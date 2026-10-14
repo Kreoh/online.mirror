@@ -64,7 +64,7 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::script;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::oox::core;
 using namespace ::oox::drawingml;
@@ -282,6 +282,13 @@ void DrawingFragment::onEndElement()
             {
                 EmuRectangle aShapeRectEmu = mxAnchor->calcAnchorRectEmu( getDrawPageSize() );
 
+                // In these two ranges of angles the anchor rectangle describes the bounding
+                // box of the rotated shape, so its width and height are exchanged
+                const sal_Int32 nRotation = mxShape->getRotation();
+                const bool bQuarterTurn
+                    = ((nRotation >= 45 * PER_DEGREE && nRotation < 135 * PER_DEGREE)
+                       || (nRotation >= 225 * PER_DEGREE && nRotation < 315 * PER_DEGREE));
+
                 // For twoCellAnchor we should set the size and anchor based on the `editAs` attribute (ISO-IEC-29500-1 2016 [20.5.3.2])
                 if (mxAnchor->getAnchorType() == ShapeAnchor::ANCHOR_TWOCELL
                     && (mxAnchor->getEditAs() == ShapeAnchor::ANCHOR_ONECELL
@@ -290,16 +297,14 @@ void DrawingFragment::onEndElement()
                     const css::awt::Size& rShapeSize = mxShape->getSize();
                     if (rShapeSize.Width > 0 && rShapeSize.Height > 0)
                     {
-                        aShapeRectEmu.Width = rShapeSize.Width;
-                        aShapeRectEmu.Height = rShapeSize.Height;
+                        aShapeRectEmu.Width = bQuarterTurn ? rShapeSize.Height : rShapeSize.Width;
+                        aShapeRectEmu.Height = bQuarterTurn ? rShapeSize.Width : rShapeSize.Height;
                     }
                 }
                 const bool bIsShapeVisible = mxAnchor->isAnchorValid();
                 if( (aShapeRectEmu.X >= 0) && (aShapeRectEmu.Y >= 0) && (aShapeRectEmu.Width >= 0) && (aShapeRectEmu.Height >= 0) )
                 {
-                    const sal_Int32 aRotation = mxShape->getRotation();
-                    if ((aRotation >= 45  * PER_DEGREE && aRotation < 135 * PER_DEGREE)
-                     || (aRotation >= 225 * PER_DEGREE && aRotation < 315 * PER_DEGREE))
+                    if (bQuarterTurn)
                     {
                         // When rotating any shape in MSO Excel within the range of degrees given above,
                         // Excel changes the cells in which the shape is anchored. The new position of
@@ -390,7 +395,8 @@ void DrawingFragment::onEndElement()
                     if ( !bIsShapeVisible)
                         mxShape->setHidden(true);
 
-                    mxShape->addShape( getOoxFilter(), &getTheme(), mxDrawPage, aTransformation, mxShape->getFillProperties() );
+                    mxShape->addShape( getOoxFilter(), &getTheme(), mxDrawPage, aTransformation,
+                                       mxShape->getFillProperties(), &maShapeMap );
 
                     /*  Collect all shape positions in the WorksheetHelper base
                         class. But first, scale EMUs to 1/100 mm. */
@@ -406,6 +412,8 @@ void DrawingFragment::onEndElement()
                         {
                             bool bResizeWithCell = mxAnchor->getEditAs() == ShapeAnchor::ANCHOR_TWOCELL;
                             ScDrawLayer::SetCellAnchoredFromPosition( *pObj, getScDocument(), getSheetIndex(), bResizeWithCell );
+                            if( mxShape->getServiceName() == "com.sun.star.drawing.ConnectorShape" )
+                                maCellAnchoredConnectors.emplace_back( mxShape, bResizeWithCell );
                         }
                     }
                 }
@@ -414,6 +422,20 @@ void DrawingFragment::onEndElement()
             mxAnchor.reset();
         break;
     }
+}
+
+void DrawingFragment::finalizeImport()
+{
+    // A connector can name a shape that comes after it, so the connections are made once all
+    // shapes of the sheet are inserted.
+    ::oox::drawingml::connectConnectorShapes( maShapeMap );
+
+    // Connecting moves the ends of a connector onto its shapes, so its cell anchor is taken from
+    // the new position.
+    for( const auto& [ rxConnector, bResizeWithCell ] : maCellAnchoredConnectors )
+        if( SdrObject* pObj = SdrObject::getSdrObjectFromXShape( rxConnector->getXShape() ) )
+            ScDrawLayer::SetCellAnchoredFromPosition( *pObj, getScDocument(), getSheetIndex(),
+                                                      bResizeWithCell );
 }
 
 void DrawingFragment::applyFontRefColor(const oox::drawingml::ShapePtr& pShape,
@@ -940,7 +962,7 @@ void VmlDrawing::convertControlFontData( AxFontData& rAxFontData, sal_uInt32& rn
     {
         if (OUString aFontId; rFontModel.moUnderlineClass.value().startsWith(u"font", &aFontId))
         {
-            if (FontRef rxFont = getStyles().getFont(aFontId.toInt32()); rxFont)
+            if (FontRef rxFont = getStyles().getFont(aFontId.toInt32()))
                 rAxFontData.mbDblUnderline
                     = (rxFont->getModel().mnUnderline == XML_double)
                       || (rxFont->getModel().mnUnderline == XML_doubleAccounting);

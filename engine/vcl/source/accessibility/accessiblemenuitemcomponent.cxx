@@ -35,7 +35,7 @@
 #include <i18nlangtag/languagetag.hxx>
 
 using namespace ::com::sun::star::accessibility;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star;
@@ -271,7 +271,7 @@ awt::Rectangle OAccessibleMenuItemComponent::implGetBounds()
 // XComponent
 
 
-void SAL_CALL OAccessibleMenuItemComponent::disposing()
+void OAccessibleMenuItemComponent::disposing()
 {
     OAccessibleMenuBaseComponent::disposing();
 

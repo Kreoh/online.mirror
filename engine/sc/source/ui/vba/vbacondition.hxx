@@ -29,19 +29,19 @@ class ScVbaCondition : public InheritedHelperInterfaceWeakImpl< Ifc... >
 {
 typedef InheritedHelperInterfaceWeakImpl< Ifc... > ScVbaCondition_BASE;
 protected:
-    css::uno::Reference< css::sheet::XCellRangeAddressable > mxAddressable;
-    css::uno::Reference< css::sheet::XSheetCondition > mxSheetCondition;
+    cpo::uno::Reference< css::sheet::XCellRangeAddressable > mxAddressable;
+    cpo::uno::Reference< css::sheet::XSheetCondition > mxSheetCondition;
 public:
-    ScVbaCondition(  const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, css::uno::Reference< css::sheet::XSheetCondition >  _xSheetCondition );
+    ScVbaCondition(  const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, cpo::uno::Reference< css::sheet::XSheetCondition >  _xSheetCondition );
 
     /// @throws css::script::BasicErrorException
     static css::sheet::ConditionOperator retrieveAPIOperator( const cpo::uno::Any& _aOperator);
 
-    virtual OUString SAL_CALL Formula1( ) override;
-    virtual OUString SAL_CALL Formula2( ) override;
+    virtual OUString Formula1( ) override;
+    virtual OUString Formula2( ) override;
     /// @throws css::script::BasicErrorException
     virtual sal_Int32 Operator(bool _bIncludeFormulaValue);
-    virtual sal_Int32 SAL_CALL Operator() override = 0;
+    virtual sal_Int32 Operator() override = 0;
 
 };
 

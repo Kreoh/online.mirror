@@ -9,6 +9,8 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <cmath>
+
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/packages/zip/ZipFileAccess.hpp>
@@ -20,6 +22,7 @@
 
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
+#include <svl/intitem.hxx>
 #include <svx/svdpage.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/adjustitem.hxx>
@@ -38,6 +41,7 @@
 #include <IDocumentRedlineAccess.hxx>
 #include <cmdid.h>
 #include <fmtanchr.hxx>
+#include <fmtfsize.hxx>
 #include <view.hxx>
 #include <wrtsh.hxx>
 #include <IDocumentDrawModelAccess.hxx>
@@ -53,7 +57,8 @@
 
 using namespace std::string_literals;
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Covers sw/source/uibase/shells/ fixes.
 class SwUibaseShellsTest : public SwModelTestBase
@@ -146,7 +151,7 @@ CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testOleSavePreviewUpdate)
     // Save the document and see if we get the previews.
     uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY);
     xStorable->storeToURL(maTempFile.GetURL(), {});
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
 
@@ -167,7 +172,7 @@ CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testOlePreviewUpdate)
     // Then make sure the preview is no longer a 0-sized stream:
     uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY);
     xStorable->storeToURL(maTempFile.GetURL(), {});
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     uno::Reference<io::XInputStream> xInputStream(
@@ -1535,6 +1540,128 @@ CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testUpdateSections)
     CPPUNIT_ASSERT_EQUAL(u"new content"_ustr, aActualResult);
 }
 
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testUpdateFieldmarksKeepsCaret)
+{
+    // Given a document with two lines that end with a citation, and an empty last line that
+    // holds the caret:
+    createSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    std::vector<cpo::uno::Sequence<css::beans::PropertyValue>> aFields;
+    for (int i = 0; i < 2; ++i)
+    {
+        pWrtShell->Insert(u"line "_ustr);
+        cpo::uno::Sequence<css::beans::PropertyValue> aArgs = {
+            comphelper::makePropertyValue(u"FieldType"_ustr, cpo::uno::Any(ODF_UNHANDLED)),
+            comphelper::makePropertyValue(u"FieldCommand"_ustr,
+                                          cpo::uno::Any(u"ADDIN ZOTERO_ITEM old command"_ustr)),
+            comphelper::makePropertyValue(u"FieldResult"_ustr, cpo::uno::Any(u"old result"_ustr)),
+        };
+        dispatchCommand(mxComponent, u".uno:TextFormField"_ustr, aArgs);
+        pWrtShell->SttEndDoc(/*bStt=*/false);
+        pWrtShell->SplitNode();
+        aFields.push_back({
+            comphelper::makePropertyValue(u"FieldType"_ustr, cpo::uno::Any(ODF_UNHANDLED)),
+            comphelper::makePropertyValue(u"FieldCommand"_ustr,
+                                          cpo::uno::Any(u"ADDIN ZOTERO_ITEM new command"_ustr)),
+            comphelper::makePropertyValue(u"FieldResult"_ustr, cpo::uno::Any(u"new result"_ustr)),
+        });
+    }
+    SwNodeOffset nCaretNode = pWrtShell->GetCursor()->GetPoint()->GetNodeIndex();
+
+    // When updating all the citations:
+    cpo::uno::Sequence<css::beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"FieldType"_ustr, cpo::uno::Any(ODF_UNHANDLED)),
+        comphelper::makePropertyValue(u"FieldCommandPrefix"_ustr,
+                                      cpo::uno::Any(u"ADDIN ZOTERO_ITEM"_ustr)),
+        comphelper::makePropertyValue(u"Fields"_ustr,
+                                      cpo::uno::Any(comphelper::containerToSequence(aFields))),
+    };
+    dispatchCommand(mxComponent, u".uno:TextFormFields"_ustr, aArgs);
+
+    // Then make sure that the caret is still at the start of the empty last line:
+    SwPosition& rCaret = *pWrtShell->GetCursor()->GetPoint();
+    // Without the accompanying fix in place, this test would have failed, the caret was at the end
+    // of the line above, behind the last updated citation.
+    CPPUNIT_ASSERT_EQUAL(nCaretNode, rCaret.GetNodeIndex());
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0), rCaret.GetContentIndex());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testUpdateBookmarksKeepsCaret)
+{
+    // Given a document with two lines that end with a citation, and an empty last line that
+    // holds the caret:
+    createSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    std::vector<cpo::uno::Sequence<css::beans::PropertyValue>> aBookmarks;
+    for (int i = 0; i < 2; ++i)
+    {
+        pWrtShell->Insert(u"line old"_ustr);
+        pWrtShell->Left(SwCursorSkipMode::Chars, /*bSelect=*/true, 3, /*bBasicCall=*/false);
+        pWrtShell->SetBookmark(vcl::KeyCode(), SwMarkName("ZOTERO_BREF_old" + OUString::number(i)));
+        pWrtShell->SttEndDoc(/*bStt=*/false);
+        pWrtShell->SplitNode();
+        aBookmarks.push_back({
+            comphelper::makePropertyValue(u"Bookmark"_ustr,
+                                          cpo::uno::Any("ZOTERO_BREF_new" + OUString::number(i))),
+            comphelper::makePropertyValue(u"BookmarkText"_ustr, cpo::uno::Any(u"new"_ustr)),
+        });
+    }
+    SwNodeOffset nCaretNode = pWrtShell->GetCursor()->GetPoint()->GetNodeIndex();
+
+    // When updating all the citations:
+    cpo::uno::Sequence<css::beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"BookmarkNamePrefix"_ustr,
+                                      cpo::uno::Any(u"ZOTERO_BREF_"_ustr)),
+        comphelper::makePropertyValue(u"Bookmarks"_ustr,
+                                      cpo::uno::Any(comphelper::containerToSequence(aBookmarks))),
+    };
+    dispatchCommand(mxComponent, u".uno:UpdateBookmarks"_ustr, aArgs);
+
+    // Then make sure that the caret is still at the start of the empty last line:
+    SwPosition& rCaret = *pWrtShell->GetCursor()->GetPoint();
+    // Without the accompanying fix in place, this test would have failed, the caret was at the end
+    // of the line above, behind the last updated citation.
+    CPPUNIT_ASSERT_EQUAL(nCaretNode, rCaret.GetNodeIndex());
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0), rCaret.GetContentIndex());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testUpdateSectionsKeepsCaret)
+{
+    // Given a document with a bibliography section, followed by a line that holds the caret:
+    createSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    cpo::uno::Sequence<css::beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(
+            u"RegionName"_ustr, cpo::uno::Any(u"ZOTERO_BIBL {} CSL_BIBLIOGRAPHY RNDold"_ustr)),
+        comphelper::makePropertyValue(u"Content"_ustr, cpo::uno::Any(u"old content"_ustr)),
+    };
+    dispatchCommand(mxComponent, u".uno:InsertSection"_ustr, aArgs);
+    pWrtShell->SttEndDoc(/*bStt=*/false);
+    CPPUNIT_ASSERT(!pWrtShell->GetCurrSection());
+    SwNodeOffset nCaretNode = pWrtShell->GetCursor()->GetPoint()->GetNodeIndex();
+
+    // When updating the bibliography:
+    cpo::uno::Sequence<css::beans::PropertyValue> aSection = {
+        comphelper::makePropertyValue(
+            u"RegionName"_ustr, cpo::uno::Any(u"ZOTERO_BIBL {} CSL_BIBLIOGRAPHY RNDnew"_ustr)),
+        comphelper::makePropertyValue(u"Content"_ustr, cpo::uno::Any(u"new content"_ustr)),
+    };
+    cpo::uno::Sequence<cpo::uno::Sequence<css::beans::PropertyValue>> aSections = { aSection };
+    aArgs = {
+        comphelper::makePropertyValue(u"SectionNamePrefix"_ustr,
+                                      cpo::uno::Any(u"ZOTERO_BIBL"_ustr)),
+        comphelper::makePropertyValue(u"Sections"_ustr, cpo::uno::Any(aSections)),
+    };
+    dispatchCommand(mxComponent, u".uno:UpdateSections"_ustr, aArgs);
+
+    // Then make sure that the caret is still on the line after the bibliography:
+    SwPosition& rCaret = *pWrtShell->GetCursor()->GetPoint();
+    // Without the accompanying fix in place, this test would have failed, the caret was inside the
+    // bibliography section, behind its new content.
+    CPPUNIT_ASSERT_EQUAL(nCaretNode, rCaret.GetNodeIndex());
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0), rCaret.GetContentIndex());
+}
+
 CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testDeleteFieldmarks)
 {
     // Given a document with 2 fieldmarks:
@@ -1850,6 +1977,239 @@ CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testUpdateSelectedField)
 
     // Check that the selected field has changed:
     CPPUNIT_ASSERT(aTimeFieldAfter != aTimeFieldBefore);
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarWidthOfImageWithCaption)
+{
+    // Given an image with a caption: the image is 100% of the caption frame wide (3 inches) and its
+    // height is synced to its width (2 inches):
+    createSwDoc("image-caption-resize.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Image1"_ustr), FLYCNTTYPE_GRF));
+    pDocShell->GetView()->SelectShell();
+    SwRect aOldRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(4320), aOldRect.Width());
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(2880), aOldRect.Height());
+
+    // When the sidebar sets its width to 4.5 inches, keeping its height:
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH, 6480);
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, 2880);
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the image is wider and its height is the same:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 6480
+    // - Actual  : 4320
+    // i.e. the image kept the width of the caption frame and only its height shrank.
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(6480), aNewRect.Width());
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(2880), aNewRect.Height());
+
+    // And the caption frame is as wide as the image, so the image stays inside it:
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    SwRect aCaptionRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(6480), aCaptionRect.Width());
+
+    // And one undo restores the old width of both:
+    pWrtShell->Undo();
+    calcLayout();
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    aCaptionRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(4320), aCaptionRect.Width());
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Image1"_ustr), FLYCNTTYPE_GRF));
+    aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(4320), aNewRect.Width());
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(2880), aNewRect.Height());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarWidthOfImageWithCaptionPercent)
+{
+    // Given an image that is 80% of its caption frame wide, with its height synced to its width, in
+    // a caption frame with borders and padding:
+    createSwDoc("image-caption-resize-percent.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Image1"_ustr), FLYCNTTYPE_GRF));
+    pDocShell->GetView()->SelectShell();
+    SwRect aOldRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+
+    // When the sidebar sets a width that is no whole percentage of the caption frame, keeping its
+    // height:
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH, 4321);
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, aOldRect.Height());
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the image has exactly the new width and its height is the same:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 4321
+    // - Actual  : 4307
+    // i.e. the new width became a whole percentage of the caption frame, 79%.
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(4321), aNewRect.Width());
+    CPPUNIT_ASSERT_EQUAL(aOldRect.Height(), aNewRect.Height());
+
+    // And the image is still 80% of the print area of the caption frame, which keeps its borders
+    // and padding:
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    SwRect aCaptionPrintRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbeddedPrt);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(5401), aCaptionPrintRect.Width());
+    SwRect aCaptionRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(5709), aCaptionRect.Width());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarSizeOfImageWithCaptionFixedHeight)
+{
+    // Given an image that is 100% of its caption frame wide (3 inches), with its height synced to
+    // its width (2 inches), in a caption frame with a fixed height of 3 inches:
+    createSwDoc("image-caption-resize-fixed-height.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Image1"_ustr), FLYCNTTYPE_GRF));
+    pDocShell->GetView()->SelectShell();
+
+    // When the sidebar makes the image 4.5 inches wide and 3 inches high:
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH, 6480);
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, 4320);
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the image has the new size:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 6480
+    // - Actual  : 4320
+    // i.e. the image kept the width of the caption frame.
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(6480), aNewRect.Width());
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(4320), aNewRect.Height());
+
+    // And the caption frame keeps the 1 inch below the image for the caption text:
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    SwRect aCaptionRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(6480), aCaptionRect.Width());
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(5760), aCaptionRect.Height());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarWidthOfRelativeFrame)
+{
+    // Given a frame that is 50% of the paragraph area wide:
+    createSwDoc("relative-frame.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    SwRect aPagePrintRect = pWrtShell->GetAnyCurRect(CurRectType::PagePrt);
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    pDocShell->GetView()->SelectShell();
+    SwRect aOldRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+
+    // When the sidebar sets its width to 30% of the paragraph area:
+    const auto nWidth = static_cast<tools::Long>(std::round(aPagePrintRect.Width() * 0.3));
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH, nWidth);
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, aOldRect.Height());
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the frame has the new width:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    // Without the accompanying fix in place, this test would have failed, because the frame kept
+    // the width that its old percentage gave it.
+    CPPUNIT_ASSERT_EQUAL(nWidth, aNewRect.Width());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarWidthOfRelativeFrameInFrame)
+{
+    // Given a frame that is 50% of the 4 inch frame it is anchored to wide:
+    createSwDoc("relative-frame-in-frame.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame2"_ustr), FLYCNTTYPE_FRM));
+    CPPUNIT_ASSERT_EQUAL(RndStdIds::FLY_AT_FLY,
+                         pWrtShell->GetFlyFrameFormat()->GetAnchor().GetAnchorId());
+    pDocShell->GetView()->SelectShell();
+    SwRect aOldRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(2880), aOldRect.Width());
+
+    // When the sidebar sets its width to 3 inches:
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH, 4320);
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, aOldRect.Height());
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the frame has the new width, as a percentage of the frame it is anchored to:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 4320
+    // - Actual  : 2880
+    // i.e. the frame kept the width that its old percentage gave it.
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(4320), aNewRect.Width());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarWidthOfImageWithCaptionBeyondPage)
+{
+    // Given an image that is 100% of its caption frame wide:
+    createSwDoc("image-caption-resize.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    SwRect aPagePrintRect = pWrtShell->GetAnyCurRect(CurRectType::PagePrt);
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Image1"_ustr), FLYCNTTYPE_GRF));
+    pDocShell->GetView()->SelectShell();
+
+    // When the sidebar sets a width that is larger than the text area of the page:
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH, aPagePrintRect.Width() + 2000);
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, 2880);
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the image is as wide as the text area of the page, which is the most that a percentage
+    // can give it:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(aPagePrintRect.Width(), aNewRect.Width());
+
+    // And the caption frame is as wide as the image:
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    SwRect aCaptionRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(aNewRect.Width(), aCaptionRect.Width());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseShellsTest, testSidebarHeightOfImageWithCaptionAfterFrameResize)
+{
+    // Given an image that is 100% of its caption frame wide, whose caption frame was then made 4.5
+    // inches wide:
+    createSwDoc("image-caption-resize.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    pDocShell->GetView()->SelectShell();
+    SfxUInt32Item aFrameWidthItem(SID_ATTR_TRANSFORM_WIDTH, 6480);
+    SfxUInt32Item aFrameHeightItem(SID_ATTR_TRANSFORM_HEIGHT, 2880);
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aFrameWidthItem, &aFrameHeightItem });
+    calcLayout();
+
+    // When the sidebar changes only the height of the image, and sends the width that the image has
+    // stored:
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Image1"_ustr), FLYCNTTYPE_GRF));
+    pDocShell->GetView()->SelectShell();
+    SfxUInt32Item aWidthItem(SID_ATTR_TRANSFORM_WIDTH,
+                             pWrtShell->GetFlyFrameFormat()->GetFrameSize().GetWidth());
+    SfxUInt32Item aHeightItem(SID_ATTR_TRANSFORM_HEIGHT, 2000);
+    pDocShell->GetView()->GetViewFrame().GetDispatcher()->ExecuteList(
+        SID_ATTR_TRANSFORM, SfxCallMode::SYNCHRON, { &aWidthItem, &aHeightItem });
+
+    // Then the caption frame keeps its width, and so does the image:
+    calcLayout();
+    SwRect aNewRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(6480), aNewRect.Width());
+    CPPUNIT_ASSERT(pWrtShell->GotoFly(UIName(u"Frame1"_ustr), FLYCNTTYPE_FRM));
+    SwRect aCaptionRect = pWrtShell->GetAnyCurRect(CurRectType::FlyEmbedded);
+    CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(6480), aCaptionRect.Width());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

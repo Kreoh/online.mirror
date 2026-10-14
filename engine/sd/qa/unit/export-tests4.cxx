@@ -37,6 +37,8 @@
 #include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeAdjustmentValue.hpp>
+#include <com/sun/star/animations/TransitionSubType.hpp>
+#include <com/sun/star/animations/TransitionType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
@@ -51,6 +53,7 @@
 
 using namespace css;
 using namespace css::animations;
+using namespace ::cpo;
 
 class SdExportTest4 : public SdModelTestBase
 {
@@ -60,6 +63,44 @@ public:
     {
     }
 };
+
+CPPUNIT_TEST_FIXTURE(SdExportTest4, testReflection)
+{
+    createSdImpressDoc("pptx/shape-reflection-effect.pptx");
+    saveAndReload(TestFilter::ODP);
+
+    // The first three shapes have a reflection, each with its own values, and they read back the
+    // same.
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0));
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"ReflectionEffect"_ustr).get<bool>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(18),
+        xShape->getPropertyValue(u"ReflectionEffectBlurRadius"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(50),
+        xShape->getPropertyValue(u"ReflectionEffectStartTransparency"_ustr).get<sal_Int16>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(100),
+        xShape->getPropertyValue(u"ReflectionEffectEndTransparency"_ustr).get<sal_Int16>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(35),
+        xShape->getPropertyValue(u"ReflectionEffectEndPosition"_ustr).get<sal_Int16>());
+    xShape.set(getShapeFromPage(1, 0));
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(141),
+        xShape->getPropertyValue(u"ReflectionEffectDistance"_ustr).get<sal_Int32>());
+    xShape.set(getShapeFromPage(3, 0));
+    CPPUNIT_ASSERT(!xShape->getPropertyValue(u"ReflectionEffect"_ustr).get<bool>());
+
+    // The reflection is in the coext namespace of the graphic styles.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    assertXPath(pXmlDoc, "//style:graphic-properties[@coext:reflection='true']", 3);
+    assertXPath(pXmlDoc, "//style:graphic-properties[@coext:reflection-distance='0.141cm']", 1);
+    assertXPath(pXmlDoc, "//style:graphic-properties[@coext:reflection-blur='0.018cm']", 2);
+    assertXPath(pXmlDoc, "//style:graphic-properties[@coext:reflection-start-transparency='50%']",
+                2);
+    assertXPath(pXmlDoc, "//style:graphic-properties[@coext:reflection-end-position='35%']", 1);
+}
 
 CPPUNIT_TEST_FIXTURE(SdExportTest4, testGlow)
 {
@@ -852,6 +893,44 @@ CPPUNIT_TEST_FIXTURE(SdExportTest4, testPlaceholderClassODFRoundTrip)
         = "/office:document-content/office:body/office:presentation/draw:page/draw:frame";
     assertXPath(pXmlDoc, aFrame, "class", u"outline");
     assertXPath(pXmlDoc, aFrame, "placeholder-class", u"graphic");
+}
+
+CPPUNIT_TEST_FIXTURE(SdExportTest4, testAirplaneTransitionODFRoundTrip)
+{
+    // Given an ODP file with an airplane transition, which has no SMIL name, so it's written as
+    // coext:subtype, with a SMIL fallback in smil:subtype:
+    createSdImpressDoc("odp/airplane-transition.odp");
+
+    // When loading that document:
+    uno::Reference<beans::XPropertySet> xPage(getPage(1), uno::UNO_QUERY);
+
+    // Then make sure the extension attribute wins over the fallback:
+    CPPUNIT_ASSERT_EQUAL(animations::TransitionType::MISCSHAPEWIPE,
+                         xPage->getPropertyValue(u"TransitionType"_ustr).get<sal_Int16>());
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 120 (AIRPLANE)
+    // - Actual  : 1 (LEFTTORIGHT)
+    // i.e. coext:subtype was ignored.
+    CPPUNIT_ASSERT_EQUAL(animations::TransitionSubType::AIRPLANE,
+                         xPage->getPropertyValue(u"TransitionSubtype"_ustr).get<sal_Int16>());
+
+    // And when saving it back to ODP:
+    save(TestFilter::ODP);
+
+    // Then make sure that the extension attribute has the subtype, with a SMIL fallback:
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: leftToRight
+    // - Actual  : airplane
+    // i.e. smil:subtype had a non-SMIL value.
+    CPPUNIT_ASSERT_EQUAL(u"leftToRight"_ustr,
+                         getXPathContent(pXmlDoc, "//anim:transitionFilter/@smil:subtype"));
+    CPPUNIT_ASSERT_EQUAL(u"airplane"_ustr,
+                         getXPathContent(pXmlDoc, "//anim:transitionFilter/@coext:subtype"));
+    CPPUNIT_ASSERT_EQUAL(
+        u"leftToRight"_ustr,
+        getXPathContent(pXmlDoc,
+                        "//style:drawing-page-properties[@smil:type='miscShapeWipe']/@smil:subtype"));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

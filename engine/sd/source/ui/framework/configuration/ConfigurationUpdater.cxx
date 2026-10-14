@@ -36,7 +36,7 @@
 
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 using ::sd::framework::FrameworkHelper;
 using ::std::vector;
@@ -160,7 +160,7 @@ void ConfigurationUpdater::UpdateConfiguration()
                 if (mnLockCount == 0)
                     UpdateCore(aClassifier);
             }
-            catch(const RuntimeException&)
+            catch(const cpo::uno::RuntimeException&)
             {
             }
 
@@ -181,7 +181,7 @@ void ConfigurationUpdater::UpdateConfiguration()
 #endif
         }
     }
-    catch(const RuntimeException &)
+    catch(const cpo::uno::RuntimeException &)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }
@@ -264,7 +264,7 @@ void ConfigurationUpdater::UpdateCore (const ConfigurationClassifier& rClassifie
         if (!aResourcesToDeactivate.empty())
             mpResourceManager->DeactivateResources(aResourcesToDeactivate, mxCurrentConfiguration);
     }
-    catch(const RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }

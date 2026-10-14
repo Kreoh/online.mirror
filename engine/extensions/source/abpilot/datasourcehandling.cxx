@@ -77,8 +77,8 @@ namespace abp
     using namespace ::utl;
     using namespace ::comphelper;
     using namespace ::com::sun::star;
-    using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+    using namespace ::cpo;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::sdb;
     using namespace ::com::sun::star::sdbc;
@@ -331,7 +331,7 @@ using namespace cpo::uno;
             Reference< XDocumentDataSource > xDocAccess( m_pImpl->xDataSource, UNO_QUERY );
             Reference< XStorable > xStorable;
             if ( xDocAccess.is() )
-                xStorable.set(xDocAccess->getDatabaseDocument(), css::uno::UNO_QUERY);
+                xStorable.set(xDocAccess->getDatabaseDocument(), cpo::uno::UNO_QUERY);
             OSL_ENSURE( xStorable.is(),"DataSource is no XStorable!" );
             if ( xStorable.is() )
             {
@@ -357,9 +357,9 @@ using namespace cpo::uno;
                     uno::Reference<embed::XStorage> xStorage = pObjectShell->GetStorage();
                     cpo::uno::Sequence<beans::PropertyValue> aSequence = comphelper::InitPropertySequence(
                     {
-                        {"TargetStorage", cpo::uno::Any(xStorage)},
-                        {"StreamRelPath", cpo::uno::Any(aStreamRelPath)},
-                        {"BaseURI", cpo::uno::Any(aOwnURL)}
+                        {u"TargetStorage"_ustr, cpo::uno::Any(xStorage)},
+                        {u"StreamRelPath"_ustr, cpo::uno::Any(aStreamRelPath)},
+                        {u"BaseURI"_ustr, cpo::uno::Any(aOwnURL)}
                     });
                     xStorable->storeAsURL(sTmpName, aSequence);
                     m_pImpl->sName = sTmpName;

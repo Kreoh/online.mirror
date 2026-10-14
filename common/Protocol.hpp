@@ -33,6 +33,7 @@ namespace COOLProtocol
     constexpr unsigned ProtocolMinorVersionNumber = 1;
 
     constexpr const char* binaryMessageTypes[] {
+        "exportslides:",
         "tile:",
         "tilecombine:",
         "delta:",
@@ -43,7 +44,8 @@ namespace COOLProtocol
         "zstdvectorprimitivesdelta:",
         "zstdvectorrenderingfont:",
         "windowpaint:",
-        "urp:"
+        "urp:",
+        "remotedoccommandresult:"
     };
 
     static inline bool isMessageOfType(const char* message, const std::string& type, size_t length)
@@ -193,6 +195,44 @@ namespace COOLProtocol
         return getTokenInteger(token, name, value) && value >= 0;
     }
 
+    /// Whether the string is a well-formed part identifier: a decimal part index, or a page
+    /// GUID in braced form like {1BE1A269-4A03-4202-ACFE-0204C5E9BE1F}.
+    inline bool isValidPartId(const std::string_view part)
+    {
+        if (part.empty())
+            return false;
+
+        if (part[0] != '{')
+        {
+            // A decimal part index.
+            for (const char c : part)
+            {
+                if (c < '0' || c > '9')
+                    return false;
+            }
+            return true;
+        }
+
+        // A braced GUID: 32 hex digits in groups of 8, 4, 4, 4 and 12, separated by dashes.
+        constexpr std::size_t guidLength = 38;
+        if (part.size() != guidLength || part[guidLength - 1] != '}')
+            return false;
+
+        for (std::size_t i = 1; i < guidLength - 1; ++i)
+        {
+            const char c = part[i];
+            if (i == 9 || i == 14 || i == 19 || i == 24)
+            {
+                if (c != '-')
+                    return false;
+            }
+            else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                return false;
+        }
+
+        return true;
+    }
+
     inline bool getTokenString(const StringVector& tokens,
                                const std::string_view name,
                                std::string& value)
@@ -313,6 +353,17 @@ namespace COOLProtocol
                 token != "userinactive");
     }
 
+    /// The command name in a ".uno:" command: the text after ".uno:" up to the first '?', '#' or
+    /// '.', which start the arguments, a fragment and a sub-command. Empty for any other token.
+    inline std::string_view getUnoCommandName(const std::string_view command)
+    {
+        static constexpr std::string_view prefix = ".uno:";
+        if (!command.starts_with(prefix))
+            return {};
+        const std::string_view name = command.substr(prefix.size());
+        return name.substr(0, name.find_first_of("?#."));
+    }
+
     /// Returns true if the token is a likely document modifying command.
     /// This is never 100% accurate, but it is needed to filter out tokens
     /// that certainly do not modify the document, such as 'load' and 'save'
@@ -327,6 +378,8 @@ namespace COOLProtocol
         // We need to assume modification rather than not.
         if (tokens.equals(0, "key") || tokens.equals(0, "outlinestate") ||
             tokens.equals(0, "paste") || tokens.equals(0, "insertfile") ||
+            tokens.equals(0, "slideimport") ||
+            tokens.equals(0, "inplaceobjectarea") ||
             tokens.equals(0, "textinput") || tokens.equals(0, "windowkey") ||
             tokens.equals(0, "windowmouse") || tokens.equals(0, "windowgesture"))
         {
@@ -342,7 +395,7 @@ namespace COOLProtocol
                    !tokens.equals(1, ".uno:InvertBackground") &&
                    !tokens.equals(1, ".uno:ChangeTheme") &&
                    !tokens.equals(1, ".uno:ShowRuler") &&
-                   !tokens.equals(1, ".uno:QuickFind") &&
+                   !tokens.startsWith(1, ".uno:QuickFind") && // QuickFind?QuickFind...
                    !tokens.equals(1, ".uno:CopySlide");
         }
 

@@ -57,7 +57,7 @@
 #include <com/sun/star/sheet/DataPilotFieldShowItemsMode.hpp>
 #include <com/sun/star/sheet/DataPilotFieldSortMode.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/diagnose_ex.hxx>
 #include <comphelper/kit.hxx>
 #include <comphelper/processfactory.hxx>
@@ -135,7 +135,6 @@
 #include <condformatmgr.hxx>
 #include <conditio.hxx>
 #include <corodlg.hxx>
-#include <crdlg.hxx>
 #include <csvtablebox.hxx>
 #include <dapidata.hxx>
 #include <dapitype.hxx>
@@ -176,7 +175,6 @@
 #include <mvtabdlg.hxx>
 #include <namecrea.hxx>
 #include <namepast.hxx>
-#include <opredlin.hxx>
 #include <optutil.hxx>
 #include <patattr.hxx>
 #include <pfiltdlg.hxx>
@@ -208,18 +206,12 @@
 #include <tabvwsh.hxx>
 #include <textdlgs.hxx>
 #include <textimportoptions.hxx>
-#include <tpcalc.hxx>
-#include <tpcompatibility.hxx>
-#include <tpdefaults.hxx>
-#include <tpformula.hxx>
 #include <tphf.hxx>
 #include <tpprint.hxx>
 #include <tpsort.hxx>
 #include <tpstat.hxx>
 #include <tpsubt.hxx>
 #include <tptable.hxx>
-#include <tpusrlst.hxx>
-#include <tpview.hxx>
 #include <uiitems.hxx>
 #include <userlist.hxx>
 #include <viewdata.hxx>

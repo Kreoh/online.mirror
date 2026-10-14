@@ -28,17 +28,17 @@ EventListenerMultiplexer::EventListenerMultiplexer( ::cppu::OWeakObject& rSource
 {
 }
 
-void SAL_CALL EventListenerMultiplexer::acquire() noexcept
+void EventListenerMultiplexer::acquire() noexcept
 {
     return ListenerMultiplexerBase::acquire();
 }
 
-void SAL_CALL EventListenerMultiplexer::release() noexcept
+void EventListenerMultiplexer::release() noexcept
 {
     return ListenerMultiplexerBase::release();
 }
 
-// css::uno::XInterface
+// cpo::uno::XInterface
 cpo::uno::Any EventListenerMultiplexer::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = ::cppu::queryInterface( rType,
@@ -152,7 +152,7 @@ void TabListenerMultiplexer::changed( sal_Int32 evt, const cpo::uno::Sequence< c
     g.unlock();
     while( aIt.hasMoreElements() )
     {
-        css::uno::Reference<css::awt::XTabListener> xListener(aIt.next());
+        cpo::uno::Reference<css::awt::XTabListener> xListener(aIt.next());
         try
         {
             xListener->changed( aMulti, evt2 );
@@ -166,7 +166,7 @@ void TabListenerMultiplexer::changed( sal_Int32 evt, const cpo::uno::Sequence< c
                 aIt.remove(g2);
             }
         }
-        catch(const css::uno::RuntimeException&)
+        catch(const cpo::uno::RuntimeException&)
         {
             DISPLAY_EXCEPTION( TabListenerMultiplexer, changed )
         }

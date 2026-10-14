@@ -31,7 +31,7 @@
 #include <vcl/unohelp.hxx>
 #include <comphelper/sequence.hxx>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/accessibility/AccessibleTextType.hpp>
@@ -45,6 +45,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 /* TODO:
    =====
@@ -204,7 +205,7 @@ bool AccessibleStaticTextBase::SetSelection( sal_Int32 nStartPara, sal_Int32 nSt
         SvxEditViewForwarder& rCacheVF = mxTextParagraph->GetEditViewForwarder( true );
         return rCacheVF.SetSelection( MakeSelection(nStartPara, nStartIndex, nEndPara, nEndIndex) );
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         return false;
     }
@@ -233,7 +234,7 @@ bool AccessibleStaticTextBase::CopyText( sal_Int32 nStartPara, sal_Int32 nStartI
 
         return aRetVal;
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         return false;
     }

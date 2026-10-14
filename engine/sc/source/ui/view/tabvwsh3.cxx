@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include <sfx2/bindings.hxx>
+#include <drawview.hxx>
+#include <drwlayer.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/passwd.hxx>
 #include <sfx2/request.hxx>
@@ -33,13 +35,19 @@
 #include <strings.hrc>
 #include <scmod.hxx>
 #include <appoptio.hxx>
+#include <ScSecurityLabelTarget.hxx>
 #include <tabvwsh.hxx>
 #include <document.hxx>
+#include <dbdata.hxx>
 #include <sc.hrc>
+#include <svx/seclabel/SecLabelStore.hxx>
+#include <svx/seclabel/SecurityLabelDialog.hxx>
+#include <vcl/abstdlg.hxx>
 #include <helpids.h>
 #include <inputwin.hxx>
 #include <scresid.hxx>
 #include <docsh.hxx>
+#include <docuno.hxx>
 #include <rangeutl.hxx>
 #include <reffact.hxx>
 #include <tabprotection.hxx>
@@ -56,7 +64,7 @@
 #include <svx/ColorSets.hxx>
 #include <comphelper/kit.hxx>
 #include <comphelper/string.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/sheet/XCellRangeData.hpp>
 #include <sfx2/kit/helper.hxx>
 #include <scabstdlg.hxx>
@@ -70,6 +78,8 @@
 #include <svx/ColorSets.hxx>
 #include <dialogs/SelectSheetViewDialog.hxx>
 
+using namespace ::cpo;
+
 namespace
 {
     void collectUIInformation(const OUString& aZoom)
@@ -81,6 +91,20 @@ namespace
         aDescription.aKeyWord = u"ScGridWinUIObject"_ustr;
         aDescription.aParent = u"MainWindow"_ustr;
         UITestLogger::getInstance().logEvent(aDescription);
+    }
+
+    // Fill a cell-range address from a styled table's data area (drops the totals row).
+    void lcl_FillTableDataArea(const ScDBData& rDB, css::table::CellRangeAddress& rRange)
+    {
+        ScRange aArea;
+        rDB.GetArea(aArea);
+        if (rDB.HasTotals() && aArea.aEnd.Row() > aArea.aStart.Row())
+            aArea.aEnd.IncRow(-1);
+        rRange.Sheet       = aArea.aStart.Tab();
+        rRange.StartColumn = aArea.aStart.Col();
+        rRange.StartRow    = aArea.aStart.Row();
+        rRange.EndColumn   = aArea.aEnd.Col();
+        rRange.EndRow      = aArea.aEnd.Row();
     }
 
     enum class DetectFlags
@@ -251,6 +275,8 @@ void ScTabViewShell::FinishProtectTable()
     TabChanged();
     UpdateInputHandler(true);   // to immediately enable input again
     SelectionChanged();
+    // need to update overlays after a sheet protection change
+    UpdateAllOverlays();
 }
 
 void ScTabViewShell::ExecProtectTable( SfxRequest& rReq )
@@ -398,6 +424,23 @@ void ScTabViewShell::Execute( SfxRequest& rReq )
 
     switch ( nSlot )
     {
+        case SID_SECURITY_LABEL:
+            {
+                // OOXML-only: the label rides in the customXml part, so gate on the
+                // actual format (the browser hides the button; this backstops a direct
+                // dispatch).
+                if (!svx::seclabel::modelSupportsLabel(GetViewData().GetDocShell()->GetModel()))
+                {
+                    break;
+                }
+                // The dialog lives in svx; Calc supplies the marking-placement target.
+                VclPtr<VclAbstractDialog> pDlg(svx::seclabel::CreateSecurityLabelDialog(
+                    GetFrameWeld(), std::make_unique<ScSecurityLabelTarget>(*this)));
+                pDlg->StartExecuteAsync([pDlg](sal_Int32 /*nResult*/) {});
+                rReq.Done();
+            }
+            break;
+
         case FID_INSERT_FILE:
             {
                 const SfxPoolItem* pItem;
@@ -917,50 +960,130 @@ void ScTabViewShell::Execute( SfxRequest& rReq )
                 }
                 else
                 {
-                    xActiveSheet = GetViewData().GetViewShell()->GetRangeWithSheet(aCellRange,
-                                                                                   bHasData, false);
+                    // Scope to the styled table at the cursor (like DataDataPilotRun); else
+                    // fall back to the current selection / data area.
+                    const ScAddress aCurPos = GetViewData().GetCurPos();
+                    const ScDBData* pTableDBData = GetViewData().GetDocument().GetTableDBAtCursor(
+                            aCurPos.Col(), aCurPos.Row(), aCurPos.Tab(), ScDBDataPortion::AREA);
+                    if (pTableDBData)
+                    {
+                        lcl_FillTableDataArea(*pTableDBData, aCellRange);
+                    }
+
+                    xActiveSheet = GetViewData().GetViewShell()->GetRangeWithSheet(
+                            aCellRange, bHasData, /*bHasUnoArguments=*/pTableDBData != nullptr);
                     if (bHasData)
                     {
-                        if (!GetViewData().GetMarkData().IsMarked())
+                        // A table at the cursor: mark its exact area. Otherwise auto-expand
+                        // a bare cursor to the data block, but keep an existing selection.
+                        if (pTableDBData)
+                        {
+                            MarkRange(ScRange(ScAddress(aCellRange.StartColumn, aCellRange.StartRow, aCellRange.Sheet),
+                                    ScAddress(aCellRange.EndColumn, aCellRange.EndRow, aCellRange.Sheet)));
+                        }
+                        else if (!GetViewData().GetMarkData().IsMarked())
+                        {
                             GetViewData().GetViewShell()->ExtendSingleSelection(aCellRange);
+                        }
 
-                        uno::Reference<frame::XModel> xModel(GetViewData().GetDocShell()->GetModel());
                         uno::Reference<sheet::XSheetCellRange> xSheetRange(
                                 xActiveSheet->getCellRangeByPosition(
                                     aCellRange.StartColumn, aCellRange.StartRow, aCellRange.EndColumn,
                                     aCellRange.EndRow),
                                 uno::UNO_QUERY);
-
-                        ScRange aRange(ScAddress(aCellRange.StartColumn, aCellRange.StartRow,
-                                    GetViewData().CurrentTabForData()),
-                                ScAddress(aCellRange.EndColumn, aCellRange.EndRow,
-                                    GetViewData().CurrentTabForData()));
-
                         uno::Reference<sheet::XCellRangeData> xCellRangeData(xSheetRange,
                                 uno::UNO_QUERY);
-                        cpo::uno::Sequence<cpo::uno::Sequence<cpo::uno::Any>> aDataArray
-                            = xCellRangeData->getDataArray();
 
-                        ScDuplicateRecordsDlg aDlg(GetFrameWeld(), aDataArray, GetViewData(), aRange);
+                        auto pRange = std::make_shared<ScRange>(
+                                ScAddress(aCellRange.StartColumn, aCellRange.StartRow,
+                                          GetViewData().CurrentTabForData()),
+                                ScAddress(aCellRange.EndColumn, aCellRange.EndRow,
+                                          GetViewData().CurrentTabForData()));
+                        auto pDataArray
+                            = std::make_shared<cpo::uno::Sequence<cpo::uno::Sequence<cpo::uno::Any>>>(
+                                xCellRangeData->getDataArray());
 
-                        bHasData = aDlg.run();
-                        if (bHasData)
-                            aResponse = aDlg.GetDialogData();
-                        else
-                        {
-                            rReq.Done();
-                            break;
-                        }
+                        auto pDlg = std::make_shared<ScDuplicateRecordsDlg>(
+                                GetFrameWeld(), *pDataArray, GetViewData(), *pRange,
+                                pTableDBData ? std::optional<bool>(pTableDBData->HasHeader())
+                                             : std::nullopt);
+
+                        const bool bWasTable = pTableDBData != nullptr;
+
+                        weld::DialogController::runAsync(
+                                pDlg, [this, pDlg, pDataArray, pRange, xActiveSheet,
+                                       aCellRange, bWasTable](sal_Int32 nResult) {
+                                    if (nResult != RET_OK)
+                                        return;
+
+                                    // The doc may have changed while the async dialog was open;
+                                    // re-resolve table area, or bail if gone.
+                                    // Plain range: just check it is still valid.
+                                    ScDocument& rDoc = GetViewData().GetDocument();
+                                    table::CellRangeAddress aRange = aCellRange;
+                                    if (bWasTable)
+                                    {
+                                        const ScAddress aCurPosNow = GetViewData().GetCurPos();
+                                        const ScDBData* pDBData = rDoc.GetTableDBAtCursor(
+                                                aCurPosNow.Col(), aCurPosNow.Row(), aCurPosNow.Tab(),
+                                                ScDBDataPortion::AREA);
+                                        if (!pDBData)
+                                        {
+                                            ErrorMessage(STR_TABLE_NOTFOUND);
+                                            return;
+                                        }
+                                        lcl_FillTableDataArea(*pDBData, aRange);
+                                    }
+                                    else if (aRange.Sheet < 0 || aRange.Sheet >= rDoc.GetTableCount()
+                                             || !ScRange(ScAddress(aRange.StartColumn, aRange.StartRow, aRange.Sheet),
+                                                         ScAddress(aRange.EndColumn, aRange.EndRow, aRange.Sheet)).IsValid())
+                                    {
+                                        return;
+                                    }
+
+                                    const DuplicatesResponse& rResponse = pDlg->GetDialogData();
+                                    if (rResponse.bRemove)
+                                    {
+                                        sal_Int32 nRemoved = 0;
+                                        sal_Int32 nRemaining = 0;
+                                        GetViewData().GetViewShell()->HandleDuplicateRecordsRemove(
+                                                xActiveSheet, aRange, rResponse.bIncludesHeaders,
+                                                rResponse.bDuplicateRows, rResponse.vEntries,
+                                                &nRemoved, &nRemaining);
+
+                                        UpdateAllOverlays();   // redraw the stale resize handle
+                                        CursorPosChanged();    // refresh formula bar (async path skipped it)
+
+                                        // Report how many duplicates were removed / remain.
+                                        if (!rResponse.vEntries.empty())
+                                        {
+                                            OUString aMsg = ScResId(STR_MSSG_TABLE_DUPLICATES)
+                                                .replaceFirst("%1", OUString::number(nRemoved))
+                                                .replaceFirst("%2", OUString::number(nRemaining));
+                                            std::shared_ptr<weld::MessageDialog> xInfoBox(
+                                                Application::CreateMessageDialog(GetFrameWeld(),
+                                                    VclMessageType::Info, VclButtonsType::Ok, aMsg));
+                                            xInfoBox->runAsync(xInfoBox, [](sal_Int32) {});
+                                        }
+                                    }
+                                    else
+                                        GetViewData().GetViewShell()->HandleDuplicateRecordsHighlight(
+                                                xActiveSheet, aRange, rResponse.bIncludesHeaders,
+                                                rResponse.bDuplicateRows, rResponse.vEntries);
+                                });
+
+                        // Async: the work runs in the callback above; skip the sync tail.
+                        bHasData = false;
                     }
                     else
                     {
-                        std::unique_ptr<weld::MessageDialog> aDialog(
+                        std::shared_ptr<weld::MessageDialog> xDialog(
                             Application::CreateMessageDialog(GetFrameWeld(),
                                                              VclMessageType::Warning,
                                                              VclButtonsType::Ok,
                                                              ScResId(STR_DUPLICATERECORDSDLG_NODATAFOUND)));
-                        aDialog->set_title(ScResId(STR_DUPLICATERECORDSDLG_WARNING));
-                        aDialog->run();
+                        xDialog->set_title(ScResId(STR_DUPLICATERECORDSDLG_WARNING));
+                        xDialog->runAsync(xDialog, [](sal_Int32) {});
                     }
                 }
 
@@ -1431,6 +1554,15 @@ void ScTabViewShell::Execute( SfxRequest& rReq )
         case SID_WINDOW_FIX_COL:
         case SID_WINDOW_FIX_ROW:
             {
+                // The slots stay available in a read-only document so that a read-only
+                // view learns where the sheet is frozen. The freeze position is shared
+                // by every view of the sheet, so such a view can read it but not move it.
+                if (IsKitReadOnlyView() || GetViewData().GetDocShell()->IsReadOnly())
+                {
+                    rReq.Ignore();
+                    break;
+                }
+
                 bool bIsCol = (nSlot == SID_WINDOW_FIX_COL);
                 sal_Int32 nFreezeIndex = 1;
                 if (const SfxInt32Item* pItem = rReq.GetArg<SfxInt32Item>(FN_PARAM_1))

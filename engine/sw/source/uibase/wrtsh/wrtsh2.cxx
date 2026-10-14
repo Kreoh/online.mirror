@@ -66,6 +66,8 @@
 #include <strings.hrc>
 #include <officecfg/Office/Common.hxx>
 
+using namespace ::cpo;
+
 bool SwWrtShell::InsertField2(SwField const& rField,
     SwPaM* pAnnotationRange, ::std::optional<SwPosition> *const poAnchorStart)
 {
@@ -89,7 +91,8 @@ bool SwWrtShell::InsertField2Impl(SwField const& rField,
     std::optional<SwPaM> pAnnotationTextRange;
     if (pAnnotationRange)
     {
-        pAnnotationTextRange.emplace(*pAnnotationRange->Start(), *pAnnotationRange->End());
+        auto [pStart, pEnd] = pAnnotationRange->StartEnd(); // SwPosition*
+        pAnnotationTextRange.emplace(*pStart, *pEnd);
     }
 
     if ( HasSelection() )
@@ -132,14 +135,15 @@ bool SwWrtShell::InsertField2Impl(SwField const& rField,
         if ( GetDoc() != nullptr )
         {
             const SwPaM& rCurrPaM = GetCurrentShellCursor();
-            if (*rCurrPaM.Start() == *pAnnotationTextRange->Start()
-                && *rCurrPaM.End() == *pAnnotationTextRange->End())
+            auto [pCurrStart, pCurrEnd] = rCurrPaM.StartEnd(); // SwPosition*
+            auto [pAnnStart, pAnnEnd] = pAnnotationTextRange->StartEnd(); // SwPosition*
+            if (*pCurrStart == *pAnnStart && *pCurrEnd == *pAnnEnd)
             {
                 // Annotation range was passed in externally, and inserting the postit field shifted
                 // its start/end positions right by one. Restore the original position for the range
                 // start. This allows commenting on the placeholder character of the field.
-                if (pAnnotationTextRange->Start()->GetContentIndex() > 0)
-                    pAnnotationTextRange->Start()->AdjustContent(-1);
+                if (pAnnStart->GetContentIndex() > 0)
+                    pAnnStart->AdjustContent(-1);
             }
             IDocumentMarkAccess* pMarksAccess = GetDoc()->getIDocumentMarkAccess();
             auto pMark{pMarksAccess->makeAnnotationMark(*pAnnotationTextRange, SwMarkName())};
@@ -502,7 +506,7 @@ void SwWrtShell::ClickToField(const SwField& rField, bool bExecHyperlinks)
                             vFieldText = pField->GetAuthority(GetLayout(), &pIteratedTOX->GetTOXForm());
 
                         if (const SwNode& rCurrentNode = GetCursor()->GetPoint()->GetNode();
-                            rCurrentNode.GetNodeType() == SwNodeType::Text
+                            rCurrentNode.IsTextNode()
                             && (GetCursor()->GetPoint()->GetNode().FindSectionNode()->GetSection().GetType()
                                 == SectionType::ToxContent) // this checks it's not a heading
                             && static_cast<const SwTextNode*>(&rCurrentNode)->GetText() == vFieldText)

@@ -91,6 +91,54 @@ downloadas name=<fileName> id=<id> format=<document format> options=<SkipImages,
     * 'slideshow': When request for download is for showing slideshow
     * 'export': Just a simple download
 
+remotedocsubscribe source=<encoded persistent link>
+remotedocunsubscribe source=<encoded persistent link>
+
+    Subscribes the sending view to, or unsubscribes it from, live events
+    about the remote document bound to the given persistent link. A view
+    names a remote document by its persistent link alone, and the address
+    the server reaches it at stays with the server. The subscription
+    belongs to that one view and is opened with that view's own access
+    token for the remote document; the token comes from that view's
+    UserPrivateInfo in CheckFileInfo, or from a POST to /cool/links. A view
+    without a token for the source is refused, and so is a persistent link
+    no remote link is bound to. A remotelinkremove of the persistent link
+    drops the document for every view, and the subscriptions to it go down
+    with it. A view holds at most one subscription per source. The command
+    is handled inside wsd and never given to this document's kit. Requires
+    the remote_links feature to be enabled.
+
+remotelinkresolve source=<encoded persistent link>
+
+    Asks this view's storage for the document behind one of the persistent
+    links the open document's pages record, over a POST to
+    <WOPISrc>/linkaccess. A view asks for the sources it finds on the
+    document once, when it joins; afterwards, and for the sources later
+    editing names, this command is the only thing that asks, so a user who
+    sees a source reported as missing can have it looked for again.
+    Requires the remote_links feature and SupportsLinkAccess.
+
+remotelinkremove source=<encoded persistent link>
+
+    Drops the remote link bound to the given persistent link from the list
+    of this document, for every view. The subscriptions to it go down with
+    it, and the fresh list goes out to all views. The link is named by its
+    persistent link, the value the document's pages store, and not by the
+    address the storage resolved it to. Answered with an error of kind
+    'notfound' when no remote link is bound to it. Requires the remote_links
+    feature to be enabled.
+
+remotedoccommand source=<encoded persistent link> <inner client command>
+
+    Routes a read-only client command to the remote document the current
+    document is subscribed to, bound to the given persistent link. The inner command is an
+    ordinary client command line, for example "getslidesections" or
+    "tilecombine ...". The command is handled inside wsd and sent to the
+    remote over the headless session; it is never given to this document's
+    kit. Only non-modifying commands are accepted. The remote's replies come
+    back as remotedoccommandresult: messages. Requires a live subscription to
+    the source.
+
 getchildid
 
     Requests the child id so that it knows where the files needs to be sent when it is
@@ -166,6 +214,150 @@ selectbackground name=<name>
 
     Inserts a graphic file with the name <name> into the document as background.
 
+slideimport insert file=<staged name> [source=<source name>] [slides=<i0,i1,...>]
+                   [at=<S>] [keepdesign=<0|1>] [link=<0|1>] [time=<source time>]
+                   [sourcepositions=<p0,p1,...>]
+
+    Inserts pages of a presentation staged in the jail into the open document.
+    Only Impress documents are served. The staged name is the file a remote
+    link wrote when it was asked to exportslides, which the server put in
+    the staging area of this document's jail; the insert takes it, so the file
+    leaves the staging area whether the pages are inserted or not. Slide
+    indices are 0-based standard-page indices, and no list at all inserts every
+    page of the file.
+
+    The pages are inserted before slide <S>; a missing or out-of-range <S>
+    appends them at the end. keepdesign=1 copies the design of the file along;
+    keepdesign=0 makes the inserted pages adopt the design of this document.
+
+    <source> names the source document as the user knows it, percent-encoded
+    like the staged name: a document name holding no path. link=1 keeps the
+    inserted pages bound to it, so that they can be refreshed from it later;
+    link=0, or no link at all, inserts plain copies. <source time> is the time
+    the source was last modified now, percent-encoded, recorded on the linked
+    pages so a later comparison tells whether they are up to date.
+
+    <sourcepositions> names the position each inserted page's slide holds in
+    the source, counted from one, in the order the staged file holds the pages:
+    one position per page or none at all. A page inserted with a position is
+    linked to that position rather than to one slide, so an update reads
+    whichever slide stands there; a page inserted without one is linked to the
+    identifier of the slide it came from. The reply is
+        slideimport: {"status":"inserted","count":<K>}
+
+    Errors are reported as
+        error: cmd=slideimport kind=<syntax|cantload|failure|nosource>
+    where cantload means no file is staged under that name, failure covers an
+    insert the document refused, including one a view that cannot edit asked
+    for, and nosource means an insert that asks for links without naming a
+    source document.
+
+exportslides [slides=<p0,p1,...>|guids=<g0,g1,...>]
+
+    Writes the given pages of this document out as a presentation of their own,
+    named by the part identifiers a presentationinfo: reports, or by the
+    identifier each page keeps in ODF, which is what a document holding pages
+    read from this one records for them. No list at all writes every page out.
+    The reply is the presentation itself, as a binary frame
+        exportslides: {"status":"written"}\n<the file>
+    so a document is reached the same way whichever node serves it.
+
+    One export carries at most 100 MB, as the file travels as one frame and is
+    held in memory whole. The pages are written before their size is known, so
+    a document whose chosen pages come to more than that is answered
+        exportslides: {"status":"failed","kind":"toolarge"}
+    and no file travels with it.
+
+    A client of this document sends it through remotedoccommand, to a document
+    this one is related to, and wsd takes the reply: it writes the file into the
+    staging area of this document's jail and answers the client with the name it
+    was staged under alone,
+        exportslides: {"status":"staged","name":"<staged name>"}
+    or {"status":"failed"} when it could not be staged. A path of another jail
+    is nothing a client is given. The staged name is what a slideimport insert
+    or a slidelink update then names.
+
+    Writing pages out takes the content of the document into a file of its own,
+    so a host that allows no export, or that has what leaves the document
+    watermarked, is answered
+        error: cmd=exportslides kind=failed
+    before any page is written.
+
+slidelink list
+slidelink break part=<part>
+slidelink update source=<source name> file=<staged name> [time=<source time>] [part=<part>]
+
+    Reads the pages of the document that are linked to a source document,
+    refreshes the pages of one source, and takes the source off one page. Only
+    Impress and Draw documents hold such pages. A source is the persistent
+    link of the source document, the value a page records: the reference the
+    storage resolves to that document, which is no address the server reads
+    itself. The server matches it against the remote links of the document,
+    and for one no remote link stands for it asks the storage, when
+    CheckFileInfo says SupportsLinkAccess; a refresh then reads the remote link
+    it stands for. A source name is any text without a control character, at
+    most 1024 bytes long. The source name, the WOPISrc and the staged name are
+    all percent-encoded.
+
+    A client sends all three. An update names a file the server staged in the
+    jail, which is what an exportslides of a remote link comes to, so the
+    kit reads only a file of its own jail and never a location. An update may add
+    a time, the time the source was last modified now, which the refreshed pages
+    record so a later comparison tells whether they are up to date.
+
+    list: the reply is
+        slidelinks: {"links":[{"source":"<source document>",
+                     "slides":[{"part":"<part>","name":"<source slide>",
+                                "lastModifiedTime":"<source time at the last read>"},...]},...]}
+    with the sources in the order their first page appears and the pages of one
+    source in slide order. <part> is the linked page and <source slide> the
+    slide of the source it was made from, named as the user sees it there.
+    <source time at the last read> is the time the source was last modified when
+    the page was read from it, empty when none was recorded. A page linked to a
+    file by its path names no source document and is left out, since a refresh
+    has no way to reach it. A document that links to nothing reports an empty
+    array.
+
+    The kit sends that same list on its own, to every view of the document, when a
+    page loses the source it records, which is what an edit of a linked page does,
+    and when an undo or a redo gives that source back. A client therefore learns of
+    a link that went or came back without asking for the list again. Other ways the
+    list changes, such as a view deleting a linked page or inserting more of them,
+    reach the view they happened in alone.
+
+    break: takes the source document off the page <part>, which keeps the content
+    it holds and becomes a page of this document alone, so a later refresh of
+    that source leaves it as it is. This is one undo step, and undoing it gives
+    the page its source back. The reply is
+        slidelink: {"status":"broken","part":"<part>"}
+    A page that is linked to nothing is answered kind=notlinked, and a view that
+    cannot edit kind=failed. The fresh link list arrives on its own, as above.
+
+    update: refreshes every page linked to <source name> from <staged name>, a
+    file previously uploaded using the insertfile POST that holds the slides of
+    that source. This is the message wsd sends the kit once it has the content
+    of a source as a local file. The kit reads only the staged file, never a
+    location, and removes the file once the refresh is done. A page whose slide the file does not hold keeps the
+    content it holds. With part=<part> the page <part> alone is refreshed, and
+    the other pages linked to the source keep their content and the time they
+    record; a <part> that is not linked to <source name> is answered
+    kind=notlinked. The whole refresh is one undo step. Each refreshed page is
+    the page read for it, so it holds a new part; the reply is therefore the
+    fresh link list followed by
+        slidelink: {"status":"updated","source":"<source document>","count":<K>}
+    where <K> counts the pages refreshed.
+
+    Errors are reported as
+        error: cmd=slidelink kind=<syntax|notlinked|failed> [source=<source name>]
+        error: cmd=slidelink kind=<syntax|notlinked|failed> [part=<part>]
+    where notlinked means no page of the document is linked to that source, or
+    that the page a break names is linked to nothing, and failed means the staged
+    file could not be read, or the view cannot edit. An answer of an update names
+    the source it was sent for and an answer of a break names the page it was
+    asked for, both percent-encoded as the command was, so that a reader of these
+    messages tells the answers of one command of the family from those of
+    another. A command too malformed to say what it was for names neither.
+
 key type=<type> char=<charcode> key=<keycode>
 
     <type> is 'input' or 'up', <charcode> and <keycode> are numbers.
@@ -174,9 +366,11 @@ load <pathname>
 
     Deprecated.
 
-load [part=<partNumber>] url=<url> [timestamp=<time>] [lang=<locale>] [deviceFormFactor=<device type>] [timezone=<timezone>] [options=<options>]
+load [part=<part>] url=<url> [timestamp=<time>] [lang=<locale>] [deviceFormFactor=<device type>] [timezone=<timezone>] [options=<options>]
 
-    part is an optional parameter. <partNumber> is a number.
+    part is an optional parameter. <part> is a page identifier, or the
+    part's index in document order written in decimal form. The view opens
+    on that part.
 
     timestamp is an optional parameter.  <time> is provided in microseconds
     since the Unix epoch - midnight, January 1, 1970.
@@ -275,6 +469,17 @@ selectgraphic type=<type> x=<x> y=<y>
 
     <type> is 'start' or 'end' <x> and <y> are numbers.
 
+inplaceobjectarea x=<x> y=<y> width=<width> height=<height>
+
+    Moves and resizes the object that is currently active for in-place editing, for
+    instance a chart opened for editing by double-clicking it. All four are numbers in
+    twips, the same unit the 'graphicselection:' message reports with "INPLACE".
+
+    The area is a request, not an instruction: core narrows it for an object protected
+    against moving or resizing, and clamps it to the page. The area finally taken comes
+    back as a fresh 'graphicselection:' "INPLACE" message, so the client should take its
+    handles from that rather than from what it asked for.
+
 setclientpart part=<partNumber>
 
     Informs the server that the client changed to part <partNumber>.
@@ -282,24 +487,27 @@ setclientpart part=<partNumber>
 selectclientpart part=<partNumber>
 
     Informs the server that the client changed the selection state of <partNumber>.
+    The server sends no reply.
 
-Part numbers of a presentation or drawing document are the pages' stable
-unique ids, not indexes into the page list. The ids carry no order:
-adjacent pages do not hold adjacent numbers, and arithmetic on an id
-never yields another page. To reach a neighbouring page, find the page's
-position in the status message's page list and take the id listed next to
-it. The status message lists each page's id as part, in document order; a
-page keeps its id for the whole document session when
-other pages are moved, inserted or deleted. Because the tile cache keys carry the part number, the cached
-tiles of a page stay valid when the page order changes. The ids of the
-pages a mode addresses come from that mode's page list: the standard
-pages, the master pages or the notes pages. Every message that names a
-part uses these ids for such documents - the tile, tilecombine,
-setclientpart and selectclientpart requests, and the tile:, delta:,
-invalidatetiles:, setpart:, curpart: and status: (selectedpart) responses.
-The exceptions are the load message's part option and the getslide
-message, which keep indexes. Text and spreadsheet documents use plain
-part indexes throughout.
+Part identifiers of a presentation or drawing document are the pages'
+GUIDs in braced form, {1BE1A269-4A03-4202-ACFE-0204C5E9BE1F}, not indexes
+into the page list. The identifiers carry no order: to reach a
+neighbouring page, find the page's position in the status message's page
+list and take the identifier listed next to it. The status message lists
+each page's identifier as part, in document order. A page keeps its
+identifier when other pages are moved, inserted or deleted, and across
+save and reload when the file format stores it (extended ODF and OOXML
+do). Because the tile cache keys carry the part identifier, the cached
+tiles of a page stay valid when the page order changes. The identifiers
+of the pages a mode addresses come from that mode's page list: the
+standard pages, the master pages, the notes pages, the notes master
+pages or the handout master page. Every message that
+names a part uses these identifiers for such documents - the tile,
+tilecombine, setclientpart, selectclientpart and getslide requests, and
+the tile:, delta:, invalidatetiles:, setpart:, curpart: and status:
+(selectedpart) responses. The load message's part option takes either
+form, a page identifier or a positional index. Text and spreadsheet
+documents use plain part indexes throughout, written in decimal form.
 
 moveselectedclientparts position=<positionNumber>
 
@@ -324,11 +532,11 @@ tile part=<partNumber> width=<width> height=<height> tileposx=<xpos> tileposy=<y
     for anything else. It is only useful to JS part and will break it
     if not returned in the response.
 
-    For a presentation or drawing document the part number is the
-    page's stable unique id. The page is rendered from whichever index
-    it holds at render time, so the picture is of that page even if
-    the pages were reordered after the request was sent. A request
-    naming a page that no longer exists is not rendered.
+    For a presentation or drawing document the part is the page's
+    GUID. The page is rendered from whichever index it holds at render
+    time, so the picture is of that page even if the pages were
+    reordered after the request was sent. A request naming a page that
+    no longer exists is not rendered.
 
 tilecombine <parameters>
 
@@ -374,6 +582,96 @@ outlinestate type=<type> level=<level> index=<index> state=<state>
     <type> is 'column' or 'row', <level> and <index> are numbers, <state> is 'visible' or 'hidden'.
 
     Invokes  lok::Document::setOutlineState().
+
+selectobjects ids=<ids>
+
+    <ids> is a comma separated list of the unique ids of drawing objects, the ones the render
+    geometry of a page names its objects by, and it is empty to ask for no selection at all.
+    Marks those objects in this view and nothing else, the way a click on them would. The objects
+    of one selection all sit at the same level, directly on the page or in one and the same group;
+    an id naming an object elsewhere, or naming nothing on the page the view shows, is left out.
+
+setobjecttransform to=<mappings> as=<what>
+
+    <mappings> holds one item per object, separated by semicolons. An item is the unique id of a
+    drawing object, the one the render geometry of a page names it by, then the six numbers of
+    the mapping it is to be drawn by - a, b, c, d, e and f - all separated by commas. The
+    mapping takes the object's own square, whose corners are 0 and 0 and 1 and 1, onto the
+    page, in twips: the first corner goes to e and f, and the other four numbers say which way
+    and how far its own two axes run. A mapping whose two axes are turned over against each
+    other turns the object over. <what> is "move", "scale" or "turn", and names the step it can
+    be undone with.
+
+    Gives every one of those objects the mapping named: it keeps what it is and only its place,
+    its size, its turn and its shear become what the mapping says. The whole of it is one step to
+    undo. A client that works a drag out for itself hands over what it drew this way, rather than
+    asking for a handle of the selection to be moved.
+
+setobjectcontrolpoint id=<id> at=<at> x=<x> y=<y> withtheshape=<withtheshape>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by,
+    and <at> counts the points a custom shape is shaped by, from zero, in the order the shape
+    offers them. <x> and <y> are where that point is to go on the page, in twips.
+    <withtheshape> is 1 to carry the shape along where the point is one that moves it, which is
+    what the tail of a callout does when it is dragged without a modifier, and 0 otherwise.
+
+    The shape reads such a point as the value it shapes itself from and holds it to whatever that
+    value may be, so the place named here is a wish and what the shape makes of it is the answer.
+    One step to undo. Naming an object that is not a custom shape does nothing.
+
+setobjecthandle id=<id> kind=<kind> polygon=<polygon> point=<point> at=<at> x=<x> y=<y>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by,
+    and the four after it name one of that object's handles as the render geometry reports it:
+    <kind> is the kind of handle, <polygon> and <point> say which point of which polygon it
+    belongs to, and <at> is the number the object itself gives the handle, for the handles that
+    are told apart by nothing else. <at> is -1 where the three before it already name the handle.
+    <x> and <y> are where the handle is to go on the page, in twips.
+
+    The object reads such a move its own way: the corner radius of a rectangle, the angle a piece
+    of a circle begins at, the offset of a measurement. One step to undo. Nothing happens where
+    the object has no handle of that name or will not have that one dragged.
+
+    A point a custom shape is shaped by is not moved this way: it has setobjectcontrolpoint,
+    which says in the command whether the shape is carried along, where this one would leave
+    that to be read off the drag that is driving it.
+
+setobjectgluepoint id=<id> at=<at> x=<x> y=<y>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by,
+    and <at> counts the points that object was given for a connector to tie itself to, from zero,
+    in the order the render geometry lists them. <x> and <y> are where that point goes on the
+    object: 0 and 0 is its upper left corner and 1 and 1 its lower right one, which is how the
+    render geometry reports such a point. Moves it there in one step that can be undone. The
+    object holds such a point either as a share of its own size or as a distance of its own, and
+    it keeps the way it holds it.
+
+setobjectpoints id=<id> changes=<changes>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by.
+    <changes> names the points of that object's path which moved, and where each of them went. It
+    is a list separated by semicolons, and every item of it is six numbers separated by commas:
+
+        <polygon>,<point>,<part>,<x>,<y>,<continuity>
+
+    <polygon> counts the polygons of the path from zero and <point> counts the points of that
+    polygon from zero, in the order the render geometry lists them. <part> is 0 for the point
+    itself, 1 for the weight that bends the curve coming into it and 2 for the weight of the
+    curve going out of it. <x> and <y> are where that point or weight went, in twips.
+    <continuity> says how the curve is to run through that point: 0 for a corner, 1 for a point
+    it runs smoothly through, 2 for one it runs symmetrically through.
+
+    Moves those points and leaves every other point of the path untouched, in one step that can
+    be undone. Moving one weight of a point that is run through smoothly or symmetrically carries
+    the other weight of that point along, and the continuity that is named is then set exactly,
+    so a point whose numbers had drifted a little off comes out lying on the line. A point named
+    twice, or one the path does not have, is left out.
+
+reportmousepointer wanted=<wanted>
+
+    <wanted> is 'true' or 'false'. Says whether this client wants to be told the mouse pointer the
+    document asks for. A client that works out the pointer from the geometry it holds says 'false'
+    and is sent none until it says 'true' again.
 
 useractive
 
@@ -537,7 +835,7 @@ getslide hash=<slideHash> part=<slidePart> width=<canvasWidth> height=<canvasHei
 
     <hash>: The hash value identifying the specific slide to be requested.
 
-    <part>: Specifies the part or index of the slide (useful for segmented or multi-part slides).
+    <part>: The part identifier of the slide: the page's GUID in braced form.
 
     <width>: The width of the canvas in which the slide will be rendered.
 
@@ -602,12 +900,18 @@ removetextcontext id=<windowId> before=<before_position> after=<after_position>
     - before=<before_position> : The position before the deletion starts.
     - after=<after_position> : The position after the deletion ends.
 
-browsersetting action=update key=<SettingKey> value=<SettingValue>
+browsersetting action=update [upload=false] json=<JSON>
 
-    The browsersetting protocol modify specific UI settings.
+    Changes the user's browser settings. The server keeps a copy of the
+    browsersetting.json file for each session of the user; the changes are
+    applied to every copy.
 
-    - key=<SettingKey> : The name of the setting to update (e.g., ShowStatusBar).
-    - value=<SettingValue> : The new value for the setting (e.g., true or false).
+    - json=<JSON> : An object of the changed settings, with flat dotted keys
+      ("text.ShowAnnotations": "false"). A toggle is the string "true" or
+      "false", a number such as the zoom index is a number.
+    - upload=false : The file already holds these settings, so the server
+      does not write it out again. Without this token, the server writes
+      the file out with the changes.
 
 contentcontrolevent <JSON>
     *Properties:
@@ -649,6 +953,16 @@ clipboardkey: <token>
     Current and previous hash remain valid for that period, always use
     the latest.
 
+linktoken: <token>
+
+    A one-time token that authorizes this view to register a remote link
+    over POST /cool/links. Sent when the view joins a document with
+    remote_links enabled, and again with a fresh token after each accepted
+    request, so a token is never accepted twice. Keep only the latest. The
+    Link object of the POST names in PersistentLink the reference the
+    document's pages store for the file, which is the one name a view knows
+    the registered link by.
+
 contextmenu: <json description of the context menu>
 
     When the user right-clicks in the document, the content of the context
@@ -670,6 +984,81 @@ downloadas: jail=<jail directory> dir=<a tmp dir> name=<name> port=<port> filena
 
     The client should then request http://server:port/jail/dir/name in order to download
     the document
+
+remotelinks: <json>
+
+    The remote links the server tracks for this document, from the
+    RemoteLinks field of CheckFileInfo (WOPISrc, BaseFileName,
+    LastModifiedTime and PersistentLink per entry), from POST
+    /cool/links, and from the sources the document's own slide
+    links name. A remotelinkremove takes one off the list, for every view,
+    and the fresh list goes out to all of them. Built for the receiving
+    view: the source list and last-modified times are the same for every
+    view, but the state is that view's own. Sent to a view when it joins
+    and again when the shared list or that view's own access or
+    subscription state changes. Access tokens and the addresses of the
+    remote documents are never included: a view knows a remote link by its
+    persistent link alone. The JSON carries a documents array of entries:
+
+        { "name": "<the BaseFileName the integrator gave the document, or the
+                    file name at the end of its WOPISrc>",
+          "lastModifiedTime": "<time or empty>",
+          "state": "noaccess|available|subscribed|connected|disconnected|failed|missing",
+          "persistentLink": "<the reference the document's pages store for the source>",
+          "access": "pending|resolved|notfound|denied|failed, or empty" }
+
+    'noaccess' means the view holds no token for the source. 'available'
+    means the view holds a token but has no live subscription. The other
+    values follow the remotedocevent states of the view's subscription.
+    'missing' means the source cannot be read: either it could not be read
+    from storage, or it is a document the open one names as the source of
+    its slides that no remote link stands for. Such an entry carries its
+    name alone, so it says what the slides were made from while nothing can
+    reach it; its persistentLink is that name.
+
+    'access' is what asking this view's storage for the persistent link came
+    to, and it is empty for a source this view never asked for, which is
+    every source on a storage that does not answer link access requests.
+    'pending' means a question is in flight, 'notfound' that the storage
+    knows no document for the link, 'denied' that this view's user may not
+    reach it, and 'failed' any other answer or none. A source that is
+    'resolved' is the remote link the storage named. See remotelinkresolve
+    for asking again.
+
+remotedocevent: tag=<t> source=<encoded persistent link> event=<event> [part=<p>] [value=<v>] [kind=<k>] [time=<encoded-time>]
+
+    An event about a remote document a view subscribed to with
+    remotedocsubscribe, named by the persistent link its remote link is
+    bound to. The tag is the session id of the view that opened the
+    subscription. <event> is one of:
+    * 'connected': the remote document is loaded and events are flowing
+    * 'modified': the remote document's modified state changed to <value>
+    * 'saved': the remote document uploaded a new file to storage; <time> is
+      the storage's last-modified time for the new content, so the source is
+      newer than the copy shown here
+    * 'invalidated': the content of part <part> changed (-1 covers documents
+      without parts); invalidations are coalesced, so one event stands for a
+      burst of changes
+    * 'structure': parts were added, removed or resized
+    * 'disconnected': the connection was lost; the server is reconnecting
+    * 'failed': the connection is given up until a new subscription
+    * 'missing': the source could not be read from storage (a missing file
+      among the reasons); <kind> names the reason and the links to it are broken
+    * 'unsubscribed': the link was dropped on request
+    * 'error': the subscription failed; <kind> names the reason, among them
+      'notfound' for a persistent link no remote link is bound to and
+      'notoken' for a source the view holds no token for
+
+remotedoccommandresult: source=<encoded persistent link>\n<inner server frame>
+
+    A reply from a remote document to a remotedoccommand. The header line
+    names the remote by the persistent link its remote link is bound to;
+    everything after the first newline is
+    the frame the remote node sent, verbatim, text or binary (for example
+    slidesections:, status:, tile:, sendthumbnail:). The frame is delivered
+    only to the view that issued commands to that remote, so several remote
+    documents can be driven in parallel and told apart by the persistent
+    link.
 
 error: cmd=<command> kind=<kind> [code=<error_code>] [params=1,2,3,...,N]
 <freeErrorText>
@@ -721,16 +1110,15 @@ getchildid: id=<id>
 
     Returns the child id
 
-invalidatetiles: part=<partNumber> x=<x> y=<y> width=<width> height=<height> wid=<wid> [sourceviewid=<sourceViewId>]
+invalidatetiles: part=<partId> x=<x> y=<y> width=<width> height=<height> wid=<wid> [sourceviewid=<sourceViewId>]
 
-    All parameters are numbers. Tells the client to invalidate any
-    cached tiles for the document area specified (in twips), at any
-    zoom level. For a presentation or drawing document the part number
-    is the page's stable unique id, matching the part the tiles carry.
-    The optional signed source view ID identifies the view that caused
-    the invalidation.
+    Tells the client to invalidate any cached tiles for the document
+    area specified (in twips), at any zoom level. For a presentation
+    or drawing document the part is the page's GUID, matching the part
+    the tiles carry; every other parameter is a number. The optional signed source view ID
+    identifies the view that caused the invalidation.
 
-invalidatetiles: EMPTY, <partNumber>, <mode>, wid=<wid> [sourceviewid=<sourceViewId>]
+invalidatetiles: EMPTY, <partId>, <mode>, wid=<wid> [sourceviewid=<sourceViewId>]
 
     Tells the client to invalidate all cached tiles.
 
@@ -747,10 +1135,11 @@ loaded: viewid=<viewId> views=<number of active views> isfirst=<true|false>
 
 haspasswordtomodify: true
 
-    Sent after loading a document that has a separate password for
+    Sent while loading a document that has a separate password for
     modifying, to every view that has not entered that password yet.
-    The view is read-only until it provides the password with an
-    editwithpassword message.
+    It arrives before the status: message of that view. The view is
+    read-only until it provides the password with an editwithpassword
+    message.
 
 editwithpassword: success
 
@@ -780,9 +1169,9 @@ statusupdate: type=<typeName> parts=<numberOfParts> current=<currentPartNumber> 
     status: implies document loading (deprecated, use loaded: instead). statusupdate: is just an update.
 
     For a presentation or drawing document the selectedpart field of the
-    JSON payload carries the current page's part number, the page's
-    stable unique id, and each entry of the parts array carries its
-    page's part number as part, in document order.
+    JSON payload carries the current page's part identifier, the page's
+    GUID, and each entry of the parts array carries its page's
+    identifier as part, in document order.
 
 styles: {"styleFamily": ["styles in family"], etc. }
 
@@ -790,6 +1179,34 @@ statechanged: <key>=<value>
 
     Notifies client of state changed events of <key>.
     Eg: 'statechanged: .uno:Undo=enabled'
+
+    The security-label lifecycle event is a special statechanged whose value is a
+    JSON object rather than a scalar, and which coolwsd broadcasts to every session
+    of the document (the classification banner it drives is client-side chrome, not
+    document content). It is emitted when a label is applied, changed or removed:
+
+        statechanged: {"commandName":".uno:SecurityLabel","state":{
+            "action":"applied"|"changed"|"removed",
+            "classification":<new classification, empty on removed>,
+            "marking":<new visual marking, empty on removed>,
+            "oldClassification":<prior classification, empty on applied>,
+            "oldMarking":<prior visual marking, empty on applied>}}
+
+    The client updates its banner from "marking" and, for an action-bearing change,
+    posts a Security_Label_Changed message to the host integration (see the SDK
+    postMessage API). The separate on-load 'commandvalues command=.uno:SecurityLabel'
+    seeds the banner without an action and is not broadcast.
+
+viewposition: [editmode=1] [zoompercent=<percent>] [x=<twips> y=<twips> width=<twips> height=<twips>]
+
+    Sent once, after the status that follows the load, when the document kept
+    the position of the view that left it before this one arrived. editmode is
+    present when that view was in editing mode. x and y are the top left corner
+    of the area it had in view, in document twips, followed by its size.
+
+    Only a CODA client sees this. A document keeps the position of a view that
+    goes away while the app keeps the document open but detaches its view, which
+    is what CODA does when it drops excess tab contents, and on reattach sends this.
 
 textselectioncontent:
 <JSON>

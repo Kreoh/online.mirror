@@ -15,10 +15,10 @@
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
@@ -43,7 +43,7 @@ class Service:
 {
 public:
     explicit Service(
-        css::uno::Reference< css::uno::XComponentContext > context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > context):
         context_(std::move(context)) {}
 
 private:
@@ -96,7 +96,7 @@ private:
 
     rtl::Reference< RootAccess > getRoot();
 
-    css::uno::Reference< css::uno::XComponentContext > context_;
+    cpo::uno::Reference< cpo::uno::XComponentContext > context_;
 
     std::mutex mutex_;
     rtl::Reference< RootAccess > root_;
@@ -112,7 +112,7 @@ void Service::initialize(cpo::uno::Sequence< cpo::uno::Any > const & aArguments)
     }
     std::unique_lock g1(mutex_);
     if (root_.is()) {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"already initialized"_ustr, getXWeak());
     }
     osl::MutexGuard g2(*lock());
@@ -133,9 +133,9 @@ rtl::Reference< RootAccess > Service::getRoot() {
 }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_configuration_ReadWriteAccess_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new configmgr::read_write_access::Service(context));
 }

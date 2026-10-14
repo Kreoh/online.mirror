@@ -46,6 +46,11 @@ export class Comment extends CanvasSectionObject {
 	static readonly replyCommentLabel = _('Reply comment');
 	static readonly openMenuLabel = _('Open menu');
 
+	// Typing and pointing inside a comment card mean the user is still working. Pointer
+	// movement stays out of this list, because a comment that moves under a resting pointer
+	// produces it on its own.
+	static readonly activityEvents = ['input', 'keydown', 'mousedown', 'touchstart'];
+
 	processingOrder: number = app.CSections.Comment.processingOrder;
 	drawingOrder: number = app.CSections.Comment.drawingOrder;
 	zIndex: number = app.CSections.Comment.zIndex;
@@ -62,7 +67,12 @@ export class Comment extends CanvasSectionObject {
 	containerPosY: number = 0;
 	// Final top after clamping (canvas-relative CSS px), so children can follow a clamped parent.
 	renderedPosY: number = 0;
+	// Height the card had when its position was last worked out, or null while no clamped
+	// position has been worked out yet.
+	positionedHeight: number | null = null;
 	canvasContainerBounds: DOMRect = new DOMRect();
+	// True while the text that selectText selected still has to be scrolled into view.
+	searchSelectionPending: boolean = false;
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 	public static makeName(data: any): string {
@@ -148,7 +158,7 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.showSelectedCoordinate = true; // Writer.
 
 		if (app.map._docLayer._docType === 'presentation' || app.map._docLayer._docType === 'drawing') {
-			this.sectionProperties.part = parseInt(this.sectionProperties.data.part);
+			this.sectionProperties.part = this.sectionProperties.data.part;
 			this.sectionProperties.partIndex = app.impress.getIndexFromPart(this.sectionProperties.part);
 		}
 
@@ -208,6 +218,12 @@ export class Comment extends CanvasSectionObject {
 		var events = ['click', 'dblclick', 'mousedown', 'mouseup', 'mouseover', 'mouseout', 'keydown', 'keypress', 'keyup', 'touchstart', 'touchmove', 'touchend'];
 		window.L.DomEvent.on(this.sectionProperties.container, 'click', this.onMouseClick, this);
 		window.L.DomEvent.on(this.sectionProperties.container, 'keydown', this.onCommentKeyDown, this);
+
+		// Events on a comment card stay inside the card. This is where the idle handler
+		// hears about the ones that show the user is still working.
+		for (const name of Comment.activityEvents) {
+			window.L.DomEvent.on(this.sectionProperties.container, name, this.notifyActive, this);
+		}
 
 		for (var it = 0; it < events.length; it++) {
 			window.L.DomEvent.on(this.sectionProperties.container, events[it], window.L.DomEvent.stopPropagation, this);
@@ -430,17 +446,26 @@ export class Comment extends CanvasSectionObject {
 			top = this.containerPosY;
 		}
 
+		// A selected or edited card is held inside the view by the clamp below, so where it
+		// ends up depends on how tall it is. Its text is capped after the layout places it,
+		// which changes that height while the layout asks for the same place. So the height
+		// is part of what makes a position out of date, along with the place and the bounds.
+		const clamped = this.isSelected() || this.isEdit();
+		const height = clamped ? this.getCommentHeight() : null;
+
 		if (this.containerPosX === left
 				&& this.containerPosY === top
 				&& this.canvasContainerBounds.left === canvasContainerBounds.left
 				&& this.canvasContainerBounds.right === canvasContainerBounds.right
 				&& this.canvasContainerBounds.top === canvasContainerBounds.top
 				&& this.canvasContainerBounds.bottom === canvasContainerBounds.bottom
+				&& this.positionedHeight === height
 				&& !forceUpdate
 		) {
 			return this.renderedPosY;
 		}
 
+		this.positionedHeight = height;
 		this.containerPosX = left;
 		this.containerPosY = top;
 		this.canvasContainerBounds = canvasContainerBounds;
@@ -465,7 +490,6 @@ export class Comment extends CanvasSectionObject {
 				left = canvasContainerBounds.right - width;
 			}
 
-			const height = this.getCommentHeight();
 			if (top + height > canvasContainerBounds.bottom - margin) {
 				top = canvasContainerBounds.bottom - height - margin;
 			}
@@ -477,13 +501,23 @@ export class Comment extends CanvasSectionObject {
 			}
 		}
 
-		if (this.isSelected()) {
-			this.sectionProperties.container.style.zIndex = 14;
+		let maxHeight = '';
+		if (this.sectionProperties.commentListSection.isShownBig(this)) {
+			// Full view lifts the card and the overlay it casts over the sidebars.
+			// That level lives in the stylesheet, so leave the inline value empty
+			// here instead of pinning the card back down beside the document.
+			this.sectionProperties.container.style.zIndex = '';
+			// Content taller than the viewport would otherwise cut the content.
+			const marginY = this.sectionProperties.commentListSection.sectionProperties.marginY / app.dpiScale;
+			maxHeight = Math.round(canvasContainerBounds.bottom - top - marginY) + 'px';
 		} else if (this.isEdit()) {
+			this.sectionProperties.container.style.zIndex = 14;
+		} else if (this.isSelected()) {
 			this.sectionProperties.container.style.zIndex = 13;
 		} else {
 			this.sectionProperties.container.style.zIndex = ''; // Default for .cool-annotation is 12
 		}
+		this.sectionProperties.container.style.maxHeight = maxHeight;
 
 		this.sectionProperties.container.style.left = Math.round(left) + 'px';
 		this.sectionProperties.container.style.top = Math.round(top) + 'px';
@@ -501,7 +535,7 @@ export class Comment extends CanvasSectionObject {
 	}
 
 	private createChildLinesNode (): void {
-		this.sectionProperties.childLinesNode = window.L.DomUtil.create('div', '', this.sectionProperties.container);
+		this.sectionProperties.childLinesNode = window.L.DomUtil.create('div', 'cool-annotation-child-lines', this.sectionProperties.container);
 		this.sectionProperties.childLinesNode.id = 'annotation-child-lines-' + this.sectionProperties.data.id;
 		this.sectionProperties.childLinesNode.style.width = this.sectionProperties.childCommentOffset*(this.getChildLevel() + 1) + 'px';
 	}
@@ -663,6 +697,12 @@ export class Comment extends CanvasSectionObject {
 		}
 	}
 
+	// Working inside a comment card keeps the document awake, in the same way that working
+	// in the document itself does.
+	private notifyActive(): void {
+		app.idleHandler.notifyActive();
+	}
+
 	private textAreaKeyDown(ev: KeyboardEvent): void {
 		if (window.KeyboardShortcuts.processEvent(app.UI.language.fromURL, ev)) {
 			return;
@@ -695,17 +735,20 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.lastContentRaw = contentRaw;
 
 		if (this.sectionProperties.data.html)
+			// eslint-disable-next-line no-restricted-syntax -- sanitized markup
 			this.sectionProperties.contentText.innerHTML = app.LOUtil.sanitize(this.sectionProperties.data.html);
 		else
 			this.sectionProperties.contentText.innerText = this.sectionProperties.data.text ? this.sectionProperties.data.text: '';
 		// Get the escaped HTML out and find for possible, useful links
 		var linkedText = Autolinker.link(this.sectionProperties.contentText.outerHTML);
+		// eslint-disable-next-line no-restricted-syntax -- sanitized markup
 		this.sectionProperties.contentText.innerHTML = app.LOUtil.sanitize(linkedText);
 		// Original unlinked text
 		this.sectionProperties.contentText.origText = this.sectionProperties.data.text ? this.sectionProperties.data.text: '';
 		this.sectionProperties.contentText.origHTML = this.sectionProperties.data.html ? this.sectionProperties.data.html: '';
 		this.sectionProperties.nodeModifyText.innerText = this.sectionProperties.data.text ? this.sectionProperties.data.text: '';
 		if (this.sectionProperties.data.html) {
+			// eslint-disable-next-line no-restricted-syntax -- sanitized markup
 			this.sectionProperties.nodeModifyText.innerHTML = app.LOUtil.sanitize(this.sectionProperties.data.html);
 		}
 	}
@@ -730,8 +773,12 @@ export class Comment extends CanvasSectionObject {
 			this.sectionProperties.authorAvatartdImg.style.borderColor = color;
 		}
 
-		// dateTime is already in UTC, so we will not append Z that will create issues while converting date
-		var d = new Date(this.sectionProperties.data.dateTime.replace(/,.*/, ''));
+		// dateTimeUtc, when the server sends one, is the moment the comment was written, so the
+		// time can be shown on the viewer's own clock. dateTime beside it is the author's wall
+		// clock with no zone, which is all a comment from an older document carries.
+		const d = this.sectionProperties.data.dateTimeUtc ?
+			new Date(this.sectionProperties.data.dateTimeUtc) :
+			new Date(this.sectionProperties.data.dateTime.replace(/,.*/, ''));
 		var dateOptions: any = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric'};
 		this.sectionProperties.contentDate.innerText = isNaN(d.getTime()) ? this.sectionProperties.data.dateTime: d.toLocaleDateString((<any>String).locale, dateOptions);
 
@@ -1127,7 +1174,8 @@ export class Comment extends CanvasSectionObject {
 	}
 
 	private hideCalc() {
-		this.sectionProperties.container.style.visibility = 'hidden';
+		if (!(<any>window).mode.isSmallScreenDevice())
+			this.sectionProperties.container.style.visibility = 'hidden';
 		this.sectionProperties.nodeModify.style.display = 'none';
 		this.sectionProperties.nodeReply.style.display = 'none';
 		this.cachedIsEdit = false;
@@ -1137,7 +1185,10 @@ export class Comment extends CanvasSectionObject {
 	}
 
 	private hideImpressDraw() {
-		if (!this.isInsideActivePart()) {
+		// While comments as a whole are hidden, a comment on the current slide or page is hidden
+		// along with its marker, the same as a comment on any other slide or page.
+		if (!this.isInsideActivePart()
+			|| this.sectionProperties.commentListSection.sectionProperties.show === false) {
 			this.sectionProperties.container.style.display = 'none';
 			this.hideMarker();
 		}
@@ -1500,6 +1551,7 @@ export class Comment extends CanvasSectionObject {
 		// It is mandatory to change these values before handleSaveCommentButton is called
 		// calling handleSaveCommentButton in onCancelClick causes problem because that is also called from many other events/function (i.e: onPartChange)
 		if (this.sectionProperties.contentText.origHTML) {
+			// eslint-disable-next-line no-restricted-syntax -- sanitized markup
 			this.sectionProperties.nodeModifyText.innerHTML = app.LOUtil.sanitize(this.sectionProperties.contentText.origHTML);
 		}
 		else {
@@ -1522,6 +1574,7 @@ export class Comment extends CanvasSectionObject {
 		if (e)
 			window.L.DomEvent.stopPropagation(e);
 		if (this.sectionProperties.contentText.origHTML) {
+			// eslint-disable-next-line no-restricted-syntax -- sanitized markup
 			this.sectionProperties.nodeModifyText.innerHTML = app.LOUtil.sanitize(this.sectionProperties.contentText.origHTML);
 		}
 		else {
@@ -2166,8 +2219,7 @@ export class Comment extends CanvasSectionObject {
 		if (invalidateCache)
 			this.cachedCommentHeight = null;
 		if (this.cachedCommentHeight === null)
-			this.cachedCommentHeight = this.sectionProperties.container.getBoundingClientRect().height
-			- this.sectionProperties.childLinesNode.getBoundingClientRect().height;
+			this.cachedCommentHeight = this.sectionProperties.container.getBoundingClientRect().height;
 		return this.cachedCommentHeight;
 	}
 
@@ -2233,9 +2285,12 @@ export class Comment extends CanvasSectionObject {
 		if (!this.isCollapsed)
 			return;
 		this.isCollapsed = false;
-		if (app.map.getDocType() !== 'text' // Comments are resolved only in writer, always show in other apps
+		// While comments as a whole are hidden, the box stays hidden and only the collapsed state
+		// is cleared.
+		if (this.sectionProperties.commentListSection.sectionProperties.show !== false
+		&& (app.map.getDocType() !== 'text' // Comments are resolved only in writer, always show in other apps
 		|| this.sectionProperties.data.resolved === 'false'
-		|| this.sectionProperties.commentListSection.sectionProperties.showResolved) {
+		|| this.sectionProperties.commentListSection.sectionProperties.showResolved)) {
 			this.sectionProperties.container.style.display = '';
 			// For presentations, only expand if the comment is on the active slide.
 			if ((app.map.getDocType() !== 'presentation' && app.map.getDocType() !== 'drawing') || this.isInsideActivePart()) {
@@ -2247,7 +2302,25 @@ export class Comment extends CanvasSectionObject {
 		window.L.DomUtil.removeClass(this.sectionProperties.container, 'cool-annotation-collapsed-show');
 	}
 
-	public selectText(startParagraph: number, startIndex: number, endParagraph: number, endIndex: number): void {
+	// Returns the text node and the offset in it for an offset into all the text of an element.
+	private static getTextPosition(element: Node, offset: number): { node: Node, offset: number } | null {
+		const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+		let remaining = offset;
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			const length = (node as Text).length;
+			if (remaining <= length)
+				return { node: node, offset: remaining };
+			remaining -= length;
+		}
+		return null;
+	}
+
+	// Selects text of this comment. searchText is the selected text, and searchOccurrence is the
+	// number of times it starts earlier in the paragraph. When they are given, they place the
+	// selection, because the paragraph here writes each link out and shortens the links that
+	// Autolinker finds, while the indexes count the text as the document engine has it.
+	public selectText(startParagraph: number, startIndex: number, endParagraph: number, endIndex: number,
+		searchText?: string, searchOccurrence?: number): void {
 		const selection = window.getSelection();
 		selection.removeAllRanges();
 
@@ -2259,38 +2332,73 @@ export class Comment extends CanvasSectionObject {
 			return;
 		}
 
-		// Find start position
 		const startElement = paragraphElements[startParagraph] as HTMLElement;
-		const startWalker = document.createTreeWalker(
-			startElement,
-			NodeFilter.SHOW_TEXT,
-			null
-		);
-		const startTextNode = startWalker.nextNode();
-		if (!startTextNode) {
-			return;
+		const endElement = paragraphElements[endParagraph] as HTMLElement;
+
+		if (searchText && startParagraph === endParagraph) {
+			const paragraphText = startElement.textContent;
+			let found = paragraphText.indexOf(searchText);
+			for (let i = 0; found >= 0 && i < searchOccurrence; i++)
+				found = paragraphText.indexOf(searchText, found + 1);
+			if (found >= 0) {
+				startIndex = found;
+				endIndex = found + searchText.length;
+			}
 		}
 
-		// Find end position
-		const endElement = paragraphElements[endParagraph] as HTMLElement;
-		const endWalker = document.createTreeWalker(
-			endElement,
-			NodeFilter.SHOW_TEXT,
-			null
-		);
-		const endTextNode = endWalker.nextNode();
-		if (!endTextNode)
+		const start = Comment.getTextPosition(startElement, startIndex);
+		const end = Comment.getTextPosition(endElement, endIndex);
+		if (!start || !end)
 			return;
 
 		// Create and apply the selection range
 		const range = document.createRange();
-		range.setStart(startTextNode, startIndex);
-		range.setEnd(endTextNode, endIndex);
+		range.setStart(start.node, start.offset);
+		range.setEnd(end.node, end.offset);
 
 		selection.addRange(range);
 
 		// Ensure the selection is visible
 		this.sectionProperties.contentText.focus();
+		this.searchSelectionPending = true;
+		this.revealSearchSelection();
+	}
+
+	// Scrolls the text of this comment to the text that selectText selected, and scrolls the
+	// document when that text is outside the document area, as a reply below the view can be. The
+	// text of a long comment scrolls inside its card, and the card moves with the document. While
+	// the comment is hidden, the selection waits for the layout that shows it.
+	public revealSearchSelection(): void {
+		if (!this.searchSelectionPending)
+			return;
+
+		const selection = window.getSelection();
+		const contentNode = this.sectionProperties.contentNode;
+		if (!selection.rangeCount || !contentNode.contains(selection.anchorNode)) {
+			this.searchSelectionPending = false;
+			return;
+		}
+
+		const contentRect = contentNode.getBoundingClientRect();
+		if (contentRect.height === 0)
+			return;
+
+		const selectionRect = selection.getRangeAt(0).getBoundingClientRect();
+		if (selectionRect.top < contentRect.top || selectionRect.bottom > contentRect.bottom)
+			contentNode.scrollTop += selectionRect.top - contentRect.top
+				- (contentRect.height - selectionRect.height) / 2;
+		this.searchSelectionPending = false;
+
+		const documentRect = document.getElementById('document-container').getBoundingClientRect();
+		const shownRect = selection.getRangeAt(0).getBoundingClientRect();
+		const margin = this.sectionProperties.commentListSection.sectionProperties.marginY / app.dpiScale;
+		let offset = 0;
+		if (shownRect.bottom > documentRect.bottom - margin)
+			offset = shownRect.bottom - documentRect.bottom + margin;
+		else if (shownRect.top < documentRect.top + margin)
+			offset = shownRect.top - documentRect.top - margin;
+		if (offset !== 0)
+			app.activeDocument.activeLayout.scroll(0, Math.round(offset * app.dpiScale));
 	}
 
 	public autoCompleteMention(username: string, profileLink: string, replacement: string): void {

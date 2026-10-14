@@ -15,10 +15,11 @@
 #include <com/sun/star/frame/DispatchDescriptor.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
+using namespace ::cpo;
 using namespace css;
 using namespace framework;
 
-DispatchDisabler::DispatchDisabler(const uno::Reference< uno::XComponentContext >& )
+DispatchDisabler::DispatchDisabler(const uno::Reference< cpo::uno::XComponentContext >& )
 {
 }
 
@@ -160,9 +161,9 @@ cpo::uno::Sequence< OUString > DispatchDisabler::getSupportedServiceNames()
     return { u"com.sun.star.frame.DispatchDisabler"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_DispatchDisabler_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::DispatchDisabler(context));
 }

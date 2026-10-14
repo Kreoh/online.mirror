@@ -196,6 +196,15 @@ const basegfx::B2DRange& ViewObjectContact::getObjectRange() const
         basegfx::B2DRange aTempRange = GetViewContact().getRange(rViewInfo2D);
         if (!aTempRange.isEmpty())
         {
+            // The range is the area where this view paints the object, so it includes the grid
+            // offset of the view (Calc only). Far from the top left of a sheet that offset grows
+            // to many rows.
+            if (GetObjectContact().supportsGridOffsets())
+            {
+                const basegfx::B2DVector& rGridOffset(getGridOffset());
+                if (0.0 != rGridOffset.getX() || 0.0 != rGridOffset.getY())
+                    aTempRange.transform(basegfx::utils::createTranslateB2DHomMatrix(rGridOffset));
+            }
             const_cast< ViewObjectContact* >(this)->maObjectRange = aTempRange;
         }
         else
@@ -452,16 +461,15 @@ void ViewObjectContact::createStructureTag(drawinglayer::primitive2d::Primitive2
         }
         else
         {
-            // page backgrounds etc should be tagged as artifacts:
-            rNewPrimitiveSequence = drawinglayer::primitive2d::Primitive2DContainer {
-                    new drawinglayer::primitive2d::StructureTagPrimitive2D(
-                        // lies to force silly VclMetafileProcessor2D to emit NonStructElement
-                        vcl::pdf::StructElement::Division,
-                        true,
-                        true,
-                        true, // Decorative
-                        std::move(rNewPrimitiveSequence))
-                };
+            // page decoration, and anything the user marked decorative, is an artifact
+            rNewPrimitiveSequence = drawinglayer::primitive2d::Primitive2DContainer{
+                new drawinglayer::primitive2d::StructureTagPrimitive2D(
+                    vcl::pdf::StructElement::NonStructElement,
+                    nullptr == pSdrObj, // Background
+                    false, // Image
+                    true, // Decorative
+                    std::move(rNewPrimitiveSequence))
+            };
         }
     }
 }

@@ -32,7 +32,7 @@
 #include <xmloff/maptype.hxx>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/chart2/data/LabeledDataSequence.hpp>
 #include <com/sun/star/chart2/data/XDataProvider.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
@@ -56,9 +56,10 @@
 #include <map>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace
@@ -164,34 +165,34 @@ static const tMakeStringStringMap& lcl_getChartTypeNameMap()
 {
     //shape property -- chart model object property
     static const tMakeStringStringMap g_aChartTypeNameMap{
-        {"com.sun.star.chart.LineDiagram",
-         "com.sun.star.chart2.LineChartType"},
-        {"com.sun.star.chart.AreaDiagram",
-         "com.sun.star.chart2.AreaChartType"},
-        {"com.sun.star.chart.BarDiagram",
-         "com.sun.star.chart2.ColumnChartType"},
-        {"com.sun.star.chart.HistogramDiagram",
-         "com.sun.star.chart2.HistogramChartType"},
-        {"com.sun.star.chart.PieDiagram",
-         "com.sun.star.chart2.PieChartType"},
-        {"com.sun.star.chart.BarOfPieDiagram",
-         "com.sun.star.chart2.BarOfPieChartType"},
-        {"com.sun.star.chart.PieOfPieDiagram",
-         "com.sun.star.chart2.PieOfPieChartType"},
-        {"com.sun.star.chart.DonutDiagram",
-         "com.sun.star.chart2.DonutChartType"},
-        {"com.sun.star.chart.XYDiagram",
-         "com.sun.star.chart2.ScatterChartType"},
-        {"com.sun.star.chart.NetDiagram",
-         "com.sun.star.chart2.NetChartType"},
-        {"com.sun.star.chart.FilledNetDiagram",
-         "com.sun.star.chart2.FilledNetChartType"},
-        {"com.sun.star.chart.StockDiagram",
-         "com.sun.star.chart2.CandleStickChartType"},
-        {"com.sun.star.chart.BubbleDiagram",
-         "com.sun.star.chart2.BubbleChartType"},
-        {"com.sun.star.chart.CorrelationCircleDiagram",
-         "com.sun.star.chart2.CorrelationCircleChartType"}};
+        {u"com.sun.star.chart.LineDiagram"_ustr,
+         u"com.sun.star.chart2.LineChartType"_ustr},
+        {u"com.sun.star.chart.AreaDiagram"_ustr,
+         u"com.sun.star.chart2.AreaChartType"_ustr},
+        {u"com.sun.star.chart.BarDiagram"_ustr,
+         u"com.sun.star.chart2.ColumnChartType"_ustr},
+        {u"com.sun.star.chart.HistogramDiagram"_ustr,
+         u"com.sun.star.chart2.HistogramChartType"_ustr},
+        {u"com.sun.star.chart.PieDiagram"_ustr,
+         u"com.sun.star.chart2.PieChartType"_ustr},
+        {u"com.sun.star.chart.BarOfPieDiagram"_ustr,
+         u"com.sun.star.chart2.BarOfPieChartType"_ustr},
+        {u"com.sun.star.chart.PieOfPieDiagram"_ustr,
+         u"com.sun.star.chart2.PieOfPieChartType"_ustr},
+        {u"com.sun.star.chart.DonutDiagram"_ustr,
+         u"com.sun.star.chart2.DonutChartType"_ustr},
+        {u"com.sun.star.chart.XYDiagram"_ustr,
+         u"com.sun.star.chart2.ScatterChartType"_ustr},
+        {u"com.sun.star.chart.NetDiagram"_ustr,
+         u"com.sun.star.chart2.NetChartType"_ustr},
+        {u"com.sun.star.chart.FilledNetDiagram"_ustr,
+         u"com.sun.star.chart2.FilledNetChartType"_ustr},
+        {u"com.sun.star.chart.StockDiagram"_ustr,
+         u"com.sun.star.chart2.CandleStickChartType"_ustr},
+        {u"com.sun.star.chart.BubbleDiagram"_ustr,
+         u"com.sun.star.chart2.BubbleChartType"_ustr},
+        {u"com.sun.star.chart.CorrelationCircleDiagram"_ustr,
+         u"com.sun.star.chart2.CorrelationCircleChartType"_ustr}};
     return g_aChartTypeNameMap;
 }
 
@@ -353,7 +354,7 @@ XMLTokenEnum getTokenByChartType(
 
 Reference< chart2::data::XLabeledDataSequence2 > GetNewLabeledDataSequence()
 {
-    const Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
     Reference< chart2::data::XLabeledDataSequence2 > xResult = chart2::data::LabeledDataSequence::create(xContext);
     return xResult;
 }
@@ -638,9 +639,8 @@ void exportFormattedText( SvXMLExport& rExport, const uno::Reference< beans::XPr
         SvXMLElementExport aElemP(rExport, XML_NAMESPACE_TEXT, XML_P, true, false);
         for (const uno::Reference<chart2::XFormattedString>& rxFS : xFormattedTitle)
         {
-            Reference< beans::XPropertySet > xRunPropSet(rxFS, uno::UNO_QUERY);
             bool bIsUICharStyle, bHasAutoStyle = false;
-            OUString sStyle = rExport.GetTextParagraphExport()->FindTextStyle(xRunPropSet, bIsUICharStyle, bHasAutoStyle);
+            OUString sStyle = rExport.GetTextParagraphExport()->FindTextStyle(rxFS, bIsUICharStyle, bHasAutoStyle);
             if (!sStyle.isEmpty())
             {
                 rExport.AddAttribute(XML_NAMESPACE_TEXT, XML_STYLE_NAME,
@@ -670,13 +670,13 @@ void importFormattedText( SvXMLImport& rImport, const std::vector<std::pair<OUSt
         {
             // these are the properties from the textshape object - needs to apply them
             // to all the string parts firstly - (necessary for backward compatibility)
-            xFullTextTitleProps.set(xFullTextTitle.getArray()[0], uno::UNO_QUERY);
+            xFullTextTitleProps = xFullTextTitle.getArray()[0];
         }
 
         for (auto aRIt = std::begin(rTitle); aRIt != std::end(rTitle); ++aRIt)
         {
-            Reference< chart2::XFormattedString2 > xNewFmtStr;
-            xNewFmtStr = chart2::FormattedString::create(rImport.GetComponentContext());
+            Reference< chart2::XFormattedString > xNewFmtStr
+                = chart2::FormattedString::create(rImport.GetComponentContext());
 
             if (xFullTextTitleProps.is())
             {
@@ -929,7 +929,7 @@ bool isDocumentGeneratedWithOpenOfficeOlderThan2_3( const uno::Reference< frame:
     return bResult;
 }
 
-bool isDocumentGeneratedWithOpenOfficeOlderThan2_0( const css::uno::Reference< css::frame::XModel >& xChartModel)
+bool isDocumentGeneratedWithOpenOfficeOlderThan2_0( const cpo::uno::Reference< css::frame::XModel >& xChartModel)
 {
     bool bResult = false;
     OUString aGenerator( lcl_getGeneratorFromModelOrItsParent(xChartModel) );

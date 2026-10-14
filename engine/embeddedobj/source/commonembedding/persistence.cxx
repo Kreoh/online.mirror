@@ -63,6 +63,7 @@
 #include "persistence.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 cpo::uno::Sequence< beans::PropertyValue > GetValuableArgs_Impl( const cpo::uno::Sequence< beans::PropertyValue >& aMedDescr,
@@ -121,7 +122,7 @@ static cpo::uno::Sequence< beans::PropertyValue > addAsTemplate( const cpo::uno:
 
 static uno::Reference< io::XInputStream > createTempInpStreamFromStor(
                                                             const uno::Reference< embed::XStorage >& xStorage,
-                                                            const uno::Reference< uno::XComponentContext >& xContext )
+                                                            const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     SAL_WARN_IF( !xStorage.is(), "embeddedobj.common", "The storage can not be empty!" );
 
@@ -144,7 +145,7 @@ static uno::Reference< io::XInputStream > createTempInpStreamFromStor(
         cpo::uno::Any anyEx = cppu::getCaughtException();
         throw embed::StorageWrappedTargetException(
                     u"Can't copy storage!"_ustr,
-                    uno::Reference< uno::XInterface >(),
+                    uno::Reference< cpo::uno::XInterface >(),
                     anyEx );
     }
 
@@ -188,7 +189,7 @@ static void TransferMediaType( const uno::Reference< embed::XStorage >& i_rSourc
 }
 
 
-static uno::Reference< util::XCloseable > CreateDocument( const uno::Reference< uno::XComponentContext >& _rxContext,
+static uno::Reference< util::XCloseable > CreateDocument( const uno::Reference< cpo::uno::XComponentContext >& _rxContext,
     const OUString& _rDocumentServiceName, bool _bEmbeddedScriptSupport, const bool i_bDocumentRecoverySupport )
 {
     ::comphelper::NamedValueCollection aArguments;
@@ -196,7 +197,7 @@ static uno::Reference< util::XCloseable > CreateDocument( const uno::Reference< 
     aArguments.put( u"EmbeddedScriptSupport"_ustr, _bEmbeddedScriptSupport );
     aArguments.put( u"DocumentRecoverySupport"_ustr, i_bDocumentRecoverySupport );
 
-    uno::Reference< uno::XInterface > xDocument;
+    uno::Reference< cpo::uno::XInterface > xDocument;
     try
     {
         xDocument = _rxContext->getServiceManager()->createInstanceWithArgumentsAndContext(
@@ -547,7 +548,7 @@ uno::Reference< util::XCloseable > OCommonEmbeddedObject::LoadDocumentFromStorag
     uno::Reference< frame::XLoadable > xLoadable( xDocument, uno::UNO_QUERY );
     uno::Reference< document::XStorageBasedDocument > xDoc( xDocument, uno::UNO_QUERY );
     if ( !xDoc.is() && !xLoadable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     ::comphelper::NamedValueCollection aLoadArgs;
     FillDefaultLoadArgs_Impl( xSourceStorage, aLoadArgs );
@@ -557,7 +558,7 @@ uno::Reference< util::XCloseable > OCommonEmbeddedObject::LoadDocumentFromStorag
     {
         xTempInpStream = createTempInpStreamFromStor( xSourceStorage, m_xContext );
         if ( !xTempInpStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         OUString aTempFileURL;
         try
@@ -638,7 +639,7 @@ uno::Reference< io::XInputStream > OCommonEmbeddedObject::StoreDocumentToTempStr
     }
 
     if( !xStorable.is() )
-        throw uno::RuntimeException(u"No storage is provided for storing!"_ustr); // TODO:
+        throw cpo::uno::RuntimeException(u"No storage is provided for storing!"_ustr); // TODO:
 
     OUString aFilterName = GetFilterName( nStorageFormat );
 
@@ -802,7 +803,7 @@ void OCommonEmbeddedObject::StoreDocToStorage_Impl(
     SAL_WARN_IF( !xStorage.is(), "embeddedobj.common", "No storage is provided for storing!" );
 
     if ( !xStorage.is() )
-        throw uno::RuntimeException(); // TODO:
+        throw cpo::uno::RuntimeException(); // TODO:
 
     uno::Reference< document::XStorageBasedDocument > xDoc;
     {
@@ -1280,7 +1281,7 @@ void OCommonEmbeddedObject::storeToEntry( const uno::Reference< embed::XStorage 
                 xStorage->openStorageElement( sEntName, embed::ElementModes::READWRITE );
 
     if ( !xSubStorage.is() )
-        throw uno::RuntimeException(); //TODO
+        throw cpo::uno::RuntimeException(); //TODO
 
     aGuard.clear();
     // TODO/LATER: support hierarchical name for embedded objects in embedded objects
@@ -1416,7 +1417,7 @@ void OCommonEmbeddedObject::storeAsEntry( const uno::Reference< embed::XStorage 
                 xStorage->openStorageElement( sEntName, embed::ElementModes::READWRITE );
 
     if ( !xSubStorage.is() )
-        throw uno::RuntimeException(); //TODO
+        throw cpo::uno::RuntimeException(); //TODO
 
     if ( m_nObjectState != embed::EmbedStates::LOADED )
     {
@@ -1477,7 +1478,7 @@ void OCommonEmbeddedObject::saveCompleted( bool bUseNew )
 
     OSL_ENSURE( m_xNewObjectStorage.is() && m_xNewParentStorage.is() , "Internal object information is broken!" );
     if ( !m_xNewObjectStorage.is() || !m_xNewParentStorage.is() )
-        throw uno::RuntimeException(); // TODO: broken internal information
+        throw cpo::uno::RuntimeException(); // TODO: broken internal information
 
     if ( bUseNew )
     {
@@ -1591,7 +1592,7 @@ void OCommonEmbeddedObject::storeOwn()
 
     SAL_WARN_IF( !m_xDocHolder->GetComponent().is(), "embeddedobj.common", "If an object is activated or in running state it must have a document!" );
     if ( !m_xDocHolder->GetComponent().is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if ( m_bIsLinkURL )
     {

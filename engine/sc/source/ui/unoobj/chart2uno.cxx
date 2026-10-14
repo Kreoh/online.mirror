@@ -20,6 +20,7 @@
 #include <memory>
 #include <sal/config.h>
 #include <sal/log.hxx>
+#include <docuno.hxx>
 
 #include <algorithm>
 #include <utility>
@@ -70,6 +71,7 @@ SC_SIMPLE_SERVICE_INFO( ScChart2DataSequence, u"ScChart2DataSequence"_ustr,
         u"com.sun.star.chart2.data.DataSequence"_ustr)
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::formula;
 
 namespace
@@ -1010,7 +1012,7 @@ void ScChart2DataProvider::Notify( SfxBroadcaster& /*rBC*/, const SfxHint& rHint
     }
 }
 
-bool SAL_CALL ScChart2DataProvider::createDataSourcePossible( const cpo::uno::Sequence< beans::PropertyValue >& aArguments )
+bool ScChart2DataProvider::createDataSourcePossible( const cpo::uno::Sequence< beans::PropertyValue >& aArguments )
 {
     SolarMutexGuard aGuard;
     if( ! m_pDocument )
@@ -1046,7 +1048,7 @@ uno::Reference< chart2::data::XLabeledDataSequence > lcl_createLabeledDataSequen
     {
         try
         {
-            const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+            const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
             if ( xContext.is() )
             {
                 xResult.set( chart2::data::LabeledDataSequence::create(xContext), uno::UNO_QUERY_THROW );
@@ -1419,13 +1421,13 @@ void shrinkToDataRange(ScDocument* pDoc, std::vector<ScTokenRef>& rRefTokens)
 
 }
 
-uno::Reference< chart2::data::XDataSource> SAL_CALL
+uno::Reference< chart2::data::XDataSource>
 ScChart2DataProvider::createDataSource(
     const cpo::uno::Sequence< beans::PropertyValue >& aArguments )
 {
     SolarMutexGuard aGuard;
     if ( ! m_pDocument )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< chart2::data::XDataSource> xResult;
     bool bLabel = true;
@@ -1615,12 +1617,7 @@ public:
         if (!ScRefTokenHelper::isRef(pToken))
             return;
 
-        SCTAB nTab;
-        if (pToken->GetType() == svSingleRef)
-            nTab = static_cast<ScSingleRefToken*>(pToken.get())->GetSingleRef().Tab();
-        else
-            nTab = static_cast<ScDoubleRefToken*>(pToken.get())->GetSingleRef().Tab();
-        mpTabNumVector->push_back(nTab);
+        mpTabNumVector->push_back(ScRefTokenHelper::getSingleRef(pToken.get())->Tab());
     }
 
     void getVector(std::vector<SCTAB>& rVector)
@@ -1795,7 +1792,7 @@ std::pair<OUString, OUString> constructKey(const uno::Reference< chart2::data::X
 
 } //end anonymous namespace
 
-cpo::uno::Sequence< beans::PropertyValue > SAL_CALL ScChart2DataProvider::detectArguments(
+cpo::uno::Sequence< beans::PropertyValue > ScChart2DataProvider::detectArguments(
     const uno::Reference< chart2::data::XDataSource >& xDataSource )
 {
     std::vector< beans::PropertyValue > aResult;
@@ -2068,7 +2065,7 @@ cpo::uno::Sequence< beans::PropertyValue > SAL_CALL ScChart2DataProvider::detect
     return comphelper::containerToSequence( aResult );
 }
 
-bool SAL_CALL ScChart2DataProvider::createDataSequenceByRangeRepresentationPossible( const OUString& aRangeRepresentation )
+bool ScChart2DataProvider::createDataSequenceByRangeRepresentationPossible( const OUString& aRangeRepresentation )
 {
     SolarMutexGuard aGuard;
     if( ! m_pDocument )
@@ -2081,7 +2078,7 @@ bool SAL_CALL ScChart2DataProvider::createDataSequenceByRangeRepresentationPossi
     return !aTokens.empty();
 }
 
-uno::Reference< chart2::data::XDataSequence > SAL_CALL
+uno::Reference< chart2::data::XDataSequence >
     ScChart2DataProvider::createDataSequenceByRangeRepresentation(
     const OUString& aRangeRepresentation )
 {
@@ -2106,7 +2103,7 @@ uno::Reference< chart2::data::XDataSequence > SAL_CALL
     return xResult;
 }
 
-uno::Reference<chart2::data::XDataSequence> SAL_CALL
+uno::Reference<chart2::data::XDataSequence>
 ScChart2DataProvider::createDataSequenceByValueArray(
     const OUString& /*aRole*/, const OUString& /*aRangeRepresentation*/,
     const OUString& /*aRoleQualifier*/ )
@@ -2114,7 +2111,7 @@ ScChart2DataProvider::createDataSequenceByValueArray(
     return uno::Reference<chart2::data::XDataSequence>();
 }
 
-uno::Reference< sheet::XRangeSelection > SAL_CALL ScChart2DataProvider::getRangeSelection()
+uno::Reference< sheet::XRangeSelection > ScChart2DataProvider::getRangeSelection()
 {
     uno::Reference< sheet::XRangeSelection > xResult;
 
@@ -2125,63 +2122,7 @@ uno::Reference< sheet::XRangeSelection > SAL_CALL ScChart2DataProvider::getRange
     return xResult;
 }
 
-bool SAL_CALL ScChart2DataProvider::createDataSequenceByFormulaTokensPossible(
-    const cpo::uno::Sequence<sheet::FormulaToken>& aTokens )
-{
-    if (!aTokens.hasElements())
-        return false;
-
-    ScTokenArray aCode(*m_pDocument);
-    if (!ScTokenConversion::ConvertToTokenArray(*m_pDocument, aCode, aTokens))
-        return false;
-
-    sal_uInt16 n = aCode.GetLen();
-    if (!n)
-        return false;
-
-    formula::FormulaTokenArrayPlainIterator aIter(aCode);
-    const formula::FormulaToken* pFirst = aIter.First();
-    const formula::FormulaToken* pLast = aCode.GetArray()[n-1];
-    for (const formula::FormulaToken* p = aIter.First(); p; p = aIter.Next())
-    {
-        switch (p->GetType())
-        {
-            case svSep:
-            {
-                switch (p->GetOpCode())
-                {
-                    case ocSep:
-                        // separators are allowed.
-                    break;
-                    case ocOpen:
-                        if (p != pFirst)
-                            // open paran is allowed only as the first token.
-                            return false;
-                    break;
-                    case ocClose:
-                        if (p != pLast)
-                            // close paren is allowed only as the last token.
-                            return false;
-                    break;
-                    default:
-                        return false;
-                }
-            }
-            break;
-            case svSingleRef:
-            case svDoubleRef:
-            case svExternalSingleRef:
-            case svExternalDoubleRef:
-            break;
-            default:
-                return false;
-        }
-    }
-
-    return true;
-}
-
-uno::Reference<chart2::data::XDataSequence> SAL_CALL
+uno::Reference<chart2::data::XDataSequence>
 ScChart2DataProvider::createDataSequenceByFormulaTokens(
     const cpo::uno::Sequence<sheet::FormulaToken>& aTokens )
 {
@@ -2254,7 +2195,7 @@ ScChart2DataProvider::createDataSequenceByFormulaTokens(
 
 // XRangeXMLConversion ---------------------------------------------------
 
-OUString SAL_CALL ScChart2DataProvider::convertRangeToXML( const OUString& sRangeRepresentation )
+OUString ScChart2DataProvider::convertRangeToXML( const OUString& sRangeRepresentation )
 {
     OUString aRet;
     if (!m_pDocument)
@@ -2281,7 +2222,7 @@ OUString SAL_CALL ScChart2DataProvider::convertRangeToXML( const OUString& sRang
     return aRet;
 }
 
-OUString SAL_CALL ScChart2DataProvider::convertRangeFromXML( const OUString& sXMLRange )
+OUString ScChart2DataProvider::convertRangeFromXML( const OUString& sXMLRange )
 {
     if (!m_pDocument)
     {
@@ -2324,7 +2265,7 @@ OUString SAL_CALL ScChart2DataProvider::convertRangeFromXML( const OUString& sXM
 
 // DataProvider XPropertySet -------------------------------------------------
 
-uno::Reference< beans::XPropertySetInfo> SAL_CALL
+uno::Reference< beans::XPropertySetInfo>
 ScChart2DataProvider::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
@@ -2333,7 +2274,7 @@ ScChart2DataProvider::getPropertySetInfo()
     return aRef;
 }
 
-void SAL_CALL ScChart2DataProvider::setPropertyValue(
+void ScChart2DataProvider::setPropertyValue(
         const OUString& rPropertyName, const cpo::uno::Any& rValue)
 {
     if ( rPropertyName != SC_UNONAME_INCLUDEHIDDENCELLS )
@@ -2344,7 +2285,7 @@ void SAL_CALL ScChart2DataProvider::setPropertyValue(
 
 }
 
-cpo::uno::Any SAL_CALL ScChart2DataProvider::getPropertyValue(
+cpo::uno::Any ScChart2DataProvider::getPropertyValue(
         const OUString& rPropertyName)
 {
     cpo::uno::Any aRet;
@@ -2360,28 +2301,28 @@ cpo::uno::Any SAL_CALL ScChart2DataProvider::getPropertyValue(
     return aRet;
 }
 
-void SAL_CALL ScChart2DataProvider::addPropertyChangeListener(
+void ScChart2DataProvider::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener>& /*xListener*/)
 {
     OSL_FAIL( "Not yet implemented" );
 }
 
-void SAL_CALL ScChart2DataProvider::removePropertyChangeListener(
+void ScChart2DataProvider::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener>& /*rListener*/)
 {
     OSL_FAIL( "Not yet implemented" );
 }
 
-void SAL_CALL ScChart2DataProvider::addVetoableChangeListener(
+void ScChart2DataProvider::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener>& /*rListener*/)
 {
     OSL_FAIL( "Not yet implemented" );
 }
 
-void SAL_CALL ScChart2DataProvider::removeVetoableChangeListener(
+void ScChart2DataProvider::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener>& /*rListener*/ )
 {
@@ -2413,7 +2354,7 @@ void ScChart2DataSource::Notify( SfxBroadcaster& /*rBC*/, const SfxHint& rHint)
     }
 }
 
-cpo::uno::Sequence< uno::Reference< chart2::data::XLabeledDataSequence> > SAL_CALL
+cpo::uno::Sequence< uno::Reference< chart2::data::XLabeledDataSequence> >
 ScChart2DataSource::getDataSequences()
 {
     SolarMutexGuard aGuard;
@@ -3015,11 +2956,11 @@ void ScChart2DataSequence::ExternalRefListener::addFileId(sal_uInt16 nFileId)
     maFileIds.insert(nFileId);
 }
 
-cpo::uno::Sequence< cpo::uno::Any> SAL_CALL ScChart2DataSequence::getData()
+cpo::uno::Sequence< cpo::uno::Any> ScChart2DataSequence::getData()
 {
     SolarMutexGuard aGuard;
     if ( !m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     BuildDataCache();
 
@@ -3052,11 +2993,11 @@ cpo::uno::Sequence< cpo::uno::Any> SAL_CALL ScChart2DataSequence::getData()
 
 // XNumericalDataSequence --------------------------------------------------
 
-cpo::uno::Sequence< double > SAL_CALL ScChart2DataSequence::getNumericalData()
+cpo::uno::Sequence< double > ScChart2DataSequence::getNumericalData()
 {
     SolarMutexGuard aGuard;
     if ( !m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     BuildDataCache();
 
@@ -3074,12 +3015,12 @@ cpo::uno::Sequence< double > SAL_CALL ScChart2DataSequence::getNumericalData()
 
 // XTextualDataSequence --------------------------------------------------
 
-cpo::uno::Sequence< OUString > SAL_CALL ScChart2DataSequence::getTextualData()
+cpo::uno::Sequence< OUString > ScChart2DataSequence::getTextualData()
 {
     SolarMutexGuard aGuard;
     cpo::uno::Sequence<OUString> aSeq;
     if ( !m_pDocument )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     BuildDataCache();
 
@@ -3105,7 +3046,7 @@ cpo::uno::Sequence< OUString > SAL_CALL ScChart2DataSequence::getTextualData()
     return aSeq;
 }
 
-OUString SAL_CALL ScChart2DataSequence::getSourceRangeRepresentation()
+OUString ScChart2DataSequence::getSourceRangeRepresentation()
 {
     SolarMutexGuard aGuard;
     OUString aStr;
@@ -3208,11 +3149,11 @@ private:
 
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL ScChart2DataSequence::generateLabel(chart2::data::LabelOrigin eOrigin)
+cpo::uno::Sequence< OUString > ScChart2DataSequence::generateLabel(chart2::data::LabelOrigin eOrigin)
 {
     SolarMutexGuard aGuard;
     if ( !m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // Determine the total size of all ranges.
     AccumulateRangeSize func(m_pDocument);
@@ -3256,7 +3197,7 @@ sal_uInt32 getDisplayNumberFormat(const ScDocument* pDoc, const ScAddress& rPos)
 
 }
 
-::sal_Int32 SAL_CALL ScChart2DataSequence::getNumberFormatKeyByIndex( ::sal_Int32 nIndex )
+::sal_Int32 ScChart2DataSequence::getNumberFormatKeyByIndex( ::sal_Int32 nIndex )
 {
     SolarMutexGuard aGuard;
     BuildDataCache();
@@ -3289,7 +3230,7 @@ sal_uInt32 getDisplayNumberFormat(const ScDocument* pDoc, const ScAddress& rPos)
 
 // XCloneable ================================================================
 
-uno::Reference< util::XCloneable > SAL_CALL ScChart2DataSequence::createClone()
+uno::Reference< util::XCloneable > ScChart2DataSequence::createClone()
 {
     SolarMutexGuard aGuard;
 
@@ -3299,7 +3240,7 @@ uno::Reference< util::XCloneable > SAL_CALL ScChart2DataSequence::createClone()
 
 // XModifyBroadcaster ========================================================
 
-void SAL_CALL ScChart2DataSequence::addModifyListener( const uno::Reference< util::XModifyListener >& aListener )
+void ScChart2DataSequence::addModifyListener( const uno::Reference< util::XModifyListener >& aListener )
 {
     // like ScCellRangesBase::addModifyListener
     SolarMutexGuard aGuard;
@@ -3335,7 +3276,7 @@ void SAL_CALL ScChart2DataSequence::addModifyListener( const uno::Reference< uti
     }
 }
 
-void SAL_CALL ScChart2DataSequence::removeModifyListener( const uno::Reference< util::XModifyListener >& aListener )
+void ScChart2DataSequence::removeModifyListener( const uno::Reference< util::XModifyListener >& aListener )
 {
     // like ScCellRangesBase::removeModifyListener
 
@@ -3373,7 +3314,7 @@ void SAL_CALL ScChart2DataSequence::removeModifyListener( const uno::Reference< 
 
 // DataSequence XPropertySet -------------------------------------------------
 
-uno::Reference< beans::XPropertySetInfo> SAL_CALL
+uno::Reference< beans::XPropertySetInfo>
 ScChart2DataSequence::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
@@ -3382,7 +3323,7 @@ ScChart2DataSequence::getPropertySetInfo()
     return aRef;
 }
 
-void SAL_CALL ScChart2DataSequence::setPropertyValue(
+void ScChart2DataSequence::setPropertyValue(
         const OUString& rPropertyName, const cpo::uno::Any& rValue)
 {
     if ( rPropertyName == SC_UNONAME_ROLE )
@@ -3424,7 +3365,7 @@ void SAL_CALL ScChart2DataSequence::setPropertyValue(
     // TODO: support optional properties
 }
 
-cpo::uno::Any SAL_CALL ScChart2DataSequence::getPropertyValue(const OUString& rPropertyName)
+cpo::uno::Any ScChart2DataSequence::getPropertyValue(const OUString& rPropertyName)
 {
     cpo::uno::Any aRet;
     if ( rPropertyName == SC_UNONAME_ROLE )
@@ -3466,7 +3407,7 @@ cpo::uno::Any SAL_CALL ScChart2DataSequence::getPropertyValue(const OUString& rP
     return aRet;
 }
 
-void SAL_CALL ScChart2DataSequence::addPropertyChangeListener(
+void ScChart2DataSequence::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener>& /*xListener*/)
 {
@@ -3474,7 +3415,7 @@ void SAL_CALL ScChart2DataSequence::addPropertyChangeListener(
     OSL_FAIL( "Not yet implemented" );
 }
 
-void SAL_CALL ScChart2DataSequence::removePropertyChangeListener(
+void ScChart2DataSequence::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener>& /*rListener*/)
 {
@@ -3482,7 +3423,7 @@ void SAL_CALL ScChart2DataSequence::removePropertyChangeListener(
     OSL_FAIL( "Not yet implemented" );
 }
 
-void SAL_CALL ScChart2DataSequence::addVetoableChangeListener(
+void ScChart2DataSequence::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener>& /*rListener*/)
 {
@@ -3490,7 +3431,7 @@ void SAL_CALL ScChart2DataSequence::addVetoableChangeListener(
     OSL_FAIL( "Not yet implemented" );
 }
 
-void SAL_CALL ScChart2DataSequence::removeVetoableChangeListener(
+void ScChart2DataSequence::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener>& /*rListener*/)
 {
@@ -3501,45 +3442,6 @@ void SAL_CALL ScChart2DataSequence::removeVetoableChangeListener(
 void ScChart2DataSequence::setDataChangedHint(bool b)
 {
     m_bGotDataChangedHint = b;
-}
-
-bool ScChart2DataSequence::switchToNext(bool bWrap)
-{
-    if(!mbTimeBased)
-        return true;
-
-    if(mnCurrentTab >= mnTimeBasedEnd)
-    {
-        if(bWrap)
-            setToPointInTime(0);
-        return false;
-    }
-
-    for(const auto& rxToken : m_aTokens)
-    {
-        if (rxToken->GetType() != svDoubleRef)
-            continue;
-
-        ScComplexRefData& rData = static_cast<ScDoubleRefToken*>(rxToken.get())->GetDoubleRef();
-        ScSingleRefData& s = rData.Ref1;
-        ScSingleRefData& e = rData.Ref2;
-
-        s.IncTab(1);
-        e.IncTab(1);
-    }
-
-    ++mnCurrentTab;
-
-    RebuildDataCache();
-
-    return true;
-}
-
-void ScChart2DataSequence::setRange(sal_Int32 nStart, sal_Int32 nEnd)
-{
-    mnTimeBasedStart = nStart;
-    mnTimeBasedEnd = nEnd;
-    mnCurrentTab = mnTimeBasedStart;
 }
 
 bool ScChart2DataSequence::setToPointInTime(sal_Int32 nPoint)

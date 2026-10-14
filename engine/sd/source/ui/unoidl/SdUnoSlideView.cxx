@@ -33,7 +33,7 @@
 #include <svx/unopage.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace sd {
@@ -50,7 +50,7 @@ SdUnoSlideView::~SdUnoSlideView() noexcept
 
 //----- XSelectionSupplier ----------------------------------------------------
 
-bool SAL_CALL SdUnoSlideView::select (const Any& aSelection)
+bool SdUnoSlideView::select (const Any& aSelection)
 {
     slidesorter::controller::SlideSorterController& rSlideSorterController
         = mrSlideSorter.GetController();
@@ -80,7 +80,7 @@ bool SAL_CALL SdUnoSlideView::select (const Any& aSelection)
     return true;
 }
 
-Any SAL_CALL SdUnoSlideView::getSelection()
+Any SdUnoSlideView::getSelection()
 {
     Any aResult;
 
@@ -103,18 +103,18 @@ Any SAL_CALL SdUnoSlideView::getSelection()
     return aResult;
 }
 
-void SAL_CALL SdUnoSlideView::addSelectionChangeListener (
-    const css::uno::Reference<css::view::XSelectionChangeListener>&)
+void SdUnoSlideView::addSelectionChangeListener (
+    const cpo::uno::Reference<css::view::XSelectionChangeListener>&)
 {}
 
-void SAL_CALL SdUnoSlideView::removeSelectionChangeListener (
-    const css::uno::Reference<css::view::XSelectionChangeListener>&)
+void SdUnoSlideView::removeSelectionChangeListener (
+    const cpo::uno::Reference<css::view::XSelectionChangeListener>&)
 {}
 
 //----- XDrawView -------------------------------------------------------------
 
-void SAL_CALL SdUnoSlideView::setCurrentPage (
-    const css::uno::Reference<css::drawing::XDrawPage>& rxDrawPage)
+void SdUnoSlideView::setCurrentPage (
+    const cpo::uno::Reference<css::drawing::XDrawPage>& rxDrawPage)
 {
     Reference<beans::XPropertySet> xProperties (rxDrawPage, UNO_QUERY);
     if (xProperties.is())
@@ -128,7 +128,7 @@ void SAL_CALL SdUnoSlideView::setCurrentPage (
     }
 }
 
-css::uno::Reference<css::drawing::XDrawPage > SAL_CALL
+cpo::uno::Reference<css::drawing::XDrawPage >
     SdUnoSlideView::getCurrentPage()
 {
     return mrSlideSorter.GetController().GetCurrentSlideManager().GetCurrentSlide()->GetXDrawPage();
@@ -143,7 +143,7 @@ void SdUnoSlideView::setFastPropertyValue (
     throw beans::UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
 }
 
-Any SAL_CALL SdUnoSlideView::getFastPropertyValue (
+Any SdUnoSlideView::getFastPropertyValue (
     sal_Int32 nHandle)
 {
     if( nHandle != DrawController::PROPERTY_VIEWOFFSET )
@@ -153,17 +153,17 @@ Any SAL_CALL SdUnoSlideView::getFastPropertyValue (
 }
 
 // XServiceInfo
-OUString SAL_CALL SdUnoSlideView::getImplementationName(  )
+OUString SdUnoSlideView::getImplementationName(  )
 {
     return u"com.sun.star.comp.sd.SdUnoSlideView"_ustr;
 }
 
-bool SAL_CALL SdUnoSlideView::supportsService( const OUString& ServiceName )
+bool SdUnoSlideView::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL SdUnoSlideView::getSupportedServiceNames(  )
+Sequence< OUString > SdUnoSlideView::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.presentation.SlidesView"_ustr };
 }

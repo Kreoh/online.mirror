@@ -2558,13 +2558,13 @@ void SwTabFramePainter::PaintLines(OutputDevice& rDev, const SwRect& rRect) cons
             {
                 pTmpColor = pHCColor;
 
-                // keep this border legible against the current on-screen page background,
-                // the way automatic text color already does, instead of always showing
-                // the line's own stored color:
-                if (!pTmpColor && gProp.pSGlobalShell->GetWin() &&
-                    !HasColorContrast(aStyles[0].GetColorPrim(), rDocColor))
+                // keep this border legible against the current on-screen dark page
+                // background, the way automatic text color already does, instead of
+                // always showing the line's own stored color:
+                if (rDocColor.IsDark() && !pTmpColor && gProp.pSGlobalShell->GetWin()
+                    && !HasColorContrast(aStyles[0].GetColorPrim(), rDocColor))
                 {
-                    aContrastColor = rDocColor.IsDark() ? COL_WHITE : COL_BLACK;
+                    aContrastColor = COL_WHITE;
                     pTmpColor = &aContrastColor;
                 }
             }
@@ -4265,14 +4265,27 @@ void SwFlyFrame::PaintSwFrame(vcl::RenderContext& rRenderContext, SwRect const& 
         }
     }
 
+    // A fly can overlap multiple pages, and be clipped to the page area.
+    // SetClipRegion() below drops whatever clip already exists, and the
+    // rectangle passed in is all that bounds this frame's output. Keep
+    // the clip by intersecting it with the rectangle to avoid the fly
+    // being repained during an adjacent page's paint cycle.
+    SwRect aRect( rRect );
+    if ( rRenderContext.IsClipRegion() )
+        aRect.Intersection( SwRect( rRenderContext.GetClipRegion().GetBoundRect() ) );
+
+    aRect.Intersection( getFrameArea() );
+    if ( !aRect.HasArea() )
+    {
+        Validate();
+        return;
+    }
+
     //because of the overlapping of frames and drawing objects the flys have to
     //paint their borders (and those of the internal ones) directly.
     //e.g. #33066#
     gProp.pSLines->LockLines(true);
     BorderLinesGuard blg; // this should not paint borders added from PaintBaBo
-
-    SwRect aRect( rRect );
-    aRect.Intersection_( getFrameArea() );
 
     rRenderContext.Push( vcl::PushFlags::CLIPREGION );
     rRenderContext.SetClipRegion();

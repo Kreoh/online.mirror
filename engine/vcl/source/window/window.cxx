@@ -89,8 +89,8 @@
 
 #include "impldockingwrapper.hxx"
 
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::datatransfer::clipboard;
 using namespace ::com::sun::star::datatransfer::dnd;
@@ -3402,6 +3402,9 @@ void Window::DumpAsPropertyTree(tools::JsonWriter& rJsonWriter)
     if (get_hexpand())
         rJsonWriter.put("hexpand", true);
 
+    if (get_vexpand())
+        rJsonWriter.put("vexpand", true);
+
     {
         WindowImpl* pGroupImpl = mpWindowImpl->mpBorderWindow
             ? mpWindowImpl->mpBorderWindow->mpWindowImpl.get()
@@ -3464,6 +3467,9 @@ void Window::DumpAsPropertyTree(tools::JsonWriter& rJsonWriter)
 
                 if (pChild->get_hexpand())
                     rJsonWriter.put("hexpand", true);
+
+                if (pChild->get_vexpand())
+                    rJsonWriter.put("vexpand", true);
 
                 if (pChild->get_expand())
                     rJsonWriter.put("expand", true);

@@ -60,6 +60,7 @@
 #include <navicfg.hxx>
 #include <edtwin.hxx>
 #include <doc.hxx>
+#include <charformats.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <IDocumentOutlineNodes.hxx>
@@ -145,8 +146,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::container;
 
 namespace {
@@ -3113,7 +3114,7 @@ IMPL_LINK(SwContentTree, EditedEntryHdl, const IterString&, rIterString, bool)
         }
 
         cpo::uno::Any aObj = xNameAccess->getByName(pCnt->GetName());
-        uno::Reference<uno::XInterface>  xTmp;
+        uno::Reference<cpo::uno::XInterface>  xTmp;
         aObj >>= xTmp;
         uno::Reference<container::XNamed>  xNamed(xTmp, uno::UNO_QUERY);
 
@@ -3124,7 +3125,7 @@ IMPL_LINK(SwContentTree, EditedEntryHdl, const IterString&, rIterString, bool)
             m_bEditing = false;
             return true;
         }
-        catch (const uno::RuntimeException)
+        catch (const cpo::uno::RuntimeException)
         {
             OSL_FAIL("Couldn't rename");
         }

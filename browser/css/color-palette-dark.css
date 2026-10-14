@@ -12,6 +12,14 @@
 	--color-text-light: #fff; /* secondard text, disabled */
 	--color-text-lighter: #f8f9fa;
 	--color-status-badge: #d6d6d6;
+
+	/* What the pane knows of a linked file. The light values sit at 3.3:1 to
+	   3.6:1 on the dark pane, so each has its own value here. */
+	--color-status-neutral: #d6d6d6;
+	--color-status-linked: #83beec;
+	--color-status-warning: #eca700;
+	--color-status-error: #f28b82;
+
 	--color-slideshow: #d6d6d6;
 	--color-date-text: #d6d6d6;
 	--color-annotation-line: #c0bfbc;
@@ -23,7 +31,7 @@
 	--color-background-lighter: #262626; /* hover, toolbar, dialog, disabled */
 	--color-overlay: #1c5fa814;
 	--color-background-tabs-group: #303030;
-	--color-stylesview-background: var(--color-background-lighter);
+	--color-stylesview-background: #fff;
 	--brightness-stylesview: 0.9;
 
 	--color-canvas: #141414;
@@ -36,9 +44,9 @@
 	--color-primary-darker: #004b86;
 	--color-primary-lighter: #83beec; /* background-color */
 
-	--color-border: #121212;
-	--color-border-dark: #1E1E1E; /* select */
-	--color-border-darker: #000;  /* hover */
+	--color-border: #767676;
+	--color-border-dark: #767676; /* select */
+	--color-border-darker: #8e8e8e;  /* hover */
 	--color-border-dark-63: #5e5e5e;
 	--color-border-lighter: #303030; /* disabled */
 
@@ -92,10 +100,29 @@
 	/* --opacity-icon-hover: 1; */
 	/* --opacity-icon-active: 1; */
 	--opacity-icon-disabled: 0.65;
+	--opacity-icon-disabled-light: 0.35;
+	--opacity-text-disabled: 0.8; /* a label has to stay readable while it is dimmed */
 }
 
 html[data-bg-theme='dark'] {
 	--color-cursor-blink-background: #fff;
 	--color-background-document: #121212;
 	--color-calc-grid: #474747;
+}
+
+/* The accent of each app, lightened for the dark pane. The light values sit
+   between 2.3:1 and 2.9:1 on #262626, under the 3:1 that a mark carrying
+   meaning needs, and the accent is the only thing marking an open row in
+   the import pane. */
+[data-theme='dark'] [data-doctype='text'] {
+	--doc-type: 91, 168, 224;
+}
+[data-theme='dark'] [data-doctype='spreadsheet'] {
+	--doc-type: 106, 186, 106;
+}
+[data-theme='dark'] [data-doctype='presentation'] {
+	--doc-type: 217, 119, 63;
+}
+[data-theme='dark'] [data-doctype='drawing'] {
+	--doc-type: 216, 178, 58;
 }

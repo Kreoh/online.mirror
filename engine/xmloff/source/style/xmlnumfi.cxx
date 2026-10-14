@@ -46,6 +46,7 @@
 #include <vector>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 namespace {
@@ -124,12 +125,12 @@ class SvXMLNumFmtElementContext : public SvXMLImportContext
 public:
                 SvXMLNumFmtElementContext( SvXMLImport& rImport, sal_Int32 nElement,
                                     SvXMLNumFormatContext& rParentContext, SvXMLStyleTokens nNewType,
-                                    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
+                                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
-    virtual void SAL_CALL characters( const OUString& rChars ) override;
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual void characters( const OUString& rChars ) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
     void    AddEmbeddedElement( sal_Int32 nFormatPos, std::u16string_view rContent, std::u16string_view rBlankWidthString );
 };
@@ -144,10 +145,10 @@ class SvXMLNumFmtEmbeddedTextContext : public SvXMLImportContext
 public:
                 SvXMLNumFmtEmbeddedTextContext( SvXMLImport& rImport, sal_Int32 nElement,
                                     SvXMLNumFmtElementContext& rParentContext,
-                                    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
+                                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
 
-    virtual void SAL_CALL characters( const OUString& rChars ) override;
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void characters( const OUString& rChars ) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 class SvXMLNumFmtMapContext : public SvXMLImportContext
@@ -159,9 +160,9 @@ class SvXMLNumFmtMapContext : public SvXMLImportContext
 public:
                 SvXMLNumFmtMapContext( SvXMLImport& rImport, sal_Int32 nElement,
                                     SvXMLNumFormatContext& rParentContext,
-                                    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
+                                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 class SvXMLNumFmtPropContext : public SvXMLImportContext
@@ -173,9 +174,9 @@ class SvXMLNumFmtPropContext : public SvXMLImportContext
 public:
                 SvXMLNumFmtPropContext( SvXMLImport& rImport, sal_Int32 nElement,
                                     SvXMLNumFormatContext& rParentContext,
-                                    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
+                                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList );
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 enum class SvXMLStyleTokens
@@ -851,9 +852,9 @@ SvXMLNumFmtElementContext::SvXMLNumFmtElementContext( SvXMLImport& rImport,
         aNumInfo.aIntegerFractionDelimiter = u" "_ustr;
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SvXMLNumFmtElementContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SvXMLNumFmtElementContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     //  only number:number and number:scientific-number supports number:embedded-text child element
 
@@ -1387,9 +1388,9 @@ SvXMLNumFormatContext::~SvXMLNumFormatContext()
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SvXMLNumFormatContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SvXMLNumFormatContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext* pContext = nullptr;
 
@@ -1536,7 +1537,7 @@ sal_Int32 SvXMLNumFormatContext::PrivateGetKey(std::vector<SvXMLNumFormatContext
     }
 }
 
-sal_Int32 SvXMLNumFormatContext::CreateAndInsert( css::uno::Reference< css::util::XNumberFormatsSupplier > const & xFormatsSupplier )
+sal_Int32 SvXMLNumFormatContext::CreateAndInsert( cpo::uno::Reference< css::util::XNumberFormatsSupplier > const & xFormatsSupplier )
 {
     if (m_nKey <= -1)
     {
@@ -2313,7 +2314,7 @@ SvXMLNumFmtHelper::~SvXMLNumFmtHelper()
 
 SvXMLStyleContext*  SvXMLNumFmtHelper::CreateChildContext( SvXMLImport& rImport,
                 sal_Int32 nElement,
-                const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList,
+                const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList,
                 SvXMLStylesContext& rStyles )
 {
     SvXMLStylesTokens nStyleToken;

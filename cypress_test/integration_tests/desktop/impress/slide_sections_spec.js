@@ -29,6 +29,57 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Slide sections', function(
 		cy.cGet('#response-ok').click();
 	}
 
+	// Watches the slide sorter and records in win.slidesShownDeselected each slide in
+	// start..end that the sorter shows selected and later shows unselected again. The
+	// check runs at the end of each script run that changes the sorter, so it sees what
+	// the user sees, not the steps inside one run. It also runs after each status message,
+	// because the socket can hand several messages to the page in one run, and whether
+	// two messages share a run depends on timing.
+	function watchSlidesShownDeselected(win, start, end) {
+		var docLayer = win.app.map._docLayer;
+		var preview = docLayer._preview;
+		var shownSelected = {};
+		win.slidesShownDeselected = [];
+		var check = function() {
+			for (var i = start; i <= end; i++) {
+				var classList = preview._previewTiles[i].classList;
+				if (classList.contains('preview-img-selectedpart') ||
+					classList.contains('preview-img-currentpart'))
+					shownSelected[i] = true;
+				else if (shownSelected[i]) {
+					shownSelected[i] = false;
+					win.slidesShownDeselected.push(i);
+				}
+			}
+		};
+		check();
+		var onStatusMsg = docLayer._onStatusMsg;
+		docLayer._onStatusMsg = function() {
+			onStatusMsg.apply(this, arguments);
+			check();
+		};
+		new win.MutationObserver(check).observe(win.document.getElementById('slide-sorter'),
+			{ attributes: true, attributeFilter: ['class'], subtree: true });
+	}
+
+	function waitForSectionsLoaded() {
+		cy.window().should(function(win) {
+			var s = win['0'].app.impress.sections;
+			expect(s).to.have.length(3);
+			expect(s.map(function(x) { return x.startIndex; }))
+				.to.deep.equal([0, 4, 11]);
+			expect(win['0'].app.impress.partList).to.have.length(13);
+		});
+	}
+
+	function assertSlidesSelected(start, end) {
+		cy.window().should(function(win) {
+			var impress = win['0'].app.impress;
+			for (var i = start; i <= end; i++)
+				expect(impress.isSlideSelected(i), 'slide ' + i).to.be.true;
+		});
+	}
+
 	describe('PPTX format', function() {
 
 		beforeEach(function() {
@@ -150,6 +201,146 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Slide sections', function(
 					expect(impress.isSlideSelected(i)).to.be.false;
 				});
 			});
+		});
+
+		// Selecting a section header selects all its slides. Pressing Delete
+		// must ask first, naming the section and its slide count, and must not
+		// remove anything until the user confirms.
+		it('Delete key on a selected section asks before removing its slides', function() {
+			helper.processToIdle(this.win);
+
+			assertSectionHeaders(['Section-1', 'Section-2', 'Section-3']);
+			cy.window().should(function(win) {
+				expect(win['0'].app.impress.partList).to.have.length(13);
+			});
+
+			// Focus the slide sorter on slide 0, then select all of Section-1.
+			cy.cGet('#preview-frame-part-0').click();
+			cy.cGet('.slide-section-header').eq(0)
+				.find('.slide-section-name').click();
+			helper.processToIdle(this.win);
+			cy.window().should(function(win) {
+				var preview = win['0'].app.map._docLayer._preview;
+				expect(preview.partsFocused).to.be.true;
+				expect(win['0'].app.impress.getSelectedSlidesCount()).to.equal(4);
+			});
+
+			// Press Delete on the focused sorter.
+			cy.cGet('#preview-frame-part-0')
+				.trigger('keydown', { keyCode: 46, which: 46, key: 'Delete', code: 'Delete' });
+
+			// The confirm names the section and its four slides. Nothing is gone.
+			cy.cGet('[id^="info-modal-tile-m"]').should('have.text', 'Delete section');
+			cy.cGet('#deleteslide-modal-response').should('have.text', 'Delete');
+			cy.cGet('[id^="info-modal-label1"]').should('contain.text', 'Section-1');
+			cy.cGet('[id^="info-modal-label1"]').should('contain.text', '4');
+			cy.window().should(function(win) {
+				expect(win['0'].app.impress.partList).to.have.length(13);
+			});
+
+			// Cancel keeps every slide.
+			cy.cGet('#deleteslide-modal-cancel').click();
+			helper.processToIdle(this.win);
+			cy.window().should(function(win) {
+				expect(win['0'].app.impress.partList).to.have.length(13);
+			});
+
+			// Press Delete again and confirm; Section-1's four slides go, 9 remain.
+			cy.cGet('#preview-frame-part-0').click();
+			cy.cGet('.slide-section-header').eq(0)
+				.find('.slide-section-name').click();
+			helper.processToIdle(this.win);
+			cy.cGet('#preview-frame-part-0')
+				.trigger('keydown', { keyCode: 46, which: 46, key: 'Delete', code: 'Delete' });
+			cy.cGet('#deleteslide-modal-response').click();
+			helper.processToIdle(this.win);
+			cy.window().should(function(win) {
+				expect(win['0'].app.impress.partList).to.have.length(9);
+			});
+		});
+
+		it('Clicking a slide of a selected section shows that slide at once', function() {
+			helper.processToIdle(this.win);
+
+			assertSectionHeaders(['Section-1', 'Section-2', 'Section-3']);
+			cy.window().should(function(win) {
+				var sections = win['0'].app.impress.sections;
+				expect(sections).to.have.length(3);
+				expect(sections[1].startIndex).to.equal(4);
+				expect(win['0'].app.impress.partList).to.have.length(13);
+			});
+
+			// Select Section-2 (slides 4-10). Its first slide becomes the current one.
+			cy.cGet('.slide-section-header').eq(1)
+				.find('.slide-section-name').click();
+			helper.processToIdle(this.win);
+			cy.window().should(function(win) {
+				var impress = win['0'].app.impress;
+				expect(impress.getSelectedSlidesCount()).to.equal(7);
+				expect(win['0'].app.map._docLayer._selectedPart).to.equal(4);
+			});
+
+			// Record every slide the view shows from now on.
+			var shownParts = [];
+			cy.getFrameWindow().then(function(win) {
+				win.app.map.on('updateparts', function() {
+					shownParts.push(win.app.map._docLayer._selectedPart);
+				});
+			});
+
+			cy.cGet('#preview-img-part-6').click();
+			helper.processToIdle(this.win);
+
+			cy.window().should(function(win) {
+				var impress = win['0'].app.impress;
+				expect(win['0'].app.map._docLayer._selectedPart).to.equal(6);
+				expect(impress.getSelectedSlidesCount()).to.equal(1);
+				expect(impress.isSlideSelected(6)).to.be.true;
+			});
+
+			// The view went from the section's first slide straight to the clicked
+			// slide, and never back to the first slide on the way.
+			cy.wrap(shownParts).should('have.length.greaterThan', 0);
+			cy.wrap(shownParts).should('not.include', 4);
+		});
+
+		it('Clicking a section never shows its slides deselected', function() {
+			helper.processToIdle(this.win);
+			waitForSectionsLoaded();
+
+			// Section-2 holds slides 4-10.
+			cy.getFrameWindow().then(function(win) {
+				watchSlidesShownDeselected(win, 4, 10);
+			});
+			cy.cGet('.slide-section-header').eq(1)
+				.find('.slide-section-name').click();
+			// The idle reply comes after the kit has handled every selection request, so any
+			// message those requests cause has been recorded by now.
+			helper.processToIdle(this.win);
+
+			assertSlidesSelected(4, 10);
+			cy.getFrameWindow().its('slidesShownDeselected').should('deep.equal', []);
+		});
+
+		it('Clicking a selected section keeps its slides selected', function() {
+			helper.processToIdle(this.win);
+			waitForSectionsLoaded();
+
+			cy.cGet('.slide-section-header').eq(1)
+				.find('.slide-section-name').click();
+			helper.processToIdle(this.win);
+			assertSlidesSelected(4, 10);
+
+			cy.getFrameWindow().then(function(win) {
+				watchSlidesShownDeselected(win, 4, 10);
+			});
+			helper.waitForTimers(this.win, 'clicktimer');
+			cy.cGet('.slide-section-header').eq(1)
+				.find('.slide-section-name').click();
+			helper.processToIdle(this.win);
+
+			assertSlidesSelected(4, 10);
+			cy.getFrameWindow().its('slidesShownDeselected').should('deep.equal', []);
 		});
 
 		describe('Drop slide at a section boundary', function() {

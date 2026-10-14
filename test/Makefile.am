@@ -50,6 +50,7 @@ all_la_unit_tests = \
 	unit-wopi-documentconflict.la \
 	unit-wopi-stuck-save.la \
 	unit-wopi-fail-upload.la \
+	unit-wopi-fail-upload-no-conflict.la \
 	unit-wopi-async-slow.la \
 	unit-perf.la \
 	unit-wopi-lock.la \
@@ -59,16 +60,20 @@ all_la_unit_tests = \
 	unit-user-presets.la \
 	unit-wopi-watermark.la \
 	unit-wopi-comment-avatar.la \
+	unit-csp-frame-ancestors.la \
 	unit-crash.la \
 	unit-integration.la \
 	unit-timeout.la \
 	unit-wopi-save-on-exit.la \
 	unit-initial-load-fail.la \
 	unit-insert-delete.la \
+	unit-slidelink.la \
+	unit-compare-documents-url.la \
 	unit-uno-command.la \
 	unit-collab.la \
 	unit-collab-protocol.la \
 	unit-quarantine.la \
+	unit-remote-document.la \
 	unit-wopi.la \
 	unit-each-view.la \
 	unit-copy-paste.la \
@@ -94,7 +99,6 @@ all_la_unit_tests = \
 	unit-password-protected.la \
 	unit-password-to-modify.la \
 	unit-calc.la \
-	unit-rendering-options.la \
 	unit-prefork.la \
 	unit-landlock.la \
 	unit-any-input.la \
@@ -118,7 +122,8 @@ all_la_unit_tests = \
 	unit-bad-doc-load.la \
 	unit-hosting.la \
 	unit-legacy-uno-api-warning.la \
-	unit-legacy-uno-api-warning-suppressed.la
+	unit-legacy-uno-api-warning-suppressed.la \
+	unit-bg-download.la
 #	unit-admin.la
 #	unit-tilecache.la # Empty test.
 else
@@ -127,6 +132,14 @@ all_la_unit_tests = \
 endif
 
 check_LTLIBRARIES = ${all_la_unit_tests}
+
+if !ENABLE_FUZZERS
+# The shared test helpers, compiled once and linked into each unit-test module.
+check_LTLIBRARIES += libtesthelpers.la
+libtesthelpers_la_SOURCES = helpers.cpp
+# A convenience library: no -rpath, so libtool links it into each module.
+libtesthelpers_la_LDFLAGS =
+endif
 
 MAGIC_TO_FORCE_SHLIB_CREATION = -rpath /dummy
 # In the server build ${PNG_LIBS} / $(ZSTD_LIBS) are the engine's static
@@ -145,56 +158,10 @@ if ENABLE_SSL
 AM_LDFLAGS += ${OPENSSL_LIBS}
 endif
 
-# We work around some of the mess of using the same sources both on
-# the server side and here in unit tests with conditional compilation
-# based on BUILDING_TESTS
+# The test sources are compiled with BUILDING_TESTS defined. The production
+# code comes from the gbuild static libraries below and is compiled without it.
 
 AM_CPPFLAGS = -pthread -I$(top_srcdir) -DBUILDING_TESTS -DLOK_ABORT_ON_ASSERTION
-
-kit_sources = \
-	../kit/Kit.cpp \
-	../kit/KitWebSocket.cpp \
-	../kit/TestStubs.cpp
-
-wsd_sources = \
-	../common/Crypto.cpp \
-	../wsd/Admin.cpp \
-	../wsd/AdminModel.cpp \
-	../wsd/AIChatSession.cpp \
-	../wsd/AIUtil.cpp \
-	../wsd/Auth.cpp \
-	../wsd/COOLWSD.cpp \
-	../wsd/CacheUtil.cpp \
-	../wsd/ClientRequestDispatcher.cpp \
-	../wsd/ClientSession.cpp \
-	../wsd/CollabBroker.cpp \
-	../wsd/CollabFileProxy.cpp \
-	../wsd/CollabSocketHandler.cpp \
-	../wsd/ContentType.cpp \
-	../wsd/DeckSpec.cpp \
-	../wsd/DocumentBroker.cpp \
-	../wsd/FileServer.cpp \
-	../wsd/FileServerUtil.cpp \
-	../wsd/HealthCheck.cpp \
-	../wsd/HostUtil.cpp \
-	../wsd/ProofKey.cpp \
-	../wsd/ProxyProtocol.cpp \
-	../wsd/ProxyRequestHandler.cpp \
-	../wsd/QuarantineUtil.cpp \
-	../wsd/RemoteConfig.cpp \
-	../wsd/RequestDetails.cpp \
-	../wsd/RequestVettingStation.cpp \
-	../wsd/ServerAuditUtil.cpp \
-	../wsd/SlideCache.cpp \
-	../wsd/SpecialBrokers.cpp \
-	../wsd/Storage.cpp \
-	../wsd/TileCache.cpp \
-	../wsd/Unzip.cpp \
-	../wsd/dumpWsdState.cpp \
-	../wsd/wopi/CheckFileInfo.cpp \
-	../wsd/wopi/StorageConnectionManager.cpp \
-	../wsd/wopi/WopiProxy.cpp \
-	../wsd/wopi/WopiStorage.cpp
 
 test_base_sources = \
 	AIUtilTests.cpp \
@@ -218,46 +185,14 @@ test_base_sources = \
 	WhiteBoxTests.cpp \
 	WopiProofTests.cpp
 
-common_sources = \
-	$(util_platform_cpp) \
-	../common/Authorization.cpp \
-	../common/CommandControl.cpp \
-	../common/ConfigUtil.cpp \
-	../common/CoolMount.cpp \
-	../common/DummyTraceEventEmitter.cpp \
-	../common/FileUtil-unix.cpp \
-	../common/FileUtil.cpp \
-	../common/JailUtil.cpp \
-	../common/Landlock.cpp \
-	../common/Log-common.cpp \
-	../common/Log-poco.cpp \
-	../common/MobileApp.cpp \
-	../common/ProcUtil.cpp \
-	../common/Protocol.cpp \
-	../common/RegexUtil.cpp \
-	../common/Seccomp.cpp \
-	../common/Session.cpp \
-	../common/SigUtil-server.cpp \
-	../common/Simd.cpp \
-	../common/SpookyV2.cpp \
-	../common/StringVector.cpp \
-	../common/Syscall.cpp \
-	../common/TraceEvent.cpp \
-	../common/Unit-server.cpp \
-	../common/Unit.cpp \
-	../common/Uri.cpp \
-	../common/Util-server.cpp \
-	../common/Util-unix.cpp \
-	../common/Util.cpp \
-	../kit/KitQueue.cpp \
-	../kit/LogUI.cpp \
-	../net/HttpHelper.cpp \
-	../net/HttpRequest.cpp \
-	../net/NetUtil.cpp \
-	../net/Socket.cpp \
-	../wsd/Exceptions.cpp
-
-globals_sources = ../common/Globals.cpp
+# The test programs link the production code from the static libraries that gbuild builds for
+# coolwsd and coolforkit, the same objects that ship. The libraries refer to each other in both
+# directions and the linker searches each archive once, in order, so the list appears twice.
+gbuild_libdir = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary
+gbuild_test_libs = \
+	$(gbuild_libdir)/libwsd.a \
+	$(gbuild_libdir)/libforkit.a \
+	$(gbuild_libdir)/libshared.a
 
 # The engine's static Poco no longer bundles zlib, so PocoFoundation and
 # PocoZip reference the system one and must precede it on the link line.
@@ -274,46 +209,43 @@ globals_sources = ../common/Globals.cpp
 # the global LIBS to avoid.
 poco_and_zlib_libs = $(POCO_LIBS) $(ZLIB_LIBS)
 
+test_program_libs = \
+	$(gbuild_test_libs) \
+	$(gbuild_test_libs) \
+	$(top_builddir)/libsimd.a \
+	${PNG_LIBS} $(ZSTD_LIBS) \
+	$(CPPUNIT_LIBS) \
+	$(poco_and_zlib_libs) \
+	$(CAP_LIBS)
+
 unithttplib_CPPFLAGS = -I$(top_srcdir) -DBUILDING_TESTS -DSTANDALONE_CPPUNIT -g
-unithttplib_SOURCES = $(common_sources) $(globals_sources) test.cpp HttpRequestTests.cpp
-unithttplib_LDADD = $(CPPUNIT_LIBS) $(poco_and_zlib_libs)
+unithttplib_SOURCES = TestGlobals.cpp TestStubs.cpp test.cpp HttpRequestTests.cpp helpers.cpp
+unithttplib_LDADD = $(test_program_libs)
+EXTRA_unithttplib_DEPENDENCIES = $(gbuild_test_libs)
 
 unittest_CPPFLAGS = -I$(top_srcdir) -DBUILDING_TESTS -DSTANDALONE_CPPUNIT -g
 unittest_SOURCES = \
-	$(common_sources) \
 	$(test_base_sources) \
-	$(kit_sources) \
-	../wsd/AIUtil.cpp \
-	../wsd/DeckSpec.cpp \
-	../wsd/FileServerUtil.cpp \
-	../wsd/HostUtil.cpp \
-	../wsd/ProofKey.cpp \
-	../wsd/RequestDetails.cpp \
-	../wsd/TestStubs.cpp \
-	../wsd/TileCache.cpp \
+	TestStubs.cpp \
 	test.cpp
 
-unittest_LDADD = $(top_builddir)/libsimd.a $(CPPUNIT_LIBS) $(poco_and_zlib_libs)
+unittest_LDADD = $(test_program_libs)
+EXTRA_unittest_DEPENDENCIES = $(gbuild_test_libs)
 
 clienttest_CPPFLAGS = -I$(top_srcdir) -DBUILDING_TESTS -DSTANDALONE_CPPUNIT -g
 
 clienttest_SOURCES = \
-	$(common_sources) \
-	$(globals_sources) \
-	$(wsd_sources) \
-	ClientTestStubs.cpp \
+	TestGlobals.cpp \
+	TestStubs.cpp \
 	ClientRequestDispatcherTests.cpp \
 	XcuScrubWhiteBoxTests.cpp \
 	test.cpp
 
-clienttest_LDADD = $(top_builddir)/libsimd.a $(CPPUNIT_LIBS) $(poco_and_zlib_libs)
+clienttest_LDADD = $(test_program_libs)
+EXTRA_clienttest_DEPENDENCIES = $(gbuild_test_libs)
 
 # Add SSL dependencies if needed.
-if ENABLE_SSL
-unittest_SOURCES += ../net/Ssl.cpp
-unithttplib_SOURCES += ../net/Ssl.cpp
-clienttest_SOURCES += ../net/Ssl.cpp
-else
+if !ENABLE_SSL
 unittest_LDADD += -lssl -lcrypto
 unithttplib_LDADD += -lssl -lcrypto
 clienttest_LDADD += -lssl -lcrypto
@@ -329,153 +261,167 @@ fakesockettest_LDADD = $(CPPUNIT_LIBS) $(poco_and_zlib_libs)
 
 # old-style unit tests - bootstrapped via UnitClient
 unit_tiletest_la_SOURCES = UnitClient.cpp TileCacheTests.cpp KitPidHelpers.cpp
-unit_tiletest_la_LIBADD = $(CPPUNIT_LIBS)
+unit_tiletest_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_integration_la_SOURCES = UnitClient.cpp integration-http-server.cpp KitPidHelpers.cpp
-unit_integration_la_LIBADD = $(CPPUNIT_LIBS)
+unit_integration_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_collab_la_SOURCES = UnitClient.cpp CollabEndpointTests.cpp KitPidHelpers.cpp
-unit_collab_la_LIBADD = $(CPPUNIT_LIBS)
+unit_collab_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_collab_protocol_la_SOURCES = UnitCollabProtocol.cpp
-unit_collab_protocol_la_LIBADD = $(CPPUNIT_LIBS)
+unit_collab_protocol_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_httpws_la_SOURCES = UnitClient.cpp httpwstest.cpp KitPidHelpers.cpp
-unit_httpws_la_LIBADD = $(CPPUNIT_LIBS)
+unit_httpws_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_crash_la_SOURCES = UnitClient.cpp httpcrashtest.cpp KitPidHelpers.cpp
-unit_crash_la_LIBADD = $(CPPUNIT_LIBS)
+unit_crash_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 
 # unit test modules:
 unit_http_la_SOURCES = UnitHTTP.cpp
-unit_http_la_LIBADD = $(CPPUNIT_LIBS)
+unit_http_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 #unit_admin_la_SOURCES = UnitAdmin.cpp
 #unit_admin_la_LIBADD = $(CPPUNIT_LIBS)
 unit_typing_la_SOURCES = UnitTyping.cpp
-unit_typing_la_LIBADD = $(CPPUNIT_LIBS)
+unit_typing_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_copy_paste_la_SOURCES = UnitCopyPaste.cpp
-unit_copy_paste_la_LIBADD = $(CPPUNIT_LIBS)
+unit_copy_paste_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_clipboard_close_la_SOURCES = UnitClipboardClose.cpp
-unit_clipboard_close_la_LIBADD = $(CPPUNIT_LIBS)
+unit_clipboard_close_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_copy_paste_writer_la_SOURCES = UnitCopyPasteWriter.cpp
-unit_copy_paste_writer_la_LIBADD = $(CPPUNIT_LIBS)
+unit_copy_paste_writer_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_convert_la_SOURCES = UnitConvert.cpp
+unit_convert_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_convert_csv_la_SOURCES = UnitConvertCSV.cpp
+unit_convert_csv_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_convert_to_password_protected_la_SOURCES = UnitConvertToPasswordProtected.cpp
+unit_convert_to_password_protected_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_initial_load_fail_la_SOURCES = UnitInitialLoadFail.cpp
-unit_initial_load_fail_la_LIBADD = $(CPPUNIT_LIBS)
+unit_initial_load_fail_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_join_disconnect_la_SOURCES = UnitJoinDisconnect.cpp
-unit_join_disconnect_la_LIBADD = $(CPPUNIT_LIBS)
+unit_join_disconnect_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_timeout_la_SOURCES = UnitTimeout.cpp
-unit_timeout_la_LIBADD = $(CPPUNIT_LIBS)
+unit_timeout_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_socket_failure_la_SOURCES = UnitSocketFailure.cpp
-unit_socket_failure_la_LIBADD = $(CPPUNIT_LIBS)
+unit_socket_failure_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_prefork_la_SOURCES = UnitPrefork.cpp
-unit_prefork_la_LIBADD = $(CPPUNIT_LIBS)
+unit_prefork_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_landlock_la_SOURCES = UnitLandlock.cpp
+unit_landlock_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 # unit_tilecache_la_SOURCES = UnitTileCache.cpp
 # unit_tilecache_la_LIBADD = $(CPPUNIT_LIBS)
 unit_oauth_la_SOURCES = UnitOAuth.cpp
-unit_oauth_la_LIBADD = $(CPPUNIT_LIBS)
+unit_oauth_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_remote_document_la_SOURCES = UnitRemoteDocument.cpp
+unit_remote_document_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_la_SOURCES = UnitWOPI.cpp
-unit_wopi_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_async_slow_la_SOURCES = UnitWOPISlow.cpp
-unit_wopi_async_slow_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_async_slow_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_saveas_la_SOURCES = UnitWOPISaveAs.cpp
-unit_wopi_saveas_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_saveas_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_edge_cases_la_SOURCES = UnitWopiEdgeCases.cpp
-unit_wopi_edge_cases_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_edge_cases_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_versionrestore_la_SOURCES = UnitWOPIVersionRestore.cpp
-unit_wopi_versionrestore_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_versionrestore_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_documentconflict_la_SOURCES = UnitWOPIDocumentConflict.cpp
-unit_wopi_documentconflict_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_documentconflict_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_save_on_exit_la_SOURCES = UnitWOPISaveOnExit.cpp
-unit_wopi_save_on_exit_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_save_on_exit_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_stuck_save_la_SOURCES = UnitWOPIStuckSave.cpp
-unit_wopi_stuck_save_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_stuck_save_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_transient_connect_fault_la_SOURCES = UnitWOPITransientConnectFault.cpp
-unit_wopi_transient_connect_fault_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_transient_connect_fault_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_fail_upload_la_SOURCES = UnitWOPIFailUpload.cpp
-unit_wopi_fail_upload_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_fail_upload_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_wopi_fail_upload_no_conflict_la_SOURCES = UnitWOPIFailUploadNoConflict.cpp
+unit_wopi_fail_upload_no_conflict_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_renamefile_la_SOURCES = UnitWOPIRenameFile.cpp
-unit_wopi_renamefile_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_renamefile_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_languages_la_SOURCES = UnitWOPILanguages.cpp
-unit_wopi_languages_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_languages_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_lock_la_SOURCES = UnitWOPILock.cpp
-unit_wopi_lock_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_lock_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_watermark_la_SOURCES = UnitWOPIWatermark.cpp
-unit_wopi_watermark_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_watermark_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_comment_avatar_la_SOURCES = UnitWopiCommentAvatar.cpp
-unit_wopi_comment_avatar_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_comment_avatar_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_csp_frame_ancestors_la_SOURCES = UnitCSPFrameAncestors.cpp
+unit_csp_frame_ancestors_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_temp_la_SOURCES = UnitWOPITemplate.cpp
-unit_wopi_temp_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_temp_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_fileurl_la_SOURCES = UnitWOPIFileUrl.cpp
-unit_wopi_fileurl_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_fileurl_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_wopi_httpredirect_la_SOURCES = UnitWOPIHttpRedirect.cpp
-unit_wopi_httpredirect_la_LIBADD = $(CPPUNIT_LIBS)
+unit_wopi_httpredirect_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_tiff_load_la_SOURCES = UnitTiffLoad.cpp
-unit_tiff_load_la_LIBADD = $(CPPUNIT_LIBS)
+unit_tiff_load_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_save_la_SOURCES = UnitSave.cpp
-unit_save_la_LIBADD = $(CPPUNIT_LIBS)
+unit_save_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_any_input_la_SOURCES = UnitAnyInput.cpp
-unit_any_input_la_LIBADD = $(CPPUNIT_LIBS)
+unit_any_input_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_agent_control_la_SOURCES = UnitAgentControl.cpp
-unit_agent_control_la_LIBADD = $(CPPUNIT_LIBS)
+unit_agent_control_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_agent_save_la_SOURCES = UnitAgentSave.cpp
-unit_agent_save_la_LIBADD = $(CPPUNIT_LIBS)
+unit_agent_save_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_kit_child_session_la_SOURCES = UnitKitChildSession.cpp
-unit_kit_child_session_la_LIBADD = $(CPPUNIT_LIBS)
+unit_kit_child_session_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_large_paste_la_SOURCES = UnitLargePaste.cpp
-unit_large_paste_la_LIBADD = $(CPPUNIT_LIBS)
+unit_large_paste_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_paste_la_SOURCES = UnitPaste.cpp
-unit_paste_la_LIBADD = $(CPPUNIT_LIBS)
+unit_paste_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_load_torture_la_SOURCES = UnitLoadTorture.cpp
-unit_load_torture_la_LIBADD = $(CPPUNIT_LIBS)
+unit_load_torture_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_save_torture_la_SOURCES = UnitSaveTorture.cpp
-unit_save_torture_la_LIBADD = $(CPPUNIT_LIBS)
+unit_save_torture_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_bg_download_la_SOURCES = UnitBgDownload.cpp
+unit_bg_download_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_synthetic_lok_la_SOURCES = UnitSyntheticLok.cpp
-unit_synthetic_lok_la_LIBADD = $(CPPUNIT_LIBS)
-unit_rendering_options_la_SOURCES = UnitRenderingOptions.cpp
-unit_rendering_options_la_LIBADD = $(CPPUNIT_LIBS)
+unit_synthetic_lok_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_invalidation_la_SOURCES = UnitInvalidation.cpp
-unit_invalidation_la_LIBADD = $(CPPUNIT_LIBS)
+unit_invalidation_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_password_protected_la_SOURCES = UnitPasswordProtected.cpp
-unit_password_protected_la_LIBADD = $(CPPUNIT_LIBS)
+unit_password_protected_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_password_to_modify_la_SOURCES = UnitPasswordToModify.cpp
-unit_password_to_modify_la_LIBADD = $(CPPUNIT_LIBS)
+unit_password_to_modify_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_render_search_result_la_SOURCES = UnitRenderSearchResult.cpp
-unit_render_search_result_la_LIBADD = $(CPPUNIT_LIBS)
+unit_render_search_result_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_render_shape_la_SOURCES = UnitRenderShape.cpp
-unit_render_shape_la_LIBADD = $(CPPUNIT_LIBS)
+unit_render_shape_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_each_view_la_SOURCES = UnitEachView.cpp
-unit_each_view_la_LIBADD = $(CPPUNIT_LIBS)
+unit_each_view_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_session_la_SOURCES = UnitSession.cpp
-unit_session_la_LIBADD = $(CPPUNIT_LIBS)
+unit_session_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_uno_command_la_SOURCES = UnitUNOCommand.cpp
-unit_uno_command_la_LIBADD = $(CPPUNIT_LIBS)
+unit_uno_command_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_legacy_uno_api_warning_la_SOURCES = UnitLegacyUnoApiWarning.cpp
-unit_legacy_uno_api_warning_la_LIBADD = $(CPPUNIT_LIBS)
+unit_legacy_uno_api_warning_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_legacy_uno_api_warning_suppressed_la_SOURCES = UnitLegacyUnoApiWarningSuppressed.cpp
-unit_legacy_uno_api_warning_suppressed_la_LIBADD = $(CPPUNIT_LIBS)
+unit_legacy_uno_api_warning_suppressed_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_load_la_SOURCES = UnitLoad.cpp
-unit_load_la_LIBADD = $(CPPUNIT_LIBS)
+unit_load_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_cursor_la_SOURCES = UnitCursor.cpp
-unit_cursor_la_LIBADD = $(CPPUNIT_LIBS)
+unit_cursor_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_calc_la_SOURCES = UnitCalc.cpp
-unit_calc_la_LIBADD = $(CPPUNIT_LIBS)
+unit_calc_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_insert_delete_la_SOURCES = UnitInsertDelete.cpp
-unit_insert_delete_la_LIBADD = $(CPPUNIT_LIBS)
+unit_insert_delete_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_slidelink_la_SOURCES = UnitSlideLink.cpp
+unit_slidelink_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_compare_documents_url_la_SOURCES = UnitCompareDocumentsUrl.cpp
+unit_compare_documents_url_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_close_la_SOURCES = UnitClose.cpp
-unit_close_la_LIBADD = $(CPPUNIT_LIBS)
+unit_close_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_bad_doc_load_la_SOURCES = UnitBadDocLoad.cpp
-unit_bad_doc_load_la_LIBADD = $(CPPUNIT_LIBS)
+unit_bad_doc_load_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_hosting_la_SOURCES = UnitHosting.cpp
-unit_hosting_la_LIBADD = $(CPPUNIT_LIBS)
+unit_hosting_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_quarantine_la_SOURCES = UnitQuarantine.cpp
-unit_quarantine_la_LIBADD = $(CPPUNIT_LIBS)
+unit_quarantine_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_multi_tenant_la_SOURCES = UnitMultiTenant.cpp
-unit_multi_tenant_la_LIBADD = $(CPPUNIT_LIBS)
+unit_multi_tenant_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_user_presets_la_SOURCES = UnitUserPresets.cpp
-unit_user_presets_la_LIBADD = $(CPPUNIT_LIBS)
+unit_user_presets_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_perf_la_SOURCES = UnitPerf.cpp
-unit_perf_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
+unit_perf_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
 unit_proxy_la_SOURCES = UnitProxy.cpp
-unit_proxy_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
+unit_proxy_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
 endif
 
 if HAVE_LO_PATH
@@ -517,8 +463,6 @@ build-tests: ${all_la_unit_tests}
 all_test_la_sources = $(sort $(foreach t,$(all_la_unit_tests),$($(subst -,_,$(basename $(t)))_SOURCES)))
 
 all_test_compiled_sources = $(sort \
-	$(common_sources) \
-	$(globals_sources) \
 	$(test_base_sources) \
 	$(unittest_SOURCES) \
 	$(unithttplib_SOURCES) \
@@ -552,6 +496,7 @@ all-local: unittest unithttplib clienttest
 	@if [ -n "$${COOL_SKIP_UNITTESTS}" ]; then \
 	    exit 0; \
 	fi; \
+	$(MAKE) -C $(abs_top_builddir) systemplate || exit 1; \
 	echo; \
 	echo "Running build-time unit tests.  For more thorough testing, please run 'make check'."; \
 	echo "Test output is in `pwd`/test.log and is displayed on failure."; \

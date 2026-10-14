@@ -37,7 +37,7 @@
 
 
 using namespace ::cppu                  ;
-using namespace ::com::sun::star::uno   ;
+using namespace ::cpo::uno   ;
 using namespace ::com::sun::star::lang  ;
 using namespace std                     ;
 using namespace com::sun::star::system;
@@ -54,8 +54,8 @@ Reference< XMultiServiceFactory >   g_xFactory;
 //  main
 
 
-// int SAL_CALL main(int nArgc, char* Argv[], char* Env[]   )
-int SAL_CALL main(int nArgc, char* Argv[], char*    )
+// int main(int nArgc, char* Argv[], char* Env[]   )
+int main(int nArgc, char* Argv[], char*    )
 {
 
     // get the global service-manager

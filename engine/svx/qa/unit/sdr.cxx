@@ -18,9 +18,15 @@
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
 #include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <comphelper/embeddedobjectcontainer.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <drawinglayer/geometry/viewinformation2d.hxx>
+#include <drawinglayer/processor2d/baseprocessor2d.hxx>
+#include <drawinglayer/processor2d/processor2dtools.hxx>
 #include <extendedprimitive2dxmldump.hxx>
 #include <rtl/ustring.hxx>
 #include <sfx2/linkmgr.hxx>
@@ -28,6 +34,7 @@
 #include <svx/sdr/contact/displayinfo.hxx>
 #include <svx/sdr/contact/viewcontact.hxx>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
+#include <svx/signaturelinehelper.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svdoashp.hxx>
 #include <svx/svdomedia.hxx>
@@ -37,6 +44,7 @@
 #include <sdr/contact/objectcontactofobjlistpainter.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -68,6 +76,37 @@ SdrTest::renderPageToPrimitives(const uno::Reference<drawing::XDrawPage>& xDrawP
     drawinglayer::primitive2d::Primitive2DContainer aContainer;
     rDrawPageVOContact.getPrimitive2DSequenceHierarchy(aDisplayInfo, aContainer);
     return aContainer;
+}
+
+/// A filled rectangle on a new drawing, with a reflection that fades out over its first quarter.
+/// It is a custom shape, like the shapes of a PPTX import. The percentages are chosen so that
+/// their fractions print exactly.
+uno::Reference<drawing::XShape>
+insertReflectedRectangle(const uno::Reference<lang::XComponent>& xComponent)
+{
+    auto xFactory = xComponent.queryThrow<lang::XMultiServiceFactory>();
+    auto xShape = xFactory->createInstance(u"com.sun.star.drawing.CustomShape"_ustr)
+                      .queryThrow<drawing::XShape>();
+    xShape->setPosition(awt::Point(1000, 2000));
+    xShape->setSize(awt::Size(5000, 4000));
+    xComponent.queryThrow<drawing::XDrawPagesSupplier>()
+        ->getDrawPages()
+        ->getByIndex(0)
+        .queryThrow<drawing::XShapes>()
+        ->add(xShape);
+
+    auto xProperties = xShape.queryThrow<beans::XPropertySet>();
+    xProperties->setPropertyValue(u"CustomShapeGeometry"_ustr,
+                                  cpo::uno::Any(comphelper::InitPropertySequence(
+                                      { { u"Type"_ustr, cpo::uno::Any(u"rectangle"_ustr) } })));
+    xProperties->setPropertyValue(u"ReflectionEffect"_ustr, cpo::uno::Any(true));
+    xProperties->setPropertyValue(u"ReflectionEffectDistance"_ustr, cpo::uno::Any(sal_Int32(100)));
+    xProperties->setPropertyValue(u"ReflectionEffectBlurRadius"_ustr, cpo::uno::Any(sal_Int32(50)));
+    xProperties->setPropertyValue(u"ReflectionEffectStartTransparency"_ustr,
+                                  cpo::uno::Any(sal_Int16(50)));
+    xProperties->setPropertyValue(u"ReflectionEffectEndPosition"_ustr,
+                                  cpo::uno::Any(sal_Int16(25)));
+    return xShape;
 }
 
 /// The mask a shape is clipped with, wherever it sits in the primitives of a page.
@@ -220,7 +259,7 @@ CPPUNIT_TEST_FIXTURE(SdrTest, testSlideBackground)
     SdrModel& rModel = pSvxDrawPage->GetSdrPage()->getSdrModelFromSdrPage();
     sfx2::LinkManager* pLinkMgr = rModel.GetLinkManager();
     CPPUNIT_ASSERT(pLinkMgr);
-    pLinkMgr->UpdateAllLinks(false, nullptr, u""_ustr);
+    pLinkMgr->UpdateAllLinks(false, u""_ustr);
 
     // When rendering that document:
     drawinglayer::primitive2d::Primitive2DContainer xPrimitiveSequence
@@ -315,7 +354,7 @@ CPPUNIT_TEST_FIXTURE(SdrTest, test3DRotatedText)
     assertXPath(pDocument, "//textsimpleportion", "text", u"Vertical");
     // x/y are the unrotated text position (in page coordinates, before the transform)
     assertXPath(pDocument, "//textsimpleportion", "x", u"7799");
-    assertXPath(pDocument, "//textsimpleportion", "y", u"6303");
+    assertXPath(pDocument, "//textsimpleportion", "y", u"6285");
 
     assertXPath(pDocument, "//transform", 1);
     double fXY11 = getXPath(pDocument, "//transform", "xy11").toDouble();
@@ -338,8 +377,8 @@ CPPUNIT_TEST_FIXTURE(SdrTest, test3DRotatedText)
     CPPUNIT_ASSERT_EQUAL(-M_PI_2, fRotate);
     // The translation values reflect current state; they may change a bit (the position of the
     // rotated text is not pixel-perfect; it is about one pixel off compared to Powerpoint).
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(2744.0, aTranslate.getX(), 10.0);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(14896.0, aTranslate.getY(), 10.0);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(2762.0, aTranslate.getX(), 10.0);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(14888.0, aTranslate.getY(), 10.0);
 }
 
 CPPUNIT_TEST_FIXTURE(SdrTest, testGraphicClipPolyPolygonIsPainted)
@@ -424,6 +463,107 @@ CPPUNIT_TEST_FIXTURE(SdrTest, testGraphicClipPolyPolygonFollowsAFlip)
     CPPUNIT_ASSERT_DOUBLES_EQUAL(6000.0, aRange.getMaxX(), 1.0);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(2000.0, aRange.getMinY(), 1.0);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(6000.0, aRange.getMaxY(), 1.0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdrTest, testReflectionOfShape)
+{
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    uno::Reference<drawing::XShape> xShape = insertReflectedRectangle(mxComponent);
+    auto xDrawPage = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()
+                         ->getDrawPages()
+                         ->getByIndex(0)
+                         .queryThrow<drawing::XDrawPage>();
+
+    svx::ExtendedPrimitive2dXmlDump aDumper;
+    xmlDocUniquePtr pDocument = aDumper.dumpAndParse(renderPageToPrimitives(xDrawPage));
+
+    // The item values arrive in the reflection, and the percentages become fractions.
+    assertXPath(pDocument, "//reflection", 1);
+    assertXPath(pDocument, "//reflection", "distance", u"100");
+    assertXPath(pDocument, "//reflection", "blurradius", u"50");
+    assertXPath(pDocument, "//reflection", "starttransparency", u"0.5");
+    assertXPath(pDocument, "//reflection", "startposition", u"0");
+    assertXPath(pDocument, "//reflection", "endtransparency", u"1");
+    assertXPath(pDocument, "//reflection", "endposition", u"0.25");
+
+    // Turning the reflection off keeps the other values but removes the reflection.
+    xShape.queryThrow<beans::XPropertySet>()->setPropertyValue(u"ReflectionEffect"_ustr,
+                                                               cpo::uno::Any(false));
+    pDocument = aDumper.dumpAndParse(renderPageToPrimitives(xDrawPage));
+    assertXPath(pDocument, "//reflection", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdrTest, testReflectionOfShapeHasNoShadow)
+{
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    uno::Reference<drawing::XShape> xShape = insertReflectedRectangle(mxComponent);
+    xShape.queryThrow<beans::XPropertySet>()->setPropertyValue(u"Shadow"_ustr, cpo::uno::Any(true));
+    auto xDrawPage = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()
+                         ->getDrawPages()
+                         ->getByIndex(0)
+                         .queryThrow<drawing::XDrawPage>();
+
+    svx::ExtendedPrimitive2dXmlDump aDumper;
+    xmlDocUniquePtr pDocument = aDumper.dumpAndParse(renderPageToPrimitives(xDrawPage));
+
+    // The shape casts a shadow, but its reflection shows the shape without it.
+    assertXPath(pDocument, "//shadow", 1);
+    assertXPath(pDocument, "//reflection", 1);
+    assertXPath(pDocument, "//reflection//shadow", 0);
+}
+
+/// The color in the middle of the given primitives, drawn for a view with the given automatic
+/// color. COL_AUTO draws them the way print and PDF export do.
+Color renderCenterPixel(const drawinglayer::primitive2d::Primitive2DContainer& rPrimitives,
+                        Color aAutoColor)
+{
+    // Page coordinates from 1000 to 11000 map to pixels from 0 to 100.
+    ScopedVclPtrInstance<VirtualDevice> pDevice;
+    pDevice->SetOutputSizePixel(Size(100, 100));
+    pDevice->SetBackground(Wallpaper(COL_GRAY));
+    pDevice->Erase();
+    drawinglayer::geometry::ViewInformation2D aViewInformation;
+    aViewInformation.setViewTransformation(
+        basegfx::utils::createScaleTranslateB2DHomMatrix(0.01, 0.01, -10.0, -10.0));
+    aViewInformation.setAutoColor(aAutoColor);
+    std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> pProcessor(
+        drawinglayer::processor2d::createPixelProcessor2DFromOutputDevice(*pDevice,
+                                                                          aViewInformation));
+    pProcessor->process(rPrimitives);
+    // The processor finishes its output on the device when it is destroyed.
+    pProcessor.reset();
+    return pDevice->GetPixel(Point(50, 50));
+}
+
+CPPUNIT_TEST_FIXTURE(SdrTest, testSignatureLineIsLightOnDarkView)
+{
+    // Given a signature line whose graphic is black:
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    auto xFactory = mxComponent.queryThrow<lang::XMultiServiceFactory>();
+    auto xShape = xFactory->createInstance(u"com.sun.star.drawing.GraphicObjectShape"_ustr)
+                      .queryThrow<drawing::XShape>();
+    xShape->setPosition(awt::Point(1000, 1000));
+    xShape->setSize(awt::Size(10000, 10000));
+    auto xDrawPage = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()
+                         ->getDrawPages()
+                         ->getByIndex(0)
+                         .queryThrow<drawing::XDrawPage>();
+    xDrawPage.queryThrow<drawing::XShapes>()->add(xShape);
+    uno::Reference<graphic::XGraphic> xGraphic = svx::SignatureLineHelper::importSVG(
+        u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10mm\" height=\"10mm\" "
+        "viewBox=\"0 0 100 100\"><rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" "
+        "fill=\"rgb(0,0,0)\"/></svg>");
+    auto xShapeProperties = xShape.queryThrow<beans::XPropertySet>();
+    xShapeProperties->setPropertyValue(u"Graphic"_ustr, cpo::uno::Any(xGraphic));
+    xShapeProperties->setPropertyValue(u"IsSignatureLine"_ustr, cpo::uno::Any(true));
+    drawinglayer::primitive2d::Primitive2DContainer aPrimitives = renderPageToPrimitives(xDrawPage);
+
+    // Then a view with the dark document background shows it white:
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, renderCenterPixel(aPrimitives, Color(0x1c, 0x1c, 0x1c)));
+    // A view with a light document background shows it black:
+    CPPUNIT_ASSERT_EQUAL(COL_BLACK, renderCenterPixel(aPrimitives, COL_WHITE));
+    // And so do print and PDF export:
+    CPPUNIT_ASSERT_EQUAL(COL_BLACK, renderCenterPixel(aPrimitives, COL_AUTO));
 }
 }
 

@@ -30,9 +30,22 @@ class SnackbarController {
 	snackbarTimeout: number = 10000;
 	snackbarQueue: Array<SnackbarData>;
 	showingSnackbar: boolean = false;
+	private liveRegion: HTMLElement = null;
 
 	constructor() {
 		this.snackbarQueue = new Array<SnackbarData>();
+	}
+
+	private writeLiveRegion(label: string) {
+		if (!this.liveRegion)
+			this.liveRegion = document.getElementById('snackbar-live-region');
+
+		const region = this.liveRegion;
+		if (!region) return;
+
+		app.layoutingService.appendLayoutingTask(() => {
+			region.textContent = label;
+		});
 	}
 
 	public closeSnackbar() {
@@ -47,6 +60,7 @@ class SnackbarController {
 		});
 
 		this.showingSnackbar = false;
+		this.writeLiveRegion('');
 		this.scheduleSnackbar();
 	}
 
@@ -90,6 +104,22 @@ class SnackbarController {
 		var buttonId = 'button';
 		var labelId = 'label';
 
+		if (!snackbarData.action) this.writeLiveRegion(snackbarData.label);
+
+		const dismissButton = snackbarData.action
+			? {
+					id: 'snackbar-dismiss-button',
+					type: 'pushbutton',
+					text: '',
+					icon: 'lc_cancel.svg',
+					aria: { label: _('Dismiss') },
+				}
+			: {
+					id: 'snackbar-dismiss-button',
+					type: 'pushbutton',
+					text: _('Dismiss'),
+				};
+
 		var json = {
 			id: 'snackbar',
 			jsontype: 'dialog',
@@ -115,13 +145,6 @@ class SnackbarController {
 									type: 'fixedtext',
 									text: snackbarData.label,
 								},
-						snackbarData.withDismiss
-							? {
-									id: 'snackbar-dismiss-button',
-									type: 'pushbutton',
-									text: _('Dismiss'),
-								}
-							: {},
 						snackbarData.hasProgress
 							? {
 									id: 'progress',
@@ -139,6 +162,7 @@ class SnackbarController {
 									labelledBy: labelId,
 								}
 							: {},
+						snackbarData.withDismiss ? dismissButton : {},
 					],
 				},
 			],

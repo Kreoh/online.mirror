@@ -29,7 +29,7 @@
 using namespace connectivity;
 using namespace connectivity::sdbcx;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::container;
@@ -80,7 +80,7 @@ Reference< XNameAccess > OCatalog::getTables(  )
         if(!m_pTables)
             refreshTables();
     }
-    catch( const RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         // allowed to leave this method
         throw;
@@ -104,7 +104,7 @@ Reference< XNameAccess > OCatalog::getViews(  )
         if(!m_pViews)
             refreshViews();
     }
-    catch( const RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         // allowed to leave this method
         throw;
@@ -128,7 +128,7 @@ Reference< XNameAccess > OCatalog::getUsers(  )
         if(!m_pUsers)
             refreshUsers();
     }
-    catch( const RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         // allowed to leave this method
         throw;
@@ -152,7 +152,7 @@ Reference< XNameAccess > OCatalog::getGroups(  )
         if(!m_pGroups)
             refreshGroups();
     }
-    catch( const RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         // allowed to leave this method
         throw;

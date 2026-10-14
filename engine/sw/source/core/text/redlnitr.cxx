@@ -228,8 +228,9 @@ public:
             && (!m_oNextFieldmarkHide || *pNextRedlineHide < *m_oNextFieldmarkHide))
         {
             SwRangeRedline const*const pRed(m_rIDRA.GetRedlineTable()[m_RedlineIndex]);
-            m_pStartPos = pRed->Start();
-            m_pEndPos = pRed->End();
+            auto [pStart, pEnd] = pRed->StartEnd();
+            m_pStartPos = pStart;
+            m_pEndPos = pEnd;
             ++m_RedlineIndex;
             m_oParagraphBreak.reset();
             return true;
@@ -643,7 +644,7 @@ void SwAttrIter::InitFontAndAttrHandler(
         bool const*const pbVertLayoutLRBT)
 {
     // Build a font matching the default paragraph style:
-    const SwFontObj& rFontAccess = rPropsNode.GetTextFormatColl().GetFontObj(m_pViewShell);
+    const SwFontObj& rFontAccess = rPropsNode.GetLayoutTextFormatColl().GetFontObj(m_pViewShell);
     // It is possible that Init is called more than once, e.g., in a
     // SwTextFrame::FormatOnceMore situation or (since sw_redlinehide)
     // from SwAttrIter::Seek(); in the latter case SwTextSizeInfo::m_pFnt
@@ -1220,7 +1221,8 @@ bool SwRedlineItr::CheckLine(
             m_rDoc.getIDocumentRedlineAccess().GetRedlineTable()[ m_nAct ] );
         // collect text of the hidden redlines at the end of the line
         bool isExtendText(false);
-        switch (ComparePosition(*pRedline->Start(), *pRedline->End(), start, end))
+        auto [pStart, pEnd] = pRedline->StartEnd(); // SwPosition*
+        switch (ComparePosition(*pStart, *pEnd, start, end))
         {
             case SwComparePosition::Behind:
                 isBreak = true;
@@ -1250,8 +1252,8 @@ bool SwRedlineItr::CheckLine(
                 }
                 // join the text of the next invisible redlines in the same position
                 // i.e. characters deleted by pressing backspace or delete
-                else if (pPrevRedline && !pRedline->IsVisible() &&
-                    *pRedline->Start() == *pPrevRedline->Start() && *pRedline->End() == *pPrevRedline->End() )
+                else if (pPrevRedline && !pRedline->IsVisible()
+                         && *pStart == *pPrevRedline->Start() && *pEnd == *pPrevRedline->End())
                 {
                     OUString sExtendText(pRedline->GetDescr(/*bSimplified=*/true));
                     if (!sExtendText.isEmpty())

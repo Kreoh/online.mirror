@@ -30,7 +30,7 @@
 
 using namespace cppu;
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::lang;
 using namespace css::registry;
@@ -52,13 +52,13 @@ public:
     NamingService_Impl();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getRegisteredObject( const OUString& Name ) override;
-    virtual void SAL_CALL registerObject( const OUString& Name, const css::uno::Reference< css::uno::XInterface >& Object ) override;
-    virtual void SAL_CALL revokeObject( const OUString& Name ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getRegisteredObject( const OUString& Name ) override;
+    virtual void registerObject( const OUString& Name, const cpo::uno::Reference< cpo::uno::XInterface >& Object ) override;
+    virtual void revokeObject( const OUString& Name ) override;
 };
 
 }
@@ -112,9 +112,9 @@ void NamingService_Impl::revokeObject( const OUString& Name )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 stoc_NamingService_Impl_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new stoc_namingservice::NamingService_Impl());
 }

@@ -33,7 +33,8 @@
 #include <osl/diagnose.h>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::com::sun::star::chart2::XAnyDescriptionAccess;
 using ::com::sun::star::chart::XComplexDescriptionAccess;
@@ -571,7 +572,7 @@ void ChartDataWrapper::fireChartDataChangeEvent( css::chart::ChartDataChangeEven
     if( ! m_aEventListenerContainer.getLength(g) )
         return;
 
-    uno::Reference< uno::XInterface > xSrc( static_cast< cppu::OWeakObject* >( this ));
+    uno::Reference< cpo::uno::XInterface > xSrc( static_cast< cppu::OWeakObject* >( this ));
     OSL_ASSERT( xSrc.is());
     if( xSrc.is() )
         aEvent.Source = std::move(xSrc);

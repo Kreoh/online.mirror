@@ -31,6 +31,37 @@ var formulaTabName = 'Formula';
 
 window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 
+	onCoreWidgetUpdate: function(control) {
+		if (control.id !== 'elementsinformulatab')
+			return false;
+
+		if (control.checked !== this.isFormulaTabShown())
+			this.reportFormulaTabShown();
+		return true;
+	},
+
+	isFormulaTabShown: function() {
+		return this.map.uiManager.getCurrentMode() === 'notebookbar';
+	},
+
+	reportFormulaTabShown: function() {
+		var windowId = JSDialog.resolveWindowId(this.builder);
+		if (typeof windowId !== 'number')
+			return;
+
+		var shown = this.isFormulaTabShown();
+		app.socket.sendMessage('dialogevent ' + windowId + ' ' + JSON.stringify({
+			id: 'elementsinformulatab',
+			cmd: 'change',
+			data: shown ? 'true' : 'false',
+			type: 'checkbox'
+		}));
+	},
+
+	onCallback: function(objectType, eventType, object, data, builder) {
+		return JSDialog.WriterTableDesignTab.onCallback(objectType, eventType, object, data, builder);
+	},
+
 	getTabs: function() {
 		return this._filterExtensionsTab(this._insertContributedNotebookbarTabs([
 			{
@@ -77,6 +108,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'name': formTabName,
 				'accessibility': { focusBack: true, combination: 'M' }
 			},
+			JSDialog.WriterTableDesignTab.getEntry(),
 			JSDialog.WriterTableTab.getEntry(),
 			{
 				'text': _('Shape'),
@@ -90,7 +122,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'id': pictureTabName + '-tab-label',
 				'name': pictureTabName,
 				'context': 'Graphic',
-				'accessibility': { focusBack: true, combination: 'PI', de: 'PI' }
+				'accessibility': { focusBack: true, combination: 'IM', de: 'PI' }
 			},
 			{
 				'text': _('Chart'),
@@ -99,6 +131,8 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'context': 'Chart|Series|ErrorBar|Axis|Grid|ChartElements|Trendline|ChartTitle|ChartLegend|ChartLabel',
 				'accessibility': { focusBack: true, combination: 'CH', de: 'CH' }
 			},
+			app.LOUtil.isAIAssistantAvailable(this.map)
+				? JSDialog.AIAssistantTab.getEntry() : null,
 			{
 				'text': _('View'),
 				'id': viewTabName + '-tab-label',
@@ -122,7 +156,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'id': formulaTabName + '-tab-label',
 				'name': formulaTabName,
 				'context': 'Math',
-				'accessibility': { focusBack: true, combination: 'V', de: 'Y' }
+				'accessibility': { focusBack: true, combination: 'EQ', de: 'Y' }
 			}
 		], this._getContributedNotebookbarTabNames(), function(tab) {
 			return {
@@ -145,10 +179,12 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			this.getReviewTab(),
 			this.getFormatTab(),
 			this.getFormTab(),
+			this.getTableDesignTab(),
 			this.getTableTab(),
 			this.getShapeTab(),
 			this.getPictureTab(),
 			this.getChartTab(),
+			this.getAIAssistantTab(),
 			this.getViewTab(),
 			this.getExtensionsTab(),
 			this.getHelpTab(),
@@ -170,7 +206,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 		var hasShare = this.map['wopi'].EnableShare;
 		var hasGroupedSaveAs = window.prefs.get('saveAsMode') === 'group';
 		var hasRunMacro = window.enableMacrosExecution;
-		var hasSave = !this.map['wopi'].HideSaveOption;
+		var hasSave = !this.map['wopi'].HideSaveOption && !this.map.isReadOnlyMode();
 		var content = [];
 
 		if (hasSave) {
@@ -208,7 +244,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			}
 		}
 
-		if (hasSaveAs) {
+		if (hasSaveAs && !this.map['wopi'].HideExportOption) {
 			content.push({
 				'id': 'exportas:ExportAsMenu',
 				'command': 'exportas',
@@ -362,8 +398,40 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			});
 		}
 
+		// Stack Properties with Security label when the format supports a label
+		// (OOXML); otherwise Properties alone as a bigtoolitem so it fills the column.
+		// The engine reports support and refreshes the notebookbar (Map.js).
 		content.push(
-			{
+			(this.map && this.map._securityLabelSupported === true) ? {
+				'type': 'container',
+				'children': [
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'properties',
+								'type': 'toolitem',
+								'text': _('Properties'),
+								'command': '.uno:SetDocumentProperties',
+								'accessibility': { focusBack: true,	combination: 'FP', de: 'I' }
+							}
+						]
+					},
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'securitylabel',
+								'type': 'toolitem',
+								'text': _('Security label'),
+								'command': '.uno:SecurityLabel',
+								'accessibility': { focusBack: true, combination: 'SL', de: null }
+							}
+						]
+					}
+				],
+				'vertical': 'true'
+			} : {
 				'type': 'container',
 				'children': [
 					{
@@ -421,7 +489,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			});
 		}
 
-		if (window.wopiSettingBaseUrl) {
+		if (app.LOUtil.canOpenSettings()) {
 			content.push({
 				'type': 'separator',
 				'id': 'file-properties-break',
@@ -445,6 +513,8 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 		var hasFeedback = this.map.feedback;
 		var hasAccessibilitySupport = window.enableAccessibility;
 		var hasAccessibilityCheck = this.map.getDocType() === 'text';
+		const screenReadingPurpose =
+			_('Lets a screen reader follow the cursor and read the document');
 		const isDebugOn = this.map._debug.debugOn;
 		var hasAbout = window.L.DomUtil.get('about-dialog') !== null;
 		var hasServerAudit = this.getHiddenItems() ? !this.getHiddenItems().includes('server-audit') : true;
@@ -459,6 +529,19 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 							'text': _('Online Help'),
 							'command': '.uno:OnlineHelp',
 							'accessibility': { focusBack: false, combination: 'H', de: null }
+						}
+					]
+				},
+				{
+					'type': 'toolbox',
+					'children': [
+						{
+							'id': 'onboardingtour',
+							'type': 'bigcustomtoolitem',
+							'text': _('Show tour'),
+							'icon': 'lc_helpindex.svg',
+							'command': 'onboardingtour',
+							'accessibility': { focusBack: false, combination: 'ST', de: null }
 						}
 					]
 				},
@@ -552,6 +635,8 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'id':'togglea11ystate',
 						'type': 'bigcustomtoolitem',
 						'text': _('Screen Reading'),
+						'tooltip': screenReadingPurpose,
+						'aria': { description: screenReadingPurpose },
 						'accessibility': { focusBack: true,	combination: 'SR', de: null }
 					} : {},
 				hasAccessibilityCheck ?
@@ -1720,7 +1805,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				]
 			};
 
-		if (window.wopiSettingBaseUrl) {
+		if (app.LOUtil.canOpenSettings()) {
 			zoomOverflowGroup.more = {
 				'command':'zoomSettings',
 				'accessibility': { focusBack: false, combination: 'ZD', de: null }
@@ -1820,19 +1905,6 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'command': '.uno:SidebarDeck.PropertyDeck',
 				'accessibility': { focusBack: true, combination: 'SB', de: null }
 			},
-			// Show the AI Assistant only to a non-anonymous user who may either
-			// configure AI or already has a configured provider. A guest can do
-			// neither, so they never see it.
-			!this.map['wopi'].IsAnonymousUser &&
-			(!this.map['wopi'].DisableAISettings || this.map['wopi'].AIConfigured) ? {
-				'id': 'view-ai-sidebar',
-				'type': 'bigcustomtoolitem',
-				'text': _('AI Assistant'),
-				'tooltip': _('AI Assistant'),
-				'icon': 'lc_ai_sidebar.svg',
-				'command': 'aichat',
-				'accessibility': { focusBack: true, combination: 'AI', de: null }
-			} : {},
 			{ type: 'separator', id: 'view-sidebar-break', orientation: 'vertical' },
 			// On Android the app's own settings choose the theme, so the
 			// editor offers no theme toggle of its own.
@@ -1847,6 +1919,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			    'id':'invertbackground',
 			    'class': 'unoinvertbackground',
 			    'type': 'bigcustomtoolitem',
+			    'visible': window.prefs.getBoolean('darkTheme'),
 			    'text': _('Invert Background'),
 			    'accessibility': { focusBack: true, combination: 'BG', de: null }
 			},
@@ -2105,7 +2178,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'accessibility': { focusBack: false,	combination: 'OL', de: null },
 				'more': {
 					'command':'.uno:TransformDialog',
-					'accessibility': { focusBack: true,	combination: 'MA', de: null },
+					'accessibility': { focusBack: true,	combination: 'AL', de: null },
 				},
 				'children' : [
 					{
@@ -2176,7 +2249,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'accessibility': { focusBack: false,	combination: 'OF', de: null },
 				'more': {
 					'command':'.uno:TransformDialog',
-					'accessibility': { focusBack: true,	combination: 'MR', de: null },
+					'accessibility': { focusBack: true,	combination: 'AR', de: null },
 				},
 				'children' : [
 					{
@@ -2232,6 +2305,15 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 
 	getReferencesTab: function() {
 		const tab = JSDialog.WriterReferencesTab;
+		return this.getTabPage(tab.getName(), tab.getContent());
+	},
+
+	// Null without a provider: _filterExtensionsTab() then drops this page
+	// and the label above with it.
+	getAIAssistantTab: function() {
+		if (!app.LOUtil.isAIAssistantAvailable(this.map))
+			return null;
+		const tab = JSDialog.AIAssistantTab;
 		return this.getTabPage(tab.getName(), tab.getContent());
 	},
 
@@ -2351,7 +2433,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'children': [
 									{
 										'id': 'review-show-resolved-annotations',
-										'type': 'toolitem',
+										'type': 'customtoolitem',
 										'text': _UNO('.uno:ShowResolvedAnnotations', 'text'),
 										'command': '.uno:ShowResolvedAnnotations',
 										'accessibility': { focusBack: true, combination: 'RA', de: null }
@@ -2514,6 +2596,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 		return this.getTabPage(reviewTabName, content);
 	},
 
+	getTableDesignTab: function() {
+		const tab = JSDialog.WriterTableDesignTab;
+		return this.getTabPage(tab.getName(), tab.getContent());
+	},
+
 	getTableTab: function() {
 		const tab = JSDialog.WriterTableTab;
 		return this.getTabPage(tab.getName(), tab.getContent());
@@ -2555,17 +2642,74 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'command': '.uno:ChangeAlignment',
 				'icon': 'lc_fontworkalignmentfloater.svg',
 				'accessibility': { focusBack: true, combination: 'CA', de: null },
+			},
+			{ type: 'separator', id: 'formula-changealignment-break', orientation: 'vertical' },
+			/* ids have to match the welded elements pane ids from the .ui in the core */
+			{
+				'id': 'formula-element-categories',
+				'type': 'container',
+				'vertical': 'true',
+				'children': [
+					{
+						'id': 'categorylistlabel',
+						'type': 'fixedtext',
+						'text': _('Element categories')
+					},
+					{
+						'id': 'categorylist',
+						'type': 'listbox',
+						'text': '',
+						'entries': [],
+						'labelledBy': 'categorylistlabel',
+						'accessibility': { focusBack: true, combination: 'EC', de: null }
+					}
+				]
 			}
-        ];
+		];
+
+		for (var group = 0; group < 15; group++) {
+			var groupId = 'elements_group' + group;
+			var groupAccessKey = 'G' + (group + 1).toString(16).toUpperCase();
+			content.push(
+				{ type: 'separator', id: groupId + '-break', orientation: 'vertical' },
+				{
+					'type': 'overflowgroup',
+					'id': groupId + '-group',
+					'nofold': true,
+					'visible': group === 0,
+					'children': [
+						{
+							'id': groupId + '-iconview-list',
+							'type': 'iconviewlist',
+							'horizontal': true,
+							'nameFromIconView': true,
+							'expanderAccessKey': groupAccessKey,
+							'accessibility': { focusBack: false, combination: groupAccessKey, de: null },
+							'children': [
+								{
+									'id': groupId,
+									'type': 'iconview',
+									'entries': [],
+									'singleclickactivate': true
+								}
+							]
+						}
+					]
+				}
+			);
+		}
+
 		return this.getTabPage(formulaTabName, content);
 	},
 
 	getShapeTab: function() {
 		var content = [
 			{
+				'id': 'shape-transform-dialog',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:TransformDialog', 'text'),
-				'command': '.uno:TransformDialog'
+				'command': '.uno:TransformDialog',
+				'accessibility': { focusBack: true, combination: 'TD', de: null }
 			},
 			{ type: 'separator', id: 'shape-transformdialog-break', orientation: 'vertical' },
 			{
@@ -2575,9 +2719,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'type': 'toolbox',
 						'children': [
 							{
+								'id': 'shape-flip-vertical',
 								'type': 'toolitem',
 								'text': _UNO('.uno:FlipVertical'),
-								'command': '.uno:FlipVertical'
+								'command': '.uno:FlipVertical',
+								'accessibility': { focusBack: true, combination: 'FV', de: null }
 							}
 						]
 					},
@@ -2585,9 +2731,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'type': 'toolbox',
 						'children': [
 							{
+								'id': 'shape-flip-horizontal',
 								'type': 'toolitem',
 								'text': _UNO('.uno:FlipHorizontal'),
-								'command': '.uno:FlipHorizontal'
+								'command': '.uno:FlipHorizontal',
+								'accessibility': { focusBack: true, combination: 'FH', de: null }
 							}
 						]
 					}
@@ -2595,37 +2743,10 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'vertical': 'true'
 			},
 			{ type: 'separator', id: 'shape-fliphorizontal-break', orientation: 'vertical' },
-			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'shape-tab-xlinecolor:ColorPickerMenu',
-								'noLabel': true,
-								'type': 'toolitem',
-								'text': _UNO('.uno:XLineColor'),
-								'command': '.uno:XLineColor'
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'shape-tab-fillcolor:ColorPickerMenu',
-								'noLabel': true,
-								'type': 'toolitem',
-								'text': _UNO('.uno:FillColor'),
-								'command': '.uno:FillColor'
-							}
-						]
-					}
-				],
-				'vertical': 'true'
-			},
+			this.getShapeFillColorButton(),
 			{ type: 'separator', id: 'shape-fillcolor-break', orientation: 'vertical' },
+			this.getShapeLineSection(),
+			{ type: 'separator', id: 'shape-line-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
 				'id': 'shape-wrap',
@@ -2639,19 +2760,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-wrap-off',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapOff', 'text'),
-										'command': '.uno:WrapOff'
+										'command': '.uno:WrapOff',
+										'accessibility': { focusBack: true, combination: 'TW', de: null }
 									},
 									{
+										'id': 'shape-wrap-on',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapOn', 'text'),
-										'command': '.uno:WrapOn'
+										'command': '.uno:WrapOn',
+										'accessibility': { focusBack: true, combination: 'WO', de: null }
 									},
 									{
+										'id': 'shape-wrap-ideal',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapIdeal', 'text'),
-										'command': '.uno:WrapIdeal'
+										'command': '.uno:WrapIdeal',
+										'accessibility': { focusBack: true, combination: 'WI', de: null }
 									}
 								]
 							},
@@ -2659,19 +2786,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-wrap-left',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapLeft', 'text'),
-										'command': '.uno:WrapLeft'
+										'command': '.uno:WrapLeft',
+										'accessibility': { focusBack: true, combination: 'WL', de: null }
 									},
 									{
+										'id': 'shape-wrap-through',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapThrough', 'text'),
-										'command': '.uno:WrapThrough'
+										'command': '.uno:WrapThrough',
+										'accessibility': { focusBack: true, combination: 'WT', de: null }
 									},
 									{
+										'id': 'shape-wrap-right',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapRight', 'text'),
-										'command': '.uno:WrapRight'
+										'command': '.uno:WrapRight',
+										'accessibility': { focusBack: true, combination: 'WR', de: null }
 									}
 								]
 							}
@@ -2698,19 +2831,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-object-align-left',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectAlignLeft'),
-										'command': '.uno:ObjectAlignLeft'
+										'command': '.uno:ObjectAlignLeft',
+										'accessibility': { focusBack: true, combination: 'OL', de: null }
 									},
 									{
+										'id': 'shape-align-center',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignCenter'),
-										'command': '.uno:AlignCenter'
+										'command': '.uno:AlignCenter',
+										'accessibility': { focusBack: true, combination: 'AC', de: null }
 									},
 									{
+										'id': 'shape-object-align-right',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectAlignRight'),
-										'command': '.uno:ObjectAlignRight'
+										'command': '.uno:ObjectAlignRight',
+										'accessibility': { focusBack: true, combination: 'OR', de: null }
 									}
 								]
 							},
@@ -2718,19 +2857,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-align-up',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignUp'),
-										'command': '.uno:AlignUp'
+										'command': '.uno:AlignUp',
+										'accessibility': { focusBack: true, combination: 'OU', de: null }
 									},
 									{
+										'id': 'shape-align-middle',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignMiddle'),
-										'command': '.uno:AlignMiddle'
+										'command': '.uno:AlignMiddle',
+										'accessibility': { focusBack: true, combination: 'AM', de: null }
 									},
 									{
+										'id': 'shape-align-down',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignDown'),
-										'command': '.uno:AlignDown'
+										'command': '.uno:AlignDown',
+										'accessibility': { focusBack: true, combination: 'AD', de: null }
 									}
 								]
 							}
@@ -2757,14 +2902,18 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-bring-to-front',
 										'type': 'toolitem',
 										'text': _UNO('.uno:BringToFront'),
-										'command': '.uno:BringToFront'
+										'command': '.uno:BringToFront',
+										'accessibility': { focusBack: true, combination: 'BF', de: null }
 									},
 									{
+										'id': 'shape-send-to-back',
 										'type': 'toolitem',
 										'text': _UNO('.uno:SendToBack'),
-										'command': '.uno:SendToBack'
+										'command': '.uno:SendToBack',
+										'accessibility': { focusBack: true, combination: 'SB', de: null }
 									}
 								]
 							},
@@ -2772,14 +2921,18 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-object-forward-one',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectForwardOne'),
-										'command': '.uno:ObjectForwardOne'
+										'command': '.uno:ObjectForwardOne',
+										'accessibility': { focusBack: true, combination: 'OF', de: null }
 									},
 									{
+										'id': 'shape-object-back-one',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectBackOne'),
-										'command': '.uno:ObjectBackOne'
+										'command': '.uno:ObjectBackOne',
+										'accessibility': { focusBack: true, combination: 'OB', de: null }
 									}
 								]
 							}
@@ -2796,15 +2949,19 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'accessibility': { focusBack: false, combination: 'FG', de: null },
 				'children' : [
 					{
+						'id': 'shape-format-group',
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:FormatGroup'),
 						'command': '.uno:FormatGroup',
+						'accessibility': { focusBack: true, combination: 'FG', de: null },
 						'hideWhenEnabled': '.uno:FormatUngroup'
 					},
 					{
+						'id': 'shape-format-ungroup',
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:FormatUngroup'),
 						'command': '.uno:FormatUngroup',
+						'accessibility': { focusBack: true, combination: 'UG', de: null },
 						'hideWhenDisabled': true
 					},
 					{
@@ -2814,9 +2971,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-enter-group',
 										'type': 'toolitem',
 										'text': _UNO('.uno:EnterGroup'),
-										'command': '.uno:EnterGroup'
+										'command': '.uno:EnterGroup',
+										'accessibility': { focusBack: true, combination: 'EG', de: null }
 									}
 								]
 							},
@@ -2824,14 +2983,32 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'shape-leave-group',
 										'type': 'toolitem',
 										'text': _UNO('.uno:LeaveGroup'),
-										'command': '.uno:LeaveGroup'
+										'command': '.uno:LeaveGroup',
+										'accessibility': { focusBack: true, combination: 'LG', de: null }
 									}
 								]
 							}
 						],
 						'vertical': 'true'
+					},
+				]
+			},
+			{ type: 'separator', id: 'shape-leavegroup-break', orientation: 'vertical' },
+			{
+				'type': 'overflowgroup',
+				'id': 'shape-caption-group',
+				'name': _('Caption'),
+				'accessibility': { focusBack: false, combination: 'IC', de: null },
+				'children': [
+					{
+						'type': 'bigtoolitem',
+						'id': 'shape-insert-caption-dialog',
+						'text': _UNO('.uno:InsertCaptionDialog', 'text'),
+						'command': '.uno:InsertCaptionDialog',
+						'accessibility': { focusBack: true, combination: 'IC', de: null },
 					},
 				]
 			},
@@ -2893,40 +3070,20 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			},
 			{ type: 'separator', id: 'picture-transparency-break', orientation: 'vertical' },
 			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'picture-tab-xlinecolor:ColorPickerMenu',
-								'type': 'menubutton',
-								'noLabel': true,
-								'text': _UNO('.uno:XLineColor'),
-								'command': '.uno:XLineColor'
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'picture-tab-fillcolor:ColorPickerMenu',
-								'type': 'menubutton',
-								'noLabel': true,
-								'text': _UNO('.uno:FillColor'),
-								'command': '.uno:FillColor'
-							}
-						]
-					}
-				],
-				'vertical': 'true'
+				'id': 'picture-tab-fillcolor:ColorPickerMenu',
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:FillColor'),
+				'command': '.uno:FillColor',
+				'disabledTooltip': _('Fill Color (Transparent Pictures Only)'),
+				'accessibility': { focusBack: true, combination: 'FC', de: null }
 			},
 			{ type: 'separator', id: 'picture-fillcolor-break', orientation: 'vertical' },
 			{
+				'id': 'picture-transform-dialog',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:TransformDialog', 'text'),
-				'command': '.uno:TransformDialog'
+				'command': '.uno:TransformDialog',
+				'accessibility': { focusBack: true, combination: 'TD', de: null }
 			},
 			{ type: 'separator', id: 'picture-transformdialog-break', orientation: 'vertical' },
 			{
@@ -2936,9 +3093,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'type': 'toolbox',
 						'children': [
 							{
+								'id': 'picture-flip-vertical',
 								'type': 'toolitem',
 								'text': _UNO('.uno:FlipVertical'),
-								'command': '.uno:FlipVertical'
+								'command': '.uno:FlipVertical',
+								'accessibility': { focusBack: true, combination: 'FV', de: null }
 							}
 						]
 					},
@@ -2946,9 +3105,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'type': 'toolbox',
 						'children': [
 							{
+								'id': 'picture-flip-horizontal',
 								'type': 'toolitem',
 								'text': _UNO('.uno:FlipHorizontal'),
-								'command': '.uno:FlipHorizontal'
+								'command': '.uno:FlipHorizontal',
+								'accessibility': { focusBack: true, combination: 'FH', de: null }
 							}
 						]
 					}
@@ -2969,19 +3130,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-wrap-off',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapOff', 'text'),
-										'command': '.uno:WrapOff'
+										'command': '.uno:WrapOff',
+										'accessibility': { focusBack: true, combination: 'TW', de: null }
 									},
 									{
+										'id': 'picture-wrap-on',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapOn', 'text'),
-										'command': '.uno:WrapOn'
+										'command': '.uno:WrapOn',
+										'accessibility': { focusBack: true, combination: 'WO', de: null }
 									},
 									{
+										'id': 'picture-wrap-ideal',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapIdeal', 'text'),
-										'command': '.uno:WrapIdeal'
+										'command': '.uno:WrapIdeal',
+										'accessibility': { focusBack: true, combination: 'WI', de: null }
 									}
 								]
 							},
@@ -2989,19 +3156,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-wrap-left',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapLeft', 'text'),
-										'command': '.uno:WrapLeft'
+										'command': '.uno:WrapLeft',
+										'accessibility': { focusBack: true, combination: 'WL', de: null }
 									},
 									{
+										'id': 'picture-wrap-through',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapThrough', 'text'),
-										'command': '.uno:WrapThrough'
+										'command': '.uno:WrapThrough',
+										'accessibility': { focusBack: true, combination: 'WT', de: null }
 									},
 									{
+										'id': 'picture-wrap-right',
 										'type': 'toolitem',
 										'text': _UNO('.uno:WrapRight', 'text'),
-										'command': '.uno:WrapRight'
+										'command': '.uno:WrapRight',
+										'accessibility': { focusBack: true, combination: 'WR', de: null }
 									}
 								]
 							}
@@ -3028,19 +3201,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-object-align-left',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectAlignLeft'),
-										'command': '.uno:ObjectAlignLeft'
+										'command': '.uno:ObjectAlignLeft',
+										'accessibility': { focusBack: true, combination: 'OL', de: null }
 									},
 									{
+										'id': 'picture-align-center',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignCenter'),
-										'command': '.uno:AlignCenter'
+										'command': '.uno:AlignCenter',
+										'accessibility': { focusBack: true, combination: 'AC', de: null }
 									},
 									{
+										'id': 'picture-object-align-right',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectAlignRight'),
-										'command': '.uno:ObjectAlignRight'
+										'command': '.uno:ObjectAlignRight',
+										'accessibility': { focusBack: true, combination: 'OR', de: null }
 									}
 								]
 							},
@@ -3048,19 +3227,25 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-align-up',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignUp'),
-										'command': '.uno:AlignUp'
+										'command': '.uno:AlignUp',
+										'accessibility': { focusBack: true, combination: 'OU', de: null }
 									},
 									{
+										'id': 'picture-align-middle',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignMiddle'),
-										'command': '.uno:AlignMiddle'
+										'command': '.uno:AlignMiddle',
+										'accessibility': { focusBack: true, combination: 'AM', de: null }
 									},
 									{
+										'id': 'picture-align-down',
 										'type': 'toolitem',
 										'text': _UNO('.uno:AlignDown'),
-										'command': '.uno:AlignDown'
+										'command': '.uno:AlignDown',
+										'accessibility': { focusBack: true, combination: 'AD', de: null }
 									}
 								]
 							}
@@ -3087,14 +3272,18 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-bring-to-front',
 										'type': 'toolitem',
 										'text': _UNO('.uno:BringToFront'),
-										'command': '.uno:BringToFront'
+										'command': '.uno:BringToFront',
+										'accessibility': { focusBack: true, combination: 'BF', de: null }
 									},
 									{
+										'id': 'picture-send-to-back',
 										'type': 'toolitem',
 										'text': _UNO('.uno:SendToBack'),
-										'command': '.uno:SendToBack'
+										'command': '.uno:SendToBack',
+										'accessibility': { focusBack: true, combination: 'SB', de: null }
 									}
 								]
 							},
@@ -3102,14 +3291,18 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-object-forward-one',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectForwardOne'),
-										'command': '.uno:ObjectForwardOne'
+										'command': '.uno:ObjectForwardOne',
+										'accessibility': { focusBack: true, combination: 'OF', de: null }
 									},
 									{
+										'id': 'picture-object-back-one',
 										'type': 'toolitem',
 										'text': _UNO('.uno:ObjectBackOne'),
-										'command': '.uno:ObjectBackOne'
+										'command': '.uno:ObjectBackOne',
+										'accessibility': { focusBack: true, combination: 'OB', de: null }
 									}
 								]
 							}
@@ -3126,15 +3319,19 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'accessibility': { focusBack: false, combination: 'EG', de: null },
 				'children' : [
 					{
+						'id': 'picture-format-group',
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:FormatGroup'),
 						'command': '.uno:FormatGroup',
+						'accessibility': { focusBack: true, combination: 'FG', de: null },
 						'hideWhenEnabled': '.uno:FormatUngroup'
 					},
 					{
+						'id': 'picture-format-ungroup',
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:FormatUngroup'),
 						'command': '.uno:FormatUngroup',
+						'accessibility': { focusBack: true, combination: 'UG', de: null },
 						'hideWhenDisabled': true
 					},
 					{
@@ -3144,9 +3341,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-enter-group',
 										'type': 'toolitem',
 										'text': _UNO('.uno:EnterGroup'),
-										'command': '.uno:EnterGroup'
+										'command': '.uno:EnterGroup',
+										'accessibility': { focusBack: true, combination: 'EG', de: null }
 									}
 								]
 							},
@@ -3154,9 +3353,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 								'type': 'toolbox',
 								'children': [
 									{
+										'id': 'picture-leave-group',
 										'type': 'toolitem',
 										'text': _UNO('.uno:LeaveGroup'),
-										'command': '.uno:LeaveGroup'
+										'command': '.uno:LeaveGroup',
+										'accessibility': { focusBack: true, combination: 'LG', de: null }
 									}
 								]
 							}
@@ -3167,10 +3368,28 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			},
 			{ type: 'separator', id: 'picture-leavegroup-break', orientation: 'vertical' },
 			{
+				'id': 'picture-crop',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Crop'),
 				'command': '.uno:Crop',
+				'accessibility': { focusBack: true, combination: 'CR', de: null },
 				'context': 'Graphic'
+			},
+			{ type: 'separator', id: 'picture-crop-break', orientation: 'vertical' },
+			{
+				'type': 'overflowgroup',
+				'id': 'picture-caption-group',
+				'name': _('Caption'),
+				'accessibility': { focusBack: false, combination: 'IC', de: null },
+				'children': [
+					{
+						'type': 'bigtoolitem',
+						'id': 'picture-insert-caption-dialog',
+						'text': _UNO('.uno:InsertCaptionDialog', 'text'),
+						'command': '.uno:InsertCaptionDialog',
+						'accessibility': { focusBack: true, combination: 'IC', de: null },
+					},
+				]
 			},
 		];
 
@@ -3399,7 +3618,8 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 
 	// filter out empty children options so that the HTML isn't cluttered
 	// and individual items missaligned
-	// Also remove the hidden items / commands.
+	// Also remove the hidden commands. Hidden buttons stay, built as not
+	// visible, so they can be shown again.
 	cleanOpts: function(children) {
 		var that = this;
 
@@ -3409,14 +3629,15 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			}
 
 			var uiManager = that.map.uiManager;
-			if (!uiManager.isButtonVisible(c.id)) {
-				return null;
-			}
 			if (!uiManager.isCommandVisible(c.command)) {
 				return null;
 			}
 
 			var opts = Object.assign(c, {});
+
+			if (!uiManager.isButtonVisible(c.id)) {
+				opts.visible = false;
+			}
 
 			if (c.children && c.children.length) {
 				opts.children = that.cleanOpts(c.children);
@@ -3428,8 +3649,8 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 		});
 	},
 
-	// `name` is not consumed by the ribbon renderer - it exists so a tabpage returned
-	// here can be found by name later (e.g. by
+	// `name` is not consumed by the notebookbar renderer - it exists so a tabpage
+	// returned here can be found by name later (e.g. by
 	// Control.Notebookbar.js's _insertContributedNotebookbarTabs, positioning a
 	// contributed tab relative to this one) without relying on this array staying
 	// index-aligned with the separate getTabs() labels array.

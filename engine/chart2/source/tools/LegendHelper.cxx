@@ -24,17 +24,18 @@
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/chart2/RelativePosition.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 
 namespace chart
 {
 
 rtl::Reference< Legend > LegendHelper::showLegend( ChartModel& rModel
-                                                    , const uno::Reference< uno::XComponentContext >& xContext )
+                                                    , const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     rtl::Reference< Legend > xLegend = LegendHelper::getLegend( rModel, xContext, true );
     if( xLegend.is())
@@ -74,7 +75,7 @@ void LegendHelper::hideLegend( ChartModel& rModel )
 
 rtl::Reference< Legend > LegendHelper::getLegend(
       ChartModel& rModel
-    , const uno::Reference< uno::XComponentContext >& xContext
+    , const uno::Reference< cpo::uno::XComponentContext >& xContext
     , bool bCreate )
 {
     rtl::Reference< Legend > xResult;

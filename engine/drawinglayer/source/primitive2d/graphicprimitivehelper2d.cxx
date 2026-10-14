@@ -555,14 +555,11 @@ namespace drawinglayer::primitive2d
             rVisitor.visit(aRetval);
         }
 
-        basegfx::B2DRange AnimatedGraphicPrimitive2D::getB2DRange(const geometry::ViewInformation2D& rViewInformation) const
+        basegfx::B2DRange AnimatedGraphicPrimitive2D::getB2DRange(const geometry::ViewInformation2D& /*rViewInformation*/) const
         {
-            // get object's range
+            // The range is the whole object, whichever part of it the view shows.
             basegfx::B2DRange aUnitRange(0.0, 0.0, 1.0, 1.0);
             aUnitRange.transform(getTransform());
-
-            // intersect with visible part
-            aUnitRange.intersect(rViewInformation.getViewport());
 
             return aUnitRange;
         }
@@ -845,6 +842,20 @@ namespace drawinglayer::primitive2d
             }
 
             return aRetval;
+        }
+
+        Primitive2DContainer create2DColorModifierEmbeddingsAsNeeded(
+            Primitive2DContainer&& rChildren,
+            const GraphicAttr& rGraphicAttr)
+        {
+            return create2DColorModifierEmbeddingsAsNeeded(
+                std::move(rChildren), rGraphicAttr.GetDrawMode(),
+                std::clamp(rGraphicAttr.GetLuminance() * 0.01, -1.0, 1.0),
+                std::clamp(rGraphicAttr.GetContrast() * 0.01, -1.0, 1.0),
+                std::clamp(rGraphicAttr.GetChannelR() * 0.01, -1.0, 1.0),
+                std::clamp(rGraphicAttr.GetChannelG() * 0.01, -1.0, 1.0),
+                std::clamp(rGraphicAttr.GetChannelB() * 0.01, -1.0, 1.0),
+                std::clamp(rGraphicAttr.GetGamma(), 0.0, 10.0), rGraphicAttr.IsInvert());
         }
 
 } // end of namespace

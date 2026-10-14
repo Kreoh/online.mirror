@@ -11,10 +11,8 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 		desktopHelper.switchUIToNotebookbar();
 		cy.viewport(1920,1080);
 
-		// give some time to open fully the app
-		cy.wait(1000);
-
 		cy.getFrameWindow().then((win) => {
+			helper.processToIdle(win);
 			this.win = win;
 		});
 	});
@@ -45,6 +43,29 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 			cy.cGet('#document-container svg svg').should('have.attr', 'width', foWidth);
 			cy.cGet('#document-container svg svg').should('have.attr', 'height', foHeight);
 		});
+	});
+
+	it('Insert an animated GIF as multimedia', function () {
+		// An image picked through Insert Local Multimedia goes into the slide
+		// as a picture, so an animated GIF shows and keeps its animation.
+		helper.processToIdle(this.win);
+
+		cy.getFrameWindow().then(function (win) {
+			cy.spy(win.app.socket, 'sendMessage').as('sendMessage');
+		});
+
+		cy.cGet('#Insert-tab-label').click();
+		cy.cGet('#Insert-container .inline.insertmultimedia').click();
+		cy.cGet('#insertmultimedia[type=file]').attachFile(
+			'/desktop/impress/animated_to_insert.gif'
+		);
+
+		cy.get('@sendMessage').should('have.been.calledWithMatch',
+			/^insertfile name=\S+ type=graphic$/);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-container svg g').should('exist');
+		cy.cGet('#document-container svg foreignObject video').should('not.exist');
 	});
 
 	it('Insert multimedia from WOPI URL shows progress feedback', function () {
@@ -91,8 +112,6 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 			cy.cGet('body').realMouseMove(startX + moveX, startY);
 			cy.cGet('body').realMouseUp();
 		});
-
-		cy.wait(1000);
 
 		cy.cGet('#canvas-container > svg').should('exist');
 		cy.cGet('#test-div-shape-handle-3').should('exist');

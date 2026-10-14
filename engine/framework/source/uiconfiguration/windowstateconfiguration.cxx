@@ -34,7 +34,7 @@
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/ui/DockingArea.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <comphelper/compbase.hxx>
 #include <comphelper/string.hxx>
@@ -51,7 +51,7 @@
 #include <unordered_map>
 #include <vector>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -1232,7 +1232,7 @@ typedef comphelper::WeakComponentImplHelper< css::container::XNameAccess,
 class WindowStateConfiguration : public WindowStateConfiguration_BASE
 {
 public:
-    explicit WindowStateConfiguration( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit WindowStateConfiguration( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     virtual ~WindowStateConfiguration() override;
 
     virtual OUString getImplementationName() override
@@ -1265,10 +1265,10 @@ public:
                                 OUString > ModuleToWindowStateFileMap;
 
     typedef std::unordered_map< OUString,
-                                css::uno::Reference< css::container::XNameAccess > > ModuleToWindowStateConfigHashMap;
+                                cpo::uno::Reference< css::container::XNameAccess > > ModuleToWindowStateConfigHashMap;
 
 private:
-    css::uno::Reference< css::uno::XComponentContext>         m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext>         m_xContext;
     ModuleToWindowStateFileMap                                m_aModuleToFileHashMap;
     ModuleToWindowStateConfigHashMap                          m_aModuleToWindowStateHashMap;
 };
@@ -1276,7 +1276,7 @@ private:
 WindowStateConfiguration::WindowStateConfiguration( const Reference< XComponentContext >& rxContext ) :
     m_xContext( rxContext )
 {
-    css::uno::Reference< css::frame::XModuleManager2 > xModuleManager =
+    cpo::uno::Reference< css::frame::XModuleManager2 > xModuleManager =
         ModuleManager::create( m_xContext );
     Reference< XNameAccess > xEmptyNameAccess;
     Sequence< OUString > aElementNames;
@@ -1284,7 +1284,7 @@ WindowStateConfiguration::WindowStateConfiguration( const Reference< XComponentC
     {
         aElementNames = xModuleManager->getElementNames();
     }
-    catch (const css::uno::RuntimeException &)
+    catch (const cpo::uno::RuntimeException &)
     {
     }
     Sequence< PropertyValue > aSeq;
@@ -1382,9 +1382,9 @@ bool WindowStateConfiguration::hasElements()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_WindowStateConfiguration_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new WindowStateConfiguration(context));

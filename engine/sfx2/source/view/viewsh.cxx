@@ -25,6 +25,7 @@
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/whiter.hxx>
+#include <optional>
 #include <utility>
 #include <vcl/svapp.hxx>
 #include <vcl/toolbox.hxx>
@@ -49,15 +50,22 @@
 #include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/view/XRenderable.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
 #include <com/sun/star/accessibility/XAccessibleEventBroadcaster.hpp>
 #include <com/sun/star/accessibility/XAccessibleSelection.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
+#include <com/sun/star/accessibility/XAccessibleHyperlink.hpp>
+#include <com/sun/star/accessibility/XAccessibleHypertext.hpp>
 #include <com/sun/star/accessibility/XAccessibleText.hpp>
+#include <com/sun/star/accessibility/XAccessibleComponent.hpp>
+#include <com/sun/star/accessibility/XAccessibleExtendedAttributes.hpp>
+#include <com/sun/star/accessibility/AccessibleRelationType.hpp>
+#include <com/sun/star/accessibility/XAccessibleRelationSet.hpp>
 #include <com/sun/star/accessibility/XAccessibleTable.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/ui/XAcceleratorConfiguration.hpp>
@@ -111,6 +119,7 @@
 #include <sfx2/kit/callback.hxx>
 #include <openuriexternally.hxx>
 #include <iostream>
+#include <algorithm>
 #include <vector>
 #include <list>
 #include <libxml/xmlwriter.h>
@@ -123,8 +132,8 @@
 #include <sfxslots.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::cppu;
@@ -136,10 +145,10 @@ public:
     SfxClipboardChangeListener( SfxViewShell* pView, uno::Reference< datatransfer::clipboard::XClipboardNotifier > xClpbrdNtfr );
 
     // XEventListener
-    virtual void SAL_CALL disposing( const lang::EventObject& rEventObject ) override;
+    virtual void disposing( const lang::EventObject& rEventObject ) override;
 
     // XClipboardListener
-    virtual void SAL_CALL changedContents( const datatransfer::clipboard::ClipboardEvent& rEventObject ) override;
+    virtual void changedContents( const datatransfer::clipboard::ClipboardEvent& rEventObject ) override;
 
     void DisconnectViewShell() { m_pViewShell = nullptr; }
     void ChangedContents();
@@ -216,7 +225,7 @@ IMPL_STATIC_LINK( SfxClipboardChangeListener, AsyncExecuteHdl_Impl, void*, p, vo
     delete pAsyncExecuteInfo;
 }
 
-void SAL_CALL SfxClipboardChangeListener::disposing( const lang::EventObject& /*rEventObject*/ )
+void SfxClipboardChangeListener::disposing( const lang::EventObject& /*rEventObject*/ )
 {
     // Either clipboard or ViewShell is going to be destroyed -> no interest in listening anymore
     uno::Reference< lang::XComponent > xCtrl( m_xCtrl );
@@ -236,7 +245,7 @@ void SAL_CALL SfxClipboardChangeListener::disposing( const lang::EventObject& /*
         delete pInfo;
 }
 
-void SAL_CALL SfxClipboardChangeListener::changedContents( const datatransfer::clipboard::ClipboardEvent& )
+void SfxClipboardChangeListener::changedContents( const datatransfer::clipboard::ClipboardEvent& )
 {
     // Make asynchronous call to avoid locking SolarMutex which is the
     // root for many deadlocks, especially in conjunction with the "Windows"
@@ -253,6 +262,14 @@ struct TableSizeType
     sal_Int32 nRowCount;
     sal_Int32 nColCount;
 };
+
+OUString getSelectionName(const uno::Reference<accessibility::XAccessibleContext>& xContext)
+{
+    OUString sName = xContext->getAccessibleName().trim();
+    if (sName == "GraphicObjectShape")
+        return u"Graphic"_ustr;
+    return sName;
+}
 }
 
 typedef std::list<uno::Reference<accessibility::XAccessibleTable>> XAccessibleTableList;
@@ -551,6 +568,456 @@ void aboutEvent(std::string msg, const accessibility::AccessibleEventObject& aEv
     }
 }
 
+uno::Reference<accessibility::XAccessibleContext>
+flowNeighbour(const uno::Reference<accessibility::XAccessibleContext>& xContext,
+              accessibility::AccessibleRelationType eType)
+{
+    uno::Reference<accessibility::XAccessibleRelationSet> xRelations
+        = xContext->getAccessibleRelationSet();
+    if (!xRelations.is())
+        return {};
+    const accessibility::AccessibleRelation aRelation = xRelations->getRelationByType(eType);
+    if (!aRelation.TargetSet.hasElements() || !aRelation.TargetSet[0].is())
+        return {};
+    return aRelation.TargetSet[0]->getAccessibleContext();
+}
+
+enum class WindowSide
+{
+    Above,
+    Inside,
+    Below,
+    NotLaidOut,
+    Unknown
+};
+
+// getLocationOnScreen, unlike getBounds, puts a table cell's paragraphs on the parent's scale.
+WindowSide windowSide(const uno::Reference<accessibility::XAccessibleContext>& xContext,
+                      const css::awt::Point& rParentOnScreen, sal_Int32 nTop, sal_Int32 nBottom)
+{
+    uno::Reference<accessibility::XAccessibleComponent> xComponent(xContext, uno::UNO_QUERY);
+    if (!xComponent.is())
+        return WindowSide::Unknown;
+    const sal_Int32 nY = xComponent->getLocationOnScreen().Y - rParentOnScreen.Y;
+    const sal_Int32 nHeight = xComponent->getSize().Height;
+    // Writer leaves a paragraph it has not laid out yet at the origin, with no height.
+    if (nY <= 0 && nHeight <= 1)
+        return WindowSide::NotLaidOut;
+    if (nY + nHeight < nTop)
+        return WindowSide::Above;
+    if (nY > nBottom)
+        return WindowSide::Below;
+    return WindowSide::Inside;
+}
+
+// Writer gives a heading or a block quote paragraph its own role.
+bool isParagraphRole(sal_Int16 nRole)
+{
+    return nRole == accessibility::AccessibleRole::PARAGRAPH
+           || nRole == accessibility::AccessibleRole::HEADING
+           || nRole == accessibility::AccessibleRole::BLOCK_QUOTE;
+}
+
+// A paragraph in a table cell is read in the flow of the text the table is in.
+uno::Reference<accessibility::XAccessible>
+textRoot(const uno::Reference<accessibility::XAccessibleContext>& xContext)
+{
+    uno::Reference<accessibility::XAccessible> xParent = xContext->getAccessibleParent();
+    while (xParent.is())
+    {
+        uno::Reference<accessibility::XAccessibleContext> xParentContext
+            = xParent->getAccessibleContext();
+        if (!xParentContext.is())
+            break;
+        const sal_Int16 nRole = xParentContext->getAccessibleRole();
+        if (nRole != accessibility::AccessibleRole::TABLE_CELL
+            && nRole != accessibility::AccessibleRole::TABLE)
+            break;
+        xParent = xParentContext->getAccessibleParent();
+    }
+    return xParent;
+}
+
+bool isSiblingParagraph(const uno::Reference<accessibility::XAccessibleContext>& xContext,
+                        const uno::Reference<accessibility::XAccessible>& xParent)
+{
+    return isParagraphRole(xContext->getAccessibleRole()) && textRoot(xContext) == xParent;
+}
+
+// Writer reports a heading as "level:N;", following the ARIA level object attribute.
+sal_Int32 getHeadingLevel(const uno::Reference<css::accessibility::XAccessibleText>& xAccText)
+{
+    uno::Reference<accessibility::XAccessibleContext> xContext(xAccText, uno::UNO_QUERY);
+    if (!xContext.is() || xContext->getAccessibleRole() != accessibility::AccessibleRole::HEADING)
+        return 0;
+
+    uno::Reference<accessibility::XAccessibleExtendedAttributes> xAttributes(xAccText,
+                                                                             uno::UNO_QUERY);
+    if (!xAttributes.is())
+        return 0;
+
+    OUString sLevel;
+    if (!xAttributes->getExtendedAttributes().startsWith(u"level:", &sLevel))
+        return 0;
+    return std::max<sal_Int32>(0, sLevel.toInt32());
+}
+
+struct ParagraphLink
+{
+    sal_Int32 nStart;
+    sal_Int32 nEnd;
+    OUString aURL;
+
+    bool operator==(const ParagraphLink&) const = default;
+};
+
+std::vector<ParagraphLink>
+collectLinks(const uno::Reference<css::accessibility::XAccessibleText>& xAccText)
+{
+    const auto xHypertext = xAccText.query<accessibility::XAccessibleHypertext>();
+    if (!xHypertext.is())
+        return {};
+
+    std::vector<ParagraphLink> aLinks;
+    const sal_Int32 nCount = xHypertext->getHyperLinkCount();
+    for (sal_Int32 i = 0; i < nCount; ++i)
+    {
+        uno::Reference<accessibility::XAccessibleHyperlink> xLink = xHypertext->getHyperLink(i);
+        if (!xLink.is())
+            continue;
+        OUString aURL;
+        xLink->getAccessibleActionObject(0) >>= aURL;
+        if (aURL.isEmpty()) // editeng provides no URL
+            continue;
+        aLinks.push_back(
+            { .nStart = xLink->getStartIndex(), .nEnd = xLink->getEndIndex(), .aURL = aURL });
+    }
+    return aLinks;
+}
+
+boost::property_tree::ptree makeLinksTree(const std::vector<ParagraphLink>& rLinks)
+{
+    boost::property_tree::ptree aLinks;
+    for (const ParagraphLink& rLink : rLinks)
+    {
+        boost::property_tree::ptree aLink;
+        aLink.put("start", rLink.nStart);
+        aLink.put("end", rLink.nEnd);
+        aLink.put("url", rLink.aURL.toUtf8().getStr());
+        aLinks.push_back(std::make_pair("", aLink));
+    }
+    return aLinks;
+}
+
+// An image anchored as a character, by its position in the paragraph text
+struct ParagraphImage
+{
+    sal_Int32 nPosition;
+    OUString aName;
+    OUString aDescription;
+
+    bool operator==(const ParagraphImage&) const = default;
+};
+
+// How far two rectangles overlap horizontally, if they overlap at all.
+sal_Int32 overlapWidth(const css::awt::Rectangle& rA, const css::awt::Rectangle& rB)
+{
+    if (rA.Y >= rB.Y + rB.Height || rB.Y >= rA.Y + rA.Height)
+        return 0;
+    return std::min(rA.X + rA.Width, rB.X + rB.Width) - std::max(rA.X, rB.X);
+}
+
+// An image anchored as a character is a child of the paragraph, and U+FFFC (OBJECT REPLACEMENT
+// CHARACTER) in its text.
+std::vector<ParagraphImage>
+collectImages(const uno::Reference<css::accessibility::XAccessibleText>& xAccText)
+{
+    const OUString aText = xAccText->getText();
+    if (aText.indexOf(u'\xfffc') < 0)
+        return {};
+    const auto xContext = xAccText.query<accessibility::XAccessibleContext>();
+    if (!xContext.is())
+        return {};
+
+    std::vector<uno::Reference<accessibility::XAccessibleContext>> aGraphics;
+    const sal_Int64 nChildren = xContext->getAccessibleChildCount();
+    for (sal_Int64 i = 0; i < nChildren; ++i)
+    {
+        const uno::Reference<accessibility::XAccessible> xChild = xContext->getAccessibleChild(i);
+        if (!xChild.is())
+            continue;
+        uno::Reference<accessibility::XAccessibleContext> xChildContext
+            = xChild->getAccessibleContext();
+        if (xChildContext.is()
+            && xChildContext->getAccessibleRole() == accessibility::AccessibleRole::GRAPHIC)
+            aGraphics.push_back(std::move(xChildContext));
+    }
+    // each getCharacterBounds() is a layout query, and fields and comments are U+FFFC too
+    if (aGraphics.empty())
+        return {};
+
+    std::vector<std::pair<sal_Int32, css::awt::Rectangle>> aCharacters;
+    for (sal_Int32 nPos = aText.indexOf(u'\xfffc'); nPos >= 0;
+         nPos = aText.indexOf(u'\xfffc', nPos + 1))
+        aCharacters.emplace_back(nPos, xAccText->getCharacterBounds(nPos));
+
+    std::vector<ParagraphImage> aResult;
+    for (const auto& xGraphic : aGraphics)
+    {
+        const auto xComponent = xGraphic.query<accessibility::XAccessibleComponent>();
+        if (!xComponent.is())
+            continue;
+
+        // a comment or an empty field is U+FFFC too, and may touch the image
+        const css::awt::Rectangle aBounds = xComponent->getBounds();
+        sal_Int32 nPosition = -1;
+        sal_Int32 nWidth = 0;
+        for (const auto & [ nPos, aCharacter ] : aCharacters)
+        {
+            if (const sal_Int32 n = overlapWidth(aCharacter, aBounds); n > nWidth)
+            {
+                nPosition = nPos;
+                nWidth = n;
+            }
+        }
+        if (nPosition >= 0)
+            aResult.push_back({ .nPosition = nPosition,
+                                .aName = xGraphic->getAccessibleName(),
+                                .aDescription = xGraphic->getAccessibleDescription() });
+    }
+    std::ranges::stable_sort(aResult, {}, &ParagraphImage::nPosition);
+    return aResult;
+}
+
+boost::property_tree::ptree makeImagesTree(const std::vector<ParagraphImage>& rImages)
+{
+    boost::property_tree::ptree aImages;
+    for (const ParagraphImage& rImage : rImages)
+    {
+        boost::property_tree::ptree aImage;
+        aImage.put("position", rImage.nPosition);
+        aImage.put("name", rImage.aName.toUtf8().getStr());
+        aImage.put("description", rImage.aDescription.toUtf8().getStr());
+        aImages.push_back(std::make_pair("", aImage));
+    }
+    return aImages;
+}
+
+struct ContextParagraph
+{
+    OUString aText;
+    tools::Rectangle aTwips;
+    sal_Int32 nLevel = 0;
+    std::vector<ParagraphLink> aLinks;
+    std::vector<ParagraphImage> aImages;
+};
+
+ContextParagraph contextParagraph(const uno::Reference<accessibility::XAccessibleContext>& xContext,
+                                  const css::awt::Point& rParentOnScreen)
+{
+    ContextParagraph aParagraph;
+    uno::Reference<accessibility::XAccessibleText> xText(xContext, uno::UNO_QUERY);
+    if (xText.is())
+    {
+        aParagraph.aText = xText->getText();
+        aParagraph.nLevel = getHeadingLevel(xText);
+        aParagraph.aLinks = collectLinks(xText);
+        aParagraph.aImages = collectImages(xText);
+    }
+    uno::Reference<accessibility::XAccessibleComponent> xComponent(xContext, uno::UNO_QUERY);
+    if (xComponent.is())
+    {
+        const css::awt::Point aOnScreen = xComponent->getLocationOnScreen();
+        const css::awt::Size aSize = xComponent->getSize();
+        aParagraph.aTwips = o3tl::convert(tools::Rectangle(Point(aOnScreen.X - rParentOnScreen.X,
+                                                                 aOnScreen.Y - rParentOnScreen.Y),
+                                                           Size(aSize.Width, aSize.Height)),
+                                          o3tl::Length::px, o3tl::Length::twip);
+    }
+    return aParagraph;
+}
+
+void walkParagraphFlow(const uno::Reference<accessibility::XAccessibleContext>& xStart,
+                       bool bBackward, const uno::Reference<accessibility::XAccessible>& xParent,
+                       const css::awt::Point& rParentOnScreen,
+                       const css::awt::Point& rOriginOnScreen, bool bByArea, sal_Int32 nTop,
+                       sal_Int32 nBottom, sal_Int32 nRadius, std::vector<ContextParagraph>& rOut)
+{
+    const accessibility::AccessibleRelationType eType
+        = bBackward ? accessibility::AccessibleRelationType_CONTENT_FLOWS_FROM
+                    : accessibility::AccessibleRelationType_CONTENT_FLOWS_TO;
+    uno::Reference<accessibility::XAccessibleContext> xContext = flowNeighbour(xStart, eType);
+    for (; xContext.is(); xContext = flowNeighbour(xContext, eType))
+    {
+        if (bByArea)
+        {
+            const WindowSide eSide = windowSide(xContext, rParentOnScreen, nTop, nBottom);
+            if (eSide == WindowSide::NotLaidOut
+                || eSide == (bBackward ? WindowSide::Above : WindowSide::Below))
+                break;
+            if (eSide != WindowSide::Inside)
+                continue;
+        }
+        else if (static_cast<sal_Int32>(rOut.size()) >= nRadius)
+            break;
+        if (isSiblingParagraph(xContext, xParent))
+            rOut.push_back(contextParagraph(xContext, rOriginOnScreen));
+    }
+    if (bBackward)
+        std::reverse(rOut.begin(), rOut.end());
+}
+
+// rectangles in document coordinates
+css::awt::Point getTextDocumentOnScreen(const uno::Reference<accessibility::XAccessible>& xParent,
+                                        const css::awt::Point& rFallback)
+{
+    uno::Reference<accessibility::XAccessible> xAncestor = xParent;
+    while (xAncestor.is())
+    {
+        uno::Reference<accessibility::XAccessibleContext> xContext
+            = xAncestor->getAccessibleContext();
+        if (!xContext.is())
+            break;
+        if (xContext->getAccessibleRole() == accessibility::AccessibleRole::DOCUMENT_TEXT)
+        {
+            const auto xComponent = xContext.query<accessibility::XAccessibleComponent>();
+            return xComponent.is() ? xComponent->getLocationOnScreen() : rFallback;
+        }
+        xAncestor = xContext->getAccessibleParent();
+    }
+    return rFallback;
+}
+
+uno::Reference<accessibility::XAccessibleContext>
+paragraphInWindow(const uno::Reference<accessibility::XAccessible>& xParent, sal_Int32 nX,
+                  sal_Int32 nTop, sal_Int32 nBottom)
+{
+    uno::Reference<accessibility::XAccessibleComponent> xParentComponent(
+        xParent->getAccessibleContext(), uno::UNO_QUERY);
+    if (!xParentComponent.is())
+        return {};
+
+    constexpr sal_Int32 nProbes = 16;
+    const sal_Int32 nStep = std::max<sal_Int32>(1, (nBottom - nTop) / nProbes);
+    for (sal_Int32 nY = std::max<sal_Int32>(0, nTop); nY <= nBottom; nY += nStep)
+    {
+        uno::Reference<accessibility::XAccessibleComponent> xComponent = xParentComponent;
+        css::awt::Point aPoint(nX, nY);
+        for (int nDepth = 0; nDepth < 4 && xComponent.is(); ++nDepth)
+        {
+            uno::Reference<accessibility::XAccessible> xHit
+                = xComponent->getAccessibleAtPoint(aPoint);
+            if (!xHit.is())
+                break;
+            uno::Reference<accessibility::XAccessibleContext> xHitContext
+                = xHit->getAccessibleContext();
+            if (!xHitContext.is())
+                break;
+            if (isParagraphRole(xHitContext->getAccessibleRole()))
+                return xHitContext;
+            xComponent.set(xHitContext, uno::UNO_QUERY);
+            if (!xComponent.is())
+                break;
+            const css::awt::Point aOrigin = xComponent->getLocation();
+            aPoint.X -= aOrigin.X;
+            aPoint.Y -= aOrigin.Y;
+        }
+    }
+    return {};
+}
+
+void collectParagraphWindow(const uno::Reference<css::accessibility::XAccessibleText>& xAccText,
+                            sal_Int32 nRadius, const tools::Rectangle& rVisibleTwips,
+                            std::vector<ContextParagraph>& rBefore,
+                            std::vector<ContextParagraph>& rAfter)
+{
+    rBefore.clear();
+    rAfter.clear();
+
+    uno::Reference<accessibility::XAccessibleContext> xContext(xAccText, uno::UNO_QUERY);
+    if (!xContext.is())
+        return;
+
+    uno::Reference<accessibility::XAccessible> xParent = textRoot(xContext);
+    if (!xParent.is())
+        return;
+
+    uno::Reference<accessibility::XAccessibleComponent> xParentComponent(
+        xParent->getAccessibleContext(), uno::UNO_QUERY);
+    uno::Reference<accessibility::XAccessibleComponent> xComponent(xContext, uno::UNO_QUERY);
+
+    const css::awt::Point aParentOnScreen
+        = xParentComponent.is() ? xParentComponent->getLocationOnScreen() : css::awt::Point();
+    const css::awt::Point aOriginOnScreen = getTextDocumentOnScreen(xParent, aParentOnScreen);
+    const bool bByArea = !rVisibleTwips.IsEmpty() && xParentComponent.is() && xComponent.is();
+    if (!bByArea)
+    {
+        walkParagraphFlow(xContext, true, xParent, aParentOnScreen, aOriginOnScreen, false, 0, 0,
+                          nRadius, rBefore);
+        walkParagraphFlow(xContext, false, xParent, aParentOnScreen, aOriginOnScreen, false, 0, 0,
+                          nRadius, rAfter);
+        return;
+    }
+
+    const tools::Rectangle aVisiblePx
+        = o3tl::convert(rVisibleTwips, o3tl::Length::twip, o3tl::Length::px);
+    const sal_Int32 nMargin = aVisiblePx.GetHeight();
+    // in the coordinates of the parent, e.g. a table cell
+    const sal_Int32 nShift = aParentOnScreen.Y - aOriginOnScreen.Y;
+    const sal_Int32 nTop = aVisiblePx.Top() - nMargin - nShift;
+    const sal_Int32 nBottom = aVisiblePx.Bottom() + nMargin - nShift;
+
+    const WindowSide eCaretSide = windowSide(xContext, aParentOnScreen, nTop, nBottom);
+    if (eCaretSide != WindowSide::Above && eCaretSide != WindowSide::Below)
+    {
+        walkParagraphFlow(xContext, true, xParent, aParentOnScreen, aOriginOnScreen, true, nTop,
+                          nBottom, 0, rBefore);
+        walkParagraphFlow(xContext, false, xParent, aParentOnScreen, aOriginOnScreen, true, nTop,
+                          nBottom, 0, rAfter);
+        return;
+    }
+
+    const css::awt::Rectangle aCaretBounds = xComponent->getBounds();
+    uno::Reference<accessibility::XAccessibleContext> xAnchor
+        = paragraphInWindow(xParent, aCaretBounds.X + aCaretBounds.Width / 2,
+                            aVisiblePx.Top() - nShift, aVisiblePx.Bottom() - nShift);
+    if (!xAnchor.is())
+    {
+        walkParagraphFlow(xContext, eCaretSide == WindowSide::Below, xParent, aParentOnScreen,
+                          aOriginOnScreen, true, nTop, nBottom, 0,
+                          eCaretSide == WindowSide::Below ? rBefore : rAfter);
+        return;
+    }
+
+    std::vector<ContextParagraph>& rOut = eCaretSide == WindowSide::Below ? rBefore : rAfter;
+    walkParagraphFlow(xAnchor, true, xParent, aParentOnScreen, aOriginOnScreen, true, nTop, nBottom,
+                      0, rOut);
+    if (isSiblingParagraph(xAnchor, xParent))
+        rOut.push_back(contextParagraph(xAnchor, aOriginOnScreen));
+    std::vector<ContextParagraph> aFollowing;
+    walkParagraphFlow(xAnchor, false, xParent, aParentOnScreen, aOriginOnScreen, true, nTop,
+                      nBottom, 0, aFollowing);
+    rOut.insert(rOut.end(), aFollowing.begin(), aFollowing.end());
+}
+
+// A deleted paragraph outlives its frame, and Writer reads its markup through
+// the frame without checking.
+bool isDefunct(const uno::Reference<css::accessibility::XAccessibleText>& xAccText)
+{
+    uno::Reference<accessibility::XAccessibleContext> xContext(xAccText, uno::UNO_QUERY);
+    if (!xContext.is())
+        return true;
+    try
+    {
+        return (xContext->getAccessibleStateSet() & accessibility::AccessibleStateType::DEFUNC)
+               != 0;
+    }
+    catch (const lang::DisposedException&)
+    {
+        return true;
+    }
+}
+
 sal_Int32 getListPrefixSize(const uno::Reference<css::accessibility::XAccessibleText>& xAccText)
 {
     if (!xAccText.is())
@@ -597,7 +1064,7 @@ void aboutTextFormatting(std::string msg, const uno::Reference<css::accessibilit
     if (nLength <= 0)
         return;
 
-    css::uno::Reference<css::accessibility::XAccessibleTextAttributes>
+    cpo::uno::Reference<css::accessibility::XAccessibleTextAttributes>
         xAccTextAttr(xAccText, uno::UNO_QUERY);
     cpo::uno::Sequence< OUString > aRequestedAttributes;
 
@@ -747,15 +1214,22 @@ class KitDocumentFocusListener :
     public ::cppu::WeakImplHelper< accessibility::XAccessibleEventListener >
 {
     static constexpr sal_Int64 MAX_ATTACHABLE_CHILDREN = 100;
+    static constexpr sal_Int32 PARAGRAPH_WINDOW = 10;
 
     const SfxViewShell* m_pViewShell;
     sal_Int16 m_nDocumentType;
-    std::unordered_set<uno::Reference<uno::XInterface>> m_aRefList;
+    std::unordered_set<uno::Reference<cpo::uno::XInterface>> m_aRefList;
     OUString m_sFocusedParagraph;
     sal_Int32 m_nCaretPosition;
     sal_Int32 m_nSelectionStart;
     sal_Int32 m_nSelectionEnd;
     sal_Int32 m_nListPrefixLength;
+    sal_Int32 m_nHeadingLevel;
+    std::vector<ParagraphLink> m_aFocusedLinks;
+    std::vector<ParagraphImage> m_aFocusedImages;
+    mutable std::vector<ContextParagraph> m_aParagraphsBefore;
+    mutable std::vector<ContextParagraph> m_aParagraphsAfter;
+    uno::Reference<accessibility::XAccessibleText> m_xFocusedText;
     uno::Reference<accessibility::XAccessibleTable> m_xLastTable;
     OUString m_sSelectedText;
     bool m_bIsEditingCell;
@@ -763,6 +1237,10 @@ class KitDocumentFocusListener :
     bool m_bIsEditingInSelection;
     OUString m_sSelectedCellAddress;
     uno::Reference<accessibility::XAccessible> m_xSelectedObject;
+    // a Writer frame reported as selected, whose deselection Writer does not report
+    std::optional<OUString> m_oSelectedFrameName;
+    // only compared with a NAME_CHANGED source
+    cpo::uno::WeakReference<accessibility::XAccessible> m_xSelectedFrame;
 
 public:
     explicit KitDocumentFocusListener(const SfxViewShell* pViewShell);
@@ -815,10 +1293,10 @@ public:
     static uno::Reference< accessibility::XAccessible > getAccessible(const lang::EventObject& aEvent );
 
     // XEventListener
-    virtual void SAL_CALL disposing( const lang::EventObject& Source ) override;
+    virtual void disposing( const lang::EventObject& Source ) override;
 
     // XAccessibleEventListener
-    virtual void SAL_CALL notifyEvent( const accessibility::AccessibleEventObject& aEvent ) override;
+    virtual void notifyEvent( const accessibility::AccessibleEventObject& aEvent ) override;
 
     void notifyEditingInSelectionState(bool bParagraph = true);
     void notifyFocusedParagraphChanged(bool force = false);
@@ -826,8 +1304,11 @@ public:
     void notifyTextSelectionChanged();
     void notifyFocusedCellChanged(sal_Int32 nOutCount, const std::vector<TableSizeType>& aInList, sal_Int32 nRow, sal_Int32 nCol, sal_Int32 nRowSpan, sal_Int32 nColSpan);
     void notifySelectionChanged(const uno::Reference<accessibility::XAccessible>& xAccObj, const OUString& sAction);
+    void notifySelectionChanged(bool bIsCell, const OUString& sAction, const OUString& sName,
+                                const OUString& sTextContent);
 
     std::string getFocusedParagraph() const;
+    tools::Rectangle visibleArea() const;
     int getCaretPosition() const;
 
 private:
@@ -854,6 +1335,7 @@ KitDocumentFocusListener::KitDocumentFocusListener(const SfxViewShell* pViewShel
     , m_nSelectionStart(0)
     , m_nSelectionEnd(0)
     , m_nListPrefixLength(0)
+    , m_nHeadingLevel(0)
     , m_bIsEditingCell(false)
     , m_bIsEditingInSelection(false)
 {
@@ -868,6 +1350,55 @@ void KitDocumentFocusListener::paragraphPropertiesToTree(boost::property_tree::p
     aPayloadTree.put("end", bLeftToRight ? m_nSelectionEnd : m_nSelectionStart);
     if (m_nListPrefixLength > 0)
         aPayloadTree.put("listPrefixLength", m_nListPrefixLength);
+    if (m_nHeadingLevel > 0)
+        aPayloadTree.put("headingLevel", m_nHeadingLevel);
+    if (!m_aFocusedLinks.empty())
+        aPayloadTree.add_child("links", makeLinksTree(m_aFocusedLinks));
+    if (!m_aFocusedImages.empty())
+        aPayloadTree.add_child("images", makeImagesTree(m_aFocusedImages));
+    if (!m_aParagraphsBefore.empty() || !m_aParagraphsAfter.empty())
+    {
+        auto toArray = [](const std::vector<ContextParagraph>& rParagraphs, auto aValue) {
+            boost::property_tree::ptree aArray;
+            for (const ContextParagraph& rParagraph : rParagraphs)
+            {
+                boost::property_tree::ptree aNode;
+                aNode.put("", aValue(rParagraph));
+                aArray.push_back(std::make_pair("", aNode));
+            }
+            return aArray;
+        };
+        auto aText = [](const ContextParagraph& r) { return std::string(r.aText.toUtf8()); };
+        auto aRect = [](const ContextParagraph& r) { return std::string(r.aTwips.toString()); };
+        auto aLevel = [](const ContextParagraph& r) { return r.nLevel; };
+        aPayloadTree.add_child("before", toArray(m_aParagraphsBefore, aText));
+        aPayloadTree.add_child("after", toArray(m_aParagraphsAfter, aText));
+        aPayloadTree.add_child("beforeRects", toArray(m_aParagraphsBefore, aRect));
+        aPayloadTree.add_child("afterRects", toArray(m_aParagraphsAfter, aRect));
+        auto isHeading = [](const ContextParagraph& r) { return r.nLevel > 0; };
+        if (std::any_of(m_aParagraphsBefore.begin(), m_aParagraphsBefore.end(), isHeading)
+            || std::any_of(m_aParagraphsAfter.begin(), m_aParagraphsAfter.end(), isHeading))
+        {
+            aPayloadTree.add_child("beforeLevels", toArray(m_aParagraphsBefore, aLevel));
+            aPayloadTree.add_child("afterLevels", toArray(m_aParagraphsAfter, aLevel));
+        }
+        auto toLinks = [](const std::vector<ContextParagraph>& rParagraphs) {
+            boost::property_tree::ptree aArray;
+            for (const ContextParagraph& rParagraph : rParagraphs)
+                aArray.push_back(std::make_pair("", makeLinksTree(rParagraph.aLinks)));
+            return aArray;
+        };
+        aPayloadTree.add_child("beforeLinks", toLinks(m_aParagraphsBefore));
+        aPayloadTree.add_child("afterLinks", toLinks(m_aParagraphsAfter));
+        auto toImages = [](const std::vector<ContextParagraph>& rParagraphs) {
+            boost::property_tree::ptree aArray;
+            for (const ContextParagraph& rParagraph : rParagraphs)
+                aArray.push_back(std::make_pair("", makeImagesTree(rParagraph.aImages)));
+            return aArray;
+        };
+        aPayloadTree.add_child("beforeImages", toImages(m_aParagraphsBefore));
+        aPayloadTree.add_child("afterImages", toImages(m_aParagraphsAfter));
+    }
     if (force)
         aPayloadTree.put("force", 1);
 }
@@ -881,12 +1412,28 @@ void KitDocumentFocusListener::paragraphPropertiesToJson(std::string& aPayload, 
     aPayload = aStream.str();
 }
 
+tools::Rectangle KitDocumentFocusListener::visibleArea() const
+{
+    return m_pViewShell ? m_pViewShell->getKitVisibleArea() : tools::Rectangle();
+}
+
 std::string KitDocumentFocusListener::getFocusedParagraph() const
 {
     aboutView("KitDocumentFocusListener::getFocusedParagraph", this, m_pViewShell);
     aboutParagraph("KitDocumentFocusListener::getFocusedParagraph",
                    m_sFocusedParagraph, m_nCaretPosition,
                    m_nSelectionStart, m_nSelectionEnd, m_nListPrefixLength);
+
+    if (m_xFocusedText.is() && isDefunct(m_xFocusedText))
+    {
+        m_aParagraphsBefore.clear();
+        m_aParagraphsAfter.clear();
+    }
+    else if (m_xFocusedText.is())
+    {
+        collectParagraphWindow(m_xFocusedText, PARAGRAPH_WINDOW, visibleArea(), m_aParagraphsBefore, m_aParagraphsAfter);
+
+    }
 
     std::string aPayload;
     paragraphPropertiesToJson(aPayload);
@@ -1082,10 +1629,7 @@ void KitDocumentFocusListener::notifySelectionChanged(const uno::Reference<acces
     uno::Reference<XAccessibleContext> xContext = xAccObj->getAccessibleContext();
     if (xContext.is())
     {
-        OUString sName = xContext->getAccessibleName();
-        sName = sName.trim();
-        if (sName == "GraphicObjectShape")
-            sName = u"Graphic"_ustr;
+        OUString sName = getSelectionName(xContext);
 
         // check for text content and send it with some limitations:
         // no more than 10 paragraphs, no more than 1000 chars
@@ -1140,21 +1684,29 @@ void KitDocumentFocusListener::notifySelectionChanged(const uno::Reference<acces
             }
         }
 
-        boost::property_tree::ptree aPayloadTree;
-        aPayloadTree.put("cell", bIsCell ? 1 : 0);
-        aPayloadTree.put("action", sAction);
-        aPayloadTree.put("name", sName);
-        if (!sTextContent.isEmpty())
-            aPayloadTree.put("text", sTextContent);
-        std::stringstream aStream;
-        boost::property_tree::write_json(aStream, aPayloadTree);
-        std::string aPayload = aStream.str();
-        if (m_pViewShell)
-        {
-            SAL_INFO("kit.a11y",  "KitDocumentFocusListener::notifySelectionChanged: "
-                                     "action: " << sAction << ", name: " << sName);
-            m_pViewShell->viewCallback(COKitCallbackType::A11Y_SELECTION_CHANGED, OString(aPayload));
-        }
+        notifySelectionChanged(bIsCell, sAction, sName, sTextContent);
+    }
+}
+
+void KitDocumentFocusListener::notifySelectionChanged(bool bIsCell, const OUString& sAction,
+                                                      const OUString& sName,
+                                                      const OUString& sTextContent)
+{
+    boost::property_tree::ptree aPayloadTree;
+    aPayloadTree.put("cell", bIsCell ? 1 : 0);
+    aPayloadTree.put("action", sAction);
+    aPayloadTree.put("name", sName);
+    if (!sTextContent.isEmpty())
+        aPayloadTree.put("text", sTextContent);
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aPayloadTree);
+    std::string aPayload = aStream.str();
+    if (m_pViewShell)
+    {
+        SAL_INFO("kit.a11y", "KitDocumentFocusListener::notifySelectionChanged: "
+                             "action: "
+                                 << sAction << ", name: " << sName);
+        m_pViewShell->viewCallback(COKitCallbackType::A11Y_SELECTION_CHANGED, OString(aPayload));
     }
 }
 
@@ -1183,6 +1735,7 @@ bool KitDocumentFocusListener::updateParagraphInfo(const uno::Reference<css::acc
         m_nSelectionStart = xAccText->getSelectionStart();
         m_nSelectionEnd = xAccText->getSelectionEnd();
         m_nListPrefixLength = getListPrefixSize(xAccText);
+        const sal_Int32 nHeadingLevel = getHeadingLevel(xAccText);
 
         // Inside a text shape when there is no selection, selection-start and selection-end are
         // set to current caret position instead of -1. Moreover, inside a text shape pressing
@@ -1200,10 +1753,20 @@ bool KitDocumentFocusListener::updateParagraphInfo(const uno::Reference<css::acc
                 m_nSelectionStart = m_nSelectionEnd = -1;
         }
 
+        // the caret's paragraph, even when it equals the previous one
+        m_xFocusedText = xAccText;
+
         // In case only caret position or text selection are different we can rely on specific events.
-        if (m_sFocusedParagraph != sText)
+        std::vector<ParagraphLink> aLinks = collectLinks(xAccText);
+        std::vector<ParagraphImage> aImages = collectImages(xAccText);
+        if (m_sFocusedParagraph != sText || m_nHeadingLevel != nHeadingLevel
+            || m_aFocusedLinks != aLinks || m_aFocusedImages != aImages)
         {
             m_sFocusedParagraph = sText;
+            m_nHeadingLevel = nHeadingLevel;
+            m_aFocusedLinks = std::move(aLinks);
+            m_aFocusedImages = std::move(aImages);
+            collectParagraphWindow(xAccText, PARAGRAPH_WINDOW, visibleArea(), m_aParagraphsBefore, m_aParagraphsAfter);
             bNotify = true;
         }
     }
@@ -1236,11 +1799,17 @@ void KitDocumentFocusListener::resetParagraphInfo()
     m_nSelectionStart = -1;
     m_nSelectionEnd = -1;
     m_nListPrefixLength = 0;
+    m_nHeadingLevel = 0;
+    m_aFocusedLinks.clear();
+    m_aFocusedImages.clear();
+    m_aParagraphsBefore.clear();
+    m_aParagraphsAfter.clear();
+    m_xFocusedText.clear();
 }
 
 // For a presentation document when an accessible event of type SELECTION_CHANGED_XXX occurs
 // the selected (or unselected) object is put in NewValue, instead for a text document
-// the selected object is put in Source.
+// the selected object is put in Source, except for a selected frame.
 // The following function helps to retrieve the selected object independently on where it has been put.
 uno::Reference< accessibility::XAccessible >
 KitDocumentFocusListener::getSelectedObject(const accessibility::AccessibleEventObject& aEvent) const
@@ -1248,7 +1817,11 @@ KitDocumentFocusListener::getSelectedObject(const accessibility::AccessibleEvent
     uno::Reference< accessibility::XAccessible > xSelectedObject;
     if (isText(m_nDocumentType))
     {
-        xSelectedObject.set(aEvent.Source, uno::UNO_QUERY);
+        // Writer reports a selected frame on its parent, with the frame as the new value
+        if (aEvent.EventId == accessibility::AccessibleEventId::SELECTION_CHANGED)
+            aEvent.NewValue >>= xSelectedObject;
+        if (!xSelectedObject.is())
+            xSelectedObject = aEvent.Source.query<accessibility::XAccessible>();
     }
     else
     {
@@ -1270,6 +1843,23 @@ void KitDocumentFocusListener::onShapeSelectionChanged(
         notifyEditingInSelectionState();
     }
     notifySelectionChanged(xSelectedObject, sAction);
+    if (isText(m_nDocumentType))
+    {
+        uno::Reference<accessibility::XAccessibleContext> xContext;
+        if (sAction == "create" && xSelectedObject.is())
+            xContext = xSelectedObject->getAccessibleContext();
+        // notifySelectionChanged() reports nothing without a context either
+        if (xContext.is())
+        {
+            m_oSelectedFrameName = getSelectionName(xContext);
+            m_xSelectedFrame = xSelectedObject;
+        }
+        else
+        {
+            m_oSelectedFrameName.reset();
+            m_xSelectedFrame.clear();
+        }
+    }
 }
 
 void KitDocumentFocusListener::onFocusedParagraphInWriterTable(
@@ -1370,7 +1960,7 @@ void KitDocumentFocusListener::notifyEvent(const accessibility::AccessibleEventO
 
                 sal_Int16 nRole = xContext->getAccessibleRole();
 
-                if (nRole == AccessibleRole::PARAGRAPH)
+                if (isParagraphRole(nRole))
                 {
                     uno::Reference<XAccessibleText> xAccText(xAccessibleObject, uno::UNO_QUERY);
                     if (!xAccText.is())
@@ -1400,6 +1990,15 @@ void KitDocumentFocusListener::notifyEvent(const accessibility::AccessibleEventO
                             }
                             if (isText(m_nDocumentType))
                             {
+                                if (m_oSelectedFrameName)
+                                {
+                                    // the caret is back in the text; the frame may be gone
+                                    notifySelectionChanged(false, u"remove"_ustr,
+                                                           *std::exchange(m_oSelectedFrameName, {}),
+                                                           {});
+                                    m_xSelectedFrame.clear();
+                                    m_xSelectedObject.clear();
+                                }
                                 // check if we are inside a table: in case notify table and current cell info
                                 bool isInsideTable = false;
                                 uno::Reference<XAccessibleTable> xTable;
@@ -1531,6 +2130,39 @@ void KitDocumentFocusListener::notifyEvent(const accessibility::AccessibleEventO
                 // it means that the text change has been performed in another view.
                 updateAndNotifyParagraph(xAccText, !isFocused(aEvent), "TEXT_CHANGED");
 
+                break;
+            }
+            case AccessibleEventId::NAME_CHANGED:
+            {
+                // e.g. a title set in the Alt Text dialog; the deselection uses the new name
+                if (uno::Reference<XAccessible> xFrame = m_xSelectedFrame;
+                    xFrame && aEvent.Source == xFrame)
+                    m_oSelectedFrameName = getSelectionName(xFrame->getAccessibleContext());
+                break;
+            }
+            case AccessibleEventId::ROLE_CHANGED:
+            {
+                // Writer raises this when a paragraph style makes a heading or a block quote, or
+                // undoes one.
+                uno::Reference<XAccessibleText> xAccText(getAccessible(aEvent), uno::UNO_QUERY);
+                updateAndNotifyParagraph(xAccText, false, "ROLE_CHANGED");
+
+                break;
+            }
+            case AccessibleEventId::TEXT_ATTRIBUTE_CHANGED:
+            {
+                // Writer raises this when a heading moves to another level.
+                uno::Reference<XAccessibleText> xAccText(getAccessible(aEvent), uno::UNO_QUERY);
+                updateAndNotifyParagraph(xAccText, false, "TEXT_ATTRIBUTE_CHANGED");
+
+                break;
+            }
+            case AccessibleEventId::VISIBLE_DATA_CHANGED:
+            {
+                // e.g. a link's URL, which leaves the text as is
+                const auto xAccText = getAccessible(aEvent).query<XAccessibleText>();
+                if (xAccText.is() && xAccText == m_xFocusedText)
+                    updateAndNotifyParagraph(xAccText, false, "VISIBLE_DATA_CHANGED");
                 break;
             }
             case AccessibleEventId::TEXT_SELECTION_CHANGED:
@@ -1754,7 +2386,7 @@ void KitDocumentFocusListener::attachRecursive(
         return;
     SAL_INFO("kit.a11y", "KitDocumentFocusListener::attachRecursive(3) #2: xBroadcaster.is()");
     // If not already done, add the broadcaster to the list and attach as listener.
-    const uno::Reference< uno::XInterface >& xInterface = xBroadcaster;
+    const uno::Reference< cpo::uno::XInterface >& xInterface = xBroadcaster;
     if( m_aRefList.insert(xInterface).second )
     {
         SAL_INFO("kit.a11y", "KitDocumentFocusListener::attachRecursive(3) #3: m_aRefList.insert(xInterface).second");
@@ -1928,7 +2560,7 @@ void SfxViewShell::InitInterface_Impl()
 /** search for a filter name dependent on type and module
  */
 static OUString impl_retrieveFilterNameFromTypeAndModule(
-    const css::uno::Reference< css::container::XContainerQuery >& rContainerQuery,
+    const cpo::uno::Reference< css::container::XContainerQuery >& rContainerQuery,
     const OUString& rType,
     const OUString& rModuleIdentifier,
     const sal_Int32 nFlags )
@@ -1939,7 +2571,7 @@ static OUString impl_retrieveFilterNameFromTypeAndModule(
         { u"DocumentService"_ustr, cpo::uno::Any( rModuleIdentifier ) }
     };
 
-    css::uno::Reference< css::container::XEnumeration > xEnumeration =
+    cpo::uno::Reference< css::container::XEnumeration > xEnumeration =
         rContainerQuery->createSubSetEnumerationByProperties( aQuery );
 
     OUString aFoundFilterName;
@@ -1973,13 +2605,13 @@ enum ETypeFamily
 
 }
 
-static OUString impl_searchFormatTypeForApp(const css::uno::Reference< css::frame::XFrame >& xFrame     ,
+static OUString impl_searchFormatTypeForApp(const cpo::uno::Reference< css::frame::XFrame >& xFrame     ,
                                                   ETypeFamily                                eTypeFamily)
 {
     try
     {
-        const css::uno::Reference< css::uno::XComponentContext >&  xContext      (::comphelper::getProcessComponentContext());
-        css::uno::Reference< css::frame::XModuleManager2 >  xModuleManager(css::frame::ModuleManager::create(xContext));
+        const cpo::uno::Reference< cpo::uno::XComponentContext >&  xContext      (::comphelper::getProcessComponentContext());
+        cpo::uno::Reference< css::frame::XModuleManager2 >  xModuleManager(css::frame::ModuleManager::create(xContext));
 
         OUString sModule = xModuleManager->identify(xFrame);
         OUString sType   ;
@@ -2018,7 +2650,7 @@ static OUString impl_searchFormatTypeForApp(const css::uno::Reference< css::fram
 
         return sType;
     }
-    catch (const css::uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -2201,19 +2833,19 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
         // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         case SID_WEBHTML:
         {
-            css::uno::Reference< lang::XMultiServiceFactory > xSMGR(::comphelper::getProcessServiceFactory(), css::uno::UNO_SET_THROW);
-            css::uno::Reference< uno::XComponentContext >     xContext(::comphelper::getProcessComponentContext(), css::uno::UNO_SET_THROW);
-            css::uno::Reference< css::frame::XFrame >         xFrame( rFrame.GetFrame().GetFrameInterface() );
-            css::uno::Reference< css::frame::XModel >         xModel;
+            cpo::uno::Reference< lang::XMultiServiceFactory > xSMGR(::comphelper::getProcessServiceFactory(), cpo::uno::UNO_SET_THROW);
+            cpo::uno::Reference< cpo::uno::XComponentContext > xContext(::comphelper::getProcessComponentContext(), cpo::uno::UNO_SET_THROW);
+            cpo::uno::Reference< css::frame::XFrame >         xFrame( rFrame.GetFrame().GetFrameInterface() );
+            cpo::uno::Reference< css::frame::XModel >         xModel;
 
-            css::uno::Reference< css::frame::XModuleManager2 > xModuleManager( css::frame::ModuleManager::create(xContext) );
+            cpo::uno::Reference< css::frame::XModuleManager2 > xModuleManager( css::frame::ModuleManager::create(xContext) );
 
             OUString aModule;
             try
             {
                 aModule = xModuleManager->identify( xFrame );
             }
-            catch (const css::uno::RuntimeException&)
+            catch (const cpo::uno::RuntimeException&)
             {
                 throw;
             }
@@ -2223,13 +2855,13 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
 
             if ( xFrame.is() )
             {
-                css::uno::Reference< css::frame::XController > xController = xFrame->getController();
+                cpo::uno::Reference< css::frame::XController > xController = xFrame->getController();
                 if ( xController.is() )
                     xModel = xController->getModel();
             }
 
             // We need at least a valid module name and model reference
-            css::uno::Reference< css::frame::XStorable > xStorable( xModel, css::uno::UNO_QUERY );
+            cpo::uno::Reference< css::frame::XStorable > xStorable( xModel, cpo::uno::UNO_QUERY );
             if ( xModel.is() && xStorable.is() )
             {
                 OUString aFilterName;
@@ -2242,9 +2874,9 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
                 bool bPrivateProtocol = ( aFileObj.GetProtocol() == INetProtocol::PrivSoffice );
                 bool bHasLocation = !aLocation.isEmpty() && !bPrivateProtocol;
 
-                css::uno::Reference< css::container::XContainerQuery > xContainerQuery(
+                cpo::uno::Reference< css::container::XContainerQuery > xContainerQuery(
                     xSMGR->createInstance( u"com.sun.star.document.FilterFactory"_ustr ),
-                    css::uno::UNO_QUERY_THROW );
+                    cpo::uno::UNO_QUERY_THROW );
 
                 // Retrieve filter from type
 
@@ -2754,6 +3386,7 @@ SfxViewShell::SfxViewShell
 ,   maKitLocale(LANGUAGE_NONE)
 ,   maKitDeviceFormFactor(KitDeviceFormFactor::UNKNOWN)
 ,   mbLOKAccessibilityEnabled(false)
+,   maKitFocusRingColor(COL_AUTO)
 ,   mbLOKColorPreviewEnabled(false)
 {
     SetMargin( rViewFrame.GetMargin_Impl() );
@@ -2769,6 +3402,7 @@ SfxViewShell::SfxViewShell
     {
         maKitLanguageTag = KitHelper::getDefaultLanguage();
         maKitLocale = KitHelper::getDefaultLanguage();
+        maKitLocale.makeFallback();
 
         const auto [isTimezoneSet, aTimezone] = KitHelper::getDefaultTimezone();
         maKitIsTimezoneSet = isTimezoneSet;
@@ -3216,8 +3850,8 @@ bool SfxViewShell::ExecKey_Impl(const KeyEvent& aKey)
     if (comphelper::COKit::isActive())
     {
         // Get the module name.
-        const css::uno::Reference< css::uno::XComponentContext >&  xContext      (::comphelper::getProcessComponentContext());
-        css::uno::Reference< css::frame::XModuleManager2 >  xModuleManager(css::frame::ModuleManager::create(xContext));
+        const cpo::uno::Reference< cpo::uno::XComponentContext >&  xContext      (::comphelper::getProcessComponentContext());
+        cpo::uno::Reference< css::frame::XModuleManager2 >  xModuleManager(css::frame::ModuleManager::create(xContext));
         OUString sModule = xModuleManager->identify(rFrame.GetFrame().GetFrameInterface());
 
         // Get the language name.
@@ -3227,7 +3861,7 @@ bool SfxViewShell::ExecKey_Impl(const KeyEvent& aKey)
         OUString key = sModule + viewLang;
 
         // Check it in configurations map. Create a configuration manager if there isn't one for the key.
-        std::unordered_map<OUString, css::uno::Reference<css::ui::XAcceleratorConfiguration>>& acceleratorConfs = SfxApplication::Get()->GetAcceleratorConfs_Impl();
+        std::unordered_map<OUString, cpo::uno::Reference<css::ui::XAcceleratorConfiguration>>& acceleratorConfs = SfxApplication::Get()->GetAcceleratorConfs_Impl();
         if (acceleratorConfs.find(key) == acceleratorConfs.end())
         {
             // Create a new configuration manager for the module.
@@ -3292,6 +3926,17 @@ void SfxViewShell::dumpCOKitViewState(rtl::OStringBuffer &rState)
     rState.append(OUStringToOString(GetKitLanguageTag().getBcp47(), RTL_TEXTENCODING_UTF8));
     rState.append("\n\tA11y:\t");
     rState.append(GetKitAccessibilityState() ? "enabled" : "disabled");
+    rState.append("\n\tUnwantedCallbacks:");
+    for (size_t nKind = 0; nKind < pImpl->m_aUnwantedCallbacks.size(); ++nKind)
+    {
+        if (!pImpl->m_aUnwantedCallbacks.test(nKind))
+            continue;
+        rState.append(' ');
+        if (const char* pName = kitCallbackTypeToString(COKitCallbackType(nKind)))
+            rState.append(pName);
+        else
+            rState.append(sal_Int32(nKind));
+    }
 
     if (pImpl->m_pCOKitViewCallback)
         pImpl->m_pCOKitViewCallback->dumpState(rState);
@@ -3300,6 +3945,10 @@ void SfxViewShell::dumpCOKitViewState(rtl::OStringBuffer &rState)
 static bool ignoreCOKitViewCallback(COKitCallbackType eType, const SfxViewShell_Impl* pImpl)
 {
     if (!comphelper::COKit::isActive())
+        return true;
+
+    // A client that works out this kind of payload for itself is not sent it.
+    if (pImpl->m_aUnwantedCallbacks.test(size_t(eType)))
         return true;
 
     if (comphelper::COKit::isTiledPaintingOf(pImpl->m_nDocId))
@@ -3351,10 +4000,10 @@ void SfxViewShell::viewInvalidateTilesCallback(const tools::Rectangle* pRect, in
             "SfxViewShell::viewInvalidateTilesCallback no callback set!");
 }
 
-void SfxViewShell::viewVectorPartChanged(int nPart) const
+void SfxViewShell::viewVectorPartChanged(const OString& rPartId, int nMode) const
 {
     if (pImpl->m_pCOKitViewCallback)
-        pImpl->m_pCOKitViewCallback->viewVectorPartChanged(nPart);
+        pImpl->m_pCOKitViewCallback->viewVectorPartChanged(rPartId, nMode);
     else
         SAL_INFO(
             "sfx.view",
@@ -3375,6 +4024,20 @@ void SfxViewShell::viewCallbackWithViewId(COKitCallbackType eType, const OString
 }
 
 bool SfxViewShell::hasKitClient() const { return pImpl->m_pCOKitViewCallback != nullptr; }
+
+ViewShellDocId SfxViewShell::getKitDocId() const { return GetDocId(); }
+
+void SfxViewShell::setCallbackWanted(COKitCallbackType eType, bool bWanted)
+{
+    pImpl->m_aUnwantedCallbacks.set(size_t(eType), !bWanted);
+}
+
+void SfxViewShell::setDrawsFromObjects(bool bDrawsFromObjects)
+{
+    pImpl->m_bDrawsFromObjects = bDrawsFromObjects;
+}
+
+bool SfxViewShell::drawsFromObjects() const { return pImpl->m_bDrawsFromObjects; }
 
 bool SfxViewShell::acceptsViewCallback(COKitCallbackType eType) const
 {
@@ -3590,6 +4253,11 @@ void SfxViewShell::setTiledSearching(bool bTiledSearching)
 int SfxViewShell::getPart() const
 {
     return 0;
+}
+
+OString SfxViewShell::getPartId() const
+{
+    return OString::number(getPart());
 }
 
 int SfxViewShell::getEditMode() const
@@ -3935,7 +4603,7 @@ bool SfxViewShell::TryContextMenuInterception(const rtl::Reference<VCLXPopupMenu
         rPopupMenu, &rMenuIdentifier);
 
     // get selection from controller
-    aEvent.Selection = css::uno::Reference< css::view::XSelectionSupplier >( GetController(), css::uno::UNO_QUERY );
+    aEvent.Selection = cpo::uno::Reference< css::view::XSelectionSupplier >( GetController(), cpo::uno::UNO_QUERY );
 
     // call interceptors
     std::unique_lock g(pImpl->aMutex);
@@ -3989,25 +4657,6 @@ bool SfxViewShell::TryContextMenuInterception(const rtl::Reference<VCLXPopupMenu
     }
 
     return true;
-}
-
-bool SfxViewShell::HandleNotifyEvent_Impl( NotifyEvent const & rEvent )
-{
-    if (pImpl->m_pController.is())
-        return pImpl->m_pController->HandleEvent_Impl( rEvent );
-    return false;
-}
-
-bool SfxViewShell::HasKeyListeners_Impl() const
-{
-    return (pImpl->m_pController.is())
-        && pImpl->m_pController->HasKeyListeners_Impl();
-}
-
-bool SfxViewShell::HasMouseClickListeners_Impl() const
-{
-    return (pImpl->m_pController.is())
-        && pImpl->m_pController->HasMouseClickListeners_Impl();
 }
 
 bool SfxViewShell::Escape()

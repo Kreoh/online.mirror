@@ -71,7 +71,7 @@ private:
     // aka mxThemeDocument - if it exists - will be used to create the style
     // attributes for the to-be-created XShapes (theoretically allows re-creation
     // with other Theme)
-    bool mbUseDiagramThemeData; // false
+    bool mbUseDiagramThemeData; // true
 
     // If true, the UNO API form of attributes per Point as Key/value list
     // that was secured after initial XShape creation is used to create the
@@ -91,7 +91,7 @@ protected:
     void applyLocksToDiagramObjects(bool bActivate);
 
     // access associated SdrObjGroup/XShape/RootShape
-    virtual css::uno::Reference< css::drawing::XShape >& accessRootShape() = 0;
+    virtual cpo::uno::Reference< css::drawing::XShape >& accessRootShape() = 0;
 
     // Make constructor protected to signal that this anyway pure virtual class
     // shall not be incarnated - target to use is oox::drawingml::DiagramHelper_oox
@@ -113,9 +113,20 @@ public:
     virtual std::vector<std::pair<OUString, OUString>>
     getDiagramChildren(const OUString& rParentId) const = 0;
 
-    // add/remove new top-level node to data model, returns its id
-    virtual OUString addDiagramNode(const OUString& rText, SdrModel& rDrawModel) = 0;
-    virtual bool removeDiagramNode(const OUString& rNodeId, SdrModel& rDrawModel) = 0;
+    // true for a node that holds no nodes below it, false for a node that holds some and for an
+    // id that leads to no node at all
+    virtual bool isChildNode(std::u16string_view rNodeId) const = 0;
+
+    // true for a node that can take a node below it, which depends on what the layout draws
+    virtual bool canHoldChildNode(std::u16string_view rNodeId) const = 0;
+
+    // Adds a node holding rText next to the node that rAnchorNode adresses and gives back the id of
+    // the new node. An empty rAnchorNode puts the new node in front of the ones at the top level.
+    // With bAsChild the new node is created below the anchor
+    virtual OUString addDiagramNode(std::u16string_view rText, SdrModel& rDrawModel,
+                                    std::u16string_view rAnchorNode, bool bAsChild) = 0;
+    // remove a node from the data model
+    virtual bool removeDiagramNode(std::u16string_view rNodeId, SdrModel& rDrawModel) = 0;
     virtual void TextInformationChange() = 0;
     virtual void ItemSetInformationChange(std::span< const SfxPoolItem* const > aChangedItems) = 0;
 
@@ -129,7 +140,7 @@ public:
 
     // connect/disconnect to/from Group
     void connectToSdrObjGroup(
-        const css::uno::Reference< css::drawing::XShape >& rTarget,
+        const cpo::uno::Reference< css::drawing::XShape >& rTarget,
         std::shared_ptr< svx::diagram::DiagramHelper_svx >* mpDiagramHelperFromUndo);
     void disconnectFromSdrObjGroup(bool bEnableUndo);
 
@@ -142,7 +153,7 @@ public:
     virtual bool checkMinimalDataDoms() const = 0;
 
     // access to RootShape - the GroupObject used to host this Diagram
-    css::uno::Reference< css::drawing::XShape >& getRootShape() { return accessRootShape(); }
+    cpo::uno::Reference< css::drawing::XShape >& getRootShape() { return accessRootShape(); }
 
     // needed to create DiagramHelper_oox in svx' SdrObjGroup copy constructor
     virtual DiagramHelper_svx* clone() const = 0;

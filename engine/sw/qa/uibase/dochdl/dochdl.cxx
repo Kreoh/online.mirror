@@ -9,23 +9,35 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <vcl/dibtools.hxx>
 #include <vcl/transfer.hxx>
 #include <svtools/stringtransfer.hxx>
 #include <editeng/wghtitem.hxx>
 #include <editeng/postitem.hxx>
 #include <editeng/udlnitem.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/datatransfer/UnsupportedFlavorException.hpp>
+#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <svx/svdpage.hxx>
 
+#include <doc.hxx>
+#include <drawdoc.hxx>
 #include <docsh.hxx>
+#include <flyenum.hxx>
 #include <swdtflvr.hxx>
 #include <wrtsh.hxx>
 #include <view.hxx>
 #include <fmtanchr.hxx>
+#include <fmtfsize.hxx>
 #include <fmtinfmt.hxx>
+#include <IDocumentDrawModelAccess.hxx>
 #include <ndtxt.hxx>
 #include <txatbase.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Covers sw/source/uibase/dochdl/ fixes.
 class SwUibaseDochdlTest : public SwModelTestBase
@@ -130,6 +142,135 @@ CPPUNIT_TEST_FIXTURE(SwUibaseDochdlTest, testPasteURLOverSelection)
 
     auto* pINetFormat = static_cast<const SwFormatINetFormat*>(&pAttr->GetAttr());
     CPPUNIT_ASSERT_EQUAL(aURL, pINetFormat->GetValue());
+}
+
+namespace
+{
+/// Minimal XTransferable that exposes exactly one flavor: SVG.
+class SvgTransferable : public cppu::WeakImplHelper<datatransfer::XTransferable>
+{
+    OString m_aSvg;
+    OUString m_aMime{ u"image/svg+xml;windows_formatname=\"image/svg+xml\""_ustr };
+
+public:
+    SvgTransferable(OString aSvg)
+        : m_aSvg(std::move(aSvg))
+    {
+    }
+
+    cpo::uno::Any getTransferData(const datatransfer::DataFlavor& rFlavor) override
+    {
+        if (rFlavor.MimeType != m_aMime)
+            throw datatransfer::UnsupportedFlavorException();
+        cpo::uno::Sequence<sal_Int8> aData(
+            reinterpret_cast<const sal_Int8*>(m_aSvg.getStr()), m_aSvg.getLength());
+        return cpo::uno::Any(aData);
+    }
+
+    cpo::uno::Sequence<datatransfer::DataFlavor> getTransferDataFlavors() override
+    {
+        datatransfer::DataFlavor aFlavor;
+        aFlavor.MimeType = m_aMime;
+        aFlavor.HumanPresentableName = u"SVG"_ustr;
+        aFlavor.DataType = cppu::UnoType<cpo::uno::Sequence<sal_Int8>>::get();
+        return { aFlavor };
+    }
+
+    bool isDataFlavorSupported(const datatransfer::DataFlavor& rFlavor) override
+    {
+        return rFlavor.MimeType == m_aMime;
+    }
+};
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseDochdlTest, testPasteSvg)
+{
+    // Given a Writer document and a transferable that exposes only SVG:
+    createSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    OString aSvg(
+        R"(<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">)"
+        R"(<rect width="10" height="10" fill="red"/></svg>)"_ostr);
+    rtl::Reference<SvgTransferable> xTransferable(new SvgTransferable(aSvg));
+    TransferableDataHelper aHelper(xTransferable);
+
+    // When pasting:
+    SwTransferable::Paste(*pWrtShell, aHelper);
+
+    // Then a graphic must land in the document:
+    SwDoc* pDoc = pWrtShell->GetDoc();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // i.e. the SVG was not pasted as an image.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pDoc->GetFlyCount(FLYCNTTYPE_GRF));
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseDochdlTest, testCopyTextAndImageObjectSize)
+{
+    // Given a document with a line of text and a 5 cm tall as-char image:
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->Insert2(u"text before the image"_ustr);
+    constexpr tools::Long IMAGE_SIZE_MM100 = 5000;
+    constexpr SwTwips IMAGE_SIZE_TWIP
+        = o3tl::convert(IMAGE_SIZE_MM100, o3tl::Length::mm100, o3tl::Length::twip);
+    SfxItemSet aFrameSet(pDoc->GetAttrPool(), svl::Items<RES_FRMATR_BEGIN, RES_FRMATR_END - 1>);
+    aFrameSet.Put(SwFormatAnchor(RndStdIds::FLY_AS_CHAR));
+    aFrameSet.Put(SwFormatFrameSize(SwFrameSize::Fixed, IMAGE_SIZE_TWIP, IMAGE_SIZE_TWIP));
+    Graphic aGraphic;
+    pWrtShell->SwFEShell::Insert(OUString(), OUString(), &aGraphic, &aFrameSet);
+    pWrtShell->UnSelectFrame();
+
+    // When copying both the text and the image:
+    pWrtShell->SelAll();
+    rtl::Reference<SwTransferable> pTransfer = new SwTransferable(*pWrtShell);
+    pTransfer->Copy();
+
+    // Then the object offered to other applications is tall enough to show the whole image:
+    TransferableDataHelper aHelper(pTransfer);
+    TransferableObjectDescriptor aObjectDescriptor;
+    CPPUNIT_ASSERT(aHelper.GetTransferableObjectDescriptor(SotClipboardFormatId::OBJECTDESCRIPTOR,
+                                                           aObjectDescriptor));
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected greater than: 5000
+    // - Actual  : 3000
+    // i.e. the object was always 3 cm tall, so the lower part of the image was cut off.
+    CPPUNIT_ASSERT_GREATER(IMAGE_SIZE_MM100, aObjectDescriptor.maSize.Height());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseDochdlTest, testCopyShapeBitmapBackground)
+{
+    // Create a document with an ellipse (leaves the corners of its bounding box empty)
+    createSwDoc();
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XShape> xShape(
+        xFactory->createInstance(u"com.sun.star.drawing.EllipseShape"_ustr), uno::UNO_QUERY);
+    xShape->setSize(awt::Size(2000, 2000));
+    uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
+    xDrawPageSupplier->getDrawPage()->add(xShape);
+
+    // Select and copy ellipse
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SdrPage* pPage = getSwDoc()->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    pWrtShell->SelectObj(Point(), 0, pPage->GetObj(0));
+    rtl::Reference<SwTransferable> pTransfer = new SwTransferable(*pWrtShell);
+    pTransfer->Copy();
+
+    // The BMP image on the clipboard must show the empty corners as white
+    TransferableDataHelper aHelper(pTransfer);
+    uno::Sequence<sal_Int8> aBmpData
+        = aHelper.GetSequence(SotClipboardFormatId::BITMAP, OUString());
+    SvMemoryStream aBmpStream(const_cast<sal_Int8*>(aBmpData.getConstArray()),
+                              aBmpData.getLength(), StreamMode::READ);
+    Bitmap aBitmap;
+    CPPUNIT_ASSERT(ReadDIB(aBitmap, aBmpStream, /*bFileHeader=*/true));
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: rgba[ffffffff]
+    // - Actual  : rgba[000000ff]
+    // i.e. the "transparent" area of the shape turned black (BMP has no alpha channel)
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, aBitmap.GetPixelColor(0, 0));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

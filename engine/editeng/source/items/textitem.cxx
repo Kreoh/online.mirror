@@ -1204,7 +1204,7 @@ bool SvxTextLineItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
     break;
     case MID_TL_COMPLEX_COLOR:
     {
-        css::uno::Reference<css::util::XComplexColor> xComplexColor;
+        cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
         if (!(rVal >>= xComplexColor))
             return false;
 
@@ -1739,7 +1739,7 @@ bool SvxColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         break;
         case MID_COMPLEX_COLOR:
         {
-            css::uno::Reference<css::util::XComplexColor> xComplexColor;
+            cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
             if (!(rVal >>= xComplexColor))
                 return false;
 
@@ -1750,8 +1750,13 @@ bool SvxColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         case MID_COLOR_RGB:
         default:
         {
-            if (!(rVal >>= maColor))
+            Color aColor;
+            if (!(rVal >>= aColor))
                 return false;
+            // A different explicit color means the theme color no longer applies.
+            if (aColor.GetRGBColor() != maColor.GetRGBColor())
+                maComplexColor = model::ComplexColor();
+            maColor = aColor;
         }
         break;
     }
@@ -1968,8 +1973,8 @@ bool SvxCaseMapItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 /*nMemberId*
 SvxEscapementItem::SvxEscapementItem( const sal_uInt16 nId ) :
     SfxPoolItem( nId ),
 
-    nEsc    ( 0 ),
-    nProp   ( 100 )
+    m_nEsc    ( 0 ),
+    m_nProp   ( 100 )
 {
 }
 
@@ -1977,11 +1982,11 @@ SvxEscapementItem::SvxEscapementItem( const sal_uInt16 nId ) :
 SvxEscapementItem::SvxEscapementItem( const SvxEscapement eEscape,
                                       const sal_uInt16 nId ) :
     SfxPoolItem( nId ),
-    nProp( 100 )
+    m_nProp( 100 )
 {
     SetEscapement( eEscape );
-    if( nEsc )
-        nProp = DFLT_ESC_PROP;
+    if( m_nEsc )
+        m_nProp = DFLT_ESC_PROP;
 }
 
 
@@ -1989,8 +1994,8 @@ SvxEscapementItem::SvxEscapementItem( const short _nEsc,
                                       const sal_uInt8 _nProp,
                                       const sal_uInt16 nId ) :
     SfxPoolItem( nId ),
-    nEsc    ( _nEsc ),
-    nProp   ( _nProp )
+    m_nEsc    ( _nEsc ),
+    m_nProp   ( _nProp )
 {
 }
 
@@ -1998,8 +2003,8 @@ bool SvxEscapementItem::operator==( const SfxPoolItem& rAttr ) const
 {
     assert(SfxPoolItem::operator==(rAttr));
 
-    return( nEsc  == static_cast<const SvxEscapementItem&>(rAttr).nEsc &&
-            nProp == static_cast<const SvxEscapementItem&>(rAttr).nProp );
+    return( m_nEsc  == static_cast<const SvxEscapementItem&>(rAttr).m_nEsc &&
+            m_nProp == static_cast<const SvxEscapementItem&>(rAttr).m_nProp );
 }
 
 SvxEscapementItem* SvxEscapementItem::Clone( SfxItemPool * ) const
@@ -2027,21 +2032,21 @@ bool SvxEscapementItem::GetPresentation
     assert(pos < SvxEscapement::End && "enum overflow!");
     rText = EditResId(RID_SVXITEMS_ESCAPEMENT[static_cast<size_t>(pos)]);
 
-    if ( nEsc != 0 )
+    if ( m_nEsc != 0 )
     {
-        if( DFLT_ESC_AUTO_SUPER == nEsc || DFLT_ESC_AUTO_SUB == nEsc )
+        if( DFLT_ESC_AUTO_SUPER == m_nEsc || DFLT_ESC_AUTO_SUB == m_nEsc )
             rText += EditResId(RID_SVXITEMS_ESCAPEMENT_AUTO);
         else
-            rText += OUString::number( nEsc ) + "%";
+            rText += OUString::number( m_nEsc ) + "%";
     }
     return true;
 }
 
 SvxEscapement SvxEscapementItem::GetEscapement() const
 {
-    if ( nEsc < 0 )
+    if ( m_nEsc < 0 )
         return SvxEscapement::Subscript;
-    else if ( nEsc > 0 )
+    else if ( m_nEsc > 0 )
         return SvxEscapement::Superscript;
     return SvxEscapement::Off;
 }
@@ -2052,13 +2057,13 @@ bool SvxEscapementItem::QueryValue( cpo::uno::Any& rVal, sal_uInt8 nMemberId ) c
     switch(nMemberId)
     {
         case MID_ESC:
-            rVal <<= static_cast<sal_Int16>(nEsc);
+            rVal <<= static_cast<sal_Int16>(m_nEsc);
         break;
         case MID_ESC_HEIGHT:
-            rVal <<= static_cast<sal_Int8>(nProp);
+            rVal <<= static_cast<sal_Int8>(m_nProp);
         break;
         case MID_AUTO_ESC:
-            rVal <<= (DFLT_ESC_AUTO_SUB == nEsc || DFLT_ESC_AUTO_SUPER == nEsc);
+            rVal <<= (DFLT_ESC_AUTO_SUB == m_nEsc || DFLT_ESC_AUTO_SUPER == m_nEsc);
         break;
     }
     return true;
@@ -2074,7 +2079,7 @@ bool SvxEscapementItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId
         {
             sal_Int16 nVal = sal_Int16();
             if( (rVal >>= nVal) && (std::abs(nVal) <= MAX_ESC_POS+1))
-                nEsc = nVal;
+                m_nEsc = nVal;
             else
                 return false;
         }
@@ -2083,7 +2088,7 @@ bool SvxEscapementItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId
         {
             sal_Int8 nVal = sal_Int8();
             if( (rVal >>= nVal) && (nVal > 0) && (nVal <= 100))
-                nProp = nVal;
+                m_nProp = nVal;
             else
                 return false;
         }
@@ -2093,16 +2098,16 @@ bool SvxEscapementItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId
             bool bVal = Any2Bool(rVal);
             if(bVal)
             {
-                if(nEsc < 0)
-                    nEsc = DFLT_ESC_AUTO_SUB;
+                if(m_nEsc < 0)
+                    m_nEsc = DFLT_ESC_AUTO_SUB;
                 else
-                    nEsc = DFLT_ESC_AUTO_SUPER;
+                    m_nEsc = DFLT_ESC_AUTO_SUPER;
             }
             else
-                if(DFLT_ESC_AUTO_SUPER == nEsc )
-                    --nEsc;
-                else if(DFLT_ESC_AUTO_SUB == nEsc)
-                    ++nEsc;
+                if(DFLT_ESC_AUTO_SUPER == m_nEsc )
+                    --m_nEsc;
+                else if(DFLT_ESC_AUTO_SUB == m_nEsc)
+                    ++m_nEsc;
         }
         break;
     }

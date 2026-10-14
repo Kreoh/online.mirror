@@ -77,6 +77,28 @@ CPPUNIT_TEST_FIXTURE(PdfPrimitive2DTest, testCreatePdfPrimitive)
     CPPUNIT_ASSERT(pPrimitive->getPdfPage() != nullptr);
 }
 
+CPPUNIT_TEST_FIXTURE(PdfPrimitive2DTest, testPdfDocumentSharedBetweenPrimitives)
+{
+    auto pPdfium = vcl::pdf::PDFiumLibrary::get();
+    if (!pPdfium)
+        return;
+
+    BinaryDataContainer aData = loadPdfData(u"Pangram.pdf");
+    const basegfx::B2DHomMatrix aTransform(
+        basegfx::utils::createScaleB2DHomMatrix(21590.0, 27940.0));
+
+    rtl::Reference<primitive2d::PdfPrimitive2D> pPrimitive1(
+        new primitive2d::PdfPrimitive2D(aData, 0, aTransform));
+    rtl::Reference<primitive2d::PdfPrimitive2D> pPrimitive2(
+        new primitive2d::PdfPrimitive2D(aData, 0, aTransform));
+
+    // primitives holding the same PDF data get one shared document instance,
+    // not one document each
+    CPPUNIT_ASSERT(pPrimitive1->getPdfDocument() != nullptr);
+    CPPUNIT_ASSERT_EQUAL(static_cast<void*>(pPrimitive1->getPdfDocument()),
+                         static_cast<void*>(pPrimitive2->getPdfDocument()));
+}
+
 CPPUNIT_TEST_FIXTURE(PdfPrimitive2DTest, testPdfPrimitiveDecomposition)
 {
     auto pPdfium = vcl::pdf::PDFiumLibrary::get();
@@ -138,6 +160,23 @@ CPPUNIT_TEST_FIXTURE(PdfPrimitive2DTest, testPdfPrimitiveDecomposition)
         }
     }
     CPPUNIT_ASSERT_MESSAGE("PDF should render non-white content", bHasNonWhite);
+
+    // the buffered bitmap of the rendered page is reported as memory in use
+    CPPUNIT_ASSERT(pPrimitive->estimateUsage() > 0);
+
+    CPPUNIT_ASSERT_EQUAL(pPrimitive->estimateUsage(), pPrimitive->getCurrentSizeInBytes());
+
+    // dropping the bitmap on the manager's request takes it out of the accounting again
+    CPPUNIT_ASSERT(pPrimitive->canReduceMemory());
+    CPPUNIT_ASSERT(pPrimitive->reduceMemory());
+    CPPUNIT_ASSERT(!pPrimitive->canReduceMemory());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), pPrimitive->estimateUsage());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), pPrimitive->getCurrentSizeInBytes());
+
+    // the next render brings the bitmap and its accounting back
+    pProcessor->process(aContainer);
+    CPPUNIT_ASSERT(pPrimitive->estimateUsage() > 0);
+    CPPUNIT_ASSERT_EQUAL(pPrimitive->estimateUsage(), pPrimitive->getCurrentSizeInBytes());
 }
 
 CPPUNIT_TEST_FIXTURE(PdfPrimitive2DTest, testPdfPrimitiveEquality)

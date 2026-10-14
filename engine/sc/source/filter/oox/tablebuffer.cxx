@@ -37,7 +37,7 @@
 namespace oox::xls {
 
 using namespace ::com::sun::star::sheet;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 TableStyleInfo::TableStyleInfo():
@@ -229,6 +229,17 @@ void TableBuffer::applyAutoFilters()
 void TableBuffer::applyTableColumns()
 {
     maIdTables.forEachMem( &Table::applyTableColumns );
+}
+
+std::vector<ScRange> TableBuffer::getAutoFilterRanges( SCTAB nSheet ) const
+{
+    std::vector<ScRange> aRanges;
+    for (const TableRef& rxTable : maTables)
+    {
+        if (rxTable->hasAutoFilter() && rxTable->getRange().aStart.Tab() == nSheet)
+            aRanges.push_back(rxTable->getRange());
+    }
+    return aRanges;
 }
 
 TableRef TableBuffer::getTable( sal_Int32 nTableId ) const

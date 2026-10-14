@@ -362,7 +362,7 @@ public:
 
     std::vector<OUString> GetSelectedEntryIds() const;
 
-    SD_DLLPUBLIC SdDrawDocument* GetBookmarkDoc(SfxMedium* pMedium = nullptr);
+    SD_DLLPUBLIC SdDrawDocument* GetBookmarkDoc();
 
     bool IsLinkableSelected() const { return m_bLinkableSelected; }
 
@@ -404,7 +404,7 @@ public:
         ::sd::DrawDocShell&     GetDocShell() const { return mrDocShell;}
         NavigatorDragType   GetDragType() const { return meDragType;}
 
-        static SdPageObjsTransferable* getImplementation( const css::uno::Reference< css::uno::XInterface >& rxData ) noexcept;
+        static SdPageObjsTransferable* getImplementation( const cpo::uno::Reference< cpo::uno::XInterface >& rxData ) noexcept;
         /** Return a temporary transferable data flavor that is used
             internally in the navigator for reordering entries.  Its
             lifetime ends with the office application.

@@ -37,7 +37,7 @@
 #include <unicode/regex.h>
 
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::i18n;
@@ -206,7 +206,7 @@ void TextSearch::setOptions2( const SearchOptions2& rOptions )
             if (maskSimpleRegexTrans(transliterateFlags) !=
                     maskSimpleTrans(transliterateFlags))
             {
-                css::uno::Reference< XExtendedTransliteration > xTranslitPattern(
+                cpo::uno::Reference< XExtendedTransliteration > xTranslitPattern(
                          Transliteration::create( m_xContext ));
                 if (xTranslitPattern.is())
                 {
@@ -960,26 +960,8 @@ SearchResult TextSearch::RESrchFrwrd( std::unique_lock<std::mutex>& /*rGuard*/, 
     const icu::UnicodeString aSearchTargetStr(false, reinterpret_cast<const UChar*>(searchStr.getStr()),
                                         searchStr.getLength());
     pRegexMatcher->reset( aSearchTargetStr);
-    // search until there is a valid match
-    for(;;)
-    {
-        if (!lcl_findRegex( pRegexMatcher, startPos, endPos, nIcuErr))
-            return aRet;
-
-        // #i118887# ignore zero-length matches e.g. "a*" in "bc"
-        int nStartOfs = pRegexMatcher->start( nIcuErr);
-        int nEndOfs = pRegexMatcher->end( nIcuErr);
-        if( nStartOfs < nEndOfs)
-            break;
-        // If the zero-length match is behind the string, do not match it again
-        // and again until startPos reaches there. A match behind the string is
-        // a "$" anchor.
-        if (nStartOfs == endPos)
-            break;
-        // try at next position if there was a zero-length match
-        if( ++startPos >= endPos)
-            return aRet;
-    }
+    if (!lcl_findRegex( pRegexMatcher, startPos, endPos, nIcuErr))
+        return aRet;
 
     // extract the result of the search
     const int nGroupCount = pRegexMatcher->groupCount();
@@ -1582,9 +1564,9 @@ TextSearch::getSupportedServiceNames()
     return { u"com.sun.star.util.TextSearch"_ustr, u"com.sun.star.util.TextSearch2"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 i18npool_TextSearch_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new TextSearch(context));
 }

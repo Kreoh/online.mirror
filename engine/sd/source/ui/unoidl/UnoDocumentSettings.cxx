@@ -20,6 +20,7 @@
 #include <sal/config.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
@@ -35,6 +36,7 @@
 #include <o3tl/string_view.hxx>
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
+#include <svx/compatflags.hxx>
 #include <svx/xtable.hxx>
 #include <vcl/svapp.hxx>
 
@@ -56,8 +58,8 @@
 using namespace ::comphelper;
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::document;
@@ -76,30 +78,30 @@ namespace sd
         explicit DocumentSettings( SdXImpressDocument* pModel );
 
         // XInterface
-        virtual Any SAL_CALL queryInterface( const Type& aType ) override;
-        virtual void SAL_CALL acquire(  ) noexcept override;
-        virtual void SAL_CALL release(  ) noexcept override;
+        virtual Any queryInterface( const Type& aType ) override;
+        virtual void acquire(  ) noexcept override;
+        virtual void release(  ) noexcept override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
-        virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
-        virtual cpo::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) override;
-        virtual void SAL_CALL addPropertyChangeListener( const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
-        virtual void SAL_CALL removePropertyChangeListener( const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
-        virtual void SAL_CALL addVetoableChangeListener( const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
-        virtual void SAL_CALL removeVetoableChangeListener( const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+        virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+        virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+        virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+        virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+        virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
 
         // XMultiPropertySet
-        virtual void SAL_CALL setPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& aValues ) override;
-        virtual cpo::uno::Sequence< cpo::uno::Any > SAL_CALL getPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames ) override;
-        virtual void SAL_CALL addPropertiesChangeListener( const cpo::uno::Sequence< OUString >& aPropertyNames, const css::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
-        virtual void SAL_CALL removePropertiesChangeListener( const css::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
-        virtual void SAL_CALL firePropertiesChangeEvent( const cpo::uno::Sequence< OUString >& aPropertyNames, const css::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+        virtual void setPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& aValues ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Any > getPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames ) override;
+        virtual void addPropertiesChangeListener( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+        virtual void removePropertiesChangeListener( const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+        virtual void firePropertiesChangeEvent( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName(  ) override;
-        virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual Sequence< OUString > getSupportedServiceNames(  ) override;
 
         // DocumentSettingsSerializer cf. xmloff
         virtual cpo::uno::Sequence<beans::PropertyValue>
@@ -125,7 +127,7 @@ namespace sd
 
     }
 
-    Reference< XInterface > DocumentSettings_createInstance( SdXImpressDocument* pModel )
+    Reference< cpo::uno::XInterface > DocumentSettings_createInstance( SdXImpressDocument* pModel )
         noexcept
     {
         DBG_ASSERT( pModel, "I need a model for the DocumentSettings!" );
@@ -148,7 +150,9 @@ enum SdDocumentSettingsPropertyHandles
     ,HANDLE_SLIDESPERHANDOUT, HANDLE_HANDOUTHORIZONTAL,
     HANDLE_EMBED_FONTS, HANDLE_EMBED_USED_FONTS,
     HANDLE_EMBED_LATIN_SCRIPT_FONTS, HANDLE_EMBED_ASIAN_SCRIPT_FONTS, HANDLE_EMBED_COMPLEX_SCRIPT_FONTS,
-    HANDLE_IMAGE_PREFERRED_DPI
+    HANDLE_IMAGE_PREFERRED_DPI,
+    // Every SdrCompatibilityFlag, told apart by the property name
+    HANDLE_COMPATIBILITY_FLAG
 };
 
 }
@@ -220,7 +224,19 @@ enum SdDocumentSettingsPropertyHandles
             { u"ImagePreferredDPI"_ustr, HANDLE_IMAGE_PREFERRED_DPI, cppu::UnoType<sal_Int32>::get(), 0,  0 },
         };
 
+        static const std::vector<PropertyMapEntry> aCompatibilityFlagsInfoMap = []
+        {
+            std::vector<PropertyMapEntry> aEntries;
+            for (const SdrCompatibilityFlagName& rName : SdrModel::GetCompatibilityFlagNames())
+            {
+                aEntries.emplace_back(rName.maName, HANDLE_COMPATIBILITY_FLAG,
+                                      cppu::UnoType<bool>::get(), 0, 0);
+            }
+            return aEntries;
+        }();
+
         rtl::Reference<PropertySetInfo> xInfo = new PropertySetInfo( aCommonSettingsInfoMap );
+        xInfo->add( aCompatibilityFlagsInfoMap );
         if (bIsDraw)
             xInfo->add( aDrawSettingsInfoMap );
         else
@@ -949,7 +965,7 @@ DocumentSettings::_setPropertyValues(const PropertyMapEntry** ppEntries,
                 if ( !( *pValues >>= aInfo ) )
                     throw lang::IllegalArgumentException(
                         u"Value of type Sequence<PropertyValue> expected!"_ustr,
-                        uno::Reference< uno::XInterface >(),
+                        uno::Reference< cpo::uno::XInterface >(),
                         2 );
 
                 if ( !pDocSh->SetModifyPasswordInfo( aInfo ) )
@@ -1041,6 +1057,22 @@ DocumentSettings::_setPropertyValues(const PropertyMapEntry** ppEntries,
                     auto nNewValue = pValues->get<sal_Int32>();
                     bChanged = (pDoc->getImagePreferredDPI() != nNewValue);
                     pDoc->setImagePreferredDPI(nNewValue);
+                    bOk = true;
+                }
+            }
+            break;
+
+            case HANDLE_COMPATIBILITY_FLAG:
+            {
+                std::optional<SdrCompatibilityFlag> oFlag
+                    = SdrModel::GetCompatibilityFlagByName((*ppEntries)->maName);
+                if (oFlag && (*pValues >>= bValue))
+                {
+                    if (pDoc->GetCompatibilityFlag(*oFlag) != bValue)
+                    {
+                        pDoc->SetCompatibilityFlag(*oFlag, bValue);
+                        bChanged = true;
+                    }
                     bOk = true;
                 }
             }
@@ -1326,6 +1358,14 @@ DocumentSettings::_getPropertyValues(
             }
             break;
 
+            case HANDLE_COMPATIBILITY_FLAG:
+            {
+                std::optional<SdrCompatibilityFlag> oFlag
+                    = SdrModel::GetCompatibilityFlagByName((*ppEntries)->maName);
+                *pValue <<= oFlag && pDoc->GetCompatibilityFlag(*oFlag);
+            }
+            break;
+
             default:
                 throw UnknownPropertyException( OUString::number((*ppEntries)->mnHandle), static_cast<cppu::OWeakObject*>(this));
         }
@@ -1333,95 +1373,95 @@ DocumentSettings::_getPropertyValues(
 }
 
 // XInterface
-Any SAL_CALL DocumentSettings::queryInterface( const Type& aType )
+Any DocumentSettings::queryInterface( const Type& aType )
 {
     return WeakImplHelper< XPropertySet, XMultiPropertySet, XServiceInfo >::queryInterface( aType );
 }
 
-void SAL_CALL DocumentSettings::acquire(  ) noexcept
+void DocumentSettings::acquire(  ) noexcept
 {
     WeakImplHelper< XPropertySet, XMultiPropertySet, XServiceInfo >::acquire();
 }
 
-void SAL_CALL DocumentSettings::release(  ) noexcept
+void DocumentSettings::release(  ) noexcept
 {
     WeakImplHelper< XPropertySet, XMultiPropertySet, XServiceInfo >::release();
 }
 
 // XPropertySet
-Reference< XPropertySetInfo > SAL_CALL DocumentSettings::getPropertySetInfo(  )
+Reference< XPropertySetInfo > DocumentSettings::getPropertySetInfo(  )
 {
     return PropertySetHelper::getPropertySetInfo();
 }
 
-void SAL_CALL DocumentSettings::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
+void DocumentSettings::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     PropertySetHelper::setPropertyValue( aPropertyName, aValue );
 }
 
-Any SAL_CALL DocumentSettings::getPropertyValue( const OUString& PropertyName )
+Any DocumentSettings::getPropertyValue( const OUString& PropertyName )
 {
     return PropertySetHelper::getPropertyValue( PropertyName );
 }
 
-void SAL_CALL DocumentSettings::addPropertyChangeListener( const OUString& aPropertyName, const Reference< XPropertyChangeListener >& xListener )
+void DocumentSettings::addPropertyChangeListener( const OUString& aPropertyName, const Reference< XPropertyChangeListener >& xListener )
 {
     PropertySetHelper::addPropertyChangeListener( aPropertyName, xListener );
 }
 
-void SAL_CALL DocumentSettings::removePropertyChangeListener( const OUString& aPropertyName, const Reference< XPropertyChangeListener >& aListener )
+void DocumentSettings::removePropertyChangeListener( const OUString& aPropertyName, const Reference< XPropertyChangeListener >& aListener )
 {
     PropertySetHelper::removePropertyChangeListener( aPropertyName, aListener );
 }
 
-void SAL_CALL DocumentSettings::addVetoableChangeListener( const OUString& PropertyName, const Reference< XVetoableChangeListener >& aListener )
+void DocumentSettings::addVetoableChangeListener( const OUString& PropertyName, const Reference< XVetoableChangeListener >& aListener )
 {
     PropertySetHelper::addVetoableChangeListener( PropertyName, aListener );
 }
 
-void SAL_CALL DocumentSettings::removeVetoableChangeListener( const OUString& PropertyName, const Reference< XVetoableChangeListener >& aListener )
+void DocumentSettings::removeVetoableChangeListener( const OUString& PropertyName, const Reference< XVetoableChangeListener >& aListener )
 {
     PropertySetHelper::removeVetoableChangeListener( PropertyName, aListener );
 }
 
 // XMultiPropertySet
-void SAL_CALL DocumentSettings::setPropertyValues( const Sequence< OUString >& aPropertyNames, const Sequence< Any >& aValues )
+void DocumentSettings::setPropertyValues( const Sequence< OUString >& aPropertyNames, const Sequence< Any >& aValues )
 {
     PropertySetHelper::setPropertyValues( aPropertyNames, aValues );
 }
 
-Sequence< Any > SAL_CALL DocumentSettings::getPropertyValues( const Sequence< OUString >& aPropertyNames )
+Sequence< Any > DocumentSettings::getPropertyValues( const Sequence< OUString >& aPropertyNames )
 {
     return PropertySetHelper::getPropertyValues( aPropertyNames );
 }
 
-void SAL_CALL DocumentSettings::addPropertiesChangeListener( const Sequence< OUString >& aPropertyNames, const Reference< XPropertiesChangeListener >& xListener )
+void DocumentSettings::addPropertiesChangeListener( const Sequence< OUString >& aPropertyNames, const Reference< XPropertiesChangeListener >& xListener )
 {
     PropertySetHelper::addPropertiesChangeListener( aPropertyNames, xListener );
 }
 
-void SAL_CALL DocumentSettings::removePropertiesChangeListener( const Reference< XPropertiesChangeListener >& xListener )
+void DocumentSettings::removePropertiesChangeListener( const Reference< XPropertiesChangeListener >& xListener )
 {
     PropertySetHelper::removePropertiesChangeListener( xListener );
 }
 
-void SAL_CALL DocumentSettings::firePropertiesChangeEvent( const Sequence< OUString >& aPropertyNames, const Reference< XPropertiesChangeListener >& xListener )
+void DocumentSettings::firePropertiesChangeEvent( const Sequence< OUString >& aPropertyNames, const Reference< XPropertiesChangeListener >& xListener )
 {
     PropertySetHelper::firePropertiesChangeEvent( aPropertyNames, xListener );
 }
 
 // XServiceInfo
-OUString SAL_CALL DocumentSettings::getImplementationName(  )
+OUString DocumentSettings::getImplementationName(  )
 {
     return u"com.sun.star.comp.Draw.DocumentSettings"_ustr;
 }
 
-bool SAL_CALL DocumentSettings::supportsService( const OUString& ServiceName )
+bool DocumentSettings::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL DocumentSettings::getSupportedServiceNames(  )
+Sequence< OUString > DocumentSettings::getSupportedServiceNames(  )
 {
     return {  u"com.sun.star.document.Settings"_ustr ,
               mxModel->IsImpressDocument()?u"com.sun.star.presentation.DocumentSettings"_ustr:u"com.sun.star.drawing.DocumentSettings"_ustr };

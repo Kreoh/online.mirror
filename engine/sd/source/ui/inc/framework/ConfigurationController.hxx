@@ -71,7 +71,7 @@ public:
     ConfigurationController(const ConfigurationController&) = delete;
     ConfigurationController& operator=(const ConfigurationController&) = delete;
 
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 
     void ProcessEvent();
 
@@ -178,7 +178,7 @@ private:
         an exception and does not return.
 
         @throws css::lang::DisposedException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void ThrowIfDisposed () const;
 };

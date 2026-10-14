@@ -27,6 +27,7 @@
 
 #include <atomic>
 #include <string>
+#include <vector>
 #include <map>
 #include <type_traits>
 
@@ -122,12 +123,10 @@ void initializeFromFile(const std::string& filename);
 /// Check if the config has been initialized
 bool isInitialized();
 
-#ifdef BUILDING_TESTS
 /// Point the active config at the given instance and return the one that was
 /// active before, so a test can exercise config-dependent behaviour and then
 /// put the previous config back. The config must outlive its use.
 const Poco::Util::AbstractConfiguration* setConfigForTest(const Poco::Util::AbstractConfiguration* config);
-#endif
 
 /// Returns the default config.
 const Util::UnorderedStringMap<std::string>& getDefaultAppConfig();
@@ -143,6 +142,17 @@ std::string getString(const std::string& key, const std::string& def);
 
 /// Returns true if and only if the property with the given key exists.
 bool has(const std::string& key);
+
+/// Returns the full key paths of the repeated element @element under @root,
+/// ordered by index: root.element, root.element[1], root.element[2], ...
+/// Unlike counting up from zero until a key is missing, this also finds
+/// entries that leave a gap, such as a command-line override of host[14]
+/// added on top of a shorter default list.
+std::vector<std::string> getIndexedKeys(const Poco::Util::AbstractConfiguration& config,
+                                        const std::string& root, const std::string& element);
+
+/// Same as above, on the active config.
+std::vector<std::string> getIndexedKeys(const std::string& root, const std::string& element);
 
 /// Returns the value of an entry as string or @def if it is not found.
 bool getBool(const std::string& key, bool def);

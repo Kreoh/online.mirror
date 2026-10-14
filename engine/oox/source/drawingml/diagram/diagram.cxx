@@ -37,6 +37,8 @@
 #include <oox/drawingml/theme.hxx>
 #include <oox/token/namespaces.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
+#include <cmath>
+#include <basegfx/numeric/ftools.hxx>
 #include <svx/svdpage.hxx>
 #include <oox/ppt/pptimport.hxx>
 #include <comphelper/xmltools.hxx>
@@ -64,6 +66,7 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace oox::drawingml {
 
@@ -107,6 +110,53 @@ static void sortChildrenByZOrder(const ShapePtr& pShape)
         sortChildrenByZOrder(rChild);
 }
 
+// A layout turns a shape by the rot of its dgm:shape, 73 degrees for the arrow of a descending
+// process, and the box the layout gave it is the box the turned shape is to fill. The shape
+// itself is smaller than that box: turned by the angle, its own width and height reach the box
+// along both axes, W = w cos + h sin and H = w sin + h cos. The shape gets that own size, the
+// middle stays where it was, and the angle becomes a plain rotation of the shape. A right angle
+// changes nothing but which side is which, so the turn before the sizing does the same there and
+// stays; near 45 degrees the two equations say the same thing, and the shape is taken square.
+static void unturnRotatedShapes(const ShapePtr& pShape)
+{
+    for (const ShapePtr& pChild : pShape->getChildren())
+    {
+        unturnRotatedShapes(pChild);
+
+        // the angle is in 60000ths of a degree, as everywhere in the format
+        const sal_Int32 nTurn(pChild->getDiagramRotation());
+        if (nTurn == 0 || nTurn % (90 * 60000) == 0)
+            continue;
+
+        const double fAngle(basegfx::deg2rad<60000>(nTurn));
+        const double fCos(std::abs(cos(fAngle)));
+        const double fSin(std::abs(sin(fAngle)));
+        const awt::Size aBox(pChild->getSize());
+        double fWidth(0.0);
+        double fHeight(0.0);
+        const double fApart(fCos * fCos - fSin * fSin);
+        if (std::abs(fApart) < 0.05)
+            fWidth = fHeight = aBox.Width / (fCos + fSin);
+        else
+        {
+            fWidth = (aBox.Width * fCos - aBox.Height * fSin) / fApart;
+            fHeight = (aBox.Height * fCos - aBox.Width * fSin) / fApart;
+        }
+        if (fWidth <= 1.0 || fHeight <= 1.0)
+            continue;
+
+        const awt::Size aOwn(static_cast<sal_Int32>(fWidth), static_cast<sal_Int32>(fHeight));
+        awt::Point aAt(pChild->getPosition());
+        aAt.X += (aBox.Width - aOwn.Width) / 2;
+        aAt.Y += (aBox.Height - aOwn.Height) / 2;
+        pChild->setPosition(aAt);
+        pChild->setSize(aOwn);
+        pChild->setChildSize(aOwn);
+        pChild->setRotation(pChild->getRotation() + nTurn);
+        pChild->setDiagramRotation(0);
+    }
+}
+
 /// Removes empty group shapes, now that their spacing influenced the layout.
 static void removeUnneededGroupShapes(const ShapePtr& pShape)
 {
@@ -133,20 +183,32 @@ void SmartArtDiagram::createShapeHierarchyFromModel( const ShapePtr & pParentSha
 
     pParentShape->setChildSize(pParentShape->getSize());
 
-    const svx::diagram::Point* pRootPoint = mpData->getRootPoint();
-    if (bCreate && mpLayout->getNode() && pRootPoint)
+    // The names the layout settles, the statements it keeps for a shape levels down and the
+    // shapes a sideways branch places as a whole all describe the tree this run builds. A run
+    // starts with none of them, so a Diagram laid out a second time is measured afresh.
+    maUserVariables.clear();
+    maDeferredUserVariables.clear();
+    maLaidOutSideways.clear();
+    maDeferredSpacers.clear();
+
+    const rtl::Reference<svx::diagram::Point> xRootPoint(mpData->getRootPoint());
+    if (bCreate && mpLayout->getNode() && xRootPoint.is())
     {
         // create Shape hierarchy
-        ShapeCreationVisitor aCreationVisitor(*this, pRootPoint, pParentShape);
+        ShapeCreationVisitor aCreationVisitor(*this, xRootPoint, pParentShape);
         mpLayout->getNode()->setExistingShape(pParentShape);
         mpLayout->getNode()->accept(aCreationVisitor);
 
         // layout shapes - now all shapes are created
-        ShapeLayoutingVisitor aLayoutingVisitor(*this, pRootPoint);
+        ShapeLayoutingVisitor aLayoutingVisitor(*this, xRootPoint);
         mpLayout->getNode()->accept(aLayoutingVisitor);
-
+        settleNamedConnectors(*this);
+        settleDeferredSpacers(*this);
         sortChildrenByZOrder(pParentShape);
+        unturnRotatedShapes(pParentShape);
         removeUnneededGroupShapes(pParentShape);
+        centreDrawnShapes(*this, pParentShape);
+        settleUprightText(*this);
     }
 
     ShapePtr pBackground = std::make_shared<Shape>(u"com.sun.star.drawing.CustomShape"_ustr);
@@ -181,7 +243,7 @@ uno::Reference<xml::dom::XDocument> SmartArtDiagram::convertAndSet(std::u16strin
     return aDomTree;
 }
 
-css::uno::Reference<css::xml::dom::XDocument> SmartArtDiagram::convertAndSet(std::u16string_view rDOMData, svx::diagram::DomMapFlag aDomMapFlag, bool bAdd)
+cpo::uno::Reference<css::xml::dom::XDocument> SmartArtDiagram::convertAndSet(std::u16string_view rDOMData, svx::diagram::DomMapFlag aDomMapFlag, bool bAdd)
 {
     // construct MemoryStream and OStreamWrapper
     const OString sUtf8(OUStringToOString(rDOMData, RTL_TEXTENCODING_UTF8));
@@ -365,7 +427,7 @@ void SmartArtDiagram::writeDiagramOOXData(DrawingML& rOriginalDrawingML, uno::Re
 #endif
 }
 
-void SmartArtDiagram::writeDiagramReducedOOXData(css::uno::Reference<css::io::XOutputStream>& xOutputStream) const
+void SmartArtDiagram::writeDiagramReducedOOXData(cpo::uno::Reference<css::io::XOutputStream>& xOutputStream) const
 {
     // need a XmlFilterBase for ShapeExport/DrawingML. All the 'big' exports classes for
     // this are in sd/sc/sw and we are not in an oox export here, so none exists. Use
@@ -375,7 +437,7 @@ void SmartArtDiagram::writeDiagramReducedOOXData(css::uno::Reference<css::io::XO
     class LocalFilterBase final : public oox::core::XmlFilterBase
     {
     public:
-        explicit LocalFilterBase(css::uno::Reference<css::uno::XComponentContext> const& rxContext)
+        explicit LocalFilterBase(cpo::uno::Reference<cpo::uno::XComponentContext> const& rxContext)
         : XmlFilterBase(rxContext) {}
         // virtual ~LocalFilterBase() override;
 

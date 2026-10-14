@@ -42,6 +42,7 @@
 #include "hierarchyuri.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace hierarchy_ucp
 {
@@ -93,7 +94,7 @@ constexpr OUString CFGPROPERTY_NODEPATH = u"nodepath"_ustr;
 
 
 HierarchyEntry::HierarchyEntry(
-                uno::Reference< uno::XComponentContext > xContext,
+                uno::Reference< cpo::uno::XComponentContext > xContext,
                 HierarchyContentProvider* pProvider,
                 const OUString& rURL )
 : m_xContext(std::move( xContext )),
@@ -221,7 +222,7 @@ bool HierarchyEntry::getData( HierarchyEntryData& rData )
             return true;
         }
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -415,7 +416,7 @@ bool HierarchyEntry::setData( const HierarchyEntryData& rData )
 
         TOOLS_WARN_EXCEPTION("ucb.ucp", "");
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -553,7 +554,7 @@ bool HierarchyEntry::move(
                 return false;
         }
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -808,7 +809,7 @@ bool HierarchyEntry::remove()
             }
         }
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -879,7 +880,7 @@ bool HierarchyEntry::first( iterator & it )
                 it.officeDirs = m_xOfficeInstDirs;
             }
         }
-        catch ( uno::RuntimeException const & )
+        catch ( cpo::uno::RuntimeException const & )
         {
             throw;
         }
@@ -997,7 +998,7 @@ HierarchyEntry::getRootReadAccess()
                             uno::UNO_QUERY );
                 }
             }
-            catch ( uno::RuntimeException const & )
+            catch ( cpo::uno::RuntimeException const & )
             {
                 throw;
             }

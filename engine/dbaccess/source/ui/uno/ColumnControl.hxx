@@ -21,16 +21,16 @@
 #include <connectivity/CommonTools.hxx>
 #include <toolkit/controls/unocontrol.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace dbaui
 {
     class OColumnControl :  public UnoControl
     {
     private:
-        css::uno::Reference< css::uno::XComponentContext> m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext> m_xContext;
     public:
-        explicit OColumnControl(const css::uno::Reference< css::uno::XComponentContext>& rxContext);
+        explicit OColumnControl(const cpo::uno::Reference< cpo::uno::XComponentContext>& rxContext);
 
         // UnoControl
         virtual OUString GetComponentServiceName() const override;
@@ -39,7 +39,7 @@ namespace dbaui
         DECLARE_SERVICE_INFO();
 
         // css::awt::XControl
-        virtual void createPeer(const css::uno::Reference< css::awt::XToolkit >& _rToolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent) override;
+        virtual void createPeer(const cpo::uno::Reference< css::awt::XToolkit >& _rToolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent) override;
     };
 }   // namespace dbaui
 

@@ -522,14 +522,14 @@ void PaletteManager::PopupColorPicker(weld::Window* pParent, const OUString& aCo
 void PaletteManager::DispatchColorCommand(const OUString& aCommand, const NamedColor& rColor)
 {
     using namespace css;
-    using namespace css::uno;
+    using namespace ::cpo::uno;
     using namespace cpo::uno;
     using namespace css::frame;
     using namespace css::beans;
     using namespace css::util;
 
     const Reference<XComponentContext>& xContext(comphelper::getProcessComponentContext());
-    Reference<XDesktop2> xDesktop = Desktop::create(xContext);
+    Reference<XDesktop> xDesktop = Desktop::create(xContext);
     Reference<XFrame> xFrame(xDesktop->getCurrentFrame());
     Reference<XDispatchProvider> xDispatchProvider(xFrame, UNO_QUERY);
     if (!xDispatchProvider.is())

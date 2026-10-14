@@ -24,7 +24,7 @@ using namespace com::sun::star;
 namespace vcl
 {
 bool ImportPDF(SvStream& rStream, Graphic& rGraphic, sal_Int32 nPageIndex,
-               const css::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,
+               const cpo::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,
                bool& bEncrypted)
 {
     BinaryDataContainer aDataContainer
@@ -309,7 +309,7 @@ findLinks(const std::unique_ptr<vcl::pdf::PDFiumPage>& pPage,
 } // end anonymous namespace
 
 size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGraphics,
-                         const css::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,
+                         const cpo::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,
                          const OUString& rPassword)
 {
     bool bEncrypted;
@@ -340,28 +340,38 @@ size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGrap
     if (nPageCount <= 0)
         return 0;
 
+    // A page pdfium cannot read still gets an entry, so the result keeps one page per page the
+    // pdf declares and every entry knows its own page number. Such a page takes the size of the
+    // last page that did come through, starting at A4 in 1/100 mm.
+    Size aLastGoodSize(21000, 29700);
+
     for (int nPageIndex = 0; nPageIndex < nPageCount; ++nPageIndex)
     {
-        basegfx::B2DSize aPageSize = pPdfDocument->getPageSize(nPageIndex);
-        if (aPageSize.getWidth() <= 0.0 || aPageSize.getHeight() <= 0.0)
-            continue;
-
         // Returned unit is points
+        basegfx::B2DSize aPageSize = pPdfDocument->getPageSize(nPageIndex);
+
+        std::unique_ptr<vcl::pdf::PDFiumPage> pPage;
+        if (aPageSize.getWidth() > 0.0 && aPageSize.getHeight() > 0.0)
+            pPage = pPdfDocument->openPage(nPageIndex);
+
+        if (!pPage)
+        {
+            SAL_WARN("vcl.filter",
+                     "ImportPDF: page " << nPageIndex << " is unreadable, importing it blank");
+            rGraphics.emplace_back(Graphic(pGfxLink, nPageIndex), aLastGoodSize,
+                                   std::vector<PDFGraphicAnnotation>(),
+                                   std::vector<std::pair<basegfx::B2DRectangle, OUString>>());
+            continue;
+        }
 
         tools::Long nPageWidth = std::round(convertPointToMm100(aPageSize.getWidth()));
         tools::Long nPageHeight = std::round(convertPointToMm100(aPageSize.getHeight()));
+        aLastGoodSize = Size(nPageWidth, nPageHeight);
 
         // Create the Graphic with the VectorGraphicDataPtr and link the original PDF stream.
         // We swap out this Graphic as soon as possible, and a later swap in
         // actually renders the correct Bitmap on demand.
         Graphic aGraphic(pGfxLink, nPageIndex);
-
-        auto pPage = pPdfDocument->openPage(nPageIndex);
-        if (!pPage)
-        {
-            SAL_WARN("vcl.filter", "ImportPDF: unable to open page: " << nPageIndex);
-            continue;
-        }
 
         std::vector<PDFGraphicAnnotation> aPDFGraphicAnnotations
             = findAnnotations(pPage, aPageSize);
@@ -369,15 +379,15 @@ size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGrap
         std::vector<std::pair<basegfx::B2DRectangle, OUString>> aPDFLinksInfo
             = findLinks(pPage, pPdfDocument, aPageSize);
 
-        rGraphics.emplace_back(std::move(aGraphic), Size(nPageWidth, nPageHeight),
-                               aPDFGraphicAnnotations, aPDFLinksInfo);
+        rGraphics.emplace_back(std::move(aGraphic), aLastGoodSize, aPDFGraphicAnnotations,
+                               aPDFLinksInfo);
     }
 
     return rGraphics.size();
 }
 
 size_t ImportPDFUnloaded(const OUString& rURL, std::vector<PDFGraphicResult>& rGraphics,
-                         const css::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,
+                         const cpo::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,
                          const OUString& rPassword)
 {
     std::unique_ptr<SvStream> xStream(

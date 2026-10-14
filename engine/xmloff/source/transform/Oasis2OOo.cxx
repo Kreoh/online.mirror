@@ -19,7 +19,7 @@
 
 #include <comphelper/base64.hxx>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
 #include <xmloff/namespacemap.hxx>
@@ -46,7 +46,7 @@
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::xmloff::token;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::beans;
@@ -1080,7 +1080,7 @@ public:
     XMLTableTransformerContext_Impl( XMLTransformerBase& rTransformer,
                            const OUString& rQName );
 
-    virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
+    virtual void StartElement( const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 };
 
@@ -1176,12 +1176,12 @@ public:
     XMLBodyOASISTransformerContext_Impl( XMLTransformerBase& rTransformer,
                            const OUString& rQName );
 
-    virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
+    virtual void StartElement( const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
     virtual rtl::Reference<XMLTransformerContext> CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const OUString& rQName,
-                                   const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
+                                   const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 };
 
@@ -1203,7 +1203,7 @@ void XMLBodyOASISTransformerContext_Impl::StartElement(
 rtl::Reference<XMLTransformerContext> XMLBodyOASISTransformerContext_Impl::CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const OUString& rQName,
-                                   const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList )
+                                   const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList )
 {
     if (!m_bFirstChild)
     {
@@ -1230,7 +1230,7 @@ public:
     XMLTabStopOASISTContext_Impl( XMLTransformerBase& rTransformer,
                            const OUString& rQName );
 
-    virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
+    virtual void StartElement( const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };
 
 }
@@ -1358,7 +1358,7 @@ public:
     XMLConfigItemTContext_Impl( XMLTransformerBase& rTransformer,
                            const OUString& rQName );
 
-    virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
+    virtual void StartElement( const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
     virtual void Characters( const OUString& rChars ) override;
@@ -1463,7 +1463,7 @@ public:
                                sal_uInt16 nPrefix,
                             XMLTokenEnum eToken );
 
-    virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
+    virtual void StartElement( const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };
 
 }
@@ -1866,26 +1866,26 @@ Oasis2OOoTransformer::~Oasis2OOoTransformer() noexcept
 }
 
 // XServiceInfo
-OUString SAL_CALL Oasis2OOoTransformer::getImplementationName()
+OUString Oasis2OOoTransformer::getImplementationName()
 {
     return u"com.sun.star.comp.Oasis2OOoTransformer"_ustr;
 }
 
-bool SAL_CALL Oasis2OOoTransformer::supportsService( const OUString& ServiceName )
+bool Oasis2OOoTransformer::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL Oasis2OOoTransformer::getSupportedServiceNames(  )
+Sequence< OUString > Oasis2OOoTransformer::getSupportedServiceNames(  )
 {
     return { };
 }
 
 // Service registration
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 xmloff_Oasis2OOoTransformer_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     SAL_INFO("xmloff.transform", "Creating Oasis2OOoTransformer");
     return cppu::acquire(new Oasis2OOoTransformer);

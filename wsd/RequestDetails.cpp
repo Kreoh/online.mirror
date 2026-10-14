@@ -21,11 +21,14 @@
 #include <common/HexUtil.hpp>
 #include <common/Log.hpp>
 #include <common/Util.hpp>
+#include <net/NetUtil.hpp>
+#include <net/Uri.hpp>
 #if !MOBILEAPP
 #include <wsd/HostUtil.hpp>
 #endif // !MOBILEAPP
 #include <wsd/Exceptions.hpp>
 
+#include <Poco/Net/HTTPRequest.h>
 #include <Poco/URI.h>
 
 #include <cctype>
@@ -35,6 +38,43 @@
 
 namespace
 {
+
+/// Rejects a malformed Host header, and drops a port nothing could connect to, such as the -1 a
+/// reverse proxy forwards when the browser sends no explicit port. The host names the server in
+/// every URL built from it, so a port like that makes all of them unusable.
+[[maybe_unused]] void sanitizeHostHeader(std::string& host)
+{
+    if (!host.empty() && !net::isValidHost(host))
+        throw BadRequestException("Malformed Host header: [" + host + ']');
+
+    const std::string original = host;
+    if (net::stripInvalidPort(host))
+        LOG_WRN("Stripped invalid port from Host header [" << original << "], using [" << host
+                                                           << ']');
+}
+
+/// Some clients and proxies send the path with more than one leading slash, as in
+/// "//browser/...", which is the same resource, but would be taken for an unknown one.
+void collapseLeadingSlashes(std::string& uri)
+{
+    const std::size_t first = uri.find_first_not_of('/');
+    const std::size_t slashes = (first == std::string::npos ? uri.size() : first);
+    if (slashes > 1)
+        uri.erase(0, slashes - 1);
+}
+
+/// Returns the path of @uri after the service root, which it must start with, with the
+/// leading slashes of each collapsed.
+std::string stripServiceRoot(std::string uri, const std::string& serviceRoot)
+{
+    collapseLeadingSlashes(uri);
+    if (!uri.starts_with(serviceRoot))
+        throw BadRequestException("The request does not start with prefix: " + serviceRoot);
+
+    uri.erase(0, serviceRoot.length());
+    collapseLeadingSlashes(uri);
+    return uri;
+}
 
 std::map<std::string, std::string> getParams(const std::string& uri)
 {
@@ -66,11 +106,7 @@ std::map<std::string, std::string> getParams(const std::string& uri)
 RequestDetails::RequestDetails(Poco::Net::HTTPRequest &request, const std::string& serviceRoot)
 {
     // Check and remove the ServiceRoot from the request.getURI()
-    if (!request.getURI().starts_with(serviceRoot))
-        throw BadRequestException("The request does not start with prefix: " + serviceRoot);
-
-    // re-writes ServiceRoot out of request
-    _uriString = request.getURI().substr(serviceRoot.length());
+    _uriString = stripServiceRoot(request.getURI(), serviceRoot);
     dehexify();
     request.setURI(_uriString);
     _method = stringToMethod(request.getMethod());
@@ -82,8 +118,11 @@ RequestDetails::RequestDetails(Poco::Net::HTTPRequest &request, const std::strin
     _isWebSocket = it != request.end() && Util::iequal(it->second, "websocket");
     _closeConnection = !request.getKeepAlive(); // HTTP/1.1: closeConnection true w/ "Connection: close" only!
     // request.getHost fires an exception on mobile.
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
+    {
         _hostUntrusted = request.getHost();
+        sanitizeHostHeader(_hostUntrusted);
+    }
 
     processURI();
 }
@@ -91,11 +130,7 @@ RequestDetails::RequestDetails(Poco::Net::HTTPRequest &request, const std::strin
 RequestDetails::RequestDetails(http::RequestParser& request, const std::string& serviceRoot)
 {
     // Check and remove the ServiceRoot from the request.getURI()
-    if (!request.getUrl().starts_with(serviceRoot))
-        throw BadRequestException("The request does not start with prefix: " + serviceRoot);
-
-    // re-writes ServiceRoot out of request
-    _uriString = request.getUrl().substr(serviceRoot.length());
+    _uriString = stripServiceRoot(request.getUrl(), serviceRoot);
     dehexify();
     request.setUrl(_uriString);
     _method = stringToMethod(request.getVerb());
@@ -106,8 +141,11 @@ RequestDetails::RequestDetails(http::RequestParser& request, const std::string& 
     _closeConnection =
         !request.isKeepAlive(); // HTTP/1.1: closeConnection true w/ "Connection: close" only!
     // request.getHost fires an exception on mobile.
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
+    {
         _hostUntrusted = request.get("Host");
+        sanitizeHostHeader(_hostUntrusted);
+    }
 
     processURI();
 }
@@ -354,19 +392,14 @@ Poco::URI RequestDetails::sanitizeURI(const std::string& uri)
 
 Poco::URI RequestDetails::sanitizeLocalPath(const std::string& path)
 {
-    // For local file paths, '%' is always a literal character, never URI encoding.
-    // Encode every '%' so that Poco::URI's automatic decoding restores the originals.
-    Poco::URI uriPublic(Uri::encodeAllPercent(path));
+    // For local file paths, '%' is always a literal character, never the start of a percent-encoded
+    // character. '#' and '?' are also OK in a pathname but not in a URI. Encode them so that
+    // Poco::URI's automatic decoding restores the originals.
+
+    Poco::URI uriPublic(Uri::encodePercentHashQuestionmark(path));
 
     if (uriPublic.isRelative() || uriPublic.getScheme() == "file")
-    {
         uriPublic.normalize();
-#ifdef _WIN32
-        std::string p = uriPublic.getPath();
-        if (p.length() > 4 && p[0] == '/' && std::isalpha(p[1]) && p[2] == ':' && p[3] == '/')
-            uriPublic.setPath(p.substr(1));
-#endif
-    }
 
     if (uriPublic.getPath().empty())
     {
@@ -384,7 +417,6 @@ std::string RequestDetails::getLineModeKey(const std::string& /*access_token*/) 
     return Poco::URI(getField(RequestDetails::Field::WOPISrc)).getPath();
 }
 
-#if !defined(BUILDING_TESTS)
 std::string RequestDetails::getDocKey(const Poco::URI& uri)
 {
     // resolve aliases
@@ -402,6 +434,5 @@ std::string RequestDetails::getDocKey(const Poco::URI& uri)
     LOG_INF("DocKey from URI [" << uri.toString() << "] => [" << docKey << ']');
     return docKey;
 }
-#endif // !defined(BUILDING_TESTS)
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

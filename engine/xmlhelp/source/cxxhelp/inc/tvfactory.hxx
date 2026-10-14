@@ -20,8 +20,8 @@
 #pragma once
 
 #include <rtl/ustring.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XInterface.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
@@ -41,33 +41,33 @@ class TVFactory final : public cppu::WeakImplHelper <
         virtual ~TVFactory() override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL
+        virtual OUString
         getImplementationName() override;
 
-        virtual bool SAL_CALL
+        virtual bool
         supportsService( const OUString& ServiceName ) override;
 
-        virtual cpo::uno::Sequence< OUString > SAL_CALL
+        virtual cpo::uno::Sequence< OUString >
         getSupportedServiceNames() override;
 
         // XMultiServiceFactory
 
-        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
+        virtual cpo::uno::Reference< cpo::uno::XInterface >
         createInstance(
             const OUString& aServiceSpecifier ) override;
 
-        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
+        virtual cpo::uno::Reference< cpo::uno::XInterface >
         createInstanceWithArguments(
             const OUString& ServiceSpecifier,
             const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
 
-        virtual cpo::uno::Sequence< OUString > SAL_CALL
+        virtual cpo::uno::Sequence< OUString >
         getAvailableServiceNames( ) override;
 
     private:
 
         // Members
-        css::uno::Reference< css::uno::XInterface >             m_xHDS;
+        cpo::uno::Reference< cpo::uno::XInterface >             m_xHDS;
     };
 
 }

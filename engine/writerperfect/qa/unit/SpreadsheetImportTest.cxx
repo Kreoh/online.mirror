@@ -11,7 +11,7 @@
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/table/XCell.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/supportsservice.hxx>
 
@@ -25,20 +25,20 @@
 
 namespace
 {
-namespace uno = css::uno;
+namespace uno = cpo::uno;
 
 class SpreadsheetImportFilter : public writerperfect::ImportFilter<OdsGenerator>
 {
 public:
-    explicit SpreadsheetImportFilter(const uno::Reference<uno::XComponentContext>& rxContext)
+    explicit SpreadsheetImportFilter(const uno::Reference<cpo::uno::XComponentContext>& rxContext)
         : writerperfect::ImportFilter<OdsGenerator>(rxContext)
     {
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 private:
     virtual bool doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName) override;
@@ -64,17 +64,17 @@ bool SpreadsheetImportFilter::doDetectFormat(librevenge::RVNGInputStream&, OUStr
 }
 
 // XServiceInfo
-OUString SAL_CALL SpreadsheetImportFilter::getImplementationName()
+OUString SpreadsheetImportFilter::getImplementationName()
 {
     return u"org.libreoffice.comp.Wpft.QA.SpreadsheetImportFilter"_ustr;
 }
 
-bool SAL_CALL SpreadsheetImportFilter::supportsService(const OUString& rServiceName)
+bool SpreadsheetImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL SpreadsheetImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> SpreadsheetImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };

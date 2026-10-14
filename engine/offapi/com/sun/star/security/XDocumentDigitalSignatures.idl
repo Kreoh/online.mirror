@@ -27,7 +27,7 @@ module com { module sun { module star { module security {
     </p>
  */
 
-interface XDocumentDigitalSignatures : com::sun::star::uno::XInterface
+interface XDocumentDigitalSignatures : cpo::uno::XInterface
 {
     /** Signs the content of the document including text and pictures
         using the given XCertificate.
@@ -154,6 +154,10 @@ interface XDocumentDigitalSignatures : com::sun::star::uno::XInterface
     boolean signScriptingContentWithCertificate([in] ::com::sun::star::security::XCertificate xCertificate,
                                                 [in] ::com::sun::star::embed::XStorage xStorage,
                                                 [in] ::com::sun::star::io::XStream xStream);
+
+    /** manages the macro security level and trusted sources
+     */
+    void manageMacroSecurity();
 };
 
 } ; } ; } ; } ;

@@ -32,7 +32,7 @@
 
 using namespace ::cppu;
 using namespace ::osl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::awt;
 using namespace ::cpo::uno;
@@ -170,7 +170,7 @@ void BaseControl::createPeer(  const   Reference< XToolkit >&      xToolkit    ,
     if ( !xLocalToolkit.is() )
     {
         // but first create well known toolkit, if it not exist
-        xLocalToolkit.set( Toolkit::create(m_xComponentContext), UNO_QUERY_THROW );
+        xLocalToolkit.set( Toolkit::create(m_xComponentContext), UNO_SET_THROW );
     }
     m_xPeer         = xLocalToolkit->createWindow( aDescriptor );
     m_xPeerWindow.set( m_xPeer, UNO_QUERY );

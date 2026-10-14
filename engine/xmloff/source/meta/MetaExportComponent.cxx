@@ -20,12 +20,12 @@
 #include <MetaExportComponent.hxx>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Exception.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/genericpropertyset.hxx>
 #include <comphelper/propertysetinfo.hxx>
 #include <osl/diagnose.h>
@@ -39,10 +39,11 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 XMLMetaExportComponent::XMLMetaExportComponent(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString const & implementationName, SvXMLExportFlags nFlags )
 :   SvXMLExport( xContext, implementationName, util::MeasureUnit::CM, XML_TEXT, nFlags )
 {
@@ -52,7 +53,7 @@ XMLMetaExportComponent::~XMLMetaExportComponent()
 {
 }
 
-void SAL_CALL XMLMetaExportComponent::setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
+void XMLMetaExportComponent::setSourceDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc )
 {
     try
     {
@@ -75,7 +76,7 @@ ErrCode XMLMetaExportComponent::exportDoc( enum XMLTokenEnum )
 
     if( !(getExportFlags() & SvXMLExportFlags::OASIS) )
     {
-        uno::Reference< uno::XComponentContext > xContext = getComponentContext();
+        uno::Reference< cpo::uno::XComponentContext > xContext = getComponentContext();
         try
         {
             static const ::comphelper::PropertyMapEntry aInfoMap[] =
@@ -162,16 +163,16 @@ void XMLMetaExportComponent::ExportAutoStyles_() {}
 void XMLMetaExportComponent::ExportMasterStyles_() {}
 void XMLMetaExportComponent::ExportContent_() {}
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 XMLMetaExportComponent_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new XMLMetaExportComponent(context, u"XMLMetaExportComponent"_ustr, SvXMLExportFlags::META|SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-XMLMetaExportOOo_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+XMLMetaExportOOo_get_implementation(cpo::uno::XComponentContext* context,
                                     cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(

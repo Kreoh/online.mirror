@@ -23,7 +23,6 @@
 #include <comphelper/types.hxx>
 #include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/accessibility/AccessibleBrowseBoxCheckBoxCell.hxx>
 #include <vcl/svapp.hxx>
 #include <tools/debug.hxx>
@@ -32,7 +31,7 @@
 namespace svt
 {
     using namespace com::sun::star::accessibility;
-    using namespace com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::accessibility::AccessibleEventId;
 
@@ -74,7 +73,7 @@ void EditBrowseBox::implCreateActiveAccessible( )
 
     m_pActiveCell = rControl.GetAccessible();
 
-    commitBrowseBoxEvent(CHILD, Any(css::uno::Reference<XAccessible>(m_pActiveCell)), Any());
+    commitBrowseBoxEvent(CHILD, Any(cpo::uno::Reference<XAccessible>(m_pActiveCell)), Any());
 }
 
 rtl::Reference<comphelper::OAccessible> EditBrowseBox::CreateAccessibleControl(sal_Int32 _nIndex)

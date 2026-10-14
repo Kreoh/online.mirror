@@ -30,6 +30,7 @@
 #include <tools/urlobj.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace http_dav_ucp;
 
 
@@ -37,7 +38,7 @@ using namespace http_dav_ucp;
 
 
 ContentProvider::ContentProvider(
-                const uno::Reference< uno::XComponentContext >& rContext )
+                const uno::Reference< cpo::uno::XComponentContext >& rContext )
 : ::ucbhelper::ContentProviderImplHelper( rContext ),
   m_xDAVSessionFactory( new DAVSessionFactory )
 {
@@ -50,17 +51,17 @@ ContentProvider::~ContentProvider()
 
 
 // XInterface methods.
-void SAL_CALL ContentProvider::acquire() noexcept
+void ContentProvider::acquire() noexcept
 {
     OWeakObject::acquire();
 }
 
-void SAL_CALL ContentProvider::release() noexcept
+void ContentProvider::release() noexcept
 {
     OWeakObject::release();
 }
 
-cpo::uno::Any SAL_CALL ContentProvider::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any ContentProvider::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = cppu::queryInterface( rType,
     static_cast< lang::XTypeProvider* >(this),
@@ -103,7 +104,7 @@ ContentProvider::supportsService(const OUString& s)
 
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 ContentProvider::queryContent(
             const uno::Reference<
                     ucb::XContentIdentifier >& Identifier )
@@ -164,9 +165,9 @@ ContentProvider::queryContent(
     return xContent;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_webdav_ContentProvider_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ContentProvider(context));
 }

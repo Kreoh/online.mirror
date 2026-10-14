@@ -26,6 +26,7 @@
 #include <comphelper/processfactory.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace sdtools {
 
@@ -134,7 +135,7 @@ void SlotStateListener::ReleaseListeners()
 
 //=====  lang::XEventListener  ================================================
 
-void SAL_CALL SlotStateListener::disposing (
+void SlotStateListener::disposing (
     const lang::EventObject& )
 {
 }

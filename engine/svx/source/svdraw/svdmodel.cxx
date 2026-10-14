@@ -83,6 +83,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 struct SdrModelImpl
 {
@@ -105,6 +106,8 @@ struct SdrModelImpl
             false, // tdf#149756 ConnectorUseSnapRect
             false, // tdf#148966 IgnoreBreakAfterMultilineField
             false, // tdf#168010 UseTrailingEmptyLinesInLayout
+            false, // tdf#163590 LineSpacingBelowBaselineLegacy
+            false, // tdf#163590 TextFittingLegacy
           }
         , mpTheme(new model::Theme(u"Office"_ustr))
     {}
@@ -263,7 +266,7 @@ SdrModel::~SdrModel()
         {
             xComponent->dispose();
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
         mxStyleSheetPool.clear();
@@ -599,7 +602,7 @@ void SdrModel::ClearModel(bool bCalledFromDestructor)
     std::vector<rtl::Reference<SdrObject>> allObjs(maAllIncarnatedObjects.begin(), maAllIncarnatedObjects.end());
     for (const auto & pSdrObj : allObjs)
     {
-        uno::Reference<uno::XInterface> xShape = pSdrObj->getWeakUnoShape().get();
+        uno::Reference<cpo::uno::XInterface> xShape = pSdrObj->getWeakUnoShape().get();
         rtl::Reference<SvxShape> pSvxShape = dynamic_cast<SvxShape*>(xShape.get());
         // calling getWeakUnoShape so we don't accidentally create new UNO shapes
         if (pSvxShape)
@@ -735,6 +738,7 @@ void SdrModel::ImpSetOutlinerDefaults( SdrOutliner* pOutliner, bool bInit )
     pOutliner->SetAsianCompressionMode( mnCharCompressType );
     pOutliner->SetKernAsianPunctuation( IsKernAsianPunctuation() );
     pOutliner->SetAddExtLeading( IsAddExtLeading() );
+    pOutliner->SetIgnoreBreakAfterMultilineField( GetCompatibilityFlag(SdrCompatibilityFlag::IgnoreBreakAfterMultilineField) );
 
     if ( !GetRefDevice() )
     {
@@ -1754,12 +1758,70 @@ void SdrModel::SetAddExtLeading( bool bEnabled )
 
 void SdrModel::SetCompatibilityFlag(SdrCompatibilityFlag eFlag, bool bEnabled)
 {
+    if (mpImpl->maCompatFlags[eFlag] == bEnabled)
+        return;
+
     mpImpl->maCompatFlags[eFlag] = bEnabled;
+
+    if (eFlag == SdrCompatibilityFlag::LegacyFontwork)
+    {
+        // tdf#148000 custom shape geometry depends on this flag, so shapes that already exist
+        // build their geometry again.
+        for (size_t i = 0; i < maPages.size(); ++i)
+        {
+            if (const SdrPage* pPage = maPages[i].get())
+            {
+                SdrObjListIter aIter(pPage, SdrIterMode::DeepWithGroups);
+                while (aIter.IsMore())
+                {
+                    if (SdrObjCustomShape* pShape = dynamic_cast<SdrObjCustomShape*>(aIter.Next()))
+                        pShape->InvalidateRenderGeometry();
+                }
+            }
+        }
+    }
+    else if (eFlag == SdrCompatibilityFlag::IgnoreBreakAfterMultilineField)
+    {
+        if (m_pDrawOutliner)
+            m_pDrawOutliner->SetIgnoreBreakAfterMultilineField(bEnabled);
+        if (m_pHitTestOutliner)
+            m_pHitTestOutliner->SetIgnoreBreakAfterMultilineField(bEnabled);
+        if (m_pChainingOutliner)
+            m_pChainingOutliner->SetIgnoreBreakAfterMultilineField(bEnabled);
+    }
 }
 
 bool SdrModel::GetCompatibilityFlag(SdrCompatibilityFlag eFlag) const
 {
     return mpImpl->maCompatFlags[eFlag];
+}
+
+std::span<const SdrCompatibilityFlagName> SdrModel::GetCompatibilityFlagNames()
+{
+    static const SdrCompatibilityFlagName aNames[] = {
+        { u"AnchoredTextOverflowLegacy"_ustr, SdrCompatibilityFlag::AnchoredTextOverflowLegacy },
+        { u"LegacySingleLineFontwork"_ustr, SdrCompatibilityFlag::LegacyFontwork },
+        { u"ConnectorUseSnapRect"_ustr, SdrCompatibilityFlag::ConnectorUseSnapRect },
+        { u"IgnoreBreakAfterMultilineField"_ustr,
+          SdrCompatibilityFlag::IgnoreBreakAfterMultilineField },
+        { u"UseTrailingEmptyLinesInLayout"_ustr,
+          SdrCompatibilityFlag::UseTrailingEmptyLinesInLayout },
+        { u"LineSpacingBelowBaselineLegacy"_ustr,
+          SdrCompatibilityFlag::LineSpacingBelowBaselineLegacy },
+        { u"TextFittingLegacy"_ustr, SdrCompatibilityFlag::TextFittingLegacy },
+    };
+    static_assert(std::size(aNames) == size_t(SdrCompatibilityFlag::LAST) + 1);
+    return aNames;
+}
+
+std::optional<SdrCompatibilityFlag> SdrModel::GetCompatibilityFlagByName(std::u16string_view aName)
+{
+    for (const SdrCompatibilityFlagName& rName : GetCompatibilityFlagNames())
+    {
+        if (rName.maName == aName)
+            return rName.meFlag;
+    }
+    return {};
 }
 
 void SdrModel::ReformatAllTextObjects()
@@ -1795,86 +1857,31 @@ SvxNumType SdrModel::GetPageNumType() const
     return SVX_NUM_ARABIC;
 }
 
+// The compatibility flags are document settings. Documents saved by versions from before that
+// carry them only in the view settings, so they are read from there too.
 void SdrModel::ReadUserDataSequenceValue(const beans::PropertyValue* pValue)
 {
-    if (pValue->Name == "AnchoredTextOverflowLegacy")
-    {
-        bool bBool = false;
-        if (pValue->Value >>= bBool)
-        {
-            SetCompatibilityFlag(SdrCompatibilityFlag::AnchoredTextOverflowLegacy, bBool);
-        }
-    }
-    else if (pValue->Name == "ConnectorUseSnapRect")
-    {
-        bool bBool = false;
-        if (pValue->Value >>= bBool)
-        {
-            SetCompatibilityFlag(SdrCompatibilityFlag::ConnectorUseSnapRect, bBool);
-        }
-    }
-    else if (pValue->Name == "LegacySingleLineFontwork")
-    {
-        bool bBool = false;
-        if ((pValue->Value >>= bBool)
-            && GetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork) != bBool)
-        {
-            SetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork, bBool);
-            // tdf#148000 hack: reset all CustomShape geometry as they may depend on this property
-            // Ideally this ReadUserDataSequenceValue should be called before geometry creation
-            // Once the calling order will be fixed, this hack will not be needed.
-            for (size_t i = 0; i < maPages.size(); ++i)
-            {
-                if (const SdrPage* pPage = maPages[i].get())
-                {
-                    SdrObjListIter aIter(pPage, SdrIterMode::DeepWithGroups);
-                    while (aIter.IsMore())
-                    {
-                        SdrObject* pTempObj = aIter.Next();
-                        if (SdrObjCustomShape* pShape = dynamic_cast<SdrObjCustomShape*>(pTempObj))
-                        {
-                            pShape->InvalidateRenderGeometry();
-                        }
-                    }
-                }
-            }
-        }
-    }
-    else if (pValue->Name == "IgnoreBreakAfterMultilineField")
-    {
-        bool bBool = false;
-        if (pValue->Value >>= bBool)
-        {
-            SetCompatibilityFlag(SdrCompatibilityFlag::IgnoreBreakAfterMultilineField, bBool);
-        }
-    }
-    else if (pValue->Name == "UseTrailingEmptyLinesInLayout")
+    if (std::optional<SdrCompatibilityFlag> oFlag = GetCompatibilityFlagByName(pValue->Name))
     {
         if (bool bBool; pValue->Value >>= bBool)
-            SetCompatibilityFlag(SdrCompatibilityFlag::UseTrailingEmptyLinesInLayout, bBool);
+            SetCompatibilityFlag(*oFlag, bBool);
     }
 }
 
+// The compatibility flags are document settings. Versions from before that read them only from
+// the view settings, so they are written there too.
 void SdrModel::WriteUserDataSequence(cpo::uno::Sequence <beans::PropertyValue>& rValues)
 {
-    std::vector< std::pair< OUString, cpo::uno::Any > > aUserData
-    {
-        { "AnchoredTextOverflowLegacy", cpo::uno::Any(GetCompatibilityFlag(SdrCompatibilityFlag::AnchoredTextOverflowLegacy)) },
-        { "LegacySingleLineFontwork", cpo::uno::Any(GetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork)) },
-        { "ConnectorUseSnapRect", cpo::uno::Any(GetCompatibilityFlag(SdrCompatibilityFlag::ConnectorUseSnapRect)) },
-        { "IgnoreBreakAfterMultilineField", cpo::uno::Any(GetCompatibilityFlag(SdrCompatibilityFlag::IgnoreBreakAfterMultilineField)) },
-        { "UseTrailingEmptyLinesInLayout", cpo::uno::Any(GetCompatibilityFlag(SdrCompatibilityFlag::UseTrailingEmptyLinesInLayout)) },
-    };
-
+    const std::span<const SdrCompatibilityFlagName> aNames = GetCompatibilityFlagNames();
     const sal_Int32 nOldLength = rValues.getLength();
-    rValues.realloc(nOldLength + aUserData.size());
+    rValues.realloc(nOldLength + aNames.size());
 
     beans::PropertyValue* pValue = &(rValues.getArray()[nOldLength]);
 
-    for (const auto &aIter : aUserData)
+    for (const SdrCompatibilityFlagName& rName : aNames)
     {
-        pValue->Name = aIter.first;
-        pValue->Value = aIter.second;
+        pValue->Name = rName.maName;
+        pValue->Value <<= GetCompatibilityFlag(rName.meFlag);
         ++pValue;
     }
 }

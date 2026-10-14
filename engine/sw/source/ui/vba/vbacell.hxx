@@ -28,26 +28,26 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XCell > SwVbaCell_BASE
 class SwVbaCell : public SwVbaCell_BASE
 {
 private:
-    css::uno::Reference< css::text::XTextTable > mxTextTable;
+    cpo::uno::Reference< css::text::XTextTable > mxTextTable;
     sal_Int32 mnColumn;
     sal_Int32 mnRow;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaCell( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext, css::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nColumn, sal_Int32 nRow );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaCell( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nColumn, sal_Int32 nRow );
     virtual ~SwVbaCell() override;
 
     // Attributes
-    virtual ::sal_Int32 SAL_CALL getWidth() override;
-    virtual void SAL_CALL setWidth( ::sal_Int32 _width ) override;
-    virtual cpo::uno::Any SAL_CALL getHeight() override;
-    virtual void SAL_CALL setHeight( const cpo::uno::Any& _height ) override;
-    virtual ::sal_Int32 SAL_CALL getHeightRule() override;
-    virtual void SAL_CALL setHeightRule( ::sal_Int32 _heightrule ) override;
+    virtual ::sal_Int32 getWidth() override;
+    virtual void setWidth( ::sal_Int32 _width ) override;
+    virtual cpo::uno::Any getHeight() override;
+    virtual void setHeight( const cpo::uno::Any& _height ) override;
+    virtual ::sal_Int32 getHeightRule() override;
+    virtual void setHeightRule( ::sal_Int32 _heightrule ) override;
 
     // Methods
-    virtual void SAL_CALL SetWidth( float width, sal_Int32 rulestyle ) override;
-    virtual void SAL_CALL SetHeight( float height, sal_Int32 heightrule ) override;
+    virtual void SetWidth( float width, sal_Int32 rulestyle ) override;
+    virtual void SetHeight( float height, sal_Int32 heightrule ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

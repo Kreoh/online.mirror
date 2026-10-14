@@ -31,7 +31,7 @@ private:
     friend class MacroSecurityLevelTP;
     friend class MacroSecurityTrustedSourcesTP;
 
-    css::uno::Reference<css::xml::crypto::XSecurityEnvironment> m_xSecurityEnvironment;
+    cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment> m_xSecurityEnvironment;
 
     std::unique_ptr<weld::Notebook> m_xTabCtrl;
     std::unique_ptr<weld::Button> m_xOkBtn;
@@ -43,8 +43,10 @@ private:
     DECL_LINK(ActivatePageHdl, const OUString&, void);
     DECL_LINK(OkBtnHdl, weld::Button&, void);
 public:
+    /// rStartPage is the notebook page shown first, SecurityLevelPage or SecurityTrustPage
     MacroSecurity(weld::Window* pParent,
-        css::uno::Reference<css::xml::crypto::XSecurityEnvironment> xSecurityEnvironment);
+        cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment> xSecurityEnvironment,
+        const OUString& rStartPage);
 
     void EnableReset(bool bEnable = true)
     {

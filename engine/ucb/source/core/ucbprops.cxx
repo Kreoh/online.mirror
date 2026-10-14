@@ -33,7 +33,7 @@
 #include <com/sun/star/ucb/SynchronizePolicy.hpp>
 #include <com/sun/star/ucb/VerificationMode.hpp>
 #include <com/sun/star/ucb/XDataContainer.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
 
@@ -41,7 +41,7 @@
 
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 #define ATTR_DEFAULT ( PropertyAttribute::BOUND | PropertyAttribute::MAYBEVOID | PropertyAttribute::MAYBEDEFAULT )
@@ -196,15 +196,15 @@ UcbPropertiesManager::~UcbPropertiesManager()
 
 // XServiceInfo methods.
 
-OUString SAL_CALL UcbPropertiesManager::getImplementationName()
+OUString UcbPropertiesManager::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.UcbPropertiesManager"_ustr;
 }
-bool SAL_CALL UcbPropertiesManager::supportsService( const OUString& ServiceName )
+bool UcbPropertiesManager::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
-cpo::uno::Sequence< OUString > SAL_CALL UcbPropertiesManager::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > UcbPropertiesManager::getSupportedServiceNames()
 {
     return { u"com.sun.star.ucb.PropertiesManager"_ustr };
 }
@@ -213,9 +213,9 @@ cpo::uno::Sequence< OUString > SAL_CALL UcbPropertiesManager::getSupportedServic
 
 // Service factory implementation.
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_UcbPropertiesManager_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new UcbPropertiesManager());
 }
@@ -224,14 +224,14 @@ ucb_UcbPropertiesManager_get_implementation(
 
 
 // virtual
-Sequence< Property > SAL_CALL UcbPropertiesManager::getProperties()
+Sequence< Property > UcbPropertiesManager::getProperties()
 {
     return m_pProps;
 }
 
 
 // virtual
-Property SAL_CALL UcbPropertiesManager::getPropertyByName( const OUString& aName )
+Property UcbPropertiesManager::getPropertyByName( const OUString& aName )
 {
     Property aProp;
     if ( queryProperty( aName, aProp ) )
@@ -242,7 +242,7 @@ Property SAL_CALL UcbPropertiesManager::getPropertyByName( const OUString& aName
 
 
 // virtual
-bool SAL_CALL UcbPropertiesManager::hasPropertyByName( const OUString& Name )
+bool UcbPropertiesManager::hasPropertyByName( const OUString& Name )
 {
     Property aProp;
     return queryProperty( Name, aProp );

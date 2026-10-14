@@ -12,6 +12,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include <rtl/ref.hxx>
@@ -28,10 +29,9 @@ class KitClipboard final
                                            css::lang::XServiceInfo>
 {
     osl::Mutex m_aMutex;
-    css::uno::Reference<css::datatransfer::XTransferable> m_xTransferable;
-    css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> m_aOwner;
-    std::vector<css::uno::Reference<css::datatransfer::clipboard::XClipboardListener>> m_aListeners;
-    int m_nViewId = -1;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_xTransferable;
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> m_aOwner;
+    std::vector<cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>> m_aListeners;
     /// The document this view belongs to, cached so the clipboard can be
     /// released on document destroy even after the view shell is gone.
     int m_nDocId = -1;
@@ -45,7 +45,6 @@ public:
     KitClipboard();
     ~KitClipboard();
 
-    void setViewId(int nViewId) { m_nViewId = nViewId; }
     void setDocId(int nDocId) { m_nDocId = nDocId; }
     int getDocId() const { return m_nDocId; }
 
@@ -62,7 +61,7 @@ public:
     void flushContents();
 
     /// get an XInterface easily.
-    css::uno::Reference<css::uno::XInterface> getXI()
+    cpo::uno::Reference<cpo::uno::XInterface> getXI()
     {
         return { static_cast<cppu::OWeakObject*>(this) };
     }
@@ -74,21 +73,18 @@ public:
     static cpo::uno::Sequence<OUString> getSupportedServiceNames_static();
 
     // XClipboard
-    css::uno::Reference<css::datatransfer::XTransferable> getContents() override;
-    void setContents(const css::uno::Reference<css::datatransfer::XTransferable>& xTransferable,
-                     const css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>&
+    cpo::uno::Reference<css::datatransfer::XTransferable> getContents() override;
+    void setContents(const cpo::uno::Reference<css::datatransfer::XTransferable>& xTransferable,
+                     const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>&
                          xClipboardOwner) override;
     OUString getName() override { return u"CLIPBOARD"_ustr; }
 
-    // XClipboardEx
-    sal_Int8 getRenderingCapabilities() override { return 0; }
-
     // XClipboardNotifier
     void addClipboardListener(
-        const css::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
         override;
     void removeClipboardListener(
-        const css::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
         override;
 };
 
@@ -143,6 +139,13 @@ class KitClipboardFactory : public ::cppu::WeakComponentImplHelper<css::lang::XS
 {
     static osl::Mutex gMutex;
 
+    /// The clipboards by view id, or nullptr once the registry is gone. See the
+    /// definition for why it is reached through a function.
+    static std::unordered_map<int, rtl::Reference<KitClipboard>>* getClipboards();
+
+    /// Frees the registry; a later request builds a new one.
+    static void freeClipboards();
+
     /// True while a process-global clipboard provider is installed, which the
     /// in-process desktop apps do and the collaborative server does not. The kit
     /// then serves one shared clipboard for all views and documents, instead of
@@ -159,11 +162,11 @@ public:
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> createInstance() override
+    cpo::uno::Reference<cpo::uno::XInterface> createInstance() override
     {
         return createInstanceWithArguments(cpo::uno::Sequence<cpo::uno::Any>());
     }
-    css::uno::Reference<css::uno::XInterface>
+    cpo::uno::Reference<cpo::uno::XInterface>
     createInstanceWithArguments(const cpo::uno::Sequence<cpo::uno::Any>& /* rArgs */) override;
 
     /// Fetch clipboard from the global pool.
@@ -182,6 +185,10 @@ public:
     /// clipboard for all views. Pass nullptr to remove it and return to
     /// per-view clipboards.
     static void installGlobalProvider(const COKitClipboardProvider* pProvider);
+
+    /// Clears the contents of every clipboard and frees the registry, which a
+    /// later request builds again. The unit-test teardown uses this.
+    static void clearAllContentsAndFree();
 
     /// Render the shared clipboard's formats now, so its contents survive the
     /// close of the document that produced them (see KitClipboard::flushContents).

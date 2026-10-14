@@ -24,7 +24,6 @@
 #include <sfx2/mieclip.hxx>
 #include <sal/log.hxx>
 #include <unotools/charclass.hxx>
-#include <osl/module.hxx>
 #include <o3tl/string_view.hxx>
 
 #include <global.hxx>
@@ -113,7 +112,8 @@ ScImportExport::ScImportExport( ScDocument& r )
       bFormulas( false ), bIncludeFiltered( true ),
       bAll( true ), bSingle( true ), bUndo( false ),
       bOverflowRow( false ), bOverflowCol( false ), bOverflowCell( false ),
-      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false)
+      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false),
+      mbDetermineRangeOnly(false)
 {
     pUndoDoc = nullptr;
     pExtOptions = nullptr;
@@ -128,7 +128,8 @@ ScImportExport::ScImportExport( ScDocument& r, const ScAddress& rPt )
       bFormulas( false ), bIncludeFiltered( true ),
       bAll( false ), bSingle( true ), bUndo( pDocSh != nullptr ),
       bOverflowRow( false ), bOverflowCol( false ), bOverflowCell( false ),
-      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false)
+      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false),
+      mbDetermineRangeOnly(false)
 {
     pUndoDoc = nullptr;
     pExtOptions = nullptr;
@@ -144,7 +145,8 @@ ScImportExport::ScImportExport( ScDocument& r, const ScRange& rRange )
       bFormulas( false ), bIncludeFiltered( true ),
       bAll( false ), bSingle( false ), bUndo( pDocSh != nullptr ),
       bOverflowRow( false ), bOverflowCol( false ), bOverflowCell( false ),
-      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false)
+      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false),
+      mbDetermineRangeOnly(false)
 {
     pUndoDoc = nullptr;
     pExtOptions = nullptr;
@@ -161,7 +163,8 @@ ScImportExport::ScImportExport( ScDocument& r, const OUString& rPos )
       bFormulas( false ), bIncludeFiltered( true ),
       bAll( false ), bSingle( true ), bUndo( pDocSh != nullptr ),
       bOverflowRow( false ), bOverflowCol( false ), bOverflowCell( false ),
-      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false)
+      mbApi( true ), mbImportBroadcast(false), mbOverwriting( false ), mbIncludeBOM(false),
+      mbDetermineRangeOnly(false)
 {
     pUndoDoc = nullptr;
     pExtOptions = nullptr;
@@ -470,17 +473,14 @@ bool ScImportExport::ImportStream( SvStream& rStrm, const OUString& rBaseURL, So
                 StreamMode::READ);
             aEngine.Read(aMdStream, OUString(), EETextFormat::Markdown);
 
-            auto pTextObj = aEngine.CreateTextObject();
-            if (pTextObj)
+            EditTextObject aTextObj = aEngine.CreateTextObject();
+            bool bOk = StartPaste();
+            if (bOk)
             {
-                bool bOk = StartPaste();
-                if (bOk)
-                {
-                    rDoc.SetEditText(aRange.aStart, std::move(pTextObj));
-                    EndPaste();
-                }
-                return bOk;
+                rDoc.SetEditText(aRange.aStart, std::move(aTextObj));
+                EndPaste();
             }
+            return bOk;
         }
 
         // Table markdown: convert to HTML for multi-cell distribution
@@ -1117,7 +1117,7 @@ static bool lcl_PutString(
             {
                 ScFieldEditEngine& rEngine = rDoc.GetEditEngine();
                 rEngine.SetTextCurrentDefaults(rStr);
-                rDocImport.setEditCell(ScAddress(nCol, nRow, nTab), rEngine.CreateTextObject());
+                rDocImport.setEditCell(ScAddress(nCol, nRow, nTab), std::make_unique<EditTextObject>(rEngine.CreateTextObject()));
                 return true;
             }
             else
@@ -1528,7 +1528,7 @@ static bool lcl_PutString(
         ScFieldEditEngine& rEngine = rDoc.GetEditEngine();
         rEngine.SetTextCurrentDefaults(rStr);
         if ( bUseDocImport )
-            rDocImport.setEditCell(ScAddress(nCol, nRow, nTab), rEngine.CreateTextObject());
+            rDocImport.setEditCell(ScAddress(nCol, nRow, nTab), std::make_unique<EditTextObject>(rEngine.CreateTextObject()));
         else
             rDoc.SetEditText( ScAddress( nCol, nRow, nTab ), rEngine.CreateTextObject() );
     }
@@ -1580,7 +1580,10 @@ static OUString lcl_GetFixed( const OUString& rLine, sal_Int32 nStart, sal_Int32
 bool ScImportExport::ExtText2Doc( SvStream& rStrm )
 {
     if (!pExtOptions)
+    {
+        assert(!mbDetermineRangeOnly && "SetDetermineRangeOnly() needs SetExtOptions()");
         return Text2Doc( rStrm );
+    }
 
     sal_uInt64 const nOldPos = rStrm.Tell();
     sal_uInt64 const nRemaining = rStrm.remainingSize();
@@ -1647,7 +1650,7 @@ bool ScImportExport::ExtText2Doc( SvStream& rStrm )
 
     // Determine range for Undo.
     // We don't need this during import of a file to a new sheet or document...
-    bool bDetermineRange = bUndo;
+    bool bDetermineRange = bUndo || mbDetermineRangeOnly;
     bool bColumnsAreDetermined = false;
 
     // Row heights don't need to be adjusted on the fly if EndPaste() is called
@@ -1830,6 +1833,11 @@ bool ScImportExport::ExtText2Doc( SvStream& rStrm )
         {
             aRange.aEnd.SetCol( nEndCol );
             aRange.aEnd.SetRow( nRow );
+
+            // The caller only wanted to know the range, the document was not
+            // touched during this pass.
+            if ( mbDetermineRangeOnly )
+                return true;
 
             if ( !mbApi && nStartCol != nEndCol &&
                  !rDoc.IsBlockEmpty( nStartCol + 1, nStartRow, nEndCol, nRow, nTab ) )
@@ -2711,43 +2719,12 @@ bool ScImportExport::HTML2Doc( SvStream& rStrm, const OUString& rBaseURL )
     return bOk;
 }
 
-#ifndef DISABLE_DYNLOADING
-
-extern "C" { static void thisModule() {} }
-
-#else
-
-extern "C" {
-ScFormatFilterPlugin* ScFilterCreate();
-}
-
-#endif
-
 typedef ScFormatFilterPlugin * (*FilterFn)();
 ScFormatFilterPlugin &ScFormatFilter::Get()
 {
     static ScFormatFilterPlugin *plugin = []()
     {
-#ifndef DISABLE_DYNLOADING
-        OUString sFilterLib(SVLIBRARY("scfilt"));
-        static ::osl::Module aModule;
-        bool bLoaded = aModule.is();
-        if (!bLoaded)
-            bLoaded = aModule.loadRelative(&thisModule, sFilterLib);
-        if (!bLoaded)
-            bLoaded = aModule.load(sFilterLib);
-        if (bLoaded)
-        {
-            oslGenericFunction fn = aModule.getFunctionSymbol( "ScFilterCreate" );
-            aModule.release();
-            if (fn != nullptr)
-                return reinterpret_cast<FilterFn>(fn)();
-        }
-        assert(false);
-        return static_cast<ScFormatFilterPlugin*>(nullptr);
-#else
         return ScFilterCreate();
-#endif
     }();
 
     return *plugin;

@@ -57,6 +57,7 @@ extras_AUTOCORR_LANGS := \
 	sv:sv-SE \
 	th:th-TH \
 	tr:tr-TR \
+	und:und \
 	vi:vi-VN \
 	vro:vro-EE \
 	zh-CN:zh-CN \
@@ -230,6 +231,8 @@ extras_AUTOCORR_XMLFILES := \
 	tr/META-INF/manifest.xml \
 	tr/SentenceExceptList.xml \
 	tr/WordExceptList.xml \
+	und/DocumentList.xml \
+	und/META-INF/manifest.xml \
 	vi/DocumentList.xml \
 	vi/META-INF/manifest.xml \
 	vi/WordExceptList.xml \
@@ -280,8 +283,8 @@ $(gb_CustomTarget_workdir)/extras/source/autocorr/acor_%.dat : \
 	$(call gb_Helper_abbreviate_dirs,\
 		cd $(dir $<) && \
 		$(autocorr_PYTHONCOMMAND) $(SRCDIR)/bin/check-autocorr.py DocumentList.xml && \
-		$(call gb_Helper_wsl_path,$(WSL) zip -q0X --filesync --must-match $@ mimetype) && \
-		$(call gb_Helper_wsl_path,$(WSL) zip -qrX --must-match $@ $(call extras_AUTOCORR_XMLFILES_LANG,$(call extras_AUTOCORR_SHORTLANG,$*))) \
+		$(call gb_Helper_wsl_path,$(WSL) zip -q0X $(call gb_Helper_zip_temporary_directory,.) --filesync --must-match $@ mimetype) && \
+		$(call gb_Helper_wsl_path,$(WSL) zip -qrX $(call gb_Helper_zip_temporary_directory,.) --must-match $@ $(call extras_AUTOCORR_XMLFILES_LANG,$(call extras_AUTOCORR_SHORTLANG,$*))) \
 	)
 	$(call gb_Trace_EndRange,autocorr/acor_$*.dat,ZIP)
 

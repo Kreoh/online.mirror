@@ -29,14 +29,14 @@ class SwVbaTemplate : public SwVbaTemplate_BASE
 private:
     OUString msFullUrl;
 public:
-    SwVbaTemplate( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    SwVbaTemplate( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
         OUString  );
     virtual ~SwVbaTemplate() override;
 
    // XTemplate
-    virtual OUString SAL_CALL getName() override;
-    virtual OUString SAL_CALL getPath() override;
-    virtual cpo::uno::Any SAL_CALL AutoTextEntries( const cpo::uno::Any& index ) override;
+    virtual OUString getName() override;
+    virtual OUString getPath() override;
+    virtual cpo::uno::Any AutoTextEntries( const cpo::uno::Any& index ) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

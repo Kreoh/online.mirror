@@ -42,7 +42,7 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/task/ErrorCodeIOException.hpp>
@@ -57,6 +57,7 @@
 #include <unotools/streamwrap.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -115,7 +116,8 @@ void GraphicHelper::GetPreferredExtension( OUString& rExtension, const Graphic& 
     }
     else
     {
-        auto eType = rGraphic.GetGfxLink().GetType();
+        const std::shared_ptr<GfxLink>& pGfxLink = rGraphic.GetSharedGfxLink();
+        GfxLinkType eType = pGfxLink ? pGfxLink->GetType() : GfxLinkType::NONE;
         const auto iter = constGfxTypeToExtension.find(eType);
         if (iter != constGfxTypeToExtension.end())
             rExtension = iter->second;
@@ -134,6 +136,12 @@ OUString GraphicHelper::GetImageType(const Graphic& rGraphic)
             return SvxResId(iter->second);
     }
     return SvxResId(STR_IMAGE_UNKNOWN);
+}
+
+bool GraphicHelper::IsGifGraphic(const Graphic& rGraphic)
+{
+    const auto& pGfxLink = rGraphic.GetSharedGfxLink();
+    return pGfxLink && pGfxLink->GetType() == GfxLinkType::NativeGif;
 }
 
 namespace {
@@ -172,7 +180,7 @@ bool lcl_ExecuteFilterDialog(const cpo::uno::Sequence<beans::PropertyValue>& rPr
         throw task::ErrorCodeIOException(
             ("lcl_ExecuteFilterDialog: NoSuchElementException"
              " \"" + exception.Message + "\": ERRCODE_IO_ABORT"),
-            uno::Reference<uno::XInterface>(), sal_uInt32(ERRCODE_IO_INVALIDPARAMETER));
+            uno::Reference<cpo::uno::XInterface>(), sal_uInt32(ERRCODE_IO_INVALIDPARAMETER));
     }
     catch (const task::ErrorCodeIOException&)
     {
@@ -237,7 +245,7 @@ OUString GraphicHelper::ExportGraphicToTempFile(const Graphic& rGraphic, std::u1
 OUString GraphicHelper::ExportGraphic(weld::Window* pParent, const Graphic& rGraphic, const OUString& rGraphicName)
 {
     sfx2::FileDialogHelper aDialogHelper(ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION, FileDialogFlags::NONE, pParent);
-    uno::Reference<ui::dialogs::XFilePicker3> xFilePicker = aDialogHelper.GetFilePicker();
+    uno::Reference<ui::dialogs::XFilePicker> xFilePicker = aDialogHelper.GetFilePicker();
 
     // fish out the graphic's name
     aDialogHelper.SetContext(sfx2::FileDialogHelper::ExportImage);
@@ -389,12 +397,12 @@ void GraphicHelper::SaveShapeAsGraphicToPath(
     const uno::Reference<drawing::XShape>& xShape, const OUString& aExportMimeType,
     const OUString& sPath)
 {
-    const uno::Reference<uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
     uno::Reference<io::XInputStream> xGraphStream;
 
     if (xGraphStream.is())
     {
-        uno::Reference<ucb::XSimpleFileAccess3> xFileAccess = ucb::SimpleFileAccess::create(xContext);
+        uno::Reference<ucb::XSimpleFileAccess> xFileAccess = ucb::SimpleFileAccess::create(xContext);
         xFileAccess->writeFile(sPath, xGraphStream);
     }
     else if (xComponent.is() && aExportMimeType == "application/pdf")
@@ -443,7 +451,7 @@ void GraphicHelper::SaveShapeAsGraphic(weld::Window* pParent,
         uno::Reference<beans::XPropertySet> xShapeSet(xShape, uno::UNO_QUERY_THROW);
 
         sfx2::FileDialogHelper aDialogHelper(ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION, FileDialogFlags::NONE, pParent);
-        uno::Reference<ui::dialogs::XFilePicker3> xFilePicker = aDialogHelper.GetFilePicker();
+        uno::Reference<ui::dialogs::XFilePicker> xFilePicker = aDialogHelper.GetFilePicker();
         aDialogHelper.SetContext(sfx2::FileDialogHelper::ExportImage);
         aDialogHelper.SetTitle( SvxResId(RID_SVXSTR_SAVEAS_IMAGE) );
 

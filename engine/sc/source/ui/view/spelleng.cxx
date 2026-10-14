@@ -125,8 +125,8 @@ bool ScConversionEngineBase::FindNextConversionCell()
 
                 if (!bSimpleString || eCellType == CELLTYPE_EDIT)
                 {
-                    std::unique_ptr<EditTextObject> pEditObj(CreateTextObject());
-                    mrDoc.SetEditText(aPos, *pEditObj, GetItemPool());
+                    EditTextObject aEditObj(CreateTextObject());
+                    mrDoc.SetEditText(aPos, aEditObj, GetItemPool());
                 }
                 else
                 {
@@ -301,7 +301,7 @@ void ScConversionEngineBase::FillFromCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
 ScSpellingEngine::ScSpellingEngine(
         SfxItemPool* pEnginePoolP, ScViewData& rViewData,
         ScDocument* pUndoDoc, ScDocument* pRedoDoc,
-        css::uno::Reference< css::linguistic2::XSpellChecker > const & xSpeller ) :
+        cpo::uno::Reference< css::linguistic2::XSpellChecker > const & xSpeller ) :
     ScConversionEngineBase( pEnginePoolP, rViewData, pUndoDoc, pRedoDoc )
 {
     SetSpeller( xSpeller );

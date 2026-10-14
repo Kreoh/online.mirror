@@ -32,6 +32,7 @@
 #include <dbdata.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 const char cURLInsertColumns[] = ".uno:DataSourceBrowser/InsertColumns"; //data into text
 constexpr OUString cURLDocDataSource = u".uno:DataSourceBrowser/DocumentDataSource"_ustr;
@@ -85,7 +86,7 @@ void ScDispatchProviderInterceptor::Notify( SfxBroadcaster&, const SfxHint& rHin
 
 // XDispatchProvider
 
-uno::Reference<frame::XDispatch> SAL_CALL ScDispatchProviderInterceptor::queryDispatch(
+uno::Reference<frame::XDispatch> ScDispatchProviderInterceptor::queryDispatch(
                         const util::URL& aURL, const OUString& aTargetFrameName,
                         sal_Int32 nSearchFlags )
 {
@@ -109,7 +110,7 @@ uno::Reference<frame::XDispatch> SAL_CALL ScDispatchProviderInterceptor::queryDi
     return xResult;
 }
 
-cpo::uno::Sequence< uno::Reference<frame::XDispatch> > SAL_CALL
+cpo::uno::Sequence< uno::Reference<frame::XDispatch> >
                         ScDispatchProviderInterceptor::queryDispatches(
                         const cpo::uno::Sequence<frame::DispatchDescriptor>& aDescripts )
 {
@@ -124,28 +125,28 @@ cpo::uno::Sequence< uno::Reference<frame::XDispatch> > SAL_CALL
 
 // XDispatchProviderInterceptor
 
-uno::Reference<frame::XDispatchProvider> SAL_CALL
+uno::Reference<frame::XDispatchProvider>
                         ScDispatchProviderInterceptor::getSlaveDispatchProvider()
 {
     SolarMutexGuard aGuard;
     return m_xSlaveDispatcher;
 }
 
-void SAL_CALL ScDispatchProviderInterceptor::setSlaveDispatchProvider(
+void ScDispatchProviderInterceptor::setSlaveDispatchProvider(
                         const uno::Reference<frame::XDispatchProvider>& xNewDispatchProvider )
 {
     SolarMutexGuard aGuard;
     m_xSlaveDispatcher.set(xNewDispatchProvider);
 }
 
-uno::Reference<frame::XDispatchProvider> SAL_CALL
+uno::Reference<frame::XDispatchProvider>
                         ScDispatchProviderInterceptor::getMasterDispatchProvider()
 {
     SolarMutexGuard aGuard;
     return m_xMasterDispatcher;
 }
 
-void SAL_CALL ScDispatchProviderInterceptor::setMasterDispatchProvider(
+void ScDispatchProviderInterceptor::setMasterDispatchProvider(
                         const uno::Reference<frame::XDispatchProvider>& xNewSupplier )
 {
     SolarMutexGuard aGuard;
@@ -154,7 +155,7 @@ void SAL_CALL ScDispatchProviderInterceptor::setMasterDispatchProvider(
 
 // XEventListener
 
-void SAL_CALL ScDispatchProviderInterceptor::disposing( const lang::EventObject& /* Source */ )
+void ScDispatchProviderInterceptor::disposing( const lang::EventObject& /* Source */ )
 {
     SolarMutexGuard aGuard;
 
@@ -200,7 +201,7 @@ void ScDispatch::Notify( SfxBroadcaster&, const SfxHint& rHint )
 
 // XDispatch
 
-void SAL_CALL ScDispatch::dispatch( const util::URL& aURL,
+void ScDispatch::dispatch( const util::URL& aURL,
                                 const cpo::uno::Sequence<beans::PropertyValue>& aArgs )
 {
     SolarMutexGuard aGuard;
@@ -218,7 +219,7 @@ void SAL_CALL ScDispatch::dispatch( const util::URL& aURL,
     // cURLDocDataSource is never dispatched
 
     if (!bDone)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 }
 
 static void lcl_FillDataSource( frame::FeatureStateEvent& rEvent, const ScImportParam& rParam )
@@ -247,14 +248,14 @@ static void lcl_FillDataSource( frame::FeatureStateEvent& rEvent, const ScImport
     rEvent.State <<= aDescriptor.createPropertyValueSequence();
 }
 
-void SAL_CALL ScDispatch::addStatusListener(
+void ScDispatch::addStatusListener(
     const uno::Reference<frame::XStatusListener>& xListener,
     const util::URL& aURL)
 {
     SolarMutexGuard aGuard;
 
     if (!pViewShell)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     //  initial state
     frame::FeatureStateEvent aEvent;
@@ -284,7 +285,7 @@ void SAL_CALL ScDispatch::addStatusListener(
     xListener->statusChanged( aEvent );
 }
 
-void SAL_CALL ScDispatch::removeStatusListener(
+void ScDispatch::removeStatusListener(
                                 const uno::Reference<frame::XStatusListener>& xListener,
                                 const util::URL& aURL )
 {
@@ -315,7 +316,7 @@ void SAL_CALL ScDispatch::removeStatusListener(
 
 // XSelectionChangeListener
 
-void SAL_CALL ScDispatch::selectionChanged( const css::lang::EventObject& /* aEvent */ )
+void ScDispatch::selectionChanged( const css::lang::EventObject& /* aEvent */ )
 {
     //  currently only called for URL cURLDocDataSource
 
@@ -349,7 +350,7 @@ void SAL_CALL ScDispatch::selectionChanged( const css::lang::EventObject& /* aEv
 
 // XEventListener
 
-void SAL_CALL ScDispatch::disposing( const css::lang::EventObject& rSource )
+void ScDispatch::disposing( const css::lang::EventObject& rSource )
 {
     uno::Reference<view::XSelectionSupplier> xSupplier(rSource.Source, uno::UNO_QUERY);
     xSupplier->removeSelectionChangeListener(this);

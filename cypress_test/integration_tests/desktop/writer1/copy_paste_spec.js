@@ -1,8 +1,8 @@
-/* global describe it cy require expect */
+/* global describe it cy require expect Cypress */
 
 var helper = require('../../common/helper');
 
-describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Clipboard operations.', function() {
+describe(['tagdesktop', 'tagnextcloud'], 'Clipboard operations.', function() {
 
 	it('Copy and Paste text.', function() {
 		helper.setupAndLoadDocument('writer/copy_paste.odt');
@@ -54,14 +54,16 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Clipboard operations.', fu
 			win.postMessage(JSON.stringify(message), '*');
 		});
 
-		// Then make sure we get markdown:
+		// Then make sure we get markdown. The host also receives other messages such as
+		// Doc_ModifiedStatus, so look for the copy response among all posted messages.
 		// Without the accompanying fix in place, this test would have failed with:
-		// expected postMessage to have been called at least once, but it was never called
-		cy.get('@postMessage').should('be.called');
+		// Action_Copy_Resp was not posted
 		cy.get('@postMessage').should(stub => {
-			const json = JSON.parse(stub.firstCall.args[0]);
-			expect(json.MessageId).to.equal('Action_Copy_Resp');
-			expect(json.Values.content).to.equal('foo *bar* baz\n');
+			const responses = stub.getCalls()
+				.map(call => JSON.parse(call.args[0]))
+				.filter(json => json.MessageId === 'Action_Copy_Resp');
+			expect(responses.length, 'Action_Copy_Resp was not posted').to.equal(1);
+			expect(responses[0].Values.content).to.equal('foo *bar* baz\n');
 		});
 	});
 
@@ -185,6 +187,111 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Clipboard operations.', fu
 					expect(clip._downloadProgress.isClosed()).to.equal(true);
 				});
 		});
+	});
+
+	it('Paste of <img src="..."> HTML pastes the SVG image', function() {
+		// Given a clipboard with just text/html referring to an image URL:
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+		cy.getFrameWindow().then(function(win) {
+			const clip = win.app.map._clip;
+			const imageUrl = win.location.origin + '/browser/'
+				+ Cypress.env('WSD_VERSION_HASH') + '/images/lc_paste.svg';
+			const html = '<img src="' + imageUrl + '"/>';
+			const clipboardItem = {
+				types: ['text/html'],
+				getType: function(type) {
+					return {
+						then: function(resolve, reject) {
+							if (type === 'text/html') {
+								resolve(new Blob([html]));
+							} else {
+								reject({ message: 'no ' + type });
+							}
+						},
+					};
+				},
+			};
+			clip._dummyClipboard = {
+				read: function() {
+					return {
+						then: function(resolve) {
+							resolve([clipboardItem]);
+						},
+					};
+				},
+			};
+
+			// When doing async paste:
+			clip.filterExecCopyPaste('.uno:Paste');
+		});
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
+
+		// Then make sure that results in a pasted image, visible in the navigator:
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.sendUnoCommand('.uno:Navigator');
+		});
+		// Without the accompanying fix in place, this test would have failed, the navigator
+		// had no visible 'Images' container, as nothing was pasted.
+		cy.cGet('#contenttree')
+			.contains('.ui-treeview-cell-text-content', 'Images')
+			.parents('.ui-treeview-entry')
+			.find('.ui-treeview-expander')
+			.click();
+		cy.cGet('#contenttree')
+			.contains('.ui-treeview-cell-text-content', 'Image1')
+			.should('be.visible');
+	});
+
+	it('Async paste special offers both HTML and plain text when the clipboard has both', function() {
+		// Given a Writer document and a fake async clipboard exposing both
+		// text/html and text/plain:
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+
+		cy.getFrameWindow().then(function(win) {
+			const clip = win.app.map._clip;
+			const html = '<p>html content</p>';
+			const plainText = 'plain text content';
+			const clipboardItem = {
+				types: ['text/html', 'text/plain'],
+				getType: function(type) {
+					return {
+						then: function(resolve, reject) {
+							if (type === 'text/html') {
+								resolve(new Blob([html]));
+							} else if (type === 'text/plain') {
+								resolve(new Blob([plainText]));
+							} else {
+								reject({ message: 'no ' + type });
+							}
+						},
+					};
+				},
+			};
+			clip._dummyClipboard = {
+				read: function() {
+					return {
+						then: function(resolve) {
+							resolve([clipboardItem]);
+						},
+					};
+				},
+			};
+
+			// When triggering async paste special:
+			clip.filterExecCopyPaste('.uno:PasteSpecial');
+		});
+
+		// Then the paste-special dialog offers both formats:
+		cy.cGet('#PasteSpecialDialog').should('be.visible');
+		cy.cGet('#PasteSpecialDialog .ui-treeview-cell-text:contains("HTML")')
+			.should('exist');
+		// Without the accompanying fix in place, this test would have failed with:
+		// expected #PasteSpecialDialog .ui-treeview-cell-text:contains("Unformatted text") to exist in the DOM
+		// i.e. the plain text item was missing from the format list in the dialog.
+		cy.cGet('#PasteSpecialDialog .ui-treeview-cell-text:contains("Unformatted text")')
+			.should('exist');
 	});
 
 	it('Cross-document paste failure shows the reason from the source stub.', function() {

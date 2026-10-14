@@ -24,7 +24,7 @@
 #include <com/sun/star/sdb/tools/XConnectionTools.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/implbase.hxx>
 
@@ -47,14 +47,11 @@ namespace sdbtools
             @param _rxContext
                 the context of the component
         */
-        explicit ConnectionTools( const css::uno::Reference< css::uno::XComponentContext >& _rContext );
+        explicit ConnectionTools( const cpo::uno::Reference< cpo::uno::XComponentContext >& _rContext );
 
         // XConnectionTools
-        virtual css::uno::Reference< css::sdb::tools::XTableName > createTableName() override;
-        virtual css::uno::Reference< css::sdb::tools::XObjectNames > getObjectNames() override;
-        virtual css::uno::Reference< css::sdb::tools::XDataSourceMetaData > getDataSourceMetaData() override;
-        virtual css::uno::Reference< css::container::XNameAccess > getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, css::uno::Reference< css::lang::XComponent >& keepFieldsAlive ) override;
-        virtual css::uno::Reference< css::sdb::XSingleSelectQueryComposer > getComposer( ::sal_Int32 commandType, const OUString& command ) override;
+        virtual cpo::uno::Reference< css::sdb::tools::XObjectNames > getObjectNames() override;
+        virtual cpo::uno::Reference< css::container::XNameAccess > getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, cpo::uno::Reference< css::lang::XComponent >& keepFieldsAlive ) override;
 
         // XServiceInfo
         virtual OUString getImplementationName() override;

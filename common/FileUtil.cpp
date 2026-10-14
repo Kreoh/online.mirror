@@ -20,13 +20,13 @@
 
 #include <common/Anonymizer.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Unit.hpp>
 #include <common/Util.hpp>
 
 #include <Poco/File.h>
 #include <Poco/Path.h>
-
-#include <o3tl/safeint.hxx>
+#include <Poco/SHA2Engine.h>
 
 #include <chrono>
 #include <cstdio>
@@ -263,8 +263,7 @@ namespace FileUtil
 
     std::unique_ptr<std::vector<char>> readFile(const std::string& path, int maxSize)
     {
-        auto data = std::make_unique<std::vector<char>>(maxSize);
-        data->resize(0);
+        auto data = std::make_unique<std::vector<char>>();
         return (readFile(path, *data, maxSize) >= 0) ? std::move(data) : nullptr;
     }
 
@@ -278,7 +277,7 @@ namespace FileUtil
         std::string target(size, '\0');
         char* target_data = target.data();
         const ssize_t written = ::readlink(fpath, target_data, size);
-        if (written <= 0 || o3tl::make_unsigned(written) > size)
+        if (written <= 0 || NumUtil::makeUnsigned(written) > size)
         {
             return {};
         }
@@ -361,7 +360,7 @@ namespace FileUtil
                 break;
 
             assert(n >= 0 && "Expected a positive read byte-count");
-            assert(o3tl::make_unsigned(n) <= nbytes && "Unexpectedly read more than requested");
+            assert(NumUtil::makeUnsigned(n) <= nbytes && "Unexpectedly read more than requested");
 
             nbytes -= n;
             p += n;
@@ -371,8 +370,6 @@ namespace FileUtil
     }
 
 } // namespace FileUtil
-
-#if !MOBILEAPP
 
 namespace
 {
@@ -406,11 +403,8 @@ namespace
 
 } // anonymous namespace
 
-#endif
-
 namespace FileUtil
 {
-#if !MOBILEAPP
     void registerFileSystemForDiskSpaceChecks(const std::string& path)
     {
         const std::string::size_type lastSlash = path.rfind('/');
@@ -423,7 +417,7 @@ namespace FileUtil
             std::lock_guard<std::mutex> lock(fsmutex);
 
             struct stat s;
-            if (stat(dirPath.c_str(), &s) == 0)
+            if (getStatOfFile(dirPath, s) == 0)
             {
                 filesystems.insert(fs(dirPath, s.st_dev));
             }
@@ -461,13 +455,12 @@ namespace FileUtil
             lastResult = std::string();
         return std::string();
     }
-#endif
 
     bool checkDiskSpace(const std::string& path)
     {
         assert(!path.empty());
 
-        if constexpr (!Util::isMobileApp())
+        if (!Util::isMobileApp())
         {
             bool hookResult = true;
             if (UnitBase::get().filterCheckDiskSpace(path, hookResult))
@@ -487,6 +480,41 @@ namespace FileUtil
     std::string extractFileExtension(const std::string& path)
     {
         return Util::splitLast(path, '.', true).second;
+    }
+
+    bool isPlainFileName(std::string_view name)
+    {
+        if (name.empty() || name == "." || name == "..")
+            return false;
+        return std::none_of(name.begin(), name.end(),
+                            [](unsigned char c)
+                            { return c == '/' || c == '\\' || c < 0x20 || c == 0x7f; });
+    }
+
+    std::string sha256Base64(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            LOG_WRN("Cannot open [" << path << "] to hash it");
+            return std::string();
+        }
+
+        Poco::SHA2Engine engine(Poco::SHA2Engine::SHA_256);
+
+        std::vector<char> buffer(64 * 1024);
+        while (file.read(buffer.data(), buffer.size()) || file.gcount() > 0)
+        {
+            engine.update(buffer.data(), file.gcount());
+        }
+
+        if (file.bad())
+        {
+            LOG_WRN("Failed to read [" << path << "] to hash it");
+            return std::string();
+        }
+
+        return Util::base64Encode(engine.digest());
     }
 
 } // namespace FileUtil

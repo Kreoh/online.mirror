@@ -21,6 +21,8 @@
 #include <uielement/rootitemcontainer.hxx>
 #include <uielement/constitemcontainer.hxx>
 #include <uielement/uielementtypenames.hxx>
+#include <accelerators/acceleratorconfiguration.hxx>
+#include <framework/documentmacrocalls.hxx>
 #include <menuconfiguration.hxx>
 #include <statusbarconfiguration.hxx>
 #include <toolboxconfiguration.hxx>
@@ -51,6 +53,8 @@
 #include <comphelper/interfacecontainer4.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/servicehelper.hxx>
+#include <rtl/uri.hxx>
+#include <tools/urlobj.hxx>
 #include <utility>
 #include <vcl/svapp.hxx>
 #include <sal/log.hxx>
@@ -60,7 +64,7 @@
 #include <string_view>
 #include <unordered_map>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::io;
 using namespace com::sun::star::embed;
@@ -92,41 +96,44 @@ public:
         return {u"com.sun.star.ui.UIConfigurationManager"_ustr};
     }
 
-    explicit UIConfigurationManager( css::uno::Reference< css::uno::XComponentContext > xContext );
+    explicit UIConfigurationManager( cpo::uno::Reference< cpo::uno::XComponentContext > xContext );
 
     // XComponent
     virtual void dispose() override;
-    virtual void addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    virtual void removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // XUIConfiguration
-    virtual void addConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) override;
-    virtual void removeConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) override;
+    virtual void addConfigurationListener( const cpo::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) override;
+    virtual void removeConfigurationListener( const cpo::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) override;
 
     // XUIConfigurationManager
     virtual void reset() override;
     virtual cpo::uno::Sequence< cpo::uno::Sequence< css::beans::PropertyValue > > getUIElementsInfo( sal_Int16 ElementType ) override;
-    virtual css::uno::Reference< css::container::XIndexContainer > createSettings(  ) override;
+    virtual cpo::uno::Reference< css::container::XIndexContainer > createSettings(  ) override;
     virtual bool hasSettings( const OUString& ResourceURL ) override;
-    virtual css::uno::Reference< css::container::XIndexAccess > getSettings( const OUString& ResourceURL, bool bWriteable ) override;
-    virtual void replaceSettings( const OUString& ResourceURL, const css::uno::Reference< css::container::XIndexAccess >& aNewData ) override;
+    virtual cpo::uno::Reference< css::container::XIndexAccess > getSettings( const OUString& ResourceURL, bool bWriteable ) override;
+    virtual void replaceSettings( const OUString& ResourceURL, const cpo::uno::Reference< css::container::XIndexAccess >& aNewData ) override;
     virtual void removeSettings( const OUString& ResourceURL ) override;
-    virtual void insertSettings( const OUString& NewResourceURL, const css::uno::Reference< css::container::XIndexAccess >& aNewData ) override;
-    virtual css::uno::Reference< css::uno::XInterface > getImageManager() override;
-    virtual css::uno::Reference< css::ui::XAcceleratorConfiguration > getShortCutManager() override;
-    virtual css::uno::Reference< css::ui::XAcceleratorConfiguration > createShortCutManager() override;
-    virtual css::uno::Reference< css::uno::XInterface > getEventsManager() override;
+    virtual void insertSettings( const OUString& NewResourceURL, const cpo::uno::Reference< css::container::XIndexAccess >& aNewData ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getImageManager() override;
+    virtual cpo::uno::Reference< css::ui::XAcceleratorConfiguration > getShortCutManager() override;
+    virtual cpo::uno::Reference< css::ui::XAcceleratorConfiguration > createShortCutManager() override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getEventsManager() override;
 
     // XUIConfigurationPersistence
     virtual void reload() override;
     virtual void store() override;
-    virtual void storeToStorage( const css::uno::Reference< css::embed::XStorage >& Storage ) override;
+    virtual void storeToStorage( const cpo::uno::Reference< css::embed::XStorage >& Storage ) override;
     virtual bool isModified() override;
     virtual bool isReadOnly() override;
 
     // XUIConfigurationStorage
-    virtual void setStorage( const css::uno::Reference< css::embed::XStorage >& Storage ) override;
+    virtual void setStorage( const cpo::uno::Reference< css::embed::XStorage >& Storage ) override;
     virtual bool hasStorage() override;
+
+    void setMacroCallsAllowed( bool bAllowed );
+    bool hasMacroCalls();
 
 private:
     // private data types
@@ -153,7 +160,7 @@ private:
         OUString aName;
         bool          bModified;        // has been changed since last storing
         bool          bDefault;         // default settings
-        css::uno::Reference< css::container::XIndexAccess > xSettings;
+        cpo::uno::Reference< css::container::XIndexAccess > xSettings;
     };
 
     struct UIElementType;
@@ -172,7 +179,7 @@ private:
         bool                                                              bShouldReloadRWOnStore;
         sal_Int16                                                         nElementType;
         UIElementDataHashMap                                              aElementsHashMap;
-        css::uno::Reference< css::embed::XStorage > xStorage;
+        cpo::uno::Reference< css::embed::XStorage > xStorage;
     };
 
     typedef std::vector< UIElementType > UIElementTypesVector;
@@ -185,22 +192,24 @@ private:
     void            impl_preloadUIElementTypeList( sal_Int16 nElementType );
     UIElementData*  impl_findUIElementData( const OUString& aResourceURL, sal_Int16 nElementType, bool bLoad = true );
     void            impl_requestUIElementData( sal_Int16 nElementType, UIElementData& aUIElementData );
-    void            impl_storeElementTypeData( css::uno::Reference< css::embed::XStorage > const & xStorage, UIElementType& rElementType, bool bResetModifyState = true );
+    void            impl_storeElementTypeData( cpo::uno::Reference< css::embed::XStorage > const & xStorage, UIElementType& rElementType, bool bResetModifyState = true );
     void            impl_resetElementTypeData( UIElementType& rDocElementType, ConfigEventNotifyContainer& rRemoveNotifyContainer );
     void            impl_reloadElementTypeData( UIElementType& rDocElementType, ConfigEventNotifyContainer& rRemoveNotifyContainer, ConfigEventNotifyContainer& rReplaceNotifyContainer );
 
     UIElementTypesVector                                      m_aUIElements;
-    css::uno::Reference< css::embed::XStorage >               m_xDocConfigStorage;
+    cpo::uno::Reference< css::embed::XStorage >               m_xDocConfigStorage;
     bool                                                      m_bReadOnly;
     bool                                                      m_bModified;
     bool                                                      m_bDisposed;
     OUString                                                  m_aPropUIName;
-    css::uno::Reference< css::uno::XComponentContext >        m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
     std::mutex                                                m_mutex;
     comphelper::OInterfaceContainerHelper4<css::lang::XEventListener>               m_aEventListeners;
     comphelper::OInterfaceContainerHelper4<css::ui::XUIConfigurationListener>       m_aConfigListeners;
     rtl::Reference< ImageManager >                            m_xImageManager;
-    css::uno::Reference< css::ui::XAcceleratorConfiguration > m_xAccConfig;
+    cpo::uno::Reference< css::ui::XAcceleratorConfiguration > m_xAccConfig;
+    /// whether the macros of the document may run
+    bool                                                      m_bMacroCallsAllowed;
 };
 
 // important: The order and position of the elements must match the constant
@@ -218,6 +227,65 @@ constexpr std::u16string_view UIELEMENTTYPENAMES[] =
 };
 
 constexpr std::u16string_view RESOURCEURL_PREFIX = u"private:resource/";
+
+bool lcl_hasMacroCalls( const Reference< XIndexAccess >& xItems )
+{
+    if ( !xItems.is() )
+        return false;
+    for ( sal_Int32 i = 0, nCount = xItems->getCount(); i < nCount; ++i )
+    {
+        Sequence< PropertyValue > aProps;
+        if ( !( xItems->getByIndex( i ) >>= aProps ) )
+            continue;
+        for ( const PropertyValue& rProp : aProps )
+        {
+            OUString sCommand;
+            Reference< XIndexAccess > xSubItems;
+            if ( rProp.Name == "CommandURL" && ( rProp.Value >>= sCommand )
+                 && isMacroCallCommand( sCommand ) )
+                return true;
+            if ( rProp.Name == "ItemDescriptorContainer" && ( rProp.Value >>= xSubItems )
+                 && lcl_hasMacroCalls( xSubItems ) )
+                return true;
+        }
+    }
+    return false;
+}
+
+Reference< XIndexAccess > lcl_withoutMacroCalls( const Reference< XIndexAccess >& xItems )
+{
+    if ( !lcl_hasMacroCalls( xItems ) )
+        return xItems;
+
+    rtl::Reference< RootItemContainer > xCopy = new RootItemContainer( xItems );
+    for ( sal_Int32 i = xCopy->getCount() - 1; i >= 0; --i )
+    {
+        Sequence< PropertyValue > aProps;
+        if ( !( xCopy->getByIndex( i ) >>= aProps ) )
+            continue;
+        bool bRemove = false;
+        bool bReplace = false;
+        for ( PropertyValue& rProp : asNonConstRange( aProps ) )
+        {
+            OUString sCommand;
+            Reference< XIndexAccess > xSubItems;
+            if ( rProp.Name == "CommandURL" && ( rProp.Value >>= sCommand )
+                 && isMacroCallCommand( sCommand ) )
+                bRemove = true;
+            else if ( rProp.Name == "ItemDescriptorContainer" && ( rProp.Value >>= xSubItems )
+                      && lcl_hasMacroCalls( xSubItems ) )
+            {
+                rProp.Value <<= lcl_withoutMacroCalls( xSubItems );
+                bReplace = true;
+            }
+        }
+        if ( bRemove )
+            xCopy->removeByIndex( i );
+        else if ( bReplace )
+            xCopy->replaceByIndex( i, Any( aProps ) );
+    }
+    return new ConstItemContainer( xCopy );
+}
 
 sal_Int16 RetrieveTypeFromResourceURL( std::u16string_view aResourceURL )
 {
@@ -673,12 +741,13 @@ void UIConfigurationManager::impl_Initialize()
     }
 }
 
-UIConfigurationManager::UIConfigurationManager( css::uno::Reference< css::uno::XComponentContext > xContext ) :
+UIConfigurationManager::UIConfigurationManager( cpo::uno::Reference< cpo::uno::XComponentContext > xContext ) :
       m_bReadOnly( true )
     , m_bModified( false )
     , m_bDisposed( false )
     , m_aPropUIName( u"UIName"_ustr )
     , m_xContext(std::move( xContext ))
+    , m_bMacroCallsAllowed( false )
 {
     // Make sure we have a default initialized entry for every layer and user interface element type!
     // The following code depends on this!
@@ -924,8 +993,10 @@ Reference< XIndexAccess > UIConfigurationManager::getSettings( const OUString& R
         // Create a copy of our data if someone wants to change the data.
         if ( bWriteable )
             return Reference< XIndexAccess >( new RootItemContainer( pDataSettings->xSettings ) );
-        else
+        else if ( m_bMacroCallsAllowed )
             return pDataSettings->xSettings;
+        else
+            return lcl_withoutMacroCalls( pDataSettings->xSettings );
     }
 
     throw NoSuchElementException();
@@ -1140,7 +1211,7 @@ Reference< XInterface > UIConfigurationManager::getImageManager()
 
 Reference< XAcceleratorConfiguration > UIConfigurationManager::createShortCutManager()
 {
-    return DocumentAcceleratorConfiguration::createWithDocumentRoot(m_xContext, m_xDocConfigStorage);
+    return createDocumentAcceleratorConfiguration(m_xContext, m_xDocConfigStorage, m_bMacroCallsAllowed);
 }
 
 Reference< XAcceleratorConfiguration > UIConfigurationManager::getShortCutManager()
@@ -1150,16 +1221,60 @@ Reference< XAcceleratorConfiguration > UIConfigurationManager::getShortCutManage
 
     if (!m_xAccConfig.is()) try
     {
-        m_xAccConfig = DocumentAcceleratorConfiguration::
-            createWithDocumentRoot(m_xContext, m_xDocConfigStorage);
+        m_xAccConfig = createDocumentAcceleratorConfiguration(m_xContext, m_xDocConfigStorage,
+                                                             m_bMacroCallsAllowed);
     }
-    catch ( const css::uno::DeploymentException& )
+    catch ( const cpo::uno::DeploymentException& )
     {
         SAL_WARN("fwk.uiconfiguration", "DocumentAcceleratorConfiguration"
                 " not available. This should happen only on mobile platforms.");
     }
 
     return m_xAccConfig;
+}
+
+void UIConfigurationManager::setMacroCallsAllowed( bool bAllowed )
+{
+    SolarMutexGuard g;
+    m_bMacroCallsAllowed = bAllowed;
+    setDocumentAcceleratorMacroCallsAllowed( m_xAccConfig, bAllowed );
+}
+
+bool UIConfigurationManager::hasMacroCalls()
+{
+    SolarMutexGuard g;
+
+    if ( m_bDisposed )
+        throw DisposedException();
+
+    for ( sal_Int16 i = 1; i < css::ui::UIElementType::COUNT; i++ )
+    {
+        impl_preloadUIElementTypeList( i );
+        for ( auto const& rElement : m_aUIElements[i].aElementsHashMap )
+        {
+            UIElementData* pData = impl_findUIElementData( rElement.first, i );
+            if ( pData && !pData->bDefault && lcl_hasMacroCalls( pData->xSettings ) )
+                return true;
+        }
+    }
+
+    Reference< XAcceleratorConfiguration > xAccConfig = getShortCutManager();
+    if ( !xAccConfig.is() )
+        return false;
+    for ( const css::awt::KeyEvent& rKey : xAccConfig->getAllKeyEvents() )
+    {
+        try
+        {
+            if ( isMacroCallCommand( xAccConfig->getCommandByKeyEvent( rKey ) ) )
+                return true;
+        }
+        catch ( const NoSuchElementException& )
+        {
+            // A listed key without a command has a macro call that is not allowed.
+            return true;
+        }
+    }
+    return false;
 }
 
 Reference< XInterface > UIConfigurationManager::getEventsManager()
@@ -1375,7 +1490,7 @@ bool UIConfigurationManager::isReadOnly()
 void UIConfigurationManager::implts_notifyContainerListener( const ConfigurationEvent& aEvent, NotifyOp eOp )
 {
     std::unique_lock aGuard(m_mutex);
-    m_aConfigListeners.forEach(aGuard, [&eOp, &aEvent](const css::uno::Reference<XUIConfigurationListener>& l) {
+    m_aConfigListeners.forEach(aGuard, [&eOp, &aEvent](const cpo::uno::Reference<XUIConfigurationListener>& l) {
         switch ( eOp )
         {
             case NotifyOp_Replace:
@@ -1393,9 +1508,50 @@ void UIConfigurationManager::implts_notifyContainerListener( const Configuration
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+namespace framework
+{
+bool isMacroCallCommand( std::u16string_view rCommand )
+{
+    if ( rCommand.empty() )
+        return false;
+    OUString sCommand = rtl::Uri::decode( OUString( rCommand ), rtl_UriDecodeWithCharset,
+                                          RTL_TEXTENCODING_UTF8 ).toAsciiLowerCase();
+    if ( !sCommand.startsWith( ".uno:" ) )
+    {
+        // The shipped key bindings use the findbar command.
+        if ( sCommand.startsWith( "vnd.sun.star.findbar:" ) )
+            return false;
+        INetURLObject aURL( rCommand );
+        return aURL.GetProtocol() == INetProtocol::NotValid || aURL.IsExoticProtocol();
+    }
+    sal_Int32 nArguments = sCommand.indexOf( '?' );
+    if ( nArguments < 0 )
+        return false;
+    std::u16string_view aArguments = std::u16string_view( sCommand ).substr( nArguments + 1 );
+    return aArguments.find( u"macro:" ) != std::u16string_view::npos
+           || aArguments.find( u"vnd.sun.star.script:" ) != std::u16string_view::npos
+           || aArguments.find( u"referer" ) != std::u16string_view::npos
+           || aArguments.find( u"macroexecutionmode" ) != std::u16string_view::npos
+           || aArguments.find( u"updatedocmode" ) != std::u16string_view::npos;
+}
+
+void setDocumentMacroCallsAllowed( const Reference< XUIConfigurationManager2 >& rxManager,
+                                   bool bAllowed )
+{
+    if ( auto pManager = dynamic_cast< UIConfigurationManager* >( rxManager.get() ) )
+        pManager->setMacroCallsAllowed( bAllowed );
+}
+
+bool documentConfigurationHasMacroCalls( const Reference< XUIConfigurationManager2 >& rxManager )
+{
+    auto pManager = dynamic_cast< UIConfigurationManager* >( rxManager.get() );
+    return pManager && pManager->hasMacroCalls();
+}
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_UIConfigurationManager_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UIConfigurationManager(context));

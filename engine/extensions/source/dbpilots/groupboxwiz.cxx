@@ -33,12 +33,12 @@
 
 namespace dbp
 {
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::form;
 
     OGroupBoxWizard::OGroupBoxWizard(weld::Window* _pParent,
-            const Reference< XPropertySet >& _rxObjectModel, const Reference< XComponentContext >& _rxContext )
+            const Reference< XPropertySet >& _rxObjectModel, const Reference< cpo::uno::XComponentContext >& _rxContext )
         : OControlWizard(_pParent, _rxObjectModel, _rxContext)
         , m_bVisitedDefault(false)
         , m_bVisitedDB(false)

@@ -19,6 +19,8 @@
 
 #include <dlg_CreationWizard_UNO.hxx>
 #include <dlg_CreationWizard.hxx>
+#include <dlg_CreationWizardMobile.hxx>
+#include <KitDevice.hxx>
 #include <ChartModel.hxx>
 #include <TimerTriggeredControllerLock.hxx>
 #include <utility>
@@ -36,13 +38,14 @@
 namespace chart
 {
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-CreationWizardUnoDlg::CreationWizardUnoDlg(uno::Reference<uno::XComponentContext> xContext)
+CreationWizardUnoDlg::CreationWizardUnoDlg(uno::Reference<cpo::uno::XComponentContext> xContext)
     : OComponentHelper(m_aMutex)
     , m_xCC(std::move(xContext))
     , m_bUnlockControllersOnExecute(false)
 {
-    uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(m_xCC);
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(m_xCC);
     uno::Reference< frame::XTerminateListener > xListener( this );
     xDesktop->addTerminateListener( xListener );
 }
@@ -179,7 +182,10 @@ void CreationWizardUnoDlg::createDialogOnDemand()
     uno::Reference< XComponent > xKeepAlive( this );
     if( m_xChartModel.is() )
     {
-        m_xDialog = std::make_shared<CreationWizard>(pParent, m_xChartModel, m_xCC);
+        if (isKitMobilePhone())
+            m_xDialog = std::make_shared<CreationWizardMobile>(pParent, m_xChartModel, m_xCC);
+        else
+            m_xDialog = std::make_shared<CreationWizard>(pParent, m_xChartModel, m_xCC);
     }
 }
 
@@ -188,7 +194,7 @@ IMPL_STATIC_LINK_NOARG(CreationWizardUnoDlg, InstallKitNotifierHdl, void*, vcl::
     return SfxViewShell::Current();
 }
 
-void CreationWizardUnoDlg::startExecuteModal( const css::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener )
+void CreationWizardUnoDlg::startExecuteModal( const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener )
 {
     SolarMutexGuard aSolarGuard;
     createDialogOnDemand();
@@ -207,7 +213,7 @@ void CreationWizardUnoDlg::startExecuteModal( const css::uno::Reference<css::ui:
     weld::DialogController::runAsync(m_xDialog, [xListener, xThat](sal_Int32 nResult){
             if( xListener.is() )
             {
-                ::css::uno::Reference< ::css::uno::XInterface > xSource;
+                ::cpo::uno::Reference< ::cpo::uno::XInterface > xSource;
                 // Notify UNO listener to perform correct action depending on the result
                 css::ui::dialogs::DialogClosedEvent aEvent( xSource, nResult );
                 xListener->dialogClosed( aEvent );
@@ -250,7 +256,7 @@ void CreationWizardUnoDlg::disposing()
 
     try
     {
-        uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(m_xCC);
+        uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(m_xCC);
         uno::Reference< frame::XTerminateListener > xListener( this );
         xDesktop->removeTerminateListener( xListener );
     }
@@ -351,8 +357,8 @@ void CreationWizardUnoDlg::removeVetoableChangeListener( const OUString& /* Prop
 
 } //namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_WizardDialog_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_WizardDialog_get_implementation(cpo::uno::XComponentContext *context,
                                                          cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::CreationWizardUnoDlg(context));

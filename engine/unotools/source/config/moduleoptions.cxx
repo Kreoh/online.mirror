@@ -113,7 +113,6 @@ struct FactoryInfo
             nIcon                       = 0;
             bChangedTemplateFile        = false;
             bChangedDefaultFilter       = false;
-            bDefaultFilterReadonly      = false;
         }
 
         // returns list of properties, which has changed only!
@@ -169,7 +168,6 @@ struct FactoryInfo
         const OUString& getFactory          () const { return sFactory;           };
         const OUString& getTemplateFile     () const { return sTemplateFile;      };
         const OUString& getDefaultFilter    () const { return sDefaultFilter;     };
-        bool            isDefaultFilterReadonly() const { return bDefaultFilterReadonly; }
         sal_Int32       getIcon             () const { return nIcon;              };
 
         // If you call set-methods - we check for changes of values and mark it.
@@ -177,7 +175,6 @@ struct FactoryInfo
         void initInstalled        ()                                       { bInstalled        = true; }
         void initFactory          ( const OUString& sNewFactory          ) { sFactory          = sNewFactory; }
         void initDefaultFilter    ( const OUString& sNewDefaultFilter    ) { sDefaultFilter    = sNewDefaultFilter; }
-        void setDefaultFilterReadonly( const bool bVal){bDefaultFilterReadonly = bVal;}
         void initIcon             ( sal_Int32              nNewIcon             ) { nIcon             = nNewIcon; }
 
         void initTemplateFile( const OUString& sNewTemplateFile )
@@ -201,17 +198,8 @@ struct FactoryInfo
             }
         };
 
-        void setDefaultFilter( const OUString& sNewDefaultFilter )
-        {
-            if( sDefaultFilter != sNewDefaultFilter )
-            {
-                sDefaultFilter       = sNewDefaultFilter;
-                bChangedDefaultFilter = true;
-            }
-        };
-
     private:
-        css::uno::Reference< css::util::XStringSubstitution > const & getStringSubstitution()
+        cpo::uno::Reference< css::util::XStringSubstitution > const & getStringSubstitution()
         {
             if ( !xSubstVars.is() )
             {
@@ -228,9 +216,8 @@ struct FactoryInfo
 
         bool            bChangedTemplateFile        :1;
         bool            bChangedDefaultFilter       :1;
-        bool            bDefaultFilterReadonly      :1;
 
-        css::uno::Reference< css::util::XStringSubstitution >  xSubstVars;
+        cpo::uno::Reference< css::util::XStringSubstitution >  xSubstVars;
 };
 
 }
@@ -259,15 +246,11 @@ class SvtModuleOptions_Impl : public ::utl::ConfigItem
         OUString const & GetFactoryStandardTemplate(      SvtModuleOptions::EFactory    eFactory   ) const;
         static OUString GetFactoryEmptyDocumentURL(       SvtModuleOptions::EFactory    eFactory   );
         OUString const & GetFactoryDefaultFilter  (       SvtModuleOptions::EFactory    eFactory   ) const;
-        bool            IsDefaultFilterReadonly(          SvtModuleOptions::EFactory eFactory      ) const;
         sal_Int32       GetFactoryIcon            (       SvtModuleOptions::EFactory    eFactory   ) const;
         static bool     ClassifyFactoryByName     ( std::u16string_view sName      ,
                                                           SvtModuleOptions::EFactory&   eFactory   );
         void            SetFactoryStandardTemplate(       SvtModuleOptions::EFactory    eFactory   ,
                                                     const OUString&              sTemplate  );
-        void            SetFactoryDefaultFilter   (       SvtModuleOptions::EFactory    eFactory   ,
-                                                    const OUString&              sFilter    );
-        void            MakeReadonlyStatesAvailable();
 
     //  private methods
 
@@ -281,7 +264,6 @@ class SvtModuleOptions_Impl : public ::utl::ConfigItem
 
     private:
         o3tl::enumarray<SvtModuleOptions::EFactory, FactoryInfo> m_lFactories;
-        bool            m_bReadOnlyStatesWellKnown;
 };
 
 /*-************************************************************************************************************
@@ -295,7 +277,6 @@ class SvtModuleOptions_Impl : public ::utl::ConfigItem
 *//*-*************************************************************************************************************/
 SvtModuleOptions_Impl::SvtModuleOptions_Impl()
     :   ::utl::ConfigItem( u"Setup/Office/Factories"_ustr )
-    ,   m_bReadOnlyStatesWellKnown( false )
 {
     // First initialize list of factory infos! Otherwise we couldn't guarantee right working of these class.
     for( auto & rFactory : m_lFactories )
@@ -525,11 +506,6 @@ OUString const & SvtModuleOptions_Impl::GetFactoryDefaultFilter( SvtModuleOption
     return m_lFactories[eFactory].getDefaultFilter();
 }
 
-bool SvtModuleOptions_Impl::IsDefaultFilterReadonly( SvtModuleOptions::EFactory eFactory   ) const
-{
-    return m_lFactories[eFactory].isDefaultFilterReadonly();
-}
-
 sal_Int32 SvtModuleOptions_Impl::GetFactoryIcon( SvtModuleOptions::EFactory eFactory ) const
 {
     return m_lFactories[eFactory].getIcon();
@@ -539,13 +515,6 @@ void SvtModuleOptions_Impl::SetFactoryStandardTemplate(       SvtModuleOptions::
                                                         const OUString&           sTemplate  )
 {
     m_lFactories[eFactory].setTemplateFile( sTemplate );
-    SetModified();
-}
-
-void SvtModuleOptions_Impl::SetFactoryDefaultFilter(       SvtModuleOptions::EFactory eFactory,
-                                                     const OUString&           sFilter )
-{
-    m_lFactories[eFactory].setDefaultFilter( sFilter );
     SetModified();
 }
 
@@ -732,32 +701,6 @@ void SvtModuleOptions_Impl::impl_Read( const cpo::uno::Sequence< OUString >& lFa
     }
 }
 
-void SvtModuleOptions_Impl::MakeReadonlyStatesAvailable()
-{
-    if (m_bReadOnlyStatesWellKnown)
-        return;
-
-    cpo::uno::Sequence< OUString > lFactories = GetNodeNames(OUString());
-    for (OUString& rFactory : asNonConstRange(lFactories))
-        rFactory += PATHSEPARATOR PROPERTYNAME_DEFAULTFILTER;
-
-    cpo::uno::Sequence< bool > lReadonlyStates = GetReadOnlyStates(lFactories);
-    sal_Int32 c = lFactories.getLength();
-    for (sal_Int32 i=0; i<c; ++i)
-    {
-        const OUString& rFactoryName = lFactories[i];
-        SvtModuleOptions::EFactory  eFactory;
-
-        if (!ClassifyFactoryByName(rFactoryName, eFactory))
-            continue;
-
-        FactoryInfo& rInfo = m_lFactories[eFactory];
-        rInfo.setDefaultFilterReadonly(lReadonlyStates[i]);
-    }
-
-    m_bReadOnlyStatesWellKnown = true;
-}
-
 namespace {
     //global
     std::weak_ptr<SvtModuleOptions_Impl> g_pModuleOptions;
@@ -840,13 +783,6 @@ OUString SvtModuleOptions::GetFactoryDefaultFilter( EFactory eFactory ) const
     return m_pImpl->GetFactoryDefaultFilter( eFactory );
 }
 
-bool SvtModuleOptions::IsDefaultFilterReadonly( EFactory eFactory   ) const
-{
-    std::unique_lock aGuard( impl_GetOwnStaticMutex() );
-    m_pImpl->MakeReadonlyStatesAvailable();
-    return m_pImpl->IsDefaultFilterReadonly( eFactory );
-}
-
 sal_Int32 SvtModuleOptions::GetFactoryIcon( EFactory eFactory ) const
 {
     std::unique_lock aGuard( impl_GetOwnStaticMutex() );
@@ -865,13 +801,6 @@ void SvtModuleOptions::SetFactoryStandardTemplate(       EFactory         eFacto
 {
     std::unique_lock aGuard( impl_GetOwnStaticMutex() );
     m_pImpl->SetFactoryStandardTemplate( eFactory, sTemplate );
-}
-
-void SvtModuleOptions::SetFactoryDefaultFilter(       EFactory         eFactory,
-                                                const OUString& sFilter )
-{
-    std::unique_lock aGuard( impl_GetOwnStaticMutex() );
-    m_pImpl->SetFactoryDefaultFilter( eFactory, sFilter );
 }
 
 OUString SvtModuleOptions::GetModuleName( EModule eModule ) const
@@ -953,18 +882,18 @@ SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByServiceName(std::u
 SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByURL(const OUString&                                 sURL            ,
                                                                   const cpo::uno::Sequence< css::beans::PropertyValue >& lMediaDescriptor)
 {
-    const css::uno::Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
-    css::uno::Reference< css::container::XNameAccess > xFilterCfg;
-    css::uno::Reference< css::container::XNameAccess > xTypeCfg;
+    cpo::uno::Reference< css::container::XNameAccess > xFilterCfg;
+    cpo::uno::Reference< css::container::XNameAccess > xTypeCfg;
     try
     {
         xFilterCfg.set(
-            xContext->getServiceManager()->createInstanceWithContext(u"com.sun.star.document.FilterFactory"_ustr, xContext), css::uno::UNO_QUERY);
+            xContext->getServiceManager()->createInstanceWithContext(u"com.sun.star.document.FilterFactory"_ustr, xContext), cpo::uno::UNO_QUERY);
         xTypeCfg.set(
-            xContext->getServiceManager()->createInstanceWithContext(u"com.sun.star.document.TypeDetection"_ustr, xContext), css::uno::UNO_QUERY);
+            xContext->getServiceManager()->createInstanceWithContext(u"com.sun.star.document.TypeDetection"_ustr, xContext), cpo::uno::UNO_QUERY);
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; }
     catch(const cpo::uno::Exception&)
         { return EFactory::UNKNOWN_FACTORY; }
@@ -984,7 +913,7 @@ SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByURL(const OUString
             if (eApp != EFactory::UNKNOWN_FACTORY)
                 return eApp;
         }
-        catch(const css::uno::RuntimeException&)
+        catch(const cpo::uno::RuntimeException&)
             { throw; }
         catch(const cpo::uno::Exception&)
             { /* do nothing here ... may the following code can help!*/ }
@@ -996,7 +925,7 @@ SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByURL(const OUString
     {
         // no :-(
         // start flat detection of URL
-        css::uno::Reference< css::document::XTypeDetection > xDetect(xTypeCfg, css::uno::UNO_QUERY);
+        cpo::uno::Reference< css::document::XTypeDetection > xDetect(xTypeCfg, cpo::uno::UNO_QUERY);
         sTypeName = xDetect->queryTypeByURL(sURL);
     }
 
@@ -1016,7 +945,7 @@ SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByURL(const OUString
         if (eApp != EFactory::UNKNOWN_FACTORY)
             return eApp;
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; }
     catch(const cpo::uno::Exception&)
         { /* do nothing here ... may the following code can help!*/ }
@@ -1025,9 +954,9 @@ SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByURL(const OUString
     return EFactory::UNKNOWN_FACTORY;
 }
 
-SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByModel(const css::uno::Reference< css::frame::XModel >& xModel)
+SvtModuleOptions::EFactory SvtModuleOptions::ClassifyFactoryByModel(const cpo::uno::Reference< css::frame::XModel >& xModel)
 {
-    css::uno::Reference< css::lang::XServiceInfo > xInfo(xModel, css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::lang::XServiceInfo > xInfo(xModel, cpo::uno::UNO_QUERY);
     if (!xInfo.is())
         return EFactory::UNKNOWN_FACTORY;
 

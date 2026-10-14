@@ -140,11 +140,28 @@
 		});
 	}
 
+	// Ask the app for the tab's hover card, placed below the tab and drawn in the strip's
+	// theme colours.
+	function startHover(tab, id) {
+		if (!bridge) return;
+		const rect = tab.getBoundingClientRect();
+		const style = getComputedStyle(document.documentElement);
+		const color = (name) => style.getPropertyValue(name).trim();
+		bridge.tabHoverStarted(
+			id,
+			Math.round(rect.left),
+			Math.round(rect.bottom),
+			color('--color-main-background'),
+			color('--color-main-text'),
+			color('--color-border-dark'),
+		);
+	}
+
 	// Rebuilt whole on every tabsChanged: matches the Qt-side push rate and
 	// keeps no stale drag state.
 	function render() {
 		const strip = document.getElementById('strip');
-		strip.innerHTML = '';
+		strip.replaceChildren();
 		tabEls = [];
 		clearDropMarkers();
 		tabs.forEach((t, idx) => {
@@ -156,7 +173,16 @@
 			tab.setAttribute('role', 'tab');
 			const doctype = docTypeAttr[t.docType];
 			if (doctype) tab.setAttribute('data-doctype', doctype);
-			tab.title = t.title || '';
+			// A background tab with a preview gets the app's hover card, which shows the name too.
+			// The active tab keeps the plain title tooltip.
+			if (t.hasThumbnail && t.id !== activeId) {
+				tab.addEventListener('mouseenter', () => startHover(tab, t.id));
+				tab.addEventListener('mouseleave', () => {
+					if (bridge) bridge.tabHoverEnded();
+				});
+			} else {
+				tab.title = t.title || '';
+			}
 
 			const icon = el('span');
 			icon.className = 'icon';
@@ -189,6 +215,11 @@
 			tab.addEventListener('auxclick', (ev) => {
 				if (ev.button === 1 && bridge) bridge.tabCloseRequested(t.id);
 			});
+			tab.addEventListener('contextmenu', (ev) => {
+				ev.preventDefault();
+				if (bridge)
+					bridge.tabContextMenuRequested(t.id, ev.clientX, ev.clientY);
+			});
 
 			tab.addEventListener('dragstart', (ev) => {
 				ev.dataTransfer.effectAllowed = 'move';
@@ -206,8 +237,11 @@
 				dragState.inStripDropHandled = false;
 			});
 
-			tab.appendChild(icon);
-			tab.appendChild(title);
+			const content = el('div');
+			content.className = 'content';
+			content.appendChild(icon);
+			content.appendChild(title);
+			tab.appendChild(content);
 			tab.appendChild(close);
 			strip.appendChild(tab);
 			tabEls.push(tab);
@@ -243,15 +277,75 @@
 		lastOverInsert = -2;
 	}
 
+	// The calls the strip makes into the app, and the notifications the app
+	// sends back. The bridge below offers a method per call and an object with
+	// a connect() per notification, whichever host the strip is running in.
+	const CALLS = [
+		'tabActivated',
+		'tabCloseRequested',
+		'tabContextMenuRequested',
+		'newTabRequested',
+		'tabReordered',
+		'tabDragStarted',
+		'tabDragEnded',
+		'tabAdoptFromOtherWindow',
+		'targetDragOver',
+		'tabHoverStarted',
+		'tabHoverEnded',
+		'requestSync',
+		'debug',
+	];
+	const NOTIFICATIONS = ['tabsChanged', 'themeChanged', 'dragExited'];
+
+	// The WebView2 message channel carries structured data both ways: a call
+	// goes out as {call, args} and a notification arrives as {signal, args}.
+	function webView2Bridge() {
+		const bridgeObject = {};
+		const handlers = {};
+
+		NOTIFICATIONS.forEach((name) => {
+			handlers[name] = [];
+			bridgeObject[name] = {
+				connect: (handler) => handlers[name].push(handler),
+			};
+		});
+		CALLS.forEach((name) => {
+			bridgeObject[name] = (...args) =>
+				window.chrome.webview.postMessage({ call: name, args: args });
+		});
+
+		window.chrome.webview.addEventListener('message', (ev) => {
+			const message = ev.data;
+			if (!message || !handlers[message.signal]) return;
+			handlers[message.signal].forEach((handler) =>
+				handler(...(message.args || [])),
+			);
+		});
+
+		return bridgeObject;
+	}
+
+	// The Windows app hosts the strip in a WebView2, the Linux one in a
+	// QWebEngineView whose QWebChannel exposes the app object directly.
+	function connectTabBridge(onReady) {
+		if (window.chrome && window.chrome.webview) {
+			onReady(webView2Bridge());
+			return;
+		}
+		new QWebChannel(qt.webChannelTransport, (channel) =>
+			onReady(channel.objects.tabBridge),
+		);
+	}
+
 	installStripDropTarget(document.getElementById('strip'));
 
-	new QWebChannel(qt.webChannelTransport, function (channel) {
-		bridge = channel.objects.tabBridge;
+	connectTabBridge(function (tabBridge) {
+		bridge = tabBridge;
 		bridge.tabsChanged.connect(onTabsChanged);
 		bridge.themeChanged.connect(onThemeChanged);
 		bridge.dragExited.connect(onDragExited);
 		bridge.debug('tabstrip ready');
-		// Slots are connected now; ask C++ for the current state.
+		// Slots are connected now; ask the app for the current state.
 		bridge.requestSync();
 	});
 })();

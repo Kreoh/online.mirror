@@ -90,8 +90,8 @@ var AdminSocketSettings = AdminSocketBase.extend({
 			var coolwsdVersionObj = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
 			var h = coolwsdVersionObj.Hash;
 			if (parseInt(h,16).toString(16) === h.toLowerCase().replace(/^0+/, '')) {
-				h = '<span>' + h + '</span>';
-				$('#coolwsd-version').html(coolwsdVersionObj.Version + ' (git hash: ' + h + ')');
+				document.getElementById('coolwsd-version').textContent =
+					coolwsdVersionObj.Version + ' (git hash: ' + h + ')';
 			}
 			else {
 				$('#coolwsd-version').text(coolwsdVersionObj.Version);
@@ -100,11 +100,11 @@ var AdminSocketSettings = AdminSocketBase.extend({
 			if (coolwsdVersionObj.PocoVersion !== undefined) {
 				buildConfig += ' (poco version: ' + coolwsdVersionObj.PocoVersion + ')';
 			}
-			$('#coolwsd-buildconfig').html(buildConfig);
+			$('#coolwsd-buildconfig').text(buildConfig);
 		}
 		else if (textMsg.startsWith('lokitversion ')) {
 			var lokitVersionObj = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
-			$('#lokit-buildconfig').html(lokitVersionObj.BuildConfig);
+			$('#lokit-buildconfig').text(lokitVersionObj.BuildConfig);
 		}
 	},
 

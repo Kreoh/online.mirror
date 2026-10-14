@@ -75,7 +75,7 @@ using namespace connectivity;
 using namespace comphelper;
 using namespace dbtools;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::sdbc;
@@ -88,8 +88,8 @@ using namespace ::com::sun::star::util;
 using namespace ::cppu;
 using namespace ::osl;
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_dba_ORowSet_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_dba_ORowSet_get_implementation(cpo::uno::XComponentContext* context,
                                                  cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ORowSet(context));
@@ -97,7 +97,7 @@ com_sun_star_comp_dba_ORowSet_get_implementation(css::uno::XComponentContext* co
 
 namespace dbaccess
 {
-ORowSet::ORowSet( const Reference< css::uno::XComponentContext >& _rxContext )
+ORowSet::ORowSet( const Reference< cpo::uno::XComponentContext >& _rxContext )
     :ORowSet_BASE1(m_aMutex)
     ,ORowSetBase( _rxContext, ORowSet_BASE1::rBHelper, &m_aMutex )
     ,m_aPrematureParamValues(new ORowSetValueVector)
@@ -332,7 +332,7 @@ void ORowSet::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rVal
             m_bOwnConnection = true;
             break;
         case PROPERTY_ID_TYPEMAP:
-            m_xTypeMap.set(m_aTypeMap, css::uno::UNO_QUERY);
+            m_xTypeMap.set(m_aTypeMap, cpo::uno::UNO_QUERY);
             break;
         case PROPERTY_ID_PROPCHANGE_NOTIFY:
             m_bPropChangeNotifyEnabled = ::cppu::any2bool(rValue);

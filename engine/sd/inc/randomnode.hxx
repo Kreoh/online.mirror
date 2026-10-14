@@ -21,14 +21,14 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 
 #include "sddllapi.h"
 
 namespace sd
 {
-SD_DLLPUBLIC css::uno::Reference<css::uno::XInterface>
+SD_DLLPUBLIC cpo::uno::Reference<cpo::uno::XInterface>
 RandomAnimationNode_createInstance(sal_Int16 nPresetClass);
 }
 

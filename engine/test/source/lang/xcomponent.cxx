@@ -17,7 +17,8 @@
 #include <cppunit/TestAssert.h>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 namespace
 {
 struct TestEventListener final : ::cppu::WeakImplHelper<lang::XEventListener>
@@ -27,7 +28,7 @@ struct TestEventListener final : ::cppu::WeakImplHelper<lang::XEventListener>
         : m_hasDisposingCalled(false)
     {
     }
-    virtual void SAL_CALL disposing(const lang::EventObject&) override
+    virtual void disposing(const lang::EventObject&) override
     {
         m_hasDisposingCalled = true;
     }

@@ -21,6 +21,7 @@
 #include <drawinglayer/primitive2d/PolyPolygonColorPrimitive2D.hxx>
 #include <drawinglayer/primitive2d/PolyPolygonRGBAPrimitive2D.hxx>
 #include <drawinglayer/primitive2d/PolygonStrokePrimitive2D.hxx>
+#include <drawinglayer/primitive2d/PolygonStrokeArrowPrimitive2D.hxx>
 #include <drawinglayer/primitive2d/PolygonHairlinePrimitive2D.hxx>
 #include <drawinglayer/primitive2d/PolyPolygonStrokePrimitive2D.hxx>
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
@@ -56,10 +57,12 @@
 #include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
 
 #include <basegfx/color/bcolormodifier.hxx>
+#include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/processor2d/Primitive2dJsonProcessor.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <drawinglayer/attribute/lineattribute.hxx>
+#include <drawinglayer/attribute/linestartendattribute.hxx>
 #include <drawinglayer/attribute/strokeattribute.hxx>
 
 #include <com/sun/star/drawing/LineCap.hpp>
@@ -95,6 +98,11 @@ protected:
         {
             drawinglayer::Primitive2dJsonProcessor aProcessor(aWriter);
             aProcessor.setBitmapCache(aBitmapCache);
+            // The writer serves an editing view, so a fixture has to say the same or the
+            // content kept for such a view alone would be missing from it.
+            drawinglayer::geometry::ViewInformation2D aViewInformation;
+            aViewInformation.setEditViewActive(true);
+            aProcessor.setViewInformation2D(aViewInformation);
             auto aArray = aWriter.startArray("primitives");
             aProcessor.decomposeAndWrite(rPrimitives);
         }
@@ -246,6 +254,46 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testPolygonStroke)
     assertJsonPathExists(aJson, "/primitives/0/path");
 }
 
+CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testPolygonStrokeArrow)
+{
+    // An arrow goes out as a group of the line, cut back under the head, and the filled head.
+    basegfx::B2DPolygon aPolygon;
+    aPolygon.append(basegfx::B2DPoint(0.0, 0.0));
+    aPolygon.append(basegfx::B2DPoint(1000.0, 0.0));
+
+    drawinglayer::attribute::LineAttribute aLine(basegfx::BColor(0.0, 0.0, 1.0), 20.0,
+                                                 basegfx::B2DLineJoin::Miter,
+                                                 css::drawing::LineCap_BUTT);
+
+    // The point of the head is at the top middle of its polygon.
+    basegfx::B2DPolygon aHead;
+    aHead.append(basegfx::B2DPoint(50.0, 0.0));
+    aHead.append(basegfx::B2DPoint(100.0, 100.0));
+    aHead.append(basegfx::B2DPoint(0.0, 100.0));
+    aHead.setClosed(true);
+    const drawinglayer::attribute::LineStartEndAttribute aEnd(100.0, basegfx::B2DPolyPolygon(aHead),
+                                                              false);
+
+    Primitive2DContainer aPrimitives;
+    aPrimitives.append(new PolygonStrokeArrowPrimitive2D(
+        aPolygon, aLine, drawinglayer::attribute::LineStartEndAttribute(), aEnd));
+
+    auto aJson = writeReference(u"testPolygonStrokeArrow", aPrimitives);
+
+    assertJsonPath(aJson, "/primitives/0/type", "polygonStrokeArrow");
+    assertJsonPathMissing(aJson, "/primitives/0/path");
+    assertJsonPath(aJson, "/primitives/0/children/0/type", "group");
+    assertJsonPathSize(aJson, "/primitives/0/children/0/children", 2);
+
+    assertJsonPath(aJson, "/primitives/0/children/0/children/0/type", "polygonStroke");
+    assertJsonPath(aJson, "/primitives/0/children/0/children/0/line/color", "#0000ff");
+
+    assertJsonPath(aJson, "/primitives/0/children/0/children/1/type", "polyPolygonColor");
+    assertJsonPath(aJson, "/primitives/0/children/0/children/1/color", "#0000ff");
+    // The point of the head is on the end of the line.
+    assertJsonPathDouble(aJson, "/primitives/0/children/0/children/1/bounds/2", 1000.0, 1e-3);
+}
+
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGroup)
 {
     // A group of two child primitives, a filled triangle followed
@@ -327,11 +375,9 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testTransform)
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testHiddenGeometry)
 {
-    // HiddenGeometryPrimitive2D wraps content that is rendered
-    // only for hit-testing. The fixture wraps a filled triangle so
-    // there are real children present. The wire output only carries
-    // the type tag, since the JSON processor drops the children on
-    // purpose.
+    // HiddenGeometryPrimitive2D wraps content that is there to be
+    // hit rather than seen. The children travel, so a reader can
+    // hit-test against them, and the type tag says not to draw them.
     basegfx::B2DPolygon aTriangle;
     aTriangle.append(basegfx::B2DPoint(0.0, 0.0));
     aTriangle.append(basegfx::B2DPoint(100.0, 0.0));
@@ -348,13 +394,14 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testHiddenGeometry)
     auto aJson = writeReference(u"testHiddenGeometry", aPrimitives);
 
     assertJsonPath(aJson, "/primitives/0/type", "hiddenGeometry");
+    assertJsonPath(aJson, "/primitives/0/children/0/type", "polyPolygonColor");
 }
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testExclusiveEditView)
 {
-    // ExclusiveEditViewPrimitive2D wraps content visible only in
-    // edit mode. Same shape as hiddenGeometry - real children but
-    // those get dropped on the wire.
+    // ExclusiveEditViewPrimitive2D wraps the content an editing view alone
+    // shows. The payload serves such a view, so the children travel with it
+    // and a reader that is not an editing view leaves them undrawn.
     basegfx::B2DPolygon aTriangle;
     aTriangle.append(basegfx::B2DPoint(0.0, 0.0));
     aTriangle.append(basegfx::B2DPoint(100.0, 0.0));
@@ -371,6 +418,8 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testExclusiveEditView)
     auto aJson = writeReference(u"testExclusiveEditView", aPrimitives);
 
     assertJsonPath(aJson, "/primitives/0/type", "exclusiveEditView");
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aJson.getSize("/primitives/0/children").value_or(0));
+    assertJsonPath(aJson, "/primitives/0/children/0/type", "polyPolygonColor");
 }
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testObjectInfoPrimitive)
@@ -479,10 +528,7 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testModifiedColorInvert)
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testModifiedColorReplace)
 {
-    // ModifiedColorPrimitive2D with a replace modifier. The wire
-    // carries an extra "color" field. The renderer leaves the
-    // children rendered as-is for now, since colour substitution
-    // is not implemented yet.
+    // A replace modifier carries the "color" that every visible pixel of the children takes.
     basegfx::B2DPolygon aTriangle;
     aTriangle.append(basegfx::B2DPoint(0.0, 0.0));
     aTriangle.append(basegfx::B2DPoint(100.0, 0.0));
@@ -503,6 +549,64 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testModifiedColorReplace)
     assertJsonPath(aJson, "/primitives/0/type", "modifiedColor");
     assertJsonPath(aJson, "/primitives/0/modifier", "replace");
     assertJsonPath(aJson, "/primitives/0/color", "#ff0000");
+}
+
+CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testModifiedColorParameters)
+{
+    // Each modifier that takes parameters, around a red triangle, carries them on the wire. The
+    // luminance and contrast modifier is covered by the adjusted graphic.
+    basegfx::B2DPolygon aTriangle;
+    aTriangle.append(basegfx::B2DPoint(0.0, 0.0));
+    aTriangle.append(basegfx::B2DPoint(100.0, 0.0));
+    aTriangle.append(basegfx::B2DPoint(100.0, 100.0));
+    aTriangle.setClosed(true);
+
+    const basegfx::BColorModifierSharedPtr aModifiers[] = {
+        std::make_shared<basegfx::BColorModifier_interpolate>(basegfx::BColor(0.0, 0.0, 1.0), 0.25),
+        std::make_shared<basegfx::BColorModifier_saturate>(0.5),
+        std::make_shared<basegfx::BColorModifier_hueRotate>(M_PI / 2.0),
+        std::make_shared<basegfx::BColorModifier_matrix>(
+            std::vector<double>{ 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+                                 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0 }),
+        std::make_shared<basegfx::BColorModifier_black_and_white>(0.25),
+        std::make_shared<basegfx::BColorModifier_gamma>(2.0),
+        std::make_shared<basegfx::BColorModifier_luminance_to_alpha>(),
+    };
+
+    Primitive2DContainer aPrimitives;
+    for (const auto& rModifier : aModifiers)
+    {
+        Primitive2DContainer aChildren;
+        aChildren.append(new PolyPolygonColorPrimitive2D(basegfx::B2DPolyPolygon(aTriangle),
+                                                         basegfx::BColor(1.0, 0.0, 0.0)));
+        aPrimitives.append(new ModifiedColorPrimitive2D(std::move(aChildren), rModifier));
+    }
+
+    auto aJson = writeReference(u"testModifiedColorParameters", aPrimitives);
+
+    assertJsonPath(aJson, "/primitives/0/modifier", "interpolate");
+    assertJsonPath(aJson, "/primitives/0/color", "#0000ff");
+    assertJsonPathDouble(aJson, "/primitives/0/value", 0.25, 1e-9);
+
+    // Saturate and hue rotate go out as their 3x3 matrix, row by row.
+    assertJsonPath(aJson, "/primitives/1/modifier", "saturate");
+    assertJsonPathSize(aJson, "/primitives/1/matrix", 9);
+    assertJsonPathDouble(aJson, "/primitives/1/matrix/0", 0.213 + 0.787 * 0.5, 1e-9);
+    assertJsonPath(aJson, "/primitives/2/modifier", "hueRotate");
+    assertJsonPathSize(aJson, "/primitives/2/matrix", 9);
+
+    // The general matrix keeps its 4x5 values as given.
+    assertJsonPath(aJson, "/primitives/3/modifier", "matrix");
+    assertJsonPathSize(aJson, "/primitives/3/matrix", 20);
+    assertJsonPathDouble(aJson, "/primitives/3/matrix/1", 1.0, 1e-9);
+
+    assertJsonPath(aJson, "/primitives/4/modifier", "black_and_white");
+    assertJsonPathDouble(aJson, "/primitives/4/value", 0.25, 1e-9);
+
+    assertJsonPath(aJson, "/primitives/5/modifier", "gamma");
+    assertJsonPathDouble(aJson, "/primitives/5/value", 2.0, 1e-9);
+
+    assertJsonPath(aJson, "/primitives/6/modifier", "luminance_to_alpha");
 }
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testFilledRectangle)
@@ -857,9 +961,7 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicMirror)
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicDrawMode)
 {
-    // A raster graphic rendered as greyscale through the
-    // engine's special draw mode. The wire carries the chosen
-    // mode as a short string ("greys", "mono", "watermark").
+    // A grayscale draw mode goes out as the gray color modifier.
     Bitmap aBitmap(Size(10, 10), vcl::PixelFormat::N24_BPP);
     basegfx::B2DHomMatrix aTransform;
     aTransform.scale(100.0, 100.0);
@@ -875,7 +977,90 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicDrawMode)
     auto aJson = writeReference(u"testGraphicDrawMode", aPrimitives);
 
     assertJsonPath(aJson, "/primitives/0/type", "graphic");
-    assertJsonPath(aJson, "/primitives/0/drawMode", "greys");
+    assertJsonPathSize(aJson, "/primitives/0/colorModifiers", 1);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/0/modifier", "gray");
+}
+
+CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicWatermark)
+{
+    // The watermark draw mode goes out as a luminance and contrast change only.
+    Bitmap aBitmap(Size(10, 10), vcl::PixelFormat::N24_BPP);
+    basegfx::B2DHomMatrix aTransform;
+    aTransform.scale(100.0, 100.0);
+
+    GraphicObject aGraphicObject{ Graphic(aBitmap) };
+    GraphicAttr aAttribute;
+    aAttribute.SetDrawMode(GraphicDrawMode::Watermark);
+
+    Primitive2DContainer aPrimitives;
+    aPrimitives.append(
+        new drawinglayer::primitive2d::GraphicPrimitive2D(aTransform, aGraphicObject, aAttribute));
+
+    auto aJson = writeReference(u"testGraphicWatermark", aPrimitives);
+
+    assertJsonPathSize(aJson, "/primitives/0/colorModifiers", 1);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/0/modifier", "RGBLuminanceContrast");
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/0/luminance", 0.5, 1e-9);
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/0/contrast", -0.7, 1e-9);
+}
+
+CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicAdjusted)
+{
+    // Every picture adjustment on top of the mono draw mode, listed in the order they apply.
+    Bitmap aBitmap(Size(10, 10), vcl::PixelFormat::N24_BPP);
+    basegfx::B2DHomMatrix aTransform;
+    aTransform.scale(100.0, 100.0);
+
+    GraphicObject aGraphicObject{ Graphic(aBitmap) };
+    GraphicAttr aAttribute;
+    aAttribute.SetDrawMode(GraphicDrawMode::Mono);
+    aAttribute.SetLuminance(20);
+    aAttribute.SetContrast(-10);
+    aAttribute.SetChannelR(5);
+    aAttribute.SetChannelG(-15);
+    aAttribute.SetChannelB(25);
+    aAttribute.SetGamma(2.0);
+    aAttribute.SetInvert(true);
+
+    Primitive2DContainer aPrimitives;
+    aPrimitives.append(
+        new drawinglayer::primitive2d::GraphicPrimitive2D(aTransform, aGraphicObject, aAttribute));
+
+    auto aJson = writeReference(u"testGraphicAdjusted", aPrimitives);
+
+    assertJsonPath(aJson, "/primitives/0/type", "graphic");
+    assertJsonPathMissing(aJson, "/primitives/0/vector");
+    assertJsonPathSize(aJson, "/primitives/0/colorModifiers", 4);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/0/modifier", "black_and_white");
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/0/value", 0.5, 1e-9);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/1/modifier", "RGBLuminanceContrast");
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/1/red", 0.05, 1e-9);
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/1/green", -0.15, 1e-9);
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/1/blue", 0.25, 1e-9);
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/1/luminance", 0.2, 1e-9);
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/1/contrast", -0.1, 1e-9);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/2/modifier", "gamma");
+    assertJsonPathDouble(aJson, "/primitives/0/colorModifiers/2/value", 2.0, 1e-9);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/3/modifier", "invert");
+}
+
+CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicUnadjusted)
+{
+    // A raster graphic in its own colors carries no modifier list.
+    Bitmap aBitmap(Size(10, 10), vcl::PixelFormat::N24_BPP);
+    basegfx::B2DHomMatrix aTransform;
+    aTransform.scale(100.0, 100.0);
+
+    GraphicObject aGraphicObject{ Graphic(aBitmap) };
+
+    Primitive2DContainer aPrimitives;
+    aPrimitives.append(new drawinglayer::primitive2d::GraphicPrimitive2D(aTransform, aGraphicObject,
+                                                                         GraphicAttr()));
+
+    auto aJson = writeReference(u"testGraphicUnadjusted", aPrimitives);
+
+    assertJsonPath(aJson, "/primitives/0/type", "graphic");
+    assertJsonPathMissing(aJson, "/primitives/0/colorModifiers");
 }
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicSvg)
@@ -909,6 +1094,39 @@ CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicSvg)
     assertJsonPathExists(aJson, "/primitives/0/checksum");
     assertJsonPathMissing(aJson, "/primitives/0/vector");
     assertJsonPathMissing(aJson, "/primitives/0/children");
+    assertJsonPathMissing(aJson, "/primitives/0/colorModifiers");
+}
+
+CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicSvgAdjusted)
+{
+    // An SVG graphic carries the same color modifier list as a raster graphic.
+    static constexpr OString sSvg
+        = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">"
+          "<rect width=\"10\" height=\"10\" fill=\"red\"/></svg>"_ostr;
+    SvMemoryStream aStream(const_cast<char*>(sSvg.getStr()), sSvg.getLength(), StreamMode::READ);
+    auto pVectorData = std::make_shared<VectorGraphicData>(
+        BinaryDataContainer(aStream, sSvg.getLength()), VectorGraphicDataType::Svg);
+    Graphic aGraphic(pVectorData);
+
+    basegfx::B2DHomMatrix aTransform;
+    aTransform.scale(100.0, 100.0);
+
+    GraphicObject aGraphicObject{ aGraphic };
+    GraphicAttr aAttribute;
+    aAttribute.SetDrawMode(GraphicDrawMode::Greys);
+    aAttribute.SetInvert(true);
+
+    Primitive2DContainer aPrimitives;
+    aPrimitives.append(
+        new drawinglayer::primitive2d::GraphicPrimitive2D(aTransform, aGraphicObject, aAttribute));
+
+    auto aJson = writeReference(u"testGraphicSvgAdjusted", aPrimitives);
+
+    assertJsonPath(aJson, "/primitives/0/type", "graphic");
+    assertJsonPathMissing(aJson, "/primitives/0/vector");
+    assertJsonPathSize(aJson, "/primitives/0/colorModifiers", 2);
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/0/modifier", "gray");
+    assertJsonPath(aJson, "/primitives/0/colorModifiers/1/modifier", "invert");
 }
 
 CPPUNIT_TEST_FIXTURE(VectorPrimitiveReferenceTest, testGraphicEmf)

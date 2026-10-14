@@ -31,7 +31,7 @@
 
 using namespace ::rtl;
 using namespace ::cppu;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace cppu
 {
@@ -61,7 +61,7 @@ static typelib_InterfaceTypeDescription * impl_get_type_XCurrentContext()
     aParameters[0].bIn = true;
     aParameters[0].bOut = false;
     rtl_uString* pExceptions[1];
-    OUString sExceptionName0(u"com.sun.star.uno.RuntimeException"_ustr);
+    OUString sExceptionName0(u"cpo.uno.RuntimeException"_ustr);
     pExceptions[0] = sExceptionName0.pData;
     OUString sReturnType0(u"any"_ustr);
     typelib_typedescription_newInterfaceMethod(&pMethod, 3, false, sMethodName0.pData,
@@ -165,12 +165,12 @@ extern "C" bool uno_getCurrentContext(
 {
     IdContainer& id = getIdContainer();
 
-    Environment target_env;
+    cpo::uno::Environment target_env;
 
     // release inout parameter
     if (*ppCurrentContext)
     {
-        target_env = Environment(OUString(pEnvTypeName), pEnvContext);
+        target_env = cpo::uno::Environment(OUString(pEnvTypeName), pEnvContext);
         OSL_ASSERT( target_env.is() );
         if (! target_env.is())
             return false;
@@ -189,13 +189,13 @@ extern "C" bool uno_getCurrentContext(
 
     if (! target_env.is())
     {
-        target_env = Environment(OUString(pEnvTypeName), pEnvContext);
+        target_env = cpo::uno::Environment(OUString(pEnvTypeName), pEnvContext);
         OSL_ASSERT( target_env.is() );
         if (! target_env.is())
             return false;
     }
 
-    Mapping mapping(&id.pCurrentContextEnv->aBase, target_env.get());
+    cpo::uno::Mapping mapping(&id.pCurrentContextEnv->aBase, target_env.get());
     OSL_ASSERT( mapping.is() );
     if (! mapping.is())
         return false;

@@ -20,9 +20,9 @@
 #define INCLUDED_VBAHELPER_VBADOCUMENTBASE_HXX
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <ooo/vba/XDocumentBase.hpp>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
@@ -32,8 +32,8 @@
 
 namespace com::sun::star {
     namespace frame { class XModel; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ooo::vba {
     class XDocumentBase;
@@ -45,36 +45,36 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::XDocumentBase > VbaDocumentB
 class VBAHELPER_DLLPUBLIC VbaDocumentBase : public VbaDocumentBase_BASE
 {
 protected:
-    css::uno::Reference< css::uno::XInterface > mxVBProject;
+    cpo::uno::Reference< cpo::uno::XInterface > mxVBProject;
 protected:
     virtual css::frame::XModel* getModel() const = 0;
 public:
-    VbaDocumentBase(    const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext );
-    VbaDocumentBase(    cpo::uno::Sequence< cpo::uno::Any > const& aArgs, css::uno::Reference< css::uno::XComponentContext >const& xContext );
+    VbaDocumentBase(    const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
+    VbaDocumentBase(    cpo::uno::Sequence< cpo::uno::Any > const& aArgs, cpo::uno::Reference< cpo::uno::XComponentContext >const& xContext );
 
     // Attributes
-    virtual OUString SAL_CALL getName() override;
-    virtual OUString SAL_CALL getPath() override;
-    virtual OUString SAL_CALL getFullName() override;
-    virtual bool SAL_CALL getSaved() override;
-    virtual void SAL_CALL setSaved( bool bSave ) override;
-    virtual cpo::uno::Any SAL_CALL getVBProject() override;
+    virtual OUString getName() override;
+    virtual OUString getPath() override;
+    virtual OUString getFullName() override;
+    virtual bool getSaved() override;
+    virtual void setSaved( bool bSave ) override;
+    virtual cpo::uno::Any getVBProject() override;
 
     // Methods
-    virtual void SAL_CALL Close( const cpo::uno::Any &bSaveChanges,
+    virtual void Close( const cpo::uno::Any &bSaveChanges,
                                  const cpo::uno::Any &aFileName,
                                  const cpo::uno::Any &bRouteWorkbook ) override;
-    /// @throws css::uno::RuntimeException
-    virtual void SAL_CALL Protect( const cpo::uno::Any &aPassword );
-    virtual void SAL_CALL Unprotect( const cpo::uno::Any &aPassword ) override;
-    virtual void SAL_CALL Save() override;
-    virtual void SAL_CALL Activate() override;
+    /// @throws cpo::uno::RuntimeException
+    virtual void Protect( const cpo::uno::Any &aPassword );
+    virtual void Unprotect( const cpo::uno::Any &aPassword ) override;
+    virtual void Save() override;
+    virtual void Activate() override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
 
-    static OUString getNameFromModel( const css::uno::Reference< css::frame::XModel >& xModel );
+    static OUString getNameFromModel( const cpo::uno::Reference< css::frame::XModel >& xModel );
 };
 
 #endif // INCLUDED_VBAHELPER_VBADOCUMENTBASE_HXX

@@ -8,8 +8,8 @@
  */
 
 #include <cppuhelper/bootstrap.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/frame/XDesktop.hpp>
@@ -18,7 +18,7 @@
 #include <rtl/ustring.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::frame;
 
@@ -41,7 +41,8 @@ SAL_DLLPUBLIC_EXPORT void* defaultBootstrap_InitialComponentContext()
     {
         // Call the actual LibreOffice bootstrap function
         SAL_INFO("rustuno", "Calling cppu::defaultBootstrap_InitialComponentContext");
-        Reference<XComponentContext> xContext = cppu::defaultBootstrap_InitialComponentContext();
+        Reference<cpo::uno::XComponentContext> xContext
+            = cppu::defaultBootstrap_InitialComponentContext();
 
         if (!xContext.is())
         {
@@ -51,7 +52,7 @@ SAL_DLLPUBLIC_EXPORT void* defaultBootstrap_InitialComponentContext()
 
         SAL_INFO("rustuno", "Component context created successfully");
 
-        auto res = new Reference<XComponentContext>(xContext);
+        auto res = new Reference<cpo::uno::XComponentContext>(xContext);
 
         if (!res->is())
         {

@@ -28,6 +28,7 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
+#include <comphelper/fileurl.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/sequence.hxx>
 #include <tools/urlobj.hxx>
@@ -37,7 +38,7 @@
 
 //  namespaces
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 constexpr OUString PROPERTYNAME_MACRO_TRUSTEDAUTHORS = u"TrustedAuthors"_ustr;
@@ -151,8 +152,6 @@ bool isSecureMacroUri(
             // is considered safe:
             return true;
         }
-        [[fallthrough]];
-    case INetProtocol::Slot:
         return referer.equalsIgnoreAsciiCase("private:user")
             || isTrustedLocationUri(referer);
     default:
@@ -169,9 +168,15 @@ bool isUntrustedReferer(OUString const & referer)
 
 bool isTrustedLocationUri(OUString const & uri)
 {
+    // Only an existing file location is trusted, compared in its canonical form.
+    OUString aCandidate(uri);
+    if (!comphelper::isFileUrl(aCandidate) || !comphelper::makeCanonicalFileURL(aCandidate))
+        return false;
     for (const auto & url : GetSecureURLs())
     {
-        if (utl::UCBContentHelper::IsSubPath(url, uri))
+        OUString aFolder(url);
+        if (comphelper::isFileUrl(aFolder) && comphelper::makeCanonicalFileURL(aFolder)
+            && utl::UCBContentHelper::IsSubPath(aFolder, aCandidate))
         {
             return true;
         }

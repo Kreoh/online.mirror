@@ -44,8 +44,19 @@
 
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/drawing/XMasterPageTarget.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/util/XComplexColor.hpp>
+#include <docmodel/theme/ColorSet.hxx>
+#include <docmodel/theme/Theme.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
+
+#include <algorithm>
+#include <cstdlib>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 namespace {
@@ -58,8 +69,8 @@ public:
 
     SdXMLBodyContext_Impl( SdXMLImport& rImport );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-                sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+                sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 };
 
 }
@@ -69,7 +80,7 @@ SdXMLBodyContext_Impl::SdXMLBodyContext_Impl( SdXMLImport& rImport ) :
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLBodyContext_Impl::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLBodyContext_Impl::createFastChildContext(
         sal_Int32 /*nElement*/,
         const uno::Reference< xml::sax::XFastAttributeList > & /*xAttrList*/ )
 {
@@ -88,8 +99,8 @@ protected:
 public:
     SdXMLDocContext_Impl( SdXMLImport& rImport );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 }
@@ -100,7 +111,7 @@ SdXMLDocContext_Impl::SdXMLDocContext_Impl(
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SdXMLDocContext_Impl::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > SdXMLDocContext_Impl::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     switch (nElement)
@@ -181,8 +192,8 @@ public:
     SdXMLFlatDocContext_Impl( SdXMLImport& i_rImport,
         const uno::Reference<document::XDocumentProperties>& i_xDocProps );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 }
@@ -195,7 +206,7 @@ SdXMLFlatDocContext_Impl::SdXMLFlatDocContext_Impl( SdXMLImport& i_rImport,
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SdXMLFlatDocContext_Impl::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > SdXMLFlatDocContext_Impl::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     // behave like meta base class iff we encounter office:meta
@@ -208,23 +219,23 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SdXMLFlatDocContext_Imp
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Impress_XMLOasisImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(
         new SdXMLImport(pCtx, u"XMLImpressImportOasis"_ustr, false, SvXMLImportFlags::ALL));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_Draw_XMLOasisImporter_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Draw_XMLOasisImporter_get_implementation(cpo::uno::XComponentContext* pCtx,
                                                            cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SdXMLImport(pCtx, u"XMLDrawImportOasis"_ustr, true, SvXMLImportFlags::ALL));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_Draw_XMLOasisStylesImporter_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Draw_XMLOasisStylesImporter_get_implementation(cpo::uno::XComponentContext* pCtx,
                                                            cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SdXMLImport(pCtx, u"XMLDrawStylesImportOasis"_ustr, true,
@@ -232,9 +243,9 @@ com_sun_star_comp_Draw_XMLOasisStylesImporter_get_implementation(uno::XComponent
                                              | SvXMLImportFlags::MASTERSTYLES));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Draw_XMLOasisContentImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SdXMLImport(pCtx, u"XMLDrawContentImportOasis"_ustr, true,
                                          SvXMLImportFlags::AUTOSTYLES | SvXMLImportFlags::CONTENT
@@ -242,34 +253,34 @@ com_sun_star_comp_Draw_XMLOasisContentImporter_get_implementation(
                                              | SvXMLImportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Draw_XMLOasisMetaImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(
         new SdXMLImport(pCtx, u"XMLDrawMetaImportOasis"_ustr, true, SvXMLImportFlags::META));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Draw_XMLOasisSettingsImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(
         new SdXMLImport(pCtx, u"XMLDrawSettingsImportOasis"_ustr, true, SvXMLImportFlags::SETTINGS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Impress_XMLOasisStylesImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SdXMLImport(pCtx, u"XMLImpressStylesImportOasis"_ustr, false,
                                          SvXMLImportFlags::STYLES | SvXMLImportFlags::AUTOSTYLES
                                              | SvXMLImportFlags::MASTERSTYLES));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Impress_XMLOasisContentImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SdXMLImport(pCtx, u"XMLImpressContentImportOasis"_ustr, false,
                                          SvXMLImportFlags::AUTOSTYLES | SvXMLImportFlags::CONTENT
@@ -277,24 +288,24 @@ com_sun_star_comp_Impress_XMLOasisContentImporter_get_implementation(
                                              | SvXMLImportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Impress_XMLOasisMetaImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(
         new SdXMLImport(pCtx, u"XMLImpressMetaImportOasis"_ustr, false, SvXMLImportFlags::META));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Impress_XMLOasisSettingsImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(
         new SdXMLImport(pCtx, u"XMLImpressSettingsImportOasis"_ustr, false, SvXMLImportFlags::SETTINGS));
 }
 
 SdXMLImport::SdXMLImport(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString const & implementationName,
     bool bIsDraw, SvXMLImportFlags nImportFlags )
 :   SvXMLImport( xContext, implementationName, nImportFlags ),
@@ -317,7 +328,7 @@ SdXMLImport::SdXMLImport(
 }
 
 // XImporter
-void SAL_CALL SdXMLImport::setTargetDocument( const uno::Reference< lang::XComponent >& xDoc )
+void SdXMLImport::setTargetDocument( const uno::Reference< lang::XComponent >& xDoc )
 {
     SvXMLImport::setTargetDocument( xDoc );
 
@@ -370,7 +381,7 @@ void SAL_CALL SdXMLImport::setTargetDocument( const uno::Reference< lang::XCompo
 }
 
 // XInitialization
-void SAL_CALL SdXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void SdXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     SvXMLImport::initialize( aArguments );
 
@@ -405,7 +416,148 @@ void SAL_CALL SdXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >
     }
 }
 
-void SAL_CALL SdXMLImport::endDocument()
+// Documents saved before a fill or a line kept its plain color and its theme color in step can
+// carry a theme color that no longer gives the color that is shown. The shown color is the one the
+// user chose, so the theme color is dropped.
+namespace
+{
+using ThemeList = std::vector<std::shared_ptr<model::Theme>>;
+
+void addTheme(ThemeList& rThemes, const std::shared_ptr<model::Theme>& pTheme)
+{
+    if (pTheme && pTheme->getColorSet()
+        && std::find(rThemes.begin(), rThemes.end(), pTheme) == rThemes.end())
+        rThemes.push_back(pTheme);
+}
+
+std::shared_ptr<model::Theme> getTheme(const uno::Reference<uno::XInterface>& xObject)
+{
+    uno::Reference<beans::XPropertySet> xSet(xObject, uno::UNO_QUERY);
+    if (!xSet.is() || !xSet->getPropertySetInfo()->hasPropertyByName(u"Theme"_ustr))
+        return nullptr;
+    return model::Theme::FromAny(xSet->getPropertyValue(u"Theme"_ustr));
+}
+
+bool resolvesToColor(const model::ComplexColor& rComplexColor, const ThemeList& rThemes,
+                     Color aColor)
+{
+    // The luminance transformations go through HSL, which can round a channel by a step or two.
+    auto isNearly = [aColor](Color aResolved)
+    {
+        constexpr int ROUNDING_TOLERANCE = 2;
+        return std::abs(aResolved.GetRed() - aColor.GetRed()) <= ROUNDING_TOLERANCE
+               && std::abs(aResolved.GetGreen() - aColor.GetGreen()) <= ROUNDING_TOLERANCE
+               && std::abs(aResolved.GetBlue() - aColor.GetBlue()) <= ROUNDING_TOLERANCE;
+    };
+    return std::any_of(rThemes.begin(), rThemes.end(),
+                       [&](const auto& pTheme)
+                       {
+                           const model::ColorSet& rColorSet = *pTheme->getColorSet();
+                           return isNearly(rColorSet.resolveColor(rComplexColor))
+                                  || isNearly(rColorSet.resolveOOXMLColor(rComplexColor));
+                       });
+}
+
+void dropStaleThemeColor(const uno::Reference<beans::XPropertySet>& xSet,
+                         const OUString& rColorName, const OUString& rComplexColorName,
+                         const ThemeList& rThemes)
+{
+    if (rThemes.empty())
+        return;
+    uno::Reference<beans::XPropertyState> xState(xSet, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySetInfo> xInfo = xSet->getPropertySetInfo();
+    if (!xState.is() || !xInfo->hasPropertyByName(rColorName)
+        || !xInfo->hasPropertyByName(rComplexColorName)
+        || xState->getPropertyState(rColorName) != beans::PropertyState_DIRECT_VALUE)
+        return;
+
+    uno::Reference<util::XComplexColor> xComplexColor;
+    xSet->getPropertyValue(rComplexColorName) >>= xComplexColor;
+    if (!xComplexColor.is())
+        return;
+    model::ComplexColor aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+    Color aColor;
+    if (aComplexColor.getThemeColorType() == model::ThemeColorType::Unknown
+        || !(xSet->getPropertyValue(rColorName) >>= aColor)
+        || resolvesToColor(aComplexColor, rThemes, aColor))
+        return;
+
+    xSet->setPropertyValue(rComplexColorName,
+                           uno::Any(model::color::createXComplexColor(model::ComplexColor())));
+}
+
+void dropStaleThemeColors(const uno::Reference<beans::XPropertySet>& xSet, const ThemeList& rThemes)
+{
+    dropStaleThemeColor(xSet, u"FillColor"_ustr, u"FillComplexColor"_ustr, rThemes);
+    dropStaleThemeColor(xSet, u"LineColor"_ustr, u"LineComplexColor"_ustr, rThemes);
+}
+
+void dropStaleThemeColorsOfShapes(const uno::Reference<drawing::XShapes>& xShapes,
+                                  const ThemeList& rThemes)
+{
+    for (sal_Int32 i = 0; i < xShapes->getCount(); ++i)
+    {
+        uno::Any aShape = xShapes->getByIndex(i);
+        if (uno::Reference<drawing::XShapes> xGroup{ aShape, uno::UNO_QUERY })
+            dropStaleThemeColorsOfShapes(xGroup, rThemes);
+        else if (uno::Reference<beans::XPropertySet> xShapeSet{ aShape, uno::UNO_QUERY })
+            dropStaleThemeColors(xShapeSet, rThemes);
+    }
+}
+
+void dropStaleThemeColorsOfDocument(const uno::Reference<frame::XModel>& xModel)
+{
+    std::shared_ptr<model::Theme> pDocumentTheme = getTheme(xModel);
+
+    uno::Reference<drawing::XMasterPagesSupplier> xMasterPagesSupplier(xModel, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(xModel, uno::UNO_QUERY);
+    if (!xMasterPagesSupplier.is() || !xDrawPagesSupplier.is())
+        return;
+
+    ThemeList aAllThemes;
+    for (const auto& xPages :
+         { xMasterPagesSupplier->getMasterPages(), xDrawPagesSupplier->getDrawPages() })
+    {
+        for (sal_Int32 i = 0; i < xPages->getCount(); ++i)
+        {
+            uno::Reference<drawing::XDrawPage> xPage(xPages->getByIndex(i), uno::UNO_QUERY_THROW);
+            // A shape takes the theme of its master page, or else the one of the document. A
+            // master page is not a master page target, and its shapes take its own theme.
+            uno::Reference<drawing::XMasterPageTarget> xTarget(xPage, uno::UNO_QUERY);
+            ThemeList aThemes;
+            addTheme(aThemes, getTheme(xTarget.is() ? xTarget->getMasterPage() : xPage));
+            if (aThemes.empty())
+                addTheme(aThemes, pDocumentTheme);
+            dropStaleThemeColorsOfShapes(xPage, aThemes);
+            for (const auto& pTheme : aThemes)
+                addTheme(aAllThemes, pTheme);
+        }
+    }
+    addTheme(aAllThemes, pDocumentTheme);
+
+    // A style can be used on any page, so its theme color is kept when any theme gives its color.
+    uno::Reference<style::XStyleFamiliesSupplier> xFamiliesSupplier(xModel, uno::UNO_QUERY);
+    if (!xFamiliesSupplier.is())
+        return;
+    uno::Reference<container::XNameAccess> xFamilies = xFamiliesSupplier->getStyleFamilies();
+    for (const OUString& rFamilyName : xFamilies->getElementNames())
+    {
+        uno::Reference<container::XNameAccess> xFamily(xFamilies->getByName(rFamilyName),
+                                                       uno::UNO_QUERY);
+        if (!xFamily.is())
+            continue;
+        for (const OUString& rStyleName : xFamily->getElementNames())
+        {
+            uno::Reference<beans::XPropertySet> xStyle(xFamily->getByName(rStyleName),
+                                                       uno::UNO_QUERY);
+            if (xStyle.is())
+                dropStaleThemeColors(xStyle, aAllThemes);
+        }
+    }
+}
+}
+
+void SdXMLImport::endDocument()
 {
     SvXMLImport::endDocument();
 
@@ -431,6 +583,10 @@ void SAL_CALL SdXMLImport::endDocument()
     }
 
     maPageShapeRefs.clear();
+
+    // The content comes last, so its import sees every page, style and theme of the document.
+    if (mbLoadDoc && (getImportFlags() & SvXMLImportFlags::CONTENT))
+        dropStaleThemeColorsOfDocument(GetModel());
 }
 
 SvXMLImportContext *SdXMLImport::CreateFastContext( sal_Int32 nElement,
@@ -576,6 +732,20 @@ void SdXMLImport::SetConfigurationSettings(const cpo::uno::Sequence<css::beans::
     if( !xInfo.is() )
         return;
 
+    // Documents written after these were introduced store them, in the settings below or in the
+    // view settings, and those values replace these.
+    static constexpr OUString aLegacyFlags[] = {
+        u"AnchoredTextOverflowLegacy"_ustr, // tdf#99729
+        u"LegacySingleLineFontwork"_ustr, // tdf#148000
+        u"LineSpacingBelowBaselineLegacy"_ustr, // tdf#163590
+        u"TextFittingLegacy"_ustr, // tdf#163590
+    };
+    for (const OUString& rName : aLegacyFlags)
+    {
+        if (xInfo->hasPropertyByName(rName))
+            xProps->setPropertyValue(rName, uno::Any(true));
+    }
+
     const cpo::uno::Sequence<beans::PropertyValue>* pValues = &aConfigProps;
 
     DocumentSettingsSerializer *pFilter;
@@ -658,7 +828,7 @@ void SdXMLImport::AddDateTimeDecl( const OUString& rName, const OUString& rText,
     }
 }
 
-void SdXMLImport::AddPageShapePageNum(const css::uno::Reference<css::drawing::XShape>& rxShape, sal_Int32 nPageNumber)
+void SdXMLImport::AddPageShapePageNum(const cpo::uno::Reference<css::drawing::XShape>& rxShape, sal_Int32 nPageNumber)
 {
     maPageShapeRefs.push_back({rxShape, nPageNumber});
 }

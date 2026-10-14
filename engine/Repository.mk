@@ -34,7 +34,6 @@ $(eval $(call gb_Helper_register_executables,NONE, \
 	concat-deps \
 	cpp \
 	cppunittester \
-	$(if $(ENABLE_EMBIND_UNO),embindmaker) \
 	$(if $(or $(filter EMSCRIPTEN,$(BUILD_TYPE_FOR_HOST)),$(filter EMSCRIPTEN,$(OS))),wasmbridgegen) \
 	gbuildtojson \
 	$(if $(filter MSC,$(COM)), \
@@ -68,27 +67,25 @@ $(eval $(call gb_Helper_register_executables,NONE, \
 	$(if $(filter-out ANDROID iOS WNT,$(OS)), \
         fftester \
         svpclient ) \
-	$(if $(filter LINUX %BSD SOLARIS,$(OS)), tilebench) \
-	$(if $(filter LINUX MACOSX SOLARIS WNT %BSD,$(OS)),icontest) \
+	$(if $(filter LINUX %BSD,$(OS)), tilebench) \
+	$(if $(filter LINUX MACOSX WNT %BSD,$(OS)),icontest) \
 	vcldemo \
 	svdemo \
 	minvcl \
+	$(if $(UNITEDLIBS),unitedlibs-link-map-generator) \
 	svptest \
 	tiledrendering \
 	mtfdemo \
 	visualbackendtest \
 	listfonts \
 	listglyphs \
-	$(if $(and $(ENABLE_GTK3), $(filter LINUX %BSD SOLARIS,$(OS))), gtktiledviewer) \
+	$(if $(and $(ENABLE_GTK3), $(filter LINUX %BSD,$(OS))), gtktiledviewer) \
 	$(if $(and $(ENABLE_GTKTILEDVIEWER), $(filter WNT,$(OS))), gtktiledviewer) \
 	$(if $(filter MACOSX,$(OS)),QuickLookPreview) \
 	$(if $(filter MACOSX,$(OS)),QuickLookThumbnail) \
 ))
 
 $(eval $(call gb_Helper_register_executables,NONE, \
-	$(if $(ENABLE_CLI),\
-		$(if $(filter MSC,$(COM)),$(if $(filter-out AARCH64_TRUE,$(CPUNAME)_$(CROSS_COMPILING)),climaker)) \
-	) \
 	cppumaker \
 	javamaker \
 	netmaker \
@@ -160,13 +157,6 @@ $(eval $(call gb_Helper_register_executables_for_install,OOO,brand, \
 	$(call gb_Helper_optional,FUZZERS,zipfuzzer) \
 	$(call gb_Helper_optional,FUZZERS,svgfuzzer) \
 	soffice_bin \
-    $(call gb_CondExeUnopkg, \
-        unopkg_bin \
-        $(if $(filter WNT,$(OS)), \
-            unopkg \
-            unopkg_com \
-        ) \
-    ) \
 	$(if $(filter WNT,$(OS)), \
 		soffice_exe \
 		soffice_com \
@@ -183,6 +173,7 @@ $(eval $(call gb_Helper_register_executables_for_install,OOO,ooo, \
 
 $(eval $(call gb_Helper_register_executables_for_install,OOO,ooo, \
 	gengal \
+	$(if $(filter-out EMSCRIPTEN MACOSX WNT,$(OS)),l10ntranslate) \
 	$(if $(filter WNT,$(OS)),,uri-encode) \
 	$(if $(filter WNT,$(OS)), \
 		senddoc \
@@ -218,7 +209,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,calc, \
 	pricing \
 	sc \
 	scd \
-	scfilt \
 	wpftcalc \
 	solver \
 	$(call gb_Helper_optional,SCRIPTING,vbaobj) \
@@ -236,7 +226,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,graphicfilter, \
 
 $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,impress, \
 	animcore \
-	PresentationMinimizer \
 	wpftimpress \
 ))
 
@@ -282,12 +271,16 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
 	$(if $(filter iOS MACOSX,$(OS)), \
 		MacOSXSpell \
 	) \
+	$(if $(filter WNT,$(OS)), \
+		WinSpell \
+	) \
 ))
 endif
 
 $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
     avmedia \
 	$(if $(ENABLE_CURL),LanguageTool) \
+	lightproof \
     $(call gb_Helper_optional,AVMEDIA, \
 	$(if $(filter MACOSX,$(OS)),\
 		avmediaMacAVF \
@@ -301,7 +294,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
 	bib \
 	chart2 \
 	chart2api \
-	$(call gb_Helper_optional,OPENCL,clew) \
 	$(if $(filter $(OS),WNT),,cmdmail) \
 	configmgr \
 	ctl \
@@ -310,7 +302,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
 		dbase \
 		dbaxml) \
 	dbtools \
-	deploymentmisc \
 	$(if $(filter-out MACOSX WNT,$(OS)),desktopbe1) \
 	$(call gb_Helper_optional,SCRIPTING,dlgprov) \
 	docmodel \
@@ -340,6 +331,7 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
 	lng \
 	$(if $(filter $(OS),MACOSX),macbe1) \
 	$(if $(MERGELIBS),merged) \
+	$(if $(UNITEDLIBS),united) \
 	$(call gb_Helper_optional,DBCONNECTIVITY,mozbootstrap) \
 	msfilter \
 	$(call gb_Helper_optional,SCRIPTING,msforms) \
@@ -380,7 +372,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
 	tk \
 	tl \
 	ucpexpand1 \
-	ucpext \
 	ucpimage \
 	$(if $(ENABLE_LIBCMIS),ucpcmis1) \
 	ucptdoc1 \
@@ -408,9 +399,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo, \
 		wininetbe1 \
 	) \
 	$(if $(filter $(OS),MACOSX), \
-		$(if $(ENABLE_MACOSX_SANDBOX),, \
-			AppleRemote \
-		) \
 		fps_aqua \
 	) \
 ))
@@ -442,7 +430,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,PLAINLIBS_OOO,python, \
 
 $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,writer, \
 	hwp \
-	msword \
 	swd \
 	t602filter \
 	$(call gb_Helper_optional,SCRIPTING,vbaswobj) \
@@ -455,9 +442,7 @@ $(eval $(call gb_Helper_register_plugins_for_install,OOOLIBS,writer, \
     swui \
 ))
 
-# cli_cppuhelper is NONE even though it is actually in URE because it is CliNativeLibrary
 $(eval $(call gb_Helper_register_libraries,PLAINLIBS_NONE, \
-	smoketest \
 	subsequenttest \
 	test \
 	test-setupvcl \
@@ -474,16 +459,12 @@ $(eval $(call gb_Helper_register_libraries,PLAINLIBS_NONE, \
 	sdqahelper \
 	wpftqahelper \
 	precompiled_system \
-	$(if $(ENABLE_CLI),$(if $(filter MSC,$(COM)),cli_cppuhelper)) \
 	$(if $(filter $(OS),ANDROID),cokit-bootstrap) \
 	$(if $(filter $(OS),MACOSX),OOoSpotlightImporter) \
 ))
 
 $(eval $(call gb_Helper_register_libraries_for_install,PLAINLIBS_URE,ure, \
 	affine_uno_uno \
-	$(if $(ENABLE_CLI),\
-		$(if $(filter MSC,$(COM)),$(if $(filter-out AARCH64_TRUE,$(CPUNAME)_$(CROSS_COMPILING)),cli_uno)) \
-	) \
 	i18nlangtag \
 	$(if $(ENABLE_DOTNET), \
 		net_uno \
@@ -540,10 +521,9 @@ $(eval $(call gb_Helper_register_libraries_for_install,PLAINLIBS_OOO,ooo, \
 	cached1 \
 	comphelper \
 	$(call gb_Helper_optional,DBCONNECTIVITY,dbpool2) \
-	deployment \
 	embobj \
 	i18nutil \
-	$(if $(and $(ENABLE_GTK3), $(filter LINUX %BSD SOLARIS,$(OS))), kitgtk) \
+	$(if $(and $(ENABLE_GTK3), $(filter LINUX %BSD,$(OS))), kitgtk) \
 	$(if $(and $(ENABLE_GTKTILEDVIEWER), $(filter WNT,$(OS))), kitgtk) \
 	$(if $(ENABLE_JAVA), \
 		$(if $(filter $(OS),MACOSX),,officebean) \
@@ -561,7 +541,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,PLAINLIBS_OOO,ooo, \
     $(call gb_Helper_optional,XMLHELP,ucpchelp1) \
 	ucphier1 \
 	ucppkg1 \
-    $(call gb_CondExeUnopkg,unopkgapp) \
 	xmlsecurity \
 	xsec_xmlsec \
 	xstor \
@@ -599,13 +578,6 @@ $(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ure, \
 	salhelper \
 ))
 
-$(eval $(call gb_Helper_register_libraries,EXTENSIONLIBS, \
-	active_native \
-	passive_native \
-	crashextension \
-	rust_uno-example \
-))
-
 ifneq ($(ENABLE_JAVA),)
 $(eval $(call gb_Helper_register_jars_for_install,URE,ure, \
 	java_uno \
@@ -620,13 +592,7 @@ $(eval $(call gb_Helper_register_jars_for_install,OOO,ooo, \
 	ScriptFramework \
 	ScriptProviderForJava \
 	$(if $(filter-out MACOSX,$(OS)),officebean) \
-	smoketest \
 	unoil \
-))
-
-$(eval $(call gb_Helper_register_jars,OXT, \
-	active_java \
-	passive_java \
 ))
 
 $(eval $(call gb_Helper_register_jars,NONE,\
@@ -650,7 +616,6 @@ $(eval $(call gb_Helper_register_packages, \
 	instsetoo_native_setup \
 	$(if $(ENABLE_OOENV),instsetoo_native_ooenv) \
 	postprocess_registry \
-	sysui_share \
 	vcl_fontunxpsprint \
 ))
 
@@ -663,7 +628,7 @@ $(eval $(call gb_Helper_register_packages_for_install,calc,\
 ))
 
 $(eval $(call gb_Helper_register_packages_for_install,kit,\
-	$(if $(filter LINUX %BSD SOLARIS, $(OS)),kit_selectionhandles) \
+	$(if $(filter LINUX %BSD, $(OS)),kit_selectionhandles) \
 	$(if $(and $(ENABLE_GTKTILEDVIEWER), $(filter WNT,$(OS))), kit_selectionhandles) \
 ))
 
@@ -681,6 +646,8 @@ $(eval $(call gb_Helper_register_packages_for_install,ure,\
 
 $(eval $(call gb_Helper_register_packages_for_install,ooo,\
 	$(if $(SYSTEM_LIBEXTTEXTCAT),,libexttextcat_fingerprint) \
+	$(call gb_Helper_optional,DICTIONARIES,dictionaries_config) \
+	lingucomponent_lightproof \
 	officecfg_misc \
 	$(if $(filter $(OS),MACOSX), \
 		extensions_mdibundle \
@@ -738,13 +705,9 @@ $(eval $(call gb_Helper_register_packages_for_install,ooo,\
 	) \
 	$(call gb_Helper_optional,SCRIPTING,scripting_scriptbindinglib) \
 	$(if $(filter $(OS),MACOSX),sysui_osxicons) \
-	toolbarmode_images \
 	vcl_theme_definitions \
 	$(if $(filter SKIA,$(BUILD_TYPE)), \
 		vcl_skia_denylist ) \
-	$(if $(DISABLE_PYTHON),, \
-		Pyuno/mailmerge \
-	) \
 	sfx2_classification \
 	svx_document_themes \
     $(if $(filter OPENCL,$(BUILD_TYPE)),sc_opencl_runtimetest) \
@@ -754,70 +717,171 @@ $(eval $(call gb_Helper_register_packages_for_install,ooo,\
 		helpcontent2_html_icon-themes \
 		helpcontent2_html_static \
 	) \
-	resource_fonts \
 	cui \
 	$(if $(filter EMSCRIPTEN,$(OS)), \
 	    favicon \
-	    $(if $(ENABLE_EMBIND_UNO),unoembind) \
 	) \
+))
+
+$(eval $(call gb_Helper_register_external_packages_for_install,OpenSymbol,ooo,\
+	resource_fonts \
 ))
 
 $(eval $(call gb_Helper_register_packages_for_install,ooo_fonts,\
 	extras_fonts \
 	$(if $(USING_X11)$(DISABLE_GUI)$(filter FONTCONFIG,$(BUILD_TYPE))$(filter ANDROID EMSCRIPTEN,$(OS)), \
 		postprocess_fontconfig) \
-	$(call gb_Helper_optional,MORE_FONTS,\
-		fonts_alef \
-		fonts_amiri \
-		fonts_caladea \
-		fonts_carlito \
-		$(if $(MPL_SUBSET),,fonts_culmus) \
-		fonts_dejavu \
-		fonts_gentium \
-		fonts_karla \
-		fonts_liberation \
-		fonts_liberation_narrow \
-		fonts_libertineg \
-		fonts_libre_hebrew \
-		fonts_noto_kufi_arabic \
-		fonts_noto_naskh_arabic \
-		fonts_noto_sans \
-		fonts_noto_sans_arabic \
-		fonts_noto_sans_armenian \
-		fonts_noto_sans_georgian \
-		fonts_noto_sans_hebrew \
-		fonts_noto_sans_lao \
-		fonts_noto_sans_lisu \
-		fonts_noto_serif \
-		fonts_noto_serif_armenian \
-		fonts_noto_serif_georgian \
-		fonts_noto_serif_hebrew \
-		fonts_noto_serif_lao \
-		fonts_opendyslexic \
-		fonts_opensans \
-		fonts_reem \
-		fonts_sourcesans \
-		fonts_scheherazade \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_agdasima,) \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_bacasime_antique,) \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_belanosima,) \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_caprasimo,) \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_lugrasimo,) \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_lumanosimo,) \
-		$(if $(WITH_DOCREPAIR_FONTS),fonts_lunasima,) \
-	) \
-	$(call gb_Helper_optional,NOTO_FONT,\
-		fonts_notomore \
-		fonts_notosansjp \
-		fonts_notosanskr \
-		fonts_notosanssc \
-		fonts_notosanstc \
-		fonts_notoserifjp \
-		fonts_notoserifkr \
-		fonts_notoserifsc \
-		fonts_notoseriftc \
-	) \
 ))
+
+ifneq ($(filter MORE_FONTS,$(BUILD_TYPE)),)
+$(eval $(call gb_Helper_register_external_packages_for_install,Alef,ooo_fonts,\
+		fonts_alef \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Amiri,ooo_fonts,\
+		fonts_amiri \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Caladea,ooo_fonts,\
+		fonts_caladea \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Carlito,ooo_fonts,\
+		fonts_carlito \
+))
+ifeq ($(MPL_SUBSET),)
+$(eval $(call gb_Helper_register_external_packages_for_install,Culmus,ooo_fonts,\
+		fonts_culmus \
+))
+endif
+$(eval $(call gb_Helper_register_external_packages_for_install,DejaVu,ooo_fonts,\
+		fonts_dejavu \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Gentium,ooo_fonts,\
+		fonts_gentium \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Karla,ooo_fonts,\
+		fonts_karla \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Liberation,ooo_fonts,\
+		fonts_liberation \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,LiberationNarrow,ooo_fonts,\
+		fonts_liberation_narrow \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,LinuxLibertineG,ooo_fonts,\
+		fonts_libertineg \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,LibreHebrew,ooo_fonts,\
+		fonts_libre_hebrew \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoKufiArabic,ooo_fonts,\
+		fonts_noto_kufi_arabic \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoNaskhArabic,ooo_fonts,\
+		fonts_noto_naskh_arabic \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSans,ooo_fonts,\
+		fonts_noto_sans \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansArabic,ooo_fonts,\
+		fonts_noto_sans_arabic \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansArmenian,ooo_fonts,\
+		fonts_noto_sans_armenian \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansGeorgian,ooo_fonts,\
+		fonts_noto_sans_georgian \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansHebrew,ooo_fonts,\
+		fonts_noto_sans_hebrew \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansLao,ooo_fonts,\
+		fonts_noto_sans_lao \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansLisu,ooo_fonts,\
+		fonts_noto_sans_lisu \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerif,ooo_fonts,\
+		fonts_noto_serif \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifArmenian,ooo_fonts,\
+		fonts_noto_serif_armenian \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifGeorgian,ooo_fonts,\
+		fonts_noto_serif_georgian \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifHebrew,ooo_fonts,\
+		fonts_noto_serif_hebrew \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifLao,ooo_fonts,\
+		fonts_noto_serif_lao \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,OpenDyslexic,ooo_fonts,\
+		fonts_opendyslexic \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,OpenSans,ooo_fonts,\
+		fonts_opensans \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Reem_Kufi,ooo_fonts,\
+		fonts_reem \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,SourceSans,ooo_fonts,\
+		fonts_sourcesans \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Scheherazade,ooo_fonts,\
+		fonts_scheherazade \
+))
+
+$(eval $(call gb_Helper_register_external_packages_for_install,Agdasima,ooo_fonts,\
+	fonts_agdasima \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Bacasime,ooo_fonts,\
+	fonts_bacasime_antique \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Belanosima,ooo_fonts,\
+	fonts_belanosima \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Caprasimo,ooo_fonts,\
+	fonts_caprasimo \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Lugrasimo,ooo_fonts,\
+	fonts_lugrasimo \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Lumanosimo,ooo_fonts,\
+	fonts_lumanosimo \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,Lunasima,ooo_fonts,\
+	fonts_lunasima \
+))
+
+ifneq ($(filter NOTO_FONT,$(BUILD_TYPE)),)
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoMore,ooo_fonts,\
+		fonts_notomore \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansJp,ooo_fonts,\
+		fonts_notosansjp \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansKr,ooo_fonts,\
+		fonts_notosanskr \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansSc,ooo_fonts,\
+		fonts_notosanssc \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSansTc,ooo_fonts,\
+		fonts_notosanstc \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifJp,ooo_fonts,\
+		fonts_notoserifjp \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifKr,ooo_fonts,\
+		fonts_notoserifkr \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifSc,ooo_fonts,\
+		fonts_notoserifsc \
+))
+$(eval $(call gb_Helper_register_external_packages_for_install,NotoSerifTc,ooo_fonts,\
+		fonts_notoseriftc \
+))
+endif # NOTO_FONT
+endif # MORE_FONTS
 
 $(eval $(call gb_Helper_register_packages_for_install,ooo_images,\
 	postprocess_images \
@@ -839,7 +903,6 @@ $(eval $(call gb_Helper_register_packages_for_install,brand,\
 	) \
 	readlicense_oo_files \
 	readlicense_oo_license \
-	$(call gb_Helper_optional,DESKTOP,setup_native_packinfo) \
 ))
 
 ifneq ($(DISABLE_PYTHON),TRUE)
@@ -894,7 +957,6 @@ $(eval $(call gb_Helper_register_mos,\
 	sc \
 	sca \
 	sd \
-	sdext \
 	sfx \
 	shell \
 	sm \

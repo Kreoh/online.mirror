@@ -47,7 +47,7 @@ namespace {
 }
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 
     /// the target directory for screenshots
 constexpr OUString g_aScreenshotDirectory(u"screenshots"_ustr);
@@ -211,7 +211,6 @@ void ScreenshotTest::dumpDialogToPath(std::string_view rUIXMLDescription)
 
     bool bNonConforming = rUIXMLDescription == "modules/swriter/ui/sidebarstylepresets.ui" ||
                           rUIXMLDescription == "modules/swriter/ui/sidebartheme.ui" ||
-                          rUIXMLDescription == "modules/swriter/ui/notebookbar.ui" ||
                           rUIXMLDescription == "modules/scalc/ui/sidebaralignment.ui" ||
                           rUIXMLDescription == "modules/scalc/ui/sidebarcellappearance.ui" ||
                           rUIXMLDescription == "modules/scalc/ui/sidebarnumberformat.ui" ||

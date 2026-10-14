@@ -57,7 +57,7 @@ public:
                 reference to a uno service manager, which is used internally.
      */
     ModuleAcceleratorConfiguration(
-            const css::uno::Reference< css::uno::XComponentContext >& xContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
             const cpo::uno::Sequence< cpo::uno::Any >& lArguments);
 
     virtual OUString getImplementationName() override
@@ -84,7 +84,7 @@ private:
 };
 
 ModuleAcceleratorConfiguration::ModuleAcceleratorConfiguration(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
         const cpo::uno::Sequence< cpo::uno::Any >& lArguments)
     : ModuleAcceleratorConfiguration_BASE(xContext)
 {
@@ -102,7 +102,7 @@ ModuleAcceleratorConfiguration::ModuleAcceleratorConfiguration(
     }
 
     if (m_sModule.isEmpty())
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
                 u"The module dependent accelerator configuration service was initialized with an empty module identifier!"_ustr,
                 static_cast< ::cppu::OWeakObject* >(this));
 }
@@ -129,11 +129,11 @@ void ModuleAcceleratorConfiguration::fillCache()
         m_sGlobalOrModules = CFG_ENTRY_MODULES;
         XCUBasedAcceleratorConfiguration::reload();
 
-        css::uno::Reference< css::util::XChangesNotifier > xBroadcaster(m_xCfg, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference< css::util::XChangesNotifier > xBroadcaster(m_xCfg, cpo::uno::UNO_QUERY_THROW);
         m_xCfgListener = new WeakChangesListener(this);
         xBroadcaster->addChangesListener(m_xCfgListener);
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; }
     catch(const cpo::uno::Exception&)
         {}
@@ -141,13 +141,13 @@ void ModuleAcceleratorConfiguration::fillCache()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_ModuleAcceleratorConfiguration_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &arguments)
 {
     rtl::Reference<ModuleAcceleratorConfiguration> inst = new ModuleAcceleratorConfiguration(context, arguments);
-    css::uno::XInterface *acquired_inst = cppu::acquire(inst.get());
+    cpo::uno::XInterface *acquired_inst = cppu::acquire(inst.get());
 
     inst->fillCache();
 

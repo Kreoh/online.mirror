@@ -40,7 +40,7 @@
 #include <viewdata.hxx>
 
 using namespace com::sun::star;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 ScCheckListMenuControl::MenuItemData::MenuItemData()
     : mbEnabled(true)
@@ -131,7 +131,7 @@ void ScCheckListMenuControl::addMenuItem(const OUString& rText, Action* pAction)
 
     mxMenu->show();
     mxMenu->append_text(rText);
-    mxMenu->set_image(mxMenu->n_children() - 1, css::uno::Reference<css::graphic::XGraphic>(), 1);
+    mxMenu->set_image(mxMenu->n_children() - 1, cpo::uno::Reference<css::graphic::XGraphic>(), 1);
 }
 
 void ScCheckListMenuControl::addSeparator()
@@ -577,6 +577,8 @@ ScCheckListMenuControl::ScCheckListMenuControl(weld::Widget* pParent, ScViewData
 {
     mxTreeChecks->set_clicks_to_toggle(1);
     mxListChecks->set_clicks_to_toggle(1);
+
+    mxContainer->connect_get_property_tree(LINK(this, ScCheckListMenuControl, DumpAsPropertyTreeHdl));
 
     mxNonMenu->connect_mouse_move(LINK(this, ScCheckListMenuControl, MouseEnterHdl));
     mxEdSearch->connect_mouse_move(LINK(this, ScCheckListMenuControl, MouseEnterHdl));
@@ -1796,6 +1798,11 @@ void ScCheckListMenuControl::setPopupEndAction(Action* p)
 void ScCheckListMenuControl::setFieldChangedAction(Action* p)
 {
     mxFieldChangedAction.reset(p);
+}
+
+IMPL_LINK(ScCheckListMenuControl, DumpAsPropertyTreeHdl, tools::JsonWriter&, rJsonWriter, void)
+{
+    rJsonWriter.put("popupId", maUniqueID.getID());
 }
 
 IMPL_LINK_NOARG(ScCheckListMenuControl, PopupModeEndHdl, weld::Popover&, void)

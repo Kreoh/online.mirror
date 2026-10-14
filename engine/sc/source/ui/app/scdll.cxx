@@ -18,6 +18,7 @@
  */
 
 #include <config_features.h>
+#include <config_options.h>
 
 #include <svx/fmobjfac.hxx>
 #include <svx/objfac3d.hxx>
@@ -203,6 +204,7 @@ void ScDLL::Init()
     ScColRowNameRangesDlgWrapper::RegisterChildWindow(false, pMod);
     ScFormulaDlgWrapper         ::RegisterChildWindow(false, pMod);
     ScTableLayoutWrapper        ::RegisterChildWindow(false, pMod);
+    ScTableResizeWrapper        ::RegisterChildWindow(false, pMod);
 
     ScRandomNumberGeneratorDialogWrapper::RegisterChildWindow(false, pMod);
     ScSamplingDialogWrapper             ::RegisterChildWindow(false, pMod);
@@ -257,9 +259,13 @@ void ScDLL::Init()
 #ifndef DISABLE_DYNLOADING
 
 extern "C" SAL_DLLPUBLIC_EXPORT
+#if ENABLE_UNITEDLIBS
+void kit_preload_hook_sc()
+#else
 void kit_preload_hook()
+#endif
 {
-    // scfilt
+    // sc
     ScFormatFilter::Get();
     // scui
     ScAbstractDialogFactory::Create();

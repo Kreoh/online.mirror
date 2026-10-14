@@ -14,13 +14,14 @@
  * RenderManagerBase - Base class for the tile-managing implementations that
  * sit behind the static RenderManager facade.
  *
- * Every method has a safe no-op default, so a subclass overrides only the
- * parts that apply to it.
+ * The tile methods have a safe no-op default, so a subclass overrides only the
+ * parts that apply to it. The vector rendering methods are abstract, and each
+ * subclass says what they do for its kind of content.
  */
 
 type AfterVisualsReadyTask = () => void;
 
-class RenderManagerBase {
+abstract class RenderManagerBase {
 	// Whether some of the document's content has arrived and can be painted.
 	private visualsReady: boolean = false;
 
@@ -132,7 +133,7 @@ class RenderManagerBase {
 
 	// -- invalidation --
 	overlapInvalidatedRectangleWithView(
-		_part: number,
+		_part: PartNumber,
 		_mode: number,
 		_wireId: number,
 		_invalidatedRectangle: cool.SimpleRectangle,
@@ -166,6 +167,8 @@ class RenderManagerBase {
 	// -- message handling --
 	// eslint-disable-next-line @typescript-eslint/no-empty-function
 	onTileMsg(_textMsg: string, _img: any): void {}
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	onTileGoneMsg(_textMsg: string): void {}
 
 	// -- expiry / touch --
 	getExpiryFactor(_tile: Tile): number {
@@ -175,54 +178,101 @@ class RenderManagerBase {
 	touchImage(_tile: Tile): void {}
 
 	// -- vector rendering --
-	isVectorRendering(): boolean {
-		return false;
-	}
+	abstract isVectorRendering(): boolean;
 
-	requestThumbnail(
-		_id: cool.PreviewId,
-		_part: number,
-		_maxWidth: number,
-		_maxHeight: number,
-		// eslint-disable-next-line @typescript-eslint/no-empty-function
-	): void {}
+	abstract requestThumbnail(
+		id: cool.PreviewId,
+		part: number,
+		mode: number,
+		maxWidth: number,
+		maxHeight: number,
+	): void;
 
-	requestPart(_part: number): cool.VectorPrimitivesData | undefined {
-		return undefined;
-	}
+	abstract requestPart(
+		part: number,
+		mode: number,
+	): cool.VectorPrimitivesData | undefined;
 
-	renderInto(
-		_context: CanvasRenderingContext2D,
-		_data: cool.VectorPrimitivesData,
-		// eslint-disable-next-line @typescript-eslint/no-empty-function
-	): void {}
+	abstract partIdAt(
+		part: number,
+		mode: number,
+	): cool.VectorPartGuid | undefined;
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
-	onVectorChanged(_callback: () => void): void {}
+	abstract renderInto(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+		options?: cool.VectorRenderOptions,
+	): void;
 
-	handleVectorPrimitivesResponse(
-		_values: cool.VectorPrimitivesResponse,
-		// eslint-disable-next-line @typescript-eslint/no-empty-function
-	): void {}
+	abstract renderObjectsWith(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+		objectIds: number[],
+		matrix: cool.Matrix2D,
+	): void;
 
-	handleVectorRenderingGraphicsResponse(
-		_values: cool.VectorRenderingGraphicsResponse,
-		// eslint-disable-next-line @typescript-eslint/no-empty-function
-	): void {}
+	abstract renderPrimitives(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+		primitives: cool.Primitive[],
+	): void;
 
-	handleVectorRenderingFontResponse(
-		_values: cool.VectorRenderingFontResponse,
-		// eslint-disable-next-line @typescript-eslint/no-empty-function
-	): void {}
+	abstract renderPlaceholderAids(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+	): void;
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
-	handleVectorPrimitivesDelta(_values: cool.VectorPrimitivesResponse): void {}
+	abstract setHiddenLayers(layers: unknown): void;
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
-	clearCachedPart(_part: number): void {}
+	abstract drawnElsewhere(objectIds: number[]): void;
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
-	clearAllParts(): void {}
+	abstract drawnElsewhereVersion(): number;
+
+	abstract isPartDrawable(part: number, mode: number): boolean;
+
+	abstract requestPartById(
+		partId: cool.VectorPartGuid,
+		mode: number,
+	): cool.VectorPrimitivesData | undefined;
+
+	abstract isPartDrawableById(
+		partId: cool.VectorPartGuid,
+		mode: number,
+	): boolean;
+
+	abstract isLayerVisible(layer: number): boolean;
+
+	abstract onVectorChanged(callback: (answered?: number[]) => void): void;
+
+	abstract offVectorChanged(callback: () => void): void;
+
+	abstract changedHere(): void;
+
+	abstract handleVectorPrimitivesResponse(
+		values: cool.VectorPrimitivesResponse,
+	): void;
+
+	abstract handleVectorRenderingGraphicsResponse(
+		values: cool.VectorRenderingGraphicsResponse,
+	): void;
+
+	abstract handleVectorRenderingFontResponse(
+		values: cool.VectorRenderingFontResponse,
+	): void;
+
+	abstract handleVectorPrimitivesDelta(
+		values: cool.VectorPrimitivesResponse,
+	): void;
+
+	abstract partListChanged(): void;
+
+	abstract revalidateCachedParts(): void;
+
+	abstract forgetRequestsInFlight(): void;
+
+	abstract clearCachedPart(partId: cool.VectorPartGuid): void;
+
+	abstract clearAllParts(): void;
 
 	// -- redraw --
 	redraw(): RenderManagerBase {

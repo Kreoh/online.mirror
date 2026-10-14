@@ -27,6 +27,7 @@
 #include <editeng/fhgtitem.hxx>
 
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <ndtxt.hxx>
 #include <swtable.hxx>
 #include <txatbase.hxx>
@@ -34,6 +35,7 @@
 #include <IDocumentRedlineAccess.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {

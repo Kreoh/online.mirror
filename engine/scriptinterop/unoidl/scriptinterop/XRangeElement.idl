@@ -1,0 +1,30 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Office contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+module scriptinterop {
+
+// One selection segment, consistent with GAS's Selection.getRangeElements() model.  The element is
+// the Text of the paragraph that a partial text segment lives in, the paragraph that is selected
+// as a whole, or the inline image that is selected on its own.  Offsets are character positions
+// within that Text, and are -1 for a segment that is not partial:
+interface XRangeElement: XBase {
+    XElement getElement();
+
+    long getEndOffsetInclusive();
+
+    long getStartOffset();
+
+    boolean isPartial();
+};
+
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

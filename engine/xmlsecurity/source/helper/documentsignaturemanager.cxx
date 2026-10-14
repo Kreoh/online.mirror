@@ -52,7 +52,8 @@
 
 using namespace css;
 using namespace css::graphic;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// RAII class to init / shut down libxmlsec.
 class Xmlsec
@@ -82,7 +83,7 @@ std::shared_ptr<Xmlsec>& XmlsecLibrary::get()
 }
 
 DocumentSignatureManager::DocumentSignatureManager(
-    const uno::Reference<uno::XComponentContext>& xContext, DocumentSignatureMode eMode)
+    const uno::Reference<cpo::uno::XComponentContext>& xContext, DocumentSignatureMode eMode)
     : mxContext(xContext)
     , maSignatureHelper(xContext)
     , meSignatureMode(eMode)

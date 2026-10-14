@@ -20,11 +20,11 @@
 #ifndef INCLUDED_OSL_FILE_H
 #define INCLUDED_OSL_FILE_H
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "osl/time.h"
-#include "rtl/ustring.h"
-#include "sal/saldllapi.h"
+#include <osl/time.h>
+#include <rtl/ustring.h>
+#include <sal/saldllapi.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -715,7 +715,7 @@ SAL_DLLPUBLIC oslFileError osl_openFile(
     @see    osl_openFile()
     @see    osl_getFilePos()
 */
-SAL_WARN_UNUSED_RESULT SAL_DLLPUBLIC oslFileError osl_setFilePos(
+[[nodiscard]] SAL_DLLPUBLIC oslFileError osl_setFilePos(
         oslFileHandle Handle, sal_uInt32 uHow, sal_Int64 uPos );
 
 /** Retrieve the current position of the internal pointer of an open file.

@@ -30,7 +30,11 @@
 #include <vcl/pdfwriter.hxx>
 #include <tools/degree.hxx>
 #include <o3tl/deleter.hxx>
+#include <map>
 #include <optional>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 struct ScCellInfo;
 
@@ -66,12 +70,37 @@ typedef std::unique_ptr<ClearableClipRegion, o3tl::default_delete<ClearableClipR
 
 typedef std::map<SCROW, sal_Int32> TableRowIdMap;
 typedef std::map<std::pair<SCROW, SCCOL>, sal_Int32> TableDataIdMap;
+
+/// a destination and what it points at, which may not be drawn when the destination is made
+struct ScPendingDest
+{
+    sal_Int32 m_nDestId;
+    ScAddress m_aTarget;
+    /// name the sheet rather than the cell, the target being the sheet itself
+    bool m_bWholeSheet;
+    /// the sheet's element is on the page this destination names, so it can stand in
+    bool m_bSheetOnPage;
+};
+
 struct ScEnhancedPDFState
 {
     sal_Int32 m_WorksheetId = -1;
     TableRowIdMap m_TableRowMap;
     TableDataIdMap m_TableDataMap;
+    /// the Worksheet element of every sheet drawn so far
+    std::unordered_map<SCTAB, sal_Int32> m_WorksheetIds;
+    /// the cell element at every grid position drawn so far, unlike m_TableDataMap kept for the
+    /// whole export; the grid position, not the cell the content came from, is what shares a
+    /// page with the destination that names it
+    std::unordered_map<ScAddress, sal_Int32> m_CellIds;
+    std::vector<ScPendingDest> m_PendingDests;
     ScEnhancedPDFState(){};
+    void StartSheet()
+    {
+        m_WorksheetId = -1;
+        m_TableRowMap.clear();
+        m_TableDataMap.clear();
+    }
 };
 
 /// Describes reference mark to be drawn, position & size in TWIPs
@@ -331,6 +360,20 @@ private:
                            tools::Long nLayoutSign,
                            KernArray& aDX);
 
+    // Pixel edges of a cell range, with a flag per edge that lies inside the painted area.
+    struct RangeEdges
+    {
+        tools::Long nMinX = 0;
+        tools::Long nMinY = 0;
+        tools::Long nMaxX = 0;
+        tools::Long nMaxY = 0;
+        bool bTop = false;
+        bool bBottom = false;
+        bool bLeft = false;
+        bool bRight = false;
+    };
+    RangeEdges GetRangeEdges( SCCOL nStartX, SCROW nStartY, SCCOL nEndX, SCROW nEndY ) const;
+
 public:
 
     /**
@@ -408,6 +451,7 @@ public:
 
     void    FindChanged();
     void    SetPagebreakMode( ScPageBreakData* pPageData );
+
     /// Draws reference mark and returns its properties
     void    DrawRefMark( SCCOL nRefStartX, SCROW nRefStartY,
                          SCCOL nRefEndX, SCROW nRefEndY,

@@ -53,7 +53,7 @@ FilterCache& GetTheFilterCache()
             case_sensitive                  compare "sort_prop" case sensitive              false
  */
 
-FilterFactory::FilterFactory(const css::uno::Reference< css::uno::XComponentContext >& rxContext)
+FilterFactory::FilterFactory(const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext)
     : m_xContext(rxContext)
 {
     static const cpo::uno::Sequence<OUString> sServiceNames { u"com.sun.star.document.FilterFactory"_ustr };
@@ -68,13 +68,13 @@ FilterFactory::~FilterFactory()
 }
 
 
-css::uno::Reference< css::uno::XInterface > FilterFactory::createInstance(const OUString& sFilter)
+cpo::uno::Reference< cpo::uno::XInterface > FilterFactory::createInstance(const OUString& sFilter)
 {
     return createInstanceWithArguments(sFilter, cpo::uno::Sequence< cpo::uno::Any >());
 }
 
 
-css::uno::Reference< css::uno::XInterface > FilterFactory::createInstanceWithArguments(const OUString&                     sFilter   ,
+cpo::uno::Reference< cpo::uno::XInterface > FilterFactory::createInstanceWithArguments(const OUString&                     sFilter   ,
                                                                                                 const cpo::uno::Sequence< cpo::uno::Any >& lArguments)
 {
     // SAFE ->
@@ -88,12 +88,12 @@ css::uno::Reference< css::uno::XInterface > FilterFactory::createInstanceWithArg
     aFilter[PROPNAME_FILTERSERVICE] >>= sFilterService;
 
     // create service instance
-    css::uno::Reference< css::uno::XInterface > xFilter;
+    cpo::uno::Reference< cpo::uno::XInterface > xFilter;
     if (!sFilterService.isEmpty())
         xFilter = m_xContext->getServiceManager()->createInstanceWithContext(sFilterService, m_xContext);
 
     // initialize filter
-    css::uno::Reference< css::lang::XInitialization > xInit(xFilter, css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::lang::XInitialization > xInit(xFilter, cpo::uno::UNO_QUERY);
     if (xInit.is())
     {
         // format: lInitData[0] = seq<PropertyValue>, which contains all configuration properties of this filter
@@ -130,7 +130,7 @@ cpo::uno::Sequence< OUString > FilterFactory::getAvailableServiceNames()
     {
         lUNOFilters = GetTheFilterCache().getMatchingItemsByProps(FilterCache::E_FILTER, {}, lEProps);
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; }
     catch(const cpo::uno::Exception&)
         { lUNOFilters.clear(); }
@@ -139,11 +139,11 @@ cpo::uno::Sequence< OUString > FilterFactory::getAvailableServiceNames()
 }
 
 
-css::uno::Reference< css::container::XEnumeration > FilterFactory::createSubSetEnumerationByQuery(const OUString& sQuery)
+cpo::uno::Reference< css::container::XEnumeration > FilterFactory::createSubSetEnumerationByQuery(const OUString& sQuery)
 {
     // reject old deprecated queries ...
     if (sQuery.startsWith("_filterquery_"))
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
                     u"Use of deprecated and now unsupported query!"_ustr,
                     static_cast< css::container::XContainerQuery* >(this));
 
@@ -306,7 +306,7 @@ std::vector<OUString> FilterFactory::impl_queryMatchByDocumentService(const Quer
             // It match the query ...
             lResult.push_back(filterName);
         }
-        catch(const css::uno::RuntimeException&)
+        catch(const cpo::uno::RuntimeException&)
             { throw; }
         catch(const cpo::uno::Exception&)
             { continue; }
@@ -406,7 +406,7 @@ std::vector<OUString> FilterFactory::impl_getSortedFilterList(const QueryTokeniz
 
 cpo::uno::Sequence<OUString> FilterFactory::impl_getListOfInstalledModules()
 {
-    css::uno::Reference< css::container::XNameAccess > xModuleConfig = officecfg::Setup::Office::Factories::get();
+    cpo::uno::Reference< css::container::XNameAccess > xModuleConfig = officecfg::Setup::Office::Factories::get();
     return xModuleConfig->getElementNames();
 }
 
@@ -461,10 +461,10 @@ std::vector<OUString> FilterFactory::impl_readSortedFilterListFromConfig(const O
 {
     try
     {
-        css::uno::Reference< css::container::XNameAccess > xUISortConfig = officecfg::TypeDetection::UISort::ModuleDependendFilterOrder::get();
+        cpo::uno::Reference< css::container::XNameAccess > xUISortConfig = officecfg::TypeDetection::UISort::ModuleDependendFilterOrder::get();
         // don't check the module name here. If it does not exists, an exception is thrown and caught below.
         // We return an empty list as result then.
-        css::uno::Reference< css::container::XNameAccess > xModule;
+        cpo::uno::Reference< css::container::XNameAccess > xModule;
         xUISortConfig->getByName(sModule) >>= xModule;
         if (xModule.is()) // only to be on the safe side of life if the exception was not thrown .-)
         {
@@ -476,7 +476,7 @@ std::vector<OUString> FilterFactory::impl_readSortedFilterListFromConfig(const O
             return lSortedFilters;
         }
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; }
     catch(const cpo::uno::Exception&)
         {}
@@ -486,9 +486,9 @@ std::vector<OUString> FilterFactory::impl_readSortedFilterListFromConfig(const O
 
 } // namespace filter
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_FilterFactory_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new filter::config::FilterFactory(context));
 }

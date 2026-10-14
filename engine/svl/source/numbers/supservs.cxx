@@ -30,14 +30,14 @@
 #include <utility>
 #include <osl/diagnose.h>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
 
 
-SvNumberFormatsSupplierServiceObject::SvNumberFormatsSupplierServiceObject(css::uno::Reference< css::uno::XComponentContext > _xORB)
+SvNumberFormatsSupplierServiceObject::SvNumberFormatsSupplierServiceObject(cpo::uno::Reference< cpo::uno::XComponentContext > _xORB)
     :m_xORB(std::move(_xORB))
 {
 }
@@ -46,7 +46,7 @@ SvNumberFormatsSupplierServiceObject::~SvNumberFormatsSupplierServiceObject()
 {
 }
 
-Any SAL_CALL SvNumberFormatsSupplierServiceObject::queryAggregation( const Type& _rType )
+Any SvNumberFormatsSupplierServiceObject::queryAggregation( const Type& _rType )
 {
     Any aReturn = ::cppu::queryInterface(_rType,
         static_cast< XInitialization* >(this),
@@ -59,7 +59,7 @@ Any SAL_CALL SvNumberFormatsSupplierServiceObject::queryAggregation( const Type&
     return aReturn;
 }
 
-void SAL_CALL SvNumberFormatsSupplierServiceObject::initialize( const Sequence< Any >& _rArguments )
+void SvNumberFormatsSupplierServiceObject::initialize( const Sequence< Any >& _rArguments )
 {
     ::osl::MutexGuard aGuard( getSharedMutex() );
 
@@ -98,36 +98,36 @@ void SAL_CALL SvNumberFormatsSupplierServiceObject::initialize( const Sequence< 
     SetNumberFormatter(m_pOwnFormatter.get());
 }
 
-OUString SAL_CALL SvNumberFormatsSupplierServiceObject::getImplementationName(  )
+OUString SvNumberFormatsSupplierServiceObject::getImplementationName(  )
 {
     return u"com.sun.star.uno.util.numbers.SvNumberFormatsSupplierServiceObject"_ustr;
 }
 
-bool SAL_CALL SvNumberFormatsSupplierServiceObject::supportsService( const OUString& _rServiceName )
+bool SvNumberFormatsSupplierServiceObject::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
-Sequence< OUString > SAL_CALL SvNumberFormatsSupplierServiceObject::getSupportedServiceNames(  )
+Sequence< OUString > SvNumberFormatsSupplierServiceObject::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.util.NumberFormatsSupplier"_ustr };
 }
 
-Reference< XPropertySet > SAL_CALL SvNumberFormatsSupplierServiceObject::getNumberFormatSettings()
+Reference< XPropertySet > SvNumberFormatsSupplierServiceObject::getNumberFormatSettings()
 {
     ::osl::MutexGuard aGuard( getSharedMutex() );
     implEnsureFormatter();
     return SvNumberFormatsSupplierObj::getNumberFormatSettings();
 }
 
-Reference< XNumberFormats > SAL_CALL SvNumberFormatsSupplierServiceObject::getNumberFormats()
+Reference< XNumberFormats > SvNumberFormatsSupplierServiceObject::getNumberFormats()
 {
     ::osl::MutexGuard aGuard( getSharedMutex() );
     implEnsureFormatter();
     return SvNumberFormatsSupplierObj::getNumberFormats();
 }
 
-sal_Int64 SAL_CALL SvNumberFormatsSupplierServiceObject::getSomething( const Sequence< sal_Int8 >& aIdentifier )
+sal_Int64 SvNumberFormatsSupplierServiceObject::getSomething( const Sequence< sal_Int8 >& aIdentifier )
 {
     sal_Int64 nReturn = SvNumberFormatsSupplierObj::getSomething( aIdentifier );
     if ( nReturn )
@@ -150,8 +150,8 @@ void SvNumberFormatsSupplierServiceObject::implEnsureFormatter()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_uno_util_numbers_SvNumberFormatsSupplierServiceObject_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_uno_util_numbers_SvNumberFormatsSupplierServiceObject_get_implementation(cpo::uno::XComponentContext* context,
                                                                     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SvNumberFormatsSupplierServiceObject(context));

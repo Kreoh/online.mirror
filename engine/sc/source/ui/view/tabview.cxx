@@ -18,6 +18,7 @@
  */
 
 #include <scitems.hxx>
+#include <docuno.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/bindings.hxx>
 #include <vcl/commandevent.hxx>
@@ -219,7 +220,8 @@ ScTabView::ScTabView( vcl::Window* pParent, ScDocShell& rDocSh, ScTabViewShell* 
     bBlockNeg( false ),
     bBlockCols( false ),
     bBlockRows( false ),
-    mbInlineWithScrollbar( false )
+    mbInlineWithScrollbar(false),
+    mbFillRangeMarked(false)
 {
     // copy settings of existing shell for this document
     if (ScTabViewShell* pExistingViewShell = rDocSh.GetBestViewShell())
@@ -2408,7 +2410,7 @@ void ScTabView::SetNewVisArea()
 
     SfxViewFrame& rViewFrame = aViewData.GetViewShell()->GetViewFrame();
     SfxFrame& rFrame = rViewFrame.GetFrame();
-    css::uno::Reference<css::frame::XController> xController = rFrame.GetController();
+    cpo::uno::Reference<css::frame::XController> xController = rFrame.GetController();
     if (xController.is())
     {
         ScTabViewObj* pImp = dynamic_cast<ScTabViewObj*>( xController.get() );
@@ -2881,7 +2883,10 @@ void lcl_ExtendTiledDimension(bool bColumn, const SCCOLROW nEnd, const SCCOLROW 
     if ((bColumn && aNewArea.getOpenWidth()) || (!bColumn && aNewArea.getOpenHeight()))
     {
         rTabView.UpdateSelectionOverlay();
-        KitHelper::notifyInvalidation(rViewData.GetViewShell(), &aNewArea);
+        // The newly tiled area is in print twips, from column widths and row
+        // heights rather than any one view's pixel grid, so every view - not
+        // just this one - can use the same rectangle regardless of its own zoom.
+        KitHelper::notifyInvalidationAllViews(pModelObj, rViewData.GetViewShell()->getPart(), &aNewArea, false);
     }
 
     // Provide size in the payload, so clients don't have to query for that.

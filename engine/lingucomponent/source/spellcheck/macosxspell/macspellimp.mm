@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 #include <com/sun/star/linguistic2/SpellFailure.hpp>
 #include <com/sun/star/linguistic2/XLinguProperties.hpp>
@@ -31,7 +31,9 @@
 
 #include "macspellimp.hxx"
 
+#include <i18nlangtag/languagetag.hxx>
 #include <linguistic/spelldta.hxx>
+#include <unotools/lingucfg.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/useroptions.hxx>
 #include <osl/diagnose.h>
@@ -39,14 +41,16 @@
 #include <rtl/ref.hxx>
 #include <rtl/ustrbuf.hxx>
 
+#include <set>
+
 using namespace utl;
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
 using namespace com::sun::star::linguistic2;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace linguistic;
 
 MacSpellChecker::MacSpellChecker() :
@@ -95,7 +99,7 @@ PropertyHelper_Spell & MacSpellChecker::GetPropHelper_Impl()
 }
 
 
-Sequence< Locale > SAL_CALL MacSpellChecker::getLocales()
+Sequence< Locale > MacSpellChecker::getLocales()
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -307,6 +311,13 @@ Sequence< Locale > SAL_CALL MacSpellChecker::getLocales()
             //first add the user dictionaries
             //TODO for MAC?
 
+            // The languages an installed hunspell dictionary covers stay with hunspell. This
+            // service claims only the rest, so the two are never chained for one locale, where
+            // a word one of them forbids on purpose would be accepted by the other.
+            std::set<LanguageType> aHunspellLanguages;
+            for (const OUString& rName : GetSpellDicLocaleNames(GetSpellDics()))
+                aHunspellLanguages.insert(LanguageTag(rName).getLanguageType());
+
             // now add the shared dictionaries
             for (i = 0; i < numshr; i++) {
                 NSDictionary *aLocDict = [ NSLocale componentsFromLocaleIdentifier:postspdict[i] ];
@@ -315,6 +326,8 @@ Sequence< Locale > SAL_CALL MacSpellChecker::getLocales()
                 OUString lang([aLang cStringUsingEncoding: NSUTF8StringEncoding], [aLang length], aEnc);
                 OUString country([ aCountry cStringUsingEncoding: NSUTF8StringEncoding], [aCountry length], aEnc);
                 Locale nLoc( lang, country, OUString() );
+                if (aHunspellLanguages.count(LanguageTag(nLoc).getLanguageType()))
+                    continue;
                 newloc = 1;
                 //eliminate duplicates (is this needed for MacOS?)
                 for (j = 0; j < numlocs; j++) {
@@ -346,7 +359,7 @@ Sequence< Locale > SAL_CALL MacSpellChecker::getLocales()
 
 
 
-bool SAL_CALL MacSpellChecker::hasLocale(const Locale& rLocale)
+bool MacSpellChecker::hasLocale(const Locale& rLocale)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -427,7 +440,7 @@ sal_Int16 MacSpellChecker::GetSpellFailure( const OUString &rWord, const Locale 
 
 
 
-bool SAL_CALL
+bool
     MacSpellChecker::isValid( const OUString& rWord, const Locale& rLocale,
             const cpo::uno::Sequence<PropertyValue>& rProperties )
 {
@@ -532,7 +545,7 @@ Reference< XSpellAlternatives >
 
 }
 
-Reference< XSpellAlternatives > SAL_CALL
+Reference< XSpellAlternatives >
     MacSpellChecker::spell( const OUString& rWord, const Locale& rLocale,
             const cpo::uno::Sequence<PropertyValue>& rProperties )
 {
@@ -552,7 +565,7 @@ Reference< XSpellAlternatives > SAL_CALL
     return xAlt;
 }
 
-bool SAL_CALL
+bool
     MacSpellChecker::addLinguServiceEventListener(
             const Reference< XLinguServiceEventListener >& rxLstnr )
 {
@@ -567,7 +580,7 @@ bool SAL_CALL
 }
 
 
-bool SAL_CALL
+bool
     MacSpellChecker::removeLinguServiceEventListener(
             const Reference< XLinguServiceEventListener >& rxLstnr )
 {
@@ -583,7 +596,7 @@ bool SAL_CALL
 }
 
 
-OUString SAL_CALL
+OUString
     MacSpellChecker::getServiceDisplayName( const Locale& /*rLocale*/ )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -591,7 +604,7 @@ OUString SAL_CALL
 }
 
 
-void SAL_CALL
+void
     MacSpellChecker::initialize( const Sequence< Any >& rArguments )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -619,7 +632,7 @@ void SAL_CALL
 }
 
 
-void SAL_CALL
+void
     MacSpellChecker::dispose()
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -633,7 +646,7 @@ void SAL_CALL
 }
 
 
-void SAL_CALL
+void
     MacSpellChecker::addEventListener( const Reference< XEventListener >& rxListener )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -643,7 +656,7 @@ void SAL_CALL
 }
 
 
-void SAL_CALL
+void
     MacSpellChecker::removeEventListener( const Reference< XEventListener >& rxListener )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -653,24 +666,24 @@ void SAL_CALL
 }
 
 // Service specific part
-OUString SAL_CALL MacSpellChecker::getImplementationName()
+OUString MacSpellChecker::getImplementationName()
 {
     return u"org.openoffice.lingu.MacOSXSpellChecker"_ustr;
 }
 
-bool SAL_CALL MacSpellChecker::supportsService( const OUString& ServiceName )
+bool MacSpellChecker::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL MacSpellChecker::getSupportedServiceNames()
+Sequence< OUString > MacSpellChecker::getSupportedServiceNames()
 {
     return { SN_SPELLCHECKER };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 lingucomponent_MacSpellChecker_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new MacSpellChecker());
 }

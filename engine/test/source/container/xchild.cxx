@@ -10,21 +10,22 @@
 #include <test/container/xchild.hxx>
 
 #include <com/sun/star/container/XChild.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppunit/TestAssert.h>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
 void XChild::testGetSetParent()
 {
     uno::Reference<container::XChild> xChild(init(), UNO_QUERY_THROW);
-    uno::Reference<uno::XInterface> xInterface(xChild, UNO_QUERY_THROW);
+    uno::Reference<cpo::uno::XInterface> xInterface(xChild, UNO_QUERY_THROW);
     xInterface = xChild->getParent();
 
     CPPUNIT_ASSERT_MESSAGE("Successfully able to Get Parent", xInterface);

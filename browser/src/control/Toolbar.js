@@ -41,6 +41,41 @@ window.L.Map.include({
 		return this['stateChangeHandler'].getItemValue('.uno:CharFontName');
 	},
 
+	// The server font list holds the fonts that are available. Text in any other font is drawn
+	// with a substitute, so the font name boxes show that font with a warning background.
+	_updateMissingFontMark: function(fontName) {
+		const fonts = this.getToolbarCommandValues('.uno:CharFontName');
+		const isMissing = !!fontName && typeof fonts === 'object' &&
+			!Object.prototype.hasOwnProperty.call(fonts, fontName);
+		document.body.classList.toggle('current-font-missing', isMissing);
+		document.querySelectorAll('.ui-combobox#fontnamecombobox')
+			.forEach((box) => this.markFontNameBox(box));
+	},
+
+	// While the current font is missing, a font name box also says so in its tooltip and in the
+	// accessible description of its input, as the engine font name box does. The warning
+	// background comes from the body class instead, so a new box shows it on its first paint.
+	markFontNameBox: function(box) {
+		const input = box.querySelector('.ui-combobox-content');
+		if (!input)
+			return;
+
+		if (box._availableFontTooltip === undefined) {
+			box._availableFontTooltip = box.dataset.cooltip || '';
+			if (!box._availableFontTooltip)
+				window.L.control.attachTooltipEventListener(box, this);
+		}
+
+		if (document.body.classList.contains('current-font-missing')) {
+			const warning = _('The current font is not available and will be substituted.');
+			box.setAttribute('data-cooltip', warning);
+			input.setAttribute('aria-description', warning);
+		} else {
+			box.setAttribute('data-cooltip', box._availableFontTooltip);
+			input.removeAttribute('aria-description');
+		}
+	},
+
 	createFontSelector: function(containerId) {
 		var that = this;
 		var container = document.getElementById(containerId);
@@ -283,16 +318,6 @@ window.L.Map.include({
 		app.socket.sendMessage(msg);
 	},
 
-	messageNeedsToBeRedirected: function(command) {
-		if (command === '.uno:EditHyperlink') {
-			this.sendUnoCommand('.uno:HyperlinkDialog');
-			return true;
-		}
-		else {
-			return false;
-		}
-	},
-
 	sendUnoCommand: function (command, json, force) {
 		if (command.indexOf('.uno:') < 0 && command.indexOf('vnd.sun.star.script') < 0)
 			console.error('Trying to send uno command without prefix: "' + command + '"');
@@ -309,6 +334,7 @@ window.L.Map.include({
 					this.sidebar.setupTargetDeck(command);
 				} else {
 					// we don't know which deck was active last, show first then switch if needed
+					this.sidebar.noteShowRequest();
 					app.socket.sendMessage('uno .uno:SidebarShow');
 
 					this.sidebar.setupTargetDeck(command);
@@ -321,10 +347,11 @@ window.L.Map.include({
 		var allowedCommands = ['.uno:Save', '.uno:SaveAs', '.uno:WordCountDialog',
 			'.uno:Signature', '.uno:PrepareSignature', '.uno:DownloadSignature', '.uno:InsertSignatureLine',
 			'.uno:SetDocumentProperties',
-			'.uno:ShowResolvedAnnotations', '.uno:Open', '.uno:CloseWin',
+			'.uno:ShowResolvedAnnotations', '.uno:Open', '.uno:CloseWin', '.uno:Quit',
 			'.uno:ToolbarMode?Mode:string=notebookbar_online.ui', '.uno:ToolbarMode?Mode:string=Default',
 			'.uno:ExportToEPUB', '.uno:ExportToPDF', '.uno:ExportDirectToPDF', '.uno:MoveKeepInsertMode', '.uno:ShowRuler',
-			'.uno:Navigator', '.uno:GotoPage',
+			'.uno:Navigator', '.uno:Navigator?Navigator:bool=true', '.uno:Navigator?Navigator:bool=false',
+			'.uno:GotoPage',
 			// Selecting does not change the document, so a viewer may use it.
 			// Copy goes through the clipboard path and never reaches here.
 			'.uno:SelectAll'];
@@ -334,8 +361,7 @@ window.L.Map.include({
 				'.uno:ResolveCommentThread', '.uno:ResolveComment', '.uno:EditAnnotation', '.uno:ExportToEPUB', '.uno:ExportToPDF',
 				'.uno:ExportDirectToPDF', '.uno:InsertThreadedComment');
 
-			const graphicInfo = GraphicSelection.extraInfo;
-			if (graphicInfo && graphicInfo.isSignature)
+			if (GraphicSelection.isBeingSigned())
 			{
 				// If the just added signature line shape is selected, allow
 				// moving/resizing it.
@@ -357,6 +383,13 @@ window.L.Map.include({
 
 		var map = this;
 
+		// Where the client draws the selection itself, cropping is its own switch and the
+		// engine is not sent into a mode for it.
+		if (command === '.uno:Crop' && GraphicSelection.takesTheCropSwitch()) {
+			GraphicSelection.toggleCropping();
+			return;
+		}
+
 		if (command.startsWith('.uno:SpellOnline')) {
 			var val = map['stateChangeHandler'].getItemValue('.uno:SpellOnline');
 
@@ -364,7 +397,10 @@ window.L.Map.include({
 			if (val && (json === undefined || json === null)) {
 				 // because it is toggle, state has to be the opposite
 				var state = !(val === 'true');
-				window.prefs.set('spellOnline', state);
+				// Kept per document type, so turning it on in Writer leaves Calc alone
+				var docType = map.getDocType();
+				if (docType)
+					window.prefs.set(docType + '.spellOnline', state);
 			}
 		}
 
@@ -374,8 +410,13 @@ window.L.Map.include({
 			&& !command.startsWith('.uno:ToolbarMode') && !force) {
 			console.debug('Cannot execute: ' + command + ' when dialog is opened.');
 			this.dialog.blinkOpenDialog();
-		} else if ((this.isEditMode() || isAllowedInReadOnly) && !this.messageNeedsToBeRedirected(command)) {
-			app.socket.sendMessage('uno ' + command + (json ? ' ' + JSON.stringify(json) : ''));
+		} else if (this.isEditMode() || isAllowedInReadOnly) {
+			// A view that draws from the objects enters and leaves groups itself.
+			if (!GraphicSelection.takesTheCommand(command)) {
+				app.socket.sendMessage('uno ' + command + (json ? ' ' + JSON.stringify(json) : ''));
+				if (command === '.uno:EnterGroup')
+					GraphicSelection.takeTheFirstOfTheGroup();
+			}
 			// user interaction turns off the following of other users
 			if (map.userList && map._docLayer && map._docLayer._viewId)
 				map.userList.followUser(map._docLayer._viewId, /* do instant scroll */ false);
@@ -492,6 +533,7 @@ window.L.Map.include({
 				// Assign only on an actual change: re-setting innerHTML recreates
 				// the children, detaching elements that are yet to be translated.
 				if (trans !== orig) {
+					// eslint-disable-next-line no-restricted-syntax -- translated help page markup that we ship
 					element.innerHTML = trans;
 				}
 			});
@@ -516,8 +558,10 @@ window.L.Map.include({
 		if (id === 'online-help-content') {
 			var productNameContent = contentElement.querySelectorAll('span.productname');
 			for (i = 0, max = productNameContent.length; i < max; i++) {
+				// eslint-disable-next-line no-restricted-syntax -- help page markup that we ship
 				productNameContent[i].innerHTML = productNameContent[i].innerHTML.replace('{productname}', productName);
 			}
+			// eslint-disable-next-line no-restricted-syntax -- help page markup that we ship
 			document.getElementById('online-help-content').innerHTML = app.util.replaceCtrlAltInMac(document.getElementById('online-help-content').innerHTML);
 		}
 		if (id === 'keyboard-shortcuts-content') {
@@ -540,15 +584,23 @@ window.L.Map.include({
 							+ ' or add the binding to Accelerators.xcu / unoshortcuts.py.');
 						continue;
 					}
-					var html = '';
 					var parts = shortcut.split('+');
+					cell.replaceChildren();
 					for (var j = 0; j < parts.length; j++) {
-						if (j > 0) html += '<span class="kbd--plus" aria-hidden="true">+</span>';
-						html += '<kbd>' + parts[j] + '</kbd>';
+						if (j > 0) {
+							const plus = document.createElement('span');
+							plus.className = 'kbd--plus';
+							plus.setAttribute('aria-hidden', 'true');
+							plus.textContent = '+';
+							cell.appendChild(plus);
+						}
+						const key = document.createElement('kbd');
+						key.textContent = parts[j];
+						cell.appendChild(key);
 					}
-					cell.innerHTML = html;
 				}
 			}
+			// eslint-disable-next-line no-restricted-syntax -- help page markup that we ship
 			document.getElementById('keyboard-shortcuts-content').innerHTML = app.util.replaceCtrlAltInMac(document.getElementById('keyboard-shortcuts-content').innerHTML);
 		}
 		var searchInput = document.getElementById('online-help-search-input');
@@ -716,10 +768,13 @@ window.L.Map.include({
 
 		if (!isAnyMatchingContent) {
 			this.resetFilterResults();
-			$('#online-help-search-input').addClass('search-not-found');
-			setTimeout(function () {
-				$('#online-help-search-input').removeClass('search-not-found');
-			}, 800);
+			const searchInput = document.getElementById('online-help-search-input');
+			if (searchInput) {
+				searchInput.classList.add('search-not-found');
+				setTimeout(function () {
+					searchInput.classList.remove('search-not-found');
+				}, 800);
+			}
 		}
 	},
 
@@ -769,6 +824,7 @@ window.L.Map.include({
 			const box = document.getElementById(id + '-box');
 			const innerDiv = window.L.DomUtil.create('div', '', null);
 			box.insertBefore(innerDiv, box.firstChild);
+			// eslint-disable-next-line no-restricted-syntax -- help page markup that we ship
 			innerDiv.innerHTML = data;
 
 			this.onHelpOpen(id, map, productName);
@@ -831,6 +887,7 @@ window.L.Map.include({
 		if (window.mode.isSmallScreenDevice()) {
 			searchInput.focus();
 			toolbar.enableItem('cancelsearch', false);
+			return;
 		}
 
 		this._onGotFocus();
@@ -890,13 +947,18 @@ window.L.Map.include({
 			mobileTopBar.showItem('redo', true);
 		} else {
 			var jsdialogFormulabar = map.formulabar;
+			if (!jsdialogFormulabar && !window.mode.isInteractivePreview()) {
+				console.error("onFormulaBarFocus: formulabar is nil");
+				return;
+			}
 			jsdialogFormulabar.hide('cancelformula');
 			jsdialogFormulabar.hide('acceptformula');
 			jsdialogFormulabar.show('startformula');
 			jsdialogFormulabar.show('AutoSumMenu');
 		}
 
-		$('#AutoSumMenu-button').css('margin-inline', '0');
+		const autoSumMenuButton = document.getElementById('AutoSumMenu-button');
+		if (autoSumMenuButton) autoSumMenuButton.style.marginInline = '0';
 		$('#AutoSumMenu .unoarrow').css('margin', '0');
 
 		map.formulabar.blurField();

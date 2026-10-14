@@ -21,6 +21,7 @@
 #include <Poco/File.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Parser.h>
+#include <Poco/Path.h>
 
 #include <exception>
 #include <fstream>
@@ -29,7 +30,7 @@
 namespace Desktop
 {
 
-void uploadSettings(const std::string& payload)
+bool uploadSettings(const std::string& payload)
 {
     try
     {
@@ -50,13 +51,18 @@ void uploadSettings(const std::string& payload)
         {
             LOG_ERR("uploadSettings failed: Could not open " << target.toString()
                                                              << " for writing");
-            return;
+            return false;
         }
         out << content;
+
+        // The group is the directory the file sits in, the way fetchSettingsConfig()
+        // keys it.
+        return target.depth() > 0 && target.directory(target.depth() - 1) == "xcu";
     }
     catch (const std::exception& ex)
     {
         LOG_ERR("uploadSettings failed: " << ex.what());
+        return false;
     }
 }
 
@@ -220,6 +226,17 @@ void syncSettings(const std::function<void(const std::vector<char>&)>& sendFileC
     }
 }
 
+Poco::Path getUserConfigRoot()
+{
+    // The dialog writes through uploadSettings(), which puts a group under
+    // settings/<config type>/. The apps have no admin iframe, so the type is
+    // always userconfig.
+    Poco::Path root = getConfigPath();
+    root.append("settings").append("userconfig");
+    root.makeDirectory();
+    return root;
+}
+
 static Poco::Path preferencesPath()
 {
     Poco::Path path = getConfigPath();
@@ -227,23 +244,65 @@ static Poco::Path preferencesPath()
     return path;
 }
 
-std::optional<bool> getDarkMode()
+// Parse preferences.json. Returns an empty object when the file is missing
+// or unreadable.
+static Poco::JSON::Object::Ptr readPreferences()
+{
+    Poco::JSON::Object::Ptr obj;
+    try
+    {
+        const Poco::Path path = preferencesPath();
+        if (Poco::File(path).exists())
+        {
+            std::ifstream in(path.toString(), std::ios::binary);
+            if (in.is_open())
+            {
+                std::ostringstream ss;
+                ss << in.rdbuf();
+                Poco::JSON::Parser parser;
+                obj = parser.parse(ss.str()).extract<Poco::JSON::Object::Ptr>();
+            }
+        }
+    }
+    catch (const std::exception&)
+    {
+        obj = nullptr;
+    }
+    if (!obj)
+        obj = new Poco::JSON::Object();
+    return obj;
+}
+
+// Write one key into preferences.json, preserving the other keys.
+static void writePreference(const std::string& key, const Poco::Dynamic::Var& value)
 {
     try
     {
         const Poco::Path path = preferencesPath();
-        if (!Poco::File(path).exists())
-            return std::nullopt;
+        Poco::JSON::Object::Ptr obj = readPreferences();
+        obj->set(key, value);
 
-        std::ifstream in(path.toString(), std::ios::binary);
-        if (!in.is_open())
-            return std::nullopt;
-        std::ostringstream ss;
-        ss << in.rdbuf();
+        Poco::File(path.parent()).createDirectories();
+        std::ofstream out(path.toString(), std::ios::trunc);
+        if (!out.is_open())
+        {
+            LOG_ERR("writePreference failed: could not open " << path.toString());
+            return;
+        }
+        obj->stringify(out);
+    }
+    catch (const std::exception& ex)
+    {
+        LOG_ERR("writePreference failed: " << ex.what());
+    }
+}
 
-        Poco::JSON::Parser parser;
-        const auto obj = parser.parse(ss.str()).extract<Poco::JSON::Object::Ptr>();
-        if (obj && obj->has("darkMode"))
+std::optional<bool> getDarkMode()
+{
+    try
+    {
+        const Poco::JSON::Object::Ptr obj = readPreferences();
+        if (obj->has("darkMode"))
             return obj->getValue<bool>("darkMode");
     }
     catch (const std::exception& ex)
@@ -255,45 +314,31 @@ std::optional<bool> getDarkMode()
 
 void setDarkMode(bool value)
 {
+    writePreference("darkMode", value);
+}
+
+int getUIZoomPercent()
+{
     try
     {
-        const Poco::Path path = preferencesPath();
-
-        // Merge into any existing preferences so other keys are preserved.
-        Poco::JSON::Object::Ptr obj;
-        if (Poco::File(path).exists())
+        const Poco::JSON::Object::Ptr obj = readPreferences();
+        if (obj->has("uiZoomPercent"))
         {
-            std::ifstream in(path.toString(), std::ios::binary);
-            std::ostringstream ss;
-            ss << in.rdbuf();
-            try
-            {
-                Poco::JSON::Parser parser;
-                obj = parser.parse(ss.str()).extract<Poco::JSON::Object::Ptr>();
-            }
-            catch (const std::exception&)
-            {
-                obj = nullptr;
-            }
+            const int percent = obj->getValue<int>("uiZoomPercent");
+            if (percent > 0)
+                return percent;
         }
-        if (!obj)
-            obj = new Poco::JSON::Object();
-
-        obj->set("darkMode", value);
-
-        Poco::File(path.parent()).createDirectories();
-        std::ofstream out(path.toString(), std::ios::trunc);
-        if (!out.is_open())
-        {
-            LOG_ERR("setDarkMode failed: could not open " << path.toString());
-            return;
-        }
-        obj->stringify(out);
     }
     catch (const std::exception& ex)
     {
-        LOG_ERR("setDarkMode failed: " << ex.what());
+        LOG_ERR("getUIZoomPercent failed: " << ex.what());
     }
+    return 0;
+}
+
+void setUIZoomPercent(int percent)
+{
+    writePreference("uiZoomPercent", percent);
 }
 
 } // namespace Desktop

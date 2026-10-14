@@ -16,7 +16,8 @@
 #include <com/sun/star/sheet/XNamedRanges.hpp>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest {
 
@@ -30,7 +31,7 @@ public:
 
     virtual void setUp() override;
 
-    virtual uno::Reference< uno::XInterface > init() override;
+    virtual uno::Reference< cpo::uno::XInterface > init() override;
     virtual uno::Reference< sheet::XNamedRange > getNamedRange(const OUString& rRangeName) override;
 
     CPPUNIT_TEST_SUITE(ScNamedRangeObj);
@@ -81,7 +82,7 @@ uno::Reference< sheet::XNamedRange> ScNamedRangeObj::getNamedRange(const OUStrin
     return xNamedRange;
 }
 
-uno::Reference< uno::XInterface > ScNamedRangeObj::init()
+uno::Reference< cpo::uno::XInterface > ScNamedRangeObj::init()
 {
     return getNamedRange(u"NamedRange"_ustr);
 }

@@ -10,10 +10,8 @@
 $(eval $(call gb_Module_Module,dictionaries))
 
 $(eval $(call gb_Module_add_targets,dictionaries,\
-	Configuration_en \
-	Configuration_hu \
-	Configuration_pt_BR \
-	Configuration_ru \
+	CustomTarget_registry \
+	Package_config \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,dictionaries,\
@@ -31,9 +29,9 @@ $(eval $(call gb_Module_add_l10n_targets,dictionaries,\
 	Dictionary_ckb \
 	Dictionary_cs \
 	Dictionary_da \
-	$(if $(and $(MPL_SUBSET), $(filter-out LINUX,$(OS))),,Dictionary_de) \
+	Dictionary_de \
 	Dictionary_el \
-	$(if $(and $(MPL_SUBSET), $(filter-out LINUX,$(OS))),,Dictionary_en) \
+	Dictionary_en \
 	Dictionary_eo \
 	Dictionary_es \
 	Dictionary_et \
@@ -49,7 +47,7 @@ $(eval $(call gb_Module_add_l10n_targets,dictionaries,\
 	Dictionary_hu \
 	Dictionary_id \
 	Dictionary_is \
-	$(if $(and $(MPL_SUBSET), $(filter-out LINUX,$(OS))),,Dictionary_it) \
+	Dictionary_it \
 	Dictionary_kmr-Latn \
 	Dictionary_kn \
 	Dictionary_ko-KR \

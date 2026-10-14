@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include <cctype>
+#include <o3tl/hash_combine.hxx>
 #include <o3tl/numeric.hxx>
 
 namespace tools
@@ -104,9 +105,9 @@ public:
 
     Guid(Guid const& rOther) { *this = rOther; }
 
-    void operator=(Guid const& rOther) { std::copy(rOther.cbegin(), rOther.cend(), begin()); }
+    void operator=(Guid const& rOther) { maGuidArray = rOther.maGuidArray; }
 
-    bool isEmpty() { return *std::max_element(maGuidArray.begin(), maGuidArray.end()) == 0; }
+    bool isEmpty() const { return *std::max_element(maGuidArray.begin(), maGuidArray.end()) == 0; }
 
     GuidArrayType::iterator begin() { return maGuidArray.begin(); }
     GuidArrayType::iterator end() { return maGuidArray.end(); }
@@ -126,12 +127,12 @@ public:
         return OString(sBuffer);
     }
 
-    OUString getOUString() { return OStringToOUString(getString(), RTL_TEXTENCODING_ASCII_US); }
-
-    bool operator==(Guid const& rCompare) const
+    OUString getOUString() const
     {
-        return rtl_compareUuid(maGuidArray.data(), rCompare.maGuidArray.data()) == 0;
+        return OStringToOUString(getString(), RTL_TEXTENCODING_ASCII_US);
     }
+
+    bool operator==(Guid const& rCompare) const { return maGuidArray == rCompare.maGuidArray; }
 
     bool operator!=(Guid const& rCompare) const { return !(*this == rCompare); }
 };
@@ -144,6 +145,19 @@ inline std::basic_ostream<charT, traits>& operator<<(std::basic_ostream<charT, t
     rStream << "GUID" << aString.getStr();
     return rStream;
 }
+}
+
+namespace std
+{
+template <> struct hash<tools::Guid>
+{
+    std::size_t operator()(tools::Guid const& rGuid) const
+    {
+        std::size_t nSeed = 0;
+        o3tl::hash_combine(nSeed, &*rGuid.cbegin(), std::distance(rGuid.cbegin(), rGuid.cend()));
+        return nSeed;
+    }
+};
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

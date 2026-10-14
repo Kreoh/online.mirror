@@ -59,6 +59,7 @@
 #include <unotools/charclass.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <fmtclds.hxx>
 #include <fmtcol.hxx>
 #include <fmtfsize.hxx>
@@ -1904,12 +1905,12 @@ void SwHTMLWriter::OutCSS1_FrameFormatOptions( const SwFrameFormat& rFrameFormat
                 {
                     bOutXPos = text::RelOrientation::CHAR != rHoriOri.GetRelationOrient();
                     nXPos = text::HoriOrientation::NONE == rHoriOri.GetHoriOrient()
-                                ? rHoriOri.GetPos() : 0;
+                                ? rHoriOri.getPosition().as_twip<SwTwips>() : 0;
 
                     const SwFormatVertOrient& rVertOri = rFrameFormat.GetVertOrient();
                     bOutYPos = text::RelOrientation::CHAR != rVertOri.GetRelationOrient();
                     nYPos = text::VertOrientation::NONE == rVertOri.GetVertOrient()
-                                 ? rVertOri.GetPos() : 0;
+                                 ? rVertOri.getPosition().as_twip<SwTwips>() : 0;
                 }
 
                 if( bOutYPos )

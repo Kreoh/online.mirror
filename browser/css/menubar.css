@@ -158,6 +158,10 @@ nav [id^='save'].saved img {
 	filter: grayscale(0);
 }
 
+#document-last-saved {
+	display: none;
+}
+
 #document-titlebar {
 	display: inline-table; /*new*/
 	table-layout: fixed;
@@ -205,8 +209,6 @@ nav [id^='save'].saved img {
 }
 .main-nav.hasnotebookbar {
 	height: var(--header-height);
-	/* overflow is set dynamically */
-	scrollbar-width: none;
 }
 
 .main-nav.hasnotebookbar:not(.readonly) {
@@ -214,13 +216,6 @@ nav [id^='save'].saved img {
 	padding: 0px;
 	overflow: visible;
 	padding-inline-start: 5px;
-}
-
-@media (max-width: 480px) {
-
-	.main-nav.hasnotebookbar {
-		scrollbar-width: unset;
-	}
 }
 
 /* Customizations to sm-simple theme to make it look like LO menu, lo-menu class */
@@ -274,12 +269,17 @@ nav [id^='save'].saved img {
 	color: var(--color-text-darker);
 	border-color: var(--color-border-darker);
 	border-bottom: 1px solid var(--color-border-darker);
+	padding: var(--spacing-m);
 }
-.lo-menu > #document-header > a.document-logo,
-.lo-menu > #document-header > a.document-logo:hover,
-.lo-menu > #document-header > a.document-logo:focus,
-.lo-menu > #document-header > a.document-logo:active,
-.lo-menu > #document-header > a.document-logo.highlighted {
+.main-nav > #document-header {
+	display: flex;
+	align-items: center;
+}
+.main-nav > #document-header > a.document-logo,
+.main-nav > #document-header > a.document-logo:hover,
+.main-nav > #document-header > a.document-logo:focus,
+.main-nav > #document-header > a.document-logo:active,
+.main-nav > #document-header > a.document-logo.highlighted {
 	background-color: transparent;
 	background-image: var(--doc-icon-url);
 	background-size: 16px 16px;

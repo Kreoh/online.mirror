@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include "vbapagesetup.hxx"
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/UnknownPropertyException.hpp>
 #include <convuno.hxx>
 #include <rangelst.hxx>
 #include <docsh.hxx>
@@ -36,13 +39,14 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 #define ZOOM_IN 10
 #define ZOOM_MAX 400
 
 ScVbaPageSetup::ScVbaPageSetup(const uno::Reference< XHelperInterface >& xParent,
-                const uno::Reference< uno::XComponentContext >& xContext,
+                const uno::Reference< cpo::uno::XComponentContext >& xContext,
                 uno::Reference< sheet::XSpreadsheet > xSheet,
                 const uno::Reference< frame::XModel >& xModel)
 : ScVbaPageSetup_BASE( xParent, xContext ),
@@ -65,7 +69,7 @@ ScVbaPageSetup::ScVbaPageSetup(const uno::Reference< XHelperInterface >& xParent
     mxPageProps->getPropertyValue(u"IsLandscape"_ustr) >>= mbIsLandscape;
 }
 
-OUString SAL_CALL ScVbaPageSetup::getPrintArea()
+OUString ScVbaPageSetup::getPrintArea()
 {
     OUString aPrintArea;
     uno::Reference< sheet::XPrintAreas > xPrintAreas( mxSheet, uno::UNO_QUERY_THROW );
@@ -89,7 +93,7 @@ OUString SAL_CALL ScVbaPageSetup::getPrintArea()
     return aPrintArea;
 }
 
-void SAL_CALL ScVbaPageSetup::setPrintArea( const OUString& rAreas )
+void ScVbaPageSetup::setPrintArea( const OUString& rAreas )
 {
     uno::Reference< sheet::XPrintAreas > xPrintAreas( mxSheet, uno::UNO_QUERY_THROW );
     if( rAreas.isEmpty() ||
@@ -119,32 +123,32 @@ void SAL_CALL ScVbaPageSetup::setPrintArea( const OUString& rAreas )
     }
 }
 
-double SAL_CALL ScVbaPageSetup::getHeaderMargin()
+double ScVbaPageSetup::getHeaderMargin()
 {
     return VbaPageSetupBase::getHeaderMargin();
 }
 
-void SAL_CALL ScVbaPageSetup::setHeaderMargin( double margin )
+void ScVbaPageSetup::setHeaderMargin( double margin )
 {
     VbaPageSetupBase::setHeaderMargin( margin );
 }
 
-double SAL_CALL ScVbaPageSetup::getFooterMargin()
+double ScVbaPageSetup::getFooterMargin()
 {
     return VbaPageSetupBase::getFooterMargin();
 }
 
-void SAL_CALL ScVbaPageSetup::setFooterMargin( double margin )
+void ScVbaPageSetup::setFooterMargin( double margin )
 {
     VbaPageSetupBase::setFooterMargin( margin );
 }
 
-cpo::uno::Any SAL_CALL ScVbaPageSetup::getFitToPagesTall()
+cpo::uno::Any ScVbaPageSetup::getFitToPagesTall()
 {
     return mxPageProps->getPropertyValue(u"ScaleToPagesY"_ustr);
 }
 
-void SAL_CALL ScVbaPageSetup::setFitToPagesTall( const cpo::uno::Any& fitToPagesTall)
+void ScVbaPageSetup::setFitToPagesTall( const cpo::uno::Any& fitToPagesTall)
 {
     try
     {
@@ -162,12 +166,12 @@ void SAL_CALL ScVbaPageSetup::setFitToPagesTall( const cpo::uno::Any& fitToPages
     }
 }
 
-cpo::uno::Any SAL_CALL ScVbaPageSetup::getFitToPagesWide()
+cpo::uno::Any ScVbaPageSetup::getFitToPagesWide()
 {
     return mxPageProps->getPropertyValue(u"ScaleToPagesX"_ustr);
 }
 
-void SAL_CALL ScVbaPageSetup::setFitToPagesWide( const cpo::uno::Any& fitToPagesWide)
+void ScVbaPageSetup::setFitToPagesWide( const cpo::uno::Any& fitToPagesWide)
 {
     try
     {
@@ -185,12 +189,12 @@ void SAL_CALL ScVbaPageSetup::setFitToPagesWide( const cpo::uno::Any& fitToPages
     }
 }
 
-cpo::uno::Any SAL_CALL ScVbaPageSetup::getZoom()
+cpo::uno::Any ScVbaPageSetup::getZoom()
 {
     return mxPageProps->getPropertyValue(u"PageScale"_ustr);
 }
 
-void SAL_CALL ScVbaPageSetup::setZoom( const cpo::uno::Any& zoom)
+void ScVbaPageSetup::setZoom( const cpo::uno::Any& zoom)
 {
     sal_uInt16 pageScale = 0;
     try
@@ -233,7 +237,7 @@ void SAL_CALL ScVbaPageSetup::setZoom( const cpo::uno::Any& zoom)
     mxPageProps->setPropertyValue(u"PageScale"_ustr, cpo::uno::Any( pageScale ));
 }
 
-OUString SAL_CALL ScVbaPageSetup::getLeftHeader()
+OUString ScVbaPageSetup::getLeftHeader()
 {
     OUString leftHeader;
     try
@@ -249,7 +253,7 @@ OUString SAL_CALL ScVbaPageSetup::getLeftHeader()
     return leftHeader;
 }
 
-void SAL_CALL ScVbaPageSetup::setLeftHeader( const OUString& leftHeader)
+void ScVbaPageSetup::setLeftHeader( const OUString& leftHeader)
 {
     try
     {
@@ -263,7 +267,7 @@ void SAL_CALL ScVbaPageSetup::setLeftHeader( const OUString& leftHeader)
     }
 }
 
-OUString SAL_CALL ScVbaPageSetup::getCenterHeader()
+OUString ScVbaPageSetup::getCenterHeader()
 {
     OUString centerHeader;
     try
@@ -279,7 +283,7 @@ OUString SAL_CALL ScVbaPageSetup::getCenterHeader()
     return centerHeader;
 }
 
-void SAL_CALL ScVbaPageSetup::setCenterHeader( const OUString& centerHeader)
+void ScVbaPageSetup::setCenterHeader( const OUString& centerHeader)
 {
     try
     {
@@ -293,7 +297,7 @@ void SAL_CALL ScVbaPageSetup::setCenterHeader( const OUString& centerHeader)
     }
 }
 
-OUString SAL_CALL ScVbaPageSetup::getRightHeader()
+OUString ScVbaPageSetup::getRightHeader()
 {
     OUString rightHeader;
     try
@@ -309,7 +313,7 @@ OUString SAL_CALL ScVbaPageSetup::getRightHeader()
     return rightHeader;
 }
 
-void SAL_CALL ScVbaPageSetup::setRightHeader( const OUString& rightHeader)
+void ScVbaPageSetup::setRightHeader( const OUString& rightHeader)
 {
     try
     {
@@ -323,7 +327,7 @@ void SAL_CALL ScVbaPageSetup::setRightHeader( const OUString& rightHeader)
     }
 }
 
-OUString SAL_CALL ScVbaPageSetup::getLeftFooter()
+OUString ScVbaPageSetup::getLeftFooter()
 {
     OUString leftFooter;
     try
@@ -339,7 +343,7 @@ OUString SAL_CALL ScVbaPageSetup::getLeftFooter()
     return leftFooter;
 }
 
-void SAL_CALL ScVbaPageSetup::setLeftFooter( const OUString& leftFooter)
+void ScVbaPageSetup::setLeftFooter( const OUString& leftFooter)
 {
     try
     {
@@ -353,7 +357,7 @@ void SAL_CALL ScVbaPageSetup::setLeftFooter( const OUString& leftFooter)
     }
 }
 
-OUString SAL_CALL ScVbaPageSetup::getCenterFooter()
+OUString ScVbaPageSetup::getCenterFooter()
 {
     OUString centerFooter;
     try
@@ -369,7 +373,7 @@ OUString SAL_CALL ScVbaPageSetup::getCenterFooter()
     return centerFooter;
 }
 
-void SAL_CALL ScVbaPageSetup::setCenterFooter( const OUString& centerFooter)
+void ScVbaPageSetup::setCenterFooter( const OUString& centerFooter)
 {
     try
     {
@@ -384,7 +388,7 @@ void SAL_CALL ScVbaPageSetup::setCenterFooter( const OUString& centerFooter)
 
 }
 
-OUString SAL_CALL ScVbaPageSetup::getRightFooter()
+OUString ScVbaPageSetup::getRightFooter()
 {
     OUString rightFooter;
     try
@@ -400,7 +404,7 @@ OUString SAL_CALL ScVbaPageSetup::getRightFooter()
     return rightFooter;
 }
 
-void SAL_CALL ScVbaPageSetup::setRightFooter( const OUString& rightFooter)
+void ScVbaPageSetup::setRightFooter( const OUString& rightFooter)
 {
     try
     {
@@ -414,7 +418,7 @@ void SAL_CALL ScVbaPageSetup::setRightFooter( const OUString& rightFooter)
     }
 }
 
-sal_Int32 SAL_CALL ScVbaPageSetup::getOrder()
+sal_Int32 ScVbaPageSetup::getOrder()
 {
     sal_Int32 order = excel::XlOrder::xlDownThenOver;
     try
@@ -432,7 +436,7 @@ sal_Int32 SAL_CALL ScVbaPageSetup::getOrder()
     return order;
 }
 
-void SAL_CALL ScVbaPageSetup::setOrder(sal_Int32 order)
+void ScVbaPageSetup::setOrder(sal_Int32 order)
 {
     bool bOrder = true;
     switch( order )
@@ -455,7 +459,7 @@ void SAL_CALL ScVbaPageSetup::setOrder(sal_Int32 order)
     }
 }
 
-sal_Int32 SAL_CALL ScVbaPageSetup::getFirstPageNumber()
+sal_Int32 ScVbaPageSetup::getFirstPageNumber()
 {
     sal_Int16 number = 0;
     try
@@ -475,7 +479,7 @@ sal_Int32 SAL_CALL ScVbaPageSetup::getFirstPageNumber()
     return number;
 }
 
-void SAL_CALL ScVbaPageSetup::setFirstPageNumber( sal_Int32 firstPageNumber)
+void ScVbaPageSetup::setFirstPageNumber( sal_Int32 firstPageNumber)
 {
     if( firstPageNumber == excel::Constants::xlAutomatic )
         firstPageNumber = 0;
@@ -491,7 +495,7 @@ void SAL_CALL ScVbaPageSetup::setFirstPageNumber( sal_Int32 firstPageNumber)
     }
 }
 
-bool SAL_CALL ScVbaPageSetup::getCenterVertically()
+bool ScVbaPageSetup::getCenterVertically()
 {
     bool centerVertically = false;
     try
@@ -505,7 +509,7 @@ bool SAL_CALL ScVbaPageSetup::getCenterVertically()
     return centerVertically;
 }
 
-void SAL_CALL ScVbaPageSetup::setCenterVertically( bool centerVertically)
+void ScVbaPageSetup::setCenterVertically( bool centerVertically)
 {
     try
     {
@@ -516,7 +520,7 @@ void SAL_CALL ScVbaPageSetup::setCenterVertically( bool centerVertically)
     }
 }
 
-bool SAL_CALL ScVbaPageSetup::getCenterHorizontally()
+bool ScVbaPageSetup::getCenterHorizontally()
 {
     bool centerHorizontally = false;
     try
@@ -530,7 +534,7 @@ bool SAL_CALL ScVbaPageSetup::getCenterHorizontally()
     return centerHorizontally;
 }
 
-void SAL_CALL ScVbaPageSetup::setCenterHorizontally( bool centerHorizontally)
+void ScVbaPageSetup::setCenterHorizontally( bool centerHorizontally)
 {
     try
     {
@@ -541,7 +545,7 @@ void SAL_CALL ScVbaPageSetup::setCenterHorizontally( bool centerHorizontally)
     }
 }
 
-bool SAL_CALL ScVbaPageSetup::getPrintHeadings()
+bool ScVbaPageSetup::getPrintHeadings()
 {
     bool printHeadings = false;
     try
@@ -555,7 +559,7 @@ bool SAL_CALL ScVbaPageSetup::getPrintHeadings()
     return printHeadings;
 }
 
-void SAL_CALL ScVbaPageSetup::setPrintHeadings( bool printHeadings)
+void ScVbaPageSetup::setPrintHeadings( bool printHeadings)
 {
     try
     {
@@ -566,32 +570,32 @@ void SAL_CALL ScVbaPageSetup::setPrintHeadings( bool printHeadings)
     }
 }
 
-bool SAL_CALL ScVbaPageSetup::getPrintGridlines()
+bool ScVbaPageSetup::getPrintGridlines()
 {
     return false;
 }
 
-void SAL_CALL ScVbaPageSetup::setPrintGridlines( bool /*_printgridlines*/ )
+void ScVbaPageSetup::setPrintGridlines( bool /*_printgridlines*/ )
 {
 }
 
-OUString SAL_CALL ScVbaPageSetup::getPrintTitleRows()
+OUString ScVbaPageSetup::getPrintTitleRows()
 {
     return OUString();
 }
-void SAL_CALL ScVbaPageSetup::setPrintTitleRows( const OUString& /*_printtitlerows*/ )
+void ScVbaPageSetup::setPrintTitleRows( const OUString& /*_printtitlerows*/ )
 {
 }
-OUString SAL_CALL ScVbaPageSetup::getPrintTitleColumns()
+OUString ScVbaPageSetup::getPrintTitleColumns()
 {
     return OUString();
 }
 
-void SAL_CALL ScVbaPageSetup::setPrintTitleColumns( const OUString& /*_printtitlecolumns*/ )
+void ScVbaPageSetup::setPrintTitleColumns( const OUString& /*_printtitlecolumns*/ )
 {
 }
 
-sal_Int32 SAL_CALL ScVbaPageSetup::getPaperSize()
+sal_Int32 ScVbaPageSetup::getPaperSize()
 {
     awt::Size aSize; // current papersize
     mxPageProps->getPropertyValue( u"Size"_ustr ) >>= aSize;
@@ -604,7 +608,7 @@ sal_Int32 SAL_CALL ScVbaPageSetup::getPaperSize()
     return nPaperSizeIndex;
 }
 
-void SAL_CALL ScVbaPageSetup::setPaperSize( sal_Int32 papersize )
+void ScVbaPageSetup::setPaperSize( sal_Int32 papersize )
 {
     if ( papersize != excel::XlPaperSize::xlPaperUser )
     {

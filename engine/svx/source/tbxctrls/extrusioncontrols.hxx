@@ -76,17 +76,17 @@ private:
 class ExtrusionDirectionControl : public svt::PopupWindowController
 {
 public:
-    explicit ExtrusionDirectionControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit ExtrusionDirectionControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ExtrusionDepthWindow final : public WeldToolbarPopup
@@ -124,17 +124,17 @@ public:
 class ExtrusionDepthController : public svt::PopupWindowController
 {
 public:
-    explicit ExtrusionDepthController( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit ExtrusionDepthController( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ExtrusionLightingWindow final : public WeldToolbarPopup
@@ -167,17 +167,17 @@ public:
 class ExtrusionLightingControl : public svt::PopupWindowController
 {
 public:
-    explicit ExtrusionLightingControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit ExtrusionLightingControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ExtrusionSurfaceWindow final : public WeldToolbarPopup
@@ -205,17 +205,17 @@ public:
 class ExtrusionSurfaceControl : public svt::PopupWindowController
 {
 public:
-    explicit ExtrusionSurfaceControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit ExtrusionSurfaceControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 }

@@ -69,7 +69,7 @@ class VCL_DLLPUBLIC PDFOutputStream
 {
     public:
     virtual ~PDFOutputStream();
-    virtual void write( const css::uno::Reference< css::io::XOutputStream >& xStream ) = 0;
+    virtual void write( const cpo::uno::Reference< css::io::XOutputStream >& xStream ) = 0;
 };
 
 /** Parameters that are needed when encrypting */
@@ -171,6 +171,7 @@ enum class StructElement
     List, ListItem, LILabel, LIBody,
     Table, TableRow, TableHeader, TableData,
     Title, // PDF 2.0
+    FENote, // PDF 2.0, which has it in place of Note
 
     // Inline level elements
     Span, Quote, Note, Reference, BibEntry, Code, Link, Annot,
@@ -703,7 +704,7 @@ public:
         sal_uInt32                      DPIx, DPIy;     // how to handle MapMode( MapUnit::MapPixel )
                                                         // 0 here specifies a default handling
         PDFWriter::ColorMode            ColorMode;
-        css::uno::Reference< css::security::XCertificate> SignCertificate;
+        cpo::uno::Reference< css::security::XCertificate> SignCertificate;
         OUString                        SignTSA;
         /// Use reference XObject markup for PDF images.
         bool                            UseReferenceXObject;
@@ -740,7 +741,7 @@ public:
         {}
     };
 
-    VCL_DLLPUBLIC PDFWriter( const PDFWriterContext& rContext, const css::uno::Reference< css::beans::XMaterialHolder >& );
+    VCL_DLLPUBLIC PDFWriter( const PDFWriterContext& rContext, const cpo::uno::Reference< css::beans::XMaterialHolder >& );
     VCL_DLLPUBLIC ~PDFWriter();
 
     /** Returns an OutputDevice for formatting
@@ -1029,6 +1030,10 @@ public:
         the dest the link shall point to
     */
     void           SetLinkDest( sal_Int32 nLinkId, sal_Int32 nDestId );
+    /** Name the structure element a destination points at, for ISO 14289-2 8.8 */
+    void SetDestStructureElement(sal_Int32 nDestId, sal_Int32 nStructElementId);
+    /** Add to an element's /Ref the element its content refers to, for ISO 14289-2 8.2.5.8 */
+    void AddStructureRef(sal_Int32 nElementId, sal_Int32 nRefElementId);
     /** Set the URL for a link
         will change a dest type link to a URL type link if necessary
         @param nLinkId
@@ -1150,8 +1155,9 @@ public:
     denotes what kind of element to begin (e.g. a heading or paragraph)
 
     @param rAlias
-    the specified alias will be used as structure tag. Also an entry in the PDF's
-    role map will be created mapping alias to regular structure type.
+    the alias is used as the structure tag. Unless it is a standard type's name, the
+    PDF's role map gets an entry giving the type it stands for; and if another alias has
+    the name already, an indexed name beside it is used instead.
 
     @returns
     the new structure element's id for use in SetCurrentStructureElement
@@ -1202,6 +1208,11 @@ public:
     to a new numerical value. A consistency check is performed before actually setting
     the value; if the check fails, the function returns False and the attribute
     remains unchanged.
+
+    The attributes the standard measures in default user space units - the indents, the
+    spacings, the width, the height, the line height and the baseline shift - take their
+    value in the current map mode, the way a bounding box is given. The rest are counts
+    and identifiers, which no map mode applies to.
 
     @param eAttr
     denotes what attribute to change
@@ -1305,6 +1316,8 @@ public:
 } // end namespace vcl::pdf
 
 } // end namespace vcl
+
+int VCL_DLLPUBLIC TestFontPDFExport(const void* data, sal_uInt32 size);
 
 #endif // INCLUDED_VCL_PDFWRITER_HXX
 

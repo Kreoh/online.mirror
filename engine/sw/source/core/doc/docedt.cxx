@@ -48,6 +48,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::linguistic2;
+using namespace ::cpo;
 
 
 void RestFlyInRange( SaveFlyArr & rArr, const SwPosition& rStartPos,
@@ -143,14 +144,14 @@ void SaveFlyInRange( const SwPaM& rPam, const SwPosition& rInsPos,
     sw::SpzFrameFormat* pFormat;
     const SwFormatAnchor* pAnchor;
 
-    const SwPosition* pPos = rPam.Start();
+    auto [pPos, pEnd] = rPam.StartEnd(); // SwPosition*
     const SwNode& rSttNd = pPos->GetNode();
 
-    SwPosition atParaEnd(*rPam.End());
+    SwPosition atParaEnd(*pEnd);
     if (bMoveAllFlys)
     {
-        assert(!rPam.End()->GetNode().IsTextNode() // can be table end-node
-            || rPam.End()->GetContentIndex() == rPam.End()->GetNode().GetTextNode()->Len());
+        assert(!pEnd->GetNode().IsTextNode() // can be table end-node
+               || pEnd->GetContentIndex() == pEnd->GetNode().GetTextNode()->Len());
         atParaEnd.Adjust(SwNodeOffset(1));
     }
 
@@ -171,9 +172,9 @@ void SaveFlyInRange( const SwPaM& rPam, const SwPosition& rInsPos,
             bool bInsPos = false;
 
             if (       (RndStdIds::FLY_AT_CHAR == pAnchor->GetAnchorId()
-                        && IsDestroyFrameAnchoredAtChar(*pAPos, *rPam.Start(), *rPam.End()))
+                        && IsDestroyFrameAnchoredAtChar(*pAPos, *pPos, *pEnd))
                     || (RndStdIds::FLY_AT_PARA == pAnchor->GetAnchorId()
-                        && IsSelectFrameAnchoredAtPara(*pAPos, *rPam.Start(), atParaEnd,
+                        && IsSelectFrameAnchoredAtPara(*pAPos, *pPos, atParaEnd,
                             bMoveAllFlys
                                 ? DelContentType::CheckNoCntnt|DelContentType::AllMask
                                 : DelContentType::AllMask))
@@ -189,7 +190,7 @@ void SaveFlyInRange( const SwPaM& rPam, const SwPosition& rInsPos,
                 SaveFly aSave( pAPos->GetNodeIndex() - rSttNd.GetIndex(),
                     (RndStdIds::FLY_AT_CHAR == pAnchor->GetAnchorId())
                         ? (pAPos->GetNode() == rSttNd)
-                            ? pAPos->GetContentIndex() - rPam.Start()->GetContentIndex()
+                            ? pAPos->GetContentIndex() - pPos->GetContentIndex()
                             : pAPos->GetContentIndex()
                         : 0,
                                 pFormat, bInsPos );
@@ -523,8 +524,7 @@ cpo::uno::Any SwDoc::Spell( SwPaM& rPaM,
                     SwRootFrame const*const pLayout,
                     SwConversionArgs *pConvArgs  ) const
 {
-    SwPosition* const pSttPos = rPaM.Start();
-    SwPosition* const pEndPos = rPaM.End();
+    auto const [pSttPos, pEndPos] = rPaM.StartEnd();
 
     std::unique_ptr<SwSpellArgs> pSpellArgs;
     if (pConvArgs)
@@ -628,7 +628,7 @@ cpo::uno::Any SwDoc::Spell( SwPaM& rPaM,
                             {
                                 if (const SwDocShell* pShell = GetDocShell())
                                 {
-                                    uno::Reference<uno::XInterface> xDoc = pShell->GetModel();
+                                    uno::Reference<cpo::uno::XInterface> xDoc = pShell->GetModel();
                                     // Expand the string:
                                     const ModelToViewHelper aConversionMap(*pNd->GetTextNode(), pLayout);
                                     const OUString& aExpandText = aConversionMap.getViewText();

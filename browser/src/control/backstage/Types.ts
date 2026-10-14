@@ -34,13 +34,15 @@ interface BackstageTabConfig {
 		| 'history'
 		| 'options'
 		| 'about'
-		| 'sign';
+		| 'sign'
+		| 'quit';
 }
 
 interface TemplateTypeMap {
 	writer: 'writer';
 	calc: 'calc';
 	impress: 'impress';
+	draw: 'draw';
 }
 
 type TemplateType = TemplateTypeMap[keyof TemplateTypeMap];
@@ -52,6 +54,8 @@ interface TemplateData {
 	path?: string;
 	basename?: string;
 	preview?: string;
+	// Images to try in turn when the preview fails to load.
+	previewFallbacks?: string[];
 	featured?: boolean;
 	searchText: string;
 }
@@ -89,7 +93,12 @@ interface ExportSections {
 	downloadAs: ExportOptionItem[];
 }
 
-type CloudProviderKind = 'nextcloud' | 'opencloud' | 'seafile' | 'other';
+/*
+ * A cloud service identifier, in lower-case letters, digits and dashes:
+ * 'other' for any server that speaks the protocol, otherwise one of the
+ * services this build ships with or one a branding declares.
+ */
+type CloudProviderKind = string;
 
 interface CloudProvider {
 	id: string;

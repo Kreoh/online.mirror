@@ -22,6 +22,7 @@
 #include <swrenamexnameddlg.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwRenameXNamedDlg::SwRenameXNamedDlg(weld::Widget* pParent,
             const uno::Reference< container::XNamed > & xN,
@@ -57,7 +58,7 @@ IMPL_LINK_NOARG(SwRenameXNamedDlg, OkHdl, weld::Button&, void)
     {
         m_xNamed->setName(m_xNewNameED->get_text());
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         OSL_FAIL("name wasn't changed");
     }

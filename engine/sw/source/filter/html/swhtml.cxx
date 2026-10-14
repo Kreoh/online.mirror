@@ -46,6 +46,7 @@
 #include <svtools/ctrltool.hxx>
 #include <unotools/pathoptions.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/wrkwin.hxx>
 #include <sfx2/event.hxx>
 #include <sfx2/docfile.hxx>
 
@@ -102,6 +103,7 @@
 #include <docufld.hxx>
 #include "swcss1.hxx"
 #include <fltini.hxx>
+#include <shellio.hxx>
 #include <htmltbl.hxx>
 #include "htmlnum.hxx"
 #include "swhtml.hxx"
@@ -117,6 +119,7 @@
 #include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/sequence.hxx>
 #include <officecfg/Office/Common.hxx>
+#include <toolkit/controls/unocontrolcontainer.hxx>
 
 #include <swerror.h>
 #include <ndole.hxx>
@@ -136,6 +139,7 @@
 
 using editeng::SvxBorderLine;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // <P ALIGN=xxx>, <Hn ALIGN=xxx>, <TD ALIGN=xxx> etc.
 HTMLOptionEnum<SvxAdjust> const aHTMLPAlignTable[] =
@@ -305,15 +309,13 @@ SwHTMLParser::SwHTMLParser( SwDoc* pD, SwPaM& rCursor, SvStream& rIn,
     m_bInFootEndNoteAnchor( false ),
     m_bInFootEndNoteSymbol( false ),
     m_bIgnoreHTMLComments( bNoHTMLComments ),
-    m_bRemoveHidden( false ),
     m_bBodySeen( false ),
     m_bReadingHeaderOrFooter( false ),
     m_bNotifyMacroEventRead( false ),
     m_isInTableStructure(false),
     m_nTableDepth( 0 ),
     m_nFloatingFrames( 0 ),
-    m_nListItems( 0 ),
-    m_pTempViewFrame(nullptr)
+    m_nListItems( 0 )
 {
     // If requested explicitly, then force ignoring of comments (don't create postits for them).
     if (!bFuzzing)
@@ -494,7 +496,7 @@ SwHTMLParser::~SwHTMLParser()
             SfxObjectCreateMode::INTERNAL != pShell->GetCreateMode() )
         {
             SfxMedium * medium = pShell->GetMedium();
-            m_xDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks( nLinkMode == MANUAL, nullptr, medium == nullptr ? OUString() : medium->GetName() );
+            m_xDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks( nLinkMode == MANUAL, medium == nullptr ? OUString() : medium->GetName() );
         }
 
         if ( pShell->IsLoading() )
@@ -528,15 +530,12 @@ SwHTMLParser::~SwHTMLParser()
 
     m_xDoc.clear();
 
-    if ( m_pTempViewFrame )
+    if (m_xControlSizeContainer.is())
     {
-        m_pTempViewFrame->DoClose();
-
-        // the temporary view frame is hidden, so the hidden flag might need to be removed
-        SwDocShell* pShell = m_xDoc.is() ? m_xDoc->GetDocShell() : nullptr;
-        if ( m_bRemoveHidden && pShell && pShell->GetMedium() )
-            pShell->GetMedium()->GetItemSet().ClearItem( SID_HIDDEN );
+        m_xControlSizeContainer->dispose();
+        m_xControlSizeContainer.clear();
     }
+    m_xControlSizeWindow.disposeAndClear();
 }
 
 IMPL_LINK_NOARG( SwHTMLParser, AsyncCallback, void*, void )
@@ -789,7 +788,7 @@ void SwHTMLParser::Continue( HtmlTokenId nToken )
                 if (pTextNode->GetText().getLength())
                     pDelNd->FormatToTextAttr( pTextNode );
                 else
-                    pTextNode->ChgFormatColl( pDelNd->GetTextColl() );
+                    Reader::TakePastedParagraphFormat(*pTextNode, *pDelNd);
                 pTextNode->JoinNext();
             }
         }
@@ -3969,16 +3968,19 @@ void SwHTMLParser::NewPara()
                                              SwPoolFormatId::COLL_TEXT, aClass )
                      : new HTMLAttrContext( HtmlTokenId::PARABREAK_ON ));
 
-    // parse styles (Don't consider class. This is only possible as long as none of
-    // the CSS1 properties of the class must be formatted hard!!!)
-    if (HasStyleOptions(aStyle, aId, {}, &aLang, &aDir))
+    // parse styles. When inserting, the receiving document's styles stay unchanged, so the class
+    // rules are hard formatting instead of a paragraph style.
+    const OUString aHardClass = IsNewDoc() ? OUString() : aClass;
+    if (HasStyleOptions(aStyle, aId, aHardClass, &aLang, &aDir))
     {
         SfxItemSet aItemSet( m_xDoc->GetAttrPool(), m_pCSS1Parser->GetWhichMap() );
         SvxCSS1PropertyInfo aPropInfo;
 
-        if (ParseStyleOptions(aStyle, aId, OUString(), aItemSet, aPropInfo, &aLang, &aDir))
+        if (ParseStyleOptions(aStyle, aId, aHardClass, aItemSet, aPropInfo, &aLang, &aDir,
+                              u"" OOO_STRING_SVTOOLS_HTML_parabreak))
         {
-            OSL_ENSURE( aClass.isEmpty() || !m_pCSS1Parser->GetClass( aClass ),
+            OSL_ENSURE( !aHardClass.isEmpty() || aClass.isEmpty() ||
+                        !m_pCSS1Parser->GetClass( aClass ),
                     "Class is not considered" );
             DoPositioning( aItemSet, aPropInfo, xCntxt.get() );
             InsertAttrs( aItemSet, aPropInfo, xCntxt.get() );

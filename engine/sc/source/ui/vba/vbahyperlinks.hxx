@@ -97,31 +97,31 @@ typedef CollTestImplHelper< ov::excel::XHyperlinks > ScVbaHyperlinks_BASE;
 class ScVbaHyperlinks : private detail::ScVbaHlinkContainerMember, public ScVbaHyperlinks_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScVbaHyperlinks(
-        const css::uno::Reference< ov::XHelperInterface >& rxParent,
-        const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+        const cpo::uno::Reference< ov::XHelperInterface >& rxParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScVbaHyperlinks(
-        const css::uno::Reference< ov::XHelperInterface >& rxParent,
-        const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+        const cpo::uno::Reference< ov::XHelperInterface >& rxParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const ScVbaHyperlinksRef& rxSheetHlinks, const ScRangeList& rScRanges );
 
     virtual ~ScVbaHyperlinks() override;
 
     // XHyperlinks
-    virtual css::uno::Reference< ov::excel::XHyperlink > SAL_CALL Add(
+    virtual cpo::uno::Reference< ov::excel::XHyperlink > Add(
         const cpo::uno::Any& rAnchor, const cpo::uno::Any& rAddress, const cpo::uno::Any& rSubAddress,
         const cpo::uno::Any& rScreenTip, const cpo::uno::Any& rTextToDisplay ) override;
 
-    virtual void SAL_CALL Delete() override;
+    virtual void Delete() override;
 
     // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
+    virtual cpo::uno::Type getElementType() override;
 
     // ScVbaCollectionBase
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& rSource ) override;

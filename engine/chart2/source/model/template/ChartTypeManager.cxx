@@ -42,7 +42,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/container/XContentEnumerationAccess.hpp>
 #include <com/sun/star/lang/XServiceName.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <sal/log.hxx>
 
 #include <algorithm>
@@ -52,6 +52,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::cpo::uno::Sequence;
 
@@ -248,7 +249,7 @@ namespace chart
 
 ChartTypeManager::ChartTypeManager(
     uno::Reference<
-        uno::XComponentContext > xContext ) :
+        cpo::uno::XComponentContext > xContext ) :
     m_xContext(std::move( xContext ))
 {}
 
@@ -256,7 +257,7 @@ ChartTypeManager::~ChartTypeManager()
 {}
 
 // ____ XMultiServiceFactory ____
-uno::Reference< uno::XInterface > ChartTypeManager::createInstance(
+uno::Reference< cpo::uno::XInterface > ChartTypeManager::createInstance(
     const OUString& aServiceSpecifier )
 {
     return static_cast<cppu::OWeakObject*>(createTemplate(aServiceSpecifier).get());
@@ -611,7 +612,7 @@ rtl::Reference< ::chart::ChartTypeTemplate > ChartTypeManager::createTemplate(
     return xTemplate;
 }
 
-uno::Reference< uno::XInterface > ChartTypeManager::createInstanceWithArguments(
+uno::Reference< cpo::uno::XInterface > ChartTypeManager::createInstanceWithArguments(
     const OUString& ServiceSpecifier,
     const cpo::uno::Sequence< cpo::uno::Any >& /* Arguments */ )
 {
@@ -638,7 +639,7 @@ cpo::uno::Sequence< OUString > ChartTypeManager::getAvailableServiceNames()
             xEnumAcc->createContentEnumeration( u"com.sun.star.chart2.ChartTypeTemplate"_ustr ));
         if( xEnum.is())
         {
-            uno::Reference< uno::XInterface > xFactIntf;
+            uno::Reference< cpo::uno::XInterface > xFactIntf;
 
             while( xEnum->hasMoreElements())
             {
@@ -675,8 +676,8 @@ cpo::uno::Sequence< OUString > ChartTypeManager::getSupportedServiceNames()
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart_ChartTypeManager_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart_ChartTypeManager_get_implementation(cpo::uno::XComponentContext *context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::ChartTypeManager(context));

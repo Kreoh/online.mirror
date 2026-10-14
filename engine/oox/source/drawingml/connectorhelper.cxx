@@ -38,6 +38,7 @@
 #include <vector>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -348,7 +349,7 @@ void ConnectorHelper::applyConnections(const oox::drawingml::ShapePtr& pConnecto
             // They do not belong to the preset geometry of the shape.
             // Adapt gluepoint index to LibreOffice
             uno::Reference<drawing::XGluePointsSupplier> xSupplier(xShape, uno::UNO_QUERY);
-            css::uno::Reference<css::container::XIdentifierContainer> xGluePoints(
+            cpo::uno::Reference<css::container::XIdentifierContainer> xGluePoints(
                 xSupplier->getGluePoints(), uno::UNO_QUERY);
             sal_Int32 nCountGluePoints = xGluePoints->getIdentifiers().getLength();
             sal_Int32 nGlueId = aIt.mnDestGlueId;
@@ -490,6 +491,32 @@ void ConnectorHelper::applyCurvedHandleAdjustments(oox::drawingml::ShapePtr pCon
             xPropSet->setPropertyValue("EdgeLine" + OUString::number(i + 1) + "Delta",
                                        cpo::uno::Any(nDiff));
         }
+    }
+}
+
+void oox::drawingml::connectConnectorShapes(ShapeIdMap& rShapeMap)
+{
+    for (auto& rIt : rShapeMap)
+    {
+        if (rIt.second->getServiceName() != "com.sun.star.drawing.ConnectorShape")
+            continue;
+
+        ConnectorHelper::applyConnections(rIt.second, rShapeMap);
+
+        if (rIt.second->getConnectorName() == u"bentConnector3"_ustr
+            || rIt.second->getConnectorName() == u"bentConnector4"_ustr
+            || rIt.second->getConnectorName() == u"bentConnector5"_ustr)
+        {
+            ConnectorHelper::applyBentHandleAdjustments(rIt.second);
+        }
+        else if (rIt.second->getConnectorName() == u"curvedConnector3"_ustr
+                 || rIt.second->getConnectorName() == u"curvedConnector4"_ustr
+                 || rIt.second->getConnectorName() == u"curvedConnector5"_ustr)
+        {
+            ConnectorHelper::applyCurvedHandleAdjustments(rIt.second);
+        }
+        // else use the default path.
+        // curveConnector2 and bentConnector2 do not have handles.
     }
 }
 

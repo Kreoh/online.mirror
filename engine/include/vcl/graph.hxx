@@ -26,7 +26,7 @@
 #include <vcl/bitmap.hxx>
 #include <vcl/animate/Animation.hxx>
 #include <vcl/gfxlink.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <vcl/vectorgraphicdata.hxx>
 #include <basegfx/vector/b2dsize.hxx>
 #include <vcl/GraphicExternalLink.hxx>
@@ -97,7 +97,7 @@ public:
                     Graphic( const std::shared_ptr<VectorGraphicData>& rVectorGraphicDataPtr );
                     Graphic( const Animation& rAnimation );
                     Graphic( const GDIMetaFile& rMtf );
-                    Graphic( const css::uno::Reference< css::graphic::XGraphic >& rxGraphic );
+                    Graphic( const cpo::uno::Reference< css::graphic::XGraphic >& rxGraphic );
 
     Graphic&        operator=( const Graphic& rGraphic );
     Graphic&        operator=( Graphic&& rGraphic ) noexcept;
@@ -114,6 +114,9 @@ public:
 
     bool            IsTransparent() const;
     bool            IsAlpha() const;
+
+    bool            HasTransparentPixels() const;
+
     bool            IsAnimated() const;
     SAL_DLLPRIVATE bool IsEPS() const;
 
@@ -132,7 +135,7 @@ public:
     Animation       GetAnimation() const;
     const GDIMetaFile& GetGDIMetaFile() const;
 
-    css::uno::Reference< css::graphic::XGraphic > GetXGraphic() const;
+    cpo::uno::Reference< css::graphic::XGraphic > GetXGraphic() const;
 
     Size            GetPrefSize() const;
     void            SetPrefSize( const Size& rPrefSize );
@@ -184,6 +187,19 @@ public:
     bool            IsGfxLink() const;
 
     const std::shared_ptr<VectorGraphicData>& getVectorGraphicData() const;
+
+    /** Whether the graphic carries vector graphic data: the drawing of an SVG, of a WMF or EMF
+        metafile, or of a PDF. Every other format answers false, including the ones that decode to
+        a metafile of drawing commands. A graphic that is swapped out answers from its link type
+        where it can, so the formats are told apart without decoding the image. */
+    bool isVectorGraphic() const;
+
+    /** Brings the encoded source bytes of the graphic back into memory. Afterwards those bytes
+        are in memory and the graphic memory manager counts them, so a reduction can write them
+        back out to their temporary file. The image itself is not decoded, so a graphic that was
+        swapped out is still swapped out afterwards. A graphic that keeps no encoded bytes is left
+        as it is. */
+    void ensureEncodedDataAvailable() const;
 
     /// Get the page number of the multi-page source this Graphic is rendered from.
     sal_Int32 getPageNumber() const;

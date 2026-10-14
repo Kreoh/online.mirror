@@ -14,6 +14,10 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Impress hyperlink popup te
 	function enterShapeTextEdit() {
 		impressHelper.selectTextShapeInTheCenter();
 		impressHelper.dblclickOnSelectedShape();
+
+		// dblclickOnSelectedShape is satisfied by the cursor container, which is always there,
+		// so a key sent next could reach the core before the text edit has started, and be lost.
+		cy.then(() => helper.processToIdle(win));
 	}
 
 	// Every test reads the same text, so the shape holds "before <hyperlink>
@@ -154,6 +158,37 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Impress hyperlink popup te
 		// Leave the document editable again.
 		cy.then(() => win.app.map.setPermission('edit'));
 		cy.then(() => helper.processToIdle(win));
+	});
+
+	it('Editing the hyperlink from the popup replaces its text.', function() {
+		enterShapeTextEdit();
+
+		helper.typeIntoDocument('{home}');
+		cy.then(() => helper.processToIdle(win));
+
+		// The caret sits in front of the field, with nothing selected.
+		for (var i = 0; i < 7; i++) {
+			helper.typeIntoDocument('{rightArrow}');
+		}
+		cy.then(() => helper.processToIdle(win));
+
+		cy.cGet('.hyperlink-pop-up-container').should('be.visible');
+		cy.cGet('#hyperlink-pop-up-edit').click();
+
+		cy.cGet('#indication-input').should('have.value', 'linktext');
+		// The new text has as many letters as the old one, so the link stays
+		// where the later tests expect it on the slide.
+		cy.cGet('#indication-input').clear();
+		cy.cGet('#indication-input').type('linkedit');
+		cy.cGet('#ok').click();
+		cy.cGet('#target-input').should('not.exist');
+		cy.then(() => helper.processToIdle(win));
+
+		// The shape still holds one hyperlink, now with the new text. Autocorrect capitalised the
+		// first word of the sentence when it was typed.
+		impressHelper.triggerNewSVGForShapeInTheCenter();
+		cy.cGet('#document-container g.Page .TextParagraph .TextPosition tspan')
+			.should('have.text', 'Before linkedit after');
 	});
 
 	it('Popup disappears after navigating away from hyperlink.', function() {

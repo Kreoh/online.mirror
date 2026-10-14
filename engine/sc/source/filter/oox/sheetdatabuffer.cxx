@@ -55,12 +55,13 @@ namespace oox::xls {
 
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sheet;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 
 CellModel::CellModel() :
     mnCellType( XML_TOKEN_INVALID ),
     mnXfId( -1 ),
+    mnValueMetadata( 0 ),
     mbShowPhonetic( false )
 {
 }
@@ -173,6 +174,14 @@ void SheetDataBuffer::setBooleanCell( const CellModel& rModel, bool bValue )
 
     // #108770# set 'Standard' number format for all Boolean cells
     setCellFormat( rModel );
+}
+
+void SheetDataBuffer::setImageCell( const CellModel& rModel )
+{
+    // The cell keeps its formatting and stays blank, and the picture is placed over it once the
+    // column widths and row heights of the sheet are known.
+    setBlankCell( rModel );
+    maInCellImages.push_back( InCellImage{ rModel.maCellAddr, rModel.mnValueMetadata } );
 }
 
 void SheetDataBuffer::setErrorCell( const CellModel& rModel, const OUString& rErrorCode )
@@ -634,6 +643,14 @@ ApiTokenSequence SheetDataBuffer::resolveSharedFormula( const ScAddress& rAddr )
 
 void SheetDataBuffer::finalizeArrayFormula( const ScRange& rRange, const ApiTokenSequence& rTokens )
 {
+    // An array formula that could not be imported leaves its range empty. Only this sheet is
+    // touched, because the other sheets may still be importing on other threads.
+    if( !rTokens.hasElements() )
+    {
+        getScDocument().DeleteAreaTab( rRange, InsertDeleteFlags::CONTENTS );
+        return;
+    }
+
     rtl::Reference<ScCellRangeObj> xCellRangeObj(new ScCellRangeObj(getScDocument().GetDocumentShell(), rRange));
     xCellRangeObj->setArrayTokens(rTokens);
 }

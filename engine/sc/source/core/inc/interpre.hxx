@@ -42,6 +42,7 @@
 
 #include <unordered_map>
 #include <memory>
+#include <optional>
 #include <vector>
 #include <limits>
 #include <ostream>
@@ -250,6 +251,11 @@ private:
     ScResultTokenMap maResultTokenMap;  // Result FormulaToken* to formula::FormulaTokenRef
     ScFormulaCell* pMyFormulaCell;      // the cell of this formula expression
 
+    // Range a matrix operand of the current token sits at, empty if none carried one. The
+    // flag is set when two operands carried different ranges, leaving no single one.
+    std::optional<ScComplexRefData> moMatrixOperandRange;
+    bool mbMatrixOperandRangeConflict = false;
+
     const formula::FormulaToken* pCur;  // current token
     const formula::FormulaToken* pStack[ MAXSTACK ]; // the current stack
     FormulaError nGlobalError;          // global (local to this formula expression) error
@@ -391,6 +397,25 @@ private:
         assert(!p || dynamic_cast<const T*>(p.get()));
         return static_cast<const T*>(p.get());
     }
+    /** Note the range a popped matrix operand sits at, so a result of the same shape can be
+        passed on as sitting there too. */
+    void NoteMatrixOperandRange(const formula::FormulaToken* pToken);
+
+    /** Pop the operand of a reference operator.
+
+        A spilled range arrives as a matrix that carries the range it was read from. These
+        operators work on ranges, so such a matrix comes back as the matching double
+        reference. Everything else comes back unchanged.
+     */
+    formula::FormulaConstTokenRef PopReferenceOperand();
+
+    /** Whether the top of the stack is a matrix whose values are still the cells' own. */
+    bool IsTopMatrixReference() const
+    {
+        return sp > 0 && pStack[sp - 1]->GetType() == formula::svMatrix
+               && static_cast<const ScMatrixToken*>(pStack[sp - 1])->IsMatrixReference();
+    }
+
     void Pop();
     void PopError();
     double PopDouble();
@@ -437,6 +462,10 @@ private:
     bool PopDoubleRefOrSingleRef( ScAddress& rAdr );
     void PopDoubleRefPushMatrix();
     void PopRefListPushMatrixOrRef();
+    /** Pop an external double reference and push the single reference its
+        implicit intersection yields. Leaves the stack alone and returns false
+        when the formula position does not intersect the range. */
+    bool PopExternalDoubleRefPushSingleRef();
     // If MatrixFormula: convert svDoubleRef to svMatrix, create JumpMatrix.
     // Else convert area reference parameters marked as ForceArray to array.
     // Returns true if JumpMatrix created.

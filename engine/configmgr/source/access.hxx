@@ -35,7 +35,6 @@
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/container/XContainer.hpp>
 #include <com/sun/star/container/XHierarchicalName.hpp>
-#include <com/sun/star/configuration/XDocumentation.hpp>
 #include <com/sun/star/container/XHierarchicalNameReplace.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XNamed.hpp>
@@ -43,7 +42,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cppuhelper/weak.hxx>
 #include <osl/interlck.h>
 #include <rtl/ref.hxx>
@@ -80,7 +79,6 @@ class Access:
     public cppu::OWeakObject, public css::lang::XTypeProvider,
     public css::lang::XServiceInfo,
     public css::lang::XComponent,
-    public css::configuration::XDocumentation,
     public css::container::XHierarchicalNameReplace,
     public css::container::XContainer,
     public css::beans::XExactName,
@@ -136,11 +134,11 @@ public:
     virtual void dispose() override;
 
     virtual void addEventListener(
-        css::uno::Reference< css::lang::XEventListener >
+        cpo::uno::Reference< css::lang::XEventListener >
             const & xListener) override;
 
     virtual void removeEventListener(
-        css::uno::Reference< css::lang::XEventListener >
+        cpo::uno::Reference< css::lang::XEventListener >
             const & aListener) override;
 
     virtual cpo::uno::Type getElementType() override;
@@ -158,26 +156,17 @@ public:
     virtual cpo::uno::Any getByHierarchicalName(
         OUString const & aName) override;
 
-    virtual OUString getDescriptionByHierarchicalName(
-        OUString const & aName) override;
-
-    virtual cpo::uno::Type getTypeByHierarchicalName(
-        OUString const & aName) override;
-
-    virtual bool getModifiedByHierarchicalName(
-        OUString const & aName) override;
-
     virtual bool hasByHierarchicalName(OUString const & aName) override;
 
     virtual void replaceByHierarchicalName(
         OUString const & aName, cpo::uno::Any const & aElement) override;
 
     virtual void addContainerListener(
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::container::XContainerListener > const & xListener) override;
 
     virtual void removeContainerListener(
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::container::XContainerListener > const & xListener) override;
 
     virtual OUString getExactName(
@@ -203,7 +192,7 @@ public:
     virtual css::beans::Property getAsProperty() override;
 
     virtual
-    css::uno::Reference< css::beans::XPropertySetInfo >
+    cpo::uno::Reference< css::beans::XPropertySetInfo >
     getPropertySetInfo() override;
 
     virtual void setPropertyValue(
@@ -215,22 +204,22 @@ public:
 
     virtual void addPropertyChangeListener(
         OUString const & aPropertyName,
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XPropertyChangeListener > const & xListener) override;
 
     virtual void removePropertyChangeListener(
         OUString const & aPropertyName,
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XPropertyChangeListener > const & aListener) override;
 
     virtual void addVetoableChangeListener(
         OUString const & PropertyName,
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XVetoableChangeListener > const & aListener) override;
 
     virtual void removeVetoableChangeListener(
         OUString const & PropertyName,
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XVetoableChangeListener > const & aListener) override;
 
     virtual void setPropertyValues(
@@ -244,23 +233,23 @@ public:
 
     virtual void addPropertiesChangeListener(
         cpo::uno::Sequence< OUString > const & aPropertyNames,
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XPropertiesChangeListener > const &
                 xListener) override;
 
     virtual void removePropertiesChangeListener(
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XPropertiesChangeListener > const &
                 xListener) override;
 
     virtual void firePropertiesChangeEvent(
         cpo::uno::Sequence< OUString > const & aPropertyNames,
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::beans::XPropertiesChangeListener > const &
                 xListener) override;
 
     virtual
-    css::uno::Reference<
+    cpo::uno::Reference<
         css::beans::XHierarchicalPropertySetInfo >
     getHierarchicalPropertySetInfo() override;
 
@@ -296,10 +285,10 @@ public:
 
     virtual void removeByName(OUString const & aName) override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstance() override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstanceWithArguments(
         cpo::uno::Sequence< cpo::uno::Any > const &
             aArguments) override;
@@ -399,19 +388,19 @@ private:
 
     typedef
         o3tl::sorted_vector<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::lang::XEventListener > >
         DisposeListeners;
 
     typedef
         o3tl::sorted_vector<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::container::XContainerListener > >
         ContainerListeners;
 
     typedef
         o3tl::sorted_vector<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::beans::XPropertyChangeListener > >
         PropertyChangeListenersElement;
 
@@ -420,7 +409,7 @@ private:
 
     typedef
         o3tl::sorted_vector<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::beans::XVetoableChangeListener > >
         VetoableChangeListenersElement;
 
@@ -429,7 +418,7 @@ private:
 
     typedef
         o3tl::sorted_vector<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::beans::XPropertiesChangeListener > >
         PropertiesChangeListeners;
 

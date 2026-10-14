@@ -20,8 +20,10 @@
 #include <memory>
 #include <utility>
 #include <worksheethelper.hxx>
+#include <docuno.hxx>
 
 #include <algorithm>
+#include <cmath>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
@@ -32,7 +34,7 @@
 #include <com/sun/star/sheet/XCellAddressable.hpp>
 #include <com/sun/star/sheet/XMultiFormulaTokens.hpp>
 #include <com/sun/star/sheet/XSheetCellRangeContainer.hpp>
-#include <com/sun/star/sheet/XSheetCondition2.hpp>
+#include <com/sun/star/sheet/XSheetCondition.hpp>
 #include <com/sun/star/sheet/XSheetOutline.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/table/XColumnRowRange.hpp>
@@ -41,6 +43,7 @@
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <oox/core/filterbase.hxx>
+#include <oox/helper/graphichelper.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/token/properties.hxx>
 #include <oox/token/tokens.hxx>
@@ -50,9 +53,11 @@
 #include <condformatbuffer.hxx>
 #include <document.hxx>
 #include <drawingfragment.hxx>
+#include <drwlayer.hxx>
 #include <threadedcommentsfragment.hxx>
 #include <pagesettings.hxx>
 #include <querytablebuffer.hxx>
+#include <richvaluebuffer.hxx>
 #include <sheetdatabuffer.hxx>
 #include <stylesbuffer.hxx>
 #include <tokenuno.hxx>
@@ -80,7 +85,11 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/editobj.hxx>
 #include <editeng/flditem.hxx>
+#include <svx/svdograf.hxx>
+#include <svx/svdpage.hxx>
 #include <tools/gen.hxx>
+#include <userdat.hxx>
+#include <vcl/graph.hxx>
 
 namespace oox::xls {
 
@@ -91,7 +100,7 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sheet;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace {
@@ -100,6 +109,23 @@ void lclUpdateProgressBar( const ISegmentProgressBarRef& rxProgressBar, double f
 {
     if( rxProgressBar )
         rxProgressBar->setPosition( fPosition );
+}
+
+/** Returns the largest rectangle with the proportions of the passed size that fits into the cell,
+    centred in it. A picture with no size of its own fills the cell. */
+tools::Rectangle lclFitIntoCell( const Size& rGraphicSize, const tools::Rectangle& rCellRect )
+{
+    if( rGraphicSize.Width() <= 0 || rGraphicSize.Height() <= 0 )
+        return rCellRect;
+
+    const double fScale = std::min(
+        static_cast<double>(rCellRect.GetWidth()) / rGraphicSize.Width(),
+        static_cast<double>(rCellRect.GetHeight()) / rGraphicSize.Height() );
+    const Size aSize( std::max<tools::Long>( 1, std::lround( rGraphicSize.Width() * fScale ) ),
+                      std::max<tools::Long>( 1, std::lround( rGraphicSize.Height() * fScale ) ) );
+    const Point aTopLeft( rCellRect.Left() + (rCellRect.GetWidth() - aSize.Width()) / 2,
+                          rCellRect.Top() + (rCellRect.GetHeight() - aSize.Height()) / 2 );
+    return tools::Rectangle( aTopLeft, aSize );
 }
 
 // TODO Needed because input might be >32-bit (in 64-bit builds),
@@ -378,6 +404,9 @@ private:
 
     /** Imports the drawings of the sheet (DML, VML, DFF) and updates the used area. */
     void                finalizeDrawings();
+
+    /** Places a picture over every cell of the sheet that holds one. */
+    void                insertInCellImages();
 
     /** Update the row import progress bar */
     void UpdateRowProgress( const ScRange& rUsedArea, SCROW nRow );
@@ -976,21 +1005,13 @@ void WorksheetGlobals::finalizeWorksheetImport()
         SCCOLROW nEndRow = static_cast<SCCOLROW>(aRange.aEnd.Row());
         aSpans.push_back(sc::ColRowSpan(nStartRow, nEndRow));
     }
-    ScDBCollection* pDocColl = rDoc.GetDBCollection();
-    if (!pDocColl->empty())
+    // The database range of a table gets its auto filter only after all sheets are imported, see
+    // TableBuffer::applyAutoFilters, so ask the table model instead.
+    for (const ScRange& rRange : getTables().getAutoFilterRanges(nTab))
     {
-        ScDBCollection::NamedDBs& rDBs = pDocColl->getNamedDBs();
-        for (const auto& rxDB : rDBs)
-        {
-            if (rxDB->GetTab() == nTab && rxDB->HasAutoFilter())
-            {
-                ScRange aRange;
-                rxDB->GetArea(aRange);
-                SCCOLROW nStartRow = static_cast<SCCOLROW>(aRange.aStart.Row());
-                SCCOLROW nEndRow = static_cast<SCCOLROW>(aRange.aEnd.Row());
-                aSpans.push_back(sc::ColRowSpan(nStartRow, nEndRow));
-            }
-        }
+        SCCOLROW nStartRow = static_cast<SCCOLROW>(rRange.aStart.Row());
+        SCCOLROW nEndRow = static_cast<SCCOLROW>(rRange.aEnd.Row());
+        aSpans.push_back(sc::ColRowSpan(nStartRow, nEndRow));
     }
     convertRows(aSpans);
     lclUpdateProgressBar( mxFinalProgress, 1.0 );
@@ -1004,9 +1025,47 @@ void WorksheetGlobals::finalizeNamedSheetViews()
 void WorksheetGlobals::finalizeDrawingImport()
 {
     finalizeDrawings();
+    insertInCellImages();
 
     // forget current sheet index in global data
     setCurrentSheetIndex( -1 );
+}
+
+void WorksheetGlobals::insertInCellImages()
+{
+    const std::vector<SheetDataBuffer::InCellImage>& rImages = maSheetData.getInCellImages();
+    if (rImages.empty())
+        return;
+
+    ScDocument& rDoc = getScDocument();
+    ScDrawLayer* pModel = rDoc.GetDrawLayer();
+    SdrPage* pPage = pModel ? pModel->GetPage(static_cast<sal_uInt16>(getSheetIndex())) : nullptr;
+    if (!pPage)
+        return;
+
+    const GraphicHelper& rGraphicHelper = getBaseFilter().getGraphicHelper();
+    for (const SheetDataBuffer::InCellImage& rImage : rImages)
+    {
+        const Graphic aGraphic = getRichValues().getImage(rImage.mnValueMetadata);
+        if (aGraphic.IsNone())
+            continue;
+
+        const tools::Rectangle aCellRect = ScDrawLayer::GetCellRect(rDoc, rImage.maCellAddr, true);
+        if (aCellRect.IsEmpty())
+            continue;
+
+        const awt::Size aOriginalSize = rGraphicHelper.getOriginalSize(aGraphic.GetXGraphic());
+        const tools::Rectangle aObjectRect = lclFitIntoCell(
+            Size(aOriginalSize.Width, aOriginalSize.Height), aCellRect);
+
+        rtl::Reference<SdrGrafObj> xObject(new SdrGrafObj(*pModel, aGraphic, aObjectRect));
+        xObject->SetName(pModel->GetNewGraphicName());
+        pPage->InsertObject(xObject.get());
+
+        ScDrawLayer::SetCellAnchoredFromPosition(*xObject, rDoc, getSheetIndex(), true);
+        if (ScDrawObjData* pObjData = ScDrawLayer::GetOrCreateObjData(xObject.get(), true))
+            pObjData->mbInCellImage = true;
+    }
 }
 
 // private --------------------------------------------------------------------
@@ -1077,7 +1136,7 @@ void WorksheetGlobals::insertHyperlink( const ScAddress& rAddress, const OUStrin
         SvxFieldItem aURLItem(aURLField, EE_FEATURE_FIELD);
         rEE.QuickInsertField(aURLItem, ESelection());
 
-        rDoc.setEditCell(rAddress, rEE.CreateTextObject());
+        rDoc.setEditCell(rAddress, std::make_unique<EditTextObject>(rEE.CreateTextObject()));
     }
     else
     {
@@ -1614,7 +1673,7 @@ void WorksheetHelper::putRichString( const ScAddress& rAddress, RichString& rStr
     rEE.SetSingleLine(bSingleLine);
 
     // The cell will own the text object instance returned from convert().
-    getDocImport().setEditCell(rAddress, rString.convert(rEE, pFirstPortionFont));
+    getDocImport().setEditCell(rAddress, std::make_unique<EditTextObject>(rString.convert(rEE, pFirstPortionFont)));
 
     rEE.SetSingleLine(false);
 }

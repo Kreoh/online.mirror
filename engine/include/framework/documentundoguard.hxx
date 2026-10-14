@@ -20,10 +20,10 @@
 #pragma once
 
 #include <framework/fwkdllapi.h>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <rtl/ref.hxx>
 
-namespace com::sun::star::uno { class XInterface; }
+namespace cpo::uno { class XInterface; }
 namespace com::sun::star::document { class XUndoManager; }
 
 namespace framework
@@ -44,11 +44,11 @@ namespace framework
     class FWK_DLLPUBLIC DocumentUndoGuard
     {
     public:
-        DocumentUndoGuard( const css::uno::Reference< css::uno::XInterface >& i_undoSupplierComponent );
+        DocumentUndoGuard( const cpo::uno::Reference< cpo::uno::XInterface >& i_undoSupplierComponent );
         ~DocumentUndoGuard();
 
     private:
-        css::uno::Reference< css::document::XUndoManager > mxUndoManager;
+        cpo::uno::Reference< css::document::XUndoManager > mxUndoManager;
         ::rtl::Reference< UndoManagerContextListener >  mxContextListener;
     };
 

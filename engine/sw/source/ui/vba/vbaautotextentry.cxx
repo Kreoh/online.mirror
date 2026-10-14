@@ -28,8 +28,9 @@
 using namespace ::ooo::vba;
 using namespace ::ooo::vba::word;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SwVbaAutoTextEntry::SwVbaAutoTextEntry( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< text::XAutoTextEntry >  xEntry ) :
+SwVbaAutoTextEntry::SwVbaAutoTextEntry( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< text::XAutoTextEntry >  xEntry ) :
     SwVbaAutoTextEntry_BASE( rParent, rContext ), mxEntry(std::move( xEntry ))
 {
 }
@@ -38,7 +39,7 @@ SwVbaAutoTextEntry::~SwVbaAutoTextEntry()
 {
 }
 
-uno::Reference< word::XRange > SAL_CALL SwVbaAutoTextEntry::Insert( const uno::Reference< word::XRange >& _where, const cpo::uno::Any& _richtext )
+uno::Reference< word::XRange > SwVbaAutoTextEntry::Insert( const uno::Reference< word::XRange >& _where, const cpo::uno::Any& _richtext )
 {
     SwVbaRange* pWhere = dynamic_cast<SwVbaRange*>( _where.get() );
     if( pWhere )
@@ -60,7 +61,7 @@ uno::Reference< word::XRange > SAL_CALL SwVbaAutoTextEntry::Insert( const uno::R
             // check if it is a blank paragraph
             rtl::Reference< SwXTextCursor > xParaCursor = dynamic_cast<SwXTextCursor*>( xTC.get() );
             if (!xParaCursor)
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             if( xParaCursor->isStartOfParagraph() && xParaCursor->isEndOfParagraph() )
             {
                 //remove the blank paragraph
@@ -95,7 +96,7 @@ SwVbaAutoTextEntry::getServiceNames()
     return aServiceNames;
 }
 
-SwVbaAutoTextEntries::SwVbaAutoTextEntries( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< css::uno::XComponentContext > & xContext, const uno::Reference< container::XIndexAccess >& xIndexAccess ) : SwVbaAutoTextEntries_BASE( xParent, xContext, xIndexAccess )
+SwVbaAutoTextEntries::SwVbaAutoTextEntries( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< container::XIndexAccess >& xIndexAccess ) : SwVbaAutoTextEntries_BASE( xParent, xContext, xIndexAccess )
 {
 }
 
@@ -108,7 +109,7 @@ SwVbaAutoTextEntries::getElementType()
 uno::Reference< container::XEnumeration >
 SwVbaAutoTextEntries::createEnumeration()
 {
-    throw uno::RuntimeException(u"Not implemented"_ustr );
+    throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
 }
 
 cpo::uno::Any

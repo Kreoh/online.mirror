@@ -252,6 +252,7 @@ public:
 
     void            ResetActualPage();
     void            ResetActualLayer();
+    SD_DLLPUBLIC void NotifyHiddenLayers();
     SD_DLLPUBLIC bool SwitchPage(sal_uInt16 nPage, bool bAllowChangeFocus = true,
                                  bool bUpdateScrollbars = true);
     bool            IsSwitchPageAllowed() const;
@@ -259,8 +260,11 @@ public:
     /**
      * Mark the desired page as selected (1), deselected (0), toggle (2).
      * nPage refers to the page in question.
+     * With bUpdateCurrentPage false the current page stays where it is
+     * instead of moving to the first slide of the new selection.
      */
-    bool            SelectPage(sal_uInt16 nPage, sal_uInt16 nSelect);
+    bool            SelectPage(sal_uInt16 nPage, sal_uInt16 nSelect,
+                               bool bUpdateCurrentPage = true);
     bool            IsSelected(sal_uInt16 nPage);
 
     void            GotoBookmark(std::u16string_view rBookmark);
@@ -364,7 +368,7 @@ public:
     /** modifies the given layer with the given values */
     void ModifyLayer( SdrLayer* pLayer, const OUString& rLayerName, const OUString& rLayerTitle, const OUString& rLayerDesc, bool bIsVisible, bool bIsLocked, bool bIsPrintable );
 
-    virtual css::uno::Reference<css::drawing::XDrawSubController> CreateSubController() override;
+    virtual cpo::uno::Reference<css::drawing::XDrawSubController> CreateSubController() override;
 
     DrawView*   GetDrawView() const { return mpDrawView.get(); }
 
@@ -485,17 +489,12 @@ private:
     /** This flag is used to prevent nested calls to SwitchPage().
     */
     bool mbIsInSwitchPage;
-    /** Whether the previous selection had more than one object, so individual
-        handles auto-enable only on the transition into multi-select and a
-        manual F8 toggle is not overridden.
-    */
-    bool mbWasMultiSelection = false;
     RotateTransliteration m_aRotateCase;
     /** Listen for selection changes and broadcast context changes for the sidebar.
     */
     ::rtl::Reference<svx::sidebar::SelectionChangeHandler> mpSelectionChangeHandler;
-    css::uno::Reference< css::scanner::XScannerManager2 > mxScannerManager;
-    css::uno::Reference< css::lang::XEventListener >      mxScannerListener;
+    cpo::uno::Reference< css::scanner::XScannerManager2 > mxScannerManager;
+    cpo::uno::Reference< css::lang::XEventListener >      mxScannerListener;
     rtl::Reference<TransferableClipboardListener>         mxClipEvtLstnr;
     bool                                                  mbPastePossible;
     bool                                                  mbMouseButtonDown;
@@ -505,6 +504,10 @@ private:
     std::vector<std::unique_ptr<SdrExternalToolEdit>> m_ExternalEdits;
 
     ::tools::Rectangle  maCanvasPageVisArea;
+
+    /** True when the page this view last showed is the canvas page. It still answers for
+        that page once the page itself has left the document. */
+    bool                mbShowedCanvasPage = false;
 };
 
 /// Merge the background properties together and deposit the result in rMergeAttr

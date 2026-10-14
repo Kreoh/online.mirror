@@ -11,13 +11,14 @@
 
 #include <com/sun/star/sheet/XDatabaseRanges.hpp>
 #include <com/sun/star/table/CellRangeAddress.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppunit/TestAssert.h>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
@@ -31,14 +32,14 @@ void XDatabaseRanges::testAddRemoveDbRanges()
     CPPUNIT_ASSERT_THROW_MESSAGE(
         "No exception thrown, when adding range with existing name",
         xDbRanges->addNewByName(u"addNewRange"_ustr, table::CellRangeAddress(0, 1, 2, 3, 4)),
-        css::uno::RuntimeException);
+        cpo::uno::RuntimeException);
 
     xDbRanges->removeByName(u"addNewRange"_ustr);
     CPPUNIT_ASSERT_MESSAGE("Unable to remove db range", !xDbRanges->hasByName(u"addNewRange"_ustr));
 
     CPPUNIT_ASSERT_THROW_MESSAGE("No exception, when removing none-existing range",
                                  xDbRanges->removeByName(u"addNewRange"_ustr),
-                                 css::uno::RuntimeException);
+                                 cpo::uno::RuntimeException);
 }
 }
 

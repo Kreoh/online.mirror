@@ -36,7 +36,7 @@
 #include <sfx2/bindings.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
-#include <sfx2/notebookbar/SfxNotebookBar.hxx>
+#include <sfx2/docmacromode.hxx>
 #include <sfx2/printer.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <editeng/flstitem.hxx>
@@ -110,8 +110,8 @@
 #include <unotxdoc.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::script;
 using namespace ::com::sun::star::container;
 
@@ -207,6 +207,10 @@ bool SwDocShell::ConvertFrom( SfxMedium& rMedium )
     if (!pRead)
       return false; // #129881# return if no reader is found
     rtl::Reference<SotStorage> pStg=pRead->getSotStorageRef(); // #i45333# save sot storage ref in case of recursive calls
+
+    // Reading a foreign format starts from the same state as reading our own one, so link updates
+    // are off until the load settles them.
+    getEmbeddedObjectContainer().setUserAllowsLinkUpdate(false);
 
     m_xDoc->setDocAccTitle(OUString());
     if (const auto pFrame1 = SfxViewFrame::GetFirst(this))
@@ -633,25 +637,9 @@ bool SwDocShell::ConvertTo( SfxMedium& rMedium )
 #if HAVE_FEATURE_SCRIPTING
         if( !officecfg::Office::Common::Filter::HTML::Export::Basic::get()
             && officecfg::Office::Common::Filter::HTML::Export::Warning::get()
-            && HasBasic() )
+            && sfx2::DocumentMacroMode::containerHasBasicMacros( GetBasicContainer() ) )
         {
-            uno::Reference< XLibraryContainer > xLibCont = GetBasicContainer();
-            uno::Reference< XNameAccess > xLib;
-            const Sequence<OUString> aNames = xLibCont->getElementNames();
-            for(const OUString& rName : aNames)
-            {
-                Any aLib = xLibCont->getByName(rName);
-                aLib >>= xLib;
-                if(xLib.is())
-                {
-                    Sequence<OUString> aModNames = xLib->getElementNames();
-                    if(aModNames.hasElements())
-                    {
-                        SetError(WARN_SWG_HTML_NO_MACROS);
-                        break;
-                    }
-                }
-            }
+            SetError(WARN_SWG_HTML_NO_MACROS);
         }
 #endif
     }
@@ -1110,17 +1098,6 @@ void SwDocShell::GetState(SfxItemSet& rSet)
             rSet.Put( SfxBoolItem( nWhich, bRet ) );
         }
         break;
-        case SID_NOTEBOOKBAR:
-        {
-            bool bVisible = false;
-            if (SfxViewShell* pViewShell = GetView() ? GetView() : SfxViewShell::Current())
-            {
-                bVisible = sfx2::SfxNotebookBar::StateMethod(pViewShell->GetViewFrame().GetBindings(),
-                                                             u"modules/swriter/ui/");
-            }
-            rSet.Put( SfxBoolItem( SID_NOTEBOOKBAR, bVisible ) );
-        }
-        break;
         case FN_REDLINE_ACCEPT_ALL:
         case FN_REDLINE_REJECT_ALL:
         case FN_REDLINE_REINSTATE_ALL:
@@ -1322,7 +1299,7 @@ void SwDocShell::PerformLinkUpdate()
         = GetDoc()->getIDocumentLinksAdministration().GetLinkManager();
     registerDeferredFormImageLinks(GetDeferredFormControlImages(), rLinkMgr);
     ClearDeferredFormControlImages();
-    rLinkMgr.UpdateAllLinks(false, nullptr,
+    rLinkMgr.UpdateAllLinks(false,
                             GetMedium() ? GetMedium()->GetName() : OUString());
 }
 
@@ -1336,7 +1313,7 @@ bool SwDocShell::HasUpdatableLinks() const
 uno::Reference< frame::XController >
                                 SwDocShell::GetController()
 {
-    css::uno::Reference< css::frame::XController > aRet;
+    cpo::uno::Reference< css::frame::XController > aRet;
     // #i82346# No view in page preview
     if ( GetView() )
         aRet = GetView()->GetController();
@@ -1487,7 +1464,7 @@ bool SwDocShell::GetProtectionHash( /*out*/ cpo::uno::Sequence< sal_Int8 > &rPas
     return bRes;
 }
 
-void SwDocShell::RegisterAutomationDocumentEventsCaller(css::uno::Reference< ooo::vba::XSinkCaller > const& xCaller)
+void SwDocShell::RegisterAutomationDocumentEventsCaller(cpo::uno::Reference< ooo::vba::XSinkCaller > const& xCaller)
 {
     mxAutomationDocumentEventsCaller = xCaller;
 }
@@ -1498,7 +1475,7 @@ void SwDocShell::CallAutomationDocumentEventSinks(const OUString& Method, cpo::u
         mxAutomationDocumentEventsCaller->CallSinks(Method, Arguments);
 }
 
-void SwDocShell::RegisterAutomationDocumentObject(css::uno::Reference< ooo::vba::word::XDocument > const& xDocument)
+void SwDocShell::RegisterAutomationDocumentObject(cpo::uno::Reference< ooo::vba::word::XDocument > const& xDocument)
 {
     mxAutomationDocumentObject = xDocument;
 }

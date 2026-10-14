@@ -11,8 +11,8 @@
 
 #include <ooo/vba/word/WdMailMergeMainDocType.hpp>
 
-SwVbaMailMerge::SwVbaMailMerge(const css::uno::Reference<ooo::vba::XHelperInterface>& xParent,
-                               const css::uno::Reference<css::uno::XComponentContext>& xContext)
+SwVbaMailMerge::SwVbaMailMerge(const cpo::uno::Reference<ooo::vba::XHelperInterface>& xParent,
+                               const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext)
     : SwVbaMailMerge_BASE(xParent, xContext)
     , m_nMainDocType(ooo::vba::word::WdMailMergeMainDocType::wdNotAMergeDocument)
 {
@@ -21,23 +21,23 @@ SwVbaMailMerge::SwVbaMailMerge(const css::uno::Reference<ooo::vba::XHelperInterf
 SwVbaMailMerge::~SwVbaMailMerge() {}
 
 rtl::Reference<SwVbaMailMerge> const&
-SwVbaMailMerge::get(const css::uno::Reference<ooo::vba::XHelperInterface>& xParent,
-                    const css::uno::Reference<css::uno::XComponentContext>& xContext)
+SwVbaMailMerge::get(const cpo::uno::Reference<ooo::vba::XHelperInterface>& xParent,
+                    const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext)
 {
     static rtl::Reference<SwVbaMailMerge> xInstance(new SwVbaMailMerge(xParent, xContext));
 
     return xInstance;
 }
 
-sal_Int32 SAL_CALL SwVbaMailMerge::getMainDocumentType() { return m_nMainDocType; }
+sal_Int32 SwVbaMailMerge::getMainDocumentType() { return m_nMainDocType; }
 
-void SAL_CALL SwVbaMailMerge::setMainDocumentType(sal_Int32 _maindocumenttype)
+void SwVbaMailMerge::setMainDocumentType(sal_Int32 _maindocumenttype)
 {
     m_nMainDocType = _maindocumenttype;
 }
 
 // Completely dummy, no-op.
-void SAL_CALL SwVbaMailMerge::OpenDataSource(
+void SwVbaMailMerge::OpenDataSource(
     const OUString&, const cpo::uno::Any&, const cpo::uno::Any&, const cpo::uno::Any&,
     const cpo::uno::Any&, const cpo::uno::Any&, const cpo::uno::Any&, const cpo::uno::Any&,
     const cpo::uno::Any&, const cpo::uno::Any&, const cpo::uno::Any&, const cpo::uno::Any&,

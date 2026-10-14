@@ -22,11 +22,12 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/graphic/XGraphicObject.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <vcl/GraphicObject.hxx>
 #include <mutex>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace {
 
@@ -45,20 +46,20 @@ public:
     explicit GraphicObjectImpl(cpo::uno::Sequence<cpo::uno::Any> const & rArgs);
 
      // XGraphicObject
-    virtual uno::Reference<graphic::XGraphic> SAL_CALL getGraphic() override;
-    virtual void SAL_CALL setGraphic(uno::Reference<graphic::XGraphic> const & rxGraphic) override;
+    virtual uno::Reference<graphic::XGraphic> getGraphic() override;
+    virtual void setGraphic(uno::Reference<graphic::XGraphic> const & rxGraphic) override;
 
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.graphic.GraphicObject"_ustr;
     }
 
-    virtual bool SAL_CALL supportsService(OUString const & ServiceName) override
+    virtual bool supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.graphic.GraphicObject"_ustr };
     }
@@ -69,21 +70,21 @@ GraphicObjectImpl::GraphicObjectImpl(const cpo::uno::Sequence<cpo::uno::Any>& /*
     mpGraphicObject.emplace();
 }
 
-uno::Reference<graphic::XGraphic> SAL_CALL GraphicObjectImpl::getGraphic()
+uno::Reference<graphic::XGraphic> GraphicObjectImpl::getGraphic()
 {
     std::scoped_lock aGuard(m_aMutex);
 
     if (!mpGraphicObject)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return mpGraphicObject->GetGraphic().GetXGraphic();
 }
 
-void SAL_CALL GraphicObjectImpl::setGraphic(uno::Reference<graphic::XGraphic> const & rxGraphic)
+void GraphicObjectImpl::setGraphic(uno::Reference<graphic::XGraphic> const & rxGraphic)
 {
     std::scoped_lock aGuard(m_aMutex);
 
     if (!mpGraphicObject)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     Graphic aGraphic(rxGraphic);
     mpGraphicObject->SetGraphic(aGraphic);
 }
@@ -91,8 +92,8 @@ void SAL_CALL GraphicObjectImpl::setGraphic(uno::Reference<graphic::XGraphic> co
 } // end anonymous namespace
 
 extern "C" SAL_DLLPUBLIC_EXPORT
-css::uno::XInterface* com_sun_star_graphic_GraphicObject_get_implementation(
-                            SAL_UNUSED_PARAMETER uno::XComponentContext*,
+cpo::uno::XInterface* com_sun_star_graphic_GraphicObject_get_implementation(
+                            SAL_UNUSED_PARAMETER cpo::uno::XComponentContext*,
                             cpo::uno::Sequence<cpo::uno::Any> const & rArguments)
 {
     return cppu::acquire(new GraphicObjectImpl(rArguments));

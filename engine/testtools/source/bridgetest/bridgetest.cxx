@@ -44,7 +44,7 @@
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include <com/sun/star/bridge/UnoUrlResolver.hpp>
 #include <com/sun/star/bridge/XUnoUrlResolver.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Type.hxx>
 
 #include <test/testtools/bridgetest/BadConstructorArguments.hpp>
@@ -60,7 +60,7 @@
 
 using namespace osl;
 using namespace cppu;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::registry;
@@ -114,12 +114,12 @@ public:
         {}
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString & rServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     // XMain
-    virtual sal_Int32 SAL_CALL run( const Sequence< OUString > & rArgs ) override;
+    virtual sal_Int32 run( const Sequence< OUString > & rArgs ) override;
 };
 
 }
@@ -196,7 +196,7 @@ static void assign( TestElement & rData,
                     float fFloat, double fDouble,
                     TestEnum eEnum, const OUString& rStr,
                     sal_Int8 nByte2, sal_Int16 nShort2,
-                    const css::uno::Reference< css::uno::XInterface >& xTest,
+                    const cpo::uno::Reference< cpo::uno::XInterface >& xTest,
                     const cpo::uno::Any& rAny )
 {
     rData.Bool = bBool;
@@ -323,8 +323,8 @@ private:
     Mutex m_mutex;
 
 public:
-    void SAL_CALL callRecursivly(
-        const css::uno::Reference< XRecursiveCall >& xCall,
+    void callRecursivly(
+        const cpo::uno::Reference< XRecursiveCall >& xCall,
         sal_Int32 nToCall ) override
         {
             MutexGuard guard( m_mutex );

@@ -75,8 +75,8 @@ using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sdbc;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::document;
 using namespace ::rtl;
@@ -833,7 +833,7 @@ bool SfxDocumentTemplates::CopyFrom
     }
     else
     {
-        uno::Reference< XDesktop2 > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
+        uno::Reference< XDesktop > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
 
         Sequence< PropertyValue > aArgs{ comphelper::makePropertyValue(u"Hidden"_ustr, true) };
 

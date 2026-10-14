@@ -20,7 +20,7 @@
 #define INCLUDED_VBAHELPER_VBADOCUMENTSBASE_HXX
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <ooo/vba/XDocumentsBase.hpp>
 #include <rtl/ustring.hxx>
@@ -32,8 +32,8 @@
 namespace com::sun::star {
     namespace beans { struct PropertyValue; }
     namespace container { class XEnumeration; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ooo::vba {
     class XDocumentsBase;
@@ -55,20 +55,20 @@ private:
     DOCUMENT_TYPE meDocType;
 
 public:
-    /// @throws css::uno::RuntimeException
-    VbaDocumentsBase( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, DOCUMENT_TYPE eDocType );
+    /// @throws cpo::uno::RuntimeException
+    VbaDocumentsBase( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, DOCUMENT_TYPE eDocType );
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override = 0;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override = 0;
+    virtual cpo::uno::Type getElementType() override = 0;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override = 0;
 
     // VbaDocumentsBase_BASE
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override = 0;
 
 protected:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Any createDocument();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Any openDocument( const OUString& Filename, const cpo::uno::Any& ReadOnly, const cpo::uno::Sequence< css::beans::PropertyValue >& rProps );
 };
 

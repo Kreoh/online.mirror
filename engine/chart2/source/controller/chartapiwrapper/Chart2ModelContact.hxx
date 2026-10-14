@@ -33,7 +33,7 @@ namespace chart { struct ExplicitScaleData; }
 namespace com::sun::star::chart2 { class XAxis; }
 namespace com::sun::star::chart2 { class XTitle; }
 namespace com::sun::star::container { class XNameContainer; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 
 namespace chart
@@ -46,7 +46,7 @@ namespace wrapper
 class Chart2ModelContact final
 {
 public:
-    explicit Chart2ModelContact( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit Chart2ModelContact( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
     ~Chart2ModelContact();
 
 public:
@@ -80,11 +80,6 @@ public:
     css::awt::Rectangle SubstractAxisTitleSizes( const css::awt::Rectangle& rPositionRect );
 
     /** Returns the position and size of the diagram in logic coordinates (100th mm) including
-        the space used for axes including axes titles.
-     */
-    css::awt::Rectangle GetDiagramRectangleIncludingTitle() const;
-
-    /** Returns the position and size of the diagram in logic coordinates (100th mm) including
         the space used for axes excluding axes titles.
      */
     css::awt::Rectangle GetDiagramRectangleIncludingAxes() const;
@@ -104,32 +99,32 @@ public:
 
     /** Returns the size of the object in logic coordinates.
      */
-    css::awt::Size GetTitleSize( const css::uno::Reference< css::chart2::XTitle > & xTitle ) const;
+    css::awt::Size GetTitleSize( const cpo::uno::Reference< css::chart2::XTitle > & xTitle ) const;
 
     /** Returns the position of the object in logic coordinates.
      */
-    css::awt::Point GetTitlePosition( const css::uno::Reference< css::chart2::XTitle > & xTitle ) const;
+    css::awt::Point GetTitlePosition( const cpo::uno::Reference< css::chart2::XTitle > & xTitle ) const;
 
     /** Returns the size of the object in logic coordinates.
      */
-    css::awt::Size GetAxisSize( const css::uno::Reference< css::chart2::XAxis > & xAxis ) const;
+    css::awt::Size GetAxisSize( const cpo::uno::Reference< css::chart2::XAxis > & xAxis ) const;
 
     /** Returns the position of the object in logic coordinates.
      */
-    css::awt::Point GetAxisPosition( const css::uno::Reference< css::chart2::XAxis > & xAxis ) const;
+    css::awt::Point GetAxisPosition( const cpo::uno::Reference< css::chart2::XAxis > & xAxis ) const;
 
 private: //methods
     rtl::Reference< ChartView > const & getChartView() const;
 
 public: //member
-    css::uno::Reference< css::uno::XComponentContext >  m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >  m_xContext;
 
 private: //member
     unotools::WeakReference< ChartModel >   m_xChartModel;
 
     mutable rtl::Reference< ChartView > m_xChartView;
 
-    std::map< OUString, css::uno::Reference< css::container::XNameContainer > > m_aTableMap;
+    std::map< OUString, cpo::uno::Reference< css::container::XNameContainer > > m_aTableMap;
 };
 
 } //  namespace wrapper

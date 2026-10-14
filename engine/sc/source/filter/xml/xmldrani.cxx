@@ -45,7 +45,33 @@
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
+
+ScSortParam convertSortSequence(const cpo::uno::Sequence<beans::PropertyValue>& rSortSequence,
+                                bool bByRow, const ScRange& rRange)
+{
+    cpo::uno::Sequence<beans::PropertyValue> aSortSequence(rSortSequence);
+    size_t nOldSize = aSortSequence.getLength();
+    aSortSequence.realloc(nOldSize + 1);
+    beans::PropertyValue aProperty;
+    aProperty.Name = SC_UNONAME_ORIENT;
+    table::TableOrientation eOrient = bByRow ?
+        table::TableOrientation_ROWS : table::TableOrientation_COLUMNS;
+    aProperty.Value <<= eOrient;
+    aSortSequence.getArray()[nOldSize] = std::move(aProperty);
+    ScSortParam aParam;
+    ScSortDescriptor::FillSortParam(aParam, aSortSequence);
+
+    SCCOLROW nStartPos = aParam.bByRow ? rRange.aStart.Col() : rRange.aStart.Row();
+    for (size_t i = 0; i < aParam.GetSortKeyCount(); ++i)
+    {
+        if (!aParam.maKeyState[i].bDoSort)
+            break;
+        aParam.maKeyState[i].nField += nStartPos;
+    }
+    return aParam;
+}
 
 ScXMLDatabaseRangesContext::ScXMLDatabaseRangesContext( ScXMLImport& rImport ) :
     ScXMLImportContext( rImport )
@@ -59,7 +85,7 @@ ScXMLDatabaseRangesContext::~ScXMLDatabaseRangesContext()
     GetScImport().UnlockSolarMutex();
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDatabaseRangesContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLDatabaseRangesContext::createFastChildContext(
                                       sal_Int32 nElement,
                                       const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
@@ -201,7 +227,7 @@ ScXMLDatabaseRangeContext::~ScXMLDatabaseRangeContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDatabaseRangeContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLDatabaseRangeContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -304,28 +330,7 @@ std::unique_ptr<ScDBData> ScXMLDatabaseRangeContext::ConvertToDBData(const OUStr
     }
 
     if (bContainsSort)
-    {
-        size_t nOldSize = aSortSequence.getLength();
-        aSortSequence.realloc(nOldSize + 1);
-        beans::PropertyValue aProperty;
-        aProperty.Name = SC_UNONAME_ORIENT;
-        table::TableOrientation eOrient = mpQueryParam->bByRow ?
-            table::TableOrientation_ROWS : table::TableOrientation_COLUMNS;
-        aProperty.Value <<= eOrient;
-        aSortSequence.getArray()[nOldSize] = std::move(aProperty);
-        ScSortParam aParam;
-        ScSortDescriptor::FillSortParam(aParam, aSortSequence);
-
-        SCCOLROW nStartPos = aParam.bByRow ? maRange.aStart.Col() : maRange.aStart.Row();
-        for (size_t i = 0; i < aParam.GetSortKeyCount(); ++i)
-        {
-            if (!aParam.maKeyState[i].bDoSort)
-                break;
-            aParam.maKeyState[i].nField += nStartPos;
-        }
-
-        pData->SetSortParam(aParam);
-    }
+        pData->SetSortParam(convertSortSequence(aSortSequence, mpQueryParam->bByRow, maRange));
 
     if (bContainsSubTotal)
     {
@@ -385,7 +390,7 @@ bool setAutoFilterFlags(ScDocument& rDoc, const ScDBData& rData)
 
 }
 
-void SAL_CALL ScXMLDatabaseRangeContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLDatabaseRangeContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScDocument* pDoc = GetScImport().GetDocument();
     if (!pDoc)
@@ -464,7 +469,7 @@ ScXMLSourceSQLContext::~ScXMLSourceSQLContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceSQLContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLSourceSQLContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -479,7 +484,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceSQLContext::
     return pContext;
 }
 
-void SAL_CALL ScXMLSourceSQLContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSourceSQLContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sDBName.isEmpty())
         pDatabaseRangeContext->SetDatabaseName(sDBName);
@@ -514,7 +519,7 @@ ScXMLSourceTableContext::~ScXMLSourceTableContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceTableContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLSourceTableContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -529,7 +534,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceTableContext
     return pContext;
 }
 
-void SAL_CALL ScXMLSourceTableContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSourceTableContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sDBName.isEmpty())
         pDatabaseRangeContext->SetDatabaseName(sDBName);
@@ -563,7 +568,7 @@ ScXMLSourceQueryContext::~ScXMLSourceQueryContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceQueryContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLSourceQueryContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -578,7 +583,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceQueryContext
     return pContext;
 }
 
-void SAL_CALL ScXMLSourceQueryContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSourceQueryContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sDBName.isEmpty())
         pDatabaseRangeContext->SetDatabaseName(sDBName);
@@ -637,7 +642,7 @@ ScXMLSubTotalRulesContext::~ScXMLSubTotalRulesContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSubTotalRulesContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLSubTotalRulesContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -744,7 +749,7 @@ ScXMLSubTotalRuleContext::~ScXMLSubTotalRuleContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSubTotalRuleContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLSubTotalRuleContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -763,7 +768,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSubTotalRuleContex
     return pContext;
 }
 
-void SAL_CALL ScXMLSubTotalRuleContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSubTotalRuleContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (pDatabaseRangeContext)
         pDatabaseRangeContext->AddSubTotalRule(aSubTotalRule);
@@ -796,7 +801,7 @@ ScXMLSubTotalFieldContext::~ScXMLSubTotalFieldContext()
 {
 }
 
-void SAL_CALL ScXMLSubTotalFieldContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSubTotalFieldContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     sheet::SubTotalColumn aSubTotalColumn;
     aSubTotalColumn.Column = sFieldNumber.toInt32();

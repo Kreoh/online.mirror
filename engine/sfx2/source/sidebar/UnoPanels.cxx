@@ -23,6 +23,7 @@
 #include <algorithm>
 
 using namespace css;
+using namespace ::cpo;
 using namespace ::sfx2::sidebar;
 
 SfxUnoPanels::SfxUnoPanels(uno::Reference<frame::XFrame> _xFrame, const OUString& deckId):
@@ -36,14 +37,14 @@ SidebarController* SfxUnoPanels::getSidebarController()
     return SidebarController::GetSidebarControllerForFrame(xFrame);
 }
 
-OUString SAL_CALL SfxUnoPanels::getDeckId()
+OUString SfxUnoPanels::getDeckId()
 {
     return mDeckId;
 }
 
 // XNameAccess
 
-cpo::uno::Any SAL_CALL SfxUnoPanels::getByName( const OUString& aName )
+cpo::uno::Any SfxUnoPanels::getByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
 
@@ -55,7 +56,7 @@ cpo::uno::Any SAL_CALL SfxUnoPanels::getByName( const OUString& aName )
 }
 
 
-cpo::uno::Sequence< OUString > SAL_CALL SfxUnoPanels::getElementNames()
+cpo::uno::Sequence< OUString > SfxUnoPanels::getElementNames()
 {
 
     SolarMutexGuard aGuard;
@@ -81,7 +82,7 @@ cpo::uno::Sequence< OUString > SAL_CALL SfxUnoPanels::getElementNames()
 
 }
 
-bool SAL_CALL SfxUnoPanels::hasByName( const OUString& aName )
+bool SfxUnoPanels::hasByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
 
@@ -112,7 +113,7 @@ bool SAL_CALL SfxUnoPanels::hasByName( const OUString& aName )
 
 // XIndexAccess
 
-sal_Int32 SAL_CALL SfxUnoPanels::getCount()
+sal_Int32 SfxUnoPanels::getCount()
 {
     SolarMutexGuard aGuard;
 
@@ -120,7 +121,7 @@ sal_Int32 SAL_CALL SfxUnoPanels::getCount()
     return panels.getLength();
 }
 
-cpo::uno::Any SAL_CALL SfxUnoPanels::getByIndex( sal_Int32 Index )
+cpo::uno::Any SfxUnoPanels::getByIndex( sal_Int32 Index )
 {
     SolarMutexGuard aGuard;
 
@@ -138,12 +139,12 @@ cpo::uno::Any SAL_CALL SfxUnoPanels::getByIndex( sal_Int32 Index )
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SfxUnoPanels::getElementType()
+cpo::uno::Type SfxUnoPanels::getElementType()
 {
     return cpo::uno::Type();
 }
 
-bool SAL_CALL SfxUnoPanels::hasElements()
+bool SfxUnoPanels::hasElements()
 {
     SolarMutexGuard aGuard;
 

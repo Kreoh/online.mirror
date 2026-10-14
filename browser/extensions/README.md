@@ -21,8 +21,8 @@ of whether the extension also declares commands.
 
 ## contributes
 
-Lets an extension put commands directly into the classic menu and/or the notebookbar
-(ribbon), without needing its sidebar panel (if it has one) to ever be opened.
+Lets an extension put commands directly into the classic menu and/or the
+notebookbar, without needing its sidebar panel (if it has one) to ever be opened.
 `contributes` is a string naming a separate JSON file (relative to the manifest,
 resolved the same way `entry`/`icon` are) holding the object described below -
 kept out of `manifest.json` itself so an extension's UI wiring, however long it
@@ -74,8 +74,7 @@ ui.json:
   ```js
   var commands = {
       insertDate: function () {
-          var desktop = uno.idl.com.sun.star.frame.Desktop.create(uno.componentContext);
-          var model = desktop.getCurrentFrame().getController().getModel();
+          var doc = cool.getActiveDocument();
           // ... call into the document via the UNO API ...
       },
   };
@@ -83,6 +82,22 @@ ui.json:
 
   More than one command may name the same `script` file - add another key to its
   `commands` object rather than giving each command a one-function file of its own.
+
+  A command may instead set `"panel": true` and omit `script`. Choosing it opens
+  the extension's sidebar panel (`entry`) if it is not showing and posts the
+  command id to the iframe, where `cool.js` calls `cool.onCommand(id)`:
+
+  ```js
+  cool.onCommand = function (id) {
+      if (id === 'run') runProgram();
+  };
+  ```
+
+  Use this when the extension's logic lives in the panel (an interpreter, an
+  editor, anything with state or UI) rather than in the kit. Panel commands
+  still get their label and icon from `contributes.commands` and can be placed
+  in the notebookbar, in menus, in the context menu and on key bindings like
+  any other command; only the target differs.
   A referenced function runs when its command is chosen from the menu or
   notebookbar. It only has access to the UNO API shown above - no DOM, no network,
   no other browser capability - and it runs without ever loading a visible panel,
@@ -90,15 +105,31 @@ ui.json:
   is optional and shown on a notebookbar button or dropdown entry that references
   this command - the classic menu never renders it.
 
+- `contributes.extensionsMenu` offers commands under the extension's own name, in the
+  Extensions menu and as a dropdown in the Extensions notebookbar tab, in the order
+  given:
+
+  ```json
+  "extensionsMenu": [
+    { "command": "insertDate" },
+    { "separator": true },
+    { "command": "about" }
+  ]
+  ```
+
+  For an extension whose commands are its whole user interface. An extension that
+  wants its commands in a document menu of its own choosing uses `menus` below
+  instead; the two are independent, and a command may appear in both.
+
 - `contributes.menus` maps an existing top-level classic-menu id (`file`, `editmenu`,
   `view`, `insert`, `format`, and so on, depending on the document type) to a list of
   command ids appended to the end of that menu.
 
-- `contributes.notebookbar` is a list of brand-new ribbon tabs the extension adds -
+- `contributes.notebookbar` is a list of brand-new notebookbar tabs the extension adds -
   `{ tab, insertBefore?, insertAfter?, groups }`. `tab` is the new tab's own
   label and must not collide with an existing tab's name (`Home`, `Insert`, `Format`,
   ...). `insertBefore`/`insertAfter` (mutually exclusive) name an *existing* tab to
-  position the new one next to; omitting both appends it at the end of the ribbon.
+  position the new one next to; omitting both appends it at the end of the notebookbar.
   There is no way to name an existing tab and land content inside it - an extension
   only ever gets its own tab(s), never a foothold in Home/Insert/etc. - matching how
   Microsoft's modern Office Add-ins platform restricts ribbon extensibility to "your
@@ -164,7 +195,7 @@ ui.json:
   Every extension that contributes at least one matching entry gets its own
   group at the end of the menu, after a separator - an entry is never
   inserted among the document's own items, the same "own space only" rule
-  `contributes.notebookbar` follows for the ribbon. `contexts` (optional;
+  `contributes.notebookbar` follows for the notebookbar. `contexts` (optional;
   omitting it, or passing an empty array, always shows the entry) narrows
   which right-click menu the entry appears in, using one of:
   - `"text-selection"` - shown only when text is selected.
@@ -215,6 +246,135 @@ ui.json:
   running the command.
 
 Command ids are namespaced internally so two extensions can never collide.
+
+## Localization
+
+Extensions are translated the same way as the rest of COOL: gettext catalogs,
+English strings as message ids, translations from Weblate. An extension author
+writes English in one place and never edits a translation file.
+
+Where the strings live and how they are picked up:
+
+- `manifest.json` `name`, and in the contributes file every command `title`,
+  notebookbar `tab`, group `label` and dropdown menu `title`, are message ids.
+  Discovery translates them in place for the UI language, so the notebookbar, menus,
+  context menu, selection toolbar and panel header all show translated text.
+- Panel and dialog pages are opened as `entry?lang=<UI language>&dir=<ltr|rtl>`.
+  `cool.js` exposes `cool.lang` and `cool.dir`, loads the catalog, and offers
+  gettext helpers: `cool._('Insert')`, `cool._n('%d word', '%d words', n)`, and
+  markup attributes translated on load: `data-l10n` (text content),
+  `data-l10n-title`, `data-l10n-placeholder`, `data-l10n-aria-label`.
+  `cool.l10n.ready` is a Promise that resolves once the catalog is in, for pages
+  that build strings in script; `cool.l10n.apply(element)` translates markup
+  added later. `cool.lang` is also the right input for `Intl` formatting.
+- Kit-side command functions receive `{ lang, dir }` as their argument.
+
+Files:
+
+- `po/<id>.pot` is the template, generated by `make pot` (which runs
+  `util/extension-pot.py <dir>` for every extension). It collects the manifest
+  and contributes strings, the `data-l10n*` attributes of HTML files, and
+  `cool._()` / `cool._n()` calls in JS files.
+- `po/<lang>.po` are the translations, maintained on Weblate like `browser/po`
+  (language codes as there: `de`, `pt_BR`, `zh_CN`, `ca_valencia`). Do not edit
+  them by hand.
+- `l10n/<lang>.json` is what runs. The build makes it from the po files with
+  `util/po2json.py` when it installs the extension; an integrator shipping a
+  zip includes these JSON files directly. The lookup tries `pt_BR` then `pt`
+  for a `pt-BR` UI, and English needs no catalog.
+
+`com.collaboraoffice.demo-commands` (notebookbar and menu strings) and
+`com.collaboraoffice.demo-wordcloud` (a panel) show the pattern.
+
+## Saving a generated file
+
+`cool.saveFile(filename, content, mimeType)` hands a file the extension built to
+COOL, which saves it the platform way: a download in the browser (Online), a
+native save panel in the desktop app (CODA). `content` is a string (text) or a
+`Uint8Array` / `number[]` of bytes. It returns a promise resolving to how it was
+saved (`"download"`, `"filesystem"`). Only the base name of `filename` is used.
+
+    await cool.saveFile('picture.svg', svgText, 'image/svg+xml');
+
+## Google Apps Script add-ons
+
+A directory holding an `appsscript.json` instead of a `manifest.json` is a
+Google Apps Script editor add-on, and COOL runs it without any file of ours
+added to it. Discovery synthesizes the manifest such a directory has no room
+for: the name comes from
+a `setTitle("...")` call or an `APP_TITLE`-style constant in the sources, and
+the target document types come from which of `DocumentApp`, `SpreadsheetApp`
+and `SlidesApp` the sources mention.
+
+The pieces:
+
+| File | Role |
+|---|---|
+| `gas-wrapper.html` | The page loaded into a sidebar panel. It reads the add-on's server sources and the requested HTML through the main window, and grafts the HTML into itself, expanding `<?!= include('name') ?>`. |
+| `gas-shim.js` | Client half. Exposes `google.script.run` as a Proxy, so a leaf call asks the main window to run the named function in the kit, through the kit half. |
+| `gas-kit-runner.js` | Kit half. Shims a subset of the Apps Script services on top of scriptinterop, then calls the named function. |
+
+The sidebar and dialog frames run in a sandbox without `allow-same-origin`, so
+they have an origin of their own, as HtmlService pages do in GAS, and they reach
+COOL only through the messages that `gas-shim.js` and `cool.js` send. Their
+popups stay in that sandbox, too, so a sign-in popup that an add-on opens has no
+cookies of its own, and a sign-in through it cannot complete. All that holds
+where COOL is served over http(s). The desktop apps load extensions over
+file://, where such a frame could not load its scripts, so there the frames keep
+the sandbox of a native extension's frame for now.
+
+An Apps Script project keeps its server code in `.gs` files in the web editor,
+which clasp writes out as `.js` on disk. Either is picked up; where a directory
+has both, the `.gs` files are taken as the project's and a `.js` is left to the
+sidebar to load in the browser.
+
+### Menu-driven add-ons
+
+An add-on's `onOpen()` builds its menu by calling `createAddonMenu().addItem(...)`.
+Extension load asks the runner for that menu through the reserved name
+`__coolGasMenu`, which runs `onOpen()` and returns the items its
+`createAddonMenu()` built. Each item becomes a contributed command placed in
+`contributes.extensionsMenu`. The add-on's items then sit under its own name in
+the Extensions menu and in the Extensions notebookbar tab, where an editor
+add-on's menu belongs.
+
+Choosing an item ships the runner, the add-on's sources and a call to the item's
+function to the kit as one `executescript` message, the same way any contributed
+command runs. Messages the add-on passes to `getUi().alert()` then arrive as a
+snackbar.
+
+### What the shims cover
+
+`DocumentApp` and `SpreadsheetApp` (documents, sheets, ranges, the active
+selection and cursor), `HtmlService`, `PropertiesService.getUserProperties`
+(stored in the main window's `localStorage`), `LanguageApp.translate`, `Session`,
+`Utilities` and `Logger`. A sidebar or dialog that uses `localStorage` itself gets
+the add-on's own entries, which the main window keeps, through the `Storage`
+methods only, and its `sessionStorage` lasts as long as the frame.
+
+`getUi().alert()` records its message rather than blocking on a modal, and the
+message becomes a dismissible banner in the panel once the call returns. Script
+and document properties, `getUi().prompt()`, the dialog calls and installable
+triggers all throw, naming what was missing.
+
+Anything else is simply absent, so an add-on that reaches for it fails naming
+the call. That is the point of packaging real add-ons unmodified: what they need
+and we do not have shows up as a gap in the shims rather than as a patch to
+someone else's sample.
+
+### Where the two spreadsheet models differ
+
+Two differences are in the sheet itself rather than in any call, and an add-on
+written for Sheets can be surprised by both.
+
+A sheet here has a fixed grid, a million rows by sixteen thousand columns, and
+deleting rows shifts the cells below up and leaves blank rows at the bottom. In
+Sheets a grid grows and shrinks, so an add-on that deletes rows to trim a sheet
+finds the row count unchanged afterwards.
+
+`getMaxRows()` therefore returns that million, and an add-on that asks for the
+values of a range spanning every row gets a million cells read one at a time.
+The call works and is slow.
 
 ## Local testing
 

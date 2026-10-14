@@ -44,9 +44,10 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans::PropertyAttribute;
+using namespace ::cpo;
 
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::beans::Property;
 using ::osl::MutexGuard;
 
@@ -661,8 +662,8 @@ cpo::uno::Sequence< OUString > Axis::getSupportedServiceNames()
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_Axis_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_Axis_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::Axis);

@@ -19,10 +19,6 @@
 
 # outdir target pattern
 
-# these are hard-coded to URE for now since there are so few of them...
-gb_CliLibrary_get_target = $(INSTROOT)/$(LIBO_URE_LIB_FOLDER)/$(1)$(gb_CliLibrary_EXT)
-gb_CliNativeLibrary_get_target = $(INSTROOT)/$(LIBO_URE_LIB_FOLDER)/$(1)$(gb_CliNativeLibrary_EXT)
-gb_CliUnoApi_get_target = $(INSTROOT)/$(if $(filter cli_uretypes,$(1)),$(LIBO_URE_LIB_FOLDER),$(LIBO_LIB_FOLDER))/$(1)$(gb_CliUnoApi_EXT)
 gb_PackagePart_get_destinations = \
 	$(INSTDIR) \
 	$(WORKDIR)/unittest \
@@ -46,11 +42,6 @@ gb_CObject_get_target = $(WORKDIR)/CObject/$(1).o
 gb_CObject_get_dwo_target = $(WORKDIR)/CObject/$(1).dwo
 gb_GenCObject_get_target = $(WORKDIR)/GenCObject/$(1).o
 gb_GenCObject_get_dwo_target = $(WORKDIR)/GenCObject/$(1).dwo
-gb_CliAssembly_get_target = $(WORKDIR)/CliAssembly/$(1).done
-gb_CliAssemblyTarget_get_target = $(WORKDIR)/CliAssemblyTarget/$(1).done
-gb_CliAssemblyTarget_get_assembly_target = $(WORKDIR)/CliAssemblyTarget/$(1)$(gb_CliAssemblyTarget_POLICYEXT)
-gb_CliConfigTarget_get_target = $(WORKDIR)/CliConfigTarget/$(1).config
-gb_CliNativeLibrary_get_preparation_target = $(WORKDIR)/CliNativeLibraryTarget/$(1).prepare
 gb_CompilerTest_get_target = $(WORKDIR)/CompilerTest/$(1)
 gb_ComponentTarget_get_target = $(WORKDIR)/ComponentTarget/$(1).component
 gb_ComponentTarget_get_target_for_build = $(WORKDIR_FOR_BUILD)/ComponentTarget/$(1).component
@@ -60,7 +51,6 @@ gb_CustomPackage_get_target = $(WORKDIR)/CustomPackage/$(1).filelist
 gb_CustomTarget_get_target = $(WORKDIR)/CustomTarget/$(1).done
 gb_CustomTarget_get_workdir = $(error please use plain gb_CustomTarget_workdir instead)
 gb_CustomTarget_workdir := $(WORKDIR)/CustomTarget
-gb_DescriptionTranslateTarget_get_target = $(WORKDIR)/DescriptionTranslateTarget/$(1).xml
 gb_Dictionary_get_target = $(WORKDIR)/Dictionary/$(1).done
 gb_CxxObject_get_target = $(WORKDIR)/CxxObject/$(1).o
 gb_CxxObject_get_dwo_target = $(WORKDIR)/CxxObject/$(1).dwo
@@ -76,13 +66,6 @@ gb_GenNasmObject_get_target = $(WORKDIR)/GenNasmObject/$(1).o
 gb_GenNasmObject_get_dwo_target = $(WORKDIR)/GenNasmObject/$(1).dwo
 gb_Executable_get_headers_target = $(WORKDIR)/Headers/Executable/$(1)
 gb_Executable_get_runtime_target = $(WORKDIR_FOR_BUILD)/Executable/$(1).run
-gb_Extension_get_target = $(WORKDIR)/Extension/$(1).oxt
-gb_Extension_get_rootdir = $(WORKDIR)/Extension/$(1)/root
-gb_Extension_get_workdir = $(error please use plain gb_Extension_workdir instead)
-gb_Extension_workdir := $(WORKDIR)/Extension
-gb_ExtensionPackage_get_target = $(WORKDIR)/ExtensionPackage/$(1).filelist
-gb_ExtensionPackage_get_preparation_target = $(WORKDIR)/ExtensionPackage/$(1).prepare
-gb_ExtensionPackageSet_get_target = $(WORKDIR)/ExtensionPackage/$(1).set
 gb_ExternalPackage_get_target = $(WORKDIR)/ExternalPackage/$(1)
 gb_ExternalProject_get_statedir = $(WORKDIR)/ExternalProject/$(1)
 gb_ExternalProject_get_preparation_target = $(WORKDIR)/ExternalProject/$(1).prepare
@@ -165,11 +148,6 @@ gb_GenObjCxxObject_get_target = $(WORKDIR)/GenObjCxxObject/$(1).o
 gb_GenObjCxxObject_get_dwo_target = $(WORKDIR)/GenObjCxxObject/$(1).dwo
 gb_GenObjCObject_get_target = $(WORKDIR)/GenObjCObject/$(1).o
 gb_GenObjCObject_get_dwo_target = $(WORKDIR)/GenObjCObject/$(1).dwo
-gb_CxxClrObject_get_target = $(WORKDIR)/CxxClrObject/$(1).o
-gb_CxxClrObject_get_dwo_target = $(WORKDIR)/CxxClrObject/$(1).dwo
-gb_GenCxxClrObject_get_target = $(WORKDIR)/GenCxxClrObject/$(1).o
-gb_GenCxxClrObject_get_dwo_target = $(WORKDIR)/GenCxxClrObject/$(1).dwo
-gb_Pagein_get_target = $(WORKDIR)/Pagein/pagein-$(1)
 gb_Package_get_preparation_target = $(WORKDIR)/Package/prepared/$(1)
 gb_Package_get_target = $(WORKDIR)/Package/$(1).filelist
 gb_Package_get_target_for_build = $(WORKDIR_FOR_BUILD)/Package/$(1).filelist
@@ -181,7 +159,6 @@ gb_PrecompiledHeader_get_dep_target_tmp = $(call gb_PrecompiledHeader_get_dep_ta
 gb_PrecompiledHeader_get_flags_file = $(WORKDIR)/PrecompiledHeader/$(call gb_PrecompiledHeader__get_debugdir,$(2))/$(1).hxx$(gb_PrecompiledHeader_EXT).flags
 gb_PrecompiledHeader_get_for_reuse_target = $(WORKDIR)/PrecompiledHeader/$(call gb_PrecompiledHeader__get_debugdir,$(2))/$(1).hxx$(gb_PrecompiledHeader_EXT).reuse
 gb_PrecompiledHeader_get_target = $(WORKDIR)/PrecompiledHeader/$(call gb_PrecompiledHeader__get_debugdir,$(2))/$(1).hxx$(gb_PrecompiledHeader_EXT)
-gb_PropertiesTranslateTarget_get_target = $(WORKDIR)/PropertiesTranslateTarget/$(1).properties
 gb_Pyuno_get_final_target = $(WORKDIR)/Pyuno/$(1).final
 gb_Pyuno_get_target = $(WORKDIR)/Pyuno/$(1).done
 gb_Rdb_get_target = $(WORKDIR)/Rdb/$(1).rdb
@@ -263,16 +240,9 @@ $(eval $(call gb_Helper_make_clean_targets,\
 	AllLangHelp \
 	AllLangPackage \
 	AllLangMoTarget \
-	CliAssembly \
-	CliAssemblyTarget \
-	CliConfigTarget \
-	CliLibrary \
-	CliNativeLibrary \
-	CliUnoApi \
 	CompilerTest \
 	ComponentTarget \
 	CustomPackage \
-	DescriptionTranslateTarget \
 	Dictionary \
 	DotnetLibrary \
 	DotnetTest \
@@ -302,10 +272,8 @@ $(eval $(call gb_Helper_make_clean_targets,\
 	PackagePart \
 	Package \
 	PackageSet \
-	Pagein \
 	Postprocess \
 	PrecompiledHeader \
-	PropertiesTranslateTarget \
 	Pyuno \
 	PythonTest \
 	Rdb \
@@ -347,7 +315,6 @@ $(eval $(call gb_Helper_make_dep_targets,\
 	CxxObject \
 	ObjCObject \
 	ObjCxxObject \
-	CxxClrObject \
 	AsmObject \
 	GenCObject \
 	GenCxxObject \
@@ -355,7 +322,6 @@ $(eval $(call gb_Helper_make_dep_targets,\
 	GenObjCxxObject \
 	GenAsmObject \
 	GenNasmObject \
-	GenCxxClrObject \
 	SdiTarget \
 ))
 

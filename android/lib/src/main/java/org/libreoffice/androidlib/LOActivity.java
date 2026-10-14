@@ -82,6 +82,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
@@ -98,6 +101,8 @@ import org.json.JSONObject;
 import org.libreoffice.androidlib.lok.LokClipboardData;
 import org.libreoffice.androidlib.lok.LokClipboardEntry;
 
+import com.android.tools.r8.keepanno.annotations.UsedByNative;
+
 public class LOActivity extends AppCompatActivity {
     final static String TAG = "LOActivity";
 
@@ -112,11 +117,17 @@ public class LOActivity extends AppCompatActivity {
     private static final String KEY_INTENT_URI = "intentUri";
     private static final String CLIPBOARD_FILE_PATH = "LibreofficeClipboardFile.data";
     private static final String CLIPBOARD_COOL_SIGNATURE = "cool-clip-magic-4a22437e49a8-";
+    private static final int CLIPBOARD_SYSTEM_LIMIT_BYTES = 512 * 1024;
     public static final String RECENT_DOCUMENTS_KEY = "RECENT_DOCUMENTS_LIST";
     private static String USER_NAME_KEY = "USER_NAME";
     public static final String NIGHT_MODE_KEY = "NIGHT_MODE";
 
     private File mTempFile = null;
+
+    private final AtomicBoolean mPendingCopyToSystemClipboard = new AtomicBoolean(false);
+
+    // Since as the clipboard can be quite large, it's better to not do this on the same thread as everything else
+    private static final ExecutorService clipboardExecutor = Executors.newSingleThreadExecutor();
 
     /// The actual file path of the document, when the app can write it directly.
     private volatile File mResolvedFile = null;
@@ -156,6 +167,8 @@ public class LOActivity extends AppCompatActivity {
     /** In case the mobile-wizard is visible, we have to intercept the Android's Back button. */
     private boolean mMobileWizardVisible = false;
     private boolean mIsEditModeActive = false;
+    /// True while a slide show is on screen in the WebView.
+    private volatile boolean mSlideShowActive = false;
 
     /// True while a physical keyboard is attached and can be typed on. Written on the main thread
     /// and read on the thread that serves the JavaScript bridge, so it is volatile.
@@ -362,7 +375,10 @@ public class LOActivity extends AppCompatActivity {
                     return;
                 }
 
-                if (mMobileWizardVisible) {
+                if (mSlideShowActive) {
+                    callFakeWebsocketOnMessage("mobile: slideshowback");
+                    return;
+                } else if (mMobileWizardVisible) {
                     // just return one level up in the mobile-wizard (or close it)
                     callFakeWebsocketOnMessage("mobile: mobilewizardback");
                     return;
@@ -507,7 +523,7 @@ public class LOActivity extends AppCompatActivity {
         // only set it to false if it returns false otherwise it can break previous controls
         if (!canDocumentBeExported())
             isDocEditable = false;
-        if (mTempFile != null)
+        if (urlToLoad != null)
         {
             mWebView = (COWebView) findViewById(R.id.browser);
 
@@ -833,7 +849,7 @@ public class LOActivity extends AppCompatActivity {
                         Uri uri = mActivity.getIntent().getData();
                         inputStream = contentResolver.openInputStream(uri);
 
-                        mTempFile = File.createTempFile("LibreOffice", suffix, mActivity.getCacheDir());
+                        mTempFile = File.createTempFile("CollaboraOffice", suffix, mActivity.getCacheDir());
                         outputStream = new FileOutputStream(mTempFile);
 
                         byte[] buffer = new byte[1024];
@@ -1150,7 +1166,7 @@ public class LOActivity extends AppCompatActivity {
                     InputStream inputStream = null;
                     OutputStream outputStream = null;
                     try {
-                        final File tempFile = File.createTempFile("LibreOffice", "." + format, this.getCacheDir());
+                        final File tempFile = File.createTempFile("CollaboraOffice", "." + format, this.getCacheDir());
                         LOActivity.this.saveAs(tempFile.toURI().toString(), format, requestCopy ? "TakeOwnership" : null);
 
                         inputStream = new FileInputStream(tempFile);
@@ -1230,24 +1246,16 @@ public class LOActivity extends AppCompatActivity {
             return;
         }
         mProgressDialog.indeterminate(R.string.exiting);
+        documentLoaded = false;
 
-        // The 'BYE' takes a considerable amount of time, we need to post it
-        // so that it starts after the saving progress is actually shown
-        getMainHandler().post(new Runnable() {
-            @Override
-            public void run() {
-                documentLoaded = false;
-                postMobileMessageNative("BYE");
-                //copyTempBackToIntent();
+        // The 'BYE' blocks until the document has closed, so it runs off the UI thread and the
+        // progress dialog keeps drawing.
+        nativeHandler.post(() -> {
+            postMobileMessageNative("BYE");
+            //copyTempBackToIntent();
 
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        mProgressDialog.dismiss();
-                    }
-                });
-                finishAndRemoveTask();
-            }
+            mProgressDialog.dismiss();
+            runOnUiThread(this::finishAndRemoveTask);
         });
     }
 
@@ -1342,6 +1350,7 @@ public class LOActivity extends AppCompatActivity {
      * Passing messages from JS (instead of the websocket communication).
      */
     @JavascriptInterface
+    @UsedByNative // androidapp.cpp postDirectMessage()
     public void postMobileMessage(String message) {
         Log.d(TAG, "postMobileMessage: " + message);
 
@@ -1405,6 +1414,7 @@ public class LOActivity extends AppCompatActivity {
      * JavaScript. For example, you should use this to pass Base64ToArrayBuffer invocations to
      * the fake websocket
      */
+    @UsedByNative // androidapp.cpp send2JS
     void rawCallFakeWebsocketOnMessage(final byte[] message) {
         try {
             mMobileSocket.queueSend(message, () -> {
@@ -1459,6 +1469,12 @@ public class LOActivity extends AppCompatActivity {
             });
         } else if (messageStartsWith(message, "error:")) {
             runOnUiThread(() -> mProgressDialog.dismiss());
+        } else if (messageStartsWith(message, "unocommandresult:")
+                   && mPendingCopyToSystemClipboard.get()) {
+            final String result = new String(message, Charset.forName("UTF-8"));
+            if ((result.contains(".uno:Copy") || result.contains(".uno:Cut"))
+                    && mPendingCopyToSystemClipboard.compareAndSet(true, false))
+                clipboardExecutor.execute(this::populateClipboard);
         }
     }
 
@@ -1469,6 +1485,8 @@ public class LOActivity extends AppCompatActivity {
      */
     private static boolean messageStartsWith(byte[] message, String prefix) {
         byte[] prefixBytes = prefix.getBytes();
+        if (message.length < prefixBytes.length)
+            return false;
         for (int i = 0; i < prefixBytes.length; i++) {
             if (message[i] != prefixBytes[i]) {
                 return false;
@@ -1560,6 +1578,17 @@ public class LOActivity extends AppCompatActivity {
                 }
                 return false;
             }
+            case "SLIDESHOW": {
+                switch (messageAndParam[1]) {
+                    case "on":
+                        mSlideShowActive = true;
+                        break;
+                    case "off":
+                        mSlideShowActive = false;
+                        break;
+                }
+                return false;
+            }
             case "hideProgressbar": {
                 if (mProgressDialog != null)
                     mProgressDialog.dismiss();
@@ -1629,10 +1658,30 @@ public class LOActivity extends AppCompatActivity {
                 filename = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME));
         } catch (Exception e) {
             return null;
+        } finally {
+            if (cursor != null)
+                cursor.close();
         }
-        if (!withExtension)
-            filename = filename.substring(0, filename.lastIndexOf("."));
+        if (filename != null && !withExtension) {
+            int dot = filename.lastIndexOf('.');
+            if (dot > 0)
+                filename = filename.substring(0, dot);
+        }
         return filename;
+    }
+
+    /**
+     * Returns the name to offer in a save dialog for document export. The base name
+     * is the display name the content provider reports for the document.
+     */
+    private String getExportDisplayName(String exportedName) {
+        String displayName = getFileName(false);
+        if (displayName == null || displayName.isEmpty())
+            return exportedName;
+
+        int dot = exportedName.lastIndexOf('.');
+        String extension = dot >= 0 ? exportedName.substring(dot) : "";
+        return displayName + extension;
     }
 
     private void requestForCopy() {
@@ -1713,7 +1762,7 @@ public class LOActivity extends AppCompatActivity {
             return;
         }
 
-        String filename = srcFile.getName();
+        String filename = getExportDisplayName(srcFile.getName());
         int dot = filename.lastIndexOf('.');
         String extension = dot > 0 ? filename.substring(dot + 1).toLowerCase() : "";
         String mime = getMimeForFormat(extension);
@@ -1746,6 +1795,7 @@ public class LOActivity extends AppCompatActivity {
             String filename = optionsMap.get("name");
             if (filename == null)
                 filename = "document." + format;
+            filename = getExportDisplayName(filename);
             int requestID = getRequestIDForFormat(format);
 
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -1801,7 +1851,7 @@ public class LOActivity extends AppCompatActivity {
                 switch (messageAndParameterArray[1]) {
                     case ".uno:Copy":
                     case ".uno:Cut":
-                        populateClipboard();
+                        mPendingCopyToSystemClipboard.set(true);
                         break;
                     default:
                         break;
@@ -1843,39 +1893,101 @@ public class LOActivity extends AppCompatActivity {
     /// Needs to be executed after the .uno:Copy / Paste has executed
     public final void populateClipboard()
     {
-        File clipboardFile = new File(getApplicationContext().getCacheDir(), CLIPBOARD_FILE_PATH);
-        if (clipboardFile.exists())
-            clipboardFile.delete();
+        // No longer written; left over from previous versions of the app.
+        File legacyFile = new File(getApplicationContext().getCacheDir(), CLIPBOARD_FILE_PATH);
+        if (legacyFile.exists())
+            legacyFile.delete();
 
         LokClipboardData clipboardData = new LokClipboardData();
-        if (!LOActivity.this.getClipboardContent(clipboardData))
+        if (!LOActivity.this.getClipboardContent(clipboardData)) {
             Log.e(TAG, "no clipboard to copy");
-        else
-        {
-            clipboardData.writeToFile(clipboardFile);
+            return;
+        }
 
-            String text = clipboardData.getText();
-            String html = clipboardData.getHtml();
+        // The full content always goes to a file: in-app pastes read it
+        // back from there, and ClipboardFileProvider streams it to other
+        // apps, both without any size constraint.
+        File clipboardFile = newClipboardFile();
+        if (clipboardFile != null && !clipboardData.writeToFile(clipboardFile)) {
+            Log.e(TAG, "failed to write the clipboard file");
+            clipboardFile = null;
+        }
 
-            if (html != null) {
-                int idx = html.indexOf("<meta name=\"generator\" content=\"");
+        String text = clipboardData.getText();
+        String html = clipboardData.getHtml();
 
-                if (idx < 0)
-                    idx = html.indexOf("<meta http-equiv=\"content-type\" content=\"text/html;");
+        if (html == null)
+            return;
 
-                if (idx >= 0) { // inject our magic
-                    StringBuffer newHtml = new StringBuffer(html);
-                    newHtml.insert(idx, "<meta name=\"origin\" content=\"" + getClipboardMagic() + "\"/>\n");
-                    html = newHtml.toString();
-                }
+        int idx = html.indexOf("<meta name=\"generator\" content=\"");
 
-                if (text == null || text.length() == 0)
-                    Log.i(TAG, "set text to clipoard with: text '" + text + "' and html '" + html + "'");
+        if (idx < 0)
+            idx = html.indexOf("<meta http-equiv=\"content-type\" content=\"text/html;");
 
-                clipData = ClipData.newHtmlText(ClipDescription.MIMETYPE_TEXT_HTML, text, html);
+        if (idx >= 0) { // inject our magic
+            StringBuffer newHtml = new StringBuffer(html);
+            newHtml.insert(idx, "<meta name=\"origin\" content=\"" + getClipboardMagic() + "\"/>\n");
+            html = newHtml.toString();
+        }
+
+        if (text == null || text.length() == 0)
+            Log.i(TAG, "set text to clipoard with: text '" + text + "' and html '" + html + "'");
+
+        Uri clipUri = clipboardFile != null
+            ? ClipboardFileProvider.uriFor(this, clipboardFile.getName()) : null;
+
+        // Binder transactions share a ~1 MB buffer per process, and larger
+        // setPrimaryClip() calls throw TransactionTooLargeException
+        // (strings are parceled as UTF-16, two bytes per char). Oversized
+        // content is therefore not inlined into the clip - receivers
+        // stream it from clipUri instead, which coerceToText() /
+        // coerceToHtmlText() do transparently when there is no inline text.
+        int estimatedParcelSize = 2 * (html.length() + (text != null ? text.length() : 0));
+        boolean inline = estimatedParcelSize <= CLIPBOARD_SYSTEM_LIMIT_BYTES || clipUri == null;
+
+        clipData = makeClipData(inline ? text : null, inline ? html : null, clipUri);
+        try {
+            clipboardManager.setPrimaryClip(clipData);
+        } catch (RuntimeException e) {
+            // Some vendors reject clips well below the nominal limit; a
+            // URI-only clip is tiny and always fits.
+            Log.w(TAG, "setPrimaryClip failed, retrying with the URI only: " + e);
+            if (clipUri != null) {
+                clipData = makeClipData(null, null, clipUri);
                 clipboardManager.setPrimaryClip(clipData);
             }
         }
+    }
+
+    /// a clipboard carrying our magic in the label, the full-fidelity data
+    /// behind 'uri', and - when small enough - the inline text and HTML
+    private final ClipData makeClipData(String text, String html, Uri uri) {
+        // ClipData.Item refuses HTML without plain text
+        if (html != null && text == null)
+            text = "";
+        ClipDescription description = new ClipDescription(getClipboardMagic(),
+            new String[]{ClipDescription.MIMETYPE_TEXT_HTML, ClipDescription.MIMETYPE_TEXT_PLAIN});
+        return new ClipData(description, new ClipData.Item(text, html, null, uri));
+    }
+
+    /// create a fresh file for the current clipboard... open streams of a
+    /// deleted file keep working, so a paste that is happening while we copy
+    /// is allowed to finish. We prefer this than deleting/recreating due to
+    /// potential permission issues if we or the smartphone vendor does that
+    /// improperly...
+    private final File newClipboardFile() {
+        File dir = ClipboardFileProvider.getClipboardDir(this);
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            Log.e(TAG, "failed to create the clipboard directory");
+            return null;
+        }
+
+        File[] oldFiles = dir.listFiles();
+        if (oldFiles != null)
+            for (File oldFile : oldFiles)
+                oldFile.delete();
+
+        return new File(dir, "clip-" + System.currentTimeMillis() + ".data");
     }
 
     /// Do the paste, and return true if we should short-circuit the paste locally (ie. let the core handle that)
@@ -1886,14 +1998,62 @@ public class LOActivity extends AppCompatActivity {
             return false;
 
         ClipDescription clipDesc = clipData.getDescription();
-        if (clipDesc == null)
+        if (clipDesc == null || clipData.getItemCount() < 1)
             return false;
+
+        CharSequence label = clipDesc.getLabel();
+        if (label != null && label.toString().startsWith(CLIPBOARD_COOL_SIGNATURE)) {
+            if (label.toString().equals(getClipboardMagic())) {
+                Log.i(TAG, "clipboard comes from us - same instance: short circuit it");
+                return true;
+            }
+
+            Log.i(TAG, "clipboard comes from us - other instance: paste from the clipboard file");
+            File clipboardFile = ClipboardFileProvider.fileFor(this, clipData.getItemAt(0).getUri());
+            LokClipboardData clipboardData = null;
+            if (clipboardFile != null && clipboardFile.exists())
+                clipboardData = LokClipboardData.createFromFile(clipboardFile);
+
+            if (clipboardData != null) {
+                LOActivity.this.setClipboardContent(clipboardData);
+                return true;
+            }
+            // couldn't read the clipboard file, try a standard paste...
+        }
+
+        // Choose a representation from the clipboard that we prefer rather than going with the
+        // first one by default ... ideally we'd eventually change this so that we have a native
+        // clipboard handler in VCL so everything is done like in the other apps...
+        for (int i = 0; i < clipDesc.getMimeTypeCount(); ++i) {
+            if (clipDesc.getMimeType(i).startsWith("image/")) {
+                Log.d(TAG, "Pasting image mime: " + clipDesc.getMimeType(i));
+                ClipData.Item item = clipData.getItemAt(0);
+                Uri uri = item.getUri();
+                try {
+                    InputStream imageStream = getContentResolver().openInputStream(uri);
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+                    int nRead;
+                    byte[] data = new byte[16384];
+                    while ((nRead = imageStream.read(data, 0, data.length)) != -1) {
+                        buffer.write(data, 0, nRead);
+                    }
+
+                    LOActivity.this.paste(clipDesc.getMimeType(i), buffer.toByteArray());
+                    return false;
+                } catch (Exception e) {
+                    Log.d(TAG, "Failed to paste image: " + e.getMessage());
+                }
+            }
+        }
 
         for (int i = 0; i < clipDesc.getMimeTypeCount(); ++i) {
             Log.d(TAG, "Pasting mime " + i + ": " + clipDesc.getMimeType(i));
 
             if (clipDesc.getMimeType(i).equals(ClipDescription.MIMETYPE_TEXT_HTML)) {
-                final String html = clipData.getItemAt(i).getHtmlText();
+                final String html = clipData.getItemAt(0).coerceToHtmlText(this);
+                if (html == null || html.isEmpty())
+                    continue;
                 // Check if the clipboard content was made with the app
                 if (html.contains(CLIPBOARD_COOL_SIGNATURE)) {
                     // Check if the clipboard content is from the same app instance
@@ -1919,29 +2079,10 @@ public class LOActivity extends AppCompatActivity {
                         return false;
                     }
                 } else {
-                    Log.i(TAG, "foreign html '" + html + "'");
+                    Log.i(TAG, "foreign html, length " + html.length());
                     byte[] htmlByteArray = html.getBytes(Charset.forName("UTF-8"));
                     LOActivity.this.paste("text/html", htmlByteArray);
                     return false;
-                }
-            }
-            else if (clipDesc.getMimeType(i).startsWith("image/")) {
-                ClipData.Item item = clipData.getItemAt(i);
-                Uri uri = item.getUri();
-                try {
-                    InputStream imageStream = getContentResolver().openInputStream(uri);
-                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-
-                    int nRead;
-                    byte[] data = new byte[16384];
-                    while ((nRead = imageStream.read(data, 0, data.length)) != -1) {
-                        buffer.write(data, 0, nRead);
-                    }
-
-                    LOActivity.this.paste(clipDesc.getMimeType(i), buffer.toByteArray());
-                    return false;
-                } catch (Exception e) {
-                    Log.d(TAG, "Failed to paste image: " + e.getMessage());
                 }
             }
         }
@@ -1951,8 +2092,11 @@ public class LOActivity extends AppCompatActivity {
             Log.d(TAG, "Plain text paste attempt " + i + ": " + clipDesc.getMimeType(i));
 
             if (clipDesc.getMimeType(i).equals(ClipDescription.MIMETYPE_TEXT_PLAIN)) {
-                final ClipData.Item clipItem = clipData.getItemAt(i);
-                String text = clipItem.getText().toString();
+                final ClipData.Item clipItem = clipData.getItemAt(0);
+                final CharSequence textSequence = clipItem.coerceToText(this);
+                if (textSequence == null)
+                    continue;
+                String text = textSequence.toString();
                 byte[] textByteArray = text.getBytes(Charset.forName("UTF-8"));
                 LOActivity.this.paste("text/plain;charset=utf-8", textByteArray);
             }

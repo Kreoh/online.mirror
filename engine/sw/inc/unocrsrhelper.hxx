@@ -25,6 +25,7 @@
 
 #include <optional>
 #include <map>
+#include <span>
 #include <string_view>
 
 class SfxItemSet;
@@ -75,7 +76,7 @@ namespace SwUnoCursorHelper
             bool    FillValue( sal_uInt16 nWhichId, sal_uInt16 nMemberId, const cpo::uno::Any*& pAny );
     };
 
-    css::uno::Reference< css::text::XTextContent >
+    cpo::uno::Reference< css::text::XTextContent >
         GetNestedTextContent(SwTextNode const & rTextNode, sal_Int32 const nIndex,
             bool const bParent);
 
@@ -96,7 +97,7 @@ namespace SwUnoCursorHelper
     void                        resetCursorPropertyValue(const SfxItemPropertyMapEntry& rEntry, SwPaM& rPam);
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void                        InsertFile(SwUnoCursor* pUnoCursor,
                                     const OUString& rURL,
                                     const cpo::uno::Sequence< css::beans::PropertyValue >& rOptions);
@@ -118,17 +119,17 @@ namespace SwUnoCursorHelper
                     const SwPaM &rNewCursor, std::u16string_view aText,
                     const bool bForceExpandHints );
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void    makeRedline( SwPaM const & rPaM, std::u16string_view RedlineType,
             const cpo::uno::Sequence< css::beans::PropertyValue >& RedlineProperties );
 
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void    makeTableRowRedline( SwTableLine& rTableLine, std::u16string_view RedlineType,
             const cpo::uno::Sequence< css::beans::PropertyValue >& RedlineProperties );
 
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SW_DLLPUBLIC void    makeTableCellRedline( SwTableBox& rTableBox, std::u16string_view RedlineType,
             const cpo::uno::Sequence< css::beans::PropertyValue >& RedlineProperties );
 
@@ -155,7 +156,7 @@ namespace SwUnoCursorHelper
     /// @throws css::beans::PropertyVetoException
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void SetPropertyValue(
             SwPaM& rPaM,
             const SfxItemPropertySet & rPropSet,
@@ -166,7 +167,7 @@ namespace SwUnoCursorHelper
     /// @throws css::beans::PropertyVetoException
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void SetPropertyValues(
             SwPaM& rPaM,
             const SfxItemPropertySet & rPropSet,
@@ -180,13 +181,13 @@ namespace SwUnoCursorHelper
             const SetAttrMode nAttrMode = SetAttrMode::DEFAULT);
     /// @throws css::beans::UnknownPropertyException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Any  GetPropertyValue(
             SwPaM& rPaM,
             const SfxItemPropertySet & rPropSet,
             std::u16string_view rPropertyName);
     /// @throws css::beans::UnknownPropertyException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence< css::beans::PropertyState > GetPropertyStates(
             SwPaM & rPaM,
             const SfxItemPropertySet & rPropSet,
@@ -195,20 +196,20 @@ namespace SwUnoCursorHelper
             const SwGetPropertyStatesCaller eCaller =
                 SW_PROPERTY_STATE_CALLER_DEFAULT);
     /// @throws css::beans::UnknownPropertyException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::beans::PropertyState GetPropertyState(
             SwPaM & rPaM,
             const SfxItemPropertySet & rPropSet,
             const OUString & rPropertyName);
     /// @throws css::beans::UnknownPropertyException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void SetPropertyToDefault(
             SwPaM & rPaM,
             const SfxItemPropertySet & rPropSet,
             std::u16string_view rPropertyName);
     /// @throws css::beans::UnknownPropertyException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Any  GetPropertyDefault(
             SwPaM const & rPaM,
             const SfxItemPropertySet & rPropSet,
@@ -218,11 +219,11 @@ namespace SwUnoCursorHelper
             const cpo::uno::Any& rValue,
             SwDoc & rDoc, SfxItemSet & rSet);
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void SetTextFormatColl(const cpo::uno::Any & rAny, SwPaM & rPaM);
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
-    /// @throws css::uno::DeploymentException
+    /// @throws cpo::uno::RuntimeException
+    /// @throws cpo::uno::DeploymentException
     bool SetCursorPropertyValue(
             SfxItemPropertyMapEntry const& rEntry,
             cpo::uno::Any const& rValue,
@@ -232,14 +233,14 @@ namespace SwUnoCursorHelper
     /// at most one of the out parameters gets assigned a non-null value
     /// o_rpPaM is newly allocated and must be deleted; other parameters not
     SW_DLLPUBLIC void GetSelectableFromAny(
-        css::uno::Reference<css::uno::XInterface> const& xIfc,
+        cpo::uno::Reference<cpo::uno::XInterface> const& xIfc,
         SwDoc & rTargetDoc,
         std::optional<SwPaM>& o_rpPaM, std::pair<UIName, FlyCntType> & o_rFrame,
         UIName & o_rTableName, SwUnoTableCursor const*& o_rpTableCursor,
         ::sw::mark::MarkBase const*& o_rpMark,
         std::vector<SdrObject *> & o_rSdrObjects);
 
-    css::uno::Reference<css::text::XFlatParagraphIterator>
+    cpo::uno::Reference<css::text::XFlatParagraphIterator>
             CreateFlatParagraphIterator(SwDoc &, sal_Int32,  bool);
 
     void SetCharStyle(SwDoc& rDoc, const cpo::uno::Any& rValue, SfxItemSet& rSet);

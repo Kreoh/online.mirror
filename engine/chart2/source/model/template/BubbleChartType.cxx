@@ -28,10 +28,11 @@
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::com::sun::star::beans::Property;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace
 {
@@ -172,8 +173,8 @@ cpo::uno::Sequence< OUString > BubbleChartType::getSupportedServiceNames()
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart_BubbleChartType_get_implementation(css::uno::XComponentContext * /*context*/,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart_BubbleChartType_get_implementation(cpo::uno::XComponentContext * /*context*/,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::BubbleChartType);

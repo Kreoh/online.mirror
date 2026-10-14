@@ -17,7 +17,7 @@
 
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/sheet/XDataPilotDescriptor.hpp>
-#include <com/sun/star/sheet/XDataPilotTable2.hpp>
+#include <com/sun/star/sheet/XDataPilotTable.hpp>
 #include <com/sun/star/sheet/XDataPilotTables.hpp>
 #include <com/sun/star/sheet/XDataPilotTablesSupplier.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
@@ -25,14 +25,14 @@
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
 #include <com/sun/star/table/CellRangeAddress.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppu/unotype.hxx>
 
-using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star;
 
 namespace sc_apitest
@@ -48,8 +48,8 @@ class ScDataPilotTablesObj : public UnoApiTest,
 public:
     ScDataPilotTablesObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
-    virtual uno::Reference<uno::XInterface> getXSpreadsheet() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> getXSpreadsheet() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScDataPilotTablesObj);
@@ -83,14 +83,14 @@ public:
 
 ScDataPilotTablesObj::ScDataPilotTablesObj()
     : UnoApiTest(u"/sc/qa/extras/testdocuments"_ustr)
-    , XElementAccess(cppu::UnoType<sheet::XDataPilotTable2>::get())
+    , XElementAccess(cppu::UnoType<sheet::XDataPilotTable>::get())
     , XIndexAccess(1)
     , XNameAccess(u"DataPilotTable"_ustr)
     , XServiceInfo(u"ScDataPilotTablesObj"_ustr, u"com.sun.star.sheet.DataPilotTables"_ustr)
 {
 }
 
-uno::Reference<uno::XInterface> ScDataPilotTablesObj::init()
+uno::Reference<cpo::uno::XInterface> ScDataPilotTablesObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
 
@@ -114,7 +114,7 @@ uno::Reference<uno::XInterface> ScDataPilotTablesObj::init()
     return xDPT;
 }
 
-uno::Reference<uno::XInterface> ScDataPilotTablesObj::getXSpreadsheet()
+uno::Reference<cpo::uno::XInterface> ScDataPilotTablesObj::getXSpreadsheet()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
 

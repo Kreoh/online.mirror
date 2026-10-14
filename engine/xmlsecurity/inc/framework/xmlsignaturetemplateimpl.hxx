@@ -23,73 +23,92 @@
 #include <rtl/ustring.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/xml/crypto/XXMLSignatureTemplate.hpp>
 
+#include <SignatureTemplateInternal.hxx>
+
 #include <vector>
 
 namespace com::sun::star::lang { class XMultiServiceFactory; }
+namespace com::sun::star::security { class XCertificate; }
 namespace com::sun::star::xml::wrapper { class XXMLElementWrapper; }
 
 class XMLSignatureTemplateImpl final : public ::cppu::WeakImplHelper<
     css::xml::crypto::XXMLSignatureTemplate ,
     css::lang::XServiceInfo >
+    , public xmlsecurity::ISignatureTemplateInternal
 {
     private:
-        css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > m_xTemplate ;
-        std::vector< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > targets;
-        css::uno::Reference< css::xml::crypto::XUriBinding > m_xUriBinding;
+        cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > m_xTemplate ;
+        std::vector< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > targets;
+        cpo::uno::Reference< css::xml::crypto::XUriBinding > m_xUriBinding;
         css::xml::crypto::SecurityOperationStatus m_nStatus;
+        cpo::uno::Reference<css::security::XCertificate> m_xSigningCertificate;
+        cpo::uno::Reference<css::security::XCertificate> m_xVerifiedCertificate;
 
     public:
         explicit XMLSignatureTemplateImpl();
         virtual ~XMLSignatureTemplateImpl() override;
 
+        void SetSigningCertificate(cpo::uno::Reference<css::security::XCertificate> const& xCertificate)
+        {
+            m_xSigningCertificate = xCertificate;
+        }
+        cpo::uno::Reference<css::security::XCertificate> const& GetVerifiedCertificate() const
+        {
+            return m_xVerifiedCertificate;
+        }
+
+        // xmlsecurity::ISignatureTemplateInternal
+        virtual cpo::uno::Reference<css::security::XCertificate> GetSigningCertificate() override;
+        virtual void SetVerifiedCertificate(cpo::uno::Reference<css::security::XCertificate> const& rCertificate) override;
+
         //Methods from XXMLSignatureTemplate
-        virtual void SAL_CALL setTemplate(
-            const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement
+        virtual void setTemplate(
+            const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement
             ) override;
 
-        virtual css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL getTemplate(
+        virtual cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > getTemplate(
         ) override;
 
-        virtual void SAL_CALL setTarget(
-            const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement
+        virtual void setTarget(
+            const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement
         ) override;
 
-        virtual cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > SAL_CALL getTargets(
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > getTargets(
         ) override;
 
-        virtual void SAL_CALL setBinding(
-            const css::uno::Reference< css::xml::crypto::XUriBinding >& aUriBinding ) override;
-        virtual css::uno::Reference< css::xml::crypto::XUriBinding >
-            SAL_CALL getBinding(  ) override;
+        virtual void setBinding(
+            const cpo::uno::Reference< css::xml::crypto::XUriBinding >& aUriBinding ) override;
+        virtual cpo::uno::Reference< css::xml::crypto::XUriBinding >
+            getBinding(  ) override;
 
-        virtual void SAL_CALL setStatus(
+        virtual void setStatus(
             css::xml::crypto::SecurityOperationStatus status ) override;
         virtual css::xml::crypto::SecurityOperationStatus
-            SAL_CALL getStatus(  ) override;
+            getStatus(  ) override;
 
         //Methods from XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override ;
+        virtual OUString getImplementationName() override ;
 
-        virtual bool SAL_CALL supportsService(
+        virtual bool supportsService(
             const OUString& ServiceName
         ) override ;
 
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override ;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override ;
 
         //Helper for XServiceInfo
         static cpo::uno::Sequence< OUString > impl_getSupportedServiceNames() ;
 
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         static OUString impl_getImplementationName() ;
 
         //Helper for registry
-        /// @throws css::uno::RuntimeException
-        static css::uno::Reference< css::uno::XInterface > impl_createInstance( const css::uno::Reference< css::lang::XMultiServiceFactory >& aServiceManager ) ;
+        /// @throws cpo::uno::RuntimeException
+        static cpo::uno::Reference< cpo::uno::XInterface > impl_createInstance( const cpo::uno::Reference< css::lang::XMultiServiceFactory >& aServiceManager ) ;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

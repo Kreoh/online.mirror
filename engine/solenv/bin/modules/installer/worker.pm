@@ -447,69 +447,6 @@ sub replace_variables_in_string
     return $string;
 }
 
-#################################################################
-# Copying the files defined as ScpActions into the
-# installation set.
-#################################################################
-
-sub put_scpactions_into_installset
-{
-    my ($installdir) = @_;
-
-    installer::logger::include_header_into_logfile("Start: Copying scp action files into installation set");
-
-    for ( my $i = 0; $i <= $#installer::globals::allscpactions; $i++ )
-    {
-        my $onescpaction = $installer::globals::allscpactions[$i];
-
-        my $subdir = "";
-        if ( $onescpaction->{'Subdir'} ) { $subdir = $onescpaction->{'Subdir'}; }
-
-        if ( $onescpaction->{'Name'} eq "loader.exe" ) { next; }    # do not copy this ScpAction loader
-
-        my $destdir = $installdir;
-        $destdir =~ s/\Q$installer::globals::separator\E\s*$//;
-        if ( $subdir ) { $destdir = $destdir . $installer::globals::separator . $subdir; }
-
-        my $sourcefile = $onescpaction->{'sourcepath'};
-        my $destfile = $destdir . $installer::globals::separator . $onescpaction->{'DestinationName'};
-
-        if (( $subdir =~ /\// ) || ( $subdir =~ /\\/ ))
-        {
-            installer::systemactions::create_directory_structure($destdir);
-        }
-        else
-        {
-            installer::systemactions::create_directory($destdir);
-        }
-
-        installer::systemactions::copy_one_file($sourcefile, $destfile);
-
-        if ( $onescpaction->{'UnixRights'} )
-        {
-            chmod oct($onescpaction->{'UnixRights'}), $destfile;
-        }
-
-    }
-
-    installer::logger::include_header_into_logfile("End: Copying scp action files into installation set");
-
-}
-
-#################################################################
-# Collecting scp actions for all languages
-#################################################################
-
-sub collect_scpactions
-{
-    my ($allscpactions) = @_;
-
-    for ( my $i = 0; $i <= $#{$allscpactions}; $i++ )
-    {
-        push(@installer::globals::allscpactions, ${$allscpactions}[$i]);
-    }
-}
-
 ###########################################################
 # Adding additional variables into the variableshashref,
 # that are defined in include files in the source tree. The
@@ -859,43 +796,6 @@ sub put_license_into_setup
 
     # Write setup
     installer::files::save_file($setupfilename, $setupfile);
-}
-
-#########################################################
-# Collecting all pkgmap files from an installation set
-#########################################################
-
-sub collectpackagemaps
-{
-    my ( $installdir, $languagestringref, $allvariables ) = @_;
-
-    installer::logger::include_header_into_logfile("Collecting all packagemaps (pkgmap):");
-
-    my $pkgmapdir = installer::systemactions::create_directories("pkgmap", $languagestringref);
-    my $subdirname = $allvariables->{'UNIXPRODUCTNAME'} . "_pkgmaps";
-    my $pkgmapsubdir = $pkgmapdir . $installer::globals::separator . $subdirname;
-    if ( -d $pkgmapsubdir ) { installer::systemactions::remove_complete_directory($pkgmapsubdir); }
-    if ( ! -d $pkgmapsubdir ) { installer::systemactions::create_directory($pkgmapsubdir); }
-
-    $installdir =~ s/\/\s*$//;
-    # Collecting all packages in $installdir and its sub package ("packages")
-    my $searchdir = $installdir . $installer::globals::separator . $installer::globals::epmoutpath;
-
-    my $allpackages = installer::systemactions::get_all_directories_without_path($searchdir);
-
-    for ( my $i = 0; $i <= $#{$allpackages}; $i++ )
-    {
-        my $pkgmapfile = $searchdir . $installer::globals::separator . ${$allpackages}[$i] . $installer::globals::separator . "pkgmap";
-        my $destfilename = $pkgmapsubdir . $installer::globals::separator . ${$allpackages}[$i] . "_pkgmap";
-        installer::systemactions::copy_one_file($pkgmapfile, $destfilename);
-    }
-
-    # Create a tar gz file with all package maps
-    my $tarfilename = $subdirname . ".tar";
-    my $targzname = $tarfilename . ".gz";
-    my $systemcall = "cd $pkgmapdir; tar -cf - $subdirname | $installer::globals::packertool > $targzname";
-    installer::systemactions::make_systemcall($systemcall);
-    installer::systemactions::remove_complete_directory($pkgmapsubdir, 1);
 }
 
 1;

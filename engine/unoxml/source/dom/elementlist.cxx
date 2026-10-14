@@ -31,7 +31,7 @@
 #include "element.hxx"
 #include "document.hxx"
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::xml::dom;
 using namespace css::xml::dom::events;
 namespace DOM { class CElementListImpl; }
@@ -49,7 +49,7 @@ namespace DOM
         {
         }
 
-        virtual void SAL_CALL handleEvent(const css::uno::Reference<css::xml::dom::events::XEvent>& rEvent) override
+        virtual void handleEvent(const cpo::uno::Reference<css::xml::dom::events::XEvent>& rEvent) override
         {
             rtl::Reference<DOM::CElementListImpl> xOwner(mxOwner);
             if (xOwner)
@@ -147,7 +147,7 @@ namespace DOM
     /**
     The number of nodes in the list.
     */
-    sal_Int32 SAL_CALL CElementListImpl::getLength()
+    sal_Int32 CElementListImpl::getLength()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -160,9 +160,9 @@ namespace DOM
     /**
     Returns the indexth item in the collection.
     */
-    Reference< XNode > SAL_CALL CElementListImpl::item(sal_Int32 index)
+    Reference< XNode > CElementListImpl::item(sal_Int32 index)
     {
-        if (index < 0) throw RuntimeException();
+        if (index < 0) throw cpo::uno::RuntimeException();
 
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -170,13 +170,13 @@ namespace DOM
 
         buildlist(m_pElement->GetNodePtr());
         if (m_nodevector.size() <= o3tl::make_unsigned(index)) {
-            throw RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
         return m_pElement->GetOwnerDocument().GetCNode(m_nodevector[index]);
     }
 
     // tree mutations can change the list
-    void SAL_CALL CElementListImpl::handleEvent(Reference< XEvent > const&)
+    void CElementListImpl::handleEvent(Reference< XEvent > const&)
     {
         ::osl::MutexGuard const g(m_rMutex);
 

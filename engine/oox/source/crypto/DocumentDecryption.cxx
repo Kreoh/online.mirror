@@ -16,7 +16,7 @@
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <com/sun/star/io/IOException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/packages/XPackageEncryption.hpp>
 #include <oox/ole/olestorage.hxx>
 #include <oox/helper/binaryinputstream.hxx>
@@ -51,8 +51,9 @@ void lcl_getListOfStreams(oox::StorageBase* pStorage, std::vector<OUString>& rEl
 namespace oox::crypto
 {
 using namespace css;
+using namespace ::cpo;
 
-DocumentDecryption::DocumentDecryption(css::uno::Reference<css::uno::XComponentContext> xContext,
+DocumentDecryption::DocumentDecryption(cpo::uno::Reference<cpo::uno::XComponentContext> xContext,
                                        oox::ole::OleStorage& rOleStorage)
     : mxContext(std::move(xContext))
     , mrOleStorage(rOleStorage)
@@ -171,7 +172,7 @@ bool DocumentDecryption::readEncryptionInfo()
     mxPackageEncryption.set(
         mxContext->getServiceManager()->createInstanceWithArgumentsAndContext(
             "com.sun.star.comp.oox.crypto." + sDataSpaceName, aArguments, mxContext),
-        css::uno::UNO_QUERY);
+        cpo::uno::UNO_QUERY);
 
     if (!mxPackageEncryption.is())
     {
@@ -210,7 +211,7 @@ bool DocumentDecryption::decrypt(const uno::Reference<io::XStream>& xDocumentStr
 
     bResult = mxPackageEncryption->decrypt(xEncryptedPackage, xDecryptedPackage);
 
-    css::uno::Reference<io::XSeekable> xSeekable(xDecryptedPackage, css::uno::UNO_QUERY);
+    cpo::uno::Reference<io::XSeekable> xSeekable(xDecryptedPackage, cpo::uno::UNO_QUERY);
     xSeekable->seek(0);
 
     if (bResult)

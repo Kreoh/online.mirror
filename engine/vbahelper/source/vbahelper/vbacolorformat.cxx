@@ -21,6 +21,7 @@
 
 using namespace ooo::vba;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 sal_Int32
 MsoColorIndices::getColorIndex( sal_Int32 nIndex )
@@ -39,7 +40,7 @@ MsoColorIndices::getColorIndex( sal_Int32 nIndex )
     };
     return COLORINDICES[nIndex];
 }
-ScVbaColorFormat::ScVbaColorFormat( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< XHelperInterface >& xInternalParent, const uno::Reference< drawing::XShape >& xShape, const sal_Int16 nColorFormatType ) : ScVbaColorFormat_BASE( xParent, xContext ), m_nColorFormatType( nColorFormatType )
+ScVbaColorFormat::ScVbaColorFormat( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< XHelperInterface >& xInternalParent, const uno::Reference< drawing::XShape >& xShape, const sal_Int16 nColorFormatType ) : ScVbaColorFormat_BASE( xParent, xContext ), m_nColorFormatType( nColorFormatType )
 {
     m_xPropertySet.set( xShape, uno::UNO_QUERY_THROW );
     m_nFillFormatBackColor = 0;
@@ -47,14 +48,14 @@ ScVbaColorFormat::ScVbaColorFormat( const uno::Reference< XHelperInterface >& xP
     {
         uno::Reference< ov::msforms::XFillFormat > xFillFormat( xInternalParent, uno::UNO_QUERY_THROW );
         m_pFillFormat = static_cast<ScVbaFillFormat*>( xFillFormat.get() );
-    }catch ( uno::RuntimeException& )
+    }catch ( cpo::uno::RuntimeException& )
     {
         m_pFillFormat = nullptr;
     }
 }
 
 // Attribute
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaColorFormat::getRGB()
 {
     sal_Int32 nRGB = 0;
@@ -74,13 +75,13 @@ ScVbaColorFormat::getRGB()
         nRGB = m_nFillFormatBackColor;
         break;
     default:
-        throw uno::RuntimeException( u"Second parameter of ColorFormat is wrong."_ustr );
+        throw cpo::uno::RuntimeException( u"Second parameter of ColorFormat is wrong."_ustr );
     }
     nRGB = OORGBToXLRGB( Color(ColorTransparency, nRGB) );
     return nRGB;
 }
 
-void SAL_CALL
+void
 ScVbaColorFormat::setRGB( sal_Int32 _rgb )
 {
     sal_Int32 nRGB = XLRGBToOORGB( _rgb );
@@ -107,11 +108,11 @@ ScVbaColorFormat::setRGB( sal_Int32 _rgb )
         }
         break;
     default:
-        throw uno::RuntimeException( u"Second parameter of ColorFormat is wrong."_ustr );
+        throw cpo::uno::RuntimeException( u"Second parameter of ColorFormat is wrong."_ustr );
     }
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaColorFormat::getSchemeColor()
 {
     sal_Int32 nColor = getRGB();
@@ -141,7 +142,7 @@ ScVbaColorFormat::getSchemeColor()
 */
 }
 
-void SAL_CALL
+void
 ScVbaColorFormat::setSchemeColor( sal_Int32 _schemecolor )
 {
     // the table is 0 based

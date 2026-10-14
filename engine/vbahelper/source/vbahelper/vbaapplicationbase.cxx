@@ -47,6 +47,7 @@
 #include <unordered_map>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 typedef ::std::pair< OUString, ::std::pair< double, double > > VbaTimerInfo;
@@ -95,7 +96,7 @@ public:
     void Start( const ::rtl::Reference< VbaApplicationBase >& xBase, const OUString& aFunction, double nFrom, double nTo )
     {
         if ( !xBase.is() || aFunction.isEmpty() )
-            throw uno::RuntimeException( u"Unexpected arguments!"_ustr );
+            throw cpo::uno::RuntimeException( u"Unexpected arguments!"_ustr );
 
         m_xBase = xBase;
         m_aTimerInfo = VbaTimerInfo( aFunction, ::std::pair< double, double >( nFrom, nTo ) );
@@ -157,7 +158,7 @@ struct VbaApplicationBase_Impl final
     VbaApplicationBase_Impl() : mbVisible( true ) {}
 };
 
-VbaApplicationBase::VbaApplicationBase( const uno::Reference< uno::XComponentContext >& xContext )
+VbaApplicationBase::VbaApplicationBase( const uno::Reference< cpo::uno::XComponentContext >& xContext )
                     : ApplicationBase_BASE( uno::Reference< XHelperInterface >(), xContext )
                     , m_pImpl( new VbaApplicationBase_Impl )
 {
@@ -167,7 +168,7 @@ VbaApplicationBase::~VbaApplicationBase()
 {
 }
 
-bool SAL_CALL
+bool
 VbaApplicationBase::getScreenUpdating()
 {
     uno::Reference< frame::XModel > xModel = getCurrentDocument();
@@ -176,7 +177,7 @@ VbaApplicationBase::getScreenUpdating()
     return !xModel->hasControllersLocked();
 }
 
-void SAL_CALL
+void
 VbaApplicationBase::setScreenUpdating(bool bUpdate)
 {
     uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
@@ -184,7 +185,7 @@ VbaApplicationBase::setScreenUpdating(bool bUpdate)
     ::basic::vba::lockControllersOfAllDocuments( xModel, !bUpdate );
 }
 
-bool SAL_CALL
+bool
 VbaApplicationBase::getDisplayStatusBar()
 {
     uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
@@ -198,7 +199,7 @@ VbaApplicationBase::getDisplayStatusBar()
     return false;
 }
 
-void SAL_CALL
+void
 VbaApplicationBase::setDisplayStatusBar(bool bDisplayStatusBar)
 {
     uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
@@ -218,7 +219,7 @@ VbaApplicationBase::setDisplayStatusBar(bool bDisplayStatusBar)
     }
 }
 
-bool SAL_CALL VbaApplicationBase::getInteractive()
+bool VbaApplicationBase::getInteractive()
 {
     uno::Reference< frame::XModel > xModel = getCurrentDocument();
     if (!xModel.is())
@@ -239,24 +240,24 @@ bool SAL_CALL VbaApplicationBase::getInteractive()
     return xWindow->isEnabled();
 }
 
-void SAL_CALL VbaApplicationBase::setInteractive( bool bInteractive )
+void VbaApplicationBase::setInteractive( bool bInteractive )
 {
     uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
     // #163808# use helper from module "basic" to enable/disable all container windows of all documents of this application
     ::basic::vba::enableContainerWindowsOfAllDocuments( xModel, bInteractive );
 }
 
-bool SAL_CALL VbaApplicationBase::getVisible()
+bool VbaApplicationBase::getVisible()
 {
     return m_pImpl->mbVisible;    // dummy implementation
 }
 
-void SAL_CALL VbaApplicationBase::setVisible( bool bVisible )
+void VbaApplicationBase::setVisible( bool bVisible )
 {
     m_pImpl->mbVisible = bVisible;  // dummy implementation
 }
 
-OUString SAL_CALL VbaApplicationBase::getCaption()
+OUString VbaApplicationBase::getCaption()
 {
     SbMethod* pMeth = StarBASIC::GetActiveMethod();
     if (!pMeth)
@@ -274,7 +275,7 @@ OUString SAL_CALL VbaApplicationBase::getCaption()
     return xFrame->getName();
 }
 
-void SAL_CALL VbaApplicationBase::setCaption( const OUString& sCaption )
+void VbaApplicationBase::setCaption( const OUString& sCaption )
 {
     // See comments in getCaption().
 
@@ -290,7 +291,7 @@ void SAL_CALL VbaApplicationBase::setCaption( const OUString& sCaption )
     xFrame->setName( sCaption );
 }
 
-void SAL_CALL
+void
 VbaApplicationBase::OnKey( const OUString& Key, const cpo::uno::Any& Procedure )
 {
     // parse the Key & modifiers
@@ -312,7 +313,7 @@ VbaApplicationBase::OnKey( const OUString& Key, const cpo::uno::Any& Procedure )
     applyShortCutKeyBinding( xModel, aKeyEvent, MacroName );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaApplicationBase::CommandBars( const cpo::uno::Any& aIndex )
 {
     uno::Reference< XCommandBars > xCommandBars( new ScVbaCommandBars( this, mxContext, uno::Reference< container::XIndexAccess >(), getCurrentDocument() ) );
@@ -321,13 +322,13 @@ VbaApplicationBase::CommandBars( const cpo::uno::Any& aIndex )
     return cpo::uno::Any( xCommandBars );
 }
 
-OUString SAL_CALL
+OUString
 VbaApplicationBase::getVersion()
 {
     return u"11.0"_ustr;
 }
 
-cpo::uno::Any SAL_CALL VbaApplicationBase::Run( const OUString& MacroName, const cpo::uno::Any& varg1, const cpo::uno::Any& varg2, const cpo::uno::Any& varg3, const cpo::uno::Any& varg4, const cpo::uno::Any& varg5, const cpo::uno::Any& varg6, const cpo::uno::Any& varg7, const cpo::uno::Any& varg8, const cpo::uno::Any& varg9, const cpo::uno::Any& varg10, const cpo::uno::Any& varg11, const cpo::uno::Any& varg12, const cpo::uno::Any& varg13, const cpo::uno::Any& varg14, const cpo::uno::Any& varg15, const cpo::uno::Any& varg16, const cpo::uno::Any& varg17, const cpo::uno::Any& varg18, const cpo::uno::Any& varg19, const cpo::uno::Any& varg20, const cpo::uno::Any& varg21, const cpo::uno::Any& varg22, const cpo::uno::Any& varg23, const cpo::uno::Any& varg24, const cpo::uno::Any& varg25, const cpo::uno::Any& varg26, const cpo::uno::Any& varg27, const cpo::uno::Any& varg28, const cpo::uno::Any& varg29, const cpo::uno::Any& varg30 )
+cpo::uno::Any VbaApplicationBase::Run( const OUString& MacroName, const cpo::uno::Any& varg1, const cpo::uno::Any& varg2, const cpo::uno::Any& varg3, const cpo::uno::Any& varg4, const cpo::uno::Any& varg5, const cpo::uno::Any& varg6, const cpo::uno::Any& varg7, const cpo::uno::Any& varg8, const cpo::uno::Any& varg9, const cpo::uno::Any& varg10, const cpo::uno::Any& varg11, const cpo::uno::Any& varg12, const cpo::uno::Any& varg13, const cpo::uno::Any& varg14, const cpo::uno::Any& varg15, const cpo::uno::Any& varg16, const cpo::uno::Any& varg17, const cpo::uno::Any& varg18, const cpo::uno::Any& varg19, const cpo::uno::Any& varg20, const cpo::uno::Any& varg21, const cpo::uno::Any& varg22, const cpo::uno::Any& varg23, const cpo::uno::Any& varg24, const cpo::uno::Any& varg25, const cpo::uno::Any& varg26, const cpo::uno::Any& varg27, const cpo::uno::Any& varg28, const cpo::uno::Any& varg29, const cpo::uno::Any& varg30 )
 {
     OUString aMacroName = MacroName.trim();
     if( aMacroName.startsWith("!") )
@@ -348,7 +349,7 @@ cpo::uno::Any SAL_CALL VbaApplicationBase::Run( const OUString& MacroName, const
     MacroResolvedInfo aMacroInfo = resolveVBAMacro( getSfxObjShell( xModel ), aMacroName );
     if( !aMacroInfo.mbFound )
     {
-        throw uno::RuntimeException( u"The macro doesn't exist"_ustr );
+        throw cpo::uno::RuntimeException( u"The macro doesn't exist"_ustr );
     }
 
     // handle the arguments
@@ -376,10 +377,10 @@ cpo::uno::Any SAL_CALL VbaApplicationBase::Run( const OUString& MacroName, const
     return aRet;
 }
 
-void SAL_CALL VbaApplicationBase::OnTime( const cpo::uno::Any& aEarliestTime, const OUString& aFunction, const cpo::uno::Any& aLatestTime, const cpo::uno::Any& aSchedule )
+void VbaApplicationBase::OnTime( const cpo::uno::Any& aEarliestTime, const OUString& aFunction, const cpo::uno::Any& aLatestTime, const cpo::uno::Any& aSchedule )
 {
     if ( aFunction.isEmpty() )
-        throw uno::RuntimeException( u"Unexpected function name!"_ustr );
+        throw cpo::uno::RuntimeException( u"Unexpected function name!"_ustr );
 
     auto getTime = [](const cpo::uno::Any& aTime)
     {
@@ -387,7 +388,7 @@ void SAL_CALL VbaApplicationBase::OnTime( const cpo::uno::Any& aEarliestTime, co
             return nTime;
         if (css::bridge::oleautomation::Date date; aTime >>= date)
             return date.Value;
-        throw uno::RuntimeException(u"Invalid type of argument"_ustr);
+        throw cpo::uno::RuntimeException(u"Invalid type of argument"_ustr);
     };
 
     double nEarliestTime = getTime(aEarliestTime);
@@ -412,14 +413,14 @@ void SAL_CALL VbaApplicationBase::OnTime( const cpo::uno::Any& aEarliestTime, co
     }
 }
 
-cpo::uno::Any SAL_CALL VbaApplicationBase::getVBE()
+cpo::uno::Any VbaApplicationBase::getVBE()
 {
     try // return empty object on error
     {
         // "VBE" object does not have a parent, but pass document model to be able to determine application type
         cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(uno::Reference(getCurrentDocument())) };
         uno::Reference< lang::XMultiComponentFactory > xServiceManager( mxContext->getServiceManager(), uno::UNO_SET_THROW );
-        uno::Reference< uno::XInterface > xVBE = xServiceManager->createInstanceWithArgumentsAndContext(
+        uno::Reference< cpo::uno::XInterface > xVBE = xServiceManager->createInstanceWithArgumentsAndContext(
             u"ooo.vba.vbide.VBE"_ustr , aArgs, mxContext );
         return cpo::uno::Any( xVBE );
     }
@@ -445,7 +446,7 @@ VbaApplicationBase::getServiceNames()
     return aServiceNames;
 }
 
-void SAL_CALL VbaApplicationBase::Undo()
+void VbaApplicationBase::Undo()
 {
     uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
     dispatchRequests( xModel, u".uno:Undo"_ustr );

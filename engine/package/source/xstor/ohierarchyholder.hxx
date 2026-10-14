@@ -73,7 +73,7 @@ public:
 
     void RemoveElement( const ::rtl::Reference< OHierarchyElement_Impl >& aRef );
 
-    css::uno::Reference< css::embed::XExtendedStorageStream >
+    cpo::uno::Reference< css::embed::XExtendedStorageStream >
         GetStreamHierarchically( sal_Int32 nStorageMode,
                                 std::vector<OUString>& aPath,
                                 sal_Int32 nStreamMode,
@@ -82,13 +82,13 @@ public:
     void RemoveStreamHierarchically( std::vector<OUString>& aListPath );
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     // XTransactionListener
-    virtual void SAL_CALL preCommit( const css::lang::EventObject& aEvent ) override;
-    virtual void SAL_CALL commited( const css::lang::EventObject& aEvent ) override;
-    virtual void SAL_CALL preRevert( const css::lang::EventObject& aEvent ) override;
-    virtual void SAL_CALL reverted( const css::lang::EventObject& aEvent ) override;
+    virtual void preCommit( const css::lang::EventObject& aEvent ) override;
+    virtual void commited( const css::lang::EventObject& aEvent ) override;
+    virtual void preRevert( const css::lang::EventObject& aEvent ) override;
+    virtual void reverted( const css::lang::EventObject& aEvent ) override;
 
 };
 
@@ -102,7 +102,7 @@ public:
 
     static std::vector<OUString> GetListPathFromString( std::u16string_view aPath );
 
-    css::uno::Reference< css::embed::XExtendedStorageStream >
+    cpo::uno::Reference< css::embed::XExtendedStorageStream >
         GetStreamHierarchically( sal_Int32 nStorageMode,
                                 std::vector<OUString>& aListPath,
                                 sal_Int32 nStreamMode,

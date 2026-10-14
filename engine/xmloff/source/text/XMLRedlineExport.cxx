@@ -47,6 +47,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 using ::com::sun::star::beans::PropertyValue;
@@ -59,7 +60,7 @@ using ::com::sun::star::text::XText;
 using ::com::sun::star::text::XTextContent;
 using ::com::sun::star::text::XTextSection;
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 
@@ -469,15 +470,15 @@ OUString const & XMLRedlineExport::ConvertTypeName(
     {
         return sInsertion;
     }
-    else if (sApiName == u"Format")
-    {
-        return sFormatChange;
-    }
     else
     {
-        OSL_FAIL("unknown redline type");
-        static constexpr OUString sUnknownChange(u"UnknownChange"_ustr);
-        return sUnknownChange;
+        // ODF knows three kinds of tracked change. A change of the paragraph format and a change
+        // of the paragraph style are both a change of formatting, and so is whatever else may
+        // arrive here.
+        SAL_WARN_IF(sApiName != u"Format" && sApiName != u"ParagraphFormat"
+                        && sApiName != u"Style",
+                    "xmloff.text", "unknown redline type: " << OUString(sApiName));
+        return sFormatChange;
     }
 }
 

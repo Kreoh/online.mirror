@@ -11,9 +11,9 @@
 
 #pragma once
 
-#if MOBILEAPP
-#error This file should be excluded from Mobile App builds
-#endif // MOBILEAPP
+#if !ENABLE_WOPI
+#error This file should be excluded from builds without the WOPI storage backend
+#endif // !ENABLE_WOPI
 
 #include <common/StateEnum.hpp>
 #include <common/TraceEvent.hpp>
@@ -33,12 +33,13 @@ class CheckFileInfo : public std::enable_shared_from_this<CheckFileInfo>
 {
 public:
     /// The CheckFileInfo State.
-    STATE_ENUM(State, None, Active, Timedout, Unauthorized, Fail, Pass);
+    STATE_ENUM(State, None, Active, NoAnswer, Transient, Unauthorized, Fail, Pass);
 
     /// Create an instance with a SocketPoll and a RequestDetails instance.
     CheckFileInfo(const std::shared_ptr<TerminatingPoll>& poll, const Poco::URI& url,
                   std::function<void(CheckFileInfo&)> onFinishCallback)
         : _url(url)
+        , _urlFromRedirect(false)
         , _profileZone("WopiStorage::getWOPIFileInfo", { { "url", url.toString() } })
         , _poll(poll)
         , _docKey(RequestDetails::getDocKey(url))
@@ -94,6 +95,7 @@ private:
     bool parseResponseAndValidate(const std::string& response);
 
     Poco::URI _url; ///< Sanitized URL to the document. Can change through redirection.
+    bool _urlFromRedirect; ///< True when _url is a redirect target, not the original URL.
     ProfileZone _profileZone;
     std::shared_ptr<http::Session> _httpSession;
     std::shared_ptr<TerminatingPoll> _poll;

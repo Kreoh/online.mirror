@@ -37,6 +37,7 @@
 #include <swtypes.hxx>
 #include <view.hxx>
 #include <wrtsh.hxx>
+#include <doc.hxx>
 #include <tools/date.hxx>
 #include <tools/datetime.hxx>
 #include <tools/time.hxx>
@@ -624,7 +625,7 @@ void CommentsPanel::EditComment(const Comment* pComment)
     sw::annotation::SwAnnotationWin* pWin = getAnnotationWin(pComment);
     Outliner* pOutliner = pWin->GetOutliner();
     pOutliner->Clear();
-    pOutliner->SetText(sText, pOutliner->GetParagraph(0));
+    pOutliner->SetText(sText, 0);
     pComment->mxTextView->set_editable(false);
 }
 

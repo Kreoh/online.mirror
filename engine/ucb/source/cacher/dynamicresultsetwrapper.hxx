@@ -27,7 +27,7 @@
 #include <com/sun/star/ucb/XDynamicResultSet.hpp>
 #include <com/sun/star/ucb/XSourceInitialization.hpp>
 #include <com/sun/star/ucb/XDynamicResultSetListener.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <rtl/ref.hxx>
 
 #include <memory>
@@ -48,7 +48,7 @@ protected:
     rtl::Reference<DynamicResultSetWrapperListener>
                             m_xMyListenerImpl;
 
-    css::uno::Reference< css::uno::XComponentContext >
+    cpo::uno::Reference< cpo::uno::XComponentContext >
                             m_xContext;
 
     std::mutex              m_aMutex;
@@ -56,19 +56,19 @@ protected:
     bool                    m_bGotWelcome;
 
     //different Interfaces from Origin:
-    css::uno::Reference< css::ucb::XDynamicResultSet >
+    cpo::uno::Reference< css::ucb::XDynamicResultSet >
                             m_xSource;
-    css::uno::Reference< css::sdbc::XResultSet >
+    cpo::uno::Reference< css::sdbc::XResultSet >
                             m_xSourceResultOne;
-    css::uno::Reference< css::sdbc::XResultSet >
+    cpo::uno::Reference< css::sdbc::XResultSet >
                             m_xSourceResultTwo;
 
-    css::uno::Reference< css::sdbc::XResultSet >
+    cpo::uno::Reference< css::sdbc::XResultSet >
                             m_xMyResultOne;
-    css::uno::Reference< css::sdbc::XResultSet >
+    cpo::uno::Reference< css::sdbc::XResultSet >
                             m_xMyResultTwo;
 
-    css::uno::Reference< css::ucb::XDynamicResultSetListener >
+    cpo::uno::Reference< css::ucb::XDynamicResultSetListener >
                             m_xListener;
 
     osl::Condition          m_aSourceSet;
@@ -78,68 +78,68 @@ protected:
     void impl_init();
     void impl_deinit();
     /// @throws css::lang::DisposedException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void
     impl_EnsureNotDisposed(std::unique_lock<std::mutex>& rGuard);
 
     virtual void
-    impl_InitResultSetOne( std::unique_lock<std::mutex>& rGuard, const css::uno::Reference<
+    impl_InitResultSetOne( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference<
                 css::sdbc::XResultSet >& xResultSet );
     virtual void
-    impl_InitResultSetTwo( std::unique_lock<std::mutex>& rGuard, const css::uno::Reference<
+    impl_InitResultSetTwo( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference<
                 css::sdbc::XResultSet >& xResultSet );
 
 public:
 
     DynamicResultSetWrapper(
-        css::uno::Reference< css::ucb::XDynamicResultSet > const & xOrigin
-        , const css::uno::Reference< css::uno::XComponentContext > & rxContext );
+        cpo::uno::Reference< css::ucb::XDynamicResultSet > const & xOrigin
+        , const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext );
 
     virtual ~DynamicResultSetWrapper() override;
 
 
     // XInterface
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
     queryInterface( const cpo::uno::Type & rType ) override;
 
 
     // XDynamicResultSet
-    virtual css::uno::Reference< css::sdbc::XResultSet > SAL_CALL
+    virtual cpo::uno::Reference< css::sdbc::XResultSet >
     getStaticResultSet() override;
 
-    virtual void SAL_CALL
-    setListener( const css::uno::Reference< css::ucb::XDynamicResultSetListener > & Listener ) override;
+    virtual void
+    setListener( const cpo::uno::Reference< css::ucb::XDynamicResultSetListener > & Listener ) override;
 
-    virtual void SAL_CALL
-    connectToCache( const css::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
+    virtual void
+    connectToCache( const cpo::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
 
-    virtual sal_Int16 SAL_CALL
+    virtual sal_Int16
     getCapabilities() override;
 
 
     // XComponent ( base of XDynamicResultSet )
-    virtual void SAL_CALL
+    virtual void
     dispose() override;
 
-    virtual void SAL_CALL
-    addEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
 
-    virtual void SAL_CALL
-    removeEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
 
 
     // XSourceInitialization
 
-    virtual void SAL_CALL
-    setSource(  const css::uno::Reference< css::uno::XInterface > & Source ) override;
+    virtual void
+    setSource(  const cpo::uno::Reference< cpo::uno::XInterface > & Source ) override;
 
 
     // own methods:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void
     impl_disposing( const css::lang::EventObject& Source );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void
     impl_notify( const css::ucb::ListEvent& Changes );
 };
@@ -159,19 +159,19 @@ public:
 
 
     // XInterface
-    virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type & rType ) override;
-    virtual void SAL_CALL acquire()
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
         noexcept override;
-    virtual void SAL_CALL release()
+    virtual void release()
         noexcept override;
 
     // XEventListener ( base of XDynamicResultSetListener )
 
-    virtual void SAL_CALL
+    virtual void
     disposing( const css::lang::EventObject& Source ) override;
 
     // XDynamicResultSetListener
-    virtual void SAL_CALL
+    virtual void
     notify( const css::ucb::ListEvent& Changes ) override;
 
 

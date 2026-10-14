@@ -41,17 +41,17 @@ private:
     LineStyleIsNoneFunction m_aLineStyleIsNoneFunction;
 
 public:
-    SvxLineStyleToolBoxControl( const css::uno::Reference<css::uno::XComponentContext>& rContext );
+    SvxLineStyleToolBoxControl( const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext );
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence<cpo::uno::Any>& rArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence<cpo::uno::Any>& rArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
-    virtual void SAL_CALL execute(sal_Int16 nKeyModifier) override;
-    virtual void SAL_CALL statusChanged(const css::frame::FeatureStateEvent& rEvent) override;
+    virtual void execute(sal_Int16 nKeyModifier) override;
+    virtual void statusChanged(const css::frame::FeatureStateEvent& rEvent) override;
 
     virtual ~SvxLineStyleToolBoxControl() override;
 

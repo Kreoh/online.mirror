@@ -2290,7 +2290,7 @@ bool SvxCharEffectsPage::FillItemSet( SfxItemSet* rSet )
         //! item-state in the 'rOldSet' will be invalid. In this case
         //! changing the effect style will be allowed if a style is
         //! selected in the listbox.
-        bool bAllowChg = nPos != -1 &&
+        bool bAllowChg = nCapsPos != -1 &&
                          SfxItemState::DEFAULT > rOldSet.GetItemState( nWhich );
 
         const SvxCaseMapItem& rItem = *static_cast<const SvxCaseMapItem*>(pOld);
@@ -3113,7 +3113,7 @@ SvxCharTwoLinesPage::SvxCharTwoLinesPage(weld::Container* pPage, weld::DialogCon
     , m_nStartBracketPosition( 0 )
     , m_nEndBracketPosition( 0 )
     , m_xTwoLinesBtn(m_xBuilder->weld_check_button(u"twolines"_ustr))
-    , m_xEnclosingFrame(m_xBuilder->weld_widget(u"enclosing"_ustr))
+    , m_xEnclosingFrame(m_xBuilder->weld_frame(u"enclosing"_ustr))
     , m_xStartBracketLB(m_xBuilder->weld_tree_view(u"startbracket"_ustr))
     , m_xEndBracketLB(m_xBuilder->weld_tree_view(u"endbracket"_ustr))
 {

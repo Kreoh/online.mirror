@@ -24,7 +24,7 @@
 #include <optional>
 #include <sfx2/dllapi.h>
 #include <sal/types.h>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <svl/lstner.hxx>
 #include <sfx2/shell.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -183,6 +183,7 @@ friend class SfxPrinterController;
     std::unordered_set<OUString>    mvLOKBlockedCommandList;
     OUString maKitTimezone;
     OUString maKitAuthor;
+    ::Color maKitFocusRingColor;
     bool maKitIsTimezoneSet;
     bool                        mbLOKColorPreviewEnabled;
 
@@ -211,9 +212,9 @@ public:
                    bool bOnlyVisible = true,
                    const std::function<bool ( const SfxViewShell& )>& isViewShell = nullptr );
     SAL_RET_MAYBENULL static SfxViewShell* Current();
-    SAL_WARN_UNUSED_RESULT static bool IsCurrentKitViewReadOnly();
+    [[nodiscard]] static bool IsCurrentKitViewReadOnly();
 
-    SAL_RET_MAYBENULL static SfxViewShell* Get( const css::uno::Reference< css::frame::XController>& i_rController );
+    SAL_RET_MAYBENULL static SfxViewShell* Get( const cpo::uno::Reference< css::frame::XController>& i_rController );
 
     // Initialize Constructors/Destructors
                                 SFX_DECL_INTERFACE(SFX_INTERFACE_SFXVIEWSH)
@@ -227,6 +228,7 @@ private:
     bool kitReadOnlyView : 1 = false; // When true, this is a COKit readonly view
     bool allowChangeComments : 1 = false; // Allow editing comments in readonly view mode
     bool allowManageRedlines : 1 = false; // Allow accepting/rejecting changes in readonly view mode
+    bool mbDying : 1 = false; // When true, this view shell is about to be deleted
 
 public:
 
@@ -235,11 +237,13 @@ public:
 
     /// Informs the view shell that it'll be deleted before the main loop processes the next user
     /// input.
-    virtual void SetDying() {}
+    void SetDying() { mbDying = true; }
+    /// True once the view shell is marked for deletion.
+    bool IsDying() const { return mbDying; }
 
     SfxInPlaceClient*           GetIPClient() const;
     SfxInPlaceClient*           GetUIActiveClient() const;
-    SfxInPlaceClient*           FindIPClient( const css::uno::Reference < css::embed::XEmbeddedObject >&  xObj, vcl::Window *pObjParentWin ) const;
+    SfxInPlaceClient*           FindIPClient( const cpo::uno::Reference < css::embed::XEmbeddedObject >&  xObj, vcl::Window *pObjParentWin ) const;
 
     virtual ErrCode             DoVerb(sal_Int32 nVerb);
 
@@ -267,7 +271,7 @@ public:
      */
     virtual bool                PrepareClose( bool bUI = true );
     virtual OUString            GetSelectionText( bool bCompleteWords = false, bool bOnlyASample = false );
-    virtual bool                HasSelection( bool bText = true ) const;
+    virtual bool HasSelection(bool bMustHaveText) const;
     virtual SdrView*            GetDrawView() const;
 
     void                        AddSubShell( SfxShell& rShell );
@@ -331,7 +335,7 @@ public:
         The default implementation simply returns the XModel of the associated SfxObjectShell. You will rarely
         need to overwrite this behavior.
     */
-    virtual css::uno::Reference< css::frame::XModel >
+    virtual cpo::uno::Reference< css::frame::XModel >
                                 GetCurrentDocument() const;
 
     /** forwards the current document, as returned by ->GetCurrentDocument, to SfxObjectShell::SetWorkingDocument
@@ -340,7 +344,7 @@ public:
 
     /** get an XRenderable instance that can render this document
     */
-    virtual css::uno::Reference< css::view::XRenderable > GetRenderable();
+    virtual cpo::uno::Reference< css::view::XRenderable > GetRenderable();
 
 
     virtual void                MarginChanged();
@@ -351,7 +355,7 @@ public:
     void                        SetNewWindowAllowed( bool bSet )    { bNoNewWindow = !bSet; }
 
     void                        SetController( SfxBaseController* pController );
-    css::uno::Reference<css::frame::XController> GetController() const;
+    cpo::uno::Reference<css::frame::XController> GetController() const;
 
     bool                        TryContextMenuInterception(const rtl::Reference<VCLXPopupMenu>& rIn,
                                                            const OUString& rMenuIdentifier,
@@ -366,12 +370,12 @@ public:
     void                        StartPrint( const cpo::uno::Sequence < css::beans::PropertyValue >&, bool, bool );
     const std::shared_ptr< vcl::PrinterController >& GetPrinterController() const;
 
-    void                        AddRemoveClipboardListener( const css::uno::Reference < css::datatransfer::clipboard::XClipboardListener>&, bool );
-    css::uno::Reference< css::datatransfer::clipboard::XClipboardNotifier > GetClipboardNotifier() const;
+    void                        AddRemoveClipboardListener( const cpo::uno::Reference < css::datatransfer::clipboard::XClipboardListener>&, bool );
+    cpo::uno::Reference< css::datatransfer::clipboard::XClipboardNotifier > GetClipboardNotifier() const;
 
     SAL_DLLPRIVATE SfxInPlaceClient* GetUIActiveIPClient_Impl() const;
-    SAL_DLLPRIVATE void AddContextMenuInterceptor_Impl( const css::uno::Reference < css::ui::XContextMenuInterceptor >& xInterceptor );
-    SAL_DLLPRIVATE void RemoveContextMenuInterceptor_Impl( const css::uno::Reference < css::ui::XContextMenuInterceptor >& xInterceptor );
+    SAL_DLLPRIVATE void AddContextMenuInterceptor_Impl( const cpo::uno::Reference < css::ui::XContextMenuInterceptor >& xInterceptor );
+    SAL_DLLPRIVATE void RemoveContextMenuInterceptor_Impl( const cpo::uno::Reference < css::ui::XContextMenuInterceptor >& xInterceptor );
     SAL_DLLPRIVATE bool GlobalKeyInput_Impl( const KeyEvent &rKeyEvent );
 
     SAL_DLLPRIVATE void NewIPClient_Impl( SfxInPlaceClient *pIPClient );
@@ -379,10 +383,6 @@ public:
     SAL_DLLPRIVATE void ResetAllClients_Impl( SfxInPlaceClient const *pIP );
 
     SAL_DLLPRIVATE void SetPrinter_Impl( VclPtr<SfxPrinter>& pNewPrinter );
-
-    SAL_DLLPRIVATE bool HandleNotifyEvent_Impl( NotifyEvent const & rEvent );
-    SAL_DLLPRIVATE bool HasKeyListeners_Impl() const;
-    SAL_DLLPRIVATE bool HasMouseClickListeners_Impl() const;
 
     SAL_DLLPRIVATE SfxBaseController*   GetBaseController_Impl() const;
 
@@ -406,9 +406,13 @@ public:
     virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode) const override;
     virtual void viewUpdatedCallback(COKitCallbackType eType) const override;
     virtual void viewUpdatedCallbackPerViewId(COKitCallbackType eType, int nViewId, int nSourceViewId) const override;
-    // Tells the view's callback handler that the vector content of the
-    // given slide part changed.
-    void viewVectorPartChanged(int nPart) const;
+    // Tells the view's callback handler that the vector content of the part with the given
+    // id changed, in the page list the mode names. The id is the page GUID.
+    void viewVectorPartChanged(const OString& rPartId, int nMode) const;
+    /// A text edit running in this view shows something other than it did, which is every
+    /// keystroke. Only what the edit shows changed, not the shapes around it. The default
+    /// does nothing, so a document type that mirrors no edit needs no override.
+    virtual void textEditContentChanged() {}
     // Performs any pending calls to viewInvalidateTilesCallback() as necessary.
     virtual void flushPendingKitInvalidateTiles();
     virtual void viewAddPendingInvalidateTiles() override;
@@ -419,8 +423,11 @@ public:
 
     /// Set if we are doing tiled searching.
     void setTiledSearching(bool bTiledSearching);
-    /// See COKitDocument::getPart().
+    /// The 0-based index of the part the view sits on.
     virtual int getPart() const;
+    /// The identifier of the part the view sits on: the page's GUID as a braced string for a
+    /// presentation or drawing document, the part's index in decimal form otherwise.
+    virtual OString getPartId() const;
     /// See COKitDocument::getEditMode().
     virtual int getEditMode() const;
     virtual void dumpAsXml(xmlTextWriterPtr pWriter) const;
@@ -433,7 +440,23 @@ public:
     /// ICOKitNotifier.
     virtual bool hasKitClient() const override;
     /// ICOKitNotifier.
+    virtual ViewShellDocId getKitDocId() const override;
+    /// ICOKitNotifier.
     virtual bool acceptsViewCallback(COKitCallbackType eType) const override;
+
+    /** Says whether the client of this view wants payloads of the given kind.
+     *
+     * A kind the client does not want is dropped before it is built, whichever of the callbacks
+     * would have carried it.
+     */
+    void setCallbackWanted(COKitCallbackType eType, bool bWanted);
+
+    /** Says that the client of this view draws the document from the objects it holds, rather
+     * than from the bitmap tiles the view paints.
+     */
+    void setDrawsFromObjects(bool bDrawsFromObjects);
+    /// See setDrawsFromObjects().
+    bool drawsFromObjects() const;
     /// ICOKitNotifier. Emits a COKitCallbackType::INVALIDATE_TILES.
     virtual void notifyInvalidation(tools::Rectangle const *) const override;
     /// ICOKitNotifier.
@@ -490,14 +513,16 @@ public:
     /// Set the server-provided author name of this view.
     void SetKitAuthor(const OUString& rAuthor) { maKitAuthor = rAuthor; }
 
+    /// COL_AUTO when the client of this view named no colour.
+    const ::Color& GetKitFocusRingColor() const { return maKitFocusRingColor; }
+    void SetKitFocusRingColor(const ::Color& rColor) { maKitFocusRingColor = rColor; }
+
     /// Set the COKit locale of this view.
     void SetKitLocale(const OUString& rBcp47LanguageTag);
     /// Get the COKit locale of this view.
     const LanguageTag& GetKitLocale() const { return maKitLocale; }
     /// Get the COKit calendar of this view.
     CalendarWrapper& GetKitCalendar();
-    /// Get the form factor of the device where the Kit client is running.
-    KitDeviceFormFactor GetKitDeviceFormFactor() const { return maKitDeviceFormFactor; }
     /// Check if the Kit client is running on a desktop machine.
     bool isKitDesktop() const { return maKitDeviceFormFactor == KitDeviceFormFactor::DESKTOP; }
     /// Check if the Kit client is running on a tablet.

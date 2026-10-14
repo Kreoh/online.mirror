@@ -45,7 +45,7 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdbcx/XRowLocate.hpp>
 #include <com/sun/star/sdb/XResultSetAccess.hpp>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -61,8 +61,8 @@ using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::form;
 using namespace ::com::sun::star::view;
@@ -85,8 +85,8 @@ class SwXSelChgLstnr_Impl : public cppu::WeakImplHelper
 public:
     explicit SwXSelChgLstnr_Impl(SwMailMergeDlg& rParentDlg);
 
-    virtual void SAL_CALL selectionChanged( const EventObject& aEvent ) override;
-    virtual void SAL_CALL disposing( const EventObject& Source ) override;
+    virtual void selectionChanged( const EventObject& aEvent ) override;
+    virtual void disposing( const EventObject& Source ) override;
 };
 
 SwXSelChgLstnr_Impl::SwXSelChgLstnr_Impl(SwMailMergeDlg& rParentDlg) :
@@ -562,7 +562,7 @@ OUString SwMailMergeDlg::GetTargetURL() const
 IMPL_LINK_NOARG(SwMailMergeDlg, InsertPathHdl, weld::Button&, void)
 {
     const uno::Reference< XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
-    uno::Reference < XFolderPicker2 > xFP = sfx2::createFolderPicker(xContext, m_xDialog.get());
+    uno::Reference < XFolderPicker > xFP = sfx2::createFolderPicker(xContext, m_xDialog.get());
     xFP->setDisplayDirectory( GetURLfromPath() );
     if( xFP->execute() == RET_OK ) {
         INetURLObject aURL(xFP->getDirectory());

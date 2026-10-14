@@ -42,11 +42,18 @@
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/processfactory.hxx>
 #include <sfx2/app.hxx>
+#include <sfx2/sfxsids.hrc>
+#include <sfx2/sfxuno.hxx>
+#include <svl/eitem.hxx>
+#include <svl/intitem.hxx>
+#include <svl/itemset.hxx>
+#include <svl/stritem.hxx>
 #include <osl/file.hxx>
 
 #include <libxml/xpathInternals.h>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -89,8 +96,8 @@ public:
 private:
     bool bCalled;
 
-    virtual void SAL_CALL disposing(const lang::EventObject&) noexcept override {}
-    virtual void SAL_CALL modified(const lang::EventObject&) noexcept override { bCalled = true; }
+    virtual void disposing(const lang::EventObject&) noexcept override {}
+    virtual void modified(const lang::EventObject&) noexcept override { bCalled = true; }
 };
 
 CPPUNIT_TEST_FIXTURE(MiscTest, testODFCustomMetadata)
@@ -472,7 +479,7 @@ CPPUNIT_TEST_FIXTURE(MiscTest, testDocumentProperties)
     }
 
     rtl::Reference<Listener> xListener = new Listener();
-    css::uno::Reference<css::util::XModifyBroadcaster> xBroadcaster(xProps, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::util::XModifyBroadcaster> xBroadcaster(xProps, cpo::uno::UNO_QUERY);
     xBroadcaster->addModifyListener(xListener);
     xProps->setAuthor(u"not me"_ustr);
     CPPUNIT_ASSERT(xListener->reset());
@@ -504,7 +511,7 @@ CPPUNIT_TEST_FIXTURE(MiscTest, testNoThumbnail)
         comphelper::InitPropertySequence({ { u"NoThumbnail"_ustr, cpo::uno::Any(true) } }));
     osl::File::remove(maTempFile.GetURL());
     xStorable->storeToURL(maTempFile.GetURL(), aProperties);
-    uno::Reference<packages::zip::XZipFileAccess2> xZipFile
+    uno::Reference<packages::zip::XZipFileAccess> xZipFile
         = packages::zip::ZipFileAccess::createWithURL(m_xContext, maTempFile.GetURL());
     CPPUNIT_ASSERT(!xZipFile->hasByName(u"Thumbnails/thumbnail.png"_ustr));
 
@@ -628,6 +635,44 @@ CPPUNIT_TEST_FIXTURE(MiscTest, testOverwrite)
     catch (const cpo::uno::Exception&)
     {
     }
+}
+
+CPPUNIT_TEST_FIXTURE(MiscTest, testTransformItemsOrder)
+{
+    // tdf#173160: a macro invoked through a hyperlink receives the media descriptor entries as
+    // positional arguments, so the order they are filled in must be preserved
+    // First, create a document to bring in SfxApplication:
+    loadFromURL(u"private:factory/swriter"_ustr);
+
+    SfxAllItemSet aSet(SfxGetpApp()->GetPool());
+    aSet.Put(SfxStringItem(SID_FILE_NAME, u"foo:bar"_ustr));
+    aSet.Put(SfxStringItem(SID_REFERER, u"private:user"_ustr));
+    aSet.Put(SfxStringItem(SID_TARGETNAME, u"_self"_ustr));
+    aSet.Put(SfxBoolItem(SID_OPEN_NEW_VIEW, false));
+    aSet.Put(SfxUInt16Item(SID_MACROEXECMODE, 3));
+    aSet.Put(SfxUInt16Item(SID_UPDATEDOCMODE, 2));
+
+    SfxUnoArguments aArgs = TransformItems(SID_OPENDOC, aSet);
+    auto assertArgumentNames = [&aArgs](std::initializer_list<OUString> aExpected)
+    {
+        CPPUNIT_ASSERT_MESSAGE("Lengths not equal",
+                               std::ranges::equal(aExpected, aArgs.getAsConstPropertyValueList(),
+                                                  [](auto& rExpected, auto& rActual)
+                                                  {
+                                                      CPPUNIT_ASSERT_EQUAL(rExpected, rActual.Name);
+                                                      return true;
+                                                  }));
+    };
+
+    // Without the accompanying fix in place, this test would have failed: the formal arguments no
+    // longer came first, so a hyperlink macro got something else than the URL as its first argument
+    assertArgumentNames({ u"URL"_ustr, u"Referer"_ustr, u"OpenNewView"_ustr, u"FrameName"_ustr,
+                          u"MacroExecutionMode"_ustr, u"UpdateDocMode"_ustr });
+
+    // this is what SfxApplication::OpenDocExec_Impl hands to the dispatch
+    aArgs.erase(u"Referer"_ustr);
+    assertArgumentNames({ u"URL"_ustr, u"OpenNewView"_ustr, u"FrameName"_ustr,
+                          u"MacroExecutionMode"_ustr, u"UpdateDocMode"_ustr });
 }
 }
 

@@ -66,15 +66,16 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 using namespace ::chart::DataSeriesProperties;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace
 {
 
 wrapper::ItemConverter* createItemConverter(
     std::u16string_view aObjectCID, const rtl::Reference<::chart::ChartModel>& xChartModel,
-    const uno::Reference<uno::XComponentContext>& xContext, SdrModel& rDrawModel,
+    const uno::Reference<cpo::uno::XComponentContext>& xContext, SdrModel& rDrawModel,
     ChartView* pExplicitValueProvider, ReferenceSizeProvider const * pRefSizeProvider )
 {
     wrapper::ItemConverter* pItemConverter=nullptr;
@@ -792,7 +793,7 @@ void ChartController::executeDlg_ObjectProperties_withUndoGuard(
     catch( const util::CloseVetoException& )
     {
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
     }
 }

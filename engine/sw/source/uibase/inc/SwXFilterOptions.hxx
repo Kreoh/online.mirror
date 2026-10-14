@@ -40,9 +40,9 @@ class SwXFilterOptions final : public ::cppu::WeakImplHelper<
 {
     OUString     m_sFilterOptions;
 
-    css::uno::Reference< css::io::XInputStream > m_xInputStream;
-    css::uno::Reference< css::lang::XComponent > m_xModel;
-    css::uno::Reference< css::awt::XWindow > m_xDialogParent;
+    cpo::uno::Reference< css::io::XInputStream > m_xInputStream;
+    cpo::uno::Reference< css::lang::XComponent > m_xModel;
+    cpo::uno::Reference< css::awt::XWindow > m_xDialogParent;
 
 public:
                             SwXFilterOptions();
@@ -50,29 +50,29 @@ public:
 
                             // XPropertyAccess
     virtual cpo::uno::Sequence< css::beans::PropertyValue >
-                            SAL_CALL getPropertyValues() override;
-    virtual void SAL_CALL   setPropertyValues( const cpo::uno::Sequence<
+                            getPropertyValues() override;
+    virtual void   setPropertyValues( const cpo::uno::Sequence<
                                     css::beans::PropertyValue >& aProps ) override;
 
                             // XExecutableDialog
-    virtual void SAL_CALL   setTitle( const OUString& aTitle ) override;
-    virtual sal_Int16 SAL_CALL execute() override;
+    virtual void   setTitle( const OUString& aTitle ) override;
+    virtual sal_Int16 execute() override;
 
                             // XImporter
-    virtual void SAL_CALL   setTargetDocument( const css::uno::Reference<
+    virtual void   setTargetDocument( const cpo::uno::Reference<
                                     css::lang::XComponent >& xDoc ) override;
 
                             // XExporter
-    virtual void SAL_CALL   setSourceDocument( const css::uno::Reference<
+    virtual void   setSourceDocument( const cpo::uno::Reference<
                                     css::lang::XComponent >& xDoc ) override;
 
                             // XInitialization
-    virtual void SAL_CALL   initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+    virtual void   initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
 };
 

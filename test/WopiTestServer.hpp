@@ -28,6 +28,7 @@
 #include <test/lokassert.hpp>
 
 #include <Poco/Net/HTTPRequest.h>
+#include <Poco/SHA2Engine.h>
 #include <Poco/URI.h>
 #include <Poco/Util/LayeredConfiguration.h>
 
@@ -73,6 +74,8 @@ private:
 
 protected:
 
+    bool _dontSendJSONOnPutFile;
+
     const std::string& getFileContent() const { return _fileContent; }
 
     /// Sets the file content to a given value and update the last file modified time
@@ -87,6 +90,17 @@ protected:
                                      << Util::getIso8601FracformatTime(oldTime));
     }
 
+    /// The SHA-256 of the current file content, Base64-encoded, as the WOPI
+    /// SHA256 field carries it. Tests that report a hash opt in via
+    /// configCheckFileInfo(); the default payload has no SHA256, so hosts that
+    /// report none stay covered too.
+    std::string getFileContentSha256Base64() const
+    {
+        Poco::SHA2Engine engine(Poco::SHA2Engine::SHA_256);
+        engine.update(_fileContent.data(), _fileContent.size());
+        return Util::base64Encode(engine.digest());
+    }
+
     const std::chrono::system_clock::time_point& getFileLastModifiedTime() const
     {
         return _fileLastModifiedTime;
@@ -99,6 +113,7 @@ protected:
         , _countGetFile(0)
         , _countPutRelative(0)
         , _countPutFile(0)
+        , _dontSendJSONOnPutFile(false)
     {
         TST_LOG("WopiTestServer created for [" << getTestname() << ']');
 
@@ -478,9 +493,12 @@ protected:
                 TST_LOG("FakeWOPIHost: Document conflict detected, Stored ModifiedTime: ["
                         << fileModifiedTime << "], Upload ModifiedTime: [" << wopiTimestamp << ']');
                 http::Response httpResponse(http::StatusCode::Conflict);
-                httpResponse.setBody("{\"COOLStatusCode\":" +
+                if (!_dontSendJSONOnPutFile)
+                {
+                    httpResponse.setBody("{\"COOLStatusCode\":" +
                                      std::to_string(static_cast<int>(COOLStatusCode::DocChanged)) +
                                      '}');
+                }
                 socket->sendAndShutdown(httpResponse);
                 return true;
             }
@@ -511,14 +529,17 @@ protected:
         }
         else
         {
-            // By default we return success.
-            std::string body = "{\"LastModifiedTime\": \"" +
-                               Util::getIso8601FracformatTime(getFileLastModifiedTime()) +
-                               "\" }";
-            TST_LOG("FakeWOPIHost: Response (default) to POST " << uriReq.getPath() << ": 200 OK "
-                                                                << body);
             http::Response httpResponse(http::StatusCode::OK);
-            httpResponse.setBody(std::move(body), "application/json; charset=utf-8");
+            if (!_dontSendJSONOnPutFile)
+            {
+                // By default we return success.
+                std::string body = "{\"LastModifiedTime\": \"" +
+                                   Util::getIso8601FracformatTime(getFileLastModifiedTime()) +
+                                   "\" }";
+                TST_LOG("FakeWOPIHost: Response (default) to POST " << uriReq.getPath() << ": 200 OK "
+                                                                    << body);
+                httpResponse.setBody(std::move(body), "application/json; charset=utf-8");
+            }
             socket->sendAndShutdown(httpResponse);
         }
 

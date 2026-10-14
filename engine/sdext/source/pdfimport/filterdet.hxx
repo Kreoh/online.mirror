@@ -21,7 +21,7 @@
 
 #include <com/sun/star/document/XExtendedFilterDetection.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/io/XStream.hpp>
 
 #include <comphelper/compbase.hxx>
@@ -37,22 +37,22 @@ typedef ::comphelper::WeakComponentImplHelper<
 class PDFDetector : public PDFDetectorBase
 {
 private:
-    css::uno::Reference<
-        css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference<
+        cpo::uno::XComponentContext > m_xContext;
 
 public:
-    explicit PDFDetector( css::uno::Reference<
-                                css::uno::XComponentContext > xContext );
+    explicit PDFDetector( cpo::uno::Reference<
+                                cpo::uno::XComponentContext > xContext );
 
     // XExtendedFilterDetection
-    virtual OUString SAL_CALL detect( cpo::uno::Sequence<
+    virtual OUString detect( cpo::uno::Sequence<
                                                css::beans::PropertyValue >& io_rDescriptor ) override;
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override;
+    bool supportsService(OUString const & ServiceName) override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
 
@@ -83,11 +83,11 @@ public:
     When false, no dialog is opened to query user for alternate
     password
  */
-css::uno::Reference< css::io::XStream >
+cpo::uno::Reference< css::io::XStream >
    getAdditionalStream( const OUString&                                                            rPDFFile,
                         OUString&                                                                  o_rOutMimetype,
                         OUString&                                                                  io_rOutPwd,
-                        const css::uno::Reference< css::uno::XComponentContext >& xContext,
+                        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
                         const cpo::uno::Sequence< css::beans::PropertyValue >&    rFilterData,
                         bool                                                                            bMayUseUI );
 
@@ -118,11 +118,11 @@ css::uno::Reference< css::io::XStream >
     When false, no dialog is opened to query user for alternate
     password
  */
-css::uno::Reference< css::io::XStream >
+cpo::uno::Reference< css::io::XStream >
    getEmbeddedFile( const OUString&                                                            rPDFFile,
                     OUString&                                                                  o_rOutMimetype,
                     OUString&                                                                  io_rOutPwd,
-                    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
                     const cpo::uno::Sequence< css::beans::PropertyValue >&    rFilterData,
                     bool                                                                            bMayUseUI );
 

@@ -34,8 +34,6 @@
 #include <editeng/unolingu.hxx>
 #include <com/sun/star/linguistic2/XSpellChecker.hpp>
 #include <svx/srchdlg.hxx>
-#include <unotools/linguprops.hxx>
-#include <unotools/lingucfg.hxx>
 #include <editeng/editeng.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <tools/debug.hxx>
@@ -68,7 +66,7 @@
 #include <ResourceId.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::linguistic2;
@@ -205,18 +203,9 @@ SdOutliner::SdOutliner( SdDrawDocument& rDoc, OutlinerMode nMode )
     }
     else
     {
-        bOnlineSpell = false;
-
-        try
-        {
-            const SvtLinguConfig    aLinguConfig;
-            Any aAny = aLinguConfig.GetProperty( UPN_IS_SPELL_AUTO );
-            aAny >>= bOnlineSpell;
-        }
-        catch( ... )
-        {
-            OSL_FAIL( "Ill. type in linguistic property" );
-        }
+        // A document without a shell has no state of its own to read, so take
+        // the setting this application starts documents with.
+        bOnlineSpell = SdModule::GetAutoSpellProperty(mrDrawDocument.GetDocumentType());
     }
 
     if (bOnlineSpell)
@@ -1056,7 +1045,7 @@ void SdOutliner::DetectChange()
             pOutlinerView->SetOutputArea( ::tools::Rectangle( Point(), Size(1, 1) ) );
         if (meMode == SPELL)
             SetPaperSize( Size(1, 1) );
-        SetText(OUString(), GetParagraph(0));
+        SetText(OUString(), 0);
 
         RememberStartPosition ();
 
@@ -1279,7 +1268,7 @@ void SdOutliner::ProvideNextTextObject()
         pOutlinerView->SetOutputArea( ::tools::Rectangle( Point(), Size(1, 1) ) );
     if (meMode == SPELL)
         SetPaperSize( Size(1, 1) );
-    SetText(OUString(), GetParagraph(0));
+    SetText(OUString(), 0);
 
     mpSearchSpellTextObj = nullptr;
 
@@ -2145,7 +2134,7 @@ void SdOutliner::Implementation::ProvideOutlinerView (
             rOutliner.SetUpdateLayout(false);
             mpOutlineView->SetOutputArea (::tools::Rectangle (Point(), Size(1, 1)));
             rOutliner.SetPaperSize( Size(1, 1) );
-            rOutliner.SetText(OUString(), rOutliner.GetParagraph(0));
+            rOutliner.SetText(OUString(), 0);
 
             meOriginalEditMode =
                 std::static_pointer_cast<sd::DrawViewShell>(rpViewShell)->GetEditMode();

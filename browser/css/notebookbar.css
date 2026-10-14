@@ -1,11 +1,20 @@
 
+/* The notebookbar scrolls sideways when it is wider than the window, and it scrolls
+   without a visible scrollbar, so the whole row height stays with the icons. A
+   narrow screen shows the bar again, through the media query below. */
 .notebookbar-scroll-wrapper {
 	height: 82px;
 	display: flex;
 	overflow-x: auto;
 	overflow-y: hidden;
 	scrollbar-color: var(--scrollbar-color);
-	scrollbar-width: var(--scrollbar-width);
+	scrollbar-width: none;
+}
+
+@media (max-width: 480px) {
+	.notebookbar-scroll-wrapper {
+		scrollbar-width: var(--scrollbar-width);
+	}
 }
 
 /* stretch the fields */
@@ -63,19 +72,7 @@ span.notebookbar.static-label,
 	display: inline-flex;
 	flex: 0.1 0.1 auto;
 	margin-inline-start: 5px;
-	overflow-x: auto;
-	scrollbar-width: thin;
 	min-width: 0;
-}
-
-.notebookbar-tabs-container::-webkit-scrollbar {
-	height: 3px;
-	background-color: var(--color-background-darker);
-}
-
-.notebookbar-tabs-container::-webkit-scrollbar-thumb {
-	background-color: var(--color-border-darker);
-	border-radius: 2px;
 }
 
 .ui-tabs.notebookbar {
@@ -84,18 +81,15 @@ span.notebookbar.static-label,
 	padding: 0px;
 	height: 100%;
 	overflow-x: auto;
-	scrollbar-width: thin;
+	scrollbar-color: var(--scrollbar-color);
+	scrollbar-width: none;
 	max-width: 100%;
 }
 
-.ui-tabs.notebookbar::-webkit-scrollbar {
-	height: 3px;
-	background-color: var(--color-background-darker);
-}
-
-.ui-tabs.notebookbar::-webkit-scrollbar-thumb {
-	background-color: var(--color-border-darker);
-	border-radius: 2px;
+@media (max-width: 480px) {
+	.ui-tabs.notebookbar {
+		scrollbar-width: var(--scrollbar-width);
+	}
 }
 
 .ui-tab.notebookbar {
@@ -377,12 +371,34 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 	pointer-events: none;
 }
 
+.unotoolbutton .unobutton > img,
+.unotoolbutton .unobutton > .w2ui-icon {
+	transition: scale var(--duration-instant) var(--ease-out);
+}
+
+.unotoolbutton:not(.disabled, [disabled]) .unobutton:not(:disabled):active > img,
+.unotoolbutton:not(.disabled, [disabled]) .unobutton:not(:disabled):active > .w2ui-icon {
+	scale: 0.92;
+}
+
 .unotoolbutton.notebookbar.inline:hover {
 	background-color: var(--color-background-darker);
 }
 
 .jsdialog .ui-tabs-content {
 	margin-top: 10px;
+}
+
+.jsdialog-window.modalpopup.ui-overflow-group-popup {
+	overflow: visible;
+}
+
+.ui-overflow-group-popup .top-row-overflow-group > * {
+	flex-shrink: 0;
+}
+
+.ui-overflow-group-popup .top-row-overflow-group > .ui-grid {
+	width: auto;
 }
 
 .ui-tabs-content .unobutton > img,
@@ -438,8 +454,12 @@ label.notebookbar.ui-checkbox-label {
 	padding: var(--spacing-s);
 }
 
+.ui-combobox.notebookbar[disabled],
 .unotoolbutton.notebookbar.disabled:not(.unospan-shortcutstoolbox),
-.unotoolbutton[disabled]:not(.unospan-shortcutstoolbox),
+.unotoolbutton[disabled]:not(.unospan-shortcutstoolbox) {
+	cursor: not-allowed;
+}
+
 .mobile-wizard-widebutton.disabled,
 .locking-disabled {
 	opacity: var(--opacity-icon-disabled);
@@ -460,12 +480,44 @@ label.notebookbar.ui-checkbox-label {
 	filter: grayscale(100%) brightness(100%);
 }
 
+/* Fill Color (Writer > Picture) button swatch */
+.unotoolbutton.notebookbar.disabled .selected-color,
+.unotoolbutton[disabled] .selected-color {
+	filter: grayscale(100%);
+}
+
+.ui-combobox.notebookbar[disabled] img {
+	opacity: var(--opacity-icon-disabled-light);
+}
+
+.ui-combobox-button.notebookbar[disabled] .ui-listbox-arrow,
+.unotoolbutton.notebookbar.disabled img,
+.unotoolbutton.notebookbar.disabled .unoarrow,
+.unotoolbutton.notebookbar.disabled .selected-color,
+.unotoolbutton[disabled] img,
+.unotoolbutton[disabled] .unoarrow,
+.unotoolbutton[disabled] .selected-color {
+	opacity: var(--opacity-icon-disabled);
+}
+
+.unotoolbutton.notebookbar.disabled .unolabel,
+.unotoolbutton[disabled] .unolabel {
+	opacity: var(--opacity-text-disabled);
+}
+
+.ui-combobox:not([disabled]) *,
 .unotoolbutton:not(.disabled) * {
 	cursor: pointer;
 }
 
+.ui-combobox[disabled] *,
 .unotoolbutton[disabled] * {
 	cursor: not-allowed !important;
+}
+
+/* do not focus on disabled items */
+.unotoolbutton[disabled] .unobutton {
+	pointer-events: none;
 }
 
 .unotoolbutton.notebookbar {
@@ -498,6 +550,19 @@ label.notebookbar.ui-checkbox-label {
 	display: inline-block;
 	clear: both;
 	color: var(--color-main-text);
+}
+
+/* big color split button */
+.unotoolbutton.notebookbar.has-label.has-colorpicker .unobutton img {
+	width: var(--btn-img-size) !important;
+	height: var(--btn-img-size) !important;
+	object-fit: contain;
+	margin: 0 auto !important;
+}
+
+.unotoolbutton.notebookbar.has-label.has-colorpicker .selected-color {
+	display: block;
+	margin: 0 auto 4px;
 }
 
 /* adding focus to tab in notebookbar */
@@ -540,9 +605,11 @@ label.notebookbar.ui-checkbox-label {
 }
 
 /* root of iconview */
+.jsdialog [id^='elements_'][id$='-iconview-list']:not(.sidebar),
 .jsdialog #stylesview-iconview-list:not(.sidebar),
 .jsdialog #masterpagenb-iconview-list:not(.sidebar),
 .jsdialog #tablestyles_design-iconview-list:not(.sidebar),
+.jsdialog #table-design-styles-iconview-list:not(.sidebar),
 .jsdialog #transitions_icons-iconview-list:not(.sidebar),
 .jsdialog #iconview_theme_colors-iconview-list:not(.sidebar) {
 	height: auto !important;
@@ -597,10 +664,12 @@ label.notebookbar.ui-checkbox-label {
 .notebookbar#masterpageall_icons,
 .notebookbar#masterpagecurrent_icons,
 .notebookbar#tablestyles_design,
+.notebookbar#table-design-styles,
 .notebookbar#transitions_icons,
 .notebookbar#iconview_theme_colors,
 .notebookbar#custom_animation_list,
-.notebookbar#effect_list {
+.notebookbar#effect_list,
+.notebookbar.ui-iconview[id^='elements_'] {
 	height: var(--notebookbar-element-height);
 	overflow: auto;
 	display: grid;
@@ -645,6 +714,7 @@ label.notebookbar.ui-checkbox-label {
 
 #masterpagenb-iconview-list-dropdown,
 #stylesview-iconview-list-dropdown,
+[id^='elements_'][id$='-iconview-list-dropdown'],
 #iconview_theme_colors-iconview-list-dropdown {
 	margin-top: 37px !important;
 }
@@ -744,6 +814,41 @@ label.notebookbar.ui-checkbox-label {
 	margin: 5px;
 }
 
+/* The New Table Style and Clear Style entries at the bottom of the */
+/* 'tablestyles_design' gallery dropdown read as menu rows: the icon sits */
+/* left of a full-width label on one line. */
+.jsdialog-container [modelid='new-table-style'].unotoolbutton,
+.jsdialog-container [modelid='clear-table-style'].unotoolbutton {
+	display: block;
+	width: calc(100% - 10px);
+	margin: 2px 5px;
+}
+
+.jsdialog-container [modelid='new-table-style'].unotoolbutton .unobutton,
+.jsdialog-container [modelid='clear-table-style'].unotoolbutton .unobutton {
+	flex-direction: row;
+	justify-content: start;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	height: auto;
+	min-height: var(--btn-size);
+	padding: 4px 8px;
+	line-height: normal;
+	white-space: nowrap;
+	text-align: start;
+}
+
+.jsdialog-container [modelid='new-table-style'] .unobutton img,
+.jsdialog-container [modelid='clear-table-style'] .unobutton img {
+	flex: 0 0 auto;
+}
+
+[id^='tablestyles_design'] hr,
+[id^='Tablestyles_design'] hr {
+	margin: 4px 8px;
+}
+
 /* Insert Tab */
 
 /* Layout Tab */
@@ -762,11 +867,48 @@ label.notebookbar.ui-checkbox-label {
 	width: 109px;
 }
 
+[data-doctype='spreadsheet'] #View-container #showstatusbar {
+	display: grid;
+	grid-template-columns: var(--btn-img-size) auto;
+	align-items: center;
+	width: auto;
+	padding-inline-start: calc(1px + var(--btn-padding));
+}
+
+[data-doctype='spreadsheet'] #View-container #showstatusbar-input {
+	justify-self: center;
+	margin: 0;
+}
+
+[data-doctype='spreadsheet'] #View-container #showstatusbar-label {
+	margin-inline: 0;
+	padding-inline-start: 5px;
+}
+
 /* Help tab */
 
 /* File tab */
 
 /* Draw tab */
+
+#Home-container #home-chart-table,
+#Home-container #home-para-spacing {
+	width: auto;
+}
+
+#Home-container .toolbox#home-chart-table {
+	justify-self: stretch;
+	justify-content: space-between;
+}
+
+#Home-container .toolbox#home-para-spacing {
+	display: flex;
+	justify-self: stretch;
+}
+
+#Home-container .toolbox#home-para-spacing > .unoParaRightToLeft {
+	margin-inline-start: auto;
+}
 
 
 /* Calc */
@@ -852,6 +994,7 @@ label.notebookbar.ui-checkbox-label {
 	flex-grow: 1;
 	scroll-snap-type: y mandatory;
 	scroll-behavior: smooth;
+	width: 35vw !important;
 }
 
 .notebookbar #transitions_icons.ui-iconview > * {
@@ -909,23 +1052,30 @@ label.notebookbar.ui-checkbox-label {
 	padding: 5px 10px;
 }
 
-#tablestyles_design.notebookbar .ui-iconview-separator {
+/* The section titles of a style gallery only fit the expanded view: the strip in the
+   notebookbar has no room for them and fills every row, the dropdown shows each title on a
+   row of its own. */
+#tablestyles_design.notebookbar .ui-iconview-separator,
+#table-design-styles.notebookbar .ui-iconview-separator {
 	display: none;
 }
 
 #masterpagenb-entries .static-label.ui-text,
-#tablestyles_design .ui-iconview-separator.label {
+#tablestyles_design .ui-iconview-separator.label,
+#table-design-styles .ui-iconview-separator.label {
 	grid-column: 1 / -1;
 	padding-inline-start: 8px;
 	font-size: var(--default-font-size);
 	font-weight: 500;
 }
 
-/* Table Design Tab (Impress) */
+/* Table Design Tab (Writer and Impress) */
 
+/* Seven columns: the built-in catalog comes in rows of one style variant in its plain form
+   and its six theme accents, so each grid row is one variant and each column one accent. */
 #table-design-styles.notebookbar,
 #table-design-styles.jsdialog {
-	grid-template-columns: repeat(6, 1fr);
+	grid-template-columns: repeat(7, 1fr);
 	grid-gap: 10px;
 	padding: 5px 10px;
 }
@@ -1117,3 +1267,89 @@ label.notebookbar.ui-checkbox-label {
 	}
 }
 
+/* Formula Tab (Writer) */
+
+.notebookbar.ui-overflow-group-content[id^='elements_group'] {
+	width: 100%;
+	grid-template-columns: minmax(0, 1fr);
+	justify-items: stretch;
+}
+
+.notebookbar.ui-iconview-window[id^='elements_group'] {
+	flex: 1 1 auto;
+}
+
+.notebookbar.ui-iconview[id^='elements_'] {
+	grid-auto-flow: column;
+	grid-template-rows: repeat(2, minmax(0, 1fr));
+	grid-auto-columns: max-content;
+	grid-template-columns: none;
+	justify-content: start;
+	width: max-content;
+	min-width: max(64px, 100%);
+	max-width: 160px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	gap: 0;
+	column-gap: var(--spacing-xs);
+}
+
+.notebookbar [id^='elements_'] .ui-iconview-entry {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	align-self: stretch;
+	box-sizing: border-box;
+	min-width: 26px;
+	padding: 0 var(--spacing-xs);
+	float: none;
+}
+
+.notebookbar [id^='elements_'] .ui-iconview-entry img,
+.notebookbar [id^='elements_'] .ui-iconview-entry span {
+	max-height: 100%;
+}
+
+[data-theme='dark'] .notebookbar [id^='elements_'] .ui-iconview-entry img {
+	filter: invert(1);
+}
+
+.notebookbar [id^='elements_'] .ui-iconview-separator {
+	grid-row: 1 / -1;
+	align-self: stretch;
+	flex: none;
+	width: 1px;
+	margin: var(--spacing-xs) var(--spacing-s);
+	padding: 0;
+	border: none;
+	background-color: var(--color-border-dark);
+}
+
+.ui-separator[id^='elements_group'][id$='-break']:has(+ .ui-overflow-group.hidden) {
+	display: none;
+}
+
+.notebookbar .ui-iconview-root-horizontal .ui-iconview-window {
+	min-width: 0;
+}
+
+[id^='elements_'][id$='-iconview-list-dropdown'] .ui-iconview {
+	grid-auto-flow: row;
+	grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+	grid-template-rows: none;
+	width: 40vw;
+	max-width: 640px;
+	overflow-x: hidden;
+}
+
+[id^='elements_'][id$='-iconview-list-dropdown'] .ui-iconview-entry {
+	align-self: center;
+}
+
+[id^='elements_'][id$='-iconview-list-dropdown'] .ui-iconview-separator {
+	grid-column: 1 / -1;
+	grid-row: auto;
+	width: auto;
+	height: 1px;
+	margin: var(--spacing-xs) 0;
+}

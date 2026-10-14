@@ -39,6 +39,7 @@
 #include <editeng/frmdiritem.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/postitem.hxx>
+#include <svx/pageitem.hxx>
 #include <svx/rotmodit.hxx>
 #include <editeng/scriptspaceitem.hxx>
 #include <editeng/shaditem.hxx>
@@ -571,6 +572,64 @@ void ScPatternAttr::fillFont(
     rFont.SetColor(aComplexColor.getFinalColor());
 }
 
+bool ScPatternAttr::CanApplyTableItemToCell(const SfxItemSet& rItemSet, sal_uInt16 nWhich)
+{
+    if (nWhich == ATTR_BACKGROUND)
+    {
+        const SfxPoolItem* pDirect = nullptr;
+        if (rItemSet.GetItemState(nWhich, false, &pDirect) != SfxItemState::SET)
+            return true;
+        return *pDirect == rItemSet.GetPool()->GetUserOrPoolDefaultItem(nWhich);
+    }
+
+    // A font value wins only when it differs from the one the Default cell style gives, set on
+    // the cell or by another cell style. Like e.g., a Bad cell style keeps its red over the
+    // header row colour, but its regular weight is Normal's too, so the header stays bold.
+    // The Default cell style is the root of every cell style's parent chain.
+    const SfxItemSet* pDefault = rItemSet.GetParent();
+    while (pDefault && pDefault->GetParent())
+        pDefault = pDefault->GetParent();
+    const SfxPoolItem& rDefault
+        = pDefault ? pDefault->Get(nWhich) : rItemSet.GetPool()->GetUserOrPoolDefaultItem(nWhich);
+    const SfxPoolItem& rCellValue = rItemSet.Get(nWhich);
+
+    auto isSameValue = [nWhich](const SfxPoolItem& rItem1, const SfxPoolItem& rItem2) {
+        if (nWhich != ATTR_FONT_COLOR)
+            return rItem1 == rItem2;
+        auto getFontColor = [](const SfxPoolItem& rItem) {
+            const Color& rColor = static_cast<const SvxColorItem&>(rItem).getColor();
+            return rColor == COL_AUTO ? COL_BLACK : rColor;
+        };
+        return getFontColor(rItem1) == getFontColor(rItem2);
+    };
+
+    if (!isSameValue(rCellValue, rDefault))
+        return false;
+
+    // The cell has the value of the Default cell style, but it still wins when its cell style
+    // defines another one. Like MSO, the font that a cell style defines but does not apply counts
+    // too: a cell keeps Normal's red under a style with automatic colour in that font.
+    for (const SfxItemSet* pStyle = rItemSet.GetParent(); pStyle && pStyle != pDefault;
+         pStyle = pStyle->GetParent())
+    {
+        const SfxPoolItem* pStyleValue = nullptr;
+        if (pStyle->GetItemState(nWhich, false, &pStyleValue) != SfxItemState::SET)
+        {
+            pStyleValue = nullptr;
+            if (const SvxSetItem* pExcludedFont = pStyle->GetItemIfSet(ATTR_EXCLUDED_FONT, false))
+            {
+                if (pExcludedFont->GetItemSet().GetItemState(nWhich, false, &pStyleValue)
+                    != SfxItemState::SET)
+                    pStyleValue = nullptr;
+            }
+        }
+        if (pStyleValue)
+            return isSameValue(rCellValue, *pStyleValue);
+    }
+
+    return true;
+}
+
 template <class T>
 static const T* lcl_populateresult( TypedWhichId<T> nWhich, const SfxItemSet& rSrcSet, const SfxItemSet* pCondSet, const SfxItemSet* pTableSet = nullptr )
 {
@@ -581,21 +640,10 @@ static const T* lcl_populateresult( TypedWhichId<T> nWhich, const SfxItemSet& rS
 
     if (!pItem && pTableSet)
     {
-        const SfxPoolItem* pThisItem;
-        if (rSrcSet.GetItemState(nWhich, false, &pThisItem) == SfxItemState::SET
-            && *pThisItem != rSrcSet.GetPool()->GetUserOrPoolDefaultItem(nWhich))
-        {
-            // use the direct cell format value against the Table style format
-            // if it not a default one (COL_BLACK is the default in case of Table Styles)
-            // on the cell level
-            if (sal_uInt16(nWhich) == ATTR_FONT_COLOR
-                && rSrcSet.GetItem(ATTR_FONT_COLOR)->getColor() == COL_BLACK)
-                pItem = pTableSet->GetItemIfSet(nWhich);
-            else
-                pItem = &rSrcSet.Get(nWhich);
-        }
-        else
+        if (ScPatternAttr::CanApplyTableItemToCell(rSrcSet, nWhich))
             pItem = pTableSet->GetItemIfSet(nWhich);
+        else
+            pItem = &rSrcSet.Get(nWhich);
     }
 
     if (!pItem)
@@ -642,14 +690,10 @@ void ScPatternAttr::fillFontOnly(
         const SvxWeightItem* pFontHWeightItem = lcl_populateresult( nWeightId, rItemSet, pCondSet, pTableSet );
         eWeight = pFontHWeightItem->GetValue();
 
-        const SvxPostureItem* pPostureItem = pCondSet->GetItemIfSet( nPostureId );
-        if ( !pPostureItem )
-            pPostureItem = &rItemSet.Get( nPostureId );
+        const SvxPostureItem* pPostureItem = lcl_populateresult( nPostureId, rItemSet, pCondSet, pTableSet );
         eItalic = pPostureItem->GetValue();
 
-        const SvxUnderlineItem* pUnderlineItem = pCondSet->GetItemIfSet( ATTR_FONT_UNDERLINE );
-        if ( !pUnderlineItem )
-            pUnderlineItem = &rItemSet.Get( ATTR_FONT_UNDERLINE );
+        const SvxUnderlineItem* pUnderlineItem = lcl_populateresult( ATTR_FONT_UNDERLINE, rItemSet, pCondSet, pTableSet );
         eUnder = pUnderlineItem->GetValue();
 
         const SvxOverlineItem* pOverlineItem = pCondSet->GetItemIfSet( ATTR_FONT_OVERLINE );
@@ -662,9 +706,7 @@ void ScPatternAttr::fillFontOnly(
             pWordlineItem = &rItemSet.Get( ATTR_FONT_WORDLINE );
         bWordLine = pWordlineItem->GetValue();
 
-        const SvxCrossedOutItem* pCrossedOutItem = pCondSet->GetItemIfSet( ATTR_FONT_CROSSEDOUT );
-        if ( !pCrossedOutItem )
-            pCrossedOutItem = &rItemSet.Get( ATTR_FONT_CROSSEDOUT );
+        const SvxCrossedOutItem* pCrossedOutItem = lcl_populateresult( ATTR_FONT_CROSSEDOUT, rItemSet, pCondSet, pTableSet );
         eStrike = pCrossedOutItem->GetValue();
 
         const SvxContourItem* pContourItem = pCondSet->GetItemIfSet( ATTR_FONT_CONTOUR );
@@ -702,11 +744,11 @@ void ScPatternAttr::fillFontOnly(
         const SvxWeightItem* pFontHWeightItem = lcl_populateresult( nWeightId, rItemSet, pCondSet, pTableSet );
         eWeight = pFontHWeightItem->GetValue();
 
-        eItalic = rItemSet.Get( nPostureId ).GetValue();
-        eUnder = rItemSet.Get( ATTR_FONT_UNDERLINE ).GetValue();
+        eItalic = lcl_populateresult( nPostureId, rItemSet, pCondSet, pTableSet )->GetValue();
+        eUnder = lcl_populateresult( ATTR_FONT_UNDERLINE, rItemSet, pCondSet, pTableSet )->GetValue();
         eOver = rItemSet.Get( ATTR_FONT_OVERLINE ).GetValue();
         bWordLine = rItemSet.Get( ATTR_FONT_WORDLINE ).GetValue();
-        eStrike = rItemSet.Get( ATTR_FONT_CROSSEDOUT ).GetValue();
+        eStrike = lcl_populateresult( ATTR_FONT_CROSSEDOUT, rItemSet, pCondSet, pTableSet )->GetValue();
         bOutline = rItemSet.Get( ATTR_FONT_CONTOUR ).GetValue();
         bShadow = rItemSet.Get( ATTR_FONT_SHADOWED ).GetValue();
         eEmphasis = rItemSet.Get( ATTR_FONT_EMPHASISMARK ).GetEmphasisMark();
@@ -824,30 +866,11 @@ void ScPatternAttr::fillColor(model::ComplexColor& rComplexColor, const SfxItemS
             || eAutoMode == ScAutoFontColorMode::IgnoreBack
             || eAutoMode == ScAutoFontColorMode::IgnoreAll)
         {
-            if (!comphelper::COKit::isActive())
-            {
-                if ( eAutoMode == ScAutoFontColorMode::Print )
-                    aBackColor = COL_WHITE;
-                else if ( pBackConfigColor )
-                {
-                    // pBackConfigColor can be used to avoid repeated lookup of the configured color
-                    aBackColor = *pBackConfigColor;
-                }
-                else
-                    aBackColor = ScModule::get()->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
-            }
-            else
-            {
-                // Get document color from current view instead
-                SfxViewShell* pSfxViewShell = SfxViewShell::Current();
-                ScTabViewShell* pViewShell = dynamic_cast<ScTabViewShell*>(pSfxViewShell);
-                if (pViewShell)
-                {
-                    const ScViewRenderingOptions& rViewRenderingOptions = pViewShell->GetViewRenderingData();
-                    aBackColor = eAutoMode == ScAutoFontColorMode::Print ? COL_WHITE :
-                        rViewRenderingOptions.GetDocColor();
-                }
-            }
+            // A cell with no background of its own sits on the document background, which the view
+            // being painted owns. Print puts the text on paper, which is white.
+            aBackColor = eAutoMode == ScAutoFontColorMode::Print
+                             ? COL_WHITE
+                             : lcl_getViewDocBackgroundColor(pBackConfigColor);
         }
 
         //  get system text color for comparison
@@ -1018,21 +1041,10 @@ static void lcl_populate( std::optional<T>& rxItem, TypedWhichId<T> nWhich, cons
 
     if (!pItem && pTableSet)
     {
-        const SfxPoolItem* pThisItem;
-        if (rSrcSet.GetItemState(nWhich, false, &pThisItem) == SfxItemState::SET
-            && *pThisItem != rSrcSet.GetPool()->GetUserOrPoolDefaultItem(nWhich))
-        {
-            // use the direct cell format value against the Table style format
-            // if it not a default one (COL_BLACK is the default in case of Table Styles)
-            // on the cell level
-            if (sal_uInt16(nWhich) == ATTR_FONT_COLOR
-                && rSrcSet.GetItem(ATTR_FONT_COLOR)->getColor() == COL_BLACK)
-                pItem = pTableSet->GetItemIfSet(nWhich);
-            else
-                pItem = &rSrcSet.Get(nWhich);
-        }
-        else
+        if (ScPatternAttr::CanApplyTableItemToCell(rSrcSet, nWhich))
             pItem = pTableSet->GetItemIfSet(nWhich);
+        else
+            pItem = &rSrcSet.Get(nWhich);
     }
 
     if (!pItem)
@@ -1088,20 +1100,14 @@ void ScPatternAttr::FillToEditItemSet( SfxItemSet& rEditSet, const SfxItemSet& r
         pWeightItem = lcl_populateresult( ATTR_CTL_FONT_WEIGHT, rSrcSet, pCondSet, pTableSet );
         eCtlWeight = pWeightItem->GetValue();
 
-        const SvxPostureItem* pPostureItem = pCondSet->GetItemIfSet( ATTR_FONT_POSTURE );
-        if ( !pPostureItem )
-            pPostureItem = &rSrcSet.Get( ATTR_FONT_POSTURE );
+        const SvxPostureItem* pPostureItem = lcl_populateresult( ATTR_FONT_POSTURE, rSrcSet, pCondSet, pTableSet );
         eItalic = pPostureItem->GetValue();
-        pPostureItem = pCondSet->GetItemIfSet( ATTR_CJK_FONT_POSTURE );
-        if ( !pPostureItem )
-            pPostureItem = &rSrcSet.Get( ATTR_CJK_FONT_POSTURE );
+        pPostureItem = lcl_populateresult( ATTR_CJK_FONT_POSTURE, rSrcSet, pCondSet, pTableSet );
         eCjkItalic = pPostureItem->GetValue();
-        pPostureItem = pCondSet->GetItemIfSet( ATTR_CTL_FONT_POSTURE );
-        if ( !pPostureItem )
-            pPostureItem = &rSrcSet.Get( ATTR_CTL_FONT_POSTURE );
+        pPostureItem = lcl_populateresult( ATTR_CTL_FONT_POSTURE, rSrcSet, pCondSet, pTableSet );
         eCtlItalic = pPostureItem->GetValue();
 
-        lcl_populate(oUnderlineItem, ATTR_FONT_UNDERLINE, rSrcSet, pCondSet);
+        lcl_populate(oUnderlineItem, ATTR_FONT_UNDERLINE, rSrcSet, pCondSet, pTableSet);
         lcl_populate(oOverlineItem, ATTR_FONT_OVERLINE, rSrcSet, pCondSet);
 
         const SvxWordLineModeItem* pWordLineModeItem = pCondSet->GetItemIfSet( ATTR_FONT_WORDLINE );
@@ -1109,9 +1115,7 @@ void ScPatternAttr::FillToEditItemSet( SfxItemSet& rEditSet, const SfxItemSet& r
             pWordLineModeItem = &rSrcSet.Get( ATTR_FONT_WORDLINE );
         bWordLine = pWordLineModeItem->GetValue();
 
-        const SvxCrossedOutItem* pCrossedOutItem = pCondSet->GetItemIfSet( ATTR_FONT_CROSSEDOUT );
-        if ( !pCrossedOutItem )
-            pCrossedOutItem = &rSrcSet.Get( ATTR_FONT_CROSSEDOUT );
+        const SvxCrossedOutItem* pCrossedOutItem = lcl_populateresult( ATTR_FONT_CROSSEDOUT, rSrcSet, pCondSet, pTableSet );
         eStrike = pCrossedOutItem->GetValue();
 
         const SvxContourItem* pContourItem = pCondSet->GetItemIfSet( ATTR_FONT_CONTOUR );
@@ -1182,13 +1186,13 @@ void ScPatternAttr::FillToEditItemSet( SfxItemSet& rEditSet, const SfxItemSet& r
         pWeightItem = lcl_populateresult(ATTR_CTL_FONT_WEIGHT, rSrcSet, pCondSet, pTableSet);
         eCtlWeight = pWeightItem->GetValue();
 
-        eItalic = rSrcSet.Get( ATTR_FONT_POSTURE ).GetValue();
-        eCjkItalic = rSrcSet.Get( ATTR_CJK_FONT_POSTURE ).GetValue();
-        eCtlItalic = rSrcSet.Get( ATTR_CTL_FONT_POSTURE ).GetValue();
-        oUnderlineItem.emplace(rSrcSet.Get(ATTR_FONT_UNDERLINE));
+        eItalic = lcl_populateresult( ATTR_FONT_POSTURE, rSrcSet, pCondSet, pTableSet )->GetValue();
+        eCjkItalic = lcl_populateresult( ATTR_CJK_FONT_POSTURE, rSrcSet, pCondSet, pTableSet )->GetValue();
+        eCtlItalic = lcl_populateresult( ATTR_CTL_FONT_POSTURE, rSrcSet, pCondSet, pTableSet )->GetValue();
+        lcl_populate(oUnderlineItem, ATTR_FONT_UNDERLINE, rSrcSet, pCondSet, pTableSet);
         oOverlineItem.emplace(rSrcSet.Get(ATTR_FONT_OVERLINE));
         bWordLine = rSrcSet.Get( ATTR_FONT_WORDLINE ).GetValue();
-        eStrike = rSrcSet.Get( ATTR_FONT_CROSSEDOUT ).GetValue();
+        eStrike = lcl_populateresult( ATTR_FONT_CROSSEDOUT, rSrcSet, pCondSet, pTableSet )->GetValue();
         bOutline = rSrcSet.Get( ATTR_FONT_CONTOUR ).GetValue();
         bShadow = rSrcSet.Get( ATTR_FONT_SHADOWED ).GetValue();
         bForbidden = rSrcSet.Get( ATTR_FORBIDDEN_RULES ).GetValue();

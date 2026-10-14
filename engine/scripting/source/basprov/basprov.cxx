@@ -40,7 +40,7 @@
 #include <sfx2/app.hxx>
 
 #include <com/sun/star/util/theMacroExpander.hpp>
-#include <com/sun/star/script/XLibraryContainer2.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/uri/XUriReference.hpp>
 #include <com/sun/star/uri/XUriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarScriptUrl.hpp>
@@ -50,7 +50,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::script;
 using namespace ::com::sun::star::document;
@@ -84,15 +84,14 @@ namespace basprov
     {
         bool bIsShared = false;
 
-        Reference< script::XLibraryContainer2 > xLibContainer( rxLibContainer, UNO_QUERY );
-        if ( xLibContainer.is() && xLibContainer->hasByName( rLibName ) && xLibContainer->isLibraryLink( rLibName ) )
+        if ( rxLibContainer.is() && rxLibContainer->hasByName( rLibName ) && rxLibContainer->isLibraryLink( rLibName ) )
         {
             OUString aFileURL;
             if ( m_xContext.is() )
             {
                 Reference< uri::XUriReferenceFactory > xUriFac( uri::UriReferenceFactory::create( m_xContext ) );
 
-                OUString aLinkURL( xLibContainer->getLibraryLinkURL( rLibName ) );
+                OUString aLinkURL( rxLibContainer->getLibraryLinkURL( rLibName ) );
                 Reference<  uri::XUriReference > xUriRef = xUriFac->parse( aLinkURL );
 
                 if ( xUriRef.is() )
@@ -464,9 +463,9 @@ namespace basprov
 
     // component operations
 
-    extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+    extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
     scripting_BasicProviderImpl_get_implementation(
-        css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+        cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
     {
         return cppu::acquire(new BasicProviderImpl(context));
     }

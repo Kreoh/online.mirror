@@ -16,18 +16,13 @@ $(call gb_CustomTarget_get_target,android/loandroid3) : \
 $(loandroid3_DIR)/done : $(call gb_Postprocess_get_target,AllModulesButInstsetNative)
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),MAK,2)
 	$(call gb_Trace_StartRange,$(subst $(WORKDIR)/,,$@),MAK)
-	cd $(SRCDIR)/android/source && $(MAKE) all
-ifeq ($(ENABLE_JAVA),TRUE)
-# Copy to $(BUILDDIR)/instsetoo_native as that is where the tinderbox build script
-# still looks for the .apk, and we want fresh daily builds to be uploaded.
-# Us "foo" instead of the old INPATH
-	mkdir -p $(BUILDDIR)/instsetoo_native/foo/bin; \
-	if test "$$ENABLE_ANDROID_KIT" != "TRUE" ; then cp $(SRCDIR)/android/source/build/outputs/apk/strippedUI$(if $(ENABLE_ANDROID_EDITING),Editing)/release/*-release-unsigned.apk $(BUILDDIR)/instsetoo_native/foo/bin ; fi
+	mkdir -p $(loandroid3_DIR)
+	cd $(loandroid3_DIR) && $(MAKE) -f $(SRCDIR)/android/source/Makefile all
 	$(call gb_Trace_EndRange,$(subst $(WORKDIR)/,,$@),MAK)
-endif
 
 $(call gb_CustomTarget_get_clean_target,android/loandroid3) :
 	$(call gb_Output_announce,$(subst $(WORKDIR)/Clean/,,$@),$(false),MAK,2)
-	cd $(SRCDIR)/android/source && $(MAKE) clean
+	rm -rf $(loandroid3_DIR) $(BUILDDIR)/android/obj $(BUILDDIR)/android/jniLibs
+	rm -f $(call gb_CustomTarget_get_target,android/loandroid3)
 
 # vim: set noet sw=4 ts=4:

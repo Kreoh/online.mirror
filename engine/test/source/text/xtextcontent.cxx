@@ -14,14 +14,15 @@
 #include <cppunit/TestAssert.h>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
 void XTextContent::testGetAnchor()
 {
     uno::Reference<text::XTextContent> xTextContent(init(), UNO_QUERY_THROW);
-    uno::Reference<uno::XInterface> xAnchor(xTextContent->getAnchor());
+    uno::Reference<cpo::uno::XInterface> xAnchor(xTextContent->getAnchor());
     CPPUNIT_ASSERT(xAnchor.is());
 }
 
@@ -45,7 +46,7 @@ void XTextContent::testAttach()
         if (bAttachSupported)
             CPPUNIT_ASSERT(false);
     }
-    catch (const RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         bool bAttachSupported = isAttachSupported();
         if (bAttachSupported)

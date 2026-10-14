@@ -15,12 +15,11 @@
 #include <common/FileUtil.hpp>
 #include <common/HexUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Png.hpp>
 #include <common/Simd.hpp>
 #include <kit/DeltaSimd.h>
 #include <wsd/TileDesc.hpp>
-
-#include <o3tl/safeint.hxx>
 
 #include <cassert>
 #include <cstdint>
@@ -42,12 +41,14 @@ struct TileLocation {
     int _left;
     int _top;
     int _size;
-    int _part;
+    /// The part identifier: a page GUID for a presentation or drawing document, a decimal
+    /// index for the other document types.
+    std::string _part;
     CanonicalViewId _canonicalViewId;
     int _viewMode;
-    TileLocation(int left, int top, int size, int part,
+    TileLocation(int left, int top, int size, std::string part,
                  CanonicalViewId canonicalViewId, int viewMode)
-        : _left(left), _top(top), _size(size), _part(part),
+        : _left(left), _top(top), _size(size), _part(std::move(part)),
           _canonicalViewId(canonicalViewId), _viewMode(viewMode)
     {
     }
@@ -55,7 +56,7 @@ struct TileLocation {
     {
         size_t left = _left;
         size_t top = _top;
-        size_t part = _part;
+        size_t part = std::hash<std::string>{}(_part);
         size_t size = _size;
         size_t canonicalViewId = to_underlying(_canonicalViewId);
         size_t viewMode = _viewMode;
@@ -377,9 +378,9 @@ class DeltaGenerator {
             , _rows(new DeltaBitmapRow[height])
         {
             assert(width > 0 && width <= 256);
-            assert (startX + width <= o3tl::make_unsigned(bufferWidth));
+            assert (startX + width <= NumUtil::makeUnsigned(bufferWidth));
             assert(height > 0 && height <= 256);
-            assert (startY + height <= o3tl::make_unsigned(bufferHeight));
+            assert (startY + height <= NumUtil::makeUnsigned(bufferHeight));
 
             LOGA_TRC(Pixel, "Converting pixel data to delta data of size "
                      << (width * height * 4) << " width " << width

@@ -33,6 +33,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::mail;
+using namespace ::cpo;
 
 class SwTestAccountSettingsDialog : public SfxDialogController
 {
@@ -143,37 +144,6 @@ SwMailConfigPage::~SwMailConfigPage()
 std::unique_ptr<SfxTabPage> SwMailConfigPage::Create(weld::Container* pPage, weld::DialogController* pController, const SfxItemSet* rAttrSet)
 {
     return std::make_unique<SwMailConfigPage>(pPage, pController, *rAttrSet);
-}
-
-OUString SwMailConfigPage::GetAllStrings()
-{
-    OUStringBuffer sAllStrings;
-    OUString labels[] = { u"label1"_ustr, u"displayname_label"_ustr, u"address_label"_ustr, u"replyto_label"_ustr,
-                          u"label2"_ustr, u"server_label"_ustr,      u"port_label"_ustr };
-
-    for (const auto& label : labels)
-    {
-        if (const auto pString = m_xBuilder->weld_label(label))
-            sAllStrings.append(pString->get_label() + " ");
-    }
-
-    OUString checkButton[] = { u"replytocb"_ustr, u"secure"_ustr };
-
-    for (const auto& check : checkButton)
-    {
-        if (const auto pString = m_xBuilder->weld_check_button(check))
-            sAllStrings.append(pString->get_label() + " ");
-    }
-
-    OUString buttons[] = { u"serverauthentication"_ustr, u"test"_ustr };
-
-    for (const auto& btn : buttons)
-    {
-        if (const auto pString = m_xBuilder->weld_button(btn))
-            sAllStrings.append(pString->get_label() + " ");
-    }
-
-    return sAllStrings.toString().replaceAll("_", "");
 }
 
 bool SwMailConfigPage::FillItemSet( SfxItemSet* /*rSet*/ )
@@ -314,7 +284,7 @@ IMPL_LINK_NOARG(SwTestAccountSettingsDialog, TestHdl, void*, void)
 
 void SwTestAccountSettingsDialog::Test()
 {
-    const uno::Reference<uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
+    const uno::Reference<cpo::uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
 
     OUString sException;
 

@@ -92,25 +92,25 @@ void MWAWImportFilter::doRegisterHandlers(OdtGenerator& rGenerator)
 }
 
 // XServiceInfo
-OUString SAL_CALL MWAWImportFilter::getImplementationName()
+OUString MWAWImportFilter::getImplementationName()
 {
     return u"com.sun.star.comp.Writer.MWAWImportFilter"_ustr;
 }
 
-bool SAL_CALL MWAWImportFilter::supportsService(const OUString& rServiceName)
+bool MWAWImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL MWAWImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> MWAWImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_MWAWImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new MWAWImportFilter(context));
 }

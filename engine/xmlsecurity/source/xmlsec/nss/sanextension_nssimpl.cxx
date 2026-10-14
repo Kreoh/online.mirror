@@ -30,7 +30,7 @@
 #include "sanextension_nssimpl.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno ;
+using namespace ::cpo::uno ;
 using namespace ::com::sun::star::security ;
 using namespace ::cpo::uno;
 
@@ -54,7 +54,7 @@ namespace {
 }
 
 //Methods from XSanExtension
-cpo::uno::Sequence< css::security::CertAltNameEntry > SAL_CALL SanExtensionImpl::getAlternativeNames()
+cpo::uno::Sequence< css::security::CertAltNameEntry > SanExtensionImpl::getAlternativeNames()
 {
     if (m_Entries.empty())
     {

@@ -27,7 +27,7 @@
 #include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::container;
@@ -36,7 +36,7 @@ namespace framework
 {
 
 bool StatusBarConfiguration::LoadStatusBar(
-    const Reference< XComponentContext >& rxContext,
+    const Reference< cpo::uno::XComponentContext >& rxContext,
     const Reference< XInputStream >& xInputStream,
     const Reference< XIndexContainer >& rStatusbarConfiguration )
 {
@@ -58,7 +58,7 @@ bool StatusBarConfiguration::LoadStatusBar(
         xParser->parseStream( aInputSource );
         return true;
     }
-    catch ( const RuntimeException& )
+    catch ( const cpo::uno::RuntimeException& )
     {
         return false;
     }
@@ -73,7 +73,7 @@ bool StatusBarConfiguration::LoadStatusBar(
 }
 
 bool StatusBarConfiguration::StoreStatusBar(
-    const Reference< XComponentContext >& rxContext,
+    const Reference< cpo::uno::XComponentContext >& rxContext,
     const Reference< XOutputStream >& xOutputStream,
     const Reference< XIndexAccess >& rStatusbarConfiguration )
 {
@@ -86,7 +86,7 @@ bool StatusBarConfiguration::StoreStatusBar(
         aWriteStatusBarDocumentHandler.WriteStatusBarDocument();
         return true;
     }
-    catch ( const RuntimeException& )
+    catch ( const cpo::uno::RuntimeException& )
     {
         return false;
     }

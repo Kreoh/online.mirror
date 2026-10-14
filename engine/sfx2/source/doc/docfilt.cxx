@@ -17,10 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifdef __sun
-#include <ctime>
-#endif
-
 #include <sot/exchange.hxx>
 #include <sot/storage.hxx>
 #include <comphelper/fileformat.h>
@@ -32,6 +28,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SfxFilter::SfxFilter( OUString aProvider, OUString aFilterName ) :
     maFilterName(std::move(aFilterName)),
@@ -163,7 +160,7 @@ OUString SfxFilter::GetTypeFromStorage(
 {
     SfxFilterMatcher aMatcher;
 
-    css::uno::Reference< css::beans::XPropertySet > xProps( xStorage, css::uno::UNO_QUERY );
+    cpo::uno::Reference< css::beans::XPropertySet > xProps( xStorage, cpo::uno::UNO_QUERY );
     if ( xProps.is() )
     {
         OUString aMediaType;

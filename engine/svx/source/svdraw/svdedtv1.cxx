@@ -69,10 +69,13 @@
 #include <COKit/COKit.hxx>
 #include <rtl/ustring.hxx>
 #include <sfx2/viewsh.hxx>
+#include <svx/drawstyleutils.hxx>
 #include <comphelper/kit.hxx>
 #include <osl/diagnose.h>
 #include <sfx2/objsh.hxx>
 #include <svl/cryptosign.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <comphelper/sequenceashashmap.hxx>
 
 // EditView
 
@@ -1027,6 +1030,8 @@ void SdrEditView::MergeAttrFromMarked(SfxItemSet& rAttr, bool bOnlyHardAttr) con
 {
     const SdrMarkList& rMarkList = GetMarkedObjectList();
     const size_t nMarkCount(rMarkList.GetMarkCount());
+    const bool bFillColorUseless
+        = comphelper::COKit::isActive() && !svx::canFillColorShowThroughMarked(rMarkList);
 
     for(size_t a = 0; a < nMarkCount; ++a)
     {
@@ -1078,6 +1083,12 @@ void SdrEditView::MergeAttrFromMarked(SfxItemSet& rAttr, bool bOnlyHardAttr) con
 
                     case XATTR_FILLCOLOR:
                     {
+                        if (bFillColorUseless)
+                        {
+                            sPayload = u".uno:FillColor=disabled"_ustr;
+                            break;
+                        }
+
                         const XFillColorItem* pItem = rSet.GetItem(XATTR_FILLCOLOR);
                         if (pItem)
                         {
@@ -1326,6 +1337,52 @@ void SdrEditView::SetAttrToMarked(const SfxItemSet& rAttr, bool bReplaceAll)
         if (bAdaptStartEndWidths)
         {
             nOldLineWidth = pObj->GetMergedItem(XATTR_LINEWIDTH).GetValue();
+        }
+
+        if (const XLineColorItem* pLineColor = rAttr.GetItemIfSet(XATTR_LINECOLOR))
+        {
+            // If the XATTR_LINECOLOR is changed we need to erase the evtl.
+            // existing InteropGrabBag Item 'OriginalLnSolidFillClr'. If it just
+            // stays, the Color is changed for the runtime, but the still existing
+            // GrabBag entry gets exported if oox is the target.
+
+            // will be changed?
+            if (!SfxPoolItem::areSame(*pLineColor, pObj->GetMergedItem(XATTR_LINECOLOR)))
+            {
+                cpo::uno::Reference<css::beans::XPropertySet> xProps(pObj->getUnoShape(), cpo::uno::UNO_QUERY);
+
+                // do we have XPropertySet from target object?
+                if (xProps)
+                {
+                    cpo::uno::Sequence<css::beans::PropertyValue> aGrabBag(0);
+                    xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+
+                    // does it have that GrabBag entry?
+                    bool bHit(false);
+
+                    if (aGrabBag.hasElements())
+                    {
+                        for (const auto& rProp : aGrabBag)
+                        {
+                            if (rProp.Name == u"OriginalLnSolidFillClr"_ustr)
+                            {
+                                bHit = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (bHit)
+                    {
+
+                        comphelper::SequenceAsHashMap aGrabBagSeq(aGrabBag);
+
+                        // try to delete and if that did something, write GrabBag back
+                        if (aGrabBagSeq.erase(u"OriginalLnSolidFillClr"_ustr))
+                            xProps->setPropertyValue(u"InteropGrabBag"_ustr, cpo::uno::Any(aGrabBagSeq.getAsConstPropertyValueList()));
+                    }
+                }
+            }
         }
 
         // set attributes at object

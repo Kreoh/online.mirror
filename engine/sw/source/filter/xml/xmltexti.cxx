@@ -56,6 +56,7 @@
 #include <ndole.hxx>
 #include <docsh.hxx>
 #include <sfx2/docfile.hxx>
+#include <vcl/outdev.hxx>
 #include <vcl/svapp.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <svtools/embedhlp.hxx>
@@ -67,8 +68,8 @@
 #include <utility>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::frame;

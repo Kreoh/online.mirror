@@ -11,6 +11,7 @@
 
 #include <IDocumentLayoutAccess.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <formatflysplit.hxx>
 #include <frmmgr.hxx>
 #include <pagefrm.hxx>
@@ -116,6 +117,22 @@ CPPUNIT_TEST_FIXTURE(Test, testInlineEndnoteAndSection)
     // - Actual  : 1
     // and we even crashed on shutdown.
     CPPUNIT_ASSERT_EQUAL(2, nToplevelSections);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testInlineEndnoteAndColumns)
+{
+    // Given a DOC file with an endnote and a page style with two columns, ContinuousEndnotes is
+    // true:
+    createSwDoc("inline-endnote-and-columns.doc");
+
+    // When laying out that document:
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    // Then make sure the endnote section is inside a column of the body text:
+    // Without the accompanying fix in place, this test would have failed with an assertion in
+    // SwFrame::GetNextSctLeaf(), the endnote section was a sibling of the columns.
+    assertXPath(pXmlDoc, "/root/page/body/column/body/section", 1);
+    assertXPath(pXmlDoc, "/root/page/body/section", 0);
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testInlineEndnotePosition)

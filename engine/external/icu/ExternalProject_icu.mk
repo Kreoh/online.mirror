@@ -22,11 +22,11 @@ ifeq ($(OS),WNT)
 $(call gb_ExternalProject_get_state_target,icu,build) :
 	$(call gb_Trace_StartRange,icu,EXTERNAL)
 	$(call gb_ExternalProject_run,build,\
-		$(WSL) autoconf -f \
+		$(UNIX_HELPER) autoconf -f \
 		&& export CC="$(filter-out -fsanitize%,$(CC))" CXX="$(filter-out -fsanitize%,$(CXX))" \
-			LIB="$(ILIB)" PYTHONWARNINGS="default" \
-			gb_ICU_XFLAGS="-FS $(SOLARINC) $(gb_DEBUGINFO_FLAGS) $(if $(MSVC_USE_DEBUG_RUNTIME),-MDd,-MD -Gy)" \
-		&& CFLAGS="$${gb_ICU_XFLAGS}" CPPFLAGS="$(SOLARINC)" CXXFLAGS="$${gb_ICU_XFLAGS} $(CXXFLAGS_CXX11)" \
+			LIB="$(ILIB)" INCLUDE="$(gb_ExternalProject_INCLUDE)" PYTHONWARNINGS="default" \
+			gb_ICU_XFLAGS="-FS $(gb_DEBUGINFO_FLAGS) $(if $(MSVC_USE_DEBUG_RUNTIME),-MDd,-MD -Gy)" \
+		&& CFLAGS="$${gb_ICU_XFLAGS}" CXXFLAGS="$${gb_ICU_XFLAGS} $(CXXFLAGS_CXX11)" \
 			INSTALL=`cygpath -m /usr/bin/install` $(if $(MSVC_USE_DEBUG_RUNTIME),LDFLAGS="-DEBUG") \
 			$(gb_RUN_CONFIGURE) ./configure \
 				$(if $(MSVC_USE_DEBUG_RUNTIME),--enable-debug --disable-release) \
@@ -79,7 +79,6 @@ $(call gb_ExternalProject_get_state_target,icu,build) :
 			--disable-layout --disable-samples \
 			$(if $(filter FUZZERS,$(BUILD_TYPE)),--disable-release) \
 			$(if $(filter EMSCRIPTEN ANDROID,$(OS)),--disable-strict ac_cv_c_bigendian=no) \
-			$(if $(filter SOLARIS,$(OS)),--disable-64bit-libs) \
 			$(if $(filter TRUE,$(DISABLE_DYNLOADING)),\
 				--with-data-packaging=static --enable-static --disable-shared --disable-dyload,\
 				--disable-static --enable-shared $(if $(filter ANDROID,$(OS)),--with-library-suffix=lo)) \

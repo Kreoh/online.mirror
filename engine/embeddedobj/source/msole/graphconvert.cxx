@@ -18,7 +18,7 @@
  */
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
@@ -40,6 +40,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 bool ConvertBufferToFormat( void* pBuf,
@@ -67,15 +68,15 @@ bool ConvertBufferToFormat( void* pBuf,
         {
             uno::Reference < graphic::XGraphicProvider > xGraphicProvider( graphic::GraphicProvider::create(comphelper::getProcessComponentContext()));
             cpo::uno::Sequence< beans::PropertyValue > aMediaProperties{ comphelper::makePropertyValue(
-                "InputStream", xIn) };
+                u"InputStream"_ustr, xIn) };
             uno::Reference< graphic::XGraphic > xGraphic( xGraphicProvider->queryGraphic( aMediaProperties  ) );
             if( xGraphic.is() )
             {
                 SvMemoryStream aNewStream( 65535, 65535 );
                 uno::Reference < io::XStream > xOut = new utl::OStreamWrapper( aNewStream );
                 cpo::uno::Sequence< beans::PropertyValue > aOutMediaProperties{
-                    comphelper::makePropertyValue("OutputStream", xOut),
-                    comphelper::makePropertyValue("MimeType", aMimeType)
+                    comphelper::makePropertyValue(u"OutputStream"_ustr, xOut),
+                    comphelper::makePropertyValue(u"MimeType"_ustr, aMimeType)
                 };
 
                 xGraphicProvider->storeGraphic( xGraphic, aOutMediaProperties );
@@ -106,7 +107,7 @@ void MainThreadNotificationRequest::notify (const cpo::uno::Any& )
     {
         try
         {
-            uno::Reference< uno::XInterface > xLock = m_xObject.get();
+            uno::Reference< cpo::uno::XInterface > xLock = m_xObject.get();
             if ( xLock.is() )
             {
                 // this is the main thread, the solar mutex must be locked

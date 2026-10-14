@@ -24,6 +24,7 @@
 #include <com/sun/star/document/XEventBroadcaster.hpp>
 #include <com/sun/star/office/XAnnotationAccess.hpp>
 #include <comphelper/kit.hxx>
+#include <sfx2/kit/helper.hxx>
 #include <svx/svxids.hrc>
 #include <svx/svditer.hxx>
 
@@ -105,6 +106,7 @@
 #include <optional>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sd
 {
@@ -144,11 +146,22 @@ static SfxDispatcher* getDispatcher( ViewShellBase const & rBase )
 
 css::util::DateTime getCurrentDateTime()
 {
+    // Read the clock of the timezone the user of the current view is in.
+    SfxKitTimezoneGuard aTimezoneGuard;
+
     DateTime aCurrentDate( DateTime::SYSTEM );
     return css::util::DateTime( 0, aCurrentDate.GetSec(),
             aCurrentDate.GetMin(), aCurrentDate.GetHour(),
             aCurrentDate.GetDay(), aCurrentDate.GetMonth(),
             aCurrentDate.GetYear(), false );
+}
+
+void stampWithCurrentTime(const uno::Reference<office::XAnnotation>& xAnnotation)
+{
+    // The wall clock the author reads, and the moment it stands for. The clock alone carries no
+    // zone, so a reader elsewhere cannot tell which moment it was.
+    xAnnotation->setDateTime(getCurrentDateTime());
+    xAnnotation->setDateTimeUTC(DateTime::CreateSystemUTC().GetUNODateTime());
 }
 
 OUString getAnnotationDateTimeString(const uno::Reference<office::XAnnotation>& xAnnotation)
@@ -257,7 +270,7 @@ void AnnotationManagerImpl::disposing (std::unique_lock<std::mutex>&)
 }
 
 // XEventListener
-void SAL_CALL AnnotationManagerImpl::notifyEvent( const css::document::EventObject& aEvent )
+void AnnotationManagerImpl::notifyEvent( const css::document::EventObject& aEvent )
 {
     if( !(aEvent.EventName == "OnAnnotationInserted" || aEvent.EventName == "OnAnnotationRemoved" || aEvent.EventName == "OnAnnotationChanged") )
         return;
@@ -280,7 +293,7 @@ void SAL_CALL AnnotationManagerImpl::notifyEvent( const css::document::EventObje
     UpdateTags();
 }
 
-void SAL_CALL AnnotationManagerImpl::disposing( const css::lang::EventObject& /*Source*/ )
+void AnnotationManagerImpl::disposing( const css::lang::EventObject& /*Source*/ )
 {
 }
 
@@ -627,7 +640,7 @@ void AnnotationManagerImpl::InsertAnnotation(const OUString& rText,
     // set current author to new annotation
     xAnnotation->setAuthor( sAuthor );
     // set current time to new annotation
-    xAnnotation->setDateTime( getCurrentDateTime() );
+    stampWithCurrentTime(xAnnotation);
 
     // set position
     geometry::RealPoint2D aPosition(x / 100.0, y / 100.0);
@@ -721,7 +734,7 @@ void AnnotationManagerImpl::ExecuteReplyToAnnotation( SfxRequest const & rReq )
 
         ESelection aSel;
         aSel.end.nPara = aOutliner.GetParagraphCount() - 2;
-        aSel.end.nIndex = aOutliner.GetText( aOutliner.GetParagraph( aSel.end.nPara ) ).getLength();
+        aSel.end.nIndex = aOutliner.GetText( aSel.end.nPara ).getLength();
 
         aOutliner.QuickSetAttribs( aAnswerSet, aSel );
     }
@@ -744,7 +757,7 @@ void AnnotationManagerImpl::ExecuteReplyToAnnotation( SfxRequest const & rReq )
 
     xAnnotation->setAuthor( sReplyAuthor );
     // set current time to reply
-    xAnnotation->setDateTime( getCurrentDateTime() );
+    stampWithCurrentTime(xAnnotation);
 
     // Tell our COKit clients about this (comment modification)
     KitCommentNotifyAll(sdr::annotation::CommentNotificationType::Modify, *xAnnotation);

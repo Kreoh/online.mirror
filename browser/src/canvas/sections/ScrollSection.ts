@@ -209,26 +209,60 @@ export class ScrollSection extends CanvasSectionObject {
 		var vx = 0;
 		var vy = 0;
 
-		// Every layout is off-map now, so the top-left comes from the viewed
-		// rectangle (the leaflet map pane is stale/unused).
-		const topLeftX = app.activeDocument.activeLayout.viewedRectangle.cX1;
-		const topLeftY = app.activeDocument.activeLayout.viewedRectangle.cY1;
+		// How far the view is scrolled from the start, in CSS pixels. Where room is laid before
+		// the document, as the lawn of the vector view, the viewed rectangle starts before the
+		// document's origin, so the scroll itself says it. Elsewhere the rectangle, as always.
+		const layout = app.activeDocument.activeLayout;
+		const roomBefore = layout.laysRoomBeforeTheDocument();
+		const topLeftX = roomBefore
+			? layout.scrollProperties.viewX / app.dpiScale
+			: layout.viewedRectangle.cX1;
+		const topLeftY = roomBefore
+			? layout.scrollProperties.viewY / app.dpiScale
+			: layout.viewedRectangle.cY1;
 
 		// The document area (anchor/tiles section) the map used to represent.
 		const frame = app.activeDocument.activeLayout.frameSize;
 
-		if (e.pos.y > frame.cY - 50) {
-			vy = 50;
-		} else if (e.pos.y < 50 && topLeftY > 50) {
-			vy = -50;
+		/*
+			How far one step scrolls, in CSS pixels, for the mouse standing that far into the band
+			along the edge, the band being 50 pixels wide inside the frame. In the vector view a
+			mouse in the band or just past the edge scrolls gently, and taken further out it
+			scrolls faster the further out it is, up to a limit, so a long way across the lawn is
+			quick and a short one stays under control. Elsewhere a
+			step is always 50, as it was. The vector view scrolls up and left as long as there is
+			anything to scroll to; elsewhere it waits for a band's width of it, as it did.
+		*/
+		const band = 50;
+		// The step at the edge and just past it, how far past the edge it stays so, how many CSS
+		// pixels further out the step doubles, and the largest step. Doubling makes it grow
+		// slowly near the edge and quickly further out.
+		const calmStep = 25;
+		const calmPastTheEdge = 30;
+		const doublingDistance = 75;
+		const largestStep = 150;
+		const stepFor = (intoTheBand: number): number => {
+			if (!roomBefore) return band;
+			const beyondTheCalm = Math.max(0, intoTheBand - band - calmPastTheEdge);
+			return Math.min(
+				largestStep,
+				calmStep * Math.pow(2, beyondTheCalm / doublingDistance),
+			);
+		};
+		const roomNeeded = roomBefore ? 0 : band;
+
+		if (e.pos.y > frame.cY - band) {
+			vy = stepFor(e.pos.y - (frame.cY - band));
+		} else if (e.pos.y < band && topLeftY > roomNeeded) {
+			vy = -stepFor(band - e.pos.y);
 		}
 
 		const mousePosX: number = this.isRTL() ? frame.cX - e.pos.x : e.pos.x;
 		const mapLeft: number = this.isRTL() ? frame.cX - topLeftX : topLeftX;
-		if (mousePosX > frame.cX - 50) {
-			vx = 50;
-		} else if (mousePosX < 50 && mapLeft > 50) {
-			vx = -50;
+		if (mousePosX > frame.cX - band) {
+			vx = stepFor(mousePosX - (frame.cX - band));
+		} else if (mousePosX < band && mapLeft > roomNeeded) {
+			vx = -stepFor(band - mousePosX);
 		}
 
 		this.onScrollVelocity({ vx: vx, vy: vy, pos: e.pos });
@@ -745,8 +779,22 @@ export class ScrollSection extends CanvasSectionObject {
 		const mirrorX = this.isRTL();
 		const documentAnchor = app.sectionContainer.getSectionWithName(app.CSections.Tiles.name);
 
-		// For CompareChanges view, viewedRectangle.pY1 can be negative while scrolling is possible.
-		const initialVerticalCheck = layout.type === 'ViewLayoutCompareChanges' ? true : layout.viewedRectangle.pY1 >= 0;
+		// Whether a bar can be taken hold of. The viewed rectangle starts before the document's
+		// origin wherever room is laid before the document - the compare view, the lawn of the
+		// vector view - so there the layout is asked whether it can scroll. Elsewhere the
+		// rectangle's start says it, as it always did.
+		const roomBefore =
+			layout.type === 'ViewLayoutCompareChanges' || layout.laysRoomBeforeTheDocument();
+
+		// Where the view stood when a bar was taken hold of, so Escape can put it back. Only the
+		// vector view keeps its view in terms that can be put back this simply.
+		this.sectionProperties.viewBeforeTheBarDrag = layout.laysRoomBeforeTheDocument()
+			? layout.zoomAnchorPoint()
+			: null;
+		this.listenForEscape(this.sectionProperties.viewBeforeTheBarDrag !== null);
+		const initialVerticalCheck = roomBefore
+			? layout.canScrollVertical(documentAnchor)
+			: layout.viewedRectangle.pY1 >= 0;
 
 		if (initialVerticalCheck) {
 			if ((!mirrorX && point.pX >= this.size[0] - scrollProps.usableThickness)
@@ -769,10 +817,8 @@ export class ScrollSection extends CanvasSectionObject {
 			}
 		}
 
-		// Same reasoning as vertical: CompareChanges can have negative pX1.
-		const canScrollH = layout.type === 'ViewLayoutCompareChanges'
-			? layout.canScrollHorizontal(documentAnchor)
-			: layout.viewedRectangle.pX1 >= 0;
+		// The same test decides whether the bar is drawn.
+		const canScrollH = layout.canScrollHorizontal(documentAnchor);
 
 		if (canScrollH) {
 			if (point.pY >= this.size[1] - scrollProps.usableThickness) {
@@ -796,6 +842,37 @@ export class ScrollSection extends CanvasSectionObject {
 		}
 	}
 
+	/*
+		Escape while a bar is dragged in the vector view puts the view back where it stood when the
+		bar was taken hold of, as the user asked to interrupt the scroll. This section is a window
+		section, and the container tells only the section a press landed on that a drag was called
+		off, so the section listens for the key itself while a bar is held.
+	*/
+	private readonly onEscapeKey = (event: KeyboardEvent): void => {
+		if (event.key !== 'Escape') return;
+
+		const before: cool.SimplePoint | null = this.sectionProperties.viewBeforeTheBarDrag;
+		const onABar = this.sectionProperties.clickScrollVertical || this.sectionProperties.clickScrollHorizontal;
+		if (!onABar || !before) return;
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		this.sectionProperties.clickScrollVertical = false;
+		this.sectionProperties.clickScrollHorizontal = false;
+		this.sectionProperties.previousDragDistance = null;
+		this.sectionProperties.viewBeforeTheBarDrag = null;
+		this.listenForEscape(false);
+
+		app.sectionContainer.cancelDragging();
+		app.activeDocument.activeLayout.showAtTheMiddle(before);
+	};
+
+	private listenForEscape (listen: boolean): void {
+		document.removeEventListener('keydown', this.onEscapeKey, true);
+		if (listen) document.addEventListener('keydown', this.onEscapeKey, true);
+	}
+
 	public onMouseUp (point: cool.SimplePoint, e: MouseEvent): void {
 		window.L.DomUtil.removeClass(document.documentElement, 'prevent-select');
 		this.map.scrollingIsHandled = false;
@@ -816,7 +893,13 @@ export class ScrollSection extends CanvasSectionObject {
 		}
 
 		this.sectionProperties.previousDragDistance = null;
-		this.onMouseMove(point, null, e);
+		this.sectionProperties.viewBeforeTheBarDrag = null;
+		this.listenForEscape(false);
+
+		if (e.type === 'touchend')
+			this.onMouseLeave();
+		else
+			this.onMouseMove(point, null, e);
 	}
 
 	public onClick(point: cool.SimplePoint, e: MouseEvent): void {

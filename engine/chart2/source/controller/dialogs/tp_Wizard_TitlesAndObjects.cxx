@@ -29,10 +29,11 @@
 namespace chart
 {
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 TitlesAndObjectsTabPage::TitlesAndObjectsTabPage(weld::Container* pPage, weld::DialogController* pController,
                                                  rtl::Reference<::chart::ChartModel> xChartModel,
-                                                 const uno::Reference< uno::XComponentContext >& xContext )
+                                                 const uno::Reference< cpo::uno::XComponentContext >& xContext )
     : OWizardPage(pPage, pController, u"modules/schart/ui/wizelementspage.ui"_ustr, u"WizElementsPage"_ustr)
     , m_xTitleResources(new TitleResources(*m_xBuilder, false))
     , m_xLegendPositionResources(new LegendPositionResources(*m_xBuilder, xContext))

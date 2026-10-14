@@ -17,13 +17,14 @@
 #include <vcl/svapp.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc
 {
 
 SC_SIMPLE_SERVICE_INFO(PivotTableDataSource, u"PivotTableDataSource"_ustr, u"com.sun.star.chart2.data.DataSource"_ustr)
 
-PivotTableDataSource::PivotTableDataSource(std::vector<css::uno::Reference<css::chart2::data::XLabeledDataSequence>>&& xLabeledSequence)
+PivotTableDataSource::PivotTableDataSource(std::vector<cpo::uno::Reference<css::chart2::data::XLabeledDataSequence>>&& xLabeledSequence)
     : m_xLabeledSequence(std::move(xLabeledSequence))
 {
 }
@@ -36,7 +37,7 @@ void PivotTableDataSource::Notify(SfxBroadcaster& /*rBroadcaster*/, const SfxHin
 {
 }
 
-cpo::uno::Sequence<uno::Reference<chart2::data::XLabeledDataSequence>> SAL_CALL
+cpo::uno::Sequence<uno::Reference<chart2::data::XLabeledDataSequence>>
     PivotTableDataSource::getDataSequences()
 {
     SolarMutexGuard aGuard;

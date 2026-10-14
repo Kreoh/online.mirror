@@ -155,7 +155,6 @@ gb_CXXFLAGS := \
 
 ifneq ($(COM_IS_CLANG),TRUE)
 gb_CXXFLAGS += -Zc:inline
-gb_CXXFLAGS_ZCINLINE_OFF := -Zc:inline-
 endif
 
 ifeq ($(CPUNAME),INTEL)
@@ -218,7 +217,7 @@ endif
 
 gb_LinkTarget_LDFLAGS := \
 	$(if $(findstring s,$(filter-out --%,$(MAKEFLAGS))),-nologo,) \
-	$(patsubst %,-LIBPATH:%,$(filter-out .,$(subst ;, ,$(subst \,/,$(ILIB))))) \
+	$(filter-out -LIBPATH:".",-LIBPATH:"$(subst ;," -LIBPATH:",$(subst \,/,$(ILIB)))") \
 
 # Prevent warning spamming
 # Happens because of the way we link our unit tests with our libraries.
@@ -259,23 +258,6 @@ endef
 endif
 
 gb_LTOFLAGS := $(if $(filter TRUE,$(ENABLE_LTO)),-GL)
-
-# At least VS2022 Preview 17.12.0 Preview 2.1 with --with-latest-c++ emits a "warning
-# C4857: C++/CLI mode does not support C++ versions newer than C++20; setting language to
-# /std:c++20" that cannot be disabled by adding -wd4857, so hardcode a -std:c++20 substitution in
-# that case:
-gb_CXXCLRFLAGS := \
-	$(if $(COM_IS_CLANG), \
-	    $(patsubst -std=%,-std:c++20 -Zc:__cplusplus,$(gb_CXXFLAGS)), \
-	    $(if $(filter -std:c++latest,$(CXXFLAGS_CXX11)), \
-	        $(patsubst -std:c++latest,-std:c++20,$(gb_CXXFLAGS)), \
-	        $(gb_CXXFLAGS))) \
-	$(gb_LinkTarget_EXCEPTIONFLAGS) \
-	-AI $(INSTDIR)/$(LIBO_URE_LIB_FOLDER) \
-	-EHa \
-	-clr \
-	-Zc:twoPhase- \
-
 
 ifeq ($(COM_IS_CLANG),TRUE)
 
@@ -341,8 +323,8 @@ endef
 gb_WIN_GPG_WINDRES_target := $(if $(filter INTEL,$(CPUNAME)),pe-i386,pe-x86-64)
 gb_WIN_GPG_platform_switches := --build=$(BUILD_PLATFORM) --host=$(subst cygwin,mingw32,$(HOST_PLATFORM))
 gb_WIN_GPG_cross_setup_exports = export REAL_BUILD_CC="$(filter-out -%,$(CC_FOR_BUILD))" REAL_BUILD_CC_FLAGS="$(filter -%,$(CC_FOR_BUILD))" \
-    && export CC_FOR_BUILD="$(call gb_Executable_get_target_for_build,gcc-wrapper) --wrapper-env-prefix=REAL_BUILD_ $(SOLARINC) -L$(subst ;, -L,$(ILIB_FOR_BUILD))" \
-    && export RC='windres -O COFF --target=$(gb_WIN_GPG_WINDRES_target) --preprocessor=$(call gb_Executable_get_target_for_build,cpp) --preprocessor-arg=-+ -DRC_INVOKED -DWINAPI_FAMILY=0 $(SOLARINC)'
+    && export CC_FOR_BUILD="$(call gb_Executable_get_target_for_build,gcc-wrapper) --wrapper-env-prefix=REAL_BUILD_ $(foreach dir,$(SOLARINC),\"$(call gb_Helper_decode_path,$(dir))\") -L\"$(subst ;,\" -L\",$(ILIB_FOR_BUILD))\"" \
+    && export RC='windres -O COFF --target=$(gb_WIN_GPG_WINDRES_target) --preprocessor=$(call gb_Executable_get_target_for_build,cpp) --preprocessor-arg=-+ -DRC_INVOKED -DWINAPI_FAMILY=0 $(call gb_Helper_decode_path,$(SOLARINC))'
 
 ifneq ($(gb_ENABLE_PCH),)
 # Enable use of .sum files for PCHs.

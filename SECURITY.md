@@ -14,5 +14,14 @@ Currently the following Online Office versions are supported with security updat
 
 ## Reporting a Vulnerability
 
-If you find a security vulnerability in Online Office, please send an email to
-*officesecurity@lists.freedesktop.org*.
+1. Share the details of the vulnerability privately with our security team by emailing *officesecurity@lists.freedesktop.org*.
+2. We acknowledge your report and then verify the vulnerability.
+3. Our policy is to disclose the vulnerability to the public within 30 days of the release of the fix, as an advisory with a CVE ID at https://github.com/CollaboraOnline/online/security/advisories.
+4. We credit reporters in the advisory, but reporters may remain anonymous if they wish.
+
+## What we do not treat as a vulnerability
+
+We fix these as ordinary bugs, without a CVE:
+
+- Denial of service on its own, including crashes, hangs and resource exhaustion. If it leads to something more, such as code execution or data disclosure, we assess that instead.
+- Missing hardening with no demonstrated exploit.

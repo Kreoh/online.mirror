@@ -35,7 +35,7 @@
 
 #include <cppuhelper/factory.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <comphelper/legacyunoapinotice.hxx>
 #include <comphelper/processfactory.hxx>
@@ -65,11 +65,11 @@ using pyuno::NOT_NULL;
 using pyuno::Runtime;
 using pyuno::PyThreadAttach;
 
-using com::sun::star::uno::Reference;
-using com::sun::star::uno::XInterface;
+using cpo::uno::Reference;
+using cpo::uno::XInterface;
 using cpo::uno::Sequence;
-using com::sun::star::uno::XComponentContext;
-using com::sun::star::uno::RuntimeException;
+using cpo::uno::XComponentContext;
+using cpo::uno::RuntimeException;
 
 namespace pyuno_loader
 {
@@ -276,9 +276,9 @@ void pythonInit() {
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 pyuno_Loader_get_implementation(
-    css::uno::XComponentContext* ctx , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* ctx , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     if (officecfg::Office::Common::Security::Scripting::DisablePythonRuntime::get(ctx))
         return nullptr;
@@ -305,7 +305,7 @@ pyuno_Loader_get_implementation(
         Runtime runtime;
 
         PyRef pyCtx = runtime.any2PyObject(
-            cpo::uno::Any( css::uno::Reference(ctx) ) );
+            cpo::uno::Any( cpo::uno::Reference(ctx) ) );
 
         PyRef clazz = getObjectFromLoaderModule( "Loader" );
         PyRef args ( PyTuple_New( 1 ), SAL_NO_ACQUIRE, NOT_NULL );

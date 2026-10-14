@@ -22,7 +22,7 @@
 #include "MasterScriptProviderFactory.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::script;
 
@@ -39,7 +39,7 @@ MasterScriptProviderFactory::~MasterScriptProviderFactory()
 {
 }
 
-Reference< provider::XScriptProvider > SAL_CALL
+Reference< provider::XScriptProvider >
 MasterScriptProviderFactory::createScriptProvider( const Any& context )
 {
     Reference< provider::XScriptProvider > xMsp( getActiveMSPList() ->getMSPFromAnyContext( context ), UNO_SET_THROW );
@@ -58,12 +58,12 @@ MasterScriptProviderFactory::getActiveMSPList() const
     return m_MSPList;
 }
 
-OUString SAL_CALL MasterScriptProviderFactory::getImplementationName()
+OUString MasterScriptProviderFactory::getImplementationName()
 {
     return u"com.sun.star.script.provider.MasterScriptProviderFactory"_ustr;
 }
 
-Sequence< OUString > SAL_CALL MasterScriptProviderFactory::getSupportedServiceNames()
+Sequence< OUString > MasterScriptProviderFactory::getSupportedServiceNames()
 {
     return { u"com.sun.star.script.provider.MasterScriptProviderFactory"_ustr };
 }
@@ -76,9 +76,9 @@ bool MasterScriptProviderFactory::supportsService(
 
 } // namespace func_provider
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_MasterScriptProviderFactory_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new func_provider::MasterScriptProviderFactory(context));
 }

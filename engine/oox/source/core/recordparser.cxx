@@ -33,7 +33,7 @@ namespace oox::core {
 
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 
 namespace prv {
@@ -44,7 +44,7 @@ public:
     explicit         Locator( RecordParser* pParser ) : mpParser( pParser ) {}
 
     void                    dispose();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void                    checkDispose();
 
     // com.sun.star.sax.XLocator interface

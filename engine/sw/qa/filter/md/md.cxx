@@ -19,6 +19,7 @@
 #include <svx/xflclit.hxx>
 
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <wrtsh.hxx>
 #include <view.hxx>
 #include <IDocumentStylePoolAccess.hxx>
@@ -37,7 +38,8 @@
 #include <swdtflvr.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {

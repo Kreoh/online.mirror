@@ -62,9 +62,9 @@ public:
     OUString familyName() const;
     OUString styleName() const;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 };
 
 /// Handles <style:font-face-src>
@@ -77,9 +77,9 @@ public:
     XMLFontStyleContextFontFaceSrc( SvXMLImport& rImport,
             const XMLFontStyleContextFontFace& font );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 };
 
 /// Handles <style:font-face-uri>
@@ -89,7 +89,7 @@ class XMLFontStyleContextFontFaceUri : public SvXMLStyleContext
     OUString format;
     OUString linkPath;
     ::cpo::uno::Sequence< sal_Int8 > maFontData;
-    ::css::uno::Reference< ::css::io::XOutputStream > mxBase64Stream;
+    ::cpo::uno::Reference< ::css::io::XOutputStream > mxBase64Stream;
 
     void handleEmbeddedFont( const OUString& url, bool eot );
     void handleEmbeddedFont( const ::cpo::uno::Sequence< sal_Int8 >& rData, bool eot );
@@ -102,10 +102,10 @@ public:
     virtual void SetAttribute( sal_Int32 nElement,
         const OUString& rValue ) override;
     void SetFormat( const OUString& rFormat );
-    void SAL_CALL endFastElement(sal_Int32 nElement) override;
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    void endFastElement(sal_Int32 nElement) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 };
 
 /// Handles <svg:font-face-format>

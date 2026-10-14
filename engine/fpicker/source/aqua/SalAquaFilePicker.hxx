@@ -22,7 +22,7 @@
 #include <cppuhelper/compbase.hxx>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/beans/StringPair.hpp>
 
@@ -35,8 +35,7 @@
 // Implementation class for the XFilePicker Interface
 
 typedef ::cppu::WeakComponentImplHelper <
-            css::ui::dialogs::XFilePicker3,
-            css::ui::dialogs::XFilePickerControlAccess,
+            css::ui::dialogs::XFilePicker,
             css::lang::XInitialization,
             css::lang::XServiceInfo >  SalAquaFilePicker_Base;
 
@@ -51,8 +50,8 @@ public:
 
     // XFilePickerNotifier
 
-    virtual void addFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
-    virtual void removeFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+    virtual void addFilePickerListener( const cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+    virtual void removeFilePickerListener( const cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
 
     // XExecutableDialog functions
 
@@ -69,8 +68,6 @@ public:
     virtual void setDisplayDirectory( const OUString& aDirectory ) override;
 
     virtual OUString getDisplayDirectory(  ) override;
-
-    virtual cpo::uno::Sequence< OUString > getFiles(  ) override;
 
     virtual cpo::uno::Sequence< OUString > getSelectedFiles(  ) override;
 
@@ -109,7 +106,7 @@ public:
     // XEventListener
 
     using cppu::WeakComponentImplHelperBase::disposing;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void disposing( const css::lang::EventObject& aEvent );
 
     // XServiceInfo
@@ -142,7 +139,7 @@ private:
 
     virtual void ensureFilterHelper();
 
-    css::uno::Reference< css::ui::dialogs::XFilePickerListener >  m_xListener;
+    cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >  m_xListener;
     FilterHelper *m_pFilterHelper;
     OUString m_sSaveFileName;
     AquaFilePickerDelegate *m_pDelegate;

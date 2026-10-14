@@ -40,7 +40,7 @@
 #include "slidelayoutcontroller.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::drawing;
@@ -232,7 +232,7 @@ LayoutToolbarMenu::LayoutToolbarMenu(SlideLayoutController* pControl, weld::Widg
     else
         sSlotStr = u".uno:Undo"_ustr;
 
-    css::uno::Reference<css::graphic::XGraphic> xSlotImage = vcl::CommandInfoProvider::GetXGraphicForCommand(sSlotStr, m_xFrame);
+    cpo::uno::Reference<css::graphic::XGraphic> xSlotImage = vcl::CommandInfoProvider::GetXGraphicForCommand(sSlotStr, m_xFrame);
 
     OUString sSlotTitle;
     if( bInsertPage )
@@ -280,7 +280,7 @@ void LayoutToolbarMenu::SelectHdl(AutoLayout eLayout)
 }
 
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 static OUString SlideLayoutController_getImplementationName()
 {
     return u"com.sun.star.comp.sd.SlideLayoutController"_ustr;
@@ -293,7 +293,7 @@ static Sequence< OUString >  SlideLayoutController_getSupportedServiceNames()
     return aSNS;
 }
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 static OUString InsertSlideController_getImplementationName()
 {
     return u"com.sun.star.comp.sd.InsertSlideController"_ustr;
@@ -306,13 +306,13 @@ static Sequence< OUString >  InsertSlideController_getSupportedServiceNames()
     return aSNS;
 }
 
-SlideLayoutController::SlideLayoutController(const Reference< uno::XComponentContext >& rxContext, bool bInsertPage)
+SlideLayoutController::SlideLayoutController(const Reference< cpo::uno::XComponentContext >& rxContext, bool bInsertPage)
     : svt::PopupWindowController(rxContext, nullptr, OUString())
     , mbInsertPage(bInsertPage)
 {
 }
 
-void SAL_CALL SlideLayoutController::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void SlideLayoutController::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     svt::PopupWindowController::initialize( aArguments );
 
@@ -344,7 +344,7 @@ VclPtr<vcl::Window> SlideLayoutController::createVclPopupWindow( vcl::Window* pP
 
 // XServiceInfo
 
-OUString SAL_CALL SlideLayoutController::getImplementationName()
+OUString SlideLayoutController::getImplementationName()
 {
     if( mbInsertPage )
         return InsertSlideController_getImplementationName();
@@ -352,7 +352,7 @@ OUString SAL_CALL SlideLayoutController::getImplementationName()
         return SlideLayoutController_getImplementationName();
 }
 
-Sequence< OUString > SAL_CALL SlideLayoutController::getSupportedServiceNames(  )
+Sequence< OUString > SlideLayoutController::getSupportedServiceNames(  )
 {
     if( mbInsertPage )
         return InsertSlideController_getSupportedServiceNames();
@@ -362,15 +362,15 @@ Sequence< OUString > SAL_CALL SlideLayoutController::getSupportedServiceNames(  
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_sd_SlideLayoutController_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_sd_SlideLayoutController_get_implementation(cpo::uno::XComponentContext* context,
                                                               cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new sd::SlideLayoutController(context, false));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_sd_InsertSlideController_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_sd_InsertSlideController_get_implementation(cpo::uno::XComponentContext* context,
                                                               cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new sd::SlideLayoutController(context, true));

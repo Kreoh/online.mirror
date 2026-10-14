@@ -41,6 +41,8 @@ class BitmapTileManager extends RenderManagerBase {
 	private _cumTileCount: number;
 	private _preFetchIdle: any;
 	private _tilesPreFetcher: any;
+	/// Pending re-request for the tiles a request wait has skipped. One covers them all.
+	private _skippedTileRetry: any;
 	private _partTilePreFetcher: any;
 	private _adjacentTilePreFetcher: any;
 	private inTransaction: number = 0;
@@ -465,7 +467,7 @@ class BitmapTileManager extends RenderManagerBase {
 			typeof msgObj.y !== 'number' ||
 			typeof msgObj.tileWidth !== 'number' ||
 			typeof msgObj.tileHeight !== 'number' ||
-			typeof msgObj.part !== 'number' ||
+			typeof msgObj.part !== 'string' ||
 			(typeof msgObj.mode !== 'number' && typeof msgObj.mode !== 'undefined')
 		) {
 			window.app.console.error(
@@ -946,7 +948,7 @@ class BitmapTileManager extends RenderManagerBase {
 		if (targetIndex < 0 || targetIndex >= this._docLayer._parts) return;
 
 		const targetPart = this._docLayer.getPartFromIndex(targetIndex);
-		if (targetPart < 0) return;
+		if (!targetPart) return;
 
 		// check existing timeout and clear it before the new one
 		if (this._partTilePreFetcher) clearTimeout(this._partTilePreFetcher);
@@ -1056,7 +1058,7 @@ class BitmapTileManager extends RenderManagerBase {
 		if (tileCombineQueue.length <= 0) return;
 
 		// Sort into buckets of consistent part & mode. The key is a string:
-		// part numbers can be slide unique ids, which are too wide to pack into
+		// part identifiers can be page GUIDs, which do not fit into
 		// the bits of a number next to the mode.
 		const partMode: any = {};
 		for (var i = 0; i < tileCombineQueue.length; ++i) {
@@ -1067,6 +1069,7 @@ class BitmapTileManager extends RenderManagerBase {
 		}
 
 		var now = new Date();
+		let skippedAsTooFast = false;
 
 		for (var pmKey in partMode) {
 			// no keys method
@@ -1085,7 +1088,10 @@ class BitmapTileManager extends RenderManagerBase {
 				const tile = this.tiles.get(key);
 
 				// don't send lots of duplicate, fast tilecombines
-				if (tile && tile.requestingTooFast(now)) continue;
+				if (tile && tile.requestingTooFast(now)) {
+					skippedAsTooFast = true;
+					continue;
+				}
 
 				// request each tile just once in these tilecombines
 				if (added.has(key)) continue;
@@ -1128,6 +1134,34 @@ class BitmapTileManager extends RenderManagerBase {
 		}
 
 		this.notifyTileStateChanged();
+
+		if (skippedAsTooFast) this.scheduleSkippedTileRetry();
+	}
+
+	/// Ask again for the tiles a request wait has skipped, once that wait is over, so a tile the
+	/// server decided against sending is still filled in while the view stays where it is. The
+	/// wait is measured from the last request that went out, so by the time this runs it has
+	/// passed for every tile skipped here.
+	private scheduleSkippedTileRetry() {
+		if (this._skippedTileRetry !== undefined) return;
+
+		this._skippedTileRetry = setTimeout(() => {
+			this._skippedTileRetry = undefined;
+			if (!this.checkDocLayer()) return;
+
+			this.beginTransaction();
+			this.checkRequestTiles(
+				app.activeDocument.activeLayout.getCurrentCoordList(),
+			);
+			this.endTransaction(null);
+		}, Tile.requestWaitMs + 100);
+	}
+
+	private clearSkippedTileRetry() {
+		if (this._skippedTileRetry !== undefined) {
+			clearTimeout(this._skippedTileRetry);
+			this._skippedTileRetry = undefined;
+		}
 	}
 
 	private tileNeedsFetch(key: string) {
@@ -1285,21 +1319,15 @@ class BitmapTileManager extends RenderManagerBase {
 	}
 
 	private removeIrrelevantsFromCoordsQueue(coordsQueue: Array<TileCoordData>) {
-		const selectedPart: number = app.map._docLayer.getSelectedPart();
+		const selectedPart = app.map._docLayer.getSelectedPart();
 
-		for (let i = coordsQueue.length - 1; i > 0; i--) {
+		for (let i = coordsQueue.length - 1; i >= 0; i--) {
 			if (
 				coordsQueue[i].part !== selectedPart ||
 				!app.activeDocument.isModeActive(coordsQueue[i].mode) ||
 				!this.tileNeedsFetch(coordsQueue[i].key())
 			) {
 				coordsQueue.splice(i, 1);
-			} else if (app.map._docLayer._moveInProgress) {
-				// While we are actively scrolling, filter out duplicate
-				// (still) missing tiles requests during the scroll.
-				if (app.map._docLayer._moveTileRequests.includes(coordsQueue[i].key()))
-					coordsQueue.splice(i, 1);
-				else app.map._docLayer._moveTileRequests.push(coordsQueue[i].key());
 			}
 		}
 	}
@@ -1473,7 +1501,7 @@ class BitmapTileManager extends RenderManagerBase {
 	public resetPreFetching(resetBorder: boolean) {
 		if (!this.checkDocLayer()) return;
 
-		this.clearPreFetch();
+		this.clearPreFetchTimers();
 
 		if (resetBorder) this._borders = undefined;
 
@@ -1481,27 +1509,28 @@ class BitmapTileManager extends RenderManagerBase {
 		var idleTime = 750;
 		this._preFetchPart = this._docLayer.getSelectedPart();
 		this._preFetchMode = app.activeDocument.activeModes;
-		this._preFetchIdle = setTimeout(
-			window.L.bind(function () {
-				this._tilesPreFetcher = setInterval(
-					window.L.bind(this.preFetchTiles, this),
-					interval,
-				);
-				this._preFetchIdle = undefined;
-				this._cumTileCount = 0;
-			}, this),
-			idleTime,
-		);
+		this._preFetchIdle = setTimeout(() => {
+			this._tilesPreFetcher = setInterval(() => {
+				this.preFetchTiles(false);
+			}, interval);
+			this._preFetchIdle = undefined;
+			this._cumTileCount = 0;
+		}, idleTime);
 	}
 
-	public clearPreFetch() {
-		if (!this.checkDocLayer()) return;
-
+	private clearPreFetchTimers() {
 		this.clearTilesPreFetcher();
 		if (this._preFetchIdle !== undefined) {
 			clearTimeout(this._preFetchIdle);
 			this._preFetchIdle = undefined;
 		}
+	}
+
+	public clearPreFetch() {
+		if (!this.checkDocLayer()) return;
+
+		this.clearSkippedTileRetry();
+		this.clearPreFetchTimers();
 	}
 
 	public preFetchTiles(forceBorderCalc: boolean) {
@@ -1546,7 +1575,7 @@ class BitmapTileManager extends RenderManagerBase {
 			),
 		);
 
-		if (this._preFetchPart < 0) return;
+		if (!this._preFetchPart) return;
 
 		var tilesToFetch = maxTilesToFetch; // total tile limit per call of preFetchTiles()
 		var doneAllPanes = true;
@@ -1735,6 +1764,19 @@ class BitmapTileManager extends RenderManagerBase {
 		}
 	}
 
+	// The kit found no page for the tile, so no pixels come for it.
+	public onTileGoneMsg(textMsg: string) {
+		const tileMsgObj: any = app.socket.parseServerCmd(textMsg);
+		if (tileMsgObj.id !== undefined) this.firePreviewGone(tileMsgObj);
+	}
+
+	private firePreviewGone(tileMsgObj: any) {
+		app.map.fire('tilepreviewgone', {
+			id: tileMsgObj.id,
+			part: tileMsgObj.part,
+		});
+	}
+
 	public onTileMsg(textMsg: string, img: any) {
 		const tileMsgObj: any = app.socket.parseServerCmd(textMsg);
 		this.checkTileMsgObject(tileMsgObj);
@@ -1747,7 +1789,7 @@ class BitmapTileManager extends RenderManagerBase {
 		if (tileMsgObj.id !== undefined) {
 			// The response names its part by part number, the way previews
 			// are requested. The event also carries the index the part holds
-			// now. The preview of a gone page fires no event.
+			// now. The preview of a page this view no longer lists is gone.
 			const partIndex = app.map._docLayer.getIndexFromPart(tileMsgObj.part);
 			if (partIndex >= 0)
 				app.map.fire('tilepreview', {
@@ -1760,6 +1802,7 @@ class BitmapTileManager extends RenderManagerBase {
 					mode: tileMsgObj.mode !== undefined ? tileMsgObj.mode : 0,
 					docType: app.map._docLayer._docType,
 				});
+			else this.firePreviewGone(tileMsgObj);
 			this.queueAcknowledgement(tileMsgObj);
 			return;
 		}
@@ -2286,7 +2329,7 @@ class BitmapTileManager extends RenderManagerBase {
 					Math.floor((localY2 - 1) / app.tile.size.pY) * app.tile.size.pY;
 
 				const part = app.map._docLayer.getPartFromIndex(i);
-				if (part < 0) continue;
+				if (!part) continue;
 
 				for (let j = startX; j <= endX; j += app.tile.size.pX) {
 					for (let k = startY; k <= endY; k += app.tile.size.pY) {
@@ -2364,6 +2407,140 @@ class BitmapTileManager extends RenderManagerBase {
 		tile.lastRendered = performance.now();
 		if (!tile.image) tile.missingContent++;
 	}
+
+	// -- vector rendering --
+	// Bitmap tiles carry no vector content: there is no part to name, fetch or
+	// draw, and every layer is visible.
+	public isVectorRendering(): boolean {
+		return false;
+	}
+
+	public requestThumbnail(
+		_id: cool.PreviewId,
+		_part: number,
+		_mode: number,
+		_maxWidth: number,
+		_maxHeight: number,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public requestPart(
+		_part: number,
+		_mode: number,
+	): cool.VectorPrimitivesData | undefined {
+		return undefined;
+	}
+
+	public partIdAt(
+		_part: number,
+		_mode: number,
+	): cool.VectorPartGuid | undefined {
+		return undefined;
+	}
+
+	public renderInto(
+		_context: CanvasRenderingContext2D,
+		_data: cool.VectorPrimitivesData,
+		_options?: cool.VectorRenderOptions,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public renderObjectsWith(
+		_context: CanvasRenderingContext2D,
+		_data: cool.VectorPrimitivesData,
+		_objectIds: number[],
+		_matrix: cool.Matrix2D,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public renderPrimitives(
+		_context: CanvasRenderingContext2D,
+		_data: cool.VectorPrimitivesData,
+		_primitives: cool.Primitive[],
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public renderPlaceholderAids(
+		_context: CanvasRenderingContext2D,
+		_data: cool.VectorPrimitivesData,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public setHiddenLayers(_layers: unknown): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public drawnElsewhere(_objectIds: number[]): void {}
+
+	public drawnElsewhereVersion(): number {
+		return 0;
+	}
+
+	public isPartDrawable(_part: number, _mode: number): boolean {
+		return false;
+	}
+
+	public requestPartById(
+		_partId: cool.VectorPartGuid,
+		_mode: number,
+	): cool.VectorPrimitivesData | undefined {
+		return undefined;
+	}
+
+	public isPartDrawableById(
+		_partId: cool.VectorPartGuid,
+		_mode: number,
+	): boolean {
+		return false;
+	}
+
+	public isLayerVisible(_layer: number): boolean {
+		return true;
+	}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public onVectorChanged(_callback: (answered?: number[]) => void): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public offVectorChanged(_callback: () => void): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public changedHere(): void {}
+
+	public handleVectorPrimitivesResponse(
+		_values: cool.VectorPrimitivesResponse,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public handleVectorRenderingGraphicsResponse(
+		_values: cool.VectorRenderingGraphicsResponse,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public handleVectorRenderingFontResponse(
+		_values: cool.VectorRenderingFontResponse,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	public handleVectorPrimitivesDelta(
+		_values: cool.VectorPrimitivesResponse,
+		// eslint-disable-next-line @typescript-eslint/no-empty-function
+	): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public partListChanged(): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public revalidateCachedParts(): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public forgetRequestsInFlight(): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public clearCachedPart(_partId: cool.VectorPartGuid): void {}
+
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	public clearAllParts(): void {}
 
 	// flip to true for extra bitmap list consistency checks
 	private extraDebugChecks(): boolean {

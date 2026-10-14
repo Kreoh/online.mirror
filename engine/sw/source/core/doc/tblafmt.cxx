@@ -35,6 +35,29 @@
 #include <cellatr.hxx>
 #include <SwStyleNameMapper.hxx>
 #include <hintids.hxx>
+#include <strings.hrc>
+#include "tblwordstylesdata.hxx"
+#include <docsh.hxx>
+#include <algorithm>
+#include <span>
+#include <o3tl/safeint.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/character.hxx>
+#include <o3tl/string_view.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/storagehelper.hxx>
+#include <unotools/streamwrap.hxx>
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/embed/XTransactedObject.hpp>
+#include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <fmtornt.hxx>
 #include <editsh.hxx>
 #include <fmtlsplt.hxx>
@@ -43,6 +66,8 @@
 #include <sal/log.hxx>
 #include <osl/diagnose.h>
 #include <osl/thread.h>
+#include <unotools/syslocale.hxx>
+#include <i18nlangtag/languagetag.hxx>
 
 #include <editeng/adjustitem.hxx>
 #include <editeng/boxitem.hxx>
@@ -410,6 +435,8 @@ SwTableAutoFormat& SwTableAutoFormat::operator=( const SwTableAutoFormat& rNew )
 
     m_aName = rNew.m_aName;
     m_nStrResId = rNew.m_nStrResId;
+    m_aCachedUIName = rNew.m_aCachedUIName;
+    m_aCachedUILanguage = rNew.m_aCachedUILanguage;
     m_bInclFont = rNew.m_bInclFont;
     m_bInclJustify = rNew.m_bInclJustify;
     m_bInclFrame = rNew.m_bInclFrame;
@@ -560,51 +587,67 @@ void SwTableAutoFormat::UpdateToSet(const sal_uInt8 nPos, const bool bCellSpansT
 
     if( SwTableAutoFormatUpdateFlags::Char & eFlags )
     {
+        const bool bDefinedOnly = bool(SwTableAutoFormatUpdateFlags::DefinedOnly & eFlags);
+        auto put = [&rChg, &rSet, bDefinedOnly](AutoFormatItem eItem, const SfxPoolItem& rItem)
+        {
+            if (!bDefinedOnly || rChg.IsDefined(eItem))
+                rSet.Put(rItem);
+        };
+        // With no CJK or CTL font of its own, a box format reuses the Western size, weight
+        // and posture for those scripts; each of those follows its Western source's own
+        // defined state.
+        auto putAsWhich = [&rChg, &rSet, bDefinedOnly](AutoFormatItem eItem, const SfxPoolItem& rItem,
+                                                        sal_uInt16 nWhich)
+        {
+            if (!bDefinedOnly || rChg.IsDefined(eItem))
+                rSet.Put(rItem.CloneSetWhich(nWhich));
+        };
+
         if( IsFont() )
         {
-            rSet.Put( rChg.GetFont() );
-            rSet.Put( rChg.GetHeight() );
-            rSet.Put( rChg.GetWeight() );
-            rSet.Put( rChg.GetPosture() );
+            put( AutoFormatItem::Font, rChg.GetFont() );
+            put( AutoFormatItem::Height, rChg.GetHeight() );
+            put( AutoFormatItem::Weight, rChg.GetWeight() );
+            put( AutoFormatItem::Posture, rChg.GetPosture() );
             // do not insert empty CJK font
             const SvxFontItem& rCJKFont = rChg.GetCJKFont();
             if (!rCJKFont.GetStyleName().isEmpty())
             {
-                rSet.Put( rChg.GetCJKFont() );
-                rSet.Put( rChg.GetCJKHeight() );
-                rSet.Put( rChg.GetCJKWeight() );
-                rSet.Put( rChg.GetCJKPosture() );
+                put( AutoFormatItem::CJKFont, rChg.GetCJKFont() );
+                put( AutoFormatItem::CJKHeight, rChg.GetCJKHeight() );
+                put( AutoFormatItem::CJKWeight, rChg.GetCJKWeight() );
+                put( AutoFormatItem::CJKPosture, rChg.GetCJKPosture() );
             }
             else
             {
-                rSet.Put( rChg.GetHeight().CloneSetWhich(RES_CHRATR_CJK_FONTSIZE) );
-                rSet.Put( rChg.GetWeight().CloneSetWhich(RES_CHRATR_CJK_WEIGHT) );
-                rSet.Put( rChg.GetPosture().CloneSetWhich(RES_CHRATR_CJK_POSTURE) );
+                putAsWhich( AutoFormatItem::Height, rChg.GetHeight(), RES_CHRATR_CJK_FONTSIZE );
+                putAsWhich( AutoFormatItem::Weight, rChg.GetWeight(), RES_CHRATR_CJK_WEIGHT );
+                putAsWhich( AutoFormatItem::Posture, rChg.GetPosture(), RES_CHRATR_CJK_POSTURE );
             }
             // do not insert empty CTL font
             const SvxFontItem& rCTLFont = rChg.GetCTLFont();
             if (!rCTLFont.GetStyleName().isEmpty())
             {
-                rSet.Put( rChg.GetCTLFont() );
-                rSet.Put( rChg.GetCTLHeight() );
-                rSet.Put( rChg.GetCTLWeight() );
-                rSet.Put( rChg.GetCTLPosture() );
+                put( AutoFormatItem::CTLFont, rChg.GetCTLFont() );
+                put( AutoFormatItem::CTLHeight, rChg.GetCTLHeight() );
+                put( AutoFormatItem::CTLWeight, rChg.GetCTLWeight() );
+                put( AutoFormatItem::CTLPosture, rChg.GetCTLPosture() );
             }
             else
             {
-                rSet.Put( rChg.GetHeight().CloneSetWhich(RES_CHRATR_CTL_FONTSIZE) );
-                rSet.Put( rChg.GetWeight().CloneSetWhich(RES_CHRATR_CTL_WEIGHT) );
-                rSet.Put( rChg.GetPosture().CloneSetWhich(RES_CHRATR_CTL_POSTURE) );
+                putAsWhich( AutoFormatItem::Height, rChg.GetHeight(), RES_CHRATR_CTL_FONTSIZE );
+                putAsWhich( AutoFormatItem::Weight, rChg.GetWeight(), RES_CHRATR_CTL_WEIGHT );
+                putAsWhich( AutoFormatItem::Posture, rChg.GetPosture(), RES_CHRATR_CTL_POSTURE );
             }
-            rSet.Put( rChg.GetUnderline() );
-            rSet.Put( rChg.GetOverline() );
-            rSet.Put( rChg.GetCrossedOut() );
-            rSet.Put( rChg.GetContour() );
-            rSet.Put( rChg.GetShadowed() );
-            rSet.Put( rChg.GetColor() );
+            put( AutoFormatItem::Underline, rChg.GetUnderline() );
+            put( AutoFormatItem::Overline, rChg.GetOverline() );
+            put( AutoFormatItem::CrossedOut, rChg.GetCrossedOut() );
+            put( AutoFormatItem::Contour, rChg.GetContour() );
+            put( AutoFormatItem::Shadowed, rChg.GetShadowed() );
+            put( AutoFormatItem::Color, rChg.GetColor() );
         }
         if( IsJustify() )
-            rSet.Put( rChg.GetAdjust() );
+            put( AutoFormatItem::Adjust, rChg.GetAdjust() );
     }
 
     if( !(SwTableAutoFormatUpdateFlags::Box & eFlags) )
@@ -912,6 +955,57 @@ sal_uInt8 SwTableAutoFormat::CountPos(sal_uInt32 nCol, sal_uInt32 nCols, sal_uIn
     return nRet;
 }
 
+sal_uInt8 SwTableAutoFormat::GetTableStyleRowRole(size_t nRow, size_t nRows,
+                                                   const SwTableStyleSettings& rSettings)
+{
+    RowColRole eRole;
+    if (!nRow)
+        eRole = RowColRole::First;
+    else if (nRow + 1 == nRows)
+        eRole = RowColRole::Last;
+    else
+        eRole = (nRow - 1) & 1 ? RowColRole::BandB : RowColRole::BandA;
+
+    if (eRole == RowColRole::First && !rSettings.m_bUseFirstRowStyle)
+        eRole = RowColRole::BandA;
+    else if (eRole == RowColRole::Last && !rSettings.m_bUseLastRowStyle)
+        eRole = RowColRole::BandB;
+
+    if ((eRole == RowColRole::BandA || eRole == RowColRole::BandB) && !rSettings.m_bUseRowBandingStyle)
+        eRole = RowColRole::BandA;
+
+    return static_cast<sal_uInt8>(eRole);
+}
+
+sal_uInt8 SwTableAutoFormat::GetTableStyleColRole(size_t nCol, size_t nCols,
+                                                   const SwTableStyleSettings& rSettings)
+{
+    RowColRole eRole;
+    if (!nCol)
+        eRole = RowColRole::First;
+    else if (nCol + 1 == nCols)
+        eRole = RowColRole::Last;
+    else
+        eRole = (nCol - 1) & 1 ? RowColRole::BandB : RowColRole::BandA;
+
+    if (eRole == RowColRole::First && !rSettings.m_bUseFirstColumnStyle)
+        eRole = RowColRole::BandA;
+    else if (eRole == RowColRole::Last && !rSettings.m_bUseLastColumnStyle)
+        eRole = RowColRole::BandB;
+
+    if ((eRole == RowColRole::BandA || eRole == RowColRole::BandB) && !rSettings.m_bUseColumnBandingStyle)
+        eRole = RowColRole::BandA;
+
+    return static_cast<sal_uInt8>(eRole);
+}
+
+OUString SwTableAutoFormat::MakeDocxStyleId(std::u16string_view rName)
+{
+    if (rName == u"Grid Table Light")
+        return u"TableGridLight"_ustr;
+    return OUString(rName).replaceAll(u" Accent ", u"-Accent").replaceAll(u" ", u"");
+}
+
 void SwTableAutoFormat::SetXObject(rtl::Reference<SwXTextTableStyle> const& xObject)
 {
     m_xUnoTextTableStyle = xObject.get();
@@ -1010,6 +1104,178 @@ SwTableAutoFormat* SwTableAutoFormatTable::FindAutoFormat(const TableStyleName& 
     return nullptr;
 }
 
+SwTableAutoFormat* SwTableAutoFormatTable::FindAutoFormatByUIName(const UIName& rUIName) const
+{
+    for (const auto &rFormat : m_pImpl->m_AutoFormats)
+    {
+        if (rFormat->GetUIName() == rUIName)
+            return rFormat.get();
+    }
+
+    return nullptr;
+}
+
+namespace
+{
+struct CatalogNamePart
+{
+    std::u16string_view aEnglish;
+    TranslateId aTranslateId;
+};
+
+// The families a built-in catalog style name starts with.
+const CatalogNamePart g_aCatalogFamilies[] = {
+    { u"Colorful Grid", STR_TABSTYLE_CATALOG_COLORFUL_GRID },
+    { u"Colorful List", STR_TABSTYLE_CATALOG_COLORFUL_LIST },
+    { u"Colorful Shading", STR_TABSTYLE_CATALOG_COLORFUL_SHADING },
+    { u"Dark List", STR_TABSTYLE_CATALOG_DARK_LIST },
+    { u"Grid Table", STR_TABSTYLE_CATALOG_GRID_TABLE },
+    { u"Grid Table Light", STR_TABSTYLE_CATALOG_GRID_TABLE_LIGHT },
+    { u"Light Grid", STR_TABSTYLE_CATALOG_LIGHT_GRID },
+    { u"Light List", STR_TABSTYLE_CATALOG_LIGHT_LIST },
+    { u"Light Shading", STR_TABSTYLE_CATALOG_LIGHT_SHADING },
+    { u"List Table", STR_TABSTYLE_CATALOG_LIST_TABLE },
+    { u"Medium Grid", STR_TABSTYLE_CATALOG_MEDIUM_GRID },
+    { u"Medium List", STR_TABSTYLE_CATALOG_MEDIUM_LIST },
+    { u"Medium Shading", STR_TABSTYLE_CATALOG_MEDIUM_SHADING },
+    { u"Normal Table", STR_TABSTYLE_CATALOG_NORMAL_TABLE },
+    { u"Plain Table", STR_TABSTYLE_CATALOG_PLAIN_TABLE },
+    { u"Table 3D effects", STR_TABSTYLE_CATALOG_TABLE_3D_EFFECTS },
+    { u"Table Classic", STR_TABSTYLE_CATALOG_TABLE_CLASSIC },
+    { u"Table Colorful", STR_TABSTYLE_CATALOG_TABLE_COLORFUL },
+    { u"Table Columns", STR_TABSTYLE_CATALOG_TABLE_COLUMNS },
+    { u"Table Contemporary", STR_TABSTYLE_CATALOG_TABLE_CONTEMPORARY },
+    { u"Table Elegant", STR_TABSTYLE_CATALOG_TABLE_ELEGANT },
+    { u"Table Grid", STR_TABSTYLE_CATALOG_TABLE_GRID },
+    { u"Table List", STR_TABSTYLE_CATALOG_TABLE_LIST },
+    { u"Table Professional", STR_TABSTYLE_CATALOG_TABLE_PROFESSIONAL },
+    { u"Table Simple", STR_TABSTYLE_CATALOG_TABLE_SIMPLE },
+    { u"Table Subtle", STR_TABSTYLE_CATALOG_TABLE_SUBTLE },
+    { u"Table Theme", STR_TABSTYLE_CATALOG_TABLE_THEME },
+    { u"Table Web", STR_TABSTYLE_CATALOG_TABLE_WEB },
+};
+
+// The variant word that can follow the family and its number.
+const CatalogNamePart g_aCatalogVariants[] = {
+    { u"Light", STR_TABSTYLE_CATALOG_VARIANT_LIGHT },
+    { u"Dark", STR_TABSTYLE_CATALOG_VARIANT_DARK },
+    { u"Colorful", STR_TABSTYLE_CATALOG_VARIANT_COLORFUL },
+};
+
+bool lcl_IsNumber(std::u16string_view rToken)
+{
+    return !rToken.empty()
+           && std::all_of(rToken.begin(), rToken.end(),
+                          [](sal_Unicode c) { return rtl::isAsciiDigit(c); });
+}
+}
+
+SwTableAutoFormat::CatalogGroup SwTableAutoFormat::GetCatalogGroup(const TableStyleName& rName)
+{
+    const OUString& rModelName = rName.toString();
+    if (rModelName.startsWith("Plain Table ") || rModelName == "Table Grid"
+        || rModelName == "Grid Table Light")
+        return CatalogGroup::Plain;
+    if (rModelName.startsWith("Grid Table "))
+        return CatalogGroup::Grid;
+    if (rModelName.startsWith("List Table "))
+        return CatalogGroup::List;
+    return CatalogGroup::None;
+}
+
+UIName SwTableAutoFormat::GetUIName() const
+{
+    // Composing the name takes several translated strings, and a style list looks up every
+    // style by its shown name, so the name is composed once per UI language.
+    const OUString aLanguage = SvtSysLocale().GetUILanguageTag().getBcp47();
+    if (m_aCachedUILanguage != aLanguage)
+    {
+        m_aCachedUIName = GetUIName(m_aName);
+        m_aCachedUILanguage = aLanguage;
+    }
+    return m_aCachedUIName;
+}
+
+UIName SwTableAutoFormat::GetUIName(const TableStyleName& rName)
+{
+    const OUString& rModelName = rName.toString();
+
+    // The longest family that starts the name wins, so that "Grid Table Light" is one family
+    // and not "Grid Table" with a variant.
+    const CatalogNamePart* pFamily = nullptr;
+    for (const CatalogNamePart& rFamily : g_aCatalogFamilies)
+    {
+        if (!rModelName.startsWith(rFamily.aEnglish))
+            continue;
+        if (rModelName.getLength() > sal_Int32(rFamily.aEnglish.size())
+            && rModelName[rFamily.aEnglish.size()] != ' ')
+            continue;
+        if (!pFamily || rFamily.aEnglish.size() > pFamily->aEnglish.size())
+            pFamily = &rFamily;
+    }
+    if (!pFamily)
+        return UIName(rModelName);
+
+    // What follows the family is a number, a variant and an accent, each of them optional
+    // and in this order; anything else means the name is not from the catalog.
+    std::vector<std::u16string_view> aTokens;
+    std::u16string_view aRest = rModelName.subView(pFamily->aEnglish.size());
+    for (size_t nPos = 0; nPos < aRest.size();)
+    {
+        aTokens.push_back(o3tl::getToken(aRest, u' ', nPos));
+        if (aTokens.back().empty())
+            aTokens.pop_back();
+    }
+
+    OUString aNumber;
+    OUString aVariant;
+    OUString aAccent;
+    size_t nToken = 0;
+    if (nToken < aTokens.size() && lcl_IsNumber(aTokens[nToken]))
+    {
+        aNumber = aTokens[nToken];
+        ++nToken;
+    }
+    if (nToken < aTokens.size())
+    {
+        for (const CatalogNamePart& rVariant : g_aCatalogVariants)
+        {
+            if (aTokens[nToken] == rVariant.aEnglish)
+            {
+                aVariant = SwResId(rVariant.aTranslateId);
+                ++nToken;
+                break;
+            }
+        }
+    }
+    if (nToken + 1 < aTokens.size() && aTokens[nToken] == u"Accent"
+        && lcl_IsNumber(aTokens[nToken + 1]))
+    {
+        aAccent = SwResId(STR_TABSTYLE_CATALOG_ACCENT).replaceFirst("%1", aTokens[nToken + 1]);
+        nToken += 2;
+    }
+    if (nToken != aTokens.size())
+        return UIName(rModelName);
+
+    // The translation decides the order of the parts. A missing part leaves two spaces next
+    // to each other, or one at an end, and those are collapsed and trimmed.
+    const OUString aPattern = SwResId(STR_TABSTYLE_CATALOG_NAME)
+                                  .replaceFirst("%FAMILY", SwResId(pFamily->aTranslateId))
+                                  .replaceFirst("%NUMBER", aNumber)
+                                  .replaceFirst("%VARIANT", aVariant)
+                                  .replaceFirst("%ACCENT", aAccent);
+    OUStringBuffer aUIName(aPattern.getLength());
+    for (sal_Int32 i = 0; i < aPattern.getLength(); ++i)
+    {
+        if (aPattern[i] == ' ' && (aUIName.isEmpty() || aUIName[aUIName.getLength() - 1] == ' '))
+            continue;
+        aUIName.append(aPattern[i]);
+    }
+    if (!aUIName.isEmpty() && aUIName[aUIName.getLength() - 1] == ' ')
+        aUIName.setLength(aUIName.getLength() - 1);
+    return UIName(aUIName.makeStringAndClear());
+}
+
 SwTableAutoFormatTable::~SwTableAutoFormatTable() = default;
 
 SwTableAutoFormatTable::SwTableAutoFormatTable(const SwTableAutoFormatTable&) = default;
@@ -1058,6 +1324,201 @@ bool SwTableAutoFormatTable::Save() const
     return m_pImpl->Save();
 }
 
+namespace {
+
+/// Writes one package part as a raw byte stream at the given path, creating any storage levels
+/// the path needs along the way. The part's text arrives in pieces, which are written one
+/// after the other.
+void lcl_WriteWordStylesPackagePart(const cpo::uno::Reference<css::embed::XStorage>& xRoot,
+                                     std::u16string_view sPath,
+                                     std::span<const std::string_view> aPieces)
+{
+    // Every storage level from the root down to this part's own parent needs its own commit
+    // for the part to actually persist - committing only the innermost one leaves the change
+    // invisible to its parent storage.
+    std::vector<cpo::uno::Reference<css::embed::XStorage>> aStorageChain{ xRoot };
+    size_t nStart = 0;
+    for (;;)
+    {
+        const size_t nSlash = sPath.find(u'/', nStart);
+        if (nSlash == std::u16string_view::npos)
+            break;
+        const OUString sSegment(sPath.substr(nStart, nSlash - nStart));
+        aStorageChain.push_back(
+            aStorageChain.back()->openStorageElement(sSegment, css::embed::ElementModes::READWRITE));
+        nStart = nSlash + 1;
+    }
+
+    const OUString sName(sPath.substr(nStart));
+    cpo::uno::Reference<css::io::XStream> xPartStream
+        = aStorageChain.back()->openStreamElement(sName, css::embed::ElementModes::READWRITE);
+    cpo::uno::Reference<css::io::XOutputStream> xOut = xPartStream->getOutputStream();
+    for (const std::string_view& sPiece : aPieces)
+        xOut->writeBytes(cpo::uno::Sequence<sal_Int8>(
+            reinterpret_cast<const sal_Int8*>(sPiece.data()), sPiece.size()));
+    xOut->closeOutput();
+
+    for (auto it = aStorageChain.rbegin(); it != aStorageChain.rend(); ++it)
+    {
+        cpo::uno::Reference<css::embed::XTransactedObject> xTransacted(*it, cpo::uno::UNO_QUERY);
+        if (xTransacted.is())
+            xTransacted->commit();
+    }
+}
+
+/// The same for a part whose text is in one piece.
+void lcl_WriteWordStylesPackagePart(const cpo::uno::Reference<css::embed::XStorage>& xRoot,
+                                     std::u16string_view sPath, std::string_view sContent)
+{
+    lcl_WriteWordStylesPackagePart(xRoot, sPath, std::span<const std::string_view>(&sContent, 1));
+}
+
+/// Builds a minimal in-memory DOCX package from the embedded Word table style catalog (see
+/// tblwordstylesdata.hxx) and returns it as a fresh, seekable input stream ready to hand to the
+/// DOCX import filter.
+cpo::uno::Reference<css::io::XInputStream> lcl_BuildWordTableStylesPackage()
+{
+    // The stream is owned here until the returned OSeekableInputStreamWrapper takes it over at
+    // the end, so it stays alive for as long as the caller holds the returned reference, and
+    // an exception on the way frees it.
+    auto pMemStream = std::make_unique<SvMemoryStream>(64 * 1024, 64 * 1024);
+    cpo::uno::Reference<css::io::XStream> xPackageStream(new utl::OStreamWrapper(*pMemStream));
+
+    // A plain zip: the OFOPXML storage format would generate [Content_Types].xml and the
+    // _rels parts itself from stream properties and refuses those names, while the parts
+    // written here are already complete. The import filter opens the result as a zip too.
+    cpo::uno::Reference<css::embed::XStorage> xRoot
+        = comphelper::OStorageHelper::GetStorageOfFormatFromStream(
+            ZIP_STORAGE_FORMAT_STRING, xPackageStream,
+            css::embed::ElementModes::READWRITE | css::embed::ElementModes::TRUNCATE);
+
+    static constexpr OUString sContentTypesXml
+        = u"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+          u"<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+          u"<Default Extension=\"rels\" "
+          u"ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+          u"<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+          u"<Override PartName=\"/word/document.xml\" "
+          u"ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml."
+          u"document.main+xml\"/>"
+          u"<Override PartName=\"/word/styles.xml\" "
+          u"ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml."
+          u"styles+xml\"/>"
+          u"<Override PartName=\"/word/theme/theme1.xml\" "
+          u"ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>"
+          u"</Types>"_ustr;
+    static constexpr OUString sRootRelsXml
+        = u"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+          u"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+          u"<Relationship Id=\"rId1\" "
+          u"Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+          u"officeDocument\" Target=\"word/document.xml\"/>"
+          u"</Relationships>"_ustr;
+    static constexpr OUString sDocumentRelsXml
+        = u"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+          u"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+          u"<Relationship Id=\"rId1\" "
+          u"Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" "
+          u"Target=\"styles.xml\"/>"
+          u"<Relationship Id=\"rId2\" "
+          u"Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" "
+          u"Target=\"theme/theme1.xml\"/>"
+          u"</Relationships>"_ustr;
+
+    auto toUtf8 = [](const OUString& s) { return OUStringToOString(s, RTL_TEXTENCODING_UTF8); };
+    const OString aContentTypes = toUtf8(sContentTypesXml);
+    const OString aRootRels = toUtf8(sRootRelsXml);
+    const OString aDocumentRels = toUtf8(sDocumentRelsXml);
+
+    lcl_WriteWordStylesPackagePart(xRoot, u"[Content_Types].xml",
+                                    { aContentTypes.getStr(), o3tl::make_unsigned(aContentTypes.getLength()) });
+    lcl_WriteWordStylesPackagePart(xRoot, u"_rels/.rels",
+                                    { aRootRels.getStr(), o3tl::make_unsigned(aRootRels.getLength()) });
+    lcl_WriteWordStylesPackagePart(xRoot, u"word/document.xml", sw::tblwordstylesdata::g_aDocumentXml);
+    lcl_WriteWordStylesPackagePart(xRoot, u"word/styles.xml", sw::tblwordstylesdata::g_aStylesXml);
+    lcl_WriteWordStylesPackagePart(xRoot, u"word/theme/theme1.xml", sw::tblwordstylesdata::g_aTheme1Xml);
+    lcl_WriteWordStylesPackagePart(xRoot, u"word/_rels/document.xml.rels",
+                                    { aDocumentRels.getStr(), o3tl::make_unsigned(aDocumentRels.getLength()) });
+
+    cpo::uno::Reference<css::embed::XTransactedObject> xRootTransacted(xRoot, cpo::uno::UNO_QUERY);
+    if (xRootTransacted.is())
+        xRootTransacted->commit();
+
+    pMemStream->Seek(0);
+    return new utl::OSeekableInputStreamWrapper(pMemStream.release(), /*bOwner=*/true);
+}
+
+/// Loads Word's built-in table style catalog (embedded as a small DOCX package, see
+/// tblwordstylesdata.hxx) through the ordinary DOCX import filter, appending each resulting
+/// style to rTarget - the same conversion path a document defining its own custom table style
+/// already goes through, so no theme or role resolution logic needs reimplementing here.
+void lcl_LoadWordTableStylePresets(std::vector<std::unique_ptr<SwTableAutoFormat>>& rTarget)
+{
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xServiceFactory(
+        comphelper::getProcessServiceFactory());
+    cpo::uno::Reference<cpo::uno::XInterface> xInterface(
+        xServiceFactory->createInstance(u"com.sun.star.comp.Writer.WriterFilter"_ustr),
+        cpo::uno::UNO_SET_THROW);
+    cpo::uno::Reference<css::document::XFilter> xFilter(xInterface, cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XImporter> xImporter(xInterface, cpo::uno::UNO_QUERY_THROW);
+
+    SfxObjectShellLock xDocSh(new SwDocShell(SfxObjectCreateMode::INTERNAL));
+    if (!xDocSh->DoInitNew())
+        return;
+
+    cpo::uno::Reference<css::lang::XComponent> xDstDoc(xDocSh->GetModel(),
+                                                        cpo::uno::UNO_QUERY_THROW);
+    xImporter->setTargetDocument(xDstDoc);
+
+    cpo::uno::Reference<css::io::XInputStream> xPackageStream = lcl_BuildWordTableStylesPackage();
+    const cpo::uno::Sequence<css::beans::PropertyValue> aDescriptor(
+        comphelper::InitPropertySequence({ { u"InputStream"_ustr, cpo::uno::Any(xPackageStream) } }));
+
+    try
+    {
+        if (!xFilter->filter(aDescriptor))
+            return;
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("sw.core", "lcl_LoadWordTableStylePresets");
+        return;
+    }
+
+    SwDoc* pImportedDoc = static_cast<SwDocShell*>(&xDocSh)->GetDoc();
+    if (!pImportedDoc)
+        return;
+
+    // The imported document's own catalog starts as a copy of the module-wide one, so it
+    // carries the built-in default style too; only the styles the import added are new.
+    const SwTableAutoFormatTable& rImportedStyles = pImportedDoc->GetTableStyles();
+    rTarget.reserve(rTarget.size() + rImportedStyles.size());
+    for (size_t i = 0; i < rImportedStyles.size(); ++i)
+    {
+        const SwTableAutoFormat& rStyle = rImportedStyles[i];
+        const bool bAlreadyPresent = std::any_of(rTarget.begin(), rTarget.end(),
+            [&rStyle](const std::unique_ptr<SwTableAutoFormat>& rpExisting)
+            { return rpExisting->GetName() == rStyle.GetName(); });
+        if (bAlreadyPresent)
+            continue;
+        auto pPreset = std::make_unique<SwTableAutoFormat>(rStyle);
+        // These are Word's built-in presets, not user-created styles, like the default one.
+        pPreset->SetUserDefined(false);
+        // The gallery offers the current generation of the catalog, the Plain, Grid and List
+        // tables. The two older generations stay in the catalog for files that refer to
+        // them, but are hidden like a hidden paragraph style.
+        pPreset->SetHidden(pPreset->GetCatalogGroup() == SwTableAutoFormat::CatalogGroup::None);
+        rTarget.push_back(std::move(pPreset));
+    }
+}
+
+/// True while the Word table style catalog is being imported. Importing it runs the DOCX
+/// filter on an internal document, and that document asks the module for the shared table
+/// style catalog in turn, which is the very catalog still being built here.
+bool g_bLoadingWordTableStylePresets = false;
+
+}
+
 void SwTableAutoFormatTable::Impl::Load()
 {
     if (comphelper::IsFuzzing())
@@ -1068,6 +1529,29 @@ void SwTableAutoFormatTable::Impl::Load()
     {
         SfxMedium aStream( sNm, StreamMode::STD_READ );
         Load( *aStream.GetInStream() );
+        return;
+    }
+
+    // SearchFile() only ever finds a user-config or shared-config copy of this file; a
+    // coolwsd kit's per-document jail has no seeded user profile to find one in, so fall back
+    // to Word's own built-in table style catalog, embedded as a small DOCX package (see
+    // tblwordstylesdata.hxx) rather than shipping our own separate style set.
+    //
+    // The internal document that import creates gets a catalog holding only the default
+    // style built above; the styles it imports are copied into this one afterwards.
+    if (g_bLoadingWordTableStylePresets)
+        return;
+    g_bLoadingWordTableStylePresets = true;
+    comphelper::ScopeGuard aResetGuard([] { g_bLoadingWordTableStylePresets = false; });
+
+    try
+    {
+        lcl_LoadWordTableStylePresets(m_AutoFormats);
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        // A failed import leaves the catalog with just the default style.
+        TOOLS_WARN_EXCEPTION("sw.core", "loading the built-in table style catalog");
     }
 }
 
@@ -1180,7 +1664,6 @@ bool SwTableAutoFormatTable::Impl::Save( SvStream& rStream ) const
 
         // Write this version number for all attributes
         SwAfVersions::Write(rStream, AUTOFORMAT_FILE_VERSION);
-
         rStream.WriteUInt16( m_AutoFormats.size() - 1 );
         bRet = ERRCODE_NONE == rStream.GetError();
 

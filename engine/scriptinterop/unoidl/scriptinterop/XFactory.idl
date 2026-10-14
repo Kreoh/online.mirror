@@ -22,8 +22,30 @@ interface XFactory
     XPresentation getActivePresentation();
 
     XDrawing getActiveDrawing();
+
+    string getActiveUserLocale();
+
+    XAffineTransformBuilder newAffineTransformBuilder();
+
+    [overload newBlob] XBlob newBlobBytes([in] sequence<byte> data);
+
+    [overload newBlob] XBlob newBlobBytesType(
+        [in] sequence<byte> data, [in] com::sun::star::beans::Optional<string> contentType);
+
+    [overload newBlob] XBlob newBlobBytesTypeName(
+        [in] sequence<byte> data, [in] com::sun::star::beans::Optional<string> contentType,
+        [in] com::sun::star::beans::Optional<string> name);
+
+    [overload newBlob] XBlob newBlobString([in] string data);
+
+    [overload newBlob] XBlob newBlobStringType(
+        [in] string data, [in] com::sun::star::beans::Optional<string> contentType);
+
+    [overload newBlob] XBlob newBlobStringTypeName(
+        [in] string data, [in] com::sun::star::beans::Optional<string> contentType,
+        [in] com::sun::star::beans::Optional<string> name);
 };
 
 };
 
-/* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

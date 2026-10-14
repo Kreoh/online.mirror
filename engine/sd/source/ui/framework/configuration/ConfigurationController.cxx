@@ -40,7 +40,8 @@
 #include <memory>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 using ::sd::framework::FrameworkHelper;
 
@@ -116,7 +117,7 @@ ConfigurationController::~ConfigurationController() noexcept
 {
 }
 
-void SAL_CALL ConfigurationController::disposing()
+void ConfigurationController::disposing()
 {
     if (mpImplementation == nullptr)
         return;
@@ -136,7 +137,7 @@ void SAL_CALL ConfigurationController::disposing()
 
     // Release the listeners.
     lang::EventObject aEvent;
-    aEvent.Source = uno::Reference<uno::XInterface>(static_cast<cppu::OWeakObject*>(this));
+    aEvent.Source = uno::Reference<cpo::uno::XInterface>(static_cast<cppu::OWeakObject*>(this));
 
     {
         const SolarMutexGuard aSolarGuard;
@@ -466,7 +467,7 @@ void ConfigurationController::ThrowIfDisposed () const
     if (mpImplementation == nullptr)
     {
         OSL_ASSERT(mpImplementation != nullptr);
-        throw RuntimeException(u"ConfigurationController not initialized"_ustr,
+        throw cpo::uno::RuntimeException(u"ConfigurationController not initialized"_ustr,
             const_cast<cpo::uno::XWeak*>(static_cast<const cpo::uno::XWeak*>(this)));
     }
 }

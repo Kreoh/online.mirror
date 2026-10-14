@@ -23,14 +23,15 @@
 
 #include <unonames.hxx>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
 #include <comphelper/propertyvalue.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star;
 
 namespace sc_apitest
@@ -42,7 +43,7 @@ class ScTableConditionalEntryObj : public UnoApiTest,
 public:
     ScTableConditionalEntryObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScTableConditionalEntryObj);
@@ -64,7 +65,7 @@ ScTableConditionalEntryObj::ScTableConditionalEntryObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScTableConditionalEntryObj::init()
+uno::Reference<cpo::uno::XInterface> ScTableConditionalEntryObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 

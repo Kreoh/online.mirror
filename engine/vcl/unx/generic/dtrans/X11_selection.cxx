@@ -21,6 +21,7 @@
 #include <sal/log.hxx>
 
 #include <cstdlib>
+#include <iomanip>
 #include <thread>
 
 #include <salinst.hxx>
@@ -72,6 +73,7 @@
 #include <officecfg/VCL.hxx>
 
 #include <algorithm>
+#include <iomanip>
 
 constexpr auto DRAG_EVENT_MASK = ButtonPressMask |
                               ButtonReleaseMask |
@@ -83,7 +85,7 @@ using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::datatransfer::dnd;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::awt;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::frame;
 using namespace cppu;
@@ -562,16 +564,6 @@ OString SelectionManager::convertToCompound( const OUString& rText )
     {
         aRet = OString(reinterpret_cast<char*>(aProp.value));
         XFree( aProp.value );
-#ifdef __sun
-        /*
-         *  for currently unknown reasons XmbTextListToTextProperty on Solaris returns
-         *  no data in ISO8859-n encodings (at least for n = 1, 15)
-         *  in these encodings the directly converted text does the
-         *  trick, also.
-         */
-        if( aRet.isEmpty() && !rText.isEmpty() )
-            aRet = OUStringToOString( rText, osl_getThreadTextEncoding() );
-#endif
     }
     else
         aRet.clear();
@@ -580,7 +572,7 @@ OString SelectionManager::convertToCompound( const OUString& rText )
 }
 
 bool SelectionManager::convertData(
-                                   const css::uno::Reference< XTransferable >& xTransferable,
+                                   const cpo::uno::Reference< XTransferable >& xTransferable,
                                    Atom nType,
                                    Atom nSelection,
                                    int& rFormat,
@@ -1590,7 +1582,7 @@ bool SelectionManager::handleSelectionRequest(const XSelectionRequestEvent& rReq
     if( pAdaptor &&
         XGetSelectionOwner( m_pDisplay, rRequest.selection ) == m_aWindow )
     {
-        css::uno::Reference< XTransferable > xTrans( pAdaptor->getTransferable() );
+        cpo::uno::Reference< XTransferable > xTrans( pAdaptor->getTransferable() );
         if( rRequest.target == m_nTARGETSAtom )
         {
             // someone requests our types
@@ -1775,7 +1767,7 @@ bool SelectionManager::handleSelectionRequest(const XSelectionRequestEvent& rReq
             dsde.DropAction         = DNDConstants::ACTION_NONE;
             dsde.DropSuccess        = false;
         }
-        css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+        cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
         m_xDragSourceListener.clear();
         aGuard.clear();
         if( xListener.is() )
@@ -2334,7 +2326,7 @@ void SelectionManager::dropComplete( bool bSuccess, ::Window aDropWindow )
             dsde.DragSource         = static_cast< XDragSource* >(this);
             dsde.DropAction         = getUserDragAction();
             dsde.DropSuccess        = bSuccess;
-            css::uno::Reference< XDragSourceListener > xListener = m_xDragSourceListener;
+            cpo::uno::Reference< XDragSourceListener > xListener = m_xDragSourceListener;
             m_xDragSourceListener.clear();
 
             aGuard.clear();
@@ -2414,7 +2406,7 @@ void SelectionManager::sendDragStatus( Atom nDropAction )
         dsde.DropAction         = m_nSourceActions;
         dsde.UserAction         = getUserDragAction();
 
-        css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+        cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
         // caution: do not change anything after this
         aGuard.clear();
         if( xListener.is() )
@@ -2685,7 +2677,7 @@ bool SelectionManager::handleDragEvent( XEvent const & rMessage )
             dsde.DragSource         = static_cast< XDragSource* >(this);
             dsde.DropAction         = m_nTargetAcceptAction;
             dsde.DropSuccess        = m_bDropSuccess;
-            css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+            cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
             m_xDragSourceListener.clear();
             aGuard.clear();
             xListener->dragDropEnd( dsde );
@@ -2749,7 +2741,7 @@ bool SelectionManager::handleDragEvent( XEvent const & rMessage )
             dsde.DragSource         = static_cast< XDragSource* >(this);
             dsde.DropAction         = DNDConstants::ACTION_NONE;
             dsde.DropSuccess        = false;
-            css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+            cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
             m_xDragSourceListener.clear();
             aGuard.clear();
             xListener->dragDropEnd( dsde );
@@ -2876,7 +2868,7 @@ bool SelectionManager::handleDragEvent( XEvent const & rMessage )
                     m_nDropTimeout                  = time( nullptr );
                     // HACK :-)
                     aGuard.clear();
-                    static_cast< X11Clipboard* >( pAdaptor )->setContents( m_xDragSourceTransferable, css::uno::Reference< css::datatransfer::clipboard::XClipboardOwner >() );
+                    static_cast< X11Clipboard* >( pAdaptor )->setContents( m_xDragSourceTransferable, cpo::uno::Reference< css::datatransfer::clipboard::XClipboardOwner >() );
                     aGuard.reset();
                     bCancel = false;
                 }
@@ -2891,7 +2883,7 @@ bool SelectionManager::handleDragEvent( XEvent const & rMessage )
             dsde.DragSource         = static_cast< XDragSource* >(this);
             dsde.DropAction         = DNDConstants::ACTION_NONE;
             dsde.DropSuccess        = false;
-            css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+            cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
             m_xDragSourceListener.clear();
             aGuard.clear();
             xListener->dragDropEnd( dsde );
@@ -3038,7 +3030,7 @@ void SelectionManager::updateDragWindow( int nX, int nY, ::Window aRoot )
 {
     osl::ResettableMutexGuard aGuard( m_aMutex );
 
-    css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+    cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
 
     m_nLastDragX = nX;
     m_nLastDragY = nY;
@@ -3204,8 +3196,8 @@ void SelectionManager::startDrag(
                                  sal_Int8 sourceActions,
                                  sal_Int32,
                                  sal_Int32,
-                                 const css::uno::Reference< XTransferable >& transferable,
-                                 const css::uno::Reference< XDragSourceListener >& listener
+                                 const cpo::uno::Reference< XTransferable >& transferable,
+                                 const cpo::uno::Reference< XDragSourceListener >& listener
                                  )
 {
 #if OSL_DEBUG_LEVEL > 1
@@ -3492,8 +3484,8 @@ void SelectionManager::dragDoDispatch()
     {
         osl::ClearableMutexGuard aGuard(m_aMutex);
 
-        css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
-        css::uno::Reference< XTransferable > xTransferable( m_xDragSourceTransferable );
+        cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+        cpo::uno::Reference< XTransferable > xTransferable( m_xDragSourceTransferable );
         m_xDragSourceListener.clear();
         m_xDragSourceTransferable.clear();
 
@@ -3746,7 +3738,7 @@ void SelectionManager::run( void* pThis )
     timeval aLast;
     gettimeofday( &aLast, nullptr );
 
-    const css::uno::Reference< XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const cpo::uno::Reference< XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     This->m_xDesktop.set( Desktop::create(xContext) );
     This->m_xDesktop->addTerminateListener(This);
 
@@ -3764,7 +3756,7 @@ void SelectionManager::run( void* pThis )
         if( (aNow.tv_sec - aLast.tv_sec) > 0 )
         {
             osl::ClearableMutexGuard aGuard(This->m_aMutex);
-            std::vector< std::pair< SelectionAdaptor*, css::uno::Reference< XInterface > > > aChangeVector;
+            std::vector< std::pair< SelectionAdaptor*, cpo::uno::Reference< XInterface > > > aChangeVector;
 
             for (auto const& selection : This->m_aSelections)
             {
@@ -3774,7 +3766,7 @@ void SelectionManager::run( void* pThis )
                     if( aOwner != selection.second->m_aLastOwner )
                     {
                         selection.second->m_aLastOwner = aOwner;
-                        std::pair< SelectionAdaptor*, css::uno::Reference< XInterface > >
+                        std::pair< SelectionAdaptor*, cpo::uno::Reference< XInterface > >
                             aKeep( selection.second->m_pAdaptor, selection.second->m_pAdaptor->getReference() );
                         aChangeVector.push_back( aKeep );
                     }
@@ -3878,13 +3870,13 @@ bool SelectionManager::handleEvent(const void* pEvent)
     return handleXEvent(*pXEvent);
 }
 
-void SAL_CALL SelectionManager::disposing( const css::lang::EventObject& rEvt )
+void SelectionManager::disposing( const css::lang::EventObject& rEvt )
 {
     if (rEvt.Source == m_xDesktop || rEvt.Source == m_xDisplayConnection->getXWeak())
         shutdown();
 }
 
-void SAL_CALL SelectionManager::queryTermination( const css::lang::EventObject& )
+void SelectionManager::queryTermination( const css::lang::EventObject& )
 {
 }
 
@@ -3893,7 +3885,7 @@ void SAL_CALL SelectionManager::queryTermination( const css::lang::EventObject& 
  * the downing event can be too late if paste are requested during shutdown and ~SfxApplication
  * has been called before vcl is shutdown
  */
-void SAL_CALL SelectionManager::notifyTermination( const css::lang::EventObject& rEvent )
+void SelectionManager::notifyTermination( const css::lang::EventObject& rEvent )
 {
     disposing(rEvent);
 }
@@ -4013,7 +4005,7 @@ void SelectionManager::deregisterDropTarget( ::Window aWindow )
     dsde.DragSource         = static_cast< XDragSource* >(this);
     dsde.DropAction         = DNDConstants::ACTION_NONE;
     dsde.DropSuccess        = false;
-    css::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
+    cpo::uno::Reference< XDragSourceListener > xListener( m_xDragSourceListener );
     m_xDragSourceListener.clear();
     aGuard.clear();
     xListener->dragDropEnd( dsde );
@@ -4023,7 +4015,7 @@ void SelectionManager::deregisterDropTarget( ::Window aWindow )
  *  SelectionAdaptor
  */
 
-css::uno::Reference< XTransferable > SelectionManager::getTransferable() noexcept
+cpo::uno::Reference< XTransferable > SelectionManager::getTransferable() noexcept
 {
     return m_xDragSourceTransferable;
 }
@@ -4037,7 +4029,7 @@ void SelectionManager::fireContentsChanged() noexcept
 {
 }
 
-css::uno::Reference< XInterface > SelectionManager::getReference() noexcept
+cpo::uno::Reference< XInterface > SelectionManager::getReference() noexcept
 {
     return getXWeak();
 }
@@ -4079,8 +4071,8 @@ sal_Int32 SelectionManagerHolder::getDefaultCursor( sal_Int8 dragAction )
 void SelectionManagerHolder::startDrag(
                                        const css::datatransfer::dnd::DragGestureEvent& trigger,
                                        sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
-                                       const css::uno::Reference< css::datatransfer::XTransferable >& transferable,
-                                       const css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
+                                       const cpo::uno::Reference< css::datatransfer::XTransferable >& transferable,
+                                       const cpo::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
                                        )
 {
     if( m_xRealDragSource.is() )

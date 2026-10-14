@@ -199,6 +199,20 @@
 	display: none;
 }
 
+#backstage-sidebar-common-break.backstage-sidebar-item {
+	height: 2px;
+	background-color: var(--color-toolbar-border);
+	padding: 0;
+	cursor: default;
+	/* Starts under the icons of the entries. Ends level with the break at the foot of the
+	   sidebar. */
+	margin-inline-start: 24px;
+	margin-inline-end: 20px;
+	/* The gap in the tab list and the margin of an entry add 6px more, so the line has 14px of
+	   space above and below. */
+	margin-block: 8px;
+}
+
 #backstage-sidebar-horizontal-break.backstage-sidebar-item {
 	height: 2px;
 	background-color: var(--color-toolbar-border);
@@ -209,6 +223,7 @@
 	margin-inline-end: 20px;
 }
 
+#backstage-quit.backstage-sidebar-item,
 #backstage-options.backstage-sidebar-item,
 #backstage-about.backstage-sidebar-item {
 	justify-content: center;
@@ -372,7 +387,7 @@
 	justify-content: center;
 	align-items: end;
 	background: transparent;
-	flex: 1;
+	flex: 0 0 auto;
 }
 
 .template-thumbnail img {
@@ -396,9 +411,10 @@
 	font-weight: 500;
 	margin-top: 10px;
 	width: 100%;
-	white-space: nowrap;
+	white-space: normal;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	text-wrap: balance;
 }
 
 .backstage-template-explorer {
@@ -815,6 +831,28 @@
 .backstage-open-tile-icon svg {
 	width: 100%;
 	height: 100%;
+}
+
+/* Cloud service logos. These are fixed-colour artwork drawn as a background
+ * image, so a branding can point them at its own logo. The bare class draws the
+ * generic cloud; each service adds its own image on top of it. */
+.backstage-cloud-icon {
+	background-image: url('images/cloud-providers/generic.svg');
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: contain;
+}
+
+.backstage-cloud-icon-nextcloud {
+	background-image: url('images/cloud-providers/nextcloud.svg');
+}
+
+.backstage-cloud-icon-opencloud {
+	background-image: url('images/cloud-providers/opencloud.svg');
+}
+
+.backstage-cloud-icon-seafile {
+	background-image: url('images/cloud-providers/seafile.svg');
 }
 
 .backstage-open-tile-label {

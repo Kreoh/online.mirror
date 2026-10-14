@@ -114,6 +114,23 @@ export class Point {
 		return this;
 	}
 
+	/// How far the point lies from the origin, which for a direction is its length.
+	public length(): number {
+		return Math.sqrt(this.x * this.x + this.y * this.y);
+	}
+
+	/// The cross product with the other one: positive where the other lies on the side the y axis
+	/// turns to from this one, negative on the other side, zero where both lie on one line.
+	public cross(point: Point): number {
+		return this.x * point.y - this.y * point.x;
+	}
+
+	/// The dot product with the other one: how far this one reaches along the other, times the
+	/// length of the other.
+	public dot(point: Point): number {
+		return this.x * point.x + this.y * point.y;
+	}
+
 	public distanceTo(point: Point): number {
 		point = Point.toPoint(point);
 

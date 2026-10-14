@@ -33,7 +33,7 @@ namespace svt::table
 {
 
 
-    using css::uno::Reference;
+    using cpo::uno::Reference;
     using css::awt::grid::XGridColumn;
     using cpo::uno::Exception;
     using css::awt::grid::XGridColumnListener;
@@ -46,7 +46,7 @@ namespace svt::table
     namespace
     {
         template< class T1, class T2 >
-        void lcl_set( Reference< XGridColumn > const & i_column, void ( SAL_CALL XGridColumn::*i_setter )( T1 ),
+        void lcl_set( Reference< XGridColumn > const & i_column, void ( XGridColumn::*i_setter )( T1 ),
             T2 i_value )
         {
             try
@@ -60,7 +60,7 @@ namespace svt::table
         }
 
         template< class ATTRIBUTE_TYPE >
-        ATTRIBUTE_TYPE lcl_get( Reference< XGridColumn > const & i_column, ATTRIBUTE_TYPE ( SAL_CALL XGridColumn::*i_getter )() )
+        ATTRIBUTE_TYPE lcl_get( Reference< XGridColumn > const & i_column, ATTRIBUTE_TYPE ( XGridColumn::*i_getter )() )
         {
             ATTRIBUTE_TYPE value = ATTRIBUTE_TYPE();
             try
@@ -93,10 +93,10 @@ namespace svt::table
         virtual ~ColumnChangeMultiplexer() override;
 
         // XGridColumnListener
-        virtual void SAL_CALL columnChanged( const GridColumnEvent& i_event ) override;
+        virtual void columnChanged( const GridColumnEvent& i_event ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const EventObject& i_event ) override;
+        virtual void disposing( const EventObject& i_event ) override;
 
     private:
         UnoGridColumnFacade* m_pColumnImplementation;
@@ -121,7 +121,7 @@ namespace svt::table
     }
 
 
-    void SAL_CALL ColumnChangeMultiplexer::columnChanged( const GridColumnEvent& i_event )
+    void ColumnChangeMultiplexer::columnChanged( const GridColumnEvent& i_event )
     {
         if ( i_event.AttributeName == "DataColumnIndex" )
         {
@@ -154,7 +154,7 @@ namespace svt::table
     }
 
 
-    void SAL_CALL ColumnChangeMultiplexer::disposing( const EventObject& )
+    void ColumnChangeMultiplexer::disposing( const EventObject& )
     {
     }
 
@@ -165,7 +165,7 @@ namespace svt::table
     UnoGridColumnFacade::UnoGridColumnFacade( UnoControlTableModel const & i_owner, Reference< XGridColumn > const & i_gridColumn )
         :m_pOwner( &i_owner )
         ,m_nDataColumnIndex( -1 )
-        ,m_xGridColumn( i_gridColumn, css::uno::UNO_SET_THROW )
+        ,m_xGridColumn( i_gridColumn, cpo::uno::UNO_SET_THROW )
         ,m_pChangeMultiplexer( new ColumnChangeMultiplexer( *this ) )
     {
         m_xGridColumn->addGridColumnListener( m_pChangeMultiplexer );

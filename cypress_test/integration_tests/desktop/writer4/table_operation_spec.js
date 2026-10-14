@@ -6,9 +6,15 @@ var mode = Cypress.env('USER_INTERFACE');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', { testIsolation: false }, function() {
 
+	// The Table tab of the notebookbar holds ten groups. In the 1000px wide
+	// window Cypress opens by default the overflow manager has to fold every
+	// one of them, which puts the row and column sizing buttons the tests
+	// below click into the hidden overflow container. A normal desktop width
+	// keeps them on the tab itself.
 	desktopHelper.shareDocumentAcrossTests('writer/table_operation.odt', {
 		notebookbar: true,
 		caretToDocumentStart: true,
+		viewport: [1280, 800],
 	});
 
 	before(function() {
@@ -202,7 +208,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', { testI
 
 	function minimalRowHeightTest(parentClass) {
 		prepareForTableSizeTests(parentClass);
+		cy.cGet(parentClass + ' #rowsizing .unoSetOptimalRowHeight').should('not.have.attr','disabled');
 		cy.cGet(parentClass + ' #rowsizing .unoSetOptimalRowHeight').click();
+		cy.cGet(parentClass + ' #rowsizing .unoSetMinimalRowHeight').should('not.have.attr','disabled');
 		cy.cGet(parentClass + ' #rowsizing .unoSetMinimalRowHeight').click();
 
 		selectFullTable();
@@ -252,6 +260,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', { testI
 
 	function minimalColumnWidthTest(parentClass) {
 		prepareForTableSizeTests(parentClass);
+		cy.cGet(parentClass + ' #columnsizing .unoSetMinimalColumnWidth').should('not.have.attr','disabled');
 		cy.cGet(parentClass + ' #columnsizing .unoSetMinimalColumnWidth').click();
 
 		selectFullTable();
@@ -261,6 +270,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', { testI
 
 	function optimalColumnWidthTest(parentClass) {
 		prepareForTableSizeTests(parentClass);
+		cy.cGet(parentClass + ' #columnsizing .unoSetOptimalColumnWidth').should('not.have.attr','disabled');
 		cy.cGet(parentClass + ' #columnsizing .unoSetOptimalColumnWidth').click();
 
 		selectFullTable();
@@ -271,6 +281,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Table operations', { testI
 
 	function distributeColumnsTest(parentClass) {
 		prepareForTableSizeTests(parentClass);
+		cy.cGet(parentClass + ' #columnsizing .unoDistributeColumns').should('not.have.attr','disabled');
 		cy.cGet(parentClass + ' #columnsizing .unoDistributeColumns').click();
 
 		selectFullTable();

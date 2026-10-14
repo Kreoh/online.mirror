@@ -13,14 +13,12 @@
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using ::cpo::uno::Sequence;
 using ::com::sun::star::beans::Property;
 
@@ -140,9 +138,9 @@ cpo::uno::Sequence<OUString> BoxWhiskerChartType::getSupportedServiceNames()
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_chart_BoxWhiskerChartType_get_implementation(
-    css::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ::chart::BoxWhiskerChartType);
 }

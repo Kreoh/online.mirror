@@ -49,6 +49,7 @@ $(eval $(call gb_Library_use_libraries,oox,\
     i18nlangtag \
     msfilter \
     sal \
+    salhelper \
     sax \
     sfx \
     svl \
@@ -289,6 +290,7 @@ $(eval $(call gb_Library_add_exception_objects,oox,\
     oox/source/ppt/EmbeddedFontListContext \
     oox/source/ppt/headerfootercontext \
     oox/source/ppt/layoutfragmenthandler \
+    oox/source/ppt/moderncommentsfragmenthandler \
     oox/source/ppt/pptfilterhelpers \
     oox/source/ppt/pptgraphicshapecontext \
     oox/source/ppt/pptimport \

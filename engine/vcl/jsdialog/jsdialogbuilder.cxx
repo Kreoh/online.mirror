@@ -74,11 +74,11 @@ public:
     JSDropTargetDropContext() {}
 
     // XDropTargetDropContext
-    virtual void SAL_CALL acceptDrop(sal_Int8 /*dragOperation*/) override {}
+    virtual void acceptDrop(sal_Int8 /*dragOperation*/) override {}
 
-    virtual void SAL_CALL rejectDrop() override {}
+    virtual void rejectDrop() override {}
 
-    virtual void SAL_CALL dropComplete(bool /*bSuccess*/) override {}
+    virtual void dropComplete(bool /*bSuccess*/) override {}
 };
 }
 
@@ -89,7 +89,7 @@ JSDropTarget::JSDropTarget() {}
 void JSDropTarget::initialize(const cpo::uno::Sequence<cpo::uno::Any>& /*rArgs*/) {}
 
 void JSDropTarget::addDropTargetListener(
-    const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& xListener)
+    const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& xListener)
 {
     std::unique_lock aGuard(m_aMutex);
 
@@ -97,7 +97,7 @@ void JSDropTarget::addDropTargetListener(
 }
 
 void JSDropTarget::removeDropTargetListener(
-    const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& xListener)
+    const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& xListener)
 {
     std::unique_lock aGuard(m_aMutex);
 
@@ -131,7 +131,7 @@ cpo::uno::Sequence<OUString> JSDropTarget::getSupportedServiceNames()
 void JSDropTarget::fire_drop(const css::datatransfer::dnd::DropTargetDropEvent& dtde)
 {
     std::unique_lock aGuard(m_aMutex);
-    std::vector<css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> aListeners(
+    std::vector<cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> aListeners(
         m_aListeners);
     aGuard.unlock();
 
@@ -144,7 +144,7 @@ void JSDropTarget::fire_drop(const css::datatransfer::dnd::DropTargetDropEvent& 
 void JSDropTarget::fire_dragEnter(const css::datatransfer::dnd::DropTargetDragEnterEvent& dtde)
 {
     std::unique_lock aGuard(m_aMutex);
-    std::vector<css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> aListeners(
+    std::vector<cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> aListeners(
         m_aListeners);
     aGuard.unlock();
 
@@ -274,7 +274,7 @@ JSInstanceBuilder::JSInstanceBuilder(weld::Widget* pParent, vcl::Window* pVclPar
                                      std::u16string_view rUIRoot, const OUString& rUIFile,
                                      JSInstanceBuilder::Type eBuilderType, sal_uInt64 nKitWindowId,
                                      const std::u16string_view& sTypeOfJSON,
-                                     const css::uno::Reference<css::frame::XFrame>& rFrame)
+                                     const cpo::uno::Reference<css::frame::XFrame>& rFrame)
     : SalInstanceBuilder(pVclParent ? pVclParent : extract_sal_widget(pParent), rUIRoot, rUIFile,
                          rFrame)
     , m_nWindowId(0)
@@ -328,7 +328,7 @@ std::unique_ptr<JSInstanceBuilder> JSInstanceBuilder::CreateDialogBuilder(weld::
 
 std::unique_ptr<JSInstanceBuilder> JSInstanceBuilder::CreateNotebookbarBuilder(
     vcl::Window* pParent, const OUString& rUIRoot, const OUString& rUIFile,
-    const css::uno::Reference<css::frame::XFrame>& rFrame, sal_uInt64 nWindowId)
+    const cpo::uno::Reference<css::frame::XFrame>& rFrame, sal_uInt64 nWindowId)
 {
     return std::make_unique<JSInstanceBuilder>(nullptr, pParent, rUIRoot, rUIFile,
                                                JSInstanceBuilder::Type::Notebookbar, nWindowId, u"",
@@ -378,6 +378,15 @@ JSInstanceBuilder::CreateAddressInputBuilder(vcl::Window* pParent, const OUStrin
     return std::make_unique<JSInstanceBuilder>(nullptr, pParent, rUIRoot, rUIFile,
                                                JSInstanceBuilder::Type::Formulabar, nKitWindowId,
                                                u"addressinputfield");
+}
+
+std::unique_ptr<JSInstanceBuilder>
+JSInstanceBuilder::CreateNotesPanelBuilder(vcl::Window* pParent, const OUString& rUIRoot,
+                                           const OUString& rUIFile, sal_uInt64 nKitWindowId)
+{
+    return std::make_unique<JSInstanceBuilder>(nullptr, pParent, rUIRoot, rUIFile,
+                                               JSInstanceBuilder::Type::Formulabar, nKitWindowId,
+                                               u"notespanel");
 }
 
 JSInstanceBuilder::~JSInstanceBuilder()
@@ -893,6 +902,9 @@ std::unique_ptr<weld::CustomWidget> JSInstanceBuilder::weld_custom_widget(const 
 std::unique_ptr<weld::Widget> JSInstanceBuilder::weld_widget(const OUString& id)
 {
     vcl::Window* pWidget = m_xBuilder->get(id);
+    assert(!dynamic_cast<VclGrid*>(pWidget)
+           && "a grid needs weld_container or weld_grid, not weld_widget");
+    assert(!dynamic_cast<VclFrame*>(pWidget) && "a frame needs weld_frame, not weld_widget");
     auto pWeldWidget
         = pWidget ? std::make_unique<JSWidgetInstance>(this, pWidget, this, false) : nullptr;
 
@@ -907,6 +919,30 @@ std::unique_ptr<weld::Image> JSInstanceBuilder::weld_image(const OUString& id)
     FixedImage* pImage = m_xBuilder->get<FixedImage>(id);
 
     auto pWeldWidget = pImage ? std::make_unique<JSImage>(this, pImage, this, false) : nullptr;
+
+    if (pWeldWidget)
+        RememberWidget(id, pWeldWidget.get());
+
+    return pWeldWidget;
+}
+
+std::unique_ptr<weld::ProgressBar> JSInstanceBuilder::weld_progress_bar(const OUString& id)
+{
+    ::ProgressBar* pProgressBar = m_xBuilder->get<::ProgressBar>(id);
+
+    auto pWeldWidget
+        = pProgressBar ? std::make_unique<JSProgressBar>(this, pProgressBar, this, false) : nullptr;
+
+    if (pWeldWidget)
+        RememberWidget(id, pWeldWidget.get());
+
+    return pWeldWidget;
+}
+
+std::unique_ptr<weld::Scale> JSInstanceBuilder::weld_scale(const OUString& id)
+{
+    ::Slider* pSlider = m_xBuilder->get<::Slider>(id);
+    auto pWeldWidget = pSlider ? std::make_unique<JSScale>(this, pSlider, this, false) : nullptr;
 
     if (pWeldWidget)
         RememberWidget(id, pWeldWidget.get());
@@ -1729,7 +1765,7 @@ void JSToolbar::set_item_icon_name(const OUString& rIdent, const OUString& rIcon
 }
 
 void JSToolbar::set_item_image(const OUString& rIdent,
-                               const css::uno::Reference<css::graphic::XGraphic>& rImage)
+                               const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
 {
     SalInstanceToolbar::set_item_image(rIdent, rImage);
     if (rIdent == u".uno:ChartColorPalette"_ustr)
@@ -1991,6 +2027,12 @@ void JSTreeView::set_column_header_name(int nColumn, const OUString& rName)
     sendUpdate();
 }
 
+void JSTreeView::clear_column_header_names()
+{
+    SalInstanceTreeView::clear_column_header_names();
+    sendUpdate();
+}
+
 void JSTreeView::render_entry(int pos, int dpiscale)
 {
     ScopedVclPtrInstance<VirtualDevice> pDevice(DeviceFormat::WITHOUT_ALPHA);
@@ -2000,6 +2042,10 @@ void JSTreeView::render_entry(int pos, int dpiscale)
     SvTreeListEntry* pEntry = m_xTreeView->GetEntryAtAbsPos(pos);
     if (!pEntry)
     {
+        // See JSIconView::render_entry: a stale position from a list rebuilt while this
+        // request was in flight should not be dropped silently, or the client is left
+        // waiting for an image that will never arrive.
+        sendUpdate(true);
         return;
     }
 
@@ -2091,7 +2137,15 @@ void JSIconView::render_entry(int pos, int dpiscale)
 {
     OUString sImage = m_xIconView->renderEntry(pos, dpiscale);
     if (sImage.isEmpty())
+    {
+        // The entry list can be rebuilt concurrently with a render request that is still
+        // in flight (for example a notebookbar style gallery reacting to a style sheet
+        // change), so the requested position may no longer resolve to an entry by the time
+        // this runs. Resend the current state instead of dropping the request, so the
+        // client rebuilds its placeholders and asks again for whatever is there now.
+        sendUpdate(true);
         return;
+    }
 
     std::unique_ptr<jsdialog::ActionDataMap> pMap = std::make_unique<jsdialog::ActionDataMap>();
     (*pMap)[ACTION_TYPE ""_ostr] = u"rendered_entry"_ustr;
@@ -2139,7 +2193,7 @@ void JSMenuButton::set_image(VirtualDevice* pDevice)
     sendUpdate();
 }
 
-void JSMenuButton::set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage)
+void JSMenuButton::set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
 {
     SalInstanceMenuButton::set_image(rImage);
     sendUpdate();
@@ -2244,6 +2298,15 @@ JSCustomWidget::JSCustomWidget(JSDialogSender* pSender, VclCustomWidget* pWidget
 
 void JSCustomWidget::send_update() { sendUpdate(); }
 
+void JSCustomWidget::send_update_action()
+{
+    std::unique_ptr<jsdialog::ActionDataMap> pData = std::make_unique<jsdialog::ActionDataMap>();
+    // The edit engine widget is the only client-rendered widget that patches itself in place, so
+    // the action type is fixed here. A second such widget would need this made per-widget.
+    (*pData)[ACTION_TYPE ""_ostr] = u"updateeditengine"_ustr;
+    sendAction(std::move(pData));
+}
+
 JSImage::JSImage(JSDialogSender* pSender, FixedImage* pImage, SalInstanceBuilder* pBuilder,
                  bool bTakeOwnership)
     : JSWidget<SalInstanceImage, FixedImage>(pSender, pImage, pBuilder, bTakeOwnership)
@@ -2256,7 +2319,7 @@ void JSImage::set_image(VirtualDevice* pDevice)
     sendUpdate();
 }
 
-void JSImage::set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage)
+void JSImage::set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
 {
     SalInstanceImage::set_image(rImage);
     sendUpdate();
@@ -2265,6 +2328,25 @@ void JSImage::set_image(const css::uno::Reference<css::graphic::XGraphic>& rImag
 void JSImage::set_from_icon_name(const OUString& rIconName)
 {
     SalInstanceImage::set_from_icon_name(rIconName);
+    sendUpdate();
+}
+
+JSProgressBar::JSProgressBar(JSDialogSender* pSender, ::ProgressBar* pProgressBar,
+                             SalInstanceBuilder* pBuilder, bool bTakeOwnership)
+    : JSWidget<SalInstanceProgressBar, ::ProgressBar>(pSender, pProgressBar, pBuilder,
+                                                      bTakeOwnership)
+{
+}
+
+void JSProgressBar::set_percentage(int nValue)
+{
+    SalInstanceProgressBar::set_percentage(nValue);
+    sendUpdate();
+}
+
+void JSProgressBar::set_text(const OUString& rText)
+{
+    SalInstanceProgressBar::set_text(rText);
     sendUpdate();
 }
 
@@ -2277,6 +2359,30 @@ JSLevelBar::JSLevelBar(JSDialogSender* pSender, ::ProgressBar* pProgressBar,
 void JSLevelBar::set_percentage(double fPercentage)
 {
     SalInstanceLevelBar::set_percentage(fPercentage);
+    sendUpdate();
+}
+
+JSScale::JSScale(JSDialogSender* pSender, ::Slider* pSlider, SalInstanceBuilder* pBuilder,
+                 bool bTakeOwnership)
+    : JSWidget<SalInstanceScale, ::Slider>(pSender, pSlider, pBuilder, bTakeOwnership)
+{
+}
+
+void JSScale::set_value(int nValue)
+{
+    SalInstanceScale::set_value(nValue);
+    sendUpdate();
+}
+
+void JSScale::set_range(int nMin, int nMax)
+{
+    SalInstanceScale::set_range(nMin, nMax);
+    sendUpdate();
+}
+
+void JSScale::set_increments(int nStep, int nPage)
+{
+    SalInstanceScale::set_increments(nStep, nPage);
     sendUpdate();
 }
 

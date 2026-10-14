@@ -23,10 +23,11 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 IndexEntrySupplierWrapper::IndexEntrySupplierWrapper()
 {
-    const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
     try {
         m_xIES = i18n::IndexEntrySupplier::create(xContext);

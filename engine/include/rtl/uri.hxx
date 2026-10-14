@@ -18,17 +18,17 @@
  */
 #pragma once
 
-#include "rtl/malformeduriexception.hxx"
-#include "rtl/uri.h"
-#include "rtl/textenc.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
+#include <rtl/malformeduriexception.hxx>
+#include <rtl/uri.h>
+#include <rtl/textenc.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <string_view>
-#include "config_global.h"
+#include <config_global.h>
 
 namespace rtl {
 
@@ -69,13 +69,13 @@ public:
         rtl::OUString const & rBaseUriRef, rtl::OUString const & rRelUriRef);
 
 private:
-    Uri() SAL_DELETED_FUNCTION;
+    Uri() = delete;
 
-    Uri(Uri &) SAL_DELETED_FUNCTION;
+    Uri(Uri &) = delete;
 
-    ~Uri() SAL_DELETED_FUNCTION;
+    ~Uri() = delete;
 
-    void operator =(Uri) SAL_DELETED_FUNCTION;
+    void operator =(Uri) = delete;
 };
 
 inline rtl::OUString Uri::encode(rtl::OUString const & rText,

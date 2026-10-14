@@ -43,6 +43,7 @@ class SwTabCols;
 class SvxBrushItem;
 class SvxFrameDirectionItem;
 class SwTableAutoFormat;
+struct SwTableStyleSettings;
 class SwFrame;
 class SwFormatFrameSize;
 class SwFormatRowSplit;
@@ -215,7 +216,7 @@ private:
     /// table copied to the clipboard by the last private copy
     bool m_bTableCopied;
 
-    SwFlyFrame *FindFlyFrame( const css::uno::Reference < css::embed::XEmbeddedObject >&  ) const;
+    SwFlyFrame *FindFlyFrame( const cpo::uno::Reference < css::embed::XEmbeddedObject >&  ) const;
 
     /// Terminate actions for all shells and call ChangeLink.
     void EndAllActionAndCall();
@@ -300,6 +301,8 @@ public:
     /// Same as IsObjSelectable(), but return the object as well.
     SdrObject* GetObjAt(const Point& rPt);
     bool IsInsideSelectedObj( const Point& rPt );    ///< returns enum values
+    /** Returns true if it is background object, and is covered by text at the given point. */
+    bool IsTextOverBgObjectAt(const Point& rPt, const SdrObject* pObj);
     /** Test if there is a draw object at that position and if it should be selected.
      The 'should' is aimed at Writer text fly frames which may be in front of
      the draw object. */
@@ -408,8 +411,18 @@ public:
     SwFrameFormat* GetSelectedFrameFormat() const; ///< If frame then frame style, else 0.
     void SetFrameFormat( SwFrameFormat *pFormat, bool bKeepOrient = false, Point const * pDocPos = nullptr ); ///< If frame then set frame style.
 
-    // Get selected fly
+    // Get selected fly. With several graphic fly frames selected this is the first one.
     SW_DLLPUBLIC SwFlyFrame* GetSelectedFlyFrame() const;
+
+    // Every selected fly frame in mark order. Empty when any marked object is not a fly frame.
+    SW_DLLPUBLIC std::vector<SwFlyFrame*> GetSelectedFlyFrames() const;
+
+    // True when more than one fly frame is selected.
+    SW_DLLPUBLIC bool IsMultipleFlyFramesSelected() const;
+
+    // True when the object at the given point is a graphic fly frame and the selection holds
+    // only graphic fly frames, so the object may join the selection.
+    bool CanAddGraphicToSelection( const Point& rPt ) const;
 
     // Get current fly in which the cursor is positioned
     SW_DLLPUBLIC SwFlyFrame* GetCurrFlyFrame(const bool bCalcFrame = true) const;
@@ -443,7 +456,21 @@ public:
      If the values are not allowed, the formatting clips and determines scaling.
      See CalcAndSetScale().
      The @return value is the applied size. */
-    Size RequestObjectResize( const SwRect &rRect, const css::uno::Reference < css::embed::XEmbeddedObject >& );
+    Size RequestObjectResize( const SwRect &rRect, const cpo::uno::Reference < css::embed::XEmbeddedObject >& );
+
+    /// Returns the size that the layout takes a relative width and a relative height in rSize of
+    /// the selected frame as percentages of, or an empty size when no frame is selected.
+    Size GetFlyPercentReference(const SwFormatFrameSize& rSize) const;
+
+    /** Resize the caption frame around the selected frame, so that the selected frame gets rSize
+     instead of rOldSize. Only the sides that differ between the two sizes change.
+     The selected frame is in a caption frame when it has a relative width and is anchored to the
+     only paragraph of that frame, which contains the caption number.
+     @return false if the selected frame is not in a caption frame, if the caption frame has a
+     relative width, or if the width of the selected frame is relative to the page.
+     rUpdateHeightPercent becomes true when the selected frame has a relative height that the
+     caption frame does not take, so that relative height still has to match the new height. */
+    bool SetCaptionFlySize(const Size& rSize, const Size& rOldSize, bool& rUpdateHeightPercent);
 
     /// The layout has been changed, so the active object has to be moved after that
     virtual void MoveObjectIfActive( svt::EmbeddedObjectRef& xObj, const Point& rOffset );
@@ -472,7 +499,7 @@ public:
     UIName GetFlyName() const;
 
     /// get reference to OLE object (if there is one) for selected FlyFrame
-    css::uno::Reference < css::embed::XEmbeddedObject > GetOleRef() const;
+    cpo::uno::Reference < css::embed::XEmbeddedObject > GetOleRef() const;
 
     /// Created unique name for frame.
     SW_DLLPUBLIC UIName GetUniqueGrfName() const;
@@ -599,10 +626,7 @@ public:
     // --> #i972#
     /** for starmath formulas anchored 'as char' it aligns it baseline to baseline
      changing the previous vertical orientation */
-    void AlignFormulaToBaseline( const css::uno::Reference < css::embed::XEmbeddedObject >& xObj );
-
-    /// aligns all formulas with anchor 'as char' to baseline
-    void AlignAllFormulasToBaseline();
+    void AlignFormulaToBaseline( const cpo::uno::Reference < css::embed::XEmbeddedObject >& xObj );
 
     /// Provide information about content situated closes to given Point.
     Point GetContentPos( const Point& rPoint, bool bNext ) const;
@@ -631,8 +655,8 @@ public:
 
     SW_DLLPUBLIC const SwRect& GetAnyCurRect( CurRectType eType,
                                  const Point* pPt = nullptr,
-                                 const css::uno::Reference < css::embed::XEmbeddedObject >& =
-                                 css::uno::Reference < css::embed::XEmbeddedObject >() ) const;
+                                 const cpo::uno::Reference < css::embed::XEmbeddedObject >& =
+                                 cpo::uno::Reference < css::embed::XEmbeddedObject >() ) const;
 
     /// Page number of the page containing Point, O if no page.
     sal_uInt16 GetPageNumber( const Point &rPoint ) const;
@@ -743,13 +767,26 @@ public:
     SW_DLLPUBLIC bool SetTableStyle(const SwTableAutoFormat& rNew);
     SW_DLLPUBLIC bool ResetTableStyle();
 
-    /// Update the direct formatting according to the current table style.
+    /// Resolve the table's style live again (SwDoc::ApplyTableStyleLive), after a
+    /// structural change or to apply another style.
     /// @param pTableNode Table node to update.  When nullptr, current cursor position is used.
-    /// @param bResetDirect Reset direct formatting that might be applied to the cells.
-    /// @param pStyleName new style to apply
+    /// @param bResetDirect Replace the cells' own border and background with the style's.
+    /// @param pStyleName new style to apply (an empty name removes the style); nullptr keeps
+    ///        the current one. Applying a style resets the cells like bResetDirect does.
     bool UpdateTableStyleFormatting(SwTableNode *pTableNode = nullptr, bool bResetDirect = false, TableStyleName const* pStyleName = nullptr);
 
     SW_DLLPUBLIC bool GetTableAutoFormat( SwTableAutoFormat& rGet );
+
+    /// Apply a named table style to the whole current table, live: the table keeps the style
+    /// name and its current row/column role settings (see SetTableStyleSettingsLive), and
+    /// cells resolve their box border and background from it instead of having those values
+    /// baked in. Tracked by undo. Returns false if the cursor isn't in a table.
+    SW_DLLPUBLIC bool SetTableStyleLive(const TableStyleName& rStyleName);
+
+    /// Change which of the current table style's row/column roles apply to the whole current
+    /// table (header row, total row, banded rows/columns, first/last column). Tracked by
+    /// undo. Returns false if the cursor isn't in a table.
+    SW_DLLPUBLIC bool SetTableStyleSettingsLive(const SwTableStyleSettings& rSettings);
 
     void SetColRowWidthHeight( TableChgWidthHeightType eType, sal_uInt16 nDiff );
 

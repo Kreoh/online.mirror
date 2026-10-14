@@ -64,7 +64,8 @@
 #include <txtfrm.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -551,7 +552,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testInsertFileInInputFieldException)
     xCursor->goLeft(1, false);
     // try to insert some random file
     // inserting even asserts in debug builds - document model goes invalid with input field split across 2 nodes
-    CPPUNIT_ASSERT_THROW(xInsertable->insertDocumentFromURL(createFileURL(u"fdo75110.odt"), {}), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xInsertable->insertDocumentFromURL(createFileURL(u"fdo75110.odt"), {}), cpo::uno::RuntimeException);
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testTdf67238)
@@ -826,6 +827,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testFdo69893)
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testFdo70807)
 {
     createSwDoc("fdo70807.odt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
 
     uno::Reference<container::XIndexAccess> xStylesIter(getStyles(u"PageStyles"_ustr), uno::UNO_QUERY);
 
@@ -849,6 +851,17 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testFdo70807)
         CPPUNIT_ASSERT_EQUAL(expectedUserDefined, xStyle->isUserDefined());
         CPPUNIT_ASSERT_EQUAL(expectedUsedStyle, xStyle->isInUse());
     }
+
+    // tdf#60632: Turn on Bulleting. We want to test if this can be repeated.
+    dispatchCommand(mxComponent, u".uno:DefaultNumbering"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(!getProperty<OUString>(getParagraph(1), u"NumberingStyleName"_ustr).isEmpty());
+
+    pWrtShell->Down(/*bSelect=*/false);
+    dispatchCommand(mxComponent, u".uno:Repeat"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(u"2."_ustr, getProperty<OUString>(getParagraph(2), u"ListLabelString"_ustr));
+    CPPUNIT_ASSERT(!getProperty<OUString>(getParagraph(2), u"NumberingStyleName"_ustr).isEmpty());
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testImportRTF)
@@ -1350,7 +1363,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testChineseConversionBlank)
     createSwDoc();
     SwDoc* pDoc = getSwDoc();
     SwView* pView = getSwDocShell()->GetView();
-    const uno::Reference< uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
     SwNodeIndex aIdx(pDoc->GetNodes().GetEndOfContent(), -1);
     SwPaM aPaM(aIdx);
 
@@ -1374,7 +1387,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testChineseConversionNonChineseText)
     createSwDoc();
     SwDoc* pDoc = getSwDoc();
     SwView* pView = getSwDocShell()->GetView();
-    const uno::Reference< uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
     SwNodeIndex aIdx(pDoc->GetNodes().GetEndOfContent(), -1);
     SwPaM aPaM(aIdx);
     pDoc->getIDocumentContentOperations().InsertString(aPaM, NON_CHINESE_CONTENT);
@@ -1399,7 +1412,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testChineseConversionTraditionalToSimplifie
     createSwDoc();
     SwDoc* pDoc = getSwDoc();
     SwView* pView = getSwDocShell()->GetView();
-    const uno::Reference< uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
     SwNodeIndex aIdx(pDoc->GetNodes().GetEndOfContent(), -1);
     SwPaM aPaM(aIdx);
     pDoc->getIDocumentContentOperations().InsertString(aPaM, OUString(CHINESE_TRADITIONAL_CONTENT));
@@ -1424,7 +1437,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest, testChineseConversionSimplifiedToTraditiona
     createSwDoc();
     SwDoc* pDoc = getSwDoc();
     SwView* pView = getSwDocShell()->GetView();
-    const uno::Reference< uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
     SwNodeIndex aIdx(pDoc->GetNodes().GetEndOfContent(), -1);
     SwPaM aPaM(aIdx);
     pDoc->getIDocumentContentOperations().InsertString(aPaM, OUString(CHINESE_SIMPLIFIED_CONTENT));

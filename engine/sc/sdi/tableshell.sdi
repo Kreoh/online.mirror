@@ -12,6 +12,15 @@ interface Table
     SID_DATABASE_SETTINGS [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
     SID_REMOVE_CALCTABLE  [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
     SID_TABLE_TOTALROW    [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_RESIZE_CALCTABLE  [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_RENAME_CALCTABLE  [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_CONVERT_CALCTABLE_TO_RANGE [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_SET_DEFAULT_TABLE_STYLE [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_NEW_TABLE_STYLE      [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_CLEAR_TABLE_STYLE    [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_SUMMARIZE_WITH_PIVOT [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_REMOVE_DUPLICATES [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
+    SID_DUPLICATE_TABLE_STYLE [ ExecMethod = ExecuteDatabaseSettings; StateMethod = GetDatabaseSettings; ]
 }
 
 shell ScTableShell

@@ -46,11 +46,12 @@
 #include "resultsetforquery.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace chelp;
 
 // Content Implementation.
 
-Content::Content( const uno::Reference< uno::XComponentContext >& rxContext,
+Content::Content( const uno::Reference< cpo::uno::XComponentContext >& rxContext,
                   ::ucbhelper::ContentProviderImplHelper* pProvider,
                   const uno::Reference< ucb::XContentIdentifier >&
                       Identifier,
@@ -67,7 +68,7 @@ Content::~Content()
 }
 
 // virtual
-cpo::uno::Any SAL_CALL Content::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any Content::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet;
     return aRet.hasValue() ? aRet : ContentImplHelper::queryInterface( rType );
@@ -78,7 +79,7 @@ cpo::uno::Any SAL_CALL Content::queryInterface( const cpo::uno::Type & rType )
 XTYPEPROVIDER_COMMON_IMPL( Content );
 
 // virtual
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL Content::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > Content::getTypes()
 {
     static cppu::OTypeCollection ourTypeCollection(
                    CPPU_TYPE_REF( lang::XTypeProvider ),
@@ -98,13 +99,13 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL Content::getTypes()
 // XServiceInfo methods.
 
 // virtual
-OUString SAL_CALL Content::getImplementationName()
+OUString Content::getImplementationName()
 {
     return u"CHelpContent"_ustr;
 }
 
 // virtual
-cpo::uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > Content::getSupportedServiceNames()
 {
     return { u"com.sun.star.ucb.CHelpContent"_ustr };
 }
@@ -112,7 +113,7 @@ cpo::uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
 // XContent methods.
 
 // virtual
-OUString SAL_CALL Content::getContentType()
+OUString Content::getContentType()
 {
     return MYUCP_CONTENT_TYPE;
 }
@@ -120,7 +121,7 @@ OUString SAL_CALL Content::getContentType()
 // XCommandProcessor methods.
 
 //virtual
-void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
+void Content::abort( sal_Int32 /*CommandId*/ )
 {
 }
 
@@ -131,7 +132,7 @@ class ResultSetForRootFactory
 {
 private:
 
-    uno::Reference< uno::XComponentContext >     m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     uno::Reference< ucb::XContentProvider >      m_xProvider;
     cpo::uno::Sequence< beans::Property >             m_seq;
     URLParameter                                 m_aURLParameter;
@@ -140,7 +141,7 @@ private:
 public:
 
     ResultSetForRootFactory(
-        uno::Reference< uno::XComponentContext > xContext,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         uno::Reference< ucb::XContentProvider > xProvider,
         const cpo::uno::Sequence< beans::Property >& seq,
         const URLParameter& rURLParameter,
@@ -168,7 +169,7 @@ class ResultSetForQueryFactory
 {
 private:
 
-    uno::Reference< uno::XComponentContext >     m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     uno::Reference< ucb::XContentProvider >      m_xProvider;
     cpo::uno::Sequence< beans::Property >             m_seq;
     URLParameter                                 m_aURLParameter;
@@ -177,7 +178,7 @@ private:
 public:
 
     ResultSetForQueryFactory(
-        uno::Reference< uno::XComponentContext > xContext,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         uno::Reference< ucb::XContentProvider > xProvider,
         const cpo::uno::Sequence< beans::Property >& seq,
         const URLParameter& rURLParameter,
@@ -203,7 +204,7 @@ public:
 }
 
 // virtual
-cpo::uno::Any SAL_CALL Content::execute(
+cpo::uno::Any Content::execute(
         const ucb::Command& aCommand,
         sal_Int32,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )

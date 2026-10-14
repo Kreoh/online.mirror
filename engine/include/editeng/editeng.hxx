@@ -25,7 +25,7 @@
 
 #include <optional>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/i18n/WordType.hpp>
 #include <com/sun/star/i18n/CharacterIteratorMode.hpp>
 
@@ -113,6 +113,9 @@ class LinkParamNone;
 class DrawPortionInfo;
 class DrawBulletInfo;
 class StripPortionsHelper;
+enum class SdrCompatibilityFlag;
+class Outliner;
+enum class ParaFlag;
 
 /** values for:
        SfxItemSet GetAttribs( const ESelection& rSel, EditEngineAttribs nOnlyHardAttrib = EditEngineAttribs::All );
@@ -158,7 +161,7 @@ public:
     typedef std::vector<EditView*> ViewsType;
 
     SAL_DLLPRIVATE EditSelection InsertText(
-        css::uno::Reference<css::datatransfer::XTransferable > const & rxDataObj,
+        cpo::uno::Reference<css::datatransfer::XTransferable > const & rxDataObj,
         const OUString& rBaseURL, const EditPaM& rPaM, bool bUseSpecial,
         SotClipboardFormatId format = SotClipboardFormatId::NONE);
 
@@ -177,7 +180,7 @@ private:
     SAL_DLLPRIVATE const ParaPortion* FindParaPortion(ContentNode const * pNode) const;
     SAL_DLLPRIVATE const ParaPortion* GetPrevVisPortion(const ParaPortion* pCurPortion) const;
 
-    SAL_DLLPRIVATE css::uno::Reference<css::datatransfer::XTransferable>
+    SAL_DLLPRIVATE cpo::uno::Reference<css::datatransfer::XTransferable>
             CreateTransferable(const EditSelection& rSelection);
 
     SAL_DLLPRIVATE EditPaM EndOfWord(const EditPaM& rPaM);
@@ -200,6 +203,7 @@ private:
     SAL_DLLPRIVATE void SetInSelectionMode(bool b);
 
 public:
+    EditEngine(Outliner* pEngOwner, SfxItemPool* pItemPool);
     EditEngine(SfxItemPool* pItemPool);
     virtual ~EditEngine();
 
@@ -309,10 +313,10 @@ public:
     void            Clear();
     void            SetText( const OUString& rStr );
 
-    std::unique_ptr<EditTextObject> CreateTextObject();
-    SAL_DLLPRIVATE std::unique_ptr<EditTextObject> GetEmptyTextObject();
-    std::unique_ptr<EditTextObject> CreateTextObject( sal_Int32 nPara, sal_Int32 nParas = 1 );
-    std::unique_ptr<EditTextObject> CreateTextObject( const ESelection& rESelection );
+    EditTextObject CreateTextObject();
+    SAL_DLLPRIVATE EditTextObject GetEmptyTextObject();
+    EditTextObject CreateTextObject( sal_Int32 nPara, sal_Int32 nParas = 1 );
+    EditTextObject CreateTextObject( const ESelection& rESelection );
     void            SetText( const EditTextObject& rTextObject );
 
     SAL_DLLPRIVATE void            RemoveParagraph(sal_Int32 nPara);
@@ -321,7 +325,7 @@ public:
 
     void            SetText(sal_Int32 nPara, const OUString& rText);
 
-    virtual void        SetParaAttribs( sal_Int32 nPara, const SfxItemSet& rSet );
+    void            SetParaAttribs( sal_Int32 nPara, const SfxItemSet& rSet );
     const SfxItemSet&   GetParaAttribs( sal_Int32 nPara ) const;
 
     /// Set attributes from rSet an all characters of nPara.
@@ -422,6 +426,10 @@ public:
     const ScalingParameters & getScalingParameters() const;
 
     SAL_DLLPRIVATE void setRoundFontSizeToPt(bool bRound);
+    SAL_DLLPRIVATE void setLineSpacingBelowBaseline(bool bBelow);
+    SAL_DLLPRIVATE bool isLineSpacingBelowBaseline() const;
+    SAL_DLLPRIVATE void setTextFitting(EETextFitting eFitting);
+    SAL_DLLPRIVATE void setTextFittingHeight(tools::Long nHeight);
 
     void            SetItemPool( SfxItemPool* pPool );
     SfxItemPool*    GetItemPool() const;
@@ -439,12 +447,12 @@ public:
 
     void            EraseVirtualDevice();
 
-    void            SetSpeller( css::uno::Reference<
+    void            SetSpeller( cpo::uno::Reference<
                             css::linguistic2::XSpellChecker > const &xSpeller );
-    SAL_DLLPRIVATE css::uno::Reference<
+    SAL_DLLPRIVATE cpo::uno::Reference<
         css::linguistic2::XSpellChecker > const &
                     GetSpeller();
-    void            SetHyphenator( css::uno::Reference<
+    void            SetHyphenator( cpo::uno::Reference<
                             css::linguistic2::XHyphenator > const & xHyph );
 
     void GetAllMisspellRanges( std::vector<editeng::MisspellRanges>& rRanges ) const;
@@ -484,7 +492,7 @@ public:
 
     bool            IsRightToLeft( sal_Int32 nPara ) const;
 
-    css::uno::Reference<css::datatransfer::XTransferable> CreateTransferable(const ESelection& rSelection);
+    cpo::uno::Reference<css::datatransfer::XTransferable> CreateTransferable(const ESelection& rSelection);
 
     // MT: Can't create new virtual functions like for ParagraphInserted/Deleted, must be compatible in SRC638, change later...
     SAL_DLLPRIVATE void            SetBeginMovingParagraphsHdl( const Link<MoveParagraphsInfo&,void>& rLink );
@@ -492,25 +500,24 @@ public:
     SAL_DLLPRIVATE void            SetBeginPasteOrDropHdl( const Link<PasteOrDropInfos&,void>& rLink );
     void            SetEndPasteOrDropHdl( const Link<PasteOrDropInfos&,void>& rLink );
 
-    virtual void    ProcessFirstLineOfParagraph(sal_Int32 nPara, const Point& rStartPos, OutputDevice& rOutDev, StripPortionsHelper& rStripPortionsHelper);
+    void    ProcessFirstLineOfParagraph(sal_Int32 nPara, const Point& rStartPos, OutputDevice& rOutDev, StripPortionsHelper& rStripPortionsHelper);
 
-    virtual void    ParagraphInserted( sal_Int32 nNewParagraph );
-    virtual void    ParagraphDeleted( sal_Int32 nDeletedParagraph );
-    virtual void    ParagraphConnected( sal_Int32 nLeftParagraph, sal_Int32 nRightParagraph );
-    virtual void    ParaAttribsChanged( sal_Int32 nParagraph );
-    virtual void    StyleSheetChanged( SfxStyleSheet* pStyle );
+    void    ParagraphInserted( sal_Int32 nNewParagraph );
+    void    ParagraphDeleted( sal_Int32 nDeletedParagraph, sal_Int16 nNumberingDepth, bool bIsPage );
+    void    ParagraphConnected( sal_Int32 nLeftParagraph, sal_Int32 nRightParagraph );
+    void    ParaAttribsChanged( sal_Int32 nParagraph );
+    void    StyleSheetChanged( SfxStyleSheet* pStyle );
     SAL_DLLPRIVATE void            ParagraphHeightChanged( sal_Int32 nPara );
 
-    virtual OUString  GetUndoComment( sal_uInt16 nUndoId ) const;
+    OUString  GetUndoComment( sal_uInt16 nUndoId ) const;
     virtual bool    SpellNextDocument();
     /** @return true, when click was consumed. false otherwise. */
     virtual bool    FieldClicked( const SvxFieldItem& rField );
     virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rTxtColor, std::optional<Color>& rFldColor, std::optional<FontLineStyle>& rFldLineStyle );
 
-    // override this if access to bullet information needs to be provided
-    virtual const SvxNumberFormat * GetNumberFormat( sal_Int32 nPara ) const;
+    const SvxNumberFormat * GetNumberFormat( sal_Int32 nPara ) const;
 
-    virtual tools::Rectangle GetBulletArea( sal_Int32 nPara );
+    tools::Rectangle GetBulletArea( sal_Int32 nPara );
 
     static rtl::Reference<SfxItemPool> CreatePool();
     static SfxItemPool& GetGlobalItemPool();
@@ -522,7 +529,7 @@ public:
     SAL_DLLPRIVATE static vcl::Font CreateFontFromItemSet( const SfxItemSet& rItemSet, SvtScriptType nScriptType );
     SAL_DLLPRIVATE static SvxFont  CreateSvxFontFromItemSet( const SfxItemSet& rItemSet );
     SAL_DLLPRIVATE static bool     IsPrintable( sal_Unicode c ) { return ( ( c >= 32 ) && ( c != 127 ) ); }
-    static bool     HasValidData( const css::uno::Reference< css::datatransfer::XTransferable >& rTransferable );
+    static bool     HasValidData( const cpo::uno::Reference< css::datatransfer::XTransferable >& rTransferable );
     /** sets a link that is called at the beginning of a drag operation at an edit view */
     SAL_DLLPRIVATE void            SetBeginDropHdl( const Link<EditView*,void>& rLink );
     SAL_DLLPRIVATE Link<EditView*,void> const & GetBeginDropHdl() const;
@@ -531,8 +538,9 @@ public:
     SAL_DLLPRIVATE void            SetEndDropHdl( const Link<EditView*,void>& rLink );
     SAL_DLLPRIVATE Link<EditView*,void> const & GetEndDropHdl() const;
 
-    /// specifies if auto-correction should capitalize the first word or not (default is on)
-    void            SetFirstWordCapitalization( bool bCapitalize );
+    /** specifies if auto-correction should capitalize the start of a sentence
+        or not (default is on) */
+    void            SetCapitalizeSentenceStart( bool bCapitalize );
 
     /** specifies if auto-correction should replace a leading single quotation
         mark (apostrophe) or not (default is on) */
@@ -633,6 +641,34 @@ public:
 
     void SetKitSpecialPaperSize(const Size& rSize);
     const Size& GetKitSpecialPaperSize() const;
+
+    // Only useful when this is Outliner capable.
+    sal_Int16       GetNumberingDepth( sal_Int32 nPara ) const;
+    void            SetNumberingDepth( sal_Int32 nPara, sal_Int16 nDepth );
+    sal_Int16       GetNumberingStartValue(sal_Int32 nPara) const;
+    void            SetNumberingStartValue( sal_Int32 nPara, sal_Int16 nNumberingStartValue );
+    bool            IsNumberingRestart(sal_Int32 nPara) const;
+    void            SetNumberingRestart( sal_Int32 nPara, bool bRestart );
+    void SetBulletText(sal_Int32 nPara, const OUString& rText);
+    void SetBulletSize(sal_Int32 nPara, Size const& rSize, ScalingParameters const& rScalingParameters);
+    Size const& GetBulletSize(sal_Int32 nPara) const;
+    const OUString& GetBulletText(sal_Int32 nPara) const;
+    bool IsBulletInvalid(sal_Int32 nPara, ScalingParameters const& rCurrentScalingParameters) const;
+    void InvalidateBulletSize(sal_Int32 nPara);
+    void SetParaFlag( sal_Int32 nPara, ParaFlag nFlag );
+    // clears existing flags and sets new flag(s)
+    void ClearAndSetParaFlag( sal_Int32 nPara, ParaFlag nFlag );
+    void RemoveParaFlag( sal_Int32 nPara, ParaFlag nFlag );
+    bool HasParaFlag( sal_Int32 nPara, ParaFlag nFlag ) const;
+    ParaFlag GetParaFlag( sal_Int32 nPara ) const;
+    bool IsBulletVisible( sal_Int32 nPara ) const;
+    void SetBulletVisible( sal_Int32 nPara, bool bVisible );
+
+    // Only useful when this is Outliner capable.
+    void SetIgnoreBreakAfterMultilineField(bool b);
+
+    // Only useful when this is Outliner capable.
+    Outliner* GetOwner();
 };
 
 #endif // INCLUDED_EDITENG_EDITENG_HXX

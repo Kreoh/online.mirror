@@ -26,7 +26,7 @@
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 /// anonymous implementation namespace
 namespace
@@ -36,21 +36,21 @@ class CreateDialogFactoryService
 {
 public:
     // css::lang::XServiceInfo:
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.sheet.comp.CreateDialogFactoryService"_ustr;
     }
-    virtual bool SAL_CALL supportsService(const OUString& serviceName) override
+    virtual bool supportsService(const OUString& serviceName) override
     {
         return cppu::supportsService(this, serviceName);
     }
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.sheet.CreateDialogFactoryService"_ustr };
     }
 
     // XUnoTunnel
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
     getSomething(const ::cpo::uno::Sequence<::sal_Int8>& /*aIdentifier*/) override
     {
         static ScAbstractDialogFactory_Impl aFactory;
@@ -61,9 +61,9 @@ public:
 } // closing anonymous implementation namespace
 
 extern "C" {
-SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_sheet_CreateDialogFactoryService_get_implementation(
-    css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new CreateDialogFactoryService);
 }

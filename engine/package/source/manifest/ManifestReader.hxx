@@ -24,9 +24,7 @@
 #include <com/sun/star/packages/manifest/XManifestReader.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
-namespace com::sun::star {
-    namespace uno { class XComponentContext; }
-}
+namespace cpo::uno { class XComponentContext; }
 
 class ManifestReader: public ::cppu::WeakImplHelper
 <
@@ -35,18 +33,18 @@ class ManifestReader: public ::cppu::WeakImplHelper
 >
 {
 private:
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 public:
-    ManifestReader( const css::uno::Reference< css::uno::XComponentContext > & xContext );
+    ManifestReader( const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext );
     virtual ~ManifestReader() override;
 
     // XManifestReader
-    virtual cpo::uno::Sequence< cpo::uno::Sequence< css::beans::PropertyValue > > SAL_CALL readManifestSequence( const css::uno::Reference< css::io::XInputStream >& rStream ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Sequence< css::beans::PropertyValue > > readManifestSequence( const cpo::uno::Reference< css::io::XInputStream >& rStream ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 #endif
 

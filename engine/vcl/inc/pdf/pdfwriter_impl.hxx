@@ -393,6 +393,8 @@ struct PDFDest
     sal_Int32                   m_nPage;
     PDFWriter::DestAreaType     m_eType;
     tools::Rectangle                   m_aRect;
+    /// index into m_aStructure, -1 when the target is not tagged
+    sal_Int32 m_nStructElement = -1;
 };
 
 //--->i56629
@@ -613,6 +615,10 @@ struct PDFStructureElement
     std::map<PDFWriter::StructAttribute, PDFStructureAttribute >
                                                         m_aAttributes;
     ::std::vector<sal_Int32>                            m_AnnotIds;
+    // what the content in this element refers to, as indexes into the structure vector
+    std::vector<sal_Int32> m_RefElements;
+    // a Link has one annotation per line, and per fly gap
+    std::vector<sal_Int32> m_LinkAnnotIds;
     tools::Rectangle                                    m_aBBox;
     OUString                                            m_aActualText;
     OUString                                            m_aAltText;
@@ -670,6 +676,29 @@ struct StreamRedirect
     MapMode         m_aMapMode;
     tools::Rectangle       m_aTargetRect;
     ResourceDict    m_aResourceDict;
+};
+
+/** Where the cross-reference has to point to reach an object.
+
+    ISO 32000-2 7.5.8.3 Table 18 calls these the type 1 and type 2 entries: an object written
+    into the file has a byte offset, one written into an object stream names that stream and its
+    index in it.
+ */
+struct ObjectLocation
+{
+    sal_uInt64 m_nOffset = SAL_MAX_UINT64;
+    /// the object stream holding it, 0 when the object stands in the file
+    sal_Int32 m_nObjectStream = 0;
+    sal_Int32 m_nIndex = 0;
+
+    bool isCompressed() const { return m_nObjectStream != 0; }
+};
+
+/// An object built but not yet written, held until its object stream is full.
+struct PendingObject
+{
+    sal_Int32 m_nObject;
+    OString m_aBody;
 };
 
 // graphics state
@@ -743,8 +772,10 @@ private:
     MapMode                             m_aMapMode; // PDFWriterImpl scaled units
     StyleSettings                       m_aWidgetStyleSettings;
     std::vector< pdf::PDFPage >         m_aPages;
-    /* maps object numbers to file offsets (needed for xref) */
-    std::vector< sal_uInt64 >           m_aObjects;
+    /* maps object numbers to where they were written (needed for xref) */
+    std::vector<pdf::ObjectLocation> m_aObjects;
+    /* objects waiting to be flushed into an object stream, with their numbers */
+    std::vector<pdf::PendingObject> m_aCompressedObjects;
     /* contains Bitmaps until they are written to the
      *  file stream as XObjects*/
     std::list< pdf::BitmapEmit >        m_aBitmaps;
@@ -774,7 +805,7 @@ private:
 
     /* makes correctly encoded for export to PDF URLS
     */
-    css::uno::Reference< css::util::XURLTransformer > m_xTrans;
+    cpo::uno::Reference< css::util::XURLTransformer > m_xTrans;
     /* maps arbitrary link ids for structure attributes to real link ids
        (for setLinkPropertyId)
     */
@@ -799,8 +830,12 @@ private:
      */
     bool                                m_bEmitStructure;
     /* role map of struct tree root */
-    std::unordered_map< OString, OString >
-                                        m_aRoleMap;
+    struct RoleMapEntry
+    {
+        OString m_aTag;
+        OString m_aAsked; ///< the alias it was claimed for, which may differ
+    };
+    std::unordered_map<OString, RoleMapEntry> m_aRoleMap;
     /* structure elements (object ids) that should have ID */
     std::unordered_set<sal_Int32> m_StructElemObjsWithID;
 
@@ -895,7 +930,14 @@ private:
     /* the buffer where the data are encrypted, dynamically allocated */
     std::vector<sal_uInt8>                  m_vEncryptionBuffer;
 
-    void addRoleMap(const OString& aAlias, vcl::pdf::StructElement eType);
+    /// Whether the name is a standard structure type's at this PDF version.
+    [[nodiscard]] bool isStandardStructureName(std::string_view aName);
+    /// The name the element carries: the alias, or the first indexed name beside it that
+    /// no standard type and no other alias has taken.
+    [[nodiscard]] OString claimRoleName(const OString& rAlias, vcl::pdf::StructElement eType);
+
+    void appendStringObject(OStringBuffer& rLine, std::string_view aBytes,
+                            sal_Int32 nObject) override;
 
     void checkAndEnableStreamEncryption( sal_Int32 nObject ) override;
 
@@ -909,6 +951,9 @@ private:
     void enableStringEncryption( sal_Int32 nObject );
 
 private:
+    sal_Int32 convertStructureAttribute(enum pdf::PDFWriter::StructAttribute eAttr,
+                                        sal_Int32 nValue);
+
     /* creates fonts and subsets that will be emitted later */
     void registerGlyph(const sal_GlyphId, const vcl::font::PhysicalFontFace*, const LogicalFontInstance* pFont, const std::vector<sal_Ucs>&, sal_Int32, sal_uInt8&, sal_Int32&);
     void registerSimpleGlyph(const sal_GlyphId, const vcl::font::PhysicalFontFace*, const LogicalFontInstance*, const std::vector<sal_Ucs>&, sal_Int32, sal_uInt8&, sal_Int32&);
@@ -1000,6 +1045,10 @@ private:
     sal_Int32 emitResources();
     // appends a dest
     bool appendDest( sal_Int32 nDestID, OStringBuffer& rBuffer );
+    /// ISO 14289-2 requires a GoTo action to name the structure element, not only the page
+    bool appendStructureDest(sal_Int32 nDestID, OStringBuffer& rBuffer);
+    /// writes /Dest, or the GoTo action carrying /SD when the target is tagged
+    void appendDestOrGoTo(sal_Int32 nDestID, OStringBuffer& rBuffer);
     // write all links
     bool emitLinkAnnotations();
     // Write all screen annotations.
@@ -1007,7 +1056,7 @@ private:
 
     void emitTextAnnotationLine(OStringBuffer & aLine, pdf::PDFNoteEntry const & rNote,
                                 std::map<sal_uInt64, sal_Int32> const & rAnnotIdToObject);
-    static void emitStateChangeAnnotationLine(OStringBuffer & aLine, pdf::PDFNoteEntry const & rNote);
+    void emitStateChangeAnnotationLine(OStringBuffer& aLine, pdf::PDFNoteEntry const& rNote);
     static void emitPopupAnnotationLine(OStringBuffer & aLine, pdf::PDFPopupAnnotation const & rPopUp);
     // write all notes
     bool emitNoteAnnotations();
@@ -1034,7 +1083,7 @@ private:
     // the maximum array elements allowed for PDF array object
     static const sal_uInt32 ncMaxPDFArraySize = 8191;
     //check if internal dummy container are needed in the structure elements
-    void addInternalStructureContainer( pdf::PDFStructureElement& rEle );
+    void addInternalStructureContainer(sal_Int32 nEle);
     //<---i94258
     // writes namespaces
     void emitNamespaces();
@@ -1055,6 +1104,23 @@ private:
     sal_Int32 emitEncrypt();
     // writes xref and trailer
     bool emitTrailer();
+    /// whether this file may carry object streams and a cross-reference stream
+    bool useObjectStreams() const;
+    /// what encrypts a string as an object is built, and nothing for an object bound for a stream
+    std::shared_ptr<pdf::IPDFEncryptor> getStringEncryptor(sal_Int32 nObject);
+#ifndef NDEBUG
+    /// objects whose strings went in plain, checked once the last object stream is flushed
+    std::unordered_set<sal_Int32> m_aPlainStringObjects;
+#endif
+    /// writes a whole object, into an object stream where the file may have one; a body
+    /// holding strings takes its encryptor from getStringEncryptor
+    bool writeObject(sal_Int32 nObject, std::string_view aBody);
+    /// writes an object's body into the pending object stream rather than into the file
+    bool writeCompressedObject(sal_Int32 nObject, std::string_view aBody);
+    /// flushes the objects waiting in m_aCompressedObjects as one /Type/ObjStm
+    bool emitObjectStream();
+    /// writes the cross-reference as a stream, the only form that can reach an object stream
+    bool emitXRefStream(std::string_view aTrailerEntries);
     // emits info dict (if applicable)
     sal_Int32 emitInfoDict( );
 
@@ -1147,7 +1213,7 @@ private:
     void appendStrokingColor( const Color& rColor, OStringBuffer& rBuffer );
     void appendNonStrokingColor( const Color& rColor, OStringBuffer& rBuffer );
 public:
-    PDFWriterImpl( const pdf::PDFWriter::PDFWriterContext& rContext, const css::uno::Reference< css::beans::XMaterialHolder >&, pdf::PDFWriter& );
+    PDFWriterImpl( const pdf::PDFWriter::PDFWriterContext& rContext, const cpo::uno::Reference< css::beans::XMaterialHolder >&, pdf::PDFWriter& );
     ~PDFWriterImpl() override;
     void dispose() override;
 
@@ -1321,6 +1387,8 @@ public:
     sal_Int32 createDest( const tools::Rectangle& rRect, sal_Int32 nPageNr, pdf::PDFWriter::DestAreaType eType );
     sal_Int32 registerDestReference( sal_Int32 nDestId, const tools::Rectangle& rRect, sal_Int32 nPageNr, pdf::PDFWriter::DestAreaType eType );
     void      setLinkDest( sal_Int32 nLinkId, sal_Int32 nDestId );
+    void setDestStructureElement(sal_Int32 nDestId, sal_Int32 nStructElementId);
+    void addStructureRef(sal_Int32 nElementId, sal_Int32 nRefElementId);
     void      setLinkURL( sal_Int32 nLinkId, const OUString& rURL );
     void      setLinkPropertyId( sal_Int32 nLinkId, sal_Int32 nPropertyId );
 

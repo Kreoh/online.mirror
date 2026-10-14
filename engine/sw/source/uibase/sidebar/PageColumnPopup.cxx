@@ -20,7 +20,7 @@
 #include "PageColumnControl.hxx"
 #include <vcl/toolbox.hxx>
 
-PageColumnPopup::PageColumnPopup(const css::uno::Reference<css::uno::XComponentContext>& rContext)
+PageColumnPopup::PageColumnPopup(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : PopupWindowController(rContext, nullptr, OUString())
 {
 }
@@ -64,9 +64,9 @@ cpo::uno::Sequence<OUString> PageColumnPopup::getSupportedServiceNames()
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 lo_writer_PageColumnToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire(new PageColumnPopup(rContext));

@@ -112,9 +112,9 @@
 	position: sticky;
 	padding: 0;
 }
-.ui-toolbar > div > div {
+.ui-toolbar:not(.ui-overflow-group-popup) > div > div {
 	display: flex;
-	padding: 0px 5px;
+	padding: 0 var(--spacing-s);
 }
 .ui-toolbar .menubutton:not(.notebookbar) {
 	line-height: normal;
@@ -200,7 +200,8 @@
 	text-align: center;
 	padding: 0;
 	position: fixed;
-	bottom: 0;
+	/* Anchored to the bottom of the visual viewport */
+	bottom: var(--viewport-bottom-inset, 0px);
 	z-index: 1000;
 	border-top: 1px solid var(--color-border);
 	display: none;
@@ -1495,26 +1496,6 @@ button.leaflet-control-search-next
 	background-color: var(--color-background-darker) !important;
 }
 
-tr.useritem:hover {
-	cursor: default;
-	background-color: rgba(67, 172, 232, 0.25);
-}
-
-tr.useritem > td {
-	padding: 7px;
-}
-
-tr.useritem > td.usercolor {
-	display: inline-block;
-	top: 0px;
-	left: 3px;
-	position: relative;
-}
-
-tr.useritem > td > img {
-	border-radius: 100px;
-}
-
 .context-menu-link {
 	text-decoration: none;
 	color: var(--color-main-text);
@@ -1677,9 +1658,13 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 	padding: 4px 8px;
 }
 
+.slide-user-item:hover,
+.user-list-item:hover {
+	background-color: var(--color-background-dark);
+}
+
 .user-list-item:hover {
 	cursor: pointer;
-	background-color: var(--color-background-dark);
 }
 
 .user-list-item--name-container {

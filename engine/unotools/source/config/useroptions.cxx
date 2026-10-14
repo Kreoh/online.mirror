@@ -42,6 +42,7 @@
 
 using namespace utl;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 // vOptionNames[] -- names of the user option entries
 // The order must correspond to the enum class UserOptToken in useroptions.hxx.
@@ -78,9 +79,9 @@ public:
     explicit ChangeListener (Impl& rParent): m_rParent(rParent) { }
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred (util::ChangesEvent const& Event) override;
+    virtual void changesOccurred (util::ChangesEvent const& Event) override;
     // XEventListener
-    virtual void SAL_CALL disposing (lang::EventObject const& Source) override;
+    virtual void disposing (lang::EventObject const& Source) override;
 
 private:
     Impl& m_rParent;
@@ -150,7 +151,7 @@ SvtUserOptions::Impl::Impl() :
         {
             xChgNot->addChangesListener(m_xChangeListener);
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
     }
@@ -307,8 +308,6 @@ OUString SvtUserOptions::GetTelephoneHome  () const { return GetToken(UserOptTok
 OUString SvtUserOptions::GetTelephoneWork  () const { return GetToken(UserOptToken::TelephoneWork); }
 OUString SvtUserOptions::GetFax            () const { return GetToken(UserOptToken::Fax); }
 OUString SvtUserOptions::GetEmail          () const { return GetToken(UserOptToken::Email); }
-OUString SvtUserOptions::GetSigningKey     () const { return GetToken(UserOptToken::SigningKey); }
-OUString SvtUserOptions::GetEncryptionKey  () const { return GetToken(UserOptToken::EncryptionKey); }
 OUString SvtUserOptions::GetSigningKeyDisplayName () const { return GetToken(UserOptToken::SigningKeyDisplayName); }
 OUString SvtUserOptions::GetEncryptionKeyDisplayName () const { return GetToken(UserOptToken::EncryptionKeyDisplayName); }
 

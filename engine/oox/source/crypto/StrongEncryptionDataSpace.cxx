@@ -23,7 +23,7 @@ using namespace css;
 using namespace css::beans;
 using namespace css::io;
 using namespace css::lang;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace oox::crypto
@@ -194,9 +194,9 @@ cpo::uno::Sequence<OUString> StrongEncryptionDataSpace::getSupportedServiceNames
 
 } // namespace oox::crypto
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_oox_crypto_StrongEncryptionDataSpace_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new oox::crypto::StrongEncryptionDataSpace(pCtx));
 }

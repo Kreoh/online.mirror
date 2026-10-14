@@ -47,6 +47,7 @@
 namespace writerfilter::dmapper {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 rtl::Reference<SwFmDrawPage> const & FormControlHelper::getDrawPage()
 {
@@ -79,7 +80,7 @@ uno::Reference<form::XForm> const & FormControlHelper::getForm()
                 sFormName = sDOCXForm + OUString::number(nUnique);
             }
 
-            uno::Reference<uno::XInterface> xForm(mxTextDocument->createInstance(u"com.sun.star.form.component.Form"_ustr));
+            uno::Reference<cpo::uno::XInterface> xForm(mxTextDocument->createInstance(u"com.sun.star.form.component.Form"_ustr));
             if (xForm.is())
             {
                 uno::Reference<beans::XPropertySet>
@@ -127,7 +128,7 @@ bool FormControlHelper::createCheckbox(uno::Reference<text::XTextRange> const& x
     if (! mxTextDocument)
         return false;
 
-    uno::Reference<uno::XInterface> xInterface = mxTextDocument->createInstance(u"com.sun.star.form.component.CheckBox"_ustr);
+    uno::Reference<cpo::uno::XInterface> xInterface = mxTextDocument->createInstance(u"com.sun.star.form.component.CheckBox"_ustr);
 
     if (!xInterface.is())
         return false;
@@ -315,7 +316,7 @@ void FormControlHelper::insertControl(uno::Reference<text::XTextRange> const& xT
     if (! mxTextDocument )
         return;
 
-    uno::Reference<uno::XInterface> xInterface = mxTextDocument->createInstance(u"com.sun.star.drawing.ControlShape"_ustr);
+    uno::Reference<cpo::uno::XInterface> xInterface = mxTextDocument->createInstance(u"com.sun.star.drawing.ControlShape"_ustr);
 
     if (! xInterface.is())
         return;

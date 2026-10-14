@@ -33,7 +33,7 @@
 #include <sdresid.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 using ::sd::framework::FrameworkHelper;
@@ -287,7 +287,7 @@ void SlideSorterModule::HandleResourceRequest(
     }
 }
 
-void SAL_CALL SlideSorterModule::disposing (
+void SlideSorterModule::disposing (
     const lang::EventObject& rEvent)
 {
     if (mxConfigurationController.is()

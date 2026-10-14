@@ -19,11 +19,13 @@
 #include <sal/macros.h>
 
 #include <cassert>
+#include <iomanip>
 #include <map>
 #include <vector>
 
 #include <boost/property_tree/json_parser.hpp>
 #include <optional>
+#include <iomanip>
 
 void btn_clicked(GtkWidget* pButton, gpointer)
 {

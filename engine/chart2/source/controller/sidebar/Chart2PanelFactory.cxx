@@ -40,7 +40,7 @@
 #include <officecfg/Office/Common.hxx>
 #include "ChartGradientsPanel.hxx"
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace chart::sidebar {
@@ -127,7 +127,7 @@ Reference<css::ui::XUIElement> ChartPanelFactory::createUIElement (
                 std::move(xPanel),
                 css::ui::LayoutSize(-1,-1,-1));
     }
-    catch (const css::uno::RuntimeException &)
+    catch (const cpo::uno::RuntimeException &)
     {
         throw;
     }
@@ -159,8 +159,8 @@ cpo::uno::Sequence<OUString> ChartPanelFactory::getSupportedServiceNames()
 
 } // end of namespace chart::sidebar
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-org_libreoffice_comp_chart2_sidebar_ChartPanelFactory(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_libreoffice_comp_chart2_sidebar_ChartPanelFactory(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::sidebar::ChartPanelFactory());
 }

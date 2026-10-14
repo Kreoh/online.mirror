@@ -53,21 +53,17 @@ $(eval $(call gb_InstallModule_add_scpfiles,scp2/ooo,\
     scp2/source/ooo/directory_ooo \
     scp2/source/ooo/directory_ooo_macosx \
     scp2/source/ooo/file_extra_ooo \
-    scp2/source/ooo/file_library_ooo \
     scp2/source/ooo/file_ooo \
     scp2/source/ooo/installation_ooo \
     scp2/source/ooo/module_help_template \
     scp2/source/ooo/module_hidden_ooo \
     scp2/source/ooo/module_lang_template \
-    scp2/source/ooo/profileitem_ooo \
-    scp2/source/ooo/scpaction_ooo \
     $(if $(filter-out MACOSX WNT,$(OS)), \
 		scp2/source/ooo/module_kit \
 	) \
     scp2/source/ooo/module_helppack \
     scp2/source/ooo/module_langpack \
     scp2/source/ooo/module_ooo \
-    scp2/source/ooo/module_systemint \
 ))
 
 ifeq ($(ENABLE_PDFIMPORT),TRUE)

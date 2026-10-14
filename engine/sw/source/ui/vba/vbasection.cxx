@@ -25,9 +25,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaSection::SwVbaSection( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                            const uno::Reference< uno::XComponentContext >& rContext,
+                            const uno::Reference< cpo::uno::XComponentContext >& rContext,
                             rtl::Reference< SwXTextDocument > xModel,
                             uno::Reference< beans::XPropertySet > xProps )
 : SwVbaSection_BASE( rParent, rContext ),
@@ -40,16 +41,16 @@ SwVbaSection::~SwVbaSection()
 {
 }
 
-bool SAL_CALL SwVbaSection::getProtectedForForms()
+bool SwVbaSection::getProtectedForForms()
 {
     return false;
 }
 
-void SAL_CALL SwVbaSection::setProtectedForForms( bool /*_protectedforforms*/ )
+void SwVbaSection::setProtectedForForms( bool /*_protectedforforms*/ )
 {
 }
 
-cpo::uno::Any SAL_CALL SwVbaSection::Headers( const cpo::uno::Any& index )
+cpo::uno::Any SwVbaSection::Headers( const cpo::uno::Any& index )
 {
     uno::Reference< XCollection > xCol( new SwVbaHeadersFooters( this, mxContext, mxModel, mxPageProps, true ) );
     if ( index.hasValue() )
@@ -57,7 +58,7 @@ cpo::uno::Any SAL_CALL SwVbaSection::Headers( const cpo::uno::Any& index )
     return cpo::uno::Any( xCol );
 }
 
-cpo::uno::Any SAL_CALL SwVbaSection::Footers( const cpo::uno::Any& index )
+cpo::uno::Any SwVbaSection::Footers( const cpo::uno::Any& index )
 {
     uno::Reference< XCollection > xCol( new SwVbaHeadersFooters( this, mxContext, mxModel, mxPageProps, false ) );
     if ( index.hasValue() )
@@ -65,7 +66,7 @@ cpo::uno::Any SAL_CALL SwVbaSection::Footers( const cpo::uno::Any& index )
     return cpo::uno::Any( xCol );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaSection::PageSetup( )
 {
     return cpo::uno::Any( uno::Reference< word::XPageSetup >( new SwVbaPageSetup( this, mxContext, mxModel, mxPageProps ) ) );

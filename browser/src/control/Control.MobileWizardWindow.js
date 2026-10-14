@@ -13,7 +13,11 @@
  * window.L.Control.MobileWizardWindow - contains one unique window instance inside mobile-wizard
  */
 
-/* global app $ */
+/* global app $ _ */
+
+/// Dialogs shown full screen.
+const fullScreenDialogs = ['ChartWizard', 'PivotTableLayout'];
+
 window.L.Control.MobileWizardWindow = window.L.Control.extend({
 	options: {
 		maxHeight: '45vh',
@@ -105,6 +109,7 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 	_softReset: function() {
 		this._setupBackButton();
 		this.tabsContainer.children().detach();
+		this.tabsContainer.removeClass('has-dismiss');
 		this.tabsContainer.hide();
 		this.titleBar.css('top', '0px');
 		this.titleBar.show();
@@ -123,6 +128,7 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 		this.tabs = null;
 		this._currentScrollPosition = 0;
 		this.isPopup = false;
+		this.isSidebar = false;
 	},
 
 	// reset back button to the original state
@@ -215,8 +221,33 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 		this.tabsContainer.show();
 		this.tabsContainer.children().detach();
 		this.tabsContainer.append(tabs);
+		if (this._isFullScreenDialog())
+			this._addDialogDismissButton();
 		this.titleBar.hide();
 		this._isTabMode = true;
+	},
+
+	_isFullScreenDialog: function() {
+		return fullScreenDialogs.indexOf(this._dialogid) !== -1;
+	},
+
+	/// A tabbed dialog has no title bar, so the close control sits in the tab strip.
+	_addDialogDismissButton: function() {
+		const that = this;
+		const dismiss = window.L.DomUtil.create('div', '', this.tabsContainer.get(0));
+		dismiss.id = 'mobile-wizard-dialog-dismiss';
+		dismiss.setAttribute('role', 'button');
+		dismiss.setAttribute('aria-label', _('Close'));
+		dismiss.onclick = function() {
+			that._dismissDialog();
+		};
+		this.tabsContainer.addClass('has-dismiss');
+	},
+
+	_dismissDialog: function() {
+		const cancel = this.content.querySelector('#cancel-button');
+		if (cancel)
+			cancel.click();
 	},
 
 	/// for restoring the tabs by manager
@@ -258,7 +289,9 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 		else
 			nodesToHide.hide();
 
-		$(contentToShow).children('.ui-header').hide();
+		// A running slide is finished first, because jQuery UI restores the visible style when a
+		// slide ends.
+		$(contentToShow).children('.ui-header').stop(true, true).hide();
 
 		$('#mobile-wizard.funcwizard div#mobile-wizard-content').removeClass('hideHelpBG');
 		$('#mobile-wizard.funcwizard div#mobile-wizard-content').addClass('showHelpBG');
@@ -291,13 +324,23 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 		this._inMainMenu = false;
 
 		this._currentPath.push(title);
+
+		if (this._isFullScreenDialog())
+			$(this.content).find('.ui-button-box').hide();
 	},
 
 	goLevelUp: function() {
 		this._currentPath.pop();
+
+		if (this._isFullScreenDialog() && this._isTabMode && this._currentDepth == 1) {
+			this._dismissDialog();
+			return;
+		}
+
 		if (this._inMainMenu || (this._isTabMode && this._currentDepth == 1
 			&& !this.map.dialog.hasDialogInMobilePanelOpened)) {
 			this.parent.removeWindow(this);
+			this.notifyPopupDismissed();
 			this._currentDepth = 0;
 			if (window.mobileWizard === true) {
 				app.dispatcher.dispatch('mobile_wizard');
@@ -341,7 +384,9 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 
 			headers = headers.not('.hidden');
 
-			$('.ui-content.level-' + this._currentDepth + '.mobile-wizard:visible').hide();
+			// A running slide is finished first, because jQuery UI restores the visible style when a
+			// slide ends.
+			$('.ui-content.level-' + this._currentDepth + '.mobile-wizard:visible').stop(true, true).hide();
 			$('#mobile-wizard.funcwizard div#mobile-wizard-content').removeClass('showHelpBG');
 			$('#mobile-wizard.funcwizard div#mobile-wizard-content').addClass('hideHelpBG');
 			headers.show('slide', { direction: 'left' }, 'fast');
@@ -360,7 +405,16 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 			if (window.commentWizard === true) {
 				app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).removeHighlighters();
 			}
+
+			if (this._isFullScreenDialog() && this._currentDepth <= 1)
+				$(this.content).find('.ui-button-box').show();
 		}
+	},
+
+	/// Reports to the owner of a popup that the user dismissed it.
+	notifyPopupDismissed: function() {
+		if (this.isPopup && this._builder)
+			this._builder.callback('popover', 'close', {id: '__POPOVER__'}, null, this._builder);
 	},
 
 	/// for restoring title on windows switching
@@ -380,6 +434,7 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 	/// setups custom HTML titlebar
 	_setCustomTitle: function(title) {
 		this.cusomTitle = title;
+		// eslint-disable-next-line no-restricted-syntax -- the title is a DOM element, not a string
 		this.titleNode.html(this.cusomTitle);
 	},
 
@@ -519,7 +574,7 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 					if (data.cancellable) {
 						overlay.onclick = function () {
 							that.parent.removeWindow(that);
-							that._builder.callback('popover', 'close', {id: '__POPOVER__'}, null, that._builder);
+							that.notifyPopupDismissed();
 						};
 					}
 				}
@@ -527,6 +582,7 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 
 			this._reset();
 			this.isPopup = isPopupJson;
+			this.isSidebar = isSidebar;
 			this.isAutoCompletePopup = data.isAutoCompletePopup;
 			this.isPopupPartialScreen = data.isPopupPartialScreen;
 			this.persistKeyboard = data.persistKeyboard;
@@ -581,6 +637,9 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 				document.getElementById('mobile-wizard').style.height = '100vh';
 				$('#mobile-wizard').css('top', $('#document-container').css('top'));
 				this.isFunctionMenu = true;
+			} else if (this._isFullScreenDialog()) {
+				document.getElementById('mobile-wizard').style.height = '100vh';
+				$('#mobile-wizard').css('top', $('#document-container').css('top'));
 			}
 			else if (data.id === 'modal-dialog-about-dialog-box' || data.id === 'modal-dialog-unlock-features-popup') {
 				isPopup = true;
@@ -712,6 +771,8 @@ window.L.Control.MobileWizardWindow = window.L.Control.extend({
 		var parent = control.parentNode;
 		if (!parent)
 			return;
+
+		$(parent).children().stop(true, true);
 
 		var scrollTop = control.scrollTop;
 		var wasHidden = control.style.display === 'none';

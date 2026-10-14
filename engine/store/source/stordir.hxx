@@ -73,7 +73,7 @@ private:
     /** IStoreHandle query() template function specialization.
      */
     friend OStoreDirectory_Impl*
-    SAL_CALL query<> (OStoreObject *pHandle, OStoreDirectory_Impl*);
+    query<> (OStoreObject *pHandle, OStoreDirectory_Impl*);
 
     typedef OStoreDirectoryPageData   inode;
     typedef PageHolderObject< inode > inode_holder_type;
@@ -89,7 +89,7 @@ private:
 };
 
 template<> inline OStoreDirectory_Impl*
-SAL_CALL query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStoreDirectory_Impl*)
+query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStoreDirectory_Impl*)
 {
     if (pHandle && pHandle->isKindOf (OStoreDirectory_Impl::m_nTypeId))
     {

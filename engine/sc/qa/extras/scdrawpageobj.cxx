@@ -22,11 +22,12 @@
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc_apitest
 {
@@ -40,7 +41,7 @@ class ScDrawPageObj : public UnoApiTest,
 public:
     ScDrawPageObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScDrawPageObj);
@@ -76,7 +77,7 @@ ScDrawPageObj::ScDrawPageObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScDrawPageObj::init()
+uno::Reference<cpo::uno::XInterface> ScDrawPageObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     uno::Reference<drawing::XDrawPagesSupplier> xDPS(xDoc, uno::UNO_QUERY_THROW);

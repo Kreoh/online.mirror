@@ -25,6 +25,7 @@
 
 #include <unotxdoc.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <wrtsh.hxx>
 #include <fmtpdsc.hxx>
 #include <IDocumentContentOperations.hxx>
@@ -35,6 +36,7 @@
 #include <fmtwrapinfluenceonobjpos.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {

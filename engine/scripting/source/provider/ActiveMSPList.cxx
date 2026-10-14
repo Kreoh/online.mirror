@@ -27,7 +27,7 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::script;
 using namespace ::sf_misc;
@@ -39,7 +39,6 @@ ActiveMSPList::ActiveMSPList(  const Reference< XComponentContext > & xContext )
 {
     userDirString = u"user"_ustr;
     shareDirString = u"share"_ustr;
-    bundledDirString = u"bundled"_ustr;
 }
 
 ActiveMSPList::~ActiveMSPList()
@@ -222,7 +221,7 @@ Reference< provider::XScriptProvider >
 }
 
 void
-ActiveMSPList::addActiveMSP( const Reference< uno::XInterface >& xComponent,
+ActiveMSPList::addActiveMSP( const Reference< cpo::uno::XInterface >& xComponent,
                const Reference< provider::XScriptProvider >& msp )
 {
     ::osl::MutexGuard guard( m_mutex );
@@ -247,7 +246,7 @@ ActiveMSPList::addActiveMSP( const Reference< uno::XInterface >& xComponent,
 }
 
 
-void SAL_CALL ActiveMSPList::disposing( const css::lang::EventObject& Source )
+void ActiveMSPList::disposing( const css::lang::EventObject& Source )
 
 {
     try
@@ -282,10 +281,6 @@ ActiveMSPList::createNonDocMSPs()
     args = { Any(shareDirString) };
     // should check if provider reference is valid
     m_hMsps[ shareDirString ].set( m_xContext->getServiceManager()->createInstanceWithArgumentsAndContext( serviceName, args, m_xContext ), UNO_QUERY );
-
-    args = { Any(bundledDirString) };
-    // should check if provider reference is valid
-    m_hMsps[ bundledDirString ].set( m_xContext->getServiceManager()->createInstanceWithArgumentsAndContext( serviceName, args, m_xContext ), UNO_QUERY );
 }
 
 } // namespace func_provider

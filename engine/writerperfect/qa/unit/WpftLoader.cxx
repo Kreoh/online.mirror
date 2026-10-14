@@ -16,14 +16,14 @@
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XDesktop2.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 
 #include <ucbhelper/content.hxx>
@@ -34,17 +34,17 @@ namespace document = css::document;
 namespace frame = css::frame;
 namespace lang = css::lang;
 namespace ucb = css::ucb;
-namespace uno = css::uno;
+namespace uno = cpo::uno;
 namespace util = css::util;
 
 namespace writerperfect::test
 {
 WpftLoader::WpftLoader(const OUString& rURL,
-                       const css::uno::Reference<css::document::XFilter>& rxFilter,
+                       const cpo::uno::Reference<css::document::XFilter>& rxFilter,
                        const OUString& rFactoryURL,
-                       const css::uno::Reference<css::frame::XDesktop2>& rxDesktop,
-                       const css::uno::Reference<css::container::XNameAccess>& rxTypeMap,
-                       const css::uno::Reference<css::uno::XComponentContext>& rxContext)
+                       const cpo::uno::Reference<css::frame::XDesktop>& rxDesktop,
+                       const cpo::uno::Reference<css::container::XNameAccess>& rxTypeMap,
+                       const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext)
     : m_aURL(rURL)
     , m_aFactoryURL(rFactoryURL)
     , m_xFilter(rxFilter)
@@ -56,11 +56,11 @@ WpftLoader::WpftLoader(const OUString& rURL,
         impl_dispose();
 }
 
-WpftLoader::WpftLoader(const css::uno::Reference<css::io::XInputStream>& rxInputStream,
-                       const css::uno::Reference<css::document::XFilter>& rxFilter,
+WpftLoader::WpftLoader(const cpo::uno::Reference<css::io::XInputStream>& rxInputStream,
+                       const cpo::uno::Reference<css::document::XFilter>& rxFilter,
                        const OUString& rFactoryURL,
-                       const css::uno::Reference<css::frame::XDesktop2>& rxDesktop,
-                       const css::uno::Reference<css::uno::XComponentContext>& rxContext)
+                       const cpo::uno::Reference<css::frame::XDesktop>& rxDesktop,
+                       const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext)
     : m_xInputStream(rxInputStream)
     , m_aFactoryURL(rFactoryURL)
     , m_xFilter(rxFilter)
@@ -82,7 +82,7 @@ WpftLoader::~WpftLoader()
     }
 }
 
-const css::uno::Reference<css::lang::XComponent>& WpftLoader::getDocument() const { return m_xDoc; }
+const cpo::uno::Reference<css::lang::XComponent>& WpftLoader::getDocument() const { return m_xDoc; }
 
 bool WpftLoader::impl_load()
 {
@@ -113,7 +113,7 @@ bool WpftLoader::impl_load()
     }
 
     if (!m_xFrame.is() || !xModel.is())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // try to import the document (and load it into the prepared frame)
     try

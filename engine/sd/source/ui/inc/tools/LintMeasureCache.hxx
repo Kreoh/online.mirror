@@ -1,0 +1,128 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Office contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <cstddef>
+#include <deque>
+#include <optional>
+#include <unordered_map>
+
+#include <sal/types.h>
+#include <tools/long.hxx>
+#include <vcl/BinaryDataContainer.hxx>
+#include <vcl/checksum.hxx>
+
+#include <sddllapi.h>
+
+#include <tools/LintImageCompressor.hxx>
+
+namespace sd::lint
+{
+/** What one measurement was worked out from: the bitmap the encoding started from, the part of it
+    that is shown, the size that part is drawn at, and the settings the encoding ran with. Two
+    measurements that agree on all of these produce the same encoded bytes.
+
+    The settings are part of the key, so a measurement taken for one target resolution or one
+    quality is never read for another one, and a reader who changes either setting simply asks
+    under a different key. */
+struct LintMeasureKey
+{
+    /** Checksum of the bitmap, which is what tells one bitmap from another. */
+    BitmapChecksum mnChecksum = 0;
+
+    /** The size the bitmap is drawn at, in hundredths of a millimetre. */
+    tools::Long mnLogicWidth = 0;
+    tools::Long mnLogicHeight = 0;
+
+    /** Wanted resolution in dots per inch. */
+    sal_Int32 mnTargetDPI = 0;
+
+    /** JPEG quality from 1 to 100. */
+    sal_Int32 mnJPEGQuality = 0;
+
+    /** How much of the original picture is cut off at each edge before it is encoded, in
+        hundredths of a millimetre. All four are zero when the whole picture is encoded. */
+    tools::Long mnCropLeft = 0;
+    tools::Long mnCropTop = 0;
+    tools::Long mnCropRight = 0;
+    tools::Long mnCropBottom = 0;
+
+    bool operator==(const LintMeasureKey& rOther) const
+    {
+        return mnChecksum == rOther.mnChecksum && mnLogicWidth == rOther.mnLogicWidth
+               && mnLogicHeight == rOther.mnLogicHeight && mnTargetDPI == rOther.mnTargetDPI
+               && mnJPEGQuality == rOther.mnJPEGQuality && mnCropLeft == rOther.mnCropLeft
+               && mnCropTop == rOther.mnCropTop && mnCropRight == rOther.mnCropRight
+               && mnCropBottom == rOther.mnCropBottom;
+    }
+};
+
+/** Hash of a measure key, so that keys can be looked up in an unordered container. */
+struct LintMeasureKeyHash
+{
+    std::size_t operator()(const LintMeasureKey& rKey) const;
+};
+
+/** Holds on to what the measurements of images worked out, so that the same bitmap drawn at the
+    same size and measured at the same settings is encoded once however often it is met.
+
+    Only the encoded bytes are kept. Whether an encoding is smaller than what the document holds
+    today rests on the byte count of the graphic that was measured, and one bitmap may sit behind
+    several links of different sizes, so that answer is worked out afresh for every count the cache
+    is asked about.
+
+    One cache stands for one whole document and is shared by everything that measures it, so a
+    deck scanned a second time at the same settings reads what an earlier scan worked out rather
+    than encoding the same images again.
+
+    What it holds is bounded. Once the kept bytes are over the limit the encodings that went in
+    first are dropped, so scanning one deck after another keeps a ceiling on what the cache
+    costs. */
+class SD_DLLPUBLIC LintMeasureCache
+{
+public:
+    /** The encoding kept under the key, with the answer to whether it is smaller worked out against
+        the bytes the document spends on the image today. Nothing comes back when no encoding is
+        kept under the key. */
+    std::optional<LintCompressedImage> find(const LintMeasureKey& rKey,
+                                            sal_uInt64 nSourceBytes) const;
+
+    /** Keeps the bytes of the encoding under the key. An encoding that came out empty is not kept,
+        and a key that is already there keeps the bytes it has. */
+    void store(const LintMeasureKey& rKey, const LintCompressedImage& rCompressed);
+
+    /** Lets go of every encoding the cache holds. */
+    void clear();
+
+    /** How many encodings the cache holds. */
+    std::size_t getCount() const { return maEntries.size(); }
+
+    /** How many encodings the cache was handed since it was made, those it kept and those it
+        turned away alike. */
+    std::size_t getHandedInCount() const { return mnHandedIn; }
+
+private:
+    std::unordered_map<LintMeasureKey, BinaryDataContainer, LintMeasureKeyHash> maEntries;
+
+    /** The keys in the order their encodings went in, oldest first. */
+    std::deque<LintMeasureKey> maKeyOrder;
+
+    /** How many bytes the kept encodings take altogether. */
+    sal_uInt64 mnStoredBytes = 0;
+
+    /** How many encodings the cache was handed since it was made. */
+    std::size_t mnHandedIn = 0;
+};
+
+} // end of namespace sd::lint
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

@@ -33,6 +33,7 @@
 #include <sfx2/frame.hxx>
 #include <sfx2/objsh.hxx>
 #include <tools/urlobj.hxx>
+#include <unotools/securityoptions.hxx>
 #include <vcl/svapp.hxx>
 
 #include <memory>
@@ -40,8 +41,8 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 
 SfxMacroLoader::SfxMacroLoader(const cpo::uno::Sequence< cpo::uno::Any >& aArguments)
@@ -54,17 +55,17 @@ SfxMacroLoader::SfxMacroLoader(const cpo::uno::Sequence< cpo::uno::Any >& aArgum
     }
 }
 
-OUString SAL_CALL SfxMacroLoader::getImplementationName()
+OUString SfxMacroLoader::getImplementationName()
 {
     return u"com.sun.star.comp.sfx2.SfxMacroLoader"_ustr;
 }
 
-bool SAL_CALL SfxMacroLoader::supportsService(OUString const & ServiceName)
+bool SfxMacroLoader::supportsService(OUString const & ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL SfxMacroLoader::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> SfxMacroLoader::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ProtocolHandler"_ustr };
 }
@@ -95,7 +96,7 @@ SfxObjectShell* SfxMacroLoader::GetObjectShell_Impl()
     return SfxMacroLoader::GetObjectShell(xFrame);
 }
 
-uno::Reference<frame::XDispatch> SAL_CALL SfxMacroLoader::queryDispatch(
+uno::Reference<frame::XDispatch> SfxMacroLoader::queryDispatch(
     const util::URL&   aURL            ,
     const OUString&               /*sTargetFrameName*/,
     sal_Int32                            /*nSearchFlags*/    )
@@ -107,7 +108,7 @@ uno::Reference<frame::XDispatch> SAL_CALL SfxMacroLoader::queryDispatch(
 }
 
 
-cpo::uno::Sequence< uno::Reference<frame::XDispatch> > SAL_CALL
+cpo::uno::Sequence< uno::Reference<frame::XDispatch> >
                 SfxMacroLoader::queryDispatches( const cpo::uno::Sequence < frame::DispatchDescriptor >& seqDescriptor )
 {
     sal_Int32 nCount = seqDescriptor.getLength();
@@ -119,7 +120,7 @@ cpo::uno::Sequence< uno::Reference<frame::XDispatch> > SAL_CALL
 }
 
 
-void SAL_CALL SfxMacroLoader::dispatchWithNotification(
+void SfxMacroLoader::dispatchWithNotification(
     const util::URL& aURL, const cpo::uno::Sequence<beans::PropertyValue>& /*lArgs*/,
     const uno::Reference<frame::XDispatchResultListener>& xListener )
 {
@@ -143,7 +144,7 @@ void SAL_CALL SfxMacroLoader::dispatchWithNotification(
     xListener->dispatchFinished( aEvent ) ;
 }
 
-cpo::uno::Any SAL_CALL SfxMacroLoader::dispatchWithReturnValue(
+cpo::uno::Any SfxMacroLoader::dispatchWithReturnValue(
     const util::URL& aURL, const cpo::uno::Sequence<beans::PropertyValue>& )
 {
     cpo::uno::Any aRet;
@@ -167,7 +168,7 @@ cpo::uno::Any SAL_CALL SfxMacroLoader::dispatchWithReturnValue(
     return aRet;
 }
 
-void SAL_CALL SfxMacroLoader::dispatch(
+void SfxMacroLoader::dispatch(
     const util::URL& aURL, const cpo::uno::Sequence<beans::PropertyValue>& /*lArgs*/ )
 {
     SolarMutexGuard aGuard;
@@ -176,7 +177,7 @@ void SAL_CALL SfxMacroLoader::dispatch(
     loadMacro( aURL.Complete, aAny, GetObjectShell_Impl() );
 }
 
-void SAL_CALL SfxMacroLoader::addStatusListener(
+void SfxMacroLoader::addStatusListener(
     const uno::Reference< frame::XStatusListener >& ,
     const util::URL&                                                    )
 {
@@ -187,7 +188,7 @@ void SAL_CALL SfxMacroLoader::addStatusListener(
 }
 
 
-void SAL_CALL SfxMacroLoader::removeStatusListener(
+void SfxMacroLoader::removeStatusListener(
     const uno::Reference< frame::XStatusListener >&,
     const util::URL&                                                  )
 {
@@ -201,6 +202,9 @@ ErrCode SfxMacroLoader::loadMacro( const OUString& rURL, cpo::uno::Any& rRetval,
     (void) pSh;
     return ERRCODE_BASIC_PROC_UNDEFINED;
 #else
+    if ( SvtSecurityOptions::IsMacroDisabled() )
+        return ERRCODE_IO_ACCESSDENIED;
+
     SfxObjectShell* pCurrent = pSh;
     if ( !pCurrent )
         // all not full qualified names use the BASIC of the given or current document
@@ -334,9 +338,9 @@ ErrCode SfxMacroLoader::loadMacro( const OUString& rURL, cpo::uno::Any& rRetval,
 #endif
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_sfx2_SfxMacroLoader_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &arguments)
 {
     return cppu::acquire(new SfxMacroLoader(arguments));

@@ -31,7 +31,7 @@
 #include <comphelper/diagnose_ex.hxx>
 #include "controlpropertymap.hxx"
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/form/XFormsSupplier2.hpp>
+#include <com/sun/star/form/XFormsSupplier.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/xforms/XFormsSupplier.hpp>
 #include <com/sun/star/form/FormComponentType.hpp>
@@ -51,7 +51,7 @@
 namespace xmloff
 {
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::awt;
     using namespace ::com::sun::star::lang;
@@ -99,7 +99,7 @@ using namespace cpo::uno;
 
     bool OFormLayerXMLExport_Impl::impl_isFormPageContainingForms(const Reference< XDrawPage >& _rxDrawPage, Reference< XIndexAccess >& _rxForms)
     {
-        Reference< XFormsSupplier2 > xFormsSupp(_rxDrawPage, UNO_QUERY);
+        Reference< XFormsSupplier > xFormsSupp(_rxDrawPage, UNO_QUERY);
         OSL_ENSURE(xFormsSupp.is(), "OFormLayerXMLExport_Impl::impl_isFormPageContainingForms: invalid draw page (no XFormsSupplier)! Doin' nothing!");
         if (!xFormsSupp.is())
             return false;
@@ -279,8 +279,8 @@ using namespace cpo::uno;
 
     bool OFormLayerXMLExport_Impl::pageContainsForms( const Reference< XDrawPage >& _rxDrawPage )
     {
-        Reference< XFormsSupplier2 > xFormsSupp( _rxDrawPage, UNO_QUERY );
-        SAL_WARN_IF( !xFormsSupp.is(), "xmloff", "OFormLayerXMLExport_Impl::pageContainsForms: no XFormsSupplier2!" );
+        Reference< XFormsSupplier > xFormsSupp( _rxDrawPage, UNO_QUERY );
+        SAL_WARN_IF( !xFormsSupp.is(), "xmloff", "OFormLayerXMLExport_Impl::pageContainsForms: no XFormsSupplier!" );
         return xFormsSupp.is() && xFormsSupp->hasForms();
     }
 
@@ -344,7 +344,7 @@ using namespace cpo::uno;
 
         // So, in such a case, seekPage is considered to be successful, too, though the
         // page was not yet known
-        Reference< XFormsSupplier2 > xFormsSupp( _rxDrawPage, UNO_QUERY );
+        Reference< XFormsSupplier > xFormsSupp( _rxDrawPage, UNO_QUERY );
         if ( xFormsSupp.is() && !xFormsSupp->hasForms() )
             return true;
 
@@ -534,7 +534,7 @@ using namespace cpo::uno;
                     // to find a better place for more targeted flush.
                     xControlText = xControlText->getText();
                 }
-                catch (css::uno::RuntimeException const&)
+                catch (cpo::uno::RuntimeException const&)
                 {
                     // just in case if we would hit something here
                 }

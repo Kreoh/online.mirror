@@ -55,8 +55,8 @@ using namespace osl;
 using namespace cppu;
 using namespace com::sun::star::sdbc;
 using namespace com::sun::star::frame;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star;
 
 namespace {
@@ -445,7 +445,7 @@ void BibFrameController_Impl::dispatch(const util::URL& _rURL, const cpo::uno::S
     {
         try
         {
-            const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+            const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
             // create the dialog object
             uno::Reference< ui::dialogs::XExecutableDialog > xDialog = sdb::FilterDialog::createWithQuery(xContext, m_xDatMan->getParser(),
@@ -665,7 +665,7 @@ void BibFrameController_Impl::addStatusListener(
         m_xLastQueriedFocusWin = lcl_GetFocusChild( VCLUnoHelper::GetWindow( m_xWindow ) );
         if (m_xLastQueriedFocusWin)
         {
-            Reference<css::awt::XTextComponent> xEdit(m_xLastQueriedFocusWin->GetComponentInterface(), css::uno::UNO_QUERY);
+            Reference<css::awt::XTextComponent> xEdit(m_xLastQueriedFocusWin->GetComponentInterface(), cpo::uno::UNO_QUERY);
             aEvent.IsEnabled = xEdit && xEdit->isEditable() && !xEdit->getSelectedText().isEmpty();
         }
     }
@@ -674,7 +674,7 @@ void BibFrameController_Impl::addStatusListener(
         m_xLastQueriedFocusWin = lcl_GetFocusChild( VCLUnoHelper::GetWindow( m_xWindow ) );
         if (m_xLastQueriedFocusWin)
         {
-            Reference<css::awt::XTextComponent> xEdit(m_xLastQueriedFocusWin->GetComponentInterface(), css::uno::UNO_QUERY);
+            Reference<css::awt::XTextComponent> xEdit(m_xLastQueriedFocusWin->GetComponentInterface(), cpo::uno::UNO_QUERY);
             aEvent.IsEnabled = xEdit && !xEdit->getSelectedText().isEmpty();
         }
     }
@@ -684,7 +684,7 @@ void BibFrameController_Impl::addStatusListener(
         m_xLastQueriedFocusWin = lcl_GetFocusChild( VCLUnoHelper::GetWindow( m_xWindow ) );
         if (m_xLastQueriedFocusWin)
         {
-            Reference<css::awt::XTextComponent> xEdit(m_xLastQueriedFocusWin->GetComponentInterface(), css::uno::UNO_QUERY);
+            Reference<css::awt::XTextComponent> xEdit(m_xLastQueriedFocusWin->GetComponentInterface(), cpo::uno::UNO_QUERY);
             if (xEdit && !xEdit->isEditable())
             {
                 uno::Reference< datatransfer::clipboard::XClipboard > xClip = m_xLastQueriedFocusWin->GetClipboard();

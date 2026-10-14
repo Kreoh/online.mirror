@@ -115,6 +115,7 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static bool g_bIsLeanException;
 
@@ -376,7 +377,7 @@ namespace
  */
 class VCLUnoWrapperDeleter : public cppu::WeakImplHelper<css::lang::XEventListener>
 {
-    virtual void SAL_CALL disposing(lang::EventObject const& rSource) override;
+    virtual void disposing(lang::EventObject const& rSource) override;
 };
 
 void
@@ -470,8 +471,8 @@ void DeInitVCL()
 
 #if defined _WIN32
     // See GetSystemClipboard (vcl/source/treelist/transfer2.cxx):
-    if (auto const comp = css::uno::Reference<css::lang::XComponent>(
-            pSVData->m_xSystemClipboard, css::uno::UNO_QUERY))
+    if (auto const comp = cpo::uno::Reference<css::lang::XComponent>(
+            pSVData->m_xSystemClipboard, cpo::uno::UNO_QUERY))
     {
         SolarMutexReleaser r; // unblock pending "clipboard content changed" notifications
         comp->dispose(); // will use s_aClipboardSingletonMutex for CWinClipboard
@@ -498,7 +499,7 @@ void DeInitVCL()
     {
         try
         {
-            uno::Reference<frame::XDesktop2> const xDesktop = frame::Desktop::create(
+            uno::Reference<frame::XDesktop> const xDesktop = frame::Desktop::create(
                     comphelper::getProcessComponentContext() );
             xDesktop->addEventListener(new VCLUnoWrapperDeleter);
         }

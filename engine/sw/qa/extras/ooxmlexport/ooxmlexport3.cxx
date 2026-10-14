@@ -11,6 +11,7 @@
 
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 #include <com/sun/star/style/CaseMap.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
@@ -26,8 +27,21 @@
 #include <svx/svdobj.hxx>
 #include <svx/diagram/DiagramHelper_svx.hxx>
 
+#include <SecLabelApply.hxx>
+#include <svx/seclabel/SecLabelStore.hxx>
+#include <svx/seclabel/SpifPolicy.hxx>
+#include <svx/seclabel/StanagLabel.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/text/ControlCharacter.hpp>
+#include <com/sun/star/text/XTextViewCursorSupplier.hpp>
+#include <com/sun/star/view/XViewCursor.hpp>
+#include <comphelper/sequenceashashmap.hxx>
+#include <tools/stream.hxx>
+
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class Test : public SwModelTestBase
 {
@@ -49,6 +63,406 @@ DECLARE_OOXMLEXPORT_TEST(testFdo68418, "fdo68418.docx")
 
     // First page footer is empty, second page footer is 'aaaa'
     CPPUNIT_ASSERT_EQUAL(u"aaaa"_ustr, xFooterParagraph->getString());        // I get an error that it expects ''
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelApply)
+{
+    // Apply a STANAG label to an empty document and round-trip through DOCX.
+    createSwDoc();
+
+    static const OString aSpif(
+        R"xml(<?xml version="1.0" encoding="utf-8"?>
+<spif:SPIF xmlns:spif="http://www.xmlspif.org/spif" schemaVersion="1.0" version="1">
+  <spif:securityPolicyId name="SPIF Collabora" id="1.2.826.0.1310.1.2.0" />
+  <spif:securityClassifications>
+    <spif:securityClassification name="SECRET" color="red" lacv="4" hierarchy="4" />
+  </spif:securityClassifications>
+  <spif:securityCategoryTagSets>
+    <spif:securityCategoryTagSet name="Release Categories" id="1.2.826.0.1310.1.2.0.0">
+      <spif:securityCategoryTag name="Releasable To" tagType="enumerated" enumType="permissive">
+        <spif:tagCategory name="CANADA" lacv="4407630" obsolete="false" />
+        <spif:tagCategory name="UNITED KINGDOM" lacv="5591873" obsolete="false" />
+        <spif:markingQualifier markingCode="pageTopBottom">
+          <spif:qualifier markingQualifier="//" qualifierCode="separator" />
+          <spif:qualifier markingQualifier="." qualifierCode="suffix" />
+        </spif:markingQualifier>
+      </spif:securityCategoryTag>
+    </spif:securityCategoryTagSet>
+  </spif:securityCategoryTagSets>
+</spif:SPIF>)xml"_ostr);
+    SvMemoryStream aPolicyStream(const_cast<char*>(aSpif.getStr()), aSpif.getLength(),
+                                 StreamMode::READ);
+    svx::seclabel::SpifPolicy aPolicy;
+    CPPUNIT_ASSERT(aPolicy.parse(aPolicyStream));
+
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    const std::vector<bool> aSelected{ true, true };
+    svx::seclabel::StanagLabel aLabel = aPolicy.buildLabel(
+        u"SECRET"_ustr, aSelected, u"2026-06-21T10:00:00Z"_ustr, u"2027-06-21T10:00:00Z"_ustr);
+    // Cache the derived marking in the binding (for policy-free banner read-back).
+    aLabel.aMarking = aPolicy.deriveMarking(aLabel);
+    // Applying the label must flag the document modified (the grab-bag write alone
+    // doesn't reliably dirty it), so the user is prompted to save.
+    uno::Reference<util::XModifiable> xModifiable(xModel, uno::UNO_QUERY_THROW);
+    xModifiable->setModified(false);
+    svx::seclabel::storeLabelPart(
+        xModel, aLabel.toBindingXml(),
+        svx::seclabel::buildItemProps(u"{B6E4D8A1-1A35-4F0E-9B7A-71F4C0F5E0D3}"_ustr,
+                                     u"urn:nato:stanag:4778:bindinginformation:1:0"_ustr));
+    CPPUNIT_ASSERT(xModifiable->isModified());
+    sw::seclabel::applyMarking(xModel, aPolicy.deriveMarking(aLabel),
+                               svx::seclabel::resolveColor(u"red"_ustr), u"Standard"_ustr);
+
+    saveAndReload(TestFilter::DOCX);
+
+    // The exported customXml part carries a spec-conformant 4774 label: assert the
+    // serialized fields directly (not just the re-parsed model), so a serialization
+    // regression is caught. local-name() XPath sidesteps the STANAG default namespaces.
+    xmlDocUniquePtr pXml = parseExport(u"customXml/item1.xml"_ustr);
+    CPPUNIT_ASSERT(pXml);
+    // PolicyIdentifier: 4774 requires the policy name text; we also assert the OID URI.
+    assertXPath(pXml, "//*[local-name()='PolicyIdentifier']", "URI",
+                u"urn:oid:1.2.826.0.1310.1.2.0");
+    assertXPathContent(pXml, "//*[local-name()='PolicyIdentifier']", u"SPIF Collabora");
+    assertXPathContent(pXml, "//*[local-name()='Classification']", u"SECRET");
+    // Category: TagName + Type both mandatory; values via GenericValue only, order preserved.
+    assertXPath(pXml, "//*[local-name()='Category']", "TagName", u"Releasable To");
+    assertXPath(pXml, "//*[local-name()='Category']", "Type", u"PERMISSIVE");
+    assertXPathContent(pXml, "(//*[local-name()='GenericValue'])[1]", u"CANADA");
+    assertXPathContent(pXml, "(//*[local-name()='GenericValue'])[2]", u"UNITED KINGDOM");
+    // Timestamps: CreationDateTime element (mandatory), ReviewDateTime attribute.
+    assertXPathContent(pXml, "//*[local-name()='CreationDateTime']", u"2026-06-21T10:00:00Z");
+    assertXPath(pXml, "//*[local-name()='OriginatorConfidentialityLabel']", "ReviewDateTime",
+                u"2027-06-21T10:00:00Z");
+
+    // The marking is in the (shared) page-style header.
+    uno::Reference<text::XText> xHeader = getProperty<uno::Reference<text::XText>>(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), u"HeaderText"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"SPIF Collabora SECRET CANADA // UNITED KINGDOM."_ustr,
+                         getParagraphOfText(1, xHeader)->getString());
+
+    // Read the label back out of the reloaded document.
+    uno::Reference<frame::XModel> xReloaded(mxComponent, uno::UNO_QUERY);
+    svx::seclabel::StanagLabel aReadBack;
+    CPPUNIT_ASSERT(svx::seclabel::readLabel(xReloaded, aReadBack));
+    CPPUNIT_ASSERT_EQUAL(u"SECRET"_ustr, aReadBack.aClassification);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aReadBack.aCategories.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aReadBack.aCategories[0].aValues.size());
+    CPPUNIT_ASSERT_EQUAL(u"CANADA"_ustr, aReadBack.aCategories[0].aValues[0]);
+    CPPUNIT_ASSERT_EQUAL(u"UNITED KINGDOM"_ustr, aReadBack.aCategories[0].aValues[1]);
+    // The cached marking survives the DOCX round-trip, so the banner is correct even
+    // without the policy provisioned.
+    CPPUNIT_ASSERT_EQUAL(u"SPIF Collabora SECRET CANADA // UNITED KINGDOM."_ustr, aReadBack.aMarking);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelReplace)
+{
+    // Re-applying a label must replace the existing STANAG part, not add a second.
+    createSwDoc();
+
+    static const OString aSpif(
+        R"xml(<?xml version="1.0" encoding="utf-8"?>
+<spif:SPIF xmlns:spif="http://www.xmlspif.org/spif" schemaVersion="1.0" version="1">
+  <spif:securityPolicyId name="SPIF Collabora" id="1.2.826.0.1310.1.2.0" />
+  <spif:securityClassifications>
+    <spif:securityClassification name="SECRET" color="red" lacv="4" hierarchy="4" />
+  </spif:securityClassifications>
+  <spif:securityCategoryTagSets>
+    <spif:securityCategoryTagSet name="Release Categories" id="1.2.826.0.1310.1.2.0.0">
+      <spif:securityCategoryTag name="Releasable To" tagType="enumerated" enumType="permissive">
+        <spif:tagCategory name="CANADA" lacv="4407630" obsolete="false" />
+        <spif:tagCategory name="UNITED KINGDOM" lacv="5591873" obsolete="false" />
+        <spif:markingQualifier markingCode="pageTopBottom">
+          <spif:qualifier markingQualifier="//" qualifierCode="separator" />
+          <spif:qualifier markingQualifier="." qualifierCode="suffix" />
+        </spif:markingQualifier>
+      </spif:securityCategoryTag>
+    </spif:securityCategoryTagSet>
+  </spif:securityCategoryTagSets>
+</spif:SPIF>)xml"_ostr);
+    SvMemoryStream aPolicyStream(const_cast<char*>(aSpif.getStr()), aSpif.getLength(),
+                                 StreamMode::READ);
+    svx::seclabel::SpifPolicy aPolicy;
+    CPPUNIT_ASSERT(aPolicy.parse(aPolicyStream));
+
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    auto applyOnce = [&](const std::vector<bool>& rSelected, const OUString& rGuid) {
+        const svx::seclabel::StanagLabel aLabel = aPolicy.buildLabel(
+            u"SECRET"_ustr, rSelected, u"2026-06-21T10:00:00Z"_ustr, u"2027-06-21T10:00:00Z"_ustr);
+        svx::seclabel::storeLabelPart(xModel, aLabel.toBindingXml(),
+                                     svx::seclabel::buildItemProps(
+                                         rGuid, svx::seclabel::STANAG_BINDING_SCHEMA));
+    };
+    applyOnce({ true, false }, u"{B6E4D8A1-1A35-4F0E-9B7A-71F4C0F5E0D3}"_ustr); // CANADA
+    applyOnce({ true, true }, u"{C7F5E9B2-2B46-5A1F-AC8B-82F5D1F6E1E4}"_ustr); // + UK
+
+    // The second apply replaced the first: exactly one STANAG customXml part.
+    uno::Reference<beans::XPropertySet> xProps(xModel, uno::UNO_QUERY);
+    comphelper::SequenceAsHashMap aGrabBag(xProps->getPropertyValue(u"InteropGrabBag"_ustr));
+    cpo::uno::Sequence<uno::Reference<css::xml::dom::XDocument>> aParts;
+    aGrabBag[u"OOXCustomXml"_ustr] >>= aParts;
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aParts.getLength());
+
+    saveAndReload(TestFilter::DOCX);
+
+    // One part on disk, and it carries the second (latest) selection.
+    CPPUNIT_ASSERT(parseExport(u"customXml/item1.xml"_ustr));
+    uno::Reference<frame::XModel> xReloaded(mxComponent, uno::UNO_QUERY);
+    svx::seclabel::StanagLabel aReadBack;
+    CPPUNIT_ASSERT(svx::seclabel::readLabel(xReloaded, aReadBack));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aReadBack.aCategories.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aReadBack.aCategories[0].aValues.size());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelHeaderVariants)
+{
+    // When the page style has distinct left/right and first-page headers/footers,
+    // the marking must land on every variant, not just the shared text.
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xPageStyle(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xPageStyle->setPropertyValue(u"HeaderIsOn"_ustr, cpo::uno::Any(true));
+    xPageStyle->setPropertyValue(u"HeaderIsShared"_ustr, cpo::uno::Any(false)); // left != right
+    xPageStyle->setPropertyValue(u"FooterIsOn"_ustr, cpo::uno::Any(true));
+    xPageStyle->setPropertyValue(u"FooterIsShared"_ustr, cpo::uno::Any(false));
+    xPageStyle->setPropertyValue(u"FirstIsShared"_ustr, cpo::uno::Any(false)); // first != rest
+
+    sw::seclabel::applyMarking(xModel, u"SECRET//X"_ustr, 0xC00000, u"Standard"_ustr);
+
+    auto areaText = [&](const OUString& rProp) {
+        uno::Reference<text::XText> xText
+            = getProperty<uno::Reference<text::XText>>(xPageStyle, rProp);
+        return getParagraphOfText(1, xText)->getString();
+    };
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, areaText(u"HeaderText"_ustr)); // shared/right
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, areaText(u"HeaderTextLeft"_ustr)); // left page
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, areaText(u"HeaderTextFirst"_ustr)); // first page
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, areaText(u"FooterTextLeft"_ustr)); // footer left
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, areaText(u"FooterTextFirst"_ustr)); // footer first
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelRemove)
+{
+    // Removing a label strips its customXml part and clears the header/footer marking.
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+
+    svx::seclabel::StanagLabel aLabel;
+    aLabel.aPolicyId = u"urn:oid:1.2.826.0.1310.1.2.0"_ustr;
+    aLabel.aClassification = u"SECRET"_ustr;
+    aLabel.aCreationDateTime = u"2026-06-21T10:00:00Z"_ustr;
+    svx::seclabel::storeLabelPart(
+        xModel, aLabel.toBindingXml(),
+        svx::seclabel::buildItemProps(u"{B6E4D8A1-1A35-4F0E-9B7A-71F4C0F5E0D3}"_ustr,
+                                     svx::seclabel::STANAG_BINDING_SCHEMA));
+    sw::seclabel::applyMarking(xModel, u"SECRET//X"_ustr, 0xC00000, u"Standard"_ustr);
+
+    // Sanity: the label is present before removal.
+    svx::seclabel::StanagLabel aBefore;
+    CPPUNIT_ASSERT(svx::seclabel::readLabel(xModel, aBefore));
+
+    // Removal is two steps (as the dialog RemoveHdl does): drop the customXml part
+    // (app-agnostic) then clear the Writer markings. It must flag the doc modified.
+    uno::Reference<util::XModifiable> xModifiable(xModel, uno::UNO_QUERY_THROW);
+    xModifiable->setModified(false);
+    svx::seclabel::removeLabelPart(xModel);
+    CPPUNIT_ASSERT(xModifiable->isModified());
+    sw::seclabel::removeLabel(xModel, u"Standard"_ustr);
+
+    // The STANAG part is gone and the header is cleared.
+    svx::seclabel::StanagLabel aAfter;
+    CPPUNIT_ASSERT(!svx::seclabel::readLabel(xModel, aAfter));
+    uno::Reference<beans::XPropertySet> xProps(xModel, uno::UNO_QUERY);
+    comphelper::SequenceAsHashMap aGrabBag(xProps->getPropertyValue(u"InteropGrabBag"_ustr));
+    cpo::uno::Sequence<uno::Reference<css::xml::dom::XDocument>> aParts;
+    aGrabBag[u"OOXCustomXml"_ustr] >>= aParts;
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aParts.getLength());
+
+    uno::Reference<text::XText> xHeader = getProperty<uno::Reference<text::XText>>(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), u"HeaderText"_ustr);
+    CPPUNIT_ASSERT_EQUAL(OUString(), xHeader->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelHeaderCoexist)
+{
+    // The marking coexists with the user's own header content, survives a DOCX round-trip,
+    // and removing it after a reopen clears only our marking -- the char-style marker
+    // (unlike a header bookmark) round-trips, so the sweep still finds it.
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xPageStyle(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xPageStyle->setPropertyValue(u"HeaderIsOn"_ustr, cpo::uno::Any(true));
+    uno::Reference<text::XText> xHeader(xPageStyle->getPropertyValue(u"HeaderText"_ustr),
+                                        uno::UNO_QUERY);
+    xHeader->setString(u"My Header"_ustr);
+
+    sw::seclabel::applyMarking(xModel, u"SECRET//X"_ustr, 0xC00000, u"Standard"_ustr);
+
+    // Marking on top, the user's content preserved below.
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraphOfText(1, xHeader)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"My Header"_ustr, getParagraphOfText(2, xHeader)->getString());
+
+    saveAndReload(TestFilter::DOCX);
+    uno::Reference<frame::XModel> xReloaded(mxComponent, uno::UNO_QUERY);
+    xPageStyle.set(getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xHeader.set(xPageStyle->getPropertyValue(u"HeaderText"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraphOfText(1, xHeader)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"My Header"_ustr, getParagraphOfText(2, xHeader)->getString());
+
+    // Remove after the reopen: only our marking goes, the user content stays.
+    sw::seclabel::removeLabel(xReloaded, u"Standard"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"My Header"_ustr, getParagraphOfText(1, xHeader)->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelFooterCoexist)
+{
+    // Same as the header case, but for the footer: the marking is appended below the
+    // user's own footer content rather than replacing it, survives a DOCX round-trip,
+    // and removal after a reopen clears only our marking.
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xPageStyle(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xPageStyle->setPropertyValue(u"FooterIsOn"_ustr, cpo::uno::Any(true));
+    uno::Reference<text::XText> xFooter(xPageStyle->getPropertyValue(u"FooterText"_ustr),
+                                        uno::UNO_QUERY);
+    xFooter->setString(u"My Footer"_ustr);
+
+    sw::seclabel::applyMarking(xModel, u"SECRET//X"_ustr, 0xC00000, u"Standard"_ustr);
+
+    // The user's content stays on top, the marking is appended below.
+    CPPUNIT_ASSERT_EQUAL(u"My Footer"_ustr, getParagraphOfText(1, xFooter)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraphOfText(2, xFooter)->getString());
+
+    saveAndReload(TestFilter::DOCX);
+    uno::Reference<frame::XModel> xReloaded(mxComponent, uno::UNO_QUERY);
+    xPageStyle.set(getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xFooter.set(xPageStyle->getPropertyValue(u"FooterText"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"My Footer"_ustr, getParagraphOfText(1, xFooter)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraphOfText(2, xFooter)->getString());
+
+    // Remove after the reopen: only our marking goes, the user content stays.
+    sw::seclabel::removeLabel(xReloaded, u"Standard"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"My Footer"_ustr, getParagraphOfText(1, xFooter)->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelFooterFieldCoexist)
+{
+    // A footer whose only content is a page-number field: getString() reports empty even
+    // though the footer is not really empty. The marking must coexist as its own paragraph,
+    // not merge into the field's paragraph (which is what a getString()-based empty check does).
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(xModel, uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xPageStyle(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xPageStyle->setPropertyValue(u"FooterIsOn"_ustr, cpo::uno::Any(true));
+    uno::Reference<text::XText> xFooter(xPageStyle->getPropertyValue(u"FooterText"_ustr),
+                                        uno::UNO_QUERY);
+
+    uno::Reference<text::XTextContent> xField(
+        xFactory->createInstance(u"com.sun.star.text.TextField.PageNumber"_ustr), uno::UNO_QUERY);
+    uno::Reference<text::XTextCursor> xFieldCursor = xFooter->createTextCursor();
+    xFooter->insertTextContent(xFieldCursor, xField, false);
+
+    // A field-only footer has empty getString() but real content.
+    CPPUNIT_ASSERT(xFooter->getString().isEmpty());
+
+    sw::seclabel::applyMarking(xModel, u"SECRET//X"_ustr, 0xC00000, u"Standard"_ustr);
+
+    std::vector<OUString> aParas;
+    uno::Reference<container::XEnumerationAccess> xEA(xFooter, uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xE = xEA->createEnumeration();
+    while (xE->hasMoreElements())
+    {
+        uno::Reference<text::XTextRange> xP(xE->nextElement(), uno::UNO_QUERY);
+        aParas.push_back(xP.is() ? xP->getString() : OUString());
+    }
+
+    // Two paragraphs: the field's and the marking's -- not merged into one.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2), static_cast<sal_Int32>(aParas.size()));
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, aParas[1]);
+    CPPUNIT_ASSERT(aParas[0].indexOf(u"SECRET//X"_ustr) < 0); // field paragraph untouched
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelBodyMarking)
+{
+    // Cover (documentStart) and end-page (documentEnd) markings bracket the body,
+    // are idempotent on re-apply, and are removable.
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextDocument> xTextDoc(mxComponent, uno::UNO_QUERY);
+    xTextDoc->getText()->setString(u"BODY"_ustr);
+
+    sw::seclabel::applyBodyMarkings(xModel, u"SECRET//X"_ustr, 0xC00000, /*bStart*/ true,
+                                    /*bEnd*/ true);
+    CPPUNIT_ASSERT_EQUAL(3, getParagraphs());
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraph(1)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"BODY"_ustr, getParagraph(2)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraph(3)->getString());
+
+    // Re-applying replaces, never duplicates.
+    sw::seclabel::applyBodyMarkings(xModel, u"SECRET//X"_ustr, 0xC00000, true, true);
+    CPPUNIT_ASSERT_EQUAL(3, getParagraphs());
+    CPPUNIT_ASSERT_EQUAL(u"BODY"_ustr, getParagraph(2)->getString());
+
+    // Dropping the end placement on re-label clears just that one.
+    sw::seclabel::applyBodyMarkings(xModel, u"SECRET//X"_ustr, 0xC00000, true, false);
+    CPPUNIT_ASSERT_EQUAL(2, getParagraphs());
+    CPPUNIT_ASSERT_EQUAL(u"SECRET//X"_ustr, getParagraph(1)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"BODY"_ustr, getParagraph(2)->getString());
+
+    // Remove clears all body markings, leaving the body intact.
+    sw::seclabel::removeBodyMarkings(xModel);
+    CPPUNIT_ASSERT_EQUAL(1, getParagraphs());
+    CPPUNIT_ASSERT_EQUAL(u"BODY"_ustr, getParagraph(1)->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSecurityLabelPortionMarking)
+{
+    // Portion marking prefixes the view cursor's paragraph, and is idempotent.
+    createSwDoc();
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextDocument> xTextDoc(mxComponent, uno::UNO_QUERY);
+
+    // Two paragraphs; place the view cursor in the second.
+    uno::Reference<text::XText> xBody = xTextDoc->getText();
+    uno::Reference<text::XTextCursor> xBodyCursor = xBody->createTextCursor();
+    xBody->insertString(xBodyCursor, u"FIRST"_ustr, false);
+    xBody->insertControlCharacter(xBodyCursor, text::ControlCharacter::PARAGRAPH_BREAK, false);
+    xBody->insertString(xBodyCursor, u"SECOND"_ustr, false);
+
+    uno::Reference<text::XTextViewCursorSupplier> xSupplier(xModel->getCurrentController(),
+                                                            uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursor> xViewCursor = xSupplier->getViewCursor();
+    xViewCursor->gotoEnd(false); // land in the second paragraph
+
+    sw::seclabel::applyPortionMarking(xModel, u"SECRET//X"_ustr, 0xC00000);
+
+    // Only the cursor's paragraph is prefixed; the other is untouched.
+    CPPUNIT_ASSERT_EQUAL(2, getParagraphs());
+    CPPUNIT_ASSERT_EQUAL(u"FIRST"_ustr, getParagraph(1)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"(SECRET//X) SECOND"_ustr, getParagraph(2)->getString());
+
+    // The prefix is a character run: it must not re-align the user's paragraph (centring is
+    // paragraph-level and would otherwise centre the whole line the marking shares).
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(style::ParagraphAdjust_LEFT),
+                         getProperty<sal_Int16>(getParagraph(2), u"ParaAdjust"_ustr));
+
+    // Re-applying the same portion marking does not stack a second prefix.
+    sw::seclabel::applyPortionMarking(xModel, u"SECRET//X"_ustr, 0xC00000);
+    CPPUNIT_ASSERT_EQUAL(u"(SECRET//X) SECOND"_ustr, getParagraph(2)->getString());
+
+    // Removing sweeps the prefix (found by its character style), leaving the user's text.
+    sw::seclabel::removeBodyMarkings(xModel);
+    CPPUNIT_ASSERT_EQUAL(u"FIRST"_ustr, getParagraph(1)->getString());
+    CPPUNIT_ASSERT_EQUAL(u"SECOND"_ustr, getParagraph(2)->getString());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testA4AndBorders, "a4andborders.docx")
@@ -706,7 +1120,7 @@ CPPUNIT_TEST_FIXTURE(Test, testCellGridSpan)
 DECLARE_OOXMLEXPORT_TEST(testFdo71646, "fdo71646.docx")
 {
     // The problem was after save file created by MS the direction changed to RTL.
-    uno::Reference<uno::XInterface> xParaLTRLeft(getParagraph( 1, u"LTR LEFT"_ustr));
+    uno::Reference<cpo::uno::XInterface> xParaLTRLeft(getParagraph( 1, u"LTR LEFT"_ustr));
     sal_Int32 nLTRLeft = getProperty< sal_Int32 >( xParaLTRLeft, u"ParaAdjust"_ustr );
     // test the text Direction value for the paragraph
     sal_Int16 nLRDir  = getProperty< sal_Int32 >( xParaLTRLeft, u"WritingMode"_ustr );

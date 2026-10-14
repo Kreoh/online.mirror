@@ -51,47 +51,47 @@ public:
         @param rTable    The Table control.
         @param eObjType  Type of accessible table control. */
     AccessibleGridControlBase(
-        css::uno::Reference< css::accessibility::XAccessible > xParent,
+        cpo::uno::Reference< css::accessibility::XAccessible > xParent,
         svt::table::TableControl& rTable,
         AccessibleTableControlObjType eObjType);
 
 protected:
     virtual ~AccessibleGridControlBase() = default;
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 
 public:
     // XAccessibleContext
 
     /** @return  A reference to the parent accessible object. */
-    virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
     getAccessibleParent() override;
 
     /** @return
             The description of this object.
     */
-    virtual OUString SAL_CALL getAccessibleDescription() override;
+    virtual OUString getAccessibleDescription() override;
 
     /** @return
             The name of this object.
     */
-    virtual OUString SAL_CALL getAccessibleName() override;
+    virtual OUString getAccessibleName() override;
 
     /** @return
             The relation set (the GridControl does not have one).
     */
-    virtual css::uno::Reference< css::accessibility::XAccessibleRelationSet > SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleRelationSet >
         getAccessibleRelationSet() override;
 
     /** @return  The set of current states. */
-    virtual sal_Int64 SAL_CALL getAccessibleStateSet() override;
+    virtual sal_Int64 getAccessibleStateSet() override;
 
     /** @return  The parent's locale. */
-    virtual css::lang::Locale SAL_CALL getLocale() override;
+    virtual css::lang::Locale getLocale() override;
 
     /** @return
             The role of this object. Panel, ROWHEADER, COLUMNHEADER, TABLE, TABLE_CELL are supported.
     */
-    virtual sal_Int16 SAL_CALL getAccessibleRole() override;
+    virtual sal_Int16 getAccessibleRole() override;
 
     /*  Derived classes have to implement:
         -   getAccessibleChildCount,
@@ -101,8 +101,8 @@ public:
         performance. */
 
     // XAccessibleComponent
-    virtual sal_Int32 SAL_CALL getForeground(  ) override;
-    virtual sal_Int32 SAL_CALL getBackground(  ) override;
+    virtual sal_Int32 getForeground(  ) override;
+    virtual sal_Int32 getBackground(  ) override;
 
 
     /*  Derived classes have to implement:
@@ -112,16 +112,16 @@ public:
     /** @return
             The accessible child rendered under the given point.
     */
-    virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
     getAccessibleAtPoint( const css::awt::Point& rPoint ) override;
 
     // XServiceInfo
 
     /** @return  Whether the specified service is supported by this class. */
-    virtual bool SAL_CALL supportsService( const OUString& rServiceName ) override;
+    virtual bool supportsService( const OUString& rServiceName ) override;
 
     /** @return  a list of all supported services. */
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
     /*  Derived classes have to implement:
@@ -170,7 +170,7 @@ protected:
     // members
 
     /** The parent accessible object. */
-    css::uno::Reference< css::accessibility::XAccessible > m_xParent;
+    cpo::uno::Reference< css::accessibility::XAccessible > m_xParent;
     /** The SVT Table control. */
     svt::table::TableControl& m_aTable;
     /** The type of this object (for names, descriptions, state sets, ...). */

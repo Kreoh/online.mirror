@@ -27,7 +27,7 @@
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <com/sun/star/connection/AlreadyAcceptingException.hpp>
 #include <com/sun/star/connection/ConnectionSetupException.hpp>
@@ -38,7 +38,7 @@
 
 using namespace ::osl;
 using namespace ::cppu;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::connection;
@@ -54,7 +54,7 @@ public:
         m_rAcceptor( r ),
         m_sConnectionDescription( sConnectionDescription )
         {}
-    virtual void SAL_CALL run();
+    virtual void run();
 
     Reference < XAcceptor > m_rAcceptor;
 private:

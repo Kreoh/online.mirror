@@ -78,8 +78,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::datatransfer;
 
@@ -745,7 +745,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
             Reference< XComponent > xComponent = xShell->GetModel();
             xStm->Seek( 0 );
 
-            css::uno::Reference< css::io::XInputStream > xInputStream( new utl::OInputStreamWrapper( *xStm ) );
+            cpo::uno::Reference< css::io::XInputStream > xInputStream( new utl::OInputStreamWrapper( *xStm ) );
             bool bReturn = SvxDrawingLayerImport( pModel, xInputStream, xComponent, "com.sun.star.comp.Impress.XMLOasisImporter" );
 
             if( pModel->GetPageCount() == 0 )
@@ -1142,16 +1142,6 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                     // try to get the replacement image from the clipboard
                     Graphic aGraphic;
                     SotClipboardFormatId nGrFormat = SotClipboardFormatId::NONE;
-
-// (for Selection Manager in Trusted Solaris)
-#ifndef __sun
-                    if (rDataHelper.GetGraphic(SotClipboardFormatId::SVXB, aGraphic))
-                        nGrFormat = SotClipboardFormatId::SVXB;
-                    else if (rDataHelper.GetGraphic(SotClipboardFormatId::GDIMETAFILE, aGraphic))
-                        nGrFormat = SotClipboardFormatId::GDIMETAFILE;
-                    else if (rDataHelper.GetGraphic(SotClipboardFormatId::BITMAP, aGraphic))
-                        nGrFormat = SotClipboardFormatId::BITMAP;
-#endif
 
                     // insert replacement image ( if there is one ) into the object helper
                     if ( nGrFormat != SotClipboardFormatId::NONE )

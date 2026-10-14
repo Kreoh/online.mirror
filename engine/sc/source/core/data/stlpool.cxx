@@ -177,6 +177,16 @@ void ScStyleSheetPool::CopyStyleFrom( SfxStyleSheetBasePool* pSrcPool,
     }
     else if ( eFamily == SfxStyleFamily::Para )
     {
+        //  The font that the style does not apply belongs to the pool of the source document
+
+        if ( const SvxSetItem* pSetItem = rSourceSet.GetItemIfSet( ATTR_EXCLUDED_FONT, false ) )
+        {
+            const SfxItemSet& rSrcSub = pSetItem->GetItemSet();
+            SfxItemSet aDestSub( *rDestSet.GetPool(), rSrcSub.GetRanges() );
+            aDestSub.PutExtended( rSrcSub, SfxItemState::INVALID, SfxItemState::DEFAULT );
+            rDestSet.Put( SvxSetItem( ATTR_EXCLUDED_FONT, aDestSub ) );
+        }
+
         // number format exchange list has to be handled here, too
 
         const SfxUInt32Item* pItem;
@@ -265,8 +275,7 @@ void ScStyleSheetPool::CreateStandardStyles()
     SfxItemSet*     pHFSet          = nullptr;
     ScEditEngineDefaulter aEdEngine( pDoc->GetEditEnginePool(), true );
     aEdEngine.SetUpdateLayout( false );
-    std::unique_ptr<EditTextObject> pEmptyTxtObj = aEdEngine.CreateTextObject();
-    std::unique_ptr<EditTextObject> pTxtObj;
+    EditTextObject aEmptyTxtObj = aEdEngine.CreateTextObject();
     ScPageHFItem aHeaderItem( ATTR_PAGE_HEADERRIGHT );
     ScPageHFItem aFooterItem( ATTR_PAGE_FOOTERRIGHT );
     ScStyleSheet*   pSheet          = nullptr;
@@ -332,10 +341,10 @@ void ScStyleSheetPool::CreateStandardStyles()
 
     aEdEngine.SetTextCurrentDefaults(OUString());
     aEdEngine.QuickInsertField( SvxFieldItem(SvxTableField(), EE_FEATURE_FIELD), ESelection() );
-    pTxtObj = aEdEngine.CreateTextObject();
-    aHeaderItem.SetLeftArea  ( *pEmptyTxtObj );
-    aHeaderItem.SetCenterArea( *pTxtObj );
-    aHeaderItem.SetRightArea ( *pEmptyTxtObj );
+    EditTextObject aTxtObj = aEdEngine.CreateTextObject();
+    aHeaderItem.SetLeftArea  ( aEmptyTxtObj );
+    aHeaderItem.SetCenterArea( aTxtObj );
+    aHeaderItem.SetRightArea ( aEmptyTxtObj );
     pSet->Put( aHeaderItem );
 
     // Footer:
@@ -345,10 +354,9 @@ void ScStyleSheetPool::CreateStandardStyles()
     aEdEngine.SetTextCurrentDefaults( aStr );
     nStrLen = aStr.getLength();
     aEdEngine.QuickInsertField( SvxFieldItem(SvxPageField(), EE_FEATURE_FIELD), ESelection(0,nStrLen) );
-    pTxtObj = aEdEngine.CreateTextObject();
-    aFooterItem.SetLeftArea  ( *pEmptyTxtObj );
-    aFooterItem.SetCenterArea( *pTxtObj );
-    aFooterItem.SetRightArea ( *pEmptyTxtObj );
+    aFooterItem.SetLeftArea  ( aEmptyTxtObj );
+    aFooterItem.SetCenterArea( aEdEngine.CreateTextObject() );
+    aFooterItem.SetRightArea ( aEmptyTxtObj );
     pSet->Put( aFooterItem );
 
     // 2. Report
@@ -391,16 +399,14 @@ void ScStyleSheetPool::CreateStandardStyles()
     aEdEngine.SetTextCurrentDefaults( aStr );
     aEdEngine.QuickInsertField( SvxFieldItem(SvxFileField(), EE_FEATURE_FIELD), ESelection(0,2) );
     aEdEngine.QuickInsertField( SvxFieldItem(SvxTableField(), EE_FEATURE_FIELD), ESelection() );
-    pTxtObj = aEdEngine.CreateTextObject();
-    aHeaderItem.SetLeftArea( *pTxtObj );
-    aHeaderItem.SetCenterArea( *pEmptyTxtObj );
+    aHeaderItem.SetLeftArea( aEdEngine.CreateTextObject() );
+    aHeaderItem.SetCenterArea( aEmptyTxtObj );
     aStr = u", "_ustr;
     aEdEngine.SetTextCurrentDefaults( aStr );
     aEdEngine.QuickInsertField( SvxFieldItem(SvxTimeField(), EE_FEATURE_FIELD), ESelection(0,2) );
     aEdEngine.QuickInsertField( SvxFieldItem(SvxDateField(Date( Date::SYSTEM ),SvxDateType::Var), EE_FEATURE_FIELD),
                                     ESelection() );
-    pTxtObj = aEdEngine.CreateTextObject();
-    aHeaderItem.SetRightArea( *pTxtObj );
+    aHeaderItem.SetRightArea( aEdEngine.CreateTextObject() );
     pSet->Put( aHeaderItem );
 
     // Footer:
@@ -413,10 +419,9 @@ void ScStyleSheetPool::CreateStandardStyles()
     aEdEngine.SetTextCurrentDefaults( aStr );
     aEdEngine.QuickInsertField( SvxFieldItem(SvxPagesField(), EE_FEATURE_FIELD), ESelection(0,nStrLen2) );
     aEdEngine.QuickInsertField( SvxFieldItem(SvxPageField(), EE_FEATURE_FIELD), ESelection(0,nStrLen) );
-    pTxtObj = aEdEngine.CreateTextObject();
-    aFooterItem.SetLeftArea  ( *pEmptyTxtObj );
-    aFooterItem.SetCenterArea( *pTxtObj );
-    aFooterItem.SetRightArea ( *pEmptyTxtObj );
+    aFooterItem.SetLeftArea  ( aEmptyTxtObj );
+    aFooterItem.SetCenterArea( aEdEngine.CreateTextObject() );
+    aFooterItem.SetRightArea ( aEmptyTxtObj );
     pSet->Put( aFooterItem );
 
     bHasStandardStyles = true;

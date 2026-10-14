@@ -35,19 +35,18 @@
 #include <cppuhelper/weak.hxx>
 #include <com/sun/star/script/XTypeConverter.hpp>
 #include <com/sun/star/script/XInvocationAdapterFactory.hpp>
-#include <com/sun/star/script/XInvocationAdapterFactory2.hpp>
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/reflection/InvocationTargetException.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <unordered_map>
 #include <vector>
 
 using namespace ::osl;
 using namespace ::com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace stoc_invadp
@@ -71,8 +70,7 @@ namespace {
 
 class FactoryImpl
     : public ::cppu::WeakImplHelper< lang::XServiceInfo,
-                                      script::XInvocationAdapterFactory,
-                                      script::XInvocationAdapterFactory2 >
+                                      script::XInvocationAdapterFactory >
 {
 public:
     Mapping m_aUno2Cpp;
@@ -93,15 +91,12 @@ public:
     virtual ~FactoryImpl() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString & rServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     // XInvocationAdapterFactory
-    virtual Reference< XInterface > SAL_CALL createAdapter(
-        const Reference< script::XInvocation > & xReceiver, const Type & rType ) override;
-    // XInvocationAdapterFactory2
-    virtual Reference< XInterface > SAL_CALL createAdapter(
+    virtual Reference< XInterface > createAdapter(
         const Reference< script::XInvocation > & xReceiver,
         const Sequence< Type > & rTypes ) override;
 };
@@ -781,8 +776,6 @@ static AdapterImpl * lookup_adapter(
     return nullptr;
 }
 
-// XInvocationAdapterFactory2 impl
-
 Reference< XInterface > FactoryImpl::createAdapter(
     const Reference< script::XInvocation > & xReceiver,
     const Sequence< Type > & rTypes )
@@ -840,13 +833,6 @@ Reference< XInterface > FactoryImpl::createAdapter(
     }
     return xRet;
 }
-// XInvocationAdapterFactory impl
-
-Reference< XInterface > FactoryImpl::createAdapter(
-    const Reference< script::XInvocation > & xReceiver, const Type & rType )
-{
-    return createAdapter( xReceiver, Sequence< Type >( &rType, 1 ) );
-}
 
 // XServiceInfo
 
@@ -868,9 +854,9 @@ Sequence< OUString > FactoryImpl::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 stoc_invocation_adapter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new stoc_invadp::FactoryImpl(context));
 }

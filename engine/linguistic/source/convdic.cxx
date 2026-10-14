@@ -37,7 +37,7 @@
 #include <com/sun/star/util/XFlushable.hpp>
 #include <com/sun/star/lang/EventObject.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/util/XFlushListener.hpp>
 #include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
@@ -57,7 +57,8 @@ using namespace utl;
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
@@ -68,13 +69,13 @@ static void ReadThroughDic( const OUString &rMainURL, ConvDicXMLImport &rImport 
         return;
     DBG_ASSERT(!INetURLObject( rMainURL ).HasError(), "invalid URL");
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     // get xInputStream stream
     uno::Reference< io::XInputStream > xIn;
     try
     {
-        uno::Reference< ucb::XSimpleFileAccess3 > xAccess( ucb::SimpleFileAccess::create(xContext) );
+        uno::Reference< ucb::XSimpleFileAccess > xAccess( ucb::SimpleFileAccess::create(xContext) );
         xIn = xAccess->openFileRead( rMainURL );
     }
     catch (const cpo::uno::Exception &)
@@ -207,13 +208,13 @@ void ConvDic::Save()
         return;
     DBG_ASSERT(!INetURLObject( aMainURL ).HasError(), "invalid URL");
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     // get XOutputStream stream
     uno::Reference< io::XStream > xStream;
     try
     {
-        uno::Reference< ucb::XSimpleFileAccess3 > xAccess( ucb::SimpleFileAccess::create(xContext) );
+        uno::Reference< ucb::XSimpleFileAccess > xAccess( ucb::SimpleFileAccess::create(xContext) );
         xStream = xAccess->openFileReadWrite( aMainURL );
     }
     catch (const cpo::uno::Exception &)

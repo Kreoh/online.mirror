@@ -39,7 +39,7 @@
 #include <vector>
 #include <map>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 typedef std::map<sal_uInt16, cpo::uno::Any> ImplPropertyTable;
 
@@ -59,7 +59,7 @@ private:
     EventListenerMultiplexer                maDisposeListeners;
 
 protected:
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 
 protected:
     void                                        ImplRegisterProperty( sal_uInt16 nPropType );
@@ -103,52 +103,52 @@ protected:
         : UnoControlModel_Base()
         , OPropertySetHelper()
         , maDisposeListeners( *this )
-        , m_xContext( css::uno::Reference< css::uno::XComponentContext >() )
+        , m_xContext( cpo::uno::Reference< cpo::uno::XComponentContext >() )
     {
         assert(false);
     }
 #endif
 
 public:
-                UnoControlModel( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+                UnoControlModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
                 UnoControlModel( const UnoControlModel& rModel );
 
     virtual rtl::Reference<UnoControlModel> Clone() const = 0;
 
-    // css::uno::XInterface
-    cpo::uno::Any  SAL_CALL queryInterface( const cpo::uno::Type & rType ) override { return OWeakAggObject::queryInterface(rType); }
-    void                        SAL_CALL acquire() noexcept override;
-    void                        SAL_CALL release() noexcept override;
+    // cpo::uno::XInterface
+    cpo::uno::Any  queryInterface( const cpo::uno::Type & rType ) override { return OWeakAggObject::queryInterface(rType); }
+    void                        acquire() noexcept override;
+    void                        release() noexcept override;
 
     // cpo::uno::XAggregation
-    cpo::uno::Any  SAL_CALL queryAggregation( const cpo::uno::Type & rType ) override;
+    cpo::uno::Any  queryAggregation( const cpo::uno::Type & rType ) override;
 
     // css::util::XCloneable
-    css::uno::Reference< css::util::XCloneable > SAL_CALL createClone() override;
+    cpo::uno::Reference< css::util::XCloneable > createClone() override;
 
     // css::lang::XTypeProvider
     DECLARE_XTYPEPROVIDER()
 
     // css::lang::XComponent
-    void SAL_CALL dispose(  ) override;
-    void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    void dispose(  ) override;
+    void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // css::beans::XPropertyState
-    css::beans::PropertyState SAL_CALL getPropertyState( const OUString& PropertyName ) override;
-    cpo::uno::Sequence< css::beans::PropertyState > SAL_CALL getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override;
-    void SAL_CALL setPropertyToDefault( const OUString& PropertyName ) override;
-    cpo::uno::Any SAL_CALL getPropertyDefault( const OUString& aPropertyName ) override;
+    css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override;
+    cpo::uno::Sequence< css::beans::PropertyState > getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override;
+    void setPropertyToDefault( const OUString& PropertyName ) override;
+    cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
 
     // css::io::XPersistObject
-    OUString SAL_CALL getServiceName() override;
-    void SAL_CALL write( const css::uno::Reference< css::io::XObjectOutputStream >& OutStream ) override;
-    void SAL_CALL read( const css::uno::Reference< css::io::XObjectInputStream >& InStream ) override;
+    OUString getServiceName() override;
+    void write( const cpo::uno::Reference< css::io::XObjectOutputStream >& OutStream ) override;
+    void read( const cpo::uno::Reference< css::io::XObjectInputStream >& InStream ) override;
 
     // css::lang::XServiceInfo
-    OUString SAL_CALL getImplementationName(  ) override;
-    bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName(  ) override;
+    bool supportsService( const OUString& ServiceName ) override;
+    cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // ::cppu::OPropertySetHelper
     ::cppu::IPropertyArrayHelper& getInfoHelper() override = 0;
@@ -160,8 +160,8 @@ public:
     void getFastPropertyValue( std::unique_lock<std::mutex>& rGuard, cpo::uno::Any& rValue, sal_Int32 nHandle ) const override;
 
     // css::beans::XMultiPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
-    void SAL_CALL setPropertyValues( const cpo::uno::Sequence< OUString >& PropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& Values ) override;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    void setPropertyValues( const cpo::uno::Sequence< OUString >& PropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& Values ) override;
 protected:
     // override setValue methods to handle properties of FontDescriptor
     // css::beans::XFastPropertySet

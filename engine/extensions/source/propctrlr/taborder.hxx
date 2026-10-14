@@ -21,7 +21,7 @@
 
 #include <com/sun/star/awt/XTabControllerModel.hpp>
 #include <com/sun/star/awt/XControlContainer.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <vcl/weld.hxx>
 
@@ -34,11 +34,11 @@ namespace pcr
     {
         rtl::Reference< OSimpleTabModel >
                                     m_xTempModel;
-        css::uno::Reference< css::awt::XTabControllerModel >
+        cpo::uno::Reference< css::awt::XTabControllerModel >
                                     m_xModel;
-        css::uno::Reference< css::awt::XControlContainer >
+        cpo::uno::Reference< css::awt::XControlContainer >
                                     m_xControlContainer;
-        css::uno::Reference< css::uno::XComponentContext >
+        cpo::uno::Reference< cpo::uno::XComponentContext >
                                     m_xORB;
 
         std::unique_ptr<weld::TreeView> m_xLB_Controls;
@@ -59,9 +59,9 @@ namespace pcr
     public:
         TabOrderDialog(
             weld::Window* pParent,
-            const css::uno::Reference< css::awt::XTabControllerModel >& _rxTabModel,
-            const css::uno::Reference< css::awt::XControlContainer >& _rxControlCont,
-            const css::uno::Reference< css::uno::XComponentContext >& _rxORB
+            const cpo::uno::Reference< css::awt::XTabControllerModel >& _rxTabModel,
+            const cpo::uno::Reference< css::awt::XControlContainer >& _rxControlCont,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxORB
         );
 
         virtual ~TabOrderDialog() override;

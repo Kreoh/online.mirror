@@ -38,6 +38,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::ooo::vba;
+using namespace ::cpo;
 
 namespace ooo::vba::word
 {
@@ -132,7 +133,7 @@ uno::Reference< text::XText > getCurrentXText( const rtl::Reference< SwXTextDocu
     {
         xText = xTextRange->getText();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         //catch exception "no text selection"
     }
@@ -144,7 +145,7 @@ uno::Reference< text::XText > getCurrentXText( const rtl::Reference< SwXTextDocu
     }
 
     if( !xText.is() )
-        throw  uno::RuntimeException(u"no text selection"_ustr );
+        throw  cpo::uno::RuntimeException(u"no text selection"_ustr );
 
     return xText;
 }
@@ -163,7 +164,7 @@ bool gotoSelectedObjectAnchor( const rtl::Reference<SwXTextDocument>& xModel )
     return isObjectSelected;
 }
 
-rtl::Reference< SwXTextDocument > getCurrentWordDoc( const uno::Reference< uno::XComponentContext >& xContext )
+rtl::Reference< SwXTextDocument > getCurrentWordDoc( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     try
     {
@@ -182,7 +183,7 @@ rtl::Reference< SwXTextDocument > getCurrentWordDoc( const uno::Reference< uno::
     return {};
 }
 
-rtl::Reference< SwXTextDocument > getThisWordDoc( const uno::Reference< uno::XComponentContext >& xContext )
+rtl::Reference< SwXTextDocument > getThisWordDoc( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     return dynamic_cast<SwXTextDocument*>(::ooo::vba::getCurrentDocCtx( u"WordDocumentContext"_ustr , xContext ).get());
 }

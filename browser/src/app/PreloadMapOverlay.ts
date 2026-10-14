@@ -53,14 +53,16 @@ class PreloadMapOverlay {
 		RenderManager.onTileStateChanged(this.boundOnChanged);
 		// Scrolling moves the view rectangle, and changing part moves the map
 		// to another part's tiles, without any tile itself changing.
-		app.map.on('move zoomend resize updateparts setpart', this.boundOnChanged);
+		app.events.on('viewmoved', this.boundOnChanged);
+		app.map.on('zoomend resize updateparts setpart', this.boundOnChanged);
 
 		this.onTileStateChanged();
 	}
 
 	destroy(): void {
 		RenderManager.offTileStateChanged(this.boundOnChanged);
-		app.map.off('move zoomend resize updateparts setpart', this.boundOnChanged);
+		app.events.off('viewmoved', this.boundOnChanged);
+		app.map.off('zoomend resize updateparts setpart', this.boundOnChanged);
 		if (this.redrawHandle) cancelAnimationFrame(this.redrawHandle);
 		this.redrawHandle = 0;
 		this.canvas.remove();
@@ -131,8 +133,8 @@ class PreloadMapOverlay {
 		tileRange.min.y = tileRange.min.y - Math.floor(viewHeight * enlargeY);
 		tileRange.max.y = tileRange.max.y + Math.floor(viewHeight * enlargeY);
 
-		// The parts carry the part number tiles are keyed by, resolved from
-		// the index. An index outside the document gets the invalid part -1.
+		// The parts carry the part identifier tiles are keyed by, resolved
+		// from the index. An index outside the document gets an empty part.
 		const preParts = (numParts - 1) / 2;
 		const parts: PreloadMapPart[] = [];
 		let voffset = 0;
@@ -200,7 +202,7 @@ class PreloadMapOverlay {
 			const range = partLayout.range;
 			for (let j = range.min.y; j <= range.max.y; ++j) {
 				for (let i = range.min.x; i <= range.max.x; ++i) {
-					if (i >= 0 && j >= 0 && partLayout.part >= 0) {
+					if (i >= 0 && j >= 0 && partLayout.part) {
 						const coords = new TileCoordData(
 							i * RenderManager.tileSize,
 							j * RenderManager.tileSize,
@@ -245,7 +247,7 @@ class PreloadMapOverlay {
 			}
 
 			// view rectangle
-			if (partLayout.part == docLayer.getSelectedPart()) {
+			if (partLayout.part === docLayer.getSelectedPart()) {
 				// viewport in tiles - not that accurate.
 				canvas.strokeStyle = 'rgba(0, 0, 0, 0.5)';
 				canvas.lineWidth = 1.0;

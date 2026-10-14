@@ -24,7 +24,7 @@
 #include <vbahelper/vbahelperinterface.hxx>
 
 namespace com::sun::star::beans { class XPropertySet; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace ooo::vba::excel { class XRange; }
 
 template< typename... Ifc >
@@ -32,20 +32,20 @@ class ScVbaPageBreak : public InheritedHelperInterfaceWeakImpl< Ifc... >
 {
 typedef InheritedHelperInterfaceWeakImpl< Ifc... > ScVbaPageBreak_BASE;
 protected:
-    css::uno::Reference< css::beans::XPropertySet > mxRowColPropertySet;
+    cpo::uno::Reference< css::beans::XPropertySet > mxRowColPropertySet;
     css::sheet::TablePageBreakData maTablePageBreakData;
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaPageBreak( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                    const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                    css::uno::Reference< css::beans::XPropertySet > xProps,
+    /// @throws cpo::uno::RuntimeException
+    ScVbaPageBreak( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                    cpo::uno::Reference< css::beans::XPropertySet > xProps,
                     css::sheet::TablePageBreakData aTablePageBreakData);
 
-    virtual sal_Int32 SAL_CALL getType( ) override;
-    virtual void SAL_CALL setType(sal_Int32 type) override;
+    virtual sal_Int32 getType( ) override;
+    virtual void setType(sal_Int32 type) override;
 
-    virtual void SAL_CALL Delete() override;
-    virtual css::uno::Reference< ov::excel::XRange> SAL_CALL Location() override;
+    virtual void Delete() override;
+    virtual cpo::uno::Reference< ov::excel::XRange> Location() override;
 };
 
 typedef ScVbaPageBreak < ov::excel::XHPageBreak > ScVbaHPageBreak_BASE;
@@ -53,10 +53,10 @@ typedef ScVbaPageBreak < ov::excel::XHPageBreak > ScVbaHPageBreak_BASE;
 class ScVbaHPageBreak :  public ScVbaHPageBreak_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaHPageBreak( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                    const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                    const css::uno::Reference< css::beans::XPropertySet >& xProps,
+    /// @throws cpo::uno::RuntimeException
+    ScVbaHPageBreak( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                    const cpo::uno::Reference< css::beans::XPropertySet >& xProps,
                     css::sheet::TablePageBreakData aTablePageBreakData):
               ScVbaHPageBreak_BASE( xParent,xContext,xProps,aTablePageBreakData ){}
 
@@ -71,10 +71,10 @@ typedef ScVbaPageBreak < ov::excel::XVPageBreak > ScVbaVPageBreak_BASE;
 class ScVbaVPageBreak :  public ScVbaVPageBreak_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaVPageBreak( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                     const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                     const css::uno::Reference< css::beans::XPropertySet >& xProps,
+    /// @throws cpo::uno::RuntimeException
+    ScVbaVPageBreak( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                     const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                     const cpo::uno::Reference< css::beans::XPropertySet >& xProps,
                      css::sheet::TablePageBreakData aTablePageBreakData);
 
     virtual ~ScVbaVPageBreak() override;

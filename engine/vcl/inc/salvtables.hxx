@@ -30,7 +30,7 @@
 #include <vcl/toolkit/svlbitm.hxx>
 #include <o3tl/sorted_vector.hxx>
 #include "calendar.hxx"
-#include "colorpicker.hxx"
+#include "slider.hxx"
 #include "iconview.hxx"
 #include "messagedialog.hxx"
 #include "verticaltabctrl.hxx"
@@ -48,8 +48,8 @@ protected:
 
 public:
     SalInstanceBuilder(vcl::Window* pParent, std::u16string_view sUIRoot, const OUString& rUIFile,
-                       const css::uno::Reference<css::frame::XFrame>& rFrame
-                       = css::uno::Reference<css::frame::XFrame>());
+                       const cpo::uno::Reference<css::frame::XFrame>& rFrame
+                       = cpo::uno::Reference<css::frame::XFrame>());
 
     virtual std::unique_ptr<weld::MessageDialog> weld_message_dialog(const OUString& id) override;
 
@@ -172,7 +172,7 @@ public:
     virtual void clear() override;
     virtual void insert(int pos, const OUString& rId, const OUString& rStr,
                         const OUString* pIconName, VirtualDevice* pImageSurface,
-                        const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                        const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                         TriState eCheckRadioFalse) override;
     virtual void insert_separator(int pos, const OUString& rId) override;
     virtual void set_item_help_id(const OUString& rIdent, const OUString& rHelpId) override;
@@ -367,8 +367,8 @@ public:
 
     virtual ScopedVclPtr<VirtualDevice> create_virtual_device() const override;
 
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() override;
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard>
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() override;
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>
     get_clipboard() const override;
 
     virtual void connect_get_property_tree(const Link<tools::JsonWriter&, void>& rLink) override;
@@ -429,7 +429,7 @@ public:
     virtual void connect_container_focus_changed(const Link<Container&, void>& rLink) override;
     virtual void child_grab_focus() override;
     virtual void move(weld::Widget* pWidget, weld::Container* pNewParent) override;
-    virtual css::uno::Reference<css::awt::XWindow> CreateChildFrame() override;
+    virtual cpo::uno::Reference<css::awt::XWindow> CreateChildFrame() override;
 };
 
 class SalInstanceWindow : public SalInstanceContainer, public virtual weld::Window
@@ -452,7 +452,7 @@ public:
 
     void help();
 
-    virtual css::uno::Reference<css::awt::XWindow> GetXWindow() override;
+    virtual cpo::uno::Reference<css::awt::XWindow> GetXWindow() override;
 
     virtual void resize_to_request() override;
 
@@ -540,8 +540,6 @@ public:
     virtual void change_default_button(weld::Button* pOld, weld::Button* pNew) override;
 
     virtual bool is_default_button(const weld::Button* pCandidate) const override;
-
-    ::Dialog* getDialog() { return m_xDialog; }
 };
 
 class SalInstanceAssistant : public SalInstanceDialog, public virtual weld::Assistant
@@ -1011,6 +1009,10 @@ public:
 
     virtual void set_entry_hidden(int pos, bool bHidden) override;
 
+    virtual void set_render_selected_entry(bool on) override;
+
+    virtual void set_whole_width_preview(bool on) override;
+
     virtual void set_entry_text(const OUString& rText) override;
 
     virtual void set_entry_width_chars(int nChars) override;
@@ -1071,7 +1073,7 @@ public:
 
     virtual void set_image(VirtualDevice* pDevice) override;
 
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override;
 
     virtual void set_from_icon_name(const OUString& rIconName) override;
 
@@ -1375,12 +1377,12 @@ public:
     virtual void set_item_image_mirrored(const OUString& rIdent, bool bMirrored) override;
 
     virtual void set_item_image(const OUString& rIdent,
-                                const css::uno::Reference<css::graphic::XGraphic>& rIcon) override;
+                                const cpo::uno::Reference<css::graphic::XGraphic>& rIcon) override;
 
     virtual void set_item_image(const OUString& rIdent, VirtualDevice* pDevice) override;
 
     virtual void set_item_image(int nIndex,
-                                const css::uno::Reference<css::graphic::XGraphic>& rIcon) override;
+                                const cpo::uno::Reference<css::graphic::XGraphic>& rIcon) override;
 
     virtual void set_item_tooltip_text(int nIndex, const OUString& rTip) override;
 
@@ -1582,6 +1584,8 @@ public:
 
     virtual void set_column_header_name(int nColumn, const OUString& rName) override;
 
+    virtual void clear_column_header_names() override;
+
     virtual void set_headers_sortable(bool bSortable) override;
 
     virtual void set_header_name_aria_label(const OUString& rLabel) override;
@@ -1704,7 +1708,7 @@ public:
 
     virtual void set_image(int pos, const OUString& rImage, int col = -1) override;
 
-    virtual void set_image(int pos, const css::uno::Reference<css::graphic::XGraphic>& rImage,
+    virtual void set_image(int pos, const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                            int col = -1) override;
 
     virtual void set_image(int pos, VirtualDevice& rImage, int col = -1) override;
@@ -1713,7 +1717,7 @@ public:
                            int col = -1) override;
 
     virtual void set_image(const weld::TreeIter& rIter,
-                           const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                           const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                            int col = -1) override;
 
     virtual void set_image(const weld::TreeIter& rIter, VirtualDevice& rImage,
@@ -2009,7 +2013,7 @@ public:
 
     virtual void set_image(VirtualDevice* pDevice) override;
 
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override;
 
     virtual void set_from_icon_name(const OUString& rIconName) override;
 
@@ -2134,6 +2138,7 @@ public:
     SalInstanceCustomWidget(VclCustomWidget* pWidget, SalInstanceBuilder* pBuilder,
                             bool bTakeOwnership);
     virtual void send_update() override;
+    virtual void send_update_action() override;
     virtual void set_custom_client_controller(weld::CustomClientWidgetController* p) override;
     virtual weld::CustomClientWidgetController* get_custom_client_controller() override;
     VclCustomWidget* getVclCustomWidget() { return m_xCustomWidget.get(); }
@@ -2151,7 +2156,7 @@ public:
 
     virtual void set_image(VirtualDevice* pDevice) override;
 
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override;
 };
 
 class SalInstanceScrolledWindow : public SalInstanceContainer, public virtual weld::ScrolledWindow
@@ -2206,6 +2211,26 @@ public:
     virtual ~SalInstanceScrolledWindow() override;
 };
 
+class SalInstanceProgressBar : public SalInstanceWidget, public virtual weld::ProgressBar
+{
+private:
+    VclPtr<::ProgressBar> m_xProgressBar;
+
+public:
+    SalInstanceProgressBar(::ProgressBar* pProgressBar, SalInstanceBuilder* pBuilder,
+                           bool bTakeOwnership)
+        : SalInstanceWidget(pProgressBar, pBuilder, bTakeOwnership)
+        , m_xProgressBar(pProgressBar)
+    {
+    }
+
+    virtual void set_percentage(int value) override { m_xProgressBar->SetValue(value); }
+
+    virtual OUString get_text() const override { return m_xProgressBar->GetText(); }
+
+    virtual void set_text(const OUString& rText) override { m_xProgressBar->SetText(rText); }
+};
+
 class SalInstanceLevelBar : public SalInstanceWidget, public virtual weld::LevelBar
 {
 private:
@@ -2222,6 +2247,46 @@ public:
     {
         m_xLevelBar->SetValue(static_cast<sal_uInt16>(fPercentage));
     }
+};
+
+class SalInstanceScale : public SalInstanceWidget, public virtual weld::Scale
+{
+private:
+    VclPtr<Slider> m_xScale;
+
+    DECL_LINK(SlideHdl, Slider*, void);
+
+public:
+    SalInstanceScale(Slider* pScale, SalInstanceBuilder* pBuilder, bool bTakeOwnership)
+        : SalInstanceWidget(pScale, pBuilder, bTakeOwnership)
+        , m_xScale(pScale)
+    {
+        m_xScale->SetSlideHdl(LINK(this, SalInstanceScale, SlideHdl));
+    }
+
+    virtual void set_value(int value) override { m_xScale->SetThumbPos(value); }
+
+    virtual void set_range(int min, int max) override
+    {
+        m_xScale->SetRangeMin(min);
+        m_xScale->SetRangeMax(max);
+    }
+
+    virtual int get_value() const override { return m_xScale->GetThumbPos(); }
+
+    virtual void set_increments(int step, int page) override
+    {
+        m_xScale->SetLineSize(step);
+        m_xScale->SetPageSize(page);
+    }
+
+    virtual void get_increments(int& step, int& page) const override
+    {
+        step = m_xScale->GetLineSize();
+        page = m_xScale->GetPageSize();
+    }
+
+    virtual ~SalInstanceScale() override { m_xScale->SetSlideHdl(Link<Slider*, void>()); }
 };
 
 class SalInstanceCalendar : public SalInstanceWidget, public virtual weld::Calendar
@@ -2262,6 +2327,7 @@ private:
 
     DECL_LINK(UpDownHdl, SpinField&, void);
     DECL_LINK(LoseFocusHdl, Control&, void);
+    DECL_LINK(ActivateHdl, Edit&, bool);
 
 public:
     SalInstanceFormattedSpinButton(FormattedField* pButton, SalInstanceBuilder* pBuilder,
@@ -2337,19 +2403,6 @@ public:
     virtual void set_show_tabs(bool /*bShow*/) override;
 
     virtual ~SalInstanceVerticalNotebook() override;
-};
-
-class SalInstanceColorChooserDialog : public SalInstanceDialog,
-                                      public virtual weld::ColorChooserDialog
-{
-    std::unique_ptr<ColorPickerDialog> m_pColorPickerDialog;
-
-public:
-    SalInstanceColorChooserDialog(std::unique_ptr<ColorPickerDialog> pColorDialog);
-    virtual ~SalInstanceColorChooserDialog() override;
-
-    virtual void set_color(const Color& rColor) override;
-    virtual Color get_color() const override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

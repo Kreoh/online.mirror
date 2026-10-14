@@ -107,6 +107,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::sfx2::isValidXmlId;
 
@@ -147,7 +148,7 @@ public:
     XmlIdRegistry();
 
     /** get the ODF element with the given metadata reference. */
-    virtual css::uno::Reference< css::rdf::XMetadatable >
+    virtual cpo::uno::Reference< css::rdf::XMetadatable >
         GetElementByMetadataReference(
             const css::beans::StringPair & i_rReference) const
         override;
@@ -275,7 +276,7 @@ public:
     virtual bool IsInClipboard() const override { return false; }
     virtual bool IsInUndo() const override { return true; }
     virtual bool IsInContent() const override { return m_isInContent; }
-    virtual css::uno::Reference< css::rdf::XMetadatable > MakeUnoObject() override
+    virtual cpo::uno::Reference< css::rdf::XMetadatable > MakeUnoObject() override
     { OSL_FAIL("MetadatableUndo::MakeUnoObject"); throw; }
 };
 
@@ -299,7 +300,7 @@ public:
     virtual bool IsInClipboard() const override { return true; }
     virtual bool IsInUndo() const override { return false; }
     virtual bool IsInContent() const override { return m_isInContent; }
-    virtual css::uno::Reference< css::rdf::XMetadatable > MakeUnoObject() override
+    virtual cpo::uno::Reference< css::rdf::XMetadatable > MakeUnoObject() override
     { OSL_FAIL("MetadatableClipboard::MakeUnoObject"); throw; }
     void OriginNoLongerInBusinessAnymore() { m_pReg = nullptr; }
 };
@@ -361,7 +362,7 @@ XmlIdRegistry::XmlIdRegistry()
 {
 }
 
-css::uno::Reference< css::rdf::XMetadatable >
+cpo::uno::Reference< css::rdf::XMetadatable >
 XmlIdRegistry::GetElementByMetadataReference(
     const beans::StringPair & i_rReference) const
 {
@@ -1525,13 +1526,13 @@ Metadatable::JoinMetadatable(Metadatable const & i_rOther,
 // XMetadatable mixin
 
 // css::rdf::XNode:
-OUString SAL_CALL MetadatableMixin::getStringValue()
+OUString MetadatableMixin::getStringValue()
 {
     return getNamespace() + getLocalName();
 }
 
 // css::rdf::XURI:
-OUString SAL_CALL MetadatableMixin::getLocalName()
+OUString MetadatableMixin::getLocalName()
 {
     SolarMutexGuard aGuard;
     beans::StringPair mdref( getMetadataReference() );
@@ -1543,7 +1544,7 @@ OUString SAL_CALL MetadatableMixin::getLocalName()
     return mdref.First + "#" + mdref.Second;
 }
 
-OUString SAL_CALL MetadatableMixin::getNamespace()
+OUString MetadatableMixin::getNamespace()
 {
     SolarMutexGuard aGuard;
     const uno::Reference< frame::XModel > xModel( GetModel() );
@@ -1552,7 +1553,7 @@ OUString SAL_CALL MetadatableMixin::getNamespace()
 }
 
 // css::rdf::XMetadatable:
-beans::StringPair SAL_CALL
+beans::StringPair
 MetadatableMixin::getMetadataReference()
 {
     SolarMutexGuard aGuard;
@@ -1560,14 +1561,14 @@ MetadatableMixin::getMetadataReference()
     Metadatable *const pObject( GetCoreObject() );
     if (!pObject)
     {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"MetadatableMixin: cannot get core object; not inserted?"_ustr,
             *this);
     }
     return pObject->GetMetadataReference();
 }
 
-void SAL_CALL
+void
 MetadatableMixin::setMetadataReference(
     const beans::StringPair & i_rReference)
 {
@@ -1576,21 +1577,21 @@ MetadatableMixin::setMetadataReference(
     Metadatable *const pObject( GetCoreObject() );
     if (!pObject)
     {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"MetadatableMixin: cannot get core object; not inserted?"_ustr,
             *this);
     }
     return pObject->SetMetadataReference(i_rReference);
 }
 
-void SAL_CALL MetadatableMixin::ensureMetadataReference()
+void MetadatableMixin::ensureMetadataReference()
 {
     SolarMutexGuard aGuard;
 
     Metadatable *const pObject( GetCoreObject() );
     if (!pObject)
     {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"MetadatableMixin: cannot get core object; not inserted?"_ustr,
             *this);
     }

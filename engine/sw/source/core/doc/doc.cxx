@@ -20,6 +20,7 @@
 #include <config_features.h>
 
 #include <doc.hxx>
+#include <charformats.hxx>
 #include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <DocumentFieldsManager.hxx>
@@ -85,6 +86,7 @@
 #include <scriptinfo.hxx>
 #include <mdiexp.hxx>
 #include <docary.hxx>
+#include <frameformats.hxx>
 #include <printdata.hxx>
 #include <strings.hrc>
 #include <SwUndoTOXChange.hxx>
@@ -122,6 +124,7 @@
 #include <istyleaccess.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 sal_Int32 SwDoc::acquire()
 {
@@ -2260,8 +2263,9 @@ OUString SwDoc::GetPaMDescr(const SwPaM & rPam)
 
         if (nullptr != pTextNode)
         {
-            const sal_Int32 nStart = rPam.Start()->GetContentIndex();
-            const sal_Int32 nEnd = rPam.End()->GetContentIndex();
+            auto [pStart, pEnd] = rPam.StartEnd(); // SwPosition*
+            const sal_Int32 nStart = pStart->GetContentIndex();
+            const sal_Int32 nEnd = pEnd->GetContentIndex();
 
             return SwResId(STR_START_QUOTE)
                 + ShortenString(pTextNode->GetText().copy(nStart, nEnd - nStart),

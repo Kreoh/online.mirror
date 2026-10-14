@@ -90,10 +90,7 @@ protected:
     ~ScFormatFilterPlugin() {}
 };
 
-// scfilt plugin symbol
-extern "C" {
-  SAL_DLLPUBLIC_EXPORT ScFormatFilterPlugin * ScFilterCreate();
-}
+SC_DLLPUBLIC ScFormatFilterPlugin * ScFilterCreate();
 
 class ScFormatFilter {
     public:

@@ -19,14 +19,14 @@
 
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include "smplmailsuppl.hxx"
 #include "smplmailclient.hxx"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 using cpo::uno::Sequence;
 using com::sun::star::lang::XServiceInfo;
 using com::sun::star::system::XSimpleMailClientSupplier;
@@ -43,7 +43,7 @@ CSmplMailSuppl::~CSmplMailSuppl()
 {
 }
 
-Reference<XSimpleMailClient> SAL_CALL CSmplMailSuppl::querySimpleMailClient()
+Reference<XSimpleMailClient> CSmplMailSuppl::querySimpleMailClient()
 {
     /* We just try to load the MAPI dll as a test
        if a mail client is available */
@@ -59,24 +59,24 @@ Reference<XSimpleMailClient> SAL_CALL CSmplMailSuppl::querySimpleMailClient()
 
 // XServiceInfo
 
-OUString SAL_CALL CSmplMailSuppl::getImplementationName()
+OUString CSmplMailSuppl::getImplementationName()
 {
-    return "com.sun.star.sys.shell.SimpleSystemMail";
+    return u"com.sun.star.sys.shell.SimpleSystemMail"_ustr;
 }
 
-bool SAL_CALL CSmplMailSuppl::supportsService(const OUString& ServiceName)
+bool CSmplMailSuppl::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence<OUString> SAL_CALL CSmplMailSuppl::getSupportedServiceNames()
+Sequence<OUString> CSmplMailSuppl::getSupportedServiceNames()
 {
-    return { "com.sun.star.system.SimpleSystemMail" };
+    return { u"com.sun.star.system.SimpleSystemMail"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_CSmplMailSuppl_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new CSmplMailSuppl());
 }

@@ -31,7 +31,7 @@
 #include "myucp_datasupplier.hxx"
 #include "myucp_resultset.hxx"
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::container;
@@ -40,7 +40,7 @@ using namespace dbaccess;
 
 // DynamicResultSet Implementation.
 DynamicResultSet::DynamicResultSet(
-                      const Reference< XComponentContext >& rxContext,
+                      const Reference< cpo::uno::XComponentContext >& rxContext,
                       rtl::Reference< ODocumentContainer > xContent,
                       const OpenCommandArgument2& rCommand,
                       const Reference< XCommandEnvironment >& rxEnv )

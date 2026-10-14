@@ -123,7 +123,10 @@ class CanvasOverlay extends CanvasSectionObject {
 		this.paths.forEach(function (path: CPath) {
 			path.onResize();
 		});
-		this.onDraw();
+		// A relayout of the sections runs outside a draw pass, with the pen of the canvas left
+		// where the last drawn section put it. The paths are drawn in the next draw pass, where
+		// the pen sits at this section and the clip covers the document area only.
+		this.containerObject.requestReDraw();
 	}
 
 	onDraw(): void {
@@ -210,17 +213,39 @@ class CanvasOverlay extends CanvasSectionObject {
 		return this.map.getSplitPanesContext();
 	}
 
+	// The panes of the view in document core pixels. The paths hold pixels of the zoom the
+	// document was at when they were built, and a zoom animation scales those pixels frame by
+	// frame from the zoom start, so during an animation the panes are those of the zoom start.
+	getPaneBoundsList(): cool.Bounds[] {
+		if (this.tsManager._inZoomAnim && this.tsManager._paintContext)
+			return this.tsManager._paintContext().paneBoundsList;
+
+		var spc = this.getSplitPanesContext();
+		return spc ? spc.getPxBoundList() : [this.getBounds().clone()];
+	}
+
+	getFixedBounds(): cool.Bounds {
+		return new cool.Bounds(new cool.Point(0, 0), this.getBounds().getSize());
+	}
+
+	onNewDocumentTopLeft(): void {
+		GraphicSelection.refreshDarkOverlay();
+	}
+
 	private isPathVisible(path: CPath): boolean {
 		var pathBounds = path.getBounds();
 		if (!pathBounds.isValid())
 			return false;
+		if (path.fixed)
+			return pathBounds.intersects(this.getFixedBounds());
 		return this.intersectsVisible(pathBounds);
 	}
 
 	private intersectsVisible(queryBounds: cool.Bounds): boolean {
 		this.updateCanvasBounds();
-		var spc = this.getSplitPanesContext();
-		return spc ? spc.intersectsVisible(queryBounds) : this.bounds.intersects(queryBounds);
+		return this.getPaneBoundsList().some(function (paneBounds: cool.Bounds) {
+			return queryBounds.intersects(paneBounds);
+		});
 	}
 
 	private static renderOrderComparator(a: CPath, b: CPath): number {

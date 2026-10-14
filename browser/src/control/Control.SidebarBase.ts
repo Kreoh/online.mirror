@@ -21,6 +21,14 @@ enum SidebarType {
 	Navigator = 'navigator', // core
 	QuickFind = 'quickfind', // core
 	Notebookbar = 'notebookbar', // online side panel, which sens messages to NB in core
+	Cleanup = 'cleanup', // online side panel built and driven in the browser
+}
+
+/// What a dock now holds: the element the dock hangs on, and the JSON type of the component
+/// whose content fills it, or null once the dock is closed.
+interface DockContentEvent {
+	wrapper: HTMLElement;
+	jsontype: string | null;
 }
 
 abstract class SidebarBase extends JSDialogComponent {
@@ -76,7 +84,7 @@ abstract class SidebarBase extends JSDialogComponent {
 
 	/// this is used to determine if we need to send uno command - only for core decks
 	isVisible(): boolean {
-		const node = $(`#${this.type}-dock-wrapper`);
+		const node = $(this.wrapper);
 		return node.hasClass('visible') && node.hasClass('coreBased');
 	}
 
@@ -87,7 +95,7 @@ abstract class SidebarBase extends JSDialogComponent {
 
 	/// shared implementation for showing/hiding sidebar
 	protected showSidebarImpl(show: boolean) {
-		const wrapper = $(`#${this.type}-dock-wrapper`);
+		const wrapper = $(this.wrapper);
 
 		if (show) {
 			wrapper.addClass('visible');
@@ -106,6 +114,14 @@ abstract class SidebarBase extends JSDialogComponent {
 
 		const upperCaseType = this.type[0].toUpperCase() + this.type.slice(1);
 		this.map.uiManager.setDocTypePref('Show' + upperCaseType, show);
+
+		// Several components share one dock, and only the one that opened or closed it knows
+		// that the content changed hands. The word goes out from here, the single place a dock
+		// is shown and hidden, so a component that shares a dock is told rather than asking.
+		this.map.fire('dockcontent', {
+			wrapper: this.wrapper,
+			jsontype: show ? this.allowedJsonType : null,
+		} as DockContentEvent);
 	}
 
 	closeSidebar() {
@@ -154,6 +170,49 @@ abstract class SidebarBase extends JSDialogComponent {
 		return super.onJSAction(e);
 	}
 
+	/// The presentation sidebar/panel toolbar buttons are mutually exclusive, so
+	/// only the button of the active deck stays highlighted. Core reports the
+	/// state of its own decks, but the decks the browser builds itself are opened
+	/// from the notebookbar and core is never told they took over the sidebar.
+	/// Their highlight, and clearing the core deck button they replace, is
+	/// driven here.
+	updatePresentationDeckHighlight(currentDeck: string) {
+		if (this.map.getDocType() !== 'presentation') return;
+
+		const panelCommandForDeck: { [key: string]: string } = {
+			'transitions-deck': 'transitiondeck',
+			'animations-deck': 'animationdeck',
+			'cleanup-deck': 'cleanupdeck',
+		};
+		const coreDeckCommands = [
+			'.uno:SidebarDeck.PropertyDeck',
+			'.uno:ModifyPage',
+			'.uno:CustomAnimation',
+			'.uno:MasterSlidesPanel',
+		];
+
+		const activePanelCommand = panelCommandForDeck[currentDeck];
+		const stateHandler = this.map['stateChangeHandler'];
+
+		const setHighlight = (command: string, active: boolean) => {
+			const value = active ? 'true' : 'false';
+			if (stateHandler && stateHandler.getItemValue(command) === value) return;
+			this.map.fire('commandstatechanged', {
+				commandName: command,
+				state: value,
+			});
+		};
+
+		Object.values(panelCommandForDeck).forEach((command) =>
+			setHighlight(command, command === activePanelCommand),
+		);
+
+		// A notebookbar panel has taken over the sidebar: core still thinks its
+		// last deck is open and keeps reporting it active, so clear those buttons.
+		if (activePanelCommand)
+			coreDeckCommands.forEach((command) => setHighlight(command, false));
+	}
+
 	markNavigatorTreeView(data: WidgetJSON): boolean {
 		if (!data) return false;
 
@@ -175,11 +234,9 @@ abstract class SidebarBase extends JSDialogComponent {
 			app.layoutingService.cancelLayoutingTask(this.resizeTaskId);
 
 		this.resizeTaskId = app.layoutingService.appendLayoutingTask(() => {
-			this.wrapper.style.maxHeight =
-				this.documentContainer.getBoundingClientRect().height + 'px';
 			if (this.container) {
 				(this.container as HTMLElement).style.height =
-					this.documentContainer.getBoundingClientRect().height + 'px';
+					this.wrapper.getBoundingClientRect().height + 'px';
 			}
 			this.resizeTaskId = null;
 		});

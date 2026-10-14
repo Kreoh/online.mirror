@@ -25,7 +25,7 @@
 #include "cellrange.hxx"
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::table;
 
@@ -79,13 +79,13 @@ Reference< XTable > CellRange::getTable()
 // XCellRange
 
 
-Reference< XCell > SAL_CALL CellRange::getCellByPosition( sal_Int32 nColumn, sal_Int32 nRow )
+Reference< XCell > CellRange::getCellByPosition( sal_Int32 nColumn, sal_Int32 nRow )
 {
     return mxTable->getCellByPosition( mnLeft + nColumn, mnTop + nRow );
 }
 
 
-Reference< XCellRange > SAL_CALL CellRange::getCellRangeByPosition( sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom )
+Reference< XCellRange > CellRange::getCellRangeByPosition( sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom )
 {
     if( (nLeft >= 0 ) && (nTop >= 0) && (nRight >= nLeft) && (nBottom >= nTop)  )
     {
@@ -105,7 +105,7 @@ Reference< XCellRange > SAL_CALL CellRange::getCellRangeByPosition( sal_Int32 nL
 }
 
 
-Reference< XCellRange > SAL_CALL CellRange::getCellRangeByName( const OUString& /*aRange*/ )
+Reference< XCellRange > CellRange::getCellRangeByName( const OUString& /*aRange*/ )
 {
     return Reference< XCellRange >();
 }

@@ -19,9 +19,9 @@
 #include <optional>
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 #include <cppu/unotype.hxx>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
@@ -65,18 +65,18 @@ template<> struct Optional<float> {
 template<> struct Optional<double> {
     using type = std::optional<double const>;
 };
-template<typename T> struct Optional<css::uno::Reference<T>> {
-    using type = std::optional<css::uno::Reference<T> const>;
+template<typename T> struct Optional<cpo::uno::Reference<T>> {
+    using type = std::optional<cpo::uno::Reference<T> const>;
 };
-template<> struct Optional<css::uno::Reference<css::uno::XInterface>> {
-    using type = css::uno::Reference<css::uno::XInterface> const *;
+template<> struct Optional<cpo::uno::Reference<cpo::uno::XInterface>> {
+    using type = cpo::uno::Reference<cpo::uno::XInterface> const *;
 };
 
 template<typename> struct IsDerivedReference: std::false_type {};
-template<typename T> struct IsDerivedReference<css::uno::Reference<T>>:
+template<typename T> struct IsDerivedReference<cpo::uno::Reference<T>>:
     std::true_type
 {};
-template<> struct IsDerivedReference<css::uno::Reference<css::uno::XInterface>>:
+template<> struct IsDerivedReference<cpo::uno::Reference<cpo::uno::XInterface>>:
     std::false_type
 {};
 
@@ -121,8 +121,7 @@ template<typename T> inline std::optional<T const> tryGetConverted(
       }
     @endcode
 
-    @note Ideally this would be a public member function of cpo::uno::Any (at
-    least conditional on LIBO_INTERNAL_ONLY, as it requires C++11).  However, as
+    @note Ideally this would be a public member function of cpo::uno::Any.  However, as
     std::optional (which would be needed to implement the proxies) is only
     available since C++14, we need to use std::optional for now.  But To not
     make every entity that includes <cpo/uno/Any.hxx> depend on
@@ -143,11 +142,11 @@ template<typename T> inline
 typename std::enable_if<
     !(detail::IsDerivedReference<T>::value
       || detail::IsUnoSequenceType<T>::value
-      || std::is_base_of<css::uno::XInterface, T>::value),
+      || std::is_base_of<cpo::uno::XInterface, T>::value),
     typename detail::Optional<T>::type>::type
 tryAccess(cpo::uno::Any const & any) {
     // CHAR, STRING, TYPE, sequence types, enum types, struct types, exception
-    // types, and com.sun.star.uno.XInterface interface type:
+    // types, and cpo.uno.XInterface interface type:
     return cppu::UnoType<T>::get().isAssignableFrom(any.getValueType())
         ? static_cast<T const *>(any.getValue()) : nullptr;
 }
@@ -225,7 +224,7 @@ template<> detail::Optional<cpo::uno::Any>::type tryAccess<cpo::uno::Any>(
 
 /*
 
-// Already prevented by std::is_base_of<css::uno::XInterface, T> requiring T to
+// Already prevented by std::is_base_of<cpo::uno::XInterface, T> requiring T to
 // be complete:
 
 template<> detail::Optional<cppu::UnoVoidType>::type
@@ -270,7 +269,7 @@ template<typename T> typename detail::Optional<T>::type tryAccess(
     @return a positive proxy for the value of the specified type obtained from
     the given Any.  See tryAccess for details.
 
-    @throws css::uno::RuntimeException  when a value of the requested type
+    @throws cpo::uno::RuntimeException  when a value of the requested type
     cannot be obtained.
 */
 template<typename T> inline typename detail::Optional<T>::type doAccess(
@@ -278,7 +277,7 @@ template<typename T> inline typename detail::Optional<T>::type doAccess(
 {
     auto opt = tryAccess<T>(any);
     if (!opt) {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             OUString(
                 cppu_Any_extraction_failure_msg(
                     &any, cppu::UnoType<T>::get().getTypeLibType()),

@@ -706,6 +706,7 @@ audioCd
 audioFile
 author
 authorId
+authorLst
 authors
 auto
 autoAdjust
@@ -1298,6 +1299,7 @@ code
 codeName
 codePage
 coerce
+coext
 coherent3DOff
 col
 colBreaks
@@ -1357,6 +1359,8 @@ command
 commandType
 comment
 commentEx
+commentExtensible
+commentId
 commentList
 commentPr
 commentRangeEnd
@@ -1364,6 +1368,8 @@ commentRangeStart
 commentReference
 comments
 commentsEx
+commentsExtensible
+commentsIds
 comp
 compact
 compactData
@@ -1740,6 +1746,7 @@ dateOlderThan
 dateOlderThanOrEqual
 dateTime
 dateTimeGrouping
+dateUtc
 day
 dayLong
 dayShort
@@ -2059,6 +2066,7 @@ dtr
 duotone
 duplicateValues
 dur
+durableId
 duration
 dvAspect
 dx
@@ -2357,6 +2365,7 @@ fitpath
 fitshape
 fixed
 fixedVal
+flag
 flash
 flat
 flatBorders
@@ -2584,6 +2593,7 @@ ghostRow
 ghostWhite
 gingerbreadMan
 glitter
+global
 glossaryDocument
 glow
 goal
@@ -3054,6 +3064,7 @@ keepNext
 kern
 key
 keyAttribute
+keyFlags
 keywords
 khaki
 kinsoku
@@ -3959,6 +3970,7 @@ owners
 p
 p14
 p15
+p188
 pBdr
 pLen
 pPos
@@ -3976,6 +3988,7 @@ pageField
 pageFieldLabels
 pageFieldValues
 pageFields
+pageGuid
 pageItem
 pageLayout
 pageMargins
@@ -4471,6 +4484,8 @@ repeat
 repeatCount
 repeatDur
 repl
+reply
+replyLst
 resId
 reservationPassword
 resizeGraphics
@@ -4502,6 +4517,7 @@ ribbon2
 riblet
 rich
 richText
+richValueRels
 rig
 right
 rightArrow
@@ -4588,6 +4604,11 @@ ruby
 rubyAlign
 rubyBase
 rubyPr
+rv
+rvb
+rvData
+rvStructures
+rvTypesInfo
 rule
 ruleLst
 rules
@@ -5895,6 +5916,8 @@ w
 w10
 w14
 w15
+w16cex
+w16cid
 wAfter
 wArH
 wBefore
@@ -6030,6 +6053,7 @@ xfrmType
 xl2000
 xl97
 xlm
+xlrd
 xm
 xml
 xmlBased

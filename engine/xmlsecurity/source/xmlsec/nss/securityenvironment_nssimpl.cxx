@@ -42,6 +42,9 @@
 
 #include "x509certificate_nssimpl.hxx"
 #include "secerror.hxx"
+#ifdef MACOSX
+#include <apple/securityenvironment_appleimpl.hxx>
+#endif
 #include <prerror.h>
 #include <keyhi.h>
 #include <xmlsec/base64.h>
@@ -58,8 +61,8 @@
 namespace csss = ::com::sun::star::security;
 using namespace ::com::sun::star::security;
 using namespace com::sun::star;
-using namespace ::com::sun::star::uno ;
 using namespace ::com::sun::star::lang ;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 using ::com::sun::star::security::XCertificate ;
@@ -97,7 +100,7 @@ struct UsageDescription
 
 static char* GetPasswordFunction( PK11SlotInfo* pSlot, PRBool bRetry, void* /*arg*/ )
 {
-    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     uno::Reference < task::XInteractionHandler2 > xInteractionHandler(
         task::InteractionHandler::createWithParent(xContext, nullptr) );
 
@@ -144,17 +147,17 @@ SecurityEnvironment_NssImpl::~SecurityEnvironment_NssImpl() {
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SecurityEnvironment_NssImpl::getImplementationName() {
+OUString SecurityEnvironment_NssImpl::getImplementationName() {
     return u"com.sun.star.xml.crypto.SecurityEnvironment"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL SecurityEnvironment_NssImpl::supportsService( const OUString& serviceName) {
+bool SecurityEnvironment_NssImpl::supportsService( const OUString& serviceName) {
     return cppu::supportsService(this, serviceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL SecurityEnvironment_NssImpl::getSupportedServiceNames() {
+Sequence< OUString > SecurityEnvironment_NssImpl::getSupportedServiceNames() {
     Sequence<OUString> seqServiceNames{ u"com.sun.star.xml.crypto.SecurityEnvironment"_ustr };
     return seqServiceNames;
 }
@@ -701,7 +704,7 @@ verifyCertificate( const Reference< csss::XCertificate >& aCert,
 }
 
 sal_Int32 SecurityEnvironment_NssImpl::getCertificateCharacters(
-    const css::uno::Reference< css::security::XCertificate >& aCert ) {
+    const cpo::uno::Reference< css::security::XCertificate >& aCert ) {
     sal_Int32 characters ;
     const CERTCertificate* cert ;
 
@@ -879,11 +882,16 @@ uno::Reference<security::XCertificate> SecurityEnvironment_NssImpl::addDERCertif
     return createAndAddCertificateFromPackage(raDERCertificate, raTrustString);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_xml_crypto_SecurityEnvironment_get_implementation(
-    uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
+#ifdef MACOSX
+    // The macOS environment extends the NSS one with Keychain support.
+    return cppu::acquire(new SecurityEnvironment_AppleImpl);
+#else
     return cppu::acquire(new SecurityEnvironment_NssImpl);
+#endif
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

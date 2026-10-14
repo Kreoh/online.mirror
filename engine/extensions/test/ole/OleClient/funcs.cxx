@@ -29,13 +29,13 @@
 #include "cpo/uno/TypeClass.hpp"
 #include "com/sun/star/script/XInvocation.hpp"
 #include "com/sun/star/lang/XMultiServiceFactory.hpp"
-#include "com/sun/star/uno/XComponentContext.hpp"
+#include "cpo/uno/XComponentContext.hpp"
 #include <com/sun/star/bridge/oleautomation/NamedArgument.hpp>
 #include "rtl/ustring.hxx"
 
 using namespace com::sun::star::bridge;
 using namespace com::sun::star::bridge::ModelDependent;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::script;

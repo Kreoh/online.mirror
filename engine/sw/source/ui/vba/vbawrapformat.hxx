@@ -28,34 +28,34 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XWrapFormat > SwVbaWra
 class SwVbaWrapFormat : public SwVbaWrapFormat_BASE
 {
 private:
-    css::uno::Reference< css::drawing::XShape > m_xShape;
-    css::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
     sal_Int32 mnWrapFormatType;
     sal_Int32 mnSide;
 
 private:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void makeWrap();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     float getDistance( const OUString& sName );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setDistance( const OUString& sName, float _distance );
 
 public:
-    SwVbaWrapFormat(  cpo::uno::Sequence< cpo::uno::Any > const& aArgs, css::uno::Reference< css::uno::XComponentContext >const& xContext );
+    SwVbaWrapFormat(  cpo::uno::Sequence< cpo::uno::Any > const& aArgs, cpo::uno::Reference< cpo::uno::XComponentContext >const& xContext );
 
-    virtual ::sal_Int32 SAL_CALL getType() override;
-    virtual void SAL_CALL setType( ::sal_Int32 _type ) override;
-    virtual ::sal_Int32 SAL_CALL getSide() override;
-    virtual void SAL_CALL setSide( ::sal_Int32 _side ) override;
-    virtual float SAL_CALL getDistanceTop() override;
-    virtual void SAL_CALL setDistanceTop( float _distancetop ) override;
-    virtual float SAL_CALL getDistanceBottom() override;
-    virtual void SAL_CALL setDistanceBottom( float _distancebottom ) override;
-    virtual float SAL_CALL getDistanceLeft() override;
-    virtual void SAL_CALL setDistanceLeft( float _distanceleft ) override;
-    virtual float SAL_CALL getDistanceRight() override;
-    virtual void SAL_CALL setDistanceRight( float _distanceright ) override;
+    virtual ::sal_Int32 getType() override;
+    virtual void setType( ::sal_Int32 _type ) override;
+    virtual ::sal_Int32 getSide() override;
+    virtual void setSide( ::sal_Int32 _side ) override;
+    virtual float getDistanceTop() override;
+    virtual void setDistanceTop( float _distancetop ) override;
+    virtual float getDistanceBottom() override;
+    virtual void setDistanceBottom( float _distancebottom ) override;
+    virtual float getDistanceLeft() override;
+    virtual void setDistanceLeft( float _distanceleft ) override;
+    virtual float getDistanceRight() override;
+    virtual void setDistanceRight( float _distanceright ) override;
 
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

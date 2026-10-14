@@ -34,7 +34,7 @@
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XActiveDataControl.hpp>
@@ -77,7 +77,7 @@ public:
      */
     virtual bool filter(const cpo::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
     virtual void cancel() override {}
-    void setDocumentHandler(css::uno::Reference<css::xml::sax::XDocumentHandler> const& xHandler)
+    void setDocumentHandler(cpo::uno::Reference<css::xml::sax::XDocumentHandler> const& xHandler)
     {
         m_rxDocumentHandler = xHandler;
     }
@@ -85,7 +85,7 @@ public:
     bool importHStream(std::unique_ptr<HStream> stream);
 
 private:
-    css::uno::Reference<css::xml::sax::XDocumentHandler> m_rxDocumentHandler;
+    cpo::uno::Reference<css::xml::sax::XDocumentHandler> m_rxDocumentHandler;
     rtl::Reference<AttributeListImpl> mxList;
     HWPFile hwpfile;
     std::unique_ptr<HwpReaderPrivate> d;

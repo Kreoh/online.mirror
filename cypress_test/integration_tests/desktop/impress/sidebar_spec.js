@@ -2,6 +2,7 @@
 
 var helper = require('../../common/helper');
 var impressHelper = require('../../common/impress_helper');
+var desktopHelper = require('../../common/desktop_helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sidebar Tests', function() {
 
@@ -21,6 +22,16 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sidebar Tests', function()
 		cy.cGet('#fillattr2').click();
 		cy.cGet('.modalpopup .jsdialog-container').should('be.visible');
 		cy.cGet('#colorwindow_iv_colors.ui-iconview').should('be.visible');
+	});
+
+	it('Hidden gradient color buttons take no room in the panel', function() {
+		cy.cGet('#fillstyle select').select('Color');
+		cy.cGet('#fillattr').should('be.visible');
+		helper.processToIdle(this.win);
+
+		// Only the border of a hidden grid cell is left.
+		cy.cGet('#fillattr2').should('have.class', 'hidden').invoke('outerWidth').should('be.lessThan', 5);
+		cy.cGet('#fillattr3').should('have.class', 'hidden').invoke('outerWidth').should('be.lessThan', 5);
 	});
 
 	it.skip('Set underline using popup', function() {
@@ -48,5 +59,33 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sidebar Tests', function()
 		// in-flight render_entry to be answered first.
 		helper.waitForOnDemandRenders(this.win);
 		cy.cGet('#fillattr').compareSnapshot('sidebar_menubutton_color', 0.1);
+	});
+
+	it('Slide Transition from the View menu shows the panel and activating it again hides it', function() {
+		desktopHelper.switchUIToCompact();
+		helper.processToIdle(this.win);
+
+		// Impress opens with a deck that comes from core, so the sidebar starts showing.
+		cy.cGet('#sidebar-dock-wrapper').should('have.class', 'visible');
+		cy.cGet('#sidebar-dock-wrapper').should('have.class', 'coreBased');
+
+		desktopHelper.hideSidebarImpress();
+
+		cy.cGet('#menu-view').click();
+		cy.cGet('#menu-transitiondeck').click();
+
+		cy.cGet('#sidebar-dock-wrapper').should('be.visible');
+		cy.cGet('#sidebar-dock-wrapper').should('have.class', 'visible');
+		// The panel is not core content, so the sidebar is no longer marked as core based.
+		cy.cGet('#sidebar-dock-wrapper').should('not.have.class', 'coreBased');
+		cy.cGet('#transitions-deck').should('be.visible');
+		cy.cGet('#transitions-panel').should('be.visible');
+
+		// The same menu entry closes the panel when it is already showing.
+		cy.cGet('#menu-view').click();
+		cy.cGet('#menu-transitiondeck').click();
+
+		cy.cGet('#sidebar-dock-wrapper').should('not.have.class', 'visible');
+		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
 	});
 });

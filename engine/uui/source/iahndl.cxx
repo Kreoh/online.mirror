@@ -87,13 +87,13 @@
 #include <comphelper/string.hxx>
 
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::Reference;
 using ::com::sun::star::task::XInteractionContinuation;
 using ::com::sun::star::task::XInteractionAbort;
 using ::com::sun::star::task::XInteractionApprove;
 using ::com::sun::star::lang::XInitialization;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_QUERY_THROW;
 using ::com::sun::star::task::InteractionHandler;
 using ::com::sun::star::task::XInteractionHandler2;
 using ::cpo::uno::Exception;
@@ -101,6 +101,7 @@ using ::cpo::uno::Any;
 using ::com::sun::star::task::XInteractionRequest;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -121,7 +122,7 @@ public:
 } /* namespace */
 
 UUIInteractionHelper::UUIInteractionHelper(
-    uno::Reference< uno::XComponentContext > xContext)
+    uno::Reference< cpo::uno::XComponentContext > xContext)
     :  m_xContext(std::move(xContext))
 {
 }
@@ -267,7 +268,7 @@ namespace
 
     bool lcl_matchesRequest( const Any& i_rRequest, const OUString& i_rTypeName, std::u16string_view i_rPropagation )
     {
-        const css::uno::TypeDescription aTypeDesc( i_rTypeName );
+        const cpo::uno::TypeDescription aTypeDesc( i_rTypeName );
         const typelib_TypeDescription* pTypeDesc = aTypeDesc.get();
         if ( !pTypeDesc || !pTypeDesc->pWeakRef )
         {
@@ -833,7 +834,7 @@ UUIInteractionHelper::handleRequest_impl(
         // Not handled.
         return false;
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         throw;  // allowed to leave here
     }

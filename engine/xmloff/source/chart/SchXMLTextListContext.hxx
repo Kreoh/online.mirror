@@ -28,11 +28,11 @@ public:
     SchXMLTextListContext( SvXMLImport& rImport,
                             cpo::uno::Sequence< OUString>& rTextList );
     virtual ~SchXMLTextListContext() override;
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
 private:
     cpo::uno::Sequence< OUString>& m_rTextList;

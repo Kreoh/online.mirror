@@ -48,10 +48,11 @@
 #include <com/sun/star/document/XTypeDetection.hpp>
 #include <com/sun/star/document/UpdateDocMode.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/script/XLibraryContainer2.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
 
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/scripturl.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -66,7 +67,7 @@
 #include <utility>
 
 using namespace ::osl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
@@ -182,7 +183,7 @@ void scriptCat(const Reference< XModel >& xDoc )
     }
 
     // ignore xScriptAccess->getDialogLibraries() for now
-    Reference< css::script::XLibraryContainer2 > xLibraries(
+    Reference< css::script::XLibraryContainer > xLibraries(
         xScriptAccess->getBasicLibraries() );
 
     if ( !xLibraries.is() )
@@ -334,7 +335,7 @@ bool DispatchWatcher::executeDispatchRequests(
     const std::vector<DispatchRequest>& aDispatchRequestsList, bool bNoTerminate,
     DispatchRequestFlags* pFlags)
 {
-    Reference< XDesktop2 > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+    Reference< XDesktop > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
 
     std::vector< DispatchHolder >   aDispatches;
     bool                     bSetInputFilter = false;
@@ -355,7 +356,7 @@ bool DispatchWatcher::executeDispatchRequests(
         std::vector<PropertyValue> aArgs;
 
         // mark request as user interaction from outside
-        aArgs.emplace_back("Referer", 0, Any(u"private:OpenEvent"_ustr),
+        aArgs.emplace_back(u"Referer"_ustr, 0, Any(u"private:OpenEvent"_ustr),
                            PropertyState_DIRECT_VALUE);
 
         OUString aTarget(u"_default"_ustr);
@@ -369,13 +370,13 @@ bool DispatchWatcher::executeDispatchRequests(
         {
             // documents opened for printing are opened readonly because they must be opened as a
             // new document and this document could be open already
-            aArgs.emplace_back("ReadOnly", 0, Any(true), PropertyState_DIRECT_VALUE);
+            aArgs.emplace_back(u"ReadOnly"_ustr, 0, Any(true), PropertyState_DIRECT_VALUE);
             // always open a new document for printing, because it must be disposed afterwards
-            aArgs.emplace_back("OpenNewView", 0, Any(true), PropertyState_DIRECT_VALUE);
+            aArgs.emplace_back(u"OpenNewView"_ustr, 0, Any(true), PropertyState_DIRECT_VALUE);
             // printing is done in a hidden view
-            aArgs.emplace_back("Hidden", 0, Any(true), PropertyState_DIRECT_VALUE);
+            aArgs.emplace_back(u"Hidden"_ustr, 0, Any(true), PropertyState_DIRECT_VALUE);
             // load document for printing without user interaction
-            aArgs.emplace_back("Silent", 0, Any(true), PropertyState_DIRECT_VALUE);
+            aArgs.emplace_back(u"Silent"_ustr, 0, Any(true), PropertyState_DIRECT_VALUE);
 
             // hidden documents should never be put into open tasks
             aTarget = u"_blank"_ustr;
@@ -385,14 +386,14 @@ bool DispatchWatcher::executeDispatchRequests(
             Reference < XInteractionHandler2 > xInteraction(
                 InteractionHandler::createWithParent(::comphelper::getProcessComponentContext(), nullptr) );
 
-            aArgs.emplace_back("InteractionHandler", 0, Any(xInteraction),
+            aArgs.emplace_back(u"InteractionHandler"_ustr, 0, Any(xInteraction),
                                PropertyState_DIRECT_VALUE);
 
-            aArgs.emplace_back("MacroExecutionMode", 0,
+            aArgs.emplace_back(u"MacroExecutionMode"_ustr, 0,
                                Any(css::document::MacroExecMode::USE_CONFIG),
                                PropertyState_DIRECT_VALUE);
 
-            aArgs.emplace_back("UpdateDocMode", 0,
+            aArgs.emplace_back(u"UpdateDocMode"_ustr, 0,
                                Any(css::document::UpdateDocMode::ACCORDING_TO_CONFIG),
                                PropertyState_DIRECT_VALUE);
         }
@@ -411,9 +412,7 @@ bool DispatchWatcher::executeDispatchRequests(
         Reference < XPrintable > xDoc;
         if(
             ( aName.startsWith( ".uno" ) )  ||
-            ( aName.startsWith( "slot:" ) )  ||
-            ( aName.startsWith( "macro:" ) )  ||
-            ( aName.startsWith("vnd.sun.star.script") )
+            comphelper::isScriptURL(aName)
           )
         {
             // Attention: URL must be parsed full. Otherwise some detections on it will fail!
@@ -488,34 +487,34 @@ bool DispatchWatcher::executeDispatchRequests(
             if ( aDispatchRequest.aRequestType == REQUEST_FORCENEW ||
                  aDispatchRequest.aRequestType == REQUEST_FORCEOPEN     )
             {
-                aArgs.emplace_back("AsTemplate", 0,
+                aArgs.emplace_back(u"AsTemplate"_ustr, 0,
                                    Any(aDispatchRequest.aRequestType == REQUEST_FORCENEW),
                                    PropertyState_DIRECT_VALUE);
             }
 
             // if we are called in viewmode, open document read-only
             if(aDispatchRequest.aRequestType == REQUEST_VIEW) {
-                aArgs.emplace_back("ReadOnly", 0, Any(true), PropertyState_DIRECT_VALUE);
+                aArgs.emplace_back(u"ReadOnly"_ustr, 0, Any(true), PropertyState_DIRECT_VALUE);
             }
 
             // if we are called with --show set Start in mediadescriptor
             if(aDispatchRequest.aRequestType == REQUEST_START) {
                 const sal_Int32 nStartingSlide = aDispatchRequest.aParam.toInt32();
                 const sal_uInt16 nSlide = nStartingSlide > 0 ? nStartingSlide : 1;
-                aArgs.emplace_back("StartPresentation", 0, Any(nSlide), PropertyState_DIRECT_VALUE);
+                aArgs.emplace_back(u"StartPresentation"_ustr, 0, Any(nSlide), PropertyState_DIRECT_VALUE);
             }
 
             // Force input filter, if possible
             if( bSetInputFilter )
             {
                 sal_Int32 nFilterOptionsIndex = 0;
-                aArgs.emplace_back("FilterName", 0,
+                aArgs.emplace_back(u"FilterName"_ustr, 0,
                                    Any(aForcedInputFilter.getToken(0, ':', nFilterOptionsIndex)),
                                    PropertyState_DIRECT_VALUE);
 
                 if (0 < nFilterOptionsIndex)
                 {
-                    aArgs.emplace_back("FilterOptions", 0,
+                    aArgs.emplace_back(u"FilterOptions"_ustr, 0,
                                        Any(aForcedInputFilter.copy(nFilterOptionsIndex)),
                                        PropertyState_DIRECT_VALUE);
                 }
@@ -854,7 +853,7 @@ void DispatchWatcher::dispatchFinished( const DispatchResultEvent& )
     if ( !nCount && !RequestHandler::AreRequestsPending() )
     {
         // We have to check if we have an open task otherwise we have to shutdown the office.
-        Reference< XDesktop2 > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+        Reference< XDesktop > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
         Reference< XElementAccess > xList = xDesktop->getFrames();
 
         if ( !xList->hasElements() )

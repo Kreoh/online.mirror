@@ -39,7 +39,7 @@
 
 #include <vector>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::frame;
@@ -55,12 +55,12 @@ class VCLSession:
 {
     struct Listener
     {
-        css::uno::Reference< XSessionManagerListener >      m_xListener;
+        cpo::uno::Reference< XSessionManagerListener >      m_xListener;
         bool                                        m_bInteractionRequested;
         bool                                        m_bInteractionDone;
         bool                                        m_bSaveDone;
 
-        explicit Listener( css::uno::Reference< XSessionManagerListener > xListener )
+        explicit Listener( cpo::uno::Reference< XSessionManagerListener > xListener )
                 : m_xListener(std::move( xListener )),
                   m_bInteractionRequested( false ),
                   m_bInteractionDone( false ),
@@ -79,22 +79,22 @@ class VCLSession:
 
     virtual ~VCLSession() override {}
 
-    virtual void SAL_CALL addSessionManagerListener( const css::uno::Reference< XSessionManagerListener >& xListener ) override;
-    virtual void SAL_CALL removeSessionManagerListener( const css::uno::Reference< XSessionManagerListener>& xListener ) override;
-    virtual void SAL_CALL queryInteraction( const css::uno::Reference< XSessionManagerListener >& xListener ) override;
-    virtual void SAL_CALL interactionDone( const css::uno::Reference< XSessionManagerListener >& xListener ) override;
-    virtual void SAL_CALL saveDone( const css::uno::Reference< XSessionManagerListener >& xListener ) override;
-    virtual bool SAL_CALL cancelShutdown() override;
+    virtual void addSessionManagerListener( const cpo::uno::Reference< XSessionManagerListener >& xListener ) override;
+    virtual void removeSessionManagerListener( const cpo::uno::Reference< XSessionManagerListener>& xListener ) override;
+    virtual void queryInteraction( const cpo::uno::Reference< XSessionManagerListener >& xListener ) override;
+    virtual void interactionDone( const cpo::uno::Reference< XSessionManagerListener >& xListener ) override;
+    virtual void saveDone( const cpo::uno::Reference< XSessionManagerListener >& xListener ) override;
+    virtual bool cancelShutdown() override;
 
-    OUString SAL_CALL getImplementationName() override {
+    OUString getImplementationName() override {
         return u"com.sun.star.frame.VCLSessionManagerClient"_ustr;
     }
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override {
+    bool supportsService(OUString const & ServiceName) override {
         return cppu::supportsService(this, ServiceName);
     }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override {
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override {
         return {u"com.sun.star.frame.SessionManagerClient"_ustr};
     }
 
@@ -229,7 +229,7 @@ void VCLSession::callQuit()
     SolarMutexReleaser aReleaser;
     for (auto const & listener: aListeners)
     {
-        css::uno::Reference< XSessionManagerListener2 > xListener2( listener.m_xListener, UNO_QUERY );
+        cpo::uno::Reference< XSessionManagerListener2 > xListener2( listener.m_xListener, UNO_QUERY );
         if( xListener2.is() )
             xListener2->doQuit();
     }
@@ -267,7 +267,7 @@ void VCLSession::SalSessionEventProc( void* pData, SalSessionEvent* pEvent )
     }
 }
 
-void SAL_CALL VCLSession::addSessionManagerListener( const css::uno::Reference<XSessionManagerListener>& xListener )
+void VCLSession::addSessionManagerListener( const cpo::uno::Reference<XSessionManagerListener>& xListener )
 {
     SAL_INFO("vcl.se", "VCLSession::addSessionManagerListener" );
 
@@ -277,7 +277,7 @@ void SAL_CALL VCLSession::addSessionManagerListener( const css::uno::Reference<X
     m_aListeners.emplace_back( xListener );
 }
 
-void SAL_CALL VCLSession::removeSessionManagerListener( const css::uno::Reference<XSessionManagerListener>& xListener )
+void VCLSession::removeSessionManagerListener( const cpo::uno::Reference<XSessionManagerListener>& xListener )
 {
     SAL_INFO("vcl.se", "VCLSession::removeSessionManagerListener" );
 
@@ -288,7 +288,7 @@ void SAL_CALL VCLSession::removeSessionManagerListener( const css::uno::Referenc
     std::erase_if(m_aListeners, [&](Listener& listener) {return xListener == listener.m_xListener;});
 }
 
-void SAL_CALL VCLSession::queryInteraction( const css::uno::Reference<XSessionManagerListener>& xListener )
+void VCLSession::queryInteraction( const cpo::uno::Reference<XSessionManagerListener>& xListener )
 {
     SAL_INFO("vcl.se", "VCLSession::queryInteraction");
 
@@ -327,7 +327,7 @@ void SAL_CALL VCLSession::queryInteraction( const css::uno::Reference<XSessionMa
     }
 }
 
-void SAL_CALL VCLSession::interactionDone( const css::uno::Reference< XSessionManagerListener >& xListener )
+void VCLSession::interactionDone( const cpo::uno::Reference< XSessionManagerListener >& xListener )
 {
     SAL_INFO("vcl.se", "VCLSession::interactionDone");
 
@@ -355,7 +355,7 @@ void SAL_CALL VCLSession::interactionDone( const css::uno::Reference< XSessionMa
     }
 }
 
-void SAL_CALL VCLSession::saveDone( const css::uno::Reference< XSessionManagerListener >& xListener )
+void VCLSession::saveDone( const cpo::uno::Reference< XSessionManagerListener >& xListener )
 {
     SAL_INFO("vcl.se", "VCLSession::saveDone");
 
@@ -380,7 +380,7 @@ void SAL_CALL VCLSession::saveDone( const css::uno::Reference< XSessionManagerLi
     }
 }
 
-bool SAL_CALL VCLSession::cancelShutdown()
+bool VCLSession::cancelShutdown()
 {
     SAL_INFO("vcl.se", "VCLSession::cancelShutdown");
 
@@ -400,7 +400,7 @@ void VCLSession::disposing(std::unique_lock<std::mutex>& rGuard) {
         try {
             listener.m_xListener->disposing(src);
             SAL_INFO("vcl.se.debug", "  call Listener disposing");
-        } catch (css::uno::RuntimeException &) {
+        } catch (cpo::uno::RuntimeException &) {
             TOOLS_WARN_EXCEPTION("vcl.se", "ignoring");
         }
         rGuard.lock();
@@ -409,9 +409,9 @@ void VCLSession::disposing(std::unique_lock<std::mutex>& rGuard) {
 
 // service implementation
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_frame_VCLSessionManagerClient_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new VCLSession);
 }

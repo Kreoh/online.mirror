@@ -172,7 +172,7 @@ void SvxAreaTabPage::SetOptimalSize()
 
 SvxAreaTabPage::~SvxAreaTabPage()
 {
-    m_xFillTabPage.reset();
+    m_aFillTabPages.clear();
 }
 
 void SvxAreaTabPage::ActivatePage( const SfxItemSet& rSet )
@@ -235,7 +235,7 @@ void SvxAreaTabPage::ActivatePage( const SfxItemSet& rSet )
 template< typename TTabPage >
 DeactivateRC SvxAreaTabPage::DeactivatePage_Impl( SfxItemSet* _pSet )
 {
-    return static_cast<TTabPage&>(*m_xFillTabPage).DeactivatePage(_pSet);
+    return static_cast<TTabPage&>(*getCurrentFillTabPage()).DeactivatePage(_pSet);
 }
 
 DeactivateRC SvxAreaTabPage::DeactivatePage( SfxItemSet* _pSet )
@@ -291,21 +291,7 @@ DeactivateRC SvxAreaTabPage::DeactivatePage( SfxItemSet* _pSet )
 template< typename TTabPage >
 bool SvxAreaTabPage::FillItemSet_Impl( SfxItemSet* rAttrs)
 {
-    return static_cast<TTabPage&>( *m_xFillTabPage ).FillItemSet( rAttrs );
-}
-
-OUString SvxAreaTabPage::GetAllStrings()
-{
-    OUString sAllStrings;
-    OUString tabLabels[] = { u"None"_ustr,  u"Color"_ustr,   u"Gradient"_ustr, u"Hatch"_ustr,
-                             u"Image"_ustr, u"Pattern"_ustr, u"Use Background"_ustr };
-
-    for (const auto& label : tabLabels)
-    {
-        sAllStrings += label + " ";
-    }
-
-    return sAllStrings.replaceAll("_", "");
+    return static_cast<TTabPage&>( *getCurrentFillTabPage() ).FillItemSet( rAttrs );
 }
 
 bool SvxAreaTabPage::FillItemSet( SfxItemSet* rAttrs )
@@ -358,12 +344,17 @@ bool SvxAreaTabPage::FillItemSet( SfxItemSet* rAttrs )
 template< typename TTabPage >
 void SvxAreaTabPage::Reset_Impl( const SfxItemSet* rAttrs )
 {
-    static_cast<TTabPage&>( *m_xFillTabPage ).Reset( rAttrs );
+    static_cast<TTabPage&>( *getCurrentFillTabPage() ).Reset( rAttrs );
 }
 
 void SvxAreaTabPage::Reset( const SfxItemSet* rAttrs )
 {
     m_bBtnClicked = false;
+
+    // Show the fill that the item set holds, before the page is first shown.
+    if (rAttrs)
+        ActivatePage(*rAttrs);
+
     OUString sCurrentPage = m_xNotebook->get_current_page_ident();
     auto it = maFillTypeMap.find(sCurrentPage);
     if (it == maFillTypeMap.end())
@@ -417,37 +408,34 @@ std::unique_ptr<SfxTabPage> SvxAreaTabPage::CreateWithSlideBackground(
     return xRet;
 }
 
-void SvxAreaTabPage::SelectFillTypeByPage(FillType eFillType, const SfxItemSet* _pSet)
+void SvxAreaTabPage::createFillTabPages()
 {
-    if (_pSet)
-        m_aFillAttributeSet.Set(*_pSet);
-
-    OUString sPageId = getPageId(eFillType);
-    if (sPageId.isEmpty())
-        return;
-
-    weld::Container* pContainer = m_xNotebook->get_page(sPageId);
-    if (!pContainer)
-        return;
-
-    m_xFillTabPage = CreateFillStyleTabPage(eFillType);
-    if (m_xFillTabPage)
+    for (const auto& rEntry : maFillTypeMap)
     {
-        m_xFillTabPage->SetDialogController(GetDialogController());
-        CreatePage(eFillType, *m_xFillTabPage);
+        std::unique_ptr<SfxTabPage> xPage = CreateFillStyleTabPage(rEntry.second);
+        if (!xPage)
+            continue;
+        xPage->SetDialogController(GetDialogController());
+        CreatePage(rEntry.second, *xPage);
+        m_aFillTabPages[rEntry.second] = std::move(xPage);
     }
 }
 
-IMPL_LINK(SvxAreaTabPage, SwitchPageHdl_Impl, const OUString&, rPageIdent, void)
+SfxTabPage* SvxAreaTabPage::getCurrentFillTabPage()
+{
+    auto aFoundType = maFillTypeMap.find(m_xNotebook->get_current_page_ident());
+    if (aFoundType == maFillTypeMap.end())
+        return nullptr;
+    auto aFoundPage = m_aFillTabPages.find(aFoundType->second);
+    return aFoundPage == m_aFillTabPages.end() ? nullptr : aFoundPage->second.get();
+}
+
+IMPL_LINK_NOARG(SvxAreaTabPage, SwitchPageHdl_Impl, const OUString&, void)
 {
     m_bBtnClicked = true;
-    auto it = maFillTypeMap.find(rPageIdent);
-    if (it != maFillTypeMap.end())
-    {
-        FillType eFillType = it->second;
-        SelectFillTypeByPage(eFillType);
-        m_bBtnClicked = true;
-    }
+    // every fill page is built already, so the notebook only shows another one
+    if (m_aFillTabPages.empty())
+        createFillTabPages();
 }
 
 std::unique_ptr<SfxTabPage> SvxAreaTabPage::CreateFillStyleTabPage(FillType eFillType)
@@ -500,11 +488,16 @@ void SvxAreaTabPage::SelectFillType(FillType eFillType, const SfxItemSet* _pSet)
     if(!pageId.isEmpty())
         m_xNotebook->set_current_page(pageId);
 
-    m_xFillTabPage = CreateFillStyleTabPage(eFillType);
-    if (m_xFillTabPage)
+    // Build all fill pages once; later calls only load the new attributes into them.
+    if (m_aFillTabPages.empty())
     {
-        m_xFillTabPage->SetDialogController(GetDialogController());
-        CreatePage(eFillType, *m_xFillTabPage);
+        createFillTabPages();
+        return;
+    }
+    for (auto& rEntry : m_aFillTabPages)
+    {
+        rEntry.second->ActivatePage(m_aFillAttributeSet);
+        rEntry.second->Reset(&m_aFillAttributeSet);
     }
 }
 

@@ -26,7 +26,7 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star::registry;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 
 #include "testfactreg.hxx"
@@ -35,7 +35,7 @@ using namespace ::com::sun::star::lang;
 extern "C"
 {
 
-bool SAL_CALL component_writeInfo(
+bool component_writeInfo(
     void * pServiceManager, void * pRegistryKey )
 {
     if (pRegistryKey)
@@ -109,7 +109,7 @@ bool SAL_CALL component_writeInfo(
     return false;
 }
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * component_getFactory(
     const char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     void * pRet = 0;

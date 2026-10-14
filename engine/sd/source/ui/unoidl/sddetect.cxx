@@ -23,7 +23,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <vcl/graphicfilter.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
@@ -34,8 +34,8 @@
 #include <unotools/mediadescriptor.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::beans;
@@ -49,7 +49,7 @@ SdFilterDetect::~SdFilterDetect()
 {
 }
 
-OUString SAL_CALL SdFilterDetect::detect( Sequence< beans::PropertyValue >& lDescriptor )
+OUString SdFilterDetect::detect( Sequence< beans::PropertyValue >& lDescriptor )
 {
     comphelper::SequenceAsHashMap aMediaDesc(lDescriptor);
     OUString aTypeName = aMediaDesc.getUnpackedValueOrDefault( utl::MediaDescriptor::PROP_TYPENAME, OUString() );
@@ -133,26 +133,26 @@ OUString SAL_CALL SdFilterDetect::detect( Sequence< beans::PropertyValue >& lDes
 }
 
 // XServiceInfo
-OUString SAL_CALL SdFilterDetect::getImplementationName()
+OUString SdFilterDetect::getImplementationName()
 {
     return u"com.sun.star.comp.draw.FormatDetector"_ustr;
 }
 
 // XServiceInfo
-bool SAL_CALL SdFilterDetect::supportsService( const OUString& sServiceName )
+bool SdFilterDetect::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > SAL_CALL SdFilterDetect::getSupportedServiceNames()
+Sequence< OUString > SdFilterDetect::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ExtendedTypeDetection"_ustr };
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_draw_FormatDetector_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_draw_FormatDetector_get_implementation(cpo::uno::XComponentContext*,
                                                          cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SdFilterDetect());

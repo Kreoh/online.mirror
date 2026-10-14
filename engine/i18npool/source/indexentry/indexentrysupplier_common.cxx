@@ -23,13 +23,13 @@
 #include <localedata.hxx>
 #include <o3tl/temporary.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 using namespace ::cpo::uno;
 
 namespace i18npool {
 
-IndexEntrySupplier_Common::IndexEntrySupplier_Common(const Reference < uno::XComponentContext >& rxContext)
+IndexEntrySupplier_Common::IndexEntrySupplier_Common(const Reference < cpo::uno::XComponentContext >& rxContext)
 {
     implementationName = "com.sun.star.i18n.IndexEntrySupplier_Common";
     collator = new CollatorImpl(rxContext);

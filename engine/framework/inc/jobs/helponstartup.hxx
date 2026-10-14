@@ -29,10 +29,10 @@
 #include <com/sun/star/task/XJob.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/frame/XDesktop2.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XModuleManager2.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace framework{
 
@@ -48,16 +48,16 @@ class HelpOnStartup final : public ::cppu::WeakImplHelper< css::lang::XServiceIn
         std::mutex m_mutex;
 
         /** @short  reference to a uno service manager. */
-        css::uno::Reference< css::uno::XComponentContext > m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 
         /** @short  such module manager is used to classify new opened documents. */
-        css::uno::Reference< css::frame::XModuleManager2 > m_xModuleManager;
+        cpo::uno::Reference< css::frame::XModuleManager2 > m_xModuleManager;
 
         /** @short  is needed to locate a might open help frame. */
-        css::uno::Reference< css::frame::XDesktop2 > m_xDesktop;
+        cpo::uno::Reference< css::frame::XDesktop > m_xDesktop;
 
         /** @short  provides read access to the underlying configuration. */
-        css::uno::Reference< css::container::XNameAccess > m_xConfig;
+        cpo::uno::Reference< css::container::XNameAccess > m_xConfig;
 
         /** @short  knows the current locale of this office session,
                     which is needed to build complete help URLs.
@@ -78,7 +78,7 @@ class HelpOnStartup final : public ::cppu::WeakImplHelper< css::lang::XServiceIn
                     reference to the uno service manager, which created this instance.
                     Can be used later to create own needed uno resources on demand.
          */
-        HelpOnStartup(css::uno::Reference< css::uno::XComponentContext > xContext);
+        HelpOnStartup(cpo::uno::Reference< cpo::uno::XComponentContext > xContext);
 
         /** @short  does nothing real ...
 

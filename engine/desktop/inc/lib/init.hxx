@@ -15,6 +15,7 @@
 #include <mutex>
 #include <set>
 #include <string_view>
+#include <utility>
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/variant.hpp>
@@ -41,7 +42,10 @@ namespace desktop {
     struct RectangleAndPart
     {
         tools::Rectangle m_aRectangle;
-        int m_nPart;
+        /// The part identifier: a page GUID for a presentation or drawing document, a decimal
+        /// index for the other document types. "-1" stands for every part, and an empty string
+        /// for a part nobody has set yet.
+        OString m_aPart;
         int m_nMode;
 
         // This is the "EMPTY" rectangle, which somewhat confusingly actually means
@@ -50,24 +54,29 @@ namespace desktop {
         constexpr static tools::Rectangle emptyAllRectangle = {0, 0, KitHelper::MaxTwips, KitHelper::MaxTwips};
 
         RectangleAndPart()
-            : m_nPart(INT_MIN)  // A part nobody has set yet. -1 is reserved to mean "all parts".
-            , m_nMode(0)
+            : m_nMode(0)
         {
         }
 
-        RectangleAndPart(const tools::Rectangle* pRect, int nPart, int nMode)
+        RectangleAndPart(const tools::Rectangle* pRect, OString aPart, int nMode)
             : m_aRectangle( pRect ? SanitizedRectangle(*pRect) : emptyAllRectangle)
-            , m_nPart(nPart)
+            , m_aPart(std::move(aPart))
             , m_nMode(nMode)
         {
+        }
+
+        /// Whether the part stands for every part of the document.
+        bool isAllParts() const
+        {
+            return m_aPart == "-1";
         }
 
         OString toString() const
         {
             // Every payload carries the part, so the part must have been set by now.
-            assert(m_nPart >= -1);
+            assert(!m_aPart.isEmpty());
             return (isInfinite() ? "EMPTY"_ostr : m_aRectangle.toString())
-                + ", " + OString::number(m_nPart) + ", " + OString::number(m_nMode);
+                + ", " + m_aPart + ", " + OString::number(m_nMode);
         }
 
         /// Infinite Rectangle is both sides are
@@ -114,17 +123,28 @@ namespace desktop {
         void setViewId( int viewId ) { m_viewId = viewId; }
 
         // True for a view that renders from vector primitives rather than
-        // painting bitmap tiles.
-        void setVectorRendering() { m_bVectorRendering = true; }
+        // painting bitmap tiles. A view asks in each mode it renders.
+        void setVectorRendering(int nMode)
+        {
+            m_bVectorRendering = true;
+            m_aVectorRenderingModes.insert(nMode);
+        }
         bool isVectorRendering() const { return m_bVectorRendering; }
+        // The view paints bitmap tiles again, in no mode from vector primitives.
+        void stopVectorRendering()
+        {
+            m_bVectorRendering = false;
+            m_aVectorRenderingModes.clear();
+        }
 
-        DESKTOP_DLLPUBLIC void tilePainted(int nPart, int nMode, const tools::Rectangle& rRectangle);
+        DESKTOP_DLLPUBLIC void tilePainted(const OString& rPart, int nMode,
+                                           const tools::Rectangle& rRectangle);
         const OString& getViewRenderState() const { return m_aViewRenderState; }
-        const std::map<int, std::map<int, tools::Rectangle>>& getPaintedTiles() const
+        const std::map<OString, std::map<int, tools::Rectangle>>& getPaintedTiles() const
         {
             return m_aPaintedTiles;
         }
-        void setPaintedTiles(const std::map<int, std::map<int, tools::Rectangle>>& rPaintedTiles)
+        void setPaintedTiles(const std::map<OString, std::map<int, tools::Rectangle>>& rPaintedTiles)
         {
             m_aPaintedTiles = rPaintedTiles;
         }
@@ -135,9 +155,10 @@ namespace desktop {
         DESKTOP_DLLPUBLIC virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode) override;
         virtual void viewUpdatedCallback(COKitCallbackType eType) override;
         virtual void viewUpdatedCallbackPerViewId(COKitCallbackType eType, int nViewId, int nSourceViewId) override;
-        /// Records that a slide part changed, so the next flush pushes
-        /// that part's vector-primitives delta to the client.
-        DESKTOP_DLLPUBLIC virtual void viewVectorPartChanged(int nPart) override;
+        /// Records that a part changed, so the next flush pushes that part's vector-primitives
+        /// delta to the client. The part is named by its id, the page GUID.
+        DESKTOP_DLLPUBLIC virtual void viewVectorPartChanged(const OString& rPartId,
+                                                             int nMode) override;
         virtual void viewAddPendingInvalidateTiles() override;
         virtual void dumpState(rtl::OStringBuffer &rState) override;
 
@@ -155,13 +176,8 @@ namespace desktop {
             {
             }
 
-            CallbackData(const tools::Rectangle* pRect, int viewId)
-                : PayloadObject(RectangleAndPart(pRect, viewId, 0))
-            { // PayloadString will be done on demand
-            }
-
-            CallbackData(const tools::Rectangle* pRect, int part, int mode)
-                : PayloadObject(RectangleAndPart(pRect, part, mode))
+            CallbackData(const tools::Rectangle* pRect, OString part, int mode)
+                : PayloadObject(RectangleAndPart(pRect, std::move(part), mode))
             { // PayloadString will be done on demand
             }
 
@@ -231,8 +247,8 @@ namespace desktop {
         std::unordered_map<OString, OString> m_lastStateChange;
         std::unordered_map<int, std::unordered_map<COKitCallbackType, OString>> m_viewStates;
 
-        /// BBox of already painted tiles: part number -> part mode -> rectangle.
-        std::map<int, std::map<int, tools::Rectangle>> m_aPaintedTiles;
+        /// BBox of already painted tiles: part identifier -> part mode -> rectangle.
+        std::map<OString, std::map<int, tools::Rectangle>> m_aPaintedTiles;
 
         // For some types only the last message matters (see isUpdatedType()) or only the last message
         // per each viewId value matters (see isUpdatedTypePerViewId()), so instead of using push model
@@ -257,9 +273,12 @@ namespace desktop {
         OString m_aViewRenderState;
         int m_viewId = -1; // view id of the associated SfxViewShell
         bool m_bVectorRendering = false;
-        /// Slide parts whose vector-primitives delta is still to be
-        /// pushed, collected between two flushes.
-        std::set<int> m_vectorDeltaParts;
+        /// Modes the view asked for primitives in. A change in another mode
+        /// pushes nothing.
+        std::set<int> m_aVectorRenderingModes;
+        /// Parts whose vector-primitives delta is still to be pushed, collected between two
+        /// flushes, each as its part id and the mode it is served in.
+        std::set<std::pair<OString, int>> m_vectorDeltaParts;
         COKitCallback m_pCallback;
         ImplSVEvent* m_pFlushEvent;
         void *m_pData;
@@ -277,15 +296,20 @@ namespace desktop {
         OUString msIdleId;
         std::shared_ptr<CallbackFlushHandler> mpCallbackFlushHandler;
         int mnViewId = -1;
+        // True until the idle handler has run once for the current request.
+        bool mbFirstPass = true;
 
         DECL_LINK(IdleHdl, Timer*, void);
     };
 
     struct DESKTOP_DLLPUBLIC COKitDocumentImpl : public COKitDocument
     {
-        css::uno::Reference<css::lang::XComponent> mxComponent;
+        cpo::uno::Reference<css::lang::XComponent> mxComponent;
         std::map<size_t, std::shared_ptr<CallbackFlushHandler>> mpCallbackFlushHandlers;
         const int mnDocumentId;
+        // Cached document type, to avoid holding the SolarMutex on
+        // document type queries.
+        COKitDocumentType meDocumentType;
         WaitUntilIdle maIdleHelper;
         std::set<OUString> maFontsMissing;
         // Canonical main URL this document's original-document-URL mapping was
@@ -293,25 +317,30 @@ namespace desktop {
         // touching the possibly-disposed model. See comphelper::COKit.
         OUString maOriginalDocumentUrlKey;
 
-        explicit COKitDocumentImpl(css::uno::Reference<css::lang::XComponent> xComponent,
+        // Area that has had tiles painted, by view render state.
+        std::map<OString, std::map<OString, std::map<int, tools::Rectangle>>>
+            maPaintedAreaByRenderState;
+
+        explicit COKitDocumentImpl(cpo::uno::Reference<css::lang::XComponent> xComponent,
                                     int nDocumentId);
         ~COKitDocumentImpl();
 
-        void updateViewsForPaintedTile(int nOrigViewId, int nPart, int nMode, const tools::Rectangle& rRectangle);
+        void updateViewsForPaintedTile(int nOrigViewId, const OString& rPart, int nMode,
+                                       const tools::Rectangle& rRectangle);
 
         bool saveAs(const char* pUrl, const char* pFormat, const char* pFilterOptions) override;
         COKitDocumentType getDocumentType() override;
         int getParts() override;
         std::string getWriterPageRectangles() override;
-        int getPart() override;
-        void setPart(int nPart) override;
-        char* getPartName(int nPart) override;
+        std::string getPart() override;
+        void setPart(const char* pPart) override;
+        std::string getPartName(int nPart) override;
         void setPartMode(COKitPartMode eMode) override;
-        void paintTile(unsigned char* pBuffer, const int nCanvasWidth, const int nCanvasHeight,
-                       const int nTilePosX, const int nTilePosY, const int nTileWidth,
-                       const int nTileHeight) override;
+        void paintTile(std::span<unsigned char> aBuffer, const int nCanvasWidth,
+                       const int nCanvasHeight, const int nTilePosX, const int nTilePosY,
+                       const int nTileWidth, const int nTileHeight) override;
         COKitTileMode getTileMode() override;
-        void getDocumentSize(long* pWidth, long* pHeight) override;
+        COKitSize getDocumentSize() override;
         void initializeForRendering(const char* pArguments) override;
         void registerCallback(COKitCallback pCallback, void* pData) override;
         void postKeyEvent(COKitKeyEventType eType, int nCharCode, int nKeyCode) override;
@@ -320,9 +349,10 @@ namespace desktop {
         void postUnoCommand(const char* pCommand, const char* pArguments,
                             bool bNotifyWhenFinished) override;
         void setTextSelection(COKitSetTextSelectionType eType, int nX, int nY) override;
-        std::string getTextSelection(std::string_view pMimeType, std::string* pUsedMimeType) override;
+        std::string getTextSelection(std::string_view aMimeType) override;
         bool paste(const char* pMimeType, const char* pData, size_t nSize) override;
         void setGraphicSelection(COKitSetGraphicSelectionType eType, int nX, int nY) override;
+        void setInPlaceObjectArea(int nX, int nY, int nWidth, int nHeight) override;
         void resetSelection() override;
         std::string getCommandValues(const char* pCommand) override;
         void setClientZoom(int nTilePixelWidth, int nTilePixelHeight, int nTileTwipWidth,
@@ -333,15 +363,14 @@ namespace desktop {
         void setView(int nId) override;
         int getView() override;
         int getViewsCount() override;
-        char* getPartHash(int nPart) override;
-        void paintPartTile(unsigned char* pBuffer, const int nPart, const int nMode,
+        void paintPartTile(std::span<unsigned char> aBuffer, const char* pPart, const int nMode,
                            const int nCanvasWidth, const int nCanvasHeight, const int nTilePosX,
                            const int nTilePosY, const int nTileWidth, const int nTileHeight,
                            bool bIsPreview = false) override;
-        bool getViewIds(std::vector<int>& rIds) override;
+        std::vector<int> getViewIds() override;
         void setOutlineState(bool bColumn, int nLevel, int nIndex, bool bHidden) override;
-        void paintWindow(unsigned nWindowId, unsigned char* pBuffer, const int x, const int y,
-                         const int width, const int height) override;
+        void paintWindow(unsigned nWindowId, std::span<unsigned char> aBuffer, const int x,
+                         const int y, const int width, const int height) override;
         void postWindow(unsigned nWindowId, COKitWindowAction eAction, const char* pData) override;
         void postWindowKeyEvent(unsigned nWindowId, COKitKeyEventType eType, int nCharCode,
                                 int nKeyCode) override;
@@ -351,45 +380,41 @@ namespace desktop {
         void postWindowExtTextInputEvent(unsigned nWindowId, COKitExtTextInputType eType,
                                          const char* pText) override;
         std::string getPartInfo(int nPart) override;
-        void paintWindowDPI(unsigned nWindowId, unsigned char* pBuffer, const int x, const int y,
-                            const int width, const int height, const double dpiscale) override;
-        bool insertCertificate(const unsigned char* pCertificateBinary,
-                               const int nCertificateBinarySize,
-                               const unsigned char* pPrivateKeyBinary,
-                               const int nPrivateKeyBinarySize) override;
-        bool addCertificate(const unsigned char* pCertificateBinary,
-                            const int nCertificateBinarySize) override;
+        void paintWindowDPI(unsigned nWindowId, std::span<unsigned char> aBuffer, const int x,
+                            const int y, const int width, const int height,
+                            const double dpiscale) override;
+        bool insertCertificate(std::span<const unsigned char> aCertificateBinary,
+                               std::span<const unsigned char> aPrivateKeyBinary) override;
+        bool addCertificate(std::span<const unsigned char> aCertificateBinary) override;
         int getSignatureState() override;
         std::vector<char> renderShapeSelection() override;
         void postWindowGestureEvent(unsigned nWindowId, const char* pType, int nX, int nY,
                                     int nOffset) override;
         int createViewWithOptions(const char* pOptions) override;
-        void selectPart(int nPart, int nSelect) override;
+        void selectPart(const char* pPart, int nSelect) override;
         void moveSelectedParts(int nPosition, bool bDuplicate, int nIntoSection) override;
         void resizeWindow(unsigned nWindowId, const int width, const int height) override;
-        bool getClipboard(const char **pMimeTypes,
-                          std::vector<std::string>& rOutMimeTypes,
-                          std::vector<std::vector<char>>& rOutStreams) override;
+        std::vector<COKitClipboardItem> getClipboard(const char **pMimeTypes,
+                                                     bool bSkipDuplicateRenderings = false) override;
         bool setClipboard(const size_t   nInCount, const char   **pInMimeTypes,
                           const size_t  *pInSizes, const char   **pInStreams) override;
         COKitSelectionType getSelectionType() override;
         void removeTextContext(unsigned nWindowId, int nBefore, int nAfter) override;
         void sendDialogEvent(unsigned long long int nKitWindowId, const char* pArguments) override;
-        unsigned char* renderFontOrientation(const char* pFontName, const char* pChar,
-                                             int* pFontWidth, int* pFontHeight,
-                                             int pOrientation) override;
-        void paintWindowForView(unsigned nWindowId, unsigned char* pBuffer, const int x,
+        COKitBitmap renderFontOrientation(const char* pFontName, const char* pChar,
+                                          int nRequestedWidth, int nRequestedHeight,
+                                          int nOrientation) override;
+        void paintWindowForView(unsigned nWindowId, std::span<unsigned char> aBuffer, const int x,
                                 const int y, const int width, const int height,
                                 const double dpiscale, int viewId) override;
         void completeFunction(const char* pFunctionName) override;
         void setWindowTextSelection(unsigned nWindowId, bool bSwap, int nX, int nY) override;
         void sendFormFieldEvent(const char* pArguments) override;
         void setBlockedCommandList(int nViewId, const char* blockedCommandList) override;
-        bool renderSearchResult(const char* pSearchResult, std::vector<unsigned char>* pBitmapBuffer,
-                                int* pWidth, int* pHeight) override;
+        COKitBitmap renderSearchResult(const char* pSearchResult) override;
         void sendContentControlEvent(const char* pArguments) override;
-        COKitSelectionType getSelectionTypeAndText(const char* pMimeType, std::string* pText) override;
-        void getDataArea(long nPart, long* pCol, long* pRow) override;
+        COKitSelection getSelectionTypeAndText(const char* pMimeType) override;
+        COKitDataArea getDataArea(long nPart) override;
         int getEditMode() override;
         void setViewTimezone(int nId, const char* pTimezone) override;
         void setAccessibilityState(int nId, bool nEnabled) override;
@@ -398,19 +423,38 @@ namespace desktop {
         void setViewReadOnly(int nId, const bool readOnly) override;
         void setAllowChangeComments(int nId, const bool allow) override;
         std::string getPresentationInfo() override;
-        bool createSlideRenderer(const char* pSlideHash, int nSlideNumber, unsigned* nViewWidth,
-                                 unsigned* nViewHeight, bool bRenderBackground,
-                                 bool bRenderMasterPage) override;
+        std::optional<COKitPixelSize> createSlideRenderer(const char* pSlideHash, int nSlideNumber,
+                                                          COKitPixelSize aMaximumSize,
+                                                          bool bRenderBackground,
+                                                          bool bRenderMasterPage) override;
         void postSlideshowCleanup() override;
-        bool renderNextSlideLayer(unsigned char* pBuffer, bool* bIsBitmapLayer, double* pScale,
-                                  std::string* pJsonMessage) override;
+        COKitSlideLayer renderNextSlideLayer(std::span<unsigned char> aBuffer,
+                                             double fScale) override;
         void setViewOption(const char* pOption, const char* pValue) override;
         void setColorPreviewState(int nId, bool nEnabled) override;
         void setAllowManageRedlines(int nId, bool allow) override;
         void transferClipboardFromView(int nSourceViewId) override;
         void flushClipboard() override;
-        unsigned long long getPartUniqueId(int nPart, int nMode) override;
-        int getPartIndex(int nPart, int nMode) override;
+        std::string getPartId(int nPart, int nMode) override;
+        int getPartIndex(const char* pPart, int nMode) override;
+        bool insertPagesFromFile(const char* pUrl, const char* pJsonOptions) override;
+        std::string getSlideLinks() override;
+        int refreshSlideLinks(const char* pSourceName, const char* pUrl,
+                              const char* pLastModifiedTime, std::string* pNotUpdated,
+                              const char* pPart) override;
+        bool breakSlideLink(const char* pPart) override;
+        bool exportPages(const char* pParts, const char* pUrl) override;
+        void selectObjects(const char* pObjectIds) override;
+        void setObjectPoints(unsigned long long nObjectId, const char* pChanges) override;
+        void setObjectGluePoint(unsigned long long nObjectId, int nAt, double fX,
+                                double fY) override;
+        void setObjectTransform(const char* pMappings, const char* pWhat) override;
+        void setObjectControlPoint(unsigned long long nObjectId, int nAt, int nX, int nY,
+                                   bool bWithTheShape) override;
+        void setObjectHandle(unsigned long long nObjectId, int nKind, int nPolygon, int nPoint,
+                             int nAt, int nX, int nY) override;
+        void cropObject(unsigned long long nObjectId, int nUpperLeftX, int nUpperLeftY,
+                        int nLowerRightX, int nLowerRightY) override;
     };
 
     struct DESKTOP_DLLPUBLIC COKitImpl : public COKit
@@ -438,16 +482,15 @@ namespace desktop {
         void registerCallback(COKitCallback pCallback, void* pData) override;
         void setOptionalFeatures(COKitOptionalFeatures features) override;
         void setDocumentPassword(char const* pURL, char const* pPassword) override;
-        char* getVersionInfo() override;
+        std::string getVersionInfo() override;
         bool runMacro(const char* pURL) override;
-        bool signDocument(const char* pUrl, const unsigned char* pCertificateBinary,
-                          const int nCertificateBinarySize, const unsigned char* pPrivateKeyBinary,
-                          const int nPrivateKeyBinarySize) override;
+        bool signDocument(const char* pUrl, std::span<const unsigned char> aCertificateBinary,
+                          std::span<const unsigned char> aPrivateKeyBinary) override;
         void runLoop(COKitPollCallback pPollCallback, COKitWakeCallback pWakeCallback,
                      void* pData) override;
         void sendDialogEvent(unsigned long long int nKitWindowId, const char* pArguments) override;
         void setOption(const char* pOption, const char* pValue) override;
-        void dumpState(const char* pOptions, char** pState) override;
+        std::string dumpState(std::string_view aOptions) override;
         std::string extractRequest(const char* pFilePath) override;
         void trimMemory(int nTarget) override;
         void* startURP(
@@ -462,14 +505,13 @@ namespace desktop {
         void registerAnyInputCallback(COKitAnyInputCallback pCallback, void* pData) override;
         int getDocsCount() override;
         void registerFileSaveDialogCallback(COKitFileSaveDialogCallback pCallback) override;
-        void executeScript(char const * script, std::string_view source, int line,
-                           char ** result, char ** error,
+        COKitScriptResult executeScript(char const * script, std::string_view source, int line,
                            std::function<void(
                                void * data, std::string_view level, std::string_view message)>
                                consoleCallback,
                            void * consoleCallbackData,
                            void (*proxyCallback) (void * data, char const * payload),
-                           void * proxyCallbackData, bool * usedLegacyUnoApi) override;
+                           void * proxyCallbackData) override;
         void deliverProxyResult(char const * callId, char const * jsonValue) override;
         void cancelProxyCalls() override;
         bool isExpectedReentry() override;
@@ -477,9 +519,12 @@ namespace desktop {
         void
         registerRevealInFileManagerCallback(COKitRevealInFileManagerCallback pCallback) override;
         void installClipboardProvider(const COKitClipboardProvider* pProvider) override;
+        void installFilePickerProvider(const COKitFilePickerProvider* pProvider) override;
         bool getGlobalClipboard(const char **pMimeTypes,
                                 std::vector<std::string>& rOutMimeTypes,
                                 std::vector<std::vector<char>>& rOutStreams) override;
+        COKitTranslateResult translateDocument(const char* pInputPath, const char* pOutputPath,
+                                               const char* pBCP47Language) override;
     };
 
     /// Helper function to extract the value from parameters delimited by

@@ -32,7 +32,7 @@ using namespace dbtools;
 using namespace cppu;
 
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::container;
@@ -761,9 +761,9 @@ void ODatabaseMetaDataResultSet::initialize( const Sequence< Any >& _aArguments 
         return Sequence<OUString>{ u"com.sun.star.sdbc.ResultSet"_ustr };
     }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 connectivity_dbtools_ODatabaseMetaDataResultSet_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ODatabaseMetaDataResultSet());
 }

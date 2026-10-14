@@ -22,23 +22,23 @@ private:
     sw::mark::Fieldmark& m_rTextInput;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaFormFieldTextInput(const css::uno::Reference<ooo::vba::XHelperInterface>& rParent,
-                            const css::uno::Reference<css::uno::XComponentContext>& rContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFormFieldTextInput(const cpo::uno::Reference<ooo::vba::XHelperInterface>& rParent,
+                            const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
                             sw::mark::Fieldmark& rFormField);
     ~SwVbaFormFieldTextInput() override;
 
     // XTextInput
-    OUString SAL_CALL getDefaultPropertyName() override;
+    OUString getDefaultPropertyName() override;
 
     // default member: True if the specified form field object is a valid text form field
-    bool SAL_CALL getValid() override;
+    bool getValid() override;
 
     // Returns and sets the default text string of the input box
-    OUString SAL_CALL getDefault() override;
-    void SAL_CALL setDefault(const OUString& bSet) override;
+    OUString getDefault() override;
+    void setDefault(const OUString& bSet) override;
     // Returns the format string for the current text
-    OUString SAL_CALL getFormat() override;
+    OUString getFormat() override;
     /*
      * Returns the type of text form field.
      * Possible return values are:
@@ -49,15 +49,15 @@ public:
      * wdNumberText - Number text field,
      * wdRegularText - Regular text field.
      */
-    sal_Int32 SAL_CALL getType() override;
+    sal_Int32 getType() override;
     // Returns and sets the width, in points
-    sal_Int32 SAL_CALL getWidth() override;
-    void SAL_CALL setWidth(sal_Int32 nSet) override;
+    sal_Int32 getWidth() override;
+    void setWidth(sal_Int32 nSet) override;
 
     // Deletes the text from the text form field.
-    void SAL_CALL Clear() override;
+    void Clear() override;
     // Sets the type, default text string, format string, and enabled status
-    void SAL_CALL EditType(sal_Int32 nType, const cpo::uno::Any& rDefault,
+    void EditType(sal_Int32 nType, const cpo::uno::Any& rDefault,
                            const cpo::uno::Any& rFormat, const cpo::uno::Any& rEnabled) override;
 
     // XHelperInterface

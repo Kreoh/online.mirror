@@ -20,14 +20,14 @@
 #include <numberformatcode.hxx>
 #include <com/sun/star/i18n/KNumberFormatUsage.hpp>
 #include <com/sun/star/i18n/KNumberFormatType.hpp>
-#include <com/sun/star/i18n/LocaleData2.hpp>
+#include <com/sun/star/i18n/LocaleData.hpp>
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 NumberFormatCodeMapper::NumberFormatCodeMapper(
-            const css::uno::Reference < css::uno::XComponentContext >& rxContext )
+            const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext )
 {
-        m_xLocaleData.set( css::i18n::LocaleData2::create( rxContext ) );
+        m_xLocaleData.set( css::i18n::LocaleData::create( rxContext ) );
 }
 
 
@@ -254,9 +254,9 @@ NumberFormatCodeMapper::getSupportedServiceNames()
     return { u"com.sun.star.i18n.NumberFormatMapper"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_i18n_NumberFormatCodeMapper_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new NumberFormatCodeMapper(context));

@@ -36,6 +36,7 @@
 #include "tdoc_content.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace tdoc_ucp;
 
 namespace tdoc_ucp
@@ -56,7 +57,7 @@ namespace {
 
 // DataSupplier Implementation.
 ResultSetDataSupplier::ResultSetDataSupplier(
-                uno::Reference< uno::XComponentContext > xContext,
+                uno::Reference< cpo::uno::XComponentContext > xContext,
                 rtl::Reference< Content > xContent )
 : m_xContent(std::move( xContent )), m_xContext(std::move( xContext )),
   m_bCountFinal( false ), m_bThrowException( false )

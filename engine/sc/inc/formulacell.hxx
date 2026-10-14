@@ -374,6 +374,9 @@ public:
      */
     formula::FormulaTokenRef CloneRawResultToken() const;
     const ScMatrix* GetMatrix();
+    // The result matrix as it stands, without interpreting and even with a result error set.
+    // Null when the last result was no matrix.
+    ScConstMatrixRef GetRawResultMatrix() const;
     SC_DLLPUBLIC bool GetMatrixOrigin( const ScDocument& rDoc, ScAddress& rPos ) const;
     void            GetResultDimensions( SCSIZE& rCols, SCSIZE& rRows );
     sc::MatrixEdge  GetMatrixEdge( const ScDocument& rDoc, ScAddress& rOrgPos ) const;
@@ -476,7 +479,7 @@ public:
     void MarkAsSpilled();
 
     SC_DLLPUBLIC bool IsHyperLinkCell() const;
-    std::unique_ptr<EditTextObject> CreateURLObject();
+    EditTextObject CreateURLObject();
     SC_DLLPUBLIC void GetURLResult( OUString& rURL, OUString& rCellText );
 
     /** Determines whether or not the result string contains more than one paragraph */

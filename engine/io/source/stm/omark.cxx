@@ -32,7 +32,7 @@
 #include <com/sun/star/io/XConnectable.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -43,7 +43,7 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star::io;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 
@@ -77,31 +77,31 @@ public:
     OMarkableOutputStream(  );
 
 public: // XOutputStream
-    virtual void SAL_CALL writeBytes(const Sequence< sal_Int8 >& aData) override;
-    virtual void SAL_CALL flush() override;
-    virtual void SAL_CALL closeOutput() override;
+    virtual void writeBytes(const Sequence< sal_Int8 >& aData) override;
+    virtual void flush() override;
+    virtual void closeOutput() override;
 
 public: // XMarkable
-    virtual sal_Int32 SAL_CALL createMark() override;
-    virtual void SAL_CALL deleteMark(sal_Int32 Mark) override;
-    virtual void SAL_CALL jumpToMark(sal_Int32 nMark) override;
-    virtual void SAL_CALL jumpToFurthest() override;
-    virtual sal_Int32 SAL_CALL offsetToMark(sal_Int32 nMark) override;
+    virtual sal_Int32 createMark() override;
+    virtual void deleteMark(sal_Int32 Mark) override;
+    virtual void jumpToMark(sal_Int32 nMark) override;
+    virtual void jumpToFurthest() override;
+    virtual sal_Int32 offsetToMark(sal_Int32 nMark) override;
 
 public: // XActiveDataSource
-    virtual void SAL_CALL setOutputStream(const Reference < XOutputStream > & aStream) override;
-    virtual Reference < XOutputStream > SAL_CALL getOutputStream() override;
+    virtual void setOutputStream(const Reference < XOutputStream > & aStream) override;
+    virtual Reference < XOutputStream > getOutputStream() override;
 
 public: // XConnectable
-    virtual void SAL_CALL setPredecessor(const Reference < XConnectable > & aPredecessor) override;
-    virtual Reference < XConnectable > SAL_CALL getPredecessor() override;
-    virtual void SAL_CALL setSuccessor(const Reference < XConnectable >& aSuccessor) override;
-    virtual Reference<  XConnectable >  SAL_CALL getSuccessor() override;
+    virtual void setPredecessor(const Reference < XConnectable > & aPredecessor) override;
+    virtual Reference < XConnectable > getPredecessor() override;
+    virtual void setSuccessor(const Reference < XConnectable >& aSuccessor) override;
+    virtual Reference<  XConnectable >  getSuccessor() override;
 
 public: // XServiceInfo
-    OUString                     SAL_CALL getImplementationName() override;
-    Sequence< OUString >         SAL_CALL getSupportedServiceNames() override;
-    bool                        SAL_CALL supportsService(const OUString& ServiceName) override;
+    OUString                     getImplementationName() override;
+    Sequence< OUString >         getSupportedServiceNames() override;
+    bool                        supportsService(const OUString& ServiceName) override;
 
 private:
     // helper methods
@@ -359,9 +359,9 @@ Sequence< OUString > OMarkableOutputStream::getSupportedServiceNames()
     return { u"com.sun.star.io.MarkableOutputStream"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 io_OMarkableOutputStream_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OMarkableOutputStream());
 }
@@ -386,34 +386,34 @@ public:
 
 
 public: // XInputStream
-    virtual sal_Int32 SAL_CALL readBytes(Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead) override ;
-    virtual sal_Int32 SAL_CALL readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead) override;
-    virtual void SAL_CALL skipBytes(sal_Int32 nBytesToSkip) override;
+    virtual sal_Int32 readBytes(Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead) override ;
+    virtual sal_Int32 readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead) override;
+    virtual void skipBytes(sal_Int32 nBytesToSkip) override;
 
-    virtual sal_Int32 SAL_CALL available() override;
-    virtual void SAL_CALL closeInput() override;
+    virtual sal_Int32 available() override;
+    virtual void closeInput() override;
 
 public: // XMarkable
-    virtual sal_Int32 SAL_CALL createMark() override;
-    virtual void SAL_CALL deleteMark(sal_Int32 Mark) override;
-    virtual void SAL_CALL jumpToMark(sal_Int32 nMark) override;
-    virtual void SAL_CALL jumpToFurthest() override;
-    virtual sal_Int32 SAL_CALL offsetToMark(sal_Int32 nMark) override;
+    virtual sal_Int32 createMark() override;
+    virtual void deleteMark(sal_Int32 Mark) override;
+    virtual void jumpToMark(sal_Int32 nMark) override;
+    virtual void jumpToFurthest() override;
+    virtual sal_Int32 offsetToMark(sal_Int32 nMark) override;
 
 public: // XActiveDataSink
-    virtual void SAL_CALL setInputStream(const Reference < XInputStream > & aStream) override;
-    virtual Reference < XInputStream > SAL_CALL getInputStream() override;
+    virtual void setInputStream(const Reference < XInputStream > & aStream) override;
+    virtual Reference < XInputStream > getInputStream() override;
 
 public: // XConnectable
-    virtual void SAL_CALL setPredecessor(const Reference < XConnectable > & aPredecessor) override;
-    virtual Reference < XConnectable > SAL_CALL getPredecessor() override;
-    virtual void SAL_CALL setSuccessor(const Reference < XConnectable > & aSuccessor) override;
-    virtual Reference < XConnectable > SAL_CALL getSuccessor() override;
+    virtual void setPredecessor(const Reference < XConnectable > & aPredecessor) override;
+    virtual Reference < XConnectable > getPredecessor() override;
+    virtual void setSuccessor(const Reference < XConnectable > & aSuccessor) override;
+    virtual Reference < XConnectable > getSuccessor() override;
 
 public: // XServiceInfo
-    OUString                     SAL_CALL getImplementationName() override;
-    Sequence< OUString >         SAL_CALL getSupportedServiceNames() override;
-    bool                         SAL_CALL  supportsService(const OUString& ServiceName) override;
+    OUString                     getImplementationName() override;
+    Sequence< OUString >         getSupportedServiceNames() override;
+    bool                          supportsService(const OUString& ServiceName) override;
 
 private:
     void checkMarksAndFlush();
@@ -769,9 +769,9 @@ Sequence< OUString > OMarkableInputStream::getSupportedServiceNames()
     return { u"com.sun.star.io.MarkableInputStream"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 io_OMarkableInputStream_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OMarkableInputStream());
 }

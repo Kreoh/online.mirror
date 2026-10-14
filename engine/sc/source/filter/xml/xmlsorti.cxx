@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xmldrani.hxx"
 #include "xmlsorti.hxx"
 #include "xmlimprt.hxx"
 #include <convuno.hxx>
@@ -32,13 +31,14 @@
 #include <com/sun/star/sheet/SortNumberBehavior.hpp>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLSortContext::ScXMLSortContext( ScXMLImport& rImport,
                                       const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
-                                      ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
+                                      ScXMLSortSequenceReceiver* pReceiver) :
     ScXMLImportContext( rImport ),
-    pDatabaseRangeContext(pTempDatabaseRangeContext),
+    pSortSequenceReceiver(pReceiver),
     nUserListIndex(0),
     bCopyOutputData(false),
     bBindFormatsToContent(true),
@@ -114,7 +114,7 @@ ScXMLSortContext::~ScXMLSortContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSortContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLSortContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
@@ -133,7 +133,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSortContext::creat
     return pContext;
 }
 
-void SAL_CALL ScXMLSortContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSortContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     sal_Int32 nAlgoLength(sAlgorithm.getLength());
     sal_uInt8 i (0);
@@ -174,7 +174,8 @@ void SAL_CALL ScXMLSortContext::endFastElement( sal_Int32 /*nElement*/ )
         pSortDescriptor[7 + i].Name = SC_UNONAME_COLLALG;
         pSortDescriptor[7 + i].Value <<= sAlgorithm;
     }
-    pDatabaseRangeContext->SetSortSequence(aSortDescriptor);
+    if (pSortSequenceReceiver)
+        pSortSequenceReceiver->SetSortSequence(aSortDescriptor);
 }
 
 void ScXMLSortContext::AddSortField(std::u16string_view sFieldNumber, std::u16string_view sDataType, std::u16string_view sOrder)
@@ -250,7 +251,7 @@ ScXMLSortByContext::~ScXMLSortByContext()
 {
 }
 
-void SAL_CALL ScXMLSortByContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLSortByContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     pSortContext->AddSortField(sFieldNumber, sDataType, sOrder);
 }

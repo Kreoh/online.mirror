@@ -26,6 +26,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 // form controls use other property name as the remaining OOo API
@@ -34,7 +35,7 @@ using namespace ::com::sun::star;
 
 VbaFontBase::VbaFontBase(
         const uno::Reference< XHelperInterface >& xParent,
-        const uno::Reference< uno::XComponentContext >& xContext,
+        const uno::Reference< cpo::uno::XComponentContext >& xContext,
         const uno::Reference< css::container::XIndexAccess >& xPalette,
         const uno::Reference< beans::XPropertySet >& xPropertySet,
         Component eWhich,
@@ -51,7 +52,7 @@ VbaFontBase::~VbaFontBase()
 {
 }
 
-void SAL_CALL
+void
 VbaFontBase::setSuperscript( const cpo::uno::Any& aValue )
 {
     // not supported in form controls
@@ -72,7 +73,7 @@ VbaFontBase::setSuperscript( const cpo::uno::Any& aValue )
     mxFont->setPropertyValue( u"CharEscapementHeight"_ustr , cpo::uno::Any(nValue2) );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getSuperscript()
 {
     short nValue = NORMAL;
@@ -82,7 +83,7 @@ VbaFontBase::getSuperscript()
     return cpo::uno::Any( nValue == SUPERSCRIPT );
 }
 
-void SAL_CALL
+void
 VbaFontBase::setSubscript( const cpo::uno::Any& aValue )
 {
     // not supported in form controls
@@ -105,7 +106,7 @@ VbaFontBase::setSubscript( const cpo::uno::Any& aValue )
 
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getSubscript()
 {
     short nValue = NORMAL;
@@ -115,7 +116,7 @@ VbaFontBase::getSubscript()
     return cpo::uno::Any( nValue == SUBSCRIPT );
 }
 
-void SAL_CALL
+void
 VbaFontBase::setSize( const cpo::uno::Any& aValue )
 {
     // form controls need a sal_Int16 containing points, other APIs need a float
@@ -129,13 +130,13 @@ VbaFontBase::setSize( const cpo::uno::Any& aValue )
     mxFont->setPropertyValue( VBAFONTBASE_PROPNAME( "CharHeight", "FontHeight" ), aVal );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getSize()
 {
     return mxFont->getPropertyValue( VBAFONTBASE_PROPNAME( "CharHeight", "FontHeight" ) );
 }
 
-void SAL_CALL
+void
 VbaFontBase::setColorIndex( const cpo::uno::Any& _colorindex )
 {
     sal_Int32 nIndex = 0;
@@ -152,7 +153,7 @@ VbaFontBase::setColorIndex( const cpo::uno::Any& _colorindex )
 }
 
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getColorIndex()
 {
     sal_Int32 nColor = 0;
@@ -179,7 +180,7 @@ VbaFontBase::getColorIndex()
     return cpo::uno::Any( nIndex );
 }
 
-void SAL_CALL
+void
 VbaFontBase::setBold( const cpo::uno::Any& aValue )
 {
     bool bValue = false;
@@ -191,7 +192,7 @@ VbaFontBase::setBold( const cpo::uno::Any& aValue )
 
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getBold()
 {
     double fValue = 0.0;
@@ -199,7 +200,7 @@ VbaFontBase::getBold()
     return cpo::uno::Any( fValue == awt::FontWeight::BOLD );
 }
 
-void SAL_CALL
+void
 VbaFontBase::setStrikethrough( const cpo::uno::Any& aValue )
 {
     bool bValue = false;
@@ -210,7 +211,7 @@ VbaFontBase::setStrikethrough( const cpo::uno::Any& aValue )
     mxFont->setPropertyValue( VBAFONTBASE_PROPNAME( "CharStrikeout", "FontStrikeout" ), cpo::uno::Any( nValue ) );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getStrikethrough()
 {
     short nValue = 0;
@@ -218,20 +219,20 @@ VbaFontBase::getStrikethrough()
     return cpo::uno::Any( nValue == awt::FontStrikeout::SINGLE );
 }
 
-void  SAL_CALL
+void
 VbaFontBase::setShadow( const cpo::uno::Any& aValue )
 {
     if( !mbFormControl )
        mxFont->setPropertyValue( u"CharShadowed"_ustr , aValue );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getShadow()
 {
     return mbFormControl ? cpo::uno::Any( false ) : mxFont->getPropertyValue( u"CharShadowed"_ustr );
 }
 
-void  SAL_CALL
+void
 VbaFontBase::setItalic( const cpo::uno::Any& aValue )
 {
     bool bValue = false;
@@ -242,7 +243,7 @@ VbaFontBase::setItalic( const cpo::uno::Any& aValue )
     mxFont->setPropertyValue( VBAFONTBASE_PROPNAME( "CharPosture", "FontSlant" ), cpo::uno::Any( static_cast<short>(nValue) ) );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getItalic()
 {
     awt::FontSlant aFS;
@@ -250,7 +251,7 @@ VbaFontBase::getItalic()
     return cpo::uno::Any( aFS == awt::FontSlant_ITALIC );
 }
 
-void  SAL_CALL
+void
 VbaFontBase::setName( const cpo::uno::Any& aValue )
 {
     OUString sString;
@@ -258,7 +259,7 @@ VbaFontBase::setName( const cpo::uno::Any& aValue )
     mxFont->setPropertyValue( VBAFONTBASE_PROPNAME( "CharFontName", "FontName" ), aValue );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaFontBase::getName()
 {
     return mxFont->getPropertyValue( VBAFONTBASE_PROPNAME( "CharFontName", "FontName" ) );

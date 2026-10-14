@@ -55,7 +55,7 @@
 #include <sfx2/event.hxx>
 #include <unotxvw.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::cpo::uno;
 
 #define GLOBAL_UPDATE_TIMEOUT 2000
@@ -624,7 +624,7 @@ void SwGlobalTree::ExecuteContextMenuAction(std::u16string_view rSelectedPopupEn
     }
     else if (rSelectedPopupEntry == u"updatelinks" || rSelectedPopupEntry == u"updateall")
     {
-        m_pActiveShell->GetLinkManager().UpdateAllLinks(true, nullptr, u""_ustr);
+        m_pActiveShell->GetLinkManager().UpdateAllLinks(true, u""_ustr);
         if (rSelectedPopupEntry == u"updateall")
             nSlot = FN_UPDATE_TOX;
         pCont = nullptr;

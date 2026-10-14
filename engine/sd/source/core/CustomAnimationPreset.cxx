@@ -47,8 +47,8 @@
 #include <vector>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::animations;
 using namespace ::com::sun::star::presentation;
 
@@ -244,7 +244,7 @@ void CustomAnimationPresets::importEffects()
 {
     try
     {
-        const uno::Reference< uno::XComponentContext >& xContext(
+        const uno::Reference< cpo::uno::XComponentContext >& xContext(
             comphelper::getProcessComponentContext() );
         Reference< XMultiServiceFactory > xServiceFactory(
             xContext->getServiceManager(), UNO_QUERY_THROW );

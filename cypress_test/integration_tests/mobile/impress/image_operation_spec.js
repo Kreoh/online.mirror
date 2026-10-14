@@ -19,7 +19,9 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Image Operation Tests', fun
 	it('Delete Image', function() {
 		mobileHelper.insertImage();
 		helper.typeIntoDocument('{esc}');
-		cy.wait(300);
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
 		mobileHelper.deleteImage();
 	});
 
@@ -42,7 +44,6 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Image Operation Tests', fun
 			cy.cGet('body').realSwipe("toRight", { x: startX, y: startY, length: moveX });
 		});
 
-		cy.wait(1000);
 		helper.assertImageSize(284, 63);
 	});
 });

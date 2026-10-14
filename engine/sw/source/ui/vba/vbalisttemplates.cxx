@@ -23,6 +23,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -32,12 +33,12 @@ class ListTemplatesEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 m_nIndex;
 public:
     explicit ListTemplatesEnumWrapper( SwVbaListTemplates* pTemplates ) : m_pListTemplates( pTemplates ), m_nIndex( 1 ) {}
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( m_nIndex <= m_pListTemplates->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( m_nIndex <= m_pListTemplates->getCount() )
             return m_pListTemplates->Item( cpo::uno::Any( m_nIndex++ ), cpo::uno::Any() );
@@ -47,23 +48,23 @@ public:
 
 }
 
-SwVbaListTemplates::SwVbaListTemplates( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, uno::Reference< text::XTextDocument >  xTextDoc, sal_Int32 nType ) : SwVbaListTemplates_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >() ),  mxTextDocument(std::move( xTextDoc )), mnGalleryType( nType )
+SwVbaListTemplates::SwVbaListTemplates( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, uno::Reference< text::XTextDocument >  xTextDoc, sal_Int32 nType ) : SwVbaListTemplates_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >() ),  mxTextDocument(std::move( xTextDoc )), mnGalleryType( nType )
 {
 }
 
-::sal_Int32 SAL_CALL SwVbaListTemplates::getCount()
+::sal_Int32 SwVbaListTemplates::getCount()
 {
     // 3 types of list( bullet, numbered and outline )
     return 7;
 }
 
-cpo::uno::Any SAL_CALL SwVbaListTemplates::Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ )
+cpo::uno::Any SwVbaListTemplates::Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ )
 {
     sal_Int32 nIndex = 0;
     if( !( Index1 >>= nIndex ) )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     if( nIndex <=0 || nIndex > getCount() )
-        throw  uno::RuntimeException(u"Index out of bounds"_ustr );
+        throw  cpo::uno::RuntimeException(u"Index out of bounds"_ustr );
 
     return cpo::uno::Any( uno::Reference< word::XListTemplate >( new SwVbaListTemplate( this, mxContext, mxTextDocument, mnGalleryType, nIndex ) ) );
 }

@@ -34,6 +34,7 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 
@@ -56,7 +57,7 @@ VbaEventsHelperBase::~VbaEventsHelperBase()
 {
 }
 
-bool SAL_CALL VbaEventsHelperBase::processVbaEvent( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs )
+bool VbaEventsHelperBase::processVbaEvent( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs )
 {
     /*  Derived classes may add new event identifiers to be processed while
         processing the original event. All unprocessed events are collected in
@@ -82,7 +83,7 @@ bool SAL_CALL VbaEventsHelperBase::processVbaEvent( sal_Int32 nEventId, const cp
             disposed (this may have happened at any time during execution of
             the last event handler). */
         if( !mxModel.is() || !mpShell )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // get info for next event
         const EventHandlerInfo& rInfo = getEventHandlerInfo( aEventQueue.front().mnEventId );
@@ -133,14 +134,14 @@ bool SAL_CALL VbaEventsHelperBase::processVbaEvent( sal_Int32 nEventId, const cp
     return bExecuted;
 }
 
-void SAL_CALL VbaEventsHelperBase::notifyEvent( const document::EventObject& rEvent )
+void VbaEventsHelperBase::notifyEvent( const document::EventObject& rEvent )
 {
     SAL_INFO("vbahelper", "VbaEventsHelperBase::notifyEvent( \"" << rEvent.EventName << "\" )");
     if( rEvent.EventName == GlobalEventConfig::GetEventName( GlobalEventId::CLOSEDOC ) )
         stopListening();
 }
 
-void SAL_CALL VbaEventsHelperBase::changesOccurred( const util::ChangesEvent& rEvent )
+void VbaEventsHelperBase::changesOccurred( const util::ChangesEvent& rEvent )
 {
     // make sure the VBA library exists
     try
@@ -177,14 +178,14 @@ void SAL_CALL VbaEventsHelperBase::changesOccurred( const util::ChangesEvent& rE
     }
 }
 
-void SAL_CALL VbaEventsHelperBase::disposing( const lang::EventObject& rEvent )
+void VbaEventsHelperBase::disposing( const lang::EventObject& rEvent )
 {
     uno::Reference< frame::XModel > xSender( rEvent.Source, uno::UNO_QUERY );
     if( xSender.is() )
         stopListening();
 }
 
-void SAL_CALL VbaEventsHelperBase::disposing()
+void VbaEventsHelperBase::disposing()
 {
     stopListening();
     mxModel.clear();
@@ -248,7 +249,7 @@ void VbaEventsHelperBase::stopListening()
     maEventInfos.clear();
 }
 
-bool SAL_CALL VbaEventsHelperBase::hasVbaEventHandler( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs )
+bool VbaEventsHelperBase::hasVbaEventHandler( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs )
 {
     EventHandlerInfoMap::const_iterator aIt = maEventInfos.find( nEventId );
     if( aIt == maEventInfos.end() )
@@ -284,7 +285,7 @@ OUString VbaEventsHelperBase::getEventHandlerPath( const EventHandlerInfo& rInfo
         break;
 
         default:
-            throw uno::RuntimeException(u"This module type is unsupported"_ustr); // unsupported module type
+            throw cpo::uno::RuntimeException(u"This module type is unsupported"_ustr); // unsupported module type
     }
 
     /*  Performance improvement: Check the list of existing event handlers
@@ -302,7 +303,7 @@ void VbaEventsHelperBase::ensureVBALibrary()
     {
         maLibraryName = getDefaultProjectName( mpShell );
         if( maLibraryName.isEmpty() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         uno::Reference< beans::XPropertySet > xModelProps( mxModel, uno::UNO_QUERY_THROW );
         uno::Reference< container::XNameAccess > xBasicLibs( xModelProps->getPropertyValue(
             u"BasicLibraries"_ustr ), uno::UNO_QUERY_THROW );
@@ -323,7 +324,7 @@ void VbaEventsHelperBase::ensureVBALibrary()
     {
         // error accessing the Basic library, so this object is useless
         stopListening();
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 }
 
@@ -361,7 +362,7 @@ sal_Int32 VbaEventsHelperBase::getModuleType( const OUString& rModuleName )
     catch( cpo::uno::Exception& )
     {
     }
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 VbaEventsHelperBase::ModulePathMap& VbaEventsHelperBase::updateModulePathMap( const OUString& rModuleName )

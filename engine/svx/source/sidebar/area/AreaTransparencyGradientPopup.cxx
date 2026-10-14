@@ -23,12 +23,12 @@
 
 namespace svx::sidebar {
 
-AreaTransparencyGradientPopup::AreaTransparencyGradientPopup(const css::uno::Reference<css::frame::XFrame>& rFrame,
+AreaTransparencyGradientPopup::AreaTransparencyGradientPopup(const cpo::uno::Reference<css::frame::XFrame>& rFrame,
                                             AreaPropertyPanelBase& rPanel, weld::Widget* pParent)
     : WeldToolbarPopup(rFrame, pParent, u"svx/ui/floatingareastyle.ui"_ustr, u"FloatingAreaStyle"_ustr)
     , mrAreaPropertyPanel(rPanel)
-    , mxCenterGrid(m_xBuilder->weld_widget(u"centergrid"_ustr))
-    , mxAngleGrid(m_xBuilder->weld_widget(u"anglegrid"_ustr))
+    , mxCenterGrid(m_xBuilder->weld_container(u"centergrid"_ustr))
+    , mxAngleGrid(m_xBuilder->weld_container(u"anglegrid"_ustr))
     , mxMtrTrgrCenterX(m_xBuilder->weld_metric_spin_button(u"centerx"_ustr, FieldUnit::PERCENT))
     , mxMtrTrgrCenterY(m_xBuilder->weld_metric_spin_button(u"centery"_ustr, FieldUnit::PERCENT))
     , mxMtrTrgrAngle(m_xBuilder->weld_metric_spin_button(u"angle"_ustr, FieldUnit::DEGREE))

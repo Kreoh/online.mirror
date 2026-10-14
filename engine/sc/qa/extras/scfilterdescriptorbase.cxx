@@ -19,12 +19,13 @@
 #include <com/sun/star/sheet/XSheetFilterable.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -41,7 +42,7 @@ public:
 
     virtual void setUp() override;
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
 
     CPPUNIT_TEST_SUITE(ScFilterDescriptorBase);
 
@@ -79,7 +80,7 @@ ScFilterDescriptorBase::ScFilterDescriptorBase()
 {
 }
 
-uno::Reference<uno::XInterface> ScFilterDescriptorBase::init()
+uno::Reference<cpo::uno::XInterface> ScFilterDescriptorBase::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 

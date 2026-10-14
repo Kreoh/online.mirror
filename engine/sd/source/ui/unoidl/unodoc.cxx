@@ -26,22 +26,23 @@
 #include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // com.sun.star.comp.Draw.DrawingDocument
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 sd_DrawingDocument_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     SolarMutexGuard aGuard;
 
     SdDLL::Init();
 
-    css::uno::Reference<css::uno::XInterface> xInterface = sfx2::createSfxModelInstance(args,
+    cpo::uno::Reference<cpo::uno::XInterface> xInterface = sfx2::createSfxModelInstance(args,
         [](SfxModelFlags _nCreationFlags)
         {
             rtl::Reference<SfxObjectShell> pShell = new ::sd::GraphicDocShell(_nCreationFlags);
-            return uno::Reference< uno::XInterface >( pShell->GetModel() );
+            return uno::Reference< cpo::uno::XInterface >( pShell->GetModel() );
         });
     xInterface->acquire();
     return xInterface.get();
@@ -50,15 +51,15 @@ sd_DrawingDocument_get_implementation(
 
 // com.sun.star.comp.Draw.PresentationDocument
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 sd_PresentationDocument_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     SolarMutexGuard aGuard;
 
     SdDLL::Init();
 
-    css::uno::Reference<css::uno::XInterface> xInterface = sfx2::createSfxModelInstance(args,
+    cpo::uno::Reference<cpo::uno::XInterface> xInterface = sfx2::createSfxModelInstance(args,
         [](SfxModelFlags _nCreationFlags)
         {
             rtl::Reference<SfxObjectShell> pShell =

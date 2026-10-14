@@ -40,12 +40,13 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/ucb/XContentProvider.hpp>
 #include <com/sun/star/ucb/XUniversalContentBroker.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/configuration.hxx>
 #include <vcl/dibtools.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <vcl/filter/PngImageReader.hxx>
 #include <vcl/font/EOTConverter.hxx>
+#include <vcl/pdfwriter.hxx>
 #include <sft.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wmf.hxx>
@@ -74,7 +75,7 @@
 #include "../source/filter/ixbm/xbmread.hxx"
 #include "../source/filter/jpeg/jpeg.hxx"
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace cppu;
@@ -133,11 +134,11 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
         comphelper::EnableFuzzing();
 
         // initialise unconfigured UCB:
-        css::uno::Reference<css::ucb::XUniversalContentBroker> xUcb(comphelper::getProcessServiceFactory()->
-            createInstance(u"com.sun.star.ucb.UniversalContentBroker"_ustr), css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::ucb::XUniversalContentBroker> xUcb(comphelper::getProcessServiceFactory()->
+            createInstance(u"com.sun.star.ucb.UniversalContentBroker"_ustr), cpo::uno::UNO_QUERY_THROW);
         cpo::uno::Sequence<cpo::uno::Any> aArgs{ cpo::uno::Any(u"NoConfig"_ustr) };
-        css::uno::Reference<css::ucb::XContentProvider> xFileProvider(comphelper::getProcessServiceFactory()->
-            createInstanceWithArguments(u"com.sun.star.ucb.FileContentProvider"_ustr, aArgs), css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::ucb::XContentProvider> xFileProvider(comphelper::getProcessServiceFactory()->
+            createInstanceWithArguments(u"com.sun.star.ucb.FileContentProvider"_ustr, aArgs), cpo::uno::UNO_QUERY_THROW);
         xUcb->registerContentProvider(xFileProvider, u"file"_ustr, true);
 
         Application::EnableHeadlessMode(false);
@@ -260,10 +261,12 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
         }
         else if (strcmp(argv[2], "sft") == 0)
         {
+            // The font under test has to be found by name.
+            unsetenv("SAL_NO_FONT_LOOKUP");
             SvFileStream aFileStream(out, StreamMode::READ);
             std::vector<sal_uInt8> aData(aFileStream.remainingSize());
             aFileStream.ReadBytes(aData.data(), aData.size());
-            ret = TestFontParsing(aData.data(), aData.size());
+            ret = TestFontPDFExport(aData.data(), aData.size());
         }
 #ifndef DISABLE_DYNLOADING
         else if ((strcmp(argv[2], "doc") == 0) || (strcmp(argv[2], "ww8") == 0))
@@ -271,7 +274,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libmswordlo.so", "TestImportWW8");
+                pfnImport = load(u"libswlo.so", "TestImportWW8");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -281,7 +284,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libmswordlo.so", "TestImportWW6");
+                pfnImport = load(u"libswlo.so", "TestImportWW6");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -291,7 +294,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libmswordlo.so", "TestImportWW2");
+                pfnImport = load(u"libswlo.so", "TestImportWW2");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -301,7 +304,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libmswordlo.so", "TestImportRTF");
+                pfnImport = load(u"libswlo.so", "TestImportRTF");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -341,7 +344,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libmswordlo.so", "TestPDFExportRTF");
+                pfnImport = load(u"libswlo.so", "TestPDFExportRTF");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -411,7 +414,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libscfiltlo.so", "TestImportXLS");
+                pfnImport = load(u"libsclo.so", "TestImportXLS");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -421,7 +424,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libscfiltlo.so", "TestImportWKS");
+                pfnImport = load(u"libsclo.so", "TestImportWKS");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -481,7 +484,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libscfiltlo.so", "TestImportQPW");
+                pfnImport = load(u"libsclo.so", "TestImportQPW");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -501,7 +504,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libscfiltlo.so", "TestImportDIF");
+                pfnImport = load(u"libsclo.so", "TestImportDIF");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -511,7 +514,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libscfiltlo.so", "TestImportCalcRTF");
+                pfnImport = load(u"libsclo.so", "TestImportCalcRTF");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));
@@ -521,7 +524,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             static FFilterCall pfnImport(nullptr);
             if (!pfnImport)
             {
-                pfnImport = load(u"libscfiltlo.so", "TestImportCalcHTML");
+                pfnImport = load(u"libsclo.so", "TestImportCalcHTML");
             }
             SvFileStream aFileStream(out, StreamMode::READ);
             ret = static_cast<int>((*pfnImport)(aFileStream));

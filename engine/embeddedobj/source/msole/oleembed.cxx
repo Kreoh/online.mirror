@@ -63,6 +63,7 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 #ifdef _WIN32
 
@@ -139,7 +140,7 @@ void OleEmbeddedObject::MoveListeners()
                     {
                         m_xWrappedObject->addStateChangeListener( static_cast<embed::XStateChangeListener*>(pIterator.next()) );
                     }
-                    catch( const uno::RuntimeException& )
+                    catch( const cpo::uno::RuntimeException& )
                     {
                         pIterator.remove();
                     }
@@ -163,7 +164,7 @@ void OleEmbeddedObject::MoveListeners()
                     {
                         m_xWrappedObject->addEventListener( static_cast<document::XEventListener*>(pIterator.next()) );
                     }
-                    catch( const uno::RuntimeException& )
+                    catch( const cpo::uno::RuntimeException& )
                     {
                         pIterator.remove();
                     }
@@ -187,7 +188,7 @@ void OleEmbeddedObject::MoveListeners()
                     {
                         m_xWrappedObject->addCloseListener( static_cast<util::XCloseListener*>(pIterator.next()) );
                     }
-                    catch( const uno::RuntimeException& )
+                    catch( const cpo::uno::RuntimeException& )
                     {
                         pIterator.remove();
                     }
@@ -217,7 +218,7 @@ uno::Reference< embed::XStorage > OleEmbeddedObject::CreateTemporarySubstorage( 
     if ( !xResult.is() )
     {
         o_aStorageName.clear();
-        throw uno::RuntimeException(u"Failed to create temporary storage for OLE embed object"_ustr);
+        throw cpo::uno::RuntimeException(u"Failed to create temporary storage for OLE embed object"_ustr);
     }
 
     return xResult;
@@ -238,7 +239,7 @@ OUString OleEmbeddedObject::MoveToTemporarySubstream()
     }
 
     if ( aResult.isEmpty() )
-        throw uno::RuntimeException(u"Failed to rename temporary storage for OLE embed object"_ustr);
+        throw cpo::uno::RuntimeException(u"Failed to rename temporary storage for OLE embed object"_ustr);
 
     return aResult;
 }
@@ -329,9 +330,9 @@ bool OleEmbeddedObject::TryToConvertToOOo( const uno::Reference< io::XStream >& 
                     aEmbedFactory = aConfigHelper.GetFactoryNameByMediaType( aMediaType );
 
                 if ( aEmbedFactory.isEmpty() )
-                    throw uno::RuntimeException(u"Failed to get OLE embedded object factory"_ustr);
+                    throw cpo::uno::RuntimeException(u"Failed to get OLE embedded object factory"_ustr);
 
-                uno::Reference< uno::XInterface > xFact = m_xContext->getServiceManager()->createInstanceWithContext( aEmbedFactory, m_xContext );
+                uno::Reference< cpo::uno::XInterface > xFact = m_xContext->getServiceManager()->createInstanceWithContext( aEmbedFactory, m_xContext );
 
                 uno::Reference< embed::XEmbedObjectCreator > xEmbCreator( xFact, uno::UNO_QUERY_THROW );
 
@@ -474,7 +475,7 @@ void OleEmbeddedObject::changeState( sal_Int32 nNewState )
         {
             // means that the object is currently trying to reach the target state
             throw embed::StateChangeInProgressException( OUString(),
-                                                        uno::Reference< uno::XInterface >(),
+                                                        uno::Reference< cpo::uno::XInterface >(),
                                                         m_nTargetState );
         }
 
@@ -683,8 +684,8 @@ namespace
     }
 
     uno::Reference < io::XStream > lcl_GetExtractedStream( OUString& rUrl,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::io::XStream >& xObjectStream )
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::io::XStream >& xObjectStream )
     {
         uno::Reference <io::XTempFile> xNativeTempFile(
             io::TempFile::create(xContext),
@@ -788,7 +789,7 @@ namespace
 
             xNativeTempFile.clear();
 
-            uno::Reference < ucb::XSimpleFileAccess3 > xSimpleFileAccess(
+            uno::Reference < ucb::XSimpleFileAccess > xSimpleFileAccess(
                     ucb::SimpleFileAccess::create( xContext ) );
 
             xSimpleFileAccess->setReadOnly(rUrl, true);
@@ -804,8 +805,8 @@ namespace
     //Dump the objects content to a tempfile, just the "CONTENTS" stream if
     //there is one for non-compound documents, otherwise the whole content.
     //On success a file is returned which must be removed by the caller
-    OUString lcl_ExtractObject(const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::io::XStream >& xObjectStream)
+    OUString lcl_ExtractObject(const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::io::XStream >& xObjectStream)
     {
         OUString sUrl;
 
@@ -819,8 +820,8 @@ namespace
         return sUrl;
     }
 
-    uno::Reference < io::XStream > lcl_ExtractObjectStream( const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::io::XStream >& xObjectStream )
+    uno::Reference < io::XStream > lcl_ExtractObjectStream( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::io::XStream >& xObjectStream )
     {
         OUString sUrl;
         return lcl_GetExtractedStream( sUrl, xContext, xObjectStream );
@@ -864,7 +865,7 @@ void OleEmbeddedObject::doVerb( sal_Int32 nVerbID )
 
         try {
             if ( !m_pOleComponent )
-                throw uno::RuntimeException("Null reference to OLE component");
+                throw cpo::uno::RuntimeException(u"Null reference to OLE component"_ustr);
 
             // ==== the STAMPIT related solution =============================
             m_aVerbExecutionController.StartControlExecution();
@@ -928,7 +929,7 @@ void OleEmbeddedObject::doVerb( sal_Int32 nVerbID )
 
                 m_xOwnView = new OwnView_Impl( m_xContext, m_xObjectStream->getInputStream() );
             }
-            catch( uno::RuntimeException& )
+            catch( cpo::uno::RuntimeException& )
             {
                 throw;
             }

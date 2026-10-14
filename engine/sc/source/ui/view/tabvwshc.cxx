@@ -18,6 +18,8 @@
  */
 
 #include <scitems.hxx>
+#include <sfx2/viewfrm.hxx>
+#include <drawview.hxx>
 #include <sfx2/childwin.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/theme/ThemeColorChangerCommon.hxx>
@@ -43,6 +45,7 @@
 #include <filtdlg.hxx>
 #include <dbnamdlg.hxx>
 #include <dbtabledlg.hxx>
+#include <dbtableresizedlg.hxx>
 #include <areasdlg.hxx>
 #include <crnrdlg.hxx>
 #include <formula.hxx>
@@ -118,6 +121,16 @@ void ScTabViewShell::SwitchBetweenRefDialogs(SfxModelessDialogController* pDialo
 
         mod->SetRefDialog( nId, pWnd == nullptr );
    }
+}
+
+void ScTabViewShell::MarkWholeDBRangeAtCursor()
+{
+    if (const ScDBData* pData = GetDBData(false, SC_DB_OLD))
+    {
+        ScRange aArea;
+        pData->GetArea(aArea);
+        MarkRange(aArea, false);
+    }
 }
 
 std::shared_ptr<SfxModelessDialogController> ScTabViewShell::CreateRefDialogController(
@@ -265,13 +278,13 @@ std::shared_ptr<SfxModelessDialogController> ScTabViewShell::CreateRefDialogCont
         case SID_DEFINE_DBNAME:
         {
             // when called for an existing range, then mark
-            GetDBData( true, SC_DB_OLD );
+            MarkWholeDBRangeAtCursor();
             xResult = std::make_shared<ScDbNameDlg>(pB, pCW, pParent, GetViewData());
             break;
         }
         case SID_INSERT_CALCTABLE:
         {
-            GetDBData(true, SC_DB_OLD);
+            MarkWholeDBRangeAtCursor();
             const ScMarkData& rMark = GetViewData().GetMarkData();
             if ( !rMark.IsMarked() && !rMark.IsMultiMarked() )
                 MarkDataArea( false );
@@ -279,6 +292,10 @@ std::shared_ptr<SfxModelessDialogController> ScTabViewShell::CreateRefDialogCont
             xResult = std::make_shared<ScDbTableDlg>(pB, pCW, pParent, GetViewData());
             break;
         }
+        case SID_RESIZE_CALCTABLE:
+            // The dialog reads the Table's range from the cursor itself (see Init).
+            xResult = std::make_shared<ScDbTableResizeDlg>(pB, pCW, pParent, GetViewData());
+            break;
         case SID_OPENDLG_EDIT_PRINTAREA:
             xResult = std::make_shared<ScPrintAreasDlg>(pB, pCW, pParent, GetViewData());
             break;
@@ -355,9 +372,7 @@ std::shared_ptr<SfxModelessDialogController> ScTabViewShell::CreateRefDialogCont
                 pDBData->ExtendDataArea(rDoc);
                 pDBData->GetQueryParam( aQueryParam );
 
-                ScRange aArea;
-                pDBData->GetArea(aArea);
-                MarkRange(aArea, false);
+                MarkDBDataArea(*pDBData);
 
                 aArgSet.Put( ScQueryItem( SCITEM_QUERYDATA, &aQueryParam ) );
 
@@ -379,9 +394,7 @@ std::shared_ptr<SfxModelessDialogController> ScTabViewShell::CreateRefDialogCont
                 pDBData->ExtendDataArea(rDoc);
                 pDBData->GetQueryParam( aQueryParam );
 
-                ScRange aArea;
-                pDBData->GetArea(aArea);
-                MarkRange(aArea, false);
+                MarkDBDataArea(*pDBData);
 
                 ScQueryItem aItem( SCITEM_QUERYDATA, &aQueryParam );
                 ScRange aAdvSource;
@@ -542,18 +555,18 @@ void ScTabViewShell::NotifyCursor(SfxViewShell* pOtherShell) const
     }
 }
 
-css::uno::Reference<css::datatransfer::XTransferable2> ScTabViewShell::GetClipData(vcl::Window* pWin)
+cpo::uno::Reference<css::datatransfer::XTransferable2> ScTabViewShell::GetClipData(vcl::Window* pWin)
 {
     SfxViewFrame* pViewFrame = nullptr;
-    css::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard;
+    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard;
 
     if (pWin)
         xClipboard = pWin->GetClipboard();
     else if ((pViewFrame = SfxViewFrame::GetFirst(nullptr, false)))
         xClipboard = pViewFrame->GetWindow().GetClipboard();
 
-    xTransferable.set(xClipboard.is() ? xClipboard->getContents() : nullptr, css::uno::UNO_QUERY);
+    xTransferable.set(xClipboard.is() ? xClipboard->getContents() : nullptr, cpo::uno::UNO_QUERY);
 
     return xTransferable;
 }

@@ -21,7 +21,8 @@
 #include <sdpage.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class SdOOXMLExportTest3 : public SdModelTestBase
 {
@@ -295,6 +296,20 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testFontScale)
     CPPUNIT_ASSERT_DOUBLES_EQUAL(sal_Int32(85000), sScale.toInt32(), 1000);
 }
 
+CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testFontScaleAndSpacingReductionExact)
+{
+    // Slide 10 fits at 92.5 percent font with 20 percent less line spacing, and both are written
+    // as those exact values.
+    createSdImpressDoc("pptx/TextFittingLikeReference.pptx");
+    save(TestFilter::PPTX);
+    xmlDocUniquePtr pXmlDocContent = parseExport(u"ppt/slides/slide10.xml"_ustr);
+
+    assertXPath(pXmlDocContent, "/p:sld/p:cSld/p:spTree/p:sp[2]/p:txBody/a:bodyPr/a:normAutofit",
+                "fontScale", u"92500");
+    assertXPath(pXmlDocContent, "/p:sld/p:cSld/p:spTree/p:sp[2]/p:txBody/a:bodyPr/a:normAutofit",
+                "lnSpcReduction", u"20000");
+}
+
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testShapeAutofitPPTX)
 {
     createSdImpressDoc("pptx/testShapeAutofit.pptx");
@@ -373,13 +388,38 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf115394Zero)
     CPPUNIT_ASSERT_EQUAL(0.01, fTransitionDuration);
 }
 
+CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testNoTransitionWithoutEffect)
+{
+    createSdImpressDoc();
+    save(TestFilter::PPTX);
+
+    // A slide of an empty presentation has no transition effect.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    assertXPath(pXmlDoc, "//p:transition", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testAutoAdvanceWithoutEffect)
+{
+    createSdImpressDoc();
+    uno::Reference<beans::XPropertySet> xPage(getPage(0), uno::UNO_QUERY_THROW);
+    // Advance to the next slide automatically after 3 seconds, without a transition effect
+    xPage->setPropertyValue(u"Change"_ustr, uno::Any(sal_Int32(1)));
+    xPage->setPropertyValue(u"Duration"_ustr, uno::Any(sal_Int32(3)));
+    save(TestFilter::PPTX);
+
+    // PP always seems to write mc:AlternateContent
+    xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    assertXPath(pXmlDoc, "/p:sld/mc:AlternateContent/mc:Choice/p:transition", "advTm", u"3000");
+    assertXPath(pXmlDoc, "/p:sld/mc:AlternateContent/mc:Choice/p:transition", "spd", u"slow");
+}
+
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf115005)
 {
     createSdImpressDoc("odp/tdf115005.odp");
     save(TestFilter::ODP);
 
     // additional checks of the output file
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(m_xContext, maTempFile.GetURL());
 
     // check that the document contains original vector images
@@ -406,7 +446,7 @@ int SdOOXMLExportTest3::testTdf115005_FallBack_Images(bool bAddReplacementImages
     save(TestFilter::ODP);
 
     // additional checks of the output file
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(m_xContext, maTempFile.GetURL());
 
     // check that the document contains original vector images
@@ -447,7 +487,7 @@ struct SvgPngCounts
 };
 
 SvgPngCounts
-countSvgAndPngInPictures(const css::uno::Reference<css::packages::zip::XZipFileAccess2>& xZip)
+countSvgAndPngInPictures(const cpo::uno::Reference<css::packages::zip::XZipFileAccess>& xZip)
 {
     SvgPngCounts aCounts;
     const cpo::uno::Sequence<OUString> aNames = xZip->getElementNames();
@@ -474,7 +514,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testSvgPngFallbackOdf14)
     createSdImpressDoc("odp/SvgImageTest.odp");
     save(TestFilter::ODP);
 
-    uno::Reference<packages::zip::XZipFileAccess2> xZip
+    uno::Reference<packages::zip::XZipFileAccess> xZip
         = packages::zip::ZipFileAccess::createWithURL(m_xContext, maTempFile.GetURL());
 
     const SvgPngCounts aCounts = countSvgAndPngInPictures(xZip);
@@ -494,7 +534,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testSvgPngFallbackOdf13)
     createSdImpressDoc("odp/SvgImageTest.odp");
     save(TestFilter::ODP);
 
-    uno::Reference<packages::zip::XZipFileAccess2> xZip
+    uno::Reference<packages::zip::XZipFileAccess> xZip
         = packages::zip::ZipFileAccess::createWithURL(m_xContext, maTempFile.GetURL());
 
     const SvgPngCounts aCounts = countSvgAndPngInPictures(xZip);
@@ -1008,7 +1048,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf148478_transitionMusic)
     save(TestFilter::PPTX);
 
     // an MD5-based ascii replacement was substituted for the unicode name. This now opens in MS PP.
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     uno::Reference<io::XInputStream> xStrm;
@@ -1151,8 +1191,8 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf135843)
     // tdf#166335: fmla must not be an empty string
     static constexpr OString sGlueStart("/p:sld/p:cSld/p:spTree/p:sp[3]/p:spPr/a:custGeom"_ostr);
     assertXPath(pXmlDoc, sGlueStart + "/a:gdLst/a:gd[@name='GluePoint2X']", "fmla", u"val w");
-    assertXPath(pXmlDoc, sGlueStart + "/a:gdLst/a:gd[@name='GluePoint2Y']", "fmla", u"*/ 1 h 2");
-    assertXPath(pXmlDoc, sGlueStart + "/a:gdLst/a:gd[@name='GluePoint3X']", "fmla", u"*/ 1 w 2");
+    assertXPath(pXmlDoc, sGlueStart + "/a:gdLst/a:gd[@name='GluePoint2Y']", "fmla", u"*/ h 1 2");
+    assertXPath(pXmlDoc, sGlueStart + "/a:gdLst/a:gd[@name='GluePoint3X']", "fmla", u"*/ w 1 2");
     assertXPath(pXmlDoc, sGlueStart + "/a:gdLst/a:gd[@name='GluePoint3Y']", "fmla", u"val h");
 }
 
@@ -1242,7 +1282,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf169952_multiple_OLEs)
 
     // Without the fix two of the three OLE objects would get lost, and only oleObject1.bin
     // would exist
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     CPPUNIT_ASSERT_EQUAL(true, xNameAccess->hasByName(u"ppt/embeddings/oleObject1.bin"_ustr));

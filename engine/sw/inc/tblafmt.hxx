@@ -39,7 +39,10 @@
 #include "fmtornt.hxx"
 #include "swdllapi.h"
 
+#include <o3tl/cow_wrapper.hxx>
+
 struct SwAfVersions;
+struct SwTableStyleSettings;
 
 class SvNumberFormatter;
 class SwTable;
@@ -112,9 +115,12 @@ public:
     SwAutoFormatProps& GetProps() { return *m_aAutoFormat; }
 };
 
-enum class SwTableAutoFormatUpdateFlags { Char = 1, Box = 2 };
+/// Char and Box select the attribute groups; DefinedOnly restricts them to the attributes the
+/// box format actually defines (AutoFormatBase::IsDefined), leaving out the constructed
+/// defaults that every box format holds for the rest.
+enum class SwTableAutoFormatUpdateFlags { Char = 1, Box = 2, DefinedOnly = 4 };
 namespace o3tl {
-    template<> struct typed_flags<SwTableAutoFormatUpdateFlags> : is_typed_flags<SwTableAutoFormatUpdateFlags, 0x03> {};
+    template<> struct typed_flags<SwTableAutoFormatUpdateFlags> : is_typed_flags<SwTableAutoFormatUpdateFlags, 0x07> {};
 };
 
 /*
@@ -171,6 +177,10 @@ class SW_DLLPUBLIC SwTableAutoFormat
 
     TableStyleName m_aName; // note that this could be a ProgName __or__ a UIName
     sal_uInt16 m_nStrResId;
+    // The name shown in the UI language, and the BCP 47 tag of the UI language it was made
+    // for. An empty tag means that no shown name is cached yet.
+    mutable UIName m_aCachedUIName;
+    mutable OUString m_aCachedUILanguage;
 
     // Common flags of Calc and Writer.
     bool m_bInclFont : 1;
@@ -212,8 +222,29 @@ public:
     SwBoxAutoFormat& GetBoxFormat( sal_uInt8 nPos );
     static const SwBoxAutoFormat& GetDefaultBoxFormat();
 
-    void SetName( const TableStyleName& rNew ) { m_aName = rNew; m_nStrResId = USHRT_MAX; }
+    void SetName( const TableStyleName& rNew )
+    {
+        m_aName = rNew;
+        m_nStrResId = USHRT_MAX;
+        m_aCachedUILanguage.clear();
+    }
     const TableStyleName& GetName() const { return m_aName; }
+
+    /// The name to show in the UI language. A built-in catalog style has an English name in
+    /// the model, "Grid Table 4 Accent 1", which the DOCX style id and the ODF template name
+    /// are made from; the UI shows it composed from translated parts. Any other name is
+    /// shown as it is.
+    UIName GetUIName() const;
+    static UIName GetUIName(const TableStyleName& rName);
+
+    /// The section of the built-in catalog a style belongs to, by its name. Plain holds the
+    /// "Plain Table" styles, "Table Grid" and "Grid Table Light"; Grid the "Grid Table"
+    /// styles and List the "List Table" styles. None is every other name: user styles,
+    /// Writer's default style and the older catalog generations, which are shown on demand
+    /// only.
+    enum class CatalogGroup { None, Plain, Grid, List };
+    CatalogGroup GetCatalogGroup() const { return GetCatalogGroup(m_aName); }
+    static CatalogGroup GetCatalogGroup(const TableStyleName& rName);
 
     void UpdateFromSet( sal_uInt8 nPos, const SfxItemSet& rSet,
                                 SwTableAutoFormatUpdateFlags eFlags, SvNumberFormatter const * );
@@ -278,6 +309,38 @@ public:
      * cell in a given table.
      */
     static sal_uInt8 CountPos(sal_uInt32 nCol, sal_uInt32 nCols, sal_uInt32 nRow, sal_uInt32 nRows);
+
+    /// The 4 roles a row or column can play when resolving a table style live: one of the
+    /// two fixed ends, or one of the two bands that alternate between the ends.
+    enum class RowColRole : sal_uInt8
+    {
+        First = 0,
+        BandA = 1,
+        BandB = 2,
+        Last = 3
+    };
+
+    /// Number of values in RowColRole. A row role and a column role combine into one of
+    /// 16 box format positions as nRowRole * nRoleCount + nColRole.
+    static constexpr sal_uInt8 nRoleCount = static_cast<sal_uInt8>(RowColRole::Last) + 1;
+
+    /// Which of the 4 row roles a row plays when resolving a table style live, given how
+    /// many rows the table has and which row roles are switched on. An unused role falls
+    /// back to a banding role - or, with banding off too, uniformly to the first banding
+    /// role, the same way it already renders as a plain body row in the style itself.
+    static sal_uInt8 GetTableStyleRowRole(size_t nRow, size_t nRows,
+                                          const SwTableStyleSettings& rSettings);
+
+    /// Column equivalent of GetTableStyleRowRole, scoped to one line's own box count (a
+    /// line's box count can differ from another line's in the presence of merged cells).
+    static sal_uInt8 GetTableStyleColRole(size_t nCol, size_t nCols,
+                                          const SwTableStyleSettings& rSettings);
+
+    /// The DOCX style id for a table style name, following the rule the built-in DOCX
+    /// styles use: spaces dropped, the accent set off with a hyphen, so "Grid Table 4
+    /// Accent 1" is "GridTable4-Accent1". "Grid Table Light" is the one id that does not
+    /// follow it, "TableGridLight".
+    static OUString MakeDocxStyleId(std::u16string_view rName);
 };
 
 class SW_DLLPUBLIC SwTableAutoFormatTable
@@ -308,6 +371,9 @@ public:
 
     /// Find table style with the provided name, return nullptr when not found.
     SwTableAutoFormat* FindAutoFormat(const TableStyleName& rName) const;
+    /// Find the table style whose name in the UI language is rUIName, return nullptr when
+    /// not found.
+    SwTableAutoFormat* FindAutoFormatByUIName(const UIName& rUIName) const;
 
     bool Save() const;
 };

@@ -53,9 +53,10 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
 using ::com::sun::star::beans::Property;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::cpo::uno::Any;
 
@@ -516,7 +517,7 @@ void AxisWrapper::getDimensionAndMainAxisBool( tAxisType eType, sal_Int32& rnDim
 void AxisWrapper::dispose()
 {
     std::unique_lock g(m_aMutex);
-    Reference< uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
+    Reference< cpo::uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
     m_aEventListenerContainer.disposeAndClear( g, lang::EventObject( xSource ) );
 
     DisposeHelper::DisposeAndClear( m_xAxisTitle );

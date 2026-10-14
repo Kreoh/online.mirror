@@ -24,7 +24,7 @@
 #include <string_view>
 
 #include <com/sun/star/beans/Optional.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <rtl/ref.hxx>
 #include <o3tl/sorted_vector.hxx>
 
@@ -36,9 +36,9 @@ namespace com::sun::star {
     namespace beans { class XPropertySet; }
     namespace uno {
         class Any;
-        class XComponentContext;
     }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace configmgr {
 
@@ -50,7 +50,7 @@ class RootAccess;
 class Components {
 public:
     static Components & getSingleton(
-        css::uno::Reference< css::uno::XComponentContext > const & context);
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context);
 
     static bool allLocales(std::u16string_view locale);
 
@@ -84,15 +84,9 @@ public:
     void flushModifications();
         // must be called with configmgr::lock unacquired; must be called before
         // shutdown if writeModifications has ever been called (probably
-        // indirectly, via removeExtensionXcuFile)
-
-    void insertExtensionXcsFile(bool shared, OUString const & fileUri);
+        // indirectly)
 
     void insertExtensionXcuFile(
-        bool shared, OUString const & fileUri,
-        Modifications * modifications);
-
-    void removeExtensionXcuFile(
         OUString const & fileUri, Modifications * modifications);
 
     void insertModificationXcuFile(
@@ -115,7 +109,7 @@ private:
         Additions *);
 public:
     explicit Components(
-        css::uno::Reference< css::uno::XComponentContext > const & context);
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context);
 
     ~Components();
 private:
@@ -144,11 +138,11 @@ private:
 
     void parseModificationLayer(int layer, OUString const & url);
 
-    int getExtensionLayer(bool shared) const;
+    int getExtensionLayer() const;
 
     typedef
         config_map<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::beans::XPropertySet > >
         ExternalServices;
 
@@ -156,14 +150,16 @@ private:
 
     enum class ModificationTarget { None, File, Dconf };
 
-    css::uno::Reference< css::uno::XComponentContext >
+    cpo::uno::Reference< cpo::uno::XComponentContext >
         context_;
     Data data_;
     o3tl::sorted_vector< RootAccess * > roots_;
     ExternalServices externalServices_;
     rtl::Reference< WriteThread > writeThread_;
+    // The "sharedext" layer. No extension exists any more; the layer now only
+    // carries the shared AutoText, Dictionary and Template preset paths that
+    // desktop/source/lib/init.cxx files into it at run time.
     int sharedExtensionLayer_;
-    int userExtensionLayer_;
     ModificationTarget modificationTarget_;
     OUString modificationFileUrl_;
     std::shared_ptr<osl::Mutex> lock_;

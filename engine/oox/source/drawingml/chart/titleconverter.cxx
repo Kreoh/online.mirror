@@ -48,7 +48,7 @@ namespace oox::drawingml::chart {
 using namespace ::com::sun::star::chart2;
 using namespace ::com::sun::star::chart2::data;
 using namespace ::com::sun::star::drawing;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 
@@ -166,7 +166,7 @@ Sequence< Reference< XFormattedString > > TextConverter::createStringSequence(
 Reference< XFormattedString > TextConverter::appendFormattedString(
         ::std::vector< Reference< XFormattedString > >& orStringVec, const OUString& rString, bool bAddNewLine ) const
 {
-    Reference< XFormattedString2 > xFmtStr;
+    Reference< XFormattedString > xFmtStr;
     try
     {
         xFmtStr = FormattedString::create( ConverterRoot::getComponentContext() );

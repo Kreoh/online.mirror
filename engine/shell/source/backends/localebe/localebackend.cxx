@@ -25,7 +25,7 @@
 
 #include "localebackend.hxx"
 #include <com/sun/star/beans/Optional.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <rtl/character.hxx>
 #include <o3tl/char16_t2wchar_t.hxx>
@@ -307,24 +307,24 @@ cpo::uno::Any LocaleBackend::getPropertyValue(
 }
 
 
-OUString SAL_CALL LocaleBackend::getImplementationName()
+OUString LocaleBackend::getImplementationName()
 {
     return u"com.sun.star.comp.configuration.backend.LocaleBackend"_ustr ;
 }
 
-bool SAL_CALL LocaleBackend::supportsService(const OUString& aServiceName)
+bool LocaleBackend::supportsService(const OUString& aServiceName)
 {
     return cppu::supportsService(this, aServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL LocaleBackend::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> LocaleBackend::getSupportedServiceNames()
 {
     return { u"com.sun.star.configuration.backend.LocaleBackend"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_LocaleBackend_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new LocaleBackend());
 }

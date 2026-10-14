@@ -434,6 +434,17 @@
         <info>
           <desc>Contains settings for the visibility of various elements.</desc>
         </info>
+        <prop oor:name="AutomaticSpellChecking" oor:type="xs:boolean">
+          <!-- UIHints: Tools - Automatic Spell Checking -->
+          <info>
+            <desc>Indicates whether spelling is checked automatically while typing.
+            Each application has its own setting. The Tools - Automatic Spell
+            Checking entry turns this one off and on. Nil, the default, means no
+            choice was ever made here, and the shared linguistic option this
+            setting was split out of still answers for it.</desc>
+            <label>Automatic spell checking</label>
+          </info>
+        </prop>
         <prop oor:name="GraphicObject" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: Tools - Options - Text document - Contents - [Section] Display -->
           <info>
@@ -766,12 +777,12 @@
           <!-- UIHints: Tools - Options - Text document - Other - [Section] Update links -->
           <info>
             <desc>Specifies whether links in the document are updated during loading.</desc>
-            <label>Update links: Always/On request/Never</label>
+            <label>Update links: Never/On request/Always</label>
           </info>
           <constraints>
             <enumeration oor:value="0">
               <info>
-                <desc>Always</desc>
+                <desc>Never</desc>
               </info>
             </enumeration>
             <enumeration oor:value="1">
@@ -781,7 +792,7 @@
             </enumeration>
             <enumeration oor:value="2">
               <info>
-                <desc>Never</desc>
+                <desc>Always</desc>
               </info>
             </enumeration>
           </constraints>
@@ -3931,7 +3942,7 @@
                 <desc>Specifies whether a numbered or bulleted text is created automatically while typing.</desc>
                 <label>Bulleted and numbered lists</label>
               </info>
-              <value>false</value>
+              <value>true</value>
             </prop>
             <group oor:name="SpecialCharacter">
               <info>
@@ -3989,7 +4000,7 @@
             <desc>Specifies whether the suggestions for the automatic word completion are displayed on the screen.</desc>
             <label>Show suggestions</label>
           </info>
-          <value>true</value>
+          <value>false</value>
         </prop>
         <prop oor:name="MinWordLen" oor:type="xs:int" oor:nillable="false">
           <!-- UIHints: Tools  AutoCorrect/AutoFormat  WordCompletion  min. word length -->

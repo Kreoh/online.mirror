@@ -50,7 +50,6 @@
 #include <toolkit/awt/vclxmenu.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/window.hxx>
-#include <unotools/cmdoptions.hxx>
 #include <unotools/collatorwrapper.hxx>
 #include <unotools/syslocale.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -58,7 +57,7 @@
 //  Defines
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
@@ -142,7 +141,7 @@ cpo::uno::Sequence< OUString > ToolbarsMenuController::getSupportedServiceNames(
 constexpr OUString g_aPropUIName( u"UIName"_ustr );
 constexpr OUString g_aPropResourceURL( u"ResourceURL"_ustr );
 
-ToolbarsMenuController::ToolbarsMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
+ToolbarsMenuController::ToolbarsMenuController( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) :
     svt::PopupMenuControllerBase( xContext ),
     m_xContext( xContext ),
     m_bResetActive( false ),
@@ -180,7 +179,7 @@ void ToolbarsMenuController::addCommand(
 
     SolarMutexGuard aSolarMutexGuard;
 
-    css::uno::Reference<css::graphic::XGraphic> xGraphic;
+    cpo::uno::Reference<css::graphic::XGraphic> xGraphic;
     const StyleSettings& rSettings = Application::GetSettings().GetStyleSettings();
 
     if ( rSettings.GetUseImagesInMenus() )
@@ -407,33 +406,10 @@ void ToolbarsMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu > co
 
     // Create commands for non-toolbars
 
-    bool          bAddCommand( true );
-    SvtCommandOptions aCmdOptions;
-
-    if ( aCmdOptions.HasEntriesDisabled() && aCmdOptions.LookupDisabled(u"ConfigureDialog"_ustr))
-        bAddCommand = false;
-
-    if ( bAddCommand )
+    if ( m_xPopupMenu->getItemCount() > 0 )
     {
-        // Create command for configure
-        if ( m_xPopupMenu->getItemCount() > 0 )
-        {
-            sal_uInt16        nItemCount = m_xPopupMenu->getItemCount();
-            m_xPopupMenu->insertSeparator( nItemCount+1 );
-        }
-
-        addCommand( m_xPopupMenu, u".uno:ConfigureDialog"_ustr, u""_ustr );
-    }
-
-    // Add separator if no configure has been added
-    if ( !bAddCommand )
-    {
-        // Create command for configure
-        if ( m_xPopupMenu->getItemCount() > 0 )
-        {
-            sal_uInt16        nItemCount = m_xPopupMenu->getItemCount();
-            m_xPopupMenu->insertSeparator( nItemCount+1 );
-        }
+        sal_uInt16        nItemCount = m_xPopupMenu->getItemCount();
+        m_xPopupMenu->insertSeparator( nItemCount+1 );
     }
 
     OUString aLabelStr(FwkResId(STR_RESTORE_TOOLBARS));
@@ -776,9 +752,9 @@ IMPL_STATIC_LINK( ToolbarsMenuController, ExecuteHdl_Impl, void*, p, void )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_ToolbarsMenuController_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::ToolbarsMenuController(context));
 }

@@ -24,7 +24,6 @@
 #include <config_feature_opencl.h>
 #include <config_java.h>
 #include <config_folders.h>
-#include <config_extensions.h>
 #include <config_wasm_strip.h>
 
 #include <sal/config.h>
@@ -34,7 +33,7 @@
 #include <string_view>
 
 #include <app.hxx>
-#include <dp_shared.hxx>
+#include <desktopresid.hxx>
 #include <strings.hrc>
 #include "cmdlineargs.hxx"
 #include <lockfile.hxx>
@@ -147,7 +146,7 @@
 #include <strings.hxx>
 
 using namespace ::com::sun::star::awt;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
@@ -165,118 +164,6 @@ namespace desktop
 static oslSignalHandler pSignalHandler = nullptr;
 
 namespace {
-
-#if HAVE_FEATURE_EXTENSIONS
-
-// Remove any existing UserInstallation's extensions cache data remaining from
-// old installations.  This addresses at least two problems:
-//
-// For one, apparently due to the old share/prereg/bundled mechanism (disabled
-// since 5c47e5f63a79a9e72ec4a100786b1bbf65137ed4 "fdo#51252 Disable copying
-// share/prereg/bundled to avoid startup crashes"), the user/extensions/bundled
-// cache could contain corrupted information (like a UNO component registered
-// twice, which got changed from active to passive registration in one LO
-// version, but the version of the corresponding bundled extension only
-// incremented in a later LO version).
-//
-// For another, UserInstallations have been seen in the wild where no extensions
-// were installed per-user (any longer), but user/uno_packages/cache/registry/
-// com.sun.star.comp.deployment.component.PackageRegistryBackend/*.rdb files
-// contained data nevertheless.
-//
-// When a LO upgrade is detected (i.e., no user/extensions/buildid or one
-// containing an old build ID), then user/extensions and
-// user/uno_packages/cache/registry/
-// com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc are
-// removed.  That should prevent any problems starting the service manager due
-// to old junk.  Later on in Desktop::SynchronizeExtensionRepositories, the
-// removed cache data is recreated.
-//
-// Multiple instances of soffice.bin can execute this code in parallel for a
-// single UserInstallation, as it is called before RequestHandler is set up.
-// Therefore, any errors here only lead to SAL_WARNs.
-//
-// At least in theory, this function could be removed again once no
-// UserInstallation can be poisoned by old junk any more.
-bool cleanExtensionCache() {
-    OUString buildId(
-        u"${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("version") ":buildid}"_ustr);
-    rtl::Bootstrap::expandMacros(buildId); //TODO: detect failure
-    OUString extDir(
-        u"${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("bootstrap")
-        ":UserInstallation}/user/extensions"_ustr);
-    rtl::Bootstrap::expandMacros(extDir); //TODO: detect failure
-    OUString buildIdFile(extDir + "/buildid");
-    osl::File fr(buildIdFile);
-    osl::FileBase::RC rc = fr.open(osl_File_OpenFlag_Read);
-    switch (rc) {
-    case osl::FileBase::E_None:
-        {
-            rtl::ByteSequence s1;
-            rc = fr.readLine(s1);
-            osl::FileBase::RC rc2 = fr.close();
-            SAL_WARN_IF(
-                rc2 != osl::FileBase::E_None, "desktop.app",
-                "cannot close " << fr.getURL() << " after reading: " << +rc2);
-            // readLine returns E_AGAIN for a zero-size file:
-            if (rc != osl::FileBase::E_None && rc != osl::FileBase::E_AGAIN) {
-                SAL_WARN( "desktop.app", "cannot read from " << fr.getURL() << ": " << +rc);
-                break;
-            }
-            OUString s2(
-                reinterpret_cast< char const * >(s1.getConstArray()),
-                s1.getLength(), RTL_TEXTENCODING_ISO_8859_1);
-                // using ISO 8859-1 avoids any and all conversion errors; the
-                // content should only be a subset of ASCII, anyway
-            if (s2 == buildId) {
-                return false;
-            }
-            break;
-        }
-    case osl::FileBase::E_NOENT:
-        break;
-    default:
-        SAL_WARN( "desktop.app", "cannot open " << fr.getURL() << " for reading: " << +rc);
-        break;
-    }
-    utl::removeTree(extDir);
-    OUString userRcFile(
-        u"$UNO_USER_PACKAGES_CACHE/registry/"
-        "com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc"_ustr);
-    rtl::Bootstrap::expandMacros(userRcFile); //TODO: detect failure
-    rc = osl::File::remove(userRcFile);
-    SAL_WARN_IF(
-        rc != osl::FileBase::E_None && rc != osl::FileBase::E_NOENT, "desktop.app",
-        "cannot remove file " << userRcFile << ": " << +rc);
-    rc = osl::Directory::createPath(extDir);
-    SAL_WARN_IF(
-        rc != osl::FileBase::E_None && rc != osl::FileBase::E_EXIST, "desktop.app",
-        "cannot create path " << extDir << ": " << +rc);
-    osl::File fw(buildIdFile);
-    rc = fw.open(osl_File_OpenFlag_Write | osl_File_OpenFlag_Create);
-    if (rc != osl::FileBase::E_None) {
-        SAL_WARN( "desktop.app", "cannot open " << fw.getURL() << " for writing: " << +rc);
-        return true;
-    }
-    OString buf(OUStringToOString(buildId, RTL_TEXTENCODING_UTF8));
-        // using UTF-8 avoids almost all conversion errors (and buildid
-        // containing single surrogate halves should never happen, anyway); the
-        // content should only be a subset of ASCII, anyway
-    sal_uInt64 n = 0;
-    rc = fw.write(buf.getStr(), buf.getLength(), n);
-    SAL_WARN_IF(
-        (rc != osl::FileBase::E_None
-         || n != static_cast< sal_uInt32 >(buf.getLength())),
-        "desktop.app",
-        "cannot write to " << fw.getURL() << ": " << +rc << ", " << n);
-    rc = fw.close();
-    SAL_WARN_IF(
-        rc != osl::FileBase::E_None, "desktop.app",
-        "cannot close " << fw.getURL() << " after writing: " << +rc);
-    return true;
-}
-
-#endif
 
 void SetRestartState() {
     try {
@@ -316,7 +203,7 @@ void runGraphicsRenderTests()
 
 OUString MakeStartupErrorMessage(std::u16string_view aErrorMessage)
 {
-    return DpResId(STR_BOOTSTRAP_ERR_CANNOT_START) + "\n" + aErrorMessage;
+    return DesktopResId(STR_BOOTSTRAP_ERR_CANNOT_START) + "\n" + aErrorMessage;
 }
 
 
@@ -385,8 +272,7 @@ OUString ReplaceStringHookProc( const OUString& rStr )
 }
 
 Desktop::Desktop()
-    : m_bCleanedExtensionCache(false)
-    , m_bServicesRegistered(false)
+    : m_bServicesRegistered(false)
     , m_aBootstrapError(BE_OK)
     , m_aBootstrapStatus(BS_OK)
     , m_firstRunTimer( "desktop::Desktop m_firstRunTimer" )
@@ -404,10 +290,6 @@ void Desktop::Init()
 {
     SetBootstrapStatus(BS_OK);
 
-#if HAVE_FEATURE_EXTENSIONS
-    m_bCleanedExtensionCache = cleanExtensionCache();
-#endif
-
     // We need to have service factory before going further, but see fdo#37195.
     // Doing this will mmap common.rdb, making it not overwritable on windows,
     // so this can't happen before the synchronization above. Let's rework this
@@ -424,13 +306,6 @@ void Desktop::Init()
     }
 
     const CommandLineArgs& rCmdLineArgs = GetCommandLineArgs();
-
-    // tdf117100: do not try to re-install extensions after the requested restart
-    if (officecfg::Setup::Office::OfficeRestartInProgress::get())
-    {
-        if (!officecfg::Office::Common::Misc::FirstRun::get())
-            GetCommandLineArgs().RemoveFilesFromOpenListEndingWith(u".oxt"_ustr);
-    }
 
     try
     {
@@ -567,7 +442,7 @@ bool Desktop::QueryExit()
 
     static constexpr OUString SUSPEND_QUICKSTARTVETO = u"SuspendQuickstartVeto"_ustr;
 
-    Reference< XDesktop2 > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+    Reference< XDesktop > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
     Reference< XPropertySet > xPropertySet(xDesktop, UNO_QUERY_THROW);
     xPropertySet->setPropertyValue( SUSPEND_QUICKSTARTVETO, Any(true) );
 
@@ -640,7 +515,7 @@ OUString    Desktop::CreateErrorMsgString(
         /// the shared installation directory could not be located
         case ::utl::Bootstrap::MISSING_INSTALL_DIRECTORY:
         {
-            aMsg = DpResId(STR_BOOTSTRAP_ERR_PATH_INVALID);
+            aMsg = DesktopResId(STR_BOOTSTRAP_ERR_PATH_INVALID);
             bFileInfo = false;
         }
         break;
@@ -650,7 +525,7 @@ OUString    Desktop::CreateErrorMsgString(
         /// the version locator INI file could not be found or read
         case ::utl::Bootstrap::MISSING_VERSION_FILE:
         {
-            aMsg = DpResId(STR_BOOTSTRAP_ERR_FILE_MISSING);
+            aMsg = DesktopResId(STR_BOOTSTRAP_ERR_FILE_MISSING);
         }
         break;
 
@@ -659,28 +534,28 @@ OUString    Desktop::CreateErrorMsgString(
          case ::utl::Bootstrap::MISSING_BOOTSTRAP_FILE_ENTRY:
          case ::utl::Bootstrap::INVALID_BOOTSTRAP_FILE_ENTRY:
         {
-            aMsg = DpResId(STR_BOOTSTRAP_ERR_FILE_CORRUPT);
+            aMsg = DesktopResId(STR_BOOTSTRAP_ERR_FILE_CORRUPT);
         }
         break;
 
         /// the version locator INI has no entry for this version
         case ::utl::Bootstrap::MISSING_VERSION_FILE_ENTRY:
         {
-            aMsg = DpResId(STR_BOOTSTRAP_ERR_NO_SUPPORT);
+            aMsg = DesktopResId(STR_BOOTSTRAP_ERR_NO_SUPPORT);
         }
         break;
 
         /// the user installation directory does not exist
         case ::utl::Bootstrap::MISSING_USER_DIRECTORY:
         {
-            aMsg = DpResId(STR_BOOTSTRAP_ERR_DIR_MISSING);
+            aMsg = DesktopResId(STR_BOOTSTRAP_ERR_DIR_MISSING);
         }
         break;
 
         /// some bootstrap data was invalid in unexpected ways
         case ::utl::Bootstrap::INVALID_BOOTSTRAP_DATA:
         {
-            aMsg = DpResId(STR_BOOTSTRAP_ERR_INTERNAL);
+            aMsg = DesktopResId(STR_BOOTSTRAP_ERR_INTERNAL);
             bFileInfo = false;
         }
         break;
@@ -807,7 +682,7 @@ void Desktop::HandleBootstrapErrors(
         }
 
         // First sentence. We cannot bootstrap office further!
-        OUString aDiagnosticMessage = DpResId(STR_BOOTSTRAP_ERR_NO_CFG_SERVICE) + "\n";
+        OUString aDiagnosticMessage = DesktopResId(STR_BOOTSTRAP_ERR_NO_CFG_SERVICE) + "\n";
         if ( !aErrorMessage.isEmpty() )
         {
             aDiagnosticMessage += "(\"" + aErrorMessage + "\")\n";
@@ -816,7 +691,7 @@ void Desktop::HandleBootstrapErrors(
         // Due to the fact the we haven't a backup applicat.rdb file anymore it is not possible to
         // repair the installation with the setup executable besides the office executable. Now
         // we have to ask the user to start the setup on CD/installation directory manually!!
-        aDiagnosticMessage += DpResId(STR_ASK_START_SETUP_MANUALLY);
+        aDiagnosticMessage += DesktopResId(STR_ASK_START_SETUP_MANUALLY);
 
         FatalError(MakeStartupErrorMessage(aDiagnosticMessage));
     }
@@ -827,7 +702,7 @@ void Desktop::HandleBootstrapErrors(
         // but end up in a _exit() call
         comphelper::BackupFileHelper::setExitWasCalled();
 
-        OUString msg(DpResId(STR_CONFIG_ERR_ACCESS_GENERAL));
+        OUString msg(DesktopResId(STR_CONFIG_ERR_ACCESS_GENERAL));
         if (!aErrorMessage.isEmpty()) {
             msg += "\n(\"" + aErrorMessage + "\")";
         }
@@ -835,12 +710,12 @@ void Desktop::HandleBootstrapErrors(
     }
     else if ( aBootstrapError == BE_USERINSTALL_FAILED )
     {
-        OUString aDiagnosticMessage = DpResId(STR_BOOTSTRAP_ERR_USERINSTALL_FAILED);
+        OUString aDiagnosticMessage = DesktopResId(STR_BOOTSTRAP_ERR_USERINSTALL_FAILED);
         FatalError(MakeStartupErrorMessage(aDiagnosticMessage));
     }
     else if ( aBootstrapError == BE_LANGUAGE_MISSING )
     {
-        OUString aDiagnosticMessage = DpResId(STR_BOOTSTRAP_ERR_LANGUAGE_MISSING);
+        OUString aDiagnosticMessage = DesktopResId(STR_BOOTSTRAP_ERR_LANGUAGE_MISSING);
         FatalError(MakeStartupErrorMessage(aDiagnosticMessage));
     }
     else if (( aBootstrapError == BE_USERINSTALL_NOTENOUGHDISKSPACE ) ||
@@ -853,16 +728,16 @@ void Desktop::HandleBootstrapErrors(
 
         OUString aDiagnosticMessage;
         if ( aBootstrapError == BE_USERINSTALL_NOTENOUGHDISKSPACE )
-            aDiagnosticMessage = DpResId(STR_BOOTSTRAP_ERR_NOTENOUGHDISKSPACE);
+            aDiagnosticMessage = DesktopResId(STR_BOOTSTRAP_ERR_NOTENOUGHDISKSPACE);
         else
-            aDiagnosticMessage = DpResId(STR_BOOTSTRAP_ERR_NOACCESSRIGHTS);
+            aDiagnosticMessage = DesktopResId(STR_BOOTSTRAP_ERR_NOACCESSRIGHTS);
         aDiagnosticMessage += aUserInstallationPath;
 
         FatalError(MakeStartupErrorMessage(aDiagnosticMessage));
     }
     else if ( aBootstrapError == BE_2NDOFFICE_WITHCAT )
     {
-        OUString aDiagnosticMessage = DpResId(STR_BOOTSTRAP_ERR_2NDOFFICE_WITHCAT);
+        OUString aDiagnosticMessage = DesktopResId(STR_BOOTSTRAP_ERR_2NDOFFICE_WITHCAT);
         FatalError(MakeStartupErrorMessage(aDiagnosticMessage));
     }
 }
@@ -901,7 +776,7 @@ void restartOnMac(bool passArguments) {
     RequestHandler::Disable();
 #if HAVE_FEATURE_MACOSX_SANDBOX
     (void) passArguments; // avoid warnings
-    OUString aMessage = DpResId(STR_LO_MUST_BE_RESTARTED);
+    OUString aMessage = DesktopResId(STR_LO_MUST_BE_RESTARTED);
 
     std::unique_ptr<weld::MessageDialog> xRestartBox(Application::CreateMessageDialog(nullptr,
                                                      VclMessageType::Warning, VclButtonsType::Ok, aMessage));
@@ -1018,11 +893,11 @@ private:
 
         Reference< css::loader::XImplementationLoader > xJavaComponentLoader(
             xSMgr->createInstance(u"com.sun.star.comp.stoc.JavaComponentLoader"_ustr),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
 
         if (xJavaComponentLoader.is())
         {
-            const css::uno::Reference< css::registry::XRegistryKey > xRegistryKey;
+            const cpo::uno::Reference< css::registry::XRegistryKey > xRegistryKey;
             try
             {
                 xJavaComponentLoader->activate(u""_ustr, u""_ustr, u""_ustr, xRegistryKey);
@@ -1189,7 +1064,7 @@ int Desktop::Main()
     SetSplashScreenProgress(40);
     recordTime(startT, "SetSplashScreenProgress(40): time = ");
 
-    Reference<XDesktop2> xDesktop = css::frame::Desktop::create(xContext);
+    Reference<XDesktop> xDesktop = css::frame::Desktop::create(xContext);
 
     // create service for loading SFX (still needed in startup)
     pExecGlobals->xGlobalBroadcaster = Reference < css::document::XDocumentEventListener >
@@ -1201,16 +1076,6 @@ int Desktop::Main()
        the main thread is not yet in the event loop.
     */
     Application::GetDefaultDevice();
-
-#if HAVE_FEATURE_EXTENSIONS
-    // Check if bundled or shared extensions were added /removed
-    // and process those extensions (has to be done before checking
-    // the extension dependencies!
-    SynchronizeExtensionRepositories(m_bCleanedExtensionCache, this);
-    bool bAbort = CheckExtensionDependencies();
-    if ( bAbort )
-        return EXIT_FAILURE;
-#endif
 
     // keep a language options instance...
     pExecGlobals->pCTLLanguageOptions.reset( new SvtCTLOptions(true));
@@ -1412,7 +1277,6 @@ int Desktop::doShutdown()
         comphelper::BackupFileHelper aBackupFileHelper;
 
         aBackupFileHelper.tryPush();
-        aBackupFileHelper.tryPushExtensionInfo();
     }
 
     // The acceptors in the AcceptorMap must be released (in DeregisterServices)
@@ -1522,10 +1386,10 @@ bool Desktop::InitializeConfiguration()
 
 void Desktop::FlushConfiguration()
 {
-    css::uno::Reference< css::util::XFlushable >(
+    cpo::uno::Reference< css::util::XFlushable >(
         css::configuration::theDefaultProvider::get(
             comphelper::getProcessComponentContext()),
-        css::uno::UNO_QUERY_THROW)->flush();
+        cpo::uno::UNO_QUERY_THROW)->flush();
 }
 
 void Desktop::OverrideSystemSettings( AllSettings& rSettings )
@@ -1772,7 +1636,7 @@ void Desktop::OpenClients()
             aRequest.aPrintToList.clear();
             std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
                                                       VclMessageType::Warning, VclButtonsType::Ok,
-                                                      DpResId(STR_ERR_PRINTDISABLED)));
+                                                      DesktopResId(STR_ERR_PRINTDISABLED)));
             xBox->run();
         }
 
@@ -1804,7 +1668,7 @@ void Desktop::OpenClients()
     }
 
     // no default document if a document was loaded by recovery or by command line or if soffice is used as server
-    Reference< XDesktop2 > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+    Reference< XDesktop > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
     Reference< XElementAccess > xList( xDesktop->getFrames(), UNO_QUERY_THROW );
     if ( xList->hasElements() )
         return;
@@ -1959,10 +1823,10 @@ void Desktop::HandleAppEvent( const ApplicationEvent& rAppEvent )
     case ApplicationEvent::Type::Appear:
         if ( !GetCommandLineArgs().IsInvisible() )
         {
-            const Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+            const Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
             // find active task - the active task is always a visible task
-            Reference< css::frame::XDesktop2 > xDesktop = css::frame::Desktop::create( xContext );
+            Reference< css::frame::XDesktop > xDesktop = css::frame::Desktop::create( xContext );
             Reference< css::frame::XFrame > xTask = xDesktop->getActiveFrame();
             if ( !xTask.is() )
             {
@@ -2040,34 +1904,6 @@ void Desktop::HandleAppEvent( const ApplicationEvent& rAppEvent )
                 pD->doShutdown();
         }
         break;
-    case ApplicationEvent::Type::ShowDialog:
-        // This is only used on macOS, and only for About or Preferences.
-        // Ignore all errors here. It's clicking a menu entry only ...
-        // The user will try it again, in case nothing happens .-)
-        try
-        {
-            const Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
-
-            Reference< css::frame::XDesktop2 > xDesktop = css::frame::Desktop::create( xContext );
-
-            Reference< css::util::XURLTransformer > xParser = css::util::URLTransformer::create(xContext);
-            css::util::URL aCommand;
-            if( rAppEvent.GetStringData() == "PREFERENCES" )
-                aCommand.Complete = u".uno:OptionsTreeDialog"_ustr;
-            if( !aCommand.Complete.isEmpty() )
-            {
-                xParser->parseStrict(aCommand);
-
-                css::uno::Reference< css::frame::XDispatch > xDispatch = xDesktop->queryDispatch(aCommand, OUString(), 0);
-                if (xDispatch.is())
-                    xDispatch->dispatch(aCommand, cpo::uno::Sequence< css::beans::PropertyValue >());
-            }
-        }
-        catch(const cpo::uno::Exception&)
-        {
-            TOOLS_WARN_EXCEPTION("desktop.app", "exception thrown by dialog");
-        }
-        break;
     case ApplicationEvent::Type::Unaccept:
         // try to remove corresponding acceptor
         destroyAcceptor(rAppEvent.GetStringData());
@@ -2116,7 +1952,7 @@ void Desktop::OpenSplashScreen()
         aSplashService = u"com.sun.star.office.PipeSplashScreen"_ustr;
 
     Sequence< Any > aSeq{ Any(true) /* bVisible */, Any(aAppName) };
-    const css::uno::Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
     m_rSplashScreen.set(
         xContext->getServiceManager()->createInstanceWithArgumentsAndContext(aSplashService, aSeq, xContext),
         UNO_QUERY);
@@ -2135,18 +1971,6 @@ void Desktop::SetSplashScreenProgress(sal_Int32 iProgress)
     if(m_rSplashScreen.is())
     {
         m_rSplashScreen->setValue(iProgress);
-    }
-#endif
-}
-
-void Desktop::SetSplashScreenText( const OUString& rText )
-{
-#if ENABLE_WASM_STRIP_SPLASH
-    (void) rText;
-#else
-    if( m_rSplashScreen.is() )
-    {
-        m_rSplashScreen->setText( rText );
     }
 #endif
 }
@@ -2188,7 +2012,7 @@ void Desktop::ShowBackingComponent(Desktop * progress)
         return;
     }
     const Reference< XComponentContext >& xContext = comphelper::getProcessComponentContext();
-    Reference< XDesktop2 > xDesktop = css::frame::Desktop::create(xContext);
+    Reference< XDesktop > xDesktop = css::frame::Desktop::create(xContext);
     if (progress != nullptr)
     {
         progress->SetSplashScreenProgress(60);

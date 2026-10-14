@@ -329,13 +329,13 @@ OUString getCheckerURL()
     return {};
 }
 
-void lclShowCURLErrorInteraction(const css::uno::Reference<css::uno::XComponentContext>& xContext,
+void lclShowCURLErrorInteraction(const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
                                  CURLcode eCURLCode, const OUString& rServer)
 {
     if (!xContext.is())
         return;
 
-    css::uno::Reference<task::XInteractionHandler2> xInteractionHandler
+    cpo::uno::Reference<task::XInteractionHandler2> xInteractionHandler
         = task::InteractionHandler::createWithParent(xContext, nullptr);
     if (!xInteractionHandler.is())
         return;
@@ -344,7 +344,7 @@ void lclShowCURLErrorInteraction(const css::uno::Reference<css::uno::XComponentC
 
     rtl::Reference<comphelper::OInteractionApprove> pApprove
         = new comphelper::OInteractionApprove();
-    cpo::uno::Sequence<css::uno::Reference<css::task::XInteractionContinuation>> aContinuations{
+    cpo::uno::Sequence<cpo::uno::Reference<css::task::XInteractionContinuation>> aContinuations{
         pApprove
     };
 
@@ -360,7 +360,7 @@ void lclShowCURLErrorInteraction(const css::uno::Reference<css::uno::XComponentC
 }
 
 LanguageToolGrammarChecker::LanguageToolGrammarChecker(
-    const css::uno::Reference<css::uno::XComponentContext>& xContext)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext)
     : mCachedResults(10)
     , mxContext(xContext)
 {
@@ -368,9 +368,9 @@ LanguageToolGrammarChecker::LanguageToolGrammarChecker(
 
 LanguageToolGrammarChecker::~LanguageToolGrammarChecker() {}
 
-bool SAL_CALL LanguageToolGrammarChecker::isSpellChecker() { return false; }
+bool LanguageToolGrammarChecker::isSpellChecker() { return false; }
 
-bool SAL_CALL LanguageToolGrammarChecker::hasLocale(const Locale& rLocale)
+bool LanguageToolGrammarChecker::hasLocale(const Locale& rLocale)
 {
     if (!m_aSuppLocales.hasElements())
         getLocales();
@@ -383,7 +383,7 @@ bool SAL_CALL LanguageToolGrammarChecker::hasLocale(const Locale& rLocale)
     return false;
 }
 
-cpo::uno::Sequence<Locale> SAL_CALL LanguageToolGrammarChecker::getLocales()
+cpo::uno::Sequence<Locale> LanguageToolGrammarChecker::getLocales()
 {
     osl::MutexGuard aGuard(linguistic::GetLinguMutex());
 
@@ -421,7 +421,7 @@ cpo::uno::Sequence<Locale> SAL_CALL LanguageToolGrammarChecker::getLocales()
     return m_aSuppLocales;
 }
 
-ProofreadingResult SAL_CALL LanguageToolGrammarChecker::doProofreading(
+ProofreadingResult LanguageToolGrammarChecker::doProofreading(
     const OUString& aDocumentIdentifier, const OUString& aText, const Locale& aLocale,
     sal_Int32 nStartOfSentencePosition, sal_Int32 nSuggestedBehindEndOfSentencePosition,
     const cpo::uno::Sequence<PropertyValue>& aProperties)
@@ -550,39 +550,39 @@ ProofreadingResult SAL_CALL LanguageToolGrammarChecker::doProofreading(
     return xRes;
 }
 
-void SAL_CALL LanguageToolGrammarChecker::ignoreRule(const OUString& /*aRuleIdentifier*/,
+void LanguageToolGrammarChecker::ignoreRule(const OUString& /*aRuleIdentifier*/,
                                                      const Locale& /*aLocale*/
 )
 {
 }
-void SAL_CALL LanguageToolGrammarChecker::resetIgnoreRules() {}
+void LanguageToolGrammarChecker::resetIgnoreRules() {}
 
-OUString SAL_CALL LanguageToolGrammarChecker::getServiceDisplayName(const Locale& rLocale)
+OUString LanguageToolGrammarChecker::getServiceDisplayName(const Locale& rLocale)
 {
     std::locale loc(Translate::Create("svt", LanguageTag(rLocale)));
     return Translate::get(STR_DESCRIPTION_LANGUAGETOOL, loc);
 }
 
-OUString SAL_CALL LanguageToolGrammarChecker::getImplementationName()
+OUString LanguageToolGrammarChecker::getImplementationName()
 {
     return u"org.openoffice.lingu.LanguageToolGrammarChecker"_ustr;
 }
 
-bool SAL_CALL LanguageToolGrammarChecker::supportsService(const OUString& ServiceName)
+bool LanguageToolGrammarChecker::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL LanguageToolGrammarChecker::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> LanguageToolGrammarChecker::getSupportedServiceNames()
 {
     return { SN_GRAMMARCHECKER };
 }
 
-void SAL_CALL LanguageToolGrammarChecker::initialize(const cpo::uno::Sequence<cpo::uno::Any>&) {}
+void LanguageToolGrammarChecker::initialize(const cpo::uno::Sequence<cpo::uno::Any>&) {}
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 lingucomponent_LanguageToolGrammarChecker_get_implementation(
-    css::uno::XComponentContext* pContext, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* pContext, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new LanguageToolGrammarChecker(pContext));
 }

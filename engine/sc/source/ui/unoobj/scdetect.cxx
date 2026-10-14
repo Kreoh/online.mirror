@@ -22,7 +22,7 @@
 #include <sal/macros.h>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <comphelper/sequenceashashmap.hxx>
@@ -34,6 +34,7 @@
 #include <global.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -262,7 +263,7 @@ static bool lcl_MayBeDBase( SvStream& rStream )
     return ( 0x0d == nEndFlag );
 }
 
-OUString SAL_CALL ScFilterDetect::detect( cpo::uno::Sequence<beans::PropertyValue>& lDescriptor )
+OUString ScFilterDetect::detect( cpo::uno::Sequence<beans::PropertyValue>& lDescriptor )
 {
     comphelper::SequenceAsHashMap aMediaDesc(lDescriptor);
     OUString aTypeName = aMediaDesc.getUnpackedValueOrDefault( utl::MediaDescriptor::PROP_TYPENAME, OUString() );
@@ -329,7 +330,7 @@ OUString SAL_CALL ScFilterDetect::detect( cpo::uno::Sequence<beans::PropertyValu
     return aTypeName;
 }
 
-OUString SAL_CALL ScFilterDetect::getImplementationName()
+OUString ScFilterDetect::getImplementationName()
 {
     return u"com.sun.star.comp.calc.FormatDetector"_ustr;
 }
@@ -344,8 +345,8 @@ cpo::uno::Sequence<OUString> ScFilterDetect::getSupportedServiceNames()
     return { u"com.sun.star.frame.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_calc_FormatDetector_get_implementation(css::uno::XComponentContext* /*context*/,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_calc_FormatDetector_get_implementation(cpo::uno::XComponentContext* /*context*/,
                                                          cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScFilterDetect);

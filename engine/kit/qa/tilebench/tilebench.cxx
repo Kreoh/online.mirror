@@ -148,13 +148,29 @@ static void dumpTile(const char *pNameStem,
     ofs.close();
 }
 
+/// Select the part at the given index in document order. The boundary names
+/// parts by their identifiers, so the index is resolved to one first.
+static void setPartByIndex(COKitDocument* pDocument, int nPart)
+{
+    const std::string aPartId = pDocument->getPartId(nPart, pDocument->getEditMode());
+    if (!aPartId.empty())
+        pDocument->setPart(aPartId.c_str());
+}
+
+/// The index the document's current part holds in document order.
+static int getPartIndex(COKitDocument* pDocument)
+{
+    const std::string aPartId = pDocument->getPart();
+    return std::max(pDocument->getPartIndex(aPartId.c_str(), pDocument->getEditMode()), 0);
+}
+
 static void testTile( COKitDocument *pDocument, int max_parts,
                       int max_tiles, bool dump )
 {
     const COKitTileMode mode = pDocument->getTileMode();
 
     aTimes.emplace_back("getparts");
-    const int nOriginalPart = (pDocument->getDocumentType() == COKitDocumentType::TEXT ? 1 : pDocument->getPart());
+    const int nOriginalPart = (pDocument->getDocumentType() == COKitDocumentType::TEXT ? 1 : getPartIndex(pDocument));
     // Writer really has 1 part (the full doc).
     const int nTotalParts = (pDocument->getDocumentType() == COKitDocumentType::TEXT ? 1 : pDocument->getParts());
     const int nParts = (max_parts < 0 ? nTotalParts : std::min(max_parts, nTotalParts));
@@ -166,11 +182,12 @@ static void testTile( COKitDocument *pDocument, int max_parts,
     for (int n = 0; n < nParts; ++n)
     {
         const int nPart = (nOriginalPart + n) % nTotalParts;
-        char* pName = pDocument->getPartName(nPart);
-        pDocument->setPart(nPart);
-        pDocument->getDocumentSize(&nWidth, &nHeight);
-        fprintf (stderr, "  '%s' -> %ld, %ld\n", pName, nWidth, nHeight);
-        free (pName);
+        const std::string aName = pDocument->getPartName(nPart);
+        setPartByIndex(pDocument, nPart);
+        const COKitSize aPartSize = pDocument->getDocumentSize();
+        nWidth = aPartSize.nWidth;
+        nHeight = aPartSize.nHeight;
+        fprintf (stderr, "  '%s' -> %ld, %ld\n", aName.c_str(), nWidth, nHeight);
     }
     aTimes.emplace_back();
 
@@ -191,17 +208,18 @@ static void testTile( COKitDocument *pDocument, int max_parts,
     for (int n = 0; n < nParts; ++n)
     {
         const int nPart = (nOriginalPart + n) % nTotalParts;
-        char* pName = pDocument->getPartName(nPart);
-        pDocument->setPart(nPart);
-        pDocument->getDocumentSize(&nWidth, &nHeight);
-        fprintf (stderr, "render '%s' -> %ld, %ld\n", pName, nWidth, nHeight);
-        free (pName);
+        const std::string aName = pDocument->getPartName(nPart);
+        setPartByIndex(pDocument, nPart);
+        const COKitSize aPartSize = pDocument->getDocumentSize();
+        nWidth = aPartSize.nWidth;
+        nHeight = aPartSize.nHeight;
+        fprintf (stderr, "render '%s' -> %ld, %ld\n", aName.c_str(), nWidth, nHeight);
 
         if (dump || pDocument->getDocumentType() != COKitDocumentType::TEXT)
         {
             // whole part; meaningful only for non-writer documents.
             aTimes.emplace_back("render whole part");
-            pDocument->paintTile(pPixels, nTilePixelWidth, nTilePixelHeight,
+            pDocument->paintTile(vBuffer, nTilePixelWidth, nTilePixelHeight,
                                  nWidth/2, 2000, 1000, 1000);
             aTimes.emplace_back();
             if (dump)
@@ -222,7 +240,7 @@ static void testTile( COKitDocument *pDocument, int max_parts,
                         nY = nHeight;
                         break;
                     }
-                    pDocument->paintTile(pPixels, nTilePixelWidth, nTilePixelHeight,
+                    pDocument->paintTile(vBuffer, nTilePixelWidth, nTilePixelHeight,
                                          nX, nY, nTilePixelWidth, nTilePixelHeight);
                     nTiles++;
                     fprintf (stderr, "   rendered 1:1 tile %d at %ld, %ld\n",
@@ -247,7 +265,7 @@ static void testTile( COKitDocument *pDocument, int max_parts,
                         nY = nHeight;
                         break;
                     }
-                    pDocument->paintTile(pPixels, nTilePixelWidth, nTilePixelHeight,
+                    pDocument->paintTile(vBuffer, nTilePixelWidth, nTilePixelHeight,
                                          nX, nY, nTileTwipWidth, nTileTwipHeight);
                     nTiles++;
                     fprintf (stderr, "   rendered scaled tile %d at %ld, %ld\n",
@@ -340,7 +358,7 @@ static std::vector<unsigned char> paintTile( COKitDocument *pDocument,
 //    long e = 0; // tweak if we suspect an overlap / visibility issue.
 //    pDocument->setClientVisibleArea( nX - e, nY - e, nTileTwipWidth + e, nTileTwipHeight + e );
     std::vector<unsigned char> vData( nTilePixelWidth * nTilePixelHeight * 4 );
-    pDocument->paintTile( vData.data(), nTilePixelWidth, nTilePixelHeight,
+    pDocument->paintTile( vData, nTilePixelWidth, nTilePixelHeight,
                           nX, nY, nTileTwipWidth, nTileTwipHeight );
     return vData;
 }
@@ -428,8 +446,9 @@ static int testJoinsAt( COKitDocument *pDocument, long nX, long nY,
 static int testJoin( COKitDocument *pDocument)
 {
     // Ignore parts - just the first for now ...
-    long nWidth = 0, nHeight = 0;
-    pDocument->getDocumentSize(&nWidth, &nHeight);
+    const COKitSize aDocSize = pDocument->getDocumentSize();
+    const long nWidth = aDocSize.nWidth;
+    const long nHeight = aDocSize.nHeight;
     fprintf (stderr, "Width is %ld, %ld (twips)\n", nWidth, nHeight);
 
     // Use realistic dimensions, similar to the Online client.
@@ -507,14 +526,12 @@ static void kitCallback(COKitCallbackType eType, const char* pPayload, void* pDa
 
     aTimes.emplace_back(); // complete wait for dialog
 
-    unsigned char *pBuffer = new unsigned char[nWidth * nHeight * 4];
+    std::vector<unsigned char> aBuffer(static_cast<size_t>(nWidth) * nHeight * 4);
 
     aTimes.emplace_back("render dialog");
-    pDocument->paintWindowForView(nDialogId, pBuffer, 0, 0, nWidth, nHeight, 1.0, -1);
-    dumpTile("dialog", nWidth, nHeight, pDocument->getTileMode(), pBuffer);
+    pDocument->paintWindowForView(nDialogId, aBuffer, 0, 0, nWidth, nHeight, 1.0, -1);
+    dumpTile("dialog", nWidth, nHeight, pDocument->getTileMode(), aBuffer.data());
     aTimes.emplace_back();
-
-    delete[] pBuffer;
 
     bDialogRendered = true;
 }

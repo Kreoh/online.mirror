@@ -55,7 +55,7 @@
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <fmtfollowtextflow.hxx>
 #include <textboxhelper.hxx>
@@ -65,8 +65,8 @@
 
 using namespace ::com::sun::star;
 using namespace css::beans;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 SFX_IMPL_SUPERCLASS_INTERFACE(SwDrawBaseShell, SwBaseShell)
 
@@ -237,13 +237,15 @@ void SwDrawBaseShell::Execute(SfxRequest& rReq)
                         SwFormatVertOrient aVOrient(pFrameFormat->GetFormatAttr(RES_VERT_ORIENT));
                         aSet.Put(SfxInt16Item(SID_ATTR_TRANSFORM_VERT_ORIENT, aVOrient.GetVertOrient()));
                         aSet.Put(SfxInt16Item(SID_ATTR_TRANSFORM_VERT_RELATION, aVOrient.GetRelationOrient() ));
-                        aSet.Put(SfxInt32Item(SID_ATTR_TRANSFORM_VERT_POSITION, aVOrient.GetPos()));
+                        aSet.Put(SfxInt32Item(SID_ATTR_TRANSFORM_VERT_POSITION,
+                                              aVOrient.getPosition().as_twip<sal_Int32>()));
 
                         SwFormatHoriOrient aHOrient(pFrameFormat->GetFormatAttr(RES_HORI_ORIENT));
                         aSet.Put(SfxInt16Item(SID_ATTR_TRANSFORM_HORI_ORIENT, aHOrient.GetHoriOrient()));
                         aSet.Put(SfxInt16Item(SID_ATTR_TRANSFORM_HORI_RELATION, aHOrient.GetRelationOrient() ));
                         aSet.Put(SfxBoolItem(SID_ATTR_TRANSFORM_HORI_MIRROR, aHOrient.IsPosToggle()));
-                        aSet.Put(SfxInt32Item(SID_ATTR_TRANSFORM_HORI_POSITION, aHOrient.GetPos()));
+                        aSet.Put(SfxInt32Item(SID_ATTR_TRANSFORM_HORI_POSITION,
+                                              aHOrient.getPosition().as_twip<sal_Int32>()));
 
                         const IDocumentSettingAccess& rIDSA = pFrameFormat->getIDocumentSettingAccess();
                         if (rIDSA.get(DocumentSettingId::DO_NOT_MIRROR_RTL_DRAW_OBJS))
@@ -317,7 +319,8 @@ void SwDrawBaseShell::Execute(SfxRequest& rReq)
                                     if(pHoriRelation)
                                         aHOrientFinal.SetRelationOrient(pHoriRelation->GetValue());
                                     if(pHoriPosition)
-                                        aHOrientFinal.SetPos( pHoriPosition->GetValue());
+                                        aHOrientFinal.setPosition(
+                                            gfx::Length::twip(pHoriPosition->GetValue()));
                                     if(pHoriMirror)
                                         aHOrientFinal.SetPosToggle( pHoriMirror->GetValue());
                                     aFrameAttrSet.Put(aHOrientFinal);
@@ -336,7 +339,8 @@ void SwDrawBaseShell::Execute(SfxRequest& rReq)
                                     if(pVertRelation)
                                         aVOrientFinal.SetRelationOrient(pVertRelation->GetValue());
                                     if(pVertPosition)
-                                        aVOrientFinal.SetPos( pVertPosition->GetValue());
+                                        aVOrientFinal.setPosition(
+                                            gfx::Length::twip(pVertPosition->GetValue()));
                                     aFrameAttrSet.Put( aVOrientFinal );
                                 }
                                 const SwFormatFollowTextFlow* pFollowItem =

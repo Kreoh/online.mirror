@@ -26,7 +26,6 @@
 #include <com/sun/star/smarttags/XSmartTagRecognizer.hpp>
 #include <com/sun/star/smarttags/XRangeBasedSmartTagRecognizer.hpp>
 #include <com/sun/star/smarttags/XSmartTagAction.hpp>
-#include <com/sun/star/deployment/ExtensionManager.hpp>
 #include <com/sun/star/smarttags/SmartTagRecognizerMode.hpp>
 #include <com/sun/star/i18n/BreakIterator.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -38,13 +37,14 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
 #include <com/sun/star/util/XChangesNotifier.hpp>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <rtl/ustring.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::i18n;
 
 
@@ -444,21 +444,6 @@ void SmartTagMgr::ReadConfiguration( bool bExcludedTypes, bool bRecognize )
 
 void SmartTagMgr::RegisterListener()
 {
-    // register as listener at package manager
-    try
-    {
-        Reference<deployment::XExtensionManager> xExtensionManager(
-                deployment::ExtensionManager::get( mxContext ) );
-        if (xExtensionManager)
-        {
-            Reference< util::XModifyListener > xListener( this );
-            xExtensionManager->addModifyListener( xListener );
-        }
-    }
-    catch ( cpo::uno::Exception& )
-    {
-    }
-
     // register as listener at configuration
     try
     {

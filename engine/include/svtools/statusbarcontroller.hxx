@@ -32,7 +32,7 @@ namespace com::sun::star::beans { struct PropertyValue; }
 namespace com::sun::star::frame { class XDispatch; }
 namespace com::sun::star::frame { class XFrame; }
 namespace com::sun::star::ui { class XStatusbarItem; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace com::sun::star::util { class XURLTransformer; }
 
 namespace svt
@@ -43,66 +43,66 @@ class SVT_DLLPUBLIC StatusbarController :
                             public ::cppu::OWeakObject
 {
     public:
-        StatusbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-                             const css::uno::Reference< css::frame::XFrame >& xFrame,
+        StatusbarController( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+                             const cpo::uno::Reference< css::frame::XFrame >& xFrame,
                              OUString aCommandURL,
                              unsigned short       nID );
         StatusbarController();
         virtual ~StatusbarController() override;
 
-        css::uno::Reference< css::frame::XFrame > getFrameInterface() const;
-        css::uno::Reference< css::util::XURLTransformer > getURLTransformer() const;
+        cpo::uno::Reference< css::frame::XFrame > getFrameInterface() const;
+        cpo::uno::Reference< css::util::XURLTransformer > getURLTransformer() const;
 
         ::tools::Rectangle getControlRect() const;
 
         // XInterface
-        virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& aType ) override;
-        virtual void SAL_CALL acquire() noexcept override;
-        virtual void SAL_CALL release() noexcept override;
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
         // XUpdatable
-        virtual void SAL_CALL update() override;
+        virtual void update() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() override;
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+        virtual void dispose() override;
+        virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
 
         // XStatusListener
-        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+        virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
         // XStatusbarController
-        virtual bool SAL_CALL mouseButtonDown( const css::awt::MouseEvent& aMouseEvent ) override;
-        virtual bool SAL_CALL mouseMove( const css::awt::MouseEvent& aMouseEvent ) override;
-        virtual bool SAL_CALL mouseButtonUp( const css::awt::MouseEvent& aMouseEvent ) override;
-        virtual void SAL_CALL command( const css::awt::Point& aPos,
+        virtual bool mouseButtonDown( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual bool mouseMove( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual bool mouseButtonUp( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual void command( const css::awt::Point& aPos,
                                        ::sal_Int32 nCommand,
                                        bool bMouseEvent,
                                        const cpo::uno::Any& aData ) override;
-        virtual void SAL_CALL paint( const css::uno::Reference< css::awt::XGraphics >& xGraphics,
+        virtual void paint( const cpo::uno::Reference< css::awt::XGraphics >& xGraphics,
                                      const css::awt::Rectangle& rOutputRectangle,
                                      ::sal_Int32 nStyle ) override;
-        virtual void SAL_CALL click( const css::awt::Point& aPos ) override;
-        virtual void SAL_CALL doubleClick( const css::awt::Point& aPos ) override;
+        virtual void click( const css::awt::Point& aPos ) override;
+        virtual void doubleClick( const css::awt::Point& aPos ) override;
 
     protected:
         struct Listener
         {
-            Listener( css::util::URL _aURL, css::uno::Reference< css::frame::XDispatch > _xDispatch ) :
+            Listener( css::util::URL _aURL, cpo::uno::Reference< css::frame::XDispatch > _xDispatch ) :
                 aURL(std::move( _aURL )), xDispatch(std::move( _xDispatch )) {}
 
             css::util::URL                               aURL;
-            css::uno::Reference< css::frame::XDispatch > xDispatch;
+            cpo::uno::Reference< css::frame::XDispatch > xDispatch;
         };
 
         typedef std::unordered_map< OUString,
-                                    css::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
+                                    cpo::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
 
         // methods to support status forwarder, known by the old sfx2 toolbox controller implementation
         void addStatusListener( const OUString& aCommandURL );
@@ -116,14 +116,14 @@ class SVT_DLLPUBLIC StatusbarController :
         bool                                                      m_bInitialized : 1,
                                                                   m_bDisposed : 1;
         unsigned short                                            m_nID;
-        css::uno::Reference< css::frame::XFrame >                 m_xFrame;
-        css::uno::Reference< css::awt::XWindow >                  m_xParentWindow;
-        css::uno::Reference< css::uno::XComponentContext >        m_xContext;
+        cpo::uno::Reference< css::frame::XFrame >                 m_xFrame;
+        cpo::uno::Reference< css::awt::XWindow >                  m_xParentWindow;
+        cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
         OUString                                                  m_aCommandURL;
         URLToDispatchMap                                          m_aListenerMap;
         comphelper::OInterfaceContainerHelper4<css::lang::XEventListener> m_aEventListeners;
-        mutable css::uno::Reference< css::util::XURLTransformer > m_xURLTransformer;
-        css::uno::Reference< css::ui::XStatusbarItem >            m_xStatusbarItem;
+        mutable cpo::uno::Reference< css::util::XURLTransformer > m_xURLTransformer;
+        cpo::uno::Reference< css::ui::XStatusbarItem >            m_xStatusbarItem;
         std::mutex m_aMutex; // for m_aEventListeners
 };
 

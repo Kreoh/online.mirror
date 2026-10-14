@@ -11,6 +11,7 @@
 
 #include "OutlineView.hxx"
 #include <Outliner.hxx>
+#include <unotools/weakref.hxx>
 
 class SdrTextObj;
 
@@ -37,11 +38,22 @@ class NotesPanelView final : public ::sd::SimpleOutlinerView
 
     Idle aModifyIdle;
 
+    /// Called after every change to the notes text, including a refill on a slide change.
+    Link<LinkParamNone*, void> maContentChangedHdl;
+
     bool mbInFocus = false;
+
+    /// The notes object the outliner was filled from.
+    ::unotools::WeakReference<SdrTextObj> mxEditedNotesObj;
 
     void getNotesFromDoc();
     void setNotesToDoc();
     SdrTextObj* getNotesTextObj();
+    SdrTextObj* getEditedNotesObj();
+    void clearPlaceholder();
+    void commitNotes();
+    void invalidateUndoState();
+    bool isLocked();
 
 public:
     NotesPanelView(DrawDocShell& rDocSh, vcl::Window* pWindow,
@@ -52,11 +64,31 @@ public:
     void onResize();
     void onGrabFocus();
     void onLoseFocus();
+    bool isInFocus() const { return mbInFocus; }
+
+    /// The notes pane of another view that has the focus on the notes shown here, or null. That
+    /// view holds the notes, and this one only shows them.
+    NotesPanelView* getLockingView();
+    /// The view shell id of the view that holds the notes shown here, or -1 when no other view
+    /// holds them or that view is not known. A view holds the notes when its notes pane has the
+    /// focus on them, or when it edits the notes object itself, as on the handout page.
+    sal_Int32 getLockingViewId();
+
+    /// Reloads the notes in every notes pane other than pExcept that shows pNotesTextObj and does
+    /// not edit it, so those panes show its current text and whether another view holds it.
+    static void refreshViews(const SdrTextObj* pNotesTextObj, const NotesPanelView* pExcept);
+    /// Makes every notes pane that holds pNotesTextObj write its text back and let the notes go.
+    static void releaseViews(const SdrTextObj* pNotesTextObj);
 
     OutlinerView* GetOutlinerView();
     OutlinerView* GetViewByWindow(vcl::Window const* pWin) const override;
 
     SdOutliner& GetOutliner() { return maOutliner; }
+
+    void SetContentChangedHdl(const Link<LinkParamNone*, void>& rLink)
+    {
+        maContentChangedHdl = rLink;
+    }
 
     void FillOutliner();
     void onUpdateStyleSettings();

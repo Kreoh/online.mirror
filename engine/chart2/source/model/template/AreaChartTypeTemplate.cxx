@@ -25,16 +25,17 @@
 #include <PropertyHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/diagnose_ex.hxx>
 
 #include <algorithm>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::com::sun::star::beans::Property;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace
 {
@@ -76,7 +77,7 @@ namespace chart
 
 AreaChartTypeTemplate::AreaChartTypeTemplate(
     uno::Reference<
-        uno::XComponentContext > const & xContext,
+        cpo::uno::XComponentContext > const & xContext,
     const OUString & rServiceName,
     StackMode eStackMode,
     sal_Int32 nDim /* = 2 */ ) :

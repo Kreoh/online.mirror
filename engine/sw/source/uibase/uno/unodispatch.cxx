@@ -35,6 +35,7 @@
 #include <dbmgr.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 const char cURLFormLetter[] = ".uno:DataSourceBrowser/FormLetter";
 const char cURLInsertContent[] = ".uno:DataSourceBrowser/InsertContent";//data into fields
@@ -90,7 +91,7 @@ uno::Reference< frame::XDispatch > SwXDispatchProviderInterceptor::queryDispatch
     return xResult;
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL SwXDispatchProviderInterceptor::getInterceptedURLs()
+cpo::uno::Sequence<OUString> SwXDispatchProviderInterceptor::getInterceptedURLs()
 {
     cpo::uno::Sequence<OUString> aRet =
     {
@@ -187,7 +188,7 @@ void SwXDispatch::dispatch(const util::URL& aURL,
     const cpo::uno::Sequence< beans::PropertyValue >& aArgs)
 {
     if(!m_pView)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 #if !HAVE_FEATURE_DBCONNECTIVITY || ENABLE_FUZZERS
     (void) aArgs;
     if (false)
@@ -246,7 +247,7 @@ void SwXDispatch::dispatch(const util::URL& aURL,
         }
     }
     else
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
 }
 
@@ -254,7 +255,7 @@ void SwXDispatch::addStatusListener(
     const uno::Reference< frame::XStatusListener >& xControl, const util::URL& aURL )
 {
     if(!m_pView)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     ShellMode eMode = m_pView->GetShellMode();
     bool bEnable = ShellMode::Text == eMode  ||
                        ShellMode::ListText == eMode  ||

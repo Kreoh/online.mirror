@@ -31,13 +31,13 @@
 
 #include <algorithm>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_comphelper_OPropertyBag (
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new comphelper::OPropertyBag());
@@ -47,7 +47,7 @@ namespace comphelper
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::beans;

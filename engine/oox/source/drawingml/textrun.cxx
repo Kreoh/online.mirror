@@ -36,7 +36,7 @@
 #include <oox/token/tokens.hxx>
 #include <comphelper/diagnose_ex.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::beans;
@@ -90,7 +90,7 @@ sal_Int32 TextRun::insertAt(
         {
             if( mbIsLineBreak )
             {
-                SAL_WARN("oox",  "OOX: TextRun::insertAt() insert line break" );
+                SAL_INFO("oox", "OOX: TextRun::insertAt() insert line break");
                 xText->insertControlCharacter( xStart, ControlCharacter::LINE_BREAK, false );
             }
             else if (!getText().isEmpty())
@@ -145,7 +145,7 @@ sal_Int32 TextRun::insertAt(
         }
         else
         {
-            SAL_WARN("oox",  "OOX: URL field" );
+            SAL_INFO("oox", "OOX: URL field");
             Reference< XMultiServiceFactory > xFactory( rFilterBase.getModel(), UNO_QUERY );
             Reference< XTextField > xField( xFactory->createInstance( u"com.sun.star.text.TextField.URL"_ustr ), UNO_QUERY );
             if( xField.is() )

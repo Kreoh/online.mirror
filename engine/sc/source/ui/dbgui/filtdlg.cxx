@@ -91,7 +91,7 @@ ScFilterDlg::ScFilterDlg(SfxBindings* pB, SfxChildWindow* pCW, weld::Window* pPa
     , m_xEdVal4(m_xBuilder->weld_combo_box(u"val4"_ustr))
     , m_xLbColor4(m_xBuilder->weld_combo_box(u"color4"_ustr))
     , m_xBtnRemove4(m_xBuilder->weld_button(u"remove4"_ustr))
-    , m_xContents(m_xBuilder->weld_widget(u"grid"_ustr))
+    , m_xContents(m_xBuilder->weld_container(u"grid"_ustr))
     , m_xScrollBar(m_xBuilder->weld_scrolled_window(u"scrollbar"_ustr, true))
     , m_xExpander(m_xBuilder->weld_expander(u"more"_ustr))
     , m_xBtnClear(m_xBuilder->weld_button(u"clear"_ustr))
@@ -110,7 +110,7 @@ ScFilterDlg::ScFilterDlg(SfxBindings* pB, SfxChildWindow* pCW, weld::Window* pPa
     , m_xFtDbArea(m_xBuilder->weld_label(u"dbarea"_ustr))
 {
     m_xExpander->connect_expanded(LINK(this, ScFilterDlg, MoreExpandedHdl));
-    m_xEdCopyArea->SetReferences(this, m_xFtDbAreaLabel.get());
+    m_xEdCopyArea->SetReferences(this, m_xBtnCopyResult.get());
     m_xRbCopyArea->SetReferences(this, m_xEdCopyArea.get());
 
     assert(m_xLbCond1->find_text(aStrFontColor) != -1);
@@ -499,6 +499,9 @@ void ScFilterDlg::UpdateValueList( size_t nList )
                 SCTAB nTab       = nSrcTab;
                 SCROW nFirstRow = theQueryData.nRow1;
                 SCROW nLastRow   = theQueryData.nRow2;
+                // A totals row is a summary, not data: keep its values out of the list.
+                if (theQueryData.bHasTotals && nLastRow > nFirstRow)
+                    --nLastRow;
                 if (maHasDates.size() < nOffset+nList)
                     maHasDates.resize(nOffset+nList, false);
                 maHasDates[nOffset+nList-1] = false;

@@ -34,6 +34,7 @@
 #include <tools/fract.hxx>
 #include <tools/helpers.hxx>
 #include <tools/stream.hxx>
+#include <tools/urlobj.hxx>
 #include <xmloff/namespacemap.hxx>
 #include <xmloff/unointerfacetouniqueidentifiermapper.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -58,9 +59,9 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::style;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::xml::sax;
+using namespace ::cpo;
 using namespace ::cpo::uno;
+using namespace ::com::sun::star::xml::sax;
 
 constexpr OUString aPrefixClipPathId = u"clip_path_"_ustr;
 
@@ -1288,7 +1289,15 @@ bool SVGTextWriter::nextTextPortion()
 #if OSL_DEBUG_LEVEL > 0
                                 sInfo += "url: " + mrExport.GetRelativeReference( sURL );
 #endif
-                                msUrl = mrExport.GetRelativeReference( sURL );
+                                // A link to a place in the presentation starts with '#'.
+                                INetURLObject aINetURLObject(sURL);
+                                if (sURL.startsWith("#")
+                                    || (!aINetURLObject.HasError()
+                                        && !aINetURLObject.IsExoticProtocol()
+                                        && aINetURLObject.GetProtocol() != INetProtocol::Javascript))
+                                    msUrl = mrExport.GetRelativeReference( sURL );
+                                else
+                                    msUrl.clear();
                                 if( !msUrl.isEmpty() )
                                 {
                                     implRegisterInterface( xPortionTextRange );
@@ -2821,7 +2830,7 @@ void SVGActionWriter::ImplWriteText( const Point& rPos, const OUString& rText,
             }
             else
             {
-                css::uno::Reference< css::i18n::XBreakIterator > xBI( vcl::unohelper::CreateBreakIterator() );
+                cpo::uno::Reference< css::i18n::XBreakIterator > xBI( vcl::unohelper::CreateBreakIterator() );
                 const css::lang::Locale& rLocale = Application::GetSettings().GetLanguageTag().getLocale();
                 sal_Int32 nCurPos = 0, nLastPos = 0, nX = aPos.X();
 
@@ -2910,7 +2919,7 @@ void SVGActionWriter::ImplWriteText( const Point& rPos, const OUString& rText,
 
 namespace
 {
-void GetGraphicFromXShape(const css::uno::Reference<css::drawing::XShape>* pShape, Graphic& rGraphic)
+void GetGraphicFromXShape(const cpo::uno::Reference<css::drawing::XShape>* pShape, Graphic& rGraphic)
 {
     if (!pShape)
     {
@@ -2935,7 +2944,7 @@ void GetGraphicFromXShape(const css::uno::Reference<css::drawing::XShape>* pShap
 void SVGActionWriter::ImplWriteBmp( const Bitmap& rBmp,
                                     const Point& rPt, const Size& rSz,
                                     const Point& rSrcPt, const Size& rSrcSz,
-                                    const css::uno::Reference<css::drawing::XShape>* pShape )
+                                    const cpo::uno::Reference<css::drawing::XShape>* pShape )
 {
     if( rBmp.IsEmpty() )
         return;
@@ -3017,6 +3026,26 @@ void SVGActionWriter::ImplWriteBmp( const Bitmap& rBmp,
     if( aBmp.IsEmpty() )
         return;
 
+    const Bitmap* pBitmap = &rBmp;
+    Bitmap aNewBitmap;
+
+    // for preview we generate downscaled images (1280x720 max)
+    if (mbIsPreview)
+    {
+        Size aSize = rBmp.GetSizePixel();
+        double fX = static_cast<double>(aSize.getWidth()) / 1280;
+        double fY = static_cast<double>(aSize.getHeight()) / 720;
+        double fFactor = fX > fY ? fX : fY;
+        if (fFactor > 1.0)
+        {
+            aSize.setWidth(aSize.getWidth() / fFactor);
+            aSize.setHeight(aSize.getHeight() / fFactor);
+            aNewBitmap = rBmp;
+            aNewBitmap.Scale(aSize);
+            pBitmap = &aNewBitmap;
+        }
+    }
+
     SvMemoryStream aOStm( 65535, 65535 );
 
     bool bCached = false;
@@ -3040,7 +3069,7 @@ void SVGActionWriter::ImplWriteBmp( const Bitmap& rBmp,
                 {
                     bJPG = true;
                 }
-                if (bPNG || bJPG)
+                if ((bPNG || bJPG) && pBitmap == &rBmp)
                 {
                     aOStm.WriteBytes(aGfxLink.GetData(), aGfxLink.GetDataSize());
                     bCached = true;
@@ -3049,27 +3078,9 @@ void SVGActionWriter::ImplWriteBmp( const Bitmap& rBmp,
         }
     }
 
-    const Bitmap* pBitmap = &rBmp;
-    Bitmap aNewBitmap;
-
-    // for preview we generate downscaled images (1280x720 max)
-    if (mbIsPreview)
-    {
-        Size aSize = rBmp.GetSizePixel();
-        double fX = static_cast<double>(aSize.getWidth()) / 1280;
-        double fY = static_cast<double>(aSize.getHeight()) / 720;
-        double fFactor = fX > fY ? fX : fY;
-        if (fFactor > 1.0)
-        {
-            aSize.setWidth(aSize.getWidth() / fFactor);
-            aSize.setHeight(aSize.getHeight() / fFactor);
-            aNewBitmap = rBmp;
-            aNewBitmap.Scale(aSize);
-            pBitmap = &aNewBitmap;
-        }
-    }
-
-    if( !(bCached || GraphicConverter::Export( aOStm, *pBitmap, ConvertDataFormat::PNG ) == ERRCODE_NONE) )
+    // A downscaled photo stays a JPEG, which is far smaller than a PNG of it.
+    const ConvertDataFormat eFormat = bJPG ? ConvertDataFormat::JPG : ConvertDataFormat::PNG;
+    if( !(bCached || GraphicConverter::Export( aOStm, *pBitmap, eFormat ) == ERRCODE_NONE) )
         return;
 
     Point                    aPt;
@@ -4269,9 +4280,9 @@ cpo::uno::Sequence< OUString > SVGWriter::getSupportedServiceNames()
     return { u"com.sun.star.svg.SVGWriter"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_SVGWriter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new SVGWriter(args, context));
 }

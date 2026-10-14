@@ -38,10 +38,10 @@ class InteractionRequest:
 public:
     explicit InteractionRequest(cpo::uno::Any aRequest);
 
-    virtual cpo::uno::Any SAL_CALL getRequest() override;
+    virtual cpo::uno::Any getRequest() override;
 
-    virtual cpo::uno::Sequence< css::uno::Reference<
-        css::task::XInteractionContinuation > > SAL_CALL
+    virtual cpo::uno::Sequence< cpo::uno::Reference<
+        css::task::XInteractionContinuation > >
     getContinuations() override;
 
     bool retry() const;
@@ -55,7 +55,7 @@ private:
     virtual ~InteractionRequest() override;
 
     cpo::uno::Any m_aRequest;
-    cpo::uno::Sequence< css::uno::Reference<
+    cpo::uno::Sequence< cpo::uno::Reference<
         css::task::XInteractionContinuation > > m_aContinuations;
     rtl::Reference< RetryContinuation > m_xRetryContinuation;
 };

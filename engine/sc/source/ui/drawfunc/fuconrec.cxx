@@ -18,6 +18,7 @@
  */
 
 #include <fuconrec.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <tabvwsh.hxx>
 #include <drawview.hxx>
 
@@ -28,6 +29,7 @@
 #include <svx/svdocapt.hxx>
 #include <svx/svxids.hrc>
 #include <svx/svdomeas.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <osl/diagnose.h>
 
 #include <basegfx/polygon/b2dpolygon.hxx>

@@ -38,6 +38,8 @@ $(eval $(call gb_Module_add_slowcheck_targets,sd,\
     CppunitTest_sd_export_tests-ooxml2 \
     CppunitTest_sd_export_tests-ooxml3 \
     CppunitTest_sd_export_tests-ooxml4 \
+    CppunitTest_sd_export_tests-ooxml5 \
+    CppunitTest_sd_export_tests-ooxml6 \
     CppunitTest_sd_export_tests1 \
     CppunitTest_sd_export_tests2 \
     CppunitTest_sd_export_tests3 \
@@ -53,12 +55,14 @@ $(eval $(call gb_Module_add_slowcheck_targets,sd,\
     CppunitTest_sd_pdf_import_test \
     CppunitTest_sd_png_export_tests \
     CppunitTest_sd_filter_eppt \
+    CppunitTest_sd_core \
     CppunitTest_sd_shape_import_export_tests \
     CppunitTest_sd_a11y \
     CppunitTest_sd_textfitting_tests \
     CppunitTest_sd_theme_tests \
     CppunitTest_sd_annotation_tests \
     CppunitTest_sd_slide_section_tests \
+    CppunitTest_sd_roundtrip_diff \
 ))
 endif
 
@@ -80,10 +84,6 @@ endif
 # screenshots
 $(eval $(call gb_Module_add_screenshot_targets,sd, \
     CppunitTest_sd_dialogs_test \
-))
-
-$(eval $(call gb_Module_add_subsequentcheck_targets,sd,\
-    JunitTest_sd_unoapi \
 ))
 
 $(eval $(call gb_Module_add_uicheck_targets,sd,\

@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_options.h>
 #include <memory>
 
 #include <svx/svdobj.hxx>
@@ -47,6 +48,7 @@
 #include "swdllimpl.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -148,11 +150,11 @@ SwDLL::~SwDLL() COVERITY_NOEXCEPT_FALSE
     // Need to clear this early in the shutdown process, because it might hold references
     // to large complex things like ScDocument.
     try {
-        css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
+        cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
             css::datatransfer::clipboard::SystemClipboard::create(
                 comphelper::getProcessComponentContext());
         xClipboard->setContents( nullptr, nullptr );
-    } catch (css::uno::DeploymentException const&) {
+    } catch (cpo::uno::DeploymentException const&) {
         // ignore, sometimes happens that UNO is already shutdown by now
     }
 
@@ -175,10 +177,12 @@ SwDLL::~SwDLL() COVERITY_NOEXCEPT_FALSE
 #ifndef DISABLE_DYNLOADING
 
 extern "C" SAL_DLLPUBLIC_EXPORT
+#if ENABLE_UNITEDLIBS
+void kit_preload_hook_sw()
+#else
 void kit_preload_hook()
+#endif
 {
-    // msword (any symbol will do)
-    sw::Filters::GetMswordLibSymbol("ImportDOC");
     // swui
     SwAbstractDialogFactory::Create();
 }

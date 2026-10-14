@@ -26,7 +26,7 @@
 
 namespace filter::config{
 
-ContentHandlerFactory::ContentHandlerFactory(const css::uno::Reference< css::uno::XComponentContext >& rxContext)
+ContentHandlerFactory::ContentHandlerFactory(const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext)
  : m_xContext(rxContext)
 {
     BaseContainer::init(u"com.sun.star.comp.filter.config.ContentHandlerFactory"_ustr   ,
@@ -40,16 +40,16 @@ ContentHandlerFactory::~ContentHandlerFactory()
 }
 
 
-css::uno::Reference< css::uno::XInterface > ContentHandlerFactory::createInstance(const OUString& sHandler)
+cpo::uno::Reference< cpo::uno::XInterface > ContentHandlerFactory::createInstance(const OUString& sHandler)
 {
     return createInstanceWithArguments(sHandler, cpo::uno::Sequence< cpo::uno::Any >());
 }
 
 
-css::uno::Reference< css::uno::XInterface > ContentHandlerFactory::createInstanceWithArguments(const OUString&                     sHandler  ,
+cpo::uno::Reference< cpo::uno::XInterface > ContentHandlerFactory::createInstanceWithArguments(const OUString&                     sHandler  ,
                                                                                                         const cpo::uno::Sequence< cpo::uno::Any >& lArguments)
 {
-    css::uno::Reference< css::uno::XInterface > xHandler;
+    cpo::uno::Reference< cpo::uno::XInterface > xHandler;
 
     // SAFE ->
     std::unique_lock aLock(m_aMutex);
@@ -63,7 +63,7 @@ css::uno::Reference< css::uno::XInterface > ContentHandlerFactory::createInstanc
     xHandler = m_xContext->getServiceManager()->createInstanceWithContext(sHandler, m_xContext);
 
     // initialize filter
-    css::uno::Reference< css::lang::XInitialization > xInit(xHandler, css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::lang::XInitialization > xInit(xHandler, cpo::uno::UNO_QUERY);
     if (xInit.is())
     {
         // format: lInitData[0] = seq<PropertyValue>, which contains all configuration properties of this handler
@@ -92,9 +92,9 @@ cpo::uno::Sequence< OUString > ContentHandlerFactory::getAvailableServiceNames()
 
 } // namespace filter::config
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_ContentHandlerFactory_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new filter::config::ContentHandlerFactory(context));
 }

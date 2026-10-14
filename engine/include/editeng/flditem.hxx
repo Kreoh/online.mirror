@@ -41,7 +41,7 @@ class EDITENG_DLLPUBLIC SvxFieldData
 {
 public:
 
-    static SvxFieldData* Create(const css::uno::Reference<css::text::XTextContent>& xContent);
+    static SvxFieldData* Create(const cpo::uno::Reference<css::text::XTextContent>& xContent);
 
     static constexpr auto CLASS_ID = css::text::textfield::Type::UNSPECIFIED;
     virtual sal_Int32  GetClassId() const { return CLASS_ID; }
@@ -104,9 +104,9 @@ enum class SvxDateFormat {
 
 class EDITENG_DLLPUBLIC SvxDateField final : public SvxFieldData
 {
-    sal_Int32               nFixDate;
-    SvxDateType             eType;
-    SvxDateFormat           eFormat;
+    sal_Int32               m_nFixDate;
+    SvxDateType             m_eType;
+    SvxDateFormat           m_eFormat;
 
 public:
     static constexpr auto CLASS_ID = css::text::textfield::Type::DATE;
@@ -117,14 +117,14 @@ public:
                                 SvxDateType eType,
                                 SvxDateFormat eFormat = SvxDateFormat::StdSmall );
 
-    sal_Int32               GetFixDate() const { return nFixDate; }
-    void                    SetFixDate( const Date& rDate ) { nFixDate = rDate.GetDate(); }
+    sal_Int32               GetFixDate() const { return m_nFixDate; }
+    void                    SetFixDate( const Date& rDate ) { m_nFixDate = rDate.GetDate(); }
 
-    SvxDateType             GetType() const { return eType; }
-    void                    SetType( SvxDateType eTp ) { eType = eTp; }
+    SvxDateType             GetType() const { return m_eType; }
+    void                    SetType( SvxDateType eTp ) { m_eType = eTp; }
 
-    SvxDateFormat           GetFormat() const { return eFormat; }
-    void                    SetFormat( SvxDateFormat eFmt ) { eFormat = eFmt; }
+    SvxDateFormat           GetFormat() const { return m_eFormat; }
+    void                    SetFormat( SvxDateFormat eFmt ) { m_eFormat = eFmt; }
 
                             // If eLanguage==LANGUAGE_DONTKNOW the language/country
                             // used in number formatter initialization is taken.
@@ -359,11 +359,11 @@ enum class SvxAuthorFormat {
 class EDITENG_DLLPUBLIC SvxAuthorField final : public SvxFieldData
 {
 private:
-    OUString   aName;
-    OUString   aFirstName;
-    OUString   aShortName;
-    SvxAuthorType   eType;
-    SvxAuthorFormat eFormat;
+    OUString   m_aName;
+    OUString   m_aFirstName;
+    OUString   m_aShortName;
+    SvxAuthorType   m_eType;
+    SvxAuthorFormat m_eFormat;
 
 public:
     static constexpr auto CLASS_ID = css::text::textfield::Type::AUTHOR;
@@ -375,11 +375,11 @@ public:
                                 SvxAuthorType eType = SvxAuthorType::Var,
                                 SvxAuthorFormat eFormat = SvxAuthorFormat::FullName );
 
-    SvxAuthorType           GetType() const { return eType; }
-    void                    SetType( SvxAuthorType eTp ) { eType = eTp; }
+    SvxAuthorType           GetType() const { return m_eType; }
+    void                    SetType( SvxAuthorType eTp ) { m_eType = eTp; }
 
-    SvxAuthorFormat         GetFormat() const { return eFormat; }
-    void                    SetFormat( SvxAuthorFormat eFmt ) { eFormat = eFmt; }
+    SvxAuthorFormat         GetFormat() const { return m_eFormat; }
+    void                    SetFormat( SvxAuthorFormat eFmt ) { m_eFormat = eFmt; }
 
     OUString                GetFormatted() const;
 

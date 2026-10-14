@@ -40,18 +40,18 @@
 namespace sdbtools
 {
 
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::sdbc::XConnection;
     using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::sdbc::SQLException;
     using ::com::sun::star::sdbc::XDatabaseMetaData;
     using ::com::sun::star::container::XNameAccess;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::com::sun::star::sdbcx::XTablesSupplier;
     using ::com::sun::star::sdb::XQueriesSupplier;
     using ::cpo::uno::Exception;
     using ::cpo::uno::Any;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
 
     namespace CommandType = ::com::sun::star::sdb::CommandType;
     namespace ErrorCondition = ::com::sun::star::sdb::ErrorCondition;
@@ -296,8 +296,8 @@ namespace sdbtools
         {
             Reference< XTablesSupplier > xSuppTables( _rxConnection, UNO_QUERY_THROW );
             Reference< XQueriesSupplier > xQueriesSupplier( _rxConnection, UNO_QUERY_THROW );
-            xTables.set( xSuppTables->getTables(), css::uno::UNO_SET_THROW );
-            xQueries.set( xQueriesSupplier->getQueries(), css::uno::UNO_SET_THROW );
+            xTables.set( xSuppTables->getTables(), cpo::uno::UNO_SET_THROW );
+            xQueries.set( xQueriesSupplier->getQueries(), cpo::uno::UNO_SET_THROW );
         }
         catch( const Exception& )
         {
@@ -328,7 +328,7 @@ namespace sdbtools
         Reference< XDatabaseMetaData > xMeta;
         try
         {
-            xMeta.set( _rxConnection->getMetaData(), css::uno::UNO_SET_THROW );
+            xMeta.set( _rxConnection->getMetaData(), cpo::uno::UNO_SET_THROW );
         }
         catch( const Exception& )
         {
@@ -353,58 +353,6 @@ namespace sdbtools
 
     ObjectNames::~ObjectNames()
     {
-    }
-
-    OUString ObjectNames::suggestName( ::sal_Int32 CommandType, const OUString& BaseName )
-    {
-        EntryGuard aGuard( *this );
-
-        PNameValidation pNameCheck( NameCheckFactory::createExistenceCheck( CommandType, getConnection() ) );
-
-        OUString sBaseName( BaseName );
-        if ( sBaseName.isEmpty() )
-        {
-            if ( CommandType == CommandType::TABLE )
-                sBaseName = DBA_RES(STR_BASENAME_TABLE);
-            else
-                sBaseName = DBA_RES(STR_BASENAME_QUERY);
-        }
-        else if( CommandType == CommandType::QUERY )
-        {
-            sBaseName=sBaseName.replace('/', '_');
-        }
-
-        OUString sName( sBaseName );
-        sal_Int32 i = 1;
-        while ( !pNameCheck->validateName( sName ) )
-        {
-            sName = sBaseName + " " + OUString::number(++i);
-        }
-
-        return sName;
-    }
-
-    OUString ObjectNames::convertToSQLName( const OUString& Name )
-    {
-        EntryGuard aGuard( *this );
-        Reference< XDatabaseMetaData > xMeta( getConnection()->getMetaData(), css::uno::UNO_SET_THROW );
-        return ::dbtools::convertName2SQLName( Name, xMeta->getExtraNameCharacters() );
-    }
-
-    bool ObjectNames::isNameUsed( ::sal_Int32 CommandType, const OUString& Name )
-    {
-        EntryGuard aGuard( *this );
-
-        PNameValidation pNameCheck( NameCheckFactory::createExistenceCheck( CommandType, getConnection()) );
-        return !pNameCheck->validateName( Name );
-    }
-
-    bool ObjectNames::isNameValid( ::sal_Int32 CommandType, const OUString& Name )
-    {
-        EntryGuard aGuard( *this );
-
-        PNameValidation pNameCheck( NameCheckFactory::createValidityCheck( CommandType, getConnection()) );
-        return pNameCheck->validateName( Name );
     }
 
     void ObjectNames::checkNameForCreate( ::sal_Int32 CommandType, const OUString& Name )

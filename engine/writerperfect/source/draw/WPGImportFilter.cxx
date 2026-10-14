@@ -37,25 +37,25 @@ bool WPGImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUStri
 }
 
 // XServiceInfo
-OUString SAL_CALL WPGImportFilter::getImplementationName()
+OUString WPGImportFilter::getImplementationName()
 {
     return u"com.sun.star.comp.Draw.WPGImportFilter"_ustr;
 }
 
-bool SAL_CALL WPGImportFilter::supportsService(const OUString& rServiceName)
+bool WPGImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL WPGImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> WPGImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Draw_WPGImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new WPGImportFilter(context));
 }

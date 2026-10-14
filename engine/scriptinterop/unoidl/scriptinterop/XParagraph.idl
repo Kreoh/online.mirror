@@ -11,9 +11,23 @@
 
 module scriptinterop {
 
-interface XParagraph : XBase
+interface XParagraph: XContainerElement
 {
-    string getText();
+    com::sun::star::beans::Optional<HorizontalAlignment> getAlignment();
+
+    com::sun::star::beans::Optional<GlyphType> getGlyphType();
+
+    com::sun::star::beans::Optional<ParagraphHeading> getHeading();
+
+    com::sun::star::beans::Optional<double> getIndentStart();
+
+    com::sun::star::beans::Optional<string> getListId();
+
+    long getNestingLevel();
+
+    com::sun::star::beans::Optional<boolean> isLeftToRight();
+
+    XParagraph setHeading([in] ParagraphHeading heading);
 };
 
 };

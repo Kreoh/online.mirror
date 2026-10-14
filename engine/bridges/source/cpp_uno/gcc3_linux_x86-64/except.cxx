@@ -21,7 +21,7 @@
 #include <sal/log.hxx>
 
 #include <cpo/uno/genfunc.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <typelib/typedescription.hxx>
 #include <uno/any2.h>
 
@@ -33,7 +33,7 @@
 #endif
 
 using namespace ::std;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::cpo::uno;
 using namespace ::__cxxabiv1;
 

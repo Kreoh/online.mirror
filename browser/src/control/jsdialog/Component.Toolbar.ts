@@ -78,7 +78,8 @@ class Toolbar extends JSDialogComponent {
 			children: items,
 		} as JSDialogJSON;
 
-		this.model.fullUpdate(json);
+		this.model.fullUpdateKeepingEntries(json);
+
 		this.builder.build(
 			this.parentContainer,
 			this.model.getSnapshot().children,
@@ -124,6 +125,15 @@ class Toolbar extends JSDialogComponent {
 			items: items,
 		});
 		this.create();
+	}
+
+	/// Fills a combo box with the given entries and records them in the model
+	/// so they are kept when the toolbar is rebuilt.
+	updateComboboxEntries(id: string, entries: string[]) {
+		const container = document.getElementById(id) as any;
+		if (container && container.updateEntries) container.updateEntries(entries);
+
+		this.model.widgetUpdate({ id: id, entries: entries } as WidgetWithEntries);
 	}
 
 	getItemElement(id: string) {
@@ -217,7 +227,7 @@ class Toolbar extends JSDialogComponent {
 		const items = this.getToolItems();
 		items.forEach((item) => {
 			if (
-				(window as any).ThisIsTheiOSApp &&
+				window.ThisIsTheiOSApp &&
 				window.mode.isTablet() &&
 				item.iosapptablet === false
 			) {
@@ -226,8 +236,7 @@ class Toolbar extends JSDialogComponent {
 				((window.mode.isSmallScreenDevice() && item.mobile === false) ||
 					(window.mode.isTablet() && item.tablet === false) ||
 					(window.mode.isDesktop() && item.desktop === false) ||
-					(!(window as any).ThisIsAMobileApp &&
-						item.mobilebrowser === false)) &&
+					(!window.ThisIsAMobileApp && item.mobilebrowser === false)) &&
 				!item.hidden
 			) {
 				toHide.push(item.id);
@@ -235,7 +244,7 @@ class Toolbar extends JSDialogComponent {
 				((window.mode.isSmallScreenDevice() && item.mobile === true) ||
 					(window.mode.isTablet() && item.tablet === true) ||
 					(window.mode.isDesktop() && item.desktop === true) ||
-					((window as any).ThisIsAMobileApp && item.mobilebrowser === true)) &&
+					(window.ThisIsAMobileApp && item.mobilebrowser === true)) &&
 				(item.hidden || item.visible === false)
 			) {
 				toShow.push(item.id);

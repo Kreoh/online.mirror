@@ -31,15 +31,16 @@
 #include <svtools/svtresid.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
 {
 
 UndoCommandDispatch::UndoCommandDispatch(
-    const Reference< uno::XComponentContext > & xContext,
+    const Reference< cpo::uno::XComponentContext > & xContext,
     rtl::Reference<::chart::ChartModel> xModel ) :
         CommandDispatch( xContext ),
         m_xModel(std::move( xModel ))

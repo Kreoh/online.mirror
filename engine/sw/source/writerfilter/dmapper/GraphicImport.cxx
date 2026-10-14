@@ -39,7 +39,7 @@
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <com/sun/star/text/WrapTextMode.hpp>
 #include <com/sun/star/text/XTextContent.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/table/ShadowFormat.hpp>
 
 #include <svx/svditer.hxx>
@@ -84,6 +84,7 @@
 #include <unotxdoc.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -113,11 +114,11 @@ class XInputStreamHelper : public cppu::WeakImplHelper<io::XInputStream>
 public:
     XInputStreamHelper(const sal_uInt8* buf, size_t len);
 
-    virtual ::sal_Int32 SAL_CALL readBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead ) override;
-    virtual ::sal_Int32 SAL_CALL readSomeBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead ) override;
-    virtual void SAL_CALL skipBytes( ::sal_Int32 nBytesToSkip ) override;
-    virtual ::sal_Int32 SAL_CALL available(  ) override;
-    virtual void SAL_CALL closeInput(  ) override;
+    virtual ::sal_Int32 readBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead ) override;
+    virtual ::sal_Int32 readSomeBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead ) override;
+    virtual void skipBytes( ::sal_Int32 nBytesToSkip ) override;
+    virtual ::sal_Int32 available(  ) override;
+    virtual void closeInput(  ) override;
 };
 
 }
@@ -314,7 +315,7 @@ comphelper::SequenceAsHashMap const & GraphicImport::getInteropGrabBag()
     return m_aInteropGrabBag;
 }
 
-GraphicImport::GraphicImport(uno::Reference<uno::XComponentContext> xComponentContext,
+GraphicImport::GraphicImport(uno::Reference<cpo::uno::XComponentContext> xComponentContext,
                              rtl::Reference<SwXTextDocument> xTextDoc,
                              DomainMapper& rDMapper,
                              GraphicImportType & rImportType,

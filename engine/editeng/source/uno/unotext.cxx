@@ -55,6 +55,7 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -310,7 +311,7 @@ uno::Reference< text::XTextRange > SvxUnoTextRangeBase::getStart()
     SvxUnoTextBase* pText = comphelper::getFromUnoTunnel<SvxUnoTextBase>( getText() );
 
     if(pText == nullptr)
-        throw uno::RuntimeException(u"Failed to retrieve a valid text base object from the Uno Tunnel"_ustr);
+        throw cpo::uno::RuntimeException(u"Failed to retrieve a valid text base object from the Uno Tunnel"_ustr);
 
     rtl::Reference<SvxUnoTextRange> pRange = new SvxUnoTextRange( *pText );
 
@@ -334,7 +335,7 @@ uno::Reference< text::XTextRange > SvxUnoTextRangeBase::getEnd()
     SvxUnoTextBase* pText = comphelper::getFromUnoTunnel<SvxUnoTextBase>( getText() );
 
     if(pText == nullptr)
-        throw uno::RuntimeException(u"Failed to retrieve a valid text base object from the Uno Tunnel"_ustr);
+        throw cpo::uno::RuntimeException(u"Failed to retrieve a valid text base object from the Uno Tunnel"_ustr);
 
     rtl::Reference<SvxUnoTextRange> pNew = new SvxUnoTextRange( *pText );
 
@@ -697,12 +698,12 @@ bool SvxUnoTextRangeBase::GetPropertyValueHelper(  SfxItemSet const & rSet, cons
         {
             SfxItemState eState = rSet.GetItemState( EE_PARA_NUMBULLET );
             if( eState != SfxItemState::SET && eState != SfxItemState::DEFAULT)
-                throw uno::RuntimeException(u"Invalid item state for paragraph numbering/bullet. Expected SET or DEFAULT."_ustr);
+                throw cpo::uno::RuntimeException(u"Invalid item state for paragraph numbering/bullet. Expected SET or DEFAULT."_ustr);
 
             const SvxNumBulletItem* pBulletItem = rSet.GetItem( EE_PARA_NUMBULLET );
 
             if( pBulletItem == nullptr )
-                throw uno::RuntimeException(u"Unable to retrieve paragraph numbering/bullet item."_ustr);
+                throw cpo::uno::RuntimeException(u"Unable to retrieve paragraph numbering/bullet item."_ustr);
 
             aAny <<= SvxCreateNumRule( pBulletItem->GetNumRule() );
         }
@@ -786,9 +787,10 @@ void SvxUnoTextRangeBase::_setPropertyValues( const cpo::uno::Sequence< OUString
 
     ESelection aSel( GetSelection() );
 
-    const OUString* pPropertyNames = aPropertyNames.getConstArray();
-    const cpo::uno::Any* pValues = aValues.getConstArray();
-    sal_Int32 nCount = aPropertyNames.getLength();
+    std::vector<const SfxItemPropertyMapEntry*> aEntries;
+    aEntries.reserve(aPropertyNames.getLength());
+    for (const OUString& rPropertyName : aPropertyNames)
+        aEntries.push_back(mpPropSet->getPropertyMapEntry(rPropertyName));
 
     sal_Int32 nEndPara = nPara;
     sal_Int32 nTempPara = nPara;
@@ -807,9 +809,10 @@ void SvxUnoTextRangeBase::_setPropertyValues( const cpo::uno::Sequence< OUString
 
     std::optional<OUString> aStyleName;
 
-    for( ; nCount; nCount--, pPropertyNames++, pValues++ )
+    for (sal_Int32 nIndex : SvxGetPropertyApplyOrder(mpPropSet->getPropertyMap(), aEntries))
     {
-        const SfxItemPropertyMapEntry* pMap = mpPropSet->getPropertyMapEntry( *pPropertyNames );
+        const SfxItemPropertyMapEntry* pMap = aEntries[nIndex];
+        const cpo::uno::Any& rValue = aValues[nIndex];
 
         if( pMap )
         {
@@ -817,7 +820,7 @@ void SvxUnoTextRangeBase::_setPropertyValues( const cpo::uno::Sequence< OUString
 
             if (pMap->nWID == WID_PARASTYLENAME)
             {
-                aStyleName.emplace((*pValues).get<OUString>());
+                aStyleName.emplace(rValue.get<OUString>());
             }
             else if( (nPara == -1) && !bParaAttrib )
             {
@@ -827,7 +830,7 @@ void SvxUnoTextRangeBase::_setPropertyValues( const cpo::uno::Sequence< OUString
                     pNewAttrSet.emplace( *pOldAttrSet->GetPool(), pOldAttrSet->GetRanges() );
                 }
 
-                setPropertyValue( pMap, *pValues, GetSelection(), *pOldAttrSet, *pNewAttrSet );
+                setPropertyValue( pMap, rValue, GetSelection(), *pOldAttrSet, *pNewAttrSet );
 
                 if( pMap->nWID >= EE_ITEMS_START && pMap->nWID <= EE_ITEMS_END )
                 {
@@ -846,7 +849,7 @@ void SvxUnoTextRangeBase::_setPropertyValues( const cpo::uno::Sequence< OUString
                     pNewParaSet.emplace( *pOldParaSet->GetPool(), pOldParaSet->GetRanges() );
                 }
 
-                setPropertyValue( pMap, *pValues, GetSelection(), *pOldParaSet, *pNewParaSet );
+                setPropertyValue( pMap, rValue, GetSelection(), *pOldParaSet, *pNewParaSet );
 
                 if( pMap->nWID >= EE_ITEMS_START && pMap->nWID <= EE_ITEMS_END )
                 {
@@ -2003,9 +2006,16 @@ static void SvxPropertyValuesToItemSet(
         SvxTextForwarder *pForwarder,
         sal_Int32 nPara)
 {
+    const SfxItemPropertyMap& rMap = pPropSet->getPropertyMap();
+    std::vector<const SfxItemPropertyMapEntry*> aEntries;
+    aEntries.reserve(rPropertyValues.getLength());
     for (const beans::PropertyValue& rProp : rPropertyValues)
+        aEntries.push_back(rMap.getByName(rProp.Name));
+
+    for (sal_Int32 nIndex : SvxGetPropertyApplyOrder(rMap, aEntries))
     {
-        const SfxItemPropertyMapEntry *pEntry = pPropSet->getPropertyMap().getByName( rProp.Name );
+        const beans::PropertyValue& rProp = rPropertyValues[nIndex];
+        const SfxItemPropertyMapEntry *pEntry = aEntries[nIndex];
         if (!pEntry)
             throw beans::UnknownPropertyException( "Unknown property: " + rProp.Name );
         // Note: there is no need to take special care of the properties
@@ -2015,7 +2025,7 @@ static void SvxPropertyValuesToItemSet(
 
         if (pEntry->nFlags & beans::PropertyAttribute::READONLY)
             // should be PropertyVetoException which is not yet defined for the new import API's functions
-            throw uno::RuntimeException("Property is read-only: " + rProp.Name );
+            throw cpo::uno::RuntimeException("Property is read-only: " + rProp.Name );
             //throw PropertyVetoException ("Property is read-only: " + rProp.Name );
 
         if (pEntry->nWID == WID_FONTDESC)

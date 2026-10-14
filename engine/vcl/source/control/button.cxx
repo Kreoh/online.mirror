@@ -33,6 +33,7 @@
 #include <vcl/salnativewidgets.hxx>
 #include <vcl/toolkit/edit.hxx>
 #include <vcl/layout.hxx>
+#include <vcl/kit.hxx>
 #include <vcl/stdtext.hxx>
 #include <vcl/uitest/uiobject.hxx>
 
@@ -118,7 +119,7 @@ void Button::dispose()
     Control::dispose();
 }
 
-void Button::SetCommandHandler(const OUString& aCommand, const css::uno::Reference<css::frame::XFrame>& rFrame)
+void Button::SetCommandHandler(const OUString& aCommand, const cpo::uno::Reference<css::frame::XFrame>& rFrame)
 {
     maCommand = aCommand;
     SetClickHdl( LINK( this, Button, dispatchCommandHandler) );
@@ -616,6 +617,12 @@ void Button::DumpAsPropertyTree(tools::JsonWriter& rJsonWriter)
     rJsonWriter.put("text", GetText());
     if (HasImage())
     {
+        // Emit the icon name first so COOL can resolve it as a local SVG; the
+        // base64 bitmap below is the fallback when it ships no such icon.
+        const OUString sIconName = vcl::kit::svgIconName(GetModeImage().GetStock());
+        if (!sIconName.isEmpty())
+            rJsonWriter.put("icon", sIconName);
+
         SvMemoryStream aOStm(6535, 6535);
         if(GraphicConverter::Export(aOStm, GetModeImage().GetBitmap(), ConvertDataFormat::PNG) == ERRCODE_NONE)
         {

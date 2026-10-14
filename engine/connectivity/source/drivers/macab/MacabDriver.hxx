@@ -22,7 +22,7 @@
 #include <com/sun/star/sdbc/XDriver.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/frame/XTerminateListener.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/compbase.hxx>
 #include <osl/module.h>
 
@@ -60,7 +60,7 @@ namespace connectivity::macab
 
         /** initializes the implementation module.
 
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if the module could be loaded, but required symbols are missing
             @throws css::sdbc::SQLException
                 if no Mac OS was found at all
@@ -74,7 +74,7 @@ namespace connectivity::macab
         /** creates a new connection
             @precond
                 <member>init</member> has been called before
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if no connection object could be created (which is a severe error, normally impossible)
         */
         MacabConnection*  createConnection( MacabDriver* _pDriver ) const;
@@ -86,7 +86,7 @@ namespace connectivity::macab
 
             @return <TRUE/> if the module could be loaded successfully.
 
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if the module could be loaded, but required symbols are missing
         */
         bool    impl_loadModule();
@@ -109,19 +109,19 @@ namespace connectivity::macab
         ::osl::Mutex                m_aMutex;           // mutex is need to control member access
         OWeakRefArray               m_xConnections;     // vector containing a list of all the
                                                         //  MacabConnection objects for this Driver
-        css::uno::Reference< css::uno::XComponentContext >
+        cpo::uno::Reference< cpo::uno::XComponentContext >
                                     m_xContext;       // the multi-service factory
         MacabImplModule             m_aImplModule;
 
     public:
-        css::uno::Reference< css::uno::XComponentContext > const &
+        cpo::uno::Reference< cpo::uno::XComponentContext > const &
         getComponentContext() const { return m_xContext; }
 
         /** returns the path of our configuration settings
         */
         static OUString  impl_getConfigurationSettingsPath();
 
-        explicit MacabDriver(const css::uno::Reference< css::uno::XComponentContext >& _rxContext);
+        explicit MacabDriver(const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext);
     protected:
 
         // OComponentHelper
@@ -133,7 +133,7 @@ namespace connectivity::macab
         virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
         // XDriver
-        virtual css::uno::Reference< css::sdbc::XConnection > connect( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
+        virtual cpo::uno::Reference< css::sdbc::XConnection > connect( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
         virtual bool acceptsURL( const OUString& url ) override;
         virtual cpo::uno::Sequence< css::sdbc::DriverPropertyInfo > getPropertyInfo( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
         virtual sal_Int32 getMajorVersion() override;

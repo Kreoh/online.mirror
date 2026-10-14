@@ -45,8 +45,8 @@
 
 using namespace utl;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::task;
 using namespace com::sun::star::ucb;
@@ -399,7 +399,7 @@ PasswordContainer::~PasswordContainer()
     }
 }
 
-void SAL_CALL PasswordContainer::disposing( const EventObject& )
+void PasswordContainer::disposing( const EventObject& )
 {
     std::unique_lock aGuard( mMutex );
 
@@ -469,7 +469,7 @@ std::vector< OUString > PasswordContainer::DecodePasswords( std::u16string_view 
     // problems with decoding
     OSL_FAIL( "Problem with decoding" );
     throw css::task::NoMasterException(
-        u"Can't decode!"_ustr, css::uno::Reference<css::uno::XInterface>(), mode);
+        u"Can't decode!"_ustr, cpo::uno::Reference<cpo::uno::XInterface>(), mode);
 }
 
 OUString PasswordContainer::EncodePasswords(const std::vector< OUString >& lines, std::u16string_view aIV, std::u16string_view aMasterPasswd)
@@ -634,7 +634,7 @@ Sequence< UserRecord > PasswordContainer::CopyToUserRecordSequence( const std::v
 }
 
 
-void SAL_CALL PasswordContainer::add( const OUString& Url, const OUString& UserName, const Sequence< OUString >& Passwords, const Reference< XInteractionHandler >& aHandler )
+void PasswordContainer::add( const OUString& Url, const OUString& UserName, const Sequence< OUString >& Passwords, const Reference< XInteractionHandler >& aHandler )
 {
     std::unique_lock aGuard( mMutex );
 
@@ -642,7 +642,7 @@ void SAL_CALL PasswordContainer::add( const OUString& Url, const OUString& UserN
 }
 
 
-void SAL_CALL PasswordContainer::addPersistent( const OUString& Url, const OUString& UserName, const Sequence< OUString >& Passwords, const Reference< XInteractionHandler >& aHandler  )
+void PasswordContainer::addPersistent( const OUString& Url, const OUString& UserName, const Sequence< OUString >& Passwords, const Reference< XInteractionHandler >& aHandler  )
 {
     std::unique_lock aGuard( mMutex );
 
@@ -700,13 +700,13 @@ void PasswordContainer::PrivateAdd( const OUString& Url, const OUString& UserNam
 }
 
 
-UrlRecord SAL_CALL PasswordContainer::find( const OUString& aURL, const Reference< XInteractionHandler >& aHandler  )
+UrlRecord PasswordContainer::find( const OUString& aURL, const Reference< XInteractionHandler >& aHandler  )
 {
     return find( aURL, u"", false, aHandler );
 }
 
 
-UrlRecord SAL_CALL PasswordContainer::findForName( const OUString& aURL, const OUString& aName, const Reference< XInteractionHandler >& aHandler  )
+UrlRecord PasswordContainer::findForName( const OUString& aURL, const OUString& aName, const Reference< XInteractionHandler >& aHandler  )
 {
     return find( aURL, aName, true, aHandler );
 }
@@ -917,7 +917,7 @@ OUString const & PasswordContainer::GetMasterPassword( const Reference< XInterac
 }
 
 
-void SAL_CALL PasswordContainer::remove( const OUString& aURL, const OUString& aName )
+void PasswordContainer::remove( const OUString& aURL, const OUString& aName )
 {
     std::unique_lock aGuard( mMutex );
 
@@ -957,7 +957,7 @@ void SAL_CALL PasswordContainer::remove( const OUString& aURL, const OUString& a
 }
 
 
-void SAL_CALL PasswordContainer::removePersistent( const OUString& aURL, const OUString& aName )
+void PasswordContainer::removePersistent( const OUString& aURL, const OUString& aName )
 {
     std::unique_lock aGuard( mMutex );
 
@@ -1002,7 +1002,7 @@ void SAL_CALL PasswordContainer::removePersistent( const OUString& aURL, const O
         m_aContainer.erase( aIter );
 }
 
-void SAL_CALL PasswordContainer::removeAllPersistent()
+void PasswordContainer::removeAllPersistent()
 {
     std::unique_lock aGuard(mMutex);
     removeAllPersistent(aGuard);
@@ -1043,7 +1043,7 @@ void PasswordContainer::removeAllPersistent(std::unique_lock<std::mutex>& /*rGua
     }
 }
 
-Sequence< UrlRecord > SAL_CALL PasswordContainer::getAllPersistent( const Reference< XInteractionHandler >& xHandler )
+Sequence< UrlRecord > PasswordContainer::getAllPersistent( const Reference< XInteractionHandler >& xHandler )
 {
     std::unique_lock aGuard( mMutex );
     return getAllPersistent(aGuard, xHandler);
@@ -1076,7 +1076,7 @@ Sequence< UrlRecord > PasswordContainer::getAllPersistent( std::unique_lock<std:
     return aResult;
 }
 
-bool SAL_CALL PasswordContainer::authorizateWithMasterPassword( const uno::Reference< task::XInteractionHandler >& xHandler )
+bool PasswordContainer::authorizateWithMasterPassword( const uno::Reference< task::XInteractionHandler >& xHandler )
 {
     std::unique_lock aGuard( mMutex );
     return authorizateWithMasterPassword(aGuard, xHandler);
@@ -1102,7 +1102,7 @@ bool PasswordContainer::authorizateWithMasterPassword( std::unique_lock<std::mut
             if ( !xTmpHandler.is() )
             {
                 uno::Reference< lang::XMultiServiceFactory > xFactory( mComponent, uno::UNO_QUERY_THROW );
-                uno::Reference< uno::XComponentContext > xContext( comphelper::getComponentContext(xFactory) );
+                uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getComponentContext(xFactory) );
                 xTmpHandler.set( InteractionHandler::createWithParent(xContext, nullptr), uno::UNO_QUERY_THROW );
             }
 
@@ -1140,7 +1140,7 @@ bool PasswordContainer::authorizateWithMasterPassword( std::unique_lock<std::mut
     return bResult;
 }
 
-bool SAL_CALL PasswordContainer::changeMasterPassword( const uno::Reference< task::XInteractionHandler >& xHandler )
+bool PasswordContainer::changeMasterPassword( const uno::Reference< task::XInteractionHandler >& xHandler )
 {
     bool bResult = false;
     uno::Reference< task::XInteractionHandler > xTmpHandler = xHandler;
@@ -1151,7 +1151,7 @@ bool SAL_CALL PasswordContainer::changeMasterPassword( const uno::Reference< tas
         if ( !xTmpHandler.is() )
         {
             uno::Reference< lang::XMultiServiceFactory > xFactory( mComponent, uno::UNO_QUERY_THROW );
-            uno::Reference< uno::XComponentContext > xContext( comphelper::getComponentContext(xFactory) );
+            uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getComponentContext(xFactory) );
             xTmpHandler.set( InteractionHandler::createWithParent(xContext, nullptr), uno::UNO_QUERY_THROW );
         }
 
@@ -1194,7 +1194,7 @@ bool SAL_CALL PasswordContainer::changeMasterPassword( const uno::Reference< tas
     return bResult;
 }
 
-void SAL_CALL PasswordContainer::removeMasterPassword()
+void PasswordContainer::removeMasterPassword()
 {
     std::unique_lock aGuard(mMutex);
     removeMasterPassword(aGuard);
@@ -1212,23 +1212,23 @@ void PasswordContainer::removeMasterPassword(std::unique_lock<std::mutex>& rGuar
     }
 }
 
-bool SAL_CALL PasswordContainer::hasMasterPassword(  )
+bool PasswordContainer::hasMasterPassword(  )
 {
     std::unique_lock aGuard( mMutex );
 
     if ( !m_xStorageFile )
-        throw uno::RuntimeException(u"storage file not set"_ustr);
+        throw cpo::uno::RuntimeException(u"storage file not set"_ustr);
 
     OUString aEncodedMP, aEncodedMPIV;
     return ( m_xStorageFile->useStorage() && m_xStorageFile->getEncodedMasterPassword( aEncodedMP, aEncodedMPIV ) );
 }
 
-bool SAL_CALL PasswordContainer::allowPersistentStoring( bool bAllow )
+bool PasswordContainer::allowPersistentStoring( bool bAllow )
 {
     std::unique_lock aGuard( mMutex );
 
     if ( !m_xStorageFile )
-        throw uno::RuntimeException(u"storage file not set"_ustr);
+        throw cpo::uno::RuntimeException(u"storage file not set"_ustr);
 
     if ( !bAllow )
         removeMasterPassword(aGuard);
@@ -1240,17 +1240,17 @@ bool SAL_CALL PasswordContainer::allowPersistentStoring( bool bAllow )
     return !bAllow;
 }
 
-bool SAL_CALL PasswordContainer::isPersistentStoringAllowed()
+bool PasswordContainer::isPersistentStoringAllowed()
 {
     std::unique_lock aGuard( mMutex );
 
     if ( !m_xStorageFile )
-        throw uno::RuntimeException(u"storage file not set"_ustr);
+        throw cpo::uno::RuntimeException(u"storage file not set"_ustr);
 
     return m_xStorageFile->useStorage();
 }
 
-bool SAL_CALL PasswordContainer::useDefaultMasterPassword( const uno::Reference< task::XInteractionHandler >& xHandler )
+bool PasswordContainer::useDefaultMasterPassword( const uno::Reference< task::XInteractionHandler >& xHandler )
 {
     bool bResult = false;
     uno::Reference< task::XInteractionHandler > xTmpHandler = xHandler;
@@ -1261,7 +1261,7 @@ bool SAL_CALL PasswordContainer::useDefaultMasterPassword( const uno::Reference<
         if ( !xTmpHandler.is() )
         {
             uno::Reference< lang::XMultiServiceFactory > xFactory( mComponent, uno::UNO_QUERY_THROW );
-            uno::Reference< uno::XComponentContext > xContext( comphelper::getComponentContext(xFactory) );
+            uno::Reference< cpo::uno::XComponentContext > xContext( comphelper::getComponentContext(xFactory) );
             xTmpHandler.set( InteractionHandler::createWithParent(xContext, nullptr), uno::UNO_QUERY_THROW );
         }
 
@@ -1302,34 +1302,34 @@ bool SAL_CALL PasswordContainer::useDefaultMasterPassword( const uno::Reference<
 
 }
 
-bool SAL_CALL PasswordContainer::isDefaultMasterPasswordUsed()
+bool PasswordContainer::isDefaultMasterPasswordUsed()
 {
     std::unique_lock aGuard( mMutex );
 
     if ( !m_xStorageFile )
-        throw uno::RuntimeException(u"storage file not set"_ustr);
+        throw cpo::uno::RuntimeException(u"storage file not set"_ustr);
 
     OUString aEncodedMP, aEncodedMPIV;
     return ( m_xStorageFile->useStorage() && m_xStorageFile->getEncodedMasterPassword( aEncodedMP, aEncodedMPIV ) && aEncodedMP.isEmpty() );
 }
 
 
-void SAL_CALL PasswordContainer::addUrl( const OUString& Url, bool MakePersistent )
+void PasswordContainer::addUrl( const OUString& Url, bool MakePersistent )
 {
     mUrlContainer.add( Url, MakePersistent );
 }
 
-OUString SAL_CALL PasswordContainer::findUrl( const OUString& Url )
+OUString PasswordContainer::findUrl( const OUString& Url )
 {
     return mUrlContainer.find( Url );
 }
 
-void SAL_CALL PasswordContainer::removeUrl( const OUString& Url )
+void PasswordContainer::removeUrl( const OUString& Url )
 {
     mUrlContainer.remove( Url );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL PasswordContainer::getUrls( bool OnlyPersistent )
+cpo::uno::Sequence< OUString > PasswordContainer::getUrls( bool OnlyPersistent )
 {
     return mUrlContainer.list( OnlyPersistent );
 }
@@ -1376,24 +1376,24 @@ void PasswordContainer::Notify()
     }
 }
 
-OUString SAL_CALL PasswordContainer::getImplementationName(  )
+OUString PasswordContainer::getImplementationName(  )
 {
     return u"stardiv.svl.PasswordContainer"_ustr;
 }
 
-bool SAL_CALL PasswordContainer::supportsService( const OUString& ServiceName )
+bool PasswordContainer::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this,  ServiceName );
 }
 
-Sequence< OUString > SAL_CALL PasswordContainer::getSupportedServiceNames(  )
+Sequence< OUString > PasswordContainer::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.task.PasswordContainer"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 svl_PasswordContainer_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new PasswordContainer(context));
 }

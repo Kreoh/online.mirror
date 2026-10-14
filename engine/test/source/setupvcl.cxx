@@ -35,36 +35,36 @@ struct Hook { // LINK only works as a member of a class...
 // context is disposed (redundantly again in unobootstrapprotector) from within
 // DeInitVCL (cf. Desktop::DeInit, desktop/source/app/app.cxx):
 IMPL_STATIC_LINK_NOARG(Hook, deinitHook, LinkParamNone *, void) {
-    css::uno::Reference<css::uno::XComponentContext> context;
+    cpo::uno::Reference<cpo::uno::XComponentContext> context;
     try {
         context = comphelper::getProcessComponentContext();
-    } catch (css::uno::RuntimeException &) {}
+    } catch (cpo::uno::RuntimeException &) {}
 
     if (!context)
         return;
 
-    css::uno::Reference<css::lang::XMultiServiceFactory> config;
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> config;
     try {
         config = css::configuration::theDefaultProvider::get(context);
-    } catch (css::uno::DeploymentException &) {}
+    } catch (cpo::uno::DeploymentException &) {}
     if (config) {
         utl::ConfigManager::storeConfigItems();
-        css::uno::Reference<css::util::XFlushable>(
-            config, css::uno::UNO_QUERY_THROW)->flush();
+        cpo::uno::Reference<css::util::XFlushable>(
+            config, cpo::uno::UNO_QUERY_THROW)->flush();
     }
 
     // the desktop has to be terminate() before it can be dispose()
-    css::uno::Reference<css::frame::XDesktop> xDesktop;
+    cpo::uno::Reference<css::frame::XDesktop> xDesktop;
     try {
         xDesktop = css::frame::Desktop::create(comphelper::getProcessComponentContext());
-    } catch (css::uno::DeploymentException &) {}
+    } catch (cpo::uno::DeploymentException &) {}
     if (xDesktop)
         try {
             xDesktop->terminate();
-        } catch (css::uno::DeploymentException &) {}
+        } catch (cpo::uno::DeploymentException &) {}
 
-    css::uno::Reference<css::lang::XComponent>(
-        context, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference<css::lang::XComponent>(
+        context, cpo::uno::UNO_QUERY_THROW)->dispose();
 
     comphelper::setProcessServiceFactory(nullptr);
 }

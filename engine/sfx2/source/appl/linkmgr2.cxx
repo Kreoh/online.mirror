@@ -57,8 +57,8 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::Reference;
 using ::com::sun::star::lang::XComponent;
 using ::com::sun::star::util::XCloseable;
 
@@ -289,7 +289,6 @@ static void disallowAllLinksUpdate(SvBaseLink* pShellProvider)
 
 void LinkManager::UpdateAllLinks(
     bool bAskUpdate,
-    weld::Window* pParentWin,
     OUString const & referer )
 {
     // when active content is disabled don't bother updating all links
@@ -344,7 +343,7 @@ void LinkManager::UpdateAllLinks(
             aMsg = aMsg.replaceFirst("%{filename}",
                                      aURL.GetLastName(INetURLObject::DecodeMechanism::WithCharset));
 
-            std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(pParentWin,
+            std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(/*pParentWin*/nullptr,
                                                            VclMessageType::Question, VclButtonsType::YesNo, aMsg));
             xQueryBox->set_default_response(RET_YES);
 

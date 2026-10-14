@@ -23,7 +23,7 @@
 
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::xml::dom;
 using namespace css::xml::sax;
 
@@ -39,7 +39,7 @@ namespace DOM
 
     void CProcessingInstruction::saxify(
             const Reference< XDocumentHandler >& i_xHandler) {
-        if (!i_xHandler.is()) throw RuntimeException();
+        if (!i_xHandler.is()) throw cpo::uno::RuntimeException();
         Reference< XExtendedDocumentHandler > xExtended(i_xHandler, UNO_QUERY);
         if (xExtended.is()) {
             xExtended->processingInstruction(getTarget(), getData());
@@ -49,7 +49,7 @@ namespace DOM
     /**
     The content of this processing instruction.
     */
-    OUString SAL_CALL
+    OUString
     CProcessingInstruction::getData()
     {
         ::osl::MutexGuard const g(m_rMutex);
@@ -70,7 +70,7 @@ namespace DOM
     /**
     The target of this processing instruction.
     */
-    OUString SAL_CALL
+    OUString
     CProcessingInstruction::getTarget()
     {
         ::osl::MutexGuard const g(m_rMutex);
@@ -91,12 +91,12 @@ namespace DOM
     /**
     The content of this processing instruction.
     */
-    void SAL_CALL CProcessingInstruction::setData(OUString const& rData)
+    void CProcessingInstruction::setData(OUString const& rData)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
         if (nullptr == m_aNodePtr) {
-            throw RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
 
         OString const data(
@@ -107,7 +107,7 @@ namespace DOM
         m_aNodePtr->content = xmlStrdup(pData);
     }
 
-    OUString SAL_CALL
+    OUString
     CProcessingInstruction::getNodeName()
     {
         ::osl::MutexGuard const g(m_rMutex);
@@ -122,12 +122,12 @@ namespace DOM
         return ret;
     }
 
-    OUString SAL_CALL CProcessingInstruction::getNodeValue()
+    OUString CProcessingInstruction::getNodeValue()
     {
         return getData();
     }
 
-    void SAL_CALL
+    void
     CProcessingInstruction::setNodeValue(OUString const& rNodeValue)
     {
         return setData(rNodeValue);

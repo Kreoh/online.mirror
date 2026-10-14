@@ -22,6 +22,7 @@
 #include "vbafiledialogitems.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 namespace {
@@ -32,11 +33,11 @@ class FileDialogItemEnumeration : public ::cppu::WeakImplHelper< container::XEnu
     std::vector< OUString >::iterator mIt;
 public:
     explicit FileDialogItemEnumeration( std::vector< OUString >&& rVector ) : m_sItems( std::move(rVector) ), mIt( m_sItems.begin() ) {}
-    virtual bool SAL_CALL hasMoreElements() override
+    virtual bool hasMoreElements() override
     {
         return ( mIt != m_sItems.end() );
     }
-    virtual cpo::uno::Any SAL_CALL nextElement() override
+    virtual cpo::uno::Any nextElement() override
     {
         if( !hasMoreElements() )
             throw container::NoSuchElementException();
@@ -48,15 +49,15 @@ public:
 }
 
 ScVbaFileDialogSelectedItems::ScVbaFileDialogSelectedItems(
-        const css::uno::Reference< ov::XHelperInterface >& xParent
-       ,const css::uno::Reference< css::uno::XComponentContext >& xContext
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent
+       ,const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext
        ,std::vector< OUString >&& rItems)
     : FileDialogSelectedItems_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() )
     , m_sItems(std::move(rItems)) {}
 
 
 // XEnumerationAccess
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaFileDialogSelectedItems::getElementType()
 {
     return cppu::UnoType<OUString>::get();
@@ -73,16 +74,16 @@ ScVbaFileDialogSelectedItems::createCollectionObject( const cpo::uno::Any& aSour
 {
     sal_Int32 nPosition = -1;
     if (!(aSource >>= nPosition))
-        throw uno::RuntimeException(u"not an sal_Int32"_ustr);
+        throw cpo::uno::RuntimeException(u"not an sal_Int32"_ustr);
     if (nPosition < 0 || o3tl::make_unsigned(nPosition) >= m_sItems.size())
-        throw uno::RuntimeException(u"out of range"_ustr);
+        throw cpo::uno::RuntimeException(u"out of range"_ustr);
 
     OUString sPath = m_sItems[nPosition];
     return cpo::uno::Any( sPath );
 }
 
 // Methods
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaFileDialogSelectedItems::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex*/ )
 {
     sal_Int32 nPosition = -1;
@@ -92,7 +93,7 @@ ScVbaFileDialogSelectedItems::Item( const cpo::uno::Any& aIndex, const cpo::uno:
 
     if( nPosition < 0 || nPosition >= getCount() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     return createCollectionObject( cpo::uno::Any( nPosition ) );

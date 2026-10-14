@@ -121,6 +121,7 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/dialog/dialcontrol \
     svx/source/dialog/dlgctl3d \
     svx/source/dialog/dlgctrl \
+    svx/source/dialog/LineEndStyleBoxes \
     svx/source/dialog/fntctrl \
     svx/source/dialog/fontwork \
     svx/source/dialog/frmdirlbox \
@@ -141,11 +142,11 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/dialog/rlrcitem \
     svx/source/dialog/rubydialog \
     svx/source/dialog/rulritem \
-    svx/source/dialog/FileExportedDialog \
     svx/source/dialog/SpellDialogChildWindow \
     svx/source/dialog/srchctrl \
     svx/source/dialog/srchdlg \
     svx/source/dialog/strarray \
+    svx/source/dialog/SvxSecurityLabelDialog \
     svx/source/dialog/svxbmpnumiconview \
     svx/source/dialog/svxgraphicitem \
     svx/source/dialog/svxruler \
@@ -221,7 +222,6 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/sidebar/line/LinePropertyPanel \
     svx/source/sidebar/line/LinePropertyPanelBase \
     svx/source/sidebar/line/LineWidthPopup \
-    $(call gb_Helper_optional,AVMEDIA,svx/source/sidebar/media/MediaPlaybackPanel) \
     svx/source/sidebar/possize/PosSizePropertyPanel \
     svx/source/sidebar/shapes/DefaultShapesPanel \
     svx/source/sidebar/shapes/ShapesUtil \
@@ -252,6 +252,7 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/tbxctrls/layctrl \
     svx/source/tbxctrls/lboxctrl \
     svx/source/tbxctrls/linewidthctrl \
+    svx/source/tbxctrls/NotebookbarLineController \
     svx/source/tbxctrls/tbunocontroller \
     svx/source/tbxctrls/tbunosearchcontrollers \
     svx/source/tbxctrls/tbxcolor \

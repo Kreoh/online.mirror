@@ -88,8 +88,8 @@ using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::embed;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 
 using ::sax_fastparser::FSHelperPtr;
@@ -149,6 +149,8 @@ const Sequence< beans::Pair< OUString, sal_Int32 > >& NamespaceIds()
              NMSP_p14},
             {u"http://schemas.microsoft.com/office/powerpoint/2012/main"_ustr,
              NMSP_p15},
+            {u"http://schemas.microsoft.com/office/powerpoint/2018/8/main"_ustr,
+             NMSP_p188},
             {u"http://schemas.microsoft.com/office/spreadsheetml/2011/1/ac"_ustr,
              NMSP_x12ac},
             {u"http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"_ustr,
@@ -166,6 +168,8 @@ const Sequence< beans::Pair< OUString, sal_Int32 > >& NamespaceIds()
             {u"http://schemas.microsoft.com/office/spreadsheetml/2019/namedsheetviews"_ustr, NMSP_xnsv},
             {u"http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"_ustr, NMSP_xthreaded},
             {u"http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray"_ustr, NMSP_xda},
+            {u"http://schemas.microsoft.com/office/spreadsheetml/2017/richdata"_ustr, NMSP_xlrd},
+            {u"http://schemas.microsoft.com/office/spreadsheetml/2022/richvaluerel"_ustr, NMSP_xlrvr},
         };
     return SINGLETON;
 };
@@ -266,7 +270,7 @@ void XmlFilterBase::checkDocumentProperties(const Reference<XDocumentProperties>
     mbMSO2007 = true;
 }
 
-void XmlFilterBase::putPropertiesToDocumentGrabBag(const css::uno::Reference<css::lang::XComponent>& xDstDoc,
+void XmlFilterBase::putPropertiesToDocumentGrabBag(const cpo::uno::Reference<css::lang::XComponent>& xDstDoc,
                                                    const comphelper::SequenceAsHashMap& rProperties)
 {
     try
@@ -1140,7 +1144,7 @@ OUString XmlFilterBase::getNamespaceURL(sal_Int32 nNSID) const
     return itr->second;
 }
 
-void XmlFilterBase::importCustomFragments(css::uno::Reference<css::embed::XStorage> const & xDocumentStorage)
+void XmlFilterBase::importCustomFragments(cpo::uno::Reference<css::embed::XStorage> const & xDocumentStorage)
 {
     Reference<XRelationshipAccess> xRelations(xDocumentStorage, UNO_QUERY);
     if (!xRelations.is())

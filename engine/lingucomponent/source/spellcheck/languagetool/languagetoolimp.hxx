@@ -25,7 +25,7 @@
 #include <com/sun/star/linguistic2/ProofreadingResult.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <linguistic/misc.hxx>
 #include <string_view>
 #include <o3tl/lru_map.hxx>
@@ -38,41 +38,41 @@ class LanguageToolGrammarChecker
     cpo::uno::Sequence<css::lang::Locale> m_aSuppLocales;
     o3tl::lru_map<OString, cpo::uno::Sequence<css::linguistic2::SingleProofreadingError>>
         mCachedResults;
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
     OUString maLastErrorCheckerURL;
     LanguageToolGrammarChecker(const LanguageToolGrammarChecker&) = delete;
     LanguageToolGrammarChecker& operator=(const LanguageToolGrammarChecker&) = delete;
 
 public:
-    LanguageToolGrammarChecker(const css::uno::Reference<css::uno::XComponentContext>& xContext);
+    LanguageToolGrammarChecker(const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext);
     virtual ~LanguageToolGrammarChecker() override;
 
     // XSupportedLocales
-    virtual cpo::uno::Sequence<css::lang::Locale> SAL_CALL getLocales() override;
-    virtual bool SAL_CALL hasLocale(const css::lang::Locale& rLocale) override;
+    virtual cpo::uno::Sequence<css::lang::Locale> getLocales() override;
+    virtual bool hasLocale(const css::lang::Locale& rLocale) override;
 
     // XProofReader
-    virtual bool SAL_CALL isSpellChecker() override;
-    virtual css::linguistic2::ProofreadingResult SAL_CALL
+    virtual bool isSpellChecker() override;
+    virtual css::linguistic2::ProofreadingResult
     doProofreading(const OUString& aDocumentIdentifier, const OUString& aText,
                    const css::lang::Locale& aLocale, sal_Int32 nStartOfSentencePosition,
                    sal_Int32 nSuggestedBehindEndOfSentencePosition,
                    const cpo::uno::Sequence<css::beans::PropertyValue>& aProperties) override;
 
-    virtual void SAL_CALL ignoreRule(const OUString& aRuleIdentifier,
+    virtual void ignoreRule(const OUString& aRuleIdentifier,
                                      const css::lang::Locale& aLocale) override;
-    virtual void SAL_CALL resetIgnoreRules() override;
+    virtual void resetIgnoreRules() override;
 
     // XServiceDisplayName
-    virtual OUString SAL_CALL getServiceDisplayName(const css::lang::Locale& rLocale) override;
+    virtual OUString getServiceDisplayName(const css::lang::Locale& rLocale) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

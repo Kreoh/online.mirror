@@ -21,18 +21,18 @@ typedef CollTestImplHelper<ooo::vba::word::XContentControls> SwVbaContentControl
 class SwVbaContentControls : public SwVbaContentControls_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaContentControls(const css::uno::Reference<ov::XHelperInterface>& xParent,
-                         const css::uno::Reference<css::uno::XComponentContext>& xContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaContentControls(const cpo::uno::Reference<ov::XHelperInterface>& xParent,
+                         const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
                          const rtl::Reference<SwXTextDocument>& xTextDocument, const OUString& rTag,
                          const OUString& rTitle);
 
     // XContentControls
-    //css::uno::Reference<ooo::vba::word::XContentControl> SAL_CALL Add(const cpo::uno::Any& Type, const cpo::uno::Any& Range) override;
+    //cpo::uno::Reference<ooo::vba::word::XContentControl> Add(const cpo::uno::Any& Type, const cpo::uno::Any& Range) override;
 
     // XEnumerationAccess
-    cpo::uno::Type SAL_CALL getElementType() override;
-    css::uno::Reference<css::container::XEnumeration> SAL_CALL createEnumeration() override;
+    cpo::uno::Type getElementType() override;
+    cpo::uno::Reference<css::container::XEnumeration> createEnumeration() override;
 
     // SwVbaContentControls_BASE
     cpo::uno::Any createCollectionObject(const cpo::uno::Any& aSource) override;

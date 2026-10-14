@@ -54,7 +54,8 @@
 #include <o3tl/string_view.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::form;
@@ -522,7 +523,7 @@ bool FmFormView::KeyInput(const KeyEvent& rKEvt, vcl::Window* pWin)
     return bDone;
 }
 
-bool FmFormView::checkUnMarkAll(const Reference< XInterface >& _xSource)
+bool FmFormView::checkUnMarkAll(const Reference< cpo::uno::XInterface >& _xSource)
 {
     Reference< css::awt::XControl> xControl(m_pImpl->m_xWindow,UNO_QUERY);
     bool bRet = !xControl.is() || !_xSource.is() || _xSource != xControl->getModel();

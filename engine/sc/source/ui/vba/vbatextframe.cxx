@@ -24,13 +24,14 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-ScVbaTextFrame::ScVbaTextFrame( cpo::uno::Sequence< cpo::uno::Any> const & args, uno::Reference< uno::XComponentContext> const & xContext ) :  ScVbaTextFrame_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext, getXSomethingFromArgs< drawing::XShape >( args, 1, false ) )
+ScVbaTextFrame::ScVbaTextFrame( cpo::uno::Sequence< cpo::uno::Any> const & args, uno::Reference< cpo::uno::XComponentContext> const & xContext ) :  ScVbaTextFrame_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext, getXSomethingFromArgs< drawing::XShape >( args, 1, false ) )
 {
 }
 
 // Methods
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaTextFrame::Characters()
 {
     uno::Reference< text::XSimpleText > xSimpleText( m_xShape, uno::UNO_QUERY_THROW );
@@ -56,9 +57,9 @@ ScVbaTextFrame::getServiceNames()
     return aServiceNames;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 ScVbaTextFrame_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &arguments)
 {
     return cppu::acquire(new ScVbaTextFrame(arguments, context));

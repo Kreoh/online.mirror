@@ -29,13 +29,13 @@
 
 namespace dbaui
 {
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::util;
     using namespace ::com::sun::star::frame;
 
     ODataView::ODataView(   vcl::Window* pParent,
                             IController& _rController,
-                            const Reference< XComponentContext >& _rxContext,
+                            const Reference< cpo::uno::XComponentContext >& _rxContext,
                             WinBits nStyle)
         :Window(pParent,nStyle)
         ,m_xContext(_rxContext)
@@ -103,7 +103,7 @@ namespace dbaui
             case NotifyEventType::KEYUP:
             case NotifyEventType::MOUSEBUTTONDOWN:
             case NotifyEventType::MOUSEBUTTONUP:
-                bHandled = m_xController->interceptUserInput( _rNEvt );
+                bHandled = false;
                 break;
             default:
                 break;

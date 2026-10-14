@@ -24,14 +24,13 @@
 #include <comphelper/compbase.hxx>
 #include <comphelper/interfacecontainer4.hxx>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
-#include <com/sun/star/datatransfer/clipboard/XClipboardEx.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardListener.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
 #include <com/sun/star/datatransfer/clipboard/XSystemClipboard.hpp>
 #include <com/sun/star/datatransfer/clipboard/XFlushableClipboard.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <osl/conditn.hxx>
 #include <systools/win32/comtools.hxx>
 
@@ -54,12 +53,12 @@ class CWinClipboard final
 {
     friend CXNotifyingDataObject::~CXNotifyingDataObject();
 
-    css::uno::Reference<css::uno::XComponentContext> m_xContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_xContext;
     const OUString m_itsName;
     CMtaOleClipboard m_MtaOleClipboard;
     CXNotifyingDataObject* m_pNewOwnClipContent = nullptr; // until onClipboardContentChanged
     CXNotifyingDataObject* m_pCurrentOwnClipContent = nullptr;
-    css::uno::Reference<css::datatransfer::XTransferable> m_foreignContent;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_foreignContent;
     comphelper::OInterfaceContainerHelper4<css::datatransfer::clipboard::XClipboardListener>
         maClipboardListeners;
 
@@ -73,39 +72,36 @@ class CWinClipboard final
 
     static void WINAPI onClipboardContentChanged();
 
-    css::uno::Reference<css::datatransfer::XTransferable> getContents_noLock();
+    cpo::uno::Reference<css::datatransfer::XTransferable> getContents_noLock();
 
 public:
-    CWinClipboard(const css::uno::Reference<css::uno::XComponentContext>& rxContext,
+    CWinClipboard(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext,
                   const OUString& aClipboardName);
     virtual ~CWinClipboard() override;
 
     // XClipboard
-    virtual css::uno::Reference<css::datatransfer::XTransferable> SAL_CALL getContents() override;
-    virtual void SAL_CALL setContents(
-        const css::uno::Reference<css::datatransfer::XTransferable>& xTransferable,
-        const css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>& xClipboardOwner)
+    virtual cpo::uno::Reference<css::datatransfer::XTransferable> getContents() override;
+    virtual void setContents(
+        const cpo::uno::Reference<css::datatransfer::XTransferable>& xTransferable,
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>& xClipboardOwner)
         override;
-    virtual OUString SAL_CALL getName() override;
+    virtual OUString getName() override;
 
     // XFlushableClipboard
-    virtual void SAL_CALL flushClipboard() override;
-
-    // XClipboardEx
-    virtual sal_Int8 SAL_CALL getRenderingCapabilities() override;
+    virtual void flushClipboard() override;
 
     // XClipboardNotifier
-    virtual void SAL_CALL addClipboardListener(
-        const css::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
+    virtual void addClipboardListener(
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
         override;
-    virtual void SAL_CALL removeClipboardListener(
-        const css::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
+    virtual void removeClipboardListener(
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
         override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     sal::systools::COMReference<IDataObject> getIDataObject();
 

@@ -37,6 +37,7 @@
 #include <com/sun/star/ucb/ContentCreationException.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 typedef std::multimap<SwNodeOffset, const ::sw::mark::MarkBase*> SwBookmarkNodeTable;
 
@@ -146,8 +147,9 @@ bool Writer::CopyNextPam( SwPaM ** ppPam )
     // otherwise copy the next value from the next Pam
     *ppPam = (*ppPam)->GetNext();
 
-    *m_pCurrentPam->GetPoint() = *(*ppPam)->Start();
-    *m_pCurrentPam->GetMark() = *(*ppPam)->End();
+    auto [pStart, pEnd] = (*ppPam)->StartEnd(); // SwPosition*
+    *m_pCurrentPam->GetPoint() = *pStart;
+    *m_pCurrentPam->GetMark() = *pEnd;
 
     return true;
 }
@@ -222,9 +224,10 @@ ErrCodeMsg Writer::Write( SwPaM& rPaM, SvStream& rStrm, const OUString* pFName )
     m_pImpl->m_pStream = &rStrm;
 
     // Copy PaM, so that it can be modified
-    m_pCurrentPam = m_pDoc->CreateUnoCursor(*rPaM.End(), false);
+    auto [pStart, pEnd] = rPaM.StartEnd(); // SwPosition*
+    m_pCurrentPam = m_pDoc->CreateUnoCursor(*pEnd, false);
     m_pCurrentPam->SetMark();
-    *m_pCurrentPam->GetPoint() = *rPaM.Start();
+    *m_pCurrentPam->GetPoint() = *pStart;
     // for comparison secure to the current Pam
     m_pOrigPam = &rPaM;
 
@@ -474,9 +477,10 @@ ErrCodeMsg StgWriter::Write( SwPaM& rPaM, SotStorage& rStg, const OUString* pFNa
     m_pOrigFileName = pFName;
 
     // Copy PaM, so that it can be modified
-    m_pCurrentPam = m_pDoc->CreateUnoCursor(*rPaM.End(), false);
+    auto [pStart, pEnd] = rPaM.StartEnd(); // SwPosition*
+    m_pCurrentPam = m_pDoc->CreateUnoCursor(*pEnd, false);
     m_pCurrentPam->SetMark();
-    *m_pCurrentPam->GetPoint() = *rPaM.Start();
+    *m_pCurrentPam->GetPoint() = *pStart;
     // for comparison secure to the current Pam
     m_pOrigPam = &rPaM;
 
@@ -497,9 +501,10 @@ ErrCodeMsg StgWriter::Write( SwPaM& rPaM, const uno::Reference < embed::XStorage
     m_pOrigFileName = pFName;
 
     // Copy PaM, so that it can be modified
-    m_pCurrentPam = m_pDoc->CreateUnoCursor(*rPaM.End(), false);
+    auto [pStart, pEnd] = rPaM.StartEnd(); // SwPosition*
+    m_pCurrentPam = m_pDoc->CreateUnoCursor(*pEnd, false);
     m_pCurrentPam->SetMark();
-    *m_pCurrentPam->GetPoint() = *rPaM.Start();
+    *m_pCurrentPam->GetPoint() = *pStart;
     // for comparison secure to the current Pam
     m_pOrigPam = &rPaM;
 

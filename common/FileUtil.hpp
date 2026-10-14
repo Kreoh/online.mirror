@@ -12,18 +12,18 @@
 #pragma once
 
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 
 #include <Poco/Path.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <fcntl.h>
 #include <fstream>
 #include <string>
 #include <sys/stat.h>
-
-#include <o3tl/safeint.hxx>
 
 #ifndef _WIN32
 #include <optional>
@@ -131,9 +131,6 @@ namespace FileUtil
     std::pair<std::string, std::string> buildPathsToJail(bool usingMountNamespaces, bool noCapsForKit,
                                                          std::string localJailRoot, std::string jailDir);
 
-    // We work around some of the mess of using the same sources both on the server side and in unit
-    // tests with conditional compilation based on BUILDING_TESTS.
-
     // Add the file system that 'path' is located on to a list of file systems that are periodically
     // checked for available space. The list is initially empty.
     void registerFileSystemForDiskSpaceChecks(const std::string& path);
@@ -224,6 +221,10 @@ namespace FileUtil
     /// Returns file extension from the path
     std::string extractFileExtension(const std::string& path);
 
+    /// Returns true iff name is one plain path component: not empty, not "." or "..", and with
+    /// no path separator or control character in it.
+    bool isPlainFileName(std::string_view name);
+
     /// Returns true iff the two files both exist, can be read,
     /// have equal size and every byte of their contents match.
     bool compareFileContents(const std::string& rhsPath, const std::string& lhsPath);
@@ -281,8 +282,22 @@ namespace FileUtil
             }
 
             got += n;
-            if (o3tl::make_unsigned(n) < room)
+            if (NumUtil::makeUnsigned(n) < room)
                 break;
+        }
+
+        if (got == limit)
+        {
+            // Probe one more byte: anything but end-of-file means the content is over maxSize.
+            char probe;
+            const ssize_t n = read(fd, &probe, 1);
+            if (n != 0)
+            {
+                closeFD(fd);
+                data.resize(originalSize);
+                data.shrink_to_fit();
+                return -1;
+            }
         }
         closeFD(fd);
 
@@ -438,6 +453,14 @@ namespace FileUtil
 
     std::vector<std::string> getDirEntries(const std::string& dirPath);
 
+    /// The SHA-256 of a file's contents, Base64-encoded, as the WOPI SHA256
+    /// field carries it. Empty when the file cannot be read.
+    /// Reads the whole file, so keep it off hot paths.
+    std::string sha256Base64(const std::string& path);
+
+    /// On Windows Poco::URI::getPath() returns a bogus path that starts with a slash followed by
+    /// the drive letter. Fix that. On Unix just return the input.
+    std::string fixPocoURIgetPathReturnValue(const std::string& path);
 } // end namespace FileUtil
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

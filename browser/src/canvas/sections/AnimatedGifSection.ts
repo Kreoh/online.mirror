@@ -15,12 +15,12 @@
  */
 
 class AnimatedGifSection extends CanvasSectionObject {
-	processingOrder: number =
-		app.CSections.DefaultForDocumentObjects.processingOrder;
-	drawingOrder: number = app.CSections.DefaultForDocumentObjects.drawingOrder;
-	zIndex: number = app.CSections.DefaultForDocumentObjects.zIndex;
+	processingOrder: number = app.CSections.AnimatedGif.processingOrder;
+	drawingOrder: number = app.CSections.AnimatedGif.drawingOrder;
+	zIndex: number = app.CSections.AnimatedGif.zIndex;
 	documentObject: boolean = true;
 	interactable: boolean = false;
+	mirror: number = 0;
 
 	constructor(sectionName: string, twipRectangle: number[], url: string) {
 		super(sectionName);
@@ -49,9 +49,22 @@ class AnimatedGifSection extends CanvasSectionObject {
 	}
 
 	onDraw(): void {
+		// The zoom animation scales the tiles, which hold the first frame, but
+		// this section keeps the rectangle of the zoom start until the zoom
+		// ends. So only the tiles show the image meanwhile.
+		if (this.containerObject.isInZoomAnimation()) return;
+
 		const frame = this.sectionProperties.source.getCurrentFrame();
 		if (!frame) return;
-		this.context.drawImage(frame, 0, 0, this.size[0], this.size[1]);
+
+		const [width, height] = this.size;
+
+		// Drawing about the centre keeps the flipped frame on the same area.
+		this.context.save();
+		this.context.translate(width / 2, height / 2);
+		this.context.scale(this.mirror & 1 ? -1 : 1, this.mirror & 2 ? -1 : 1);
+		this.context.drawImage(frame, -width / 2, -height / 2, width, height);
+		this.context.restore();
 	}
 
 	onRemove(): void {

@@ -172,7 +172,6 @@ public:
     virtual VclPtr<SfxAbstractTabDialog>       CreateSdParagraphTabDlg(weld::Window* pWindow, const SfxItemSet* pAttr) = 0;
     virtual VclPtr<AbstractSdStartPresDlg>     CreateSdStartPresentationDlg(weld::Window* pWindow, const SfxItemSet& rInAttrs,
                                                                      const std::vector<OUString> &rPageNames, SdCustomShowList* pCSList ) = 0;
-    virtual VclPtr<VclAbstractDialog>          CreateRemoteDialog(weld::Window* pWindow) = 0;
     virtual VclPtr<SfxAbstractTabDialog>       CreateSdPresLayoutTemplateDlg(SfxObjectShell* pDocSh, weld::Window* pParent, bool bBackgroundDlg, SfxStyleSheetBase& rStyleBase, PresentationObjects ePO, SfxStyleSheetBasePool* pSSPool) = 0;
     virtual VclPtr<AbstractSdPresLayoutDlg>    CreateSdPresLayoutDlg(weld::Window* pParent, ::sd::DrawDocShell* pDocShell, const SfxItemSet& rInAttrs) = 0;
     virtual VclPtr<SfxAbstractTabDialog>       CreateSdTabTemplateDlg(weld::Window* pParent, const SfxObjectShell* pDocShell, SfxStyleSheetBase& rStyleBase, SdrModel* pModel, SdrView* pView) = 0;
@@ -186,10 +185,6 @@ public:
                                                                         SdDrawDocument& rDoc,
                                                                         SdPage* pCurrentPage) = 0;
 
-    virtual CreateTabPage               GetSdOptionsContentsTabPageCreatorFunc() = 0;
-    virtual CreateTabPage               GetSdPrintOptionsTabPageCreatorFunc() = 0;
-    virtual CreateTabPage               GetSdOptionsMiscTabPageCreatorFunc() = 0;
-    virtual CreateTabPage               GetSdOptionsSnapTabPageCreatorFunc() = 0;
 
     virtual VclPtr<VclAbstractDialog> CreateSdPhotoAlbumDialog(weld::Window* pWindow, SdDrawDocument& rDoc) = 0;
 

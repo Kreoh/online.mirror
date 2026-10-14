@@ -73,6 +73,7 @@
 namespace sd {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -90,7 +91,7 @@ struct SdNavigatorDropEvent : public ExecuteDropEvent
 
 }
 
-css::uno::Reference< css::datatransfer::XTransferable > View::CreateClipboardDataObject()
+cpo::uno::Reference< css::datatransfer::XTransferable > View::CreateClipboardDataObject()
 {
     // since SdTransferable::CopyToClipboard is called, this
     // dynamically created object is destroyed automatically
@@ -157,7 +158,7 @@ css::uno::Reference< css::datatransfer::XTransferable > View::CreateClipboardDat
     return pTransferable;
 }
 
-css::uno::Reference< css::datatransfer::XTransferable > View::CreateDragDataObject( View* pWorkView, vcl::Window& rWindow, const Point& rDragPos )
+cpo::uno::Reference< css::datatransfer::XTransferable > View::CreateDragDataObject( View* pWorkView, vcl::Window& rWindow, const Point& rDragPos )
 {
     rtl::Reference<SdTransferable> pTransferable = new SdTransferable( &mrDoc, pWorkView, false );
 
@@ -206,7 +207,7 @@ css::uno::Reference< css::datatransfer::XTransferable > View::CreateDragDataObje
     return pTransferable;
 }
 
-css::uno::Reference< css::datatransfer::XTransferable > View::CreateSelectionDataObject( View* pWorkView )
+cpo::uno::Reference< css::datatransfer::XTransferable > View::CreateSelectionDataObject( View* pWorkView )
 {
     rtl::Reference<SdTransferable> pTransferable = new SdTransferable( &mrDoc, pWorkView, true );
     std::unique_ptr<TransferableObjectDescriptor> pObjDesc(new TransferableObjectDescriptor);
@@ -331,7 +332,8 @@ bool View::Paste(const SdrModel& rMod, const Point& rPos, SdrObjList* pLst,
 
 void View::DoPaste (::sd::Window* pWindow,bool /*bMergeMasterPagesOnly*/)
 {
-    TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( mpViewSh->GetActiveWindow() ) );
+    TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard(
+        mpViewSh->GetActiveWindow(), DownloadRemoteContent::Yes ) );
     if( !aDataHelper.GetTransferable().is() )
         return; // empty clipboard?
 
@@ -998,7 +1000,7 @@ SdHTMLImageCollector::SdHTMLImageCollector(SdrModel& rModel)
 
 void SdHTMLImageCollector::Read(SvStream& rStream)
 {
-    EditEngine& rEdit = const_cast<EditEngine&>(mpOutliner->GetEditEngine());
+    EditEngine& rEdit = mpOutliner->GetEditEngine();
     Link<HtmlImportInfo&, void> aOldLink(rEdit.GetHtmlImportHdl());
     rEdit.SetHtmlImportHdl(LINK(this, SdHTMLImageCollector, HTMLImportHdl));
     mpOutliner->Read(rStream, OUString(), EETextFormat::Html);
@@ -1027,26 +1029,26 @@ IMPL_LINK(SdHTMLImageCollector, HTMLImportHdl, HtmlImportInfo&, rInfo, void)
         return;
 
     INetURLObject aGraphicURL(aURL);
-    if (comphelper::COKit::isActive())
-    {
-        if (HostFilter::isForbidden(aGraphicURL.GetHost()))
-            KitHelper::sendNetworkAccessError("paste");
-    }
-
     GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
     std::optional<Graphic> oGraphic(std::in_place);
     if (aGraphicURL.GetProtocol() == INetProtocol::Data)
     {
+        // The image bytes are in the URL itself, so nothing is fetched.
         std::unique_ptr<SvMemoryStream> pStream(aGraphicURL.getData());
         if (!pStream)
             return;
 
         *oGraphic = rFilter.ImportUnloadedGraphic(*pStream);
     }
-    else if (ERRCODE_NONE != GraphicFilter::LoadGraphic(aURL, OUString(),
-            *oGraphic, &rFilter))
+    else
     {
-        return;
+        // The image is fetched from its host, which the kit allows only for the hosts on its
+        // allow-list.
+        if (comphelper::COKit::isActive() && HostFilter::isForbidden(aGraphicURL.GetHost()))
+            KitHelper::sendNetworkAccessError("paste");
+
+        if (ERRCODE_NONE != GraphicFilter::LoadGraphic(aURL, OUString(), *oGraphic, &rFilter))
+            return;
     }
 
     if (oGraphic && oGraphic->GetType() != GraphicType::NONE)

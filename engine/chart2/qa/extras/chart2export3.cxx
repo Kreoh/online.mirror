@@ -17,7 +17,7 @@
 
 using css::beans::XPropertySet;
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 class Chart2ExportTest3 : public ChartTest
@@ -162,11 +162,12 @@ CPPUNIT_TEST_FIXTURE(Chart2ExportTest3, testBarChartDataPointPropDOCX)
     assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:idx", "val", u"1");
     assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:gradFill/a:gsLst/a:gs[1]/a:srgbClr", "val", u"f6f8fc");
     assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:gradFill/a:gsLst/a:gs[2]/a:srgbClr", "val", u"c7d5ed");
-    assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:ln/a:solidFill/a:srgbClr", "val", u"70ad47");
+    // The line of the point names a slot of the theme, the way the document states it
+    assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:ln/a:solidFill/a:schemeClr", "val", u"accent6");
 
     assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[2]/c:idx", "val", u"2");
     assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[2]/c:spPr/a:solidFill/a:srgbClr", "val", u"ff0000");
-    assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[2]/c:spPr/a:ln/a:solidFill/a:srgbClr", "val", u"000000");
+    assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[2]/c:spPr/a:ln/a:solidFill/a:schemeClr", "val", u"dk1");
 }
 
 CPPUNIT_TEST_FIXTURE(Chart2ExportTest3, testFdo83058dlblPos)
@@ -558,7 +559,8 @@ CPPUNIT_TEST_FIXTURE(Chart2ExportTest3, testBarChartDataPointPropXLSX)
 
     assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:idx", "val", u"1");
     assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:solidFill/a:srgbClr", "val", u"ff0000");
-    assertXPathInsensitive(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:ln/a:solidFill/a:srgbClr", "val", u"000000");
+    // The line color of the point comes from the theme, and it stays a theme color.
+    assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[1]/c:spPr/a:ln/a:solidFill/a:schemeClr", "val", u"dk1");
 
     assertXPath(pXmlDoc, "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:dPt[2]/c:idx", "val", u"2");
 
@@ -858,7 +860,7 @@ void checkCharacterProps(Reference<beans::XPropertySet> const & xTitleProp)
     {
         const OUString aText = xFormattedSubTitle[i]->getString();
         CPPUNIT_ASSERT_EQUAL(aValues[i], aText);
-        Reference< beans::XPropertySet > xRunPropSet(xFormattedSubTitle[i], uno::UNO_QUERY);
+        Reference< beans::XPropertySet > xRunPropSet(xFormattedSubTitle[i]);
         // common props
         cpo::uno::Any aAny = xRunPropSet->getPropertyValue(u"CharFontName"_ustr);
         CPPUNIT_ASSERT_EQUAL(cpo::uno::Any(u"Aptos Narrow"_ustr), aAny);
@@ -1016,6 +1018,24 @@ CPPUNIT_TEST_FIXTURE(Chart2ExportTest3, test1904NullDate)
         OUString aLabelName = xLabel->getString();
         CPPUNIT_ASSERT_EQUAL(aExpectedLabels[nLabelIndex], aLabelName);
     }
+}
+
+CPPUNIT_TEST_FIXTURE(Chart2ExportTest3, testTdf116148HatchWithoutName)
+{
+    // The bar series is filled with a hatch but names no hatch, so the drawing
+    // layer paints it with the item pool's default one.
+    loadFromFile(u"odp/tdf116148.odp");
+
+    save(TestFilter::PPTX);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/charts/chart1.xml"_ustr);
+    CPPUNIT_ASSERT(pXmlDoc);
+
+    // Without the fix the series carried no fill at all, and PowerPoint filled
+    // the bars with its own default instead, which is solid.
+    static constexpr OString sFill(
+        "/c:chartSpace/c:chart/c:plotArea/c:barChart/c:ser/c:spPr/a:pattFill"_ostr);
+    assertXPath(pXmlDoc, sFill, "prst", u"ltHorz");
+    assertXPath(pXmlDoc, sFill + "/a:fgClr/a:srgbClr", "val", u"3465A4");
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

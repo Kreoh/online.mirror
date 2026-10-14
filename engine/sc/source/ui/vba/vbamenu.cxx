@@ -13,31 +13,32 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaMenu::ScVbaMenu( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< XCommandBarControl > xCommandBarControl ) : Menu_BASE( rParent, rContext ), m_xCommandBarControl(std::move( xCommandBarControl ))
+ScVbaMenu::ScVbaMenu( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< XCommandBarControl > xCommandBarControl ) : Menu_BASE( rParent, rContext ), m_xCommandBarControl(std::move( xCommandBarControl ))
 {
 }
 
-OUString SAL_CALL
+OUString
 ScVbaMenu::getCaption()
 {
     return m_xCommandBarControl->getCaption();
 }
 
-void SAL_CALL
+void
 ScVbaMenu::setCaption( const OUString& _caption )
 {
     m_xCommandBarControl->setCaption( _caption );
 }
 
-void SAL_CALL
+void
 ScVbaMenu::Delete( )
 {
     m_xCommandBarControl->Delete();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaMenu::MenuItems( const cpo::uno::Any& aIndex )
 {
     uno::Reference< XCommandBarControls > xCommandBarControls( m_xCommandBarControl->Controls( cpo::uno::Any() ), uno::UNO_QUERY_THROW );

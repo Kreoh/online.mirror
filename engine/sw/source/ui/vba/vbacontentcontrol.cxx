@@ -24,6 +24,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /**
  * Content controls are the modern version of FormFields, providing inline functionality similar
@@ -33,7 +34,7 @@ using namespace ::com::sun::star;
  * Not all functions are applicable to each type of control, so use getType verification liberally.
  */
 SwVbaContentControl::SwVbaContentControl(const uno::Reference<XHelperInterface>& rParent,
-                                         const uno::Reference<uno::XComponentContext>& rContext,
+                                         const uno::Reference<cpo::uno::XComponentContext>& rContext,
                                          const rtl::Reference<SwXTextDocument>& xTextDocument,
                                          std::shared_ptr<SwContentControl> pContentControl)
     : SwVbaContentControl_BASE(rParent, rContext)

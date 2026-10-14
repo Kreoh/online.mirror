@@ -618,6 +618,9 @@ public:
     /// The visible area in the client (set by setClientVisibleArea).
     const tools::Rectangle& getKitVisibleArea() const { return maKitVisibleArea; }
     void setKitVisibleArea(const tools::Rectangle& rArea) { maKitVisibleArea = rArea; }
+    /// The cell at the top left corner of that visible area. It is A1 while no visible area
+    /// has been set.
+    ScAddress GetKitVisibleTopLeftCell() const;
 
     void            KillEditView();
     void            ResetEditView();
@@ -644,6 +647,13 @@ public:
      *                 edit engine instance.
      */
     void            EditGrowY( bool bInitial = false );
+
+    /**
+     * True while the edit area is being grown. EditGrowX and EditGrowY leave
+     * the area unchanged while it is set.
+     */
+    void            SetEditGrowing( bool bSet )     { bGrowing = bSet; }
+    bool            IsEditGrowing() const           { return bGrowing; }
 
     ScSplitPos      GetEditActivePart() const       { return eEditActivePart; }
     SCCOL           GetEditViewCol() const          { return nEditCol; }

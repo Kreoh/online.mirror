@@ -37,7 +37,7 @@
 #include <sfx2/objsh.hxx>
 
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 #include <comphelper/processfactory.hxx>
 
 #include <dialmgr.hxx>
@@ -45,6 +45,7 @@
 
 using namespace sfx2;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -302,7 +303,7 @@ IMPL_LINK_NOARG(SvBaseLinksDlg, ChangeSourceClickHdl, weld::Button&, void)
     {
         try
         {
-            uno::Reference<ui::dialogs::XFolderPicker2> xFolderPicker = sfx2::createFolderPicker(
+            uno::Reference<ui::dialogs::XFolderPicker> xFolderPicker = sfx2::createFolderPicker(
                     comphelper::getProcessComponentContext(), m_xDialog.get());
 
             OUString sType, sFile, sLinkName;

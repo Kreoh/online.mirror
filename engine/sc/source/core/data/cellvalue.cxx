@@ -240,7 +240,7 @@ ScCellValue::ScCellValue( const ScRefCellValue& rCell )
             maData = *rCell.getSharedString();
         break;
         case CELLTYPE_EDIT:
-            maData = rCell.getEditText()->Clone().release();
+            maData = new EditTextObject(*rCell.getEditText());
         break;
         case CELLTYPE_FORMULA:
             maData = rCell.getFormula()->Clone();
@@ -266,7 +266,7 @@ ScCellValue::ScCellValue( const ScCellValue& r )
             maData = *r.getSharedString();
         break;
         case CELLTYPE_EDIT:
-            maData = r.getEditText()->Clone().release();
+            maData = new EditTextObject(*r.getEditText());
         break;
         case CELLTYPE_FORMULA:
             maData = r.getFormula()->Clone();
@@ -342,13 +342,13 @@ void ScCellValue::set( const svl::SharedString& rStr )
 void ScCellValue::set( const EditTextObject& rEditText )
 {
     clear();
-    maData = rEditText.Clone().release();
+    maData = new EditTextObject(rEditText);
 }
 
-void ScCellValue::set( std::unique_ptr<EditTextObject> xEditText )
+void ScCellValue::set( EditTextObject&& rEditText )
 {
     clear();
-    maData = xEditText.release();
+    maData = new EditTextObject(std::move(rEditText));
 }
 
 void ScCellValue::set( ScFormulaCell* pFormula )
@@ -369,7 +369,7 @@ void ScCellValue::assign( const ScDocument& rDoc, const ScAddress& rPos )
             maData = *aRefVal.getSharedString();
         break;
         case CELLTYPE_EDIT:
-            maData = aRefVal.getEditText() ? aRefVal.getEditText()->Clone().release() : static_cast<EditTextObject*>(nullptr);
+            maData = aRefVal.getEditText() ? new EditTextObject(*aRefVal.getEditText()) : static_cast<EditTextObject*>(nullptr);
         break;
         case CELLTYPE_VALUE:
             maData = aRefVal.getDouble();
@@ -402,14 +402,14 @@ void ScCellValue::assign(const ScCellValue& rOther, ScDocument& rDestDoc, ScClon
                 if (bNewControl)
                     rEngine.SetControlWord(nControl | nSpellControl);
                 rEngine.SetTextCurrentDefaults(*rOther.getEditText());
-                maData = rEngine.CreateTextObject().release();
+                maData = new EditTextObject(rEngine.CreateTextObject());
                 if (bNewControl)
                     rEngine.SetControlWord(nControl);
             }
             else
             {
                 rEngine.SetTextCurrentDefaults(*rOther.getEditText());
-                maData = rEngine.CreateTextObject().release();
+                maData = new EditTextObject(rEngine.CreateTextObject());
             }
         }
         break;
@@ -436,7 +436,7 @@ void ScCellValue::commit( ScDocument& rDoc, const ScAddress& rPos ) const
         }
         break;
         case CELLTYPE_EDIT:
-            rDoc.SetEditText(rPos, getEditText()->Clone());
+            rDoc.SetEditText(rPos, std::make_unique<EditTextObject>(*getEditText()));
         break;
         case CELLTYPE_VALUE:
             rDoc.SetValue(rPos, getDouble());

@@ -21,7 +21,7 @@
 
 #include <algorithm>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <drawinglayer/attribute/fontattribute.hxx>
@@ -60,8 +60,8 @@ class scoped_timed_RefDev : public comphelper::unique_disposing_ptr<ImpTimedRefD
 public:
     scoped_timed_RefDev()
         : comphelper::unique_disposing_ptr<ImpTimedRefDev>(
-              (css::uno::Reference<css::lang::XComponent>(
-                  ::comphelper::getProcessComponentContext(), css::uno::UNO_QUERY_THROW)))
+              (cpo::uno::Reference<css::lang::XComponent>(
+                  ::comphelper::getProcessComponentContext(), cpo::uno::UNO_QUERY_THROW)))
     {
     }
 };

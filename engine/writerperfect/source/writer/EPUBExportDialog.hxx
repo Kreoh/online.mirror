@@ -10,7 +10,7 @@
 #pragma once
 
 #include <vcl/weld.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 
 namespace comphelper
@@ -25,8 +25,8 @@ class EPUBExportDialog : public weld::GenericDialogController
 {
 public:
     EPUBExportDialog(weld::Window* pParent, comphelper::SequenceAsHashMap& rFilterData,
-                     css::uno::Reference<css::uno::XComponentContext> xContext,
-                     css::uno::Reference<css::lang::XComponent> xDocument);
+                     cpo::uno::Reference<cpo::uno::XComponentContext> xContext,
+                     cpo::uno::Reference<css::lang::XComponent> xDocument);
     ~EPUBExportDialog() override;
 
 private:
@@ -37,9 +37,9 @@ private:
     DECL_LINK(MediaClickHdl, weld::Button&, void);
     DECL_LINK(OKClickHdl, weld::Button&, void);
 
-    css::uno::Reference<css::uno::XComponentContext> m_xContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_xContext;
     comphelper::SequenceAsHashMap& m_rFilterData;
-    css::uno::Reference<css::lang::XComponent> m_xSourceDocument;
+    cpo::uno::Reference<css::lang::XComponent> m_xSourceDocument;
 
     std::unique_ptr<weld::ComboBox> m_xVersion;
     std::unique_ptr<weld::ComboBox> m_xSplit;

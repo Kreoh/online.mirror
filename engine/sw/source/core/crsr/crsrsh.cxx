@@ -83,6 +83,7 @@
 #include <redline.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 /**
  * Check if pCurrentCursor points into already existing ranges and delete those.
@@ -715,8 +716,9 @@ static SwStartNode const* FindTextStart(SwPosition const& rPos)
 static SwStartNode const* FindParentText(SwShellCursor const& rCursor)
 {
     // find closest section containing both start and end - ignore Sections
-    SwStartNode const* pStartNode(FindTextStart(*rCursor.Start()));
-    SwEndNode const* pEndNode(FindTextStart(*rCursor.End())->EndOfSectionNode());
+    auto [pStart, pEnd] = rCursor.StartEnd(); // SwPosition*
+    SwStartNode const* pStartNode(FindTextStart(*pStart));
+    SwEndNode const* pEndNode(FindTextStart(*pEnd)->EndOfSectionNode());
     while (pStartNode->EndOfSectionNode()->GetIndex() < pEndNode->GetIndex())
     {
         pStartNode = pStartNode->StartOfSectionNode();
@@ -862,7 +864,8 @@ SwCursorShell::ExtendedSelection SwCursorShell::ExtendedSelectedAll() const
 
     SwPosition aStart(*pStart, 0);
     SwPosition aEnd(*pEnd, pEnd->Len());
-    if (!(aStart == *pShellCursor->Start() && aEnd == *pShellCursor->End()))
+    if (auto [pCursorStart, pCursorEnd] = pShellCursor->StartEnd();
+        !(aStart == *pCursorStart && aEnd == *pCursorEnd))
     {
         return {};
     }
@@ -915,8 +918,9 @@ typename SwCursorShell::StartsWith SwCursorShell::StartsWith_()
     // b) a selection that is extended
     // c) a selection that is invalid and will cause FindParentText to loop
     SwNode const& rEndOfExtras(GetDoc()->GetNodes().GetEndOfExtras());
-    if (pShellCursor->Start()->nNode.GetIndex() <= rEndOfExtras.GetIndex()
-        && rEndOfExtras.GetIndex() < pShellCursor->End()->nNode.GetIndex())
+    if (auto [pStart, pEnd] = pShellCursor->StartEnd();
+        pStart->nNode.GetIndex() <= rEndOfExtras.GetIndex()
+        && rEndOfExtras.GetIndex() < pEnd->nNode.GetIndex())
     {
         return StartsWith::None; // *very* extended, no ExtendedSelectedAll handling!
     }
@@ -1316,8 +1320,11 @@ bool SwCursorShell::TestCurrPam(
     SwShellCursor* pCmp = m_pCurrentCursor; // keep the pointer on cursor
     do
     {
-        if (pCmp->HasMark() && *pCmp->Start() <= aPtPos && *pCmp->End() > aPtPos)
-            return true;               // return without update
+        if (pCmp->HasMark())
+        {
+            if (auto [pStart, pEnd] = pCmp->StartEnd(); *pStart <= aPtPos && *pEnd > aPtPos)
+                return true; // return without update
+        }
         pCmp = pCmp->GetNext();
     } while (m_pCurrentCursor != pCmp);
     return false;
@@ -2288,7 +2295,7 @@ void SwCursorShell::UpdateCursor( sal_uInt16 eFlags, bool bIdleEnd, ScrollSizeMo
 #endif
     SwContentFrame *pPointFrame;
 
-    auto const Impl = [this, eFlags, eScrollSizeMode](::sw::VisibleCursorState & rState, SwContentFrame **const ppFrame, bool isThisShell)
+    auto const Impl = [this, eFlags, eScrollSizeMode, bIdleEnd](::sw::VisibleCursorState & rState, SwContentFrame **const ppFrame, bool isThisShell)
     {
     SwRect aOld(rState.m_aCharRect);
     bool bFirst = true;
@@ -2451,6 +2458,21 @@ void SwCursorShell::UpdateCursor( sal_uInt16 eFlags, bool bIdleEnd, ScrollSizeMo
         }
 
     } while( eFlags & SwCursorShell::SCROLLWIN );
+
+    // Name the view that moved this cursor. A live update runs under the moving
+    // view, so name the current one. A change deferred to the layout idle no
+    // longer runs under the view that made it, so name the view that ended the
+    // change. IsIdleAction covers the whole idle pass, while bIdleEnd only tells
+    // whether the caret was off screen before it.
+    if (comphelper::COKit::isActive() && rState.m_pVisibleCursor)
+    {
+        const bool bDeferred = isThisShell && (bIdleEnd || Imp()->IsIdleAction());
+        const int nMover = (bDeferred && m_nInstigatingViewId != -1)
+                               ? m_nInstigatingViewId
+                               : KitHelper::getCurrentView();
+        rState.m_pVisibleCursor->SetKitEditorViewId(nMover);
+    }
+
     *ppFrame = pFrame;
     return true;
     };
@@ -3072,8 +3094,7 @@ OUString SwCursorShell::GetSelText() const
         if (pFrame && FrameContainsNode(*pFrame, m_pCurrentCursor->GetMark()->GetNodeIndex()))
         {
             OUStringBuffer buf;
-            SwPosition const*const pStart(m_pCurrentCursor->Start());
-            SwPosition const*const pEnd(m_pCurrentCursor->End());
+            auto const [pStart, pEnd] = m_pCurrentCursor->StartEnd();
             for (SwNodeOffset i = pStart->GetNodeIndex(); i <= pEnd->GetNodeIndex(); ++i)
             {
                 SwNode const& rNode(*pStart->GetNodes()[i]);
@@ -3106,9 +3127,9 @@ OUString SwCursorShell::GetSelText() const
         SwTextNode* pTextNd = m_pCurrentCursor->GetPointNode().GetTextNode();
         if( pTextNd )
         {
-            const sal_Int32 nStt = m_pCurrentCursor->Start()->GetContentIndex();
-            aText = pTextNd->GetExpandText(GetLayout(), nStt,
-                    m_pCurrentCursor->End()->GetContentIndex() - nStt );
+            auto [pStart, pEnd] = m_pCurrentCursor->StartEnd(); // SwPosition*
+            const sal_Int32 nStt = pStart->GetContentIndex();
+            aText = pTextNd->GetExpandText(GetLayout(), nStt, pEnd->GetContentIndex() - nStt);
         }
     }
     return aText;
@@ -3563,6 +3584,7 @@ SwCursorShell::SwCursorShell( SwCursorShell& rShell, vcl::Window *pInitWin )
     , m_nMarkedListLevel( 0 )
     , m_oldColFrame(nullptr)
     , m_aLayoutIdle("SwCursorShell m_aLayoutIdle")
+    , m_nInstigatingViewId(-1)
 {
     CurrShell aCurr( this );
     // only keep the position of the current cursor of the copy shell
@@ -3604,6 +3626,7 @@ SwCursorShell::SwCursorShell( SwDoc& rDoc, vcl::Window *pInitWin,
     , m_nMarkedListLevel( 0 )
     , m_oldColFrame(nullptr)
     , m_aLayoutIdle("SwCursorShell m_aLayoutIdle")
+    , m_nInstigatingViewId(-1)
 {
     CurrShell aCurr( this );
     // create initial cursor and set it to first content position
@@ -3697,8 +3720,8 @@ bool SwCursorShell::ShouldWait() const
         return true;
 
     SwPaM* pPam = GetCursor();
-    return pPam->Start()->GetNodeIndex() + SwNodeOffset(10) <
-            pPam->End()->GetNodeIndex();
+    auto [pStart, pEnd] = pPam->StartEnd(); // SwPosition*
+    return pStart->GetNodeIndex() + SwNodeOffset(10) < pEnd->GetNodeIndex();
 }
 
 size_t SwCursorShell::UpdateTableSelBoxes()
@@ -4277,6 +4300,25 @@ void SwCursorShell::ClearUpCursors()
     {
         pStartCursor->DeleteMark();
         bChanged = true;
+    }
+
+    // sw_PosOk only asks whether the position is in a content node, so a
+    // content index pointing past the end of the text survives it.
+    // It should not happen, but still happened when an undo left it behind when
+    // it rebuilt the text it had selected.
+    // Keep the offsets inside the node, so that users of the selection cannot run
+    // out of bounds.
+    for (SwPaM& rPaM : pStartCursor->GetRingContainer())
+    {
+        for (SwPosition* pPos : { rPaM.GetPoint(), rPaM.GetMark() })
+        {
+            const SwContentNode* pContentNode = pPos->GetNode().GetContentNode();
+            if (pContentNode && pPos->GetContentIndex() > pContentNode->Len())
+            {
+                pPos->SetContent(pContentNode->Len());
+                bChanged = true;
+            }
+        }
     }
     if (pStartCursor->GetPoint()->GetNode().IsTableNode())
     {

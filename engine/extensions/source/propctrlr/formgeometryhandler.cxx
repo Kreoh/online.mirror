@@ -51,16 +51,16 @@ namespace pcr
 {
 
 
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using ::cpo::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
+    using ::cpo::uno::RuntimeException;
     using ::cpo::uno::Any;
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::beans::Property;
     using ::com::sun::star::awt::XControlModel;
     using ::com::sun::star::drawing::XControlShape;
@@ -233,9 +233,9 @@ namespace pcr
         // XPropertyHandler overriables
         virtual Any                         getPropertyValue( const OUString& _rPropertyName ) override;
         virtual void                        setPropertyValue( const OUString& _rPropertyName, const Any& _rValue ) override;
-        virtual LineDescriptor              describePropertyLine( const OUString& _rPropertyName, const css::uno::Reference< css::inspection::XPropertyControlFactory >& _rxControlFactory ) override;
-        virtual void                        addPropertyChangeListener( const css::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
-        virtual void                        removePropertyChangeListener( const css::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual LineDescriptor              describePropertyLine( const OUString& _rPropertyName, const cpo::uno::Reference< css::inspection::XPropertyControlFactory >& _rxControlFactory ) override;
+        virtual void                        addPropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual void                        removePropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
         virtual Sequence< OUString >        getActuatingProperties( ) override;
         virtual void                        actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& _rOldValue, const Reference< XObjectInspectorUI >& _rxInspectorUI, bool _bFirstTimeInit ) override;
 
@@ -811,9 +811,9 @@ namespace pcr
 
 } // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_FormGeometryHandler_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::FormGeometryHandler(context));
 }

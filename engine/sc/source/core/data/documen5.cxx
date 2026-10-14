@@ -25,6 +25,7 @@
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
 
 #include <svx/svditer.hxx>
+#include <docuno.hxx>
 #include <svx/svdoole2.hxx>
 #include <svtools/embedhlp.hxx>
 
@@ -41,6 +42,7 @@
 #include <charthelper.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static void lcl_GetChartParameters( const uno::Reference< chart2::XChartDocument >& xChartDoc,
             OUString& rRanges, chart::ChartDataRowSource& rDataRowSource,

@@ -24,7 +24,9 @@
 
 #include <cstdlib>
 
-#if defined(__linux__) && __has_include(<linux/landlock.h>)
+// configure settles whether landlock is compiled in, and has already checked that
+// linux/landlock.h is present when it is.
+#if defined(__linux__) && DISABLE_LANDLOCK == 0
 #define HAVE_LANDLOCK 1
 #else
 #define HAVE_LANDLOCK 0
@@ -57,6 +59,10 @@ bool allowsCrossDirectoryRename()
 bool restrictsTruncate()
 {
     return false;
+}
+
+void precomputeGlobPaths()
+{
 }
 
 bool lock(const std::vector<Permission>& /*perms*/)
@@ -213,7 +219,12 @@ bool addPerm(int rulesetFd, const Permission& perm)
 }
 
 /// Grant read access to each file a wildcard pattern matches. A pattern that matches nothing is skipped.
-bool addPermGlobReadOnly(int rulesetFd, const char* pattern)
+/// The paths the library glob patterns expand to, read-only. Empty until the first expansion.
+std::vector<Permission> GlobPaths;
+/// True once GlobPaths holds the expansion, so an empty result is told apart from no result.
+bool GlobPathsExpanded = false;
+
+void expandGlobReadOnly(const char* pattern, std::vector<Permission>& paths)
 {
     glob_t matches = {};
 
@@ -221,22 +232,20 @@ bool addPermGlobReadOnly(int rulesetFd, const char* pattern)
     if (globResult == GLOB_NOMATCH)
     {
         globfree(&matches);
-        return true;
+        return;
     }
 
     if (globResult != 0)
     {
         LOG_ERR("Landlock: failed to expand '" << pattern << "', error " << globResult);
         globfree(&matches);
-        return false;
+        return;
     }
 
-    bool success = true;
     for (size_t i = 0; i < matches.gl_pathc; ++i)
-        success = success && addPerm(rulesetFd, Permission(matches.gl_pathv[i], Access::ReadOnly));
+        paths.emplace_back(matches.gl_pathv[i], Access::ReadOnly);
 
     globfree(&matches);
-    return success;
 }
 
 } // anonymous namespace
@@ -254,6 +263,29 @@ bool allowsCrossDirectoryRename()
 bool restrictsTruncate()
 {
     return getAbi() >= TruncateAbi;
+}
+
+void precomputeGlobPaths()
+{
+    if (GlobPathsExpanded)
+        return;
+
+    for (const char* pattern : {
+            "/lib/ld-*",
+            "/lib64/ld-*",
+            "/lib/libnss_*",
+            "/lib64/libnss_*",
+            "/lib/*/libnss_*",
+            "/lib/libresolv*",
+            "/lib64/libresolv*",
+            "/lib/*/libresolv*",
+        })
+    {
+        expandGlobReadOnly(pattern, GlobPaths);
+    }
+
+    GlobPathsExpanded = true;
+    LOG_DBG("Landlock: " << GlobPaths.size() << " library paths expanded from the glob patterns");
 }
 
 bool lock(const std::vector<Permission>& perms)
@@ -279,6 +311,8 @@ bool lock(const std::vector<Permission>& perms)
         LOG_SYS("Landlock can't create ruleset");
         return false;
     }
+
+    precomputeGlobPaths();
 
     bool success = true;
 
@@ -317,27 +351,8 @@ bool lock(const std::vector<Permission>& perms)
     success = success && addPerm(rulesetFd, Permission("/usr/share/ghostscript/fonts", Access::ReadOnlyDir));
     success = success && addPerm(rulesetFd, Permission("/usr/local/share/fonts", Access::ReadOnlyDir));
 
-#if ENABLE_DEBUG
-    auto const pHome = getenv("HOME");
-    if (pHome) {
-        const std::string home{pHome};
-        success = success && addPerm(rulesetFd, Permission(home + "/.fonts", Access::ReadOnlyDir));
-    }
-#endif
-
-    for (const char* pattern : {
-            "/lib/ld-*",
-            "/lib64/ld-*",
-            "/lib/libnss_*",
-            "/lib64/libnss_*",
-            "/lib/*/libnss_*",
-            "/lib/libresolv*",
-            "/lib64/libresolv*",
-            "/lib/*/libresolv*",
-        })
-    {
-        success = success && addPermGlobReadOnly(rulesetFd, pattern);
-    }
+    for (const auto& perm : GlobPaths)
+        success = success && addPerm(rulesetFd, perm);
 
     success = success && addPerm(rulesetFd, Permission("/nix/store", Access::ReadOnlyDir));
 

@@ -38,13 +38,14 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
 namespace chart::wrapper
 {
 
 SeriesOptionsItemConverter::SeriesOptionsItemConverter(
         const rtl::Reference<::chart::ChartModel>& xChartModel
-        , uno::Reference< uno::XComponentContext > xContext
+        , uno::Reference< cpo::uno::XComponentContext > xContext
         , const rtl::Reference< ::chart::DataSeries >& xDataSeries
         , SfxItemPool& rItemPool )
         : ItemConverter( xDataSeries, rItemPool )

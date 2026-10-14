@@ -31,7 +31,6 @@
 #import "Util.hpp"
 #import "CoolURLSchemeHandler.h"
 
-#define LIBO_INTERNAL_ONLY
 #import <COKit/COKit.hxx>
 
 #import "DocumentViewController.h"
@@ -82,6 +81,14 @@ static BOOL isExternalKeyboardAttached()
 @implementation DocumentViewController
 
 static IMP standardImpOfInputAccessoryView = nil;
+
+// The web UI's main background colour (--color-main-background) in its dark and light theme.
+static UIColor *mainBackgroundColor(BOOL dark)
+{
+    if (dark)
+        return [UIColor colorWithRed:0x12/255.0 green:0x12/255.0 blue:0x12/255.0 alpha:1.0];
+    return [UIColor colorWithRed:0xF8/255.0 green:0xF9/255.0 blue:0xFA/255.0 alpha:1.0];
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -185,16 +192,60 @@ static IMP standardImpOfInputAccessoryView = nil;
         }
     }
 
+    // The web view stops above the home indicator strip. WebKit drops its automatic bottom inset
+    // while an editable element is focused, so ending the view at the safe area keeps the layout
+    // viewport height the same whatever has focus.
     WKWebView *webViewP = self.webView;
-    NSDictionary *views = NSDictionaryOfVariableBindings(webViewP);
-    [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-0-[webViewP(>=0)]-0-|"
-                                                                      options:0
-                                                                      metrics:nil
-                                                                        views:views]];
-    [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-0-[webViewP(>=0)]-0-|"
-                                                                      options:0
-                                                                      metrics:nil
-                                                                        views:views]];
+    [NSLayoutConstraint activateConstraints:@[
+        [webViewP.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [webViewP.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [webViewP.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [webViewP.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
+    ]];
+
+    // The root view paints the strip in the web UI's main background colour, so it continues
+    // the bottom bar. The web UI starts in the light theme on iOS and reports every later change,
+    // so the strip starts light as well.
+    self.view.backgroundColor = mainBackgroundColor(NO);
+
+    // Listener for keyboard dismissal. Calc needs to leave the in-cell edit so the
+    // keyboard is not immediately reshown by the cursor-visible/resize refocus path
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillHide:)
+                                                 name:UIKeyboardWillHideNotification
+                                               object:nil];
+}
+
+- (void)keyboardWillHide:(NSNotification*)notification
+{
+    if (self.webView == nil)
+        return;
+
+    if (self.view.window == nil || self.presentedViewController != nil)
+        return;
+
+    if ([[UIApplication sharedApplication] applicationState] != UIApplicationStateActive)
+        return;
+
+    if (isExternalKeyboardAttached())
+        return;
+
+    NSString* notifyKeyboardHidden = @"{"
+                                      "    if (window.onNativeKeyboardHidden) {"
+                                      "        window.onNativeKeyboardHidden();"
+                                      "    }"
+                                      "}";
+
+    [self.webView evaluateJavaScript:notifyKeyboardHidden
+                   completionHandler:^(id _Nullable obj, NSError* _Nullable error) {
+                     if (error)
+                     {
+                         NSString* jsException = error.userInfo[@"WKJavaScriptExceptionMessage"];
+                         if (jsException != nil)
+                             LOG_ERR("JavaScript exception in onNativeKeyboardHidden: " <<
+                                     [jsException UTF8String]);
+                     }
+                   }];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -218,6 +269,7 @@ static IMP standardImpOfInputAccessoryView = nil;
 }
 
 - (IBAction)dismissDocumentViewController {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIKeyboardWillHideNotification object:nil];
     [self dismissViewControllerAnimated:YES completion:^ {
             [self.document closeWithCompletionHandler:^(BOOL success){
                     LOG_TRC("close completion handler gets " << (success?"YES":"NO"));
@@ -450,6 +502,10 @@ static IMP standardImpOfInputAccessoryView = nil;
                  ];
             }
 
+            return;
+        } else if ([message.body hasPrefix:@"SETDARKMODE "]) {
+            self.view.backgroundColor =
+                mainBackgroundColor([message.body isEqualToString:@"SETDARKMODE true"]);
             return;
         } else if ([message.body hasPrefix:@"HYPERLINK"]) {
             NSArray *messageBodyItems = [message.body componentsSeparatedByString:@" "];

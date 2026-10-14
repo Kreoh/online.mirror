@@ -36,16 +36,15 @@ enum class SwFillMode
 struct SwFillCursorPos
 {
     SwRect aCursor;           ///< position and size of the ShadowCursor
-    sal_uInt16 nParaCnt;        ///< number of paragraphs to insert
-    sal_uInt16 nTabCnt;         ///< number of tabs respectively size of indentation
-    sal_uInt16 nSpaceCnt;       ///< number of spaces to insert
-    sal_uInt16 nSpaceOnlyCnt;   ///< number of spaces to insert ("only spaces, no tabs" mode)
-    sal_uInt16 nColumnCnt;      ///< number of necessary column breaks
-    sal_Int16  eOrient;      ///< paragraph alignment
+    sal_uInt16 nParaCnt = 0;      ///< number of paragraphs to insert
+    sal_uInt16 nTabCnt = 0;       ///< number of tabs respectively size of indentation
+    sal_uInt16 nSpaceCnt = 0;     ///< number of spaces to insert
+    sal_uInt16 nSpaceOnlyCnt = 0; ///< number of spaces to insert ("only spaces, no tabs" mode)
+    sal_uInt16 nColumnCnt = 0;    ///< number of necessary column breaks
+    sal_Int16  eOrient = css::text::HoriOrientation::NONE; ///< paragraph alignment
     SwFillMode eMode;       ///< desired fill-up rule
     SwFillCursorPos( SwFillMode eMd ) :
-        nParaCnt( 0 ), nTabCnt( 0 ), nSpaceCnt( 0 ), nSpaceOnlyCnt(0), nColumnCnt( 0 ),
-        eOrient( css::text::HoriOrientation::NONE ), eMode( eMd )
+        eMode(eMd)
     {}
 };
 
@@ -106,14 +105,9 @@ enum class SwSPExtendRange : sal_uInt8
 
 struct SwSpecialPos
 {
-    sal_Int32 nCharOfst;
-    sal_Int32 nLineOfst;
-    SwSPExtendRange nExtendRange;
-
-    // #i27615#
-    SwSpecialPos() : nCharOfst(0), nLineOfst(0),
-                     nExtendRange(SwSPExtendRange::NONE)
-    {}
+    sal_Int32 nCharOfst = 0;
+    sal_Int32 nLineOfst = 0;
+    SwSPExtendRange nExtendRange = SwSPExtendRange::NONE;
 };
 
 // CursorTravelling-States (for GetModelPositionForViewPoint)

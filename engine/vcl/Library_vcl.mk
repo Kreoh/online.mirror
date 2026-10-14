@@ -210,8 +210,6 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/window/menuwindow \
     vcl/source/window/mnemonic \
     vcl/source/window/mouse \
-    vcl/source/window/NotebookBarAddonsMerger \
-    vcl/source/window/OptionalBox \
     vcl/source/window/printdlg \
     vcl/source/window/scrwnd \
     vcl/source/window/seleng \
@@ -235,8 +233,6 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/control/calendar \
     vcl/source/control/combobox \
     vcl/source/control/ctrl \
-    vcl/source/control/ContextVBox \
-    vcl/source/control/DropdownBox \
     vcl/source/control/edit \
     vcl/source/control/field2 \
     vcl/source/control/field \
@@ -253,11 +249,7 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/control/longcurr \
     vcl/source/control/imp_listbox \
     vcl/source/control/listbox \
-    vcl/source/control/managedmenubutton \
     vcl/source/control/MenuButton \
-    vcl/source/control/NotebookbarPopup \
-    vcl/source/control/PriorityHBox \
-    vcl/source/control/PriorityMergedHBox \
     vcl/source/control/notebookbar \
     vcl/source/control/WeldedTabbedNotebookbar \
     vcl/source/control/quickselectionengine \
@@ -322,6 +314,7 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/treelist/imap2 \
     vcl/source/treelist/imap3 \
     vcl/source/treelist/inetimg \
+    vcl/source/treelist/remoteclipboard \
     vcl/source/treelist/svtabbx \
     vcl/source/treelist/transfer \
     vcl/source/treelist/transfer2 \
@@ -354,7 +347,6 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/gdi/lineinfo \
     vcl/source/gdi/mapmod \
     vcl/source/gdi/metaact \
-    vcl/source/gdi/oldprintadaptor \
     vcl/source/gdi/print2 \
     vcl/source/gdi/print3 \
     vcl/source/gdi/print \
@@ -457,6 +449,7 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/app/help \
     vcl/source/app/i18nhelp \
     vcl/source/app/idle \
+    vcl/source/app/salabort \
     vcl/source/app/salplug \
     vcl/source/app/salusereventlist \
     vcl/source/app/salvtables \
@@ -544,6 +537,7 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
     vcl/source/filter/webp/writer \
     vcl/source/font/DirectFontSubstitution \
     vcl/source/font/EmphasisMark \
+    vcl/source/font/FallbackLanguage \
     vcl/source/font/Feature \
     vcl/source/font/FeatureCollector \
     vcl/source/font/FeatureParser \
@@ -672,7 +666,7 @@ $(eval $(call gb_Library_add_libs,vcl,\
 ))
 endif # USING_X11
 
-ifeq ($(OS), $(filter LINUX %BSD SOLARIS, $(OS)))
+ifeq ($(OS), $(filter LINUX %BSD, $(OS)))
 $(eval $(call gb_Library_add_libs,vcl,\
 	-lm $(UNIX_DLAPI_LIBS) \
 ))
@@ -691,7 +685,7 @@ $(eval $(call gb_Library_add_exception_objects,vcl,\
         vcl/skia/zone \
         vcl/skia/gdiimpl \
     ) \
-    $(if $(filter LINUX SOLARIS %BSD,$(OS)), \
+    $(if $(filter LINUX %BSD,$(OS)), \
 	vcl/unx/generic/window/sessioninhibitor \
     ) \
 ))
@@ -736,7 +730,7 @@ $(eval $(call gb_Library_use_externals,vcl,\
 ))
 
 $(eval $(call gb_Library_add_libs,vcl,\
-    $(if $(filter LINUX %BSD SOLARIS,$(OS)), \
+    $(if $(filter LINUX %BSD,$(OS)), \
         -lm \
         $(if $(DISABLE_DYNLOADING),,$(UNIX_DLAPI_LIBS)) \
     ) \

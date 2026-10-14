@@ -30,6 +30,7 @@
 #include <vector>
 
 namespace com::sun::star::graphic { class XGraphic; }
+namespace com::sun::star::security { class XCertificate; }
 
 /*
  * type of reference
@@ -85,13 +86,20 @@ struct SignatureInformation
     sal_Int32 nSecurityId;
     css::xml::crypto::SecurityOperationStatus nStatus;
     SignatureReferenceInformations  vSignatureReferenceInfors;
-    struct X509CertInfo
+    /// base class for XAdES SigningCertificate
+    struct X509CertInfoRef
     {
         OUString X509IssuerName;
         OUString X509SerialNumber;
-        OUString X509Certificate;
+        /// from css::xml::crypto::DigestID, 0 = no digest
+        sal_Int32 DigestID{0};
         /// OOXML certificate SHA-256 digest, empty for ODF except when doing XAdES signature.
         OUString CertDigest;
+    };
+    struct X509CertInfo : public X509CertInfoRef
+    {
+        /// Base64 encoded
+        OUString X509Certificate;
         /// The certificate owner (aka subject).
         OUString X509Subject;
     };
@@ -119,6 +127,10 @@ struct SignatureInformation
 
     // XAdES EncapsulatedX509Certificate values
     std::set<OUString> maEncapsulatedX509Certificates;
+    /// XAdES SigningCertificate values
+    std::vector<X509CertInfoRef> SigningCertificates;
+    /// X509 certificate whose public key verified the signature
+    cpo::uno::Reference<css::security::XCertificate> xVerifiedCertificate;
 
     OUString ouSignatureId;
     // signature may contain multiple time stamps - check they're consistent
@@ -142,8 +154,8 @@ struct SignatureInformation
     /// The Id attribute of the <SignatureProperty> element that contains the <dc:description>.
     OUString ouDescriptionPropertyId;
     /// Valid and invalid signature line images
-    css::uno::Reference<css::graphic::XGraphic> aValidSignatureImage;
-    css::uno::Reference<css::graphic::XGraphic> aInvalidSignatureImage;
+    cpo::uno::Reference<css::graphic::XGraphic> aValidSignatureImage;
+    cpo::uno::Reference<css::graphic::XGraphic> aInvalidSignatureImage;
     /// Signature Line Id, used to map signatures to their respective signature line images.
     OUString ouSignatureLineId;
     /// A full OOXML signature for unchanged roundtrip, empty for ODF.

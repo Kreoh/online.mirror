@@ -18,7 +18,7 @@
  */
 
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/awt/XVclContainerPeer.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
@@ -35,8 +35,8 @@
 #include <comphelper/sequence.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
@@ -303,7 +303,7 @@ void StdTabController::activateTabOrder(  )
     Reference< XControl >  xC( mxControlContainer, UNO_QUERY );
     Reference< XVclContainerPeer >  xVclContainerPeer;
     if ( xC.is() )
-        xVclContainerPeer.set(xC->getPeer(), css::uno::UNO_QUERY);
+        xVclContainerPeer.set(xC->getPeer(), cpo::uno::UNO_QUERY);
     if ( !xC.is() || !xVclContainerPeer.is() )
         return;
 
@@ -388,7 +388,7 @@ Reference< XControl >  StdTabController::FindControl( Sequence< Reference< XCont
 {
     if (!rxCtrlModel.is())
         throw lang::IllegalArgumentException(u"No valid XControlModel"_ustr,
-                                             uno::Reference<uno::XInterface>(), 0);
+                                             uno::Reference<cpo::uno::XInterface>(), 0);
 
     auto pCtrl = std::find_if(std::cbegin(rCtrls), std::cend(rCtrls),
         [&rxCtrlModel](const Reference< XControl >& rCtrl) {
@@ -405,9 +405,9 @@ Reference< XControl >  StdTabController::FindControl( Sequence< Reference< XCont
     return Reference< XControl > ();
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_StdTabController_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new StdTabController());

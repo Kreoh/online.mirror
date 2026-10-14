@@ -35,35 +35,35 @@ namespace svxform
             ,public ::comphelper::OPropertyArrayUsageHelper< OAddConditionDialog >
     {
     public:
-        static css::uno::Reference< css::uno::XInterface >
-            Create( const css::uno::Reference< css::lang::XMultiServiceFactory >& );
+        static cpo::uno::Reference< cpo::uno::XInterface >
+            Create( const cpo::uno::Reference< css::lang::XMultiServiceFactory >& );
 
     private:
-        OAddConditionDialog( const css::uno::Reference< css::uno::XComponentContext >& _rxORB );
+        OAddConditionDialog( const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxORB );
 
         // XTypeProvider
-        virtual cpo::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) override;
+        virtual cpo::uno::Sequence<sal_Int8> getImplementationId(  ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual OUString getImplementationName() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
         // XPropertySet
-        virtual css::uno::Reference<css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() override;
-        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+        virtual cpo::uno::Reference<css::beans::XPropertySetInfo>  getPropertySetInfo() override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
         // OPropertyArrayUsageHelper
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
 
         // OGenericUnoDialog overridables
-        virtual std::unique_ptr<weld::DialogController> createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+        virtual std::unique_ptr<weld::DialogController> createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
         virtual void executedDialog(sal_Int16 _nExecutionResult) override;
 
-        css::uno::Reference< css::beans::XPropertySet >
+        cpo::uno::Reference< css::beans::XPropertySet >
                                 m_xBinding;
         OUString                m_sFacetName;
         OUString                m_sConditionValue;
-        css::uno::Reference< css::xforms::XModel >
+        cpo::uno::Reference< css::xforms::XModel >
                                 m_xWorkModel;
     };
 

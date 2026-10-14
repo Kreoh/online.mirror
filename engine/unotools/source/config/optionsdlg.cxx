@@ -26,7 +26,7 @@
 #include <cassert>
 
 using namespace com::sun::star::beans;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 constexpr OUString ROOT_NODE = u"OptionsDialogGroups"_ustr;
@@ -102,34 +102,6 @@ static void ReadNode(
             ReadNode( xHierarchyAccess, aOptionNodeList, sSubNodeName, NT_Option );
         }
     }
-}
-
-static OUString getGroupPath( std::u16string_view _rGroup )
-{
-    return OUString( OUString::Concat(ROOT_NODE) + "/" + _rGroup + "/" );
-}
-static OUString getPagePath( std::u16string_view _rPage )
-{
-    return OUString( OUString::Concat(PAGES_NODE) + "/" + _rPage + "/" );
-}
-
-bool SvtOptionsDialogOptions::IsHidden( const OUString& _rPath ) const
-{
-    bool bRet = false;
-    OptionNodeList::const_iterator pIter = m_aOptionNodeList.find( _rPath );
-    if ( pIter != m_aOptionNodeList.end() )
-        bRet = pIter->second;
-    return bRet;
-}
-
-bool SvtOptionsDialogOptions::IsGroupHidden( std::u16string_view _rGroup ) const
-{
-    return IsHidden( getGroupPath( _rGroup ) );
-}
-
-bool SvtOptionsDialogOptions::IsPageHidden( std::u16string_view _rPage, std::u16string_view _rGroup ) const
-{
-    return IsHidden( getGroupPath( _rGroup  ) + getPagePath( _rPage ) );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

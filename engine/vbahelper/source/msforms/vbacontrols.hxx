@@ -31,19 +31,19 @@ class ScVbaControls : public ControlsImpl_BASE
 {
 public:
     ScVbaControls(
-        const css::uno::Reference< ov::XHelperInterface >& xParent,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::awt::XControl >& xDialog,
-        css::uno::Reference< css::frame::XModel > xModel,
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::awt::XControl >& xDialog,
+        cpo::uno::Reference< css::frame::XModel > xModel,
         double fOffsetX, double fOffsetY );
     // XControls
-    virtual void SAL_CALL Move( double cx, double cy ) override;
-    virtual cpo::uno::Any SAL_CALL Add( const cpo::uno::Any& Object, const cpo::uno::Any& StringKey, const cpo::uno::Any& Before, const cpo::uno::Any& After ) override;
-    virtual void SAL_CALL Remove( const cpo::uno::Any& StringKeyOrIndex ) override;
+    virtual void Move( double cx, double cy ) override;
+    virtual cpo::uno::Any Add( const cpo::uno::Any& Object, const cpo::uno::Any& StringKey, const cpo::uno::Any& Before, const cpo::uno::Any& After ) override;
+    virtual void Remove( const cpo::uno::Any& StringKeyOrIndex ) override;
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // ScVbaCollectionBaseImpl
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
@@ -52,8 +52,8 @@ public:
     VBAHELPER_DECL_XHELPERINTERFACE
 
 private:
-    css::uno::Reference< css::awt::XControl > mxDialog;
-    css::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::awt::XControl > mxDialog;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
     double mfOffsetX;
     double mfOffsetY;
 };

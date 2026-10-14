@@ -24,6 +24,9 @@
 
 #include <osl/diagnose.h>
 #include <vcl/svapp.hxx>
+#include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
 #include <vcl/weld.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/bindings.hxx>
@@ -65,8 +68,8 @@
 using com::sun::star::script::XLibraryContainer;
 using com::sun::star::script::vba::XVBACompatibility;
 using com::sun::star::container::XNameContainer;
-using com::sun::star::uno::Reference;
-using com::sun::star::uno::UNO_QUERY;
+using cpo::uno::Reference;
+using cpo::uno::UNO_QUERY;
 
 //  former viewfunc/dbfunc methods
 
@@ -239,9 +242,12 @@ ScDBData* ScDocShell::GetDBData( const ScRange& rMarked, ScGetDBMode eMode, ScGe
             // Do not reset AutoFilter range during temporary operations on
             // other ranges, use the document global temporary anonymous range
             // instead. But, if AutoFilter is to be toggled then do use the
-            // sheet-local DB range.
+            // sheet-local DB range. Also avoid the sheet-local range when the
+            // marked area overlaps an autofiltered named range, so re-fitting
+            // it (DBAreaDeleted below) doesn't drop that range's filter buttons.
             bool bSheetLocal = true;
-            if (eMode != SC_DB_AUTOFILTER && pNoNameData->HasAutoFilter())
+            if (eMode != SC_DB_AUTOFILTER
+                && (pNoNameData->HasAutoFilter() || (pData && pData->HasAutoFilter())))
             {
                 bSheetLocal = false;
                 pNoNameData = m_pDocument->GetAnonymousDBData();
@@ -1197,6 +1203,11 @@ bool ScDocShell::MoveTable( SCTAB nSrcTab, SCTAB nDestTab, bool bCopy, bool bRec
 
 IMPL_LINK( ScDocShell, RefreshDBDataHdl, Timer*, pRefreshTimer, void )
 {
+    // The timer keeps running, so the import starts at the first refresh after the user allows
+    // link updates.
+    if (!GetEmbeddedObjectContainer().getUserAllowsLinkUpdate())
+        return;
+
     ScDBDocFunc aFunc(*this);
 
     ScDBData* pDBData = static_cast<ScDBData*>(pRefreshTimer);

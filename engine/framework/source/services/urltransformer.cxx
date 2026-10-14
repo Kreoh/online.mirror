@@ -25,7 +25,7 @@
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace {
 
@@ -296,9 +296,9 @@ OUString URLTransformer::getPresentation( const css::util::URL& aURL,
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_URLTransformer_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new URLTransformer());

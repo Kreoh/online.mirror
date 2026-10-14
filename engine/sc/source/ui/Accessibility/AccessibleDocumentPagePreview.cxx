@@ -60,6 +60,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 typedef std::vector<rtl::Reference<comphelper::OAccessible>> ScOAccVector;
 
@@ -583,7 +584,7 @@ struct ScShapeChild
     }
 
     mutable rtl::Reference< ::accessibility::AccessibleShape > mpAccShape;
-    css::uno::Reference< css::drawing::XShape > mxShape;
+    cpo::uno::Reference< css::drawing::XShape > mxShape;
     sal_Int32 mnRangeId;
 };
 
@@ -643,7 +644,7 @@ public:
 
     virtual bool ReplaceChild (
         ::accessibility::AccessibleShape* pCurrentChild,
-        const css::uno::Reference< css::drawing::XShape >& _rxShape,
+        const cpo::uno::Reference< css::drawing::XShape >& _rxShape,
         const tools::Long _nIndex,
         const ::accessibility::AccessibleShapeTreeInfo& _rShapeTreeInfo
     ) override;
@@ -776,7 +777,7 @@ void ScShapeChildren::VisAreaChanged() const
     ///=====  IAccessibleParent  ==============================================
 
 bool ScShapeChildren::ReplaceChild (::accessibility::AccessibleShape* /* pCurrentChild */,
-    const css::uno::Reference< css::drawing::XShape >& /* _rxShape */,
+    const cpo::uno::Reference< css::drawing::XShape >& /* _rxShape */,
         const tools::Long /* _nIndex */, const ::accessibility::AccessibleShapeTreeInfo& /* _rShapeTreeInfo */)
 {
     OSL_FAIL("should not be called in the page preview");
@@ -1130,7 +1131,7 @@ ScAccessibleDocumentPagePreview::~ScAccessibleDocumentPagePreview()
     }
 }
 
-void SAL_CALL ScAccessibleDocumentPagePreview::disposing()
+void ScAccessibleDocumentPagePreview::disposing()
 {
     SolarMutexGuard aGuard;
     if (mpTable.is())
@@ -1238,7 +1239,7 @@ void ScAccessibleDocumentPagePreview::Notify( SfxBroadcaster& rBC, const SfxHint
 
 //=====  XAccessibleComponent  ============================================
 
-uno::Reference< XAccessible > SAL_CALL ScAccessibleDocumentPagePreview::getAccessibleAtPoint( const awt::Point& rPoint )
+uno::Reference< XAccessible > ScAccessibleDocumentPagePreview::getAccessibleAtPoint( const awt::Point& rPoint )
 {
     uno::Reference<XAccessible> xAccessible;
     if (containsPoint(rPoint))
@@ -1301,7 +1302,7 @@ uno::Reference< XAccessible > SAL_CALL ScAccessibleDocumentPagePreview::getAcces
     return xAccessible;
 }
 
-void SAL_CALL ScAccessibleDocumentPagePreview::grabFocus()
+void ScAccessibleDocumentPagePreview::grabFocus()
 {
     SolarMutexGuard aGuard;
     ensureAlive();
@@ -1318,7 +1319,7 @@ void SAL_CALL ScAccessibleDocumentPagePreview::grabFocus()
 
 //=====  XAccessibleContext  ==============================================
 
-sal_Int64 SAL_CALL ScAccessibleDocumentPagePreview::getAccessibleChildCount()
+sal_Int64 ScAccessibleDocumentPagePreview::getAccessibleChildCount()
 {
     SolarMutexGuard aGuard;
     ensureAlive();
@@ -1333,7 +1334,7 @@ sal_Int64 SAL_CALL ScAccessibleDocumentPagePreview::getAccessibleChildCount()
     return nRet;
 }
 
-uno::Reference<XAccessible> SAL_CALL ScAccessibleDocumentPagePreview::getAccessibleChild(sal_Int64 nIndex)
+uno::Reference<XAccessible> ScAccessibleDocumentPagePreview::getAccessibleChild(sal_Int64 nIndex)
 {
     SolarMutexGuard aGuard;
     ensureAlive();
@@ -1395,7 +1396,7 @@ uno::Reference<XAccessible> SAL_CALL ScAccessibleDocumentPagePreview::getAccessi
 }
 
     /// Return the set of current states.
-sal_Int64 SAL_CALL ScAccessibleDocumentPagePreview::getAccessibleStateSet()
+sal_Int64 ScAccessibleDocumentPagePreview::getAccessibleStateSet()
 {
     SolarMutexGuard aGuard;
     sal_Int64 nParentStates = 0;

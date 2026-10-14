@@ -34,7 +34,7 @@ namespace com::sun::star::util {
     class XStringWidth;
 }
 
-namespace com::sun::star::uno { template <typename > class Reference; }
+namespace cpo::uno { template <typename > class Reference; }
 
 // Common URL prefixes for various schemes:
 inline constexpr OUString INET_FTP_SCHEME = u"ftp://"_ustr;
@@ -58,7 +58,6 @@ enum class INetProtocol
     PrivSoffice,
     VndSunStarHelp,
     Https,
-    Slot,
     Macro,
     Javascript,
     Data,
@@ -273,7 +272,7 @@ public:
         const;
 
     OUString
-    getAbbreviated(css::uno::Reference< css::util::XStringWidth > const & rStringWidth,
+    getAbbreviated(cpo::uno::Reference< css::util::XStringWidth > const & rStringWidth,
                    sal_Int32 nWidth,
                    DecodeMechanism eMechanism = DecodeMechanism::ToIUri,
                    rtl_TextEncoding eCharset = RTL_TEXTENCODING_UTF8)
@@ -912,7 +911,7 @@ public:
 
     void changeScheme(INetProtocol eTargetScheme);
 
-    // INetProtocol::Macro, INetProtocol::Uno, INetProtocol::Slot,
+    // INetProtocol::Macro, INetProtocol::Uno,
     // vnd.sun.star.script, etc. All the types of URLs which shouldn't
     // be accepted from an outside controlled source
     bool IsExoticProtocol() const;

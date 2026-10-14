@@ -11,10 +11,11 @@
 #include <oox/drawingml/theme.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace oox::drawingml
 {
-ThemeFilterBase::ThemeFilterBase(const uno::Reference<uno::XComponentContext>& rxContext)
+ThemeFilterBase::ThemeFilterBase(const uno::Reference<cpo::uno::XComponentContext>& rxContext)
     : XmlFilterBase(rxContext)
 {
 }

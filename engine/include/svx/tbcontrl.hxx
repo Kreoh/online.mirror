@@ -159,25 +159,25 @@ public:
     virtual ~SvxStyleToolBoxControl() override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+    virtual void statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
     // XToolbarController
-    virtual css::uno::Reference<css::awt::XWindow> SAL_CALL createItemWindow(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+    virtual cpo::uno::Reference<css::awt::XWindow> createItemWindow(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& aArguments) override;
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& aArguments) override;
 
     // XUpdatable
-    virtual void SAL_CALL update() override;
+    virtual void update() override;
 
     // WeakComponentImplHelperBase
     using SvxStyleToolBoxControl_Base::disposing;
     virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 private:
 #define MAX_FAMILIES 5
@@ -213,33 +213,33 @@ class UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxColorToolBoxControl final : public 
     weld::Window* GetParentFrame() const;
 
 public:
-    explicit SvxColorToolBoxControl( const css::uno::Reference<css::uno::XComponentContext>& rContext );
+    explicit SvxColorToolBoxControl( const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext );
     virtual ~SvxColorToolBoxControl() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence<cpo::uno::Any>& rArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence<cpo::uno::Any>& rArguments ) override;
 
     // XUpdatable
-    virtual void SAL_CALL update() override;
+    virtual void update() override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+    virtual void statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
     // XToolbarController
-    virtual void SAL_CALL execute( sal_Int16 nSelectModifier ) override;
+    virtual void execute( sal_Int16 nSelectModifier ) override;
 
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
 
     // XSubToolbarController
-    virtual bool SAL_CALL opensSubToolbar() override;
-    virtual OUString SAL_CALL getSubToolbarName() override;
-    virtual void SAL_CALL functionSelected( const OUString& rCommand ) override;
-    virtual void SAL_CALL updateImage() override;
+    virtual bool opensSubToolbar() override;
+    virtual OUString getSubToolbarName() override;
+    virtual void functionSelected( const OUString& rCommand ) override;
+    virtual void updateImage() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     void setColorSelectFunction(const ColorSelectFunction& aColorSelectFunction);
     void EnsurePaletteManager();
@@ -266,21 +266,21 @@ public:
                                     std::vector<sal_uInt16>& rCurrencyList,
                                     std::vector<sfx::CurrencyID> const& rCurrencyIDs);
 
-    explicit SvxCurrencyToolBoxControl( const css::uno::Reference<css::uno::XComponentContext>& rContext );
+    explicit SvxCurrencyToolBoxControl( const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext );
     virtual ~SvxCurrencyToolBoxControl() override;
 
     /** XToolbarController **/
-    virtual void SAL_CALL execute( sal_Int16 nSelectModifier ) override;
+    virtual void execute( sal_Int16 nSelectModifier ) override;
 
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
 
     /** XServiceInfo **/
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     /** XInitialization **/
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
 };
 
 #endif // INCLUDED_SVX_TBCONTRL_HXX

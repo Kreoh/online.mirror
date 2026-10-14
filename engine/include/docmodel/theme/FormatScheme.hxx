@@ -84,6 +84,8 @@ struct DOCMODEL_DLLPUBLIC RelativeRectangle
     sal_Int32 mnTop = 0;
     sal_Int32 mnRight = 0;
     sal_Int32 mnBottom = 0;
+
+    bool isZero() const { return mnLeft == 0 && mnTop == 0 && mnRight == 0 && mnBottom == 0; }
 };
 
 class DOCMODEL_DLLPUBLIC GradientFill : public Fill
@@ -265,7 +267,7 @@ public:
     FlipMode meTileFlipMode = FlipMode::None;
     RectangleAlignment meTileAlignment = RectangleAlignment::TopLeft;
 
-    css::uno::Reference<css::graphic::XGraphic> mxGraphic;
+    cpo::uno::Reference<css::graphic::XGraphic> mxGraphic;
     std::vector<BlipEffect> maBlipEffects;
 
     BlipFill()

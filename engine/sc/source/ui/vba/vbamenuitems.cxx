@@ -15,6 +15,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 typedef ::cppu::WeakImplHelper< container::XEnumeration > MenuEnumeration_BASE;
@@ -24,18 +25,18 @@ namespace {
 class MenuEnumeration : public MenuEnumeration_BASE
 {
     uno::Reference< XHelperInterface > m_xParent;
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     uno::Reference< container::XEnumeration > m_xEnumeration;
 public:
     /// @throws uno::RuntimeException
-    MenuEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< uno::XComponentContext > xContext, uno::Reference< container::XEnumeration > xEnumeration) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xEnumeration(std::move( xEnumeration ))
+    MenuEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< cpo::uno::XComponentContext > xContext, uno::Reference< container::XEnumeration > xEnumeration) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xEnumeration(std::move( xEnumeration ))
     {
     }
-    virtual bool SAL_CALL hasMoreElements() override
+    virtual bool hasMoreElements() override
     {
         return m_xEnumeration->hasMoreElements();
     }
-    virtual cpo::uno::Any SAL_CALL nextElement() override
+    virtual cpo::uno::Any nextElement() override
     {
         // FIXME: should be add menu
         if( !hasMoreElements() )
@@ -60,12 +61,12 @@ public:
 
 }
 
-ScVbaMenuItems::ScVbaMenuItems( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, uno::Reference< XCommandBarControls > xCommandBarControls ) : MenuItems_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBarControls(std::move( xCommandBarControls ))
+ScVbaMenuItems::ScVbaMenuItems( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, uno::Reference< XCommandBarControls > xCommandBarControls ) : MenuItems_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBarControls(std::move( xCommandBarControls ))
 {
 }
 
 // XEnumerationAccess
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaMenuItems::getElementType()
 {
     return cppu::UnoType<excel::XMenuItem>::get();
@@ -85,7 +86,7 @@ ScVbaMenuItems::createCollectionObject( const cpo::uno::Any& aSource )
     return aSource;
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaMenuItems::getCount()
 {
     // FIXME: should check if it is a popup menu
@@ -93,7 +94,7 @@ ScVbaMenuItems::getCount()
 }
 
 // ScVbaCollectionBaseImpl
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaMenuItems::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2*/ )
 {
     uno::Reference< XCommandBarControl > xCommandBarControl( m_xCommandBarControls->Item( aIndex, cpo::uno::Any() ), uno::UNO_QUERY_THROW );
@@ -101,10 +102,10 @@ ScVbaMenuItems::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex
         return cpo::uno::Any( uno::Reference< excel::XMenu > ( new ScVbaMenu( this, mxContext, xCommandBarControl ) ) );
     else if( xCommandBarControl->getType() == office::MsoControlType::msoControlButton )
         return cpo::uno::Any( uno::Reference< excel::XMenuItem > ( new ScVbaMenuItem( this, mxContext, xCommandBarControl ) ) );
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-uno::Reference< excel::XMenuItem > SAL_CALL ScVbaMenuItems::Add( const OUString& Caption, const cpo::uno::Any& OnAction, const cpo::uno::Any& /*ShortcutKey*/, const cpo::uno::Any& Before, const cpo::uno::Any& Restore, const cpo::uno::Any& /*StatusBar*/, const cpo::uno::Any& /*HelpFile*/, const cpo::uno::Any& /*HelpContextID*/ )
+uno::Reference< excel::XMenuItem > ScVbaMenuItems::Add( const OUString& Caption, const cpo::uno::Any& OnAction, const cpo::uno::Any& /*ShortcutKey*/, const cpo::uno::Any& Before, const cpo::uno::Any& Restore, const cpo::uno::Any& /*StatusBar*/, const cpo::uno::Any& /*HelpFile*/, const cpo::uno::Any& /*HelpContextID*/ )
 {
     uno::Reference< XCommandBarControl > xCommandBarControl = m_xCommandBarControls->Add(
             cpo::uno::Any( office::MsoControlType::msoControlButton ),

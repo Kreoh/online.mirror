@@ -47,6 +47,7 @@
 #endif
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ucbhelper;
 
 constexpr OUString CONFIG_ROOT_KEY = u"org.openoffice.Inet/Settings"_ustr;
@@ -140,7 +141,7 @@ private:
                          bool bUseFullyQualified ) const;
 public:
     explicit InternetProxyDecider_Impl(
-        const uno::Reference< uno::XComponentContext >& rxContext );
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     void dispose();
 
@@ -149,10 +150,10 @@ public:
                                           sal_Int32 nPort ) const;
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred( const util::ChangesEvent& Event ) override;
+    virtual void changesOccurred( const util::ChangesEvent& Event ) override;
 
     // XEventListener ( base of XChangesLisetenr )
-    virtual void SAL_CALL disposing( const lang::EventObject& Source ) override;
+    virtual void disposing( const lang::EventObject& Source ) override;
 
 private:
     void setNoProxyList( std::u16string_view rNoProxyList );
@@ -287,7 +288,7 @@ static bool getConfigInt32Value(
 
 
 InternetProxyDecider_Impl::InternetProxyDecider_Impl(
-    const uno::Reference< uno::XComponentContext >& rxContext )
+    const uno::Reference< cpo::uno::XComponentContext >& rxContext )
     : m_nProxyType( ProxyType::NoProxy ),
       m_aHostnames()
 {
@@ -301,7 +302,7 @@ InternetProxyDecider_Impl::InternetProxyDecider_Impl(
                 configuration::theDefaultProvider::get( rxContext );
 
         cpo::uno::Sequence< cpo::uno::Any > aArguments{ cpo::uno::Any(CONFIG_ROOT_KEY) };
-        uno::Reference< uno::XInterface > xInterface(
+        uno::Reference< cpo::uno::XInterface > xInterface(
                     xConfigProv->createInstanceWithArguments(
                         u"com.sun.star.configuration.ConfigurationAccess"_ustr,
                         aArguments ) );
@@ -688,7 +689,7 @@ InternetProxyServer InternetProxyDecider_Impl::getProxy(
 }
 
 // virtual
-void SAL_CALL InternetProxyDecider_Impl::changesOccurred(
+void InternetProxyDecider_Impl::changesOccurred(
                                         const util::ChangesEvent& Event )
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
@@ -764,7 +765,7 @@ void SAL_CALL InternetProxyDecider_Impl::changesOccurred(
 
 
 // virtual
-void SAL_CALL InternetProxyDecider_Impl::disposing(const lang::EventObject&)
+void InternetProxyDecider_Impl::disposing(const lang::EventObject&)
 {
     if ( m_xNotifier.is() )
     {
@@ -883,7 +884,7 @@ void InternetProxyDecider_Impl::setNoProxyList(
 
 
 InternetProxyDecider::InternetProxyDecider(
-    const uno::Reference< uno::XComponentContext>& rxContext )
+    const uno::Reference< cpo::uno::XComponentContext>& rxContext )
 : m_xImpl( new proxydecider_impl::InternetProxyDecider_Impl( rxContext ) )
 {
 }

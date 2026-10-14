@@ -31,13 +31,11 @@
 #include <o3tl/string_view.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <vcl/unohelp.hxx>
+#include <vcl/wrkwin.hxx>
 #include <svtools/htmlkywd.hxx>
 #include <svtools/htmltokn.h>
 #include <svl/urihelper.hxx>
-#include <sfx2/docfile.hxx>
 #include <sfx2/event.hxx>
-#include <sfx2/sfxsids.hrc>
-#include <sfx2/viewfrm.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/ulspitem.hxx>
 #include <editeng/brushitem.hxx>
@@ -49,6 +47,7 @@
 #include <editeng/udlnitem.hxx>
 #include <editeng/crossedoutitem.hxx>
 #include <svx/svdouno.hxx>
+#include <unotools/sharedunocomponent.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/form/ListSourceType.hpp>
 #include <com/sun/star/form/FormButtonType.hpp>
@@ -70,7 +69,6 @@
 #include <com/sun/star/form/XForm.hpp>
 #include <doc.hxx>
 #include <IDocumentLayoutAccess.hxx>
-#include <IDocumentUndoRedo.hxx>
 #include <pam.hxx>
 #include <swtable.hxx>
 #include <fmtanchr.hxx>
@@ -86,8 +84,8 @@
 #include "htmlform.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::form;
 
@@ -393,25 +391,25 @@ public:
     // UNO binding
 
     // XImageConsumer
-    virtual void SAL_CALL init( sal_Int32 Width, sal_Int32 Height) override;
-    virtual void SAL_CALL setColorModel(
+    virtual void init( sal_Int32 Width, sal_Int32 Height) override;
+    virtual void setColorModel(
             sal_Int16 BitCount, const cpo::uno::Sequence< sal_Int32 >& RGBAPal,
             sal_Int32 RedMask, sal_Int32 GreenMask, sal_Int32 BlueMask,
             sal_Int32 AlphaMask) override;
-    virtual void SAL_CALL setPixelsByBytes(
+    virtual void setPixelsByBytes(
             sal_Int32 X, sal_Int32 Y, sal_Int32 Width, sal_Int32 Height,
             const cpo::uno::Sequence< sal_Int8 >& ProducerData,
             sal_Int32 Offset, sal_Int32 Scansize) override;
-    virtual void SAL_CALL setPixelsByLongs(
+    virtual void setPixelsByLongs(
             sal_Int32 X, sal_Int32 Y, sal_Int32 Width, sal_Int32 Height,
             const cpo::uno::Sequence< sal_Int32 >& ProducerData,
             sal_Int32 Offset, sal_Int32 Scansize) override;
-    virtual void SAL_CALL complete(
+    virtual void complete(
             sal_Int32 Status,
             const uno::Reference< awt::XImageProducer > & Producer) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const EventObject& Source ) override;
+    virtual void disposing( const EventObject& Source ) override;
 };
 
 }
@@ -624,28 +622,6 @@ void SwHTMLParser::SetControlSize( const uno::Reference< drawing::XShape >& rSha
     uno::Reference< beans::XPropertySet > xPropSet( rShape, UNO_QUERY );
 
     SwViewShell *pVSh = m_xDoc->getIDocumentLayoutAccess().GetCurrentViewShell();
-    if( !pVSh && !m_nEventId )
-    {
-        // If there is no view shell by now and the doc shell is an internal
-        // one, no view shell will be created. That for, we have to do that of
-        // our own. This happens if a linked section is inserted or refreshed.
-        SwDocShell *pDocSh = m_xDoc->GetDocShell();
-        if( pDocSh )
-        {
-            if ( pDocSh->GetMedium() )
-            {
-                // if there is no hidden property in the MediaDescriptor it should be removed after loading
-                const SfxBoolItem* pHiddenItem = pDocSh->GetMedium()->GetItemSet().GetItem(SID_HIDDEN, false);
-                m_bRemoveHidden = ( pHiddenItem == nullptr || !pHiddenItem->GetValue() );
-            }
-
-            m_pTempViewFrame = SfxViewFrame::LoadHiddenDocument( *pDocSh, SFX_INTERFACE_NONE );
-            CallStartAction();
-            pVSh = m_xDoc->getIDocumentLayoutAccess().GetCurrentViewShell();
-            // this ridiculous hack also enables Undo, so turn it off again
-            m_xDoc->GetIDocumentUndoRedo().DoUndo(false);
-        }
-    }
 
     SwXShape *pSwShape = comphelper::getFromUnoTunnel<SwXShape>(xPropSet);
 
@@ -663,9 +639,21 @@ void SwHTMLParser::SetControlSize( const uno::Reference< drawing::XShape >& rSha
     const SdrView* pDrawView = pVSh ? pVSh->GetDrawView() : nullptr;
 
     const SdrUnoObj *pFormObj = dynamic_cast<const SdrUnoObj*>( pObj  );
-    uno::Reference< awt::XControl > xControl;
+    utl::SharedUNOComponent<awt::XControl> xControl;
     if ( pDrawView && pVSh->GetWin() && pFormObj )
-        xControl = pFormObj->GetUnoControl( *pDrawView, *pVSh->GetWin()->GetOutDev() );
+    {
+        xControl.reset(pFormObj->GetUnoControl(*pDrawView, *pVSh->GetWin()->GetOutDev()),
+                       utl::SharedUNOComponent<awt::XControl>::NoTakeOwnership);
+    }
+    else if ( !pVSh && pFormObj )
+    {
+        // With no view, the control is realized in a hidden window of its own to be measured.
+        if (!m_xControlSizeWindow)
+            m_xControlSizeWindow = VclPtr<WorkWindow>::Create(nullptr, WB_STDWORK);
+        xControl.reset(
+            pFormObj->GetTemporaryControlForWindow(*m_xControlSizeWindow, m_xControlSizeContainer),
+            utl::SharedUNOComponent<awt::XControl>::TakeOwnership);
+    }
 
     awt::Size aSz( rShape->getSize() );
     awt::Size aNewSz( 0, 0 );
@@ -1953,7 +1941,7 @@ void SwHTMLParser::NewTextArea()
         FinishTextArea();
         return;
     }
-    uno::Reference< uno::XInterface >  xInt = rSrvcMgr->createInstance(
+    uno::Reference< cpo::uno::XInterface >  xInt = rSrvcMgr->createInstance(
         u"com.sun.star.form.component.TextField"_ustr );
     if( !xInt.is() )
     {
@@ -2220,7 +2208,7 @@ void SwHTMLParser::NewSelect()
         FinishTextArea();
         return;
     }
-    uno::Reference< uno::XInterface >  xInt = rSrvcMgr->createInstance(
+    uno::Reference< cpo::uno::XInterface >  xInt = rSrvcMgr->createInstance(
         u"com.sun.star.form.component.ListBox"_ustr );
     if( !xInt.is() )
     {

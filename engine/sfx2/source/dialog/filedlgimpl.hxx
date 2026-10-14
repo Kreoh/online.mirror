@@ -47,8 +47,8 @@ namespace sfx2
     {
         friend class FileDialogHelper;
 
-        css::uno::Reference < css::ui::dialogs::XFilePicker3 > mxFileDlg;
-        css::uno::Reference < css::container::XNameAccess >   mxFilterCFG;
+        cpo::uno::Reference < css::ui::dialogs::XFilePicker > mxFileDlg;
+        cpo::uno::Reference < css::container::XNameAccess >   mxFilterCFG;
 
         std::vector< css::beans::StringPair >   maFilters;
 
@@ -141,17 +141,17 @@ namespace sfx2
 
     public:
         // XFilePickerListener methods
-        virtual void SAL_CALL               fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
-        virtual void SAL_CALL               directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
-        virtual OUString SAL_CALL           helpRequested( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
-        virtual void SAL_CALL               controlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
-        virtual void SAL_CALL               dialogSizeChanged() override;
+        virtual void               fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual void               directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual OUString           helpRequested( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual void               controlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual void               dialogSizeChanged() override;
 
         // XDialogClosedListener methods
-        virtual void SAL_CALL               dialogClosed( const css::ui::dialogs::DialogClosedEvent& _rEvent ) override;
+        virtual void               dialogClosed( const css::ui::dialogs::DialogClosedEvent& _rEvent ) override;
 
         // XEventListener methods
-        virtual void SAL_CALL       disposing( const css::lang::EventObject& Source ) override;
+        virtual void       disposing( const css::lang::EventObject& Source ) override;
 
         // handle XFilePickerListener events
         void                    handleFileSelectionChanged();
@@ -207,7 +207,7 @@ namespace sfx2
         bool             isAsyncFilePicker() const { return mbAsyncPicker; }
         bool             isPasswordEnabled() const { return mbIsPwdEnabled; }
 
-        css::uno::Reference<css::awt::XWindow> GetFrameInterface();
+        cpo::uno::Reference<css::awt::XWindow> GetFrameInterface();
     };
 }   // end of namespace sfx2
 

@@ -69,7 +69,7 @@ export class Header extends CanvasSectionObject {
 	onInitialize(): void {
 		this._selectionBackgroundGradient = [ '#3465A4', '#729FCF', '#004586' ];
 
-		this._map.on('move zoomchanged sheetgeometrychanged splitposchanged', this._updateCanvas, this);
+		this._map.on('zoomchanged sheetgeometrychanged splitposchanged', this._updateCanvas, this);
 		this._map.on('darkmodechanged', this._reInitRowColumnHeaderStylesAfterModeChange, this);
 		this._map.on('statusupdated', this._handleStatusUpdated, this);
 
@@ -177,8 +177,8 @@ export class Header extends CanvasSectionObject {
 	}
 
 	private _showHeaderContextMenu(posEl: HTMLElement): void {
-		if ((window as any).mode.isSmallScreenDevice()) {
-			(window as any).contextMenuWizard = true;
+		if (window.mode.isSmallScreenDevice()) {
+			window.contextMenuWizard = true;
 			const menuData = Object.assign({}, this._menuData);
 			menuData.children = this._menuData.children.filter(
 				(child: any) => this._isHeaderCommandUsable(child.command));
@@ -600,11 +600,21 @@ export class Header extends CanvasSectionObject {
 		return this._menuPosEl;
 	}
 
+	private _isCommandDisabledForSelection(command: string): boolean {
+		if (!this._isRowColumnInSelectedRange(this._lastMouseOverIndex))
+			return false;
+
+		return this._map.stateChangeHandler.getItemValue(command) === 'disabled';
+	}
+
 	// Sheet protection blocks some header commands but leaves others
 	// working, and which structural edits stay allowed is chosen when the
 	// sheet is protected. Keep in the menu only the commands that still work
 	// on the current sheet.
 	_isHeaderCommandUsable(command: string): boolean {
+		if (this._isCommandDisabledForSelection(command))
+			return false;
+
 		const part = this._map._docLayer._selectedPart;
 		if (!(app.calc as any).isPartProtected(part))
 			return true;

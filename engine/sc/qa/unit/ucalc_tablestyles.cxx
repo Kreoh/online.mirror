@@ -8,18 +8,27 @@
  */
 
 #include "helper/qahelper.hxx"
+#include <drwlayer.hxx>
+#include <map>
+#include <memory>
 
 #include <TableStyleGenerator.hxx>
 #include <tablestyle.hxx>
 #include <attrib.hxx>
 #include <dbdata.hxx>
 #include <dbdocfun.hxx>
+#include <scopetools.hxx>
+#include <subtotalparam.hxx>
 #include <docfunc.hxx>
+#include <editutil.hxx>
+#include <formulacell.hxx>
 #include <docsh.hxx>
 #include <document.hxx>
+#include <rangenam.hxx>
 #include <scitems.hxx>
 #include <patattr.hxx>
 #include <undomanager.hxx>
+#include <svl/numformat.hxx>
 
 #include <docmodel/theme/Theme.hxx>
 #include <editeng/borderline.hxx>
@@ -121,6 +130,11 @@ ScRange getArea(const ScDBData& rData)
     return aRange;
 }
 
+ScDBData* findTestTable(ScDocument* pDoc)
+{
+    return pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TESTTABLE"_ustr);
+}
+
 } // anonymous namespace
 
 // Test 1: Verify 60 default styles are generated with correct names
@@ -201,6 +215,44 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleFillColors)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testGetDataAreaExcludeDBRange)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    // Loose column A (A1:A4) directly left of a table B1:C5 (no empty gap between them).
+    m_pDoc->SetString(0, 0, 0, u"a1"_ustr);
+    m_pDoc->SetString(0, 1, 0, u"a2"_ustr);
+    m_pDoc->SetString(0, 2, 0, u"a3"_ustr);
+    m_pDoc->SetString(0, 3, 0, u"a4"_ustr);
+    for (SCCOL nCol = 1; nCol <= 2; ++nCol)
+        for (SCROW nRow = 0; nRow <= 4; ++nRow)
+            m_pDoc->SetString(nCol, nRow, 0, u"t"_ustr);
+    createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, /*nCol1*/ 1, /*nRow1*/ 0, /*nCol2*/ 2,
+                     /*nRow2*/ 4, /*bHasHeader*/ true, /*bHasTotals*/ false);
+
+    SCCOL nStartCol = 0, nEndCol = 0;
+    SCROW nStartRow = 1, nEndRow = 1;
+
+    // Default: the auto-detect grows from the loose cell across into the table.
+    m_pDoc->GetDataArea(0, nStartCol, nStartRow, nEndCol, nEndRow, /*bIncludeOld*/ true,
+                        /*bOnlyDown*/ false);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("default includes the table", SCCOL(2), nEndCol);
+
+    // bExcludeDBRange: the table acts as a boundary, so only the loose column is detected.
+    nStartCol = 0;
+    nStartRow = 1;
+    nEndCol = 0;
+    nEndRow = 1;
+    m_pDoc->GetDataArea(0, nStartCol, nStartRow, nEndCol, nEndRow, /*bIncludeOld*/ true,
+                        /*bOnlyDown*/ false, /*bExcludeDBRange*/ true);
+    CPPUNIT_ASSERT_EQUAL(SCCOL(0), nStartCol);
+    CPPUNIT_ASSERT_EQUAL(SCROW(0), nStartRow);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("table excluded", SCCOL(0), nEndCol);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("re-shrunk past the table's extra row", SCROW(3), nEndRow);
+
+    m_pDoc->DeleteTab(0);
+}
+
 // Test 3: Verify border widths and styles
 CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBorders)
 {
@@ -217,7 +269,7 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBorders)
     CPPUNIT_ASSERT(pStyle);
 
     // Data cell (row 5, middle of table) — should have thin borders from WholeTable
-    std::unique_ptr<SvxBoxItem> pBoxItem = pStyle->GetBoxItem(*pDBData, 1, 5, 4);
+    const SvxBoxItem* pBoxItem = pStyle->GetBoxItem(*pDBData, 1, 5, 4);
     CPPUNIT_ASSERT(pBoxItem);
 
     // Top and bottom borders should be thin (SvxBorderLineWidth::Thin = 15)
@@ -232,8 +284,17 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBorders)
     // Border color should be Accent1-tinted (reddish)
     CPPUNIT_ASSERT(pTopLine->GetColor().GetRed() > pTopLine->GetColor().GetGreen());
 
+    // B6 sits inside the table (A1:D11), so it has no vertical edge at all, while D6 in the
+    // same band closes the table on the right. The two cells differ only in the column.
+    CPPUNIT_ASSERT(!pBoxItem->GetLine(SvxBoxItemLine::LEFT));
+    CPPUNIT_ASSERT(!pBoxItem->GetLine(SvxBoxItemLine::RIGHT));
+    const SvxBoxItem* pLastColBox = pStyle->GetBoxItem(*pDBData, 3, 5, 4);
+    CPPUNIT_ASSERT(pLastColBox);
+    CPPUNIT_ASSERT(pLastColBox->GetLine(SvxBoxItemLine::RIGHT));
+    CPPUNIT_ASSERT(!pLastColBox->GetLine(SvxBoxItemLine::LEFT));
+
     // Total row (row 10, rowIndex 9) — should have a DOUBLE top border
-    std::unique_ptr<SvxBoxItem> pTotalBox = pStyle->GetBoxItem(*pDBData, 1, 10, 9);
+    const SvxBoxItem* pTotalBox = pStyle->GetBoxItem(*pDBData, 1, 10, 9);
     CPPUNIT_ASSERT(pTotalBox);
     const editeng::SvxBorderLine* pTotalTop = pTotalBox->GetLine(SvxBoxItemLine::TOP);
     CPPUNIT_ASSERT(pTotalTop);
@@ -241,6 +302,230 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBorders)
 
     m_pDoc->DeleteTab(0);
 }
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBordersNoWholeTable)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    ScTableStyle aStyle(u"HeaderOnly"_ustr, std::nullopt);
+
+    editeng::SvxBorderLine aLine(nullptr, SvxBorderLineWidth::Thick);
+    SvxBoxItem aBox(ATTR_BORDER);
+    aBox.SetLine(&aLine, SvxBoxItemLine::BOTTOM);
+
+    auto pHeaderPattern = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pHeaderPattern->ItemSetPut(aBox);
+    aStyle.SetPattern(ScTableStyleElement::HeaderRow, std::move(pHeaderPattern));
+
+    ScDBData aDBData(u"HeaderOnly"_ustr, 0, 0, 0, 3, 10, true, true, false);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"HeaderOnly"_ustr;
+    aStyleParam.mbRowStripes = false;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = false;
+    aStyleParam.mbLastColumn = false;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const SvxBoxItem* pHeaderBox = aStyle.GetBoxItem(aDBData, 1, 0, -1);
+    CPPUNIT_ASSERT(pHeaderBox);
+    const editeng::SvxBorderLine* pBotLine = pHeaderBox->GetLine(SvxBoxItemLine::BOTTOM);
+    CPPUNIT_ASSERT(pBotLine);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(SvxBorderLineWidth::Thick), pBotLine->GetWidth());
+
+    CPPUNIT_ASSERT(!aStyle.GetBoxItem(aDBData, 1, 5, 4));
+    CPPUNIT_ASSERT(!aStyle.GetFillItem(aDBData, 1, 5, 4));
+    CPPUNIT_ASSERT(!aStyle.GetFontItemSet(aDBData, 1, 5, 4));
+
+    m_pDoc->DeleteTab(0);
+}
+
+// Test 3b: Single-column table keeps both left and right outer edges (regression)
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBordersSingleColumn)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    // TableStyleMedium2's WholeTable is a full box (top/bottom/left/right), so a
+    // one-column table (A1:A11) must still carry the right edge in every band.
+    ScDBData* pDBData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 0, 10);
+
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleMedium2"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    auto assertOuterLeftRight = [](const SvxBoxItem* pBox, const char* pWhat) {
+        CPPUNIT_ASSERT_MESSAGE(pWhat, pBox);
+        CPPUNIT_ASSERT_MESSAGE(pWhat, pBox->GetLine(SvxBoxItemLine::LEFT) != nullptr);
+        CPPUNIT_ASSERT_MESSAGE(pWhat, pBox->GetLine(SvxBoxItemLine::RIGHT) != nullptr);
+    };
+
+    assertOuterLeftRight(pStyle->GetBoxItem(*pDBData, 0, 0, 0), "single-column header cell");
+    assertOuterLeftRight(pStyle->GetBoxItem(*pDBData, 0, 5, 4), "single-column data cell");
+    assertOuterLeftRight(pStyle->GetBoxItem(*pDBData, 0, 10, 9), "single-column total cell");
+
+    m_pDoc->DeleteTab(0);
+}
+
+// Test 3c: Style with inner vertical borders — interior cells get them, single column keeps edges
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBordersSingleColumnInnerVertical)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    // TableStyleLight17's WholeTable is a full box plus inner horizontal AND vertical lines.
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleLight17"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    auto assertLeftRight = [](const SvxBoxItem* pBox, const char* pWhat) {
+        CPPUNIT_ASSERT_MESSAGE(pWhat, pBox);
+        CPPUNIT_ASSERT_MESSAGE(pWhat, pBox->GetLine(SvxBoxItemLine::LEFT) != nullptr);
+        CPPUNIT_ASSERT_MESSAGE(pWhat, pBox->GetLine(SvxBoxItemLine::RIGHT) != nullptr);
+    };
+
+    // An interior cell of a multi-column table (A1:C11) has no outer edge, so left/right
+    // lines there can only come from the inner vertical border.
+    ScDBData* pMulti = createTestDBData(m_pDoc, u"TableStyleLight17"_ustr, 0, 0, 2, 10);
+    assertLeftRight(pStyle->GetBoxItem(*pMulti, 1, 5, 4), "multi-column interior cell");
+
+    // Single-column table (E1:E11) with the same style still shows both edges in every band.
+    ScDBData* pOne = createTestDBData(m_pDoc, u"TableStyleLight17"_ustr, 4, 0, 4, 10, true, true,
+                                      u"OneCol"_ustr);
+    assertLeftRight(pStyle->GetBoxItem(*pOne, 4, 0, 0), "single-column header cell");
+    assertLeftRight(pStyle->GetBoxItem(*pOne, 4, 5, 4), "single-column data cell");
+    assertLeftRight(pStyle->GetBoxItem(*pOne, 4, 10, 9), "single-column total cell");
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleColumnBorderInRowElements)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScDBData aDBData(u"ColumnBorder"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleDark1"_ustr;
+    aStyleParam.mbRowStripes = false;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = true;
+    aStyleParam.mbLastColumn = true;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleDark1"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    // Header row, data row, totals row
+    for (SCROW nRow : { SCROW(0), SCROW(5), SCROW(10) })
+    {
+        const SvxBoxItem* pFirstColBox = pStyle->GetBoxItem(aDBData, 0, nRow, nRow - 1);
+        CPPUNIT_ASSERT(pFirstColBox);
+        const editeng::SvxBorderLine* pRightLine = pFirstColBox->GetLine(SvxBoxItemLine::RIGHT);
+        CPPUNIT_ASSERT(pRightLine);
+        CPPUNIT_ASSERT_EQUAL(tools::Long(SvxBorderLineWidth::Medium), pRightLine->GetWidth());
+
+        const SvxBoxItem* pLastColBox = pStyle->GetBoxItem(aDBData, 3, nRow, nRow - 1);
+        CPPUNIT_ASSERT(pLastColBox);
+        CPPUNIT_ASSERT(pLastColBox->GetLine(SvxBoxItemLine::LEFT));
+    }
+
+    // The row element keeps its own edge underneath the column's
+    CPPUNIT_ASSERT(pStyle->GetBoxItem(aDBData, 0, 0, -1)->GetLine(SvxBoxItemLine::BOTTOM));
+    CPPUNIT_ASSERT(pStyle->GetBoxItem(aDBData, 0, 10, 9)->GetLine(SvxBoxItemLine::TOP));
+
+    // Dark1's WholeTable draws no border, so no other edge appears
+    const SvxBoxItem* pDataBox = pStyle->GetBoxItem(aDBData, 0, 5, 4);
+    CPPUNIT_ASSERT(!pDataBox->GetLine(SvxBoxItemLine::TOP));
+    CPPUNIT_ASSERT(!pDataBox->GetLine(SvxBoxItemLine::LEFT));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleStripeBordersMerge)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScDBData aDBData(u"StripeBorder"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleLight9"_ustr;
+    aStyleParam.mbRowStripes = true;
+    aStyleParam.mbColumnStripes = true;
+    aStyleParam.mbFirstColumn = false;
+    aStyleParam.mbLastColumn = false;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleLight9"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    // Light9's WholeTable has an outer box and no inner line, so an interior cell gets its
+    // horizontal from the row stripe and its vertical from the column stripe
+    const SvxBoxItem* pDataBox = pStyle->GetBoxItem(aDBData, 1, 5, 4);
+    CPPUNIT_ASSERT(pDataBox);
+    CPPUNIT_ASSERT(pDataBox->GetLine(SvxBoxItemLine::TOP));
+    CPPUNIT_ASSERT(pDataBox->GetLine(SvxBoxItemLine::LEFT));
+    CPPUNIT_ASSERT(!pDataBox->GetLine(SvxBoxItemLine::RIGHT));
+
+    // Banding stops at the totals row, which keeps only its own double line
+    const SvxBoxItem* pTotalBox = pStyle->GetBoxItem(aDBData, 1, 10, 9);
+    CPPUNIT_ASSERT(pTotalBox);
+    const editeng::SvxBorderLine* pTotalTop = pTotalBox->GetLine(SvxBoxItemLine::TOP);
+    CPPUNIT_ASSERT(pTotalTop);
+    CPPUNIT_ASSERT_EQUAL(SvxBorderLineStyle::DOUBLE_THIN, pTotalTop->GetBorderLineStyle());
+    CPPUNIT_ASSERT(!pTotalBox->GetLine(SvxBoxItemLine::LEFT));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleInnerLinesInRowElements)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScDBData* pDBData = createTestDBData(m_pDoc, u"TableStyleMedium9"_ustr);
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleMedium9"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    // The vertical runs through all three bands
+    for (SCROW nRow : { SCROW(0), SCROW(5), SCROW(10) })
+    {
+        const SvxBoxItem* pBoxItem = pStyle->GetBoxItem(*pDBData, 1, nRow, nRow - 1);
+        CPPUNIT_ASSERT(pBoxItem);
+        CPPUNIT_ASSERT(pBoxItem->GetLine(SvxBoxItemLine::LEFT));
+        CPPUNIT_ASSERT(pBoxItem->GetLine(SvxBoxItemLine::RIGHT));
+    }
+
+    // The header row's own thick line wins the edge the inner horizontal shares with it, and
+    // no inner line leaks onto the table's outer edges
+    const SvxBoxItem* pHeaderBox = pStyle->GetBoxItem(*pDBData, 1, 0, -1);
+    const editeng::SvxBorderLine* pHeaderBottom = pHeaderBox->GetLine(SvxBoxItemLine::BOTTOM);
+    CPPUNIT_ASSERT(pHeaderBottom);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(SvxBorderLineWidth::Thick), pHeaderBottom->GetWidth());
+    CPPUNIT_ASSERT(!pHeaderBox->GetLine(SvxBoxItemLine::TOP));
+    CPPUNIT_ASSERT(!pStyle->GetBoxItem(*pDBData, 0, 5, 4)->GetLine(SvxBoxItemLine::LEFT));
+    CPPUNIT_ASSERT(!pStyle->GetBoxItem(*pDBData, 1, 10, 9)->GetLine(SvxBoxItemLine::BOTTOM));
+
+    m_pDoc->DeleteTab(0);
+}
+
 
 // Test 4: Verify font properties (bold, color)
 CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleFonts)
@@ -292,6 +577,197 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleFonts)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleFontsAcrossElements)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    ScTableStyle aStyle(u"Split"_ustr, std::nullopt);
+
+    auto pTablePattern = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pTablePattern->ItemSetPut(SvxWeightItem(WEIGHT_BOLD, ATTR_FONT_WEIGHT));
+    pTablePattern->ItemSetPut(SvxColorItem(COL_BLUE, ATTR_FONT_COLOR));
+    aStyle.SetPattern(ScTableStyleElement::WholeTable, std::move(pTablePattern));
+
+    auto pHeaderPattern = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pHeaderPattern->ItemSetPut(SvxColorItem(COL_RED, ATTR_FONT_COLOR));
+    aStyle.SetPattern(ScTableStyleElement::HeaderRow, std::move(pHeaderPattern));
+
+    ScDBData aDBData(u"Split"_ustr, 0, 0, 0, 3, 10, true, true, false);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"Split"_ustr;
+    aStyleParam.mbRowStripes = false;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = false;
+    aStyleParam.mbLastColumn = false;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const SfxItemSet* pHeaderFont = aStyle.GetFontItemSet(aDBData, 0, 0, -1);
+    CPPUNIT_ASSERT(pHeaderFont);
+    const SvxColorItem* pHeaderColor = pHeaderFont->GetItemIfSet(ATTR_FONT_COLOR, false);
+    CPPUNIT_ASSERT(pHeaderColor);
+    CPPUNIT_ASSERT_EQUAL(COL_RED, pHeaderColor->GetValue());
+    const SvxWeightItem* pHeaderWeight = pHeaderFont->GetItemIfSet(ATTR_FONT_WEIGHT, false);
+    CPPUNIT_ASSERT(pHeaderWeight);
+    CPPUNIT_ASSERT_EQUAL(WEIGHT_BOLD, pHeaderWeight->GetWeight());
+
+    const SfxItemSet* pDataFont = aStyle.GetFontItemSet(aDBData, 0, 5, 4);
+    CPPUNIT_ASSERT(pDataFont);
+    const SvxColorItem* pDataColor = pDataFont->GetItemIfSet(ATTR_FONT_COLOR, false);
+    CPPUNIT_ASSERT(pDataColor);
+    CPPUNIT_ASSERT_EQUAL(COL_BLUE, pDataColor->GetValue());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleStripesSkipHiddenRows)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    // A1:D20 with a header row, and row 5 hidden by hand, not by a filter
+    createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 3, 19, true, false);
+    m_pDoc->SetRowHidden(4, 4, 0, true);
+    CPPUNIT_ASSERT(!m_pDoc->RowFiltered(4, 0));
+
+    // The stripe of each row, painted with the paint range starting at nStartRow
+    auto getStripes = [this](SCROW nStartRow) {
+        ScTableInfo aTabInfo(nStartRow, 19, false);
+        m_pDoc->FillInfo(aTabInfo, 0, nStartRow, 3, 19, 0, 1, 1, false, false);
+        std::map<SCROW, bool> aStripes;
+        for (SCSIZE nArrRow = 1; nArrRow + 1 < aTabInfo.mnArrCount; ++nArrRow)
+        {
+            const RowInfo& rRowInfo = aTabInfo.mpRowInfo[nArrRow];
+            const SvxBrushItem* pFill
+                = static_cast<const SvxBrushItem*>(rRowInfo.cellInfo(0).maBackground.getItem());
+            aStripes[rRowInfo.nRowNo] = pFill && !pFill->GetColor().IsTransparent();
+        }
+        return aStripes;
+    };
+
+    // MSO stripes the visible rows only: rows 4 and 6 differ, rows 4 and 7 match
+    const std::map<SCROW, bool> aFullPaint = getStripes(1);
+    CPPUNIT_ASSERT(!aFullPaint.contains(4));
+    CPPUNIT_ASSERT(aFullPaint.at(3) != aFullPaint.at(5));
+    CPPUNIT_ASSERT_EQUAL(aFullPaint.at(3), aFullPaint.at(6));
+
+    // A paint that starts lower, as a tile does, must give every row the same stripe
+    for (SCROW nStartRow = 2; nStartRow < 19; ++nStartRow)
+    {
+        for (const auto& [nRow, bStripe] : getStripes(nStartRow))
+        {
+            OString aMsg = "row " + OString::number(nRow + 1) + ", paint from row "
+                           + OString::number(nStartRow + 1);
+            CPPUNIT_ASSERT_EQUAL_MESSAGE(aMsg.getStr(), aFullPaint.at(nRow), bStripe);
+        }
+    }
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleTotalCells)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    ScTableStyle aStyle(u"TotalCells"_ustr, std::nullopt);
+
+    auto pTotalRow = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pTotalRow->ItemSetPut(SvxBrushItem(COL_LIGHTBLUE, ATTR_BACKGROUND));
+    aStyle.SetPattern(ScTableStyleElement::TotalRow, std::move(pTotalRow));
+
+    auto pFirstColumn = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pFirstColumn->ItemSetPut(SvxBrushItem(COL_GREEN, ATTR_BACKGROUND));
+    aStyle.SetPattern(ScTableStyleElement::FirstColumn, std::move(pFirstColumn));
+
+    auto pFirstTotal = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pFirstTotal->ItemSetPut(SvxBrushItem(COL_RED, ATTR_BACKGROUND));
+    pFirstTotal->ItemSetPut(SvxWeightItem(WEIGHT_BOLD, ATTR_FONT_WEIGHT));
+    SvxBoxItem aBox(ATTR_BORDER);
+    editeng::SvxBorderLine aLine(nullptr, SvxBorderLineWidth::Thick);
+    aBox.SetLine(&aLine, SvxBoxItemLine::BOTTOM);
+    pFirstTotal->ItemSetPut(aBox);
+    aStyle.SetPattern(ScTableStyleElement::FirstTotalCell, std::move(pFirstTotal));
+
+    ScDBData aDBData(u"TotalCells"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TotalCells"_ustr;
+    aStyleParam.mbRowStripes = false;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = true;
+    aStyleParam.mbLastColumn = false;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const SvxBrushItem* pFill = aStyle.GetFillItem(aDBData, 0, 10, 9);
+    CPPUNIT_ASSERT(pFill);
+    CPPUNIT_ASSERT_EQUAL(COL_RED, pFill->GetColor());
+
+    pFill = aStyle.GetFillItem(aDBData, 3, 10, 9);
+    CPPUNIT_ASSERT(pFill);
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTBLUE, pFill->GetColor());
+
+    pFill = aStyle.GetFillItem(aDBData, 1, 10, 9);
+    CPPUNIT_ASSERT(pFill);
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTBLUE, pFill->GetColor());
+
+    pFill = aStyle.GetFillItem(aDBData, 0, 5, 4);
+    CPPUNIT_ASSERT(pFill);
+    CPPUNIT_ASSERT_EQUAL(COL_GREEN, pFill->GetColor());
+
+    const SfxItemSet* pFont = aStyle.GetFontItemSet(aDBData, 0, 10, 9);
+    CPPUNIT_ASSERT(pFont);
+    const SvxWeightItem* pWeight = pFont->GetItemIfSet(ATTR_FONT_WEIGHT, false);
+    CPPUNIT_ASSERT(pWeight);
+    CPPUNIT_ASSERT_EQUAL(WEIGHT_BOLD, pWeight->GetWeight());
+
+    const SvxBoxItem* pBox = aStyle.GetBoxItem(aDBData, 0, 10, 9);
+    CPPUNIT_ASSERT(pBox);
+    const editeng::SvxBorderLine* pBotLine = pBox->GetLine(SvxBoxItemLine::BOTTOM);
+    CPPUNIT_ASSERT(pBotLine);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(SvxBorderLineWidth::Thick), pBotLine->GetWidth());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleFontsHeaderFirstColumn)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleDark8"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    ScDBData aDBData(u"HeaderFirstCol"_ustr, 0, 0, 0, 3, 10, true, true, false);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleDark8"_ustr;
+    aStyleParam.mbRowStripes = false;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = true;
+    aStyleParam.mbLastColumn = true;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const SfxItemSet* pCornerFont = pStyle->GetFontItemSet(aDBData, 0, 0, -1);
+    CPPUNIT_ASSERT(pCornerFont);
+    const SvxColorItem* pColor = pCornerFont->GetItemIfSet(ATTR_FONT_COLOR, false);
+    CPPUNIT_ASSERT(pColor);
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pColor->GetValue());
+    const SvxWeightItem* pWeight = pCornerFont->GetItemIfSet(ATTR_FONT_WEIGHT, false);
+    CPPUNIT_ASSERT(pWeight);
+    CPPUNIT_ASSERT_EQUAL(WEIGHT_BOLD, pWeight->GetWeight());
+
+    const SfxItemSet* pHeaderFont = pStyle->GetFontItemSet(aDBData, 1, 0, -1);
+    CPPUNIT_ASSERT(pHeaderFont);
+    CPPUNIT_ASSERT(!pHeaderFont->GetItemIfSet(ATTR_FONT_WEIGHT, false));
+
+    m_pDoc->DeleteTab(0);
+}
+
 // Test 5: Verify styles regenerate with new theme colors
 CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleThemeChange)
 {
@@ -332,7 +808,7 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleThemeChange)
     CPPUNIT_ASSERT_EQUAL(sal_uInt8(0xFF), aColorB.GetBlue());
 
     // Border colors should also have changed
-    std::unique_ptr<SvxBoxItem> pBoxB = pStyle->GetBoxItem(*pDBData, 1, 5, 4);
+    const SvxBoxItem* pBoxB = pStyle->GetBoxItem(*pDBData, 1, 5, 4);
     CPPUNIT_ASSERT(pBoxB);
     const editeng::SvxBorderLine* pLine = pBoxB->GetLine(SvxBoxItemLine::TOP);
     CPPUNIT_ASSERT(pLine);
@@ -456,7 +932,7 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testMultipleTableStyleCategories)
                                    pFill != nullptr);
 
             // Medium styles should have borders on data cells
-            std::unique_ptr<SvxBoxItem> pBox = pMedium->GetBoxItem(*pDBData, 1, 5, 4);
+            const SvxBoxItem* pBox = pMedium->GetBoxItem(*pDBData, 1, 5, 4);
             CPPUNIT_ASSERT_MESSAGE(OString("No borders for: " + rName.toUtf8()).getStr(),
                                    pBox != nullptr);
         }
@@ -645,7 +1121,7 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleNoHeaderNoTotal)
 
     // No total row — last row (row 9) is just a data row, not a total row
     // No DOUBLE_THIN border
-    std::unique_ptr<SvxBoxItem> pBoxLast = pStyle->GetBoxItem(aDBNoHeaderNoTotal, 1, 9, 9);
+    const SvxBoxItem* pBoxLast = pStyle->GetBoxItem(aDBNoHeaderNoTotal, 1, 9, 9);
     if (pBoxLast)
     {
         const editeng::SvxBorderLine* pTopLine = pBoxLast->GetLine(SvxBoxItemLine::TOP);
@@ -683,7 +1159,7 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleNoHeaderNoTotal)
     CPPUNIT_ASSERT_EQUAL(sal_uInt8(0xFF), pHeaderFill->GetColor().GetRed());
 
     // Total row (row 10) should have DOUBLE_THIN top border
-    std::unique_ptr<SvxBoxItem> pTotalBox = pStyle->GetBoxItem(aDBWithBoth, 1, 10, 9);
+    const SvxBoxItem* pTotalBox = pStyle->GetBoxItem(aDBWithBoth, 1, 10, 9);
     CPPUNIT_ASSERT(pTotalBox);
     const editeng::SvxBorderLine* pTotalTop = pTotalBox->GetLine(SvxBoxItemLine::TOP);
     CPPUNIT_ASSERT(pTotalTop);
@@ -727,6 +1203,61 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBandedColumns)
         // They should differ — that's what banded columns means
         CPPUNIT_ASSERT(pFillCol0->GetColor() != pFillCol1->GetColor());
     }
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBandingSkipsHeaderAndTotals)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    // Only the stripes carry a fill, so a header or totals cell that wrongly counts
+    // as banded shows the stripe colour instead of no fill at all.
+    ScTableStyle aStyle(u"Banding"_ustr, std::nullopt);
+
+    auto pColumnStripe = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pColumnStripe->ItemSetPut(SvxBrushItem(COL_GREEN, ATTR_BACKGROUND));
+    aStyle.SetPattern(ScTableStyleElement::FirstColumnStripe, std::move(pColumnStripe));
+
+    auto pRowStripe = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pRowStripe->ItemSetPut(SvxBrushItem(COL_YELLOW, ATTR_BACKGROUND));
+    aStyle.SetPattern(ScTableStyleElement::FirstRowStripe, std::move(pRowStripe));
+
+    // The totals row sits on the second stripe, so that one needs a fill too for the
+    // totals check below to be able to fail
+    auto pSecondRowStripe = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pSecondRowStripe->ItemSetPut(SvxBrushItem(COL_MAGENTA, ATTR_BACKGROUND));
+    aStyle.SetPattern(ScTableStyleElement::SecondRowStripe, std::move(pSecondRowStripe));
+
+    ScDBData aDBData(u"Banding"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"Banding"_ustr;
+    aStyleParam.mbFirstColumn = false;
+    aStyleParam.mbLastColumn = false;
+
+    // Column banding covers the data rows, never the header or the totals row
+    aStyleParam.mbRowStripes = false;
+    aStyleParam.mbColumnStripes = true;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const SvxBrushItem* pFill = aStyle.GetFillItem(aDBData, 0, 1, 0);
+    CPPUNIT_ASSERT(pFill);
+    CPPUNIT_ASSERT_EQUAL(COL_GREEN, pFill->GetColor());
+
+    CPPUNIT_ASSERT(!aStyle.GetFillItem(aDBData, 0, 0, -1));
+    CPPUNIT_ASSERT(!aStyle.GetFillItem(aDBData, 0, 10, 9));
+
+    // Row banding follows the same rule
+    aStyleParam.mbRowStripes = true;
+    aStyleParam.mbColumnStripes = false;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    pFill = aStyle.GetFillItem(aDBData, 0, 1, 0);
+    CPPUNIT_ASSERT(pFill);
+    CPPUNIT_ASSERT_EQUAL(COL_YELLOW, pFill->GetColor());
+
+    CPPUNIT_ASSERT(!aStyle.GetFillItem(aDBData, 0, 0, -1));
+    CPPUNIT_ASSERT(!aStyle.GetFillItem(aDBData, 0, 10, 9));
 
     m_pDoc->DeleteTab(0);
 }
@@ -785,7 +1316,59 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleFirstLastColumn)
     m_pDoc->DeleteTab(0);
 }
 
-// Test 12: Verify tiny table (single data row) doesn't crash
+// The First and Last Column options claim the corner cells, but they must not take the header or
+// totals row's own border off them.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleCornerCellRowBorder)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScDBData aDBData(u"CornerBorder"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleMedium2"_ustr;
+    aStyleParam.mbRowStripes = true;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = true;
+    aStyleParam.mbLastColumn = true;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleMedium2"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    // Medium2 draws the double line above its totals row, corner cells included
+    for (SCCOL nCol : { SCCOL(0), SCCOL(1), SCCOL(3) })
+    {
+        const SvxBoxItem* pTotalBox = pStyle->GetBoxItem(aDBData, nCol, 10, 9);
+        CPPUNIT_ASSERT(pTotalBox);
+        const editeng::SvxBorderLine* pTotalTop = pTotalBox->GetLine(SvxBoxItemLine::TOP);
+        CPPUNIT_ASSERT(pTotalTop);
+        CPPUNIT_ASSERT_EQUAL(SvxBorderLineStyle::DOUBLE_THIN, pTotalTop->GetBorderLineStyle());
+    }
+
+    // Light1 puts a line under its header row, where Medium2 has none
+    ScDBData aLightData(u"CornerHeaderBorder"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    aStyleParam.maStyleID = u"TableStyleLight1"_ustr;
+    aLightData.SetTableStyleInfo(aStyleParam);
+
+    const ScTableStyle* pLightStyle
+        = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleLight1"_ustr);
+    CPPUNIT_ASSERT(pLightStyle);
+
+    for (SCCOL nCol : { SCCOL(0), SCCOL(1), SCCOL(3) })
+    {
+        const SvxBoxItem* pHeaderBox = pLightStyle->GetBoxItem(aLightData, nCol, 0, -1);
+        CPPUNIT_ASSERT(pHeaderBox);
+        CPPUNIT_ASSERT(pHeaderBox->GetLine(SvxBoxItemLine::BOTTOM));
+    }
+
+    m_pDoc->DeleteTab(0);
+}
+
+// Test 12: The smallest Tables — one column, and the smallest one with a total row
 CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleTinyTable)
 {
     m_pDoc->InitDrawLayer();
@@ -808,37 +1391,73 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleTinyTable)
     aStyleParam.mbLastColumn = false;
     aDB1.SetTableStyleInfo(aStyleParam);
 
-    // Should not crash — header row 0
+    // Header row 0
     const SvxBrushItem* pFill = pStyle->GetFillItem(aDB1, 0, 0, 0);
     CPPUNIT_ASSERT(pFill); // header should still have fill
     const SfxItemSet* pFont = pStyle->GetFontItemSet(aDB1, 0, 0, 0);
     CPPUNIT_ASSERT(pFont);
-    std::unique_ptr<SvxBoxItem> pBox = pStyle->GetBoxItem(aDB1, 0, 0, 0);
-    // Border may or may not exist, just verify no crash
 
-    // Data row 1
+    // A1 opens the table on the left, and B1 closes it on the right, so the header cell
+    // carries the top and left edges but no right one.
+    const SvxBoxItem* pHeaderBox = pStyle->GetBoxItem(aDB1, 0, 0, 0);
+    CPPUNIT_ASSERT(pHeaderBox);
+    CPPUNIT_ASSERT(pHeaderBox->GetLine(SvxBoxItemLine::TOP));
+    CPPUNIT_ASSERT(pHeaderBox->GetLine(SvxBoxItemLine::LEFT));
+    CPPUNIT_ASSERT(!pHeaderBox->GetLine(SvxBoxItemLine::RIGHT));
+
+    // Data row 1 — the only data row, so it is the last row of the table as well. Without a
+    // total row it must not take the total row's double top border, and it has to close the
+    // table at the bottom.
     pStyle->GetFillItem(aDB1, 0, 1, 0);
     pStyle->GetFontItemSet(aDB1, 0, 1, 0);
-    pStyle->GetBoxItem(aDB1, 0, 1, 0);
+    const SvxBoxItem* pDataBox = pStyle->GetBoxItem(aDB1, 0, 1, 0);
+    CPPUNIT_ASSERT(pDataBox);
+    const editeng::SvxBorderLine* pDataTop = pDataBox->GetLine(SvxBoxItemLine::TOP);
+    CPPUNIT_ASSERT(pDataTop);
+    CPPUNIT_ASSERT(pDataTop->GetBorderLineStyle() != SvxBorderLineStyle::DOUBLE_THIN);
+    CPPUNIT_ASSERT(pDataBox->GetLine(SvxBoxItemLine::BOTTOM));
 
-    // Single cell table: A1:A1 — just header, no data
-    ScDBData aDB2(u"Tiny2"_ustr, 0, 0, 0, 0, 0, true, true, false);
+    // Single column table: A1:A2 — header + one data row
+    ScDBData aDB2(u"Tiny2"_ustr, 0, 0, 0, 0, 1, true, true, false);
     aDB2.SetTableStyleInfo(aStyleParam);
 
-    // Should not crash
     pStyle->GetFillItem(aDB2, 0, 0, 0);
     pStyle->GetFontItemSet(aDB2, 0, 0, 0);
-    pStyle->GetBoxItem(aDB2, 0, 0, 0);
 
-    // Header + total, no data rows: A1:B2 with total
-    ScDBData aDB3(u"Tiny3"_ustr, 0, 0, 0, 1, 1, true, true, true);
+    // A1 is the first and the last column at once, so it takes both outer edges. The same
+    // cell of aDB1 above took only the left one, and both tables share this ScTableStyle.
+    const SvxBoxItem* pOneColBox = pStyle->GetBoxItem(aDB2, 0, 0, 0);
+    CPPUNIT_ASSERT(pOneColBox);
+    CPPUNIT_ASSERT(pOneColBox->GetLine(SvxBoxItemLine::TOP));
+    CPPUNIT_ASSERT(pOneColBox->GetLine(SvxBoxItemLine::LEFT));
+    CPPUNIT_ASSERT(pOneColBox->GetLine(SvxBoxItemLine::RIGHT));
+
+    // Header + two data rows + total: A1:B4
+    ScDBData aDB3(u"Tiny3"_ustr, 0, 0, 0, 1, 3, true, true, true);
     aDB3.SetTableStyleInfo(aStyleParam);
 
-    // Row 0 = header, row 1 = total — no data rows
     pStyle->GetFillItem(aDB3, 0, 0, 0);
-    pStyle->GetFillItem(aDB3, 0, 1, 0);
+    pStyle->GetFillItem(aDB3, 0, 3, 2);
     pStyle->GetBoxItem(aDB3, 0, 0, 0);
-    pStyle->GetBoxItem(aDB3, 0, 1, 0);
+
+    // A4 is the total row: double top border, and the outer bottom and left edges. Its row
+    // index is even like aDB1's data row above, so both cells land on the same row stripe
+    // and the total row is all that separates them. Keep the data row count even.
+    const SvxBoxItem* pTotalBox = pStyle->GetBoxItem(aDB3, 0, 3, 2);
+    CPPUNIT_ASSERT(pTotalBox);
+    const editeng::SvxBorderLine* pTotalTop = pTotalBox->GetLine(SvxBoxItemLine::TOP);
+    CPPUNIT_ASSERT(pTotalTop);
+    CPPUNIT_ASSERT_EQUAL(SvxBorderLineStyle::DOUBLE_THIN, pTotalTop->GetBorderLineStyle());
+    CPPUNIT_ASSERT(pTotalBox->GetLine(SvxBoxItemLine::BOTTOM));
+    CPPUNIT_ASSERT(pTotalBox->GetLine(SvxBoxItemLine::LEFT));
+    CPPUNIT_ASSERT(!pTotalBox->GetLine(SvxBoxItemLine::RIGHT));
+
+    // B4 ends both the total row and the table
+    const SvxBoxItem* pLastTotalBox = pStyle->GetBoxItem(aDB3, 1, 3, 2);
+    CPPUNIT_ASSERT(pLastTotalBox);
+    CPPUNIT_ASSERT(pLastTotalBox->GetLine(SvxBoxItemLine::RIGHT));
+    CPPUNIT_ASSERT(pLastTotalBox->GetLine(SvxBoxItemLine::BOTTOM));
+    CPPUNIT_ASSERT(!pLastTotalBox->GetLine(SvxBoxItemLine::LEFT));
 
     m_pDoc->DeleteTab(0);
 }
@@ -866,6 +1485,41 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testAutoExpandRowDown)
                                  getArea(*pData));
     CPPUNIT_ASSERT_MESSAGE("pending flag should be cleared after drain",
                            !pData->HasPendingExpansion());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeDoesNotAutoExpandOverStructRef)
+{
+    m_pDoc->InsertTab(0, u"ResizeNoAutoExpand"_ustr);
+
+    // Styled table A1:C8 (TestTable): header Name|Number|Column3, data rows 1-7, no Total Row.
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 2, 7,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ false);
+    m_pDoc->SetString(0, 0, 0, u"Name"_ustr);
+    m_pDoc->SetString(1, 0, 0, u"Number"_ustr);
+    m_pDoc->SetString(2, 0, 0, u"Column3"_ustr);
+    for (SCROW nRow = 1; nRow <= 7; ++nRow)
+        m_pDoc->SetValue(1, nRow, 0, static_cast<double>(nRow)); // Number: 1..7 (sum 28)
+    pData->RefreshTableColumnNames(m_pDoc);
+
+    // A structured-ref formula at G9, below-right of the table and OUTSIDE its current bands
+    // (row band A9:D9, col band D1:D9), so placing it flags no expansion.
+    m_pDoc->SetString(6, 8, 0, u"=SUBTOTAL(9;TestTable[Number])"_ustr);
+    m_pDoc->CalcAll();
+    CPPUNIT_ASSERT_EQUAL(28.0, m_pDoc->GetValue(6, 8, 0));
+    CPPUNIT_ASSERT_MESSAGE("placing the struct ref outside the bands must not flag expansion",
+                           !pData->HasPendingExpansion());
+
+    // Widen by columns only: A1:C8 -> A1:G8. G9 is now in the row band directly below, but a
+    // column resize must NOT grow a row (that stray row would swallow G9 and break it to #REF!).
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(0, 0, 0, 6, 7, 0));
+    m_xDocShell->ProcessPendingTableExpansions();
+
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("column resize must not auto-expand a row over the struct ref",
+                                 ScRange(0, 0, 0, 6, 7, 0), getArea(*pNow));
 
     m_pDoc->DeleteTab(0);
 }
@@ -1256,6 +1910,205 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testExpandUndoRedoThenShrink)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeTotalsColumnsOnly)
+{
+    m_pDoc->InsertTab(0, u"ResizeTotalsCols"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    // Table B2:D11, header row (row 2) + Total Row (row 11).
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+    m_pDoc->SetString(ScAddress(1, 1, 0), u"A"_ustr);
+    m_pDoc->SetString(ScAddress(2, 1, 0), u"B"_ustr);
+    m_pDoc->SetString(ScAddress(3, 1, 0), u"C"_ustr);
+
+    // Widen B2:D11 -> B2:F11 (rows unchanged).
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(1, 1, 0, 5, 10, 0));
+
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 5, 10, 0), getArea(*pNow));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("new column E header", u"Column4"_ustr,
+                                 m_pDoc->GetString(4, 1, 0));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("new column F header", u"Column5"_ustr,
+                                 m_pDoc->GetString(5, 1, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeMinimumRows)
+{
+    m_pDoc->InsertTab(0, u"ResizeMinRows"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    // Table B2:D11, header row (row 2) + Total Row (row 11).
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+
+    ScDBDocFunc aFunc(*m_xDocShell);
+
+    // The header row on its own, and the header row with the Total Row right below it, both
+    // leave no data row: refused, and the Table keeps its area.
+    CPPUNIT_ASSERT(!aFunc.ResizeTable(*pData, ScRange(1, 1, 0, 3, 1, 0), /*bApi*/ true));
+    CPPUNIT_ASSERT(!aFunc.ResizeTable(*pData, ScRange(1, 1, 0, 3, 2, 0), /*bApi*/ true));
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 3, 10, 0), getArea(*pData));
+
+    // Header + one data row + the Total Row is the smallest a Total Row Table shrinks to.
+    CPPUNIT_ASSERT(aFunc.ResizeTable(*pData, ScRange(1, 1, 0, 3, 3, 0), /*bApi*/ true));
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 3, 3, 0), getArea(*pNow));
+
+    // Without a Total Row the header and one data row are enough.
+    ScDBData* pPlain
+        = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 5, 1, 6, 10,
+                           /*bHasHeader*/ true, /*bHasTotals*/ false, u"PlainTable"_ustr);
+    CPPUNIT_ASSERT(!aFunc.ResizeTable(*pPlain, ScRange(5, 1, 0, 6, 1, 0), /*bApi*/ true));
+    CPPUNIT_ASSERT(aFunc.ResizeTable(*pPlain, ScRange(5, 1, 0, 6, 2, 0), /*bApi*/ true));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeTotalsRowsOnly)
+{
+    m_pDoc->InsertTab(0, u"ResizeTotalsRows"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+
+    // Grow B2:D11 -> B2:D27 (rows only): the Total Row moves to the new last row.
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(1, 1, 0, 3, 26, 0));
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 3, 26, 0), getArea(*pNow));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeMultiDimNoTotals)
+{
+    m_pDoc->InsertTab(0, u"ResizeMultiNoTotals"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ false);
+    m_pDoc->SetString(ScAddress(1, 1, 0), u"A"_ustr);
+    m_pDoc->SetString(ScAddress(2, 1, 0), u"B"_ustr);
+    m_pDoc->SetString(ScAddress(3, 1, 0), u"C"_ustr);
+
+    // Grow B2:D11 -> B2:K26 (columns AND rows).
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(1, 1, 0, 10, 25, 0));
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 10, 25, 0), getArea(*pNow));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("new column E header", u"Column4"_ustr,
+                                 m_pDoc->GetString(4, 1, 0));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("new column K header", u"Column10"_ustr,
+                                 m_pDoc->GetString(10, 1, 0));
+
+    m_xDocShell->GetUndoManager()->Undo();
+    pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 3, 10, 0), getArea(*pNow));
+
+    m_xDocShell->GetUndoManager()->Redo();
+    pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 10, 25, 0), getArea(*pNow));
+    CPPUNIT_ASSERT_EQUAL(u"Column10"_ustr, m_pDoc->GetString(10, 1, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeTotalsMultiDim)
+{
+    m_pDoc->InsertTab(0, u"ResizeTotalsMulti"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+    m_pDoc->SetString(ScAddress(1, 1, 0), u"A"_ustr);
+    m_pDoc->SetString(ScAddress(2, 1, 0), u"B"_ustr);
+    m_pDoc->SetString(ScAddress(3, 1, 0), u"C"_ustr);
+
+    // Grow B2:D11 -> B2:K26 (columns AND rows) with a Total Row present.
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(1, 1, 0, 10, 25, 0));
+
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 10, 25, 0), getArea(*pNow));
+
+    // New columns must get generated headers, same as the no-totals case.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("new column E header", u"Column4"_ustr,
+                                 m_pDoc->GetString(4, 1, 0));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("new column K header", u"Column10"_ustr,
+                                 m_pDoc->GetString(10, 1, 0));
+
+    // This table has autofilter OFF, so the resize must NOT add filter-button flags.
+    CPPUNIT_ASSERT_MESSAGE(
+        "no autofilter flag when the table has autofilter off",
+        !bool(m_pDoc->GetAttr(10, 1, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeTotalsColumnShrink)
+{
+    m_pDoc->InsertTab(0, u"ResizeTotalsShrink"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    // Total-Row table B2:D11 with headers A|B|C; grow it (columns only) to B2:K11 so E..K
+    // get generated Column4..Column10 (routes through ModifyDBData, rows unchanged).
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+    m_pDoc->SetString(ScAddress(1, 1, 0), u"A"_ustr);
+    m_pDoc->SetString(ScAddress(2, 1, 0), u"B"_ustr);
+    m_pDoc->SetString(ScAddress(3, 1, 0), u"C"_ustr);
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(1, 1, 0, 10, 10, 0));
+    CPPUNIT_ASSERT_EQUAL(u"Column6"_ustr, m_pDoc->GetString(6, 1, 0)); // G header generated
+
+    // Shrink to B2:F27 (drop G..K) AND change the row span, so the totals branch runs and
+    // must clear the dropped columns' generated names.
+    ScDBData* pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pNow, ScRange(1, 1, 0, 5, 26, 0));
+
+    pNow = findTestTable(m_pDoc);
+    CPPUNIT_ASSERT(pNow);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 5, 26, 0), getArea(*pNow));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("kept column F header", u"Column5"_ustr,
+                                 m_pDoc->GetString(5, 1, 0));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("dropped column G generated header cleared", OUString(),
+                                 m_pDoc->GetString(6, 1, 0));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("dropped column K generated header cleared", OUString(),
+                                 m_pDoc->GetString(10, 1, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testResizeTotalsAutoFilterFlags)
+{
+    m_pDoc->InsertTab(0, u"ResizeTotalsAutoFilter"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 1, 1, 3, 10,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+    pData->SetAutoFilter(true);
+    m_pDoc->ApplyFlagsTab(1, 1, 3, 1, 0, ScMF::Auto); // initial filter buttons on header B2:D2
+
+    // Grow B2:D11 -> B2:K26 (columns AND rows): the new header cells get the filter button.
+    ScDBDocFunc(*m_xDocShell).ResizeTable(*pData, ScRange(1, 1, 0, 10, 25, 0));
+
+    CPPUNIT_ASSERT_MESSAGE("new column E autofilter flag",
+                           bool(m_pDoc->GetAttr(4, 1, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+    CPPUNIT_ASSERT_MESSAGE(
+        "new column K autofilter flag",
+        bool(m_pDoc->GetAttr(10, 1, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+
+    m_pDoc->DeleteTab(0);
+}
+
 // Removing a table clears the default header names it generated, but leaves
 // user-entered headers (and any header it did not generate) in place.
 CPPUNIT_TEST_FIXTURE(TableStylesTest, testAutoHeadersRemoveTable)
@@ -1429,6 +2282,113 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateHeader)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testNumericHeaderBecomesText)
+{
+    m_pDoc->InsertTab(0, u"NumHeader"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    m_pDoc->SetString(ScAddress(0, 0, 0), u"Sales"_ustr);
+    m_pDoc->SetString(ScAddress(1, 0, 0), u"Profit"_ustr);
+    m_pDoc->SetString(ScAddress(2, 0, 0), u"Region"_ustr);
+    ScDBDocFunc aFunc(*m_xDocShell);
+    CPPUNIT_ASSERT(aFunc.AddDBTable(u"Table1"_ustr, ScRange(0, 0, 0, 2, 4, 0),
+                                    /*bHeader*/ true, /*bRecord*/ true, /*bApi*/ true,
+                                    u"TableStyleMedium2"_ustr));
+
+    m_xDocShell->GetDocFunc().SetValueCell(ScAddress(2, 0, 0), 9999.0, false);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("a number in a header is stored as text", CELLTYPE_STRING,
+                                 m_pDoc->GetCellType(ScAddress(2, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"9999"_ustr, m_pDoc->GetString(2, 0, 0));
+
+    const ScDBData* pData
+        = m_pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE1"_ustr);
+    CPPUNIT_ASSERT(pData);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("the column is named what the cell shows", u"9999"_ustr,
+                                 pData->GetTableColumnNames()[2]);
+
+    // A formula in a header cell goes the same way, it is a name too.
+    m_xDocShell->GetDocFunc().SetFormulaCell(
+        ScAddress(1, 0, 0), new ScFormulaCell(*m_pDoc, ScAddress(1, 0, 0), u"=1+11"_ustr), false);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("a formula in a header is stored as text", CELLTYPE_STRING,
+                                 m_pDoc->GetCellType(ScAddress(1, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"12"_ustr, m_pDoc->GetString(1, 0, 0));
+
+    // Rich text in a header is text already, it must survive untouched.
+    ScFieldEditEngine& rEE = m_pDoc->GetEditEngine();
+    rEE.SetTextCurrentDefaults(u"Two\nLines"_ustr);
+    m_xDocShell->GetDocFunc().SetEditCell(ScAddress(0, 0, 0), rEE.CreateTextObject(), false);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("rich text in a header is not flattened", CELLTYPE_EDIT,
+                                 m_pDoc->GetCellType(ScAddress(0, 0, 0)));
+
+    // A data cell keeps its number and its formula.
+    m_xDocShell->GetDocFunc().SetValueCell(ScAddress(2, 1, 0), 1234.0, false);
+    CPPUNIT_ASSERT_EQUAL(CELLTYPE_VALUE, m_pDoc->GetCellType(ScAddress(2, 1, 0)));
+    m_xDocShell->GetDocFunc().SetFormulaCell(
+        ScAddress(1, 1, 0), new ScFormulaCell(*m_pDoc, ScAddress(1, 1, 0), u"=1+11"_ustr), false);
+    CPPUNIT_ASSERT_EQUAL(CELLTYPE_FORMULA, m_pDoc->GetCellType(ScAddress(1, 1, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testNumericHeaderDuplicateReverts)
+{
+    m_pDoc->InsertTab(0, u"NumDup"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    m_pDoc->SetString(ScAddress(0, 0, 0), u"12"_ustr);
+    m_pDoc->SetString(ScAddress(1, 0, 0), u"Profit"_ustr);
+    m_pDoc->SetString(ScAddress(2, 0, 0), u"Region"_ustr);
+    ScDBDocFunc aFunc(*m_xDocShell);
+    CPPUNIT_ASSERT(aFunc.AddDBTable(u"Table1"_ustr, ScRange(0, 0, 0, 2, 4, 0),
+                                    /*bHeader*/ true, /*bRecord*/ true, /*bApi*/ true,
+                                    u"TableStyleMedium2"_ustr));
+
+    // 12 into C1 would read the same as A1, so C1 goes back to "Region".
+    m_xDocShell->GetDocFunc().SetValueCell(ScAddress(2, 0, 0), 12.0, false);
+    CPPUNIT_ASSERT_EQUAL(u"12"_ustr, m_pDoc->GetString(0, 0, 0));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("a duplicate is reverted, not turned into text", u"Region"_ustr,
+                                 m_pDoc->GetString(2, 0, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testCreateTableReusesDBRangeWithTotals)
+{
+    m_pDoc->InsertTab(0, u"Promote"_ustr);
+
+    m_pDoc->SetString(ScAddress(0, 0, 0), u"Sales"_ustr);
+    m_pDoc->SetString(ScAddress(1, 0, 0), u"Profit"_ustr);
+    m_pDoc->SetString(ScAddress(0, 1, 0), u"d1"_ustr);
+    m_pDoc->SetString(ScAddress(0, 4, 0), u"Total"_ustr);
+
+    // A plain named range A1:B5 with a totals row and no table style.
+    ScDBData* pPlain = new ScDBData(u"MyRange"_ustr, 0, 0, 0, 1, 4,
+                                    /*bByRow*/ true, /*bHasHeader*/ true, /*bTotals*/ true);
+    CPPUNIT_ASSERT(
+        m_pDoc->GetDBCollection()->getNamedDBs().insert(std::unique_ptr<ScDBData>(pPlain)));
+    const size_t nBefore = m_pDoc->GetDBCollection()->getNamedDBs().size();
+
+    ScDBDocFunc aFunc(*m_xDocShell);
+    CPPUNIT_ASSERT(aFunc.AddDBTable(u"Table1"_ustr, ScRange(0, 0, 0, 1, 4, 0),
+                                    /*bHeader*/ true, /*bRecord*/ true, /*bApi*/ true,
+                                    u"TableStyleMedium2"_ustr));
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("reused, not a second range", nBefore,
+                                 m_pDoc->GetDBCollection()->getNamedDBs().size());
+
+    // The very same range object was promoted: still named MyRange, now styled,
+    // same extent, totals row intact.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("the existing range was promoted", u"MyRange"_ustr,
+                                 pPlain->GetName());
+    CPPUNIT_ASSERT(pPlain->GetTableStyleInfo());
+    ScRange aArea;
+    pPlain->GetArea(aArea);
+    CPPUNIT_ASSERT_EQUAL(ScRange(0, 0, 0, 1, 4, 0), aArea);
+    CPPUNIT_ASSERT(pPlain->HasTotals());
+
+    m_pDoc->DeleteTab(0);
+}
+
 // Creating a table whose header row holds a duplicate renames the duplicate in
 // place (Excel-style "A | B | A" -> "A | B | A2"); no row is inserted and the
 // data below is left exactly where it was.
@@ -1495,6 +2455,48 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testGeneratedNameReusedByUser)
     CPPUNIT_ASSERT_EQUAL_MESSAGE("user header B kept", u"Sales"_ustr, m_pDoc->GetString(1, 0, 0));
     CPPUNIT_ASSERT_EQUAL_MESSAGE("user-typed C must survive remove", u"Column2"_ustr,
                                  m_pDoc->GetString(2, 0, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testHeaderRepairOfDuplicateShownByAFormat)
+{
+    m_pDoc->InsertTab(0, u"HeaderRepair"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    ScDBDocFunc aFunc(*m_xDocShell);
+    CPPUNIT_ASSERT(aFunc.AddDBTable(u"Table1"_ustr, ScRange(0, 0, 0, 2, 4, 0),
+                                    /*bHeader*/ true, /*bRecord*/ true, /*bApi*/ true,
+                                    u"TableStyleMedium2"_ustr));
+
+    // A number format can put extra characters around a header name, so what the header row
+    // shows differs from the name the cell holds.
+    sal_Int32 nCheckPos;
+    SvNumFormatType eType;
+    sal_uInt32 nFormat;
+    OUString aCode = u"\"[\"@\"]\""_ustr;
+    m_pDoc->GetFormatTable()->PutEntry(aCode, nCheckPos, eType, nFormat);
+    ScPatternAttr aFormatAttr(m_pDoc->getCellAttributeHelper());
+    aFormatAttr.ItemSetPut(SfxUInt32Item(ATTR_VALUE_FORMAT, nFormat));
+    m_pDoc->ApplyPattern(0, 0, 0, aFormatAttr);
+    m_pDoc->ApplyPattern(2, 0, 0, aFormatAttr);
+    CPPUNIT_ASSERT_EQUAL(u"[Column1]"_ustr, m_pDoc->GetString(0, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(u"[Column3]"_ustr, m_pDoc->GetString(2, 0, 0));
+
+    // The first and the third header now show the same text, so the third one is a duplicate.
+    m_pDoc->SetString(ScAddress(2, 0, 0), u"Column1"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"[Column1]"_ustr, m_pDoc->GetString(2, 0, 0));
+
+    ScDBData* pData = m_pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE1"_ustr);
+    CPPUNIT_ASSERT(pData);
+    CPPUNIT_ASSERT_MESSAGE("a duplicate header leaves the column names to redo",
+                           pData->AreTableColumnNamesDirty());
+
+    // The repair puts the third column back to its own name and then stops.
+    m_xDocShell->SetDocumentModified();
+
+    CPPUNIT_ASSERT_EQUAL(u"[Column1]"_ustr, m_pDoc->GetString(0, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(u"[Column3]"_ustr, m_pDoc->GetString(2, 0, 0));
 
     m_pDoc->DeleteTab(0);
 }
@@ -1724,6 +2726,557 @@ CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBorderEmptyCellOverride)
     CPPUNIT_ASSERT_MESSAGE("table-style wholeTable border must not be masked by empty cell border",
                            pBox->GetTop() || pBox->GetBottom() || pBox->GetLeft()
                                || pBox->GetRight());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testTableStyleBorderDirectEdge)
+{
+    // GIVEN a TableStyleMedium2 range with a direct top border over one whole data row, the
+    // way the Borders toolbar applies one.
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScDBData* pDBData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr);
+    CPPUNIT_ASSERT(pDBData);
+
+    constexpr SCROW nRow = 5;
+    constexpr SCTAB nTab = 0;
+    SvxBoxItem aBox(ATTR_BORDER);
+    editeng::SvxBorderLine aLine(nullptr, SvxBorderLineWidth::Thick);
+    aBox.SetLine(&aLine, SvxBoxItemLine::TOP);
+    for (SCCOL nCol = 0; nCol <= 3; ++nCol)
+        m_pDoc->ApplyAttr(nCol, nRow, nTab, aBox);
+
+    // WHEN ScDocument::FillInfo runs over the table.
+    ScTableInfo aTabInfo(0, 10, false);
+    m_pDoc->FillInfo(aTabInfo, 0, 0, 3, 10, nTab, 1, 1, false, false);
+
+    // THEN the cell keeps the edge it set itself and the style keeps the others, so the row
+    // still closes on both sides.
+    RowInfo& rRowInfo = aTabInfo.mpRowInfo[nRow + 1];
+    const SvxBoxItem* pFirstBox
+        = static_cast<const SvxBoxItem*>(rRowInfo.cellInfo(0).maLinesAttr.getItem());
+    CPPUNIT_ASSERT(pFirstBox);
+    const editeng::SvxBorderLine* pTopLine = pFirstBox->GetTop();
+    CPPUNIT_ASSERT(pTopLine);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(SvxBorderLineWidth::Thick), pTopLine->GetWidth());
+    CPPUNIT_ASSERT_MESSAGE("a direct top border must not take the style's left edge off the row",
+                           pFirstBox->GetLeft());
+
+    const SvxBoxItem* pLastBox
+        = static_cast<const SvxBoxItem*>(rRowInfo.cellInfo(3).maLinesAttr.getItem());
+    CPPUNIT_ASSERT(pLastBox);
+    CPPUNIT_ASSERT(pLastBox->GetTop());
+    CPPUNIT_ASSERT_MESSAGE("a direct top border must not take the style's right edge off the row",
+                           pLastBox->GetRight());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testRenameTableUpdatesStructuredRefs)
+{
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"RenameTable"_ustr);
+    m_pDoc->EnableUndo(true);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 1, 3,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ false);
+    CPPUNIT_ASSERT(pData);
+    m_pDoc->SetString(ScAddress(0, 0, 0), u"Header1"_ustr);
+    m_pDoc->SetString(ScAddress(1, 0, 0), u"Header2"_ustr);
+    m_pDoc->SetString(ScAddress(0, 1, 0), u"1"_ustr);
+    m_pDoc->SetString(ScAddress(0, 2, 0), u"4"_ustr);
+    m_pDoc->SetString(ScAddress(0, 3, 0), u"16"_ustr);
+
+    m_pDoc->SetString(ScAddress(3, 0, 0), u"=SUM(TestTable[Header1])"_ustr);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    CPPUNIT_ASSERT(ScDBDocFunc(*m_xDocShell).RenameDBRange(u"TestTable"_ustr, u"Renamed"_ustr));
+
+    // The structured reference must follow the rename.
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"Renamed[") >= 0);
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"TestTable") < 0);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    m_xDocShell->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TESTTABLE"_ustr));
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"TestTable[") >= 0);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    m_xDocShell->GetUndoManager()->Redo();
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"RENAMED"_ustr));
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"Renamed[") >= 0);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    // A case-only rename ("Renamed" -> "RENAMED") is allowed, and the structured reference
+    // re-renders with the new case.
+    CPPUNIT_ASSERT(ScDBDocFunc(*m_xDocShell).RenameDBRange(u"Renamed"_ustr, u"RENAMED"_ustr));
+    ScDBData* pCased = m_pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"RENAMED"_ustr);
+    CPPUNIT_ASSERT(pCased);
+    CPPUNIT_ASSERT_EQUAL(u"RENAMED"_ustr, pCased->GetName());
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"RENAMED[") >= 0);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+// The gallery groups styles Light, then Medium, then Dark, and orders the
+// trailing number numerically so the list reads 1, 2, ... 10 rather than the
+// lexical 1, 10, 2.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testGetSortedTableStyles)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Sorted"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    std::vector<const ScTableStyle*> aSorted = pStyles->GetSortedTableStyles();
+    CPPUNIT_ASSERT(!aSorted.empty());
+
+    auto indexOf = [&aSorted](std::u16string_view aName) -> sal_Int32 {
+        for (size_t i = 0; i < aSorted.size(); ++i)
+            if (aSorted[i]->GetName() == aName)
+                return static_cast<sal_Int32>(i);
+        return -1;
+    };
+
+    const sal_Int32 nLight1 = indexOf(u"TableStyleLight1");
+    const sal_Int32 nLight2 = indexOf(u"TableStyleLight2");
+    const sal_Int32 nLight10 = indexOf(u"TableStyleLight10");
+    const sal_Int32 nLight21 = indexOf(u"TableStyleLight21");
+    const sal_Int32 nMedium1 = indexOf(u"TableStyleMedium1");
+    const sal_Int32 nDark1 = indexOf(u"TableStyleDark1");
+    CPPUNIT_ASSERT(nLight1 >= 0);
+    CPPUNIT_ASSERT(nLight2 >= 0);
+    CPPUNIT_ASSERT(nLight10 >= 0);
+    CPPUNIT_ASSERT(nLight21 >= 0);
+    CPPUNIT_ASSERT(nMedium1 >= 0);
+    CPPUNIT_ASSERT(nDark1 >= 0);
+
+    CPPUNIT_ASSERT_MESSAGE("Light 1 precedes Light 2", nLight1 < nLight2);
+    CPPUNIT_ASSERT_MESSAGE("Light 2 precedes Light 10 (numeric, not lexical)", nLight2 < nLight10);
+    CPPUNIT_ASSERT_MESSAGE("Light precedes Medium", nLight21 < nMedium1);
+    CPPUNIT_ASSERT_MESSAGE("Medium precedes Dark", nMedium1 < nDark1);
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testRenameTableDuplicateRefused)
+{
+    m_pDoc->InsertTab(0, u"RenameDup"_ustr);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 1, 3,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ false);
+    CPPUNIT_ASSERT(pData);
+
+    // Renaming into a *different* existing table's name is refused.
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().insert(
+        std::unique_ptr<ScDBData>(new ScDBData(u"Other"_ustr, 0, 3, 0, 4, 3, true, true, false))));
+    CPPUNIT_ASSERT(!ScDBDocFunc(*m_xDocShell).RenameDBRange(u"TestTable"_ustr, u"Other"_ustr));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testConvertToRangeBakePreservesLayers)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Bake"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleMedium2"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    // A1:D11, header + total + row stripes + first/last column.
+    ScDBData aDBData(u"T"_ustr, 0, 0, 0, 3, 10, true, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleMedium2"_ustr;
+    aStyleParam.mbRowStripes = true;
+    aStyleParam.mbColumnStripes = false;
+    aStyleParam.mbFirstColumn = true;
+    aStyleParam.mbLastColumn = true;
+    aDBData.SetTableStyleInfo(aStyleParam);
+
+    // Direct attributes that must survive: a background (fill: direct beats the style) and a
+    // non-black font colour (font: direct beats the style).
+    const Color aDirectBg(0x123456);
+    m_pDoc->ApplyAttr(1, 3, 0, SvxBrushItem(aDirectBg, ATTR_BACKGROUND));
+    const Color aDirectFontColor(0x654321);
+    m_pDoc->ApplyAttr(2, 4, 0, SvxColorItem(aDirectFontColor, ATTR_FONT_COLOR));
+
+    pStyle->BakeInto(*m_pDoc, aDBData);
+
+    // The header is solid in Medium2: it must be baked as a real cell background.
+    const SvxBrushItem* pHeaderFill = pStyle->GetFillItem(aDBData, 1, 0, -1);
+    CPPUNIT_ASSERT(pHeaderFill);
+    CPPUNIT_ASSERT_EQUAL(pHeaderFill->GetColor(),
+                         m_pDoc->GetAttr(1, 0, 0, ATTR_BACKGROUND).GetColor());
+
+    // Elsewhere, wherever the style provides a fill, the baked cell background matches it
+    // (rowIndex mirrors fillinfo: header = -1, first data row = 0, ...). Empty stripes have no
+    // style fill, so those cells stay default - nothing to assert there.
+    auto checkFill = [&](SCCOL nCol, SCROW nRow) {
+        if (const SvxBrushItem* pStyleFill = pStyle->GetFillItem(aDBData, nCol, nRow, nRow - 1))
+            CPPUNIT_ASSERT_EQUAL(pStyleFill->GetColor(),
+                                 m_pDoc->GetAttr(nCol, nRow, 0, ATTR_BACKGROUND).GetColor());
+    };
+    checkFill(1, 2); // data stripe
+    checkFill(1, 10); // total row
+    checkFill(0, 2); // first column
+    checkFill(3, 2); // last column
+
+    // Direct background survives untouched.
+    CPPUNIT_ASSERT_EQUAL(aDirectBg, m_pDoc->GetAttr(1, 3, 0, ATTR_BACKGROUND).GetColor());
+    // Direct (non-black) font colour survives untouched.
+    CPPUNIT_ASSERT_EQUAL(aDirectFontColor, m_pDoc->GetAttr(2, 4, 0, ATTR_FONT_COLOR).getColor());
+
+    // The style's header font weight is baked onto a gap header cell (font beats the cell).
+    const SfxItemSet* pHeaderFont = pStyle->GetFontItemSet(aDBData, 1, 0, -1);
+    CPPUNIT_ASSERT(pHeaderFont);
+    if (const SvxWeightItem* pStyleWeight = pHeaderFont->GetItemIfSet(ATTR_FONT_WEIGHT, false))
+        CPPUNIT_ASSERT_EQUAL(pStyleWeight->GetWeight(),
+                             m_pDoc->GetAttr(1, 0, 0, ATTR_FONT_WEIGHT).GetWeight());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testConvertToRangeUndoRedo)
+{
+    m_pDoc->EnableUndo(true);
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Conv"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 3, 5,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+    const ScTableStyle* pStyle = m_pDoc->GetTableStyles()->GetTableStyle(u"TableStyleMedium2"_ustr);
+    CPPUNIT_ASSERT(pStyle);
+
+    // The header fill that must appear as a real cell attribute after conversion.
+    const SvxBrushItem* pHeaderFill = pStyle->GetFillItem(*pData, 1, 0, -1);
+    CPPUNIT_ASSERT(pHeaderFill);
+    const Color aHeaderColor = pHeaderFill->GetColor();
+
+    CPPUNIT_ASSERT(ScDBDocFunc(*m_xDocShell).ConvertTableToRange(pData));
+
+    CPPUNIT_ASSERT(!m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"TestTable"_ustr));
+    CPPUNIT_ASSERT_EQUAL(aHeaderColor, m_pDoc->GetAttr(1, 0, 0, ATTR_BACKGROUND).GetColor());
+
+    m_pDoc->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"TestTable"_ustr));
+    CPPUNIT_ASSERT(m_pDoc->GetAttr(1, 0, 0, ATTR_BACKGROUND).GetColor() != aHeaderColor);
+
+    m_pDoc->GetUndoManager()->Redo();
+    CPPUNIT_ASSERT(!m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"TestTable"_ustr));
+    CPPUNIT_ASSERT_EQUAL(aHeaderColor, m_pDoc->GetAttr(1, 0, 0, ATTR_BACKGROUND).GetColor());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testConvertToRangeFlattensStructuredRefs)
+{
+    m_pDoc->EnableUndo(true);
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Conv"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    applyThemeToDocument(m_pDoc, pColorSet);
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    // Table A1:B5 - header row 0, data rows 1..3, totals row 4; column B is "Val".
+    ScDBData* pData = createTestDBData(m_pDoc, u"TableStyleMedium2"_ustr, 0, 0, 1, 4,
+                                       /*bHasHeader*/ true, /*bHasTotals*/ true);
+    m_pDoc->SetString(0, 0, 0, u"Name"_ustr);
+    m_pDoc->SetString(1, 0, 0, u"Val"_ustr);
+    m_pDoc->SetValue(1, 1, 0, 10.0);
+    m_pDoc->SetValue(1, 2, 0, 20.0);
+    m_pDoc->SetValue(1, 3, 0, 30.0);
+    pData->RefreshTableColumnNames(m_pDoc);
+
+    // A scalar structured reference (D1) and a multi-cell array formula over D2:D4
+    // ({=TestTable[Val]*2} -> {20, 40, 60}). If Convert-to-Range dropped the array-ness, D2:D4
+    // would collapse to a single value, so distinct per-row values prove the array survived.
+    m_pDoc->SetString(3, 0, 0, u"=SUM(TestTable[Val])"_ustr); // D1
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectTable(0, true);
+    m_pDoc->InsertMatrixFormula(3, 1, 3, 3, aMark, u"=TestTable[Val]*2"_ustr); // D2:D4
+    // A defined name (global) that also references the column via a structured reference. Its
+    // value stays cached even when the stored code dangles, so we check the code (symbol) itself.
+    m_pDoc->GetRangeName().insert(std::make_unique<ScRangeData>(
+        *m_pDoc, u"ValTotal"_ustr, u"SUM(TestTable[Val])"_ustr, ScAddress(0, 0, 0)));
+    auto bNameHasTableRef = [this] {
+        const ScRangeData* p = m_pDoc->GetRangeName().findByUpperName(u"VALTOTAL"_ustr);
+        return p && p->GetSymbol().indexOf(u"TestTable") >= 0;
+    };
+    m_pDoc->CalcAll();
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 0, 0));
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"TestTable") >= 0);
+    CPPUNIT_ASSERT_EQUAL(20.0, m_pDoc->GetValue(3, 1, 0));
+    CPPUNIT_ASSERT_EQUAL(40.0, m_pDoc->GetValue(3, 2, 0));
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 3, 0));
+    CPPUNIT_ASSERT(bNameHasTableRef());
+
+    CPPUNIT_ASSERT(ScDBDocFunc(*m_xDocShell).ConvertTableToRange(pData));
+    m_pDoc->CalcAll();
+
+    // Table gone; both formulas are flattened to plain ranges with values intact (no #REF!), and
+    // the array stays an array (D2:D4 keep their distinct values).
+    CPPUNIT_ASSERT(!m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"TestTable"_ustr));
+    const OUString aFlat = m_pDoc->GetFormula(3, 0, 0);
+    CPPUNIT_ASSERT(aFlat.indexOf(u"TestTable") < 0);
+    CPPUNIT_ASSERT(aFlat.indexOf(u"$B$2:$B$4") >= 0);
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 0, 0));
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 1, 0).indexOf(u"TestTable") < 0);
+    CPPUNIT_ASSERT_EQUAL(20.0, m_pDoc->GetValue(3, 1, 0));
+    CPPUNIT_ASSERT_EQUAL(40.0, m_pDoc->GetValue(3, 2, 0));
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 3, 0));
+    CPPUNIT_ASSERT(!bNameHasTableRef()); // the defined name's stored code is flattened too
+
+    // Undo restores the structured references and the values (array included).
+    m_pDoc->GetUndoManager()->Undo();
+    m_pDoc->CalcAll();
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"TestTable"_ustr));
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"TestTable") >= 0);
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(20.0, m_pDoc->GetValue(3, 1, 0));
+    CPPUNIT_ASSERT_EQUAL(40.0, m_pDoc->GetValue(3, 2, 0));
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 3, 0));
+    CPPUNIT_ASSERT(bNameHasTableRef()); // the defined name is structured again
+
+    // Redo flattens again.
+    m_pDoc->GetUndoManager()->Redo();
+    m_pDoc->CalcAll();
+    CPPUNIT_ASSERT(!m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"TestTable"_ustr));
+    CPPUNIT_ASSERT(m_pDoc->GetFormula(3, 0, 0).indexOf(u"TestTable") < 0);
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(20.0, m_pDoc->GetValue(3, 1, 0));
+    CPPUNIT_ASSERT_EQUAL(40.0, m_pDoc->GetValue(3, 2, 0));
+    CPPUNIT_ASSERT_EQUAL(60.0, m_pDoc->GetValue(3, 3, 0));
+    CPPUNIT_ASSERT(!bNameHasTableRef());
+
+    m_pDoc->DeleteTab(0);
+}
+
+// The document carries a default table style for newly inserted tables. New
+// documents start at the built-in Medium 2, and the choice is remembered.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDefaultTableStyleName)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Default"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    CPPUNIT_ASSERT_EQUAL(u"TableStyleMedium2"_ustr, pStyles->GetDefaultStyleName());
+
+    pStyles->SetDefaultStyleName(u"TableStyleLight9"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"TableStyleLight9"_ustr, pStyles->GetDefaultStyleName());
+
+    m_pDoc->DeleteTab(0);
+}
+
+namespace
+{
+// The background colour a style sets on one of its regions, or COL_AUTO when that
+// region carries no fill.
+Color regionBackground(const ScTableStyle& rStyle, ScTableStyleElement eElement)
+{
+    const std::map<ScTableStyleElement, const ScPatternAttr*> aPatterns = rStyle.GetSetPatterns();
+    const auto it = aPatterns.find(eElement);
+    if (it == aPatterns.end())
+        return COL_AUTO;
+    const SvxBrushItem* pBrush = it->second->GetItemSet().GetItemIfSet(ATTR_BACKGROUND, false);
+    return pBrush ? pBrush->GetColor() : COL_AUTO;
+}
+}
+
+// Copying a style makes a Custom style that carries the formatting of the style it
+// was copied from, under the name it was given.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateTableStyleCopiesFormatting)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"Duplicate"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    const ScTableStyle* pSource = pStyles->GetTableStyle(u"TableStyleMedium2"_ustr);
+    CPPUNIT_ASSERT(pSource);
+    const Color aSourceHeader = regionBackground(*pSource, ScTableStyleElement::HeaderRow);
+
+    const OUString aNewName
+        = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, u"Copy of Medium 2"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"TableStyleCustom1"_ustr, aNewName);
+
+    const ScTableStyle* pCopy = pStyles->GetTableStyle(aNewName);
+    CPPUNIT_ASSERT(pCopy);
+    CPPUNIT_ASSERT_EQUAL(u"Copy of Medium 2"_ustr, pCopy->GetUIName());
+    CPPUNIT_ASSERT_EQUAL(aSourceHeader, regionBackground(*pCopy, ScTableStyleElement::HeaderRow));
+    // The copy is the user's own style, so it is not one of the generated built-ins
+    // and is grouped as Custom.
+    CPPUNIT_ASSERT(!pCopy->IsOOXMLDefault());
+
+    m_pDoc->DeleteTab(0);
+}
+
+// Copying a name no style is registered under changes nothing.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateTableStyleUnknownSource)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"DuplicateMissing"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    const size_t nBefore = pStyles->GetSortedTableStyles().size();
+    const OUString aNewName
+        = pStyles->DuplicateTableStyle(u"NoSuchStyle"_ustr, u"Copy of nothing"_ustr);
+
+    CPPUNIT_ASSERT(aNewName.isEmpty());
+    CPPUNIT_ASSERT_EQUAL(nBefore, pStyles->GetSortedTableStyles().size());
+    CPPUNIT_ASSERT(!pStyles->GetTableStyle(u"TableStyleCustom1"_ustr));
+
+    m_pDoc->DeleteTab(0);
+}
+
+// Each copy gets a name of its own, and copying a copy is allowed.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateTableStyleNamesEachCopy)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"DuplicateTwice"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    CPPUNIT_ASSERT_EQUAL(
+        u"TableStyleCustom1"_ustr,
+        pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, u"First"_ustr));
+    CPPUNIT_ASSERT_EQUAL(
+        u"TableStyleCustom2"_ustr,
+        pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, u"Second"_ustr));
+    // A copy can itself be copied.
+    CPPUNIT_ASSERT_EQUAL(
+        u"TableStyleCustom3"_ustr,
+        pStyles->DuplicateTableStyle(u"TableStyleCustom1"_ustr, u"Third"_ustr));
+
+    CPPUNIT_ASSERT_EQUAL(u"First"_ustr,
+                         pStyles->GetTableStyle(u"TableStyleCustom1"_ustr)->GetUIName());
+    CPPUNIT_ASSERT_EQUAL(u"Third"_ustr,
+                         pStyles->GetTableStyle(u"TableStyleCustom3"_ustr)->GetUIName());
+
+    m_pDoc->DeleteTab(0);
+}
+
+// A copy holds its own formatting, so changing one style leaves the other alone.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateTableStyleIsIndependent)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"DuplicateOwn"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    auto pPattern = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pPattern->GetItemSetWritable().Put(SvxBrushItem(COL_LIGHTRED, ATTR_BACKGROUND));
+    auto pOriginal = std::make_unique<ScTableStyle>(u"TableStyleCustom1"_ustr,
+                                                   std::optional<OUString>(u"Original"_ustr));
+    pOriginal->SetPattern(ScTableStyleElement::WholeTable, std::move(pPattern));
+    pStyles->AddTableStyle(std::move(pOriginal));
+
+    const OUString aCopyName
+        = pStyles->DuplicateTableStyle(u"TableStyleCustom1"_ustr, u"Copy"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"TableStyleCustom2"_ustr, aCopyName);
+
+    // Recolour the original; the copy keeps the colour it was made with.
+    auto pRecolour = std::make_unique<ScPatternAttr>(m_pDoc->getCellAttributeHelper());
+    pRecolour->GetItemSetWritable().Put(SvxBrushItem(COL_LIGHTBLUE, ATTR_BACKGROUND));
+    const_cast<ScTableStyle*>(pStyles->GetTableStyle(u"TableStyleCustom1"_ustr))
+        ->SetPattern(ScTableStyleElement::WholeTable, std::move(pRecolour));
+
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTBLUE,
+                         regionBackground(*pStyles->GetTableStyle(u"TableStyleCustom1"_ustr),
+                                          ScTableStyleElement::WholeTable));
+    CPPUNIT_ASSERT_EQUAL(
+        COL_LIGHTRED,
+        regionBackground(*pStyles->GetTableStyle(aCopyName), ScTableStyleElement::WholeTable));
+
+    m_pDoc->DeleteTab(0);
+}
+
+// A name of the user's own may carry the same per-cent token the numbering pattern
+// uses, and it still reaches the copy as they wrote it.
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateTableStyleNameKeepsPerCentToken)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"PerCentName"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    const OUString aRequested = u"Sales %2 and %1"_ustr;
+    const OUString aFirst = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, aRequested);
+    const OUString aSecond = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, aRequested);
+
+    CPPUNIT_ASSERT_EQUAL(aRequested, pStyles->GetTableStyle(aFirst)->GetUIName());
+    CPPUNIT_ASSERT_EQUAL(u"Sales %2 and %1 (2)"_ustr,
+                         pStyles->GetTableStyle(aSecond)->GetUIName());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TableStylesTest, testDuplicateTableStyleUINameStaysApart)
+{
+    m_pDoc->InitDrawLayer();
+    m_pDoc->InsertTab(0, u"DuplicateNaming"_ustr);
+
+    auto pColorSet = createTestThemeA();
+    ScTableStyleGenerator::generateDefaultStyles(*m_pDoc, *pColorSet);
+    ScTableStyles* pStyles = m_pDoc->GetTableStyles();
+    CPPUNIT_ASSERT(pStyles);
+
+    // Copying one style repeatedly asks for the same name every time, which is what
+    // the command does, so each copy has to end up under a name of its own.
+    const OUString aRequested = u"Copy of Medium 2"_ustr;
+    const OUString aFirst = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, aRequested);
+    const OUString aSecond = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, aRequested);
+    const OUString aThird = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, aRequested);
+
+    CPPUNIT_ASSERT_EQUAL(aRequested, pStyles->GetTableStyle(aFirst)->GetUIName());
+    CPPUNIT_ASSERT_EQUAL(u"Copy of Medium 2 (2)"_ustr, pStyles->GetTableStyle(aSecond)->GetUIName());
+    CPPUNIT_ASSERT_EQUAL(u"Copy of Medium 2 (3)"_ustr, pStyles->GetTableStyle(aThird)->GetUIName());
+
+    // A name already taken by a style the user made is avoided the same way.
+    pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, u"Taken"_ustr);
+    const OUString aAfterTaken
+        = pStyles->DuplicateTableStyle(u"TableStyleMedium2"_ustr, u"Taken"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"Taken (2)"_ustr, pStyles->GetTableStyle(aAfterTaken)->GetUIName());
 
     m_pDoc->DeleteTab(0);
 }

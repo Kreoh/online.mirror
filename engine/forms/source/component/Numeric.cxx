@@ -28,7 +28,7 @@
 namespace frm
 {
 using namespace comphelper;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -77,7 +77,7 @@ ONumericModel::~ONumericModel()
 
 // XCloneable
 
-css::uno::Reference< css::util::XCloneable > ONumericModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > ONumericModel::createClone()
 {
     rtl::Reference<ONumericModel> pClone = new ONumericModel(this, getContext());
     pClone->clonedFrom(this);
@@ -181,15 +181,15 @@ void ONumericModel::resetNoBroadcast()
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_ONumericModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_ONumericModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ONumericModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_ONumericControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_ONumericControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ONumericControl(component));

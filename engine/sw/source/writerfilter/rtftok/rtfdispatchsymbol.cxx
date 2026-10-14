@@ -9,6 +9,8 @@
 
 #include "rtfdocumentimpl.hxx"
 
+#include <algorithm>
+
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <svl/lngmisc.hxx>
 
@@ -144,6 +146,7 @@ RTFError RTFDocumentImpl::dispatchSymbol(RTFKeyword nKeyword)
                                         pCurrentBuffer->begin(), pCurrentBuffer->end(),
                                         [](auto const& it) {
                                             return ::std::get<0>(it) == RTFBufferTypes::PAR
+                                                   || ::std::get<0>(it) == RTFBufferTypes::CellEnd
                                                    || (::std::get<0>(it) == RTFBufferTypes::Props
                                                        && ::std::get<1>(it)->getSprms().find(
                                                               NS_ooxml::LN_inTbl)
@@ -367,7 +370,7 @@ RTFError RTFDocumentImpl::dispatchSymbol(RTFKeyword nKeyword)
                         auto pSizeValue = new RTFValue(0);
                         putNestedSprm(rCurrentCellSprms, NS_ooxml::LN_CT_TcPrBase_tcBorders,
                                       aBorderIds[i], pBorderValue, RTFConflictPolicy::Overwrite);
-                        RTFSprms* pAttributes = &getLastAttributes(
+                        RTFSprms* pAttributes = getLastAttributes(
                             rCurrentCellSprms, NS_ooxml::LN_CT_TcPrBase_tcBorders);
                         if (pAttributes)
                         {
@@ -431,13 +434,15 @@ RTFError RTFDocumentImpl::dispatchSymbol(RTFKeyword nKeyword)
             if (m_TopLevelTableRow.getCells() != 0)
             {
                 // If the right edge of the last cell (row width) is smaller than the width of some other row, mimic WW8TabDesc::CalcDefaults(): resize the last cell
-                if ((m_TopLevelTableRow.nCellXMax - m_TopLevelTableRow.nCurrentCellX) >= MINLAY)
+                const sal_Int64 nMissingWidth
+                    = sal_Int64(m_TopLevelTableRow.nCellXMax) - m_TopLevelTableRow.nCurrentCellX;
+                if (nMissingWidth >= MINLAY)
                 {
                     auto pXValueLast = m_aStates.top().getTableRowSprms().find(
                         NS_ooxml::LN_CT_TblGridBase_gridCol, false);
                     const int nXValueLast = pXValueLast ? pXValueLast->getInt() : 0;
-                    auto pXValue = new RTFValue(nXValueLast + m_TopLevelTableRow.nCellXMax
-                                                - m_TopLevelTableRow.nCurrentCellX);
+                    auto pXValue = new RTFValue(static_cast<int>(std::clamp<sal_Int64>(
+                        nXValueLast + nMissingWidth, SAL_MIN_INT32, SAL_MAX_INT32)));
                     m_aStates.top().getTableRowSprms().eraseLast(
                         NS_ooxml::LN_CT_TblGridBase_gridCol);
                     m_aStates.top().getTableRowSprms().set(NS_ooxml::LN_CT_TblGridBase_gridCol,

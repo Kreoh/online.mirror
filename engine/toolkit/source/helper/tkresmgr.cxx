@@ -27,7 +27,7 @@
 
 #include <helper/tkresmgr.hxx>
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::graphic::XGraphic;
 using ::com::sun::star::graphic::XGraphicProvider;
 using namespace ::com::sun::star;
@@ -39,7 +39,7 @@ Image TkResMgr::getImageFromURL(const OUString& i_rImageURL)
 
     try
     {
-        const Reference<uno::XComponentContext>& xContext(
+        const Reference<cpo::uno::XComponentContext>& xContext(
             ::comphelper::getProcessComponentContext());
         Reference<XGraphicProvider> xProvider(graphic::GraphicProvider::create(xContext));
         ::comphelper::NamedValueCollection aMediaProperties;

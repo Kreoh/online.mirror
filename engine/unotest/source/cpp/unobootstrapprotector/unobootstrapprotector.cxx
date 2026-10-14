@@ -24,7 +24,7 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <sal/types.h>
 
@@ -33,6 +33,7 @@
 namespace {
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 //cppunit calls instantiates a new TextFixture for each test and calls setUp
 //and tearDown on that for every test in a fixture
@@ -59,7 +60,7 @@ public:
         CppUnit::Functor const & functor,
         CppUnit::ProtectorContext const & context) override;
 private:
-    uno::Reference<uno::XComponentContext> m_xContext;
+    uno::Reference<cpo::uno::XComponentContext> m_xContext;
 };
 
 

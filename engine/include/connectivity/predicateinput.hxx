@@ -25,9 +25,9 @@
 
 namespace cpo::uno { class Any; }
 namespace com::sun::star::beans { class XPropertySet; }
-namespace com::sun::star::i18n { class XLocaleData4; }
+namespace com::sun::star::i18n { class XLocaleData; }
 namespace com::sun::star::sdbc { class XConnection; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace com::sun::star::util { class XNumberFormatter; }
 
 
@@ -44,11 +44,11 @@ namespace dbtools
     class UNLESS_MERGELIBS(OOO_DLLPUBLIC_DBTOOLS) OPredicateInputController
     {
     private:
-        css::uno::Reference< css::sdbc::XConnection >
+        cpo::uno::Reference< css::sdbc::XConnection >
                 m_xConnection;
-        css::uno::Reference< css::util::XNumberFormatter >
+        cpo::uno::Reference< css::util::XNumberFormatter >
                 m_xFormatter;
-        css::uno::Reference< css::i18n::XLocaleData4 >
+        cpo::uno::Reference< css::i18n::XLocaleData >
                 m_xLocaleData;
 
         ::connectivity::OSQLParser
@@ -56,8 +56,8 @@ namespace dbtools
 
     public:
         OPredicateInputController(
-            const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-            const css::uno::Reference< css::sdbc::XConnection >& _rxConnection,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            const cpo::uno::Reference< css::sdbc::XConnection >& _rxConnection,
             const ::connectivity::IParseContext* _pParseContext = nullptr
         );
 
@@ -72,7 +72,7 @@ namespace dbtools
         */
         bool        normalizePredicateString(
             OUString& _rPredicateValue,
-            const css::uno::Reference< css::beans::XPropertySet >& _rxField,
+            const cpo::uno::Reference< css::beans::XPropertySet >& _rxField,
             OUString* _pErrorMessage = nullptr
         ) const;
 
@@ -85,7 +85,7 @@ namespace dbtools
         */
         OUString getPredicateValueStr(
             const OUString& _rPredicateValue,
-            const css::uno::Reference< css::beans::XPropertySet > & _rxField
+            const cpo::uno::Reference< css::beans::XPropertySet > & _rxField
         ) const;
 
         OUString getPredicateValueStr(
@@ -101,14 +101,14 @@ namespace dbtools
         */
         cpo::uno::Any getPredicateValue(
             const OUString& _rPredicateValue,
-            const css::uno::Reference< css::beans::XPropertySet > & _rxField
+            const cpo::uno::Reference< css::beans::XPropertySet > & _rxField
         ) const;
 
     private:
         std::unique_ptr<::connectivity::OSQLParseNode> implPredicateTree(
             OUString& _rErrorMessage,
             const OUString& _rStatement,
-            const css::uno::Reference< css::beans::XPropertySet > & _rxField
+            const cpo::uno::Reference< css::beans::XPropertySet > & _rxField
         ) const;
 
         bool getSeparatorChars(

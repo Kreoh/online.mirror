@@ -36,7 +36,7 @@
 
 class SdrUndoAction;
 
-namespace com::sun::star::uno { template <typename > class Reference; }
+namespace cpo::uno { template <typename > class Reference; }
 
 namespace sd
 {
@@ -48,33 +48,35 @@ std::unique_ptr<SdrUndoAction> CreateUndoInsertOrRemoveAnnotation(rtl::Reference
 class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) Annotation final : public sdr::annotation::Annotation
 {
 public:
-    explicit Annotation(const css::uno::Reference<css::uno::XComponentContext>& context, SdrPage* pPage);
+    explicit Annotation(const cpo::uno::Reference<cpo::uno::XComponentContext>& context, SdrPage* pPage);
     Annotation(const Annotation&) = delete;
     Annotation& operator=(const Annotation&) = delete;
 
     virtual ~Annotation();
 
     // css::beans::XPropertySet:
-    virtual css::uno::Reference<css::beans::XPropertySetInfo> SAL_CALL getPropertySetInfo() override;
-    virtual void SAL_CALL setPropertyValue(const OUString & aPropertyName, const cpo::uno::Any & aValue) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue(const OUString & PropertyName) override;
-    virtual void SAL_CALL addPropertyChangeListener(const OUString & aPropertyName, const css::uno::Reference<css::beans::XPropertyChangeListener> & xListener) override;
-    virtual void SAL_CALL removePropertyChangeListener(const OUString & aPropertyName, const css::uno::Reference<css::beans::XPropertyChangeListener> & aListener) override;
-    virtual void SAL_CALL addVetoableChangeListener(const OUString & PropertyName, const css::uno::Reference<css::beans::XVetoableChangeListener> & aListener) override;
-    virtual void SAL_CALL removeVetoableChangeListener(const OUString & PropertyName, const css::uno::Reference<css::beans::XVetoableChangeListener> & aListener) override;
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo> getPropertySetInfo() override;
+    virtual void setPropertyValue(const OUString & aPropertyName, const cpo::uno::Any & aValue) override;
+    virtual cpo::uno::Any getPropertyValue(const OUString & PropertyName) override;
+    virtual void addPropertyChangeListener(const OUString & aPropertyName, const cpo::uno::Reference<css::beans::XPropertyChangeListener> & xListener) override;
+    virtual void removePropertyChangeListener(const OUString & aPropertyName, const cpo::uno::Reference<css::beans::XPropertyChangeListener> & aListener) override;
+    virtual void addVetoableChangeListener(const OUString & PropertyName, const cpo::uno::Reference<css::beans::XVetoableChangeListener> & aListener) override;
+    virtual void removeVetoableChangeListener(const OUString & PropertyName, const cpo::uno::Reference<css::beans::XVetoableChangeListener> & aListener) override;
 
     // css::office::XAnnotation:
-    virtual cpo::uno::Any SAL_CALL getAnchor() override;
-    SD_DLLPUBLIC virtual css::geometry::RealPoint2D SAL_CALL getPosition() override;
-    virtual void SAL_CALL setPosition(const css::geometry::RealPoint2D & the_value) override;
-    virtual css::geometry::RealSize2D SAL_CALL getSize() override;
-    virtual void SAL_CALL setSize(const css::geometry::RealSize2D& _size) override;
-    SD_DLLPUBLIC virtual OUString SAL_CALL getAuthor() override;
-    virtual void SAL_CALL setAuthor(const OUString & the_value) override;
-    SD_DLLPUBLIC virtual OUString SAL_CALL getInitials() override;
-    virtual void SAL_CALL setInitials(const OUString & the_value) override;
-    SD_DLLPUBLIC virtual css::util::DateTime SAL_CALL getDateTime() override;
-    virtual void SAL_CALL setDateTime(const css::util::DateTime & the_value) override;
+    virtual cpo::uno::Any getAnchor() override;
+    SD_DLLPUBLIC virtual css::geometry::RealPoint2D getPosition() override;
+    virtual void setPosition(const css::geometry::RealPoint2D & the_value) override;
+    virtual css::geometry::RealSize2D getSize() override;
+    virtual void setSize(const css::geometry::RealSize2D& _size) override;
+    SD_DLLPUBLIC virtual OUString getAuthor() override;
+    virtual void setAuthor(const OUString & the_value) override;
+    SD_DLLPUBLIC virtual OUString getInitials() override;
+    virtual void setInitials(const OUString & the_value) override;
+    SD_DLLPUBLIC virtual css::util::DateTime getDateTime() override;
+    virtual void setDateTime(const css::util::DateTime & the_value) override;
+    SD_DLLPUBLIC virtual css::util::DateTime getDateTimeUTC() override;
+    virtual void setDateTimeUTC(const css::util::DateTime & the_value) override;
 
     void createChangeUndo();
     rtl::Reference<sdr::annotation::Annotation> clone(SdrPage* pTargetPage) override;

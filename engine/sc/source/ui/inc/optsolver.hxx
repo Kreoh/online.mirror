@@ -143,7 +143,7 @@ private:
     std::unique_ptr<weld::Button> m_xBtnResetAll;
 
     std::unique_ptr<weld::Label> m_xResultFT;
-    std::unique_ptr<weld::Widget> m_xContents;
+    std::unique_ptr<weld::Container> m_xContents;
 
     std::shared_ptr<ScSolverOptionsDialog> m_xOptDlg;
     std::shared_ptr<sc::SolverSettings> m_pSolverSettings;
@@ -159,8 +159,8 @@ private:
         sal_Int32 nVarCount;
         css::table::CellAddress aObjective;
         cpo::uno::Sequence<css::sheet::SolverConstraint> aConstraints;
-        css::uno::Reference<css::sheet::XSolver> xSolver;
-        css::uno::Reference<css::beans::XPropertySet> xOptProp;
+        cpo::uno::Reference<css::sheet::XSolver> xSolver;
+        cpo::uno::Reference<css::beans::XPropertySet> xOptProp;
         bool bSuccess;
     };
 

@@ -45,6 +45,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 // PathTextPortion helper
 
@@ -236,7 +237,7 @@ namespace
             mrShadowDecomposition(rShadowDecomposition)
         {
             // prepare BreakIterator
-            const uno::Reference<uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
+            const uno::Reference<cpo::uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
             mxBreak = i18n::BreakIterator::create(xContext);
         }
 

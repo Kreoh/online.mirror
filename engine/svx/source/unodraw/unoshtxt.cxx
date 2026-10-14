@@ -86,7 +86,7 @@ private:
     std::unique_ptr<SdrOutliner>    mpOutliner;
     std::unique_ptr<SvxOutlinerForwarder> mpTextForwarder;
     std::unique_ptr<SvxDrawOutlinerViewForwarder> mpViewForwarder;    // if non-NULL, use GetViewModeTextForwarder text forwarder
-    css::uno::Reference< css::linguistic2::XLinguServiceManager2 > m_xLinguServiceManager;
+    cpo::uno::Reference< css::linguistic2::XLinguServiceManager2 > m_xLinguServiceManager;
     Point                           maTextOffset;
     bool                            mbDataValid;
     bool                            mbIsLocked;
@@ -498,20 +498,20 @@ SvxTextForwarder* SvxTextEditSourceImpl::GetBackgroundTextForwarder()
             mpOutliner->SetTextObjNoInit( pTextObj );
             if( mbIsLocked )
             {
-                const_cast<EditEngine*>(&(mpOutliner->GetEditEngine()))->SetUpdateLayout( false );
+                mpOutliner->GetEditEngine().SetUpdateLayout( false );
                 mbOldUndoMode = mpOutliner->GetEditEngine().IsUndoEnabled();
-                const_cast<EditEngine*>(&(mpOutliner->GetEditEngine()))->EnableUndo( false );
+                mpOutliner->GetEditEngine().EnableUndo( false );
             }
 
             if (!comphelper::IsFuzzing())
             {
                 if ( !m_xLinguServiceManager.is() )
                 {
-                    const css::uno::Reference< css::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
                     m_xLinguServiceManager.set(css::linguistic2::LinguServiceManager::create(xContext));
                 }
 
-                css::uno::Reference< css::linguistic2::XHyphenator > xHyphenator = m_xLinguServiceManager->getHyphenator();
+                cpo::uno::Reference< css::linguistic2::XHyphenator > xHyphenator = m_xLinguServiceManager->getHyphenator();
                 if( xHyphenator.is() )
                     mpOutliner->SetHyphenator( xHyphenator );
             }
@@ -549,7 +549,7 @@ SvxTextForwarder* SvxTextEditSourceImpl::GetBackgroundTextForwarder()
             if (mpText && bTextEditActive && mpObject->IsEmptyPresObj() && pTextObj && pTextObj->IsReallyEdited())
             {
                 mpObject->SetEmptyPresObj( false );
-                static_cast<SdrTextObj*>(mpObject)->NbcSetOutlinerParaObjectForText(std::move(pOutlinerParaObject), mpText);
+                pTextObj->NbcSetOutlinerParaObjectForText(std::move(pOutlinerParaObject), mpText);
             }
         }
         else
@@ -576,12 +576,12 @@ SvxTextForwarder* SvxTextEditSourceImpl::GetBackgroundTextForwarder()
         if (mpOutliner->GetParagraphCount()==1)
         {
             // if we only have one paragraph we check if it is empty
-            OUString aStr(mpOutliner->GetText(mpOutliner->GetParagraph(0)));
+            OUString aStr(mpOutliner->GetText(0));
 
             if (aStr.isEmpty())
             {
                 // its empty, so we have to force the outliner to initialise itself
-                mpOutliner->SetText( u""_ustr, mpOutliner->GetParagraph( 0 ) );
+                mpOutliner->SetText( u""_ustr, 0 );
 
                 auto pCell = dynamic_cast<sdr::table::Cell*>(mpText);
                 if (pCell && pCell->GetStyleSheet())
@@ -813,9 +813,9 @@ void SvxTextEditSourceImpl::lock()
     mbIsLocked = true;
     if( mpOutliner )
     {
-        const_cast<EditEngine*>(&(mpOutliner->GetEditEngine()))->SetUpdateLayout( false );
+        mpOutliner->GetEditEngine().SetUpdateLayout( false );
         mbOldUndoMode = mpOutliner->GetEditEngine().IsUndoEnabled();
-        const_cast<EditEngine*>(&(mpOutliner->GetEditEngine()))->EnableUndo( false );
+        mpOutliner->GetEditEngine().EnableUndo( false );
     }
 }
 
@@ -831,8 +831,8 @@ void SvxTextEditSourceImpl::unlock()
 
     if( mpOutliner )
     {
-        const_cast<EditEngine*>(&(mpOutliner->GetEditEngine()))->SetUpdateLayout( true );
-        const_cast<EditEngine*>(&(mpOutliner->GetEditEngine()))->EnableUndo( mbOldUndoMode );
+        mpOutliner->GetEditEngine().SetUpdateLayout( true );
+        mpOutliner->GetEditEngine().EnableUndo( mbOldUndoMode );
     }
 }
 

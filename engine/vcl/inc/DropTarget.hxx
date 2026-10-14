@@ -30,7 +30,7 @@ class VCL_DLLPUBLIC DropTarget
     osl::Mutex m_aMutex;
     bool m_bActive;
     sal_Int8 m_nDefaultActions;
-    std::vector<css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> m_aListeners;
+    std::vector<cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> m_aListeners;
 
 protected:
     DropTarget();
@@ -44,14 +44,14 @@ public:
     void drop(const css::datatransfer::dnd::DropTargetDropEvent& dtde) noexcept;
 
     // XDropTarget
-    virtual void SAL_CALL addDropTargetListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override final;
-    virtual void SAL_CALL removeDropTargetListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override final;
-    virtual bool SAL_CALL isActive() override final;
-    virtual void SAL_CALL setActive(bool active) override final;
-    virtual sal_Int8 SAL_CALL getDefaultActions() override final;
-    virtual void SAL_CALL setDefaultActions(sal_Int8 actions) override final;
+    virtual void addDropTargetListener(
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override final;
+    virtual void removeDropTargetListener(
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override final;
+    virtual bool isActive() override final;
+    virtual void setActive(bool active) override final;
+    virtual sal_Int8 getDefaultActions() override final;
+    virtual void setDefaultActions(sal_Int8 actions) override final;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

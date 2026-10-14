@@ -294,6 +294,8 @@ bool handleConditionalFormat(ScConditionalFormatList& rCondFormList, const ScCon
 
         ScCondFormatData aData = pCondForm->GetData(
                 pInfo->maCell, rAddr);
+        //TODO: MSO combines every rule that matches, each contributing what it sets; we take
+        //the first style and drop the rest, border, fill and font alike
         if (!bAnyCondition && !aData.aStyleName.isEmpty())
         {
             SfxStyleSheetBase* pStyleSheet =
@@ -429,7 +431,7 @@ void ScDocument::FillInfo(
         SCROW nNonEmptyRowsBeforePaintRange = -static_cast<SCROW>(pDBData->HasHeader());
         if (aDBRange.aStart.Row() < aIntersectionRange.aStart.Row())
         {
-            nNonEmptyRowsBeforePaintRange += this->CountNonFilteredRows(aDBRange.aStart.Row(), aIntersectionRange.aStart.Row() - 1, nTab);
+            nNonEmptyRowsBeforePaintRange += this->CountVisibleRows(aDBRange.aStart.Row(), aIntersectionRange.aStart.Row() - 1, nTab);
         }
         SCROW nRowIndex = nNonEmptyRowsBeforePaintRange;
         for (SCROW nRow = aIntersectionRange.aStart.Row(); nRow <= aIntersectionRange.aEnd.Row(); ++nRow)
@@ -453,10 +455,11 @@ void ScDocument::FillInfo(
                     pThisRowInfo->bEmptyBack = false;
                 }
 
-                std::unique_ptr<SvxBoxItem> pLinesAttr = pTableStyle->GetBoxItem(*pDBData, nCol, nRow, nRowIndex);
+                const SvxBoxItem* pLinesAttr
+                    = pTableStyle->GetBoxItem(*pDBData, nCol, nRow, nRowIndex);
                 if (pLinesAttr)
                 {
-                    pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, pLinesAttr.get());
+                    pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, pLinesAttr);
                 }
 
                 const SfxItemSet* pPoolItem = pTableStyle->GetFontItemSet(*pDBData, nCol, nRow, nRowIndex);
@@ -603,7 +606,11 @@ void ScDocument::FillInfo(
                                 ScBasicCellInfo* pBasicInfo = &pThisRowInfo->basicCellInfo(nCol);
                                 if (pInfo->maBackground)
                                 {
-                                    if (pExplicitBackground)
+                                    // A fully transparent explicit background means "no
+                                    // fill", not a fill of nothing. Treat it as not-explicit
+                                    // so the table-style fill survives, like the border below.
+                                    if (pExplicitBackground
+                                        && !pExplicitBackground->GetColor().IsFullyTransparent())
                                     {
                                         pInfo->maBackground = SfxPoolItemHolder(*pPool, pExplicitBackground);
                                     }
@@ -625,15 +632,20 @@ void ScDocument::FillInfo(
                                 pInfo->bFilterActive = bFilterActive;
                                 if (pInfo->maLinesAttr)
                                 {
-                                    // pExplicitLinesAttr is "empty" when the cell xf set
-                                    // borderId=0 + applyBorder=1. Treat that as not-explicit
-                                    // so the table-style decoration survives.
+                                    // The cell keeps the edges it sets itself and takes the rest
+                                    // from the table style. Nothing to merge when the cell xf set
+                                    // borderId=0 + applyBorder=1, which leaves the border empty.
                                     const bool bExplicitNonEmpty = pExplicitLinesAttr
                                         && (pExplicitLinesAttr->GetTop() || pExplicitLinesAttr->GetBottom()
                                             || pExplicitLinesAttr->GetLeft() || pExplicitLinesAttr->GetRight());
                                     if (bExplicitNonEmpty)
                                     {
-                                        pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, pExplicitLinesAttr);
+                                        const SvxBoxItem* pStyleBox
+                                            = static_cast<const SvxBoxItem*>(
+                                                pInfo->maLinesAttr.getItem());
+                                        SvxBoxItem aBorder(*pExplicitLinesAttr);
+                                        aBorder.FillUnsetLines(*pStyleBox);
+                                        pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, &aBorder);
                                     }
                                 }
                                 else
@@ -763,7 +775,21 @@ void ScDocument::FillInfo(
                             // Border
                     if ( const SvxBoxItem* pItem = pCondSet->GetItemIfSet( ATTR_BORDER ) )
                     {
-                        pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, pItem);
+                        // The condition adds the edges it defines and leaves the rest, as the
+                        // cell's own border above. A condition that defines no edge at all is
+                        // "No Border", and that one does clear what the style draws - the
+                        // opposite of an empty border on the cell itself.
+                        const bool bCondNonEmpty = pItem->GetTop() || pItem->GetBottom()
+                                                   || pItem->GetLeft() || pItem->GetRight();
+                        if (bCondNonEmpty && pInfo->maLinesAttr)
+                        {
+                            SvxBoxItem aBorder(*pItem);
+                            aBorder.FillUnsetLines(*static_cast<const SvxBoxItem*>(
+                                pInfo->maLinesAttr.getItem()));
+                            pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, &aBorder);
+                        }
+                        else
+                            pInfo->maLinesAttr = SfxPoolItemHolder(*pPool, pItem);
                         pRowInfo[nArrRow].bEmptyBack = false;
                     }
 

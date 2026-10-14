@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <algorithm>
 #include <config_java.h>
 
 #include <tools/debug.hxx>
@@ -32,8 +33,6 @@
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/util/URLTransformer.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/status/FontHeight.hpp>
 #include <com/sun/star/frame/status/ItemStatus.hpp>
@@ -84,7 +83,7 @@
 #include <frozen/unordered_map.h>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 
@@ -134,21 +133,21 @@ void SfxStatusDispatcher::sendStatusChanged(const OUString& rURL, const css::fra
     if (!pContnr)
         return;
     pContnr->forEach(aGuard,
-        [&rEvent](const css::uno::Reference<css::frame::XStatusListener>& xListener)
+        [&rEvent](const cpo::uno::Reference<css::frame::XStatusListener>& xListener)
         {
             xListener->statusChanged(rEvent);
         }
     );
 }
 
-void SAL_CALL SfxStatusDispatcher::dispatch( const css::util::URL&, const cpo::uno::Sequence< css::beans::PropertyValue >& )
+void SfxStatusDispatcher::dispatch( const css::util::URL&, const cpo::uno::Sequence< css::beans::PropertyValue >& )
 {
 }
 
-void SAL_CALL SfxStatusDispatcher::dispatchWithNotification(
+void SfxStatusDispatcher::dispatchWithNotification(
     const css::util::URL&,
     const cpo::uno::Sequence< css::beans::PropertyValue >&,
-    const css::uno::Reference< css::frame::XDispatchResultListener >& )
+    const cpo::uno::Reference< css::frame::XDispatchResultListener >& )
 {
 }
 
@@ -156,7 +155,7 @@ SfxStatusDispatcher::SfxStatusDispatcher()
 {
 }
 
-void SAL_CALL SfxStatusDispatcher::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
+void SfxStatusDispatcher::addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
 {
     {
         std::unique_lock aGuard(maMutex);
@@ -173,7 +172,7 @@ void SAL_CALL SfxStatusDispatcher::addStatusListener(const css::uno::Reference< 
     }
 }
 
-void SAL_CALL SfxStatusDispatcher::removeStatusListener( const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL )
+void SfxStatusDispatcher::removeStatusListener( const cpo::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL )
 {
     std::unique_lock aGuard(maMutex);
     maListeners.removeInterface( aGuard, aURL.Complete, aListener );
@@ -218,10 +217,10 @@ SfxOfficeDispatch::~SfxOfficeDispatch()
 namespace {
 std::unique_ptr< cpo::uno::ContextLayer > EnsureJavaContext()
 {
-    css::uno::Reference< cpo::uno::XCurrentContext > xContext(cpo::uno::getCurrentContext());
+    cpo::uno::Reference< cpo::uno::XCurrentContext > xContext(cpo::uno::getCurrentContext());
     if (xContext.is())
     {
-        css::uno::Reference< css::task::XInteractionHandler > xHandler;
+        cpo::uno::Reference< css::task::XInteractionHandler > xHandler;
         xContext->getValueByName(JAVA_INTERACTION_HANDLER_NAME) >>= xHandler;
         if (xHandler.is())
             return nullptr; // No need to add new layer: JavaContext already present
@@ -231,7 +230,7 @@ std::unique_ptr< cpo::uno::ContextLayer > EnsureJavaContext()
 }
 #endif
 
-void SAL_CALL SfxOfficeDispatch::dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs )
+void SfxOfficeDispatch::dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs )
 {
     // ControllerItem is the Impl class
     if ( pImpl )
@@ -249,20 +248,20 @@ void SAL_CALL SfxOfficeDispatch::dispatch( const css::util::URL& aURL, const cpo
             SolarMutexGuard aGuard;
             vcl::solarthread::syncExecute([this, &aURL, &aArgs]() {
                 pImpl->dispatch(aURL, aArgs,
-                                css::uno::Reference<css::frame::XDispatchResultListener>());
+                                cpo::uno::Reference<css::frame::XDispatchResultListener>());
             });
         }
         else
         {
             pImpl->dispatch(aURL, aArgs,
-                            css::uno::Reference<css::frame::XDispatchResultListener>());
+                            cpo::uno::Reference<css::frame::XDispatchResultListener>());
         }
     }
 }
 
-void SAL_CALL SfxOfficeDispatch::dispatchWithNotification( const css::util::URL& aURL,
+void SfxOfficeDispatch::dispatchWithNotification( const css::util::URL& aURL,
         const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs,
-        const css::uno::Reference< css::frame::XDispatchResultListener >& rListener )
+        const cpo::uno::Reference< css::frame::XDispatchResultListener >& rListener )
 {
     // ControllerItem is the Impl class
     if ( pImpl )
@@ -274,7 +273,7 @@ void SAL_CALL SfxOfficeDispatch::dispatchWithNotification( const css::util::URL&
     }
 }
 
-void SAL_CALL SfxOfficeDispatch::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
+void SfxOfficeDispatch::addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
 {
     {
         std::unique_lock aGuard(maMutex);
@@ -297,7 +296,7 @@ sal_uInt16 SfxOfficeDispatch::GetId() const
     return pImpl ? pImpl->GetId() : 0;
 }
 
-void SfxOfficeDispatch::SetFrame(const css::uno::Reference< css::frame::XFrame >& xFrame)
+void SfxOfficeDispatch::SetFrame(const cpo::uno::Reference< css::frame::XFrame >& xFrame)
 {
     if ( pImpl )
         pImpl->SetFrame( xFrame );
@@ -342,19 +341,11 @@ SfxDispatchController_Impl::SfxDispatchController_Impl(
     , bMasterSlave( false )
     , bVisible( true )
 {
-    if ( aDispatchURL.Protocol == "slot:" && !pSlot->aUnoName.isEmpty() )
-    {
-        aDispatchURL.Complete = pSlot->GetCommand();
-        Reference< XURLTransformer > xTrans( URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
-        xTrans->parseStrict( aDispatchURL );
-    }
-
     sal_uInt16 nSlot = pSlot->GetSlotId();
     SetId( nSlot );
     if ( pBindings )
     {
         // Bind immediately to enable the cache to recycle dispatches when asked for the same command
-        // a command in "slot" or in ".uno" notation must be treated as identical commands!
         pBindings->ENTERREGISTRATIONS();
         BindInternal_Impl( nSlot, pBindings );
         pBindings->LEAVEREGISTRATIONS();
@@ -397,7 +388,7 @@ SfxDispatchController_Impl::~SfxDispatchController_Impl()
     }
 }
 
-void SfxDispatchController_Impl::SetFrame(const css::uno::Reference< css::frame::XFrame >& _xFrame)
+void SfxDispatchController_Impl::SetFrame(const cpo::uno::Reference< css::frame::XFrame >& _xFrame)
 {
     xFrame = _xFrame;
 }
@@ -569,7 +560,7 @@ void collectUIInformation(const util::URL& rURL, const cpo::uno::Sequence< css::
 
 void SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
         const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs,
-        const css::uno::Reference< css::frame::XDispatchResultListener >& rListener )
+        const cpo::uno::Reference< css::frame::XDispatchResultListener >& rListener )
 {
     collectUIInformation(aURL, aArgs);
 
@@ -592,13 +583,7 @@ void SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
         }
     }
 
-    if (
-        !(pDispatch &&
-        (
-         (aURL.Protocol == ".uno:" && aURL.Path == aDispatchURL.Path) ||
-         (aURL.Protocol == "slot:" && aURL.Path.toInt32() == GetId())
-        ))
-       )
+    if (!pDispatch || aURL.Protocol != ".uno:" || aURL.Path != aDispatchURL.Path)
         return;
 
     if ( !pDispatcher && pBindings )
@@ -663,7 +648,7 @@ void SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
         el.Value <<= aURL.Mark;
     }
 
-    css::uno::Reference< css::frame::XFrame > xFrameRef(xFrame.get(), css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::frame::XFrame > xFrameRef(xFrame.get(), cpo::uno::UNO_QUERY);
     if (! xFrameRef.is() && pDispatcher)
     {
         SfxViewFrame* pViewFrame = pDispatcher->GetFrame();
@@ -797,7 +782,7 @@ SfxDispatcher* SfxDispatchController_Impl::GetDispatcher()
     return pDispatcher;
 }
 
-void SfxDispatchController_Impl::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
+void SfxDispatchController_Impl::addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
 {
     SolarMutexGuard aGuard;
     if ( !pDispatch )
@@ -1017,6 +1002,18 @@ OString Int32Payload(sal_uInt16, SfxViewFrame*, const css::frame::FeatureStateEv
     return aBuffer.makeStringAndClear();
 }
 
+// Like Int32Payload, but sends "disabled" - an empty value reads as "no value".
+OString Int32OrDisabledPayload(sal_uInt16, SfxViewFrame*,
+                               const css::frame::FeatureStateEvent& aEvent, const SfxPoolItem*)
+{
+    OStringBuffer aBuffer(aEvent.FeatureURL.Complete.toUtf8() + "=");
+    if (sal_Int32 aInt32; aEvent.IsEnabled && (aEvent.State >>= aInt32))
+        aBuffer.append(aInt32);
+    else
+        aBuffer.append("disabled");
+    return aBuffer.makeStringAndClear();
+}
+
 OString TransformPayload(sal_uInt16 nSID, SfxViewFrame* pViewFrame,
                          const css::frame::FeatureStateEvent& aEvent, const SfxPoolItem*)
 {
@@ -1076,6 +1073,17 @@ OString BooleanPayload(sal_uInt16, SfxViewFrame*, const css::frame::FeatureState
     if (bool aBool; aEvent.IsEnabled && (aEvent.State >>= aBool))
         aBuffer.append(aBool);
     return aBuffer.makeStringAndClear();
+}
+
+OString ColorOrDisabledPayload(sal_uInt16, SfxViewFrame*,
+                               const css::frame::FeatureStateEvent& aEvent, const SfxPoolItem*)
+{
+    if (!aEvent.IsEnabled)
+        return aEvent.FeatureURL.Complete.toUtf8() + "=disabled";
+
+    sal_Int32 nColor = -1;
+    aEvent.State >>= nColor;
+    return aEvent.FeatureURL.Complete.toUtf8() + "=" + OString::number(nColor);
 }
 
 OString BooleanOrDisabledPayload(sal_uInt16, SfxViewFrame*,
@@ -1195,12 +1203,14 @@ constexpr auto enumToPayload = frozen::make_unordered_map<PayloadType, PayloadGe
     { PayloadType::EnabledPayload, EnabledPayload },
     { PayloadType::ParaDirectionPayload, ParaDirectionPayload },
     { PayloadType::Int32Payload, Int32Payload },
+    { PayloadType::Int32OrDisabledPayload, Int32OrDisabledPayload },
     { PayloadType::TransformPayload, TransformPayload },
     { PayloadType::StringPayload, StringPayload },
     { PayloadType::RowColSelCountPayload, RowColSelCountPayload },
     { PayloadType::StateTableCellPayload, StateTableCellPayload },
     { PayloadType::BooleanPayload, BooleanPayload },
     { PayloadType::BooleanOrDisabledPayload, BooleanOrDisabledPayload },
+    { PayloadType::ColorOrDisabledPayload, ColorOrDisabledPayload },
     { PayloadType::PointPayload, PointPayload },
     { PayloadType::SizePayload, SizePayload },
     { PayloadType::StringOrStrSeqPayload, StringOrStrSeqPayload },
@@ -1277,6 +1287,7 @@ const std::map<std::u16string_view, KitUnoCommand>& GetKitUnoCommandList()
         { u"FontColor", { PayloadType::ColorPayload, true } },
         { u"FrameLineColor", { PayloadType::ColorPayload, true } },
         { u"GlowColor", { PayloadType::ColorPayload, false } },
+        { u"FillColor", { PayloadType::ColorOrDisabledPayload, true } },
 
         { u"Undo", { PayloadType::UndoRedoPayload, true } },
         { u"Redo", { PayloadType::UndoRedoPayload, true } },
@@ -1309,6 +1320,7 @@ const std::map<std::u16string_view, KitUnoCommand>& GetKitUnoCommandList()
         { u"DuplicatePage", { PayloadType::EnabledPayload, true } },
         { u"DeleteRows", { PayloadType::EnabledPayload, true } },
         { u"DeleteColumns", { PayloadType::EnabledPayload, true } },
+        { u"DeleteCell", { PayloadType::EnabledPayload, true } },
         { u"DistributeRows", { PayloadType::EnabledPayload, true } },
         { u"DistributeColumns", { PayloadType::EnabledPayload, true } },
         { u"SetMinimalRowHeight", { PayloadType::EnabledPayload, true } },
@@ -1349,6 +1361,7 @@ const std::map<std::u16string_view, KitUnoCommand>& GetKitUnoCommandList()
         { u"SplitCell", { PayloadType::EnabledPayload, true } },
         { u"DeleteNote", { PayloadType::EnabledPayload, true } },
         { u"AcceptChanges", { PayloadType::EnabledPayload, true } },
+        { u"CommentChange", { PayloadType::EnabledPayload, true } },
         { u"SetDefault", { PayloadType::EnabledPayload, true } },
         { u"ParaspaceIncrease", { PayloadType::EnabledPayload, true } },
         { u"ParaspaceDecrease", { PayloadType::EnabledPayload, true } },
@@ -1398,6 +1411,14 @@ const std::map<std::u16string_view, KitUnoCommand>& GetKitUnoCommandList()
         { u"EditHeaderAndFooter", { PayloadType::EnabledPayload, true } },
         { u"InsertCalcTable", { PayloadType::EnabledPayload, true } },
         { u"RemoveCalcTable", { PayloadType::EnabledPayload, true } },
+        { u"ResizeCalcTable", { PayloadType::EnabledPayload, true } },
+        { u"RenameCalcTable", { PayloadType::EnabledPayload, true } },
+        { u"ConvertCalcTableToRange", { PayloadType::EnabledPayload, true } },
+        { u"NewTableStyle", { PayloadType::EnabledPayload, true } },
+        { u"ClearTableStyle", { PayloadType::EnabledPayload, true } },
+        { u"SummarizeWithPivot", { PayloadType::EnabledPayload, true } },
+        { u"RemoveDuplicates", { PayloadType::EnabledPayload, true } },
+        { u"HandleDuplicateRecords", { PayloadType::EnabledPayload, true } },
         { u"InsertSparkline", { PayloadType::EnabledPayload, true } },
         { u"DeleteSparkline", { PayloadType::EnabledPayload, true } },
         { u"DeleteSparklineGroup", { PayloadType::EnabledPayload, true } },
@@ -1435,15 +1456,16 @@ const std::map<std::u16string_view, KitUnoCommand>& GetKitUnoCommandList()
         { u"ExecuteAnimationEffect", { PayloadType::EnabledPayload, true } },
         { u"PasteSlide", { PayloadType::EnabledPayload, true } },
         { u"LineStyle", { PayloadType::EnabledPayload, true } },
+        { u"GraphicFilterToolbox", { PayloadType::EnabledPayload, true } },
 
         { u"ParaLeftToRight", { PayloadType::ParaDirectionPayload, true } },
         { u"ParaRightToLeft", { PayloadType::ParaDirectionPayload, true } },
 
         { u"AssignLayout", { PayloadType::Int32Payload, true } },
-        { u"GrafContrast", { PayloadType::Int32Payload, true } },
-        { u"GrafLuminance", { PayloadType::Int32Payload, true } },
-        { u"GrafMode", { PayloadType::Int32Payload, true } },
-        { u"GrafTransparence", { PayloadType::Int32Payload, true } },
+        { u"GrafContrast", { PayloadType::Int32OrDisabledPayload, true } },
+        { u"GrafLuminance", { PayloadType::Int32OrDisabledPayload, true } },
+        { u"GrafMode", { PayloadType::Int32OrDisabledPayload, true } },
+        { u"GrafTransparence", { PayloadType::Int32OrDisabledPayload, true } },
         { u"StatusSelectionMode", { PayloadType::Int32Payload, true } },
         { u"Signature", { PayloadType::Int32Payload, false } },
         { u"SelectionMode", { PayloadType::Int32Payload, true } },
@@ -1501,6 +1523,7 @@ const std::map<std::u16string_view, KitUnoCommand>& GetKitUnoCommandList()
         { u"DatabaseSettings", { PayloadType::TableStylePayload, true } },
         { u"TableTotalRow", { PayloadType::BooleanOrDisabledPayload, true } },
         { u"TableStyles", { PayloadType::StringPayload, true } },
+        { u"SetDefaultTableStyle", { PayloadType::StringPayload, true } },
 
         { u"TableStyle", { PayloadType::StringPayload, true } },
         { u"TableStyleSettings", { PayloadType::StringPayload, true } },
@@ -1529,6 +1552,27 @@ static void InterceptKitStateChangeEvent(sal_uInt16 nSID, SfxViewFrame* pViewFra
 {
     const SfxViewShell* pViewShell = pViewFrame->GetViewShell();
     if (!comphelper::COKit::isActive() || !pViewShell)
+        return;
+
+    // A view that draws from the objects gives the state of these itself, from where its
+    // selection stands.
+    static constexpr std::u16string_view aGivenByTheView[] = {
+        u"EnterGroup",             u"LeaveGroup",             u"FormatUngroup",
+        u"FormatGroup",            u"ObjectAlignLeft",        u"AlignCenter",
+        u"ObjectAlignRight",       u"AlignUp",                u"AlignMiddle",
+        u"AlignDown",              u"ObjectAlign",            u"BringToFront",
+        u"ObjectForwardOne",       u"ObjectBackOne",          u"SendToBack",
+        u"TransformDialog",        u"NameGroup",              u"ObjectTitleDescription",
+        u"DistributeHorzLeft",     u"DistributeHorzCenter",   u"DistributeHorzDistance",
+        u"DistributeHorzRight",    u"DistributeVertTop",      u"DistributeVertCenter",
+        u"DistributeVertDistance", u"DistributeVertBottom",   u"DistributeSelection",
+        u"FlipHorizontal",         u"FlipVertical",           u"ChangeBezier",
+        u"FormatArea",             u"FormatLine"
+    };
+    if (pViewShell->drawsFromObjects()
+        && std::find(std::begin(aGivenByTheView), std::end(aGivenByTheView),
+                     aEvent.FeatureURL.Path)
+               != std::end(aGivenByTheView))
         return;
 
     const std::map<std::u16string_view, KitUnoCommand>& rUnoCommandList = GetKitUnoCommandList();

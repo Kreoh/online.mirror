@@ -18,10 +18,6 @@
 
 #include <typeinfo>
 
-#include <Poco/File.h>
-#include <Poco/Net/HTTPRequest.h>
-#include <Poco/Path.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -30,7 +26,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
 #include <map>
 #include <memory.h>
 #include <mutex>
@@ -39,6 +34,11 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+namespace Poco::Net
+{
+class HTTPRequest;
+}
 
 #if CODE_COVERAGE
 extern "C"
@@ -908,6 +908,22 @@ int main(int argc, char**argv)
     /// either for a URL or for a file path
     std::string cleanupFilename(const std::string &filename);
 
+    /// Whether a name is one file of a directory: a name holding no path separator
+    /// and naming no directory of its own.
+    inline bool isPlainFileName(const std::string& name)
+    {
+        return !name.empty() && name != "." && name != ".." &&
+               name.find('/') == std::string::npos && name.find('\\') == std::string::npos;
+    }
+
+    /// Whether a string holds a character that a document name never holds and
+    /// that a JSON string carries escaped: a control character of the ASCII range.
+    inline bool holdsControlCharacter(const std::string& value)
+    {
+        return std::any_of(value.begin(), value.end(), [](const char character)
+                           { return static_cast<unsigned char>(character) < 0x20; });
+    }
+
     //// Return current time in HTTP format.
     std::string getHttpTimeNow();
 
@@ -1013,7 +1029,7 @@ int main(int argc, char**argv)
         if (elapsedSec != std::chrono::seconds::zero())
             ss << elapsedSec << ' ';
 
-        ss << std::setprecision(3) << elapsedMs;
+        ss << elapsedMs;
         ss << (past ? " ago)" : " later)");
         return ss.str();
     }
@@ -1045,10 +1061,22 @@ int main(int argc, char**argv)
 #endif
     }
 
-    constexpr bool isMobileApp()
+    /// Resolved at compile time, so the branch not taken never reaches the link.
+    constexpr bool isMobileAppBuild()
     {
 #ifdef MOBILEAPP
         return MOBILEAPP;
+#else
+        return false;
+#endif
+    }
+
+    /// True when this binary links the WOPI storage backend and so can talk to
+    /// a remote WOPI host. False for a build that opens local files only.
+    constexpr bool isWopiSupported()
+    {
+#ifdef ENABLE_WOPI
+        return ENABLE_WOPI;
 #else
         return false;
 #endif
@@ -1063,14 +1091,16 @@ int main(int argc, char**argv)
 #endif
     }
 
-    constexpr bool isKitInProcess()
-    {
-#if defined(ENABLE_INPROC) && ENABLE_INPROC
-        return true;
-#else
-        return isFuzzing() || isMobileApp();
-#endif // ENABLE_INPROC
-    }
+    /// True when the kit runs as a thread of this process rather than as a forked child.
+    /// Defined once per binary, next to the other globals.
+    extern const bool KitInProcess;
+
+    inline bool isKitInProcess() { return KitInProcess; }
+
+    /// Defined once per binary, next to the other globals.
+    extern const bool MobileApp;
+
+    inline bool isMobileApp() { return MobileApp; }
 
     /**
      * Splits string into vector<string>. Does not accept referenced variables for easy
@@ -1165,7 +1195,8 @@ int main(int argc, char**argv)
     /// Convert a vector to a string. Useful for conversion in templates.
     inline std::string toString(const std::vector<char>& x)
     {
-        return std::string(x.data(), x.size());
+        // The iterator constructor is defined for an empty range, while data() may be null then.
+        return std::string(x.begin(), x.end());
     }
 
     /// No-op string conversion. Useful for conversion in templates.
@@ -1274,14 +1305,7 @@ inline std::ostream& operator<<(std::ostream& os, const std::chrono::system_cloc
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const Poco::Net::HTTPRequest& request)
-{
-    os << request.getMethod() << ' ' << request.getVersion() << ' ' << request.getURI()
-       << ", content-length: " << request.getContentLength64()
-       << ", chunked: " << request.getChunkedTransferEncoding() << ", ";
-    Util::joinPair(os, request, " / ");
-    return os;
-}
+std::ostream& operator<<(std::ostream& os, const Poco::Net::HTTPRequest& request);
 
 // std::to_underlying will be available in C++23
 template <typename Enum> constexpr std::underlying_type_t<Enum> to_underlying(Enum e)

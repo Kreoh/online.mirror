@@ -33,6 +33,9 @@
 #include <sfx2/sfxsids.hrc>
 
 #include <comphelper/kit.hxx>
+#include <sfx2/viewsh.hxx>
+#include <sfx2/digitalsignatures.hxx>
+#include <svl/cryptosign.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/storagehelper.hxx>
@@ -49,7 +52,7 @@
 #include <vcl/tabs.hrc>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::cpo::uno;
@@ -210,7 +213,23 @@ ImpPDFTabDialog::ImpPDFTabDialog(weld::Window* pParent, const Sequence< Property
                RID_L + RID_TAB_PDFLINKS.sIconName);
     AddTabPage(u"security"_ustr, TabResId(RID_TAB_PDFPROTECT.aLabel), ImpPDFTabSecurityPage::Create,
                RID_L + RID_TAB_PDFPROTECT.sIconName);
-    if (!comphelper::COKit::isActive())
+    // Offer the signature tab whenever a signing certificate is reachable.
+    // The desktop apps list the native certificate store (CODA-W, the only
+    // _WIN32 COKit build, the Windows certificate store; CODA-M, the only
+    // MACOSX COKit build, Keychain Access), so the tab is always available
+    // there. Elsewhere in COKit mode (COOL, CODA-Q) signing uses the
+    // certificate supplied via viewsettings and put on the view, so only
+    // offer the tab once such a certificate is present.
+    bool bCanSign = true;
+#if !defined(_WIN32) && !defined(MACOSX)
+    if (comphelper::COKit::isActive())
+    {
+        SfxViewShell* pSignViewShell = SfxViewShell::Current();
+        bCanSign
+            = pSignViewShell && pSignViewShell->GetSigningCertificate().m_xCertificate.is();
+    }
+#endif
+    if (bCanSign)
         AddTabPage(u"digitalsignatures"_ustr, TabResId(RID_TAB_PDFSIGN.aLabel),
                    ImpPDFTabSigningPage::Create, RID_L + RID_TAB_PDFSIGN.sIconName);
 
@@ -496,7 +515,7 @@ ImpPDFTabGeneralPage::ImpPDFTabGeneralPage(weld::Container* pPage, weld::DialogC
     , mxEdSheets(m_xBuilder->weld_entry(u"sheets"_ustr))
     , mxRbLosslessCompression(m_xBuilder->weld_radio_button(u"losslesscompress"_ustr))
     , mxRbJPEGCompression(m_xBuilder->weld_radio_button(u"jpegcompress"_ustr))
-    , mxQualityFrame(m_xBuilder->weld_widget(u"qualityframe"_ustr))
+    , mxQualityFrame(m_xBuilder->weld_container(u"qualityframe"_ustr))
     , mxNfQuality(m_xBuilder->weld_metric_spin_button(u"quality"_ustr, FieldUnit::PERCENT))
     , mxCbReduceImageResolution(m_xBuilder->weld_check_button(u"changeresolution"_ustr))
     , mxCoReduceImageResolution(m_xBuilder->weld_combo_box(u"resolution"_ustr))
@@ -504,7 +523,7 @@ ImpPDFTabGeneralPage::ImpPDFTabGeneralPage(weld::Container* pPage, weld::DialogC
     , mxRbPDFVersion(m_xBuilder->weld_combo_box(u"pdf_version"_ustr))
     , mxCbTaggedPDF(m_xBuilder->weld_check_button(u"tagged"_ustr))
     , mxCbExportFormFields(m_xBuilder->weld_check_button(u"forms"_ustr))
-    , mxFormsOptionGrid(m_xBuilder->weld_widget(u"forms_options_grid"_ustr))
+    , mxFormsOptionGrid(m_xBuilder->weld_container(u"forms_options_grid"_ustr))
     , mxLbFormsFormat(m_xBuilder->weld_combo_box(u"format"_ustr))
     , mxCbAllowDuplicateFieldNames(m_xBuilder->weld_check_button(u"allowdups"_ustr))
     , mxCbExportBookmarks(m_xBuilder->weld_check_button(u"bookmarks"_ustr))
@@ -1355,23 +1374,23 @@ ImpPDFTabSecurityPage::ImpPDFTabSecurityPage(weld::Container* pPage, weld::Dialo
     , mbHaveUserPassword( false )
     , msOwnerPwdTitle( FilterResId( STR_PDF_EXPORT_ODPWD ) )
     , mxPbSetPwd(m_xBuilder->weld_button(u"setpassword"_ustr))
-    , mxUserPwdSet(m_xBuilder->weld_widget(u"userpwdset"_ustr))
-    , mxUserPwdUnset(m_xBuilder->weld_widget(u"userpwdunset"_ustr))
-    , mxUserPwdPdfa(m_xBuilder->weld_widget(u"userpwdpdfa"_ustr))
-    , mxOwnerPwdSet(m_xBuilder->weld_widget(u"ownerpwdset"_ustr))
-    , mxOwnerPwdUnset(m_xBuilder->weld_widget(u"ownerpwdunset"_ustr))
-    , mxOwnerPwdPdfa(m_xBuilder->weld_widget(u"ownerpwdpdfa"_ustr))
-    , mxPrintPermissions(m_xBuilder->weld_widget(u"printing"_ustr))
+    , mxUserPwdSet(m_xBuilder->weld_container(u"userpwdset"_ustr))
+    , mxUserPwdUnset(m_xBuilder->weld_container(u"userpwdunset"_ustr))
+    , mxUserPwdPdfa(m_xBuilder->weld_container(u"userpwdpdfa"_ustr))
+    , mxOwnerPwdSet(m_xBuilder->weld_container(u"ownerpwdset"_ustr))
+    , mxOwnerPwdUnset(m_xBuilder->weld_container(u"ownerpwdunset"_ustr))
+    , mxOwnerPwdPdfa(m_xBuilder->weld_container(u"ownerpwdpdfa"_ustr))
+    , mxPrintPermissions(m_xBuilder->weld_frame(u"printing"_ustr))
     , mxRbPrintNone(m_xBuilder->weld_radio_button(u"printnone"_ustr))
     , mxRbPrintLowRes(m_xBuilder->weld_radio_button(u"printlow"_ustr))
     , mxRbPrintHighRes(m_xBuilder->weld_radio_button(u"printhigh"_ustr))
-    , mxChangesAllowed(m_xBuilder->weld_widget(u"changes"_ustr))
+    , mxChangesAllowed(m_xBuilder->weld_frame(u"changes"_ustr))
     , mxRbChangesNone(m_xBuilder->weld_radio_button(u"changenone"_ustr))
     , mxRbChangesInsDel(m_xBuilder->weld_radio_button(u"changeinsdel"_ustr))
     , mxRbChangesFillForm(m_xBuilder->weld_radio_button(u"changeform"_ustr))
     , mxRbChangesComment(m_xBuilder->weld_radio_button(u"changecomment"_ustr))
     , mxRbChangesAnyNoCopy(m_xBuilder->weld_radio_button(u"changeany"_ustr))
-    , mxContent(m_xBuilder->weld_widget(u"content"_ustr))
+    , mxContent(m_xBuilder->weld_frame(u"content"_ustr))
     , mxCbEnableCopy(m_xBuilder->weld_check_button(u"enablecopy"_ustr))
     , mxCbEnableAccessibility(m_xBuilder->weld_check_button(u"enablea11y"_ustr))
     , mxPasswordTitle(m_xBuilder->weld_label(u"setpasswordstitle"_ustr))
@@ -1838,10 +1857,17 @@ IMPL_LINK_NOARG(ImpPDFTabSigningPage, ClickmaPbSignCertSelect, weld::Button&, vo
             comphelper::getProcessComponentContext()));
     xSigner->setParentWindow(GetFrameWeld()->GetXWindow());
 
-    // The use may provide a description while choosing a certificate.
+    // The user may provide a description while choosing a certificate.
     OUString aDescription;
-    maSignCertificate = xSigner->selectSigningCertificateWithType(
-        security::CertificateKind::CertificateKind_X509, aDescription);
+    // Use the view-aware overload: in COKit mode the certificate chooser may
+    // source the signing certificate from the view when it is supplied via
+    // viewsettings (COOL, CODA-Q). The plain UNO method passes no view, so
+    // the chooser cannot reach that certificate and comes up empty.
+    sfx2::DigitalSignatures* pModelSigner
+        = dynamic_cast<sfx2::DigitalSignatures*>(xSigner.get());
+    assert(pModelSigner);
+    maSignCertificate = pModelSigner->SelectSigningCertificateWithType(
+        SfxViewShell::Current(), security::CertificateKind::CertificateKind_X509, aDescription);
 
     if (!maSignCertificate.is())
         return;

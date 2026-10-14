@@ -47,7 +47,7 @@
 namespace dbaui
 {
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::container;
@@ -58,7 +58,7 @@ using namespace comphelper;
 OCollectionView::OCollectionView(weld::Window* pParent,
                                  const Reference< XContent>& _xContent,
                                  const OUString& _sDefaultName,
-                                 css::uno::Reference< css::uno::XComponentContext > _xContext)
+                                 cpo::uno::Reference< cpo::uno::XComponentContext > _xContext)
     : GenericDialogController(pParent, u"dbaccess/ui/collectionviewdialog.ui"_ustr, u"CollectionView"_ustr)
     , m_xContent(_xContent)
     , m_xContext(std::move(_xContext))
@@ -133,8 +133,8 @@ IMPL_LINK_NOARG(OCollectionView, Save_Click, weld::Button&, void)
                 {
                     Sequence<Any> aValues(comphelper::InitAnyPropertySequence(
                     {
-                        {"ResourceName", Any(sSubFolder)},
-                        {"ResourceType", Any(u"folder"_ustr)}
+                        {u"ResourceName"_ustr, Any(sSubFolder)},
+                        {u"ResourceType"_ustr, Any(u"folder"_ustr)}
                     }));
                     InteractiveAugmentedIOException aException(OUString(),Reference<XInterface>(),
                                                                InteractionClassification_ERROR,
@@ -178,7 +178,7 @@ IMPL_LINK_NOARG(OCollectionView, NewFolder_Click, weld::Button&, void)
     try
     {
         Reference<XHierarchicalNameContainer> xNameContainer(m_xContent,UNO_QUERY);
-        if ( dbaui::insertHierarchyElement(m_xDialog.get(),m_xContext,xNameContainer,OUString(),m_bCreateForm) )
+        if ( dbaui::insertHierarchyElement(m_xDialog.get(),m_xContext,xNameContainer,m_bCreateForm) )
             Initialize();
     }
     catch( const SQLException& )

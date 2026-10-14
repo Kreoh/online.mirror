@@ -42,6 +42,7 @@
 #include <svl/documentlockfile.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace svt {
 
@@ -79,7 +80,7 @@ bool GenDocumentLockFile::CreateOwnLockFile()
         uno::Reference< io::XOutputStream > xOutput = xTempFile->getOutputStream();
 
         if ( !xInput.is() || !xOutput.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         LockFileEntry aNewEntry = GenerateOwnEntry();
         WriteEntryToStream( aGuard, aNewEntry, xOutput );
@@ -203,7 +204,7 @@ LockFileEntry DocumentLockFile::GetLockDataImpl(std::unique_lock<std::mutex>& rG
 {
     uno::Reference< io::XInputStream > xInput = OpenStream(rGuard);
     if ( !xInput.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     const sal_Int32 nBufLen = 32000;
     cpo::uno::Sequence< sal_Int8 > aBuffer( nBufLen );

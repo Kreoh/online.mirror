@@ -63,9 +63,9 @@
 #include "sdrtableobjimpl.hxx"
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
+using ::cpo::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
 using ::cpo::uno::Exception;
 using ::com::sun::star::container::XIndexAccess;
 using ::com::sun::star::style::XStyle;
@@ -267,7 +267,7 @@ void SdrTableObjImpl::CropTableModelToSelection(const CellPos& rStart, const Cel
     }
 
     // copy row heights
-    Reference< XTableRows > xNewRows(mxTable->getRows(), css::uno::UNO_SET_THROW );
+    Reference< XTableRows > xNewRows(mxTable->getRows(), cpo::uno::UNO_SET_THROW );
     for( sal_Int32 nRow = 0; nRow < nRows; ++nRow )
     {
         Reference< XPropertySet > xNewSet( xNewRows->getByIndex( nRow ), UNO_QUERY_THROW );
@@ -275,7 +275,7 @@ void SdrTableObjImpl::CropTableModelToSelection(const CellPos& rStart, const Cel
     }
 
     // copy column widths
-    Reference< XTableColumns > xNewColumns( mxTable->getColumns(), css::uno::UNO_SET_THROW );
+    Reference< XTableColumns > xNewColumns( mxTable->getColumns(), cpo::uno::UNO_SET_THROW );
     for( sal_Int32 nCol = 0; nCol < nColumns; ++nCol )
     {
         Reference< XPropertySet > xNewSet( xNewColumns->getByIndex( nCol ), UNO_QUERY_THROW );
@@ -384,7 +384,7 @@ SdrTableObjImpl& SdrTableObjImpl::operator=( const SdrTableObjImpl& rSource )
         // search in target SdrModel for that TableStyle
         const OUString sStyleName( Reference< XNamed >( rSource.mxTableStyle, UNO_QUERY_THROW )->getName() );
         Reference< XStyleFamiliesSupplier > xSFS(rTargetSdrModel.getUnoModel(), UNO_QUERY_THROW );
-        Reference< XNameAccess > xFamilyNameAccess( xSFS->getStyleFamilies(), css::uno::UNO_SET_THROW );
+        Reference< XNameAccess > xFamilyNameAccess( xSFS->getStyleFamilies(), cpo::uno::UNO_SET_THROW );
         Reference< XNameAccess > xTableFamilyAccess( xFamilyNameAccess->getByName( u"table"_ustr ), UNO_QUERY_THROW );
 
         if( xTableFamilyAccess->hasByName( sStyleName ) )
@@ -615,7 +615,7 @@ void SdrTableObjImpl::DragEdge( bool mbHorizontal, int nEdge, sal_Int32 nOffset 
 // XModifyListener
 
 
-void SAL_CALL SdrTableObjImpl::modified( const css::lang::EventObject& aEvent )
+void SdrTableObjImpl::modified( const css::lang::EventObject& aEvent )
 {
     if (aEvent.Source == mxTableStyle && mpTableObj)
         static_cast<TextProperties&>(mpTableObj->GetProperties()).increaseVersion();
@@ -700,7 +700,7 @@ void SdrTableObjImpl::dumpAsXml(xmlTextWriterPtr pWriter) const
 // XEventListener
 
 
-void SAL_CALL SdrTableObjImpl::disposing( const css::lang::EventObject& Source )
+void SdrTableObjImpl::disposing( const css::lang::EventObject& Source )
 {
     assert(Source.Source == mxTableStyle);
     (void)Source;
@@ -797,6 +797,11 @@ void SdrTableObjImpl::LayoutTable( tools::Rectangle& rArea, bool bFitWidth, bool
         rArea = lastLayoutResultRectangle;
         mpLayouter->UpdateBorderLayout();
     }
+}
+
+void SdrTableObjImpl::InvalidateLayout()
+{
+    lastLayoutTable = nullptr;
 }
 
 void SdrTableObjImpl::UpdateCells( tools::Rectangle const & rArea )
@@ -1284,12 +1289,20 @@ const SfxItemSet& SdrTableObj::GetActiveCellItemSet() const
     return getActiveCell()->GetItemSet();
 }
 
-std::optional<Color> SdrTableObj::GetActiveTextBackgroundColor(const SdrText* pSdrText) const
+std::optional<Color> SdrTableObj::GetActiveTextBackgroundColor(const SdrText* pSdrText,
+                                                               std::optional<Color> oBehind) const
 {
-    // Prefer the cell's own fill color if set.
+    // Prefer the cell's own fill color if set. The color behind a cell fill that is not fully
+    // opaque is the page background, not the table object's fill, which is not painted behind
+    // the cells.
     const SfxItemSet& rCellItemSet = pSdrText ? pSdrText->GetItemSet() : GetActiveCellItemSet();
-    if (auto oColor = GetDraftFillColor(rCellItemSet))
+    if (auto oColor = GetDraftFillColor(rCellItemSet, oBehind))
         return oColor;
+
+    // Cell has no fill, so the page background is the answer, and a caller that has resolved
+    // it for its render target already holds it.
+    if (oBehind)
+        return oBehind;
 
     // Cell has no fill, so use the page/slide background directly instead
     // of the table object's fill, which does not represent the actual
@@ -1448,6 +1461,9 @@ void SdrTableObj::onEditOutlinerStatusEvent( EditStatus* pEditStatus )
 {
     if( (pEditStatus->GetStatusWord() & EditStatusFlags::TextHeightChanged) && mpImpl.is() && mpImpl->mpLayouter )
     {
+        // The edited text now has a different height, also when only the cell width changed and
+        // the text itself is unmodified, so the row heights are computed again.
+        SdrTableObjImpl::InvalidateLayout();
         tools::Rectangle aRect0(getRectangle());
         setRectangle(maLogicRect);
         auto aRectangle = getRectangle();
@@ -1865,10 +1881,9 @@ void SdrTableObj::EndTextEdit(SdrOutliner& rOutl)
     if(rOutl.IsModified())
     {
         std::optional<OutlinerParaObject> pNewText;
-        Paragraph* p1stPara = rOutl.GetParagraph( 0 );
         sal_Int32 nParaCnt = rOutl.GetParagraphCount();
 
-        if(p1stPara)
+        if(nParaCnt > 0)
         {
             // to remove the grey field background
             rOutl.UpdateFields();
@@ -2005,6 +2020,8 @@ bool SdrTableObj::AdjustTextFrameWidthAndHeight(tools::Rectangle& rR, bool bHeig
 
 void SdrTableObj::NbcReformatText()
 {
+    // The text of a cell may have changed outside text edit, so its row can need a new height.
+    SdrTableObjImpl::InvalidateLayout();
     NbcAdjustTextFrameWidthAndHeight();
 }
 

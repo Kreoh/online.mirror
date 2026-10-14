@@ -20,11 +20,11 @@
 #pragma once
 
 #include "TokenContext.hxx"
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 namespace com::sun::star {
     namespace beans { class XPropertySet; }
-    namespace xforms { class XModel2; }
+    namespace xforms { class XModel; }
 }
 
 class SvXMLImport;
@@ -32,25 +32,25 @@ class SvXMLImport;
 /** import the xforms:binding element */
 class XFormsBindContext : public TokenContext
 {
-    const css::uno::Reference<css::xforms::XModel2> mxModel;
-    css::uno::Reference<css::beans::XPropertySet> mxBinding;
+    const cpo::uno::Reference<css::xforms::XModel> mxModel;
+    cpo::uno::Reference<css::beans::XPropertySet> mxBinding;
 
 public:
     XFormsBindContext( SvXMLImport& rImport,
-                       const css::uno::Reference<css::xforms::XModel2>& xModel );
+                       const cpo::uno::Reference<css::xforms::XModel>& xModel );
 
     // implement SvXMLImportContext & TokenContext methods:
 
-    virtual void SAL_CALL startFastElement(
+    virtual void startFastElement(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
 protected:
     virtual void HandleAttribute( const sax_fastparser::FastAttributeList::FastAttributeIter & aIter ) override;
 
     virtual SvXMLImportContext* HandleChild(
         sal_Int32 nElementToken,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 
 };
 

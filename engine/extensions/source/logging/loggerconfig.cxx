@@ -44,15 +44,15 @@ namespace logging
 {
 
 
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::logging::XLogger;
     using ::com::sun::star::lang::XMultiServiceFactory;
     using ::cpo::uno::Sequence;
     using ::cpo::uno::Any;
     using ::com::sun::star::container::XNameContainer;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::com::sun::star::lang::XSingleServiceFactory;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::XInterface;
     using ::com::sun::star::util::XChangesBatch;
     using ::com::sun::star::lang::NullPointerException;
     using ::cpo::uno::Exception;
@@ -61,7 +61,7 @@ namespace logging
     using ::com::sun::star::logging::XLogHandler;
     using ::com::sun::star::logging::XLogFormatter;
     using ::com::sun::star::container::XNameAccess;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
 
     namespace LogLevel = ::com::sun::star::logging::LogLevel;
 
@@ -223,7 +223,7 @@ namespace logging
             {
                 // no node yet for this logger. Create default settings.
                 Reference< XSingleServiceFactory > xNodeFactory( xAllSettings, UNO_QUERY_THROW );
-                Reference< XInterface > xLoggerSettings( xNodeFactory->createInstance(), css::uno::UNO_SET_THROW );
+                Reference< XInterface > xLoggerSettings( xNodeFactory->createInstance(), cpo::uno::UNO_SET_THROW );
                 xAllSettings->insertByName( sLoggerName, Any( xLoggerSettings ) );
                 Reference< XChangesBatch > xChanges( xAllSettings, UNO_QUERY_THROW );
                 xChanges->commitChanges();

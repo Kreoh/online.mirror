@@ -502,6 +502,13 @@ void XmlTestTools::registerOOXMLNamespaces(xmlXPathContextPtr& pXmlXpathCtx)
                        BAD_CAST("http://schemas.microsoft.com/office/word/2010/wordml"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("w15"),
                        BAD_CAST("http://schemas.microsoft.com/office/word/2012/wordml"));
+    xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("w16cid"),
+                       BAD_CAST("http://schemas.microsoft.com/office/word/2016/wordml/cid"));
+    xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("w16cex"),
+                       BAD_CAST("http://schemas.microsoft.com/office/word/2018/wordml/cex"));
+    xmlXPathRegisterNs(
+        pXmlXpathCtx, BAD_CAST("xthreaded"),
+        BAD_CAST("http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("m"),
                        BAD_CAST("http://schemas.openxmlformats.org/officeDocument/2006/math"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("ContentType"),
@@ -545,6 +552,10 @@ void XmlTestTools::registerOOXMLNamespaces(xmlXPathContextPtr& pXmlXpathCtx)
                        BAD_CAST("http://schemas.microsoft.com/office/excel/2006/main"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("x12ac"),
                        BAD_CAST("http://schemas.microsoft.com/office/spreadsheetml/2011/1/ac"));
+    xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("xlrd"),
+                       BAD_CAST("http://schemas.microsoft.com/office/spreadsheetml/2017/richdata"));
+    xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("xlrvr"),
+                       BAD_CAST("http://schemas.microsoft.com/office/spreadsheetml/2022/richvaluerel"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("o"),
                        BAD_CAST("urn:schemas-microsoft-com:office:office"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("w10"),
@@ -553,6 +564,13 @@ void XmlTestTools::registerOOXMLNamespaces(xmlXPathContextPtr& pXmlXpathCtx)
                        BAD_CAST("http://schemas.openxmlformats.org/presentationml/2006/main"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("p14"),
                        BAD_CAST("http://schemas.microsoft.com/office/powerpoint/2010/main"));
+    xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("p15"),
+                       BAD_CAST("http://schemas.microsoft.com/office/powerpoint/2012/main"));
+    xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("p188"),
+                       BAD_CAST("http://schemas.microsoft.com/office/powerpoint/2018/8/main"));
+    xmlXPathRegisterNs(
+        pXmlXpathCtx, BAD_CAST("coextml"),
+        BAD_CAST("urn:com:collaboraoffice:names:experimental:ooxml:xmlns:coext:1.0"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("dgm"),
                        BAD_CAST("http://schemas.openxmlformats.org/drawingml/2006/diagram"));
     xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("c15"),

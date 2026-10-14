@@ -34,15 +34,16 @@
 #include <o3tl/sorted_vector.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
 {
 
 CommandDispatchContainer::CommandDispatchContainer(
-    const Reference< uno::XComponentContext > & xContext )
+    const Reference< cpo::uno::XComponentContext > & xContext )
         :m_xContext( xContext )
         ,m_pDrawCommandDispatch( nullptr )
         ,m_pShapeController( nullptr )

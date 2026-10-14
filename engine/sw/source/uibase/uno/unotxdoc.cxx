@@ -73,6 +73,7 @@
 #include <unodraw.hxx>
 #include <svl/eitem.hxx>
 #include <unotools/datetime.hxx>
+#include <tools/datetimeutils.hxx>
 #include <unocrsr.hxx>
 #include <unofieldcoll.hxx>
 #include <unoidxcoll.hxx>
@@ -82,6 +83,7 @@
 #include <unochart.hxx>
 #include <charatr.hxx>
 #include <svx/xmleohlp.hxx>
+#include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/lang/ServiceNotRegisteredException.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
@@ -138,6 +140,7 @@
 #include <i18nutil/searchopt.hxx>
 
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <fmtcol.hxx>
 #include <istyleaccess.hxx>
 
@@ -187,8 +190,8 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::i18n;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
@@ -289,7 +292,7 @@ const Sequence< sal_Int8 > & SwXTextDocument::getUnoTunnelId()
     return theSwXTextDocumentUnoTunnelId.getSeq();
 }
 
-sal_Int64 SAL_CALL SwXTextDocument::getSomething( const Sequence< sal_Int8 >& rId )
+sal_Int64 SwXTextDocument::getSomething( const Sequence< sal_Int8 >& rId )
 {
     if( comphelper::isUnoTunnelId<SwXTextDocument>(rId) )
     {
@@ -309,7 +312,7 @@ sal_Int64 SAL_CALL SwXTextDocument::getSomething( const Sequence< sal_Int8 >& rI
     return (xNumTunnel.is()) ? xNumTunnel->getSomething(rId) : 0;
 }
 
-Any SAL_CALL SwXTextDocument::queryInterface( const cpo::uno::Type& rType )
+Any SwXTextDocument::queryInterface( const cpo::uno::Type& rType )
 {
     Any aRet = SwXTextDocumentBaseClass::queryInterface(rType);
     if ( !aRet.hasValue() )
@@ -336,17 +339,17 @@ Any SAL_CALL SwXTextDocument::queryInterface( const cpo::uno::Type& rType )
     return aRet;
 }
 
-void SAL_CALL SwXTextDocument::acquire()noexcept
+void SwXTextDocument::acquire()noexcept
 {
     SfxBaseModel::acquire();
 }
 
-void SAL_CALL SwXTextDocument::release()noexcept
+void SwXTextDocument::release()noexcept
 {
     SfxBaseModel::release();
 }
 
-Sequence< cpo::uno::Type > SAL_CALL SwXTextDocument::getTypes()
+Sequence< cpo::uno::Type > SwXTextDocument::getTypes()
 {
     Sequence< cpo::uno::Type > aNumTypes;
     GetNumberFormatter();
@@ -665,7 +668,7 @@ rtl::Reference< SwXFootnotes >  SwXTextDocument::getSwXFootnotes()
     return mxXFootnotes;
 }
 
-Reference< XPropertySet >  SAL_CALL
+Reference< XPropertySet >
         SwXTextDocument::getFootnoteSettings()
 {
     SolarMutexGuard aGuard;
@@ -1383,23 +1386,23 @@ class SwDrawPagesObj : public cppu::WeakImplHelper<
     css::lang::XServiceInfo>
 {
 private:
-    css::uno::Reference< css::drawing::XDrawPageSupplier > m_xDoc;
+    cpo::uno::Reference< css::drawing::XDrawPageSupplier > m_xDoc;
 public:
-    SwDrawPagesObj(css::uno::Reference< css::drawing::XDrawPageSupplier > xDoc) : m_xDoc(std::move(xDoc)) {}
+    SwDrawPagesObj(cpo::uno::Reference< css::drawing::XDrawPageSupplier > xDoc) : m_xDoc(std::move(xDoc)) {}
 
     // XDrawPages
-    virtual css::uno::Reference< css::drawing::XDrawPage > SAL_CALL
+    virtual cpo::uno::Reference< css::drawing::XDrawPage >
         insertNewByIndex(sal_Int32 /*nIndex*/) override { throw css::lang::NoSupportException(); }
 
-    virtual void SAL_CALL remove(const css::uno::Reference< css::drawing::XDrawPage >& /*xPage*/) override
+    virtual void remove(const cpo::uno::Reference< css::drawing::XDrawPage >& /*xPage*/) override
     {
         throw css::lang::NoSupportException();
     }
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override { return 1; }
+    virtual sal_Int32 getCount() override { return 1; }
 
-    virtual cpo::uno::Any SAL_CALL getByIndex(sal_Int32 Index) override
+    virtual cpo::uno::Any getByIndex(sal_Int32 Index) override
     {
         if (Index != 0)
             throw css::lang::IndexOutOfBoundsException(u"Writer documents have only one DrawPage!"_ustr);
@@ -1407,25 +1410,25 @@ public:
     }
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
     {
         return cppu::UnoType<drawing::XDrawPage>::get();
     }
 
-    virtual bool SAL_CALL hasElements() override { return true; }
+    virtual bool hasElements() override { return true; }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"SwDrawPagesObj"_ustr;
     }
 
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override
+    virtual bool supportsService(const OUString& ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override
     {
         return { u"com.sun.star.drawing.DrawPages"_ustr };
     }
@@ -1435,7 +1438,7 @@ public:
 
 // XDrawPagesSupplier
 
-uno::Reference<drawing::XDrawPages> SAL_CALL SwXTextDocument::getDrawPages()
+uno::Reference<drawing::XDrawPages> SwXTextDocument::getDrawPages()
 {
     SolarMutexGuard aGuard;
     return new SwDrawPagesObj(this);
@@ -1613,7 +1616,7 @@ void    SwXTextDocument::InitNewDoc()
     }
 }
 
-css::uno::Reference<css::uno::XInterface> SwXTextDocument::create(
+cpo::uno::Reference<cpo::uno::XInterface> SwXTextDocument::create(
     OUString const & rServiceName,
     cpo::uno::Sequence<cpo::uno::Any> const * arguments)
 {
@@ -1717,7 +1720,7 @@ rtl::Reference<SwXTextField> SwXTextDocument::createTextField(
 
     const SwServiceType nType = SwXServiceProvider::GetProviderType(rServiceName);
     assert(nType != SwServiceType::Invalid);
-    uno::Reference<uno::XInterface> xTmp = SwXServiceProvider::MakeInstance(nType, GetDocOrThrow());
+    uno::Reference<cpo::uno::XInterface> xTmp = SwXServiceProvider::MakeInstance(nType, GetDocOrThrow());
     rtl::Reference<SwXTextField> xTextField = dynamic_cast<SwXTextField*>(xTmp.get());
     assert(xTextField);
     return xTextField;
@@ -1731,7 +1734,7 @@ rtl::Reference<SwXFieldmark> SwXTextDocument::createFieldmark(
 
     const SwServiceType nType = SwXServiceProvider::GetProviderType(rServiceName);
     assert(nType != SwServiceType::Invalid);
-    uno::Reference<uno::XInterface> xTmp = SwXServiceProvider::MakeInstance(nType, GetDocOrThrow());
+    uno::Reference<cpo::uno::XInterface> xTmp = SwXServiceProvider::MakeInstance(nType, GetDocOrThrow());
     rtl::Reference<SwXFieldmark> xTextField = dynamic_cast<SwXFieldmark*>(xTmp.get());
     assert(xTextField);
     return xTextField;
@@ -1767,7 +1770,7 @@ rtl::Reference<SwXFieldMaster> SwXTextDocument::createFieldMaster(
 
     const SwServiceType nType = SwXServiceProvider::GetProviderType(rServiceName);
     assert(nType != SwServiceType::Invalid);
-    uno::Reference<uno::XInterface> xTmp = SwXServiceProvider::MakeInstance(nType, GetDocOrThrow());
+    uno::Reference<cpo::uno::XInterface> xTmp = SwXServiceProvider::MakeInstance(nType, GetDocOrThrow());
     rtl::Reference<SwXFieldMaster> xTextField = dynamic_cast<SwXFieldMaster*>(xTmp.get());
     assert(xTextField);
     return xTextField;
@@ -2428,7 +2431,7 @@ void SwXTextDocument::refresh()
         pViewShell->Reformat();
 }
 
-void SAL_CALL SwXTextDocument::addRefreshListener(
+void SwXTextDocument::addRefreshListener(
         const Reference<util::XRefreshListener> & xListener)
 {
     if (xListener)
@@ -2438,7 +2441,7 @@ void SAL_CALL SwXTextDocument::addRefreshListener(
     }
 }
 
-void SAL_CALL SwXTextDocument::removeRefreshListener(
+void SwXTextDocument::removeRefreshListener(
         const Reference<util::XRefreshListener> & xListener)
 {
     if (xListener)
@@ -2458,12 +2461,12 @@ void SwXTextDocument::updateLinks(  )
     if( !rLnkMan.GetLinks().empty() )
     {
         UnoActionContext aAction(&rDoc);
-        rLnkMan.UpdateAllLinks( false, nullptr, u""_ustr );
+        rLnkMan.UpdateAllLinks( false, u""_ustr );
     }
 }
 
 //XPropertyState
-PropertyState SAL_CALL SwXTextDocument::getPropertyState( const OUString& rPropertyName )
+PropertyState SwXTextDocument::getPropertyState( const OUString& rPropertyName )
 {
     SolarMutexGuard aGuard;
     ThrowIfInvalid();
@@ -2474,7 +2477,7 @@ PropertyState SAL_CALL SwXTextDocument::getPropertyState( const OUString& rPrope
     return PropertyState_DIRECT_VALUE;
 }
 
-Sequence< PropertyState > SAL_CALL SwXTextDocument::getPropertyStates( const Sequence< OUString >& rPropertyNames )
+Sequence< PropertyState > SwXTextDocument::getPropertyStates( const Sequence< OUString >& rPropertyNames )
 {
     const sal_Int32 nCount = rPropertyNames.getLength();
     Sequence < PropertyState > aRet ( nCount );
@@ -2485,7 +2488,7 @@ Sequence< PropertyState > SAL_CALL SwXTextDocument::getPropertyStates( const Seq
     return aRet;
 }
 
-void SAL_CALL SwXTextDocument::setPropertyToDefault( const OUString& rPropertyName )
+void SwXTextDocument::setPropertyToDefault( const OUString& rPropertyName )
 {
     SolarMutexGuard aGuard;
     ThrowIfInvalid();
@@ -2499,7 +2502,7 @@ void SAL_CALL SwXTextDocument::setPropertyToDefault( const OUString& rPropertyNa
     }
 }
 
-Any SAL_CALL SwXTextDocument::getPropertyDefault( const OUString& rPropertyName )
+Any SwXTextDocument::getPropertyDefault( const OUString& rPropertyName )
 {
     SolarMutexGuard aGuard;
     ThrowIfInvalid();
@@ -2673,7 +2676,7 @@ static void lcl_SavePrintUIOptionsToDocumentPrintData(
     rDoc.getIDocumentDeviceAccess().setPrintData( aDocPrintData );
 }
 
-sal_Int32 SAL_CALL SwXTextDocument::getRendererCount(
+sal_Int32 SwXTextDocument::getRendererCount(
         const cpo::uno::Any& rSelection,
         const cpo::uno::Sequence< beans::PropertyValue >& rxOptions )
 {
@@ -2848,7 +2851,7 @@ sal_Int32 SAL_CALL SwXTextDocument::getRendererCount(
     return nRet;
 }
 
-cpo::uno::Sequence< beans::PropertyValue > SAL_CALL SwXTextDocument::getRenderer(
+cpo::uno::Sequence< beans::PropertyValue > SwXTextDocument::getRenderer(
         sal_Int32 nRenderer,
         const cpo::uno::Any& rSelection,
         const cpo::uno::Sequence< beans::PropertyValue >& rxOptions )
@@ -3158,7 +3161,7 @@ SfxViewShell * SwXTextDocument::GuessViewShell(
     return pView;
 }
 
-void SAL_CALL SwXTextDocument::render(
+void SwXTextDocument::render(
         sal_Int32 nRenderer,
         const cpo::uno::Any& rSelection,
         const cpo::uno::Sequence< beans::PropertyValue >& rxOptions )
@@ -3322,7 +3325,7 @@ void SAL_CALL SwXTextDocument::render(
 }
 
 // xforms::XFormsSupplier
-Reference<XNameContainer> SAL_CALL SwXTextDocument::getXForms()
+Reference<XNameContainer> SwXTextDocument::getXForms()
 {
     SolarMutexGuard aGuard;
     if ( !m_pDocShell )
@@ -3330,7 +3333,7 @@ Reference<XNameContainer> SAL_CALL SwXTextDocument::getXForms()
     return GetDocOrThrow().getXForms();
 }
 
-uno::Reference< text::XFlatParagraphIterator > SAL_CALL SwXTextDocument::getFlatParagraphIterator(::sal_Int32 nTextMarkupType, bool bAutomatic)
+uno::Reference< text::XFlatParagraphIterator > SwXTextDocument::getFlatParagraphIterator(::sal_Int32 nTextMarkupType, bool bAutomatic)
 {
     SolarMutexGuard aGuard;
     ThrowIfInvalid();
@@ -3519,15 +3522,28 @@ void SwXTextDocument::setClientVisibleArea(const tools::Rectangle& rRectangle)
 void SwXTextDocument::setClientZoom(int nTilePixelWidth_, int /*nTilePixelHeight_*/,
                                     int nTileTwipWidth_, int /*nTileTwipHeight_*/)
 {
+    if (!m_pDocShell)
+    {
+        SAL_WARN("sw.uno", "no DocShell when attempting to setClientZoom");
+        return;
+    }
+
+    const SwView* pView = m_pDocShell->GetView();
+    if (!pView)
+    {
+        SAL_WARN("sw.uno", "no view when attempting to setClientZoom");
+        return;
+    }
+
     // Here we set the zoom value as it has been set by the user in the client.
     // This value is used in postMouseEvent and setGraphicSelection methods
     // for in place chart editing. We assume that x and y scale is roughly
     // the same.
-    SfxInPlaceClient* pIPClient = m_pDocShell->GetView()->GetIPClient();
+    SfxInPlaceClient* pIPClient = pView->GetIPClient();
     if (!pIPClient)
         return;
 
-    SwViewShell* pWrtViewShell = m_pDocShell->GetWrtShell();
+    SwViewShell* pWrtViewShell = &pView->GetWrtShell();
     double fScale = 100.0 * nTilePixelWidth_ / nTileTwipWidth_
                     * o3tl::convert(1.0, o3tl::Length::px, o3tl::Length::twip);
     SwViewOption aOption(*(pWrtViewShell->GetViewOptions()));
@@ -3657,6 +3673,9 @@ void SwXTextDocument::getPostIts(tools::JsonWriter& rJsonWriter)
         rJsonWriter.put("html", pWin->GetSimpleHtml());
         rJsonWriter.put("resolved", pField->GetResolved() ? "true" : "false");
         rJsonWriter.put("dateTime", utl::toISO8601(pField->GetDateTime().GetUNODateTime()));
+        // See the comment callback: the moment, when the comment carries one.
+        if (const std::optional<DateTime>& oDateTimeUTC = pField->GetDateTimeUTC())
+            rJsonWriter.put("dateTimeUtc", DateTimeToOString(*oDateTimeUTC));
         rJsonWriter.put("anchorPos", aSVRect.toString());
         rJsonWriter.put("textRange", sRects);
         rJsonWriter.put("layoutStatus", static_cast< sal_Int16 >(pWin->GetLayoutStatus()));
@@ -3692,7 +3711,9 @@ void SwXTextDocument::executeFromFieldEvent(const StringMap& aArguments)
             (*pFieldBM->GetParameters())[ODF_FORMDROPDOWN_RESULT] <<= nSelection;
             pFieldBM->Invalidate();
             m_pDocShell->GetWrtShell()->SetModified();
-            m_pDocShell->GetView()->GetEditWin().LogicInvalidate(nullptr);
+            // Every view showing this document has the dropdown's new value now,
+            // not just the one that made the selection.
+            KitHelper::notifyInvalidationAllViews(this, m_pDocShell->GetView()->getPart(), nullptr, false);
         }
     }
 }
@@ -3959,6 +3980,8 @@ void SwXTextDocument::initializeForTiledRendering(const cpo::uno::Sequence<css::
             aViewOption.SetHideWhitespaceMode(rValue.Value.get<bool>());
         else if (rValue.Name == ".uno:ShowBorderShadow" && rValue.Value.has<bool>())
             aViewOption.SetAppearanceFlag(ViewOptFlags::Shadow , rValue.Value.get<bool>());
+        else if (rValue.Name == ".uno:FocusRingColor" && rValue.Value.has<OUString>())
+            pView->SetKitFocusRingColor(::Color::STRtoRGB(rValue.Value.get<OUString>()));
         else if (rValue.Name == ".uno:Author" && rValue.Value.has<OUString>())
         {
             sAuthor = rValue.Value.get<OUString>();
@@ -4183,7 +4206,7 @@ void SwXTextDocument::resetSelection()
 /**
  * retrieve languages already used in current document
  */
-cpo::uno::Sequence< lang::Locale > SAL_CALL SwXTextDocument::getDocumentLanguages(
+cpo::uno::Sequence< lang::Locale > SwXTextDocument::getDocumentLanguages(
         ::sal_Int16 nScriptTypes,
         ::sal_Int16 nMaxCount )
 {
@@ -4311,7 +4334,7 @@ cpo::uno::Sequence< lang::Locale > SAL_CALL SwXTextDocument::getDocumentLanguage
         SdrOutliner* pOutliner = pSdrView->GetTextEditOutliner();
         if(pOutliner)
         {
-            EditEngine& rEditEng = const_cast<EditEngine&>(pOutliner->GetEditEngine());
+            EditEngine& rEditEng = pOutliner->GetEditEngine();
             sal_Int32 nParCount = pOutliner->GetParagraphCount();
             for (sal_Int32 nPar=0; nPar<nParCount; nPar++)
             {

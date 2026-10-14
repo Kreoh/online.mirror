@@ -62,6 +62,8 @@ struct SdtData
 {
     OUString namespaces;
     OUString xpath;
+    /// The ds:itemID of the customXml item the value belongs to. Empty when the binding names none.
+    OUString storeItemID;
     OUString data;
 };
 
@@ -101,7 +103,7 @@ class DocxExport : public MSWordExportBase
         OUString sFileName;
         OUString sRelationType;
         OUString sRelId;
-        css::uno::Reference<css::io::XOutputStream> xOutputStream;
+        cpo::uno::Reference<css::io::XOutputStream> xOutputStream;
     };
     std::map<OUString, OLECacheEntry> m_aOLECache;
 
@@ -137,7 +139,7 @@ class DocxExport : public MSWordExportBase
 
     std::set<SwNode*> m_aDummyFloatingTableAnchors;
 
-    std::vector<css::uno::Reference<css::frame::XModel>> m_aExportedCharts;
+    std::vector<cpo::uno::Reference<css::frame::XModel>> m_aExportedCharts;
 
 public:
 
@@ -209,22 +211,23 @@ public:
     virtual sal_uInt64 ReplaceCr( sal_uInt8 nChar ) override;
 
     /// Returns the relationd id
-    OString OutputChart( css::uno::Reference< css::frame::XModel > const & xModel, sal_Int32 nCount, ::sax_fastparser::FSHelperPtr const & m_pSerializer );
+    OString OutputChart( cpo::uno::Reference< css::frame::XModel > const & xModel, sal_Int32 nCount, ::sax_fastparser::FSHelperPtr const & m_pSerializer );
     OString WriteOLEObject(SwOLEObj& rObject, OUString & io_rProgID);
-    std::pair<OString,OString> WriteActiveXObject(const css::uno::Reference<css::drawing::XShape>& rxShape,
-                                                  const css::uno::Reference<css::awt::XControlModel>& rxControlModel);
+    std::pair<OString,OString> WriteActiveXObject(const cpo::uno::Reference<css::drawing::XShape>& rxShape,
+                                                  const cpo::uno::Reference<css::awt::XControlModel>& rxControlModel);
 
     /// Writes the shape using drawingML syntax.
-    void OutputDML( css::uno::Reference< css::drawing::XShape > const & xShape );
+    void OutputDML( cpo::uno::Reference< css::drawing::XShape > const & xShape );
 
     sal_Int32 WriteOutliner(const OutlinerParaObject& rOutliner, sal_uInt8 nTyp,
                             bool bNeedsLastParaId);
 
     virtual ExportFormat GetExportFormat() const override { return ExportFormat::DOCX; }
 
-    void AddSdtData(const OUString & namespaces, const OUString & xpath, const OUString & data)
+    void AddSdtData(const OUString & namespaces, const OUString & xpath,
+                    const OUString & storeItemID, const OUString & data)
     {
-        m_SdtData.push_back({ namespaces, xpath, data });
+        m_SdtData.push_back({ namespaces, xpath, storeItemID, data });
     }
 
 protected:
@@ -295,6 +298,9 @@ private:
 
     /// Write customXml/item[n].xml and customXml/itemProps[n].xml
     void WriteCustomXml();
+
+    /// Write word/webSettings.xml
+    void WriteWebSettings();
 
     /// Write word/embeddings/Worksheet[n].xlsx
     void WriteEmbeddings();

@@ -40,12 +40,12 @@ class SortedDynamicResultSet: public cppu::WeakImplHelper <
 {
     comphelper::OInterfaceContainerHelper4<css::lang::XEventListener>  maDisposeEventListeners;
 
-    css::uno::Reference < css::ucb::XDynamicResultSetListener > mxListener;
+    cpo::uno::Reference < css::ucb::XDynamicResultSetListener > mxListener;
 
-    css::uno::Reference < css::ucb::XDynamicResultSet >      mxOriginal;
+    cpo::uno::Reference < css::ucb::XDynamicResultSet >      mxOriginal;
     cpo::uno::Sequence  < css::ucb::NumberedSortingInfo >    maOptions;
-    css::uno::Reference < css::ucb::XAnyCompareFactory >     mxCompFac;
-    css::uno::Reference < css::uno::XComponentContext >      m_xContext;
+    cpo::uno::Reference < css::ucb::XAnyCompareFactory >     mxCompFac;
+    cpo::uno::Reference < cpo::uno::XComponentContext >      m_xContext;
 
     rtl::Reference<SortedResultSet>                          mxOne;
     rtl::Reference<SortedResultSet>                          mxTwo;
@@ -61,51 +61,51 @@ private:
     void                SendNotify();
 
 public:
-    SortedDynamicResultSet( const css::uno::Reference < css::ucb::XDynamicResultSet >    &xOriginal,
+    SortedDynamicResultSet( const cpo::uno::Reference < css::ucb::XDynamicResultSet >    &xOriginal,
                             const cpo::uno::Sequence  < css::ucb::NumberedSortingInfo >  &aOptions,
-                            const css::uno::Reference < css::ucb::XAnyCompareFactory >   &xCompFac,
-                            const css::uno::Reference < css::uno::XComponentContext >    &rxContext );
+                            const cpo::uno::Reference < css::ucb::XAnyCompareFactory >   &xCompFac,
+                            const cpo::uno::Reference < cpo::uno::XComponentContext >    &rxContext );
 
     virtual ~SortedDynamicResultSet() override;
 
 
     // XServiceInfo
 
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XComponent
 
-    virtual void SAL_CALL dispose() override;
+    virtual void dispose() override;
 
-    virtual void SAL_CALL
-    addEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
 
-    virtual void SAL_CALL
-    removeEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
 
 
     // XDynamicResultSet
 
-    virtual css::uno::Reference< css::sdbc::XResultSet > SAL_CALL getStaticResultSet() override;
+    virtual cpo::uno::Reference< css::sdbc::XResultSet > getStaticResultSet() override;
 
-    virtual void SAL_CALL
-    setListener( const css::uno::Reference< css::ucb::XDynamicResultSetListener >& Listener ) override;
+    virtual void
+    setListener( const cpo::uno::Reference< css::ucb::XDynamicResultSetListener >& Listener ) override;
 
-    virtual void SAL_CALL
-    connectToCache( const css::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
+    virtual void
+    connectToCache( const cpo::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
 
-    virtual sal_Int16 SAL_CALL
+    virtual sal_Int16
     getCapabilities() override;
 
 
     // own methods:
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void impl_disposing();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void impl_notify( const css::ucb::ListEvent& Changes );
 };
 
@@ -121,12 +121,12 @@ public:
 
     // XEventListener ( base of XDynamicResultSetListener )
 
-    virtual void SAL_CALL
+    virtual void
     disposing( const css::lang::EventObject& Source ) override;
 
     // XDynamicResultSetListener
 
-    virtual void SAL_CALL notify( const css::ucb::ListEvent& Changes ) override;
+    virtual void notify( const css::ucb::ListEvent& Changes ) override;
 
     // own methods:
 
@@ -139,26 +139,26 @@ class SortedDynamicResultSetFactory: public cppu::WeakImplHelper <
     css::ucb::XSortedDynamicResultSetFactory >
 {
 
-    css::uno::Reference< css::uno::XComponentContext >   m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >   m_xContext;
 
 public:
     SortedDynamicResultSetFactory(
-        const css::uno::Reference< css::uno::XComponentContext > & rxContext);
+        const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext);
 
     virtual ~SortedDynamicResultSetFactory() override;
 
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XSortedDynamicResultSetFactory
-    virtual css::uno::Reference< css::ucb::XDynamicResultSet > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XDynamicResultSet >
     createSortedDynamicResultSet(
-                const css::uno::Reference< css::ucb::XDynamicResultSet > & Source,
+                const cpo::uno::Reference< css::ucb::XDynamicResultSet > & Source,
                 const cpo::uno::Sequence< css::ucb::NumberedSortingInfo > & Info,
-                const css::uno::Reference< css::ucb::XAnyCompareFactory > & CompareFactory ) override;
+                const cpo::uno::Reference< css::ucb::XAnyCompareFactory > & CompareFactory ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

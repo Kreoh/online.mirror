@@ -19,7 +19,6 @@
 
 #include <QByteArray>
 #include <QFile>
-#include <QMultiMap>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QWebEngineUrlRequestJob>
@@ -38,11 +37,14 @@ void CoolUrlSchemeHandler::requestStarted(QWebEngineUrlRequestJob* job)
     const bool isVtt = (url.path() == QStringLiteral("/cool/mediavtt"));
 
     // The server percent-encodes the '&' query separators (see
-    // ClientSession::createPublicURI), so decode once before parsing.
+    // ClientSession::createPublicURI), so decode once before parsing. Each value is then decoded
+    // in full, as the server does for a media request, and getDocKey decodes the WOPISrc once
+    // more. A file name with a space or parentheses is encoded once more than the rest of the
+    // WOPISrc, and only then matches the key of its DocumentBroker.
     QUrlQuery query;
     query.setQuery(QUrl::fromPercentEncoding(url.query(QUrl::FullyEncoded).toUtf8()));
-    const std::string wopiSrc = query.queryItemValue("WOPISrc").toStdString();
-    const std::string tag = query.queryItemValue("Tag").toStdString();
+    const std::string wopiSrc = query.queryItemValue("WOPISrc", QUrl::FullyDecoded).toStdString();
+    const std::string tag = query.queryItemValue("Tag", QUrl::FullyDecoded).toStdString();
 
     std::shared_ptr<DocumentBroker> docBroker;
     {
@@ -76,11 +78,9 @@ void CoolUrlSchemeHandler::requestStarted(QWebEngineUrlRequestJob* job)
         return;
     }
 
-    // file:// pages have origin "null"; required for <video crossOrigin="anonymous">.
-    QMultiMap<QByteArray, QByteArray> headers;
-    headers.insert("Access-Control-Allow-Origin", "null");
-    job->setAdditionalResponseHeaders(headers);
-
+    // Chromium does not run its cross-origin check on a reply from a custom scheme handler, so
+    // <video crossOrigin="anonymous"> loads the reply without an Access-Control-Allow-Origin
+    // header.
     job->reply(isVtt ? "text/vtt" : "application/octet-stream", file);
 }
 

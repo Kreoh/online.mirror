@@ -10,7 +10,6 @@
 
 #include <config.h>
 
-#define LIBO_INTERNAL_ONLY
 #include <COKit/COKit.hxx>
 
 #import <WebKit/WebKit.h>
@@ -24,8 +23,12 @@
 // Include necessary C++ headers
 #include <thread>
 #include <string>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <set>
 #include <common/Clipboard.hpp>
+#include <common/ConfigUtil.hpp>
 #include <common/LangUtil.hpp>
 #include <common/AIHttpTransport.hpp>
 #include <common/SettingsStorage.hpp>
@@ -34,7 +37,11 @@
 #include <common/MobileApp.hpp>
 #include <common/Util.hpp>
 #include <net/FakeSocket.hpp>
+#include <wsd/Extensions.hpp>
 #include <wsd/COOLWSD.hpp>
+#include <wsd/DocumentBroker.hpp>
+
+#include <Poco/Path.h>
 
 // Declare the coolwsd pointer at global scope
 COOLWSD *coolwsd = nullptr;
@@ -75,6 +82,9 @@ static COClipboardOwner *sClipboardOwner = nil;
 static COKit *sOffice = nullptr;
 
 static std::thread coolwsdThread;
+
+// Where the log is being written, or nil when it goes to standard error.
+static NSString *sLogFilePath = nil;
 
 /**
  * Register the AI chat HTTP transport. The desktop apps have no server-side AI
@@ -138,20 +148,11 @@ static NSData *_Nullable copyEngineClipboardData(const char *mime)
 {
     // The clipboard is process-global (one shared clipboard for the desktop
     // app), so read it straight from the office; no document is involved.
-    if (!sOffice)
+    std::vector<char> bytes;
+    if (!sOffice || !sOffice->getGlobalClipboardData(mime, bytes))
         return nil;
 
-    const char *filter[] = { mime, nullptr };
-    std::vector<std::string> outMimeTypes;
-    std::vector<std::vector<char>> outStreams;
-    if (!sOffice->getGlobalClipboard(filter, outMimeTypes, outStreams)
-        || outStreams.size() == 0)
-        return nil;
-
-    NSData *data = nil;
-    if (outStreams[0].size() > 0)
-        data = [NSData dataWithBytes:outStreams[0].data() length:outStreams[0].size()];
-    return data;
+    return [NSData dataWithBytes:bytes.data() length:bytes.size()];
 }
 
 @implementation COClipboardOwner
@@ -256,6 +257,70 @@ void install_clipboard_provider(COKit &rOffice)
     rOffice.installClipboardProvider(&provider);
 }
 
+// The engine asks the user for a file. Convert the details on the calling
+// thread, then show an open panel on the main thread and answer through the
+// completion; the engine's main loop keeps running while the panel is open.
+static void filePickerProviderPick(const char* pTitle, const COKitFilePickerFilter* pFilters,
+                                   size_t nFilters,
+                                   void (*pfnPicked)(void* pContext, const char* pUrl),
+                                   void* pContext)
+{
+    @autoreleasepool {
+        NSString* title = pTitle && pTitle[0] ? [NSString stringWithUTF8String:pTitle] : nil;
+
+        NSMutableArray<UTType*>* types = [NSMutableArray array];
+        for (size_t i = 0; i < nFilters; ++i)
+        {
+            NSString* wildcards = [NSString stringWithUTF8String:pFilters[i].pWildcards];
+            for (NSString* wildcard in [wildcards componentsSeparatedByString:@";"])
+            {
+                // A wildcard has the shape "*.png"; the extension follows the last dot.
+                NSRange dot = [wildcard rangeOfString:@"." options:NSBackwardsSearch];
+                if (dot.location == NSNotFound)
+                    continue;
+                UTType* type =
+                    [UTType typeWithFilenameExtension:[wildcard substringFromIndex:dot.location + 1]];
+                if (type)
+                    [types addObject:type];
+            }
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSOpenPanel* panel = [NSOpenPanel openPanel];
+            panel.canChooseFiles = YES;
+            panel.canChooseDirectories = NO;
+            panel.allowsMultipleSelection = NO;
+            if (title)
+                panel.message = title;
+            if (types.count > 0)
+                panel.allowedContentTypes = types;
+
+            void (^deliver)(NSModalResponse) = ^(NSModalResponse result) {
+                if (result == NSModalResponseOK && panel.URL)
+                    pfnPicked(pContext, panel.URL.absoluteString.UTF8String);
+                else
+                    pfnPicked(pContext, nullptr);
+            };
+
+            NSWindow* window = NSApp.keyWindow;
+            if (window)
+                [panel beginSheetModalForWindow:window completionHandler:deliver];
+            else
+                [panel beginWithCompletionHandler:deliver];
+        });
+    }
+}
+
+// Install the process-global file picker provider (declared in macos.h). After
+// this a command that needs the user to pick a file - compare documents,
+// insert an image - opens a native open panel instead of the engine's dialog.
+void install_filepicker_provider(COKit &rOffice)
+{
+    static COKitFilePickerProvider provider{};
+    provider.pick = filePickerProviderPick;
+    rOffice.installFilePickerProvider(&provider);
+}
+
 /**
  * Wrapper to be able to call the C++ code from Swift.
  *
@@ -267,10 +332,38 @@ void install_clipboard_provider(COKit &rOffice)
     // Initialize logging
     // Use "debug" or potentially even "trace" for debugging
 #if DEBUG
-    Log::initialize("Mobile", "debug");
+    const std::string logLevel("debug");
 #else
-    Log::initialize("Mobile", "information");
+    const std::string logLevel("information");
 #endif
+
+    // In UI testing mode the log goes to a file, because standard error is not
+    // collected when the app is launched through LaunchServices.
+    //
+    // Standard error itself is redirected, rather than the logging channel
+    // being pointed at the file. The server re-initializes logging with a
+    // channel of its own once it starts, and log lines are written to the
+    // standard error file descriptor directly, so redirecting that keeps every
+    // line whichever channel is in place at the time. Opening the file with "w"
+    // also starts each run with an empty log.
+    //
+    // The file lives in our own temporary directory, the place the sandbox
+    // allows us to write, and the test driver hands its content out from there
+    // on request. Reading it from outside would mean granting the reader access
+    // to another app's data, which a test run should not have to ask for.
+    if ([[[NSProcessInfo processInfo] arguments] containsObject:@"--uitesting"]) {
+        NSString *logFile =
+            [NSTemporaryDirectory() stringByAppendingPathComponent:@"coda-app.log"];
+        if (freopen([logFile fileSystemRepresentation], "w", stderr) != nullptr) {
+            sLogFilePath = logFile;
+        }
+        else {
+            NSLog(@"CollaboraOffice: cannot log to %@: %s", logFile, strerror(errno));
+        }
+    }
+
+    Log::initialize("Mobile", logLevel);
+
     ProcUtil::setThreadName("main");
 
     // Give AIChatSession a native HTTP transport (no server-side AI proxy here).
@@ -280,6 +373,11 @@ void install_clipboard_provider(COKit &rOffice)
     fakeSocketSetLoggingCallback([](const std::string& line) {
         LOG_TRC_NOFILE(line);
     });
+
+#if ENABLE_DEBUG
+    // The bundle's Resources directory stands in for browser/dist/:
+    Extensions::synthesizeBuiltinExtensionsIndex(Desktop::getDataDir() + "/extensions");
+#endif
 
     // Start the COOLWSD server in a detached thread
     NSLog(@"CollaboraOffice: Starting the thread");
@@ -301,6 +399,10 @@ void install_clipboard_provider(COKit &rOffice)
     });
 }
 
++ (NSString *_Nullable)logFilePath {
+    return sLogFilePath;
+}
+
 + (void)stopServer {
     NSLog(@"CollaboraOffice: Requesting shutdown");
     SigUtil::requestShutdown();
@@ -313,6 +415,8 @@ void install_clipboard_provider(COKit &rOffice)
     // Contact the permanently (during app lifetime) listening COOLWSD server
     // "public" socket
     assert(coolwsd_server_socket_fd != -1);
+    NSLog(@"CollaboraOffice: HULLO for appDocId %d, connecting client fd %d to server fd %d",
+          document.appDocId, document.fakeClientFd, coolwsd_server_socket_fd);
     int rc = fakeSocketConnect(document.fakeClientFd, coolwsd_server_socket_fd);
     assert(rc != -1);
 
@@ -324,15 +428,23 @@ void install_clipboard_provider(COKit &rOffice)
     document.closeNotificationSignalFd = closeNotificationPipe[0];
     document.closeNotificationWatchedFd = closeNotificationPipe[1];
 
+    // The forwarding thread keeps its own copy of the two fds it polls and closes. A
+    // reattach gives the document a fresh socket while this thread is still winding down,
+    // and reading the fds from the document here would pick up that newer connection.
+    const int clientFd = document.fakeClientFd;
+    const int watchedFd = document.closeNotificationWatchedFd;
+
     // Start another thread to read responses and forward them to the JavaScript
     dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
                    ^{
                        ProcUtil::setThreadName("app2js");
+                       NSLog(@"CollaboraOffice: forwarding thread started for appDocId %d",
+                             document.appDocId);
                        while (true) {
                            struct pollfd p[2];
-                           p[0].fd = document.fakeClientFd;
+                           p[0].fd = clientFd;
                            p[0].events = POLLIN;
-                           p[1].fd = document.closeNotificationWatchedFd;
+                           p[1].fd = watchedFd;
                            p[1].events = POLLIN;
                            if (fakeSocketPoll(p, 2, -1) > 0) {
                                if (p[1].revents == POLLIN) {
@@ -342,32 +454,42 @@ void install_clipboard_provider(COKit &rOffice)
                                    // too just for cleanliness, even if a FakeSocket as
                                    // such is not a system resource so nothing is saved by
                                    // closing it.
-                                   fakeSocketClose(document.closeNotificationWatchedFd);
+                                   fakeSocketClose(watchedFd);
 
                                    // Close our end of the fake socket connection to the
                                    // ClientSession thread, so that it terminates
-                                   fakeSocketClose(document.fakeClientFd);
+                                   fakeSocketClose(clientFd);
 
+                                   NSLog(@"CollaboraOffice: forwarding thread for appDocId %d "
+                                          "ends on close notification",
+                                         document.appDocId);
                                    return;
                                }
                                if (p[0].revents == POLLIN) {
-                                   size_t n = fakeSocketAvailableDataLength(document.fakeClientFd);
+                                   size_t n = fakeSocketAvailableDataLength(clientFd);
                                    // I don't want to check for n being -1 here, even if
                                    // that will lead to a crash (std::length_error from the
                                    // below std::vector constructor), as n being -1 is a
                                    // sign of something being wrong elsewhere anyway, and I
                                    // prefer to fix the root cause. Let's see how well this
                                    // works out. See tdf#122543 for such a case.
-                                   if (n == 0)
+                                   if (n == 0) {
+                                       NSLog(@"CollaboraOffice: forwarding thread for appDocId %d "
+                                              "ends, the server closed the socket",
+                                             document.appDocId);
                                        return;
+                                   }
                                    std::vector<char> buf(n);
-                                   n = fakeSocketRead(document.fakeClientFd, buf.data(), n);
+                                   n = fakeSocketRead(clientFd, buf.data(), n);
                                    [document send2JS:buf.data() length:n];
                                }
                            }
                            else
                                break;
                        }
+                       NSLog(@"CollaboraOffice: forwarding thread for appDocId %d ends, the poll "
+                              "on client fd %d failed",
+                             document.appDocId, clientFd);
                        assert(false);
                    });
 
@@ -383,10 +505,19 @@ void install_clipboard_provider(COKit &rOffice)
     // so it stays a single token.
     if (document.fileURL != nil)
         message += " " + std::string([[document.fileURL absoluteString] UTF8String]);
+    NSLog(@"CollaboraOffice: sending handshake for appDocId %d on client fd %d: %s",
+          document.appDocId, document.fakeClientFd, message.c_str());
     fakeSocketWriteQueue(document.fakeClientFd, message.c_str(), message.size());
 }
 
 + (void)handleByeWith:(Document *_Nonnull)document {
+    NSLog(@"CollaboraOffice: BYE for appDocId %d, %d documents open",
+          document.appDocId, DocumentData::count());
+
+    // A document with no view of its own is kept loaded on purpose, so closing its
+    // last session is not what ends it. Ask for it directly.
+    closeDetachedDocument(document.appDocId);
+
     if (DocumentData::count() > 1) {
         // Other documents remain open. Keep the content in the shared clipboard;
         // just render it now so a lazy transferable (Writer, Impress) stays
@@ -406,6 +537,27 @@ void install_clipboard_provider(COKit &rOffice)
     fakeSocketClose(document.closeNotificationSignalFd);
 }
 
++ (void)detachDocument:(Document *_Nonnull)document {
+    NSLog(@"CollaboraOffice: detaching appDocId %d, client fd %d",
+          document.appDocId, document.fakeClientFd);
+
+    // Mark the document before the socket goes, so the broker never sees an empty
+    // session list that it would read as the document having ended.
+    if (auto broker = findBrokerByMobileAppDocId(document.appDocId))
+        broker->setDetached(true);
+
+    if (document.closeNotificationSignalFd == -1)
+        return;
+
+    // Wake this document's forwarding thread, which closes the watched end of the pair
+    // and the client socket. It holds its own copies of those two, so clearing them here
+    // leaves the document ready for a fresh connection straight away.
+    fakeSocketClose(document.closeNotificationSignalFd);
+    document.closeNotificationSignalFd = -1;
+    document.closeNotificationWatchedFd = -1;
+    document.fakeClientFd = -1;
+}
+
 + (void)handleMessageWith:(Document *)document message:(NSString *)message {
     const char *buf = [message UTF8String];
     fakeSocketWriteQueue(document.fakeClientFd, buf, strlen(buf));
@@ -413,6 +565,23 @@ void install_clipboard_provider(COKit &rOffice)
 
 + (void)saveAsWith:(Document *)document url:(NSString *)url format:(NSString *)format filterOptions:(NSString *)filterOptions {
     DocumentData::get(document.appDocId).loKitDocument->saveAs([url UTF8String], [format UTF8String], [filterOptions UTF8String]);
+}
+
++ (NSString *_Nullable)embeddedMediaPathWithDocument:(Document *)document tag:(NSString *)tag {
+    // The broker is recorded under the appDocId once the engine has loaded the document.
+    DocumentData *data = DocumentData::getIfExists(document.appDocId);
+    std::shared_ptr<DocumentBroker> docBroker = data ? data->docBroker.lock() : nullptr;
+    if (!docBroker) {
+        LOG_ERR("No document broker for appDocId " << document.appDocId
+                << ", cannot resolve media tag [" << [tag UTF8String] << ']');
+        return nil;
+    }
+
+    const std::string path = docBroker->getEmbeddedMediaPath(std::string([tag UTF8String]));
+    if (path.empty())
+        return nil;
+
+    return [NSString stringWithUTF8String:path.c_str()];
 }
 
 /**
@@ -622,8 +791,20 @@ static std::atomic<int> appDocIdCounter(1);
     LOG_TRC(stdMessage);
 }
 
++ (bool)traceEnabled {
+    return Log::traceEnabled();
+}
+
 + (bool)isRtlLanguage:(NSString *)language {
     return LangUtil::isRtlLanguage(std::string([language UTF8String]));
+}
+
++ (bool)isWelcomeEnabled {
+#if ENABLE_DEBUG
+    return ConfigUtil::getBool("welcome.enable", false);
+#else
+    return true;
+#endif
 }
 
 + (bool)darkModeWithSystemDefault:(bool)systemDefault {
@@ -646,7 +827,7 @@ static std::atomic<int> appDocIdCounter(1);
 }
 
 + (void)uploadSettings:(NSString *)payload {
-    Desktop::uploadSettings(std::string([payload UTF8String]));
+    uploadAndApplySettings(std::string([payload UTF8String]));
 }
 
 + (void)syncSettingsWith:(Document *)document {

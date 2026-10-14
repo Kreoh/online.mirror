@@ -22,14 +22,14 @@
 
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <rtl/ref.hxx>
 #include <svx/unoshape.hxx>
 #include <vector>
 
 namespace chart { class ChartModel; }
 namespace com::sun::star::beans { class XPropertySet; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace chart
 {
@@ -79,9 +79,9 @@ public:
     virtual std::vector< ViewLegendEntry > createLegendEntries(
             const css::awt::Size& rEntryKeyAspectRatio,
             css::chart2::LegendPosition eLegendPosition,
-            const css::uno::Reference< css::beans::XPropertySet >& xTextProperties,
+            const cpo::uno::Reference< css::beans::XPropertySet >& xTextProperties,
             const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
-            const css::uno::Reference< css::uno::XComponentContext >& xContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
             ChartModel& rModel
                 ) = 0;
 

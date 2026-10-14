@@ -23,7 +23,7 @@
 #include <memory>
 #include <tools/gen.hxx>
 #include <cppuhelper/implbase2.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/accessibility/XAccessibleText.hpp>
 #include <com/sun/star/accessibility/XAccessibleTextAttributes.hpp>
 #include <com/sun/star/accessibility/TextSegment.hpp>
@@ -194,15 +194,15 @@ public:
     virtual cpo::uno::Sequence< css::beans::PropertyValue > getRunAttributes( sal_Int32 Index, const cpo::uno::Sequence< OUString >& RequestedAttributes ) override final;
 
     // child-related methods from XAccessibleContext
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual sal_Int64 getAccessibleChildCount();
     /// @throws css::lang::IndexOutOfBoundsException
-    /// @throws css::uno::RuntimeException
-    virtual css::uno::Reference< css::accessibility::XAccessible > getAccessibleChild( sal_Int64 i );
+    /// @throws cpo::uno::RuntimeException
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleChild( sal_Int64 i );
 
     // child-related methods from XAccessibleComponent
-    /// @throws css::uno::RuntimeException
-    virtual css::uno::Reference< css::accessibility::XAccessible > getAccessibleAtPoint( const css::awt::Point& aPoint );
+    /// @throws cpo::uno::RuntimeException
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleAtPoint( const css::awt::Point& aPoint );
 
 protected:
     tools::Rectangle GetParagraphBoundingBox() const;

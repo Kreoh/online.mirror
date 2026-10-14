@@ -30,6 +30,7 @@
 
 #include <dbdocfun.hxx>
 #include <dbdata.hxx>
+#include <tablestyle.hxx>
 #include <undodat.hxx>
 #include <undocell.hxx>
 #include <viewdata.hxx>
@@ -82,6 +83,18 @@ bool lcl_GetCursorPos(const ScDocShell& rDocShell, ScAddress& rPos)
         return false;
     rPos = pViewSh->GetViewData().GetCurPos();
     return true;
+}
+
+bool lcl_HasFilterHiddenRows(const ScDocument& rDoc, const ScDBData& rDBData)
+{
+    ScRange aRange;
+    rDBData.GetArea(aRange);
+    if (!rDoc.HasFilteredRows(aRange.aStart.Row(), aRange.aEnd.Row(), aRange.aStart.Tab()))
+        return false;
+
+    ScQueryParam aParam;
+    rDBData.GetQueryParam(aParam);
+    return aParam.bInplace; // a filter with a copy-to target never hid a row here
 }
 }
 
@@ -411,17 +424,25 @@ void ScDBDocFunc::RestoreHeaderColumnNames(ScDBData& rData, const std::vector<OU
         }
 
         // A header cell duplicating another header, revert it to its previous name.
-        bool bDuplicate = false;
-        for (SCCOL nOther = nStartCol; nOther <= nEndCol && !bDuplicate; ++nOther)
+        bool bReverted = false;
+        for (SCCOL nOther = nStartCol; nOther <= nEndCol && !bReverted; ++nOther)
         {
             if (nOther != nCol && rTransliteration.isEqual(rHeader, aCur[nOther - nStartCol]))
             {
                 const OUString aPrev = getPrev(nCol);
                 if (!aPrev.isEmpty() && !rTransliteration.isEqual(aPrev, rHeader))
+                {
                     writeBack(nCol, aPrev);
+                    bReverted = true;
+                }
                 break;
             }
         }
+
+        // A header cell holds a name, so a number or a formula entered there need to become a text
+        const CellType eType = rDoc.GetCellType(ScAddress(nCol, nRow, nTab));
+        if (!bReverted && eType != CELLTYPE_STRING && eType != CELLTYPE_EDIT)
+            writeBack(nCol, rHeader);
     }
 
     // Release a generated name whose origin column no longer holds it: once the
@@ -446,6 +467,139 @@ void ScDBDocFunc::RestoreHeaderColumnNames(ScDBData& rData, const std::vector<OU
         else
             pUndoMgr->LeaveListAction();
     }
+}
+
+std::vector<ScDBDocFunc::TableRepair> ScDBDocFunc::GetTablesLosingData(
+    const ScMarkData& rMark, const ScRange& rRange, DelCellCmd eCmd) const
+{
+    const ScDocument& rDoc = rDocShell.GetDocument();
+    std::vector<TableRepair> aNames;
+
+    if (eCmd != DelCellCmd::Rows && eCmd != DelCellCmd::CellsUp)
+        return aNames;
+
+    ScRange aBand(rRange);
+    if (eCmd == DelCellCmd::Rows)
+    {
+        aBand.aStart.SetCol(0);
+        aBand.aEnd.SetCol(rDoc.MaxCol());
+    }
+
+    for (const SCTAB nTab : rMark)
+    {
+        aBand.aStart.SetTab(nTab);
+        aBand.aEnd.SetTab(nTab);
+
+        for (const ScDBData* pData : rDoc.GetAllNamedDBsInArea(aBand))
+        {
+            if (!pData->HasHeader())
+                continue;
+
+            ScRange aArea;
+            pData->GetArea(aArea);
+
+            // A cell shift moves the Table's area only when it spans the whole width of it.
+            if (eCmd == DelCellCmd::CellsUp
+                && (aBand.aStart.Col() > aArea.aStart.Col()
+                    || aBand.aEnd.Col() < aArea.aEnd.Col()))
+                continue;
+
+            // Taking the header row promotes the row below it instead, or drops the range
+            // when the whole of it goes. Neither is a repair.
+            if (aBand.aStart.Row() <= aArea.aStart.Row())
+                continue;
+
+            // The Total Row is part of the area, so it is not a row that may be given back.
+            const SCROW nFirstData = aArea.aStart.Row() + 1;
+            const SCROW nLastData = aArea.aEnd.Row() - (pData->HasTotals() ? 1 : 0);
+
+            const bool bTotalsGone = pData->HasTotals() && aBand.aStart.Row() <= aArea.aEnd.Row()
+                                     && aBand.aEnd.Row() >= aArea.aEnd.Row();
+            const bool bAllDataGone = nFirstData <= nLastData && aBand.aStart.Row() <= nFirstData
+                                      && aBand.aEnd.Row() >= nLastData;
+            if (!bTotalsGone && !bAllDataGone)
+                continue;
+
+            aNames.push_back({ pData->GetUpperName(), bTotalsGone });
+        }
+    }
+
+    return aNames;
+}
+
+void ScDBDocFunc::RepairTablesAfterDelete(const std::vector<TableRepair>& rRepairs,
+                                          DelCellCmd eCmd, bool bRecord, bool bApi)
+{
+    for (const TableRepair& rRepair : rRepairs)
+    {
+        // The Total Row first: without it the table needs one row less, which is what
+        // deciding whether a data row is owed depends on.
+        if (rRepair.mbTotalsGone)
+            DropTableTotals(rRepair.maUpperName);
+        RestoreTableDataRow(rRepair.maUpperName, eCmd, bRecord, bApi);
+    }
+}
+
+void ScDBDocFunc::DropTableTotals(const OUString& rUpperName)
+{
+    ScDBCollection* pDBs = rDocShell.GetDocument().GetDBCollection();
+    if (!pDBs)
+        return;
+
+    const ScDBData* pData = pDBs->getNamedDBs().findByUpperName(rUpperName);
+    if (!pData || !pData->HasTotals())
+        return;
+
+    ScDBData aNoTotals(*pData);
+    aNoTotals.SetTotals(false);
+    ScSubTotalParam aParam;
+    aNoTotals.GetSubTotalParam(aParam);
+    ScDBData::ClearTotalRowParam(aParam);
+    aNoTotals.SetSubTotalParam(aParam);
+    ModifyDBData(aNoTotals);
+}
+
+void ScDBDocFunc::RestoreTableDataRow(const OUString& rUpperName, DelCellCmd eCmd,
+                                      bool bRecord, bool bApi)
+{
+    ScDocument& rDoc = rDocShell.GetDocument();
+    ScDBCollection* pDBs = rDoc.GetDBCollection();
+    if (!pDBs)
+        return;
+
+    // Re-resolve by name: the deletion may have dropped the Table, and an earlier repair on the
+    // same sheet may have shifted it.
+    ScDBData* pData = pDBs->getNamedDBs().findByUpperName(rUpperName);
+    if (!pData)
+        return;
+
+    ScRange aArea;
+    pData->GetArea(aArea);
+    if (aArea.aEnd.Row() - aArea.aStart.Row() >= pData->GetMinRowSpan())
+        return;
+
+    const SCROW nNewRow = aArea.aStart.Row() + 1;
+    const ScRange aInsert(aArea.aStart.Col(), nNewRow, aArea.aStart.Tab(), aArea.aEnd.Col(),
+                          nNewRow, aArea.aStart.Tab());
+    rDocShell.GetDocFunc().InsertCells(
+        aInsert, nullptr, eCmd == DelCellCmd::Rows ? INS_INSROWS_BEFORE : INS_CELLSDOWN, bRecord,
+        bApi);
+
+    // The insert widens the area on its own only when it lands inside it, which is the case for a
+    // Table with a Total Row but not for one that is down to its header row.
+    pData = pDBs->getNamedDBs().findByUpperName(rUpperName);
+    if (!pData)
+        return;
+
+    pData->GetArea(aArea);
+    const SCROW nMissing = pData->GetMinRowSpan() - (aArea.aEnd.Row() - aArea.aStart.Row());
+    if (nMissing <= 0)
+        return;
+
+    ScDBData aNewData(*pData);
+    aArea.aEnd.IncRow(nMissing);
+    aNewData.SetArea(aArea);
+    ModifyDBData(aNewData);
 }
 
 bool ScDBDocFunc::DeleteDBTable(const ScDBData* pDBObj, bool bRecord, bool bApi)
@@ -482,7 +636,8 @@ bool ScDBDocFunc::DeleteDBTable(const ScDBData* pDBObj, bool bRecord, bool bApi)
             }
         }
 
-        const bool bGroup = bRecord && !aClearCols.empty();
+        const bool bShowRows = lcl_HasFilterHiddenRows(rDoc, *pDel);
+        const bool bGroup = bRecord && (!aClearCols.empty() || bShowRows);
         ScAddress aCursorPos;
         const bool bHaveCursor = bGroup && lcl_GetCursorPos(rDocShell, aCursorPos);
         if (bGroup)
@@ -510,6 +665,10 @@ bool ScDBDocFunc::DeleteDBTable(const ScDBData* pDBObj, bool bRecord, bool bApi)
             aMark.SetMarkArea(ScRange(nCol, nHdrRow, nHdrTab));
             rDocShell.GetDocFunc().DeleteContents(aMark, InsertDeleteFlags::CONTENTS, bRecord, bApi);
         }
+
+        // The filter goes away with the Table, so its hidden rows have to come back.
+        if (bShowRows)
+            ShowFilteredRows(*pDel, bRecord, bApi);
 
         std::unique_ptr<ScDBCollection> pUndoColl;
         if (bRecord)
@@ -553,6 +712,132 @@ bool ScDBDocFunc::DeleteDBTable(const ScDBData* pDBObj, bool bRecord, bool bApi)
     }
 
     return bDone;
+}
+
+bool ScDBDocFunc::ConvertTableToRange(const ScDBData* pDBObj, bool bApi)
+{
+    ScDocument& rDoc = rDocShell.GetDocument();
+    ScDBCollection* pDocColl = rDoc.GetDBCollection();
+    ScDBCollection::NamedDBs& rDBs = pDocColl->getNamedDBs();
+    auto const iter = rDBs.findByPointer(pDBObj);
+    if (iter == rDBs.end())
+    {
+        if (!bApi)
+            rDocShell.ErrorMessage(STR_TABLE_ERR_DEL);
+        return false;
+    }
+
+    ScRange aRange;
+    pDBObj->GetArea(aRange);
+    const SCTAB nTab = aRange.aStart.Tab();
+    const bool bRecord = rDoc.IsUndoEnabled();
+    const sal_uInt16 nIndex = pDBObj->GetIndex();
+
+    ScDocShellModificator aModificator(rDocShell);
+
+    // Formulas that reference this table through a structured reference (Table[Col]); they must
+    // be flattened to plain ranges before the range is dropped, else they would become #REF!.
+    std::vector<ScAddress> aRefCells;
+    rDoc.CollectTableRefFormulas(nIndex, aRefCells);
+
+    // Named expressions can hold structured references too; a cheap const pre-check decides whether
+    // we take the (copy-all) range-name path, so nothing is copied when no name is affected.
+    const bool bNamesAffected = rDoc.HasTableRefInNames(nIndex);
+
+    // The Undo/Redo docs must span the table's tab plus every tab holding a referencing formula.
+    SCTAB nTab1 = nTab;
+    SCTAB nTab2 = nTab;
+    for (const ScAddress& a : aRefCells)
+    {
+        nTab1 = std::min(nTab1, a.Tab());
+        nTab2 = std::max(nTab2, a.Tab());
+    }
+
+    // When named expressions are also rewritten, group both changes into one "Convert Table to
+    // Range" undo. The range-name child (ScUndoAllRangeNames, added first by ModifyAllRangeNames
+    // below) is undone last, after the table's own child has re-added the database range, so the
+    // restored structured names resolve against it again. Mirrors the grouping in ResizeTable().
+    SfxUndoManager* pUndoMgr = rDocShell.GetUndoManager();
+    const bool bShowRows = lcl_HasFilterHiddenRows(rDoc, *pDBObj);
+    const bool bGroup = bRecord && (bNamesAffected || bShowRows);
+    if (bGroup)
+    {
+        ViewShellId nViewShellId(-1);
+        if (ScTabViewShell* pViewSh = ScTabViewShell::GetActiveViewShell())
+            nViewShellId = pViewSh->GetViewShellId();
+        pUndoMgr->EnterListAction(ScResId(STR_UNDO_CONVERT_CALCTABLE_TO_RANGE),
+                                  ScResId(STR_UNDO_CONVERT_CALCTABLE_TO_RANGE), 0, nViewShellId);
+    }
+
+    // The filter goes away with the Table, so its hidden rows have to come back.
+    if (bShowRows)
+        ShowFilteredRows(*pDBObj, bRecord, bApi);
+
+    // Flatten the named expressions first, while GetAreaRefRPN() still resolves against the live
+    // range. ModifyAllRangeNames applies the flattened set and records the ScUndoAllRangeNames
+    // child (capturing the still-structured old names itself).
+    if (bNamesAffected)
+    {
+        std::map<OUString, ScRangeName> aFlatNames;
+        if (rDoc.ConvertTableRefsToRangeInNames(nIndex, aFlatNames))
+            rDocShell.GetDocFunc().ModifyAllRangeNames(aFlatNames);
+    }
+
+    // Snapshot the range's attributes and the still-structured referencing formulas before baking
+    // (Undo restores this pristine state), then flatten the cells while the range still resolves.
+    ScDocumentUniquePtr pUndoDoc;
+    std::unique_ptr<ScDBCollection> pUndoColl;
+    if (bRecord)
+    {
+        pUndoDoc.reset(new ScDocument(SCDOCMODE_UNDO));
+        pUndoDoc->InitUndo(rDoc, nTab1, nTab2, false, false);
+        rDoc.CopyToDocument(aRange, InsertDeleteFlags::ATTRIB, false, *pUndoDoc);
+        for (const ScAddress& a : aRefCells)
+            rDoc.CopyToDocument(ScRange(a), InsertDeleteFlags::CONTENTS, false, *pUndoDoc);
+        pUndoColl.reset(new ScDBCollection(*pDocColl));
+    }
+    rDoc.ConvertTableRefsToRange(nIndex, aRefCells);
+
+    // Bake the table style into direct cell attributes so the look survives the range removal.
+    if (const ScTableStyleParam* pStyleInfo = pDBObj->GetTableStyleInfo())
+    {
+        if (const ScTableStyle* pStyle
+            = rDoc.GetTableStyles()->GetTableStyle(pStyleInfo->maStyleID))
+            pStyle->BakeInto(rDoc, *pDBObj);
+    }
+
+    // Erase the database range and clear the header's autofilter dropdown flags; the data,
+    // header text and baked formatting stay.
+    rDoc.PreprocessDBDataUpdate();
+    rDBs.erase(iter);
+    rDoc.CompileHybridFormula();
+    rDoc.RemoveFlagsTab(aRange.aStart.Col(), aRange.aStart.Row(), aRange.aEnd.Col(),
+                        aRange.aStart.Row(), nTab, ScMF::Auto);
+
+    if (bRecord)
+    {
+        // Snapshot the baked, range-less attributes and the flattened formulas for Redo.
+        ScDocumentUniquePtr pRedoDoc(new ScDocument(SCDOCMODE_UNDO));
+        pRedoDoc->InitUndo(rDoc, nTab1, nTab2, false, false);
+        rDoc.CopyToDocument(aRange, InsertDeleteFlags::ATTRIB, false, *pRedoDoc);
+        for (const ScAddress& a : aRefCells)
+            rDoc.CopyToDocument(ScRange(a), InsertDeleteFlags::CONTENTS, false, *pRedoDoc);
+
+        pUndoMgr->AddUndoAction(std::make_unique<ScUndoConvertTableToRange>(
+            rDocShell, aRange, std::move(pUndoDoc), std::move(pRedoDoc), std::move(pUndoColl),
+            std::make_unique<ScDBCollection>(*pDocColl), aRefCells));
+    }
+
+    if (bGroup)
+        pUndoMgr->LeaveListAction();
+
+    rDocShell.PostPaint(aRange, PaintPartFlags::Grid | PaintPartFlags::Left | PaintPartFlags::Top
+                                    | PaintPartFlags::Size);
+    for (const ScAddress& a : aRefCells)
+        rDocShell.PostPaint(ScRange(a), PaintPartFlags::Grid);
+    aModificator.SetDocumentModified();
+    SfxGetpApp()->Broadcast(SfxHint(SfxHintId::ScDbAreasChanged));
+    return true;
 }
 
 bool ScDBDocFunc::AddDBRange( const OUString& rName, const ScRange& rRange )
@@ -608,6 +893,22 @@ bool ScDBDocFunc::AddDBRange( const OUString& rName, const ScRange& rRange )
     return true;
 }
 
+void ScDBDocFunc::ShowFilteredRows(const ScDBData& rDBData, bool bRecord, bool bApi)
+{
+    ScRange aRange;
+    rDBData.GetArea(aRange);
+    ScQueryParam aParam;
+    rDBData.GetQueryParam(aParam);
+
+    // Same as switching the AutoFilter off: empty the query and run it, which shows the rows
+    // and records the ScUndoQuery that hides them again on undo.
+    for (SCCOL nCol = aParam.nCol1; nCol <= aParam.nCol2; nCol++)
+        aParam.RemoveAllEntriesByField(nCol);
+
+    aParam.bDuplicate = true;
+    Query(aRange.aStart.Tab(), aParam, nullptr, bRecord, bApi);
+}
+
 bool ScDBDocFunc::DeleteDBRange(const OUString& rName)
 {
     bool bDone = false;
@@ -649,49 +950,25 @@ bool ScDBDocFunc::DeleteDBRange(const OUString& rName)
 
 bool ScDBDocFunc::RenameDBRange( const OUString& rOld, const OUString& rNew )
 {
-    bool bDone = false;
     ScDocument& rDoc = rDocShell.GetDocument();
-    ScDBCollection* pDocColl = rDoc.GetDBCollection();
-    bool bUndo = rDoc.IsUndoEnabled();
-    ScDBCollection::NamedDBs& rDBs = pDocColl->getNamedDBs();
-    auto const iterOld = rDBs.findByUpperName2(ScGlobal::getCharClass().uppercase(rOld));
-    const ScDBData* pNew = rDBs.findByUpperName(ScGlobal::getCharClass().uppercase(rNew));
-    if (iterOld != rDBs.end() && !pNew)
-    {
-        ScDocShellModificator aModificator( rDocShell );
+    ScDBCollection::NamedDBs& rDBs = rDoc.GetDBCollection()->getNamedDBs();
 
-        std::unique_ptr<ScDBData> pNewData(new ScDBData(rNew, **iterOld));
-        OUString aUndoName = rOld;
-        std::unique_ptr<ScDBCollection> pUndoColl( new ScDBCollection( *pDocColl ) );
+    ScDocShellModificator aModificator( rDocShell );
 
-        rDoc.PreprocessDBDataUpdate();
-        rDBs.erase(iterOld);
-        bool bInserted = rDBs.insert(std::move(pNewData));
-        if (!bInserted)                             // error -> restore old state
-        {
-            rDoc.SetDBCollection(std::move(pUndoColl));       // belongs to the document then
-        }
+    // Rename in place (keeping the same ScDBData object at its index) so index-based
+    // references - structured refs =Table[col] and plain DB-area refs - follow the new name
+    // automatically, exactly like a sheet rename. A destroy-and-recreate would drop the
+    // binding those references resolve through and corrupt =Table[col] formulas.
+    if (!rDBs.rename(rOld, rNew))
+        return false;
 
-        rDoc.CompileHybridFormula();
+    if (rDoc.IsUndoEnabled())
+        rDocShell.GetUndoManager()->AddUndoAction(
+            std::make_unique<ScUndoRenameDBData>( rDocShell, rOld, rNew ) );
 
-        if (bInserted)                              // insertion worked
-        {
-            if (bUndo)
-            {
-                rDocShell.GetUndoManager()->AddUndoAction(
-                                std::make_unique<ScUndoDBData>( rDocShell, aUndoName, std::move(pUndoColl),
-                                    rNew, std::make_unique<ScDBCollection>( *pDocColl ) ) );
-            }
-            else
-                pUndoColl.reset();
-
-            aModificator.SetDocumentModified();
-            SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScDbAreasChanged ) );
-            bDone = true;
-        }
-    }
-
-    return bDone;
+    aModificator.SetDocumentModified();
+    SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScDbAreasChanged ) );
+    return true;
 }
 
 void ScDBDocFunc::ModifyDBData( const ScDBData& rNewData )
@@ -789,6 +1066,9 @@ void ScDBDocFunc::ModifyDBData( const ScDBData& rNewData )
             if (pData->IsGeneratedHeaderName(rDoc.GetString(nCol, nRow, nTab)))
                 aClearCols.push_back(nCol);
         }
+
+        // Drop the stored Total Row formulas for the columns the resize removed (no shift here).
+        pData->AdjustTotalsRowFormulas(0, 0, aNewRange.aStart.Col(), aNewRange.aEnd.Col());
     }
 
     // Group the cell writes with the range/setting-change undo so one Undo reverts both.
@@ -857,6 +1137,110 @@ void ScDBDocFunc::ModifyDBData( const ScDBData& rNewData )
     }
 
     aModificator.SetDocumentModified();
+}
+
+bool ScDBDocFunc::ResizeTable(const ScDBData& rOldData, const ScRange& rNewArea, bool bApi)
+{
+    ScDocument& rDoc = rDocShell.GetDocument();
+
+    ScRange aNewRange = rNewArea;
+    aNewRange.PutInOrder();
+
+    ScDBData aNewDBData(rOldData);
+    aNewDBData.SetArea(aNewRange.aStart.Tab(), aNewRange.aStart.Col(), aNewRange.aStart.Row(),
+                       aNewRange.aEnd.Col(), aNewRange.aEnd.Row());
+
+    ScRange aOldRange;
+    rOldData.GetArea(aOldRange);
+
+    // Refuse growing over another structure up front, before any change is applied.
+    if (rOldData.WouldResizeOverlap(rDoc, aNewRange))
+    {
+        if (!bApi)
+            rDocShell.ErrorMessageAsync(STR_MSSG_TABLE_OVERLAP);
+        return false;
+    }
+
+    // The Total Row lives inside the Table's range, so a Table that has one needs a row more
+    // than a plain one to keep a data row.
+    if (aNewRange.aEnd.Row() - aNewRange.aStart.Row() < rOldData.GetMinRowSpan())
+    {
+        if (!bApi)
+            rDocShell.ErrorMessageAsync(STR_MSSG_TABLE_RESIZE_NO_DATA);
+        return false;
+    }
+
+    // A row-span change on a Total-Row table relocates the total (DoTableSubTotals still
+    // guards straddle/tear); otherwise a plain range change.
+    if (aNewDBData.HasTotals()
+        && (aOldRange.aEnd.Row() != aNewRange.aEnd.Row()
+            || aOldRange.aStart.Row() != aNewRange.aStart.Row()))
+    {
+        const OUString aName = rOldData.GetName();
+        const bool bColumnsChanged = aNewRange.aStart.Col() != aOldRange.aStart.Col()
+                                     || aNewRange.aEnd.Col() != aOldRange.aEnd.Col();
+
+        // One "Resize Table" undo for the whole resize. (The Total Row toggle goes
+        // straight through DoTableSubTotals and keeps its own "Table Total Row" entry.)
+        const bool bGroup = rDoc.IsUndoEnabled();
+        if (bGroup)
+        {
+            ViewShellId nViewShellId(-1);
+            if (ScTabViewShell* pViewSh = ScTabViewShell::GetActiveViewShell())
+                nViewShellId = pViewSh->GetViewShellId();
+            rDocShell.GetUndoManager()->EnterListAction(ScResId(STR_UNDO_RESIZE_CALCTABLE),
+                                                        ScResId(STR_UNDO_RESIZE_CALCTABLE), 0, nViewShellId);
+        }
+
+        // The column extent, autofilter flags and generated header names are ModifyDBData's
+        // job (with ScUndoDBData undo/redo): apply the column change first, keeping the old
+        // rows, so we don't reimplement (and drift from) that logic here.
+        if (bColumnsChanged)
+        {
+            ScDBData aColData(rOldData);
+            aColData.SetArea(aOldRange.aStart.Tab(), aNewRange.aStart.Col(),
+                             aOldRange.aStart.Row(), aNewRange.aEnd.Col(), aOldRange.aEnd.Row());
+            ModifyDBData(aColData);
+        }
+
+        // Relocate the Total Row to the new row span on the (possibly re-columned) live table.
+        bool bOk = true;
+        if (ScDBData* pLive = rDoc.GetDBCollection()->getNamedDBs().findByName(aName))
+        {
+            ScDBData aRowData(*pLive);
+            aRowData.SetArea(aNewRange.aStart.Tab(), aNewRange.aStart.Col(),
+                             aNewRange.aStart.Row(), aNewRange.aEnd.Col(), aNewRange.aEnd.Row());
+            ScSubTotalParam aSubTotalParam;
+            pLive->GetSubTotalParam(aSubTotalParam);
+            pLive->CreateTotalRowParam(aSubTotalParam);
+            aRowData.SetSubTotalParam(aSubTotalParam);
+            aSubTotalParam.bRemoveOnly = false;
+            aSubTotalParam.bReplace = true;
+            bOk = DoTableSubTotals(aRowData.GetTab(), aRowData, aSubTotalParam, true, bApi);
+        }
+
+        if (bGroup)
+            rDocShell.GetUndoManager()->LeaveListAction();
+        return bOk;
+    }
+
+    // Same "Resize Table" history entry as the total-row path above; ModifyDBData keeps its
+    // own grouping (range change + any generated header cells) as a child of this list action.
+    const bool bGroup = rDoc.IsUndoEnabled();
+    if (bGroup)
+    {
+        ViewShellId nViewShellId(-1);
+        if (ScTabViewShell* pViewSh = ScTabViewShell::GetActiveViewShell())
+            nViewShellId = pViewSh->GetViewShellId();
+        rDocShell.GetUndoManager()->EnterListAction(ScResId(STR_UNDO_RESIZE_CALCTABLE),
+                                                    ScResId(STR_UNDO_RESIZE_CALCTABLE), 0, nViewShellId);
+    }
+
+    ModifyDBData(aNewDBData);
+
+    if (bGroup)
+        rDocShell.GetUndoManager()->LeaveListAction();
+    return true;
 }
 
 void ScDBDocFunc::ModifyAllDBData( const ScDBCollection& rNewColl, const std::vector<ScRange>& rDelAreaList )
@@ -1105,8 +1489,9 @@ bool ScDBDocFunc::DoTableSubTotals( SCTAB nTab, const ScDBData& rNewData, const 
 {
     bool bDo = !rParam.bRemoveOnly; // false = only delete
     // A resize (extend/shrink) relocates the total row: bReplace && bDo, unlike the toggle
-    // (ON: bReplace=false; OFF: bRemoveOnly=true). It is net-0 rows, which drives the tear
-    // refusal and Undo/Redo handling below.
+    // (ON: bReplace=false; OFF: bRemoveOnly=true). It deletes that row where it was and
+    // inserts it at the new bottom, so the row count comes out unchanged - which drives the
+    // tear refusal and Undo/Redo handling below.
     const bool bResize = rParam.bReplace && bDo;
 
     ScDocument& rDoc = rDocShell.GetDocument();
@@ -1175,10 +1560,12 @@ bool ScDBDocFunc::DoTableSubTotals( SCTAB nTab, const ScDBData& rNewData, const 
     ScSubTotalParam aNewParam;
     rNewData.GetSubTotalParam(aNewParam); // end of range is being changed (new bottom)
 
-    // Snapshot down to the lower of the old/new bottom, so content absorbed below the old
-    // total row is captured for undo.
-    const SCROW nCaptureEndRow
-        = (bResize && aNewParam.nRow2 > rParam.nRow2) ? aNewParam.nRow2 : rParam.nRow2;
+    // Do only writes, removes or relocates the one total row, so nothing above the band
+    // between the old and the new bottom changes. Keep in step with ScUndoTableTotals::Undo.
+    const SCROW nNewBottomRow
+        = bResize ? aNewParam.nRow2 : (bDo ? rParam.nRow2 + 1 : rParam.nRow2 - 1);
+    const SCROW nBandStartRow = std::min(rParam.nRow2, nNewBottomRow);
+    const SCROW nBandEndRow = std::max(rParam.nRow2, nNewBottomRow);
 
     ScDocumentUniquePtr pUndoDoc;
     std::unique_ptr<ScDBCollection> pUndoDB;
@@ -1187,17 +1574,12 @@ bool ScDBDocFunc::DoTableSubTotals( SCTAB nTab, const ScDBData& rNewData, const 
     {
         bool bOldFilter = bDo && rParam.bDoSort;
 
-        SCTAB nTabCount = rDoc.GetTableCount();
         pUndoDoc.reset(new ScDocument(SCDOCMODE_UNDO));
         pUndoDoc->InitUndo(rDoc, nTab, nTab, false, bOldFilter);
 
         //  secure data range - incl. filtering result
-        rDoc.CopyToDocument(rParam.nCol1, rParam.nRow1 + 1, nTab, rParam.nCol2, nCaptureEndRow, nTab,
+        rDoc.CopyToDocument(rParam.nCol1, nBandStartRow, nTab, rParam.nCol2, nBandEndRow, nTab,
                             InsertDeleteFlags::ALL, false, *pUndoDoc);
-
-        //  all formulas because of references
-        rDoc.CopyToDocument(0, 0, 0, rDoc.MaxCol(), rDoc.MaxRow(), nTabCount - 1,
-                            InsertDeleteFlags::FORMULA, false, *pUndoDoc);
 
         //  ranges of DB
         ScDBCollection* pDocDB = rDoc.GetDBCollection();
@@ -1224,7 +1606,8 @@ bool ScDBDocFunc::DoTableSubTotals( SCTAB nTab, const ScDBData& rNewData, const 
         ScDBCollection* pDocDB = rDoc.GetDBCollection();
         rDocShell.GetUndoManager()->AddUndoAction(std::make_unique<ScUndoTableTotals>(
             rDocShell, nTab, rParam, aNewParam.nRow2, std::move(pUndoDoc),
-            std::move(pUndoDB), std::make_unique<ScDBCollection>(*pDocDB), bInPlace));
+            std::move(pUndoDB), std::make_unique<ScDBCollection>(*pDocDB), rNewData.GetName(),
+            bInPlace));
     }
 
     if (!bSuccess)

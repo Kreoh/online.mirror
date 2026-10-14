@@ -23,7 +23,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <com/sun/star/system/XSimpleMailClient.hpp>
 
@@ -39,34 +39,34 @@ class CmdMailSuppl :
         css::lang::XServiceInfo >
 {
 
-    css::uno::Reference< css::lang::XMultiServiceFactory > m_xConfigurationProvider;
+    cpo::uno::Reference< css::lang::XMultiServiceFactory > m_xConfigurationProvider;
 
 public:
-    explicit CmdMailSuppl( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit CmdMailSuppl( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
 
     // XSimpleMailClientSupplier
 
 
-    virtual css::uno::Reference< css::system::XSimpleMailClient > SAL_CALL querySimpleMailClient(  ) override;
+    virtual cpo::uno::Reference< css::system::XSimpleMailClient > querySimpleMailClient(  ) override;
 
 
     // XSimpleMailClient
 
 
-    virtual css::uno::Reference< css::system::XSimpleMailMessage > SAL_CALL createSimpleMailMessage(  ) override;
+    virtual cpo::uno::Reference< css::system::XSimpleMailMessage > createSimpleMailMessage(  ) override;
 
-    virtual void SAL_CALL sendSimpleMailMessage( const css::uno::Reference< css::system::XSimpleMailMessage >& xSimpleMailMessage, sal_Int32 aFlag ) override;
+    virtual void sendSimpleMailMessage( const cpo::uno::Reference< css::system::XSimpleMailMessage >& xSimpleMailMessage, sal_Int32 aFlag ) override;
 
 
     // XServiceInfo
 
 
-    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual OUString getImplementationName(  ) override;
 
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 #endif

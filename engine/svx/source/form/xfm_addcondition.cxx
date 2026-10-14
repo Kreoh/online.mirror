@@ -34,7 +34,7 @@ namespace svxform
 #define PROPERTY_ID_FACET_NAME          5726
 #define PROPERTY_ID_CONDITION_VALUE     5727
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::xforms;
@@ -98,7 +98,7 @@ namespace svxform
     }
 
 
-    Sequence<sal_Int8> SAL_CALL OAddConditionDialog::getImplementationId(  )
+    Sequence<sal_Int8> OAddConditionDialog::getImplementationId(  )
     {
         return cpo::uno::Sequence<sal_Int8>();
     }
@@ -110,19 +110,19 @@ namespace svxform
     }
 
 
-    OUString SAL_CALL OAddConditionDialog::getImplementationName()
+    OUString OAddConditionDialog::getImplementationName()
     {
         return OAddConditionDialog_GetImplementationName();
     }
 
 
-    Sequence< OUString > SAL_CALL OAddConditionDialog::getSupportedServiceNames()
+    Sequence< OUString > OAddConditionDialog::getSupportedServiceNames()
     {
         return OAddConditionDialog_GetSupportedServiceNames();
     }
 
 
-    Reference<XPropertySetInfo>  SAL_CALL OAddConditionDialog::getPropertySetInfo()
+    Reference<XPropertySetInfo>  OAddConditionDialog::getPropertySetInfo()
     {
         return createPropertySetInfo( getInfoHelper() );
     }
@@ -139,7 +139,7 @@ namespace svxform
         return new ::cppu::OPropertyArrayHelper( aProperties );
     }
 
-    std::unique_ptr<weld::DialogController> OAddConditionDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+    std::unique_ptr<weld::DialogController> OAddConditionDialog::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
     {
         if ( !m_xBinding.is() || m_sFacetName.isEmpty() )
             throw RuntimeException( OUString(), *this );

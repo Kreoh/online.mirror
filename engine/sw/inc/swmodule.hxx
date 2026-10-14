@@ -108,8 +108,8 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SwModule final : public SfxModule, pu
 
     // DictionaryList listener to trigger spellchecking or hyphenation
     rtl::Reference< SwLinguServiceEventListener > m_xLinguServiceEventListener;
-    css::uno::Reference< css::scanner::XScannerManager2 >    m_xScannerManager;
-    css::uno::Reference< css::linguistic2::XLanguageGuessing >  m_xLanguageGuesser;
+    cpo::uno::Reference< css::scanner::XScannerManager2 >    m_xScannerManager;
+    cpo::uno::Reference< css::linguistic2::XLanguageGuessing >  m_xLanguageGuesser;
 
     SvtCTLOptions::TextNumerals m_eCTLTextNumerals;
 
@@ -125,7 +125,7 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SwModule final : public SfxModule, pu
     void                InsertEnv(SfxRequest&);
     void                InsertLab(SfxRequest&, bool bLabel);
 
-    css::uno::Reference< ooo::vba::XSinkCaller > mxAutomationApplicationEventsCaller;
+    cpo::uno::Reference< ooo::vba::XSinkCaller > mxAutomationApplicationEventsCaller;
 
 public:
     // public Data - used for internal Clipboard / Drag & Drop / XSelection
@@ -154,6 +154,10 @@ public:
 
     SW_DLLPUBLIC void ExecOther(SfxRequest &);    // Fields, formula...
 
+    /// The automatic spell checking setting Writer keeps for itself.
+    SW_DLLPUBLIC static bool GetAutoSpellProperty();
+    SW_DLLPUBLIC static void SetAutoSpellProperty(bool bSet);
+
     // Modify user settings.
     SW_DLLPUBLIC const SwMasterUsrPref *GetUsrPref(bool bWeb) const;
     const SwViewOption* GetViewOption(bool bWeb);
@@ -161,13 +165,6 @@ public:
                                      SvViewOpt nDest = SvViewOpt::DestView );
     void ApplyUserMetric( FieldUnit eMetric, bool bWeb );
     void ApplyRulerMetric( FieldUnit eMetric, bool bHorizontal, bool bWeb );
-    SW_DLLPUBLIC void ApplyFieldUpdateFlags(SwFieldUpdateFlags eFieldFlags);
-    SW_DLLPUBLIC void ApplyLinkMode(sal_Int32 nNewLinkMode);
-
-    // Default page mode for text grid.
-    SW_DLLPUBLIC void ApplyDefaultPageMode(bool bIsSquaredPageMode);
-
-    void ApplyUserCharUnit(bool bApplyChar, bool bWeb);  // apply_char_unit
 
     // Create ConfigItems.
     SwModuleOptions*    GetModuleConfig()       { return m_pModuleConfig.get();}
@@ -231,9 +228,6 @@ public:
     SwFieldUpdateFlags GetFieldUpdateFlags() const;
 
     // Virtual methods for options dialog.
-    virtual std::optional<SfxItemSet> CreateItemSet( sal_uInt16 nId ) override;
-    virtual void         ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet ) override;
-    virtual std::unique_ptr<SfxTabPage> CreateTabPage( sal_uInt16 nId, weld::Container* pPage, weld::DialogController* pController, const SfxItemSet& rSet ) override;
     SW_DLLPUBLIC virtual SfxStyleFamilies CreateStyleFamilies() override;
 
     void    InitItemInfoPackageSwAttributes();
@@ -245,13 +239,13 @@ public:
     static void  CheckSpellChanges( bool bOnlineSpelling,
                     bool bIsSpellWrongAgain, bool bIsSpellAllAgain, bool bSmartTags );
 
-    css::uno::Reference< css::scanner::XScannerManager2 > const &
+    cpo::uno::Reference< css::scanner::XScannerManager2 > const &
             GetScannerManager();
 
-    css::uno::Reference< css::linguistic2::XLanguageGuessing > const &
+    cpo::uno::Reference< css::linguistic2::XLanguageGuessing > const &
             GetLanguageGuesser();
 
-    SW_DLLPUBLIC void RegisterAutomationApplicationEventsCaller(css::uno::Reference< ooo::vba::XSinkCaller > const& xCaller);
+    SW_DLLPUBLIC void RegisterAutomationApplicationEventsCaller(cpo::uno::Reference< ooo::vba::XSinkCaller > const& xCaller);
     void CallAutomationApplicationEventSinks(const OUString& Method, cpo::uno::Sequence< cpo::uno::Any >& Arguments);
 
     SW_DLLPUBLIC const SwTableAutoFormatTable& GetAutoFormatTable();

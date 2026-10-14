@@ -133,6 +133,7 @@
 #include <algorithm>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::EnhancedCustomShapeToken;
 using namespace ::xmloff::token;
 
@@ -202,7 +203,7 @@ XMLShapeExport::~XMLShapeExport()
 {
 }
 
-static css::uno::Reference<css::drawing::XShape> GetPDFShape(const uno::Reference<lang::XComponent>& xReplacementModel)
+static cpo::uno::Reference<css::drawing::XShape> GetPDFShape(const uno::Reference<lang::XComponent>& xReplacementModel)
 {
     uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(xReplacementModel, uno::UNO_QUERY);
     if (!xDrawPagesSupplier)
@@ -262,12 +263,12 @@ uno::Reference< drawing::XShape > XMLShapeExport::checkForCustomShapeReplacement
                 xSet->getPropertyValue(u"CustomShapeEngine"_ustr) >>= aEngine;
                 if ( aEngine.isEmpty() || aEngine == "com.sun.star.drawing.EnhancedCustomShapeEngine")
                 {
-                    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+                    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
 
                     cpo::uno::Sequence< cpo::uno::Any > aArguments {
                         cpo::uno::Any(comphelper::makePropertyValue(u"CustomShape"_ustr, xShape)),
                         cpo::uno::Any(comphelper::makePropertyValue(u"ForceGroupWithText"_ustr, true)) };
-                    uno::Reference< uno::XInterface > xInterface(
+                    uno::Reference< cpo::uno::XInterface > xInterface(
                         xContext->getServiceManager()->createInstanceWithArgumentsAndContext(u"com.sun.star.drawing.EnhancedCustomShapeEngine"_ustr, aArguments, xContext) );
                     assert( xInterface && "should never fail" );
                     uno::Reference< drawing::XCustomShapeEngine > xCustomShapeEngine(
@@ -295,7 +296,7 @@ void XMLShapeExport::collectShapeAutoStyles(const uno::Reference< drawing::XShap
 
     ImplXMLShapeExportInfo& aShapeInfo = aShapeInfoMap[xShape];
 
-    css::uno::Reference<css::lang::XComponent> xPDFModelReplacement = checkForPDFShapeReplacement(xShape);
+    cpo::uno::Reference<css::lang::XComponent> xPDFModelReplacement = checkForPDFShapeReplacement(xShape);
     if (xPDFModelReplacement)
     {
         aShapeInfo.xPDFModelReplacement = std::move(xPDFModelReplacement);
@@ -338,7 +339,7 @@ void XMLShapeExport::collectShapeAutoStyles(const uno::Reference< drawing::XShap
                 // point it would make sense to find a better place for more targeted flush.
                 xText = xText->getText();
             }
-            catch (uno::RuntimeException const&)
+            catch (cpo::uno::RuntimeException const&)
             {
                 // E.g., SwXTextFrame that contains only a table will throw; this is not an error
             }
@@ -524,7 +525,7 @@ void XMLShapeExport::collectShapeAutoStyles(const uno::Reference< drawing::XShap
     {
         case XmlShapeType::DrawConnectorShape:
         {
-            uno::Reference< uno::XInterface > xConnection;
+            uno::Reference< cpo::uno::XInterface > xConnection;
 
             // create shape ids for export later
             xPropSet->getPropertyValue( u"StartShape"_ustr ) >>= xConnection;
@@ -729,7 +730,7 @@ void XMLShapeExport::exportShape(const uno::Reference< drawing::XShape >& xShape
 
     // export shapes id if needed
     {
-        uno::Reference< uno::XInterface > xRef( xShape, uno::UNO_QUERY );
+        uno::Reference< cpo::uno::XInterface > xRef( xShape, uno::UNO_QUERY );
         const OUString& rShapeId = mrExport.getInterfaceToIdentifierMapper().getIdentifier( xRef );
         if( !rShapeId.isEmpty() )
         {
@@ -854,7 +855,7 @@ void XMLShapeExport::exportShape(const uno::Reference< drawing::XShape >& xShape
                     {
                         xClose->close(true);
                     }
-                    catch (const uno::RuntimeException& e)
+                    catch (const cpo::uno::RuntimeException& e)
                     {
                         SAL_WARN("xmloff", "Couldn't close PDF replacement model: " << e.Message);
                     }
@@ -967,6 +968,12 @@ void XMLShapeExport::exportShape(const uno::Reference< drawing::XShape >& xShape
         case XmlShapeType::DrawMediaShape:
         {
             ImpExportMediaShape( xShape, aShapeInfo.meShapeType, nFeatures, pRefPoint );
+            break;
+        }
+
+        case XmlShapeType::DrawAnnotationShape:
+        {
+            // A comment carries its own element, written beside the shapes of the page.
             break;
         }
 
@@ -1200,6 +1207,7 @@ void XMLShapeExport::ImpCalcShapeType(const uno::Reference< drawing::XShape >& x
 
         else if(o3tl::starts_with(aRest, u"GraphicObject")) { eShapeType = XmlShapeType::DrawGraphicObjectShape; }
         else if(o3tl::starts_with(aRest, u"Group")) { eShapeType = XmlShapeType::DrawGroupShape; }
+        else if(o3tl::starts_with(aRest, u"Annotation")) { eShapeType = XmlShapeType::DrawAnnotationShape; }
         else if(o3tl::starts_with(aRest, u"Text")) { eShapeType = XmlShapeType::DrawTextShape; }
         else if(o3tl::starts_with(aRest, u"OLE2"))
         {
@@ -1489,7 +1497,7 @@ void XMLShapeExport::ExportGraphicDefaults()
     }
 }
 
-void XMLShapeExport::onExport( const css::uno::Reference < css::drawing::XShape >& )
+void XMLShapeExport::onExport( const cpo::uno::Reference < css::drawing::XShape >& )
 {
 }
 
@@ -2919,8 +2927,8 @@ void XMLShapeExport::ImpExportConnectorShape(
     mrExport.AddAttribute(XML_NAMESPACE_SVG, XML_Y2, aStr);
 
     // #i39320#
-    uno::Reference< uno::XInterface > xRefS;
-    uno::Reference< uno::XInterface > xRefE;
+    uno::Reference< cpo::uno::XInterface > xRefS;
+    uno::Reference< cpo::uno::XInterface > xRefE;
 
     // export start connection
     xProps->getPropertyValue(u"StartShape"_ustr) >>= xRefS;
@@ -3534,7 +3542,7 @@ void ExportGraphicPreview(const uno::Reference<graphic::XGraphic>& xGraphic, SvX
 
     if( xGraphic.is() ) try
     {
-        uno::Reference< uno::XComponentContext > xContext = rExport.getComponentContext();
+        uno::Reference< cpo::uno::XComponentContext > xContext = rExport.getComponentContext();
 
         uno::Reference< embed::XStorage > xPictureStorage;
         uno::Reference< embed::XStorage > xStorage;
@@ -3910,7 +3918,7 @@ void XMLShapeExport::ImpExport3DShape(
 }
 
 /** helper for chart that adds all attributes of a 3d scene element to the export */
-void XMLShapeExport::export3DSceneAttributes( const css::uno::Reference< css::beans::XPropertySet >& xPropSet )
+void XMLShapeExport::export3DSceneAttributes( const cpo::uno::Reference< css::beans::XPropertySet >& xPropSet )
 {
     OUString aStr;
     OUStringBuffer sStringBuffer;
@@ -4026,7 +4034,7 @@ void XMLShapeExport::export3DSceneAttributes( const css::uno::Reference< css::be
 }
 
 /** helper for chart that exports all lamps from the propertyset */
-void XMLShapeExport::export3DLamps( const css::uno::Reference< css::beans::XPropertySet >& xPropSet )
+void XMLShapeExport::export3DLamps( const cpo::uno::Reference< css::beans::XPropertySet >& xPropSet )
 {
     // write lamps 1..8 as content
     OUString aStr;

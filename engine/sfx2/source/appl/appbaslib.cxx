@@ -25,9 +25,9 @@
 
 #include <basic/basmgr.hxx>
 #include <comphelper/diagnose_ex.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::script;
 using namespace ::com::sun::star::embed;
@@ -52,6 +52,11 @@ void SfxBasicManagerHolder::Notify(SfxBroadcaster& rBC, SfxHint const& rHint)
 
 void SfxBasicManagerHolder::reset( BasicManager* _pBasicManager )
 {
+    // A document's Basic manager can be handed over a second time while it is still being
+    // created. The holder already listens to it and holds its containers, so it stays as it is.
+    if ( _pBasicManager == mpBasicManager )
+        return;
+
     impl_releaseContainers();
 
 #if !HAVE_FEATURE_SCRIPTING
@@ -110,20 +115,6 @@ void SfxBasicManagerHolder::setStorage( const Reference< XStorage >& _rxStorage 
 #endif
 }
 
-void SfxBasicManagerHolder::storeLibrariesToStorage( const Reference< XStorage >& _rxStorage )
-{
-#if !HAVE_FEATURE_SCRIPTING
-    (void) _rxStorage;
-#else
-    OSL_PRECOND( isValid(), "SfxBasicManagerHolder::storeLibrariesToStorage: not initialized!" );
-
-    if ( mxBasicContainer.is() )
-        mxBasicContainer->storeLibrariesToStorage( _rxStorage );
-    if ( mxDialogContainer.is() )
-        mxDialogContainer->storeLibrariesToStorage( _rxStorage );
-#endif
-}
-
 XStorageBasedLibraryContainer* SfxBasicManagerHolder::getLibraryContainer( ContainerType _eType )
 {
     OSL_PRECOND( isValid(), "SfxBasicManagerHolder::getLibraryContainer: not initialized!" );
@@ -143,37 +134,26 @@ void SfxBasicManagerHolder::impl_releaseContainers()
     mxDialogContainer.clear();
 }
 
-bool SfxBasicManagerHolder::ImgVersion12PsswdBinaryLimitExceeded( std::vector< OUString >& sModules )
-{
-#if !HAVE_FEATURE_SCRIPTING
-    (void) sModules;
-#else
-    if ( mpBasicManager )
-        return mpBasicManager->ImgVersion12PsswdBinaryLimitExceeded( sModules );
-#endif
-    return true;
-}
-
 // Service for application library container
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_sfx2_ApplicationDialogLibraryContainer_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SfxApplication::GetBasicManager();
-    css::uno::XInterface* pRet = static_cast<css::script::XLibraryContainer*>(SfxGetpApp()->GetDialogContainer());
+    cpo::uno::XInterface* pRet = static_cast<css::script::XLibraryContainer*>(SfxGetpApp()->GetDialogContainer());
     pRet->acquire();
     return pRet;
 }
 
 // Service for application library container
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_sfx2_ApplicationScriptLibraryContainer_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SfxApplication::GetBasicManager();
-    css::uno::XInterface* pRet = static_cast<css::script::XLibraryContainer*>(SfxGetpApp()->GetBasicContainer());
+    cpo::uno::XInterface* pRet = static_cast<css::script::XLibraryContainer*>(SfxGetpApp()->GetBasicContainer());
     pRet->acquire();
     return pRet;
 }

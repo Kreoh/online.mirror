@@ -6,7 +6,6 @@
 	max-height: 95%;
 	scrollbar-color: var(--scrollbar-color);
 	scrollbar-width: var(--scrollbar-width);
-	counter-reset: slide-number;
 }
 
 #sidebar-panel {
@@ -34,11 +33,6 @@
 	padding-right: 4px;
 	flex-shrink: 0;
 	user-select: none;
-	counter-increment: slide-number;
-}
-
-.preview-slide-number::before {
-	content: counter(slide-number);
 }
 
 .preview-helper {
@@ -76,6 +70,68 @@
 /* Highlight where a slide can be dropped when reordering by drag-and-drop. */
 .preview-img-dropsite {
 	border-bottom: 20px solid var(--color-primary);
+}
+
+.preview-avatars {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	justify-content: flex-end;
+	flex: 0 0 0;
+	min-width: 0;
+	align-self: flex-end;
+	pointer-events: none;
+	inset-inline-end: 2px;
+	bottom: -9px;
+}
+
+.preview-avatars .avatar-img,
+.slide-user-list .avatar-img {
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	box-sizing: border-box;
+	object-fit: cover;
+	box-shadow: 0 1px 2px var(--color-box-shadow);
+}
+
+.preview-avatars > * + * {
+	margin-inline-start: -6px;
+}
+
+.preview-avatars .avatar-img {
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.slide-user-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	white-space: nowrap;
+	font-size: var(--default-font-size);
+}
+
+/* The counter is the last circle in the avatar row, so it keeps their size. */
+.preview-avatars-more {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 24px;
+	height: 24px;
+	border: 2px solid var(--color-background-lighter);
+	border-radius: var(--border-radius-pill);
+	background: var(--color-primary-dark);
+	color: var(--color-primary-text);
+	font-family: var(--cool-font);
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1;
+	pointer-events: auto;
+	cursor: pointer;
 }
 
 /* Fluid drag-and-drop reordering: while a slide drag is in progress the
@@ -116,13 +172,13 @@
 /* How many slides the drag carries, over the top picture's corner. */
 .slide-drag-ghost-count {
 	position: absolute;
-	min-width: 22px;
-	height: 22px;
-	padding: 0 6px;
-	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	box-sizing: border-box;
+	min-width: 22px;
+	height: 22px;
+	padding: 0 6px;
 	border-radius: 11px;
 	background: var(--color-primary);
 	color: var(--color-primary-text);
@@ -139,6 +195,55 @@
 
 .hidden-slide {
 	opacity: 0.5;
+}
+
+/* The mark of a slide that is linked to another file. The span takes no room
+   of its own and its picture overflows back over the thumbnail's top right
+   corner, so the thumbnails stay where they are and the mark follows the
+   picture in the strip and in the grid alike. The pointer goes through it to
+   the thumbnail, which carries the description of the link. */
+.preview-link-badge {
+	display: none;
+	width: 0;
+	height: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.preview-link-badge.linked {
+	display: block;
+}
+
+.preview-link-badge::before {
+	content: '';
+	display: block;
+	position: relative;
+	/* Back over the picture: its 10px strip margin, the width of the mark,
+	   and 6px inside the picture's corner. */
+	left: -32px;
+	top: 6px;
+	width: 16px;
+	height: 16px;
+	border-radius: var(--border-radius-s);
+	background: var(--color-background-lighter) url('images/sc_linkedslide.svg') no-repeat center;
+	background-size: 16px 16px;
+	box-shadow: var(--shadow-subtle);
+}
+
+.preview-link-badge.outdated::before {
+	box-shadow: 0 0 0 2px var(--color-warning);
+}
+
+.preview-link-badge.broken::before {
+	box-shadow: 0 0 0 2px var(--color-error);
+}
+
+.preview-link-badge.connected::before {
+	box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+[data-theme='dark'] .preview-link-badge::before {
+	background-image: url('images/dark/sc_linkedslide.svg');
 }
 
 /* Slide section headers - styled to match sidebar expander labels */
@@ -180,7 +285,7 @@
 	background: transparent url('images/lc_menu_chevron.svg') no-repeat center;
 	filter: brightness(0.5);
 	transform: rotate(90deg); /* expanded: chevron points down */
-	transition: transform var(--duration-instant) ease-in;
+	transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .slide-section-header.collapsed .slide-section-toggle::before {
@@ -205,6 +310,26 @@
 	display: none;
 }
 
+/* How many slides a section holds, at the end of its header. */
+.slide-section-count {
+	flex-shrink: 0;
+	margin-inline-start: 8px;
+	color: var(--color-text-light);
+	white-space: nowrap;
+}
+
+/* Selecting a whole section is a checkbox, the way selecting one slide is,
+ * so the row itself is free to do what the row above it does and open or
+ * close the section. Only the slide import pane asks for it. */
+.slide-section-pick {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	margin-inline-start: 8px;
+	cursor: pointer;
+}
+
 .slide-section-name.selected {
 	color: rgb(var(--doc-type));
 	font-weight: 600;
@@ -219,26 +344,32 @@
 	flex-direction: column;
 }
 
-/* Grid layout for the slide list while the panel is maximized. The slides
- * flow into as many columns as the wide panel fits; the reorder drop site
- * and the section headers take a whole row of their own. The grid takes
- * the space left above the toolbar and scrolls on its own. The rows pack
- * at their content height from the top: left to the default stretch, a
- * short deck's row tracks would inflate to fill the panel and any
- * fixed-height cell added to a row would redistribute that slack, moving
- * every row. */
+/* Grid layout for the slide navigator's list while the panels are
+ * maximized. The slides flow into as many columns as the wide panel fits;
+ * the section headers take a whole row of their own. The grid takes the
+ * space left above the toolbar and scrolls on its own. The rows pack at
+ * their content height from the top: left to the default stretch, a short
+ * deck's row tracks would inflate to fill the panel and any fixed-height
+ * cell added to a row would redistribute that slack, moving every row. */
 .parts-preview-grid #slide-sorter {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 	align-content: start;
 	gap: 12px;
-	padding: 12px;
+	--preview-outline: 3px;
+	padding: calc(20px + 1em) calc(16px + var(--preview-outline)) 12px;
 	white-space: normal;
 	overflow-x: visible;
 	overflow-y: auto;
 	flex: 1;
 	min-height: 0;
 	max-height: none;
+}
+
+/* The slide import pane lays its slides out in the same grid whatever the
+ * panel width; the wide panel only takes wider columns. */
+.parts-preview-grid .slide-import-list {
+	grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
 }
 
 /* Out of the grid the toolbar flows at the end of the column rather than
@@ -257,9 +388,31 @@
 	gap: 4px;
 }
 
-.parts-preview-grid #first-drop-site,
+/* Centre the import button and give it a fixed width rather than letting it
+ * stretch across the whole row. */
+.parts-preview-grid #presentation-import-toolbar {
+	justify-content: center;
+}
+
+.parts-preview-grid #presentation-import-toolbar .unotoolbutton {
+	flex: 0 0 auto;
+	width: 300px;
+}
+
 .parts-preview-grid .slide-section-header {
 	grid-column: 1 / -1;
+}
+
+.parts-preview-grid #first-drop-site {
+	display: none;
+}
+
+.parts-preview-grid #slide-sorter .slide-section-header {
+	margin-inline: calc(-1 * var(--preview-outline));
+}
+
+.parts-preview-grid #slide-sorter:has(.slide-section-header:not(.preview-frame:not(#first-drop-site) ~ *)) {
+	padding-top: 20px;
 }
 
 .parts-preview-grid .preview-frame {
@@ -281,4 +434,13 @@
 	width: 100% !important;
 	height: auto !important;
 	margin: 0;
+}
+
+.parts-preview-grid .preview-avatars {
+	inset-inline-end: 6px;
+	bottom: 6px;
+}
+
+.parts-preview-grid .preview-link-badge::before {
+	left: -22px;
 }

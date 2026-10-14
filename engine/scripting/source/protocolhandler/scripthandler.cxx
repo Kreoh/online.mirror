@@ -19,6 +19,10 @@
 
 #include "scripthandler.hxx"
 
+#include <cstdlib>
+
+#include <comphelper/configuration.hxx>
+
 #include <com/sun/star/frame/DispatchResultEvent.hpp>
 #include <com/sun/star/frame/DispatchResultState.hpp>
 #include <com/sun/star/frame/XController.hpp>
@@ -52,7 +56,7 @@
 #include <memory>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::util;
@@ -65,7 +69,7 @@ using namespace ::com::sun::star::document;
 namespace scripting_protocolhandler
 {
 
-void SAL_CALL ScriptProtocolHandler::initialize(
+void ScriptProtocolHandler::initialize(
     const cpo::uno::Sequence < cpo::uno::Any >& aArguments )
 {
     if ( m_bInitialised )
@@ -84,7 +88,7 @@ void SAL_CALL ScriptProtocolHandler::initialize(
     m_bInitialised = true;
 }
 
-Reference< XDispatch > SAL_CALL ScriptProtocolHandler::queryDispatch(
+Reference< XDispatch > ScriptProtocolHandler::queryDispatch(
     const URL& aURL, const OUString&, sal_Int32 )
 {
     Reference< XDispatch > xDispatcher;
@@ -103,7 +107,7 @@ Reference< XDispatch > SAL_CALL ScriptProtocolHandler::queryDispatch(
     return xDispatcher;
 }
 
-Sequence< Reference< XDispatch > > SAL_CALL
+Sequence< Reference< XDispatch > >
 ScriptProtocolHandler::queryDispatches(
 const Sequence < DispatchDescriptor >& seqDescriptor )
 {
@@ -115,7 +119,7 @@ const Sequence < DispatchDescriptor >& seqDescriptor )
     return lDispatcher;
 }
 
-void SAL_CALL ScriptProtocolHandler::dispatchWithNotification(
+void ScriptProtocolHandler::dispatchWithNotification(
     const URL& aURL, const Sequence < PropertyValue >& lArgs,
     const Reference< XDispatchResultListener >& xListener )
 {
@@ -131,10 +135,10 @@ void SAL_CALL ScriptProtocolHandler::dispatchWithNotification(
     {
         try
         {
-            css::uno::Reference<css::uri::XUriReferenceFactory> urifac(
+            cpo::uno::Reference<css::uri::XUriReferenceFactory> urifac(
                 css::uri::UriReferenceFactory::create(m_xContext));
-            css::uno::Reference<css::uri::XVndSunStarScriptUrlReference> uri(
-                urifac->parse(aURL.Complete), css::uno::UNO_QUERY_THROW);
+            cpo::uno::Reference<css::uri::XVndSunStarScriptUrlReference> uri(
+                urifac->parse(aURL.Complete), cpo::uno::UNO_QUERY_THROW);
             auto const loc = uri->getParameter(u"location"_ustr);
             bool bIsDocumentScript = loc == "document";
 
@@ -211,6 +215,8 @@ void SAL_CALL ScriptProtocolHandler::dispatchWithNotification(
                 std::exception_ptr aFirstCaughtException;
                 try
                 {
+                    if (comphelper::IsFuzzing())
+                        std::abort();
                     invokeResult = xFunc->invoke( inArgs, outIndex, outArgs );
                     aState = css::frame::DispatchResultState::SUCCESS;
                     break;
@@ -281,19 +287,19 @@ void SAL_CALL ScriptProtocolHandler::dispatchWithNotification(
     }
 }
 
-void SAL_CALL ScriptProtocolHandler::dispatch(
+void ScriptProtocolHandler::dispatch(
 const URL& aURL, const Sequence< PropertyValue >& lArgs )
 {
     dispatchWithNotification( aURL, lArgs, Reference< XDispatchResultListener >() );
 }
 
-void SAL_CALL ScriptProtocolHandler::addStatusListener(
+void ScriptProtocolHandler::addStatusListener(
 const Reference< XStatusListener >&, const URL& )
 {
     // implement if status is supported
 }
 
-void SAL_CALL ScriptProtocolHandler::removeStatusListener(
+void ScriptProtocolHandler::removeStatusListener(
 const Reference< XStatusListener >&, const URL& )
 {}
 
@@ -389,7 +395,7 @@ void ScriptProtocolHandler::createScriptProvider()
     }
 }
 
-ScriptProtocolHandler::ScriptProtocolHandler( const Reference< css::uno::XComponentContext > & xContext )
+ScriptProtocolHandler::ScriptProtocolHandler( const Reference< cpo::uno::XComponentContext > & xContext )
   : m_bInitialised( false ), m_xContext( xContext )
 {
 }
@@ -399,26 +405,26 @@ ScriptProtocolHandler::~ScriptProtocolHandler()
 }
 
 /* XServiceInfo */
-OUString SAL_CALL ScriptProtocolHandler::getImplementationName( )
+OUString ScriptProtocolHandler::getImplementationName( )
 {
     return u"com.sun.star.comp.ScriptProtocolHandler"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL ScriptProtocolHandler::supportsService(const OUString& sServiceName )
+bool ScriptProtocolHandler::supportsService(const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL ScriptProtocolHandler::getSupportedServiceNames()
+Sequence< OUString > ScriptProtocolHandler::getSupportedServiceNames()
 {
     return {u"com.sun.star.frame.ProtocolHandler"_ustr};
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_ScriptProtocolHandler_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ScriptProtocolHandler(context));
 }

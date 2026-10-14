@@ -25,12 +25,13 @@
 #include <xmloff/xmlnamespace.hxx>
 #include <o3tl/string_view.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
 SwXMLBlockListExport::SwXMLBlockListExport(
-    const uno::Reference< uno::XComponentContext >& rContext,
+    const uno::Reference< cpo::uno::XComponentContext >& rContext,
     SwXMLTextBlocks & rBlocks,
     const OUString &rFileName,
     uno::Reference< xml::sax::XDocumentHandler> const &rHandler)
@@ -79,7 +80,7 @@ ErrCode SwXMLBlockListExport::exportDoc(enum XMLTokenEnum )
 }
 
 SwXMLTextBlockExport::SwXMLTextBlockExport(
-    const uno::Reference< uno::XComponentContext >& rContext,
+    const uno::Reference< cpo::uno::XComponentContext >& rContext,
     SwXMLTextBlocks & rBlocks,
     const OUString &rFileName,
     uno::Reference< xml::sax::XDocumentHandler> const &rHandler)

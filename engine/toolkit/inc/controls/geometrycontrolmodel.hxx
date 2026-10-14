@@ -31,11 +31,7 @@
 
 namespace com::sun::star::resource { class XStringResourceResolver; }
 
-namespace com::sun::star {
-    namespace uno {
-        class XComponentContext;
-    }
-}
+namespace cpo::uno { class XComponentContext; }
 namespace toolkit { class ScriptEventContainer; }
 
 // namespace toolkit
@@ -54,7 +50,7 @@ namespace toolkit { class ScriptEventContainer; }
         ,public OGCM_Base
     {
     protected:
-        css::uno::Reference< cpo::uno::XAggregation >
+        cpo::uno::Reference< cpo::uno::XAggregation >
                     m_xAggregate;
         rtl::Reference< toolkit::ScriptEventContainer >
                     mxEventContainer;
@@ -68,7 +64,7 @@ namespace toolkit { class ScriptEventContainer; }
         sal_Int16       m_nTabIndex;
         sal_Int32       m_nStep;
         OUString m_aTag;
-        css::uno::Reference< css::resource::XStringResourceResolver > m_xStrResolver;
+        cpo::uno::Reference< css::resource::XStringResourceResolver > m_xStrResolver;
         // </properties>
 
         bool        m_bCloneable;
@@ -90,7 +86,7 @@ namespace toolkit { class ScriptEventContainer; }
                 is the object to be aggregated. Must be acquired exactly once (by the reference object given).<br/>
                 Will be reset to NULL upon leaving
         */
-        OGeometryControlModel_Base(css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance);
+        OGeometryControlModel_Base(cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance);
 
         /** releases the aggregation
             <p>Can be used if in a derived class, an exception has to be thrown after this base class here already
@@ -102,28 +98,28 @@ namespace toolkit { class ScriptEventContainer; }
         virtual ~OGeometryControlModel_Base() override;
 
         // XAggregation
-        cpo::uno::Any SAL_CALL queryAggregation( const cpo::uno::Type& _aType ) override;
+        cpo::uno::Any queryAggregation( const cpo::uno::Type& _aType ) override;
 
     public:
         // XInterface
-        virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& aType ) override;
-        virtual void SAL_CALL acquire(  ) noexcept override;
-        virtual void SAL_CALL release(  ) noexcept override;
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+        virtual void acquire(  ) noexcept override;
+        virtual void release(  ) noexcept override;
 
     protected:
         // XTypeProvider
-        virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes(  ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
 
         // OPropertySetHelper overridables
-        virtual bool SAL_CALL convertFastPropertyValue(
+        virtual bool convertFastPropertyValue(
                 cpo::uno::Any& _rConvertedValue, cpo::uno::Any& _rOldValue,
                 sal_Int32 _nHandle, const cpo::uno::Any& _rValue ) override;
 
-        virtual void SAL_CALL setFastPropertyValue_NoBroadcast(
+        virtual void setFastPropertyValue_NoBroadcast(
                 sal_Int32 _nHandle, const cpo::uno::Any& _rValue) override;
 
         using comphelper::OPropertySetAggregationHelper::getFastPropertyValue;
-        virtual void SAL_CALL getFastPropertyValue(
+        virtual void getFastPropertyValue(
             cpo::uno::Any& _rValue, sal_Int32 _nHandle) const override;
 
         // OPropertyStateHelper overridables
@@ -132,25 +128,25 @@ namespace toolkit { class ScriptEventContainer; }
         virtual cpo::uno::Any              getPropertyDefaultByHandle(sal_Int32 nHandle) const override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo> SAL_CALL getPropertySetInfo() override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo> getPropertySetInfo() override;
 
         // OPropertySetAggregationHelper overridables
         using OPropertySetAggregationHelper::getInfoHelper;
 
         // XCloneable
-        virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) override;
+        virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
 
         //XScriptEventsSupplier
-        virtual css::uno::Reference< css::container::XNameContainer >
-            SAL_CALL getEvents(  ) override;
+        virtual cpo::uno::Reference< css::container::XNameContainer >
+            getEvents(  ) override;
 
         // XCloneable implementation - to be overwritten
         virtual rtl::Reference<OGeometryControlModel_Base> createClone_Impl(
-            css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) = 0;
+            cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) = 0;
 
         // XComponent
         using comphelper::OPropertySetAggregationHelper::disposing;
-        virtual void SAL_CALL disposing() override;
+        virtual void disposing() override;
 
     private:
         void registerProperties();
@@ -176,10 +172,10 @@ namespace toolkit { class ScriptEventContainer; }
         ,public ::comphelper::OAggregationArrayUsageHelper< OTemplateInstanceDisambiguation< CONTROLMODEL > >
     {
     public:
-        OGeometryControlModel( const css::uno::Reference< css::uno::XComponentContext >& i_factory );
+        OGeometryControlModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_factory );
 
     private:
-        OGeometryControlModel(css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance);
+        OGeometryControlModel(cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance);
 
         // OAggregationArrayUsageHelper overridables
         virtual void fillProperties(
@@ -188,14 +184,14 @@ namespace toolkit { class ScriptEventContainer; }
             ) const override;
 
         // OPropertySetAggregationHelper overridables
-        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
         // OGeometryControlModel_Base
         virtual rtl::Reference<OGeometryControlModel_Base> createClone_Impl(
-            css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
+            cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
 
         // XTypeProvider
-        virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) override;
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
     };
 
 
@@ -220,7 +216,7 @@ namespace toolkit { class ScriptEventContainer; }
                 (this is not checked here)
         */
         OCommonGeometryControlModel(
-                    css::uno::Reference< css::util::XCloneable >& _rxAgg,
+                    cpo::uno::Reference< css::util::XCloneable >& _rxAgg,
             OUString _aServiceSpecifier
         );
 
@@ -228,17 +224,17 @@ namespace toolkit { class ScriptEventContainer; }
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper(sal_Int32 nId) const override;
 
         // OPropertySetAggregationHelper overridables
-        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
         // OGeometryControlModel_Base
         virtual rtl::Reference<OGeometryControlModel_Base> createClone_Impl(
-            css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
+            cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
 
         // XTypeProvider
-        virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) override;
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
 
     private:
-        virtual void SAL_CALL setFastPropertyValue_NoBroadcast(
+        virtual void setFastPropertyValue_NoBroadcast(
                 sal_Int32 _nHandle, const cpo::uno::Any& _rValue) override;
     };
 

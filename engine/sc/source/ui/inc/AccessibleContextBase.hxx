@@ -23,7 +23,7 @@
 #include <com/sun/star/accessibility/XAccessibleComponent.hpp>
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
 #include <com/sun/star/accessibility/XAccessibleEventBroadcaster.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <comphelper/OAccessible.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/interfacecontainer.h>
@@ -39,19 +39,19 @@ class ScAccessibleContextBase : public comphelper::OAccessible, public SfxListen
 
 public:
     ScAccessibleContextBase(
-        css::uno::Reference<css::accessibility::XAccessible> xParent,
+        cpo::uno::Reference<css::accessibility::XAccessible> xParent,
         const sal_Int16 aRole);
 
     virtual void Init();
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 protected:
     virtual ~ScAccessibleContextBase() override;
 public:
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool isShowing();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual bool isVisible();
 
     ///=====  SfxListener  =====================================================
@@ -63,66 +63,66 @@ public:
 
     ///=====  XAccessibleComponent  ============================================
 
-    virtual css::awt::Point SAL_CALL getLocationOnScreen(  ) override;
+    virtual css::awt::Point getLocationOnScreen(  ) override;
 
-    virtual void SAL_CALL grabFocus(  ) override;
+    virtual void grabFocus(  ) override;
 
-    virtual sal_Int32 SAL_CALL getForeground(  ) override;
+    virtual sal_Int32 getForeground(  ) override;
 
-    virtual sal_Int32 SAL_CALL getBackground(  ) override;
+    virtual sal_Int32 getBackground(  ) override;
 
     ///=====  XAccessibleContext  ==============================================
 
     /// Return a reference to the parent.
-    virtual css::uno::Reference< css::accessibility::XAccessible> SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessible>
         getAccessibleParent() override;
 
     /// Return this object's role.
-    virtual sal_Int16 SAL_CALL
+    virtual sal_Int16
         getAccessibleRole() override;
 
     /// Return this object's description.
-    virtual OUString SAL_CALL
+    virtual OUString
         getAccessibleDescription() override;
 
     /// Return the object's current name.
-    virtual OUString SAL_CALL
+    virtual OUString
         getAccessibleName() override;
 
     /// Return NULL to indicate that an empty relation set.
-    virtual css::uno::Reference<css::accessibility::XAccessibleRelationSet> SAL_CALL
+    virtual cpo::uno::Reference<css::accessibility::XAccessibleRelationSet>
         getAccessibleRelationSet() override;
 
     /// Return the set of current states.
-    virtual sal_Int64 SAL_CALL getAccessibleStateSet() override;
+    virtual sal_Int64 getAccessibleStateSet() override;
 
     /** Return the parents locale or throw exception if this object has no
         parent yet/anymore.
     */
-    virtual css::lang::Locale SAL_CALL
+    virtual css::lang::Locale
         getLocale() override;
 
 protected:
     /// Return this object's description.
     ///
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual OUString
         createAccessibleDescription();
 
     /// Return the object's current name.
     ///
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual OUString
         createAccessibleName();
 
     /// Return the object's current bounding box relative to the desktop.
     ///
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual AbsoluteScreenPixelRectangle GetBoundingBoxOnScreen() = 0;
 
     /// Return the object's current bounding box relative to the parent object.
     ///
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual tools::Rectangle GetBoundingBox() = 0;
 
 public:
@@ -136,7 +136,7 @@ public:
     /// Use this method to set initial Description without notification
     void SetDescription(const OUString& rDesc) { msDescription = rDesc; }
 
-    void SetParent(const css::uno::Reference<css::accessibility::XAccessible>& rParent) { mxParent = rParent; }
+    void SetParent(const cpo::uno::Reference<css::accessibility::XAccessible>& rParent) { mxParent = rParent; }
 
 protected:
     /// Calls all FocusListener to tell they that the focus is gained.
@@ -148,7 +148,7 @@ protected:
     bool IsDefunc() const { return rBHelper.bDisposed; }
 
     /// Reference to the parent object.
-    css::uno::Reference<css::accessibility::XAccessible> mxParent;
+    cpo::uno::Reference<css::accessibility::XAccessible> mxParent;
 
 private:
     /** Description of this object.  This is not a constant because it can

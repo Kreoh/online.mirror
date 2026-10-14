@@ -21,7 +21,7 @@
 #include <com/sun/star/ucb/XContent.hpp>
 
 namespace ucb = css::ucb;
-namespace uno = css::uno;
+namespace uno = cpo::uno;
 
 using std::unique_ptr;
 
@@ -59,7 +59,7 @@ private:
 DirectoryStreamTest::DirectoryStreamTest()
 {
     const uno::Reference<ucb::XCommandEnvironment> xCmdEnv;
-    const uno::Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
 
     using ucbhelper::Content;
 

@@ -31,7 +31,7 @@
 #include <com/sun/star/packages/zip/ZipFileAccess.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <cpo/uno/Exception.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Sequence.hxx>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -62,6 +62,7 @@
 #include <bitmap/BitmapLightenFilter.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 bool ImageRequestParameters::convertToDarkTheme()
 {
@@ -213,8 +214,6 @@ void loadImageFromStream(std::shared_ptr<SvStream> const & xStream, OUString con
     {
         rParameters.mbWriteImageToCache = true; // Cache the scaled variant
         double aScaleFactor(aScalePercentage / 100.0);
-        // when scaling use the full 24bit RGB values
-        rParameters.mrBitmap.Convert(BmpConversion::N24Bit);
         rParameters.mrBitmap.Scale(aScaleFactor, aScaleFactor, BmpScaleFlag::Fast);
     }
 }
@@ -362,7 +361,7 @@ bool ImplImageTree::loadImage(OUString const & rName, OUString const & rStyle, B
             if (doLoadImage(aParameters))
                 return true;
         }
-        catch (uno::RuntimeException &)
+        catch (cpo::uno::RuntimeException &)
         {}
 
         aCurrentStyle = fallbackStyle(aCurrentStyle);
@@ -445,7 +444,7 @@ bool ImplImageTree::doLoadImage(ImageRequestParameters& rParameters)
     {
         bFound = findImage(aPaths, rParameters);
     }
-    catch (uno::RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -673,24 +672,24 @@ namespace {
 class FolderFileAccess : public ::cppu::WeakImplHelper<css::container::XNameAccess>
 {
 public:
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     OUString maURL;
-    FolderFileAccess(uno::Reference< uno::XComponentContext > context, OUString url)
+    FolderFileAccess(uno::Reference< cpo::uno::XComponentContext > context, OUString url)
         : mxContext(std::move(context)), maURL(std::move(url)) {}
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override { return cppu::UnoType<io::XInputStream>::get(); }
-    virtual bool SAL_CALL hasElements() override { return true; }
+    virtual cpo::uno::Type getElementType() override { return cppu::UnoType<io::XInputStream>::get(); }
+    virtual bool hasElements() override { return true; }
     // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override
+    virtual cpo::uno::Any getByName( const OUString& aName ) override
     {
         uno::Reference< io::XInputStream > xInputStream = ucb::SimpleFileAccess::create(mxContext)->openFileRead( maURL + "/" + aName );
         return cpo::uno::Any(xInputStream);
     }
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override
+    virtual cpo::uno::Sequence< OUString > getElementNames() override
     {
         return {};
     }
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override
+    virtual bool hasByName( const OUString& aName ) override
     {
         osl::File aBaseFile(maURL + "/" + aName);
         return osl::File::E_None == aBaseFile.open(osl_File_OpenFlag_Read);
@@ -713,7 +712,7 @@ bool ImplImageTree::checkPathAccess()
         else
             rNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getProcessComponentContext(), rIconSet.maURL);
     }
-    catch (const uno::RuntimeException &)
+    catch (const cpo::uno::RuntimeException &)
     {
         throw;
     }

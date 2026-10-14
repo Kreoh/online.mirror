@@ -25,9 +25,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 ScVbaCharacters::ScVbaCharacters( const uno::Reference< XHelperInterface >& xParent,
-                                  const uno::Reference< uno::XComponentContext >& xContext,
+                                  const uno::Reference< cpo::uno::XComponentContext >& xContext,
                                   const ScVbaPalette& dPalette,
                                   uno::Reference< text::XSimpleText> xRange,
                                   const cpo::uno::Any& Start,
@@ -60,55 +61,55 @@ ScVbaCharacters::ScVbaCharacters( const uno::Reference< XHelperInterface >& xPar
 
 }
 
-OUString SAL_CALL
+OUString
 ScVbaCharacters::getCaption()
 {
     return m_xTextRange->getString();
 }
-void SAL_CALL
+void
 ScVbaCharacters::setCaption( const OUString& _caption )
 {
     m_xTextRange->setString( _caption );
 
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaCharacters::getCount()
 {
     return getCaption().getLength();
 }
 
-OUString SAL_CALL
+OUString
 ScVbaCharacters::getText()
 {
     return getCaption();
 }
-void SAL_CALL
+void
 ScVbaCharacters::setText( const OUString& _text )
 {
     setCaption( _text );
 }
-uno::Reference< excel::XFont > SAL_CALL
+uno::Reference< excel::XFont >
 ScVbaCharacters::getFont()
 {
     uno::Reference< beans::XPropertySet > xProps( m_xTextRange, uno::UNO_QUERY_THROW );
     return uno::Reference< excel::XFont >( new ScVbaFont( this, mxContext, m_aPalette, xProps ) );
 }
-void SAL_CALL
+void
 ScVbaCharacters::setFont( const uno::Reference< excel::XFont >& /*_font*/ )
 {
     // #TODO #FIXME needs implementation, or can't be done?
-    throw uno::RuntimeException(u"Not Implemented"_ustr );
+    throw cpo::uno::RuntimeException(u"Not Implemented"_ustr );
 }
 
 // Methods
-void SAL_CALL
+void
 ScVbaCharacters::Insert( const OUString& rString )
 {
     m_xSimpleText->insertString( m_xTextRange, rString, bReplace );
 }
 
-void SAL_CALL
+void
 ScVbaCharacters::Delete(  )
 {
     // #FIXME #TODO is this a bit suspect? I wonder should the contents

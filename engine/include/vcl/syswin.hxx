@@ -30,10 +30,8 @@ class SalInstanceBuilder;
 class ScreenshotTest;
 class MenuBar;
 class MnemonicGenerator;
-class NotebookBar;
 class TaskPaneList;
 class VclBuilder;
-struct NotebookBarAddonsItem;
 
 #define ICON_LO_DEFAULT                 1
 #define ICON_TEXT_DOCUMENT              2
@@ -117,7 +115,6 @@ private:
 
     std::unique_ptr<ImplData> mpImplData;
     VclPtr<MenuBar> mpMenuBar;
-    OUString        maNotebookBarUIFile;
     Size            maMinOutSize;
     MenuBarMode     mnMenuBarMode = MenuBarMode::Normal;
     sal_uInt16      mnIcon = 0;
@@ -126,7 +123,6 @@ private:
     bool            mbSysChild : 1 = false;
     bool            mbIsCalculatingInitialLayoutSize : 1 = false;
     bool            mbInitialLayoutSizeCalculated : 1 = false;
-    bool            mbInSetNoteBookBar : 1 = false;
     bool            mbPaintComplete : 1 = false;
     bool            mbIsDeferredInit : 1 = false;
     LayoutIdle      maLayoutIdle;
@@ -157,7 +153,7 @@ protected:
     // Single argument ctors shall be explicit.
     SAL_DLLPRIVATE explicit SystemWindow(
         WindowType eType, const char* pIdleDebugName, bool transferableIdle = false);
-    SAL_DLLPRIVATE void loadUI(vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription, const css::uno::Reference<css::frame::XFrame> &rFrame = css::uno::Reference<css::frame::XFrame>());
+    SAL_DLLPRIVATE void loadUI(vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription, const cpo::uno::Reference<css::frame::XFrame> &rFrame = cpo::uno::Reference<css::frame::XFrame>());
 
     SAL_DLLPRIVATE void SetWindowState(const vcl::WindowData& rData);
 
@@ -183,7 +179,6 @@ public:
     SAL_DLLPRIVATE bool            isLayoutEnabled() const;
     SAL_DLLPRIVATE void            setOptimalLayoutSize(bool bAllowWindowShrink);
     bool            isCalculatingInitialLayoutSize() const { return mbIsCalculatingInitialLayoutSize; }
-    bool            isSettingUpNoteBookBar() const { return mbInSetNoteBookBar; }
 
     void            SetIcon( sal_uInt16 nIcon );
     sal_uInt16          GetIcon() const { return mnIcon; }
@@ -206,14 +201,6 @@ public:
     MenuBar*        GetMenuBar() const { return mpMenuBar; }
     void            SetMenuBarMode( MenuBarMode nMode );
     int             GetMenuBarHeight() const;
-
-    void SetNotebookBar(const OUString& rUIXMLDescription,
-                        const css::uno::Reference<css::frame::XFrame>& rFrame,
-                        std::unique_ptr<NotebookBarAddonsItem> pNotebookBarAddonsItem,
-                        bool bReloadNotebookbar = false);
-
-    void            CloseNotebookBar();
-    VclPtr<NotebookBar> const & GetNotebookBar() const;
 
     TaskPaneList*   GetTaskPaneList();
     SAL_DLLPRIVATE void GetWindowState(vcl::WindowData& rData) const;

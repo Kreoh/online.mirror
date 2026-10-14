@@ -58,7 +58,7 @@
 namespace frm
 {
     using namespace comphelper;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::sdb;
     using namespace ::com::sun::star::sdbc;
@@ -196,7 +196,7 @@ using namespace cpo::uno;
 
     // XCloneable
 
-    css::uno::Reference< css::util::XCloneable > OListBoxModel::createClone()
+    cpo::uno::Reference< css::util::XCloneable > OListBoxModel::createClone()
 {
     rtl::Reference<OListBoxModel> pClone = new OListBoxModel(this, getContext());
     pClone->clonedFrom(this);
@@ -2174,15 +2174,15 @@ using namespace cpo::uno;
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OListBoxModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OListBoxModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OListBoxModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OListBoxControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OListBoxControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OListBoxControl(component));

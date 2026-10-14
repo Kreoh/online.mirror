@@ -20,6 +20,8 @@
 #include <sal/config.h>
 
 #include <comphelper/propertyvalue.hxx>
+#include <svl/itemprop.hxx>
+#include <com/sun/star/container/XIndexContainer.hpp>
 #include <comphelper/sequence.hxx>
 #include <svtools/unoevent.hxx>
 #include <svtools/unoimap.hxx>
@@ -50,12 +52,13 @@
 #include <styleuno.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static std::span<const SfxItemPropertyMapEntry> lcl_GetShapeMap()
 {
     static const SfxItemPropertyMapEntry aShapeMap_Impl[] =
     {
-        { SC_UNONAME_ANCHOR, 0, cppu::UnoType<uno::XInterface>::get(), 0, 0 },
+        { SC_UNONAME_ANCHOR, 0, cppu::UnoType<cpo::uno::XInterface>::get(), 0, 0 },
         { SC_UNONAME_RESIZE_WITH_CELL, 0, cppu::UnoType<bool>::get(), 0, 0 },
         { SC_UNONAME_HORIPOS, 0, cppu::UnoType<sal_Int32>::get(), 0, 0 },
         { SC_UNONAME_IMAGEMAP, 0, cppu::UnoType<container::XIndexContainer>::get(), 0, 0 },
@@ -127,7 +130,7 @@ ScShapeObj::~ScShapeObj()
 
 // XInterface
 
-cpo::uno::Any SAL_CALL ScShapeObj::queryInterface( const cpo::uno::Type& rType )
+cpo::uno::Any ScShapeObj::queryInterface( const cpo::uno::Type& rType )
 {
     cpo::uno::Any aRet = ScShapeObj_Base::queryInterface( rType );
 
@@ -143,12 +146,12 @@ cpo::uno::Any SAL_CALL ScShapeObj::queryInterface( const cpo::uno::Type& rType )
     return aRet;
 }
 
-void SAL_CALL ScShapeObj::acquire() noexcept
+void ScShapeObj::acquire() noexcept
 {
         OWeakObject::acquire();
 }
 
-void SAL_CALL ScShapeObj::release() noexcept
+void ScShapeObj::release() noexcept
 {
         OWeakObject::release();
 }
@@ -273,7 +276,7 @@ static uno::Reference<beans::XPropertySetInfo> getPropertySetInfoFromCache(const
 
 //  XPropertySet
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL ScShapeObj::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> ScShapeObj::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
 
@@ -371,7 +374,7 @@ static awt::Point lcl_GetRelativePos( const uno::Reference< drawing::XShape >& x
     return aUnoPoint;
 }
 
-void SAL_CALL ScShapeObj::setPropertyValue(const OUString& aPropertyName, const cpo::uno::Any& aValue)
+void ScShapeObj::setPropertyValue(const OUString& aPropertyName, const cpo::uno::Any& aValue)
 {
     SolarMutexGuard aGuard;
 
@@ -510,7 +513,7 @@ void SAL_CALL ScShapeObj::setPropertyValue(const OUString& aPropertyName, const 
         if ( pObj )
         {
             ImageMap aImageMap;
-            uno::Reference< uno::XInterface > xImageMapInt(aValue, uno::UNO_QUERY);
+            uno::Reference< cpo::uno::XInterface > xImageMapInt(aValue, uno::UNO_QUERY);
 
             if( !xImageMapInt.is() || !SvUnoImageMap_fillImageMap( xImageMapInt, aImageMap ) )
                 throw lang::IllegalArgumentException();
@@ -738,7 +741,7 @@ void SAL_CALL ScShapeObj::setPropertyValue(const OUString& aPropertyName, const 
     }
 }
 
-cpo::uno::Any SAL_CALL ScShapeObj::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any ScShapeObj::getPropertyValue( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -761,7 +764,7 @@ cpo::uno::Any SAL_CALL ScShapeObj::getPropertyValue( const OUString& aPropertyNa
                     {
                         if ( ScDocShell* pDocSh = pDoc->GetDocumentShell() )
                         {
-                            uno::Reference< uno::XInterface > xAnchor;
+                            uno::Reference< cpo::uno::XInterface > xAnchor;
                             if (ScDrawObjData *pAnchor = ScDrawLayer::GetObjDataTab(pObj, nTab))
                                 xAnchor.set(cppu::getXWeak(new ScCellObj( pDocSh, pAnchor->maStart)));
                             else
@@ -786,7 +789,7 @@ cpo::uno::Any SAL_CALL ScShapeObj::getPropertyValue( const OUString& aPropertyNa
     }
     else if ( aPropertyName == SC_UNONAME_IMAGEMAP )
     {
-        uno::Reference< uno::XInterface > xImageMap;
+        uno::Reference< cpo::uno::XInterface > xImageMap;
         SdrObject* pObj = GetSdrObject();
         if ( pObj )
         {
@@ -948,7 +951,7 @@ cpo::uno::Any SAL_CALL ScShapeObj::getPropertyValue( const OUString& aPropertyNa
     return aAny;
 }
 
-void SAL_CALL ScShapeObj::addPropertyChangeListener( const OUString& aPropertyName,
+void ScShapeObj::addPropertyChangeListener( const OUString& aPropertyName,
                             const uno::Reference<beans::XPropertyChangeListener>& aListener)
 {
     SolarMutexGuard aGuard;
@@ -958,7 +961,7 @@ void SAL_CALL ScShapeObj::addPropertyChangeListener( const OUString& aPropertyNa
         pShapePropertySet->addPropertyChangeListener( aPropertyName, aListener );
 }
 
-void SAL_CALL ScShapeObj::removePropertyChangeListener( const OUString& aPropertyName,
+void ScShapeObj::removePropertyChangeListener( const OUString& aPropertyName,
                             const uno::Reference<beans::XPropertyChangeListener>& aListener)
 {
     SolarMutexGuard aGuard;
@@ -968,7 +971,7 @@ void SAL_CALL ScShapeObj::removePropertyChangeListener( const OUString& aPropert
         pShapePropertySet->removePropertyChangeListener( aPropertyName, aListener );
 }
 
-void SAL_CALL ScShapeObj::addVetoableChangeListener( const OUString& aPropertyName,
+void ScShapeObj::addVetoableChangeListener( const OUString& aPropertyName,
                             const uno::Reference<beans::XVetoableChangeListener>& aListener)
 {
     SolarMutexGuard aGuard;
@@ -978,7 +981,7 @@ void SAL_CALL ScShapeObj::addVetoableChangeListener( const OUString& aPropertyNa
         pShapePropertySet->addVetoableChangeListener( aPropertyName, aListener );
 }
 
-void SAL_CALL ScShapeObj::removeVetoableChangeListener( const OUString& aPropertyName,
+void ScShapeObj::removeVetoableChangeListener( const OUString& aPropertyName,
                             const uno::Reference<beans::XVetoableChangeListener>& aListener)
 {
     SolarMutexGuard aGuard;
@@ -990,7 +993,7 @@ void SAL_CALL ScShapeObj::removeVetoableChangeListener( const OUString& aPropert
 
 //  XPropertyState
 
-beans::PropertyState SAL_CALL ScShapeObj::getPropertyState( const OUString& aPropertyName )
+beans::PropertyState ScShapeObj::getPropertyState( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1021,7 +1024,7 @@ beans::PropertyState SAL_CALL ScShapeObj::getPropertyState( const OUString& aPro
     return eRet;
 }
 
-cpo::uno::Sequence<beans::PropertyState> SAL_CALL ScShapeObj::getPropertyStates(
+cpo::uno::Sequence<beans::PropertyState> ScShapeObj::getPropertyStates(
                                 const cpo::uno::Sequence<OUString>& aPropertyNames )
 {
     SolarMutexGuard aGuard;
@@ -1034,7 +1037,7 @@ cpo::uno::Sequence<beans::PropertyState> SAL_CALL ScShapeObj::getPropertyStates(
     return aRet;
 }
 
-void SAL_CALL ScShapeObj::setPropertyToDefault( const OUString& aPropertyName )
+void ScShapeObj::setPropertyToDefault( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1063,7 +1066,7 @@ void SAL_CALL ScShapeObj::setPropertyToDefault( const OUString& aPropertyName )
     }
 }
 
-cpo::uno::Any SAL_CALL ScShapeObj::getPropertyDefault( const OUString& aPropertyName )
+cpo::uno::Any ScShapeObj::getPropertyDefault( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1071,7 +1074,7 @@ cpo::uno::Any SAL_CALL ScShapeObj::getPropertyDefault( const OUString& aProperty
     if ( aPropertyName == SC_UNONAME_IMAGEMAP )
     {
         //  default: empty ImageMap
-        uno::Reference< uno::XInterface > xImageMap(SvUnoImageMap_createInstance());
+        uno::Reference< cpo::uno::XInterface > xImageMap(SvUnoImageMap_createInstance());
         aAny <<= uno::Reference< container::XIndexContainer >::query( xImageMap );
     }
     else
@@ -1086,12 +1089,12 @@ cpo::uno::Any SAL_CALL ScShapeObj::getPropertyDefault( const OUString& aProperty
 
 // XTextContent
 
-void SAL_CALL ScShapeObj::attach( const uno::Reference<text::XTextRange>& /* xTextRange */ )
+void ScShapeObj::attach( const uno::Reference<text::XTextRange>& /* xTextRange */ )
 {
     throw lang::IllegalArgumentException();     // anchor cannot be changed
 }
 
-uno::Reference<text::XTextRange> SAL_CALL ScShapeObj::getAnchor()
+uno::Reference<text::XTextRange> ScShapeObj::getAnchor()
 {
     SolarMutexGuard aGuard;
 
@@ -1127,7 +1130,7 @@ uno::Reference<text::XTextRange> SAL_CALL ScShapeObj::getAnchor()
 
 // XComponent
 
-void SAL_CALL ScShapeObj::dispose()
+void ScShapeObj::dispose()
 {
     SolarMutexGuard aGuard;
 
@@ -1136,7 +1139,7 @@ void SAL_CALL ScShapeObj::dispose()
         xAggComp->dispose();
 }
 
-void SAL_CALL ScShapeObj::addEventListener(
+void ScShapeObj::addEventListener(
                         const uno::Reference<lang::XEventListener>& xListener )
 {
     SolarMutexGuard aGuard;
@@ -1146,7 +1149,7 @@ void SAL_CALL ScShapeObj::addEventListener(
         xAggComp->addEventListener(xListener);
 }
 
-void SAL_CALL ScShapeObj::removeEventListener(
+void ScShapeObj::removeEventListener(
                         const uno::Reference<lang::XEventListener>& xListener )
 {
     SolarMutexGuard aGuard;
@@ -1171,7 +1174,7 @@ static void lcl_CopyOneProperty( beans::XPropertySet& rDest, beans::XPropertySet
     }
 }
 
-void SAL_CALL ScShapeObj::insertTextContent( const uno::Reference<text::XTextRange>& xRange,
+void ScShapeObj::insertTextContent( const uno::Reference<text::XTextRange>& xRange,
                                                 const uno::Reference<text::XTextContent>& xContent,
                                                 bool bAbsorb )
 {
@@ -1200,7 +1203,7 @@ void SAL_CALL ScShapeObj::insertTextContent( const uno::Reference<text::XTextRan
         xAggText->insertTextContent( xRange, xEffContent, bAbsorb );
 }
 
-void SAL_CALL ScShapeObj::removeTextContent( const uno::Reference<text::XTextContent>& xContent )
+void ScShapeObj::removeTextContent( const uno::Reference<text::XTextContent>& xContent )
 {
     SolarMutexGuard aGuard;
 
@@ -1214,7 +1217,7 @@ void SAL_CALL ScShapeObj::removeTextContent( const uno::Reference<text::XTextCon
 // XSimpleText (parent of XText)
 // Use own SvxUnoTextCursor subclass - everything is just passed to aggregated object
 
-uno::Reference<text::XTextCursor> SAL_CALL ScShapeObj::createTextCursor()
+uno::Reference<text::XTextCursor> ScShapeObj::createTextCursor()
 {
     SolarMutexGuard aGuard;
 
@@ -1230,7 +1233,7 @@ uno::Reference<text::XTextCursor> SAL_CALL ScShapeObj::createTextCursor()
     return uno::Reference<text::XTextCursor>();
 }
 
-uno::Reference<text::XTextCursor> SAL_CALL ScShapeObj::createTextCursorByRange(
+uno::Reference<text::XTextCursor> ScShapeObj::createTextCursorByRange(
                                     const uno::Reference<text::XTextRange>& aTextPosition )
 {
     SolarMutexGuard aGuard;
@@ -1252,26 +1255,26 @@ uno::Reference<text::XTextCursor> SAL_CALL ScShapeObj::createTextCursorByRange(
     return uno::Reference<text::XTextCursor>();
 }
 
-void SAL_CALL ScShapeObj::insertString( const uno::Reference<text::XTextRange>& xRange,
+void ScShapeObj::insertString( const uno::Reference<text::XTextRange>& xRange,
                                         const OUString& aString, bool bAbsorb )
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<text::XSimpleText> xAggSimpleText(lcl_GetSimpleText(mxShapeAgg));
     if ( !xAggSimpleText.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     xAggSimpleText->insertString( xRange, aString, bAbsorb );
 }
 
-void SAL_CALL ScShapeObj::insertControlCharacter( const uno::Reference<text::XTextRange>& xRange,
+void ScShapeObj::insertControlCharacter( const uno::Reference<text::XTextRange>& xRange,
                                                 sal_Int16 nControlCharacter, bool bAbsorb )
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<text::XSimpleText> xAggSimpleText(lcl_GetSimpleText(mxShapeAgg));
     if ( !xAggSimpleText.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     xAggSimpleText->insertControlCharacter( xRange, nControlCharacter, bAbsorb );
 }
@@ -1279,58 +1282,58 @@ void SAL_CALL ScShapeObj::insertControlCharacter( const uno::Reference<text::XTe
 // XTextRange
 // (parent of XSimpleText)
 
-uno::Reference<text::XText> SAL_CALL ScShapeObj::getText()
+uno::Reference<text::XText> ScShapeObj::getText()
 {
     return this;
 }
 
-uno::Reference<text::XTextRange> SAL_CALL ScShapeObj::getStart()
+uno::Reference<text::XTextRange> ScShapeObj::getStart()
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<text::XTextRange> xAggTextRange(lcl_GetTextRange(mxShapeAgg));
     if ( !xAggTextRange.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return xAggTextRange->getStart();
 }
 
-uno::Reference<text::XTextRange> SAL_CALL ScShapeObj::getEnd()
+uno::Reference<text::XTextRange> ScShapeObj::getEnd()
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<text::XTextRange> xAggTextRange(lcl_GetTextRange(mxShapeAgg));
     if ( !xAggTextRange.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return xAggTextRange->getEnd();
 }
 
-OUString SAL_CALL ScShapeObj::getString()
+OUString ScShapeObj::getString()
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<text::XTextRange> xAggTextRange(lcl_GetTextRange(mxShapeAgg));
     if ( !xAggTextRange.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return xAggTextRange->getString();
 }
 
-void SAL_CALL ScShapeObj::setString( const OUString& aText )
+void ScShapeObj::setString( const OUString& aText )
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<text::XTextRange> xAggTextRange(lcl_GetTextRange(mxShapeAgg));
     if ( !xAggTextRange.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     xAggTextRange->setString( aText );
 }
 
 // XChild
 
-uno::Reference< uno::XInterface > SAL_CALL ScShapeObj::getParent()
+uno::Reference< cpo::uno::XInterface > ScShapeObj::getParent()
 {
     SolarMutexGuard aGuard;
 
@@ -1360,14 +1363,14 @@ uno::Reference< uno::XInterface > SAL_CALL ScShapeObj::getParent()
     return nullptr;
 }
 
-void SAL_CALL ScShapeObj::setParent( const uno::Reference< uno::XInterface >& )
+void ScShapeObj::setParent( const uno::Reference< cpo::uno::XInterface >& )
 {
     throw lang::NoSupportException();
 }
 
 // XTypeProvider
 
-cpo::uno::Sequence<cpo::uno::Type> SAL_CALL ScShapeObj::getTypes()
+cpo::uno::Sequence<cpo::uno::Type> ScShapeObj::getTypes()
 {
     cpo::uno::Sequence< cpo::uno::Type > aBaseTypes( ScShapeObj_Base::getTypes() );
 
@@ -1387,7 +1390,7 @@ cpo::uno::Sequence<cpo::uno::Type> SAL_CALL ScShapeObj::getTypes()
     return ::comphelper::concatSequences( aBaseTypes, aTextTypes, aAggTypes );
 }
 
-cpo::uno::Sequence<sal_Int8> SAL_CALL ScShapeObj::getImplementationId()
+cpo::uno::Sequence<sal_Int8> ScShapeObj::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -1419,7 +1422,7 @@ public:
     }
 
     // XNameReplace
-    virtual void SAL_CALL replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override
+    virtual void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override
     {
         if ( !hasByName( aName ) )
             throw container::NoSuchElementException();
@@ -1449,7 +1452,7 @@ public:
     }
 
     // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override
+    virtual cpo::uno::Any getByName( const OUString& aName ) override
     {
         cpo::uno::Sequence< beans::PropertyValue > aProperties;
         ScMacroInfo* pInfo = getInfo(false);
@@ -1469,47 +1472,47 @@ public:
         return cpo::uno::Any( aProperties );
     }
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override
+    virtual cpo::uno::Sequence< OUString > getElementNames() override
     {
         cpo::uno::Sequence<OUString> aSeq { SC_EVENTACC_ONCLICK };
         return aSeq;
     }
 
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override
+    virtual bool hasByName( const OUString& aName ) override
     {
         return aName == SC_EVENTACC_ONCLICK;
     }
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
     {
         return cppu::UnoType<cpo::uno::Sequence< beans::PropertyValue >>::get();
     }
 
-    virtual bool SAL_CALL hasElements() override
+    virtual bool hasElements() override
     {
         // elements are always present (but contained property sequences may be empty)
         return true;
     }
 };
 
-::uno::Reference< container::XNameReplace > SAL_CALL
+::uno::Reference< container::XNameReplace >
 ScShapeObj::getEvents(  )
 {
     return new ShapeUnoEventAccessImpl( this );
 }
 
-OUString SAL_CALL ScShapeObj::getImplementationName(  )
+OUString ScShapeObj::getImplementationName(  )
 {
     return u"com.sun.star.comp.sc.ScShapeObj"_ustr;
 }
 
-bool SAL_CALL ScShapeObj::supportsService( const OUString& ServiceName )
+bool ScShapeObj::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL ScShapeObj::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > ScShapeObj::getSupportedServiceNames(  )
 {
     uno::Reference<lang::XServiceInfo> xSI;
     if ( mxShapeAgg.is() )

@@ -8,6 +8,10 @@
  */
 
 #include <com/sun/star/drawing/FillStyle.hpp>
+#include <officecfg/Office/Writer.hxx>
+#include <unotools/lingucfg.hxx>
+#include <unotools/linguprops.hxx>
+#include <swmodule.hxx>
 #include <swmodeltestbase.hxx>
 #include <cntfrm.hxx>
 #include <itabenum.hxx>
@@ -18,6 +22,7 @@
 #include <view.hxx>
 #include <com/sun/star/text/XTextColumns.hpp>
 
+#include <svx/ruler.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdview.hxx>
 #include <svl/itemiter.hxx>
@@ -47,6 +52,8 @@
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/scopeguard.hxx>
+#include <editeng/acorrcfg.hxx>
+#include <editeng/svxacorr.hxx>
 #include <editeng/swafopt.hxx>
 #include <editeng/unolingu.hxx>
 #include <COKit/COKit.hxx>
@@ -72,8 +79,8 @@
 using namespace com::sun::star;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
@@ -2357,6 +2364,53 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testInconsistentBookmark)
     }
 }
 
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testAutomaticSpellCheckingFollowsSharedOptionUntilChosen)
+{
+    SvtLinguConfig aLinguConfig;
+
+    // Nothing was ever chosen for Writer, so the shared linguistic option this
+    // setting was split out of still answers for it - which is what carries a
+    // choice made before the split over to this application
+    CPPUNIT_ASSERT(
+        !officecfg::Office::Writer::Content::Display::AutomaticSpellChecking::get().has_value());
+
+    aLinguConfig.SetProperty(UPN_IS_SPELL_AUTO, uno::Any(false));
+    CPPUNIT_ASSERT(!SwModule::GetAutoSpellProperty());
+
+    aLinguConfig.SetProperty(UPN_IS_SPELL_AUTO, uno::Any(true));
+    CPPUNIT_ASSERT(SwModule::GetAutoSpellProperty());
+
+    // once Writer has a choice of its own the shared option no longer speaks for it
+    SwModule::SetAutoSpellProperty(false);
+    CPPUNIT_ASSERT(!SwModule::GetAutoSpellProperty());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testAutomaticSpellCheckingIsPerApplication)
+{
+    SvtLinguConfig aLinguConfig;
+    SvtLinguOptions aLinguOptions;
+    aLinguConfig.GetOptions(aLinguOptions);
+    const bool bSharedSpellAuto = aLinguOptions.bIsSpellAuto;
+
+    SwModule::SetAutoSpellProperty(false);
+
+    createSwDoc();
+    const SwViewOption* pOpt = getSwDocShell()->GetWrtShell()->GetViewOptions();
+
+    // a new document takes Writer's setting
+    CPPUNIT_ASSERT(!pOpt->IsOnlineSpell());
+
+    // Tools - Automatic Spell Checking turns it back on, and Writer keeps that
+    // choice for the next document
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, {});
+    CPPUNIT_ASSERT(pOpt->IsOnlineSpell());
+    CPPUNIT_ASSERT(SwModule::GetAutoSpellProperty());
+
+    // none of which touches the shared linguistic option
+    aLinguConfig.GetOptions(aLinguOptions);
+    CPPUNIT_ASSERT_EQUAL(bSharedSpellAuto, aLinguOptions.bIsSpellAuto);
+}
+
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testSpellOnlineParameter)
 {
     createSwDoc();
@@ -2931,6 +2985,13 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf83260)
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf139922)
 {
     createSwDoc();
+    // The two initial capitals correction is off by default, this test needs it
+    SvxAutoCorrect* pACorr = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    const bool bCapitalStartWord = pACorr->IsAutoCorrFlag(ACFlags::CapitalStartWord);
+    pACorr->SetAutoCorrFlag(ACFlags::CapitalStartWord, true);
+    comphelper::ScopeGuard aGuard(
+        [pACorr, bCapitalStartWord]
+        { pACorr->SetAutoCorrFlag(ACFlags::CapitalStartWord, bCapitalStartWord); });
 
     SwXTextDocument* pTextDoc = getSwTextDoc();
     pTextDoc->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_RETURN);

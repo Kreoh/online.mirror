@@ -20,6 +20,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 #include <com/sun/star/beans/PropertyValues.hpp>
 
 #include <map>
@@ -634,6 +635,11 @@ public:
     void SetStop( const bool bNew ) { m_bStop = bNew; }
     SwLinePortion *GetRest() { return m_pRest; }
     void SetRest( SwLinePortion *pNewRest ) { m_pRest = pNewRest; }
+    void DiscardRest()
+    {
+        if (m_pRest)
+            delete std::exchange(m_pRest, nullptr);
+    }
     bool IsNewLine() const { return m_bNewLine; }
     void SetNewLine( const bool bNew ) { m_bNewLine = bNew; }
     bool IsShift() const { return m_bShift; }
@@ -712,7 +718,7 @@ public:
     void SetExtraDescent(gfx::Length nNew) { m_nExtraDescent = std::max(m_nExtraDescent, nNew); }
 
     // Calls HyphenateWord() of Hyphenator
-    css::uno::Reference< css::linguistic2::XHyphenatedWord >
+    cpo::uno::Reference< css::linguistic2::XHyphenatedWord >
                 HyphWord( const OUString &rText, const sal_Int32 nMinTrail );
     const css::beans::PropertyValues & GetHyphValues() const;
 

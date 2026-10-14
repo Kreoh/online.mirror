@@ -65,7 +65,6 @@ fuzzer_core_libraries = \
     dbase \
     dbtools \
     deployment \
-    deploymentmisc \
     docmodel \
     drawinglayer \
     drawinglayercore \
@@ -156,7 +155,6 @@ fuzzer_calc_libraries = \
     analysis \
     date \
     pricing \
-    scfilt \
     scd \
     $(call gb_Helper_optional,SCRIPTING, \
         vbaevents \
@@ -169,7 +167,6 @@ fuzzer_calc_libraries = \
     guesslang \
 
 fuzzer_writer_libraries = \
-    msword \
     sw \
     swd \
     sw_writerfilter \

@@ -153,7 +153,7 @@ window.L.Control.Tabs = window.L.Control.extend({
 				isHtmlName: true,
 				callback: (this._moveOrCopySheet).bind(this),
 				visible: areTabsMultiple,
-				_image: 'Move',
+				_image: 'MoveorCopy',
 			},
 			'.uno:CopyTab': {
 				name: app.IconUtil.createMenuItemLink(_('Copy Sheet...'), 'CopyTab'),
@@ -163,7 +163,7 @@ window.L.Control.Tabs = window.L.Control.extend({
 					return !areTabsMultiple();
 				},
 				text: _('Copy Sheet...'),
-				_image: 'CopyTab',
+				_image: 'MoveorCopy',
 			},
 		};
 
@@ -276,6 +276,18 @@ window.L.Control.Tabs = window.L.Control.extend({
 								return function(e) {
 									this._tabForContextMenu = j;
 									if (!this._map.isReadOnlyMode()) {
+										if (e.pointerType === 'touch') {
+											// The menu slides up under the finger while it is still down. Cancel
+											// the default action of the release, so the menu stays open with
+											// nothing selected when the finger lifts.
+											const cancelRelease = function (releaseEvent) {
+												releaseEvent.preventDefault();
+												window.removeEventListener('touchend', cancelRelease, true);
+												window.removeEventListener('touchcancel', cancelRelease, true);
+											};
+											window.addEventListener('touchend', cancelRelease, true);
+											window.addEventListener('touchcancel', cancelRelease, true);
+										}
 										if (window.mode.isSmallScreenDevice()) {
 											window.contextMenuWizard = true;
 											// Build the structure now, so entries that depend on the
@@ -377,6 +389,7 @@ window.L.Control.Tabs = window.L.Control.extend({
 
 			var scrollCont = document.getElementById('spreadsheet-tab-scroll');
 			var focusInTablist = scrollCont && scrollCont.contains(document.activeElement);
+			var documentContainer = document.getElementById('document-container');
 			for (var key in this._spreadsheetTabs) {
 				var part =  parseInt(key.match(/\d+/g)[0]);
 				var tabEl = this._spreadsheetTabs[key];
@@ -387,8 +400,13 @@ window.L.Control.Tabs = window.L.Control.extend({
 					this._map.fire('closeAutoFilterDialog');
 					this._map.fire('closepopups');
 					window.L.DomUtil.addClass(tabEl, 'spreadsheet-tab-selected');
+					if (documentContainer) {
+						documentContainer.setAttribute('role', 'tabpanel');
+						documentContainer.setAttribute('aria-labelledby', tabEl.id);
+					}
 				}
 				tabEl.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+				tabEl.setAttribute('aria-controls', 'document-container');
 				if (!focusInTablist)
 					tabEl.setAttribute('tabindex', isSelected ? '0' : '-1');
 			}
@@ -528,6 +546,24 @@ window.L.Control.Tabs = window.L.Control.extend({
 
 	_onTabKeyDown: function (e) {
 		var key = e.key;
+
+		// Rename is hidden for a protected sheet, so F2 is too.
+		if (key === 'F2') {
+			if (this._map.isReadOnlyMode())
+				return;
+			const match = e.currentTarget.id.match(/\d+/);
+			if (!match)
+				return;
+			const part = parseInt(match[0]);
+			if (this._isProtectedSheet(part))
+				return;
+
+			window.L.DomEvent.stop(e);
+			this._tabForContextMenu = part;
+			this._renameSheet();
+			return;
+		}
+
 		if (key !== 'ArrowLeft' && key !== 'ArrowRight' &&
 			key !== 'Home' && key !== 'End' &&
 			key !== 'Enter' && key !== ' ' && key !== 'Spacebar')

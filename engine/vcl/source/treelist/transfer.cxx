@@ -61,6 +61,7 @@
 #include <vcl/inetimg.hxx>
 #include <vcl/wmf.hxx>
 #include <vcl/imap.hxx>
+#include <vcl/remoteclipboard.hxx>
 #include <vcl/transfer.hxx>
 #include <rtl/strbuf.hxx>
 #include <cstdio>
@@ -72,7 +73,7 @@
 #include <utility>
 #include <vcl/TypeSerializer.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
@@ -274,28 +275,28 @@ TransferableHelper::TerminateListener::~TerminateListener()
 }
 
 
-void SAL_CALL TransferableHelper::TerminateListener::disposing( const EventObject& )
+void TransferableHelper::TerminateListener::disposing( const EventObject& )
 {
 }
 
 
-void SAL_CALL TransferableHelper::TerminateListener::queryTermination( const EventObject& )
+void TransferableHelper::TerminateListener::queryTermination( const EventObject& )
 {
 }
 
 
-void SAL_CALL TransferableHelper::TerminateListener::notifyTermination( const EventObject& )
+void TransferableHelper::TerminateListener::notifyTermination( const EventObject& )
 {
     mrParent.ImplFlush();
     mrParent.mxTerminateListener.clear();
 }
 
-OUString SAL_CALL TransferableHelper::TerminateListener::getImplementationName()
+OUString TransferableHelper::TerminateListener::getImplementationName()
 {
     return u"com.sun.star.comp.svt.TransferableHelperTerminateListener"_ustr;
 }
 
-bool SAL_CALL TransferableHelper::TerminateListener::supportsService(const OUString& /*rServiceName*/)
+bool TransferableHelper::TerminateListener::supportsService(const OUString& /*rServiceName*/)
 {
     return false;
 }
@@ -318,12 +319,12 @@ TransferableHelper::~TransferableHelper()
     }
 }
 
-Any SAL_CALL TransferableHelper::getTransferData( const DataFlavor& rFlavor )
+Any TransferableHelper::getTransferData( const DataFlavor& rFlavor )
 {
     return getTransferData2(rFlavor, OUString());
 }
 
-Any SAL_CALL TransferableHelper::getTransferData2( const DataFlavor& rFlavor, const OUString& rDestDoc )
+Any TransferableHelper::getTransferData2( const DataFlavor& rFlavor, const OUString& rDestDoc )
 {
     if( !maAny.hasValue() || maFormats.empty() || ( maLastFormat != rFlavor.MimeType ) )
     {
@@ -468,14 +469,14 @@ Any SAL_CALL TransferableHelper::getTransferData2( const DataFlavor& rFlavor, co
     return maAny;
 }
 
-bool SAL_CALL TransferableHelper::isComplex()
+bool TransferableHelper::isComplex()
 {
     // By default everything is complex, until proven otherwise
     // in the respective document type transferable handler.
     return true;
 }
 
-Sequence< DataFlavor > SAL_CALL TransferableHelper::getTransferDataFlavors()
+Sequence< DataFlavor > TransferableHelper::getTransferDataFlavors()
 {
     const SolarMutexGuard aGuard;
 
@@ -492,7 +493,7 @@ Sequence< DataFlavor > SAL_CALL TransferableHelper::getTransferDataFlavors()
 }
 
 
-bool SAL_CALL TransferableHelper::isDataFlavorSupported( const DataFlavor& rFlavor )
+bool TransferableHelper::isDataFlavorSupported( const DataFlavor& rFlavor )
 {
     const SolarMutexGuard aGuard;
 
@@ -517,7 +518,7 @@ bool SAL_CALL TransferableHelper::isDataFlavorSupported( const DataFlavor& rFlav
 }
 
 
-void SAL_CALL TransferableHelper::lostOwnership( const Reference< XClipboard >&, const Reference< XTransferable >& )
+void TransferableHelper::lostOwnership( const Reference< XClipboard >&, const Reference< XTransferable >& )
 {
     const SolarMutexGuard aGuard;
 
@@ -525,7 +526,7 @@ void SAL_CALL TransferableHelper::lostOwnership( const Reference< XClipboard >&,
     {
         if( mxTerminateListener.is() )
         {
-            Reference< XDesktop2 > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
+            Reference< XDesktop > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
             xDesktop->removeTerminateListener( mxTerminateListener );
 
             mxTerminateListener.clear();
@@ -539,12 +540,12 @@ void SAL_CALL TransferableHelper::lostOwnership( const Reference< XClipboard >&,
 }
 
 
-void SAL_CALL TransferableHelper::disposing( const EventObject& )
+void TransferableHelper::disposing( const EventObject& )
 {
 }
 
 
-void SAL_CALL TransferableHelper::dragDropEnd( const DragSourceDropEvent& rDSDE )
+void TransferableHelper::dragDropEnd( const DragSourceDropEvent& rDSDE )
 {
     const SolarMutexGuard aGuard;
 
@@ -559,22 +560,22 @@ void SAL_CALL TransferableHelper::dragDropEnd( const DragSourceDropEvent& rDSDE 
 }
 
 
-void SAL_CALL TransferableHelper::dragEnter( const DragSourceDragEvent& )
+void TransferableHelper::dragEnter( const DragSourceDragEvent& )
 {
 }
 
 
-void SAL_CALL TransferableHelper::dragExit( const DragSourceEvent& )
+void TransferableHelper::dragExit( const DragSourceEvent& )
 {
 }
 
 
-void SAL_CALL TransferableHelper::dragOver( const DragSourceDragEvent& )
+void TransferableHelper::dragOver( const DragSourceDragEvent& )
 {
 }
 
 
-void SAL_CALL TransferableHelper::dropActionChanged( const DragSourceDragEvent& )
+void TransferableHelper::dropActionChanged( const DragSourceDragEvent& )
 {
 }
 
@@ -741,8 +742,11 @@ bool TransferableHelper::SetBitmap(const Bitmap& rBitmap, const DataFlavor& rFla
         }
         else
         {
+            // BMP has no alpha channel, blend any transparency onto white
+            Bitmap aBitmap(rBitmap);
+            aBitmap.ReplaceTransparency(COL_WHITE);
             // explicitly use Bitmap::Write with bCompressed = false and bFileHeader = true
-            WriteDIB(rBitmap, aMemStm, false, true);
+            WriteDIB(aBitmap, aMemStm, false, true);
         }
 
         maAny <<= Sequence< sal_Int8 >( static_cast< const sal_Int8* >( aMemStm.GetData() ), aMemStm.TellEnd() );
@@ -972,7 +976,7 @@ void TransferableHelper::CopyToClipboard(const Reference<XClipboard>& rClipboard
     try
     {
         mxTerminateListener = new TerminateListener(*this);
-        Reference< XDesktop2 > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
+        Reference< XDesktop > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
         xDesktop->addTerminateListener(mxTerminateListener);
 
         mxClipboard->setContents(this, this);
@@ -1001,7 +1005,7 @@ void TransferableHelper::CopyToSelection(const Reference<XClipboard>& rSelection
     try
     {
         mxTerminateListener = new TerminateListener(*this);
-        Reference< XDesktop2 > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
+        Reference< XDesktop > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
         xDesktop->addTerminateListener(mxTerminateListener);
 
         rSelection->setContents(this, this);
@@ -1072,10 +1076,10 @@ private:
 
 protected:
     // XClipboardListener
-    virtual void SAL_CALL changedContents( const clipboard::ClipboardEvent& event ) override;
+    virtual void changedContents( const clipboard::ClipboardEvent& event ) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const EventObject& Source ) override;
+    virtual void disposing( const EventObject& Source ) override;
 
 public:
     TransferableClipboardNotifier( const Reference< XClipboard >& _rxClipboard, TransferableDataHelper& _rListener );
@@ -1104,7 +1108,7 @@ TransferableClipboardNotifier::TransferableClipboardNotifier( const Reference< X
 }
 
 
-void SAL_CALL TransferableClipboardNotifier::changedContents( const clipboard::ClipboardEvent& event )
+void TransferableClipboardNotifier::changedContents( const clipboard::ClipboardEvent& event )
 {
     SolarMutexGuard aSolarGuard;
     if( mpListener )
@@ -1112,7 +1116,7 @@ void SAL_CALL TransferableClipboardNotifier::changedContents( const clipboard::C
 }
 
 
-void SAL_CALL TransferableClipboardNotifier::disposing( const EventObject& )
+void TransferableClipboardNotifier::disposing( const EventObject& )
 {
     // clipboard is being disposed. Hmm. Okay, become disfunctional myself.
     dispose();
@@ -1769,6 +1773,20 @@ bool TransferableDataHelper::GetGraphic( const css::datatransfer::DataFlavor& rF
         if (bRet)
             rGraphic = aBitmap;
     }
+    else if (SotExchange::GetFormatDataFlavor(SotClipboardFormatId::SVG, aFlavor)
+             && TransferableDataHelper::IsEqual(aFlavor, rFlavor))
+    {
+        Graphic aGraphic;
+        if (std::unique_ptr<SvStream> xStm = GetSotStorageStream(rFlavor))
+        {
+            if (GraphicConverter::Import(*xStm, aGraphic, ConvertDataFormat::SVG)
+                == ERRCODE_NONE)
+            {
+                rGraphic = std::move(aGraphic);
+                bRet = true;
+            }
+        }
+    }
     else if(SotExchange::GetFormatDataFlavor( SotClipboardFormatId::BITMAP, aFlavor ) &&
         TransferableDataHelper::IsEqual( aFlavor, rFlavor ) )
     {
@@ -2169,7 +2187,7 @@ void TransferableDataHelper::StopClipboardListening( )
     }
 }
 
-TransferableDataHelper TransferableDataHelper::CreateFromClipboard(const css::uno::Reference<css::datatransfer::clipboard::XClipboard>& rClipboard)
+TransferableDataHelper TransferableDataHelper::CreateFromClipboard(const cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>& rClipboard)
 {
     TransferableDataHelper  aRet;
 
@@ -2194,7 +2212,8 @@ TransferableDataHelper TransferableDataHelper::CreateFromClipboard(const css::un
     return aRet;
 }
 
-TransferableDataHelper TransferableDataHelper::CreateFromSystemClipboard( vcl::Window * pWindow )
+TransferableDataHelper TransferableDataHelper::CreateFromSystemClipboard(
+    vcl::Window* pWindow, DownloadRemoteContent eDownload)
 {
     DBG_ASSERT( pWindow, "Window pointer is NULL" );
 
@@ -2203,7 +2222,10 @@ TransferableDataHelper TransferableDataHelper::CreateFromSystemClipboard( vcl::W
     if( pWindow )
         xClipboard = pWindow->GetClipboard();
 
-    return CreateFromClipboard(xClipboard);
+    TransferableDataHelper aData = CreateFromClipboard(xClipboard);
+    if (eDownload == DownloadRemoteContent::Yes)
+        vcl::remoteclipboard::resolveForPaste(aData, pWindow ? pWindow->GetFrameWeld() : nullptr);
+    return aData;
 }
 
 TransferableDataHelper TransferableDataHelper::CreateFromPrimarySelection()

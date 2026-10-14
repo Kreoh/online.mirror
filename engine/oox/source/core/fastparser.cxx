@@ -33,7 +33,7 @@ namespace oox::core {
 
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 
 namespace {
@@ -81,7 +81,7 @@ FastParser::~FastParser()
 void FastParser::registerNamespace( sal_Int32 nNamespaceId )
 {
     if( !mxParser.is() )
-        throw RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // add handling for OOXML strict here
     const OUString* pNamespaceUrl = ContainerHelper::getMapElement( mrNamespaceMap.maTransitionalNamespaceMap, nNamespaceId );
@@ -101,7 +101,7 @@ void FastParser::registerNamespace( sal_Int32 nNamespaceId )
 void FastParser::setDocumentHandler( const Reference< XFastDocumentHandler >& rxDocHandler )
 {
     if( !mxParser.is() )
-        throw RuntimeException();
+        throw cpo::uno::RuntimeException();
     mxParser->setFastDocumentHandler( rxDocHandler );
 }
 
@@ -117,7 +117,7 @@ void FastParser::parseStream( const InputSource& rInputSource, bool bCloseStream
     // guard closing the input stream also when exceptions are thrown
     InputStreamCloseGuard aGuard( rInputSource.aInputStream, bCloseStream );
     if( !mxParser.is() )
-        throw RuntimeException();
+        throw cpo::uno::RuntimeException();
     mxParser->parseStream( rInputSource );
 }
 

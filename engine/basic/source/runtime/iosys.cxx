@@ -40,7 +40,7 @@
 #include <com/sun/star/io/XSeekable.hpp>
 #include <iosys.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::ucb;
 using namespace com::sun::star::io;
 using namespace ::cpo::uno;
@@ -430,7 +430,7 @@ ErrCode const & SbiStream::Open
 
     if( hasUno() )
     {
-        Reference< XSimpleFileAccess3 > xSFI( SimpleFileAccess::create( comphelper::getProcessComponentContext() ) );
+        Reference< XSimpleFileAccess > xSFI( SimpleFileAccess::create( comphelper::getProcessComponentContext() ) );
         try
         {
 

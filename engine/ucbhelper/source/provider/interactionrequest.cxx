@@ -26,6 +26,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ucbhelper;
 
 
@@ -40,7 +41,7 @@ struct InteractionRequest_Impl
     rtl::Reference< InteractionContinuation > m_xSelection;
     cpo::uno::Any m_aRequest;
     cpo::uno::Sequence<
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::task::XInteractionContinuation > > m_aContinuations;
 
     InteractionRequest_Impl() {}
@@ -104,14 +105,14 @@ void InteractionRequest::setSelection(
 
 
 // virtual
-cpo::uno::Any SAL_CALL InteractionRequest::getRequest()
+cpo::uno::Any InteractionRequest::getRequest()
 {
     return m_pImpl->m_aRequest;
 }
 
 
 // virtual
-cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL
+cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > >
 InteractionRequest::getContinuations()
 {
     return m_pImpl->m_aContinuations;
@@ -147,7 +148,7 @@ void InteractionContinuation::recordSelection()
 
 
 // virtual
-void SAL_CALL InteractionAbort::select()
+void InteractionAbort::select()
 {
     recordSelection();
 }
@@ -160,7 +161,7 @@ void SAL_CALL InteractionAbort::select()
 
 
 // virtual
-void SAL_CALL InteractionRetry::select()
+void InteractionRetry::select()
 {
     recordSelection();
 }
@@ -173,7 +174,7 @@ void SAL_CALL InteractionRetry::select()
 
 
 // virtual
-void SAL_CALL InteractionApprove::select()
+void InteractionApprove::select()
 {
     recordSelection();
 }
@@ -186,7 +187,7 @@ void SAL_CALL InteractionApprove::select()
 
 
 // virtual
-void SAL_CALL InteractionDisapprove::select()
+void InteractionDisapprove::select()
 {
     recordSelection();
 }
@@ -199,7 +200,7 @@ void SAL_CALL InteractionDisapprove::select()
 
 
 // virtual
-void SAL_CALL InteractionSupplyAuthentication::select()
+void InteractionSupplyAuthentication::select()
 {
     recordSelection();
 }
@@ -209,7 +210,7 @@ void SAL_CALL InteractionSupplyAuthentication::select()
 
 
 // virtual
-bool SAL_CALL
+bool
 InteractionSupplyAuthentication::canSetRealm()
 {
     return m_bCanSetRealm;
@@ -217,7 +218,7 @@ InteractionSupplyAuthentication::canSetRealm()
 
 
 // virtual
-void SAL_CALL
+void
 InteractionSupplyAuthentication::setRealm( const OUString& Realm )
 {
     OSL_ENSURE( m_bCanSetPassword,
@@ -229,7 +230,7 @@ InteractionSupplyAuthentication::setRealm( const OUString& Realm )
 
 
 // virtual
-bool SAL_CALL
+bool
 InteractionSupplyAuthentication::canSetUserName()
 {
     return m_bCanSetUserName;
@@ -237,7 +238,7 @@ InteractionSupplyAuthentication::canSetUserName()
 
 
 // virtual
-void SAL_CALL
+void
 InteractionSupplyAuthentication::setUserName( const OUString& UserName )
 {
     OSL_ENSURE( m_bCanSetUserName,
@@ -249,7 +250,7 @@ InteractionSupplyAuthentication::setUserName( const OUString& UserName )
 
 
 // virtual
-bool SAL_CALL
+bool
 InteractionSupplyAuthentication::canSetPassword()
 {
     return m_bCanSetPassword;
@@ -257,7 +258,7 @@ InteractionSupplyAuthentication::canSetPassword()
 
 
 // virtual
-void SAL_CALL
+void
 InteractionSupplyAuthentication::setPassword( const OUString& Password )
 {
     OSL_ENSURE( m_bCanSetPassword,
@@ -269,7 +270,7 @@ InteractionSupplyAuthentication::setPassword( const OUString& Password )
 
 
 // virtual
-cpo::uno::Sequence< ucb::RememberAuthentication > SAL_CALL
+cpo::uno::Sequence< ucb::RememberAuthentication >
 InteractionSupplyAuthentication::getRememberPasswordModes(
                                     ucb::RememberAuthentication& Default )
 {
@@ -279,7 +280,7 @@ InteractionSupplyAuthentication::getRememberPasswordModes(
 
 
 // virtual
-void SAL_CALL
+void
 InteractionSupplyAuthentication::setRememberPassword(
                                     ucb::RememberAuthentication Remember )
 {
@@ -288,7 +289,7 @@ InteractionSupplyAuthentication::setRememberPassword(
 
 
 // virtual
-bool SAL_CALL
+bool
 InteractionSupplyAuthentication::canSetAccount()
 {
     return m_bCanSetAccount;
@@ -296,7 +297,7 @@ InteractionSupplyAuthentication::canSetAccount()
 
 
 // virtual
-void SAL_CALL
+void
 InteractionSupplyAuthentication::setAccount( const OUString& /*Account*/ )
 {
     OSL_ENSURE( m_bCanSetAccount,
@@ -305,7 +306,7 @@ InteractionSupplyAuthentication::setAccount( const OUString& /*Account*/ )
 
 
 // virtual
-cpo::uno::Sequence< ucb::RememberAuthentication > SAL_CALL
+cpo::uno::Sequence< ucb::RememberAuthentication >
 InteractionSupplyAuthentication::getRememberAccountModes(
                                     ucb::RememberAuthentication& Default )
 {
@@ -315,7 +316,7 @@ InteractionSupplyAuthentication::getRememberAccountModes(
 
 
 // virtual
-void SAL_CALL InteractionSupplyAuthentication::setRememberAccount(
+void InteractionSupplyAuthentication::setRememberAccount(
                                     ucb::RememberAuthentication )
 {
 }
@@ -325,7 +326,7 @@ void SAL_CALL InteractionSupplyAuthentication::setRememberAccount(
 
 
 // virtual
-bool SAL_CALL
+bool
 InteractionSupplyAuthentication::canUseSystemCredentials(
         bool& Default )
 {
@@ -335,7 +336,7 @@ InteractionSupplyAuthentication::canUseSystemCredentials(
 
 
 // virtual
-void SAL_CALL InteractionSupplyAuthentication::setUseSystemCredentials(
+void InteractionSupplyAuthentication::setUseSystemCredentials(
         bool UseSystemCredentials )
 {
     if ( m_bCanUseSystemCredentials )
@@ -350,7 +351,7 @@ void SAL_CALL InteractionSupplyAuthentication::setUseSystemCredentials(
 
 
 // virtual
-void SAL_CALL InteractionReplaceExistingData::select()
+void InteractionReplaceExistingData::select()
 {
     recordSelection();
 }
@@ -360,7 +361,7 @@ void SAL_CALL InteractionReplaceExistingData::select()
 // XInteractionContinuation methods.
 
 // virtual
-void SAL_CALL InteractionAuthFallback::select()
+void InteractionAuthFallback::select()
 {
     recordSelection();
 }
@@ -368,7 +369,7 @@ void SAL_CALL InteractionAuthFallback::select()
 // XInteractionAuthFallback methods
 
 // virtual
-void SAL_CALL InteractionAuthFallback::setCode( const OUString& code )
+void InteractionAuthFallback::setCode( const OUString& code )
 {
     m_aCode = code;
 }

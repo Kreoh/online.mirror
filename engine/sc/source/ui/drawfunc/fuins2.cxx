@@ -21,9 +21,10 @@
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
+#include <docuno.hxx>
 #include <sot/exchange.hxx>
 #include <svl/globalnameitem.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -76,6 +77,7 @@
 #include <memory>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -626,7 +628,7 @@ FuInsertChart::FuInsertChart(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawV
         if( xChartModel.is() )
             xChartModel->unlockControllers();
     }
-    else if (!rViewSh.isKitMobilePhone())
+    else
     {
         //the controller will be unlocked by the dialog when the dialog is told to do so
 
@@ -635,20 +637,20 @@ FuInsertChart::FuInsertChart(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawV
             rViewShell.ActivateObject(pObj.get(), embed::EmbedVerbs::MS_OLEVERB_SHOW);
 
         //open wizard
-        uno::Reference< uno::XComponentContext > xContext(::comphelper::getProcessComponentContext());
+        uno::Reference< cpo::uno::XComponentContext > xContext(::comphelper::getProcessComponentContext());
         if(xContext.is())
         {
             uno::Reference< lang::XMultiComponentFactory > xMCF( xContext->getServiceManager() );
             if(xMCF.is())
             {
-                css::uno::Reference<css::ui::dialogs::XAsynchronousExecutableDialog> xDialog(
+                cpo::uno::Reference<css::ui::dialogs::XAsynchronousExecutableDialog> xDialog(
                     xMCF->createInstanceWithContext(
                         u"com.sun.star.comp.chart2.WizardDialog"_ustr
                         , xContext), uno::UNO_QUERY);
                 uno::Reference< lang::XInitialization > xInit( xDialog, uno::UNO_QUERY );
                 if( xChartModel.is() && xInit.is() )
                 {
-                    css::uno::Reference< css::awt::XWindow > xParent
+                    cpo::uno::Reference< css::awt::XWindow > xParent
                         = new weld::TransportAsXWindow(pWin->GetFrameWeld());
                     cpo::uno::Sequence<cpo::uno::Any> aSeq(comphelper::InitAnyPropertySequence(
                     {

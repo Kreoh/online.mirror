@@ -22,17 +22,17 @@
 #include <com/sun/star/frame/XController.hpp>
 #include <vector>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 
 namespace basctl::docs {
 
 
-    typedef std::vector< css::uno::Reference< css::frame::XController > >   Controllers;
+    typedef std::vector< cpo::uno::Reference< css::frame::XController > >   Controllers;
 
     struct DocumentDescriptor
     {
-        css::uno::Reference< css::frame::XModel >  xModel;
+        cpo::uno::Reference< css::frame::XModel >  xModel;
         Controllers                                aControllers;
     };
 
@@ -65,7 +65,7 @@ namespace basctl::docs {
     class DocumentEnumeration
     {
     public:
-        DocumentEnumeration( css::uno::Reference< css::uno::XComponentContext > const & _rContext, const IDocumentDescriptorFilter* _pFilter );
+        DocumentEnumeration( cpo::uno::Reference< cpo::uno::XComponentContext > const & _rContext, const IDocumentDescriptorFilter* _pFilter );
         ~DocumentEnumeration();
 
         /** retrieves a list of all currently known documents in the application
@@ -79,7 +79,7 @@ namespace basctl::docs {
         ) const;
 
     private:
-        css::uno::Reference< css::uno::XComponentContext > m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
         const IDocumentDescriptorFilter* m_pFilter;
     };
 

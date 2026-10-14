@@ -30,14 +30,14 @@
 
 
 using namespace connectivity::file;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::sdbc;
 using namespace com::sun::star::sdbcx;
 using namespace ::cpo::uno;
 
-OFileDriver::OFileDriver(css::uno::Reference< css::uno::XComponentContext > _xContext)
+OFileDriver::OFileDriver(cpo::uno::Reference< cpo::uno::XComponentContext > _xContext)
     : ODriver_BASE(m_aMutex)
     ,m_xContext(std::move(_xContext))
 {
@@ -182,19 +182,6 @@ Reference< XTablesSupplier > OFileDriver::getDataDefinitionByConnection( const R
     }
     return {};
 }
-
-
-Reference< XTablesSupplier > OFileDriver::getDataDefinitionByURL( const OUString& url, const Sequence< PropertyValue >& info )
-{
-    if ( ! acceptsURL(url) )
-    {
-        ::connectivity::SharedResources aResources;
-        const OUString sMessage = aResources.getResourceString(STR_URI_SYNTAX_ERROR);
-        ::dbtools::throwGenericSQLException(sMessage ,*this);
-    }
-    return getDataDefinitionByConnection(connect(url,info));
-}
-
 
 OOperandAttr::OOperandAttr(sal_uInt16 _nPos,const Reference< XPropertySet>& _xColumn)
     : OOperandRow(_nPos,::comphelper::getINT32(_xColumn->getPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_TYPE))))

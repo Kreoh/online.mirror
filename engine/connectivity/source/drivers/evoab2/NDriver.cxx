@@ -28,7 +28,7 @@
 
 using namespace osl;
 using namespace connectivity::evoab;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::lang;
@@ -143,9 +143,9 @@ bool OEvoabDriver::acceptsURL_Stat( std::u16string_view url )
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 connectivity_OEvoabDriver_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OEvoabDriver(context));
 }

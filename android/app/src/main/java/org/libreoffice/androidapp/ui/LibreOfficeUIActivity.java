@@ -78,6 +78,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import androidx.annotation.NonNull;
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AlertDialog;
@@ -177,6 +178,24 @@ public class LibreOfficeUIActivity extends AppCompatActivity implements Settings
 
         fabOpenAnimation = AnimationUtils.loadAnimation(this, R.anim.fab_open);
         fabCloseAnimation = AnimationUtils.loadAnimation(this, R.anim.fab_close);
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (drawerLayout.isDrawerOpen(navigationDrawer)) {
+                    drawerLayout.closeDrawer(navigationDrawer);
+                    collapseFabMenu();
+                } else if (isFabMenuOpen) {
+                    collapseFabMenu();
+                } else {
+                    // call the next handler in the chain (presumably exiting the app)
+                    // ideally we'd probably set this in a handler where we update isDrawerOpen/isFabMenuOpen and skip this clause entirely but that's a less trivial change
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                    setEnabled(true);
+                }
+            }
+        });
     }
 
     private String[] getRecentDocuments() {
@@ -235,72 +254,19 @@ public class LibreOfficeUIActivity extends AppCompatActivity implements Settings
         navigationDrawer.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
             @Override
             public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                switch (item.getItemId()) {
-                    /* TODO Currently we don't support sorting of the recent files
-                    case R.id.menu_filter_everything:
-                        item.setChecked(true);
-                        filterMode = FileUtilities.ALL;
-                        //openDirectory(currentDirectory);
-                        break;
+                int i = item.getItemId();
 
-                    case R.id.menu_filter_documents:
-                        item.setChecked(true);
-                        filterMode = FileUtilities.DOC;
-                        //openDirectory(currentDirectory);
-                        break;
-
-                    case R.id.menu_filter_spreadsheets:
-                        item.setChecked(true);
-                        filterMode = FileUtilities.CALC;
-                        //openDirectory(currentDirectory);
-                        break;
-
-                    case R.id.menu_filter_presentations:
-                        item.setChecked(true);
-                        filterMode = FileUtilities.IMPRESS;
-                        //openDirectory(currentDirectory);
-                        break;
-
-                    case R.id.menu_sort_size_asc:
-                        sortMode = FileUtilities.SORT_SMALLEST;
-                        this.onResume();
-                        break;
-
-                    case R.id.menu_sort_size_desc:
-                        sortMode = FileUtilities.SORT_LARGEST;
-                        this.onResume();
-                        break;
-
-                    case R.id.menu_sort_az:
-                        sortMode = FileUtilities.SORT_AZ;
-                        this.onResume();
-                        break;
-
-                    case R.id.menu_sort_za:
-                        sortMode = FileUtilities.SORT_ZA;
-                        this.onResume();
-                        break;
-
-                    case R.id.menu_sort_modified_newest:
-                        sortMode = FileUtilities.SORT_NEWEST;
-                        this.onResume();
-                        break;
-
-                    case R.id.menu_sort_modified_oldest:
-                        sortMode = FileUtilities.SORT_OLDEST;
-                        this.onResume();
-                        break;
-                    */
-
-                    case R.id.action_settings:
-                        startActivity(new Intent(getApplicationContext(), SettingsActivity.class));
-                        return true;
-
-                    case R.id.action_about:
-                        AboutDialogFragment aboutDialogFragment = new AboutDialogFragment();
-                        aboutDialogFragment.show(getSupportFragmentManager(), "AboutDialogFragment");
-                        return true;
+                if (i == R.id.action_settings) {
+                    startActivity(new Intent(getApplicationContext(), SettingsActivity.class));
+                    return true;
                 }
+
+                if (i == R.id.action_about) {
+                    AboutDialogFragment aboutDialogFragment = new AboutDialogFragment();
+                    aboutDialogFragment.show(getSupportFragmentManager(), "AboutDialogFragment");
+                    return true;
+                }
+
                 return false;
             }
         });
@@ -463,19 +429,14 @@ public class LibreOfficeUIActivity extends AppCompatActivity implements Settings
             @Override
             public void onClick(View view) {
                 // With the generic MIME type, the system file creation dialog saves the file under the name the user types.
-                switch (view.getId()) {
-                    case R.id.newWriterFAB:
-                    case R.id.writerLayout:
-                        createNewFileInputDialog(getString(R.string.new_textdocument) + FileUtilities.DEFAULT_WRITER_EXTENSION, "*/*", CREATE_DOCUMENT_REQUEST_CODE);
-                        break;
-                    case R.id.newCalcFAB:
-                    case R.id.calcLayout:
-                        createNewFileInputDialog(getString(R.string.new_spreadsheet) + FileUtilities.DEFAULT_SPREADSHEET_EXTENSION, "*/*", CREATE_SPREADSHEET_REQUEST_CODE);
-                        break;
-                    case R.id.newImpressFAB:
-                    case R.id.impressLayout:
-                        createNewFileInputDialog(getString(R.string.new_presentation) + FileUtilities.DEFAULT_IMPRESS_EXTENSION, "*/*", CREATE_PRESENTATION_REQUEST_CODE);
-                        break;
+                int i = view.getId();
+
+                if (i == R.id.newWriterFAB || i == R.id.writerLayout) {
+                    createNewFileInputDialog(getString(R.string.new_textdocument) + FileUtilities.DEFAULT_WRITER_EXTENSION, "*/*", CREATE_DOCUMENT_REQUEST_CODE);
+                } else if (i == R.id.newCalcFAB || i == R.id.calcLayout) {
+                    createNewFileInputDialog(getString(R.string.new_spreadsheet) + FileUtilities.DEFAULT_SPREADSHEET_EXTENSION, "*/*", CREATE_SPREADSHEET_REQUEST_CODE);
+                } else if (i == R.id.newImpressFAB || i == R.id.impressLayout) {
+                    createNewFileInputDialog(getString(R.string.new_presentation) + FileUtilities.DEFAULT_IMPRESS_EXTENSION, "*/*", CREATE_PRESENTATION_REQUEST_CODE);
                 }
             }
         };
@@ -546,19 +507,6 @@ public class LibreOfficeUIActivity extends AppCompatActivity implements Settings
     }
 
     @Override
-    public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(navigationDrawer)) {
-            drawerLayout.closeDrawer(navigationDrawer);
-            collapseFabMenu();
-        } else if (isFabMenuOpen) {
-            collapseFabMenu();
-        } else {
-            // exit the app
-            super.onBackPressed();
-        }
-    }
-
-    @Override
     public void onCreateContextMenu(ContextMenu menu, View v,
                                     ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
@@ -568,19 +516,24 @@ public class LibreOfficeUIActivity extends AppCompatActivity implements Settings
 
     @Override
     public boolean onContextItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.context_menu_open:
-                open(currentlySelectedFile);
-                return true;
-            case R.id.context_menu_share:
-                share(currentlySelectedFile);
-                return true;
-            case R.id.context_menu_remove_from_list:
-                removeFromList(currentlySelectedFile);
-                return true;
-            default:
-                return super.onContextItemSelected(item);
+        int i = item.getItemId();
+
+        if (i == R.id.context_menu_open) {
+            open(currentlySelectedFile);
+            return true;
         }
+
+        if (i == R.id.context_menu_share) {
+            share(currentlySelectedFile);
+            return true;
+        }
+
+        if (i == R.id.context_menu_remove_from_list) {
+            removeFromList(currentlySelectedFile);
+            return true;
+        }
+
+        return super.onContextItemSelected(item);
     }
 
     public void openContextMenu(View view, Uri uri) {
@@ -898,15 +851,12 @@ public class LibreOfficeUIActivity extends AppCompatActivity implements Settings
             return true;
         }
 
-        switch (item.getItemId()) {
-            case R.id.action_open_file:
-                openDocument();
-                break;
-
-            default:
-                return super.onOptionsItemSelected(item);
+        if (item.getItemId() == R.id.action_open_file) {
+            openDocument();
+            return true;
         }
-        return true;
+
+        return super.onOptionsItemSelected(item);
     }
 
     public void readPreferences() {

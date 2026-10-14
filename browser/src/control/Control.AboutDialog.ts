@@ -281,8 +281,9 @@ class AboutDialog {
 		copyVersion.setAttribute('data-cooltip', copyVersionText);
 		var img = window.L.DomUtil.create('img', null, null);
 		app.LOUtil.setImage(img, 'lc_copy.svg', this.map);
-		copyVersion.innerHTML =
-			'<img src="' + sanitizeUrl(img.src) + '" width="18px" height="18px">';
+		img.width = 18;
+		img.height = 18;
+		copyVersion.appendChild(img);
 		copyVersion.addEventListener(
 			'click',
 			this.copyVersionInfoToClipboard.bind(this),
@@ -352,7 +353,7 @@ class AboutDialog {
 		text = text.replace(/\u00A0/g, ' ');
 
 		if (window.mode.isCODesktop()) {
-			(window as any).postMobileMessage('TEXTCLIPBOARD ' + text);
+			window.postMobileMessage('TEXTCLIPBOARD ' + text);
 			this.contentHasBeenCopiedShowSnackbar();
 		} else if (navigator.clipboard && window.isSecureContext) {
 			navigator.clipboard

@@ -30,7 +30,7 @@
 #include <scriptdlg.hxx>
 #include <dialmgr.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/script/provider/ScriptFrameworkErrorException.hpp>
 #include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
 #include <com/sun/star/script/provider/XScriptProvider.hpp>
@@ -56,7 +56,7 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::script;
 using namespace css::frame;
@@ -203,7 +203,7 @@ Reference< XInterface  >
 SvxScriptOrgDialog::getDocumentModel( Reference< XComponentContext > const & xCtx, std::u16string_view docName )
 {
     Reference< XInterface > xModel;
-    Reference< frame::XDesktop2 > desktop  = frame::Desktop::create(xCtx);
+    Reference< frame::XDesktop > desktop  = frame::Desktop::create(xCtx);
 
     Reference< container::XEnumerationAccess > componentsAccess =
         desktop->getComponents();

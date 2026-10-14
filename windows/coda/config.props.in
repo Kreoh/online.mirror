@@ -1,8 +1,8 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <!-- Out-of-tree, generated/built files are not under the source tree:
-         $(OnlineBuildDir) is the online build root (config_version.h, the
-         generated coolkitconfig.xcu, and the built browser/dist);
+         $(OnlineBuildDir) is the online build root (config_version.h and
+         the built browser/dist);
          $(MSBuildThisFileDirectory) holds config.h; @LOINCLUDE_WINDOWS@ is the
          engine include (symlink resolved); the UnpackedTarball dirs are the
          engine's bundled zlib/zstd/libpng; $(EngineLibDir) its static libs. -->
@@ -23,12 +23,17 @@
          disagree. -->
     <CoolSrcExclude Condition="'@ENABLE_BUNDLE@' == 'true'">/XD src</CoolSrcExclude>
   </PropertyGroup>
-  <!-- Run the clang-cl compiles through the ccache masquerade directory
-       configure created. When CODA_CCACHE is empty the condition is false
-       and the stock ClangCL toolset is used, so a build without ccache is
-       unchanged. -->
+  <!-- Run the clang-cl compiles through the ccache directory the engine's
+       configure built. When CODA_CCACHE is empty the condition is false and the
+       stock ClangCL toolset is used, so a build without ccache is unchanged. -->
   <PropertyGroup Condition="'@CODA_CCACHE@' != ''">
     <CLToolPath>@CODA_CCACHE@</CLToolPath>
     <CLToolExe>clang-cl.exe</CLToolExe>
+    <!-- A copy of ccache in a directory of its own no longer sees the DLLs a
+         MinGW-built ccache links against next to the original, so the directory
+         it came from goes on the compiler PATH. It goes behind the LLVM one, so
+         ccache still resolves clang-cl to Visual Studio's rather than to a MinGW
+         clang-cl in that same directory. -->
+    <ExecutablePath>$(LLVMInstallDir)\bin;@CODA_CCACHE_DIR@;$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
 </Project>

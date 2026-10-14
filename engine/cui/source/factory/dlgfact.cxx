@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_extensions.h>
 #include <config_wasm_strip.h>
 
 #include <vcl/abstdlgimpl.hxx>
@@ -27,7 +26,6 @@
 
 #include <dlgname.hxx>
 #include <securityoptions.hxx>
-#include <AdditionsDialog.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/newstyle.hxx>
 #include <sfx2/pageids.hxx>
@@ -40,7 +38,6 @@
 #include <srchxtra.hxx>
 #include <textanim.hxx>
 #include <autocdlg.hxx>
-#include <treeopt.hxx>
 #include <labdlg.hxx>
 #include <hangulhanjadlg.hxx>
 #include <showcols.hxx>
@@ -61,7 +58,6 @@
 #include <connect.hxx>
 #include <dbregister.hxx>
 #include <cuioptgenrl.hxx>
-#include <optasian.hxx>
 #include <insdlg.hxx>
 #include <pastedlg.hxx>
 #include <linkdlg.hxx>
@@ -69,7 +65,6 @@
 #include <SignSignatureLineDialog.hxx>
 #include <QrCodeGenDialog.hxx>
 #include <SpellDialog.hxx>
-#include <cfg.hxx>
 #include <numpages.hxx>
 #include <paragrph.hxx>
 #include <tabstpge.hxx>
@@ -92,7 +87,6 @@
 #include <hyphen.hxx>
 #include <thesdlg.hxx>
 #include <widgettestdlg.hxx>
-#include <uipickerdlg.hxx>
 #include <DiagramDialog.hxx>
 #include <fileextcheckdlg.hxx>
 #include <TextColumnsPage.hxx>
@@ -103,7 +97,7 @@
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::container;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 using namespace svx;
 using namespace css;
@@ -117,63 +111,6 @@ using CuiAbstractController_Impl = vcl::AbstractDialogImpl_Sync<VclAbstractDialo
 
 template <class Dialog>
 using CuiAbstractControllerAsync_Impl = vcl::AbstractDialogImpl_Async<VclAbstractDialog, Dialog>;
-}
-
-// Create dialogs with simplest interface
-VclPtr<VclAbstractDialog> AbstractDialogFactory_Impl::CreateVclDialog(weld::Window* pParent, sal_uInt32 nResId)
-{
-    switch ( nResId )
-    {
-        case SID_OPTIONS_DATABASES :
-        {
-            Reference< frame::XFrame > xFrame;
-            auto xDlg = std::make_shared<OfaTreeOptionsDialog>(pParent, xFrame, /*bActivateLastSelection*/false);
-            xDlg->ActivatePage(SID_SB_DBREGISTEROPTIONS);
-            return VclPtr<CuiAbstractControllerAsync_Impl<OfaTreeOptionsDialog>>::Create(std::move(xDlg));
-        }
-        case SID_OPTIONS_TREEDIALOG :
-        case SID_LANGUAGE_OPTIONS :
-        {
-            bool bActivateLastSelection = false;
-            if (nResId == SID_OPTIONS_TREEDIALOG)
-                bActivateLastSelection = true;
-            Reference< frame::XFrame > xFrame;
-            auto xDlg = std::make_unique<OfaTreeOptionsDialog>(pParent, xFrame, bActivateLastSelection);
-            if (nResId == SID_LANGUAGE_OPTIONS)
-            {
-                //open the tab page "tools/options/languages"
-                xDlg->ActivatePage(OFA_TP_LANGUAGES_FOR_SET_DOCUMENT_LANGUAGE);
-            }
-            return VclPtr<CuiAbstractController_Impl<OfaTreeOptionsDialog>>::Create(std::move(xDlg));
-        }
-        break;
-
-        default:
-            assert(false);
-            return nullptr;
-    }
-}
-
-VclPtr<VclAbstractDialog> AbstractDialogFactory_Impl::CreateFrameDialog(weld::Window* pParent, const Reference< frame::XFrame >& rxFrame,
-    sal_uInt32 nResId, sal_uInt16 nPageId, const OUString& rParameter)
-{
-    std::unique_ptr<OfaTreeOptionsDialog> xDlg;
-    if (SID_OPTIONS_TREEDIALOG == nResId || SID_OPTIONS_DATABASES == nResId)
-    {
-        // only activate last page if we don't want to activate a special page
-        bool bActivateLastSelection = ( nResId != SID_OPTIONS_DATABASES && rParameter.isEmpty() && !nPageId);
-        xDlg = std::make_unique<OfaTreeOptionsDialog>(pParent, rxFrame, bActivateLastSelection);
-        if ( nResId == SID_OPTIONS_DATABASES )
-            xDlg->ActivatePage(SID_SB_DBREGISTEROPTIONS);
-        else if (nPageId)
-            xDlg->ActivatePage(nPageId);
-        else if ( !rParameter.isEmpty() )
-            xDlg->ActivatePage( rParameter );
-    }
-
-    if (xDlg)
-        return VclPtr<CuiAbstractController_Impl<OfaTreeOptionsDialog>>::Create(std::move(xDlg));
-    return nullptr;
 }
 
 namespace
@@ -229,15 +166,6 @@ public:
 VclPtr<SfxAbstractTabDialog> AbstractDialogFactory_Impl::CreateAutoCorrTabDialog(weld::Window* pParent, const SfxItemSet* pAttrSet)
 {
     return VclPtr<CuiAbstractTabController_Impl<OfaAutoCorrDlg>>::Create(pParent, pAttrSet);
-}
-
-VclPtr<SfxAbstractTabDialog> AbstractDialogFactory_Impl::CreateCustomizeTabDialog(weld::Window* pParent,
-                                                const SfxItemSet* pAttrSet,
-                                                const Reference< frame::XFrame >& xViewFrame )
-{
-    auto xDlg1 = std::make_shared<SvxConfigDialog>(pParent, pAttrSet);
-    xDlg1->SetFrame(xViewFrame);
-    return VclPtr<CuiAbstractTabController_Impl<SvxConfigDialog>>::Create(std::move(xDlg1));
 }
 
 // TabDialog that use functionality of the drawing layer
@@ -368,7 +296,7 @@ public:
 }
 
 VclPtr<AbstractThesaurusDialog> AbstractDialogFactory_Impl::CreateThesaurusDialog(weld::Widget* pParent,
-                                css::uno::Reference<css::linguistic2::XThesaurus> xThesaurus,
+                                cpo::uno::Reference<css::linguistic2::XThesaurus> xThesaurus,
                                 const OUString &rWord, LanguageType nLanguage)
 {
     return VclPtr<AbstractThesaurusDialog_Impl>::Create(pParent, xThesaurus, rWord, nLanguage);
@@ -391,7 +319,7 @@ public:
 
 VclPtr<AbstractHyphenWordDialog> AbstractDialogFactory_Impl::CreateHyphenWordDialog(weld::Widget* pParent,
                                                 const OUString &rWord, LanguageType nLang,
-                                                css::uno::Reference< css::linguistic2::XHyphenator >  &xHyphen,
+                                                cpo::uno::Reference< css::linguistic2::XHyphenator >  &xHyphen,
                                                 SvxSpellWrapper* pWrapper)
 {
 #if !ENABLE_WASM_STRIP_EXTRA
@@ -862,24 +790,6 @@ VclPtr<AbstractSvxObjectTitleDescDialog> AbstractDialogFactory_Impl::CreateSvxOb
 
 namespace
 {
-class AbstractSvxMultiPathDialog_Impl final
-    : public vcl::AbstractDialogImpl_Sync<AbstractSvxMultiPathDialog, SvxMultiPathDialog>
-{
-public:
-    using AbstractDialogImpl_BASE::AbstractDialogImpl_BASE;
-    OUString GetPath() const override { return m_pDlg->GetPath(); }
-    void SetPath(const OUString& rPath) override { m_pDlg->SetPath(rPath); }
-    void SetTitle(const OUString& rNewTitle) override { m_pDlg->SetTitle(rNewTitle); }
-};
-}
-
-VclPtr<AbstractSvxMultiPathDialog> AbstractDialogFactory_Impl::CreateSvxMultiPathDialog(weld::Window* pParent)
-{
-    return VclPtr<AbstractSvxMultiPathDialog_Impl>::Create(pParent);
-}
-
-namespace
-{
 class AbstractSvxPathSelectDialog_Impl final
     : public vcl::AbstractDialogImpl_Sync<AbstractSvxMultiPathDialog, SvxPathSelectDialog>
 {
@@ -887,7 +797,6 @@ public:
     using AbstractDialogImpl_BASE::AbstractDialogImpl_BASE;
     OUString GetPath() const override { return m_pDlg->GetPath(); }
     void SetPath(const OUString& rPath) override { m_pDlg->SetPath(rPath); }
-    void SetTitle(const OUString& rNewTitle) override { m_pDlg->SetTitle(rNewTitle); }
 };
 }
 
@@ -1314,8 +1223,6 @@ GetTabPageRanges AbstractDialogFactory_Impl::GetTabPageRangesFunc( sal_uInt16 nI
             return SvxNumberFormatTabPage::GetRanges;
         case RID_SVXPAGE_PAGE :
             return SvxPageDescPage::GetRanges;
-        case RID_SVXPAGE_ASIAN_LAYOUT:
-            return SvxAsianLayoutPage::GetRanges;
         case RID_SVXPAGE_TEXTCOLUMNS:
             return SvxTextColumnsPage::GetRanges;
         default:
@@ -1537,32 +1444,12 @@ VclPtr<AbstractQrCodeGenDialog> AbstractDialogFactory_Impl::CreateQrCodeGenDialo
     return VclPtr<AbstractQrCodeGenDialog_Impl>::Create(pParent, xModel, bEditExisting);
 }
 
-VclPtr<AbstractAdditionsDialog> AbstractDialogFactory_Impl::CreateAdditionsDialog(
-    weld::Window* pParent, const OUString& sAdditionsTag)
-{
-#if HAVE_FEATURE_EXTENSIONS
-    using AbstractAdditionsDialog_Impl
-        = vcl::AbstractDialogImpl_Async<AbstractAdditionsDialog, AdditionsDialog>;
-    return VclPtr<AbstractAdditionsDialog_Impl>::Create(pParent, sAdditionsTag);
-#else
-    (void) pParent;
-    (void) sAdditionsTag;
-    return nullptr;
-#endif
-}
-
 VclPtr<VclAbstractDialog>
 AbstractDialogFactory_Impl::CreateWidgetTestDialog(weld::Window* pParent)
 {
     using CuiAbstractWidgetTestControllerAsync_Impl
         = vcl::AbstractDialogImpl_Async<VclAbstractDialog, WidgetTestDialog>;
     return VclPtr<CuiAbstractWidgetTestControllerAsync_Impl>::Create(pParent);
-}
-
-VclPtr<VclAbstractDialog>
-AbstractDialogFactory_Impl::CreateUIPickerDialog(weld::Window* pParent)
-{
-    return VclPtr<CuiAbstractController_Impl<UIPickerDialog>>::Create(pParent);
 }
 
 VclPtr<AbstractDiagramDialog>

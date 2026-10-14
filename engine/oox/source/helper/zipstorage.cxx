@@ -24,7 +24,7 @@
 #include <com/sun/star/embed/XTransactedObject.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -35,7 +35,7 @@ namespace oox {
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::embed;
 using namespace ::com::sun::star::io;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::cpo::uno;
 
 ZipStorage::ZipStorage( const Reference< XComponentContext >& rxContext, const Reference< XInputStream >& rxInStream, bool bRepairStorage ) :

@@ -31,6 +31,7 @@
 #include <mutex>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace tdoc_ucp;
 
 namespace tdoc_ucp
@@ -46,11 +47,11 @@ namespace tdoc_ucp
             : InteractionSupplyPassword_BASE( pRequest ) {}
 
         // XInteractionContinuation
-        virtual void SAL_CALL select() override;
+        virtual void select() override;
 
         // XInteractionPassword
-        virtual void SAL_CALL setPassword( const OUString & aPasswd ) override;
-        virtual OUString SAL_CALL getPassword() override;
+        virtual void setPassword( const OUString & aPasswd ) override;
+        virtual OUString getPassword() override;
 
     private:
         std::mutex m_aMutex;
@@ -68,7 +69,7 @@ namespace tdoc_ucp
 
 
 // virtual
-void SAL_CALL InteractionSupplyPassword::select()
+void InteractionSupplyPassword::select()
 {
     recordSelection();
 }
@@ -78,7 +79,7 @@ void SAL_CALL InteractionSupplyPassword::select()
 
 
 // virtual
-void SAL_CALL
+void
 InteractionSupplyPassword::setPassword( const OUString& aPasswd )
 {
     std::scoped_lock aGuard( m_aMutex );
@@ -86,7 +87,7 @@ InteractionSupplyPassword::setPassword( const OUString& aPasswd )
 }
 
 // virtual
-OUString SAL_CALL InteractionSupplyPassword::getPassword()
+OUString InteractionSupplyPassword::getPassword()
 {
     std::scoped_lock aGuard( m_aMutex );
     return m_aPassword;

@@ -23,8 +23,8 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <sal/types.h>
 
-namespace com::sun::star::i18n { class XLocaleData5; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace com::sun::star::i18n { class XLocaleData; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace i18npool {
 
@@ -36,7 +36,7 @@ class TransliterationImpl final : public cppu::WeakImplHelper
 {
 public:
     // Constructors
-    TransliterationImpl(const css::uno::Reference < css::uno::XComponentContext >& xContext);
+    TransliterationImpl(const cpo::uno::Reference < cpo::uno::XComponentContext >& xContext);
     // Destructor
     virtual ~TransliterationImpl() override;
 
@@ -83,24 +83,24 @@ public:
 
 private:
 #define maxCascade 27
-    css::uno::Reference< css::i18n::XExtendedTransliteration > bodyCascade[maxCascade];
+    cpo::uno::Reference< css::i18n::XExtendedTransliteration > bodyCascade[maxCascade];
     sal_Int16 numCascade;
     bool caseignoreOnly;
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-    css::uno::Reference< css::i18n::XLocaleData5 > mxLocaledata;
-    css::uno::Reference< css::i18n::XExtendedTransliteration > caseignore;
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
+    cpo::uno::Reference< css::i18n::XLocaleData > mxLocaledata;
+    cpo::uno::Reference< css::i18n::XExtendedTransliteration > caseignore;
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool loadModuleByName( std::u16string_view implName,
-        css::uno::Reference<css::i18n::XExtendedTransliteration> & body, const css::lang::Locale& rLocale);
+        cpo::uno::Reference<css::i18n::XExtendedTransliteration> & body, const css::lang::Locale& rLocale);
 
     void clear();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void loadBody( OUString const &implName,
-        css::uno::Reference< css::i18n::XExtendedTransliteration >& body );
+        cpo::uno::Reference< css::i18n::XExtendedTransliteration >& body );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence< OUString > getRange(
         const cpo::uno::Sequence< OUString > &inStrs,
         sal_Int32 length, const sal_Int16 _nCascade);

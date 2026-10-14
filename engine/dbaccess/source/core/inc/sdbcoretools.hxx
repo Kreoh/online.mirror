@@ -20,31 +20,31 @@
 #pragma once
 
 #include <com/sun/star/embed/XStorage.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace dbaccess
 {
 
-    void notifyDataSourceModified(const css::uno::Reference< css::uno::XInterface >& _rxObject);
+    void notifyDataSourceModified(const cpo::uno::Reference< cpo::uno::XInterface >& _rxObject);
 
-    css::uno::Reference< css::uno::XInterface >
-        getDataSource( const css::uno::Reference< css::uno::XInterface >& _rxDependentObject );
+    cpo::uno::Reference< cpo::uno::XInterface >
+        getDataSource( const cpo::uno::Reference< cpo::uno::XInterface >& _rxDependentObject );
 
     /** retrieves a to-be-displayed string for a given caught exception;
     */
-    OUString extractExceptionMessage( const css::uno::Reference< css::uno::XComponentContext >& _rContext, const cpo::uno::Any& _rError );
+    OUString extractExceptionMessage( const cpo::uno::Reference< cpo::uno::XComponentContext >& _rContext, const cpo::uno::Any& _rError );
 
 }   // namespace dbaccess
 
 namespace dbaccesstools
 {
             bool    storageIsWritable_nothrow(
-                        const css::uno::Reference< css::embed::XStorage >& _rxStorage
+                        const cpo::uno::Reference< css::embed::XStorage >& _rxStorage
                     );
 
             /// commits a given storage if it's not readonly
             bool    commitStorageIfWriteable(
-                        const css::uno::Reference< css::embed::XStorage >& _rxStorage
+                        const cpo::uno::Reference< css::embed::XStorage >& _rxStorage
                     );
 }
 

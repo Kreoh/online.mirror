@@ -25,7 +25,7 @@
 #include <sfx2/styfitem.hxx>
 #include <sal/types.h>
 #include <tools/fldunit.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 class SfxObjectFactory;
 class SfxModule_Impl;
@@ -72,9 +72,6 @@ public:
     void                        RegisterChildWindow(const SfxChildWinFactory&);
     void                        RegisterStatusBarControl(const SfxStbCtrlFactory&);
 
-    virtual std::unique_ptr<SfxTabPage>  CreateTabPage( sal_uInt16 nId,
-                                               weld::Container* pPage, weld::DialogController* pController,
-                                               const SfxItemSet& rSet );
     virtual void                Invalidate(sal_uInt16 nId = 0) override;
 
     virtual SfxStyleFamilies CreateStyleFamilies() { return {}; }
@@ -88,7 +85,7 @@ public:
 
         Failures in any of those steps are reported as assertion in non-product builds, and then FieldUnit::MM_100TH is returned.
      */
-    static FieldUnit            GetModuleFieldUnit( css::uno::Reference< css::frame::XFrame > const & i_frame );
+    static FieldUnit            GetModuleFieldUnit( cpo::uno::Reference< css::frame::XFrame > const & i_frame );
     FieldUnit                   GetFieldUnit() const;
 
     SAL_DLLPRIVATE SfxTbxCtrlFactory* GetTbxCtrlFactory(const std::type_info& rSlotType, sal_uInt16 nSlotID) const;

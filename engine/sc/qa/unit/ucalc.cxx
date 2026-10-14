@@ -22,6 +22,7 @@
 #include <undotab.hxx>
 #include <attrib.hxx>
 #include <dbdata.hxx>
+#include <filterentries.hxx>
 #include <reftokenhelper.hxx>
 #include <userdat.hxx>
 #include <refdata.hxx>
@@ -3651,6 +3652,104 @@ CPPUNIT_TEST_FIXTURE(Test, testToggleRefFlag)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(Test, testAutoFilterFlagShiftUpUndo)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    // An autofilter range A25:F35 (header row 25 == index 24), with the ScMF::Auto
+    // buttons on the header - as an anonymous database range carries them.
+    ScDBData* pDBData = new ScDBData(STR_DB_GLOBAL_NONAME, 0, 0, 24, 5, 34);
+    pDBData->SetAutoFilter(true);
+    m_pDoc->SetAnonymousDBData(0, std::unique_ptr<ScDBData>(pDBData));
+    m_pDoc->ApplyFlagsTab(0, 24, 5, 24, 0, ScMF::Auto);
+
+    auto bHasAutoFilter = [this](SCCOL nCol, SCROW nRow) {
+        return bool(m_pDoc->GetAttr(nCol, nRow, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto);
+    };
+
+    CPPUNIT_ASSERT(bHasAutoFilter(0, 24)); // A25
+    CPPUNIT_ASSERT(bHasAutoFilter(1, 24)); // B25
+
+    // Shift cells up above the range: delete A10:B20, pulling the cells below up.
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_xDocShell->GetDocFunc().DeleteCells(ScRange(0, 9, 0, 1, 19, 0), &aMark,
+                                          DelCellCmd::CellsUp, true);
+
+    // Forward: the buttons stay on the header (RefreshAutoFilter reconciles them).
+    CPPUNIT_ASSERT_MESSAGE("A25 keeps its autofilter button after shift-up",
+                           bHasAutoFilter(0, 24));
+    CPPUNIT_ASSERT_MESSAGE("B25 keeps its autofilter button after shift-up",
+                           bHasAutoFilter(1, 24));
+
+    // Undo re-inserts the rows, which pushes the A/B header cells down 11 rows. The
+    // buttons must stay on the header (A25:B25), not ride down to A36:B36.
+    m_pDoc->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT_MESSAGE("A25 keeps its autofilter button after undo", bHasAutoFilter(0, 24));
+    CPPUNIT_ASSERT_MESSAGE("B25 keeps its autofilter button after undo", bHasAutoFilter(1, 24));
+    CPPUNIT_ASSERT_MESSAGE("no stray autofilter button at A36 after undo", !bHasAutoFilter(0, 35));
+    CPPUNIT_ASSERT_MESSAGE("no stray autofilter button at B36 after undo", !bHasAutoFilter(1, 35));
+
+    // Redo re-does the shift-up; the buttons must again land on the header, not ride up
+    // with the shifted cells (to A14/B14).
+    m_pDoc->GetUndoManager()->Redo();
+    CPPUNIT_ASSERT_MESSAGE("A25 keeps its autofilter button after redo", bHasAutoFilter(0, 24));
+    CPPUNIT_ASSERT_MESSAGE("B25 keeps its autofilter button after redo", bHasAutoFilter(1, 24));
+    CPPUNIT_ASSERT_MESSAGE("no stray autofilter button at A14 after redo", !bHasAutoFilter(0, 13));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testAutoFilterFlagTableColumnUndo)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    ScDBData* pNamed = new ScDBData(u"Table1"_ustr, 0, 0, 2, 6, 14);
+    pNamed->SetAutoFilter(true);
+    CPPUNIT_ASSERT(
+        m_pDoc->GetDBCollection()->getNamedDBs().insert(std::unique_ptr<ScDBData>(pNamed)));
+    m_pDoc->ApplyFlagsTab(0, 2, 6, 2, 0, ScMF::Auto);
+
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_xDocShell->GetDocFunc().InsertCells(ScRange(5, 0, 0, 5, m_pDoc->MaxRow(), 0), &aMark,
+                                          INS_INSCOLS_BEFORE, true, false);
+
+    ScRange aArea;
+    ScDBData* pData = m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"Table1"_ustr);
+    CPPUNIT_ASSERT(pData);
+    pData->GetArea(aArea);
+    CPPUNIT_ASSERT_EQUAL(SCCOL(7), aArea.aEnd.Col());
+    for (SCCOL nCol = 0; nCol <= 7; ++nCol)
+        CPPUNIT_ASSERT(bool(m_pDoc->GetAttr(nCol, 2, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+
+    m_pDoc->GetUndoManager()->Undo();
+
+    pData = m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"Table1"_ustr);
+    CPPUNIT_ASSERT(pData);
+    pData->GetArea(aArea);
+    CPPUNIT_ASSERT_EQUAL(SCCOL(6), aArea.aEnd.Col());
+    for (SCCOL nCol = 0; nCol <= 6; ++nCol)
+        CPPUNIT_ASSERT(bool(m_pDoc->GetAttr(nCol, 2, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+    CPPUNIT_ASSERT_MESSAGE(
+        "no stray autofilter button right of the table after undo",
+        !m_pDoc->HasAttrib(7, 2, 0, m_pDoc->MaxCol(), 2, 0, HasAttrFlags::AutoFilter));
+
+    m_pDoc->GetUndoManager()->Redo();
+
+    pData = m_pDoc->GetDBCollection()->getNamedDBs().findByName(u"Table1"_ustr);
+    CPPUNIT_ASSERT(pData);
+    pData->GetArea(aArea);
+    CPPUNIT_ASSERT_EQUAL(SCCOL(7), aArea.aEnd.Col());
+    for (SCCOL nCol = 0; nCol <= 7; ++nCol)
+        CPPUNIT_ASSERT(bool(m_pDoc->GetAttr(nCol, 2, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+    CPPUNIT_ASSERT_MESSAGE(
+        "no stray autofilter button right of the table after redo",
+        !m_pDoc->HasAttrib(8, 2, 0, m_pDoc->MaxCol(), 2, 0, HasAttrFlags::AutoFilter));
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(Test, testAutofilter)
 {
     m_pDoc->InsertTab( 0, u"Test"_ustr );
@@ -4204,6 +4303,41 @@ CPPUNIT_TEST_FIXTURE(Test, testAdvancedFilter)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(Test, testFilterEntriesTotalsRow)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    m_pDoc->SetString(0, 0, 0, u"Header"_ustr);
+    m_pDoc->SetString(0, 1, 0, u"one"_ustr);
+    m_pDoc->SetString(0, 2, 0, u"two"_ustr);
+    m_pDoc->SetString(0, 3, 0, u"Total"_ustr);
+
+    // A named database range with a totals row, no table style.
+    ScDBData* pDBData = new ScDBData(u"MyRange"_ustr, 0, 0, 0, 0, 3, true, true, /*bTotals*/true);
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().insert(
+        std::unique_ptr<ScDBData>(pDBData)));
+
+    {
+        ScFilterEntries aEntries;
+        m_pDoc->GetFilterEntries(0, 0, 0, aEntries);
+
+        // The totals row is a summary, not data.
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aEntries.size());
+        for (const auto& rEntry : aEntries)
+            CPPUNIT_ASSERT(rEntry.GetString() != u"Total"_ustr);
+    }
+
+    // Without a totals row the last row is data again.
+    pDBData->SetTotals(false);
+    {
+        ScFilterEntries aEntries;
+        m_pDoc->GetFilterEntries(0, 0, 0, aEntries);
+        CPPUNIT_ASSERT_EQUAL(size_t(3), aEntries.size());
+    }
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(Test, testDateFilterContains)
 {
     m_pDoc->InsertTab(0, u"Test"_ustr);
@@ -4504,6 +4638,40 @@ CPPUNIT_TEST_FIXTURE(Test, testSearchCells)
     CPPUNIT_ASSERT_MESSAGE("A3 should be inside the matched range.", aMatchedRanges.Contains(ScRange(aHit)));
     aHit.SetRow(4);
     CPPUNIT_ASSERT_MESSAGE("A5 should be inside the matched range.", aMatchedRanges.Contains(ScRange(aHit)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSearchCellsIgnoreDiacritics)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
+    // The same two letters, written with a precomposed accented character and
+    // with a base letter followed by a combining mark.
+    m_pDoc->SetString(ScAddress(0,0,0), u"a\u00e1"_ustr);
+    m_pDoc->SetString(ScAddress(0,1,0), u"a\u0061\u0308"_ustr);
+
+    SvxSearchItem aItem(SID_SEARCH_ITEM);
+    aItem.SetSearchString(u"aa"_ustr);
+    aItem.SetCommand(SvxSearchCmd::FIND_ALL);
+    aItem.SetTransliterationFlags(TransliterationFlags::IGNORE_DIACRITICS_CTL);
+    ScMarkData aMarkData(m_pDoc->GetSheetLimits());
+    aMarkData.SelectOneTable(0);
+    SCCOL nCol = 0;
+    SCROW nRow = 0;
+    SCTAB nTab = 0;
+    ScRangeList aMatchedRanges;
+    OUString aUndoStr;
+    bool bMatchedRangesWereClamped = false;
+    bool bSuccess = m_pDoc->SearchAndReplace(aItem, nCol, nRow, nTab, aMarkData, aMatchedRanges,
+                                             aUndoStr, nullptr, bMatchedRangesWereClamped);
+
+    // A search that ignores diacritics finds both spellings. Without the
+    // accompanying fix only the second cell was found, because the accent of
+    // the first one was still compared.
+    CPPUNIT_ASSERT(bSuccess);
+    CPPUNIT_ASSERT(aMatchedRanges.Contains(ScRange(ScAddress(0,0,0))));
+    CPPUNIT_ASSERT(aMatchedRanges.Contains(ScRange(ScAddress(0,1,0))));
 
     m_pDoc->DeleteTab(0);
 }
@@ -5791,6 +5959,214 @@ CPPUNIT_TEST_FIXTURE(Test, testAreasWithNotes)
     CPPUNIT_ASSERT_MESSAGE("No PrintAreaVer found", dataFound);
     CPPUNIT_ASSERT_EQUAL_MESSAGE("PrintAreaVer wrong row", static_cast<SCROW>(3), row);
 
+    m_pDoc->DeleteTab(0);
+}
+
+namespace
+{
+// A header row, then empty rows that carry a border on every side, down to nLastBorderedRow.
+// This is the shape of a pre-printed form, where the bordered rows are filled in later.
+void lcl_makeBorderedForm(ScDocument* pDoc, SCROW nLastBorderedRow)
+{
+    pDoc->SetString(0, 0, 0, u"Header"_ustr);
+
+    ::editeng::SvxBorderLine aLine(nullptr, 50, SvxBorderLineStyle::SOLID);
+    SvxBoxItem aBorderItem(ATTR_BORDER);
+    aBorderItem.SetLine(&aLine, SvxBoxItemLine::LEFT);
+    aBorderItem.SetLine(&aLine, SvxBoxItemLine::RIGHT);
+    aBorderItem.SetLine(&aLine, SvxBoxItemLine::TOP);
+    aBorderItem.SetLine(&aLine, SvxBoxItemLine::BOTTOM);
+    ScPatternAttr aBordered(pDoc->getCellAttributeHelper());
+    aBordered.ItemSetPut(aBorderItem);
+    pDoc->ApplyPatternAreaTab(0, 1, 2, nLastBorderedRow, 0, aBordered);
+}
+
+// The pattern of a single border line, for marking one cell or one row.
+ScPatternAttr lcl_oneLine(ScDocument* pDoc, SvxBoxItemLine eSide)
+{
+    ::editeng::SvxBorderLine aLine(nullptr, 50, SvxBorderLineStyle::SOLID);
+    SvxBoxItem aBorderItem(ATTR_BORDER);
+    aBorderItem.SetLine(&aLine, eSide);
+    ScPatternAttr aPattern(pDoc->getCellAttributeHelper());
+    aPattern.ItemSetPut(aBorderItem);
+    return aPattern;
+}
+
+ScPatternAttr lcl_colour(ScDocument* pDoc, const Color& rColor)
+{
+    ScPatternAttr aPattern(pDoc->getCellAttributeHelper());
+    aPattern.ItemSetPut(SvxBrushItem(rColor, ATTR_BACKGROUND));
+    return aPattern;
+}
+
+SCROW lcl_printAreaEndRow(ScDocument* pDoc)
+{
+    SCCOL nEndCol;
+    SCROW nEndRow;
+    CPPUNIT_ASSERT(pDoc->GetPrintArea(0, nEndCol, nEndRow, false));
+    return nEndRow;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testPrintAreaCoversABorderedForm)
+{
+    // Empty rows carrying a border are printed, so they belong to the print area even though
+    // no cell in them holds anything.
+    m_pDoc->InsertTab(0, u"Form"_ustr);
+    lcl_makeBorderedForm(m_pDoc, 99);
+
+    SCCOL nEndCol;
+    SCROW nEndRow;
+    CPPUNIT_ASSERT(m_pDoc->GetPrintArea(0, nEndCol, nEndRow, false));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("the printout reaches the last bordered row",
+                                 static_cast<SCROW>(99), nEndRow);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("the printout reaches the last bordered column",
+                                 static_cast<SCCOL>(2), nEndCol);
+    m_pDoc->DeleteTab(0);
+
+    // A form of over a thousand rows is still a form.
+    m_pDoc->InsertTab(0, u"LongForm"_ustr);
+    lcl_makeBorderedForm(m_pDoc, 1499);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("the printout reaches the last bordered row",
+                                 static_cast<SCROW>(1499), lcl_printAreaEndRow(m_pDoc));
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testPrintAreaIgnoresAColourBelowTheContent)
+{
+    // A colour below the last cell with content stays out of the print area, wherever it sits
+    // and however far it runs.
+    const SCROW nLast = m_pDoc->MaxRow();
+
+    const std::pair<SCROW, SCROW> aRanges[] = {
+        { 0, nLast },           // the whole column
+        { 1, nLast },           // from under the header to the last row
+        { 10, nLast },          // from below the content to the last row
+        { 10, nLast - 1 },      // stopping one row short of the last row
+        { 49999, 49999 },       // one cell far below the content
+    };
+
+    sal_Int32 nSheet = 0;
+    for (const auto& rRange : aRanges)
+    {
+        m_pDoc->InsertTab(0, "Colour" + OUString::number(nSheet++));
+        m_pDoc->SetString(0, 0, 0, u"Header"_ustr);
+        m_pDoc->ApplyPatternAreaTab(0, rRange.first, 0, rRange.second, 0,
+                                    lcl_colour(m_pDoc, COL_BLUE));
+
+        OString aMessage = "a colour over rows " + OString::number(rRange.first) + " to "
+                           + OString::number(rRange.second);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), static_cast<SCROW>(0),
+                                     lcl_printAreaEndRow(m_pDoc));
+        m_pDoc->DeleteTab(0);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testPrintAreaIgnoresABorderTooWideForAForm)
+{
+    // A border far below the content, or one many times wider than a form, stays out of the
+    // print area. The printout ends at the last row with content.
+    const SCROW nLast = m_pDoc->MaxRow();
+
+    const std::pair<SCROW, SCROW> aRanges[] = {
+        { nLast, nLast },       // the last row of the sheet
+        { 10, 50000 },          // reaching far below the content
+    };
+
+    sal_Int32 nSheet = 0;
+    for (const auto& rRange : aRanges)
+    {
+        m_pDoc->InsertTab(0, "Border" + OUString::number(nSheet++));
+        m_pDoc->SetString(0, 0, 0, u"Header"_ustr);
+        m_pDoc->ApplyPatternAreaTab(0, rRange.first, 0, rRange.second, 0,
+                                    lcl_oneLine(m_pDoc, SvxBoxItemLine::BOTTOM));
+
+        OString aMessage = "a border over rows " + OString::number(rRange.first) + " to "
+                           + OString::number(rRange.second);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), static_cast<SCROW>(0),
+                                     lcl_printAreaEndRow(m_pDoc));
+        m_pDoc->DeleteTab(0);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testPrintAreaIgnoresAFrameRoundAWholeColumn)
+{
+    // A frame round a whole column keeps the side lines on every row, the top line on the
+    // first row and the bottom line on the last, so it arrives as three ranges and the middle
+    // one covers nearly the sheet. The printout ends at the last row with content.
+    m_pDoc->InsertTab(0, u"Frame"_ustr);
+    m_pDoc->SetString(0, 0, 0, u"Header"_ustr);
+    const SCROW nLast = m_pDoc->MaxRow();
+
+    ::editeng::SvxBorderLine aLine(nullptr, 50, SvxBorderLineStyle::SOLID);
+    SvxBoxItem aSides(ATTR_BORDER);
+    aSides.SetLine(&aLine, SvxBoxItemLine::LEFT);
+    aSides.SetLine(&aLine, SvxBoxItemLine::RIGHT);
+    ScPatternAttr aSidesOnly(m_pDoc->getCellAttributeHelper());
+    aSidesOnly.ItemSetPut(aSides);
+    m_pDoc->ApplyPatternAreaTab(0, 0, 0, nLast, 0, aSidesOnly);
+
+    SvxBoxItem aTop(aSides);
+    aTop.SetLine(&aLine, SvxBoxItemLine::TOP);
+    ScPatternAttr aTopRow(m_pDoc->getCellAttributeHelper());
+    aTopRow.ItemSetPut(aTop);
+    m_pDoc->ApplyPatternAreaTab(0, 0, 0, 0, 0, aTopRow);
+
+    SvxBoxItem aBottom(aSides);
+    aBottom.SetLine(&aLine, SvxBoxItemLine::BOTTOM);
+    ScPatternAttr aBottomRow(m_pDoc->getCellAttributeHelper());
+    aBottomRow.ItemSetPut(aBottom);
+    m_pDoc->ApplyPatternAreaTab(0, nLast, 0, nLast, 0, aBottomRow);
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("the printout stops at the last row with content",
+                                 static_cast<SCROW>(0), lcl_printAreaEndRow(m_pDoc));
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testPrintAreaDoesNotMoveAsTheSheetIsFilledIn)
+{
+    // A form is printed in full wherever the last cell with content sits, so filling the form
+    // in row by row leaves the printout the same.
+    for (SCROW nContentRow : { SCROW(1), SCROW(13), SCROW(15), SCROW(16), SCROW(17), SCROW(50) })
+    {
+        m_pDoc->InsertTab(0, "Form" + OUString::number(nContentRow));
+        lcl_makeBorderedForm(m_pDoc, 99);
+        m_pDoc->SetString(0, nContentRow, 0, u"filled in"_ustr);
+
+        OString aMessage = "a form, content in row " + OString::number(nContentRow);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), static_cast<SCROW>(99),
+                                     lcl_printAreaEndRow(m_pDoc));
+        m_pDoc->DeleteTab(0);
+    }
+
+    // A block too wide to be a form stays out of the printout while the content ends well
+    // above it.
+    for (SCROW nContentRow : { SCROW(0), SCROW(600), SCROW(3000) })
+    {
+        m_pDoc->InsertTab(0, "Wide" + OUString::number(nContentRow));
+        m_pDoc->SetString(0, 0, 0, u"Header"_ustr);
+        if (nContentRow > 0)
+            m_pDoc->SetString(0, nContentRow, 0, u"filled in"_ustr);
+        lcl_makeBorderedForm(m_pDoc, 10499);
+
+        OString aMessage = "a wide block, content in row " + OString::number(nContentRow);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), nContentRow,
+                                     lcl_printAreaEndRow(m_pDoc));
+        m_pDoc->DeleteTab(0);
+    }
+
+    // A form too wide for the printout stays out of it wherever the content sits inside it.
+    // Bold over the upper part splits the form into two ranges that still look the same, and
+    // the lower one is short enough on its own to pass for a form.
+    m_pDoc->InsertTab(0, u"Split"_ustr);
+    lcl_makeBorderedForm(m_pDoc, 3000);
+    ScPatternAttr aBold(m_pDoc->getCellAttributeHelper());
+    aBold.ItemSetPut(SvxWeightItem(WEIGHT_BOLD, ATTR_FONT_WEIGHT));
+    m_pDoc->ApplyPatternAreaTab(0, 1, 2, 2500, 0, aBold);
+    m_pDoc->SetString(0, 2600, 0, u"filled in"_ustr);
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("a wide form, content in its lower range",
+                                 static_cast<SCROW>(2600), lcl_printAreaEndRow(m_pDoc));
     m_pDoc->DeleteTab(0);
 }
 
@@ -7714,6 +8090,44 @@ CPPUNIT_TEST_FIXTURE(Test, testAutoFilterFlagsAfterColumnInsertUndoRedo)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(Test, testAutoFilterFlagsKeptOnSubRangeMake)
+{
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    // Header in A1:F1, one data row.
+    for (SCCOL nCol = 0; nCol <= 5; ++nCol)
+    {
+        m_pDoc->SetString(nCol, 0, 0, "Col" + OUString::number(nCol + 1));
+        m_pDoc->SetString(nCol, 1, 0, OUString::number(nCol));
+    }
+
+    // Named DB range A1:F30 carrying the autofilter, with buttons on A1:F1.
+    ScDBData* pNamed = new ScDBData(u"MyRange"_ustr, 0, 0, 0, 5, 29);
+    pNamed->SetAutoFilter(true);
+    CPPUNIT_ASSERT(m_pDoc->GetDBCollection()->getNamedDBs().insert(
+        std::unique_ptr<ScDBData>(pNamed)));
+    m_pDoc->ApplyFlagsTab(0, 0, 5, 0, 0, ScMF::Auto);
+
+    // Sheet-local anonymous range over the same area, without autofilter - the
+    // range GetDBData re-fits to the selection.
+    m_pDoc->SetAnonymousDBData(
+        0, std::unique_ptr<ScDBData>(new ScDBData(u"NONAME"_ustr, 0, 0, 0, 5, 29)));
+
+    for (SCCOL nCol = 0; nCol <= 5; ++nCol)
+        CPPUNIT_ASSERT(bool(m_pDoc->GetAttr(nCol, 0, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+
+    // Make an unnamed DB range over the sub-range A1:F20.
+    m_xDocShell->GetDBData(ScRange(0, 0, 0, 5, 19, 0), SC_DB_MAKE, ScGetDBSelection::Keep);
+
+    // The named range's header buttons must survive.
+    for (SCCOL nCol = 0; nCol <= 5; ++nCol)
+        CPPUNIT_ASSERT_MESSAGE(
+            OString("autofilter button dropped on column " + OString::number(nCol)).getStr(),
+            bool(m_pDoc->GetAttr(nCol, 0, 0, ATTR_MERGE_FLAG).GetValue() & ScMF::Auto));
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(Test, testAutoFilterFlagsAfterColumnDeleteUndoRedo)
 {
     m_pDoc->InsertTab(0, u"Sheet1"_ustr);
@@ -7965,6 +8379,89 @@ CPPUNIT_TEST_FIXTURE(Test, testCopyTabContent)
     m_pDoc->DeleteTab(2);
     m_pDoc->DeleteTab(1);
     m_pDoc->DeleteTab(0);
+}
+
+// The relative sheet references of a copied sheet point at the same sheets as the ones of its
+// source, wherever the copy is inserted.
+CPPUNIT_TEST_FIXTURE(Test, testCopyTabRelativeTabRefs)
+{
+    // The source has two sheets on each side, so every insert position leaves referenced sheets
+    // both before and after the copy.
+    const SCTAB nTabCount = 5;
+    const SCTAB nSourceTab = 2;
+
+    // Each sheet holds its own value in A1, so a reference that lands on the wrong sheet gives a
+    // different result.
+    struct RefCheck
+    {
+        OUString sFormula;
+        double fExpected;
+    };
+    const std::vector<RefCheck> aChecks = {
+        { u"=Tab0.A1"_ustr, 10.0 },
+        { u"=Tab1.A1"_ustr, 11.0 },
+        { u"=Tab3.A1"_ustr, 13.0 },
+        { u"=Tab4.A1"_ustr, 14.0 },
+        { u"=SUM(Tab0.A1:Tab0.A2)"_ustr, 110.0 },
+        { u"=SUM(Tab4.A1:Tab4.A2)"_ustr, 114.0 },
+    };
+
+    // Positions 0 and 1 put the copy in front of sheets it references on the left, 2 puts it
+    // directly before the source and 3 directly after it, 4 puts it between the two sheets it
+    // references on the right, and the last one appends it.
+    const SCTAB aInsertPositions[] = { 0, 1, 2, 3, 4, SC_TAB_APPEND };
+    for (SCTAB nInsertPos : aInsertPositions)
+    {
+        // A document always keeps its last sheet, so each position gets a new document.
+        ScDocShellRef xDocShell;
+        getNewDocShell(xDocShell);
+        ScDocument& rDoc = xDocShell->GetDocument();
+
+        for (SCTAB nTab = 0; nTab < nTabCount; ++nTab)
+        {
+            rDoc.InsertTab(nTab, u"Tab"_ustr + OUString::number(nTab));
+            rDoc.SetValue(ScAddress(0, 0, nTab), 10.0 + nTab);
+            rDoc.SetValue(ScAddress(0, 1, nTab), 100.0);
+        }
+        SCROW nRow = 0;
+        for (const RefCheck& rCheck : aChecks)
+            rDoc.SetString(ScAddress(1, nRow++, nSourceTab), rCheck.sFormula);
+        rDoc.SetString(ScAddress(2, 0, nSourceTab), u"=A1"_ustr);
+
+        rDoc.CopyTab(nSourceTab, nInsertPos);
+        CPPUNIT_ASSERT_EQUAL(static_cast<SCTAB>(nTabCount + 1), rDoc.GetTableCount());
+
+        const SCTAB nCopyTab = (nInsertPos == SC_TAB_APPEND) ? nTabCount : nInsertPos;
+        // The source moves one place to the right when the copy goes in at or before it.
+        const SCTAB nSourceTabAfterCopy
+            = (nInsertPos <= nSourceTab) ? nSourceTab + 1 : nSourceTab;
+
+        // A new value in A1 of the copy tells a reference to the copy itself apart from one to
+        // the source.
+        rDoc.SetValue(ScAddress(0, 0, nCopyTab), 20.0);
+        rDoc.CalcAll();
+
+        auto checkSheet = [&](SCTAB nTab, double fOwnValue, std::string_view sSheet)
+        {
+            const OString sPrefix = OString::Concat(sSheet) + " sheet, copy at position "
+                                    + OString::number(nCopyTab) + ", ";
+            SCROW nCheckRow = 0;
+            for (const RefCheck& rCheck : aChecks)
+            {
+                const OString sMessage
+                    = sPrefix + OUStringToOString(rCheck.sFormula, RTL_TEXTENCODING_UTF8);
+                CPPUNIT_ASSERT_EQUAL_MESSAGE(sMessage.getStr(), rCheck.fExpected,
+                                             rDoc.GetValue(ScAddress(1, nCheckRow++, nTab)));
+            }
+            const OString sMessage = sPrefix + "=A1";
+            CPPUNIT_ASSERT_EQUAL_MESSAGE(sMessage.getStr(), fOwnValue,
+                                         rDoc.GetValue(ScAddress(2, 0, nTab)));
+        };
+        checkSheet(nSourceTabAfterCopy, 12.0, "source");
+        checkSheet(nCopyTab, 20.0, "copied");
+
+        xDocShell->DoClose();
+    }
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

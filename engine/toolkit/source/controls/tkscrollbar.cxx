@@ -19,7 +19,7 @@
 
 #include <controls/tkscrollbar.hxx>
 #include <helper/property.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/queryinterface.hxx>
 
@@ -32,12 +32,13 @@ namespace toolkit
 
 
     using namespace ::com::sun::star;
+    using namespace ::cpo;
 
 
     //= UnoControlScrollBarModel
 
 
-    UnoControlScrollBarModel::UnoControlScrollBarModel( const uno::Reference< uno::XComponentContext >& i_factory )
+    UnoControlScrollBarModel::UnoControlScrollBarModel( const uno::Reference< cpo::uno::XComponentContext >& i_factory )
         :UnoControlModel( i_factory )
     {
         UNO_CONTROL_MODEL_REGISTER_PROPERTIES<VCLXScrollBar>();
@@ -106,7 +107,7 @@ namespace toolkit
         return u"ScrollBar"_ustr;
     }
 
-    // css::uno::XInterface
+    // cpo::uno::XInterface
     cpo::uno::Any UnoScrollBarControl::queryAggregation( const cpo::uno::Type & rType )
     {
         cpo::uno::Any aRet = ::cppu::queryInterface( rType,
@@ -174,12 +175,12 @@ namespace toolkit
     }
 
     // css::awt::XScrollBar
-    void UnoScrollBarControl::addAdjustmentListener( const css::uno::Reference< css::awt::XAdjustmentListener > & l )
+    void UnoScrollBarControl::addAdjustmentListener( const cpo::uno::Reference< css::awt::XAdjustmentListener > & l )
     {
         maAdjustmentListeners.addInterface( l );
     }
 
-    void UnoScrollBarControl::removeAdjustmentListener( const css::uno::Reference< css::awt::XAdjustmentListener > & l )
+    void UnoScrollBarControl::removeAdjustmentListener( const cpo::uno::Reference< css::awt::XAdjustmentListener > & l )
     {
         maAdjustmentListeners.removeInterface( l );
     }
@@ -305,17 +306,17 @@ namespace toolkit
 }  // namespace toolkit
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlScrollBarModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new toolkit::UnoControlScrollBarModel(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoScrollBarControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new toolkit::UnoScrollBarControl());

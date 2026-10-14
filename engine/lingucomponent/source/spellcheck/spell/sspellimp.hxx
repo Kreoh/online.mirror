@@ -47,14 +47,34 @@ class SpellChecker :
         css::lang::XServiceDisplayName
     >
 {
+
+    // The word list of one dictionary: the path of its .aff/.dic file pair without the
+    // extension, the Hunspell instance loaded from those files, and the text encoding that
+    // instance expects. m_pDict stays null until Load has run.
+    struct DictInstance
+    {
+        OUString m_aDName;
+        std::unique_ptr<Hunspell> m_pDict;
+        rtl_TextEncoding m_aDEnc = RTL_TEXTENCODING_DONTKNOW;
+
+        explicit DictInstance(OUString const& i_rDName)
+            : m_aDName(i_rDName)
+        {}
+
+        void Load();
+    };
+
+    // One entry per locale. A dictionary that names several locales gets one DictItem for each
+    // of them, and those items point to the same DictInstance.
     struct DictItem
     {
-        OUString                  m_aDName;
-        css::lang::Locale         m_aDLoc;
-        std::unique_ptr<Hunspell> m_pDict;
-        rtl_TextEncoding          m_aDEnc;
+        css::lang::Locale m_aDLoc;
+        std::shared_ptr<DictInstance> m_pInstance;
 
-        DictItem(OUString i_DName, css::lang::Locale i_DLoc, rtl_TextEncoding i_DEnc);
+        DictItem(css::lang::Locale const& i_rDLocale, std::shared_ptr<DictInstance> const& i_pInstance)
+            : m_aDLoc(i_rDLocale)
+            , m_pInstance(i_pInstance)
+        {}
     };
 
     std::vector<DictItem> m_DictItems;
@@ -75,39 +95,39 @@ class SpellChecker :
     }
 
     sal_Int16   GetSpellFailure( const OUString &rWord, const css::lang::Locale &rLocale, int& rInfo );
-    css::uno::Reference< css::linguistic2::XSpellAlternatives > GetProposals( const OUString &rWord, const css::lang::Locale &rLocale );
+    cpo::uno::Reference< css::linguistic2::XSpellAlternatives > GetProposals( const OUString &rWord, const css::lang::Locale &rLocale );
 
 public:
     SpellChecker();
     virtual ~SpellChecker() override;
 
     // XSupportedLocales (for XSpellChecker)
-    virtual cpo::uno::Sequence< css::lang::Locale > SAL_CALL getLocales() override;
-    virtual bool SAL_CALL hasLocale( const css::lang::Locale& rLocale ) override;
+    virtual cpo::uno::Sequence< css::lang::Locale > getLocales() override;
+    virtual bool hasLocale( const css::lang::Locale& rLocale ) override;
 
     // XSpellChecker
-    virtual bool SAL_CALL isValid( const OUString& rWord, const css::lang::Locale& rLocale, const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties ) override;
-    virtual css::uno::Reference< css::linguistic2::XSpellAlternatives > SAL_CALL spell( const OUString& rWord, const css::lang::Locale& rLocale, const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties ) override;
+    virtual bool isValid( const OUString& rWord, const css::lang::Locale& rLocale, const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties ) override;
+    virtual cpo::uno::Reference< css::linguistic2::XSpellAlternatives > spell( const OUString& rWord, const css::lang::Locale& rLocale, const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties ) override;
 
     // XLinguServiceEventBroadcaster
-    virtual bool SAL_CALL addLinguServiceEventListener( const css::uno::Reference< css::linguistic2::XLinguServiceEventListener >& rxLstnr ) override;
-    virtual bool SAL_CALL removeLinguServiceEventListener( const css::uno::Reference< css::linguistic2::XLinguServiceEventListener >& rxLstnr ) override;
+    virtual bool addLinguServiceEventListener( const cpo::uno::Reference< css::linguistic2::XLinguServiceEventListener >& rxLstnr ) override;
+    virtual bool removeLinguServiceEventListener( const cpo::uno::Reference< css::linguistic2::XLinguServiceEventListener >& rxLstnr ) override;
 
     // XServiceDisplayName
-    virtual OUString SAL_CALL getServiceDisplayName( const css::lang::Locale& rLocale ) override;
+    virtual OUString getServiceDisplayName( const css::lang::Locale& rLocale ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
 
     // XComponent
-    virtual void SAL_CALL dispose() override;
-    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& rxListener ) override;
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& rxListener ) override;
+    virtual void dispose() override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& rxListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& rxListener ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& rServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& rServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 #endif

@@ -17,7 +17,7 @@
  */
 package com.sun.star.lib.uno.helper;
 
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 import cpo.uno.Type;
 import com.sun.star.uno.AnyConverter;
 import com.sun.star.lang.XServiceInfo;
@@ -52,7 +52,7 @@ public class Factory_Test
     {
         if (null == xContext.getValueByName( "/singletons/com.sun.star.lang.theServiceManager" ))
         {
-            throw new com.sun.star.uno.RuntimeException(
+            throw new cpo.uno.RuntimeException(
                 "bad component context given!", this );
         }
     }

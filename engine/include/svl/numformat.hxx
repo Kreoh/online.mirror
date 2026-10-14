@@ -45,7 +45,7 @@ public:
     static const sal_uInt16 INPUTSTRING_PRECISION;
 
     /// ctor with service manager and language/country enum
-    SvNumberFormatter(const css::uno::Reference<css::uno::XComponentContext>& rxContext,
+    SvNumberFormatter(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext,
                       LanguageType eLang);
 
     ~SvNumberFormatter();
@@ -394,15 +394,6 @@ public:
      */
     static const NfCurrencyEntry& GetCurrencyEntry(LanguageType);
 
-    /** Return a NfCurrencyEntry pointer matching a language/country
-        and currency abbreviation (AKA banking symbol).
-        This method is meant for the configuration of the default currency.
-        @return
-            <NULL/> if not found
-            else pointer to NfCurrencyEntry
-     */
-    static const NfCurrencyEntry* GetCurrencyEntry(std::u16string_view rAbbrev, LanguageType eLang);
-
     /** Return a NfCurrencyEntry pointer matching the symbol
         combination of a LegacyOnly currency. Note that this means only that
         the currency matching both symbols was once used in the Office, but is
@@ -546,7 +537,7 @@ public:
 
 private:
     mutable ::osl::Mutex m_aMutex;
-    css::uno::Reference<css::uno::XComponentContext> m_xContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_xContext;
     const LanguageType IniLnge; // Initialized setting language/country
     SvNFFormatData m_aFormatData;
     SvNFEngine::Accessor m_aRWPolicy;
@@ -566,7 +557,7 @@ private:
     // Generate additional formats provided by i18n
     SVL_DLLPRIVATE void ImpGenerateAdditionalFormats(
         sal_uInt32 CLOffset,
-        css::uno::Reference<css::i18n::XNumberFormatCode> const& rNumberFormatCode);
+        cpo::uno::Reference<css::i18n::XNumberFormatCode> const& rNumberFormatCode);
 
     // Test whether format code already exists, then return index key,
     // otherwise NUMBERFORMAT_ENTRY_NOT_FOUND

@@ -18,7 +18,7 @@
 #include <comphelper/kit.hxx>
 
 using namespace utl;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 
@@ -60,29 +60,6 @@ bool ScDefaultsOptions::operator==( const ScDefaultsOptions& rOpt ) const
     return rOpt.nInitTabCount  == nInitTabCount
         && rOpt.aInitTabPrefix == aInitTabPrefix
         && rOpt.bJumboSheets == bJumboSheets;
-}
-
-ScTpDefaultsItem::ScTpDefaultsItem( ScDefaultsOptions aOpt ) :
-    SfxPoolItem ( SID_SCDEFAULTSOPTIONS ),
-    theOptions  (std::move( aOpt ))
-{
-}
-
-ScTpDefaultsItem::~ScTpDefaultsItem()
-{
-}
-
-bool ScTpDefaultsItem::operator==( const SfxPoolItem& rItem ) const
-{
-    assert(SfxPoolItem::operator==(rItem));
-
-    const ScTpDefaultsItem& rPItem = static_cast<const ScTpDefaultsItem&>(rItem);
-    return ( theOptions == rPItem.theOptions );
-}
-
-ScTpDefaultsItem* ScTpDefaultsItem::Clone( SfxItemPool * ) const
-{
-    return new ScTpDefaultsItem( *this );
 }
 
 #define SCDEFAULTSOPT_TAB_COUNT  0

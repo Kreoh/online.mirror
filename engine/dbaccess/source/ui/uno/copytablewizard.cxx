@@ -72,16 +72,16 @@
 namespace dbaui
 {
 
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using ::cpo::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
+    using ::cpo::uno::RuntimeException;
     using ::cpo::uno::Any;
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::beans::XPropertySetInfo;
     using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::beans::Property;
@@ -185,7 +185,7 @@ namespace dbaui
 
     protected:
         // OGenericUnoDialog overridables
-        virtual std::unique_ptr<weld::DialogController> createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+        virtual std::unique_ptr<weld::DialogController> createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
         virtual void executedDialog( sal_Int16 _nExecutionResult ) override;
 
     private:
@@ -197,7 +197,7 @@ namespace dbaui
 
         /** returns our typed dialog
 
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if we don't have a dialog at the moment the method is called
         */
         OCopyTableWizard&
@@ -592,7 +592,7 @@ namespace
         Reference< XDataSource > xDataSource;
         Reference< XChild > xAsChild( _rxConnection, UNO_QUERY );
         if ( xAsChild.is() )
-            xDataSource.set(xAsChild->getParent(), css::uno::UNO_QUERY);
+            xDataSource.set(xAsChild->getParent(), cpo::uno::UNO_QUERY);
 
         if ( xDataSource.is() )
             return lcl_getInteractionHandler_throw( xDataSource, _rFallback );
@@ -1485,7 +1485,7 @@ void CopyTableWizard::initialize( const Sequence< Any >& _rArguments )
     return new ::cppu::OPropertyArrayHelper( aProps );
 }
 
-std::unique_ptr<weld::DialogController> CopyTableWizard::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+std::unique_ptr<weld::DialogController> CopyTableWizard::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
 {
     OSL_PRECOND( isInitialized(), "CopyTableWizard::createDialog: not initialized!" );
         // this should have been prevented in ::execute already
@@ -1519,9 +1519,9 @@ void CopyTableWizard::executedDialog( sal_Int16 _nExecutionResult )
 
 } // namespace dbaui
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_openoffice_comp_dbu_CopyTableWizard_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new ::dbaui::CopyTableWizard(context));
 }

@@ -41,13 +41,14 @@
 
 #include <algorithm>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::com::sun::star::beans::Property;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::osl::MutexGuard;
 
 namespace chart
@@ -90,20 +91,20 @@ namespace
 };
 
 void lcl_SetParent(
-    const uno::Reference< uno::XInterface > & xChildInterface,
-    const uno::Reference< uno::XInterface > & xParentInterface )
+    const uno::Reference< cpo::uno::XInterface > & xChildInterface,
+    const uno::Reference< cpo::uno::XInterface > & xParentInterface )
 {
     uno::Reference< container::XChild > xChild( xChildInterface, uno::UNO_QUERY );
     if( xChild.is())
         xChild->setParent( xParentInterface );
 }
 
-typedef std::map< sal_Int32, css::uno::Reference< css::beans::XPropertySet > >
+typedef std::map< sal_Int32, cpo::uno::Reference< css::beans::XPropertySet > >
     lcl_tDataPointMap;
 
 void lcl_CloneAttributedDataPoints(
     const lcl_tDataPointMap & rSource, lcl_tDataPointMap & rDestination,
-    const uno::Reference< uno::XInterface > & xSeries )
+    const uno::Reference< cpo::uno::XInterface > & xSeries )
 {
     for (auto const& elem : rSource)
     {
@@ -179,7 +180,7 @@ DataSeries::DataSeries( const DataSeries & rOther ) :
 // late initialization to call after copy-constructing
 void DataSeries::Init( const DataSeries & rOther )
 {
-    Reference< uno::XInterface > xThisInterface( static_cast< ::cppu::OWeakObject * >( this ));
+    Reference< cpo::uno::XInterface > xThisInterface( static_cast< ::cppu::OWeakObject * >( this ));
     if( ! rOther.m_aAttributedDataPoints.empty())
     {
         lcl_CloneAttributedDataPoints(
@@ -490,29 +491,6 @@ cpo::uno::Sequence< uno::Reference< chart2::XRegressionCurve > > DataSeries::get
     return comphelper::containerToSequence<uno::Reference< chart2::XRegressionCurve >>( m_aRegressionCurves );
 }
 
-void DataSeries::setRegressionCurves(
-    const Sequence< Reference< chart2::XRegressionCurve > >& aRegressionCurves )
-{
-    tRegressionCurveContainerType aOldCurves;
-    tRegressionCurveContainerType aNewCurves;
-    for (const auto & i : aRegressionCurves)
-    {
-        auto pRegressionCurve = dynamic_cast<RegressionCurveModel*>(i.get());
-        assert(pRegressionCurve);
-        aNewCurves.push_back(pRegressionCurve);
-    }
-    rtl::Reference< ModifyEventForwarder > xModifyEventForwarder;
-    {
-        MutexGuard aGuard( m_aMutex );
-        xModifyEventForwarder = m_xModifyEventForwarder;
-        std::swap( aOldCurves, m_aRegressionCurves );
-        m_aRegressionCurves = aNewCurves;
-    }
-    ModifyListenerHelper::removeListenerFromAllElements( aOldCurves, xModifyEventForwarder );
-    ModifyListenerHelper::addListenerToAllElements( aNewCurves, xModifyEventForwarder );
-    fireModifyEvent();
-}
-
 // ____ XModifyBroadcaster ____
 void DataSeries::addModifyListener( const Reference< util::XModifyListener >& aListener )
 {
@@ -739,7 +717,7 @@ bool DataSeries::hasUnhiddenData()
 
 bool DataSeries::hasPointOwnColor(
         sal_Int32 nPointIndex
-        , const css::uno::Reference< css::beans::XPropertySet >& xDataPointProperties //may be NULL this is just for performance
+        , const cpo::uno::Reference< css::beans::XPropertySet >& xDataPointProperties //may be NULL this is just for performance
          )
 {
     if( hasPointOwnProperties( nPointIndex ))
@@ -1048,12 +1026,12 @@ sal_Int32 DataSeries::getExplicitNumberFormatKeyForDataLabel()
 
 }
 
-void DataSeries::setCalculatedYSequence(css::uno::Reference<css::chart2::data::XLabeledDataSequence> const& xSequence)
+void DataSeries::setCalculatedYSequence(cpo::uno::Reference<css::chart2::data::XLabeledDataSequence> const& xSequence)
 {
     m_xCalculatedYSequence = xSequence;
 }
 
-css::uno::Reference<css::chart2::data::XLabeledDataSequence> DataSeries::getCalculatedYSequence() const
+cpo::uno::Reference<css::chart2::data::XLabeledDataSequence> DataSeries::getCalculatedYSequence() const
 {
     return m_xCalculatedYSequence;
 }
@@ -1065,8 +1043,8 @@ void DataSeries::clearCalculatedYSequence()
 
 }  // namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart_DataSeries_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart_DataSeries_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::DataSeries );

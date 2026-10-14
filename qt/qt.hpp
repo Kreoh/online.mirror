@@ -37,12 +37,24 @@ private:
     static QWebEngineProfile* globalProfile;
     static RecentFiles recentFiles;
     static std::unique_ptr<Prefs> prefs;
-    static QSslKey embedKey;
-    static QSslCertificate embedCert;
+    /// Constructing a QSslKey or QSslCertificate reaches into Qt Network's
+    /// TLS backend registry, which is a Q_APPLICATION_STATIC, so it has to
+    /// happen after the QApplication is up.  Function-local statics keep it
+    /// out of static initialization.
+    static QSslKey& embedKeyRef();
+    static QSslCertificate& embedCertRef();
 
 public:
     static void initialize();
     static QWebEngineProfile* getProfile();
+    /// The saved profile of one cloud account, so each account keeps its own sign-in. An id
+    /// that is not plain letters, digits, '-' and '_' gets the shared profile instead.
+    static QWebEngineProfile* getAccountProfile(const QString& accountId);
+    /// The number of web views showing a page on the account's saved profile, 0 when the
+    /// account has no views on it yet.
+    static int countAccountProfileViews(const QString& accountId);
+    /// Delete the cookies and cache that an account's saved profile holds.
+    static void deleteAccountProfile(const QString& accountId);
     static RecentFiles& getRecentFiles();
     static Prefs& getPrefs();
     /// Self-signed cert/key for the embed-mode HTTPS server.  Both
@@ -66,6 +78,8 @@ inline std::string getDataDir()
     }
     return COOLWSD_DATADIR;
 }
+
+inline std::string getBrowserDistDir() { return getDataDir() + "/browser/dist"; }
 } // namespace
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

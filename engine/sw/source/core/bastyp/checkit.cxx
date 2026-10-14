@@ -21,12 +21,12 @@
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/i18n/InputSequenceChecker.hpp>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::i18n;
 
 SwCheckIt::SwCheckIt()
 {
-    const Reference<XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
+    const Reference<cpo::uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
     xCheck = InputSequenceChecker::create(xContext);
 }
 

@@ -18,7 +18,7 @@
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/text/XPageCursor.hpp>
 #include <com/sun/star/text/XTextViewCursorSupplier.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <comphelper/genericpropertyset.hxx>
 #include <comphelper/propertysetinfo.hxx>
@@ -36,10 +36,11 @@
 #include <WPFTResMgr.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace writerperfect
 {
-EPUBExportFilter::EPUBExportFilter(uno::Reference<uno::XComponentContext> xContext)
+EPUBExportFilter::EPUBExportFilter(uno::Reference<cpo::uno::XComponentContext> xContext)
     : mxContext(std::move(xContext))
 {
 }
@@ -206,9 +207,9 @@ cpo::uno::Sequence<OUString> EPUBExportFilter::getSupportedServiceNames()
     return aRet;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_EPUBExportFilter_get_implementation(
-    uno::XComponentContext* pContext, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pContext, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new EPUBExportFilter(pContext));
 }

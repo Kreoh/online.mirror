@@ -11,13 +11,13 @@
 
 #include <sal/types.h>
 #include <vcl/dllapi.h>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 namespace com::sun::star::lang
 {
 class XInitialization;
 }
-namespace com::sun::star::uno
+namespace cpo::uno
 {
 class XInterface;
 }
@@ -31,7 +31,7 @@ enum class DragOrDrop
     Drag,
     Drop
 };
-VCL_DLLPUBLIC void OleDnDHelper(const css::uno::Reference<css::lang::XInitialization>&,
+VCL_DLLPUBLIC void OleDnDHelper(const cpo::uno::Reference<css::lang::XInitialization>&,
                                 sal_IntPtr pWin, DragOrDrop);
 }
 

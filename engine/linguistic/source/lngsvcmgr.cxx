@@ -20,8 +20,6 @@
 #include <sal/config.h>
 #include <sal/log.hxx>
 
-#include <com/sun/star/deployment/DeploymentException.hpp>
-#include <com/sun/star/deployment/ExtensionManager.hpp>
 #include <com/sun/star/container/XContentEnumerationAccess.hpp>
 #include <com/sun/star/container/XEnumeration.hpp>
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
@@ -54,6 +52,7 @@
 #include "gciterator.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace linguistic;
 
 cpo::uno::Sequence< OUString > static GetLangSvcList( const cpo::uno::Any &rVal );
@@ -75,7 +74,7 @@ static cpo::uno::Sequence< lang::Locale > GetAvailLocales(
     // language, which is not the embedded script the legacy UNO API notice is about:
     auto const aSuppression = comphelper::suppressLegacyApiWarning();
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
     if( rSvcImplNames.hasElements() )
     {
         std::set< LanguageType > aLanguages;
@@ -233,7 +232,7 @@ void LngSvcMgrListenerHelper::disposing( const lang::EventObject& rSource )
 {
     osl::MutexGuard aGuard( GetLinguMutex() );
 
-    uno::Reference< uno::XInterface > xRef( rSource.Source );
+    uno::Reference< cpo::uno::XInterface > xRef( rSource.Source );
     if ( xRef.is() )
     {
         aLngSvcMgrListeners   .removeInterface( xRef );
@@ -420,41 +419,6 @@ LngSvcMgr::LngSvcMgr()
 
     aUpdateIdle.SetPriority(TaskPriority::LOWEST);
     aUpdateIdle.SetInvokeHandler(LINK(this, LngSvcMgr, updateAndBroadcast));
-
-    // request to be notified if an extension has been added/removed
-    const uno::Reference<uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
-
-    uno::Reference<deployment::XExtensionManager> xExtensionManager;
-    try {
-        xExtensionManager = deployment::ExtensionManager::get(xContext);
-    } catch ( const uno::DeploymentException & ) {
-        SAL_WARN( "linguistic", "no extension manager - should fire on mobile only" );
-    } catch ( const deployment::DeploymentException & ) {
-        SAL_WARN( "linguistic", "no extension manager - should fire on mobile only" );
-    }
-    if (xExtensionManager.is())
-    {
-        xMB.set(xExtensionManager, uno::UNO_QUERY_THROW);
-
-        uno::Reference<util::XModifyListener> xListener(this);
-        xMB->addModifyListener( xListener );
-    }
-}
-
-// css::util::XModifyListener
-void LngSvcMgr::modified(const lang::EventObject&)
-{
-    osl::MutexGuard aGuard(GetLinguMutex());
-    //assume that if an extension has been added/removed that
-    //it might be a dictionary extension, so drop our cache
-
-    pAvailSpellSvcs.reset();
-    pAvailGrammarSvcs.reset();
-    pAvailHyphSvcs.reset();
-    pAvailThesSvcs.reset();
-
-    //schedule in an update to execute in the main thread
-    aUpdateIdle.Start();
 }
 
 bool LngSvcMgr::joinThreads()
@@ -485,38 +449,12 @@ IMPL_LINK_NOARG(LngSvcMgr, updateAndBroadcast, Timer *, void)
     }
 }
 
-void LngSvcMgr::stopListening()
-{
-    osl::MutexGuard aGuard(GetLinguMutex());
-
-    if (!xMB.is())
-        return;
-
-    try
-    {
-            uno::Reference<util::XModifyListener>  xListener(this);
-            xMB->removeModifyListener(xListener);
-    }
-    catch (const cpo::uno::Exception&)
-    {
-    }
-
-    xMB.clear();
-}
-
-void LngSvcMgr::disposing(const lang::EventObject&)
-{
-    stopListening();
-}
-
 #if defined __GNUC__ && !defined __clang__ && __GNUC__ >= 14 && __GNUC__ <= 17
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 LngSvcMgr::~LngSvcMgr()
 {
-    stopListening();
-
     // memory for pSpellDsp, pHyphDsp, pThesDsp, pListenerHelper
     // will be freed in the destructor of the respective Reference's
     // xSpellDsp, xGrammarDsp, xHyphDsp, xThesDsp
@@ -789,7 +727,7 @@ void LngSvcMgr::Notify( const cpo::uno::Sequence< OUString > &rPropertyNames )
                 aValues = /*aCfg.*/GetProperties( aNames );
                 cpo::uno::Sequence< OUString > aSvcImplNames;
                 if (aValues.hasElements())
-                    aSvcImplNames = GetLangSvc(aValues[0]);
+                    aSvcImplNames = GetLangSvcList(aValues[0]);
 
                 LanguageType nLang = LANGUAGE_NONE;
                 if (!aKeyText.isEmpty())
@@ -935,17 +873,17 @@ void LngSvcMgr::GetThesaurusDsp_Impl( bool bSetSvcList  )
 namespace {
 
 template<typename T> uno::Reference<T> createLinguisticInstance(
-    const uno::Reference<uno::XComponentContext>& rContext,
+    const uno::Reference<cpo::uno::XComponentContext>& rContext,
     const cpo::uno::Any& rCurrent)
 {
     // A linguistic service written in a scripting language is office or extension code, not the
     // embedded script the legacy UNO API notice is about:
     auto const aSuppression = comphelper::suppressLegacyApiWarning();
 
-    uno::Reference<lang::XSingleComponentFactory> xCompFactory(rCurrent, css::uno::UNO_QUERY);
+    uno::Reference<lang::XSingleComponentFactory> xCompFactory(rCurrent, cpo::uno::UNO_QUERY);
     if (xCompFactory.is())
         return uno::Reference<T>(xCompFactory->createInstanceWithContext(rContext), uno::UNO_QUERY_THROW);
-    uno::Reference<lang::XSingleServiceFactory> xFactory(rCurrent, css::uno::UNO_QUERY);
+    uno::Reference<lang::XSingleServiceFactory> xFactory(rCurrent, cpo::uno::UNO_QUERY);
     if (xFactory)
         return uno::Reference<T>(xFactory->createInstance(), uno::UNO_QUERY_THROW);
     return nullptr;
@@ -960,7 +898,7 @@ void LngSvcMgr::GetAvailableSpellSvcs_Impl()
 
     pAvailSpellSvcs.emplace();
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     uno::Reference< container::XContentEnumerationAccess > xEnumAccess( xContext->getServiceManager(), uno::UNO_QUERY );
     uno::Reference< container::XEnumeration > xEnum;
@@ -1004,7 +942,7 @@ void LngSvcMgr::GetAvailableGrammarSvcs_Impl()
 
     pAvailGrammarSvcs.emplace();
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     uno::Reference< container::XContentEnumerationAccess > xEnumAccess( xContext->getServiceManager(), uno::UNO_QUERY );
     uno::Reference< container::XEnumeration > xEnum;
@@ -1048,7 +986,7 @@ void LngSvcMgr::GetAvailableHyphSvcs_Impl()
         return;
 
     pAvailHyphSvcs.emplace();
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     uno::Reference< container::XContentEnumerationAccess > xEnumAccess( xContext->getServiceManager(), uno::UNO_QUERY );
     uno::Reference< container::XEnumeration > xEnum;
@@ -1092,7 +1030,7 @@ void LngSvcMgr::GetAvailableThesSvcs_Impl()
 
     pAvailThesSvcs.emplace();
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     uno::Reference< container::XContentEnumerationAccess > xEnumAccess( xContext->getServiceManager(), uno::UNO_QUERY );
     uno::Reference< container::XEnumeration > xEnum;
@@ -1108,10 +1046,10 @@ void LngSvcMgr::GetAvailableThesSvcs_Impl()
         uno::Reference< lang::XSingleComponentFactory > xCompFactory;
         uno::Reference< lang::XSingleServiceFactory > xFactory;
 
-        xCompFactory.set(aCurrent, css::uno::UNO_QUERY);
+        xCompFactory.set(aCurrent, cpo::uno::UNO_QUERY);
         if (!xCompFactory.is())
         {
-            xFactory.set(aCurrent, css::uno::UNO_QUERY);
+            xFactory.set(aCurrent, cpo::uno::UNO_QUERY);
         }
         if ( xCompFactory.is() || xFactory.is() )
         {
@@ -1196,10 +1134,10 @@ void LngSvcMgr::SetCfgServiceLists( GrammarCheckingIterator &rGrammarDsp )
         cpo::uno::Sequence< OUString > aSvcImplNames;
         if (rValue >>= aSvcImplNames)
         {
-            // there should only be one grammar checker in use per language...
-            if (aSvcImplNames.getLength() > 1)
-                aSvcImplNames.realloc(1);
-
+            // Every configured service is kept: one of them ends up checking
+            // the language, but which one depends on the locales each
+            // reports, and GrammarCheckingIterator can only find that out by
+            // asking them in turn.
             OUString aLocaleStr( *pNames++ );
             sal_Int32 nSeparatorPos = aLocaleStr.lastIndexOf( '/' );
             aLocaleStr = aLocaleStr.copy( nSeparatorPos + 1 );
@@ -1713,7 +1651,7 @@ cpo::uno::Sequence< OUString >
             pNames[0] = aNode + "/" + aCfgLocale;
             aValues = /*aCfg.*/GetProperties( aNames );
             if (aValues.hasElements())
-                aSvcImplNames = GetLangSvc(aValues[0]);
+                aSvcImplNames = GetLangSvcList(aValues[0]);
         }
     }
     else if ( rServiceName == SN_HYPHENATOR )
@@ -1822,9 +1760,9 @@ cpo::uno::Sequence< OUString >
     return { u"com.sun.star.linguistic2.LinguServiceManager"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 linguistic_LngSvcMgr_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new LngSvcMgr());
 }

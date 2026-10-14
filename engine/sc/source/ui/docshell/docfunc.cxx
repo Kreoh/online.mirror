@@ -18,6 +18,7 @@
  */
 
 #include <scitems.hxx>
+#include <docuno.hxx>
 
 #include <comphelper/kit.hxx>
 #include <o3tl/safeint.hxx>
@@ -153,6 +154,7 @@
 #include <sfx2/viewfrm.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScDocFunc::NotifyDrawUndo( std::unique_ptr<SdrUndoAction> pUndoAction)
 {
@@ -712,8 +714,8 @@ bool ScDocFunc::SetStringOrEditCell( const ScAddress& rPos, const OUString& rStr
     {
         ScFieldEditEngine& rEngine = rDoc.GetEditEngine();
         rEngine.SetTextCurrentDefaults(rStr);
-        std::unique_ptr<EditTextObject> pEditText(rEngine.CreateTextObject());
-        return SetEditCell(rPos, *pEditText, bInteraction);
+        EditTextObject aEditText(rEngine.CreateTextObject());
+        return SetEditCell(rPos, aEditText, bInteraction);
     }
     else
         return SetStringCell(rPos, rStr, bInteraction);
@@ -832,11 +834,11 @@ bool ScDocFunc::MoveBlock( const ScRange& rSource, const ScAddress& rDestPos,
     return aOperation.run();
 }
 
-static uno::Reference< uno::XInterface > GetDocModuleObject( const SfxObjectShell& rDocSh, const OUString& sCodeName )
+static uno::Reference< cpo::uno::XInterface > GetDocModuleObject( const SfxObjectShell& rDocSh, const OUString& sCodeName )
 {
     uno::Reference< lang::XMultiServiceFactory> xSF(rDocSh.GetModel(), uno::UNO_QUERY);
     uno::Reference< container::XNameAccess > xVBACodeNamedObjectAccess;
-    uno::Reference< uno::XInterface > xDocModuleApiObject;
+    uno::Reference< cpo::uno::XInterface > xDocModuleApiObject;
     if ( xSF.is() )
     {
         xVBACodeNamedObjectAccess.set( xSF->createInstance(u"ooo.vba.VBAObjectModuleObjectProvider"_ustr), uno::UNO_QUERY );

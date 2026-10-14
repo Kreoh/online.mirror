@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.63])
 
-AC_INIT([coolwsd], [26.04.4.0], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://www.collaboraoffice.org/])
+AC_INIT([coolwsd], [26.04.6.0], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://www.collaboraoffice.org/])
 LT_INIT([shared, disable-static, dlopen])
 
 AM_INIT_AUTOMAKE([1.10 foreign subdir-objects tar-pax -Wno-portability])
@@ -42,17 +42,37 @@ if test "$enable_androidapp" = "yes"; then
         COOLWSD_VERSION_NANO=`echo $with_android_package_versioncode | awk -F. '{print $4}' | awk -F- '{print $1}'`
 
         ANDROID_PACKAGE_VERSIONCODE=`echo $with_android_package_versioncode | awk -F- '{print $2}'`
+        case "$ANDROID_PACKAGE_VERSIONCODE" in
+            ''|*@<:@!0-9@:>@*)
+                AC_MSG_ERROR([--with-android-package-versioncode should end in a dash followed by a build number, got "$with_android_package_versioncode"])
+                ;;
+        esac
         AC_MSG_RESULT([$ANDROID_PACKAGE_VERSIONCODE])
     fi
 fi
 AC_SUBST(ANDROID_PACKAGE_VERSIONCODE)
 
-COOLWSD_VERSION="$COOLWSD_VERSION_MAJOR.$COOLWSD_VERSION_MINOR.$COOLWSD_VERSION_MICRO.$COOLWSD_VERSION_NANO"
+COOLWSD_VERSION_BUILD_ID=
+AC_MSG_CHECKING([for build ID])
+if test -n "$with_build_id"; then
+    COOLWSD_VERSION_BUILD_ID=$with_build_id
+    case "$COOLWSD_VERSION_BUILD_ID" in
+        *@<:@!0-9@:>@*)
+            AC_MSG_ERROR([--with-build-id should be numerical, got "$with_build_id"])
+            ;;
+    esac
+    AC_MSG_RESULT([$COOLWSD_VERSION_BUILD_ID])
+    COOLWSD_VERSION="$COOLWSD_VERSION_MAJOR.$COOLWSD_VERSION_MINOR.$COOLWSD_VERSION_MICRO.$COOLWSD_VERSION_NANO-$COOLWSD_VERSION_BUILD_ID"
+else
+    AC_MSG_RESULT([not set, skipping...])
+    COOLWSD_VERSION="$COOLWSD_VERSION_MAJOR.$COOLWSD_VERSION_MINOR.$COOLWSD_VERSION_MICRO.$COOLWSD_VERSION_NANO"
+fi
 
 AC_SUBST([COOLWSD_VERSION_MAJOR])
 AC_SUBST([COOLWSD_VERSION_MINOR])
 AC_SUBST([COOLWSD_VERSION_MICRO])
 AC_SUBST([COOLWSD_VERSION_NANO])
+AC_SUBST([COOLWSD_VERSION_BUILD_ID])
 AC_SUBST([COOLWSD_VERSION])
 
 AC_DEFINE_UNQUOTED([COOLWSD_VERSION],[["$COOLWSD_VERSION"]],[Collabora Online WebSocket server version])
@@ -119,19 +139,45 @@ if test "$external_toolchain_app" != "yes"; then
 fi
 AM_CONDITIONAL([CXX_CLANG], [test "$cxx_clang" = true])
 
+# The Python 3 interpreter for the build scripts. Distributions that
+# install only a versioned binary, such as python3.12 on FreeBSD, can
+# pass PYTHON=... to configure.
+AC_ARG_VAR([PYTHON], [Python 3 interpreter used by the build scripts])
+AC_PATH_PROGS([PYTHON], [python3 python3.14 python3.13 python3.12 python3.11], [no])
+if test "$PYTHON" = "no"; then
+    AC_MSG_ERROR([python3 is needed to build])
+fi
+
 # check for python modules
 for MODULE in lxml polib; do
     AC_MSG_CHECKING([for ${MODULE} for python3])
-    if /usr/bin/env python3 -c "import ${MODULE}" 2> /dev/null ; then
+    if $PYTHON -c "import ${MODULE}" 2> /dev/null ; then
         AC_MSG_RESULT([yes])
     else
         AC_MSG_RESULT([no])
-        AS_IF([test `uname -s` = Linux -o `uname -s` = FreeBSD -o `uname -s` = Darwin],
+        # The Windows app builds the JS bits in this tree, so the modules are
+        # needed there just like on Linux.
+        AS_IF([test `uname -s` = Linux -o `uname -s` = FreeBSD -o `uname -s` = Darwin -o "$enable_windowsapp" = yes],
               [AC_MSG_ERROR([${MODULE} for python3 is needed. It might be in a package called python3-${MODULE}.])],
               [AC_MSG_WARN([${MODULE} for python3 is needed. It might be in a package called python3-${MODULE}. But
                if you are building the JS bits on another (Linux) machine, that doesn't matter])])
     fi
 done
+
+# Print the Windows forward-slash form of an existing Unix directory, for the
+# Windows app build. Under Git Bash/MSYS2 cygpath does the conversion; under
+# WSL there is no cygpath, but cmd.exe started in the directory reports its
+# native path. The directory is entered first so a symlink (e.g. a symlink
+# left by an out-of-tree engine build) is resolved at the OS level into a
+# plain native path that msbuild/clang-cl can traverse.
+UnixDirToWindows()
+{
+    if command -v cygpath >/dev/null 2>&1; then
+        (cd "$1" && cygpath -m "`pwd -P`")
+    else
+        (cd "$1" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r')
+    fi
+}
 
 # On some platforms, std::atomic needs a helper library
 if test "$external_toolchain_app" != "yes"; then
@@ -187,15 +233,20 @@ AC_ARG_ENABLE([iosapp],
               AS_HELP_STRING([--enable-iosapp],
                              [Use on a Mac where you will build the iOS app.]))
 
+AC_ARG_WITH([iosapp-bundle-version],
+            AS_HELP_STRING([--with-iosapp-bundle-version=23],
+                           [Set the bundle version for the iOS app. If not set, we will count up starting from 1]),
+,)
+
 AC_ARG_ENABLE([macosapp],
               AS_HELP_STRING([--enable-macosapp],
                              [Use on a Mac where you will build the macOS app.]))
 
 AC_ARG_ENABLE([windowsapp],
               AS_HELP_STRING([--enable-windowsapp],
-                             [Use in WSL2 on a Windows PC where you will build the Windows app that works
-                              similarly to the iOS app, from the JavaScript and the pseudo WebSocket
-                              message plumbing point of view.]))
+                             [Use in Git Bash/MSYS2 (or WSL2) on a Windows PC where you will build the
+                              Windows app that works similarly to the iOS app, from the JavaScript and
+                              the pseudo WebSocket message plumbing point of view.]))
 
 AC_ARG_WITH([wasm-fallback],
               AS_HELP_STRING([--with-wasm-fallback=<path>],
@@ -222,14 +273,27 @@ AC_ARG_WITH([iosapp-fonts],
 AC_ARG_WITH([app-branding],
               AS_HELP_STRING([--with-app-branding=<path>],
                              [Point to a directory containing a branding.css file and possibly other files it references,
-                              to be bundled and used by the iOS app. The directory structure is copied to
+                              to be bundled and used by the mobile apps. The directory structure is copied to
                               "browser/dist/branding" and that directory ends upp in the app bundle as "branding".]))
+
+AC_ARG_WITH([app-branding-suffix],
+              AS_HELP_STRING([--with-app-branding-suffix=<suffix>],
+                             [A suffix that branded assets will use. Defaults to empty if --with-app-branding is not supplied,
+                              otherwise "_brand"]))
 
 AC_ARG_ENABLE([qtapp],
               AS_HELP_STRING([--enable-qtapp],
-                             [Use in a tree where the only purpose is to build the qt "app" that is supposed
-                              to work similarly to the iOS app, from the JavaScript and the pseudo WebSocket
-                              message plumbing point of view. See qt/README.]))
+                             [Also build the qt "app" that is supposed to work similarly to the iOS app,
+                              from the JavaScript and the pseudo WebSocket message plumbing point of view.
+                              The server is built from the same tree unless --disable-server is given
+                              as well. See qt/README.]))
+
+AC_ARG_ENABLE([server],
+              AS_HELP_STRING([--disable-server],
+                             [Do not build or install coolwsd, its tools, configuration and data files.
+                              Only meaningful together with --enable-qtapp: packaging builds of the qt
+                              app (Flatpak, Snap, FreeBSD port) use it so that no server ends up in the
+                              app package. The server is built by default.]))
 
 AC_ARG_ENABLE([qtapp-tests],
               AS_HELP_STRING([--enable-qtapp-tests],
@@ -269,6 +333,10 @@ AC_ARG_WITH(android-package-versioncode,
             AS_HELP_STRING([--with-android-package-versioncode=6.7.8-23],
                            [Set the versionCode for the Android package.]),
 ,)
+
+AC_ARG_WITH(build-id,
+            AS_HELP_STRING([--with-build-id=23],
+                           [Set the build ID, which will appear after the version with a dash (e.g. 26.04.0.0-23)]))
 
 AC_ARG_WITH(android-abi,
             AS_HELP_STRING([--with-android-abi=x86_64],
@@ -320,6 +388,11 @@ AC_ARG_ENABLE([seccomp],
               AS_HELP_STRING([--disable-seccomp],
                              [Disable use of linux/seccomp.h header when kernel on target system does not support it.
                               Beware of the security consequences!]))
+
+AC_ARG_ENABLE([landlock],
+              AS_HELP_STRING([--disable-landlock],
+                             [Disable use of linux/landlock.h header when the build host does not provide it.
+                              Beware of the security consequences!]))
 AC_ARG_WITH([lokit-path],
             AS_HELP_STRING([--with-lokit-path=<path>],
                            [Path to the "include" directory with the COKit headers.
@@ -332,7 +405,8 @@ AC_ARG_WITH([lo-path],
                            Overrides the value derived from --with-lo-builddir.
 
                            For CODA-W, a *Windows* format path to the core build instdir, used at build-time.
-                           All other configure script arguments that are paths are Unix (WSL) paths.]))
+                           All other configure script arguments that are paths are Unix (Git Bash/MSYS2
+                           or WSL) paths.]))
 
 AC_ARG_WITH([lo-sourcedir],
             AS_HELP_STRING([--with-lo-sourcedir=<path>],
@@ -519,29 +593,6 @@ AC_ARG_ENABLE([feature-lock],
 AC_ARG_ENABLE([feature-restriction],
               AS_HELP_STRING([--enable-feature-restriction],
                              [Enable control over which uno-commands/feature to disable completely.]))
-
-AC_ARG_ENABLE([wasm-embind-uno],
-              AS_HELP_STRING([--enable-wasm-embind-uno],
-                             [Enable the Embind-based UNO support. Relevant only for a Wasm
-                              build.]))
-
-AC_ARG_ENABLE([wasm-embindtest],
-              AS_HELP_STRING([--enable-wasm-embindtest],
-                             [Run the CollaboraOffice embindtest as part of running the app. Requires
-                              --enable-wasm-embind-uno. Relevant only for a Wasm build.]))
-
-AC_ARG_WITH([wasm-zetajs],
-            AS_HELP_STRING([--with-wasm-zetajs=<path>],
-                           [Include zetajs scripting support in the app. (Together with
-                            --enable-wasm-embindtest, also run the zetajs smoketest as part of
-                            running the app.) Requires --enable-wasm-embind-uno. Relevant only for a
-                            Wasm build. Path to a zetajs source tree.]))
-
-AC_ARG_ENABLE([wasm-zetajs-example],
-              AS_HELP_STRING([--enable-wasm-zetajs-example],
-                             [Include a zetajs scripting example in the app. Requires
-                              --enable-wasm-embind-uno and --with-wasm-zetajs. Relevant only for a
-                              Wasm build.]))
 
 AC_ARG_ENABLE([experimental],
               AS_HELP_STRING([--enable-experimental],
@@ -775,14 +826,10 @@ if test -z "$anonym_msg";  then
   anonym_msg="anonymization of user-data is disabled"
 fi
 
-# Disable (0) or Enable (2) exotic file formats
-ENABLE_EXOTIC_FILE_FORMATS="0"
-
 if test "$enable_experimental" = "yes" ; then
   ENABLE_EXPERIMENTAL=true
   experimental_msg="enabled by default"
   SSL_VERIFY="false"
-  ENABLE_EXOTIC_FILE_FORMATS="2"
 fi
 AC_SUBST(ENABLE_EXPERIMENTAL)
 
@@ -790,14 +837,6 @@ AC_MSG_CHECKING([if ssl verification is enabled by default])
 AC_MSG_RESULT([$SSL_VERIFY])
 AC_DEFINE_UNQUOTED([SSL_VERIFY],["$SSL_VERIFY"],[Default SSL Verification mode])
 AC_SUBST(SSL_VERIFY)
-
-AC_MSG_CHECKING([if exotic file formats are enabled by default])
-if test "$ENABLE_EXOTIC_FILE_FORMATS" = "0"; then
-  AC_MSG_RESULT([no])
-else
-  AC_MSG_RESULT([yes])
-fi
-AC_SUBST(ENABLE_EXOTIC_FILE_FORMATS)
 
 AC_SUBST(SERVER_SIGNATURE)
 
@@ -851,7 +890,6 @@ ZSTDLIB_ARM64_V8A=
 ZSTDLIB_X86=
 ZSTDLIB_X86_64=
 
-CORE_VERSION_HASH=""
 if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_windowsapp" = "yes" \) -o \( "$enable_androidapp" = "yes" \) -o "$host_os" = "emscripten" ; then
    if test "$enable_androidapp" = "yes" ; then
       AC_MSG_CHECKING([for Android ABI to build for])
@@ -905,8 +943,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
 
    LOBUILDDIR=`readlink -f "$LOBUILDDIR"`
 
-   # Get the git hash of the core build.
-   # Also use the setuprc or setup.ini file existence as a sanity check.
+   # Use the setuprc or setup.ini file existence as a sanity check.
    if test "$enable_windowsapp" = "yes"; then
       setuprc=setup.ini
    else
@@ -918,8 +955,6 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
    else
       AC_MSG_ERROR([This is not a CollaboraOffice core build directory: $LOBUILDDIR])
    fi
-
-   CORE_VERSION_HASH=`grep buildid $LOBUILDDIR/instdir/program/$setuprc | sed -e 's/buildid=//' -e 's/............................$//'`
 
    if test -n "$LOBUILDDIR_ARM64_V8A" ; then
       if test -f "$LOBUILDDIR_ARM64_V8A/workdir/LinkTarget/StaticLibrary/liblibpng.a" ; then
@@ -946,13 +981,12 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
    fi
 
    if test "$enable_windowsapp" = "yes" ; then
-      LOBUILDDIR_WINDOWS=`cd "$LOBUILDDIR" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
+      LOBUILDDIR_WINDOWS=`UnixDirToWindows "$LOBUILDDIR"`
 
-      # $LOBUILDDIR/include may be a symlink (e.g. a WSL/DrvFs symlink left by an
-      # out-of-tree engine build) that native msbuild/clang-cl cannot follow. cd
-      # resolves it at the OS level, so cmd.exe reports the real target as a
-      # plain native path that the Windows app build can traverse.
-      LOINCLUDE_WINDOWS=`cd "$LOBUILDDIR/include" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
+      # $LOBUILDDIR/include may be a symlink (left by an out-of-tree engine
+      # build) that native msbuild/clang-cl cannot follow; UnixDirToWindows
+      # resolves it into the real target.
+      LOINCLUDE_WINDOWS=`UnixDirToWindows "$LOBUILDDIR/include"`
 
       # The Windows app's C++ projects build with the clang-cl (ClangCL)
       # platform toolset. Confirm Visual Studio has both the Clang compiler
@@ -961,10 +995,22 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
       # (Platform Toolset = 'ClangCL') cannot be found". vswhere lives at a
       # fixed location regardless of where VS itself is installed.
       AC_MSG_CHECKING([for the Visual Studio clang-cl (ClangCL) toolset])
-      # Resolve vswhere to a WSL path and run the .exe directly: going through
+      # Resolve vswhere to a Unix path and run the .exe directly: going through
       # cmd.exe mangles the quotes the spaced path needs, so it would not run.
-      VSWHERE_DIR=`cmd.exe /c 'echo %ProgramFiles(x86)%' 2>/dev/null | tr -d '\r'`
-      VSWHERE=`wslpath -u "$VSWHERE_DIR" 2>/dev/null`/"Microsoft Visual Studio/Installer/vswhere.exe"
+      if command -v cygpath >/dev/null 2>&1; then
+         # printenv avoids cmd.exe, whose /c switch the MSYS argument
+         # conversion would rewrite into a path - but the parenthesized
+         # variable name does not always survive into an MSYS2 shell, so
+         # fall back to the well-known default location.
+         VSWHERE_DIR=`printenv 'ProgramFiles(x86)' 2>/dev/null`
+         if test -z "$VSWHERE_DIR"; then
+            VSWHERE_DIR="C:\\Program Files (x86)"
+         fi
+         VSWHERE=`cygpath -u "$VSWHERE_DIR" 2>/dev/null`/"Microsoft Visual Studio/Installer/vswhere.exe"
+      else
+         VSWHERE_DIR=`cmd.exe /c 'echo %ProgramFiles(x86)%' 2>/dev/null | tr -d '\r'`
+         VSWHERE=`wslpath -u "$VSWHERE_DIR" 2>/dev/null`/"Microsoft Visual Studio/Installer/vswhere.exe"
+      fi
       CLANGCL_VS=`"$VSWHERE" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Llvm.Clang Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset -property installationPath 2>/dev/null | tr -d '\r'`
       if test -n "$CLANGCL_VS"; then
          AC_MSG_RESULT([$CLANGCL_VS])
@@ -1027,7 +1073,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_m
    CHK_FILE_VAR(POCOINCLUDE,Poco/Poco.h,Poco include,_X86_64)
 
    if test "$enable_windowsapp" = "yes" ; then
-      POCOINCLUDE_WINDOWS=`cd "$POCOINCLUDE" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
+      POCOINCLUDE_WINDOWS=`UnixDirToWindows "$POCOINCLUDE"`
    fi
 
    # Sanity checks; the engine builds undecorated static libraries
@@ -1042,7 +1088,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_m
    fi
 
    if test "$enable_windowsapp" = "yes" ; then
-      POCOLIB_WINDOWS=`cd "$POCOLIB" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
+      POCOLIB_WINDOWS=`UnixDirToWindows "$POCOLIB"`
    fi
 
    # zstd comes from the engine workdir too.  The Windows app links it via the
@@ -1102,9 +1148,6 @@ AC_SUBST(ZSTDLIB)
 AC_SUBST(ZSTDLIB_ARM64_V8A)
 AC_SUBST(ZSTDLIB_X86)
 AC_SUBST(ZSTDLIB_X86_64)
-AC_SUBST([CORE_VERSION_HASH])
-
-AC_DEFINE_UNQUOTED([CORE_VERSION_HASH],[["$CORE_VERSION_HASH"]],[CollaboraOffice core git hash if present])
 
 # The native app builds take libpng from the engine (like zstd and POCO):
 # Windows links it via the vcxproj, and iOS/Android/WASM reference the engine
@@ -1228,14 +1271,21 @@ IOSAPP_BUNDLE_SHORT_VERSION="$COOLWSD_VERSION_MAJOR$COOLWSD_VERSION_MINOR.$COOLW
 IOSAPP_BUNDLE_VERSION=
 
 if test "$enable_iosapp" = "yes"; then
-   ENABLE_IOSAPP=true
+    ENABLE_IOSAPP=true
 
-   if test -f BUNDLE-VERSION; then
-       IOSAPP_BUNDLE_VERSION=$(cat BUNDLE-VERSION)
-   else
-       IOSAPP_BUNDLE_VERSION=1
-   fi
-   echo $IOSAPP_BUNDLE_VERSION >BUNDLE-VERSION
+    if test -n "$with_iosapp_bundle_version" -a "$with_iosapp_bundle_version" != "no"; then
+        case "$with_iosapp_bundle_version" in
+            ''|*@<:@!0-9@:>@*)
+                AC_MSG_ERROR([--with-iosapp-bundle-version must be a number if provided, got "$with_iosapp_bundle_version"])
+                ;;
+        esac
+        IOSAPP_BUNDLE_VERSION=$with_iosapp_bundle_version
+    elif test -f BUNDLE-VERSION; then
+        IOSAPP_BUNDLE_VERSION=$(cat BUNDLE-VERSION)
+    else
+        IOSAPP_BUNDLE_VERSION=1
+    fi
+    echo $IOSAPP_BUNDLE_VERSION >BUNDLE-VERSION
 fi
 
 AC_SUBST(ENABLE_IOSAPP)
@@ -1293,6 +1343,11 @@ if test "$enable_qtapp" = "yes"; then
 fi
 AC_SUBST(ENABLE_QTAPP)
 AM_CONDITIONAL([ENABLE_QTAPP], [test "$ENABLE_QTAPP" = "true"])
+
+dnl The desktop apps show their open documents as tabs, and both draw the tab
+dnl strip with the same HTML page out of the browser bundle.
+AM_CONDITIONAL([ENABLE_TABSTRIP],
+               [test "$ENABLE_QTAPP" = "true" -o "$ENABLE_WINDOWSAPP" = "true"])
 
 ENABLE_QTAPP_TESTS=false
 AT_SPI_DRIVER_PATH=
@@ -1412,8 +1467,7 @@ AC_DEFINE_UNQUOTED([WELCOME_URL],["$WELCOME_URL"],[The welcome url of the build.
 
 # Test for build environment
 
-AS_IF([test "$ENABLE_QTAPP" != true],
-      [CXXFLAGS="$CXXFLAGS -Wall -Wextra -Woverloaded-virtual -Wshadow -Wundef"])
+CXXFLAGS="$CXXFLAGS -Wall -Wextra -Woverloaded-virtual -Wshadow -Wundef"
 
 CFLAGS="$CFLAGS -Wall -Wextra"
 
@@ -1443,12 +1497,29 @@ if test "$enable_hardening" = no; then
 
     AC_MSG_CHECKING([whether $CC supports -D_FORTIFY_SOURCE=2])
     save_CFLAGS=$CFLAGS
-    CFLAGS="$CFLAGS -Werror -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"
+    # Probe with optimization on. Ubuntu's gcc defines _FORTIFY_SOURCE=3 itself
+    # when optimizing unless a driver-visible -D/-U_FORTIFY_SOURCE is given, and
+    # the -Wp, spellings are not visible to it. There the macro gets redefined
+    # and the probe fails, which is right: the compiler already fortifies.
+    CFLAGS="$CFLAGS -O2 -Werror -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"
     AC_LINK_IFELSE(
         [AC_LANG_PROGRAM([[#include <string.h>]], [[return 0;]])],
-        [AC_MSG_RESULT([yes]); HARDENING_CFLAGS="$HARDENING_CFLAGS -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"],
-        [AC_MSG_RESULT([no])])
+        [fortify_source_works=yes],
+        [fortify_source_works=no])
+    # Probe again with the passed-in CFLAGS the build will actually use, because if those do not
+    # enable optimization, setting _FORTIFY_SOURCE would later warn/error during the build:
+    CFLAGS="$save_CFLAGS -Werror -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"
+    AC_LINK_IFELSE(
+        [AC_LANG_PROGRAM([[#include <string.h>]], [[return 0;]])],
+        [],
+        [fortify_source_works=no])
     CFLAGS=$save_CFLAGS
+    if test "$fortify_source_works" = yes; then
+        AC_MSG_RESULT([yes])
+        HARDENING_CFLAGS="$HARDENING_CFLAGS -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"
+    else
+        AC_MSG_RESULT([no])
+    fi
 
     AC_MSG_CHECKING([whether $CC supports -D_GLIBCXX_ASSERTIONS])
     save_CFLAGS=$CFLAGS
@@ -1730,35 +1801,44 @@ if test "$ENABLE_RUNTIME_OPTIMIZATIONS" != no; then
     AC_DEFINE([ENABLE_RUNTIME_OPTIMIZATIONS],1,[Define to 1 if this is not a sanitizers build.])
 fi
 
-# Check for C++20 support.
+# Check for >= C++20 support.
 HAVE_CXXSTD=
 CXXFLAGS_CXXSTD=
 if test "$external_toolchain_app" != "yes"; then
-    AC_MSG_CHECKING([whether $CXX supports C++20])
-    for flag in -std=c++20 -std=c++2a ; do
-        save_CXXFLAGS=$CXXFLAGS
-        CXXFLAGS="$CXXFLAGS $flag -Werror"
-        AC_LANG_PUSH([C++])
-        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-            #include <algorithm>
-            #include <functional>
-            #include <vector>
-            void f(std::vector<int> & v, std::function<bool(int, int)> fn) {
-                std::sort(v.begin(), v.end(), fn);
-            }
-            ]])],[CXXFLAGS_CXXSTD=$flag])
-        AC_LANG_POP([C++])
-        CXXFLAGS=$save_CXXFLAGS
-        if test -n "$CXXFLAGS_CXXSTD"; then
-            HAVE_CXXSTD=TRUE
-            break
-        fi
-    done
-    if test "$HAVE_CXXSTD" = TRUE; then
-        AC_MSG_RESULT([yes ($CXXFLAGS_CXXSTD)])
+    engine_config_host_mk="${engine_builddir:-$ENGINE_BUILDDIR}/config_host.mk"
+    if test -f "$engine_config_host_mk"; then
+        CXXFLAGS_CXXSTD=`sed -n 's/^export CXXFLAGS_CXX11=//p' "$engine_config_host_mk"`
+    fi
+    if test -n "$CXXFLAGS_CXXSTD"; then
+        HAVE_CXXSTD=TRUE
+        AC_MSG_NOTICE([taking the C++ standard from the engine: $CXXFLAGS_CXXSTD])
     else
-        AC_MSG_RESULT([no])
-        AC_MSG_ERROR(Compiler doesn't support C++20)
+        AC_MSG_CHECKING([whether $CXX supports C++20])
+        for flag in -std=c++20 -std=c++2a ; do
+            save_CXXFLAGS=$CXXFLAGS
+            CXXFLAGS="$CXXFLAGS $flag -Werror"
+            AC_LANG_PUSH([C++])
+            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+                #include <algorithm>
+                #include <functional>
+                #include <vector>
+                void f(std::vector<int> & v, std::function<bool(int, int)> fn) {
+                    std::sort(v.begin(), v.end(), fn);
+                }
+                ]])],[CXXFLAGS_CXXSTD=$flag])
+            AC_LANG_POP([C++])
+            CXXFLAGS=$save_CXXFLAGS
+            if test -n "$CXXFLAGS_CXXSTD"; then
+                HAVE_CXXSTD=TRUE
+                break
+            fi
+        done
+        if test "$HAVE_CXXSTD" = TRUE; then
+            AC_MSG_RESULT([yes ($CXXFLAGS_CXXSTD)])
+        else
+            AC_MSG_RESULT([no])
+            AC_MSG_ERROR(Compiler doesn't support C++20)
+        fi
     fi
 fi
 
@@ -1795,7 +1875,15 @@ AS_IF([test "$ENABLE_IOSAPP" != "true" -a "$ENABLE_ANDROIDAPP" != "true"],
       if test -n "$with_lo_path"; then
           # strip trailing '/' from LO_PATH, 'ln -s' with such path will otherwise fail
           if test "$ENABLE_WINDOWSAPP" != "true"; then
-              LO_PATH=`readlink -f ${with_lo_path%/}`
+              # The path may not exist yet when a package is built, and
+              # BSD readlink prints nothing for a missing path, so only
+              # canonicalize what is there.
+              lo_path_given=${with_lo_path%/}
+              if test -e "$lo_path_given"; then
+                  LO_PATH=`readlink -f "$lo_path_given"`
+              else
+                  LO_PATH=$lo_path_given
+              fi
           else
               # LO_PATH is the path used at run-time to find the
               # CollaboraOffice shared libraries. When running configure
@@ -2006,8 +2094,10 @@ AS_IF([test "$ENABLE_QTAPP" = true],
        PKG_CHECK_MODULES([QT6], [Qt6Core >= 6.6 Qt6Widgets Qt6Gui Qt6Network Qt6WebSockets Qt6WebEngineCore Qt6WebChannel Qt6WebEngineWidgets Qt6DBus Qt6PrintSupport])
 
        dnl Locate qtpaths6 for Qt6 tool discovery
+       dnl FreeBSD ports keep the Qt tools out of the PATH, under
+       dnl /usr/local/lib/qt6/bin.
        AC_PATH_PROG([QTPATHS6], [qtpaths6], [no],
-             [$PATH$PATH_SEPARATOR/usr/lib/qt6/bin])
+             [$PATH$PATH_SEPARATOR/usr/lib/qt6/bin$PATH_SEPARATOR/usr/local/lib/qt6/bin])
        if test "x$QTPATHS6" = "xno"; then
              AC_MSG_ERROR([qtpaths6 not found. Install Qt6 development tools.])
        fi
@@ -2051,19 +2141,45 @@ mobile_app=
 ENABLE_MOBILEAPP=
 MOBILEAPP=0
 AC_MSG_CHECKING([whether this is a mobile app])
-if test "$enable_iosapp" = "yes" -o "$enable_macosapp" = "yes" -o "$enable_windowsapp" = "yes" -o "$enable_androidapp" = "yes" -o "$host_os" = "emscripten" -o "$enable_qtapp" = "yes" ; then
+if test "$enable_iosapp" = "yes" -o "$enable_macosapp" = "yes" -o "$enable_windowsapp" = "yes" -o "$enable_androidapp" = "yes" -o "$host_os" = "emscripten" ; then
      AC_MSG_RESULT([yes])
      mobile_app=true;
      MOBILEAPP=1
      ENABLE_MOBILEAPP=true
      AC_DEFINE([ENABLE_CHILDROOTS],0,[Disable systemplate and jails when building CODA.])
+     AC_DEFINE_UNQUOTED([MOBILEAPP],[$MOBILEAPP],[Define to 1 if this is a mobileapp (eg. Android) build.])
+elif test "$enable_qtapp" = "yes" ; then
+     dnl Combined build: the tree stays a normal server, and only the coda-qt
+     dnl target overrides MOBILEAPP and ENABLE_CHILDROOTS on its command line.
+     AC_MSG_RESULT([no, combined server plus qt app])
 else
      AC_DEFINE([ENABLE_CHILDROOTS],1,[Normal server, enable systemplate and jails.])
+     AC_DEFINE_UNQUOTED([MOBILEAPP],[$MOBILEAPP],[Define to 1 if this is a mobileapp (eg. Android) build.])
      AC_MSG_RESULT([no])
 fi
-AC_DEFINE_UNQUOTED([MOBILEAPP],[$MOBILEAPP],[Define to 1 if this is a mobileapp (eg. Android) build.])
 AC_SUBST(ENABLE_MOBILEAPP)
 AM_CONDITIONAL([ENABLE_MOBILEAPP], [test "$ENABLE_MOBILEAPP" = "true"])
+
+ENABLE_SERVER=true
+server_msg="enabled"
+if test "$enable_server" = "no"; then
+    if test "$enable_qtapp" != "yes"; then
+        AC_MSG_ERROR([--disable-server is only meaningful together with --enable-qtapp; a server tree has nothing else to build])
+    fi
+    if test "$LIBFUZZER" = "1"; then
+        AC_MSG_ERROR([--disable-server cannot be combined with --enable-fuzzers, the fuzzers exercise the server])
+    fi
+    ENABLE_SERVER=false
+    server_msg="disabled (qt app only)"
+elif test "$mobile_app" = "true"; then
+    ENABLE_SERVER=false
+    server_msg="not applicable (app build)"
+fi
+AC_SUBST(ENABLE_SERVER)
+AM_CONDITIONAL([ENABLE_SERVER], [test "$ENABLE_SERVER" = "true"])
+
+dnl The tree builds a page that an app loads from file://.
+AM_CONDITIONAL([ENABLE_APP], [test "$ENABLE_MOBILEAPP" = "true" -o "$ENABLE_QTAPP" = "true"])
 
 if test "$host_os" = "emscripten" ; then
     ENABLE_EMSCRIPTENAPP=true
@@ -2141,8 +2257,9 @@ AC_SUBST(ENABLE_SSL)
 
 dnl coolwsd does not link libpam; it dlopen's it on demand for the optional
 dnl admin-console PAM auth. Only the header is needed at build time (for the
-dnl PAM types); the library is not required and not linked.
-AS_IF([test "$mobile_app" != "true" -a "$host_os" != "emscripten"],
+dnl PAM types); the library is not required and not linked. Only the server
+dnl needs it, so a --disable-server qt app tree skips the check.
+AS_IF([test "$ENABLE_SERVER" = "true" -a "$host_os" != "emscripten"],
       [AC_CHECK_HEADERS([security/pam_appl.h],
                         [],
                         [AC_MSG_ERROR([header security/pam_appl.h not found, install PAM development package])])])
@@ -2384,10 +2501,30 @@ AS_IF([test "$ENABLE_IOSAPP" != "true" -a "$ENABLE_WINDOWSAPP" != "true" -a "$EN
 
        ])
 
-AS_IF([test `uname -s` = "Linux" -o `uname -s` = "FreeBSD" -o `uname -s` = "Darwin"],
+dnl Landlock containment, the file-system isolation used when coolwsd runs
+dnl without capabilities. The build settles here whether it is compiled in, so
+dnl the choice appears in the configure output, and a host that cannot supply
+dnl the header stops the build.
+AS_IF([test "$enable_landlock" != "no" \
+       -a "$ENABLE_IOSAPP" != "true" \
+       -a "$ENABLE_WINDOWSAPP" != "true" \
+       -a "$ENABLE_ANDROIDAPP" != "true" \
+       -a "$ENABLE_MACOSAPP" != "true" \
+       -a "$host_os" != "emscripten" \
+       -a "`uname -s`" = "Linux"],
+      [AC_CHECK_HEADERS([linux/landlock.h],
+                        [],
+                        [AC_MSG_ERROR([critical security header linux/landlock.h not found. It comes from the kernel headers, linux-libc-dev on Debian and Ubuntu or kernel-headers on RPM distributions, and needs to be version 5.13 or newer. Only the header is needed. The build host does not need a kernel that new. If the target system cannot support landlock, you can use --disable-landlock, but mind the security consequences.])])
+       AC_DEFINE([DISABLE_LANDLOCK],0,[Whether to disable Landlock containment])
+       landlock_msg="enabled"],
+      [AC_DEFINE([DISABLE_LANDLOCK],1,[Whether to disable Landlock containment])
+       landlock_msg="disabled"])
+
+AS_IF([test `uname -s` = "Linux" -o `uname -s` = "FreeBSD" -o `uname -s` = "Darwin" -o "$enable_windowsapp" = "yes"],
       # We need npm and node unconditionally only on Linux, both in the normal Online case, and when
       # only building cool for the iOS app. When building the iOS app itself on macOS, this is
       # optional. If node and npm are not available, cool will have to be built on a Linux box.
+      # The Windows app builds cool in this tree, so it needs them too.
       [AC_PATH_PROG(NODE, node, no)
        if test "$NODE" = "no"; then
             AC_MSG_ERROR([node required to build cool, but not installed])
@@ -2416,15 +2553,23 @@ AS_IF([test `uname -s` = "Linux" -o `uname -s` = "FreeBSD" -o `uname -s` = "Darw
                AC_MSG_ERROR([chrome or chromium is required to run the JS tests, but not installed])
            fi
        fi
+
+       # A native Windows node lives under "C:\Program Files"; convert to a
+       # space-free 8.3 short path so $(NODE)/$(NPM) survive make/shell word
+       # splitting. node is node.exe (found through the MSYS .exe magic, which
+       # cygpath does not apply), while npm is an extensionless shell script.
+       if test "$enable_windowsapp" = "yes" && command -v cygpath >/dev/null 2>&1; then
+           test -f "$NODE.exe" && NODE="$NODE.exe"
+           NODE=`cygpath -ms "$NODE"`
+           NPM=`cygpath -ms "$NPM"`
+       fi
        ])
 
-AS_IF([test `uname -s` = "FreeBSD"],
-      [AC_CHECK_LIB(iconv, libiconv_open, [], [AC_MSG_ERROR([No. Install 3rd-party libiconv.])])],
-      [AS_IF([test `uname -s` = "Darwin" -a "$ENABLE_IOSAPP" != "true"],
-             [AC_CHECK_LIB(iconv, iconv_open, [], [AC_MSG_ERROR([No, please install libiconv.])])])])
+AS_IF([test `uname -s` = "Darwin" -a "$ENABLE_IOSAPP" != "true"],
+      [AC_CHECK_LIB(iconv, iconv_open, [], [AC_MSG_ERROR([No, please install libiconv.])])])
 
 AS_IF([test `uname -s` = "FreeBSD"],
-      [LIBS="$LIBS -lexecinfo -lz -liconv"])
+      [LIBS="$LIBS -lexecinfo -lz"])
 
 if test "x${prefix}" = "xNONE"; then
     prefix=/usr/local
@@ -2458,7 +2603,7 @@ if test "$srcdir" != '.'; then
        mkdir -p $dirname ||
              as_fn_error $? "cannot create directory $dirname"
 
-       rm -f "$dst_dir"
+       rm -rf "$dst_dir"
        case $srcdir in
          /*)
            src_dir=$srcdir/$dst_dir
@@ -2474,23 +2619,31 @@ if test "$srcdir" != '.'; then
        echo "linking $src_dir to $dst_dir"
        ln -s "$src_dir" "$dst_dir" 2>/dev/null ||
           ln "$src_dir" "$dst_dir" 2>/dev/null ||
-             cp -p "$srcdir/$dst_dir" "$dst_dir" ||
+             cp -pR "$srcdir/$dst_dir" "$dst_dir" ||
                 as_fn_error $? "cannot link or copy $src_dir to $dst_dir"
    done
 fi])
 
 APP_BRANDING_DIR=
-APP_IC_LAUNCHER="ic_launcher"
+APP_BRANDING_SUFFIX=
 APP_HAS_BRANDING="false"
 if test "$with_app_branding" != no -a -d "$with_app_branding"; then
     APP_BRANDING_DIR="$with_app_branding"
-    APP_IC_LAUNCHER="ic_launcher_brand"
+    APP_BRANDING_SUFFIX=_brand
     APP_HAS_BRANDING="true"
 fi
+
+if test "$with_app_branding_suffix" != no -a -n "$with_app_branding_suffix"; then
+    APP_BRANDING_SUFFIX="$with_app_branding_suffix"
+fi
+
 AC_SUBST(APP_BRANDING_DIR)
-AC_SUBST(APP_IC_LAUNCHER)
+AC_SUBST(APP_BRANDING_SUFFIX)
 AC_SUBST(APP_HAS_BRANDING)
 AM_CONDITIONAL([APP_HAS_BRANDING], [test "$APP_HAS_BRANDING" = "true"])
+
+APP_IC_LAUNCHER="ic_launcher$APP_BRANDING_SUFFIX"
+AC_SUBST(APP_IC_LAUNCHER)
 
 APP_GOOGLE_PLAY="false"
 if test "$enable_android_google_play" = "yes"; then
@@ -2554,7 +2707,6 @@ AS_IF([test "$ENABLE_IOSAPP" = "true"],
               # iOS app.
               touch ios/Mobile/Branding/branding.css
           fi
-          cp coolkitconfig-mobile.xcu ios/Mobile/coolkitconfig.xcu
        fi
       ])
 AC_SUBST(IOSAPP_FONTS)
@@ -2742,90 +2894,6 @@ fi
 AC_SUBST(FEATURE_RESTRICTION_CONFIGURATION)
 AM_SUBST_NOTMAKE(FEATURE_RESTRICTION_CONFIGURATION)
 
-ENABLE_WASM_EMBIND_UNO=
-if test "$host_os" = emscripten; then
-    AC_MSG_CHECKING([whether to enable the Embind-based UNO support])
-    if test "$enable_wasm_embind_uno" = yes; then
-        AC_MSG_RESULT([yes])
-        AC_MSG_CHECKING([whether the CollaboraOffice installation includes the Embind-base UNO support])
-        if test ! -f "$LOBUILDDIR"/workdir/CustomTarget/static/unoembind/bindings_uno.js; then
-            AC_MSG_ERROR(
-                [cannot find $LOBUILDDIR/workdir/CustomTarget/static/unoembind/bindings_uno.js])
-        else
-            AC_MSG_RESULT([yes])
-        fi
-        ENABLE_WASM_EMBIND_UNO=true
-    else
-        AC_MSG_RESULT([no])
-    fi
-fi
-AM_CONDITIONAL([ENABLE_WASM_EMBIND_UNO], [test "$ENABLE_WASM_EMBIND_UNO" = true])
-
-ENABLE_WASM_EMBINDTEST=
-if test "$host_os" = emscripten; then
-    AC_MSG_CHECKING([whether to run the CollaboraOffice embindtest])
-    if test "$enable_wasm_embindtest" = yes; then
-        if test "$ENABLE_WASM_EMBIND_UNO" != true; then
-            AC_MSG_ERROR([requires --enable-wasm-embind-uno])
-        else
-            AC_MSG_RESULT([yes])
-            AC_MSG_CHECKING([whether the CollaboraOffice installation includes embindtest])
-            if test ! -f "$LOBUILDDIR"/instdir/program/soffice.js.linkdeps; then
-                AC_MSG_ERROR([cannot find $LOBUILDDIR/instdir/program/soffice.js.linkdeps])
-            elif ! LC_ALL=POSIX grep -E -q -e '(^|[[[:space:]]])-ltestunolo($|[[[:space:]]])' \
-                    "$LOBUILDDIR"/instdir/program/soffice.js.linkdeps
-            then
-                AC_MSG_ERROR(
-                    [cannot find -ltestunolo in $LOBUILDDIR/instdir/program/soffice.js.linkdeps])
-            else
-                AC_MSG_RESULT([yes])
-            fi
-            ENABLE_WASM_EMBINDTEST=true
-        fi
-    else
-        AC_MSG_RESULT([no])
-    fi
-fi
-AC_SUBST([ENABLE_WASM_EMBINDTEST])
-AM_CONDITIONAL([ENABLE_WASM_EMBINDTEST], [test "$ENABLE_WASM_EMBINDTEST" = true])
-
-ENABLE_WASM_ZETAJS=
-WITH_WASM_ZETAJS=
-if test "$host_os" = emscripten; then
-    AC_MSG_CHECKING([whether to include zetajs scripting support])
-    if test -n "$with_wasm_zetajs"; then
-        if test "$ENABLE_WASM_EMBIND_UNO" != true; then
-            AC_MSG_ERROR([requires --enable-wasm-embind-uno])
-        else
-            AC_MSG_RESULT([yes])
-            ENABLE_WASM_ZETAJS=true
-            WITH_WASM_ZETAJS=$with_wasm_zetajs
-        fi
-    else
-        AC_MSG_RESULT([no])
-    fi
-fi
-AC_SUBST([ENABLE_WASM_ZETAJS])
-AC_SUBST([WITH_WASM_ZETAJS])
-AM_CONDITIONAL([ENABLE_WASM_ZETAJS], [test "$ENABLE_WASM_ZETAJS" = true])
-
-ENABLE_WASM_ZETAJS_EXAMPLE=
-if test "$host_os" = emscripten; then
-    AC_MSG_CHECKING([whether to include a zetajs scripting example])
-    if test "$enable_wasm_zetajs_example" = yes; then
-        if test "$ENABLE_WASM_EMBIND_UNO" != true || test "$ENABLE_WASM_ZETAJS" != true; then
-            AC_MSG_ERROR([requires --enable-wasm-embind-uno and --with-wasm-zetajs])
-        else
-            AC_MSG_RESULT([yes])
-        fi
-        ENABLE_WASM_ZETAJS_EXAMPLE=true
-    else
-        AC_MSG_RESULT([no])
-    fi
-fi
-AC_SUBST([ENABLE_WASM_ZETAJS_EXAMPLE])
-AM_CONDITIONAL([ENABLE_WASM_ZETAJS_EXAMPLE], [test "$ENABLE_WASM_ZETAJS_EXAMPLE" = true])
-
 AC_CONFIG_FILES([Makefile
                  cypress_test/Makefile
                  cypress_test/fontconfig/cypress-fonts.conf
@@ -2839,7 +2907,6 @@ AC_CONFIG_FILES([Makefile
                  browser/images/Makefile
                  browser/l10n/Makefile
                  browser/npm-shrinkwrap.json
-                 coolkitconfig.xcu
                  coolwsd.spec
                  coolwsd.xml
                  debian/coolwsd.postinst])
@@ -2883,55 +2950,26 @@ if test "$enable_windowsapp" = "yes"; then
     # WSL. Ideally we shouldn't need to run the configure script when
     # building CODA-W at all. Later.
 
-    # Cache the clang-cl compiles of the windows app with ccache, the same
-    # way the engine build caches its compiles. MSBuild runs the compiler
-    # without naming it on the command line, so ccache cannot be handed the
-    # compiler as an argument. The way round it is a directory holding a
-    # clang-cl.exe that is really ccache: point the C++ tool at that
-    # directory and ccache, seeing it was invoked as clang-cl, runs the real
-    # clang-cl that the Visual Studio environment puts on PATH. Make that
-    # clang-cl as a hard link to ccache, and fall back to a copy when ccache
-    # sits on another volume than the build tree. The shim goes in a
-    # directory of its own under the build tree so it is gitignored and out
-    # of the way. CODA_CCACHE holds that directory, or stays empty when no
-    # ccache is found, in which case the build keeps the stock clang-cl.
+    # The engine's configure builds a directory whose clang-cl.exe is really
+    # ccache and records it as MSBUILD_CCACHE in its config_host.mk, already as
+    # a native Windows path. Read it from there. A search here would run on WSL
+    # and could turn up a Linux ccache that native msbuild cannot start, and an
+    # engine that found no usable ccache leaves the value empty, which is the
+    # same answer the app needs.
     CODA_CCACHE=
-    AC_ARG_WITH([coda-ccache],
-        AS_HELP_STRING([--with-coda-ccache=PATH],
-            [Path to the Windows ccache.exe used to wrap the windows app
-             clang-cl compiles. Defaults to the ccache.exe found on PATH; pass
-             --without-coda-ccache to build without it.]))
-    dnl configure runs on WSL or Cygwin, but MSBuild runs the shim as a native
-    dnl Windows process, so the shim must be a Windows ccache.exe, never the
-    dnl Linux ccache that sits on the WSL PATH. Search for ccache.exe so that
-    dnl Linux ccache is passed over. (Cygwin resolves the bare name to
-    dnl ccache.exe anyway, so spelling out the .exe costs it nothing.)
-    coda_ccache_exe=
-    AS_IF([test "$with_coda_ccache" = "no"],
-              [coda_ccache_exe=no],
-          [test -n "$with_coda_ccache" -a "$with_coda_ccache" != "yes"],
-              [coda_ccache_exe="$with_coda_ccache"],
-          [AC_PATH_PROG([coda_ccache_exe], [ccache.exe])])
-    dnl A Windows executable starts with the "MZ" DOS signature. If what we
-    dnl found is something else (e.g. a Linux ELF ccache picked up from the WSL
-    dnl PATH), warn and build without ccache rather than installing a shim that
-    dnl Windows refuses to run as an "Unsupported 16-Bit Application".
-    AS_IF([test -n "$coda_ccache_exe" -a "$coda_ccache_exe" != "no"],
-        [AS_IF([test "`head -c 2 "$coda_ccache_exe" 2>/dev/null`" != "MZ"],
-            [AC_MSG_WARN([$coda_ccache_exe is not a Windows executable; building without ccache. Install a Windows ccache.exe and pass --with-coda-ccache=PATH to cache the clang-cl compiles.])
-             coda_ccache_exe=no])])
-    AS_IF([test -n "$coda_ccache_exe" -a "$coda_ccache_exe" != "no"],
-        [coda_ccache_shim="`pwd`/windows/coda/ccache-shim"
-         AS_MKDIR_P([$coda_ccache_shim])
-         rm -f "$coda_ccache_shim/clang-cl.exe"
-         ln "$coda_ccache_exe" "$coda_ccache_shim/clang-cl.exe" 2>/dev/null \
-             || cp -f "$coda_ccache_exe" "$coda_ccache_shim/clang-cl.exe"
-         AS_IF([command -v wslpath >/dev/null 2>&1],
-                   [CODA_CCACHE=`wslpath -w "$coda_ccache_shim"`],
-               [command -v cygpath >/dev/null 2>&1],
-                   [CODA_CCACHE=`cygpath -w "$coda_ccache_shim"`],
-               [CODA_CCACHE="$coda_ccache_shim"])])
+    CODA_CCACHE_DIR=
+    AC_MSG_CHECKING([for the engine's ccache directory])
+    if test -f "$LOBUILDDIR/config_host.mk"; then
+        CODA_CCACHE=`sed -n 's/^MSBUILD_CCACHE = //p' "$LOBUILDDIR/config_host.mk"`
+        CODA_CCACHE_DIR=`sed -n 's/^MSBUILD_CCACHE_DIR = //p' "$LOBUILDDIR/config_host.mk"`
+    fi
+    if test -n "$CODA_CCACHE"; then
+        AC_MSG_RESULT([$CODA_CCACHE])
+    else
+        AC_MSG_RESULT([none, the app compiles with the stock clang-cl])
+    fi
     AC_SUBST([CODA_CCACHE])
+    AC_SUBST([CODA_CCACHE_DIR])
 
     AC_CONFIG_FILES([windows/coda/config.h
                      windows/coda/config.props])
@@ -3050,7 +3088,9 @@ Configuration:
     LOKit path                ${lokit_msg}
     LO path                   $LO_PATH
     LO integration tests      ${lo_msg}
+    Server (coolwsd)          $server_msg
     SSL support               $ssl_msg
+    Landlock containment      $landlock_msg
     Debug & low security      $debug_msg
     Experimental features     $experimental_msg
     Test assertion logging    $log_asserts_msg
@@ -3062,7 +3102,7 @@ Configuration:
     Code-Coverage             $coverage_msg
 
     \$ make # to compile"
-if test -n "$with_lo_path"; then
+if test -n "$with_lo_path" -a "$ENABLE_SERVER" = "true"; then
 echo "    \$ make run # to start coolwsd
     \$ make sync-writer|calc|impress # to start browsersync with specified app
 "

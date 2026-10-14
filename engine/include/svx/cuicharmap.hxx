@@ -66,7 +66,7 @@ class SVX_DLLPUBLIC SvxCharacterMap final : public SfxDialogController
 {
 public:
     SvxCharacterMap(weld::Widget* pParent, const SfxItemSet* pSet,
-                    css::uno::Reference<css::frame::XFrame> xFrame);
+                    cpo::uno::Reference<css::frame::XFrame> xFrame);
 
     virtual ~SvxCharacterMap() override;
 
@@ -146,8 +146,8 @@ private:
         hexadecimal = 16
     };
 
-    // inserts the character that is currently selected in the given IconView
-    void insertSelectedCharacter(weld::IconView& rIconView);
+    // inserts the character the dialog currently shows, and remembers it
+    void insertCurrentCharacter();
 
     static void fillAllSubsets(weld::ComboBox& rListBox);
 
@@ -175,6 +175,8 @@ private:
     DECL_DLLPRIVATE_LINK(DecimalCodeChangeHdl, weld::Entry&, void);
     DECL_DLLPRIVATE_LINK(HexCodeChangeHdl, weld::Entry&, void);
     DECL_DLLPRIVATE_LINK(CharClickHdl, SvxCharView*, void);
+    DECL_DLLPRIVATE_LINK(CharViewInsertHdl, SvxCharView*, void);
+    DECL_DLLPRIVATE_LINK(CharViewReturnHdl, SvxCharView*, void);
     DECL_DLLPRIVATE_LINK(InsertClickHdl, weld::Button&, void);
     DECL_DLLPRIVATE_LINK(FavSelectHdl, weld::Button&, void);
     DECL_DLLPRIVATE_LINK(SearchUpdateHdl, weld::Entry&, void);
@@ -190,7 +192,7 @@ private:
     vcl::Font m_aFont;
     std::unique_ptr<const SubsetMap> m_pSubsetMap;
     bool m_isSearchMode;
-    css::uno::Reference<css::frame::XFrame> m_xFrame;
+    cpo::uno::Reference<css::frame::XFrame> m_xFrame;
     SfxCharmapContainer m_aCharmapContents;
     SvxShowText m_aShowChar;
     std::unique_ptr<SfxAllItemSet> m_xOutputSet;

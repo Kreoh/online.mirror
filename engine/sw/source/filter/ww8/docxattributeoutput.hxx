@@ -32,6 +32,7 @@
 
 #include <editeng/boxitem.hxx>
 #include <sax/fshelper.hxx>
+#include <docmodel/color/ComplexColor.hxx>
 #include <sax/fastattribs.hxx>
 #include <vcl/vclenum.hxx>
 #include <svx/xenum.hxx>
@@ -493,6 +494,13 @@ private:
     /// @see InitCollectedRunproperties(), WriteCollectedParagraphProperties()
     void WriteCollectedRunProperties();
 
+    /// Close the paragraph that holds the drop cap, and open one for the rest of the text.
+    ///
+    /// Writer keeps a drop cap as an attribute of the paragraph it starts, while
+    /// Word gives the initial a framed paragraph of its own, so the paragraph has
+    /// to be split where the initial ends.
+    void SplitParagraphAtDropCap();
+
     /// Output graphic fly frames or replacement graphics for OLE nodes.
     ///
     /// For graphic frames, just use the first two parameters, for OLE
@@ -500,7 +508,7 @@ private:
     ///
     /// @see WriteOLE2Obj()
     void FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size& rSize, const SwFlyFrameFormat* pOLEFrameFormat, SwOLENode* pOLENode, const SdrObject* pSdrObj = nullptr);
-    void WriteSrcRect(const css::uno::Reference<css::beans::XPropertySet>& xShapePropSet,
+    void WriteSrcRect(const cpo::uno::Reference<css::beans::XPropertySet>& xShapePropSet,
                       const SwFrameFormat* pFrameFormat);
     void WriteOLE2Obj( const SdrObject* pSdrObj, SwOLENode& rNode, const Size& rSize, const SwFlyFrameFormat* pFlyFrameFormat, const sal_Int8 nFormulaAlignment);
     bool WriteOLEChart( const SdrObject* pSdrObj, const Size& rSize, const SwFlyFrameFormat* pFlyFrameFormat);
@@ -856,6 +864,25 @@ private:
     rtl::Reference<sax_fastparser::FastAttributeList> m_pHyperlinkAttrList;
     std::optional<double> m_oFontSize;
     bool m_bCharPostureWritten;
+    /// Whether the run already has a w:position, so that a drop cap must not add one.
+    bool m_bCharPositionWritten;
+    /// Whether the run already has a w:rStyle, so that a drop cap must not add one.
+    bool m_bCharStyleWritten;
+
+    /// The drop cap that is waiting for a paragraph of its own.
+    struct DropCapInfo
+    {
+        OString aStyleId;       ///< style of the paragraph the initial starts
+        OString aCharStyleId;   ///< character style Writer gives the initial
+        sal_Int32 nLines;       ///< how many lines tall the initial is
+        sal_Int32 nDistance;    ///< space between the initial and the text, in twips
+        sal_Int32 nLineHeight;  ///< height of the initial's line, in twips
+        sal_Int32 nFontSize;    ///< size of the initial, in half-points
+        sal_Int32 nPosition;    ///< how far the initial is lowered, in half-points
+        bool bStyleIsNumbered = false; ///< whether the paragraph style brings a list with it
+        bool bSizeWritten = false; ///< whether a run already got the size of the initial
+    };
+    std::optional<DropCapInfo> m_oDropCap;
     std::shared_ptr<SwContentControl> m_pContentControl;
     /// If the current SDT around runs should be ended before the current run.
     bool m_bEndCharSdt;
@@ -1147,14 +1174,17 @@ public:
     enum class hasProperties { no, yes };
     hasProperties WritePostitFields();
     void WritePostItFieldsResolved();
+    bool HasPostitFieldsWithDateUTC() const;
+    void WritePostItFieldsIds();
+    void WritePostItFieldsExtensible();
 
     /// VMLTextExport
     virtual void WriteOutliner(const OutlinerParaObject& rParaObj) override;
-    virtual void WriteVMLTextBox(css::uno::Reference<css::drawing::XShape> xShape) override;
+    virtual void WriteVMLTextBox(cpo::uno::Reference<css::drawing::XShape> xShape) override;
     /// DMLTextExport
-    virtual void WriteTextBox(css::uno::Reference<css::drawing::XShape> xShape) override;
-    virtual css::uno::Reference<css::text::XTextFrame> GetUnoTextFrame(
-        css::uno::Reference<css::drawing::XShape> xShape) override;
+    virtual void WriteTextBox(cpo::uno::Reference<css::drawing::XShape> xShape) override;
+    virtual cpo::uno::Reference<css::text::XTextFrame> GetUnoTextFrame(
+        cpo::uno::Reference<css::drawing::XShape> xShape) override;
     virtual oox::drawingml::DrawingML& GetDrawingML() override;
     virtual bool MaybeOutputBrushItem(SfxItemSet const&) override;
 
@@ -1185,6 +1215,14 @@ public:
     static OString convertToOOXMLVertOrientRel(sal_Int16 nOrientRel);
     static OString convertToOOXMLHoriOrientRel(sal_Int16 nOrientRel);
     static void ImplCellMargins( sax_fastparser::FSHelperPtr const & pSerializer, const SvxBoxItem& rBox, sal_Int32 tag, bool bUseStartEnd, const SvxBoxItem* pDefaultMargins = nullptr);
+    /// Add the theme color attributes (w:themeColor with tint or shade) of a theme color to a
+    /// color or border attribute list; a color that is no theme color adds nothing.
+    static void AddThemeColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                        model::ComplexColor const& rComplexColor);
+    /// The same with the fill attributes (w:themeFill with tint or shade) of a shading.
+    static void AddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                            model::ComplexColor const& rComplexColor);
+
     template <class... Args>
     static void AddToAttrList(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList, Args&&... args)
     {
@@ -1209,6 +1247,7 @@ public:
     static const sal_Int32 Tag_TableDefinition = 14;
     static const sal_Int32 Tag_OutputFlyFrame = 15;
     static const sal_Int32 Tag_StartSection = 16;
+    static const sal_Int32 Tag_DropCapParagraphProperties = 17;
 };
 
 /**

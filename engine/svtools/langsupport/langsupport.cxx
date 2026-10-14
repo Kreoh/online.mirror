@@ -9,7 +9,7 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/bootstrap.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -22,6 +22,7 @@
 #include <sal/log.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 SAL_IMPLEMENT_MAIN()
 {
@@ -29,7 +30,7 @@ SAL_IMPLEMENT_MAIN()
     {
         tools::extendApplicationEnvironment();
 
-        uno::Reference<uno::XComponentContext> xContext =
+        uno::Reference<cpo::uno::XComponentContext> xContext =
             cppu::defaultBootstrap_InitialComponentContext();
 
         uno::Reference<lang::XMultiComponentFactory> xFactory =

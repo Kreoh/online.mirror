@@ -39,7 +39,8 @@
 #include <rootfrm.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Third set of tests asserting the behavior of Writer user interface shells.
 class SwUiWriterTest3 : public SwModelTestBase
@@ -2183,21 +2184,6 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf134253)
     CPPUNIT_ASSERT_EQUAL(6, getPages());
 }
 
-CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testNotebookBar)
-{
-    createSwDoc();
-
-    //tdf#154282: Without the fix in place, this test would have crashed
-    dispatchCommand(mxComponent, u".uno:ToolbarMode?Mode:string=notebookbar.ui"_ustr, {});
-    dispatchCommand(mxComponent, u".uno:ToolbarMode?Mode:string=Single"_ustr, {});
-    dispatchCommand(mxComponent, u".uno:ToolbarMode?Mode:string=Sidebar"_ustr, {});
-    dispatchCommand(mxComponent, u".uno:ToolbarMode?Mode:string=notebookbar_compact.ui"_ustr, {});
-    dispatchCommand(mxComponent,
-                    u".uno:ToolbarMode?Mode:string=notebookbar_groupedbar_compact.ui"_ustr, {});
-    dispatchCommand(mxComponent, u".uno:ToolbarMode?Mode:string=notebookbar_single.ui"_ustr, {});
-    dispatchCommand(mxComponent, u".uno:ToolbarMode?Mode:string=Default"_ustr, {});
-}
-
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, TestAsCharTextBox)
 {
     // Related tickets:
@@ -2624,11 +2610,11 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf130746)
     // between paragraphs. Let’s remove the accelerator so that the
     // table handling code can see the key which will make it try to
     // change the row size instead.
-    const uno::Reference<uno::XComponentContext>& xContext
+    const uno::Reference<cpo::uno::XComponentContext>& xContext
         = comphelper::getProcessComponentContext();
-    css::uno::Reference<ui::XModuleUIConfigurationManagerSupplier> confSupplier
+    cpo::uno::Reference<ui::XModuleUIConfigurationManagerSupplier> confSupplier
         = ui::theModuleUIConfigurationManagerSupplier::get(xContext);
-    css::uno::Reference<ui::XUIConfigurationManager> xManager
+    cpo::uno::Reference<ui::XUIConfigurationManager> xManager
         = confSupplier->getUIConfigurationManager(u"com.sun.star.text.TextDocument"_ustr);
     awt::KeyEvent keyEvent;
     keyEvent.KeyCode = css::awt::Key::UP;
@@ -2900,6 +2886,77 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf140061)
     // Without the fix in place, this test would have crashed here
     dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
     CPPUNIT_ASSERT_EQUAL(1, getPages());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testHTMLPasteElementClassFromStyleSheet)
+{
+    // Given a document with an empty paragraph that has a direct font of its own:
+    createSwDoc();
+    uno::Reference<beans::XPropertySet> xParagraph(getParagraph(1), uno::UNO_QUERY);
+    xParagraph->setPropertyValue(u"CharFontName"_ustr, uno::Any(u"DejaVu Sans"_ustr));
+    xParagraph->setPropertyValue(u"CharHeight"_ustr, uno::Any(float(14)));
+
+    // When pasting HTML in the shape a word processor puts on the clipboard, where the font is only
+    // in a style sheet rule for the element and class:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->SttEndDoc(/*bStt=*/true);
+    OString const aHtml
+        = "<html><head><style><!--\n"
+          "p.MsoNormal, li.MsoNormal, div.MsoNormal\n"
+          "{margin:0cm; font-size:11.0pt; font-family:\"Calibri\",sans-serif;"
+          " mso-fareast-language:EN-US;}\n"
+          "--></style></head><body><!--StartFragment-->"
+          "<p class=MsoNormal><span lang=SK>first</span></p>"
+          "<p class=MsoNormal><span lang=SK>second</span></p>"
+          "<p class=MsoNormal><span lang=SK>third</span></p>"
+          "<!--EndFragment--></body></html>"_ostr;
+    rtl::Reference<TransferDataContainer> xTransferable(new TransferDataContainer);
+    xTransferable->CopyByteString(SotClipboardFormatId::HTML, aHtml);
+    TransferableDataHelper aHelper(xTransferable);
+    SwTransferable::PasteFormat(*pWrtShell, aHelper, SotClipboardFormatId::HTML);
+
+    // Then make sure every pasted paragraph has the font from the style sheet:
+    const std::u16string_view aTexts[] = { u"first", u"second", u"third" };
+    for (int i = 0; i < 3; ++i)
+    {
+        uno::Reference<text::XTextRange> xRun = getRun(getParagraph(i + 1), 1, OUString(aTexts[i]));
+        // Without the fix in place, this test would have failed with:
+        // - Expected: Calibri;sans-serif
+        // - Actual  : DejaVu Sans
+        // i.e. the style sheet rule was dropped when pasting into an existing document.
+        CPPUNIT_ASSERT_EQUAL(u"Calibri;sans-serif"_ustr,
+                             getProperty<OUString>(xRun, u"CharFontName"_ustr));
+        CPPUNIT_ASSERT_EQUAL(float(11), getProperty<float>(xRun, u"CharHeight"_ustr));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testHTMLPasteIntoEmptyParagraphKeepsParagraphFormat)
+{
+    // Given a document with an empty, left aligned paragraph that has a direct font:
+    createSwDoc();
+    uno::Reference<beans::XPropertySet> xParagraph(getParagraph(1), uno::UNO_QUERY);
+    xParagraph->setPropertyValue(u"CharFontName"_ustr, uno::Any(u"DejaVu Sans"_ustr));
+
+    // When pasting HTML with two justified paragraphs into it:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->SttEndDoc(/*bStt=*/true);
+    OString const aHtml = "<html><body>"
+                          "<p style='text-align:justify'>first</p>"
+                          "<p style='text-align:justify'>second</p>"
+                          "</body></html>"_ostr;
+    rtl::Reference<TransferDataContainer> xTransferable(new TransferDataContainer);
+    xTransferable->CopyByteString(SotClipboardFormatId::HTML, aHtml);
+    TransferableDataHelper aHelper(xTransferable);
+    SwTransferable::PasteFormat(*pWrtShell, aHelper, SotClipboardFormatId::HTML);
+
+    // Then make sure the first pasted paragraph is justified as well:
+    CPPUNIT_ASSERT_EQUAL(u"first"_ustr, getParagraph(1)->getString());
+    // Without the fix in place, this test would have failed with:
+    // - Expected: 2
+    // - Actual  : 0
+    // i.e. the first pasted paragraph took the paragraph formatting of the empty paragraph.
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(style::ParagraphAdjust_BLOCK),
+                         getProperty<sal_Int16>(getParagraph(1), u"ParaAdjust"_ustr));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

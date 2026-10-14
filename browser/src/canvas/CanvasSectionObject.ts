@@ -58,6 +58,8 @@ class CanvasSectionObject {
 	onMouseMove(point: cool.SimplePoint, dragDistance: Array<number>, e: MouseEvent): void { return; }
 	onMouseDown(point: cool.SimplePoint, e: MouseEvent): void { return; }
 	onMouseUp(point: cool.SimplePoint, e: MouseEvent): void { return; }
+	/// The drag this section started is off, and what it was showing of it goes.
+	onDragCancel(): void { return; }
 
 	setShowSection(show: boolean): void {
 		this.showSection = show;
@@ -84,7 +86,7 @@ class CanvasSectionObject {
 	onMouseEnter(point: cool.SimplePoint, e: MouseEvent): void { return; }
 	onMouseLeave(point: cool.SimplePoint, e: MouseEvent): void { return; }
 	onClick(point: cool.SimplePoint, e: MouseEvent): void { return; }
-	onMiddleClick(point: cool.SimplePoint, e: MouseEvent): void { return; }
+	onMiddleClick(point: cool.SimplePoint, e: MouseEvent, openHyperlink: boolean): void { return; }
 	onDoubleClick(point: cool.SimplePoint, e: MouseEvent): void { return; }
 	onContextMenu(point: cool.SimplePoint, e: MouseEvent): void { return; }
 	onMouseWheel(point: cool.SimplePoint, delta: Array<number>, e: WheelEvent): void { return; }

@@ -33,7 +33,7 @@
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
@@ -54,7 +54,7 @@ static sal_Int16 checkScriptType(sal_Unicode c)
 
   UScriptCode scriptCode = uscript_getScript(c, &status);
 
-  if ( !U_SUCCESS(status) ) throw RuntimeException();
+  if ( !U_SUCCESS(status) ) throw cpo::uno::RuntimeException();
 
   return scriptCode == USCRIPT_HANGUL ? SCRIPT_HANGUL :
             scriptCode == USCRIPT_HAN ? SCRIPT_HANJA : SCRIPT_OTHERS;

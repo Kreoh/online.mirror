@@ -27,10 +27,10 @@
 #include <comphelper/diagnose_ex.hxx>
 #include <slideshow.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::drawing::framework;
 
@@ -111,7 +111,7 @@ void PresentationFactory::install(const rtl::Reference<::sd::DrawController>& rx
                 gsPresentationViewURL,
                 new PresentationFactory(rxController));
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }

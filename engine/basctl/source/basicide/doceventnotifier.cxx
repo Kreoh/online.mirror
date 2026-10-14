@@ -34,13 +34,13 @@ namespace basctl
     using ::com::sun::star::document::XDocumentEventBroadcaster;
     using ::com::sun::star::document::XDocumentEventListener;
     using ::com::sun::star::document::DocumentEvent;
-    using ::com::sun::star::uno::XComponentContext;
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::cpo::uno::Exception;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::frame::theGlobalEventBroadcaster;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY;
 
     // DocumentEventNotifier::Impl
 
@@ -197,7 +197,7 @@ namespace basctl
                 xBroadcaster.set( m_xModel, UNO_QUERY_THROW );
             else
             {
-                const Reference< css::uno::XComponentContext >& aContext(
+                const Reference< cpo::uno::XComponentContext >& aContext(
                     comphelper::getProcessComponentContext() );
                 xBroadcaster = theGlobalEventBroadcaster::get(aContext);
             }

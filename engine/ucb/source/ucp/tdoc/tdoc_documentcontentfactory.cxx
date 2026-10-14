@@ -31,6 +31,7 @@
 #include "tdoc_documentcontentfactory.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace tdoc_ucp;
 
 
@@ -38,7 +39,7 @@ using namespace tdoc_ucp;
 
 
 DocumentContentFactory::DocumentContentFactory(
-            uno::Reference< uno::XComponentContext > xContext )
+            uno::Reference< cpo::uno::XComponentContext > xContext )
 : m_xContext(std::move( xContext ))
 {
 }
@@ -54,20 +55,20 @@ DocumentContentFactory::~DocumentContentFactory()
 
 
 // virtual
-OUString SAL_CALL DocumentContentFactory::getImplementationName()
+OUString DocumentContentFactory::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.TransientDocumentsDocumentContentFactory"_ustr;
 }
 
 // virtual
-bool SAL_CALL
+bool
 DocumentContentFactory::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // virtual
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 DocumentContentFactory::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.TransientDocumentsDocumentContentFactory"_ustr };
@@ -78,7 +79,7 @@ DocumentContentFactory::getSupportedServiceNames()
 
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 DocumentContentFactory::createDocumentContent(
         const uno::Reference< frame::XModel >& Model )
 {
@@ -96,7 +97,7 @@ DocumentContentFactory::createDocumentContent(
     if ( xDocFac.is() )
         return xDocFac->createDocumentContent( Model );
 
-    throw uno::RuntimeException(
+    throw cpo::uno::RuntimeException(
         u"Unable to obtain document content factory!"_ustr,
         getXWeak() );
 }
@@ -104,9 +105,9 @@ DocumentContentFactory::createDocumentContent(
 
 // Service factory implementation.
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_tdoc_DocumentContentFactory_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new DocumentContentFactory(context));
 }

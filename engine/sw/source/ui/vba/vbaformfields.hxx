@@ -19,19 +19,19 @@ typedef CollTestImplHelper<ooo::vba::word::XFormFields> SwVbaFormFields_BASE;
 class SwVbaFormFields : public SwVbaFormFields_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaFormFields(const css::uno::Reference<ov::XHelperInterface>& xParent,
-                    const css::uno::Reference<css::uno::XComponentContext>& xContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFormFields(const cpo::uno::Reference<ov::XHelperInterface>& xParent,
+                    const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
                     const rtl::Reference<SwXTextDocument>& xTextDocument);
 
     // XFormFields
-    bool SAL_CALL getShaded() override;
-    void SAL_CALL setShaded(bool bSet) override;
-    //css::uno::Reference<ooo::vba::word::XFormField> SAL_CALL Add(const cpo::uno::Any& Range, sal_Int32 Type) override;
+    bool getShaded() override;
+    void setShaded(bool bSet) override;
+    //cpo::uno::Reference<ooo::vba::word::XFormField> Add(const cpo::uno::Any& Range, sal_Int32 Type) override;
 
     // XEnumerationAccess
-    cpo::uno::Type SAL_CALL getElementType() override;
-    css::uno::Reference<css::container::XEnumeration> SAL_CALL createEnumeration() override;
+    cpo::uno::Type getElementType() override;
+    cpo::uno::Reference<css::container::XEnumeration> createEnumeration() override;
 
     // SwVbaFormFields_BASE
     cpo::uno::Any createCollectionObject(const cpo::uno::Any& aSource) override;

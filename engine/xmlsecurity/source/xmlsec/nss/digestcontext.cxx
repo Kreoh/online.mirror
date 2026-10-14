@@ -35,12 +35,12 @@ ODigestContext::~ODigestContext()
     }
 }
 
-void SAL_CALL ODigestContext::updateDigest( const cpo::uno::Sequence< ::sal_Int8 >& aData )
+void ODigestContext::updateDigest( const cpo::uno::Sequence< ::sal_Int8 >& aData )
 {
     std::scoped_lock aGuard( m_aMutex );
 
     if ( m_bBroken )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if ( m_bDisposed )
         throw lang::DisposedException();
@@ -57,18 +57,18 @@ void SAL_CALL ODigestContext::updateDigest( const cpo::uno::Sequence< ::sal_Int8
         PK11_DestroyContext( m_pContext, PR_TRUE );
         m_pContext = nullptr;
         m_bBroken = true;
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     m_nDigested += aToDigest.getLength();
 }
 
-cpo::uno::Sequence< ::sal_Int8 > SAL_CALL ODigestContext::finalizeDigestAndDispose()
+cpo::uno::Sequence< ::sal_Int8 > ODigestContext::finalizeDigestAndDispose()
 {
     std::scoped_lock aGuard( m_aMutex );
 
     if ( m_bBroken )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if ( m_bDisposed )
         throw lang::DisposedException();
@@ -80,7 +80,7 @@ cpo::uno::Sequence< ::sal_Int8 > SAL_CALL ODigestContext::finalizeDigestAndDispo
         PK11_DestroyContext( m_pContext, PR_TRUE );
         m_pContext = nullptr;
         m_bBroken = true;
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     PK11_DestroyContext( m_pContext, PR_TRUE );

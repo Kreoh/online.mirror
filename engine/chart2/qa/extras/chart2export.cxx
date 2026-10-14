@@ -19,13 +19,13 @@
 #include <com/sun/star/chart/DataLabelPlacement.hpp>
 #include <com/sun/star/chart2/PieChartSubType.hpp>
 #include <com/sun/star/packages/zip/ZipFileAccess.hpp>
-#include <com/sun/star/packages/zip/XZipFileAccess2.hpp>
+#include <com/sun/star/packages/zip/XZipFileAccess.hpp>
 
-using css::uno::Reference;
+using cpo::uno::Reference;
 using css::beans::XPropertySet;
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class Chart2ExportTest : public ChartTest
 {
@@ -507,7 +507,7 @@ CPPUNIT_TEST_FIXTURE(Chart2ExportTest, testTdf115558_footnote_chart)
     save(TestFilter::DOCX);
 
     // Without the fix the embedded XLSX file would be missing from the exported archive
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     CPPUNIT_ASSERT_EQUAL(true, bool(xNameAccess->hasByName(u"word/embeddings/Microsoft_Excel_Worksheet1.xlsx"_ustr)));

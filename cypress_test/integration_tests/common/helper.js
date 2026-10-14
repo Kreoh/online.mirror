@@ -113,6 +113,23 @@ function loadDocument(filePath, skipDocumentChecks, isMultiUser, lang, extraQuer
 }
 
 /*
+ * Covers most use cases for test interactive preview. For more flexibility,
+ * call setupDocument and loadDocument directly. loadDocument must be called
+ * with skipDocumentChecks: true otherwise it will fail in preview.
+ * filePath: test document path, for example: 'calc/hello-world.ods'
+ */
+function setupAndPreviewDocument(filePath) {
+	cy.log('>> setupAndPreviewDocument - start');
+
+	cy.viewport(350, 221);
+	var newFilePath = setupDocument(filePath, false);
+	loadDocument(newFilePath, true, undefined, undefined, 'interactivepreview=true');
+
+	cy.log('<< setupAndPreviewDocument - end');
+	return newFilePath;
+}
+
+/*
  * Covers most use cases. For more flexibility,
  * call setupDocument and loadDocument directly
  * filePath: test document path, for example: 'calc/hello-world.ods'
@@ -188,6 +205,32 @@ function reloadDocument(filePath, extraQuery) {
 	cy.log('<< reloadDocument - end');
 }
 
+// Reload one frame of a multi-user test by submitting its load form, and return
+// when the new page in that frame has finished loading.
+// Parameters:
+// frameSelector - '#iframe1' or '#iframe2'. It becomes the active frame.
+// formSelector - '#form1' or '#form2', the form that loads that frame.
+function reloadFrameAndWaitForNewPage(frameSelector, formSelector) {
+	cy.log('>> reloadFrameAndWaitForNewPage - start');
+
+	cy.cSetActiveFrame(frameSelector);
+	// The marker lives on the old window only, so its absence means the new
+	// page is in the frame.
+	cy.getFrameWindow().then(function(win) {
+		win.cypressOldPageMarker = true;
+	});
+	cy.get(formSelector).submit();
+	cy.getFrameWindow().should(function(win) {
+		expect(win.cypressOldPageMarker).to.be.undefined;
+	});
+	// The document canvas is visible once the new page has loaded the
+	// document, the same signal reloadDocument waits for.
+	cy.cGet('#document-canvas').should('be.visible');
+	documentChecks(true);
+
+	cy.log('<< reloadFrameAndWaitForNewPage - end');
+}
+
 function copyFile(filePath, newFilePath) {
 	// subFolder can be '', if filePath does not have a slash
 	var subFolder = getSubFolder(filePath);
@@ -209,6 +252,16 @@ function logError(event) {
 }
 
 /*
+ * The origin of the web server that serves proxy.php under php-proxy. The
+ * Makefile passes the port of the PHP built-in server it starts; without
+ * one the proxy is expected on port 80.
+ */
+function phpProxyOrigin() {
+	const port = Cypress.env('PHP_PROXY_HTTP_PORT');
+	return 'http://' + Cypress.env('SERVER') + (port ? ':' + port : '');
+}
+
+/*
  * Loads the test document directly in Collabora Online.
  */
 function loadDocumentNoIntegration(filePath, isMultiUser, lang, extraQuery) {
@@ -217,7 +270,7 @@ function loadDocumentNoIntegration(filePath, isMultiUser, lang, extraQuery) {
 	var URI = '';
 
 	if (Cypress.env('INTEGRATION') === 'php-proxy') {
-		URI += 'http://' + Cypress.env('SERVER') + '/proxy.php?req=';
+		URI += phpProxyOrigin() + '/proxy.php?req=';
 	}
 
 	URI += '/browser/' + Cypress.env('WSD_VERSION_HASH') + '/debug.html'
@@ -460,17 +513,6 @@ function documentChecks(skipInitializedCheck = false) {
 				});
 		});
 
-		// In Writer wait for styles to appear in notebookbar. The img only
-		// exists after the on-demand renderer round-trips with core for at
-		// least one entry, so use the same 20s timeout as the other
-		// document-load checks rather than the default 10s.
-		doIfOnDesktop(() => {
-			doIfInWriter(() => {
-				cy.cGet('#stylesview.notebookbar .icon-view-item-container img')
-					.should('exist');
-			});
-		});
-
 		// Check also that the inputbar is drawn in Calc.
 		doIfInCalc(() => {
 			cy.cGet('#sc_input_window.formulabar').should('exist');
@@ -525,6 +567,18 @@ function assertCursorAndFocus() {
 	assertHaveKeyboardInput();
 
 	cy.log('<< assertCursorAndFocus - end');
+}
+
+// Click into the document and wait until the editable area has the focus and accepts
+// input. The editable area listens for keys only while it has focus, and the load of
+// another frame takes the focus away. The click gives it back.
+function clickIntoDocument() {
+	cy.log('>> clickIntoDocument - start');
+
+	cy.cGet('#document-container').click();
+	assertCursorAndFocus();
+
+	cy.log('<< clickIntoDocument - end');
 }
 
 // Select all text via CTRL+A shortcut.
@@ -663,10 +717,11 @@ function closeDocument(filePath) {
 			cy.cGet('tr[data-file=\'' + fileName + '\']').should('not.exist');
 
 		}
-	// For php-proxy admin console does not work, so we just open
-	// localhost and wait some time for the test document to be closed.
+	// For php-proxy the admin console is out of reach, so just leave the
+	// document by opening the root of the proxy's web server (a 404 from
+	// php -S is fine) and give coolwsd some time to close it.
 	} else if (Cypress.env('INTEGRATION') === 'php-proxy') {
-		cy.visit('http://' + Cypress.env('SERVER') + '/', {failOnStatusCode: false});
+		cy.visit(phpProxyOrigin() + '/', {failOnStatusCode: false});
 
 		cy.wait(5000);
 	} else {
@@ -832,7 +887,9 @@ function isImageWhite(selector, expectWhite = true) {
 function isCanvasWhite(expectWhite = true) {
 	cy.log('>> isCanvasWhite - start');
 
-	cy.wait(300);
+	cy.getFrameWindow().then(function(win) {
+		processToIdle(win);
+	});
 	cy.cGet('#document-canvas').should('exist').then(function(canvas) {
 		var result = true;
 		var context = canvas[0].getContext('2d');
@@ -1135,9 +1192,12 @@ function typeIntoInputField(selector, text, clearBefore = true)
 {
 	cy.log('>> typeIntoInputField - start');
 
-	cy.wait(600);
+	// Core is idle and the JSDialog layout has settled, so the input is not
+	// rebuilt while the text goes in.
+	cy.getFrameWindow().then(function(win) {
+		processToIdle(win);
+	});
 	cy.cGet(selector).type((clearBefore ? '{selectall}{backspace}' : '') + text + '{enter}');
-	cy.wait(600);
 	cy.cGet(selector).should('have.value', text);
 
 	cy.log('<< typeIntoInputField - end');
@@ -1297,8 +1357,8 @@ function getShapeSVGCenter() {
 function assertImageSize(expectedWidth, expectedHeight) {
 	cy.log('>> assertImageSize - start');
 
-	cy.cGet('#canvas-container > svg', {timeout: 1000})
-		.then(function (element) {
+	cy.cGet('#canvas-container > svg')
+		.should(function (element) {
 			expect(element).to.have.length(1);
 			const actualWidth = parseInt(element[0].style.width.replace('px', ''));
 			const actualHeight = parseInt(element[0].style.height.replace('px', ''));
@@ -1306,9 +1366,6 @@ function assertImageSize(expectedWidth, expectedHeight) {
 			expect(actualWidth).to.be.closeTo(expectedWidth, 10);
 			expect(actualHeight).to.be.closeTo(expectedHeight, 10);
 		});
-
-	// wait for above async result
-	cy.wait(3000);
 
 	cy.log('<< assertImageSize - end');
 }
@@ -1440,6 +1497,17 @@ function retryUntil(action, condition, options) {
 	}, opts);
 }
 
+// Wait until the canvas has no animation running. The container holds the
+// name of the section that started the animation and clears it when the
+// animation ends, so a null name means every canvas animation has settled.
+// Take this before a screenshot, so an animation part way through, such as
+// the scroll bar fading out, cannot land in the picture.
+function waitForCanvasAnimation(win) {
+	return cy.waitUntil(function() {
+		return win.app.sectionContainer.getAnimatingSectionName() === null;
+	}, { interval: 50 });
+}
+
 // Wait until no timers of the given tag exist.
 // If no timers with the tag exist at call time resolve immediately.
 function waitForTimers(win, tag) {
@@ -1542,11 +1610,14 @@ function getContextMenuItemList() {
 
 module.exports.setupDocument = setupDocument;
 module.exports.loadDocument = loadDocument;
+module.exports.setupAndPreviewDocument = setupAndPreviewDocument;
 module.exports.setupAndLoadDocument = setupAndLoadDocument;
 module.exports.setupAndLoadTwoDocuments = setupAndLoadTwoDocuments;
 module.exports.reloadDocument = reloadDocument;
+module.exports.reloadFrameAndWaitForNewPage = reloadFrameAndWaitForNewPage;
 module.exports.documentChecks = documentChecks;
 module.exports.assertCursorAndFocus = assertCursorAndFocus;
+module.exports.clickIntoDocument = clickIntoDocument;
 module.exports.assertNoKeyboardInput = assertNoKeyboardInput;
 module.exports.assertHaveKeyboardInput = assertHaveKeyboardInput;
 module.exports.selectAllText = selectAllText;
@@ -1595,6 +1666,7 @@ module.exports.waitUntilCoreIsIdle = waitUntilCoreIsIdle;
 module.exports.waitUntilLayoutingIsIdle = waitUntilLayoutingIsIdle;
 module.exports.processToIdle = processToIdle;
 module.exports.retryUntil = retryUntil;
+module.exports.waitForCanvasAnimation = waitForCanvasAnimation;
 module.exports.waitForTimers = waitForTimers;
 module.exports.waitForOnDemandRenders = waitForOnDemandRenders;
 module.exports.waitForMapState = waitForMapState;

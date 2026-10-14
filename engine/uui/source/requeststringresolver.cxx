@@ -24,9 +24,10 @@
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 UUIInteractionRequestStringResolver::UUIInteractionRequestStringResolver(
-    uno::Reference< uno::XComponentContext > const &
+    uno::Reference< cpo::uno::XComponentContext > const &
         rxContext)
         : m_pImpl(rxContext)
 {
@@ -36,13 +37,13 @@ UUIInteractionRequestStringResolver::~UUIInteractionRequestStringResolver()
 {
 }
 
-OUString SAL_CALL
+OUString
 UUIInteractionRequestStringResolver::getImplementationName()
 {
     return u"com.sun.star.comp.uui.UUIInteractionRequestStringResolver"_ustr;
 }
 
-bool SAL_CALL
+bool
 UUIInteractionRequestStringResolver::supportsService(
         OUString const & rServiceName)
 {
@@ -50,13 +51,13 @@ UUIInteractionRequestStringResolver::supportsService(
 }
 
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 UUIInteractionRequestStringResolver::getSupportedServiceNames()
 {
     return { u"com.sun.star.task.InteractionRequestStringResolver"_ustr };
 }
 
-beans::Optional< OUString > SAL_CALL
+beans::Optional< OUString >
 UUIInteractionRequestStringResolver::getStringFromInformationalRequest(
     const uno::Reference<
         task::XInteractionRequest >& Request )
@@ -65,7 +66,7 @@ UUIInteractionRequestStringResolver::getStringFromInformationalRequest(
     {
         return m_pImpl.getStringFromRequest(Request);
     }
-    catch (uno::RuntimeException const & ex)
+    catch (cpo::uno::RuntimeException const & ex)
     {
         cpo::uno::Any anyEx = cppu::getCaughtException();
         throw css::lang::WrappedTargetRuntimeException( ex.Message,
@@ -73,9 +74,9 @@ UUIInteractionRequestStringResolver::getStringFromInformationalRequest(
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_uui_UUIInteractionRequestStringResolver_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UUIInteractionRequestStringResolver(context));

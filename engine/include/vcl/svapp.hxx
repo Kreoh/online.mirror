@@ -41,7 +41,7 @@
 #include <vcl/vclenum.hxx>
 #include <i18nlangtag/lang.h>
 #include <o3tl/typed_flags_set.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 
 class Bitmap;
@@ -73,12 +73,10 @@ struct ImplSVEvent;
 struct ConvertData;
 namespace basegfx { class SystemDependentDataManager; }
 
-namespace com::sun::star::uno {
-    class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 namespace com::sun::star::ui::dialogs {
-    class XFilePicker2;
-    class XFolderPicker2;
+    class XFilePicker;
+    class XFolderPicker;
 }
 namespace com::sun::star::awt {
     class XToolkit;
@@ -219,7 +217,6 @@ private:
 enum class DialogCancelMode {
     Off,      ///< do not automatically cancel dialogs
     Silent,   ///< silently cancel any dialogs
-    KitSilent, ///< silently cancel any dialogs (COKit case)
     Fatal     ///< cancel any dialogs by std::abort
 };
 
@@ -1036,24 +1033,6 @@ public:
     */
     SAL_DLLPRIVATE static void  RemoveAccel( Accelerator const * pAccel );
 
-    /** Get the number of reserved key codes used by the application.
-
-     @returns number of reserved key codes
-
-     @see GetReservedKeyCode
-    */
-    static size_t               GetReservedKeyCodeCount();
-
-    /** Get the reserved key code.
-
-     @param     i               The keycode number to retrieve
-
-     @returns Const pointer to a KeyCode object
-
-     @see GetReservedKeyCodeCount
-    */
-    static const vcl::KeyCode*  GetReservedKeyCode( size_t i );
-
     ///@}
 
     /** @name Application Help
@@ -1171,7 +1150,7 @@ public:
 
      @returns UNO reference to VCL toolkit
     */
-    static css::uno::Reference< css::awt::XToolkit > GetVCLToolkit();
+    static cpo::uno::Reference< css::awt::XToolkit > GetVCLToolkit();
 
     ///@}
 
@@ -1270,12 +1249,6 @@ public:
     /** Update main thread identifier */
     static void                 UpdateMainThread();
 
-    /** Do we have a native / system file selector available?
-
-     @returns True if native file selector is available, false otherwise.
-     */
-    static bool                 hasNativeFileSelection();
-
     /** Create a platform specific file picker, if one is available, otherwise return an
      empty reference.
 
@@ -1283,8 +1256,8 @@ public:
 
      @returns File picker if available, otherwise an empty reference.
     */
-    static css::uno::Reference< css::ui::dialogs::XFilePicker2 >
-        createFilePicker( const css::uno::Reference< css::uno::XComponentContext >& rServiceManager );
+    static cpo::uno::Reference< css::ui::dialogs::XFilePicker >
+        createFilePicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& rServiceManager );
 
     /** Create a platform specific folder picker, if one is available, otherwise return an
      empty reference
@@ -1293,8 +1266,8 @@ public:
 
      @returns Folder picker if available, otherwise an empty reference.
     */
-    static css::uno::Reference< css::ui::dialogs::XFolderPicker2 >
-        createFolderPicker( const css::uno::Reference< css::uno::XComponentContext >& rServiceManager );
+    static cpo::uno::Reference< css::ui::dialogs::XFolderPicker >
+        createFolderPicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& rServiceManager );
 
     /** Returns true, if the VCL plugin should run on the system event loop.
      *
@@ -1315,7 +1288,7 @@ public:
                                                     VclButtonsType eButtonType, const OUString& rPrimaryMessage,
                                                     const ICOKitNotifier* pNotifier = nullptr);
 
-    static weld::Window* GetFrameWeld(const css::uno::Reference<css::awt::XWindow>& rWindow);
+    static weld::Window* GetFrameWeld(const cpo::uno::Reference<css::awt::XWindow>& rWindow);
 
     // ICOKitNotifier
     void* m_pCallbackData;
@@ -1326,6 +1299,10 @@ public:
                               const std::vector<vcl::KitPayloadItem>& rPayload = std::vector<vcl::KitPayloadItem>()) const override;
     virtual void viewCallback(COKitCallbackType eType, const OString& pPayload) const override;
     virtual bool hasKitClient() const override { return m_pCallback != nullptr; }
+    virtual ViewShellDocId getKitDocId() const override
+    {
+        return comphelper::COKit::NoDocId;
+    }
     virtual bool acceptsViewCallback(COKitCallbackType eType) const override;
     virtual void notifyInvalidation(tools::Rectangle const* pRect) const override;
     virtual void notifyCursorInvalidation(tools::Rectangle const* pRect, bool bControlEvent, int windowID) const override;

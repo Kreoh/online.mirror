@@ -27,13 +27,11 @@ endef
 # $(call gb_CObject__compiler,flags,source,compiler)
 define gb_CObject__compiler
 	VSLANG=1033 \
-	$(if $(filter YES,$(LIBRARY_X64)), $(CXX_X64_BINARY), \
-		$(if $(filter YES,$(PE_X86)), $(CXX_X86_BINARY), \
+	$(if $(filter YES,$(LIBRARY_X64)), "$(CXX_X64_BINARY)", \
+		$(if $(filter YES,$(PE_X86)), "$(CXX_X86_BINARY)", \
 			$(if $(filter %.c,$(2)), \
 				$(if $(3), $(3), $(gb_CC)), \
-				$(if $(filter -clr,$(1)), \
-					$(MSVC_CXX) -I$(SRCDIR)/solenv/clang-cl, \
-						$(if $(3), $(3), $(gb_CXX))))))
+				$(if $(3), $(3), $(gb_CXX)))))
 endef
 
 # Avoid annoying warning D9025 about overriding command-line arguments.
@@ -86,10 +84,9 @@ $(call gb_Helper_abbreviate_dirs,\
 			$(if $(6), $(call gb_CObject__filter_out_clang_cflags,$(2)),$(2)) \
 			$(if $(WARNINGS_DISABLED),$(gb_CXXFLAGS_DISABLE_WARNINGS)) \
 			$(if $(EXTERNAL_CODE), \
-				$(if $(filter -clr,$(2)),,$(if $(COM_IS_CLANG),-Wno-undef)), \
-				$(gb_DEFS_INTERNAL)) \
+				$(if $(COM_IS_CLANG),-Wno-undef)) \
 			$(if $(WARNINGS_NOT_ERRORS),$(if $(ENABLE_WERROR),$(if $(PLUGIN_WARNINGS_AS_ERRORS),$(gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS))),$(gb_CFLAGS_WERROR)) \
-			$(if $(filter -clr,$(2)),,$(if $(5),$(gb_COMPILER_PLUGINS))) \
+			$(if $(5),$(gb_COMPILER_PLUGINS)) \
 			$(if $(COMPILER_TEST),-fsyntax-only -ferror-limit=0 -Xclang -verify) \
 			$(PCHFLAGS) \
 			$(if $(COMPILER_TEST),,$(if $(or $(COM_IS_CLANG),$(T_USE_CLANG)),$(gb_COMPILERDEPFLAGS),/sourceDependencies $(4).json)) \
@@ -129,7 +126,7 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(call gb_Helper_remove_overridden_flags, \
 			$(4) $(if $(WARNINGS_DISABLED),$(gb_CXXFLAGS_DISABLE_WARNINGS))) \
 		-Fd$(PDBFILE) \
-		$(if $(EXTERNAL_CODE),$(if $(COM_IS_CLANG),-Wno-undef),$(gb_DEFS_INTERNAL)) \
+		$(if $(EXTERNAL_CODE),$(if $(COM_IS_CLANG),-Wno-undef)) \
 		$(if $(filter YES,$(LIBRARY_X64)), ,$(gb_LTOFLAGS)) \
 		$(gb_COMPILERDEPFLAGS) \
 		$(gb_NO_PCH_TIMESTAMP) \
@@ -158,7 +155,7 @@ $(call gb_Helper_abbreviate_dirs,\
 	$(call gb_CObject__compiler,$(4),$(3),$(7)) \
 		$(call gb_Helper_remove_overridden_flags, \
 			$(4)$(if $(WARNINGS_DISABLED),$(gb_CXXFLAGS_DISABLE_WARNINGS))) \
-		$(if $(EXTERNAL_CODE),$(if $(COM_IS_CLANG),-Wno-undef),$(gb_DEFS_INTERNAL)) \
+		$(if $(EXTERNAL_CODE),$(if $(COM_IS_CLANG),-Wno-undef)) \
 		$(gb_LTOFLAGS) \
 		$(5) \
 		-E -d1PP $(3) \
@@ -194,7 +191,7 @@ define gb_AsmObject__command
 $(call gb_Output_announce,$(2),$(true),ASM,3)
 $(call gb_Helper_abbreviate_dirs,\
     mkdir -p $(dir $(1)) $(dir $(4)) && \
-    $(CC) -nologo -EP -D_M_ARM64 $(SOLARINC) $(3) > $(subst .o,.asm,$(1)) && \
+    $(CC) -nologo -EP -D_M_ARM64 $(foreach dir,$(SOLARINC),"$(call gb_Helper_decode_path,$(dir))") $(3) > $(subst .o,.asm,$(1)) && \
     "$(ML_EXE)" $(gb_AFLAGS) -g -errorReport:prompt -o $(1) $(subst .o,.asm,$(1)), \
     ) && \
     echo "$(1) : $(3)" > $(4)
@@ -219,10 +216,9 @@ endif
 
 gb_LinkTarget_CFLAGS := $(gb_CFLAGS)
 gb_LinkTarget_CXXFLAGS := $(gb_CXXFLAGS)
-gb_LinkTarget_CXXCLRFLAGS := $(gb_CXXCLRFLAGS)
 
 gb_LinkTarget_INCLUDE :=\
-	$(SOLARINC) \
+	$(foreach dir,$(SOLARINC),"$(call gb_Helper_decode_path,$(dir))") \
 	$(foreach inc,$(subst ;, ,$(JDKINC)),-I$(inc)) \
 	-I$(BUILDDIR)/config_$(gb_Side) \
 
@@ -271,8 +267,6 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(foreach object,$(GENCXXOBJECTS),$(call gb_GenCxxObject_get_target,$(object))) \
 		$(foreach object,$(COBJECTS),$(call gb_CObject_get_target,$(object))) \
 		$(foreach object,$(GENCOBJECTS),$(call gb_GenCObject_get_target,$(object))) \
-		$(foreach object,$(CXXCLROBJECTS),$(call gb_CxxClrObject_get_target,$(object))) \
-		$(foreach object,$(GENCXXCLROBJECTS),$(call gb_GenCxxClrObject_get_target,$(object))) \
 		$(foreach object,$(ASMOBJECTS),$(call gb_AsmObject_get_target,$(object))) \
 		$(foreach object,$(GENASMOBJECTS),$(call gb_GenAsmObject_get_target,$(object))) \
 		$(foreach object,$(GENNASMOBJECTS),$(call gb_GenNasmObject_get_target,$(object))) \
@@ -280,7 +274,7 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(PCHOBJS) $(NATIVERES)) && \
 		$(if $(filter $(call gb_Library__get_workdir_linktargetname,merged),$(2)),$(call gb_LinkTarget_MergedResponseFile)) \
 	unset INCLUDE && \
-	$(if $(filter StaticLibrary,$(TARGETTYPE)),$(gb_LINK),$(gb_LINK_DLLEXE)) \
+	"$(if $(filter StaticLibrary,$(TARGETTYPE)),$(gb_LINK),$(gb_LINK_DLLEXE))" \
 		$(if $(filter Library CppunitTest,$(TARGETTYPE)),$(gb_Library_TARGETTYPEFLAGS)) \
 		$(if $(filter StaticLibrary,$(TARGETTYPE)),-LIB) \
 		-nologo \
@@ -290,15 +284,15 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(if $(filter YES,$(LIBRARY_X64)), -MACHINE:X64) \
 		$(if $(filter YES,$(PE_X86)), -MACHINE:X86) \
 		$(if $(filter YES,$(LIBRARY_X64)), \
-			-LIBPATH:$(COMPATH)/lib/x64 \
-			-LIBPATH:$(WINDOWS_SDK_HOME)/lib/x64 \
-			-LIBPATH:$(UCRTSDKDIR)lib/$(UCRTVERSION)/ucrt/x64 \
-		    $(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x64)) \
+			-LIBPATH:"$(COMPATH)/lib/x64" \
+			-LIBPATH:"$(WINDOWS_SDK_HOME)/lib/x64" \
+			-LIBPATH:"$(UCRTSDKDIR)lib/$(UCRTVERSION)/ucrt/x64" \
+		    $(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:"$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x64")) \
 		$(if $(filter YES,$(PE_X86)), \
-			-LIBPATH:$(COMPATH)/lib/x86 \
-			-LIBPATH:$(WINDOWS_SDK_HOME)/lib/x86 \
-			-LIBPATH:$(UCRTSDKDIR)lib/$(UCRTVERSION)/ucrt/x86 \
-			$(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x86)) \
+			-LIBPATH:"$(COMPATH)/lib/x86" \
+			-LIBPATH:"$(WINDOWS_SDK_HOME)/lib/x86" \
+			-LIBPATH:"$(UCRTSDKDIR)lib/$(UCRTVERSION)/ucrt/x86" \
+			$(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:"$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x86")) \
 		$(T_USE_LD) $(T_LDFLAGS) \
 		$(if $(filter Library CppunitTest Executable,$(TARGETTYPE)),/NATVIS:$(SRCDIR)/solenv/vs/LibreOffice.natvis) \
 		@$${RESPONSEFILE} \
@@ -350,9 +344,9 @@ gb_Windows_PE_TARGETTYPEFLAGS := \
 # fastlink is faster but pdb files reference .obj files.
 # Static gate, resolved once at parse time: dbgutil and a linker that supports it.
 gb_Windows_PE_FASTLINK := $(if $(filter TRUE,$(ENABLE_DBGUTIL)),$(HAVE_LINK_DEBUG_FASTLINK))
-# but don't do that for setup_native DLLs: this produces make error 139 in some configurations;
-# same for managed/CLR images. Per-target carve-outs, resolved at link time.
-gb_Windows_PE_use_fastlink = $(if $(gb_Windows_PE_FASTLINK),$(if $(filter -U_DLL,$(1))$(CXXCLROBJECTS)$(GENCXXCLROBJECTS),,:fastlink))
+# but don't do that for setup_native DLLs: this produces make error 139 in some
+# configurations. Per-target carve-out, resolved at link time.
+gb_Windows_PE_use_fastlink = $(if $(gb_Windows_PE_FASTLINK),$(if $(filter -U_DLL,$(1)),,:fastlink))
 gb_Windows_PE_TARGETTYPEFLAGS_DEBUGINFO = -debug$(call gb_Windows_PE_use_fastlink,$(1))
 
 ifeq ($(ENABLE_LTO),TRUE)
@@ -653,27 +647,42 @@ define gb_ExternalProject_use_nmake
 $(call gb_ExternalProject_get_state_target,$(1),$(2)): NMAKE := $(gb_NMAKE_VARS)
 endef
 
-# if ccache is enabled, then split it and use lastword as REAL_FOO
-# /opt/lo/bin/ccache /cygdrive/c/PROGRA~2/MICROS~2.0/VC/bin/cl.exe
+# The compiler and the launcher in front of it travel as two values, each
+# converted on its own, so that a path holding a space stays a single word.
+# REAL_CC_LAUNCHER is exported only where configure knew the two apart, and it
+# is empty when the build uses no launcher. Where the compiler came in from the
+# environment configure knows no better than the old split does, the variable
+# stays absent, and the wrapper takes the launcher off REAL_CC itself.
 
 gb_AUTOCONF_WRAPPERS = \
-	REAL_CC="$(shell cygpath -w $(filter-out -%,$(CC)))" \
+	REAL_CC="$(if $(CC_PROGRAM),$(shell cygpath -w '$(CC_PROGRAM)'),$(shell cygpath -w $(filter-out -%,$(CC))))" \
+	$(if $(CC_PROGRAM),REAL_CC_LAUNCHER="$(if $(CC_LAUNCHER),$(shell cygpath -w '$(CC_LAUNCHER)'))") \
 	REAL_CC_FLAGS="$(filter -%,$(CC))" \
 	CC="$(call gb_Executable_get_target_for_build,gcc-wrapper)" \
-	REAL_CXX="$(shell cygpath -w $(filter-out -%,$(CXX)))" \
+	REAL_CXX="$(if $(CXX_PROGRAM),$(shell cygpath -w '$(CXX_PROGRAM)'),$(shell cygpath -w $(filter-out -%,$(CXX))))" \
+	$(if $(CXX_PROGRAM),REAL_CXX_LAUNCHER="$(if $(CXX_LAUNCHER),$(shell cygpath -w '$(CXX_LAUNCHER)'))") \
 	REAL_CXX_FLAGS="$(filter -%,$(CXX))" \
 	CXX="$(call gb_Executable_get_target_for_build,g++-wrapper)" \
-    LD="$(shell cygpath -w $(COMPATH)/bin/link.exe) -nologo"
+    LD="$(shell cygpath -w '$(COMPATH)/bin/link.exe') -nologo"
 
 gb_ExternalProject_INCLUDE := \
-	$(subst -I,,$(subst $(WHITESPACE),;,$(SOLARINC)))
+	$(call gb_Helper_decode_path,$(subst -I,,$(subst $(WHITESPACE),;,$(SOLARINC))))
 
-# Workaround for openssl build - it puts the CC var into additional pair of quotes. This breaks if
-# CC consists of more than a single element such as when using "ccache compiler". In case the
-# variables are exported for openssl, it closes and reopens the quotes after each element.
+# CC reaches an nmake project as a command line, so every element of it carries quotes of its own
+# and a pathname holding a space stays one argument. openssl is the exception: it puts the whole
+# value inside a second pair of quotes, so there the elements close and reopen that pair instead of
+# bringing their own, and the outer quotes come from openssl.
+#
+# Where configure knew the launcher and the compiler apart, the elements are joined one at a time
+# rather than by replacing every space in a finished string. Where it did not, the words of CC are
+# what there is to join.
+gb_NMAKE_CC_SEPARATOR = \" \"
+gb_NMAKE_CC_EDGE = $(if $(filter openssl,$(1)),,\")
+gb_NMAKE_CC_FROM_PARTS = $(gb_NMAKE_CC_EDGE)$(if $(CC_LAUNCHER),$(shell cygpath -w '$(CC_LAUNCHER)')$(gb_NMAKE_CC_SEPARATOR))$(shell cygpath -w '$(CC_PROGRAM)')$(foreach cc_flag,$(filter -%,$(CC)),$(gb_NMAKE_CC_SEPARATOR)$(cc_flag))$(gb_NMAKE_CC_EDGE)
+gb_NMAKE_CC_FROM_WORDS = $(gb_NMAKE_CC_EDGE)$(subst $(WHITESPACE),$(gb_NMAKE_CC_SEPARATOR),$(strip $(shell cygpath -w $(filter-out -%,$(CC))) $(filter -%,$(CC))))$(gb_NMAKE_CC_EDGE)
+
 gb_NMAKE_VARS = \
-	CC="$(subst $(WHITESPACE),$(if $(filter openssl,$(1)),\" \", ),$(strip \
-		$(shell cygpath -ws $(filter-out -%,$(CC))) $(filter -%,$(CC))))" \
+	CC="$(if $(CC_PROGRAM),$(gb_NMAKE_CC_FROM_PARTS),$(gb_NMAKE_CC_FROM_WORDS))" \
 	INCLUDE="$(gb_ExternalProject_INCLUDE)" \
 	LIB="$(ILIB)" \
 	MAKEFLAGS= \
@@ -683,14 +692,8 @@ gb_NMAKE_VARS = \
 
 gb_InstallScript_EXT := .inf
 
-# CliAssemblyTarget class
-
-gb_CliAssemblyTarget_POLICYEXT := $(gb_Library_DLLEXT)
-gb_CliAssemblyTarget_get_dll = $(call gb_Library__get_dir_for_layer,NONE)/$(1)$(gb_CliAssemblyTarget_POLICYEXT)
-
 # Extension class
 
-gb_Extension_LICENSEFILE_DEFAULT := $(INSTROOT)/license.txt
 
 # UnpackedTarget class
 
@@ -714,7 +717,7 @@ define gb_UIConfig__gla11y_command
 $(call gb_ExternalExecutale__check_registration,python)
 $(call gb_Helper_abbreviate_dirs,\
 	FILES=$(call gb_var2file,$(call gb_TmpFile,$@),$(UIFILES)) && \
-	$(gb_UIConfig_LXML_PATH) $(if $(SYSTEM_LIBXML)$(SYSTEM_LIBXSLT),,$(gb_Helper_set_ld_path)) \
+	$(gb_UIConfig_LXML_PATH) $(if $(filter LXML,$(BUILD_TYPE)),$(if $(SYSTEM_LIBXML)$(SYSTEM_LIBXSLT),,$(gb_Helper_set_ld_path))) \
 	$(call gb_ExternalExecutable_get_command,python) \
 	$(gb_UIConfig_gla11y_SCRIPT) $(gb_UIConfig_gla11y_PARAMETERS) -o $@ -L $$FILES && \
 	rm $$FILES
@@ -736,7 +739,12 @@ gb_UIMenubarTarget_UIMenubarTarget_platform :=
 
 # Python
 gb_Python_HOME := $(INSTDIR_FOR_BUILD)/program/python-core-$(PYTHON_VERSION)
-gb_Python_PRECOMMAND := PATH="$(shell cygpath -u $(INSTDIR_FOR_BUILD)/program):$(shell cygpath.exe -uS)" PYTHONHOME="$(gb_Python_HOME)" PYTHONPATH="$${PYPATH:+$$PYPATH;}$(gb_Python_HOME)/lib;$(gb_Python_HOME)/lib/lib-dynload:$(INSTDIR_FOR_BUILD)/program"
+# This python has a PATH of its own, the program directory for its DLLs and the Windows system
+# directory. It also gets the directory of ccache, which CC names by its basename, and meson finds
+# ccache there. The compiler's directory stays out, because meson sets up the Visual Studio
+# environment itself only when it finds no cl.exe in PATH.
+gb_Python__CCACHE_DIR := $(if $(CCACHE),$(shell dirname "$$(command -v "$(firstword $(CCACHE))")"))
+gb_Python_PRECOMMAND := PATH="$(shell cygpath -u $(INSTDIR_FOR_BUILD)/program):$(shell cygpath.exe -uS)$(if $(gb_Python__CCACHE_DIR),:$(gb_Python__CCACHE_DIR))" PYTHONHOME="$(gb_Python_HOME)" PYTHONPATH="$${PYPATH:+$$PYPATH;}$(gb_Python_HOME)/lib;$(gb_Python_HOME)/lib/lib-dynload:$(INSTDIR_FOR_BUILD)/program"
 gb_Python_INSTALLED_EXECUTABLE := $(INSTROOT_FOR_BUILD)/$(LIBO_BIN_FOLDER)/python.exe
 
 gb_ICU_PRECOMMAND := PATH="$(shell cygpath -w $(WORKDIR_FOR_BUILD)/UnpackedTarball/icu/source/lib)"

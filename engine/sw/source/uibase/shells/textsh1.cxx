@@ -59,6 +59,7 @@
 #include <IDocumentSettingAccess.hxx>
 #include <charfmt.hxx>
 #include <svx/SmartTagItem.hxx>
+#include <svx/seclabel/SecLabelStore.hxx>
 #include <svx/xflgrit.hxx>
 #include <svx/xflhtit.hxx>
 #include <svx/xfillit0.hxx>
@@ -166,6 +167,7 @@ using namespace ::com::sun::star;
 using namespace com::sun::star::beans;
 using namespace ::com::sun::star::container;
 using namespace com::sun::star::style;
+using namespace ::cpo;
 using namespace svx::sidebar;
 
 static void sw_CharDialogResult(const SfxItemSet* pSet, SwWrtShell &rWrtSh, std::shared_ptr<SfxItemSet> const & pCoreSet, bool bSel,
@@ -462,8 +464,7 @@ void UpdateSections(const SfxRequest& rReq, SwWrtShell& rWrtSh)
         pSections->GetValue() >>= aSections;
     }
 
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::UPDATE_SECTIONS, nullptr);
-    rWrtSh.StartAction();
+    SwTranslateHelper::BulkUpdateGuard aGuard(rWrtSh, SwUndoId::UPDATE_SECTIONS);
 
     SwDoc* pDoc = rWrtSh.GetDoc();
     sal_Int32 nSectionIndex = 0;
@@ -508,9 +509,6 @@ void UpdateSections(const SfxRequest& rReq, SwWrtShell& rWrtSh)
             SwTranslateHelper::PasteHTMLToPaM(rWrtSh, pCursorPos, aSectionText.toUtf8());
         }
     }
-
-    rWrtSh.EndAction();
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::UPDATE_SECTIONS, nullptr);
 }
 
 void DeleteSections(const SfxRequest& rReq, SwWrtShell& rWrtSh)
@@ -577,8 +575,7 @@ void UpdateBookmarks(const SfxRequest& rReq, SwWrtShell& rWrtSh)
         pBookmarks->GetValue() >>= aBookmarks;
     }
 
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::UPDATE_BOOKMARKS, nullptr);
-    rWrtSh.StartAction();
+    SwTranslateHelper::BulkUpdateGuard aGuard(rWrtSh, SwUndoId::UPDATE_BOOKMARKS);
 
     IDocumentMarkAccess& rIDMA = *rWrtSh.GetDoc()->getIDocumentMarkAccess();
     sal_Int32 nBookmarkIndex = 0;
@@ -638,9 +635,6 @@ void UpdateBookmarks(const SfxRequest& rReq, SwWrtShell& rWrtSh)
     {
         rIDMA.assureSortedMarkContainers();
     }
-
-    rWrtSh.EndAction();
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::UPDATE_BOOKMARKS, nullptr);
 }
 
 void UpdateBookmark(const SfxRequest& rReq, SwWrtShell& rWrtSh)
@@ -1012,15 +1006,6 @@ void SwTextShell::Execute(SfxRequest &rReq)
             //!! SwTextShell got destroyed meanwhile.)
             SfxViewFrame& rViewFrame = GetView().GetViewFrame();
 
-            if (aNewLangText == "*")
-            {
-                // open the dialog "Tools/Options/Languages and Locales - General"
-                // to set the documents default language
-                SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-                ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateVclDialog(GetView().GetFrameWeld(), SID_LANGUAGE_OPTIONS));
-                pDlg->Execute();
-            }
-            else
             {
                 //!! We have to use StartAction / EndAction bracketing in
                 //!! order to prevent possible destruction of the SwTextShell
@@ -1222,14 +1207,14 @@ void SwTextShell::Execute(SfxRequest &rReq)
                     aAttribs.insert( i );
             }
 
-            // also clear the direct formatting flag inside SwTableBox(es)
+            // also give the cells back the table style's border and background
             if (SwFEShell* pFEShell = GetView().GetDocShell()->GetFEShell())
                 pFEShell->UpdateTableStyleFormatting(nullptr, true);
 
             // tdf#160801 fix crash by delaying resetting of attributes
             // Calling SwWrtShell::ResetAttr() will sometimes delete the
-            // current SwTextShell instance so call it after clearing the
-            // direct formatting flag.
+            // current SwTextShell instance so call it after the table
+            // style has been reapplied.
             rWrtSh.ResetAttr( aAttribs );
 
             rReq.Done();
@@ -1237,8 +1222,14 @@ void SwTextShell::Execute(SfxRequest &rReq)
         }
         case FN_SECURITY_LABEL:
         {
+            // OOXML-only: the label rides in the customXml part, so gate on the actual
+            // format (the browser hides the button; this backstops a direct dispatch).
+            if (!svx::seclabel::modelSupportsLabel(GetView().GetDocShell()->GetModel()))
+            {
+                break;
+            }
             SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-            VclPtr<VclAbstractDialog> pDlg(pFact->CreateSecurityLabelDlg(GetView().GetFrameWeld()));
+            VclPtr<VclAbstractDialog> pDlg(pFact->CreateSecurityLabelDlg(GetView().GetFrameWeld(), rWrtSh));
             pDlg->StartExecuteAsync([pDlg](sal_Int32){
                                         pDlg->disposeOnce();
                                     });
@@ -1895,8 +1886,9 @@ void SwTextShell::Execute(SfxRequest &rReq)
                     for(SwPaM& rPaM : rWrtSh.GetCursor()->GetRingContainer())
                     {
                         // check each selected paragraph separately
-                        const SwNodeIndex nEnd = rPaM.End()->nNode;
-                        for (SwNodeIndex nPara = rPaM.Start()->nNode; nPara <= nEnd; ++nPara)
+                        auto [pStart, pEnd] = rPaM.StartEnd(); // SwPosition*
+                        const SwNodeIndex nEnd = pEnd->nNode;
+                        for (SwNodeIndex nPara = pStart->nNode; nPara <= nEnd; ++nPara)
                         {
                             SwPaM aPaM(nPara);
                             if (!rWrtSh.IsNumRuleStart(&aPaM))

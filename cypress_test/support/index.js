@@ -13,6 +13,40 @@ beforeEach(function() {
 	cy.log('Starting test: ' + getFullTestName());
 });
 
+// The tour that introduces the user interface is a card shown once, on a first
+// visit, and it covers the whole window while it is open. Every page loads as
+// for a returning user who has seen it already, so it stays out of the way.
+// The key is filled in just before each page load, so a document opened in a
+// before hook gets it too. A key that a test has set already keeps its value,
+// so the test of the first visit stores 'false' to see the tour.
+//
+// A debug build keeps the stored settings of each user apart when the page is
+// opened with a user id: the name of each stored setting gets '__u' and the
+// user id appended. So the key is written once more for every user the page
+// can open as: the ids given as userid, userid1, userid2 or userid3, and
+// 'test' and 'test2', the users the two views of the multiuser page are when
+// a test gives no id.
+Cypress.on('window:before:load', function(appWindow) {
+	const params = new URLSearchParams(appWindow.location.search);
+	const userIds = ['test', 'test2'];
+	['userid', 'userid1', 'userid2', 'userid3'].forEach(function(param) {
+		const userId = params.get(param);
+		if (userId)
+			userIds.push(userId);
+	});
+
+	['text', 'spreadsheet', 'presentation', 'drawing'].forEach(function(docType) {
+		const key = docType + '.onboardingTourSeen';
+		const names = [key].concat(userIds.map(function(userId) {
+			return key + '__u' + userId;
+		}));
+		names.forEach(function(name) {
+			if (appWindow.localStorage.getItem(name) === null)
+				appWindow.localStorage.setItem(name, 'true');
+		});
+	});
+});
+
 // This afterEach must be before installLogsCollector, otherwise the
 // cypress-terminal-report afterEach gets called first, and so this log does
 // not get printed
@@ -25,24 +59,15 @@ afterEach(function() {
 			if (result.code === 0)
 				Cypress.log({ name: 'loadavg', message: result.stdout });
 		});
-		// Dump app.Log on test failure for debugging
-		cy.getFrameWindow().then((win) => {
-			if (win && win.app && win.app.Log && win.app.Log._logs) {
-				var logs = win.app.Log._logs;
-				Cypress.log({name: 'app.Log', message: 'Dumping ' + logs.length + ' log entries'});
-				for (var i = 0; i < logs.length; i++) {
-					var entry = logs[i];
-					Cypress.log({name: entry.direction, message: entry.msg});
-				}
-			}
+		cy.then(() => {
+			dumpApplicationLog();
+
 			// Skip remaining tests in this spec once a test has definitively
 			// failed, but only after all retries are exhausted.
 			var retries = this.currentTest._retries || 0;
 			var currentRetry = this.currentTest._currentRetry || 0;
-			if (currentRetry >= retries) {
+			if (currentRetry >= retries)
 				Cypress.stop();
-				return;
-			}
 		});
 	}
 });
@@ -206,6 +231,39 @@ Cypress.Commands.add('cGet', function(selector, options) {
 			.its('0.contentDocument', {log: false});
 	}
 });
+
+// Print the log the document frame collected. A test can fail with its frame already
+// reloaded or closed, so every step here reports what it could not reach and returns.
+function dumpApplicationLog() {
+	var frameID = cy.cActiveFrame;
+	if (!frameID) {
+		Cypress.log({name: 'app.Log', message: 'no active frame is set'});
+		return;
+	}
+
+	try {
+		var frame = cy.$$(frameID);
+		if (!frame.length) {
+			Cypress.log({name: 'app.Log', message: 'frame ' + frameID + ' is gone'});
+			return;
+		}
+
+		var win = frame[0].contentWindow;
+		var logs = win && win.app && win.app.Log && win.app.Log._logs;
+		if (!logs) {
+			Cypress.log({name: 'app.Log', message: 'frame ' + frameID + ' holds no log'});
+			return;
+		}
+
+		Cypress.log({name: 'app.Log', message: 'Dumping ' + logs.length + ' log entries'});
+		for (var i = 0; i < logs.length; i++) {
+			var entry = logs[i];
+			Cypress.log({name: entry.direction, message: entry.msg});
+		}
+	} catch (error) {
+		Cypress.log({name: 'app.Log', message: 'frame ' + frameID + ' is unreachable: ' + error.message});
+	}
+}
 
 function getFullTestName() {
 	return Cypress.spec.relative + ' / ' + Cypress.currentTest.titlePath.join(' / ');

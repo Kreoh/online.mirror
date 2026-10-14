@@ -37,7 +37,7 @@
 
 using namespace oox::core;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace oox::drawingml {
 
@@ -71,17 +71,8 @@ ContextHandlerRef ShapeContext::onCreateContext( sal_Int32 aElementToken, const 
         }
         break;
     case XML_cNvPr:
-    {
-        // If Shape ID is already assigned don't reassign it
-        if (mpShapePtr->getId().isEmpty())
-            mpShapePtr->setId(rAttribs.getStringDefaulted(XML_id));
-
-        mpShapePtr->setHidden( rAttribs.getBool( XML_hidden, false ) );
-        mpShapePtr->setName( rAttribs.getStringDefaulted( XML_name ) );
-        mpShapePtr->setDescription( rAttribs.getStringDefaulted( XML_descr ) );
-        mpShapePtr->setTitle(rAttribs.getStringDefaulted(XML_title));
+        mpShapePtr->setNonVisualProperties( rAttribs );
         break;
-    }
     case XML_hlinkMouseOver:
     case XML_hlinkClick:
         return new HyperLinkContext( *this, rAttribs,  getShape()->getShapeProperties() );

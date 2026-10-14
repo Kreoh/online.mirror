@@ -38,6 +38,7 @@
 #include <vcl/window.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 struct SdrPageWindow::Impl
 {
@@ -87,7 +88,7 @@ rtl::Reference<UnoControlContainer> const & SdrPageWindow::GetControlContainer( 
 
             if(mpImpl->mxControlContainer.is())
             {
-                uno::Reference< uno::XInterface > xContext = mpImpl->mxControlContainer->getContext();
+                uno::Reference< cpo::uno::XInterface > xContext = mpImpl->mxControlContainer->getContext();
                 if(!xContext.is())
                 {
                     mpImpl->mxControlContainer->createPeer( uno::Reference<awt::XToolkit>(), uno::Reference<awt::XWindowPeer>() );

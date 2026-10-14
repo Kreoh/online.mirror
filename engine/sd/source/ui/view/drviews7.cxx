@@ -32,8 +32,6 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/sizeitem.hxx>
 #include <editeng/urlfieldhelper.hxx>
-#include <officecfg/Office/Impress.hxx>
-#include <officecfg/Office/Security.hxx>
 #include <svx/svxids.hrc>
 #include <svx/svdpagv.hxx>
 #include <svx/clipfmtitem.hxx>
@@ -91,7 +89,8 @@
 #include <SlideSectionManager.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::linguistic2;
 
 /** Create a list of clipboard formats that are supported both from the
@@ -1015,25 +1014,6 @@ void DrawViewShell::GetMenuState( SfxItemSet &rSet )
        rSet.DisableItem(SID_ZOOM_PREV);
     }
 
-    if( SfxItemState::DEFAULT == rSet.GetItemState( SID_REMOTE_DLG ) )
-    {
-
-        bool bDisableSdremoteForGood = false;
-#ifndef ENABLE_SDREMOTE
-        bDisableSdremoteForGood = true;
-#endif
-        bDisableSdremoteForGood |= !(officecfg::Office::Impress::Misc::Start::EnableSdremote::get()
-                                     && officecfg::Office::Security::Net::AllowInsecureImpressRemoteWiFi::get()
-                                       );
-
-        // This dialog is only useful for TCP/IP remote control
-        // which is unusual, under-tested and a security issue.
-        if ( bDisableSdremoteForGood )
-        {
-            rSet.Put(SfxVisibilityItem(SID_REMOTE_DLG, false));
-        }
-    }
-
     // EditText active
     if (GetViewShellBase().GetViewShellManager()->GetShell(ToolbarId::Draw_Text_Toolbox_Sd) != nullptr)
     {
@@ -1571,9 +1551,6 @@ void DrawViewShell::GetMenuState( SfxItemSet &rSet )
         if (bDisableSaveBackground)
             rSet.DisableItem(SID_SAVE_BACKGROUND);
     }
-
-    if (GetObjectShell()->isExportLocked())
-        rSet.DisableItem(SID_PRESENTATION_MINIMIZER);
 
     if (rSet.GetItemState(SID_INSERT_SIGNATURELINE) == SfxItemState::DEFAULT)
     {

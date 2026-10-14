@@ -48,8 +48,8 @@ using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 static void lcl_SetProp( uno::Reference< XPropertySetInfo > const & xInfo,
                            uno::Reference< XPropertySet > const & xProps,
@@ -148,7 +148,7 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
         {
              bInitialCreate = true;
              if(!m_vTypeData[nTOXIndex].m_oIndexSections->xContainerSection.is())
-                 throw uno::RuntimeException();
+                 throw cpo::uno::RuntimeException();
              uno::Reference< text::XTextRange >  xAnchor = m_vTypeData[nTOXIndex].m_oIndexSections->xContainerSection->getAnchor();
              xAnchor = xAnchor->getStart();
              uno::Reference< text::XTextCursor >  xCursor = xAnchor->getText()->createTextCursorByRange(xAnchor);

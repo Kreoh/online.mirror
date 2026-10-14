@@ -83,7 +83,6 @@
       <menu:menuitem menu:id=".uno:Draw"/>
       <menu:menuitem menu:id=".uno:RedrawAutomatic"/>
       <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:ToolbarMode"/>
       <menu:menuitem menu:id=".uno:AvailableToolbars"/>
       <menu:menuitem menu:id=".uno:StatusBarVisible"/>
       <menu:menuseparator/>
@@ -131,7 +130,6 @@
         <menu:menupopup>
           <menu:menuitem menu:id=".uno:MacroManager"/>
           <menu:menuseparator/>
-          <menu:menuitem menu:id=".uno:MacroRecorder"/>
           <menu:menuitem menu:id=".uno:RunMacro"/>
           <menu:menuitem menu:id=".uno:BasicIDEAppear"/>
           <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
@@ -141,8 +139,6 @@
         </menu:menupopup>
       </menu:menu>
       <menu:menuitem menu:id=".uno:OpenXMLFilterSettings"/>
-      <menu:menuitem menu:id=".uno:ConfigureDialog" menu:style="text"/>
-      <menu:menuitem menu:id=".uno:OptionsTreeDialog"/>
     </menu:menupopup>
   </menu:menu>
   <menu:menu menu:id=".uno:WindowList">
@@ -156,10 +152,6 @@
     <menu:menupopup>
       <menu:menuitem menu:id=".uno:HelpIndex"/>
       <menu:menuitem menu:id=".uno:ExtendedHelp"/>
-      <menu:menuitem menu:id=".uno:Documentation" menu:style="text"/>
-      <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:QuestionAnswers"/>
-      <menu:menuitem menu:id=".uno:SendFeedback"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:ShowLicense" menu:style="text"/>
     </menu:menupopup>

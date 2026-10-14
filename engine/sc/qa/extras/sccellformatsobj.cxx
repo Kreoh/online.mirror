@@ -18,14 +18,15 @@
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppu/unotype.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -37,7 +38,7 @@ class ScCellFormatsObj : public UnoApiTest,
 public:
     ScCellFormatsObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScCellFormatsObj);
@@ -63,7 +64,7 @@ ScCellFormatsObj::ScCellFormatsObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScCellFormatsObj::init()
+uno::Reference<cpo::uno::XInterface> ScCellFormatsObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_MESSAGE("no calc document", xDoc.is());

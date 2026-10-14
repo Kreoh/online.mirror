@@ -50,8 +50,8 @@ public:
 
     virtual ~XMLFootnoteSeparatorImport() override;
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

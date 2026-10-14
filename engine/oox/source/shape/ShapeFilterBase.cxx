@@ -33,8 +33,9 @@
 namespace oox::shape {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-ShapeFilterBase::ShapeFilterBase( const uno::Reference< uno::XComponentContext >& rxContext ) :
+ShapeFilterBase::ShapeFilterBase( const uno::Reference< cpo::uno::XComponentContext >& rxContext ) :
     XmlFilterBase( rxContext ),
 #if ENABLE_WASM_STRIP_CHART
     // WASM_CHART change

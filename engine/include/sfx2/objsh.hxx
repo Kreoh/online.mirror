@@ -24,7 +24,7 @@
 #include <sfx2/signaturestate.hxx>
 #include <sal/types.h>
 #include <comphelper/errcode.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <cpo/uno/Sequence.hxx>
 #include <cppuhelper/weakref.hxx>
 #include <com/sun/star/frame/XModel3.hpp>
@@ -103,6 +103,7 @@ namespace com::sun::star::beans { struct PropertyValue; }
 namespace com::sun::star::document { struct CmisVersion; }
 namespace com::sun::star::document { class XDocumentProperties; }
 namespace com::sun::star::embed { class XStorage; }
+namespace com::sun::star::form { class XLoadable; }
 namespace com::sun::star::graphic { class XGraphic; }
 namespace com::sun::star::io { class XStream; }
 namespace com::sun::star::script { class XStorageBasedLibraryContainer ; }
@@ -197,20 +198,20 @@ private:
                                                   // false := new object
     bool                        bIsInGenerateThumbnail; //optimize thumbnail generate and store procedure to improve odt saving performance, i120030
     bool                        mbAvoidRecentDocs; ///< Avoid adding to the recent documents list, if not necessary.
-    bool                        bRememberSignature; // Do we want to remember the signature.
     bool                        bPendingLinkUpdateInfobar;
     std::vector<std::pair<cpo::uno::WeakReference<css::beans::XPropertySet>, OUString>>
                                 maDeferredFormControlImages;
+    bool                        mbHasExternalDatabaseForms;
+    std::vector<cpo::uno::WeakReference<css::form::XLoadable>>
+                                maDeferredDatabaseForms;
 
     enum TriState               {undefined, yes, no};
     TriState                    mbContinueImportOnFilterExceptions = undefined; // try to import as much as possible
 
     bool                        CloseInternal();
 
-    SAL_DLLPRIVATE void UpdateTime_Impl(const css::uno::Reference<
+    SAL_DLLPRIVATE void UpdateTime_Impl(const cpo::uno::Reference<
         css::document::XDocumentProperties> & i_xDocProps);
-
-    cpo::uno::Sequence< css::security::DocumentSignatureInformation > rSignatureInfosRemembered;
 
     SAL_DLLPRIVATE bool SaveTo_Impl(SfxMedium &rMedium, const SfxItemSet* pSet );
 
@@ -262,9 +263,9 @@ public:
                   const std::function<bool ( const SfxObjectShell* )>& isObjectShell = nullptr,
                   bool bOnlyVisible = true );
     SAL_RET_MAYBENULL static SfxObjectShell* Current();
-    static css::uno::Reference< css::uno::XInterface >
+    static cpo::uno::Reference< cpo::uno::XInterface >
                                 GetCurrentComponent();
-    static void                 SetCurrentComponent( const css::uno::Reference< css::uno::XInterface >& _rxComponent );
+    static void                 SetCurrentComponent( const cpo::uno::Reference< cpo::uno::XInterface >& _rxComponent );
 
     virtual void                Invalidate(sal_uInt16 nId = 0) override;
 
@@ -272,7 +273,7 @@ public:
 
     virtual SfxObjectFactory&   GetFactory() const=0;
     SfxMedium *                 GetMedium() const { return pMedium; }
-    css::uno::Reference< css::document::XDocumentProperties >
+    cpo::uno::Reference< css::document::XDocumentProperties >
                                 getDocProperties() const;
     void                        UpdateDocInfoForSave(  );
     void                        FlushDocInfo();
@@ -290,6 +291,10 @@ public:
     bool                        IsInPrepareClose() const;
     bool                        AcceptStateUpdate() const;
     bool                        IsHelpDocument() const;
+
+    // Whether the document's location lets its links update without asking. A document embedded
+    // in another one has no location of its own and is never in a trusted location.
+    bool                        IsTrustedLocationForUpdatingLinks() const;
 
     bool                        IsDocShared() const;
     OUString                    GetSharedFileURL() const;
@@ -334,14 +339,14 @@ public:
     virtual bool                SaveAsOwnFormat( SfxMedium& pMedium );
     virtual bool                ConvertFrom( SfxMedium &rMedium );
     virtual bool                ConvertTo( SfxMedium &rMedium );
-    virtual bool                InitNew( const css::uno::Reference< css::embed::XStorage >& xStorage );
+    virtual bool                InitNew( const cpo::uno::Reference< css::embed::XStorage >& xStorage );
     virtual bool                Load( SfxMedium &rMedium  );
     virtual bool                LoadFrom( SfxMedium& rMedium );
     virtual bool                Save();
     virtual bool                SaveAs( SfxMedium &rMedium  );
-    virtual bool                SaveCompleted( const css::uno::Reference< css::embed::XStorage >& xStorage );
+    virtual bool                SaveCompleted( const cpo::uno::Reference< css::embed::XStorage >& xStorage );
     bool                        SwitchPersistence(
-                                    const css::uno::Reference< css::embed::XStorage >& xStorage );
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStorage );
     virtual void                UpdateLinks();
     virtual void                PerformLinkUpdate();
     void                        SetPendingLinkUpdateInfobar() { bPendingLinkUpdateInfobar = true; }
@@ -350,13 +355,22 @@ public:
     void                        AllowLinkUpdate();
     virtual bool                HasUpdatableLinks() const;
     void                        AddDeferredFormControlImage(
-                                    const css::uno::Reference<css::beans::XPropertySet>& rxControl,
+                                    const cpo::uno::Reference<css::beans::XPropertySet>& rxControl,
                                     const OUString& rURL);
     const std::vector<std::pair<cpo::uno::WeakReference<css::beans::XPropertySet>, OUString>>&
                                 GetDeferredFormControlImages() const
                                     { return maDeferredFormControlImages; }
     void                        ClearDeferredFormControlImages()
                                     { maDeferredFormControlImages.clear(); }
+    /// Whether rxForm is a database form whose database is not a data source registered in the
+    /// user's configuration.
+    static bool                 IsExternalDatabaseForm(
+                                    const cpo::uno::Reference<css::beans::XPropertySet>& rxForm);
+    void                        SetHasExternalDatabaseForms() { mbHasExternalDatabaseForms = true; }
+    bool                        HasExternalDatabaseForms() const
+                                    { return mbHasExternalDatabaseForms; }
+    void                        AddDeferredDatabaseForm(
+                                    const cpo::uno::Reference<css::form::XLoadable>& rxForm);
     virtual bool                LoadExternal( SfxMedium& rMedium );
     bool                        IsConfigOptionsChecked() const;
     void                        SetConfigOptionsChecked( bool bChecked );
@@ -367,16 +381,16 @@ public:
     void                        SaveChildren(bool bObjectsOnly=false);
     bool                        SaveAsChildren( SfxMedium &rMedium );
     bool                        SwitchChildrenPersistence(
-                                    const css::uno::Reference< css::embed::XStorage >& xStorage,
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStorage,
                                     bool bForceNonModified = false );
     bool                        SaveCompletedChildren();
 
     /** a very special case to insert at a position in Writer from UNO,
         via OwnSubFilterService */
     virtual bool                InsertGeneratedStream(SfxMedium& rMedium,
-            css::uno::Reference<css::text::XTextRange> const& xInsertPosition);
+            cpo::uno::Reference<css::text::XTextRange> const& xInsertPosition);
     virtual bool                ImportFrom( SfxMedium &rMedium,
-            css::uno::Reference<css::text::XTextRange> const& xInsertPosition);
+            cpo::uno::Reference<css::text::XTextRange> const& xInsertPosition);
     bool                        ExportTo( SfxMedium &rMedium );
 
     /** Returns true if preparing was successful, else false. */
@@ -389,16 +403,15 @@ public:
     void SignDocumentContent(weld::Window* pDialogParent, const std::function<void(bool)>& rCallback);
     cpo::uno::Sequence<css::security::DocumentSignatureInformation> GetDocumentSignatureInformation(
         bool bScriptingContent,
-        const css::uno::Reference<css::security::XDocumentDigitalSignatures>& xSigner
-        = css::uno::Reference<css::security::XDocumentDigitalSignatures>());
+        const cpo::uno::Reference<css::security::XDocumentDigitalSignatures>& xSigner
+        = cpo::uno::Reference<css::security::XDocumentDigitalSignatures>());
 
     bool SignDocumentContentUsingCertificate(svl::crypto::SigningContext& rSigningContext);
-    bool ResignDocument(cpo::uno::Sequence< css::security::DocumentSignatureInformation >& rSignaturesInfo);
 
     void SignSignatureLine(weld::Window* pDialogParent, const OUString& aSignatureLineId,
-                           const css::uno::Reference<css::security::XCertificate>& xCert,
-                           const css::uno::Reference<css::graphic::XGraphic>& xValidGraphic,
-                           const css::uno::Reference<css::graphic::XGraphic>& xInvalidGraphic,
+                           const cpo::uno::Reference<css::security::XCertificate>& xCert,
+                           const cpo::uno::Reference<css::graphic::XGraphic>& xValidGraphic,
+                           const cpo::uno::Reference<css::graphic::XGraphic>& xInvalidGraphic,
                            const OUString& aComment);
     SignatureState              GetScriptingSignatureState();
     void SignScriptingContent(weld::Window* pDialogParent, const std::function<void(bool)>& rCallback);
@@ -420,7 +433,7 @@ public:
         const cpo::uno::Any* aCaller = nullptr );
 
     static ErrCode  CallXScript(
-        const css::uno::Reference< css::uno::XInterface >& _rxScriptContext,
+        const cpo::uno::Reference< cpo::uno::XInterface >& _rxScriptContext,
         const OUString& rScriptURL,
         const cpo::uno::Sequence< cpo::uno::Any >& aParams,
         cpo::uno::Any& aRet,
@@ -439,9 +452,20 @@ public:
     */
     bool                        AdjustMacroMode();
 
+    /// whether macros from this document are already allowed to run, without asking
+    bool                        IsMacroExecutionAllowed() const;
+
     static bool                 UnTrustedScript(const OUString& rScriptURL);
 
-    static bool                 isScriptAccessAllowed(const css::uno::Reference<css::uno::XInterface>& rScriptContext);
+    /// Check if script URL whitelist exists, and if so, if current script url is part of it
+    static bool                 isScriptURLAllowed(const OUString& rScriptURL);
+
+    static bool                 isScriptAccessAllowed(const cpo::uno::Reference<cpo::uno::XInterface>& rScriptContext);
+
+    /// Whether a script URL that rxDocument binds may run: the URL is allowed, the document may
+    /// run macros, and the script is not an untrusted one
+    static bool                 isDocumentScriptAllowed(const OUString& rScriptURL,
+                                    const cpo::uno::Reference<cpo::uno::XInterface>& rxDocument);
 
     SvKeyValueIterator*         GetHeaderAttributes();
     void                        ClearHeaderAttributesForSourceViewHack();
@@ -492,19 +516,16 @@ public:
 
     bool                        GenerateAndStoreThumbnail(
                                     bool bEncrypted,
-                                    const css::uno::Reference< css::embed::XStorage >& xStor );
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStor );
 
     bool                        WriteThumbnail(
                                     bool bEncrypted,
-                                    const css::uno::Reference< css::io::XStream >& xStream );
+                                    const cpo::uno::Reference< css::io::XStream >& xStream );
 
     bool                        IsInGenerateAndStoreThumbnail() const {return bIsInGenerateThumbnail;}//optimize thumbnail generate and store procedure to improve odt saving performance, i120030
 
     /// Don't add to the recent documents - it's an expensive operation, sometimes it is not wanted.
     bool                        IsAvoidRecentDocs() const { return mbAvoidRecentDocs; }
-
-    bool                        IsRememberingSignature() const { return bRememberSignature; }
-    void                        SetRememberCurrentSignature(bool bRemember);
 
     /// Don't add to the recent documents - it's an expensive operation, sometimes it is not wanted.
     void                        AvoidRecentDocs(bool bAvoid) { mbAvoidRecentDocs = bAvoid; }
@@ -600,9 +621,9 @@ public:
     sal_uInt16                  GetAutoStyleFilterIndex() const;
     bool                        HasBasic() const;
     BasicManager*               GetBasicManager() const;
-    css::uno::Reference< css::script::XStorageBasedLibraryContainer >
+    cpo::uno::Reference< css::script::XStorageBasedLibraryContainer >
                                 GetBasicContainer();
-    css::uno::Reference< css::script::XStorageBasedLibraryContainer >
+    cpo::uno::Reference< css::script::XStorageBasedLibraryContainer >
                                 GetDialogContainer();
     StarBASIC*                  GetBasic() const;
 
@@ -620,29 +641,29 @@ public:
 
     virtual SfxObjectShell*     GetObjectShell() override;
 
-    css::uno::Reference< css::frame::XModel3 >
+    cpo::uno::Reference< css::frame::XModel3 >
                                 GetModel() const;
     // Only temporarily for the applications!
     void                        SetBaseModel( SfxBaseModel* pModel );
-    css::uno::Reference< css::frame::XModel3 > GetBaseModel() const;
+    cpo::uno::Reference< css::frame::XModel3 > GetBaseModel() const;
     // Only temporarily for the applications!
 
     virtual cpo::uno::Sequence< OUString > GetEventNames();
 
-    css::uno::Reference<css::awt::XWindow> GetDialogParent(SfxMedium const* pMedium = nullptr);
+    cpo::uno::Reference<css::awt::XWindow> GetDialogParent(SfxMedium const* pMedium = nullptr);
     static SfxObjectShell*      CreateObject( const OUString& rServiceName, SfxObjectCreateMode = SfxObjectCreateMode::STANDARD );
     static SfxObjectShell*      CreateObjectByFactoryName( const OUString& rURL, SfxObjectCreateMode = SfxObjectCreateMode::STANDARD );
-    static css::uno::Reference< css::lang::XComponent >
+    static cpo::uno::Reference< css::lang::XComponent >
                                 CreateAndLoadComponent( const SfxItemSet& rSet );
-    static SfxObjectShell* GetShellFromComponent(const css::uno::Reference< css::uno::XInterface >& xComp);
-    static SfxObjectShell* GetParentShell(const css::uno::Reference<css::uno::XInterface>& xChild);
+    static SfxObjectShell* GetShellFromComponent(const cpo::uno::Reference< cpo::uno::XInterface >& xComp);
+    static SfxObjectShell* GetParentShell(const cpo::uno::Reference<cpo::uno::XInterface>& xChild);
     static OUString             GetServiceNameFromFactory( const OUString& rFact );
     bool                        IsInPlaceActive() const;
     bool                        IsUIActive() const;
 
     static bool                 CopyStoragesOfUnknownMediaType(
-                                    const css::uno::Reference< css::embed::XStorage >& xSource,
-                                    const css::uno::Reference<css::embed::XStorage>& xTarget,
+                                    const cpo::uno::Reference< css::embed::XStorage >& xSource,
+                                    const cpo::uno::Reference<css::embed::XStorage>& xTarget,
                                     const cpo::uno::Sequence<OUString>& rExceptions = cpo::uno::Sequence<OUString>());
 
     bool isEditDocLocked() const;
@@ -661,16 +682,16 @@ public:
      * @param bChart true if the file is a chart doc and FillClass should not be called
      */
     void            SetupStorage(
-                        const css::uno::Reference< css::embed::XStorage >& xStorage,
+                        const cpo::uno::Reference< css::embed::XStorage >& xStorage,
                         sal_Int32 nVersion, bool bTemplate ) const;
 
-    css::uno::Reference< css::embed::XStorage > const & GetStorage();
+    cpo::uno::Reference< css::embed::XStorage > const & GetStorage();
 
     SvGlobalName const & GetClassName() const;
 
     // comphelper::IEmbeddedHelper
-    virtual css::uno::Reference< css::task::XInteractionHandler > getInteractionHandler() const override;
-    virtual css::uno::Reference < css::embed::XStorage > getStorage() const override
+    virtual cpo::uno::Reference< css::task::XInteractionHandler > getInteractionHandler() const override;
+    virtual cpo::uno::Reference < css::embed::XStorage > getStorage() const override
     {
         return const_cast<SfxObjectShell*>(this)->GetStorage();
     }
@@ -740,22 +761,23 @@ public:
 
     SAL_DLLPRIVATE static bool IsPackageStorageFormat_Impl(const SfxMedium &);
 
-    SAL_DLLPRIVATE bool ConnectTmpStorage_Impl( const css::uno::Reference< css::embed::XStorage >& xStorage, SfxMedium* pMedium );
+    SAL_DLLPRIVATE bool ConnectTmpStorage_Impl( const cpo::uno::Reference< css::embed::XStorage >& xStorage, SfxMedium* pMedium );
     SAL_DLLPRIVATE bool DisconnectStorage_Impl( SfxMedium& rSrcMedium, SfxMedium& rTargetMedium );
 
     SAL_DLLPRIVATE bool PutURLContentsToVersionStream_Impl(
                     const OUString& aURL,
-                    const css::uno::Reference< css::embed::XStorage >& xDocStorage,
+                    const cpo::uno::Reference< css::embed::XStorage >& xDocStorage,
                     const OUString& aStreamName );
 
     SAL_DLLPRIVATE OUString CreateTempCopyOfStorage_Impl(
-                    const css::uno::Reference< css::embed::XStorage >& xStorage );
+                    const cpo::uno::Reference< css::embed::XStorage >& xStorage );
 
     SAL_DLLPRIVATE void InitOwnModel_Impl();
     SAL_DLLPRIVATE void BreakMacroSign_Impl( bool bBreakMacroSing );
     SAL_DLLPRIVATE void CheckSecurityOnLoading_Impl();
+    SAL_DLLPRIVATE bool DocumentUIConfigurationHasMacroCalls_Impl();
     SAL_DLLPRIVATE void CheckForBrokenDocSignatures_Impl();
-    SAL_DLLPRIVATE void CheckEncryption_Impl( const css::uno::Reference< css::task::XInteractionHandler >& xHandler );
+    SAL_DLLPRIVATE void CheckEncryption_Impl( const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler );
     SAL_DLLPRIVATE void SetModifyPasswordEntered( bool bEntered = true );
     bool IsModifyPasswordEntered() const;
 
@@ -763,7 +785,7 @@ public:
     SAL_DLLPRIVATE SfxObjectShell_Impl* Get_Impl() { return pImpl.get(); }
 
     SAL_DLLPRIVATE static bool UseInteractionToHandleError(
-                    const css::uno::Reference< css::task::XInteractionHandler >& xHandler,
+                    const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler,
                     const ErrCodeMsg& nError );
     SAL_DLLPRIVATE const SfxObjectShell_Impl* Get_Impl() const { return pImpl.get(); }
 
@@ -789,7 +811,7 @@ public:
 
     // Load/Save public internals
     SAL_DLLPRIVATE bool ImportFromGeneratedStream_Impl(
-                    const css::uno::Reference< css::io::XStream >& xStream,
+                    const cpo::uno::Reference< css::io::XStream >& xStream,
                     const cpo::uno::Sequence< css::beans::PropertyValue >& aMediaDescr );
     SAL_DLLPRIVATE void UpdateFromTemplate_Impl();
     SAL_DLLPRIVATE bool CanReload_Impl();
@@ -806,7 +828,7 @@ public:
     CommonSaveAs_Impl(const INetURLObject& aURL, const OUString& aFilterName, SfxItemSet& rItemSet,
                       const cpo::uno::Sequence<css::beans::PropertyValue>& rArgs);
     SAL_DLLPRIVATE bool GeneralInit_Impl(
-                                    const css::uno::Reference< css::embed::XStorage >& xStorage,
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStorage,
                                     bool bTypeMustBeSetAlready );
     SAL_DLLPRIVATE void PrepareSecondTryLoad_Impl();
     SAL_DLLPRIVATE void SetInitialized_Impl( const bool i_fromInitNew );
@@ -820,8 +842,8 @@ public:
     // configuration items
     SAL_DLLPRIVATE SignatureState ImplGetSignatureState( bool bScriptingContent = false );
 
-    SAL_DLLPRIVATE bool QuerySaveSizeExceededModules_Impl( const css::uno::Reference< css::task::XInteractionHandler >& xHandler );
-    SAL_DLLPRIVATE static bool QueryAllowExoticFormat_Impl( const css::uno::Reference< css::task::XInteractionHandler >& xHandler,
+    SAL_DLLPRIVATE bool QuerySaveSizeExceededModules_Impl( const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler );
+    SAL_DLLPRIVATE static bool QueryAllowExoticFormat_Impl( const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler,
                                                      const OUString& rURL,
                                                      const OUString& rFilterUIName);
 

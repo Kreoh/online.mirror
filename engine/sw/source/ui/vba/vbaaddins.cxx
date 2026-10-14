@@ -25,14 +25,15 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-static uno::Reference< container::XIndexAccess > lcl_getAddinCollection( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext )
+static uno::Reference< container::XIndexAccess > lcl_getAddinCollection( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     XNamedObjectCollectionHelper< word::XAddin >::XNamedVec aAddins;
 
     // first get the autoload addins in the directory STARTUP
     uno::Reference< lang::XMultiComponentFactory > xMCF( xContext->getServiceManager(), uno::UNO_SET_THROW );
-    uno::Reference<ucb::XSimpleFileAccess3> xSFA(ucb::SimpleFileAccess::create(xContext));
+    uno::Reference<ucb::XSimpleFileAccess> xSFA(ucb::SimpleFileAccess::create(xContext));
     SvtPathOptions aPathOpt;
     // FIXME: temporary the STARTUP path is located in $OO/basic3.1/program/addin
     const OUString& aAddinPath = aPathOpt.GetAddinPath();
@@ -55,7 +56,7 @@ static uno::Reference< container::XIndexAccess > lcl_getAddinCollection( const u
     return xAddinsAccess;
 }
 
-SwVbaAddins::SwVbaAddins( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext ): SwVbaAddins_BASE( xParent, xContext, lcl_getAddinCollection( xParent,xContext ) )
+SwVbaAddins::SwVbaAddins( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext ): SwVbaAddins_BASE( xParent, xContext, lcl_getAddinCollection( xParent,xContext ) )
 {
 }
 // XEnumerationAccess

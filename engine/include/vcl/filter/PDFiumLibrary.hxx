@@ -40,6 +40,7 @@
 
 class SvMemoryStream;
 class Bitmap;
+class BinaryDataContainer;
 
 namespace vcl::pdf
 {
@@ -215,6 +216,8 @@ public:
 
     virtual PDFPageObjectType getType() = 0;
     virtual OUString getText(std::unique_ptr<PDFiumTextPage> const& pTextPage) = 0;
+    // what ties the object to a structure element within the page, or -1
+    virtual int getMarkedContentID() = 0;
 
     virtual int getFormObjectCount() = 0;
     virtual std::unique_ptr<PDFiumPageObject> getFormObject(int nIndex) = 0;
@@ -228,14 +231,10 @@ public:
     virtual std::unique_ptr<PDFiumFont> getFont() = 0;
     virtual PDFTextRenderMode getTextRenderMode() = 0;
     virtual Color getFillColor() = 0;
-    virtual std::unique_ptr<PDFiumBitmap> getRenderedFillPattern(PDFiumDocument& rDoc,
-                                                                 PDFiumPage& rPage)
-        = 0;
+    virtual std::unique_ptr<PDFiumBitmap> getRenderedFillPattern(PDFiumDocument& rDoc) = 0;
     virtual Color getStrokeColor() = 0;
     virtual double getStrokeWidth() = 0;
-    virtual std::unique_ptr<PDFiumBitmap> getRenderedStrokePattern(PDFiumDocument& rDoc,
-                                                                   PDFiumPage& rPage)
-        = 0;
+    virtual std::unique_ptr<PDFiumBitmap> getRenderedStrokePattern(PDFiumDocument& rDoc) = 0;
     // Path
     virtual int getPathSegmentCount() = 0;
     virtual std::unique_ptr<PDFiumPathSegment> getPathSegment(int index) = 0;
@@ -378,6 +377,10 @@ public:
 struct VCL_DLLPUBLIC PDFiumLibrary final
 {
     static std::shared_ptr<PDFium>& get();
+
+    // Returns one document instance shared between all callers that pass the same bytes.
+    static std::shared_ptr<PDFiumDocument>
+    openDocumentShared(const BinaryDataContainer& rDataContainer);
 };
 
 // Tools

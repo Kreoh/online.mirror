@@ -49,7 +49,7 @@
 
 #include <unordered_map>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::container;
 
@@ -184,12 +184,12 @@ private:
 
     // XStringSubstitution implementation methods
     /// @throws css::container::NoSuchElementException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OUString impl_substituteVariable( const OUString& aText, bool bSustRequired );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OUString impl_reSubstituteVariables( const OUString& aText );
     /// @throws css::container::NoSuchElementException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OUString const & impl_getSubstituteVariableValue( const OUString& variable );
 
 private:
@@ -267,7 +267,7 @@ OUString SubstitutePathVariables::getSubstituteVariableValue( const OUString& aV
 OUString SubstitutePathVariables::GetWorkPath()
 {
     OUString aWorkPath;
-    css::uno::Reference< css::container::XHierarchicalNameAccess > xPaths(officecfg::Office::Paths::Paths::get(), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess > xPaths(officecfg::Office::Paths::Paths::get(), cpo::uno::UNO_QUERY_THROW);
     if (!(xPaths->getByHierarchicalName(u"['Work']/WritePath"_ustr) >>= aWorkPath))
         // fallback in case config layer does not return a usable work dir value.
         aWorkPath = GetWorkVariableValue();
@@ -657,10 +657,8 @@ void SubstitutePathVariables::SetPredefinedPathVariables()
     OUString              sVal;
 
     aState = utl::Bootstrap::locateUserData( sVal );
-    //There can be the valid case that there is no user installation.
-    //TODO: Is that still the case? (With OOo 3.4, "unopkg sync" was run as part
-    // of the setup. Then no user installation was required.)
-    //Therefore we do not assert here.
+    // There can be the valid case that there is no user installation,
+    // so do not assert here.
     // It's not possible to detect when an empty value would actually be used.
     // (note: getenv is a hack to detect if we're running in a unit test)
     // Also, it's okay to have an empty user installation path in case of COKit
@@ -739,9 +737,9 @@ void SubstitutePathVariables::SetPredefinedPathVariables()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_PathSubstitution_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SubstitutePathVariables());

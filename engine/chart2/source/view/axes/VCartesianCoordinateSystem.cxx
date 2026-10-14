@@ -34,7 +34,8 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 
 namespace {
 
@@ -104,7 +105,7 @@ void VCartesianCoordinateSystem::createVAxisList(
             const awt::Rectangle& rMaximumSpaceForLabels,
             bool bLimitSpaceForLabels,
             std::vector<std::unique_ptr<VSeriesPlotter>>& rSeriesPlotterList,
-            uno::Reference<uno::XComponentContext> const& rComponentContext)
+            uno::Reference<cpo::uno::XComponentContext> const& rComponentContext)
 {
     // note: using xChartDoc itself as XNumberFormatsSupplier would cause
     // a leak from VCartesianAxis due to cyclic reference

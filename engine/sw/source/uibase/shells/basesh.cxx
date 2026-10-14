@@ -96,6 +96,8 @@
 #include <SwRewriter.hxx>
 #include <GraphicSizeCheck.hxx>
 #include <svx/galleryitem.hxx>
+#include <svx/graphichelper.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <sfx2/devtools/DevelopmentToolChildWindow.hxx>
 #include <com/sun/star/gallery/GalleryItemType.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
@@ -122,6 +124,8 @@
 #include <txtrfmrk.hxx>
 #include <translatehelper.hxx>
 #include <rootfrm.hxx>
+
+using namespace ::cpo;
 
 FlyMode SwBaseShell::s_eFrameMode = FLY_DRAG_END;
 
@@ -161,7 +165,7 @@ namespace
 }
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 
 SFX_IMPL_SUPERCLASS_INTERFACE(SwBaseShell, SfxShell)
@@ -379,7 +383,8 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
         case SID_PASTE:
             {
                 TransferableDataHelper aDataHelper(
-                    TransferableDataHelper::CreateFromSystemClipboard( &rSh.GetView().GetEditWin() ) );
+                    TransferableDataHelper::CreateFromSystemClipboard( &rSh.GetView().GetEditWin(),
+                                                                       DownloadRemoteContent::Yes ) );
                 if( aDataHelper.GetXTransferable().is()
                     && SwTransferable::IsPaste( rSh, aDataHelper ) )
                 {
@@ -395,6 +400,19 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
                     const SfxBoolItem* pIgnoreComments = rReq.GetArg<SfxBoolItem>(FN_PARAM_2);
                     if (pIgnoreComments)
                         bIgnoreComments = pIgnoreComments->GetValue();
+
+                    // See if we should do a merged paste.
+                    bool bMerged = false;
+                    const SfxBoolItem* pMerged = rReq.GetArg<SfxBoolItem>(FN_PARAM_4);
+                    if (pMerged)
+                        bMerged = pMerged->GetValue();
+                    SwDoc* pDoc = rSh.GetDoc();
+                    if (bMerged)
+                    {
+                        pDoc->SetInMergedPaste(true);
+                    }
+                    comphelper::ScopeGuard g(
+                        [pDoc, bMerged] { if (bMerged) pDoc->SetInMergedPaste(false); });
 
                     SwTransferable::Paste(rSh, aDataHelper, nAnchorType, bIgnoreComments, ePasteTable);
 
@@ -418,7 +436,8 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
                 {
                     TransferableDataHelper aDataHelper(
                         TransferableDataHelper::CreateFromSystemClipboard(
-                                            &rSh.GetView().GetEditWin()) );
+                                            &rSh.GetView().GetEditWin(),
+                                            DownloadRemoteContent::Yes) );
                     if( aDataHelper.GetXTransferable().is()
                         /*&& SwTransferable::IsPaste( rSh, aDataHelper )*/ )
                     {
@@ -446,7 +465,8 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
         case SID_PASTE_UNFORMATTED:
             {
                 TransferableDataHelper aDataHelper(
-                    TransferableDataHelper::CreateFromSystemClipboard( &rSh.GetView().GetEditWin()) );
+                    TransferableDataHelper::CreateFromSystemClipboard( &rSh.GetView().GetEditWin(),
+                                                                       DownloadRemoteContent::Yes) );
                 if( aDataHelper.GetXTransferable().is()
                     && SwTransferable::IsPaste( rSh, aDataHelper ) )
                 {
@@ -482,7 +502,8 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
         case SID_PASTE_SPECIAL:
             {
                 std::shared_ptr<const TransferableDataHelper> aDataHelper =
-                    std::make_shared<TransferableDataHelper>(TransferableDataHelper::CreateFromSystemClipboard( &rSh.GetView().GetEditWin()));
+                    std::make_shared<TransferableDataHelper>(TransferableDataHelper::CreateFromSystemClipboard(
+                        &rSh.GetView().GetEditWin(), DownloadRemoteContent::Yes));
 
                 if( aDataHelper->GetXTransferable().is()
                     && SwTransferable::IsPaste( rSh, *aDataHelper )
@@ -837,24 +858,7 @@ bool UpdateFieldContents(const SfxRequest& rReq, SwWrtShell& rWrtSh)
     pFields->GetValue() >>= aFields;
 
     SwDoc* pDoc = rWrtSh.GetDoc();
-    pDoc->GetIDocumentUndoRedo().StartUndo(SwUndoId::UPDATE_FIELDS, nullptr);
-    rWrtSh.StartAction();
-
-    // (zotero) Rewriting each field's content moves the shell cursor onto that field.
-    // Remember the caret here and put it back when the function returns, so a bulk
-    // field refresh leaves the caret where the user was editing.
-    rWrtSh.Push();
-
-    // Restore the caret and close the action and the undo grouping when the
-    // function returns, even if a field entry makes the loop throw. The stacked
-    // cursor tracked the content edits, so it still points at the original spot.
-    comphelper::ScopeGuard aGuard(
-        [&rWrtSh]
-        {
-            rWrtSh.Pop(SwCursorShell::PopMode::DeleteCurrent);
-            rWrtSh.EndAction();
-            rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::UPDATE_FIELDS, nullptr);
-        });
+    SwTranslateHelper::BulkUpdateGuard aGuard(rWrtSh, SwUndoId::UPDATE_FIELDS);
 
     std::vector<const SwFormatRefMark*> aRefMarks;
     pDoc->GetRefMarks(aRefMarks);
@@ -1050,7 +1054,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                         medium = sh->GetMedium();
                     }
                     rSh.GetLinkManager().UpdateAllLinks(
-                        false, nullptr, medium == nullptr ? OUString() : medium->GetName() );
+                        false, medium == nullptr ? OUString() : medium->GetName() );
                     rSh.EndAllAction();
                 }
                 SfxDispatcher &rDis = *rTempView.GetViewFrame().GetDispatcher();
@@ -1457,6 +1461,10 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         case FN_TOOL_ANCHOR_AT_CHAR:
         case FN_TOOL_ANCHOR_FRAME:
         {
+            // The anchor change below is written for one fly frame.
+            if (rSh.IsMultipleFlyFramesSelected())
+                break;
+
             RndStdIds eSet = nSlot == FN_TOOL_ANCHOR_PAGE
                                 ? RndStdIds::FLY_AT_PAGE
                                 : nSlot == FN_TOOL_ANCHOR_PARAGRAPH
@@ -1572,7 +1580,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                         medium = sh->GetMedium();
                     }
                     rSh.GetLinkManager().UpdateAllLinks(
-                        false, nullptr, medium == nullptr ? OUString() : medium->GetName() );
+                        false, medium == nullptr ? OUString() : medium->GetName() );
                     rSh.EndAllAction();
                 }
             }
@@ -1759,7 +1767,9 @@ IMPL_LINK_NOARG(SwBaseShell, GraphicArrivedHdl, SwCursorShell&, void)
         case SID_GRFFILTER_POPART:
         case SID_GRFFILTER_SEPIA:
         case SID_GRFFILTER_SOLARIZE:
-            bSetState = bState = GraphicType::Bitmap == nGrfType;
+            bSetState = bState = GraphicType::Bitmap == nGrfType &&
+                    !( rSh.GetGraphicObj() &&
+                       GraphicHelper::IsGifGraphic( rSh.GetGraphicObj()->GetGraphic() ) );
             break;
         }
 
@@ -2026,7 +2036,9 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                 bool bObj = 0 != rSh.GetSelectedObjCount();
                 bool bParentCntProt = rSh.IsSelObjProtected( FlyProtectFlags::Content|FlyProtectFlags::Parent ) != FlyProtectFlags::NONE;
 
-                if( !bParentCntProt && (bObj || rSh.IsFrameSelected()))
+                // The attributes below are read from and written to one fly frame.
+                if( !bParentCntProt && !rSh.IsMultipleFlyFramesSelected() &&
+                    (bObj || rSh.IsFrameSelected()))
                 {
                     SfxItemSet aSet(SfxItemSet::makeFixedSfxItemSet<RES_ANCHOR, RES_ANCHOR>(GetPool()));
                     if(bObj)
@@ -2077,7 +2089,9 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                 bool bObj = 0 != rSh.GetSelectedObjCount();
                 bool bParentCntProt = rSh.IsSelObjProtected( FlyProtectFlags::Content|FlyProtectFlags::Parent ) != FlyProtectFlags::NONE;
 
-                if( !bParentCntProt && (bObj || rSh.IsFrameSelected()))
+                // The attributes below are read from and written to one fly frame.
+                if( !bParentCntProt && !rSh.IsMultipleFlyFramesSelected() &&
+                    (bObj || rSh.IsFrameSelected()))
                 {
                     SfxItemSet aSet(SfxItemSet::makeFixedSfxItemSet<RES_OPAQUE, RES_ANCHOR>(GetPool()));
                     RndStdIds nAnchorType;
@@ -2313,6 +2327,10 @@ void SwBaseShell::SetWrapMode( sal_uInt16 nSlot )
     SwWrtShell &rSh = GetShell();
     bool bObj = 0 != rSh.GetSelectedObjCount();
     if( !bObj && !rSh.IsFrameSelected())
+        return;
+
+    // The wrap mode below is read from and written to one fly frame.
+    if( rSh.IsMultipleFlyFramesSelected() )
         return;
 
     SfxItemSet aSet(SfxItemSet::makeFixedSfxItemSet<RES_OPAQUE, RES_SURROUND>(GetPool()));
@@ -3191,7 +3209,6 @@ static void InsertTableImpl(SwWrtShell& rSh,
                     sal_uInt16 nRows,
                     sal_uInt16 nCols,
                     SwInsertTableOptions aInsTableOpts,
-                    const TableStyleName& aAutoName,
                     const std::unique_ptr<SwTableAutoFormat>& pTAFormat)
 {
     rSh.StartUndo(SwUndoId::INSTABLE);
@@ -3205,18 +3222,6 @@ static void InsertTableImpl(SwWrtShell& rSh,
 
     if( !aTableName.isEmpty() && !rSh.GetTableStyle( aTableName ) )
         rSh.GetTableFormat()->SetFormatName( aTableName );
-
-    if( pTAFormat != nullptr && !aAutoName.isEmpty()
-                        && aAutoName != SwViewShell::GetShellRes()->aStrNone )
-    {
-        SwTableNode* pTableNode = const_cast<SwTableNode*>( rSh.IsCursorInTable() );
-        if ( pTableNode )
-        {
-            pTableNode->GetTable().SetTableStyleName( aAutoName );
-            SwUndoTableAutoFormat* pUndo = new SwUndoTableAutoFormat( *pTableNode, *pTAFormat );
-            rSh.GetIDocumentUndoRedo().AppendUndo( std::unique_ptr<SwUndo>(pUndo) );
-        }
-    }
 
     rSh.EndAllAction();
     rTempView.AutoCaption(TABLE_CAP);
@@ -3320,7 +3325,7 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
 
                         if( nCols && nRows )
                         {
-                            InsertTableImpl( rSh, rTempView, UIName(aTableName), nRows, nCols, aInsTableOpts, TableStyleName(aAutoName), pTAFormat );
+                            InsertTableImpl( rSh, rTempView, UIName(aTableName), nRows, nCols, aInsTableOpts, pTAFormat );
                             EndUndo(rSh);
                         }
                     }
@@ -3338,7 +3343,7 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
             _rRequest.AppendItem( SfxInt32Item( FN_PARAM_1, static_cast<sal_Int32>(aInsTableOptsIn.mnInsMode) ) );
             _rRequest.Done();
 
-            InsertTableImpl( rSh, rTempView, UIName(aTableNameIn), nRowsIn, nColsIn, aInsTableOptsIn, TableStyleName(aAutoNameIn), pTAFormatIn );
+            InsertTableImpl( rSh, rTempView, UIName(aTableNameIn), nRowsIn, nColsIn, aInsTableOptsIn, pTAFormatIn );
 
             bCallEndUndo = true;
         }

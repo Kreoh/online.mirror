@@ -104,6 +104,7 @@
 #include <sfx2/kit/helper.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 const sal_uInt16 ScDocument::nSrcVer = SC_CURRENT_VERSION;
 
@@ -133,6 +134,22 @@ CellAttributeHelper& ScDocument::getCellAttributeHelper() const
     }
 
     return *mpCellAttributeHelper;
+}
+
+void ScDocument::setConnectionVector(const ConnectionVector& rIn)
+{
+    maConnectionVector = rIn;
+}
+
+void ScDocument::setSheetQueryTables(SCTAB nTab, QueryTableModelVector aIn)
+{
+    maSheetQueryTables[nTab] = std::move(aIn);
+}
+
+const QueryTableModelVector* ScDocument::getSheetQueryTables(SCTAB nTab) const
+{
+    auto it = maSheetQueryTables.find(nTab);
+    return it == maSheetQueryTables.end() ? nullptr : &it->second;
 }
 
 ScDocument::ScDocument( ScDocumentMode eMode, ScDocShell* pDocShell ) :
@@ -218,6 +235,7 @@ ScDocument::ScDocument( ScDocumentMode eMode, ScDocShell* pDocShell ) :
         mnImagePreferredDPI(0),
         mbTrackFormulasPending(false),
         mbFinalTrackFormulas(false),
+        mbCompilingDBFormula(false),
         mbDocShellRecalc(false),
         mbLayoutStrings(false),
         mnMutationGuardFlags(0)
@@ -545,15 +563,15 @@ ScNoteEditEngine& ScDocument::GetNoteEngine()
     return *mpNoteEngine;
 }
 
-std::unique_ptr<EditTextObject> ScDocument::CreateSharedStringTextObject( const svl::SharedString& rSS )
+EditTextObject ScDocument::CreateSharedStringTextObject( const svl::SharedString& rSS )
 {
     /* TODO: Add shared string support to the edit engine to make this process
      * simpler. */
     ScFieldEditEngine& rEngine = GetEditEngine();
     rEngine.SetTextCurrentDefaults( rSS.getString());
-    std::unique_ptr<EditTextObject> pObj( rEngine.CreateTextObject());
-    pObj->NormalizeString( GetSharedStringPool());
-    return pObj;
+    EditTextObject aObj( rEngine.CreateTextObject());
+    aObj.NormalizeString( GetSharedStringPool());
+    return aObj;
 }
 
 void ScDocument::ResetClip( ScDocument* pSourceDoc, const ScMarkData* pMarks )
@@ -991,7 +1009,7 @@ bool ScDocument::CopyTab( SCTAB nOldPos, SCTAB nNewPos, const ScMarkData* pOnlyM
         {
             sc::TableContentCopier aHandler(*this, nOldPos, nNewPos);
             aHandler.performCopy(pOnlyMarked, ScCloneFlags::NamesToLocal, nPreviousSourceTabNo);
-            aHandler.updateReferencesAfterTabInsertion(aCxt);
+            aHandler.updateReferencesAfterTabInsertion(aCxt, nPreviousSourceTabNo);
         }
 
         SetNoListening(false);

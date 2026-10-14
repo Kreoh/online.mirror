@@ -19,7 +19,7 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/scanner/ScannerException.hpp>
@@ -70,7 +70,7 @@ public:
 
     bool SelectSource(ScannerManager& rMgr, const VclPtr<vcl::Window>& xTopWindow);
     bool PerformTransfer(ScannerManager& rMgr,
-                         const css::uno::Reference<css::lang::XEventListener>& rxListener,
+                         const cpo::uno::Reference<css::lang::XEventListener>& rxListener,
                          const VclPtr<vcl::Window>& xTopWindow);
     void WaitReadyForNextTask();
 
@@ -110,8 +110,8 @@ private:
         void NotifyOwner(WPARAM nEvent);
         void NotifyXFerOwner(LPARAM nHandle);
     };
-    css::uno::Reference<css::lang::XEventListener> mxListener;
-    css::uno::Reference<css::scanner::XScannerManager> mxMgr;
+    cpo::uno::Reference<css::lang::XEventListener> mxListener;
+    cpo::uno::Reference<css::scanner::XScannerManager> mxMgr;
     ScannerManager* mpCurMgr = nullptr;
     TwainState meState = TWAIN_STATE_NONE;
     rtl::Reference<ShimListenerThread> mpThread;
@@ -381,7 +381,7 @@ bool Twain::SelectSource(ScannerManager& rMgr, const VclPtr<vcl::Window>& xTopWi
 }
 
 bool Twain::PerformTransfer(ScannerManager& rMgr,
-                            const css::uno::Reference<css::lang::XEventListener>& rxListener,
+                            const cpo::uno::Reference<css::lang::XEventListener>& rxListener,
                             const VclPtr<vcl::Window>& xTopWindow)
 {
     osl::MutexGuard aGuard(maMutex);
@@ -465,9 +465,9 @@ VclPtr<vcl::Window> ImplGetActiveFrameWindow()
     try
     {
         // query desktop instance
-        css::uno::Reference<css::frame::XDesktop2> xDesktop
+        cpo::uno::Reference<css::frame::XDesktop> xDesktop
             = css::frame::Desktop::create(comphelper::getProcessComponentContext());
-        if (css::uno::Reference<css::frame::XFrame> xActiveFrame = xDesktop->getActiveFrame())
+        if (cpo::uno::Reference<css::frame::XFrame> xActiveFrame = xDesktop->getActiveFrame())
             return VCLUnoHelper::GetWindow(xActiveFrame->getComponentWindow());
     }
     catch (const cpo::uno::Exception&)
@@ -584,13 +584,13 @@ cpo::uno::Sequence<ScannerContext> ScannerManager::getAvailableScanners()
 }
 
 bool ScannerManager::configureScannerAndScan(
-    ScannerContext& rContext, const css::uno::Reference<css::lang::XEventListener>& rxListener)
+    ScannerContext& rContext, const cpo::uno::Reference<css::lang::XEventListener>& rxListener)
 {
     osl::MutexGuard aGuard(maProtector);
-    css::uno::Reference<XScannerManager> xThis(this);
+    cpo::uno::Reference<XScannerManager> xThis(this);
 
     if (rContext.InternalData != 0 || rContext.ScannerName != "TWAIN")
-        throw ScannerException("Scanner does not exist", xThis, ScanError_InvalidContext);
+        throw ScannerException(u"Scanner does not exist"_ustr, xThis, ScanError_InvalidContext);
 
     ReleaseData();
 
@@ -613,13 +613,13 @@ bool ScannerManager::configureScannerAndScan(
 }
 
 void ScannerManager::startScan(const ScannerContext& rContext,
-                               const css::uno::Reference<css::lang::XEventListener>& rxListener)
+                               const cpo::uno::Reference<css::lang::XEventListener>& rxListener)
 {
     osl::MutexGuard aGuard(maProtector);
-    css::uno::Reference<XScannerManager> xThis(this);
+    cpo::uno::Reference<XScannerManager> xThis(this);
 
     if (rContext.InternalData != 0 || rContext.ScannerName != "TWAIN")
-        throw ScannerException("Scanner does not exist", xThis, ScanError_InvalidContext);
+        throw ScannerException(u"Scanner does not exist"_ustr, xThis, ScanError_InvalidContext);
 
     ReleaseData();
     aTwain.PerformTransfer(*this, rxListener, ImplGetActiveFrameWindow());
@@ -628,19 +628,19 @@ void ScannerManager::startScan(const ScannerContext& rContext,
 ScanError ScannerManager::getError(const ScannerContext& rContext)
 {
     osl::MutexGuard aGuard(maProtector);
-    css::uno::Reference<XScannerManager> xThis(this);
+    cpo::uno::Reference<XScannerManager> xThis(this);
 
     if (rContext.InternalData != 0 || rContext.ScannerName != "TWAIN")
-        throw ScannerException("Scanner does not exist", xThis, ScanError_InvalidContext);
+        throw ScannerException(u"Scanner does not exist"_ustr, xThis, ScanError_InvalidContext);
 
     return ((aTwain.GetState() == TWAIN_STATE_CANCELED) ? ScanError_ScanCanceled
                                                         : ScanError_ScanErrorNone);
 }
 
-css::uno::Reference<css::awt::XBitmap> ScannerManager::getBitmap(const ScannerContext& /*rContext*/)
+cpo::uno::Reference<css::awt::XBitmap> ScannerManager::getBitmap(const ScannerContext& /*rContext*/)
 {
     osl::MutexGuard aGuard(maProtector);
-    return css::uno::Reference<css::awt::XBitmap>(this);
+    return cpo::uno::Reference<css::awt::XBitmap>(this);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

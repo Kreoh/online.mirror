@@ -19,7 +19,7 @@ from com.sun.star.testuno import XTest
 from com.sun.star.testuno.Enum import E3
 from com.sun.star.testuno.Enum import E_10
 from com.sun.star.testuno.Enum import E_2
-from com.sun.star.uno import RuntimeException
+from cpo.uno import RuntimeException
 
 class Test(unohelper.Base, XTest):
     def getBoolean(self):
@@ -450,6 +450,39 @@ class Test(unohelper.Base, XTest):
                     StructString('foo'), -123456, -123456, StructString('barr')),
                 self),
             self)
+
+    def getOverloadedNoArgs(self):
+        return 'foo'
+
+    def getOverloadedOneArg(self, value):
+        return value
+
+    def getOverloadedString(self, value):
+        return value
+
+    def getOverloadedBytes(self, value):
+        return len(value)
+
+    def getOverloadedAny(self, value):
+        return 'any'
+
+    def getOverloadedAnyString(self, value1, value2):
+        return 'anystring'
+
+    def getOverloadedStringAny(self, value1, value2):
+        return 'stringany'
+
+    def getOptionalString(self, present):
+        opt = uno.createUnoStruct('com.sun.star.beans.Optional<string>')
+        opt.IsPresent = present
+        opt.Value = 'hello' if present else ''
+        return opt
+
+    def unwrapOptionalString(self, value):
+        return value.Value if value.IsPresent else 'absent'
+
+    def unwrapOptionalStructString(self, value):
+        return value.Value.m if value.IsPresent else 'absent'
 
     def throwRuntimeException(self):
         raise RuntimeException('test', None)
@@ -888,6 +921,32 @@ class TestUno(unittest.TestCase):
                     StructString('foo'), -123456, -123456, StructString('barr')),
                 test))
         self.assertEqual(v18, test)
+
+        self.assertEqual(test.getOverloadedNoArgs(), 'foo')
+        self.assertEqual(test.getOverloadedOneArg(-123456), -123456)
+        self.assertEqual(test.getOverloadedString('bar'), 'bar')
+        self.assertEqual(test.getOverloadedBytes((1, 2, 3)), 3)
+        self.assertEqual(test.getOverloadedAny(True), 'any')
+        self.assertEqual(test.getOverloadedAnyString(True, 'y'), 'anystring')
+        self.assertEqual(test.getOverloadedStringAny('x', True), 'stringany')
+
+        self.assertEqual(test.getOptionalString(True).Value, 'hello')
+        self.assertFalse(test.getOptionalString(False).IsPresent)
+        opt = uno.createUnoStruct('com.sun.star.beans.Optional<string>')
+        opt.IsPresent = True
+        opt.Value = 'hi'
+        self.assertEqual(test.unwrapOptionalString(opt), 'hi')
+        opt.IsPresent = False
+        opt.Value = ''
+        self.assertEqual(test.unwrapOptionalString(opt), 'absent')
+        opts = uno.createUnoStruct(
+            'com.sun.star.beans.Optional<com.sun.star.testuno.StructString>')
+        opts.IsPresent = True
+        opts.Value = StructString('hi')
+        self.assertEqual(test.unwrapOptionalStructString(opts), 'hi')
+        opts.IsPresent = False
+        opts.Value = StructString('')
+        self.assertEqual(test.unwrapOptionalStructString(opts), 'absent')
 
         with self.assertRaises(RuntimeException) as cm:
             test.throwRuntimeException()

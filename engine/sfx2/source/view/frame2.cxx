@@ -44,7 +44,7 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
@@ -134,23 +134,6 @@ IMPL_LINK(SfxFrameWindow_Impl, ModalHierarchyHdl, bool, bSetModal, void)
 bool SfxFrameWindow_Impl::PreNotify( NotifyEvent& rNEvt )
 {
     NotifyEventType nType = rNEvt.GetType();
-    if ( nType == NotifyEventType::KEYINPUT || nType == NotifyEventType::KEYUP )
-    {
-        SfxViewFrame* pView = m_pFrame->GetCurrentViewFrame();
-        SfxViewShell* pShell = pView ? pView->GetViewShell() : nullptr;
-        if ( pShell && pShell->HasKeyListeners_Impl() && pShell->HandleNotifyEvent_Impl( rNEvt ) )
-            return true;
-    }
-    else if ( nType == NotifyEventType::MOUSEBUTTONUP || nType == NotifyEventType::MOUSEBUTTONDOWN )
-    {
-        vcl::Window* pWindow = rNEvt.GetWindow();
-        SfxViewFrame* pView = m_pFrame->GetCurrentViewFrame();
-        SfxViewShell* pShell = pView ? pView->GetViewShell() : nullptr;
-        if ( pShell )
-            if ( pWindow == pShell->GetWindow() || pShell->GetWindow()->IsChild( pWindow ) )
-                if ( pShell->HasMouseClickListeners_Impl() && pShell->HandleNotifyEvent_Impl( rNEvt ) )
-                    return true;
-    }
 
     if ( nType == NotifyEventType::MOUSEBUTTONDOWN )
     {
@@ -210,7 +193,7 @@ Reference < XFrame > SfxFrame::CreateBlankFrame()
     Reference < XFrame > xFrame;
     try
     {
-        Reference < XDesktop2 > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
+        Reference < XDesktop > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
         xFrame.set( xDesktop->findFrame( u"_blank"_ustr, 0 ), UNO_SET_THROW );
     }
     catch( const Exception& )

@@ -20,7 +20,7 @@
 #define INCLUDED_UCBHELPER_CONTENT_HXX
 
 #include <rtl/ref.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <cpo/uno/Sequence.h>
 #include <ucbhelper/ucbhelperdllapi.h>
 
@@ -54,7 +54,7 @@ struct ContentInfo;
 struct NumberedSortingInfo;
 }
 
-namespace com::sun::star::uno
+namespace cpo::uno
 {
 class XComponentContext;
 }
@@ -100,7 +100,7 @@ class UCBHELPER_DLLPUBLIC Content final
     rtl::Reference<Content_Impl> m_xImpl;
 
     /// @throws css::ucb::CommandAbortedException
-    /// @throws css::uno::RuntimeException,
+    /// @throws cpo::uno::RuntimeException,
     /// @throws cpo::uno::Exception
     cpo::uno::Any createCursorAny(const cpo::uno::Sequence<OUString>& rPropertyNames,
                                   ResultSetInclude eMode);
@@ -120,10 +120,10 @@ public:
       *        implementation to interact with the client and to propagate
       *        errors.
       * @throws css::ucb::ContentCreationException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       */
-    Content(const OUString& rURL, const css::uno::Reference<css::ucb::XCommandEnvironment>& rEnv,
-            const css::uno::Reference<css::uno::XComponentContext>& rCtx);
+    Content(const OUString& rURL, const cpo::uno::Reference<css::ucb::XCommandEnvironment>& rEnv,
+            const cpo::uno::Reference<cpo::uno::XComponentContext>& rCtx);
     /**
       * Constructor.
       *
@@ -133,11 +133,11 @@ public:
       *        implementation to interact with the client and to propagate
       *        errors.
       * @throws css::ucb::ContentCreationException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       */
-    Content(const css::uno::Reference<css::ucb::XContent>& rContent,
-            const css::uno::Reference<css::ucb::XCommandEnvironment>& rEnv,
-            const css::uno::Reference<css::uno::XComponentContext>& rCtx);
+    Content(const cpo::uno::Reference<css::ucb::XContent>& rContent,
+            const cpo::uno::Reference<css::ucb::XCommandEnvironment>& rEnv,
+            const cpo::uno::Reference<cpo::uno::XComponentContext>& rCtx);
     /**
       * Copy Constructor.
       *
@@ -181,8 +181,8 @@ public:
       * @return true, if the operation was successful - false, otherwise.
       */
     static bool create(const OUString& rURL,
-                       const css::uno::Reference<css::ucb::XCommandEnvironment>& rEnv,
-                       const css::uno::Reference<css::uno::XComponentContext>& rCtx,
+                       const cpo::uno::Reference<css::ucb::XCommandEnvironment>& rEnv,
+                       const cpo::uno::Reference<cpo::uno::XComponentContext>& rCtx,
                        Content& rContent);
 
     // Direct access to UCB content.
@@ -196,7 +196,7 @@ public:
       *
       * @return the XContent interface of the underlying UCB content.
       */
-    css::uno::Reference<css::ucb::XContent> get() const;
+    cpo::uno::Reference<css::ucb::XContent> get() const;
 
     // Object identity.
 
@@ -207,22 +207,6 @@ public:
       */
     const OUString& getURL() const;
 
-    // Command environment.
-
-    /**
-      * This method returns the environment to use when executing commands.
-      *
-      * @return the command environment.
-      */
-    const css::uno::Reference<css::ucb::XCommandEnvironment>& getCommandEnvironment() const;
-
-    /**
-      * This method sets a new command environment.
-      *
-      * @param xNewEnv is the new command environment.
-      */
-    void setCommandEnvironment(const css::uno::Reference<css::ucb::XCommandEnvironment>& xNewEnv);
-
     // Access to supported commands/properties.
 
     /**
@@ -232,10 +216,10 @@ public:
       * @return an XCommandInfo interface implementation, which can be used
       *         to obtain meta data of the commands supported by this content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::ucb::XCommandInfo> getCommands();
+    cpo::uno::Reference<css::ucb::XCommandInfo> getCommands();
     /**
       * This methods provides access to meta data of the properties supported
       * by this content.
@@ -243,10 +227,10 @@ public:
       * @return an XPropertSetInfo interface implementation, which can be used
       *         to obtain meta data of the properties supported by this content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::beans::XPropertySetInfo> getProperties();
+    cpo::uno::Reference<css::beans::XPropertySetInfo> getProperties();
 
     // Access to property value(s).
 
@@ -257,7 +241,7 @@ public:
       *         shall be obtained.
       * @return the property value.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     cpo::uno::Any getPropertyValue(const OUString& rPropertyName);
@@ -285,7 +269,7 @@ public:
       *           transporting the error code
       *           css::ucb::IOErrorCode::ACCESS_DENIED.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     cpo::uno::Any setPropertyValue(const OUString& rPropertyName, const cpo::uno::Any& rValue);
@@ -296,7 +280,7 @@ public:
       *         that the values shall be obtained.
       * @return the property values.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     cpo::uno::Sequence<cpo::uno::Any>
@@ -308,10 +292,10 @@ public:
       *         that the values shall be obtained.
       * @return the property values.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::sdbc::XRow>
+    cpo::uno::Reference<css::sdbc::XRow>
     getPropertyValuesInterface(const cpo::uno::Sequence<OUString>& rPropertyNames);
 
     /**
@@ -344,7 +328,7 @@ public:
       *           transporting the error code
       *           css::ucb::IOErrorCode::ACCESS_DENIED.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     cpo::uno::Sequence<cpo::uno::Any>
@@ -363,7 +347,7 @@ public:
       *         specification.
       * @return the result of the command according to its specification.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     cpo::uno::Any executeCommand(const OUString& rCommandName,
@@ -386,10 +370,10 @@ public:
       *         com.cun.star.ucb.ContentResultSet, which can be used to
       *         get access to the children of a content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::sdbc::XResultSet>
+    cpo::uno::Reference<css::sdbc::XResultSet>
     createCursor(const cpo::uno::Sequence<OUString>& rPropertyNames,
                  ResultSetInclude eMode = INCLUDE_FOLDERS_AND_DOCUMENTS);
     /**
@@ -407,20 +391,20 @@ public:
       *         com.cun.star.ucb.DynamicResultSet, which can be used to
       *         get access to the children of a content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::ucb::XDynamicResultSet>
+    cpo::uno::Reference<css::ucb::XDynamicResultSet>
     createDynamicCursor(const cpo::uno::Sequence<OUString>& rPropertyNames,
                         ResultSetInclude eMode = INCLUDE_FOLDERS_AND_DOCUMENTS);
 
     /// @throws css::ucb::CommandAbortedException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     /// @throws cpo::uno::Exception
-    css::uno::Reference<css::sdbc::XResultSet>
+    cpo::uno::Reference<css::sdbc::XResultSet>
     createSortedCursor(const cpo::uno::Sequence<OUString>& rPropertyNames,
                        const cpo::uno::Sequence<css::ucb::NumberedSortingInfo>& rSortInfo,
-                       const css::uno::Reference<css::ucb::XAnyCompareFactory>& rAnyCompareFactory,
+                       const cpo::uno::Reference<css::ucb::XAnyCompareFactory>& rAnyCompareFactory,
                        ResultSetInclude eMode = INCLUDE_FOLDERS_AND_DOCUMENTS);
 
     /**
@@ -431,10 +415,10 @@ public:
       * @return an implementation of the interface XInputStream, which can
       *         be used to read the content's data.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::io::XInputStream> openStream();
+    cpo::uno::Reference<css::io::XInputStream> openStream();
     /**
       * This methods gives read access to the content stream of a content (i.e
       * the content of a file located at the local file system).
@@ -444,10 +428,10 @@ public:
       * @return an implementation of the interface XInputStream, which can
       *         be used to read the content's data.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::io::XInputStream> openStreamNoLock();
+    cpo::uno::Reference<css::io::XInputStream> openStreamNoLock();
 
     /**
       * This methods gives read/write access to the content stream of a content (i.e
@@ -457,10 +441,10 @@ public:
       * @return an implementation of the interface XStream, which can
       *         be used to read/write the content's data.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::io::XStream> openWriteableStream();
+    cpo::uno::Reference<css::io::XStream> openWriteableStream();
     /**
       * This methods gives read/write access to the content stream of a content (i.e
       * the content of a file located at the local file system).
@@ -470,10 +454,10 @@ public:
       * @return an implementation of the interface XStream, which can
       *         be used to read/write the content's data.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    css::uno::Reference<css::io::XStream> openWriteableStreamNoLock();
+    cpo::uno::Reference<css::io::XStream> openWriteableStreamNoLock();
 
     /**
       * This methods gives read access to the content stream of a content (i.e
@@ -483,10 +467,10 @@ public:
       * @param rSink is the implementation of an XActiveDataSink interface,
       *        which shall be used by the content to deliver the data.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    bool openStream(const css::uno::Reference<css::io::XActiveDataSink>& rSink);
+    bool openStream(const cpo::uno::Reference<css::io::XActiveDataSink>& rSink);
     /**
       * This methods gives read access to the content stream of a content (i.e
       * the content of a file located at the local file system).
@@ -495,10 +479,10 @@ public:
       * @param rStream is the implementation of an XOutputStream interface,
       *        which shall be used by the content to deliver the data.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    bool openStream(const css::uno::Reference<css::io::XOutputStream>& rStream);
+    bool openStream(const cpo::uno::Reference<css::io::XOutputStream>& rStream);
     /**
       * This methods gives write access to the content stream of a content (i.e
       * the content of a file located at the local file system).
@@ -509,10 +493,10 @@ public:
       * @param bReplaceExisting specifies, whether any existing content data
       *        shall be overwritten.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
-    void writeStream(const css::uno::Reference<css::io::XInputStream>& rStream,
+    void writeStream(const cpo::uno::Reference<css::io::XInputStream>& rStream,
                      bool bReplaceExisting);
 
     /**
@@ -522,7 +506,7 @@ public:
       * @return the content types or an empty sequence if no contents can be
       *         created by this content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     cpo::uno::Sequence<css::ucb::ContentInfo> queryCreatableContentsInfo();
@@ -550,7 +534,7 @@ public:
       * @param rNewContent will be filled by the implementation of this method
       *        with the new content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     bool insertNewContent(const OUString& rContentType,
@@ -583,13 +567,13 @@ public:
       * @param rNewContent will be filled by the implementation of this method
       *        with the new content.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     bool insertNewContent(const OUString& rContentType,
                           const cpo::uno::Sequence<OUString>& rPropertyNames,
                           const cpo::uno::Sequence<cpo::uno::Any>& rPropertyValues,
-                          const css::uno::Reference<css::io::XInputStream>& rStream,
+                          const cpo::uno::Reference<css::io::XInputStream>& rStream,
                           Content& rNewContent);
 
     /**
@@ -621,7 +605,7 @@ public:
       *        case there was a change (introduced for the checkin operation)
       * @param rDocumentId is the document Id ( in case of CMIS ).
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     void transferContent(const Content& rSourceContent, InsertOperation eOperation,
@@ -635,7 +619,7 @@ public:
       *  This method lock the resource.
       *
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     void lock();
@@ -644,7 +628,7 @@ public:
       * This method unlock the resource.
       *
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     void unlock();
@@ -657,7 +641,7 @@ public:
       * @return true, if the content is a folder ( it can contain other
       *         UCB contents). false, otherwise.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     bool isFolder();
@@ -667,7 +651,7 @@ public:
       * @return true, if the content is a document ( it has a content stream ).
       *         false, otherwise.
       * @throws css::ucb::CommandAbortedException
-      * @throws css::uno::RuntimeException
+      * @throws cpo::uno::RuntimeException
       * @throws cpo::uno::Exception
       */
     bool isDocument();

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
@@ -52,8 +52,8 @@ using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
@@ -91,7 +91,7 @@ PropertyHelper_Thesaurus& Thesaurus::GetPropHelper_Impl()
     return *pPropHelper;
 }
 
-Sequence< Locale > SAL_CALL Thesaurus::getLocales()
+Sequence< Locale > Thesaurus::getLocales()
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -199,7 +199,7 @@ Sequence< Locale > SAL_CALL Thesaurus::getLocales()
     return aSuppLocales;
 }
 
-bool SAL_CALL Thesaurus::hasLocale(const Locale& rLocale)
+bool Thesaurus::hasLocale(const Locale& rLocale)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -209,7 +209,7 @@ bool SAL_CALL Thesaurus::hasLocale(const Locale& rLocale)
     return comphelper::findValue(aSuppLocales, rLocale) != -1;
 }
 
-Sequence < Reference < css::linguistic2::XMeaning > > SAL_CALL Thesaurus::queryMeanings(
+Sequence < Reference < css::linguistic2::XMeaning > > Thesaurus::queryMeanings(
     const OUString& qTerm, const Locale& rLocale,
     const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties)
 {
@@ -444,13 +444,13 @@ Sequence < Reference < css::linguistic2::XMeaning > > SAL_CALL Thesaurus::queryM
     return noMeanings;
 }
 
-OUString SAL_CALL Thesaurus::getServiceDisplayName(const Locale& rLocale)
+OUString Thesaurus::getServiceDisplayName(const Locale& rLocale)
 {
     std::locale loc(Translate::Create("svt", LanguageTag(rLocale)));
     return Translate::get(STR_DESCRIPTION_MYTHES, loc);
 }
 
-void SAL_CALL Thesaurus::initialize( const Sequence< Any >& rArguments )
+void Thesaurus::initialize( const Sequence< Any >& rArguments )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -508,7 +508,7 @@ OUString Thesaurus::makeInitCap(const OUString& aTerm, CharClass const * pCC)
     return aTerm;
 }
 
-void SAL_CALL Thesaurus::dispose()
+void Thesaurus::dispose()
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -526,7 +526,7 @@ void SAL_CALL Thesaurus::dispose()
     }
 }
 
-void SAL_CALL Thesaurus::addEventListener( const Reference< XEventListener >& rxListener )
+void Thesaurus::addEventListener( const Reference< XEventListener >& rxListener )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -534,7 +534,7 @@ void SAL_CALL Thesaurus::addEventListener( const Reference< XEventListener >& rx
         aEvtListeners.addInterface( rxListener );
 }
 
-void SAL_CALL Thesaurus::removeEventListener( const Reference< XEventListener >& rxListener )
+void Thesaurus::removeEventListener( const Reference< XEventListener >& rxListener )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -543,24 +543,24 @@ void SAL_CALL Thesaurus::removeEventListener( const Reference< XEventListener >&
 }
 
 // Service specific part
-OUString SAL_CALL Thesaurus::getImplementationName()
+OUString Thesaurus::getImplementationName()
 {
     return u"org.openoffice.lingu.new.Thesaurus"_ustr;
 }
 
-bool SAL_CALL Thesaurus::supportsService( const OUString& ServiceName )
+bool Thesaurus::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL Thesaurus::getSupportedServiceNames()
+Sequence< OUString > Thesaurus::getSupportedServiceNames()
 {
     return { SN_THESAURUS };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 lingucomponent_Thesaurus_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new Thesaurus());
 }

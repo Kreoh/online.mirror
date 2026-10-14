@@ -56,6 +56,7 @@
 #include <unotxdoc.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace writerfilter::rtftok
 {
@@ -65,6 +66,7 @@ RTFSdrImport::RTFSdrImport(RTFDocumentImpl& rDocument,
     , m_bTextFrame(false)
     , m_bTextGraphicObject(false)
     , m_bFakePict(false)
+    , m_bOpenInMapper(false)
 {
     if (xDstDoc)
         m_aParents.push(xDstDoc->getDrawPage());
@@ -500,9 +502,9 @@ void RTFSdrImport::resolve(RTFShape& rShape, bool bClose, ShapeOrPict const shap
             resolveFLine(xPropertySet, rProperty.second.toInt32());
         else if (rProperty.first == "fillOpacity" && xPropertySet.is())
         {
-            int opacity = 100 - (rProperty.second.toInt32()) * 100 / RTF_MULTIPLIER;
-            xPropertySet->setPropertyValue(u"FillTransparence"_ustr,
-                                           cpo::uno::Any(sal_uInt32(opacity)));
+            sal_Int16 nOpacity = static_cast<sal_Int16>(
+                100 - (rProperty.second.toInt32()) * 100 / RTF_MULTIPLIER);
+            xPropertySet->setPropertyValue(u"FillTransparence"_ustr, cpo::uno::Any(nOpacity));
         }
         else if (rProperty.first == "lineWidth")
             aLineWidth <<= rProperty.second.toInt32() / 360;
@@ -1125,7 +1127,28 @@ void RTFSdrImport::resolve(RTFShape& rShape, bool bClose, ShapeOrPict const shap
             xPropertySet->setPropertyValue(u"VertOrientRelation"_ustr,
                                            cpo::uno::Any(rShape.getVertOrientRelation()));
         if (rShape.getWrap() != text::WrapTextMode::WrapTextMode_MAKE_FIXED_SIZE)
-            xPropertySet->setPropertyValue(u"Surround"_ustr, cpo::uno::Any(rShape.getWrap()));
+        {
+            text::WrapTextMode eWrap = rShape.getWrap();
+            // A square wrap can still keep the text off one of the two sides.
+            if (eWrap == text::WrapTextMode_PARALLEL)
+            {
+                switch (rShape.getWrapSide())
+                {
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_WrapText_left:
+                        eWrap = text::WrapTextMode_LEFT;
+                        break;
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_WrapText_right:
+                        eWrap = text::WrapTextMode_RIGHT;
+                        break;
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_WrapText_largest:
+                        eWrap = text::WrapTextMode_DYNAMIC;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            xPropertySet->setPropertyValue(u"Surround"_ustr, cpo::uno::Any(eWrap));
+        }
         oox::ModelObjectHelper aModelObjectHelper(m_rImport.getTextDocument());
         if (aFillModel.moType.has_value())
         {
@@ -1186,10 +1209,10 @@ void RTFSdrImport::resolve(RTFShape& rShape, bool bClose, ShapeOrPict const shap
     // cells exist - resolvePict() defers its own output the same way.
     if (xShape.is() && !m_rImport.bufferShapeInsertion(xShape, bClose))
     {
-        m_rImport.Mapper().startShape(xShape);
+        open(xShape);
         if (bClose)
         {
-            m_rImport.Mapper().endShape();
+            close();
         }
     }
 
@@ -1207,7 +1230,17 @@ void RTFSdrImport::resolve(RTFShape& rShape, bool bClose, ShapeOrPict const shap
     m_xShape = std::move(xShape);
 }
 
-void RTFSdrImport::close() { m_rImport.Mapper().endShape(); }
+void RTFSdrImport::open(uno::Reference<drawing::XShape> const& xShape)
+{
+    m_rImport.Mapper().startShape(xShape);
+    m_bOpenInMapper = true;
+}
+
+void RTFSdrImport::close()
+{
+    m_rImport.Mapper().endShape();
+    m_bOpenInMapper = false;
+}
 
 void RTFSdrImport::append(std::u16string_view aKey, std::u16string_view aValue)
 {

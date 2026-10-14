@@ -20,7 +20,7 @@
 #include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/awt/PosSize.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <vcl/taskpanelist.hxx>
 #include <tools/debug.hxx>
@@ -30,8 +30,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 
 #define ID_TOOLBAR                          1
@@ -126,7 +126,7 @@ namespace bib
         if( !m_xControlContainer.is())
             return;
 
-        const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
 
         if ( !m_xGridModel.is())
             return;

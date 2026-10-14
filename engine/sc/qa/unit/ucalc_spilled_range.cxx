@@ -110,6 +110,51 @@ CPPUNIT_TEST_FIXTURE(TestSpilledRange, testSpilledRangeOperatorOnNonMasterFormul
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TestSpilledRange, testSpilledRangeNeedsOneCellToNameAMaster)
+{
+    // The # refers to the master cell before it, so an operand wider than one cell has no
+    // master and gives #REF!. A union list is used because a plain range before a # is
+    // reduced to the cell it lines up with during the parse and never arrives as a range.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(4, 0, 0), 10.0);
+    m_pDoc->SetValue(ScAddress(4, 1, 0), 20.0);
+
+    // Master at A1 spills =E1:E2 into A1:A2.
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_pDoc->InsertMatrixFormula(0, 0, 0, 1, aMark, u"=E1:E2"_ustr);
+
+    m_pDoc->SetString(ScAddress(6, 0, 0), u"=(A1~E1)#"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(6, 0, 0)));
+
+    // The list gets there the same way with the spill range as its second part.
+    m_pDoc->SetString(ScAddress(6, 1, 0), u"=(E1~A1)#"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(6, 1, 0)));
+
+    // A matrix formula and a dynamic-array master parse without working out implicit
+    // intersections, so a range before the # arrives whole in those too.
+    m_pDoc->InsertMatrixFormula(6, 2, 6, 2, aMark, u"=(E1:E2)#"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(6, 2, 0)));
+
+    // The range is one operand of the #, not a matrix walked cell by cell, so the master
+    // gives one error and spills nothing. The value below it would force #SPILL! if it did.
+    m_pDoc->SetValue(ScAddress(7, 1, 0), 5.0);
+    m_pDoc->InsertMatrixFormula(7, 0, 7, 0, aMark, u"=(E1:E2)#"_ustr, nullptr,
+                                formula::FormulaGrammar::GRAM_DEFAULT,
+                                /*bDynamicArrayMaster=*/true);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(7, 0, 0)));
+
+    m_pDoc->SetValue(ScAddress(8, 1, 0), 5.0);
+    m_pDoc->InsertMatrixFormula(8, 0, 8, 0, aMark, u"=E1:E2#"_ustr, nullptr,
+                                formula::FormulaGrammar::GRAM_DEFAULT,
+                                /*bDynamicArrayMaster=*/true);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(8, 0, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(TestSpilledRange, testSpilledRangeOperatorImplicitIntersection)
 {
     // A # reference in a cell that does not promote to a dynamic-array
@@ -379,6 +424,103 @@ CPPUNIT_TEST_FIXTURE(TestSpilledRange, testSpilledRangeOperatorInExpression)
     CPPUNIT_ASSERT_EQUAL(120.0, m_pDoc->GetValue(ScAddress(2, 0, 0)));
 
     CPPUNIT_ASSERT_EQUAL(u"=SUM(A1#)+100"_ustr, m_pDoc->GetFormula(2, 0, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestSpilledRange, testSpilledRangeKeepsItsPlaceThroughAnOperator)
+{
+    // An operator over a # spilled range gives one value per cell, so the result sits at
+    // that range.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(4, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(4, 1, 0), 200.0);
+    m_pDoc->SetValue(ScAddress(4, 2, 0), 400.0);
+
+    // Master at A1 spills =E1:E3 into A1:A3.
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_pDoc->InsertMatrixFormula(0, 0, 0, 2, aMark, u"=E1:E3"_ustr);
+
+    // Each cell takes the percent of the spilled value in its own row.
+    m_pDoc->SetString(ScAddress(6, 0, 0), u"=A1#%"_ustr);
+    CPPUNIT_ASSERT_EQUAL(1.0, m_pDoc->GetValue(ScAddress(6, 0, 0)));
+    m_pDoc->SetString(ScAddress(6, 1, 0), u"=A1#%"_ustr);
+    CPPUNIT_ASSERT_EQUAL(2.0, m_pDoc->GetValue(ScAddress(6, 1, 0)));
+
+    // One row past the spill range there is no value to line up with.
+    m_pDoc->SetString(ScAddress(6, 3, 0), u"=A1#%"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(6, 3, 0)));
+
+    // SUM takes an array, so it gets all the percents, not just one.
+    m_pDoc->SetString(ScAddress(7, 0, 0), u"=SUM(A1#%)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(7.0, m_pDoc->GetValue(ScAddress(7, 0, 0)));
+
+    // An explicit @ takes the first percent, not the row's, as they are not the cells' own values.
+    m_pDoc->SetString(ScAddress(9, 1, 0), u"=@(A1#%)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(1.0, m_pDoc->GetValue(ScAddress(9, 1, 0)));
+
+    // The spill range references its cells. The percents are the operator's own values, so
+    // they sit at that range without referencing it.
+    m_pDoc->SetString(ScAddress(8, 0, 0), u"=ISREF(A1#)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(1.0, m_pDoc->GetValue(ScAddress(8, 0, 0)));
+    m_pDoc->SetString(ScAddress(8, 1, 0), u"=ISREF(A1#%)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(0.0, m_pDoc->GetValue(ScAddress(8, 1, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestSpilledRange, testSpilledRangeAsReferenceOperatorOperand)
+{
+    // The reference operators take a # spilled range as the range it stands for. They pop it
+    // as a matrix that carries the range, and since they work on ranges they use the range
+    // and leave the values alone.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(4, 0, 0), 10.0);
+    m_pDoc->SetValue(ScAddress(4, 1, 0), 20.0);
+    m_pDoc->SetValue(ScAddress(4, 2, 0), 30.0);
+
+    // Master at A1 spills =E1:E3 into A1:A3.
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_pDoc->InsertMatrixFormula(0, 0, 0, 2, aMark, u"=E1:E3"_ustr);
+
+    // B2 and C1 sit outside the spill range, so each operator's result is a distinct sum.
+    m_pDoc->SetValue(ScAddress(1, 1, 0), 7.0);
+    m_pDoc->SetValue(ScAddress(2, 0, 0), 5.0);
+
+    // The intersection of A1:C2 with the spill range A1:A3 is A1:A2, whichever side the
+    // spill range is on.
+    m_pDoc->SetString(ScAddress(6, 0, 0), u"=SUM(A1:C2!A1#)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(30.0, m_pDoc->GetValue(ScAddress(6, 0, 0)));
+    // The parentheses keep the # away from the intersection operator, because a # directly
+    // before an exclamation mark lexes as the start of an error constant.
+    m_pDoc->SetString(ScAddress(7, 0, 0), u"=SUM((A1#)!A1:C2)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(30.0, m_pDoc->GetValue(ScAddress(7, 0, 0)));
+
+    // The range operator spans the spill range and C1, which is A1:C3, so B2 comes in.
+    m_pDoc->SetString(ScAddress(6, 1, 0), u"=SUM(A1#:C1)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(72.0, m_pDoc->GetValue(ScAddress(6, 1, 0)));
+    // The parentheses keep the left operand apart from the spill range, because C1:A1 on its
+    // own lexes as a single reference instead of two operands of the range operator.
+    m_pDoc->SetString(ScAddress(7, 1, 0), u"=SUM((C1):A1#)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NONE, m_pDoc->GetErrCode(ScAddress(7, 1, 0)));
+    CPPUNIT_ASSERT_EQUAL(72.0, m_pDoc->GetValue(ScAddress(7, 1, 0)));
+
+    // The union operator keeps the parts apart, so B2 stays out.
+    m_pDoc->SetString(ScAddress(6, 2, 0), u"=SUM(A1#~C1)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(65.0, m_pDoc->GetValue(ScAddress(6, 2, 0)));
+    m_pDoc->SetString(ScAddress(7, 2, 0), u"=SUM(C1~A1#)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(65.0, m_pDoc->GetValue(ScAddress(7, 2, 0)));
+
+    // With a third part the union operator extends a list it already built, which is a
+    // separate code path, so check that the spill range gets there too.
+    m_pDoc->SetString(ScAddress(6, 3, 0), u"=SUM(C1~B2~A1#)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(72.0, m_pDoc->GetValue(ScAddress(6, 3, 0)));
 
     m_pDoc->DeleteTab(0);
 }

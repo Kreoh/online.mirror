@@ -11,9 +11,9 @@
 
 #pragma once
 
-#if MOBILEAPP
-#error This file should be excluded from Mobile App builds
-#endif // MOBILEAPP
+#if !ENABLE_WOPI
+#error This file should be excluded from builds without the WOPI storage backend
+#endif // !ENABLE_WOPI
 
 #include <RequestDetails.hpp>
 #include <wopi/CheckFileInfo.hpp>
@@ -45,9 +45,10 @@ private:
 
     void checkFileInfo(const std::shared_ptr<TerminatingPoll>& poll, const Poco::URI& uri,
                        std::optional<std::string> const & postBody, int redirectionLimit);
+    /// hostChecked is true when the host of uriPublic passed the WOPI host check.
     void transfer(const std::shared_ptr<TerminatingPoll>& poll, const std::string& url,
                   std::optional<std::string> const & postBody,
-                  const Poco::URI& uriPublic, int redirectionLimit);
+                  const Poco::URI& uriPublic, int redirectionLimit, bool hostChecked);
 
     const std::string _id;
     const RequestDetails _requestDetails;

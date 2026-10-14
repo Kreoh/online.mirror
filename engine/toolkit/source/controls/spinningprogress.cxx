@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <controls/animatedimages.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <vcl/toolkit/throbber.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace {
@@ -32,20 +32,20 @@ typedef toolkit::AnimatedImagesControlModel SpinningProgressControlModel_Base;
 class SpinningProgressControlModel : public SpinningProgressControlModel_Base
 {
 public:
-    explicit SpinningProgressControlModel( css::uno::Reference< css::uno::XComponentContext > const & i_factory );
+    explicit SpinningProgressControlModel( cpo::uno::Reference< cpo::uno::XComponentContext > const & i_factory );
     SpinningProgressControlModel(const SpinningProgressControlModel& rOther) : SpinningProgressControlModel_Base(rOther) {}
 
     virtual rtl::Reference<UnoControlModel> Clone() const override;
 
     // XPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
 
     // XPersistObject
-    OUString SAL_CALL getServiceName() override;
+    OUString getServiceName() override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName(  ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName(  ) override;
+    cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
 protected:
     virtual ~SpinningProgressControlModel() override;
@@ -90,26 +90,26 @@ protected:
     }
 
 
-    Reference< beans::XPropertySetInfo > SAL_CALL SpinningProgressControlModel::getPropertySetInfo(  )
+    Reference< beans::XPropertySetInfo > SpinningProgressControlModel::getPropertySetInfo(  )
     {
         static Reference< beans::XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
     }
 
 
-    OUString SAL_CALL SpinningProgressControlModel::getServiceName()
+    OUString SpinningProgressControlModel::getServiceName()
     {
         return u"com.sun.star.awt.SpinningProgressControlModel"_ustr;
     }
 
 
-    OUString SAL_CALL SpinningProgressControlModel::getImplementationName(  )
+    OUString SpinningProgressControlModel::getImplementationName(  )
     {
         return u"org.openoffice.comp.toolkit.SpinningProgressControlModel"_ustr;
     }
 
 
-    Sequence< OUString > SAL_CALL SpinningProgressControlModel::getSupportedServiceNames()
+    Sequence< OUString > SpinningProgressControlModel::getSupportedServiceNames()
     {
         return { u"com.sun.star.awt.SpinningProgressControlModel"_ustr,
                  u"com.sun.star.awt.AnimatedImagesControlModel"_ustr,
@@ -118,9 +118,9 @@ protected:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 org_openoffice_comp_toolkit_SpinningProgressControlModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SpinningProgressControlModel(context));

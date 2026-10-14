@@ -35,7 +35,7 @@
 #include <optional>
 #include <vector>
 #include <deque>
-#include <tools/UniqueID.hxx>
+#include <tools/Guid.hxx>
 
 // predefines
 namespace model { class Theme; }
@@ -91,6 +91,11 @@ public:
 
     SAL_DLLPRIVATE void CopyObjects(const SdrObjList& rSrcList);
     static OString GetObjectRectangles(const SdrObjList& rSrcList);
+
+    /** The object of this list carrying the given unique id, looked for inside every group on
+        the way, or nothing when the list holds no such object.
+     */
+    SdrObject* FindObjectByUniqueID(sal_uInt64 nUniqueID) const;
 
     // tdf#116879 clean up everything (without Undo), plus broadcasting
     // changes. Split to this call and a private one (impClearSdrObjList)
@@ -218,7 +223,7 @@ public:
             Otherwise this list is expected to contain all the shapes in the
             called SdrObjList.
     */
-    void SetNavigationOrder (const css::uno::Reference<
+    void SetNavigationOrder (const cpo::uno::Reference<
                              css::container::XIndexAccess>& rxOrder);
 
     SAL_DLLPRIVATE virtual void dumpAsXml(xmlTextWriterPtr pWriter) const;
@@ -426,7 +431,9 @@ private:
     sal_Int32 mnBorderUpper; // top page margin
     sal_Int32 mnBorderRight; // right page margin
     sal_Int32 mnBorderLower; // bottom page margin
-    UniqueID maUniqueID;
+    // Globally unique identifier of the page. It is never empty. A new page generates one,
+    // and a cloned page starts out holding the identifier of its source page.
+    tools::Guid maGuid;
     bool mbBackgroundFullSize = false; ///< Background object to represent the whole page.
 
     std::unique_ptr<SdrLayerAdmin> mpLayerAdmin;
@@ -489,7 +496,8 @@ public:
     sal_Int32 GetUpperBorder() const;
     sal_Int32 GetRightBorder() const;
     sal_Int32 GetLowerBorder() const;
-    sal_uInt64 GetUniqueID() const { return maUniqueID.getID(); }
+    const tools::Guid& GetGuid() const { return maGuid; }
+    void SetGuid(const tools::Guid& rGuid) { maGuid = rGuid; }
     void    SetBackgroundFullSize(bool bIn);
     bool    IsBackgroundFullSize() const;
 
@@ -534,6 +542,11 @@ public:
     /** *deprecated* returns an averaged background color of this page */
     // #i75566# GetBackgroundColor -> GetPageBackgroundColor and bScreenDisplay hint value
     Color GetPageBackgroundColor( SdrPageView const * pView, bool bScreenDisplay = true) const;
+
+    /** returns the background of this page over the given color behind it: the fill of the
+        page or of its master page, mixed with rBehind where it is not fully opaque, rBehind
+        itself if there is no such fill */
+    Color GetPageBackgroundColor(const Color& rBehind) const;
 
     /** this method returns true if the object from the ViewObjectContact should
         be visible on this page while rendering.

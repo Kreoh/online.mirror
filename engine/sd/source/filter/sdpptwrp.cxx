@@ -30,13 +30,13 @@
 #include <officecfg/Office/Common.hxx>
 
 #include <com/sun/star/packages/XPackageEncryption.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <sdpptwrp.hxx>
 #include <DrawDocShell.hxx>
 #include <sfx2/frame.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::task;

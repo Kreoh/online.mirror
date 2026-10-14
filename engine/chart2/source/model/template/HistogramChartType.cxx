@@ -36,12 +36,10 @@
 #include <com/sun/star/chart2/AxisType.hpp>
 #include <cpo/uno/Any.hxx>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -244,37 +242,51 @@ void HistogramChartType::createCalculatedDataSeries()
             = new LabeledDataSequence(xCalcSeq);
         xSeries->setCalculatedYSequence(xLabeledCalc);
 
-        // 3. Regenerate the categories (bins)
-        rtl::Reference<HistogramDataSequence> xCatSeq = new HistogramDataSequence(
-            xValuesY, true, nFrequencyType, fBinWidth, nBinCount, bUseUnderflowBin,
-            fUnderflowBinValue, bUseOverflowBin, fOverflowBinValue);
+        auto createCategorySequence = [&]() {
+            rtl::Reference<HistogramDataSequence> xCatSeq = new HistogramDataSequence(
+                xValuesY, true, nFrequencyType, fBinWidth, nBinCount, bUseUnderflowBin,
+                fUnderflowBinValue, bUseOverflowBin, fOverflowBinValue);
 
-        uno::Reference<chart2::data::XDataSequence> xCatDataSeq(xCatSeq);
-        uno::Reference<beans::XPropertySet> xCatProp(xCatDataSeq, uno::UNO_QUERY);
-        if (xCatProp.is())
-        {
-            xCatProp->setPropertyValue(u"Role"_ustr, cpo::uno::Any(u"categories"_ustr));
-        }
+            uno::Reference<chart2::data::XDataSequence> xCatDataSeq(xCatSeq);
+            uno::Reference<beans::XPropertySet> xCatProp(xCatDataSeq, uno::UNO_QUERY);
+            if (xCatProp.is())
+            {
+                xCatProp->setPropertyValue(u"Role"_ustr, cpo::uno::Any(u"categories"_ustr));
+            }
 
-        uno::Reference<chart2::data::XLabeledDataSequence> xLabeledCat
-            = new LabeledDataSequence(xCatSeq);
+            return uno::Reference<chart2::data::XLabeledDataSequence>(
+                new LabeledDataSequence(xCatSeq));
+        };
 
-        // 4. Attach the categories to the DataSeries so the View can find them
+        // 3. Update existing histogram categories in place. The X axis and the DataSeries hold
+        // the same sequence, so new bin parameters reach the axis labels through it.
         bool bHasCategories = false;
         for (auto& seq : aSeqs)
         {
-            if (seq.is() && DataSeriesHelper::getRole(seq) == u"categories"_ustr)
+            if (!seq.is() || DataSeriesHelper::getRole(seq) != u"categories"_ustr)
+                continue;
+
+            rtl::Reference<HistogramDataSequence> xHistogramSequence
+                = dynamic_cast<HistogramDataSequence*>(seq->getValues().get());
+
+            if (xHistogramSequence.is())
             {
-                seq = xLabeledCat;
-                bHasCategories = true;
-                break;
+                xHistogramSequence->setBinningParameters(nFrequencyType, fBinWidth, nBinCount,
+                                                         bUseUnderflowBin, fUnderflowBinValue,
+                                                         bUseOverflowBin, fOverflowBinValue);
             }
+            else
+            {
+                seq = createCategorySequence();
+            }
+
+            bHasCategories = true;
+            break;
         }
 
+        // 4. Attach generated categories when the series does not have them yet
         if (!bHasCategories)
-        {
-            aSeqs.push_back(xLabeledCat);
-        }
+            aSeqs.push_back(createCategorySequence());
 
         xSeries->setData(aSeqs);
     }
@@ -368,9 +380,9 @@ cpo::uno::Sequence<OUString> HistogramChartType::getSupportedServiceNames()
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_chart_HistogramChartType_get_implementation(
-    css::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ::chart::HistogramChartType());
 }

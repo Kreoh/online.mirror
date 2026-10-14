@@ -23,6 +23,7 @@
 #include <tools/long.hxx>
 #include <tools/solar.h>
 #include <ndarr.hxx>
+#include <swtable.hxx>
 #include <undobj.hxx>
 #include <set>
 #include <itabenum.hxx>
@@ -86,7 +87,6 @@ class SwUndoTextToTable final : public SwUndo, public SwUndRng
     SwInsertTableOptions m_aInsertTableOpts;
     std::vector<SwNodeOffset> mvDelBoxes;
     std::unique_ptr<SwTableAutoFormat> m_pAutoFormat;
-    SwHistory* m_pHistory;
     sal_Unicode m_cSeparator;
     sal_uInt16 m_nAdjust;
     bool m_bSplitEnd : 1;
@@ -102,7 +102,6 @@ public:
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RepeatImpl( ::sw::RepeatContext & ) override;
 
-    SwHistory& GetHistory(); // will be created if necessary
     void AddFillBox( const SwTableBox& rBox );
 };
 
@@ -147,28 +146,25 @@ public:
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
 };
 
-class SwUndoTableNumFormat;
-
-class SwUndoTableAutoFormat final : public SwUndo
+/// Undo for applying a table style or its role settings live. Applying a (style, settings)
+/// pair never writes into the cells' content, so undo is reapplying the previous (style,
+/// settings) pair, swapping it with the current one so redo reverses it again. Choosing a
+/// style also replaces the cells' own border and background and the table's own properties
+/// with the style's; with bSaveFormatting the undo keeps those too and gives them back.
+class SwUndoTableStyleLive final : public SwUndo
 {
-    TableStyleName m_TableStyleName;
     SwNodeOffset m_nStartNode;
+    TableStyleName m_TableStyleName;
+    SwTableStyleSettings m_TableStyleSettings;
     std::unique_ptr<SaveTable> m_pSaveTable;
-    std::vector< std::shared_ptr<SwUndoTableNumFormat> > m_Undos;
-    bool m_bSaveContentAttr;
-    sal_uInt16 m_nRepeatHeading;
-
-    void UndoRedo(bool const bUndo, ::sw::UndoRedoContext & rContext);
+    sal_uInt16 m_nRowsToRepeat;
 
 public:
-    SwUndoTableAutoFormat( const SwTableNode& rTableNd, const SwTableAutoFormat& );
-
-    virtual ~SwUndoTableAutoFormat() override;
+    SwUndoTableStyleLive( const SwTableNode& rTableNd, bool bSaveFormatting );
+    virtual ~SwUndoTableStyleLive() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
-
-    void SaveBoxContent( const SwTableBox& rBox );
 };
 
 using SwUndoSaveSections = std::vector<std::unique_ptr<SwUndoSaveSection, o3tl::default_delete<SwUndoSaveSection>>>;
@@ -292,9 +288,11 @@ public:
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
 
-    void AddBoxBefore( const SwTableBox& rBox, bool bDelContent );
+    /// bTrackChanges is false for a box that is copied without recording it as a change, even
+    /// though changes are being recorded: see lcl_CpyBox().
+    void AddBoxBefore( const SwTableBox& rBox, bool bDelContent, bool bTrackChanges );
     void AddBoxAfter( const SwTableBox& rBox, const SwNodeIndex& rIdx,
-                bool bDelContent );
+                bool bDelContent, bool bTrackChanges );
 
     bool IsEmpty() const;
     bool InsertRow( SwTable& rTable, const SwSelBoxes& rBoxes, sal_uInt16 nCnt );
@@ -402,9 +400,10 @@ public:
 class SwUndoTableStyleDelete final : public SwUndo
 {
     std::unique_ptr<SwTableAutoFormat> m_pAutoFormat;
-    std::vector<SwTable*> m_rAffectedTables;
+    std::vector<std::pair<SwTable*, SwTableStyleSettings>> m_rAffectedTables;
 public:
-    SwUndoTableStyleDelete(std::unique_ptr<SwTableAutoFormat> pAutoFormat, std::vector<SwTable*>&& rAffectedTables, const SwDoc& rDoc);
+    SwUndoTableStyleDelete(std::unique_ptr<SwTableAutoFormat> pAutoFormat,
+            std::vector<std::pair<SwTable*, SwTableStyleSettings>>&& rAffectedTables, const SwDoc& rDoc);
 
     virtual ~SwUndoTableStyleDelete() override;
 

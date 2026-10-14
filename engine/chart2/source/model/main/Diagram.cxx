@@ -55,7 +55,7 @@
 #include <com/sun/star/chart/MissingValueTreatment.hpp>
 #include <com/sun/star/container/NoSuchElementException.hpp>
 #include <com/sun/star/drawing/ShadeMode.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/CloseVetoException.hpp>
 
 #include <cppuhelper/supportsservice.hxx>
@@ -69,11 +69,12 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans::PropertyAttribute;
+using namespace ::cpo;
 using namespace ::chart::SceneProperties;
 
 using ::com::sun::star::beans::Property;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Any;
 using ::osl::MutexGuard;
 
@@ -268,7 +269,7 @@ void lcl_CloneCoordinateSystems(
 namespace chart
 {
 
-Diagram::Diagram( uno::Reference< uno::XComponentContext > xContext ) :
+Diagram::Diagram( uno::Reference< cpo::uno::XComponentContext > xContext ) :
         m_xContext(std::move( xContext )),
         m_xModifyEventForwarder( new ModifyEventForwarder() )
 {
@@ -1130,7 +1131,7 @@ static bool lcl_moveSeriesOrCheckIfMoveIsAllowed(
                         catch( const util::CloseVetoException& )
                         {
                         }
-                        catch( const uno::RuntimeException& )
+                        catch( const cpo::uno::RuntimeException& )
                         {
                         }
                     }
@@ -1142,7 +1143,7 @@ static bool lcl_moveSeriesOrCheckIfMoveIsAllowed(
     catch( const util::CloseVetoException& )
     {
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
     }
     return bMovedOrMoveAllowed;
@@ -1434,7 +1435,7 @@ rtl::Reference< Axis > Diagram::getAttachedAxis(
 
 bool Diagram::attachSeriesToAxis( bool bAttachToMainAxis
                         , const rtl::Reference< DataSeries >& xDataSeries
-                        , const uno::Reference< uno::XComponentContext > & xContext
+                        , const uno::Reference< cpo::uno::XComponentContext > & xContext
                         , bool bAdaptAxes )
 {
     bool bChanged = false;
@@ -2294,8 +2295,8 @@ void Diagram::switchRightAngledAxes( bool bRightAngledAxes )
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_Diagram_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_Diagram_get_implementation(cpo::uno::XComponentContext *context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::Diagram(context));

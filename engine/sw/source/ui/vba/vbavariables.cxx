@@ -23,9 +23,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// @throws uno::RuntimeException
-static uno::Reference< container::XIndexAccess > createVariablesAccess( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< beans::XPropertyAccess >& xUserDefined )
+static uno::Reference< container::XIndexAccess > createVariablesAccess( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< beans::XPropertyAccess >& xUserDefined )
 {
     // FIXME: the performance is poor?
     XNamedObjectCollectionHelper< word::XVariable >::XNamedVec aVariables;
@@ -40,7 +41,7 @@ static uno::Reference< container::XIndexAccess > createVariablesAccess( const un
     return xVariables;
 }
 
-SwVbaVariables::SwVbaVariables( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< css::uno::XComponentContext > & xContext, const uno::Reference< beans::XPropertyAccess >& rUserDefined ): SwVbaVariables_BASE( xParent, xContext, createVariablesAccess( xParent, xContext, rUserDefined ) ),  mxUserDefined( rUserDefined )
+SwVbaVariables::SwVbaVariables( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< beans::XPropertyAccess >& rUserDefined ): SwVbaVariables_BASE( xParent, xContext, createVariablesAccess( xParent, xContext, rUserDefined ) ),  mxUserDefined( rUserDefined )
 {
 }
 // XEnumerationAccess
@@ -62,7 +63,7 @@ SwVbaVariables::createCollectionObject( const cpo::uno::Any& aSource )
     return aSource;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaVariables::Add( const OUString& rName, const cpo::uno::Any& rValue )
 {
     cpo::uno::Any aValue;

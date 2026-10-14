@@ -32,11 +32,11 @@
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 
 namespace sfx2::sidebar {
 
-css::uno::Reference<css::graphic::XGraphic> Tools::GetImage(
+cpo::uno::Reference<css::graphic::XGraphic> Tools::GetImage(
     const OUString& rsImageURL,
     const OUString& rsHighContrastImageURL,
     const Reference<frame::XFrame>& rxFrame)
@@ -47,7 +47,7 @@ css::uno::Reference<css::graphic::XGraphic> Tools::GetImage(
         return GetImage(rsImageURL, rxFrame);
 }
 
-css::uno::Reference<css::graphic::XGraphic> Tools::GetImage(
+cpo::uno::Reference<css::graphic::XGraphic> Tools::GetImage(
     const OUString& rsURL,
     const Reference<frame::XFrame>& rxFrame)
 {
@@ -58,7 +58,7 @@ css::uno::Reference<css::graphic::XGraphic> Tools::GetImage(
 
         else
         {
-             const Reference<uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
+             const Reference<cpo::uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
              Reference<graphic::XGraphicProvider> xProvider(graphic::GraphicProvider::create(xContext));
              ::comphelper::NamedValueCollection aMediaProperties;
              aMediaProperties.put(u"URL"_ustr, rsURL);
@@ -73,7 +73,7 @@ util::URL Tools::GetURL (const OUString& rsCommand)
     util::URL aURL;
     aURL.Complete = rsCommand;
 
-    const Reference<XComponentContext>& xComponentContext (::comphelper::getProcessComponentContext());
+    const Reference<cpo::uno::XComponentContext>& xComponentContext (::comphelper::getProcessComponentContext());
     const Reference<util::XURLTransformer> xParser = util::URLTransformer::create( xComponentContext );
     xParser->parseStrict(aURL);
 
@@ -81,7 +81,7 @@ util::URL Tools::GetURL (const OUString& rsCommand)
 }
 
 Reference<frame::XDispatch> Tools::GetDispatch (
-    const css::uno::Reference<css::frame::XFrame>& rxFrame,
+    const cpo::uno::Reference<css::frame::XFrame>& rxFrame,
     const util::URL& rURL)
 {
     Reference<frame::XDispatchProvider> xProvider (rxFrame, UNO_QUERY_THROW);
@@ -90,14 +90,14 @@ Reference<frame::XDispatch> Tools::GetDispatch (
 }
 
 OUString Tools::GetModuleName (
-    const css::uno::Reference<css::frame::XController>& rxController)
+    const cpo::uno::Reference<css::frame::XController>& rxController)
 {
     if (!rxController.is())
         return OUString();
 
     try
     {
-        const Reference<XComponentContext>& xComponentContext (::comphelper::getProcessComponentContext());
+        const Reference<cpo::uno::XComponentContext>& xComponentContext (::comphelper::getProcessComponentContext());
         const Reference<frame::XModuleManager> xModuleManager = frame::ModuleManager::create( xComponentContext );
         return xModuleManager->identify(rxController);
     }

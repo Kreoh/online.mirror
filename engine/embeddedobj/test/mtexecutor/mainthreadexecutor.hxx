@@ -30,12 +30,12 @@
 
 class MainThreadExecutorRequest
 {
-    css::uno::Reference< css::task::XJob > m_xJob;
+    cpo::uno::Reference< css::task::XJob > m_xJob;
     cpo::uno::Sequence< css::beans::NamedValue > m_aValues;
 
     public:
         MainThreadExecutorRequest(
-            const css::uno::Reference< css::task::XJob >& xJob,
+            const cpo::uno::Reference< css::task::XJob >& xJob,
             const cpo::uno::Sequence< css::beans::NamedValue >& aValues );
 
         void doIt();
@@ -48,25 +48,25 @@ class MainThreadExecutor : public ::cppu::WeakImplHelper<
 {
 public:
     explicit MainThreadExecutor(
-        const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory )
+        const cpo::uno::Reference< css::lang::XMultiServiceFactory >& xFactory )
     {}
 
     static cpo::uno::Sequence< OUString > impl_staticGetSupportedServiceNames();
 
     static OUString impl_staticGetImplementationName();
 
-    static css::uno::Reference< css::uno::XInterface > impl_staticCreateSelfInstance(
-            const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+    static cpo::uno::Reference< cpo::uno::XInterface > impl_staticCreateSelfInstance(
+            const cpo::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
     DECL_STATIC_LINK( MainThreadExecutor, worker, MainThreadExecutorRequest*, void );
 
     // XJob
-       virtual cpo::uno::Any execute( const cpo::uno::Sequence< css::beans::NamedValue >& Arguments ) throw (css::lang::IllegalArgumentException, cpo::uno::Exception, css::uno::RuntimeException);
+       virtual cpo::uno::Any execute( const cpo::uno::Sequence< css::beans::NamedValue >& Arguments ) throw (css::lang::IllegalArgumentException, cpo::uno::Exception, cpo::uno::RuntimeException);
 
     // XServiceInfo
-    virtual OUString getImplementationName() throw (css::uno::RuntimeException);
-    virtual bool supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException);
-    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() throw (css::uno::RuntimeException);
+    virtual OUString getImplementationName() throw (cpo::uno::RuntimeException);
+    virtual bool supportsService( const OUString& ServiceName ) throw (cpo::uno::RuntimeException);
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() throw (cpo::uno::RuntimeException);
 
 };
 

@@ -51,9 +51,9 @@ import com.sun.star.registry.XRegistryKey;
 import com.sun.star.script.framework.log.LogUtils;
 
 import com.sun.star.uno.AnyConverter;
-import com.sun.star.uno.RuntimeException;
+import cpo.uno.RuntimeException;
 import com.sun.star.uno.UnoRuntime;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 
 public class SecurityDialog extends WeakBase implements
     XComponent, XServiceInfo, XDialog, XInitialization {

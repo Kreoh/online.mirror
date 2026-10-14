@@ -56,8 +56,8 @@
 #include <sfx2/notebookbar/SfxNotebookBar.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace {
 
@@ -143,7 +143,7 @@ LayoutManagerListener::~LayoutManagerListener()
 {
 }
 
-void LayoutManagerListener::setFrame( const css::uno::Reference< css::frame::XFrame >& xFrame )
+void LayoutManagerListener::setFrame( const cpo::uno::Reference< css::frame::XFrame >& xFrame )
 {
     SolarMutexGuard aGuard;
     if ( !m_pWrkWin || m_bHasFrame )
@@ -155,8 +155,8 @@ void LayoutManagerListener::setFrame( const css::uno::Reference< css::frame::XFr
     if ( !xFrame.is() )
         return;
 
-    css::uno::Reference< css::beans::XPropertySet > xPropSet( xFrame, UNO_QUERY );
-    css::uno::Reference< css::frame::XLayoutManagerEventBroadcaster > xLayoutManager;
+    cpo::uno::Reference< css::beans::XPropertySet > xPropSet( xFrame, UNO_QUERY );
+    cpo::uno::Reference< css::frame::XLayoutManagerEventBroadcaster > xLayoutManager;
     if ( !xPropSet.is() )
         return;
 
@@ -167,7 +167,7 @@ void LayoutManagerListener::setFrame( const css::uno::Reference< css::frame::XFr
 
         if ( xLayoutManager.is() )
             xLayoutManager->addLayoutManagerEventListener(
-                css::uno::Reference< css::frame::XLayoutManagerListener >(this) );
+                cpo::uno::Reference< css::frame::XLayoutManagerListener >(this) );
 
         xPropSet.set( xLayoutManager, UNO_QUERY );
         if ( xPropSet.is() )
@@ -179,7 +179,7 @@ void LayoutManagerListener::setFrame( const css::uno::Reference< css::frame::XFr
     catch ( css::lang::DisposedException& )
     {
     }
-    catch ( const css::uno::RuntimeException& )
+    catch ( const cpo::uno::RuntimeException& )
     {
         throw;
     }
@@ -191,34 +191,34 @@ void LayoutManagerListener::setFrame( const css::uno::Reference< css::frame::XFr
 
 //  XComponent
 
-void SAL_CALL LayoutManagerListener::addEventListener(
-    const css::uno::Reference< css::lang::XEventListener >& )
+void LayoutManagerListener::addEventListener(
+    const cpo::uno::Reference< css::lang::XEventListener >& )
 {
     // do nothing, only internal class
 }
 
-void SAL_CALL LayoutManagerListener::removeEventListener(
-    const css::uno::Reference< css::lang::XEventListener >& )
+void LayoutManagerListener::removeEventListener(
+    const cpo::uno::Reference< css::lang::XEventListener >& )
 {
     // do nothing, only internal class
 }
 
-void SAL_CALL LayoutManagerListener::dispose()
+void LayoutManagerListener::dispose()
 {
     SolarMutexGuard aGuard;
 
     // reset member
     m_pWrkWin = nullptr;
 
-    css::uno::Reference< css::frame::XFrame > xFrame( m_xFrame.get(), css::uno::UNO_QUERY );
+    cpo::uno::Reference< css::frame::XFrame > xFrame( m_xFrame.get(), cpo::uno::UNO_QUERY );
     if ( !xFrame.is() )
         return;
 
     m_xFrame.clear();
     m_bHasFrame = false;
 
-    css::uno::Reference< css::beans::XPropertySet > xPropSet( xFrame, css::uno::UNO_QUERY );
-    css::uno::Reference< css::frame::XLayoutManagerEventBroadcaster > xLayoutManager;
+    cpo::uno::Reference< css::beans::XPropertySet > xPropSet( xFrame, cpo::uno::UNO_QUERY );
+    cpo::uno::Reference< css::frame::XLayoutManagerEventBroadcaster > xLayoutManager;
     if ( !xPropSet.is() )
         return;
 
@@ -230,12 +230,12 @@ void SAL_CALL LayoutManagerListener::dispose()
         // remove as listener from layout manager
         if ( xLayoutManager.is() )
             xLayoutManager->removeLayoutManagerEventListener(
-                css::uno::Reference< css::frame::XLayoutManagerListener >(this) );
+                cpo::uno::Reference< css::frame::XLayoutManagerListener >(this) );
     }
     catch ( css::lang::DisposedException& )
     {
     }
-    catch ( const css::uno::RuntimeException& )
+    catch ( const cpo::uno::RuntimeException& )
     {
         throw;
     }
@@ -247,7 +247,7 @@ void SAL_CALL LayoutManagerListener::dispose()
 
 //  XEventListener
 
-void SAL_CALL LayoutManagerListener::disposing(
+void LayoutManagerListener::disposing(
     const css::lang::EventObject& )
 {
     SolarMutexGuard aGuard;
@@ -259,7 +259,7 @@ void SAL_CALL LayoutManagerListener::disposing(
 
 // XLayoutManagerEventListener
 
-void SAL_CALL LayoutManagerListener::layoutEvent(
+void LayoutManagerListener::layoutEvent(
     const css::lang::EventObject&,
     ::sal_Int16                   eLayoutEvent,
     const cpo::uno::Any&                        )
@@ -455,11 +455,7 @@ SfxWorkWindow::SfxWorkWindow( vcl::Window *pWin, SfxFrame *pFrm, SfxFrame* pMast
     bDockingAllowed(true),
     bInternalDockingAllowed(true),
     bAllChildrenVisible(true),
-#if !defined(ANDROID) || HAVE_FEATURE_ANDROID_KIT
     bIsFullScreen( false ),
-#else // Fennec-based Android Viewer
-    bIsFullScreen( true ),
-#endif
 #if HAVE_FEATURE_DESKTOP
     bShowStatusBar( true ),
 #else
@@ -1145,9 +1141,9 @@ bool SfxWorkWindow::IsPluginMode( SfxObjectShell const * pObjShell )
 }
 
 
-css::uno::Reference< css::frame::XFrame > SfxWorkWindow::GetFrameInterface()
+cpo::uno::Reference< css::frame::XFrame > SfxWorkWindow::GetFrameInterface()
 {
-    css::uno::Reference< css::frame::XFrame > xFrame;
+    cpo::uno::Reference< css::frame::XFrame > xFrame;
 
     SfxDispatcher* pDispatcher( GetBindings().GetDispatcher() );
     if ( pDispatcher )

@@ -235,7 +235,7 @@ excludelist:
     include/comphelper/diagnose_ex.hxx:
     # Needed for macros
     - com/sun/star/lang/IllegalArgumentException.hpp
-    - com/sun/star/uno/RuntimeException.hpp
+    - cpo/uno/RuntimeException.hpp
     - rtl/ustring.hxx
     include/tools/long.hxx:
     # Needed on _WIN64
@@ -311,7 +311,6 @@ excludelist:
     - com/sun/star/awt/XView.hpp
     - com/sun/star/beans/XPropertySetInfo.hpp
     - com/sun/star/awt/XDockableWindow.hpp
-    - com/sun/star/awt/XStyleSettingsSupplier.hpp
     include/toolkit/awt/vclxwindows.hxx:
     # base class has to be a complete type
     - com/sun/star/awt/XListBox.hpp
@@ -326,7 +325,6 @@ excludelist:
     - com/sun/star/beans/XPropertiesChangeListener.hpp
     - com/sun/star/lang/XServiceInfo.hpp
     - com/sun/star/awt/XUnitConversion.hpp
-    - com/sun/star/awt/XStyleSettingsSupplier.hpp
     - com/sun/star/accessibility/XAccessible.hpp
     - com/sun/star/util/XModeChangeBroadcaster.hpp
     include/toolkit/controls/unocontrolmodel.hxx:
@@ -353,7 +351,7 @@ excludelist:
     - comphelper/diagnose_ex.hxx
     include/xmloff/unointerfacetouniqueidentifiermapper.hxx:
     # base class has to be a complete type
-    - com/sun/star/uno/XInterface.hpp
+    - cpo/uno/XInterface.hpp
     include/xmloff/unoatrcn.hxx:
     # base class has to be a complete type
     - com/sun/star/container/XNameContainer.hpp
@@ -536,7 +534,6 @@ excludelist:
     - com/sun/star/frame/XDispatchProvider.hpp
     - com/sun/star/task/XStatusIndicatorSupplier.hpp
     - com/sun/star/ui/XContextMenuInterception.hpp
-    - com/sun/star/awt/XUserInputInterception.hpp
     - com/sun/star/frame/XDispatchInformationProvider.hpp
     - com/sun/star/frame/XTitle.hpp
     - com/sun/star/frame/XTitleChangeBroadcaster.hpp

@@ -20,7 +20,7 @@
 #pragma once
 
 #include <xmloff/xmlictxt.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <rtl/ustring.hxx>
 #include <sax/fastattribs.hxx>
 
@@ -45,38 +45,38 @@ private:
 protected:
 
     /// property set of index; must be accessible to subclasses
-    css::uno::Reference<css::beans::XPropertySet> & rIndexPropertySet;
+    cpo::uno::Reference<css::beans::XPropertySet> & rIndexPropertySet;
 
 public:
 
 
     XMLIndexSourceBaseContext(
         SvXMLImport& rImport,
-        css::uno::Reference<css::beans::XPropertySet> & rPropSet,
+        cpo::uno::Reference<css::beans::XPropertySet> & rPropSet,
         UseStyles eUseStyles);
 
     virtual ~XMLIndexSourceBaseContext() override;
 
 protected:
 
-    virtual void SAL_CALL startFastElement(
+    virtual void startFastElement(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
     virtual void ProcessAttribute(const sax_fastparser::FastAttributeList::FastAttributeIter & aIter);
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 
 namespace xmloff {
 
 OUString GetIndexSourceStyleName(
-    css::uno::Reference<css::xml::sax::XFastAttributeList> const& xAttrList);
+    cpo::uno::Reference<css::xml::sax::XFastAttributeList> const& xAttrList);
 
 } // namespace xmloff
 

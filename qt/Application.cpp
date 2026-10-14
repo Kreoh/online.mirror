@@ -13,6 +13,7 @@
 
 #include <common/MobileApp.hpp>
 #include <qt/CoolUrlSchemeHandler.hpp>
+#include <qt/QtClipboard.hpp>
 #include <qt/qt.hpp>
 
 #include <common/Log.hpp>
@@ -26,6 +27,7 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMap>
@@ -33,20 +35,116 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSslCertificate>
 #include <QSslKey>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTemporaryFile>
 #include <QUrl>
+#include <QWebEngineCookieStore>
+#include <QWebEnginePage>
 #include <QWebEngineProfile>
 #include <QWebEngineSettings>
+#include <QWebEngineView>
+
+namespace
+{
+QWebEngineProfile* createSavedProfile(const QString& storageName, const QString& storagePath,
+                                      const QString& cachePath)
+{
+    LOG_DBG("Application: profile '" << storageName.toStdString() << "' keeps its files in '"
+                                     << storagePath.toStdString() << "' and its cache in '"
+                                     << cachePath.toStdString() << "'");
+
+    auto* profile = new QWebEngineProfile(storageName);
+    profile->setPersistentStoragePath(storagePath);
+    profile->setCachePath(cachePath);
+    profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+    return profile;
+}
+
+// The id names a folder on disk, so it is taken only as one plain path segment.
+bool isPlainAccountId(const QString& accountId)
+{
+    static const QRegularExpression plainId(
+        QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_-]{1,64}")));
+    return plainId.match(accountId).hasMatch();
+}
+
+QString accountStorageRoot()
+{
+    return QString::fromStdString(Desktop::getConfigPath().toString()) +
+           QStringLiteral("/accounts");
+}
+
+QString accountCacheRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) +
+           QStringLiteral("/accounts");
+}
+
+QString accountStoragePath(const QString& accountId)
+{
+    return accountStorageRoot() + '/' + accountId;
+}
+
+QString accountCachePath(const QString& accountId)
+{
+    return accountCacheRoot() + '/' + accountId;
+}
+
+// A folder goes only when its real path is the accounts folder's own plus the id, so a
+// symbolic link in its place leaves everything where it is.
+void removeAccountFolders(const QString& accountId)
+{
+    for (const QString& accounts : { accountStorageRoot(), accountCacheRoot() })
+    {
+        const QString folder = accounts + '/' + accountId;
+        if (!QFileInfo::exists(folder))
+        {
+            LOG_DBG("Application: '" << folder.toStdString()
+                                      << "' does not exist, so there is nothing to remove");
+            continue;
+        }
+
+        if (QFileInfo(folder).canonicalFilePath() !=
+            QDir(accounts).canonicalPath() + '/' + accountId)
+        {
+            LOG_ERR("Application: refusing to remove '" << folder.toStdString()
+                                                        << "': not an account folder");
+            continue;
+        }
+
+        LOG_DBG("Application: removing '" << folder.toStdString() << "'");
+        if (!QDir(folder).removeRecursively())
+            LOG_DBG("Application: could not remove all of '" << folder.toStdString() << "'");
+    }
+}
+
+// A profile has to outlive every page built on it, so each one stays until CODA exits.
+QMap<QString, QWebEngineProfile*>& accountProfiles()
+{
+    static QMap<QString, QWebEngineProfile*> profiles;
+    return profiles;
+}
+}
 
 QWebEngineProfile* Application::globalProfile = nullptr;
 RecentFiles Application::recentFiles;
 std::unique_ptr<Prefs> Application::prefs;
-QSslKey Application::embedKey;
-QSslCertificate Application::embedCert;
+
+QSslKey& Application::embedKeyRef()
+{
+    static QSslKey key;
+    return key;
+}
+
+QSslCertificate& Application::embedCertRef()
+{
+    static QSslCertificate cert;
+    return cert;
+}
 
 namespace
 {
@@ -137,7 +235,7 @@ void Application::initialize()
         // our cert only - the integrator's HTTPS origin is still
         // validated against the system trust store as normal.
         QByteArray spkiHash;
-        generateEmbedCert(embedKey, embedCert, spkiHash);
+        generateEmbedCert(embedKeyRef(), embedCertRef(), spkiHash);
         if (!spkiHash.isEmpty())
         {
             // Append, so the switches the environment already carries stay in force.
@@ -148,16 +246,13 @@ void Application::initialize()
             qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags);
         }
 
-        globalProfile = new QWebEngineProfile(QStringLiteral("PersistentProfile"));
-
         // Keep the WebEngine's persistent data (localStorage, cookies) under the
         // same directory as our settings instead of a separate data location.
         QString configData = QString::fromStdString(Desktop::getConfigPath().toString());
         QString cacheData = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
 
-        globalProfile->setPersistentStoragePath(configData);
-        globalProfile->setCachePath(cacheData);
-        globalProfile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+        globalProfile = createSavedProfile(QStringLiteral("PersistentProfile"), configData,
+                                           cacheData);
 
         globalProfile->installUrlSchemeHandler(
             "cool", new CoolUrlSchemeHandler(globalProfile));
@@ -184,6 +279,8 @@ void Application::initialize()
     // Provide AIChatSession with an HTTP transport (the COOL http::Session stack
     // isn't available here).
     registerAIHttpTransport();
+
+    initializeQtClipboard();
 }
 
 Poco::Path Desktop::getConfigPath()
@@ -263,12 +360,75 @@ std::string Desktop::fetchAIModels(const std::string& payload)
 
 QWebEngineProfile* Application::getProfile() { return globalProfile; }
 
+QWebEngineProfile* Application::getAccountProfile(const QString& accountId)
+{
+    if (!isPlainAccountId(accountId))
+    {
+        LOG_DBG("Application: account id '" << accountId.toStdString()
+                                             << "' is not plain, so it gets the shared profile");
+        return globalProfile;
+    }
+
+    auto it = accountProfiles().find(accountId);
+    if (it != accountProfiles().end())
+        return it.value();
+
+    QWebEngineProfile* profile =
+        createSavedProfile(QStringLiteral("Account-") + accountId,
+                           accountStoragePath(accountId), accountCachePath(accountId));
+    accountProfiles().insert(accountId, profile);
+    return profile;
+}
+
+int Application::countAccountProfileViews(const QString& accountId)
+{
+    auto it = accountProfiles().find(accountId);
+    if (it == accountProfiles().end())
+    {
+        LOG_DBG("Application: account '" << accountId.toStdString()
+                                        << "' has no profile this session, so no views use it");
+        return 0;
+    }
+
+    int count = 0;
+    for (QWidget* widget : QApplication::allWidgets())
+    {
+        auto* view = qobject_cast<QWebEngineView*>(widget);
+        if (view && view->page() && view->page()->profile() == it.value())
+            ++count;
+    }
+    return count;
+}
+
+void Application::deleteAccountProfile(const QString& accountId)
+{
+    if (!isPlainAccountId(accountId))
+    {
+        LOG_DBG("Application: account id '" << accountId.toStdString()
+                                             << "' is not plain, so nothing is deleted");
+        return;
+    }
+
+    // A profile in use this session holds its files open, so it is emptied through Qt instead.
+    auto it = accountProfiles().find(accountId);
+    if (it != accountProfiles().end())
+    {
+        LOG_DBG("Application: account '" << accountId.toStdString()
+                                        << "' is in use, so only its cookies and cache go");
+        it.value()->cookieStore()->deleteAllCookies();
+        it.value()->clearHttpCache();
+        return;
+    }
+
+    removeAccountFolders(accountId);
+}
+
 RecentFiles& Application::getRecentFiles() { return recentFiles; }
 
 Prefs& Application::getPrefs() { return *prefs; }
 
-const QSslKey& Application::getEmbedKey() { return embedKey; }
+const QSslKey& Application::getEmbedKey() { return embedKeyRef(); }
 
-const QSslCertificate& Application::getEmbedCert() { return embedCert; }
+const QSslCertificate& Application::getEmbedCert() { return embedCertRef(); }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -19,8 +19,9 @@
 
 #include <svx/dbaobjectex.hxx>
 #include <osl/diagnose.h>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
-#include <com/sun/star/sdb/XSQLQueryComposerFactory.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <sot/formats.hxx>
 #include <sot/exchange.hxx>
@@ -30,7 +31,7 @@ namespace svx
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::ucb;

@@ -13,9 +13,9 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <rtl/ustring.hxx>
 #include <test/testdllapi.hxx>
@@ -25,9 +25,9 @@ namespace apitest
 class OOO_DLLPUBLIC_TEST XStyleLoader
 {
 public:
-    virtual css::uno::Reference<css::uno::XInterface> init() = 0;
-    virtual css::uno::Reference<css::sheet::XSpreadsheetDocument> getTargetDoc() = 0;
-    virtual css::uno::Reference<css::lang::XComponent> getSourceComponent() = 0;
+    virtual cpo::uno::Reference<cpo::uno::XInterface> init() = 0;
+    virtual cpo::uno::Reference<css::sheet::XSpreadsheetDocument> getTargetDoc() = 0;
+    virtual cpo::uno::Reference<css::lang::XComponent> getSourceComponent() = 0;
     virtual OUString getTestURL() = 0;
 
     // XStyleLoader
@@ -38,7 +38,7 @@ public:
 
 private:
     static void checkStyleProperties(
-        css::uno::Reference<css::style::XStyleFamiliesSupplier> const& xFamilySupplier);
+        cpo::uno::Reference<css::style::XStyleFamiliesSupplier> const& xFamilySupplier);
 
 protected:
     ~XStyleLoader() {}

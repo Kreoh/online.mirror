@@ -29,9 +29,9 @@
 
 namespace gio
 {
-css::uno::Reference< css::ucb::XContent > SAL_CALL
+cpo::uno::Reference< css::ucb::XContent >
 ContentProvider::queryContent(
-            const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier )
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier )
 {
     SAL_INFO("ucb.ucp.gio", "QueryContent: " << Identifier->getContentIdentifier());
     osl::MutexGuard aGuard( m_aMutex );
@@ -57,7 +57,7 @@ ContentProvider::queryContent(
 }
 
 ContentProvider::ContentProvider(
-    const css::uno::Reference< css::uno::XComponentContext >& rxContext )
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext )
 : ::ucbhelper::ContentProviderImplHelper( rxContext )
 {
 }
@@ -67,19 +67,19 @@ ContentProvider::~ContentProvider()
 }
 
 // XInterface
-void SAL_CALL ContentProvider::acquire()
+void ContentProvider::acquire()
     noexcept
 {
     OWeakObject::acquire();
 }
 
-void SAL_CALL ContentProvider::release()
+void ContentProvider::release()
     noexcept
 {
     OWeakObject::release();
 }
 
-cpo::uno::Any SAL_CALL ContentProvider::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any ContentProvider::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = cppu::queryInterface( rType,
                                                static_cast< css::lang::XTypeProvider* >(this),
@@ -94,17 +94,17 @@ XTYPEPROVIDER_IMPL_3( ContentProvider,
                       css::lang::XServiceInfo,
                       css::ucb::XContentProvider );
 
-cpo::uno::Sequence< OUString > SAL_CALL ContentProvider::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > ContentProvider::getSupportedServiceNames()
 {
     return { u"com.sun.star.ucb.GIOContentProvider"_ustr };
 }
 
-OUString SAL_CALL ContentProvider::getImplementationName()
+OUString ContentProvider::getImplementationName()
 {
     return u"com.sun.star.comp.GIOContentProvider"_ustr;
 }
 
-bool SAL_CALL ContentProvider::supportsService(const OUString& aServiceName)
+bool ContentProvider::supportsService(const OUString& aServiceName)
 {
     return cppu::supportsService(this, aServiceName);
 }
@@ -124,9 +124,9 @@ static bool isDisabled()
 
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_gio_ContentProvider_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     if (isDisabled())
         return nullptr;

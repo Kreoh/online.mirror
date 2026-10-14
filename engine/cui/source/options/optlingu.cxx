@@ -29,8 +29,9 @@
 #include <unotools/linguprops.hxx>
 #include <editeng/unolingu.hxx>
 #include <linguistic/misc.hxx>
-#include <sfx2/AdditionsDialogHelper.hxx>
+#include <sfx2/dispatch.hxx>
 #include <sfx2/sfxsids.hrc>
+#include <sfx2/viewfrm.hxx>
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -38,6 +39,7 @@
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <com/sun/star/configuration/ReadWriteAccess.hpp>
+#include <com/sun/star/linguistic2/LinguProperties.hpp>
 #include <com/sun/star/linguistic2/LinguServiceManager.hpp>
 #include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
 #include <com/sun/star/linguistic2/XSpellChecker.hpp>
@@ -56,6 +58,7 @@
 #include <sal/log.hxx>
 
 #include <svx/svxdlg.hxx>
+#include <svx/svxids.hrc>
 #include <editeng/optitems.hxx>
 #include <optlingu.hxx>
 #include <dialmgr.hxx>
@@ -70,8 +73,8 @@
 using namespace ::ucbhelper;
 using namespace ::com::sun::star;
 using namespace css::lang;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace css::linguistic2;
 using namespace css::beans;
 
@@ -196,7 +199,6 @@ static const OUString & lcl_GetPropertyName( EID_OPTIONS eEntryId )
 {
     switch (eEntryId)
     {
-        case EID_SPELL_AUTO: return UPN_IS_SPELL_AUTO;
         case EID_GRAMMAR_AUTO: return UPN_IS_GRAMMAR_AUTO;
         case EID_CAPITAL_WORDS: return UPN_IS_SPELL_UPPER_CASE;
         case EID_SPELL_CLOSED_COMPOUND: return UPN_IS_SPELL_CLOSED_COMPOUND;
@@ -800,7 +802,6 @@ SvxLinguTabPage::SvxLinguTabPage(weld::Container* pPage, weld::DialogController*
     , m_xLinguOptionsCLB(m_xBuilder->weld_tree_view(u"linguoptions"_ustr))
     , m_xLinguOptionsEditPB(m_xBuilder->weld_button(u"linguoptionsedit"_ustr))
     , m_xMoreDictsBox(m_xBuilder->weld_box(u"moredictsbox"_ustr))
-    , m_xMoreDictsLink(m_xBuilder->weld_link_button(u"moredictslink"_ustr))
 {
     m_xLinguModulesCLB->enable_toggle_buttons(weld::ColumnToggleType::Check);
     m_xLinguDicsCLB->enable_toggle_buttons(weld::ColumnToggleType::Check);
@@ -823,7 +824,6 @@ SvxLinguTabPage::SvxLinguTabPage(weld::Container* pPage, weld::DialogController*
     m_xLinguOptionsCLB->connect_selection_changed(LINK(this, SvxLinguTabPage, SelectHdl_Impl));
     m_xLinguOptionsCLB->connect_row_activated(LINK(this, SvxLinguTabPage, BoxDoubleClickHdl_Impl));
 
-    m_xMoreDictsLink->connect_activate_link(LINK(this, SvxLinguTabPage, OnLinkClick));
     if (officecfg::Office::Security::Hyperlinks::Open::get() == SvtExtendedSecurityOptions::OPEN_NEVER)
         m_xMoreDictsBox->hide();
 
@@ -875,22 +875,6 @@ std::unique_ptr<SfxTabPage> SvxLinguTabPage::Create( weld::Container* pPage, wel
                                             const SfxItemSet* rAttrSet )
 {
     return std::make_unique<SvxLinguTabPage>( pPage, pController, *rAttrSet );
-}
-
-OUString SvxLinguTabPage::GetAllStrings()
-{
-    OUStringBuffer sAllStrings;
-    OUString labels[] = { u"lingumodulesft"_ustr, u"lingudictsft"_ustr, u"label4"_ustr };
-
-    for (const auto& label : labels)
-    {
-        if (const auto pString = m_xBuilder->weld_label(label))
-            sAllStrings.append(pString->get_label() + " ");
-    }
-
-    sAllStrings.append(m_xMoreDictsLink->get_label() + " ");
-
-    return sAllStrings.toString().replaceAll("_", "");
 }
 
 bool SvxLinguTabPage::FillItemSet( SfxItemSet* rCoreSet )
@@ -993,6 +977,10 @@ bool SvxLinguTabPage::FillItemSet( SfxItemSet* rCoreSet )
     for (int j = 0; j < nEntries; ++j)
     {
         OptionsUserData aData(m_xLinguOptionsCLB->get_id(j).toUInt32());
+        // Automatic spell checking belongs to the application, not to the shared
+        // linguistic options, and travels there as SID_AUTOSPELL_CHECK below.
+        if (aData.GetEntryId() == EID_SPELL_AUTO)
+            continue;
         OUString aPropName( lcl_GetPropertyName( static_cast<EID_OPTIONS>(aData.GetEntryId()) ) );
 
         Any aAny;
@@ -1022,13 +1010,16 @@ bool SvxLinguTabPage::FillItemSet( SfxItemSet* rCoreSet )
         rCoreSet->Put( aHyp );
     }
 
-    // automatic spell checking
-    bool bNewAutoCheck = m_xLinguOptionsCLB->get_toggle(EID_SPELL_AUTO) == TRISTATE_TRUE;
-    const SfxPoolItem* pOld = GetOldItem( *rCoreSet, SID_AUTOSPELL_CHECK );
-    if ( !pOld || static_cast<const SfxBoolItem*>(pOld)->GetValue() != bNewAutoCheck )
+    // automatic spell checking; only an application that told us its state has
+    // one to take back
+    if (const SfxPoolItem* pOld = GetOldItem( *rCoreSet, SID_AUTOSPELL_CHECK ))
     {
-        rCoreSet->Put( SfxBoolItem( SID_AUTOSPELL_CHECK, bNewAutoCheck ) );
-        bModified = true;
+        const bool bNewAutoCheck = m_xLinguOptionsCLB->get_toggle(EID_SPELL_AUTO) == TRISTATE_TRUE;
+        if ( static_cast<const SfxBoolItem*>(pOld)->GetValue() != bNewAutoCheck )
+        {
+            rCoreSet->Put( SfxBoolItem( SID_AUTOSPELL_CHECK, bNewAutoCheck ) );
+            bModified = true;
+        }
     }
 
     return bModified;
@@ -1142,14 +1133,15 @@ void SvxLinguTabPage::Reset( const SfxItemSet* rSet )
     m_xLinguOptionsCLB->append();
     int nEntry = 0;
 
-    aLngCfg.GetProperty( UPN_IS_SPELL_AUTO ) >>= bVal;
-    if (const SfxBoolItem* pItem = GetItem( *rSet, SID_AUTOSPELL_CHECK ))
-        bVal = pItem->GetValue();
+    // Automatic spell checking is the one setting here that each application keeps
+    // for itself, so it only has a state to show when an application supplied one.
+    const SfxBoolItem* pAutoSpell = GetItem( *rSet, SID_AUTOSPELL_CHECK );
+    bVal = pAutoSpell && pAutoSpell->GetValue();
     nUserData = OptionsUserData( EID_SPELL_AUTO, false, 0, true, bVal).GetUserData();
     m_xLinguOptionsCLB->set_toggle(nEntry, bVal ? TRISTATE_TRUE : TRISTATE_FALSE);
     m_xLinguOptionsCLB->set_text(nEntry, sSpellAuto, 0);
     m_xLinguOptionsCLB->set_id(nEntry, OUString::number(nUserData));
-    m_xLinguOptionsCLB->set_sensitive(nEntry, !aLngCfg.IsReadOnly(UPN_IS_SPELL_AUTO));
+    m_xLinguOptionsCLB->set_sensitive(nEntry, pAutoSpell != nullptr);
 
     m_xLinguOptionsCLB->append();
     ++nEntry;
@@ -1525,6 +1517,69 @@ IMPL_LINK(SvxLinguTabPage, SelectHdl_Impl, weld::TreeView&, rBox, void)
     }
 }
 
+void SvxLinguTabPage::ApplyLanguageOptions(const SfxItemSet& rSet)
+{
+    bool bSaveSpellCheck = false;
+    const SfxPoolItem* pItem = nullptr;
+
+    const Reference< XComponentContext >&  xContext( ::comphelper::getProcessComponentContext() );
+    Reference< XLinguProperties >  xProp = LinguProperties::create( xContext );
+    if ( const SfxHyphenRegionItem* pHyphenItem = rSet.GetItemIfSet(SID_ATTR_HYPHENREGION, false ) )
+    {
+        xProp->setHyphMinLeading( static_cast<sal_Int16>(pHyphenItem->GetMinLead()) );
+        xProp->setHyphMinTrailing( static_cast<sal_Int16>(pHyphenItem->GetMinTrail()) );
+        bSaveSpellCheck = true;
+    }
+
+    SfxViewFrame *pViewFrame = SfxViewFrame::Current();
+    if ( pViewFrame )
+    {
+        SfxDispatcher* pDispatch = pViewFrame->GetDispatcher();
+        pItem = nullptr;
+        if(SfxItemState::SET == rSet.GetItemState( SID_ATTR_LANGUAGE, false, &pItem ))
+        {
+            pDispatch->ExecuteList(pItem->Which(), SfxCallMode::SYNCHRON, { pItem });
+            bSaveSpellCheck = true;
+        }
+        if(SfxItemState::SET == rSet.GetItemState( SID_ATTR_CHAR_CTL_LANGUAGE, false, &pItem ))
+        {
+            pDispatch->ExecuteList(pItem->Which(), SfxCallMode::SYNCHRON, { pItem });
+            bSaveSpellCheck = true;
+        }
+        if(SfxItemState::SET == rSet.GetItemState( SID_ATTR_CHAR_CJK_LANGUAGE, false, &pItem ))
+        {
+            pDispatch->ExecuteList(pItem->Which(), SfxCallMode::SYNCHRON, { pItem });
+            bSaveSpellCheck = true;
+        }
+
+        if( SfxItemState::SET == rSet.GetItemState(SID_AUTOSPELL_CHECK, false, &pItem ))
+        {
+            // The application this reaches keeps the choice for itself. The shared
+            // linguistic option it was split out of is left alone.
+            pDispatch->ExecuteList(SID_AUTOSPELL_CHECK,
+                SfxCallMode::ASYNCHRON|SfxCallMode::RECORD, { pItem });
+        }
+
+        if( bSaveSpellCheck )
+        {
+            //! the config item has changed since we modified the
+            //! property set it uses
+            pDispatch->Execute(SID_SPELLCHECKER_CHANGED, SfxCallMode::ASYNCHRON);
+        }
+    }
+
+    if( SfxItemState::SET == rSet.GetItemState(SID_OPT_LOCALE_CHANGED, false, &pItem ))
+    {
+        SfxViewFrame* _pViewFrame = SfxViewFrame::GetFirst();
+        while ( _pViewFrame )
+        {
+            _pViewFrame->GetDispatcher()->ExecuteList(pItem->Which(),
+                    SfxCallMode::ASYNCHRON, { pItem });
+            _pViewFrame = SfxViewFrame::GetNext( *_pViewFrame );
+        }
+    }
+}
+
 void SvxLinguTabPage::HideModulesGroup()
 {
     m_xLinguModulesFrame->hide();
@@ -1534,13 +1589,6 @@ void SvxLinguTabPage::HideModulesGroup()
     {
         m_xMoreDictsBox->show();
     }
-}
-
-IMPL_LINK_NOARG(SvxLinguTabPage, OnLinkClick, weld::LinkButton&, bool)
-{
-    AdditionsDialogHelper::RunAdditionsDialog(GetDialogController()->getDialog(),
-                                              u"Dictionary"_ustr);
-    return true;
 }
 
 SvxEditModulesDlg::SvxEditModulesDlg(weld::Window* pParent, SvxLinguData_Impl& rData)
@@ -1554,7 +1602,6 @@ SvxEditModulesDlg::SvxEditModulesDlg(weld::Window* pParent, SvxLinguData_Impl& r
     , m_xPrioUpPB(m_xBuilder->weld_button(u"up"_ustr))
     , m_xPrioDownPB(m_xBuilder->weld_button(u"down"_ustr))
     , m_xBackPB(m_xBuilder->weld_button(u"back"_ustr))
-    , m_xMoreDictsLink(m_xBuilder->weld_link_button(u"moredictslink"_ustr))
     , m_xClosePB(m_xBuilder->weld_button(u"close"_ustr))
     , m_xLanguageLB(new SvxLanguageBox(m_xBuilder->weld_combo_box(u"language"_ustr)))
 {
@@ -1576,10 +1623,6 @@ SvxEditModulesDlg::SvxEditModulesDlg(weld::Window* pParent, SvxLinguData_Impl& r
     m_xPrioUpPB->set_sensitive( false );
     m_xPrioDownPB->set_sensitive( false );
 
-    m_xMoreDictsLink->connect_activate_link(LINK(this, SvxEditModulesDlg, OnLinkClick));
-    if (officecfg::Office::Security::Hyperlinks::Open::get() == SvtExtendedSecurityOptions::OPEN_NEVER)
-        m_xMoreDictsLink->hide();
-
     // set that we want the checkbox shown if spellchecking is available
     m_xLanguageLB->SetLanguageList(SvxLanguageListFlags::EMPTY, false, false, true);
 
@@ -1595,7 +1638,7 @@ SvxEditModulesDlg::SvxEditModulesDlg(weld::Window* pParent, SvxLinguData_Impl& r
     if (m_xLanguageLB->get_active_id() != eSysLang)
         m_xLanguageLB->set_active(0);
 
-    const css::uno::Reference < css::uno::XComponentContext >& xContext(::comphelper::getProcessComponentContext());
+    const cpo::uno::Reference < cpo::uno::XComponentContext >& xContext(::comphelper::getProcessComponentContext());
     m_xReadWriteAccess = css::configuration::ReadWriteAccess::create(xContext, u"*"_ustr);
 
     m_xLanguageLB->connect_changed( LINK( this, SvxEditModulesDlg, LangSelectListBoxHdl_Impl ));
@@ -1991,12 +2034,6 @@ IMPL_LINK_NOARG(SvxEditModulesDlg, BackHdl_Impl, weld::Button&, void)
 {
     rLinguData = *pDefaultLinguData;
     LangSelectHdl_Impl(nullptr);
-}
-
-IMPL_LINK_NOARG(SvxEditModulesDlg, OnLinkClick, weld::LinkButton&, bool)
-{
-    AdditionsDialogHelper::RunAdditionsDialog(getDialog(), u"Dictionary"_ustr);
-    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

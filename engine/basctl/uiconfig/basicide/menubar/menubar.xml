@@ -146,10 +146,7 @@
             <menu:menuitem menu:id=".uno:ChooseMacro"/>
             <menu:menuitem menu:id=".uno:ModuleDialog"/>
             <menu:menuseparator/>
-            <menu:menuitem menu:id=".uno:MacroRecorder"/>
             <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
-            <menu:menuitem menu:id=".uno:ConfigureDialog"/>
-            <menu:menuitem menu:id=".uno:OptionsTreeDialog"/>
         </menu:menupopup>
     </menu:menu>
     <menu:menu menu:id=".uno:WindowList">
@@ -162,10 +159,6 @@
         <menu:menupopup>
             <menu:menuitem menu:id=".uno:HelpIndex"/>
             <menu:menuitem menu:id=".uno:ExtendedHelp"/>
-            <menu:menuitem menu:id=".uno:Documentation" menu:style="text"/>
-            <menu:menuseparator/>
-            <menu:menuitem menu:id=".uno:QuestionAnswers"/>
-            <menu:menuitem menu:id=".uno:SendFeedback"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:ShowLicense" menu:style="text"/>
         </menu:menupopup>

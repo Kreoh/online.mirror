@@ -21,9 +21,9 @@
 
 #include <cppuhelper/supportsservice.hxx>
 #include <comphelper/namedvaluecollection.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::scanner;
 using namespace ::cpo::uno;
 
@@ -82,9 +82,9 @@ void ScannerManager::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArgume
         aProperties.get(u"ParentWindow"_ustr) >>= mxDialogParent;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_ScannerManager_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ScannerManager());
 }

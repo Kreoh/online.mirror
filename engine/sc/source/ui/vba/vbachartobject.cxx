@@ -28,9 +28,10 @@
 #include "vbachartobjects.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
-ScVbaChartObject::ScVbaChartObject( const css::uno::Reference< ov::XHelperInterface >& _xParent, const css::uno::Reference< css::uno::XComponentContext >& _xContext, css::uno::Reference< css::table::XTableChart >  _xTableChart, css::uno::Reference< css::drawing::XDrawPageSupplier >  _xDrawPageSupplier ) : ChartObjectImpl_BASE( _xParent, _xContext ), xTableChart(std::move( _xTableChart )), xDrawPageSupplier(std::move( _xDrawPageSupplier ))
+ScVbaChartObject::ScVbaChartObject( const cpo::uno::Reference< ov::XHelperInterface >& _xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& _xContext, cpo::uno::Reference< css::table::XTableChart >  _xTableChart, cpo::uno::Reference< css::drawing::XDrawPageSupplier >  _xDrawPageSupplier ) : ChartObjectImpl_BASE( _xParent, _xContext ), xTableChart(std::move( _xTableChart )), xDrawPageSupplier(std::move( _xDrawPageSupplier ))
 {
         xDrawPage = xDrawPageSupplier->getDrawPage();
         xEmbeddedObjectSupplier.set( xTableChart, uno::UNO_QUERY_THROW );
@@ -72,24 +73,24 @@ ScVbaChartObject::setShape()
     }
     catch (cpo::uno::Exception& )
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
     return nullptr;
 }
 
-void SAL_CALL
+void
 ScVbaChartObject::setName( const OUString& sName )
 {
     xNamedShape->setName(sName);
 }
 
-OUString SAL_CALL
+OUString
 ScVbaChartObject::getName()
 {
     return xNamedShape->getName();
 }
 
-void SAL_CALL
+void
 ScVbaChartObject::Delete()
 {
     // parent of this object is sheet
@@ -97,7 +98,7 @@ ScVbaChartObject::Delete()
     uno::Reference< excel::XChartObjects > xColl( xParent->ChartObjects( cpo::uno::Any() ), uno::UNO_QUERY_THROW );
     ScVbaChartObjects* pChartObjectsImpl = static_cast< ScVbaChartObjects* >( xColl.get() );
     if (!pChartObjectsImpl)
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), u"Parent is not ChartObjects"_ustr );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), u"Parent is not ChartObjects"_ustr );
 
     pChartObjectsImpl->removeByName( getPersistName() );
 
@@ -117,11 +118,11 @@ ScVbaChartObject::Activate()
     }
     catch (cpo::uno::Exception& )
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), u"ChartObject Activate internal error"_ustr );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), u"ChartObject Activate internal error"_ustr );
     }
 }
 
-uno::Reference< excel::XChart > SAL_CALL
+uno::Reference< excel::XChart >
 ScVbaChartObject::getChart()
 {
     return new ScVbaChart( this, mxContext, xEmbeddedObjectSupplier->getEmbeddedObject(), xTableChart );

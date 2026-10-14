@@ -8,6 +8,7 @@
  */
 
 #include <sal/config.h>
+#include <config_options.h>
 
 #include <deque>
 #include <optional>
@@ -53,7 +54,6 @@
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
-#include <com/sun/star/datatransfer/clipboard/XClipboardEx.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardListener.hpp>
 #include <com/sun/star/datatransfer/clipboard/XFlushableClipboard.hpp>
@@ -103,8 +103,8 @@
 #include <unx/gtk/gtkdata.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 
 extern "C"
@@ -121,7 +121,12 @@ extern "C"
         pYieldMutex->ThreadsLeave();
     }
 
+// need to rename this to prevent duplicate symbols when in unitedlibs mode
+#if ENABLE_UNITEDLIBS
+    SAL_DLLPUBLIC_EXPORT SalInstance* create_SalInstanceGtk3()
+#else
     VCLPLUG_GTK_PUBLIC SalInstance* create_SalInstance()
+#endif
     {
         SAL_INFO(
             "vcl.gtk",
@@ -685,12 +690,12 @@ std::vector<css::datatransfer::DataFlavor> GtkTransferable::getTransferDataFlavo
     return aVector;
 }
 
-cpo::uno::Sequence<css::datatransfer::DataFlavor> SAL_CALL GtkTransferable::getTransferDataFlavors()
+cpo::uno::Sequence<css::datatransfer::DataFlavor> GtkTransferable::getTransferDataFlavors()
 {
     return comphelper::containerToSequence(getTransferDataFlavorsAsVector());
 }
 
-bool SAL_CALL GtkTransferable::isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor)
+bool GtkTransferable::isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor)
 {
     const std::vector<css::datatransfer::DataFlavor> aAll =
         getTransferDataFlavorsAsVector();
@@ -723,7 +728,7 @@ public:
      * XTransferable
      */
 
-    virtual cpo::uno::Any SAL_CALL getTransferData(const css::datatransfer::DataFlavor& rFlavor) override
+    virtual cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& rFlavor) override
     {
         cpo::uno::Any aRet;
 
@@ -808,40 +813,34 @@ public:
      * XServiceInfo
      */
 
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     /*
      * XClipboard
      */
 
-    virtual Reference< css::datatransfer::XTransferable > SAL_CALL getContents() override;
+    virtual Reference< css::datatransfer::XTransferable > getContents() override;
 
-    virtual void SAL_CALL setContents(
+    virtual void setContents(
         const Reference< css::datatransfer::XTransferable >& xTrans,
         const Reference< css::datatransfer::clipboard::XClipboardOwner >& xClipboardOwner ) override;
 
-    virtual OUString SAL_CALL getName() override;
-
-    /*
-     * XClipboardEx
-     */
-
-    virtual sal_Int8 SAL_CALL getRenderingCapabilities() override;
+    virtual OUString getName() override;
 
     /*
      * XFlushableClipboard
      */
-    virtual void SAL_CALL flushClipboard() override;
+    virtual void flushClipboard() override;
 
     /*
      * XClipboardNotifier
      */
-    virtual void SAL_CALL addClipboardListener(
+    virtual void addClipboardListener(
         const Reference< css::datatransfer::clipboard::XClipboardListener >& listener ) override;
 
-    virtual void SAL_CALL removeClipboardListener(
+    virtual void removeClipboardListener(
         const Reference< css::datatransfer::clipboard::XClipboardListener >& listener ) override;
 
     void ClipboardGet(GtkSelectionData *selection_data, guint info);
@@ -1227,11 +1226,6 @@ OUString VclGtkClipboard::getName()
     return (m_eSelection == SELECTION_CLIPBOARD) ? u"CLIPBOARD"_ustr : u"PRIMARY"_ustr;
 }
 
-sal_Int8 VclGtkClipboard::getRenderingCapabilities()
-{
-    return 0;
-}
-
 void VclGtkClipboard::addClipboardListener( const Reference< datatransfer::clipboard::XClipboardListener >& listener )
 {
     osl::Guard aGuard( m_aMutex );
@@ -1258,7 +1252,7 @@ GtkInstance::CreateClipboard(const Sequence<Any>& arguments)
     } else if (arguments.getLength() != 1 || !(arguments[0] >>= sel)) {
         throw css::lang::IllegalArgumentException(
             u"bad GtkInstance::CreateClipboard arguments"_ustr,
-            css::uno::Reference<css::uno::XInterface>(), -1);
+            cpo::uno::Reference<cpo::uno::XInterface>(), -1);
     }
 
     SelectionType eSelection = (sel == "CLIPBOARD") ? SELECTION_CLIPBOARD : SELECTION_PRIMARY;
@@ -1288,17 +1282,17 @@ GtkInstDropTarget::GtkInstDropTarget(GtkSalFrame* pFrame)
     setActive(true);
 }
 
-OUString SAL_CALL GtkInstDropTarget::getImplementationName()
+OUString GtkInstDropTarget::getImplementationName()
 {
     return u"com.sun.star.datatransfer.dnd.VclGtkDropTarget"_ustr;
 }
 
-bool SAL_CALL GtkInstDropTarget::supportsService(OUString const & ServiceName)
+bool GtkInstDropTarget::supportsService(OUString const & ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL GtkInstDropTarget::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> GtkInstDropTarget::getSupportedServiceNames()
 {
     Sequence<OUString> aRet { u"com.sun.star.datatransfer.dnd.GtkDropTarget"_ustr };
     return aRet;
@@ -1316,7 +1310,7 @@ void GtkInstDropTarget::deinitialize()
     setActive(false);
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget>
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget>
 GtkInstance::ImplCreateDropTarget(const SystemEnvData& rSysEnv)
 {
     return new GtkInstDropTarget(static_cast<GtkSalFrame*>(rSysEnv.pSalFrame));
@@ -1358,23 +1352,23 @@ sal_Int32 GtkInstDragSource::getDefaultCursor( sal_Int8 )
     return 0;
 }
 
-OUString SAL_CALL GtkInstDragSource::getImplementationName()
+OUString GtkInstDragSource::getImplementationName()
 {
     return u"com.sun.star.datatransfer.dnd.VclGtkDragSource"_ustr;
 }
 
-bool SAL_CALL GtkInstDragSource::supportsService(OUString const & ServiceName)
+bool GtkInstDragSource::supportsService(OUString const & ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL GtkInstDragSource::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> GtkInstDragSource::getSupportedServiceNames()
 {
     Sequence<OUString> aRet { u"com.sun.star.datatransfer.dnd.GtkDragSource"_ustr };
     return aRet;
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDragSource>
+cpo::uno::Reference<css::datatransfer::dnd::XDragSource>
 GtkInstance::ImplCreateDragSource(const SystemEnvData& rSysEnv)
 {
     return new GtkInstDragSource(static_cast<GtkSalFrame*>(rSysEnv.pSalFrame));
@@ -2918,7 +2912,7 @@ public:
         gtk_widget_queue_resize(m_pWidget);
     }
 
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() override
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() override
     {
         if (!m_xDropTarget)
         {
@@ -2936,7 +2930,7 @@ public:
         return m_xDropTarget;
     }
 
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard> get_clipboard() const override
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> get_clipboard() const override
     {
         // the gen backend can have per-frame clipboards which is (presumably) useful for LibreOffice Online
         // but normal usage is the shared system clipboard
@@ -3258,11 +3252,6 @@ namespace
         return aColor;
     }
 
-    Color toVclColor(const GdkRGBA& rColor)
-    {
-        return Color(rColor.red * 255, rColor.green * 255, rColor.blue * 255);
-    }
-
     OUString get_label(GtkLabel* pLabel)
     {
         const gchar* pStr = gtk_label_get_label(pLabel);
@@ -3487,7 +3476,7 @@ namespace
         return Image(aMirrBitmap);
     }
 
-    GdkPixbuf* getPixbuf(const css::uno::Reference<css::graphic::XGraphic>& rImage)
+    GdkPixbuf* getPixbuf(const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
     {
         Image aImage(rImage);
 
@@ -3510,7 +3499,7 @@ namespace
 
     // tdf#151898 as far as I can see only gtk_image_new_from_file (or gtk_image_new_from_resource) can support the use of a
     // scalable input format to create a hidpi GtkImage, rather than an upscaled lodpi one so forced to go via a file here
-    std::unique_ptr<utl::TempFileNamed> getImageFile(const css::uno::Reference<css::graphic::XGraphic>& rImage, bool bMirror = false)
+    std::unique_ptr<utl::TempFileNamed> getImageFile(const cpo::uno::Reference<css::graphic::XGraphic>& rImage, bool bMirror = false)
     {
         Image aImage(rImage);
         if (bMirror)
@@ -3624,7 +3613,7 @@ namespace
         return pImage;
     }
 
-    GtkWidget* image_new_from_xgraphic(const css::uno::Reference<css::graphic::XGraphic>& rIcon, bool bMirror)
+    GtkWidget* image_new_from_xgraphic(const cpo::uno::Reference<css::graphic::XGraphic>& rIcon, bool bMirror)
     {
         GtkWidget* pImage = nullptr;
         if (auto xTempFile = getImageFile(rIcon, bMirror))
@@ -3669,7 +3658,7 @@ namespace
         gtk_image_set_from_surface(pImage, pDevice ? get_underlying_cairo_surface(*pDevice) : nullptr);
     }
 
-    void image_set_from_xgraphic(GtkImage* pImage, const css::uno::Reference<css::graphic::XGraphic>& rImage)
+    void image_set_from_xgraphic(GtkImage* pImage, const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
     {
         if (auto xTempFile = getImageFile(rImage, false))
             gtk_image_set_from_file(pImage, OUStringToOString(xTempFile->GetFileName(), osl_getThreadTextEncoding()).getStr());
@@ -3699,7 +3688,7 @@ namespace
         gtk_button_set_image(pButton, pImage);
     }
 
-    void button_set_image(GtkButton* pButton, const css::uno::Reference<css::graphic::XGraphic>& rImage)
+    void button_set_image(GtkButton* pButton, const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
     {
         if (GtkImage* pImage = get_image_widget(GTK_WIDGET(pButton)))
         {
@@ -4219,7 +4208,7 @@ public:
         g_object_unref(pChild);
     }
 
-    virtual css::uno::Reference<css::awt::XWindow> CreateChildFrame() override
+    virtual cpo::uno::Reference<css::awt::XWindow> CreateChildFrame() override
     {
         // This will cause a GtkSalFrame to be created. With WB_SYSTEMCHILDWINDOW set it
         // will create a toplevel GtkEventBox window
@@ -4228,7 +4217,7 @@ public:
 
         // NoActivate otherwise Show grab focus to this widget
         xEmbedWindow->Show(true, ShowFlags::NoActivate);
-        css::uno::Reference<css::awt::XWindow> xWindow(xEmbedWindow->GetComponentInterface(), css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::awt::XWindow> xWindow(xEmbedWindow->GetComponentInterface(), cpo::uno::UNO_QUERY);
         return xWindow;
     }
 
@@ -4478,7 +4467,7 @@ public:
         return ::get_title(m_pWindow);
     }
 
-    virtual css::uno::Reference<css::awt::XWindow> GetXWindow() override
+    virtual cpo::uno::Reference<css::awt::XWindow> GetXWindow() override
     {
         if (!m_xWindow.is())
             m_xWindow.set(new SalGtkXWindow(this, m_pWidget));
@@ -5748,37 +5737,6 @@ public:
     virtual int get_position() const override
     {
         return gtk_paned_get_position(m_pPaned);
-    }
-};
-
-class GtkInstanceColorChooserDialog : public GtkInstanceDialog,
-                                      public virtual weld::ColorChooserDialog
-{
-    GtkColorChooserDialog* m_pColorChooserDialog;
-
-public:
-    GtkInstanceColorChooserDialog(GtkColorChooserDialog* pColorChooserDialog)
-        : GtkInstanceDialog(GTK_WINDOW(pColorChooserDialog), nullptr, true)
-        , m_pColorChooserDialog(pColorChooserDialog)
-    {
-        assert(m_pColorChooserDialog);
-        gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(m_pColorChooserDialog), false);
-
-        // directly show the advanced color editor
-        g_object_set(G_OBJECT(m_pColorChooserDialog), "show-editor", true, nullptr);
-    }
-
-    virtual void set_color(const Color& rColor) override
-    {
-        GdkRGBA aColor = toGdkColor(rColor);
-        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(m_pColorChooserDialog), &aColor);
-    }
-
-    virtual Color get_color() const override
-    {
-        GdkRGBA aColor;
-        gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(m_pColorChooserDialog), &aColor);
-        return toVclColor(aColor);
     }
 };
 }
@@ -7720,7 +7678,7 @@ public:
         ::button_set_from_icon_name(m_pButton, rIconName);
     }
 
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override
     {
         ::button_set_image(m_pButton, rImage);
     }
@@ -8515,7 +8473,7 @@ public:
         image_set_from_virtual_device(m_pImage, pDevice);
     }
 
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override
     {
         ensure_image_widget();
         image_set_from_xgraphic(m_pImage, rImage);
@@ -8841,7 +8799,7 @@ public:
 
     virtual void insert(int pos, const OUString& rId, const OUString& rStr,
                         const OUString* pIconName, VirtualDevice* pImageSurface,
-                        const css::uno::Reference<css::graphic::XGraphic>& rGraphic,
+                        const cpo::uno::Reference<css::graphic::XGraphic>& rGraphic,
                         TriState eCheckRadioFalse) override
     {
         GtkWidget* pImage = nullptr;
@@ -9108,7 +9066,7 @@ private:
     }
 
 
-    static void set_item_image(GtkToolButton* pItem, const css::uno::Reference<css::graphic::XGraphic>& rIcon, bool bMirror)
+    static void set_item_image(GtkToolButton* pItem, const cpo::uno::Reference<css::graphic::XGraphic>& rIcon, bool bMirror)
     {
         GtkWidget* pImage = image_new_from_xgraphic(rIcon, bMirror);
         if (pImage)
@@ -9352,7 +9310,7 @@ public:
         m_aMirroredMap[rIdent] = bMirrored;
     }
 
-    virtual void set_item_image(const OUString& rIdent, const css::uno::Reference<css::graphic::XGraphic>& rIcon) override
+    virtual void set_item_image(const OUString& rIdent, const cpo::uno::Reference<css::graphic::XGraphic>& rIcon) override
     {
         GtkWidget* pItem = m_aMap[rIdent];
         auto it = m_aMirroredMap.find(rIdent);
@@ -9370,7 +9328,7 @@ public:
         set_item_image(GTK_TOOL_BUTTON(pItem), pDevice);
     }
 
-    virtual void set_item_image(int nIndex, const css::uno::Reference<css::graphic::XGraphic>& rIcon) override
+    virtual void set_item_image(int nIndex, const cpo::uno::Reference<css::graphic::XGraphic>& rIcon) override
     {
         auto* pItem = toolbar_get_nth_item(nIndex);
         if (!GTK_IS_TOOL_BUTTON(pItem))
@@ -9822,7 +9780,7 @@ public:
         image_set_from_virtual_device(m_pImage, pDevice);
     }
 
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override
     {
         image_set_from_xgraphic(m_pImage, rImage);
     }
@@ -12481,7 +12439,7 @@ public:
         }
     }
 
-    virtual void set_image(int pos, const css::uno::Reference<css::graphic::XGraphic>& rImage, int col) override
+    virtual void set_image(int pos, const cpo::uno::Reference<css::graphic::XGraphic>& rImage, int col) override
     {
         set_image(pos, getPixbuf(rImage), col);
     }
@@ -12496,7 +12454,7 @@ public:
         set_image(pos, getPixbuf(rImage), col);
     }
 
-    virtual void set_image(const weld::TreeIter& rIter, const css::uno::Reference<css::graphic::XGraphic>& rImage, int col) override
+    virtual void set_image(const weld::TreeIter& rIter, const cpo::uno::Reference<css::graphic::XGraphic>& rImage, int col) override
     {
         const GtkInstanceTreeIter& rGtkIter = static_cast<const GtkInstanceTreeIter&>(rIter);
         set_image(rGtkIter.iter, col, getPixbuf(rImage));
@@ -15328,7 +15286,7 @@ public:
         // there's no such function to override for the accessible ID)
         if (m_pAccessible && m_xAccessible.is())
         {
-            css::uno::Reference<css::accessibility::XAccessibleContext2> xContext(
+            cpo::uno::Reference<css::accessibility::XAccessibleContext2> xContext(
                 m_xAccessible->getAccessibleContext(), UNO_QUERY);
             if (xContext.is())
             {
@@ -19014,6 +18972,8 @@ public:
         GtkWidget* pWidget = GTK_WIDGET(gtk_builder_get_object(m_pBuilder, OUStringToOString(id, RTL_TEXTENCODING_UTF8).getStr()));
         if (!pWidget)
             return nullptr;
+        assert(!GTK_IS_GRID(pWidget) && "a grid needs weld_container or weld_grid, not weld_widget");
+        assert(!GTK_IS_FRAME(pWidget) && "a frame needs weld_frame, not weld_widget");
         auto_add_parentless_widgets_to_container(pWidget);
         return std::make_unique<GtkInstanceWidget>(pWidget, this, false);
     }
@@ -19538,17 +19498,7 @@ std::unique_ptr<weld::MessageDialog> GtkInstance::CreateMessageDialog(weld::Widg
     return std::make_unique<GtkInstanceMessageDialog>(pMessageDialog, nullptr, true);
 }
 
-std::unique_ptr<weld::ColorChooserDialog>
-GtkInstance::CreateColorChooserDialog(weld::Window* pParent, vcl::ColorPickerMode)
-{
-    GtkInstanceWindow* pWindow = dynamic_cast<GtkInstanceWindow*>(pParent);
-    GtkWindow* pGtkParent = pWindow ? pWindow->getWindow() : nullptr;
-    GtkColorChooserDialog* pDialog = GTK_COLOR_CHOOSER_DIALOG(
-        gtk_color_chooser_dialog_new(VclResId(RID_STR_PICK_COLOR).toUtf8().getStr(), pGtkParent));
-    return std::make_unique<GtkInstanceColorChooserDialog>(pDialog);
-}
-
-weld::Window* GtkInstance::GetFrameWeld(const css::uno::Reference<css::awt::XWindow>& rWindow)
+weld::Window* GtkInstance::GetFrameWeld(const cpo::uno::Reference<css::awt::XWindow>& rWindow)
 {
     if (SalGtkXWindow* pGtkXWindow = dynamic_cast<SalGtkXWindow*>(rWindow.get()))
         return pGtkXWindow->getFrameWeld();

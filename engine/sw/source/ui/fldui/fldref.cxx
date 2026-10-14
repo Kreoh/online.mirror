@@ -25,6 +25,8 @@
 #include <frmatr.hxx>
 #include <reffld.hxx>
 #include <wrtsh.hxx>
+#include <doc.hxx>
+#include <pagedesc.hxx>
 
 #include <fldref.hrc>
 #include <strings.hrc>
@@ -71,10 +73,10 @@ SwFieldRefPage::SwFieldRefPage(weld::Container* pPage, weld::DialogController* p
     , mpSavedSelectedTextNode(nullptr)
     , mnSavedSelectedPos(0)
     , m_xTypeLB(m_xBuilder->weld_tree_view(u"type"_ustr))
-    , m_xSelection(m_xBuilder->weld_widget(u"selectframe"_ustr))
+    , m_xSelection(m_xBuilder->weld_frame(u"selectframe"_ustr))
     , m_xSelectionLB(m_xBuilder->weld_tree_view(u"select"_ustr))
     , m_xSelectionToolTipLB(m_xBuilder->weld_tree_view(u"selecttip"_ustr))
-    , m_xFormat(m_xBuilder->weld_widget(u"formatframe"_ustr))
+    , m_xFormat(m_xBuilder->weld_frame(u"formatframe"_ustr))
     , m_xFormatLB(m_xBuilder->weld_tree_view(u"format"_ustr))
     , m_xNameFT(m_xBuilder->weld_label(u"nameft"_ustr))
     , m_xNameED(m_xBuilder->weld_entry(u"name"_ustr))

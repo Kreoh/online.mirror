@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <docuno.hxx>
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/embed/XClassifiedObject.hpp>
@@ -99,6 +100,7 @@ namespace com::sun::star::embed { class XEmbeddedObject; }
 #define DET_ARROW_OFFSET    1000
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static E3dObjFactory* pF3d = nullptr;
 static sal_uInt16 nInst = 0;
@@ -413,7 +415,7 @@ void ScDrawLayer::UseHyphenator()
 {
     if (!bHyphenatorSet)
     {
-        css::uno::Reference< css::linguistic2::XHyphenator >
+        cpo::uno::Reference< css::linguistic2::XHyphenator >
                                     xHyphenator = LinguMgr::GetHyphenator();
 
         GetDrawOutliner().SetHyphenator( xHyphenator );
@@ -2689,6 +2691,15 @@ bool ScDrawLayer::IsResizeWithCell( const SdrObject& rObj )
     return pDrawObjData->mbResizeWithCell;
 }
 
+bool ScDrawLayer::IsInCellImage( const SdrObject& rObj )
+{
+    ScDrawObjData* pDrawObjData = GetOrCreateObjData(const_cast<SdrObject*>(&rObj));
+    if (!pDrawObjData)
+        return false;
+
+    return pDrawObjData->mbInCellImage;
+}
+
 void ScDrawLayer::SetPageAnchored( SdrObject &rObj )
 {
     rObj.deleteUserData(UserDataID::ID_ScDrawObjData);
@@ -2912,9 +2923,9 @@ void ScDrawLayer::SetChanged( bool bFlg /* = true */ )
     FmFormModel::SetChanged( bFlg );
 }
 
-css::uno::Reference< css::frame::XModel > ScDrawLayer::createUnoModel()
+cpo::uno::Reference< css::frame::XModel > ScDrawLayer::createUnoModel()
 {
-    css::uno::Reference< css::frame::XModel > xRet;
+    cpo::uno::Reference< css::frame::XModel > xRet;
     if( pDoc && pDoc->GetDocumentShell() )
         xRet = pDoc->GetDocumentShell()->GetModel();
 

@@ -21,7 +21,7 @@
 
 #include <com/sun/star/graphic/XPrimitive2DRenderer.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <basegfx/numeric/ftools.hxx>
@@ -35,6 +35,7 @@
 #include <comphelper/sequenceashashmap.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 namespace drawinglayer::unorenderer
@@ -180,9 +181,9 @@ namespace drawinglayer::unorenderer
 } // end of namespace
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 drawinglayer_XPrimitive2DRenderer(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new drawinglayer::unorenderer::XPrimitive2DRenderer());
 }

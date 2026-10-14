@@ -154,6 +154,7 @@ class SwUINumRuleItem;
 #define FN_COPY_FIELD                (FN_EDIT2 + 48)    /* show field content in readonly documents to copy content*/
 #define FN_CONVERT_SEL_FIELD         (FN_EDIT2 + 49)    /* convert selected field to text */
 #define FN_REDLINE_REINSTATE_ALL     (FN_EDIT2 + 50)    /* redlining reinstate all */
+#define FN_GOTO_OUTLINE_INDEX        (FN_EDIT2 + 51)    /* go to a heading by its position in the outline */
 
 // Region: View
 #define FN_DRAW_WRAP_DLG        TypedWhichId<SfxInt16Item>(FN_VIEW + 3)   /* Draw wrapping dlg */
@@ -686,6 +687,10 @@ class SwUINumRuleItem;
 #define FN_UNO_CONTENT_CONTROL (FN_EXTRA2 + 132)
 #define FN_UNO_IS_CONTENT_EMPTY  (FN_EXTRA2 + 133)
 #define FN_UNO_STYLE_ALIASES     (FN_EXTRA2 + 134)
+// SID_TABLE_STYLE's UNO name "TableStyle" collides with SwDocShell's pre-existing
+// SID_STYLE_FAMILY6 slot of the same name, so applying a table style live uses this
+// separate slot instead of the one Impress reuses from svx.sdi.
+#define FN_TABLE_SET_STYLE       TypedWhichId<SfxStringItem>(FN_EXTRA2 + 135)
 
 // Area: Help
 // Region: Traveling & Selection
@@ -822,9 +827,6 @@ class SwUINumRuleItem;
 #define FN_PARAM_MOVE_SELECTION     TypedWhichId<SfxBoolItem>(FN_PARAM+3)
 
 #define FN_PARAM_ADDPRINTER         TypedWhichId<SwAddPrinterItem>(FN_PARAM+18)
-#define FN_PARAM_DOCDISP            TypedWhichId<SwDocDisplayItem>(FN_PARAM+20)
-#define FN_PARAM_ELEM               TypedWhichId<SwElemItem>(FN_PARAM+21)
-#define FN_PARAM_SWTEST             TypedWhichId<SwTestItem>(FN_PARAM+22)
 
 #define FN_PARAM_FTN_INFO           TypedWhichId<SwPageFootnoteInfoItem>(FN_PARAM+23)
 
@@ -856,14 +858,11 @@ class SwUINumRuleItem;
 
 #define FN_PARAM_NUM_PRESET             TypedWhichId<SfxBoolItem>(FN_PARAM2+5) /* predefined numbering */
 
-#define FN_PARAM_SHADOWCURSOR           TypedWhichId<SwShadowCursorItem>(FN_PARAM2+8) /* for ShadowCursor options */
-
 #define FN_TEXT_RANGE                   (FN_PARAM2+12) /* TextRange Property*/
 
 #define FN_PARAM_CRSR_IN_PROTECTED      TypedWhichId<SfxBoolItem>(FN_PARAM2+13) /* Cursor in protected areas */
 #define FN_PARAM_TOX_TYPE               TypedWhichId<SfxUInt16Item>(FN_PARAM2+14) /* TOX type in tox dialog*/
 #define FN_PARAM_LINK_DISPLAY_NAME      (FN_PARAM2+15) /* LinkDisplayName property*/
-#define FN_PARAM_FMT_AIDS_AUTOCOMPL     TypedWhichId<SwFmtAidsAutoComplItem>(FN_PARAM2+16) /* Formatting aids autocomplete options */
 #define FN_PARAM_CONTOUR_PP             (FN_PARAM2+17) /* contour PolyPolygon*/
 
 #define FN_ANCHOR_POSITION              (FN_PARAM2+18) /* AnchorPosition property */

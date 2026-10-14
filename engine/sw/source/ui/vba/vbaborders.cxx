@@ -29,6 +29,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::ooo::vba;
+using namespace ::cpo;
 
 typedef ::cppu::WeakImplHelper<container::XIndexAccess > RangeBorders_Base;
 typedef InheritedHelperInterfaceWeakImpl<word::XBorder > SwVbaBorder_Base;
@@ -147,9 +148,9 @@ protected:
         return aServiceNames;
     }
 public:
-    SwVbaBorder( const uno::Reference< beans::XPropertySet > & xProps, const uno::Reference< uno::XComponentContext >& xContext, sal_Int32 lineType ) : SwVbaBorder_Base( uno::Reference< XHelperInterface >( xProps, uno::UNO_QUERY ), xContext ), m_xProps( xProps ), m_LineType( lineType ) {}
+    SwVbaBorder( const uno::Reference< beans::XPropertySet > & xProps, const uno::Reference< cpo::uno::XComponentContext >& xContext, sal_Int32 lineType ) : SwVbaBorder_Base( uno::Reference< XHelperInterface >( xProps, uno::UNO_QUERY ), xContext ), m_xProps( xProps ), m_LineType( lineType ) {}
 
-    cpo::uno::Any SAL_CALL getLineStyle() override
+    cpo::uno::Any getLineStyle() override
     {
         sal_Int32 nLineStyle = word::WdLineStyle::wdLineStyleNone;
         table::BorderLine aBorderLine;
@@ -170,7 +171,7 @@ public:
         }
         return cpo::uno::Any( nLineStyle );
     }
-    void SAL_CALL setLineStyle( const cpo::uno::Any& _linestyle ) override
+    void setLineStyle( const cpo::uno::Any& _linestyle ) override
     {
         // Urk no choice but to silently ignore we don't support this attribute
         // #TODO would be nice to support the word line styles
@@ -178,7 +179,7 @@ public:
         _linestyle >>= nLineStyle;
         table::BorderLine aBorderLine;
         if ( !getBorderLine( aBorderLine ) )
-            throw uno::RuntimeException(u"Method failed"_ustr );
+            throw cpo::uno::RuntimeException(u"Method failed"_ustr );
 
         switch ( nLineStyle )
         {
@@ -218,7 +219,7 @@ public:
                 break;
             }
             default:
-                throw uno::RuntimeException(u"Bad param"_ustr );
+                throw cpo::uno::RuntimeException(u"Bad param"_ustr );
         }
         setBorderLine( aBorderLine );
 
@@ -229,7 +230,7 @@ class RangeBorders : public RangeBorders_Base
 {
 private:
     uno::Reference< table::XCellRange > m_xRange;
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     VbaPalette m_Palette;
     sal_Int32 getTableIndex( sal_Int32 nConst )
     {
@@ -245,15 +246,15 @@ private:
         return getCount(); // error condition
     }
 public:
-    RangeBorders(  uno::Reference< table::XCellRange > xRange,  uno::Reference< uno::XComponentContext > xContext, VbaPalette aPalette ) : m_xRange(std::move( xRange )), m_xContext(std::move( xContext )), m_Palette(std::move( aPalette ))
+    RangeBorders(  uno::Reference< table::XCellRange > xRange,  uno::Reference< cpo::uno::XComponentContext > xContext, VbaPalette aPalette ) : m_xRange(std::move( xRange )), m_xContext(std::move( xContext )), m_Palette(std::move( aPalette ))
     {
     }
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) override
+    virtual ::sal_Int32 getCount(  ) override
     {
         return std::ssize( supportedIndexTable );
     }
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
 
         sal_Int32 nIndex = getTableIndex( Index );
@@ -264,11 +265,11 @@ public:
         }
         throw lang::IndexOutOfBoundsException();
     }
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override
+    virtual cpo::uno::Type getElementType(  ) override
     {
         return  cppu::UnoType<word::XBorder>::get();
     }
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual bool hasElements(  ) override
     {
         return true;
     }
@@ -277,7 +278,7 @@ public:
 }
 
 static uno::Reference< container::XIndexAccess >
-rangeToBorderIndexAccess( const uno::Reference< table::XCellRange >& xRange,  const uno::Reference< uno::XComponentContext > & xContext, VbaPalette const & rPalette )
+rangeToBorderIndexAccess( const uno::Reference< table::XCellRange >& xRange,  const uno::Reference< cpo::uno::XComponentContext > & xContext, VbaPalette const & rPalette )
 {
     return new RangeBorders( xRange, xContext, rPalette );
 }
@@ -290,12 +291,12 @@ class RangeBorderEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 m_nIndex;
 public:
     explicit RangeBorderEnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess ) : m_xIndexAccess(std::move( xIndexAccess )), m_nIndex( 0 ) {}
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( m_nIndex < m_xIndexAccess->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( m_nIndex < m_xIndexAccess->getCount() )
             return m_xIndexAccess->getByIndex( m_nIndex++ );
@@ -306,7 +307,7 @@ public:
 }
 
 // for Table borders
-SwVbaBorders::SwVbaBorders( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< table::XCellRange >& xRange, VbaPalette const & rPalette  ):  SwVbaBorders_BASE( xParent, xContext, rangeToBorderIndexAccess( xRange ,xContext, rPalette ) )
+SwVbaBorders::SwVbaBorders( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< table::XCellRange >& xRange, VbaPalette const & rPalette  ):  SwVbaBorders_BASE( xParent, xContext, rangeToBorderIndexAccess( xRange ,xContext, rPalette ) )
 {
     m_xProps.set( xRange, uno::UNO_QUERY_THROW );
 }
@@ -335,13 +336,13 @@ SwVbaBorders::getItemByIntIndex( const sal_Int32 nIndex )
     return createCollectionObject( m_xIndexAccess->getByIndex( nIndex ) );
 }
 
-bool SAL_CALL SwVbaBorders::getShadow()
+bool SwVbaBorders::getShadow()
 {
     // always return False for table border in MS Word
     return false;
 }
 
-void SAL_CALL SwVbaBorders::setShadow( bool /*_shadow*/ )
+void SwVbaBorders::setShadow( bool /*_shadow*/ )
 {
     // not support in Table border in Word
     // TODO:

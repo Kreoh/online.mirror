@@ -83,6 +83,7 @@
 #include <com/sun/star/text/XTextEmbeddedObjectsSupplier.hpp>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 // Migrate Marking of Objects, Points and GluePoints
 
@@ -219,6 +220,7 @@ SdrMarkView::SdrMarkView(SdrModel& rSdrModel, OutputDevice* pOut)
     , mbMarkedPointsRectsDirty(false)
     , mbMarkHandlesHidden(false)
     , mbNegativeX(false)
+    , meHandleModeChosenFor(HandleModeChosenFor::Nothing)
 {
 
     BrkMarkObj();
@@ -680,6 +682,19 @@ bool SdrMarkView::ImpIsFrameHandles() const
         }
     }
 
+    /*
+        A client that draws the document from the objects it holds shows one frame around a
+        selection of several objects, so that a drag on a handle scales every object in it and
+        there is one set of handles to draw. A single object keeps its own handles, which is where
+        the interaction points of a shape sit.
+    */
+    if (!bFrmHdl && nMarkCount > 1)
+    {
+        const SfxViewShell* pViewShell = GetSfxViewShell();
+        if (pViewShell && pViewShell->drawsFromObjects())
+            bFrmHdl = true;
+    }
+
     // no FrameHdl for crop
     if(bFrmHdl && SdrDragMode::Crop == meDragMode)
     {
@@ -806,6 +821,11 @@ bool SdrMarkView::dumpGluePointsToJSON(boost::property_tree::ptree& rTree)
             if (!pObj)
                 continue;
             if (pObj == rMarkList.GetMark(0)->GetMarkedSdrObj())
+                continue;
+            // A connector is not something a connector is tied to. It has no points of its own
+            // and the four an object falls back on lie where its track happens to run, so they
+            // would be offered as places to tie to that lead nowhere.
+            if (pObj->GetObjIdentifier() == SdrObjKind::Edge)
                 continue;
             const SdrGluePointList* pGPL = pObj->GetGluePointList();
             bool VertexObject = !(pGPL && pGPL->GetCount());
@@ -976,8 +996,11 @@ void SdrMarkView::SetMarkHandlesForKit(tools::Rectangle const & rRect, const Sfx
             }
         }
 
-        // hide the text selection too
-        if (pViewShell)
+        // A shape is selected, so the text selection this view showed before belongs to
+        // nothing now and goes away with it. A view that is editing text keeps the text it
+        // selected: the shape reported here is the frame around that very edit, and the edit
+        // reports its own selection as it changes.
+        if (pViewShell && !static_cast<SdrView*>(this)->IsTextEdit())
             pViewShell->viewCallback(COKitCallbackType::TEXT_SELECTION, ""_ostr);
     }
 
@@ -1015,15 +1038,38 @@ void SdrMarkView::SetMarkHandlesForKit(tools::Rectangle const & rRect, const Sfx
 
             OString handleArrayStr;
 
+            // The first marked object, by the unique id it keeps for as long as it lives. It
+            // used to be the address of the object, which says nothing a reader can act on and
+            // is given to another object once this one is gone.
             aExtraInfo.append("{\"id\":\""
-                + OString::number(reinterpret_cast<sal_IntPtr>(pO))
+                + OString::number(pO->GetUniqueID())
                 + "\",\"type\":"
                 + OString::number(static_cast<sal_Int32>(pO->GetObjIdentifier()))
                 + ",\"typeString\":\"");
             aExtraInfo.append(SdrObjKindToString(pO->GetObjIdentifier()));
             aExtraInfo.append("\",\"OrdNum\":" + OString::number(pO->GetOrdNum()));
 
-            aExtraInfo.append(", \"isMathObject\": " + OString::boolean(lcl_isStarMath(pO)));
+            // Every marked object, by the unique id it keeps for as long as it lives. The order is
+            // the order they were marked in, and one entry stands for one object, so a reader can
+            // tell which objects the selection is about and whether that set moved.
+            aExtraInfo.append(",\"uniqueIds\":[");
+            for (size_t nMark = 0; nMark < rMarkList.GetMarkCount(); ++nMark)
+            {
+                if (nMark > 0)
+                    aExtraInfo.append(",");
+
+                SdrObject* pMarked = rMarkList.GetMark(nMark)->GetMarkedSdrObj();
+
+                // A diagram marked alone and edited one object at a time is selected as the
+                // object it works on, its sub-selection; with none chosen that is its background
+                // shape, which stands for the whole diagram.
+                if (pMarked && rMarkList.GetMarkCount() == 1 && pMarked->isDiagram()
+                    && SdrObject::useAdvancedDiagramFeatures())
+                    pMarked = pMarked->getDiagramSubSelection();
+
+                aExtraInfo.append(OString::number(pMarked ? pMarked->GetUniqueID() : 0));
+            }
+            aExtraInfo.append("], \"isMathObject\": " + OString::boolean(lcl_isStarMath(pO)));
             aExtraInfo.append(", \"isDiagram\": " + OString::boolean(pO->isDiagram()));
 
             if (mpMarkedObj && !pOtherShell)
@@ -1115,8 +1161,8 @@ void SdrMarkView::SetMarkHandlesForKit(tools::Rectangle const & rRect, const Sfx
             if (bIsChart)
             {
                 KitChartHelper aChartHelper(pViewShell);
-                css::uno::Reference<css::frame::XController>& xChartController = aChartHelper.GetXController();
-                css::uno::Reference<css::view::XSelectionSupplier> xSelectionSupplier( xChartController, uno::UNO_QUERY);
+                cpo::uno::Reference<css::frame::XController>& xChartController = aChartHelper.GetXController();
+                cpo::uno::Reference<css::view::XSelectionSupplier> xSelectionSupplier( xChartController, uno::UNO_QUERY);
                 if (xSelectionSupplier.is())
                 {
                     cpo::uno::Any aSel = xSelectionSupplier->getSelection();
@@ -2190,6 +2236,42 @@ void SdrMarkView::SetFrameHandles(bool bOn)
             MarkListHasChanged();
         }
     }
+
+    // Remember which selection this choice was made for, so the next mark change keeps it. A
+    // choice made while nothing is selected counts as one object, because the object that is
+    // about to be created arrives on its own. This runs after the notification above, which
+    // would overwrite the record.
+    meHandleModeChosenFor = GetMarkedObjectList().GetMarkCount() > 1
+                                ? HandleModeChosenFor::SeveralObjects
+                                : HandleModeChosenFor::OneObject;
+}
+
+void SdrMarkView::AdjustFrameHandlesToMarkCount()
+{
+    // An empty selection has no handles to choose between, so leave them alone. Forget the size
+    // the mode was chosen for, so the next selection is treated as a fresh one.
+    const size_t nMarkCount = GetMarkedObjectList().GetMarkCount();
+    if (nMarkCount == 0)
+    {
+        meHandleModeChosenFor = HandleModeChosenFor::Nothing;
+        return;
+    }
+
+    const HandleModeChosenFor eChosenFor = nMarkCount > 1 ? HandleModeChosenFor::SeveralObjects
+                                                          : HandleModeChosenFor::OneObject;
+    if (eChosenFor == meHandleModeChosenFor)
+        return;
+    meHandleModeChosenFor = eChosenFor;
+
+    const bool bWasFrameHandles = ImpIsFrameHandles();
+    mbForceFrameHandles = (eChosenFor == HandleModeChosenFor::OneObject);
+    if (ImpIsFrameHandles() == bWasFrameHandles)
+        return;
+
+    // Build the handles here rather than through SetFrameDragSingles, which reports the change
+    // through MarkListHasChanged. The caller is inside that notification already, and running it
+    // a second time repeats everything the caller does for one selection change.
+    AdjustMarkHdl();
 }
 
 void SdrMarkView::SetEditMode(SdrViewEditMode eMode)
@@ -2369,10 +2451,20 @@ bool SdrMarkView::MarkNextObj(bool bPrev)
         return false;
     }
 
-    if (nChgMarkNum!=SAL_MAX_SIZE)
+    /*
+        What is walked to is marked on its own, whatever was marked before. The search set off
+        from the topmost of the marked objects going forward and from the lowest going back, so
+        the object it arrived at carries on from the end of the selection it started with.
+    */
+    if (nMarkCount > 1)
+    {
+        GetMarkedObjectListWriteAccess().Clear();
+    }
+    else if (nChgMarkNum!=SAL_MAX_SIZE)
     {
         GetMarkedObjectListWriteAccess().DeleteMark(nChgMarkNum);
     }
+
     MarkObj(pMarkObj,pPageView); // also calls MarkListHasChanged(), AdjustMarkHdl()
     return true;
 }
@@ -2537,9 +2629,9 @@ void collectUIInformation(const SdrObject* pObj)
     aDescription.aKeyWord = u"CurrentApp"_ustr;
 
     if (!pObj->GetName().isEmpty())
-        aDescription.aParameters = {{"OBJECT", pObj->GetName()}};
+        aDescription.aParameters = {{u"OBJECT"_ustr, pObj->GetName()}};
     else
-        aDescription.aParameters = {{"OBJECT", "Unnamed_Obj_" + OUString::number(pObj->GetOrdNum())}};
+        aDescription.aParameters = {{u"OBJECT"_ustr, "Unnamed_Obj_" + OUString::number(pObj->GetOrdNum())}};
 
     UITestLogger::getInstance().logEvent(aDescription);
 }

@@ -35,7 +35,8 @@
 #include <frameformats.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class Test : public SwModelTestBase
 {
@@ -840,7 +841,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf89791)
     properties.set(getStyles(u"ParagraphStyles"_ustr)->getByName(u"Titre"_ustr), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(u"Corps de texte"_ustr, getProperty<OUString>(properties, u"FollowStyle"_ustr));
 
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
     CPPUNIT_ASSERT_EQUAL(false, xNameAccess->hasByName(u"docProps/custom.xml"_ustr));
 }
 
@@ -901,7 +902,7 @@ DECLARE_OOXMLEXPORT_TEST(testTdf91594, "tdf91594.docx")
 }
 DECLARE_OOXMLEXPORT_TEST(testTDF99434, "protectedform.docx")
 {
-    css::uno::Reference<css::lang::XMultiServiceFactory> m_xTextFactory(mxComponent, uno::UNO_QUERY);
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> m_xTextFactory(mxComponent, uno::UNO_QUERY);
     uno::Reference< beans::XPropertySet > xSettings(m_xTextFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY);
     cpo::uno::Any aProtect = xSettings->getPropertyValue(u"ProtectForm"_ustr);
     bool bProt = false;
@@ -1068,7 +1069,8 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf115094v3)
         // - Expected: 1991
         // - Actual  : 1883
         // i.e. some unwanted ~-2mm left margin appeared.
-        CPPUNIT_ASSERT_EQUAL(static_cast<SwTwips>(1991), pFormat->GetHoriOrient().GetPos());
+        CPPUNIT_ASSERT_EQUAL(SwTwips(1991),
+                             pFormat->GetHoriOrient().getPosition().as_twip<SwTwips>());
     }
     save(TestFilter::DOCX);
     // floating table is now exported directly without surrounding frame

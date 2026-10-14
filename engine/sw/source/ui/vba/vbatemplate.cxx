@@ -27,6 +27,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static OUString lcl_CheckGroupName( std::u16string_view aGroupName )
 {
@@ -45,7 +46,7 @@ static OUString lcl_CheckGroupName( std::u16string_view aGroupName )
     return sRet.makeStringAndClear();
 }
 
-SwVbaTemplate::SwVbaTemplate( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, OUString aFullUrl )
+SwVbaTemplate::SwVbaTemplate( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, OUString aFullUrl )
     : SwVbaTemplate_BASE( rParent, rContext ), msFullUrl(std::move( aFullUrl ))
 {
 }
@@ -80,11 +81,11 @@ SwVbaTemplate::getPath()
     return sPath;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaTemplate::AutoTextEntries( const cpo::uno::Any& index )
 {
-    const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
-    uno::Reference< text::XAutoTextContainer2 > xAutoTextContainer = text::AutoTextContainer::create( xContext );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+    uno::Reference< text::XAutoTextContainer > xAutoTextContainer = text::AutoTextContainer::create( xContext );
 
     // the default template is "Normal.dot" in Word.
     OUString sGroup(u"Normal"_ustr);
@@ -99,7 +100,7 @@ SwVbaTemplate::AutoTextEntries( const cpo::uno::Any& index )
     uno::Reference< container::XIndexAccess > xGroup;
     if( !xAutoTextContainer->hasByName( sNewGroup ) )
     {
-        throw uno::RuntimeException(u"Auto Text Entry doesn't exist"_ustr );
+        throw cpo::uno::RuntimeException(u"Auto Text Entry doesn't exist"_ustr );
     }
 
     xGroup.set( xAutoTextContainer->getByName( sNewGroup ), uno::UNO_QUERY_THROW );

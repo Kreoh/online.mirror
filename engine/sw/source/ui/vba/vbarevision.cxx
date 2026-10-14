@@ -31,9 +31,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaRevision::SwVbaRevision( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                              const uno::Reference< uno::XComponentContext >& rContext,
+                              const uno::Reference< cpo::uno::XComponentContext >& rContext,
                               rtl::Reference< SwXTextDocument > xModel,
                               uno::Reference< beans::XPropertySet >  xRedlineProps )
 : SwVbaRevision_BASE( rParent, rContext ),
@@ -62,12 +63,12 @@ sal_Int32 SwVbaRevision::GetPosition()
         }
     }
     if( nPos == -1 )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return nPos;
 }
 
-void SAL_CALL
+void
 SwVbaRevision::Accept()
 {
     SwDoc* pDoc = mxModel->GetDocShell()->GetDoc();
@@ -75,7 +76,7 @@ SwVbaRevision::Accept()
         pDoc->getIDocumentRedlineAccess().AcceptRedline( GetPosition(), true );
 }
 
-void SAL_CALL
+void
 SwVbaRevision::Reject( )
 {
     SwDoc* pDoc = mxModel->GetDocShell()->GetDoc();

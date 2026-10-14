@@ -21,15 +21,16 @@
 #include "vbanewfont.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaLabel::ScVbaLabel(  const css::uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+ScVbaLabel::ScVbaLabel(  const cpo::uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
     : LabelImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
-OUString SAL_CALL
+OUString
 ScVbaLabel::getCaption()
 {
     OUString Label;
@@ -37,18 +38,18 @@ ScVbaLabel::getCaption()
     return Label;
 }
 
-void SAL_CALL
+void
 ScVbaLabel::setCaption( const OUString& _caption )
 {
     m_xProps->setPropertyValue( u"Label"_ustr, cpo::uno::Any( _caption ) );
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaLabel::getValue()
 {
     return cpo::uno::Any( getCaption() );
 }
 
-void SAL_CALL
+void
 ScVbaLabel::setValue( const cpo::uno::Any& _value )
 {
     OUString sCaption;
@@ -56,20 +57,20 @@ ScVbaLabel::setValue( const cpo::uno::Any& _value )
     setCaption( sCaption );
 }
 
-OUString SAL_CALL
+OUString
 ScVbaLabel::getAccelerator()
 {
     // #STUB
     return OUString();
 }
 
-void SAL_CALL
+void
 ScVbaLabel::setAccelerator( const OUString& /*_accelerator*/ )
 {
     // #STUB
 }
 
-uno::Reference< msforms::XNewFont > SAL_CALL ScVbaLabel::getFont()
+uno::Reference< msforms::XNewFont > ScVbaLabel::getFont()
 {
     return new VbaNewFont( m_xProps );
 }
@@ -79,22 +80,22 @@ OUString ScVbaLabel::getServiceImplName()
     return u"ScVbaLabel"_ustr;
 }
 
-sal_Int32 SAL_CALL ScVbaLabel::getBackColor()
+sal_Int32 ScVbaLabel::getBackColor()
 {
     return ScVbaControl::getBackColor();
 }
 
-void SAL_CALL ScVbaLabel::setBackColor( sal_Int32 nBackColor )
+void ScVbaLabel::setBackColor( sal_Int32 nBackColor )
 {
     ScVbaControl::setBackColor( nBackColor );
 }
 
-bool SAL_CALL ScVbaLabel::getAutoSize()
+bool ScVbaLabel::getAutoSize()
 {
     return ScVbaControl::getAutoSize();
 }
 
-void SAL_CALL ScVbaLabel::setAutoSize( bool bAutoSize )
+void ScVbaLabel::setAutoSize( bool bAutoSize )
 {
     ScVbaControl::setAutoSize( bAutoSize );
 }

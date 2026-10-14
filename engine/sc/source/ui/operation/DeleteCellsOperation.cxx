@@ -9,6 +9,7 @@
 
 #include <operation/DeleteCellsOperation.hxx>
 
+#include <dbdocfun.hxx>
 #include <docfunc.hxx>
 #include <docsh.hxx>
 #include <markdata.hxx>
@@ -306,6 +307,12 @@ bool DeleteCellsOperation::runImplementation()
     //the patch comes from maoyg
     ::std::vector<ScRange> qDecreaseRange;
     bool bDeletingMerge = false;
+
+    // The list action below stays open past the deletion, for the row given back to these.
+    ScDBDocFunc aDBFunc(mrDocShell);
+    const std::vector<ScDBDocFunc::TableRepair> aStarvedTables
+        = aDBFunc.GetTablesLosingData(aMark, aInputRange, meCmd);
+
     OUString aUndo = ScResId(STR_UNDO_DELETECELLS);
     if (mbRecord)
     {
@@ -604,7 +611,7 @@ bool DeleteCellsOperation::runImplementation()
             nUndoPos++;
         }
 
-        if (!bDeletingMerge)
+        if (!bDeletingMerge && aStarvedTables.empty())
         {
             mrDocShell.GetUndoManager()->LeaveListAction();
         }
@@ -673,7 +680,9 @@ bool DeleteCellsOperation::runImplementation()
         qDecreaseRange.pop_back();
     }
 
-    if (bDeletingMerge)
+    aDBFunc.RepairTablesAfterDelete(aStarvedTables, meCmd, mbRecord, mbApi);
+
+    if (bDeletingMerge || (mbRecord && !aStarvedTables.empty()))
         mrDocShell.GetUndoManager()->LeaveListAction();
 
     if (meCmd == DelCellCmd::Cols || meCmd == DelCellCmd::CellsLeft)

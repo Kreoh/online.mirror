@@ -24,6 +24,39 @@ interface CanvasRecorderCall {
 	depth: number;
 }
 
+/// A gradient handed out by CanvasRecorder. The stops it was given are
+/// kept in the order they were added, so a test can check where along
+/// the ramp each color was placed.
+class GradientRecorder {
+	public readonly stops: { offset: number; color: string }[] = [];
+
+	constructor(
+		public readonly kind: string,
+		public readonly args: any[],
+	) {}
+
+	addColorStop(offset: number, color: string): void {
+		this.stops.push({ offset: offset, color: color });
+	}
+
+	/// The stops sorted the way the canvas reads them, which is by
+	/// offset regardless of the order they were added in.
+	sortedStops(): { offset: number; color: string }[] {
+		return this.stops.slice().sort((a, b) => a.offset - b.offset);
+	}
+}
+
+/// A pattern from CanvasRecorder, with its arguments and last transform.
+class PatternRecorder {
+	public transform: Record<string, number> | undefined;
+
+	constructor(public readonly args: any[]) {}
+
+	setTransform(transform: Record<string, number>): void {
+		this.transform = transform;
+	}
+}
+
 /// Test helper that mimics a CanvasRenderingContext2D. Pass an instance of
 /// CanvasRecorder wherever production code expects a context. Every method
 /// invocation is recorded into calls, and every assigned drawing-state
@@ -37,7 +70,17 @@ class CanvasRecorder {
 	public readonly calls: CanvasRecorderCall[] = [];
 	public readonly properties: Record<string, any> = {};
 	public readonly canvas: { width: number; height: number };
+	/// Every gradient handed out, in the order it was created.
+	public readonly gradients: GradientRecorder[] = [];
+	/// The RGBA value of every pixel getImageData returns. Unset is transparent
+	/// black.
+	public imagePixel: number[] | undefined;
 	private _depth: number = 0;
+	/// The live transform as [a, b, c, d, e, f], kept up to date through
+	/// the transform calls and the save stack so getTransform answers
+	/// what a real context would.
+	private _transform: number[] = [1, 0, 0, 1, 0, 0];
+	private _transformStack: number[][] = [];
 
 	private static readonly _PROPS = [
 		'fillStyle',
@@ -162,32 +205,104 @@ class CanvasRecorder {
 		// one level deeper.
 		this._record('save', []);
 		this._depth++;
+		this._transformStack.push(this._transform.slice());
 	}
 	restore(): void {
 		// Pop the level first so the restore() entry itself sits at
 		// the outer depth, matching the save() entry that opened it.
 		if (this._depth > 0) this._depth--;
 		this._record('restore', []);
+		const saved = this._transformStack.pop();
+		if (saved) this._transform = saved;
 	}
 	translate(...args: any[]): void {
 		this._record('translate', args);
+		this._apply([1, 0, 0, 1, args[0], args[1]]);
 	}
 	scale(...args: any[]): void {
 		this._record('scale', args);
+		this._apply([args[0], 0, 0, args[1], 0, 0]);
 	}
 	rotate(...args: any[]): void {
 		this._record('rotate', args);
+		const cos = Math.cos(args[0]);
+		const sin = Math.sin(args[0]);
+		this._apply([cos, sin, -sin, cos, 0, 0]);
 	}
 	transform(...args: any[]): void {
 		this._record('transform', args);
+		this._apply(args.slice(0, 6));
 	}
 	setTransform(...args: any[]): void {
 		this._record('setTransform', args);
+		const first = args[0];
+		this._transform =
+			args.length >= 6
+				? args.slice(0, 6)
+				: [first.a, first.b, first.c, first.d, first.e, first.f];
 	}
 	resetTransform(): void {
 		this._record('resetTransform', []);
+		this._transform = [1, 0, 0, 1, 0, 0];
+	}
+	getTransform(): {
+		a: number;
+		b: number;
+		c: number;
+		d: number;
+		e: number;
+		f: number;
+	} {
+		const t = this._transform;
+		return { a: t[0], b: t[1], c: t[2], d: t[3], e: t[4], f: t[5] };
+	}
+	getImageData(x: number, y: number, width: number, height: number): any {
+		this._record('getImageData', [x, y, width, height]);
+		const data = new Uint8ClampedArray(width * height * 4);
+		if (this.imagePixel) {
+			for (let index = 0; index < data.length; index += 4)
+				data.set(this.imagePixel, index);
+		}
+		return { width: width, height: height, data: data };
+	}
+	putImageData(...args: any[]): void {
+		this._record('putImageData', args);
+	}
+
+	/// Multiply the live transform by another, the way a canvas
+	/// composes a new transform onto the one already in place.
+	private _apply(m: number[]): void {
+		const t = this._transform;
+		this._transform = [
+			t[0] * m[0] + t[2] * m[1],
+			t[1] * m[0] + t[3] * m[1],
+			t[0] * m[2] + t[2] * m[3],
+			t[1] * m[2] + t[3] * m[3],
+			t[0] * m[4] + t[2] * m[5] + t[4],
+			t[1] * m[4] + t[3] * m[5] + t[5],
+		];
 	}
 	setLineDash(...args: any[]): void {
 		this._record('setLineDash', args);
+	}
+	createLinearGradient(...args: any[]): GradientRecorder {
+		return this._makeGradient('linear', args);
+	}
+	createRadialGradient(...args: any[]): GradientRecorder {
+		return this._makeGradient('radial', args);
+	}
+	createPattern(...args: any[]): PatternRecorder {
+		this._record('createPattern', args);
+		return new PatternRecorder(args);
+	}
+
+	private _makeGradient(kind: string, args: any[]): GradientRecorder {
+		this._record(
+			'create' + kind[0].toUpperCase() + kind.slice(1) + 'Gradient',
+			args,
+		);
+		const gradient = new GradientRecorder(kind, args);
+		this.gradients.push(gradient);
+		return gradient;
 	}
 }

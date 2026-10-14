@@ -261,7 +261,7 @@ bool ScTable::SearchCell(const SvxSearchItem& rSearchItem, SCCOL nCol, sc::Colum
     {
         ScFieldEditEngine& rEngine = rDocument.GetEditEngine();
         rEngine.SetTextCurrentDefaults(aString);
-        SetEditText(nCol, nRow, rEngine.CreateTextObject());
+        SetEditText(nCol, nRow, std::make_unique<EditTextObject>(rEngine.CreateTextObject()));
     }
     else
         aCol[nCol].SetString(nRow, nTab, aString, rDocument.GetAddressConvention());
@@ -628,7 +628,7 @@ bool ScTable::SearchStyle(const SvxSearchItem& rSearchItem, SCCOL& rCol, SCROW& 
                                         rDocument.GetStyleSheetPool()->Find(
                                         rSearchItem.GetSearchString(), SfxStyleFamily::Para ));
 
-    SCCOL nCol = rCol;
+    SCCOL nCol = ClampToAllocatedColumns(rCol);
     SCROW nRow = rRow;
     bool bFound = false;
 
@@ -637,7 +637,7 @@ bool ScTable::SearchStyle(const SvxSearchItem& rSearchItem, SCCOL& rCol, SCROW& 
     bool bBack = rSearchItem.GetBackward();
     short nAdd = bBack ? -1 : 1;
 
-    if (bRows)                                      // by row
+    if (!bRows) // by column
     {
         if ( !IsColValid( nCol ) )
         {
@@ -661,7 +661,7 @@ bool ScTable::SearchStyle(const SvxSearchItem& rSearchItem, SCCOL& rCol, SCROW& 
         }
         while ( !bFound && IsColValid( nCol ) );
     }
-    else                                    // by column
+    else // by row
     {
         SCCOL aColSize = aCol.size();
         std::vector< SCROW > nNextRows ( aColSize );
@@ -786,7 +786,11 @@ bool ScTable::ReplaceAllStyle(
             if (pUndoDoc)
                 rDocument.CopyToDocument(0, 0 ,nTab, rDocument.MaxCol(),rDocument.MaxRow(),nTab,
                                           InsertDeleteFlags::ATTRIB, true, *pUndoDoc, &rMark);
-            ApplySelectionStyle( *pReplaceStyle, rMark );
+
+            const ScRange aThisTab(0, 0, nTab, rDocument.MaxCol(), rDocument.MaxRow(), nTab);
+            const ScMarkData aThisMark(rDocument.GetSheetLimits(),
+                                       rMatchedRanges.GetIntersectedRange(aThisTab));
+            ApplySelectionStyle(*pReplaceStyle, aThisMark);
         }
         else
         {
@@ -835,12 +839,15 @@ bool ScTable::SearchAndReplace(
             aSearchOptions.Locale = ScGlobal::GetLocale();
 
             //  reflect UseAsianOptions flag in SearchOptions
-            //  (use only ignore case and width if asian options are disabled).
+            //  (use only ignore case and width if asian options are disabled,
+            //  plus the two options that stand on their own in the dialog).
             //  This is also done in SvxSearchDialog CommandHdl, but not in API object.
             if ( !rSearchItem.IsUseAsianOptions() )
                 aSearchOptions.transliterateFlags &=
                     TransliterationFlags::IGNORE_CASE |
-                      TransliterationFlags::IGNORE_WIDTH;
+                      TransliterationFlags::IGNORE_WIDTH |
+                      TransliterationFlags::IGNORE_DIACRITICS_CTL |
+                      TransliterationFlags::IGNORE_KASHIDA_CTL;
 
             pSearchText.reset( new utl::TextSearch( aSearchOptions ) );
 

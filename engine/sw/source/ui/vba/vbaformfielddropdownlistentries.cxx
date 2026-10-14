@@ -13,6 +13,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static cpo::uno::Sequence<OUString> lcl_getListEntries(sw::mark::DropDownFieldmark& rDropDown)
 {
@@ -35,9 +36,9 @@ public:
     {
     }
 
-    bool SAL_CALL hasMoreElements() override { return (mnIndex < mxIndexAccess->getCount()); }
+    bool hasMoreElements() override { return (mnIndex < mxIndexAccess->getCount()); }
 
-    cpo::uno::Any SAL_CALL nextElement() override
+    cpo::uno::Any nextElement() override
     {
         if (mnIndex < mxIndexAccess->getCount())
         {
@@ -52,13 +53,13 @@ class ListEntryCollectionHelper
 {
 private:
     uno::Reference<XHelperInterface> mxParent;
-    uno::Reference<uno::XComponentContext> mxContext;
+    uno::Reference<cpo::uno::XComponentContext> mxContext;
     sw::mark::DropDownFieldmark& m_rDropDown;
 
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     ListEntryCollectionHelper(uno::Reference<ov::XHelperInterface> xParent,
-                              uno::Reference<uno::XComponentContext> xContext,
+                              uno::Reference<cpo::uno::XComponentContext> xContext,
                               sw::mark::DropDownFieldmark& rFormField)
         : mxParent(std::move(xParent))
         , mxContext(std::move(xContext))
@@ -66,9 +67,9 @@ public:
     {
     }
 
-    sal_Int32 SAL_CALL getCount() override { return lcl_getListEntries(m_rDropDown).getLength(); }
+    sal_Int32 getCount() override { return lcl_getListEntries(m_rDropDown).getLength(); }
 
-    cpo::uno::Any SAL_CALL getByIndex(sal_Int32 Index) override
+    cpo::uno::Any getByIndex(sal_Int32 Index) override
     {
         if (Index < 0 || Index >= getCount())
             throw lang::IndexOutOfBoundsException();
@@ -77,15 +78,15 @@ public:
             new SwVbaFormFieldDropDownListEntry(mxParent, mxContext, m_rDropDown, Index)));
     }
 
-    cpo::uno::Type SAL_CALL getElementType() override
+    cpo::uno::Type getElementType() override
     {
         return cppu::UnoType<word::XListEntry>::get();
     }
 
-    bool SAL_CALL hasElements() override { return getCount() != 0; }
+    bool hasElements() override { return getCount() != 0; }
 
     // XEnumerationAccess
-    uno::Reference<container::XEnumeration> SAL_CALL createEnumeration() override
+    uno::Reference<container::XEnumeration> createEnumeration() override
     {
         return new ListEntriesEnumWrapper(this);
     }
@@ -94,7 +95,7 @@ public:
 
 SwVbaFormFieldDropDownListEntries::SwVbaFormFieldDropDownListEntries(
     const uno::Reference<XHelperInterface>& xParent,
-    const uno::Reference<uno::XComponentContext>& xContext, sw::mark::DropDownFieldmark& rFormField)
+    const uno::Reference<cpo::uno::XComponentContext>& xContext, sw::mark::DropDownFieldmark& rFormField)
     : SwVbaFormFieldDropDownListEntries_BASE(
           xParent, xContext,
           uno::Reference<container::XIndexAccess>(

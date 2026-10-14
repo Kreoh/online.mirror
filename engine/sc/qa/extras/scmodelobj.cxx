@@ -8,6 +8,7 @@
  */
 
 #include <test/unoapi_test.hxx>
+#include <docuno.hxx>
 #include <test/document/xlinktargetsupplier.hxx>
 #include <test/sheet/spreadsheetdocumentsettings.hxx>
 #include <test/sheet/xcalculatable.hxx>
@@ -20,12 +21,13 @@
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -40,7 +42,7 @@ class ScModelObj : public UnoApiTest,
 public:
     virtual void setUp() override;
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual cpo::uno::Sequence<uno::Reference<table::XCell>> getXCells() override;
 
     ScModelObj();
@@ -79,7 +81,7 @@ ScModelObj::ScModelObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScModelObj::init()
+uno::Reference<cpo::uno::XInterface> ScModelObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
 

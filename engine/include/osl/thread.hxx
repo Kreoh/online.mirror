@@ -20,14 +20,14 @@
 #ifndef INCLUDED_OSL_THREAD_HXX
 #define INCLUDED_OSL_THREAD_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstddef>
 
-#include "osl/time.h"
-#include "osl/thread.h"
-#include "rtl/alloc.h"
+#include <osl/time.h>
+#include <osl/thread.h>
+#include <rtl/alloc.h>
 
 namespace osl
 {
@@ -47,8 +47,8 @@ extern "C" inline void threadFunc( void* param);
  */
 class Thread
 {
-    Thread( const Thread& ) SAL_DELETED_FUNCTION;
-    Thread& operator= ( const Thread& ) SAL_DELETED_FUNCTION;
+    Thread( const Thread& ) = delete;
+    Thread& operator= ( const Thread& ) = delete;
 public:
     Thread(): m_hThread(NULL){}
 
@@ -138,7 +138,7 @@ public:
         osl_yieldThread();
     }
 
-    static void setName(char const * name) SAL_NOEXCEPT {
+    static void setName(char const * name) noexcept {
         osl_setThreadName(name);
     }
 
@@ -178,8 +178,8 @@ extern "C" inline void threadFunc( void* param)
 
 class ThreadData
 {
-    ThreadData( const ThreadData& ) SAL_DELETED_FUNCTION;
-    ThreadData& operator= (const ThreadData& ) SAL_DELETED_FUNCTION;
+    ThreadData( const ThreadData& ) = delete;
+    ThreadData& operator= (const ThreadData& ) = delete;
 public:
      /// Create a thread specific local data key
     ThreadData( oslThreadKeyCallbackFunction pCallback= NULL )

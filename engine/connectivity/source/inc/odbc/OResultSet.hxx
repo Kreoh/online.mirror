@@ -133,7 +133,7 @@ namespace connectivity::odbc
         SQLHANDLE                                   m_aConnectionHandle;
         OStatement_Base*                            m_pStatement;
         std::unique_ptr<OSkipDeletedSet>            m_pSkipDeletedSet;
-        css::uno::Reference< css::uno::XInterface>    m_xStatement;
+        cpo::uno::Reference< cpo::uno::XInterface>    m_xStatement;
         rtl::Reference< OResultSetMetaData>        m_xMetaData;
         std::unique_ptr<SQLUSMALLINT[]>             m_pRowStatusArray;
         rtl_TextEncoding                            m_nTextEncoding;
@@ -165,7 +165,7 @@ namespace connectivity::odbc
         void allocBuffer();
         void releaseBuffer();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void updateValue(sal_Int32 columnIndex, SQLSMALLINT _nType, void const * _pValue);
         void fillNeededData(SQLRETURN _nRet);
         bool moveImpl(IResultSetHelper::Movement _eCursorPosition, sal_Int32 _nOffset);
@@ -179,28 +179,28 @@ namespace connectivity::odbc
         template < typename T > T impl_getValue( const sal_Int32 _nColumnIndex, SQLSMALLINT nType );
         // these cases need some special treatment
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         bool impl_getBoolean( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         cpo::uno::Sequence< sal_Int8 > impl_getBytes( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         css::util::Date impl_getDate( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         css::util::Time impl_getTime( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         css::util::DateTime impl_getTimestamp( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int64 impl_getLong( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         OUString impl_getString( sal_Int32 columnIndex );
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         cpo::uno::Sequence<sal_Int8> impl_getBookmark(  );
 
 
@@ -232,9 +232,9 @@ namespace connectivity::odbc
 
         const Functions& functions() const { return m_pStatement->functions(); }
 
-        css::uno::Reference< css::uno::XInterface > operator *()
+        cpo::uno::Reference< cpo::uno::XInterface > operator *()
         {
-            return css::uno::Reference< css::uno::XInterface >(*static_cast<OResultSet_BASE*>(this));
+            return cpo::uno::Reference< cpo::uno::XInterface >(*static_cast<OResultSet_BASE*>(this));
         }
 
         void setMetaData(const rtl::Reference<OResultSetMetaData>& _xMetaData) { m_xMetaData = _xMetaData;}
@@ -248,7 +248,7 @@ namespace connectivity::odbc
         //XTypeProvider
         virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
         // XResultSet
         virtual bool next(  ) override;
         virtual bool isBeforeFirst(  ) override;
@@ -267,7 +267,7 @@ namespace connectivity::odbc
         virtual bool rowUpdated(  ) override;
         virtual bool rowInserted(  ) override;
         virtual bool rowDeleted(  ) override;
-        virtual css::uno::Reference< css::uno::XInterface > getStatement(  ) override;
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getStatement(  ) override;
         // XRow
         virtual bool wasNull(  ) override;
         virtual OUString getString( sal_Int32 columnIndex ) override;
@@ -282,15 +282,15 @@ namespace connectivity::odbc
         virtual css::util::Date getDate( sal_Int32 columnIndex ) override;
         virtual css::util::Time getTime( sal_Int32 columnIndex ) override;
         virtual css::util::DateTime getTimestamp( sal_Int32 columnIndex ) override;
-        virtual css::uno::Reference< css::io::XInputStream > getBinaryStream( sal_Int32 columnIndex ) override;
-        virtual css::uno::Reference< css::io::XInputStream > getCharacterStream( sal_Int32 columnIndex ) override;
-        virtual cpo::uno::Any getObject( sal_Int32 columnIndex, const css::uno::Reference< css::container::XNameAccess >& typeMap ) override;
-        virtual css::uno::Reference< css::sdbc::XRef > getRef( sal_Int32 columnIndex ) override;
-        virtual css::uno::Reference< css::sdbc::XBlob > getBlob( sal_Int32 columnIndex ) override;
-        virtual css::uno::Reference< css::sdbc::XClob > getClob( sal_Int32 columnIndex ) override;
-        virtual css::uno::Reference< css::sdbc::XArray > getArray( sal_Int32 columnIndex ) override;
+        virtual cpo::uno::Reference< css::io::XInputStream > getBinaryStream( sal_Int32 columnIndex ) override;
+        virtual cpo::uno::Reference< css::io::XInputStream > getCharacterStream( sal_Int32 columnIndex ) override;
+        virtual cpo::uno::Any getObject( sal_Int32 columnIndex, const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+        virtual cpo::uno::Reference< css::sdbc::XRef > getRef( sal_Int32 columnIndex ) override;
+        virtual cpo::uno::Reference< css::sdbc::XBlob > getBlob( sal_Int32 columnIndex ) override;
+        virtual cpo::uno::Reference< css::sdbc::XClob > getClob( sal_Int32 columnIndex ) override;
+        virtual cpo::uno::Reference< css::sdbc::XArray > getArray( sal_Int32 columnIndex ) override;
         // XResultSetMetaDataSupplier
-        virtual css::uno::Reference< css::sdbc::XResultSetMetaData > getMetaData(  ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSetMetaData > getMetaData(  ) override;
         // XCancellable
         virtual void cancel(  ) override;
         // XCloseable
@@ -319,8 +319,8 @@ namespace connectivity::odbc
         virtual void updateDate( sal_Int32 columnIndex, const css::util::Date& x ) override;
         virtual void updateTime( sal_Int32 columnIndex, const css::util::Time& x ) override;
         virtual void updateTimestamp( sal_Int32 columnIndex, const css::util::DateTime& x ) override;
-        virtual void updateBinaryStream( sal_Int32 columnIndex, const css::uno::Reference< css::io::XInputStream >& x, sal_Int32 length ) override;
-        virtual void updateCharacterStream( sal_Int32 columnIndex, const css::uno::Reference< css::io::XInputStream >& x, sal_Int32 length ) override;
+        virtual void updateBinaryStream( sal_Int32 columnIndex, const cpo::uno::Reference< css::io::XInputStream >& x, sal_Int32 length ) override;
+        virtual void updateCharacterStream( sal_Int32 columnIndex, const cpo::uno::Reference< css::io::XInputStream >& x, sal_Int32 length ) override;
         virtual void updateObject( sal_Int32 columnIndex, const cpo::uno::Any& x ) override;
         virtual void updateNumericObject( sal_Int32 columnIndex, const cpo::uno::Any& x, sal_Int32 scale ) override;
         // XColumnLocate

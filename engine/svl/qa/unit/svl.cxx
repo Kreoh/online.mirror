@@ -21,7 +21,7 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <i18nlangtag/lang.h>
 
@@ -41,6 +41,7 @@
 #include <unicode/timezone.h>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace svl;
 
 namespace svl
@@ -100,7 +101,7 @@ public:
     CPPUNIT_TEST_SUITE_END();
 
 protected:
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     void checkPreviewString(SvNumberFormatter& aFormatter,
                             const OUString& sCode,
                             double fPreviewNumber,

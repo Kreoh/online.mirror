@@ -21,7 +21,7 @@
 #include <transliterationImpl.hxx>
 #include <servicename.hxx>
 
-#include <com/sun/star/i18n/LocaleData2.hpp>
+#include <com/sun/star/i18n/LocaleData.hpp>
 #include <com/sun/star/i18n/TransliterationType.hpp>
 #include <com/sun/star/i18n/TransliterationModulesExtra.hpp>
 
@@ -34,7 +34,7 @@
 #include <mutex>
 #include <numeric>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::i18n;
 using namespace com::sun::star::lang;
@@ -168,7 +168,7 @@ TransliterationImpl::TransliterationImpl(const Reference <XComponentContext>& xC
     numCascade = 0;
     caseignoreOnly = true;
 
-    mxLocaledata.set(LocaleData2::create(xContext));
+    mxLocaledata.set(LocaleData::create(xContext));
 }
 
 TransliterationImpl::~TransliterationImpl()
@@ -604,7 +604,7 @@ namespace
     struct TransBody
     {
         OUString Name;
-        css::uno::Reference< css::i18n::XExtendedTransliteration > Body;
+        cpo::uno::Reference< css::i18n::XExtendedTransliteration > Body;
     };
 }
 
@@ -672,9 +672,9 @@ TransliterationImpl::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_i18n_Transliteration_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new i18npool::TransliterationImpl(context));

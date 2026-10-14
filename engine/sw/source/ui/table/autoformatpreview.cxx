@@ -42,6 +42,7 @@
 #include <autoformatpreview.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 #define FRAME_OFFSET 4
 
@@ -57,7 +58,7 @@ AutoFormatPreview::AutoFormatPreview()
     , maStringSouth(SwResId(STR_SOUTH))
     , maStringSum(SwResId(STR_SUM))
 {
-    const uno::Reference<uno::XComponentContext>& xContext
+    const uno::Reference<cpo::uno::XComponentContext>& xContext
         = comphelper::getProcessComponentContext();
     m_xBreak = i18n::BreakIterator::create(xContext);
     mxNumFormat.reset(new SvNumberFormatter(xContext, LANGUAGE_SYSTEM));

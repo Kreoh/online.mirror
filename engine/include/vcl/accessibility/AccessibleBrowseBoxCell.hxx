@@ -43,13 +43,13 @@ protected:
     virtual tools::Rectangle implGetBoundingBox() override;
 
     // XAccessibleComponent
-    virtual void SAL_CALL grabFocus() override;
+    virtual void grabFocus() override;
 
 protected:
     AccessibleBrowseBoxCell(
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxParent,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxParent,
         ::vcl::IAccessibleTableProvider& _rBrowseBox,
-        const css::uno::Reference< css::awt::XWindow >& _xFocusWindow,
+        const cpo::uno::Reference< css::awt::XWindow >& _xFocusWindow,
         sal_Int32 _nRowPos,
         sal_uInt16 _nColPos,
         AccessibleBrowseBoxObjType _eType = AccessibleBrowseBoxObjType::TableCell

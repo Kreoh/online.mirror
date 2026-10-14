@@ -24,24 +24,17 @@
 class AbstractDialogFactory_Impl : public SvxAbstractDialogFactory
 {
 public:
-    virtual VclPtr<VclAbstractDialog>    CreateVclDialog(weld::Window* pParent, sal_uInt32 nResId) override;
-
     virtual VclPtr<SfxAbstractDialog>    CreateSfxDialog( weld::Window* pParent,
                                             const SfxItemSet& rAttr,
                                             const SdrView* pView,
                                             sal_uInt32 nResId ) override;
     virtual VclPtr<SfxAbstractDialog>    CreateCharMapDialog(weld::Window* pParent,
                                                              const SfxItemSet& rAttr,
-                                                             const css::uno::Reference< css::frame::XFrame >& rFrame) override;
+                                                             const cpo::uno::Reference< css::frame::XFrame >& rFrame) override;
     virtual VclPtr<SfxAbstractDialog>    CreateEventConfigDialog(weld::Widget* pParent,
                                                                  std::unique_ptr<const SfxItemSet> xAttr,
-                                                                 const css::uno::Reference< css::frame::XFrame >& rFrame) override;
-    virtual VclPtr<VclAbstractDialog>    CreateFrameDialog(weld::Window* pParent, const css::uno::Reference< css::frame::XFrame >& rxFrame,
-                                                           sal_uInt32 nResId, sal_uInt16 nPageId, const OUString& rParameter) override;
+                                                                 const cpo::uno::Reference< css::frame::XFrame >& rFrame) override;
     virtual VclPtr<SfxAbstractTabDialog> CreateAutoCorrTabDialog(weld::Window* pParent, const SfxItemSet* pAttrSet) override;
-    virtual VclPtr<SfxAbstractTabDialog> CreateCustomizeTabDialog(weld::Window* pParent,
-                                            const SfxItemSet* pAttrSet,
-                                            const css::uno::Reference< css::frame::XFrame >& xViewFrame ) override;
     virtual VclPtr<SfxAbstractTabDialog> CreateTextTabDialog( weld::Window* pParent,
                                             const SfxItemSet* pAttrSet,
                                             SdrView* pView ) override;
@@ -52,21 +45,21 @@ public:
                                             SvxAnchorIds nAnchorTypes = SvxAnchorIds::NONE) override;
     virtual VclPtr<SfxAbstractInsertObjectDialog>
                                            CreateInsertObjectDialog(weld::Window* pParent, const OUString& rCommand,
-                                            const css::uno::Reference < css::embed::XStorage >& xStor,
+                                            const cpo::uno::Reference < css::embed::XStorage >& xStor,
                                             const SvObjectServerList* pList ) override;
     virtual VclPtr<VclAbstractDialog>      CreateEditObjectDialog(weld::Window* pParent, const OUString& rCommand,
-                                            const css::uno::Reference < css::embed::XEmbeddedObject >& xObj ) override;
+                                            const cpo::uno::Reference < css::embed::XEmbeddedObject >& xObj ) override;
     virtual VclPtr<SfxAbstractPasteDialog> CreatePasteDialog(weld::Window* pParent) override;
     virtual VclPtr<SfxAbstractLinksDialog> CreateLinksDialog(weld::Window* pParent, sfx2::LinkManager* pMgr, bool bHTML = false, sfx2::SvBaseLink* p=nullptr) override;
 
     virtual VclPtr<AbstractHangulHanjaConversionDialog> CreateHangulHanjaConversionDialog(weld::Widget* pParent) override;
     virtual VclPtr<AbstractThesaurusDialog>  CreateThesaurusDialog(weld::Widget*,
-                                                css::uno::Reference<css::linguistic2::XThesaurus> xThesaurus,
+                                                cpo::uno::Reference<css::linguistic2::XThesaurus> xThesaurus,
                                                 const OUString &rWord, LanguageType nLanguage) override;
 
     virtual VclPtr<AbstractHyphenWordDialog> CreateHyphenWordDialog(weld::Widget*,
                                                 const OUString &rWord, LanguageType nLang,
-                                                css::uno::Reference< css::linguistic2::XHyphenator >  &xHyphen,
+                                                cpo::uno::Reference< css::linguistic2::XHyphenator >  &xHyphen,
                                                 SvxSpellWrapper* pWrapper) override;
 
     virtual VclPtr<AbstractFmShowColsDialog> CreateFmShowColsDialog(weld::Window* pParent) override;
@@ -122,7 +115,6 @@ public:
     // #i68101#
     virtual VclPtr<AbstractSvxObjectNameDialog> CreateSvxObjectNameDialog(weld::Window* pParent, const OUString& rName) override;
     virtual VclPtr<AbstractSvxObjectTitleDescDialog> CreateSvxObjectTitleDescDialog(weld::Window* pParent, const OUString& rTitle, const OUString& rDescription, bool isDecorative) override;
-    virtual VclPtr<AbstractSvxMultiPathDialog>    CreateSvxMultiPathDialog(weld::Window* pParent) override;
     virtual VclPtr<AbstractSvxMultiPathDialog>    CreateSvxPathSelectDialog(weld::Window* pParent) override;
     virtual VclPtr<AbstractSvxHpLinkDlg>          CreateSvxHpLinkDlg(SfxChildWindow* pChild, SfxBindings* pBindings, weld::Window* pParent) override;
     virtual VclPtr<AbstractFmSearchDialog>        CreateFmSearchDialog(weld::Window* pParent,
@@ -163,19 +155,19 @@ public:
     virtual VclPtr<VclAbstractDialog>   CreateSvxScriptOrgDialog(weld::Window* pParent, const OUString& rLanguage) override;
 
     virtual VclPtr<AbstractScriptSelectorDialog> CreateScriptSelectorDialog(weld::Window* pParent,
-            const css::uno::Reference< css::frame::XFrame >& rxFrame) override;
+            const cpo::uno::Reference< css::frame::XFrame >& rxFrame) override;
 
     virtual VclPtr<AbstractMacroManagerDialog> CreateMacroManagerDialog(weld::Window* pParent,
-            const css::uno::Reference< css::frame::XFrame >& rxFrame) override;
+            const cpo::uno::Reference< css::frame::XFrame >& rxFrame) override;
 
 
     virtual void ShowAsyncScriptErrorDialog(weld::Window* pParent, const cpo::uno::Any& rException) override;
 
     virtual VclPtr<VclAbstractDialog>  CreateSvxMacroAssignDlg(
                 weld::Window* _pParent,
-                const css::uno::Reference< css::frame::XFrame >& _rxDocumentFrame,
+                const cpo::uno::Reference< css::frame::XFrame >& _rxDocumentFrame,
                 const bool _bUnoDialogMode,
-                const css::uno::Reference< css::container::XNameReplace >& _rxEvents,
+                const cpo::uno::Reference< css::container::XNameReplace >& _rxEvents,
                 const sal_uInt16 _nInitiallySelectedEvent
             ) override;
 
@@ -195,22 +187,18 @@ public:
 
     virtual VclPtr<AbstractSignatureLineDialog>
     CreateSignatureLineDialog(weld::Window* pParent,
-                              const css::uno::Reference<css::frame::XModel> xModel, bool bEditExisting) override;
+                              const cpo::uno::Reference<css::frame::XModel> xModel, bool bEditExisting) override;
 
     virtual VclPtr<AbstractSignSignatureLineDialog>
     CreateSignSignatureLineDialog(weld::Window* pParent,
-                                  const css::uno::Reference<css::frame::XModel> xModel) override;
+                                  const cpo::uno::Reference<css::frame::XModel> xModel) override;
 
     virtual VclPtr<AbstractQrCodeGenDialog>
     CreateQrCodeGenDialog(weld::Window* pParent,
-                              const css::uno::Reference<css::frame::XModel> xModel, bool bEditExisting) override;
+                              const cpo::uno::Reference<css::frame::XModel> xModel, bool bEditExisting) override;
 
-    virtual VclPtr<AbstractAdditionsDialog>
-    CreateAdditionsDialog(weld::Window* pParent, const OUString& sAdditionsTag) override;
 
     virtual VclPtr<VclAbstractDialog> CreateWidgetTestDialog(weld::Window* pParent) override;
-
-    virtual VclPtr<VclAbstractDialog> CreateUIPickerDialog(weld::Window* pParent) override;
 
     virtual VclPtr<AbstractDiagramDialog> CreateDiagramDialog(
         weld::Window* pParent,

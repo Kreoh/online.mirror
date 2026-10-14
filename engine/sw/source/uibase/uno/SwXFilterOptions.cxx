@@ -36,6 +36,7 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::ui::dialogs;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::lang;
+using namespace ::cpo;
 
 constexpr OUString FILTER_OPTIONS_NAME = u"FilterOptions"_ustr;
 
@@ -110,7 +111,7 @@ void   SwXFilterOptions::setSourceDocument( const uno::Reference<XComponent >& x
     m_xModel = xDoc;
 }
 
-void SAL_CALL SwXFilterOptions::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
+void SwXFilterOptions::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
 {
     ::comphelper::NamedValueCollection aProperties(rArguments);
     if (aProperties.has(u"ParentWindow"_ustr))
@@ -132,8 +133,8 @@ cpo::uno::Sequence< OUString > SwXFilterOptions::getSupportedServiceNames()
     return { u"com.sun.star.ui.dialogs.FilterOptionsDialog"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Writer_FilterOptionsDialog_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_FilterOptionsDialog_get_implementation(cpo::uno::XComponentContext*,
                                 cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SolarMutexGuard aGuard;

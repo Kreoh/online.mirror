@@ -18,6 +18,7 @@
  */
 
 #include <xichart.hxx>
+#include <docuno.hxx>
 
 #include <algorithm>
 #include <memory>
@@ -101,11 +102,11 @@
 #include <xiview.hxx>
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
-using ::com::sun::star::uno::UNO_SET_THROW;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_SET_THROW;
 using ::cpo::uno::Exception;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::frame::XModel;
@@ -880,7 +881,7 @@ Sequence< Reference< XFormattedString > > XclImpChSourceLink::CreateStringSequen
     {
         for( XclImpStringIterator aIt( *mxString ); aIt.Is(); ++aIt )
         {
-            Reference< css::chart2::XFormattedString2 > xFmtStr = css::chart2::FormattedString::create( comphelper::getProcessComponentContext() );
+            Reference< css::chart2::XFormattedString > xFmtStr = css::chart2::FormattedString::create( comphelper::getProcessComponentContext() );
             // set text data
             xFmtStr->setString( aIt.GetPortionText() );
 
@@ -2366,7 +2367,7 @@ bool XclImpChType::HasCategoryLabels() const
 Reference< XCoordinateSystem > XclImpChType::CreateCoordSystem( bool b3dChart ) const
 {
     // create the coordinate system object
-    const Reference< css::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+    const Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
     Reference< XCoordinateSystem > xCoordSystem;
     if( maTypeInfo.mbPolarCoordSystem )
     {

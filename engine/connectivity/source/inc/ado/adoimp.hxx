@@ -67,8 +67,8 @@ namespace connectivity::ado
         static const IID    IID_ADOVIEW_25;
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
-        static void ThrowException(ADOConnection* _pAdoCon,const css::uno::Reference< css::uno::XInterface >& _xInterface);
+        /// @throws cpo::uno::RuntimeException
+        static void ThrowException(ADOConnection* _pAdoCon,const cpo::uno::Reference< cpo::uno::XInterface >& _xInterface);
         static sal_Int32 MapADOType2Jdbc(DataTypeEnum eType);
         static DataTypeEnum MapJdbc2ADOType(sal_Int32 _nType,sal_Int32 _nJetEngine);
         static bool isJetEngine(sal_Int32 _nEngineType);
@@ -79,7 +79,7 @@ namespace connectivity::ado
         static sal_Int32        mapRights2Ado(sal_Int32 nRights);
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         static WpADOField       getField(ADORecordset* _pRecordSet,sal_Int32 _nColumnIndex);
     };
 

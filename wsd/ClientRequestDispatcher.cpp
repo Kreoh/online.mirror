@@ -39,6 +39,7 @@
 #include <wsd/COOLWSD.hpp>
 #include <wsd/ClientSession.hpp>
 #include <wsd/DocumentBroker.hpp>
+#include <wsd/RemoteDocumentBroker.hpp>
 #include <wsd/Exceptions.hpp>
 #include <wsd/FileServer.hpp>
 #include <wsd/ProofKey.hpp>
@@ -71,6 +72,7 @@
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/NetException.h>
 #include <Poco/Net/PartHandler.h>
+#include <Poco/Path.h>
 #include <Poco/SAX/InputSource.h>
 #include <Poco/StreamCopier.h>
 
@@ -312,7 +314,7 @@ public:
         if (filenameParam.getFileName() == "callback:")
             tempPath.setFileName("incoming_file"); // A sensible name.
         else
-            tempPath.setFileName(filenameParam.getFileName()); //TODO: Sanitize.
+            tempPath.setFileName(Util::cleanupFilename(filenameParam.getFileName()));
         std::string paramName = "data";
         if (params.has("name"))
         {
@@ -390,7 +392,7 @@ public:
             if (filenameParam.getFileName() == "callback:")
                 tempPath.setFileName("incoming_file"); // A sensible name.
             else
-                tempPath.setFileName(filenameParam.getFileName()); //TODO: Sanitize.
+                tempPath.setFileName(Util::cleanupFilename(filenameParam.getFileName()));
             _filename = tempPath.toString();
 
             // Copy the stream to _filename.
@@ -488,7 +490,7 @@ public:
         assert(!_asyncCb);
         while (!_addressesToResolve.empty())
         {
-            const std::string& addressToCheck = _addressesToResolve.front();
+            const std::string& addressToCheck = _addressesToResolve.back();
 
             try
             {
@@ -547,7 +549,7 @@ public:
             return toState();
         };
 
-        net::AsyncDNS::lookup(_addressesToResolve.front(), std::move(pushHostnameResolvedToPoll),
+        net::AsyncDNS::lookup(_addressesToResolve.back(), std::move(pushHostnameResolvedToPoll),
                               std::move(dumpState));
     }
 
@@ -562,7 +564,7 @@ public:
             _allow = false;
         }
 
-        const std::string& addressToCheck = _addressesToResolve.front();
+        const std::string& addressToCheck = _addressesToResolve.back();
         if (_allow)
             LOG_INF_S("convert-to: Requesting address is allowed: " << addressToCheck);
         else
@@ -589,19 +591,15 @@ bool ClientRequestDispatcher::allowPostFrom(const std::string& address)
     static RegexUtil::RegexListMatcher hosts;
     if (!init)
     {
-        // Parse the host allow settings.
-        for (size_t i = 0;; ++i)
+        // Parse the host allow settings. Each entry is either a network in
+        // CIDR notation or a regular expression matched against the address.
+        for (const std::string& path : ConfigUtil::getIndexedKeys("net.post_allow", "host"))
         {
-            const std::string path = "net.post_allow.host[" + std::to_string(i) + ']';
-            const auto host = ConfigUtil::getString(path, "");
+            const std::string host = ConfigUtil::getString(path, "");
             if (!host.empty())
             {
                 LOG_INF_S("Adding trusted POST_ALLOW host: [" << host << ']');
                 hosts.allow(host);
-            }
-            else if (!ConfigUtil::has(path))
-            {
-                break;
             }
         }
 
@@ -921,6 +919,10 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
             LOG_ERR("Bad document ID \"" << appDocIdView << "\" in \"" << payloadView << "\"");
         }
 
+        LOG_INF("App handshake for appDocId ["
+                << mobileAppDocId << "] with URL [" << payloadView.substr(0, space)
+                << "] and original URL [" << originalDocUrl << ']');
+
         handleClientWsUpgrade(request,
                               RequestDetails(std::string(payloadView.substr(0, space))),
                               disposition, socket, mobileAppDocId, originalDocUrl);
@@ -928,6 +930,8 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
     else
     {
         // no appDocId provided
+        LOG_INF("App handshake with no appDocId, URL [" << payloadView << ']');
+
         handleClientWsUpgrade(
             request,
             RequestDetails(std::string(payloadView)),
@@ -977,7 +981,7 @@ ssize_t ClientRequestDispatcher::readHeader(const std::shared_ptr<StreamSocket>&
                 << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
                 << delayMs.count() << "ms");
         socket->asyncShutdown();
-        return 0; //FIXME: Why not -1 as we've closed the socket already?
+        return -1;
     }
     catch (const Poco::Net::UnsupportedRedirectException& exc)
     {
@@ -1176,6 +1180,26 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
         RequestDetails requestDetails(request, COOLWSD::ServiceRoot);
         // LOG_TRC("Request details " << requestDetails.toString());
 
+#if !MOBILEAPP
+        // A headless connection that a RemoteDocumentBroker made provides the secret.
+        if (const std::string secret =
+                request.get(std::string(RemoteDocumentBroker::ChainSecretHeader), std::string());
+            !secret.empty())
+        {
+            if (secret != RemoteDocumentBroker::getChainSecret())
+            {
+                // The URI carries the access token of the document, so it is not logged.
+                LOG_WRN("Refusing a request that carried a remote document secret which does "
+                        "not match this node's");
+                HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket,
+                                                 "invalid remote document secret");
+                return MessageResult::Ignore;
+            }
+
+            requestDetails.setRemoteDocument(true);
+        }
+#endif // !MOBILEAPP
+
         // Config & security ...
         if (requestDetails.isProxy())
         {
@@ -1244,7 +1268,7 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
                     CommandControl::LockManager::getUnlockImageUri();
                 if (!unlockImageUri.empty())
                 {
-                    const std::string& serverUri =
+                    const std::string serverUri =
                         unlockImageUri.getScheme() + "://" + unlockImageUri.getAuthority();
                     ProxyRequestHandler::handleRequest(
                         uri.substr(pos + sizeof("/remote/static") - 1), socket, serverUri);
@@ -1323,7 +1347,7 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             {
                 //LOG_ERR("FileServerRequestHandler::NotAuthenticated: " << exc.displayText());
                 http::Response httpResponse(http::StatusCode::Unauthorized);
-                httpResponse.set("Content-Type", "text/html charset=UTF-8");
+                httpResponse.set("Content-Type", "text/html; charset=UTF-8");
                 httpResponse.set("WWW-authenticate", "Basic realm=\"online\"");
                 socket->sendAndShutdown(httpResponse);
                 socket->ignoreInput();
@@ -1392,6 +1416,12 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
                  requestDetails.equals(1, "agent") && requestDetails.equals(2, "save"))
         {
             servedSync = handleAgentSaveRequest(request, disposition, socket);
+        }
+        else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
+                 requestDetails.equals(1, "links") &&
+                 request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST)
+        {
+            servedSync = handleLinksRequest(request, message, disposition, socket);
         }
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "signature"))
@@ -2303,6 +2333,166 @@ bool ClientRequestDispatcher::handleAgentSaveRequest(const Poco::Net::HTTPReques
     return false;
 }
 
+bool ClientRequestDispatcher::handleLinksRequest(
+    const Poco::Net::HTTPRequest& request, std::istream& message, SocketDisposition& disposition,
+    const std::shared_ptr<StreamSocket>& socket)
+{
+    assert(socket && "Must have a valid socket");
+
+    LOG_DBG_S("Links request: " << Anonymizer::anonymizeUrl(request.getURI()));
+
+    if (!RemoteDocumentBroker::isEnabled())
+    {
+        LOG_ERR_S("Links request rejected: remote_links is disabled in the "
+                  "configuration: "
+                  << Anonymizer::anonymizeUrl(request.getURI()));
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket,
+                                         "remote links are disabled");
+        return true;
+    }
+
+    if (request.getContentLength() > MaxInMemoryHttpRequestSize)
+    {
+        LOG_ERR_S("Links request rejected: the body is "
+                  << request.getContentLength() << " bytes, over the " << MaxInMemoryHttpRequestSize
+                  << " a remote link is named in: "
+                  << Anonymizer::anonymizeUrl(request.getURI()));
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::PayloadTooLarge, socket,
+                                         "body too large");
+        return true;
+    }
+
+    std::string wopiSrc;
+    const Poco::URI requestUri(request.getURI());
+    for (const auto& param : requestUri.getQueryParameters())
+    {
+        if (param.first == "WOPISrc")
+            wopiSrc = param.second;
+    }
+
+    if (wopiSrc.empty())
+    {
+        LOG_ERR_S("Links request without a WOPISrc query parameter: "
+                  << Anonymizer::anonymizeUrl(request.getURI()));
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket, "missing WOPISrc");
+        return true;
+    }
+
+    // Verify that the WOPISrc is properly encoded.
+    if (!HttpHelper::verifyWOPISrc(request.getURI(), wopiSrc, socket))
+    {
+        LOG_ERR_S("Links request with an unencoded WOPISrc, rejected: "
+                  << Anonymizer::anonymizeUrl(request.getURI()));
+        return false;
+    }
+
+    // Tokens travel only in the body, never in the URL. The caller proves it
+    // is one of the document's browser views by echoing that view's one-time
+    // link token, and names the remote link the same way a
+    // CheckFileInfo RemoteLinks entry does:
+    //   { "Nonce": "<the view's one-time link token>",
+    //     "Link": { "WOPISrc": "...", "AccessToken": "...",
+    //               "BaseFileName": "...", "LastModifiedTime": "...",
+    //               "PersistentLink": "<the reference the document's pages store for this
+    //                                  file>" } }
+    const std::string body(std::istreambuf_iterator<char>(message), {});
+    std::string oneTimeToken;
+    std::string remoteWopiSrc;
+    std::string remoteAccessToken;
+    std::string remoteName;
+    std::string remoteLastModifiedTime;
+    std::string remotePersistentLink;
+    Poco::JSON::Object::Ptr object;
+    if (JsonUtil::parseJSON(body, object))
+    {
+        JsonUtil::findJSONValue(object, "Nonce", oneTimeToken);
+        if (auto link = object->getObject("Link"))
+        {
+            JsonUtil::findJSONValue(link, "WOPISrc", remoteWopiSrc);
+            JsonUtil::findJSONValue(link, "AccessToken", remoteAccessToken);
+            JsonUtil::findJSONValue(link, "BaseFileName", remoteName);
+            JsonUtil::findJSONValue(link, "LastModifiedTime", remoteLastModifiedTime);
+            JsonUtil::findJSONValue(link, "PersistentLink", remotePersistentLink);
+        }
+    }
+
+    // sanitize: no control chars and not unusually long
+    constexpr std::size_t MaxPersistentLinkLength = 1024;
+    if (remotePersistentLink.size() > MaxPersistentLinkLength ||
+        std::any_of(remotePersistentLink.begin(), remotePersistentLink.end(),
+                    [](unsigned char c) { return c < 0x20 || c == 0x7f; }))
+    {
+        LOG_WRN_S("Links request for [" << Anonymizer::anonymizeUrl(request.getURI())
+                                        << "] names a persistent link of an unexpected syntax, "
+                                           "ignored");
+        remotePersistentLink.clear();
+    }
+
+    // A view reaches a remote link by its persistent link alone, so the link needs one.
+    if (oneTimeToken.empty() || remoteWopiSrc.empty() || remoteAccessToken.empty() ||
+        remotePersistentLink.empty())
+    {
+        LOG_ERR_S("Links request rejected: incomplete body (have Nonce: "
+                  << !oneTimeToken.empty() << ", Link WOPISrc: " << !remoteWopiSrc.empty()
+                  << ", Link AccessToken: " << !remoteAccessToken.empty()
+                  << ", Link PersistentLink: " << !remotePersistentLink.empty()
+                  << "): " << Anonymizer::anonymizeUrl(request.getURI()));
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket,
+                                         "missing Nonce or Link");
+        return true;
+    }
+
+    const std::string docKey = RequestDetails::getDocKey(wopiSrc);
+    std::shared_ptr<DocumentBroker> docBroker;
+    {
+        std::unique_lock<std::mutex> docBrokersLock(DocBrokersMutex);
+        const auto it = DocBrokers.find(docKey);
+        if (it != DocBrokers.end())
+            docBroker = it->second;
+    }
+
+    if (!docBroker || !docBroker->isAlive())
+    {
+        LOG_ERR_S("Links request rejected: no live document for docKey [" << docKey
+                                                                          << ']');
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket, "no such document");
+        return true;
+    }
+
+    docBroker->setupTransfer(
+        disposition,
+        [docBroker, oneTimeToken = std::move(oneTimeToken),
+         remoteWopiSrc = std::move(remoteWopiSrc), remoteAccessToken = std::move(remoteAccessToken),
+         remoteName = std::move(remoteName),
+         remoteLastModifiedTime = std::move(remoteLastModifiedTime),
+         remotePersistentLink =
+             std::move(remotePersistentLink)](const std::shared_ptr<Socket>& moveSocket)
+        {
+            auto streamSocket = std::static_pointer_cast<StreamSocket>(moveSocket);
+
+            // The remote document's token becomes private to the one view that
+            // holds the one-time token. A request that carries no view's
+            // current token is refused, and the token is consumed on success.
+            if (!docBroker->registerRemoteDocumentToken(oneTimeToken, remoteWopiSrc,
+                                                        remoteAccessToken, remoteName,
+                                                        remoteLastModifiedTime,
+                                                        remotePersistentLink))
+            {
+                LOG_ERR_S("Links request for ["
+                          << docBroker->getDocKey() << "] with an invalid one-time token");
+                HttpHelper::sendErrorAndShutdown(http::StatusCode::Unauthorized, streamSocket,
+                                                 "invalid token");
+                return;
+            }
+
+            http::Response httpResponse(http::StatusCode::OK);
+            httpResponse.setContentLength(0);
+            streamSocket->sendAndShutdown(httpResponse);
+        });
+
+    return true;
+}
+
 namespace
 {
 bool handleStaticRequest(const Poco::Net::HTTPRequest& request,
@@ -2936,6 +3126,8 @@ bool ClientRequestDispatcher::handleClientWsUpgrade(const Poco::Net::HTTPRequest
 
     auto ws = std::make_shared<WebSocketHandler>(socket, request, allowed);
 
+    ws->closeOnPongTimeout();
+
     // Response to clients beyond this point is done via WebSocket.
     try
     {
@@ -3028,6 +3220,9 @@ std::string ClientRequestDispatcher::getDiscoveryXML()
     const std::string uriValue = uriBaseValue
         + (COOLWSD::WASMEnabled ? "wasm/" : "")
         + "cool.html?";
+    const std::string previewUriValue = uriBaseValue
+        + (COOLWSD::WASMEnabled ? "wasm/" : "")
+        + "cool-preview.html";
 
     LOG_DBG_S("Processing discovery.xml from " << discoveryPath);
     Poco::XML::InputSource inputSrc(discoveryPath);
@@ -3044,14 +3239,17 @@ std::string ClientRequestDispatcher::getDiscoveryXML()
         {
             elem->setAttribute(urlsrc, rootUriValue + CAPABILITIES_END_POINT);
         }
-        else
-        {
-            elem->setAttribute(urlsrc, uriValue);
-        }
-
-        if (parent && parent->getAttribute("name") == "Settings")
+        else if (parent && parent->getAttribute("name") == "Settings")
         {
             elem->setAttribute(urlsrc, uriBaseValue + SETTING_IFRAME_END_POINT);
+        }
+        else
+        {
+            if (elem->getAttribute("name") == "interactivepreview") {
+                elem->setAttribute(urlsrc, previewUriValue);
+            } else {
+                elem->setAttribute(urlsrc, uriValue);
+            }
         }
 
         // Set the View extensions cache as well.
@@ -3188,6 +3386,11 @@ std::string getCapabilitiesJson(bool convertToAvailable)
 
     // Advertise wopiAccessCheck endpoint availability
     capabilities->set("hasWopiAccessCheck", true);
+
+    // Set if this instance supports importing slides from another presentation.
+    // That builds on the live links between documents, so it follows the same
+    // remote_links switch in the configuration.
+    capabilities->set("hasSlideImportSupport", RemoteDocumentBroker::isEnabled());
 
     const std::string serverName = ConfigUtil::getString("indirection_endpoint.server_name", "");
     if (const char* podName = std::getenv("POD_NAME"))

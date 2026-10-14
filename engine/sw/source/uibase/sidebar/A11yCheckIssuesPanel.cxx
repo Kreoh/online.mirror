@@ -100,7 +100,7 @@ IMPL_LINK_NOARG(AccessibilityCheckEntry, FixButtonClicked, weld::Button&, void)
 }
 
 AccessibilityCheckLevel::AccessibilityCheckLevel(weld::Box* pParent,
-                                                 css::uno::Reference<css::ui::XSidebar> xSidebar)
+                                                 cpo::uno::Reference<css::ui::XSidebar> xSidebar)
     : m_xBuilder(Application::CreateBuilder(pParent, u"svx/ui/accessibilitychecklevel.ui"_ustr,
                                             false,
                                             reinterpret_cast<sal_uInt64>(SfxViewShell::Current())))
@@ -170,7 +170,7 @@ void AccessibilityCheckLevel::hide(size_t nGroupIndex) { m_xExpanders[nGroupInde
 
 std::unique_ptr<PanelLayout>
 A11yCheckIssuesPanel::Create(weld::Widget* pParent, SfxBindings* pBindings,
-                             css::uno::Reference<css::ui::XSidebar> xSidebar)
+                             cpo::uno::Reference<css::ui::XSidebar> xSidebar)
 {
     if (pParent == nullptr)
         throw css::lang::IllegalArgumentException(
@@ -179,10 +179,9 @@ A11yCheckIssuesPanel::Create(weld::Widget* pParent, SfxBindings* pBindings,
 }
 
 A11yCheckIssuesPanel::A11yCheckIssuesPanel(weld::Widget* pParent, SfxBindings* pBindings,
-                                           css::uno::Reference<css::ui::XSidebar> xSidebar)
+                                           cpo::uno::Reference<css::ui::XSidebar> xSidebar)
     : PanelLayout(pParent, u"A11yCheckIssuesPanel"_ustr,
                   u"modules/swriter/ui/a11ycheckissuespanel.ui"_ustr)
-    , m_xOptionsButton(m_xBuilder->weld_button(u"bOptions"_ustr))
     , mxUpdateBox(m_xBuilder->weld_box(u"updateBox"_ustr))
     , mxUpdateLinkButton(m_xBuilder->weld_link_button(u"updateLinkButton"_ustr))
     , m_xListSep(m_xBuilder->weld_widget(u"sep_level"_ustr))
@@ -230,17 +229,13 @@ A11yCheckIssuesPanel::A11yCheckIssuesPanel(weld::Widget* pParent, SfxBindings* p
 
     mpDoc = pDocSh->GetDoc();
 
-    m_xOptionsButton->connect_clicked(LINK(this, A11yCheckIssuesPanel, OptionsButtonClicked));
-
     // If COKit is enabled, then enable the update button and don't run the accessibility check.
     // In desktop don't show the update button and schedule to run the accessibility check async
-    // If COKit is enabled, hide the Options button and its label.
     if (comphelper::COKit::isActive())
     {
         m_xLevelExpanders[0]->hide();
         m_xLevelExpanders[1]->hide();
         mxUpdateBox->show();
-        m_xBuilder->weld_widget(u"gridOptions"_ustr)->hide();
     }
     else
     {
@@ -249,13 +244,6 @@ A11yCheckIssuesPanel::A11yCheckIssuesPanel(weld::Widget* pParent, SfxBindings* p
         mxUpdateBox->hide();
         Application::PostUserEvent(LINK(this, A11yCheckIssuesPanel, PopulateIssuesHdl));
     }
-}
-
-IMPL_LINK_NOARG(A11yCheckIssuesPanel, OptionsButtonClicked, weld::Button&, void)
-{
-    SfxUInt16Item aPageID(SID_OPTIONS_PAGEID, sal_uInt16(RID_SVXPAGE_ACCESSIBILITYCONFIG));
-    auto pDispatcher = GetBindings()->GetDispatcher();
-    pDispatcher->ExecuteList(SID_OPTIONS_TREEDIALOG, SfxCallMode::SYNCHRON, { &aPageID });
 }
 
 IMPL_LINK_NOARG(A11yCheckIssuesPanel, ExpandHdl, weld::Expander&, void)

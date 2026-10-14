@@ -18,6 +18,7 @@
  */
 
 #include <scitems.hxx>
+#include <drawview.hxx>
 
 #include <algorithm>
 
@@ -79,6 +80,7 @@
 #include <prnsave.hxx>
 #include <searchresults.hxx>
 #include <tokenarray.hxx>
+#include <dbdata.hxx>
 #include <rowheightcontext.hxx>
 #include <COKit/COKit.hxx>
 #include <comphelper/kit.hxx>
@@ -839,6 +841,47 @@ bool ScViewFunc::AutoSum( const ScRange& rRange, bool bSubTotal, bool bSetCursor
     return true;
 }
 
+static const ScDBData* lcl_GetTotalsRowTable( const ScDocument& rDoc, const ScAddress& rAddr )
+{
+    const ScDBCollection* pColl = rDoc.GetDBCollection();
+    const ScDBData* pDB = pColl ? pColl->GetDBAtCursor(
+        rAddr.Col(), rAddr.Row(), rAddr.Tab(), ScDBDataPortion::AREA) : nullptr;
+    if (!pDB || !pDB->HasTotals())
+        return nullptr;
+
+    ScRange aArea;
+    pDB->GetArea(aArea);
+    return rAddr.Row() == aArea.aEnd.Row() ? pDB : nullptr;
+}
+
+// If the auto-sum target is in a table's totals row, add a structured reference
+// Table[Column] for rRange's column instead of a plain range (false if not applicable).
+static bool lcl_AddTableColumnRef( ScTokenArray& rArray, const ScDocument& rDoc,
+                                   const ScRange& rRange, const ScAddress& rAddr )
+{
+    const ScDBData* pDB = lcl_GetTotalsRowTable(rDoc, rAddr);
+    if (!pDB)
+        return false;
+
+    ScRange aArea;
+    pDB->GetArea(aArea);
+
+    // rRange must be that column's data body (headers and totals row excluded).
+    const SCROW nDataStart = aArea.aStart.Row() + (pDB->HasHeader() ? 1 : 0);
+    const SCROW nDataEnd = aArea.aEnd.Row() - 1;
+    if (rRange.aStart.Col() != rAddr.Col() || rRange.aEnd.Col() != rAddr.Col()
+        || rRange.aStart.Row() != nDataStart || rRange.aEnd.Row() != nDataEnd)
+        return false;
+
+    ScSingleRefData aColRef;
+    aColRef.InitAddress(ScAddress(rAddr.Col(), nDataStart, rAddr.Tab()));
+    rArray.AddTableRef(pDB->GetIndex());
+    rArray.AddOpCode(ocTableRefOpen);
+    rArray.AddSingleReference(aColRef);
+    rArray.AddOpCode(ocTableRefClose);
+    return true;
+}
+
 OUString ScViewFunc::GetAutoSumFormula( const ScRangeList& rRangeList, bool bSubTotal, const ScAddress& rAddr , const OpCode eCode)
 {
     ScViewData& rViewData = GetViewData();
@@ -850,7 +893,8 @@ OUString ScViewFunc::GetAutoSumFormula( const ScRangeList& rRangeList, bool bSub
 
     if (bSubTotal)
     {
-        aArray.AddDouble( GetSubTotal( eCode ) );
+        const bool bTotalsRow = lcl_GetTotalsRowTable(rDoc, rAddr) != nullptr;
+        aArray.AddDouble( GetSubTotal( eCode ) + (bTotalsRow ? 100 : 0) );
         aArray.AddOpCode(ocSep);
     }
 
@@ -862,6 +906,8 @@ OUString ScViewFunc::GetAutoSumFormula( const ScRangeList& rRangeList, bool bSub
             const ScRange & r = rRangeList[i];
             if (i != 0)
                 aArray.AddOpCode(ocSep);
+            if (bSubTotal && lcl_AddTableColumnRef(aArray, rDoc, r, rAddr))
+                continue;
             ScComplexRefData aRef;
             aRef.InitRangeRel(rDoc, r, rAddr);
             aArray.AddDoubleReference(aRef);
@@ -1168,7 +1214,8 @@ bool ScViewFunc::TestMergeCells()           // pre-test (for menu)
         ScRange aRange;
         bool bMergeable = ( GetViewData().GetSimpleArea( aRange ) == SC_MARK_SIMPLE );
         bMergeable = bMergeable && ( aRange.aStart.Col() != aRange.aEnd.Col() ||
-                                   aRange.aStart.Row() != aRange.aEnd.Row() );
+                                   aRange.aStart.Row() != aRange.aEnd.Row() ) &&
+                                   GetViewData().GetDocument().GetAllNamedDBsInArea(aRange).empty();
         return bMergeable;
     }
     else
@@ -2042,11 +2089,7 @@ bool ScViewFunc::SearchAndReplace( const SvxSearchItem* pSearchItem,
     DoneBlockMode(true);                // don't delete mark
     InitOwnBlockMode( ScRange( nCol, nRow, nStartTab, nCol, nRow, nEndTab));
 
-    //  If search starts at the beginning don't ask again whether it shall start at the beginning
     bool bFirst = true;
-    if ( nCol == 0 && nRow == 0 && nTab == nStartTab && !pSearchItem->GetBackward()  )
-        bFirst = false;
-
     bool bFound = false;
     while (true)
     {

@@ -50,7 +50,7 @@
 #include "menufloatingwindow.hxx"
 #include "menuitemlist.hxx"
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/accessibility/XAccessible.hpp>
@@ -678,10 +678,6 @@ void Menu::SetItemBits( sal_uInt16 nItemId, MenuItemBits nBits )
 
         pData->nBits = nBits;
 
-        // update native menu
-        if (ImplGetSalMenu())
-            ImplGetSalMenu()->SetItemBits(nPos, nBits);
-
         if (bRoleBitsChanged)
             ImplCallEventListeners(VclEventId::MenuItemRoleChanged, nPos);
     }
@@ -1041,7 +1037,7 @@ Image Menu::GetItemImage( sal_uInt16 nItemId ) const
         return Image();
 }
 
-void Menu::SetItemImageGraphic( sal_uInt16 nItemId, const css::uno::Reference<css::graphic::XGraphic>& rGraphic )
+void Menu::SetItemImageGraphic( sal_uInt16 nItemId, const cpo::uno::Reference<css::graphic::XGraphic>& rGraphic )
 {
     MenuItemData* pData = pItemList->GetData( nItemId );
 
@@ -1049,7 +1045,7 @@ void Menu::SetItemImageGraphic( sal_uInt16 nItemId, const css::uno::Reference<cs
         pData->xImageGraphic = rGraphic;
 }
 
-css::uno::Reference<css::graphic::XGraphic> Menu::GetItemImageGraphic( sal_uInt16 nItemId ) const
+cpo::uno::Reference<css::graphic::XGraphic> Menu::GetItemImageGraphic( sal_uInt16 nItemId ) const
 {
     MenuItemData* pData = pItemList->GetData( nItemId );
 
@@ -1142,9 +1138,6 @@ void Menu::SetTipHelpText( sal_uInt16 nItemId, const OUString& rStr )
     if ( pData )
     {
         pData->aTipHelpText = rStr;
-
-        if (ImplGetSalMenu() && pData->pSalMenuItem)
-            ImplGetSalMenu()->SetItemTooltip(pData->pSalMenuItem.get(), rStr);
     }
 }
 
@@ -1343,7 +1336,7 @@ rtl::Reference<comphelper::OAccessible> Menu::GetAccessible()
                 rtl::Reference<comphelper::OAccessible> pParent = pStartedFrom->GetAccessible();
                 if (pParent.is())
                 {
-                    css::uno::Reference<css::accessibility::XAccessible> xAcc = pParent->getAccessibleChild(i);
+                    cpo::uno::Reference<css::accessibility::XAccessible> xAcc = pParent->getAccessibleChild(i);
                     if (!xAcc)
                         return {};
 
@@ -3126,14 +3119,6 @@ tools::Long PopupMenu::ImplCalcHeight( sal_uInt16 nEntries ) const
     nHeight += 2*ImplGetFloatingWindow()->GetScrollerHeight();
 
     return nHeight;
-}
-
-css::uno::Reference<css::awt::XPopupMenu> PopupMenu::CreateMenuInterface()
-{
-    UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper();
-    if ( pWrapper )
-        return pWrapper->CreateMenuInterface(this);
-    return nullptr;
 }
 
 ImplMenuDelData::ImplMenuDelData( const Menu* pMenu )

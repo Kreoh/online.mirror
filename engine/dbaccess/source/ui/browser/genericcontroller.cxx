@@ -50,7 +50,7 @@
 #include <set>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
@@ -102,7 +102,6 @@ void OGenericUnoController::executeUserDefinedFeatures( const URL& _rFeatureURL,
 // OGenericUnoController
 OGenericUnoController::OGenericUnoController(const Reference< XComponentContext >& _rM)
     :OGenericUnoController_Base( getMutex() )
-    ,m_aUserInputInterception(*this, getMutex())
     ,m_pView(nullptr)
 #ifdef DBG_UTIL
     ,m_bDescribingSupportedFeatures( false )
@@ -256,14 +255,13 @@ void OGenericUnoController::disposing(const EventObject& Source)
 void OGenericUnoController::modified(const EventObject& aEvent)
 {
     ::osl::MutexGuard aGuard( getMutex() );
-    if ( !isDataSourceReadOnly() )
-    {
-        Reference<XModifiable> xModi(aEvent.Source,UNO_QUERY);
-        if ( xModi.is() )
-            m_bCurrentlyModified = xModi->isModified(); // can only be reset by save
-        else
-            m_bCurrentlyModified = true;
-    }
+
+    Reference<XModifiable> xModi(aEvent.Source,UNO_QUERY);
+    if ( xModi.is() )
+        m_bCurrentlyModified = xModi->isModified(); // can only be reset by save
+    else
+        m_bCurrentlyModified = true;
+
     InvalidateFeature(ID_BROWSER_SAVEDOC);
     InvalidateFeature(ID_BROWSER_UNDO);
 }
@@ -783,12 +781,12 @@ void OGenericUnoController::startConnectionListening(const Reference< XConnectio
 }
 
 Reference< XConnection > OGenericUnoController::connect( const OUString& _rDataSourceName,
-    const OUString& _rContextInformation, ::dbtools::SQLExceptionInfo* _pErrorInfo )
+    const OUString& _rContextInformation )
 {
     weld::WaitObject aWaitCursor(getFrameWeld());
 
     ODatasourceConnector aConnector( getORB(), getFrameWeld(), _rContextInformation );
-    Reference<XConnection> xConnection = aConnector.connect( _rDataSourceName, _pErrorInfo );
+    Reference<XConnection> xConnection = aConnector.connect( _rDataSourceName );
     startConnectionListening( xConnection );
 
     return xConnection;
@@ -947,42 +945,9 @@ void OGenericUnoController::removeTitleChangeListener(const Reference< XTitleCha
         xBroadcaster->removeTitleChangeListener (xListener);
 }
 
-// XUserInputInterception
-void OGenericUnoController::addKeyHandler( const Reference< XKeyHandler >& _rxHandler )
-{
-    if ( _rxHandler.is() )
-        m_aUserInputInterception.addKeyHandler( _rxHandler );
-}
-
-void OGenericUnoController::removeKeyHandler( const Reference< XKeyHandler >& _rxHandler )
-{
-    m_aUserInputInterception.removeKeyHandler( _rxHandler );
-}
-
-void OGenericUnoController::addMouseClickHandler( const Reference< XMouseClickHandler >& _rxHandler )
-{
-    if ( _rxHandler.is() )
-        m_aUserInputInterception.addMouseClickHandler( _rxHandler );
-}
-
-void OGenericUnoController::removeMouseClickHandler( const Reference< XMouseClickHandler >& _rxHandler )
-{
-    m_aUserInputInterception.removeMouseClickHandler( _rxHandler );
-}
-
-bool OGenericUnoController::isDataSourceReadOnly() const
-{
-    return false;
-}
-
 Reference< XController > OGenericUnoController::getXController()
 {
     return this;
-}
-
-bool OGenericUnoController::interceptUserInput( const NotifyEvent& _rEvent )
-{
-    return m_aUserInputInterception.handleNotifyEvent( _rEvent );
 }
 
 Sequence< ::sal_Int16 > OGenericUnoController::getSupportedCommandGroups()

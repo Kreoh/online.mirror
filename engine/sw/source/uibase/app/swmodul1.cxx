@@ -24,6 +24,10 @@
 #include <hintids.hxx>
 #include <sfx2/request.hxx>
 #include <unotools/useroptions.hxx>
+#include <unotools/lingucfg.hxx>
+#include <unotools/linguprops.hxx>
+#include <comphelper/configuration.hxx>
+#include <officecfg/Office/Writer.hxx>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
@@ -62,8 +66,8 @@
 
 using namespace ::svx;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::view;
 
@@ -280,66 +284,6 @@ void SwModule::ApplyRulerMetric( FieldUnit eMetric, bool bHorizontal, bool bWeb 
             else
                 pTmpView->ChangeVRulerMetric(eMetric);
         }
-        pTmpView = SwModule::GetNextView(pTmpView);
-    }
-}
-
-//set the usrpref 's char unit attribute and set rulers unit as char if the "apply char unit" is checked
-void SwModule::ApplyUserCharUnit(bool bApplyChar, bool bWeb)
-{
-    SwMasterUsrPref* pPref;
-    if(bWeb)
-    {
-        if(!m_pWebUsrPref)
-            GetUsrPref(true);
-        pPref = m_pWebUsrPref.get();
-    }
-    else
-    {
-        if(!m_pUsrPref)
-            GetUsrPref(false);
-        pPref = m_pUsrPref.get();
-    }
-    assert(pPref && "pPref is set by here");
-    bool bOldApplyCharUnit = pPref->IsApplyCharUnit();
-    bool bHasChanged = false;
-    if(bOldApplyCharUnit != bApplyChar)
-    {
-        pPref->SetApplyCharUnit(bApplyChar);
-        bHasChanged = true;
-    }
-
-    if( !bHasChanged )
-        return;
-
-    FieldUnit eHScrollMetric = pPref->IsHScrollMetric() ? pPref->GetHScrollMetric() : pPref->GetMetric();
-    FieldUnit eVScrollMetric = pPref->IsVScrollMetric() ? pPref->GetVScrollMetric() : pPref->GetMetric();
-    if(bApplyChar)
-    {
-        eHScrollMetric = FieldUnit::CHAR;
-        eVScrollMetric = FieldUnit::LINE;
-    }
-    else
-    {
-        if ( !SvtCJKOptions::IsAsianTypographyEnabled() && ( eHScrollMetric == FieldUnit::CHAR ))
-            eHScrollMetric = FieldUnit::INCH;
-        else if ( eHScrollMetric == FieldUnit::CHAR )
-            eHScrollMetric = FieldUnit::CM;
-        if ( !SvtCJKOptions::IsAsianTypographyEnabled() && ( eVScrollMetric == FieldUnit::LINE ))
-            eVScrollMetric = FieldUnit::INCH;
-        else if ( eVScrollMetric == FieldUnit::LINE )
-            eVScrollMetric = FieldUnit::CM;
-    }
-    SwView* pTmpView = SwModule::GetFirstView();
-    // switch rulers for all MDI-Windows
-    while(pTmpView)
-    {
-        if(bWeb == (dynamic_cast<SwWebView*>( pTmpView) !=  nullptr) )
-        {
-            pTmpView->ChangeVRulerMetric(eVScrollMetric);
-            pTmpView->ChangeTabMetric(eHScrollMetric);
-        }
-
         pTmpView = SwModule::GetNextView(pTmpView);
     }
 }
@@ -646,20 +590,26 @@ SwFieldUpdateFlags SwModule::GetFieldUpdateFlags() const
     return m_pUsrPref->GetFieldUpdateFlags();
 }
 
-void SwModule::ApplyFieldUpdateFlags(SwFieldUpdateFlags eFieldFlags)
+bool SwModule::GetAutoSpellProperty()
 {
-    if (!m_pUsrPref)
-        GetUsrPref(false);
-    assert(m_pUsrPref && "m_pUsrPref is set by here");
-    m_pUsrPref->SetFieldUpdateFlags(eFieldFlags);
+    const std::optional<bool> oSet
+        = officecfg::Office::Writer::Content::Display::AutomaticSpellChecking::get();
+    if (oSet)
+        return *oSet;
+
+    // Nothing was ever chosen here. Before the setting became one per application
+    // a single linguistic option answered for all of them, so a choice made then
+    // still stands until Writer is told otherwise.
+    bool bShared = true;
+    SvtLinguConfig().GetProperty(UPN_IS_SPELL_AUTO) >>= bShared;
+    return bShared;
 }
 
-void SwModule::ApplyLinkMode(sal_Int32 nNewLinkMode)
+void SwModule::SetAutoSpellProperty(bool bSet)
 {
-    if (!m_pUsrPref)
-        GetUsrPref(false);
-    assert(m_pUsrPref && "m_pUsrPref is set by here");
-    m_pUsrPref->SetUpdateLinkMode(nNewLinkMode);
+    auto pChange(comphelper::ConfigurationChanges::create());
+    officecfg::Office::Writer::Content::Display::AutomaticSpellChecking::set(bSet, pChange);
+    pChange->commit();
 }
 
 void SwModule::CheckSpellChanges( bool bOnlineSpelling,
@@ -683,14 +633,6 @@ void SwModule::CheckSpellChanges( bool bOnlineSpelling,
                 pViewShell->GetWin()->Invalidate();
         }
     }
-}
-
-void SwModule::ApplyDefaultPageMode(bool bIsSquaredPageMode)
-{
-    if (!m_pUsrPref)
-        GetUsrPref(false);
-    assert(m_pUsrPref && "pPref is set by here");
-    m_pUsrPref->SetDefaultPageMode(bIsSquaredPageMode);
 }
 
 SwCompareMode SwModule::GetCompareMode() const

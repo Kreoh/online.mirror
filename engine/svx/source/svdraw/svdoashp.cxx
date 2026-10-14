@@ -26,7 +26,7 @@
 #include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/sequenceashashmap.hxx>
@@ -92,6 +92,7 @@
 #include <EnhancedCustomShapeEngine.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static void lcl_ShapeSegmentFromBinary( drawing::EnhancedCustomShapeSegment& rSegInfo, sal_uInt16 nSDat )
 {
@@ -634,7 +635,7 @@ std::vector< SdrCustomShapeInteraction > SdrObjCustomShape::GetInteractionHandle
             aRet.push_back( aSdrCustomShapeInteraction );
         }
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
     }
     return aRet;
@@ -1541,7 +1542,7 @@ void SdrObjCustomShape::NbcResize( const Point& rRef, double rxFact, double ryFa
                 rInteraction.xInteraction->setControllerPosition(awt::Point(rInteraction.xInteraction->getPosition().X, nY));
             }
         }
-        catch ( const uno::RuntimeException& )
+        catch ( const cpo::uno::RuntimeException& )
         {
         }
     }
@@ -1871,12 +1872,27 @@ void SdrObjCustomShape::AddToHdlList(SdrHdlList& rHdlList) const
                 pH->SetObj( const_cast<SdrObjCustomShape*>(this) );
                 rHdlList.AddHdl(std::move(pH));
             }
-            catch ( const uno::RuntimeException& )
+            catch ( const cpo::uno::RuntimeException& )
             {
             }
         }
         ++nCustomShapeHdlNum;
     }
+}
+
+/*
+    A point a custom shape is shaped by is held by the shape itself, which reads the value behind
+    it and works out from its own formulas how far that value may go. The shape is asked, and
+    what comes back is already in this object's own coordinates.
+*/
+bool SdrObjCustomShape::GetHandleRails(const SdrHdl& rHandle, SdrHandleRails& rRails) const
+{
+    if (SdrHdlKind::CustomShape1 != rHandle.GetKind())
+        return SdrTextObj::GetHandleRails(rHandle, rRails);
+
+    EnhancedCustomShape2d aShaping(const_cast<SdrObjCustomShape&>(*this));
+
+    return aShaping.GetHandleRails(rHandle.GetPointNum(), rRails);
 }
 
 bool SdrObjCustomShape::hasSpecialDrag() const
@@ -2014,7 +2030,7 @@ void SdrObjCustomShape::DragResizeCustomShape( const tools::Rectangle& rNewRect 
                 rInteraction.xInteraction->setControllerPosition(awt::Point(rInteraction.xInteraction->getPosition().X, nY));
             }
         }
-        catch ( const uno::RuntimeException& )
+        catch ( const cpo::uno::RuntimeException& )
         {
         }
     }
@@ -2056,7 +2072,7 @@ void SdrObjCustomShape::DragMoveCustomShapeHdl( const Point& rDestination,
         }
         aInteractionHandle.xInteraction->setControllerPosition( aPt );
     }
-    catch ( const uno::RuntimeException& )
+    catch ( const cpo::uno::RuntimeException& )
     {
     }
 }
@@ -2136,7 +2152,7 @@ void SdrObjCustomShape::DragCreateObject( SdrDragStat& rStat )
             if ( rInteraction.nMode & CustomShapeHandleModes::CREATE_FIXED )
                 rInteraction.xInteraction->setControllerPosition( awt::Point( rStat.GetStart().X(), rStat.GetStart().Y() ) );
         }
-        catch ( const uno::RuntimeException& )
+        catch ( const cpo::uno::RuntimeException& )
         {
         }
     }
@@ -2485,7 +2501,7 @@ bool SdrObjCustomShape::NbcAdjustTextFrameWidthAndHeight(bool bHgt, bool bWdt)
                 if ( rInteraction.nMode & CustomShapeHandleModes::RESIZE_FIXED )
                     rInteraction.xInteraction->setControllerPosition( rInteraction.aPosition );
             }
-            catch ( const uno::RuntimeException& )
+            catch ( const cpo::uno::RuntimeException& )
             {
             }
         }
@@ -2519,7 +2535,7 @@ bool SdrObjCustomShape::AdjustTextFrameWidthAndHeight()
                 if ( rInteraction.nMode & CustomShapeHandleModes::RESIZE_FIXED )
                     rInteraction.xInteraction->setControllerPosition( rInteraction.aPosition );
             }
-            catch ( const uno::RuntimeException& )
+            catch ( const cpo::uno::RuntimeException& )
             {
             }
         }

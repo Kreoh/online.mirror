@@ -244,6 +244,8 @@ void SdTestViewCallback::callbackImpl(COKitCallbackType eType, const char* pPayl
                 aInvalidationRect.setWidth(aSeq[2].toInt32());
                 aInvalidationRect.setHeight(aSeq[3].toInt32());
                 m_aInvalidations.push_back(aInvalidationRect);
+                if (aSeq.getLength() >= 5)
+                    m_aInvalidationParts.push_back(aSeq[4].toInt32());
             }
             else
             {
@@ -259,12 +261,19 @@ void SdTestViewCallback::callbackImpl(COKitCallbackType eType, const char* pPayl
             m_ShapeSelection = OString(pPayload);
         }
         break;
+        case COKitCallbackType::TEXT_SELECTION:
+        {
+            m_aTextSelections.push_back(OString(pPayload));
+        }
+        break;
         case COKitCallbackType::GRAPHIC_VIEW_SELECTION:
         {
             std::stringstream aStream(pPayload);
             boost::property_tree::ptree aTree;
             boost::property_tree::read_json(aStream, aTree);
-            if (aTree.get_child("part").get_value<int>() == m_nPart)
+            // The payload names the part by its identifier, the page's GUID.
+            if (aTree.get_child("part").get_value<std::string>()
+                == mpViewShell->getPartId().getStr())
                 // Ignore callbacks which are for a different part.
                 m_bGraphicViewSelectionInvalidated = true;
         }
@@ -333,6 +342,35 @@ void SdTestViewCallback::callbackImpl(COKitCallbackType eType, const char* pPayl
 
             std::string aCommandName = it->second.get_value<std::string>();
             m_aStateChanges[aCommandName] = aTree;
+        }
+        break;
+        case COKitCallbackType::JSDIALOG:
+        {
+            std::stringstream aStream(pPayload);
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+            auto itData = aTree.find("data");
+            if (itData == aTree.not_found())
+                break;
+
+            auto itControlId = itData->second.find("control_id");
+            auto itActionType = itData->second.find("action_type");
+            if (itControlId == itData->second.not_found() || itActionType == itData->second.not_found())
+                break;
+
+            if (itActionType->second.get_value<std::string>() == "select")
+                ++m_aJSDialogSelectCounts[itControlId->second.get_value<std::string>()];
+        }
+        break;
+        case COKitCallbackType::UNO_COMMAND_RESULT:
+        {
+            std::stringstream aStream(pPayload);
+            if (!aStream.str().starts_with("{"))
+                break;
+
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+            m_aCommandResults.push_back(aTree);
         }
         break;
         default:

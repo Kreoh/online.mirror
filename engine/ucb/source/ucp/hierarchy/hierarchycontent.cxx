@@ -74,6 +74,7 @@
 #include "../inc/urihelper.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace hierarchy_ucp;
 
 
@@ -82,7 +83,7 @@ using namespace hierarchy_ucp;
 
 // static ( "virtual" ctor )
 rtl::Reference<HierarchyContent> HierarchyContent::create(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             HierarchyContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier )
 {
@@ -97,7 +98,7 @@ rtl::Reference<HierarchyContent> HierarchyContent::create(
 
 // static ( "virtual" ctor )
 rtl::Reference<HierarchyContent> HierarchyContent::create(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             HierarchyContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier,
             const ucb::ContentInfo& Info )
@@ -113,7 +114,7 @@ rtl::Reference<HierarchyContent> HierarchyContent::create(
 
 
 HierarchyContent::HierarchyContent(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             HierarchyContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier,
             HierarchyContentProperties aProps )
@@ -129,7 +130,7 @@ HierarchyContent::HierarchyContent(
 
 
 HierarchyContent::HierarchyContent(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             HierarchyContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier,
             const ucb::ContentInfo& Info )
@@ -154,7 +155,7 @@ HierarchyContent::~HierarchyContent()
 
 
 // virtual
-void SAL_CALL HierarchyContent::acquire()
+void HierarchyContent::acquire()
     noexcept
 {
     ContentImplHelper::acquire();
@@ -162,7 +163,7 @@ void SAL_CALL HierarchyContent::acquire()
 
 
 // virtual
-void SAL_CALL HierarchyContent::release()
+void HierarchyContent::release()
     noexcept
 {
     ContentImplHelper::release();
@@ -170,7 +171,7 @@ void SAL_CALL HierarchyContent::release()
 
 
 // virtual
-cpo::uno::Any SAL_CALL HierarchyContent::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any HierarchyContent::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = ContentImplHelper::queryInterface( rType );
 
@@ -198,7 +199,7 @@ XTYPEPROVIDER_COMMON_IMPL( HierarchyContent );
 
 
 // virtual
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL HierarchyContent::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > HierarchyContent::getTypes()
 {
     if ( isFolder() && !isReadOnly() )
     {
@@ -241,14 +242,14 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL HierarchyContent::getTypes()
 
 
 // virtual
-OUString SAL_CALL HierarchyContent::getImplementationName()
+OUString HierarchyContent::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.HierarchyContent"_ustr;
 }
 
 
 // virtual
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 HierarchyContent::getSupportedServiceNames()
 {
     cpo::uno::Sequence< OUString > aSNS( 1 );
@@ -268,14 +269,14 @@ HierarchyContent::getSupportedServiceNames()
 
 
 // virtual
-OUString SAL_CALL HierarchyContent::getContentType()
+OUString HierarchyContent::getContentType()
 {
     return m_aProps.getContentType();
 }
 
 
 // virtual
-uno::Reference< ucb::XContentIdentifier > SAL_CALL
+uno::Reference< ucb::XContentIdentifier >
 HierarchyContent::getIdentifier()
 {
     // Transient?
@@ -293,7 +294,7 @@ HierarchyContent::getIdentifier()
 
 
 // virtual
-cpo::uno::Any SAL_CALL HierarchyContent::execute(
+cpo::uno::Any HierarchyContent::execute(
         const ucb::Command& aCommand,
         sal_Int32 /*CommandId*/,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
@@ -429,7 +430,7 @@ cpo::uno::Any SAL_CALL HierarchyContent::execute(
         {
             cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
             {
-                {"Uri", cpo::uno::Any(m_xIdentifier->getContentIdentifier())}
+                {u"Uri"_ustr, cpo::uno::Any(m_xIdentifier->getContentIdentifier())}
             }));
             ucbhelper::cancelCommandExecution(
                 ucb::IOErrorCode_CANT_WRITE,
@@ -506,7 +507,7 @@ cpo::uno::Any SAL_CALL HierarchyContent::execute(
 
 
 // virtual
-void SAL_CALL HierarchyContent::abort( sal_Int32 /*CommandId*/ )
+void HierarchyContent::abort( sal_Int32 /*CommandId*/ )
 {
     // @@@ Generally, no action takes much time...
 }
@@ -516,7 +517,7 @@ void SAL_CALL HierarchyContent::abort( sal_Int32 /*CommandId*/ )
 
 
 // virtual
-cpo::uno::Sequence< ucb::ContentInfo > SAL_CALL
+cpo::uno::Sequence< ucb::ContentInfo >
 HierarchyContent::queryCreatableContentsInfo()
 {
     return m_aProps.getCreatableContentsInfo();
@@ -524,7 +525,7 @@ HierarchyContent::queryCreatableContentsInfo()
 
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 HierarchyContent::createNewContent( const ucb::ContentInfo& Info )
 {
     if ( isFolder() )
@@ -575,7 +576,7 @@ OUString HierarchyContent::getParentURL()
 
 //static
 bool HierarchyContent::hasData(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             HierarchyContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier )
 {
@@ -596,7 +597,7 @@ bool HierarchyContent::hasData(
 
 //static
 bool HierarchyContent::loadData(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             HierarchyContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier,
             HierarchyContentProperties& rProps )
@@ -829,7 +830,7 @@ bool HierarchyContent::exchangeIdentity(
 
 // static
 uno::Reference< sdbc::XRow > HierarchyContent::getPropertyValues(
-                const uno::Reference< uno::XComponentContext >& rxContext,
+                const uno::Reference< cpo::uno::XComponentContext >& rxContext,
                 const cpo::uno::Sequence< beans::Property >& rProperties,
                 const HierarchyContentProperties& rData,
                 HierarchyContentProvider* pProvider,
@@ -1259,7 +1260,7 @@ cpo::uno::Sequence< cpo::uno::Any > HierarchyContent::setPropertyValues(
             {
                 cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
                 {
-                    {"Uri", cpo::uno::Any(m_xIdentifier->getContentIdentifier())}
+                    {u"Uri"_ustr, cpo::uno::Any(m_xIdentifier->getContentIdentifier())}
                 }));
                 ucbhelper::cancelCommandExecution(
                     ucb::IOErrorCode_CANT_WRITE,
@@ -1398,7 +1399,7 @@ void HierarchyContent::insert( sal_Int32 nNameClashResolve,
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(m_xIdentifier->getContentIdentifier())}
+            {u"Uri"_ustr, cpo::uno::Any(m_xIdentifier->getContentIdentifier())}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_WRITE,
@@ -1514,7 +1515,7 @@ void HierarchyContent::transfer(
         {
             cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
             {
-                {"Uri", cpo::uno::Any(rInfo.SourceURL)}
+                {u"Uri"_ustr, cpo::uno::Any(rInfo.SourceURL)}
             }));
             ucbhelper::cancelCommandExecution(
                 ucb::IOErrorCode_RECURSIVE,
@@ -1551,7 +1552,7 @@ void HierarchyContent::transfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(xId->getContentIdentifier())}
+            {u"Uri"_ustr, cpo::uno::Any(xId->getContentIdentifier())}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1581,7 +1582,7 @@ void HierarchyContent::transfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Folder", cpo::uno::Any(aId)}
+            {u"Folder"_ustr, cpo::uno::Any(aId)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_CREATE,
@@ -1709,7 +1710,7 @@ void HierarchyContent::transfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(xSource->m_xIdentifier->getContentIdentifier())}
+            {u"Uri"_ustr, cpo::uno::Any(xSource->m_xIdentifier->getContentIdentifier())}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_WRITE,

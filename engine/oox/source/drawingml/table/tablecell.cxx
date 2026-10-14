@@ -30,6 +30,7 @@
 #include <oox/token/properties.hxx>
 #include <oox/token/tokens.hxx>
 #include <oox/token/tokenmap.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <tools/color.hxx>
 #include <com/sun/star/table/BorderLineStyle.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
@@ -41,7 +42,7 @@
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using ::com::sun::star::table::BorderLine2;
@@ -145,6 +146,29 @@ static void applyLineAttributes(const ::oox::core::XmlFilterBase& rFilterBase,
     PropertySet aPropSet( rxPropSet );
     if (aPropSet.hasProperty(nPropId))
         aPropSet.setProperty( nPropId, aBorderLine );
+
+    // A border whose color comes from the theme says so, so that it follows the theme and can be
+    // written back as the theme color it is.
+    sal_Int32 nComplexColorPropId = -1;
+    switch (nPropId)
+    {
+        case PROP_LeftBorder: nComplexColorPropId = PROP_LeftBorderComplexColor; break;
+        case PROP_RightBorder: nComplexColorPropId = PROP_RightBorderComplexColor; break;
+        case PROP_TopBorder: nComplexColorPropId = PROP_TopBorderComplexColor; break;
+        case PROP_BottomBorder: nComplexColorPropId = PROP_BottomBorderComplexColor; break;
+        default: break;
+    }
+    if (nComplexColorPropId != -1 && aPropSet.hasProperty(nComplexColorPropId))
+    {
+        model::ComplexColor aComplexColor
+            = rLineProperties.maLineFill.getBestSolidColor().createComplexColor(
+                rFilterBase.getGraphicHelper(), -1);
+        if (aComplexColor.getThemeColorType() != model::ThemeColorType::Unknown)
+        {
+            aPropSet.setProperty(nComplexColorPropId,
+                                 model::color::createXComplexColor(aComplexColor));
+        }
+    }
 }
 
 static void applyBorder( const ::oox::core::XmlFilterBase& rFilterBase, TableStylePart& rTableStylePart, sal_Int32 nLineType, oox::drawingml::LineProperties& rLineProperties )
@@ -265,7 +289,7 @@ static void applyTableCellProperties( const Reference < css::table::XCell >& rxC
 }
 
 void TableCell::pushToXCell( const ::oox::core::XmlFilterBase& rFilterBase, const ::oox::drawingml::TextListStylePtr& pMasterTextListStyle,
-    const css::uno::Reference < css::table::XCell >& rxCell, const TableProperties& rTableProperties,
+    const cpo::uno::Reference < css::table::XCell >& rxCell, const TableProperties& rTableProperties,
     const TableStyle& rTableStyle, sal_Int32 nColumn, sal_Int32 nMaxColumn, sal_Int32 nRow, sal_Int32 nMaxRow )
 {
     TableStyle& rTable( const_cast< TableStyle& >( rTableStyle ) );

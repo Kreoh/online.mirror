@@ -34,8 +34,8 @@
 
 using namespace ::com::sun::star;
 using namespace css::awt;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace css::beans;
 using namespace css::lang;
 using namespace css::frame;
@@ -45,7 +45,7 @@ namespace framework
 {
 
 ButtonToolbarController::ButtonToolbarController(
-    uno::Reference< uno::XComponentContext >  xContext,
+    uno::Reference< cpo::uno::XComponentContext >  xContext,
     ToolBox*                                            pToolBar,
     OUString                                 aCommand ) :
     m_bInitialized( false ),
@@ -138,13 +138,13 @@ void ButtonToolbarController::dispose()
 }
 
 void ButtonToolbarController::addEventListener(
-    const css::uno::Reference< css::lang::XEventListener >& )
+    const cpo::uno::Reference< css::lang::XEventListener >& )
 {
     // do nothing
 }
 
 void ButtonToolbarController::removeEventListener(
-    const css::uno::Reference< css::lang::XEventListener >& )
+    const cpo::uno::Reference< css::lang::XEventListener >& )
 {
     // do nothing
 }
@@ -161,14 +161,14 @@ void ButtonToolbarController::update()
 void ButtonToolbarController::disposing(
     const css::lang::EventObject& Source )
 {
-    uno::Reference< uno::XInterface > xSource( Source.Source );
+    uno::Reference< cpo::uno::XInterface > xSource( Source.Source );
 
     SolarMutexGuard aSolarMutexGuard;
 
     if ( m_bDisposed )
         return;
 
-    uno::Reference< uno::XInterface > xIfac( m_xFrame, uno::UNO_QUERY );
+    uno::Reference< cpo::uno::XInterface > xIfac( m_xFrame, uno::UNO_QUERY );
     if ( xIfac == xSource )
         m_xFrame.clear();
 }
@@ -261,7 +261,7 @@ uno::Reference< awt::XWindow > ButtonToolbarController::createPopupWindow()
 }
 
 uno::Reference< awt::XWindow > ButtonToolbarController::createItemWindow(
-    const css::uno::Reference< css::awt::XWindow >& )
+    const cpo::uno::Reference< css::awt::XWindow >& )
 {
     if ( m_bDisposed )
         throw DisposedException();

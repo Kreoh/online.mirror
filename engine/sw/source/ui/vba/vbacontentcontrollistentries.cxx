@@ -11,6 +11,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -27,12 +28,12 @@ public:
     {
     }
 
-    virtual bool SAL_CALL hasMoreElements() override
+    virtual bool hasMoreElements() override
     {
         return (mnIndex < mxIndexAccess->getCount());
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement() override
+    virtual cpo::uno::Any nextElement() override
     {
         if (mnIndex < mxIndexAccess->getCount())
         {
@@ -47,13 +48,13 @@ class ContentControlListEntryCollectionHelper
 {
 private:
     uno::Reference<XHelperInterface> mxParent;
-    uno::Reference<uno::XComponentContext> mxContext;
+    uno::Reference<cpo::uno::XComponentContext> mxContext;
     std::shared_ptr<SwContentControl> m_pCC;
 
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     ContentControlListEntryCollectionHelper(uno::Reference<ov::XHelperInterface> xParent,
-                                            uno::Reference<uno::XComponentContext> xContext,
+                                            uno::Reference<cpo::uno::XComponentContext> xContext,
                                             std::shared_ptr<SwContentControl> pCC)
         : mxParent(std::move(xParent))
         , mxContext(std::move(xContext))
@@ -61,9 +62,9 @@ public:
     {
     }
 
-    sal_Int32 SAL_CALL getCount() override { return m_pCC->GetListItems().size(); }
+    sal_Int32 getCount() override { return m_pCC->GetListItems().size(); }
 
-    cpo::uno::Any SAL_CALL getByIndex(sal_Int32 Index) override
+    cpo::uno::Any getByIndex(sal_Int32 Index) override
     {
         if (Index < 0 || Index >= getCount())
             throw lang::IndexOutOfBoundsException();
@@ -72,15 +73,15 @@ public:
             new SwVbaContentControlListEntry(mxParent, mxContext, m_pCC, Index)));
     }
 
-    cpo::uno::Type SAL_CALL getElementType() override
+    cpo::uno::Type getElementType() override
     {
         return cppu::UnoType<word::XContentControlListEntry>::get();
     }
 
-    bool SAL_CALL hasElements() override { return getCount() != 0; }
+    bool hasElements() override { return getCount() != 0; }
 
     // XEnumerationAccess
-    uno::Reference<container::XEnumeration> SAL_CALL createEnumeration() override
+    uno::Reference<container::XEnumeration> createEnumeration() override
     {
         return new ContentControlListEntriesEnumWrapper(this);
     }
@@ -93,7 +94,7 @@ public:
  */
 SwVbaContentControlListEntries::SwVbaContentControlListEntries(
     const uno::Reference<XHelperInterface>& xParent,
-    const uno::Reference<uno::XComponentContext>& xContext, std::shared_ptr<SwContentControl> pCC)
+    const uno::Reference<cpo::uno::XComponentContext>& xContext, std::shared_ptr<SwContentControl> pCC)
     : SwVbaContentControlListEntries_BASE(
           xParent, xContext,
           uno::Reference<container::XIndexAccess>(

@@ -57,7 +57,7 @@ using namespace ::com::sun::star::ui::dialogs::ExtendedFilePickerElementIds;
 using namespace ::com::sun::star::ui::dialogs::CommonFilePickerElementIds;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 namespace
@@ -171,9 +171,9 @@ sal_Int16 SalAquaFilePicker::execute()
             break;
 
         default:
-            throw uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                       u"The dialog returned with an unknown result!"_ustr,
-                      static_cast<XFilePicker*>( static_cast<XFilePicker3*>( this ) ));
+                      static_cast<cppu::OWeakObject*>( this ) );
             break;
     }
 
@@ -211,17 +211,6 @@ OUString SalAquaFilePicker::getDisplayDirectory()
     OUString retVal = implgetDisplayDirectory();
 
     return retVal;
-}
-
-cpo::uno::Sequence<OUString> SalAquaFilePicker::getFiles()
-{
-    cpo::uno::Sequence< OUString > aSelectedFiles = getSelectedFiles();
-    // multiselection doesn't really work with getFiles
-    // so just retrieve the first url
-    if (aSelectedFiles.getLength() > 1)
-        aSelectedFiles.realloc(1);
-
-    return aSelectedFiles;
 }
 
 cpo::uno::Sequence<OUString> SalAquaFilePicker::getSelectedFiles()
@@ -377,14 +366,14 @@ void SalAquaFilePicker::initialize( const cpo::uno::Sequence<cpo::uno::Any>& aAr
     cpo::uno::Any aAny;
     if( 0 == aArguments.getLength() )
         throw lang::IllegalArgumentException(u"no arguments"_ustr,
-                                             static_cast<XFilePicker*>( static_cast<XFilePicker3*>(this) ), 1 );
+                                             static_cast<cppu::OWeakObject*>(this), 1 );
 
     aAny = aArguments[0];
 
     if( ( aAny.getValueType() != ::cppu::UnoType<sal_Int16>::get() ) &&
         (aAny.getValueType() != ::cppu::UnoType<sal_Int8>::get() ) )
         throw lang::IllegalArgumentException(u"invalid argument type"_ustr,
-                                             static_cast<XFilePicker*>( static_cast<XFilePicker3*>(this) ), 1 );
+                                             static_cast<cppu::OWeakObject*>(this), 1 );
 
     sal_Int16 templateId = -1;
     aAny >>= templateId;
@@ -438,7 +427,7 @@ void SalAquaFilePicker::initialize( const cpo::uno::Sequence<cpo::uno::Any>& aAr
             break;
         default:
             throw lang::IllegalArgumentException(u"Unknown template"_ustr,
-                                                 static_cast<XFilePicker*>( static_cast<XFilePicker3*>(this) ),
+                                                 static_cast<cppu::OWeakObject*>(this),
                                                  1 );
     }
 
@@ -464,7 +453,7 @@ void SalAquaFilePicker::disposing( const lang::EventObject& aEvent )
 {
     SolarMutexGuard aGuard;
 
-    uno::Reference<XFilePickerListener> xFilePickerListener( aEvent.Source, css::uno::UNO_QUERY );
+    uno::Reference<XFilePickerListener> xFilePickerListener( aEvent.Source, cpo::uno::UNO_QUERY );
 
     if( xFilePickerListener.is() )
         removeFilePickerListener( xFilePickerListener );
@@ -583,9 +572,9 @@ void SalAquaFilePicker::filterControlChanged()
     controlStateChanged( evt );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 fpicker_SalAquaFilePicker_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SalAquaFilePicker());
 }

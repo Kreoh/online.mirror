@@ -62,7 +62,8 @@ SystemGraphicsData getiOSGraphicsData(unsigned char* pBuffer, long width, long h
     // to kCGImageAlphaPremultipliedLast | kCGImageByteOrder32Big
     CGContextRef pCGContext
         = CGBitmapContextCreate(pBuffer, width, height, 8, width * 4, CGColorSpaceCreateDeviceRGB(),
-                                kCGImageAlphaPremultipliedLast | kCGImageByteOrder32Big);
+                                uint32_t(kCGImageAlphaPremultipliedLast)
+                                    | uint32_t(kCGImageByteOrder32Big));
 
     CGContextTranslateCTM(pCGContext, 0, height);
     CGContextScaleCTM(pCGContext, fDPIScale, -fDPIScale);
@@ -76,6 +77,7 @@ SystemGraphicsData getiOSGraphicsData(unsigned char* pBuffer, long width, long h
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace sd
 {
@@ -853,9 +855,18 @@ void SlideshowLayerRenderer::setupMasterPageFields()
 
 const Size& SlideshowLayerRenderer::calculateAndSetSizePixel(Size const& rDesiredSizePixel)
 {
+    // Keep the slide aspect ratio and fit the result inside the desired box. Take the desired
+    // width and compute the height from it. When that height is too tall for the box, take the
+    // desired height instead and compute the width from it.
     double fRatio = double(mrPage.GetHeight()) / mrPage.GetWidth();
-    Size aSize(rDesiredSizePixel.Width(), ::tools::Long(rDesiredSizePixel.Width() * fRatio));
-    maSlideSize = aSize;
+    ::tools::Long nWidth = rDesiredSizePixel.Width();
+    ::tools::Long nHeight = ::tools::Long(nWidth * fRatio);
+    if (nHeight > rDesiredSizePixel.Height())
+    {
+        nHeight = rDesiredSizePixel.Height();
+        nWidth = ::tools::Long(nHeight / fRatio);
+    }
+    maSlideSize = Size(nWidth, nHeight);
 
     return maSlideSize;
 }

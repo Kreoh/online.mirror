@@ -23,7 +23,7 @@
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-using namespace ::com::sun::star::uno ;
+using namespace ::cpo::uno ;
 using namespace ::cpo::uno;
 using ::com::sun::star::lang::XMultiServiceFactory ;
 
@@ -38,62 +38,72 @@ XMLSignatureTemplateImpl::XMLSignatureTemplateImpl()
 XMLSignatureTemplateImpl::~XMLSignatureTemplateImpl() {
 }
 
+cpo::uno::Reference<css::security::XCertificate> XMLSignatureTemplateImpl::GetSigningCertificate()
+{
+    return m_xSigningCertificate;
+}
+
+void XMLSignatureTemplateImpl::SetVerifiedCertificate(cpo::uno::Reference<css::security::XCertificate> const& xCertificate)
+{
+    m_xVerifiedCertificate = xCertificate;
+}
+
 /* XXMLSignatureTemplate */
-void SAL_CALL XMLSignatureTemplateImpl::setTemplate( const Reference< XXMLElementWrapper >& aTemplate )
+void XMLSignatureTemplateImpl::setTemplate( const Reference< XXMLElementWrapper >& aTemplate )
 {
     m_xTemplate = aTemplate ;
 }
 
 /* XXMLSignatureTemplate */
-Reference< XXMLElementWrapper > SAL_CALL XMLSignatureTemplateImpl::getTemplate()
+Reference< XXMLElementWrapper > XMLSignatureTemplateImpl::getTemplate()
 {
     return m_xTemplate ;
 }
 
-void SAL_CALL XMLSignatureTemplateImpl::setTarget( const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement )
+void XMLSignatureTemplateImpl::setTarget( const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement )
 {
     targets.push_back( aXmlElement );
 }
 
-cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > SAL_CALL XMLSignatureTemplateImpl::getTargets()
+cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > XMLSignatureTemplateImpl::getTargets()
 {
     return comphelper::containerToSequence(targets);
 }
 
-void SAL_CALL XMLSignatureTemplateImpl::setBinding(
-    const css::uno::Reference< css::xml::crypto::XUriBinding >& aUriBinding )
+void XMLSignatureTemplateImpl::setBinding(
+    const cpo::uno::Reference< css::xml::crypto::XUriBinding >& aUriBinding )
 {
     m_xUriBinding = aUriBinding;
 }
 
-css::uno::Reference< css::xml::crypto::XUriBinding > SAL_CALL XMLSignatureTemplateImpl::getBinding()
+cpo::uno::Reference< css::xml::crypto::XUriBinding > XMLSignatureTemplateImpl::getBinding()
 {
     return m_xUriBinding;
 }
 
-void SAL_CALL XMLSignatureTemplateImpl::setStatus(
+void XMLSignatureTemplateImpl::setStatus(
     css::xml::crypto::SecurityOperationStatus status )
 {
     m_nStatus = status;
 }
 
-css::xml::crypto::SecurityOperationStatus SAL_CALL XMLSignatureTemplateImpl::getStatus(  )
+css::xml::crypto::SecurityOperationStatus XMLSignatureTemplateImpl::getStatus(  )
 {
     return m_nStatus;
 }
 
 /* XServiceInfo */
-OUString SAL_CALL XMLSignatureTemplateImpl::getImplementationName() {
+OUString XMLSignatureTemplateImpl::getImplementationName() {
     return impl_getImplementationName() ;
 }
 
 /* XServiceInfo */
-bool SAL_CALL XMLSignatureTemplateImpl::supportsService( const OUString& serviceName) {
+bool XMLSignatureTemplateImpl::supportsService( const OUString& serviceName) {
     return cppu::supportsService(this, serviceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL XMLSignatureTemplateImpl::getSupportedServiceNames() {
+Sequence< OUString > XMLSignatureTemplateImpl::getSupportedServiceNames() {
     return impl_getSupportedServiceNames() ;
 }
 

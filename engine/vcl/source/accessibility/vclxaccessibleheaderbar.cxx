@@ -28,7 +28,7 @@
 #include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::accessibility;
 using namespace ::cpo::uno;
@@ -55,7 +55,7 @@ Sequence<OUString> VCLXAccessibleHeaderBar::getSupportedServiceNames()
 
 // =======XAccessibleContext=======
 
-sal_Int64 SAL_CALL VCLXAccessibleHeaderBar::getAccessibleChildCount()
+sal_Int64 VCLXAccessibleHeaderBar::getAccessibleChildCount()
 {
     SolarMutexGuard g;
 
@@ -65,8 +65,8 @@ sal_Int64 SAL_CALL VCLXAccessibleHeaderBar::getAccessibleChildCount()
 
     return nCount;
 }
-css::uno::Reference<css::accessibility::XAccessible>
-    SAL_CALL VCLXAccessibleHeaderBar::getAccessibleChild(sal_Int64 i)
+cpo::uno::Reference<css::accessibility::XAccessible>
+    VCLXAccessibleHeaderBar::getAccessibleChild(sal_Int64 i)
 {
     SolarMutexGuard g;
 
@@ -86,12 +86,12 @@ css::uno::Reference<css::accessibility::XAccessible>
     return xChild;
 }
 
-sal_Int16 SAL_CALL VCLXAccessibleHeaderBar::getAccessibleRole()
+sal_Int16 VCLXAccessibleHeaderBar::getAccessibleRole()
 {
     return css::accessibility::AccessibleRole::LIST;
 }
 
-void SAL_CALL VCLXAccessibleHeaderBar::disposing()
+void VCLXAccessibleHeaderBar::disposing()
 {
     SolarMutexGuard g;
 

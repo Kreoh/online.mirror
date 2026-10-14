@@ -13,7 +13,7 @@
 #include <com/sun/star/util/XRefreshListener.hpp>
 #include <com/sun/star/util/XRefreshable.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ref.hxx>
@@ -21,7 +21,8 @@
 #include <cppunit/TestAssert.h>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
@@ -36,11 +37,11 @@ public:
     }
 
     bool m_bListenerCalled;
-    virtual void SAL_CALL refreshed(const lang::EventObject& /* xEvent */) override
+    virtual void refreshed(const lang::EventObject& /* xEvent */) override
     {
         m_bListenerCalled = true;
     }
-    virtual void SAL_CALL disposing(const lang::EventObject& /* xEventObj */) override {}
+    virtual void disposing(const lang::EventObject& /* xEventObj */) override {}
 };
 }
 

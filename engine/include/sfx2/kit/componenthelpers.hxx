@@ -30,7 +30,7 @@ class SFX2_DLLPUBLIC KitChartHelper
 {
 private:
     SfxViewShell* mpViewShell;
-    mutable css::uno::Reference<css::frame::XController> mxController;
+    mutable cpo::uno::Reference<css::frame::XController> mxController;
     VclPtr<vcl::Window> mpWindow;
 
 public:
@@ -39,9 +39,11 @@ public:
         , mpWindow(nullptr)
     {}
 
-    css::uno::Reference<css::frame::XController>& GetXController() const;
+    cpo::uno::Reference<css::frame::XController>& GetXController() const;
     vcl::Window* GetWindow();
-    tools::Rectangle GetChartBoundingBox();
+    /// Where the chart is on the tiles, or with bWithGridOffset false, in print twips: in Calc
+    /// these differ by the grid offset.
+    tools::Rectangle GetChartBoundingBox(bool bWithGridOffset = true);
     void Invalidate();
 
     void Dispatch(const OUString& cmd, const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) const;
@@ -73,6 +75,11 @@ public:
     const SfxViewShell* GetSmViewShell();
     tools::Rectangle GetBoundingBox() const;
 
+    static const SfxViewShell* FindContainerViewShell(const SfxViewShell* pSmViewShell);
+
+    /// Sends the cursor and selection of a Math view to its COKit client.
+    static void SendCaret(const SfxViewShell& rSmViewShell);
+
     void Dispatch(const OUString& cmd, const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) const;
 
     bool postMouseEvent(COKitMouseEventType eType, int nX, int nY, int nCount, int nButtons,
@@ -88,7 +95,7 @@ private:
 
     const SfxViewShell* mpViewShell;
     const SfxInPlaceClient* mpIPClient = nullptr; // not nullptr when the object is valid
-    css::uno::Reference<css::frame::XFrame> mxFrame; // not empty when the object is valid
+    cpo::uno::Reference<css::frame::XFrame> mxFrame; // not empty when the object is valid
     VclPtr<vcl::Window> mpGraphicWindow;
     VclPtr<vcl::Window> mpWidgetWindow;
 };

@@ -64,8 +64,8 @@
 
 using namespace com::sun::star::packages::zip::ZipConstants;
 using namespace com::sun::star::packages::zip;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star;
 using namespace cppu;
@@ -233,7 +233,7 @@ cpo::uno::Sequence<sal_Int8> ZipPackageStream::GetEncryptionKey(Bugs const bugs)
                     : PACKAGE_ENCRYPTIONDATA_SHA1CORRECT;
         }
         else
-            throw uno::RuntimeException( u"No expected key is provided!"_ustr );
+            throw cpo::uno::RuntimeException( u"No expected key is provided!"_ustr );
 
         for (const auto& rKey : m_aStorageEncryptionKeys)
             if ( rKey.Name == aNameToFind )
@@ -242,7 +242,7 @@ cpo::uno::Sequence<sal_Int8> ZipPackageStream::GetEncryptionKey(Bugs const bugs)
         // empty keys are not allowed here
         // so it is not important whether there is no key, or the key is empty, it is an error
         if ( !aResult.hasElements() )
-            throw uno::RuntimeException( u"No expected key is provided!"_ustr );
+            throw cpo::uno::RuntimeException( u"No expected key is provided!"_ustr );
     }
     else
         aResult = m_aEncryptionKey;
@@ -643,7 +643,7 @@ bool ZipPackageStream::saveChild(
             {
                 ::rtl::Reference< EncryptionData > xEncData = GetEncryptionData();
                 if ( !xEncData.is() )
-                    throw uno::RuntimeException();
+                    throw cpo::uno::RuntimeException();
 
                 pPropSet[PKG_MNFST_ENCALG].Name = sEncryptionAlgProperty;
                 pPropSet[PKG_MNFST_ENCALG].Value <<= xEncData->m_nEncAlg;
@@ -834,7 +834,7 @@ bool ZipPackageStream::saveChild(
         {
             ::rtl::Reference< EncryptionData > xEncData = GetEncryptionData();
             if ( !xEncData.is() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
 
             // very confusing: half the encryption properties are
             // unconditionally added above and the other half conditionally;
@@ -909,7 +909,7 @@ void ZipPackageStream::SetPackageMember( bool bNewValue )
 }
 
 // XActiveDataSink
-void SAL_CALL ZipPackageStream::setInputStream( const uno::Reference< io::XInputStream >& aStream )
+void ZipPackageStream::setInputStream( const uno::Reference< io::XInputStream >& aStream )
 {
     // if seekable access is required the wrapping will be done on demand
     m_xStream = aStream;
@@ -953,7 +953,7 @@ uno::Reference< io::XInputStream > ZipPackageStream::getRawData()
     }
 }
 
-uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getInputStream()
+uno::Reference< io::XInputStream > ZipPackageStream::getInputStream()
 {
     try
     {
@@ -987,7 +987,7 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getInputStream()
 }
 
 // XDataSinkEncrSupport
-uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
+uno::Reference< io::XInputStream > ZipPackageStream::getDataStream()
 {
     // There is no stream attached to this object
     if ( m_nStreamMode == PACKAGE_STREAM_NOTSET )
@@ -1079,7 +1079,7 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
         return uno::Reference< io::XInputStream >();
 }
 
-uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getRawStream()
+uno::Reference< io::XInputStream > ZipPackageStream::getRawStream()
 {
     // There is no stream attached to this object
     if ( m_nStreamMode == PACKAGE_STREAM_NOTSET )
@@ -1110,13 +1110,13 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getRawStream()
     throw packages::NoEncryptionException();
 }
 
-void SAL_CALL ZipPackageStream::setDataStream( const uno::Reference< io::XInputStream >& aStream )
+void ZipPackageStream::setDataStream( const uno::Reference< io::XInputStream >& aStream )
 {
     setInputStream( aStream );
     m_nStreamMode = PACKAGE_STREAM_DATA;
 }
 
-void SAL_CALL ZipPackageStream::setRawStream( const uno::Reference< io::XInputStream >& aStream )
+void ZipPackageStream::setRawStream( const uno::Reference< io::XInputStream >& aStream )
 {
     // wrap the stream in case it is not seekable
     uno::Reference< io::XInputStream > xNewStream = ::comphelper::OSeekableInputWrapper::CheckSeekableCanWrap( aStream, m_xContext );
@@ -1138,7 +1138,7 @@ void SAL_CALL ZipPackageStream::setRawStream( const uno::Reference< io::XInputSt
     m_nStreamMode = PACKAGE_STREAM_RAW;
 }
 
-uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getPlainRawStream()
+uno::Reference< io::XInputStream > ZipPackageStream::getPlainRawStream()
 {
     // There is no stream attached to this object
     if ( m_nStreamMode == PACKAGE_STREAM_NOTSET )
@@ -1173,7 +1173,7 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getPlainRawStream(
 }
 
 // XPropertySet
-void SAL_CALL ZipPackageStream::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
+void ZipPackageStream::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     if ( aPropertyName == "MediaType" )
     {
@@ -1321,7 +1321,7 @@ void SAL_CALL ZipPackageStream::setPropertyValue( const OUString& aPropertyName,
         throw beans::UnknownPropertyException(aPropertyName);
 }
 
-Any SAL_CALL ZipPackageStream::getPropertyValue( const OUString& PropertyName )
+Any ZipPackageStream::getPropertyValue( const OUString& PropertyName )
 {
     if ( PropertyName == "MediaType" )
     {
@@ -1370,7 +1370,7 @@ Sequence< OUString > ZipPackageStream::getSupportedServiceNames()
     return { u"com.sun.star.packages.PackageStream"_ustr };
 }
 
-bool SAL_CALL ZipPackageStream::supportsService( OUString const & rServiceName )
+bool ZipPackageStream::supportsService( OUString const & rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }

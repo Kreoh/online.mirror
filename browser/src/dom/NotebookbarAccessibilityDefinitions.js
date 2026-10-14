@@ -18,19 +18,47 @@ var NotebookbarAccessibilityDefinitions = function() {
 		return id.substr(0, separatorPos);
 	};
 
+	this.itemName = function(item) {
+		if (item.id)
+			return item.id;
+		if (item.command)
+			return item.command.replace('.uno:', '');
+		return item.id;
+	};
+
 	this.sidebarCombinations = {
 		presentation: {
 			'paperformat-input': 'KF',
 			'fillstyle-input': 'KB',
 			'orientation-input': 'KO',
-			'masterslide-input': 'KS'
+			'masterslide-input': 'KS',
+			'LinesArrows': 'KL',
+			'Curves': 'KC',
+			'Connectors': 'KN',
+			'BasicShapes': 'KA',
+			'SymbolShapes': 'KY',
+			'BlockArrows': 'KW',
+			'Flowcharts': 'KH',
+			'Callouts': 'KT',
+			'Stars': 'KR',
+			'3DObjects': 'KD'
 		},
 		drawing: {
 			'paperformat-input': 'KF',
 			'fillstyle-input': 'KB',
 			'orientation-input': 'KO',
 			'marginLB-input': 'KM',
-			'masterslide-input': 'KS'
+			'masterslide-input': 'KS',
+			'LinesArrows': 'KL',
+			'Curves': 'KC',
+			'Connectors': 'KN',
+			'BasicShapes': 'KA',
+			'SymbolShapes': 'KY',
+			'BlockArrows': 'KW',
+			'Flowcharts': 'KH',
+			'Callouts': 'KT',
+			'Stars': 'KR',
+			'3DObjects': 'KD'
 		},
 		text: {
 			'papersize-input': 'KF',
@@ -59,7 +87,13 @@ var NotebookbarAccessibilityDefinitions = function() {
 				selectedDefinitions[id] = {
 					focusBack: false,
 					combination: combinations[id],
-					contentList: []
+					contentList: [],
+					// The frame around a gallery is named after it, so a prefix finds the frame.
+					exactId: true,
+					// A gallery is a block, not a button: its key belongs by the caption.
+					anchorTop: true,
+					// Reaching a sidebar widget means taking the focus, not opening a tab.
+					focusOnly: true
 				};
 			}
 		}
@@ -70,7 +104,7 @@ var NotebookbarAccessibilityDefinitions = function() {
 			for (var i = 0; i < rawList.length; i++) {
 				if (rawList[i].accessibility) {
 					var combination = language && rawList[i].accessibility[language] ? rawList[i].accessibility[language]: rawList[i].accessibility.combination;
-					var id = this.cleanMenuName(rawList[i].id);
+					var id = this.cleanMenuName(this.itemName(rawList[i]));
 
 					var overflow = document.querySelector('#' + id + '.ui-overflow-group');
 					var arrow = document.querySelector('#' + id + ' .arrowbackground');

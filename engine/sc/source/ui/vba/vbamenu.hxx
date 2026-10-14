@@ -17,17 +17,17 @@ typedef InheritedHelperInterfaceWeakImpl< ov::excel::XMenu > Menu_BASE;
 class ScVbaMenu : public Menu_BASE
 {
 private:
-    css::uno::Reference< ov::XCommandBarControl > m_xCommandBarControl;
+    cpo::uno::Reference< ov::XCommandBarControl > m_xCommandBarControl;
 
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaMenu( const css::uno::Reference< ov::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext, css::uno::Reference< ov::XCommandBarControl > xCommandBarControl );
+    /// @throws cpo::uno::RuntimeException
+    ScVbaMenu( const cpo::uno::Reference< ov::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< ov::XCommandBarControl > xCommandBarControl );
 
-    virtual OUString SAL_CALL getCaption() override;
-    virtual void SAL_CALL setCaption( const OUString& _caption ) override;
+    virtual OUString getCaption() override;
+    virtual void setCaption( const OUString& _caption ) override;
 
-    virtual void SAL_CALL Delete(  ) override;
-    virtual cpo::uno::Any SAL_CALL MenuItems( const cpo::uno::Any& aIndex ) override;
+    virtual void Delete(  ) override;
+    virtual cpo::uno::Any MenuItems( const cpo::uno::Any& aIndex ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

@@ -11,7 +11,7 @@
 
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 #include <sfx2/docfile.hxx>
@@ -23,6 +23,7 @@
 #include <global.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 ScExcelBiffDetect::ScExcelBiffDetect() {}
 ScExcelBiffDetect::~ScExcelBiffDetect() {}
@@ -189,8 +190,8 @@ OUString ScExcelBiffDetect::detect( cpo::uno::Sequence<beans::PropertyValue>& lD
     return aType;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_calc_ExcelBiffFormatDetector_get_implementation(css::uno::XComponentContext* /*context*/,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_calc_ExcelBiffFormatDetector_get_implementation(cpo::uno::XComponentContext* /*context*/,
                                                                   cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScExcelBiffDetect);

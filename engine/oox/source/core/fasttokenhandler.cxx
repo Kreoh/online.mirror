@@ -19,7 +19,7 @@
 
 #include <oox/core/fasttokenhandler.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <oox/token/tokenmap.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
@@ -27,7 +27,7 @@ using namespace ::com::sun::star;
 
 namespace oox::core {
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 // XServiceInfo
@@ -65,9 +65,9 @@ sal_Int32 FastTokenHandler::getTokenDirect(std::string_view token) const
 
 } // namespace oox::core
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_oox_core_FastTokenHandler_get_implementation(
-    uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new oox::core::FastTokenHandler);
 }

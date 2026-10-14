@@ -47,7 +47,7 @@ namespace oox::core {
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::uri;
@@ -571,8 +571,8 @@ OUString FilterDetect::detect( Sequence< PropertyValue >& rMediaDescSeq )
 
 } // namespace oox::core
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_oox_FormatDetector_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_oox_FormatDetector_get_implementation(cpo::uno::XComponentContext* pCtx,
                                                         cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new oox::core::FilterDetect(pCtx));

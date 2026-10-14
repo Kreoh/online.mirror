@@ -21,7 +21,7 @@
 
 #include <cppuhelper/implbase.hxx>
 #include <ooo/vba/word/XPageSetup.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <vbahelper/vbahelperinterface.hxx>
 #include <vbahelper/vbapagesetupbase.hxx>
@@ -36,27 +36,27 @@ class SwVbaPageSetup :  public SwVbaPageSetup_BASE
 private:
     rtl::Reference< SwXTextDocument > mxModel;
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OUString getStyleOfFirstPage() const;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaPageSetup( const css::uno::Reference< ooo::vba::XHelperInterface >& xParent,
-                    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaPageSetup( const cpo::uno::Reference< ooo::vba::XHelperInterface >& xParent,
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
                     const rtl::Reference< SwXTextDocument >& xModel,
-                    const css::uno::Reference< css::beans::XPropertySet >& xProps );
+                    const cpo::uno::Reference< css::beans::XPropertySet >& xProps );
 
     // Attributes
-    virtual double SAL_CALL getGutter() override;
-    virtual void SAL_CALL setGutter( double _gutter ) override;
-    virtual double SAL_CALL getHeaderDistance() override;
-    virtual void SAL_CALL setHeaderDistance( double _headerdistance ) override;
-    virtual double SAL_CALL getFooterDistance() override;
-    virtual void SAL_CALL setFooterDistance( double _footerdistance ) override;
-    virtual bool SAL_CALL getDifferentFirstPageHeaderFooter() override;
-    virtual void SAL_CALL setDifferentFirstPageHeaderFooter( bool status ) override;
-    virtual ::sal_Int32 SAL_CALL getSectionStart() override;
-    virtual void SAL_CALL setSectionStart( ::sal_Int32 _sectionstart ) override;
+    virtual double getGutter() override;
+    virtual void setGutter( double _gutter ) override;
+    virtual double getHeaderDistance() override;
+    virtual void setHeaderDistance( double _headerdistance ) override;
+    virtual double getFooterDistance() override;
+    virtual void setFooterDistance( double _footerdistance ) override;
+    virtual bool getDifferentFirstPageHeaderFooter() override;
+    virtual void setDifferentFirstPageHeaderFooter( bool status ) override;
+    virtual ::sal_Int32 getSectionStart() override;
+    virtual void setSectionStart( ::sal_Int32 _sectionstart ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

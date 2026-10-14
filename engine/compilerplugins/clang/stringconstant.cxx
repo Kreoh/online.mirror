@@ -265,10 +265,7 @@ private:
 };
 
 void StringConstant::run() {
-    if (compiler.getLangOpts().CPlusPlus
-        && compiler.getPreprocessor().getIdentifierInfo(
-            "LIBO_INTERNAL_ONLY")->hasMacroDefinition())
-            //TODO: some parts of it are useful for external code, too
+    if (compiler.getLangOpts().CPlusPlus)
     {
         TraverseDecl(compiler.getASTContext().getTranslationUnitDecl());
     }
@@ -1557,7 +1554,7 @@ bool StringConstant::isStringConstant(
         return true;
     }
     APValue v;
-    if (!expr->isCXX11ConstantExpr(compiler.getASTContext(), &v)) {
+    if (!compat::isCXX11ConstantExpr(expr, compiler.getASTContext(), v)) {
         return false;
     }
     switch (v.getKind()) {

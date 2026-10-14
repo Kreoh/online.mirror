@@ -21,6 +21,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // Helper function to access the content controls
 // @param rIndex
@@ -108,9 +109,9 @@ public:
     {
     }
 
-    bool SAL_CALL hasMoreElements() override { return (mnIndex < mxIndexAccess->getCount()); }
+    bool hasMoreElements() override { return (mnIndex < mxIndexAccess->getCount()); }
 
-    cpo::uno::Any SAL_CALL nextElement() override
+    cpo::uno::Any nextElement() override
     {
         if (mnIndex < mxIndexAccess->getCount())
         {
@@ -126,16 +127,16 @@ class ContentControlCollectionHelper
 {
 private:
     uno::Reference<XHelperInterface> mxParent;
-    uno::Reference<uno::XComponentContext> mxContext;
+    uno::Reference<cpo::uno::XComponentContext> mxContext;
     rtl::Reference<SwXTextDocument> mxTextDocument;
     const OUString m_sTag;
     const OUString m_sTitle;
     std::shared_ptr<SwContentControl> m_pCache;
 
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     ContentControlCollectionHelper(uno::Reference<ov::XHelperInterface> xParent,
-                                   uno::Reference<uno::XComponentContext> xContext,
+                                   uno::Reference<cpo::uno::XComponentContext> xContext,
                                    rtl::Reference<SwXTextDocument> xTextDocument,
                                    const OUString& rTag, const OUString& rTitle)
 
@@ -148,14 +149,14 @@ public:
     }
 
     // XIndexAccess
-    sal_Int32 SAL_CALL getCount() override
+    sal_Int32 getCount() override
     {
         sal_Int32 nCount = SAL_MAX_INT32;
         lcl_getContentControl(u"", m_sTag, m_sTitle, nCount, mxTextDocument);
         return nCount == SAL_MAX_INT32 || nCount < 0 ? 0 : nCount;
     }
 
-    cpo::uno::Any SAL_CALL getByIndex(sal_Int32 Index) override
+    cpo::uno::Any getByIndex(sal_Int32 Index) override
     {
         m_pCache = lcl_getContentControl(u"", m_sTag, m_sTitle, Index, mxTextDocument);
         if (!m_pCache)
@@ -166,7 +167,7 @@ public:
     }
 
     // XNameAccess
-    cpo::uno::Sequence<OUString> SAL_CALL getElementNames() override
+    cpo::uno::Sequence<OUString> getElementNames() override
     {
         sal_Int32 nCount = SAL_MAX_INT32;
         cpo::uno::Sequence<OUString> aSeq;
@@ -174,7 +175,7 @@ public:
         return aSeq;
     }
 
-    cpo::uno::Any SAL_CALL getByName(const OUString& aName) override
+    cpo::uno::Any getByName(const OUString& aName) override
     {
         if (!hasByName(aName))
             throw container::NoSuchElementException();
@@ -183,7 +184,7 @@ public:
             new SwVbaContentControl(mxParent, mxContext, mxTextDocument, m_pCache)));
     }
 
-    bool SAL_CALL hasByName(const OUString& aName) override
+    bool hasByName(const OUString& aName) override
     {
         sal_Int32 nCount = -1;
         m_pCache = lcl_getContentControl(aName, m_sTag, m_sTitle, nCount, mxTextDocument);
@@ -191,15 +192,15 @@ public:
     }
 
     // XElementAccess
-    cpo::uno::Type SAL_CALL getElementType() override
+    cpo::uno::Type getElementType() override
     {
         return cppu::UnoType<word::XContentControl>::get();
     }
 
-    bool SAL_CALL hasElements() override { return getCount() != 0; }
+    bool hasElements() override { return getCount() != 0; }
 
     // XEnumerationAccess
-    uno::Reference<container::XEnumeration> SAL_CALL createEnumeration() override
+    uno::Reference<container::XEnumeration> createEnumeration() override
     {
         return new ContentControlsEnumWrapper(this);
     }
@@ -217,7 +218,7 @@ public:
  * TODO: add filtering for Range, SelectLinkedControls, SelectUnlinkedControls
  */
 SwVbaContentControls::SwVbaContentControls(const uno::Reference<XHelperInterface>& xParent,
-                                           const uno::Reference<uno::XComponentContext>& xContext,
+                                           const uno::Reference<cpo::uno::XComponentContext>& xContext,
                                            const rtl::Reference<SwXTextDocument>& xTextDocument,
                                            const OUString& rTag, const OUString& rTitle)
     : SwVbaContentControls_BASE(

@@ -40,6 +40,7 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::comphelper;
 
 embed::VisualRepresentation OleEmbeddedObject::GetVisualRepresentationInNativeFormat_Impl(
@@ -50,7 +51,7 @@ embed::VisualRepresentation OleEmbeddedObject::GetVisualRepresentationInNativeFo
     // TODO: detect the format in the future for now use workaround
     uno::Reference< io::XInputStream > xInStream = xCachedVisRepr->getInputStream();
     if ( !xInStream.is() )
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"Failed to retrieve input stream from cached visual representation. "_ustr
         );
     uno::Reference< io::XSeekable > xSeekable( xCachedVisRepr, uno::UNO_QUERY_THROW );
@@ -221,7 +222,7 @@ awt::Size OleEmbeddedObject::getVisualAreaSize_impl(sal_Int64 nAspect,
                     catch( const cpo::uno::Exception& )
                     {
                         throw embed::NoVisualAreaSizeException(
-                                "No size available!",
+                                u"No size available!"_ustr,
                                 static_cast< ::cppu::OWeakObject* >(this) );
                     }
                 }
@@ -279,7 +280,7 @@ awt::Size OleEmbeddedObject::getVisualAreaSize_impl(sal_Int64 nAspect,
 
                 if ( !bSuccess )
                     throw embed::NoVisualAreaSizeException(
-                                    "No size available!",
+                                    u"No size available!"_ustr,
                                     static_cast< ::cppu::OWeakObject* >(this) );
 
                 } // <= unguarded
@@ -298,7 +299,7 @@ awt::Size OleEmbeddedObject::getVisualAreaSize_impl(sal_Int64 nAspect,
         catch ( const cpo::uno::Exception& )
         {
             throw embed::NoVisualAreaSizeException(
-                            "No size available!",
+                            u"No size available!"_ustr,
                             static_cast< ::cppu::OWeakObject* >(this) );
         }
     }
@@ -367,8 +368,8 @@ embed::VisualRepresentation OleEmbeddedObject::getPreferredVisualRepresentation(
         try
         {
             datatransfer::DataFlavor aDataFlavor(
-                    "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"",
-                    "Windows Metafile",
+                    u"application/x-openoffice-wmf;windows_formatname=\"Image WMF\""_ustr,
+                    u"Windows Metafile"_ustr,
                     cppu::UnoType<cpo::uno::Sequence< sal_Int8 >>::get() );
 
             embed::VisualRepresentation aVisualRepr;

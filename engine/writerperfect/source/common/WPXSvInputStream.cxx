@@ -9,8 +9,8 @@
 
 #include <WPXSvInputStream.hxx>
 
-#include <com/sun/star/packages/zip/XZipFileAccess2.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/packages/zip/XZipFileAccess.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/seekableinput.hxx>
@@ -31,7 +31,7 @@
 
 namespace writerperfect
 {
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::io;
 
@@ -260,7 +260,7 @@ struct ZipStreamData
 {
     explicit ZipStreamData(OString aName);
 
-    css::uno::Reference<css::io::XInputStream> xStream;
+    cpo::uno::Reference<css::io::XInputStream> xStream;
 
     /** Name of the stream.
       *
@@ -278,7 +278,7 @@ struct ZipStreamData
   */
 struct ZipStorageImpl
 {
-    explicit ZipStorageImpl(const css::uno::Reference<css::container::XNameAccess>& rxContainer);
+    explicit ZipStorageImpl(const cpo::uno::Reference<css::container::XNameAccess>& rxContainer);
 
     /** Initialize for access.
       *
@@ -703,7 +703,7 @@ bool WPXSvInputStream::isZip()
         {
             const Reference<XComponentContext> xContext(comphelper::getProcessComponentContext(),
                                                         UNO_SET_THROW);
-            const Reference<packages::zip::XZipFileAccess2> xZip(
+            const Reference<packages::zip::XZipFileAccess> xZip(
                 xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
                     u"com.sun.star.packages.zip.ZipFileAccess"_ustr, { Any(mxStream) }, xContext),
                 UNO_QUERY_THROW);

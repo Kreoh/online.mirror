@@ -33,7 +33,7 @@ module com { module sun { module star { module xml { module crypto {
  * <p>In some cases, the contents to be signed need to be clearly pointed out by
  * the signature template.</p>
  */
-interface XXMLSignature : com::sun::star::uno::XInterface
+interface XXMLSignature : cpo::uno::XInterface
 {
     /**
      * Perform signature in the environment of signature template and context.
@@ -42,7 +42,7 @@ interface XXMLSignature : com::sun::star::uno::XInterface
         [in] com::sun::star::xml::crypto::XXMLSignatureTemplate aTemplate ,
         [in] com::sun::star::xml::crypto::XSecurityEnvironment aEnvironment
     ) raises( com::sun::star::xml::crypto::XMLSignatureException ,
-        com::sun::star::uno::SecurityException ) ;
+        cpo::uno::SecurityException ) ;
 
     /**
      * Perform validation in the environment of signature template and context.
@@ -51,7 +51,7 @@ interface XXMLSignature : com::sun::star::uno::XInterface
         [in] com::sun::star::xml::crypto::XXMLSignatureTemplate aTemplate ,
         [in] com::sun::star::xml::crypto::XXMLSecurityContext aContext
     ) raises( com::sun::star::xml::crypto::XMLSignatureException ,
-        com::sun::star::uno::SecurityException ) ;
+        cpo::uno::SecurityException ) ;
 
     /**
      * get the time used by the engine, JSR105,

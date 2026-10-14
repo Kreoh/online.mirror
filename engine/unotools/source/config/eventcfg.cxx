@@ -38,7 +38,7 @@
 #include <unordered_map>
 
 using namespace ::utl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star;
 
@@ -106,19 +106,19 @@ public:
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::container::NoSuchElementException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void replaceByName( const OUString& aName, const cpo::uno::Any& aElement );
     /// @throws css::container::NoSuchElementException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence < css::beans::PropertyValue > getByName( const OUString& aName );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence< OUString > getElementNames(  );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool hasByName( const OUString& aName );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static cpo::uno::Type const & getElementType(  );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool hasElements() const;
     OUString const & GetEventName( GlobalEventId nID ) const;
 };
@@ -327,19 +327,19 @@ GlobalEventConfig::~GlobalEventConfig()
     }
 }
 
-Reference< container::XNameReplace > SAL_CALL GlobalEventConfig::getEvents()
+Reference< container::XNameReplace > GlobalEventConfig::getEvents()
 {
     std::unique_lock aGuard( GetOwnStaticMutex() );
     Reference< container::XNameReplace > ret(this);
     return ret;
 }
 
-void SAL_CALL GlobalEventConfig::replaceByName( const OUString& aName, const Any& aElement )
+void GlobalEventConfig::replaceByName( const OUString& aName, const Any& aElement )
 {
     std::unique_lock aGuard( GetOwnStaticMutex() );
     m_pImpl->replaceByName( aName, aElement );
 }
-Any SAL_CALL GlobalEventConfig::getByName( const OUString& aName )
+Any GlobalEventConfig::getByName( const OUString& aName )
 {
     return Any(getByName2(aName));
 }
@@ -348,22 +348,22 @@ cpo::uno::Sequence < css::beans::PropertyValue > GlobalEventConfig::getByName2( 
     std::unique_lock aGuard( GetOwnStaticMutex() );
     return m_pImpl->getByName( aName );
 }
-Sequence< OUString > SAL_CALL GlobalEventConfig::getElementNames(  )
+Sequence< OUString > GlobalEventConfig::getElementNames(  )
 {
     std::unique_lock aGuard( GetOwnStaticMutex() );
     return m_pImpl->getElementNames( );
 }
-bool SAL_CALL GlobalEventConfig::hasByName( const OUString& aName )
+bool GlobalEventConfig::hasByName( const OUString& aName )
 {
     std::unique_lock aGuard( GetOwnStaticMutex() );
     return m_pImpl->hasByName( aName );
 }
-Type SAL_CALL GlobalEventConfig::getElementType(  )
+Type GlobalEventConfig::getElementType(  )
 {
     std::unique_lock aGuard( GetOwnStaticMutex() );
     return GlobalEventConfig_Impl::getElementType( );
 }
-bool SAL_CALL GlobalEventConfig::hasElements(  )
+bool GlobalEventConfig::hasElements(  )
 {
     std::unique_lock aGuard( GetOwnStaticMutex() );
     return m_pImpl->hasElements( );

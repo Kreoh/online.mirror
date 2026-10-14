@@ -16,17 +16,22 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <com/sun/star/document/UpdateDocMode.hpp>
 #include <com/sun/star/document/XEmbeddedObjectSupplier2.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/task/XInteractionApprove.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/task/XInteractionRequest.hpp>
+#include <com/sun/star/text/TextContentAnchorType.hpp>
 #include <com/sun/star/text/WritingMode2.hpp>
 #include <com/sun/star/style/BreakType.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
+#include <com/sun/star/text/XTextTablesSupplier.hpp>
 #include <com/sun/star/text/XTextField.hpp>
+#include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
 
@@ -38,6 +43,7 @@
 #include <officecfg/Office/Common.hxx>
 #include <svl/documentlockfile.hxx>
 #include <vcl/BitmapReadAccess.hxx>
+#include <vcl/graph.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <xmloff/odffields.hxx>
 
@@ -50,6 +56,13 @@
 #include <fmtftn.hxx>
 #include <ftnidx.hxx>
 #include <unotxdoc.hxx>
+#include <swtable.hxx>
+#include <docmodel/theme/ColorSet.hxx>
+#include <ThemeColorChanger.hxx>
+#include <frmfmt.hxx>
+#include <frmatr.hxx>
+#include <frameformats.hxx>
+#include <editeng/brushitem.hxx>
 #include <docsh.hxx>
 #include <rootfrm.hxx>
 #include <frame.hxx>
@@ -59,7 +72,8 @@
 #include <tabfrm.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -388,6 +402,19 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf120547)
     CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aPosShape3.Y);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(9091), aSizeShape3.Width);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(8073), aSizeShape3.Height);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testGroupShapeName)
+{
+    // A group shape inside a group shape, each with a name of its own.
+    createSwDoc("tdf118693.docx");
+
+    uno::Reference<container::XIndexAccess> xGroup(getShape(1), uno::UNO_QUERY);
+    uno::Reference<container::XNamed> xInnerGroup(xGroup->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xInnerGroup.is());
+    // Without the fix the name of a group within a group was dropped on import, because the
+    // non-visual properties of such a group were the one thing its reader did not read.
+    CPPUNIT_ASSERT_EQUAL(u"Group 30"_ustr, xInnerGroup->getName());
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf118693)
@@ -1122,7 +1149,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf154319)
     auto xSupplier(mxComponent.queryThrow<css::text::XDocumentIndexesSupplier>());
     auto xIndexes = xSupplier->getDocumentIndexes();
     auto xTOCIndex(xIndexes->getByIndex(0).queryThrow<css::beans::XPropertySet>());
-    css::uno::Reference<css::container::XIndexReplace> xLevelFormats;
+    cpo::uno::Reference<css::container::XIndexReplace> xLevelFormats;
     CPPUNIT_ASSERT(xTOCIndex->getPropertyValue(u"LevelFormat"_ustr) >>= xLevelFormats);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(11), xLevelFormats->getCount());
 
@@ -1185,7 +1212,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf154695)
     auto xSupplier(mxComponent.queryThrow<css::text::XDocumentIndexesSupplier>());
     auto xIndexes = xSupplier->getDocumentIndexes();
     auto xTOCIndex(xIndexes->getByIndex(0).queryThrow<css::beans::XPropertySet>());
-    css::uno::Reference<css::container::XIndexReplace> xLevelFormats;
+    cpo::uno::Reference<css::container::XIndexReplace> xLevelFormats;
     CPPUNIT_ASSERT(xTOCIndex->getPropertyValue(u"LevelFormat"_ustr) >>= xLevelFormats);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(11), xLevelFormats->getCount());
 
@@ -1450,7 +1477,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf165348_lockFileOnRepair)
     class ApproveRepairHandler : public cppu::WeakImplHelper<task::XInteractionHandler>
     {
     public:
-        void SAL_CALL handle(const uno::Reference<task::XInteractionRequest>& xRequest) override
+        void handle(const uno::Reference<task::XInteractionRequest>& xRequest) override
         {
             for (auto& xCont : xRequest->getContinuations())
             {
@@ -1544,6 +1571,135 @@ CPPUNIT_TEST_FIXTURE(Test, testVmlTextboxAutoWidth)
     CPPUNIT_ASSERT_GREATER(sal_Int32(4000), nWidth);
     // It must not fall back to the full column width either.
     CPPUNIT_ASSERT_LESS(sal_Int32(6000), nWidth);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testInlineVmlLineWithoutExtent)
+{
+    // A paragraph holds a VML line without a style, so the line is placed in the text flow and
+    // has no width and height of its own. Its from and to points span 256.65pt by 5pt with a
+    // 5pt stroke.
+    createSwDoc("inline-vml-line.docx");
+
+    uno::Reference<drawing::XShape> xShape = getShape(1);
+    CPPUNIT_ASSERT_EQUAL(text::TextContentAnchorType_AS_CHARACTER,
+                         getProperty<text::TextContentAnchorType>(xShape, u"AnchorType"_ustr));
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected less or equal: 2
+    // - Actual  : 9110
+    // The line took the size of its from and to points and was drawn as a wide bar across
+    // the paragraph, while it has no extent in the text flow. The fallback extent is 1 x 1
+    // hundredths of a millimetre (hmm), read back through twips as 2 x 2.
+    CPPUNIT_ASSERT_LESSEQUAL(sal_Int32(2), xShape->getSize().Width);
+    CPPUNIT_ASSERT_LESSEQUAL(sal_Int32(2), xShape->getSize().Height);
+    CPPUNIT_ASSERT(!getProperty<bool>(xShape, u"Visible"_ustr));
+    CPPUNIT_ASSERT(!getProperty<bool>(xShape, u"Printable"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testNestedTableWithoutBordersInTblPrExRow)
+{
+    // The outer table row carries tblPrEx borders and holds a nested table that declares no
+    // borders at all.
+    createSwDoc("nested-table-tblprex-borders.docx");
+
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XNameAccess> xTables = xTablesSupplier->getTextTables();
+    uno::Reference<text::XTextTable> xInnerTable(xTables->getByName(u"Table1"_ustr),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XText> xInnerCell(xInnerTable->getCellByName(u"A1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"inner cell"_ustr, xInnerCell->getString());
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 0
+    // - Actual  : 18
+    // The cells of the nested table were drawn with the borders of the outer row.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt32(0),
+                         getProperty<table::BorderLine2>(xInnerCell, u"LeftBorder"_ustr).LineWidth);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt32(0),
+                         getProperty<table::BorderLine2>(xInnerCell, u"TopBorder"_ustr).LineWidth);
+
+    // The outer cell keeps the borders of its row.
+    uno::Reference<text::XTextTable> xOuterTable(xTables->getByName(u"Table2"_ustr),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XText> xOuterCell(xOuterTable->getCellByName(u"A1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt32(18),
+                         getProperty<table::BorderLine2>(xOuterCell, u"LeftBorder"_ustr).LineWidth);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testNestedTableFirstInCellWithTblPrExRows)
+{
+    // The outer row carries tblPrEx borders of 1.5pt, wider than the 0.5pt table borders. Its
+    // first cell starts with a nested table, whose row carries a tblPrEx cell margin of 200 twips
+    // and no borders. The second outer cell has two paragraphs and a cell margin of 300 twips.
+    createSwDoc("nested-table-first-in-cell-tblprex.docx");
+
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XNameAccess> xTables = xTablesSupplier->getTextTables();
+
+    // The nested table keeps to its own row: no borders, and its own cell margin.
+    uno::Reference<text::XTextTable> xInnerTable(xTables->getByName(u"Table1"_ustr),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XText> xInnerCell(xInnerTable->getCellByName(u"A1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"inner cell"_ustr, xInnerCell->getString());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt32(0),
+                         getProperty<table::BorderLine2>(xInnerCell, u"LeftBorder"_ustr).LineWidth);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(353),
+                         getProperty<sal_Int32>(xInnerCell, u"TopBorderDistance"_ustr));
+
+    // Both cells of the outer row have the row's 1.5pt borders, the cell that holds the nested
+    // table and the cell after it alike.
+    uno::Reference<text::XTextTable> xOuterTable(xTables->getByName(u"Table2"_ustr),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XText> xFirstCell(xOuterTable->getCellByName(u"A1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt32(53),
+                         getProperty<table::BorderLine2>(xFirstCell, u"LeftBorder"_ustr).LineWidth);
+    uno::Reference<text::XText> xSecondCell(xOuterTable->getCellByName(u"B1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"second cell\nsecond paragraph"_ustr, xSecondCell->getString());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_uInt32(53),
+        getProperty<table::BorderLine2>(xSecondCell, u"LeftBorder"_ustr).LineWidth);
+    // A cell with more than one paragraph keeps the margin set on the cell itself.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(529),
+                         getProperty<sal_Int32>(xSecondCell, u"TopBorderDistance"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testBuiltInTableStyleReference)
+{
+    // Given a document whose table names one of Word's built-in table styles in w:tblStyle
+    // without defining that style in its styles.xml:
+    createSwDoc("table-style-builtin-reference.docx");
+    SwDoc* pDoc = getSwDoc();
+
+    // Then the table gets the matching style from the built-in catalog...
+    const sw::TableFrameFormats& rTableFormats = *pDoc->GetTableFrameFormats();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rTableFormats.size());
+    SwTable* pTable = SwTable::FindTable(rTableFormats[0]);
+    CPPUNIT_ASSERT(pTable);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: Grid Table 4 Accent 1
+    // - Actual  :
+    // i.e. an undefined style reference left the table without any style.
+    CPPUNIT_ASSERT_EQUAL(u"Grid Table 4 Accent 1"_ustr, pTable->GetTableStyleName().toString());
+
+    // ...and the style shows in the cells: the header row is filled with the accent color of
+    // the document's theme.
+    const SwTableBox* pHeaderBox = pTable->GetTabLines()[0]->GetTabBoxes()[0];
+    CPPUNIT_ASSERT_EQUAL(
+        sw::GetDocumentThemeColors(*pDoc).getColor(model::ThemeColorType::Accent1),
+        pHeaderBox->GetFrameFormat()->GetAttrSet().GetBackground().GetColor());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkedPictureNotReadOnLoad)
+{
+    // Given a document whose picture is only a link to a file next to it, loaded with link
+    // updates off:
+    loadWithParams(createFileURL(u"linked-picture.docx"),
+                   { comphelper::makePropertyValue(
+                       u"UpdateDocMode"_ustr, sal_Int16(document::UpdateDocMode::NO_UPDATE)) });
+
+    // Then the linked file is not read, so the picture has no pixels:
+    auto xGraphic = getProperty<uno::Reference<graphic::XGraphic>>(getShape(1), u"Graphic"_ustr);
+    // Without the accompanying fix in place, this test would have failed, the import read the
+    // linked file and the picture was a bitmap.
+    CPPUNIT_ASSERT(Graphic(xGraphic).GetType() != GraphicType::Bitmap);
 }
 
 // tests should only be added to ooxmlIMPORT *if* they fail round-tripping in ooxmlEXPORT

@@ -61,7 +61,7 @@ OUString SvxOutlinerForwarder::GetText( const ESelection& rSel ) const
 {
     //! GetText (ESelection) should probably also be in the Outliner
     // in the time being use as the hack for the EditEngine:
-    EditEngine* pEditEngine = const_cast<EditEngine*>(&rOutliner.GetEditEngine());
+    EditEngine* pEditEngine = &rOutliner.GetEditEngine();
     return pEditEngine->GetText( rSel );
 }
 
@@ -109,7 +109,7 @@ SfxItemSet SvxOutlinerForwarder::GetAttribs( const ESelection& rSel, EditEngineA
 
     //! Does it not exist on the Outliner?
     //! and why is the GetAttribs on the EditEngine not a const?
-    EditEngine& rEditEngine = const_cast<EditEngine&>(rOutliner.GetEditEngine());
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
 
     SfxItemSet aSet( ImplOutlinerForwarderGetAttribs( rSel, nOnlyHardAttrib, rEditEngine ) );
 
@@ -146,7 +146,7 @@ SfxItemSet SvxOutlinerForwarder::GetParaAttribs( sal_Int32 nPara ) const
     moParaAttribsCache.emplace( rOutliner.GetParaAttribs( nPara ) );
     mnParaAttribsCache = nPara;
 
-    EditEngine& rEditEngine = const_cast<EditEngine&>(rOutliner.GetEditEngine());
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
 
     SfxStyleSheet* pStyle = rEditEngine.GetStyleSheet( nPara );
     if( pStyle )
@@ -181,7 +181,7 @@ SfxItemPool* SvxOutlinerForwarder::GetPool() const
 
 void SvxOutlinerForwarder::GetPortions( sal_Int32 nPara, std::vector<sal_Int32>& rList ) const
 {
-    const_cast<EditEngine&>(rOutliner.GetEditEngine()).GetPortions( nPara, rList );
+    rOutliner.GetEditEngine().GetPortions( nPara, rList );
 }
 
 OUString SvxOutlinerForwarder::GetStyleSheet(sal_Int32 nPara) const
@@ -436,35 +436,22 @@ bool SvxOutlinerForwarder::SupportsOutlineDepth() const
 
 sal_Int16 SvxOutlinerForwarder::GetDepth( sal_Int32 nPara ) const
 {
-    DBG_ASSERT( 0 <= nPara && nPara < GetParagraphCount(), "SvxOutlinerForwarder::GetDepth: Invalid paragraph index");
-
-    Paragraph* pPara = rOutliner.GetParagraph( nPara );
-
-    sal_Int16 nLevel = -1;
-
-    if( pPara )
-        nLevel = rOutliner.GetDepth( nPara );
-
-    return nLevel;
+    return rOutliner.GetDepth( nPara );
 }
 
 bool SvxOutlinerForwarder::SetDepth( sal_Int32 nPara, sal_Int16 nNewDepth )
 {
-    DBG_ASSERT( 0 <= nPara && nPara < GetParagraphCount(), "SvxOutlinerForwarder::SetDepth: Invalid paragraph index");
+    assert( 0 <= nPara && nPara < GetParagraphCount() && "SvxOutlinerForwarder::SetDepth: Invalid paragraph index");
 
-    if( (nNewDepth >= -1) && (nNewDepth <= 9) && (0 <= nPara && nPara < GetParagraphCount()) )
+    if( (nNewDepth >= -1) && (nNewDepth <= 9))
     {
-        Paragraph* pPara = rOutliner.GetParagraph( nPara );
-        if( pPara )
-        {
-            rOutliner.SetDepth( pPara, nNewDepth );
+        rOutliner.SetDepth( nPara, nNewDepth );
 
 //          const bool bOutlinerText = pSdrObject && (pSdrObject->GetObjInventor() == SdrInventor::Default) && (pSdrObject->GetObjIdentifier() == OBJ_OUTLINETEXT);
-            if( bOutlinerText )
-                rOutliner.SetLevelDependentStyleSheet( nPara );
+        if( bOutlinerText )
+            rOutliner.SetLevelDependentStyleSheet( nPara );
 
-            return true;
-        }
+        return true;
     }
 
     return false;
@@ -472,78 +459,41 @@ bool SvxOutlinerForwarder::SetDepth( sal_Int32 nPara, sal_Int16 nNewDepth )
 
 sal_Int32 SvxOutlinerForwarder::GetNumberingStartValue( sal_Int32 nPara )
 {
-    if( 0 <= nPara && nPara < GetParagraphCount() )
-    {
-        return rOutliner.GetNumberingStartValue( nPara );
-    }
-    else
-    {
-        OSL_FAIL( "SvxOutlinerForwarder::GetNumberingStartValue)(), Invalid paragraph index");
-        return -1;
-    }
+    return rOutliner.GetNumberingStartValue( nPara );
 }
 
 void SvxOutlinerForwarder::SetNumberingStartValue(  sal_Int32 nPara, sal_Int32 nNumberingStartValue )
 {
-    if( 0 <= nPara && nPara < GetParagraphCount() )
-    {
-        rOutliner.SetNumberingStartValue( nPara, nNumberingStartValue );
-    }
-    else
-    {
-        OSL_FAIL( "SvxOutlinerForwarder::SetNumberingStartValue)(), Invalid paragraph index");
-    }
+    rOutliner.SetNumberingStartValue( nPara, nNumberingStartValue );
 }
 
 bool SvxOutlinerForwarder::IsParaIsNumberingRestart( sal_Int32 nPara )
 {
-    if( 0 <= nPara && nPara < GetParagraphCount() )
-    {
-        return rOutliner.IsParaIsNumberingRestart( nPara );
-    }
-    else
-    {
-        OSL_FAIL( "SvxOutlinerForwarder::IsParaIsNumberingRestart)(), Invalid paragraph index");
-        return false;
-    }
+    return rOutliner.IsParaIsNumberingRestart( nPara );
 }
 
 void SvxOutlinerForwarder::SetParaIsNumberingRestart(  sal_Int32 nPara, bool bParaIsNumberingRestart )
 {
-    if( 0 <= nPara && nPara < GetParagraphCount() )
-    {
-        rOutliner.SetParaIsNumberingRestart( nPara, bParaIsNumberingRestart );
-    }
-    else
-    {
-        OSL_FAIL( "SvxOutlinerForwarder::SetParaIsNumberingRestart)(), Invalid paragraph index");
-    }
+    rOutliner.SetParaIsNumberingRestart( nPara, bParaIsNumberingRestart );
 }
 
 const SfxItemSet * SvxOutlinerForwarder::GetEmptyItemSetPtr()
 {
-    EditEngine& rEditEngine = const_cast< EditEngine& >( rOutliner.GetEditEngine() );
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
     return &rEditEngine.GetEmptyItemSet();
 }
 
 void SvxOutlinerForwarder::AppendParagraph()
 {
-    EditEngine& rEditEngine = const_cast< EditEngine& >( rOutliner.GetEditEngine() );
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
     rEditEngine.InsertParagraph( rEditEngine.GetParagraphCount(), OUString() );
 }
 
 sal_Int32 SvxOutlinerForwarder::AppendTextPortion( sal_Int32 nPara, const OUString &rText, const SfxItemSet & /*rSet*/ )
 {
-    sal_Int32 nLen = 0;
-
-    EditEngine& rEditEngine = const_cast< EditEngine& >( rOutliner.GetEditEngine() );
-    sal_Int32 nParaCount = rEditEngine.GetParagraphCount();
-    DBG_ASSERT( 0 <= nPara && nPara < nParaCount, "paragraph index out of bounds" );
-    if (0 <= nPara && nPara < nParaCount)
-    {
-        nLen = rEditEngine.GetTextLen( nPara );
-        rEditEngine.QuickInsertText(rText, ESelection(nPara, nLen));
-    }
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
+    sal_Int32 nLen = rEditEngine.GetTextLen( nPara );
+    rEditEngine.QuickInsertText(rText, ESelection(nPara, nLen));
 
     return nLen;
 }

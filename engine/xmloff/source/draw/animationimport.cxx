@@ -18,6 +18,7 @@
  */
 
 #include <memory>
+#include <optional>
 #include <xmloff/unointerfacetouniqueidentifiermapper.hxx>
 #include <xmloff/SoundReference.hxx>
 #include <com/sun/star/lang/XInitialization.hpp>
@@ -77,7 +78,7 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::animations;
 using namespace ::com::sun::star::presentation;
 using namespace ::com::sun::star::drawing;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::xmloff::token;
 
@@ -433,7 +434,7 @@ Any AnimationsImportHelperImpl::convertPath( const OUString& rValue )
 AnimationNodeContext::AnimationNodeContext(
         const Reference< XAnimationNode >& xParentNode,
         SvXMLImport& rImport, sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
         const std::shared_ptr<AnimationsImportHelperImpl>& pHelper )
 :   SvXMLImportContext(rImport),
     mpHelper( pHelper )
@@ -539,7 +540,7 @@ AnimationNodeContext::AnimationNodeContext(
     }
 }
 
-void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+void AnimationNodeContext::init_node(  const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if( !mxNode.is() )
         return;
@@ -560,6 +561,7 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
         std::string_view aKeyTimes;
         bool bHaveXmlId( false );
         OUString sXmlId;
+        std::optional<sal_Int16> oExtSubtype;
 
         sal_Int16 nEnum;
         for (auto &aIter : sax_fastparser::castToFastAttributeList( xAttrList ))
@@ -1041,6 +1043,16 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             }
             break;
 
+            case XML_ELEMENT(CO_EXT, XML_SUBTYPE):
+            {
+                // Applied after all attributes, so it wins over the smil:subtype fallback.
+                if (xTransitionFilter.is()
+                    && SvXMLUnitConverter::convertEnum(nEnum, aIter.toView(),
+                                                       aAnimations_EnumMap_TransitionSubTypeExt))
+                    oExtSubtype = nEnum;
+            }
+            break;
+
             case XML_ELEMENT(SMIL, XML_MODE):
             case XML_ELEMENT(SMIL_COMPAT, XML_MODE):
             case XML_ELEMENT(SMIL_SO52, XML_MODE):
@@ -1114,7 +1126,7 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             case XML_ELEMENT(PRESENTATION_SO52, XML_GROUP_ID):
             case XML_ELEMENT(PRESENTATION_OOO, XML_GROUP_ID):
             {
-                aUserData.emplace_back( "group-id", Any( aIter.toInt32() ) );
+                aUserData.emplace_back( u"group-id"_ustr, Any( aIter.toInt32() ) );
             }
             break;
 
@@ -1146,6 +1158,9 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             }
             }
         }
+
+        if (oExtSubtype)
+            xTransitionFilter->setSubtype(*oExtSubtype);
 
         if (!sXmlId.isEmpty())
         {
@@ -1203,8 +1218,8 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler >  AnimationNodeContext::createFastChildContext(sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList)
+cpo::uno::Reference< css::xml::sax::XFastContextHandler >  AnimationNodeContext::createFastChildContext(sal_Int32 nElement,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList)
 {
     if( mxNode.is())
         return new AnimationNodeContext( mxNode, GetImport(), nElement, xAttrList, mpHelper );
@@ -1222,12 +1237,12 @@ public:
                     const Reference<XFastAttributeList>& xAttrList) override;
 
     // XInterface
-    virtual Any SAL_CALL queryInterface( const Type& aType ) override;
-    virtual void SAL_CALL acquire() noexcept override;
-    virtual void SAL_CALL release() noexcept override;
+    virtual Any queryInterface( const Type& aType ) override;
+    virtual void acquire() noexcept override;
+    virtual void release() noexcept override;
 
     // XAnimationNodeSupplier
-    Reference< XAnimationNode > SAL_CALL getAnimationNode() override;
+    Reference< XAnimationNode > getAnimationNode() override;
 
 private:
     Reference< XAnimationNode > mxRootNode;
@@ -1245,7 +1260,7 @@ AnimationsImport::AnimationsImport( const Reference< XComponentContext > & rxCon
 }
 
 // XInterface
-Any SAL_CALL AnimationsImport::queryInterface( const Type& aType )
+Any AnimationsImport::queryInterface( const Type& aType )
 {
     if ( aType == cppu::UnoType<XAnimationNodeSupplier>::get())
     {
@@ -1257,12 +1272,12 @@ Any SAL_CALL AnimationsImport::queryInterface( const Type& aType )
     }
 }
 
-void SAL_CALL AnimationsImport::acquire() noexcept
+void AnimationsImport::acquire() noexcept
 {
     SvXMLImport::acquire();
 }
 
-void SAL_CALL AnimationsImport::release() noexcept
+void AnimationsImport::release() noexcept
 {
     SvXMLImport::release();
 }
@@ -1282,7 +1297,7 @@ SvXMLImportContext *AnimationsImport::CreateFastContext(
 }
 
 // XAnimationNodeSupplier
-Reference< XAnimationNode > SAL_CALL AnimationsImport::getAnimationNode()
+Reference< XAnimationNode > AnimationsImport::getAnimationNode()
 {
     return mxRootNode;
 }
@@ -1370,8 +1385,8 @@ void AnimationNodeContext::postProcessRootNode( const Reference< XAnimationNode 
 
 } // namespace xmloff
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_Xmloff_AnimationsImport(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Xmloff_AnimationsImport(cpo::uno::XComponentContext* pCtx,
                                           cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new xmloff::AnimationsImport(pCtx));

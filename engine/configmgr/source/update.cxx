@@ -23,9 +23,9 @@
 
 #include <com/sun/star/configuration/XUpdate.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
@@ -48,7 +48,7 @@ class Service:
     public cppu::WeakImplHelper< css::configuration::XUpdate, css::lang::XServiceInfo >
 {
 public:
-    explicit Service(const css::uno::Reference< css::uno::XComponentContext >& context):
+    explicit Service(const cpo::uno::Reference< cpo::uno::XComponentContext >& context):
         context_(context)
     {
         assert(context.is());
@@ -61,13 +61,7 @@ private:
 
     virtual ~Service() override {}
 
-    virtual void insertExtensionXcsFile(
-        bool shared, OUString const & fileUri) override;
-
-    virtual void insertExtensionXcuFile(
-        bool shared, OUString const & fileUri) override;
-
-    virtual void removeExtensionXcuFile(OUString const & fileUri) override;
+    virtual void insertExtensionXcuFile(OUString const & fileUri) override;
 
     virtual void insertModificationXcuFile(
         OUString const & fileUri,
@@ -89,39 +83,17 @@ private:
     }
 
     std::shared_ptr<osl::Mutex> lock_;
-    css::uno::Reference< css::uno::XComponentContext > context_;
+    cpo::uno::Reference< cpo::uno::XComponentContext > context_;
 };
 
-void Service::insertExtensionXcsFile(
-    bool shared, OUString const & fileUri)
-{
-    osl::MutexGuard g(*lock_);
-    Components::getSingleton(context_).insertExtensionXcsFile(shared, fileUri);
-}
-
-void Service::insertExtensionXcuFile(
-    bool shared, OUString const & fileUri)
+void Service::insertExtensionXcuFile(OUString const & fileUri)
 {
     Broadcaster bc;
     {
         osl::MutexGuard g(*lock_);
         Components & components = Components::getSingleton(context_);
         Modifications mods;
-        components.insertExtensionXcuFile(shared, fileUri, &mods);
-        components.initGlobalBroadcaster(
-            mods, rtl::Reference< RootAccess >(), &bc);
-    }
-    bc.send();
-}
-
-void Service::removeExtensionXcuFile(OUString const & fileUri)
-{
-    Broadcaster bc;
-    {
-        osl::MutexGuard g(*lock_);
-        Components & components = Components::getSingleton(context_);
-        Modifications mods;
-        components.removeExtensionXcuFile(fileUri, &mods);
+        components.insertExtensionXcuFile(fileUri, &mods);
         components.initGlobalBroadcaster(
             mods, rtl::Reference< RootAccess >(), &bc);
     }
@@ -157,9 +129,9 @@ void Service::writeModifications(OUString const & fileUri)
 }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_configuration_Update_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new configmgr::update::Service(context));
 }

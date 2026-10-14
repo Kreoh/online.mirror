@@ -16,12 +16,17 @@ window.app = {
 // since body has overflow:hidden, that still shifts the visible UI up by the chrome-height delta
 // when focus arrives during a chrome rebuild like the readonly-to-edit transition), and
 // {preventScroll: true} on .focus() is not enough because Chromium's selection-into-view path runs
-// independently of focus():
+// independently of focus(). WebKit scrolls the page the same way to reveal a focused element or
+// frame, in both directions, so both axes are pinned:
 window.addEventListener('scroll', function() {
 	if (document.documentElement.scrollTop !== 0)
 		document.documentElement.scrollTop = 0;
 	if (document.body && document.body.scrollTop !== 0)
 		document.body.scrollTop = 0;
+	if (document.documentElement.scrollLeft !== 0)
+		document.documentElement.scrollLeft = 0;
+	if (document.body && document.body.scrollLeft !== 0)
+		document.body.scrollLeft = 0;
 }, true);
 
 // For typings (including the global object), please see browser/src/global.d.ts
@@ -205,6 +210,13 @@ class BrowserProperties {
 			isCODesktop: function() {
 				return global.ThisIsTheMacOSApp || global.ThisIsTheQtApp || global.ThisIsTheWindowsApp;
 			},
+			// The apps whose engine drives the system clipboard through the
+			// installed clipboard provider: copy advertises straight onto the
+			// system clipboard and .uno:Paste reads it back in the engine, so
+			// the browser moves no clipboard payload itself.
+			hasEngineClipboardProvider: function() {
+				return global.ThisIsTheiOSApp || global.mode.isCODesktop();
+			},
 			isDesktop: function() {
 				if (global.ThisIsTheWindowsApp || global.ThisIsTheQtApp	|| global.ThisIsTheMacOSApp)
 					return true;
@@ -213,6 +225,9 @@ class BrowserProperties {
 					return true;
 
 				return !global.L.Browser.mobile;
+			},
+			isInteractivePreview: function() {
+				return global.coolPreview;
 			},
 			getDeviceFormFactor: function() {
 				if (global.mode.isSmallScreenDevice())
@@ -275,6 +290,7 @@ class InitializerBase {
 		window.protocolDebug = false;
 		window.enableDebug = false;
 		window.frameAncestors = "";
+		window.relayOrigin = "";
 		window.socketProxy = false;
 		window.uiDefaults = {};
 		window.useStatusbarSaveIndicator = false;
@@ -282,6 +298,10 @@ class InitializerBase {
 		window.deeplEnabled = false;
 		// Match COOL's ai.ethical_rating_message default (true).
 		window.aiEthicalRatingMessage = true;
+		// Match COOL's ai.show_ai_sidebar default (false).
+		window.showAISidebar = false;
+		// Match COOL's ai.show_ai_notebookbar default (false).
+		window.showAINotebookbar = false;
 		// Match COOL's zotero.enable default (true). On the desktop the plugin
 		// is still gated on a user-provided API key (and !isSmallScreenDevice)
 		// so this only surfaces the feature where it makes sense.
@@ -295,8 +315,11 @@ class InitializerBase {
 		window.indirectionUrl = "";
 		window.geolocationSetup = false;
 		window.canvasSlideshowEnabled = false;
+		window.remoteLinksEnabled = false;
 		window.wopiSettingBaseUrl = element.dataset.wopiSettingBaseUrl;
 		window.enableExperimentalFeatures = element.dataset.enableExperimentalFeatures === 'true';
+
+		window.coolPreview = element.dataset.coolPreview === 'true';
 
 		window.tileSize = 256;
 
@@ -317,7 +340,6 @@ class InitializerBase {
 
 			document.getElementById('content-keeper').remove();
 		}, false);
-
 		let productName = document.getElementById("init-product-branding-name") ? document.getElementById("init-product-branding-name").value : "";
 		if (typeof productName === 'string' && productName.length) {
 			window.brandProductName = productName;
@@ -455,6 +477,9 @@ class BrowserInitializer extends InitializerBase {
 		window.protocolDebug = element.dataset.protocolDebug.toLowerCase().trim() === "true";
 		window.enableDebug = element.dataset.enableDebug.toLowerCase().trim() === "true";
 		window.frameAncestors = decodeURIComponent(element.dataset.frameAncestors);
+		// The origin of the page that relays messages between this page and the
+		// WOPI host. Empty when the WOPI host embeds this page directly.
+		window.relayOrigin = element.dataset.relayOrigin || "";
 		window.socketProxy = element.dataset.socketProxy.toLowerCase().trim() === "true";
 		window.uiDefaults = JSON.parse(atob(element.dataset.uiDefaults));
 		// The server administrator can choose the opening zoom for every text
@@ -467,6 +492,8 @@ class BrowserInitializer extends InitializerBase {
 		window.checkFileInfoOverride = element.dataset.checkFileInfoOverride;
 		window.deeplEnabled = element.dataset.deeplEnabled.toLowerCase().trim() === "true";
 		window.aiEthicalRatingMessage = element.dataset.aiEthicalRatingMessage.toLowerCase().trim() === "true";
+		window.showAISidebar = element.dataset.showAiSidebar.toLowerCase().trim() === "true";
+		window.showAINotebookbar = element.dataset.showAiNotebookbar.toLowerCase().trim() === "true";
 		window.zoteroEnabled = element.dataset.zoteroEnabled.toLowerCase().trim() === "true";
 		window.documentSigningEnabled = element.dataset.documentSigningEnabled.toLowerCase().trim() === "true";
 		window.savedUIState = element.dataset.savedUiState.toLowerCase().trim() === "true";
@@ -475,6 +502,7 @@ class BrowserInitializer extends InitializerBase {
 		window.indirectionUrl = element.dataset.indirectionUrl;
 		window.geolocationSetup = element.dataset.geolocationSetup.toLowerCase().trim() === "true";
 		window.canvasSlideshowEnabled = element.dataset.canvasSlideshowEnabled.toLowerCase().trim() === "true";
+		window.remoteLinksEnabled = element.dataset.remoteLinksEnabled.toLowerCase().trim() === "true";
 		window.wopiSettingBaseUrl = element.dataset.wopiSettingBaseUrl;
 		// The value is percent-encoded server-side (see FileServer.cpp) before
 		// being embedded in the data attribute, so decode it back for display.
@@ -537,6 +565,7 @@ class MobileAppInitializer extends InitializerBase {
 		window.idleTimeoutSecs = 1000000;
 
 		window.canvasSlideshowEnabled = true;
+		window.remoteLinksEnabled = false;
 		window.enableAccessibility = true;
 		window.enableExperimentalFeatures = element.dataset.enableExperimentalFeatures === 'true';
 	}
@@ -805,10 +834,20 @@ function showWelcomeSVG() {
 	const initializer = getInitializerClass();
 	initializer.afterInitialization();
 
+	// True when global.socket is an open WebSocket, IndirectSocket or
+	// ProxySocket, so a message can be passed straight to its send().
+	global.isRawSocketOpen = function () {
+		return !!global.socket &&
+			(global.socket instanceof WebSocket ||
+			 global.socket instanceof global.IndirectSocket ||
+			 global.socket instanceof global.ProxySocket) &&
+			global.socket.readyState === 1;
+	};
+
 	global.logServer = function (log) {
 		if (global.ThisIsAMobileApp) {
 			global.postMobileError(log);
-		} else if (global.socket && (global.socket instanceof WebSocket || global.socket instanceof global.IndirectSocket) && global.socket.readyState === 1) {
+		} else if (global.isRawSocketOpen()) {
 			global.socket.send(log);
 		} else if (global.socket && global.L && global.app.definitions.Socket &&
 			   (global.socket instanceof global.app.definitions.Socket) && global.socket.connected()) {
@@ -1088,13 +1127,37 @@ function showWelcomeSVG() {
 		},
 
 		sendPendingBrowserSettingsUpdate: function() {
+			global.prefs._sendBrowserSettingsUpdate(true);
+		},
+
+		// Hands the pending changes to the server, which keeps its own copy of the
+		// settings file. With upload set, the server writes the file out again
+		// afterwards; without it, the file already holds these values and the
+		// server only refreshes its copy.
+		_sendBrowserSettingsUpdate: function(upload) {
 			const isEmpty = (obj) => Object.keys(obj).length === 0;
-			if (!isEmpty(global.prefs._settingUpdateJSON)) {
-				global.socket.send('browsersetting action=update json=' + JSON.stringify(global.prefs._settingUpdateJSON));
+			// Ensure the socket is open before sending. Because it resets the _settingsUpdatedJSON.
+			const canSend = global.socket && global.socket.readyState === 1;
+			if (canSend && !isEmpty(global.prefs._settingUpdateJSON)) {
+				const uploadToken = upload ? '' : 'upload=false ';
+				global.socket.send('browsersetting action=update ' + uploadToken + 'json=' + JSON.stringify(global.prefs._settingUpdateJSON));
 				global.prefs._settingUpdateJSON = {};
 			}
 			clearTimeout(global.prefs._pendingSettingUpdate);
 			global.prefs._pendingSettingUpdate = undefined;
+		},
+
+		recordStoredBrowserSettings: function (settings) {
+			if (!global.prefs.useBrowserSetting)
+				return;
+
+			// Data is already sent to WOPI. Don't re-send it if there isn't any news.
+			const upload = Object.keys(global.prefs._settingUpdateJSON).length > 0;
+			for (const [key, value] of Object.entries(settings)) {
+				global.prefs._userBrowserSetting[key] = value;
+				global.prefs._settingUpdateJSON[key] = value;
+			}
+			global.prefs._sendBrowserSettingsUpdate(upload);
 		},
 
 		// Debounce before pushing a browsersetting update to the server, so a
@@ -1126,7 +1189,7 @@ function showWelcomeSVG() {
 			}
 
 			const isEmpty = (obj) => Object.keys(obj).length === 0;
-			if (browserSettingEnabled && !isEmpty(global.prefs._settingUpdateJSON) && global.socket && (global.socket instanceof WebSocket || global.socket instanceof global.IndirectSocket) && global.socket.readyState === 1) {
+			if (browserSettingEnabled && !isEmpty(global.prefs._settingUpdateJSON) && global.isRawSocketOpen()) {
 				clearTimeout(global.prefs._pendingSettingUpdate);
 				global.prefs._pendingSettingUpdate = setTimeout(L.bind(this.sendPendingBrowserSettingsUpdate, this), this._settingUpdateDebounceMs());
 			}
@@ -1137,7 +1200,7 @@ function showWelcomeSVG() {
 			if (global.prefs.useBrowserSetting) {
 				const oldValue = global.prefs._userBrowserSetting[key];
 				global.prefs._userBrowserSetting[key] = value;
-				if (global.socket && (global.socket instanceof WebSocket || global.socket instanceof global.IndirectSocket) && global.socket.readyState === 1 && oldValue !== value) {
+				if (global.isRawSocketOpen() && oldValue !== value) {
 					global.prefs._settingUpdateJSON[key] = value;
 					clearTimeout(global.prefs._pendingSettingUpdate);
 					global.prefs._pendingSettingUpdate = setTimeout(L.bind(this.sendPendingBrowserSettingsUpdate, this), this._settingUpdateDebounceMs());
@@ -1222,6 +1285,22 @@ function showWelcomeSVG() {
 			}
 			return global.prefs.getBoolean('darkTheme');
 		},
+
+		// The automatic spell checking choice is kept per document type, because a
+		// spreadsheet of codes and abbreviations wants a different default from a
+		// text document. The document type is not known yet when the 'load' message
+		// goes out, so name every choice that was made and let the kit pick the one
+		// that applies. Returns an empty string when nothing was ever chosen, which
+		// leaves each document type to its own default in core.
+		spellOnlineForLoad: function() {
+			const parts = [];
+			for (const docType of ['text', 'spreadsheet', 'presentation', 'drawing']) {
+				const value = global.prefs.get(docType + '.spellOnline');
+				if (value)
+					parts.push(docType + ':' + value);
+			}
+			return parts.join(',');
+		},
 	};
 
 	global.getAccessibilityState = function () {
@@ -1266,6 +1345,15 @@ function showWelcomeSVG() {
 		}
 	}
 	// End 24.04.4.1 renames
+
+	// The automatic spell checking choice became one per document type. A value
+	// stored before that was whatever the user last chose in any application, so
+	// it still stands for the document types that shared its default. Calc is
+	// left out: it now starts with spell checking off, which is the whole point
+	// of the split.
+	for (const docType of ['text', 'presentation', 'drawing']) {
+		global.prefs._renameLocalStoragePref('spellOnline', `${docType}.spellOnline`);
+	}
 
 	global.keyboard = {
 		onscreenKeyboardHint: global.uiDefaults['onscreenKeyboardHint'],
@@ -1502,6 +1590,22 @@ function showWelcomeSVG() {
 		}
 	}, false);
 
+	// The colour as "#rrggbb", or the empty string when it cannot be read.
+	global.getFocusRingColor = function () {
+		const probe = document.createElement('div');
+		probe.style.outlineColor = '-webkit-focus-ring-color';
+		document.documentElement.appendChild(probe);
+		const computed = global.getComputedStyle(probe).outlineColor;
+		probe.remove();
+
+		const parts = computed.match(/\d+/g);
+		if (!parts || parts.length < 3)
+			return '';
+		return '#' + parts.slice(0, 3).map(function (part) {
+			return parseInt(part, 10).toString(16).padStart(2, '0');
+		}).join('');
+	};
+
 	global.fakeWebSocketCounter = 0;
 	global.FakeWebSocket = function () {
 		this.binaryType = 'arraybuffer';
@@ -1643,7 +1747,8 @@ function showWelcomeSVG() {
 				i += size; // skip trailing '\n' in loop-increment
 			}
 		};
-		this.sendQueue = '';
+		// Strings and Blobs: a binary message, e.g. a pasted image, must not be turned into text.
+		this.sendQueue = [];
 		this._signalErrorClose = function() {
 			clearInterval(this.pollInterval);
 			clearTimeout(this.delaySession);
@@ -1653,7 +1758,7 @@ function showWelcomeSVG() {
 			if (that.readyState < 3)
 			{
 				this.onerror();
-				this.onclose();
+				this.onclose({ code: 1006, wasClean: false, reason: 'proxy error' });
 			}
 			this.sessionId = 'open';
 			this.inSerial = 0;
@@ -1752,10 +1857,11 @@ function showWelcomeSVG() {
 				that.msgInflight--;
 			});
 			const toSend = that.sendQueue;
-			that.sendQueue = '';
+			that.sendQueue = [];
 			that.msgInflight++;
 			// terminate all messages with an end-marker
-			req.send(toSend.concat('.'));
+			toSend.push('.');
+			req.send(new Blob(toSend, { type: 'text/plain;charset=UTF-8' }));
 		};
 		this.getSessionId = function() {
 			if (this.openInflight > 0)
@@ -1814,9 +1920,12 @@ function showWelcomeSVG() {
 		};
 		this.send = function(msg) {
 			var hadData = this.sendQueue.length > 0;
-			this.sendQueue = this.sendQueue.concat(
+			// A Blob takes the other binary types as parts too, only their size is read differently.
+			const size = typeof msg === 'string' ? new TextEncoder().encode(msg).length
+				: msg instanceof Blob ? msg.size : msg.byteLength;
+			this.sendQueue.push(
 				'B0x' + this.outSerial.toString(16) + '\n' +
-				'0x' + (new TextEncoder().encode(msg)).length.toString(16) + '\n' + msg + '\n');
+				'0x' + size.toString(16) + '\n', msg, '\n');
 			this.outSerial++;
 
 			// Send ASAP, if we have throttled.
@@ -1847,7 +1956,7 @@ function showWelcomeSVG() {
 			var oldState = this.readyState;
 			global.app.console.debug('proxy: close socket');
 			this.readyState = 3;
-			this.onclose();
+			this.onclose({ code: 1000, wasClean: true, reason: 'proxy closed' });
 			clearInterval(this.pollInterval);
 			clearTimeout(this.delaySession);
 			this.pollInterval = undefined;
@@ -1950,6 +2059,12 @@ function showWelcomeSVG() {
 		} , false);
 	}
 
+	// Route-token request timings. The controller answers 202 while it is scaling or migrating,
+	// and the request is repeated until it answers or the limit below is reached.
+	const routeTokenTimeoutMs = 30000;
+	const routeTokenRetryIntervalMs = 3000;
+	const routeTokenRetryLimitMs = 300000;
+
 	// indirect socket to wrap the asyncness around fetching the routetoken from indirection url endpoint
 	global.IndirectSocket = function(uri) {
 		var that = this;
@@ -1958,22 +2073,47 @@ function showWelcomeSVG() {
 		this.unloading = false;
 		this.readyState = 0; // connecting
 		this.innerSocket = undefined;
+		this.tokenRequest = undefined;
+		this.retryTimer = undefined;
+		this.retryDeadline = undefined;
 
 		this.onclose = function() {};
 		this.onerror = function () {};
 		this.onmessage = function () {};
 		this.onopen = function () {};
 
+		// Drops the request for a route and any repeat of it that is still scheduled.
+		this.stopRouteTokenRequest = function () {
+			if (that.retryTimer !== undefined) {
+				clearTimeout(that.retryTimer);
+				that.retryTimer = undefined;
+			}
+			if (that.tokenRequest !== undefined) {
+				const request = that.tokenRequest;
+				that.tokenRequest = undefined;
+				request.abort();
+			}
+		};
+
 		this.close = function() {
-			this.innerSocket.close();
+			this.stopRouteTokenRequest();
+			if (this.innerSocket)
+				this.innerSocket.close();
+			else
+				this.readyState = 3;
 		};
 
 		this.send = function(msg) {
-			this.innerSocket.send(msg);
+			if (this.innerSocket)
+				this.innerSocket.send(msg);
+			else
+				global.app.console.warn(
+					'Indirection url: no route yet, dropping ' + msg);
 		};
 
 		this.setUnloading = function() {
 			this.unloading = true;
+			this.stopRouteTokenRequest();
 		};
 
 		this.sendPostMsg = function(errorCode) {
@@ -1997,52 +2137,110 @@ function showWelcomeSVG() {
 			global.parent.postMessage(JSON.stringify(msg), '*');
 		};
 
+		// Tells the outer socket the route could not be had, so that it runs the reconnect
+		// ladder it runs for any other close.
+		this.routeFailed = function (reason) {
+			that.stopRouteTokenRequest();
+			if (that.readyState === 3)
+				return;
+
+			global.app.console.error('Indirection url: ' + reason);
+			that.readyState = 3;
+			that.sendPostMsg(-1);
+			that.onerror();
+			that.onclose({ code: 1006, wasClean: false, reason: reason });
+		};
+
+		this.connectToRoute = function (response) {
+			const uriWithRouteToken = response ? response.uri : undefined;
+			if (typeof uriWithRouteToken !== 'string' || uriWithRouteToken === '') {
+				that.routeFailed('the controller answered without a uri');
+				return;
+			}
+
+			let params;
+			try {
+				params = (new URL(uriWithRouteToken)).searchParams;
+			} catch (error) {
+				that.routeFailed('the controller answered with the unusable uri '
+					+ uriWithRouteToken);
+				return;
+			}
+
+			global.expectedServerId = response.serverId;
+			global.routeToken = params.get('RouteToken');
+			global.app.console.log('updated routeToken: ' + global.routeToken);
+
+			const socket = new WebSocket(uriWithRouteToken);
+			that.innerSocket = socket;
+			socket.binaryType = that.binaryType;
+			socket.onerror = function () {
+				that.readyState = socket.readyState;
+				that.onerror();
+			};
+			socket.onclose = function (e) {
+				that.readyState = 3;
+				that.onclose(e);
+				socket.onerror = function () { };
+				socket.onclose = function () { };
+				socket.onmessage = function () { };
+			};
+			socket.onopen = function () {
+				that.readyState = 1;
+				that.onopen();
+			};
+			socket.onmessage = function (e) {
+				that.readyState = socket.readyState;
+				that.onmessage(e);
+			};
+		};
+
+		// The controller is busy. Tell the integrator once, then ask again until the limit.
+		this.retryRouteTokenRequest = function (requestUri, response) {
+			if (that.unloading || that.readyState === 3)
+				return;
+
+			if (that.retryDeadline === undefined) {
+				that.retryDeadline = Date.now() + routeTokenRetryLimitMs;
+				if (!(window.app && window.app.socket && window.app.socket._reconnecting))
+					that.sendPostMsg(response ? response.errorCode : -1);
+			}
+
+			if (Date.now() >= that.retryDeadline) {
+				that.routeFailed('the controller stayed busy, giving up');
+				return;
+			}
+
+			that.retryTimer = setTimeout(function () {
+				that.retryTimer = undefined;
+				global.app.console.warn('Requesting again for routeToken');
+				that.sendRouteTokenRequest(requestUri);
+			}, routeTokenRetryIntervalMs);
+		};
+
 		this.sendRouteTokenRequest = function (requestUri) {
 			var http = new XMLHttpRequest();
-			// let url = global.indirectionUrl + '?Uri=' + encodeURIComponent(that.uri);
+			that.tokenRequest = http;
 			http.open('GET', requestUri, true);
 			http.responseType = 'json';
+			http.timeout = routeTokenTimeoutMs;
+			http.addEventListener('error', function () {
+				that.tokenRequest = undefined;
+				that.routeFailed('the request to the controller failed');
+			});
+			http.addEventListener('timeout', function () {
+				that.tokenRequest = undefined;
+				that.routeFailed('the request to the controller timed out after '
+					+ routeTokenTimeoutMs + 'ms');
+			});
 			http.addEventListener('load', function () {
+				that.tokenRequest = undefined;
 				if (this.status === 200) {
-					var uriWithRouteToken = http.response.uri;
-					global.expectedServerId = http.response.serverId;
-					var params = (new URL(uriWithRouteToken)).searchParams;
-					global.routeToken = params.get('RouteToken');
-					global.app.console.log('updated routeToken: ' + global.routeToken);
-					that.innerSocket = new WebSocket(uriWithRouteToken);
-					that.innerSocket.binaryType = that.binaryType;
-					that.innerSocket.onerror = function () {
-						that.readyState = that.innerSocket.readyState;
-						that.onerror();
-					};
-					that.innerSocket.onclose = function () {
-						that.readyState = 3;
-						that.onclose();
-						that.innerSocket.onerror = function () { };
-						that.innerSocket.onclose = function () { };
-						that.innerSocket.onmessage = function () { };
-					};
-					that.innerSocket.onopen = function () {
-						that.readyState = 1;
-						that.onopen();
-					};
-					that.innerSocket.onmessage = function (e) {
-						that.readyState = that.innerSocket.readyState;
-						that.onmessage(e);
-					};
+					that.connectToRoute(http.response);
 				} else if (this.status === 202) {
-					if (!(window.app && window.app.socket && window.app.socket._reconnecting)) {
-						that.sendPostMsg(http.response.errorCode);
-					}
-					var timeoutFn = function (requestUri) {
-						console.warn('Requesting again for routeToken');
-						this.open('GET', requestUri, true);
-						this.send();
-					}.bind(this);
-					setTimeout(timeoutFn, 3000, requestUri);
+					that.retryRouteTokenRequest(requestUri, http.response);
 				} else {
-					global.app.console.error('Indirection url: error on incoming response ' + this.status);
-					that.sendPostMsg(-1);
+					that.routeFailed('the controller answered ' + this.status);
 				}
 			});
 			http.send();
@@ -2123,6 +2321,14 @@ function showWelcomeSVG() {
 
 	global._ = function (string) {
 		return string.toLocaleString();
+	};
+
+	// Marks a string for extraction into the pot and returns it untranslated.
+	// For tables that are built before the localization table is loaded, such
+	// as the template manifests; the reader translates each entry with _()
+	// when it uses it.
+	global.N_ = function (string) {
+		return string;
 	};
 
 	// Some global variables are defined in cool.html, among them:
@@ -2346,13 +2552,12 @@ function showWelcomeSVG() {
 					if (lang) {
 						msg += ' lang=' + lang;
 					}
-					// renderingOptions?
 				}
 
 				if (global.deviceFormFactor) {
 					msg += ' deviceFormFactor=' + global.deviceFormFactor;
 				}
-				var spellOnline = window.prefs.get('spellOnline');
+				var spellOnline = window.prefs.spellOnlineForLoad();
 				if (spellOnline) {
 					msg += ' spellOnline=' + spellOnline;
 				}
@@ -2369,6 +2574,15 @@ function showWelcomeSVG() {
 
 				const darkBackground = window.prefs.getBoolean('darkBackgroundForTheme.' + (darkTheme ? 'dark' : 'light'), darkTheme);
 				msg += ' darkBackground=' + darkBackground;
+
+				// The interface is not built yet, so leave the two values the engine
+				// is being given here for it to pick up.
+				global.themeSentWithLoad = { theme: darkTheme, background: darkBackground };
+
+				const focusRingColor = global.getFocusRingColor();
+				if (focusRingColor) {
+					msg += ' focusRingColor=' + focusRingColor;
+				}
 
 				msg += ' timezone=' + Intl.DateTimeFormat().resolvedOptions().timeZone;
 				msg += ' clientvisiblearea=' + window.makeClientVisibleArea();
@@ -2805,6 +3019,11 @@ function showWelcomeSVG() {
 			// the local static file server:
 			global.host = coolWsScheme + coolHost;
 			global.webserver = ri.coolServer.replace(/\/*$/, ''); // Remove trailing slash.
+			// Static asset URLs, icons included, carry the server's version hash between
+			// /browser/ and the asset path, and the server only maps such a path onto its dist
+			// directory when that segment is present.
+			var versionMatch = (ri.coolPath || '').match(/\/browser\/([0-9a-f]+)\//);
+			global.versionPath = versionMatch ? versionMatch[1] : 'dist';
 		} else {
 			// COWASM: cool.html is hosted on the cool server, so a
 			// same-origin upgrade against location.host is fine.
@@ -2840,11 +3059,19 @@ function showWelcomeSVG() {
 		global.app.socket.connect(ws);
 	};
 
-	function handleViewportChange(event) {
-		var visualViewport = event.target;
+	function handleViewportChange() {
+		const visualViewport = window.visualViewport;
+
+		// --viewport-bottom-inset is the height of the part of the layout viewport that
+		// lies below the visual viewport (the area covered by the on-screen keyboard).
+		const bottomInset = Math.max(0,
+			document.documentElement.clientHeight
+			- visualViewport.offsetTop - visualViewport.height);
 
 		window.scroll(0, 0);
 		document.body.style.height = visualViewport.height + 'px';
+		document.documentElement.style.setProperty(
+			'--viewport-bottom-inset', bottomInset + 'px');
 	}
 
 	if (window.visualViewport !== undefined) {

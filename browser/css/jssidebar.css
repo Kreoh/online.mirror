@@ -162,7 +162,9 @@ img.sidebar.ui-image {
 
 .sidebar.ui-panel-content {
 	padding-inline: 10px;
-	width: 300px;
+	/* A panel is as wide as the deck that holds it, and its own padding comes
+	   off that width. */
+	width: auto;
 	line-height: var(--default-height);
 }
 
@@ -200,7 +202,9 @@ img.sidebar.ui-image {
 
 .sidebar.ui-expander-content {
 	padding-inline: 10px;
-	width: 300px;
+	/* A section is as wide as the panel or the section that holds it, and each
+	   level of nesting takes its own padding off that width. */
+	width: auto;
 	line-height: var(--default-height);
 }
 
@@ -700,22 +704,10 @@ span.jsdialog.sidebar.ui-treeview-notexpandable {
 	border-bottom-color: rgba(var(--doc-type), 1);
 }
 #navigation-sidebar {
-	width: 250px;
+	width: var(--navigation-sidebar-width, 250px);
 	display: none;
 	border-inline-end: 1px solid var(--color-border);
 	/* bg set in #sidebar-dock-wrapper, #navigator-dock-wrapper */
-}
-
-/* Maximized layout: the open panel covers the document area. The document
- * canvas underneath keeps rendering, so returning to the normal layout
- * needs no re-render. */
-#main-document-content.panes-expanded #navigation-sidebar.visible {
-	position: absolute;
-	inset-block: 0;
-	inset-inline-start: 0;
-	inset-inline-end: 0;
-	width: auto;
-	z-index: 992;
 }
 
 /* Quick Find Panel */
@@ -1002,7 +994,22 @@ span.jsdialog.sidebar.ui-treeview-notexpandable {
 	flex-wrap: wrap;
 }
 
+#ElementsDeck #elements .ui-iconview-separator {
+	flex: 0 0 100%;
+	height: 0;
+	margin: var(--spacing-xs) 0;
+	border: none;
+	border-top: 1px solid var(--color-border-dark);
+}
+
 /* Writer - Table - Sort */
 #SortDialog #box2 :is(#grid7, #grid5) {
 	align-items: center;
+}
+
+/* Six is what svx/ui/defaultshapespanel.ui asks each gallery for. */
+#DefaultShapesPanel .ui-iconview {
+	width: auto;
+	grid-template-columns: repeat(6, 1fr);
+	justify-content: start;
 }

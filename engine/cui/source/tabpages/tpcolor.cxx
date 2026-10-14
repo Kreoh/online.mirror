@@ -31,7 +31,6 @@
 #include <svx/svxdlg.hxx>
 #include <dialmgr.hxx>
 #include <cuitabline.hxx>
-#include <sfx2/AdditionsDialogHelper.hxx>
 #include <svx/dialmgr.hxx>
 #include <svx/strings.hrc>
 #include <officecfg/Office/Common.hxx>
@@ -54,8 +53,8 @@ SvxColorTabPage::SvxColorTabPage(weld::Container* pPage, weld::DialogController*
     , m_xSelectPalette(m_xBuilder->weld_combo_box(u"paletteselector"_ustr))
     , m_xRbRGB(m_xBuilder->weld_radio_button(u"RGB"_ustr))
     , m_xRbCMYK(m_xBuilder->weld_radio_button(u"CMYK"_ustr))
-    , m_xRGBcustom(m_xBuilder->weld_widget(u"rgbcustom"_ustr))
-    , m_xRGBpreset(m_xBuilder->weld_widget(u"rgbpreset"_ustr))
+    , m_xRGBcustom(m_xBuilder->weld_container(u"rgbcustom"_ustr))
+    , m_xRGBpreset(m_xBuilder->weld_container(u"rgbpreset"_ustr))
     , m_xRpreset(m_xBuilder->weld_entry(u"R_preset"_ustr))
     , m_xGpreset(m_xBuilder->weld_entry(u"G_preset"_ustr))
     , m_xBpreset(m_xBuilder->weld_entry(u"B_preset"_ustr))
@@ -64,8 +63,8 @@ SvxColorTabPage::SvxColorTabPage(weld::Container* pPage, weld::DialogController*
     , m_xBcustom(m_xBuilder->weld_spin_button(u"B_custom"_ustr))
     , m_xHexpreset(new weld::HexColorControl(m_xBuilder->weld_entry(u"hex_preset"_ustr)))
     , m_xHexcustom(new weld::HexColorControl(m_xBuilder->weld_entry(u"hex_custom"_ustr)))
-    , m_xCMYKcustom(m_xBuilder->weld_widget(u"cmykcustom"_ustr))
-    , m_xCMYKpreset(m_xBuilder->weld_widget(u"cmykpreset"_ustr))
+    , m_xCMYKcustom(m_xBuilder->weld_container(u"cmykcustom"_ustr))
+    , m_xCMYKpreset(m_xBuilder->weld_container(u"cmykpreset"_ustr))
     , m_xCpreset(m_xBuilder->weld_entry(u"C_preset"_ustr))
     , m_xYpreset(m_xBuilder->weld_entry(u"Y_preset"_ustr))
     , m_xMpreset(m_xBuilder->weld_entry(u"M_preset"_ustr))
@@ -77,7 +76,6 @@ SvxColorTabPage::SvxColorTabPage(weld::Container* pPage, weld::DialogController*
     , m_xBtnAdd(m_xBuilder->weld_button(u"add"_ustr))
     , m_xBtnDelete(m_xBuilder->weld_button(u"delete"_ustr))
     , m_xBtnWorkOn(m_xBuilder->weld_button(u"edit"_ustr))
-    , m_xMoreColors(m_xBuilder->weld_button(u"btnMoreColors"_ustr))
     , m_xCtlPreviewOld(new weld::CustomWeld(*m_xBuilder, u"oldpreview"_ustr, m_aCtlPreviewOld))
     , m_xCtlPreviewNew(new weld::CustomWeld(*m_xBuilder, u"newpreview"_ustr, m_aCtlPreviewNew))
 {
@@ -131,7 +129,6 @@ SvxColorTabPage::SvxColorTabPage(weld::Container* pPage, weld::DialogController*
     m_xBtnDelete->set_sensitive(false);
     m_xBtnDelete->set_tooltip_text( CuiResId(RID_CUISTR_DELETEUSERCOLOR1) );
 
-    m_xMoreColors->connect_clicked(LINK(this, SvxColorTabPage, OnMoreColorsClick));
 
     // disable preset color values
     m_xRGBpreset->set_sensitive(false);
@@ -140,12 +137,6 @@ SvxColorTabPage::SvxColorTabPage(weld::Container* pPage, weld::DialogController*
     // IconView
     maPaletteManager.ReloadRecentColorSet(*m_xIconViewRecentList);
     vRecentColors = maPaletteManager.GetRecentColors();
-
-    // it is not possible to install color palette extensions in Online or mobile apps
-    if(comphelper::COKit::isActive())
-    {
-        m_xMoreColors->hide();
-    }
 }
 
 SvxColorTabPage::~SvxColorTabPage()
@@ -641,12 +632,6 @@ IMPL_LINK_NOARG(SvxColorTabPage, SelectColorModeHdl_Impl, weld::Toggleable&, voi
         m_eCM = ColorModel::CMYK;
     ChangeColorModel();
     UpdateColorValues();
-}
-
-IMPL_LINK_NOARG(SvxColorTabPage, OnMoreColorsClick, weld::Button&, void)
-{
-    AdditionsDialogHelper::RunAdditionsDialog(GetDialogController()->getDialog(),
-                                              u"Color Palette"_ustr);
 }
 
 void SvxColorTabPage::ChangeColor(const NamedColor &rNewColor, bool bUpdatePreset )

@@ -22,15 +22,12 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
-namespace com::sun::star::uno
-{
-class XInterface;
-}
+namespace cpo::uno { class XInterface; }
 class SdrObject;
 
-css::uno::Reference<css::uno::XInterface> SvxUnoGluePointAccess_createInstance(SdrObject* pObject);
+cpo::uno::Reference<cpo::uno::XInterface> SvxUnoGluePointAccess_createInstance(SdrObject* pObject);
 
 #endif
 

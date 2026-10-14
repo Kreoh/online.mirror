@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SVX_IACCESSIBLEPARENT_HXX
 #define INCLUDED_SVX_IACCESSIBLEPARENT_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <tools/long.hxx>
 
 namespace accessibility { class AccessibleControlShape; }
@@ -80,19 +80,19 @@ public:
     */
     virtual bool ReplaceChild (
         AccessibleShape* pCurrentChild,
-        const css::uno::Reference< css::drawing::XShape >& _rxShape,
+        const cpo::uno::Reference< css::drawing::XShape >& _rxShape,
         const tools::Long _nIndex,
         const AccessibleShapeTreeInfo& _rShapeTreeInfo
     ) = 0;
     //Add this method to support Form Controls
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual AccessibleControlShape* GetAccControlShapeFromModel
         (css::beans::XPropertySet*){return nullptr;};
 
     //Return a raw pointer here rather than a reference, so that subclasses can override and return a subtype pointer.
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual css::accessibility::XAccessible*
-        GetAccessibleCaption (const css::uno::Reference<
+        GetAccessibleCaption (const cpo::uno::Reference<
             css::drawing::XShape>&){return nullptr;};
 
     virtual bool IsDocumentSelAll(){ return false; }

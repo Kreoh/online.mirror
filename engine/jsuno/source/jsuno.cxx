@@ -22,6 +22,7 @@
 #include <mutex>
 #include <optional>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <string_view>
 #include <utility>
@@ -32,6 +33,7 @@
 #include <com/sun/star/beans/XIntrospectionAccess.hpp>
 #include <com/sun/star/container/XEnumeration.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/reflection/InvocationTargetException.hpp>
 #include <com/sun/star/reflection/XCompoundTypeDescription.hpp>
 #include <com/sun/star/reflection/XConstantTypeDescription.hpp>
@@ -45,16 +47,17 @@
 #include <com/sun/star/script/InvocationInfo.hpp>
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/script/XInvocation2.hpp>
-#include <com/sun/star/script/XInvocationAdapterFactory2.hpp>
+#include <com/sun/star/script/XInvocationAdapterFactory.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cpo/uno/genfunc.hxx>
 #include <comphelper/json.hxx>
 #include <comphelper/legacyunoapinotice.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/scopeguard.hxx>
 #include <cool.hpp>
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -70,6 +73,7 @@
 #include <rtl/ustring.hxx>
 #include <sal/log.hxx>
 #include <sal/types.h>
+#include <sfx2/kit/helper.hxx>
 #include <typelib/typedescription.h>
 #include <typelib/typedescription.hxx>
 #include <vcl/kit.hxx>
@@ -219,6 +223,13 @@ private:
     std::uint16_t const* ptr_;
 };
 
+struct EnumeratorData
+{
+    cpo::uno::Type type;
+    sal_Int32 value;
+    OUString name;
+};
+
 ValueRef createDefaultValue(JSContext* ctx, cpo::uno::Type const& type);
 cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst val);
 JSValue invokeUno(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
@@ -253,9 +264,12 @@ struct RuntimeData
 {
     RuntimeData(
         JSRuntime* rt,
+        OUString const & source_, int line_,
         std::function<void(OUString const& level, OUString const& message)> consoleHook_,
         std::function<void(OUString const&)> proxyCallHook_)
-        : consoleHook(std::move(consoleHook_))
+        : source(source_)
+        , line(line_)
+        , consoleHook(std::move(consoleHook_))
         , proxyCallHook(std::move(proxyCallHook_))
         , symbolIteratorAtom(rt)
     {
@@ -275,6 +289,9 @@ struct RuntimeData
     JSClassID ctorClassId = 0;
     JSClassID singletonClassId = 0;
     JSClassID moduleClassId = 0;
+
+    OUString source;
+    int line;
 
     std::function<void(OUString const& level, OUString const& message)> consoleHook;
 
@@ -452,10 +469,10 @@ JSValue enumerationIteratorNext(JSContext* ctx, JSValueConst, int, JSValueConst*
                                 JSValueConst* func_data)
 {
     return callFromJs(ctx, [ctx, func_data] {
-        css::uno::Reference<css::container::XEnumeration> en(
-            static_cast<css::uno::XInterface*>(
+        cpo::uno::Reference<css::container::XEnumeration> en(
+            static_cast<cpo::uno::XInterface*>(
                 JS_GetOpaque(func_data[0], getRuntimeData(ctx)->wrapperClassId)),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
         ValueRef val(ctx, JS_NewObject(ctx));
         if (en->hasMoreElements())
         {
@@ -482,16 +499,336 @@ JSValue enumerationIterator(JSContext* ctx, JSValueConst this_val, int, JSValueC
     });
 }
 
+void collectOverloadMembers(
+    OUString const & ann, typelib_InterfaceTypeDescription * ifaceTd, std::set<OUString> & visited,
+    std::vector<OUString> & members)
+{
+    auto const interfaceName = OUString::unacquired(&ifaceTd->aBase.pTypeName);
+    if (!visited.insert(interfaceName).second) {
+        return;
+    }
+    for (sal_Int32 i = 0; i != ifaceTd->nBaseTypes; ++i) {
+        collectOverloadMembers(ann, ifaceTd->ppBaseTypes[i], visited, members);
+    }
+    for (sal_Int32 i = 0; i != ifaceTd->nMembers; ++i) {
+        typelib_TypeDescription * memberTd = nullptr;
+        typelib_typedescriptionreference_getDescription(&memberTd, ifaceTd->ppMembers[i]);
+        if (memberTd == nullptr) {
+            throw cpo::uno::RuntimeException(
+                OUString::Concat("findOverloads: no description for member of ") + interfaceName);
+        }
+        if (memberTd->eTypeClass == typelib_TypeClass_INTERFACE_METHOD) {
+            for (sal_Int32 j = 0; j != memberTd->nAnnotations; ++j) {
+                if (OUString::unacquired(&memberTd->ppAnnotations[j]) == ann) {
+                    members.push_back(
+                        OUString::unacquired(
+                            &reinterpret_cast<typelib_InterfaceMethodTypeDescription *>(memberTd)
+                                ->aBase.pMemberName));
+                    break;
+                }
+            }
+        }
+        typelib_typedescription_release(memberTd);
+    }
+}
+
+std::vector<OUString> findOverloads(
+   cpo::uno::Reference<cpo::uno::XInterface> const & object, std::u16string_view name)
+{
+    cpo::uno::Reference<css::lang::XTypeProvider> const tp(object, cpo::uno::UNO_QUERY);
+    if (!tp.is()) {
+        return {};
+    }
+    std::set<OUString> visited;
+    std::vector<OUString> members;
+    for (auto const & type: tp->getTypes()) {
+        cpo::uno::TypeDescription desc(type);
+        if (!desc.is() || desc.get()->eTypeClass != typelib_TypeClass_INTERFACE) {
+            throw cpo::uno::RuntimeException(
+                u"findOverloads: XTypeProvider returned a non-interface type"_ustr);
+        }
+        desc.makeComplete();
+        collectOverloadMembers(
+            OUString(OUString::Concat("overload=") + name),
+            reinterpret_cast<typelib_InterfaceTypeDescription *>(desc.get()), visited, members);
+    }
+    return members;
+}
+
+bool isUnoAnyInstance(JSContext * ctx, JSValueConst val) {
+    ValueRef const global(ctx, JS_GetGlobalObject(ctx));
+    if (JS_IsException(global)) {
+        throw JsException();
+    }
+    ValueRef const uno(ctx, JS_GetPropertyStr(ctx, global, "uno"));
+    if (JS_IsException(uno)) {
+        throw JsException();
+    }
+    ValueRef const anyCtor(ctx, JS_GetPropertyStr(ctx, uno, "Any"));
+    if (JS_IsException(anyCtor)) {
+        throw JsException();
+    }
+    auto const r = JS_IsInstanceOf(ctx, val, anyCtor);
+    if (r == -1) {
+        throw JsException();
+    }
+    return r == 1;
+}
+
+std::optional<cpo::uno::Type> getOptionalType(cpo::uno::Type const & type) {
+    if (type.getTypeClass() != cpo::uno::TypeClass_STRUCT
+        || !type.getTypeName().startsWith(u"com.sun.star.beans.Optional<"))
+    {
+        return std::nullopt;
+    }
+    cpo::uno::TypeDescription desc(type);
+    desc.makeComplete();
+    auto const compDesc = reinterpret_cast<typelib_CompoundTypeDescription const *>(desc.get());
+    assert(compDesc->nMembers == 2);
+    return cpo::uno::Type(compDesc->ppTypeRefs[1]);
+}
+
+bool hasIsPresentProperty(JSContext * ctx, JSValueConst val) {
+    if (JS_IsNull(val) || !JS_IsObject(val)) {
+        return false;
+    }
+    AtomRef const atom(ctx, JS_NewAtomLen(ctx, "IsPresent", 9));
+    if (atom == JS_ATOM_NULL) {
+        return false;
+    }
+    return JS_HasProperty(ctx, val, atom) == 1;
+}
+
+bool isCompoundOfType(JSContext * ctx, JSValueConst val, cpo::uno::Type const & type) {
+    if (JS_GetClassID(val) != getRuntimeData(ctx)->compoundClassId) {
+        return false;
+    }
+    cpo::uno::Type const valType(static_cast<typelib_TypeDescriptionReference *>(
+        JS_GetOpaque(val, getRuntimeData(ctx)->compoundClassId)));
+    cpo::uno::TypeDescription desc(valType);
+    desc.makeComplete();
+    auto const targetName = type.getTypeName();
+    for (auto p = reinterpret_cast<typelib_CompoundTypeDescription const *>(desc.get());
+         p != nullptr; p = p->pBaseTypeDescription)
+    {
+        if (cpo::uno::Type(p->aBase.pWeakRef).getTypeName() == targetName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+enum class ArgumentFit { None, Loose, Exact };
+
+ArgumentFit argumentFit(
+    JSContext * ctx, css::reflection::ParamMode mode, cpo::uno::Type const & type, JSValueConst val)
+{
+    // An out or inout parameter takes a holder object, which is orthogonal to type; treat every
+    // candidate as loose so the tie-break falls to any in parameters alongside it:
+    if (mode != css::reflection::ParamMode_IN) {
+        return ArgumentFit::Loose;
+    }
+    switch (type.getTypeClass()) {
+    case cpo::uno::TypeClass_BOOLEAN:
+        return JS_IsBool(val) ? ArgumentFit::Exact : ArgumentFit::None;
+    case cpo::uno::TypeClass_BYTE:
+    case cpo::uno::TypeClass_SHORT:
+    case cpo::uno::TypeClass_UNSIGNED_SHORT:
+    case cpo::uno::TypeClass_LONG:
+    case cpo::uno::TypeClass_UNSIGNED_LONG:
+    case cpo::uno::TypeClass_FLOAT:
+    case cpo::uno::TypeClass_DOUBLE:
+        return JS_IsNumber(val) ? ArgumentFit::Exact : ArgumentFit::None;
+    case cpo::uno::TypeClass_HYPER:
+    case cpo::uno::TypeClass_UNSIGNED_HYPER:
+        return JS_IsBigInt(val) ? ArgumentFit::Exact : ArgumentFit::None;
+    case cpo::uno::TypeClass_CHAR:
+    case cpo::uno::TypeClass_STRING:
+        return JS_IsString(val) ? ArgumentFit::Exact : ArgumentFit::None;
+    case cpo::uno::TypeClass_TYPE:
+        return JS_GetClassID(val) == getRuntimeData(ctx)->typeClassId
+            ? ArgumentFit::Exact : ArgumentFit::None;
+    case cpo::uno::TypeClass_ANY:
+        return isUnoAnyInstance(ctx, val) ? ArgumentFit::Exact : ArgumentFit::Loose;
+    case cpo::uno::TypeClass_SEQUENCE:
+        return JS_IsArray(val) || JS_GetTypedArrayType(val) != -1
+            ? ArgumentFit::Exact : ArgumentFit::None;
+    case cpo::uno::TypeClass_ENUM:
+        if (JS_GetClassID(val) == getRuntimeData(ctx)->enumeratorClassId) {
+            auto const data = static_cast<EnumeratorData const *>(
+                JS_GetOpaque(val, getRuntimeData(ctx)->enumeratorClassId));
+            assert(data != nullptr);
+            if (data->type == type) {
+                return ArgumentFit::Exact;
+            }
+        }
+        return ArgumentFit::None;
+    case cpo::uno::TypeClass_STRUCT:
+    case cpo::uno::TypeClass_EXCEPTION:
+        if (auto const type2 = getOptionalType(type)) {
+            if (JS_IsNull(val)) {
+                return ArgumentFit::Exact;
+            }
+            if (!isCompoundOfType(ctx, val, type)) {
+                if (hasIsPresentProperty(ctx, val)) {
+                    return ArgumentFit::Loose;
+                }
+                return argumentFit(ctx, mode, *type2, val);
+            }
+        }
+        if (JS_GetClassID(val) == getRuntimeData(ctx)->compoundClassId) {
+            return ArgumentFit::Exact;
+        }
+        if (JS_IsObject(val) && !JS_IsArray(val) && JS_GetTypedArrayType(val) == -1
+            && !isUnoAnyInstance(ctx, val)
+            && JS_GetClassID(val) != getRuntimeData(ctx)->wrapperClassId
+            && JS_GetClassID(val) != getRuntimeData(ctx)->enumeratorClassId
+            && JS_GetClassID(val) != getRuntimeData(ctx)->typeClassId)
+        {
+            // Conservatively:
+            return ArgumentFit::Loose;
+        }
+        return ArgumentFit::None;
+    case cpo::uno::TypeClass_INTERFACE:
+    {
+        if (JS_IsNull(val)) {
+            return ArgumentFit::Exact;
+        }
+        if (JS_GetClassID(val) != getRuntimeData(ctx)->wrapperClassId) {
+            return ArgumentFit::None;
+        }
+        auto const iface = static_cast<cpo::uno::XInterface *>(
+            JS_GetOpaque(val, getRuntimeData(ctx)->wrapperClassId));
+        return iface != nullptr
+                && cpo::uno::Reference(iface)->queryInterface(type).hasValue()
+            ? ArgumentFit::Exact : ArgumentFit::None;
+    }
+    default:
+        O3TL_UNREACHABLE;
+    }
+}
+
+int scoreOverload(
+    JSContext * ctx, css::script::InvocationInfo const & info, int argc, JSValueConst * argv)
+{
+    int exact = 0;
+    for (int i = 0; i != argc; ++i) {
+        switch (argumentFit(ctx, info.aParamModes[i], info.aParamTypes[i], argv[i])) {
+        case ArgumentFit::None:
+            return -1;
+        case ArgumentFit::Loose:
+            break;
+        case ArgumentFit::Exact:
+            ++exact;
+            break;
+        }
+    }
+    return exact;
+}
+
+JSValue overloadDispatch(
+    JSContext * ctx, JSValueConst this_val, int argc, JSValueConst * argv, int, JSValueConst * data)
+{
+    return callFromJs(ctx, [&]() -> JSValue {
+        auto const obj = static_cast<cpo::uno::XInterface *>(
+            JS_GetOpaque(this_val, getRuntimeData(ctx)->wrapperClassId));
+        if (obj == nullptr) {
+            JS_ThrowTypeError(ctx, "overload dispatch: missing this");
+            throw JsException();
+        }
+        cpo::uno::Reference<css::script::XInvocation2> invoke(
+            css::script::Invocation::create(comphelper::getProcessComponentContext())
+                ->createInstanceWithArguments({cpo::uno::Any(cpo::uno::Reference(obj))}),
+            cpo::uno::UNO_QUERY_THROW);
+        // data[0] is a JS array of the overload set's method names:
+        ValueRef const lenVal(ctx, JS_GetPropertyStr(ctx, data[0], "length"));
+        std::uint32_t nMembers = 0;
+        JS_ToUint32(ctx, &nMembers, lenVal);
+        std::vector<css::script::InvocationInfo> matches;
+        for (std::uint32_t i = 0; i != nMembers; ++i) {
+            ValueRef const nameVal(ctx, JS_GetPropertyUint32(ctx, data[0], i));
+            UniqueCString8 const nameStr(ctx, JS_ToCString(ctx, nameVal));
+            if (nameStr.get() == nullptr) {
+                throw cpo::uno::RuntimeException(
+                    u"overload dispatch: JS_ToCString failed on the member-name array"_ustr);
+            }
+            // A css::script::Invocation limitation, not specific to overloading, is that it cannot
+            // properly handle cases where an object implements unrelated interfaces X1 and X2 that
+            // each have a method f that adds to the same overload set (just the same as when X1::f
+            // and X2::f are not in overload sets, and css::script::Invocation can't decide which
+            // implementation of f to invoke):
+            auto info = invoke->getInfoForName(OUString::fromUtf8(nameStr.get()), false);
+            if (info.aParamTypes.getLength() == argc) {
+                matches.push_back(info);
+            }
+        }
+        if (matches.empty()) {
+            JS_ThrowTypeError(ctx, "overload dispatch: no member matches %d argument(s)", argc);
+            throw JsException();
+        }
+        std::optional<css::script::InvocationInfo> chosen;
+        if (matches.size() == 1) {
+            chosen = matches.front();
+        } else {
+            auto bestScore = -1;
+            auto tied = false;
+            for (auto const & info: matches) {
+                auto const score = scoreOverload(ctx, info, argc, argv);
+                if (score == -1) {
+                    continue;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    chosen = info;
+                    tied = false;
+                } else if (score == bestScore) {
+                    tied = true;
+                }
+            }
+            if (!chosen) {
+                OStringBuffer buf;
+                for (auto const & info: matches) {
+                    buf.append(" " + info.aName.toUtf8());
+                }
+                JS_ThrowTypeError(
+                    ctx, "overload dispatch: no member matches the argument types (candidates:%s)",
+                    buf.makeStringAndClear().getStr());
+                throw JsException();
+            }
+            if (tied) {
+                JS_ThrowTypeError(
+                    ctx,
+                    "overload dispatch: ambiguous call, %s and at least one other candidate match"
+                        " equally well",
+                    chosen->aName.toUtf8().getStr());
+                throw JsException();
+            }
+        }
+        ValueRef data0(ctx, JS_NewObjectClass(ctx, getRuntimeData(ctx)->pointerClassId));
+        [[maybe_unused]] auto const e
+            = JS_SetOpaque(data0, new css::script::InvocationInfo(*chosen));
+        assert(e == 0);
+#if defined DBG_UTIL
+        getRuntimeData(ctx)->toFinalize.inc();
+#endif
+        ValueRef fn(
+            ctx,
+            JS_NewCFunctionData(
+                ctx, invokeUno, chosen->aParamTypes.getLength(), 0, 1, data0.ptr()));
+        return JS_Call(ctx, fn, this_val, argc, argv);
+    });
+}
+
 int wrapperGetOwnProperty(JSContext* ctx, JSPropertyDescriptor* desc, JSValueConst obj, JSAtom atom)
 {
     try
     {
         if (atom == getRuntimeData(ctx)->symbolIteratorAtom)
         {
-            css::uno::Reference<css::container::XEnumeration> en(
-                static_cast<css::uno::XInterface*>(
+            cpo::uno::Reference<css::container::XEnumeration> en(
+                static_cast<cpo::uno::XInterface*>(
                     JS_GetOpaque(obj, getRuntimeData(ctx)->wrapperClassId)),
-                css::uno::UNO_QUERY);
+                cpo::uno::UNO_QUERY);
             if (!en.is())
             {
                 return 0;
@@ -510,16 +847,35 @@ int wrapperGetOwnProperty(JSContext* ctx, JSPropertyDescriptor* desc, JSValueCon
         {
             return 0;
         }
-        css::uno::Reference<css::script::XInvocation2> invoke(
+        auto const name = OUString::fromUtf8(JS_AtomToCString(ctx, atom));
+        // Check for UNO interface method overloads:
+        cpo::uno::Reference<cpo::uno::XInterface> const object(
+            static_cast<cpo::uno::XInterface *>(
+                JS_GetOpaque(obj, getRuntimeData(ctx)->wrapperClassId)));
+        auto const overloads = findOverloads(object, name);
+        if (!overloads.empty()) {
+            if (desc != nullptr) {
+                ValueRef membersArr(ctx, JS_NewArray(ctx));
+                for (std::size_t i = 0; i != overloads.size(); ++i) {
+                    JS_SetPropertyUint32(
+                        ctx, membersArr, i, JS_NewString(ctx, overloads[i].toUtf8().getStr()));
+                }
+                desc->flags = JS_PROP_C_W_E;
+                desc->value = JS_NewCFunctionData(ctx, overloadDispatch, 0, 0, 1, membersArr.ptr());
+                desc->getter = JS_UNDEFINED;
+                desc->setter = JS_UNDEFINED;
+            }
+            return 1;
+        }
+        cpo::uno::Reference<css::script::XInvocation2> invoke(
             css::script::Invocation::create(comphelper::getProcessComponentContext())
                 ->createInstanceWithArguments(
-                    { cpo::uno::Any(css::uno::Reference(static_cast<css::uno::XInterface*>(
-                        JS_GetOpaque(obj, getRuntimeData(ctx)->wrapperClassId)))) }),
-            css::uno::UNO_QUERY_THROW);
+                    { cpo::uno::Any(object) }),
+            cpo::uno::UNO_QUERY_THROW);
         css::script::InvocationInfo info;
         try
         {
-            info = invoke->getInfoForName(OUString::fromUtf8(JS_AtomToCString(ctx, atom)), false);
+            info = invoke->getInfoForName(name, false);
         }
         catch (css::lang::IllegalArgumentException)
         {
@@ -584,12 +940,12 @@ int wrapperSetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValueCon
         ValueRef const v(ctx, JS_AtomToString(ctx, atom));
         if (JS_IsString(v))
         {
-            css::uno::Reference<css::script::XInvocation2> invoke(
+            cpo::uno::Reference<css::script::XInvocation2> invoke(
                 css::script::Invocation::create(comphelper::getProcessComponentContext())
                     ->createInstanceWithArguments(
-                        { cpo::uno::Any(css::uno::Reference(static_cast<css::uno::XInterface*>(
+                        { cpo::uno::Any(cpo::uno::Reference(static_cast<cpo::uno::XInterface*>(
                             JS_GetOpaque(obj, getRuntimeData(ctx)->wrapperClassId)))) }),
-                css::uno::UNO_QUERY_THROW);
+                cpo::uno::UNO_QUERY_THROW);
             css::script::InvocationInfo info;
             auto prop = false;
             try
@@ -634,7 +990,7 @@ void wrapperFinalizer(JSRuntime* rt, JSValueConst val)
 #if defined DBG_UTIL
     getRuntimeData(rt)->toFinalize.dec();
 #endif
-    static_cast<css::uno::XInterface*>(JS_GetOpaque(val, getRuntimeData(rt)->wrapperClassId))
+    static_cast<cpo::uno::XInterface*>(JS_GetOpaque(val, getRuntimeData(rt)->wrapperClassId))
         ->release();
 }
 
@@ -642,13 +998,13 @@ JSValue wrapperToString(JSContext* ctx, JSValueConst this_val, int, JSValueConst
 {
     return callFromJs(ctx, [ctx, this_val] {
         std::ostringstream s;
-        s << css::uno::Reference(static_cast<css::uno::XInterface*>(
+        s << cpo::uno::Reference(static_cast<cpo::uno::XInterface*>(
             JS_GetOpaque(this_val, getRuntimeData(ctx)->wrapperClassId)));
         return JS_NewString(ctx, s.str().c_str());
     });
 }
 
-JSValue wrapUnoObject(JSContext* ctx, css::uno::Reference<css::uno::XInterface> const& obj)
+JSValue wrapUnoObject(JSContext* ctx, cpo::uno::Reference<cpo::uno::XInterface> const& obj)
 {
     if (!obj.is())
     {
@@ -664,13 +1020,6 @@ JSValue wrapUnoObject(JSContext* ctx, css::uno::Reference<css::uno::XInterface> 
     return val;
 }
 
-struct EnumeratorData
-{
-    cpo::uno::Type type;
-    sal_Int32 value;
-    OUString name;
-};
-
 void enumeratorFinalizer(JSRuntime* rt, JSValueConst val)
 {
 #if defined DBG_UTIL
@@ -685,9 +1034,38 @@ JSValue enumeratorToString(JSContext* ctx, JSValueConst this_val, int, JSValueCo
     return callFromJs(ctx, [ctx, this_val] {
         auto const data = static_cast<EnumeratorData const*>(
             JS_GetOpaque(this_val, getRuntimeData(ctx)->enumeratorClassId));
-        OUString const s(data->type.getTypeName() + "." + data->name);
-        return JS_NewStringUTF16(ctx, reinterpret_cast<std::uint16_t const*>(s.getStr()),
-                                 s.getLength());
+        return JS_NewStringUTF16(ctx, reinterpret_cast<std::uint16_t const*>(data->name.getStr()),
+                                 data->name.getLength());
+    });
+}
+
+OString compoundMemberName(typelib_CompoundTypeDescription const * compound, sal_Int32 i) {
+    if (i == 0 && OUString::unacquired(&compound->aBase.pTypeName) == u"cpo.uno.Exception") {
+        return "message"_ostr; // instead of UNOIDL's "Message"
+    }
+    return OUString::unacquired(&compound->ppMemberNames[i]).toUtf8();
+}
+
+JSValue exceptionToString(JSContext * ctx, JSValueConst this_val, int, JSValueConst *) {
+    return callFromJs(ctx, [ctx, this_val] {
+        auto const type = static_cast<typelib_TypeDescriptionReference *>(
+            JS_GetOpaque2(ctx, this_val, getRuntimeData(ctx)->compoundClassId));
+        if (type == nullptr) {
+            throw JsException();
+        }
+        ValueRef const message(ctx, JS_GetPropertyStr(ctx, this_val, "message"));
+        if (JS_IsException(message)) {
+            throw JsException();
+        }
+        std::size_t n;
+        UniqueCString16 const p(ctx, JS_ToCStringLenUTF16(ctx, &n, message));
+        if (p.get() == nullptr) {
+            throw JsException();
+        }
+        OUString const s(
+            OUString::unacquired(&type->pTypeName) + ": " + std::u16string_view(p.get(), n));
+        return JS_NewStringUTF16(
+            ctx, reinterpret_cast<std::uint16_t const *>(s.getStr()), s.getLength());
     });
 }
 
@@ -799,7 +1177,7 @@ JSValue unoTypeStruct(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv
             JS_ThrowTypeError(ctx, "TODO: BAD UNO TYPE VALUE");
             throw JsException();
         }
-        css::uno::Reference td(static_cast<css::reflection::XStructTypeDescription*>(
+        cpo::uno::Reference td(static_cast<css::reflection::XStructTypeDescription*>(
             JS_GetOpaque(data, getRuntimeData(ctx)->structClassId)));
         OUStringBuffer buf(td->getName());
         auto const params = td->getTypeParameters();
@@ -951,7 +1329,7 @@ JSValue structCtor(JSContext* ctx, JSValueConst new_target, int argc, JSValueCon
         {
             throw JsException();
         }
-        css::uno::Reference td(static_cast<css::reflection::XStructTypeDescription*>(
+        cpo::uno::Reference td(static_cast<css::reflection::XStructTypeDescription*>(
             JS_GetOpaque(data, getRuntimeData(ctx)->structClassId)));
         int argIdx = 0;
         auto const params = td->getTypeParameters();
@@ -1038,8 +1416,8 @@ JSValue structCtor(JSContext* ctx, JSValueConst new_target, int argc, JSValueCon
 #if defined DBG_UTIL
         getRuntimeData(ctx)->toFinalize.inc();
 #endif
-        for (css::uno::Reference<css::reflection::XCompoundTypeDescription> ctd(
-                 td, css::uno::UNO_QUERY_THROW);
+        for (cpo::uno::Reference<css::reflection::XCompoundTypeDescription> ctd(
+                 td, cpo::uno::UNO_QUERY_THROW);
              ;)
         {
             auto const memberNames = ctd->getMemberNames();
@@ -1099,7 +1477,7 @@ JSValue structCtor(JSContext* ctx, JSValueConst new_target, int argc, JSValueCon
             {
                 break;
             }
-            ctd.set(base, css::uno::UNO_QUERY_THROW);
+            ctd.set(base, cpo::uno::UNO_QUERY_THROW);
         }
         return obj.release();
     });
@@ -1124,7 +1502,7 @@ JSValue exceptionCtor(JSContext* ctx, JSValueConst new_target, int argc, JSValue
         }
         cpo::uno::Type const type(static_cast<typelib_TypeDescriptionReference*>(
             JS_GetOpaque(data, getRuntimeData(ctx)->exceptionClassId)));
-        css::uno::TypeDescription desc(type);
+        cpo::uno::TypeDescription desc(type);
         auto compDesc = reinterpret_cast<typelib_CompoundTypeDescription const*>(desc.get());
         ValueRef proto(ctx, JS_GetPropertyStr(ctx, new_target, "prototype"));
         if (JS_IsException(proto))
@@ -1144,7 +1522,7 @@ JSValue exceptionCtor(JSContext* ctx, JSValueConst new_target, int argc, JSValue
         {
             for (sal_Int32 i = 0; i != compDesc->nMembers; ++i)
             {
-                auto const name = OUString::unacquired(&compDesc->ppMemberNames[i]).toUtf8();
+                auto const name = compoundMemberName(compDesc, i);
                 AtomRef const a(ctx, JS_NewAtomLen(ctx, name.getStr(), name.getLength()));
                 assert(a != JS_ATOM_NULL); //TODO
                 ValueRef val(ctx);
@@ -1194,7 +1572,7 @@ void interfaceFinalizer(JSRuntime* rt, JSValueConst val)
 struct CtorData
 {
     OUString service;
-    css::uno::Reference<css::reflection::XServiceConstructorDescription> ctor;
+    cpo::uno::Reference<css::reflection::XServiceConstructorDescription> ctor;
 };
 
 void ctorFinalizer(JSRuntime* rt, JSValueConst val)
@@ -1219,9 +1597,9 @@ JSValue createService(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv
             JS_ThrowSyntaxError(ctx, "TODO: BAD NUMBER OF ARGUMENTS");
             throw JsException();
         }
-        css::uno::Reference<css::uno::XComponentContext> context(
-            fromJs(ctx, cppu::UnoType<css::uno::XComponentContext>::get(), argv[0]),
-            css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<cpo::uno::XComponentContext> context(
+            fromJs(ctx, cppu::UnoType<cpo::uno::XComponentContext>::get(), argv[0]),
+            cpo::uno::UNO_QUERY_THROW);
         cpo::uno::Sequence<cpo::uno::Any> args(argc - 1);
         for (sal_Int32 i = 0; i != params.getLength(); ++i)
         {
@@ -1246,12 +1624,12 @@ JSValue createService(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv
                                             argv[i + 1]);
             }
         }
-        css::uno::Reference<css::uno::XInterface> ifc(
+        cpo::uno::Reference<cpo::uno::XInterface> ifc(
             data->ctor->isDefaultConstructor()
                 ? context->getServiceManager()->createInstanceWithContext(data->service, context)
                 : context->getServiceManager()->createInstanceWithArgumentsAndContext(
                       data->service, args, context),
-            css::uno::UNO_SET_THROW);
+            cpo::uno::UNO_SET_THROW);
         return toJs(ctx, cpo::uno::Any(ifc)).release();
     });
 }
@@ -1272,12 +1650,12 @@ JSValue getSingleton(JSContext* ctx, JSValueConst, [[maybe_unused]] int argc, JS
     return callFromJs(ctx, [ctx, argv, func_data] {
         auto const s = static_cast<rtl_uString*>(
             JS_GetOpaque(func_data[0], getRuntimeData(ctx)->singletonClassId));
-        css::uno::Reference<css::uno::XComponentContext> context(
-            fromJs(ctx, cppu::UnoType<css::uno::XComponentContext>::get(), argv[0]),
-            css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::uno::XInterface> ifc(
+        cpo::uno::Reference<cpo::uno::XComponentContext> context(
+            fromJs(ctx, cppu::UnoType<cpo::uno::XComponentContext>::get(), argv[0]),
+            cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<cpo::uno::XInterface> ifc(
             context->getValueByName("/singletons/" + OUString::unacquired(&s)),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
         return toJs(ctx, cpo::uno::Any(ifc)).release();
     });
 }
@@ -1305,21 +1683,34 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
         buf.append('.');
     }
     buf.append(OUString::fromUtf8(JS_AtomToCString(ctx, atom)));
-    auto const id = buf.makeStringAndClear();
+    auto id = buf.makeStringAndClear();
     if (comphelper::isLegacyUnoApi(id) && !comphelper::isLegacyApiWarningSuppressed())
     {
         getRuntimeData(ctx)->usedLegacyUnoApi = true;
+        SAL_INFO(
+            "jsuno.legacyapi",
+            "legacy UNO API " << id << " at " << getRuntimeData(ctx)->source << ":"
+                << getRuntimeData(ctx)->line);
     }
-    css::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
+    cpo::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
         comphelper::getProcessComponentContext()->getValueByName(
             u"/singletons/com.sun.star.reflection.theTypeDescriptionManager"_ustr),
-        css::uno::UNO_QUERY_THROW);
+        cpo::uno::UNO_QUERY_THROW);
     if (!mgr->hasByHierarchicalName(id))
     {
-        return JS_UNDEFINED;
+        // Backwards-compatibility support for the com.sun.star -> cpo renaming:
+        OUString rest;
+        if (!id.startsWith(u"com.sun.star.", &rest)) {
+            return JS_UNDEFINED;
+        }
+        OUString const newId = "cpo." + rest;
+        if (!mgr->hasByHierarchicalName(newId)) {
+            return JS_UNDEFINED;
+        }
+        id = newId;
     }
-    css::uno::Reference<css::reflection::XTypeDescription> td(mgr->getByHierarchicalName(id),
-                                                              css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::reflection::XTypeDescription> td(mgr->getByHierarchicalName(id),
+                                                              cpo::uno::UNO_QUERY_THROW);
     auto const tc = td->getTypeClass();
     ValueRef val(ctx);
     switch (tc)
@@ -1333,7 +1724,7 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
 #if defined DBG_UTIL
             getRuntimeData(ctx)->toFinalize.inc();
 #endif
-            css::uno::TypeDescription desc(type);
+            cpo::uno::TypeDescription desc(type);
             auto const enumDesc = reinterpret_cast<typelib_EnumTypeDescription const*>(desc.get());
             for (sal_Int32 i = 0; i != enumDesc->nEnumValues; ++i)
             {
@@ -1353,8 +1744,8 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
         }
         case cpo::uno::TypeClass_STRUCT:
         {
-            css::uno::Reference<css::reflection::XStructTypeDescription> std(
-                td, css::uno::UNO_QUERY_THROW);
+            cpo::uno::Reference<css::reflection::XStructTypeDescription> std(
+                td, cpo::uno::UNO_QUERY_THROW);
             assert(!std->getTypeArguments().hasElements());
             ValueRef proto(ctx, JS_NewObject(ctx));
             assert(!JS_IsException(proto)); //TODO
@@ -1375,6 +1766,9 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
         {
             ValueRef proto(ctx, JS_NewObject(ctx));
             assert(!JS_IsException(proto)); //TODO
+            static JSCFunctionListEntry const functions[] = {
+                JS_CFUNC_DEF("toString", 0, exceptionToString)};
+            JS_SetPropertyFunctionList(ctx, proto, functions, std::size(functions));
             val = JS_NewCFunction2(ctx, exceptionCtor, "TODO", 0, JS_CFUNC_constructor, 0);
             assert(!JS_IsException(val)); //TODO
             JS_SetConstructor(ctx, val, proto);
@@ -1414,8 +1808,8 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
             {
                 throw JsException();
             }
-            css::uno::Reference<css::reflection::XConstantsTypeDescription> cstd(
-                td, css::uno::UNO_QUERY_THROW);
+            cpo::uno::Reference<css::reflection::XConstantsTypeDescription> cstd(
+                td, cpo::uno::UNO_QUERY_THROW);
             for (auto const& ctd : cstd->getConstants())
             {
                 ValueRef con = toJs(ctx, ctd->getConstantValue());
@@ -1431,8 +1825,8 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
         }
         case cpo::uno::TypeClass_SERVICE:
         {
-            css::uno::Reference<css::reflection::XServiceTypeDescription2> std(
-                td, css::uno::UNO_QUERY_THROW);
+            cpo::uno::Reference<css::reflection::XServiceTypeDescription2> std(
+                td, cpo::uno::UNO_QUERY_THROW);
             if (!std->isSingleInterfaceBased())
             {
                 return JS_UNDEFINED;
@@ -1494,6 +1888,7 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
 
 ValueRef getUnoidlRepresentation(JSContext* ctx, std::u16string_view id)
 {
+    auto const suppression = comphelper::suppressLegacyApiWarning();
     ValueRef const global(ctx, JS_GetGlobalObject(ctx));
     ValueRef const uno(ctx, JS_GetPropertyStr(ctx, global, "uno"));
     assert(JS_IsObject(uno));
@@ -1540,7 +1935,7 @@ ValueRef createDefaultValue(JSContext* ctx, cpo::uno::Type const& type)
             return ValueRef(ctx, JS_NewArray(ctx));
         case cpo::uno::TypeClass_ENUM:
         {
-            css::uno::TypeDescription desc(type);
+            cpo::uno::TypeDescription desc(type);
             auto const enumDesc = reinterpret_cast<typelib_EnumTypeDescription const*>(desc.get());
             auto val = getUnoidlRepresentation(
                 ctx, Concat2View(type.getTypeName() + "."
@@ -1550,6 +1945,9 @@ ValueRef createDefaultValue(JSContext* ctx, cpo::uno::Type const& type)
         }
         case cpo::uno::TypeClass_STRUCT:
         {
+            if (getOptionalType(type)) {
+                return ValueRef(ctx, JS_NULL);
+            }
             auto const id = type.getTypeName();
             auto n = id.indexOf('<');
             auto const rep = getUnoidlRepresentation(ctx, n == -1 ? id : id.subView(0, n));
@@ -1573,18 +1971,18 @@ ValueRef createDefaultValue(JSContext* ctx, cpo::uno::Type const& type)
                 assert(id.endsWith(">"));
                 sal_Int32 nest = 0;
                 ++n;
-                css::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
+                cpo::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
                     comphelper::getProcessComponentContext()->getValueByName(
                         u"/singletons/com.sun.star.reflection.theTypeDescriptionManager"_ustr),
-                    css::uno::UNO_QUERY_THROW);
+                    cpo::uno::UNO_QUERY_THROW);
                 for (sal_Int32 i = n;; ++i)
                 {
                     if (i == id.getLength() - 1 || (nest == 0 && id[i] == ','))
                     {
                         assert(nest == 0);
-                        css::uno::Reference<css::reflection::XTypeDescription> td(
+                        cpo::uno::Reference<css::reflection::XTypeDescription> td(
                             mgr->getByHierarchicalName(id.copy(n, i - n)),
-                            css::uno::UNO_QUERY_THROW);
+                            cpo::uno::UNO_QUERY_THROW);
                         if (JS_SetPropertyUint32(
                                 ctx, args, arg++,
                                 mapTypeToJs(ctx, cpo::uno::Type(td->getTypeClass(), td->getName()))
@@ -1664,7 +2062,7 @@ cpo::uno::Any fromJsString(JSContext* ctx, JSValueConst val)
 
 cpo::uno::Any fromJsSequence(JSContext* ctx, cpo::uno::Type const& type, JSValueConst val)
 {
-    if (!JS_IsArray(val))
+    if (!JS_IsArray(val) && JS_GetTypedArrayType(val) == -1)
     {
         JS_ThrowTypeError(ctx, "TODO: BAD UNO SEQUENCE VALUE");
         throw JsException();
@@ -1685,8 +2083,8 @@ cpo::uno::Any fromJsSequence(JSContext* ctx, cpo::uno::Type const& type, JSValue
         JS_ThrowTypeError(ctx, "TODO: BAD UNO SEQUENCE VALUE");
         throw JsException();
     }
-    css::uno::TypeDescription desc(type);
-    css::uno::TypeDescription elemDesc(
+    cpo::uno::TypeDescription desc(type);
+    cpo::uno::TypeDescription elemDesc(
         reinterpret_cast<typelib_IndirectTypeDescription const*>(desc.get())->pType);
     uno_Sequence* seq;
     uno_sequence_construct(&seq, desc.get(), nullptr, len2, cpo::uno::cpp_acquire);
@@ -1732,7 +2130,7 @@ cpo::uno::Any fromJsInterface(JSContext* ctx, cpo::uno::Type const& type, JSValu
         JS_ThrowTypeError(ctx, "TODO: BAD UNO ENUM VALUE");
         throw JsException();
     }
-    auto const a = css::uno::Reference(static_cast<css::uno::XInterface*>(
+    auto const a = cpo::uno::Reference(static_cast<cpo::uno::XInterface*>(
                                            JS_GetOpaque(val, getRuntimeData(ctx)->wrapperClassId)))
                        ->queryInterface(type);
     if (!a.hasValue())
@@ -1764,12 +2162,12 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                 throw JsException();
             }
             n = std::trunc(n);
-            if (n < SAL_MIN_INT8 || n > SAL_MAX_INT8)
+            if (std::isnan(n) || n < SAL_MIN_INT8 || n > SAL_MAX_UINT8)
             {
                 JS_ThrowRangeError(ctx, "Bad UNO byte val %f", n);
                 throw JsException();
             }
-            return cpo::uno::Any(static_cast<sal_Int8>(n));
+            return cpo::uno::Any(static_cast<sal_Int8>(n <= SAL_MAX_INT8 ? n : n - 256));
         }
         case cpo::uno::TypeClass_SHORT:
         {
@@ -1780,7 +2178,7 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                 throw JsException();
             }
             n = std::trunc(n);
-            if (n < SAL_MIN_INT16 || n > SAL_MAX_INT16)
+            if (std::isnan(n) || n < SAL_MIN_INT16 || n > SAL_MAX_INT16)
             {
                 JS_ThrowRangeError(ctx, "Bad UNO short value %f", n);
                 throw JsException();
@@ -1796,7 +2194,7 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                 throw JsException();
             }
             n = std::trunc(n);
-            if (n < 0 || n > SAL_MAX_UINT16)
+            if (std::isnan(n) || n < 0 || n > SAL_MAX_UINT16)
             {
                 JS_ThrowRangeError(ctx, "Bad UNO unsigned short value %f", n);
                 throw JsException();
@@ -1812,9 +2210,9 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                 throw JsException();
             }
             n = std::trunc(n);
-            if (n < SAL_MIN_INT32 || n > SAL_MAX_INT32)
+            if (std::isnan(n) || n < SAL_MIN_INT32 || n > SAL_MAX_INT32)
             {
-                JS_ThrowRangeError(ctx, "Bad UNO short value %f", n);
+                JS_ThrowRangeError(ctx, "Bad UNO long value %f", n);
                 throw JsException();
             }
             return cpo::uno::Any(static_cast<sal_Int32>(n));
@@ -1828,7 +2226,7 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                 throw JsException();
             }
             n = std::trunc(n);
-            if (n < 0 || n > SAL_MAX_UINT32)
+            if (std::isnan(n) || n < 0 || n > SAL_MAX_UINT32)
             {
                 JS_ThrowRangeError(ctx, "Bad UNO unsigned long value %f", n);
                 throw JsException();
@@ -2009,13 +2407,13 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
             }
             if (JS_IsNull(val))
             {
-                return cpo::uno::Any(css::uno::Reference<css::uno::XInterface>());
+                return cpo::uno::Any(cpo::uno::Reference<cpo::uno::XInterface>());
             }
             if (JS_IsObject(val))
             {
                 if (JS_GetClassID(val) == getRuntimeData(ctx)->wrapperClassId)
                 {
-                    return fromJsInterface(ctx, cppu::UnoType<css::uno::XInterface>::get(), val);
+                    return fromJsInterface(ctx, cppu::UnoType<cpo::uno::XInterface>::get(), val);
                 }
                 if (JS_GetClassID(val) == getRuntimeData(ctx)->enumeratorClassId)
                 {
@@ -2086,17 +2484,44 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
         case cpo::uno::TypeClass_STRUCT:
         case cpo::uno::TypeClass_EXCEPTION:
         {
-            css::uno::TypeDescription desc(type);
+            ValueRef synthesizedOptional(ctx);
+            JSValueConst effective;
+            if (getOptionalType(type) && !isCompoundOfType(ctx, val, type)
+                && !hasIsPresentProperty(ctx, val))
+            {
+                synthesizedOptional = ValueRef(ctx, JS_NewObject(ctx));
+                if (JS_IsException(synthesizedOptional)) {
+                    throw JsException();
+                }
+                auto const present = !JS_IsNull(val);
+                if (JS_SetPropertyStr(
+                        ctx, synthesizedOptional, "IsPresent", JS_NewBool(ctx, present))
+                    == -1)
+                {
+                    throw JsException();
+                }
+                if (present
+                    && JS_SetPropertyStr(
+                           ctx, synthesizedOptional, "Value", JS_DupValue(ctx, val))
+                       == -1)
+                {
+                    throw JsException();
+                }
+                effective = synthesizedOptional;
+            } else {
+                effective = val;
+            }
+            cpo::uno::TypeDescription desc(type);
             auto compDesc = reinterpret_cast<typelib_CompoundTypeDescription const*>(desc.get());
             std::vector<cpo::uno::Any> mems;
             for (;;)
             {
                 for (sal_Int32 i = 0; i != compDesc->nMembers; ++i)
                 {
-                    auto const name = OUString::unacquired(&compDesc->ppMemberNames[i]).toUtf8();
+                    auto const name = compoundMemberName(compDesc, i);
                     AtomRef const a(ctx, JS_NewAtomLen(ctx, name.getStr(), name.getLength()));
                     assert(a != JS_ATOM_NULL); //TODO
-                    auto const has = JS_HasProperty(ctx, val, a);
+                    auto const has = JS_HasProperty(ctx, effective, a);
                     if (has == -1)
                     {
                         throw JsException();
@@ -2109,7 +2534,7 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                         }
                         else
                         {
-                            css::uno::TypeDescription memDesc(compDesc->ppTypeRefs[i]);
+                            cpo::uno::TypeDescription memDesc(compDesc->ppTypeRefs[i]);
                             memDesc.makeComplete();
                             std::vector<char> buf(memDesc.get()->nSize, 0);
                             uno_constructData(buf.data(), memDesc.get());
@@ -2119,7 +2544,7 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
                     }
                     else
                     {
-                        ValueRef mem(ctx, JS_GetProperty(ctx, val, a));
+                        ValueRef mem(ctx, JS_GetProperty(ctx, effective, a));
                         if (JS_IsException(mem))
                         {
                             throw JsException();
@@ -2139,7 +2564,7 @@ cpo::uno::Any fromJs(JSContext* ctx, cpo::uno::Type const& type, JSValueConst va
             {
                 for (sal_Int32 i = 0; i != compDesc->nMembers; ++i)
                 {
-                    css::uno::TypeDescription memDesc(compDesc->ppTypeRefs[i]);
+                    cpo::uno::TypeDescription memDesc(compDesc->ppTypeRefs[i]);
                     uno_copyData(static_cast<std::byte*>(buf) + compDesc->pMemberOffsets[i],
                                  const_cast<void*>(compDesc->ppTypeRefs[i]->eTypeClass
                                                            == typelib_TypeClass_ANY
@@ -2195,8 +2620,8 @@ ValueRef mapTypeToJs(JSContext* ctx, cpo::uno::Type const& type)
         }
         case cpo::uno::TypeClass_SEQUENCE:
         {
-            css::uno::TypeDescription desc(type);
-            css::uno::TypeDescription elemDesc(
+            cpo::uno::TypeDescription desc(type);
+            cpo::uno::TypeDescription elemDesc(
                 reinterpret_cast<typelib_IndirectTypeDescription const*>(desc.get())->pType);
             auto elem = mapTypeToJs(ctx, elemDesc.get()->pWeakRef);
             ValueRef val(ctx, unoTypeSequence(ctx, JS_NULL, 1, elem.ptr()));
@@ -2300,8 +2725,8 @@ ValueRef toJs(JSContext* ctx, cpo::uno::Type const& type, void const* value)
         case cpo::uno::TypeClass_SEQUENCE:
         {
             auto const seq = *static_cast<uno_Sequence* const*>(value);
-            css::uno::TypeDescription desc(type);
-            css::uno::TypeDescription elemDesc(
+            cpo::uno::TypeDescription desc(type);
+            cpo::uno::TypeDescription elemDesc(
                 reinterpret_cast<typelib_IndirectTypeDescription const*>(desc.get())->pType);
             std::vector<ValueRef> refs;
             for (sal_Int32 i = 0; i != seq->nElements; ++i)
@@ -2328,7 +2753,7 @@ ValueRef toJs(JSContext* ctx, cpo::uno::Type const& type, void const* value)
         case cpo::uno::TypeClass_ENUM:
         {
             auto const val = *static_cast<sal_Int32 const*>(value);
-            css::uno::TypeDescription desc(type);
+            cpo::uno::TypeDescription desc(type);
             auto const enumDesc = reinterpret_cast<typelib_EnumTypeDescription const*>(desc.get());
             sal_Int32 i = 0;
             for (; i != enumDesc->nEnumValues; ++i)
@@ -2348,12 +2773,26 @@ ValueRef toJs(JSContext* ctx, cpo::uno::Type const& type, void const* value)
         case cpo::uno::TypeClass_STRUCT:
         case cpo::uno::TypeClass_EXCEPTION:
         {
+            if (getOptionalType(type)) {
+                cpo::uno::TypeDescription desc(type);
+                auto const compDesc = reinterpret_cast<typelib_CompoundTypeDescription const*>(
+                    desc.get());
+                // Member 0 is IsPresent (boolean), member 1 is Value (T):
+                auto const present = *reinterpret_cast<bool const *>(
+                    static_cast<std::byte const *>(value) + compDesc->pMemberOffsets[0]);
+                if (!present) {
+                    return ValueRef(ctx, JS_NULL);
+                }
+                return toJs(
+                    ctx, compDesc->ppTypeRefs[1],
+                    static_cast<std::byte const *>(value) + compDesc->pMemberOffsets[1]);
+            }
             ValueRef mems(ctx, JS_NewObject(ctx));
             if (JS_IsException(mems))
             {
                 throw JsException();
             }
-            css::uno::TypeDescription desc(type);
+            cpo::uno::TypeDescription desc(type);
             auto compDesc = reinterpret_cast<typelib_CompoundTypeDescription const*>(desc.get());
             for (;;)
             {
@@ -2364,7 +2803,7 @@ ValueRef toJs(JSContext* ctx, cpo::uno::Type const& type, void const* value)
                                static_cast<std::byte const*>(value) + compDesc->pMemberOffsets[i]);
                     if (JS_SetPropertyStr(
                             ctx, mems,
-                            OUString::unacquired(&compDesc->ppMemberNames[i]).toUtf8().getStr(),
+                            compoundMemberName(compDesc, i).getStr(),
                             mem.release())
                         == -1)
                     {
@@ -2400,18 +2839,18 @@ ValueRef toJs(JSContext* ctx, cpo::uno::Type const& type, void const* value)
                 assert(id.endsWith(">"));
                 sal_Int32 nest = 0;
                 ++n;
-                css::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
+                cpo::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
                     comphelper::getProcessComponentContext()->getValueByName(
                         u"/singletons/com.sun.star.reflection.theTypeDescriptionManager"_ustr),
-                    css::uno::UNO_QUERY_THROW);
+                    cpo::uno::UNO_QUERY_THROW);
                 for (sal_Int32 i = n;; ++i)
                 {
                     if (i == id.getLength() - 1 || (nest == 0 && id[i] == ','))
                     {
                         assert(nest == 0);
-                        css::uno::Reference<css::reflection::XTypeDescription> td(
+                        cpo::uno::Reference<css::reflection::XTypeDescription> td(
                             mgr->getByHierarchicalName(id.copy(n, i - n)),
-                            css::uno::UNO_QUERY_THROW);
+                            cpo::uno::UNO_QUERY_THROW);
                         if (JS_SetPropertyUint32(
                                 ctx, args, arg++,
                                 mapTypeToJs(ctx, cpo::uno::Type(td->getTypeClass(), td->getName()))
@@ -2447,7 +2886,7 @@ ValueRef toJs(JSContext* ctx, cpo::uno::Type const& type, void const* value)
         }
         case cpo::uno::TypeClass_INTERFACE:
             return ValueRef(ctx,
-                            wrapUnoObject(ctx, *static_cast<css::uno::XInterface* const*>(value)));
+                            wrapUnoObject(ctx, *static_cast<cpo::uno::XInterface* const*>(value)));
         default:
             O3TL_UNREACHABLE;
     }
@@ -2464,10 +2903,10 @@ JSValue sameUnoObject(JSContext* ctx, JSValueConst, [[maybe_unused]] int argc, J
     return callFromJs(ctx, [ctx, argv] {
         return JS_NewBool(
             ctx,
-            *o3tl::forceAccess<css::uno::Reference<css::uno::XInterface>>(
-                fromJsInterface(ctx, cppu::UnoType<css::uno::XInterface>::get(), argv[0]))
-                == *o3tl::forceAccess<css::uno::Reference<css::uno::XInterface>>(
-                       fromJsInterface(ctx, cppu::UnoType<css::uno::XInterface>::get(), argv[1])));
+            *o3tl::forceAccess<cpo::uno::Reference<cpo::uno::XInterface>>(
+                fromJsInterface(ctx, cppu::UnoType<cpo::uno::XInterface>::get(), argv[0]))
+                == *o3tl::forceAccess<cpo::uno::Reference<cpo::uno::XInterface>>(
+                       fromJsInterface(ctx, cppu::UnoType<cpo::uno::XInterface>::get(), argv[1])));
     });
 }
 
@@ -2475,7 +2914,7 @@ JSValue sameUnoObject(JSContext* ctx, JSValueConst, [[maybe_unused]] int argc, J
 // same C++ adapter UNO was originally handed (each jsuno::execute uses a fresh JSRuntime, so
 // JS-side identity does not survive):
 std::mutex g_proxyMapMutex;
-std::map<OUString, css::uno::Reference<css::uno::XInterface>> g_proxyMap;
+std::map<OUString, cpo::uno::Reference<cpo::uno::XInterface>> g_proxyMap;
 
 // Per-callId rendezvous between ProxyInvocation::invoke (spinning Application::Yield) and
 // jsuno::deliverProxyResult:
@@ -2540,18 +2979,27 @@ public:
     {
     }
 
-    css::uno::Reference<css::beans::XIntrospectionAccess> SAL_CALL getIntrospection() override
+    cpo::uno::Reference<css::beans::XIntrospectionAccess> getIntrospection() override
     {
         return {};
     }
 
-    cpo::uno::Any SAL_CALL invoke(OUString const& aFunctionName,
+    cpo::uno::Any invoke(OUString const& aFunctionName,
                                   cpo::uno::Sequence<cpo::uno::Any> const& aParams,
                                   cpo::uno::Sequence<sal_Int16>& aOutParamIndex,
                                   cpo::uno::Sequence<cpo::uno::Any>& aOutParam) override
     {
         aOutParamIndex = {};
         aOutParam = {};
+
+        if (aFunctionName == u"getTypes") {
+            return cpo::uno::Any(
+                cpo::uno::Sequence{
+                    cppu::UnoType<css::lang::XTypeProvider>::get(), m_interfaceType});
+        }
+        if (aFunctionName == u"getImplementationId") {
+            return cpo::uno::Any(cpo::uno::Sequence<sal_Int8>{});
+        }
 
         cpo::uno::Type const returnType = lookupMethodReturnType(m_interfaceType, aFunctionName);
         bool const isVoid = returnType.getTypeClass() == cpo::uno::TypeClass_VOID;
@@ -2618,6 +3066,10 @@ public:
         {
             ~ReentryPopper() { vcl::kit::popExpectedReentry(); }
         } popper;
+        // Other sessions' input handled during the spin switches to their views, so switch back to
+        // the view that was current when the call was made:
+        comphelper::ScopeGuard restoreView(
+            [view = KitHelper::getCurrentView()] { KitHelper::setView(view); });
         OUString jsonResult;
         for (;;)
         {
@@ -2636,13 +3088,13 @@ public:
         return comphelper::parseJsonToAny(jsonResult, returnType);
     }
 
-    void SAL_CALL setValue(OUString const&, cpo::uno::Any const&) override {}
+    void setValue(OUString const&, cpo::uno::Any const&) override {}
 
-    cpo::uno::Any SAL_CALL getValue(OUString const&) override { return {}; }
+    cpo::uno::Any getValue(OUString const&) override { return {}; }
 
-    bool SAL_CALL hasMethod(OUString const&) override { return true; }
+    bool hasMethod(OUString const&) override { return true; }
 
-    bool SAL_CALL hasProperty(OUString const&) override { return false; }
+    bool hasProperty(OUString const&) override { return false; }
 
 private:
     cpo::uno::Type m_interfaceType;
@@ -2674,13 +3126,17 @@ JSValue internalCreateProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int a
             throw JsException();
         }
         OUString const id(idStr.get(), idLen);
-        css::uno::Reference<css::script::XInvocation> invocation(
+        cpo::uno::Reference<css::script::XInvocation> invocation(
             new ProxyInvocation(interfaceType, id, getRuntimeData(ctx)->proxyCallHook));
-        css::uno::Reference<css::script::XInvocationAdapterFactory2> factory
+        cpo::uno::Reference<css::script::XInvocationAdapterFactory> factory
             = css::script::InvocationAdapterFactory::create(
                 comphelper::getProcessComponentContext());
-        css::uno::Reference<css::uno::XInterface> adapter(
-            factory->createAdapter(invocation, { interfaceType }), css::uno::UNO_SET_THROW);
+        //TODO: Ideally, XInvocationAdapterFactory::createAdapter would automatically add
+        // XTypeProvider support:
+        cpo::uno::Reference<cpo::uno::XInterface> adapter(
+            factory->createAdapter(
+                invocation, { cppu::UnoType<css::lang::XTypeProvider>::get(), interfaceType }),
+            cpo::uno::UNO_SET_THROW);
         {
             std::lock_guard lock(g_proxyMapMutex);
             auto const[it, inserted] = g_proxyMap.try_emplace(id, adapter);
@@ -2710,7 +3166,7 @@ JSValue internalTakeProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int arg
             throw JsException();
         }
         OUString const id(idStr.get(), idLen);
-        css::uno::Reference<css::uno::XInterface> adapter;
+        cpo::uno::Reference<cpo::uno::XInterface> adapter;
         {
             std::lock_guard lock(g_proxyMapMutex);
             auto const it = g_proxyMap.find(id);
@@ -2723,6 +3179,28 @@ JSValue internalTakeProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int arg
             g_proxyMap.erase(it);
         }
         return wrapUnoObject(ctx, adapter);
+    });
+}
+
+JSValue internalEvalWithSource(JSContext * ctx, JSValueConst, int argc, JSValueConst* argv) {
+    return callFromJs(ctx, [ctx, argc, argv] {
+        if (argc != 3 || !JS_IsString(argv[0]) || !JS_IsString(argv[1]) || !JS_IsNumber(argv[2])) {
+            JS_ThrowTypeError(ctx, "$internal.evalWithSource: (script, source, line) required");
+            throw JsException();
+        }
+        std::size_t scriptLen = 0;
+        UniqueCString8 const script(ctx, JS_ToCStringLen(ctx, &scriptLen, argv[0]));
+        if (script.get() == nullptr) {
+            throw JsException();
+        }
+        UniqueCString8 const source(ctx, JS_ToCString(ctx, argv[1]));
+        if (source.get() == nullptr) {
+            throw JsException();
+        }
+        int32_t line = 1;
+        JS_ToInt32(ctx, &line, argv[2]);
+        JSEvalOptions opts{JS_EVAL_OPTIONS_VERSION, JS_EVAL_TYPE_GLOBAL, source.get(), line};
+        return JS_Eval2(ctx, script.get(), scriptLen, &opts);
     });
 }
 
@@ -2799,12 +3277,12 @@ JSValue invokeUno(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst*
         {
             ret = toJs(
                 ctx,
-                css::uno::Reference<css::script::XInvocation>(
+                cpo::uno::Reference<css::script::XInvocation>(
                     css::script::Invocation::create(comphelper::getProcessComponentContext())
                         ->createInstanceWithArguments(
-                            { cpo::uno::Any(css::uno::Reference(static_cast<css::uno::XInterface*>(
+                            { cpo::uno::Any(cpo::uno::Reference(static_cast<cpo::uno::XInterface*>(
                                 JS_GetOpaque(this_val, getRuntimeData(ctx)->wrapperClassId)))) }),
-                    css::uno::UNO_QUERY_THROW)
+                    cpo::uno::UNO_QUERY_THROW)
                     ->invoke(info->aName, args, outParamIndex, outParam));
         }
         catch (css::reflection::InvocationTargetException e)
@@ -2870,6 +3348,23 @@ jsuno::Exception extractException(JSContext* ctx, ValueRef const& err)
                 exc.name = OUString(p.get(), n);
             }
         }
+        if (exc.name.isEmpty()) {
+            // For a UNO exception marshaled to JS, extract its name from the constructor's opaque
+            // 'data member:
+            if (ValueRef const ctorVal(ctx, JS_GetPropertyStr(ctx, err, "constructor"));
+                JS_IsObject(ctorVal))
+            {
+                if (ValueRef const dataVal(ctx, JS_GetPropertyStr(ctx, ctorVal, "'data"));
+                    JS_IsObject(dataVal))
+                {
+                    auto const typeRef = static_cast<typelib_TypeDescriptionReference *>(
+                        JS_GetOpaque(dataVal, getRuntimeData(ctx)->exceptionClassId));
+                    if (typeRef != nullptr) {
+                        exc.name = OUString::unacquired(&typeRef->pTypeName);
+                    }
+                }
+            }
+        }
         ValueRef const msgVal(ctx, JS_GetPropertyStr(ctx, err, "message"));
         if (JS_IsString(msgVal))
         {
@@ -2882,21 +3377,6 @@ jsuno::Exception extractException(JSContext* ctx, ValueRef const& err)
             }
         }
         parseStackTrace(ctx, err, exc.stack);
-        if (!haveMessage)
-        {
-            // See whether this is a css.uno.Exception with a Message member:
-            ValueRef const unoMsgVal(ctx, JS_GetPropertyStr(ctx, err, "Message"));
-            if (JS_IsString(unoMsgVal))
-            {
-                std::size_t n;
-                UniqueCString16 const p(ctx, JS_ToCStringLenUTF16(ctx, &n, unoMsgVal));
-                if (p.get() != nullptr)
-                {
-                    exc.message = OUString(p.get(), n);
-                    haveMessage = true;
-                }
-            }
-        }
     }
     if (!haveMessage)
     {
@@ -2924,8 +3404,9 @@ OUString jsuno::execute(OUString const& script, OUString const & source, int lin
                         bool* usedLegacyUnoApi)
 {
     auto const rt = JS_NewRuntime();
+    JS_SetMaxStackSize(rt, 4 * 1024 * 1024); // from default 256 KiB to 4 MiB
     JS_SetRuntimeOpaque(
-        rt, new RuntimeData(rt, std::move(consoleHook), std::move(proxyCallHook)));
+        rt, new RuntimeData(rt, source, line, std::move(consoleHook), std::move(proxyCallHook)));
     JS_NewClassID(rt, &getRuntimeData(rt)->pointerClassId);
     JSClassDef pointerClass{ "InternalPointer", pointerFinalizer, nullptr, nullptr, nullptr };
     [[maybe_unused]] auto e = JS_NewClass(rt, getRuntimeData(rt)->pointerClassId, &pointerClass);
@@ -2991,6 +3472,7 @@ OUString jsuno::execute(OUString const& script, OUString const & source, int lin
     }
     {
         static JSCFunctionListEntry const functions[] = {
+            JS_CFUNC_DEF("toJSON", 0, enumeratorToString),
             JS_CFUNC_DEF("toString", 0, enumeratorToString),
         };
         ValueRef proto(ctx, JS_NewObject(ctx));
@@ -3073,6 +3555,9 @@ OUString jsuno::execute(OUString const& script, OUString const & source, int lin
                           JS_NewCFunction(ctx, internalCreateProxy, "createProxy", 2));
         JS_SetPropertyStr(ctx, internalObj, "takeProxy",
                           JS_NewCFunction(ctx, internalTakeProxy, "takeProxy", 1));
+        JS_SetPropertyStr(
+            ctx, internalObj, "evalWithSource",
+            JS_NewCFunction(ctx, internalEvalWithSource, "evalWithSource", 3));
         JS_SetPropertyStr(ctx, internalObj, "suppressLegacyUnoApiStart",
                           JS_NewCFunction(ctx, internalSuppressLegacyUnoApiStart,
                                           "suppressLegacyUnoApiStart", 0));

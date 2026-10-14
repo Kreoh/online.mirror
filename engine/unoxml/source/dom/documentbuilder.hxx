@@ -23,7 +23,7 @@
 
 #include <cppuhelper/implbase.hxx>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <cpo/uno/Sequence.h>
 
 #include <com/sun/star/xml/dom/XDocumentBuilder.hpp>
@@ -47,8 +47,8 @@ namespace DOM
     {
     private:
         std::recursive_mutex m_Mutex;
-        css::uno::Reference< css::xml::sax::XEntityResolver > m_xEntityResolver;
-        css::uno::Reference< css::xml::sax::XErrorHandler > m_xErrorHandler;
+        cpo::uno::Reference< css::xml::sax::XEntityResolver > m_xEntityResolver;
+        cpo::uno::Reference< css::xml::sax::XErrorHandler > m_xErrorHandler;
 
     public:
 
@@ -56,65 +56,65 @@ namespace DOM
         explicit CDocumentBuilder();
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames () override;
+        virtual OUString getImplementationName() override;
+        virtual bool supportsService(const OUString& ServiceName) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames () override;
 
         /**
         Obtain an instance of a DOMImplementation object.
         */
-        virtual css::uno::Reference< css::xml::dom::XDOMImplementation > SAL_CALL getDOMImplementation() override;
+        virtual cpo::uno::Reference< css::xml::dom::XDOMImplementation > getDOMImplementation() override;
 
         /**
         Indicates whether or not this parser is configured to understand
         namespaces.
         */
-        virtual bool SAL_CALL isNamespaceAware() override;
+        virtual bool isNamespaceAware() override;
 
         /**
         Indicates whether or not this parser is configured to validate XML
         documents.
         */
-        virtual bool SAL_CALL isValidating() override;
+        virtual bool isValidating() override;
 
         /**
         Obtain a new instance of a DOM Document object to build a DOM tree
         with.
         */
-        virtual css::uno::Reference< css::xml::dom::XDocument > SAL_CALL newDocument() override;
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > newDocument() override;
 
         /**
         Parse the content of the given InputStream as an XML document and
         return a new DOM Document object.
         */
-        virtual css::uno::Reference< css::xml::dom::XDocument > SAL_CALL parse(const css::uno::Reference< css::io::XInputStream >& is) override;
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > parse(const cpo::uno::Reference< css::io::XInputStream >& is) override;
 
         /**
         Parse the content of the given URI as an XML document and return
         a new DOM Document object.
         */
-        virtual css::uno::Reference< css::xml::dom::XDocument > SAL_CALL parseURI(const OUString& uri) override;
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > parseURI(const OUString& uri) override;
 
         /**
         Specify the EntityResolver to be used to resolve entities present
         in the XML document to be parsed.
         */
-        virtual void SAL_CALL setEntityResolver(const css::uno::Reference< css::xml::sax::XEntityResolver >& er) override;
+        virtual void setEntityResolver(const cpo::uno::Reference< css::xml::sax::XEntityResolver >& er) override;
 
-        /// @throws css::uno::RuntimeException
-        css::uno::Reference< css::xml::sax::XEntityResolver > getEntityResolver();
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::xml::sax::XEntityResolver > getEntityResolver();
 
         /**
         Specify the ErrorHandler to be used to report errors present in
         the XML document to be parsed.
         */
-        virtual void SAL_CALL setErrorHandler(const css::uno::Reference< css::xml::sax::XErrorHandler >& eh) override;
+        virtual void setErrorHandler(const cpo::uno::Reference< css::xml::sax::XErrorHandler >& eh) override;
 
         /*
         Get the ErrorHandler to be used to report errors present in
         the XML document to be parsed.
         */
-        css::uno::Reference< css::xml::sax::XErrorHandler > getErrorHandler();
+        cpo::uno::Reference< css::xml::sax::XErrorHandler > getErrorHandler();
     };
 }
 

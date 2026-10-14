@@ -27,6 +27,8 @@
 #include <sal/log.hxx>
 #include <tools/debug.hxx>
 #include <svtools/colorcfg.hxx>
+#include <basegfx/polygon/b2dpolygon.hxx>
+#include <sfx2/viewsh.hxx>
 
 #include <algorithm>
 #include <math.h>
@@ -51,7 +53,7 @@ using namespace ::editeng;
 
 namespace svx {
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Any;
 using ::com::sun::star::accessibility::XAccessible;
 using namespace ::com::sun::star::accessibility;
@@ -240,7 +242,8 @@ FrameSelectorImpl::FrameSelectorImpl( FrameSelector& rFrameSel ) :
     mbBLTR( false ),
     mbFullRepaint( true ),
     mbAutoSelect( true ),
-    mbHCMode( false )
+    mbHCMode( false ),
+    mbHasFocus( false )
 #if !ENABLE_WASM_STRIP_ACCESSIBILITY
     ,maChildVec(FRAMEBORDERTYPE_COUNT)
 #endif
@@ -734,6 +737,14 @@ void FrameSelectorImpl::CopyVirDevToControl(vcl::RenderContext& rRenderContext)
     rRenderContext.DrawBitmap(maVirDevPos, mpVirDev->GetBitmap(Point(0, 0), mpVirDev->GetOutputSizePixel()));
 }
 
+static Color lclGetFocusRingColor(const vcl::RenderContext& rRenderContext)
+{
+    const SfxViewShell* pViewShell = SfxViewShell::Current();
+    if (pViewShell && pViewShell->GetKitFocusRingColor() != COL_AUTO)
+        return pViewShell->GetKitFocusRingColor();
+    return rRenderContext.GetSettings().GetStyleSettings().GetHighlightColor();
+}
+
 void FrameSelectorImpl::DrawAllTrackingRects(vcl::RenderContext& rRenderContext)
 {
     tools::PolyPolygon aPPoly;
@@ -749,8 +760,17 @@ void FrameSelectorImpl::DrawAllTrackingRects(vcl::RenderContext& rRenderContext)
 
     aPPoly.Optimize(PolyOptimizeFlags::CLOSE);
 
+    rRenderContext.Push(vcl::PushFlags::LINECOLOR | vcl::PushFlags::FILLCOLOR);
+    rRenderContext.SetFillColor();
+    rRenderContext.SetLineColor(lclGetFocusRingColor(rRenderContext));
+
     for(sal_uInt16 nIdx = 0, nCount = aPPoly.Count(); nIdx < nCount; ++nIdx)
-        rRenderContext.Invert(aPPoly.GetObject(nIdx), InvertFlags::TrackFrame);
+    {
+        basegfx::B2DPolygon aB2DPoly(aPPoly.GetObject(nIdx).getB2DPolygon());
+        rRenderContext.DrawPolyLine(aB2DPoly, 2.0);
+    }
+
+    rRenderContext.Pop();
 }
 
 Point FrameSelectorImpl::GetDevPosFromMousePos( const Point& rMousePos ) const
@@ -1112,7 +1132,7 @@ tools::Rectangle FrameSelector::GetClickBoundRect( FrameBorderType eBorder ) con
 void FrameSelector::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
     mxImpl->CopyVirDevToControl(rRenderContext);
-    if (HasFocus())
+    if (mxImpl->mbHasFocus)
         mxImpl->DrawAllTrackingRects(rRenderContext);
 }
 
@@ -1257,6 +1277,7 @@ bool FrameSelector::KeyInput( const KeyEvent& rKEvt )
 
 void FrameSelector::GetFocus()
 {
+    mxImpl->mbHasFocus = true;
     // auto-selection of a frame border, if focus reaches control, and nothing is selected
     if( mxImpl->mbAutoSelect && !IsAnyBorderSelected() && !mxImpl->maEnabBorders.empty() )
         mxImpl->SelectBorder( *mxImpl->maEnabBorders.front(), true );
@@ -1283,13 +1304,12 @@ void FrameSelector::GetFocus()
             borderType = FrameBorderType::BLTR;
         SelectBorder(borderType, true);
     }
-    for( SelFrameBorderIter aIt( mxImpl->maEnabBorders ); aIt.Is(); ++aIt )
-            mxImpl->SetBorderState( **aIt, FrameBorderState::Show );
     CustomWidgetController::GetFocus();
 }
 
 void FrameSelector::LoseFocus()
 {
+    mxImpl->mbHasFocus = false;
     mxImpl->DoInvalidate( false );
     CustomWidgetController::LoseFocus();
 }

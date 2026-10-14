@@ -36,7 +36,7 @@
 
 using namespace connectivity;
 using namespace connectivity::ado;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -44,7 +44,7 @@ using namespace com::sun::star::sdbc;
 using namespace com::sun::star::sdbcx;
 
 
-ODriver::ODriver(const css::uno::Reference< css::uno::XComponentContext >& _xORB)
+ODriver::ODriver(const cpo::uno::Reference< cpo::uno::XComponentContext >& _xORB)
     : ODriver_BASE(m_aMutex)
     ,m_xContext(_xORB)
     ,mnNbCallCoInitializeExForReinit(0)
@@ -196,13 +196,6 @@ Reference< XTablesSupplier > ODriver::getDataDefinitionByConnection( const Refer
     return xTab;
 }
 
-Reference< XTablesSupplier > ODriver::getDataDefinitionByURL( const OUString& url, const Sequence< PropertyValue >& info )
-{
-    impl_checkURL_throw(url);
-    return getDataDefinitionByConnection(connect(url,info));
-}
-
-
 void ADOS::ThrowException(ADOConnection* _pAdoCon,const Reference< XInterface >& _xInterface)
 {
     sal::systools::COMReference<ADOErrors> pErrors;
@@ -240,9 +233,9 @@ void ADOS::ThrowException(ADOConnection* _pAdoCon,const Reference< XInterface >&
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 connectivity_ado_ODriver_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ODriver(context));
 }

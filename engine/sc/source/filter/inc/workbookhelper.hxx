@@ -95,6 +95,7 @@ class PageSettingsConverter;
 class PivotCacheBuffer;
 class PivotTableBuffer;
 class ScenarioBuffer;
+class RichValueBuffer;
 class SharedStringsBuffer;
 class StylesBuffer;
 class TableBuffer;
@@ -200,14 +201,14 @@ public:
                         getSheetFromDoc( const OUString& rSheet ) const;
 
     /** Returns the XCellRange interface for the passed cell range address. */
-    css::uno::Reference< css::table::XCellRange >
+    cpo::uno::Reference< css::table::XCellRange >
                         getCellRangeFromDoc( const ScRange& rRange ) const;
 
     /** Returns the cell styles container from the Calc document. */
-    css::uno::Reference< css::container::XNameContainer >
+    cpo::uno::Reference< css::container::XNameContainer >
                         getCellStyleFamily() const;
     /** Returns the specified cell or page style from the Calc document. */
-    css::uno::Reference< css::style::XStyle >
+    cpo::uno::Reference< css::style::XStyle >
                         getStyleObject( const OUString& rStyleName, bool bPageStyle ) const;
 
     // second is true if ownership belongs to the caller
@@ -238,7 +239,7 @@ public:
 
     /** Creates and returns an unnamed database range on-the-fly in the Calc document.
         The range will not be buffered in the global table buffer. */
-    css::uno::Reference< css::sheet::XDatabaseRange >
+    cpo::uno::Reference< css::sheet::XDatabaseRange >
                         createUnnamedDatabaseRangeObject(
                             const ScRange& rRangeAddr ) const;
 
@@ -246,7 +247,7 @@ public:
     ScDBData* findDatabaseRangeByIndex( sal_uInt16 nIndex ) const;
 
     /** Creates and returns a com.sun.star.style.Style object for cells or pages. */
-    css::uno::Reference< css::style::XStyle >
+    cpo::uno::Reference< css::style::XStyle >
                         createStyleObject(
                             OUString& orStyleName,
                             bool bPageStyle ) const;
@@ -266,6 +267,8 @@ public:
     StylesBuffer&       getStyles() const;
     /** Returns the shared strings read from the shared strings substream. */
     SharedStringsBuffer& getSharedStrings() const;
+    /** Returns the rich values read from the rich data parts. */
+    RichValueBuffer& getRichValues() const;
     /** Returns the external links read from the external links substream. */
     ExternalLinkBuffer& getExternalLinks() const;
     /** Returns the defined names read from the workbook globals. */

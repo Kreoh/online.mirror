@@ -23,9 +23,9 @@
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::i18n;
 using namespace ::cpo::uno;
 
@@ -58,7 +58,7 @@ CalendarImpl::loadDefaultCalendarTZ( const css::lang::Locale& rLocale, const OUS
 void
 CalendarImpl::loadCalendarTZ( const OUString& uniqueID, const css::lang::Locale& rLocale, const OUString& rTimeZone )
 {
-    Reference < XCalendar4 > xOldCalendar( xCalendar );  // backup
+    Reference < XCalendar > xOldCalendar( xCalendar );  // backup
     const OUString aCacheID( uniqueID + "_" + rTimeZone);
     bool bTimeZone = true;
     sal_Int32 i;
@@ -363,7 +363,7 @@ CalendarImpl::supportsService(const OUString& rServiceName)
 Sequence< OUString >
 CalendarImpl::getSupportedServiceNames()
 {
-    return { u"com.sun.star.i18n.LocaleCalendar"_ustr, u"com.sun.star.i18n.LocaleCalendar2"_ustr };
+    return { u"com.sun.star.i18n.LocaleCalendar"_ustr };
 }
 
 }

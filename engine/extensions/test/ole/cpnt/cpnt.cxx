@@ -39,9 +39,9 @@
 #include <com/sun/star/lang/XEventListener.hpp>
 
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <rtl/ustring.h>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <oletest/XTestSequence.hpp>
 #include <oletest/XTestStruct.hpp>
 #include <oletest/XTestOther.hpp>
@@ -55,7 +55,7 @@
 using namespace cppu;
 using namespace osl;
 using namespace oletest;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -297,8 +297,8 @@ public: // XTestSequence
     virtual void testInterface(  const Reference< XCallback >& xCallback, sal_Int32 mode ) throw(RuntimeException);
     virtual void testInterface2(  const Reference< XSimple >& xSimple, sal_Int32 mode ) throw(RuntimeException);
     // XSimple --------------------------------------------------------------------------
-    void func( const OUString &message) throw(css::uno::RuntimeException);
-    OUString getName() throw(css::uno::RuntimeException);
+    void func( const OUString &message) throw(cpo::uno::RuntimeException);
+    OUString getName() throw(cpo::uno::RuntimeException);
 
     // XIdentity
     virtual void setObject( const Reference< XInterface >& val ) throw (RuntimeException);
@@ -1891,14 +1891,14 @@ void EventListener::disposing( const css::lang::EventObject& ) throw (RuntimeExc
 }
 
 // XSimple --------------------------------------------------------------------------
-void OComponent::func( const OUString &message)throw(css::uno::RuntimeException)
+void OComponent::func( const OUString &message)throw(cpo::uno::RuntimeException)
 {
     USES_CONVERSION;
 
     MessageBox( NULL, W2T( message.getStr()), _T("OleTest: XSimple::func"), MB_OK);
 }
 // XSimple --------------------------------------------------------------------------
-OUString OComponent::getName()throw(css::uno::RuntimeException)
+OUString OComponent::getName()throw(cpo::uno::RuntimeException)
 {
     return L"XSimple";
 }

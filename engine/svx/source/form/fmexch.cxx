@@ -25,7 +25,7 @@
 
 namespace svxform
 {
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::datatransfer;
 
@@ -64,7 +64,7 @@ using namespace cpo::uno;
         m_bClipboardOwner = false;
     }
 
-    void SAL_CALL OLocalExchange::lostOwnership( const Reference< clipboard::XClipboard >& _rxClipboard, const Reference< XTransferable >& _rxTrans )
+    void OLocalExchange::lostOwnership( const Reference< clipboard::XClipboard >& _rxClipboard, const Reference< XTransferable >& _rxTrans )
     {
         TransferDataContainer::implCallOwnLostOwnership( _rxClipboard, _rxTrans );
         m_bClipboardOwner = false;
@@ -186,7 +186,7 @@ using namespace cpo::uno;
         m_bFocusEntry = _bFocusEntry;
     }
 
-    void OControlTransferData::addHiddenControlsFormat(const cpo::uno::Sequence< css::uno::Reference< css::uno::XInterface > >& seqInterfaces)
+    void OControlTransferData::addHiddenControlsFormat(const cpo::uno::Sequence< cpo::uno::Reference< cpo::uno::XInterface > >& seqInterfaces)
     {
         m_aHiddenControlModels = seqInterfaces;
     }

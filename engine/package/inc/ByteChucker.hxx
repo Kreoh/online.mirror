@@ -20,30 +20,30 @@
 #define INCLUDED_PACKAGE_INC_BYTECHUCKER_HXX
 
 #include <cpo/uno/Sequence.h>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 namespace com::sun::star {
     namespace io { class XSeekable; class XOutputStream; }
 }
 class ByteChucker final
 {
-    css::uno::Reference < css::io::XOutputStream > xStream;
-    css::uno::Reference < css::io::XSeekable > xSeek;
+    cpo::uno::Reference < css::io::XOutputStream > xStream;
+    cpo::uno::Reference < css::io::XSeekable > xSeek;
     cpo::uno::Sequence < sal_Int8 > a2Sequence, a4Sequence, a8Sequence;
     sal_Int8 * const p2Sequence, * const p4Sequence, * const p8Sequence;
 
 public:
-    ByteChucker (css::uno::Reference<css::io::XOutputStream> const & xOstream);
+    ByteChucker (cpo::uno::Reference<css::io::XOutputStream> const & xOstream);
     ~ByteChucker();
 
     /// @throws css::io::NotConnectedException
     /// @throws css::io::BufferSizeExceededException
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void WriteBytes( const cpo::uno::Sequence< sal_Int8 >& aData );
 
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int64 GetPosition();
 
     void WriteInt16(sal_Int16 nInt16)

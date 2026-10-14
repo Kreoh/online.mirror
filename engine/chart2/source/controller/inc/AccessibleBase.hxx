@@ -102,14 +102,14 @@ protected:
 
     /** Adds a state to the set.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void             AddState( sal_Int64 aState );
 
     /** Removes a state from the set if the set contains the state, otherwise
         nothing is done.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void             RemoveState( sal_Int64 aState );
 
@@ -164,15 +164,15 @@ protected:
         update of children is done if necessary.
 
         @throws css::lang::IndexOutOfBoundsException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
      */
-    virtual css::uno::Reference< css::accessibility::XAccessible >
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
         ImplGetAccessibleChildById( sal_Int64 i ) const;
 
     /** Is called from getAccessibleChildCount(). Before this method is called,
         an update of children is done if necessary.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
      */
     virtual sal_Int64 ImplGetAccessibleChildCount() const;
 
@@ -185,29 +185,29 @@ protected:
 
     // ________ XAccessibleContext ________
     virtual sal_Int64 getAccessibleChildCount() override;
-    virtual css::uno::Reference< css::accessibility::XAccessible >
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
         getAccessibleChild( sal_Int64 i ) override;
-    virtual css::uno::Reference< css::accessibility::XAccessible >
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
         getAccessibleParent() override;
     virtual sal_Int64 getAccessibleIndexInParent() override;
     /// @return AccessibleRole.SHAPE
     virtual sal_Int16 getAccessibleRole() override;
     // has to be implemented by derived classes
 //     virtual OUString getAccessibleName()
-//         throw (css::uno::RuntimeException);
-    virtual css::uno::Reference< css::accessibility::XAccessibleRelationSet >
+//         throw (cpo::uno::RuntimeException);
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleRelationSet >
         getAccessibleRelationSet() override;
     virtual sal_Int64 getAccessibleStateSet() override;
     virtual css::lang::Locale getLocale() override;
     // has to be implemented by derived classes
 //     virtual OUString getAccessibleDescription()
-//         throw (css::uno::RuntimeException);
+//         throw (cpo::uno::RuntimeException);
 
     // OAccessible
     virtual css::awt::Rectangle implGetBounds() override;
 
     // ________ XAccessibleComponent ________
-    virtual css::uno::Reference< css::accessibility::XAccessible >
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
         getAccessibleAtPoint( const css::awt::Point& aPoint ) override;
     virtual void grabFocus() override;
     virtual sal_Int32 getForeground() override;

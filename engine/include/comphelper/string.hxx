@@ -26,41 +26,18 @@
 #include <sal/types.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <com/sun/star/lang/Locale.hpp>
 
 namespace com::sun::star::i18n { class XBreakIterator; }
 namespace com::sun::star::i18n { class XCollator; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace cpo::uno { template <typename> class Sequence; }
 
 // OUString helper functions that are not widespread or mature enough to
 // go into the stable URE API:
 namespace comphelper::string {
-
-/** Removes all occurrences of a character from within the source string
-
-    @param rIn      The input OUStringBuffer
-    @param c        The character to be removed
-
-    @return         The resulting OUStringBuffer
- */
-inline OUStringBuffer& remove(OUStringBuffer &rIn,
-    sal_Unicode c)
-{
-    sal_Int32 index = 0;
-    while (true)
-    {
-        if (index >= rIn.getLength())
-            break;
-        index = rIn.indexOf(c, index);
-        if (index == -1)
-            break;
-        rIn.remove(index, 1);
-    }
-    return rIn;
-}
 
 /** Strips occurrences of a character from the start of the source string
 
@@ -228,13 +205,6 @@ inline OUStringBuffer& padToLength(
     return detail::padToLength(rBuffer, nLength, cFill);
 }
 
-/** Similar to OUString::replaceAt, but for an OUStringBuffer.
-
-    Replace n = count characters
-    from position index in this string with newStr.
- */
-COMPHELPER_DLLPUBLIC void replaceAt(OUStringBuffer& rIn, sal_Int32 index, sal_Int32 count, std::u16string_view newStr );
-
 /** Replace a token in a string
     @param rIn       OUString in which the token is to be replaced
     @param nToken    which nToken to replace
@@ -334,19 +304,19 @@ COMPHELPER_DLLPUBLIC cpo::uno::Sequence< OUString >
             > 0 - if this string is greater than the string argument
 */
 COMPHELPER_DLLPUBLIC sal_Int32 compareNatural( const OUString &rLHS, const OUString &rRHS,
-    const css::uno::Reference< css::i18n::XCollator > &rCollator,
-    const css::uno::Reference< css::i18n::XBreakIterator > &rBI,
+    const cpo::uno::Reference< css::i18n::XCollator > &rCollator,
+    const cpo::uno::Reference< css::i18n::XBreakIterator > &rBI,
     const css::lang::Locale &rLocale );
 
 class COMPHELPER_DLLPUBLIC NaturalStringSorter
 {
 private:
     css::lang::Locale const                          m_aLocale;
-    css::uno::Reference< css::i18n::XCollator >      m_xCollator;
-    css::uno::Reference< css::i18n::XBreakIterator > m_xBI;
+    cpo::uno::Reference< css::i18n::XCollator >      m_xCollator;
+    cpo::uno::Reference< css::i18n::XBreakIterator > m_xBI;
 public:
     NaturalStringSorter(
-        const css::uno::Reference< css::uno::XComponentContext > &rContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext > &rContext,
         css::lang::Locale aLocale);
     sal_Int32 compare(const OUString &rLHS, const OUString &rRHS) const
     {

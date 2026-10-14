@@ -12,7 +12,7 @@
  * JSDialog.StatusBar - statusbar component
  */
 
-/* global $ app JSDialog _ _UNO  getPermissionModeElements URLPopUpSection */
+/* global app JSDialog _ _UNO  getPermissionModeElements URLPopUpSection */
 class StatusBar extends JSDialog.Toolbar {
 	constructor(map) {
 		super(map, 'Statusbar', 'toolbar-down');
@@ -135,13 +135,24 @@ class StatusBar extends JSDialog.Toolbar {
 				this.showItem('cancelsearch', false);
 			}
 			window.L.DomUtil.addClass(searchInput, 'search-not-found');
-			$('#findthis').addClass('search-not-found');
+			var findThis = document.getElementById('findthis');
+			if (findThis) findThis.classList.add('search-not-found');
 			app.searchService.resetSelection();
 			setTimeout(function () {
-				$('#findthis').removeClass('search-not-found');
+				// Query again to get the current instance for sure: the
+				// element found above may no longer be the live one after
+				// this delay.
+				var findThis = document.getElementById('findthis');
+				if (findThis) findThis.classList.remove('search-not-found');
 				window.L.DomUtil.removeClass(searchInput, 'search-not-found');
 			}, 800);
 		}
+	}
+
+	// The button shows the bare number; on its own that is what a screen
+	// reader announces.
+	_zoomAriaLabel(zoomPercent) {
+		return { label: _('Zoom') + ': ' + zoomPercent + '%' };
 	}
 
 	onZoomEnd() {
@@ -153,6 +164,7 @@ class StatusBar extends JSDialog.Toolbar {
 				id: 'zoom',
 				type: 'menubutton',
 				text: '' + zoomPercent,
+				aria: this._zoomAriaLabel(zoomPercent),
 				selected: zoomSelected,
 				menu: this._generateZoomItems(),
 				image: false
@@ -171,8 +183,20 @@ class StatusBar extends JSDialog.Toolbar {
 			statemsg = _UNO('.uno:ShowAnnotations') +': ' + _('On');
 		else if (state === 'false')
 			statemsg = _UNO('.uno:ShowAnnotations') +': ' + _('Off');
-		$('#showcomments-container').attr('default-state', state || null);
+		this._setDefaultState('showcomments-container', state);
 		this.updateHtmlItem('ShowComments', state ? statemsg : ' ');
+	}
+
+	// Toggles a data attribute used purely as a CSS state hook: present with
+	// the given value when truthy, removed entirely when falsy (mirrors the
+	// old jQuery .attr(name, value || null) shorthand).
+	_setDefaultState(id, value) {
+		var el = document.getElementById(id);
+		if (!el) return;
+		if (value)
+			el.setAttribute('default-state', value);
+		else
+			el.removeAttribute('default-state');
 	}
 
 	_generateHtmlItem(id, dataPriority, configPeers) {
@@ -272,7 +296,7 @@ class StatusBar extends JSDialog.Toolbar {
 			{type: 'spacer',  id: 'permissionspacer'},
 			this._generateHtmlItem('documentstatus', 2),					// spreadsheet, text, presentation, drawing
 			{type: 'customtoolitem',  id: 'multi-page-view', command: 'multipageview', text: _('Multi Page View'), dataPriority: 10, visible: false,
-				configLabel: _('Multi Page View')},		
+				configLabel: _('Multi Page View')},
 			{type: 'customtoolitem',  id: 'prevpage', command: 'prev', text: _UNO('.uno:PageUp', 'text'), pressAndHold: true, dataPriority: 9,
 				configLabel: JSDialog.getStatusbarItemConfigLabel('prevpage'), configPeers: ['nextpage', 'prevnextbreak']},
 			{type: 'customtoolitem',  id: 'nextpage', command: 'next', text: _UNO('.uno:PageDown', 'text'), pressAndHold: true, dataPriority: 9},
@@ -280,12 +304,15 @@ class StatusBar extends JSDialog.Toolbar {
 			{type: 'customtoolitem',  id: 'overview', command: '.uno:InsertCanvasSlide', text: _('Overview'), dataPriority: 9, visible: !app.isReadOnly(),
 				configLabel: _('Overview'), configPeers: ['overviewbreak']},
 			{type: 'separator', id: 'overviewbreak', orientation: 'vertical', dataPriority: 9, visible: !app.isReadOnly()},
+			{type: 'customtoolitem',  id: 'notespanel', command: 'notespanel', text: _('Notes'), icon: 'statusbarnotesmode.svg', dataPriority: 9, visible: false,
+				configLabel: _('Notes'), configPeers: ['notespanelbreak']},
+			{type: 'separator', id: 'notespanelbreak', orientation: 'vertical', dataPriority: 9, visible: false},
 		].concat(window.mode.isTablet() ? [] : [
 			{type: 'customtoolitem',  id: 'fitwidthzoom-impress', command: 'fitwidthzoom', text: _('Zoom to Fit Slide'), icon: 'pagewidth.svg', dataPriority: 8, visible: false},
-			{type: 'customtoolitem', id: 'fitwidthzoom-writer', command: 'fitwidthzoom', text: _('Fit the page to the window width. Smart Zoom on open can be toggled in Options under File tab.'), icon: 'pagewidth.svg', dataPriority: 8, visible: false },
+			{type: 'customtoolitem', id: 'fitwidthzoom-writer', command: 'fitwidthzoom', text: app.LOUtil.canOpenSettings() ? _('Fit the page to the window width. Smart Zoom on open can be toggled in Options under File tab.') : _('Fit the page to the window width.'), icon: 'pagewidth.svg', dataPriority: 8, visible: false },
 			{type: 'customtoolitem',  id: 'zoomreset', command: 'zoomreset', text: _('Reset zoom'), icon: 'zoomreset.svg', dataPriority: 8},
 			{type: 'customtoolitem',  id: 'zoomout', command: 'zoomout', text: _UNO('.uno:ZoomMinus'), icon: 'minus.svg'},
-			{type: 'menubutton', id: 'zoom', text: '100', selected: 'zoom100', menu: this._generateZoomItems(), image: false},
+			{type: 'menubutton', id: 'zoom', text: '100', aria: this._zoomAriaLabel('100'), selected: 'zoom100', menu: this._generateZoomItems(), image: false},
 			{type: 'customtoolitem',  id: 'zoomin', command: 'zoomin', text: _UNO('.uno:ZoomPlus'), icon: 'plus.svg'},
 			{type: 'toolitem', id: 'menuoverflow', command: 'menuoverflow', text: _('Status Bar Menu'), icon: 'statusbarmenu.svg'}
 		]);
@@ -333,21 +360,28 @@ class StatusBar extends JSDialog.Toolbar {
 		this._openConfigMenu(this._getAnchorAtCursor(e));
 	}
 
-	_openConfigMenu(anchor) {
-		const items = this.getToolItems();
-		const menuEntries = [];
-		const visible = {};
-
-		for (let i = 0; i < items.length; i++) {
-			const item = items[i];
+	// The status bar entries the user can hide, one per configuration menu entry.
+	_configurableItems() {
+		const result = [];
+		const seen = {};
+		for (const item of this.getToolItems()) {
 			if (!item.configLabel)
 				continue;
 
 			const configId = item.configId || item.id;
-			if (visible[configId])
+			if (seen[configId])
 				continue;
-			visible[configId] = true;
+			seen[configId] = true;
+			result.push(item);
+		}
+		return result;
+	}
 
+	_openConfigMenu(anchor) {
+		const menuEntries = [];
+
+		for (const item of this._configurableItems()) {
+			const configId = item.configId || item.id;
 			const targetId = item.configTargetId || item.id;
 			const el = document.getElementById(targetId)
 				|| this.parentContainer.querySelector('[modelid="' + item.id + '"]');
@@ -383,7 +417,7 @@ class StatusBar extends JSDialog.Toolbar {
 
 			const newHidden = !this.isItemUserHidden(entry.itemId);
 			this._applyUserHidden(entry.itemId, entry.targetId, entry.peers, newHidden);
-			this.map.uiManager.setDocTypePref('StatusbarUserHidden.' + entry.id, newHidden);
+			this._storeHiddenItems();
 		};
 
 		JSDialog.OpenDropdown('statusbar-context-menu', anchor, menuEntries, callback, 'top', false);
@@ -399,22 +433,40 @@ class StatusBar extends JSDialog.Toolbar {
 		}
 	}
 
+	// The hidden entries are kept per document type as one JSON array of configuration menu
+	// entry ids, for example ["prevpage","rowcolselcount"].
+	_storeHiddenItems() {
+		const hidden = this._configurableItems()
+			.filter((item) => this.isItemUserHidden(item.id))
+			.map((item) => item.configId || item.id);
+		this.map.uiManager.setDocTypePref('StatusbarHiddenItems', JSON.stringify(hidden));
+	}
+
+	_storedHiddenItems() {
+		const stored = this.map.uiManager.getDocTypePref('StatusbarHiddenItems');
+		if (stored === undefined)
+			return this._legacyHiddenItems();
+
+		try {
+			const parsed = JSON.parse(stored);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch (e) {
+			return [];
+		}
+	}
+
+	// Backward compatibility with the old per-entry StatusbarUserHidden.<id> keys; remove later.
+	_legacyHiddenItems() {
+		return this._configurableItems()
+			.map((item) => item.configId || item.id)
+			.filter((configId) => this.map.uiManager.getBooleanDocTypePref(
+				'StatusbarUserHidden.' + configId, false));
+	}
+
 	_restoreUserHiddenState() {
-		const items = this.getToolItems();
-		const visible = {};
-		for (let i = 0; i < items.length; i++) {
-			const item = items[i];
-			if (!item.configLabel)
-				continue;
-
-			const configId = item.configId || item.id;
-			if (visible[configId])
-				continue;
-			visible[configId] = true;
-
-			const hide = this.map.uiManager.getBooleanDocTypePref(
-				'StatusbarUserHidden.' + configId, false);
-			if (!hide)
+		const hidden = this._storedHiddenItems();
+		for (const item of this._configurableItems()) {
+			if (!hidden.includes(item.configId || item.id))
 				continue;
 
 			this._applyUserHidden(item.id, item.configTargetId, item.configPeers, true);
@@ -428,10 +480,6 @@ class StatusBar extends JSDialog.Toolbar {
 			this.map.uiManager.showStatusBar();
 		else
 			this.map.uiManager.hideStatusBar(true);
-
-		const statusbarState = showStatusbar ? 'true' : 'false';
-		app.map['stateChangeHandler'].setItemValue('showstatusbar', statusbarState);
-		this.map.fire('commandstatechanged', {commandName : 'showstatusbar', state : statusbarState});
 	}
 
 	onDocLayerInit() {
@@ -492,6 +540,8 @@ class StatusBar extends JSDialog.Toolbar {
 				this.showItem('fitwidthzoom-writer', false);
 				this.showItem('fitwidthzoom-impress', true);
 				this.showItem('zoomreset', false);
+				this.showItem('notespanel', true);
+				this.showItem('notespanelbreak', true);
 			}
 			break;
 		case 'drawing':
@@ -552,11 +602,7 @@ class StatusBar extends JSDialog.Toolbar {
 
 	onPermissionChanged(event) {
 		var isReadOnlyMode = event.detail.perm === 'readonly';
-		if (isReadOnlyMode) {
-			$('#toolbar-down').addClass('readonly');
-		} else {
-			$('#toolbar-down').removeClass('readonly');
-		}
+		this.parentContainer.classList.toggle('readonly', isReadOnlyMode);
 
 		var canUserWrite = window.ThisIsAMobileApp ? !app.isReadOnly() : this.map['wopi'].UserCanWrite;
 		var NotEditDocMode = false;
@@ -643,10 +689,10 @@ class StatusBar extends JSDialog.Toolbar {
 		else if (commandName === '.uno:InsertMode') {
 			this.updateHtmlItem('InsertMode', state ? window.L.Styles.insertMode[state] : ' ', !state);
 
-			$('#InsertMode').removeClass();
-			$('#InsertMode').addClass('jsdialog ui-badge insert-mode-' + state);
+			var insertModeEl = document.getElementById('InsertMode');
+			if (insertModeEl) insertModeEl.className = 'jsdialog ui-badge insert-mode-' + state;
 			var isDefaultState = state === 'true' || state === '';
-			$('#insertmode-container').attr('default-state', isDefaultState || null);
+			this._setDefaultState('insertmode-container', isDefaultState);
 
 			if ((state === 'false' || !state) && URLPopUpSection.isOpen()) {
 				this.map.hyperlinkUnderCursor = null;
@@ -654,7 +700,7 @@ class StatusBar extends JSDialog.Toolbar {
 			}
 		}
 		else if (commandName === '.uno:StatusSelectionMode' || commandName === '.uno:SelectionMode') {
-			$('#statusselectionmode-container').attr('default-state', state === '0' || null);
+			this._setDefaultState('statusselectionmode-container', state === '0');
 			this.updateHtmlItem('StatusSelectionMode', state ? window.L.Styles.selectionMode[state] : _('Selection mode: inactive'), !state);
 		}
 		else if (commandName === '.uno:Size') {
@@ -698,7 +744,7 @@ class StatusBar extends JSDialog.Toolbar {
 		}
 		else if (commandName === '.uno:EditDoc') {
 			state = state !== "false";
-			$('#permissionmode-container').attr('default-state', this.map.isEditMode() || null);
+			this._setDefaultState('permissionmode-container', this.map.isEditMode());
 			this.onPermissionChanged({detail : {
 				perm: state && this.map.isEditMode() ? "edit" : "readonly"
 			} });

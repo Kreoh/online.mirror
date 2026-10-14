@@ -25,6 +25,7 @@
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <sfx2/app.hxx>
+#include <sfx2/docmacromode.hxx>
 #include <sfx2/objsh.hxx>
 #include <basic/sbmeth.hxx>
 #include <basic/sbstar.hxx>
@@ -43,6 +44,7 @@
 #include <com/sun/star/sheet/FormulaLanguage.hpp>
 #include <com/sun/star/i18n/KParseTokens.hpp>
 #include <com/sun/star/i18n/KParseType.hpp>
+#include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
 #include <unotools/transliterationwrapper.hxx>
@@ -81,9 +83,10 @@
 
 using namespace formula;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-const CharClass*                    ScCompiler::pCharClassEnglish = nullptr;
-const CharClass*                    ScCompiler::pCharClassLocalized = nullptr;
+std::optional<CharClass>            ScCompiler::goCharClassEnglish;
+std::optional<CharClass>            ScCompiler::goCharClassLocalized;
 const ScCompiler::Convention*       ScCompiler::pConventions[ ]   = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 
 namespace {
@@ -391,16 +394,8 @@ static std::mutex gCharClassMutex;
 void ScCompiler::DeInit()
 {
     std::scoped_lock aGuard(gCharClassMutex);
-    if (pCharClassEnglish)
-    {
-        delete pCharClassEnglish;
-        pCharClassEnglish = nullptr;
-    }
-    if (pCharClassLocalized)
-    {
-        delete pCharClassLocalized;
-        pCharClassLocalized = nullptr;
-    }
+    goCharClassEnglish.reset();
+    goCharClassLocalized.reset();
 }
 
 bool ScCompiler::IsEnglishSymbol( const OUString& rName )
@@ -429,12 +424,12 @@ bool ScCompiler::IsEnglishSymbol( const OUString& rName )
 const CharClass* ScCompiler::GetCharClassEnglish()
 {
     std::scoped_lock aGuard(gCharClassMutex);
-    if (!pCharClassEnglish)
+    if (!goCharClassEnglish)
     {
-        pCharClassEnglish = new CharClass( ::comphelper::getProcessComponentContext(),
+        goCharClassEnglish.emplace( ::comphelper::getProcessComponentContext(),
                 LanguageTag( LANGUAGE_ENGLISH_US));
     }
-    return pCharClassEnglish;
+    return &*goCharClassEnglish;
 }
 
 const CharClass* ScCompiler::GetCharClassLocalized()
@@ -442,12 +437,12 @@ const CharClass* ScCompiler::GetCharClassLocalized()
     // Switching UI language requires restart; if not, we would have to
     // keep track of that.
     std::scoped_lock aGuard(gCharClassMutex);
-    if (!pCharClassLocalized)
+    if (!goCharClassLocalized)
     {
-        pCharClassLocalized = new CharClass( ::comphelper::getProcessComponentContext(),
+        goCharClassLocalized.emplace( ::comphelper::getProcessComponentContext(),
                 Application::GetSettings().GetUILanguageTag());
     }
-    return pCharClassLocalized;
+    return &*goCharClassLocalized;
 }
 
 void ScCompiler::SetGrammar( const FormulaGrammar::Grammar eGrammar )
@@ -2381,7 +2376,7 @@ Label_MaskStateMachine:
             case ssGetChar :
             {
                 // Order is important!
-                if (meLastOp == ocTableRefOpen && c != '[' && c != '#' && c != ']')
+                if (meLastOp == ocTableRefOpen && c != '[' && c != '#' && c != ']' && c != '@')
                 {
                     *pSym++ = c;
                     eState = ssGetTableRefColumn;
@@ -3267,11 +3262,9 @@ bool ScCompiler::ParseOpCode( const OUString& rName, bool bInArray )
     OpCode eOp = maRawToken.GetOpCode();
     if (eOp == ocSub || eOp == ocNegSub)
     {
-        bool bShouldBeNegSub =
-            (meLastOp == ocOpen || meLastOp == ocSep || meLastOp == ocNegSub ||
-             (ocStartBinaryOperators <= meLastOp && meLastOp < ocStopBinaryOperators) ||
-             meLastOp == ocArrayOpen ||
-             meLastOp == ocArrayColSep || meLastOp == ocArrayRowSep);
+        bool bShouldBeNegSub = (meLastOp == ocOpen || meLastOp == ocSep || meLastOp == ocNegSub
+                                || isBinaryOperatorOpCode(meLastOp) || meLastOp == ocArrayOpen
+                                || meLastOp == ocArrayColSep || meLastOp == ocArrayRowSep);
         if (bShouldBeNegSub && eOp == ocSub)
             maRawToken.NewOpCode( ocNegSub );
             //TODO: if ocNegSub had ForceArray we'd have to set it here
@@ -3755,10 +3748,30 @@ bool ScCompiler::ParseReference( const OUString& rName, const OUString* pErrRef 
     return false;
 }
 
-bool ScCompiler::ParseMacro( const OUString& rName )
+#if HAVE_FEATURE_SCRIPTING
+static bool lcl_IsBasicFunction( StarBASIC& rBasic, const OUString& rName )
+{
+    SbxMethod* pMeth = static_cast<SbxMethod*>(rBasic.Find( rName, SbxClassType::Method ));
+    if( !pMeth )
+    {
+        return false;
+    }
+    // It really should be a BASIC function!
+    if( pMeth->GetType() == SbxVOID
+     || ( pMeth->IsFixed() && pMeth->GetType() == SbxEMPTY )
+     || dynamic_cast<const SbMethod*>( pMeth) ==  nullptr )
+    {
+        return false;
+    }
+    return true;
+}
+#endif
+
+bool ScCompiler::ParseMacro( const OUString& rName, bool bParenFollows )
 {
 #if !HAVE_FEATURE_SCRIPTING
     (void) rName;
+    (void) bParenFollows;
 
     return false;
 #else
@@ -3782,8 +3795,35 @@ bool ScCompiler::ParseMacro( const OUString& rName )
     }
 
     OUString aName( rName);
+    // ODFF recommends to store user-defined functions prefixed with "USER.",
+    // use only unprefixed name if encountered. BASIC doesn't allow '.' in a
+    // function name so a function "USER.FOO" could not exist, and macro check
+    // is assigned the lowest priority in function name check.
+    if (FormulaGrammar::isODFF( GetGrammar()) && aName.startsWithIgnoreAsciiCase("USER."))
+        aName = aName.copy(5);
+
     StarBASIC* pObj = nullptr;
     ScDocShell* pDocSh = rDoc.GetDocumentShell();
+
+    // During ODF import the Basic of a document whose macros are not allowed yet stays unloaded.
+    // A called name that is not an application Basic function may be one of the document's own
+    // macros only if the document has Basic libraries. Such a call is kept as a macro call, and the
+    // document is flagged as calling macros, whichever Basic the function lives in.
+    if (pDocSh && rDoc.IsImportingXML() && !pDocSh->IsMacroExecutionAllowed())
+    {
+        if (!bParenFollows)
+            return false;
+        StarBASIC* pAppBasic = SfxApplication::GetBasic();
+        if ((!pAppBasic || !lcl_IsBasicFunction(*pAppBasic, aName))
+            && !sfx2::DocumentMacroMode::containerHasBasicMacros(pDocSh->GetBasicContainer()))
+        {
+            return false;
+        }
+        pDocSh->SetMacroCallsSeenWhileLoading();
+        maRawToken.SetExternal( aName );
+        maRawToken.eOp = ocMacro;
+        return true;
+    }
 
     try
     {
@@ -3797,28 +3837,13 @@ bool ScCompiler::ParseMacro( const OUString& rName )
         return false;
     }
 
-    if (!pObj)
+    if (!pObj || !lcl_IsBasicFunction(*pObj, aName))
         return false;
 
-    // ODFF recommends to store user-defined functions prefixed with "USER.",
-    // use only unprefixed name if encountered. BASIC doesn't allow '.' in a
-    // function name so a function "USER.FOO" could not exist, and macro check
-    // is assigned the lowest priority in function name check.
-    if (FormulaGrammar::isODFF( GetGrammar()) && aName.startsWithIgnoreAsciiCase("USER."))
-        aName = aName.copy(5);
+    // A formula that calls a Basic function is macro use of the document being loaded.
+    if (pDocSh && pDocSh->IsLoading())
+        pDocSh->SetMacroCallsSeenWhileLoading();
 
-    SbxMethod* pMeth = static_cast<SbxMethod*>(pObj->Find( aName, SbxClassType::Method ));
-    if( !pMeth )
-    {
-        return false;
-    }
-    // It really should be a BASIC function!
-    if( pMeth->GetType() == SbxVOID
-     || ( pMeth->IsFixed() && pMeth->GetType() == SbxEMPTY )
-     || dynamic_cast<const SbMethod*>( pMeth) ==  nullptr )
-    {
-        return false;
-    }
     maRawToken.SetExternal( aName );
     maRawToken.eOp = ocMacro;
     return true;
@@ -4382,7 +4407,7 @@ bool ScCompiler::ParseTableRefItem( const OUString& rName )
 namespace {
 OUString unescapeTableRefColumnSpecifier( const OUString& rStr )
 {
-    // '#', '[', ']' and '\'' are escaped with '\''
+    // '#', '[', ']', a leading '@' and '\'' are escaped with '\''
 
     if (rStr.indexOf( '\'' ) < 0)
         return rStr;
@@ -4415,6 +4440,14 @@ bool ScCompiler::ParseTableRefColumn( const OUString& rName )
     // accessing maTableRefs.back() is safe.
     ScTableRefToken* p = maTableRefs.back().mxToken.get();
     assert(p);  // not a ScTableRefToken can't be
+
+    // A bare [@Col] bracketed the column here, so pay that bracket's close before any early
+    // return below; an unbalanced run would report a bracket error over the name error.
+    if (maTableRefs.back().mbCloseAfterColumn)
+    {
+        maTableRefs.back().mbCloseAfterColumn = false;
+        maPendingOpCodes.push( ocTableRefClose);
+    }
 
     ScDBData* pDBData = rDoc.GetDBCollection()->getNamedDBs().findByIndex( p->GetIndex());
     if (!pDBData)
@@ -4879,7 +4912,27 @@ Label_Rewind:
     {
         const OUString aOrg( cSymbol );
 
-        // Check for TableRef column specifier first, it may be anything.
+        // '@' is MSO's shorthand for [#This Row]. Emit the tokens the long form would
+        // produce, so that nothing downstream sees the short form.
+        if (cSymbol[0] == '@' && cSymbol[1] == 0 && !maTableRefs.empty()
+                && maTableRefs.back().mnLevel == 1)
+        {
+            TableRefEntry& rTableRef = maTableRefs.back();
+            rTableRef.mxToken->AddItem( ScTableRefToken::THIS_ROW);
+            maPendingOpCodes.push( ocTableRefItemThisRow);
+            maPendingOpCodes.push( ocTableRefClose);
+            maPendingOpCodes.push( ocSep);
+            if (nSrcPos >= aFormula.getLength() || aFormula[nSrcPos] != '[')
+            {
+                // A bare [@Col] does not bracket the column, so bracket it here.
+                maPendingOpCodes.push( ocTableRefOpen);
+                rTableRef.mbCloseAfterColumn = true;
+            }
+            maRawToken.SetOpCode( ocTableRefOpen);
+            return true;
+        }
+
+        // Check for TableRef column specifier before any name, it may be anything.
         if (cSymbol[0] != '#' && !maTableRefs.empty() && maTableRefs.back().mnLevel)
         {
             if (ParseTableRefColumn( aOrg ))
@@ -4962,7 +5015,7 @@ Label_Rewind:
                 if (!bParenFollows && ParseColRowName( aUpper ))
                     return true;
 
-                if (ParseMacro( aUpper ))
+                if (ParseMacro( aUpper, bParenFollows ))
                     return true;
 
                 if (ParseOpCode( aUpper, bInArray ))
@@ -5008,6 +5061,21 @@ Label_Rewind:
                 // ocBad to preserve input instead of #REF!.A1
                 if (!maRawToken.IsValidReference(rDoc))
                 {
+                    // A parenthesis after such a symbol makes it a range operator plus
+                    // a call, as in F25:IF(TRUE,F26) where IF also reads as a column.
+                    // Cut at the operator, so the reference stands alone and the call
+                    // follows.
+                    if (bParenFollows && mnRangeOpPosInSymbol > 0)
+                    {
+                        sal_Int32 nLen = mnRangeOpPosInSymbol;
+                        while (cSymbol[++nLen])
+                            ;
+                        cSymbol[mnRangeOpPosInSymbol] = 0;
+                        nSrcPos -= (nLen - mnRangeOpPosInSymbol);
+                        mnRangeOpPosInSymbol = -1;
+                        mbRewind = true;
+                        continue;   // do; up to range operator.
+                    }
                     aUpper = aOrg;          // ensure for ocBad
                     break;                  // do; create ocBad token or set error.
                 }
@@ -5034,7 +5102,7 @@ Label_Rewind:
             // the same user-defined function, so in the call position the macro
             // takes priority over a same-named defined name. A plain name
             // reference still resolves as the named range.
-            if (bMayBeName && bParenFollows && ParseMacro(aUpper))
+            if (bMayBeName && bParenFollows && ParseMacro(aUpper, bParenFollows))
                 return true;
 
             if (ParseNamedRange( aUpper ))
@@ -5071,7 +5139,7 @@ Label_Rewind:
 
             if (bMayBeName)
             {
-                if (ParseMacro( aUpper ))
+                if (ParseMacro( aUpper, bParenFollows ))
                     return true;
 
                 if (ParseLocalName( aOrg ))
@@ -5257,16 +5325,27 @@ std::unique_ptr<ScTokenArray> ScCompiler::CompileString( const OUString& rFormul
                     || meLastOp == ocArrayClose
                     || meLastOp == ocTableRef )
                 {
-                    // We're trying to call a function, it seems; inject ocCall so that
-                    // the compiler can see what's going on.
-                    ScRawToken aToken;
-                    aToken.SetOpCode( ocCall );
-                    FormulaToken* pNewToken = static_cast<ScTokenArray*>(mpArr)->Add(
-                        aToken.CreateToken(rDoc.GetSheetLimits()));
-                    if (!pNewToken)
+                    // Where the intersection operator is a blank, a blank before the
+                    // parenthesis is that operator and opens a group, not an argument list.
+                    const sal_uInt16 nArrayLength = mpArr->GetLen();
+                    const bool bIntersectingBlank
+                        = (meLastOp == ocPush || meLastOp == ocClose)
+                          && FormulaGrammar::isExcelSyntax( meGrammar)
+                          && nArrayLength > 0
+                          && mpArr->TokenAt(nArrayLength - 1)->GetOpCode() == ocSpaces;
+                    if (!bIntersectingBlank)
                     {
-                        SetError(FormulaError::CodeOverflow);
-                        goto OutsideLoop;
+                        // We're trying to call a function, it seems. Inject ocCall so the
+                        // compiler can see what's going on.
+                        ScRawToken aToken;
+                        aToken.SetOpCode( ocCall );
+                        FormulaToken* pNewToken = static_cast<ScTokenArray*>(mpArr)->Add(
+                            aToken.CreateToken(rDoc.GetSheetLimits()));
+                        if (!pNewToken)
+                        {
+                            SetError(FormulaError::CodeOverflow);
+                            goto OutsideLoop;
+                        }
                     }
                 }
 
@@ -6000,6 +6079,12 @@ void escapeTableRefColumnSpecifier( OUString& rStr )
             case ']':
                 aBuf.append( '\'' );
                 break;
+            case '@':
+                // Only a leading '@' can be read as the [#This Row] shorthand, and MSO
+                // escapes it nowhere else either.
+                if (p == rStr.getStr())
+                    aBuf.append( '\'' );
+                break;
             default:
                 ;   // nothing
         }
@@ -6155,8 +6240,7 @@ bool ScCompiler::GetRefColRowNames(const FormulaToken* pToken, ScComplexRefData&
             if (eOp1 != ocColRowName && eOp1 != ocIntersect && eOp2 != ocColRowName
                 && eOp2 != ocIntersect)
             {
-                if ((ocStartBinaryOperators <= eOp1 && eOp1 < ocStopBinaryOperators)
-                    || (ocStartBinaryOperators <= eOp2 && eOp2 < ocStopBinaryOperators))
+                if (isBinaryOperatorOpCode(eOp1) || isBinaryOperatorOpCode(eOp2))
                     bSingle = true;
             }
             if (bSingle)
@@ -6277,7 +6361,17 @@ void ScCompiler::CreateStringFromSingleRef( OUStringBuffer& rBuffer, const Formu
     {
         OUString aStr;
         ScAddress aAbs = rRef.toAbs(rDoc, aPos);
-        const ScDBData* pData = rDoc.GetDBAtCursor( aAbs.Col(), aAbs.Row(), aAbs.Tab(), ScDBDataPortion::AREA);
+        const ScDBData* pData = nullptr;
+        for (sal_uInt16 nBack = maArrIterator.GetIndex(); nBack > 0; )
+        {
+            const FormulaToken* pPrev = mpArr->GetArray()[--nBack];
+            if (pPrev->GetOpCode() == ocTableRef && pPrev->GetType() == svIndex)
+            {
+                pData = rDoc.GetDBCollection()->getNamedDBs().findByIndex(
+                    static_cast<const ScTableRefToken*>(pPrev)->GetIndex());
+                break;
+            }
+        }
         SAL_WARN_IF( !pData, "sc.core", "ScCompiler::CreateStringFromSingleRef - TableRef without ScDBData: " <<
                 aAbs.Format( ScRefFlags::VALID | ScRefFlags::TAB_3D, &rDoc));
         if (pData)
@@ -6933,9 +7027,8 @@ bool ScCompiler::HandleIIOpCodeInternal(FormulaToken* token, FormulaToken*** ppp
         mPendingImplicitIntersectionOptimizations.emplace_back( pppToken[0], token );
         return true;
     }
-    else if ((nOpCode >= ocStartBinaryOperators && nOpCode < ocStopBinaryOperators
-                && nOpCode != ocAnd && nOpCode != ocOr)
-              || nOpCode == ocRound || nOpCode == ocRoundUp || nOpCode == ocRoundDown)
+    else if ((isBinaryOperatorOpCode(nOpCode) && nOpCode != ocAnd && nOpCode != ocOr)
+             || nOpCode == ocRound || nOpCode == ocRoundUp || nOpCode == ocRoundDown)
     {
         if (nNumParams != 2)
             return false;
@@ -6952,8 +7045,7 @@ bool ScCompiler::HandleIIOpCodeInternal(FormulaToken* token, FormulaToken*** ppp
             mPendingImplicitIntersectionOptimizations.emplace_back( pppToken[1], token );
         return true;
     }
-    else if ((nOpCode >= ocStartUnaryOperators && nOpCode < ocStopUnaryOperators)
-              || nOpCode == ocPercentSign)
+    else if (isUnaryOperatorOpCode(nOpCode) || nOpCode == ocPercentSign)
     {
         if (nNumParams != 1)
             return false;
@@ -7128,6 +7220,29 @@ bool ScCompiler::DoubleRefToPosSingleRefScalarCase(const ScRange& rRange, ScAddr
     }
 
     return bOk;
+}
+
+bool ScCompiler::ExternalDoubleRefToPosSingleRef(const ScRange& rRange, ScAddress& rAdr,
+                                                 const ScAddress& rFormulaPos)
+{
+    SCCOL nCol = rFormulaPos.Col();
+    SCROW nRow = rFormulaPos.Row();
+    if (rRange.aStart == rRange.aEnd)
+    {
+        nCol = rRange.aStart.Col();
+        nRow = rRange.aStart.Row();
+    }
+    else if (rRange.aStart.Col() == rRange.aEnd.Col() && rRange.aStart.Row() <= nRow
+             && nRow <= rRange.aEnd.Row())
+        nCol = rRange.aStart.Col();
+    else if (rRange.aStart.Row() == rRange.aEnd.Row() && rRange.aStart.Col() <= nCol
+             && nCol <= rRange.aEnd.Col())
+        nRow = rRange.aStart.Row();
+    else
+        return false;
+
+    rAdr.Set(nCol, nRow, rRange.aStart.Tab());
+    return true;
 }
 
 static void lcl_GetColRowDeltas(const ScRange& rRange, SCCOL& rXDelta, SCROW& rYDelta)

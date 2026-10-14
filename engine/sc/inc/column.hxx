@@ -390,9 +390,11 @@ public:
         SCROW nRow, SCTAB nTab, const OUString& rString, formula::FormulaGrammar::AddressConvention eConv,
         const ScSetStringParam* pParam = nullptr );
 
-    void SetEditText( SCROW nRow, std::unique_ptr<EditTextObject> pEditText );
+    void SetEditText( SCROW nRow, std::unique_ptr<EditTextObject> aEditText );
+    void SetEditText( SCROW nRow, EditTextObject aEditText );
     void SetEditText( sc::ColumnBlockPosition& rBlockPos, SCROW nRow, std::unique_ptr<EditTextObject> pEditText );
     void SetEditText( sc::ColumnBlockPosition& rBlockPos, SCROW nRow, const EditTextObject& rEditText );
+    void SetEditText( sc::ColumnBlockPosition& rBlockPos, SCROW nRow, EditTextObject&& rEditText );
     void SetEditText( SCROW nRow, const EditTextObject& rEditText, const SfxItemPool* pEditPool );
     void SetFormula( SCROW nRow, const ScTokenArray& rArray, formula::FormulaGrammar::Grammar eGram );
     void SetFormula( SCROW nRow, const OUString& rFormula, formula::FormulaGrammar::Grammar eGram );
@@ -491,8 +493,6 @@ public:
                 position broadcasted. */
     bool BroadcastBroadcasters( SCROW nRow1, SCROW nRow2, SfxHintId nHint );
 
-    bool CompileErrorCells( sc::CompileFormulaContext& rCxt, FormulaError nErrCode );
-
     void        ResetChanged( SCROW nStartRow, SCROW nEndRow );
 
     bool UpdateReferenceOnCopy( sc::RefUpdateContext& rCxt, ScDocument* pUndoDoc = nullptr );
@@ -526,6 +526,9 @@ public:
 
     void PreprocessDBDataUpdate(
         sc::EndListeningContext& rEndListenCxt, sc::CompileFormulaContext& rCompileCxt );
+
+    /** Append positions of this column's formula cells with a structured reference to database range nIndex. */
+    void CollectTableRefFormulas( sal_uInt16 nIndex, std::vector<ScAddress>& rCells );
 
     using ScColumnData::GetAttr;
     using ScColumnData::GetPattern;

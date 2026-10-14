@@ -42,7 +42,7 @@ namespace svxform
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::beans;
@@ -58,13 +58,13 @@ using namespace cpo::uno;
 
     // XPropertyChangeListener
 
-    void SAL_CALL OFormComponentObserver::disposing(const EventObject& Source)
+    void OFormComponentObserver::disposing(const EventObject& Source)
     {
         Remove( Source.Source );
     }
 
 
-    void SAL_CALL OFormComponentObserver::propertyChange(const PropertyChangeEvent& evt)
+    void OFormComponentObserver::propertyChange(const PropertyChangeEvent& evt)
     {
         if( !m_pNavModel ) return;
         if( evt.PropertyName != FM_PROP_NAME ) return;
@@ -89,7 +89,7 @@ using namespace cpo::uno;
 
     // XContainerListener
 
-    void SAL_CALL OFormComponentObserver::elementInserted(const ContainerEvent& evt)
+    void OFormComponentObserver::elementInserted(const ContainerEvent& evt)
     {
         if (IsLocked() || !m_pNavModel)
             return;
@@ -128,7 +128,7 @@ using namespace cpo::uno;
     }
 
 
-    void SAL_CALL OFormComponentObserver::elementReplaced(const ContainerEvent& evt)
+    void OFormComponentObserver::elementReplaced(const ContainerEvent& evt)
     {
         if (IsLocked() || !m_pNavModel)
             return;
@@ -159,7 +159,7 @@ using namespace cpo::uno;
     }
 
 
-    void OFormComponentObserver::Remove( const css::uno::Reference< css::uno::XInterface >& _rxElement )
+    void OFormComponentObserver::Remove( const cpo::uno::Reference< cpo::uno::XInterface >& _rxElement )
     {
         if (IsLocked() || !m_pNavModel)
             return;
@@ -176,7 +176,7 @@ using namespace cpo::uno;
     }
 
 
-    void SAL_CALL OFormComponentObserver::elementRemoved(const ContainerEvent& evt)
+    void OFormComponentObserver::elementRemoved(const ContainerEvent& evt)
     {
         Reference< XInterface > xElement;
         evt.Element >>= xElement;

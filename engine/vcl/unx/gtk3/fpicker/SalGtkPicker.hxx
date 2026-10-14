@@ -31,7 +31,7 @@
 #include <com/sun/star/awt/XExtendedToolkit.hpp>
 #include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XTerminateListener.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <strings.hrc>
 #include <svdata.hxx>
@@ -51,27 +51,27 @@
 class SalGtkPicker
 {
     public:
-                 SalGtkPicker( css::uno::Reference<css::uno::XComponentContext> xContext );
+                 SalGtkPicker( cpo::uno::Reference<cpo::uno::XComponentContext> xContext );
         virtual ~SalGtkPicker();
     protected:
         osl::Mutex m_rbHelperMtx;
         GtkWidget  *m_pParentWidget;
         GtkWidget  *m_pDialog;
     protected:
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void implsetTitle( std::u16string_view aTitle );
 
         /// @throws css::lang::IllegalArgumentException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void implsetDisplayDirectory( const OUString& rDirectory );
 
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         OUString implgetDisplayDirectory(  );
         OUString uritounicode(const gchar *pIn) const;
         OString unicodetouri(const OUString &rURL) const;
 
         // to instantiate own services
-        css::uno::Reference< css::uno::XComponentContext > m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 
         static GtkWidget* GetParentWidget(const cpo::uno::Sequence<cpo::uno::Any>& rArguments);
 
@@ -92,29 +92,29 @@ private:
     osl::Mutex maLock;
     GtkWidget *mpDialog;
     bool mbTerminateDesktop;
-    css::uno::Reference<css::awt::XExtendedToolkit> mxToolkit;
-    css::uno::Reference<css::frame::XDesktop> mxDesktop;
+    cpo::uno::Reference<css::awt::XExtendedToolkit> mxToolkit;
+    cpo::uno::Reference<css::frame::XDesktop> mxDesktop;
     DECL_STATIC_LINK(RunDialog, TerminateDesktop, void*, void);
 public:
 
     // XTopWindowListener
     using cppu::WeakComponentImplHelperBase::disposing;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& ) override {}
-    virtual void SAL_CALL windowOpened( const css::lang::EventObject& e ) override;
-    virtual void SAL_CALL windowClosing( const css::lang::EventObject& ) override {}
-    virtual void SAL_CALL windowClosed( const css::lang::EventObject& ) override {}
-    virtual void SAL_CALL windowMinimized( const css::lang::EventObject& ) override {}
-    virtual void SAL_CALL windowNormalized( const css::lang::EventObject& ) override {}
-    virtual void SAL_CALL windowActivated( const css::lang::EventObject& ) override {}
-    virtual void SAL_CALL windowDeactivated( const css::lang::EventObject& ) override {}
+    virtual void disposing( const css::lang::EventObject& ) override {}
+    virtual void windowOpened( const css::lang::EventObject& e ) override;
+    virtual void windowClosing( const css::lang::EventObject& ) override {}
+    virtual void windowClosed( const css::lang::EventObject& ) override {}
+    virtual void windowMinimized( const css::lang::EventObject& ) override {}
+    virtual void windowNormalized( const css::lang::EventObject& ) override {}
+    virtual void windowActivated( const css::lang::EventObject& ) override {}
+    virtual void windowDeactivated( const css::lang::EventObject& ) override {}
 
     // XTerminateListener
-    virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
-    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
+    virtual void queryTermination( const css::lang::EventObject& aEvent ) override;
+    virtual void notifyTermination( const css::lang::EventObject& aEvent ) override;
 public:
     RunDialog(GtkWidget *pDialog,
-        css::uno::Reference<css::awt::XExtendedToolkit> xToolkit,
-        css::uno::Reference<css::frame::XDesktop> xDesktop);
+        cpo::uno::Reference<css::awt::XExtendedToolkit> xToolkit,
+        cpo::uno::Reference<css::frame::XDesktop> xDesktop);
     virtual ~RunDialog() override;
     gint run();
     void cancel();

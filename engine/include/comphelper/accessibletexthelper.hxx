@@ -43,15 +43,15 @@ namespace comphelper
     class COMPHELPER_DLLPUBLIC OCommonAccessibleText
     {
     private:
-        css::uno::Reference < css::i18n::XBreakIterator >             m_xBreakIter;
-        css::uno::Reference < css::i18n::XCharacterClassification >   m_xCharClass;
+        cpo::uno::Reference < css::i18n::XBreakIterator >             m_xBreakIter;
+        cpo::uno::Reference < css::i18n::XCharacterClassification >   m_xCharClass;
 
     protected:
         OCommonAccessibleText();
         virtual ~OCommonAccessibleText();
 
-        css::uno::Reference < css::i18n::XBreakIterator > const &            implGetBreakIterator();
-        css::uno::Reference < css::i18n::XCharacterClassification > const &  implGetCharacterClassification();
+        cpo::uno::Reference < css::i18n::XBreakIterator > const &            implGetBreakIterator();
+        cpo::uno::Reference < css::i18n::XCharacterClassification > const &  implGetCharacterClassification();
         static bool                      implIsValidBoundary( css::i18n::Boundary const & rBoundary, sal_Int32 nLength );
         static bool                      implIsValidIndex( sal_Int32 nIndex, sal_Int32 nLength );
         static bool                      implIsValidRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex, sal_Int32 nLength );
@@ -69,24 +69,24 @@ namespace comphelper
         /** non-virtual versions of the methods
 
             @throws css::lang::IndexOutOfBoundsException
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
         */
         OUString getSelectedText();
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getSelectionStart();
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getSelectionEnd();
         /// @throws css::lang::IndexOutOfBoundsException
         /// @throws css::lang::IllegalArgumentException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         css::accessibility::TextSegment getTextAtIndex( sal_Int32 nIndex, sal_Int16 aTextType );
         /// @throws css::lang::IndexOutOfBoundsException
         /// @throws css::lang::IllegalArgumentException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         css::accessibility::TextSegment getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 aTextType );
         /// @throws css::lang::IndexOutOfBoundsException
         /// @throws css::lang::IllegalArgumentException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         css::accessibility::TextSegment getTextBehindIndex( sal_Int32 nIndex, sal_Int16 aTextType );
 
     public:

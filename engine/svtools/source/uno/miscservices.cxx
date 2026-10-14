@@ -26,7 +26,7 @@
 #include "fpicker.hxx"
 
 using namespace ::com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::lang;
 
 namespace
@@ -39,7 +39,7 @@ namespace
             FilePicker_CreateInstance,
             FilePicker_getImplementationName,
             FilePicker_getSupportedServiceNames,
-            ::cppu::createSingleComponentFactory, nullptr, 0
+            ::cppu::createSingleComponentFactory, 0
         },
         {
             // FolderPicker should not use a constructor, it is only a
@@ -47,9 +47,9 @@ namespace
             FolderPicker_CreateInstance,
             FolderPicker_getImplementationName,
             FolderPicker_getSupportedServiceNames,
-            ::cppu::createSingleComponentFactory, nullptr, 0
+            ::cppu::createSingleComponentFactory, 0
         },
-        { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
+        { nullptr, nullptr, nullptr, nullptr, 0 }
     };
 }
 

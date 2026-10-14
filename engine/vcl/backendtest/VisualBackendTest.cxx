@@ -9,9 +9,10 @@
 
 #include <sal/log.hxx>
 
+#include <osl/time.h>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/bootstrap.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <vcl/bitmap.hxx>
@@ -31,6 +32,7 @@
 #include <test/outputdevice.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 static void drawBitmapCentered(tools::Rectangle const& rRect, const Bitmap& aBitmap,
                         vcl::RenderContext& rRenderContext)
@@ -853,7 +855,7 @@ protected:
     {
         try
         {
-            uno::Reference<uno::XComponentContext> xComponentContext = ::cppu::defaultBootstrap_InitialComponentContext();
+            uno::Reference<cpo::uno::XComponentContext> xComponentContext = ::cppu::defaultBootstrap_InitialComponentContext();
             uno::Reference<lang::XMultiServiceFactory> xMSF(xComponentContext->getServiceManager(), uno::UNO_QUERY);
 
             if (!xMSF.is())

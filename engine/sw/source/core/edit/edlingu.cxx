@@ -59,8 +59,8 @@
 
 using namespace ::svx;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::linguistic2;
 
@@ -296,7 +296,7 @@ cpo::uno::Any SwSpellIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
 
     OSL_ENSURE( m_oEnd, "SwSpellIter::Continue without start?");
 
-    uno::Reference< uno::XInterface >  xSpellRet;
+    uno::Reference< cpo::uno::XInterface >  xSpellRet;
     bool bGoOn = true;
     do {
         SwPaM *pCursor = pMySh->GetCursor();
@@ -500,15 +500,16 @@ void SwHyphIter::Ignore()
     DelSoftHyph( *pCursor );
 
     // and continue
-    pCursor->Start()->SetContent( pCursor->End()->GetContentIndex() );
+    auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
+    pStart->SetContent(pEnd->GetContentIndex());
     pCursor->SetMark();
 }
 
 void SwHyphIter::DelSoftHyph( SwPaM &rPam )
 {
-    const SwPosition* pStart = rPam.Start();
+    auto [pStart, pEnd] = rPam.StartEnd(); // SwPosition*
     const sal_Int32 nStart = pStart->GetContentIndex();
-    const sal_Int32 nEnd   = rPam.End()->GetContentIndex();
+    const sal_Int32 nEnd = pEnd->GetContentIndex();
     SwTextNode *pNode = pStart->GetNode().GetTextNode();
     pNode->DelSoftHyph( nStart, nEnd );
 }
@@ -677,7 +678,7 @@ cpo::uno::Any SwEditShell::SpellContinue(
     //             Paints are also disabled.
     ++mnStartAction;
     OUString aRet;
-    uno::Reference< uno::XInterface >  xRet;
+    uno::Reference< cpo::uno::XInterface >  xRet;
     if (pConvArgs)
     {
         g_pConvIter->Continue( pPageCnt, pPageSt ) >>= aRet;
@@ -745,7 +746,7 @@ void SwEditShell::HyphEnd()
 }
 
 /// @returns HYPH_CONTINUE if hyphenation, HYPH_OK if selected area was processed.
-uno::Reference< uno::XInterface >
+uno::Reference< cpo::uno::XInterface >
     SwEditShell::HyphContinue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
 {
     assert(g_pHyphIter);
@@ -768,7 +769,7 @@ uno::Reference< uno::XInterface >
     //JP 18.07.95: prevent displaying selection on error messages. NO StartAction so that all
     //             Paints are also disabled.
     ++mnStartAction;
-    uno::Reference< uno::XInterface >  xRet;
+    uno::Reference< cpo::uno::XInterface >  xRet;
     g_pHyphIter->Continue( pPageCnt, pPageSt ) >>= xRet;
     --mnStartAction;
 
@@ -887,7 +888,12 @@ uno::Reference< XSpellAlternatives >
     SwTextNode *pNode = nullptr;
     SwWrongList *pWrong = nullptr;
     if (pPt && GetLayout()->GetModelPositionForViewPoint( &aPos, *const_cast<Point*>(pPt), &eTmpState ))
+    {
+        if (eTmpState.m_bInNumPortion || eTmpState.m_bFootnoteNoInfo)
+            return nullptr; // no spell checking over top of numbering
+
         pNode = aPos.GetNode().GetTextNode();
+    }
     if (nullptr == pNode)
         pNode = pCursor->GetPointNode().GetTextNode();
     if (nullptr != pNode)
@@ -1189,7 +1195,8 @@ void SwEditShell::ApplyChangedSentence(const svx::SpellPortions& rNewPortions, b
             mxDoc->getIDocumentContentOperations().InsertString(*pCursor, rCurrentNewPortion.sText);
 
             // set the cursor to the end of the inserted string
-            *pCursor->Start() = *pCursor->End();
+            auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
+            *pStart = *pEnd;
         }
     }
 
@@ -1199,7 +1206,8 @@ void SwEditShell::ApplyChangedSentence(const svx::SpellPortions& rNewPortions, b
     Pop(PopMode::DeleteCurrent);
 
     // collapse cursor to the end of the modified sentence
-    *pCursor->Start() = *pCursor->End();
+    auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
+    *pStart = *pEnd;
     if (bRecheck)
     {
         // in grammar check the current sentence has to be checked again
@@ -1528,8 +1536,9 @@ void SwSpellIter::CreatePortion(uno::Reference< XSpellAlternatives > const & xAl
     aPortion.xAlternatives = xAlt;
     SpellContentPosition aPosition;
     SwPaM *pCursor = GetSh()->GetCursor();
-    aPosition.nLeft = pCursor->Start()->GetContentIndex();
-    aPosition.nRight = pCursor->End()->GetContentIndex();
+    auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
+    aPosition.nLeft = pStart->GetContentIndex();
+    aPosition.nRight = pEnd->GetContentIndex();
     m_aLastPortions.push_back(std::move(aPortion));
     m_aLastPositions.push_back(aPosition);
 }
@@ -1663,16 +1672,17 @@ void SwEditShell::IgnoreGrammarErrorAt( SwPaM& rErrorPosition )
 {
     SwTextNode *pNode;
     SwWrongList *pWrong;
-    SwNodeIndex aIdx(rErrorPosition.Start()->GetNode());
-    SwNodeIndex aEndIdx(rErrorPosition.Start()->GetNode());
-    sal_Int32 nStart = rErrorPosition.Start()->GetContentIndex();
+    auto [pStart, pEnd] = rErrorPosition.StartEnd(); // SwPosition*
+    SwNodeIndex aIdx(pStart->GetNode());
+    SwNodeIndex aEndIdx(pStart->GetNode());
+    sal_Int32 nStart = pStart->GetContentIndex();
     sal_Int32 nEnd = COMPLETE_STRING;
     while( aIdx <= aEndIdx )
     {
         pNode = aIdx.GetNode().GetTextNode();
         if( pNode ) {
             if( aIdx == aEndIdx )
-                nEnd = rErrorPosition.End()->GetContentIndex();
+                nEnd = pEnd->GetContentIndex();
             pWrong = pNode->GetGrammarCheck();
             if( pWrong )
                 pWrong->RemoveEntry( nStart, nEnd );

@@ -22,7 +22,7 @@
 #include <comphelper/accessiblecontexthelper.hxx>
 
 using namespace com::sun::star::accessibility;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::comphelper;
 
@@ -31,13 +31,13 @@ EditBrowseBoxTableCell::EditBrowseBoxTableCell(svt::ControlBase* pControl)
 {
 }
 
-OUString SAL_CALL EditBrowseBoxTableCell::getImplementationName()
+OUString EditBrowseBoxTableCell::getImplementationName()
 {
     return u"com.sun.star.comp.svtools.TableCellProxy"_ustr;
 }
 
-css::uno::Reference<css::accessibility::XAccessible>
-    SAL_CALL EditBrowseBoxTableCell::getAccessibleParent()
+cpo::uno::Reference<css::accessibility::XAccessible>
+    EditBrowseBoxTableCell::getAccessibleParent()
 {
     OExternalLockGuard aGuard(this);
 

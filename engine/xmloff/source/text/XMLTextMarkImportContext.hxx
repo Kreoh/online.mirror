@@ -21,7 +21,7 @@
 #pragma once
 
 #include <xmloff/xmlictxt.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 
 namespace com::sun::star {
@@ -40,9 +40,9 @@ public:
         SvXMLImport& rImport,
         XMLTextImportHelper& rHlp );
 
-    virtual void SAL_CALL startFastElement(
+    virtual void startFastElement(
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList> & xAttrList) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList> & xAttrList) override;
 };
 
 
@@ -58,7 +58,7 @@ class XMLTextMarkImportContext final : public SvXMLImportContext
 private:
     XMLTextImportHelper & m_rHelper;
 
-    css::uno::Reference<css::uno::XInterface> & m_rxCrossRefHeadingBookmark;
+    cpo::uno::Reference<cpo::uno::XInterface> & m_rxCrossRefHeadingBookmark;
 
     OUString m_sBookmarkName;
     OUString m_sFieldName;
@@ -77,27 +77,27 @@ public:
     XMLTextMarkImportContext(
         SvXMLImport& rImport,
         XMLTextImportHelper& rHlp,
-        css::uno::Reference<css::uno::XInterface> & io_rxCrossRefHeadingBookmark );
+        cpo::uno::Reference<cpo::uno::XInterface> & io_rxCrossRefHeadingBookmark );
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
 public:
-    static css::uno::Reference< css::text::XTextContent > CreateAndInsertMark(
+    static cpo::uno::Reference< css::text::XTextContent > CreateAndInsertMark(
         SvXMLImport& rImport,
         const OUString& sServiceName,
         const OUString& sMarkName,
-        const css::uno::Reference<css::text::XTextRange> & rRange,
+        const cpo::uno::Reference<css::text::XTextRange> & rRange,
         const OUString& i_rXmlId = OUString(),
         bool const isFieldmarkSeparatorMissing = false);
 
     bool FindName(
-        const css::uno::Reference<css::xml::sax::XFastAttributeList> & xAttrList);
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList> & xAttrList);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

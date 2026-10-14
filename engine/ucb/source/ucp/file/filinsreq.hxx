@@ -21,7 +21,7 @@
 #pragma once
 
 #include <rtl/ustring.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <com/sun/star/task/XInteractionAbort.hpp>
 #include <com/sun/star/ucb/XInteractionSupplyName.hpp>
 #include <com/sun/star/task/XInteractionRequest.hpp>
@@ -44,12 +44,12 @@ class XInteractionSupplyNameImpl : public cppu::WeakImplHelper<
         {
         }
 
-        virtual void SAL_CALL select() override
+        virtual void select() override
         {
             m_bSelected = true;
         }
 
-        void SAL_CALL setName(const OUString& Name) override
+        void setName(const OUString& Name) override
         {
             m_aNewName = Name;
         }
@@ -81,7 +81,7 @@ class XInteractionSupplyNameImpl : public cppu::WeakImplHelper<
         {
         }
 
-        virtual void SAL_CALL select() override
+        virtual void select() override
         {
             m_bSelected = true;
         }
@@ -104,7 +104,7 @@ class XInteractionSupplyNameImpl : public cppu::WeakImplHelper<
 
         XInteractionRequestImpl(
             const OUString& aClashingName,
-            const css::uno::Reference< css::uno::XInterface>& xOrigin,
+            const cpo::uno::Reference< cpo::uno::XInterface>& xOrigin,
             TaskManager* pShell,
             sal_Int32 CommandId);
 
@@ -121,7 +121,7 @@ class XInteractionSupplyNameImpl : public cppu::WeakImplHelper<
                 return EMPTY_OUSTRING;
         }
 
-        css::uno::Reference<css::task::XInteractionRequest> const& getRequest() const
+        cpo::uno::Reference<css::task::XInteractionRequest> const& getRequest() const
         {
             return m_xRequest;
         }
@@ -131,9 +131,9 @@ class XInteractionSupplyNameImpl : public cppu::WeakImplHelper<
         XInteractionSupplyNameImpl* p1;
         XInteractionAbortImpl* p2;
 
-        css::uno::Reference<css::task::XInteractionRequest> m_xRequest;
+        cpo::uno::Reference<css::task::XInteractionRequest> m_xRequest;
 
-        css::uno::Reference< css::uno::XInterface> m_xOrigin;
+        cpo::uno::Reference< cpo::uno::XInterface> m_xOrigin;
     };
 
 }

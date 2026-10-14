@@ -73,6 +73,7 @@
 #include <spellcheckcontext.hxx>
 #include <scopetools.hxx>
 #include <tabvwsh.hxx>
+#include <dbdata.hxx>
 
 #include <com/sun/star/i18n/DirectionProperty.hpp>
 #include <comphelper/scopeguard.hxx>
@@ -889,7 +890,7 @@ static void lcl_DoHyperlinkResult( const OutputDevice* pDev, const tools::Rectan
     if ( !aURL.isEmpty() && pPDFData )
     {
         vcl::PDFExtOutDevBookmarkEntry aBookmark;
-        aBookmark.nLinkId = pPDFData->CreateLink(rRect, u""_ustr);
+        aBookmark.nLinkId = pPDFData->CreateLink(rRect, aCellText.isEmpty() ? aURL : aCellText);
         aBookmark.aBookmark = aURL;
         std::vector< vcl::PDFExtOutDevBookmarkEntry >& rBookmarks = pPDFData->GetBookmarks();
         rBookmarks.push_back( aBookmark );
@@ -1485,6 +1486,40 @@ static SvxCellHorJustify getAlignmentFromContext( SvxCellHorJustify eInHorJust,
     return eHorJustContext;
 }
 
+/// what a database range's labels head, where this position holds one of them
+static vcl::pdf::PDFWriter::StructAttributeValue
+lcl_GetLabelScope(const ScDocument& rDoc, SCTAB nTab, SCCOL nCol, SCROW nRow)
+{
+    const ScDBData* pDBData(rDoc.GetDBAtCursor(nCol, nRow, nTab, ScDBDataPortion::AREA));
+    if (!pDBData || !pDBData->HasHeader())
+        return vcl::pdf::PDFWriter::Invalid;
+
+    ScRange aRange;
+    pDBData->GetArea(aRange);
+    // a range the user works left to right keeps its labels in the first column
+    if (!pDBData->IsByRow())
+        return nCol == aRange.aStart.Col() ? vcl::pdf::PDFWriter::Row
+                                           : vcl::pdf::PDFWriter::Invalid;
+
+    return nRow == aRange.aStart.Row() ? vcl::pdf::PDFWriter::Column
+                                       : vcl::pdf::PDFWriter::Invalid;
+}
+
+/// the element for a cell, a TH where a database range says the cell holds one of its labels
+static sal_Int32 lcl_OpenCellElement(vcl::PDFExtOutDevData& rPDF, const ScDocument& rDoc,
+                                     SCTAB nTab, SCCOL nCol, SCROW nRow)
+{
+    const vcl::pdf::PDFWriter::StructAttributeValue eScope(
+        lcl_GetLabelScope(rDoc, nTab, nCol, nRow));
+    if (eScope == vcl::pdf::PDFWriter::Invalid)
+        return rPDF.WrapBeginStructureElement(vcl::pdf::StructElement::TableData, u"TD"_ustr);
+
+    const sal_Int32 nId(
+        rPDF.WrapBeginStructureElement(vcl::pdf::StructElement::TableHeader, u"TH"_ustr));
+    rPDF.SetStructureAttribute(vcl::pdf::PDFWriter::Scope, eScope);
+    return nId;
+}
+
 void ScOutputData::DrawStrings( bool bPixelToLogic )
 {
     LayoutStrings(bPixelToLogic);
@@ -1782,7 +1817,13 @@ void ScOutputData::LayoutStringsImpl(bool const bPixelToLogic, RowInfo* const pT
         if ( !ScPatternAttr::areSame(pPattern, pOldPattern) || pCondSet != pOldCondSet ||
              pTableSet != pOldTableSet || nScript != nOldScript || mbSyntaxMode )
         {
-            if ( StringDiffer(pOldPattern,pPattern) || pCondSet != pOldCondSet ||
+            // Under a table style the cell style decides about the font too, even when both
+            // patterns give the same font, see ScPatternAttr::CanApplyTableItemToCell.
+            // Check it before StringDiffer, which takes the new pattern as the old one when it
+            // finds no difference.
+            const bool bCellStyleChanged = pTableSet && pOldPattern
+                                           && pPattern->GetStyleSheet() != pOldPattern->GetStyleSheet();
+            if ( bCellStyleChanged || StringDiffer(pOldPattern,pPattern) || pCondSet != pOldCondSet ||
                  pTableSet != pOldTableSet || nScript != nOldScript || mbSyntaxMode )
             {
                 aVars.SetPattern(pPattern, pCondSet, pTableSet, aCell, nScript);
@@ -1945,7 +1986,7 @@ void ScOutputData::LayoutStringsImpl(bool const bPixelToLogic, RowInfo* const pT
         pThisRowInfo->basicCellInfo(nMarkX).bEditEngine = true;
         bDoCell = false;    // don't draw here
 
-        // Mark the tagged "TD" structure element to be drawn in DrawEdit
+        // Mark the tagged cell structure element to be drawn in DrawEdit
         if (bTaggedPDF)
         {
             if (bReopenRowTag)
@@ -1960,11 +2001,10 @@ void ScOutputData::LayoutStringsImpl(bool const bPixelToLogic, RowInfo* const pT
                 bReopenRowTag = true;
             }
 
-            pPDF->WrapBeginStructureElement(vcl::pdf::StructElement::TableData,
-                                            u"TD"_ustr);
-
-            sal_Int32 nId = pPDF->GetCurrentStructureElement();
+            const sal_Int32 nId(lcl_OpenCellElement(*pPDF, *mpDoc, mnTab, nX, nY));
             pPDF->GetScPDFState()->m_TableDataMap[{ nY, nX }] = nId;
+            // the first page it is drawn on, which is the one a destination for it names
+            pPDF->GetScPDFState()->m_CellIds.emplace(ScAddress(nX, nY, mnTab), nId);
 
             pPDF->EndStructureElement(); // TableData
             pPDF->EndStructureElement(); // TableRow
@@ -2192,8 +2232,10 @@ void ScOutputData::LayoutStringsImpl(bool const bPixelToLogic, RowInfo* const pT
                         bReopenRowTag = true;
                     }
 
-                    pPDF->WrapBeginStructureElement(vcl::pdf::StructElement::TableData,
-                                                    u"TD"_ustr);
+                    // what a destination naming this cell has to reach
+                    pPDF->GetScPDFState()->m_CellIds.emplace(
+                        ScAddress(nX, nY, mnTab),
+                        lcl_OpenCellElement(*pPDF, *mpDoc, mnTab, nX, nY));
                     pPDF->WrapBeginStructureElement(vcl::pdf::StructElement::Paragraph,
                                                     u"P"_ustr);
                 }
@@ -2649,7 +2691,7 @@ void ScOutputData::DrawEditParam::setPatternToEngine(bool bUseStyleColor)
     if ( !mbHyphenatorSet && bParaHyphenate )
     {
         //  set hyphenator the first time it is needed
-        css::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
+        cpo::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
         mpEngine->SetHyphenator( xXHyphenator );
         mbHyphenatorSet = true;
     }
@@ -4721,8 +4763,10 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
     bool bHyphenatorSet = false;
     const ScPatternAttr* pPattern;
     const SfxItemSet*    pCondSet;
+    const SfxItemSet*    pTableSet;
     const ScPatternAttr* pOldPattern = nullptr;
     const SfxItemSet*    pOldCondSet = nullptr;
+    const SfxItemSet*    pOldTableSet = nullptr;
     ScRefCellValue aCell;
 
     tools::Long nInitPosX = mnScrX;
@@ -4767,6 +4811,7 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
                         bool bFromDoc = false;
                         pPattern = pInfo->getPatternAttr();
                         pCondSet = pInfo->pConditionSet;
+                        pTableSet = pInfo->pTableFormatSet;
                         if (!pPattern)
                         {
                             pPattern = mpDoc->GetPattern( nX, nY, mnTab );
@@ -4774,7 +4819,10 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
                         }
                         aCell = pInfo->maCell;
                         if (bFromDoc)
+                        {
                             pCondSet = mpDoc->GetCondResult( nX, nY, mnTab );
+                            pTableSet = mpDoc->GetTableFormatSet( nX, nY, mnTab );
+                        }
 
                         if (aCell.isEmpty() && nX>mnX2)
                             GetVisibleCell( nX, nY, mnTab, aCell );
@@ -4837,10 +4885,11 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
                             // syntax mode is ignored here...
 
                             // StringDiffer doesn't look at hyphenate, language items
-                            if ( !ScPatternAttr::areSame(pPattern, pOldPattern) || pCondSet != pOldCondSet )
+                            if ( !ScPatternAttr::areSame(pPattern, pOldPattern) || pCondSet != pOldCondSet
+                                 || pTableSet != pOldTableSet )
                             {
                                 SfxItemSet aSet( mxOutputEditEngine->GetEmptyItemSet() );
-                                pPattern->FillEditItemSet( &aSet, pCondSet );
+                                pPattern->FillEditItemSet( &aSet, pCondSet, pTableSet );
 
                                                                     // adjustment for EditEngine
                                 SvxAdjust eSvxAdjust = SvxAdjust::Left;
@@ -4853,6 +4902,7 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
                                 mxOutputEditEngine->SetDefaults( std::move(aSet) );
                                 pOldPattern = pPattern;
                                 pOldCondSet = pCondSet;
+                                pOldTableSet = pTableSet;
 
                                 EEControlBits nControl = mxOutputEditEngine->GetControlWord();
                                 if (eOrient==SvxCellOrientation::Stacked)
@@ -4864,7 +4914,7 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
                                 if ( !bHyphenatorSet && bParaHyphenate )
                                 {
                                     //  set hyphenator the first time it is needed
-                                    css::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
+                                    cpo::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
                                     mxOutputEditEngine->SetHyphenator( xXHyphenator );
                                     bHyphenatorSet = true;
                                 }

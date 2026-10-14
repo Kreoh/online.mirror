@@ -36,11 +36,11 @@
 
 namespace dbaccess
 {
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::RuntimeException;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::RuntimeException;
     using ::cpo::uno::Any;
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::container::NoSuchElementException;
     using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::lang::IllegalAccessException;

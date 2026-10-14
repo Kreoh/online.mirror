@@ -44,6 +44,9 @@ html[dir='rtl'] .sub-menu-arrow {
 .editmode-on {
 	background: url('images/lc_listitem-selected.svg') no-repeat center / 28px !important;
 }
+[data-close-button-enabled='false'] #toolbar-mobile-back.editmode-off {
+	display: none;
+}
 
 /* Permisson mode status */
 .mobile .ui-badge {
@@ -335,13 +338,13 @@ textarea.cool-annotation-textarea {
 #slide-sorter.landscape .preview-img {
 	min-width: 20px;
 	max-width: 60px;
-	margin: 0;
+	margin: 0 6px 0 0;
 }
 
 #slide-sorter.landscape .preview-frame {
 	max-height: initial;
-	max-width: 66px;
-	display: block;
+	max-width: 94px;
+	display: flex;
 	margin: 1em 3px;
 }
 
@@ -658,16 +661,18 @@ div#fontstyletoolbox + div#style.mobile-wizard {
 }
 
 /* Hide non-critical toolbars if height is too small (e.g. landscape mode...) */
-@media screen and (height <= 150px) {
-	#toolbar-down {
-		display: none !important;
-	}
+@media screen and (height <=150px) {
+	html:has(#document-and-notes:focus-within) {
+		#toolbar-down {
+			display: none !important;
+		}
 
-	#toolbar-wrapper:has(#toolbar-up) {
-		display: none !important;
-	}
+		#toolbar-wrapper:has(#toolbar-up) {
+			display: none !important;
+		}
 
-	#spreadsheet-toolbar {
-		display: none !important;
+		#spreadsheet-toolbar {
+			display: none !important;
+		}
 	}
 }

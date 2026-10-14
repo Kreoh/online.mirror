@@ -20,19 +20,20 @@
 #ifndef INCLUDED_CPPUHELPER_IMPLBASE_HXX
 #define INCLUDED_CPPUHELPER_IMPLBASE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
+#include <atomic>
 #include <cstddef>
 #include <utility>
 
-#include "com/sun/star/lang/XTypeProvider.hpp"
-#include "cpo/uno/Any.h"
-#include "cpo/uno/Sequence.hxx"
-#include "cpo/uno/Type.h"
-#include "cppuhelper/implbase_ex.hxx"
-#include "cppuhelper/weak.hxx"
-#include "rtl/instance.hxx"
-#include "sal/types.h"
+#include <com/sun/star/lang/XTypeProvider.hpp>
+#include <cpo/uno/Any.h>
+#include <cpo/uno/Sequence.hxx>
+#include <cpo/uno/Type.h>
+#include <cppuhelper/implbase_ex.hxx>
+#include <cppuhelper/weak.hxx>
+#include <rtl/instance.hxx>
+#include <sal/types.h>
 
 // A replacement for ImplHelperN has deliberately been left out, as ImplHelperN
 // is unlikely ever be a better choice than WeakImplHelper, so all their
@@ -50,16 +51,14 @@ namespace detail {
 
 template<std::size_t N> struct class_dataN {
     sal_Int16 m_nTypes;
-    bool m_storedTypeRefs;
-    bool m_storedId;
-    sal_Int8 m_id[16];
+    std::atomic<bool> m_storedTypeRefs;
     type_entry m_typeEntries[N + 1];
 };
 
 template<typename Impl, typename... Ifc> struct ImplClassData {
     class_data * operator ()() {
         static class_dataN<sizeof... (Ifc)> s_cd = {
-            sizeof... (Ifc) + 1, false, false, {},
+            sizeof... (Ifc) + 1, false,
             {
                 { { Ifc::static_type },
                   (reinterpret_cast<sal_IntPtr>(
@@ -78,7 +77,7 @@ template<typename Impl, typename... Ifc> struct ImplClassData {
 /// @endcond
 
 /** Implementation helper implementing interfaces
-    css::uno::XInterface, css::lang::XTypeProvider, and
+    cpo::uno::XInterface, css::lang::XTypeProvider, and
     cpo::uno::XWeak (through cppu::OWeakObject).
 
     @derive
@@ -108,9 +107,9 @@ public:
     cpo::uno::Any queryInterface(cpo::uno::Type const & aType) override
     { return WeakImplHelper_query(aType, cd::get(), this, this); }
 
-    void acquire() SAL_NOEXCEPT override { OWeakObject::acquire(); }
+    void acquire() noexcept override { OWeakObject::acquire(); }
 
-    void release() SAL_NOEXCEPT override { OWeakObject::release(); }
+    void release() noexcept override { OWeakObject::release(); }
 
     cpo::uno::Sequence<cpo::uno::Type> getTypes() override
     { return WeakImplHelper_getTypes(cd::get()); }
@@ -120,7 +119,7 @@ public:
 };
 
 /** Implementation helper implementing interfaces
-    css::uno::XInterface and css::lang::XTypeProvider
+    cpo::uno::XInterface and css::lang::XTypeProvider
     inheriting from a BaseClass.
 
     All acquire() and release() calls are delegated to the BaseClass.  Upon
@@ -129,7 +128,7 @@ public:
 
     @attention
     The BaseClass has to be complete in the sense that
-    css::uno::XInterface and css::lang::XTypeProvider are
+    cpo::uno::XInterface and css::lang::XTypeProvider are
     implemented properly.
 
     @derive
@@ -164,9 +163,9 @@ public:
         return ret.hasValue() ? ret : BaseClass::queryInterface(aType);
     }
 
-    void acquire() SAL_NOEXCEPT override { BaseClass::acquire(); }
+    void acquire() noexcept override { BaseClass::acquire(); }
 
-    void release() SAL_NOEXCEPT override { BaseClass::release(); }
+    void release() noexcept override { BaseClass::release(); }
 
     cpo::uno::Sequence<cpo::uno::Type> getTypes() override
     { return ImplInhHelper_getTypes(cd::get(), BaseClass::getTypes()); }

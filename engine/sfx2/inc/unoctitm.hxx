@@ -51,12 +51,12 @@ public:
     SfxStatusDispatcher();
 
     // XDispatch
-    virtual void SAL_CALL dispatchWithNotification( const css::util::URL& aURL,
+    virtual void dispatchWithNotification( const css::util::URL& aURL,
                 const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs,
-                const css::uno::Reference< css::frame::XDispatchResultListener >& rListener ) override;
-    virtual void SAL_CALL dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
-    virtual void SAL_CALL addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & xControl, const css::util::URL& aURL) override;
-    virtual void SAL_CALL removeStatusListener(const css::uno::Reference< css::frame::XStatusListener > & xControl, const css::util::URL& aURL) override;
+                const cpo::uno::Reference< css::frame::XDispatchResultListener >& rListener ) override;
+    virtual void dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
+    virtual void addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener > & xControl, const css::util::URL& aURL) override;
+    virtual void removeStatusListener(const cpo::uno::Reference< css::frame::XStatusListener > & xControl, const css::util::URL& aURL) override;
 
     // Something else
     void                ReleaseAll();
@@ -80,18 +80,18 @@ public:
                                                    const css::util::URL& rURL );
                                 virtual ~SfxOfficeDispatch() override;
 
-    virtual void SAL_CALL       dispatchWithNotification( const css::util::URL& aURL,
+    virtual void       dispatchWithNotification( const css::util::URL& aURL,
                                                           const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs,
-                                                          const css::uno::Reference< css::frame::XDispatchResultListener >& rListener ) override;
-    virtual void   SAL_CALL     dispatch( const css::util::URL& aURL,
+                                                          const cpo::uno::Reference< css::frame::XDispatchResultListener >& rListener ) override;
+    virtual void       dispatch( const css::util::URL& aURL,
                                           const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
-    virtual void   SAL_CALL     addStatusListener( const css::uno::Reference< css::frame::XStatusListener > & xControl,
+    virtual void       addStatusListener( const cpo::uno::Reference< css::frame::XStatusListener > & xControl,
                                                    const css::util::URL& aURL) override;
 
     static bool             IsMasterUnoCommand( const css::util::URL& aURL );
     static OUString         GetMasterUnoCommand( const css::util::URL& aURL );
 
-    void                    SetFrame(const css::uno::Reference< css::frame::XFrame >& xFrame);
+    void                    SetFrame(const cpo::uno::Reference< css::frame::XFrame >& xFrame);
 
     void                    SetMasterUnoCommand( bool bSet );
 
@@ -134,16 +134,16 @@ public:
     void                StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState, SfxSlotServer const * pServ );
     virtual void        StateChangedAtToolBoxControl( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     void                setMasterSlaveCommand( bool bSet );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void       dispatch( const css::util::URL& aURL,
                                   const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs,
-                                  const css::uno::Reference< css::frame::XDispatchResultListener >& rListener );
+                                  const cpo::uno::Reference< css::frame::XDispatchResultListener >& rListener );
 
-    /// @throws css::uno::RuntimeException
-    void       addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & xControl, const css::util::URL& aURL);
+    /// @throws cpo::uno::RuntimeException
+    void       addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener > & xControl, const css::util::URL& aURL);
     void                UnBindController();
     SfxDispatcher*      GetDispatcher();
-    void                SetFrame(const css::uno::Reference< css::frame::XFrame >& xFrame);
+    void                SetFrame(const cpo::uno::Reference< css::frame::XFrame >& xFrame);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

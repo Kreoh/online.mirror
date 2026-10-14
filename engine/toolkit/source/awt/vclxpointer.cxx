@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <awt/vclxpointer.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
@@ -59,9 +59,9 @@ cpo::uno::Sequence<OUString> VCLXPointer::getSupportedServiceNames()
         u"com.sun.star.awt.Pointer"_ustr, u"stardiv.vcl.Pointer"_ustr};
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_VCLXPointer_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new VCLXPointer());

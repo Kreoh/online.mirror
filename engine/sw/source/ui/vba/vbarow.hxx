@@ -32,28 +32,28 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XRow > SwVbaRow_BASE;
 class SwVbaRow : public SwVbaRow_BASE
 {
 private:
-    css::uno::Reference< css::text::XTextTable > mxTextTable;
-    css::uno::Reference< css::table::XTableRows > mxTableRows;
-    css::uno::Reference< css::beans::XPropertySet > mxRowProps;
+    cpo::uno::Reference< css::text::XTextTable > mxTextTable;
+    cpo::uno::Reference< css::table::XTableRows > mxTableRows;
+    cpo::uno::Reference< css::beans::XPropertySet > mxRowProps;
     sal_Int32 mnIndex;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaRow( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext, css::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nIndex );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaRow( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nIndex );
     virtual ~SwVbaRow() override;
 
     // Attributes
-    virtual cpo::uno::Any SAL_CALL getHeight() override;
-    virtual void SAL_CALL setHeight( const cpo::uno::Any& _height ) override;
-    virtual ::sal_Int32 SAL_CALL getHeightRule() override;
-    virtual void SAL_CALL setHeightRule( ::sal_Int32 _heightrule ) override;
+    virtual cpo::uno::Any getHeight() override;
+    virtual void setHeight( const cpo::uno::Any& _height ) override;
+    virtual ::sal_Int32 getHeightRule() override;
+    virtual void setHeightRule( ::sal_Int32 _heightrule ) override;
 
     // Methods
-    virtual void SAL_CALL Select(  ) override;
-    virtual void SAL_CALL SetHeight( float height, sal_Int32 heightrule ) override;
+    virtual void Select(  ) override;
+    virtual void SetHeight( float height, sal_Int32 heightrule ) override;
 
-    /// @throws css::uno::RuntimeException
-    static void SelectRow( const rtl::Reference< SwXTextDocument >& xModel, const css::uno::Reference< css::text::XTextTable >& xTextTable, sal_Int32 nStartRow, sal_Int32 nEndRow );
+    /// @throws cpo::uno::RuntimeException
+    static void SelectRow( const rtl::Reference< SwXTextDocument >& xModel, const cpo::uno::Reference< css::text::XTextTable >& xTextTable, sal_Int32 nStartRow, sal_Int32 nEndRow );
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

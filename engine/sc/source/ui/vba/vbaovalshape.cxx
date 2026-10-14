@@ -20,6 +20,7 @@
 #include "vbaovalshape.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 /*
@@ -27,7 +28,7 @@ using namespace ooo::vba;
  * interface. This is needed by TypeOf ... Is ... basic operator.
  */
 
-ScVbaOvalShape::ScVbaOvalShape( const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< drawing::XShape >& xShape, const uno::Reference< drawing::XShapes >& xShapes, const uno::Reference< frame::XModel >& xModel ) : OvalShapeImpl_BASE( uno::Reference< XHelperInterface >(), xContext, xShape, xShapes, xModel, ScVbaShape::getType( xShape )  )
+ScVbaOvalShape::ScVbaOvalShape( const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< drawing::XShape >& xShape, const uno::Reference< drawing::XShapes >& xShapes, const uno::Reference< frame::XModel >& xModel ) : OvalShapeImpl_BASE( uno::Reference< XHelperInterface >(), xContext, xShape, xShapes, xModel, ScVbaShape::getType( xShape )  )
 {}
 
 

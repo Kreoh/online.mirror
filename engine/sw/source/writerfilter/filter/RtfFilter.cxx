@@ -42,6 +42,7 @@
 #include <unotxdoc.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -50,34 +51,34 @@ class RtfFilter
     : public cppu::WeakImplHelper<document::XFilter, document::XImporter, document::XExporter,
                                   lang::XInitialization, lang::XServiceInfo>
 {
-    uno::Reference<uno::XComponentContext> m_xContext;
+    uno::Reference<cpo::uno::XComponentContext> m_xContext;
     uno::Reference<lang::XComponent> m_xSrcDoc;
     rtl::Reference<SwXTextDocument> m_xDstDoc;
 
 public:
-    explicit RtfFilter(uno::Reference<uno::XComponentContext> xContext);
+    explicit RtfFilter(uno::Reference<cpo::uno::XComponentContext> xContext);
 
     // XFilter
-    bool SAL_CALL filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor) override;
-    void SAL_CALL cancel() override;
+    bool filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor) override;
+    void cancel() override;
 
     // XImporter
-    void SAL_CALL setTargetDocument(const uno::Reference<lang::XComponent>& xDoc) override;
+    void setTargetDocument(const uno::Reference<lang::XComponent>& xDoc) override;
 
     // XExporter
-    void SAL_CALL setSourceDocument(const uno::Reference<lang::XComponent>& xDoc) override;
+    void setSourceDocument(const uno::Reference<lang::XComponent>& xDoc) override;
 
     // XInitialization
-    void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+    void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& rServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 }
 
-RtfFilter::RtfFilter(uno::Reference<uno::XComponentContext> xContext)
+RtfFilter::RtfFilter(uno::Reference<cpo::uno::XComponentContext> xContext)
     : m_xContext(std::move(xContext))
 {
 }
@@ -88,7 +89,7 @@ bool RtfFilter::filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescript
     {
         uno::Reference<lang::XMultiServiceFactory> xMSF(m_xContext->getServiceManager(),
                                                         uno::UNO_QUERY_THROW);
-        uno::Reference<uno::XInterface> xIfc(
+        uno::Reference<cpo::uno::XInterface> xIfc(
             xMSF->createInstance(u"com.sun.star.comp.Writer.RtfExport"_ustr), uno::UNO_SET_THROW);
         uno::Reference<document::XExporter> xExporter(xIfc, uno::UNO_QUERY_THROW);
         uno::Reference<document::XFilter> xFilter(xIfc, uno::UNO_QUERY_THROW);
@@ -213,9 +214,9 @@ cpo::uno::Sequence<OUString> RtfFilter::getSupportedServiceNames()
     return aRet;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_RtfFilter_get_implementation(
-    uno::XComponentContext* pComponent, cpo::uno::Sequence<cpo::uno::Any> const& /*rSequence*/)
+    cpo::uno::XComponentContext* pComponent, cpo::uno::Sequence<cpo::uno::Any> const& /*rSequence*/)
 {
     return cppu::acquire(new RtfFilter(pComponent));
 }

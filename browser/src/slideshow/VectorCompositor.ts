@@ -36,6 +36,8 @@ class VectorCompositor extends SlideCompositor {
 	private canvasHeight = 0;
 
 	private disposed = false;
+	// The listener registered on the render manager, kept to remove it.
+	private onDataChanged: (() => void) | null = null;
 
 	// The slide the initial fetchAndRun is waiting on, and the callback to
 	// fire once its primitive tree is in the cache.
@@ -53,13 +55,13 @@ class VectorCompositor extends SlideCompositor {
 		// The shared cache fires this when a tree or an embedded bitmap
 		// arrives. Use it to release the initial fetchAndRun once its
 		// slide is ready.
-		RenderManager.onVectorChanged(() => this._onDataChanged());
+		this.onDataChanged = () => this._onDataChanged();
+		RenderManager.onVectorChanged(this.onDataChanged);
 	}
 
 	public removeHooks(): void {
-		// RenderManager.onVectorChanged keeps the callback for the life of
-		// the page, so the disposed flag guards against acting after the
-		// slideshow has closed.
+		if (this.onDataChanged) RenderManager.offVectorChanged(this.onDataChanged);
+		this.onDataChanged = null;
 	}
 
 	public onUpdatePresentationInfo(): void {
@@ -102,19 +104,26 @@ class VectorCompositor extends SlideCompositor {
 	private _fetchAllSlides(): void {
 		this._metaPresentation.getMetaSlides().forEach((_metaSlide, hash) => {
 			const info = this._metaPresentation.getSlideInfo(hash);
-			if (info) RenderManager.requestPart(info.index);
+			if (info) {
+				RenderManager.requestPartById(info.part, cool.VectorMode.Slides);
+			}
 		});
 	}
 
-	private _partForSlide(slideNumber: number): number {
+	/// The id of the page that shows the slide. The slideshow can run from
+	/// any view, and the slide info names each slide by its id.
+	private _partIdForSlide(slideNumber: number): cool.VectorPartGuid | null {
 		const hash = this._metaPresentation.getSlideHash(slideNumber);
 		const info = hash ? this._metaPresentation.getSlideInfo(hash) : null;
-		return info ? info.index : null;
+		return info ? info.part : null;
 	}
 
 	private _runWhenReady(slideNumber: number, ready: VoidFunction): void {
-		const part = this._partForSlide(slideNumber);
-		if (part !== null && RenderManager.requestPart(part)) {
+		const partId = this._partIdForSlide(slideNumber);
+		if (
+			partId !== null &&
+			RenderManager.isPartDrawableById(partId, cool.VectorMode.Slides)
+		) {
 			ready();
 			return;
 		}
@@ -126,8 +135,12 @@ class VectorCompositor extends SlideCompositor {
 		if (this.disposed) return;
 		if (this.pendingReady === null) return;
 
-		const part = this._partForSlide(this.pendingSlideNumber);
-		if (part === null || !RenderManager.requestPart(part)) return;
+		const partId = this._partIdForSlide(this.pendingSlideNumber);
+		if (
+			partId === null ||
+			!RenderManager.isPartDrawableById(partId, cool.VectorMode.Slides)
+		)
+			return;
 
 		const ready = this.pendingReady;
 		this.pendingReady = null;
@@ -140,10 +153,14 @@ class VectorCompositor extends SlideCompositor {
 	private _composeSlide(slideNumber: number): ImageBitmap {
 		if (this.disposed || !this.offscreenContext) return null;
 
-		const part = this._partForSlide(slideNumber);
-		if (part === null) return null;
+		const partId = this._partIdForSlide(slideNumber);
+		if (partId === null) return null;
 
-		const data = RenderManager.requestPart(part);
+		// A slide is composed only once the master it draws under is cached
+		// too, since the master holds the slide's background and footers.
+		if (!RenderManager.isPartDrawableById(partId, cool.VectorMode.Slides))
+			return null;
+		const data = RenderManager.requestPartById(partId, cool.VectorMode.Slides);
 		if (!data || data.slideWidth <= 0 || data.slideHeight <= 0) return null;
 
 		const context = this.offscreenContext;

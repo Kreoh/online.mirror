@@ -34,6 +34,8 @@
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/form/XFormComponent.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/awt/XControlContainer.hpp>
+#include <vcl/vclptr.hxx>
 
 #include <memory>
 #include <utility>
@@ -43,7 +45,7 @@
 #include <set>
 
 class SfxMedium;
-class SfxViewFrame;
+class WorkWindow;
 class SdrObject;
 class SvxMacroTableDtor;
 class SwDoc;
@@ -59,6 +61,7 @@ class SwNumRule;
 struct SwPending;
 class SvxCSS1PropertyInfo;
 struct ImplSVEvent;
+class UnoControlContainer;
 
 constexpr tools::Long HTML_CJK_PARSPACE = o3tl::toTwips(25, o3tl::Length::mm10); // 2.5mm
 constexpr tools::Long HTML_CTL_PARSPACE = o3tl::toTwips(25, o3tl::Length::mm10); // 2.5mm
@@ -126,6 +129,7 @@ struct HTMLAttrTable
     HTMLAttr* pLanguageCTL;
     HTMLAttr* pCharBox;
     HTMLAttr* pOpticalSizing;
+    HTMLAttr* pCharHidden;
 };
 
 class HTMLAttr
@@ -472,7 +476,6 @@ class SwHTMLParser : public SfxHTMLParser, public SvtListener
     bool m_bInFootEndNoteAnchor : 1;
     bool m_bInFootEndNoteSymbol : 1;
     bool m_bIgnoreHTMLComments : 1;
-    bool m_bRemoveHidden : 1; // the filter implementation might set the hidden flag
 
     bool m_bBodySeen : 1;
     bool m_bReadingHeaderOrFooter : 1;
@@ -486,7 +489,10 @@ class SwHTMLParser : public SfxHTMLParser, public SvtListener
     /// the names corresponding to the DOCINFO field subtypes INFO[1-4]
     OUString m_InfoNames[4];
 
-    SfxViewFrame* m_pTempViewFrame;
+    // A hidden window, and the control container on it, in which a form control is realized to
+    // measure its size when the document has no view.
+    VclPtr<WorkWindow> m_xControlSizeWindow;
+    rtl::Reference<UnoControlContainer> m_xControlSizeContainer;
 
     bool m_bXHTML = false;
     bool m_bReqIF = false;
@@ -770,7 +776,8 @@ private:
     bool ParseStyleOptions( const OUString &rStyle, const OUString &rId,
                             const OUString &rClass, SfxItemSet &rItemSet,
                             SvxCSS1PropertyInfo &rPropInfo,
-                            const OUString *pLang=nullptr, const OUString *pDir=nullptr );
+                            const OUString *pLang=nullptr, const OUString *pDir=nullptr,
+                            std::u16string_view rElement = {} );
 
     // Inserting Controls and Forms (htmlform.cxx)
 
@@ -780,9 +787,9 @@ private:
                            sal_Int16 eHoriOri,
                            SfxItemSet& rCSS1ItemSet,
                            SvxCSS1PropertyInfo& rCSS1PropInfo );
-    css::uno::Reference< css::drawing::XShape >  InsertControl(
-                        const css::uno::Reference< css::form::XFormComponent > & rFormComp,
-                        const css::uno::Reference< css::beans::XPropertySet > & rFCompPropSet,
+    cpo::uno::Reference< css::drawing::XShape >  InsertControl(
+                        const cpo::uno::Reference< css::form::XFormComponent > & rFormComp,
+                        const cpo::uno::Reference< css::beans::XPropertySet > & rFCompPropSet,
                         const Size& rSize,
                         sal_Int16 eVertOri,
                         sal_Int16 eHoriOri,
@@ -793,7 +800,7 @@ private:
                         const std::vector<OUString>& rUnoMacroParamTable,
                         bool bSetPropSet = true,
                         bool bHidden = false );
-    void SetControlSize( const css::uno::Reference< css::drawing::XShape > & rShape, const Size& rTextSz,
+    void SetControlSize( const cpo::uno::Reference< css::drawing::XShape > & rShape, const Size& rTextSz,
                          bool bMinWidth, bool bMinHeight );
 
 public:
@@ -927,7 +934,7 @@ public:
     // for reading asynchronously from SvStream
     virtual void Continue( HtmlTokenId nToken ) override;
 
-    virtual bool ParseMetaOptions( const css::uno::Reference<css::document::XDocumentProperties>&,
+    virtual bool ParseMetaOptions( const cpo::uno::Reference<css::document::XDocumentProperties>&,
             SvKeyValueIterator* ) override;
 
 

@@ -17,7 +17,7 @@
  */
 package com.sun.star.lib.uno.helper;
 
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 import com.sun.star.lang.XSingleComponentFactory;
 import com.sun.star.lang.XServiceInfo;
 import com.sun.star.lang.XInitialization;
@@ -53,7 +53,7 @@ public class Factory
     */
     public static XSingleComponentFactory createComponentFactory(
         Class impl_class, String impl_name, String supported_services [] )
-        throws com.sun.star.uno.RuntimeException
+        throws cpo.uno.RuntimeException
     {
         return new Factory( impl_class, impl_name, supported_services );
     }
@@ -73,7 +73,7 @@ public class Factory
     */
     public static XSingleComponentFactory createComponentFactory(
         Class impl_class, String supported_services [] )
-        throws com.sun.star.uno.RuntimeException
+        throws cpo.uno.RuntimeException
     {
         return createComponentFactory(
             impl_class, impl_class.getName(), supported_services );
@@ -122,7 +122,7 @@ public class Factory
 
     private Factory(
         Class impl_class, String impl_name, String supported_services [] )
-                throws com.sun.star.uno.DeploymentException
+                throws cpo.uno.DeploymentException
     {
         m_impl_name = impl_name;
         m_supported_services = supported_services;
@@ -132,7 +132,7 @@ public class Factory
 
         if (!java.lang.reflect.Modifier.isPublic( impl_class.getModifiers() ))
         {
-            throw new com.sun.star.uno.DeploymentException("class " + impl_class + " is not public");
+            throw new cpo.uno.DeploymentException("class " + impl_class + " is not public");
         }
 
         java.lang.reflect.Method tmpMethod = null;
@@ -169,7 +169,7 @@ public class Factory
             {
                 if (!java.lang.reflect.Modifier.isPublic( tmpCtor.getModifiers() ))
                 {
-                    throw new com.sun.star.uno.DeploymentException("constructor with XComponentContext param for class  " + impl_class + " is not public");
+                    throw new cpo.uno.DeploymentException("constructor with XComponentContext param for class  " + impl_class + " is not public");
                 }
             }
             else
@@ -182,11 +182,11 @@ public class Factory
                 }
                 catch (Exception exc2)
                 {
-                    throw new com.sun.star.uno.DeploymentException(exc2, "class " + impl_class + " has no means of creating it, cannot find a __create method or a useful constructor.");
+                    throw new cpo.uno.DeploymentException(exc2, "class " + impl_class + " has no means of creating it, cannot find a __create method or a useful constructor.");
                 }
                 if (!java.lang.reflect.Modifier.isPublic( defaultCtor.getModifiers() ))
                 {
-                    throw new com.sun.star.uno.DeploymentException("default constructor for class  " + impl_class + " is not public");
+                    throw new cpo.uno.DeploymentException("default constructor for class  " + impl_class + " is not public");
                 }
             }
         }
@@ -222,8 +222,8 @@ public class Factory
             Throwable targetException = exc.getTargetException();
             if (targetException instanceof java.lang.RuntimeException)
                 throw (java.lang.RuntimeException)targetException;
-            else if (targetException instanceof com.sun.star.uno.RuntimeException)
-                throw (com.sun.star.uno.RuntimeException)targetException;
+            else if (targetException instanceof cpo.uno.RuntimeException)
+                throw (cpo.uno.RuntimeException)targetException;
             else if (targetException instanceof cpo.uno.Exception)
                 throw (cpo.uno.Exception)targetException;
             else
@@ -231,11 +231,11 @@ public class Factory
         }
         catch (IllegalAccessException exc)
         {
-            throw new com.sun.star.uno.RuntimeException( exc, exc.getMessage(), this);
+            throw new cpo.uno.RuntimeException( exc, exc.getMessage(), this);
         }
         catch (InstantiationException exc)
         {
-            throw new com.sun.star.uno.RuntimeException( exc, exc.getMessage(), this);
+            throw new cpo.uno.RuntimeException( exc, exc.getMessage(), this);
         }
     }
     // XSingleComponentFactory impl

@@ -18,8 +18,8 @@
  */
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XUriReference.hpp>
@@ -34,8 +34,8 @@
 #include <utility>
 #include <sal/types.h>
 
-namespace com::sun::star::uno { class XComponentContext; }
-namespace com::sun::star::uno { class XInterface; }
+namespace cpo::uno { class XComponentContext; }
+namespace cpo::uno { class XInterface; }
 
 namespace {
 
@@ -45,27 +45,27 @@ class Factory:
 {
 public:
     explicit Factory(
-        css::uno::Reference< css::uno::XComponentContext > context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > context):
         m_context(std::move(context)) {}
 
     Factory(const Factory&) = delete;
     Factory& operator=(const Factory&) = delete;
 
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL supportsService(OUString const & serviceName) override;
+    virtual bool supportsService(OUString const & serviceName) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
-    virtual css::uno::Reference< css::uri::XUriReference > SAL_CALL
+    virtual cpo::uno::Reference< css::uri::XUriReference >
     createVndSunStarPkgUrlReference(
-        css::uno::Reference< css::uri::XUriReference > const & authority) override;
+        cpo::uno::Reference< css::uri::XUriReference > const & authority) override;
 
 private:
     virtual ~Factory() override {}
 
-    css::uno::Reference< css::uno::XComponentContext > m_context;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_context;
 };
 
 OUString Factory::getImplementationName()
@@ -84,12 +84,12 @@ cpo::uno::Sequence< OUString > Factory::getSupportedServiceNames()
     return s;
 }
 
-css::uno::Reference< css::uri::XUriReference >
+cpo::uno::Reference< css::uri::XUriReference >
 Factory::createVndSunStarPkgUrlReference(
-    css::uno::Reference< css::uri::XUriReference > const & authority)
+    cpo::uno::Reference< css::uri::XUriReference > const & authority)
 {
     if (!authority.is()) {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"null authority passed to"
             " XVndSunStarPkgUrlReferenceFactory.createVndSunStarPkgUrlReference"_ustr);
     }
@@ -99,19 +99,19 @@ Factory::createVndSunStarPkgUrlReference(
             rtl::Uri::encode(
                 authority->getUriReference(), rtl_UriCharClassRegName,
                 rtl_UriEncodeIgnoreEscapes, RTL_TEXTENCODING_UTF8);
-        css::uno::Reference< css::uri::XUriReference > uriRef(
+        cpo::uno::Reference< css::uri::XUriReference > uriRef(
             css::uri::UriReferenceFactory::create(m_context)->parse(
                 buf));
         return uriRef;
     } else {
-        return css::uno::Reference< css::uri::XUriReference >();
+        return cpo::uno::Reference< css::uri::XUriReference >();
     }
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_uri_VndSunStarPkgUrlReferenceFactory_get_implementation(css::uno::XComponentContext* rxContext,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_uri_VndSunStarPkgUrlReferenceFactory_get_implementation(cpo::uno::XComponentContext* rxContext,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return ::cppu::acquire(new Factory(rxContext));

@@ -67,7 +67,7 @@ def getConstantByName(constant):
 def getTypeByName(typeName):
     """Returns a `uno.Type` instance of the type given by typeName.
 
-    If the type does not exist, a `com.sun.star.uno.RuntimeException` is raised.
+    If the type does not exist, a `cpo.uno.RuntimeException` is raised.
     """
 
     return pyuno.getTypeByName(typeName)
@@ -345,6 +345,29 @@ def invoke(object, methodname, argTuple):
 # -----------------------------------------------------------------------------
 _builtin_import = __import__
 
+def _uno_try_import(RuntimeException, name, class_name):
+
+    # check for structs, exceptions, interfaces, services or singletons
+    try:
+        return pyuno.getClass(name + "." + class_name)
+    except RuntimeException:
+        pass
+    # check for enums
+    try:
+        return Enum(name, class_name)
+    except RuntimeException:
+        pass
+    # check for constants
+    try:
+        return getConstantByName(name + "." + class_name)
+    except RuntimeException:
+        pass
+    # check for constant group
+    try:
+        return _impl_getConstantGroupByName(name, class_name)
+    except ValueError:
+        pass
+    return None
 
 def _uno_import(name, *optargs, **kwargs):
     """Overrides built-in import to allow directly importing LibreOffice classes."""
@@ -377,31 +400,21 @@ def _uno_import(name, *optargs, **kwargs):
 
         d = mod.__dict__
 
-    RuntimeException = pyuno.getClass("com.sun.star.uno.RuntimeException")
-
     for class_name in fromlist:
         if class_name not in d:
-            failed = False
+            RuntimeException = pyuno.getClass("cpo.uno.RuntimeException")
+            clazz = _uno_try_import(RuntimeException, name, class_name)
+            # Since we moved most of the UNO types from com::sun::star to cpo,
+            # attempt to allow importing using the old names.
+            if clazz is None:
+                css_prefix = "com.sun.star."
+                if name.startswith(css_prefix):
+                    compat_name = "cpo." + name[len(css_prefix):]
+                    clazz = _uno_try_import(RuntimeException, compat_name, class_name)
 
-            try:
-                # check for structs, exceptions, interfaces, services or singletons
-                d[class_name] = pyuno.getClass(name + "." + class_name)
-            except RuntimeException:
-                # check for enums
-                try:
-                    d[class_name] = Enum(name, class_name)
-                except RuntimeException:
-                    # check for constants
-                    try:
-                        d[class_name] = getConstantByName(name + "." + class_name)
-                    except RuntimeException:
-                        # check for constant group
-                        try:
-                            d[class_name] = _impl_getConstantGroupByName(name, class_name)
-                        except ValueError:
-                            failed = True
-
-            if failed:
+            if clazz is not None:
+                d[class_name] = clazz;
+            else:
                 # We have an import failure, but cannot distinguish between
                 # uno and non-uno errors as uno lookups are attempted for all
                 # "from xxx import yyy" imports following a python failure.
@@ -496,7 +509,7 @@ def _uno_struct__init__(self, *args, **kwargs):
 
         for kwarg in kwargs.keys():
             if not used.get(kwarg):
-                RuntimeException = pyuno.getClass("com.sun.star.uno.RuntimeException")
+                RuntimeException = pyuno.getClass("cpo.uno.RuntimeException")
                 raise RuntimeException("_uno_struct__init__: unused keyword argument '%s'." % kwarg, None)
 
         self.__dict__["value"] = struct

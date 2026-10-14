@@ -18,11 +18,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'AutoFilter Complex', funct
 
 		// make deterministic jump, so in retry we have similar scrollbar values
 		helper.typeIntoInputField(helper.addressInputSelector, 'A1');
-		cy.wait(1000);
 
 		helper.typeIntoInputField(helper.addressInputSelector, 'U126');
 		cy.cGet('#map').focus();
-		cy.wait(1000);
 
 		desktopHelper.assertScrollbarPosition('vertical', 230, 270);
 		desktopHelper.assertScrollbarPosition('horizontal', 260, 290);
@@ -30,6 +28,12 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'AutoFilter Complex', funct
 
 	it('Check checkbox status in the date tree', function() {
 		helper.typeIntoInputField(helper.addressInputSelector, 'P100');
+
+		// The cell cursor still shows U126 until the jump is processed, and its corner
+		// is on the scrollbar, so a click there would scroll the view instead.
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
 
 		cy.cGet('#test-div-OwnCellCursor').then((div) => {
 			const rect = div[0].getBoundingClientRect();
@@ -111,8 +115,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'AutoFilter', function() {
 	});
 
 	it('Close autofilter popup by click outside', function() {
-		// Test sometimes fails without this wait, no idea why.
-		cy.wait(1000);
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
 
 		calcHelper.openAutoFilterMenu();
 
@@ -122,7 +127,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'AutoFilter', function() {
 
 		// Wait for autofilter dialog to close
 		cy.cGet('div.autofilter').should('not.exist');
-		cy.wait(500);
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
 
 		calcHelper.dblClickOnFirstCell();
 		// Position of the double click determines the cursor position. So press home button in order to go to start of the cell.
@@ -281,5 +288,51 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'AutoFilter Scroll Position
 				positionBeforeFilter - 150,
 				positionBeforeFilter + 150);
 		});
+	});
+});
+
+describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'AutoFilter Search', function() {
+
+	function openAutoFilterAtCursor() {
+		cy.getFrameWindow().then(function(win) {
+			win.app.socket.sendMessage('uno .uno:DataSelect');
+		});
+		cy.cGet('.autofilter .vertical').should('be.visible');
+	}
+
+	beforeEach(function() {
+		// The column holds the numbers 1 to 30, which is more values than the
+		// popup shows at once, so the search field is the way to reach one.
+		helper.setupAndLoadDocument('calc/autofilter-search.fods');
+		desktopHelper.switchUIToCompact();
+		toggleAutofilter();
+		helper.setDummyClipboardForCopy();
+
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
+	});
+
+	it('Search narrows the list to the match, which then filters the sheet', function() {
+		openAutoFilterAtCursor();
+		cy.cGet('#check_list_box .ui-treeview-entry:not(.hidden)').should('have.length', 30);
+
+		cy.cGet('#toggle_all-input').uncheck();
+		cy.cGet('.autofilter .ui-treeview-search-input').type('25');
+
+		cy.cGet('#check_list_box .ui-treeview-entry:not(.hidden)').should('have.length', 1);
+		cy.cGet('#check_list_box .ui-treeview-entry:not(.hidden)').should('contain.text', '25');
+		cy.cGet('#check_list_box .ui-treeview-entry.hidden').first().should('have.css', 'display', 'none');
+
+		cy.cGet('#check_list_box .ui-treeview-entry:not(.hidden) .ui-treeview-checkbox').check();
+
+		// Ticking the entry rebuilds the list, and the search still holds.
+		cy.cGet('.autofilter .ui-treeview-search-input').should('have.value', '25');
+		cy.cGet('#check_list_box .ui-treeview-entry:not(.hidden)').should('have.length', 1);
+
+		cy.cGet('#ok').click();
+		cy.cGet('div.autofilter').should('not.exist');
+
+		calcHelper.assertSheetContents(['Value', '25'], true);
 	});
 });

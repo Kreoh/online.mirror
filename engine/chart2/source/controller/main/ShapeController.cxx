@@ -41,13 +41,13 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::frame;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
 {
 
-ShapeController::ShapeController( const Reference< uno::XComponentContext >& rxContext,
+ShapeController::ShapeController( const Reference< cpo::uno::XComponentContext >& rxContext,
         ChartController* pController )
     :FeatureCommandDispatchBase( rxContext )
     ,m_pChartController( pController )

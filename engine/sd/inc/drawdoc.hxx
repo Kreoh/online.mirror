@@ -41,7 +41,7 @@
 namespace com::sun::star::xml::dom { class XNode; }
 namespace editeng { class SvxFieldItemUpdater; }
 namespace vcl { class Font; }
-namespace com::sun::star::presentation { class XPresentation2; }
+namespace com::sun::star::presentation { class XPresentation; }
 class SdOutliner;
 class Timer;
 class SfxObjectShell;
@@ -54,7 +54,6 @@ class SvxSearchItem;
 class EditStatus;
 class Point;
 class SdTransferable;
-struct SpellCallbackInfo;
 class SdCustomShowList;
 class SdUndoGroup;
 class SdrObject;
@@ -181,11 +180,22 @@ struct InsertBookmarkOptions
     bool bMergeMasterPages;   // Merge master pages
     bool bMergeMasterPagesOnly; // Only merge master pages
     bool bPreservePageNames;  // Preserve page names
+    bool bIsFileDocument;     // Operation involves a file document
+    bool bAdoptTargetDesign;  // Inserted pages take the design of the destination document
+    // The reference to record as the source of pages inserted as links, or
+    // empty for the name of the medium the pages are read from. A valid
+    // reference is absolute and holds no '#' of its own, since the name of the
+    // source page is appended to it after a '#'. It escapes the characters
+    // that would otherwise be read as delimiters and leaves the rest as they
+    // are: an escape for a character outside ASCII comes back as that
+    // character once the document has been saved and read again.
+    OUString aLinkSourceUrl;
 
     InsertBookmarkOptions()
         : bLink(false), bReplace(false), bNoDialogs(false),
           bCopy(true), bMergeMasterPages(true), bMergeMasterPagesOnly(false),
-          bPreservePageNames(false)
+          bPreservePageNames(false),
+          bIsFileDocument(false), bAdoptTargetDesign(false)
     {}
 
     // Preset for paste operation
@@ -202,6 +212,19 @@ struct InsertBookmarkOptions
         InsertBookmarkOptions options;
         options.bLink = bLinkPages;
         options.bMergeMasterPagesOnly = false;
+        return options;
+    }
+
+    // Preset for inserting pages picked from another presentation file.
+    // With bKeepDesign the source master pages come along; without it the
+    // inserted pages are bound to the destination document's design instead.
+    static InsertBookmarkOptions ForSlideImport(bool bKeepDesign) {
+        InsertBookmarkOptions options;
+        options.bNoDialogs = true;
+        options.bIsFileDocument = true;
+        options.bMergeMasterPagesOnly = false;
+        options.bMergeMasterPages = bKeepDesign;
+        options.bAdoptTargetDesign = !bKeepDesign;
         return options;
     }
 
@@ -360,6 +383,15 @@ private:
     OUString            maBookmarkFile;
     ::sd::DrawDocShellRef   mxBookmarkDocShRef;
 
+    /** The local file the pages of one source document are read from, by the reference the pages
+        linked to that source record. Each entry is a file: URL of a file staged for this document,
+        holding the source pages to read. Session state, never saved with the document.
+    */
+    std::map<OUString, OUString> maStagedLinkSourceFiles;
+
+    /// How many page operations of the document are running now, see KeepPageLinks.
+    sal_Int32 mnPageLinksKept = 0;
+
     sd::PresentationSettings maPresentationSettings;
 
     rtl::Reference< sd::SlideShow > mxPresentation;
@@ -401,9 +433,9 @@ private:
                         DECL_DLLPRIVATE_LINK(OnlineSpellEventHdl, EditStatus&, void);
 
     std::vector< OUString > maAnnotationAuthors;
-    std::vector<css::uno::Reference< css::xml::dom::XNode> > maLayoutInfo;
+    std::vector<cpo::uno::Reference< css::xml::dom::XNode> > maLayoutInfo;
 
-    std::vector<css::uno::Reference< css::xml::dom::XNode> > maPresObjectInfo;
+    std::vector<cpo::uno::Reference< css::xml::dom::XNode> > maPresObjectInfo;
 
     bool mbEmbedFonts : 1;
     bool mbEmbedUsedFontsOnly : 1;
@@ -419,7 +451,7 @@ private:
 
     bool mbSkipCanvasPreviewUpdates = false;
 
-    SAL_DLLPRIVATE virtual css::uno::Reference< css::frame::XModel > createUnoModel() override;
+    SAL_DLLPRIVATE virtual cpo::uno::Reference< css::frame::XModel > createUnoModel() override;
 
 public:
 
@@ -465,7 +497,7 @@ public:
         SdDrawDocument* pBookmarkDoc,
         SlideLayoutNameList& rLayoutsToTransfer,
         const DocumentPageCounts& rPageCounts,
-        bool bMergeMasterPagesOnly);
+        const InsertBookmarkOptions& rOptions);
 
     /**
      * Transfer layout styles from source document to destination
@@ -512,6 +544,11 @@ public:
      * Begin an undoable action for page operations
      */
     SfxUndoManager* beginUndoAction();
+
+    /**
+     * Begin an undoable action for page operations, reported under rComment
+     */
+    SfxUndoManager* beginUndoAction(const OUString& rComment);
 
     /**
      * End an undoable action for page operations
@@ -631,8 +668,29 @@ public:
     void   SetMasterPage(sal_uInt16 nSdPageNum, std::u16string_view rLayoutName,
                                       SdDrawDocument* pSourceDoc, bool bMaster, bool bCheckMasters);
 
-    SdDrawDocument* OpenBookmarkDoc(const OUString& rBookmarkFile);
-    SAL_DLLPRIVATE SdDrawDocument* OpenBookmarkDoc(SfxMedium* pMedium);
+    /** Opens rBookmarkFile as the document pages are inserted from, and keeps it open until
+        CloseBookmarkDoc.
+
+        With bNoDialogs the file is read without any interaction, and a file that cannot be read is
+        reported by an empty result alone.
+    */
+    SdDrawDocument* OpenBookmarkDoc(const OUString& rBookmarkFile, bool bNoDialogs = false);
+    SAL_DLLPRIVATE SdDrawDocument* OpenBookmarkDoc(SfxMedium* pMedium, bool bNoDialogs = false);
+
+    /** Load an external drawing or presentation file into a fresh document
+     * shell.
+     *
+     * Guesses the filter when the medium does not carry one, accepts only
+     * drawing and presentation documents, and creates the matching shell
+     * type. Takes ownership of the medium: a successful load hands it to the
+     * shell, any other outcome frees it.
+     *
+     * @param pMedium the file to load
+     * @return the loaded shell, or an empty reference when the file has no
+     *         usable filter, is neither a drawing nor a presentation, or
+     *         fails to load
+     */
+    static ::sd::DrawDocShellRef LoadExternalDrawDoc(SfxMedium* pMedium);
 
     SAL_DLLPRIVATE void InsertBookmark(const std::vector<OUString> &rBookmarkList,
                             std::vector<OUString> &rExchangeList, bool bLink,
@@ -646,13 +704,13 @@ public:
     /// load xml-based impress layout definitions into document
     SAL_DLLPRIVATE void InitLayoutVector();
     /// return reference to vector of Impress layout definitions
-    SAL_DLLPRIVATE const std::vector<css::uno::Reference< css::xml::dom::XNode> >& GetLayoutVector() const
+    SAL_DLLPRIVATE const std::vector<cpo::uno::Reference< css::xml::dom::XNode> >& GetLayoutVector() const
     { return maLayoutInfo; }
 
    /// load xml-based impress master presentation object definitions into document
     SAL_DLLPRIVATE void InitObjectVector();
     /// return reference to vector of master presentation object definitions
-    SAL_DLLPRIVATE const std::vector<css::uno::Reference<css::xml::dom::XNode> >& GetObjectVector() const { return maPresObjectInfo; }
+    SAL_DLLPRIVATE const std::vector<cpo::uno::Reference<css::xml::dom::XNode> >& GetObjectVector() const { return maPresObjectInfo; }
 
 
     /**
@@ -698,6 +756,31 @@ public:
         std::optional<bool> oScaleObjects = std::nullopt);
 
     /**
+     * Insert pages from external files with explicit insertion options
+     *
+     * Behaves like the boolean-flag overload but lets the caller choose the
+     * full set of insertion options, including whether the inserted pages
+     * keep the source document's design or are bound to the design of the
+     * destination document.
+     *
+     * @param rBookmarkList List of page names to be inserted
+     * @param pExchangeList Optional list of names to use for the inserted pages
+     * @param rOptions Options controlling the insertion
+     * @param nInsertPos Position where pages should be inserted
+     * @param pBookmarkDocSh Source document shell
+     * @param oScaleObjects Whether inserted objects scale to the page size;
+     *                      unset asks interactively when dialogs are allowed
+     * @return true if operation was successful
+     */
+    bool InsertFileAsPage(
+        const PageNameList &rBookmarkList,
+        PageNameList *pExchangeList,
+        const InsertBookmarkOptions& rOptions,
+        sal_uInt16 nInsertPos,
+        ::sd::DrawDocShell* pBookmarkDocSh,
+        std::optional<bool> oScaleObjects = std::nullopt);
+
+    /**
      * Handle drag and drop operations
      *
      * This method is called when pages are dragged and dropped, either within
@@ -727,13 +810,18 @@ public:
      * @param nInsertPos Position where resolved pages should be inserted
      * @param bNoDialogs Whether to suppress dialogs during operation
      * @param bCopy Whether to copy the linked pages
+     * @param rLinkSourceUrl The reference the resolved pages record as their source, or empty for
+     *                       the name of the medium they are read from. A reference given here is
+     *                       what keeps the pages linked to a source document when the medium is a
+     *                       file staged for one resolution and means nothing later.
      * @return true if operation was successful
      */
     bool ResolvePageLinks(
         const PageNameList &rBookmarkList,
         sal_uInt16 nInsertPos,
         bool bNoDialogs,
-        bool bCopy);
+        bool bCopy,
+        const OUString& rLinkSourceUrl);
 
     /**
      * Copy or move pages within the same document
@@ -778,6 +866,46 @@ public:
 
     void   CloseBookmarkDoc();
 
+    /** Names the local file the pages linked to one source document are read from.
+
+        rSourceReference is the reference those pages record and rFileUrl a file: URL of a file
+        staged for this document, holding the source pages. An empty rFileUrl takes the source's
+        file away again.
+    */
+    void SetStagedLinkSourceFile(const OUString& rSourceReference, const OUString& rFileUrl);
+
+    /** The local file the pages linked to rSourceReference are read from, or empty when no file is
+        staged for that source.
+    */
+    OUString GetStagedLinkSourceFile(const OUString& rSourceReference) const;
+
+    /** Whether a page operation of the document is running now, see KeepPageLinks. */
+    bool ArePageLinksKept() const { return mnPageLinksKept > 0; }
+
+    /** Marks a page operation of the document, one that reads pages into it or moves them about.
+
+        While one of these is alive the pages of the document keep the source documents they record,
+        whatever else changes about them. Such an operation writes that record itself and then goes
+        on to change the page it wrote.
+    */
+    class KeepPageLinks
+    {
+    public:
+        explicit KeepPageLinks(SdDrawDocument& rDoc)
+            : mrDoc(rDoc)
+        {
+            ++mrDoc.mnPageLinksKept;
+        }
+
+        ~KeepPageLinks() { --mrDoc.mnPageLinksKept; }
+
+        KeepPageLinks(const KeepPageLinks&) = delete;
+        KeepPageLinks& operator=(const KeepPageLinks&) = delete;
+
+    private:
+        SdDrawDocument& mrDoc;
+    };
+
     SAL_DLLPRIVATE SdrObject*          GetObj(std::u16string_view rObjName) const;
 
     /** Return the first page that has the given name.  Regular pages and
@@ -803,6 +931,14 @@ public:
     bool IsPageNameUnique( std::u16string_view rPageName ) const;
     SdPage*GetSdPage(sal_uInt16 nPgNum, PageKind ePgKind) const;
     sal_uInt16 GetSdPageCount(PageKind ePgKind) const;
+
+    /** returns the page or master page holding the given globally unique identifier, or
+        nullptr when no page of this document holds it */
+    SdPage* GetPageByGuid(const tools::Guid& rGuid);
+
+    /** gives the page a freshly generated globally unique identifier when another page of
+        this document already holds the page's current one */
+    SAL_DLLPRIVATE void EnsureUniquePageGuid(SdPage& rPage);
 
     SAL_DLLPRIVATE void                SetSelected(SdPage* pPage, bool bSelect);
     SAL_DLLPRIVATE void                UnselectAllPages();
@@ -850,8 +986,6 @@ public:
     SAL_DLLPRIVATE bool                GetOnlineSpell() const { return mbOnlineSpell; }
     SAL_DLLPRIVATE void                StopOnlineSpelling();
     SAL_DLLPRIVATE void                StartOnlineSpelling(bool bForceSpelling=true);
-
-    SAL_DLLPRIVATE void                ImpOnlineSpellCallback(SpellCallbackInfo const * pInfo, SdrObject* pObj, SdrOutliner const * pOutl);
 
     SAL_DLLPRIVATE void                InsertObject(SdrObject* pObj);
     SAL_DLLPRIVATE void                RemoveObject(SdrObject* pObj);
@@ -1071,6 +1205,17 @@ public:
      * @return A new layout name that is unique and based on the original name
      */
     static OUString GenerateNewLayoutName(std::u16string_view rOriginalName);
+
+    // True when no master page of rDoc carries the layout name rCandidate and no presentation
+    // style sheet is named after it.
+    static bool IsLayoutNameUnused(const SdDrawDocument& rDoc, std::u16string_view rCandidate);
+
+    // Gives back a layout name that neither document uses and that rAlsoTaken does not
+    // list, counting up from rWanted. Passing null for pOtherDoc asks about rDoc alone.
+    static OUString GetUnusedLayoutName(const SdDrawDocument& rDoc,
+                                        const SdDrawDocument* pOtherDoc,
+                                        const std::vector<OUString>& rAlsoTaken,
+                                        const OUString& rWanted);
 
     SAL_DLLPRIVATE sal_uInt16 GetAnnotationAuthorIndex( const OUString& rAuthor );
 

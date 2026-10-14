@@ -32,7 +32,8 @@
 #include <docsh.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class Test : public SwModelTestBase
 {
@@ -142,7 +143,7 @@ CPPUNIT_TEST_FIXTURE(DocmTest, testTdf108269)
 {
     createSwDoc("tdf108269.docm");
     saveAndReload(TestFilter::DOCM);
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
     // This failed: VBA streams were not roundtripped via the doc-level
     // grab-bag.
     CPPUNIT_ASSERT(xNameAccess->hasByName(u"word/vbaProject.bin"_ustr));
@@ -153,7 +154,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf125338)
 {
     createSwDoc("tdf125338.docm");
     save(TestFilter::DOCX);
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
     // docm files should not retain macros when saved as docx
     CPPUNIT_ASSERT(!xNameAccess->hasByName(u"word/vbaProject.bin"_ustr));
 }

@@ -68,6 +68,7 @@
 #include <rtl/ref.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // add mutex locking ???
 
@@ -91,7 +92,7 @@ DocumentHolder::DocumentHolder(
     m_nMacroExecMode( document::MacroExecMode::USE_CONFIG ),
     m_bLink( false )
 {
-    uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
     xDesktop->addTerminateListener( static_cast<frame::XTerminateListener*>(this) );
 }
 
@@ -117,19 +118,19 @@ void DocumentHolder::LoadDocInFrame( bool bPluginMode )
         cpo::uno::Sequence<beans::PropertyValue> aSeq( nLen );
         auto pSeq = aSeq.getArray();
         pSeq[0] = beans::PropertyValue(
-            "Model",
+            u"Model"_ustr,
             -1,
-            cpo::uno::Any(uno::Reference<uno::XInterface>(m_xDocument, uno::UNO_QUERY)),
+            cpo::uno::Any(uno::Reference<cpo::uno::XInterface>(m_xDocument, uno::UNO_QUERY)),
             beans::PropertyState_DIRECT_VALUE);
 
         pSeq[1] = beans::PropertyValue(
-            "ReadOnly",
+            u"ReadOnly"_ustr,
             -1,
             cpo::uno::Any(false),
             beans::PropertyState_DIRECT_VALUE);
 
         pSeq[2] = beans::PropertyValue(
-            "NoAutoSave",
+            u"NoAutoSave"_ustr,
             -1,
             cpo::uno::Any(true),
             beans::PropertyState_DIRECT_VALUE);
@@ -137,27 +138,27 @@ void DocumentHolder::LoadDocInFrame( bool bPluginMode )
         if ( bPluginMode )
         {
             pSeq[3] = beans::PropertyValue(
-                "PluginMode",
+                u"PluginMode"_ustr,
                 -1,
                 cpo::uno::Any(sal_Int16(3)),
                 beans::PropertyState_DIRECT_VALUE);
         }
 
         pSeq[nLen-2] = beans::PropertyValue(
-            "InteractionHandler",
+            u"InteractionHandler"_ustr,
             -1,
             cpo::uno::Any(xHandler),
             beans::PropertyState_DIRECT_VALUE);
 
         pSeq[nLen-1] = beans::PropertyValue(
-            "MacroExecutionMode",
+            u"MacroExecutionMode"_ustr,
             -1,
             cpo::uno::Any(m_nMacroExecMode),
             beans::PropertyState_DIRECT_VALUE);
 
         xComponentLoader->loadComponentFromURL(
-            "private:object",
-            "_self",
+            u"private:object"_ustr,
+            u"_self"_ustr,
             0,
             aSeq);
 
@@ -262,7 +263,7 @@ HRESULT DocumentHolder::InPlaceActivate(
             HWND                          hWndxWinParent(nullptr);
             uno::Reference<awt::XWindow>  xWin;
 
-            uno::Reference<awt::XToolkit2> xToolkit =
+            uno::Reference<awt::XToolkit> xToolkit =
                 awt::Toolkit::create(comphelper::getComponentContext(m_xFactory));
 
             // create system window wrapper for hwnd
@@ -351,14 +352,14 @@ HRESULT DocumentHolder::InPlaceActivate(
             // load the model into the frame
             LoadDocInFrame( true );
 
-            uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
+            uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
             xDesktop->getFrames()->append(m_xFrame);
 
             // determine the menuhandle to get menuitems.
             if(m_xLayoutManager.is()) {
                 uno::Reference< css::ui::XUIElement > xUIEl(
                     m_xLayoutManager->getElement(
-                        "private:resource/menubar/menubar"));
+                        u"private:resource/menubar/menubar"_ustr));
                 OSL_ENSURE(xUIEl.is(),"no menubar");
                 uno::Reference<awt::XSystemDependentMenuPeer> xSDMP(
                     xUIEl->getRealInterface(),
@@ -369,7 +370,7 @@ HRESULT DocumentHolder::InPlaceActivate(
                 if( aAny >>= tmp )
                     m_nMenuHandle = reinterpret_cast<HMENU>(tmp);
                 m_xLayoutManager->hideElement(
-                    "private:resource/menubar/menubar" );
+                    u"private:resource/menubar/menubar"_ustr );
             }
         }
 
@@ -596,7 +597,7 @@ BOOL DocumentHolder::Undo()
 
 void DocumentHolder::FreeOffice()
 {
-    uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
     xDesktop->removeTerminateListener(
         static_cast<frame::XTerminateListener*>(this) );
 }
@@ -701,7 +702,7 @@ void DocumentHolder::SetDocument( const uno::Reference< frame::XModel >& xDoc, b
     if ( m_xDocument.is() && !m_bLink )
     {
         // set the document mode to embedded
-        cpo::uno::Sequence< beans::PropertyValue > aSeq{ comphelper::makePropertyValue("SetEmbedded",
+        cpo::uno::Sequence< beans::PropertyValue > aSeq{ comphelper::makePropertyValue(u"SetEmbedded"_ustr,
                                                                                   true) };
         m_xDocument->attachResource(OUString(),aSeq);
     }
@@ -751,12 +752,12 @@ uno::Reference< frame::XFrame2 > DocumentHolder::DocumentFrame()
 {
     if(! m_xFrame.is() )
     {
-        uno::Reference<frame::XDesktop2> xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
+        uno::Reference<frame::XDesktop> xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
 
         // the frame will be registered on desktop here, later when the document
         // is loaded into the frame in ::show() method the terminate listener will be removed
         // this is so only for outplace activation
-        m_xFrame.set( xDesktop->findFrame( "_blank", 0 ), uno::UNO_QUERY );
+        m_xFrame.set( xDesktop->findFrame( u"_blank"_ustr, 0 ), uno::UNO_QUERY );
 
         uno::Reference< util::XCloseBroadcaster > xBroadcaster(
             m_xFrame, uno::UNO_QUERY );
@@ -828,7 +829,7 @@ void DocumentHolder::show()
             uno::Reference< beans::XPropertySet > xLMProps( m_xFrame->getLayoutManager(), uno::UNO_QUERY );
             if ( xLMProps.is() )
             {
-                xLMProps->setPropertyValue("MenuBarCloser",
+                xLMProps->setPropertyValue(u"MenuBarCloser"_ustr,
                                             cpo::uno::Any( uno::Reference< frame::XStatusListener >() ) );
             }
 
@@ -931,7 +932,7 @@ void DocumentHolder::setTitle(const OUString& aDocumentName)
             if(aFilterName.getLength())
             {
                 uno::Reference<container::XNameAccess> xNameAccess(
-                    m_xFactory->createInstance("com.sun.star.document.FilterFactory"),
+                    m_xFactory->createInstance(u"com.sun.star.document.FilterFactory"_ustr),
                     uno::UNO_QUERY);
                 try {
                     if(xNameAccess.is() &&
@@ -999,7 +1000,7 @@ IDispatch* DocumentHolder::GetIDispatch()
     if ( !m_pIDispatch && m_xDocument.is() )
     {
         uno::Reference< bridge::XBridgeSupplier2 > xSupplier(
-            m_xFactory->createInstance( "com.sun.star.bridge.OleBridgeSupplier2" ), uno::UNO_QUERY );
+            m_xFactory->createInstance( u"com.sun.star.bridge.OleBridgeSupplier2"_ustr ), uno::UNO_QUERY );
 
         if ( xSupplier.is() )
         {
@@ -1181,14 +1182,14 @@ HRESULT DocumentHolder::SetObjectRects(LPCRECT aRect, LPCRECT aClip)
 }
 
 
-css::uno::Reference< css::awt::XWindow> DocumentHolder::getContainerWindow()
+cpo::uno::Reference< css::awt::XWindow> DocumentHolder::getContainerWindow()
 {
     if(m_xContainerWindow.is())
         return m_xContainerWindow;
 
     uno::Reference<awt::XWindow> xWin;
 
-    uno::Reference<awt::XToolkit2> xToolkit = awt::Toolkit::create( comphelper::getComponentContext(m_xFactory) );
+    uno::Reference<awt::XToolkit> xToolkit = awt::Toolkit::create( comphelper::getComponentContext(m_xFactory) );
 
     if(m_pIOleIPFrame) {
         HWND hWnd;

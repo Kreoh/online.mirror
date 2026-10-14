@@ -69,6 +69,7 @@
 #include "ndsect.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
     class SwIntrnlSectRefLink : public SwBaseLink
@@ -1330,7 +1331,7 @@ static void lcl_UpdateLinksInSect( const SwBaseLink& rUpdLnk, SwSectionNode& rSe
                 if ( pSrcDoc != &rDoc &&
                      rSection.IsProtectFlag() )
                 {
-                    pSrcDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks( false, nullptr, u""_ustr );
+                    pSrcDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks( false, u""_ustr );
                 }
 
                 if( oCpyRg )

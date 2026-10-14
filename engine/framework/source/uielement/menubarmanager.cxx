@@ -28,7 +28,7 @@
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cpo/uno/XCurrentContext.hpp>
 #include <com/sun/star/frame/XPopupMenuController.hpp>
 #include <com/sun/star/frame/thePopupMenuControllerFactory.hpp>
@@ -65,7 +65,7 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::beans;
@@ -525,7 +525,7 @@ class QuietInteractionContext:
 {
 public:
     explicit QuietInteractionContext(
-        css::uno::Reference< cpo::uno::XCurrentContext > context):
+        cpo::uno::Reference< cpo::uno::XCurrentContext > context):
         context_(std::move(context)) {}
     QuietInteractionContext(const QuietInteractionContext&) = delete;
     QuietInteractionContext& operator=(const QuietInteractionContext&) = delete;
@@ -541,7 +541,7 @@ private:
             : cpo::uno::Any();
     }
 
-    css::uno::Reference< cpo::uno::XCurrentContext >
+    cpo::uno::Reference< cpo::uno::XCurrentContext >
         context_;
 };
 
@@ -897,7 +897,7 @@ OUString MenuBarManager::RetrieveLabelFromCommand(const OUString& rCmdURL)
 }
 
 bool MenuBarManager::CreatePopupMenuController( MenuItemHandler* pMenuItemHandler,
-                                                const css::uno::Reference< css::frame::XDispatchProvider >& rDispatchProvider,
+                                                const cpo::uno::Reference< css::frame::XDispatchProvider >& rDispatchProvider,
                                                 const OUString& rModuleIdentifier )
 {
     OUString aItemCommand( pMenuItemHandler->aMenuItemURL );
@@ -980,7 +980,8 @@ void MenuBarManager::FillMenuManager( Menu* pMenu, const Reference< XFrame >& rF
     m_aMenuItemHandlerVector.reserve(nItemCount);
     for ( sal_uInt16 i = 0; i < nItemCount; i++ )
     {
-        sal_uInt16 nItemId = FillItemCommand(aItemCommand,pMenu, i );
+        sal_uInt16 nItemId = pMenu->GetItemId( i );
+        aItemCommand = pMenu->GetItemCommand( nItemId );
 
         if (( pMenu->IsMenuBar() || bAccessibilityEnabled ) &&
             ( pMenu->GetItemText( nItemId ).isEmpty() ))
@@ -1185,7 +1186,7 @@ void MenuBarManager::RetrieveShortcuts( std::vector< std::unique_ptr<MenuItemHan
             xGlobalAccelCfg = GlobalAcceleratorConfiguration::create( m_xContext );
             m_xGlobalAcceleratorManager = xGlobalAccelCfg;
         }
-        catch ( const css::uno::DeploymentException& )
+        catch ( const cpo::uno::DeploymentException& )
         {
             SAL_WARN("fwk.uielement", "GlobalAcceleratorConfiguration"
                     " not available. This should happen only on mobile platforms.");
@@ -1555,20 +1556,6 @@ void MenuBarManager::AddMenu(MenuBarManager* pSubMenuManager,const OUString& _sI
                                                 Reference<XDispatch>() ));
     pMenuItemHandler->aMenuItemURL = _sItemCommand;
     m_aMenuItemHandlerVector.push_back( std::move(pMenuItemHandler) );
-}
-
-// static
-sal_uInt16 MenuBarManager::FillItemCommand(OUString& _rItemCommand, Menu* _pMenu,sal_uInt16 _nIndex)
-{
-    sal_uInt16 nItemId = _pMenu->GetItemId( _nIndex );
-
-    _rItemCommand = _pMenu->GetItemCommand( nItemId );
-    if ( _rItemCommand.isEmpty() )
-    {
-        _rItemCommand = "slot:" + OUString::number( nItemId );
-        _pMenu->SetItemCommand( nItemId, _rItemCommand );
-    }
-    return nItemId;
 }
 
 void MenuBarManager::SetHdl()

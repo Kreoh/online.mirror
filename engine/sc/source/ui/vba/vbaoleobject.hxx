@@ -30,28 +30,28 @@ class ScVbaOLEObject final : public OLEObjectImpl_BASE
 {
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
-    css::uno::Reference< ov::msforms::XControl> m_xControl;
+    cpo::uno::Reference< ov::msforms::XControl> m_xControl;
 public:
-    ScVbaOLEObject( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext,
-            css::uno::Reference< css::drawing::XControlShape > const & xControlShape );
+    ScVbaOLEObject( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+            cpo::uno::Reference< css::drawing::XControlShape > const & xControlShape );
 
     // XOLEObject Attributes
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getObject() override;
-    virtual bool SAL_CALL getEnabled() override;
-    virtual void SAL_CALL setEnabled( bool _enabled ) override;
-    virtual bool SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( bool _visible ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getObject() override;
+    virtual bool getEnabled() override;
+    virtual void setEnabled( bool _enabled ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
 
-    virtual double SAL_CALL getLeft() override;
-    virtual void SAL_CALL setLeft( double _left ) override;
-    virtual double SAL_CALL getTop() override;
-    virtual void SAL_CALL setTop( double _top ) override;
-    virtual double SAL_CALL getHeight() override;
-    virtual void SAL_CALL setHeight( double _height ) override;
-    virtual double SAL_CALL getWidth() override;
-    virtual void SAL_CALL setWidth( double _width ) override;
-    virtual OUString SAL_CALL getLinkedCell() override;
-    virtual void SAL_CALL setLinkedCell( const OUString& _linkedcell ) override;
+    virtual double getLeft() override;
+    virtual void setLeft( double _left ) override;
+    virtual double getTop() override;
+    virtual void setTop( double _top ) override;
+    virtual double getHeight() override;
+    virtual void setHeight( double _height ) override;
+    virtual double getWidth() override;
+    virtual void setWidth( double _width ) override;
+    virtual OUString getLinkedCell() override;
+    virtual void setLinkedCell( const OUString& _linkedcell ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

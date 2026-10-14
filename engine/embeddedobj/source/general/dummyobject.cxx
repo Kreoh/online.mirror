@@ -36,6 +36,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 void ODummyEmbeddedObject::CheckInit_WrongState()
@@ -54,7 +55,7 @@ void ODummyEmbeddedObject::CheckInit_Runtime()
         throw lang::DisposedException();
 
     if ( m_nObjectState == -1 )
-        throw uno::RuntimeException( u"The object has no persistence!"_ustr,
+        throw cpo::uno::RuntimeException( u"The object has no persistence!"_ustr,
                                      static_cast< ::cppu::OWeakObject* >(this) );
 }
 void ODummyEmbeddedObject::PostEvent_Impl( const OUString& aEventName )
@@ -80,7 +81,7 @@ void ODummyEmbeddedObject::PostEvent_Impl( const OUString& aEventName )
         {
             static_cast<document::XEventListener *>(aIt.next())->notifyEvent( aEvent );
         }
-        catch( const uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
             aIt.remove();
         }
@@ -369,7 +370,7 @@ void ODummyEmbeddedObject::saveCompleted( bool bUseNew )
 
     OSL_ENSURE( m_xNewParentStorage.is() , "Internal object information is broken!" );
     if ( !m_xNewParentStorage.is() )
-        throw uno::RuntimeException(); // TODO: broken internal information
+        throw cpo::uno::RuntimeException(); // TODO: broken internal information
 
     if ( bUseNew )
     {
@@ -528,7 +529,7 @@ void ODummyEmbeddedObject::close( bool bDeliverOwnership )
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
-    uno::Reference< uno::XInterface > xSelfHold( static_cast< ::cppu::OWeakObject* >( this ) );
+    uno::Reference< cpo::uno::XInterface > xSelfHold( static_cast< ::cppu::OWeakObject* >( this ) );
     lang::EventObject aSource( static_cast< ::cppu::OWeakObject* >( this ) );
 
     if ( m_pInterfaceContainer )
@@ -544,7 +545,7 @@ void ODummyEmbeddedObject::close( bool bDeliverOwnership )
                 {
                     static_cast<util::XCloseListener*>(pIterator.next())->queryClosing( aSource, bDeliverOwnership );
                 }
-                catch( const uno::RuntimeException& )
+                catch( const cpo::uno::RuntimeException& )
                 {
                     pIterator.remove();
                 }
@@ -562,7 +563,7 @@ void ODummyEmbeddedObject::close( bool bDeliverOwnership )
                 {
                     static_cast<util::XCloseListener*>(pCloseIterator.next())->notifyClosing( aSource );
                 }
-                catch( const uno::RuntimeException& )
+                catch( const cpo::uno::RuntimeException& )
                 {
                     pCloseIterator.remove();
                 }

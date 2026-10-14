@@ -40,7 +40,7 @@
 #include <com/sun/star/form/binding/XBindableValue.hpp>
 #include <com/sun/star/form/binding/XListEntrySink.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/script/XScriptListener.hpp>
 
 #include <svx/fmtools.hxx>
@@ -57,7 +57,7 @@
 #include <cppuhelper/implbase.hxx>
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::beans;
@@ -75,7 +75,7 @@ using namespace ::dbtools;
 class ScriptEventListenerWrapper : public cppu::WeakImplHelper< XScriptListener >
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScriptEventListenerWrapper( FmFormModel& _rModel)
         :m_rModel( _rModel )
         ,m_attemptedListenerCreation( false )
@@ -83,10 +83,10 @@ public:
 
     }
     // XEventListener
-    virtual void SAL_CALL disposing(const EventObject& ) override {}
+    virtual void disposing(const EventObject& ) override {}
 
     // XScriptListener
-    virtual void SAL_CALL firing(const  ScriptEvent& evt) override
+    virtual void firing(const  ScriptEvent& evt) override
     {
         attemptListenerCreation();
         if ( m_vbaListener.is() )
@@ -95,7 +95,7 @@ public:
         }
     }
 
-    virtual Any SAL_CALL approveFiring(const ScriptEvent& evt) override
+    virtual Any approveFiring(const ScriptEvent& evt) override
     {
         attemptListenerCreation();
         if ( m_vbaListener.is() )
@@ -114,7 +114,7 @@ private:
 
         try
         {
-            const css::uno::Reference<css::uno::XComponentContext>& context(
+            const cpo::uno::Reference<cpo::uno::XComponentContext>& context(
                 comphelper::getProcessComponentContext());
             Reference< XScriptListener > const xScriptListener(
                 context->getServiceManager()->createInstanceWithContext(
@@ -502,7 +502,7 @@ void FmXUndoEnvironment::Removed(FmFormObj* pObj)
 
 //  XEventListener
 
-void SAL_CALL FmXUndoEnvironment::disposing(const EventObject& e)
+void FmXUndoEnvironment::disposing(const EventObject& e)
 {
     // check if it's an object we have cached information about
     if (m_pPropertySetCache)
@@ -519,7 +519,7 @@ void SAL_CALL FmXUndoEnvironment::disposing(const EventObject& e)
 
 // XPropertyChangeListener
 
-void SAL_CALL FmXUndoEnvironment::propertyChange(const PropertyChangeEvent& evt)
+void FmXUndoEnvironment::propertyChange(const PropertyChangeEvent& evt)
 {
     ::osl::ClearableMutexGuard aGuard( m_aMutex );
 
@@ -712,7 +712,7 @@ void SAL_CALL FmXUndoEnvironment::propertyChange(const PropertyChangeEvent& evt)
 
 // XContainerListener
 
-void SAL_CALL FmXUndoEnvironment::elementInserted(const ContainerEvent& evt)
+void FmXUndoEnvironment::elementInserted(const ContainerEvent& evt)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( m_aMutex );
@@ -736,7 +736,7 @@ void FmXUndoEnvironment::implSetModified()
 }
 
 
-void SAL_CALL FmXUndoEnvironment::elementReplaced(const ContainerEvent& evt)
+void FmXUndoEnvironment::elementReplaced(const ContainerEvent& evt)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( m_aMutex );
@@ -753,7 +753,7 @@ void SAL_CALL FmXUndoEnvironment::elementReplaced(const ContainerEvent& evt)
 }
 
 
-void SAL_CALL FmXUndoEnvironment::elementRemoved(const ContainerEvent& evt)
+void FmXUndoEnvironment::elementRemoved(const ContainerEvent& evt)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( m_aMutex );
@@ -766,7 +766,7 @@ void SAL_CALL FmXUndoEnvironment::elementRemoved(const ContainerEvent& evt)
 }
 
 
-void SAL_CALL FmXUndoEnvironment::modified( const EventObject& /*aEvent*/ )
+void FmXUndoEnvironment::modified( const EventObject& /*aEvent*/ )
 {
     implSetModified();
 }
@@ -1196,7 +1196,7 @@ FmUndoModelReplaceAction::~FmUndoModelReplaceAction()
 }
 
 
-void FmUndoModelReplaceAction::DisposeElement( const css::uno::Reference< css::awt::XControlModel>& xReplaced )
+void FmUndoModelReplaceAction::DisposeElement( const cpo::uno::Reference< css::awt::XControlModel>& xReplaced )
 {
     Reference< XComponent >  xComp(xReplaced, UNO_QUERY);
     if (xComp.is())
@@ -1218,7 +1218,7 @@ void FmUndoModelReplaceAction::Undo()
         Reference< XChild > xCurrentAsChild( xCurrentModel, UNO_QUERY );
         Reference< XNameContainer > xCurrentsParent;
         if ( xCurrentAsChild.is() )
-            xCurrentsParent.set(xCurrentAsChild->getParent(), css::uno::UNO_QUERY);
+            xCurrentsParent.set(xCurrentAsChild->getParent(), cpo::uno::UNO_QUERY);
         DBG_ASSERT( xCurrentsParent.is(), "FmUndoModelReplaceAction::Undo: invalid current model!" );
 
         if ( xCurrentsParent.is() )

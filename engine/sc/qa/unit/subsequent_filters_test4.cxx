@@ -10,6 +10,7 @@
 #include <config_fonts.h>
 
 #include <svx/svdpage.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <svx/svdocapt.hxx>
 #include <svx/svdoole2.hxx>
 #include <editeng/eeitem.hxx>
@@ -62,7 +63,8 @@
 #include "helper/qahelper.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /* Implementation of Filters test */
 

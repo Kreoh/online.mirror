@@ -20,9 +20,10 @@
 #pragma once
 
 #include <vector>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/media/XPlayerListener.hpp>
 #include <comphelper/compbase.hxx>
+#include <tools/gen.hxx>
 #include <vcl/vclptr.hxx>
 #include <avmedia/avmediadllapi.h>
 
@@ -59,21 +60,21 @@ namespace avmedia
     class AVMEDIA_DLLPUBLIC PlayerListener final : public PlayerListener_BASE
     {
     private:
-        css::uno::Reference<css::media::XPlayerNotifier> m_xNotifier;
-        std::function<void(const css::uno::Reference<css::media::XPlayer>&)> m_aFn;
+        cpo::uno::Reference<css::media::XPlayerNotifier> m_xNotifier;
+        std::function<void(const cpo::uno::Reference<css::media::XPlayer>&)> m_aFn;
 
         using WeakComponentImplHelperBase::disposing;
     public:
-        PlayerListener(std::function<void(const css::uno::Reference<css::media::XPlayer>&)> fn);
+        PlayerListener(std::function<void(const cpo::uno::Reference<css::media::XPlayer>&)> fn);
         virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
         virtual ~PlayerListener() override;
 
         virtual void preferredPlayerWindowSizeAvailable(const css::lang::EventObject& rSource) override;
         virtual void disposing(const css::lang::EventObject& rSource) override;
 
-        void startListening(const css::uno::Reference<css::media::XPlayerNotifier>& rNotifier);
+        void startListening(const cpo::uno::Reference<css::media::XPlayerNotifier>& rNotifier);
 
-        void callPlayerWindowSizeAvailable(const css::uno::Reference<css::media::XPlayer>& rPlayer) { m_aFn(rPlayer); }
+        void callPlayerWindowSizeAvailable(const cpo::uno::Reference<css::media::XPlayer>& rPlayer) { m_aFn(rPlayer); }
     private:
         void stopListening(std::unique_lock<std::mutex>& rGuard);
     };
@@ -131,16 +132,26 @@ namespace avmedia
         static bool         isMediaURL(std::u16string_view rURL, const OUString& rReferer, bool bDeep = false,
                                        const rtl::Reference<PlayerListener>& xPreferredPixelSizeListener = nullptr);
 
-        static css::uno::Reference< css::media::XPlayer > createPlayer( const OUString& rURL, const OUString& rReferer, const OUString* pMimeType = nullptr );
+        static cpo::uno::Reference< css::media::XPlayer > createPlayer( const OUString& rURL, const OUString& rReferer, const OUString* pMimeType = nullptr );
 
-        static css::uno::Reference<css::graphic::XGraphic>
-        grabFrame(const css::uno::Reference<css::media::XPlayer>& rPlayer,
-                  const css::uno::Reference<css::graphic::XGraphic>& rGraphic = nullptr);
+        static cpo::uno::Reference<css::graphic::XGraphic>
+        grabFrame(const cpo::uno::Reference<css::media::XPlayer>& rPlayer,
+                  const cpo::uno::Reference<css::graphic::XGraphic>& rGraphic = nullptr);
 
-        static css::uno::Reference< css::graphic::XGraphic > grabFrame(const OUString& rURL, const OUString& rReferer,
+        static cpo::uno::Reference< css::graphic::XGraphic > grabFrame(const OUString& rURL, const OUString& rReferer,
             const OUString& sMimeType, const rtl::Reference<PlayerListener>& xPreferredPixelSizeListener);
 
-        static void dispatchInsertAVMedia(const css::uno::Reference<css::frame::XDispatchProvider>&,
+        /** The display size in pixels of the first video track of a local MP4, QuickTime,
+            Matroska or WebM file, read from the container headers. Empty when the URL is not a
+            local file in one of these formats, the file has no video track, or the headers are
+            broken. */
+        static Size readVideoSize(std::u16string_view rURL);
+
+        /** rSize scaled down to fit inside rBounds, keeping its shape. rSize itself when it
+            already fits or when rBounds is empty. */
+        static Size shrinkToFit(const Size& rSize, const Size& rBounds);
+
+        static void dispatchInsertAVMedia(const cpo::uno::Reference<css::frame::XDispatchProvider>&,
                                           const css::awt::Size& rSize, const OUString& rURL, bool bLink);
 
     private:

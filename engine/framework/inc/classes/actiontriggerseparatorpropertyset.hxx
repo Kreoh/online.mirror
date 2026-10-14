@@ -73,14 +73,14 @@ class ActionTriggerSeparatorPropertySet final : private cppu::BaseMutex,
 
         virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
 
         static cpo::uno::Sequence< css::beans::Property > impl_getStaticPropertyDescriptor();
 
         //  helper
 
         /// @throws css::lang::IllegalArgumentException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         static bool impl_tryToChangeProperty(  sal_Int16                           aCurrentValue   ,
                                             const   cpo::uno::Any&   aNewValue       ,
                                             cpo::uno::Any&           aOldValue       ,

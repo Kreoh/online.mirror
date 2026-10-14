@@ -27,8 +27,8 @@
 #include <rtl/ref.hxx>
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::XInterface;
+using ::cpo::uno::Reference;
+using ::cpo::uno::XInterface;
 using ::com::sun::star::task::InteractionClassification_QUERY;
 using ::com::sun::star::task::XInteractionHandler;
 using ::com::sun::star::ucb::InteractiveAppException;

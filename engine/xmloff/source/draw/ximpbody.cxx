@@ -40,18 +40,21 @@
 #include "layerimp.hxx"
 #include <animationimport.hxx>
 #include <sal/log.hxx>
+#include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 SdXMLDrawPageContext::SdXMLDrawPageContext( SdXMLImport& rImport,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
     uno::Reference< drawing::XShapes > const & rShapes)
 :   SdXMLGenericPageContext( rImport, xAttrList, rShapes )
 ,   mbHadSMILNodes( false )
 {
     bool bHaveXmlId( false );
-    OUString sXmlId, sStyleName, sContextName, sMasterPageName, sHREF;
+    OUString sXmlId, sStyleName, sContextName, sMasterPageName, sHREF, sSourceModifiedTime,
+        sSourcePageGuid;
 
     for (auto &aIter : sax_fastparser::castToFastAttributeList( xAttrList ))
     {
@@ -117,12 +120,22 @@ SdXMLDrawPageContext::SdXMLDrawPageContext( SdXMLImport& rImport,
                 sHREF = sValue;
                 break;
             }
+            case XML_ELEMENT(CO_EXT, XML_SOURCE_MODIFIED_TIME):
+            {
+                sSourceModifiedTime = sValue;
+                break;
+            }
+            case XML_ELEMENT(CO_EXT, XML_SOURCE_PAGE_GUID):
+            {
+                sSourcePageGuid = sValue;
+                break;
+            }
         }
     }
 
     if (!sXmlId.isEmpty())
     {
-        uno::Reference< uno::XInterface > const xRef( rShapes );
+        uno::Reference< cpo::uno::XInterface > const xRef( rShapes );
         GetImport().getInterfaceToIdentifierMapper().registerReference(
             sXmlId, xRef );
     }
@@ -221,6 +234,34 @@ SdXMLDrawPageContext::SdXMLDrawPageContext( SdXMLImport& rImport,
             }
 
             xProps->setPropertyValue(u"BookmarkURL"_ustr, cpo::uno::Any( sHREF ) );
+
+            if( !sSourceModifiedTime.isEmpty() )
+            {
+                try
+                {
+                    xProps->setPropertyValue(u"SourceModifiedTime"_ustr,
+                                             cpo::uno::Any( sSourceModifiedTime ) );
+                }
+                catch( const cpo::uno::Exception& )
+                {
+                    TOOLS_WARN_EXCEPTION("xmloff.draw",
+                                         "while importing the source modified time of the page");
+                }
+            }
+
+            if( !sSourcePageGuid.isEmpty() )
+            {
+                try
+                {
+                    xProps->setPropertyValue(u"SourcePageGuid"_ustr,
+                                             cpo::uno::Any( sSourcePageGuid ) );
+                }
+                catch( const cpo::uno::Exception& )
+                {
+                    TOOLS_WARN_EXCEPTION("xmloff.draw",
+                                         "while importing the source slide identifier of the page");
+                }
+            }
         }
     }
 
@@ -233,8 +274,8 @@ SdXMLDrawPageContext::~SdXMLDrawPageContext()
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler >  SdXMLDrawPageContext::createFastChildContext(sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList)
+cpo::uno::Reference< css::xml::sax::XFastContextHandler >  SdXMLDrawPageContext::createFastChildContext(sal_Int32 nElement,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList)
 {
     // some special objects inside draw:page context
     switch(nElement)
@@ -311,7 +352,7 @@ class SdXMLSectionContext : public SvXMLImportContext
 
 public:
     SdXMLSectionContext(SvXMLImport& rImport,
-                        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList)
+                        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList)
         : SvXMLImportContext(rImport)
     {
         for (auto& aIter : sax_fastparser::castToFastAttributeList(xAttrList))
@@ -323,9 +364,9 @@ public:
         }
     }
 
-    css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override
     {
         if (nElement == XML_ELEMENT(LO_EXT, XML_SECTION_SLIDE))
         {
@@ -354,9 +395,9 @@ public:
     {
     }
 
-    css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override
     {
         if (nElement == XML_ELEMENT(LO_EXT, XML_SECTION))
         {
@@ -367,7 +408,7 @@ public:
         return nullptr;
     }
 
-    void SAL_CALL endFastElement(sal_Int32) override
+    void endFastElement(sal_Int32) override
     {
         if (maSections.empty())
             return;
@@ -419,9 +460,9 @@ SdXMLBodyContext::~SdXMLBodyContext()
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLBodyContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLBodyContext::createFastChildContext(
      sal_Int32 nElement,
-     const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+     const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     switch (nElement)
     {

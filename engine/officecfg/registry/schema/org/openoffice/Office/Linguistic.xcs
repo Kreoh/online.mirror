@@ -413,6 +413,609 @@
             </info>
           </prop>
       </group>
+      <group oor:name="SentenceChecking">
+        <info>
+          <desc>Per-language options for the built-in sentence checker. One
+          group per rule package, holding one flag per rule category. The
+          node and property names are generated from the rule package by
+          lingucomponent/source/spellcheck/lightproof/tools/lpcompile.py
+          --emit-schema.</desc>
+        </info>
+        <group oor:name="en">
+          <info>
+            <desc>Sentence checking options for the en rules.</desc>
+          </info>
+          <prop oor:name="grammar" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Possible mistakes</desc>
+              <label>Possible mistakes</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="cap" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Capitalization</desc>
+              <label>Capitalization</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="dup" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word duplication</desc>
+              <label>Word duplication</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="pair" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Parentheses</desc>
+              <label>Parentheses</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="spaces" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word spacing</desc>
+              <label>Word spacing</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="mdash" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Em dash</desc>
+              <label>Em dash</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="quotation" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Quotation marks</desc>
+              <label>Quotation marks</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="times" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Multiplication sign</desc>
+              <label>Multiplication sign</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="spaces2" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Sentence spacing</desc>
+              <label>Sentence spacing</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="ndash" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>En dash</desc>
+              <label>En dash</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="apostrophe" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Apostrophe</desc>
+              <label>Apostrophe</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="ellipsis" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Ellipsis</desc>
+              <label>Ellipsis</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="spaces3" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>More spaces</desc>
+              <label>More spaces</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="minus" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Minus sign</desc>
+              <label>Minus sign</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="metric" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Convert to metric (°C, km/h, m, kg, l)</desc>
+              <label>Convert to metric (°C, km/h, m, kg, l)</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="numsep" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Thousand separation of large numbers</desc>
+              <label>Thousand separation of large numbers</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="nonmetric" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Convert to non-metric (°F, mph, ft, lb, gal)</desc>
+              <label>Convert to non-metric (°F, mph, ft, lb, gal)</label>
+            </info>
+            <value>false</value>
+          </prop>
+        </group>
+        <group oor:name="hu_HU">
+          <info>
+            <desc>Sentence checking options for the hu_HU rules.</desc>
+          </info>
+          <prop oor:name="cap" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Capitalization</desc>
+              <label>Capitalization</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="par" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Parentheses</desc>
+              <label>Parentheses</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="quot" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Quotation marks</desc>
+              <label>Quotation marks</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="wordpart" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word parts of compounds</desc>
+              <label>Word parts of compounds</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="dash" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>En dash</desc>
+              <label>En dash</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="comma" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Comma usage</desc>
+              <label>Comma usage</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="numpart" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Thousand separation of numbers</desc>
+              <label>Thousand separation of numbers</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="grammar" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Possible mistakes</desc>
+              <label>Possible mistakes</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="style" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Style checking</desc>
+              <label>Style checking</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="dup0" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word duplication</desc>
+              <label>Word duplication</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="compound" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Underline typo-like compound words</desc>
+              <label>Underline typo-like compound words</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="dup" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Duplication within clauses</desc>
+              <label>Duplication within clauses</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="allcompound" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Underline all generated compound words</desc>
+              <label>Underline all generated compound words</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="dup2" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Duplication within sentences</desc>
+              <label>Duplication within sentences</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="money" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Consistency of money amounts</desc>
+              <label>Consistency of money amounts</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="dup3" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Allow previous checkings with affixes</desc>
+              <label>Allow previous checkings with affixes</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="SI" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Measurements</desc>
+              <label>Measurements</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="hyphen" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Hyphenation of ambiguous words</desc>
+              <label>Hyphenation of ambiguous words</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="apost" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Apostrophe</desc>
+              <label>Apostrophe</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="spaces" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Double spaces</desc>
+              <label>Double spaces</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="frac" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Fractions</desc>
+              <label>Fractions</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="ligature" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Ligature suggestion</desc>
+              <label>Ligature suggestion</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="elli" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Ellipsis</desc>
+              <label>Ellipsis</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="spaces2" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>More spaces</desc>
+              <label>More spaces</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="thin" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Thin space</desc>
+              <label>Thin space</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="noligature" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Underline ligatures</desc>
+              <label>Underline ligatures</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="idx" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Indices</desc>
+              <label>Indices</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="minus" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Minus</desc>
+              <label>Minus</label>
+            </info>
+            <value>false</value>
+          </prop>
+        </group>
+        <group oor:name="pt_BR">
+          <info>
+            <desc>Sentence checking options for the pt_BR rules.</desc>
+          </info>
+          <prop oor:name="grammar" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Grave accent</desc>
+              <label>Grave accent</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="cap" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Capitalization</desc>
+              <label>Capitalization</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="dup" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word duplication</desc>
+              <label>Word duplication</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="pair" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Parentheses</desc>
+              <label>Parentheses</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="spaces" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word spacing</desc>
+              <label>Word spacing</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="mdash" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Em-dash</desc>
+              <label>Em-dash</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="quotation" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Quotation marks</desc>
+              <label>Quotation marks</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="times" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Multiplication sign</desc>
+              <label>Multiplication sign</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="spaces2" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Sentence spacing</desc>
+              <label>Sentence spacing</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="ndash" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>En-dash</desc>
+              <label>En-dash</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="apostrophe" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Apostrophes</desc>
+              <label>Apostrophes</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="ellipsis" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Ellipsis</desc>
+              <label>Ellipsis</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="spaces3" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>More spaces</desc>
+              <label>More spaces</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="minus" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Minus sign</desc>
+              <label>Minus sign</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="metric" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Pleonasms</desc>
+              <label>Pleonasms</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="gerund" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Gerundisms</desc>
+              <label>Gerundisms</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="nonmetric" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Cacophonous sound</desc>
+              <label>Cacophonous sound</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="paronimo" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Paronyms</desc>
+              <label>Paronyms</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="composto" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Compound terms</desc>
+              <label>Compound terms</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="malmau" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>"Mal" or "Mau"</desc>
+              <label>"Mal" or "Mau"</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="aha" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>"Há" or "a"</desc>
+              <label>"Há" or "a"</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="meiameio" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>"Meia" or "meio"</desc>
+              <label>"Meia" or "meio"</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="verbo" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Verbal agreement</desc>
+              <label>Verbal agreement</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="pronominal" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Pronominal placement</desc>
+              <label>Pronominal placement</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="pronome" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Use of pronouns</desc>
+              <label>Use of pronouns</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="porque" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Use of "porquê"</desc>
+              <label>Use of "porquê"</label>
+            </info>
+            <value>true</value>
+          </prop>
+        </group>
+        <group oor:name="ru_RU">
+          <info>
+            <desc>Sentence checking options for the ru_RU rules.</desc>
+          </info>
+          <prop oor:name="hyphen" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Compound words with hyphen</desc>
+              <label>Compound words with hyphen</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="comma" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Comma usage</desc>
+              <label>Comma usage</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="multiword" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Multiword expressions</desc>
+              <label>Multiword expressions</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="together" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Together/separately</desc>
+              <label>Together/separately</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="common" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>General error</desc>
+              <label>General error</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="space" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Space mistake</desc>
+              <label>Space mistake</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="abbreviation" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Abbreviation</desc>
+              <label>Abbreviation</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="dup" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Word duplication</desc>
+              <label>Word duplication</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="numsep" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Separation of large numbers (ISO)</desc>
+              <label>Separation of large numbers (ISO)</label>
+            </info>
+            <value>false</value>
+          </prop>
+          <prop oor:name="typographica" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Typographical</desc>
+              <label>Typographical</label>
+            </info>
+            <value>true</value>
+          </prop>
+          <prop oor:name="quotation" oor:type="xs:boolean" oor:nillable="false">
+            <info>
+              <desc>Quotation</desc>
+              <label>Quotation</label>
+            </info>
+            <value>false</value>
+          </prop>
+        </group>
+      </group>
     </group>
     <group oor:name="Translation">
       <info>

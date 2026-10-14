@@ -135,12 +135,6 @@ sub run {
 
     installer::simplepackage::check_simple_packager_project($allvariableshashref);
 
-    ####################################################################
-    # setting global variables
-    ####################################################################
-
-    installer::control::set_addsystemintegration($allvariableshashref);
-
     ########################################################
     # Re-define logging dir, after all variables are set
     ########################################################
@@ -261,14 +255,6 @@ sub run {
 
     my $filesinproductarrayref = installer::setupscript::get_all_items_from_script($setupscriptref, "File");
 
-    if (( ! $installer::globals::isrpmbuild ) &&
-        ( ! $installer::globals::isdebbuild ) &&
-        ( ! $installer::globals::issolarispkgbuild ) &&
-        ( $installer::globals::packageformat ne "installed" ) &&
-        ( $installer::globals::packageformat ne "dmg" ) &&
-        ( $installer::globals::packageformat ne "archive" ))
-        { installer::control::check_oxtfiles($filesinproductarrayref); }
-
     if (! $installer::globals::languagepack)
     {
         $filesinproductarrayref = installer::scriptitems::remove_Languagepacklibraries_from_Installset($filesinproductarrayref);
@@ -278,15 +264,6 @@ sub run {
     {
         $filesinproductarrayref = installer::scriptitems::remove_Helppacklibraries_from_Installset($filesinproductarrayref);
     }
-
-    installer::logger::print_message( "... analyzing scpactions ... \n" );
-
-    my $scpactionsinproductarrayref = installer::setupscript::get_all_items_from_script($setupscriptref, "ScpAction");
-
-    if ( $installer::globals::languagepack ) { installer::scriptitems::use_langpack_copy_scpaction($scpactionsinproductarrayref); }
-    elsif ( $installer::globals::helppack ) { installer::scriptitems::use_langpack_copy_scpaction($scpactionsinproductarrayref); }
-
-    installer::scriptitems::change_keys_of_scpactions($scpactionsinproductarrayref);
 
     installer::logger::print_message( "... analyzing shortcuts ... \n" );
 
@@ -353,15 +330,11 @@ sub run {
 
         if ( $installer::globals::languagepack )
         {
-            $installer::globals::addsystemintegration = 0;
-            $installer::globals::addlicensefile = 0;
             $installer::globals::makedownload = 1;
         }
 
         if ( $installer::globals::helppack )
         {
-            $installer::globals::addsystemintegration = 0;
-            $installer::globals::addlicensefile = 0;
             $installer::globals::makedownload = 1;
             @setuplanguagesarray = grep { $_ ne "en-US" } @setuplanguagesarray;
             unshift(@setuplanguagesarray, "en-US");
@@ -511,20 +484,6 @@ sub run {
         my $directoriesforepmarrayref = installer::scriptitems::collect_directories_with_create_flag_from_directoryarray($dirsinproductlanguageresolvedarrayref, $alldirectoryhash);
 
         #########################################################
-        # language dependent scpactions part
-        #########################################################
-
-        my $scpactionsinproductlanguageresolvedarrayref = installer::scriptitems::resolving_all_languages_in_productlists($scpactionsinproductarrayref, $languagesarrayref);
-
-        installer::scriptitems::changing_name_of_language_dependent_keys($scpactionsinproductlanguageresolvedarrayref);
-
-        installer::scriptitems::get_Source_Directory_For_Files_From_Includepathlist($scpactionsinproductlanguageresolvedarrayref, $includepatharrayref_lang, $dirsinproductlanguageresolvedarrayref, "ScpActions", $allvariableshashref);
-
-        # Editing scpactions with flag SCPZIP_REPLACE.
-
-        installer::scpzipfiles::resolving_scpzip_replace_flag($scpactionsinproductlanguageresolvedarrayref, $allvariableshashref, "ScpAction", $languagestringref);
-
-        #########################################################
         # language dependent links part
         #########################################################
 
@@ -611,14 +570,13 @@ sub run {
 
         }
 
-        # Copy-only projects can now start to copy all items File and ScpAction
-        if ( $installer::globals::is_copy_only_project ) { installer::copyproject::copy_project($filesinproductlanguageresolvedarrayref, $scpactionsinproductlanguageresolvedarrayref, $loggingdir, $languagestringref, $shipinstalldir, $allsettingsarrayref); }
+        # Copy-only projects can now start to copy all File items
+        if ( $installer::globals::is_copy_only_project ) { installer::copyproject::copy_project($filesinproductlanguageresolvedarrayref, $loggingdir, $languagestringref, $shipinstalldir, $allsettingsarrayref); }
 
         # Language pack projects can now start to select the required information
         if ( $installer::globals::languagepack )
         {
             $filesinproductlanguageresolvedarrayref = installer::languagepack::select_language_items($filesinproductlanguageresolvedarrayref, $languagesarrayref, "File");
-            $scpactionsinproductlanguageresolvedarrayref = installer::languagepack::select_language_items($scpactionsinproductlanguageresolvedarrayref, $languagesarrayref, "ScpAction");
             $linksinproductlanguageresolvedarrayref = installer::languagepack::select_language_items($linksinproductlanguageresolvedarrayref, $languagesarrayref, "Shortcut");
             $unixlinksinproductlanguageresolvedarrayref = installer::languagepack::select_language_items($unixlinksinproductlanguageresolvedarrayref, $languagesarrayref, "Unixlink");
             @{$folderitemsinproductlanguageresolvedarrayref} = (); # no folderitems in languagepacks
@@ -634,7 +592,6 @@ sub run {
         if ( $installer::globals::helppack )
         {
             $filesinproductlanguageresolvedarrayref = installer::helppack::select_help_items($filesinproductlanguageresolvedarrayref, $languagesarrayref, "File");
-            $scpactionsinproductlanguageresolvedarrayref = installer::helppack::select_help_items($scpactionsinproductlanguageresolvedarrayref, $languagesarrayref, "ScpAction");
             $linksinproductlanguageresolvedarrayref = installer::helppack::select_help_items($linksinproductlanguageresolvedarrayref, $languagesarrayref, "Shortcut");
             $unixlinksinproductlanguageresolvedarrayref = installer::helppack::select_help_items($unixlinksinproductlanguageresolvedarrayref, $languagesarrayref, "Unixlink");
             @{$folderitemsinproductlanguageresolvedarrayref} = (); # no folderitems in helppacks
@@ -646,22 +603,15 @@ sub run {
 
         }
 
-        #########################################################
-        # Collecting all scp actions
-        #########################################################
-
-        installer::worker::collect_scpactions($scpactionsinproductlanguageresolvedarrayref);
-
         ###########################################################
         # Simple package projects can now start to create the
         # installation structure by creating Directories, Files
-        # Links and ScpActions. This is the last platform
-        # independent part.
+        # and Links. This is the last platform independent part.
         ###########################################################
 
         if ( $installer::globals::is_simple_packager_project )
         {
-            installer::simplepackage::create_simple_package($filesinproductlanguageresolvedarrayref, $directoriesforepmarrayref, $scpactionsinproductlanguageresolvedarrayref, $linksinproductlanguageresolvedarrayref, $unixlinksinproductlanguageresolvedarrayref, $loggingdir, $languagestringref, $shipinstalldir, $allsettingsarrayref, $allvariableshashref, $includepatharrayref);
+            installer::simplepackage::create_simple_package($filesinproductlanguageresolvedarrayref, $directoriesforepmarrayref, $linksinproductlanguageresolvedarrayref, $unixlinksinproductlanguageresolvedarrayref, $loggingdir, $languagestringref, $shipinstalldir, $allsettingsarrayref, $allvariableshashref, $includepatharrayref);
             next; # ! leaving the current loop, because no further packaging required.
         }
 
@@ -712,13 +662,6 @@ sub run {
         my $listfiledir = installer::systemactions::create_directories("listfile", $languagestringref);
         my $installlogdir = installer::systemactions::create_directory_next_to_directory($installdir, "log");
 
-        ####################################################
-        # Reading for Solaris all package descriptions
-        # from file defined in property PACKAGEMAP
-        ####################################################
-
-        if (  $installer::globals::issolarisbuild ) { installer::epmfile::read_packagemap($allvariableshashref, $includepatharrayref, $languagesarrayref); }
-
         ###########################################
         # Checking epm state
         ###########################################
@@ -758,14 +701,7 @@ sub run {
 
             my $packagename = "";
 
-            if ( $installer::globals::issolarisbuild )   # only for Solaris
-            {
-                if ( $onepackage->{'solarispackagename'} ) { $packagename = $onepackage->{'solarispackagename'}; }
-            }
-            else # not Solaris
-            {
-                if ( $onepackage->{'packagename'} ) { $packagename = $onepackage->{'packagename'}; }
-            }
+            if ( $onepackage->{'packagename'} ) { $packagename = $onepackage->{'packagename'}; }
 
             if (!($packagename eq ""))
             {
@@ -836,6 +772,20 @@ sub run {
                 my $infoline = "\n\nNo file in package: $packagename \-\> Skipping\n\n";
                 push(@installer::globals::logfileinfo, $infoline);
                 next;   # next package, end of loop !
+            }
+
+            # every package gets an SBOM - except in a simple install
+            # (ooinstall), which does not build the SBOM custom target
+            if ( ! $installer::globals::simple )
+            {
+                my %sbomfile;
+                $sbomfile{'sourcepath'}  = $pathvariableshashref->{"customtargetpath"} . "/instsetoo_native/sbom/" . $packagename . "-sbom.spdx.json";
+                my $infoline = "\nAutomatically adding SBOM: $sbomfile{'sourcepath'}\n";
+                push(@installer::globals::logfileinfo, $infoline);
+                $sbomfile{'destination'} = $packagerootpath .
+                   $installer::globals::separator . $packagename . "-sbom.spdx.json";
+                $sbomfile{'UnixRights'}  = "444";
+                push(@{$filesinpackage}, \%sbomfile);
             }
 
             ###########################################
@@ -918,15 +868,27 @@ sub run {
                 # ... replacing the variable PRODUCTDIRECTORYNAME in the shellscriptfile by $staticpath
 
                 installer::epmfile::resolve_path_in_epm_list_before_packaging(\@epmfile, $completeepmfilename, "PRODUCTDIRECTORYNAME", $staticpath);
-                installer::epmfile::resolve_path_in_epm_list_before_packaging(\@epmfile, $completeepmfilename, "SOLSUREPACKAGEPREFIX", $allvariableshashref->{'SOLSUREPACKAGEPREFIX'});
                 installer::epmfile::resolve_path_in_epm_list_before_packaging(\@epmfile, $completeepmfilename, "UREPACKAGEPREFIX", $allvariableshashref->{'UREPACKAGEPREFIX'});
                 installer::files::save_file($completeepmfilename ,\@epmfile);
 
+                my $dbgpackage;
                 if ($dbg)
                 {
-                    $onepackage->{'packagename'} .= "-debuginfo";
-                    $onepackage->{'description'} .= " (debug info)";
-                    $dbgepmheaderref = installer::epmfile::create_epm_header($allvariableshashref, $filesinproductlanguageresolvedarrayref, $languagesarrayref, $onepackage);
+                    # The debug info package matches exactly one build of its
+                    # base package, so it requires that package at the same
+                    # version and release. The base package's own provides,
+                    # replaces, incompat and findrequires relations describe
+                    # the runtime files and stay with the base package, whose
+                    # spec file is prepared from $onepackage further below.
+                    $dbgpackage = { %{$onepackage} };
+                    $dbgpackage->{'packagename'} .= "-debuginfo";
+                    $dbgpackage->{'description'} .= " (debug info)";
+                    $dbgpackage->{'requires'} = $onepackage->{'packagename'} . " %PACKAGEVERSION-%PACKAGEREVISION %PACKAGEVERSION-%PACKAGEREVISION";
+                    delete $dbgpackage->{'provides'};
+                    delete $dbgpackage->{'linuxreplaces'};
+                    delete $dbgpackage->{'linuxincompat'};
+                    delete $dbgpackage->{'findrequires'};
+                    $dbgepmheaderref = installer::epmfile::create_epm_header($allvariableshashref, $filesinproductlanguageresolvedarrayref, $languagesarrayref, $dbgpackage);
                     installer::epmfile::adding_header_to_epm_file(\@dbgepmfile, $dbgepmheaderref);
                     installer::epmfile::put_directories_into_epmfile($dirsinpackage, \@dbgepmfile, $allvariableshashref, $packagerootpath);
                     installer::epmfile::put_files_into_dbgepmfile($debugfilelist, \@dbgepmfile );
@@ -946,13 +908,12 @@ sub run {
 
                     # With a patched epm, it is now possible to set the relocatable directory, change
                     # the directory in which the packages are created, setting "requires" and "provides"
-                    # (Linux) or creating the "depend" file (Solaris) and finally to begin
+                    # (Linux) and finally to begin
                     # the packaging process with standard tooling and standard parameter
                     # Linux: Adding into the spec file: Prefix: /opt
-                    # Solaris: Adding into the pkginfo file: BASEDIR=/opt
                     # Attention: Changing of the path can influence the shell scripts
 
-                    if (( $installer::globals::is_special_epm ) && ( ($installer::globals::isrpmbuild) || ($installer::globals::issolarispkgbuild) ))   # special handling only for Linux RPMs and Solaris Packages
+                    if (( $installer::globals::is_special_epm ) && ( $installer::globals::isrpmbuild ))   # special handling only for Linux RPMs
                     {
                         if ( $installer::globals::call_epm )    # only do something, if epm is really executed
                         {
@@ -971,7 +932,6 @@ sub run {
                             installer::epmfile::remove_temporary_epm_files($newepmdir, $loggingdir, $packagename);
 
                             # Installation:
-                            # Install: pkgadd -a myAdminfile -d ./SUNWso8m34.pkg
                             # Install: rpm -i --prefix=/opt/special --nodeps so8m35.rpm
 
                             installer::epmfile::create_new_directory_structure($newepmdir);
@@ -981,7 +941,7 @@ sub run {
                             if ($dbg)
                             {
                                 installer::epmfile::call_epm($epmexecutable, $completedbgepmfilename, $packagename . "-debuginfo", $includepatharrayref);
-                                my $newdbgepmdir = installer::epmfile::prepare_packages($loggingdir, $packagename . "-debuginfo", $staticpath, $relocatablepath, $onepackage, $allvariableshashref, $debugfilelist, $languagestringref);
+                                my $newdbgepmdir = installer::epmfile::prepare_packages($loggingdir, $packagename . "-debuginfo", $staticpath, $relocatablepath, $dbgpackage, $allvariableshashref, $debugfilelist, $languagestringref);
                                 installer::epmfile::create_packages_without_epm($newdbgepmdir, $packagename . "-debuginfo", $includepatharrayref, $allvariableshashref, $languagestringref);
                                 installer::epmfile::remove_temporary_epm_files($newdbgepmdir, $loggingdir, $packagename . "-debuginfo");
                                 installer::epmfile::create_new_directory_structure($newdbgepmdir);
@@ -990,7 +950,7 @@ sub run {
                         }
                     }
 
-                    else    # this is the standard epm (not relocatable) or ( nonlinux and nonsolaris )
+                    else    # this is the standard epm (not relocatable) or nonlinux
                     {
                         installer::epmfile::resolve_path_in_epm_list_before_packaging(\@epmfile, $completeepmfilename, "\$\$PRODUCTINSTALLLOCATION", $relocatablepath);
                         installer::files::save_file($completeepmfilename ,\@epmfile);   # Warning for pool, content of epm file is changed.
@@ -1014,7 +974,7 @@ sub run {
                                 installer::epmfile::call_epm($epmexecutable, $completedbgepmfilename, $packagename . "-debuginfo", $includepatharrayref);
                             }
 
-                            if (($installer::globals::isrpmbuild) || ($installer::globals::issolarispkgbuild) || ($installer::globals::debian))
+                            if (($installer::globals::isrpmbuild) || ($installer::globals::debian))
                             {
                                 $installer::globals::postprocess_standardepm = 1;
                             }
@@ -1039,12 +999,6 @@ sub run {
 
             chdir($installdir);
 
-            # Copying the cde, kde and gnome packages into the installation set
-            if ( $installer::globals::addsystemintegration ) { installer::epmfile::put_systemintegration_into_installset($installer::globals::epmoutpath, $includepatharrayref, $allvariableshashref, $modulesinproductarrayref); }
-
-            # Adding license into installation set
-            if ($installer::globals::addlicensefile) { installer::worker::put_scpactions_into_installset("."); }
-
             # Adding license file into setup
             if ( $allvariableshashref->{'PUT_LICENSE_INTO_SETUP'} ) { installer::worker::put_license_into_setup(".", $includepatharrayref); }
 
@@ -1066,12 +1020,6 @@ sub run {
             # determine the destination directory
             my $newepmdir = installer::epmfile::determine_installdir_ooo();
 
-            # Copying the cde, kde and gnome packages into the installation set
-            if ( $installer::globals::addsystemintegration ) { installer::epmfile::put_systemintegration_into_installset($newepmdir, $includepatharrayref, $allvariableshashref, $modulesinproductarrayref); }
-
-            # Adding license into installation set
-            if ($installer::globals::addlicensefile) { installer::worker::put_scpactions_into_installset("."); }
-
             # Adding license file into setup
             if ( $allvariableshashref->{'PUT_LICENSE_INTO_SETUP'} ) { installer::worker::put_license_into_setup(".", $includepatharrayref); }
 
@@ -1083,8 +1031,6 @@ sub run {
 
             chdir($currentdir); # changing back into start directory
         }
-
-        if (( $installer::globals::issolarispkgbuild ) && ( $allvariableshashref->{'COLLECT_PKGMAP'} )) { installer::worker::collectpackagemaps($installdir, $languagestringref, $allvariableshashref); }
 
         #######################################################
         # Analyzing the log file

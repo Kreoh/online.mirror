@@ -188,7 +188,7 @@ static void s_acquireAndRegister_v(va_list * pParam)
 }
 }
 
-Proxy::Proxy(uno::Mapping                          to_from,
+Proxy::Proxy(cpo::uno::Mapping                     to_from,
              uno_Environment                     * pTo,
              uno_Environment                     * pFrom,
              uno_Interface                       * pUnoI,
@@ -242,14 +242,14 @@ Proxy::~Proxy()
     typelib_typedescription_release(&m_pTypeDescr->aBase);
 }
 
-static uno::TypeDescription getAcquireMethod()
+static cpo::uno::TypeDescription getAcquireMethod()
 {
     typelib_TypeDescriptionReference * type_XInterface =
         * typelib_static_type_getByTypeClass(typelib_TypeClass_INTERFACE);
 
     typelib_TypeDescription * pTXInterfaceDescr = nullptr;
     TYPELIB_DANGER_GET    (&pTXInterfaceDescr, type_XInterface);
-    uno::TypeDescription acquire(
+    cpo::uno::TypeDescription acquire(
         reinterpret_cast< typelib_InterfaceTypeDescription * >(
             pTXInterfaceDescr)->ppAllMembers[1]);
     TYPELIB_DANGER_RELEASE(pTXInterfaceDescr);
@@ -257,14 +257,14 @@ static uno::TypeDescription getAcquireMethod()
     return acquire;
 }
 
-static uno::TypeDescription getReleaseMethod()
+static cpo::uno::TypeDescription getReleaseMethod()
 {
     typelib_TypeDescriptionReference * type_XInterface =
         * typelib_static_type_getByTypeClass(typelib_TypeClass_INTERFACE);
 
     typelib_TypeDescription * pTXInterfaceDescr = nullptr;
     TYPELIB_DANGER_GET    (&pTXInterfaceDescr, type_XInterface);
-    uno::TypeDescription release(
+    cpo::uno::TypeDescription release(
         reinterpret_cast< typelib_InterfaceTypeDescription * >(
             pTXInterfaceDescr)->ppAllMembers[2]);
     TYPELIB_DANGER_RELEASE(pTXInterfaceDescr);
@@ -272,8 +272,8 @@ static uno::TypeDescription getReleaseMethod()
     return release;
 }
 
-static uno::TypeDescription s_acquireMethod(getAcquireMethod());
-static uno::TypeDescription s_releaseMethod(getReleaseMethod());
+static cpo::uno::TypeDescription s_acquireMethod(getAcquireMethod());
+static cpo::uno::TypeDescription s_releaseMethod(getReleaseMethod());
 
 void Proxy::acquire()
 {

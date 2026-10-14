@@ -20,20 +20,20 @@
 #include <sal/log.hxx>
 #include <unotools/calendarwrapper.hxx>
 #include <i18nlangtag/languagetag.hxx>
-#include <com/sun/star/i18n/LocaleCalendar2.hpp>
+#include <com/sun/star/i18n/LocaleCalendar.hpp>
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::i18n;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 CalendarWrapper::CalendarWrapper(
-            const Reference< uno::XComponentContext > & rxContext
+            const Reference< cpo::uno::XComponentContext > & rxContext
             )
         :
         aEpochStart( Date( 1, 1, 1970 ) )
 {
-    xC = LocaleCalendar2::create(rxContext);
+    xC = LocaleCalendar::create(rxContext);
 }
 
 CalendarWrapper::~CalendarWrapper()
@@ -279,7 +279,7 @@ OUString CalendarWrapper::getDisplayName( sal_Int16 nCalendarDisplayIndex, sal_I
     return OUString();
 }
 
-// --- XExtendedCalendar -----------------------------------------------------
+// --- XCalendar -----------------------------------------------------
 
 OUString CalendarWrapper::getDisplayString( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode ) const
 {
@@ -295,7 +295,7 @@ OUString CalendarWrapper::getDisplayString( sal_Int32 nCalendarDisplayCode, sal_
     return OUString();
 }
 
-// --- XCalendar3 ------------------------------------------------------------
+// --- XCalendar ------------------------------------------------------------
 
 css::i18n::Calendar2 CalendarWrapper::getLoadedCalendar() const
 {

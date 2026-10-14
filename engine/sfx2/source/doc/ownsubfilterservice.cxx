@@ -21,7 +21,7 @@
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/io/XStream.hpp>
 
@@ -30,6 +30,7 @@
 #include <sfx2/objsh.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace {
 
@@ -42,17 +43,17 @@ class OwnSubFilterService : public cppu::WeakImplHelper < document::XFilter
 
 public:
     /// @throws cpo::uno::Exception
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit OwnSubFilterService(const cpo::uno::Sequence< cpo::uno::Any >& aArguments);
 
     // XFilter
-    virtual bool SAL_CALL filter( const cpo::uno::Sequence< beans::PropertyValue >& aDescriptor ) override;
-    virtual void SAL_CALL cancel() override;
+    virtual bool filter( const cpo::uno::Sequence< beans::PropertyValue >& aDescriptor ) override;
+    virtual void cancel() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 OwnSubFilterService::OwnSubFilterService(const cpo::uno::Sequence< cpo::uno::Any >& aArguments)
@@ -74,39 +75,39 @@ OwnSubFilterService::OwnSubFilterService(const cpo::uno::Sequence< cpo::uno::Any
         throw lang::IllegalArgumentException();
 }
 
-bool SAL_CALL OwnSubFilterService::filter( const cpo::uno::Sequence< beans::PropertyValue >& aDescriptor )
+bool OwnSubFilterService::filter( const cpo::uno::Sequence< beans::PropertyValue >& aDescriptor )
 {
     if ( !m_pObjectShell )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_pObjectShell->ImportFromGeneratedStream_Impl( m_xStream, aDescriptor );
 }
 
-void SAL_CALL OwnSubFilterService::cancel()
+void OwnSubFilterService::cancel()
 {
     // not implemented
 }
 
-OUString SAL_CALL OwnSubFilterService::getImplementationName()
+OUString OwnSubFilterService::getImplementationName()
 {
     return u"com.sun.star.comp.document.OwnSubFilter"_ustr;
 }
 
-bool SAL_CALL OwnSubFilterService::supportsService( const OUString& ServiceName )
+bool OwnSubFilterService::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL OwnSubFilterService::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > OwnSubFilterService::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.OwnSubFilter"_ustr, u"com.sun.star.comp.document.OwnSubFilter"_ustr };
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_document_OwnSubFilter_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &arguments)
 {
     return cppu::acquire(new OwnSubFilterService(arguments));

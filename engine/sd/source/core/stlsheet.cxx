@@ -23,6 +23,7 @@
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/table/BorderLine.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/text/XTextColumns.hpp>
 
@@ -78,7 +79,7 @@
 
 using ::osl::MutexGuard;
 using ::com::sun::star::table::BorderLine;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
@@ -315,7 +316,7 @@ bool SdStyleSheet::IsUsed() const
 
         if( maModifyListeners.getLength(aGuard) )
         {
-            std::vector<css::uno::Reference<XModifyListener>> aModifyListeners( maModifyListeners.getElements(aGuard) );
+            std::vector<cpo::uno::Reference<XModifyListener>> aModifyListeners( maModifyListeners.getElements(aGuard) );
             bResult = std::any_of(aModifyListeners.begin(), aModifyListeners.end(),
                 [](const Reference<XInterface>& rListener) {
                     Reference< XStyle > xStyle( rListener, UNO_QUERY );
@@ -711,7 +712,7 @@ rtl::Reference<SdStyleSheet> SdStyleSheet::CreateEmptyUserStyle( SfxStyleSheetBa
 
 // XComponent
 
-void SAL_CALL SdStyleSheet::dispose(  )
+void SdStyleSheet::dispose(  )
 {
     {
         std::unique_lock aGuard(m_aMutex);
@@ -767,7 +768,7 @@ void SdStyleSheet::disposing()
     mxPool.clear();
 }
 
-void SAL_CALL SdStyleSheet::addEventListener( const Reference< XEventListener >& xListener )
+void SdStyleSheet::addEventListener( const Reference< XEventListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
     if (m_bDisposed || m_bInDispose)
@@ -782,7 +783,7 @@ void SAL_CALL SdStyleSheet::addEventListener( const Reference< XEventListener >&
     }
 }
 
-void SAL_CALL SdStyleSheet::removeEventListener( const Reference< XEventListener >& xListener  )
+void SdStyleSheet::removeEventListener( const Reference< XEventListener >& xListener  )
 {
     std::unique_lock aGuard( m_aMutex );
     maEventListeners.removeInterface( aGuard, xListener );
@@ -790,7 +791,7 @@ void SAL_CALL SdStyleSheet::removeEventListener( const Reference< XEventListener
 
 // XModifyBroadcaster
 
-void SAL_CALL SdStyleSheet::addModifyListener( const Reference< XModifyListener >& xListener )
+void SdStyleSheet::addModifyListener( const Reference< XModifyListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
     if (m_bDisposed || m_bInDispose)
@@ -807,7 +808,7 @@ void SAL_CALL SdStyleSheet::addModifyListener( const Reference< XModifyListener 
     }
 }
 
-void SAL_CALL SdStyleSheet::removeModifyListener( const Reference< XModifyListener >& xListener )
+void SdStyleSheet::removeModifyListener( const Reference< XModifyListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
     maModifyListeners.removeInterface( aGuard, xListener );
@@ -825,17 +826,17 @@ void SdStyleSheet::notifyModifyListener()
 }
 
 // XServiceInfo
-OUString SAL_CALL SdStyleSheet::getImplementationName()
+OUString SdStyleSheet::getImplementationName()
 {
     return u"SdStyleSheet"_ustr;
 }
 
-bool SAL_CALL SdStyleSheet::supportsService( const OUString& ServiceName )
+bool SdStyleSheet::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL SdStyleSheet::getSupportedServiceNames()
+Sequence< OUString > SdStyleSheet::getSupportedServiceNames()
 {
     return { u"com.sun.star.style.Style"_ustr,
              u"com.sun.star.drawing.FillProperties"_ustr,
@@ -862,14 +863,14 @@ bool SdStyleSheet::SetName(const OUString& rNewName, bool bReindexNow)
 }
 
 // XNamed
-OUString SAL_CALL SdStyleSheet::getName()
+OUString SdStyleSheet::getName()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
     return GetApiName();
 }
 
-void SAL_CALL SdStyleSheet::setName( const OUString& rName  )
+void SdStyleSheet::setName( const OUString& rName  )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -878,21 +879,21 @@ void SAL_CALL SdStyleSheet::setName( const OUString& rName  )
 
 // XStyle
 
-bool SAL_CALL SdStyleSheet::isUserDefined()
+bool SdStyleSheet::isUserDefined()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
     return IsUserDefined();
 }
 
-bool SAL_CALL SdStyleSheet::isInUse()
+bool SdStyleSheet::isInUse()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
     return IsUsed();
 }
 
-OUString SAL_CALL SdStyleSheet::getParentStyle()
+OUString SdStyleSheet::getParentStyle()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -906,7 +907,7 @@ OUString SAL_CALL SdStyleSheet::getParentStyle()
     return OUString();
 }
 
-void SAL_CALL SdStyleSheet::setParentStyle( const OUString& rParentName  )
+void SdStyleSheet::setParentStyle( const OUString& rParentName  )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -999,11 +1000,11 @@ void SdStyleSheet::setPropertyValue_Impl(const OUString& aPropertyName, const cp
 
     if (pEntry->nWID == OWN_ATTR_TEXTCOLUMNS)
     {
-        if (css::uno::Reference<css::text::XTextColumns> xColumns; aValue >>= xColumns)
+        if (cpo::uno::Reference<css::text::XTextColumns> xColumns; aValue >>= xColumns)
         {
             rStyleSet.Put(SfxInt16Item(SDRATTR_TEXTCOLUMNS_NUMBER, xColumns->getColumnCount()));
-            if (css::uno::Reference<css::beans::XPropertySet> xPropSet{ xColumns,
-                                                                        css::uno::UNO_QUERY })
+            if (cpo::uno::Reference<css::beans::XPropertySet> xPropSet{ xColumns,
+                                                                        cpo::uno::UNO_QUERY })
             {
                 auto aVal = xPropSet->getPropertyValue(u"AutomaticDistance"_ustr);
                 if (sal_Int32 nSpacing; aVal >>= nSpacing)
@@ -1137,9 +1138,9 @@ cpo::uno::Any SdStyleSheet::getPropertyValue_Impl(const OUString& PropertyName)
         const SfxItemSet& rStyleSet = GetItemSet();
 
         auto xIf = SvxXTextColumns_createInstance();
-        css::uno::Reference<css::text::XTextColumns> xCols(xIf, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::text::XTextColumns> xCols(xIf, cpo::uno::UNO_QUERY_THROW);
         xCols->setColumnCount(rStyleSet.Get(SDRATTR_TEXTCOLUMNS_NUMBER).GetValue());
-        css::uno::Reference<css::beans::XPropertySet> xProp(xIf, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xProp(xIf, cpo::uno::UNO_QUERY_THROW);
         xProp->setPropertyValue(
             u"AutomaticDistance"_ustr,
             cpo::uno::Any(rStyleSet.Get(SDRATTR_TEXTCOLUMNS_SPACING).GetValue()));
@@ -1177,6 +1178,9 @@ cpo::uno::Any SdStyleSheet::getPropertyValue_Impl(const OUString& PropertyName)
         else if( pEntry->aType == ::cppu::UnoType<css::table::BorderLine>::get()
                  && aAny.getValueType() == ::cppu::UnoType<css::table::BorderLine2>::get() )
             ; // do not warn for valid case
+        else if( pEntry->aType == ::cppu::UnoType<css::awt::Gradient>::get()
+                 && aAny.getValueType() == ::cppu::UnoType<css::awt::Gradient2>::get() )
+            ; // a gradient that carries its own color stops is the richer form of the same thing
         else
         {
             SAL_WARN_IF(aAny.hasValue(), "sd", "SvxShape::GetAnyForItem() Return value has wrong type, expected "
@@ -1196,7 +1200,7 @@ Reference< XPropertySetInfo > SdStyleSheet::getPropertySetInfo()
     return xInfo;
 }
 
-void SAL_CALL SdStyleSheet::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
+void SdStyleSheet::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -1205,7 +1209,7 @@ void SAL_CALL SdStyleSheet::setPropertyValue( const OUString& aPropertyName, con
     Broadcast(SfxHint(SfxHintId::DataChanged));
 }
 
-Any SAL_CALL SdStyleSheet::getPropertyValue( const OUString& PropertyName )
+Any SdStyleSheet::getPropertyValue( const OUString& PropertyName )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -1213,14 +1217,14 @@ Any SAL_CALL SdStyleSheet::getPropertyValue( const OUString& PropertyName )
     return getPropertyValue_Impl(PropertyName);
 }
 
-void SAL_CALL SdStyleSheet::addPropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) {}
-void SAL_CALL SdStyleSheet::removePropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) {}
-void SAL_CALL SdStyleSheet::addVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) {}
-void SAL_CALL SdStyleSheet::removeVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) {}
+void SdStyleSheet::addPropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) {}
+void SdStyleSheet::removePropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) {}
+void SdStyleSheet::addVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) {}
+void SdStyleSheet::removeVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) {}
 
 // XMultiPropertySet
 
-void SAL_CALL SdStyleSheet::setPropertyValues(const cpo::uno::Sequence<OUString>& aPropertyNames,
+void SdStyleSheet::setPropertyValues(const cpo::uno::Sequence<OUString>& aPropertyNames,
                                               const cpo::uno::Sequence<cpo::uno::Any>& aValues)
 {
     const sal_Int32 nCount = aPropertyNames.getLength();
@@ -1250,7 +1254,7 @@ void SAL_CALL SdStyleSheet::setPropertyValues(const cpo::uno::Sequence<OUString>
 }
 
 cpo::uno::Sequence<cpo::uno::Any>
-SAL_CALL SdStyleSheet::getPropertyValues(const cpo::uno::Sequence<OUString>& aPropertyNames)
+SdStyleSheet::getPropertyValues(const cpo::uno::Sequence<OUString>& aPropertyNames)
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -1265,13 +1269,13 @@ SAL_CALL SdStyleSheet::getPropertyValues(const cpo::uno::Sequence<OUString>& aPr
     return aValues;
 }
 
-void SAL_CALL SdStyleSheet::addPropertiesChangeListener(const cpo::uno::Sequence<OUString>&, const css::uno::Reference<css::beans::XPropertiesChangeListener>&) {}
-void SAL_CALL SdStyleSheet::removePropertiesChangeListener(const css::uno::Reference<css::beans::XPropertiesChangeListener>&) {}
-void SAL_CALL SdStyleSheet::firePropertiesChangeEvent(const cpo::uno::Sequence<OUString>&, const css::uno::Reference<css::beans::XPropertiesChangeListener>&) {}
+void SdStyleSheet::addPropertiesChangeListener(const cpo::uno::Sequence<OUString>&, const cpo::uno::Reference<css::beans::XPropertiesChangeListener>&) {}
+void SdStyleSheet::removePropertiesChangeListener(const cpo::uno::Reference<css::beans::XPropertiesChangeListener>&) {}
+void SdStyleSheet::firePropertiesChangeEvent(const cpo::uno::Sequence<OUString>&, const cpo::uno::Reference<css::beans::XPropertiesChangeListener>&) {}
 
 // XPropertyState
 
-PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyName )
+PropertyState SdStyleSheet::getPropertyState( const OUString& PropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1417,7 +1421,7 @@ PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyN
     }
 }
 
-Sequence< PropertyState > SAL_CALL SdStyleSheet::getPropertyStates( const Sequence< OUString >& aPropertyName )
+Sequence< PropertyState > SdStyleSheet::getPropertyStates( const Sequence< OUString >& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1433,7 +1437,7 @@ Sequence< PropertyState > SAL_CALL SdStyleSheet::getPropertyStates( const Sequen
     return aPropertyStateSequence;
 }
 
-void SAL_CALL SdStyleSheet::setPropertyToDefault( const OUString& PropertyName )
+void SdStyleSheet::setPropertyToDefault( const OUString& PropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1457,7 +1461,7 @@ void SAL_CALL SdStyleSheet::setPropertyToDefault( const OUString& PropertyName )
     Broadcast(SfxHint(SfxHintId::DataChanged));
 }
 
-Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName )
+Any SdStyleSheet::getPropertyDefault( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 

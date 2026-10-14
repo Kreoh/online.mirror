@@ -33,6 +33,12 @@
 #include <sfx2/linkmgr.hxx>
 
 #include <wrtsh.hxx>
+#include <translatehelper.hxx>
+#include <comphelper/configuration.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <officecfg/Office/Linguistic.hxx>
+#include <osl/socket.hxx>
+#include <osl/thread.hxx>
 #include <UndoManager.hxx>
 #include <unotxdoc.hxx>
 #include <drawdoc.hxx>
@@ -49,7 +55,8 @@
 #include <officecfg/Office/Common.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -1319,6 +1326,146 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf107494)
 
     CPPUNIT_ASSERT_EQUAL(0, getShapes());
 }
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testCool6098TranslateSkipsFooter)
+{
+    // Given a document with a footer holding date/page number/file name fields, and no
+    // active text selection in the body:
+    createSwDoc();
+    SwWrtShell* const pWrtSh = getSwDocShell()->GetWrtShell();
+    pWrtSh->Insert(u"Body text"_ustr);
+
+    uno::Reference<beans::XPropertySet> xPageStyle(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xPageStyle->setPropertyValue(u"FooterIsOn"_ustr, cpo::uno::Any(true));
+    uno::Reference<text::XText> xFooter(
+        getProperty<uno::Reference<text::XText>>(xPageStyle, u"FooterText"_ustr));
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextContent> xDateField(
+        xFactory->createInstance(u"com.sun.star.text.TextField.DateTime"_ustr), uno::UNO_QUERY);
+    uno::Reference<text::XTextCursor> xFooterCursor(xFooter->createTextCursor());
+    xFooter->insertTextContent(xFooterCursor, xDateField, false);
+
+    pWrtSh->SttEndDoc(true);
+    CPPUNIT_ASSERT(!pWrtSh->HasSelection());
+
+    // When asking which nodes a document-wide translate would walk:
+    SwNodeOffset nStartNode;
+    SwNodeOffset nEndNode;
+    SwTranslateHelper::GetTranslationNodeRange(*pWrtSh, nStartNode, nEndNode);
+
+    // Then the range must stay inside the body and not reach into the footer's node, or a
+    // translate would export the footer's field markup, send it to the translation
+    // service, and paste the result back over the footer's own content.
+    SwNodes const& rNodes = pWrtSh->GetDoc()->GetNodes();
+    CPPUNIT_ASSERT(nStartNode >= rNodes.GetEndOfExtras().GetIndex());
+    CPPUNIT_ASSERT(nEndNode <= rNodes.GetEndOfContent().GetIndex());
+}
+
+#if HAVE_FEATURE_CURL
+/// Stands in for the DeepL API: answers every POST with the same fixed translation,
+/// regardless of what was asked, so a test can tell a translated node from an untouched one
+/// without a real API key. Same in-process approach as linguistic/qa/restprotocol.cxx.
+class Cool6098MockTranslateServer : public ::osl::Thread
+{
+public:
+    Cool6098MockTranslateServer()
+        : m_aSocketAddr(u"localhost"_ustr, 18099)
+    {
+    }
+
+    virtual void run() override
+    {
+        while (m_aAcceptorSocket.acceptConnection(m_aStreamSocket) == osl_Socket_Ok)
+        {
+            cpo::uno::Sequence<sal_Int8> aBuffer(2048);
+            m_aStreamSocket.recv(aBuffer.getArray(), aBuffer.getLength());
+            OString aResponse("HTTP/1.1 200 OK\r\n"
+                              "Content-Type: application/json\r\n"
+                              "\r\n"
+                              "{\"translations\":[{\"text\":\"TRANSLATED-TEXT\"}]}"_ostr);
+            m_aStreamSocket.write(aResponse.getStr(), aResponse.getLength());
+            m_aStreamSocket.close();
+        }
+    }
+
+    void init()
+    {
+        m_aAcceptorSocket.setOption(osl_Socket_OptionReuseAddr, 1);
+        CPPUNIT_ASSERT(m_aAcceptorSocket.bind(m_aSocketAddr));
+        CPPUNIT_ASSERT(m_aAcceptorSocket.listen());
+    }
+
+    void stop()
+    {
+        m_aAcceptorSocket.close();
+        join();
+    }
+
+private:
+    ::osl::SocketAddr m_aSocketAddr;
+    ::osl::AcceptorSocket m_aAcceptorSocket;
+    ::osl::StreamSocket m_aStreamSocket;
+};
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testCool6098TranslateEndToEnd)
+{
+    // Point the translation service at a local mock server, so a real end-to-end translate
+    // run can be told apart from untouched text without needing a real DeepL account.
+    Cool6098MockTranslateServer aMockServer;
+    aMockServer.init();
+    aMockServer.create();
+    comphelper::ScopeGuard aStopServer([&aMockServer] { aMockServer.stop(); });
+
+    auto pBatch = comphelper::ConfigurationChanges::create();
+    officecfg::Office::Linguistic::Translation::Deepl::ApiURL::set(
+        u"http://127.0.0.1:18099"_ustr, pBatch);
+    officecfg::Office::Linguistic::Translation::Deepl::AuthKey::set(u"dummy"_ustr, pBatch);
+    pBatch->commit();
+    comphelper::ScopeGuard aResetConfig([] {
+        auto pResetBatch = comphelper::ConfigurationChanges::create();
+        officecfg::Office::Linguistic::Translation::Deepl::ApiURL::set(std::optional<OUString>(),
+                                                                       pResetBatch);
+        officecfg::Office::Linguistic::Translation::Deepl::AuthKey::set(std::optional<OUString>(),
+                                                                        pResetBatch);
+        pResetBatch->commit();
+    });
+
+    // Given a document with a footer holding a date field, a single body paragraph, and no
+    // active text selection:
+    createSwDoc();
+    SwWrtShell* const pWrtSh = getSwDocShell()->GetWrtShell();
+    pWrtSh->Insert(u"Body text"_ustr);
+
+    uno::Reference<beans::XPropertySet> xPageStyle(
+        getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
+    xPageStyle->setPropertyValue(u"FooterIsOn"_ustr, cpo::uno::Any(true));
+    uno::Reference<text::XText> xFooter(
+        getProperty<uno::Reference<text::XText>>(xPageStyle, u"FooterText"_ustr));
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextContent> xDateField(
+        xFactory->createInstance(u"com.sun.star.text.TextField.DateTime"_ustr), uno::UNO_QUERY);
+    uno::Reference<text::XTextCursor> xFooterCursor(xFooter->createTextCursor());
+    xFooter->insertTextContent(xFooterCursor, xDateField, false);
+    const int nParagraphsBefore = getParagraphs();
+
+    pWrtSh->SttEndDoc(true);
+    CPPUNIT_ASSERT(!pWrtSh->HasSelection());
+
+    // When translating with no selection, the "whole document" path:
+    bool bCancel = false;
+    CPPUNIT_ASSERT(SwTranslateHelper::TranslateDocumentCancellable(*pWrtSh, "EN"_ostr, bCancel));
+
+    // Then the body paragraph itself must actually get translated (the fix must not
+    // accidentally turn translate into a no-op for legitimate content):
+    CPPUNIT_ASSERT_EQUAL(u"TRANSLATED-TEXT"_ustr, getParagraph(1)->getString());
+
+    // And no extra paragraph carrying the footer's translated field markup must appear in
+    // the body, and the footer's own text must be untouched:
+    CPPUNIT_ASSERT_EQUAL(nParagraphsBefore, getParagraphs());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1), xFooter->getString().indexOf("TRANSLATED-TEXT"));
+}
+#endif
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf133358)
 {
@@ -2819,16 +2966,16 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf138897)
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf136740)
 {
     createSwDoc();
-    css::uno::Reference<css::lang::XMultiServiceFactory> xFact(mxComponent,
-                                                               css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::beans::XPropertySet> xTextDefaults(
-        xFact->createInstance(u"com.sun.star.text.Defaults"_ustr), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xFact(mxComponent,
+                                                               cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::beans::XPropertySet> xTextDefaults(
+        xFact->createInstance(u"com.sun.star.text.Defaults"_ustr), cpo::uno::UNO_QUERY_THROW);
     const cpo::uno::Any aOrig = xTextDefaults->getPropertyValue(u"TabStopDistance"_ustr);
     sal_Int32 nDefTab = aOrig.get<sal_Int32>();
     CPPUNIT_ASSERT(nDefTab != 0);
 
-    css::uno::Reference<css::text::XTextRange> const xParagraph(getParagraphOrTable(1),
-                                                                css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextRange> const xParagraph(getParagraphOrTable(1),
+                                                                cpo::uno::UNO_QUERY_THROW);
     xParagraph->setString(u"Foo"_ustr);
 
     CPPUNIT_ASSERT_EQUAL(1, getParagraphs());
@@ -2880,7 +3027,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf128106)
         pMasterDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks().size());
     // no way to set SwDocShell::m_nUpdateDocMode away from NO_UPDATE ?
     // pMasterDoc->getIDocumentLinksAdministration().UpdateLinks();
-    pMasterDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pMasterDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                                   u""_ustr);
     // note: this has called SwGetRefFieldType::UpdateGetReferences()
     SwFieldType const* const pType(
@@ -2943,7 +3090,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf103612)
     SwDoc* pDoc = getSwDoc();
     CPPUNIT_ASSERT_EQUAL(
         size_t(1), pDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks().size());
-    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                             u""_ustr);
 
     xmlDocUniquePtr pLayout = parseLayoutDump();
@@ -2971,7 +3118,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf121119)
     SwDoc* pDoc = getSwDoc();
     CPPUNIT_ASSERT_EQUAL(
         size_t(2), pDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks().size());
-    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                             u""_ustr);
 
     uno::Reference<text::XTextGraphicObjectsSupplier> xTextGraphicObjectsSupplier(mxComponent,

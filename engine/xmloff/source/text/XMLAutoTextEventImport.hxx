@@ -21,27 +21,27 @@
 
 #include <xmloff/xmlimp.hxx>
 #include <com/sun/star/container/XNameReplace.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 
 class XMLAutoTextEventImport : public SvXMLImport
 {
-    css::uno::Reference<css::container::XNameReplace> xEvents;
+    cpo::uno::Reference<css::container::XNameReplace> xEvents;
 
 public:
     explicit XMLAutoTextEventImport(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext);
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext);
 
     virtual ~XMLAutoTextEventImport() noexcept override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         const cpo::uno::Sequence<cpo::uno::Any> & rArguments ) override;
 
 protected:
 
     virtual SvXMLImportContext *CreateFastContext( sal_Int32 Element,
-        const ::css::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const ::cpo::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
 };
 

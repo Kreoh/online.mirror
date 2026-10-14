@@ -39,8 +39,9 @@
 
 using namespace ::comphelper;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-DocxExportFilter::DocxExportFilter( const uno::Reference< uno::XComponentContext >& xContext )
+DocxExportFilter::DocxExportFilter( const uno::Reference< cpo::uno::XComponentContext >& xContext )
     : oox::core::XmlFilterBase( xContext )
 {
 }
@@ -48,7 +49,7 @@ DocxExportFilter::DocxExportFilter( const uno::Reference< uno::XComponentContext
 bool DocxExportFilter::exportDocument()
 {
     // get SwDoc*
-    uno::Reference< uno::XInterface > xIfc( getModel(), uno::UNO_QUERY );
+    uno::Reference< cpo::uno::XInterface > xIfc( getModel(), uno::UNO_QUERY );
     SwXTextDocument *pTextDoc = dynamic_cast< SwXTextDocument * >( xIfc.get() );
     if ( !pTextDoc )
         return false;
@@ -106,9 +107,10 @@ bool DocxExportFilter::exportDocument()
     aPam.SetMark();
     aPam.Move( fnMoveBackward, GoInDoc );
 
-    std::shared_ptr<SwUnoCursor> pCurPam(pDoc->CreateUnoCursor(*aPam.End(), false));
+    auto [pStart, pEnd] = aPam.StartEnd(); // SwPosition*
+    std::shared_ptr<SwUnoCursor> pCurPam(pDoc->CreateUnoCursor(*pEnd, false));
     pCurPam->SetMark();
-    *pCurPam->GetPoint() = *aPam.Start();
+    *pCurPam->GetPoint() = *pStart;
 
     const uno::Reference<task::XStatusIndicator>& xStatusIndicator = getStatusIndicator();
     if ( xStatusIndicator.is() )
@@ -153,8 +155,8 @@ OUString DocxExportFilter::getImplementationName()
     return u"com.sun.star.comp.Writer.DocxExport"_ustr;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_Writer_DocxExport_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_DocxExport_get_implementation(cpo::uno::XComponentContext* pCtx,
                                                        cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new DocxExportFilter(pCtx));

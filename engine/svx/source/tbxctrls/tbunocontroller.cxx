@@ -47,6 +47,7 @@
 #include <vcl/InterimItemWindow.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -58,26 +59,26 @@ class FontHeightToolBoxControl : public FontHeightToolBoxControl_Base
 {
     public:
         explicit FontHeightToolBoxControl(
-            const css::uno::Reference< css::uno::XComponentContext >& rServiceManager );
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rServiceManager );
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual OUString getImplementationName() override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
         // WeakComponentImplHelperBase
         using FontHeightToolBoxControl_Base::disposing;
         virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
         // XStatusListener
-        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+        virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
         // XToolbarController
-        virtual void SAL_CALL execute( sal_Int16 KeyModifier ) override;
-        virtual void SAL_CALL click() override;
-        virtual void SAL_CALL doubleClick() override;
-        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() override;
-        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createItemWindow( const css::uno::Reference< css::awt::XWindow >& Parent ) override;
+        virtual void execute( sal_Int16 KeyModifier ) override;
+        virtual void click() override;
+        virtual void doubleClick() override;
+        virtual cpo::uno::Reference< css::awt::XWindow > createPopupWindow() override;
+        virtual cpo::uno::Reference< css::awt::XWindow > createItemWindow( const cpo::uno::Reference< css::awt::XWindow >& Parent ) override;
 
         void dispatchCommand( const cpo::uno::Sequence< css::beans::PropertyValue >& rArgs );
         using svt::ToolboxController::dispatchCommand;
@@ -348,27 +349,27 @@ IMPL_LINK(SvxFontSizeBox_Base, DumpAsPropertyTreeHdl, tools::JsonWriter&, rJsonW
     rJsonWriter.put("command", ".uno:FontHeight");
 }
 
-FontHeightToolBoxControl::FontHeightToolBoxControl( const uno::Reference< uno::XComponentContext >& rxContext )
+FontHeightToolBoxControl::FontHeightToolBoxControl( const uno::Reference< cpo::uno::XComponentContext >& rxContext )
  : FontHeightToolBoxControl_Base( rxContext,
                            uno::Reference< frame::XFrame >(),
-                           ".uno:FontHeight" ),
+                           u".uno:FontHeight"_ustr ),
    m_pBox( nullptr )
 {
     addStatusListener( u".uno:CharFontName"_ustr);
 }
 
 // XServiceInfo
-bool SAL_CALL FontHeightToolBoxControl::supportsService( const OUString& ServiceName )
+bool FontHeightToolBoxControl::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-OUString SAL_CALL FontHeightToolBoxControl::getImplementationName()
+OUString FontHeightToolBoxControl::getImplementationName()
 {
     return u"com.sun.star.svx.FontHeightToolBoxController"_ustr;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL FontHeightToolBoxControl::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > FontHeightToolBoxControl::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
@@ -385,7 +386,7 @@ void FontHeightToolBoxControl::disposing(std::unique_lock<std::mutex>& rGuard)
 }
 
 // XStatusListener
-void SAL_CALL FontHeightToolBoxControl::statusChanged(
+void FontHeightToolBoxControl::statusChanged(
     const frame::FeatureStateEvent& rEvent )
 {
     if ( !m_pBox )
@@ -430,24 +431,24 @@ void SAL_CALL FontHeightToolBoxControl::statusChanged(
 }
 
 // XToolbarController
-void SAL_CALL FontHeightToolBoxControl::execute( sal_Int16 /*KeyModifier*/ )
+void FontHeightToolBoxControl::execute( sal_Int16 /*KeyModifier*/ )
 {
 }
 
-void SAL_CALL FontHeightToolBoxControl::click()
+void FontHeightToolBoxControl::click()
 {
 }
 
-void SAL_CALL FontHeightToolBoxControl::doubleClick()
+void FontHeightToolBoxControl::doubleClick()
 {
 }
 
-uno::Reference< awt::XWindow > SAL_CALL FontHeightToolBoxControl::createPopupWindow()
+uno::Reference< awt::XWindow > FontHeightToolBoxControl::createPopupWindow()
 {
     return uno::Reference< awt::XWindow >();
 }
 
-uno::Reference< awt::XWindow > SAL_CALL FontHeightToolBoxControl::createItemWindow(
+uno::Reference< awt::XWindow > FontHeightToolBoxControl::createItemWindow(
     const uno::Reference< awt::XWindow >& xParent )
 {
     uno::Reference< awt::XWindow > xItemWindow;
@@ -458,7 +459,7 @@ uno::Reference< awt::XWindow > SAL_CALL FontHeightToolBoxControl::createItemWind
 
         std::unique_ptr<weld::ComboBox> xWidget(m_pBuilder->weld_combo_box(u"fontsizecombobox"_ustr));
 
-        xItemWindow = css::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
+        xItemWindow = cpo::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
 
         m_xWeldBox.reset(new SvxFontSizeBox_Base(std::move(xWidget), m_xFrame, *this));
         m_pBox = m_xWeldBox.get();
@@ -504,9 +505,9 @@ void FontHeightToolBoxControl::dispatchCommand(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_svx_FontHeightToolBoxController_get_implementation(
-    css::uno::XComponentContext *rxContext,
+    cpo::uno::XComponentContext *rxContext,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new FontHeightToolBoxControl(rxContext));

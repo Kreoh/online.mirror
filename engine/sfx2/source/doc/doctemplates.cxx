@@ -68,8 +68,8 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/thePathSettings.hpp>
 
 #include <svtools/templatefoldercache.hxx>
@@ -112,8 +112,8 @@ using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::ucb;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::util;
 
@@ -162,30 +162,30 @@ public:
                                 : m_xInteractionHandler(std::move( xInteractionHandler ))
                             {}
 
-    virtual uno::Reference<task::XInteractionHandler> SAL_CALL getInteractionHandler() override
+    virtual uno::Reference<task::XInteractionHandler> getInteractionHandler() override
     { return m_xInteractionHandler; }
 
-    virtual uno::Reference<ucb::XProgressHandler> SAL_CALL    getProgressHandler() override
+    virtual uno::Reference<ucb::XProgressHandler>    getProgressHandler() override
     { return uno::Reference<ucb::XProgressHandler>(); }
 };
 
 class SfxDocTplService : public ::cppu::WeakImplHelper< css::lang::XLocalizable, css::frame::XDocumentTemplates, css::lang::XServiceInfo >
 {
 public:
-    explicit SfxDocTplService( const css::uno::Reference < uno::XComponentContext >& xContext );
+    explicit SfxDocTplService( const cpo::uno::Reference < cpo::uno::XComponentContext >& xContext );
     virtual ~SfxDocTplService() override;
 
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.comp.sfx2.DocumentTemplates"_ustr;
     }
 
-    virtual bool SAL_CALL supportsService(OUString const & ServiceName) override
+    virtual bool supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         cpo::uno::Sequence< OUString > aSeq { u"com.sun.star.frame.DocumentTemplates"_ustr };
         return aSeq;
@@ -193,27 +193,27 @@ public:
 
 
     // --- XLocalizable ---
-    void SAL_CALL                   setLocale( const css::lang::Locale & eLocale ) override;
-    css::lang::Locale SAL_CALL              getLocale() override;
+    void                   setLocale( const css::lang::Locale & eLocale ) override;
+    css::lang::Locale              getLocale() override;
 
     // --- XDocumentTemplates ---
-    css::uno::Reference< css::ucb::XContent > SAL_CALL  getContent() override;
-    bool SAL_CALL               storeTemplate( const OUString& GroupName,
+    cpo::uno::Reference< css::ucb::XContent >  getContent() override;
+    bool               storeTemplate( const OUString& GroupName,
                                                    const OUString& TemplateName,
-                                                   const css::uno::Reference< css::frame::XStorable >& Storable ) override;
-    bool SAL_CALL               addTemplate( const OUString& GroupName,
+                                                   const cpo::uno::Reference< css::frame::XStorable >& Storable ) override;
+    bool               addTemplate( const OUString& GroupName,
                                                  const OUString& TemplateName,
                                                  const OUString& SourceURL ) override;
-    bool SAL_CALL               removeTemplate( const OUString& GroupName,
+    bool               removeTemplate( const OUString& GroupName,
                                                     const OUString& TemplateName ) override;
-    bool SAL_CALL               renameTemplate( const OUString& GroupName,
+    bool               renameTemplate( const OUString& GroupName,
                                                     const OUString& OldTemplateName,
                                                     const OUString& NewTemplateName ) override;
-    bool SAL_CALL               addGroup( const OUString& GroupName ) override;
-    bool SAL_CALL               removeGroup( const OUString& GroupName ) override;
-    bool SAL_CALL               renameGroup( const OUString& OldGroupName,
+    bool               addGroup( const OUString& GroupName ) override;
+    bool               removeGroup( const OUString& GroupName ) override;
+    bool               renameGroup( const OUString& OldGroupName,
                                                  const OUString& NewGroupName ) override;
-    void SAL_CALL                   update() override;
+    void                   update() override;
 
 private:
     bool                        init() { if ( !mbIsInitialized ) init_Impl(); return mbIsInitialized; }
@@ -394,7 +394,7 @@ public:
 
 void SfxDocTplService::init_Impl()
 {
-    const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
     uno::Reference < task::XInteractionHandler > xInteractionHandler(
         task::InteractionHandler::createWithParent(xContext, nullptr), uno::UNO_QUERY_THROW );
     maCmdEnv = new TplTaskEnvironment( xInteractionHandler );
@@ -442,7 +442,7 @@ void SfxDocTplService::init_Impl()
         try {
             m_xDocProps.set(document::DocumentProperties::create(
                         ::comphelper::getProcessComponentContext()));
-        } catch (uno::RuntimeException const&) {
+        } catch (cpo::uno::RuntimeException const&) {
             TOOLS_WARN_EXCEPTION("sfx.doc", "SfxDocTplService_Impl::init_Impl: cannot create DocumentProperties service:");
         }
 
@@ -569,7 +569,7 @@ void SfxDocTplService::getDirList()
 
     aValue <<= maTemplateDirs;
 
-    css::uno::Reference< css::util::XPathSettings > xPathSettings =
+    cpo::uno::Reference< css::util::XPathSettings > xPathSettings =
         css::util::thePathSettings::get(mxContext);
 
     // load internal paths
@@ -1041,7 +1041,7 @@ bool SfxDocTplService::getProperty(Content& rContent, const OUString& rPropName,
     return bGotProperty;
 }
 
-SfxDocTplService::SfxDocTplService( const uno::Reference< XComponentContext > & xContext )
+SfxDocTplService::SfxDocTplService( const uno::Reference< cpo::uno::XComponentContext > & xContext )
     : mxContext(xContext), mbIsInitialized(false), mbLocaleSet(false), maRelocator(xContext)
 {
 }
@@ -1281,7 +1281,7 @@ bool SfxDocTplService::WriteUINamesForTemplateDir_Impl( std::u16string_view aUse
 
         uno::Reference< io::XOutputStream > xOutStream = xTempFile->getOutputStream();
         if ( !xOutStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         DocTemplLocaleHelper::WriteGroupLocalizationSequence( xOutStream, aUINames, mxContext);
         try {
@@ -1706,13 +1706,13 @@ bool SfxDocTplService::storeTemplate( const OUString& rGroupName,
 
     try
     {
-        const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
         // get document service name
         uno::Reference< frame::XModuleManager2 > xModuleManager( frame::ModuleManager::create(xContext) );
-        const OUString sDocServiceName {xModuleManager->identify( uno::Reference< uno::XInterface >( rStorable, uno::UNO_QUERY ) )};
+        const OUString sDocServiceName {xModuleManager->identify( uno::Reference< cpo::uno::XInterface >( rStorable, uno::UNO_QUERY ) )};
         if ( sDocServiceName.isEmpty() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // get the actual filter name
         uno::Reference< lang::XMultiServiceFactory > xConfigProvider =
@@ -1731,12 +1731,12 @@ bool SfxDocTplService::storeTemplate( const OUString& rGroupName,
         uno::Reference< container::XNameAccess > xApplConfig;
         xSOFConfig->getByName( sDocServiceName ) >>= xApplConfig;
         if ( !xApplConfig.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         OUString aFilterName;
         xApplConfig->getByName(u"ooSetupFactoryActualTemplateFilter"_ustr) >>= aFilterName;
         if ( aFilterName.isEmpty() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // find the related type name
         uno::Reference< container::XNameAccess > xFilterFactory(
@@ -1751,7 +1751,7 @@ bool SfxDocTplService::storeTemplate( const OUString& rGroupName,
                 rProp.Value >>= aTypeName;
 
         if ( aTypeName.isEmpty() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // find the mediatype and extension
         uno::Reference< container::XNameAccess > xTypeDetection =
@@ -1765,13 +1765,13 @@ bool SfxDocTplService::storeTemplate( const OUString& rGroupName,
         cpo::uno::Sequence< OUString > aAllExt =
             aTypeProps.getUnpackedValueOrDefault(u"Extensions"_ustr, Sequence< OUString >() );
         if ( !aAllExt.hasElements() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         const OUString aMediaType {aTypeProps.getUnpackedValueOrDefault(u"MediaType"_ustr, OUString() )};
         const OUString& aExt {aAllExt[0]};
 
         if ( aMediaType.isEmpty() || aExt.isEmpty() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // construct destination url
         if ( aGroupTargetURL.isEmpty() )
@@ -1779,7 +1779,7 @@ bool SfxDocTplService::storeTemplate( const OUString& rGroupName,
             aGroupTargetURL = CreateNewGroupFsys( rGroupName, aGroup );
 
             if ( aGroupTargetURL.isEmpty() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
 
         OUString aNewTemplateTargetURL = CreateNewUniqueFileWithPrefix( aGroupTargetURL, rTemplateName, aExt );
@@ -1788,7 +1788,7 @@ bool SfxDocTplService::storeTemplate( const OUString& rGroupName,
             aNewTemplateTargetURL = CreateNewUniqueFileWithPrefix( aGroupTargetURL, u"UserTemplate"_ustr, aExt );
 
             if ( aNewTemplateTargetURL.isEmpty() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
 
         // store template
@@ -2113,7 +2113,7 @@ bool SfxDocTplService::renameTemplate( const OUString& rGroupName,
 
 //--- XDocumentTemplates ---
 
-uno::Reference< ucb::XContent > SAL_CALL SfxDocTplService::getContent()
+uno::Reference< ucb::XContent > SfxDocTplService::getContent()
 {
     if ( init() )
         return maRootContent.get();
@@ -2608,9 +2608,9 @@ void SfxURLRelocator_Impl::makeAbsoluteURL( OUString & rURL )
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_sfx2_DocumentTemplates_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SfxDocTplService(context));

@@ -12,10 +12,14 @@
 #include <app.hrc>
 #include <test/helper/transferable.hxx>
 #include <tools/JsonPath.hxx>
+#include <tools/json_writer.hxx>
 #include <test/JsonTestTools.hxx>
 #include <boost/property_tree/json_parser.hpp>
+#include <svx/svdlayer.hxx>
 #include <functional>
+#include <optional>
 #include <set>
+#include <string_view>
 #include <vector>
 #include <COKit/COKit.hxx>
 #include <sal/log.hxx>
@@ -23,6 +27,7 @@
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/string.hxx>
 #include <comphelper/hash.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <editeng/colritem.hxx>
 #include <editeng/eeitem.hxx>
@@ -37,22 +42,37 @@
 #include <editeng/fhgtitem.hxx>
 #include <editeng/outlobj.hxx>
 #include <osl/conditn.hxx>
+#include <osl/thread.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
+#include <sfx2/sfxsids.hrc>
 #include <svl/stritem.hxx>
 #include <svl/intitem.hxx>
+#include <svl/lstner.hxx>
+#include <svx/sdgcpitm.hxx>
 #include <svx/unoapi.hxx>
+#include <svx/svdograf.hxx>
 #include <svx/svdorect.hxx>
 #include <svx/svdotable.hxx>
 #include <svx/svdoutl.hxx>
+#include <svx/sdtagitm.hxx>
+#include <svx/sdtfsitm.hxx>
 #include <svx/xfillit0.hxx>
 #include <svx/xflclit.hxx>
+#include <svx/xfltrit.hxx>
+#include <com/sun/star/awt/XLayoutConstrains.hpp>
+#include <com/sun/star/table/XCellRange.hpp>
+#include <com/sun/star/text/XText.hpp>
 #include <svtools/colorcfg.hxx>
 #include <unotools/datetime.hxx>
 
 #include <DrawDocShell.hxx>
+#include <TransitionPreset.hxx>
 #include <ViewShellBase.hxx>
 #include <ViewShell.hxx>
+#include <DrawViewShell.hxx>
+#include <Window.hxx>
+#include <svx/svdpagv.hxx>
 #include <SlideshowLayerRenderer.hxx>
 #include <sdpage.hxx>
 #include <unomodel.hxx>
@@ -72,7 +92,14 @@
 #include <sfx2/sidebar/Sidebar.hxx>
 #include <vcl/BitmapTools.hxx>
 #include <vcl/filter/PngImageWriter.hxx>
+#include <vcl/mapmod.hxx>
+#include <vcl/outdev.hxx>
+#include <vcl/svapp.hxx>
+#include <com/sun/star/text/GraphicCrop.hpp>
 #include <sfx2/kit/helper.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <tools/datetime.hxx>
 
 #include <config_cairo_rgba.h>
 
@@ -81,6 +108,7 @@
 #include <string_view>
 
 using namespace css;
+using namespace ::cpo;
 
 static std::ostream& operator<<(std::ostream& os, ViewShellId id)
 {
@@ -581,6 +609,99 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testResizeTableColumn)
     pXmlDoc = nullptr;
 }
 
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testResizeTableColumnDuringTextEdit)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("table-column.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    SdrObject* pObject = pActualPage->GetObj(0);
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pObject);
+    CPPUNIT_ASSERT(pTableObject);
+
+    // Put a long word without spaces into the first cell.
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pObject, pView->GetSdrPageView());
+    pTableObject->setActiveCell(sdr::table::CellPos(0, 0));
+    pView->SdrBeginTextEdit(pObject);
+    pView->GetTextEditOutlinerView()->InsertText(
+        u"https://www.collaboraoffice.com/downloads/Collabora-Office-Flatpak-Nightly/"_ustr);
+    pView->SdrEndTextEdit();
+
+    // Edit the cell again, without changing its text.
+    pTableObject->setActiveCell(sdr::table::CellPos(0, 0));
+    pView->SdrBeginTextEdit(pObject);
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    Scheduler::ProcessEventsToIdle();
+
+    // Make the first column 4 cm narrower while the cell is still being edited.
+    uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+        { "BorderType", uno::Any(u"column-middle"_ustr) },
+        { "Index", uno::Any(sal_uInt16(0)) },
+        { "Offset", uno::Any(sal_Int32(o3tl::toTwips(-4000, o3tl::Length::mm100))) },
+    }));
+    dispatchCommand(mxComponent, u".uno:TableChangeCurrentBorderPosition"_ustr, aArgs);
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+
+    // The first row grows, so the text that now wraps onto more lines still fits inside the cell.
+    // Without the fix, the cell kept its old height of about half the text height.
+    ::tools::Rectangle aCellRect;
+    pTableObject->getCellBounds(sdr::table::CellPos(0, 0), aCellRect);
+    sal_Int32 nTextHeight = pView->GetTextEditOutliner()->GetTextHeight();
+    CPPUNIT_ASSERT_GREATEREQUAL(nTextHeight, static_cast<sal_Int32>(aCellRect.GetHeight()));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTableRowFitsTextAfterUndo)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("table.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrObject* pObject = pViewShell->GetActualPage()->GetObj(0);
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pObject);
+    CPPUNIT_ASSERT(pTableObject);
+    SdrView* pView = pViewShell->GetView();
+
+    auto typeKey = [pXImpressDocument](int nCharCode, int nKeyCode) {
+        pXImpressDocument->postKeyEvent(COKitKeyEventType::DOWN, nCharCode, nKeyCode);
+        pXImpressDocument->postKeyEvent(COKitKeyEventType::UP, nCharCode, nKeyCode);
+        Scheduler::ProcessEventsToIdle();
+    };
+
+    // Type six lines into the second cell, so the text is taller than the row was.
+    pView->MarkObj(pObject, pView->GetSdrPageView());
+    pTableObject->setActiveCell(sdr::table::CellPos(0, 1));
+    pView->SdrBeginTextEdit(pObject);
+    for (char cLine : std::string_view("abcdef"))
+    {
+        if (cLine != 'a')
+            typeKey(0, KEY_RETURN);
+        typeKey(cLine, 0);
+    }
+    pView->SdrEndTextEdit();
+
+    // Delete the last three lines, then undo that outside text edit.
+    pView->SdrBeginTextEdit(pObject);
+    typeKey(0, KEY_MOD1 | KEY_END);
+    for (int i = 0; i < 6; ++i)
+        typeKey(0, KEY_BACKSPACE);
+    pView->SdrEndTextEdit();
+    pXImpressDocument->GetDocShell()->GetUndoManager()->Undo();
+
+    // The row grows again to hold the six lines.
+    uno::Reference<table::XCellRange> xCells = pTableObject->getTable();
+    uno::Reference<awt::XLayoutConstrains> xCell(xCells->getCellByPosition(0, 1),
+                                                 uno::UNO_QUERY);
+    sal_Int32 nTextHeight = xCell->getMinimumSize().Height;
+    xmlDocUniquePtr pXmlDoc = parseXmlDump();
+    sal_Int32 nRowHeight
+        = getXPath(pXmlDoc,
+                   "/SdDrawDocument/SdrModel/maPages/SdPage/SdrPage/SdrObjList/SdrTableObj/"
+                   "SdrTableObjImpl/TableLayouter/rows/TableLayouter_Layout[2]",
+                   "size")
+              .toInt32();
+    // Without the accompanying fix in place, this test would have failed: the row kept the
+    // height it had for three lines and the restored text ran past the cell.
+    CPPUNIT_ASSERT_GREATEREQUAL(nTextHeight, nRowHeight);
+}
+
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testViewCursors)
 {
     // Create two views.
@@ -601,6 +722,86 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testViewCursors)
     CPPUNIT_ASSERT(aView1.m_bGraphicViewSelectionInvalidated);
     // Second view notices that there was a selection change in its own view.
     CPPUNIT_ASSERT(aView2.m_bGraphicSelectionInvalidated);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideTransitionOtherView)
+{
+    // Given an Impress document, with the Slide Transition sidebar panel open in the first
+    // of two views co-editing the presentation:
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    SdTestViewCallback aView1;
+    sfx2::sidebar::Sidebar::Setup(u"");
+    Scheduler::ProcessEventsToIdle();
+    dispatchCommand(mxComponent, u".uno:SidebarDeck.SdSlideTransitionDeck"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    // Let the panel's deferred entry population timer run, so its gallery holds real
+    // entries and the initial ("no transition") entry gets selected, the same as when a
+    // user actually opens it.
+    osl::Thread::wait(std::chrono::milliseconds(250));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(aView1.m_aJSDialogSelectCounts["transitions_icons"] > 0);
+    aView1.m_aJSDialogSelectCounts.clear();
+
+    KitHelper::createView();
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView2;
+
+    // When the second (now current) view sets the transition to a real preset, through the
+    // property set, the same path the transition dispatch commands go through:
+    const sd::TransitionPresetList& rPresets = sd::TransitionPreset::getTransitionPresetList();
+    CPPUNIT_ASSERT(!rPresets.empty());
+    const sd::TransitionPresetPtr& pPreset = rPresets.front();
+
+    uno::Reference<beans::XPropertySet> xPage(
+        pXImpressDocument->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
+    xPage->setPropertyValue(u"TransitionType"_ustr, cpo::uno::Any(pPreset->getTransition()));
+    xPage->setPropertyValue(u"TransitionSubtype"_ustr, cpo::uno::Any(pPreset->getSubtype()));
+    xPage->setPropertyValue(u"TransitionDirection"_ustr, cpo::uno::Any(pPreset->getDirection()));
+    xPage->setPropertyValue(u"TransitionFadeColor"_ustr, cpo::uno::Any(pPreset->getFadeColor()));
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the first view's panel must pick up the new transition too, instead of showing a
+    // stale value until the user navigates away from the slide and back.
+    CPPUNIT_ASSERT(aView1.m_aJSDialogSelectCounts["transitions_icons"] > 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideTransitionNoRedundantSelectOnOtherEdit)
+{
+    // Given an Impress document with the Slide Transition sidebar panel open:
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    SdTestViewCallback aView;
+    sfx2::sidebar::Sidebar::Setup(u"");
+    Scheduler::ProcessEventsToIdle();
+    dispatchCommand(mxComponent, u".uno:SidebarDeck.SdSlideTransitionDeck"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    // Let the panel's deferred entry population timer run, so its gallery holds real
+    // entries and a real one gets selected, the same as when a user actually opens it.
+    osl::Thread::wait(std::chrono::milliseconds(250));
+    Scheduler::ProcessEventsToIdle();
+
+    // Sanity check the capture plumbing itself: building the panel selects the current
+    // slide's transition, so this must have produced at least one recorded "select" action.
+    // Without this check, a broken capture (wrong JSON field names, wrong control id) would
+    // make the counter stay at 0 no matter what happens below, passing for the wrong reason.
+    CPPUNIT_ASSERT(aView.m_aJSDialogSelectCounts["transitions_icons"] > 0);
+
+    // Ignore the "select" actions sent while the panel was being built and populated.
+    aView.m_aJSDialogSelectCounts.clear();
+
+    // When another user edits the document without touching the current slide's
+    // transition, twice, to rule out a one-shot fluke:
+    pXImpressDocument->GetDocShell()->SetModified(true);
+    Scheduler::ProcessEventsToIdle();
+    pXImpressDocument->GetDocShell()->SetModified(true);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the panel must not resend a selection for an entry that is already selected.
+    // Without the fix in place, this test would have failed: updateControls() reselected
+    // the same entry unconditionally on every resync, sending a redundant "select" action
+    // that resets the scroll position of every other user's gallery.
+    CPPUNIT_ASSERT_EQUAL(0, aView.m_aJSDialogSelectCounts["transitions_icons"]);
 }
 
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testViewCursorParts)
@@ -1162,6 +1363,35 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPostKeyEventInvalidation)
     CPPUNIT_ASSERT(!aView2.m_bTilesInvalidated);
 }
 
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTypingInvalidatesSlideForViewOnOtherSlide)
+{
+    // The first view shows the first slide, the second view the second slide.
+    SdXImpressDocument* pXImpressDocument = createDoc("2slides.odp");
+    int nView1 = KitHelper::getCurrentView();
+    SdTestViewCallback aView1;
+    KitHelper::createView();
+    pXImpressDocument->initializeForTiledRendering({});
+    SdTestViewCallback aView2;
+    pXImpressDocument->setPart(1);
+    Scheduler::ProcessEventsToIdle();
+
+    // Type into the title of the first slide in the first view.
+    KitHelper::setView(nView1);
+    aView2.m_aInvalidations.clear();
+    aView2.m_aInvalidationParts.clear();
+    pXImpressDocument->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_TAB);
+    pXImpressDocument->postKeyEvent(COKitKeyEventType::UP, 0, KEY_TAB);
+    pXImpressDocument->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pXImpressDocument->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    Scheduler::ProcessEventsToIdle();
+
+    // The second view still shows a preview of the first slide, so it learns that the first
+    // slide changed.
+    CPPUNIT_ASSERT(!aView2.m_aInvalidations.empty());
+    for (int nPart : aView2.m_aInvalidationParts)
+        CPPUNIT_ASSERT_EQUAL(0, nPart);
+}
+
 // Rendering a slide-panel preview transiently switches the part (with
 // bAllowChangeFocus false) to paint another slide and switches back. That must
 // keep the selection of a shape that is being text-edited, otherwise the next
@@ -1202,11 +1432,181 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testKeepTextSelectionAcrossTransientP
 
     // Copying targets the selected text, not an empty object copy.
     dispatchCommand(mxComponent, u".uno:Copy"_ustr, cpo::uno::Sequence<beans::PropertyValue>());
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard
         = pOutlinerViewAfter->GetEditView().GetClipboard();
     CPPUNIT_ASSERT_EQUAL("First slide"_ostr,
                          apitest::helper::transferable::getTextSelection(
                              xClipboard->getContents(), "text/plain;charset=utf-8"_ostr));
+}
+
+// A slide preview paints the whole slide into a device of a couple of hundred
+// pixels, and the text being edited is laid out for that device. The reported
+// text selection stays the measurement of the view: with a whole slide painted
+// into 180 by 101 pixels one device pixel covers about 88 twips, which is how
+// far the preview's own rectangles can sit from the text they cover.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPreviewRenderKeepsReportedTextSelection)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    setupCOKitViewCallback(pViewShell->GetViewShellBase());
+
+    uno::Reference<container::XIndexAccess> xDrawPage(
+        pXImpressDocument->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    xShape->setString(u"Aaa bbb."_ustr);
+
+    SdrView* pView = pViewShell->GetView();
+    pView->SdrBeginTextEdit(pViewShell->GetActualPage()->GetObj(0));
+    CPPUNIT_ASSERT(pView->GetTextEditObject());
+    pView->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection(0, 4, 0, 7));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), m_aSelection.size());
+    const ::tools::Rectangle aSelectionOfTheView = m_aSelection[0];
+
+    // Paint a preview of the slide: the whole page into 180 by 101 pixels.
+    const Size aPageSize = pXImpressDocument->getDocumentSize();
+    std::vector<unsigned char> aPixmap(180 * 101 * 4, 0);
+    ScopedVclPtrInstance<VirtualDevice> pDevice(DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetOutputSizePixelScaleOffsetAndKitBuffer(Size(180, 101), 1.0, Point(),
+                                                       aPixmap.data());
+    pXImpressDocument->paintTile(*pDevice, 180, 101, 0, 0, aPageSize.Width(),
+                                aPageSize.Height());
+    Scheduler::ProcessEventsToIdle();
+
+    // This failed: the preview reported the rectangle it measured for its own
+    // device, which is narrower than the text.
+    CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), m_aSelection.size());
+    CPPUNIT_ASSERT_EQUAL(aSelectionOfTheView, m_aSelection[0]);
+}
+
+// Two views edit text on two different slides at the same time. What one of
+// them does reaches every view as a document change, and a view that has a
+// slide with an empty placeholder on it rebuilds its layout tags and with them
+// the handles of what it has marked. A view that is editing text keeps the
+// text it selected through all of that.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTextSelectionSurvivesEditingInAnotherView)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("2slides.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->getParts() >= 2);
+
+    // The first view edits the title of the first slide and selects some text.
+    SdTestViewCallback aView1;
+    const int nView1 = KitHelper::getCurrentView();
+    sd::ViewShell* pViewShell1 = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView1 = pViewShell1->GetView();
+    SdrObject* pTitle1 = pViewShell1->GetActualPage()->GetObj(0);
+    pView1->MarkObj(pTitle1, pView1->GetSdrPageView());
+    pView1->SdrBeginTextEdit(pTitle1);
+    CPPUNIT_ASSERT(pView1->GetTextEditObject());
+    pView1->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection(0, 0, 0, 5));
+    CPPUNIT_ASSERT(pView1->GetTextEditOutlinerView()->GetEditView().HasSelection());
+    Scheduler::ProcessEventsToIdle();
+    aView1.m_aTextSelections.clear();
+
+    // The second view sits on the second slide and starts editing the title
+    // there.
+    KitHelper::createView();
+    pXImpressDocument->initializeForTiledRendering({});
+    SdTestViewCallback aView2;
+    pXImpressDocument->setPart(1);
+    sd::ViewShell* pViewShell2 = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView2 = pViewShell2->GetView();
+    CPPUNIT_ASSERT(pView2 != pView1);
+    SdrObject* pTitle2 = pViewShell2->GetActualPage()->GetObj(0);
+    pView2->MarkObj(pTitle2, pView2->GetSdrPageView());
+    pView2->SdrBeginTextEdit(pTitle2);
+    CPPUNIT_ASSERT(pView2->GetTextEditObject());
+    pView2->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection(0, 0, 0, 6));
+    Scheduler::ProcessEventsToIdle();
+
+    // This failed: the first view was told that its text selection is gone.
+    for (const OString& rSelection : aView1.m_aTextSelections)
+        CPPUNIT_ASSERT_MESSAGE("the first view was told its selection is gone",
+                               !rSelection.isEmpty());
+    CPPUNIT_ASSERT(pView1->GetTextEditObject());
+    CPPUNIT_ASSERT(pView1->GetTextEditOutlinerView()->GetEditView().HasSelection());
+
+    // The same holds the other way round while the first view carries on typing.
+    aView2.m_aTextSelections.clear();
+    KitHelper::setView(nView1);
+    pXImpressDocument->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pXImpressDocument->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    Scheduler::ProcessEventsToIdle();
+
+    for (const OString& rSelection : aView2.m_aTextSelections)
+        CPPUNIT_ASSERT_MESSAGE("the second view was told its selection is gone",
+                               !rSelection.isEmpty());
+    CPPUNIT_ASSERT(pView2->GetTextEditObject());
+    CPPUNIT_ASSERT(pView2->GetTextEditOutlinerView()->GetEditView().HasSelection());
+}
+
+// Making the selected text bold lays it out wider, and the reported text
+// selection is the measurement of the new layout.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testReportedTextSelectionFollowsBoldChange)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    setupCOKitViewCallback(pViewShell->GetViewShellBase());
+
+    uno::Reference<container::XIndexAccess> xDrawPage(
+        pXImpressDocument->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    xShape->setString(u"Aaa bbb."_ustr);
+
+    SdrView* pView = pViewShell->GetView();
+    pView->SdrBeginTextEdit(pViewShell->GetActualPage()->GetObj(0));
+    CPPUNIT_ASSERT(pView->GetTextEditObject());
+    pView->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection(0, 0, 0, 3));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), m_aSelection.size());
+    const ::tools::Rectangle aSelectionOfTheRegularText = m_aSelection[0];
+
+    dispatchCommand(mxComponent, u".uno:Bold"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    // This failed: the text had become bold and wider, while the rectangle
+    // reported for it was still the one measured before the change.
+    CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), m_aSelection.size());
+    CPPUNIT_ASSERT_GREATER(aSelectionOfTheRegularText.GetWidth(), m_aSelection[0].GetWidth());
+}
+
+// A click into the text being edited collapses its selection. The collapsed
+// selection is reported, so the client stops drawing the one it had.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testClickReportsCollapsedTextSelection)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    setupCOKitViewCallback(pViewShell->GetViewShellBase());
+
+    uno::Reference<container::XIndexAccess> xDrawPage(
+        pXImpressDocument->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    xShape->setString(u"Aaa bbb."_ustr);
+
+    SdrView* pView = pViewShell->GetView();
+    pView->SdrBeginTextEdit(pViewShell->GetActualPage()->GetObj(0));
+    CPPUNIT_ASSERT(pView->GetTextEditObject());
+    EditView& rEditView = pView->GetTextEditOutlinerView()->GetEditView();
+    rEditView.SetSelection(ESelection(0, 4, 0, 7));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(u"bbb"_ustr, rEditView.GetSelected());
+    CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(1), m_aSelection.size());
+
+    // Click into the first word, left of the selection. The click goes straight to the edit
+    // view, and the report is checked before a repaint of the window can report it too.
+    sd::Window* pWindow = pViewShell->GetActiveWindow();
+    CPPUNIT_ASSERT(pWindow);
+    const Point aClickLogic(
+        o3tl::convert(m_aSelection[0].Left() - 500, o3tl::Length::twip, o3tl::Length::mm100),
+        o3tl::convert(m_aSelection[0].Center().Y(), o3tl::Length::twip, o3tl::Length::mm100));
+    const MouseEvent aClick(pWindow->LogicToPixel(aClickLogic), /*nClicks=*/1,
+                            MouseEventModifiers::SIMPLECLICK, MOUSE_LEFT);
+    rEditView.MouseButtonDown(aClick);
+    rEditView.MouseButtonUp(aClick);
+
+    CPPUNIT_ASSERT(!rEditView.HasSelection());
+    // This failed: the last reported selection was still the one of "bbb".
+    CPPUNIT_ASSERT(m_aSelection.empty());
 }
 
 /**
@@ -1338,6 +1738,86 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTdf104405)
             "/SdDrawDocument/SdrModel/maPages/SdPage/SdrPage/SdrObjList/SdrTableObj/SdrTableObjImpl"
                 "/TableModel/Cell[1]/DefaultProperties/SfxItemSet/SdrTextVertAdjustItem",
             "value"));
+}
+
+namespace
+{
+/// This helper clicks in the middle of the given cell of a table on a slide.
+void clickIntoCell(SdXImpressDocument& rDocument, sdr::table::SdrTableObj& rTable,
+                   sal_Int32 nColumn, sal_Int32 nRow)
+{
+    ::tools::Rectangle aCellRect;
+    rTable.getCellBounds(sdr::table::CellPos(nColumn, nRow), aCellRect);
+    // The rectangle stays empty when the table has no cell at that column and row.
+    CPPUNIT_ASSERT(!aCellRect.IsEmpty());
+    const Point aCentre = aCellRect.Center();
+    const int nX = o3tl::toTwips(aCentre.X(), o3tl::Length::mm100);
+    const int nY = o3tl::toTwips(aCentre.Y(), o3tl::Length::mm100);
+    rDocument.postMouseEvent(COKitMouseEventType::BUTTONDOWN, nX, nY, 1, MOUSE_LEFT, 0);
+    rDocument.postMouseEvent(COKitMouseEventType::BUTTONUP, nX, nY, 1, MOUSE_LEFT, 0);
+    Scheduler::ProcessEventsToIdle();
+}
+
+/// This helper selects the whole text of the cell that is being edited.
+void selectEditedText(SdrView& rView)
+{
+    OutlinerView* pOutlinerView = rView.GetTextEditOutlinerView();
+    CPPUNIT_ASSERT(pOutlinerView);
+    const sal_Int32 nTextLength = pOutlinerView->GetOutliner().GetEditEngine().GetTextLen(0);
+    pOutlinerView->SetSelection(ESelection(0, 0, 0, nTextLength));
+}
+
+/// This helper returns the character formatting of the text that is selected in the cell being
+/// edited.
+SfxItemSet getEditedTextAttributes(SdrView& rView)
+{
+    OutlinerView* pOutlinerView = rView.GetTextEditOutlinerView();
+    CPPUNIT_ASSERT(pOutlinerView);
+    return pOutlinerView->GetAttribs();
+}
+}
+
+/// A single undo takes a cell that was painted with Clone Formatting back to the formatting
+/// it had, while its text is still being edited.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testCloneFormattingUndoInTableCell)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("table-clone-formatting.fodp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pActualPage->GetObj(0));
+    CPPUNIT_ASSERT(pTableObject);
+    SdrView* pView = pViewShell->GetView();
+
+    // The text of the first cell gets a highlight colour, which is the formatting that the
+    // paintbrush carries to the second cell.
+    clickIntoCell(*pXImpressDocument, *pTableObject, 0, 0);
+    selectEditedText(*pView);
+    const sal_uInt32 nFontHeight
+        = getEditedTextAttributes(*pView).Get(EE_CHAR_FONTHEIGHT).GetHeight();
+    cpo::uno::Sequence aColourArgs{ comphelper::makePropertyValue(u"CharBackColor"_ustr,
+                                                                  sal_Int32(0xffff00)) };
+    dispatchCommand(mxComponent, u".uno:CharBackColor"_ustr, aColourArgs);
+    Scheduler::ProcessEventsToIdle();
+
+    // The paintbrush stays active, the way it does after a double click on its icon, and the
+    // second cell takes the formatting of the first one.
+    cpo::uno::Sequence aBrushArgs{ comphelper::makePropertyValue(u"PersistentCopy"_ustr, true) };
+    dispatchCommand(mxComponent, u".uno:FormatPaintbrush"_ustr, aBrushArgs);
+    Scheduler::ProcessEventsToIdle();
+    clickIntoCell(*pXImpressDocument, *pTableObject, 1, 0);
+    selectEditedText(*pView);
+    CPPUNIT_ASSERT_EQUAL(Color(0xffff00),
+                         getEditedTextAttributes(*pView).Get(EE_CHAR_BKGCOLOR).GetValue());
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    selectEditedText(*pView);
+    const SfxItemSet aAttributes = getEditedTextAttributes(*pView);
+    // Without the fix one undo took back only a part of the paste. The text lost the character
+    // height it started with, so it was shown at the larger height it inherits.
+    CPPUNIT_ASSERT_EQUAL(nFontHeight, aAttributes.Get(EE_CHAR_FONTHEIGHT).GetHeight());
+    CPPUNIT_ASSERT_EQUAL(COL_AUTO, aAttributes.Get(EE_CHAR_BKGCOLOR).GetValue());
 }
 
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTdf81754)
@@ -2181,11 +2661,11 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testGetViewRenderState)
     SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
     int nFirstViewId = KitHelper::getCurrentView();
     SdTestViewCallback aView1;
-    CPPUNIT_ASSERT_EQUAL("SD;Default"_ostr, pXImpressDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL("S;Default"_ostr, pXImpressDocument->getViewRenderState());
     // Create a second view
     KitHelper::createView();
     SdTestViewCallback aView2;
-    CPPUNIT_ASSERT_EQUAL("SD;Default"_ostr, pXImpressDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL("S;Default"_ostr, pXImpressDocument->getViewRenderState());
     // Set to dark scheme
     {
         cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
@@ -2195,14 +2675,14 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testGetViewRenderState)
         );
         dispatchCommand(mxComponent, u".uno:ChangeTheme"_ustr, aPropertyValues);
     }
-    CPPUNIT_ASSERT_EQUAL("SD;Dark"_ostr, pXImpressDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL("S;Dark"_ostr, pXImpressDocument->getViewRenderState());
     // Switch back to the first view, and check that the options string is the same
     KitHelper::setView(nFirstViewId);
-    CPPUNIT_ASSERT_EQUAL("SD;Default"_ostr, pXImpressDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL("S;Default"_ostr, pXImpressDocument->getViewRenderState());
 }
 
 // Helper function to send a theme command with a named theme to the current view
-static void dispatchThemeCommand(const css::uno::Reference<css::lang::XComponent>& xComponent,
+static void dispatchThemeCommand(const cpo::uno::Reference<css::lang::XComponent>& xComponent,
                                  const OUString& rCommand, const OUString& rThemeName)
 {
     cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
@@ -2211,6 +2691,57 @@ static void dispatchThemeCommand(const css::uno::Reference<css::lang::XComponent
         }
     );
     unotest::MacrosTest::dispatchCommand(xComponent, rCommand, aPropertyValues);
+}
+
+// Whether the view render state carries the letter that stands for a dark document background.
+// The letters of the states that are on come before the semicolon; the name of the color scheme
+// follows it and can hold a D of its own.
+static bool hasDarkBackgroundLetter(std::string_view aViewRenderState)
+{
+    const std::string_view aStateLetters = aViewRenderState.substr(0, aViewRenderState.find(';'));
+    return aStateLetters.find('D') != std::string_view::npos;
+}
+
+// The letter that stands for a dark document background marks the view whose background is dark.
+// Two views with different backgrounds get different states, which is what keeps their tiles apart.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testViewRenderStateMarksTheDarkView)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    const int nFirstViewId = KitHelper::getCurrentView();
+    SdTestViewCallback aView1;
+
+    // The color configuration belongs to the process and every test in this file shares it, so put
+    // the document background back on the way out, whatever the assertions below do.
+    svtools::EditableColorConfig aColorConfig;
+    const Color aDocColorBefore = aColorConfig.GetColorValue(svtools::DOCCOLOR).nColor;
+    comphelper::ScopeGuard aRestoreDocColor(
+        [aDocColorBefore]
+        {
+            svtools::EditableColorConfig aRestore;
+            svtools::ColorConfigValue aValue;
+            aValue.nColor = aDocColorBefore;
+            aRestore.SetColorValue(svtools::DOCCOLOR, aValue);
+        });
+
+    // Start from a light background, whatever the tests before this one left behind.
+    dispatchThemeCommand(mxComponent, u".uno:InvertBackground"_ustr, u"Light"_ustr);
+    CPPUNIT_ASSERT(!hasDarkBackgroundLetter(pXImpressDocument->getViewRenderState()));
+
+    // This view inverts its document background on its own.
+    dispatchThemeCommand(mxComponent, u".uno:InvertBackground"_ustr, u"Dark"_ustr);
+    CPPUNIT_ASSERT(hasDarkBackgroundLetter(pXImpressDocument->getViewRenderState()));
+
+    // A second view goes back to a light background, which puts the light color back into the
+    // color configuration of the process as well.
+    KitHelper::createView();
+    SdTestViewCallback aView2;
+    dispatchThemeCommand(mxComponent, u".uno:InvertBackground"_ustr, u"Light"_ustr);
+    CPPUNIT_ASSERT(!hasDarkBackgroundLetter(pXImpressDocument->getViewRenderState()));
+
+    // Without the fix the letter followed the appearance mode of the process, which is one setting
+    // for every view, so it was the light view that carried it and the dark one that did not.
+    KitHelper::setView(nFirstViewId);
+    CPPUNIT_ASSERT(hasDarkBackgroundLetter(pXImpressDocument->getViewRenderState()));
 }
 
 // Helper function to paint a tile of the first slide and return it as a bitmap. The painted area
@@ -2355,6 +2886,236 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testShapeTextEditAutoColorUnfilledSha
 
     CPPUNIT_ASSERT_EQUAL(
         COL_WHITE, getShapeTextEditAutoColor(pXImpressDocument, pObject, pViewShell->GetView()));
+}
+
+// Leaves the first view on a light theme while a second view switches to a dark one. The color
+// configuration of the process belongs to whichever view switched its theme last, so it now
+// disagrees with the theme of the first view, which is current again on return.
+static void switchSecondViewToDarkTheme(const cpo::uno::Reference<css::lang::XComponent>& xComponent)
+{
+    const int nFirstViewId = KitHelper::getCurrentView();
+    dispatchThemeCommand(xComponent, u".uno:ChangeTheme"_ustr, u"Light"_ustr);
+    KitHelper::createView();
+    dispatchThemeCommand(xComponent, u".uno:ChangeTheme"_ustr, u"Dark"_ustr);
+    KitHelper::setView(nFirstViewId);
+}
+
+// A shape fill that is not fully opaque is mixed with the page background of the view being
+// painted when the automatic font color is resolved against it, not with the document background
+// of the color configuration
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testShapeTextEditAutoColorTranslucentFill)
+{
+    addScheme(u"Dark"_ustr, Color(0x1c, 0x1c, 0x1c));
+    addScheme(u"Light"_ustr, COL_WHITE);
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrObject* pObject = pViewShell->GetActualPage()->GetObj(0);
+    CPPUNIT_ASSERT(pObject);
+    switchSecondViewToDarkTheme(mxComponent);
+
+    // Fill the shape with black that mostly lets the white page of this view through
+    pObject->SetMergedItem(XFillStyleItem(drawing::FillStyle_SOLID));
+    pObject->SetMergedItem(XFillColorItem(OUString(), COL_BLACK));
+    pObject->SetMergedItem(XFillTransparenceItem(80));
+
+    // The fill over the white page of this view is light, so the automatic font color is black;
+    // without the accompanying fix the fill was mixed with the dark document background of the
+    // color configuration, which the second view had put there, and the text of the light first
+    // view came out white
+    CPPUNIT_ASSERT_EQUAL(
+        COL_BLACK, getShapeTextEditAutoColor(pXImpressDocument, pObject, pViewShell->GetView()));
+}
+
+// The fill of a table cell that is not fully opaque gets the same treatment while the cell is
+// edited: mixed with the page background of the view being painted
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTableCellTextEditAutoColorTranslucentFill)
+{
+    addScheme(u"Dark"_ustr, Color(0x1c, 0x1c, 0x1c));
+    addScheme(u"Light"_ustr, COL_WHITE);
+    SdXImpressDocument* pXImpressDocument = createDoc("table.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrObject* pObject = pViewShell->GetActualPage()->GetObj(0);
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pObject);
+    CPPUNIT_ASSERT(pTableObject);
+    switchSecondViewToDarkTheme(mxComponent);
+
+    // Fill the first cell, where text edit will start, with black that mostly lets the white
+    // page of this view through
+    uno::Reference<table::XCellRange> xCellRange(pTableObject->getTable(), uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xCell(xCellRange->getCellByPosition(0, 0),
+                                              uno::UNO_QUERY_THROW);
+    xCell->setPropertyValue(u"FillStyle"_ustr, cpo::uno::Any(drawing::FillStyle_SOLID));
+    xCell->setPropertyValue(u"FillColor"_ustr, cpo::uno::Any(COL_BLACK));
+    xCell->setPropertyValue(u"FillTransparence"_ustr, cpo::uno::Any(sal_Int32(80)));
+
+    // The cell background in this view is light, so the automatic font color is black
+    CPPUNIT_ASSERT_EQUAL(
+        COL_BLACK, getShapeTextEditAutoColor(pXImpressDocument, pObject, pViewShell->GetView()));
+}
+
+// Rendering the text of a table cell from the model resolves the same mix for the render target
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTableCellAutoColorTranslucentFillRender)
+{
+    addScheme(u"Dark"_ustr, Color(0x1c, 0x1c, 0x1c));
+    addScheme(u"Light"_ustr, COL_WHITE);
+    SdXImpressDocument* pXImpressDocument = createDoc("table.odp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrObject* pObject = pViewShell->GetActualPage()->GetObj(0);
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pObject);
+    CPPUNIT_ASSERT(pTableObject);
+
+    // Put text with an automatic color into the first cell and fill the cell with black that
+    // mostly lets the white page of this view through
+    uno::Reference<table::XCellRange> xCellRange(pTableObject->getTable(), uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xCell(xCellRange->getCellByPosition(0, 0),
+                                              uno::UNO_QUERY_THROW);
+    uno::Reference<text::XText> xText(xCell, uno::UNO_QUERY_THROW);
+    xText->setString(u"Automatic"_ustr);
+    xCell->setPropertyValue(u"FillStyle"_ustr, cpo::uno::Any(drawing::FillStyle_SOLID));
+    xCell->setPropertyValue(u"FillColor"_ustr, cpo::uno::Any(COL_BLACK));
+    xCell->setPropertyValue(u"FillTransparence"_ustr, cpo::uno::Any(sal_Int32(80)));
+
+    switchSecondViewToDarkTheme(mxComponent);
+
+    // The first cell takes the upper half of the table; its region in the tile, which maps
+    // 15360x7680 twips onto 1024x1024 pixels, stepped in a bit so the cell borders stay outside
+    const ::tools::Rectangle aRect(pObject->GetLogicRect());
+    const ::tools::Long nLeft(o3tl::toTwips(aRect.Left(), o3tl::Length::mm100) * 1024 / 15360 + 8);
+    const ::tools::Long nRight(o3tl::toTwips(aRect.Right(), o3tl::Length::mm100) * 1024 / 15360 - 8);
+    const ::tools::Long nTop(o3tl::toTwips(aRect.Top(), o3tl::Length::mm100) * 1024 / 7680 + 8);
+    const ::tools::Long nBottom(
+        o3tl::toTwips(aRect.Top() + aRect.GetHeight() / 2, o3tl::Length::mm100) * 1024 / 7680 - 8);
+
+    Bitmap aBitmap = getTile(pXImpressDocument);
+    BitmapScopedReadAccess pAccess(aBitmap);
+    bool bDarkText(false);
+    for (::tools::Long nY = nTop; nY <= nBottom && !bDarkText; ++nY)
+    {
+        for (::tools::Long nX = nLeft; nX <= nRight && !bDarkText; ++nX)
+            bDarkText = Color(pAccess->GetPixel(nY, nX)).IsDark();
+    }
+
+    // The cell background in this light view is light, so the automatic text color has to be
+    // dark; without the accompanying fix the mix was made against the dark document background
+    // of the color configuration and the text of this view was painted white
+    CPPUNIT_ASSERT(bDarkText);
+}
+
+// The notes text of a slide sits on the notes page, which has no fill of its own and whose master
+// carries none either, so its automatic font color follows the document background of the view
+// and not the fill of the master of the slide
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testNotesPageAutoColorWithDarkSlideMaster)
+{
+    addScheme(u"Light"_ustr, COL_WHITE);
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    dispatchThemeCommand(mxComponent, u".uno:ChangeTheme"_ustr, u"Light"_ustr);
+
+    // Show the notes pages
+    dispatchCommand(mxComponent, u".uno:NotesMode"_ustr,
+                    cpo::uno::Sequence<beans::PropertyValue>());
+    Scheduler::ProcessEventsToIdle();
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pNotesPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT(pNotesPage);
+    CPPUNIT_ASSERT_EQUAL(PageKind::Notes, pNotesPage->GetPageKind());
+
+    // Give the master of the slides a dark fill, as a dark template has
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    SdPage* pSlideMaster = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pSlideMaster);
+    pSlideMaster->getSdrPageProperties().PutItem(XFillStyleItem(drawing::FillStyle_SOLID));
+    pSlideMaster->getSdrPageProperties().PutItem(
+        XFillColorItem(OUString(), Color(0x1c, 0x1c, 0x1c)));
+
+    // The notes text is edited on the white notes page, so its automatic color is black; without
+    // the accompanying fix the notes page answered with the dark fill of the slide master and
+    // the notes text was white on white
+    SdrObject* pNotesObject = pNotesPage->GetPresObj(PresObjKind::Notes);
+    CPPUNIT_ASSERT(pNotesObject);
+    CPPUNIT_ASSERT_EQUAL(COL_BLACK, getShapeTextEditAutoColor(pXImpressDocument, pNotesObject,
+                                                              pViewShell->GetView()));
+}
+
+// Collects the fill colors of the filled paths and the colors of the text in a PDF page object,
+// also inside the form objects it holds
+static void collectPdfColors(vcl::pdf::PDFiumPageObject& rObject, std::vector<Color>& rPathColors,
+                             std::vector<Color>& rTextColors)
+{
+    switch (rObject.getType())
+    {
+        case vcl::pdf::PDFPageObjectType::Path:
+        {
+            vcl::pdf::PDFFillMode eFillMode;
+            bool bStroke;
+            rObject.getDrawMode(eFillMode, bStroke);
+            if (eFillMode != vcl::pdf::PDFFillMode::None)
+                rPathColors.push_back(rObject.getFillColor());
+            break;
+        }
+        case vcl::pdf::PDFPageObjectType::Text:
+            rTextColors.push_back(rObject.getFillColor());
+            break;
+        case vcl::pdf::PDFPageObjectType::Form:
+            for (int i = 0; i < rObject.getFormObjectCount(); ++i)
+                collectPdfColors(*rObject.getFormObject(i), rPathColors, rTextColors);
+            break;
+        default:
+            break;
+    }
+}
+
+// The notes pages exported to PDF for printing sit on white paper with dark notes text, also
+// while the view has a dark color scheme. A notes page has no fill of its own, and the notes text
+// here is stretched to fit its frame, which lays it out apart from ordinary text.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testNotesPagesPdfOnWhiteWithDarkScheme)
+{
+    // Changing the theme writes the document color of the whole process, so the color that was
+    // in place is put back at the end of the test.
+    ScopedDocumentColor aScopedDocumentColor;
+
+    addScheme(u"Dark"_ustr, Color(0x1c, 0x1c, 0x1c));
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    dispatchThemeCommand(mxComponent, u".uno:ChangeTheme"_ustr, u"Dark"_ustr);
+
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    SdPage* pNotesPage = pDoc->GetSdPage(0, PageKind::Notes);
+    CPPUNIT_ASSERT(pNotesPage);
+    auto pNotesObject = dynamic_cast<SdrTextObj*>(pNotesPage->GetPresObj(PresObjKind::Notes));
+    CPPUNIT_ASSERT(pNotesObject);
+    pNotesObject->SetEmptyPresObj(false);
+    pNotesObject->SetText(u"Speaker notes"_ustr);
+    // Fit to size applies only to a frame that keeps its width
+    pNotesObject->SetMergedItem(makeSdrTextAutoGrowWidthItem(false));
+    pNotesObject->SetMergedItem(SdrTextFitToSizeTypeItem(drawing::TextFitToSizeType_PROPORTIONAL));
+
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
+        { u"ExportNotesPages"_ustr, cpo::uno::Any(true) },
+        { u"ExportOnlyNotesPages"_ustr, cpo::uno::Any(true) },
+    }));
+    comphelper::SequenceAsHashMap aMediaDescriptor;
+    aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
+    save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
+
+    std::unique_ptr<vcl::pdf::PDFiumDocument> pPdfDocument = parsePDFExport();
+    CPPUNIT_ASSERT(pPdfDocument);
+    std::unique_ptr<vcl::pdf::PDFiumPage> pPdfPage = pPdfDocument->openPage(/*nIndex=*/0);
+    CPPUNIT_ASSERT(pPdfPage);
+
+    std::vector<Color> aPathColors;
+    std::vector<Color> aTextColors;
+    for (int i = 0; i < pPdfPage->getObjectCount(); ++i)
+        collectPdfColors(*pPdfPage->getObject(i), aPathColors, aTextColors);
+
+    // Every filled area on the page is light, so the page sits on white paper
+    for (const Color& rColor : aPathColors)
+        CPPUNIT_ASSERT_MESSAGE(OString("dark fill " + rColor.AsRGBHexString().toUtf8()).getStr(),
+                               !rColor.IsDark());
+
+    // The stretched notes text is dark, so it reads on the white page
+    CPPUNIT_ASSERT(!aTextColors.empty());
+    for (const Color& rColor : aTextColors)
+        CPPUNIT_ASSERT_MESSAGE(OString("light text " + rColor.AsRGBHexString().toUtf8()).getStr(),
+                               rColor.IsDark());
 }
 
 // Test that changing the theme in one view doesn't change it in the other view
@@ -3028,6 +3789,53 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testEndTextEditAfterShapeDeleted)
     CPPUNIT_ASSERT(!pView1->getViewLocalUndoManager());
 }
 
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testHiddenLayersReachANewView)
+{
+    // A view that starts listening is told which layers it hides at once, so a client that
+    // joins or comes back hides the right layers from the start.
+    createDoc("dummy.odg");
+    SdTestViewCallback aView;
+    auto it = aView.m_aStateChanges.find(".uno:LayerVisibility");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+    CPPUNIT_ASSERT(it->second.get_child("state").empty());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testHiddenLayersReachTheView)
+{
+    // A view drawn from the model has no page view of its own to ask which layers are hidden,
+    // so the view is told, as a state change listing the ids of the layers it hides.
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odg");
+    SdTestViewCallback aView;
+    auto* pDrawViewShell
+        = dynamic_cast<sd::DrawViewShell*>(pXImpressDocument->GetDocShell()->GetViewShell());
+    CPPUNIT_ASSERT(pDrawViewShell);
+    SdrPageView* pPageView = pDrawViewShell->GetView()->GetSdrPageView();
+    CPPUNIT_ASSERT(pPageView);
+    const SdrLayerAdmin& rLayerAdmin = pXImpressDocument->GetDoc()->GetLayerAdmin();
+    const SdrLayer* pControls = rLayerAdmin.GetLayer(u"controls"_ustr);
+    CPPUNIT_ASSERT(pControls);
+
+    pPageView->SetLayerVisible(u"controls"_ustr, false);
+    aView.m_aStateChanges.clear();
+    pDrawViewShell->NotifyHiddenLayers();
+
+    auto it = aView.m_aStateChanges.find(".uno:LayerVisibility");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+    std::vector<sal_Int32> aHidden;
+    for (const auto& rId : it->second.get_child("state"))
+        aHidden.push_back(rId.second.get_value<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aHidden.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(pControls->GetID().get()), aHidden[0]);
+
+    // Showing the layer again empties the list.
+    pPageView->SetLayerVisible(u"controls"_ustr, true);
+    aView.m_aStateChanges.clear();
+    pDrawViewShell->NotifyHiddenLayers();
+    it = aView.m_aStateChanges.find(".uno:LayerVisibility");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+    CPPUNIT_ASSERT(it->second.get_child("state").empty());
+}
+
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSidebarHide)
 {
     // Given an impress document, with a visible sidebar:
@@ -3191,6 +3999,32 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationInfo)
         CPPUNIT_ASSERT_EQUAL(std::string("FadeOverColor"), rChild.get_child("transitionSubtype").get_value<std::string>());
         CPPUNIT_ASSERT_EQUAL(true, rChild.get_child("transitionDirection").get_value<bool>());
     }
+}
+
+// The presentation info reports the size of the slides even while the canvas page, which is a
+// much larger square, is the page on screen.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationInfoSizeOnCanvasPage)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("PresentationInfoTest.odp");
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    Scheduler::ProcessEventsToIdle();
+
+    dispatchCommand(mxComponent, u".uno:InsertCanvasSlide"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDocument->HasCanvasPage());
+    CPPUNIT_ASSERT(pDocument->GetSdPage(0, PageKind::Standard)->IsCanvasPage());
+
+    pXImpressDocument->setPart(0);
+    Scheduler::ProcessEventsToIdle();
+
+    boost::property_tree::ptree aTree;
+    readJSON(aTree, pXImpressDocument->getPresentationInfo());
+
+    CPPUNIT_ASSERT_EQUAL(15875, aTree.get_child("docWidth").get_value<int>());
+    CPPUNIT_ASSERT_EQUAL(8930, aTree.get_child("docHeight").get_value<int>());
 }
 
 // Notes with several paragraphs keep the paragraph breaks as newlines.
@@ -3655,6 +4489,38 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideshowLayeredRendering)
         CPPUNIT_ASSERT(pXImpressDocument->renderNextSlideLayer(pBuffer.data(), bIsBitmapLayer, dScale, aJson));
         CPPUNIT_ASSERT(aJson.empty());
     }
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideRendererSizeFitsTheRequestedBox)
+{
+    // The slide size never exceeds the requested size in either direction.
+    SdXImpressDocument* pXImpressDocument = createDoc("SlideRenderingTest.odp");
+    std::string sHash = GetSlideHash(pXImpressDocument, 0);
+
+    // A square box limits the 16:9 slide by width.
+    sal_Int32 nViewWidth = 2000;
+    sal_Int32 nViewHeight = 2000;
+    CPPUNIT_ASSERT(pXImpressDocument->createSlideRenderer(OString(sHash), 0, nViewWidth, nViewHeight, true, true));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2000), nViewWidth);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1125), nViewHeight);
+
+    // A wide box limits it by height, so the width shrinks to keep the ratio.
+    nViewWidth = 2000;
+    nViewHeight = 1000;
+    CPPUNIT_ASSERT(pXImpressDocument->createSlideRenderer(OString(sHash), 0, nViewWidth, nViewHeight, true, true));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1777), nViewWidth);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1000), nViewHeight);
+
+    // A 9:16 portrait slide in a box whose width was rounded up from its height. The height that
+    // follows from that width is one pixel too tall, so the height stays at the requested value
+    // and the width shrinks by one pixel instead.
+    pXImpressDocument = createDoc("SlideRenderingTest_Portrait.odp");
+    sHash = GetSlideHash(pXImpressDocument, 0);
+    nViewWidth = 564;
+    nViewHeight = 1001;
+    CPPUNIT_ASSERT(pXImpressDocument->createSlideRenderer(OString(sHash), 0, nViewWidth, nViewHeight, true, true));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(563), nViewWidth);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1001), nViewHeight);
 }
 
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideshowLayeredRendering_WithFields)
@@ -4905,19 +5771,19 @@ public:
         m_aString = OUString(rMarkdown.data(), rMarkdown.size(), RTL_TEXTENCODING_UTF8);
     }
 
-    cpo::uno::Any SAL_CALL getTransferData(const css::datatransfer::DataFlavor& rFlavor) override
+    cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& rFlavor) override
     {
         if (rFlavor.MimeType == m_aFlavor.MimeType && rFlavor.DataType == m_aFlavor.DataType)
             return cpo::uno::Any(m_aString);
         return {};
     }
 
-    cpo::uno::Sequence<css::datatransfer::DataFlavor> SAL_CALL getTransferDataFlavors() override
+    cpo::uno::Sequence<css::datatransfer::DataFlavor> getTransferDataFlavors() override
     {
         return { m_aFlavor };
     }
 
-    bool SAL_CALL isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override
+    bool isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override
     {
         return rFlavor.MimeType == m_aFlavor.MimeType && rFlavor.DataType == m_aFlavor.DataType;
     }
@@ -4944,10 +5810,10 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPasteMarkdownInEditMode)
     rEditView.SetSelection(ESelection(0, 0, EE_PARA_MAX, EE_TEXTPOS_MAX));
 
     // Set markdown content on the clipboard:
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClip = rEditView.GetClipboard();
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClip = rEditView.GetClipboard();
     CPPUNIT_ASSERT(xClip.is());
     xClip->setContents(new MarkdownTransferable("**bold** text"),
-                       css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>());
+                       cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>());
 
     // When pasting:
     dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
@@ -4996,10 +5862,6 @@ void forEachPrimitive(const tools::JsonPath& rNode,
                 forEachPrimitive(rNode.sub(rChild.second), rVisitor);
         }
     }
-
-    // Recurse into sub-nodes
-    if (auto oMasterPage = rNode.at("masterPage"))
-        forEachPrimitive(*oMasterPage, rVisitor);
 }
 
 /// Collect all primitive types in the JSON tree
@@ -5031,9 +5893,12 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitives)
     SdXImpressDocument* pXImpressDocument = createDoc("SlideExample.odp");
     CPPUNIT_ASSERT(pXImpressDocument);
 
-    // Request vector content for the current slide
+    // Request vector content for the first slide, named by its page id.
+    const SdPage* pSlide = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    const OString aCommand = ".uno:VectorPrimitives?partid=" + pSlide->GetGuid().getString();
     tools::JsonWriter aJsonWriter;
-    pXImpressDocument->getCommandValues(aJsonWriter, ".uno:VectorPrimitives");
+    pXImpressDocument->getCommandValues(aJsonWriter,
+                                        std::string_view(aCommand.getStr(), aCommand.getLength()));
     OString aResult = aJsonWriter.finishAndGetAsOString();
 
     // Is JSON empty
@@ -5045,14 +5910,17 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitives)
     // Must have a "vectorprimitives"
     CPPUNIT_ASSERT_EQUAL("vectorprimitives"_ostr, aJson.getString("/type").value_or(OString()));
 
-    // Slide dimensions must be present
-    CPPUNIT_ASSERT(aJson.has("/slideWidth"));
-    CPPUNIT_ASSERT(aJson.has("/slideHeight"));
+    // The page is the first object, and it carries the page rectangle and
+    // everything that lies behind the objects on it.
+    CPPUNIT_ASSERT_EQUAL("page"_ostr, aJson.getString("/objects/0/kind").value_or(OString()));
+    CPPUNIT_ASSERT(aJson.getInt("/objects/0/width").value_or(0) > 0);
+    CPPUNIT_ASSERT(aJson.getInt("/objects/0/height").value_or(0) > 0);
 
-    // Check master page
-    auto oMasterPrimitives = aJson.at("/masterPage/primitives");
+    auto oMasterPrimitives = aJson.at("/objects/0/primitives");
     CPPUNIT_ASSERT(oMasterPrimitives.has_value());
-    // Master page: backgroundcolor + white fill + gradient background + 2 placeholder SdrRects.
+    // The page carries what lies behind the objects and is its own: the background color, the
+    // white page fill and the gradient the master defines. The master's placeholders this slide
+    // fills in are objects of the slide rather than part of the page.
     size_t nNumberOfMasterPrimitives = 0;
     bool bHasBackgroundColor = false;
     bool bHasWhiteFill = false;
@@ -5080,7 +5948,7 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitives)
             CPPUNIT_ASSERT(aPrimitive.has("gradient/colorStops"));
         }
     }
-    CPPUNIT_ASSERT_EQUAL(size_t(5), nNumberOfMasterPrimitives);
+    CPPUNIT_ASSERT_EQUAL(size_t(3), nNumberOfMasterPrimitives);
     CPPUNIT_ASSERT_MESSAGE("Expecting page background color", bHasBackgroundColor);
     CPPUNIT_ASSERT_MESSAGE("Expecting white page fill", bHasWhiteFill);
     CPPUNIT_ASSERT_MESSAGE("Expecting gradient background", bHasGradient);
@@ -5095,8 +5963,20 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitives)
         CPPUNIT_ASSERT(aObject.has("primitives"));
     }
 
-    // Check number of objects is what we expect.
-    CPPUNIT_ASSERT_EQUAL(size_t(10), aJson.getSize("/objects").value_or(0));
+    // Check number of objects is what we expect: the page, the footer this slide fills in, and
+    // the ten objects it holds of its own. The slide number is turned off on this slide, so it
+    // gets no copy, and the text box the master carries is the master's to send.
+    CPPUNIT_ASSERT_EQUAL(size_t(12), aJson.getSize("/objects").value_or(0));
+
+    // A copy of a master placeholder says whose it is, so a reader draws it with the master
+    // rather than with the objects of the slide.
+    size_t nMasterContent = 0;
+    for (const auto& rObject : oObjects->tree())
+    {
+        if (oObjects->sub(rObject.second).getBool("masterContent").value_or(false))
+            ++nMasterContent;
+    }
+    CPPUNIT_ASSERT_EQUAL(size_t(1), nMasterContent);
 
     // Collect all primitive types in the JSON tree.
     std::set<OString> aTypes = collectPrimitiveTypes(aJson);
@@ -5132,8 +6012,11 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitivesMasterPagePl
     SdXImpressDocument* pXImpressDocument = createDoc("MasterPagePlaceholderTest.fodp");
     CPPUNIT_ASSERT(pXImpressDocument);
 
+    const SdPage* pSlide = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    const OString aCommand = ".uno:VectorPrimitives?partid=" + pSlide->GetGuid().getString();
     tools::JsonWriter aJsonWriter;
-    pXImpressDocument->getCommandValues(aJsonWriter, ".uno:VectorPrimitives");
+    pXImpressDocument->getCommandValues(aJsonWriter,
+                                        std::string_view(aCommand.getStr(), aCommand.getLength()));
     OString aResult = aJsonWriter.finishAndGetAsOString();
     CPPUNIT_ASSERT(!aResult.isEmpty());
 
@@ -5141,8 +6024,9 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitivesMasterPagePl
 
     // The master page of the test document has only two presentation
     // placeholders (title + outline) which must be filtered out.
-    auto oMasterPage = aJson.at("/masterPage");
+    auto oMasterPage = aJson.at("/objects/0");
     CPPUNIT_ASSERT(oMasterPage.has_value());
+    CPPUNIT_ASSERT_EQUAL("page"_ostr, oMasterPage->getString("kind").value_or(OString()));
 
     std::vector<OString> aMasterTexts;
     forEachPrimitive(*oMasterPage, [&aMasterTexts](const tools::JsonPath& rNode)
@@ -5154,8 +6038,963 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPaintVectorPrimitivesMasterPagePl
         "Master page title/outline placeholder text must be filtered out",
         size_t(0), aMasterTexts.size());
 
-    // The slide itself should still contain its rectangle.
-    CPPUNIT_ASSERT_EQUAL(size_t(1), aJson.getSize("/objects").value_or(0));
+    // The slide itself should still contain its rectangle, after the page.
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aJson.getSize("/objects").value_or(0));
+}
+
+#ifndef _WIN32 // osl_setTimezone has no effect on Windows
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testAnnotationDateTimeUsesViewTimezone)
+{
+    // A new annotation and a reply to it are both stamped with the clock of the timezone their
+    // author reads.
+    createDoc("dummy.odp", comphelper::InitPropertySequence({
+                               { ".uno:Author", cpo::uno::Any(u"Kit User1"_ustr) },
+                           }));
+    SdTestViewCallback aView;
+
+    // The server keeps time in UTC and the author reads the clock in Kolkata, which is five and a
+    // half hours ahead of it the whole year round.
+    const std::pair<bool, OUString> aOldDefaultTimezone = KitHelper::getDefaultTimezone();
+    comphelper::ScopeGuard aRestoreTimezone(
+        [aOldDefaultTimezone]()
+        {
+            KitHelper::setDefaultTimezone(aOldDefaultTimezone.first, aOldDefaultTimezone.second);
+            comphelper::COKit::setTimezone(aOldDefaultTimezone.first, aOldDefaultTimezone.second);
+        });
+    KitHelper::setDefaultTimezone(true, u"UTC"_ustr);
+    comphelper::COKit::setTimezone(true, u"UTC"_ustr);
+    KitHelper::setViewTimezone(KitHelper::getCurrentView(), true, u"Asia/Kolkata"_ustr);
+    const tools::Time aAuthorOffset(5, 30);
+
+    // Both readings are in the server's zone, so the annotation has to fall between them once the
+    // author's offset is added.
+    const DateTime aBefore(DateTime::SYSTEM);
+    dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr,
+                    comphelper::InitPropertySequence({
+                        { "Text", cpo::uno::Any(u"a comment"_ustr) },
+                    }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    // An annotation stamp carries whole seconds, so the lower bound drops its fraction too.
+    DateTime aExpectedFrom = aBefore + aAuthorOffset;
+    aExpectedFrom.SetNanoSec(0);
+    const DateTime aExpectedTo = aAfter + aAuthorOffset;
+    css::util::DateTime aParsed;
+    OUString aDateTime = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTime"));
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(aDateTime, aParsed));
+    // Without the accompanying fix in place, this test would have failed: the annotation carried
+    // the server's own reading of the clock, five and a half hours behind the author's.
+    CPPUNIT_ASSERT(DateTime(aParsed).IsBetween(aExpectedFrom, aExpectedTo));
+
+    const int nComment = aView.m_aCommentCallbackResult.get<int>("id");
+    dispatchCommand(mxComponent, u".uno:ReplyToAnnotation"_ustr,
+                    comphelper::InitPropertySequence({
+                        { "Id", cpo::uno::Any(OUString::number(nComment)) },
+                        { "Text", cpo::uno::Any(u"a reply"_ustr) },
+                    }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfterReply(DateTime::SYSTEM);
+
+    // A reply carries the time it was written, in the same zone.
+    aDateTime = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTime"));
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(aDateTime, aParsed));
+    CPPUNIT_ASSERT(DateTime(aParsed).IsBetween(aExpectedFrom, aAfterReply + aAuthorOffset));
+}
+#endif
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testOpenEditRaisesTheVectorVersion)
+{
+    // A reader that draws from the model hears nothing from the view object
+    // contacts, so a change made while the text edit is still open has to raise
+    // the part's version. Beginning the edit raises it anyway, so what matters is
+    // that a further change inside the same edit raises it too.
+
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    setupCOKitViewCallback(pViewShell->GetViewShellBase());
+
+    auto aPartVersion = [pXImpressDocument]() -> sal_Int64 {
+        tools::JsonWriter aJsonWriter;
+        const SdPage* pSlide = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+        const OString aCommand = ".uno:VectorPrimitives?partid=" + pSlide->GetGuid().getString();
+        pXImpressDocument->getCommandValues(
+            aJsonWriter, std::string_view(aCommand.getStr(), aCommand.getLength()));
+        const OString aResult = aJsonWriter.finishAndGetAsOString();
+        auto oJson
+            = tools::JsonPath::parse(std::string_view(aResult.getStr(), aResult.getLength()));
+        CPPUNIT_ASSERT(oJson.has_value());
+        return oJson->getInt("/version").value_or(-1);
+    };
+
+    // The first pull is what marks the model as drawn from.
+    aPartVersion();
+
+    SdrView* pView = pViewShell->GetView();
+    pView->SdrBeginTextEdit(pViewShell->GetActualPage()->GetObj(0));
+    CPPUNIT_ASSERT(pView->GetTextEditObject());
+    pView->GetTextEditOutlinerView()->GetEditView().InsertText(u"Hello"_ustr);
+
+    // The text edit announces a change only once its update timer runs out,
+    // which takes longer than EDIT_UPDATEDATA_TIMEOUT.
+    osl::Thread::wait(std::chrono::milliseconds(500));
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_MESSAGE("the edit ended on its own", pView->GetTextEditObject());
+    const sal_Int64 nAfterFirst = aPartVersion();
+
+    pView->GetTextEditOutlinerView()->GetEditView().InsertText(u" there"_ustr);
+    osl::Thread::wait(std::chrono::milliseconds(500));
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_MESSAGE("the edit ended on its own", pView->GetTextEditObject());
+    const sal_Int64 nAfterSecond = aPartVersion();
+    pView->SdrEndTextEdit();
+
+    CPPUNIT_ASSERT_GREATER(nAfterFirst, nAfterSecond);
+}
+
+namespace
+{
+/** Sends one request to the cleanup command of the view that is current, and comes back once the
+    session has dealt with it. No turn of the scheduler is run here, so a run the request set going
+    is still under way when this returns. */
+void requestCleanup(const OUString& rRequestJson)
+{
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    CPPUNIT_ASSERT(pViewShell);
+
+    SfxStringItem aRequest(FN_PARAM_1, rRequestJson);
+    pViewShell->GetViewFrame().GetDispatcher()->ExecuteList(SID_PRESENTATION_CLEANUP,
+                                                            SfxCallMode::SYNCHRON, { &aRequest });
+}
+
+/** Every message of the given kind the cleanup command sent to the view, in the order they
+    arrived, counting from the nFrom-th result the view has seen. */
+std::vector<boost::property_tree::ptree>
+cleanupEvents(const SdTestViewCallback& rView, std::string_view aEvent, std::size_t nFrom = 0)
+{
+    std::vector<boost::property_tree::ptree> aFound;
+    for (std::size_t nResult = nFrom; nResult < rView.m_aCommandResults.size(); ++nResult)
+    {
+        const boost::property_tree::ptree& rResult = rView.m_aCommandResults[nResult];
+        if (rResult.get("commandName", std::string()) != ".uno:PresentationCleanup")
+            continue;
+
+        const auto oPayload = rResult.get_child_optional("result");
+        if (oPayload && oPayload->get("event", std::string()) == aEvent)
+            aFound.push_back(*oPayload);
+    }
+
+    return aFound;
+}
+
+/** The first such message, or nothing when none of that kind arrived. */
+std::optional<boost::property_tree::ptree>
+firstCleanupEvent(const SdTestViewCallback& rView, std::string_view aEvent, std::size_t nFrom = 0)
+{
+    const std::vector<boost::property_tree::ptree> aFound = cleanupEvents(rView, aEvent, nFrom);
+    if (aFound.empty())
+        return std::nullopt;
+
+    return aFound.front();
+}
+
+/** The reply the request that went out under the given number was answered with. */
+std::optional<boost::property_tree::ptree> cleanupReply(const SdTestViewCallback& rView,
+                                                        int nRequestId)
+{
+    for (const boost::property_tree::ptree& rReply : cleanupEvents(rView, "reply"))
+    {
+        if (rReply.get("request", 0) == nRequestId)
+            return rReply;
+    }
+
+    return std::nullopt;
+}
+
+/** Reads the reason a reply gives, which is empty for a request that was accepted. */
+std::string cleanupReplyReason(const SdTestViewCallback& rView, int nRequestId)
+{
+    const auto oReply = cleanupReply(rView, nRequestId);
+    CPPUNIT_ASSERT(oReply);
+    return oReply->get("reason", std::string());
+}
+
+/** The number the client knows the first row of the given kind by, or -1 when the list holds no
+    such row. */
+int cleanupRowId(const boost::property_tree::ptree& rList, std::string_view aCategory)
+{
+    for (const auto& rRow : rList.get_child("rows"))
+    {
+        if (rRow.second.get("category", std::string()) == aCategory)
+            return rRow.second.get("id", 0);
+    }
+
+    return -1;
+}
+
+/** The categories the list says its scan looked for, joined in the order the list names them. */
+std::string cleanupScannedCategories(const boost::property_tree::ptree& rList)
+{
+    std::string aJoined;
+    for (const auto& rEntry : rList.get_child("scanned"))
+    {
+        if (!aJoined.empty())
+            aJoined += ",";
+
+        aJoined += rEntry.second.get_value<std::string>();
+    }
+
+    return aJoined;
+}
+
+/** Answers whether a message of the given kind has arrived. Everything that produces one runs on
+    this thread, so the run is driven to its end by the turns of the scheduler this loop takes. The
+    short pause between rounds leaves the machine free between turns of the scheduler, and the
+    ceiling is far above what the work takes on a machine that is busy with something else. */
+bool waitForCleanupEvent(const SdTestViewCallback& rView, std::string_view aEvent,
+                         std::size_t nFrom = 0)
+{
+    const auto aDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < aDeadline)
+    {
+        if (!cleanupEvents(rView, aEvent, nFrom).empty())
+            return true;
+
+        Scheduler::ProcessEventsToIdle();
+
+        const TimeValue aPause{ 0, 5 * 1000 * 1000 };
+        osl::Thread::wait(aPause);
+    }
+
+    return !cleanupEvents(rView, aEvent, nFrom).empty();
+}
+
+/** The image the given slide of the deck holds at the given place in its object list. */
+SdrGrafObj& imageOnSlide(SdDrawDocument& rDocument, sal_uInt16 nSlide, sal_uInt32 nIndex)
+{
+    SdPage* pPage = rDocument.GetSdPage(nSlide, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    auto* pObject = dynamic_cast<SdrGrafObj*>(pPage->GetObj(nIndex));
+    CPPUNIT_ASSERT(pObject);
+
+    return *pObject;
+}
+
+/** Keeps the right half and the bottom half of the picture the object draws off the slide. A crop
+    is written in hundredths of a millimetre against the size of the whole picture, and a picture
+    that knows itself in pixels is measured on the default device to get there. */
+void cropAwayThreeQuarters(SdrGrafObj& rObject)
+{
+    const Graphic& rGraphic = rObject.GetGraphic();
+    const MapMode aMap100(MapUnit::Map100thMM);
+    const Size aPictureSize
+        = rGraphic.GetPrefMapMode().GetMapUnit() == MapUnit::MapPixel
+              ? Application::GetDefaultDevice()->PixelToLogic(rGraphic.GetPrefSize(), aMap100)
+              : OutputDevice::LogicToLogic(rGraphic.GetPrefSize(), rGraphic.GetPrefMapMode(),
+                                           aMap100);
+
+    const text::GraphicCrop aCrop(0, aPictureSize.Height() / 2, 0, aPictureSize.Width() / 2);
+
+    uno::Reference<beans::XPropertySet> xShape(rObject.getUnoShape(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xShape.is());
+    xShape->setPropertyValue(u"GraphicCrop"_ustr, cpo::uno::Any(aCrop));
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupScan)
+{
+    // A scan asked for over the cleanup command answers the request that asked for it, sends the
+    // list of what it found, and says when the run has settled.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"DataJson"_ustr,
+                                      u"{\"action\":\"scan\",\"request\":7}"_ustr),
+    };
+    dispatchCommand(mxComponent, u".uno:PresentationCleanup"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oReply = cleanupReply(aView, 7);
+    CPPUNIT_ASSERT(oReply);
+    CPPUNIT_ASSERT(oReply->get("ok", false));
+
+    // The list names the oversized images of the deck, its hidden slide and the master slide no
+    // slide uses. The speaker notes and the embedded objects are only reported for a deck that is
+    // being prepared to hand out, which this scan did not ask for.
+    const auto oList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(std::string("scan"), oList->get("reason", std::string()));
+    CPPUNIT_ASSERT_EQUAL(1, oList->get("run", 0));
+
+    std::multiset<std::string> aCategories;
+    for (const auto& rRow : oList->get_child("rows"))
+        aCategories.insert(rRow.second.get("category", std::string()));
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aCategories.count("image"));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCategories.count("hiddenSlide"));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCategories.count("unusedMaster"));
+    CPPUNIT_ASSERT_EQUAL(size_t(4), aCategories.size());
+
+    // A row carries the figures it is described by rather than a sentence, so the client writes
+    // the row in the language of its own view. The two images of the first slide are told apart
+    // by their number and each says what it is stored at.
+    std::multiset<int> aImageNumbers;
+    for (const auto& rRow : oList->get_child("rows"))
+    {
+        if (rRow.second.get("category", std::string()) != "image")
+            continue;
+
+        aImageNumbers.insert(rRow.second.get("imageNumber", 0));
+        CPPUNIT_ASSERT_GREATER(0, rRow.second.get("dpi", 0));
+        CPPUNIT_ASSERT_EQUAL(std::string(), rRow.second.get("text", std::string()));
+    }
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aImageNumbers.count(1));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aImageNumbers.count(2));
+
+    // A master slide no slide builds on is named, since its row says which one it is.
+    for (const auto& rRow : oList->get_child("rows"))
+    {
+        if (rRow.second.get("category", std::string()) != "unusedMaster")
+            continue;
+
+        CPPUNIT_ASSERT(!rRow.second.get("name", std::string()).empty());
+    }
+
+    // Encoding the smaller of the two images again would free up a few kilobytes, which is under
+    // the floor the list keeps, so the measurement takes that row off the list before the run ends.
+    const auto oFinished = firstCleanupEvent(aView, "finished");
+    CPPUNIT_ASSERT(oFinished);
+    CPPUNIT_ASSERT(!oFinished->get("stopped", true));
+    CPPUNIT_ASSERT_EQUAL(3, oFinished->get_child("total").get("count", 0));
+
+    // The totals say how big the file the document was loaded from is, so the client can tell
+    // what fraction of the whole file the estimate stands for.
+    CPPUNIT_ASSERT_GREATER(sal_Int64(0),
+                           oFinished->get_child("total").get("documentBytes", sal_Int64(0)));
+
+    // The scan settles once, however many rounds of measurement it took to get there.
+    CPPUNIT_ASSERT_EQUAL(size_t(1), cleanupEvents(aView, "finished").size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupStopLeavesTheRowsUnmeasured)
+{
+    // Stopping a scan that is under way settles the run at once and says it was stopped. The rows
+    // whose figure had not been worked out stay on the list carrying no figure.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+
+    // The turn that measures the images of the deck has not come round yet, so the run is still
+    // going when the request to stop it arrives.
+    CPPUNIT_ASSERT(cleanupEvents(aView, "finished").empty());
+
+    requestCleanup(u"{\"action\":\"stop\",\"request\":2}"_ustr);
+
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 2));
+
+    const auto oFinished = firstCleanupEvent(aView, "finished");
+    CPPUNIT_ASSERT(oFinished);
+    CPPUNIT_ASSERT(oFinished->get("stopped", false));
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0),
+                         oFinished->get_child("total").get("estimated", sal_Int64(0)));
+
+    // The rows the scan listed are all still there, and every image row says it carries no figure.
+    const std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"list\",\"request\":3}"_ustr);
+
+    const auto oList = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(std::string("request"), oList->get("reason", std::string()));
+    CPPUNIT_ASSERT_EQUAL(4, oList->get_child("total").get("count", 0));
+
+    int nImageRows = 0;
+    for (const auto& rRow : oList->get_child("rows"))
+    {
+        if (rRow.second.get("category", std::string()) != "image")
+            continue;
+
+        ++nImageRows;
+        CPPUNIT_ASSERT(!rRow.second.get("measured", true));
+        CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rRow.second.get("saving", sal_Int64(0)));
+    }
+    CPPUNIT_ASSERT_EQUAL(2, nImageRows);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupListBeforeAnyScanIsEmpty)
+{
+    // Asking for the list before anything has been scanned answers with the list of a session that
+    // has found nothing: no rows, and the number that names no list at all.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"list\",\"request\":1}"_ustr);
+
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 1));
+
+    const auto oList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(0, oList->get("run", -1));
+    CPPUNIT_ASSERT_EQUAL(std::string("request"), oList->get("reason", std::string()));
+    CPPUNIT_ASSERT_EQUAL(std::string("idle"), oList->get("status", std::string()));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), oList->get_child("rows").size());
+    CPPUNIT_ASSERT_EQUAL(0, oList->get_child("total").get("count", -1));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupListNamesWhatTheScanLookedFor)
+{
+    // The list names the kinds of problem the scan behind it looked for, so a category that turned
+    // up nothing reads differently from one the settings left out.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    // Nothing has been scanned yet, so the session names no category at all.
+    requestCleanup(u"{\"action\":\"list\",\"request\":1}"_ustr);
+
+    const auto oBeforeScan = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oBeforeScan);
+    CPPUNIT_ASSERT_EQUAL(0, oBeforeScan->get("run", -1));
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupScannedCategories(*oBeforeScan));
+
+    // A scan that names no settings of its own keeps the images in and leaves the stricter rules of
+    // a deck being prepared to hand out out.
+    std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"scan\",\"request\":2}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished", nSeen));
+
+    const auto oDefaults = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oDefaults);
+    CPPUNIT_ASSERT_EQUAL(std::string("image,croppedImage,hiddenSlide,unusedMaster"),
+                         cleanupScannedCategories(*oDefaults));
+
+    // A target of zero dots per inch leaves every image alone, so neither kind of image row is
+    // looked for.
+    nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"scan\",\"request\":3,\"options\":{\"resolution\":0}}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished", nSeen));
+
+    const auto oWithoutImages = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oWithoutImages);
+    CPPUNIT_ASSERT_EQUAL(std::string("hiddenSlide,unusedMaster"),
+                         cleanupScannedCategories(*oWithoutImages));
+
+    // A deck being prepared to hand out adds the speaker notes and the embedded objects. The
+    // resolution goes back in the request because a setting the last scan was given stands until
+    // another scan changes it.
+    nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"scan\",\"request\":4,"
+                   u"\"options\":{\"resolution\":150,\"forPublication\":true}}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished", nSeen));
+
+    const auto oForPublication = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oForPublication);
+    CPPUNIT_ASSERT_EQUAL(
+        std::string("image,croppedImage,hiddenSlide,unusedMaster,notes,embeddedObject"),
+        cleanupScannedCategories(*oForPublication));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupReleaseStartsAnEmptySession)
+{
+    // Letting the session go takes the list with it, so the next request is answered by a session
+    // that has found nothing yet.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oScanned = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oScanned);
+    CPPUNIT_ASSERT_EQUAL(1, oScanned->get("run", 0));
+    CPPUNIT_ASSERT(oScanned->get_child("rows").size() > 0);
+
+    requestCleanup(u"{\"action\":\"release\",\"request\":2}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 2));
+
+    const std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"list\",\"request\":3}"_ustr);
+
+    const auto oList = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(0, oList->get("run", -1));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), oList->get_child("rows").size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupGoToMovesTheViewDuringARun)
+{
+    // Asking to be taken to a row shows the slide that row is about, and the request is taken
+    // while the scan that listed the row is still going.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    CPPUNIT_ASSERT_EQUAL(0, pXImpressDocument->getPart());
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+
+    const auto oList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oList);
+
+    // The row about the hidden slide names the second slide of the deck.
+    const int nRowId = cleanupRowId(*oList, "hiddenSlide");
+    CPPUNIT_ASSERT(nRowId > 0);
+
+    CPPUNIT_ASSERT(cleanupEvents(aView, "finished").empty());
+
+    requestCleanup(u"{\"action\":\"goTo\",\"request\":2,\"run\":1,\"row\":"
+                   + OUString::number(nRowId) + "}");
+
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 2));
+    CPPUNIT_ASSERT_EQUAL(1, pXImpressDocument->getPart());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesARequestItCannotRead)
+{
+    // A request that is not readable JSON, one that names no action the session knows, and one
+    // that leaves out the list or the row it is about are each answered as a bad request.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    // A request that cannot be read carries no number of its own, so its refusal goes out under
+    // the number nothing the client sends can carry.
+    requestCleanup(u"{\"action\":"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("badRequest"), cleanupReplyReason(aView, 0));
+
+    requestCleanup(u"{\"action\":\"polish\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("badRequest"), cleanupReplyReason(aView, 1));
+
+    requestCleanup(u"{\"action\":\"fix\",\"request\":2,\"row\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("badRequest"), cleanupReplyReason(aView, 2));
+
+    requestCleanup(u"{\"action\":\"fix\",\"request\":3,\"run\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("badRequest"), cleanupReplyReason(aView, 3));
+
+    requestCleanup(u"{\"action\":\"fixAll\",\"request\":4}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("badRequest"), cleanupReplyReason(aView, 4));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesARowOfAnOlderList)
+{
+    // The numbers of one list mean nothing in another, so a request that names a list the session
+    // has moved on from is refused as stale.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(1, oList->get("run", 0));
+
+    const int nRowId = cleanupRowId(*oList, "hiddenSlide");
+    CPPUNIT_ASSERT(nRowId > 0);
+
+    // A second scan sends a list of its own, and the numbers of the first one are refused from
+    // then on.
+    const std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"scan\",\"request\":2}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the second scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished", nSeen));
+
+    const auto oSecondList = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oSecondList);
+    CPPUNIT_ASSERT_EQUAL(2, oSecondList->get("run", 0));
+
+    requestCleanup(u"{\"action\":\"fix\",\"request\":3,\"run\":1,\"row\":"
+                   + OUString::number(nRowId) + "}");
+    CPPUNIT_ASSERT_EQUAL(std::string("stale"), cleanupReplyReason(aView, 3));
+
+    requestCleanup(u"{\"action\":\"fixAll\",\"request\":4,\"run\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("stale"), cleanupReplyReason(aView, 4));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesARowThatIsGone)
+{
+    // The measurement takes off the list every row that turns out not to be worth reading, and a
+    // request about one of those rows is answered that it is gone.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    // Encoding the smaller image of the deck again would free up too little to be worth a row, so
+    // the measurement dropped it and said which number went. The measurement works through the
+    // images in slices of the time it is given, and each slice reports what it worked out, so the
+    // number that went is looked for over all of them.
+    std::vector<int> aDropped;
+    for (const auto& rMeasured : cleanupEvents(aView, "measured"))
+    {
+        for (const auto& rEntry : rMeasured.get_child("dropped"))
+            aDropped.push_back(rEntry.second.get_value<int>());
+    }
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aDropped.size());
+
+    requestCleanup(u"{\"action\":\"fix\",\"request\":2,\"run\":1,\"row\":"
+                   + OUString::number(aDropped[0]) + "}");
+    CPPUNIT_ASSERT_EQUAL(std::string("gone"), cleanupReplyReason(aView, 2));
+
+    requestCleanup(u"{\"action\":\"goTo\",\"request\":3,\"run\":1,\"row\":"
+                   + OUString::number(aDropped[0]) + "}");
+    CPPUNIT_ASSERT_EQUAL(std::string("gone"), cleanupReplyReason(aView, 3));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesASecondScanWhileOneRuns)
+{
+    // One run of a session at a time, so a scan asked for while a scan is going is refused as busy
+    // and the run that is going is left alone.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT(cleanupEvents(aView, "finished").empty());
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":2}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("busy"), cleanupReplyReason(aView, 2));
+
+    requestCleanup(u"{\"action\":\"fixAll\",\"request\":3,\"run\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("busy"), cleanupReplyReason(aView, 3));
+
+    // The refused requests left the scan that was going to settle on its own, under the one list
+    // it was gathering.
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), cleanupEvents(aView, "list").size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesAScanForAReadOnlyView)
+{
+    // A scan asked for by a view that holds the document read-only is refused with readOnly and
+    // gathers no list. A request that only reads is still answered, and the same view once it may
+    // write again gathers a list as usual.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    CPPUNIT_ASSERT(pViewShell);
+    pViewShell->SetKitReadOnlyView(true);
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+
+    const auto oRefused = cleanupReply(aView, 1);
+    CPPUNIT_ASSERT(oRefused);
+    CPPUNIT_ASSERT(!oRefused->get("ok", true));
+    CPPUNIT_ASSERT_EQUAL(std::string("readOnly"), oRefused->get("reason", std::string()));
+    CPPUNIT_ASSERT(cleanupEvents(aView, "list").empty());
+
+    // Asking for the list reads the document and changes nothing, so the read-only view is served.
+    requestCleanup(u"{\"action\":\"list\",\"request\":2}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 2));
+
+    const auto oEmptyList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oEmptyList);
+    CPPUNIT_ASSERT_EQUAL(0, oEmptyList->get_child("total").get("count", -1));
+
+    pViewShell->SetKitReadOnlyView(false);
+
+    const std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"scan\",\"request\":3}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished", nSeen));
+
+    const auto oList = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(1, oList->get("run", 0));
+    CPPUNIT_ASSERT(oList->get_child("rows").size() > 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesAFixForAReadOnlyView)
+{
+    // A list gathered while the view could write stands once the view holds the document
+    // read-only, and a cleanup asked for from then on is refused with readOnly. The deck keeps
+    // every slide and every master slide it had.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDocument);
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oScannedList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oScannedList);
+
+    const int nRowId = cleanupRowId(*oScannedList, "hiddenSlide");
+    CPPUNIT_ASSERT(nRowId > 0);
+
+    const sal_uInt16 nPageCount = pDocument->GetSdPageCount(PageKind::Standard);
+    const sal_uInt16 nMasterCount = pDocument->GetMasterSdPageCount(PageKind::Standard);
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    CPPUNIT_ASSERT(pViewShell);
+    pViewShell->SetKitReadOnlyView(true);
+
+    requestCleanup(u"{\"action\":\"fix\",\"request\":2,\"run\":1,\"row\":"
+                   + OUString::number(nRowId) + "}");
+    CPPUNIT_ASSERT_EQUAL(std::string("readOnly"), cleanupReplyReason(aView, 2));
+
+    requestCleanup(u"{\"action\":\"fixAll\",\"request\":3,\"run\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("readOnly"), cleanupReplyReason(aView, 3));
+
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDocument->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDocument->GetMasterSdPageCount(PageKind::Standard));
+
+    pViewShell->SetKitReadOnlyView(false);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupUndoDuringARunWaitsForTheRun)
+{
+    // Taking a cleanup back while another cleanup is working out what it needs asks for the list
+    // afresh. That list is gathered once the cleanup that was going has made its changes, so it
+    // tells of the document the undo left behind.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDocument);
+
+    SfxUndoManager* pUndoManager = pXImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oFirstList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oFirstList);
+
+    const int nHiddenRowId = cleanupRowId(*oFirstList, "hiddenSlide");
+    CPPUNIT_ASSERT(nHiddenRowId > 0);
+
+    // Taking the hidden slide out reaches the rows around it, so the list is gathered again and
+    // one undo entry is left behind for the undo below to take back.
+    std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"fix\",\"request\":2,\"run\":1,\"row\":"
+                   + OUString::number(nHiddenRowId) + "}");
+    CPPUNIT_ASSERT_MESSAGE("the cleanup never reported ending",
+                           waitForCleanupEvent(aView, "fixed", nSeen));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDocument->GetSdPageCount(PageKind::Standard));
+
+    const auto oSecondList = firstCleanupEvent(aView, "list", nSeen);
+    CPPUNIT_ASSERT(oSecondList);
+    CPPUNIT_ASSERT_EQUAL(2, oSecondList->get("run", 0));
+
+    const int nImageRowId = cleanupRowId(*oSecondList, "image");
+    CPPUNIT_ASSERT(nImageRowId > 0);
+
+    // The turn that works out what the image of the deck needs has not come round yet, so this
+    // cleanup is still working that out when the undo arrives.
+    nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"fix\",\"request\":3,\"run\":2,\"row\":"
+                   + OUString::number(nImageRowId) + "}");
+    CPPUNIT_ASSERT(cleanupEvents(aView, "fixed", nSeen).empty());
+
+    pUndoManager->Undo();
+
+    // Nothing was gathered while the cleanup was going.
+    CPPUNIT_ASSERT(cleanupEvents(aView, "list", nSeen).empty());
+
+    CPPUNIT_ASSERT_MESSAGE("the cleanup never reported ending",
+                           waitForCleanupEvent(aView, "fixed", nSeen));
+    CPPUNIT_ASSERT_MESSAGE("the list the undo asked for never arrived",
+                           waitForCleanupEvent(aView, "list", nSeen));
+
+    // The cleanup made its changes and only then was the list gathered, under the reason that says
+    // a cleanup was taken back.
+    const std::vector<boost::property_tree::ptree> aFixed = cleanupEvents(aView, "fixed", nSeen);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aFixed.size());
+    CPPUNIT_ASSERT(!aFixed[0].get("cancelled", true));
+
+    const std::vector<boost::property_tree::ptree> aLists = cleanupEvents(aView, "list", nSeen);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLists.size());
+    CPPUNIT_ASSERT_EQUAL(std::string("undo"), aLists[0].get("reason", std::string()));
+    CPPUNIT_ASSERT_EQUAL(3, aLists[0].get("run", 0));
+
+    // The undo put the hidden slide back, and the list gathered afterwards names it again.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDocument->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(cleanupRowId(aLists[0], "hiddenSlide") > 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupRefusesAScanWhileACleanupRuns)
+{
+    // A cleanup that is working out what it needs is left to finish, so a scan asked for in the
+    // middle of it is refused as busy and the cleanup goes on to make its changes.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDocument);
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const sal_uInt16 nPageCount = pDocument->GetSdPageCount(PageKind::Standard);
+    const sal_uInt16 nMasterCount = pDocument->GetMasterSdPageCount(PageKind::Standard);
+
+    // The turn that works out what the image of the deck needs has not come round yet, so the
+    // cleanup has changed nothing.
+    const std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"fixAll\",\"request\":2,\"run\":1}"_ustr);
+    CPPUNIT_ASSERT(cleanupEvents(aView, "fixed", nSeen).empty());
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":3}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string("busy"), cleanupReplyReason(aView, 3));
+
+    CPPUNIT_ASSERT_MESSAGE("the cleanup never reported ending",
+                           waitForCleanupEvent(aView, "fixed", nSeen));
+
+    const std::vector<boost::property_tree::ptree> aFixed = cleanupEvents(aView, "fixed", nSeen);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aFixed.size());
+    CPPUNIT_ASSERT(!aFixed[0].get("cancelled", true));
+    CPPUNIT_ASSERT_EQUAL(2, aFixed[0].get("request", 0));
+
+    // The cleanup the scan did not disturb took the hidden slide and the unused master out.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nPageCount - 1), pDocument->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDocument->GetMasterSdPageCount(PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupOfAnEmptyListEndsAtOnce)
+{
+    // A deck with nothing to clean up gathers an empty list, and a cleanup of that list ends where
+    // it began. The session takes the next request straight away.
+    createDoc("dummy.odp");
+    SdTestViewCallback aView;
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oList);
+    CPPUNIT_ASSERT_EQUAL(1, oList->get("run", 0));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), oList->get_child("rows").size());
+    CPPUNIT_ASSERT_EQUAL(0, oList->get_child("total").get("count", -1));
+
+    requestCleanup(u"{\"action\":\"fixAll\",\"request\":2,\"run\":1}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 2));
+
+    const auto oFixed = firstCleanupEvent(aView, "fixed");
+    CPPUNIT_ASSERT(oFixed);
+    CPPUNIT_ASSERT_EQUAL(2, oFixed->get("request", 0));
+    CPPUNIT_ASSERT(!oFixed->get("cancelled", true));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), oFixed->get_child("removed").size());
+
+    // The session is ready for what comes next rather than sitting on the cleanup that ended.
+    requestCleanup(u"{\"action\":\"scan\",\"request\":3}"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::string(), cleanupReplyReason(aView, 3));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testPresentationCleanupTrimsACroppedImage)
+{
+    // An image most of which a crop keeps off the slide reaches the client under its own kind, and
+    // cleaning up that row trims the picture down to what the slides show.
+    loadFromURL(m_directories.getURLFromSrc(u"/sd/qa/unit/data/presentation-lint.fodp"));
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    SdTestViewCallback aView;
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDocument);
+
+    // The first and the third slide draw one and the same picture, and both are made to show the
+    // same quarter of it, so the one copy the document holds stands for what all of them show.
+    cropAwayThreeQuarters(imageOnSlide(*pDocument, 0, 0));
+    cropAwayThreeQuarters(imageOnSlide(*pDocument, 2, 0));
+
+    requestCleanup(u"{\"action\":\"scan\",\"request\":1}"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("the scan never reported finishing",
+                           waitForCleanupEvent(aView, "finished"));
+
+    const auto oList = firstCleanupEvent(aView, "list");
+    CPPUNIT_ASSERT(oList);
+
+    const int nRowId = cleanupRowId(*oList, "croppedImage");
+    CPPUNIT_ASSERT(nRowId > 0);
+
+    const std::size_t nSeen = aView.m_aCommandResults.size();
+    requestCleanup(u"{\"action\":\"fix\",\"request\":2,\"run\":1,\"row\":"
+                   + OUString::number(nRowId) + "}");
+    CPPUNIT_ASSERT_MESSAGE("the cleanup never reported ending",
+                           waitForCleanupEvent(aView, "fixed", nSeen));
+
+    const auto oFixed = firstCleanupEvent(aView, "fixed", nSeen);
+    CPPUNIT_ASSERT(oFixed);
+    CPPUNIT_ASSERT(!oFixed->get("cancelled", true));
+
+    // The row is off the list because the picture now holds no more than the slides show.
+    std::set<int> aRemoved;
+    for (const auto& rEntry : oFixed->get_child("removed"))
+        aRemoved.insert(rEntry.second.get_value<int>());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aRemoved.count(nRowId));
+
+    const SdrGrafObj& rFirstImage = imageOnSlide(*pDocument, 0, 0);
+    const SdrGrafCropItem& rCrop = rFirstImage.GetMergedItem(SDRATTR_GRAFCROP);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), rCrop.GetRight());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), rCrop.GetBottom());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

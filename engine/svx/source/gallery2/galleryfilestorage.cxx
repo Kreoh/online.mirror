@@ -48,6 +48,7 @@
 #include <tools/vcompat.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 GalleryFileStorage::GalleryFileStorage(
     const GalleryStorageLocations& rGalleryBinaryStorageLocations,
@@ -673,7 +674,7 @@ void GalleryFileStorage::insertFileOrDirURL(const INetURLObject& rFileOrDirURL,
     catch (const ucb::ContentCreationException&)
     {
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
     }
     catch (const cpo::uno::Exception&)

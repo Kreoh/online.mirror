@@ -21,11 +21,12 @@
 #include <sddll.hxx>
 #include <drawdoc.hxx>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -45,7 +46,7 @@ public:
     CPPUNIT_TEST_SUITE_END();
 
 private:
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     std::unique_ptr<SdDrawDocument> m_pDoc;
 };
 

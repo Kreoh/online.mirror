@@ -26,7 +26,7 @@
 #include <rtl/ustring.hxx>
 
 SvxCTLTextTbxCtrl::SvxCTLTextTbxCtrl(
-    const css::uno::Reference<css::uno::XComponentContext>& rContext)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : SvxVertCTLTextTbxCtrl(rContext)
 {
     addStatusListener(u".uno:CTLFontState"_ustr);
@@ -37,15 +37,15 @@ OUString SvxCTLTextTbxCtrl::getImplementationName()
     return u"com.sun.star.comp.svx.CTLToolBoxControl"_ustr;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_svx_CTLToolBoxControl_get_implementation(css::uno::XComponentContext* rContext,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_svx_CTLToolBoxControl_get_implementation(cpo::uno::XComponentContext* rContext,
                                                            cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SvxCTLTextTbxCtrl(rContext));
 }
 
 SvxVertTextTbxCtrl::SvxVertTextTbxCtrl(
-    const css::uno::Reference<css::uno::XComponentContext>& rContext)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : SvxVertCTLTextTbxCtrl(rContext)
 {
     addStatusListener(u".uno:VerticalTextState"_ustr);
@@ -56,15 +56,15 @@ OUString SvxVertTextTbxCtrl::getImplementationName()
     return u"com.sun.star.comp.svx.VertTextToolBoxControl"_ustr;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_svx_VertTextToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* rContext, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SvxVertTextTbxCtrl(rContext));
 }
 
 SvxVertCTLTextTbxCtrl::SvxVertCTLTextTbxCtrl(
-    const css::uno::Reference<css::uno::XComponentContext>& rContext)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : SvxVertCTLTextTbxCtrl_Base(rContext, nullptr, OUString())
     , m_bVisible(false)
 {
@@ -72,7 +72,7 @@ SvxVertCTLTextTbxCtrl::SvxVertCTLTextTbxCtrl(
 
 SvxVertCTLTextTbxCtrl::~SvxVertCTLTextTbxCtrl() {}
 
-void SAL_CALL SvxVertCTLTextTbxCtrl::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
+void SvxVertCTLTextTbxCtrl::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
 {
     SvxVertCTLTextTbxCtrl_Base::initialize(rArguments);
     // fdo#83320 Hide vertical text commands early
@@ -93,7 +93,7 @@ void SAL_CALL SvxVertCTLTextTbxCtrl::initialize(const cpo::uno::Sequence<cpo::un
         m_bVisible = pToolBox->IsItemVisible(nItemId);
 }
 
-void SAL_CALL SvxVertCTLTextTbxCtrl::statusChanged(const css::frame::FeatureStateEvent& rEvent)
+void SvxVertCTLTextTbxCtrl::statusChanged(const css::frame::FeatureStateEvent& rEvent)
 {
     ToolBox* pToolBox = nullptr;
     ToolBoxItemId nItemId;
@@ -150,7 +150,7 @@ void SAL_CALL SvxVertCTLTextTbxCtrl::statusChanged(const css::frame::FeatureStat
 }
 
 // XServiceInfo
-bool SAL_CALL SvxVertCTLTextTbxCtrl::supportsService(const OUString& ServiceName)
+bool SvxVertCTLTextTbxCtrl::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }

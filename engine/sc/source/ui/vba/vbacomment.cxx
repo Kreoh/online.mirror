@@ -39,10 +39,11 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 ScVbaComment::ScVbaComment(
         const uno::Reference< XHelperInterface >& xParent,
-        const uno::Reference< uno::XComponentContext >& xContext,
+        const uno::Reference< cpo::uno::XComponentContext >& xContext,
         const uno::Reference< frame::XModel >& xModel,
         const uno::Reference< table::XCellRange >& xRange ) :
     ScVbaComment_BASE( xParent, xContext ),
@@ -50,7 +51,7 @@ ScVbaComment::ScVbaComment(
     mxRange( xRange )
 {
     if  ( !xRange.is() )
-        throw lang::IllegalArgumentException(u"range is not set "_ustr, uno::Reference< uno::XInterface >() , 1 );
+        throw lang::IllegalArgumentException(u"range is not set "_ustr, uno::Reference< cpo::uno::XInterface >() , 1 );
     getAnnotation();
 }
 
@@ -111,19 +112,19 @@ ScVbaComment::getCommentByIndex( sal_Int32 Index )
 
 // public vba functions
 
-OUString SAL_CALL
+OUString
 ScVbaComment::getAuthor()
 {
     return getAnnotation()->getAuthor();
 }
 
-void SAL_CALL
+void
 ScVbaComment::setAuthor( const OUString& /*_author*/ )
 {
     // #TODO #FIXME  implementation needed
 }
 
-uno::Reference< msforms::XShape > SAL_CALL
+uno::Reference< msforms::XShape >
 ScVbaComment::getShape()
 {
     uno::Reference< sheet::XSheetAnnotationShapeSupplier > xAnnoShapeSupp( getAnnotation(), uno::UNO_QUERY_THROW );
@@ -134,39 +135,39 @@ ScVbaComment::getShape()
     return new ScVbaShape( this, mxContext, xAnnoShape, xShapes, mxModel, office::MsoShapeType::msoComment );
 }
 
-bool SAL_CALL
+bool
 ScVbaComment::getVisible()
 {
     return getAnnotation()->getIsVisible();
 }
 
-void SAL_CALL
+void
 ScVbaComment::setVisible( bool _visible )
 {
     getAnnotation()->setIsVisible( _visible );
 }
 
-void SAL_CALL
+void
 ScVbaComment::Delete()
 {
     getAnnotations()->removeByIndex( getAnnotationIndex() );
 }
 
-uno::Reference< excel::XComment > SAL_CALL
+uno::Reference< excel::XComment >
 ScVbaComment::Next()
 {
     // index: uno = 0, vba = 1
     return getCommentByIndex( getAnnotationIndex() + 2 );
 }
 
-uno::Reference< excel::XComment > SAL_CALL
+uno::Reference< excel::XComment >
 ScVbaComment::Previous()
 {
     // index: uno = 0, vba = 1
     return getCommentByIndex( getAnnotationIndex() );
 }
 
-OUString SAL_CALL
+OUString
 ScVbaComment::Text( const cpo::uno::Any& aText, const cpo::uno::Any& aStart, const cpo::uno::Any& Overwrite )
 {
     OUString sText;
@@ -203,7 +204,7 @@ ScVbaComment::Text( const cpo::uno::Any& aText, const cpo::uno::Any& aStart, con
             xAnnoText->insertString( xRange, sText, bOverwrite );
             return xAnnoText->getString();
         }
-        throw uno::RuntimeException(u"ScVbaComment::Text - bad Start value "_ustr );
+        throw cpo::uno::RuntimeException(u"ScVbaComment::Text - bad Start value "_ustr );
     }
     else if ( aText.hasValue() )
     {

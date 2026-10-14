@@ -76,8 +76,8 @@
 #include <rtl/character.hxx>
 
 using namespace ::com::sun::star::ucb;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
@@ -439,7 +439,7 @@ void SvxAutoCorrect::FnCapitalStartWord( SvxAutoCorrDoc& rDoc, const OUString& r
             if( !FindInWordStartExceptList(eLang, sWord) )
             {
                 // Check that word isn't correctly spelt before correcting:
-                css::uno::Reference< css::linguistic2::XSpellChecker > xSpeller =
+                cpo::uno::Reference< css::linguistic2::XSpellChecker > xSpeller =
                     LinguMgr::GetSpellChecker();
                 if( xSpeller->hasLocale(LanguageTag::convertToLocale(eLang)) )
                 {
@@ -1940,6 +1940,14 @@ bool SvxAutoCorrect::CreateLanguageFile( const LanguageTag& rLanguageTag, bool b
     return pLists != nullptr;
 }
 
+void SvxAutoCorrect::SetAutoCorrFileNames(const OUString& rShareFile, const OUString& rUserFile)
+{
+    sShareAutoCorrFile = rShareFile;
+    sUserAutoCorrFile = rUserFile;
+    m_aLangTable.clear();
+    aLastFileTable.clear();
+}
+
 bool SvxAutoCorrect::PutText( const OUString& rShort, const OUString& rLong,
                                 LanguageType eLang )
 {
@@ -1985,7 +1993,7 @@ void SvxAutoCorrect::refreshBlockList( const uno::Reference< embed::XStorage >& 
 }
 
 // Text with attribution (only the SWG - SWG format!)
-bool SvxAutoCorrect::PutText( const css::uno::Reference < css::embed::XStorage >&,
+bool SvxAutoCorrect::PutText( const cpo::uno::Reference < css::embed::XStorage >&,
                               const OUString&, const OUString&, SfxObjectShell&, OUString& )
 {
     return false;
@@ -2353,7 +2361,7 @@ void SvxAutoCorrectLanguageLists::LoadXMLExceptList_Imp(
             }
             else
             {
-                const uno::Reference< uno::XComponentContext >& xContext =
+                const uno::Reference< cpo::uno::XComponentContext >& xContext =
                     comphelper::getProcessComponentContext();
 
                 xml::sax::InputSource aParserInput;
@@ -2426,7 +2434,7 @@ void SvxAutoCorrectLanguageLists::SaveExceptList_Imp(
             xStrm->SetProperty( u"MediaType"_ustr, Any(u"text/xml"_ustr) );
 
 
-            const uno::Reference< uno::XComponentContext >& xContext =
+            const uno::Reference< cpo::uno::XComponentContext >& xContext =
                 comphelper::getProcessComponentContext();
 
             uno::Reference < xml::sax::XWriter > xWriter  = xml::sax::Writer::create(xContext);
@@ -2467,7 +2475,7 @@ SvxAutocorrWordList* SvxAutoCorrectLanguageLists::LoadAutocorrWordList()
     {
         uno::Reference < embed::XStorage > xStg = comphelper::OStorageHelper::GetStorageFromURL( sShareAutoCorrFile, embed::ElementModes::READ );
         uno::Reference < io::XStream > xStrm = xStg->openStreamElement( pXMLImplAutocorr_ListStr, embed::ElementModes::READ );
-        const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
 
         xml::sax::InputSource aParserInput;
         aParserInput.sSystemId = pXMLImplAutocorr_ListStr;
@@ -2766,7 +2774,7 @@ bool SvxAutoCorrectLanguageLists::MakeBlocklist_Imp( SotStorage& rStg )
             refList->SetBufferSize( 8192 );
             refList->SetProperty( u"MediaType"_ustr, Any(u"text/xml"_ustr) );
 
-            const uno::Reference< uno::XComponentContext >& xContext =
+            const uno::Reference< cpo::uno::XComponentContext >& xContext =
                 comphelper::getProcessComponentContext();
 
             uno::Reference < xml::sax::XWriter > xWriter = xml::sax::Writer::create(xContext);

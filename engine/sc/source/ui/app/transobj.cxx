@@ -71,6 +71,7 @@
 #include <formulaiter.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 constexpr sal_uInt32 SCTRANS_TYPE_IMPEX              = 1;
 constexpr sal_uInt32 SCTRANS_TYPE_EDIT_RTF           = 2;
@@ -767,7 +768,7 @@ bool ScTransferObj::WriteObject( SvStream& rOStm, void* pUserObject, sal_uInt32 
     return bRet;
 }
 
-bool SAL_CALL ScTransferObj::isComplex()
+bool ScTransferObj::isComplex()
 {
     ScRange aReduced = lcl_reduceBlock(*m_pDoc, m_aBlock);
     size_t nCells = (aReduced.aEnd.Col() - aReduced.aStart.Col() + 1) *

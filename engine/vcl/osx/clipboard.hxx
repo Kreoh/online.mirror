@@ -24,7 +24,6 @@
 #include <sal/types.h>
 #include <cppuhelper/compbase.hxx>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
-#include <com/sun/star/datatransfer/clipboard/XClipboardEx.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardListener.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
@@ -86,31 +85,27 @@ public:
 
   // XClipboard
 
-  virtual css::uno::Reference<css::datatransfer::XTransferable> SAL_CALL getContents() override;
+  virtual cpo::uno::Reference<css::datatransfer::XTransferable> getContents() override;
 
-  virtual void SAL_CALL setContents(css::uno::Reference<css::datatransfer::XTransferable> const & xTransferable,
-                                    css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> const & xClipboardOwner) override;
+  virtual void setContents(cpo::uno::Reference<css::datatransfer::XTransferable> const & xTransferable,
+                                    cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> const & xClipboardOwner) override;
 
-  virtual OUString SAL_CALL getName() override;
-
-  // XClipboardEx
-
-  virtual sal_Int8 SAL_CALL getRenderingCapabilities() override;
+  virtual OUString getName() override;
 
   // XClipboardNotifier
 
-  virtual void SAL_CALL addClipboardListener(css::uno::Reference<css::datatransfer::clipboard::XClipboardListener> const & listener) override;
-  virtual void SAL_CALL removeClipboardListener(css::uno::Reference<css::datatransfer::clipboard::XClipboardListener> const & listener) override;
+  virtual void addClipboardListener(cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener> const & listener) override;
+  virtual void removeClipboardListener(cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener> const & listener) override;
 
   // XFlushableClipboard
 
-  virtual void SAL_CALL flushClipboard() override;
+  virtual void flushClipboard() override;
 
   // XServiceInfo
 
-  virtual OUString SAL_CALL getImplementationName() override;
-  virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-  virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+  virtual OUString getImplementationName() override;
+  virtual bool supportsService( const OUString& ServiceName ) override;
+  virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
   /* Get a reference to the used pastboard.
    */
@@ -118,8 +113,8 @@ public:
 
   /* Notify the current clipboard owner that he is no longer the clipboard owner.
    */
-  void fireLostClipboardOwnershipEvent(css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> const & oldOwner,
-                                       css::uno::Reference<css::datatransfer::XTransferable> const & oldContent);
+  void fireLostClipboardOwnershipEvent(cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> const & oldOwner,
+                                       cpo::uno::Reference<css::datatransfer::XTransferable> const & oldContent);
 
   void pasteboardChangedOwner();
 
@@ -135,10 +130,10 @@ private:
   void fireClipboardChangedEvent();
 
 private:
-  css::uno::Reference<css::datatransfer::XMimeContentTypeFactory> mrXMimeCntFactory;
-  std::list<css::uno::Reference<css::datatransfer::clipboard::XClipboardListener>> mClipboardListeners;
-  css::uno::Reference<css::datatransfer::XTransferable> mXClipboardContent;
-  css::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> mXClipboardOwner;
+  cpo::uno::Reference<css::datatransfer::XMimeContentTypeFactory> mrXMimeCntFactory;
+  std::list<cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>> mClipboardListeners;
+  cpo::uno::Reference<css::datatransfer::XTransferable> mXClipboardContent;
+  cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> mXClipboardOwner;
   DataFlavorMapperPtr_t mpDataFlavorMapper;
   bool mIsSystemPasteboard;
   NSPasteboard* mPasteboard;

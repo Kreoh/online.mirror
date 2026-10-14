@@ -20,16 +20,16 @@
 #ifndef INCLUDED_CPPUHELPER_BOOTSTRAP_HXX
 #define INCLUDED_CPPUHELPER_BOOTSTRAP_HXX
 
-#include "sal/config.h"
-#include "com/sun/star/uno/Reference.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <sal/config.h>
+#include <cpo/uno/Reference.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <cppuhelper/cppuhelperdllapi.h>
 
 namespace com { namespace sun { namespace star {
     namespace container { class XHierarchicalNameAccess; }
-    namespace uno { class XComponentContext; }
 } } }
+namespace cpo::uno { class XComponentContext; }
 
 namespace cppu
 {
@@ -40,7 +40,7 @@ namespace cppu
     @return true, if successfully registered
 */
 CPPUHELPER_DLLPUBLIC bool installTypeDescriptionManager(
-    css::uno::Reference< css::container::XHierarchicalNameAccess > const & xTDMgr );
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess > const & xTDMgr );
 
 /** Bootstraps an initial component context with service manager upon
     information from bootstrap variables.
@@ -55,7 +55,7 @@ CPPUHELPER_DLLPUBLIC bool installTypeDescriptionManager(
 
     @return component context
 */
-CPPUHELPER_DLLPUBLIC css::uno::Reference< css::uno::XComponentContext >
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< cpo::uno::XComponentContext >
 defaultBootstrap_InitialComponentContext();
 
 
@@ -73,7 +73,7 @@ defaultBootstrap_InitialComponentContext();
     @param iniFile ini filename to get bootstrap variables
     @return component context
 */
-CPPUHELPER_DLLPUBLIC css::uno::Reference< css::uno::XComponentContext >
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< cpo::uno::XComponentContext >
 defaultBootstrap_InitialComponentContext(const ::rtl::OUString & iniFile);
 
 /**
@@ -130,7 +130,7 @@ private:
  * Thrown in case bootstrap() signals an exception due to a
  * bootstrap error.
  */
-CPPUHELPER_DLLPUBLIC css::uno::Reference< css::uno::XComponentContext >
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< cpo::uno::XComponentContext >
 bootstrap();
 
 /// @cond INTERNAL

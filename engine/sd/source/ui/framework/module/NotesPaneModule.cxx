@@ -25,7 +25,7 @@
 #include <com/sun/star/frame/XController.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 namespace sd::framework
@@ -174,7 +174,7 @@ void NotesPaneModule::notifyConfigurationChange(const ConfigurationChangeEvent& 
     }
 }
 
-void SAL_CALL NotesPaneModule::disposing(const lang::EventObject& rEvent)
+void NotesPaneModule::disposing(const lang::EventObject& rEvent)
 {
     if (mxConfigurationController.is()
         && rEvent.Source == cppu::getXWeak(mxConfigurationController.get()))

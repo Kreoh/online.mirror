@@ -36,7 +36,7 @@
 #include <com/sun/star/text/XFootnote.hpp>
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::lang;
@@ -55,7 +55,7 @@ XMLFootnoteImportContext::XMLFootnoteImportContext(
 
 void XMLFootnoteImportContext::startFastElement(
     sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     // create footnote
     Reference<XMultiServiceFactory> xFactory(GetImport().GetModel(),
@@ -116,7 +116,7 @@ void XMLFootnoteImportContext::startFastElement(
         // May fail e.g. for a nested footnote, which is formally a valid ODF, but is not supported
         rHelper.SetCursor(xText->createTextCursor());
     }
-    catch (css::uno::RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("xmloff.text", "skipping the footnote: caught");
         mbIsValid = false;
@@ -148,8 +148,8 @@ void XMLFootnoteImportContext::endFastElement(sal_Int32 )
     rHelper.PopListContext();
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLFootnoteImportContext::createFastChildContext(
-    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLFootnoteImportContext::createFastChildContext(
+    sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if (!mbIsValid)
         return {};

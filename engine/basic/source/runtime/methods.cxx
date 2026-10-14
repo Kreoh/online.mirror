@@ -106,8 +106,8 @@ using namespace comphelper;
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 static sal_Int32 GetDayDiff(const Date& rDate) { return rDate - Date(1899'12'30); }
 
@@ -173,9 +173,9 @@ OUString getFullPath( const OUString& aRelPath )
 }
 
 // TODO: -> SbiGlobals
-static uno::Reference< ucb::XSimpleFileAccess3 > const & getFileAccess()
+static uno::Reference< ucb::XSimpleFileAccess > const & getFileAccess()
 {
-    static uno::Reference< ucb::XSimpleFileAccess3 > xSFI = ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() );
+    static uno::Reference< ucb::XSimpleFileAccess > xSFI = ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() );
     return xSFI;
 }
 
@@ -457,7 +457,7 @@ void SbRtl_ChDrive(StarBASIC *, SbxArray & rPar, bool)
 // Implementation of StepRENAME with UCB
 void implStepRenameUCB( const OUString& aSource, const OUString& aDest )
 {
-    const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+    const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
     if( !xSFI.is() )
         return;
 
@@ -506,7 +506,7 @@ void SbRtl_FileCopy(StarBASIC *, SbxArray & rPar, bool)
     OUString aDest = rPar.Get(2)->GetOUString();
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -539,7 +539,7 @@ void SbRtl_Kill(StarBASIC *, SbxArray & rPar, bool)
 
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             OUString aFullPath = getFullPath( aFileSpec );
@@ -596,7 +596,7 @@ void SbRtl_MkDir(StarBASIC * pBasic, SbxArray & rPar, bool bWrite)
 
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -653,7 +653,7 @@ void SbRtl_RmDir(StarBASIC *, SbxArray & rPar, bool)
     OUString aPath = rPar.Get(1)->GetOUString();
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -716,7 +716,7 @@ void SbRtl_FileLen(StarBASIC *, SbxArray & rPar, bool)
     sal_Int32 nLen = 0;
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -1425,7 +1425,7 @@ void SbRtl_StrComp(StarBASIC *, SbxArray & rPar, bool)
         ::utl::TransliterationWrapper* pTransliterationWrapper = GetSbData()->pTransliterationWrapper.get();
         if( !pTransliterationWrapper )
         {
-            const uno::Reference< uno::XComponentContext >& xContext = getProcessComponentContext();
+            const uno::Reference< cpo::uno::XComponentContext >& xContext = getProcessComponentContext();
             GetSbData()->pTransliterationWrapper.reset(
                 new ::utl::TransliterationWrapper( xContext,
                     TransliterationFlags::IGNORE_CASE |
@@ -2416,7 +2416,7 @@ void SbRtl_Dir(StarBASIC *, SbxArray & rPar, bool)
     SbiRTLData& rRTLData = GetSbData()->pInst->GetRTLData();
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             if ( nParCount >= 2 )
@@ -2707,7 +2707,7 @@ void SbRtl_GetAttr(StarBASIC *, SbxArray & rPar, bool)
 
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -2777,7 +2777,7 @@ void SbRtl_FileDateTime(StarBASIC *, SbxArray & rPar, bool)
     Date aDate( Date::EMPTY );
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -3965,7 +3965,7 @@ void SbRtl_StrConv(StarBASIC *, SbxArray & rPar, bool)
     OUString aStr = rPar.Get(1)->GetOUString();
     if (!aStr.isEmpty() && !aTranslitSet.empty())
     {
-        const uno::Reference< uno::XComponentContext >& xContext = getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = getProcessComponentContext();
 
         for (auto transliterationFlag : aTranslitSet)
         {
@@ -4196,7 +4196,7 @@ void SbRtl_SetAttr(StarBASIC *, SbxArray & rPar, bool)
 
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try
@@ -4261,7 +4261,7 @@ void SbRtl_FileExists(StarBASIC *, SbxArray & rPar, bool)
 
     if( hasUno() )
     {
-        const uno::Reference< ucb::XSimpleFileAccess3 >& xSFI = getFileAccess();
+        const uno::Reference< ucb::XSimpleFileAccess >& xSFI = getFileAccess();
         if( xSFI.is() )
         {
             try

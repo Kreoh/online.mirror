@@ -184,31 +184,28 @@ void EditUndoDelContent::Redo()
 
     // pNode is no longer correct, if the paragraphs where merged
     // in between Undos
-    ContentNode* pNode = pEE->GetEditDoc().GetObject(nNode);
-    DBG_ASSERT(pNode, "EditUndoDelContent::Redo(): Node?!");
+    ContentNode& rNode = pEE->GetEditDoc().GetObject(nNode);
 
     pEE->RemoveParaPortion(nNode);
 
     // Do not delete node, depends on the undo!
     mpContentNode = pEE->GetEditDoc().Release(nNode);
-    assert(mpContentNode.get() == pNode);
+    assert(mpContentNode.get() == &rNode);
 
     if (pEE->IsCallParaInsertedOrDeleted())
-        pEE->ParagraphDeleted(nNode);
+        pEE->ParagraphDeleted(nNode, mpContentNode->GetNumberingDepth(), mpContentNode->HasParaFlag(ParaFlag::ISPAGE));
 
-    DeletedNodeInfo* pDeletedNodeInfo = new DeletedNodeInfo(pNode, nNode);
+    DeletedNodeInfo* pDeletedNodeInfo = new DeletedNodeInfo(&rNode, nNode);
     pEE->AppendDeletedNodeInfo(pDeletedNodeInfo);
     pEE->UpdateSelections();
 
-    ContentNode* pCheckNode = (nNode < pEE->GetEditDoc().Count())
+    ContentNode& rCheckNode = (nNode < pEE->GetEditDoc().Count())
         ? pEE->GetEditDoc().GetObject(nNode)
         : pEE->GetEditDoc().GetObject(nNode - 1);
 
-    assert(pCheckNode);
+    DBG_ASSERT(&rCheckNode != mpContentNode.get(), "?! RemoveContent !? ");
 
-    DBG_ASSERT(pCheckNode != mpContentNode.get(), "?! RemoveContent !? ");
-
-    EditPaM aPaM(pCheckNode, pCheckNode->Len());
+    EditPaM aPaM(rCheckNode, rCheckNode.Len());
 
     pEE->GetActiveView()->getImpl().SetEditSelection( EditSelection( aPaM, aPaM ) );
 }
@@ -500,6 +497,17 @@ void EditUndoSetParaAttribs::Redo()
     lcl_DoSetSelection( GetEditEngine()->GetActiveView(), nPara );
 }
 
+
+EditUndoContentAttribsInfo::EditUndoContentAttribsInfo( SfxItemSet aParaAttribs ) :
+        aPrevParaAttribs(std::move( aParaAttribs))
+{
+}
+
+void EditUndoContentAttribsInfo::AppendCharAttrib(EditCharAttrib* pNew)
+{
+    aPrevCharAttribs.push_back(std::unique_ptr<EditCharAttrib>(pNew));
+}
+
 EditUndoSetAttribs::EditUndoSetAttribs(EditEngine* pEE, const ESelection& rESel, SfxItemSet aNewItems) :
     EditUndo(EDITUNDO_ATTRIBS, pEE),
     aESel(rESel),
@@ -526,7 +534,7 @@ void EditUndoSetAttribs::Undo()
     bool bFields = false;
     for ( sal_Int32 nPara = aESel.start.nPara; nPara <= aESel.end.nPara; nPara++ )
     {
-        const ContentAttribsInfo& rInf = *aPrevAttribs[nPara-aESel.start.nPara];
+        const EditUndoContentAttribsInfo& rInf = *aPrevAttribs[nPara-aESel.start.nPara];
 
         // first the paragraph attributes ...
         pEE->SetParaAttribsOnly(nPara, rInf.GetPrevParaAttribs());
@@ -534,13 +542,12 @@ void EditUndoSetAttribs::Undo()
         // Then the character attributes ...
         // Remove all attributes including features, are later re-established.
         pEE->RemoveCharAttribs(nPara, 0, true);
-        DBG_ASSERT( pEE->GetEditDoc().GetObject( nPara ), "Undo (SetAttribs): pNode = NULL!" );
-        ContentNode* pNode = pEE->GetEditDoc().GetObject( nPara );
+        ContentNode& rNode = pEE->GetEditDoc().GetObject( nPara );
         for (const auto & nAttr : rInf.GetPrevCharAttribs())
         {
             const EditCharAttrib& rX = *nAttr;
             // is automatically "poolsized"
-            pEE->GetEditDoc().InsertAttrib(pNode, rX.GetStart(), rX.GetEnd(), *rX.GetItem());
+            pEE->GetEditDoc().InsertAttrib(&rNode, rX.GetStart(), rX.GetEnd(), *rX.GetItem());
             if (rX.Which() == EE_FEATURE_FIELD)
                 bFields = true;
         }
@@ -570,9 +577,9 @@ void EditUndoSetAttribs::Redo()
     }
 }
 
-void EditUndoSetAttribs::AppendContentInfo(ContentAttribsInfo* pNew)
+void EditUndoSetAttribs::AppendContentInfo(EditUndoContentAttribsInfo* pNew)
 {
-    aPrevAttribs.push_back(std::unique_ptr<ContentAttribsInfo>(pNew));
+    aPrevAttribs.push_back(std::unique_ptr<EditUndoContentAttribsInfo>(pNew));
 }
 
 void EditUndoSetAttribs::ImpSetSelection()
@@ -605,9 +612,9 @@ void EditUndoTransliteration::Undo()
     aDelSel.Max() = aSel.Min();
     aDelSel.Max().GetNode()->GetCharAttribs().DeleteEmptyAttribs();
     EditSelection aNewSel;
-    if ( pTxtObj )
+    if ( moTxtObj )
     {
-        aNewSel = pEE->InsertText( *pTxtObj, aSel );
+        aNewSel = pEE->InsertText( *moTxtObj, aSel );
     }
     else
     {

@@ -21,6 +21,7 @@
 #include "PropertyMap.hxx"
 #include "ConversionHelper.hxx"
 #include <com/sun/star/table/BorderLine2.hpp>
+#include <algorithm>
 #include <o3tl/enumarray.hxx>
 #include <o3tl/enumrange.hxx>
 #include <ooxml/resourceids.hxx>
@@ -57,7 +58,8 @@ void BorderHandler::lcl_attribute(Id rName, const Value & rVal)
     {
         case NS_ooxml::LN_CT_Border_sz:
             //  width of a single line in 1/8 pt, max of 32 pt -> twip * 5 / 2.
-            m_nLineWidth = nIntValue * 5 / 2;
+            m_nLineWidth = std::clamp<sal_Int64>(sal_Int64(nIntValue) * 5 / 2, SAL_MIN_INT32,
+                                                 SAL_MAX_INT32);
             appendGrabBag(u"sz"_ustr, OUString::number(nIntValue));
         break;
         case NS_ooxml::LN_CT_Border_val:
@@ -69,7 +71,8 @@ void BorderHandler::lcl_attribute(Id rName, const Value & rVal)
             appendGrabBag(u"color"_ustr, msfilter::util::ConvertColorOU(Color(ColorTransparency, nIntValue)));
         break;
         case NS_ooxml::LN_CT_Border_space: // border distance in points
-            m_nLineDistance = ConversionHelper::convertTwipToMm100_Limited(nIntValue * 20);
+            m_nLineDistance = ConversionHelper::convertTwipToMm100_Limited(
+                std::clamp<sal_Int64>(sal_Int64(nIntValue) * 20, SAL_MIN_INT32, SAL_MAX_INT32));
             appendGrabBag(u"space"_ustr, OUString::number(nIntValue));
         break;
         case NS_ooxml::LN_CT_Border_shadow:
@@ -226,12 +229,12 @@ model::ComplexColor BorderHandler::getComplexColor() const
 
     if (m_nThemeTint > 0 )
     {
-        sal_Int16 nTint = sal_Int16((255.0 - m_nThemeTint) * 10000.0 / 255.0);
+        sal_Int16 nTint = ConversionHelper::convertThemeTintOrShade(m_nThemeTint);
         aComplexColor.addTransformation({model::TransformationType::Tint, nTint});
     }
     if (m_nThemeShade > 0)
     {
-        sal_Int16 nShade = sal_Int16((255.0 - m_nThemeShade) * 10000 / 255.0);
+        sal_Int16 nShade = ConversionHelper::convertThemeTintOrShade(m_nThemeShade);
         aComplexColor.addTransformation({model::TransformationType::Shade, nShade});
     }
 

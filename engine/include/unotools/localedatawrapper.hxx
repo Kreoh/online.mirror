@@ -20,7 +20,7 @@
 #ifndef INCLUDED_UNOTOOLS_LOCALEDATAWRAPPER_HXX
 #define INCLUDED_UNOTOOLS_LOCALEDATAWRAPPER_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/i18n/LocaleItem.hpp>
 #include <com/sun/star/i18n/LocaleDataItem2.hpp>
@@ -34,8 +34,8 @@
 #include <memory>
 #include <string_view>
 
-namespace com::sun::star::uno { class XComponentContext; }
-namespace com::sun::star::i18n { class XLocaleData5; }
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::i18n { class XLocaleData; }
 namespace com::sun::star::i18n { struct Calendar2; }
 namespace com::sun::star::i18n { struct Currency2; }
 namespace com::sun::star::i18n { struct FormatElement; }
@@ -76,8 +76,8 @@ class UNOTOOLS_DLLPUBLIC LocaleDataWrapper
 {
     static  sal_uInt8                nLocaleDataChecking;    // 0:=dontknow, 1:=yes, 2:=no
 
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
-    css::uno::Reference< css::i18n::XLocaleData5 >     xLD;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< css::i18n::XLocaleData >      xLD;
     LanguageTag                                        maLanguageTag;
     std::shared_ptr< css::i18n::Calendar2 >            xDefaultCalendar;
     std::shared_ptr< css::i18n::Calendar2 >            xSecondaryCalendar;
@@ -119,7 +119,7 @@ class UNOTOOLS_DLLPUBLIC LocaleDataWrapper
     SAL_DLLPRIVATE void loadDigitGrouping();
 
     LocaleDataWrapper(
-        const css::uno::Reference< css::uno::XComponentContext > & rxContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext,
         LanguageTag aLanguageTag
         );
 
@@ -145,8 +145,8 @@ public:
         non-existent if this LocaleDataWrapper was created without one and
         lives "on the grassland". The CalendarWrapper ctor can handle that
         though. */
-    const css::uno::Reference<
-        css::uno::XComponentContext > & getComponentContext()
+    const cpo::uno::Reference<
+        cpo::uno::XComponentContext > & getComponentContext()
         const { return m_xContext; }
 
     /// get current requested Locale
@@ -158,11 +158,11 @@ public:
     // Wrapper implementations of service LocaleData
 
     SAL_DLLPRIVATE css::i18n::LanguageCountryInfo getLanguageCountryInfo() const;
-    /// NOTE: this wraps XLocaleData5::getLocaleItem2() in fact.
+    /// NOTE: this wraps XLocaleData::getLocaleItem2() in fact.
     const css::i18n::LocaleDataItem2& getLocaleItem() const;
-    /// NOTE: this wraps XLocaleData3::getAllCalendars2() in fact.
+    /// NOTE: this wraps XLocaleData::getAllCalendars2() in fact.
     cpo::uno::Sequence< css::i18n::Calendar2 > getAllCalendars() const;
-    /// NOTE: this wraps XLocaleData2::getAllCurrencies2() in fact.
+    /// NOTE: this wraps XLocaleData::getAllCurrencies2() in fact.
     cpo::uno::Sequence< css::i18n::Currency2 > getAllCurrencies() const;
     cpo::uno::Sequence< css::i18n::FormatElement > getAllFormats() const;
     css::i18n::ForbiddenCharacters getForbiddenCharacters() const;

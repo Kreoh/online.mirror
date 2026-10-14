@@ -152,7 +152,6 @@ private:
     bool m_bSearch;
     bool m_bFormat;
     bool m_bInitialFocusOnReplace;
-    bool m_bReplaceBackwards;
     SearchOptionFlags m_nOptions;
     bool m_bSet;
     bool m_bConstruct;
@@ -230,7 +229,7 @@ private:
     std::unique_ptr<weld::Button> m_xFormatBtn;
     std::unique_ptr<weld::Button> m_xNoFormatBtn;
 
-    std::unique_ptr<weld::Widget> m_xCalcGrid;
+    std::unique_ptr<weld::Container> m_xCalcGrid;
     std::unique_ptr<weld::Label> m_xCalcSearchInFT;
     std::unique_ptr<weld::ComboBox> m_xCalcSearchInLB;
     std::unique_ptr<weld::Label> m_xCalcSearchDirFT;

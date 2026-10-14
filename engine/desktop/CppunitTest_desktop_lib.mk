@@ -13,6 +13,7 @@ $(eval $(call gb_CppunitTest_CppunitTest,desktop_lib))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,desktop_lib, \
 	desktop/qa/desktop_lib/test_desktop_lib \
+	desktop/qa/desktop_lib/test_l10ntranslate \
 ))
 
 $(eval $(call gb_CppunitTest_use_libraries,desktop_lib, \
@@ -22,7 +23,6 @@ $(eval $(call gb_CppunitTest_use_libraries,desktop_lib, \
 	i18nlangtag \
 	sal \
 	sc \
-	scfilt \
 	sfx \
 	sofficeapp \
 	subsequenttest \

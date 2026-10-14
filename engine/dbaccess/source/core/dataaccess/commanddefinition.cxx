@@ -25,7 +25,7 @@
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
@@ -88,7 +88,7 @@ cpo::uno::Sequence< cpo::uno::Type > OCommandDefinition::getTypes()
     );
 }
 IMPLEMENT_FORWARD_XINTERFACE2( OCommandDefinition,OComponentDefinition,OCommandDefinition_Base)
-css::uno::Reference< css::beans::XPropertySetInfo >  OCommandDefinition::getPropertySetInfo()
+cpo::uno::Reference< css::beans::XPropertySetInfo >  OCommandDefinition::getPropertySetInfo()
 {
     Reference< XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
     return xInfo;
@@ -141,8 +141,8 @@ void OCommandDefinition::rename( const OUString& newName )
 
 }   // namespace dbaccess
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_dba_OCommandDefinition(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_dba_OCommandDefinition(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new dbaccess::OCommandDefinition(

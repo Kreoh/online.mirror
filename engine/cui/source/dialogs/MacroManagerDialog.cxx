@@ -28,7 +28,6 @@
 #include <sfx2/app.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/frame.hxx>
-#include <sfx2/minfitem.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <svl/itemset.hxx>
@@ -46,12 +45,11 @@
 #include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
 #include <com/sun/star/script/browse/theBrowseNodeFactory.hpp>
 #include <com/sun/star/script/browse/BrowseNodeFactoryViewTypes.hpp>
-#include <com/sun/star/script/XLibraryContainer2.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/script/XPersistentLibraryContainer.hpp>
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 ScriptsListBox::ScriptsListBox(std::unique_ptr<weld::TreeView> xTreeView)
     : m_xTreeView(std::move(xTreeView))
@@ -151,8 +149,8 @@ void ScriptContainersListBox::ClearAll()
     m_xTreeView->clear();
 }
 
-void ScriptContainersListBox::Init(const css::uno::Reference<css::uno::XComponentContext>& xContext,
-                                   const css::uno::Reference<css::frame::XFrame>& xFrame)
+void ScriptContainersListBox::Init(const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
+                                   const cpo::uno::Reference<css::frame::XFrame>& xFrame)
 {
     m_xContext = xContext;
     m_xFrame = xFrame;
@@ -215,13 +213,13 @@ void ScriptContainersListBox::Fill(const weld::TreeIter* pEntryIter)
 {
     weld::WaitObject aWait(m_pMacroManagerDialog->getDialog());
 
-    css::uno::Reference<css::script::browse::XBrowseNode> xNode;
+    cpo::uno::Reference<css::script::browse::XBrowseNode> xNode;
     if (pEntryIter == nullptr)
     {
         ClearAll();
         try
         {
-            css::uno::Reference<css::script::browse::XBrowseNodeFactory> xFac
+            cpo::uno::Reference<css::script::browse::XBrowseNodeFactory> xFac
                 = css::script::browse::theBrowseNodeFactory::get(
                     comphelper::getProcessComponentContext());
             xNode.set(
@@ -254,7 +252,6 @@ void ScriptContainersListBox::Fill(const weld::TreeIter* pEntryIter)
 
         OUString user(u"user"_ustr);
         OUString share(u"share"_ustr);
-        OUString uno_packages(u"uno_packages"_ustr);
         if (xNode->getName() == "Root")
         {
             bIsRootNode = true;
@@ -270,25 +267,23 @@ void ScriptContainersListBox::Fill(const weld::TreeIter* pEntryIter)
         // NOTE: This approach doesn't work for open documents with the same name, for example
         // Untitled 1.odt and Untitled 1.ods will both be included as root containers.
         OUString currentDocTitle;
-        if (css::uno::Reference<css::frame::XController> xController = m_xFrame->getController();
+        if (cpo::uno::Reference<css::frame::XController> xController = m_xFrame->getController();
             xController.is())
         {
-            css::uno::Reference<css::frame::XModel> xModel = xController->getModel();
+            cpo::uno::Reference<css::frame::XModel> xModel = xController->getModel();
             if (xModel.is())
                 currentDocTitle = comphelper::DocumentInfo::getDocumentTitle(xModel);
         }
 
-        const cpo::uno::Sequence<css::uno::Reference<css::script::browse::XBrowseNode>> children
+        const cpo::uno::Sequence<cpo::uno::Reference<css::script::browse::XBrowseNode>> children
             = xNode->getChildNodes();
-        for (css::uno::Reference<css::script::browse::XBrowseNode> const& theChild : children)
+        for (cpo::uno::Reference<css::script::browse::XBrowseNode> const& theChild : children)
         {
             if (!theChild.is())
                 continue;
 
             if (theChild->getType() == css::script::browse::BrowseNodeTypes::SCRIPT)
                 // we only want containers in this list box
-                continue;
-            if (theChild->getName() == uno_packages)
                 continue;
 
             OUString uiName = theChild->getName();
@@ -320,7 +315,7 @@ void ScriptContainersListBox::Fill(const weld::TreeIter* pEntryIter)
 
             if (theChild->hasChildNodes())
             {
-                const cpo::uno::Sequence<css::uno::Reference<css::script::browse::XBrowseNode>>
+                const cpo::uno::Sequence<cpo::uno::Reference<css::script::browse::XBrowseNode>>
                     grandchildren = theChild->getChildNodes();
                 for (const auto& rxNode : grandchildren)
                 {
@@ -355,7 +350,7 @@ void ScriptContainersListBox::Fill(const weld::TreeIter* pEntryIter)
 
             OUString aLibName = m_xTreeView->get_text(*pEntryIter);
 
-            css::uno::Reference<css::script::XLibraryContainer> xDlgLibContainer(
+            cpo::uno::Reference<css::script::XLibraryContainer> xDlgLibContainer(
                 aDocument.getLibraryContainer(basctl::E_DIALOGS));
 
             if (xDlgLibContainer.is() && xDlgLibContainer->hasByName(aLibName)
@@ -379,7 +374,7 @@ void ScriptContainersListBox::Fill(const weld::TreeIter* pEntryIter)
 }
 
 void ScriptContainersListBox::Insert(
-    const css::uno::Reference<css::script::browse::XBrowseNode>& xInsertNode,
+    const cpo::uno::Reference<css::script::browse::XBrowseNode>& xInsertNode,
     const weld::TreeIter* pIter, const OUString& rsUiName, const OUString& rsImage,
     bool bChildOnDemand, int nPos, weld::TreeIter* pRet)
 {
@@ -404,13 +399,11 @@ void ScriptContainersListBox::Insert(
 
             OUString aLibName = m_xTreeView->get_text(*xNewEntryIter);
 
-            css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+            cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                 aDocument.getLibraryContainer(basctl::E_SCRIPTS));
             if (xModLibContainer.is() && xModLibContainer->hasByName(aLibName))
             {
-                css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(
-                    xModLibContainer, css::uno::UNO_QUERY);
-                if (xPasswd.is() && xPasswd->isLibraryPasswordProtected(aLibName))
+                if (xModLibContainer->isLibraryPasswordProtected(aLibName))
                 {
                     // password protected
                     m_xTreeView->set_image(*xNewEntryIter, RID_CUIBMP_LOCKED);
@@ -428,9 +421,7 @@ void ScriptContainersListBox::Insert(
 }
 
 // fills the scripts list box
-// inspired by code in void CommandCategoryListBox::addChildren
-// cui/source/customize/CommandCategoryListBox.cxx
-// and void CuiConfigGroupListBox::GroupSelected()
+// inspired by code in void CuiConfigGroupListBox::GroupSelected()
 // cui/source/customize/cfgutil.cxx
 void ScriptContainersListBox::ScriptContainerSelected()
 {
@@ -446,16 +437,16 @@ void ScriptContainersListBox::ScriptContainerSelected()
         // maybe the browse node has children and those children are most likely script nodes
         ScriptContainerInfo* pScriptContainerInfo
             = weld::fromId<ScriptContainerInfo*>(m_xTreeView->get_id(*xIter));
-        css::uno::Reference<css::script::browse::XBrowseNode> xBrowseNode(
+        cpo::uno::Reference<css::script::browse::XBrowseNode> xBrowseNode(
             pScriptContainerInfo->pBrowseNode);
         try
         {
             if (xBrowseNode->hasChildNodes())
             {
-                const cpo::uno::Sequence<css::uno::Reference<css::script::browse::XBrowseNode>>
+                const cpo::uno::Sequence<cpo::uno::Reference<css::script::browse::XBrowseNode>>
                     children = xBrowseNode->getChildNodes();
 
-                for (const css::uno::Reference<css::script::browse::XBrowseNode>& childNode :
+                for (const cpo::uno::Reference<css::script::browse::XBrowseNode>& childNode :
                      children)
                 {
                     if (!childNode.is())
@@ -463,8 +454,8 @@ void ScriptContainersListBox::ScriptContainerSelected()
 
                     if (childNode->getType() == css::script::browse::BrowseNodeTypes::SCRIPT)
                     {
-                        css::uno::Reference<css::beans::XPropertySet> xPropSet(childNode,
-                                                                               css::uno::UNO_QUERY);
+                        cpo::uno::Reference<css::beans::XPropertySet> xPropSet(childNode,
+                                                                               cpo::uno::UNO_QUERY);
                         if (!xPropSet.is())
                         {
                             continue;
@@ -503,7 +494,7 @@ void ScriptContainersListBox::ScriptContainerSelected()
                 }
             }
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
             // do nothing, the entry will not be displayed in the UI
         }
@@ -563,7 +554,7 @@ IMPL_LINK(ScriptContainersListBox, QueryTooltip, const weld::TreeIter&, rEntryIt
             if (!aDocument.isAlive())
                 return OUString();
 
-            css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+            cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                 aDocument.getLibraryContainer(basctl::E_SCRIPTS));
             // check for linked library
             OUString aLibName = m_xTreeView->get_text(rEntryIter);
@@ -596,14 +587,12 @@ IMPL_LINK(ScriptContainersListBox, ExpandingHdl, const weld::TreeIter&, rEntryIt
             OUString aLibName = m_xTreeView->get_text(rEntryIter);
 
             // check if the library is password protected
-            css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+            cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                 aDocument.getLibraryContainer(basctl::E_SCRIPTS));
             if (xModLibContainer.is() && xModLibContainer->hasByName(aLibName))
             {
-                css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(
-                    xModLibContainer, css::uno::UNO_QUERY);
-                if (xPasswd.is() && xPasswd->isLibraryPasswordProtected(aLibName)
-                    && !xPasswd->isLibraryPasswordVerified(aLibName))
+                if (xModLibContainer->isLibraryPasswordProtected(aLibName)
+                    && !xModLibContainer->isLibraryPasswordVerified(aLibName))
                 {
                     // ensure selection before password dialog is shown
                     m_xTreeView->select(rEntryIter);
@@ -627,7 +616,7 @@ IMPL_LINK(ScriptContainersListBox, ExpandingHdl, const weld::TreeIter&, rEntryIt
 }
 
 MacroManagerDialog::MacroManagerDialog(weld::Window* pParent,
-                                       const css::uno::Reference<css::frame::XFrame>& xDocFrame)
+                                       const cpo::uno::Reference<css::frame::XFrame>& xDocFrame)
     : GenericDialogController(pParent, u"cui/ui/macromanagerdialog.ui"_ustr,
                               u"MacroManagerDialog"_ustr)
     , m_xDocumentFrame(xDocFrame)
@@ -652,7 +641,6 @@ MacroManagerDialog::MacroManagerDialog(weld::Window* pParent,
     , m_xMacroDeleteButton(m_xBuilder->weld_button(u"macrodelete"_ustr))
     , m_xMacroCreateButton(m_xBuilder->weld_button(u"macrocreate"_ustr))
     , m_xMacroRenameButton(m_xBuilder->weld_button(u"macrorename"_ustr))
-    , m_xAssignButton(m_xBuilder->weld_button(u"assign"_ustr))
 {
     m_aScriptsListBoxLabelBaseStr = m_xScriptsListBoxLabel->get_label();
 
@@ -666,7 +654,6 @@ MacroManagerDialog::MacroManagerDialog(weld::Window* pParent,
         LINK(this, MacroManagerDialog, FunctionDoubleClickHdl));
     m_xScriptsListBox->connect_popup_menu(LINK(this, MacroManagerDialog, ContextMenuHdl));
 
-    m_xAssignButton->connect_clicked(LINK(this, MacroManagerDialog, ClickHdl));
     m_xRunButton->connect_clicked(LINK(this, MacroManagerDialog, ClickHdl));
     m_xCloseButton->connect_clicked(LINK(this, MacroManagerDialog, ClickHdl));
     m_xNewLibraryButton->connect_clicked(LINK(this, MacroManagerDialog, ClickHdl));
@@ -902,7 +889,7 @@ IMPL_LINK(MacroManagerDialog, ContextMenuHdl, const CommandEvent&, rCEvt, bool)
 // same as OUString SvxScriptOrgDialog::getBoolProperty((Reference<beans::XPropertySet> const& xProps, OUString const& propName)
 // cui/source/dialogs/scriptdlg.cxx
 bool MacroManagerDialog::getBoolProperty(
-    css::uno::Reference<css::beans::XPropertySet> const& xProps, OUString const& propName)
+    cpo::uno::Reference<css::beans::XPropertySet> const& xProps, OUString const& propName)
 {
     bool result = false;
     try
@@ -916,7 +903,7 @@ bool MacroManagerDialog::getBoolProperty(
     return result;
 }
 
-css::uno::Reference<css::script::browse::XBrowseNode>
+cpo::uno::Reference<css::script::browse::XBrowseNode>
 MacroManagerDialog::getBrowseNode(const weld::TreeView& rTreeView, const weld::TreeIter& rTreeIter)
 {
     if (&rTreeView == m_xScriptContainersListBox->m_xTreeView.get())
@@ -953,7 +940,7 @@ void MacroManagerDialog::UpdateUI()
             if (aDocument.isAlive())
             {
                 // if this is a Basic linked library use the link url name for the description string
-                css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+                cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                     aDocument.getLibraryContainer(basctl::E_SCRIPTS));
                 OUString aLibName = rTreeView.get_text(*xSelectedIter);
                 if (xModLibContainer.is() && xModLibContainer->hasByName(aLibName)
@@ -993,8 +980,6 @@ void MacroManagerDialog::CheckButtons()
     bool bSensitiveMacroRenameButton = false;
     bool bSensitiveMacroDeleteButton = false;
 
-    bool bSensitiveAssignButton = false;
-
     weld::TreeView& rScriptContainersTreeView = m_xScriptContainersListBox->get_widget();
     std::unique_ptr<weld::TreeIter> xScriptContainersSelectedIter
         = rScriptContainersTreeView.make_iterator();
@@ -1026,12 +1011,12 @@ void MacroManagerDialog::CheckButtons()
                     }
                     else
                     {
-                        css::uno::Reference<css::script::browse::XBrowseNode> node = getBrowseNode(
+                        cpo::uno::Reference<css::script::browse::XBrowseNode> node = getBrowseNode(
                             rScriptContainersTreeView, *xScriptContainersSelectedIter);
                         if (node.is())
                         {
-                            css::uno::Reference<css::beans::XPropertySet> xProps(
-                                node, css::uno::UNO_QUERY);
+                            cpo::uno::Reference<css::beans::XPropertySet> xProps(
+                                node, cpo::uno::UNO_QUERY);
                             if (xProps.is())
                             {
                                 if (getBoolProperty(xProps, u"Creatable"_ustr))
@@ -1052,8 +1037,8 @@ void MacroManagerDialog::CheckButtons()
                 OUString aLibName = m_xScriptContainersListBox->GetSelectedEntryContainerName(
                     ScriptContainerType::LIBRARY);
 
-                css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(
-                    aDocument.getLibraryContainer(basctl::E_SCRIPTS), css::uno::UNO_QUERY);
+                cpo::uno::Reference<css::script::XLibraryContainer> xPasswd(
+                    aDocument.getLibraryContainer(basctl::E_SCRIPTS));
 
                 if (xPasswd.is() && xPasswd->isLibraryPasswordProtected(aLibName)
                     && !xPasswd->isLibraryPasswordVerified(aLibName))
@@ -1067,7 +1052,7 @@ void MacroManagerDialog::CheckButtons()
                 else
                 {
                     // check, if library is readonly
-                    css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+                    cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                         aDocument.getLibraryContainer(basctl::E_SCRIPTS));
 
                     bool bReadOnly = xModLibContainer.is() && xModLibContainer->hasByName(aLibName)
@@ -1101,9 +1086,9 @@ void MacroManagerDialog::CheckButtons()
                     OUString aLibName = m_xScriptContainersListBox->GetSelectedEntryContainerName(
                         ScriptContainerType::LIBRARY);
 
-                    css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+                    cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                         aDocument.getLibraryContainer(basctl::E_SCRIPTS));
-                    css::uno::Reference<css::script::XLibraryContainer2> xDlgLibContainer(
+                    cpo::uno::Reference<css::script::XLibraryContainer> xDlgLibContainer(
                         aDocument.getLibraryContainer(basctl::E_DIALOGS));
 
                     bool bReadOnly
@@ -1122,11 +1107,11 @@ void MacroManagerDialog::CheckButtons()
 
             if (!bSharedLocationContainer && nSelectedIterDepth > 1)
             {
-                css::uno::Reference<css::script::browse::XBrowseNode> node
+                cpo::uno::Reference<css::script::browse::XBrowseNode> node
                     = getBrowseNode(rScriptContainersTreeView, *xScriptContainersSelectedIter);
                 if (node.is())
                 {
-                    css::uno::Reference<css::beans::XPropertySet> xProps(node, css::uno::UNO_QUERY);
+                    cpo::uno::Reference<css::beans::XPropertySet> xProps(node, cpo::uno::UNO_QUERY);
                     if (xProps.is())
                     {
                         if (getBoolProperty(xProps, u"Creatable"_ustr)
@@ -1158,15 +1143,13 @@ void MacroManagerDialog::CheckButtons()
             if (rScriptsTreeView.n_children()
                 && rScriptsTreeView.get_selected(xScriptsSelectedIter.get()))
             {
-                bSensitiveAssignButton = true;
-
-                css::uno::Reference<css::script::browse::XBrowseNode> node;
+                cpo::uno::Reference<css::script::browse::XBrowseNode> node;
                 node = getBrowseNode(rScriptsTreeView, *xScriptsSelectedIter);
                 if (node.is())
                 {
                     bSensitiveMacroRunButton = true;
 
-                    css::uno::Reference<css::beans::XPropertySet> xProps(node, css::uno::UNO_QUERY);
+                    cpo::uno::Reference<css::beans::XPropertySet> xProps(node, cpo::uno::UNO_QUERY);
                     if (xProps.is())
                     {
                         if (getBoolProperty(xProps, u"Editable"_ustr))
@@ -1204,7 +1187,6 @@ void MacroManagerDialog::CheckButtons()
     m_xMacroEditButton->set_sensitive(bSensitiveMacroEditButton);
     m_xMacroRenameButton->set_sensitive(bSensitiveMacroRenameButton);
     m_xMacroDeleteButton->set_sensitive(bSensitiveMacroDeleteButton);
-    m_xAssignButton->set_sensitive(bSensitiveAssignButton);
 }
 
 // void createLibImpl(weld::Window* pWin, const ScriptDocument& rDocument,
@@ -1251,10 +1233,10 @@ void MacroManagerDialog::BasicScriptsCreateLibrary(const basctl::ScriptDocument&
         // tdf#151741 - store all libraries to the file system, otherwise they
         // cannot be renamed/moved since the SfxLibraryContainer::renameLibrary
         // moves the folders/files on the file system
-        css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+        cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
             rDocument.getLibraryContainer(basctl::E_SCRIPTS));
-        css::uno::Reference<css::script::XPersistentLibraryContainer> xModPersLibContainer(
-            xModLibContainer, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::script::XPersistentLibraryContainer> xModPersLibContainer(
+            xModLibContainer, cpo::uno::UNO_QUERY);
         if (xModPersLibContainer.is())
             xModPersLibContainer->storeLibraries();
 
@@ -1353,7 +1335,7 @@ void MacroManagerDialog::BasicScriptsCreateDialog(const basctl::ScriptDocument& 
     {
         rDocument.getOrCreateLibrary(basctl::E_DIALOGS, aLibName);
 
-        css::uno::Reference<css::io::XInputStreamProvider> xISP;
+        cpo::uno::Reference<css::io::XInputStreamProvider> xISP;
         if (!rDocument.createDialog(aLibName, sDialogName, xISP))
             return;
 
@@ -1432,8 +1414,8 @@ IMPL_LINK(MacroManagerDialog, CheckPasswordHdl, SvxPasswordDialog*, pDlg, bool)
 
     bool bRet = false;
 
-    css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(
-        aDocument.getLibraryContainer(basctl::E_SCRIPTS), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::script::XLibraryContainer> xPasswd(
+        aDocument.getLibraryContainer(basctl::E_SCRIPTS));
 
     if (xPasswd.is())
     {
@@ -1470,7 +1452,7 @@ basctl::ScriptDocument ScriptContainersListBox::GetScriptDocument(const weld::Tr
         = weld::fromId<ScriptContainerInfo*>(m_xTreeView->get_id(*xIter));
     if (pScriptContainerInfo && pScriptContainerInfo->pBrowseNode)
     {
-        css::uno::Reference<css::script::browse::XBrowseNode> aRootNode;
+        cpo::uno::Reference<css::script::browse::XBrowseNode> aRootNode;
         aRootNode = pScriptContainerInfo->pBrowseNode;
         if (aRootNode->getName() == u"user"_ustr || aRootNode->getName() == u"share"_ustr)
             return basctl::ScriptDocument::getApplicationScriptDocument();
@@ -1559,27 +1541,6 @@ IMPL_LINK(MacroManagerDialog, ClickHdl, weld::Button&, rButton, void)
             // see: void MacroChooser::DeleteMacro()
             return;
         }
-        else if (&rButton == m_xAssignButton.get())
-        {
-            SfxAllItemSet Args(SfxGetpApp()->GetPool());
-            SfxAllItemSet aInternalSet(SfxGetpApp()->GetPool());
-            if (m_xDocumentFrame.is())
-                aInternalSet.Put(SfxUnoFrameItem(SID_FILLFRAME, m_xDocumentFrame));
-            SfxRequest aRequest(SID_CONFIGACCEL, SfxCallMode::SYNCHRON, Args, aInternalSet);
-
-            SfxMacroInfoItem aMacroInfoItem(
-                SID_MACROINFO, aDocument.getBasicManager(),
-                m_xScriptContainersListBox->GetSelectedEntryContainerName(
-                    ScriptContainerType::LIBRARY),
-                m_xScriptContainersListBox->GetSelectedEntryContainerName(
-                    ScriptContainerType::MODULEORDIALOG),
-                m_xScriptsListBox->GetSelectedScriptName(), OUString(),
-                m_xScriptContainersListBox->GetSelectedEntryContainerName(
-                    ScriptContainerType::LOCATION));
-            aRequest.AppendItem(aMacroInfoItem);
-
-            SfxGetpApp()->ExecuteSlot(aRequest);
-        }
         return;
     }
 
@@ -1600,9 +1561,9 @@ IMPL_LINK(MacroManagerDialog, ClickHdl, weld::Button&, rButton, void)
         std::unique_ptr<weld::TreeIter> xSelectedIter = rTreeView.make_iterator();
         if (!rTreeView.get_selected(xSelectedIter.get()))
             return; // should never happen
-        css::uno::Reference<css::script::browse::XBrowseNode> node
+        cpo::uno::Reference<css::script::browse::XBrowseNode> node
             = getBrowseNode(rTreeView, *xSelectedIter);
-        css::uno::Reference<css::script::XInvocation> xInv(node, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::script::XInvocation> xInv(node, cpo::uno::UNO_QUERY);
         if (xInv.is())
         {
             m_xDialog->response(RET_CANCEL);
@@ -1652,31 +1613,14 @@ IMPL_LINK(MacroManagerDialog, ClickHdl, weld::Button&, rButton, void)
             return; // should never happen
         ScriptingFrameworkScriptsRenameEntry(rTreeView, *xSelectedIter);
     }
-    else if (&rButton == m_xAssignButton.get())
-    {
-        SfxAllItemSet Args(SfxGetpApp()->GetPool());
-        SfxAllItemSet aInternalSet(SfxGetpApp()->GetPool());
-        if (m_xDocumentFrame.is())
-            aInternalSet.Put(SfxUnoFrameItem(SID_FILLFRAME, m_xDocumentFrame));
-        SfxRequest aRequest(SID_CONFIGACCEL, SfxCallMode::SYNCHRON, Args, aInternalSet);
-
-        SfxMacroInfoItem aMacroInfoItem(
-            SID_MACROINFO, nullptr,
-            m_xScriptContainersListBox->GetSelectedEntryContainerName(ScriptContainerType::LIBRARY),
-            OUString(), m_xScriptsListBox->GetSelectedScriptName(), OUString(),
-            m_xScriptContainersListBox->GetSelectedEntryContainerName(
-                ScriptContainerType::LOCATION));
-        aRequest.AppendItem(aMacroInfoItem);
-        SfxGetpApp()->ExecuteSlot(aRequest);
-    }
 }
 
 bool MacroManagerDialog::IsLibraryReadOnlyOrFailedPasswordQuery(
     const basctl::ScriptDocument& rDocument, const weld::TreeIter* pIter)
 {
-    css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+    cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
         rDocument.getLibraryContainer(basctl::E_SCRIPTS));
-    css::uno::Reference<css::script::XLibraryContainer2> xDlgLibContainer(
+    cpo::uno::Reference<css::script::XLibraryContainer> xDlgLibContainer(
         rDocument.getLibraryContainer(basctl::E_DIALOGS));
 
     OUString aLibName
@@ -1703,10 +1647,8 @@ bool MacroManagerDialog::IsLibraryReadOnlyOrFailedPasswordQuery(
     {
         bool bOK = true;
         // check password
-        css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(xModLibContainer,
-                                                                            css::uno::UNO_QUERY);
-        if (xPasswd.is() && xPasswd->isLibraryPasswordProtected(aLibName)
-            && !xPasswd->isLibraryPasswordVerified(aLibName))
+        if (xModLibContainer->isLibraryPasswordProtected(aLibName)
+            && !xModLibContainer->isLibraryPasswordVerified(aLibName))
         {
             OUString sPassword;
             bOK = basctl::QueryPassword(m_xDialog.get(), xModLibContainer, aLibName, sPassword,
@@ -1762,11 +1704,11 @@ void MacroManagerDialog::BasicScriptsLibraryModuleDialogRename(
         bool bSuccess = true;
         try
         {
-            css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+            cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
                 rDocument.getLibraryContainer(basctl::E_SCRIPTS));
             if (xModLibContainer.is() && xModLibContainer->hasByName(sOldName))
                 xModLibContainer->renameLibrary(sOldName, sNewName);
-            css::uno::Reference<css::script::XLibraryContainer2> xDlgLibContainer(
+            cpo::uno::Reference<css::script::XLibraryContainer> xDlgLibContainer(
                 rDocument.getLibraryContainer(basctl::E_DIALOGS));
             if (xDlgLibContainer.is() && xDlgLibContainer->hasByName(sOldName))
                 xDlgLibContainer->renameLibrary(sOldName, sNewName);
@@ -1850,9 +1792,9 @@ void MacroManagerDialog::BasicScriptsLibraryModuleDialogDelete(
 
         // check, if library is link
         bool bIsLibraryLink = false;
-        css::uno::Reference<css::script::XLibraryContainer2> xModLibContainer(
+        cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer(
             rDocument.getLibraryContainer(basctl::E_SCRIPTS));
-        css::uno::Reference<css::script::XLibraryContainer2> xDlgLibContainer(
+        cpo::uno::Reference<css::script::XLibraryContainer> xDlgLibContainer(
             rDocument.getLibraryContainer(basctl::E_DIALOGS));
         if ((xModLibContainer.is() && xModLibContainer->hasByName(aLibName)
              && xModLibContainer->isLibraryLink(aLibName))
@@ -1952,7 +1894,7 @@ void MacroManagerDialog::BasicScriptsLibraryPassword(const basctl::ScriptDocumen
     OUString aLibName = rTreeView.get_text(*xSelectedIter);
 
     // load module library (if not loaded)
-    css::uno::Reference<css::script::XLibraryContainer> xModLibContainer
+    cpo::uno::Reference<css::script::XLibraryContainer> xModLibContainer
         = rDocument.getLibraryContainer(basctl::E_SCRIPTS);
     if (xModLibContainer.is() && xModLibContainer->hasByName(aLibName)
         && !xModLibContainer->isLibraryLoaded(aLibName))
@@ -1963,38 +1905,33 @@ void MacroManagerDialog::BasicScriptsLibraryPassword(const basctl::ScriptDocumen
     // check if library is password protected --> this is for setting and removing password
     if (xModLibContainer.is() && xModLibContainer->hasByName(aLibName))
     {
-        css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(xModLibContainer,
-                                                                            css::uno::UNO_QUERY);
-        if (xPasswd.is())
+        if (xModLibContainer->isLibraryPasswordProtected(aLibName)
+            && !xModLibContainer->isLibraryPasswordVerified(aLibName))
         {
-            if (xPasswd->isLibraryPasswordProtected(aLibName)
-                && !xPasswd->isLibraryPasswordVerified(aLibName))
+            // password not verified
+            OUString sPassword;
+            if (basctl::QueryPassword(m_xDialog.get(), xModLibContainer, aLibName, sPassword,
+                                      true, true))
             {
-                // password not verified
-                OUString sPassword;
-                if (basctl::QueryPassword(m_xDialog.get(), xModLibContainer, aLibName, sPassword,
-                                          true, true))
-                {
-                    CheckButtons();
-                }
-                return;
+                CheckButtons();
             }
-
-            // set/change password dialog
-            SvxPasswordDialog aDlg(m_xDialog.get(), !xPasswd->isLibraryPasswordProtected(aLibName));
-            aDlg.SetCheckPasswordHdl(LINK(this, MacroManagerDialog, CheckPasswordHdl));
-
-            if (aDlg.run() == RET_OK)
-            {
-                if (xPasswd->isLibraryPasswordProtected(aLibName))
-                    rTreeView.set_image(*xSelectedIter, RID_CUIBMP_LOCKED);
-                else
-                    rTreeView.set_image(*xSelectedIter, RID_CUIBMP_LIB);
-                basctl::MarkDocumentModified(rDocument);
-            }
-
-            rTreeView.grab_focus();
+            return;
         }
+
+        // set/change password dialog
+        SvxPasswordDialog aDlg(m_xDialog.get(), !xModLibContainer->isLibraryPasswordProtected(aLibName));
+        aDlg.SetCheckPasswordHdl(LINK(this, MacroManagerDialog, CheckPasswordHdl));
+
+        if (aDlg.run() == RET_OK)
+        {
+            if (xModLibContainer->isLibraryPasswordProtected(aLibName))
+                rTreeView.set_image(*xSelectedIter, RID_CUIBMP_LOCKED);
+            else
+                rTreeView.set_image(*xSelectedIter, RID_CUIBMP_LIB);
+            basctl::MarkDocumentModified(rDocument);
+        }
+
+        rTreeView.grab_focus();
     }
 }
 
@@ -2034,9 +1971,9 @@ void MacroManagerDialog::BasicScriptsMacroEdit(const basctl::ScriptDocument& rDo
 void MacroManagerDialog::ScriptingFrameworkScriptsRenameEntry(weld::TreeView& rTreeView,
                                                               const weld::TreeIter& rEntry)
 {
-    css::uno::Reference<css::script::browse::XBrowseNode> xBrowseNode
+    cpo::uno::Reference<css::script::browse::XBrowseNode> xBrowseNode
         = getBrowseNode(rTreeView, rEntry);
-    css::uno::Reference<css::script::XInvocation> xInv(xBrowseNode, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::script::XInvocation> xInv(xBrowseNode, cpo::uno::UNO_QUERY);
 
     if (xInv.is())
     {
@@ -2075,7 +2012,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsRenameEntry(weld::TreeView& rT
         try
         {
             cpo::uno::Any aResult = xInv->invoke(u"Renamable"_ustr, args, outIndex, outArgs);
-            xBrowseNode.set(aResult, css::uno::UNO_QUERY);
+            xBrowseNode.set(aResult, cpo::uno::UNO_QUERY);
         }
         catch (cpo::uno::Exception const&)
         {
@@ -2093,8 +2030,8 @@ void MacroManagerDialog::ScriptingFrameworkScriptsRenameEntry(weld::TreeView& rT
             ScriptInfo* pScriptInfo = weld::fromId<ScriptInfo*>(m_xScriptsListBox->get_id(rEntry));
             if (pScriptInfo)
             {
-                css::uno::Reference<css::beans::XPropertySet> xPropSet(xBrowseNode,
-                                                                       css::uno::UNO_QUERY);
+                cpo::uno::Reference<css::beans::XPropertySet> xPropSet(xBrowseNode,
+                                                                       cpo::uno::UNO_QUERY);
                 if (xPropSet.is())
                 {
                     OUString sURI;
@@ -2129,7 +2066,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsRenameEntry(weld::TreeView& rT
 // duplicate of OUString SvxScriptOrgDialog::getListOfChildren
 // cui/source/dialogs/scriptdlg.cxx
 OUString MacroManagerDialog::getListOfChildren(
-    const css::uno::Reference<css::script::browse::XBrowseNode>& node, int depth)
+    const cpo::uno::Reference<css::script::browse::XBrowseNode>& node, int depth)
 {
     OUStringBuffer result = "\n";
     for (int i = 0; i <= depth; i++)
@@ -2142,9 +2079,9 @@ OUString MacroManagerDialog::getListOfChildren(
     {
         if (node->hasChildNodes())
         {
-            const cpo::uno::Sequence<css::uno::Reference<css::script::browse::XBrowseNode>> children
+            const cpo::uno::Sequence<cpo::uno::Reference<css::script::browse::XBrowseNode>> children
                 = node->getChildNodes();
-            for (const css::uno::Reference<css::script::browse::XBrowseNode>& n : children)
+            for (const cpo::uno::Reference<css::script::browse::XBrowseNode>& n : children)
             {
                 result.append(getListOfChildren(n, depth + 1));
             }
@@ -2164,7 +2101,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsDeleteEntry(weld::TreeView& rT
                                                               const weld::TreeIter& rEntry)
 {
     bool result = false;
-    css::uno::Reference<css::script::browse::XBrowseNode> node = getBrowseNode(rTreeView, rEntry);
+    cpo::uno::Reference<css::script::browse::XBrowseNode> node = getBrowseNode(rTreeView, rEntry);
     // ISSUE L10N string & can we center list?
     OUString aQuery = CuiResId(RID_CUISTR_DELQUERY) + getListOfChildren(node, 0);
     std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(
@@ -2175,7 +2112,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsDeleteEntry(weld::TreeView& rT
         return;
     }
 
-    css::uno::Reference<css::script::XInvocation> xInv(node, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::script::XInvocation> xInv(node, cpo::uno::UNO_QUERY);
     if (xInv.is())
     {
         cpo::uno::Sequence<cpo::uno::Any> args(0);
@@ -2224,10 +2161,10 @@ void MacroManagerDialog::ScriptingFrameworkScriptsCreateEntry(InputDialogMode eI
     if (!rTreeView.get_selected(xSelectedIter.get()))
         return; // should never happen
 
-    css::uno::Reference<css::script::browse::XBrowseNode> aChildNode;
-    css::uno::Reference<css::script::browse::XBrowseNode> xBrowseNode
+    cpo::uno::Reference<css::script::browse::XBrowseNode> aChildNode;
+    cpo::uno::Reference<css::script::browse::XBrowseNode> xBrowseNode
         = getBrowseNode(rTreeView, *xSelectedIter);
-    css::uno::Reference<css::script::XInvocation> xInv(xBrowseNode, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::script::XInvocation> xInv(xBrowseNode, cpo::uno::UNO_QUERY);
 
     // Currently, invocation is not implemented for python, only javascript and java.
     if (xInv.is())
@@ -2246,7 +2183,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsCreateEntry(InputDialogMode eI
         bool bValid = false;
         sal_Int32 i = 1;
 
-        cpo::uno::Sequence<css::uno::Reference<css::script::browse::XBrowseNode>> childNodes;
+        cpo::uno::Sequence<cpo::uno::Reference<css::script::browse::XBrowseNode>> childNodes;
         // no children => ok to create Parcel1 or Script1 without checking ?
         try
         {
@@ -2277,7 +2214,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsCreateEntry(InputDialogMode eI
                 if (extnPos > 0)
                     extn = nodeName.copy(extnPos);
             }
-            for (const css::uno::Reference<css::script::browse::XBrowseNode>& n : childNodes)
+            for (const cpo::uno::Reference<css::script::browse::XBrowseNode>& n : childNodes)
             {
                 if (Concat2View(aNewName + extn) == n->getName())
                 {
@@ -2320,7 +2257,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsCreateEntry(InputDialogMode eI
             {
                 OUString aUserSuppliedName = aNameDialog.GetName();
                 bValid = true;
-                for (const css::uno::Reference<css::script::browse::XBrowseNode>& n : childNodes)
+                for (const cpo::uno::Reference<css::script::browse::XBrowseNode>& n : childNodes)
                 {
                     if (Concat2View(aUserSuppliedName + extn) == n->getName())
                     {
@@ -2357,7 +2294,7 @@ void MacroManagerDialog::ScriptingFrameworkScriptsCreateEntry(InputDialogMode eI
         try
         {
             cpo::uno::Any aResult = xInv->invoke(u"Creatable"_ustr, args, outIndex, outArgs);
-            aChildNode.set(aResult, css::uno::UNO_QUERY);
+            aChildNode.set(aResult, cpo::uno::UNO_QUERY);
         }
         catch (cpo::uno::Exception const&)
         {

@@ -29,7 +29,7 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
@@ -46,7 +46,7 @@ ManifestWriter::~ManifestWriter()
 }
 
 // XManifestWriter methods
-void SAL_CALL ManifestWriter::writeManifestSequence( const Reference< XOutputStream >& rStream, const Sequence< Sequence< PropertyValue > >& rSequence )
+void ManifestWriter::writeManifestSequence( const Reference< XOutputStream >& rStream, const Sequence< Sequence< PropertyValue > >& rSequence )
 {
     Reference < XWriter > xSource = Writer::create( m_xContext );
     xSource->setOutputStream ( rStream );
@@ -65,7 +65,7 @@ OUString ManifestWriter::getImplementationName()
     return u"com.sun.star.packages.manifest.comp.ManifestWriter"_ustr;
 }
 
-bool SAL_CALL ManifestWriter::supportsService(OUString const & rServiceName)
+bool ManifestWriter::supportsService(OUString const & rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
@@ -75,9 +75,9 @@ Sequence < OUString > ManifestWriter::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 package_ManifestWriter_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ManifestWriter(context));
 }

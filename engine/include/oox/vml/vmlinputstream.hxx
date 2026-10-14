@@ -21,7 +21,7 @@
 #define INCLUDED_OOX_VML_VMLINPUTSTREAM_HXX
 
 #include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <rtl/string.hxx>
@@ -29,8 +29,8 @@
 
 namespace com::sun::star {
     namespace io { class XTextInputStream2; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace oox::vml {
 
@@ -56,8 +56,8 @@ class InputStream final : public ::cppu::WeakImplHelper< css::io::XInputStream >
 {
 public:
     explicit            InputStream(
-                            const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-                            const css::uno::Reference< css::io::XInputStream >& rxInStrm );
+                            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+                            const cpo::uno::Reference< css::io::XInputStream >& rxInStrm );
     virtual             ~InputStream() override;
 
     virtual sal_Int32 readBytes( cpo::uno::Sequence< sal_Int8 >& rData, sal_Int32 nBytesToRead ) override;
@@ -68,17 +68,17 @@ public:
 
 private:
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void                updateBuffer();
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OString      readToElementBegin();
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OString      readToElementEnd();
 
 private:
-    css::uno::Reference< css::io::XTextInputStream2 >
+    cpo::uno::Reference< css::io::XTextInputStream2 >
                         mxTextStrm;
     cpo::uno::Sequence< sal_Unicode > maOpeningBracket;
     cpo::uno::Sequence< sal_Unicode > maClosingBracket;

@@ -18,12 +18,17 @@
 
 #include <common/Rectangle.hpp>
 #include <common/Session.hpp>
+#include <common/TilePrioritizer.hpp>
 #include <common/Uri.hpp>
 #include <common/Util.hpp>
 #include <wsd/DocumentBroker.hpp>
 #include <wsd/SenderQueue.hpp>
 #include <wsd/ServerURL.hpp>
 #include <wsd/Storage.hpp>
+#include <wsd/TileCache.hpp>
+#if !MOBILEAPP
+#include <wsd/wopi/WopiStorage.hpp>
+#endif
 
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
@@ -122,6 +127,8 @@ public:
         if (_saveResponseCorrelation && _saveResponseCorrelation->first == requestId)
             _saveResponseCorrelation->second = true;
     }
+    // Cancel only when no Core response can arrive, for example before sending.
+    // A timed-out sent request must use rejectSaveResponse and retain its slot.
     bool cancelSaveResponse(const std::size_t requestId)
     {
         if (!_saveResponseCorrelation || _saveResponseCorrelation->first != requestId)
@@ -182,6 +189,14 @@ public:
 
     bool sendTileNow(const TileDesc &desc, const Tile &tile)
     {
+        // The tracker is left alone for a tile that stays here, so the client and our record of
+        // what it holds keep matching and a later delta still applies.
+        if (!canSendTile(desc))
+        {
+            LOG_TRC("Keeping tile in the cache for now: " << desc.serialize());
+            return false;
+        }
+
         TileWireId lastSentId = _tracker.updateTileSeq(desc);
 
         std::string header;
@@ -199,7 +214,15 @@ public:
 
         bool hasContent = tile->appendChangesSince(output, tile->isPng() ? 0 : lastSentId);
         LOG_TRC("Sending tile message: " << header << " lastSendId " << lastSentId << " content " << hasContent);
-        return sendBinaryFrame(output.data(), output.size());
+        if (!sendBinaryFrame(output.data(), output.size()))
+            return false;
+
+        // The load timing marks the first tile that reached a client, so it is taken here, where
+        // every tile a client receives passes through.
+        if (const std::shared_ptr<DocumentBroker> docBroker = getDocumentBroker())
+            docBroker->recordFirstTileSent();
+
+        return true;
     }
 
     bool sendBlob(const std::string &header, const Blob &blob)
@@ -305,7 +328,44 @@ public:
     /// Returns true if the wireId was found and removed.
     bool removeTileOnFly(TileWireId wireId);
 
+    /// Whether a tile goes to the client now. A client that is keeping up receives every tile it
+    /// asked for. One that is behind receives the tiles at and around its visible area, while a
+    /// tile it has scrolled away from keeps its place in the cache and goes out when asked for
+    /// again.
+    bool canSendTile(const TileDesc& tile) const;
+
+    /// Where a tile sits in what this client is looking at, ranked the same way the kit ranks the
+    /// tiles it renders.
+    TilePrioritizer::Priority getTilePriority(const TileDesc& tile) const;
+
     const Util::Rectangle& getVisibleArea() const { return _clientVisibleArea; }
+
+    /// The identifier of the part this client is showing, empty when it has not said.
+    /// Writer documents have no parts and leave it empty.
+    const std::string& getClientSelectedPart() const { return _clientSelectedPart; }
+
+    /// The zoom this client is showing at, as a percentage, or 0 when it has not said.
+    int getClientZoomPercent() const { return _clientZoomPercent; }
+
+    /// True while the client is in editing mode rather than viewing mode, and unset until
+    /// the client has said which.
+    std::optional<bool> getClientEditMode() const { return _clientEditMode; }
+
+    /// Where the text cursor of this view is, in document twips, empty until the kit says.
+    const Util::Rectangle& getClientCursor() const { return _clientCursor; }
+
+    /// The two ends of this view's text selection, in document twips.
+    const Util::Rectangle& getClientSelectionStart() const { return _clientSelectionStart; }
+    const Util::Rectangle& getClientSelectionEnd() const { return _clientSelectionEnd; }
+
+    /// The cell the cursor of this view is on, such as "D24". Empty in a document with no cells.
+    const std::string& getClientCellAddress() const { return _clientCellAddress; }
+
+    /// Tell the client, once, the zoom and the scroll offset the last view left.
+    void sendLastViewPosition(const std::shared_ptr<DocumentBroker>& docBroker);
+
+    /// Put the cursor and any selection back where the last view of this document had them.
+    void restoreLastViewSelection(const std::shared_ptr<DocumentBroker>& docBroker);
     /// Visible area can have negative value as position, but we have tiles only in the positive range
     Util::Rectangle getNormalizedVisibleArea() const;
 
@@ -347,6 +407,13 @@ public:
     /// Handle presentation info request
     bool handlePresentationInfo(const std::shared_ptr<Message>& payload, const std::shared_ptr<DocumentBroker>& docBroker);
 
+#if !MOBILEAPP
+    /// Takes the source documents named by the slide links the document reports, so that a
+    /// source the storage listed no remote link for is still known by its name.
+    void recordSlideLinkSources(const std::shared_ptr<Message>& payload,
+                                const std::shared_ptr<DocumentBroker>& docBroker);
+#endif // !MOBILEAPP
+
     /// Handle a clipboard fetch / put request.
     void handleClipboardRequest(DocumentBroker::ClipboardRequest     type,
                                 const std::shared_ptr<StreamSocket> &socket,
@@ -372,6 +439,18 @@ public:
 
     /// Generate and rotate a new clipboard hash, sending it if appropriate
     void rotateClipboardKey(bool notifyClient);
+
+    /// Generate a fresh one-time token that authorizes a POST to
+    /// /cool/links for this view, sending it to the client when
+    /// notifyClient is set. Each accepted POST consumes and rotates it.
+    void rotateLinkToken(bool notifyClient);
+
+    /// True when the given token is this view's current link POST
+    /// token, and not empty.
+    bool matchesLinkToken(const std::string& token) const
+    {
+        return !token.empty() && token == _linkToken;
+    }
 
     /// Generate an access token for this session via proxy protocol.
     const std::string &getOrCreateProxyAccess();
@@ -420,6 +499,8 @@ public:
 
     void uploadViewSettingsToWopiHost();
 
+    void uploadServerPrivateInfoToWopiHost();
+
     /// Resolve AI credentials with precedence:
     ///   viewSettings[aiProviderAPIKey|Model|URL]
     ///   -> userPrivateInfoObj[AIProviderAPIKey|Model|URL]
@@ -466,10 +547,20 @@ public:
 #endif
 
 private:
+    /// The value of one AI setting: the user's view setting, else their user private info, which is
+    /// then copied into the view settings, else the coolwsd.xml value.
+    std::string resolveAISetting(Poco::JSON::Object::Ptr& viewSettings,
+                                 const Poco::JSON::Object::Ptr& userPrivateInfoObj,
+                                 bool& viewSettingsMutated, const std::string& vsKey,
+                                 const std::string& upiKey, const std::string& cfgKey) const;
+
     std::shared_ptr<ClientSession> client_from_this()
     {
         return std::static_pointer_cast<ClientSession>(shared_from_this());
     }
+
+    void uploadSettingsToWopiHost(const std::string& filePath, const std::string& jsonBody,
+                                  const std::string& settingName);
 
     /// SocketHandler: disconnection event.
     void onDisconnect() override;
@@ -530,13 +621,21 @@ private:
     /// Returns true if the download message of type 'id' should be allowed or not
     bool filterDownloadAs(const std::string& id) const;
 
+    /// Whether the host lets the content of the document leave in a file of its own,
+    /// unwatermarked. The content may not leave when the host disables export or copy,
+    /// or when a watermark must stay over it.
+    bool allowsCleanExport() const
+    {
+        return !_wopiFileInfo ||
+               (!_wopiFileInfo->getDisableExport() && !_wopiFileInfo->getDisableCopy() &&
+                _wopiFileInfo->getWatermarkText().empty());
+    }
+
     void dumpState(std::ostream& os) override;
 
     /// Handle invalidation message coming from a kit and transfer it to a tile request.
     void handleTileInvalidation(const std::string& message,
                                 const std::shared_ptr<DocumentBroker>& docBroker);
-
-    bool isTileInsideVisibleArea(const TileDesc& tile) const;
 
     /// If this session is read-only because of failed lock, try to unlock and make it read-write.
     bool attemptLock(const std::shared_ptr<DocumentBroker>& docBroker);
@@ -585,6 +684,10 @@ private:
     /// Secure session id token for proxyprotocol authentication
     std::string _proxyAccess;
 
+    /// The current one-time token that authorizes a POST to
+    /// /cool/links for this view. Empty until the first is generated.
+    std::string _linkToken;
+
     /// Store last sent payload of form field button, so we can filter out redundant messages.
     std::string _lastSentFormFielButtonMessage;
 
@@ -611,6 +714,12 @@ private:
     /// Visible area of the client
     Util::Rectangle _clientVisibleArea;
 
+    /// The part and the edit mode the visible area above was reported for. They are the values the
+    /// client had selected when it last told us what it was looking at, so they equal the selected
+    /// part and mode until either of those changes.
+    std::string _visibleAreaPart;
+    int _visibleAreaMode;
+
     Poco::SharedPtr<Poco::JSON::Object> _browserSettingsJSON;
 
     /// Time when loading of view started
@@ -626,8 +735,10 @@ private:
     int _splitX;
     int _splitY;
 
-    /// Selected part of the document viewed by the client (no parts in Writer)
-    int _clientSelectedPart;
+    /// Selected part of the document viewed by the client, as its part identifier: a page
+    /// GUID for a presentation or drawing document, a decimal index for a spreadsheet.
+    /// Empty before any part is known (and always for Writer, which has no parts).
+    std::string _clientSelectedPart;
 
     /// Selected mode of the presentation viewed by the client (in Impress)
     int _clientSelectedMode;
@@ -637,6 +748,28 @@ private:
     int _tileHeightPixel;
     int _tileWidthTwips;
     int _tileHeightTwips;
+
+    /// The zoom the client is showing at, as a percentage, or 0 before it has said.
+    int _clientZoomPercent;
+
+    /// True while the client is in editing mode. The client says which mode it is in when
+    /// its page has loaded and again on each change, so this stays unset until then.
+    std::optional<bool> _clientEditMode;
+
+    /// True once this session has been put where the last view of the document was.
+    bool _restoredLastViewPosition;
+
+    /// Where the text cursor of this view is, in document twips.
+    Util::Rectangle _clientCursor;
+
+    /// The two ends of this view's text selection, in document twips.
+    Util::Rectangle _clientSelectionStart;
+    Util::Rectangle _clientSelectionEnd;
+
+    std::string _clientCellAddress;
+
+    /// Read a "x, y, width, height" rectangle in twips. False when the text is not one.
+    static bool parseRectangle(const std::string& text, Util::Rectangle& rectangle);
 
     /// The integer id of the view in the Kit process
     int _kitViewId;
@@ -688,6 +821,9 @@ private:
 
     /// If Session is for convert-to
     bool _isConvertTo;
+
+    /// Whether this session is the headless connection
+    bool _isRemoteDocumentConnection;
 
     Poco::SharedPtr<Poco::JSON::Object> _viewSettingsJSON;
 

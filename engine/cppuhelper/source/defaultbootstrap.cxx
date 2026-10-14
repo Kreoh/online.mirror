@@ -11,9 +11,9 @@
 
 #include <vector>
 
-#include <com/sun/star/uno/DeploymentException.hpp>
+#include <cpo/uno/DeploymentException.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/component_context.hxx>
@@ -27,7 +27,7 @@
 #include "servicemanager.hxx"
 #include "typemanager.hxx"
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace {
 
@@ -36,7 +36,7 @@ OUString getBootstrapVariable(
 {
     OUString v;
     if (!bootstrap.getFrom(name, v)) {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             "Cannot obtain " + name + " from uno ini");
     }
     return v;
@@ -44,12 +44,12 @@ OUString getBootstrapVariable(
 
 }
 
-css::uno::Reference< css::uno::XComponentContext >
+cpo::uno::Reference< cpo::uno::XComponentContext >
 cppu::defaultBootstrap_InitialComponentContext(OUString const & iniUri)
 {
     rtl::Bootstrap bs(iniUri);
     if (bs.getHandle() == nullptr) {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             "Cannot open uno ini " + iniUri);
     }
     rtl::Reference smgr(
@@ -62,13 +62,13 @@ cppu::defaultBootstrap_InitialComponentContext(OUString const & iniUri)
         cppu::ContextEntry_Init(
             u"/singletons/com.sun.star.lang.theServiceManager"_ustr,
             cpo::uno::Any(
-                css::uno::Reference< css::uno::XInterface >(
+                cpo::uno::Reference< cpo::uno::XInterface >(
                     static_cast< cppu::OWeakObject * >(smgr.get()))),
             false),
         cppu::ContextEntry_Init(
             u"/singletons/com.sun.star.reflection.theTypeDescriptionManager"_ustr,
             cpo::uno::Any(
-                css::uno::Reference< css::uno::XInterface >(
+                cpo::uno::Reference< cpo::uno::XInterface >(
                     static_cast< cppu::OWeakObject * >(tmgr.get()))),
             false),
         cppu::ContextEntry_Init( //TODO: from services.rdb?
@@ -78,14 +78,14 @@ cppu::defaultBootstrap_InitialComponentContext(OUString const & iniUri)
             true)
     };
     smgr->addSingletonContextEntries(&context_values);
-    css::uno::Reference< css::uno::XComponentContext > context(
+    cpo::uno::Reference< cpo::uno::XComponentContext > context(
         createComponentContext(context_values.data(), context_values.size()));
     smgr->setContext(context);
     cppu::installTypeDescriptionManager(tmgr);
     return context;
 }
 
-css::uno::Reference< css::uno::XComponentContext >
+cpo::uno::Reference< cpo::uno::XComponentContext >
 cppu::defaultBootstrap_InitialComponentContext()
 {
     return defaultBootstrap_InitialComponentContext(getUnoIniUri());

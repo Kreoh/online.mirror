@@ -31,7 +31,7 @@
 
 #include <com/sun/star/i18n/KNumberFormatUsage.hpp>
 #include <com/sun/star/i18n/KNumberFormatType.hpp>
-#include <com/sun/star/i18n/LocaleData2.hpp>
+#include <com/sun/star/i18n/LocaleData.hpp>
 #include <com/sun/star/i18n/NumberFormatIndex.hpp>
 #include <com/sun/star/i18n/NumberFormatMapper.hpp>
 
@@ -51,7 +51,7 @@ const sal_uInt16 nCurrFormatDefault = 0;
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::i18n;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace
@@ -83,12 +83,12 @@ const LocaleDataWrapper* LocaleDataWrapper::get(const LanguageTag& aLanguageTag)
 
 
 LocaleDataWrapper::LocaleDataWrapper(
-            const Reference< uno::XComponentContext > & rxContext,
+            const Reference< cpo::uno::XComponentContext > & rxContext,
             LanguageTag aLanguageTag
             )
         :
         m_xContext( rxContext ),
-        xLD( LocaleData2::create(rxContext) ),
+        xLD( LocaleData::create(rxContext) ),
         maLanguageTag(std::move( aLanguageTag ))
 {
     loadData();
@@ -101,7 +101,7 @@ LocaleDataWrapper::LocaleDataWrapper(
             )
         :
         m_xContext( comphelper::getProcessComponentContext() ),
-        xLD( LocaleData2::create(m_xContext) ),
+        xLD( LocaleData::create(m_xContext) ),
         maLanguageTag(std::move( aLanguageTag ))
 {
     loadData();
@@ -565,7 +565,7 @@ void LocaleDataWrapper::scanCurrFormatImpl( std::u16string_view rCode,
 
 void LocaleDataWrapper::loadCurrencyFormats()
 {
-    css::uno::Reference< css::i18n::XNumberFormatCode > xNFC = i18n::NumberFormatMapper::create( m_xContext );
+    cpo::uno::Reference< css::i18n::XNumberFormatCode > xNFC = i18n::NumberFormatMapper::create( m_xContext );
     cpo::uno::Sequence< NumberFormatCode > aFormatSeq = xNFC->getAllFormatCode( KNumberFormatUsage::CURRENCY, maLanguageTag.getLocale() );
     sal_Int32 nCnt = aFormatSeq.getLength();
     if ( !nCnt )
@@ -814,7 +814,7 @@ static DateOrder getDateOrderFromLongDateOrder( LongDateOrder eLong )
 
 void LocaleDataWrapper::loadDateOrders()
 {
-    css::uno::Reference< css::i18n::XNumberFormatCode > xNFC = i18n::NumberFormatMapper::create( m_xContext );
+    cpo::uno::Reference< css::i18n::XNumberFormatCode > xNFC = i18n::NumberFormatMapper::create( m_xContext );
     cpo::uno::Sequence< NumberFormatCode > aFormatSeq = xNFC->getAllFormatCode( KNumberFormatUsage::DATE, maLanguageTag.getLocale() );
     sal_Int32 nCnt = aFormatSeq.getLength();
     if ( !nCnt )
@@ -1482,7 +1482,7 @@ void LocaleDataWrapper::evaluateLocaleDataChecking()
     }
 }
 
-// --- XLocaleData3 ----------------------------------------------------------
+// --- XLocaleData ----------------------------------------------------------
 
 cpo::uno::Sequence< css::i18n::Calendar2 > LocaleDataWrapper::getAllCalendars() const
 {
@@ -1497,7 +1497,7 @@ cpo::uno::Sequence< css::i18n::Calendar2 > LocaleDataWrapper::getAllCalendars() 
     return {};
 }
 
-// --- XLocaleData4 ----------------------------------------------------------
+// --- XLocaleData ----------------------------------------------------------
 
 const cpo::uno::Sequence< OUString > & LocaleDataWrapper::getDateAcceptancePatterns() const
 {

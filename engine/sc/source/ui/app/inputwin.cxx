@@ -22,6 +22,7 @@
 #include <string_view>
 
 #include <editeng/eeitem.hxx>
+#include <vcl/ptrstyle.hxx>
 
 #include <sfx2/app.hxx>
 #include <editeng/adjustitem.hxx>
@@ -40,6 +41,7 @@
 #include <vcl/commandevent.hxx>
 #include <vcl/cursor.hxx>
 #include <vcl/help.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <vcl/settings.hxx>
 #include <svl/stritem.hxx>
 #include <vcl/svapp.hxx>
@@ -84,8 +86,8 @@ const tools::Long TOOLBOX_WINDOW_HEIGHT = 22;   // Height of toolbox window in p
 const tools::Long POSITION_COMBOBOX_WIDTH = 18; // Width of position combobox in characters
 const int RESIZE_HOTSPOT_HEIGHT = 4;
 
-using com::sun::star::uno::Reference;
-using com::sun::star::uno::UNO_QUERY;
+using cpo::uno::Reference;
+using cpo::uno::UNO_QUERY;
 
 using com::sun::star::frame::XLayoutManager;
 using com::sun::star::beans::XPropertySet;
@@ -789,7 +791,7 @@ void ScInputWindow::AutoSum( bool& bRangeFinder, bool& bSubTotal, OpCode eCode )
         return;
 
     SetFuncString( aFormula );
-    const sal_Int32 aOpen = aFormula.indexOf('(');
+    const sal_Int32 nArgStart = ScGlobal::GetAutoSumArgStart(aFormula, bSubTotal);
     const sal_Int32 aLen  = aFormula.getLength();
     if (!(bRangeFinder && pScMod->IsEditMode()))
         return;
@@ -802,9 +804,9 @@ void ScInputWindow::AutoSum( bool& bRangeFinder, bool& bSubTotal, OpCode eCode )
 
     //! SetSelection at the InputHandler?
     //! Set bSelIsRef?
-    if ( aOpen != -1 && aLen > aOpen )
+    if ( nArgStart != -1 && aLen > nArgStart )
     {
-        ESelection aSel( 0, aOpen + (bSubTotal ? 3 : 1), 0, aLen-1 );
+        ESelection aSel( 0, nArgStart, 0, aLen-1 );
         EditView* pTableView = pHdl->GetTableView();
         if ( pTableView )
             pTableView->SetSelection( aSel );

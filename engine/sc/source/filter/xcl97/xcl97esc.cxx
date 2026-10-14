@@ -26,6 +26,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <svx/svdpage.hxx>
+#include <docuno.hxx>
 #include <svx/svdotext.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdoole2.hxx>
@@ -53,10 +54,10 @@
 
 using ::cpo::uno::Any;
 using ::cpo::uno::Exception;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
 using ::com::sun::star::container::XIndexAccess;
 using ::com::sun::star::embed::XClassifiedObject;
 using ::com::sun::star::drawing::XShape;

@@ -12,6 +12,7 @@
 #include "helper/qahelper.hxx"
 
 #include <docsh.hxx>
+#include <dbdata.hxx>
 #include <scitems.hxx>
 #include <attrib.hxx>
 #include <stlpool.hxx>
@@ -19,6 +20,8 @@
 #include <postit.hxx>
 #include <tabprotection.hxx>
 #include <dpobject.hxx>
+#include <drwlayer.hxx>
+#include <rangenam.hxx>
 
 #include <editeng/wghtitem.hxx>
 #include <editeng/eeitem.hxx>
@@ -29,6 +32,8 @@
 #include <svl/numformat.hxx>
 #include <svl/zformat.hxx>
 #include <svx/svdocapt.hxx>
+#include <svx/svdoedge.hxx>
+#include <svx/svdpage.hxx>
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
@@ -46,8 +51,8 @@
 #include <com/sun/star/text/XTextFieldsSupplier.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class ScExportTest5 : public ScModelTestBase
 {
@@ -165,17 +170,17 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf142264ManyChartsToXLSX)
     createScDoc("ods/many_charts.ods");
     saveAndReload(TestFilter::XLSX);
 
-    css::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(mxComponent,
-                                                                    css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(mxComponent,
+                                                                    cpo::uno::UNO_QUERY_THROW);
     auto xDrawPages = xSupplier->getDrawPages();
 
     // No charts (or other objects) on the first sheet, and resp. first draw page
-    css::uno::Reference<css::drawing::XDrawPage> xPage(xDrawPages->getByIndex(0),
-                                                       css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::drawing::XDrawPage> xPage(xDrawPages->getByIndex(0),
+                                                       cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(0), xPage->getCount());
 
     // 20 charts on the second sheet, and resp. second draw page
-    xPage.set(xDrawPages->getByIndex(1), css::uno::UNO_QUERY_THROW);
+    xPage.set(xDrawPages->getByIndex(1), cpo::uno::UNO_QUERY_THROW);
     // Without the fix in place, this test would have failed with
     // - Expected: 20
     // - Actual : 0
@@ -183,20 +188,20 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf142264ManyChartsToXLSX)
     CPPUNIT_ASSERT_EQUAL(sal_Int32(20), xPage->getCount());
     for (sal_Int32 i = 0; i < xPage->getCount(); ++i)
     {
-        css::uno::Reference<css::beans::XPropertySet> xProps(xPage->getByIndex(i),
-                                                             css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::chart2::XChartDocument> xChart(
-            xProps->getPropertyValue(u"Model"_ustr), css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xProps(xPage->getByIndex(i),
+                                                             cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::chart2::XChartDocument> xChart(
+            xProps->getPropertyValue(u"Model"_ustr), cpo::uno::UNO_QUERY_THROW);
         const auto xDiagram = xChart->getFirstDiagram();
         CPPUNIT_ASSERT(xDiagram);
 
-        css::uno::Reference<css::chart2::XCoordinateSystemContainer> xCooSysContainer(
+        cpo::uno::Reference<css::chart2::XCoordinateSystemContainer> xCooSysContainer(
             xDiagram, uno::UNO_QUERY_THROW);
 
         const auto xCooSysSeq = xCooSysContainer->getCoordinateSystems();
         for (const auto& rCooSys : xCooSysSeq)
         {
-            css::uno::Reference<css::chart2::XChartTypeContainer> xChartTypeCont(
+            cpo::uno::Reference<css::chart2::XChartTypeContainer> xChartTypeCont(
                 rCooSys, uno::UNO_QUERY_THROW);
             cpo::uno::Sequence<uno::Reference<chart2::XChartType>> xChartTypeSeq
                 = xChartTypeCont->getChartTypes();
@@ -205,24 +210,24 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf142264ManyChartsToXLSX)
     }
 
     // 20 charts on the third sheet, and resp. third draw page
-    xPage.set(xDrawPages->getByIndex(2), css::uno::UNO_QUERY_THROW);
+    xPage.set(xDrawPages->getByIndex(2), cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(20), xPage->getCount());
     for (sal_Int32 i = 0; i < xPage->getCount(); ++i)
     {
-        css::uno::Reference<css::beans::XPropertySet> xProps(xPage->getByIndex(i),
-                                                             css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::chart2::XChartDocument> xChart(
-            xProps->getPropertyValue(u"Model"_ustr), css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xProps(xPage->getByIndex(i),
+                                                             cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::chart2::XChartDocument> xChart(
+            xProps->getPropertyValue(u"Model"_ustr), cpo::uno::UNO_QUERY_THROW);
         const auto xDiagram = xChart->getFirstDiagram();
         CPPUNIT_ASSERT(xDiagram);
 
-        css::uno::Reference<css::chart2::XCoordinateSystemContainer> xCooSysContainer(
+        cpo::uno::Reference<css::chart2::XCoordinateSystemContainer> xCooSysContainer(
             xDiagram, uno::UNO_QUERY_THROW);
 
         const auto xCooSysSeq = xCooSysContainer->getCoordinateSystems();
         for (const auto& rCooSys : xCooSysSeq)
         {
-            css::uno::Reference<css::chart2::XChartTypeContainer> xChartTypeCont(
+            cpo::uno::Reference<css::chart2::XChartTypeContainer> xChartTypeCont(
                 rCooSys, uno::UNO_QUERY_THROW);
             cpo::uno::Sequence<uno::Reference<chart2::XChartType>> xChartTypeSeq
                 = xChartTypeCont->getChartTypes();
@@ -236,42 +241,42 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf143929MultiColumnToODS)
     createScDoc("ods/two-col-shape.ods");
 
     {
-        css::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(mxComponent,
-                                                                        css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::drawing::XDrawPage> xPage(xSupplier->getDrawPages()->getByIndex(0),
-                                                           css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::container::XIndexAccess> xIndexAccess(xPage,
-                                                                       css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::drawing::XShape> xShape(xIndexAccess->getByIndex(0),
-                                                         css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::beans::XPropertySet> xProps(xShape, css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::text::XTextColumns> xCols(
-            xProps->getPropertyValue(u"TextColumns"_ustr), css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(mxComponent,
+                                                                        cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPage> xPage(xSupplier->getDrawPages()->getByIndex(0),
+                                                           cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::container::XIndexAccess> xIndexAccess(xPage,
+                                                                       cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XShape> xShape(xIndexAccess->getByIndex(0),
+                                                         cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xProps(xShape, cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::text::XTextColumns> xCols(
+            xProps->getPropertyValue(u"TextColumns"_ustr), cpo::uno::UNO_QUERY_THROW);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(2), xCols->getColumnCount());
-        css::uno::Reference<css::beans::XPropertySet> xColProps(xCols, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xColProps(xCols, cpo::uno::UNO_QUERY_THROW);
         CPPUNIT_ASSERT_EQUAL(cpo::uno::Any(sal_Int32(1000)),
                              xColProps->getPropertyValue(u"AutomaticDistance"_ustr));
     }
 
     saveAndReload(TestFilter::ODS);
     {
-        css::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(mxComponent,
-                                                                        css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::drawing::XDrawPage> xPage(xSupplier->getDrawPages()->getByIndex(0),
-                                                           css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::container::XIndexAccess> xIndexAccess(xPage,
-                                                                       css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::drawing::XShape> xShape(xIndexAccess->getByIndex(0),
-                                                         css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::beans::XPropertySet> xProps(xShape, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(mxComponent,
+                                                                        cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPage> xPage(xSupplier->getDrawPages()->getByIndex(0),
+                                                           cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::container::XIndexAccess> xIndexAccess(xPage,
+                                                                       cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XShape> xShape(xIndexAccess->getByIndex(0),
+                                                         cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xProps(xShape, cpo::uno::UNO_QUERY_THROW);
 
         // Without the fix in place, this would have failed with:
-        //   An uncaught exception of type com.sun.star.uno.RuntimeException
+        //   An uncaught exception of type cpo.uno.RuntimeException
         //   - unsatisfied query for interface of type com.sun.star.text.XTextColumns!
-        css::uno::Reference<css::text::XTextColumns> xCols(
-            xProps->getPropertyValue(u"TextColumns"_ustr), css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::text::XTextColumns> xCols(
+            xProps->getPropertyValue(u"TextColumns"_ustr), cpo::uno::UNO_QUERY_THROW);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(2), xCols->getColumnCount());
-        css::uno::Reference<css::beans::XPropertySet> xColProps(xCols, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> xColProps(xCols, cpo::uno::UNO_QUERY_THROW);
         CPPUNIT_ASSERT_EQUAL(cpo::uno::Any(sal_Int32(1000)),
                              xColProps->getPropertyValue(u"AutomaticDistance"_ustr));
     }
@@ -479,7 +484,7 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf91286)
     createScDoc("ods/tdf91286.ods");
     save(TestFilter::XLSX);
 
-    Reference<packages::zip::XZipFileAccess2> xNameAccess
+    Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     const Sequence<OUString> aNames(xNameAccess->getElementNames());
@@ -721,6 +726,85 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testAutofilterHiddenButton)
             = OString::Concat("/x:table/x:autoFilter/x:filterColumn[") + OString::number(i) + "]";
         assertXPath(pDocXml, sPath, "hiddenButton", u"1");
     }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest5, testTableFilterButtonsOff)
+{
+    createScDoc("xlsx/tableFilterButtonsOff.xlsx");
+    ScDocument* pDoc = getScDoc();
+    ScDBData* pDBData = pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE1"_ustr);
+    CPPUNIT_ASSERT(pDBData);
+    CPPUNIT_ASSERT(!pDBData->HasAutoFilter());
+
+    saveAndReload(TestFilter::XLSX);
+
+    pDoc = getScDoc();
+    pDBData = pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE1"_ustr);
+    CPPUNIT_ASSERT(pDBData);
+    CPPUNIT_ASSERT(!pDBData->HasAutoFilter());
+
+    // the hidden buttons have to survive the export, not drop the whole element
+    xmlDocUniquePtr pDocXml = parseExport(u"xl/tables/table1.xml"_ustr);
+    CPPUNIT_ASSERT(pDocXml);
+    assertXPath(pDocXml, "/x:table/x:autoFilter", "ref", u"H6:J10");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn", 3);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[1]", "colId", u"0");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[1]", "hiddenButton", u"1");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[2]", "colId", u"1");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[2]", "hiddenButton", u"1");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[3]", "colId", u"2");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[3]", "hiddenButton", u"1");
+
+    // except when there's no header row
+    pDocXml = parseExport(u"xl/tables/table2.xml"_ustr);
+    CPPUNIT_ASSERT(pDocXml);
+    assertXPath(pDocXml, "/x:table", "headerRowCount", u"0");
+    assertXPath(pDocXml, "/x:table/x:autoFilter", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest5, testTableFilterButtonsOn)
+{
+    createScDoc("xlsx/tableFilterButtonsOn.xlsx");
+    ScDocument* pDoc = getScDoc();
+    ScDBData* pDBData = pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE1"_ustr);
+    CPPUNIT_ASSERT(pDBData);
+    CPPUNIT_ASSERT(pDBData->HasAutoFilter());
+
+    saveAndReload(TestFilter::XLSX);
+
+    pDoc = getScDoc();
+    pDBData = pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE1"_ustr);
+    CPPUNIT_ASSERT(pDBData);
+    CPPUNIT_ASSERT(pDBData->HasAutoFilter());
+
+    xmlDocUniquePtr pDocXml = parseExport(u"xl/tables/table1.xml"_ustr);
+    CPPUNIT_ASSERT(pDocXml);
+    assertXPath(pDocXml, "/x:table/x:autoFilter", "ref", u"H6:J10");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest5, testTableHiddenButtonWithCriteria)
+{
+    createScDoc("xlsx/tableHiddenButtonWithCriteria.xlsx");
+
+    saveAndReload(TestFilter::XLSX);
+
+    xmlDocUniquePtr pDocXml = parseExport(u"xl/tables/table1.xml"_ustr);
+    CPPUNIT_ASSERT(pDocXml);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn", 3);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='0']", 1);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='1']", 1);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='2']", 1);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='0']", "hiddenButton", u"1");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='1']", "hiddenButton", u"1");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='2']", "hiddenButton", u"1");
+
+    // the criteria have to stay on that one column
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='0']/x:filters/x:filter", 2);
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='0']/x:filters/x:filter[1]",
+                "val", u"4");
+    assertXPath(pDocXml, "/x:table/x:autoFilter/x:filterColumn[@colId='0']/x:filters/x:filter[2]",
+                "val", u"5");
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest5, testAutofilterShowButton)
@@ -1065,6 +1149,54 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testNotesAuthor)
     // Reset config change
     officecfg::Office::Common::Security::Scripting::RemovePersonalInfoOnSaving::set(false, pBatch);
     pBatch->commit();
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest5, testNoteFirstParagraphFormatting)
+{
+    // The note has a bold blue first paragraph in Tahoma 9pt and a plain black second paragraph.
+    createScDoc("xlsx/cell-note-formatted.xlsx");
+
+    save(TestFilter::XLSX);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"xl/comments1.xml"_ustr);
+    CPPUNIT_ASSERT(pXmlDoc);
+
+    // Without the fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // i.e. the first paragraph was written in the default font, not bold.
+    static constexpr OString aFirst
+        = "/x:comments/x:commentList/x:comment/x:text/x:r[starts-with(x:t, 'First')]/x:rPr"_ostr;
+    assertXPath(pXmlDoc, aFirst + "/x:b", 1);
+    assertXPath(pXmlDoc, aFirst + "/x:rFont", "val", u"Tahoma");
+    assertXPath(pXmlDoc, aFirst + "/x:sz", "val", u"9");
+    assertXPath(pXmlDoc, aFirst + "/x:color", "rgb", u"FF0000FF");
+
+    static constexpr OString aSecond
+        = "/x:comments/x:commentList/x:comment/x:text/x:r[starts-with(x:t, 'Second')]/x:rPr"_ostr;
+    assertXPath(pXmlDoc, aSecond + "/x:b", 0);
+    assertXPath(pXmlDoc, aSecond + "/x:rFont", "val", u"Tahoma");
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest5, testConnectorStartShape)
+{
+    // The sheet has an arrow connector whose start is connected to a box. The connector comes
+    // first in the drawing, before the box.
+    createScDoc("xlsx/connector-start-shape.xlsx");
+
+    SdrPage* pPage = getScDoc()->GetDrawLayer()->GetPage(0);
+    auto pConnector = dynamic_cast<SdrEdgeObj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pConnector);
+    // Without the fix in place, the connector was not connected to anything after import.
+    CPPUNIT_ASSERT_EQUAL(pPage->GetObj(1), pConnector->GetConnectedNode(true));
+
+    save(TestFilter::XLSX);
+    xmlDocUniquePtr pDrawing = parseExport(u"xl/drawings/drawing1.xml"_ustr);
+    CPPUNIT_ASSERT(pDrawing);
+
+    // The connection names the id that the box is written with.
+    const OUString sBoxId = getXPath(pDrawing, "//xdr:sp/xdr:nvSpPr/xdr:cNvPr", "id");
+    assertXPath(pDrawing, "//xdr:cxnSp/xdr:nvCxnSpPr/xdr:cNvCxnSpPr/a:stCxn", "id", sBoxId);
+    assertXPath(pDrawing, "//xdr:cxnSp/xdr:nvCxnSpPr/xdr:cNvCxnSpPr/a:stCxn", "idx", u"3");
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest5, testSheetProtections)
@@ -1472,6 +1604,34 @@ CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf170565_empty_functions)
     assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[4]/x:c[2]/x:f", u"AVERAGE(,)");
     assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[5]/x:c[2]/x:f", u"COUNT(,)");
     assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[6]/x:c[2]/x:f", u"PRODUCT(,)");
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest5, testNamedExpressionRelativeReferenceXLSX)
+{
+    // Names defined at B1. OOXML stores relative references relative to A1, so B becomes A, also
+    // in formulas that are rewritten for OOXML: SUM and a union of references.
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+    ScRangeName* pNames = &pDoc->GetRangeName();
+    const ScAddress aPos(1, 0, 0);
+    pNames->insert(
+        std::make_unique<ScRangeData>(*pDoc, u"withSum"_ustr, u"SUM($Sheet1.B$1)"_ustr, aPos));
+    pNames->insert(std::make_unique<ScRangeData>(*pDoc, u"withUnion"_ustr,
+                                                 u"AREAS($Sheet1.B$1~$Sheet1.B$2)"_ustr, aPos));
+
+    save(TestFilter::XLSX);
+    xmlDocUniquePtr pBook = parseExport(u"xl/workbook.xml"_ustr);
+    CPPUNIT_ASSERT(pBook);
+    assertXPathContent(pBook, "/x:workbook/x:definedNames/x:definedName[@name='withSum']",
+                       u"SUM(Sheet1!A$1)");
+    assertXPathContent(pBook, "/x:workbook/x:definedNames/x:definedName[@name='withUnion']",
+                       u"AREAS((Sheet1!A$1,Sheet1!A$2))");
+
+    // After reload, seen from B1, the name refers to column B again.
+    saveAndReload(TestFilter::XLSX);
+    pNames = &getScDoc()->GetRangeName();
+    CPPUNIT_ASSERT_EQUAL(u"SUM($Sheet1.B$1)"_ustr,
+                         pNames->findByUpperName(u"WITHSUM"_ustr)->GetSymbol(aPos));
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest5, testTdf170963_row_breaks)

@@ -86,12 +86,15 @@
 #include <docsh.hxx>
 #include <itabenum.hxx>
 #include <wrtsh.hxx>
+#include <flyfrm.hxx>
+#include <o3tl/string_view.hxx>
 #include <unotxdoc.hxx>
 #include <textcontentcontrol.hxx>
 #include <swtestviewcallback.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 static std::ostream& operator<<(std::ostream& os, ViewShellId id)
 {
@@ -495,6 +498,22 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDocumentSizeChanged)
     CPPUNIT_ASSERT_EQUAL(aSize.getWidth(), m_aDocumentSize.getWidth());
     // Document height should be smaller now.
     CPPUNIT_ASSERT(aSize.getHeight() > m_aDocumentSize.getHeight());
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDocumentSizeChangedOutsideAction)
+{
+    // The view learns the document size also when the layout reports it outside an action.
+    SwXTextDocument* pXTextDocument = createDoc("2-pages.odt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    m_aDocumentSize = Size();
+
+    // A cursor placed on a page that is formatted only then reports the size like this, after
+    // the action around the cursor move has ended.
+    CPPUNIT_ASSERT(!pWrtShell->ActionPend());
+    pWrtShell->SizeChgNotify();
+
+    CPPUNIT_ASSERT_EQUAL(pXTextDocument->getDocumentSize(), m_aDocumentSize);
 }
 
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testSearchAll)
@@ -1059,7 +1078,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testUndoDispatch)
     pXTextDocument->postMouseEvent(COKitMouseEventType::BUTTONDOWN, aStart.getX(), aStart.getY(), 1, MOUSE_LEFT, 0);
     pXTextDocument->postMouseEvent(COKitMouseEventType::BUTTONUP, aStart.getX(), aStart.getY(), 1, MOUSE_LEFT, 0);
     Scheduler::ProcessEventsToIdle();
-    uno::Reference<frame::XDesktop2> xDesktop = frame::Desktop::create(comphelper::getProcessComponentContext());
+    uno::Reference<frame::XDesktop> xDesktop = frame::Desktop::create(comphelper::getProcessComponentContext());
     uno::Reference<frame::XFrame> xFrame2 = xDesktop->getActiveFrame();
 
     // Now switch back to the first view, and make sure that the active frame is updated.
@@ -1948,7 +1967,7 @@ public:
     {
     }
 
-    virtual void SAL_CALL dispatchFinished(const css::frame::DispatchResultEvent& rEvent) override
+    virtual void dispatchFinished(const css::frame::DispatchResultEvent& rEvent) override
     {
         if (rEvent.State == frame::DispatchResultState::SUCCESS)
         {
@@ -1956,7 +1975,7 @@ public:
         }
     }
 
-    virtual void SAL_CALL disposing(const css::lang::EventObject&) override {}
+    virtual void disposing(const css::lang::EventObject&) override {}
 };
 }
 
@@ -2758,6 +2777,42 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testVisCursorInvalidationViewIdNotCur
 
     CPPUNIT_ASSERT(aView1.m_bOwnCursorInvalidated);
     CPPUNIT_ASSERT_EQUAL(nView1, aView1.m_nOwnCursorInvalidatedBy);
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testViewCursorCarriesTheViewThatMovedIt)
+{
+    // A view is told which view moved another view's caret, so a caret that moved only because
+    // someone else's edit shifted the text under it is told apart from its owner working there.
+    SwXTextDocument* pXTextDocument = createDoc("dummy.fodt");
+    SwTestViewCallback aView1;
+    int nView1 = KitHelper::getCurrentView();
+
+    KitHelper::createView();
+    SwTestViewCallback aView2;
+    int nView2 = KitHelper::getCurrentView();
+    CPPUNIT_ASSERT(nView1 != nView2);
+    Scheduler::ProcessEventsToIdle();
+
+    // The first view moves its own caret.
+    KitHelper::setView(nView1);
+    Scheduler::ProcessEventsToIdle();
+    aView2.m_nViewCursorMovedBy = -1;
+
+    pXTextDocument->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_RIGHT);
+    pXTextDocument->postKeyEvent(COKitKeyEventType::UP, 0, KEY_RIGHT);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_EQUAL(nView1, aView2.m_nViewCursorMovedBy);
+
+    // The second view types on the same line, which shifts the first view's caret.
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+    aView2.m_nViewCursorMovedBy = -1;
+
+    emulateTyping(u"x");
+
+    // The caret belongs to the first view, and the second view is the one that moved it.
+    CPPUNIT_ASSERT_EQUAL(nView2, aView2.m_nViewCursorMovedBy);
 }
 
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDeselectCustomShape)
@@ -3624,7 +3679,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testCondCollCopy)
 
     // When getting the text selection, then make sure it doesn't crash:
     uno::Reference<datatransfer::XTransferable2> xTransferable(pXTextDocument->getSelection(),
-                                                               css::uno::UNO_QUERY);
+                                                               cpo::uno::UNO_QUERY);
     datatransfer::DataFlavor aFlavor;
     aFlavor.MimeType = u"text/plain;charset=utf-16"_ustr;
     aFlavor.DataType = cppu::UnoType<OUString>::get();
@@ -4316,6 +4371,78 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testOverlaySelectionViewSwitch)
     const basegfx::B2DRange aPrimitiveRange
         = aSequence.getB2DRange(xMgr->getCurrentViewInformation2D());
     CPPUNIT_ASSERT_EQUAL(aPrimitiveRange, aFastRange);
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testSetClientZoomWithoutView)
+{
+    SwXTextDocument* pXTextDocument = createDoc("dummy.fodt");
+    SwDocShell* pDocShell = getSwDocShell();
+    SwView* pView = pDocShell->GetView();
+    CPPUNIT_ASSERT(pView);
+
+    // As when the view the shell names is destroyed
+    pDocShell->SetView(nullptr);
+    comphelper::ScopeGuard aGuard([pDocShell, pView] { pDocShell->SetView(pView); });
+
+    // Without the fix, this crashed
+    pXTextDocument->setClientZoom(256, 256, 1920, 1920);
+}
+
+namespace
+{
+// Reads the "x, y, w, h" that opens a graphic selection payload.
+tools::Rectangle lcl_getSelectionRectangle(std::string_view rSelection)
+{
+    sal_Int32 nIndex = 0;
+    const tools::Long nX = o3tl::toInt32(o3tl::getToken(rSelection, 0, ',', nIndex));
+    const tools::Long nY = o3tl::toInt32(o3tl::getToken(rSelection, 0, ',', nIndex));
+    const tools::Long nWidth = o3tl::toInt32(o3tl::getToken(rSelection, 0, ',', nIndex));
+    const tools::Long nHeight = o3tl::toInt32(o3tl::getToken(rSelection, 0, ',', nIndex));
+    return tools::Rectangle(Point(nX, nY), Size(nWidth, nHeight));
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testSeveralImagesGraphicSelection)
+{
+    // With two images selected the graphic selection callback carries the rectangle around
+    // both, and moving the selection moves that rectangle.
+    createDoc("two-images.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SdrPage* pPage = pWrtShell->GetDoc()->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    pWrtShell->SelectObj(Point(), 0, pPage->GetObj(0));
+    pWrtShell->SelectObj(Point(), SW_ADD_SELECT, pPage->GetObj(1));
+    Scheduler::ProcessEventsToIdle();
+
+    std::vector<SwFlyFrame*> aFlyFrames = pWrtShell->GetSelectedFlyFrames();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aFlyFrames.size());
+    tools::Rectangle aUnion(aFlyFrames[0]->getFrameArea().SVRect());
+    aUnion.Union(aFlyFrames[1]->getFrameArea().SVRect());
+
+    CPPUNIT_ASSERT(!m_ShapeSelection.isEmpty());
+    tools::Rectangle aSelection = lcl_getSelectionRectangle(m_ShapeSelection);
+    CPPUNIT_ASSERT_EQUAL(aUnion.Left(), aSelection.Left());
+    CPPUNIT_ASSERT_EQUAL(aUnion.Top(), aSelection.Top());
+    // The payload width and height may be one twip off the frame areas.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(aUnion.GetWidth(), aSelection.GetWidth(), 1);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(aUnion.GetHeight(), aSelection.GetHeight(), 1);
+
+    // The frame shell handles the transform command. The view switches to it on a timer
+    // after a selection change, so do that switch here.
+    pWrtShell->GetView().SelectShell();
+    const tools::Long nDeltaX = 500;
+    const tools::Long nDeltaY = 300;
+    dispatchCommand(mxComponent, u".uno:TransformDialog"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { u"TransformPosX"_ustr, cpo::uno::Any(sal_Int32(aSelection.Left() + nDeltaX)) },
+                          { u"TransformPosY"_ustr, cpo::uno::Any(sal_Int32(aSelection.Top() + nDeltaY)) } }));
+    Scheduler::ProcessEventsToIdle();
+
+    tools::Rectangle aMovedSelection = lcl_getSelectionRectangle(m_ShapeSelection);
+    CPPUNIT_ASSERT_EQUAL(aSelection.Left() + nDeltaX, aMovedSelection.Left());
+    CPPUNIT_ASSERT_EQUAL(aSelection.Top() + nDeltaY, aMovedSelection.Top());
+    CPPUNIT_ASSERT_EQUAL(aSelection.GetWidth(), aMovedSelection.GetWidth());
+    CPPUNIT_ASSERT_EQUAL(aSelection.GetHeight(), aMovedSelection.GetHeight());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

@@ -28,7 +28,6 @@ $(eval $(call gb_Module_Module,sw))
 $(eval $(call gb_Module_add_targets,sw,\
 	CustomTarget_generated \
     CustomTarget_source \
-	Library_msword \
 	Library_sw \
 	Library_swd \
 	Library_swui \
@@ -77,6 +76,7 @@ $(eval $(call gb_Module_add_slowcheck_targets,sw,\
     CppunitTest_sw_htmlimport \
     CppunitTest_sw_indexingexport \
     CppunitTest_sw_macros_test \
+    CppunitTest_sw_roundtrip_diff \
     CppunitTest_sw_ooxmlexport \
     CppunitTest_sw_ooxmlexport2 \
     CppunitTest_sw_ooxmlexport3 \
@@ -213,14 +213,6 @@ $(eval $(call gb_Module_add_slowcheck_targets,sw,\
 endif
 
 $(eval $(call gb_Module_add_subsequentcheck_targets,sw,\
-    JunitTest_sw_complex \
-    JunitTest_sw_unoapi_1 \
-    JunitTest_sw_unoapi_2 \
-    JunitTest_sw_unoapi_3 \
-    JunitTest_sw_unoapi_4 \
-))
-
-$(eval $(call gb_Module_add_subsequentcheck_targets,sw,\
 	PythonTest_sw_python \
 ))
 
@@ -252,7 +244,6 @@ $(eval $(call gb_Module_add_uicheck_targets,sw,\
 	UITest_sw_findReplace \
 	UITest_chapterNumbering \
 	UITest_sw_navigator \
-	UITest_sw_options \
 	UITest_sw_sidebar \
 	UITest_sw_styleInspector \
 	UITest_sw_ui_fmtui \

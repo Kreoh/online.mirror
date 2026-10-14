@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/graphic/XGraphicMapper.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -32,21 +33,21 @@ public:
 
 protected:
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     {
         return u"com.sun.star.comp.graphic.GraphicMapper"_ustr;
     }
-    bool SAL_CALL supportsService(const OUString& ServiceName) override
+    bool supportsService(const OUString& ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.graphic.GraphicMapper"_ustr };
     }
 
     // XTypeProvider
-    cpo::uno::Sequence<cpo::uno::Type> SAL_CALL getTypes() override
+    cpo::uno::Sequence<cpo::uno::Type> getTypes() override
     {
         static const cpo::uno::Sequence<cpo::uno::Type> aTypes{
             cppu::UnoType<lang::XServiceInfo>::get(), cppu::UnoType<lang::XTypeProvider>::get(),
@@ -54,31 +55,31 @@ protected:
         };
         return aTypes;
     }
-    cpo::uno::Sequence<sal_Int8> SAL_CALL getImplementationId() override
+    cpo::uno::Sequence<sal_Int8> getImplementationId() override
     {
         return cpo::uno::Sequence<sal_Int8>();
     }
 
     // XGraphicMapper
-    css::uno::Reference<css::graphic::XGraphic> SAL_CALL findGraphic(const OUString& rId) override
+    cpo::uno::Reference<css::graphic::XGraphic> findGraphic(const OUString& rId) override
     {
         auto aIterator = maGraphicMap.find(rId);
 
         if (aIterator == maGraphicMap.end())
-            return css::uno::Reference<css::graphic::XGraphic>();
+            return cpo::uno::Reference<css::graphic::XGraphic>();
 
         return aIterator->second;
     }
-    void SAL_CALL putGraphic(const OUString& rId,
-                             css::uno::Reference<css::graphic::XGraphic> const& rGraphic) override
+    void putGraphic(const OUString& rId,
+                             cpo::uno::Reference<css::graphic::XGraphic> const& rGraphic) override
     {
         maGraphicMap.emplace(rId, rGraphic);
     }
 };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_graphic_GraphicMapper_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_graphic_GraphicMapper_get_implementation(cpo::uno::XComponentContext*,
                                                            cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new GraphicMapper);

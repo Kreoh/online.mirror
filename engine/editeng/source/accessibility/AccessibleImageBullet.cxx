@@ -42,6 +42,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 namespace accessibility
 {
@@ -168,8 +169,8 @@ awt::Rectangle AccessibleImageBullet::implGetBounds(  )
 
 void AccessibleImageBullet::grabFocus(  )
 {
-    throw uno::RuntimeException(u"Not focusable"_ustr,
-                                uno::Reference< uno::XInterface >
+    throw cpo::uno::RuntimeException(u"Not focusable"_ustr,
+                                uno::Reference< cpo::uno::XInterface >
                                 ( static_cast< XAccessible* > (this) ) );   // disambiguate hierarchy
 }
 
@@ -286,7 +287,7 @@ void AccessibleImageBullet::SetParagraphIndex( sal_Int32 nIndex )
 SvxEditSource& AccessibleImageBullet::GetEditSource() const
 {
     if( !mpEditSource )
-        throw uno::RuntimeException(u"No edit source, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"No edit source, object is defunct"_ustr,
                                     cppu::getXWeak
                                       ( const_cast< AccessibleImageBullet* > (this) ) );  // disambiguate hierarchy
     return *mpEditSource;
@@ -298,12 +299,12 @@ SvxTextForwarder& AccessibleImageBullet::GetTextForwarder() const
     SvxTextForwarder* pTextForwarder = rEditSource.GetTextForwarder();
 
     if( !pTextForwarder )
-        throw uno::RuntimeException(u"Unable to fetch text forwarder, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"Unable to fetch text forwarder, object is defunct"_ustr,
                                     cppu::getXWeak
                                       ( const_cast< AccessibleImageBullet* > (this) ) );  // disambiguate hierarchy
 
     if( !pTextForwarder->IsValid() )
-        throw uno::RuntimeException(u"Text forwarder is invalid, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"Text forwarder is invalid, object is defunct"_ustr,
                                     cppu::getXWeak
                                       ( const_cast< AccessibleImageBullet* > (this) ) );  // disambiguate hierarchy
     return *pTextForwarder;
@@ -316,13 +317,13 @@ SvxViewForwarder& AccessibleImageBullet::GetViewForwarder() const
 
     if( !pViewForwarder )
     {
-        throw uno::RuntimeException(u"Unable to fetch view forwarder, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"Unable to fetch view forwarder, object is defunct"_ustr,
                                     cppu::getXWeak
                                       ( const_cast< AccessibleImageBullet* > (this) ) );  // disambiguate hierarchy
     }
 
     if( !pViewForwarder->IsValid() )
-        throw uno::RuntimeException(u"View forwarder is invalid, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"View forwarder is invalid, object is defunct"_ustr,
                                     cppu::getXWeak
                                       ( const_cast< AccessibleImageBullet* > (this) ) ); // disambiguate hierarchy
     return *pViewForwarder;

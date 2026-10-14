@@ -48,10 +48,10 @@ class SVXCORE_DLLPUBLIC SvXMLEmbeddedObjectHelper final :
     OUString             maCurContainerStorageName;
 
 
-    css::uno::Reference < css::embed::XStorage > mxRootStorage;  // package
+    cpo::uno::Reference < css::embed::XStorage > mxRootStorage;  // package
     ::comphelper::IEmbeddedHelper*             mpDocPersist;
-    css::uno::Reference < css::embed::XStorage > mxContainerStorage; // container sub package for
-    css::uno::Reference < css::embed::XStorage > mxTempStorage;  // package
+    cpo::uno::Reference < css::embed::XStorage > mxContainerStorage; // container sub package for
+    cpo::uno::Reference < css::embed::XStorage > mxTempStorage;  // package
                                                 // objects
     SvXMLEmbeddedObjectHelperMode       meCreateMode;
     std::optional<std::map< OUString, rtl::Reference<OutputStorageWrapper_Impl> >>
@@ -65,7 +65,7 @@ class SVXCORE_DLLPUBLIC SvXMLEmbeddedObjectHelper final :
                                        bool *pGraphicRepl=nullptr,
                                        bool *pOasisFormat=nullptr ) const;
 
-    SVX_DLLPRIVATE css::uno::Reference < css::embed::XStorage > const & ImplGetContainerStorage(
+    SVX_DLLPRIVATE cpo::uno::Reference < css::embed::XStorage > const & ImplGetContainerStorage(
                                     const OUString& rStorageName );
 
     SVX_DLLPRIVATE void                 ImplReadObject(
@@ -77,12 +77,12 @@ class SVXCORE_DLLPUBLIC SvXMLEmbeddedObjectHelper final :
     SVX_DLLPRIVATE OUString              ImplInsertEmbeddedObjectURL(
                                     const OUString& rURLStr );
 
-    SVX_DLLPRIVATE css::uno::Reference< css::io::XInputStream > ImplGetReplacementImage(
-                                const css::uno::Reference< css::embed::XEmbeddedObject >& xObj );
+    SVX_DLLPRIVATE cpo::uno::Reference< css::io::XInputStream > ImplGetReplacementImage(
+                                const cpo::uno::Reference< css::embed::XEmbeddedObject >& xObj );
 
                                 SvXMLEmbeddedObjectHelper();
                                 virtual ~SvXMLEmbeddedObjectHelper() override;
-    void                        Init( const css::uno::Reference < css::embed::XStorage >&,
+    void                        Init( const cpo::uno::Reference < css::embed::XStorage >&,
                                       ::comphelper::IEmbeddedHelper& rDocPersist,
                                       SvXMLEmbeddedObjectHelperMode eCreateMode );
 
@@ -94,7 +94,7 @@ public:
                                     SvXMLEmbeddedObjectHelperMode eCreateMode );
 
     static rtl::Reference<SvXMLEmbeddedObjectHelper> Create(
-                                    const css::uno::Reference < css::embed::XStorage >&,
+                                    const cpo::uno::Reference < css::embed::XStorage >&,
                                     ::comphelper::IEmbeddedHelper& rDocPersist,
                                     SvXMLEmbeddedObjectHelperMode eCreateMode );
     static rtl::Reference<SvXMLEmbeddedObjectHelper>   Create(
@@ -102,20 +102,20 @@ public:
                                     SvXMLEmbeddedObjectHelperMode eCreateMode );
 
     // XEmbeddedObjectResolver
-    virtual OUString SAL_CALL resolveEmbeddedObjectURL( const OUString& aURL ) override;
+    virtual OUString resolveEmbeddedObjectURL( const OUString& aURL ) override;
 
     // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override;
+    virtual bool hasByName( const OUString& aName ) override;
 
     // XNameAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override;
-    virtual bool SAL_CALL hasElements(  ) override;
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
 };
 
 namespace svx {
-    SVXCORE_DLLPUBLIC void DropUnusedNamedItems(css::uno::Reference<css::uno::XInterface> const& xModel);
+    SVXCORE_DLLPUBLIC void DropUnusedNamedItems(cpo::uno::Reference<cpo::uno::XInterface> const& xModel);
 }
 
 #endif // INCLUDED_SVX_XMLEOHLP_HXX

@@ -27,7 +27,7 @@
 #include <cppuhelper/propshlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-OTempFileService::OTempFileService(css::uno::Reference< css::uno::XComponentContext > const &)
+OTempFileService::OTempFileService(cpo::uno::Reference< cpo::uno::XComponentContext > const &)
 : mpStream( nullptr )
 , mbRemoveFile( true )
 , mbInClosed( false )
@@ -43,7 +43,7 @@ OTempFileService::~OTempFileService ()
 
 //  XTypeProvider
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL OTempFileService::getTypes(  )
+cpo::uno::Sequence< cpo::uno::Type > OTempFileService::getTypes(  )
 {
     static ::cppu::OTypeCollection ourTypeCollection(
                 cppu::UnoType<css::beans::XPropertySet>::get()
@@ -54,50 +54,50 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL OTempFileService::getTypes(  )
 
 //  XTempFile
 
-bool SAL_CALL OTempFileService::getRemoveFile()
+bool OTempFileService::getRemoveFile()
 {
     std::unique_lock aGuard( maMutex );
 
     if ( !mpTempFile )
     {
         // the stream is already disconnected
-        throw css::uno::RuntimeException(u"Not connected to a file."_ustr);
+        throw cpo::uno::RuntimeException(u"Not connected to a file."_ustr);
     }
 
     return mbRemoveFile;
 };
-void SAL_CALL OTempFileService::setRemoveFile( bool _removefile )
+void OTempFileService::setRemoveFile( bool _removefile )
 {
     std::unique_lock aGuard( maMutex );
 
     if ( !mpTempFile )
     {
         // the stream is already disconnected
-        throw css::uno::RuntimeException(u"Not connected to a file."_ustr);
+        throw cpo::uno::RuntimeException(u"Not connected to a file."_ustr);
     }
 
     mbRemoveFile = _removefile;
     mpTempFile->EnableKillingFile( mbRemoveFile );
 };
-OUString SAL_CALL OTempFileService::getUri()
+OUString OTempFileService::getUri()
 {
     std::unique_lock aGuard( maMutex );
 
     if ( !mpTempFile )
     {
-        throw css::uno::RuntimeException(u"Not connected to a file."_ustr);
+        throw cpo::uno::RuntimeException(u"Not connected to a file."_ustr);
     }
 
     return mpTempFile->GetURL();
 
 };
-OUString SAL_CALL OTempFileService::getResourceName()
+OUString OTempFileService::getResourceName()
 {
     std::unique_lock aGuard( maMutex );
 
     if ( !mpTempFile )
     {
-        throw css::uno::RuntimeException(u"Not connected to a file."_ustr);
+        throw cpo::uno::RuntimeException(u"Not connected to a file."_ustr);
     }
 
     return mpTempFile->GetFileName();
@@ -105,7 +105,7 @@ OUString SAL_CALL OTempFileService::getResourceName()
 
 // XInputStream
 
-sal_Int32 SAL_CALL OTempFileService::readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
+sal_Int32 OTempFileService::readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbInClosed )
@@ -126,7 +126,7 @@ sal_Int32 SAL_CALL OTempFileService::readBytes( cpo::uno::Sequence< sal_Int8 >& 
 
     return nRead;
 }
-sal_Int32 SAL_CALL OTempFileService::readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
+sal_Int32 OTempFileService::readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
 {
     {
         std::unique_lock aGuard( maMutex );
@@ -162,7 +162,7 @@ sal_Int32 OTempFileService::readSomeBytes( sal_Int8* aData, sal_Int32 nBytesToRe
 
     return nRead;
 }
-void SAL_CALL OTempFileService::skipBytes( sal_Int32 nBytesToSkip )
+void OTempFileService::skipBytes( sal_Int32 nBytesToSkip )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbInClosed )
@@ -173,7 +173,7 @@ void SAL_CALL OTempFileService::skipBytes( sal_Int32 nBytesToSkip )
     mpStream->SeekRel(nBytesToSkip);
     checkError();
 }
-sal_Int32 SAL_CALL OTempFileService::available(  )
+sal_Int32 OTempFileService::available(  )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbInClosed )
@@ -186,7 +186,7 @@ sal_Int32 SAL_CALL OTempFileService::available(  )
 
     return std::min<sal_Int64>(SAL_MAX_INT32, nAvailable);
 }
-void SAL_CALL OTempFileService::closeInput(  )
+void OTempFileService::closeInput(  )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbInClosed )
@@ -204,7 +204,7 @@ void SAL_CALL OTempFileService::closeInput(  )
 
 // XOutputStream
 
-void SAL_CALL OTempFileService::writeBytes( const cpo::uno::Sequence< sal_Int8 >& aData )
+void OTempFileService::writeBytes( const cpo::uno::Sequence< sal_Int8 >& aData )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbOutClosed )
@@ -216,7 +216,7 @@ void SAL_CALL OTempFileService::writeBytes( const cpo::uno::Sequence< sal_Int8 >
     if  ( nWritten != static_cast<sal_uInt32>(aData.getLength()))
         throw css::io::BufferSizeExceededException( OUString(), getXWeak() );
 }
-void SAL_CALL OTempFileService::flush(  )
+void OTempFileService::flush(  )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbOutClosed )
@@ -226,7 +226,7 @@ void SAL_CALL OTempFileService::flush(  )
     mpStream->Flush();
     checkError();
 }
-void SAL_CALL OTempFileService::closeOutput(  )
+void OTempFileService::closeOutput(  )
 {
     std::unique_lock aGuard( maMutex );
     if ( mbOutClosed )
@@ -269,7 +269,7 @@ void OTempFileService::checkConnected ()
 
 // XSeekable
 
-void SAL_CALL OTempFileService::seek( sal_Int64 nLocation )
+void OTempFileService::seek( sal_Int64 nLocation )
 {
     std::unique_lock aGuard( maMutex );
     checkConnected();
@@ -281,7 +281,7 @@ void SAL_CALL OTempFileService::seek( sal_Int64 nLocation )
     mpStream->Seek(static_cast<sal_uInt32>(nLocation) );
     checkError();
 }
-sal_Int64 SAL_CALL OTempFileService::getPosition(  )
+sal_Int64 OTempFileService::getPosition(  )
 {
     std::unique_lock aGuard( maMutex );
     checkConnected();
@@ -290,7 +290,7 @@ sal_Int64 SAL_CALL OTempFileService::getPosition(  )
     checkError();
     return static_cast<sal_Int64>(nPos);
 }
-sal_Int64 SAL_CALL OTempFileService::getLength(  )
+sal_Int64 OTempFileService::getLength(  )
 {
     std::unique_lock aGuard( maMutex );
     checkConnected();
@@ -304,19 +304,19 @@ sal_Int64 SAL_CALL OTempFileService::getLength(  )
 
 // XStream
 
-css::uno::Reference< css::io::XInputStream > SAL_CALL OTempFileService::getInputStream()
+cpo::uno::Reference< css::io::XInputStream > OTempFileService::getInputStream()
 {
     return this;
 }
 
-css::uno::Reference< css::io::XOutputStream > SAL_CALL OTempFileService::getOutputStream()
+cpo::uno::Reference< css::io::XOutputStream > OTempFileService::getOutputStream()
 {
     return this;
 }
 
 // XTruncate
 
-void SAL_CALL OTempFileService::truncate()
+void OTempFileService::truncate()
 {
     std::unique_lock aGuard( maMutex );
     checkConnected();
@@ -331,7 +331,7 @@ void SAL_CALL OTempFileService::truncate()
 #define PROPERTY_HANDLE_RESOURCE_NAME 3
 
 // XPropertySet
-::css::uno::Reference< ::css::beans::XPropertySetInfo > OTempFileService::getPropertySetInfo()
+::cpo::uno::Reference< ::css::beans::XPropertySetInfo > OTempFileService::getPropertySetInfo()
 {
     // Create a table that map names to index values.
     // attention: properties need to be sorted by name!
@@ -345,7 +345,7 @@ void SAL_CALL OTempFileService::truncate()
                 css::beans::PropertyAttribute::READONLY )
         },
         true );
-    static css::uno::Reference< css::beans::XPropertySetInfo > xInfo( 
+    static cpo::uno::Reference< css::beans::XPropertySetInfo > xInfo(
         ::cppu::OPropertySetHelper::createPropertySetInfo( ourPropertyInfo ) );
     return xInfo;
 }
@@ -373,19 +373,19 @@ void OTempFileService::setPropertyValue( const ::rtl::OUString& aPropertyName, c
         throw css::beans::UnknownPropertyException(aPropertyName);
     }
 }
-void OTempFileService::addPropertyChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::css::uno::Reference< ::css::beans::XPropertyChangeListener >& /*xListener*/ )
+void OTempFileService::addPropertyChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::cpo::uno::Reference< ::css::beans::XPropertyChangeListener >& /*xListener*/ )
 {
     assert(false);
 }
-void OTempFileService::removePropertyChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::css::uno::Reference< ::css::beans::XPropertyChangeListener >& /*xListener*/ )
+void OTempFileService::removePropertyChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::cpo::uno::Reference< ::css::beans::XPropertyChangeListener >& /*xListener*/ )
 {
     assert(false);
 }
-void OTempFileService::addVetoableChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::css::uno::Reference< ::css::beans::XVetoableChangeListener >& /*xListener*/ )
+void OTempFileService::addVetoableChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::cpo::uno::Reference< ::css::beans::XVetoableChangeListener >& /*xListener*/ )
 {
     assert(false);
 }
-void OTempFileService::removeVetoableChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::css::uno::Reference< ::css::beans::XVetoableChangeListener >& /*xListener*/ )
+void OTempFileService::removeVetoableChangeListener( const ::rtl::OUString& /*aPropertyName*/, const ::cpo::uno::Reference< ::css::beans::XVetoableChangeListener >& /*xListener*/ )
 {
     assert(false);
 }
@@ -439,9 +439,9 @@ cpo::uno::Sequence< OUString > OTempFileService::getSupportedServiceNames()
     return { u"com.sun.star.io.TempFile"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 unotools_OTempFileService_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OTempFileService(context));
 }

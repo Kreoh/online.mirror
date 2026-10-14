@@ -59,7 +59,7 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 SVGFilter::SVGFilter( const Reference< XComponentContext >& rxCtx ) :
@@ -143,7 +143,7 @@ bool SVGFilter::filter( const Sequence< PropertyValue >& rDescriptor )
     return filterImpressOrDraw(rDescriptor);
 }
 
-css::uno::Reference<css::frame::XController> SVGFilter::getSourceController() const
+cpo::uno::Reference<css::frame::XController> SVGFilter::getSourceController() const
 {
     uno::Reference<frame::XController> xController;
     // Current frame may be e.g. Basic. Try to get a controller from the source model first.
@@ -152,14 +152,14 @@ css::uno::Reference<css::frame::XController> SVGFilter::getSourceController() co
     // Try current frame as a fallback.
     if (!xController)
     {
-        uno::Reference<frame::XDesktop2> xDesktop(frame::Desktop::create(mxContext));
+        uno::Reference<frame::XDesktop> xDesktop(frame::Desktop::create(mxContext));
         if (auto xFrame = xDesktop->getCurrentFrame()) // Manage headless case
             xController = xFrame->getController();
     }
     return xController;
 }
 
-css::uno::Reference<css::frame::XController> SVGFilter::fillDrawImpressSelectedPages()
+cpo::uno::Reference<css::frame::XController> SVGFilter::fillDrawImpressSelectedPages()
 {
     uno::Reference<frame::XController> xController = getSourceController();
 
@@ -835,9 +835,9 @@ cpo::uno::Sequence< OUString > SVGFilter::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_SVGFilter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SVGFilter(context));
 }

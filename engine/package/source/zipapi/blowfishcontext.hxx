@@ -39,11 +39,11 @@ public:
 
     virtual ~BlowfishCFB8CipherContext() override;
 
-    static css::uno::Reference< css::xml::crypto::XCipherContext >
+    static cpo::uno::Reference< css::xml::crypto::XCipherContext >
         Create( const cpo::uno::Sequence< sal_Int8 >& aDerivedKey, const cpo::uno::Sequence< sal_Int8 >& aInitVector, bool bEncrypt );
 
-    virtual cpo::uno::Sequence< ::sal_Int8 > SAL_CALL convertWithCipherContext( const cpo::uno::Sequence< ::sal_Int8 >& aData ) override;
-    virtual cpo::uno::Sequence< ::sal_Int8 > SAL_CALL finalizeCipherContextAndDispose(  ) override;
+    virtual cpo::uno::Sequence< ::sal_Int8 > convertWithCipherContext( const cpo::uno::Sequence< ::sal_Int8 >& aData ) override;
+    virtual cpo::uno::Sequence< ::sal_Int8 > finalizeCipherContextAndDispose(  ) override;
 };
 
 #endif // INCLUDED_PACKAGE_SOURCE_ZIPAPI_BLOWFISHCONTEXT_HXX

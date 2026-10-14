@@ -120,7 +120,6 @@
     <string name="pref_category_editor">Configurações do editor</string>
     <string name="remove_from_list">Remover da lista</string>
     <string name="file_actions_icon_desc">Ações de arquivo</string>
-    <string name="app_version_and_hash">Versão: %1$s \nonline git-hash: %2$s \ncore git-hash: %3$s</string>
     <string name="theme_light">Claro</string>
     <string name="theme_dark">Escuro</string>
     <string name="theme_system_default">Padrão do sistema</string>
@@ -129,4 +128,5 @@
     <string name="pref_user_name_info">Usado ao adicionar um comentário</string>
     <string name="pref_user_name">Nome de usuário</string>
     <string name="pref_user_name_guest">Usuário Convidado</string>
+    <string name="app_version_and_hash">Versão: %1$s\nhash do git: %2$s</string>
 </resources>

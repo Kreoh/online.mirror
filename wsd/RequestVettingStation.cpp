@@ -33,6 +33,9 @@
 #include <wsd/ServerAuditUtil.hpp>
 #include <wsd/Storage.hpp>
 
+#include <Poco/File.h>
+#include <Poco/Path.h>
+
 #if !MOBILEAPP
 #include <common/JailUtil.hpp>
 #include <wsd/wopi/CheckFileInfo.hpp>
@@ -211,10 +214,14 @@ void RequestVettingStation::launchInstallPresets()
     std::string configIdPresets = Poco::Path(presetsPath, Uri::encode(configId)).toString();
     Poco::File(Poco::Path(configIdPresets, "autotext")).createDirectories();
     Poco::File(Poco::Path(configIdPresets, "wordbook")).createDirectories();
-    Poco::File(Poco::Path(configIdPresets, "template")).createDirectories();
+    Poco::Path sharedTemplates(configIdPresets, "template");
+    sharedTemplates.makeDirectory();
+    sharedTemplates.pushDirectory("presnt");
+    Poco::File(sharedTemplates).createDirectories();
     // ensure the server config is downloaded and populate a subforkit when config is available
     _asyncInstallTask = DocumentBroker::asyncInstallPresets(_poll, configId, sharedSettings.getUri(), configIdPresets,
-                                                            {}, nullptr, finishedCallback);
+                                                            {}, /*sharedPresets=*/true, nullptr,
+                                                            finishedCallback);
 }
 
 #endif
@@ -334,9 +341,12 @@ void RequestVettingStation::handleRequest(const std::string& id,
             }
             else if (_checkFileInfo == nullptr ||
                      _checkFileInfo->state() == CheckFileInfo::State::None ||
-                     _checkFileInfo->state() == CheckFileInfo::State::Timedout)
+                     _checkFileInfo->state() == CheckFileInfo::State::NoAnswer ||
+                     _checkFileInfo->state() == CheckFileInfo::State::Transient)
             {
-                // We haven't tried or we timed-out. Retry.
+                // We haven't tried, or the host didn't answer in time or asked
+                // us to come back later. Either way it hasn't refused us, so
+                // retry rather than report the user as unauthorized.
                 _checkFileInfo.reset();
                 checkFileInfo(uriPublic, HTTP_REDIRECTION_LIMIT);
             }

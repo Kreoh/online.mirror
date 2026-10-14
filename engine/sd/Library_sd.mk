@@ -106,23 +106,9 @@ $(eval $(call gb_Library_use_libraries,sd,\
 $(eval $(call gb_Library_use_externals,sd,\
 	boost_headers \
 	libxml2 \
-	dbus \
-	$(if $(ENABLE_AVAHI), \
-		avahi \
-	) \
 	icu_headers \
 	frozen \
 ))
-
-ifneq ($(DBUS_HAVE_GLIB),)
-$(eval $(call gb_Library_set_include,sd,\
-	$$(INCLUDE) \
-	$(DBUS_GLIB_CFLAGS) \
-))
-$(eval $(call gb_Library_add_libs,sd,\
-	$(DBUS_GLIB_LIBS) \
-))
-endif
 
 ifeq ($(OS),WNT)
 $(eval $(call gb_Library_use_system_win32_libs,sd,\
@@ -163,6 +149,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/core/anminfo \
 	sd/source/core/annotations/Annotation \
 	sd/source/core/cusshow \
+	sd/source/core/SlideLink \
 	sd/source/core/SlideSectionManager \
 	sd/source/core/UndoSlideSection \
 	sd/source/core/drawdoc \
@@ -425,6 +412,11 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/tools/GraphicSizeCheck \
 	sd/source/ui/tools/IconCache \
 	sd/source/ui/tools/IdleDetection \
+	sd/source/ui/tools/LintImageCompressor \
+	sd/source/ui/tools/LintMeasureCache \
+	sd/source/ui/tools/PresentationLint \
+	sd/source/ui/tools/PresentationLintRules \
+	sd/source/ui/tools/PresentationLintSession \
 	sd/source/ui/tools/PreviewRenderer \
 	sd/source/ui/tools/SdGlobalResourceContainer \
 	sd/source/ui/tools/SlideshowLayerRenderer \
@@ -459,6 +451,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/view/OutlinerIterator \
 	sd/source/ui/view/PresentationViewShellBase \
 	sd/source/ui/view/SlideSorterViewShellBase \
+	sd/source/ui/view/SdSecurityLabelTarget \
 	sd/source/ui/view/ToolBarManager \
 	sd/source/ui/view/ViewClipboard \
 	sd/source/ui/view/ViewShellBase \
@@ -500,6 +493,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/view/outlview \
 	sd/source/ui/view/presvish \
 	sd/source/ui/view/sdruler \
+	sd/source/ui/view/PlaceholderDecoration \
 	sd/source/ui/view/sdview \
 	sd/source/ui/view/sdview2 \
 	sd/source/ui/view/sdview3 \
@@ -515,92 +509,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/view/zoomlist \
 	sd/source/ui/view/NotesPanelView \
 	sd/source/ui/view/NotesPanelViewShell \
+	sd/source/ui/view/NotesPanelWidget \
 ))
-
-ifeq ($(ENABLE_SDREMOTE),TRUE)
-$(eval $(call gb_Library_add_exception_objects,sd,\
-	sd/source/ui/remotecontrol/BufferedStreamSocket \
-	sd/source/ui/remotecontrol/Communicator \
-	sd/source/ui/remotecontrol/ImagePreparer \
-	sd/source/ui/remotecontrol/Server \
-	sd/source/ui/remotecontrol/Receiver \
-	sd/source/ui/remotecontrol/Listener \
-	sd/source/ui/remotecontrol/Transmitter \
-))
-
-ifeq ($(OS),MACOSX)
-$(eval $(call gb_Library_add_objcxxobjects,sd,\
-	sd/source/ui/remotecontrol/DiscoveryService \
-	sd/source/ui/remotecontrol/OSXNetworkService \
-))
-
-$(eval $(call gb_Library_use_system_darwin_frameworks,sd,\
-	Foundation \
-))
-
-else # OS!=MACSOX
-
-ifeq ($(ENABLE_AVAHI),TRUE)
-$(eval $(call gb_Library_add_exception_objects,sd,\
-	sd/source/ui/remotecontrol/AvahiNetworkService \
-))
-endif # ENABLE_AVAHI=TRUE
-
-$(eval $(call gb_Library_add_exception_objects,sd,\
-	sd/source/ui/remotecontrol/DiscoveryService \
-))
-
-ifeq ($(OS),WNT)
-
-$(eval $(call gb_Library_add_exception_objects,sd,\
-	sd/source/ui/remotecontrol/WINNetworkService \
-))
-
-$(eval $(call gb_Library_use_external,sd,mDNSResponder))
-
-endif # OS=WNT
-
-endif # OS!=MACOSX
-
-$(eval $(call gb_Library_add_defs,sd,\
-	-DENABLE_SDREMOTE \
-))
-
-ifeq ($(ENABLE_SDREMOTE_BLUETOOTH),TRUE)
-
-ifneq ($(OS),MACOSX)
-
-$(eval $(call gb_Library_add_exception_objects,sd,\
-	sd/source/ui/remotecontrol/BluetoothServer \
-))
-
-else # OS!=MACOSX
-
-$(eval $(call gb_Library_add_objcxxobjects,sd,\
-	sd/source/ui/remotecontrol/BluetoothServer \
-	sd/source/ui/remotecontrol/OSXBluetooth \
-))
-
-$(eval $(call gb_Library_add_libs,sd,\
-	-lobjc \
-))
-
-$(eval $(call gb_Library_use_system_darwin_frameworks,sd,\
-	IOBluetooth \
-))
-
-endif # OS!=MACOSX
-
-$(eval $(call gb_Library_add_defs,sd,\
-	-DENABLE_SDREMOTE_BLUETOOTH \
-))
-
-$(eval $(call gb_Library_use_externals,sd,\
-	bluez_bluetooth_headers \
-))
-
-endif # ENABLE_SDREMOTE_BLUETOOTH=TRUE
-
-endif # ENABLE_SDREMOTE=TRUE
 
 # vim: set noet sw=4 ts=4:

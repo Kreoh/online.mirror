@@ -24,7 +24,7 @@
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 using namespace com::sun::star::accessibility;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 AccessibleCheckBoxCell::AccessibleCheckBoxCell(const Reference<XAccessible>& _rxParent,
@@ -54,7 +54,7 @@ sal_Int64 AccessibleCheckBoxCell::implCreateStateSet()
 
 // XAccessibleValue
 
-Any SAL_CALL AccessibleCheckBoxCell::getCurrentValue(  )
+Any AccessibleCheckBoxCell::getCurrentValue(  )
 {
     ::osl::MutexGuard aGuard( getMutex() );
 
@@ -74,12 +74,12 @@ Any SAL_CALL AccessibleCheckBoxCell::getCurrentValue(  )
     return Any(nValue);
 }
 
-bool SAL_CALL AccessibleCheckBoxCell::setCurrentValue( const Any& )
+bool AccessibleCheckBoxCell::setCurrentValue( const Any& )
 {
     return false;
 }
 
-Any SAL_CALL AccessibleCheckBoxCell::getMaximumValue(  )
+Any AccessibleCheckBoxCell::getMaximumValue(  )
 {
     ::osl::MutexGuard aGuard( getMutex() );
 
@@ -93,7 +93,7 @@ Any SAL_CALL AccessibleCheckBoxCell::getMaximumValue(  )
     return aValue;
 }
 
-Any SAL_CALL AccessibleCheckBoxCell::getMinimumValue(  )
+Any AccessibleCheckBoxCell::getMinimumValue(  )
 {
     Any aValue;
     aValue <<= sal_Int32(0);
@@ -101,7 +101,7 @@ Any SAL_CALL AccessibleCheckBoxCell::getMinimumValue(  )
     return aValue;
 }
 
-Any SAL_CALL AccessibleCheckBoxCell::getMinimumIncrement(  )
+Any AccessibleCheckBoxCell::getMinimumIncrement(  )
 {
     Any aValue;
     aValue <<= sal_Int32(1);
@@ -110,22 +110,22 @@ Any SAL_CALL AccessibleCheckBoxCell::getMinimumIncrement(  )
 }
 
 // XAccessibleContext
-sal_Int64 SAL_CALL AccessibleCheckBoxCell::getAccessibleChildCount(  )
+sal_Int64 AccessibleCheckBoxCell::getAccessibleChildCount(  )
 {
     return 0;
 }
 
-css::uno::Reference< css::accessibility::XAccessible > SAL_CALL AccessibleCheckBoxCell::getAccessibleChild( sal_Int64 )
+cpo::uno::Reference< css::accessibility::XAccessible > AccessibleCheckBoxCell::getAccessibleChild( sal_Int64 )
 {
     throw css::lang::IndexOutOfBoundsException();
 }
 
-OUString SAL_CALL AccessibleCheckBoxCell::getImplementationName()
+OUString AccessibleCheckBoxCell::getImplementationName()
 {
     return u"com.sun.star.comp.svtools.TableCheckBoxCell"_ustr;
 }
 
-sal_Int64 SAL_CALL AccessibleCheckBoxCell::getAccessibleIndexInParent()
+sal_Int64 AccessibleCheckBoxCell::getAccessibleIndexInParent()
 {
     ::osl::MutexGuard aGuard( getMutex() );
     ensureIsAlive();

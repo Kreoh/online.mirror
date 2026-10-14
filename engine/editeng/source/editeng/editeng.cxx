@@ -66,8 +66,11 @@
 #include <editeng/frmdiritem.hxx>
 #endif
 
+#include <outlundo.hxx>
+
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::linguistic2;
 
 
@@ -78,6 +81,11 @@ ImpEditEngine& EditEngine::getImpl() const
 
 EditEngine::EditEngine(SfxItemPool* pItemPool)
     : mpImpEditEngine(new ImpEditEngine(this, pItemPool))
+{
+}
+
+EditEngine::EditEngine( Outliner* pEngOwner, SfxItemPool* pItemPool )
+    : mpImpEditEngine(new ImpEditEngine(this, pItemPool, pEngOwner))
 {
 }
 
@@ -828,17 +836,17 @@ void EditEngine::Write( SvStream& rOutput, EETextFormat eFormat )
     getImpl().Write(rOutput, eFormat);
 }
 
-std::unique_ptr<EditTextObject> EditEngine::CreateTextObject()
+EditTextObject EditEngine::CreateTextObject()
 {
     return getImpl().CreateTextObject();
 }
 
-std::unique_ptr<EditTextObject> EditEngine::CreateTextObject( const ESelection& rESelection )
+EditTextObject EditEngine::CreateTextObject( const ESelection& rESelection )
 {
     return getImpl().CreateTextObject(CreateSelection(rESelection));
 }
 
-std::unique_ptr<EditTextObject> EditEngine::GetEmptyTextObject()
+EditTextObject EditEngine::GetEmptyTextObject()
 {
     return getImpl().GetEmptyTextObject();
 }
@@ -915,7 +923,7 @@ void EditEngine::SetEndPasteOrDropHdl( const Link<PasteOrDropInfos&,void>& rLink
     getImpl().maEndPasteOrDropHdl = rLink;
 }
 
-std::unique_ptr<EditTextObject> EditEngine::CreateTextObject( sal_Int32 nPara, sal_Int32 nParas )
+EditTextObject EditEngine::CreateTextObject( sal_Int32 nPara, sal_Int32 nParas )
 {
     return getImpl().CreateTextObject(nPara, nParas);
 }
@@ -927,11 +935,8 @@ void EditEngine::RemoveParagraph( sal_Int32 nPara )
 
 sal_Int32 EditEngine::GetTextLen( sal_Int32 nPara ) const
 {
-    ContentNode* pNode = getImpl().GetEditDoc().GetObject(nPara);
-    DBG_ASSERT( pNode, "Paragraph not found: GetTextLen" );
-    if ( pNode )
-        return pNode->Len();
-    return 0;
+    ContentNode& rNode = getImpl().GetEditDoc().GetObject(nPara);
+    return rNode.Len();
 }
 
 OUString EditEngine::GetText( sal_Int32 nPara ) const
@@ -984,9 +989,29 @@ void EditEngine::SetText(sal_Int32 nPara, const OUString& rTxt)
 
 void EditEngine::SetParaAttribs( sal_Int32 nPara, const SfxItemSet& rSet )
 {
+    Outliner* pOwner = getImpl().GetOwner();
+
+    if (pOwner)
+    {
+        if ( !IsInUndo() && IsUndoEnabled() )
+            pOwner->UndoActionStart( OLUNDO_ATTR );
+    }
+
     getImpl().SetParaAttribs(nPara, rSet);
     if (getImpl().IsUpdateLayout())
         getImpl().FormatAndLayout();
+
+    if (pOwner)
+    {
+        pOwner->ImplCheckNumBulletItem( nPara );
+        // #i100014#
+        // It is not a good idea to subtract 1 from a count and cast the result
+        // to sal_uInt16 without check, if the count is 0.
+        pOwner->ImplCheckParagraphs( nPara, pOwner->pEditEngine->GetParagraphCount() );
+
+        if ( !IsInUndo() && IsUndoEnabled() )
+            pOwner->UndoActionEnd();
+    }
 }
 
 const SfxItemSet& EditEngine::GetParaAttribs( sal_Int32 nPara ) const
@@ -1041,8 +1066,8 @@ vcl::Font EditEngine::GetStandardFont( sal_Int32 nPara )
 
 SvxFont EditEngine::GetStandardSvxFont( sal_Int32 nPara )
 {
-    ContentNode* pNode = getImpl().GetEditDoc().GetObject( nPara );
-    return pNode->GetCharAttribs().GetDefFont();
+    ContentNode& rNode = getImpl().GetEditDoc().GetObject( nPara );
+    return rNode.GetCharAttribs().GetDefFont();
 }
 
 void EditEngine::StripPortions(StripPortionsHelper& rStripPortionsHelper)
@@ -1160,10 +1185,10 @@ Point EditEngine::GetDocPosTopLeft( sal_Int32 nParagraph )
     return getImpl().GetDocPosTopLeft(nParagraph);
 }
 
-const SvxNumberFormat* EditEngine::GetNumberFormat( sal_Int32 ) const
+const SvxNumberFormat* EditEngine::GetNumberFormat( sal_Int32 nPara ) const
 {
-    // derived objects may override this function to give access to
-    // bullet information (see Outliner)
+    if (Outliner* pOwner = getImpl().GetOwner())
+       return pOwner->GetNumberFormat( nPara );
     return nullptr;
 }
 
@@ -1338,6 +1363,8 @@ LanguageType EditEngine::GetDefaultLanguage() const
 
 bool EditEngine::SpellNextDocument()
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        return pOwner->SpellNextDocument();
     return false;
 }
 
@@ -1376,6 +1403,8 @@ bool EditEngine::HasConvertibleTextPortion( LanguageType nLang )
 
 bool EditEngine::ConvertNextDocument()
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        return pOwner->ConvertNextDocument();
     return false;
 }
 
@@ -1399,6 +1428,26 @@ void EditEngine::setRoundFontSizeToPt(bool bRound)
     getImpl().setRoundToNearestPt(bRound);
 }
 
+void EditEngine::setLineSpacingBelowBaseline(bool bBelow)
+{
+    getImpl().setLineSpacingBelowBaseline(bBelow);
+}
+
+bool EditEngine::isLineSpacingBelowBaseline() const
+{
+    return getImpl().isLineSpacingBelowBaseline();
+}
+
+void EditEngine::setTextFitting(EETextFitting eFitting)
+{
+    getImpl().setTextFitting(eFitting);
+}
+
+void EditEngine::setTextFittingHeight(tools::Long nHeight)
+{
+    getImpl().setTextFittingHeight(nHeight);
+}
+
 bool EditEngine::ShouldCreateBigTextObject() const
 {
     sal_Int32 nTextPortions = 0;
@@ -1414,19 +1463,16 @@ bool EditEngine::ShouldCreateBigTextObject() const
 std::vector<EFieldInfo> EditEngine::GetFieldInfo( sal_Int32 nPara ) const
 {
     std::vector<EFieldInfo> aFieldInfos;
-    ContentNode* pNode = getImpl().GetEditDoc().GetObject(nPara);
-    if ( pNode )
+    ContentNode& rNode = getImpl().GetEditDoc().GetObject(nPara);
+    for (auto const& attrib : rNode.GetCharAttribs().GetAttribs())
     {
-        for (auto const& attrib : pNode->GetCharAttribs().GetAttribs())
+        const EditCharAttrib& rAttr = *attrib;
+        if (rAttr.Which() == EE_FEATURE_FIELD)
         {
-            const EditCharAttrib& rAttr = *attrib;
-            if (rAttr.Which() == EE_FEATURE_FIELD)
-            {
-                const SvxFieldItem* p = static_cast<const SvxFieldItem*>(rAttr.GetItem());
-                EFieldInfo aInfo(*p, nPara, rAttr.GetStart());
-                aInfo.aCurrentText = static_cast<const EditCharAttribField&>(rAttr).GetFieldValue();
-                aFieldInfos.push_back(aInfo);
-            }
+            const SvxFieldItem* p = static_cast<const SvxFieldItem*>(rAttr.GetItem());
+            EFieldInfo aInfo(*p, nPara, rAttr.GetStart());
+            aInfo.aCurrentText = static_cast<const EditCharAttribField&>(rAttr).GetFieldValue();
+            aFieldInfos.push_back(aInfo);
         }
     }
     return aFieldInfos;
@@ -1453,8 +1499,8 @@ void EditEngine::RemoveFields( const std::function<bool ( const SvxFieldData* )>
     sal_Int32 nParas = getImpl().GetEditDoc().Count();
     for ( sal_Int32 nPara = 0; nPara < nParas; nPara++  )
     {
-        ContentNode* pNode = getImpl().GetEditDoc().GetObject(nPara);
-        const CharAttribList::AttribsType& rAttrs = pNode->GetCharAttribs().GetAttribs();
+        ContentNode& rNode = getImpl().GetEditDoc().GetObject(nPara);
+        const CharAttribList::AttribsType& rAttrs = rNode.GetCharAttribs().GetAttribs();
         for (size_t nAttr = rAttrs.size(); nAttr; )
         {
             const EditCharAttrib& rAttr = *rAttrs[--nAttr];
@@ -1464,7 +1510,7 @@ void EditEngine::RemoveFields( const std::function<bool ( const SvxFieldData* )>
                 if ( pFldData && ( isFieldData( pFldData )  ) )
                 {
                     DBG_ASSERT( dynamic_cast<const SvxFieldItem*>(rAttr.GetItem()), "no field item..." );
-                    EditSelection aSel( EditPaM(pNode, rAttr.GetStart()), EditPaM(pNode, rAttr.GetEnd()) );
+                    EditSelection aSel( EditPaM(rNode, rAttr.GetStart()), EditPaM(rNode, rAttr.GetEnd()) );
                     OUString aFieldText = static_cast<const EditCharAttribField&>(rAttr).GetFieldValue();
                     getImpl().ImpInsertText(aSel, aFieldText);
                 }
@@ -1478,8 +1524,8 @@ bool EditEngine::HasOnlineSpellErrors() const
     sal_Int32 nNodes = getImpl().GetEditDoc().Count();
     for ( sal_Int32 n = 0; n < nNodes; n++ )
     {
-        ContentNode* pNode = getImpl().GetEditDoc().GetObject(n);
-        if ( pNode->GetWrongList() && !pNode->GetWrongList()->empty() )
+        ContentNode& rNode = getImpl().GetEditDoc().GetObject(n);
+        if ( rNode.GetWrongList() && !rNode.GetWrongList()->empty() )
             return true;
     }
     return false;
@@ -1514,14 +1560,14 @@ EPaM EditEngine::FindDocPosition(const Point& rDocPos) const
 tools::Rectangle EditEngine::GetCharacterBounds(const EPaM& rPos) const
 {
     tools::Rectangle aBounds;
-    ContentNode* pNode = getImpl().GetEditDoc().GetObject(rPos.nPara);
+    ContentNode& rNode = getImpl().GetEditDoc().GetObject(rPos.nPara);
 
     // Check against index, not paragraph
-    if ( pNode && ( rPos.nIndex < pNode->Len() ) )
+    if ( rPos.nIndex < rNode.Len() )
     {
-        aBounds = getImpl().PaMtoEditCursor(EditPaM(pNode, rPos.nIndex), CursorFlags{.bTextOnly = true});
+        aBounds = getImpl().PaMtoEditCursor(EditPaM(rNode, rPos.nIndex), CursorFlags{.bTextOnly = true});
         CursorFlags aFlags { .bTextOnly = true, .bEndOfLine = true};
-        tools::Rectangle aR2 = getImpl().PaMtoEditCursor(EditPaM(pNode, rPos.nIndex + 1), aFlags);
+        tools::Rectangle aR2 = getImpl().PaMtoEditCursor(EditPaM(rNode, rPos.nIndex + 1), aFlags);
         if ( aR2.Right() > aBounds.Right() )
             aBounds.SetRight( aR2.Right() );
     }
@@ -1559,12 +1605,26 @@ EditEngine::CreateTransferable(const ESelection& rSelection)
 
 // ======================    Virtual Methods    ========================
 
-void EditEngine::ProcessFirstLineOfParagraph(sal_Int32, const Point&, OutputDevice&, StripPortionsHelper&)
+void EditEngine::ProcessFirstLineOfParagraph(sal_Int32 nPara, const Point& rStartPos, OutputDevice& rOutDev,
+                    StripPortionsHelper& rStripPortionsHelper)
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+    {
+        if( GetControlWord() & EEControlBits::OUTLINER )
+        {
+            PaintFirstLineInfo aInfo(nPara, rStartPos, &rOutDev, rStripPortionsHelper);
+            pOwner->maPaintFirstLineHdl.Call( &aInfo );
+        }
+
+        pOwner->StripBullet(nPara, rStartPos, rOutDev, rStripPortionsHelper);
+    }
 }
 
 void EditEngine::ParagraphInserted( sal_Int32 nPara )
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        pOwner->ParagraphInserted( nPara );
+
     if ( GetNotifyHdl().IsSet() )
     {
         EENotify aNotify( EE_NOTIFY_PARAGRAPHINSERTED );
@@ -1573,8 +1633,11 @@ void EditEngine::ParagraphInserted( sal_Int32 nPara )
     }
 }
 
-void EditEngine::ParagraphDeleted( sal_Int32 nPara )
+void EditEngine::ParagraphDeleted( sal_Int32 nPara, sal_Int16 nNumberingDepth, bool bIsPage )
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        pOwner->ParagraphDeleted( nPara, nNumberingDepth, bIsPage );
+
     if ( GetNotifyHdl().IsSet() )
     {
         EENotify aNotify( EE_NOTIFY_PARAGRAPHREMOVED );
@@ -1583,16 +1646,28 @@ void EditEngine::ParagraphDeleted( sal_Int32 nPara )
     }
 }
 
-void EditEngine::ParagraphConnected( sal_Int32 /*nLeftParagraph*/, sal_Int32 /*nRightParagraph*/ )
+void EditEngine::ParagraphConnected( sal_Int32 /*nLeftParagraph*/, sal_Int32 nRightParagraph )
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        if(pOwner->IsUndoEnabled() && !pOwner->GetEditEngine().IsInUndo() )
+        {
+            if( HasParaFlag( nRightParagraph, ParaFlag::ISPAGE ) )
+            {
+                pOwner->InsertUndo( std::make_unique<OutlinerUndoChangeParaFlags>( pOwner, nRightParagraph, ParaFlag::ISPAGE, ParaFlag::NONE ) );
+            }
+        }
 }
 
-void EditEngine::ParaAttribsChanged( sal_Int32 /* nParagraph */ )
+void EditEngine::ParaAttribsChanged( sal_Int32 nPara )
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        pOwner->ParaAttribsChanged( nPara );
 }
 
-void EditEngine::StyleSheetChanged( SfxStyleSheet* /* pStyle */ )
+void EditEngine::StyleSheetChanged( SfxStyleSheet* pStyle )
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+        pOwner->StyleSheetChanged( pStyle );
 }
 
 void EditEngine::ParagraphHeightChanged( sal_Int32 nPara )
@@ -1610,6 +1685,25 @@ void EditEngine::ParagraphHeightChanged( sal_Int32 nPara )
 
 OUString EditEngine::GetUndoComment( sal_uInt16 nId ) const
 {
+    if (getImpl().GetOwner() != nullptr)
+        switch( nId )
+        {
+            case OLUNDO_DEPTH:
+                return EditResId(RID_OUTLUNDO_DEPTH);
+
+            case OLUNDO_EXPAND:
+                return EditResId(RID_OUTLUNDO_EXPAND);
+
+            case OLUNDO_COLLAPSE:
+                return EditResId(RID_OUTLUNDO_COLLAPSE);
+
+            case OLUNDO_ATTR:
+                return EditResId(RID_OUTLUNDO_ATTR);
+
+            case OLUNDO_INSERT:
+                return EditResId(RID_OUTLUNDO_INSERT);
+        }
+
     OUString aComment;
     switch ( nId )
     {
@@ -1657,13 +1751,33 @@ OUString EditEngine::GetUndoComment( sal_uInt16 nId ) const
     return aComment;
 }
 
-tools::Rectangle EditEngine::GetBulletArea( sal_Int32 )
+tools::Rectangle EditEngine::GetBulletArea( sal_Int32 nPara )
 {
+    if (Outliner* pOwner = getImpl().GetOwner())
+    {
+        tools::Rectangle aBulletArea { Point(), Point() };
+        if ( nPara < pOwner->pEditEngine->GetParagraphCount() )
+        {
+            if ( pOwner->ImplHasNumberFormat( nPara ) )
+                aBulletArea = pOwner->ImpCalcBulletArea( nPara, false, false );
+        }
+        return aBulletArea;
+    }
     return tools::Rectangle( Point(), Point() );
 }
 
-OUString EditEngine::CalcFieldValue( const SvxFieldItem&, sal_Int32, sal_Int32, std::optional<Color>&, std::optional<Color>&, std::optional<FontLineStyle>& )
+void EditEngine::SetIgnoreBreakAfterMultilineField(bool b)
 {
+    getImpl().SetIgnoreBreakAfterMultilineField(b);
+}
+
+OUString EditEngine::CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos,
+            std::optional<Color>& rpTxtColor,
+            std::optional<Color>& rpFldColor,
+            std::optional<FontLineStyle>& rpFldLineStyle)
+{
+    if (Outliner* pOwner = getImpl().GetOwner())
+        return pOwner->CalcFieldValue( rField, nPara, nPos, rpTxtColor, rpFldColor, rpFldLineStyle );
     return OUString(' ');
 }
 
@@ -1805,7 +1919,7 @@ bool EditEngine::IsSimpleCharInput( const KeyEvent& rKeyEvent )
     return ImpEditEngine::IsSimpleCharInput(rKeyEvent);
 }
 
-bool EditEngine::HasValidData( const css::uno::Reference< css::datatransfer::XTransferable >& rTransferable )
+bool EditEngine::HasValidData( const cpo::uno::Reference< css::datatransfer::XTransferable >& rTransferable )
 {
     bool bValidData = false;
 
@@ -1852,9 +1966,9 @@ Link<EditView*,void> const & EditEngine::GetEndDropHdl() const
     return getImpl().GetEndDropHdl();
 }
 
-void EditEngine::SetFirstWordCapitalization( bool bCapitalize )
+void EditEngine::SetCapitalizeSentenceStart( bool bCapitalize )
 {
-    getImpl().SetFirstWordCapitalization(bCapitalize);
+    getImpl().SetCapitalizeSentenceStart(bCapitalize);
 }
 
 void EditEngine::SetReplaceLeadingSingleQuotationMark( bool bReplace )
@@ -1963,6 +2077,106 @@ EFieldInfo& EFieldInfo::operator= ( const EFieldInfo& rFldInfo )
     aPosition = rFldInfo.aPosition;
 
     return *this;
+}
+
+sal_Int16 EditEngine::GetNumberingDepth(sal_Int32 nPara) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).GetNumberingDepth();
+}
+
+void EditEngine::SetNumberingDepth(sal_Int32 nPara, sal_Int16 nDepth)
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetNumberingDepth(nDepth);
+}
+
+sal_Int16 EditEngine::GetNumberingStartValue(sal_Int32 nPara) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).GetNumberingStartValue();
+}
+
+void EditEngine::SetNumberingStartValue(sal_Int32 nPara, sal_Int16 nNumberingStartValue)
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetNumberingStartValue(nNumberingStartValue);
+}
+
+bool EditEngine::IsNumberingRestart(sal_Int32 nPara) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).IsNumberingRestart();
+}
+
+void EditEngine::SetNumberingRestart(sal_Int32 nPara, bool bRestart)
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetNumberingRestart(bRestart);
+}
+
+void EditEngine::SetBulletText(sal_Int32 nPara, const OUString& rText)
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetBulletText(rText);
+}
+
+Size const& EditEngine::GetBulletSize(sal_Int32 nPara) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).GetBulletSize();
+}
+
+void EditEngine::SetBulletSize(sal_Int32 nPara, Size const& rSize, ScalingParameters const& rScalingParameters)
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetBulletSize(rSize, rScalingParameters);
+}
+
+OUString const& EditEngine::GetBulletText(sal_Int32 nPara) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).GetBulletText();
+}
+
+bool EditEngine::IsBulletInvalid(sal_Int32 nPara, ScalingParameters const& rCurrentScalingParameters) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).IsBulletInvalid(rCurrentScalingParameters);
+}
+
+void EditEngine::InvalidateBulletSize(sal_Int32 nPara)
+{
+    getImpl().GetEditDoc().GetObject(nPara).InvalidateBulletSize();
+}
+
+void EditEngine::SetParaFlag( sal_Int32 nPara, ParaFlag nFlag )
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetParaFlag(nFlag);
+}
+
+void EditEngine::ClearAndSetParaFlag( sal_Int32 nPara, ParaFlag nFlag )
+{
+    getImpl().GetEditDoc().GetObject(nPara).ClearAndSetParaFlag(nFlag);
+}
+
+void EditEngine::RemoveParaFlag( sal_Int32 nPara, ParaFlag nFlag )
+{
+    getImpl().GetEditDoc().GetObject(nPara).RemoveParaFlag(nFlag);
+}
+
+bool EditEngine::HasParaFlag( sal_Int32 nPara, ParaFlag nFlag ) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).HasParaFlag(nFlag);
+}
+
+ParaFlag EditEngine::GetParaFlag( sal_Int32 nPara ) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).GetParaFlag();
+}
+
+bool EditEngine::IsBulletVisible( sal_Int32 nPara ) const
+{
+    return getImpl().GetEditDoc().GetObject(nPara).IsBulletVisible();
+}
+
+void EditEngine::SetBulletVisible( sal_Int32 nPara, bool b )
+{
+    getImpl().GetEditDoc().GetObject(nPara).SetBulletVisible(b);
+}
+
+Outliner* EditEngine::GetOwner()
+{
+    return getImpl().GetOwner();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

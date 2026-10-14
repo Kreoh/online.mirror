@@ -74,7 +74,8 @@ enum class SwUndoId
     TRANSLITERATE,                     // 39
     PASTE_CLIPBOARD,                   // 40
     TYPING,                            // 41
-        REPEAT_END = 46,
+    NUMRULE_CREATE,                    // 42
+    REPEAT_END = 46,
 
     MOVE = REPEAT_END,                 // 46
     INSGLOSSARY,                       // 47
@@ -128,7 +129,6 @@ enum class SwUndoId
     FRMFMT_CREATE,                     // 99
     FRMFMT_DELETE,                     // 100
     FRMFMT_RENAME,                     // 101
-    NUMRULE_CREATE,                    // 102
     NUMRULE_DELETE,                    // 103
     NUMRULE_RENAME,                    // 104
     BOOKMARK_RENAME,                   // 105
@@ -185,7 +185,8 @@ enum class SwUndoId
     CONVERT_FIELD_TO_TEXT = 153,
     REINSTATE_REDLINE = 154,
     COPY_HEADER_FOOTER = 155,
-    RENAME_TABLE = 156
+    RENAME_TABLE = 156,
+    TABLE_STYLE = 157
 };
 
 OUString GetUndoComment(SwUndoId eId);

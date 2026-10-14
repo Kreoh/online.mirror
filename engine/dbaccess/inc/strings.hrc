@@ -28,6 +28,7 @@
 #define RID_STR_TABLE_IS_FILTERED                   NC_("RID_STR_TABLE_IS_FILTERED", "The table $name$ already exists. It is not visible because it has been filtered out.")
 #define RID_STR_COULDNOTCONNECT_UNSPECIFIED         NC_("RID_STR_COULDNOTCONNECT_UNSPECIFIED", "The connection to the external data source could not be established. An unknown error occurred. The driver is probably defective.")
 #define RID_STR_COULDNOTCONNECT_NODRIVER            NC_("RID_STR_COULDNOTCONNECT_NODRIVER", "The connection to the external data source could not be established. No SDBC driver was found for the URL '$name$'.")
+#define RID_STR_COULDNOTCONNECT_UNTRUSTED           NC_("RID_STR_COULDNOTCONNECT_UNTRUSTED", "The connection to the external data source could not be established. The database document is not in a trusted location.")
 #define RID_STR_COULDNOTLOAD_MANAGER                NC_("RID_STR_COULDNOTLOAD_MANAGER", "The connection to the external data source could not be established. The SDBC driver manager could not be loaded.")
 #define RID_STR_FORM                                NC_("RID_STR_FORM", "Form")
 #define RID_STR_REPORT                              NC_("RID_STR_REPORT", "Report")
@@ -89,11 +90,8 @@
 #define RID_STR_MISSING_EXTENSION                   NC_("RID_STR_MISSING_EXTENSION", "The extension is not installed.")
 
 #define STR_QUERY_AND_TABLE_DISTINCT_NAMES          NC_("STR_QUERY_AND_TABLE_DISTINCT_NAMES", "You cannot give a table and a query the same name. Please use a name which is not yet used by a query or table.")
-#define STR_BASENAME_TABLE                          NC_("STR_BASENAME_TABLE", "Table")
-#define STR_BASENAME_QUERY                          NC_("STR_BASENAME_QUERY", "Query")
 #define STR_CONN_WITHOUT_QUERIES_OR_TABLES          NC_("STR_CONN_WITHOUT_QUERIES_OR_TABLES", "The given connection is no valid query and/or tables supplier.")
 #define STR_NO_TABLE_OBJECT                         NC_("STR_NO_TABLE_OBJECT", "The given object is no table object.")
-#define STR_INVALID_COMPOSITION_TYPE                NC_("STR_INVALID_COMPOSITION_TYPE", "Invalid composition type - need a value from com.sun.star.sdb.tools.CompositionType.")
 #define STR_INVALID_COMMAND_TYPE                    NC_("STR_INVALID_COMMAND_TYPE", "Invalid command type - only TABLE and QUERY from com.sun.star.sdb.CommandType are allowed.")
 
 #define STR_STATEMENT_WITHOUT_RESULT_SET            NC_("STR_STATEMENT_WITHOUT_RESULT_SET", "The query does not create a result set, and thus cannot be part of another query.")

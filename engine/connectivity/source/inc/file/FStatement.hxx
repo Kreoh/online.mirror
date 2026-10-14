@@ -64,8 +64,8 @@ namespace connectivity::file
 
         css::sdbc::SQLWarning                              m_aLastWarning;
         unotools::WeakReference< OResultSet>               m_xResultSet;   // The last ResultSet created
-        css::uno::Reference< css::sdbc::XDatabaseMetaData> m_xDBMetaData;
-        css::uno::Reference< css::container::XNameAccess>  m_xColNames; // table columns                                                          //  for this Statement
+        cpo::uno::Reference< css::sdbc::XDatabaseMetaData> m_xDBMetaData;
+        cpo::uno::Reference< css::container::XNameAccess>  m_xColNames; // table columns                                                          //  for this Statement
 
 
         connectivity::OSQLParser                    m_aParser;
@@ -103,7 +103,7 @@ namespace connectivity::file
         virtual void initializeResultSet(OResultSet* _pResult);
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void closeResultSet();
 
         void disposeResultSet();
@@ -130,16 +130,16 @@ namespace connectivity::file
 
         OConnection* getOwnConnection() const { return m_pConnection.get(); }
 
-        using OStatement_BASE::operator css::uno::Reference< css::uno::XInterface >;
+        using OStatement_BASE::operator cpo::uno::Reference< cpo::uno::XInterface >;
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         virtual void construct(const OUString& sql);
 
         // OComponentHelper
         virtual void disposing() override;
         // XInterface
-        //      virtual void release() throw(css::uno::RuntimeException) = 0;
+        //      virtual void release() throw(cpo::uno::RuntimeException) = 0;
         virtual void acquire() noexcept override;
         // XInterface
         virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
@@ -147,7 +147,7 @@ namespace connectivity::file
         virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
         // XWarningsSupplier
         virtual cpo::uno::Any getWarnings(  ) override;
         virtual void clearWarnings(  ) override;
@@ -186,10 +186,10 @@ namespace connectivity::file
         virtual void release() noexcept override;
 
         // XStatement
-        virtual css::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override ;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override ;
         virtual sal_Int32 executeUpdate( const OUString& sql ) override ;
         virtual bool execute( const OUString& sql ) override ;
-        virtual css::uno::Reference< css::sdbc::XConnection > getConnection(  ) override ;
+        virtual cpo::uno::Reference< css::sdbc::XConnection > getConnection(  ) override ;
     };
 
 }

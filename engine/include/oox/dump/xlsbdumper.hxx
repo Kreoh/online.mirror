@@ -28,8 +28,8 @@
 
 namespace com::sun::star {
     namespace io { class XInputStream; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace oox::core { class FilterBase; }
 
@@ -54,7 +54,7 @@ public:
 
 protected:
     virtual void        implDumpStream(
-                            const css::uno::Reference< css::io::XInputStream >& rxStrm,
+                            const cpo::uno::Reference< css::io::XInputStream >& rxStrm,
                             const OUString& rStrgPath,
                             const OUString& rStrmName,
                             const OUString& rSysFileName ) override;
@@ -67,8 +67,8 @@ public:
     explicit            Dumper( const ::oox::core::FilterBase& rFilter );
 
     explicit            Dumper(
-                            const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-                            const css::uno::Reference< css::io::XInputStream >& rxInStrm,
+                            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+                            const cpo::uno::Reference< css::io::XInputStream >& rxInStrm,
                             const OUString& rSysFileName );
 
 protected:

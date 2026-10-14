@@ -29,7 +29,7 @@
 #include <com/sun/star/xml/sax/Parser.hpp>
 #include <vector>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
@@ -44,7 +44,7 @@ ManifestReader::ManifestReader( const Reference < XComponentContext > & xContext
 ManifestReader::~ManifestReader()
 {
 }
-Sequence< Sequence< PropertyValue > > SAL_CALL ManifestReader::readManifestSequence( const Reference< XInputStream >& rStream )
+Sequence< Sequence< PropertyValue > > ManifestReader::readManifestSequence( const Reference< XInputStream >& rStream )
 {
     Sequence < Sequence < PropertyValue > > aManifestSequence;
     Reference < XParser > xParser  = Parser::create(m_xContext);
@@ -82,7 +82,7 @@ OUString ManifestReader::getImplementationName()
     return u"com.sun.star.packages.manifest.comp.ManifestReader"_ustr;
 }
 
-bool SAL_CALL ManifestReader::supportsService(OUString const & rServiceName)
+bool ManifestReader::supportsService(OUString const & rServiceName)
 {
     return cppu::supportsService(this, rServiceName );
 }
@@ -93,9 +93,9 @@ Sequence < OUString > ManifestReader::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 package_ManifestReader_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ManifestReader(context));
 }

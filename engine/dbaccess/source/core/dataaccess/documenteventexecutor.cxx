@@ -27,22 +27,24 @@
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 
 #include <comphelper/namedvaluecollection.hxx>
+#include <cppuhelper/weak.hxx>
 #include <cppuhelper/weakref.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <sfx2/objsh.hxx>
 #include <vcl/svapp.hxx>
 
 namespace dbaccess
 {
 
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using ::cpo::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
+    using ::cpo::uno::RuntimeException;
     using ::cpo::uno::Sequence;
     using ::cpo::uno::WeakReference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::document::XDocumentEventBroadcaster;
     using ::com::sun::star::document::XEventsSupplier;
     using ::com::sun::star::container::XNameAccess;
@@ -62,7 +64,7 @@ namespace dbaccess
     {
         void lcl_dispatchScriptURL_throw(
             ::unotools::WeakReference< ODatabaseDocument > const & xWeakDocument,
-            css::uno::Reference< css::util::XURLTransformer > const & xURLTransformer,
+            cpo::uno::Reference< css::util::XURLTransformer > const & xURLTransformer,
             const OUString& _rScriptURL, const DocumentEvent& _rTrigger )
         {
             rtl::Reference< ODatabaseDocument > xDocument( xWeakDocument.get() );
@@ -166,6 +168,9 @@ namespace dbaccess
 
             if ( bDispatchScriptURL && bNonEmptyScript )
             {
+                if ( !SfxObjectShell::isDocumentScriptAllowed( sScript, cppu::getXWeak( xDocument.get() ) ) )
+                    return;
+
                 lcl_dispatchScriptURL_throw( mxDocument, mxURLTransformer, sScript, Event );
             }
         }

@@ -74,7 +74,7 @@ class SAX_DLLPUBLIC FastAttributeList final : public cppu::WeakImplHelper< css::
 {
 public:
     FastAttributeList( FastTokenHandlerBase *pTokenHandler );
-    FastAttributeList( const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList );
+    FastAttributeList( const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList );
     virtual ~FastAttributeList() override;
 
     void clear();
@@ -84,7 +84,7 @@ public:
         maAttributeTokens.reserve(nNumTokens);
     }
     void add( const FastAttributeList& );
-    void add( const css::uno::Reference<css::xml::sax::XFastAttributeList>& );
+    void add( const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& );
     void add( sal_Int32 nToken, std::string_view value );
     void add( sal_Int32 nToken, std::u16string_view sValue ); // Converts to UTF-8
     template <typename C, typename T1, typename T2>
@@ -124,16 +124,16 @@ public:
     sal_Int32 getValueTokenByIndex(sal_Int32 nTokenIndex) const;
 
     // XFastAttributeList
-    virtual bool SAL_CALL hasAttribute( ::sal_Int32 Token ) override;
-    virtual ::sal_Int32 SAL_CALL getValueToken( ::sal_Int32 Token ) override;
-    virtual ::sal_Int32 SAL_CALL getOptionalValueToken( ::sal_Int32 Token, ::sal_Int32 Default ) override;
-    virtual OUString SAL_CALL getValue( ::sal_Int32 Token ) override;
-    virtual OUString SAL_CALL getOptionalValue( ::sal_Int32 Token ) override;
-    virtual cpo::uno::Sequence< css::xml::Attribute > SAL_CALL getUnknownAttributes(  ) override;
-    virtual cpo::uno::Sequence< css::xml::FastAttribute > SAL_CALL getFastAttributes() override;
+    virtual bool hasAttribute( ::sal_Int32 Token ) override;
+    virtual ::sal_Int32 getValueToken( ::sal_Int32 Token ) override;
+    virtual ::sal_Int32 getOptionalValueToken( ::sal_Int32 Token, ::sal_Int32 Default ) override;
+    virtual OUString getValue( ::sal_Int32 Token ) override;
+    virtual OUString getOptionalValue( ::sal_Int32 Token ) override;
+    virtual cpo::uno::Sequence< css::xml::Attribute > getUnknownAttributes(  ) override;
+    virtual cpo::uno::Sequence< css::xml::FastAttribute > getFastAttributes() override;
 
     // XCloneable
-    virtual ::css::uno::Reference< ::css::util::XCloneable > SAL_CALL createClone() override;
+    virtual ::cpo::uno::Reference< ::css::util::XCloneable > createClone() override;
 
     sal_Int32 getAttributeIndex( ::sal_Int32 Token )
     {
@@ -237,7 +237,7 @@ private:
 };
 
 inline FastAttributeList& castToFastAttributeList(
-                    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     assert( dynamic_cast <FastAttributeList *> ( xAttrList.get() ) != nullptr );
     return *static_cast <FastAttributeList *> ( xAttrList.get() );

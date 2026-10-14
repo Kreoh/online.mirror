@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CPPUHELPER_COMPBASE12_HXX
 #define INCLUDED_CPPUHELPER_COMPBASE12_HXX
 
-#include "cppuhelper/implbase12.hxx"
-#include "cppuhelper/compbase_ex.hxx"
+#include <cppuhelper/implbase12.hxx>
+#include <cppuhelper/compbase_ex.hxx>
 
 namespace cppu
 {
@@ -48,24 +48,24 @@ namespace cppu
     {
         struct cd : public rtl::StaticAggregate< class_data, ImplClassData12< Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, Ifc7, Ifc8, Ifc9, Ifc10, Ifc11, Ifc12, WeakComponentImplHelper12<Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, Ifc7, Ifc8, Ifc9, Ifc10, Ifc11, Ifc12> > > {};
     public:
-        WeakComponentImplHelper12( ::osl::Mutex & rMutex ) SAL_NOEXCEPT
+        WeakComponentImplHelper12( ::osl::Mutex & rMutex ) noexcept
             : WeakComponentImplHelperBase( rMutex )
             {}
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return WeakComponentImplHelper_query( rType, cd::get(), this, static_cast<WeakComponentImplHelperBase *>(this) ); }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { WeakComponentImplHelperBase::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { WeakComponentImplHelperBase::release(); }
-        virtual void dispose() SAL_OVERRIDE
+        virtual void dispose() override
             { WeakComponentImplHelperBase::dispose(); }
-        virtual void addEventListener(const css::uno::Reference< css::lang::XEventListener > & xListener) SAL_OVERRIDE
+        virtual void addEventListener(const cpo::uno::Reference< css::lang::XEventListener > & xListener) override
             { WeakComponentImplHelperBase::addEventListener(xListener); }
-        virtual void removeEventListener(const css::uno::Reference< css::lang::XEventListener > & xListener) SAL_OVERRIDE
+        virtual void removeEventListener(const cpo::uno::Reference< css::lang::XEventListener > & xListener) override
             { WeakComponentImplHelperBase::removeEventListener(xListener); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return WeakComponentImplHelper_getTypes( cd::get() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
 
@@ -86,18 +86,18 @@ namespace cppu
     {
         struct cd : public rtl::StaticAggregate< class_data, ImplClassData12< Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, Ifc7, Ifc8, Ifc9, Ifc10, Ifc11, Ifc12, PartialWeakComponentImplHelper12<Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, Ifc7, Ifc8, Ifc9, Ifc10, Ifc11, Ifc12> > > {};
     public:
-        PartialWeakComponentImplHelper12( ::osl::Mutex & rMutex ) SAL_NOEXCEPT
+        PartialWeakComponentImplHelper12( ::osl::Mutex & rMutex ) noexcept
             : WeakComponentImplHelperBase( rMutex )
             {}
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return WeakComponentImplHelper_query( rType, cd::get(), this, static_cast<WeakComponentImplHelperBase *>(this) ); }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { WeakComponentImplHelperBase::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { WeakComponentImplHelperBase::release(); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return WeakComponentImplHelper_getTypes( cd::get() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
 
@@ -126,20 +126,20 @@ namespace cppu
     {
         struct cd : public rtl::StaticAggregate< class_data, ImplClassData12< Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, Ifc7, Ifc8, Ifc9, Ifc10, Ifc11, Ifc12, WeakAggComponentImplHelper12<Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, Ifc7, Ifc8, Ifc9, Ifc10, Ifc11, Ifc12> > > {};
     public:
-        WeakAggComponentImplHelper12( ::osl::Mutex & rMutex ) SAL_NOEXCEPT
+        WeakAggComponentImplHelper12( ::osl::Mutex & rMutex ) noexcept
             : WeakAggComponentImplHelperBase( rMutex )
             {}
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return WeakAggComponentImplHelperBase::queryInterface( rType ); }
-        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override
             { return WeakAggComponentImplHelper_queryAgg( rType, cd::get(), this, static_cast<WeakAggComponentImplHelperBase *>(this) ); }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { WeakAggComponentImplHelperBase::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { WeakAggComponentImplHelperBase::release(); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return WeakAggComponentImplHelper_getTypes( cd::get() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
 }

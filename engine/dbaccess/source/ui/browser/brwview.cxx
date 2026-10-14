@@ -31,7 +31,7 @@
 #include <osl/diagnose.h>
 
 using namespace dbaui;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::form;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
@@ -63,7 +63,7 @@ namespace
 
 UnoDataBrowserView::UnoDataBrowserView( vcl::Window* pParent,
                                         IController& _rController,
-                                        const Reference< css::uno::XComponentContext >& _rxContext)
+                                        const Reference< cpo::uno::XComponentContext >& _rxContext)
     :ODataView(pParent,_rController,_rxContext)
     ,m_pTreeView(nullptr)
     ,m_pSplitter(nullptr)

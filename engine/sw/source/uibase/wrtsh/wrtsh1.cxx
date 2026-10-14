@@ -104,6 +104,7 @@
 
 #include <sfx2/msgpool.hxx>
 #include <sfx2/msg.hxx>
+#include <sfx2/kit/helper.hxx>
 #include <svtools/embedhlp.hxx>
 #include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
@@ -131,6 +132,8 @@
 
 using namespace sw::mark;
 using namespace com::sun::star;
+using namespace ::cpo;
+
 namespace {
 
 void collectUIInformation(const OUString& rAction, const OUString& aParameters)
@@ -147,6 +150,38 @@ void collectUIInformation(const OUString& rAction, const OUString& aParameters)
 }
 
 sal_uInt32 MakeAllOutlineContentTemporarilyVisible::nLock = 0;
+
+MakeAllOutlineContentTemporarilyVisible::MakeAllOutlineContentTemporarilyVisible(SwDoc* pDoc, bool bScrollToCursor)
+{
+    ++nLock;
+    if (nLock > 1)
+        return;
+    if (SwDocShell* pDocSh = pDoc->GetDocShell())
+        if ((m_pWrtSh = pDocSh->GetWrtShell()) && m_pWrtSh->GetViewOptions() &&
+                m_pWrtSh->GetViewOptions()->IsShowOutlineContentVisibilityButton())
+        {
+            m_pWrtSh->LockView(true);
+            m_pWrtSh->LockPaint(LockPaintReason::OutlineFolding);
+            m_pWrtSh->MakeAllFoldedOutlineContentVisible();
+            m_bScrollToCursor = bScrollToCursor;
+            m_bDone = true;
+        }
+}
+
+MakeAllOutlineContentTemporarilyVisible::~MakeAllOutlineContentTemporarilyVisible() COVERITY_NOEXCEPT_FALSE
+{
+    --nLock;
+    if (nLock > 0)
+        return;
+    if (m_bDone && m_pWrtSh)
+    {
+        m_pWrtSh->MakeAllFoldedOutlineContentVisible(false);
+        m_pWrtSh->UnlockPaint();
+        m_pWrtSh->LockView(false);
+        if (m_bScrollToCursor)
+            m_pWrtSh->UpdateCursor(SwCursorShell::SCROLLWIN);
+    }
+}
 
 static bool lcl_IsAllowed(const SwWrtShell* rSh)
 {
@@ -1278,8 +1313,10 @@ void SwWrtShell::InsertContentControl(SwContentControlType eType)
                 /*bBasicCall=*/false);
     }
 
+    // Only the recording bit is cleared while the content control attribute goes in, so the
+    // placeholder text is a tracked insert and the control around it is not.
     const RedlineFlags oldRedlineFlags = getIDocumentRedlineAccess().GetRedlineFlags();
-    getIDocumentRedlineAccess().SetRedlineFlags(RedlineFlags::Ignore);
+    getIDocumentRedlineAccess().SetRedlineFlags(oldRedlineFlags & ~RedlineFlags::On);
     SwFormatContentControl aContentControl(pContentControl, RES_TXTATR_CONTENTCONTROL);
     SetAttrItem(aContentControl);
     getIDocumentRedlineAccess().SetRedlineFlags(oldRedlineFlags);
@@ -1738,28 +1775,7 @@ void SwWrtShell::NumOrBulletOn(bool bNum)
 
             if (! bNum)
             {
-                static constexpr OUString sDefaultBulletSymbol = u"•"_ustr;
-                static constexpr OUString sDefaultBulletSymbolFont = u"OpenSymbol"_ustr;
-                cpo::uno::Sequence<OUString> aBulletSymbols(
-                    officecfg::Office::Common::BulletsNumbering::DefaultListBullets::get());
-                cpo::uno::Sequence<OUString> aBulletSymbolsFonts(
-                    officecfg::Office::Common::BulletsNumbering::DefaultListBulletsFonts::get());
-                if (!aBulletSymbols.hasElements())
-                {
-                    SAL_WARN("sw", "empty DefaultListBullets config, adding a default single bullet");
-                    // Add a single element even if user cleared the list in the config
-                    aBulletSymbols.realloc(1);
-                    aBulletSymbols.getArray()[0] = sDefaultBulletSymbol;
-                }
-                const sal_Int32 nBulletSymbolIndex = nLvl % aBulletSymbols.getLength();
-                aFormat.SetBulletChar(aBulletSymbols[nBulletSymbolIndex].toChar());
-                vcl::Font aFont;
-                // Symbol and font correspond to each other, use same index
-                if (nBulletSymbolIndex < aBulletSymbolsFonts.getLength())
-                    aFont.SetFamilyName(aBulletSymbolsFonts[nBulletSymbolIndex]);
-                else
-                    aFont.SetFamilyName(sDefaultBulletSymbolFont);
-                aFormat.SetBulletFont(&aFont);
+                numfunc::SetDefaultListBullet(aFormat, nLvl);
                 aFormat.SetNumberingType(SVX_NUM_CHAR_SPECIAL);
                 // #i93908# clear suffix for bullet lists
                 aFormat.SetListFormat(u""_ustr, u""_ustr, nLvl);
@@ -2510,8 +2526,8 @@ void SwWrtShell::InsertPostIt(SwFieldMgr& rFieldMgr, const SfxRequest& rReq)
                 }
                 else if (pFormat && pFormat->GetAnchor().GetAnchorId() == RndStdIds::FLY_AT_CHAR)
                 {
-                    aData.m_oAnnotationRange.emplace(*GetCurrentShellCursor().Start(),
-                                                     *GetCurrentShellCursor().End());
+                    auto [pStart, pEnd] = GetCurrentShellCursor().StartEnd(); // SwPosition*
+                    aData.m_oAnnotationRange.emplace(*pStart, *pEnd);
                 }
             }
         }
@@ -2521,7 +2537,11 @@ void SwWrtShell::InsertPostIt(SwFieldMgr& rFieldMgr, const SfxRequest& rReq)
         if (oTextPara)
             StartAction();
 
-        rFieldMgr.InsertField( aData );
+        // Stamp the comment with the clock of the timezone its author reads.
+        {
+            SfxKitTimezoneGuard aTimezoneGuard;
+            rFieldMgr.InsertField( aData );
+        }
 
         Push();
         SwCursorShell::Left(1, SwCursorSkipMode::Chars);

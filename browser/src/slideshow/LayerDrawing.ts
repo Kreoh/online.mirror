@@ -564,8 +564,8 @@ class LayerDrawing {
 			this.map.fire('handleslideshowprogressbar', { isVisible: true });
 
 		app.socket.sendMessage(
-			`getslide hash=${slideInfo.hash} part=${slideInfo.index} width=${this.canvasWidth} height=${this.canvasHeight} ` +
-				`renderBackground=${backgroundRendered ? 0 : 1} renderMasterPage=${masterPageRendered ? 0 : 1} devicePixelRatio=${window.devicePixelRatio} compressedLayers=${compressedLayers ? 1 : 0} uniqueID=${slideInfo.uniqueID}`,
+			`getslide hash=${slideInfo.hash} part=${slideInfo.part} width=${this.canvasWidth} height=${this.canvasHeight} ` +
+				`renderBackground=${backgroundRendered ? 0 : 1} renderMasterPage=${masterPageRendered ? 0 : 1} devicePixelRatio=${window.devicePixelRatio} compressedLayers=${compressedLayers ? 1 : 0}`,
 		);
 	}
 
@@ -1052,10 +1052,10 @@ class LayerDrawing {
 		this.handleVideos(slideHash);
 		if (this.videoRenderers.has(slideHash)) {
 			this.loadVideos(slideHash);
-			// In our own Qt browser start playback on slide entry. A plain
-			// browser cannot guarantee sound without a user gesture, so
-			// there the video waits for a click.
-			if (window.ThisIsTheQtApp) {
+			// In our own Qt and macOS shells start playback on slide entry.
+			// A plain browser cannot guarantee sound without a user gesture,
+			// so there the video waits for a click.
+			if (window.ThisIsTheQtApp || window.ThisIsTheMacOSApp) {
 				this.playVideos(slideHash);
 			}
 		}

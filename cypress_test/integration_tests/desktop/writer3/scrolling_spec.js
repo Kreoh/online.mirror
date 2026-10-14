@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require */
+/* global describe it cy beforeEach require expect */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
@@ -7,6 +7,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 
 	beforeEach(function() {
 		helper.setupAndLoadDocument('writer/scrolling.odt');
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
 	});
 
 	it('Check if we jump the view on new page insertion', function() {
@@ -16,7 +19,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 		helper.typeIntoDocument('{ctrl+enter}');
 		helper.typeIntoDocument('{ctrl+enter}');
 
-		cy.wait(500);
+		helper.processToIdle(this.win);
 		desktopHelper.assertVisiblePage(2, 3, 6);
 
 		desktopHelper.assertScrollbarPosition('vertical', 120, 250);
@@ -79,6 +82,10 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 		desktopHelper.scrollWriterDocumentToTop();
 		desktopHelper.assertScrollbarPosition('vertical', 0, 10);
 
+		// Core reports the initial marks state a few seconds after the load. The click below
+		// is the first change after that report, so the client keeps it.
+		helper.waitForMapState('.uno:ControlCodes', 'false');
+
 		cy.cGet('.notebookbar #View-tab-label').click();
 		cy.cGet('.notebookbar #View-container .unoControlCodes').click();
 
@@ -89,9 +96,14 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 	it('Drag vertical scrollbar while mouse moves into sidebar area', function() {
 		desktopHelper.assertScrollbarPosition('vertical', 0, 10);
 
-		cy.getFrameWindow().then(function(win) {
-			helper.processToIdle(win);
+		// The notebookbar styles iconview renders its entries on demand after load, and each
+		// render can shift the layout and resize the canvas. Wait until those renders are done
+		// and the layout is idle, so the canvas rectangle measured below is the final one.
+		helper.processToIdle(this.win);
+		helper.waitForOnDemandRenders(this.win);
 
+		cy.then(() => {
+			var win = this.win;
 			var canvas = win.document.getElementById('document-canvas');
 			var rect = canvas.getBoundingClientRect();
 			var scrollProps = win.app.activeDocument.activeLayout.scrollProperties;
@@ -133,6 +145,59 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 		});
 
 		desktopHelper.assertScrollbarPosition('vertical', 200, 900);
+	});
+
+	it('The view stops following the caret once the user scrolls it out of sight', function() {
+		desktopHelper.selectZoomLevel('40');
+
+		// Put the caret on the last page. The view follows its own caret while the
+		// caret is on screen.
+		helper.typeIntoDocument('{ctrl}{end}');
+		helper.processToIdle(this.win);
+		cy.then(() => {
+			expect(this.win.app.isFollowingUser()).to.equal(true);
+		});
+
+		desktopHelper.scrollWriterDocumentToTop();
+
+		cy.then(() => {
+			expect(this.win.app.isFollowingOff()).to.equal(true);
+		});
+	});
+
+	it('The view stays put when the caret is re-reported after a reflow', function() {
+		desktopHelper.selectZoomLevel('40');
+
+		helper.typeIntoDocument('{ctrl}{end}');
+		helper.processToIdle(this.win);
+
+		desktopHelper.scrollWriterDocumentToTop();
+
+		// Where the user left the view, read from the layout, which carries the
+		// position through every scroll.
+		let readingPosition;
+
+		// A reflow makes core report the caret again, naming our own view.
+		cy.then(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			readingPosition = layout.viewedRectangle.y1;
+
+			const caret = this.win.app.file.textCursor.rectangle;
+			const CARET_SHIFT_TWIPS = 15;
+			const payload = {
+				viewId: this.win.app.map._docLayer._viewId,
+				rectangle: (caret.x1 + CARET_SHIFT_TWIPS) + ', ' + caret.y1 + ', ' +
+					caret.width + ', ' + caret.height,
+			};
+			this.win.app.map._docLayer._onMessage(
+				'invalidatecursor: ' + JSON.stringify(payload));
+		});
+
+		// The user is reading the top of the document, so the view stays there.
+		cy.then(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			expect(layout.viewedRectangle.y1).to.equal(readingPosition);
+		});
 	});
 
 });

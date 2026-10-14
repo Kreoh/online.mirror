@@ -70,6 +70,7 @@
 
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <framework/documentmacrocalls.hxx>
 #include <framework/titlehelper.hxx>
 #include <unotools/saveopt.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -78,8 +79,8 @@
 #include <vcl/GraphicObject.hxx>
 #include <tools/urlobj.hxx>
 
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
@@ -135,12 +136,12 @@ ODatabaseDocument::ODatabaseDocument(const ::rtl::Reference<ODatabaseModelImpl>&
             ,ODatabaseDocument_OfficeDocument( getMutex() )
             ,m_aModifyListeners( getMutex() )
             ,m_aCloseListener( getMutex() )
-            ,m_aStorageListeners( getMutex() )
             ,m_pEventContainer( new DocumentEvents( *this, getMutex(), _pImpl->getDocumentEvents() ) )
             ,m_aEventNotifier( *this, getMutex() )
             ,m_aViewMonitor( m_aEventNotifier )
             ,m_eInitState( NotInitialized )
             ,m_bClosing( false )
+            ,m_bMacroCallsAllowed( false )
             ,m_bAllowDocumentScripting( false )
             ,m_bHasBeenRecovered( false )
             ,m_bEmbedded(false)
@@ -467,6 +468,9 @@ void ODatabaseDocument::initNew(  )
 
     impl_setInitializing();
 
+    // A new document gets its macros from the user.
+    m_bMacroCallsAllowed = true;
+
     // create a temporary storage
     Reference< XStorage > xTempStor( ::comphelper::OStorageHelper::GetTemporaryStorage( m_pImpl->m_aContext ) );
 
@@ -487,8 +491,6 @@ void ODatabaseDocument::initNew(  )
     // <- SYNCHRONIZED
 
     m_aEventNotifier.notifyDocumentEvent( u"OnCreate"_ustr, nullptr, Any() );
-
-    impl_notifyStorageChange_nolck_nothrow( xTempStor );
 }
 
 void ODatabaseDocument::load( const Sequence< PropertyValue >& Arguments )
@@ -764,6 +766,10 @@ bool ODatabaseDocument::impl_attachResource( const OUString& i_rLogicalDocumentU
 
         _rDocGuard.clear();
         // <- SYNCHRONIZED
+
+        // decide the macro mode while the load arguments still hold the interaction handler
+        m_pImpl->checkMacrosOnLoading();
+
         m_aEventNotifier.notifyDocumentEvent( u"OnLoadFinished"_ustr, nullptr, Any() );
     }
 
@@ -816,7 +822,8 @@ void ODatabaseDocument::connectController( const Reference< XController >& _xCon
         return;
 
     // check/adjust our macro mode.
-    m_pImpl->checkMacrosOnLoading();
+    m_bMacroCallsAllowed = m_pImpl->checkMacrosOnLoading() || m_bMacroCallsAllowed;
+    framework::setDocumentMacroCallsAllowed( m_xUIConfigurationManager, m_bMacroCallsAllowed );
 }
 
 void ODatabaseDocument::disconnectController( const Reference< XController >& _xController )
@@ -1101,15 +1108,11 @@ void ODatabaseDocument::impl_storeAs_throw( const OUString& _rURL, const ::comph
     // reset our "modified" flag, and clear the guard
     impl_setModified_nothrow( false, _rGuard );
     // <- SYNCHRONIZED
-
-    // notify storage listeners
-    if ( xNewRootStorage.is() )
-        impl_notifyStorageChange_nolck_nothrow( xNewRootStorage );
 }
 
 Reference< XStorage > ODatabaseDocument::impl_createStorageFor_throw( const OUString& _rURL ) const
 {
-    Reference< ucb::XSimpleFileAccess3 > xTempAccess(ucb::SimpleFileAccess::create(m_pImpl->m_aContext));
+    Reference< ucb::XSimpleFileAccess > xTempAccess(ucb::SimpleFileAccess::create(m_pImpl->m_aContext));
     Reference< io::XStream > xStream = xTempAccess->openFileReadWrite( _rURL );
     Reference< io::XTruncate > xTruncate(xStream,UNO_QUERY);
     if ( xTruncate.is() )
@@ -1122,7 +1125,7 @@ Reference< XStorage > ODatabaseDocument::impl_createStorageFor_throw( const OUSt
     return Reference< XStorage >( xStorageFactory->createInstanceWithArguments( aParam ), UNO_QUERY_THROW );
 }
 
-css::uno::Reference<css::embed::XStorage> ODatabaseDocument::impl_GetStorageOrCreateFor_throw(
+cpo::uno::Reference<css::embed::XStorage> ODatabaseDocument::impl_GetStorageOrCreateFor_throw(
     const ::comphelper::NamedValueCollection& _rArguments, const OUString& _rURL) const
 {
     // Try to get the storage from arguments, then create storage for target URL
@@ -1419,7 +1422,7 @@ Reference< XNameAccess > ODatabaseDocument::impl_getDocumentContainer_throw( ODa
     if ( !xContainer.is() )
     {
         Any aValue;
-        css::uno::Reference< css::uno::XInterface > xMy(*this);
+        cpo::uno::Reference< cpo::uno::XInterface > xMy(*this);
         if (dbtools::getDataSourceSetting(xMy, bFormsContainer ? u"Forms"_ustr : u"Reports"_ustr, aValue))
         {
             OUString sSupportService;
@@ -1729,6 +1732,8 @@ Reference< XUIConfigurationManager2 > const & ODatabaseDocument::getUIConfigurat
     {
         m_xUIConfigurationManager = UIConfigurationManager::create( m_pImpl->m_aContext );
 
+        framework::setDocumentMacroCallsAllowed( m_xUIConfigurationManager, m_bMacroCallsAllowed );
+
         OUString aUIConfigFolderName( u"Configurations2"_ustr );
 
         // First try to open with READWRITE and then READ
@@ -1768,16 +1773,6 @@ Sequence< OUString > ODatabaseDocument::getDocumentSubStoragesNames(  )
     return xStorageAccess->getDocumentSubStoragesNames();
 }
 
-void ODatabaseDocument::impl_notifyStorageChange_nolck_nothrow( const Reference< XStorage >& xNewRootStorage )
-{
-    Reference< XInterface > xMe( *this );
-
-    m_aStorageListeners.forEach(
-        [&xMe, &xNewRootStorage] (uno::Reference<XStorageChangeListener> const& xListener) {
-            return xListener->notifyStorageChange(xMe, xNewRootStorage);
-        });
-}
-
 void ODatabaseDocument::disposing()
 {
     if ( !m_pImpl.is() )
@@ -1797,7 +1792,6 @@ void ODatabaseDocument::disposing()
     lang::EventObject aDisposeEvent(static_cast<XWeak*>(this));
     m_aModifyListeners.disposeAndClear( aDisposeEvent );
     m_aCloseListener.disposeAndClear( aDisposeEvent );
-    m_aStorageListeners.disposeAndClear( aDisposeEvent );
 
     // this is the list of objects which we currently hold as member. Upon resetting
     // those members, we can (potentially) release the last reference to them, in which
@@ -1816,7 +1810,7 @@ void ODatabaseDocument::disposing()
         // the document. And upon closing, our controllers are closed, too
 
         {
-            uno::Reference<uno::XInterface> xUIInterface(m_xUIConfigurationManager);
+            uno::Reference<cpo::uno::XInterface> xUIInterface(m_xUIConfigurationManager);
             aKeepAlive.push_back(xUIInterface);
         }
         m_xUIConfigurationManager = nullptr;
@@ -1842,13 +1836,13 @@ void ODatabaseDocument::disposing()
         impl_disposeControllerFrames_nothrow();
 
         {
-            uno::Reference<uno::XInterface> xModuleInterface(m_xModuleManager);
+            uno::Reference<cpo::uno::XInterface> xModuleInterface(m_xModuleManager);
             aKeepAlive.push_back(xModuleInterface);
         }
         m_xModuleManager.clear();
 
         {
-            uno::Reference<uno::XInterface> xTitleInterface(cppu::getXWeak(m_xTitleHelper.get()));
+            uno::Reference<cpo::uno::XInterface> xTitleInterface(cppu::getXWeak(m_xTitleHelper.get()));
             aKeepAlive.push_back(xTitleInterface);
         }
         m_xTitleHelper.clear();
@@ -1954,25 +1948,12 @@ void ODatabaseDocument::switchToStorage( const Reference< XStorage >& _rxNewRoot
     Reference< XStorage > xNewRootStorage( m_pImpl->switchToStorage( _rxNewRootStorage ) );
 
     aGuard.clear();
-    impl_notifyStorageChange_nolck_nothrow( xNewRootStorage );
 }
 
 Reference< XStorage > ODatabaseDocument::getDocumentStorage(  )
 {
     DocumentGuard aGuard(*this, DocumentGuard::MethodUsedDuringInit);
     return m_pImpl->getOrCreateRootStorage();
-}
-
-void ODatabaseDocument::addStorageChangeListener( const Reference< XStorageChangeListener >& Listener )
-{
-    DocumentGuard aGuard(*this, DocumentGuard::DefaultMethod);
-    m_aStorageListeners.addInterface( Listener );
-}
-
-void ODatabaseDocument::removeStorageChangeListener( const Reference< XStorageChangeListener >& Listener )
-{
-    DocumentGuard aGuard(*this, DocumentGuard::DefaultMethod);
-    m_aStorageListeners.removeInterface( Listener );
 }
 
 Reference< XStorageBasedLibraryContainer > ODatabaseDocument::getBasicLibraries()
@@ -2051,12 +2032,6 @@ Reference< XEnumeration > ODatabaseDocument::getControllers(  )
     return new ::comphelper::OAnyEnumeration(aController);
 }
 
-Sequence< OUString > ODatabaseDocument::getAvailableViewControllerNames(  )
-{
-    Sequence< OUString > aNames { SERVICE_SDB_APPLICATIONCONTROLLER };
-    return aNames;
-}
-
 Reference< XController2 > ODatabaseDocument::createDefaultViewController( const Reference< XFrame >& Frame )
 {
     return createViewController( u"Default"_ustr, Sequence< PropertyValue >(), Frame);
@@ -2099,7 +2074,7 @@ rtl::Reference< ::framework::TitleHelper > const & ODatabaseDocument::impl_getTi
     return m_xTitleHelper;
 }
 
-uno::Reference< frame::XUntitledNumbers > ODatabaseDocument::impl_getUntitledHelper_throw(const uno::Reference< uno::XInterface >& _xComponent)
+uno::Reference< frame::XUntitledNumbers > ODatabaseDocument::impl_getUntitledHelper_throw(const uno::Reference< cpo::uno::XInterface >& _xComponent)
 {
     if ( !m_xModuleManager.is() )
         m_xModuleManager.set( ModuleManager::create(m_pImpl->m_aContext) );
@@ -2164,7 +2139,7 @@ void ODatabaseDocument::removeTitleChangeListener( const uno::Reference< frame::
 }
 
 // css.frame.XUntitledNumbers
-::sal_Int32 ODatabaseDocument::leaseNumber( const uno::Reference< uno::XInterface >& xComponent )
+::sal_Int32 ODatabaseDocument::leaseNumber( const uno::Reference< cpo::uno::XInterface >& xComponent )
 {
     DocumentGuard aGuard(*this, DocumentGuard::DefaultMethod);
     return impl_getUntitledHelper_throw(xComponent)->leaseNumber (xComponent);
@@ -2178,7 +2153,7 @@ void ODatabaseDocument::releaseNumber( ::sal_Int32 nNumber )
 }
 
 // css.frame.XUntitledNumbers
-void ODatabaseDocument::releaseNumberForComponent( const uno::Reference< uno::XInterface >& xComponent )
+void ODatabaseDocument::releaseNumberForComponent( const uno::Reference< cpo::uno::XInterface >& xComponent )
 {
     DocumentGuard aGuard(*this, DocumentGuard::DefaultMethod);
     impl_getUntitledHelper_throw(xComponent)->releaseNumberForComponent (xComponent);
@@ -2192,8 +2167,8 @@ OUString ODatabaseDocument::getUntitledPrefix()
 
 }   // namespace dbaccess
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_dba_ODatabaseDocument(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_dba_ODatabaseDocument(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     Reference<XInterface> xDBContextTunnel(DatabaseContext::create(context), UNO_QUERY_THROW);

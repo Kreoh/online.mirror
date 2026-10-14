@@ -10,10 +10,8 @@
 $(eval $(call gb_Module_Module,setup_native))
 
 $(eval $(call gb_Module_add_targets,setup_native,\
-	$(if $(filter MACOSX,$(OS)),CustomTarget_mac) \
 	CustomTarget_spell \
-	Package_packinfo \
-	$(if $(filter LINUX SOLARIS,$(OS)), \
+	$(if $(filter LINUX,$(OS)), \
 		CustomTarget_scripts \
 	) \
 ))

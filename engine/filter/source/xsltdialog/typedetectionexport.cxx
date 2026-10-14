@@ -33,13 +33,13 @@
 #include <comphelper/attributelist.hxx>
 #include <rtl/ref.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::io;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::xml::sax;
 
 
-TypeDetectionExporter::TypeDetectionExporter( Reference< XComponentContext > const & xContext )
+TypeDetectionExporter::TypeDetectionExporter( Reference< cpo::uno::XComponentContext > const & xContext )
 : mxContext( xContext )
 {
 }

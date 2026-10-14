@@ -22,7 +22,7 @@
 #include <comphelper/compbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <ucbhelper/content.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/util/theMacroExpander.hpp>
@@ -32,6 +32,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -42,7 +43,7 @@ typedef comphelper::WeakComponentImplHelper<
 
 class ExpandContentProviderImpl : public t_impl_helper
 {
-    uno::Reference< uno::XComponentContext > m_xComponentContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xComponentContext;
     uno::Reference< util::XMacroExpander >   m_xMacroExpander;
     OUString expandUri(
         uno::Reference< ucb::XContentIdentifier > const & xIdentifier ) const;
@@ -52,20 +53,20 @@ protected:
 
 public:
     explicit ExpandContentProviderImpl(
-        uno::Reference< uno::XComponentContext > const & xComponentContext )
+        uno::Reference< cpo::uno::XComponentContext > const & xComponentContext )
         : m_xComponentContext( xComponentContext ),
           m_xMacroExpander( util::theMacroExpander::get(xComponentContext) )
         {}
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( OUString const & serviceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( OUString const & serviceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XContentProvider
-    virtual uno::Reference< ucb::XContent > SAL_CALL queryContent(
+    virtual uno::Reference< ucb::XContent > queryContent(
         uno::Reference< ucb::XContentIdentifier > const & xIdentifier ) override;
-    virtual sal_Int32 SAL_CALL compareContentIds(
+    virtual sal_Int32 compareContentIds(
         uno::Reference< ucb::XContentIdentifier > const & xId1,
         uno::Reference< ucb::XContentIdentifier > const & xId2 ) override;
 };
@@ -166,9 +167,9 @@ sal_Int32 ExpandContentProviderImpl::compareContentIds(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_expand_ExpandContentProviderImpl_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ExpandContentProviderImpl(context));
 }

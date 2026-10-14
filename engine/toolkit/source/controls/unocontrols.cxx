@@ -20,7 +20,7 @@
 #include <com/sun/star/awt/XTextArea.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/awt/VisualEffect.hpp>
 #include <com/sun/star/awt/LineEndFormat.hpp>
 #include <com/sun/star/graphic/GraphicProvider.hpp>
@@ -54,10 +54,10 @@
 using namespace css;
 using namespace css::awt;
 using namespace css::lang;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using ::com::sun::star::graphic::XGraphic;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using namespace ::toolkit;
 
 uno::Reference< graphic::XGraphic >
@@ -67,7 +67,7 @@ ImageHelper::getGraphicAndGraphicObjectFromURL_nothrow( uno::Reference< graphic:
     return ImageHelper::getGraphicFromURL_nothrow( _rURL, u""_ustr );
 }
 
-css::uno::Reference< css::graphic::XGraphic >
+cpo::uno::Reference< css::graphic::XGraphic >
 ImageHelper::getGraphicFromURL_nothrow( const OUString& _rURL, OUString const & referer )
 {
     uno::Reference< graphic::XGraphic > xGraphic;
@@ -76,7 +76,7 @@ ImageHelper::getGraphicFromURL_nothrow( const OUString& _rURL, OUString const & 
 
     try
     {
-        const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+        const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
         uno::Reference< graphic::XGraphicProvider > xProvider( graphic::GraphicProvider::create(xContext) );
         xGraphic = xProvider->queryGraphic({ comphelper::makePropertyValue(u"URL"_ustr, _rURL) });
     }
@@ -143,9 +143,9 @@ cpo::uno::Sequence<OUString> UnoControlEditModel::getSupportedServiceNames()
     return comphelper::concatSequences(UnoControlModel::getSupportedServiceNames(), vals);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlEditModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlEditModel(context));
@@ -164,7 +164,7 @@ UnoEditControl::UnoEditControl()
     maComponentInfos.nHeight = 12;
 }
 
-cpo::uno::Any SAL_CALL UnoEditControl::queryAggregation( const cpo::uno::Type & rType )
+cpo::uno::Any UnoEditControl::queryAggregation( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aReturn = UnoControlBase::queryAggregation( rType );
     if ( !aReturn.hasValue() )
@@ -172,17 +172,17 @@ cpo::uno::Any SAL_CALL UnoEditControl::queryAggregation( const cpo::uno::Type & 
     return aReturn;
 }
 
-cpo::uno::Any SAL_CALL UnoEditControl::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any UnoEditControl::queryInterface( const cpo::uno::Type & rType )
 {
     return UnoControlBase::queryInterface( rType );
 }
 
-void SAL_CALL UnoEditControl::acquire(  ) noexcept
+void UnoEditControl::acquire(  ) noexcept
 {
     UnoControlBase::acquire();
 }
 
-void SAL_CALL UnoEditControl::release(  ) noexcept
+void UnoEditControl::release(  ) noexcept
 {
     UnoControlBase::release();
 }
@@ -203,7 +203,7 @@ OUString UnoEditControl::GetComponentServiceName() const
     return sName;
 }
 
-bool SAL_CALL UnoEditControl::setModel(const uno::Reference< awt::XControlModel >& _rModel)
+bool UnoEditControl::setModel(const uno::Reference< awt::XControlModel >& _rModel)
 {
     bool bReturn = UnoControlBase::setModel( _rModel );
     mbHasTextProperty = ImplHasProperty( BASEPROPERTY_TEXT );
@@ -472,9 +472,9 @@ cpo::uno::Sequence< OUString > UnoEditControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames( ), vals);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoEditControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoEditControl());
@@ -544,9 +544,9 @@ UnoControlFileControlModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlFileControlModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlFileControlModel(context));
@@ -574,9 +574,9 @@ cpo::uno::Sequence<OUString> UnoFileControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoEditControl::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoFileControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoFileControl());
@@ -719,9 +719,9 @@ cpo::uno::Sequence<OUString> UnoControlButtonModel::getSupportedServiceNames()
     return comphelper::concatSequences( GraphicControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlButtonModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlButtonModel(context));
@@ -829,12 +829,12 @@ void UnoButtonControl::removeItemListener(const uno::Reference< awt::XItemListen
     maItemListeners.removeInterface( l );
 }
 
-void SAL_CALL UnoButtonControl::disposing( const lang::EventObject& Source )
+void UnoButtonControl::disposing( const lang::EventObject& Source )
 {
     UnoControlBase::disposing( Source );
 }
 
-void SAL_CALL UnoButtonControl::itemStateChanged( const awt::ItemEvent& rEvent )
+void UnoButtonControl::itemStateChanged( const awt::ItemEvent& rEvent )
 {
     // forward to model
     ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_STATE ), cpo::uno::Any(static_cast<sal_Int16>(rEvent.Selected)), false );
@@ -886,9 +886,9 @@ cpo::uno::Sequence<OUString> UnoButtonControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoButtonControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoButtonControl());
@@ -987,9 +987,9 @@ void UnoControlImageControlModel::setFastPropertyValue_NoBroadcast( std::unique_
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlImageControlModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlImageControlModel(context));
@@ -1054,9 +1054,9 @@ cpo::uno::Sequence<OUString> UnoImageControlControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoImageControlControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoImageControlControl());
@@ -1114,9 +1114,9 @@ UnoControlRadioButtonModel::getSupportedServiceNames()
     return comphelper::concatSequences( GraphicControlModel::getSupportedServiceNames(), vals);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlRadioButtonModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlRadioButtonModel(context));
@@ -1287,9 +1287,9 @@ cpo::uno::Sequence<OUString> UnoRadioButtonControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoRadioButtonControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoRadioButtonControl());
@@ -1346,9 +1346,9 @@ cpo::uno::Sequence<OUString> UnoControlCheckBoxModel::getSupportedServiceNames()
     return comphelper::concatSequences( GraphicControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlCheckBoxModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlCheckBoxModel(context));
@@ -1492,9 +1492,9 @@ cpo::uno::Sequence<OUString> UnoCheckBoxControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoCheckBoxControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoCheckBoxControl());
@@ -1544,9 +1544,9 @@ uno::Reference< beans::XPropertySetInfo > UnoControlFixedHyperlinkModel::getProp
     return xInfo;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlFixedHyperlinkModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlFixedHyperlinkModel(context));
@@ -1682,9 +1682,9 @@ void UnoFixedHyperlinkControl::removeActionListener(const uno::Reference< awt::X
     maActionListeners.removeInterface( l );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoFixedHyperlinkControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoFixedHyperlinkControl());
@@ -1742,9 +1742,9 @@ UnoControlFixedTextModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlFixedTextModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlFixedTextModel(context));
@@ -1843,9 +1843,9 @@ cpo::uno::Sequence<OUString> UnoFixedTextControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoFixedTextControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoFixedTextControl());
@@ -1906,9 +1906,9 @@ cpo::uno::Sequence<OUString> UnoControlGroupBoxModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlGroupBoxModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlGroupBoxModel(context));
@@ -1943,9 +1943,9 @@ cpo::uno::Sequence<OUString> UnoGroupBoxControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoGroupBoxControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoGroupBoxControl());
@@ -2185,14 +2185,14 @@ void UnoControlListBoxModel::ImplNormalizePropertySequence( const sal_Int32 _nCo
 }
 
 
-::sal_Int32 SAL_CALL UnoControlListBoxModel::getItemCount()
+::sal_Int32 UnoControlListBoxModel::getItemCount()
 {
     std::unique_lock aGuard( m_aMutex );
     return m_xData->getItemCount();
 }
 
 
-void SAL_CALL UnoControlListBoxModel::insertItem( ::sal_Int32 i_nPosition, const OUString& i_rItemText, const OUString& i_rItemImageURL )
+void UnoControlListBoxModel::insertItem( ::sal_Int32 i_nPosition, const OUString& i_rItemText, const OUString& i_rItemImageURL )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2205,7 +2205,7 @@ void SAL_CALL UnoControlListBoxModel::insertItem( ::sal_Int32 i_nPosition, const
 }
 
 
-void SAL_CALL UnoControlListBoxModel::insertItemText( ::sal_Int32 i_nPosition, const OUString& i_rItemText )
+void UnoControlListBoxModel::insertItemText( ::sal_Int32 i_nPosition, const OUString& i_rItemText )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2217,7 +2217,7 @@ void SAL_CALL UnoControlListBoxModel::insertItemText( ::sal_Int32 i_nPosition, c
 }
 
 
-void SAL_CALL UnoControlListBoxModel::insertItemImage( ::sal_Int32 i_nPosition, const OUString& i_rItemImageURL )
+void UnoControlListBoxModel::insertItemImage( ::sal_Int32 i_nPosition, const OUString& i_rItemImageURL )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2229,7 +2229,7 @@ void SAL_CALL UnoControlListBoxModel::insertItemImage( ::sal_Int32 i_nPosition, 
 }
 
 
-void SAL_CALL UnoControlListBoxModel::removeItem( ::sal_Int32 i_nPosition )
+void UnoControlListBoxModel::removeItem( ::sal_Int32 i_nPosition )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2240,7 +2240,7 @@ void SAL_CALL UnoControlListBoxModel::removeItem( ::sal_Int32 i_nPosition )
 }
 
 
-void SAL_CALL UnoControlListBoxModel::removeAllItems(  )
+void UnoControlListBoxModel::removeAllItems(  )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2251,7 +2251,7 @@ void SAL_CALL UnoControlListBoxModel::removeAllItems(  )
 }
 
 
-void SAL_CALL UnoControlListBoxModel::setItemText( ::sal_Int32 i_nPosition, const OUString& i_rItemText )
+void UnoControlListBoxModel::setItemText( ::sal_Int32 i_nPosition, const OUString& i_rItemText )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2263,7 +2263,7 @@ void SAL_CALL UnoControlListBoxModel::setItemText( ::sal_Int32 i_nPosition, cons
 }
 
 
-void SAL_CALL UnoControlListBoxModel::setItemImage( ::sal_Int32 i_nPosition, const OUString& i_rItemImageURL )
+void UnoControlListBoxModel::setItemImage( ::sal_Int32 i_nPosition, const OUString& i_rItemImageURL )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2275,7 +2275,7 @@ void SAL_CALL UnoControlListBoxModel::setItemImage( ::sal_Int32 i_nPosition, con
 }
 
 
-void SAL_CALL UnoControlListBoxModel::setItemTextAndImage( ::sal_Int32 i_nPosition, const OUString& i_rItemText, const OUString& i_rItemImageURL )
+void UnoControlListBoxModel::setItemTextAndImage( ::sal_Int32 i_nPosition, const OUString& i_rItemText, const OUString& i_rItemImageURL )
 {
     std::unique_lock aGuard( m_aMutex );
     // SYNCHRONIZED ----->
@@ -2288,7 +2288,7 @@ void SAL_CALL UnoControlListBoxModel::setItemTextAndImage( ::sal_Int32 i_nPositi
 }
 
 
-void SAL_CALL UnoControlListBoxModel::setItemData( ::sal_Int32 i_nPosition, const Any& i_rDataValue )
+void UnoControlListBoxModel::setItemData( ::sal_Int32 i_nPosition, const Any& i_rDataValue )
 {
     std::unique_lock aGuard( m_aMutex );
     ListItem& rItem( m_xData->getItem( i_nPosition ) );
@@ -2296,7 +2296,7 @@ void SAL_CALL UnoControlListBoxModel::setItemData( ::sal_Int32 i_nPosition, cons
 }
 
 
-OUString SAL_CALL UnoControlListBoxModel::getItemText( ::sal_Int32 i_nPosition )
+OUString UnoControlListBoxModel::getItemText( ::sal_Int32 i_nPosition )
 {
     std::unique_lock aGuard( m_aMutex );
     const ListItem& rItem( m_xData->getItem( i_nPosition ) );
@@ -2304,7 +2304,7 @@ OUString SAL_CALL UnoControlListBoxModel::getItemText( ::sal_Int32 i_nPosition )
 }
 
 
-OUString SAL_CALL UnoControlListBoxModel::getItemImage( ::sal_Int32 i_nPosition )
+OUString UnoControlListBoxModel::getItemImage( ::sal_Int32 i_nPosition )
 {
     std::unique_lock aGuard( m_aMutex );
     const ListItem& rItem( m_xData->getItem( i_nPosition ) );
@@ -2312,7 +2312,7 @@ OUString SAL_CALL UnoControlListBoxModel::getItemImage( ::sal_Int32 i_nPosition 
 }
 
 
-beans::Pair< OUString, OUString > SAL_CALL UnoControlListBoxModel::getItemTextAndImage( ::sal_Int32 i_nPosition )
+beans::Pair< OUString, OUString > UnoControlListBoxModel::getItemTextAndImage( ::sal_Int32 i_nPosition )
 {
     std::unique_lock aGuard( m_aMutex );
     const ListItem& rItem( m_xData->getItem( i_nPosition ) );
@@ -2320,7 +2320,7 @@ beans::Pair< OUString, OUString > SAL_CALL UnoControlListBoxModel::getItemTextAn
 }
 
 
-Any SAL_CALL UnoControlListBoxModel::getItemData( ::sal_Int32 i_nPosition )
+Any UnoControlListBoxModel::getItemData( ::sal_Int32 i_nPosition )
 {
     std::unique_lock aGuard( m_aMutex );
     const ListItem& rItem( m_xData->getItem( i_nPosition ) );
@@ -2328,14 +2328,14 @@ Any SAL_CALL UnoControlListBoxModel::getItemData( ::sal_Int32 i_nPosition )
 }
 
 
-Sequence< beans::Pair< OUString, OUString > > SAL_CALL UnoControlListBoxModel::getAllItems(  )
+Sequence< beans::Pair< OUString, OUString > > UnoControlListBoxModel::getAllItems(  )
 {
     std::unique_lock aGuard( m_aMutex );
     return m_xData->getAllItems();
 }
 
 
-void SAL_CALL UnoControlListBoxModel::addItemListListener( const uno::Reference< awt::XItemListListener >& i_Listener )
+void UnoControlListBoxModel::addItemListListener( const uno::Reference< awt::XItemListListener >& i_Listener )
 {
     std::unique_lock aGuard( m_aMutex );
     if ( i_Listener.is() )
@@ -2343,7 +2343,7 @@ void SAL_CALL UnoControlListBoxModel::addItemListListener( const uno::Reference<
 }
 
 
-void SAL_CALL UnoControlListBoxModel::removeItemListListener( const uno::Reference< awt::XItemListListener >& i_Listener )
+void UnoControlListBoxModel::removeItemListListener( const uno::Reference< awt::XItemListListener >& i_Listener )
 {
     std::unique_lock aGuard( m_aMutex );
     if ( i_Listener.is() )
@@ -2469,7 +2469,7 @@ void UnoControlListBoxModel::impl_notifyItemListEvent(
     std::unique_lock<std::mutex>& rGuard,
     const sal_Int32 i_nItemPosition, const ::std::optional< OUString >& i_rItemText,
     const ::std::optional< OUString >& i_rItemImageURL,
-    void ( SAL_CALL XItemListListener::*NotificationMethod )( const ItemListEvent& ) )
+    void ( XItemListListener::*NotificationMethod )( const ItemListEvent& ) )
 {
     ItemListEvent aEvent;
     aEvent.Source = *this;
@@ -2488,9 +2488,9 @@ void UnoControlListBoxModel::impl_notifyItemListEvent(
     m_aItemListListeners.notifyEach( rGuard, NotificationMethod, aEvent );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlListBoxModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlListBoxModel(context));
@@ -2840,7 +2840,7 @@ void UnoListBoxControl::getColumnsAndLines( sal_Int16& nCols, sal_Int16& nLines 
     Impl_getColumnsAndLines( nCols, nLines );
 }
 
-bool SAL_CALL UnoListBoxControl::setModel( const uno::Reference< awt::XControlModel >& i_rModel )
+bool UnoListBoxControl::setModel( const uno::Reference< awt::XControlModel >& i_rModel )
 {
     ::osl::MutexGuard aGuard( GetMutex() );
 
@@ -2860,7 +2860,7 @@ bool SAL_CALL UnoListBoxControl::setModel( const uno::Reference< awt::XControlMo
     return true;
 }
 
-void SAL_CALL UnoListBoxControl::listItemInserted( const awt::ItemListEvent& i_rEvent )
+void UnoListBoxControl::listItemInserted( const awt::ItemListEvent& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoListBoxControl::listItemInserted: invalid peer!" );
@@ -2868,7 +2868,7 @@ void SAL_CALL UnoListBoxControl::listItemInserted( const awt::ItemListEvent& i_r
         xPeerListener->listItemInserted( i_rEvent );
 }
 
-void SAL_CALL UnoListBoxControl::listItemRemoved( const awt::ItemListEvent& i_rEvent )
+void UnoListBoxControl::listItemRemoved( const awt::ItemListEvent& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoListBoxControl::listItemRemoved: invalid peer!" );
@@ -2876,7 +2876,7 @@ void SAL_CALL UnoListBoxControl::listItemRemoved( const awt::ItemListEvent& i_rE
         xPeerListener->listItemRemoved( i_rEvent );
 }
 
-void SAL_CALL UnoListBoxControl::listItemModified( const awt::ItemListEvent& i_rEvent )
+void UnoListBoxControl::listItemModified( const awt::ItemListEvent& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoListBoxControl::listItemModified: invalid peer!" );
@@ -2884,7 +2884,7 @@ void SAL_CALL UnoListBoxControl::listItemModified( const awt::ItemListEvent& i_r
         xPeerListener->listItemModified( i_rEvent );
 }
 
-void SAL_CALL UnoListBoxControl::allItemsRemoved( const lang::EventObject& i_rEvent )
+void UnoListBoxControl::allItemsRemoved( const lang::EventObject& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoListBoxControl::allItemsRemoved: invalid peer!" );
@@ -2892,7 +2892,7 @@ void SAL_CALL UnoListBoxControl::allItemsRemoved( const lang::EventObject& i_rEv
         xPeerListener->allItemsRemoved( i_rEvent );
 }
 
-void SAL_CALL UnoListBoxControl::itemListChanged( const lang::EventObject& i_rEvent )
+void UnoListBoxControl::itemListChanged( const lang::EventObject& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoListBoxControl::itemListChanged: invalid peer!" );
@@ -2900,9 +2900,9 @@ void SAL_CALL UnoListBoxControl::itemListChanged( const lang::EventObject& i_rEv
         xPeerListener->itemListChanged( i_rEvent );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoListBoxControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoListBoxControl());
@@ -2984,9 +2984,9 @@ cpo::uno::Any UnoControlComboBoxModel::ImplGetDefaultValue( sal_uInt16 nPropId )
     return UnoControlModel::ImplGetDefaultValue( nPropId );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlComboBoxModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlComboBoxModel(context));
@@ -3142,7 +3142,7 @@ void UnoComboBoxControl::itemStateChanged( const awt::ItemEvent& rEvent )
         }
     }
 }
-bool SAL_CALL UnoComboBoxControl::setModel( const uno::Reference< awt::XControlModel >& i_rModel )
+bool UnoComboBoxControl::setModel( const uno::Reference< awt::XControlModel >& i_rModel )
 {
     ::osl::MutexGuard aGuard( GetMutex() );
 
@@ -3162,7 +3162,7 @@ bool SAL_CALL UnoComboBoxControl::setModel( const uno::Reference< awt::XControlM
     return true;
 }
 
-void SAL_CALL UnoComboBoxControl::listItemInserted( const awt::ItemListEvent& i_rEvent )
+void UnoComboBoxControl::listItemInserted( const awt::ItemListEvent& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoComboBoxControl::listItemInserted: invalid peer!" );
@@ -3170,7 +3170,7 @@ void SAL_CALL UnoComboBoxControl::listItemInserted( const awt::ItemListEvent& i_
         xPeerListener->listItemInserted( i_rEvent );
 }
 
-void SAL_CALL UnoComboBoxControl::listItemRemoved( const awt::ItemListEvent& i_rEvent )
+void UnoComboBoxControl::listItemRemoved( const awt::ItemListEvent& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoComboBoxControl::listItemRemoved: invalid peer!" );
@@ -3178,7 +3178,7 @@ void SAL_CALL UnoComboBoxControl::listItemRemoved( const awt::ItemListEvent& i_r
         xPeerListener->listItemRemoved( i_rEvent );
 }
 
-void SAL_CALL UnoComboBoxControl::listItemModified( const awt::ItemListEvent& i_rEvent )
+void UnoComboBoxControl::listItemModified( const awt::ItemListEvent& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoComboBoxControl::listItemModified: invalid peer!" );
@@ -3186,7 +3186,7 @@ void SAL_CALL UnoComboBoxControl::listItemModified( const awt::ItemListEvent& i_
         xPeerListener->listItemModified( i_rEvent );
 }
 
-void SAL_CALL UnoComboBoxControl::allItemsRemoved( const lang::EventObject& i_rEvent )
+void UnoComboBoxControl::allItemsRemoved( const lang::EventObject& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoComboBoxControl::allItemsRemoved: invalid peer!" );
@@ -3194,7 +3194,7 @@ void SAL_CALL UnoComboBoxControl::allItemsRemoved( const lang::EventObject& i_rE
         xPeerListener->allItemsRemoved( i_rEvent );
 }
 
-void SAL_CALL UnoComboBoxControl::itemListChanged( const lang::EventObject& i_rEvent )
+void UnoComboBoxControl::itemListChanged( const lang::EventObject& i_rEvent )
 {
     const Reference< XItemListListener > xPeerListener( getPeer(), UNO_QUERY );
     OSL_ENSURE( xPeerListener.is() || !getPeer().is(), "UnoComboBoxControl::itemListChanged: invalid peer!" );
@@ -3296,9 +3296,9 @@ sal_Int16 UnoComboBoxControl::getDropDownLineCount()
     return ImplGetPropertyValue_INT16( BASEPROPERTY_LINECOUNT );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoComboBoxControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoComboBoxControl());
@@ -3345,7 +3345,7 @@ void UnoSpinFieldControl::createPeer( const uno::Reference< awt::XToolkit > & rx
 }
 
     // css::awt::XSpinField
-void UnoSpinFieldControl::addSpinListener( const css::uno::Reference< css::awt::XSpinListener >& l )
+void UnoSpinFieldControl::addSpinListener( const cpo::uno::Reference< css::awt::XSpinListener >& l )
 {
     maSpinListeners.addInterface( l );
     if( getPeer().is() && maSpinListeners.getLength() == 1 )
@@ -3355,7 +3355,7 @@ void UnoSpinFieldControl::addSpinListener( const css::uno::Reference< css::awt::
     }
 }
 
-void UnoSpinFieldControl::removeSpinListener( const css::uno::Reference< css::awt::XSpinListener >& l )
+void UnoSpinFieldControl::removeSpinListener( const cpo::uno::Reference< css::awt::XSpinListener >& l )
 {
     if( getPeer().is() && maSpinListeners.getLength() == 1 )
     {
@@ -3450,9 +3450,9 @@ UnoControlDateFieldModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlDateFieldModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlDateFieldModel(context));
@@ -3662,9 +3662,9 @@ cpo::uno::Sequence<OUString> UnoDateFieldControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoSpinFieldControl::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoDateFieldControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoDateFieldControl());
@@ -3718,9 +3718,9 @@ UnoControlTimeFieldModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlTimeFieldModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlTimeFieldModel(context));
@@ -3889,9 +3889,9 @@ cpo::uno::Sequence<OUString> UnoTimeFieldControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoSpinFieldControl::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoTimeFieldControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoTimeFieldControl());
@@ -3945,9 +3945,9 @@ UnoControlNumericFieldModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlNumericFieldModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlNumericFieldModel(context));
@@ -4109,9 +4109,9 @@ sal_Int16 UnoNumericFieldControl::getDecimalDigits()
     return ImplGetPropertyValue_INT16( BASEPROPERTY_DECIMALACCURACY );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoNumericFieldControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoNumericFieldControl());
@@ -4167,9 +4167,9 @@ UnoControlCurrencyFieldModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlCurrencyFieldModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlCurrencyFieldModel(context));
@@ -4332,9 +4332,9 @@ sal_Int16 UnoCurrencyFieldControl::getDecimalDigits()
     return ImplGetPropertyValue_INT16( BASEPROPERTY_DECIMALACCURACY );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoCurrencyFieldControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoCurrencyFieldControl());
@@ -4387,9 +4387,9 @@ UnoControlPatternFieldModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlPatternFieldModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlPatternFieldModel(context));
@@ -4494,9 +4494,9 @@ cpo::uno::Sequence<OUString> UnoPatternFieldControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoSpinFieldControl::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoPatternFieldControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoPatternFieldControl());
@@ -4562,9 +4562,9 @@ UnoControlProgressBarModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlProgressBarModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlProgressBarModel(context));
@@ -4656,9 +4656,9 @@ cpo::uno::Sequence<OUString> UnoProgressBarControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoProgressBarControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoProgressBarControl());
@@ -4720,9 +4720,9 @@ UnoControlFixedLineModel::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlFixedLineModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlFixedLineModel(context));
@@ -4757,9 +4757,9 @@ cpo::uno::Sequence<OUString> UnoFixedLineControl::getSupportedServiceNames()
     return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoFixedLineControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoFixedLineControl());

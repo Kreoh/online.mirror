@@ -21,7 +21,7 @@
 
 #include <osl/diagnose.h>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::xml::dom;
 using namespace css::xml::sax;
 
@@ -41,7 +41,7 @@ namespace DOM
 
     void CText::saxify(
             const Reference< XDocumentHandler >& i_xHandler) {
-        if (!i_xHandler.is()) throw RuntimeException();
+        if (!i_xHandler.is()) throw cpo::uno::RuntimeException();
         i_xHandler->characters(getData());
     }
 
@@ -58,12 +58,12 @@ namespace DOM
         }
     }
 
-    OUString SAL_CALL CText::getNodeName()
+    OUString CText::getNodeName()
     {
         return u"#text"_ustr;
     }
 
-    Reference< XText > SAL_CALL CText::splitText(sal_Int32 /*offset*/)
+    Reference< XText > CText::splitText(sal_Int32 /*offset*/)
     {
         OSL_FAIL("CText::splitText: not implemented (#i113683#)");
         return Reference< XText >(this);

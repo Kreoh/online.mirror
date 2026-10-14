@@ -27,24 +27,24 @@
 using OInputSeekStream_BASE = cppu::ImplInheritanceHelper<OInputCompStream, css::io::XSeekable>;
 class OInputSeekStream final : public OInputSeekStream_BASE
 {
-    css::uno::Reference < css::io::XSeekable > m_xSeekable;
+    cpo::uno::Reference < css::io::XSeekable > m_xSeekable;
 
 public:
     OInputSeekStream( OWriteStream_Impl& pImpl,
-                      css::uno::Reference < css::io::XInputStream > const & xStream,
+                      cpo::uno::Reference < css::io::XInputStream > const & xStream,
                       const cpo::uno::Sequence< css::beans::PropertyValue >& aProps,
                       sal_Int32 nStorageType );
 
-    OInputSeekStream( css::uno::Reference < css::io::XInputStream > const & xStream,
+    OInputSeekStream( cpo::uno::Reference < css::io::XInputStream > const & xStream,
                       const cpo::uno::Sequence< css::beans::PropertyValue >& aProps,
                       sal_Int32 nStorageType );
 
     virtual ~OInputSeekStream() override;
 
     //XSeekable
-    virtual void SAL_CALL seek( sal_Int64 location ) override;
-    virtual sal_Int64 SAL_CALL getPosition() override;
-    virtual sal_Int64 SAL_CALL getLength() override;
+    virtual void seek( sal_Int64 location ) override;
+    virtual sal_Int64 getPosition() override;
+    virtual sal_Int64 getLength() override;
 };
 
 #endif

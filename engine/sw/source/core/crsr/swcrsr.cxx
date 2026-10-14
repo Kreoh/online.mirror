@@ -56,6 +56,7 @@
 #include <memory>
 #include <comphelper/kit.hxx>
 #include <editsh.hxx>
+#include <pamtyp.hxx>
 
 #include <viewopt.hxx>
 #include <annotationmark.hxx>
@@ -764,6 +765,14 @@ SwMoveFnCollection const & SwCursor::MakeFindRange( SwDocPositions nStart,
                 ? fnMoveForward : fnMoveBackward;
 }
 
+static bool lcl_IsNotTextSearch(const SvxSearchItem* pSearchItem)
+{
+    if (!pSearchItem || pSearchItem->GetSearchString().isEmpty())
+        return true;
+
+    return pSearchItem->GetPattern(); // paragraph style search
+}
+
 static sal_Int32 lcl_FindSelection( SwFindParas& rParas, SwCursor* pCurrentCursor,
                         SwMoveFnCollection const & fnMove, SwCursor*& pFndRing,
                         SwPaM& aRegion, FindRanges eFndRngs,
@@ -798,8 +807,9 @@ static sal_Int32 lcl_FindSelection( SwFindParas& rParas, SwCursor* pCurrentCurso
         // if the search area is valid
         SwPosition *pSttPos = aRegion.GetMark(),
                         *pEndPos = aRegion.GetPoint();
-        *pSttPos = *pTmpCursor->Start();
-        *pEndPos = *pTmpCursor->End();
+        auto [pTmpStart, pTmpEnd] = pTmpCursor->StartEnd(); // SwPosition*
+        *pSttPos = *pTmpStart;
+        *pEndPos = *pTmpEnd;
         if( bSrchBkwrd )
             aRegion.Exchange();
 
@@ -807,7 +817,7 @@ static sal_Int32 lcl_FindSelection( SwFindParas& rParas, SwCursor* pCurrentCurso
             pPHdl.reset(new PercentHdl( aRegion ));
 
         // as long as found and not at same position
-        while(  *pSttPos <= *pEndPos )
+        while( *pSttPos <= *pEndPos )
         {
             nFndRet = rParas.DoFind(*pCurrentCursor, fnMove, aRegion, bInReadOnly, xSearchItem);
             if( 0 == nFndRet ||
@@ -855,16 +865,49 @@ static sal_Int32 lcl_FindSelection( SwFindParas& rParas, SwCursor* pCurrentCurso
                 }
             }
 
+            // tdf#131431 force move pCurrentCursor if it hasn't moved to avoid an infinite loop
+            bool bToNextPara = false;
+            if (!bSrchBkwrd)
+            {
+                bToNextPara = *pSttPos == *pCurrentCursor->End(); // force move
+                if (!bToNextPara && lcl_IsNotTextSearch(xSearchItem.get()))
+                {
+                    // move to next paragraph when last find was at the very end of a paragraph
+                    const SwContentNode* pPointNd = pCurrentCursor->GetPointContentNode();
+                    bToNextPara = pCurrentCursor->End()->GetContentIndex() == pPointNd->Len();
+                }
+            }
+            else
+            {
+                bToNextPara = *pEndPos == *pCurrentCursor->Start(); // force move
+                if (!bToNextPara && lcl_IsNotTextSearch(xSearchItem.get()))
+                {
+                    // move to previous paragraph when last find was at the start of a paragraph
+                    bToNextPara = !pCurrentCursor->Start()->GetContentIndex();
+                }
+            }
+            if (bToNextPara)
+            {
+                if (!(*fnMove.fnPos)(pCurrentCursor->GetPoint(), false))
+                {
+                    if (lcl_IsNotTextSearch(xSearchItem.get()))
+                    {
+                        // At end of the document with a style/format/attr search: done this ring
+                        break;
+                    }
+                }
+            }
+
+            if( *pSttPos == *pEndPos )
+                // in area but at the end => done
+                break;
+
             if( bSrchBkwrd )
                 // move pEndPos in front of the found area
                 *pEndPos = *pCurrentCursor->Start();
             else
                 // move pSttPos behind the found area
                 *pSttPos = *pCurrentCursor->End();
-
-            if( *pSttPos == *pEndPos )
-                // in area but at the end => done
-                break;
 
             if( !nCursorCnt && pPHdl )
             {

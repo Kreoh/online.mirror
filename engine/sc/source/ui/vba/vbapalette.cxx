@@ -18,6 +18,7 @@
  */
 
 #include "vbapalette.hxx"
+#include <docuno.hxx>
 
 #include <sal/macros.h>
 #include <cppuhelper/implbase.hxx>
@@ -29,6 +30,7 @@
 #include "excelvbahelper.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 /** Standard EGA colors, bright. */
@@ -59,12 +61,12 @@ public:
    DefaultPalette(){}
 
     // Methods XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount() override
+    virtual ::sal_Int32 getCount() override
     {
         return SAL_N_ELEMENTS(spnDefColorTable8);
     }
 
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0 || Index >= getCount() )
             throw lang::IndexOutOfBoundsException();
@@ -72,11 +74,11 @@ public:
     }
 
     // Methods XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
     {
         return ::cppu::UnoType<sal_Int32>::get();
     }
-    virtual bool SAL_CALL hasElements() override
+    virtual bool hasElements() override
     {
         return true;
     }
@@ -102,7 +104,7 @@ ScVbaPalette::getPalette() const
     uno::Reference< container::XIndexAccess > xIndex;
     uno::Reference< beans::XPropertySet > xProps;
     if ( !m_pShell )
-        throw uno::RuntimeException(u"Can't extract palette, no doc shell"_ustr );
+        throw cpo::uno::RuntimeException(u"Can't extract palette, no doc shell"_ustr );
 
     xProps.set( m_pShell->GetModel(), uno::UNO_QUERY_THROW );
 

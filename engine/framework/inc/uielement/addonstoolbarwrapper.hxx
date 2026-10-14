@@ -22,7 +22,7 @@
 #include <helper/uielementwrapperbase.hxx>
 #include <rtl/ref.hxx>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace framework
 {
@@ -31,7 +31,7 @@ class ToolBarManager;
 class AddonsToolBarWrapper final : public UIElementWrapperBase
 {
     public:
-        AddonsToolBarWrapper( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+        AddonsToolBarWrapper( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
         virtual ~AddonsToolBarWrapper() override;
 
         // XComponent
@@ -41,13 +41,13 @@ class AddonsToolBarWrapper final : public UIElementWrapperBase
         virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
         // XUIElement
-        virtual css::uno::Reference< css::uno::XInterface > getRealInterface() override;
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getRealInterface() override;
 
         // cf. ToolbarLayoutManager
         void populateImages();
 
     private:
-        css::uno::Reference< css::uno::XComponentContext >                        m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext >                        m_xContext;
         rtl::Reference< ToolBarManager >                                          m_xToolBarManager;
         cpo::uno::Sequence< cpo::uno::Sequence< css::beans::PropertyValue > >     m_aConfigData;
         bool                                                                      m_bCreatedImages;

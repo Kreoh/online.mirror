@@ -18,12 +18,12 @@
  */
 
 #include <cppuhelper/supportsservice.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include "mcnttfactory.hxx"
 #include "mcnttype.hxx"
 
 using namespace ::cppu;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::datatransfer;
@@ -39,17 +39,17 @@ Reference< XMimeContentType > CMimeContentTypeFactory::createMimeContentType( co
 
 // XServiceInfo
 
-OUString SAL_CALL CMimeContentTypeFactory::getImplementationName(  )
+OUString CMimeContentTypeFactory::getImplementationName(  )
 {
     return u"com.sun.star.datatransfer.MimeCntTypeFactory"_ustr;
 }
 
-bool SAL_CALL CMimeContentTypeFactory::supportsService( const OUString& ServiceName )
+bool CMimeContentTypeFactory::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL CMimeContentTypeFactory::getSupportedServiceNames( )
+Sequence< OUString > CMimeContentTypeFactory::getSupportedServiceNames( )
 {
     return { u"com.sun.star.datatransfer.MimeContentTypeFactory"_ustr };
 }
@@ -57,9 +57,9 @@ Sequence< OUString > SAL_CALL CMimeContentTypeFactory::getSupportedServiceNames(
 
 // returns a factory to create XFilePicker-Services
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 dtrans_CMimeContentTypeFactory_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire( new CMimeContentTypeFactory() );
 }

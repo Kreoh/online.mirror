@@ -40,6 +40,7 @@
 #include <svtools/embedhlp.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SvEmbedTransferHelper::SvEmbedTransferHelper( const uno::Reference< embed::XEmbeddedObject >& xObj,
                                               const Graphic* pGraphic,
@@ -111,8 +112,8 @@ bool SvEmbedTransferHelper::GetData( const css::datatransfer::DataFlavor& rFlavo
                             bool bDeleteStream = false;
                             cpo::uno::Sequence < beans::PropertyValue > aEmpty;
                             cpo::uno::Sequence<beans::PropertyValue> aObjArgs( comphelper::InitPropertySequence({
-                                    { "SourceShellID", cpo::uno::Any(maParentShellID) },
-                                    { "DestinationShellID", cpo::uno::Any(rDestDoc) }
+                                    { u"SourceShellID"_ustr, cpo::uno::Any(maParentShellID) },
+                                    { u"DestinationShellID"_ustr, cpo::uno::Any(rDestDoc) }
                                 }));
                             xPers->storeToEntry(xStg, aName, aEmpty, aObjArgs);
                             if ( xStg->isStreamElement( aName ) )
@@ -197,7 +198,7 @@ void SvEmbedTransferHelper::ObjectReleased()
 }
 
 void SvEmbedTransferHelper::FillTransferableObjectDescriptor( TransferableObjectDescriptor& rDesc,
-    const css::uno::Reference< css::embed::XEmbeddedObject >& xObj,
+    const cpo::uno::Reference< css::embed::XEmbeddedObject >& xObj,
     const Graphic* pGraphic,
     sal_Int64 nAspect )
 {

@@ -29,7 +29,7 @@ namespace basctl
 
 using namespace comphelper;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::datatransfer;
 using namespace ::com::sun::star::datatransfer::clipboard;
@@ -44,7 +44,7 @@ DlgEdTransferableImpl::~DlgEdTransferableImpl()
 bool DlgEdTransferableImpl::compareDataFlavors( const DataFlavor& lFlavor, const DataFlavor& rFlavor )
 {
     // compare mime content types
-    const Reference< uno::XComponentContext >&  xContext = getProcessComponentContext();
+    const Reference< cpo::uno::XComponentContext >&  xContext = getProcessComponentContext();
     Reference< datatransfer::XMimeContentTypeFactory >
         xMCntTypeFactory = MimeContentTypeFactory::create(xContext);
 

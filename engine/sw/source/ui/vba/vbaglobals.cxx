@@ -26,11 +26,11 @@
 
 #include "vbaapplication.hxx"
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::ooo::vba;
 
-SwVbaGlobals::SwVbaGlobals(  cpo::uno::Sequence< cpo::uno::Any > const& aArgs, uno::Reference< uno::XComponentContext >const& rxContext ) : SwVbaGlobals_BASE( uno::Reference< XHelperInterface >(), rxContext, u"WordDocumentContext"_ustr )
+SwVbaGlobals::SwVbaGlobals(  cpo::uno::Sequence< cpo::uno::Any > const& aArgs, uno::Reference< cpo::uno::XComponentContext >const& rxContext ) : SwVbaGlobals_BASE( uno::Reference< XHelperInterface >(), rxContext, u"WordDocumentContext"_ustr )
 {
     SAL_INFO("sw.vba", "SwVbaGlobals::SwVbaGlobals()");
     cpo::uno::Sequence< beans::PropertyValue > aInitArgs( aArgs.hasElements() ? 2 : 1 );
@@ -62,67 +62,67 @@ SwVbaGlobals::getApplication()
     return mxApplication;
 }
 
-uno::Reference<word::XSystem > SAL_CALL
+uno::Reference<word::XSystem >
 SwVbaGlobals::getSystem()
 {
     return getApplication()->getSystem();
 }
 
-uno::Reference< word::XDocument > SAL_CALL
+uno::Reference< word::XDocument >
 SwVbaGlobals::getActiveDocument()
 {
     return getApplication()->getActiveDocument();
 }
 
-uno::Reference< word::XWindow > SAL_CALL
+uno::Reference< word::XWindow >
 SwVbaGlobals::getActiveWindow()
 {
     return getApplication()->getActiveWindow();
 }
 
-OUString SAL_CALL
+OUString
 SwVbaGlobals::getName()
 {
     return getApplication()->getName();
 }
 
-uno::Reference<word::XOptions > SAL_CALL
+uno::Reference<word::XOptions >
 SwVbaGlobals::getOptions()
 {
     return getApplication()->getOptions();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaGlobals::CommandBars( const cpo::uno::Any& aIndex )
 {
     return getApplication()->CommandBars( aIndex );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaGlobals::Documents( const cpo::uno::Any& index )
 {
     return getApplication()->Documents( index );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaGlobals::Addins( const cpo::uno::Any& index )
 {
     return getApplication()->Addins( index );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaGlobals::Dialogs( const cpo::uno::Any& index )
 {
     return getApplication()->Dialogs( index );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaGlobals::ListGalleries( const cpo::uno::Any& index )
 {
     return getApplication()->ListGalleries( index );
 }
 
-uno::Reference<word::XSelection > SAL_CALL
+uno::Reference<word::XSelection >
 SwVbaGlobals::getSelection()
 {
     return getApplication()->getSelection();
@@ -133,7 +133,7 @@ uno::Reference<word::XGlobals> SwVbaGlobals::getWord()
     return uno::Reference<word::XGlobals>(this);
 }
 
-uno::Reference<word::XWordBasic> SAL_CALL SwVbaGlobals::getWordBasic()
+uno::Reference<word::XWordBasic> SwVbaGlobals::getWordBasic()
 {
     assert(dynamic_cast<SwVbaApplication*>(getApplication().get()));
     SwVbaApplication* pVbaApp = static_cast<SwVbaApplication*>(getApplication().get());
@@ -141,52 +141,52 @@ uno::Reference<word::XWordBasic> SAL_CALL SwVbaGlobals::getWordBasic()
     return xWB;
 }
 
-float SAL_CALL SwVbaGlobals::CentimetersToPoints( float Centimeters )
+float SwVbaGlobals::CentimetersToPoints( float Centimeters )
 {
     return getApplication()->CentimetersToPoints( Centimeters );
 }
 
-float SAL_CALL SwVbaGlobals::PointsToCentimeters( float Points )
+float SwVbaGlobals::PointsToCentimeters( float Points )
 {
     return getApplication()->PointsToCentimeters( Points );
 }
 
-float SAL_CALL SwVbaGlobals::PixelsToPoints( float Pixels, bool fVertical )
+float SwVbaGlobals::PixelsToPoints( float Pixels, bool fVertical )
 {
     return getApplication()->PixelsToPoints( Pixels, fVertical );
 }
 
-float SAL_CALL SwVbaGlobals::PointsToPixels( float Points, bool fVertical )
+float SwVbaGlobals::PointsToPixels( float Points, bool fVertical )
 {
     return getApplication()->PointsToPixels( Points, fVertical );
 }
 
-float SAL_CALL SwVbaGlobals::InchesToPoints( float Inches )
+float SwVbaGlobals::InchesToPoints( float Inches )
 {
     return getApplication()->InchesToPoints( Inches );
 }
 
-float SAL_CALL SwVbaGlobals::PointsToInches( float Points )
+float SwVbaGlobals::PointsToInches( float Points )
 {
     return getApplication()->PointsToInches( Points );
 }
 
-float SAL_CALL SwVbaGlobals::MillimetersToPoints( float Millimeters )
+float SwVbaGlobals::MillimetersToPoints( float Millimeters )
 {
     return getApplication()->MillimetersToPoints( Millimeters );
 }
 
-float SAL_CALL SwVbaGlobals::PointsToMillimeters( float Points )
+float SwVbaGlobals::PointsToMillimeters( float Points )
 {
     return getApplication()->PointsToMillimeters( Points );
 }
 
-float SAL_CALL SwVbaGlobals::PicasToPoints( float Picas )
+float SwVbaGlobals::PicasToPoints( float Picas )
 {
     return getApplication()->PicasToPoints( Picas );
 }
 
-float SAL_CALL SwVbaGlobals::PointsToPicas( float Points )
+float SwVbaGlobals::PointsToPicas( float Points )
 {
     return getApplication()->PointsToPicas( Points );
 }
@@ -215,9 +215,9 @@ SwVbaGlobals::getAvailableServiceNames(  )
     return serviceNames;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Writer_SwVbaGlobals_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new SwVbaGlobals(args, context));
 }

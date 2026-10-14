@@ -29,7 +29,8 @@
 #include <comphelper/storagehelper.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::container;
 using namespace com::sun::star::packages::zip;
@@ -50,11 +51,11 @@ ZipPackageEntry::~ZipPackageEntry()
 }
 
 // XChild
-OUString SAL_CALL ZipPackageEntry::getName(  )
+OUString ZipPackageEntry::getName(  )
 {
     return msName;
 }
-void SAL_CALL ZipPackageEntry::setName( const OUString& aName )
+void ZipPackageEntry::setName( const OUString& aName )
 {
     if ( mpParent && !msName.isEmpty() && mpParent->hasByName ( msName ) )
         mpParent->removeByName ( msName );
@@ -62,14 +63,14 @@ void SAL_CALL ZipPackageEntry::setName( const OUString& aName )
     // unfortunately no other exception than RuntimeException can be thrown here
     // usually the package is used through storage implementation, the problem should be detected there
     if ( !::comphelper::OStorageHelper::IsValidZipEntryFileName( aName, true ) )
-        throw RuntimeException(u"Unexpected character is used in file name."_ustr );
+        throw cpo::uno::RuntimeException(u"Unexpected character is used in file name."_ustr );
 
     msName = aName;
 
     if ( mpParent )
         mpParent->doInsertByName ( this, false );
 }
-uno::Reference< XInterface > SAL_CALL ZipPackageEntry::getParent(  )
+uno::Reference< cpo::uno::XInterface > ZipPackageEntry::getParent(  )
 {
     // return uno::Reference< XInterface >( xParent, UNO_QUERY );
     return cppu::getXWeak( mpParent );
@@ -83,7 +84,7 @@ void ZipPackageEntry::doSetParent ( ZipPackageFolder * pNewParent )
         pNewParent->doInsertByName ( this, false );
 }
 
-void SAL_CALL ZipPackageEntry::setParent( const uno::Reference< XInterface >& xNewParent )
+void ZipPackageEntry::setParent( const uno::Reference< XInterface >& xNewParent )
 {
     if ( !xNewParent.is() )
         throw NoSupportException();
@@ -99,20 +100,20 @@ void SAL_CALL ZipPackageEntry::setParent( const uno::Reference< XInterface >& xN
     }
 }
     //XPropertySet
-uno::Reference< beans::XPropertySetInfo > SAL_CALL ZipPackageEntry::getPropertySetInfo(  )
+uno::Reference< beans::XPropertySetInfo > ZipPackageEntry::getPropertySetInfo(  )
 {
     return uno::Reference < beans::XPropertySetInfo > ();
 }
-void SAL_CALL ZipPackageEntry::addPropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/ )
+void ZipPackageEntry::addPropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/ )
 {
 }
-void SAL_CALL ZipPackageEntry::removePropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*aListener*/ )
+void ZipPackageEntry::removePropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*aListener*/ )
 {
 }
-void SAL_CALL ZipPackageEntry::addVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
+void ZipPackageEntry::addVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
 {
 }
-void SAL_CALL ZipPackageEntry::removeVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
+void ZipPackageEntry::removeVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
 {
 }
 

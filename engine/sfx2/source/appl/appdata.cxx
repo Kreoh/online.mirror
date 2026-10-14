@@ -41,9 +41,9 @@
 using ::basic::BasicManagerRepository;
 using ::basic::BasicManagerCreationListener;
 #endif
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::frame::XModel;
-using ::com::sun::star::uno::XInterface;
+using ::cpo::uno::XInterface;
 
 static BasicDLL* pBasic = nullptr;
 

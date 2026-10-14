@@ -25,20 +25,20 @@ private:
     const sal_Int32 m_nZIndex;
 
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SwVbaFormFieldDropDownListEntry(
-        const css::uno::Reference<ooo::vba::XHelperInterface>& rParent,
-        const css::uno::Reference<css::uno::XComponentContext>& rContext,
+        const cpo::uno::Reference<ooo::vba::XHelperInterface>& rParent,
+        const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
         sw::mark::DropDownFieldmark& rFormField, sal_Int32 nZIndex);
     ~SwVbaFormFieldDropDownListEntry() override;
 
     // XListEntry
-    sal_Int32 SAL_CALL getIndex() override;
+    sal_Int32 getIndex() override;
 
-    OUString SAL_CALL getName() override;
-    void SAL_CALL setName(const OUString& sSet) override;
+    OUString getName() override;
+    void setName(const OUString& sSet) override;
 
-    void SAL_CALL Delete() override;
+    void Delete() override;
 
     // XHelperInterface
     OUString getServiceImplName() override;

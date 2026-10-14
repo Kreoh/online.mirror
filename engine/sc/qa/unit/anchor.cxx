@@ -8,6 +8,7 @@
  */
 
 #include <sfx2/dispatch.hxx>
+#include <drawview.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdpage.hxx>
 #include <test/unoapi_test.hxx>
@@ -27,6 +28,7 @@
 #include <sc.hrc>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc_apitest
 {

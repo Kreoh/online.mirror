@@ -48,6 +48,7 @@
 #include <app.hrc>
 
 #include <OutlineView.hxx>
+#include <NotesPanelView.hxx>
 #include <DrawViewShell.hxx>
 #include <DrawDocShell.hxx>
 #include <slideshow.hxx>
@@ -101,7 +102,8 @@
 #include <com/sun/star/frame/XFrame.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::presentation;
 
 namespace {
@@ -665,7 +667,7 @@ uno::Reference<datatransfer::XTransferable> ViewShell::GetSelectionTransferable(
     if (nParaCount == 0)
         return uno::Reference<datatransfer::XTransferable>();
 
-    EditEngine& rEditEngine = const_cast<EditEngine&>(aOutliner.GetEditEngine());
+    EditEngine& rEditEngine = aOutliner.GetEditEngine();
     sal_Int32 nLen = rEditEngine.GetTextLen(nParaCount - 1);
     ESelection aSel(0, 0, nParaCount - 1, nLen);
 
@@ -1161,25 +1163,6 @@ void ViewShell::ArrangeGUIElements()
     mpImpl->mbArrangeActive = false;
 }
 
-void ViewShell::SetUIUnit(FieldUnit eUnit)
-{
-    // Set unit at horizontal and vertical rulers.
-    if (mpHorizontalRuler)
-        mpHorizontalRuler->SetUnit(eUnit);
-
-    if (mpVerticalRuler)
-        mpVerticalRuler->SetUnit(eUnit);
-}
-
-/**
- * set DefTab at horizontal rulers
- */
-void ViewShell::SetDefTabHRuler( sal_uInt16 nDefTab )
-{
-    if (mpHorizontalRuler)
-        mpHorizontalRuler->SetDefTabDist( nDefTab );
-}
-
 /** Tell the FmFormShell that the view shell is closing.  Give it the
     opportunity to prevent that.
 */
@@ -1201,8 +1184,27 @@ void ViewShell::UpdatePreview (SdPage*)
     // useful is still done.
 }
 
+SfxUndoManager* ViewShell::ImpGetNotesPanelUndoManager() const
+{
+    // The notes pane overrides the main view shell while it has the focus.
+    std::shared_ptr<ViewShell> pOverridingShell
+        = GetViewShellBase().GetViewShellManager()->GetOverridingMainShell();
+    if (!pOverridingShell || pOverridingShell->GetShellType() != ST_NOTESPANEL)
+        return nullptr;
+
+    NotesPanelView* pNotesPanelView = dynamic_cast<NotesPanelView*>(pOverridingShell->GetView());
+    if (!pNotesPanelView)
+        return nullptr;
+
+    return &pNotesPanelView->GetOutliner().GetUndoManager();
+}
+
 SfxUndoManager* ViewShell::ImpGetUndoManager() const
 {
+    // The notes pane edits its text with an undo history of its own.
+    if (SfxUndoManager* pNotesUndoManager = ImpGetNotesPanelUndoManager())
+        return pNotesUndoManager;
+
     const ViewShell* pMainViewShell = GetViewShellBase().GetMainViewShell().get();
 
     if( pMainViewShell == nullptr )
@@ -1340,7 +1342,9 @@ void ViewShell::ImpSidUndo(SfxRequest& rReq)
         sal_uInt16 nCount(pUndoManager->GetUndoActionCount());
         if(nCount >= nNumber)
         {
-            if (comphelper::COKit::isActive() && !bRepair)
+            // Every action in the notes pane history comes from this view.
+            if (comphelper::COKit::isActive() && !bRepair
+                && pUndoManager != ImpGetNotesPanelUndoManager())
             {
                 // If another view created the first undo action, prevent redoing it from this view.
                 const SfxUndoAction* pAction = pUndoManager->GetUndoAction();
@@ -1410,7 +1414,9 @@ void ViewShell::ImpSidRedo(SfxRequest& rReq)
         sal_uInt16 nCount(pUndoManager->GetRedoActionCount());
         if(nCount >= nNumber)
         {
-            if (comphelper::COKit::isActive() && !bRepair)
+            // Every action in the notes pane history comes from this view.
+            if (comphelper::COKit::isActive() && !bRepair
+                && pUndoManager != ImpGetNotesPanelUndoManager())
             {
                 // If another view created the first undo action, prevent redoing it from this view.
                 const SfxUndoAction* pAction = pUndoManager->GetRedoAction();
@@ -1647,7 +1653,7 @@ bool ViewShell::RelocateToParentWindow (vcl::Window* pParentWindow)
     return true;
 }
 
-void ViewShell::SwitchViewFireFocus(const css::uno::Reference< css::accessibility::XAccessible >& xAcc )
+void ViewShell::SwitchViewFireFocus(const cpo::uno::Reference< css::accessibility::XAccessible >& xAcc )
 {
     if (xAcc)
     {

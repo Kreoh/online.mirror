@@ -29,6 +29,7 @@
 #include "simpleioerrorrequest.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace ucbhelper
 {
@@ -57,14 +58,14 @@ void cancelCommandExecution( const cpo::uno::Any & rException,
             if ( xSelection.is() )
                 throw ucb::CommandFailedException(
                                     OUString(),
-                                    uno::Reference< uno::XInterface >(),
+                                    uno::Reference< cpo::uno::XInterface >(),
                                     rException );
         }
     }
 
     cppu::throwException( rException );
     OSL_FAIL( "Return from cppu::throwException call!!!" );
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 
@@ -107,7 +108,7 @@ void cancelCommandExecution( const ucb::IOErrorCode eError,
     }
 
     OSL_FAIL( "Return from cppu::throwException call!!!" );
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 }

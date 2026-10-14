@@ -32,7 +32,7 @@ class SvxThesaurusDialog : public SfxDialogController
 {
     Idle                    m_aModifyIdle;
 
-    css::uno::Reference< css::linguistic2::XThesaurus >   xThesaurus;
+    cpo::uno::Reference< css::linguistic2::XThesaurus >   xThesaurus;
     OUString                aLookUpText;
     LanguageType            nLookUpLanguage;
     std::stack< OUString >  aLookUpHistory;
@@ -63,8 +63,8 @@ public:
     DECL_LINK( KeyInputHdl, const KeyEvent&, bool );
 
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
-    cpo::uno::Sequence< css::uno::Reference< css::linguistic2::XMeaning > >
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Sequence< cpo::uno::Reference< css::linguistic2::XMeaning > >
             queryMeanings_Impl( OUString& rTerm, const css::lang::Locale& rLocale, const css::beans::PropertyValues& rProperties );
 
     bool    UpdateAlternativesBox_Impl();
@@ -73,7 +73,7 @@ public:
 
 public:
     SvxThesaurusDialog(weld::Widget* pParent,
-                       css::uno::Reference< css::linguistic2::XThesaurus > const & xThesaurus,
+                       cpo::uno::Reference< css::linguistic2::XThesaurus > const & xThesaurus,
                        const OUString &rWord, LanguageType nLanguage);
     void            SetWindowTitle( LanguageType nLanguage );
     OUString        GetWord() const;

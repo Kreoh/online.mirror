@@ -20,12 +20,14 @@
 #ifndef INCLUDED_CPPUHELPER_IMPLBASE_EX_HXX
 #define INCLUDED_CPPUHELPER_IMPLBASE_EX_HXX
 
-#include "cpo/uno/Any.h"
-#include "cpo/uno/Sequence.h"
-#include "cpo/uno/Type.h"
-#include "cpo/uno/genfunc.h"
-#include "cppuhelper/cppuhelperdllapi.h"
-#include "sal/types.h"
+#include <atomic>
+
+#include <cpo/uno/Any.h>
+#include <cpo/uno/Sequence.h>
+#include <cpo/uno/Type.h>
+#include <cpo/uno/genfunc.h>
+#include <cppuhelper/cppuhelperdllapi.h>
+#include <sal/types.h>
 
 namespace cppu { class OWeakAggObject; }
 namespace cppu { class OWeakObject; }
@@ -84,15 +86,7 @@ struct SAL_WARN_UNUSED class_data
 
     /** determines whether m_typeEntries is initialized and carries unacquired type refs
     */
-    bool m_storedTypeRefs;
-
-    /** determines whether an implementation id was created in m_id
-    */
-    bool m_createdId;
-
-    /** implementation id
-     */
-    sal_Int8 m_id[ 16 ];
+    std::atomic<bool> m_storedTypeRefs;
 
     /** type, object offset
     */

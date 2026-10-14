@@ -58,10 +58,7 @@ class Dispatcher {
 		};
 
 		this.actionsMap['closeapp'] = () => {
-			if (
-				(window as any).ThisIsAMobileApp &&
-				!(window as any).ThisIsTheEmscriptenApp
-			) {
+			if (window.ThisIsAMobileApp && !window.ThisIsTheEmscriptenApp) {
 				window.postMobileMessage('BYE');
 			} else {
 				if (app.map) app.map.acceptPendingCellEdit();
@@ -77,6 +74,10 @@ class Dispatcher {
 				});
 			}
 			if (!app.map._disableDefaultAction['UI_Close']) app.map.remove();
+		};
+
+		this.actionsMap['onboardingtour'] = () => {
+			if (app.onboardingTour) app.onboardingTour.start();
 		};
 
 		this.actionsMap['userlist'] = () => {
@@ -136,7 +137,7 @@ class Dispatcher {
 		};
 
 		this.actionsMap['insertmultimedia'] = function () {
-			window.L.DomUtil.get('insertmultimedia').click();
+			app.LOUtil.openFilePicker('insertmultimedia');
 		};
 		this.actionsMap['remotemultimedia'] = function () {
 			app.map.fire('postMessage', {
@@ -149,7 +150,7 @@ class Dispatcher {
 		};
 
 		this.actionsMap['localcomparedocuments'] = function () {
-			window.L.DomUtil.get('comparedocuments').click();
+			app.LOUtil.openFilePicker('comparedocuments');
 		};
 		this.actionsMap['remotecomparedocuments'] = function () {
 			app.map.fire('postMessage', {
@@ -159,6 +160,11 @@ class Dispatcher {
 					mimeTypeFilter: app.LOUtil.documentMimeFilter,
 				},
 			});
+		};
+
+		this.actionsMap['switchtoedit'] = function () {
+			if (app.isReadOnly()) return;
+			app.map.uiManager.permissionViewMode?.handleModeSelection('edit');
 		};
 
 		this.actionsMap['closetablet'] = function () {
@@ -199,12 +205,31 @@ class Dispatcher {
 			app.map.fire('morelanguages', { applyto: 'all' });
 		};
 		this.actionsMap['localgraphic'] = function () {
-			window.L.DomUtil.get('insertgraphic').click();
+			app.LOUtil.openFilePicker('insertgraphic');
 		};
 		this.actionsMap['remotegraphic'] = this.actionsMap['insertremotegraphic'] =
 			function () {
 				app.map.fire('postMessage', { msgId: 'UI_InsertGraphic' });
 			};
+		this.actionsMap['importslides'] = function () {
+			const pane = app.map.slideImportPane;
+			if (pane) pane.open();
+		};
+		this.actionsMap['closeimportslides'] = function () {
+			if (app.map.slideImportPane) app.map.slideImportPane.close();
+		};
+		this.actionsMap['updateslidelinks'] = function () {
+			if (app.map.slideLinks) app.map.slideLinks.updateAll();
+		};
+		// The two act on the slide on show alone.
+		this.actionsMap['updatelinkedslide'] = function () {
+			const links = app.map.slideLinks;
+			if (links) links.updatePage(links.currentPart());
+		};
+		this.actionsMap['unlinkslide'] = function () {
+			const links = app.map.slideLinks;
+			if (links) links.breakLink(links.currentPart());
+		};
 
 		this.actionsMap['showhelp'] = function () {
 			app.map.showHelp('online-help-content');
@@ -259,7 +284,7 @@ class Dispatcher {
 					.getElementById('navigation-sidebar')
 					.classList.contains('visible')
 			)
-				app.map.sendUnoCommand('.uno:Navigator');
+				app.map.sendUnoCommand('.uno:Navigator?Navigator:bool=true');
 			app.map.sendUnoCommand(
 				'.uno:NavigatorSelectComment?CommentId:short=' +
 					(data ? (data as number) : 0),
@@ -303,6 +328,8 @@ class Dispatcher {
 		};
 		this.actionsMap['hidesearchbar'] = () => {
 			$('#toolbar-search').hide();
+			app.map.fire('searchend');
+			app.map._onGotFocus();
 			if (app.map.isEditMode()) $('#toolbar-down').show();
 			/** show edit button if only we are able to edit but in readonly mode */
 			if (!app.isReadOnly() && app.map.isReadOnlyMode())
@@ -420,7 +447,8 @@ class Dispatcher {
 	//
 	// An area defines blur only when it leaves sticky focus state behind that
 	// has to be cleared as focus moves away from it.
-	private getFocusRegions(): Array<{
+	getFocusRegions(): Array<{
+		name: string;
 		available: () => boolean;
 		hasFocus: () => boolean;
 		focus: () => boolean;
@@ -442,6 +470,7 @@ class Dispatcher {
 		};
 
 		const topBar = {
+			name: 'topBar',
 			available: () => true,
 			hasFocus: () =>
 				contains(document.querySelector('.notebookbar-tabs-container')) ||
@@ -449,32 +478,53 @@ class Dispatcher {
 			focus: () => this.focusTopBar(),
 		};
 
+		const topToolbar = {
+			name: 'topToolbar',
+			available: () => {
+				if (app.map.uiManager.getCurrentMode() === 'notebookbar') return false;
+				const bar = document.getElementById('toolbar-up');
+				if (!isVisible(bar)) return false;
+				const focusables = JSDialog.GetFocusableElements(bar);
+				return !!focusables && focusables.length > 0;
+			},
+			hasFocus: () => contains(document.getElementById('toolbar-up')),
+			focus: () => focusFirstIn(document.getElementById('toolbar-up')),
+		};
+
+		const formulaBarRow = () => document.getElementById('formulabar-row');
+
+		const formulaBarWidgets = () => {
+			const row = formulaBarRow();
+			if (!row) return [];
+			return Array.from(
+				row.querySelectorAll<HTMLElement>(
+					'input:not([disabled]), button:not([disabled]), [tabindex="0"]',
+				),
+			).filter((element) => element.offsetParent !== null);
+		};
+
 		const formulaBar = {
+			name: 'formulaBar',
 			available: () =>
 				!app.isReadOnly() &&
 				isVisible(document.getElementById('sc_input_window')),
 			hasFocus: () =>
-				contains(document.getElementById('formulabar-row')) ||
-				app.map.calcInputBarHasFocus(),
-			focus: () => {
-				const row = document.getElementById('formulabar-row');
-				const focusables = row
-					? Array.from(
-							row.querySelectorAll<HTMLElement>(
-								'input:not([disabled]), button:not([disabled]), [tabindex="0"]',
-							),
-						)
-					: [];
-				for (const element of focusables) {
-					if (element.offsetParent !== null) {
-						element.focus();
-						return true;
-					}
-				}
-				return false;
-			},
+				app.map.calcInputBarHasFocus() && !contains(formulaBarRow()),
+			focus: () => !!(app.map.formulabar && app.map.formulabar.focus()),
 			blur: () => {
 				if (app.map.formulabar) app.map.onFormulaBarBlur();
+			},
+		};
+
+		const formulaBarToolbar = {
+			name: 'formulaBarToolbar',
+			available: () => formulaBarWidgets().length > 0,
+			hasFocus: () => contains(formulaBarRow()),
+			focus: () => {
+				const widgets = formulaBarWidgets();
+				if (!widgets.length) return false;
+				widgets[0].focus();
+				return true;
 			},
 		};
 
@@ -487,6 +537,7 @@ class Dispatcher {
 			isVisible(document.getElementById('slide-sorter'));
 
 		const navigationSidebar = {
+			name: 'navigationSidebar',
 			available: () =>
 				slideSorterShowing() ||
 				(!!app.map.navigator && app.map.navigator.isNavigationPanelVisible()),
@@ -510,6 +561,7 @@ class Dispatcher {
 		};
 
 		const documentArea = {
+			name: 'documentArea',
 			available: () => true,
 			hasFocus: () => app.map.hasFocus() && !app.map.calcInputBarHasFocus(),
 			focus: () => {
@@ -518,13 +570,25 @@ class Dispatcher {
 			},
 		};
 
+		// shown over the document while the caret is in a link
+		const linkPopUp = {
+			name: 'linkPopUp',
+			available: () => URLPopUpSection.isOpen(),
+			hasFocus: () =>
+				URLPopUpSection.isOpen() &&
+				contains(URLPopUpSection.getCurrent().getHTMLObject()),
+			focus: () => focusFirstIn(URLPopUpSection.getCurrent().getHTMLObject()),
+		};
+
 		const sidebar = {
+			name: 'sidebar',
 			available: () => !!app.map.sidebar && app.map.sidebar.isVisible(),
 			hasFocus: () => !!app.map.sidebar && contains(app.map.sidebar.wrapper),
 			focus: () => focusFirstIn(app.map.sidebar.wrapper),
 		};
 
 		const statusBar = {
+			name: 'statusBar',
 			available: () => {
 				const bar = document.getElementById('toolbar-down');
 				if (!isVisible(bar)) return false;
@@ -536,6 +600,7 @@ class Dispatcher {
 		};
 
 		const sheetTabs = {
+			name: 'sheetTabs',
 			available: () =>
 				isVisible(document.getElementById('spreadsheet-toolbar')),
 			hasFocus: () => {
@@ -553,9 +618,14 @@ class Dispatcher {
 		};
 
 		const regions = [topBar];
-		if (docType === 'spreadsheet') regions.push(formulaBar);
+		regions.push(topToolbar);
+		if (docType === 'spreadsheet') {
+			regions.push(formulaBar);
+			regions.push(formulaBarToolbar);
+		}
 		regions.push(navigationSidebar);
 		regions.push(documentArea);
+		regions.push(linkPopUp);
 		regions.push(sidebar);
 		if (docType === 'spreadsheet') regions.push(sheetTabs);
 		regions.push(statusBar);
@@ -594,43 +664,68 @@ class Dispatcher {
 		}
 	}
 
-	// An AI action was triggered before a provider was configured. On the
-	// desktop app the Options dialog opens right here, over the document,
-	// scrolled to the AI section, so the user sets the provider up in place
-	// and lands back on the document when they save. In a browser the File
-	// menu leads straight to the same dialog, so a snackbar with the path
-	// is enough.
-	private static promptAISetup() {
-		if (window.mode.isCODesktop()) {
-			(app.map as any).settings.showSettingsDialog('ai-section');
-		} else {
+	// Sending an unconfigured user to the Options dialog only helps where
+	// that dialog exists. Where it does not, AI has to come from the server
+	// configuration, so say who can turn it on rather than opening a dialog
+	// that has nothing to offer.
+	private static openAISetup() {
+		if (!app.LOUtil.canOpenSettings()) {
 			app.map.uiManager.showSnackbar(
-				_(
-					'AI is not configured. Go to File > Options > AI Assistant to set it up.',
-				),
+				_('AI is not configured, contact your administrator'),
 			);
+			return;
 		}
+		(app.map as any).settings.showSettingsDialog('ai-section');
 	}
 
 	private addAICommands() {
-		this.actionsMap['aichat'] = function () {
-			if (!app.map.isAIConfigured) {
-				Dispatcher.promptAISetup();
-				return;
-			}
-			const sidebar = JSDialog.getAIChatSidebar();
-			sidebar.toggle();
+		// None of these can answer without a provider, so an unconfigured user
+		// gets the setup path instead of a sidebar that cannot reply.
+		const requireAIProvider = (run: (sidebar: any) => void) => {
+			return function () {
+				if (!app.map.isAIConfigured) {
+					Dispatcher.openAISetup();
+					return;
+				}
+				run(JSDialog.getAIChatSidebar());
+			};
 		};
 
-		this.actionsMap['helpfixformulaerror'] = function () {
-			if (!app.map.isAIConfigured) {
-				Dispatcher.promptAISetup();
-				return;
-			}
-			const sidebar = JSDialog.getAIChatSidebar();
+		this.actionsMap['aichat'] = requireAIProvider((sidebar) =>
+			sidebar.toggle(),
+		);
+
+		this.actionsMap['helpfixformulaerror'] = requireAIProvider((sidebar) => {
 			if (!sidebar.isVisible()) sidebar.show();
 			sidebar.diagnoseFormulaError();
-		};
+		});
+
+		for (const action of JSDialog.AIAssistantTab?.getQuickActions() ?? []) {
+			if (!action.prompt) continue;
+			this.actionsMap['aichatquick-' + action.id] = requireAIProvider(
+				(sidebar) => sidebar.runOnSelection(action.prompt),
+			);
+		}
+
+		this.actionsMap['aichatcreateslides'] = requireAIProvider((sidebar) =>
+			sidebar.createSlides(),
+		);
+
+		this.actionsMap['aichatgenerateimage'] = requireAIProvider((sidebar) =>
+			sidebar.generateImage(),
+		);
+
+		this.actionsMap['aichatspeakernotes'] = requireAIProvider((sidebar) =>
+			sidebar.generateSpeakerNotes(),
+		);
+
+		this.actionsMap['aichatcreateformula'] = requireAIProvider((sidebar) =>
+			sidebar.createFormula(),
+		);
+
+		this.actionsMap['aichatcleanupdata'] = requireAIProvider((sidebar) =>
+			sidebar.sanityCheckData(),
+		);
 	}
 
 	private addExportCommands() {
@@ -682,17 +777,20 @@ class Dispatcher {
 				section.openContextMenuForCurrentSelection();
 		};
 
+		// Save the cell edit. On a small screen the edit is saved with an Enter key
+		// press, so the cell cursor also moves on to the next cell.
 		this.actionsMap['acceptformula'] = function () {
-			if (window.mode.isSmallScreenDevice()) {
-				app.map.focus();
-				app.map._docLayer.postKeyboardEvent(
-					'input',
-					app.map.keyboard.keyCodes.enter,
-					app.map.keyboard._toUNOKeyCode(app.map.keyboard.keyCodes.enter),
-				);
-			} else {
-				app.map.sendUnoCommand('.uno:AcceptFormula');
+			if (!window.mode.isSmallScreenDevice()) {
+				app.dispatcher.acceptFormulaInPlace();
+				return;
 			}
+
+			app.map.focus();
+			app.map._docLayer.postKeyboardEvent(
+				'input',
+				app.map.keyboard.keyCodes.enter,
+				app.map.keyboard._toUNOKeyCode(app.map.keyboard.keyCodes.enter),
+			);
 
 			app.map.onFormulaBarBlur();
 			app.map.formulabarBlur();
@@ -755,7 +853,12 @@ class Dispatcher {
 
 		// sheets toolbar
 		this.actionsMap['insertsheet'] = function () {
-			var nPos = $('#spreadsheet-tab-scroll')[0].childElementCount;
+			// The tab strip's DOM only catches up with the true sheet count once
+			// the engine's status round-trip for a previous insert comes back, so
+			// a burst of clicks would all read the same stale count. The part
+			// count the map already tracks is incremented synchronously on every
+			// insertPage() call, so it stays correct across a rapid burst.
+			var nPos = app.map.getNumberOfParts();
 			app.map.insertPage(nPos);
 			app.map.insertPage.scrollToEnd = true;
 		};
@@ -862,21 +965,50 @@ class Dispatcher {
 		};
 
 		this.actionsMap['deletepage'] = function () {
+			const count = app.impress.getSelectedSlidesCount();
+			const sectionName = app.impress.getSelectedSectionName();
+			if (!sectionName && count <= 1) {
+				app.map.deletePage();
+				return;
+			}
+
+			let title: string;
 			let msg: string;
 			if (app.map.getDocType() === 'presentation') {
-				msg = _('Are you sure you want to delete this slide?');
+				if (sectionName) {
+					title = _('Delete section');
+					msg = _n(
+						'Delete section "%1" and its %n slide?',
+						'Delete section "%1" and its %n slides?',
+						count,
+					).replace('%1', sectionName);
+				} else {
+					title = _('Delete slides');
+					msg = _n('Delete %n slide?', 'Delete %n slides?', count);
+				}
 			} else {
 				/* drawing */
-				msg = _('Are you sure you want to delete this page?');
+				title = _('Delete pages');
+				msg = _n('Delete %n page?', 'Delete %n pages?', count);
 			}
+			const fromSlideSorter = app.map.keyboard._slideSorterFocused();
 			app.map.uiManager.showInfoModal(
 				'deleteslide-modal',
-				_('Delete'),
+				title,
 				msg,
 				'',
-				_('OK'),
+				_('Delete'),
 				function () {
 					app.map.deletePage();
+					if (!fromSlideSorter) return false;
+
+					// The dialog puts its focus back in a layouting task, so this task runs after it.
+					const uiManager = app.map.uiManager;
+					uiManager.closeModal(uiManager.generateModalId('deleteslide-modal'));
+					app.layoutingService.appendLayoutingTask(() => {
+						app.map._docLayer._preview.focusCurrentSlide();
+					});
+					return true;
 				},
 				true,
 				'deleteslide-modal-response',
@@ -897,6 +1029,10 @@ class Dispatcher {
 			if (app.file.fileBasedView)
 				app.map._docLayer._preview._scrollViewByDirection('next');
 			else app.map.setPart('next');
+		};
+
+		this.actionsMap['selectallslides'] = function () {
+			app.map._docLayer._preview._selectAllParts();
 		};
 
 		this.actionsMap['lastpart'] = function () {
@@ -928,34 +1064,31 @@ class Dispatcher {
 
 		this.actionsMap['leftpara'] = function () {
 			app.map.sendUnoCommand(
-				(window as any).getUNOCommand({
+				window.getUNOCommand({
 					textCommand: '.uno:LeftPara',
 					objectCommand: '.uno:ObjectAlignLeft',
-					unosheet: '.uno:AlignLeft',
 				}),
 			);
 		};
 		this.actionsMap['centerpara'] = function () {
 			app.map.sendUnoCommand(
-				(window as any).getUNOCommand({
+				window.getUNOCommand({
 					textCommand: '.uno:CenterPara',
 					objectCommand: '.uno:AlignCenter',
-					unosheet: '.uno:AlignHorizontalCenter',
 				}),
 			);
 		};
 		this.actionsMap['rightpara'] = function () {
 			app.map.sendUnoCommand(
-				(window as any).getUNOCommand({
+				window.getUNOCommand({
 					textCommand: '.uno:RightPara',
 					objectCommand: '.uno:ObjectAlignRight',
-					unosheet: '.uno:AlignRight',
 				}),
 			);
 		};
 
 		this.actionsMap['selectbackground'] = function () {
-			window.L.DomUtil.get('selectbackground').click();
+			app.LOUtil.openFilePicker('selectbackground');
 		};
 
 		this.actionsMap['notesmode'] = function () {
@@ -964,12 +1097,61 @@ class Dispatcher {
 			else app.map.sendUnoCommand('.uno:NotesMode');
 		};
 
+		// The three notes views are mutually exclusive. Picking one turns the
+		// others off, and "Hidden" turns both off.
+
+		// The status bar button switches the bottom panel on and off, so
+		// switching it on leaves the handout page.
+		this.actionsMap['notespanel'] = () => {
+			if (app.map.notesPanel.isVisible()) this.actionsMap['notespanelhidden']();
+			else this.actionsMap['notespanelbottom']();
+		};
+
+		this.actionsMap['notespanelbottom'] = function () {
+			const openPanel = function () {
+				if (!app.map.notesPanel.isVisible()) app.map.notesPanel.toggle();
+			};
+
+			if (!app.impress.notesMode) {
+				openPanel();
+				return;
+			}
+
+			// The engine takes its time to leave the handout page, and it moves
+			// through other pages on the way. A panel opened before the normal
+			// view is up is dropped, or fills itself from one of those pages,
+			// so wait for the state that says the normal view is there.
+			const onStateChange = function (e: any) {
+				if (e.commandName !== '.uno:NormalMultiPaneGUI' || e.state !== 'true')
+					return;
+				app.map.off('commandstatechanged', onStateChange);
+				openPanel();
+			};
+			app.map.on('commandstatechanged', onStateChange);
+			app.map.sendUnoCommand('.uno:NormalMultiPaneGUI');
+		};
+
+		this.actionsMap['notespanelhandout'] = function () {
+			if (app.map.notesPanel.isVisible()) app.map.notesPanel.toggle();
+			if (!app.impress.notesMode) app.map.sendUnoCommand('.uno:NotesMode');
+		};
+
+		this.actionsMap['notespanelhidden'] = function () {
+			if (app.map.notesPanel.isVisible()) app.map.notesPanel.toggle();
+			if (app.impress.notesMode)
+				app.map.sendUnoCommand('.uno:NormalMultiPaneGUI');
+		};
+
 		this.actionsMap['animationdeck'] = () => {
-			app.map.sidebarFromNotebookbar.openAnimationsSidebar();
+			app.map.sidebarFromNotebookbar.toggleAnimationsSidebar();
 		};
 
 		this.actionsMap['transitiondeck'] = () => {
-			app.map.sidebarFromNotebookbar.openTransitionsSidebar();
+			app.map.sidebarFromNotebookbar.toggleTransitionsSidebar();
+		};
+
+		this.actionsMap['cleanupdeck'] = () => {
+			app.map.cleanupSidebar.toggle();
 		};
 	}
 
@@ -1238,7 +1420,6 @@ class Dispatcher {
 			const configuration = window as any;
 			if (configuration.mobileWizard) {
 				configuration.mobileWizard = false;
-				app.map.sendUnoCommand('.uno:SidebarHide');
 				app.map.fire('closemobilewizard');
 				app.map.mobileTopBar.selectItem('mobile_wizard', false);
 			} else {
@@ -1272,12 +1453,12 @@ class Dispatcher {
 
 		this.actionsMap['fontcolor'] = () => {
 			app.map.fire('mobilewizard', {
-				data: (window as any).getColorPickerData('Font Color'),
+				data: window.getColorPickerData('Font Color'),
 			});
 		};
 		this.actionsMap['backcolor'] = () => {
 			app.map.fire('mobilewizard', {
-				data: (window as any).getColorPickerData('Highlight Color'),
+				data: window.getColorPickerData('Highlight Color'),
 			});
 		};
 		// TODO: leftover from mobile bottom bar
@@ -1294,6 +1475,9 @@ class Dispatcher {
 
 	/// optional docType specifies which commands should we load
 	constructor(docType: string = undefined) {
+		if (window.mode.isInteractivePreview()) {
+			return;
+		}
 		docType = docType ? docType : app.map._docLayer._docType;
 
 		this.addGeneralCommands();
@@ -1310,6 +1494,15 @@ class Dispatcher {
 		}
 
 		if (window.mode.isSmallScreenDevice()) this.addMobileCommands();
+	}
+
+	// Save the cell edit and leave the cell cursor on the same cell.
+	public acceptFormulaInPlace() {
+		app.map.sendUnoCommand('.uno:AcceptFormula');
+
+		app.map.onFormulaBarBlur();
+		app.map.formulabarBlur();
+		app.map.formulabarSetDirty();
 	}
 
 	public dispatch(action: string, data?: any) {
@@ -1390,6 +1583,11 @@ class Dispatcher {
 			return;
 		}
 
+		if (action === '.uno:DeletePage') {
+			this.actionsMap['deletepage']();
+			return;
+		}
+
 		if (this.actionsMap[action] !== undefined) {
 			this.actionsMap[action](data);
 			return;
@@ -1409,6 +1607,10 @@ class Dispatcher {
 			return;
 		}
 
+		if (window.mode.isInteractivePreview()) {
+			// No need to alert anyone here.
+			return;
+		}
 		console.error('unknown dispatch: "' + action + '"');
 	}
 }

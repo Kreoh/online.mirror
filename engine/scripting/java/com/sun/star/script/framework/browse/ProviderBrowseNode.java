@@ -37,7 +37,7 @@ import com.sun.star.uno.Any;
 import com.sun.star.uno.AnyConverter;
 import cpo.uno.Type;
 import com.sun.star.uno.UnoRuntime;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -76,7 +76,7 @@ public class ProviderBrowseNode extends PropertySet implements
                                          xFac.createInstanceWithContext(
                                              "com.sun.star.ucb.SimpleFileAccess",
                                              xCtx));
-            if (  container.isUnoPkg() || xSFA.isReadOnly( container.getParcelContainerDir() ) )
+            if ( xSFA.isReadOnly( container.getParcelContainerDir() ) )
             {
                 deletable = false;
                 creatable = false;
@@ -115,19 +115,6 @@ public class ProviderBrowseNode extends PropertySet implements
                 }
             }
 
-            ParcelContainer[] packageContainers = container.getChildContainers();
-
-            LogUtils.DEBUG("**** For container named " + container.getName() +
-                           " with root path " + container.getParcelContainerDir() +
-                           " has " + packageContainers.length + " child containers ");
-
-            for (ParcelContainer packageContainer : packageContainers) {
-
-                XBrowseNode node =
-                    new PkgProviderBrowseNode(provider, packageContainer, m_xCtx);
-
-                browsenodes.add(node);
-            }
         } else {
             LogUtils.DEBUG("*** No container available");
             return new XBrowseNode[0];
@@ -139,9 +126,7 @@ public class ProviderBrowseNode extends PropertySet implements
     public boolean hasChildNodes() {
         boolean result = true;
 
-        if (container == null ||
-            (!container.hasElements() && container.getChildContainers().length == 0)) {
-
+        if (container == null || !container.hasElements()) {
             result = false;
         }
 

@@ -30,6 +30,7 @@
 #include <doctemplateslocal.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -42,16 +43,16 @@ constexpr OUString g_sUINameAttr(u"groupuinames:default-ui-name"_ustr);
 
 }
 
-std::vector< beans::StringPair > DocTemplLocaleHelper::ReadGroupLocalizationSequence( const uno::Reference< io::XInputStream >& xInStream, const uno::Reference< uno::XComponentContext >& xContext )
+std::vector< beans::StringPair > DocTemplLocaleHelper::ReadGroupLocalizationSequence( const uno::Reference< io::XInputStream >& xInStream, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     return ReadLocalizationSequence_Impl( xInStream, u"groupuinames.xml"_ustr, xContext );
 }
 
 
-void DocTemplLocaleHelper::WriteGroupLocalizationSequence( const uno::Reference< io::XOutputStream >& xOutStream, const std::vector< beans::StringPair >& aSequence, const uno::Reference< uno::XComponentContext >& xContext )
+void DocTemplLocaleHelper::WriteGroupLocalizationSequence( const uno::Reference< io::XOutputStream >& xOutStream, const std::vector< beans::StringPair >& aSequence, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     if ( !xOutStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< xml::sax::XWriter > xWriterHandler(
         xml::sax::Writer::create(xContext) );
@@ -86,10 +87,10 @@ void DocTemplLocaleHelper::WriteGroupLocalizationSequence( const uno::Reference<
 }
 
 
-std::vector< beans::StringPair > DocTemplLocaleHelper::ReadLocalizationSequence_Impl( const uno::Reference< io::XInputStream >& xInStream, const OUString& aStringID, const uno::Reference< uno::XComponentContext >& xContext )
+std::vector< beans::StringPair > DocTemplLocaleHelper::ReadLocalizationSequence_Impl( const uno::Reference< io::XInputStream >& xInStream, const OUString& aStringID, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     if ( !xContext.is() || !xInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< xml::sax::XParser > xParser = xml::sax::Parser::create( xContext );
 
@@ -118,23 +119,23 @@ DocTemplLocaleHelper::~DocTemplLocaleHelper()
 std::vector< beans::StringPair > const & DocTemplLocaleHelper::GetParsingResult() const
 {
     if ( !m_aElementsSeq.empty() )
-        throw uno::RuntimeException(u"The parsing has still not finished!"_ustr);
+        throw cpo::uno::RuntimeException(u"The parsing has still not finished!"_ustr);
 
     return m_aResultSeq;
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::startDocument()
+void DocTemplLocaleHelper::startDocument()
 {
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::endDocument()
+void DocTemplLocaleHelper::endDocument()
 {
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::startElement( const OUString& aName, const uno::Reference< xml::sax::XAttributeList >& xAttribs )
+void DocTemplLocaleHelper::startElement( const OUString& aName, const uno::Reference< xml::sax::XAttributeList >& xAttribs )
 {
     if ( aName == g_sGroupListElement )
     {
@@ -177,7 +178,7 @@ void SAL_CALL DocTemplLocaleHelper::startElement( const OUString& aName, const u
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::endElement( const OUString& aName )
+void DocTemplLocaleHelper::endElement( const OUString& aName )
 {
     if ( m_aElementsSeq.empty() )
         throw xml::sax::SAXException(); // TODO: no other end elements expected!
@@ -189,22 +190,22 @@ void SAL_CALL DocTemplLocaleHelper::endElement( const OUString& aName )
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::characters( const OUString& /*aChars*/ )
+void DocTemplLocaleHelper::characters( const OUString& /*aChars*/ )
 {
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::ignorableWhitespace( const OUString& /*aWhitespaces*/ )
+void DocTemplLocaleHelper::ignorableWhitespace( const OUString& /*aWhitespaces*/ )
 {
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::processingInstruction( const OUString& /*aTarget*/, const OUString& /*aData*/ )
+void DocTemplLocaleHelper::processingInstruction( const OUString& /*aTarget*/, const OUString& /*aData*/ )
 {
 }
 
 
-void SAL_CALL DocTemplLocaleHelper::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& /*xLocator*/ )
+void DocTemplLocaleHelper::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& /*xLocator*/ )
 {
 }
 

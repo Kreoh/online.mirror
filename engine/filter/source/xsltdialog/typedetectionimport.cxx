@@ -28,7 +28,8 @@
 #include "xmlfiltercommon.hxx"
 
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::io;
 using namespace com::sun::star::xml::sax;
 using namespace com::sun::star;
@@ -41,7 +42,7 @@ TypeDetectionImporter::~TypeDetectionImporter()
 {
 }
 
-void TypeDetectionImporter::doImport( const Reference< XComponentContext >& rxContext, const Reference< XInputStream >& xIS,
+void TypeDetectionImporter::doImport( const Reference< cpo::uno::XComponentContext >& rxContext, const Reference< XInputStream >& xIS,
                                       std::vector< std::unique_ptr<filter_info_impl> >& rFilters )
 {
     try

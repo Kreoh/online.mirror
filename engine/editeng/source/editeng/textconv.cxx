@@ -28,10 +28,10 @@
 #include <vcl/weld.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 
 TextConvWrapper::TextConvWrapper( weld::Widget* pWindow,
-        const Reference< XComponentContext >& rxContext,
+        const Reference< cpo::uno::XComponentContext >& rxContext,
         const lang::Locale& rSourceLocale,
         const lang::Locale& rTargetLocale,
         const vcl::Font* pTargetFont,

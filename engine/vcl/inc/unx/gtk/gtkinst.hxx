@@ -58,7 +58,7 @@ struct VclToGtkHelper
 {
     std::vector<css::datatransfer::DataFlavor> aInfoToFlavor;
     std::vector<GtkTargetEntry> FormatsToGtk(const cpo::uno::Sequence<css::datatransfer::DataFlavor> &rFormats);
-    void setSelectionData(const css::uno::Reference<css::datatransfer::XTransferable> &rTrans,
+    void setSelectionData(const cpo::uno::Reference<css::datatransfer::XTransferable> &rTrans,
                           GtkSelectionData *selection_data, guint info);
 private:
     GtkTargetEntry makeGtkTargetEntry(const css::datatransfer::DataFlavor& rFlavor);
@@ -72,10 +72,10 @@ protected:
     std::vector<css::datatransfer::DataFlavor> getTransferDataFlavorsAsVector(GdkAtom *targets, gint n_targets);
 
 public:
-    virtual cpo::uno::Any SAL_CALL getTransferData(const css::datatransfer::DataFlavor& rFlavor) override = 0;
+    virtual cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& rFlavor) override = 0;
     virtual std::vector<css::datatransfer::DataFlavor> getTransferDataFlavorsAsVector() = 0;
-    virtual cpo::uno::Sequence<css::datatransfer::DataFlavor> SAL_CALL getTransferDataFlavors() override;
-    virtual bool SAL_CALL isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override;
+    virtual cpo::uno::Sequence<css::datatransfer::DataFlavor> getTransferDataFlavors() override;
+    virtual bool isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override;
 };
 
 class GtkDnDTransferable;
@@ -94,11 +94,11 @@ public:
 
     void deinitialize();
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override;
+    bool supportsService(OUString const & ServiceName) override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     void SetFormatConversionRequest(GtkDnDTransferable *pRequest)
     {
@@ -119,8 +119,8 @@ class GtkInstDragSource final
 {
     osl::Mutex m_aMutex;
     GtkSalFrame* m_pFrame;
-    css::uno::Reference<css::datatransfer::dnd::XDragSourceListener> m_xListener;
-    css::uno::Reference<css::datatransfer::XTransferable> m_xTrans;
+    cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener> m_xListener;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_xTrans;
     VclToGtkHelper m_aConversionHelper;
 public:
     GtkInstDragSource()
@@ -130,8 +130,8 @@ public:
     }
     GtkInstDragSource(GtkSalFrame* pFrame);
 
-    void set_datatransfer(const css::uno::Reference<css::datatransfer::XTransferable>& rTrans,
-                          const css::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& rListener);
+    void set_datatransfer(const cpo::uno::Reference<css::datatransfer::XTransferable>& rTrans,
+                          const cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& rListener);
 
     std::vector<GtkTargetEntry> FormatsToGtk(const cpo::uno::Sequence<css::datatransfer::DataFlavor> &rFormats);
 
@@ -140,20 +140,20 @@ public:
     virtual ~GtkInstDragSource() override;
 
     // XDragSource
-    virtual bool    SAL_CALL isDragImageSupported() override;
-    virtual sal_Int32   SAL_CALL getDefaultCursor(sal_Int8 dragAction) override;
-    virtual void        SAL_CALL startDrag(
+    virtual bool    isDragImageSupported() override;
+    virtual sal_Int32   getDefaultCursor(sal_Int8 dragAction) override;
+    virtual void        startDrag(
         const css::datatransfer::dnd::DragGestureEvent& trigger, sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
-        const css::uno::Reference< css::datatransfer::XTransferable >& transferable,
-        const css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener) override;
+        const cpo::uno::Reference< css::datatransfer::XTransferable >& transferable,
+        const cpo::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener) override;
 
     void deinitialize();
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override;
+    bool supportsService(OUString const & ServiceName) override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     void dragFailed();
     void dragDelete();
@@ -163,7 +163,7 @@ public:
     // For LibreOffice internal D&D we provide the Transferable without Gtk
     // intermediaries as a shortcut, see tdf#100097 for how dbaccess depends on this
     static GtkInstDragSource* g_ActiveDragSource;
-    css::uno::Reference<css::datatransfer::XTransferable> const & GetTransferable() const { return m_xTrans; }
+    cpo::uno::Reference<css::datatransfer::XTransferable> const & GetTransferable() const { return m_xTrans; }
 };
 
 enum SelectionType { SELECTION_CLIPBOARD = 0, SELECTION_PRIMARY = 1 };
@@ -206,26 +206,22 @@ public:
 
     virtual std::unique_ptr<GenPspGraphics> CreatePrintGraphics() override;
 
-    virtual bool hasNativeFileSelection() const override { return true; }
+    virtual cpo::uno::Reference< css::ui::dialogs::XFilePicker >
+        createFilePicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& ) override;
+    virtual cpo::uno::Reference< css::ui::dialogs::XFolderPicker >
+        createFolderPicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& ) override;
 
-    virtual css::uno::Reference< css::ui::dialogs::XFilePicker2 >
-        createFilePicker( const css::uno::Reference< css::uno::XComponentContext >& ) override;
-    virtual css::uno::Reference< css::ui::dialogs::XFolderPicker2 >
-        createFolderPicker( const css::uno::Reference< css::uno::XComponentContext >& ) override;
-
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard>
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>
     CreateClipboard(const cpo::uno::Sequence<cpo::uno::Any>& i_rArguments) override;
-    virtual css::uno::Reference<css::datatransfer::dnd::XDragSource>
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDragSource>
     ImplCreateDragSource(const SystemEnvData& rSysEnv) override;
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget>
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget>
     ImplCreateDropTarget(const SystemEnvData& rSysEnv) override;
     virtual std::unique_ptr<weld::Builder> CreateBuilder(weld::Widget* pParent, const OUString& rUIRoot, const OUString& rUIFile) override;
     virtual std::unique_ptr<weld::Builder> CreateInterimBuilder(vcl::Window* pParent, const OUString& rUIRoot, const OUString& rUIFile,
                                                 bool bAllowCycleFocusOut, sal_uInt64 nKitWindowId = 0) override;
     virtual std::unique_ptr<weld::MessageDialog> CreateMessageDialog(weld::Widget* pParent, VclMessageType eMessageType, VclButtonsType eButtonType, const OUString &rPrimaryMessage) override;
-    std::unique_ptr<weld::ColorChooserDialog>
-    CreateColorChooserDialog(weld::Window* pParent, vcl::ColorPickerMode eMode) override;
-    virtual weld::Window* GetFrameWeld(const css::uno::Reference<css::awt::XWindow>& rWindow) override;
+    virtual weld::Window* GetFrameWeld(const cpo::uno::Reference<css::awt::XWindow>& rWindow) override;
 
     virtual const cairo_font_options_t* GetCairoFontOptions() override;
             const cairo_font_options_t* GetLastSeenCairoFontOptions() const;
@@ -235,7 +231,7 @@ public:
 
 private:
     GtkSalTimer *m_pTimer;
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> m_aClipboards[2];
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> m_aClipboards[2];
     bool                        IsTimerExpired();
     bool                        bNeedsInit;
     cairo_font_options_t*       m_pLastCairoFontOptions;

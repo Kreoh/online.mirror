@@ -28,7 +28,7 @@
 
 #include <limits>
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::graphic::XGraphic;
 using ::com::sun::star::graphic::XGraphicProvider;
 using ::cpo::uno::Exception;
@@ -65,7 +65,7 @@ namespace
     {
         ::std::vector< Image > aImages;
 
-        const Reference< css::uno::XComponentContext >& aContext( ::comphelper::getProcessComponentContext() );
+        const Reference< cpo::uno::XComponentContext >& aContext( ::comphelper::getProcessComponentContext() );
         const Reference< XGraphicProvider > xGraphicProvider( css::graphic::GraphicProvider::create(aContext) );
 
         ::std::vector< OUString > aImageURLs( Throbber::getDefaultImageURLs( i_imageSet ) );

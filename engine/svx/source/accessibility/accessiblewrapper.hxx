@@ -40,7 +40,7 @@
 #include <rtl/ref.hxx>
 #include <unotools/weakref.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace accessibility
 {
@@ -59,10 +59,10 @@ class OAccessibleWrapper final : public OAccessibleWrapper_Base, public OCompone
 
 {
 private:
-    css::uno::Reference< css::accessibility::XAccessible >
+    cpo::uno::Reference< css::accessibility::XAccessible >
             m_xParentAccessible;
     unotools::WeakReference<OAccessibleContextWrapper> m_aContext;
-    css::uno::Reference< css::accessibility::XAccessible >
+    cpo::uno::Reference< css::accessibility::XAccessible >
             m_xInnerAccessible;
 
 public:
@@ -77,19 +77,19 @@ public:
             The XAccessible which is our parent
     */
     OAccessibleWrapper(
-        const css::uno::Reference< css::uno::XComponentContext >&     _rxContext,
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxInnerAccessible,
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxParentAccessible
+        const cpo::uno::Reference< cpo::uno::XComponentContext >&     _rxContext,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxInnerAccessible,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxParentAccessible
     );
     DECLARE_XINTERFACE()
     DECLARE_XTYPEPROVIDER()
 
     // returns the context without creating it
-    css::uno::Reference< css::accessibility::XAccessibleContext >
+    cpo::uno::Reference< css::accessibility::XAccessibleContext >
                 getContextNoCreate( ) const;
 
 protected:
-    virtual css::uno::Reference< css::accessibility::XAccessibleContext > SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleContext >
                 getAccessibleContext(  ) override final;
 
 protected:
@@ -127,13 +127,13 @@ class OAccessibleContextWrapperHelper : private OComponentProxyAggregationHelper
 {
 protected:
     /// the context we're wrapping (properly typed, in opposite to OComponentProxyAggregationHelper::m_xInner)
-    css::uno::Reference< css::accessibility::XAccessibleContext >
+    cpo::uno::Reference< css::accessibility::XAccessibleContext >
                                                         m_xInnerContext;
     /// the XAccessible which created this context
-    css::uno::Reference< css::accessibility::XAccessible >
+    cpo::uno::Reference< css::accessibility::XAccessible >
                                                         m_xOwningAccessible;
     /// the XAccessible which is to be returned in getAccessibleParent
-    css::uno::Reference< css::accessibility::XAccessible >
+    cpo::uno::Reference< css::accessibility::XAccessible >
                                                         m_xParentAccessible;
 
     rtl::Reference<OWrappedAccessibleChildrenManager>   m_xChildMapper;     // for mapping children from our inner context to our callers
@@ -157,11 +157,11 @@ protected:
             The XAccessible to return in the getAccessibleParent call
     */
     OAccessibleContextWrapperHelper(
-        const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext,
         ::cppu::OBroadcastHelper& _rBHelper,
-        const css::uno::Reference< css::accessibility::XAccessibleContext >& _rxInnerAccessibleContext,
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxOwningAccessible,
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxParentAccessible
+        const cpo::uno::Reference< css::accessibility::XAccessibleContext >& _rxInnerAccessibleContext,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxOwningAccessible,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxParentAccessible
     );
 
     /// to be called from within your ctor - does the aggregation of a proxy for m_xInnerContext
@@ -172,19 +172,19 @@ protected:
 
 protected:
     // XInterface
-    cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& _rType ) override;
+    cpo::uno::Any queryInterface( const cpo::uno::Type& _rType ) override;
 
     // XTypeProvider
     DECLARE_XTYPEPROVIDER( )
 
     // XAccessibleEventListener
-    virtual void SAL_CALL notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) override final;
+    virtual void notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) override final;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     // XComponent/OComponentProxyAggregationHelper
-    virtual void SAL_CALL dispose() override;
+    virtual void dispose() override;
 
     // own overridables
     /** notify an accessible event which has been translated (if necessary)
@@ -195,7 +195,7 @@ protected:
         <p>The mutex of the BroadcastHelper passed to the instance's ctor is <em>not</em> locked when calling
         into this method</p>
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     virtual void notifyTranslatedEvent( const css::accessibility::AccessibleEventObject& _rEvent ) = 0;
 
@@ -239,10 +239,10 @@ public:
             The XAccessible to return in the getAccessibleParent call
     */
     OAccessibleContextWrapper(
-        const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-        const css::uno::Reference< css::accessibility::XAccessibleContext >& _rxInnerAccessibleContext,
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxOwningAccessible,
-        const css::uno::Reference< css::accessibility::XAccessible >& _rxParentAccessible
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext,
+        const cpo::uno::Reference< css::accessibility::XAccessibleContext >& _rxInnerAccessibleContext,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxOwningAccessible,
+        const cpo::uno::Reference< css::accessibility::XAccessible >& _rxParentAccessible
     );
 
     // XInterface
@@ -251,20 +251,20 @@ public:
     DECLARE_XTYPEPROVIDER( )
 
     // XAccessibleContext
-    virtual sal_Int64 SAL_CALL getAccessibleChildCount(  ) override final;
-    virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleChild( sal_Int64 i ) override final;
-    virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleParent(  ) override final;
-    virtual sal_Int64 SAL_CALL getAccessibleIndexInParent(  ) override;
-    virtual sal_Int16 SAL_CALL getAccessibleRole(  ) override final;
-    virtual OUString SAL_CALL getAccessibleDescription(  ) override final;
-    virtual OUString SAL_CALL getAccessibleName(  ) override final;
-    virtual css::uno::Reference< css::accessibility::XAccessibleRelationSet > SAL_CALL getAccessibleRelationSet(  ) override final;
-    virtual sal_Int64 SAL_CALL getAccessibleStateSet(  ) override final;
-    virtual css::lang::Locale SAL_CALL getLocale(  ) override final;
+    virtual sal_Int64 getAccessibleChildCount(  ) override final;
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleChild( sal_Int64 i ) override final;
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleParent(  ) override final;
+    virtual sal_Int64 getAccessibleIndexInParent(  ) override;
+    virtual sal_Int16 getAccessibleRole(  ) override final;
+    virtual OUString getAccessibleDescription(  ) override final;
+    virtual OUString getAccessibleName(  ) override final;
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleRelationSet > getAccessibleRelationSet(  ) override final;
+    virtual sal_Int64 getAccessibleStateSet(  ) override final;
+    virtual css::lang::Locale getLocale(  ) override final;
 
     // XAccessibleEventBroadcaster
-    virtual void SAL_CALL addAccessibleEventListener( const css::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) override final;
-    virtual void SAL_CALL removeAccessibleEventListener( const css::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) override final;
+    virtual void addAccessibleEventListener( const cpo::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) override final;
+    virtual void removeAccessibleEventListener( const cpo::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) override final;
 
     // OAccessibleContextWrapper
     virtual void notifyTranslatedEvent( const css::accessibility::AccessibleEventObject& _rEvent ) override final;
@@ -273,10 +273,10 @@ public:
     void implDisposing(const css::lang::EventObject* pEvent);
 
     // OComponentHelper
-    void SAL_CALL disposing() override final;
+    void disposing() override final;
 
     // XAccessibleEventListener
-    virtual void SAL_CALL disposing(const css::lang::EventObject& rEvent) override final;
+    virtual void disposing(const css::lang::EventObject& rEvent) override final;
 
 protected:
     virtual ~OAccessibleContextWrapper() override;
@@ -290,7 +290,7 @@ private:
 //= OWrappedAccessibleChildrenManager
 
 
-typedef ::std::map  <   css::uno::Reference< css::accessibility::XAccessible >
+typedef ::std::map  <   cpo::uno::Reference< css::accessibility::XAccessible >
                     ,   rtl::Reference<OAccessibleWrapper >
                     >   AccessibleMap;
                     // TODO: think about if we should hold these objects weak
@@ -301,7 +301,7 @@ typedef ::cppu::WeakImplHelper<   css::lang::XEventListener
 */
 class OWrappedAccessibleChildrenManager final : public OWrappedAccessibleChildrenManager_Base
 {
-    css::uno::Reference< css::uno::XComponentContext >
+    cpo::uno::Reference< cpo::uno::XComponentContext >
                             m_xContext;
     cpo::uno::WeakReference< css::accessibility::XAccessible >
                             m_aOwningAccessible;    // the XAccessible which belongs to the XAccessibleContext which we work for
@@ -311,7 +311,7 @@ class OWrappedAccessibleChildrenManager final : public OWrappedAccessibleChildre
 public:
     /// ctor
     OWrappedAccessibleChildrenManager(
-        const css::uno::Reference< css::uno::XComponentContext >& _rxContext
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext
     );
 
     /** specifies if the children are to be considered transient (i.e.: not cached)
@@ -322,16 +322,16 @@ public:
     /** sets the XAccessible which belongs to the XAccessibleContext which we work for
         <p>to be called only once per lifetime</p>
     */
-    void    setOwningAccessible( const css::uno::Reference< css::accessibility::XAccessible >& _rxAcc );
+    void    setOwningAccessible( const cpo::uno::Reference< css::accessibility::XAccessible >& _rxAcc );
 
     /// retrieves a wrapper for the given accessible
-    css::uno::Reference< css::accessibility::XAccessible >
+    cpo::uno::Reference< css::accessibility::XAccessible >
             getAccessibleWrapperFor(
-                const css::uno::Reference< css::accessibility::XAccessible >& _rxKey
+                const cpo::uno::Reference< css::accessibility::XAccessible >& _rxKey
             );
 
     /// erases the given key from the map (if it is present there)
-    void    removeFromCache( const css::uno::Reference< css::accessibility::XAccessible >& _rxKey );
+    void    removeFromCache( const cpo::uno::Reference< css::accessibility::XAccessible >& _rxKey );
 
     /// invalidates (i.e. empties) the map
     void    invalidateAll( );
@@ -357,7 +357,7 @@ public:
 
 private:
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     void    implTranslateChildEventValue( const cpo::uno::Any& _rInValue, cpo::uno::Any& _rOutValue );
 

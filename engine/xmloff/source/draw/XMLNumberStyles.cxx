@@ -498,26 +498,26 @@ public:
 
     SdXMLNumberFormatMemberImportContext( SvXMLImport& rImport,
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
         SdXMLNumberFormatImportContext* pParent,
         SvXMLImportContextRef xSlaveContext );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual void SAL_CALL characters( const OUString& rChars ) override;
+    virtual void characters( const OUString& rChars ) override;
 };
 
 
 SdXMLNumberFormatMemberImportContext::SdXMLNumberFormatMemberImportContext(
     SvXMLImport& rImport,
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
     SdXMLNumberFormatImportContext* pParent,
     SvXMLImportContextRef xSlaveContext )
 :   SvXMLImportContext(rImport),
@@ -542,6 +542,12 @@ SdXMLNumberFormatMemberImportContext::SdXMLNumberFormatMemberImportContext(
             case XML_ELEMENT(NUMBER, XML_TEXTUAL):
                 mbTextual = IsXMLToken( aIter, XML_TRUE );
                 break;
+            case XML_ELEMENT(NUMBER, XML_CALENDAR):
+                // The formats built below all count in the Gregorian calendar, so only another
+                // one would say anything new here.
+                SAL_WARN_IF( aIter.toString() != u"gregorian", "xmloff",
+                             "date or time in an unsupported calendar: " << aIter.toString() );
+                break;
             default:
                 XMLOFF_WARN_UNKNOWN("xmloff", aIter);
         }
@@ -549,16 +555,16 @@ SdXMLNumberFormatMemberImportContext::SdXMLNumberFormatMemberImportContext(
 
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLNumberFormatMemberImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLNumberFormatMemberImportContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     return mxSlaveContext->createFastChildContext( nElement, xAttrList );
 }
 
 void SdXMLNumberFormatMemberImportContext::startFastElement(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     mxSlaveContext->startFastElement( nElement, xAttrList );
 }
@@ -578,7 +584,7 @@ void SdXMLNumberFormatMemberImportContext::characters( const OUString& rChars )
 }
 
 
-SdXMLNumberFormatImportContext::SdXMLNumberFormatImportContext( SdXMLImport& rImport, sal_Int32 nElement, SvXMLNumImpData* pNewData, SvXMLStylesTokens nNewType, const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList, SvXMLStylesContext& rStyles)
+SdXMLNumberFormatImportContext::SdXMLNumberFormatImportContext( SdXMLImport& rImport, sal_Int32 nElement, SvXMLNumImpData* pNewData, SvXMLStylesTokens nNewType, const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList, SvXMLStylesContext& rStyles)
 :   SvXMLNumFormatContext(rImport, nElement, pNewData, nNewType, xAttrList, rStyles),
     mnElements{},
     mnIndex(0),
@@ -690,9 +696,9 @@ void SdXMLNumberFormatImportContext::endFastElement(sal_Int32 )
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLNumberFormatImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLNumberFormatImportContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     return new SdXMLNumberFormatMemberImportContext( GetImport(), nElement, xAttrList,
         this, static_cast<SvXMLImportContext*>(SvXMLNumFormatContext::createFastChildContext( nElement, xAttrList ).get()) );

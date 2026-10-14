@@ -35,19 +35,6 @@ bool FindFormatImpl(SwPaM & rSearchPam,
     std::optional<SwPaM> oPam;
     MakeRegion( fnMove, rRegion, oPam );
 
-    // if at beginning/end then move it out of the node
-    if( bSrchForward
-        ? oPam->GetPoint()->GetContentIndex() == oPam->GetPointContentNode()->Len()
-        : !oPam->GetPoint()->GetContentIndex() )
-    {
-        if( !(*fnMove.fnPos)( oPam->GetPoint(), false ))
-        {
-            return false;
-        }
-        SwContentNode *pNd = oPam->GetPoint()->GetNode().GetContentNode();
-        oPam->GetPoint()->SetContent( bSrchForward ? 0 : pNd->Len() );
-    }
-
     bool bFirst = true;
     SwContentNode* pNode;
     while (nullptr != (pNode = ::GetNode(*oPam, bFirst, fnMove, bInReadOnly, pLayout)))

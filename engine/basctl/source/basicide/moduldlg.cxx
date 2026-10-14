@@ -31,8 +31,7 @@
 #include <basctl/basctldllpublic.hxx>
 #include <basic/basmgr.hxx>
 #include <com/sun/star/io/XInputStreamProvider.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
-#include <com/sun/star/script/XLibraryContainer2.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <comphelper/processfactory.hxx>
@@ -48,13 +47,13 @@
 #include <tools/debug.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <xmlscript/xmldlg_imexp.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace basctl
 {
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::resource;
 
@@ -68,8 +67,8 @@ IMPL_LINK(ObjectPage, EditingEntryHdl, const weld::TreeIter&, rEntry, bool)
         EntryDescriptor aDesc = m_xBasicBox->GetEntryDescriptor(&rEntry);
         const ScriptDocument& aDocument( aDesc.GetDocument() );
         const OUString& aLibName( aDesc.GetLibName() );
-        Reference< script::XLibraryContainer2 > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
-        Reference< script::XLibraryContainer2 > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ) );
+        Reference< script::XLibraryContainer > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
+        Reference< script::XLibraryContainer > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ) );
         if ( !( ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && xModLibContainer->isLibraryReadOnly( aLibName ) ) ||
                 ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) && xDlgLibContainer->isLibraryReadOnly( aLibName ) ) ) )
         {
@@ -187,7 +186,7 @@ void Shell::CopyDialogResources(
     io_xISP = ::xmlscript::exportDialogModel( xDialogModel, xContext, rDestDoc.isDocument() ? rDestDoc.getDocument() : Reference< frame::XModel >() );
 }
 
-void OrganizeDialog::SetCurrentEntry(const css::uno::Reference<css::frame::XFrame>& xDocFrame)
+void OrganizeDialog::SetCurrentEntry(const cpo::uno::Reference<css::frame::XFrame>& xDocFrame)
 {
     if (!xDocFrame)
         return;
@@ -203,7 +202,7 @@ void OrganizeDialog::SetCurrentEntry(const css::uno::Reference<css::frame::XFram
 }
 
 // OrganizeDialog
-OrganizeDialog::OrganizeDialog(weld::Window* pParent, const css::uno::Reference<css::frame::XFrame>& xDocFrame, sal_Int16 tabId)
+OrganizeDialog::OrganizeDialog(weld::Window* pParent, const cpo::uno::Reference<css::frame::XFrame>& xDocFrame, sal_Int16 tabId)
     : GenericDialogController(pParent, u"modules/BasicIDE/ui/organizedialog.ui"_ustr, u"OrganizeDialog"_ustr)
     , m_xTabCtrl(m_xBuilder->weld_notebook(u"tabcontrol"_ustr))
     , m_xModulePage(new ObjectPage(m_xTabCtrl->get_page(u"modules"_ustr), u"ModulePage"_ustr, BrowseMode::Modules, this))
@@ -287,8 +286,8 @@ private:
                     const ScriptDocument& aDocument( aDesc.GetDocument() );
                     const OUString& aLibName( aDesc.GetLibName() );
                     // allow MOVE mode only for libraries, which are not readonly
-                    Reference< script::XLibraryContainer2 > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
-                    Reference< script::XLibraryContainer2 > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ) );
+                    Reference< script::XLibraryContainer > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
+                    Reference< script::XLibraryContainer > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ) );
                     if ( !( ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && xModLibContainer->isLibraryReadOnly( aLibName ) ) ||
                             ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) && xDlgLibContainer->isLibraryReadOnly( aLibName ) ) ) )
                     {
@@ -359,7 +358,7 @@ private:
             const OUString& aDestLibName = aDestDesc.GetLibName();
 
             // check if module library is not loaded, readonly or password protected
-            Reference< script::XLibraryContainer2 > xModLibContainer( rDestDoc.getLibraryContainer( E_SCRIPTS ) );
+            Reference< script::XLibraryContainer > xModLibContainer( rDestDoc.getLibraryContainer( E_SCRIPTS ) );
             if ( xModLibContainer.is() && xModLibContainer->hasByName( aDestLibName ) )
             {
                 if ( !xModLibContainer->isLibraryLoaded( aDestLibName ) )
@@ -368,13 +367,12 @@ private:
                 if ( xModLibContainer->isLibraryReadOnly( aDestLibName ) )
                     bValid = false;
 
-                Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-                if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aDestLibName ) && !xPasswd->isLibraryPasswordVerified( aDestLibName ) )
+                if ( xModLibContainer->isLibraryPasswordProtected( aDestLibName ) && !xModLibContainer->isLibraryPasswordVerified( aDestLibName ) )
                     bValid = false;
             }
 
             // check if dialog library is not loaded or readonly
-            Reference< script::XLibraryContainer2 > xDlgLibContainer( rDestDoc.getLibraryContainer( E_DIALOGS ) );
+            Reference< script::XLibraryContainer > xDlgLibContainer( rDestDoc.getLibraryContainer( E_DIALOGS ) );
             if ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aDestLibName ) )
             {
                 if ( !xDlgLibContainer->isLibraryLoaded( aDestLibName ) )
@@ -651,8 +649,8 @@ void ObjectPage::CheckButtons()
     bool bReadOnly = false;
     if ( nDepth > 0 )
     {
-        Reference< script::XLibraryContainer2 > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
-        Reference< script::XLibraryContainer2 > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ) );
+        Reference< script::XLibraryContainer > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
+        Reference< script::XLibraryContainer > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ) );
         if ( ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && xModLibContainer->isLibraryReadOnly( aLibName ) ) ||
              ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) && xDlgLibContainer->isLibraryReadOnly( aLibName ) ) )
         {
@@ -771,8 +769,7 @@ bool ObjectPage::GetSelection( ScriptDocument& rDocument, OUString& rLibName )
     if ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && !xModLibContainer->isLibraryLoaded( aLibName ) )
     {
         // check password
-        Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-        if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aLibName ) && !xPasswd->isLibraryPasswordVerified( aLibName ) )
+        if ( xModLibContainer->isLibraryPasswordProtected( aLibName ) && !xModLibContainer->isLibraryPasswordVerified( aLibName ) )
         {
             OUString aPassword;
             bOK = QueryPassword(m_pDialog->getDialog(), xModLibContainer, rLibName, aPassword);

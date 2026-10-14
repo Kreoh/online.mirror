@@ -38,6 +38,7 @@
 #include <viewsh.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 void SwModelTestBase::paste(std::u16string_view aFilename, const OUString& aInstance,
                             uno::Reference<text::XTextRange> const& xTextRange)
@@ -194,7 +195,7 @@ xmlDocUniquePtr SwModelTestBase::parseLayoutDump(const uno::Reference<lang::XCom
     return pXmlDoc;
 }
 
-bool SwModelTestBase::hasProperty(const uno::Reference<uno::XInterface>& obj,
+bool SwModelTestBase::hasProperty(const uno::Reference<cpo::uno::XInterface>& obj,
                                   const OUString& name) const
 {
     uno::Reference<beans::XPropertySet> properties(obj, uno::UNO_QUERY_THROW);
@@ -349,7 +350,7 @@ OUString SwModelTestBase::getFormula(uno::Reference<text::XTextRange> const& xRu
 }
 
 uno::Reference<table::XCell>
-SwModelTestBase::getCell(uno::Reference<uno::XInterface> const& xTableIfc, OUString const& rCell,
+SwModelTestBase::getCell(uno::Reference<cpo::uno::XInterface> const& xTableIfc, OUString const& rCell,
                          OUString const& rContent)
 {
     uno::Reference<text::XTextTable> const xTable(xTableIfc, uno::UNO_QUERY_THROW);

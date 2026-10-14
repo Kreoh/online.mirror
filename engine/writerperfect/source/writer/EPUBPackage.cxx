@@ -24,10 +24,11 @@
 #include <unotools/mediadescriptor.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace writerperfect
 {
-EPUBPackage::EPUBPackage(uno::Reference<uno::XComponentContext> xContext,
+EPUBPackage::EPUBPackage(uno::Reference<cpo::uno::XComponentContext> xContext,
                          const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor)
     : mxContext(std::move(xContext))
 {

@@ -47,8 +47,8 @@ void lokit_main(
 #if !MOBILEAPP
     const std::string& childRoot, const std::string& jailId, const std::string& configId,
     const std::string& sysTemplate, const std::string& loTemplate, bool noCapabilities,
-    bool noSeccomp, bool useMountNamespaces, bool queryVersionInfo, bool displayVersion,
-    bool sysTemplateIncomplete,
+    bool requireLandlock, bool noSeccomp, bool useMountNamespaces, bool queryVersionInfo,
+    bool displayVersion, bool sysTemplateIncomplete,
 #else
     int docBrokerSocket, const std::string& userInterface,
 #endif
@@ -162,11 +162,6 @@ public:
 
     static KitSocketPoll* getMainPoll() { return mainPoll; }
 
-    /// Queue a callback to run on the kit thread that serves the given
-    /// document. Returns true when it was queued, false when no live poll
-    /// serves that document.
-    static bool scheduleOnKitThread(unsigned mobileAppDocId, const CallbackFn& fn);
-
 #if ENABLE_DEBUG
     struct ReEntrancyGuard
     {
@@ -212,6 +207,15 @@ public:
 };
 
 class ChildSession;
+
+/// What a forked child process was started to produce. Save writes the document back to
+/// its own file, so the parent takes the document to be unmodified while it runs. Export
+/// writes a separate copy elsewhere in the jail and leaves the document's state alone.
+enum class BackgroundForkPurpose : std::uint8_t
+{
+    Save,
+    Export
+};
 
 /// A document container.
 /// Owns LOKitDocument instance and connections.
@@ -286,6 +290,10 @@ private:
         _queue->putCallback(-1, type, payload);
     }
 
+    /// Hands a vector primitives delta to every session that draws vector content, compressed
+    /// once for all of them.
+    void deliverVectorDelta(const std::string& payload);
+
     /// Cleanup bgSave child processes.
     static void reapZombieChildren();
 
@@ -297,12 +305,15 @@ private:
 public:
     /// Request loading a document, or a new view, if one exists,
     /// and register callbacks.
-    bool onLoad(const std::string& sessionId, const std::string& uriAnonym,
-                const std::string& renderOpts);
+    bool onLoad(const std::string& sessionId, const std::string& uriAnonym);
 
     /// Unload a client session, which unloads the document
     /// if it is the last and only.
     void onUnload(const ChildSession& session);
+
+    /// Destroy the view kept alive with no session of its own, if there is one. The engine
+    /// then has no view left and disposes of the document. Answers whether a view went.
+    bool destroyKeptView();
 
     /// Get a view ID <-> UserInfo map.
     const std::map<int, UserInfo>& getViewInfo() const { return _sessionUserInfo; }
@@ -360,12 +371,19 @@ public:
     bool joinThreads();
     void startThreads();
 
-    bool forkToSave(const std::function<void()> &childSave, int viewId);
+    bool forkToSave(const std::function<void()> &childSave, int viewId,
+                    BackgroundForkPurpose purpose);
 
     void handleSaveMessage(const std::string &msg);
 
+    /// Release the document and close the socket to the parent, in a forked child.
+    void finishBackgroundForkProcess();
+
     /// Notify all views of viewId and their associated usernames
     void notifyViewInfo();
+
+    /// Tell the other views which part the given view switched to.
+    void notifyViewPart(int viewId, const std::string& partId);
 
     std::shared_ptr<ChildSession> findSessionByViewId(int viewId);
 
@@ -383,15 +401,15 @@ private:
 
     static std::string getDefaultBackgroundTheme(const std::shared_ptr<ChildSession>& session);
 
-    std::shared_ptr<COKitDocument> load(const std::shared_ptr<ChildSession>& session,
-                                        const std::string& renderOpts);
+    std::shared_ptr<COKitDocument> load(const std::shared_ptr<ChildSession>& session);
 
     bool forwardToChild(std::string_view prefix, const std::vector<char>& payload);
 
-    static std::string makeRenderParams(const std::string& renderOpts, const std::string& userName,
+    static std::string makeRenderParams(const std::string& userName,
                                         const std::string& spellOnline,
                                         const std::string& formattingMarks, const std::string& theme,
                                         const std::string& backgroundTheme,
+                                        const std::string& focusRingColor,
                                         const std::string& userPrivateInfo);
 
     /// Returns true iff at least one session is loaded.
@@ -507,7 +525,6 @@ private:
     const std::string _url;
     const std::string _obfuscatedFileId;
     std::string _jailedUrl;
-    std::string _renderOpts;
 
     std::shared_ptr<COKitDocument> _loKitDocument;
 #ifdef __ANDROID__
@@ -543,6 +560,10 @@ private:
     std::string _docPasswordToModify;
     // Whether a password to modify is stored
     bool _haveDocPasswordToModify;
+
+    /// The view kept alive after the session that owned it left, so the document keeps at
+    /// least one view. -1 when there is no such view, which is the usual state.
+    int _keptViewId;
 
     std::atomic<bool> _stop;
 

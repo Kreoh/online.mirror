@@ -34,13 +34,13 @@
 #include <cppuhelper/weakagg.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/reflection/XProxyFactory.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <utility>
 
 
 using namespace ::com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 
@@ -62,12 +62,12 @@ struct FactoryImpl : public ::cppu::WeakImplHelper< lang::XServiceInfo,
     FactoryImpl();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString & rServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     // XProxyFactory
-    virtual Reference< XAggregation > SAL_CALL createProxy(
+    virtual Reference< XAggregation > createProxy(
         Reference< XInterface > const & xTarget ) override;
 };
 
@@ -133,7 +133,7 @@ UnoInterfaceReference FactoryImpl::binuno_queryInterface(
 struct ProxyRoot : public ::cppu::OWeakAggObject
 {
     // XAggregation
-    virtual Any SAL_CALL queryAggregation( Type const & rType ) override;
+    virtual Any queryAggregation( Type const & rType ) override;
 
     ProxyRoot( ::rtl::Reference< FactoryImpl > factory,
                       Reference< XInterface > const & xTarget );
@@ -399,9 +399,9 @@ Sequence< OUString > FactoryImpl::getSupportedServiceNames()
     return { u"com.sun.star.reflection.ProxyFactory"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 stoc_FactoryImpl_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new FactoryImpl);
 }

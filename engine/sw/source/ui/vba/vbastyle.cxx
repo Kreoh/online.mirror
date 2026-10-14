@@ -31,9 +31,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaStyle::SwVbaStyle( const uno::Reference< XHelperInterface >& xParent,
-                        const uno::Reference< uno::XComponentContext > & xContext,
+                        const uno::Reference< cpo::uno::XComponentContext > & xContext,
                         rtl::Reference< SwXTextDocument>  xModel,
                         const uno::Reference< beans::XPropertySet >& _xPropertySet )
 : SwVbaStyle_BASE( xParent, xContext ),
@@ -43,13 +44,13 @@ SwVbaStyle::SwVbaStyle( const uno::Reference< XHelperInterface >& xParent,
     mxStyle.set( _xPropertySet, uno::UNO_QUERY_THROW );
 }
 
-void SAL_CALL
+void
 SwVbaStyle::setName( const OUString& Name )
 {
     mxStyle->setName(Name);
 }
 
-OUString SAL_CALL
+OUString
 SwVbaStyle::getName()
 {
     return mxStyle->getName();
@@ -68,17 +69,17 @@ void SwVbaStyle::setLanguageID( const uno::Reference< beans::XPropertySet >& xTC
     xTCProps->setPropertyValue(u"CharLocale"_ustr, cpo::uno::Any( aLocale ) ) ;
 }
 
-::sal_Int32 SAL_CALL SwVbaStyle::getLanguageID()
+::sal_Int32 SwVbaStyle::getLanguageID()
 {
     return static_cast<sal_uInt16>(getLanguageID( mxStyleProps ));
 }
 
-void SAL_CALL SwVbaStyle::setLanguageID( ::sal_Int32 _languageid )
+void SwVbaStyle::setLanguageID( ::sal_Int32 _languageid )
 {
     setLanguageID( mxStyleProps, LanguageType(_languageid) );
 }
 
-::sal_Int32 SAL_CALL SwVbaStyle::getType()
+::sal_Int32 SwVbaStyle::getType()
 {
     sal_Int32 nType = word::WdStyleType::wdStyleTypeParagraph;
     uno::Reference< lang::XServiceInfo > xServiceInfo( mxStyle, uno::UNO_QUERY_THROW );
@@ -91,7 +92,7 @@ void SAL_CALL SwVbaStyle::setLanguageID( ::sal_Int32 _languageid )
     return nType;
 }
 
-uno::Reference< word::XFont > SAL_CALL
+uno::Reference< word::XFont >
 SwVbaStyle::getFont()
 {
     VbaPalette aColors;
@@ -117,98 +118,98 @@ void SwVbaStyle::setStyle( const uno::Reference< beans::XPropertySet >& xParaPro
         return;
     }
 
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-OUString SAL_CALL SwVbaStyle::getNameLocal()
+OUString SwVbaStyle::getNameLocal()
 {
     OUString sNameLocal;
     mxStyleProps->getPropertyValue(u"DisplayName"_ustr) >>= sNameLocal;
     return sNameLocal;
 }
 
-void SAL_CALL SwVbaStyle::setNameLocal( const OUString& _namelocal )
+void SwVbaStyle::setNameLocal( const OUString& _namelocal )
 {
     mxStyleProps->setPropertyValue(u"DisplayName"_ustr, cpo::uno::Any( _namelocal ) );
 }
 
-uno::Reference< word::XParagraphFormat > SAL_CALL SwVbaStyle::getParagraphFormat()
+uno::Reference< word::XParagraphFormat > SwVbaStyle::getParagraphFormat()
 {
     if( word::WdStyleType::wdStyleTypeParagraph != getType() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     return uno::Reference< word::XParagraphFormat >( new SwVbaParagraphFormat( this, mxContext, mxStyleProps ) );
 }
 
-bool SAL_CALL SwVbaStyle::getAutomaticallyUpdate()
+bool SwVbaStyle::getAutomaticallyUpdate()
 {
     bool isAutoUpdate = false;
     mxStyleProps->getPropertyValue(u"IsAutoUpdate"_ustr) >>= isAutoUpdate;
     return isAutoUpdate;
 }
 
-void SAL_CALL SwVbaStyle::setAutomaticallyUpdate( bool _automaticallyupdate )
+void SwVbaStyle::setAutomaticallyUpdate( bool _automaticallyupdate )
 {
     mxStyleProps->setPropertyValue(u"IsAutoUpdate"_ustr, cpo::uno::Any( _automaticallyupdate ) );
 }
 
-cpo::uno::Any SAL_CALL SwVbaStyle::getBaseStyle()
+cpo::uno::Any SwVbaStyle::getBaseStyle()
 {
     // ParentStyle
     OUString sBaseStyle;
     mxStyleProps->getPropertyValue(u"ParentStyle"_ustr) >>= sBaseStyle;
     if( sBaseStyle.isEmpty() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     uno::Reference< XCollection > xCol( new SwVbaStyles( this, mxContext, mxModel ) );
     return xCol->Item( cpo::uno::Any( sBaseStyle ), cpo::uno::Any() );
 }
 
-void SAL_CALL SwVbaStyle::setBaseStyle( const cpo::uno::Any& _basestyle )
+void SwVbaStyle::setBaseStyle( const cpo::uno::Any& _basestyle )
 {
     uno::Reference< word::XStyle > xStyle;
     _basestyle >>= xStyle;
     if( !xStyle.is() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     OUString sBaseStyle = xStyle->getName();
     mxStyleProps->setPropertyValue(u"ParentStyle"_ustr, cpo::uno::Any( sBaseStyle ) );
 }
 
-cpo::uno::Any SAL_CALL SwVbaStyle::getNextParagraphStyle()
+cpo::uno::Any SwVbaStyle::getNextParagraphStyle()
 {
     //FollowStyle
     OUString sFollowStyle;
     mxStyleProps->getPropertyValue(u"FollowStyle"_ustr) >>= sFollowStyle;
     if( sFollowStyle.isEmpty() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     uno::Reference< XCollection > xCol( new SwVbaStyles( this, mxContext, mxModel ) );
     return xCol->Item( cpo::uno::Any( sFollowStyle ), cpo::uno::Any() );
 }
 
-void SAL_CALL SwVbaStyle::setNextParagraphStyle( const cpo::uno::Any& _nextparagraphstyle )
+void SwVbaStyle::setNextParagraphStyle( const cpo::uno::Any& _nextparagraphstyle )
 {
     uno::Reference< word::XStyle > xStyle;
     _nextparagraphstyle >>= xStyle;
     if( !xStyle.is() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     OUString sFollowStyle = xStyle->getName();
     mxStyleProps->setPropertyValue(u"FollowStyle"_ustr, cpo::uno::Any( sFollowStyle ) );
 }
 
-::sal_Int32 SAL_CALL SwVbaStyle::getListLevelNumber()
+::sal_Int32 SwVbaStyle::getListLevelNumber()
 {
     sal_Int16 nNumberingLevel = 0;
     mxStyleProps->getPropertyValue(u"NumberingLevel"_ustr) >>= nNumberingLevel;

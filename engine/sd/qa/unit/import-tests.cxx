@@ -83,8 +83,9 @@
 #include <vcl/filter/PDFiumLibrary.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-namespace com::sun::star::uno
+namespace cpo::uno
 {
 template <class T>
 static std::ostream& operator<<(std::ostream& rStrm, const uno::Reference<T>& xRef)
@@ -826,9 +827,9 @@ CPPUNIT_TEST_FIXTURE(SdImportTest, testCustomSlideShow)
 {
     createSdImpressDoc("pptx/tdf131390.pptx");
 
-    css::uno::Reference<css::presentation::XCustomPresentationSupplier> aXCPSup(
-        mxComponent, css::uno::UNO_QUERY);
-    css::uno::Reference<css::container::XNameContainer> aXCont(aXCPSup->getCustomPresentations());
+    cpo::uno::Reference<css::presentation::XCustomPresentationSupplier> aXCPSup(
+        mxComponent, cpo::uno::UNO_QUERY);
+    cpo::uno::Reference<css::container::XNameContainer> aXCont(aXCPSup->getCustomPresentations());
     const cpo::uno::Sequence<OUString> aNameSeq(aXCont->getElementNames());
 
     // In the document, there are two custom presentations.
@@ -2365,6 +2366,25 @@ CPPUNIT_TEST_FIXTURE(SdImportTest, testDrawImageRemoteNotFetched)
     loadWithParams(createFileURL(u"draw-image-link.fodp"), aParams);
 
     CPPUNIT_ASSERT(mxComponent.is());
+}
+
+// A file carrying the same page identifier on two pages loads with distinct ones: the first
+// page keeps the stored value and the second gets one of its own.
+CPPUNIT_TEST_FIXTURE(SdImportTest, testPageGuidDuplicateInFile)
+{
+    createSdImpressDoc("odp/duplicate-page-guid.fodp");
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    static constexpr OUString sStoredGuid = u"{11111111-2222-3333-4444-555555555555}"_ustr;
+    SdPage* pFirstPage = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pSecondPage = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sStoredGuid, pFirstPage->GetGuid().getOUString());
+    CPPUNIT_ASSERT(pSecondPage->GetGuid().getOUString() != sStoredGuid);
+    CPPUNIT_ASSERT(!pSecondPage->GetGuid().isEmpty());
+    CPPUNIT_ASSERT_EQUAL(pFirstPage, pDoc->GetPageByGuid(pFirstPage->GetGuid()));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

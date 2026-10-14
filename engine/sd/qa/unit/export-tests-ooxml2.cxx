@@ -34,6 +34,7 @@
 
 using namespace css;
 using namespace css::animations;
+using namespace ::cpo;
 
 namespace
 {
@@ -362,6 +363,25 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testMathObject)
         CPPUNIT_ASSERT_MESSAGE("no object", pObj != nullptr);
         CPPUNIT_ASSERT_EQUAL(SdrObjKind::OLE2, pObj->GetObjIdentifier());
     }
+}
+
+CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testMathObjectColorOmittedInSlide)
+{
+    // A colored formula still exports as a slide that binds every prefix it uses. The
+    // run properties that carry a color live in the w namespace, which a slide does not
+    // declare, so the color is left out and the run holds nothing but its text.
+    createSdImpressDoc("odp/math-color.fodp");
+    save(TestFilter::PPTX);
+
+    xmlDocUniquePtr pXmlDocContent = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    assertXPathContent(pXmlDocContent,
+                       "/p:sld/p:cSld/p:spTree/mc:AlternateContent/mc:Choice/p:sp/p:txBody/a:p/"
+                       "a14:m/m:oMath/m:r[1]/m:t",
+                       u"1");
+    assertXPath(pXmlDocContent,
+                "/p:sld/p:cSld/p:spTree/mc:AlternateContent/mc:Choice/p:sp/p:txBody/a:p/"
+                "a14:m/m:oMath/m:r[1]/*",
+                1);
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testMathExportNonBMP)
@@ -1117,7 +1137,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testPptmVBAStream)
     createSdImpressDoc("pptm/macro.pptm");
     save(TestFilter::PPTM);
 
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     // This failed: VBA stream was not roundtripped
@@ -1310,7 +1330,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testTdf106867)
     CPPUNIT_ASSERT_EQUAL(u"vnd.sun.star.Package:ppt/media/media1.avi"_ustr, pMediaObj->getURL());
 
     // additional checks of the output file
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     // check that the document contains the video stream

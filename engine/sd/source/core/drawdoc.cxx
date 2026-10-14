@@ -55,7 +55,6 @@
 #include <com/sun/star/animations/XAudio.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <unotools/securityoptions.hxx>
 #include <Outliner.hxx>
 #include <sdmod.hxx>
 #include <editeng/editstat.hxx>
@@ -76,12 +75,12 @@
 #include <unotools/lingucfg.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <unotools/syslocale.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/xml/dom/XDocumentBuilder.hpp>
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/xml/dom/XNodeList.hpp>
 #include <com/sun/star/xml/dom/DocumentBuilder.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <rtl/ustring.hxx>
 
 #include <editeng/outliner.hxx>
@@ -114,12 +113,12 @@ namespace com::sun::star::linguistic2 { class XSpellChecker; }
 
 using namespace ::sd;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::linguistic2;
 
 using namespace com::sun::star::xml::dom;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 
 SdDrawDocument* SdDrawDocument::s_pDocLockedInsertingLinks = nullptr;
@@ -235,7 +234,7 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
         SetLanguage( MsLangId::resolveSystemLanguageByScriptType(aOptions.nDefaultLanguage_CTL,
             css::i18n::ScriptType::COMPLEX), EE_CHAR_LANGUAGE_CTL );
 
-        mbOnlineSpell = aOptions.bIsSpellAuto;
+        mbOnlineSpell = SdModule::GetAutoSpellProperty(meDocType);
     }
 
     LanguageType eRealLanguage = MsLangId::getRealLanguage( meLanguage );
@@ -1134,16 +1133,16 @@ public:
 // state directly. The URL is kept; only the allowed state changes.
 class SdAnimationSoundLink final : public SdPageBoundSoundLink
 {
-    css::uno::Reference<css::animations::XAudio> m_xAudio;
+    cpo::uno::Reference<css::animations::XAudio> m_xAudio;
 
 public:
-    SdAnimationSoundLink(SdPage& rPage, css::uno::Reference<css::animations::XAudio> xAudio)
+    SdAnimationSoundLink(SdPage& rPage, cpo::uno::Reference<css::animations::XAudio> xAudio)
         : SdPageBoundSoundLink(rPage)
         , m_xAudio(std::move(xAudio))
     {
     }
 
-    const css::uno::Reference<css::animations::XAudio>& getAudio() const { return m_xAudio; }
+    const cpo::uno::Reference<css::animations::XAudio>& getAudio() const { return m_xAudio; }
 
     virtual UpdateResult DataChanged(const OUString&, const cpo::uno::Any&) override
     {
@@ -1186,7 +1185,7 @@ bool lcl_hasAnySoundLink(const sfx2::LinkManager& rLinkManager)
 // points outside the document package, binding each to rPage. Sets rbFound when
 // rNode holds any such sound.
 void lcl_registerAudioSoundLinks(
-    const css::uno::Reference<css::animations::XAnimationNode>& rNode,
+    const cpo::uno::Reference<css::animations::XAnimationNode>& rNode,
     SdPage& rPage, sfx2::LinkManager& rLinkManager, bool& rbFound)
 {
     if (!rNode.is())
@@ -1194,7 +1193,7 @@ void lcl_registerAudioSoundLinks(
 
     if (rNode->getType() == css::animations::AnimationNodeType::AUDIO)
     {
-        css::uno::Reference<css::animations::XAudio> xAudio(rNode, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::animations::XAudio> xAudio(rNode, cpo::uno::UNO_QUERY);
         const OUString aURL = xAudio.is() ? xmloff::getSoundURL(xAudio->getSource()) : OUString();
         if (SdSoundLink(aURL).isExternalLink())
         {
@@ -1209,14 +1208,14 @@ void lcl_registerAudioSoundLinks(
         }
     }
 
-    css::uno::Reference<css::container::XEnumerationAccess> xEnumAccess(rNode, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::container::XEnumerationAccess> xEnumAccess(rNode, cpo::uno::UNO_QUERY);
     if (xEnumAccess.is())
     {
-        css::uno::Reference<css::container::XEnumeration> xEnum = xEnumAccess->createEnumeration();
+        cpo::uno::Reference<css::container::XEnumeration> xEnum = xEnumAccess->createEnumeration();
         while (xEnum.is() && xEnum->hasMoreElements())
         {
-            css::uno::Reference<css::animations::XAnimationNode> xChild(xEnum->nextElement(),
-                                                                       css::uno::UNO_QUERY);
+            cpo::uno::Reference<css::animations::XAnimationNode> xChild(xEnum->nextElement(),
+                                                                       cpo::uno::UNO_QUERY);
             lcl_registerAudioSoundLinks(xChild, rPage, rLinkManager, rbFound);
         }
     }
@@ -1308,10 +1307,10 @@ void SdDrawDocument::UpdateAllLinks()
         }
     }
 
-    if (m_pLinkManager->GetLinks().empty())
+    if (!pDocShell)
         return;
 
-    if (!pDocShell)
+    if (m_pLinkManager->GetLinks().empty() && !pDocShell->HasExternalDatabaseForms())
         return;
 
     comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer
@@ -1320,7 +1319,7 @@ void SdDrawDocument::UpdateAllLinks()
     if (rEmbeddedObjectContainer.getUserAllowsLinkUpdate())
     {
         s_pDocLockedInsertingLinks = this;
-        m_pLinkManager->UpdateAllLinks(false, nullptr, u""_ustr);
+        m_pLinkManager->UpdateAllLinks(false, u""_ustr);
         if (s_pDocLockedInsertingLinks == this)
             s_pDocLockedInsertingLinks = nullptr;
         return;
@@ -1347,9 +1346,7 @@ void SdDrawDocument::UpdateAllLinks()
             bAskUpdate = false;
             break;
         case css::document::UpdateDocMode::ACCORDING_TO_CONFIG:
-            bAskUpdate = !pMedium
-                || !SvtSecurityOptions::isTrustedLocationUriForUpdatingLinks(
-                       pMedium->GetName());
+            bAskUpdate = !pMedium || !pDocShell->IsTrustedLocationForUpdatingLinks();
             break;
     }
 
@@ -1362,7 +1359,7 @@ void SdDrawDocument::UpdateAllLinks()
     {
         rEmbeddedObjectContainer.setUserAllowsLinkUpdate(true);
         s_pDocLockedInsertingLinks = this;
-        m_pLinkManager->UpdateAllLinks(false, nullptr,
+        m_pLinkManager->UpdateAllLinks(false,
             pMedium ? pMedium->GetName() : OUString());
         if (s_pDocLockedInsertingLinks == this)
             s_pDocLockedInsertingLinks = nullptr;
@@ -1548,7 +1545,7 @@ SdOutliner* SdDrawDocument::GetInternalOutliner(bool bCreateOutliner)
     // Advantages:
     // a) no unnecessary Clear calls
     // b) no wasted memory
-    DBG_ASSERT( !mpInternalOutliner || ( ( mpInternalOutliner->GetParagraphCount() == 1 ) && ( mpInternalOutliner->GetText( mpInternalOutliner->GetParagraph( 0 ) ).isEmpty() ) ), "InternalOutliner: not empty!" );
+    DBG_ASSERT( !mpInternalOutliner || ( ( mpInternalOutliner->GetParagraphCount() == 1 ) && ( mpInternalOutliner->GetText( 0 ).isEmpty() ) ), "InternalOutliner: not empty!" );
 
     return mpInternalOutliner.get();
 }
@@ -1614,7 +1611,7 @@ uno::Reference< frame::XModel > SdDrawDocument::createUnoModel()
         if ( mpDocSh )
             xModel = mpDocSh->GetModel();
     }
-    catch( uno::RuntimeException& )
+    catch( cpo::uno::RuntimeException& )
     {
     }
 
@@ -1696,7 +1693,7 @@ void SdDrawDocument::InitLayoutVector()
     if (comphelper::IsFuzzing())
         return;
 
-    const Reference<css::uno::XComponentContext>& xContext(
+    const Reference<cpo::uno::XComponentContext>& xContext(
         ::comphelper::getProcessComponentContext() );
 
     // get file list from configuration
@@ -1734,7 +1731,7 @@ void SdDrawDocument::InitObjectVector()
     if (comphelper::IsFuzzing())
         return;
 
-    const Reference<css::uno::XComponentContext>& xContext(
+    const Reference<cpo::uno::XComponentContext>& xContext(
         ::comphelper::getProcessComponentContext() );
 
     // get file list from configuration
@@ -1780,8 +1777,6 @@ void SdDrawDocument::dumpAsXml(xmlTextWriterPtr pWriter) const
     (void)xmlTextWriterStartElement(pWriter, BAD_CAST("SdDrawDocument"));
     (void)xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("ptr"), "%p", this);
 
-    if (mpOutliner)
-        mpOutliner->dumpAsXml(pWriter);
     FmFormModel::dumpAsXml(pWriter);
     if (GetUndoManager())
         GetUndoManager()->dumpAsXml(pWriter);

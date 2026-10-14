@@ -21,12 +21,10 @@
 #define INCLUDED_UNOTOOLS_COLLATORWRAPPER_HXX
 
 #include <unotools/unotoolsdllapi.h>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 
-namespace com::sun::star::uno {
-        class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace com::sun::star::i18n { class XCollator; }
 namespace com::sun::star::lang { struct Locale; }
@@ -34,12 +32,12 @@ namespace com::sun::star::lang { struct Locale; }
 class UNOTOOLS_DLLPUBLIC CollatorWrapper
 {
     private:
-        css::uno::Reference< css::i18n::XCollator >        mxInternationalCollator;
+        cpo::uno::Reference< css::i18n::XCollator >        mxInternationalCollator;
 
     public:
 
         CollatorWrapper (
-                const css::uno::Reference< css::uno::XComponentContext > &rxContext);
+                const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext);
 
            sal_Int32
         compareString (

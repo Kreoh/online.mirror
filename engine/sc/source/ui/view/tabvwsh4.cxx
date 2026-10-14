@@ -20,6 +20,7 @@
 #include <sal/config.h>
 
 #include <formdata.hxx>
+#include <docuno.hxx>
 
 #include <sfx2/app.hxx>
 #include <svx/dialogs.hrc>
@@ -98,6 +99,7 @@
 #include <drwlayer.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace sfx2::sidebar;
 
 namespace {
@@ -1804,8 +1806,8 @@ public:
     ScViewOptiChangesListener(ScTabViewShell&);
     void stopListening();
 
-    virtual void SAL_CALL changesOccurred(const util::ChangesEvent& Event) override;
-    virtual void SAL_CALL disposing(const lang::EventObject& rEvent) override;
+    virtual void changesOccurred(const util::ChangesEvent& Event) override;
+    virtual void disposing(const lang::EventObject& rEvent) override;
 
 private:
     ScTabViewShell& mrViewShell;
@@ -1822,7 +1824,7 @@ void ScViewOptiChangesListener::stopListening()
 }
 
 // virtual
-void SAL_CALL ScViewOptiChangesListener::changesOccurred(const util::ChangesEvent& rEvent)
+void ScViewOptiChangesListener::changesOccurred(const util::ChangesEvent& rEvent)
 {
     for (const auto& change : rEvent.Changes)
     {
@@ -1848,7 +1850,7 @@ void SAL_CALL ScViewOptiChangesListener::changesOccurred(const util::ChangesEven
 }
 
 // virtual
-void SAL_CALL ScViewOptiChangesListener::disposing(const lang::EventObject& /* rEvent */)
+void ScViewOptiChangesListener::disposing(const lang::EventObject& /* rEvent */)
 {
     m_xViewChangesNotifier.clear();
     m_xColorSchemeChangesNotifier.clear();
@@ -1867,11 +1869,11 @@ ScViewOptiChangesListener::ScViewOptiChangesListener(ScTabViewShell& rViewShell)
     beans::NamedValue aColorSchemeProperty{ u"nodepath"_ustr,
                                  cpo::uno::Any(u"/org.openoffice.Office.UI/ColorScheme"_ustr) };
 
-    uno::Reference<uno::XInterface> xViewConfigurationAccess
+    uno::Reference<cpo::uno::XInterface> xViewConfigurationAccess
         = xConfigurationProvider->createInstanceWithArguments(
             u"com.sun.star.configuration.ConfigurationAccess"_ustr, { cpo::uno::Any(aViewProperty) });
 
-    uno::Reference<uno::XInterface> xColorSchemeConfigurationAccess
+    uno::Reference<cpo::uno::XInterface> xColorSchemeConfigurationAccess
         = xConfigurationProvider->createInstanceWithArguments(
             u"com.sun.star.configuration.ConfigurationAccess"_ustr, { cpo::uno::Any(aColorSchemeProperty) });
 
@@ -1990,8 +1992,10 @@ void ScTabViewShell::ExtendSingleSelection(css::table::CellRangeAddress& rRangeD
     SCROW aStartRow(rRangeData.StartRow);
     SCROW aEndRow(rRangeData.EndRow);
 
+    // Exclude database ranges/tables from the auto-detected area: a loose cell next to
+    // a table must not grow into the table.
     GetViewData().GetDocument().GetDataArea(rRangeData.Sheet, aStartCol, aStartRow, aEndCol,
-                                            aEndRow, true, false);
+                                            aEndRow, true, false, /*bExcludeDBRange*/ true);
     MarkRange(ScRange(ScAddress(aStartCol, aStartRow, rRangeData.Sheet),
                       ScAddress(aEndCol, aEndRow, rRangeData.Sheet)));
 
@@ -2020,9 +2024,10 @@ void ScTabViewShell::HandleDuplicateRecordsHighlight(const rtl::Reference<ScTabl
 
     ScDocument& rDoc = GetViewData().GetDocShell()->GetDocument();
 
-    comphelper::ScopeGuard aUndoContextGuard(
+    // Highlighting only builds a selection (no undoable document change), so it
+    // takes just the controller/action locks to batch the marking - no undo context.
+    comphelper::ScopeGuard aLockGuard(
         [pModel, &rDoc] {
-        pModel->getUndoManager()->leaveUndoContext();
         pModel->removeActionLock();
         if (pModel->hasControllersLocked())
             pModel->unlockControllers();
@@ -2032,7 +2037,6 @@ void ScTabViewShell::HandleDuplicateRecordsHighlight(const rtl::Reference<ScTabl
     rDoc.LockAdjustHeight();
     pModel->lockControllers();
     pModel->addActionLock();
-    pModel->getUndoManager()->enterUndoContext(u"HandleDuplicateRecords"_ustr);
 
     bool nModifier = false;         // modifier key pressed?
     bool bNoDuplicatesForSelection = true;
@@ -2101,7 +2105,8 @@ void ScTabViewShell::HandleDuplicateRecordsHighlight(const rtl::Reference<ScTabl
 void ScTabViewShell::HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSheetObj>& ActiveSheet,
                                 const css::table::CellRangeAddress& aRange,
                                 bool bIncludesHeaders, bool bDuplicateRows,
-                                const std::vector<int>& rSelectedEntries)
+                                const std::vector<int>& rSelectedEntries,
+                                sal_Int32* pnRemoved, sal_Int32* pnRemaining)
 {
     if (rSelectedEntries.size() == 0)
     {
@@ -2109,7 +2114,8 @@ void ScTabViewShell::HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSh
         return;
     }
 
-    ScModelObj* pModel(GetViewData().GetDocShell()->GetModel());
+    ScDocShell* pDocSh = GetViewData().GetDocShell();
+    ScModelObj* pModel(pDocSh->GetModel());
     rtl::Reference<ScCellRangeObj> xSheetRange(
             ActiveSheet->getScCellRangeByPosition(aRange.StartColumn, aRange.StartRow, aRange.EndColumn, aRange.EndRow));
 
@@ -2119,8 +2125,8 @@ void ScTabViewShell::HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSh
     ScDocument& rDoc = GetViewData().GetDocShell()->GetDocument();
 
     comphelper::ScopeGuard aUndoContextGuard(
-        [pModel, &bAutoCalc, &rDoc] {
-        pModel->getUndoManager()->leaveUndoContext();
+        [pModel, pDocSh, &bAutoCalc, &rDoc] {
+        pDocSh->GetUndoManager()->LeaveListAction();
         pModel->enableAutomaticCalculation(bAutoCalc);
         pModel->removeActionLock();
         if (pModel->hasControllersLocked())
@@ -2132,7 +2138,10 @@ void ScTabViewShell::HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSh
     pModel->lockControllers();
     pModel->addActionLock();
     pModel->enableAutomaticCalculation(true);
-    pModel->getUndoManager()->enterUndoContext(u"HandleDuplicateRecords"_ustr);
+    // Use the Sfx-native undo manager with this view's id: Online filters undo per
+    // view, and the UNO XUndoManager stamps ViewShellId(-1) (invisible there).
+    pDocSh->GetUndoManager()->EnterListAction(u"HandleDuplicateRecords"_ustr,
+                                              u"HandleDuplicateRecords"_ustr, 0, GetViewShellId());
 
     if (bDuplicateRows)
     {
@@ -2167,6 +2176,11 @@ void ScTabViewShell::HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSh
         }
         for (const table::CellRangeAddress & rRange : aDelRanges)
             ActiveSheet->removeRange(rRange, sheet::CellDeleteMode_UP);
+
+        if (pnRemoved)
+            *pnRemoved = static_cast<sal_Int32>(nDeleteCount);
+        if (pnRemaining)
+            *pnRemaining = static_cast<sal_Int32>(aUnionArray.size());
     }
     else
     {
@@ -2206,6 +2220,11 @@ void ScTabViewShell::HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSh
         }
         for (const table::CellRangeAddress & rRange : aDelRanges)
             ActiveSheet->removeRange(rRange, sheet::CellDeleteMode_LEFT);
+
+        if (pnRemoved)
+            *pnRemoved = static_cast<sal_Int32>(nDeleteCount);
+        if (pnRemaining)
+            *pnRemaining = static_cast<sal_Int32>(aUnionArray.size());
     }
 }
 

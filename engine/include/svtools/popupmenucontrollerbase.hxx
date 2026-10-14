@@ -35,7 +35,7 @@
 #include <rtl/ustring.hxx>
 
 namespace com::sun::star::frame { class XFrame; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace com::sun::star::util { class XURLTransformer; }
 class VCLXPopupMenu;
 
@@ -54,41 +54,41 @@ namespace svt
     class UNLESS_MERGELIBS(SVT_DLLPUBLIC) PopupMenuControllerBase : public PopupMenuControllerBaseType
     {
         public:
-            PopupMenuControllerBase( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+            PopupMenuControllerBase( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
             virtual ~PopupMenuControllerBase() override;
 
             // XServiceInfo
-            virtual OUString SAL_CALL getImplementationName(  ) override = 0;
-            virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-            virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override = 0;
+            virtual OUString getImplementationName(  ) override = 0;
+            virtual bool supportsService( const OUString& ServiceName ) override;
+            virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override = 0;
 
             // XPopupMenuController
-            virtual void SAL_CALL setPopupMenu( const css::uno::Reference< css::awt::XPopupMenu >& PopupMenu ) override;
-            virtual void SAL_CALL updatePopupMenu() override;
+            virtual void setPopupMenu( const cpo::uno::Reference< css::awt::XPopupMenu >& PopupMenu ) override;
+            virtual void updatePopupMenu() override;
 
             // XInitialization
-            virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override final;
+            virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override final;
 
             // XStatusListener
-            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override = 0;
+            virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override = 0;
 
             // XMenuListener
-            virtual void SAL_CALL itemHighlighted( const css::awt::MenuEvent& rEvent ) override;
-            virtual void SAL_CALL itemSelected( const css::awt::MenuEvent& rEvent ) override;
-            virtual void SAL_CALL itemActivated( const css::awt::MenuEvent& rEvent ) override;
-            virtual void SAL_CALL itemDeactivated( const css::awt::MenuEvent& rEvent ) override;
+            virtual void itemHighlighted( const css::awt::MenuEvent& rEvent ) override;
+            virtual void itemSelected( const css::awt::MenuEvent& rEvent ) override;
+            virtual void itemActivated( const css::awt::MenuEvent& rEvent ) override;
+            virtual void itemDeactivated( const css::awt::MenuEvent& rEvent ) override;
 
             // XDispatchProvider
-            virtual css::uno::Reference< css::frame::XDispatch > SAL_CALL queryDispatch( const css::util::URL& aURL, const OUString& sTarget, sal_Int32 nFlags ) override;
-            virtual cpo::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL queryDispatches( const cpo::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor ) override;
+            virtual cpo::uno::Reference< css::frame::XDispatch > queryDispatch( const css::util::URL& aURL, const OUString& sTarget, sal_Int32 nFlags ) override;
+            virtual cpo::uno::Sequence< cpo::uno::Reference< css::frame::XDispatch > > queryDispatches( const cpo::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor ) override;
 
             // XDispatch
-            virtual void SAL_CALL dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& seqProperties ) override;
-            virtual void SAL_CALL addStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
-            virtual void SAL_CALL removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
+            virtual void dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& seqProperties ) override;
+            virtual void addStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
+            virtual void removeStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
 
             // XEventListener
-            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+            virtual void disposing( const css::lang::EventObject& Source ) override;
 
             void dispatchCommand( const OUString& sCommandURL, const cpo::uno::Sequence< css::beans::PropertyValue >& rArgs, const OUString& sTarget = OUString() );
 
@@ -104,7 +104,7 @@ namespace svt
             */
             virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
-            static void resetPopupMenu( css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
+            static void resetPopupMenu( cpo::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
             virtual void impl_setPopupMenu(std::unique_lock<std::mutex>& rGuard);
             static OUString determineBaseURL( std::u16string_view aURL );
 
@@ -115,9 +115,9 @@ namespace svt
             OUString                                               m_aCommandURL;
             OUString                                               m_aBaseURL;
             OUString                                               m_aModuleName;
-            css::uno::Reference< css::frame::XDispatch >           m_xDispatch;
-            css::uno::Reference< css::frame::XFrame >              m_xFrame;
-            css::uno::Reference< css::util::XURLTransformer >      m_xURLTransformer;
+            cpo::uno::Reference< css::frame::XDispatch >           m_xDispatch;
+            cpo::uno::Reference< css::frame::XFrame >              m_xFrame;
+            cpo::uno::Reference< css::util::XURLTransformer >      m_xURLTransformer;
             rtl::Reference< VCLXPopupMenu >                        m_xPopupMenu;
             comphelper::OInterfaceContainerHelper4<XStatusListener> maStatusListeners;
     };

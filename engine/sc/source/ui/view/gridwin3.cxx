@@ -18,10 +18,12 @@
  */
 
 #include <svx/svdpagv.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <svx/svxids.hrc>
 #include <editeng/sizeitem.hxx>
 #include <sfx2/bindings.hxx>
 #include <svl/ptitem.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <osl/diagnose.h>
 
 #include <tabvwsh.hxx>

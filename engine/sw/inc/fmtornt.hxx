@@ -62,18 +62,16 @@ public:
     void   SetRelationOrient( sal_Int16 eNew )
     { ASSERT_CHANGE_REFCOUNTED_ITEM; m_eRelation = eNew; }
 
-    SwTwips GetPos() const { return std::round(m_nYPos.as_twip()); }
-    void    SetPos( SwTwips nNew )
-    {
-        ASSERT_CHANGE_REFCOUNTED_ITEM;
-        m_nYPos = gfx::Length::twip(nNew);
-    }
-
     gfx::Length getPosition() const { return m_nYPos; }
     void setPosition(gfx::Length nNew)
     {
         ASSERT_CHANGE_REFCOUNTED_ITEM;
         m_nYPos = nNew;
+    }
+    void adjustPosition(gfx::Length nDelta)
+    {
+        ASSERT_CHANGE_REFCOUNTED_ITEM;
+        m_nYPos += nDelta;
     }
 
     void dumpAsXml(xmlTextWriterPtr pWriter) const override;
@@ -115,18 +113,16 @@ public:
     void SetHoriOrient( sal_Int16 eNew ) { ASSERT_CHANGE_REFCOUNTED_ITEM; m_eOrient = eNew; }
     void SetRelationOrient( sal_Int16 eNew ) { ASSERT_CHANGE_REFCOUNTED_ITEM; m_eRelation = eNew; }
 
-    SwTwips GetPos() const { return std::round(m_nXPos.as_twip()); }
-    void SetPos(SwTwips nNew)
-    {
-        ASSERT_CHANGE_REFCOUNTED_ITEM;
-        m_nXPos = gfx::Length::twip(nNew);
-    }
-
     gfx::Length getPosition() const { return m_nXPos; }
     void setPosition(gfx::Length nNew)
     {
         ASSERT_CHANGE_REFCOUNTED_ITEM;
         m_nXPos = nNew;
+    }
+    void adjustPosition(gfx::Length nDelta)
+    {
+        ASSERT_CHANGE_REFCOUNTED_ITEM;
+        m_nXPos += nDelta;
     }
 
     bool IsPosToggle() const { return m_bPosToggle; }

@@ -19,6 +19,10 @@ class KitTrigger
 public:
     static void trigger_changed(weld::TextView& rView) { rView.signal_changed(); }
 
+    static void trigger_focus_in(weld::Widget& rWidget) { rWidget.signal_focus_in(); }
+
+    static void trigger_focus_out(weld::Widget& rWidget) { rWidget.signal_focus_out(); }
+
     static void trigger_changed(weld::Entry& rEdit) { rEdit.signal_changed(); }
 
     static void trigger_activated(weld::Entry& rEdit) { rEdit.signal_activated(); }
@@ -139,11 +143,14 @@ public:
         rSpinButton.signal_value_changed();
     }
 
+    static void trigger_value_changed(weld::Scale& rScale) { rScale.signal_value_changed(); }
+
     static void trigger_closed(weld::Popover& rPopover) { rPopover.popdown(); }
 
-    static void trigger_key_press(const weld::Widget& rWidget, const KeyEvent& rEvent)
+    /// returns true when the widget's owner handled the key
+    static bool trigger_key_press(const weld::Widget& rWidget, const KeyEvent& rEvent)
     {
-        rWidget.m_aKeyPressHdl.Call(rEvent);
+        return rWidget.m_aKeyPressHdl.Call(rEvent);
     }
 
     static void trigger_key_release(const weld::Widget& rWidget, const KeyEvent& rEvent)

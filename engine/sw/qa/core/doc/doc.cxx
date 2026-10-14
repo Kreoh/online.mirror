@@ -9,10 +9,23 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <editeng/borderline.hxx>
+#include <editeng/boxitem.hxx>
+
+#include <com/sun/star/graphic/XGraphic.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
+#include <com/sun/star/text/XTextTablesSupplier.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <com/sun/star/document/UpdateDocMode.hpp>
+#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
+#include <com/sun/star/form/XFormsSupplier.hpp>
+#include <com/sun/star/form/XLoadable.hpp>
+#include <com/sun/star/sdb/CommandType.hpp>
 
 #include <comphelper/classids.hxx>
+#include <comphelper/configuration.hxx>
+#include <officecfg/Office/Common.hxx>
 #include <tools/globname.hxx>
 #include <svtools/embedhlp.hxx>
 #include <editeng/acorrcfg.hxx>
@@ -27,11 +40,13 @@
 
 #include <wrtsh.hxx>
 #include <fmtanchr.hxx>
+#include <fmtfollowtextflow.hxx>
 #include <frameformats.hxx>
 #include <docsh.hxx>
 #include <edtwin.hxx>
 #include <view.hxx>
 #include <ndtxt.hxx>
+#include <numrule.hxx>
 #include <swdtflvr.hxx>
 #include <unotxdoc.hxx>
 #include <UndoManager.hxx>
@@ -42,12 +57,22 @@
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
 #include <sortedobjs.hxx>
+#include <textboxhelper.hxx>
 #include <itabenum.hxx>
 #include <redline.hxx>
 #include <UndoRedline.hxx>
+#include <tblafmt.hxx>
+#include <docmodel/theme/ColorSet.hxx>
+#include <tblafmtpreview.hxx>
+#include <ThemeColorChanger.hxx>
+#include <docmodel/color/ComplexColor.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/memberids.h>
+#include <editeng/colritem.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Covers sw/source/core/doc/ fixes.
 class SwCoreDocTest : public SwModelTestBase
@@ -169,6 +194,209 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testBulletsOnSpace)
     ErrorRegistry::Reset();
 }
 
+namespace
+{
+/// Types the text and then Enter into the edit window of the document.
+void TypeLineWithEnter(SwDocShell& rDocShell, std::u16string_view aText)
+{
+    SwEditWin& rEditWin = rDocShell.GetView()->GetEditWin();
+    for (sal_Unicode cChar : aText)
+    {
+        KeyEvent aKeyEvent(cChar, cChar == ' ' ? KEY_SPACE : 0);
+        rEditWin.KeyInput(aKeyEvent);
+    }
+    KeyEvent aEnterEvent(0, KEY_RETURN);
+    rEditWin.KeyInput(aEnterEvent);
+}
+
+/// Sets the default bullet characters and fonts of unordered lists.
+void SetDefaultListBullets(const cpo::uno::Sequence<OUString>& rBullets,
+                           const cpo::uno::Sequence<OUString>& rFonts)
+{
+    std::shared_ptr<comphelper::ConfigurationChanges> pBatch(
+        comphelper::ConfigurationChanges::create());
+    officecfg::Office::Common::BulletsNumbering::DefaultListBullets::set(rBullets, pBatch);
+    officecfg::Office::Common::BulletsNumbering::DefaultListBulletsFonts::set(rFonts, pBatch);
+    pBatch->commit();
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testAutoFormatBulletIsDefaultBullet)
+{
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    pAutoCorrect->GetSwFlags().bSetNumRule = true;
+
+    // "-", "*" and "+" each start a list with the default bullet of each level, the same as the
+    // Unordered List button:
+    for (std::u16string_view aStart : { u"-", u"*", u"+" })
+    {
+        createSwDoc();
+        SwDocShell* pDocShell = getSwDocShell();
+        TypeLineWithEnter(*pDocShell, Concat2View(OUString::Concat(aStart) + " A"));
+
+        SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+        pWrtShell->Up(/*bSelect=*/false);
+        SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+        CPPUNIT_ASSERT_EQUAL(u"A"_ustr, pTextNode->GetText());
+        const SwNumRule* pRule = pTextNode->GetNumRule();
+        CPPUNIT_ASSERT(pRule);
+        OString aMessage = "list started by " + OUString(aStart).toUtf8();
+        // Without the accompanying fix in place, this test would have failed with:
+        // - Expected: 8226
+        // - Actual  : 8211
+        // i.e. "-" gave an en dash bullet.
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), sal_UCS4(0x2022),
+                                     pRule->Get(0).GetBulletChar());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), sal_UCS4(0x25e6),
+                                     pRule->Get(1).GetBulletChar());
+        const std::optional<vcl::Font>& oFont = pRule->Get(0).GetBulletFont();
+        CPPUNIT_ASSERT(oFont);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), u"OpenSymbol"_ustr, oFont->GetFamilyName());
+    }
+    ErrorRegistry::Reset();
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testAutoFormatBulletFollowsDefaultBulletSetting)
+{
+    // Given a custom default bullet:
+    const cpo::uno::Sequence<OUString> aOldBullets
+        = officecfg::Office::Common::BulletsNumbering::DefaultListBullets::get();
+    const cpo::uno::Sequence<OUString> aOldFonts
+        = officecfg::Office::Common::BulletsNumbering::DefaultListBulletsFonts::get();
+    SetDefaultListBullets({ u"■"_ustr }, { u"DejaVu Sans"_ustr });
+    comphelper::ScopeGuard aConfigGuard([&] { SetDefaultListBullets(aOldBullets, aOldFonts); });
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    pAutoCorrect->GetSwFlags().bSetNumRule = true;
+
+    // When typing "- a" and Enter:
+    createSwDoc();
+    SwDocShell* pDocShell = getSwDocShell();
+    TypeLineWithEnter(*pDocShell, u"- a");
+
+    // Then the list uses the custom bullet:
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    pWrtShell->Up(/*bSelect=*/false);
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    const SwNumRule* pRule = pTextNode->GetNumRule();
+    CPPUNIT_ASSERT(pRule);
+    CPPUNIT_ASSERT_EQUAL(sal_UCS4(0x25a0), pRule->Get(0).GetBulletChar());
+    const std::optional<vcl::Font>& oFont = pRule->Get(0).GetBulletFont();
+    CPPUNIT_ASSERT(oFont);
+    CPPUNIT_ASSERT_EQUAL(u"DejaVu Sans"_ustr, oFont->GetFamilyName());
+    ErrorRegistry::Reset();
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testAutoFormatBulletTypedDashStaysDash)
+{
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    pAutoCorrect->GetSwFlags().bSetNumRule = true;
+
+    // A typed en dash or em dash starts a list with that dash as the bullet:
+    for (sal_Unicode cDash : { u'\u2013', u'\u2014' })
+    {
+        createSwDoc();
+        SwDocShell* pDocShell = getSwDocShell();
+        TypeLineWithEnter(*pDocShell, Concat2View(OUStringChar(cDash) + " a"));
+
+        SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+        pWrtShell->Up(/*bSelect=*/false);
+        SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+        const SwNumRule* pRule = pTextNode->GetNumRule();
+        CPPUNIT_ASSERT(pRule);
+        CPPUNIT_ASSERT_EQUAL(sal_UCS4(cDash), pRule->Get(0).GetBulletChar());
+    }
+    ErrorRegistry::Reset();
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testAutoFormatBulletContinuesPreviousBulletList)
+{
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    pAutoCorrect->GetSwFlags().bSetNumRule = true;
+
+    // Given a paragraph in a list with a check mark bullet, followed by an empty paragraph:
+    createSwDoc();
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    pWrtShell->Insert(u"A"_ustr);
+    pWrtShell->SplitNode();
+    pWrtShell->SplitNode();
+    pWrtShell->SttEndDoc(/*bStt=*/true);
+    pWrtShell->BulletOn();
+    SwTextNode* pFirstNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    SwNumRule* pCheckRule = pFirstNode->GetNumRule();
+    CPPUNIT_ASSERT(pCheckRule);
+    SwNumFormat aFormat(pCheckRule->Get(0));
+    aFormat.SetBulletChar(0x2714);
+    pCheckRule->Set(0, aFormat);
+    pWrtShell->SttEndDoc(/*bStt=*/false);
+
+    // When typing "- B" and Enter in the last paragraph:
+    TypeLineWithEnter(*pDocShell, u"- B");
+
+    // Then the new paragraph continues the list with the check mark bullet, the same as the
+    // Unordered List button:
+    pWrtShell->Up(/*bSelect=*/false);
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    CPPUNIT_ASSERT_EQUAL(u"B"_ustr, pTextNode->GetText());
+    const SwNumRule* pRule = pTextNode->GetNumRule();
+    CPPUNIT_ASSERT(pRule);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 10004
+    // - Actual  : 8226
+    // i.e. the typed bullet started a new list with the default bullet.
+    CPPUNIT_ASSERT_EQUAL(sal_UCS4(0x2714), pRule->Get(0).GetBulletChar());
+    CPPUNIT_ASSERT_EQUAL(pFirstNode->GetListId(), pTextNode->GetListId());
+    ErrorRegistry::Reset();
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testBulletsOnSpacePlus)
+{
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    pAutoCorrect->GetSwFlags().bSetNumRule = true;
+    pAutoCorrect->GetSwFlags().bSetNumRuleAfterSpace = true;
+
+    createSwDoc();
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    SwEditWin& rEditWin = pDocShell->GetView()->GetEditWin();
+    KeyEvent aKeyEvent('+', 0);
+    rEditWin.KeyInput(aKeyEvent);
+    KeyEvent aKeyEvent2(' ', KEY_SPACE);
+    rEditWin.KeyInput(aKeyEvent2);
+    KeyEvent aKeyEvent3('a', 0);
+    rEditWin.KeyInput(aKeyEvent3);
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: a
+    // - Actual  : + a
+    // i.e. '+ ' was not converted into a bullet, unlike '- ' and '* '.
+    CPPUNIT_ASSERT_EQUAL(u"a"_ustr, pTextNode->GetText());
+    CPPUNIT_ASSERT(pTextNode->GetNumRule());
+    ErrorRegistry::Reset();
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testEmojiShortcodeIsLanguageIndependent)
+{
+    // Given a document whose text language is not English:
+    createSwDoc();
+    SwDocShell* pDocShell = getSwDocShell();
+    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
+    pWrtShell->SetAttrItem(SvxLanguageItem(LANGUAGE_GERMAN, RES_CHRATR_LANGUAGE));
+
+    // When typing the international shortcode of an emoji:
+    SwEditWin& rEditWin = pDocShell->GetView()->GetEditWin();
+    for (sal_Unicode ch : std::u16string_view(u":rocket:"))
+        rEditWin.KeyInput(KeyEvent(ch, 0));
+
+    // Then it is replaced, the shortcodes living in the "und" replacement list
+    // that AutoCorrect consults whatever the document language is.
+    // Without that, this was ":rocket:", the German list only knowing :Rakete:.
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    CPPUNIT_ASSERT_EQUAL(u"\U0001F680"_ustr, pTextNode->GetText());
+    ErrorRegistry::Reset();
+}
+
 CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testLocaleIndependentTemplate)
 {
     createSwDoc("locale-independent-template.odt");
@@ -206,6 +434,38 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTextBoxZOrder)
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt32>(2), pEllipseShape->GetOrdNum());
 }
 
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testShapeZOrderOverTextBox)
+{
+    // Given a document with a shape that has a text box at the bottom and two plain shapes over
+    // it, the three of them asking for that order:
+    createSwDoc("textbox-shape-zorder.docx");
+
+    // Then the shapes have to keep the order the document gives them.
+    uno::Reference<beans::XPropertySet> xBottom(getShapeByName(u"WithTextBox"), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xMiddle(getShapeByName(u"Middle"), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xTop(getShapeByName(u"Top"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xBottom.is());
+    CPPUNIT_ASSERT(xMiddle.is());
+    CPPUNIT_ASSERT(xTop.is());
+
+    sal_Int32 nBottom = 0;
+    sal_Int32 nMiddle = 0;
+    sal_Int32 nTop = 0;
+    xBottom->getPropertyValue(u"ZOrder"_ustr) >>= nBottom;
+    xMiddle->getPropertyValue(u"ZOrder"_ustr) >>= nMiddle;
+    xTop->getPropertyValue(u"ZOrder"_ustr) >>= nTop;
+
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 2
+    // The shape over the text box was put one place too high and ended up over the shape that5
+    // should have covered it: the import added a place for the text frame of the text box,
+    // which the z-order it read back does not count.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0), nBottom);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), nMiddle);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2), nTop);
+}
+
 CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTextBoxMakeFlyFrame)
 {
     // Given a document with an as-char textbox (as-char draw format + at-char fly format):
@@ -231,6 +491,39 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTextBoxMakeFlyFrame)
     // frame in the body frame had an SwAnchoredDrawObject anchored to it, but not a fly frame, so
     // a blank square was painted, not the image.
     assertXPath(pLayout, "/root/page/body/txt/anchored/fly", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTextBoxInCellFollowTextFlow)
+{
+    // Given a table cell holding an absolutely positioned shape that has a text box:
+    createSwDoc("textbox-in-cell-follow-text-flow.docx");
+    SwDoc* pDoc = getSwDoc();
+    sw::SpzFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), rFormats.size());
+    SwFrameFormat* pShapeFormat = nullptr;
+    for (const auto& pFormat : rFormats)
+    {
+        if (pFormat->Which() == RES_DRAWFRMFMT)
+            pShapeFormat = pFormat;
+    }
+    CPPUNIT_ASSERT(pShapeFormat);
+    // The text box is the fly format linked to the shape format.
+    const SwFrameFormat* pFlyFormat
+        = SwTextBoxHelper::getOtherTextBoxFormat(pShapeFormat, RES_DRAWFRMFMT);
+    CPPUNIT_ASSERT(pFlyFormat);
+    CPPUNIT_ASSERT(pShapeFormat->GetFollowTextFlow().GetValue());
+    // Without the accompanying fix in place, this test would have failed: the fly format kept the
+    // pool default (false) while the shape format had true, so the text box was positioned
+    // against the page instead of staying inside the cell that holds its shape.
+    CPPUNIT_ASSERT(pFlyFormat->GetFollowTextFlow().GetValue());
+
+    // When the flag is changed on the shape format later, the text box follows it:
+    pDoc->SetAttr(SwFormatFollowTextFlow(false), *pShapeFormat);
+    CPPUNIT_ASSERT(!pShapeFormat->GetFollowTextFlow().GetValue());
+    CPPUNIT_ASSERT(!pFlyFormat->GetFollowTextFlow().GetValue());
+    pDoc->SetAttr(SwFormatFollowTextFlow(true), *pShapeFormat);
+    CPPUNIT_ASSERT(pShapeFormat->GetFollowTextFlow().GetValue());
+    CPPUNIT_ASSERT(pFlyFormat->GetFollowTextFlow().GetValue());
 }
 
 CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testIMEGrouping)
@@ -405,10 +698,10 @@ struct SelectionChangeListener : public cppu::WeakImplHelper<view::XSelectionCha
 public:
     SelectionChangeListener(const uno::Reference<container::XNameAccess>& xBookmarks);
     // view::XSelectionChangeListener
-    void SAL_CALL selectionChanged(const lang::EventObject& rEvent) override;
+    void selectionChanged(const lang::EventObject& rEvent) override;
 
     // lang::XEventListener
-    void SAL_CALL disposing(const lang::EventObject& rSource) override;
+    void disposing(const lang::EventObject& rSource) override;
 };
 }
 
@@ -1185,6 +1478,539 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCloseDocWithFillBitmapLinkTracker)
     // ~FillBitmapLinkTracker as the document was destroyed.
     mxComponent->dispose();
     mxComponent.clear();
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTableStyleFollowsDocumentTheme)
+{
+    // A table with the built-in "Grid Table 4 Accent 1", whose colors are theme colors, in a
+    // new document.
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    const TableStyleName aStyleName(u"Grid Table 4 Accent 1"_ustr);
+    SwInsertTableOptions aOptions(SwInsertTableFlags::DefaultBorder, 0);
+    const SwTable& rTable = pWrtShell->InsertTable(aOptions, /*nRows=*/2, /*nCols=*/2);
+    SwTable& rMutableTable = rTable.GetTableNode()->GetTable();
+    SwTableStyleSettings aSettings;
+    aSettings.m_bUseFirstRowStyle = true;
+    rMutableTable.SetTableStyleName(aStyleName);
+    rMutableTable.SetTableStyleSettings(aSettings);
+    pDoc->ApplyTableStyleLive(*rTable.GetTableNode(), /*bResetCellFormatting=*/true);
+
+    // The header takes the fill and text color the document's own theme has for accent 1 and
+    // the first light color, not the values the catalog was made with.
+    const model::ColorSet& rTheme = sw::GetDocumentThemeColors(*pDoc);
+    const Color aAccent1 = rTheme.getColor(model::ThemeColorType::Accent1);
+    CPPUNIT_ASSERT(aAccent1 != Color(0x4472C4));
+    const SwTableBox* pHeaderBox = rMutableTable.GetTabLines()[0]->GetTabBoxes()[0];
+    CPPUNIT_ASSERT_EQUAL(aAccent1,
+                         pHeaderBox->GetFrameFormat()->GetAttrSet().Get(RES_BACKGROUND).GetColor());
+    const SwTextNode* pHeaderNode = pDoc->GetNodes()[pHeaderBox->GetSttIdx() + 1]->GetTextNode();
+    CPPUNIT_ASSERT(pHeaderNode);
+    CPPUNIT_ASSERT_EQUAL(rTheme.getColor(model::ThemeColorType::Light1),
+                         pHeaderNode->GetSwAttrSet().Get(RES_CHRATR_COLOR).GetValue());
+
+    // A body cell shaded by hand keeps its own color through everything that follows.
+    SwTableBox* pBodyBox = rMutableTable.GetTabLines()[1]->GetTabBoxes()[0];
+    pBodyBox->ClaimFrameFormat()->SetFormatAttr(SvxBrushItem(COL_LIGHTGREEN, RES_BACKGROUND));
+
+    // Changing the theme's accent 1 recolors the header at once.
+    auto pNewTheme = std::make_shared<model::ColorSet>(rTheme);
+    pNewTheme->add(model::ThemeColorType::Accent1, Color(0x123456));
+    sw::ThemeColorChanger aChanger(getSwDocShell());
+    aChanger.apply(pNewTheme);
+    CPPUNIT_ASSERT_EQUAL(Color(0x123456),
+                         pHeaderBox->GetFrameFormat()->GetAttrSet().Get(RES_BACKGROUND).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTGREEN,
+                         pBodyBox->GetFrameFormat()->GetAttrSet().Get(RES_BACKGROUND).GetColor());
+
+    // Undo of the theme change gives the header the old accent 1 back, and redo the new one.
+    pWrtShell->Undo();
+    CPPUNIT_ASSERT_EQUAL(aAccent1,
+                         pHeaderBox->GetFrameFormat()->GetAttrSet().Get(RES_BACKGROUND).GetColor());
+    pWrtShell->Redo();
+    CPPUNIT_ASSERT_EQUAL(Color(0x123456),
+                         pHeaderBox->GetFrameFormat()->GetAttrSet().Get(RES_BACKGROUND).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTGREEN,
+                         pBodyBox->GetFrameFormat()->GetAttrSet().Get(RES_BACKGROUND).GetColor());
+
+    // The gallery preview of the style is rendered with the same theme.
+    const OString aPreview = sw::CreateTableStylePreviewDataUri(
+        *pDoc->GetTableStyles().FindAutoFormat(aStyleName), aSettings, /*bIsPageDark=*/false,
+        &sw::GetDocumentThemeColors(*pDoc));
+    CPPUNIT_ASSERT(aPreview.startsWith("data:image/png;base64,"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testBuiltInWordTableStyleCatalog)
+{
+    // Given a new document in a profile with no autotbl.fmt of its own, which is the
+    // situation inside a coolwsd kit's jail:
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+
+    // Then the table style catalog offers Word's built-in styles next to the default one.
+    const SwTableAutoFormatTable& rStyles = pDoc->GetTableStyles();
+    // 246 named styles from the embedded catalog plus the default style built in code.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(247), rStyles.size());
+
+    CPPUNIT_ASSERT(rStyles.FindAutoFormat(TableStyleName(u"Plain Table 1"_ustr)));
+    CPPUNIT_ASSERT(rStyles.FindAutoFormat(TableStyleName(u"Light Shading Accent 1"_ustr)));
+    CPPUNIT_ASSERT(rStyles.FindAutoFormat(TableStyleName(u"List Table 7 Colorful Accent 6"_ustr)));
+
+    // A catalog name is shown composed from its translated parts, which in the English UI
+    // gives the name itself back, and the shown name finds the style again. A name that is
+    // not from the catalog is shown as it is.
+    for (const OUString& rName : { u"Grid Table 4 Accent 1"_ustr, u"Grid Table Light"_ustr,
+                                   u"List Table 7 Colorful Accent 6"_ustr, u"Table 3D effects 1"_ustr,
+                                   u"Plain Table 1"_ustr })
+    {
+        CPPUNIT_ASSERT_EQUAL(rName, SwTableAutoFormat::GetUIName(TableStyleName(rName)).toString());
+        const SwTableAutoFormat* pByUIName = rStyles.FindAutoFormatByUIName(UIName(rName));
+        CPPUNIT_ASSERT(pByUIName);
+        CPPUNIT_ASSERT_EQUAL(rName, pByUIName->GetName().toString());
+    }
+    // The gallery shows the current generation of the catalog in three sections, and the
+    // older generations only on demand: they stay in the catalog for files that use them
+    // but are hidden. The catalog's bare base style is not imported at all.
+    using CatalogGroup = SwTableAutoFormat::CatalogGroup;
+    const struct { OUString aName; CatalogGroup eGroup; bool bHidden; } aExpected[] = {
+        { u"Plain Table 1"_ustr, CatalogGroup::Plain, false },
+        { u"Table Grid"_ustr, CatalogGroup::Plain, false },
+        { u"Grid Table Light"_ustr, CatalogGroup::Plain, false },
+        { u"Grid Table 4 Accent 1"_ustr, CatalogGroup::Grid, false },
+        { u"List Table 7 Colorful Accent 6"_ustr, CatalogGroup::List, false },
+        { u"Light Shading Accent 1"_ustr, CatalogGroup::None, true },
+        { u"Table Classic 1"_ustr, CatalogGroup::None, true },
+    };
+    for (const auto& rExpected : aExpected)
+    {
+        const SwTableAutoFormat* pStyle = rStyles.FindAutoFormat(TableStyleName(rExpected.aName));
+        CPPUNIT_ASSERT_MESSAGE(OUStringToOString(rExpected.aName, RTL_TEXTENCODING_UTF8).getStr(),
+                               pStyle);
+        CPPUNIT_ASSERT_EQUAL(static_cast<int>(rExpected.eGroup),
+                             static_cast<int>(pStyle->GetCatalogGroup()));
+        CPPUNIT_ASSERT_EQUAL(rExpected.bHidden, pStyle->IsHidden());
+    }
+    const TableStyleName aUserName(u"My Table"_ustr);
+    CPPUNIT_ASSERT_EQUAL(static_cast<int>(CatalogGroup::None),
+                         static_cast<int>(SwTableAutoFormat::GetCatalogGroup(aUserName)));
+
+    CPPUNIT_ASSERT_EQUAL(u"My Table"_ustr,
+                         SwTableAutoFormat::GetUIName(TableStyleName(u"My Table"_ustr)).toString());
+    CPPUNIT_ASSERT_EQUAL(u"Grid Table 4 Accent 1 Wide"_ustr,
+                         SwTableAutoFormat::GetUIName(TableStyleName(u"Grid Table 4 Accent 1 Wide"_ustr))
+                             .toString());
+    CPPUNIT_ASSERT_EQUAL(u"Grid Table Accent 1"_ustr,
+                         SwTableAutoFormat::GetUIName(TableStyleName(u"Grid Table Accent 1"_ustr))
+                             .toString());
+
+    // And the colors resolve against the stock Office theme, so a first-row header cell of
+    // "Grid Table 4 Accent 1" is filled with the theme's accent1 blue, not with whatever
+    // theme the document the catalog was extracted from happened to use.
+    const SwTableAutoFormat* pGridTable4
+        = rStyles.FindAutoFormat(TableStyleName(u"Grid Table 4 Accent 1"_ustr));
+    CPPUNIT_ASSERT(pGridTable4);
+    const sal_uInt8 nHeaderCorner
+        = static_cast<sal_uInt8>(SwTableAutoFormat::RowColRole::First) * SwTableAutoFormat::nRoleCount
+          + static_cast<sal_uInt8>(SwTableAutoFormat::RowColRole::First);
+    const Color aHeaderFill = pGridTable4->GetBoxFormat(nHeaderCorner).GetProps().GetBackground().GetColor();
+    CPPUNIT_ASSERT_EQUAL(Color(0x4472C4), aHeaderFill);
+
+    // A banded body cell of the same style is a light tint of that blue: the tinted literal
+    // was recomputed from the stock theme as well, not left at the source document's pink.
+    const sal_uInt8 nBandCell
+        = static_cast<sal_uInt8>(SwTableAutoFormat::RowColRole::BandA) * SwTableAutoFormat::nRoleCount
+          + static_cast<sal_uInt8>(SwTableAutoFormat::RowColRole::BandA);
+    const Color aBandFill = pGridTable4->GetBoxFormat(nBandCell).GetProps().GetBackground().GetColor();
+    CPPUNIT_ASSERT(aBandFill != COL_TRANSPARENT);
+    CPPUNIT_ASSERT(aBandFill != Color(0xFADBDB));
+    CPPUNIT_ASSERT(aBandFill.GetBlue() > aBandFill.GetRed());
+    CPPUNIT_ASSERT(aBandFill.GetLuminance() > aHeaderFill.GetLuminance());
+
+    // The catalog's colors are theme colors: the header fill is the theme's accent 1, the
+    // band a tint of it and the header text the theme's first light color. The style keeps
+    // those references next to the resolved values, so it can follow a document theme.
+    const model::ComplexColor& rHeaderFill
+        = pGridTable4->GetBoxFormat(nHeaderCorner).GetProps().GetBackground().getComplexColor();
+    CPPUNIT_ASSERT_EQUAL(int(model::ThemeColorType::Accent1), int(rHeaderFill.getThemeColorType()));
+    CPPUNIT_ASSERT(rHeaderFill.getTransformations().empty());
+    const model::ComplexColor& rBandFill
+        = pGridTable4->GetBoxFormat(nBandCell).GetProps().GetBackground().getComplexColor();
+    CPPUNIT_ASSERT_EQUAL(int(model::ThemeColorType::Accent1), int(rBandFill.getThemeColorType()));
+    CPPUNIT_ASSERT(!rBandFill.getTransformations().empty());
+    CPPUNIT_ASSERT_EQUAL(int(model::TransformationType::Tint),
+                         int(rBandFill.getTransformations()[0].meType));
+    CPPUNIT_ASSERT_EQUAL(int(model::ThemeColorType::Light1),
+                         int(pGridTable4->GetBoxFormat(nHeaderCorner).GetProps().GetColor()
+                                 .getComplexColor().getThemeColorType()));
+
+    // A converted style defines only what the document's style did: the header text color,
+    // not a font. Asking for the defined text attributes must give exactly that, while the
+    // full set still carries the constructed default font for the old bake.
+    const SwAutoFormatProps& rHeaderProps = pGridTable4->GetBoxFormat(nHeaderCorner).GetProps();
+    CPPUNIT_ASSERT(rHeaderProps.IsDefined(AutoFormatItem::Color));
+    CPPUNIT_ASSERT(!rHeaderProps.IsDefined(AutoFormatItem::Font));
+    CPPUNIT_ASSERT(!rHeaderProps.IsDefined(AutoFormatItem::Height));
+
+    SfxItemSet aDefinedSet(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_BEGIN, RES_PARATR_LIST_END - 1>(pDoc->GetAttrPool()));
+    pGridTable4->UpdateToSet(nHeaderCorner, false, false, aDefinedSet,
+                             SwTableAutoFormatUpdateFlags::Char | SwTableAutoFormatUpdateFlags::DefinedOnly, nullptr);
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::SET, aDefinedSet.GetItemState(RES_CHRATR_COLOR, false));
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::DEFAULT, aDefinedSet.GetItemState(RES_CHRATR_FONT, false));
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::DEFAULT, aDefinedSet.GetItemState(RES_CHRATR_FONTSIZE, false));
+
+    SfxItemSet aFullSet(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_BEGIN, RES_PARATR_LIST_END - 1>(pDoc->GetAttrPool()));
+    pGridTable4->UpdateToSet(nHeaderCorner, false, false, aFullSet, SwTableAutoFormatUpdateFlags::Char, nullptr);
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::SET, aFullSet.GetItemState(RES_CHRATR_FONT, false));
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testExternalDatabaseFormLoadsOnlyAfterLinkUpdateAllowed)
+{
+    // Given a document whose form names its database by connection URL, loaded without link
+    // updates:
+    uno::Sequence<beans::PropertyValue> aParams = {
+        comphelper::makePropertyValue(u"UpdateDocMode"_ustr,
+                                      sal_Int16(document::UpdateDocMode::NO_UPDATE)),
+    };
+    loadWithParams(createFileURL(u"external-database-form.fodt"), aParams);
+    SwDocShell* pDocShell = getSwDocShell();
+    CPPUNIT_ASSERT(pDocShell->HasExternalDatabaseForms());
+
+    uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<form::XFormsSupplier> xFormsSupplier(xDrawPageSupplier->getDrawPage(),
+                                                        uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xForm(xFormsSupplier->getForms()->getByName(u"Form"_ustr),
+                                              uno::UNO_QUERY);
+    uno::Reference<form::XLoadable> xLoadable(xForm, uno::UNO_QUERY);
+
+    // The .fodt cannot hold an absolute path, so point the form at the table directory next to
+    // it. A flat-file connection made from a bare URL looks for tables with no file extension.
+    const OUString sTableURL = createFileURL(u"database-form-table/names");
+    const OUString sTableDirectoryURL = sTableURL.copy(0, sTableURL.lastIndexOf('/') + 1);
+    xForm->setPropertyValue(u"URL"_ustr, uno::Any("sdbc:flat:" + sTableDirectoryURL));
+    xForm->setPropertyValue(u"Command"_ustr, uno::Any(u"names"_ustr));
+    xForm->setPropertyValue(u"CommandType"_ustr, uno::Any(sdb::CommandType::TABLE));
+
+    // When the form is loaded while link updates are not allowed, it stays unloaded.
+    xLoadable->load();
+    CPPUNIT_ASSERT(!xLoadable->isLoaded());
+
+    // When the user then allows link updates, the form connects and loads.
+    pDocShell->AllowLinkUpdate();
+    CPPUNIT_ASSERT(xLoadable->isLoaded());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testStripBakedTableStyleComparesThemeAndLineSplit)
+{
+    // Given a document with two one-cell tables:
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    // The style's theme colors resolve against the document theme, so a fill that repeats the
+    // style's has the theme's value for accent 1.
+    const Color aFill = sw::GetDocumentThemeColors(*pDoc).getColor(model::ThemeColorType::Accent1);
+    model::ComplexColor aAccent1Theme;
+    aAccent1Theme.setThemeColor(model::ThemeColorType::Accent1);
+    SvxBrushItem aPlainBrush(aFill, RES_BACKGROUND);
+    SvxBrushItem aThemeBrush(aFill, RES_BACKGROUND);
+    aThemeBrush.setComplexColor(aAccent1Theme);
+    editeng::SvxBorderLine aEvenLine(nullptr, 0, SvxBorderLineStyle::DOUBLE);
+    aEvenLine.GuessLinesWidths(SvxBorderLineStyle::DOUBLE, 20, 20, 20);
+    editeng::SvxBorderLine aUnevenLine(nullptr, 0, SvxBorderLineStyle::DOUBLE);
+    aUnevenLine.GuessLinesWidths(SvxBorderLineStyle::DOUBLE, 10, 30, 20);
+    CPPUNIT_ASSERT_EQUAL(aEvenLine.GetWidth(), aUnevenLine.GetWidth());
+
+    // Each table has a style whose cells all have the given fill and a double top border split
+    // 20, 20, 20, and its cell has the given own fill and own top border.
+    auto aInsertTable = [&](const OUString& rStyleName, const SvxBrushItem& rStyleBrush,
+                            const SvxBrushItem& rOwnBrush, const editeng::SvxBorderLine& rOwnLine)
+    {
+        SwInsertTableOptions aOptions(SwInsertTableFlags::NONE, 0);
+        const SwTable& rTable = pWrtShell->InsertTable(aOptions, /*nRows=*/1, /*nCols=*/1);
+        SwTable& rMutableTable = rTable.GetTableNode()->GetTable();
+        SwTableBox* pBox = rMutableTable.GetTabLines()[0]->GetTabBoxes()[0];
+        SfxItemSet aStyleSet(pBox->GetFrameFormat()->GetAttrSet());
+        aStyleSet.Put(rStyleBrush);
+        SvxBoxItem aStyleBox(RES_BOX);
+        aStyleBox.SetLine(&aEvenLine, SvxBoxItemLine::TOP);
+        aStyleSet.Put(aStyleBox);
+        SwTableAutoFormat aStyle((TableStyleName(rStyleName)));
+        for (sal_uInt8 nPos = 0; nPos < 16; ++nPos)
+            aStyle.UpdateFromSet(nPos, aStyleSet, SwTableAutoFormatUpdateFlags::Box, nullptr);
+        pDoc->GetTableStyles().AddAutoFormat(aStyle);
+        rMutableTable.SetTableStyleName(TableStyleName(rStyleName));
+
+        SvxBoxItem aOwnBox(RES_BOX);
+        aOwnBox.SetLine(&rOwnLine, SvxBoxItemLine::TOP);
+        SwFrameFormat* pBoxFormat = pBox->ClaimFrameFormat();
+        pBoxFormat->SetFormatAttr(rOwnBrush);
+        pBoxFormat->SetFormatAttr(aOwnBox);
+        pWrtShell->SttEndDoc(/*bStt=*/false);
+        return std::pair<SwTableNode*, SwTableBox*>(rTable.GetTableNode(), pBox);
+    };
+    // In the first, the style's fill is a plain value, and the cell's own fill has the same
+    // value but links to the theme's accent 1; the cell's border splits the same total width
+    // 10, 30, 20.
+    auto [pFirstNode, pFirstBox]
+        = aInsertTable(u"Plain Fill"_ustr, aPlainBrush, aThemeBrush, aUnevenLine);
+    // In the second, the style's fill and the cell's own fill both link to accent 1, and the
+    // borders are the same.
+    auto [pSecondNode, pSecondBox]
+        = aInsertTable(u"Theme Fill"_ustr, aThemeBrush, aThemeBrush, aEvenLine);
+
+    // When the formatting that only repeats the style is dropped, as on load:
+    pDoc->StripBakedTableStyleFormatting(*pFirstNode, /*bCompleteStyleBoxes=*/true);
+    pDoc->StripBakedTableStyleFormatting(*pSecondNode, /*bCompleteStyleBoxes=*/true);
+
+    // Then the first cell keeps both: the fill's theme link and the border's split are things
+    // its style does not give.
+    const SwAttrSet& rFirstSet = pFirstBox->GetFrameFormat()->GetAttrSet();
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::SET, rFirstSet.GetItemState(RES_BACKGROUND, false));
+    CPPUNIT_ASSERT_EQUAL(
+        int(model::ThemeColorType::Accent1),
+        int(rFirstSet.Get(RES_BACKGROUND).getComplexColor().getThemeColorType()));
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::SET, rFirstSet.GetItemState(RES_BOX, false));
+    const editeng::SvxBorderLine* pTop = rFirstSet.Get(RES_BOX).GetTop();
+    CPPUNIT_ASSERT(pTop);
+    CPPUNIT_ASSERT_EQUAL(aUnevenLine.GetOutWidth(), pTop->GetOutWidth());
+
+    // And the second cell loses both, since they only repeat what its style gives.
+    const SwAttrSet& rSecondSet = pSecondBox->GetFrameFormat()->GetAttrSet();
+    CPPUNIT_ASSERT(SfxItemState::SET != rSecondSet.GetItemState(RES_BACKGROUND, false));
+    CPPUNIT_ASSERT(SfxItemState::SET != rSecondSet.GetItemState(RES_BOX, false));
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testBrushGraphicLinkProtocols)
+{
+    // Register every configured content provider, as a running office does.
+    uno::Reference<lang::XInitialization> xBroker(
+        m_xSFactory->createInstance(u"com.sun.star.ucb.UniversalContentBroker"_ustr),
+        uno::UNO_QUERY_THROW);
+    xBroker->initialize({});
+
+    const OUString aFileURL
+        = m_directories.getURLFromSrc(u"/vcl/qa/cppunit/data/TypeDetectionExample.png");
+    SvxBrushItem aFileBrush(aFileURL, OUString(), GPOS_TILED, RES_BACKGROUND);
+    uno::Any aValue;
+    CPPUNIT_ASSERT(aFileBrush.QueryValue(aValue, MID_GRAPHIC));
+    CPPUNIT_ASSERT(aValue.get<uno::Reference<graphic::XGraphic>>().is());
+
+    // A picture named through a protocol that does not name a picture file gives none.
+    SvxBrushItem aExpandBrush(u"vnd.sun.star.expand:$BRAND_BASE_DIR/program/intro.png"_ustr,
+                              OUString(), GPOS_TILED, RES_BACKGROUND);
+    CPPUNIT_ASSERT(aExpandBrush.QueryValue(aValue, MID_GRAPHIC));
+    CPPUNIT_ASSERT(!aValue.get<uno::Reference<graphic::XGraphic>>().is());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableCellChange)
+{
+    // Given a document with a 2x2 table where one cell gained text compared to the old version:
+    createSwDoc("compare-table-new.fodt");
+
+    // When comparing with the old version:
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr, createFileURL(u"compare-table-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+
+    // Then only the added text in that cell is tracked:
+    SwDoc* pDoc = getSwDoc();
+    const SwRedlineTable& rRedlines = pDoc->getIDocumentRedlineAccess().GetRedlineTable();
+    // Without the fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 2
+    // i.e. the whole old table was tracked as deleted and the whole new table as inserted.
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(1), rRedlines.size());
+    const SwRangeRedline* pRedline = rRedlines[0];
+    CPPUNIT_ASSERT_EQUAL(RedlineType::Insert, pRedline->GetType());
+    CPPUNIT_ASSERT(pRedline->Start()->GetNode().FindTableNode());
+    CPPUNIT_ASSERT_EQUAL(u", edited"_ustr, pRedline->GetText());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableRowAdded)
+{
+    // Given a document whose table has one more row than in the old version:
+    createSwDoc("compare-table-new-row.fodt");
+
+    // When comparing with the old version:
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr, createFileURL(u"compare-table-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+
+    // Then tables of a different shape are still tracked as a whole-table delete and insert:
+    SwDoc* pDoc = getSwDoc();
+    const SwRedlineTable& rRedlines = pDoc->getIDocumentRedlineAccess().GetRedlineTable();
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(2), rRedlines.size());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableCellReplacedText)
+{
+    // Given a document where the only paragraph of a cell has unrelated text compared to the old
+    // version:
+    auto aCompareWithOld = [this]() {
+        createSwDoc("compare-table-replaced-new.fodt");
+        cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+            comphelper::makePropertyValue(u"URL"_ustr,
+                                          createFileURL(u"compare-table-replaced-old.fodt")),
+            comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+        };
+        dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+    };
+    auto aGetCellText = [this](const OUString& rCellName) {
+        uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+        uno::Reference<text::XTextTable> xTable(
+            xTablesSupplier->getTextTables()->getByName(u"Table1"_ustr), uno::UNO_QUERY);
+        uno::Reference<text::XText> xCell(xTable->getCellByName(rCellName), uno::UNO_QUERY);
+        return xCell->getString();
+    };
+
+    // When comparing with the old version:
+    aCompareWithOld();
+
+    // Then the old and the new text are tracked inside the cell's one paragraph:
+    // Without the fix in place, this test would have failed with:
+    // - Expected: Cmdx+T
+    // - Actual  : Cmd+T
+    // i.e. the whole old table was tracked as deleted and the whole new table as inserted.
+    CPPUNIT_ASSERT_EQUAL(u"Cmdx+T"_ustr, aGetCellText(u"B1"_ustr));
+
+    // And rejecting all changes gives the old text:
+    getSwDoc()->getIDocumentRedlineAccess().AcceptAllRedline(/*bAcceptReject=*/false);
+    CPPUNIT_ASSERT_EQUAL(u"x+T"_ustr, aGetCellText(u"B1"_ustr));
+
+    // And accepting all changes instead gives the new text:
+    aCompareWithOld();
+    getSwDoc()->getIDocumentRedlineAccess().AcceptAllRedline(/*bAcceptReject=*/true);
+    CPPUNIT_ASSERT_EQUAL(u"Cmd+T"_ustr, aGetCellText(u"B1"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableCellFirstParagraphDeleted)
+{
+    // Given a document where the first of two paragraphs in a cell was deleted compared to the old
+    // version:
+    createSwDoc("compare-table-paragraph-deleted-new.fodt");
+
+    // When comparing with the old version:
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr,
+                                      createFileURL(u"compare-table-paragraph-deleted-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+
+    // Then the deleted paragraph is shown where it was, before the kept one:
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextTable> xTable(
+        xTablesSupplier->getTextTables()->getByName(u"Table1"_ustr), uno::UNO_QUERY);
+    uno::Reference<text::XText> xCell(xTable->getCellByName(u"B1"_ustr), uno::UNO_QUERY);
+    // Without the fix in place, this test would have failed with:
+    // - Expected: First paragraph of the cell\nSecond paragraph of the cell
+    // - Actual  : Second paragraph of the cell
+    // i.e. the whole old table was tracked as deleted and the whole new table as inserted.
+    CPPUNIT_ASSERT_EQUAL(u"First paragraph of the cell\nSecond paragraph of the cell"_ustr,
+                         xCell->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableCellUndo)
+{
+    // Given a document where a paragraph before a table was removed and a cell was edited compared
+    // to the old version:
+    createSwDoc("compare-table-undo-new.fodt");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr, createFileURL(u"compare-table-undo-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+    SwDoc* pDoc = getSwDoc();
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(2),
+                         pDoc->getIDocumentRedlineAccess().GetRedlineTable().size());
+
+    // When undoing the compare:
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    // Then the document is as before the compare:
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(0),
+                         pDoc->getIDocumentRedlineAccess().GetRedlineTable().size());
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextTable> xTable(
+        xTablesSupplier->getTextTables()->getByName(u"Table1"_ustr), uno::UNO_QUERY);
+    uno::Reference<text::XText> xCell(xTable->getCellByName(u"A1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"Text in the cell, edited"_ustr, xCell->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareRemovedTableUndo)
+{
+    // Given a document where a table between two paragraphs was removed compared to the old
+    // version:
+    createSwDoc("compare-table-removed-new.fodt");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr, createFileURL(u"compare-table-removed-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+
+    // When undoing the compare:
+    // Without the fix in place, this test would have failed here, because the undo aborted on an
+    // assertion in BigPtrArray::operator[].
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    // Then the document is as before the compare, with no table and no tracked changes:
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xTables(xTablesSupplier->getTextTables(),
+                                                    uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), xTables->getCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(0),
+                         getSwDoc()->getIDocumentRedlineAccess().GetRedlineTable().size());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableNestedTableAtCellEndUndo)
+{
+    // Given a document where a nested table at the end of a cell was removed compared to the old
+    // version:
+    createSwDoc("compare-table-nested-at-cell-end-new.fodt");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr,
+                                      createFileURL(u"compare-table-nested-at-cell-end-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+
+    // When undoing the compare:
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    // Then the document is as before the compare, with one table and no tracked changes:
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xTables(xTablesSupplier->getTextTables(),
+                                                    uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTables->getCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(0),
+                         getSwDoc()->getIDocumentRedlineAccess().GetRedlineTable().size());
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCompareTableSplitCellMoved)
+{
+    // Given a document with a 2x2 table where the first cell is split in two rows, while the old
+    // version has the second cell split instead:
+    createSwDoc("compare-table-split-cell-new.fodt");
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextTable> xTable(
+        xTablesSupplier->getTextTables()->getByName(u"Table1"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), xTable->getCellNames().getLength());
+
+    // When comparing with the old version:
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"URL"_ustr,
+                                      createFileURL(u"compare-table-split-cell-old.fodt")),
+        comphelper::makePropertyValue(u"NoAcceptDialog"_ustr, true),
+    };
+    dispatchCommand(mxComponent, u".uno:CompareDocuments"_ustr, aArgs);
+
+    // Then the cells are not paired, and the change is tracked as a whole-table delete and insert:
+    const SwRedlineTable& rRedlines = getSwDoc()->getIDocumentRedlineAccess().GetRedlineTable();
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(2), rRedlines.size());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

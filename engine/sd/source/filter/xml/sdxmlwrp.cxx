@@ -82,8 +82,8 @@
 #include <com/sun/star/document/XDocumentProperties.hpp>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::document;
 using namespace comphelper;
@@ -175,7 +175,7 @@ ErrCodeMsg ReadThroughComponent(
     const Reference<io::XInputStream>& xInputStream,
     const Reference<XComponent>& xModelComponent,
     const OUString& rStreamName,
-    Reference<uno::XComponentContext> const & rxContext,
+    Reference<cpo::uno::XComponentContext> const & rxContext,
     const char* pFilterName,
     const Sequence<Any>& rFilterArguments,
     const OUString& rName,
@@ -314,7 +314,7 @@ ErrCodeMsg ReadThroughComponent(
     const uno::Reference < embed::XStorage >& xStorage,
     const Reference<XComponent>& xModelComponent,
     const char* pStreamName,
-    Reference<uno::XComponentContext> const & rxContext,
+    Reference<cpo::uno::XComponentContext> const & rxContext,
     const char* pFilterName,
     const Sequence<Any>& rFilterArguments,
     const OUString& rName,
@@ -420,8 +420,7 @@ static void fixupOutlinePlaceholderNumberingDepths(SdDrawDocument* pDoc)
             const sal_Int16 nExpectedDepth = j;
             if (nExpectedDepth != pOutliner->GetDepth(j))
             {
-                Paragraph* p = pOutliner->GetParagraph(j);
-                pOutliner->SetDepth(p, nExpectedDepth);
+                pOutliner->SetDepth(j, nExpectedDepth);
                 bInconsistent = true;
             }
 
@@ -450,7 +449,7 @@ bool SdXMLFilter::Import( ErrCode& nError )
     ErrCodeMsg nRet = ERRCODE_NONE;
 
     // Get service factory
-    const Reference< uno::XComponentContext >& rxContext =
+    const Reference< cpo::uno::XComponentContext >& rxContext =
             comphelper::getProcessComponentContext();
 
     SdDrawDocument* pDoc = mrDocShell.GetDoc();
@@ -782,7 +781,7 @@ bool SdXMLFilter::Export()
             return false;
         }
 
-        const uno::Reference<uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+        const uno::Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
 
         uno::Reference< xml::sax::XWriter > xWriter = xml::sax::Writer::create( xContext );
 
@@ -1005,7 +1004,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportFODP(SvStream &rStream)
 
     uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
     uno::Reference<io::XInputStream> xStream(new ::utl::OSeekableInputStreamWrapper(rStream));
-    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
+    uno::Reference<cpo::uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
 
     cpo::uno::Sequence<OUString> aUserData
     {

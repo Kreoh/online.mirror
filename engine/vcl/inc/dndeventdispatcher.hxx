@@ -46,29 +46,29 @@ class DNDEventDispatcher final : public ::cppu::WeakImplHelper<
      * fire the events on the dnd listener container of the specified window
      */
 
-    /// @throws css::uno::RuntimeException
-    static sal_Int32 fireDragEnterEvent( vcl::Window *pWindow, const css::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext >& xContext,
+    /// @throws cpo::uno::RuntimeException
+    static sal_Int32 fireDragEnterEvent( vcl::Window *pWindow, const cpo::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext >& xContext,
         const sal_Int8 nDropAction, const Point& rLocation, const sal_Int8 nSourceAction,
         const cpo::uno::Sequence< css::datatransfer::DataFlavor >& aFlavorList );
 
-    /// @throws css::uno::RuntimeException
-    static sal_Int32 fireDragOverEvent( vcl::Window *pWindow, const css::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext >& xContext,
+    /// @throws cpo::uno::RuntimeException
+    static sal_Int32 fireDragOverEvent( vcl::Window *pWindow, const cpo::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext >& xContext,
         const sal_Int8 nDropAction, const Point& rLocation, const sal_Int8 nSourceAction );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static sal_Int32 fireDragExitEvent( vcl::Window *pWindow );
 
-    /// @throws css::uno::RuntimeException
-    static sal_Int32 fireDropActionChangedEvent( vcl::Window *pWindow, const css::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext >& xContext,
+    /// @throws cpo::uno::RuntimeException
+    static sal_Int32 fireDropActionChangedEvent( vcl::Window *pWindow, const cpo::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext >& xContext,
         const sal_Int8 nDropAction, const Point& rLocation, const sal_Int8 nSourceAction );
 
-    /// @throws css::uno::RuntimeException
-    static sal_Int32 fireDropEvent( vcl::Window *pWindow, const css::uno::Reference< css::datatransfer::dnd::XDropTargetDropContext >& xContext,
+    /// @throws cpo::uno::RuntimeException
+    static sal_Int32 fireDropEvent( vcl::Window *pWindow, const cpo::uno::Reference< css::datatransfer::dnd::XDropTargetDropContext >& xContext,
         const sal_Int8 nDropAction, const Point& rLocation, const sal_Int8 nSourceAction,
-        const css::uno::Reference< css::datatransfer::XTransferable >& xTransferable );
+        const cpo::uno::Reference< css::datatransfer::XTransferable >& xTransferable );
 
-    /// @throws css::uno::RuntimeException
-    static sal_Int32 fireDragGestureEvent( vcl::Window *pWindow, const css::uno::Reference< css::datatransfer::dnd::XDragSource >& xSource,
+    /// @throws cpo::uno::RuntimeException
+    static sal_Int32 fireDragGestureEvent( vcl::Window *pWindow, const cpo::uno::Reference< css::datatransfer::dnd::XDragSource >& xSource,
         const cpo::uno::Any& event, const Point& rOrigin, const sal_Int8 nDragAction );
 
 public:
@@ -80,30 +80,30 @@ public:
      * XDropTargetDragContext
      */
 
-    virtual void SAL_CALL acceptDrag( sal_Int8 dropAction ) override;
-    virtual void SAL_CALL rejectDrag() override;
+    virtual void acceptDrag( sal_Int8 dropAction ) override;
+    virtual void rejectDrag() override;
 
     /*
      * XDropTargetListener
      */
 
-    virtual void SAL_CALL drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) override;
-    virtual void SAL_CALL dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee ) override;
-    virtual void SAL_CALL dragExit( const css::datatransfer::dnd::DropTargetEvent& dte ) override;
-    virtual void SAL_CALL dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
-    virtual void SAL_CALL dropActionChanged( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
+    virtual void drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) override;
+    virtual void dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee ) override;
+    virtual void dragExit( const css::datatransfer::dnd::DropTargetEvent& dte ) override;
+    virtual void dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
+    virtual void dropActionChanged( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
 
     /*
      * XDragGestureListener
      */
 
-    virtual void SAL_CALL dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge ) override;
+    virtual void dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge ) override;
 
     /*
      * XEventListener
      */
 
-    virtual void SAL_CALL disposing( const css::lang::EventObject& eo ) override;
+    virtual void disposing( const css::lang::EventObject& eo ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

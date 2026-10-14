@@ -36,15 +36,12 @@
 #include <unotools/linguprops.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::linguistic2;
 
 namespace{
-
-// UAX #14: spaces from SP and BA classes (elided in the end of a line)
-bool IsBlank(sal_Unicode ch) { return ch == CH_BLANK || ch == CH_FULL_BLANK || ch == CH_SIX_PER_EM; }
 
 // Used when spaces should not be counted in layout
 // Returns adjusted cut position
@@ -291,10 +288,7 @@ bool SwTextGuess::Guess( const SwTextPortion& rPor, SwTextFormatInfo &rInf,
         }
     }
 
-    bool bHyph = rInf.IsHyphenate() && !rInf.IsHyphForbud() &&
-            // disable hyphenation at minimum word spacing
-            // (and at weighted word spacing between minimum and desired word spacing)
-            !( nPropWordSpacing < aAdjustItem.GetPropWordSpacing() );
+    bool bHyph = rInf.IsHyphenate() && !rInf.IsHyphForbud();
 
     // disable hyphenation according to hyphenation-keep and hyphenation-keep-type,
     // or modify hyphenation according to hyphenation-zone-column/page/spread (see widorp.cxx)

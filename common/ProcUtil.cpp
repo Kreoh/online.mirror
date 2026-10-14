@@ -143,7 +143,7 @@ static_assert(sizeof(ThreadName) >= 16,
 
 void setThreadName(const std::string& s)
 {
-#if !MOBILEAPP
+#if !defined __EMSCRIPTEN__
     // Clear the cache - perhaps we forked
     ThreadTid = 0;
 #endif

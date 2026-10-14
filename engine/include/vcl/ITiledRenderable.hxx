@@ -17,6 +17,8 @@
 #include <vcl/ptrstyle.hxx>
 #include <vcl/vclptr.hxx>
 #include <map>
+#include <string_view>
+#include <vector>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 #include <basegfx/range/b2drange.hxx>
 
@@ -24,7 +26,7 @@
 
 namespace com::sun::star::beans { struct PropertyValue; }
 namespace com::sun::star::datatransfer::clipboard { class XClipboard; }
-namespace com::sun::star::uno { template <class interface_type> class Reference; }
+namespace cpo::uno { template <class interface_type> class Reference; }
 namespace cpo::uno { template <typename > class Sequence; }
 namespace vcl { class Window; }
 namespace tools { class JsonWriter; }
@@ -164,6 +166,12 @@ public:
     virtual void setEditMode(int) {}
 
     /**
+     * Say whether anything still draws from the model rather than from the
+     * view object contacts.
+     */
+    virtual void setDrawnFromModel(bool /*bDrawnFromModel*/) {}
+
+    /**
      * Setup various document properties that are needed for the document to
      * be renderable via tiled rendering.
      */
@@ -194,7 +202,7 @@ public:
     /**
      * Gets the selection as a transferable for later processing
      */
-    virtual css::uno::Reference<css::datatransfer::XTransferable> getSelection() = 0;
+    virtual cpo::uno::Reference<css::datatransfer::XTransferable> getSelection() = 0;
 
     /**
      * Adjusts the graphic selection.
@@ -252,6 +260,14 @@ public:
     }
 
     /**
+     * Whether writing the document out through the given filter puts a question to the
+     * person, such as a warning that the format holds only part of the document.
+     *
+     * @rFilterName - the name of the filter the document would be written with.
+     */
+    virtual bool exportRaisesDialog(const OUString& /*rFilterName*/) { return false; }
+
+    /**
      * Get position and size of cell cursor in Calc - as JSON in the
      * current' views' co-ordinate system.
      * (This could maybe also be used for tables in Writer/Impress in future?)
@@ -263,7 +279,7 @@ public:
     virtual PointerStyle getPointer() = 0;
 
     /// Sets the clipboard of the component.
-    virtual void setClipboard(const css::uno::Reference<css::datatransfer::clipboard::XClipboard>& xClipboard) = 0;
+    virtual void setClipboard(const cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>& xClipboard) = 0;
 
     /// If the current contents of the clipboard is something we can paste.
     virtual bool isMimeTypeSupported() = 0;
@@ -360,15 +376,44 @@ public:
     }
 
     /*
-     * The stable identifier of one part: a nonzero integer assigned to the part
-     * for the whole document session, kept over part moves, insertions and
-     * deletions of other parts. nMode selects the part list the index addresses:
-     * 0 for the standard parts, 1 for the master pages, 2 for the notes pages.
-     * Zero when there is no such part or the document has no part identifiers.
+     * The stable identifier of the part at the given index. For a presentation or
+     * drawing document that is the page's GUID as a braced string like
+     * {1BE1A269-4A03-4202-ACFE-0204C5E9BE1F}, kept over part moves, insertions and
+     * deletions of other parts, and persistent across sessions when the file format
+     * stores it; nMode selects the page list the index addresses: 0 for the standard
+     * pages, 1 for the master pages, 2 for the notes pages, 3 for the notes master
+     * pages, 4 for the handout master page. For the other document types the
+     * identifier is the index itself in decimal form. Empty when there is no such
+     * part.
      */
-    virtual sal_uInt64 getPartUniqueId(int /*nPart*/, int /*nMode*/)
+    virtual OString getPartId(int nPart, int /*nMode*/)
     {
-        return 0;
+        if (nPart < 0)
+            return OString();
+
+        return OString::number(nPart);
+    }
+
+    /*
+     * The index the part with the given identifier holds now in the part list nMode
+     * selects, or -1 when no part carries that identifier. For a document whose part
+     * identifiers are decimal indexes the identifier converts back to the index it
+     * spells.
+     */
+    virtual int getPartIndex(std::string_view rPartId, int /*nMode*/)
+    {
+        // Nine digits keep the converted value inside the int range.
+        if (rPartId.empty() || rPartId.size() > 9)
+            return -1;
+
+        int nIndex = 0;
+        for (const char c : rPartId)
+        {
+            if (c < '0' || c > '9')
+                return -1;
+            nIndex = nIndex * 10 + (c - '0');
+        }
+        return nIndex;
     }
 
     /**
@@ -437,6 +482,17 @@ public:
     }
 
     /**
+     * Writes the vector primitives delta of a part: the objects that changed since the part was
+     * last pushed, then moves that mark to the part's current version. rPartId names the part the
+     * way getPartId spells it and nMode the page list it sits in. Writes nothing when nothing
+     * changed since the last push or when no part carries that identifier.
+     */
+    virtual void pushVectorPrimitivesDelta(tools::JsonWriter& /*rJsonWriter*/,
+                                           std::string_view /*rPartId*/, int /*nMode*/)
+    {
+    }
+
+    /**
      * Returns an opaque string reflecting the render state of a component
      * eg. 'PD' - P for non-printing-characters, D for dark-mode.
      * @param pViewShell the view to get the options from, if nullptr the current view shell is used
@@ -461,6 +517,57 @@ public:
     virtual bool renderNextSlideLayer(unsigned char* /*pBuffer*/, bool& /*bIsBitmapLayer*/, double& /*rScale*/, std::string& /*rJsonMsg*/)
     {
         return true;
+    }
+
+    /** Inserts pages of the presentation at rFileUrl into this document. rJsonOptions names
+        the pages to take as "slides", an empty list taking every page, the slide to insert
+        before as "at", whether the pages keep the design of the file they came from as
+        "keepDesign", whether they stay linked to the document named by "source" as "link",
+        and the time that source was last modified as "lastModifiedTime", recorded on each
+        linked page (Impress only function) */
+    virtual bool insertPagesFromFile(const OUString& /*rFileUrl*/, const OString& /*rJsonOptions*/)
+    {
+        return false;
+    }
+
+    /** Writes the pages of the document that are linked to a source document, grouped by the
+        source they were made from (Impress only function) */
+    virtual bool getSlideLinks(tools::JsonWriter& /*rJsonWriter*/) { return false; }
+
+    /** Refreshes the pages linked to one source document from a local file holding the source
+        pages, and returns how many pages were refreshed; -1 when no page is linked to that source
+        or the file could not be read. rLastModifiedTime is the time the source was last modified
+        now, recorded on each refreshed page. pNotUpdated, when it is given, takes the
+        identifier of every page the file held no slide for. nPageIndex names one page in the page
+        list of the standard pages, which is then the only page refreshed, or is -1 for every page
+        linked to the source (Impress only function) */
+    virtual sal_Int32 refreshSlideLinks(const OUString& /*rSourceName*/,
+                                        const OUString& /*rFileUrl*/,
+                                        const OUString& /*rLastModifiedTime*/,
+                                        std::vector<OString>* /*pNotUpdated*/ = nullptr,
+                                        sal_Int32 /*nPageIndex*/ = -1)
+    {
+        return -1;
+    }
+
+    /** Takes the source document off the page at nIndex in the page list of the standard pages,
+        which keeps the content it holds, and returns whether that page was linked to a source
+        (Impress only function) */
+    virtual bool breakSlideLink(sal_Int32 /*nIndex*/) { return false; }
+
+    /** The index in the page list of the standard pages of the page holding the identifier
+        rGuid, a braced GUID string as ODF keeps it; -1 when no standard page of the document
+        holds it (Impress only function) */
+    virtual sal_Int32 getSlideIndexOfGuid(const OUString& /*rGuid*/) { return -1; }
+
+    /** Writes the given pages out as a document of their own, in the order they are given.
+        The pages are named by their index in the page list of the standard pages, and an
+        empty list writes every page. rFileUrl names the file to write and its extension
+        chooses the filter (Impress only function) */
+    virtual bool exportPages(const std::vector<sal_Int32>& /*rPages*/,
+                             const OUString& /*rFileUrl*/)
+    {
+        return false;
     }
 };
 } // namespace vcl

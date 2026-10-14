@@ -77,8 +77,8 @@
 
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::table;
@@ -333,10 +333,10 @@ public:
             const Reference< xml::sax::XFastAttributeList > & xAttrList,
             SwXMLTableContext *pTable );
 
-    virtual css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext(
             sal_Int32 nElement,
             const Reference< xml::sax::XFastAttributeList > & xAttrList ) override;
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
     SwXMLImport& GetSwImport() { return static_cast<SwXMLImport&>(GetImport()); }
 };
@@ -532,7 +532,7 @@ inline void SwXMLTableCellContext_Impl::InsertContent(
     m_bHasTableContent = true;
 }
 
-css::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableCellContext_Impl::createFastChildContext(
+cpo::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableCellContext_Impl::createFastChildContext(
         sal_Int32 nElement,
         const Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -730,8 +730,8 @@ public:
             SwXMLImport& rImport,
             SwXMLTableContext *pTable );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 Element, const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 
     SwXMLImport& GetSwImport() { return static_cast<SwXMLImport&>(GetImport()); }
 };
@@ -746,8 +746,8 @@ SwXMLTableColsContext_Impl::SwXMLTableColsContext_Impl(
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLTableColsContext_Impl::createFastChildContext(
-    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList )
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLTableColsContext_Impl::createFastChildContext(
+    sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
 
@@ -777,10 +777,10 @@ public:
             const Reference< xml::sax::XFastAttributeList > & xAttrList,
             SwXMLTableContext *pTable, bool bInHead=false );
 
-    virtual css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext( sal_Int32 nElement,
+    virtual cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext( sal_Int32 nElement,
             const Reference< xml::sax::XFastAttributeList > & xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
     SwXMLImport& GetSwImport() { return static_cast<SwXMLImport&>(GetImport()); }
 };
@@ -839,7 +839,7 @@ void SwXMLTableRowContext_Impl::endFastElement(sal_Int32 )
     }
 }
 
-css::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableRowContext_Impl::createFastChildContext(
+cpo::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableRowContext_Impl::createFastChildContext(
         sal_Int32 nElement,
         const Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -887,7 +887,7 @@ public:
             SwXMLTableContext *pTable,
             bool bHead );
 
-    virtual css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext(
             sal_Int32 nElement,
             const Reference< xml::sax::XFastAttributeList > & xAttrList ) override;
 
@@ -905,7 +905,7 @@ SwXMLTableRowsContext_Impl::SwXMLTableRowsContext_Impl( SwXMLImport& rImport,
 {
 }
 
-css::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableRowsContext_Impl::createFastChildContext(
+cpo::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableRowsContext_Impl::createFastChildContext(
     sal_Int32 nElement,
     const Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -932,7 +932,7 @@ public:
 
     SwXMLDDETableContext_Impl(SwXMLImport& rImport);
 
-    virtual void SAL_CALL startFastElement(
+    virtual void startFastElement(
         sal_Int32 nElement,
         const Reference<xml::sax::XFastAttributeList> & xAttrList) override;
 
@@ -1156,6 +1156,41 @@ SwXMLTableContext::SwXMLTableContext( SwXMLImport& rImport,
             case XML_ELEMENT(TABLE, XML_TEMPLATE_NAME):
                 m_aTemplateName = sValue;
                 break;
+            case XML_ELEMENT(TABLE, XML_USE_FIRST_ROW_STYLES):
+            case XML_ELEMENT(TABLE, XML_USE_LAST_ROW_STYLES):
+            case XML_ELEMENT(TABLE, XML_USE_FIRST_COLUMN_STYLES):
+            case XML_ELEMENT(TABLE, XML_USE_LAST_COLUMN_STYLES):
+            case XML_ELEMENT(TABLE, XML_USE_BANDING_ROWS_STYLES):
+            case XML_ELEMENT(TABLE, XML_USE_BANDING_COLUMNS_STYLES):
+            {
+                m_bHasTemplateSettings = true;
+                bool bTmp(false);
+                if (::sax::Converter::convertBool(bTmp, sValue))
+                {
+                    switch (aIter.getToken())
+                    {
+                        case XML_ELEMENT(TABLE, XML_USE_FIRST_ROW_STYLES):
+                            m_aTemplateSettings.m_bUseFirstRowStyle = bTmp;
+                            break;
+                        case XML_ELEMENT(TABLE, XML_USE_LAST_ROW_STYLES):
+                            m_aTemplateSettings.m_bUseLastRowStyle = bTmp;
+                            break;
+                        case XML_ELEMENT(TABLE, XML_USE_FIRST_COLUMN_STYLES):
+                            m_aTemplateSettings.m_bUseFirstColumnStyle = bTmp;
+                            break;
+                        case XML_ELEMENT(TABLE, XML_USE_LAST_COLUMN_STYLES):
+                            m_aTemplateSettings.m_bUseLastColumnStyle = bTmp;
+                            break;
+                        case XML_ELEMENT(TABLE, XML_USE_BANDING_ROWS_STYLES):
+                            m_aTemplateSettings.m_bUseRowBandingStyle = bTmp;
+                            break;
+                        default:
+                            m_aTemplateSettings.m_bUseColumnBandingStyle = bTmp;
+                            break;
+                    }
+                }
+                break;
+            }
             case XML_ELEMENT(XML, XML_ID):
                 sXmlId = sValue;
                 break;
@@ -1277,7 +1312,7 @@ SwXMLTableContext::~SwXMLTableContext()
     GetImport().GetTextImport()->RedlineAdjustStartNodeCursor();
 }
 
-css::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableContext::createFastChildContext(
+cpo::uno::Reference<css::xml::sax::XFastContextHandler> SwXMLTableContext::createFastChildContext(
     sal_Int32 nElement,
     const Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -2496,6 +2531,17 @@ void SwXMLTableContext::MakeTable()
     UIName sStyleName;
     SwStyleNameMapper::FillUIName( ProgName(m_aTemplateName), sStyleName, SwGetPoolIdFromName::TableStyle );
     m_pTableNode->GetTable().SetTableStyleName( TableStyleName(sStyleName.toString()) );
+    if (!m_aTemplateName.isEmpty() && !m_bHasTemplateSettings)
+    {
+        // Written before the roles could be switched off: every role of the template applied.
+        m_aTemplateSettings.m_bUseFirstRowStyle = true;
+        m_aTemplateSettings.m_bUseLastRowStyle = true;
+        m_aTemplateSettings.m_bUseFirstColumnStyle = true;
+        m_aTemplateSettings.m_bUseLastColumnStyle = true;
+        m_aTemplateSettings.m_bUseRowBandingStyle = true;
+        m_aTemplateSettings.m_bUseColumnBandingStyle = true;
+    }
+    m_pTableNode->GetTable().SetTableStyleSettings( m_aTemplateSettings );
     m_pTableNode->GetTable().SetRowsToRepeat( m_nHeaderRows );
     m_pTableNode->GetTable().SetTableModel( !m_bHasSubTables );
 
@@ -2617,6 +2663,13 @@ void SwXMLTableContext::MakeTable()
 
     for (std::unique_ptr<SwXMLTableRow_Impl> & rRow : *m_pRows)
         rRow->Dispose();
+
+    // The file carries the style's own formatting as direct formatting of the cells and
+    // paragraphs, for readers without table styles. Here the style is live, so what only
+    // repeats it goes, and a later role change can show. A file from before the role
+    // settings were written carries the complete style boxes, defaults included.
+    m_pTableNode->GetDoc().StripBakedTableStyleFormatting(*m_pTableNode,
+                                                          /*bCompleteStyleBoxes=*/!m_bHasTemplateSettings);
 
     // now that table is complete, change into DDE table (if appropriate)
     if (m_xDDESource.is())

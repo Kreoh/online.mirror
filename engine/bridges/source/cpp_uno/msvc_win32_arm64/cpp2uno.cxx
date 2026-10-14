@@ -27,7 +27,7 @@
 #include <limits>
 #include <typeinfo>
 
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cpo/uno/genfunc.hxx>
 #include <sal/alloca.h>
 #include <sal/types.h>
@@ -53,7 +53,7 @@ using namespace ::com::sun::star;
 namespace
 {
 void call(bridges::cpp_uno::shared::CppInterfaceProxy* proxy,
-          uno::TypeDescription const& description, typelib_TypeDescriptionReference* returnType,
+          cpo::uno::TypeDescription const& description, typelib_TypeDescriptionReference* returnType,
           sal_Int32 count, typelib_MethodParameter* parameters, sal_uInt64* gpr, sal_uInt64* fpr,
           sal_uInt64* stack, void* indirectRet)
 {
@@ -228,7 +228,7 @@ extern "C" void vtableCall(sal_Int32 functionIndex, sal_Int32 vtableOffset, sal_
     assert(functionIndex < pInterfaceTD->nMapFunctionIndexToMemberIndex);
     sal_Int32 nMemberPos = pInterfaceTD->pMapFunctionIndexToMemberIndex[functionIndex];
     assert(nMemberPos < pInterfaceTD->nAllMembers);
-    uno::TypeDescription aMemberDescr(pInterfaceTD->ppAllMembers[nMemberPos]);
+    cpo::uno::TypeDescription aMemberDescr(pInterfaceTD->ppAllMembers[nMemberPos]);
 
     switch (aMemberDescr.get()->eTypeClass)
     {
@@ -267,7 +267,7 @@ extern "C" void vtableCall(sal_Int32 functionIndex, sal_Int32 vtableOffset, sal_
                         &td, (reinterpret_cast<cpo::uno::Type*>(gpr[2])->getTypeLibType()));
                     if (td != 0 && td->eTypeClass == typelib_TypeClass_INTERFACE)
                     {
-                        uno::XInterface* ifc = nullptr;
+                        cpo::uno::XInterface* ifc = nullptr;
                         proxy->getBridge()->getCppEnv()->getRegisteredInterface(
                             proxy->getBridge()->getCppEnv(), reinterpret_cast<void**>(&ifc),
                             proxy->getOid().pData,

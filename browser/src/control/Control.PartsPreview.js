@@ -12,7 +12,32 @@
  * window.L.Control.PartsPreview
  */
 
-/* global _ _n app $ Hammer _UNO cool JSDialog buildSlideDragGhost */
+/* global _ _n app $ Hammer _UNO cool JSDialog buildSlideSectionHeader buildSlideDragGhost */
+
+// Drag data type that marks a drag as carrying slides to import from another
+// presentation, with a payload of {slides:[...]} source slide indices. A drag
+// reordering the current slides carries no custom type, so the presence of
+// this type tells an import drag apart from a reorder drag.
+const SLIDE_IMPORT_DND_TYPE = 'application/x-cool-slide-import';
+
+// True when the drag carries slides from the slide import pane.
+function isSlideImportDrag(e) {
+	const types = e.dataTransfer && e.dataTransfer.types;
+	return !!types && Array.prototype.indexOf.call(types, SLIDE_IMPORT_DND_TYPE) !== -1;
+}
+
+// The slides named by a slide import drag, or an empty array. The data is
+// only readable once the drop happens, so this returns nothing on dragover.
+function readSlideImportDrag(e) {
+	try {
+		const data = e.dataTransfer.getData(SLIDE_IMPORT_DND_TYPE);
+		const parsed = data ? JSON.parse(data) : null;
+		return parsed && Array.isArray(parsed.slides) ? parsed.slides : [];
+	} catch (ex) {
+		return [];
+	}
+}
+
 window.L.Control.PartsPreview = window.L.Control.extend({
 	options: {
 		fetchThumbnail: true,
@@ -25,6 +50,8 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		maxHeight: window.mode.isDesktop() ? 180: (window.mode.isTablet() ? 120: 60)
 	},
 	partsFocused: false,
+
+	_focusedCurrentPart: undefined,
 
 	initialize: function (container, preview, options) {
 		window.L.setOptions(this, options);
@@ -74,7 +101,9 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		map.on('updateparts', this._updateDisabled, this);
 		map.on('updatepart', this._updatePart, this);
 		map.on('invalidateparts', this._invalidateParts, this);
+		map.on('vectorcontentstale', this._onVectorContentStale, this);
 		map.on('tilepreview', this._updatePreview, this);
+		map.on('tilepreviewgone', this._onPreviewGone, this);
 		map.on('insertpage', this._insertPreview, this);
 		map.on('deletepage', this._deletePreview, this);
 		map.on('scrolllimit', this._invalidateCurrentPart, this);
@@ -83,6 +112,10 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		map.on('beforerequestpreview', this._beforeRequestPreview, this);
 		map.on('updatesections', this._updateSections, this);
 		map.on('docloaded', this._focusCurrentSlideOnLoad, this);
+		app.events.on('slidelink:changed', this._updateLinkMarks.bind(this));
+		map.on('addview', this._updateViewAvatars, this);
+		map.on('removeview', this._updateViewAvatars, this);
+		map.on('updateviewpart', this._updateViewAvatars, this);
 
 		window.addEventListener('resize', window.L.bind(this._resize, this));
 	},
@@ -155,13 +188,18 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 					// it while the sorter owns the keyboard, so a screen
 					// reader announces the slide the sorter marks as the
 					// current one.
-					if (this.hasSlideFocus() || this.partsFocused)
+					const currentPartMoved = this._focusedCurrentPart !== selectedPart;
+					this._focusedCurrentPart = selectedPart;
+					if (currentPartMoved && (this.hasSlideFocus() || this.partsFocused))
 						this.focusCurrentSlide();
+					this._sendTabThumbnail();
 				}
 				this._updateSelectedSection();
 			}
 
+			this._updateLinkMarks();
 			this._updateA11ySelection();
+			this._updateViewAvatars();
 
 			if (!this.options.allowOrientation) {
 				return;
@@ -204,6 +242,9 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		var partList = (app.impress && app.impress.partList) || [];
 		var activeTab = (selectedPart >= 0 && selectedPart < this._previewTiles.length)
 			? selectedPart : 0;
+		var focusedTab = this._previewTiles.indexOf(document.activeElement);
+		if (focusedTab !== -1)
+			activeTab = focusedTab;
 		for (var i = 0; i < this._previewTiles.length; i++) {
 			var img = this._previewTiles[i];
 			if (!img)
@@ -327,6 +368,126 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		}
 	},
 
+	// Put every other user's avatar on the preview of the slide that user is on.
+	_updateViewAvatars: function () {
+		if (!this._previewInitialized || !this._map.userList)
+			return;
+
+		if (window.mode.isSmallScreenDevice() || window.mode.isInteractivePreview() || this._map.userList.hideUserList())
+			return;
+
+		var viewIdsByPart = new Map();
+		var myViewId = this._map._docLayer._viewId;
+
+		for (var viewId in this._map._viewInfo) {
+			var id = parseInt(viewId);
+			var part = this._map._viewInfo[viewId].part;
+			if (id === myViewId || !part)
+				continue;
+			if (!viewIdsByPart.has(part))
+				viewIdsByPart.set(part, []);
+			viewIdsByPart.get(part).push(id);
+		}
+
+		for (var i = 0; i < this._previewTiles.length; i++) {
+			var img = this._previewTiles[i];
+			if (!img || !img.parentNode)
+				continue;
+			this._setFrameAvatars(img, i, viewIdsByPart.get(img._part) || []);
+		}
+	},
+
+	// The avatars of the given views over one preview
+	_setFrameAvatars: function (img, i, viewIds) {
+		// Every slide is offered on every update; only redo the ones that changed.
+		var key = viewIds.join(',');
+		if (img.viewKey === key)
+			return;
+		img.viewKey = key;
+
+		var map = this._map;
+		var frame = img.parentNode;
+		var strip = frame.querySelector('.preview-avatars');
+
+		img.viewNames = viewIds.map(function (viewId) {
+			return map.getViewName(viewId) || '';
+		});
+		this._setPreviewPositionLabels(img, i);
+
+		if (!viewIds.length) {
+			if (strip)
+				strip.remove();
+			return;
+		}
+
+		if (!strip) {
+			strip = window.L.DomUtil.create('div', 'preview-avatars');
+			strip.setAttribute('aria-hidden', 'true');
+			frame.insertBefore(strip, img.nextSibling);
+		}
+
+		var slots = app.SlideAvatars.slots(viewIds.length);
+
+		var children = viewIds.slice(0, slots.faces).map(function (viewId, index) {
+			// The user list keeps the avatar between updates
+			var user = map.userList.users.get(viewId);
+			var avatar = map.userList.createAvatar(user && user.cachedSlideAvatar,
+				viewId, img.viewNames[index], undefined,
+				app.LOUtil.rgbToHex(map.getViewColor(viewId)));
+			if (user)
+				user.cachedSlideAvatar = avatar;
+			avatar.setAttribute('data-cooltip', img.viewNames[index]);
+			// A drag grabbed on a face starts from the frame, as one
+			// grabbed on the picture does.
+			avatar.draggable = false;
+			if (!avatar.namesItsUser) {
+				avatar.namesItsUser = true;
+				window.L.control.attachTooltipEventListener(avatar, map);
+				window.L.DomEvent.on(avatar, 'click', this._selectSlideUnder);
+			}
+			return avatar;
+		}, this);
+
+		if (slots.hidden) {
+			var more = window.L.DomUtil.create('span', 'preview-avatars-more');
+			more.textContent = app.SlideAvatars.counterText(slots.hidden);
+			more.setAttribute('data-cooltip', _('Show everyone on this slide'));
+			window.L.control.attachTooltipEventListener(more, map);
+			window.L.DomEvent.on(more, 'click', function (e) {
+				window.L.DomEvent.stop(e);
+				this._openFrameUserList(more, viewIds);
+			}, this);
+			children.push(more);
+		}
+
+		strip.replaceChildren.apply(strip, children);
+	},
+
+	_openFrameUserList: function (anchor, viewIds) {
+		var map = this._map;
+		var present = viewIds.filter(function (viewId) {
+			return map.hasInfoForView(viewId);
+		});
+
+		JSDialog.OpenDropdown(
+			'slide-frame-users',
+			anchor,
+			[{
+				type: 'json',
+				content: {
+					id: 'slide-frame-users-list',
+					type: 'htmlcontent',
+					htmlId: 'slideuserspopup',
+					viewIds: present,
+				},
+			}],
+			function () {
+				JSDialog.CloseAllDropdowns();
+				return true;
+			},
+			'', false, false, true);
+	},
+
 	_createPreview: function (i, part) {
 		var frameClass = 'preview-frame ' + this.options.frameClass;
 		var frame = window.L.DomUtil.create('div', frameClass, this._partsPreviewCont);
@@ -334,15 +495,12 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		this._addDnDHandlers(frame);
 		window.L.DomUtil.create('span', 'preview-helper', frame);
 
-		// The visible digit comes from a CSS counter keyed off DOM order (see
-		// partsPreviewControl.css), so it always matches the frame's current
-		// position without any renumbering when frames are inserted or removed.
+		// Holds the slide's 1-based position as its text.
 		const slideNumber = window.L.DomUtil.create('span', 'preview-slide-number', frame);
 		slideNumber.setAttribute('aria-hidden', 'true');
 
 		var imgClassName = 'preview-img ' + this.options.imageClass;
 		var img = window.L.DomUtil.create('img', imgClassName, frame);
-		this._setPreviewPositionLabels(img, i);
 		// A drag grabbed on the picture starts from the frame, the nearest
 		// draggable ancestor, so it carries the slide marker data and shows
 		// the framed preview as its ghost.
@@ -357,6 +515,12 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		// The part number of the slide this preview shows: the slide's
 		// stable unique id, carried by the slide list entries.
 		img._part = part;
+		// The mark of a slide that is linked to another file, drawn over the
+		// corner of the thumbnail. It is a picture alone, so the pointer goes
+		// through it to the thumbnail, which describes the link.
+		img._linkBadge = window.L.DomUtil.create('span', 'preview-link-badge', frame);
+		img._linkBadge.setAttribute('aria-hidden', 'true');
+		this._setPreviewLinkMark(img, i);
 		this._setPlaceholder(img, 'previewSmile');
 		img.fetched = false;
 		if (!window.mode.isDesktop()) {
@@ -390,6 +554,26 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 					document.activeElement.blur();
 				}
 			}
+			img.focus();
+		}, this);
+
+		// A double-click on a slide in the maximized grid returns to the normal layout. The first
+		// click of the pair has already selected the slide, so the strip scrolls to show it and it
+		// keeps the focus. While a comment is being edited a click stays on the comment and the
+		// slide does not change, so the double-click leaves the layout as it is too.
+		window.L.DomEvent.on(img, 'dblclick', function (e) {
+			var expander = this._map.paneExpander;
+			if (!expander || expander.getMode() !== 'expanded')
+				return;
+			if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey)
+				return;
+			if (cool.Comment.isAnyEdit())
+				return;
+			window.L.DomEvent.stop(e);
+			var part = this._findClickedPart(img.parentNode);
+			expander.reset();
+			if (part !== null && part !== -1)
+				this._scrollToPart(parseInt(part) - 1);
 			img.focus();
 		}, this);
 
@@ -568,6 +752,17 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 				});
 			}
 
+			if (that._pageLink(img) !== null) {
+				entries.push({
+					id: 'unlinkslide',
+					type: 'comboboxentry',
+					text: _('Unlink Slide'),
+					img: 'removehyperlink',
+					class: 'unlinkslide',
+					pos: 0,
+				});
+			}
+
 			// if not the first section slide then add entry for section
 			var isFirstSectionSlide = false;
 			const sections = app.impress.sections;
@@ -637,6 +832,9 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 				case 'addsection':
 					app.socket.sendMessage('uno .uno:AddSlideSection');
 					break;
+				case 'unlinkslide':
+					that._map.slideLinks.breakLink(img._part);
+					break;
 				}
 				JSDialog.CloseAllDropdowns();
 				return true;
@@ -668,13 +866,151 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		return img;
 	},
 
-	// Unlike the visible digit, the alt text and tooltip are plain
-	// attribute strings, so they only ever hold the position they were
-	// given here. Callers that move a preview to a different position
-	// must call this again with the new position.
+	// An avatar is kept between updates and travels with its user, so the
+	// slide it selects is the one it is drawn on now.
+	_selectSlideUnder: function (e) {
+		window.L.DomEvent.stop(e);
+		const frame = e.currentTarget.closest('.preview-frame');
+		const picture = frame && frame.querySelector('.preview-img');
+		if (!picture)
+			return;
+		// ctrl and shift pick a slide differently, so they travel with the
+		// click rather than being dropped by a synthetic one.
+		picture.dispatchEvent(
+			new MouseEvent('click', {
+				bubbles: true,
+				cancelable: true,
+				ctrlKey: e.ctrlKey,
+				shiftKey: e.shiftKey,
+				altKey: e.altKey,
+				metaKey: e.metaKey,
+			}),
+		);
+	},
+
+	// The names the faces show, then a count for anyone past them.
+	_peopleHere: function (img) {
+		const all = img.viewNames || [];
+		if (!all.length)
+			return '';
+		const named = all.filter(function (name) { return name; });
+		if (!named.length)
+			return _n('with 1 other', 'with %n others', all.length);
+		const names = named.slice(0, app.SlideAvatars.slots(all.length).faces);
+		const shown = names.join(', ');
+		const rest = all.length - names.length;
+		// The name goes in through a function, so one holding a '$' pattern
+		// goes in as it is.
+		const put = function (text) {
+			return text.replace('%1', function () { return shown; });
+		};
+		if (!rest)
+			return put(_('with %1'));
+		return put(_n('with %1 and 1 other', 'with %1 and %n others', rest));
+	},
+
+	// The visible digit, the alt text and the tooltip are plain position
+	// strings, so they only ever hold the position they were given here.
+	// Callers that move a preview to a different position must call this
+	// again with the new position. A slide linked to another file names
+	// that file and the slide of it in the alt text and the tooltip.
 	_setPreviewPositionLabels: function (img, i) {
-		img.setAttribute('alt', _('preview of page %1').replace('%1', String(i + 1)));
-		img.setAttribute('data-cooltip', _('Slide %1').replace('%1', String(i + 1)));
+		const link = this._pageLink(img);
+		const position = String(i + 1);
+		const people = this._peopleHere(img);
+		const withPeople = function (text) {
+			return people ? text + ', ' + people : text;
+		};
+		const slideNumber = img.parentNode &&
+			img.parentNode.querySelector('.preview-slide-number');
+		if (slideNumber)
+			slideNumber.textContent = position;
+		// One pass, with the replacement returned by a function, so a name
+		// holding a '$' pattern or a '%N' of its own goes in as it is.
+		const fill = function (text, values) {
+			return text.replace(/%[123]/g, function (token) {
+				return values[token];
+			});
+		};
+		if (link && link.name) {
+			const values = { '%1': position, '%2': link.name, '%3': link.source };
+			img.setAttribute(
+				'alt',
+				withPeople(fill(_('preview of page %1, linked to %2 in %3'), values)),
+			);
+			img.setAttribute(
+				'data-cooltip',
+				withPeople(fill(_('Slide %1, linked to %2 in %3'), values)),
+			);
+			return;
+		}
+		if (link) {
+			// The slide is tracked by the identifier of the slide it came
+			// from, so it names no slide of the source.
+			const values = { '%1': position, '%2': link.source };
+			img.setAttribute(
+				'alt',
+				withPeople(fill(_('preview of page %1, linked to %2'), values)),
+			);
+			img.setAttribute(
+				'data-cooltip',
+				withPeople(fill(_('Slide %1, linked to %2'), values)),
+			);
+			return;
+		}
+		img.setAttribute(
+			'alt',
+			withPeople(_('preview of page %1').replace('%1', position)),
+		);
+		img.setAttribute(
+			'data-cooltip',
+			withPeople(_('Slide %1').replace('%1', position)),
+		);
+	},
+
+	// The source document a slide is linked to and the slide of that document
+	// it was made from, or null for a slide that is linked to nothing.
+	_pageLink: function (img) {
+		const links = this._map.slideLinks;
+		return links && img._part ? links.getPageLink(img._part) : null;
+	},
+
+	// Shows the link mark on the preview of a slide that is linked to another
+	// file, and describes the link in the preview's labels. A link whose source
+	// is missing is marked as broken by specific class, and one whose source was
+	// read and holds no slide the page came from is marked as broken.
+	_setPreviewLinkMark: function (img, i) {
+		const links = this._map.slideLinks;
+		const linked = this._pageLink(img) !== null;
+		img._linkBadge.classList.toggle('linked', linked);
+		const broken =
+			linked && links && img._part && links.isPageBroken(img._part);
+		img._linkBadge.classList.toggle('broken', !!broken);
+		const outdated =
+			!broken &&
+			linked &&
+			links &&
+			img._part &&
+			links.isPageOutdated(img._part);
+		img._linkBadge.classList.toggle('outdated', !!outdated);
+		const connected =
+			!broken &&
+			!outdated &&
+			linked &&
+			links &&
+			img._part &&
+			links.isPageConnected(img._part);
+		img._linkBadge.classList.toggle('connected', !!connected);
+		this._setPreviewPositionLabels(img, i);
+	},
+
+	// Brings the link marks of every preview to what the document reports
+	// its linked pages to be.
+	_updateLinkMarks: function () {
+		for (let i = 0; i < this._previewTiles.length; i++) {
+			if (this._previewTiles[i])
+				this._setPreviewLinkMark(this._previewTiles[i], i);
+		}
 	},
 
 	// Relabels every preview from startIndex onward to match its current
@@ -785,34 +1121,20 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 	_createSectionHeader: function (section, sectionIndex) {
 		var that = this;
 
-		var header = window.L.DomUtil.create('div', 'slide-section-header');
-		header.setAttribute('data-section-index', sectionIndex);
-		header.setAttribute('data-start-index', section.startIndex);
-		header.setAttribute('draggable', 'false');
+		// The shared builder wires the collapse toggle and the click that
+		// selects all slides in the section.
+		var header = buildSlideSectionHeader(
+			section.name, sectionIndex,
+			this._collapsedSections.has(section.name), {
+				onToggle: function () {
+					that._toggleSectionCollapse(sectionIndex);
+				},
+				onSelect: function () {
+					that._selectSection(sectionIndex);
+				},
+			});
 
-		var toggleBtn = window.L.DomUtil.create('button', 'slide-section-toggle ui-expander-btn', header);
-		toggleBtn.type = 'button';
-		toggleBtn.setAttribute('aria-label',
-			_('Toggle section %1').replace('%1', section.name));
-
-		var nameSpan = window.L.DomUtil.create('span', 'slide-section-name', header);
-		nameSpan.textContent = section.name;
-		nameSpan.setAttribute('title', section.name);
-
-		window.L.DomEvent.on(toggleBtn, 'click', function (e) {
-			window.L.DomEvent.stopPropagation(e);
-			window.L.DomEvent.preventDefault(e);
-			that._toggleSectionCollapse(sectionIndex);
-		}, this);
-
-		// Click on the header (but not the toggle) selects all slides in the section.
-		window.L.DomEvent.on(header, 'click', function (e) {
-			if (toggleBtn.contains(e.target))
-				return;
-			window.L.DomEvent.stopPropagation(e);
-			window.L.DomEvent.preventDefault(e);
-			that._selectSection(sectionIndex);
-		}, this);
+		const toggleBtn = header.querySelector('.slide-section-toggle');
 
 		// The second press of a double-click on the header (but not on the toggle) opens
 		// the rename dialog.
@@ -1062,9 +1384,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 				app.socket.sendMessage('uno .uno:MoveSlideSectionDown');
 				break;
 			case 'removeSection':
-				that._map.deselectAll();
-				that._map.setPart(section.startIndex);
-				that._map.selectPart(section.startIndex, 1, false);
+				that._selectOnlyPart(section.startIndex);
 				app.socket.sendMessage('uno .uno:RemoveSlideSection');
 				break;
 			case 'removeSectionAndSlides': {
@@ -1234,7 +1554,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			// app native bridges (where navigator.clipboard.read() is unavailable
 			// or would pop up the WebView's system "Paste" confirmation).
 			const canReadClipboard = window.L.Browser.clipboardApiAvailable
-				|| window.ThisIsTheiOSApp || window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp;
+				|| window.mode.hasEngineClipboardProvider();
 			if (canReadClipboard) {
 				let html = '';
 				try {
@@ -1307,11 +1627,19 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			} else if (e.shiftKey) {
 				this._selectPartRange(this._map._docLayer._selectedPart, partId);
 			} else {
-				this._map.deselectAll();
-				this._map.setPart(partId);
-				this._map.selectPart(partId, 1, false); // And select.
+				this._selectOnlyPart(partId);
 			}
 		}
+	},
+
+	// Make the given slide the current one and the only selected one. The
+	// server switches to the slide before it gets the deselections, so the
+	// status that answers each deselection already names this slide as the
+	// current one, and the view stays on it.
+	_selectOnlyPart: function (partId) {
+		this._map.setPart(partId);
+		this._map.deselectAll();
+		this._map.selectPart(partId, 1, false);
 	},
 
 	_selectPartRange: function (start, end, scrollToEnd = true) {
@@ -1343,6 +1671,17 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			this._scrollToPart(end);
 	},
 
+	// Selects every part. The current part stays the current one, so the view does not jump.
+	_selectAllParts: function () {
+		if (app.file.fileBasedView)
+			return;
+
+		this._selectedPartRange = undefined;
+		for (let id = 0; id < app.impress.partList.length; ++id)
+			this._map.selectPart(id, 1, false, false);
+		this._map.fire('updateparts', {});
+	},
+
 	_modifySelectedPartRange: function (direction) {
 		var start, end;
 		if (this._selectedPartRange) {
@@ -1366,6 +1705,21 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 	_syncPreviews: function () {
 		var it = 0;
+
+		// The preview images that exist now, keyed by part number. A part
+		// number stays the same for the slide's whole lifetime, so an image
+		// fetched for a part number is still right for that slide wherever
+		// the update puts it.
+		const previewByPart = {};
+		for (it = 0; it < this._previewTiles.length; it++) {
+			if (this._previewTiles[it]._part) {
+				previewByPart[this._previewTiles[it]._part] = {
+					src: this._previewTiles[it].src,
+					fetched: this._previewTiles[it].fetched,
+					placeholderName: this._previewTiles[it].placeholderName
+				};
+			}
+		}
 
 		if (app.impress.partList.length !== this._previewTiles.length) {
 			if (Math.abs(app.impress.partList.length - this._previewTiles.length) === 1) {
@@ -1393,58 +1747,48 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 				}
 			}
 			else {
-				// sync all, should never happen
+				// A batch insert or delete changed the count by more than
+				// one in a single update. Bring the preview list to the
+				// new length with placeholder tiles that carry no part
+				// number; the matching loop below hands every index its
+				// part number and the image that already carries it, so
+				// only genuinely new slides are left with the placeholder.
 				while (this._previewTiles.length < app.impress.partList.length) {
-					this._insertPreview({selectedPart: this._previewTiles.length - 1,
-							     part: app.impress.partList[this._previewTiles.length].part});
+					this._insertPreview({selectedPart: this._previewTiles.length - 1});
 				}
 
 				while (this._previewTiles.length > app.impress.partList.length) {
 					this._deletePreview({selectedPart: this._previewTiles.length - 1});
 				}
+			}
+		}
 
-				for (it = 0; it < app.impress.partList.length; it++) {
-					this._previewTiles[it]._part = app.impress.partList[it].part;
+		// The counts match here, but a part number can sit at a new index:
+		// the slides were reordered, an index holds a new slide, or the
+		// batch path above left placeholders at the tail. The preview image
+		// that already carries a part number can move to the slide's new
+		// index and show up there immediately; a part number no image
+		// carries yet is a new slide and shows the placeholder.
+		for (it = 0; it < app.impress.partList.length; it++) {
+			const newPart = app.impress.partList[it].part;
+			if (this._previewTiles[it]._part !== newPart) {
+				this._previewTiles[it]._part = newPart;
+				const knownPreview = newPart ? previewByPart[newPart] : undefined;
+				if (knownPreview) {
+					this._previewTiles[it].src = knownPreview.src;
+					this._previewTiles[it].fetched = knownPreview.fetched;
+					this._previewTiles[it].placeholderName = knownPreview.placeholderName;
+				} else {
 					this._setPlaceholder(this._previewTiles[it], 'previewSmile');
 					this._previewTiles[it].fetched = false;
 				}
 			}
 		}
-		else {
-			// The same number of slides with part numbers at new indices
-			// means the slides were reordered (or an index holds a new
-			// slide). A part number stays the same for the slide's whole
-			// lifetime, so the preview image that already carries it can
-			// move to the slide's new index and show up there immediately;
-			// only a part number no preview carries needs a fetch.
-			const previewByPart = {};
-			for (it = 0; it < this._previewTiles.length; it++) {
-				if (this._previewTiles[it]._part) {
-					previewByPart[this._previewTiles[it]._part] = {
-						src: this._previewTiles[it].src,
-						fetched: this._previewTiles[it].fetched,
-						placeholderName: this._previewTiles[it].placeholderName
-					};
-				}
-			}
-			for (it = 0; it < app.impress.partList.length; it++) {
-				const newPart = app.impress.partList[it].part;
-				if (this._previewTiles[it]._part !== newPart) {
-					this._previewTiles[it]._part = newPart;
-					const knownPreview = newPart ? previewByPart[newPart] : undefined;
-					if (knownPreview) {
-						this._previewTiles[it].src = knownPreview.src;
-						this._previewTiles[it].fetched = knownPreview.fetched;
-						this._previewTiles[it].placeholderName = knownPreview.placeholderName;
-					} else {
-						this._map.getPreview(it, it, this.options.maxWidth, this.options.maxHeight, {autoUpdate: this.options.autoUpdate});
-					}
-				}
-			}
-			// A moved preview that was never fetched keeps its placeholder;
-			// fetch the ones that are in view now.
-			this._ensureVisiblePreviews();
-		}
+		// A tile left with a placeholder - a new slide, or a moved
+		// preview that was never fetched - stays unfetched until it is
+		// in view; fetch the ones that are in view now. The ones out of
+		// view are fetched as scrolling reaches them.
+		this._ensureVisiblePreviews();
 	},
 
 	_resize: function () {
@@ -1499,14 +1843,15 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		}
 	},
 
+	// No pixels come for a preview of a page that is gone, so the request is answered.
+	_onPreviewGone: function () {
+		if (this._map.isPresentationOrDrawing())
+			this._map._previewRequestAnswered();
+	},
+
 	_updatePreview: function (e) {
 		if (this._map.isPresentationOrDrawing()) {
-			this._map._previewRequestsOnFly--;
-			if (this._map._previewRequestsOnFly < 0) {
-				this._map._previewRequestsOnFly = 0;
-				this._map._timeToEmptyQueue = new Date();
-			}
-			this._map._processPreviewQueue();
+			this._map._previewRequestAnswered();
 			if (!this._previewInitialized)
 				return;
 			if (e.part === undefined)
@@ -1523,8 +1868,20 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 				tile.src = e.tile.src;
 				tile.fetched = true;
 				window.app.console.debug('PREVIEW: part fetched : ' + parseInt(e.id));
+				this._sendTabThumbnail();
 			}
 		}
+	},
+
+	// Give the desktop app the image of the current slide, for the hover card on the document tab.
+	_sendTabThumbnail: function () {
+		if (!window.ThisIsTheQtApp || app.file.fileBasedView)
+			return;
+		const tile = this._previewTiles[this._map._docLayer._selectedPart];
+		if (!tile || !tile.fetched || tile.src === this._lastTabThumbnail)
+			return;
+		this._lastTabThumbnail = tile.src;
+		window.postMobileMessage('TABTHUMBNAIL ' + tile.src);
 	},
 
 	_insertPreview: function (e) {
@@ -1591,6 +1948,20 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 	},
 
 	_onScroll: function () {
+		this._ensureVisiblePreviews();
+	},
+
+	// The vector content the previews were drawn from may be behind the
+	// document. Every preview counts as not fetched, so the ones in view are
+	// asked for now and the rest once scrolling reaches them. Each keeps its
+	// image until the new one arrives.
+	_onVectorContentStale: function () {
+		if (!this._previewTiles)
+			return;
+		for (let part = 0; part < this._previewTiles.length; ++part) {
+			if (this._previewTiles[part])
+				this._previewTiles[part].fetched = false;
+		}
 		this._ensureVisiblePreviews();
 	},
 
@@ -1737,9 +2108,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			// Same selection change as a plain click on the slide: the
 			// previous selection is dropped on the client and the server
 			// alike, so both agree on which slides the move applies to.
-			partsPreview._map.deselectAll();
-			partsPreview._map.setPart(partId);
-			partsPreview._map.selectPart(partId, 1, false); // And select.
+			partsPreview._selectOnlyPart(partId);
 		}
 		// By default we move when dragging, but can
 		// support duplication with ctrl in the future.
@@ -1849,7 +2218,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			}
 			// Give the frames their measured size first, so the change
 			// animates from the real value.
-			void this._partsPreviewCont.offsetHeight;
+			window.L.DomUtil.forceLayoutFlush(this._partsPreviewCont);
 			for (let i = 0; i < frames.length; i++) {
 				frames[i].style[sizeProperty] = '0px';
 				frames[i].style.padding = '0px';
@@ -1873,7 +2242,21 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 	},
 
 	_handleContainerDragOver: function (e) {
-		const state = this._dragState;
+		// A drag from the slide import pane brings slides in from another
+		// file. It starts outside the sorter, so it opens its own drag
+		// state on the first move rather than in a dragstart handler.
+		const importDrag = isSlideImportDrag(e);
+		let state = this._dragState;
+		if (importDrag && (!state || !state.external)) {
+			if (!this._map.isEditMode()) {
+				e.preventDefault();
+				if (e.dataTransfer)
+					e.dataTransfer.dropEffect = 'none';
+				return;
+			}
+			state = this._beginImportDrag();
+		}
+
 		// A drag that did not start on a slide (a file from the desktop,
 		// for example) has no drop target here; refusing it keeps the
 		// browser from opening the file in place of the editor.
@@ -1886,7 +2269,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 		e.preventDefault();
 		if (e.dataTransfer)
-			e.dataTransfer.dropEffect = 'move';
+			e.dataTransfer.dropEffect = importDrag ? 'copy' : 'move';
 
 		// dragover keeps firing while the pointer rests; the gap only
 		// needs recomputing when the pointer moved.
@@ -1896,6 +2279,42 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		state.pointer = { x: e.clientX, y: e.clientY };
 		this._updateDropGap();
 		this._ensureAutoScroll();
+	},
+
+	// Start the drag visuals for an import drag. Nothing leaves the sorter,
+	// so there are no frames to collapse; the state's only job is to open a
+	// slide-sized insertion gap that follows the pointer, the same way a
+	// reorder drag does. The gap takes the size of the first preview frame.
+	_beginImportDrag: function () {
+		const sizeProperty = this._direction === 'x' ? 'width' : 'height';
+		let gapSize = 0;
+		// Size the gap from the first preview still on show; a frame in a
+		// collapsed section is hidden and would measure as zero.
+		for (var i = 0; i < this._previewTiles.length; i++) {
+			var size = this._previewTiles[i].parentNode.getBoundingClientRect()[sizeProperty];
+			if (size > 0) {
+				gapSize = size;
+				break;
+			}
+		}
+		this._dragState = {
+			external: true,
+			draggedParts: [],
+			frames: [],
+			sizes: [],
+			sizeProperty: sizeProperty,
+			grid: this._gridMode,
+			gapSize: gapSize,
+			gapFrame: null,
+			gapSide: null,
+			gapPlaceholder: null,
+			insertIndex: null,
+			intoSection: null,
+			pointer: null,
+			autoScrollId: null
+		};
+		this._partsPreviewCont.classList.add('dragging-slide');
+		return this._dragState;
 	},
 
 	_handleContainerDragLeave: function (e) {
@@ -1911,6 +2330,13 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		if (e.clientX >= rect.left && e.clientX < rect.right &&
 		    e.clientY >= rect.top && e.clientY < rect.bottom)
 			return;
+		// An import drag ends on a thumbnail in another pane, so no dragend
+		// reaches the sorter to clear its visuals; leaving the sorter ends
+		// them here.
+		if (state.external) {
+			this._finishDrag(false);
+			return;
+		}
 		this._closeDropGap(state);
 		state.insertIndex = null;
 		state.pointer = null;
@@ -1926,6 +2352,21 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		e.stopPropagation();
 
 		const insertIndex = state.insertIndex;
+
+		// An import drag hands the slides to the import session to insert
+		// from the other file; the current slides are not reordered and
+		// the inserted previews arrive with the server's status update.
+		if (state.external) {
+			if (insertIndex !== null && this._map.isEditMode()) {
+				app.events.fire('slideimport:dropinsert', {
+					pos: insertIndex - 1,
+					slides: readSlideImportDrag(e),
+				});
+			}
+			this._finishDrag(false);
+			return;
+		}
+
 		if (insertIndex === null) {
 			this._finishDrag(true);
 			return;
@@ -1999,15 +2440,16 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 		// With the old positions frozen in as transforms, releasing them
 		// after a reflow slides each child into its new cell.
-		void container.offsetHeight;
+		window.L.DomUtil.forceLayoutFlush(container);
+		const slideMs = window.L.DomUtil.getDurationMs('--duration-fast') + 50;
 		for (let i = 0; i < moved.length; i++) {
 			const el = moved[i];
-			el.style.transition = 'transform 0.15s ease-out';
+			el.style.transition = 'transform var(--duration-fast) var(--ease-out)';
 			el.style.transform = '';
 			el._gridSlideTimer = setTimeout(() => {
 				el.style.transition = '';
 				el._gridSlideTimer = null;
-			}, 200);
+			}, slideMs);
 		}
 	},
 
@@ -2093,9 +2535,13 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		// the slides land outside the section and the gap opens above the
 		// header; below it they become the section's first slides and the
 		// gap opens between the header and the slide.
+		// An import drag has one outcome at the boundary: the inserted
+		// slides become the section's first slides, so its gap keeps to
+		// the spot below the header.
 		let intoSection = null;
-		const boundaryHeader = (gapFrame && gapSide === 'before') ?
-			this._sectionHeaderAt(insertIndex) : null;
+		const boundaryHeader =
+			(!state.external && gapFrame && gapSide === 'before') ?
+				this._sectionHeaderAt(insertIndex) : null;
 		if (boundaryHeader) {
 			const rect = boundaryHeader.getBoundingClientRect();
 			// A grid header spans its own full row, so the grid boundary
@@ -2272,7 +2718,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			this._previewTiles.indexOf(anchorTile) : this._previewTiles.length;
 		Array.prototype.splice.apply(this._previewTiles, [insertAt, 0].concat(draggedTiles));
 
-		// The slide numbers in the alt text and tooltip are positional,
+		// The visible digit, the alt text and the tooltip are positional,
 		// so renumber every preview after the previews change order.
 		this._updatePreviewPositionLabelsFrom(0);
 	},
@@ -2323,7 +2769,9 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 		if (!animate) {
 			state.frames.forEach(restoreFrame);
-			void container.offsetHeight;
+			// The restored sizes land while transitions are still off, so
+			// the frames appear at once when the class comes back off.
+			window.L.DomUtil.forceLayoutFlush(container);
 			container.classList.remove('drag-no-transition');
 			container.classList.remove('dragging-slide');
 			this._schedulePreviewRefresh();
@@ -2441,6 +2889,24 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		this.partsFocused = true;
 	},
 });
+
+window.L.control.createSlideUserList = function (viewIds) {
+	var map = app.map;
+	var list = window.L.DomUtil.create('div', 'slide-user-list');
+	list.replaceChildren.apply(list, viewIds.map(function (viewId) {
+		var item = window.L.DomUtil.create('div', 'slide-user-item');
+		var name = map.getViewName(viewId) || '';
+		var avatar = map.userList.createAvatar(undefined, viewId, name, undefined,
+			app.LOUtil.rgbToHex(map.getViewColor(viewId)));
+		// The row's own text names the user, so the picture stays decoration.
+		avatar.alt = '';
+		avatar.setAttribute('aria-hidden', 'true');
+		item.appendChild(avatar);
+		window.L.DomUtil.create('span', 'slide-user-name', item).textContent = name;
+		return item;
+	}));
+	return list;
+};
 
 window.L.control.partsPreview = function (container, preview, options) {
 	return new window.L.Control.PartsPreview(container, preview, options);

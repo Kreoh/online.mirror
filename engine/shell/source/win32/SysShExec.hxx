@@ -23,7 +23,7 @@
 #include <cppuhelper/compbase.hxx>
 #include <osl/mutex.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <com/sun/star/system/XSystemShellExecute.hpp>
 
@@ -42,29 +42,29 @@ class CSysShExec :
             css::system::XSystemShellExecute,
             css::lang::XServiceInfo >
 {
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
     // to put back all the inits with COINIT_MULTITHREADED if needed
     int mnNbCallCoInitializeExForReinit;
 
 public:
-    explicit CSysShExec(const css::uno::Reference< css::uno::XComponentContext >& xContext);
+    explicit CSysShExec(const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext);
     ~CSysShExec();
 
 
     // XSystemShellExecute
 
 
-    virtual void SAL_CALL execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags ) override;
+    virtual void execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags ) override;
 
 
     // XServiceInfo
 
 
-    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual OUString getImplementationName(  ) override;
 
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 #endif

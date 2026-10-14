@@ -39,12 +39,13 @@
 #include "xstorage.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static bool CheckPackageSignature_Impl( const uno::Reference< io::XInputStream >& xInputStream,
                                      const uno::Reference< io::XSeekable >& xSeekable )
 {
     if ( !xInputStream.is() || !xSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if ( xSeekable->getLength() )
     {
@@ -63,7 +64,7 @@ static bool CheckPackageSignature_Impl( const uno::Reference< io::XInputStream >
 
 
 
-uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstance()
+uno::Reference< cpo::uno::XInterface > OStorageFactory::createInstance()
 {
     // TODO: reimplement TempStream service to support XStream interface
     uno::Reference < io::XStream > xTempStream(new utl::TempFileFastService);
@@ -73,7 +74,7 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstance()
                                                   embed::StorageFormats::PACKAGE));
 }
 
-uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithArguments(
+uno::Reference< cpo::uno::XInterface > OStorageFactory::createInstanceWithArguments(
             const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     // The request for storage can be done with up to three arguments
@@ -126,7 +127,7 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
             throw lang::IllegalArgumentException(); // TODO:
         }
 
-        uno::Reference < ucb::XSimpleFileAccess3 > xTempAccess(
+        uno::Reference < ucb::XSimpleFileAccess > xTempAccess(
             ucb::SimpleFileAccess::create(
                 m_xContext ) );
 
@@ -182,19 +183,19 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
                         else if ( aFormatName == OFOPXML_STORAGE_FORMAT_STRING )
                             nStorageType = embed::StorageFormats::OFOPXML;
                         else
-                            throw lang::IllegalArgumentException( u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+                            throw lang::IllegalArgumentException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
                     }
                     else if ( rProp.Value >>= nFormatID )
                     {
                         if ( nFormatID != embed::StorageFormats::PACKAGE
                           && nFormatID != embed::StorageFormats::ZIP
                           && nFormatID != embed::StorageFormats::OFOPXML )
-                            throw lang::IllegalArgumentException( u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+                            throw lang::IllegalArgumentException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
 
                         nStorageType = nFormatID;
                     }
                     else
-                        throw lang::IllegalArgumentException( u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+                        throw lang::IllegalArgumentException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
                 }
                 else if (rProp.Name == "NoFileSync")
                 {
@@ -259,26 +260,26 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
     throw cpo::uno::Exception(u"no input stream or regular stream"_ustr, nullptr); // general error during creation
 }
 
-OUString SAL_CALL OStorageFactory::getImplementationName()
+OUString OStorageFactory::getImplementationName()
 {
     return u"com.sun.star.comp.embed.StorageFactory"_ustr;
 }
 
-bool SAL_CALL OStorageFactory::supportsService( const OUString& ServiceName )
+bool OStorageFactory::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL OStorageFactory::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > OStorageFactory::getSupportedServiceNames()
 {
     return  { u"com.sun.star.embed.StorageFactory"_ustr,
                 u"com.sun.star.comp.embed.StorageFactory"_ustr };
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 package_OStorageFactory_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OStorageFactory(context));
 }

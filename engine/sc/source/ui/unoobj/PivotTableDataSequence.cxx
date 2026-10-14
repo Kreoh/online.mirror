@@ -21,6 +21,7 @@
 #include <unonames.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc
 {
@@ -65,12 +66,12 @@ void PivotTableDataSequence::Notify(SfxBroadcaster& /*rBC*/, const SfxHint& rHin
     }
 }
 
-cpo::uno::Sequence<cpo::uno::Any> SAL_CALL PivotTableDataSequence::getData()
+cpo::uno::Sequence<cpo::uno::Any> PivotTableDataSequence::getData()
 {
     SolarMutexGuard aGuard;
 
     if (!m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence<cpo::uno::Any> aSeq(m_aData.size());
     auto pSeq = aSeq.getArray();
@@ -90,11 +91,11 @@ cpo::uno::Sequence<cpo::uno::Any> SAL_CALL PivotTableDataSequence::getData()
 
 // XNumericalDataSequence --------------------------------------------------
 
-cpo::uno::Sequence<double> SAL_CALL PivotTableDataSequence::getNumericalData()
+cpo::uno::Sequence<double> PivotTableDataSequence::getNumericalData()
 {
     SolarMutexGuard aGuard;
     if (!m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence<double> aSeq(m_aData.size());
     auto pSeq = aSeq.getArray();
@@ -110,11 +111,11 @@ cpo::uno::Sequence<double> SAL_CALL PivotTableDataSequence::getNumericalData()
 
 // XTextualDataSequence --------------------------------------------------
 
-cpo::uno::Sequence<OUString> SAL_CALL PivotTableDataSequence::getTextualData()
+cpo::uno::Sequence<OUString> PivotTableDataSequence::getTextualData()
 {
     SolarMutexGuard aGuard;
     if (!m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence<OUString> aSeq(m_aData.size());
     auto pSeq = aSeq.getArray();
@@ -129,22 +130,22 @@ cpo::uno::Sequence<OUString> SAL_CALL PivotTableDataSequence::getTextualData()
     return aSeq;
 }
 
-OUString SAL_CALL PivotTableDataSequence::getSourceRangeRepresentation()
+OUString PivotTableDataSequence::getSourceRangeRepresentation()
 {
     return m_aID;
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL PivotTableDataSequence::generateLabel(chart2::data::LabelOrigin /*eOrigin*/)
+cpo::uno::Sequence<OUString> PivotTableDataSequence::generateLabel(chart2::data::LabelOrigin /*eOrigin*/)
 {
     SolarMutexGuard aGuard;
     if (!m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence<OUString> aSeq;
     return aSeq;
 }
 
-sal_Int32 SAL_CALL PivotTableDataSequence::getNumberFormatKeyByIndex(sal_Int32 nIndex)
+sal_Int32 PivotTableDataSequence::getNumberFormatKeyByIndex(sal_Int32 nIndex)
 {
     SolarMutexGuard aGuard;
     if (nIndex == -1 && !m_aData.empty())
@@ -161,7 +162,7 @@ sal_Int32 SAL_CALL PivotTableDataSequence::getNumberFormatKeyByIndex(sal_Int32 n
 
 // XCloneable ================================================================
 
-uno::Reference<util::XCloneable> SAL_CALL PivotTableDataSequence::createClone()
+uno::Reference<util::XCloneable> PivotTableDataSequence::createClone()
 {
     SolarMutexGuard aGuard;
 
@@ -173,13 +174,13 @@ uno::Reference<util::XCloneable> SAL_CALL PivotTableDataSequence::createClone()
 
 // XModifyBroadcaster ========================================================
 
-void SAL_CALL PivotTableDataSequence::addModifyListener(const uno::Reference<util::XModifyListener>& aListener)
+void PivotTableDataSequence::addModifyListener(const uno::Reference<util::XModifyListener>& aListener)
 {
     SolarMutexGuard aGuard;
     m_aValueListeners.emplace_back(aListener);
 }
 
-void SAL_CALL PivotTableDataSequence::removeModifyListener(const uno::Reference<util::XModifyListener>& aListener)
+void PivotTableDataSequence::removeModifyListener(const uno::Reference<util::XModifyListener>& aListener)
 {
     SolarMutexGuard aGuard;
 
@@ -196,14 +197,14 @@ void SAL_CALL PivotTableDataSequence::removeModifyListener(const uno::Reference<
 
 // DataSequence XPropertySet -------------------------------------------------
 
-uno::Reference< beans::XPropertySetInfo> SAL_CALL PivotTableDataSequence::getPropertySetInfo()
+uno::Reference< beans::XPropertySetInfo> PivotTableDataSequence::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef = new SfxItemPropertySetInfo(m_aPropSet.getPropertyMap());
     return aRef;
 }
 
-void SAL_CALL PivotTableDataSequence::setPropertyValue(const OUString& rPropertyName, const cpo::uno::Any& rValue)
+void PivotTableDataSequence::setPropertyValue(const OUString& rPropertyName, const cpo::uno::Any& rValue)
 {
     if (rPropertyName == SC_UNONAME_ROLE)
     {
@@ -219,7 +220,7 @@ void SAL_CALL PivotTableDataSequence::setPropertyValue(const OUString& rProperty
         throw beans::UnknownPropertyException(rPropertyName);
 }
 
-cpo::uno::Any SAL_CALL PivotTableDataSequence::getPropertyValue(const OUString& rPropertyName)
+cpo::uno::Any PivotTableDataSequence::getPropertyValue(const OUString& rPropertyName)
 {
     cpo::uno::Any aReturn;
     if (rPropertyName == SC_UNONAME_ROLE)
@@ -244,28 +245,28 @@ cpo::uno::Any SAL_CALL PivotTableDataSequence::getPropertyValue(const OUString& 
     return aReturn;
 }
 
-void SAL_CALL PivotTableDataSequence::addPropertyChangeListener(
+void PivotTableDataSequence::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener>& /*xListener*/)
 {
     OSL_FAIL("Not yet implemented");
 }
 
-void SAL_CALL PivotTableDataSequence::removePropertyChangeListener(
+void PivotTableDataSequence::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener>& /*rListener*/)
 {
     OSL_FAIL("Not yet implemented");
 }
 
-void SAL_CALL PivotTableDataSequence::addVetoableChangeListener(
+void PivotTableDataSequence::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener>& /*rListener*/)
 {
     OSL_FAIL("Not yet implemented");
 }
 
-void SAL_CALL PivotTableDataSequence::removeVetoableChangeListener(
+void PivotTableDataSequence::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener>& /*rListener*/)
 {

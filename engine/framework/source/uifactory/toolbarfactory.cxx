@@ -22,7 +22,7 @@
 #include <uielement/toolbarwrapper.hxx>
 #include <uifactory/menubarfactory.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -34,7 +34,7 @@ namespace {
 class ToolBarFactory :  public MenuBarFactory
 {
 public:
-    explicit ToolBarFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit ToolBarFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual OUString getImplementationName() override
     {
@@ -52,11 +52,11 @@ public:
     }
 
     // XUIElementFactory
-    virtual css::uno::Reference< css::ui::XUIElement > createUIElement(
+    virtual cpo::uno::Reference< css::ui::XUIElement > createUIElement(
             const OUString& ResourceURL, const cpo::uno::Sequence< css::beans::PropertyValue >& Args ) override;
 };
 
-ToolBarFactory::ToolBarFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
+ToolBarFactory::ToolBarFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) :
     MenuBarFactory( xContext )
 {
 }
@@ -73,9 +73,9 @@ Reference< XUIElement > ToolBarFactory::createUIElement(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_ToolBarFactory_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ToolBarFactory(context));

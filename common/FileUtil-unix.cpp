@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <ftw.h>
 #include <grp.h>
+#include <iomanip>
 #include <iostream>
 #include <pwd.h>
 #include <string>
@@ -31,7 +32,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <o3tl/safeint.hxx>
+#include <Poco/File.h>
 
 #ifdef __linux__
 #include <sys/vfs.h>
@@ -511,6 +512,11 @@ namespace FileUtil
         }
 
         return true;
+    }
+
+    std::string fixPocoURIgetPathReturnValue(const std::string& path)
+    {
+        return path;
     }
 } // namespace FileUtil
 

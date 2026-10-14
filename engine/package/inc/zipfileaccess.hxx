@@ -20,7 +20,7 @@
 #ifndef INCLUDED_PACKAGE_INC_ZIPFILEACCESS_HXX
 #define INCLUDED_PACKAGE_INC_ZIPFILEACCESS_HXX
 
-#include <com/sun/star/packages/zip/XZipFileAccess2.hpp>
+#include <com/sun/star/packages/zip/XZipFileAccess.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -35,21 +35,21 @@
 #include <optional>
 
 class OZipFileAccess final : public ::cppu::WeakImplHelper<
-                        css::packages::zip::XZipFileAccess2,
+                        css::packages::zip::XZipFileAccess,
                         css::lang::XInitialization,
                         css::lang::XComponent,
                         css::lang::XServiceInfo >
 {
     rtl::Reference<comphelper::RefCountedMutex> m_aMutexHolder;
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
-    css::uno::Reference< css::io::XInputStream > m_xContentStream;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< css::io::XInputStream > m_xContentStream;
     std::optional<ZipFile> m_pZipFile;
     std::unique_ptr<::comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>> m_pListenersContainer;
     bool m_bDisposed;
     bool m_bOwnContent;
 
 public:
-    OZipFileAccess( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    OZipFileAccess( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual ~OZipFileAccess() override;
 
@@ -59,27 +59,27 @@ public:
                                         const cpo::uno::Sequence< OUString >& aPattern );
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override;
-    virtual bool SAL_CALL hasElements(  ) override;
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override;
+    virtual bool hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
 
     // XZipFileAccess
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getStreamByPattern( const OUString& aPattern ) override;
+    virtual cpo::uno::Reference< css::io::XInputStream > getStreamByPattern( const OUString& aPattern ) override;
 
     // XComponent
-    virtual void SAL_CALL dispose(  ) override;
-    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    virtual void dispose(  ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
 };
 

@@ -31,11 +31,15 @@ interface SidebarDeckState {
 	targetDeckCommand: string | null; /// deck command last asked for
 	/// deck showing when the current deck was requested, and the command that requested it
 	openedFrom: { deckId: string | null; forCommand: string } | null;
+	showRequested: boolean; /// the dock was asked to open and has not opened yet
 }
 
 class Sidebar extends SidebarBase {
 	isUserRequest: boolean; /// automatic or user request to show the sidebar
 	sidebarShownTheFirstTime: boolean = true;
+	// True once the first sidebar message has been handled, whether it showed or closed the
+	// sidebar.
+	firstMessageHandled: boolean = false;
 
 	/// The whole deck-navigation state, changed only through setDeckState. Keeping it in one
 	/// value with one writer means the sidebar has a single place its state can move.
@@ -43,6 +47,7 @@ class Sidebar extends SidebarBase {
 		activeDeckId: null,
 		targetDeckCommand: null,
 		openedFrom: null,
+		showRequested: false,
 	};
 
 	/// the extension currently showing, if any
@@ -75,7 +80,11 @@ class Sidebar extends SidebarBase {
 	closeSidebar() {
 		if (this.extensionDeck) this.extensionDeck.owner.closeDeck();
 		super.closeSidebar();
-		this.setDeckState({ activeDeckId: null });
+		this.setDeckState({ activeDeckId: null, showRequested: false });
+	}
+
+	noteShowRequest() {
+		this.setDeckState({ showRequested: true });
 	}
 
 	hasExtensionDeck(owner: ExtensionDeckOwner): boolean {
@@ -139,52 +148,15 @@ class Sidebar extends SidebarBase {
 			'A11yCheckDeck',
 		];
 
+		if (!decks.includes(currentDeck)) {
+			return;
+		}
+
 		const deckPref: { [key: string]: string } = {};
 		decks.forEach((deck: string) => {
 			deckPref[deck] = currentDeck === deck ? 'true' : 'false';
 		});
 		this.map.uiManager.setDocTypeMultiplePrefs(deckPref);
-	}
-
-	/// The presentation sidebar/panel toolbar buttons are mutually exclusive, so
-	/// only the button of the active deck stays highlighted. Core reports the
-	/// state of its own decks, but the transitions and animations panels live in
-	/// the notebookbar and core is never told they took over the sidebar. Their
-	/// highlight, and clearing the core deck button they replace, is driven here.
-	updatePresentationDeckHighlight(currentDeck: string) {
-		if (this.map.getDocType() !== 'presentation') return;
-
-		const panelCommandForDeck: { [key: string]: string } = {
-			'transitions-deck': 'transitiondeck',
-			'animations-deck': 'animationdeck',
-		};
-		const coreDeckCommands = [
-			'.uno:SidebarDeck.PropertyDeck',
-			'.uno:ModifyPage',
-			'.uno:CustomAnimation',
-			'.uno:MasterSlidesPanel',
-		];
-
-		const activePanelCommand = panelCommandForDeck[currentDeck];
-		const stateHandler = this.map['stateChangeHandler'];
-
-		const setHighlight = (command: string, active: boolean) => {
-			const value = active ? 'true' : 'false';
-			if (stateHandler && stateHandler.getItemValue(command) === value) return;
-			this.map.fire('commandstatechanged', {
-				commandName: command,
-				state: value,
-			});
-		};
-
-		Object.values(panelCommandForDeck).forEach((command) =>
-			setHighlight(command, command === activePanelCommand),
-		);
-
-		// A notebookbar panel has taken over the sidebar: core still thinks its
-		// last deck is open and keeps reporting it active, so clear those buttons.
-		if (activePanelCommand)
-			coreDeckCommands.forEach((command) => setHighlight(command, false));
 	}
 
 	commandForDeck(deckId: string): string {
@@ -238,6 +210,21 @@ class Sidebar extends SidebarBase {
 		this.setDeckState({ targetDeckCommand: unoCommand });
 	}
 
+	private formulaKeepsDockClosed(): boolean {
+		if (this.deckState.showRequested) return false;
+
+		if (
+			this.map.getDocType() !== 'text' ||
+			this.map.uiManager.getCurrentMode() !== 'notebookbar'
+		)
+			return false;
+
+		const context = (this.map as any).context;
+		return (
+			!!context && context.appId === 'com.sun.star.formula.FormulaProperties'
+		);
+	}
+
 	getTargetDeck(): string {
 		return this.deckState.targetDeckCommand;
 	}
@@ -251,12 +238,13 @@ class Sidebar extends SidebarBase {
 	onSidebar(data: FireEvent) {
 		var sidebarData = data.data;
 
-		if (
-			sidebarData.action === 'close' ||
-			window.app.file.disableSidebar ||
-			this.map.isReadOnlyMode()
-		) {
+		if (window.app.file.disableSidebar || this.map.isReadOnlyMode()) {
 			this.closeSidebar();
+		} else if (sidebarData.action === 'close') {
+			// While a panel deck owns the dock content, closing the core decks only
+			// drops the core deck state and the dock stays as the panel left it.
+			if (this.ownsContainerContent()) this.closeSidebar();
+			else this.setDeckState({ activeDeckId: null });
 		} else if (sidebarData.children) {
 			for (var i = sidebarData.children.length - 1; i >= 0; i--) {
 				if (sidebarData.children[i].type !== 'deck') {
@@ -310,6 +298,7 @@ class Sidebar extends SidebarBase {
 				}
 
 				this.model.fullUpdate(sidebarData as JSDialogJSON);
+				this.markContainerContentOwner();
 
 				const documentFragment = new DocumentFragment(); // do not modify dom yet
 				const tempContainer = window.L.DomUtil.create(
@@ -320,7 +309,10 @@ class Sidebar extends SidebarBase {
 
 				this.builder.build(tempContainer, [this.model.getSnapshot()], false);
 
-				if (!this.isVisible()) {
+				const keepClosed = this.formulaKeepsDockClosed();
+				this.setDeckState({ showRequested: false });
+
+				if (!this.isVisible() && !keepClosed) {
 					this.showSidebar();
 
 					if (this.sidebarShownTheFirstTime) {
@@ -333,10 +325,10 @@ class Sidebar extends SidebarBase {
 					}
 				}
 
-				this.map.uiManager.setDocTypePref('ShowSidebar', true);
+				if (!keepClosed) this.map.uiManager.setDocTypePref('ShowSidebar', true);
 
 				// cache - check happens in task and we will update value later in this function
-				const wasUserRequest = this.isUserRequest;
+				const wasUserRequest = !keepClosed && this.isUserRequest;
 
 				app.layoutingService.appendLayoutingTask(() => {
 					// now attach to the DOM built content
@@ -361,18 +353,25 @@ class Sidebar extends SidebarBase {
 									}
 								});
 							},
-							250,
+							window.L.DomUtil.getDurationMs('--duration-normal') + 50,
 						); // see animation time in #sidebar-dock-wrapper.visible
 					}
 
-					this.sidebarShownTheFirstTime = false;
+					if (!keepClosed) this.sidebarShownTheFirstTime = false;
 				});
 
-				this.isUserRequest = false;
+				if (!keepClosed) this.isUserRequest = false;
 			} else {
 				this.closeSidebar();
 				this.isUserRequest = true;
 			}
+		}
+
+		// Only the instance stored as map.sidebar reports, once, that its first message has been
+		// handled.
+		if (!this.firstMessageHandled && this.map.sidebar === this) {
+			this.firstMessageHandled = true;
+			app.serverConnectionService.onSidebarSettled();
 		}
 	}
 }

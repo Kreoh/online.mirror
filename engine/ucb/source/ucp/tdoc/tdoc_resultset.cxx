@@ -35,6 +35,7 @@
 #include "tdoc_content.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace tdoc_ucp;
 
 
@@ -42,7 +43,7 @@ using namespace tdoc_ucp;
 
 
 DynamicResultSet::DynamicResultSet(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             rtl::Reference< Content > xContent,
             const ucb::OpenCommandArgument2& rCommand )
 : ResultSetImplHelper( rxContext, rCommand ),

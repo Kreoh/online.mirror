@@ -22,7 +22,7 @@
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/packages/XDataSinkEncrSupport.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include "ZipPackageEntry.hxx"
 #include <rtl/ref.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -57,7 +57,7 @@ class ZipPackageStream final : public cppu::ImplInheritanceHelper
 >
 {
 private:
-    css::uno::Reference < css::io::XInputStream > m_xStream;
+    cpo::uno::Reference < css::io::XInputStream > m_xStream;
     ZipPackage          &m_rZipPackage;
     bool                 m_bToBeCompressed, m_bToBeEncrypted, m_bHaveOwnKey, m_bIsEncrypted;
 
@@ -78,10 +78,10 @@ private:
     bool m_bRawStream;
 
     /// Check that m_xStream implements io::XSeekable and return it
-    css::uno::Reference< css::io::XInputStream > const & GetOwnSeekStream();
+    cpo::uno::Reference< css::io::XInputStream > const & GetOwnSeekStream();
     /// get raw data using unbuffered stream
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XInputStream > getRawData();
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XInputStream > getRawData();
 
 public:
     bool IsPackageMember () const { return m_nStreamMode == PACKAGE_STREAM_PACKAGEMEMBER;}
@@ -132,13 +132,13 @@ public:
     void setSize (const sal_Int64 nNewSize);
 
     ZipPackageStream( ZipPackage & rNewPackage,
-                      const css::uno::Reference < css::uno::XComponentContext >& xContext,
+                      const cpo::uno::Reference < cpo::uno::XComponentContext >& xContext,
                       sal_Int32 nFormat,
                       bool bAllowRemoveOnInsert );
     virtual ~ZipPackageStream() override;
 
-    css::uno::Reference< css::io::XInputStream > GetRawEncrStreamNoHeaderCopy();
-    css::uno::Reference< css::io::XInputStream > TryToGetRawFromDataStream(bool bAddHeaderForEncr );
+    cpo::uno::Reference< css::io::XInputStream > GetRawEncrStreamNoHeaderCopy();
+    cpo::uno::Reference< css::io::XInputStream > TryToGetRawFromDataStream(bool bAddHeaderForEncr );
 
     bool ParsePackageRawStream();
     virtual bool saveChild( const OUString &rPath,
@@ -152,26 +152,26 @@ public:
     void successfullyWritten( ZipEntry const *pEntry );
 
     // XActiveDataSink
-    virtual void SAL_CALL setInputStream( const css::uno::Reference< css::io::XInputStream >& aStream ) override;
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getInputStream(  ) override;
+    virtual void setInputStream( const cpo::uno::Reference< css::io::XInputStream >& aStream ) override;
+    virtual cpo::uno::Reference< css::io::XInputStream > getInputStream(  ) override;
 
     // XDataSinkEncrSupport
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getDataStream() override;
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getRawStream() override;
-    virtual void SAL_CALL setDataStream(
-                    const css::uno::Reference< css::io::XInputStream >& aStream ) override;
-    virtual void SAL_CALL setRawStream(
-                    const css::uno::Reference< css::io::XInputStream >& aStream ) override;
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getPlainRawStream() override;
+    virtual cpo::uno::Reference< css::io::XInputStream > getDataStream() override;
+    virtual cpo::uno::Reference< css::io::XInputStream > getRawStream() override;
+    virtual void setDataStream(
+                    const cpo::uno::Reference< css::io::XInputStream >& aStream ) override;
+    virtual void setRawStream(
+                    const cpo::uno::Reference< css::io::XInputStream >& aStream ) override;
+    virtual cpo::uno::Reference< css::io::XInputStream > getPlainRawStream() override;
 
     // XPropertySet
-    virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 #endif
 

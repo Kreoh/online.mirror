@@ -46,7 +46,7 @@
 #include <strings.hrc>
 
 using namespace comphelper;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -383,9 +383,9 @@ Sequence< OUString > XmlFilterAdaptor::getSupportedServiceNames(  )
     return { u"com.sun.star.document.ExportFilter"_ustr, u"com.sun.star.document.ImportFilter"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_XmlFilterAdaptor_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XmlFilterAdaptor(context));
 }

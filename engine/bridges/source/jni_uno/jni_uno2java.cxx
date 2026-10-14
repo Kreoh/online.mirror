@@ -25,7 +25,7 @@
 #include <cstddef>
 #include <memory>
 
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 #include <rtl/ustrbuf.hxx>
 #include <utility>
@@ -79,7 +79,7 @@ void Bridge::handle_java_exc(
     OUString exc_name(
         jstring_to_oustring( jni, static_cast<jstring>(jo_class_name.get()) ) );
 
-    css::uno::TypeDescription td( exc_name.pData );
+    cpo::uno::TypeDescription td( exc_name.pData );
     if (!td.is() || (td.get()->eTypeClass != typelib_TypeClass_EXCEPTION))
     {
         // call toString()
@@ -132,9 +132,9 @@ void Bridge::call_java(
         static_cast<JniUnoEnvironmentData *>(m_java_env->pContext)->machine);
 
     // assure fully initialized iface_td:
-    css::uno::TypeDescription iface_holder;
+    cpo::uno::TypeDescription iface_holder;
     if (! iface_td->aBase.bComplete) {
-        iface_holder = css::uno::TypeDescription(
+        iface_holder = cpo::uno::TypeDescription(
             reinterpret_cast<typelib_TypeDescription *>(iface_td) );
         iface_holder.makeComplete();
         if (! iface_holder.get()->bComplete) {
@@ -573,9 +573,9 @@ void UNO_proxy_dispatch(
                 reinterpret_cast<
                 typelib_InterfaceAttributeTypeDescription const * >(
                     member_td );
-            css::uno::TypeDescription attrib_holder;
+            cpo::uno::TypeDescription attrib_holder;
             while ( attrib_td->pBaseRef != nullptr ) {
-                attrib_holder = css::uno::TypeDescription(
+                attrib_holder = cpo::uno::TypeDescription(
                     attrib_td->pBaseRef );
                 assert(
                     attrib_holder.get()->eTypeClass
@@ -616,9 +616,9 @@ void UNO_proxy_dispatch(
                 reinterpret_cast<
                 typelib_InterfaceMethodTypeDescription const * >(
                     member_td );
-            css::uno::TypeDescription method_holder;
+            cpo::uno::TypeDescription method_holder;
             while ( method_td->pBaseRef != nullptr ) {
-                method_holder = css::uno::TypeDescription(
+                method_holder = cpo::uno::TypeDescription(
                     method_td->pBaseRef );
                 assert(
                     method_holder.get()->eTypeClass
@@ -768,10 +768,10 @@ void UNO_proxy_dispatch(
         }
         buf.append( ": " + err.m_message );
         // binary identical struct
-        css::uno::RuntimeException exc(
+        cpo::uno::RuntimeException exc(
             buf.makeStringAndClear(),
-            css::uno::Reference<
-              css::uno::XInterface >() );
+            cpo::uno::Reference<
+              cpo::uno::XInterface >() );
         cpo::uno::Type const & exc_type = cppu::UnoType<decltype(exc)>::get();
         uno_type_any_construct( *uno_exc, &exc, exc_type.getTypeLibType(), nullptr );
         SAL_INFO("bridges", exc.Message);
@@ -779,10 +779,10 @@ void UNO_proxy_dispatch(
     catch (::jvmaccess::VirtualMachine::AttachGuard::CreationException &)
     {
         // binary identical struct
-        css::uno::RuntimeException exc(
+        cpo::uno::RuntimeException exc(
             u"[jni_uno bridge error] attaching current thread to java failed!"_ustr,
-            css::uno::Reference<
-              css::uno::XInterface >() );
+            cpo::uno::Reference<
+              cpo::uno::XInterface >() );
         cpo::uno::Type const & exc_type = cppu::UnoType<decltype(exc)>::get();
         uno_type_any_construct( *uno_exc, &exc, exc_type.getTypeLibType(), nullptr );
         SAL_WARN("bridges", exc.Message);

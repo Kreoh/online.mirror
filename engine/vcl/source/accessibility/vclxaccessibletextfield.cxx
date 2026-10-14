@@ -25,7 +25,7 @@
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::accessibility;
 using namespace ::cpo::uno;
@@ -50,24 +50,24 @@ OUString VCLXAccessibleTextField::implGetText()
 
 // XAccessibleContext
 
-sal_Int64 SAL_CALL VCLXAccessibleTextField::getAccessibleChildCount()
+sal_Int64 VCLXAccessibleTextField::getAccessibleChildCount()
 {
     return 0;
 }
 
 
-Reference<XAccessible> SAL_CALL VCLXAccessibleTextField::getAccessibleChild (sal_Int64)
+Reference<XAccessible> VCLXAccessibleTextField::getAccessibleChild (sal_Int64)
 {
     throw IndexOutOfBoundsException();
 }
 
 
-sal_Int16 SAL_CALL VCLXAccessibleTextField::getAccessibleRole()
+sal_Int16 VCLXAccessibleTextField::getAccessibleRole()
 {
     return AccessibleRole::TEXT;
 }
 
-Reference< XAccessible > SAL_CALL VCLXAccessibleTextField::getAccessibleParent(  )
+Reference< XAccessible > VCLXAccessibleTextField::getAccessibleParent(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 

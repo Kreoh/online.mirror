@@ -36,11 +36,11 @@ private:
     static bool       isSpreadSheetFile( std::u16string_view rString );
     static sal_Int16& getCurrentDelim(){ static sal_Int16 nDelim = 44; return nDelim; }
 public:
-    ScVbaWorkbooks( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    ScVbaWorkbooks( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // ScVbaWorkbooks_BASE
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
@@ -48,9 +48,9 @@ public:
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
 
     // XWorkbooks
-    virtual cpo::uno::Any SAL_CALL Add( const cpo::uno::Any& Template ) override;
-    virtual void SAL_CALL Close(  ) override;
-    virtual cpo::uno::Any SAL_CALL Open( const OUString& Filename, const cpo::uno::Any& UpdateLinks, const cpo::uno::Any& ReadOnly, const cpo::uno::Any& Format, const cpo::uno::Any& Password, const cpo::uno::Any& WriteResPassword, const cpo::uno::Any& IgnoreReadOnlyRecommended, const cpo::uno::Any& Origin, const cpo::uno::Any& Delimiter, const cpo::uno::Any& Editable, const cpo::uno::Any& Notify, const cpo::uno::Any& Converter, const cpo::uno::Any& AddToMru ) override;
+    virtual cpo::uno::Any Add( const cpo::uno::Any& Template ) override;
+    virtual void Close(  ) override;
+    virtual cpo::uno::Any Open( const OUString& Filename, const cpo::uno::Any& UpdateLinks, const cpo::uno::Any& ReadOnly, const cpo::uno::Any& Format, const cpo::uno::Any& Password, const cpo::uno::Any& WriteResPassword, const cpo::uno::Any& IgnoreReadOnlyRecommended, const cpo::uno::Any& Origin, const cpo::uno::Any& Delimiter, const cpo::uno::Any& Editable, const cpo::uno::Any& Notify, const cpo::uno::Any& Converter, const cpo::uno::Any& AddToMru ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

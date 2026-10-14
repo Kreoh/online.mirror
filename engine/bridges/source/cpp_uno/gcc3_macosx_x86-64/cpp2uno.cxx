@@ -26,7 +26,7 @@
 #include <sal/log.hxx>
 
 #include <cpo/uno/genfunc.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
 
@@ -40,7 +40,7 @@
 #include "share.hxx"
 
 using namespace ::osl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 
@@ -401,7 +401,7 @@ int cpp_vtable_call(
         }
         default:
         {
-            throw RuntimeException("no member description found!",
+            throw RuntimeException(u"no member description found!"_ustr,
                                     reinterpret_cast<XInterface *>( pCppI ) );
         }
     }

@@ -18,19 +18,19 @@
  */
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 #include <type_traits>
 
-#include "rtl/ustring.hxx"
-#include "uno/any2.h"
-#include "typelib/typedescription.h"
-#include "cppu/unotype.hxx"
-#include "cpo/uno/TypeClass.hdl"
-#include "rtl/alloc.h"
+#include <rtl/ustring.hxx>
+#include <uno/any2.h>
+#include <typelib/typedescription.h>
+#include <cppu/unotype.hxx>
+#include <cpo/uno/TypeClass.hdl>
+#include <rtl/alloc.h>
 
-namespace com::sun::star::uno
+namespace cpo::uno
 {
     class BaseReference;
     template<class interface_type> class Reference;
@@ -61,9 +61,9 @@ public:
     */
     template <typename T>
         // Disallow things like
-        // Reference<css::uno::XInterface> x(...);
+        // Reference<cpo::uno::XInterface> x(...);
         // Any a(*x);
-        requires (!std::is_base_of_v<css::uno::XInterface, T>)
+        requires (!std::is_base_of_v<cpo::uno::XInterface, T>)
     explicit inline Any( T const & value );
     /// Ctor support for C++ bool.
     explicit inline Any( bool value );
@@ -182,11 +182,11 @@ public:
         sal_Int32 myVal = myAny.get<sal_Int32>();
         </pre>
         Widening conversion without data loss is taken into account.
-        Throws a com::sun::star::uno::RuntimeException if the specified type
+        Throws a cpo::uno::RuntimeException if the specified type
         cannot be provided.
 
         @return value of specified type
-        @exception com::sun::star::uno::RuntimeException
+        @exception cpo::uno::RuntimeException
                    in case the specified type cannot be provided
     */
     template <typename T>
@@ -264,8 +264,8 @@ public:
     // Similar to Reference::query/queryThrow, these allow to simplify calling constructors of
     // Reference taking Any. queryThrow is functionally similar to get(), but doesn't require
     // to specify the full Reference type explicitly, only the interface type.
-    template<class interface_type> inline css::uno::Reference<interface_type> query() const;
-    template<class interface_type> inline css::uno::Reference<interface_type> queryThrow() const;
+    template<class interface_type> inline cpo::uno::Reference<interface_type> query() const;
+    template<class interface_type> inline cpo::uno::Reference<interface_type> queryThrow() const;
 };
 
 /** Wrap a value in an Any, if necessary.
@@ -386,7 +386,7 @@ template<>
 inline bool operator == ( const Any & rAny, const cpo::uno::Type & value );
 // interface
 template<>
-inline bool operator == ( const Any & rAny, const css::uno::BaseReference & value );
+inline bool operator == ( const Any & rAny, const cpo::uno::BaseReference & value );
 
 }
 

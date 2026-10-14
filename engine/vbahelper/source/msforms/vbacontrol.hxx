@@ -20,7 +20,7 @@
 #define INCLUDED_VBAHELPER_SOURCE_MSFORMS_VBACONTROL_HXX
 
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
@@ -36,8 +36,8 @@ typedef InheritedHelperInterfaceWeakImpl< ov::msforms::XControl > ControlImpl_BA
 class ScVbaControl : public ControlImpl_BASE
 {
 private:
-    css::uno::Reference< css::lang::XEventListener > m_xEventListener;
-    css::uno::Reference< css::awt::XControl > m_xEmptyFormControl;
+    cpo::uno::Reference< css::lang::XEventListener > m_xEventListener;
+    cpo::uno::Reference< css::awt::XControl > m_xEmptyFormControl;
 protected:
     // awt control has nothing similar to Tag property of Mso controls,
     // whether it is necessary is another question
@@ -45,17 +45,17 @@ protected:
 
     OUString m_sLibraryAndCodeName;
     std::unique_ptr< ov::AbstractGeometryAttributes > mpGeometryHelper;
-    css::uno::Reference< css::beans::XPropertySet > m_xProps;
-    css::uno::Reference< css::uno::XInterface > m_xControl;
-    css::uno::Reference< css::frame::XModel > m_xModel;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xProps;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xControl;
+    cpo::uno::Reference< css::frame::XModel > m_xModel;
 
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::awt::XVclWindowPeer > getWindowPeer();
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::awt::XVclWindowPeer > getWindowPeer();
     void fireChangeEvent();
     void fireClickEvent();
 public:
-    ScVbaControl( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                    css::uno::Reference< css::uno::XInterface >  xControl, css::uno::Reference< css::frame::XModel > xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pHelper );
+    ScVbaControl( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                    cpo::uno::Reference< cpo::uno::XInterface >  xControl, cpo::uno::Reference< css::frame::XModel > xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pHelper );
     virtual ~ScVbaControl() override;
     // This class will own the helper, so make sure it is allocated from
     // the heap
@@ -64,76 +64,76 @@ public:
     void setLibraryAndCodeName( const OUString& sLibCodeName ) { m_sLibraryAndCodeName = sLibCodeName; }
 
     // XControl
-    virtual bool SAL_CALL getEnabled() override;
-    virtual void SAL_CALL setEnabled( bool _enabled ) override;
-    virtual bool SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( bool _visible ) override;
-    virtual double SAL_CALL getHeight() override;
-    virtual void SAL_CALL setHeight( double _height ) override;
-    virtual double SAL_CALL getWidth() override;
-    virtual void SAL_CALL setWidth( double _width ) override;
-    virtual double SAL_CALL getLeft() override;
-    virtual void SAL_CALL setLeft( double _left ) override;
-    virtual double SAL_CALL getTop() override;
-    virtual void SAL_CALL setTop( double _top ) override;
-    virtual void SAL_CALL SetFocus(  ) override;
-    virtual void SAL_CALL Move( double Left, double Top, const cpo::uno::Any& Width, const cpo::uno::Any& Height ) override;
-    virtual void SAL_CALL fireEvent( const css::script::ScriptEvent& evt ) override;
+    virtual bool getEnabled() override;
+    virtual void setEnabled( bool _enabled ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
+    virtual double getHeight() override;
+    virtual void setHeight( double _height ) override;
+    virtual double getWidth() override;
+    virtual void setWidth( double _width ) override;
+    virtual double getLeft() override;
+    virtual void setLeft( double _left ) override;
+    virtual double getTop() override;
+    virtual void setTop( double _top ) override;
+    virtual void SetFocus(  ) override;
+    virtual void Move( double Left, double Top, const cpo::uno::Any& Width, const cpo::uno::Any& Height ) override;
+    virtual void fireEvent( const css::script::ScriptEvent& evt ) override;
 
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getObject() override;
-    virtual OUString SAL_CALL getControlSource() override;
-    virtual void SAL_CALL setControlSource( const OUString& _controlsource ) override;
-    virtual OUString SAL_CALL getRowSource() override;
-    virtual void SAL_CALL setRowSource( const OUString& _rowsource ) override;
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL setName( const OUString& _name ) override;
-    virtual OUString SAL_CALL getControlTipText() override;
-    virtual void SAL_CALL setControlTipText( const OUString& ) override;
-    virtual OUString SAL_CALL getTag() override;
-    virtual void SAL_CALL setTag( const OUString& aTag ) override;
-    virtual sal_Int32 SAL_CALL getTabIndex() override;
-    virtual void SAL_CALL setTabIndex( sal_Int32 nTabIndex ) override;
-    virtual ::sal_Int32 SAL_CALL getMousePointer() override;
-    virtual void SAL_CALL setMousePointer( ::sal_Int32 _mousepointer ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getObject() override;
+    virtual OUString getControlSource() override;
+    virtual void setControlSource( const OUString& _controlsource ) override;
+    virtual OUString getRowSource() override;
+    virtual void setRowSource( const OUString& _rowsource ) override;
+    virtual OUString getName() override;
+    virtual void setName( const OUString& _name ) override;
+    virtual OUString getControlTipText() override;
+    virtual void setControlTipText( const OUString& ) override;
+    virtual OUString getTag() override;
+    virtual void setTag( const OUString& aTag ) override;
+    virtual sal_Int32 getTabIndex() override;
+    virtual void setTabIndex( sal_Int32 nTabIndex ) override;
+    virtual ::sal_Int32 getMousePointer() override;
+    virtual void setMousePointer( ::sal_Int32 _mousepointer ) override;
     //remove resource because ooo.vba.excel.XControl is a wrapper of com.sun.star.drawing.XControlShape
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void removeResource();
-    /// @throws css::uno::RuntimeException
-    virtual ::sal_Int32 SAL_CALL getForeColor();
+    /// @throws cpo::uno::RuntimeException
+    virtual ::sal_Int32 getForeColor();
     //XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
     //General helper methods for properties (may or may not be relevant for all
     //controls)
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int32 getBackColor();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setBackColor( sal_Int32 nBackColor );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool getAutoSize() const;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setAutoSize( bool bAutoSize );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool getLocked();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setLocked( bool bAutoSize );
 };
 
 
 namespace ScVbaControlFactory
 {
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< ov::msforms::XControl > createShapeControl(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::drawing::XControlShape >& xControlShape,
-        const css::uno::Reference< css::frame::XModel >& xModel );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< ov::msforms::XControl > createShapeControl(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::drawing::XControlShape >& xControlShape,
+        const cpo::uno::Reference< css::frame::XModel >& xModel );
 
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< ov::msforms::XControl > createUserformControl(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::awt::XControl >& xControl,
-        const css::uno::Reference< css::awt::XControl >& xDialog,
-        const css::uno::Reference< css::frame::XModel >& xModel,
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< ov::msforms::XControl > createUserformControl(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::awt::XControl >& xControl,
+        const cpo::uno::Reference< css::awt::XControl >& xDialog,
+        const cpo::uno::Reference< css::frame::XModel >& xModel,
         double fOffsetX, double fOffsetY );
 }
 

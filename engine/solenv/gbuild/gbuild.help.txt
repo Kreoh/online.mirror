@@ -74,9 +74,6 @@ AVAILABLE TARGETS
        <class>_<target> for all targets and for the following classes:
            o AllLangMoTarget
            o AllLangZip
-           o CliLibrary
-           o CliNativeLibrary
-           o CliUnoApi
            o ComponentTarget
            o Configuration
            o CppunitTest
@@ -97,7 +94,6 @@ AVAILABLE TARGETS
            o JunitTest
            o Library
            o Package
-           o Pagein
            o PythonTest
            o Pyuno
            o Rdb

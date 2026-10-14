@@ -12,6 +12,7 @@
 #include <sal/config.h>
 
 #include <PivotTableDataProvider.hxx>
+#include <docuno.hxx>
 #include <PivotTableDataSource.hxx>
 #include <PivotTableDataSequence.hxx>
 
@@ -51,6 +52,7 @@
 #include <unordered_map>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc
 {
@@ -90,7 +92,7 @@ OUString lcl_identifierForCategories()
     return "PT@" + u"categories"_ustr;
 }
 
-std::vector<OUString> lcl_getVisiblePageMembers(const uno::Reference<uno::XInterface> & xLevel)
+std::vector<OUString> lcl_getVisiblePageMembers(const uno::Reference<cpo::uno::XInterface> & xLevel)
 {
     std::vector<OUString> aResult;
     if (!xLevel.is())
@@ -174,7 +176,7 @@ void PivotTableDataProvider::Notify(SfxBroadcaster& /*rBroadcaster*/, const SfxH
     }
 }
 
-bool SAL_CALL PivotTableDataProvider::createDataSourcePossible(const cpo::uno::Sequence<beans::PropertyValue>& /*aArguments*/)
+bool PivotTableDataProvider::createDataSourcePossible(const cpo::uno::Sequence<beans::PropertyValue>& /*aArguments*/)
 {
     SolarMutexGuard aGuard;
     if (!m_pDocument)
@@ -187,13 +189,13 @@ bool SAL_CALL PivotTableDataProvider::createDataSourcePossible(const cpo::uno::S
     return bool(pDPCollection->GetByName(m_sPivotTableName));
 }
 
-uno::Reference<chart2::data::XDataSource> SAL_CALL
+uno::Reference<chart2::data::XDataSource>
     PivotTableDataProvider::createDataSource(const cpo::uno::Sequence<beans::PropertyValue>& aArguments)
 {
     SolarMutexGuard aGuard;
 
     if (!m_pDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     bool bOrientCol = true;
     OUString aRangeRepresentation;
@@ -335,7 +337,7 @@ void PivotTableDataProvider::collectPivotTableData()
 
     for (sal_Int32 nDim = 0; nDim < xDims->getCount(); nDim++)
     {
-        uno::Reference<uno::XInterface> xDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
+        uno::Reference<cpo::uno::XInterface> xDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
         uno::Reference<beans::XPropertySet> xDimProp(xDim, uno::UNO_QUERY);
         uno::Reference<sheet::XHierarchiesSupplier> xDimSupp(xDim, uno::UNO_QUERY);
 
@@ -364,7 +366,7 @@ void PivotTableDataProvider::collectPivotTableData()
 
         for (tools::Long nLevel = 0; nLevel < xLevels->getCount(); nLevel++)
         {
-            uno::Reference<uno::XInterface> xLevel(xLevels->getByIndex(nLevel), uno::UNO_QUERY);
+            uno::Reference<cpo::uno::XInterface> xLevel(xLevels->getByIndex(nLevel), uno::UNO_QUERY);
             uno::Reference<container::XNamed> xLevelName(xLevel, uno::UNO_QUERY);
             uno::Reference<sheet::XDataPilotMemberResults> xLevelResult(xLevel, uno::UNO_QUERY );
 
@@ -672,7 +674,7 @@ uno::Reference<chart2::data::XDataSource>
 }
 
 
-cpo::uno::Sequence<beans::PropertyValue> SAL_CALL PivotTableDataProvider::detectArguments(
+cpo::uno::Sequence<beans::PropertyValue> PivotTableDataProvider::detectArguments(
             const uno::Reference<chart2::data::XDataSource> & xDataSource)
 {
     if (!m_pDocument ||!xDataSource.is())
@@ -686,19 +688,19 @@ cpo::uno::Sequence<beans::PropertyValue> SAL_CALL PivotTableDataProvider::detect
     });
 }
 
-bool SAL_CALL PivotTableDataProvider::createDataSequenceByRangeRepresentationPossible(const OUString& /*aRangeRepresentation*/)
+bool PivotTableDataProvider::createDataSequenceByRangeRepresentationPossible(const OUString& /*aRangeRepresentation*/)
 {
     return false;
 }
 
-uno::Reference<chart2::data::XDataSequence> SAL_CALL
+uno::Reference<chart2::data::XDataSequence>
     PivotTableDataProvider::createDataSequenceByRangeRepresentation(const OUString& /*rRangeRepresentation*/)
 {
     uno::Reference<chart2::data::XDataSequence> xDataSequence;
     return xDataSequence;
 }
 
-uno::Reference<chart2::data::XDataSequence> SAL_CALL
+uno::Reference<chart2::data::XDataSequence>
     PivotTableDataProvider::createDataSequenceByValueArray(const OUString& /*aRole*/,
                                                            const OUString& /*aRangeRepresentation*/,
                                                            const OUString& /*aRoleQualifier*/)
@@ -706,7 +708,7 @@ uno::Reference<chart2::data::XDataSequence> SAL_CALL
     return uno::Reference<chart2::data::XDataSequence>();
 }
 
-uno::Reference<sheet::XRangeSelection> SAL_CALL PivotTableDataProvider::getRangeSelection()
+uno::Reference<sheet::XRangeSelection> PivotTableDataProvider::getRangeSelection()
 {
     uno::Reference<sheet::XRangeSelection> xResult;
 
@@ -808,14 +810,14 @@ OUString PivotTableDataProvider::getFieldOutputDescription(sal_Int32 nDimensionI
 
 // XModifyBroadcaster ========================================================
 
-void SAL_CALL PivotTableDataProvider::addModifyListener(const uno::Reference< util::XModifyListener>& aListener)
+void PivotTableDataProvider::addModifyListener(const uno::Reference< util::XModifyListener>& aListener)
 {
     SolarMutexGuard aGuard;
 
     m_aValueListeners.emplace_back(aListener);
 }
 
-void SAL_CALL PivotTableDataProvider::removeModifyListener(const uno::Reference<util::XModifyListener>& aListener )
+void PivotTableDataProvider::removeModifyListener(const uno::Reference<util::XModifyListener>& aListener )
 {
     SolarMutexGuard aGuard;
 
@@ -832,7 +834,7 @@ void SAL_CALL PivotTableDataProvider::removeModifyListener(const uno::Reference<
 
 // DataProvider XPropertySet ========================================================
 
-uno::Reference< beans::XPropertySetInfo> SAL_CALL
+uno::Reference< beans::XPropertySetInfo>
     PivotTableDataProvider::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
@@ -841,7 +843,7 @@ uno::Reference< beans::XPropertySetInfo> SAL_CALL
     return aRef;
 }
 
-void SAL_CALL PivotTableDataProvider::setPropertyValue(const OUString& rPropertyName, const cpo::uno::Any& rValue)
+void PivotTableDataProvider::setPropertyValue(const OUString& rPropertyName, const cpo::uno::Any& rValue)
 {
     if (rPropertyName != SC_UNONAME_INCLUDEHIDDENCELLS)
         throw beans::UnknownPropertyException(rPropertyName);
@@ -850,7 +852,7 @@ void SAL_CALL PivotTableDataProvider::setPropertyValue(const OUString& rProperty
         throw lang::IllegalArgumentException();
 }
 
-cpo::uno::Any SAL_CALL PivotTableDataProvider::getPropertyValue(const OUString& rPropertyName)
+cpo::uno::Any PivotTableDataProvider::getPropertyValue(const OUString& rPropertyName)
 {
     cpo::uno::Any aRet;
     if (rPropertyName == SC_UNONAME_INCLUDEHIDDENCELLS)
@@ -865,28 +867,28 @@ cpo::uno::Any SAL_CALL PivotTableDataProvider::getPropertyValue(const OUString& 
     return aRet;
 }
 
-void SAL_CALL PivotTableDataProvider::addPropertyChangeListener(
+void PivotTableDataProvider::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference<beans::XPropertyChangeListener>& /*xListener*/)
 {
     OSL_FAIL("Not yet implemented");
 }
 
-void SAL_CALL PivotTableDataProvider::removePropertyChangeListener(
+void PivotTableDataProvider::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference<beans::XPropertyChangeListener>& /*rListener*/)
 {
     OSL_FAIL("Not yet implemented");
 }
 
-void SAL_CALL PivotTableDataProvider::addVetoableChangeListener(
+void PivotTableDataProvider::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference<beans::XVetoableChangeListener>& /*rListener*/)
 {
     OSL_FAIL("Not yet implemented");
 }
 
-void SAL_CALL PivotTableDataProvider::removeVetoableChangeListener(
+void PivotTableDataProvider::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference<beans::XVetoableChangeListener>& /*rListener*/ )
 {

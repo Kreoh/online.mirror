@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <scitems.hxx>
+#include <drawview.hxx>
 #include <editeng/eeitem.hxx>
 
 #include <svtools/colorcfg.hxx>
@@ -591,9 +592,6 @@ void ScGridWindow::Draw( SCCOL nX1, SCROW nY1, SCCOL nX2, SCROW nY2, ScUpdateMod
 
 namespace {
 
-// Set while a view paints another view's in-progress cell edit
-bool gbPaintingForeignEditView = false;
-
 class SuppressEditViewMessagesGuard
 {
 public:
@@ -614,6 +612,28 @@ public:
 private:
     EditView& mrEditView;
     const bool mbOrigSuppressFlag;
+};
+
+class KeepEditAreaGuard
+{
+public:
+    KeepEditAreaGuard(ScViewData& rViewData) :
+        mrViewData(rViewData),
+        mbOrigGrowingFlag(rViewData.IsEditGrowing())
+    {
+        if (!mbOrigGrowingFlag)
+            mrViewData.SetEditGrowing(true);
+    }
+
+    ~KeepEditAreaGuard()
+    {
+        if (mrViewData.IsEditGrowing() != mbOrigGrowingFlag)
+            mrViewData.SetEditGrowing(mbOrigGrowingFlag);
+    }
+
+private:
+    ScViewData& mrViewData;
+    const bool mbOrigGrowingFlag;
 };
 
 }
@@ -737,7 +757,7 @@ void ScGridWindow::DrawContent(OutputDevice &rDevice, const ScTableInfo& rTableI
                 aDocColor = aHighlightColor;
             }
 
-            Color aBackColor = rDoc.GetPattern(nEditCol, nEditRow, getViewData().CurrentTabForData())->GetItem(ATTR_BACKGROUND).GetColor();
+            Color aBackColor = rDoc.GetCellBackgroundColor(nEditCol, nEditRow, getViewData().CurrentTabForData());
             if (!aBackColor.IsTransparent())
                 aDocColor = aBackColor;
 
@@ -1138,8 +1158,7 @@ void ScGridWindow::DrawContent(OutputDevice &rDevice, const ScTableInfo& rTableI
 
             rDevice.SetLineColor();
             // Theme colors
-            const ScPatternAttr* pPattern = rDoc.GetPattern( nCol1, nRow1, nTab );
-            Color aCellColor = pPattern->GetItem(ATTR_BACKGROUND).GetColor();
+            Color aCellColor = rDoc.GetCellBackgroundColor( nCol1, nRow1, nTab );
             if (aCellColor.IsTransparent())
             {
                 if (ScTabViewShell* pCurrentViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current()))
@@ -1246,6 +1265,12 @@ void ScGridWindow::DrawContent(OutputDevice &rDevice, const ScTableInfo& rTableI
                 // So they need to be in the same coordinates/units. This is tied to the mapmode of the gridwin
                 // attached to the EditView, so we have to change its mapmode too (temporarily). We save the
                 // original mapmode and 'output area' and roll them back when we finish painting to rDevice.
+
+                // The edit area is grown by the editing view, at its own zoom. Its map mode and output
+                // area carry this (painting) view's zoom for as long as the paint lasts, so the area
+                // is held as it is here.
+                KeepEditAreaGuard aEditAreaGuard(rOtherViewData);
+
                 rOtherWin.SetMapMode(rDevice.GetMapMode());
 
                 // Avoid sending wrong cursor/selection messages by the 'other' view, as the output-area is going
@@ -1254,30 +1279,9 @@ void ScGridWindow::DrawContent(OutputDevice &rDevice, const ScTableInfo& rTableI
 
                 pOtherEditView->SetOutputArea(rDevice.PixelToLogic(aNewOutputArea));
 
-                // Layout the foreign edit text out at this (painting) view's zoom
-                // instead of the editing view's
-                EditEngine& rForeignEditEngine = pOtherEditView->getEditEngine();
-                const MapMode aOrigRefMapMode = rForeignEditEngine.GetRefMapMode();
-                MapMode aPaintRefMapMode(aOrigRefMapMode);
-                aPaintRefMapMode.SetScaleX(mrViewData.GetZoomX());
-                aPaintRefMapMode.SetScaleY(mrViewData.GetZoomY());
-                const bool bRefMapModeChanged = (aPaintRefMapMode != aOrigRefMapMode);
-                const bool bWasPaintingForeignEditView = gbPaintingForeignEditView;
-                if (bRefMapModeChanged)
-                {
-                    gbPaintingForeignEditView = true;
-                    rForeignEditEngine.SetRefMapMode(aPaintRefMapMode);
-                }
-
+                // The shared edit engine lays the text out at a fixed reference scale, so the
+                // line breaks are the same for every view and the text is painted as it stands.
                 pOtherEditView->DrawText_ToEditView(rDevice.PixelToLogic(aTileRectPx), &rDevice);
-
-                // Reformat back to the editing view's scale
-                if (bRefMapModeChanged)
-                {
-                    rForeignEditEngine.SetRefMapMode(aOrigRefMapMode);
-                    rForeignEditEngine.QuickFormatDoc();
-                    gbPaintingForeignEditView = bWasPaintingForeignEditView;
-                }
 
                 // EditView will do the cursor notifications correctly if we're in
                 // print-twips messaging mode.
@@ -1698,9 +1702,6 @@ void ScGridWindow::LogicInvalidatePart(const tools::Rectangle* pRectangle, int n
 
 void ScGridWindow::LogicInvalidate(const tools::Rectangle* pRectangle)
 {
-    if (gbPaintingForeignEditView)
-        return;
-
     ScTabViewShell* pViewShell = mrViewData.GetViewShell();
     LogicInvalidatePart(pRectangle, pViewShell->getPart());
 }
@@ -1754,28 +1755,28 @@ std::optional<tools::Rectangle> ScGridWindow::GetForeignEditInvalidateRect(EditV
         return std::nullopt;
 
     const ScViewData& rViewData = pGridWin->getViewData();
-    tools::Long nRefTabNo = rViewData.GetRefTabNo();
-    tools::Long nX = rViewData.GetCurXForTab(nRefTabNo);
-    tools::Long nY = rViewData.GetCurYForTab(nRefTabNo);
+    SCCOL nStartCol = rViewData.GetEditStartCol();
+    SCROW nStartRow = rViewData.GetEditStartRow();
+    SCCOL nEndCol = rViewData.GetEditEndCol();
+    SCROW nEndRow = rViewData.GetEditEndRow();
 
-    if (nX < 0 || nY < 0)
+    if (nStartCol < 0 || nStartRow < 0 || nEndCol < nStartCol || nEndRow < nStartRow)
         return std::nullopt;
 
-    tools::Rectangle aPixRect = getViewData().GetEditArea(eWhich, nX, nY, this, nullptr, true);
+    // The same area the editing view draws into: the text area of the first and of the last cell
+    // the edit covers, without the cell margins and the grid lines.
+    tools::Rectangle aPixRect
+        = getViewData().GetEditArea(eWhich, nStartCol, nStartRow, this, nullptr, true);
+    aPixRect.Union(getViewData().GetEditArea(eWhich, nEndCol, nEndRow, this, nullptr, true));
     tools::Rectangle aLogicRect = PixelToLogic(aPixRect, getViewData().GetLogicMode());
 
-    // The in-progress text can reach past the cell into neighbouring tiles
+    // The in-progress text can reach past the cells into neighbouring tiles
     return ExtendEditInvalidateRectForText(aLogicRect,
                                            pEditView->getEditEngine().CalcTextWidth());
 }
 
 bool ScGridWindow::InvalidateByForeignEditView(EditView* pEditView)
 {
-    // Skip the reformat this view triggers while painting a foreign edit at its
-    // own zoom; the text is unchanged, so no real invalidation is lost.
-    if (gbPaintingForeignEditView)
-        return true;
-
     std::optional<tools::Rectangle> oLogicRect = GetForeignEditInvalidateRect(pEditView);
     if (!oLogicRect)
         return false;

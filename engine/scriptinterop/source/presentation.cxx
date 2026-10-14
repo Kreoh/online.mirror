@@ -9,7 +9,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <cmath>
+#include <algorithm>
 #include <vector>
 
 #include <com/sun/star/awt/FontSlant.hpp>
@@ -17,82 +17,130 @@
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/beans/Optional.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
+#include <com/sun/star/drawing/XDrawPageDuplicator.hpp>
 #include <com/sun/star/drawing/XDrawPages.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawView.hpp>
+#include <com/sun/star/drawing/XMasterPageTarget.hpp>
+#include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/presentation/XPresentationPage.hpp>
 #include <com/sun/star/text/XParagraphAppend.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/text/XTextPortionAppend.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <com/sun/star/util/XReplaceDescriptor.hpp>
+#include <com/sun/star/util/XReplaceable.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cpo/uno/Any.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <o3tl/string_view.hxx>
+#include <rtl/textenc.h>
+#include <rtl/uri.hxx>
 #include <rtl/ustring.hxx>
 #include <sal/config.h>
 #include <sal/types.h>
+#include <scriptinterop/ContentAlignment.hpp>
+#include <scriptinterop/PageElementType.hpp>
+#include <scriptinterop/PageType.hpp>
+#include <scriptinterop/PlaceholderType.hpp>
+#include <scriptinterop/PredefinedLayout.hpp>
+#include <scriptinterop/SelectionType.hpp>
+#include <scriptinterop/ShapeType.hpp>
+#include <scriptinterop/SlideLinkingMode.hpp>
+#include <scriptinterop/TextBaselineOffset.hpp>
+#include <scriptinterop/XAutofit.hpp>
+#include <scriptinterop/XAutoText.hpp>
+#include <scriptinterop/XBorder.hpp>
+#include <scriptinterop/XColor.hpp>
+#include <scriptinterop/XColorScheme.hpp>
+#include <scriptinterop/XFill.hpp>
+#include <scriptinterop/XGroup.hpp>
+#include <scriptinterop/XImage.hpp>
+#include <scriptinterop/XLayout.hpp>
+#include <scriptinterop/XLine.hpp>
+#include <scriptinterop/XLink.hpp>
+#include <scriptinterop/XListStyle.hpp>
+#include <scriptinterop/XMaster.hpp>
+#include <scriptinterop/XNotesMaster.hpp>
+#include <scriptinterop/XNotesPage.hpp>
 #include <scriptinterop/XPage.hpp>
+#include <scriptinterop/XPageBackground.hpp>
+#include <scriptinterop/XPageElement.hpp>
+#include <scriptinterop/XPageElementBase.hpp>
+#include <scriptinterop/XPageElementRange.hpp>
+#include <scriptinterop/XPageRange.hpp>
+#include <scriptinterop/XParagraphStyle.hpp>
 #include <scriptinterop/XPresentation.hpp>
 #include <scriptinterop/XShape.hpp>
 #include <scriptinterop/XSlide.hpp>
 #include <scriptinterop/XSlideSelection.hpp>
+#include <scriptinterop/XSlideTable.hpp>
 #include <scriptinterop/XTextParagraph.hpp>
 #include <scriptinterop/XTextRange.hpp>
 #include <scriptinterop/XTextStyle.hpp>
+#include <scriptinterop/XVideo.hpp>
+#include <scriptinterop/XWordArt.hpp>
+#include <xmloff/autolayout.hxx>
 
+#include "conversions.hxx"
 #include "presentation.hxx"
+
+using scriptinterop::detail::extentToHundredthMm;
+using scriptinterop::detail::hundredthMmToPoints;
+using scriptinterop::detail::parseColor;
+using scriptinterop::detail::pointsToHundredthMm;
 
 namespace
 {
-// The API works in points; the UNO drawing layer works in 1/100 mm.  A value that is not a
-// finite number, or that falls outside the drawing layer's integer range after the conversion,
-// is an error.  The comparison is written so that a NaN input fails it too.
-sal_Int32 pointsToHundredthMm(double points)
+// Maps a predefined layout to the matching value of a page's Layout property.  Only the
+// predefined layouts with a matching page layout are accepted; the others are still awaiting an
+// implementation.
+sal_Int16 predefinedAutoLayout(scriptinterop::PredefinedLayout layout)
 {
-    auto const hundredthMm = std::round(points * 2540.0 / 72.0);
-    if (!(hundredthMm >= SAL_MIN_INT32 && hundredthMm <= SAL_MAX_INT32))
+    switch (layout)
     {
-        throw css::uno::RuntimeException(
-            u"expected a length in points that fits the page coordinate range, got "_ustr
-            + OUString::number(points));
+        case scriptinterop::PredefinedLayout_BLANK:
+            return AUTOLAYOUT_NONE;
+        case scriptinterop::PredefinedLayout_TITLE:
+            return AUTOLAYOUT_TITLE;
+        case scriptinterop::PredefinedLayout_TITLE_AND_BODY:
+            return AUTOLAYOUT_TITLE_CONTENT;
+        case scriptinterop::PredefinedLayout_TITLE_AND_TWO_COLUMNS:
+            return AUTOLAYOUT_TITLE_2CONTENT;
+        case scriptinterop::PredefinedLayout_TITLE_ONLY:
+            return AUTOLAYOUT_TITLE_ONLY;
+        default:
+            throw cpo::uno::RuntimeException(
+                u"appendSlide with this predefined layout: not implemented"_ustr);
     }
-    return static_cast<sal_Int32>(hundredthMm);
 }
-
-// A shape width or height in points.  The value must not be negative; the comparison is written
-// so that a NaN input fails it too.
-sal_Int32 extentToHundredthMm(double points)
-{
-    if (!(points >= 0))
-    {
-        throw css::uno::RuntimeException(u"expected a non-negative size in points, got "_ustr
-                                         + OUString::number(points));
-    }
-    return pointsToHundredthMm(points);
-}
-
-double hundredthMmToPoints(sal_Int32 hundredthMm) { return hundredthMm * 72.0 / 2540.0; }
 
 // Formatting is applied through a cursor, so it lands on the text runs themselves and survives
 // saving.  With a range the cursor spans just that range; without one it spans the whole text.
-css::uno::Reference<css::beans::XPropertySet>
-cursorProperties(css::uno::Reference<css::text::XText> const& text,
-                 css::uno::Reference<css::text::XTextRange> const& range)
+cpo::uno::Reference<css::beans::XPropertySet>
+cursorProperties(cpo::uno::Reference<css::text::XText> const& text,
+                 cpo::uno::Reference<css::text::XTextRange> const& range)
 {
-    css::uno::Reference<css::text::XTextCursor> cursor;
+    cpo::uno::Reference<css::text::XTextCursor> cursor;
     if (range.is())
     {
         cursor = text->createTextCursorByRange(range);
@@ -103,67 +151,557 @@ cursorProperties(css::uno::Reference<css::text::XText> const& text,
         cursor->gotoStart(false);
         cursor->gotoEnd(true);
     }
-    return css::uno::Reference<css::beans::XPropertySet>(cursor, css::uno::UNO_QUERY_THROW);
+    return cpo::uno::Reference<css::beans::XPropertySet>(cursor, cpo::uno::UNO_QUERY_THROW);
 }
 
-sal_Int32 parseHexColor(OUString const& hexColor)
+// The pages of a page container, in order.
+std::vector<cpo::uno::Reference<css::drawing::XDrawPage>>
+pageList(cpo::uno::Reference<css::drawing::XDrawPages> const& pages)
 {
-    bool valid = hexColor.getLength() == 7 && hexColor[0] == '#';
-    if (valid)
+    std::vector<cpo::uno::Reference<css::drawing::XDrawPage>> result;
+    auto const n = pages->getCount();
+    for (sal_Int32 i = 0; i != n; ++i)
     {
-        for (sal_Int32 i = 1; i != 7; ++i)
+        cpo::uno::Reference<css::drawing::XDrawPage> page;
+        pages->getByIndex(i) >>= page;
+        if (page.is())
         {
-            auto const c = hexColor[i];
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
-            {
-                valid = false;
-                break;
-            }
+            result.push_back(page);
         }
     }
-    if (!valid)
-    {
-        throw css::uno::RuntimeException(u"expected a color in \"#rrggbb\" form, got "_ustr
-                                         + hexColor);
-    }
-    return static_cast<sal_Int32>(o3tl::toUInt32(hexColor.subView(1), 16));
+    return result;
+}
+
+bool containsPage(cpo::uno::Reference<css::drawing::XDrawPages> const& pages,
+                  cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+{
+    auto const list = pageList(pages);
+    return std::find(list.begin(), list.end(), page) != list.end();
 }
 
 // A page counts as one of the presentation's slides when the model's slide container holds it.
 // Notes, handout and master pages live in other containers, so they do not count.
-bool isSlide(css::uno::Reference<css::frame::XModel> const& model,
-             css::uno::Reference<css::drawing::XDrawPage> const& page)
+bool isSlide(cpo::uno::Reference<css::frame::XModel> const& model,
+             cpo::uno::Reference<css::drawing::XDrawPage> const& page)
 {
-    css::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model, css::uno::UNO_QUERY);
-    if (!sup.is())
+    cpo::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model, cpo::uno::UNO_QUERY);
+    return sup.is() && containsPage(sup->getDrawPages(), page);
+}
+
+cpo::uno::Reference<css::drawing::XDrawPages>
+masterPages(cpo::uno::Reference<css::frame::XModel> const& model)
+{
+    cpo::uno::Reference<css::drawing::XMasterPagesSupplier> const sup(model,
+                                                                      cpo::uno::UNO_QUERY_THROW);
+    return sup->getMasterPages();
+}
+
+// A page counts as a master page when the model's master page container holds it.
+bool isMasterPage(cpo::uno::Reference<css::frame::XModel> const& model,
+                  cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+{
+    cpo::uno::Reference<css::drawing::XMasterPagesSupplier> const sup(model, cpo::uno::UNO_QUERY);
+    return sup.is() && containsPage(sup->getMasterPages(), page);
+}
+
+// Removes a master page.  The presentation keeps at least one master page, and the drawing layer
+// keeps a master page that a slide still uses, so both cases are errors rather than silent
+// no-ops.
+void removeMasterPage(cpo::uno::Reference<css::frame::XModel> const& model,
+                      cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+{
+    auto const masters = masterPages(model);
+    if (masters->getCount() <= 1)
+    {
+        throw cpo::uno::RuntimeException(u"remove: cannot remove the only master page"_ustr);
+    }
+    cpo::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model,
+                                                                    cpo::uno::UNO_QUERY_THROW);
+    for (auto const& slide : pageList(sup->getDrawPages()))
+    {
+        cpo::uno::Reference<css::drawing::XMasterPageTarget> const target(slide,
+                                                                          cpo::uno::UNO_QUERY);
+        if (target.is() && target->getMasterPage() == page)
+        {
+            throw cpo::uno::RuntimeException(u"remove: a slide still uses this master page"_ustr);
+        }
+    }
+    masters->remove(page);
+}
+
+// A custom shape is word art when its CustomShapeGeometry carries a TextPath group whose TextPath
+// flag is set.
+bool isWordArt(cpo::uno::Reference<css::drawing::XShape> const& shape)
+{
+    cpo::uno::Reference<css::beans::XPropertySet> const props(shape, cpo::uno::UNO_QUERY);
+    if (!props.is())
     {
         return false;
     }
-    auto const pages = sup->getDrawPages();
-    auto const n = pages->getCount();
-    for (sal_Int32 i = 0; i != n; ++i)
+    cpo::uno::Sequence<css::beans::PropertyValue> geometry;
+    props->getPropertyValue(u"CustomShapeGeometry"_ustr) >>= geometry;
+    for (auto const& entry : geometry)
     {
-        css::uno::Reference<css::drawing::XDrawPage> candidate;
-        pages->getByIndex(i) >>= candidate;
-        if (candidate == page)
+        if (entry.Name != "TextPath")
         {
-            return true;
+            continue;
+        }
+        cpo::uno::Sequence<css::beans::PropertyValue> textPath;
+        entry.Value >>= textPath;
+        for (auto const& inner : textPath)
+        {
+            if (inner.Name == "TextPath")
+            {
+                bool on = false;
+                inner.Value >>= on;
+                return on;
+            }
         }
     }
     return false;
 }
 
+// Classifies a UNO shape by its service name.  Presentation placeholder services map like the
+// plain drawing services they specialise.  Embedded objects, charts, applets, plug-ins, frames
+// and form controls have no counterpart in the API and report UNSUPPORTED.  Everything else,
+// including text boxes and custom shapes, is a plain shape.
+scriptinterop::PageElementType
+pageElementType(cpo::uno::Reference<css::drawing::XShape> const& shape)
+{
+    auto const type = shape->getShapeType();
+    if (type == "com.sun.star.drawing.GraphicObjectShape"
+        || type == "com.sun.star.presentation.GraphicObjectShape")
+    {
+        return scriptinterop::PageElementType_IMAGE;
+    }
+    if (type == "com.sun.star.drawing.MediaShape" || type == "com.sun.star.presentation.MediaShape")
+    {
+        return scriptinterop::PageElementType_VIDEO;
+    }
+    if (type == "com.sun.star.drawing.TableShape" || type == "com.sun.star.presentation.TableShape")
+    {
+        return scriptinterop::PageElementType_TABLE;
+    }
+    if (type == "com.sun.star.drawing.GroupShape")
+    {
+        return scriptinterop::PageElementType_GROUP;
+    }
+    if (type == "com.sun.star.drawing.LineShape" || type == "com.sun.star.drawing.ConnectorShape")
+    {
+        return scriptinterop::PageElementType_LINE;
+    }
+    if (type == "com.sun.star.drawing.CustomShape" && isWordArt(shape))
+    {
+        return scriptinterop::PageElementType_WORD_ART;
+    }
+    if (type == "com.sun.star.drawing.OLE2Shape" || type == "com.sun.star.presentation.OLE2Shape"
+        || type == "com.sun.star.presentation.ChartShape"
+        || type == "com.sun.star.presentation.CalcShape"
+        || type == "com.sun.star.presentation.OrgChartShape"
+        || type == "com.sun.star.drawing.AppletShape" || type == "com.sun.star.drawing.PluginShape"
+        || type == "com.sun.star.drawing.FrameShape" || type == "com.sun.star.drawing.ControlShape")
+    {
+        return scriptinterop::PageElementType_UNSUPPORTED;
+    }
+    return scriptinterop::PageElementType_SHAPE;
+}
+
+// Reads the page's automatic layout.  A page without the Layout property has none.
+AutoLayout pageAutoLayout(cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+{
+    cpo::uno::Reference<css::beans::XPropertySet> const props(page, cpo::uno::UNO_QUERY);
+    if (!props.is() || !props->getPropertySetInfo()->hasPropertyByName(u"Layout"_ustr))
+    {
+        return AUTOLAYOUT_NONE;
+    }
+    sal_Int16 layout = AUTOLAYOUT_NONE;
+    props->getPropertyValue(u"Layout"_ustr) >>= layout;
+    return static_cast<AutoLayout>(layout);
+}
+
+// Maps a presentation placeholder service to the API's placeholder kind.  A shape from a plain
+// drawing service is not a placeholder and reports NONE.  The title of a page on the title layout
+// is CENTERED_TITLE, on every other layout it is TITLE.  Handout placeholders have no counterpart
+// in the API.
+scriptinterop::PlaceholderType
+placeholderType(cpo::uno::Reference<css::drawing::XShape> const& shape, AutoLayout pageLayout)
+{
+    auto const type = shape->getShapeType();
+    if (type == "com.sun.star.presentation.TitleTextShape")
+    {
+        return pageLayout == AUTOLAYOUT_TITLE ? scriptinterop::PlaceholderType_CENTERED_TITLE
+                                              : scriptinterop::PlaceholderType_TITLE;
+    }
+    if (type == "com.sun.star.presentation.OutlinerShape"
+        || type == "com.sun.star.presentation.NotesShape")
+    {
+        return scriptinterop::PlaceholderType_BODY;
+    }
+    if (type == "com.sun.star.presentation.SubtitleShape")
+    {
+        return scriptinterop::PlaceholderType_SUBTITLE;
+    }
+    if (type == "com.sun.star.presentation.GraphicObjectShape")
+    {
+        return scriptinterop::PlaceholderType_PICTURE;
+    }
+    if (type == "com.sun.star.presentation.ChartShape")
+    {
+        return scriptinterop::PlaceholderType_CHART;
+    }
+    if (type == "com.sun.star.presentation.TableShape")
+    {
+        return scriptinterop::PlaceholderType_TABLE;
+    }
+    if (type == "com.sun.star.presentation.PageShape")
+    {
+        return scriptinterop::PlaceholderType_SLIDE_IMAGE;
+    }
+    if (type == "com.sun.star.presentation.HeaderShape")
+    {
+        return scriptinterop::PlaceholderType_HEADER;
+    }
+    if (type == "com.sun.star.presentation.FooterShape")
+    {
+        return scriptinterop::PlaceholderType_FOOTER;
+    }
+    if (type == "com.sun.star.presentation.SlideNumberShape")
+    {
+        return scriptinterop::PlaceholderType_SLIDE_NUMBER;
+    }
+    if (type == "com.sun.star.presentation.DateTimeShape")
+    {
+        return scriptinterop::PlaceholderType_DATE_AND_TIME;
+    }
+    if (type == "com.sun.star.presentation.MediaShape")
+    {
+        return scriptinterop::PlaceholderType_MEDIA;
+    }
+    if (type == "com.sun.star.presentation.OLE2Shape"
+        || type == "com.sun.star.presentation.CalcShape"
+        || type == "com.sun.star.presentation.OrgChartShape")
+    {
+        return scriptinterop::PlaceholderType_OBJECT;
+    }
+    if (type == "com.sun.star.presentation.HandoutShape")
+    {
+        return scriptinterop::PlaceholderType_UNSUPPORTED;
+    }
+    return scriptinterop::PlaceholderType_NONE;
+}
+
+// Replaces every occurrence of findText in the texts of the page's shapes and returns how many
+// occurrences were replaced.  The match ignores case unless matchCase is set.
+sal_Int32 replaceAllOnPage(cpo::uno::Reference<css::drawing::XDrawPage> const& page,
+                           OUString const& findText, OUString const& replaceText, bool matchCase)
+{
+    if (findText.isEmpty())
+    {
+        throw cpo::uno::RuntimeException(u"replaceAllText: expected a non-empty search text"_ustr);
+    }
+    cpo::uno::Reference<css::util::XReplaceable> const replaceable(page, cpo::uno::UNO_QUERY_THROW);
+    auto const descriptor = replaceable->createReplaceDescriptor();
+    descriptor->setSearchString(findText);
+    descriptor->setReplaceString(replaceText);
+    descriptor->setPropertyValue(u"SearchCaseSensitive"_ustr, cpo::uno::Any(matchCase));
+    return replaceable->replaceAll(descriptor);
+}
+
+// Reads a page's size property.  The drawing layer stores it as a 1/100 mm integer.
+double pageSizePoints(cpo::uno::Reference<css::drawing::XDrawPage> const& page,
+                      OUString const& propertyName)
+{
+    cpo::uno::Reference<css::beans::XPropertySet> const props(page, cpo::uno::UNO_QUERY_THROW);
+    sal_Int32 sizeHundredthMm = 0;
+    props->getPropertyValue(propertyName) >>= sizeHundredthMm;
+    return hundredthMmToPoints(sizeHundredthMm);
+}
+
+// The notes page attached to a slide or to a master page.
+cpo::uno::Reference<css::drawing::XDrawPage>
+notesPageOf(cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+{
+    cpo::uno::Reference<css::presentation::XPresentationPage> const presentationPage(
+        page, cpo::uno::UNO_QUERY_THROW);
+    return presentationPage->getNotesPage();
+}
+
+// Throwing defaults for the shared page element surface.  A leaf implementation class derives
+// from this template with its own interface and overrides the methods it implements; the rest
+// keep throwing until an implementation is added.
+template <typename Iface> class PageElementStub : public cppu::WeakImplHelper<Iface>
+{
+public:
+    cpo::uno::Reference<scriptinterop::XPageElementBase>
+    alignOnPage(scriptinterop::AlignmentPosition) override
+    {
+        throw cpo::uno::RuntimeException(u"alignOnPage: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> bringForward() override
+    {
+        throw cpo::uno::RuntimeException(u"bringForward: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> bringToFront() override
+    {
+        throw cpo::uno::RuntimeException(u"bringToFront: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElement> duplicate() override
+    {
+        throw cpo::uno::RuntimeException(u"duplicate: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XConnectionSite>>
+    getConnectionSites() override
+    {
+        throw cpo::uno::RuntimeException(u"getConnectionSites: not implemented"_ustr);
+    }
+
+    OUString getDescription() override
+    {
+        throw cpo::uno::RuntimeException(u"getDescription: not implemented"_ustr);
+    }
+
+    css::beans::Optional<double> getHeight() override
+    {
+        throw cpo::uno::RuntimeException(u"getHeight: not implemented"_ustr);
+    }
+
+    css::beans::Optional<double> getInherentHeight() override
+    {
+        throw cpo::uno::RuntimeException(u"getInherentHeight: not implemented"_ustr);
+    }
+
+    css::beans::Optional<double> getInherentWidth() override
+    {
+        throw cpo::uno::RuntimeException(u"getInherentWidth: not implemented"_ustr);
+    }
+
+    double getLeft() override
+    {
+        throw cpo::uno::RuntimeException(u"getLeft: not implemented"_ustr);
+    }
+
+    OUString getObjectId() override
+    {
+        throw cpo::uno::RuntimeException(u"getObjectId: not implemented"_ustr);
+    }
+
+    scriptinterop::PageElementType getPageElementType() override
+    {
+        throw cpo::uno::RuntimeException(u"getPageElementType: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XGroup>>
+        getParentGroup() override
+    {
+        throw cpo::uno::RuntimeException(u"getParentGroup: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPage> getParentPage() override
+    {
+        throw cpo::uno::RuntimeException(u"getParentPage: not implemented"_ustr);
+    }
+
+    double getRotation() override
+    {
+        throw cpo::uno::RuntimeException(u"getRotation: not implemented"_ustr);
+    }
+
+    OUString getTitle() override
+    {
+        throw cpo::uno::RuntimeException(u"getTitle: not implemented"_ustr);
+    }
+
+    double getTop() override
+    {
+        throw cpo::uno::RuntimeException(u"getTop: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XAffineTransform> getTransform() override
+    {
+        throw cpo::uno::RuntimeException(u"getTransform: not implemented"_ustr);
+    }
+
+    css::beans::Optional<double> getWidth() override
+    {
+        throw cpo::uno::RuntimeException(u"getWidth: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase>
+    preconcatenateTransform(cpo::uno::Reference<scriptinterop::XAffineTransform> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"preconcatenateTransform: not implemented"_ustr);
+    }
+
+    void remove() override
+    {
+        throw cpo::uno::RuntimeException(u"remove: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> scaleHeight(double) override
+    {
+        throw cpo::uno::RuntimeException(u"scaleHeight: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> scaleWidth(double) override
+    {
+        throw cpo::uno::RuntimeException(u"scaleWidth: not implemented"_ustr);
+    }
+
+    void select() override
+    {
+        throw cpo::uno::RuntimeException(u"select: not implemented"_ustr);
+    }
+
+    void selectWithReplace(bool) override
+    {
+        throw cpo::uno::RuntimeException(u"selectWithReplace: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> sendBackward() override
+    {
+        throw cpo::uno::RuntimeException(u"sendBackward: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> sendToBack() override
+    {
+        throw cpo::uno::RuntimeException(u"sendToBack: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase>
+    setDescription(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setDescription: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setHeight(double) override
+    {
+        throw cpo::uno::RuntimeException(u"setHeight: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setLeft(double) override
+    {
+        throw cpo::uno::RuntimeException(u"setLeft: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setRotation(double) override
+    {
+        throw cpo::uno::RuntimeException(u"setRotation: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase>
+    setTitle(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setTitle: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setTop(double) override
+    {
+        throw cpo::uno::RuntimeException(u"setTop: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase>
+    setTransform(cpo::uno::Reference<scriptinterop::XAffineTransform> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setTransform: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setWidth(double) override
+    {
+        throw cpo::uno::RuntimeException(u"setWidth: not implemented"_ustr);
+    }
+};
+
+// The page element behaviour every element kind shares: identity, geometry and removal.  Position
+// and size convert between the API's points and the drawing layer's 1/100 mm.
+template <typename Iface> class PageElementCommon : public PageElementStub<Iface>
+{
+public:
+    PageElementCommon(cpo::uno::Reference<css::drawing::XDrawPage> const& page,
+                      cpo::uno::Reference<css::drawing::XShape> const& shape)
+        : page_(page)
+        , shape_(shape)
+    {
+    }
+
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override { return shape_; }
+
+    scriptinterop::PageElementType getPageElementType() override
+    {
+        return pageElementType(shape_);
+    }
+
+    double getLeft() override { return hundredthMmToPoints(shape_->getPosition().X); }
+
+    double getTop() override { return hundredthMmToPoints(shape_->getPosition().Y); }
+
+    css::beans::Optional<double> getWidth() override
+    {
+        return {true, hundredthMmToPoints(shape_->getSize().Width)};
+    }
+
+    css::beans::Optional<double> getHeight() override
+    {
+        return {true, hundredthMmToPoints(shape_->getSize().Height)};
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setLeft(double points) override
+    {
+        auto pos = shape_->getPosition();
+        pos.X = pointsToHundredthMm(points);
+        shape_->setPosition(pos);
+        return this;
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setTop(double points) override
+    {
+        auto pos = shape_->getPosition();
+        pos.Y = pointsToHundredthMm(points);
+        shape_->setPosition(pos);
+        return this;
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setWidth(double points) override
+    {
+        auto size = shape_->getSize();
+        size.Width = extentToHundredthMm(points);
+        shape_->setSize(size);
+        return this;
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElementBase> setHeight(double points) override
+    {
+        auto size = shape_->getSize();
+        size.Height = extentToHundredthMm(points);
+        shape_->setSize(size);
+        return this;
+    }
+
+    void remove() override
+    {
+        cpo::uno::Reference<css::drawing::XShapes> const shapes(page_, cpo::uno::UNO_QUERY_THROW);
+        shapes->remove(shape_);
+    }
+
+protected:
+    cpo::uno::Reference<css::drawing::XDrawPage> page_;
+    cpo::uno::Reference<css::drawing::XShape> shape_;
+};
+
 class TextStyleImpl : public cppu::WeakImplHelper<scriptinterop::XTextStyle>
 {
 public:
-    TextStyleImpl(css::uno::Reference<css::text::XText> const& text,
-                  css::uno::Reference<css::text::XTextRange> const& range)
+    TextStyleImpl(cpo::uno::Reference<css::text::XText> const& text,
+                  cpo::uno::Reference<css::text::XTextRange> const& range)
         : text_(text)
         , range_(range)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override
     {
         if (range_.is())
         {
@@ -172,7 +710,102 @@ public:
         return text_;
     }
 
-    css::uno::Reference<scriptinterop::XTextStyle> SAL_CALL setBold(bool bold) override
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XColor>>
+        getBackgroundColor() override
+    {
+        throw cpo::uno::RuntimeException(u"getBackgroundColor: not implemented"_ustr);
+    }
+
+    css::beans::Optional<scriptinterop::TextBaselineOffset> getBaselineOffset() override
+    {
+        throw cpo::uno::RuntimeException(u"getBaselineOffset: not implemented"_ustr);
+    }
+
+    css::beans::Optional<OUString> getFontFamily() override
+    {
+        throw cpo::uno::RuntimeException(u"getFontFamily: not implemented"_ustr);
+    }
+
+    css::beans::Optional<double> getFontSize() override
+    {
+        throw cpo::uno::RuntimeException(u"getFontSize: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XColor>>
+        getForegroundColor() override
+    {
+        throw cpo::uno::RuntimeException(u"getForegroundColor: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XLink>> getLink() override
+    {
+        throw cpo::uno::RuntimeException(u"getLink: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> hasLink() override
+    {
+        throw cpo::uno::RuntimeException(u"hasLink: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> isBackgroundTransparent() override
+    {
+        throw cpo::uno::RuntimeException(u"isBackgroundTransparent: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> isBold() override
+    {
+        throw cpo::uno::RuntimeException(u"isBold: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> isItalic() override
+    {
+        throw cpo::uno::RuntimeException(u"isItalic: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> isSmallCaps() override
+    {
+        throw cpo::uno::RuntimeException(u"isSmallCaps: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> isStrikethrough() override
+    {
+        throw cpo::uno::RuntimeException(u"isStrikethrough: not implemented"_ustr);
+    }
+
+    css::beans::Optional<bool> isUnderline() override
+    {
+        throw cpo::uno::RuntimeException(u"isUnderline: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> removeLink() override
+    {
+        throw cpo::uno::RuntimeException(u"removeLink: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle>
+        setBackgroundColor(cpo::uno::Any const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setBackgroundColor: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle>
+        setBackgroundColorRgb(sal_Int32, sal_Int32, sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"setBackgroundColorRgb: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setBackgroundColorTransparent() override
+    {
+        throw cpo::uno::RuntimeException(u"setBackgroundColorTransparent: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle>
+        setBaselineOffset(scriptinterop::TextBaselineOffset) override
+    {
+        throw cpo::uno::RuntimeException(u"setBaselineOffset: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setBold(bool bold) override
     {
         auto const props = cursorProperties(text_, range_);
         auto const weight = bold ? css::awt::FontWeight::BOLD : css::awt::FontWeight::NORMAL;
@@ -182,29 +815,12 @@ public:
         return this;
     }
 
-    css::uno::Reference<scriptinterop::XTextStyle> SAL_CALL setItalic(bool italic) override
+    cpo::uno::Reference<scriptinterop::XTextStyle> setFontFamily(OUString const&) override
     {
-        auto const props = cursorProperties(text_, range_);
-        auto const slant = italic ? css::awt::FontSlant_ITALIC : css::awt::FontSlant_NONE;
-        props->setPropertyValue(u"CharPosture"_ustr, cpo::uno::Any(slant));
-        props->setPropertyValue(u"CharPostureAsian"_ustr, cpo::uno::Any(slant));
-        props->setPropertyValue(u"CharPostureComplex"_ustr, cpo::uno::Any(slant));
-        return this;
+        throw cpo::uno::RuntimeException(u"setFontFamily: not implemented"_ustr);
     }
 
-    css::uno::Reference<scriptinterop::XTextStyle>
-        SAL_CALL setStrikethrough(bool strikethrough) override
-    {
-        // A single CharStrikeout property covers all scripts; there is no Asian or complex
-        // variant.
-        auto const strikeout
-            = strikethrough ? css::awt::FontStrikeout::SINGLE : css::awt::FontStrikeout::NONE;
-        cursorProperties(text_, range_)
-            ->setPropertyValue(u"CharStrikeout"_ustr, cpo::uno::Any(strikeout));
-        return this;
-    }
-
-    css::uno::Reference<scriptinterop::XTextStyle> SAL_CALL setFontSize(double points) override
+    cpo::uno::Reference<scriptinterop::XTextStyle> setFontSize(double points) override
     {
         auto const props = cursorProperties(text_, range_);
         // CharHeight is measured in points, so the value passes through unconverted:
@@ -215,57 +831,121 @@ public:
         return this;
     }
 
-    css::uno::Reference<scriptinterop::XTextStyle>
-        SAL_CALL setForegroundColor(OUString const& hexColor) override
+    cpo::uno::Reference<scriptinterop::XTextStyle>
+        setForegroundColor(cpo::uno::Any const& color) override
     {
+        if (!color.has<OUString>())
+        {
+            throw cpo::uno::RuntimeException(u"setForegroundColor: not implemented"_ustr);
+        }
         cursorProperties(text_, range_)
-            ->setPropertyValue(u"CharColor"_ustr, cpo::uno::Any(parseHexColor(hexColor)));
+            ->setPropertyValue(u"CharColor"_ustr,
+                               cpo::uno::Any(parseColor(color.get<OUString>())));
         return this;
     }
 
+    cpo::uno::Reference<scriptinterop::XTextStyle>
+        setForegroundColorRgb(sal_Int32, sal_Int32, sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"setForegroundColorRgb: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setItalic(bool italic) override
+    {
+        auto const props = cursorProperties(text_, range_);
+        auto const slant = italic ? css::awt::FontSlant_ITALIC : css::awt::FontSlant_NONE;
+        props->setPropertyValue(u"CharPosture"_ustr, cpo::uno::Any(slant));
+        props->setPropertyValue(u"CharPostureAsian"_ustr, cpo::uno::Any(slant));
+        props->setPropertyValue(u"CharPostureComplex"_ustr, cpo::uno::Any(slant));
+        return this;
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setLinkSlide(cpo::uno::Any const&)
+        override
+    {
+        throw cpo::uno::RuntimeException(u"setLinkSlide: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setLinkUrl(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setLinkUrl: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setSmallCaps(bool) override
+    {
+        throw cpo::uno::RuntimeException(u"setSmallCaps: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle>
+        setStrikethrough(bool strikethrough) override
+    {
+        // A single CharStrikeout property covers all scripts; there is no Asian or complex
+        // variant.
+        auto const strikeout
+            = strikethrough ? css::awt::FontStrikeout::SINGLE : css::awt::FontStrikeout::NONE;
+        cursorProperties(text_, range_)
+            ->setPropertyValue(u"CharStrikeout"_ustr, cpo::uno::Any(strikeout));
+        return this;
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextStyle> setUnderline(bool) override
+    {
+        throw cpo::uno::RuntimeException(u"setUnderline: not implemented"_ustr);
+    }
+
 private:
-    css::uno::Reference<css::text::XText> text_;
-    css::uno::Reference<css::text::XTextRange> range_;
+    cpo::uno::Reference<css::text::XText> text_;
+    cpo::uno::Reference<css::text::XTextRange> range_;
 };
 
 class TextParagraphImpl : public cppu::WeakImplHelper<scriptinterop::XTextParagraph>
 {
 public:
-    explicit TextParagraphImpl(css::uno::Reference<scriptinterop::XTextRange> const& range)
+    explicit TextParagraphImpl(cpo::uno::Reference<scriptinterop::XTextRange> const& range)
         : range_(range)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override
     {
         return range_->getuno();
     }
 
-    css::uno::Reference<scriptinterop::XTextRange> SAL_CALL getRange() override
+    css::beans::Optional<sal_Int32> getIndex() override
     {
-        return range_;
+        throw cpo::uno::RuntimeException(u"getIndex: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XTextRange>> getRange()
+        override
+    {
+        return {range_.is(), range_};
     }
 
 private:
-    css::uno::Reference<scriptinterop::XTextRange> range_;
+    cpo::uno::Reference<scriptinterop::XTextRange> range_;
 };
 
 class TextRangeImpl : public cppu::WeakImplHelper<scriptinterop::XTextRange>
 {
 public:
-    explicit TextRangeImpl(css::uno::Reference<css::text::XText> const& text)
+    explicit TextRangeImpl(cpo::uno::Reference<css::text::XText> const& text)
         : text_(text)
     {
     }
 
-    TextRangeImpl(css::uno::Reference<css::text::XText> const& text,
-                  css::uno::Reference<css::text::XTextRange> const& range)
+    // A range over part of the text.  With paragraph set, the range is a whole paragraph and
+    // its text ends with the paragraph's newline.
+    TextRangeImpl(cpo::uno::Reference<css::text::XText> const& text,
+                  cpo::uno::Reference<css::text::XTextRange> const& range,
+                  bool paragraph = false)
         : text_(text)
         , range_(range)
+        , paragraph_(paragraph)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override
     {
         if (range_.is())
         {
@@ -274,16 +954,162 @@ public:
         return text_;
     }
 
-    OUString SAL_CALL asString() override
+    cpo::uno::Reference<scriptinterop::XTextRange>
+    appendRange(cpo::uno::Reference<scriptinterop::XTextRange> const&) override
     {
-        if (range_.is())
-        {
-            return range_->getString();
-        }
-        return text_->getString();
+        throw cpo::uno::RuntimeException(u"appendRange: not implemented"_ustr);
     }
 
-    css::uno::Reference<scriptinterop::XTextRange> SAL_CALL setText(OUString const& newText)
+    cpo::uno::Reference<scriptinterop::XTextRange>
+    appendRangeMatchSourceFormatting(cpo::uno::Reference<scriptinterop::XTextRange> const&,
+                                     bool) override
+    {
+        throw cpo::uno::RuntimeException(u"appendRangeMatchSourceFormatting: not implemented"_ustr);
+    }
+
+    OUString asRenderedString() override
+    {
+        throw cpo::uno::RuntimeException(u"asRenderedString: not implemented"_ustr);
+    }
+
+    OUString asString() override
+    {
+        // The whole text of a shape or table cell always ends in a paragraph terminator, and so
+        // does each paragraph in it.
+        if (!range_.is() || paragraph_)
+        {
+            return rawString() + "\n";
+        }
+        return rawString();
+    }
+
+    void clear() override
+    {
+        throw cpo::uno::RuntimeException(u"clear: not implemented"_ustr);
+    }
+
+    void clearRange(sal_Int32, sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"clearRange: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XTextRange>>
+    find(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"find: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XTextRange>>
+    findFrom(OUString const&, sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"findFrom: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XAutoText>>
+    getAutoTexts() override
+    {
+        throw cpo::uno::RuntimeException(u"getAutoTexts: not implemented"_ustr);
+    }
+
+    sal_Int32 getEndIndex() override
+    {
+        throw cpo::uno::RuntimeException(u"getEndIndex: not implemented"_ustr);
+    }
+
+    sal_Int32 getLength() override
+    {
+        throw cpo::uno::RuntimeException(u"getLength: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XTextRange>> getLinks() override
+    {
+        throw cpo::uno::RuntimeException(u"getLinks: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XTextParagraph>>
+    getListParagraphs() override
+    {
+        throw cpo::uno::RuntimeException(u"getListParagraphs: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XListStyle> getListStyle() override
+    {
+        throw cpo::uno::RuntimeException(u"getListStyle: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XTextParagraph>>
+    getParagraphs() override
+    {
+        throw cpo::uno::RuntimeException(u"getParagraphs: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XParagraphStyle> getParagraphStyle() override
+    {
+        throw cpo::uno::RuntimeException(u"getParagraphStyle: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextRange> getRange(sal_Int32, sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"getRange: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XTextRange>> getRuns() override
+    {
+        throw cpo::uno::RuntimeException(u"getRuns: not implemented"_ustr);
+    }
+
+    sal_Int32 getStartIndex() override
+    {
+        throw cpo::uno::RuntimeException(u"getStartIndex: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextParagraph>
+    insertParagraph(sal_Int32, OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertParagraph: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextRange>
+    insertRange(sal_Int32, cpo::uno::Reference<scriptinterop::XTextRange> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertRange: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextRange>
+    insertRangeMatchSourceFormatting(sal_Int32,
+                                     cpo::uno::Reference<scriptinterop::XTextRange> const&,
+                                     bool) override
+    {
+        throw cpo::uno::RuntimeException(u"insertRangeMatchSourceFormatting: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextRange>
+    insertText(sal_Int32, OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertText: not implemented"_ustr);
+    }
+
+    bool isEmpty() override
+    {
+        throw cpo::uno::RuntimeException(u"isEmpty: not implemented"_ustr);
+    }
+
+    sal_Int32 replaceAllText(OUString const&, OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"replaceAllText: not implemented"_ustr);
+    }
+
+    sal_Int32 replaceAllTextMatchCase(OUString const&, OUString const&, bool) override
+    {
+        throw cpo::uno::RuntimeException(u"replaceAllTextMatchCase: not implemented"_ustr);
+    }
+
+    void select() override
+    {
+        throw cpo::uno::RuntimeException(u"select: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XTextRange> setText(OUString const& newText)
         override
     {
         if (range_.is())
@@ -297,44 +1123,30 @@ public:
         return this;
     }
 
-    css::uno::Reference<scriptinterop::XTextRange> SAL_CALL appendText(OUString const& text)
+    cpo::uno::Reference<scriptinterop::XTextRange> appendText(OUString const& text)
         override
     {
         if (range_.is())
         {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"appendText: only the shape's whole text range can append"_ustr);
         }
-        css::uno::Reference<css::text::XTextPortionAppend> const append(text_,
-                                                                        css::uno::UNO_QUERY);
-        if (!append.is())
-        {
-            throw css::uno::RuntimeException(
-                u"appendText: the text cannot take appended runs"_ustr);
-        }
-        // The engine returns a range covering exactly the appended run, with any character
-        // formatting inherited from the preceding text stripped off.
-        auto const run = append->appendTextPortion(text, {});
-        if (!run.is())
-        {
-            throw css::uno::RuntimeException(u"appendText: appending failed"_ustr);
-        }
-        return new TextRangeImpl(text_, run);
+        return new TextRangeImpl(text_, appendRun(text));
     }
 
-    css::uno::Reference<scriptinterop::XTextParagraph> SAL_CALL
+    cpo::uno::Reference<scriptinterop::XTextParagraph>
     appendParagraph(OUString const& text) override
     {
         if (range_.is())
         {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"appendParagraph: only the shape's whole text range can append"_ustr);
         }
-        css::uno::Reference<css::text::XParagraphAppend> const append(text_,
-                                                                      css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::text::XParagraphAppend> const append(text_,
+                                                                      cpo::uno::UNO_QUERY);
         if (!append.is())
         {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"appendParagraph: the text cannot take appended paragraphs"_ustr);
         }
         // finishParagraph reports the paragraph it closed; the interesting one is the new empty
@@ -344,22 +1156,22 @@ public:
         {
             // The appended run lands in the new last paragraph and covers exactly its text, so
             // it doubles as the paragraph's range.
-            return new TextParagraphImpl(appendText(text));
+            return new TextParagraphImpl(new TextRangeImpl(text_, appendRun(text), true));
         }
         // With no text the new paragraph stays empty, so the paragraph's range is a cursor at
         // the text end.  That cursor is a live position: the edit engine keeps it inside the
         // last paragraph as text is inserted into it.
         auto const cursor = text_->createTextCursor();
         cursor->gotoEnd(false);
-        return new TextParagraphImpl(new TextRangeImpl(text_, cursor));
+        return new TextParagraphImpl(new TextRangeImpl(text_, cursor, true));
     }
 
-    css::uno::Reference<scriptinterop::XTextRange> SAL_CALL setBulletLevel(sal_Int32 level)
+    cpo::uno::Reference<scriptinterop::XTextRange> setBulletLevel(sal_Int32 level)
         override
     {
         if (level < -1 || level > 9)
         {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"setBulletLevel: the level must be between -1 (no bullet) and 9"_ustr);
         }
         // NumberingLevel drives the outliner depth of every paragraph the underlying cursor
@@ -372,345 +1184,1229 @@ public:
         return this;
     }
 
-    css::uno::Reference<scriptinterop::XTextStyle> SAL_CALL getTextStyle() override
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XTextStyle>> getTextStyle()
+        override
     {
         // Character formatting lives on the text runs, so an empty range holds none to style.
-        if (asString().isEmpty())
+        if (rawString().isEmpty())
         {
-            throw css::uno::RuntimeException(
-                u"getTextStyle: the range is empty and has no characters to style"_ustr);
+            return {false, {}};
         }
-        return new TextStyleImpl(text_, range_);
+        return {true, new TextStyleImpl(text_, range_)};
     }
 
 private:
-    css::uno::Reference<css::text::XText> text_;
-    css::uno::Reference<css::text::XTextRange> range_;
+    // Appends a run at the end of the whole text and returns the range that covers exactly that
+    // run, with any character formatting inherited from the preceding text stripped off.
+    cpo::uno::Reference<css::text::XTextRange> appendRun(OUString const& text)
+    {
+        cpo::uno::Reference<css::text::XTextPortionAppend> const append(text_,
+                                                                        cpo::uno::UNO_QUERY);
+        if (!append.is())
+        {
+            throw cpo::uno::RuntimeException(
+                u"appendText: the text cannot take appended runs"_ustr);
+        }
+        auto const run = append->appendTextPortion(text, {});
+        if (!run.is())
+        {
+            throw cpo::uno::RuntimeException(u"appendText: appending failed"_ustr);
+        }
+        return run;
+    }
+
+    // The characters the range covers, without any terminator.
+    OUString rawString() const
+    {
+        if (range_.is())
+        {
+            return range_->getString();
+        }
+        return text_->getString();
+    }
+
+    cpo::uno::Reference<css::text::XText> text_;
+    cpo::uno::Reference<css::text::XTextRange> range_;
+    bool paragraph_ = false;
 };
 
-class ShapeImpl : public cppu::WeakImplHelper<scriptinterop::XShape>
+class ShapeImpl : public PageElementCommon<scriptinterop::XShape>
 {
 public:
-    ShapeImpl(css::uno::Reference<css::drawing::XDrawPage> const& page,
-              css::uno::Reference<css::drawing::XShape> const& shape)
-        : page_(page)
-        , shape_(shape)
+    ShapeImpl(cpo::uno::Reference<css::drawing::XDrawPage> const& page,
+              cpo::uno::Reference<css::drawing::XShape> const& shape)
+        : PageElementCommon(page, shape)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override { return shape_; }
-
-    css::uno::Reference<scriptinterop::XTextRange> SAL_CALL getText() override
+    cpo::uno::Reference<scriptinterop::XTextRange> getText() override
     {
-        css::uno::Reference<css::text::XText> const text(shape_, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::text::XText> const text(shape_, cpo::uno::UNO_QUERY);
         if (!text.is())
         {
-            throw css::uno::RuntimeException(u"getText: shape cannot hold text"_ustr);
+            throw cpo::uno::RuntimeException(u"getText: shape cannot hold text"_ustr);
         }
         return new TextRangeImpl(text);
     }
 
-    double SAL_CALL getLeft() override { return hundredthMmToPoints(shape_->getPosition().X); }
-
-    double SAL_CALL getTop() override { return hundredthMmToPoints(shape_->getPosition().Y); }
-
-    double SAL_CALL getWidth() override { return hundredthMmToPoints(shape_->getSize().Width); }
-
-    double SAL_CALL getHeight() override { return hundredthMmToPoints(shape_->getSize().Height); }
-
-    css::uno::Reference<scriptinterop::XShape> SAL_CALL setLeft(double points) override
+    cpo::uno::Reference<scriptinterop::XFill> getFill() override
     {
-        auto pos = shape_->getPosition();
-        pos.X = pointsToHundredthMm(points);
-        shape_->setPosition(pos);
-        return this;
+        throw cpo::uno::RuntimeException(u"getFill: not implemented"_ustr);
     }
 
-    css::uno::Reference<scriptinterop::XShape> SAL_CALL setTop(double points) override
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XAutofit>>
+        getAutofit() override
     {
-        auto pos = shape_->getPosition();
-        pos.Y = pointsToHundredthMm(points);
-        shape_->setPosition(pos);
-        return this;
+        throw cpo::uno::RuntimeException(u"getAutofit: not implemented"_ustr);
     }
 
-    css::uno::Reference<scriptinterop::XShape> SAL_CALL setWidth(double points) override
+    cpo::uno::Reference<scriptinterop::XBorder> getBorder() override
     {
-        auto size = shape_->getSize();
-        size.Width = extentToHundredthMm(points);
-        shape_->setSize(size);
-        return this;
+        throw cpo::uno::RuntimeException(u"getBorder: not implemented"_ustr);
     }
 
-    css::uno::Reference<scriptinterop::XShape> SAL_CALL setHeight(double points) override
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XLink>> getLink() override
     {
-        auto size = shape_->getSize();
-        size.Height = extentToHundredthMm(points);
-        shape_->setSize(size);
-        return this;
+        throw cpo::uno::RuntimeException(u"getLink: not implemented"_ustr);
     }
 
-    void SAL_CALL remove() override
+    void removeLink() override
     {
-        css::uno::Reference<css::drawing::XShapes> const shapes(page_, css::uno::UNO_QUERY_THROW);
-        shapes->remove(shape_);
+        throw cpo::uno::RuntimeException(u"removeLink: not implemented"_ustr);
     }
 
-private:
-    css::uno::Reference<css::drawing::XDrawPage> page_;
-    css::uno::Reference<css::drawing::XShape> shape_;
+    cpo::uno::Reference<scriptinterop::XLink> setLinkUrl(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setLinkUrl: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XLink> setLinkSlide(cpo::uno::Any const&) override
+    {
+        throw cpo::uno::RuntimeException(u"setLinkSlide: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageElement>>
+        getParentPlaceholder() override
+    {
+        throw cpo::uno::RuntimeException(u"getParentPlaceholder: not implemented"_ustr);
+    }
+
+    css::beans::Optional<sal_Int32> getPlaceholderIndex() override
+    {
+        throw cpo::uno::RuntimeException(u"getPlaceholderIndex: not implemented"_ustr);
+    }
+
+    scriptinterop::PlaceholderType getPlaceholderType() override
+    {
+        throw cpo::uno::RuntimeException(u"getPlaceholderType: not implemented"_ustr);
+    }
+
+    scriptinterop::ShapeType getShapeType() override
+    {
+        throw cpo::uno::RuntimeException(u"getShapeType: not implemented"_ustr);
+    }
+
+    scriptinterop::ContentAlignment getContentAlignment() override
+    {
+        throw cpo::uno::RuntimeException(u"getContentAlignment: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XShape>
+    setContentAlignment(scriptinterop::ContentAlignment) override
+    {
+        throw cpo::uno::RuntimeException(u"setContentAlignment: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XImage>
+    replaceWithImage(cpo::uno::Any const&) override
+    {
+        throw cpo::uno::RuntimeException(u"replaceWithImage: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XImage>
+    replaceWithImageCropped(cpo::uno::Any const&, bool) override
+    {
+        throw cpo::uno::RuntimeException(u"replaceWithImageCropped: not implemented"_ustr);
+    }
 };
 
-class SlideImpl : public cppu::WeakImplHelper<scriptinterop::XSlide>
+// The generic page element handed back by page listings.  The typed views hand the same shape to
+// a typed facade when its kind matches.  Only the shape view has a facade so far; the others
+// are still awaiting an implementation.
+class PageElementImpl : public PageElementCommon<scriptinterop::XPageElement>
 {
 public:
-    SlideImpl(css::uno::Reference<css::frame::XModel> const& model,
-              css::uno::Reference<css::drawing::XDrawPage> const& page)
+    PageElementImpl(cpo::uno::Reference<css::drawing::XDrawPage> const& page,
+                    cpo::uno::Reference<css::drawing::XShape> const& shape)
+        : PageElementCommon(page, shape)
+    {
+    }
+
+    cpo::uno::Reference<scriptinterop::XShape> asShape() override
+    {
+        if (getPageElementType() != scriptinterop::PageElementType_SHAPE)
+        {
+            throw cpo::uno::RuntimeException(u"asShape: the page element is not a shape"_ustr);
+        }
+        return new ShapeImpl(page_, shape_);
+    }
+
+    cpo::uno::Reference<scriptinterop::XGroup> asGroup() override
+    {
+        throw cpo::uno::RuntimeException(u"asGroup: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XImage> asImage() override
+    {
+        throw cpo::uno::RuntimeException(u"asImage: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XLine> asLine() override
+    {
+        throw cpo::uno::RuntimeException(u"asLine: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlideTable> asTable() override
+    {
+        throw cpo::uno::RuntimeException(u"asTable: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XVideo> asVideo() override
+    {
+        throw cpo::uno::RuntimeException(u"asVideo: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XWordArt> asWordArt() override
+    {
+        throw cpo::uno::RuntimeException(u"asWordArt: not implemented"_ustr);
+    }
+};
+
+// The page behaviour every page kind shares.  A leaf implementation class derives from this
+// template with its own interface.  Listings walk the page's shapes in drawing order.  The typed
+// listings other than getShapes still await their element facades and keep throwing; so do the
+// object id lookups.
+template <typename Iface> class PageBaseImpl : public cppu::WeakImplHelper<Iface>
+{
+public:
+    PageBaseImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+                 cpo::uno::Reference<css::drawing::XDrawPage> const& page)
         : model_(model)
         , page_(page)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override { return page_; }
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override { return page_; }
 
-    cpo::uno::Sequence<css::uno::Reference<scriptinterop::XShape>> SAL_CALL getShapes() override
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElement>>
+    getPageElements() override
     {
-        std::vector<css::uno::Reference<scriptinterop::XShape>> shapes;
-        css::uno::Reference<css::container::XIndexAccess> const access = page_;
+        std::vector<cpo::uno::Reference<scriptinterop::XPageElement>> elements;
+        for (auto const& shape : shapes())
+        {
+            elements.emplace_back(new PageElementImpl(page_, shape));
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElement>>(
+            elements.data(), elements.size());
+    }
+
+    // Only elements of the plain shape kind are shapes; images, lines, tables and the rest are
+    // left out.
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XShape>> getShapes() override
+    {
+        std::vector<cpo::uno::Reference<scriptinterop::XShape>> result;
+        for (auto const& shape : shapes())
+        {
+            if (pageElementType(shape) == scriptinterop::PageElementType_SHAPE)
+            {
+                result.emplace_back(new ShapeImpl(page_, shape));
+            }
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XShape>>(result.data(),
+                                                                              result.size());
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XGroup>> getGroups() override
+    {
+        throw cpo::uno::RuntimeException(u"getGroups: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XImage>> getImages() override
+    {
+        throw cpo::uno::RuntimeException(u"getImages: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XLine>> getLines() override
+    {
+        throw cpo::uno::RuntimeException(u"getLines: not implemented"_ustr);
+    }
+
+    OUString getObjectId() override
+    {
+        throw cpo::uno::RuntimeException(u"getObjectId: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageElement>>
+        getPageElementById(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"getPageElementById: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageElement>>
+        getPlaceholder(scriptinterop::PlaceholderType wanted) override
+    {
+        return getPlaceholderByIndex(wanted, 0);
+    }
+
+    // Hands back the index-th placeholder of the given kind in drawing order, or null when the
+    // page has fewer of that kind.
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageElement>>
+        getPlaceholderByIndex(scriptinterop::PlaceholderType wanted,
+                              sal_Int32 placeholderIndex) override
+    {
+        if (placeholderIndex < 0)
+        {
+            throw cpo::uno::RuntimeException(
+                u"getPlaceholder: expected a non-negative index, got "_ustr
+                + OUString::number(placeholderIndex));
+        }
+        auto const layout = pageAutoLayout(page_);
+        sal_Int32 seen = 0;
+        for (auto const& shape : shapes())
+        {
+            if (placeholderType(shape, layout) != wanted)
+            {
+                continue;
+            }
+            if (seen == placeholderIndex)
+            {
+                return {true, new PageElementImpl(page_, shape)};
+            }
+            ++seen;
+        }
+        return {false, {}};
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElement>>
+    getPlaceholders() override
+    {
+        std::vector<cpo::uno::Reference<scriptinterop::XPageElement>> elements;
+        auto const layout = pageAutoLayout(page_);
+        for (auto const& shape : shapes())
+        {
+            if (placeholderType(shape, layout) != scriptinterop::PlaceholderType_NONE)
+            {
+                elements.emplace_back(new PageElementImpl(page_, shape));
+            }
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElement>>(
+            elements.data(), elements.size());
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XSlideTable>>
+    getTables() override
+    {
+        throw cpo::uno::RuntimeException(u"getTables: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XVideo>> getVideos() override
+    {
+        throw cpo::uno::RuntimeException(u"getVideos: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XWordArt>>
+    getWordArts() override
+    {
+        throw cpo::uno::RuntimeException(u"getWordArts: not implemented"_ustr);
+    }
+
+protected:
+    // The page's shapes in drawing order.
+    std::vector<cpo::uno::Reference<css::drawing::XShape>> shapes()
+    {
+        std::vector<cpo::uno::Reference<css::drawing::XShape>> result;
+        cpo::uno::Reference<css::container::XIndexAccess> const access = page_;
         if (access.is())
         {
             auto const n = access->getCount();
             for (sal_Int32 i = 0; i != n; ++i)
             {
-                css::uno::Reference<css::drawing::XShape> shape;
+                cpo::uno::Reference<css::drawing::XShape> shape;
                 access->getByIndex(i) >>= shape;
                 if (shape.is())
                 {
-                    shapes.emplace_back(new ShapeImpl(page_, shape));
+                    result.push_back(shape);
                 }
             }
         }
-        return cpo::uno::Sequence<css::uno::Reference<scriptinterop::XShape>>(shapes.data(),
-                                                                              shapes.size());
+        return result;
     }
 
-    css::uno::Reference<scriptinterop::XShape>
-        SAL_CALL insertTextBox(OUString const& text, double left, double top, double width,
-                               double height) override
+    cpo::uno::Reference<css::frame::XModel> model_;
+    cpo::uno::Reference<css::drawing::XDrawPage> page_;
+};
+
+// Throwing defaults for the editable page surface, plus the text box insertion every editable
+// page kind supports.  A leaf implementation class derives from this template with its own
+// interface and overrides the methods it implements.
+template <typename Iface> class EditablePageImpl : public PageBaseImpl<Iface>
+{
+public:
+    using PageBaseImpl<Iface>::PageBaseImpl;
+
+    cpo::uno::Reference<scriptinterop::XShape>
+    insertTextBox(OUString const& text) override
     {
-        // The whole geometry is converted up front, so a bad value fails before the slide is
-        // touched:
+        // A text box inserted without geometry lands at the page's top left corner with the GAS
+        // API's default square size: 3000000 English Metric Units, at 12700 to the point, or
+        // 236.22 points.
+        double const defaultExtent = 3000000.0 / 12700.0;
+        return insertTextBoxAt(text, 0.0, 0.0, defaultExtent, defaultExtent);
+    }
+
+    // The geometry is converted up front, so a bad value fails before the page is touched.
+    cpo::uno::Reference<scriptinterop::XShape> insertTextBoxAt(OUString const& text,
+                                                                        double left, double top,
+                                                                        double width,
+                                                                        double height) override
+    {
         css::awt::Point const position(pointsToHundredthMm(left), pointsToHundredthMm(top));
         css::awt::Size const size(extentToHundredthMm(width), extentToHundredthMm(height));
-        css::uno::Reference<css::lang::XMultiServiceFactory> const factory(model_,
-                                                                           css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::lang::XMultiServiceFactory> const factory(this->model_,
+                                                                           cpo::uno::UNO_QUERY);
         if (!factory.is())
         {
-            throw css::uno::RuntimeException(u"insertTextBox: no shape factory"_ustr);
+            throw cpo::uno::RuntimeException(u"insertTextBox: no shape factory"_ustr);
         }
-        css::uno::Reference<css::drawing::XShape> const shape(
+        cpo::uno::Reference<css::drawing::XShape> const shape(
             factory->createInstance(u"com.sun.star.drawing.TextShape"_ustr),
-            css::uno::UNO_QUERY_THROW);
-        css::uno::Reference<css::drawing::XShapes> const shapes(page_, css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XShapes> const shapes(this->page_,
+                                                                cpo::uno::UNO_QUERY_THROW);
         // The shape only gets its edit engine when it enters the page, so the text is set after
         // the add:
         shapes->add(shape);
         // The box keeps the requested height; long text overflows instead of resizing the shape:
-        css::uno::Reference<css::beans::XPropertySet> const props(shape,
-                                                                  css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> const props(shape,
+                                                                  cpo::uno::UNO_QUERY_THROW);
         props->setPropertyValue(u"TextAutoGrowHeight"_ustr, cpo::uno::Any(false));
-        css::uno::Reference<css::text::XText> const shapeText(shape, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::text::XText> const shapeText(shape, cpo::uno::UNO_QUERY_THROW);
         shapeText->setString(text);
         // The geometry goes in last, after the text, so no text-driven resize can override it:
         shape->setPosition(position);
         shape->setSize(size);
-        return new ShapeImpl(page_, shape);
+        return new ShapeImpl(this->page_, shape);
     }
 
-    css::uno::Reference<scriptinterop::XSlide>
-        SAL_CALL setBackgroundColor(OUString const& hexColor) override
+    cpo::uno::Reference<scriptinterop::XPageBackground> getBackground() override
     {
-        auto const color = parseHexColor(hexColor);
-        css::uno::Reference<css::lang::XMultiServiceFactory> const factory(model_,
-                                                                           css::uno::UNO_QUERY);
+        throw cpo::uno::RuntimeException(u"getBackground: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XColorScheme> getColorScheme() override
+    {
+        throw cpo::uno::RuntimeException(u"getColorScheme: not implemented"_ustr);
+    }
+
+    // Slides and master pages have a type of their own.  Notes and handout pages are editable
+    // in the drawing layer but have no type in the API, so they report UNSUPPORTED.
+    scriptinterop::PageType getPageType() override
+    {
+        if (isSlide(this->model_, this->page_))
+        {
+            return scriptinterop::PageType_SLIDE;
+        }
+        if (isMasterPage(this->model_, this->page_))
+        {
+            return scriptinterop::PageType_MASTER;
+        }
+        return scriptinterop::PageType_UNSUPPORTED;
+    }
+
+    cpo::uno::Reference<scriptinterop::XGroup>
+    group(cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElementBase>> const&)
+        override
+    {
+        throw cpo::uno::RuntimeException(u"group: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XGroup>
+    insertGroup(cpo::uno::Reference<scriptinterop::XGroup> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertGroup: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XImage> insertImage(cpo::uno::Any const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertImage: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XImage>
+    insertImageAt(cpo::uno::Any const&, double, double, double, double) override
+    {
+        throw cpo::uno::RuntimeException(u"insertImageAt: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XLine>
+    insertLine(cpo::uno::Reference<scriptinterop::XLine> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertLine: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XLine>
+    insertLineBetween(scriptinterop::LineCategory,
+                      cpo::uno::Reference<scriptinterop::XConnectionSite> const&,
+                      cpo::uno::Reference<scriptinterop::XConnectionSite> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertLineBetween: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XLine>
+    insertLineAt(scriptinterop::LineCategory, double, double, double, double) override
+    {
+        throw cpo::uno::RuntimeException(u"insertLineAt: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XPageElement>
+    insertPageElement(cpo::uno::Reference<scriptinterop::XPageElement> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertPageElement: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XShape> insertShape(cpo::uno::Any const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertShape: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XShape>
+    insertShapeAt(scriptinterop::ShapeType, double, double, double, double) override
+    {
+        throw cpo::uno::RuntimeException(u"insertShapeAt: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlideTable> insertTable(sal_Int32,
+                                                                         sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"insertTable: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlideTable>
+    insertTableAt(sal_Int32, sal_Int32, double, double, double, double) override
+    {
+        throw cpo::uno::RuntimeException(u"insertTableAt: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlideTable>
+    insertTableCopy(cpo::uno::Reference<scriptinterop::XSlideTable> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertTableCopy: not implemented"_ustr);
+    }
+
+    cpo::uno::Reference<scriptinterop::XWordArt>
+    insertWordArt(cpo::uno::Reference<scriptinterop::XWordArt> const&) override
+    {
+        throw cpo::uno::RuntimeException(u"insertWordArt: not implemented"_ustr);
+    }
+
+    void remove() override
+    {
+        throw cpo::uno::RuntimeException(u"remove: not implemented"_ustr);
+    }
+
+    sal_Int32 replaceAllText(OUString const& findText,
+                             OUString const& replaceText) override
+    {
+        return replaceAllOnPage(this->page_, findText, replaceText, false);
+    }
+
+    sal_Int32 replaceAllTextMatchCase(OUString const& findText,
+                                      OUString const& replaceText, bool matchCase) override
+    {
+        return replaceAllOnPage(this->page_, findText, replaceText, matchCase);
+    }
+
+    // The drawing view switches to the page and enters or leaves master page mode to match the
+    // page's kind.
+    void selectAsCurrentPage() override
+    {
+        cpo::uno::Reference<css::drawing::XDrawView> const view(
+            this->model_->getCurrentController(), cpo::uno::UNO_QUERY);
+        if (!view.is())
+        {
+            throw cpo::uno::RuntimeException(
+                u"selectAsCurrentPage: the presentation has no drawing view"_ustr);
+        }
+        view->setCurrentPage(this->page_);
+    }
+};
+
+class NotesPageImpl : public PageBaseImpl<scriptinterop::XNotesPage>
+{
+public:
+    NotesPageImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+                  cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+        : PageBaseImpl(model, page)
+    {
+    }
+
+    // The speaker notes live in the page's notes placeholder shape.
+    cpo::uno::Reference<scriptinterop::XShape> getSpeakerNotesShape() override
+    {
+        for (auto const& shape : shapes())
+        {
+            if (shape->getShapeType() == "com.sun.star.presentation.NotesShape")
+            {
+                return new ShapeImpl(page_, shape);
+            }
+        }
+        throw cpo::uno::RuntimeException(
+            u"getSpeakerNotesShape: the notes page has no notes shape"_ustr);
+    }
+
+    sal_Int32 replaceAllText(OUString const& findText,
+                             OUString const& replaceText) override
+    {
+        return replaceAllOnPage(page_, findText, replaceText, false);
+    }
+
+    sal_Int32 replaceAllTextMatchCase(OUString const& findText,
+                                      OUString const& replaceText, bool matchCase) override
+    {
+        return replaceAllOnPage(page_, findText, replaceText, matchCase);
+    }
+};
+
+class NotesMasterImpl : public PageBaseImpl<scriptinterop::XNotesMaster>
+{
+public:
+    NotesMasterImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+                    cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+        : PageBaseImpl(model, page)
+    {
+    }
+};
+
+class MasterImpl;
+
+// TODO: The drawing layer has no separate layout page between a slide and its master page, so
+// the Layout role is played by the master page itself.  A slide's layout is its master page, the
+// layout's master is that same page, and the layout name is the master page's name.  When the
+// drawing layer gains layout pages, this class should wrap those instead.
+class LayoutImpl : public EditablePageImpl<scriptinterop::XLayout>
+{
+public:
+    LayoutImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+               cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+        : EditablePageImpl(model, page)
+    {
+    }
+
+    OUString getLayoutName() override
+    {
+        cpo::uno::Reference<css::container::XNamed> const named(page_, cpo::uno::UNO_QUERY_THROW);
+        return named->getName();
+    }
+
+    cpo::uno::Reference<scriptinterop::XMaster> getMaster() override;
+
+    scriptinterop::PageType getPageType() override
+    {
+        return scriptinterop::PageType_LAYOUT;
+    }
+
+    void remove() override { removeMasterPage(model_, page_); }
+};
+
+class MasterImpl : public EditablePageImpl<scriptinterop::XMaster>
+{
+public:
+    MasterImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+               cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+        : EditablePageImpl(model, page)
+    {
+    }
+
+    // The master page is its own single layout.
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XLayout>> getLayouts() override
+    {
+        return { cpo::uno::Reference<scriptinterop::XLayout>(new LayoutImpl(model_, page_)) };
+    }
+
+    void remove() override { removeMasterPage(model_, page_); }
+};
+
+cpo::uno::Reference<scriptinterop::XMaster> LayoutImpl::getMaster()
+{
+    return new MasterImpl(model_, page_);
+}
+
+class SlideImpl : public EditablePageImpl<scriptinterop::XSlide>
+{
+public:
+    SlideImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+              cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+        : EditablePageImpl(model, page)
+    {
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlide>
+        setBackgroundColor(OUString const& hexColor) override
+    {
+        auto const color = parseColor(hexColor);
+        cpo::uno::Reference<css::lang::XMultiServiceFactory> const factory(model_,
+                                                                           cpo::uno::UNO_QUERY);
         if (!factory.is())
         {
-            throw css::uno::RuntimeException(u"setBackgroundColor: no background factory"_ustr);
+            throw cpo::uno::RuntimeException(u"setBackgroundColor: no background factory"_ustr);
         }
         // The page's Background property takes a property set created by the document model.  A
         // solid fill stored on the slide itself wins over whatever the master slide would paint.
-        css::uno::Reference<css::beans::XPropertySet> const background(
+        cpo::uno::Reference<css::beans::XPropertySet> const background(
             factory->createInstance(u"com.sun.star.drawing.Background"_ustr),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
         background->setPropertyValue(u"FillStyle"_ustr,
                                      cpo::uno::Any(css::drawing::FillStyle_SOLID));
         background->setPropertyValue(u"FillColor"_ustr, cpo::uno::Any(color));
-        css::uno::Reference<css::beans::XPropertySet> const pageProps(page_,
-                                                                      css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::beans::XPropertySet> const pageProps(page_,
+                                                                      cpo::uno::UNO_QUERY_THROW);
         pageProps->setPropertyValue(u"Background"_ustr, cpo::uno::Any(background));
         return this;
     }
 
-    void SAL_CALL remove() override
+    void remove() override
     {
-        css::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model_,
-                                                                        css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model_,
+                                                                        cpo::uno::UNO_QUERY_THROW);
         auto const pages = sup->getDrawPages();
         // A presentation always keeps at least one slide, so removing the last one is an error
         // rather than a silent no-op:
         if (pages->getCount() <= 1)
         {
-            throw css::uno::RuntimeException(u"remove: cannot remove the only slide"_ustr);
+            throw cpo::uno::RuntimeException(u"remove: cannot remove the only slide"_ustr);
         }
         pages->remove(page_);
     }
 
-private:
-    css::uno::Reference<css::frame::XModel> model_;
-    css::uno::Reference<css::drawing::XDrawPage> page_;
+    // The copy is inserted directly after this slide.
+    cpo::uno::Reference<scriptinterop::XSlide> duplicate() override
+    {
+        cpo::uno::Reference<css::drawing::XDrawPageDuplicator> const duplicator(
+            model_, cpo::uno::UNO_QUERY_THROW);
+        return new SlideImpl(model_, duplicator->duplicate(page_));
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XLayout>> getLayout() override
+    {
+        cpo::uno::Reference<css::drawing::XMasterPageTarget> const target(
+            page_, cpo::uno::UNO_QUERY_THROW);
+        return {true, new LayoutImpl(model_, target->getMasterPage())};
+    }
+
+    cpo::uno::Reference<scriptinterop::XNotesPage> getNotesPage() override
+    {
+        return new NotesPageImpl(model_, notesPageOf(page_));
+    }
+
+    // A slide from another presentation that stays linked to its source carries that source's
+    // URL as its bookmark.
+    scriptinterop::SlideLinkingMode getSlideLinkingMode() override
+    {
+        cpo::uno::Reference<css::beans::XPropertySet> const props(page_, cpo::uno::UNO_QUERY_THROW);
+        OUString bookmark;
+        props->getPropertyValue(u"BookmarkURL"_ustr) >>= bookmark;
+        return bookmark.isEmpty() ? scriptinterop::SlideLinkingMode_NOT_LINKED
+                                  : scriptinterop::SlideLinkingMode_LINKED;
+    }
+
+    // A skipped slide is one the drawing layer marks as not visible in the slide show.
+    bool isSkipped() override
+    {
+        cpo::uno::Reference<css::beans::XPropertySet> const props(page_, cpo::uno::UNO_QUERY_THROW);
+        bool visible = true;
+        props->getPropertyValue(u"Visible"_ustr) >>= visible;
+        return !visible;
+    }
+
+    void move(sal_Int32) override
+    {
+        throw cpo::uno::RuntimeException(u"move: not implemented"_ustr);
+    }
+
+    void setSkipped(bool skipped) override
+    {
+        cpo::uno::Reference<css::beans::XPropertySet> const props(page_, cpo::uno::UNO_QUERY_THROW);
+        props->setPropertyValue(u"Visible"_ustr, cpo::uno::Any(!skipped));
+    }
 };
 
-class PageImpl : public cppu::WeakImplHelper<scriptinterop::XPage>
+class PageImpl : public EditablePageImpl<scriptinterop::XPage>
 {
 public:
-    PageImpl(css::uno::Reference<css::frame::XModel> const& model,
-             css::uno::Reference<css::drawing::XDrawPage> const& page)
-        : model_(model)
-        , page_(page)
+    PageImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+             cpo::uno::Reference<css::drawing::XDrawPage> const& page)
+        : EditablePageImpl(model, page)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override { return page_; }
+    cpo::uno::Reference<scriptinterop::XLayout> asLayout() override
+    {
+        if (!isMasterPage(model_, page_))
+        {
+            throw cpo::uno::RuntimeException(u"asLayout: the page is not a layout"_ustr);
+        }
+        return new LayoutImpl(model_, page_);
+    }
 
-    css::uno::Reference<scriptinterop::XSlide> SAL_CALL asSlide() override
+    cpo::uno::Reference<scriptinterop::XMaster> asMaster() override
+    {
+        if (!isMasterPage(model_, page_))
+        {
+            throw cpo::uno::RuntimeException(u"asMaster: the page is not a master page"_ustr);
+        }
+        return new MasterImpl(model_, page_);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlide> asSlide() override
     {
         // Only a page in the presentation's slide container is a slide; a notes, handout or
         // master page is not:
         if (!isSlide(model_, page_))
         {
-            throw css::uno::RuntimeException(u"asSlide: the page is not a slide"_ustr);
+            throw cpo::uno::RuntimeException(u"asSlide: the page is not a slide"_ustr);
         }
         return new SlideImpl(model_, page_);
     }
+};
+
+class PageRangeImpl : public cppu::WeakImplHelper<scriptinterop::XPageRange>
+{
+public:
+    PageRangeImpl(cpo::uno::Reference<css::frame::XModel> const& model,
+                  std::vector<cpo::uno::Reference<css::drawing::XDrawPage>> const& pages)
+        : model_(model)
+        , pages_(pages)
+    {
+    }
+
+    // A range is a grouping made here; there is no single drawing layer object behind it.
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override { return nullptr; }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPage>> getPages() override
+    {
+        std::vector<cpo::uno::Reference<scriptinterop::XPage>> result;
+        for (auto const& page : pages_)
+        {
+            result.emplace_back(new PageImpl(model_, page));
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPage>>(result.data(),
+                                                                             result.size());
+    }
 
 private:
-    css::uno::Reference<css::frame::XModel> model_;
-    css::uno::Reference<css::drawing::XDrawPage> page_;
+    cpo::uno::Reference<css::frame::XModel> model_;
+    std::vector<cpo::uno::Reference<css::drawing::XDrawPage>> pages_;
+};
+
+class PageElementRangeImpl : public cppu::WeakImplHelper<scriptinterop::XPageElementRange>
+{
+public:
+    PageElementRangeImpl(
+        cpo::uno::Reference<css::drawing::XShapes> const& shapes,
+        std::vector<cpo::uno::Reference<scriptinterop::XPageElement>> const& elements)
+        : shapes_(shapes)
+        , elements_(elements)
+    {
+    }
+
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override { return shapes_; }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElement>>
+    getPageElements() override
+    {
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XPageElement>>(
+            elements_.data(), elements_.size());
+    }
+
+private:
+    cpo::uno::Reference<css::drawing::XShapes> shapes_;
+    std::vector<cpo::uno::Reference<scriptinterop::XPageElement>> elements_;
 };
 
 class SlideSelectionImpl : public cppu::WeakImplHelper<scriptinterop::XSlideSelection>
 {
 public:
-    explicit SlideSelectionImpl(css::uno::Reference<css::frame::XModel> const& model)
+    explicit SlideSelectionImpl(cpo::uno::Reference<css::frame::XModel> const& model)
         : model_(model)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override
     {
         auto const controller = model_->getCurrentController();
         if (!controller.is())
         {
-            throw css::uno::RuntimeException(u"getuno: the presentation has no view"_ustr);
+            throw cpo::uno::RuntimeException(u"getuno: the presentation has no view"_ustr);
         }
         return controller;
     }
 
-    css::uno::Reference<scriptinterop::XPage> SAL_CALL getCurrentPage() override
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPage>> getCurrentPage()
+        override
     {
-        css::uno::Reference<css::drawing::XDrawView> const view(model_->getCurrentController(),
-                                                                css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::drawing::XDrawView> const view(model_->getCurrentController(),
+                                                                cpo::uno::UNO_QUERY);
         // Each view reports its own page kind as current: the normal drawing view a slide, the
         // notes, handout and master views their own page kind.
         auto const page = view.is() ? view->getCurrentPage() : nullptr;
         if (!page.is())
         {
-            return nullptr;
+            return {false, {}};
         }
-        return new PageImpl(model_, page);
+        return {true, new PageImpl(model_, page)};
+    }
+
+    // Each marked shape is wrapped with the page that holds it, so geometry changes and removal
+    // through the range reach the right page.
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageElementRange>>
+        getPageElementRange() override
+    {
+        cpo::uno::Reference<css::drawing::XShapes> shapes;
+        if (!(currentSelection() >>= shapes) || shapes->getCount() == 0)
+        {
+            return {false, {}};
+        }
+        std::vector<cpo::uno::Reference<scriptinterop::XPageElement>> elements;
+        auto const n = shapes->getCount();
+        for (sal_Int32 i = 0; i != n; ++i)
+        {
+            cpo::uno::Reference<css::drawing::XShape> shape;
+            shapes->getByIndex(i) >>= shape;
+            if (!shape.is())
+            {
+                continue;
+            }
+            cpo::uno::Reference<css::container::XChild> const child(shape, cpo::uno::UNO_QUERY);
+            cpo::uno::Reference<css::drawing::XDrawPage> const page(
+                child.is() ? child->getParent() : nullptr, cpo::uno::UNO_QUERY);
+            elements.emplace_back(new PageElementImpl(page, shape));
+        }
+        return {true, new PageElementRangeImpl(shapes, elements)};
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageRange>>
+        getPageRange() override
+    {
+        cpo::uno::Sequence<cpo::uno::Reference<cpo::uno::XInterface>> selected;
+        if (!(currentSelection() >>= selected) || !selected.hasElements())
+        {
+            return {false, {}};
+        }
+        std::vector<cpo::uno::Reference<css::drawing::XDrawPage>> pages;
+        for (auto const& entry : selected)
+        {
+            cpo::uno::Reference<css::drawing::XDrawPage> const page(entry, cpo::uno::UNO_QUERY);
+            if (page.is())
+            {
+                pages.push_back(page);
+            }
+        }
+        return {true, new PageRangeImpl(model_, pages)};
+    }
+
+    scriptinterop::SelectionType getSelectionType() override
+    {
+        auto const selection = currentSelection();
+        cpo::uno::Reference<css::text::XTextRange> text;
+        if (selection >>= text)
+        {
+            return scriptinterop::SelectionType_TEXT;
+        }
+        cpo::uno::Reference<css::drawing::XShapes> shapes;
+        if ((selection >>= shapes) && shapes->getCount() > 0)
+        {
+            return scriptinterop::SelectionType_PAGE_ELEMENT;
+        }
+        cpo::uno::Sequence<cpo::uno::Reference<cpo::uno::XInterface>> pages;
+        if ((selection >>= pages) && pages.hasElements())
+        {
+            return scriptinterop::SelectionType_PAGE;
+        }
+        return getCurrentPage().IsPresent ? scriptinterop::SelectionType_CURRENT_PAGE
+                                          : scriptinterop::SelectionType_NONE;
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XSlideTableCellRange>>
+        getTableCellRange() override
+    {
+        throw cpo::uno::RuntimeException(u"getTableCellRange: not implemented"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XTextRange>>
+        getTextRange() override
+    {
+        cpo::uno::Reference<css::text::XTextRange> cursor;
+        if (!(currentSelection() >>= cursor))
+        {
+            return {false, {}};
+        }
+        return {true, new TextRangeImpl(cursor->getText(), cursor)};
     }
 
 private:
-    css::uno::Reference<css::frame::XModel> model_;
+    // The drawing view reports a text cursor while edited text is highlighted, a shape collection
+    // while shapes are marked, and nothing otherwise.  The slide sorter view reports the selected
+    // pages as a sequence of interfaces.
+    cpo::uno::Any currentSelection()
+    {
+        cpo::uno::Reference<css::view::XSelectionSupplier> const supplier(
+            model_->getCurrentController(), cpo::uno::UNO_QUERY);
+        return supplier.is() ? supplier->getSelection() : cpo::uno::Any();
+    }
+
+    cpo::uno::Reference<css::frame::XModel> model_;
 };
 
 class PresentationImpl : public cppu::WeakImplHelper<scriptinterop::XPresentation>
 {
 public:
-    explicit PresentationImpl(css::uno::Reference<css::frame::XModel> const& model)
+    explicit PresentationImpl(cpo::uno::Reference<css::frame::XModel> const& model)
         : model_(model)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override { return model_; }
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override { return model_; }
 
-    cpo::uno::Sequence<css::uno::Reference<scriptinterop::XSlide>> SAL_CALL getSlides() override
+    cpo::uno::Reference<scriptinterop::XSlide> appendSlide() override
     {
-        std::vector<css::uno::Reference<scriptinterop::XSlide>> slides;
-        auto const pages = drawPages();
-        auto const n = pages->getCount();
-        for (sal_Int32 i = 0; i != n; ++i)
+        return insertSlideWithLayout(drawPages()->getCount(), AUTOLAYOUT_NONE);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlide>
+    appendSlideFrom(cpo::uno::Any const& layoutOrSlide) override
+    {
+        return insertSlideFrom(drawPages()->getCount(), layoutOrSlide);
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlide>
+    appendSlideLinked(cpo::uno::Reference<scriptinterop::XSlide> const&,
+                      scriptinterop::SlideLinkingMode) override
+    {
+        throw cpo::uno::RuntimeException(
+            u"appendSlide with a slide linking mode: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XLayout>> getLayouts() override
+    {
+        std::vector<cpo::uno::Reference<scriptinterop::XLayout>> layouts;
+        for (auto const& page : pageList(masterPages(model_)))
         {
-            css::uno::Reference<css::drawing::XDrawPage> page;
-            pages->getByIndex(i) >>= page;
-            if (page.is())
+            layouts.emplace_back(new LayoutImpl(model_, page));
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XLayout>>(layouts.data(),
+                                                                               layouts.size());
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XMaster>> getMasters() override
+    {
+        std::vector<cpo::uno::Reference<scriptinterop::XMaster>> masters;
+        for (auto const& page : pageList(masterPages(model_)))
+        {
+            masters.emplace_back(new MasterImpl(model_, page));
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XMaster>>(masters.data(),
+                                                                               masters.size());
+    }
+
+    // The name is the document title.  Without a title, a saved document is named after its
+    // file, without the directory and the extension.  An unsaved document without a title gets
+    // a default name.
+    OUString getName() override
+    {
+        cpo::uno::Reference<css::document::XDocumentPropertiesSupplier> const sup(
+            model_, cpo::uno::UNO_QUERY);
+        if (sup.is())
+        {
+            auto const title = sup->getDocumentProperties()->getTitle();
+            if (!title.isEmpty())
             {
-                slides.emplace_back(new SlideImpl(model_, page));
+                return title;
             }
         }
-        return cpo::uno::Sequence<css::uno::Reference<scriptinterop::XSlide>>(slides.data(),
+        auto const url = model_->getURL();
+        if (!url.isEmpty())
+        {
+            auto const slash = url.lastIndexOf('/');
+            auto fileName = url.copy(slash + 1);
+            auto const dot = fileName.lastIndexOf('.');
+            if (dot > 0)
+            {
+                fileName = fileName.copy(0, dot);
+            }
+            return rtl::Uri::decode(fileName, rtl_UriDecodeWithCharset, RTL_TEXTENCODING_UTF8);
+        }
+        return u"Untitled presentation"_ustr;
+    }
+
+    // The notes master is the notes page of the first master page.
+    cpo::uno::Reference<scriptinterop::XNotesMaster> getNotesMaster() override
+    {
+        cpo::uno::Reference<css::drawing::XDrawPage> master;
+        masterPages(model_)->getByIndex(0) >>= master;
+        return new NotesMasterImpl(model_, notesPageOf(master));
+    }
+
+    double getNotesPageHeight() override
+    {
+        return pageSizePoints(notesPageOf(firstSlide()), u"Height"_ustr);
+    }
+
+    double getNotesPageWidth() override
+    {
+        return pageSizePoints(notesPageOf(firstSlide()), u"Width"_ustr);
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XPageElement>>
+        getPageElementById(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"getPageElementById: not implemented"_ustr);
+    }
+
+    double getPageHeight() override
+    {
+        return pageSizePoints(firstSlide(), u"Height"_ustr);
+    }
+
+    double getPageWidth() override { return pageSizePoints(firstSlide(), u"Width"_ustr); }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XSlideSelection>>
+    getSelection() override
+    {
+        return {true, new SlideSelectionImpl(model_)};
+    }
+
+    css::beans::Optional<cpo::uno::Reference<scriptinterop::XSlide>>
+        getSlideById(OUString const&) override
+    {
+        throw cpo::uno::RuntimeException(u"getSlideById: not implemented"_ustr);
+    }
+
+    cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XSlide>> getSlides() override
+    {
+        std::vector<cpo::uno::Reference<scriptinterop::XSlide>> slides;
+        for (auto const& page : pageList(drawPages()))
+        {
+            slides.emplace_back(new SlideImpl(model_, page));
+        }
+        return cpo::uno::Sequence<cpo::uno::Reference<scriptinterop::XSlide>>(slides.data(),
                                                                               slides.size());
     }
 
-    css::uno::Reference<scriptinterop::XSlide> SAL_CALL appendSlide() override
+    cpo::uno::Reference<scriptinterop::XSlide> insertSlide(sal_Int32 index) override
     {
-        auto const pages = drawPages();
-        // Inserting at getCount() appends; the new page is blank, without layout placeholders.
-        auto const page = pages->insertNewByIndex(pages->getCount());
-        return new SlideImpl(model_, page);
+        return insertSlideWithLayout(index, AUTOLAYOUT_NONE);
     }
 
-    double SAL_CALL getPageWidth() override { return pageSizePoints(u"Width"_ustr); }
-
-    double SAL_CALL getPageHeight() override { return pageSizePoints(u"Height"_ustr); }
-
-    css::uno::Reference<scriptinterop::XSlideSelection> SAL_CALL getSelection() override
+    cpo::uno::Reference<scriptinterop::XSlide>
+    insertSlideFrom(sal_Int32 index, cpo::uno::Any const& layoutOrSlide) override
     {
-        return new SlideSelectionImpl(model_);
+        // The argument is checked before the slide is created, so a rejected call leaves the
+        // presentation unchanged.
+        scriptinterop::PredefinedLayout predefined;
+        if (!(layoutOrSlide >>= predefined))
+        {
+            throw cpo::uno::RuntimeException(
+                u"insertSlide with a layout argument that is not a predefined layout: not "
+                "implemented"_ustr);
+        }
+        return insertSlideWithLayout(index, predefinedAutoLayout(predefined));
+    }
+
+    cpo::uno::Reference<scriptinterop::XSlide>
+    insertSlideLinked(sal_Int32, cpo::uno::Reference<scriptinterop::XSlide> const&,
+                      scriptinterop::SlideLinkingMode) override
+    {
+        throw cpo::uno::RuntimeException(u"insertSlideLinked: not implemented"_ustr);
+    }
+
+    sal_Int32 replaceAllText(OUString const& findText,
+                             OUString const& replaceText) override
+    {
+        return replaceAllTextMatchCase(findText, replaceText, false);
+    }
+
+    // The replacement covers every slide, each slide's notes page, and every master page.
+    sal_Int32 replaceAllTextMatchCase(OUString const& findText,
+                                      OUString const& replaceText, bool matchCase) override
+    {
+        sal_Int32 count = 0;
+        for (auto const& slide : pageList(drawPages()))
+        {
+            count += replaceAllOnPage(slide, findText, replaceText, matchCase);
+            count += replaceAllOnPage(notesPageOf(slide), findText, replaceText, matchCase);
+        }
+        for (auto const& master : pageList(masterPages(model_)))
+        {
+            count += replaceAllOnPage(master, findText, replaceText, matchCase);
+        }
+        return count;
     }
 
 private:
-    // Reads the size property of the first slide.  The drawing layer stores it as a 1/100 mm
-    // integer.
-    double pageSizePoints(OUString const& propertyName)
+    // Inserts a slide before the slide at index, or at the end when index equals the slide
+    // count.  The drawing layer inserts a new page after an existing one, so the page goes in
+    // after the slide at index - 1.  A slide before the first one has no such neighbour and is
+    // still awaiting an implementation.  The new page is blank unless a layout creates
+    // placeholder shapes on it.
+    cpo::uno::Reference<scriptinterop::XSlide> insertSlideWithLayout(sal_Int32 index,
+                                                                     sal_Int16 autoLayout)
     {
-        css::uno::Reference<css::drawing::XDrawPage> page;
-        drawPages()->getByIndex(0) >>= page;
-        css::uno::Reference<css::beans::XPropertySet> const props(page,
-                                                                  css::uno::UNO_QUERY_THROW);
-        sal_Int32 sizeHundredthMm = 0;
-        props->getPropertyValue(propertyName) >>= sizeHundredthMm;
-        return hundredthMmToPoints(sizeHundredthMm);
+        auto const pages = drawPages();
+        if (index < 0 || index > pages->getCount())
+        {
+            throw cpo::uno::RuntimeException(u"insertSlide: expected an index between 0 and "_ustr
+                                             + OUString::number(pages->getCount()) + ", got "
+                                             + OUString::number(index));
+        }
+        if (index == 0)
+        {
+            throw cpo::uno::RuntimeException(u"insertSlide at index 0: not implemented"_ustr);
+        }
+        auto const page = pages->insertNewByIndex(index - 1);
+        if (autoLayout != AUTOLAYOUT_NONE)
+        {
+            // Setting the page's Layout property creates the layout's placeholder shapes.
+            cpo::uno::Reference<css::beans::XPropertySet> const props(page,
+                                                                      cpo::uno::UNO_QUERY_THROW);
+            props->setPropertyValue(u"Layout"_ustr, cpo::uno::Any(autoLayout));
+        }
+        return new SlideImpl(model_, page);
     }
 
-    css::uno::Reference<css::drawing::XDrawPages> drawPages()
+    cpo::uno::Reference<css::drawing::XDrawPage> firstSlide()
     {
-        css::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model_,
-                                                                        css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPage> page;
+        drawPages()->getByIndex(0) >>= page;
+        return page;
+    }
+
+    cpo::uno::Reference<css::drawing::XDrawPages> drawPages()
+    {
+        cpo::uno::Reference<css::drawing::XDrawPagesSupplier> const sup(model_,
+                                                                        cpo::uno::UNO_QUERY_THROW);
         return sup->getDrawPages();
     }
 
-    css::uno::Reference<css::frame::XModel> model_;
+    cpo::uno::Reference<css::frame::XModel> model_;
 };
 }
 
 namespace scriptinterop::detail
 {
-css::uno::Reference<scriptinterop::XPresentation>
-createPresentation(css::uno::Reference<css::frame::XModel> const& model)
+cpo::uno::Reference<scriptinterop::XPresentation>
+createPresentation(cpo::uno::Reference<css::frame::XModel> const& model)
 {
     return new PresentationImpl(model);
 }
 }
 
-/* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

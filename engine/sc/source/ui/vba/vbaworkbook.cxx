@@ -48,10 +48,11 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 cpo::uno::Sequence< sal_Int32 > ScVbaWorkbook::ColorData;
 
-void SAL_CALL
+void
 ScVbaWorkbook::ResetColors(  )
 {
         uno::Reference< container::XIndexAccess > xIndexAccess( ScVbaPalette::getDefaultPalette(), uno::UNO_SET_THROW );
@@ -63,7 +64,7 @@ ScVbaWorkbook::ResetColors(  )
             xIndexAccess->getByIndex( index )  >>= *pDest;
 }
 
-::cpo::uno::Any SAL_CALL
+::cpo::uno::Any
 ScVbaWorkbook::Colors( const ::cpo::uno::Any& Index )
 {
     cpo::uno::Any aRet;
@@ -118,7 +119,7 @@ bool ScVbaWorkbook::setFilterPropsFromFormat( sal_Int32 nFormat, cpo::uno::Seque
     return bRes;
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaWorkbook::getFileFormat(  )
 {
         sal_Int32 aFileFormat = 0;
@@ -188,8 +189,8 @@ ScVbaWorkbook::init()
         pShell->RegisterAutomationWorkbookObject( this );
 }
 
-ScVbaWorkbook::ScVbaWorkbook( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                              const css::uno::Reference< css::uno::XComponentContext >& xContext,
+ScVbaWorkbook::ScVbaWorkbook( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                              const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
                               rtl::Reference< ScModelObj > const & xModel )
 : ScVbaWorkbook_BASE( xParent, xContext ),
   mxModel(xModel)
@@ -198,7 +199,7 @@ ScVbaWorkbook::ScVbaWorkbook( const css::uno::Reference< ov::XHelperInterface >&
 }
 
 ScVbaWorkbook::ScVbaWorkbook( cpo::uno::Sequence< cpo::uno::Any> const & args,
-                              uno::Reference< uno::XComponentContext> const & xContext )
+                              uno::Reference< cpo::uno::XComponentContext> const & xContext )
 : ScVbaWorkbook_BASE( args, xContext ),
   mxModel(dynamic_cast<ScModelObj*>(getXSomethingFromArgs< frame::XModel >( args, 1 ).get()))
 {
@@ -218,13 +219,13 @@ ScVbaWorkbook::getActiveSheet()
     return new ScVbaWorksheet( this, mxContext, xSheet, xModel );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbook::Sheets( const cpo::uno::Any& aIndex )
 {
     return Worksheets( aIndex );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbook::Worksheets( const cpo::uno::Any& aIndex )
 {
     uno::Reference< frame::XModel > xModel( getModel() );
@@ -238,7 +239,7 @@ ScVbaWorkbook::Worksheets( const cpo::uno::Any& aIndex )
     // pass on to collection
     return xWorkSheets->Item( aIndex, cpo::uno::Any() );
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbook::Windows( const cpo::uno::Any& aIndex )
 {
 
@@ -248,7 +249,7 @@ ScVbaWorkbook::Windows( const cpo::uno::Any& aIndex )
     return xWindows->Item( aIndex, cpo::uno::Any() );
 }
 
-void SAL_CALL
+void
 ScVbaWorkbook::Activate()
 {
     VbaDocumentBase::Activate();
@@ -266,7 +267,7 @@ ScVbaWorkbook::getProtectStructure()
     return getModel()->isProtected();
 }
 
-bool SAL_CALL ScVbaWorkbook::getPrecisionAsDisplayed()
+bool ScVbaWorkbook::getPrecisionAsDisplayed()
 {
     if ( ScDocShell* pShell = excel::getDocShell( getModel() ))
     {
@@ -276,7 +277,7 @@ bool SAL_CALL ScVbaWorkbook::getPrecisionAsDisplayed()
     return false;
 }
 
-void SAL_CALL ScVbaWorkbook::setPrecisionAsDisplayed( bool _precisionAsDisplayed )
+void ScVbaWorkbook::setPrecisionAsDisplayed( bool _precisionAsDisplayed )
 {
     if ( ScDocShell* pShell = excel::getDocShell( getModel() ))
     {
@@ -287,7 +288,7 @@ void SAL_CALL ScVbaWorkbook::setPrecisionAsDisplayed( bool _precisionAsDisplayed
     }
 }
 
-OUString SAL_CALL ScVbaWorkbook::getAuthor()
+OUString ScVbaWorkbook::getAuthor()
 {
     rtl::Reference<ScModelObj> xDPS( getModel() );
     if (!xDPS.is())
@@ -296,7 +297,7 @@ OUString SAL_CALL ScVbaWorkbook::getAuthor()
     return xDocProps->getAuthor();
 }
 
-void SAL_CALL ScVbaWorkbook::setAuthor( const OUString& _author )
+void ScVbaWorkbook::setAuthor( const OUString& _author )
 {
     rtl::Reference<ScModelObj> xDPS( getModel() );
     if (!xDPS.is())
@@ -316,7 +317,7 @@ ScVbaWorkbook::SaveCopyAs( const OUString& sFileName )
     xStor->storeToURL( aURL, storeProps );
 }
 
-void SAL_CALL
+void
 ScVbaWorkbook::SaveAs( const cpo::uno::Any& FileName, const cpo::uno::Any& FileFormat, const cpo::uno::Any& /*Password*/, const cpo::uno::Any& /*WriteResPassword*/, const cpo::uno::Any& /*ReadOnlyRecommended*/, const cpo::uno::Any& /*CreateBackup*/, const cpo::uno::Any& /*AccessMode*/, const cpo::uno::Any& /*ConflictResolution*/, const cpo::uno::Any& /*AddToMru*/, const cpo::uno::Any& /*TextCodepage*/, const cpo::uno::Any& /*TextVisualLayout*/, const cpo::uno::Any& /*Local*/ )
 {
     OUString sFileName;
@@ -361,7 +362,7 @@ ScVbaWorkbook::SaveAs( const cpo::uno::Any& FileName, const cpo::uno::Any& FileF
     xStor->storeAsURL( sURL, storeProps );
 }
 
-void SAL_CALL
+void
 ScVbaWorkbook::ExportAsFixedFormat(const cpo::uno::Any& Type, const cpo::uno::Any& FileName, const cpo::uno::Any& Quality,
     const cpo::uno::Any& IncludeDocProperties, const cpo::uno::Any& /*IgnorePrintAreas*/, const cpo::uno::Any& From,
     const cpo::uno::Any& To, const cpo::uno::Any& OpenAfterPublish, const cpo::uno::Any& /*FixedFormatExtClassPtr*/)
@@ -373,7 +374,7 @@ ScVbaWorkbook::ExportAsFixedFormat(const cpo::uno::Any& Type, const cpo::uno::An
         IncludeDocProperties, From, To, OpenAfterPublish);
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbook::Styles( const cpo::uno::Any& Item )
 {
     // quick look and Styles object doesn't seem to have a valid parent
@@ -385,7 +386,7 @@ ScVbaWorkbook::Styles( const cpo::uno::Any& Item )
     return cpo::uno::Any( dStyles );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbook::Names( const cpo::uno::Any& aIndex )
 {
     uno::Reference< frame::XModel > xModel( getModel(), uno::UNO_SET_THROW );
@@ -413,7 +414,7 @@ ScVbaWorkbook::getServiceNames()
     return aServiceNames;
 }
 
-OUString SAL_CALL
+OUString
 ScVbaWorkbook::getCodeName()
 {
     rtl::Reference< ScModelObj > xModelProp( getModel() );
@@ -430,9 +431,9 @@ ScVbaWorkbook::getSomething(const cpo::uno::Sequence<sal_Int8 >& rId )
     return 0;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_ScVbaWorkbook_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new ScVbaWorkbook(args, context));
 }

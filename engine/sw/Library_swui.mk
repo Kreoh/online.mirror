@@ -92,7 +92,6 @@ $(eval $(call gb_Library_add_exception_objects,swui,\
     sw/source/ui/chrdlg/swuiccoll \
     sw/source/ui/chrdlg/tblnumfm \
     sw/source/ui/config/mailconfigpage \
-    sw/source/ui/config/optcomp \
     sw/source/ui/config/optload \
     sw/source/ui/config/optpage \
     sw/source/ui/dialog/abstract \
@@ -138,7 +137,7 @@ $(eval $(call gb_Library_add_exception_objects,swui,\
     sw/source/ui/index/cntex \
     sw/source/ui/index/cnttab \
     sw/source/ui/index/multmrk \
-    sw/source/ui/seclabel/seclabeldlg \
+    sw/source/ui/seclabel/SwSecurityLabelTarget \
     sw/source/ui/index/swuiidxmrk \
     sw/source/ui/misc/bookmark \
     sw/source/ui/misc/contentcontroldlg \

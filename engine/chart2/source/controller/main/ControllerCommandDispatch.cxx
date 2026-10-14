@@ -60,8 +60,9 @@
 #include <editeng/escapementitem.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace
@@ -311,7 +312,7 @@ void ControllerState::update(
                 xEquationProperties->getPropertyValue( u"MayHaveCorrelationCoefficient"_ustr ) >>= bMayHaveR2;
             }
         }
-        catch(const uno::RuntimeException&)
+        catch(const cpo::uno::RuntimeException&)
         {
             TOOLS_WARN_EXCEPTION("chart2", "" );
         }
@@ -483,7 +484,7 @@ bool ModelState::HasAnyTitle() const
 } // namespace impl
 
 ControllerCommandDispatch::ControllerCommandDispatch(
-    const Reference< uno::XComponentContext > & xContext,
+    const Reference< cpo::uno::XComponentContext > & xContext,
     ChartController* pController, CommandDispatchContainer* pContainer ) :
         impl::ControllerCommandDispatch_Base( xContext ),
         m_xChartController( pController ),
@@ -569,7 +570,7 @@ void ControllerCommandDispatch::updateCommandAvailability()
         OSL_ENSURE(xChartModel.is(), "Invalid XChartDocument");
         if ( xChartModel.is() )
         {
-            css::uno::Reference< css::chart2::XDataProviderAccess > xCreatorDoc(xChartModel->getParent(), uno::UNO_QUERY);
+            cpo::uno::Reference< css::chart2::XDataProviderAccess > xCreatorDoc(xChartModel->getParent(), uno::UNO_QUERY);
             bCanCreateDataProvider = xCreatorDoc.is();
         }
     }
@@ -638,6 +639,8 @@ void ControllerCommandDispatch::updateCommandAvailability()
         m_aCommandAvailability[u".uno:XLineColor"_ustr] = bFormatObjectAvailable;
         m_aCommandAvailability[u".uno:LineWidth"_ustr] = bFormatObjectAvailable;
         m_aCommandAvailability[u".uno:FillGradient"_ustr] = bFormatObjectAvailable;
+        m_aCommandAvailability[u".uno:KitTransform"_ustr] = bIsWritable && bControllerStateIsValid && m_apControllerState->bHasSelectedObject;
+        m_aCommandAvailability[u".uno:KitSetTextSelection"_ustr] = bIsWritable;
     }
 
     m_aCommandAvailability[ u".uno:DiagramType"_ustr ] = bIsWritable;

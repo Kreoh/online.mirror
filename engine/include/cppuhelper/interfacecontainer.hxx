@@ -20,11 +20,11 @@
 #ifndef INCLUDED_CPPUHELPER_INTERFACECONTAINER_HXX
 #define INCLUDED_CPPUHELPER_INTERFACECONTAINER_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 
-#include "cppuhelper/interfacecontainer.h"
+#include <cppuhelper/interfacecontainer.h>
 
 
 namespace cppu
@@ -102,7 +102,7 @@ OInterfaceContainerHelper * OMultiTypeInterfaceContainerHelperVar< key , hashImp
 template< class key , class hashImpl , class equalImpl >
 sal_Int32 OMultiTypeInterfaceContainerHelperVar< key , hashImpl , equalImpl >::addInterface(
     const key & rKey,
-    const css::uno::Reference< css::uno::XInterface > & rListener )
+    const cpo::uno::Reference< cpo::uno::XInterface > & rListener )
 {
     ::osl::MutexGuard aGuard( rMutex );
     typename InterfaceMap::iterator iter = find( rKey );
@@ -120,7 +120,7 @@ sal_Int32 OMultiTypeInterfaceContainerHelperVar< key , hashImpl , equalImpl >::a
 template< class key , class hashImpl , class equalImpl >
 inline sal_Int32 OMultiTypeInterfaceContainerHelperVar< key , hashImpl , equalImpl >::removeInterface(
     const key & rKey,
-    const css::uno::Reference< css::uno::XInterface > & rListener )
+    const cpo::uno::Reference< cpo::uno::XInterface > & rListener )
 {
     ::osl::MutexGuard aGuard( rMutex );
 

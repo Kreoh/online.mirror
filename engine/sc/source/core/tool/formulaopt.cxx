@@ -20,7 +20,7 @@
 #include <utility>
 
 using namespace utl;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 namespace lang = ::com::sun::star::lang;
 
@@ -145,29 +145,6 @@ bool ScFormulaOptions::operator==( const ScFormulaOptions& rOpt ) const
 bool ScFormulaOptions::operator!=( const ScFormulaOptions& rOpt ) const
 {
     return !(operator==(rOpt));
-}
-
-ScTpFormulaItem::ScTpFormulaItem( ScFormulaOptions aOpt ) :
-    SfxPoolItem ( SID_SCFORMULAOPTIONS ),
-    theOptions  (std::move( aOpt ))
-{
-}
-
-ScTpFormulaItem::~ScTpFormulaItem()
-{
-}
-
-bool ScTpFormulaItem::operator==( const SfxPoolItem& rItem ) const
-{
-    assert(SfxPoolItem::operator==(rItem));
-
-    const ScTpFormulaItem& rPItem = static_cast<const ScTpFormulaItem&>(rItem);
-    return ( theOptions == rPItem.theOptions );
-}
-
-ScTpFormulaItem* ScTpFormulaItem::Clone( SfxItemPool * ) const
-{
-    return new ScTpFormulaItem( *this );
 }
 
 #define SCFORMULAOPT_GRAMMAR              0

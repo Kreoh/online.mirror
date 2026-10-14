@@ -2,6 +2,7 @@
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
+var calcHelper = require('../../common/calc_helper');
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', { testIsolation: false }, function() {
 
@@ -248,6 +249,144 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', 
 		// the row where the pointer last moved.
 		cy.cGet(helper.addressInputSelector).invoke('val').should((val) => {
 			expect(endRow(val)).to.be.greaterThan(rowBeforeScroll + 3);
+		});
+	});
+
+	// While a formula is being edited, the cell ranges it refers to are drawn on
+	// the overlay canvas from their positions in the sheet. The overlay has to
+	// be told which part of the sheet is on screen, so that what it draws moves
+	// with the view. Before the fix the overlay kept the area the sheet showed
+	// when it loaded, and everything drawn on it stayed behind by however far
+	// the view had scrolled.
+	it('Formula reference marks follow the view when it scrolls', function() {
+		// The highlight of the ranges a formula refers to is built when editing
+		// starts on a formula the cell already holds, so the formula goes in
+		// first and the cell is then reopened for editing.
+		helper.typeIntoInputField(helper.addressInputSelector, 'A1');
+		helper.typeIntoDocument('=SUM(A5:A10){enter}');
+		helper.processToIdle(this.win);
+
+		calcHelper.dblClickOnFirstCell();
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			expect(this.win.app.map._docLayer._referencesAll,
+				'reference marks while a formula is edited').to.have.length.greaterThan(0);
+		});
+
+		// A mouse wheel or a scroll bar drag reaches core through this same
+		// layout scroll; driving it directly keeps the test free of
+		// wheel-animation timing.
+		cy.then(() => {
+			this.win.app.activeDocument.activeLayout.scroll(0, 500, true);
+		});
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			const overlayBounds = this.win.app.map._docLayer._canvasOverlay.getBounds();
+
+			// The document must really have scrolled for the test to mean anything.
+			expect(layout.viewedRectangle.pY1, 'the view scrolled').to.be.greaterThan(0);
+
+			expect(overlayBounds.min.x, 'overlay left edge').to.equal(layout.viewedRectangle.pX1);
+			expect(overlayBounds.min.y, 'overlay top edge').to.equal(layout.viewedRectangle.pY1);
+		});
+
+		// Leave the cell and take the formula back out of the sheet, so the
+		// tests below start from the document as it was loaded.
+		helper.typeIntoDocument('{esc}');
+		helper.processToIdle(this.win);
+		helper.typeIntoDocument('{ctrl}z');
+		helper.processToIdle(this.win);
+	});
+
+	// A formula takes the addresses of the cells the user clicks. To reach a cell that is
+	// not on screen the user scrolls the sheet first, and the view then stays where it was
+	// scrolled to while the cell is clicked. The click puts the address in the formula and
+	// moves the caret inside the edited cell, which is now off screen, so before the fix the
+	// view followed that caret back to the edited cell.
+	it('The view stays where it was scrolled while a formula reference is clicked', function() {
+		helper.typeIntoDocument('=');
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			expect(this.win.app.file.textCursor.visible, 'the cell is being edited')
+				.to.equal(true);
+		});
+
+		// A mouse wheel or a scroll bar drag reaches core through this same layout scroll;
+		// driving it directly keeps the test free of wheel-animation timing. A whole frame
+		// height takes the edited cell off screen.
+		cy.then(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			layout.scroll(0, layout.frameSize.pY, true);
+		});
+		helper.processToIdle(this.win);
+
+		let scrolledTop;
+		cy.then(() => {
+			scrolledTop = this.win.app.activeDocument.activeLayout.viewedRectangle.pY1;
+			expect(scrolledTop, 'the view scrolled').to.be.greaterThan(0);
+			expect(this.win.app.calc.cellCursorRectangle.pY2,
+				'the edited cell is off screen').to.be.lessThan(scrolledTop);
+		});
+
+		// Click a cell in the middle of the part of the sheet the view now shows.
+		// A Cypress click on the canvas moves the browser focus, and the client
+		// saves the pending cell edit when the window loses focus, so the click
+		// goes to the section that handles it instead.
+		cy.then(() => {
+			const mouseControl = this.win.app.sectionContainer
+				.getSectionWithName('mouse-control');
+			const frame = this.win.app.activeDocument.activeLayout.frameSize;
+			const middleOfTheView = this.win.cool.SimplePoint.fromCorePixels(
+				[frame.pX / 2, frame.pY / 2]);
+
+			mouseControl.onClick(middleOfTheView,
+				new this.win.MouseEvent('click', { buttons: 1 }));
+		});
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			expect(this.win.app.file.textCursor.visible, 'the cell edit goes on')
+				.to.equal(true);
+			expect(this.win.app.map._docLayer._references.empty(),
+				'the clicked cell is marked as a reference').to.equal(false);
+			expect(this.win.app.activeDocument.activeLayout.viewedRectangle.pY1,
+				'the view after the click').to.equal(scrolledTop);
+		});
+
+		// Leave the cell without writing the formula into the sheet, so the tests below
+		// start from the document as it was loaded.
+		helper.typeIntoDocument('{esc}');
+		helper.processToIdle(this.win);
+	});
+
+	// The view scrolls by itself to keep a selection that grows past the bottom edge in
+	// sight. The cell cursor stays on the cell the selection started from, so that scroll
+	// takes it off screen, but the user did not scroll away from it, so the view keeps
+	// following it.
+	it('The view keeps following the cell cursor when a keyboard selection scrolls it away', function() {
+		// Click on a cell near the bottom edge of the view.
+		cy.cGet('#map')
+		.then(function(items) {
+			expect(items).to.have.lengthOf(1);
+			var XPos = items[0].getBoundingClientRect().right - 280;
+			var YPos = items[0].getBoundingClientRect().bottom - 60;
+			cy.cGet('body').click(XPos, YPos);
+		});
+		helper.processToIdle(this.win);
+
+		helper.typeIntoDocument('{shift}{pagedown}');
+		helper.processToIdle(this.win);
+
+		cy.then(() => {
+			const app = this.win.app;
+			expect(app.calc.cellCursorRectangle.pY2, 'the cell cursor is above the view')
+				.to.be.lessThan(app.activeDocument.activeLayout.viewedRectangle.pY1);
+			// Without the fix in place, this test would have failed with following turned off.
+			expect(app.isFollowingOff(), 'following after the selection').to.be.false;
 		});
 	});
 

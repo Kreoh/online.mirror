@@ -36,7 +36,7 @@
 #include "x509certificate_mscryptimpl.hxx"
 #include <comphelper/servicehelper.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include "akmngr.hxx"
 
@@ -54,6 +54,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang ;
+using namespace ::cpo;
 
 using ::com::sun::star::xml::crypto::XSecurityEnvironment ;
 using ::com::sun::star::security::XCertificate ;
@@ -110,7 +111,7 @@ static void traceTrustStatus(DWORD err)
     }
 }
 
-SecurityEnvironment_MSCryptImpl::SecurityEnvironment_MSCryptImpl( const uno::Reference< uno::XComponentContext >& xContext ) : m_hProv( 0 ) , m_pszContainer( nullptr ) , m_hKeyStore( nullptr ), m_hCertStore( nullptr ), m_hMySystemStore(nullptr), m_hRootSystemStore(nullptr), m_hTrustSystemStore(nullptr), m_hCaSystemStore(nullptr), m_bEnableDefault( false ){
+SecurityEnvironment_MSCryptImpl::SecurityEnvironment_MSCryptImpl( const uno::Reference< cpo::uno::XComponentContext >& xContext ) : m_hProv( 0 ) , m_pszContainer( nullptr ) , m_hKeyStore( nullptr ), m_hCertStore( nullptr ), m_hMySystemStore(nullptr), m_hRootSystemStore(nullptr), m_hTrustSystemStore(nullptr), m_hCaSystemStore(nullptr), m_bEnableDefault( false ){
 
     m_xServiceManager.set(xContext, uno::UNO_QUERY);
 }
@@ -160,17 +161,17 @@ SecurityEnvironment_MSCryptImpl::~SecurityEnvironment_MSCryptImpl() {
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SecurityEnvironment_MSCryptImpl::getImplementationName() {
-    return "com.sun.star.xml.crypto.SecurityEnvironment";
+OUString SecurityEnvironment_MSCryptImpl::getImplementationName() {
+    return u"com.sun.star.xml.crypto.SecurityEnvironment"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL SecurityEnvironment_MSCryptImpl::supportsService( const OUString& serviceName) {
+bool SecurityEnvironment_MSCryptImpl::supportsService( const OUString& serviceName) {
     return cppu::supportsService(this, serviceName);
 }
 /* XServiceInfo */
-cpo::uno::Sequence< OUString > SAL_CALL SecurityEnvironment_MSCryptImpl::getSupportedServiceNames() {
-    return { "com.sun.star.xml.crypto.SecurityEnvironment" };
+cpo::uno::Sequence< OUString > SecurityEnvironment_MSCryptImpl::getSupportedServiceNames() {
+    return { u"com.sun.star.xml.crypto.SecurityEnvironment"_ustr };
 }
 
 HCRYPTPROV SecurityEnvironment_MSCryptImpl::getCryptoProvider() {
@@ -400,7 +401,7 @@ uno::Reference< XCertificate > SecurityEnvironment_MSCryptImpl::getCertificate( 
 
     certInfo.Issuer.pbData = static_cast<BYTE*>(malloc( certInfo.Issuer.cbData ));
     if(!certInfo.Issuer.pbData)
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
 
     if( ! ( CertStrToNameW(
         X509_ASN_ENCODING | PKCS_7_ASN_ENCODING ,
@@ -420,7 +421,7 @@ uno::Reference< XCertificate > SecurityEnvironment_MSCryptImpl::getCertificate( 
     if (!cryptSerialNumber.pbData)
     {
         free( certInfo.Issuer.pbData ) ;
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
     }
     for( i = 0; i < cryptSerialNumber.cbData; i ++ )
         cryptSerialNumber.pbData[i] = serialNumber[ cryptSerialNumber.cbData - i - 1 ] ;
@@ -585,7 +586,7 @@ cpo::uno::Sequence< uno::Reference < XCertificate > > SecurityEnvironment_MSCryp
 
     const auto* xcert = dynamic_cast<X509Certificate_MSCryptImpl*>(begin.get());
     if( xcert == nullptr ) {
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
     }
 
     pCertContext = xcert->getMswcryCert() ;
@@ -807,7 +808,7 @@ sal_Int32 SecurityEnvironment_MSCryptImpl::verifyCertificate(
 
     const auto* xcert = dynamic_cast<X509Certificate_MSCryptImpl*>(aCert.get());
     if( xcert == nullptr ) {
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
     }
 
     pCertContext = xcert->getMswcryCert() ;
@@ -965,13 +966,13 @@ sal_Int32 SecurityEnvironment_MSCryptImpl::verifyCertificate(
     return validity ;
 }
 
-sal_Int32 SecurityEnvironment_MSCryptImpl::getCertificateCharacters( const css::uno::Reference< css::security::XCertificate >& aCert ) {
+sal_Int32 SecurityEnvironment_MSCryptImpl::getCertificateCharacters( const cpo::uno::Reference< css::security::XCertificate >& aCert ) {
     sal_Int32 characters ;
     PCCERT_CONTEXT pCertContext ;
 
     const auto* xcert = dynamic_cast<X509Certificate_MSCryptImpl*>(aCert.get());
     if( xcert == nullptr ) {
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
     }
 
     pCertContext = xcert->getMswcryCert() ;
@@ -1032,7 +1033,7 @@ static rtl::Reference<X509Certificate_MSCryptImpl> MswcryCertContextToXCert( PCC
 
 OUString SecurityEnvironment_MSCryptImpl::getSecurityEnvironmentInformation()
 {
-    return "Microsoft Crypto API";
+    return u"Microsoft Crypto API"_ustr;
 }
 
 xmlSecKeysMngrPtr SecurityEnvironment_MSCryptImpl::createKeysManager() {
@@ -1042,7 +1043,7 @@ xmlSecKeysMngrPtr SecurityEnvironment_MSCryptImpl::createKeysManager() {
      */
     xmlSecKeysMngrPtr pKeysMngr = xmlsecurity::MSCryptoAppliedKeysMngrCreate() ;
     if( pKeysMngr == nullptr )
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
 
     /*-
      * Adopt system default certificate store.
@@ -1054,7 +1055,7 @@ xmlSecKeysMngrPtr SecurityEnvironment_MSCryptImpl::createKeysManager() {
             if( xmlsecurity::MSCryptoAppliedKeysMngrAdoptKeyStore( pKeysMngr, m_hMySystemStore ) < 0 ) {
                 CertCloseStore( m_hMySystemStore, CERT_CLOSE_STORE_CHECK_FLAG ) ;
                 m_hMySystemStore = nullptr;
-                throw uno::RuntimeException() ;
+                throw cpo::uno::RuntimeException() ;
             }
             m_hMySystemStore = nullptr;
         }
@@ -1065,7 +1066,7 @@ xmlSecKeysMngrPtr SecurityEnvironment_MSCryptImpl::createKeysManager() {
             if( xmlsecurity::MSCryptoAppliedKeysMngrAdoptTrustedStore( pKeysMngr, m_hRootSystemStore ) < 0 ) {
                 CertCloseStore( m_hRootSystemStore, CERT_CLOSE_STORE_CHECK_FLAG ) ;
                 m_hRootSystemStore = nullptr;
-                throw uno::RuntimeException() ;
+                throw cpo::uno::RuntimeException() ;
             }
             m_hRootSystemStore = nullptr;
         }
@@ -1076,7 +1077,7 @@ xmlSecKeysMngrPtr SecurityEnvironment_MSCryptImpl::createKeysManager() {
             if( xmlsecurity::MSCryptoAppliedKeysMngrAdoptUntrustedStore( pKeysMngr, m_hTrustSystemStore ) < 0 ) {
                 CertCloseStore( m_hTrustSystemStore, CERT_CLOSE_STORE_CHECK_FLAG ) ;
                 m_hTrustSystemStore = nullptr;
-                throw uno::RuntimeException() ;
+                throw cpo::uno::RuntimeException() ;
             }
             m_hTrustSystemStore = nullptr;
         }
@@ -1087,7 +1088,7 @@ xmlSecKeysMngrPtr SecurityEnvironment_MSCryptImpl::createKeysManager() {
             if( xmlsecurity::MSCryptoAppliedKeysMngrAdoptUntrustedStore( pKeysMngr, m_hCaSystemStore ) < 0 ) {
                 CertCloseStore( m_hCaSystemStore, CERT_CLOSE_STORE_CHECK_FLAG ) ;
                 m_hCaSystemStore = nullptr;
-                throw uno::RuntimeException() ;
+                throw cpo::uno::RuntimeException() ;
             }
             m_hCaSystemStore = nullptr;
         }
@@ -1101,9 +1102,9 @@ void SecurityEnvironment_MSCryptImpl::destroyKeysManager(xmlSecKeysMngrPtr pKeys
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_xml_crypto_SecurityEnvironment_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SecurityEnvironment_MSCryptImpl(pCtx));
 }

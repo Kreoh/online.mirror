@@ -22,8 +22,10 @@
 #include <editeng/unolingu.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/outdev.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 Size GetGraphicSizeTwip(const Graphic& rGraphic, vcl::RenderContext* pOutDev)
 {

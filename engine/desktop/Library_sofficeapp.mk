@@ -13,7 +13,6 @@ $(eval $(call gb_Library_set_include,sofficeapp,\
     $$(INCLUDE) \
     -I$(SRCDIR)/desktop/inc \
     -I$(SRCDIR)/desktop/source/inc \
-    -I$(SRCDIR)/desktop/source/deployment/inc \
 ))
 
 $(eval $(call gb_Library_use_externals,sofficeapp, \
@@ -23,6 +22,8 @@ $(eval $(call gb_Library_use_externals,sofficeapp, \
     $(if $(filter OPENCL,$(BUILD_TYPE)),clew) \
     boost_headers \
     dbus \
+    libxml2 \
+    zlib \
     $(if $(ENABLE_CURL), \
     $(if $(filter-out EMSCRIPTEN iOS,$(OS)), \
         curl \
@@ -32,12 +33,6 @@ $(eval $(call gb_Library_use_externals,sofficeapp, \
 $(eval $(call gb_Library_use_custom_headers,sofficeapp,\
 	officecfg/registry \
 ))
-
-ifeq ($(ENABLE_EMBIND_UNO),TRUE)
-$(eval $(call gb_Library_use_custom_headers,sofficeapp, \
-    static/unoembind \
-))
-endif
 
 $(eval $(call gb_Library_use_api,sofficeapp,\
 	udkapi \
@@ -51,10 +46,10 @@ $(eval $(call gb_Library_add_defs,sofficeapp,\
 $(eval $(call gb_Library_set_precompiled_header,sofficeapp,desktop/inc/pch/precompiled_sofficeapp))
 
 $(eval $(call gb_Library_use_libraries,sofficeapp,\
+    basegfx \
     comphelper \
     cppu \
     cppuhelper \
-    deploymentmisc \
     drawinglayercore \
     editeng \
     fwk \
@@ -65,6 +60,7 @@ $(eval $(call gb_Library_use_libraries,sofficeapp,\
     salhelper \
     sb \
     sfx \
+    sot \
     svl \
     svx \
     svxcore \
@@ -103,14 +99,15 @@ endif
 $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
     desktop/source/app/app \
     desktop/source/app/appinit \
-    desktop/source/app/check_ext_deps \
     desktop/source/app/cmdlineargs \
     desktop/source/app/cmdlinehelp \
     desktop/source/app/desktopcontext \
     desktop/source/app/dispatchwatcher \
-    desktop/source/app/initjsunoscripting \
     desktop/source/app/langselect \
+    desktop/source/app/desktopresid \
+    desktop/source/app/lockfile \
     desktop/source/app/lockfile2 \
+    desktop/source/app/officepipe \
     desktop/source/app/officeipcthread \
     desktop/source/app/opencl \
     desktop/source/app/sofficemain \
@@ -121,16 +118,16 @@ $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
 ifneq ($(filter $(OS),ANDROID iOS MACOSX WNT),)
 $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
 	desktop/source/lib/init \
+	desktop/source/lib/l10ntranslate \
 	desktop/source/lib/kitinteractionhandler \
 	desktop/source/lib/kitclipboard \
-	$(if $(filter $(OS),ANDROID), \
-		desktop/source/lib/kitandroid) \
 ))
 $(eval $(call gb_Library_set_componentfile,sofficeapp,desktop/kitclipboard,services))
 else
 ifneq ($(filter TRUE,$(USING_X11) $(DISABLE_GUI))($filter EMSCRIPTEN,$(OS)),)
 $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
 	desktop/source/lib/init \
+	desktop/source/lib/l10ntranslate \
 	desktop/source/lib/kitinteractionhandler \
 	desktop/source/lib/kitclipboard \
 ))

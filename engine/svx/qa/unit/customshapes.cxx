@@ -22,15 +22,23 @@
 #include <sfx2/viewsh.hxx>
 #include <svl/intitem.hxx>
 #include <svx/EnhancedCustomShape2d.hxx>
+#include <svx/EnhancedCustomShapeGeometry.hxx>
+#include <svx/EnhancedCustomShapeTypeNames.hxx>
 #include <svx/extrusionbar.hxx>
 #include <svx/graphichelper.hxx>
 #include <svx/svdoashp.hxx>
+#include <svx/svdogrp.hxx>
+#include <svx/scene3d.hxx>
+#include <svx/svditer.hxx>
 #include <svx/svdopath.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svxids.hrc>
+#include <svx/xfillit0.hxx>
+#include <svx/xflclit.hxx>
 #include <unotools/tempfile.hxx>
 #include <vcl/filter/PngImageReader.hxx>
 #include <vcl/BitmapReadAccess.hxx>
+#include <comphelper/propertysequence.hxx>
 
 #include <cppunit/TestAssert.h>
 
@@ -40,8 +48,10 @@
 #include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -1420,6 +1430,104 @@ CPPUNIT_TEST_FIXTURE(CustomshapesTest, testTdf160421_3D_FlipLight)
     xShape = getShape(2);
     nColorDistance = aNormalColor.GetColorError(getColor(xShape, 0.6, 0.6));
     CPPUNIT_ASSERT_LESS(sal_uInt16(6), nColorDistance);
+}
+
+CPPUNIT_TEST_FIXTURE(CustomshapesTest, testGalleryShapeTypeMapping)
+{
+    // These gallery shapes carry their own inline geometry and have no legacy binary
+    // equivalent. They must map to the same type as other shapes with inline geometry
+    // instead of staying unmapped, or converting them to a polygon splits each of them
+    // into an unneeded fill object and a stroke object.
+    CPPUNIT_ASSERT_EQUAL(mso_sptMin, EnhancedCustomShapeTypeNames::Get(u"frame"_ustr));
+    CPPUNIT_ASSERT_EQUAL(mso_sptMin, EnhancedCustomShapeTypeNames::Get(u"circle-pie"_ustr));
+    CPPUNIT_ASSERT_EQUAL(mso_sptMin, EnhancedCustomShapeTypeNames::Get(u"puzzle"_ustr));
+    CPPUNIT_ASSERT_EQUAL(mso_sptMin,
+                          EnhancedCustomShapeTypeNames::Get(u"up-right-down-arrow"_ustr));
+    CPPUNIT_ASSERT_EQUAL(mso_sptMin,
+                          EnhancedCustomShapeTypeNames::Get(u"up-right-arrow-callout"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(CustomshapesTest, testConvertRingToPolygonIsSingleObject)
+{
+    // Given a ring (donut) shape:
+    mxComponent = loadFromDesktop(u"private:factory/sdraw"_ustr);
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent,
+                                                                   uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XDrawPage> xPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                             uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XShape> xShape(
+        xFactory->createInstance(u"com.sun.star.drawing.CustomShape"_ustr), uno::UNO_QUERY);
+    xPage->add(xShape);
+    xShape->setSize(awt::Size(10000, 10000));
+    xShape->setPosition(awt::Point(1000, 1000));
+    cpo::uno::Sequence<beans::PropertyValue> aShapeGeometry(comphelper::InitPropertySequence({
+        { u"Type"_ustr, cpo::uno::Any(u"ring"_ustr) },
+    }));
+    uno::Reference<beans::XPropertySet> xShapeProps(xShape, uno::UNO_QUERY);
+    xShapeProps->setPropertyValue(u"CustomShapeGeometry"_ustr, cpo::uno::Any(aShapeGeometry));
+
+    SdrObject* pObj = SdrObject::getSdrObjectFromXShape(xShape);
+    CPPUNIT_ASSERT(pObj);
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    CPPUNIT_ASSERT(pViewShell);
+    SdrView* pSdrView = pViewShell->GetDrawView();
+    pSdrView->MarkObj(pObj, pSdrView->GetSdrPageView());
+
+    // When converting it to a polygon:
+    dispatchCommand(mxComponent, u".uno:ChangePolygon"_ustr, {});
+
+    // Then the result must be a single path object, not a group of a fill and a line shape.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt8>(1), countShapes());
+    uno::Reference<drawing::XShape> xConverted(getShape(0));
+    SdrObject* pConverted = SdrObject::getSdrObjectFromXShape(xConverted);
+    CPPUNIT_ASSERT(pConverted);
+    CPPUNIT_ASSERT(!dynamic_cast<SdrObjGroup*>(pConverted));
+}
+
+CPPUNIT_TEST_FIXTURE(CustomshapesTest, testExtrusionSlideBackgroundFill)
+{
+    // The document contains an extruded 'rectangle' custom shape without outline. Its area uses
+    // the slide background, which is solid #2a9d8f.
+    loadFromFile(u"ExtrusionSlideBackground.fodp");
+
+    uno::Reference<drawing::XShape> xShape(getShape(0));
+    SdrObjCustomShape& rSdrCustomShape(
+        static_cast<SdrObjCustomShape&>(*SdrObject::getSdrObjectFromXShape(xShape)));
+
+    // Counts the faces of the rendered 3D scene that are filled with aColor.
+    auto countFacesWithColor = [&rSdrCustomShape](Color aColor) {
+        const E3dScene* pScene = DynCastE3dScene(rSdrCustomShape.GetSdrObjectFromCustomShape());
+        CPPUNIT_ASSERT(pScene);
+        sal_Int32 nCount(0);
+        SdrObjListIter aIter(pScene->GetSubList(), SdrIterMode::DeepNoGroups);
+        while (aIter.IsMore())
+        {
+            const SdrObject* pObject = aIter.Next();
+            if (pObject->GetMergedItem(XATTR_FILLSTYLE).GetValue() == drawing::FillStyle_SOLID
+                && pObject->GetMergedItem(XATTR_FILLCOLOR).GetColorValue() == aColor)
+                ++nCount;
+        }
+        return nCount;
+    };
+
+    // The front of the shape shows the slide background.
+    CPPUNIT_ASSERT_GREATER(sal_Int32(0), countFacesWithColor(Color(0x2a9d8f)));
+
+    // The shape follows a change of the slide background.
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent,
+                                                                   uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                              uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xBackground(
+        xFactory->createInstance(u"com.sun.star.drawing.Background"_ustr), uno::UNO_QUERY_THROW);
+    xBackground->setPropertyValue(u"FillStyle"_ustr, cpo::uno::Any(drawing::FillStyle_SOLID));
+    xBackground->setPropertyValue(u"FillColor"_ustr, cpo::uno::Any(Color(0xcc3366)));
+    xPage->setPropertyValue(u"Background"_ustr, cpo::uno::Any(xBackground));
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), countFacesWithColor(Color(0x2a9d8f)));
+    CPPUNIT_ASSERT_GREATER(sal_Int32(0), countFacesWithColor(Color(0xcc3366)));
 }
 }
 

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <scitems.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/objsh.hxx>
@@ -53,6 +54,7 @@
 
 using namespace formula;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 //      init/ shared functions for dialog
 

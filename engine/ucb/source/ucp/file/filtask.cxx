@@ -67,8 +67,8 @@
 
 using namespace fileaccess;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::ucb;
 
 TaskManager::UnqPathData::UnqPathData() = default;
@@ -128,7 +128,7 @@ constexpr OUString ContentType( u"ContentType"_ustr );
 constexpr OUString IsReadOnly( u"IsReadOnly"_ustr );
 constexpr OUString CreatableContentsInfo( u"CreatableContentsInfo"_ustr );
 
-TaskManager::TaskManager( const uno::Reference< uno::XComponentContext >& rxContext,
+TaskManager::TaskManager( const uno::Reference< cpo::uno::XComponentContext >& rxContext,
               FileProvider* pProvider, bool bWithConfig )
     : m_nCommandId( 0 ),
       m_pProvider( pProvider ),
@@ -918,7 +918,7 @@ TaskManager::setv( const OUString& aUnqPath,
                         --propChanged; // unsuccessful setting
                         cpo::uno::Sequence<cpo::uno::Any> names(comphelper::InitAnyPropertySequence(
                         {
-                            {"Uri", cpo::uno::Any(aUnqPath)}
+                            {u"Uri"_ustr, cpo::uno::Any(aUnqPath)}
                         }));
                         retRange[i] <<= InteractiveAugmentedIOException(
                             OUString(),
@@ -980,7 +980,7 @@ TaskManager::setv( const OUString& aUnqPath,
                         --propChanged; // unsuccessful setting
                         cpo::uno::Sequence<cpo::uno::Any> names(comphelper::InitAnyPropertySequence(
                         {
-                            {"Uri", cpo::uno::Any(aUnqPath)}
+                            {u"Uri"_ustr, cpo::uno::Any(aUnqPath)}
                         }));
                         IOErrorCode ioError;
                         switch( err )

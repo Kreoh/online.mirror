@@ -28,7 +28,7 @@
 
 using namespace connectivity::flat;
 using namespace connectivity::file;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::beans;
 using namespace css::sdbcx;
@@ -44,9 +44,9 @@ OUString ODriver::getImplementationName(  )
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 connectivity_flat_ODriver(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     rtl::Reference<ODriver> ret;
     try {

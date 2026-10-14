@@ -56,7 +56,7 @@
 #include <o3tl/string_view.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
@@ -155,9 +155,9 @@ Sequence< OUString > BibliographyLoader::getSupportedServiceNames()
     return { u"com.sun.star.frame.FrameLoader"_ustr, u"com.sun.star.frame.Bibliography"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_BibliographyLoader_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new BibliographyLoader());
 }

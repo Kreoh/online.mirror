@@ -6,7 +6,7 @@
   <name>Collabora Office</name>
   <summary>The Collabora Office productivity suite</summary>
   <description>
-    <p>Collabora Office brings the familiar Collabora Online experience to your computer - so you can create, edit, and present with a beautiful, modern UI. Built on LibreOffice, it delivers excellent interoperability with ODF and Microsoft Office formats (DOCX/XLSX/PPTX), and exports to PDF with ease. Your documents stay on your device unless you choose to share them - privacy by design.</p>
+    <p>Collabora Office brings the familiar Collabora Online experience to your computer - so you can create, edit, and present with a beautiful, modern UI. It delivers excellent interoperability with ODF and Microsoft Office formats (DOCX/XLSX/PPTX), and exports to PDF with ease. Your documents stay on your device unless you choose to share them - privacy by design.</p>
   </description>
   <launchable type="desktop-id">com.collaboraoffice.Office.desktop</launchable>
   <url type="homepage">https://collaboraoffice.com</url>
@@ -41,6 +41,37 @@
   </kudos>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="26.04.4.3-1" date="2026-10-08">
+      <description>
+        <p>New features and fixes in this release:</p>
+        <ul>
+          <li>Tabbed windows: open several documents in one window, switch between them, drag tabs around, and manage them from a tab context menu; quit with Ctrl+Q</li>
+          <li>Better desktop integration: windows open at a sensible size, GNOME integration fixes, native file pickers through the desktop portal, and dragging and dropping or pasting images</li>
+          <li>Table styles in Calc: create your own styles, set a default, rename and resize tables, add a totals row, remove duplicates, and summarize a table with a pivot table</li>
+          <li>Funnel charts, and a new Statistical chart group with histogram bin settings</li>
+          <li>Impress: a slide notes panel below the slide, a Table Design tab, and pausing an automatic slideshow with P</li>
+          <li>Track Changes in the Calc menu and notebookbar, and comments shown in your own time zone</li>
+          <li>All fixes and improvements from the shared codebase with Collabora Online 26.04.4, including many document compatibility fixes for Microsoft Word, Excel and PowerPoint files</li>
+        </ul>
+      </description>
+    </release>
+    <release version="26.04.3.3-1" date="2026-09-10">
+      <description>
+        <p>New features and fixes in this release:</p>
+        <ul>
+          <li>Open documents from Nextcloud and OpenCloud servers straight from the start screen, and save them back - switching to real-time collaboration when someone else joins</li>
+          <li>A refreshed start screen with introductory documents, better templates handling, and Recent files that keep up with Save As</li>
+          <li>Multi-monitor presenting fixes, videos that start with their slide, and animated GIFs in Impress and Draw</li>
+          <li>New in Calc: Principal Component Analysis, the ARRAYTOTEXT and MSVD functions, spilled-range references, and Text to Column</li>
+          <li>Copy and paste as Markdown in Writer, Calc and Impress</li>
+          <li>The AI assistant now builds whole presentations - it proposes an outline you can edit, then lays it out on a design template of your choice</li>
+          <li>Maximize the Impress slide panel into a grid of large thumbnails, reorder slides by dragging, and rename sections in place</li>
+          <li>Settings that persist, sharper cursors on HiDPI screens, and automatic dark mode following your desktop</li>
+          <li>A broad set of accessibility improvements: keyboard navigation, screen-reader labels, and focus and contrast fixes throughout</li>
+          <li>All fixes and improvements from the shared codebase with Collabora Online 26.04.3.3, including many document compatibility fixes for Microsoft Word, Excel and PowerPoint files</li>
+        </ul>
+      </description>
+    </release>
     <release version="26.04.2.4-2" date="2026-08-01">
       <description>
         <p>New features and fixes in this release:</p>

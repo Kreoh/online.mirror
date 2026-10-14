@@ -32,7 +32,7 @@
 
 namespace dbaxml
 {
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::container;
@@ -71,8 +71,8 @@ OXMLHierarchyCollection::OXMLHierarchyCollection( ODBFilter& rImport
         {
             Sequence<Any> aArguments(comphelper::InitAnyPropertySequence(
             {
-                {"Name", Any(sName)}, // set as folder
-                {"Parent", Any(_xParentContainer)},
+                {u"Name"_ustr, Any(sName)}, // set as folder
+                {u"Parent"_ustr, Any(_xParentContainer)},
             }));
             m_xContainer.set(xORB->createInstanceWithArguments(_sCollectionServiceName,aArguments),UNO_QUERY);
             Reference<XNameContainer> xNameContainer(_xParentContainer,UNO_QUERY);
@@ -101,8 +101,8 @@ OXMLHierarchyCollection::~OXMLHierarchyCollection()
 
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > OXMLHierarchyCollection::createFastChildContext(
-            sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > OXMLHierarchyCollection::createFastChildContext(
+            sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
 

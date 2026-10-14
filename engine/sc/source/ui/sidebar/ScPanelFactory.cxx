@@ -34,7 +34,7 @@
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace sc::sidebar {
@@ -47,7 +47,7 @@ ScPanelFactory::~ScPanelFactory()
 {
 }
 
-Reference<ui::XUIElement> SAL_CALL ScPanelFactory::createUIElement (
+Reference<ui::XUIElement> ScPanelFactory::createUIElement (
     const OUString& rsResourceURL,
     const ::cpo::uno::Sequence<css::beans::PropertyValue>& rArguments)
 {
@@ -108,7 +108,7 @@ Reference<ui::XUIElement> SAL_CALL ScPanelFactory::createUIElement (
                 std::move(xPanel),
                 ui::LayoutSize(nMinimumSize,-1,-1));
     }
-    catch (const uno::RuntimeException &)
+    catch (const cpo::uno::RuntimeException &)
     {
         throw;
     }
@@ -140,8 +140,8 @@ cpo::uno::Sequence<OUString> ScPanelFactory::getSupportedServiceNames()
 
 } // end of namespace sc::sidebar
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-ScPanelFactory_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ScPanelFactory_get_implementation(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new sc::sidebar::ScPanelFactory());
 }

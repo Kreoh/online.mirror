@@ -19,7 +19,7 @@
 #ifndef INCLUDED_VBAHELPER_VBAPAGESETUPBASE_HXX
 #define INCLUDED_VBAHELPER_VBAPAGESETUPBASE_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <ooo/vba/XPageSetupBase.hpp>
 #include <sal/types.h>
 #include <vbahelper/vbadllapi.h>
@@ -29,8 +29,8 @@
 namespace com::sun::star {
     namespace beans { class XPropertySet; }
     namespace frame { class XModel; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ooo::vba {
     class XHelperInterface;
@@ -41,34 +41,34 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::XPageSetupBase > VbaPageSetu
 class VBAHELPER_DLLPUBLIC VbaPageSetupBase :  public VbaPageSetupBase_BASE
 {
 protected:
-    css::uno::Reference< css::beans::XPropertySet > mxPageProps;
+    cpo::uno::Reference< css::beans::XPropertySet > mxPageProps;
     sal_Int32 mnOrientLandscape;
     sal_Int32 mnOrientPortrait;
 
-    /// @throws css::uno::RuntimeException
-    VbaPageSetupBase( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                    const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    /// @throws cpo::uno::RuntimeException
+    VbaPageSetupBase( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 public:
 
     // Attribute
-    virtual double SAL_CALL getTopMargin() override;
-    virtual void SAL_CALL setTopMargin( double margin ) override;
-    virtual double SAL_CALL getBottomMargin() override;
-    virtual void SAL_CALL setBottomMargin( double margin ) override;
-    virtual double SAL_CALL getRightMargin() override;
-    virtual void SAL_CALL setRightMargin( double margin ) override;
-    virtual double SAL_CALL getLeftMargin() override;
-    virtual void SAL_CALL setLeftMargin( double margin ) override;
-    /// @throws css::uno::RuntimeException
-    virtual double SAL_CALL getHeaderMargin();
-    /// @throws css::uno::RuntimeException
-    virtual void SAL_CALL setHeaderMargin( double margin );
-    /// @throws css::uno::RuntimeException
-    virtual double SAL_CALL getFooterMargin();
-    /// @throws css::uno::RuntimeException
-    virtual void SAL_CALL setFooterMargin( double margin );
-    virtual sal_Int32 SAL_CALL getOrientation() override;
-    virtual void SAL_CALL setOrientation( sal_Int32 orientation ) override;
+    virtual double getTopMargin() override;
+    virtual void setTopMargin( double margin ) override;
+    virtual double getBottomMargin() override;
+    virtual void setBottomMargin( double margin ) override;
+    virtual double getRightMargin() override;
+    virtual void setRightMargin( double margin ) override;
+    virtual double getLeftMargin() override;
+    virtual void setLeftMargin( double margin ) override;
+    /// @throws cpo::uno::RuntimeException
+    virtual double getHeaderMargin();
+    /// @throws cpo::uno::RuntimeException
+    virtual void setHeaderMargin( double margin );
+    /// @throws cpo::uno::RuntimeException
+    virtual double getFooterMargin();
+    /// @throws cpo::uno::RuntimeException
+    virtual void setFooterMargin( double margin );
+    virtual sal_Int32 getOrientation() override;
+    virtual void setOrientation( sal_Int32 orientation ) override;
 };
 #endif
 

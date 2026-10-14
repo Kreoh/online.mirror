@@ -34,33 +34,33 @@ class CachedDynamicResultSetStub
 {
 protected:
     virtual void
-    impl_InitResultSetOne( std::unique_lock<std::mutex>& rGuard, const css::uno::Reference< css::sdbc::XResultSet >& xResultSet ) override;
+    impl_InitResultSetOne( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference< css::sdbc::XResultSet >& xResultSet ) override;
     virtual void
-    impl_InitResultSetTwo( std::unique_lock<std::mutex>& rGuard, const css::uno::Reference< css::sdbc::XResultSet >& xResultSet ) override;
+    impl_InitResultSetTwo( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference< css::sdbc::XResultSet >& xResultSet ) override;
 
 public:
-    CachedDynamicResultSetStub( css::uno::Reference< css::ucb::XDynamicResultSet > const & xOrigin
-        , const css::uno::Reference< css::uno::XComponentContext > & rxContext );
+    CachedDynamicResultSetStub( cpo::uno::Reference< css::ucb::XDynamicResultSet > const & xOrigin
+        , const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext );
 
     virtual ~CachedDynamicResultSetStub() override;
 
 
     // XInterface
-    virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type & rType ) override;
-    virtual void SAL_CALL acquire()
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
         noexcept override;
-    virtual void SAL_CALL release()
+    virtual void release()
         noexcept override;
 
     // XTypeProvider
 
-    virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
-    virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes() override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 
@@ -69,32 +69,32 @@ class CachedDynamicResultSetStubFactory final :
                     css::lang::XServiceInfo,
                     css::ucb::XCachedDynamicResultSetStubFactory>
 {
-    css::uno::Reference< css::uno::XComponentContext >    m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >    m_xContext;
 
 public:
 
     CachedDynamicResultSetStubFactory(
-        const css::uno::Reference< css::uno::XComponentContext > & rxContext);
+        const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext);
 
     virtual ~CachedDynamicResultSetStubFactory() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XCachedDynamicResultSetStubFactory
 
-    virtual css::uno::Reference< css::ucb::XDynamicResultSet > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XDynamicResultSet >
     createCachedDynamicResultSetStub(
-                const css::uno::Reference< css::ucb::XDynamicResultSet > & Source ) override;
+                const cpo::uno::Reference< css::ucb::XDynamicResultSet > & Source ) override;
 
 
-    virtual void SAL_CALL connectToCache(
-                  const css::uno::Reference< css::ucb::XDynamicResultSet > & Source
-                , const css::uno::Reference< css::ucb::XDynamicResultSet > & TargetCache
+    virtual void connectToCache(
+                  const cpo::uno::Reference< css::ucb::XDynamicResultSet > & Source
+                , const cpo::uno::Reference< css::ucb::XDynamicResultSet > & TargetCache
                 , const cpo::uno::Sequence< css::ucb::NumberedSortingInfo > & SortingInfo
-                , const css::uno::Reference< css::ucb::XAnyCompareFactory > & CompareFactory
+                , const cpo::uno::Reference< css::ucb::XAnyCompareFactory > & CompareFactory
                 ) override;
 };
 

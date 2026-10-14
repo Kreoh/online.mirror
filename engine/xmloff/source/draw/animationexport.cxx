@@ -73,6 +73,7 @@
 #include <xmloff/animationexport.hxx>
 
 using namespace css;
+using namespace ::cpo;
 using namespace ::cppu;
 using namespace ::com::sun::star::animations;
 using namespace ::com::sun::star::presentation;
@@ -81,13 +82,13 @@ using namespace ::com::sun::star::beans;
 using namespace ::xmloff::token;
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::cpo::uno::Exception;
-using ::com::sun::star::uno::RuntimeException;
-using ::com::sun::star::uno::XInterface;
+using ::cpo::uno::RuntimeException;
+using ::cpo::uno::XInterface;
 using ::com::sun::star::beans::NamedValue;
 using ::com::sun::star::container::XEnumerationAccess;
 using ::com::sun::star::container::XEnumeration;
@@ -333,6 +334,42 @@ const SvXMLEnumMapEntry<sal_Int16> aAnimations_EnumMap_TransitionSubType[] =
 
     { XML_TOKEN_INVALID, 0 }
 };
+// Subtypes that have no SMIL name: these are written as coext:subtype, with a fallback in smil:subtype.
+const SvXMLEnumMapEntry<sal_Int16> aAnimations_EnumMap_TransitionSubTypeExt[] =
+{
+    { XML_AIRPLANE,             TransitionSubType::AIRPLANE },
+
+    { XML_TOKEN_INVALID, 0 }
+};
+
+sal_Int16 getTransitionSubTypeFallback(sal_Int16 nSubtype)
+{
+    switch (nSubtype)
+    {
+        case TransitionSubType::AIRPLANE:
+            // Fall: the sheet falls over instead of flying away.
+            return TransitionSubType::LEFTTORIGHT;
+    }
+    return nSubtype;
+}
+
+namespace
+{
+void exportTransitionSubType(SvXMLExport& rExport, sal_Int16 nSubtype)
+{
+    OUStringBuffer sTmp;
+    OUString aExtSubtype;
+    if (SvXMLUnitConverter::convertEnum(sTmp, nSubtype, aAnimations_EnumMap_TransitionSubTypeExt))
+        aExtSubtype = sTmp.makeStringAndClear();
+
+    SvXMLUnitConverter::convertEnum(sTmp, getTransitionSubTypeFallback(nSubtype),
+                                    aAnimations_EnumMap_TransitionSubType);
+    rExport.AddAttribute(XML_NAMESPACE_SMIL, XML_SUBTYPE, sTmp.makeStringAndClear());
+
+    if (!aExtSubtype.isEmpty() && (rExport.getSaneDefaultVersion() & SvtSaveOptions::ODFSVER_EXTENDED))
+        rExport.AddAttribute(XML_NAMESPACE_CO_EXT, XML_SUBTYPE, aExtSubtype);
+}
+}
 const SvXMLEnumMapEntry<sal_Int16> aAnimations_EnumMap_EventTrigger[] =
 {
     { XML_ONBEGIN,          EventTrigger::ON_BEGIN },
@@ -495,7 +532,7 @@ static void lcl_CopyStream(
     OUString dir;
     OUString rest;
     if (!splitPath(rPath, dir, rest))
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if (dir.getLength() == 0)
         xSource->copyElementTo(rPath, xTarget, rPath);
@@ -599,10 +636,7 @@ void AnimationsExporterImpl::exportTransitionNode()
         mxExport->AddAttribute( XML_NAMESPACE_SMIL, XML_TYPE, sTmp.makeStringAndClear() );
 
         if( nSubtype != TransitionSubType::DEFAULT )
-        {
-            SvXMLUnitConverter::convertEnum( sTmp, nSubtype, aAnimations_EnumMap_TransitionSubType );
-            mxExport->AddAttribute( XML_NAMESPACE_SMIL, XML_SUBTYPE, sTmp.makeStringAndClear() );
-        }
+            exportTransitionSubType( *mxExport, nSubtype );
 
         if( !bDirection )
             mxExport->AddAttribute( XML_NAMESPACE_SMIL, XML_DIRECTION, XML_REVERSE );
@@ -693,7 +727,7 @@ void AnimationsExporterImpl::prepareNode( const Reference< XAnimationNode >& xNo
         case AnimationNodeType::SEQ:
         {
             Reference< XEnumerationAccess > xEnumerationAccess( xNode, UNO_QUERY_THROW );
-            Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+            Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
             while( xEnumeration->hasMoreElements() )
             {
                 Reference< XAnimationNode > xChildNode( xEnumeration->nextElement(), UNO_QUERY_THROW );
@@ -1048,7 +1082,7 @@ void AnimationsExporterImpl::exportContainer( const Reference< XTimeContainer >&
             exportTransitionNode();
 
         Reference< XEnumerationAccess > xEnumerationAccess( xContainer, UNO_QUERY_THROW );
-        Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+        Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
         while( xEnumeration->hasMoreElements() )
         {
             Reference< XAnimationNode > xChildNode( xEnumeration->nextElement(), UNO_QUERY_THROW );
@@ -1330,10 +1364,7 @@ void AnimationsExporterImpl::exportAnimate( const Reference< XAnimate >& xAnimat
 
             sal_Int16 nSubtype = xTransitionFilter->getSubtype();
             if( nSubtype != TransitionSubType::DEFAULT )
-            {
-                SvXMLUnitConverter::convertEnum( sTmp, nSubtype, aAnimations_EnumMap_TransitionSubType );
-                mxExport->AddAttribute( XML_NAMESPACE_SMIL, XML_SUBTYPE, sTmp.makeStringAndClear() );
-            }
+                exportTransitionSubType( *mxExport, nSubtype );
 
             bTemp = xTransitionFilter->getMode();
             if( !bTemp )
@@ -1422,7 +1453,7 @@ void AnimationsExporterImpl::exportCommand( const Reference< XCommand >& xComman
         SvXMLUnitConverter::convertEnum( sTmp, nCommand, aAnimations_EnumMap_Command );
         mxExport->AddAttribute( XML_NAMESPACE_ANIMATION, XML_COMMAND, sTmp.makeStringAndClear() );
 
-    // todo virtual cpo::uno::Any SAL_CALL getParameter() throw (css::uno::RuntimeException) = 0;
+    // todo virtual cpo::uno::Any getParameter() throw (cpo::uno::RuntimeException) = 0;
 
         SvXMLElementExport aElement( *mxExport, XML_NAMESPACE_ANIMATION, XML_COMMAND, true, true );
 
@@ -1439,7 +1470,7 @@ Reference< XInterface > AnimationsExporterImpl::getParagraphTarget( const Paragr
     {
         Reference< XEnumerationAccess > xParaEnumAccess( pTarget.Shape, UNO_QUERY_THROW );
 
-        Reference< XEnumeration > xEnumeration( xParaEnumAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+        Reference< XEnumeration > xEnumeration( xParaEnumAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
         sal_Int32 nParagraph = pTarget.Paragraph;
 
         while( xEnumeration->hasMoreElements() )
@@ -1727,13 +1758,13 @@ void AnimationsExporter::exportAnimations( const Reference< XAnimationNode >& xR
             {
                 // first check if there are no animations
                 Reference< XEnumerationAccess > xEnumerationAccess( xRootNode, UNO_QUERY_THROW );
-                Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+                Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
                 if( xEnumeration->hasMoreElements() )
                 {
                     // first child node may be an empty main sequence, check this
                     Reference< XAnimationNode > xMainNode( xEnumeration->nextElement(), UNO_QUERY_THROW );
                     Reference< XEnumerationAccess > xMainEnumerationAccess( xMainNode, UNO_QUERY_THROW );
-                    Reference< XEnumeration > xMainEnumeration( xMainEnumerationAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+                    Reference< XEnumeration > xMainEnumeration( xMainEnumerationAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
 
                     // only export if the main sequence is not empty or if there are additional
                     // trigger sequences

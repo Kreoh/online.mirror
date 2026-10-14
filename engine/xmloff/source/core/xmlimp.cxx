@@ -97,8 +97,8 @@
 using ::com::sun::star::beans::XPropertySetInfo;
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::container;
@@ -121,7 +121,7 @@ public:
     explicit SvXMLImportEventListener(SvXMLImport* pImport);
 
                             // XEventListener
-    virtual void SAL_CALL disposing(const lang::EventObject& rEventObject) override;
+    virtual void disposing(const lang::EventObject& rEventObject) override;
 };
 
 }
@@ -132,7 +132,7 @@ SvXMLImportEventListener::SvXMLImportEventListener(SvXMLImport* pTempImport)
 }
 
 // XEventListener
-void SAL_CALL SvXMLImportEventListener::disposing( const lang::EventObject& )
+void SvXMLImportEventListener::disposing( const lang::EventObject& )
 {
     if (pImport)
     {
@@ -367,7 +367,7 @@ public:
     bool mbShapePositionInHoriL2R;
     bool mbTextDocInOOoFileFormat;
 
-    const uno::Reference< uno::XComponentContext > mxComponentContext;
+    const uno::Reference< cpo::uno::XComponentContext > mxComponentContext;
     OUString implementationName;
     cpo::uno::Sequence< OUString > maSupportedServiceNames;
 
@@ -377,7 +377,7 @@ public:
 
     std::optional< DocumentInfo > moDocumentInfo;
 
-    SvXMLImport_Impl( uno::Reference< uno::XComponentContext > xContext,
+    SvXMLImport_Impl( uno::Reference< cpo::uno::XComponentContext > xContext,
                       OUString theImplementationName,
                       const cpo::uno::Sequence< OUString > & sSupportedServiceNames = {})
         : hBatsFontConv( nullptr )
@@ -393,7 +393,7 @@ public:
         , maSupportedServiceNames(sSupportedServiceNames)
     {
         SAL_WARN_IF(!mxComponentContext.is(), "xmloff.core", "SvXMLImport: no ComponentContext");
-        if (!mxComponentContext.is()) throw uno::RuntimeException();
+        if (!mxComponentContext.is()) throw cpo::uno::RuntimeException();
         if (!maSupportedServiceNames.hasElements())
             maSupportedServiceNames = { u"com.sun.star.document.ImportFilter"_ustr, u"com.sun.star.xml.XMLImportFilter"_ustr };
     }
@@ -485,7 +485,7 @@ namespace {
         virtual ~L10nMapper() override {}
 
     public:
-        static css::uno::Reference< XMap > load(const uno::Reference<css::embed::XStorage> &xStorage)
+        static cpo::uno::Reference< XMap > load(const uno::Reference<css::embed::XStorage> &xStorage)
         {
             try {
                 OUString streamName = u"l10n"_ustr;
@@ -493,7 +493,7 @@ namespace {
                 {
                     auto xIn = xStorage->openStreamElement(streamName, css::embed::ElementModes::READ|css::embed::ElementModes::NOCREATE);
                     if (!xIn)
-                        return css::uno::Reference< XMap >();
+                        return cpo::uno::Reference< XMap >();
 
                     auto xInStrm = uno::Reference<css::io::XInputStream>(xIn, UNO_QUERY_THROW);
 
@@ -515,9 +515,9 @@ namespace {
                         aLocales = aL10nLang.getFallbackStrings(true);
                     }
                     else
-                        aLocales = LanguageTag(css::uno::Reference< css::lang::XLocalizable >(
+                        aLocales = LanguageTag(cpo::uno::Reference< css::lang::XLocalizable >(
                                                    css::configuration::theDefaultProvider::get(xContext),
-                                                   css::uno::UNO_QUERY_THROW)->getLocale()).getFallbackStrings(true);
+                                                   cpo::uno::UNO_QUERY_THROW)->getLocale()).getFallbackStrings(true);
                     OUString aLocale; // cached best locale match
 
                     // Format is <opt-prefix|string>\nlocale\t<translated-string>\n<repeat>\n\n
@@ -572,7 +572,7 @@ namespace {
 
                     xTextStrm->closeInput();
 
-                    auto xMap = css::uno::Reference< XMap >(pMap);
+                    auto xMap = cpo::uno::Reference< XMap >(pMap);
 
                     return xMap;
                 }
@@ -581,20 +581,20 @@ namespace {
             {
                 DBG_UNHANDLED_EXCEPTION("xmloff.core", "exception getting BuildId");
             }
-            return css::uno::Reference< XMap >();
+            return cpo::uno::Reference< XMap >();
         }
 
         // XMap
-        virtual Type SAL_CALL getKeyType() override   { return cppu::UnoType<OUString>::get(); };
-        virtual Type SAL_CALL getValueType() override { return cppu::UnoType<OUString>::get(); };
-        virtual void SAL_CALL clear() override { maMap.clear(); }
-        virtual bool SAL_CALL containsKey( const Any& ) override
+        virtual Type getKeyType() override   { return cppu::UnoType<OUString>::get(); };
+        virtual Type getValueType() override { return cppu::UnoType<OUString>::get(); };
+        virtual void clear() override { maMap.clear(); }
+        virtual bool containsKey( const Any& ) override
         {
-            throw css::uno::RuntimeException(u"not implemented"_ustr);
+            throw cpo::uno::RuntimeException(u"not implemented"_ustr);
         }
-        virtual bool SAL_CALL containsValue( const Any& ) override
+        virtual bool containsValue( const Any& ) override
         {
-            throw css::uno::RuntimeException(u"not implemented"_ustr);
+            throw cpo::uno::RuntimeException(u"not implemented"_ustr);
         }
 
         static OUString cleanDomain(const OUString &str)
@@ -606,7 +606,7 @@ namespace {
                 return str;
         }
 
-        virtual Any SAL_CALL get( const Any& key ) override
+        virtual Any get( const Any& key ) override
         {
             auto it = maMap.find(key.get<OUString>());
             if (it == maMap.end())
@@ -617,21 +617,21 @@ namespace {
             else
                 return cpo::uno::Any(it->second);
         }
-        virtual Any SAL_CALL put( const Any&, const Any& ) override
+        virtual Any put( const Any&, const Any& ) override
         {
-            throw css::uno::RuntimeException(u"not implemented"_ustr);
+            throw cpo::uno::RuntimeException(u"not implemented"_ustr);
         }
-        virtual Any SAL_CALL remove( const Any& ) override
+        virtual Any remove( const Any& ) override
         {
-            throw css::uno::RuntimeException(u"not implemented"_ustr);
+            throw cpo::uno::RuntimeException(u"not implemented"_ustr);
         }
 
         // XElementAccess (base)
-        virtual Type SAL_CALL getElementType() override
+        virtual Type getElementType() override
         {
-            throw css::uno::RuntimeException(u"not implemented"_ustr);
+            throw cpo::uno::RuntimeException(u"not implemented"_ustr);
         }
-        virtual bool SAL_CALL hasElements() override
+        virtual bool hasElements() override
         {
             return !maMap.empty();
         }
@@ -639,7 +639,7 @@ namespace {
 }
 
 SvXMLImport::SvXMLImport(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString const & implementationName,
     SvXMLImportFlags nImportFlags,
     const cpo::uno::Sequence< OUString > & sSupportedServiceNames )
@@ -694,7 +694,7 @@ SvXMLImport::~SvXMLImport() noexcept
     cleanup();
 }
 
-bool SvXMLImport::addEmbeddedFont(const css::uno::Reference< css::io::XInputStream >& stream,
+bool SvXMLImport::addEmbeddedFont(const cpo::uno::Reference< css::io::XInputStream >& stream,
                                   const OUString& fontName, std::u16string_view extra,
                                   std::vector<unsigned char> const & key, bool eot)
 {
@@ -708,10 +708,10 @@ namespace
     class setFastDocumentHandlerGuard
     {
     private:
-        css::uno::Reference<css::xml::sax::XFastParser> mxParser;
+        cpo::uno::Reference<css::xml::sax::XFastParser> mxParser;
     public:
-        setFastDocumentHandlerGuard(css::uno::Reference<css::xml::sax::XFastParser> Parser,
-                                    const css::uno::Reference<css::xml::sax::XFastDocumentHandler>& Handler)
+        setFastDocumentHandlerGuard(cpo::uno::Reference<css::xml::sax::XFastParser> Parser,
+                                    const cpo::uno::Reference<css::xml::sax::XFastDocumentHandler>& Handler)
             : mxParser(std::move(Parser))
         {
             mxParser->setFastDocumentHandler(Handler);
@@ -725,58 +725,58 @@ namespace
 }
 
 // XFastParser
-void SAL_CALL SvXMLImport::parseStream( const xml::sax::InputSource& aInputSource )
+void SvXMLImport::parseStream( const xml::sax::InputSource& aInputSource )
 {
     setFastDocumentHandlerGuard aDocumentHandlerGuard(mxParser, mxFastDocumentHandler.is() ? mxFastDocumentHandler : this);
     mxParser->parseStream(aInputSource);
 }
 
-void SAL_CALL SvXMLImport::setFastDocumentHandler( const uno::Reference< xml::sax::XFastDocumentHandler >& Handler )
+void SvXMLImport::setFastDocumentHandler( const uno::Reference< xml::sax::XFastDocumentHandler >& Handler )
 {
     mxFastDocumentHandler = Handler;
 }
 
-void SAL_CALL SvXMLImport::setTokenHandler( const uno::Reference< xml::sax::XFastTokenHandler >& Handler )
+void SvXMLImport::setTokenHandler( const uno::Reference< xml::sax::XFastTokenHandler >& Handler )
 {
     mxParser->setTokenHandler( Handler );
 }
 
-void SAL_CALL SvXMLImport::registerNamespace( const OUString& NamespaceURL, sal_Int32 NamespaceToken )
+void SvXMLImport::registerNamespace( const OUString& NamespaceURL, sal_Int32 NamespaceToken )
 {
     mxParser->registerNamespace( NamespaceURL, NamespaceToken );
 }
 
-OUString SAL_CALL SvXMLImport::getNamespaceURL( const OUString& rPrefix )
+OUString SvXMLImport::getNamespaceURL( const OUString& rPrefix )
 {
     return mxParser->getNamespaceURL( rPrefix );
 }
 
-void SAL_CALL SvXMLImport::setErrorHandler( const uno::Reference< xml::sax::XErrorHandler >& Handler )
+void SvXMLImport::setErrorHandler( const uno::Reference< xml::sax::XErrorHandler >& Handler )
 {
     mxParser->setErrorHandler( Handler );
 }
 
-void SAL_CALL SvXMLImport::setEntityResolver( const uno::Reference< xml::sax::XEntityResolver >& Resolver )
+void SvXMLImport::setEntityResolver( const uno::Reference< xml::sax::XEntityResolver >& Resolver )
 {
     mxParser->setEntityResolver( Resolver );
 }
 
-void SAL_CALL SvXMLImport::setLocale( const lang::Locale& rLocale )
+void SvXMLImport::setLocale( const lang::Locale& rLocale )
 {
     mxParser->setLocale( rLocale );
 }
 
-void SAL_CALL SvXMLImport::setNamespaceHandler( const uno::Reference< xml::sax::XFastNamespaceHandler >& Handler)
+void SvXMLImport::setNamespaceHandler( const uno::Reference< xml::sax::XFastNamespaceHandler >& Handler)
 {
     mxParser->setNamespaceHandler( Handler );
 }
 
-void SAL_CALL SvXMLImport::setCustomEntityNames( const ::cpo::uno::Sequence< ::css::beans::Pair<::rtl::OUString, ::rtl::OUString> >& replacements )
+void SvXMLImport::setCustomEntityNames( const ::cpo::uno::Sequence< ::css::beans::Pair<::rtl::OUString, ::rtl::OUString> >& replacements )
 {
     mxParser->setCustomEntityNames( replacements );
 }
 
-void SAL_CALL SvXMLImport::startDocument()
+void SvXMLImport::startDocument()
 {
     SAL_INFO( "xmloff.core", "{ SvXMLImport::startDocument" );
     if (mxGraphicStorageHandler.is() && mxEmbeddedResolver.is())
@@ -809,7 +809,7 @@ void SAL_CALL SvXMLImport::startDocument()
     }
 }
 
-void SAL_CALL SvXMLImport::endDocument()
+void SvXMLImport::endDocument()
 {
     SAL_INFO( "xmloff.core", "} SvXMLImport::endDocument" );
     //  #i9518# All the stuff that accesses the document has to be done here, not in the dtor,
@@ -915,7 +915,7 @@ std::optional<SvXMLNamespaceMap> SvXMLImport::processNSAttributes(
                 && !pImport->IsODFVersionConsistent(*pImport->mpImpl->mxODFVersion))
             {
                 throw xml::sax::SAXException(u"Inconsistent ODF versions in content.xml and manifest.xml!"_ustr,
-                        uno::Reference< uno::XInterface >(),
+                        uno::Reference< cpo::uno::XInterface >(),
                         cpo::uno::Any(
                             packages::zip::ZipIOException(u"Inconsistent ODF versions in content.xml and manifest.xml!"_ustr ) ) );
             }
@@ -954,23 +954,23 @@ std::optional<SvXMLNamespaceMap> SvXMLImport::processNSAttributes(
 }
 
 
-void SAL_CALL SvXMLImport::characters( const OUString& rChars )
+void SvXMLImport::characters( const OUString& rChars )
 {
     maContexts.top()->characters( rChars );
 }
 
-void SAL_CALL SvXMLImport::processingInstruction( const OUString&,
+void SvXMLImport::processingInstruction( const OUString&,
                                        const OUString& )
 {
 }
 
-void SAL_CALL SvXMLImport::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& rLocator )
+void SvXMLImport::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& rLocator )
 {
     mxLocator = rLocator;
 }
 
 // XFastContextHandler
-void SAL_CALL SvXMLImport::startFastElement (sal_Int32 Element,
+void SvXMLImport::startFastElement (sal_Int32 Element,
     const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
 {
     SAL_INFO("xmloff.core", "startFastElement " << SvXMLImport::getNameFromToken( Element ));
@@ -987,7 +987,7 @@ void SAL_CALL SvXMLImport::startFastElement (sal_Int32 Element,
             if ( mpImpl->mStreamName == "content.xml" && !IsODFVersionConsistent( *mpImpl->mxODFVersion ) )
             {
                 throw xml::sax::SAXException(u"Inconsistent ODF versions in content.xml and manifest.xml!"_ustr,
-                        uno::Reference< uno::XInterface >(),
+                        uno::Reference< cpo::uno::XInterface >(),
                         cpo::uno::Any(
                             packages::zip::ZipIOException(u"Inconsistent ODF versions in content.xml and manifest.xml!"_ustr ) ) );
             }
@@ -1033,7 +1033,7 @@ void SAL_CALL SvXMLImport::startFastElement (sal_Int32 Element,
     maContexts.push(xContext);
 }
 
-void SAL_CALL SvXMLImport::startUnknownElement (const OUString & rNamespace, const OUString & rName,
+void SvXMLImport::startUnknownElement (const OUString & rNamespace, const OUString & rName,
     const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
 {
     SAL_INFO("xmloff.core", "startUnknownElement " << rNamespace << " " << rName);
@@ -1070,7 +1070,7 @@ void SAL_CALL SvXMLImport::startUnknownElement (const OUString & rNamespace, con
     maContexts.push(xContext);
 }
 
-void SAL_CALL SvXMLImport::endFastElement (sal_Int32 Element)
+void SvXMLImport::endFastElement (sal_Int32 Element)
 {
     SAL_INFO("xmloff.core", "endFastElement " << SvXMLImport::getNameFromToken( Element ));
     if (maContexts.empty())
@@ -1089,7 +1089,7 @@ void SAL_CALL SvXMLImport::endFastElement (sal_Int32 Element)
         mxNamespaceMap = std::move(pRewindMap);
 }
 
-void SAL_CALL SvXMLImport::endUnknownElement (const OUString & rPrefix, const OUString & rLocalName)
+void SvXMLImport::endUnknownElement (const OUString & rPrefix, const OUString & rLocalName)
 {
     SAL_INFO("xmloff.core", "endUnknownElement " << rPrefix << " " << rLocalName);
     if (maContexts.empty())
@@ -1103,14 +1103,14 @@ void SAL_CALL SvXMLImport::endUnknownElement (const OUString & rPrefix, const OU
     xContext->endUnknownElement( rPrefix, rLocalName );
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
     SvXMLImport::createFastChildContext (sal_Int32,
     const uno::Reference< xml::sax::XFastAttributeList > &)
 {
     return this;
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
     SvXMLImport::createUnknownChildContext (const OUString &, const OUString &,
     const uno::Reference< xml::sax::XFastAttributeList > &)
 {
@@ -1124,7 +1124,7 @@ void SvXMLImport::SetStatistics(const cpo::uno::Sequence< beans::NamedValue> &)
 }
 
 // XImporter
-void SAL_CALL SvXMLImport::setTargetDocument( const uno::Reference< lang::XComponent >& xDoc )
+void SvXMLImport::setTargetDocument( const uno::Reference< lang::XComponent >& xDoc )
 {
     mxModel.set( xDoc, UNO_QUERY );
     if( !mxModel.is() )
@@ -1157,17 +1157,17 @@ void SAL_CALL SvXMLImport::setTargetDocument( const uno::Reference< lang::XCompo
 }
 
 // XFilter
-bool SAL_CALL SvXMLImport::filter( const cpo::uno::Sequence< beans::PropertyValue >& )
+bool SvXMLImport::filter( const cpo::uno::Sequence< beans::PropertyValue >& )
 {
     return false;
 }
 
-void SAL_CALL SvXMLImport::cancel(  )
+void SvXMLImport::cancel(  )
 {
 }
 
 // XInitialize
-void SAL_CALL SvXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void SvXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     for( const auto& rAny : aArguments )
     {
@@ -1268,7 +1268,7 @@ void SAL_CALL SvXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >
 
     uno::Reference<lang::XInitialization> const xInit(mxParser, uno::UNO_QUERY_THROW);
 
-    css::uno::Reference< XMap > xMap = L10nMapper::load(GetSourceStorage());
+    cpo::uno::Reference< XMap > xMap = L10nMapper::load(GetSourceStorage());
     cpo::uno::Sequence< cpo::uno::Any > args{
         cpo::uno::Any(u"IgnoreMissingNSDecl"_ustr),
         cpo::uno::Any(xMap) };
@@ -1276,17 +1276,17 @@ void SAL_CALL SvXMLImport::initialize( const cpo::uno::Sequence< cpo::uno::Any >
 }
 
 // XServiceInfo
-OUString SAL_CALL SvXMLImport::getImplementationName()
+OUString SvXMLImport::getImplementationName()
 {
     return mpImpl->implementationName;
 }
 
-bool SAL_CALL SvXMLImport::supportsService( const OUString& rServiceName )
+bool SvXMLImport::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvXMLImport::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SvXMLImport::getSupportedServiceNames(  )
 {
     return mpImpl->maSupportedServiceNames;
 }
@@ -2040,7 +2040,7 @@ void SvXMLImport::DisposingModel()
     return mpImpl->maInterfaceToIdentifierMapper;
 }
 
-uno::Reference< uno::XComponentContext > const &
+uno::Reference< cpo::uno::XComponentContext > const &
 SvXMLImport::GetComponentContext() const
 {
     return mpImpl->mxComponentContext;
@@ -2141,7 +2141,7 @@ bool SvXMLImport::IsMSO() const
 }
 
 // xml:id for RDF metadata
-void SvXMLImport::SetXmlId(uno::Reference<uno::XInterface> const & i_xIfc,
+void SvXMLImport::SetXmlId(uno::Reference<cpo::uno::XInterface> const & i_xIfc,
     OUString const & i_rXmlId)
 {
     if (i_rXmlId.isEmpty())
@@ -2412,22 +2412,22 @@ SvXMLLegacyToFastDocHandler::SvXMLLegacyToFastDocHandler( rtl::Reference< SvXMLI
 {
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::setTargetDocument( const uno::Reference< lang::XComponent >& xDoc )
+void SvXMLLegacyToFastDocHandler::setTargetDocument( const uno::Reference< lang::XComponent >& xDoc )
 {
     mrImport->setTargetDocument( xDoc );
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::startDocument()
+void SvXMLLegacyToFastDocHandler::startDocument()
 {
     mrImport->startDocument();
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::endDocument()
+void SvXMLLegacyToFastDocHandler::endDocument()
 {
     mrImport->endDocument();
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::startElement( const OUString& rName,
+void SvXMLLegacyToFastDocHandler::startElement( const OUString& rName,
                         const uno::Reference< xml::sax::XAttributeList >& xAttrList )
 {
     sal_uInt16 nDefaultNamespace = XML_NAMESPACE_UNKNOWN;
@@ -2495,7 +2495,7 @@ void SAL_CALL SvXMLLegacyToFastDocHandler::startElement( const OUString& rName,
     maDefaultNamespaces.push(nDefaultNamespace);
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::endElement( const OUString& rName )
+void SvXMLLegacyToFastDocHandler::endElement( const OUString& rName )
 {
     OUString aLocalName;
     sal_uInt16 nPrefix = mrImport->mxNamespaceMap->GetKeyByAttrName( rName, &aLocalName );
@@ -2504,22 +2504,22 @@ void SAL_CALL SvXMLLegacyToFastDocHandler::endElement( const OUString& rName )
     maDefaultNamespaces.pop();
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::characters( const OUString& aChars )
+void SvXMLLegacyToFastDocHandler::characters( const OUString& aChars )
 {
     mrImport->characters( aChars );
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::ignorableWhitespace( const OUString& )
+void SvXMLLegacyToFastDocHandler::ignorableWhitespace( const OUString& )
 {
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::processingInstruction( const OUString& aTarget,
+void SvXMLLegacyToFastDocHandler::processingInstruction( const OUString& aTarget,
                                                                   const OUString& aData)
 {
     mrImport->processingInstruction( aTarget, aData );
 }
 
-void SAL_CALL SvXMLLegacyToFastDocHandler::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& rLocator )
+void SvXMLLegacyToFastDocHandler::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& rLocator )
 {
     mrImport->setDocumentLocator( rLocator );
 }

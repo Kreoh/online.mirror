@@ -32,7 +32,7 @@
 #include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::lang;
 using namespace css::beans;
@@ -69,7 +69,7 @@ OGenericUnoDialog::~OGenericUnoDialog()
 }
 
 
-Any SAL_CALL OGenericUnoDialog::queryInterface(const Type& _rType)
+Any OGenericUnoDialog::queryInterface(const Type& _rType)
 {
     Any aReturn = OGenericUnoDialogBase::queryInterface(_rType);
 
@@ -84,7 +84,7 @@ Any SAL_CALL OGenericUnoDialog::queryInterface(const Type& _rType)
 }
 
 
-Sequence<Type> SAL_CALL OGenericUnoDialog::getTypes(  )
+Sequence<Type> OGenericUnoDialog::getTypes(  )
 {
     return ::comphelper::concatSequences(
         OGenericUnoDialogBase::getTypes(),
@@ -92,7 +92,7 @@ Sequence<Type> SAL_CALL OGenericUnoDialog::getTypes(  )
     );
 }
 
-bool SAL_CALL OGenericUnoDialog::supportsService(const OUString& ServiceName)
+bool OGenericUnoDialog::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -121,7 +121,7 @@ bool OGenericUnoDialog::convertFastPropertyValue( Any& rConvertedValue, Any& rOl
     {
         case UNODIALOG_PROPERTY_ID_PARENT:
         {
-            Reference<css::awt::XWindow> xNew(rValue, css::uno::UNO_QUERY);
+            Reference<css::awt::XWindow> xNew(rValue, cpo::uno::UNO_QUERY);
             if (xNew != m_xParent)
             {
                 rConvertedValue <<= xNew;
@@ -135,7 +135,7 @@ bool OGenericUnoDialog::convertFastPropertyValue( Any& rConvertedValue, Any& rOl
 }
 
 
-void SAL_CALL OGenericUnoDialog::setTitle( const OUString& _rTitle )
+void OGenericUnoDialog::setTitle( const OUString& _rTitle )
 {
     UnoDialogEntryGuard aGuard( *this );
 
@@ -180,7 +180,7 @@ bool OGenericUnoDialog::impl_ensureDialog_lck()
     return true;
 }
 
-sal_Int16 SAL_CALL OGenericUnoDialog::execute()
+sal_Int16 OGenericUnoDialog::execute()
 {
     // both creation and execution of the dialog must be guarded with the SolarMutex, so be generous here
     SolarMutexGuard aSolarGuard;
@@ -240,7 +240,7 @@ void OGenericUnoDialog::implInitialize(const Any& _rValue)
     }
 }
 
-void SAL_CALL OGenericUnoDialog::initialize( const Sequence< Any >& aArguments )
+void OGenericUnoDialog::initialize( const Sequence< Any >& aArguments )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bInitialized )

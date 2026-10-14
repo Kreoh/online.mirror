@@ -47,6 +47,8 @@
 #include <basegfx/utils/gradienttools.hxx>
 
 #include <numeric>
+#include <functional>
+#include <map>
 #include <string_view>
 #include <set>
 
@@ -110,6 +112,8 @@
 #include <com/sun/star/drawing/RectanglePoint.hpp>
 
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <basegfx/units/Length.hxx>
 #include <comphelper/random.hxx>
 #include <comphelper/seqstream.hxx>
 #include <comphelper/storagehelper.hxx>
@@ -151,7 +155,7 @@ using namespace ::css::drawing;
 using namespace ::css::i18n;
 using namespace ::css::style;
 using namespace ::css::text;
-using namespace ::css::uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 using namespace ::css::container;
 using namespace ::com::sun::star::drawing::EnhancedCustomShapeSegmentCommand;
@@ -215,12 +219,12 @@ GraphicExportCache& GraphicExportCache::get()
     return staticGraphicExportCache;
 }
 
-static cpo::uno::Any getLineDash( const css::uno::Reference<css::frame::XModel>& xModel, const OUString& rDashName )
+static cpo::uno::Any getLineDash( const cpo::uno::Reference<css::frame::XModel>& xModel, const OUString& rDashName )
     {
-        css::uno::Reference<css::lang::XMultiServiceFactory> xFact(xModel, css::uno::UNO_QUERY);
-        css::uno::Reference<css::container::XNameAccess> xNameAccess(
+        cpo::uno::Reference<css::lang::XMultiServiceFactory> xFact(xModel, cpo::uno::UNO_QUERY);
+        cpo::uno::Reference<css::container::XNameAccess> xNameAccess(
             xFact->createInstance(u"com.sun.star.drawing.DashTable"_ustr),
-            css::uno::UNO_QUERY );
+            cpo::uno::UNO_QUERY );
         if(xNameAccess.is())
         {
             if (!xNameAccess->hasByName(rDashName))
@@ -267,6 +271,8 @@ DrawingML::DrawingML(::sax_fastparser::FSHelperPtr pFS, ::oox::core::XmlFilterBa
     , mbPlaceholder(false)
     , mbDiagaramExport(false)
     , mbDiagaramReplacementExport(false)
+    , mbDiagramModelTextExport(false)
+    , mnDiagramModelTextParagraph(-1)
 {
     uno::Reference<beans::XPropertySet> xSettings(pFB->getModelFactory()->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY);
     if (xSettings.is())
@@ -339,8 +345,8 @@ bool DrawingML::GetPropertyAndState( const Reference< XPropertySet >& rXProperty
 }
 
 bool DrawingML::GetDirectProperty(
-    const css::uno::Reference<css::beans::XPropertySet>& rXPropSet,
-    const css::uno::Reference<css::beans::XPropertyState>& rXPropState, const OUString& aName)
+    const cpo::uno::Reference<css::beans::XPropertySet>& rXPropSet,
+    const cpo::uno::Reference<css::beans::XPropertyState>& rXPropState, const OUString& aName)
 {
     PropertyState state;
     return GetPropertyAndState(rXPropSet, rXPropState, aName, state)
@@ -552,9 +558,11 @@ void DrawingML::WriteSolidFill( const Reference< XPropertySet >& rXPropSet )
     }
     else
     {
-        // the shape had a custom color and the user didn't change it
+        // The shape kept the color it was read with. That color may name a theme color, and
+        // saying so keeps the shape following the theme.
         // tdf#124013
-        WriteSolidFill( ::Color(ColorTransparency, nFillColor & 0xffffff), nAlpha );
+        if (!WriteSchemeColor(u"FillComplexColor"_ustr, rXPropSet))
+            WriteSolidFill( ::Color(ColorTransparency, nFillColor & 0xffffff), nAlpha );
     }
 }
 
@@ -1126,7 +1134,9 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
         }
         else
         {
-            WriteSolidFill( nColor, nColorAlpha );
+            // The line kept the color it was read with, which may name a theme color.
+            if (!WriteSchemeColor(u"LineComplexColor"_ustr, rXPropSet))
+                WriteSolidFill( nColor, nColorAlpha );
         }
     }
 
@@ -1256,17 +1266,15 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
                 }
             }
 
-            SAL_WARN_IF(nLineWidth <= 0,
-                        "oox.shape", "while writing outline - custom dash - line width was < 0  : " << nLineWidth);
             SAL_WARN_IF(aLineDash.Dashes < 0,
                         "oox.shape", "while writing outline - custom dash - number of dashes was < 0  : " << aLineDash.Dashes);
-            SAL_WARN_IF(aLineDash.Dashes > 0 && aLineDash.DashLen <= 0,
+            SAL_WARN_IF(aLineDash.Dashes > 0 && aLineDash.DashLen < 0,
                         "oox.shape", "while writing outline - custom dash - dash length was < 0  : " << aLineDash.DashLen);
             SAL_WARN_IF(aLineDash.Dots < 0,
                         "oox.shape", "while writing outline - custom dash - number of dots was < 0  : " << aLineDash.Dots);
-            SAL_WARN_IF(aLineDash.Dots > 0 && aLineDash.DotLen <= 0,
+            SAL_WARN_IF(aLineDash.Dots > 0 && aLineDash.DotLen < 0,
                         "oox.shape", "while writing outline - custom dash - dot length was < 0  : " << aLineDash.DotLen);
-            SAL_WARN_IF(aLineDash.Distance <= 0,
+            SAL_WARN_IF(aLineDash.Distance < 0,
                         "oox.shape", "while writing outline - custom dash - distance was < 0  : " << aLineDash.Distance);
 
             mpFS->endElementNS( XML_a, XML_custDash );
@@ -1501,8 +1509,16 @@ OUString GraphicExport::writeNewEntryToStorage(const Graphic& rGraphic, bool bRe
             aExtension = u"tif"_ustr;
             break;
         case GfxLinkType::NativeWmf:
-            sMediaType = u"image/x-wmf"_ustr;
-            aExtension = u"wmf"_ustr;
+            if (aLink.IsEMF())
+            {
+                sMediaType = u"image/x-emf"_ustr;
+                aExtension = u"emf"_ustr;
+            }
+            else
+            {
+                sMediaType = u"image/x-wmf"_ustr;
+                aExtension = u"wmf"_ustr;
+            }
             break;
         case GfxLinkType::NativeMet:
             sMediaType = u"image/x-met"_ustr;
@@ -1671,7 +1687,7 @@ OUString DrawingML::writeGraphicToStorage(const Graphic& rGraphic , bool bRelPat
     return aExporter.writeToStorage(rGraphic, bRelPathToMedia, eHint);
 }
 
-void DrawingML::WriteMediaNonVisualProperties(const css::uno::Reference<css::drawing::XShape>& xShape)
+void DrawingML::WriteMediaNonVisualProperties(const cpo::uno::Reference<css::drawing::XShape>& xShape)
 {
     SdrMediaObj* pMediaObj = dynamic_cast<SdrMediaObj*>(SdrObject::getSdrObjectFromXShape(xShape));
     if (!pMediaObj)
@@ -2469,7 +2485,7 @@ void DrawingML::WriteShapeTransformation( const Reference< XShape >& rXShape, sa
             bFlipHWrite, bFlipVWrite, ExportRotateClockwisify(nRotation + nCameraRotation), IsGroupShape( rXShape ));
 }
 
-static OUString lcl_GetTarget(const css::uno::Reference<css::frame::XModel>& xModel, std::u16string_view rURL)
+static OUString lcl_GetTarget(const cpo::uno::Reference<css::frame::XModel>& xModel, std::u16string_view rURL)
 {
     Reference<drawing::XDrawPagesSupplier> xDPS(xModel, uno::UNO_QUERY_THROW);
     Reference<drawing::XDrawPages> xDrawPages(xDPS->getDrawPages(), uno::UNO_SET_THROW);
@@ -2725,8 +2741,17 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
 
     assert(nSize >= 100 && "Minimum accepted value for fontsize(ST_TextFontSize) is 100");
 
+    // The data model of a Diagram defines the language, also holds no paragraph properties
+    if (isDiagramModelTextExport())
+    {
+        mpFS->singleElementNS(XML_a, nElement, XML_lang,
+                              sax_fastparser::UseIf(usLanguage, !usLanguage.isEmpty()));
+        return;
+    }
+
     mpFS->startElementNS( XML_a, nElement,
-                          XML_lang, sax_fastparser::UseIf(usLanguage, !usLanguage.isEmpty()),
+                          XML_lang, sax_fastparser::UseIf(usLanguage, !usLanguage.isEmpty()
+                                                                         && !rRunInput.bIsLevelDefault),
                           XML_sz, OString::number(nSize),
                           XML_b, bold,
                           XML_i, italic,
@@ -2796,7 +2821,10 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
                     WriteSolidFill(color, nTransparency);
                 }
             }
-            else if (GetDocumentType() == DOCUMENT_PPTX)
+            // An automatic colour is the colour the shape holding the text asks for, and the
+            // shapes that take a level of a list style each ask for their own, so the level
+            // states none and every one of them resolves it again.
+            else if (GetDocumentType() == DOCUMENT_PPTX && !rRunInput.bIsLevelDefault)
             {
                 // Resolve COL_AUTO for PPTX since MS Powerpoint doesn't have automatic colors.
                 bool bIsTextBackgroundDark = mbIsBackgroundDark;
@@ -2847,7 +2875,9 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
         if( color != COL_AUTO )
         {
             mpFS->startElementNS(XML_a, XML_uFill);
-            WriteSolidFill( color );
+            if (!WriteSchemeColor(u"CharUnderlineComplexColor"_ustr, rXPropSet,
+                                  rRunInput.bUseTextSchemeColors))
+                WriteSolidFill( color );
             mpFS->endElementNS( XML_a, XML_uFill );
         }
         else
@@ -2915,6 +2945,12 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
         mAny >>= sURL;
         if (!sURL.isEmpty())
         {
+            OUString sName;
+            if (GetProperty(rXPropSet, u"Name"_ustr))
+                mAny >>= sName;
+            // OOXML keeps the accessible name in the tooltip attribute
+            const auto oTooltip = sax_fastparser::UseIf(sName, !sName.isEmpty());
+
             if (!sURL.match("#action?jump="))
             {
                 bool bExtURL = URLTransformer().isExternalURL(sURL);
@@ -2932,15 +2968,16 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
                 if (bExtURL)
                 {
                     if (isDiagaramExport())
-                        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_xmlns, XML_r), mpFB->getNamespaceURL(OOX_NS(officeRel)), FSNS(XML_r, XML_id), sRelId);
+                        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_xmlns, XML_r), mpFB->getNamespaceURL(OOX_NS(officeRel)), FSNS(XML_r, XML_id), sRelId, XML_tooltip, oTooltip);
                     else
-                        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+                        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_tooltip, oTooltip);
                 }
                 else
                 {
                     mpFS->singleElementNS(
                         XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_action,
-                        sURL.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump");
+                        sURL.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump",
+                        XML_tooltip, oTooltip);
                 }
             }
             else
@@ -2948,14 +2985,15 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
                 sal_Int32 nIndex = sURL.indexOf('=');
                 std::u16string_view aDestination(sURL.subView(nIndex + 1));
                 mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), "", XML_action,
-                                      OUString::Concat("ppaction://hlinkshowjump?jump=") + aDestination);
+                                      OUString::Concat("ppaction://hlinkshowjump?jump=") + aDestination,
+                                      XML_tooltip, oTooltip);
             }
         }
     }
     mpFS->endElementNS( XML_a, nElement );
 }
 
-OUString DrawingML::GetFieldValue( const css::uno::Reference< css::text::XTextRange >& rRun, bool& bIsURLField )
+OUString DrawingML::GetFieldValue( const cpo::uno::Reference< css::text::XTextRange >& rRun, bool& bIsURLField )
 {
     Reference< XPropertySet > rXPropSet( rRun, UNO_QUERY );
     OUString aFieldType, aFieldValue;
@@ -3121,7 +3159,7 @@ OUString DrawingML::GetDatetimeTypeFromDateTime(SvxDateFormat eDate, SvxTimeForm
 
 void DrawingML::WriteRun( const Reference< XTextRange >& rRun,
                           bool& rbOverridingCharHeight, sal_Int32& rnCharHeight,
-                          const css::uno::Reference< css::beans::XPropertySet >& rXShapePropSet)
+                          const cpo::uno::Reference< css::beans::XPropertySet >& rXShapePropSet)
 {
     Reference< XPropertySet > rXPropSet( rRun, UNO_QUERY );
     sal_Int16 nLevel = -1;
@@ -3573,6 +3611,11 @@ void DrawingML::WriteLinespacing(const LineSpacing& rSpacing, float fFirstCharHe
 
 bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagraph, float fFirstCharHeight, sal_Int32 nElement)
 {
+    // The data model of a Diagram holds the text only. Attributes come from the layout,
+    // the style and the colours that the Diagram, so do not write here
+    if (isDiagramModelTextExport())
+        return false;
+
     Reference< XPropertySet > rXPropSet( rParagraph, UNO_QUERY );
     Reference< XPropertyState > rXPropState( rParagraph, UNO_QUERY );
     PropertyState eState;
@@ -3665,6 +3708,12 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
     if (GetProperty(rXPropSet, u"ParaTabStopDefaultDistance"_ustr))
         mAny >>= nParaDefaultTabSize;
 
+    // A paragraph that hangs its punctuation says so. One that does not leaves the attribute out,
+    // which is the state a paragraph arrives in when a file names nothing.
+    bool bHangingPunctuation = false;
+    if (GetProperty(rXPropSet, u"ParaIsHangingPunctuation"_ustr))
+        mAny >>= bHangingPunctuation;
+
     // ST_TextIndentLevelType
     const sal_Int16 nOutLevel = std::min(nLevel, sal_Int16(8));
 
@@ -3684,7 +3733,8 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
                            XML_indent, sax_fastparser::UseIf(OString::number((bForceZeroIndent && nParaFirstLineIndent == 0) ? 0 : oox::drawingml::convertHmmToEmu(nParaFirstLineIndent)), (bForceZeroIndent || nParaFirstLineIndent != 0)),
                            XML_algn, GetAlignment( nAlignment, mbPlaceholder ),
                            XML_defTabSz, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaDefaultTabSize)), nParaDefaultTabSize > 0),
-                           XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl));
+                           XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl),
+                           XML_hangingPunct, sax_fastparser::UseIf("1", bHangingPunctuation));
     else
         mpFS->startElementNS( XML_a, nElement,
                            XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nLeftMargin)), nLeftMargin > 0),
@@ -3692,7 +3742,8 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
                            XML_indent, sax_fastparser::UseIf(OString::number(!bForceZeroIndent ? oox::drawingml::convertHmmToEmu(nLineIndentation) : 0), (bForceZeroIndent || ( nLineIndentation != 0))),
                            XML_algn, GetAlignment( nAlignment, mbPlaceholder ),
                            XML_defTabSz, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaDefaultTabSize)), nParaDefaultTabSize > 0),
-                           XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl));
+                           XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl),
+                           XML_hangingPunct, sax_fastparser::UseIf("1", bHangingPunctuation));
 
 
     if( bHasLinespacing )
@@ -3751,9 +3802,9 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
     return true;
 }
 
-void DrawingML::WriteLstStyle(const css::uno::Reference<css::text::XTextContent>& rParagraph,
+void DrawingML::WriteLstStyle(const cpo::uno::Reference<css::text::XTextContent>& rParagraph,
                                bool& rbOverridingCharHeight, sal_Int32& rnCharHeight,
-                               const css::uno::Reference<css::beans::XPropertySet>& rXShapePropSet,
+                               const cpo::uno::Reference<css::beans::XPropertySet>& rXShapePropSet,
                                sal_Int32 nElement)
 {
     Reference<XEnumerationAccess> xAccess(rParagraph, UNO_QUERY);
@@ -3790,6 +3841,10 @@ void DrawingML::WriteLstStyle(const css::uno::Reference<css::text::XTextContent>
         aInput.xShapePropSet = rXShapePropSet;
         aInput.bOverridingCharHeight = rbOverridingCharHeight;
         aInput.nCharHeight = rnCharHeight;
+        // Everything else of this level is taken from the first run of the paragraph, but its
+        // language and an automatic colour belong to that run alone. Stating either here would
+        // hand it to every paragraph of the level.
+        aInput.bIsLevelDefault = true;
         WriteRunProperties(xFirstRunPropSet, XML_defRPr, aInput);
         rbOverridingCharHeight = aInput.bOverridingCharHeight;
         rnCharHeight = aInput.nCharHeight;
@@ -3833,9 +3888,9 @@ uno::Reference<container::XEnumeration> GetOutlinerTextFormatParaEnum(const uno:
 }
 }
 
-void DrawingML::WriteLstStyles(const css::uno::Reference<css::text::XTextContent>& rParagraph,
+void DrawingML::WriteLstStyles(const cpo::uno::Reference<css::text::XTextContent>& rParagraph,
                                bool& rbOverridingCharHeight, sal_Int32& rnCharHeight,
-                               const css::uno::Reference<css::beans::XPropertySet>& rXShapePropSet)
+                               const cpo::uno::Reference<css::beans::XPropertySet>& rXShapePropSet)
 {
     mpFS->startElementNS(XML_a, XML_lstStyle);
 
@@ -3898,7 +3953,7 @@ void DrawingML::WriteLstStyles(const css::uno::Reference<css::text::XTextContent
 
 void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
                                 bool& rbOverridingCharHeight, sal_Int32& rnCharHeight,
-                                const css::uno::Reference< css::beans::XPropertySet >& rXShapePropSet)
+                                const cpo::uno::Reference< css::beans::XPropertySet >& rXShapePropSet)
 {
     Reference< XEnumerationAccess > access( rParagraph, UNO_QUERY );
     if( !access.is() )
@@ -3911,6 +3966,7 @@ void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
     mpFS->startElementNS(XML_a, XML_p);
 
     bool bPropertiesWritten = false;
+    Reference<XPropertySet> xLastRunPropSet;
     while( enumeration->hasMoreElements() )
     {
         Reference< XTextRange > run;
@@ -3918,6 +3974,8 @@ void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
 
         if (any >>= run)
         {
+            if (!run->getString().isEmpty())
+                xLastRunPropSet.set(run, UNO_QUERY);
             if( !bPropertiesWritten )
             {
                 float fFirstCharHeight = rnCharHeight / 1000.;
@@ -3935,7 +3993,11 @@ void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
             WriteRun( run, rbOverridingCharHeight, rnCharHeight, rXShapePropSet);
         }
     }
-    Reference< XPropertySet > rXPropSet( rParagraph, UNO_QUERY );
+    // endParaRPr is the formatting for text typed after the last run, so a paragraph with text
+    // takes it from its last run.
+    Reference<XPropertySet> rXPropSet = xLastRunPropSet;
+    if (!rXPropSet.is())
+        rXPropSet.set(rParagraph, UNO_QUERY);
 
     WriteRunInput aInput;
     aInput.xShapePropSet = rXShapePropSet;
@@ -3948,7 +4010,7 @@ void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
     mpFS->endElementNS( XML_a, XML_p );
 }
 
-bool DrawingML::IsFontworkShape(const css::uno::Reference<css::beans::XPropertySet>& rXShapePropSet)
+bool DrawingML::IsFontworkShape(const cpo::uno::Reference<css::beans::XPropertySet>& rXShapePropSet)
 {
     bool bResult(false);
     if (rXShapePropSet.is())
@@ -3980,7 +4042,7 @@ bool DrawingML::IsFontworkShape(const css::uno::Reference<css::beans::XPropertyS
 }
 
 // Output text body properties
-void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >& rXIface,
+void DrawingML::WriteBodyProps(const cpo::uno::Reference< cpo::uno::XInterface >& rXIface,
         sal_Int32 nXmlNamespace, bool bIsFontworkShape,
         sal_Int32 nTop, sal_Int32 nBottom, sal_Int32 nLeft, sal_Int32 nRight)
 {
@@ -4352,11 +4414,11 @@ void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >
     sal_Int32 nColSpacing = -1;
     if (GetProperty(rXPropSet, u"TextColumns"_ustr))
     {
-        if (css::uno::Reference<css::text::XTextColumns> xCols{ mAny, css::uno::UNO_QUERY })
+        if (cpo::uno::Reference<css::text::XTextColumns> xCols{ mAny, cpo::uno::UNO_QUERY })
         {
             nCols = xCols->getColumnCount();
-            if (css::uno::Reference<css::beans::XPropertySet> xProps{ mAny,
-                                                                      css::uno::UNO_QUERY })
+            if (cpo::uno::Reference<css::beans::XPropertySet> xProps{ mAny,
+                                                                      cpo::uno::UNO_QUERY })
             {
                 if (GetProperty(xProps, u"AutomaticDistance"_ustr))
                     mAny >>= nColSpacing;
@@ -4496,8 +4558,9 @@ void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >
                 SdrTextObj* pTextObject = DynCastSdrTextObj(pTextShape->GetSdrObject());
                 if (pTextObject)
                 {
-                    nFontScale = sal_Int32(pTextObject->GetFontScale() * 100000.0);
-                    nSpacingReduction = sal_Int32((1.0 - pTextObject->GetSpacingScale()) * 100000.0);
+                    nFontScale = basegfx::fround(pTextObject->GetFontScale() * 100000.0);
+                    nSpacingReduction
+                        = basegfx::fround((1.0 - pTextObject->GetSpacingScale()) * 100000.0);
                 }
             }
 
@@ -4544,6 +4607,33 @@ void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >
     Write3DEffects( rXPropSet, /*bIsText=*/true );
 
     mpFS->endElementNS((nXmlNamespace ? nXmlNamespace : XML_a), XML_bodyPr);
+}
+
+void DrawingML::WriteTextlessParagraph(const Reference<XInterface>& rXIface)
+{
+    Reference<XTextContent> xParagraph;
+    if (auto xAccess = rXIface.query<XEnumerationAccess>())
+    {
+        if (auto xParagraphs = xAccess->createEnumeration();
+            xParagraphs && xParagraphs->hasMoreElements())
+            xParagraph = xParagraphs->nextElement().query<XTextContent>();
+    }
+
+    if (!xParagraph)
+    {
+        mpFS->singleElementNS(XML_a, XML_p);
+        return;
+    }
+
+    // tdf#144092: with no run to ask, the run properties come from the shape's propset
+    auto xShapeProps = rXIface.query<XPropertySet>();
+    assert(xShapeProps);
+
+    mpFS->startElementNS(XML_a, XML_p);
+    WriteParagraphProperties(xParagraph, -1, XML_pPr);
+    WriteRunInput aInput{ .xShapePropSet = xShapeProps };
+    WriteRunProperties(xShapeProps, XML_endParaRPr, aInput);
+    mpFS->endElementNS(XML_a, XML_p);
 }
 
 void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bool bText,
@@ -4600,14 +4690,19 @@ void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bo
                 nTextHeight = convertTwipToMm100(nTextHeight);
         }
 
-        if (nTop + nBottom >= nTextHeight)
+        // A shape that states no height of its own has no text area to measure against.
+        if (nTextHeight > 0 && nTop + nBottom >= nTextHeight)
         {
-            // Effective bottom would be above effective top of text area. LO normalizes the
-            // effective text area in such case implicitly for rendering. MS needs indents so that
-            // the result is the normalized effective text area.
-            std::swap(nTop, nBottom);
-            nTop = nTextHeight - nTop;
-            nBottom = nTextHeight - nBottom;
+            // Where the two distances together reach further than the text area, the slide is
+            // drawn by taking half of what they reach past it off each of them. The reading of a
+            // presentation does the same, so a document written this way comes back as it went.
+            // One of them can go below nothing that way, and is written so, because reading a
+            // PPTX file gives such a distance wherever the insets in the file reach past the
+            // shape. Half of an odd excess is rounded to the nearest, as the drawing takes the
+            // exact half.
+            const sal_Int32 nExcess = (nTop + nBottom - nTextHeight + 1) / 2;
+            nTop -= nExcess;
+            nBottom -= nExcess;
         }
     }
 
@@ -4682,29 +4777,13 @@ void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bo
     sal_Int32 nCharHeight = -1;
     bool bFirstParagraph = true;
 
-    // tdf#144092 For shapes without text: Export run properties (into
-    // endParaRPr) from the shape's propset instead of the paragraph's.
-    if(xXText->getString().isEmpty() && enumeration->hasMoreElements())
+    if (xXText->getString().isEmpty())
     {
-        Any aAny (enumeration->nextElement());
-        Reference<XTextContent> xParagraph;
-        if( aAny >>= xParagraph )
-        {
-            mpFS->startElementNS(XML_a, XML_p);
-            WriteParagraphProperties(xParagraph, nCharHeight, XML_pPr);
-
-            WriteRunInput aInput;
-            aInput.xShapePropSet = rXPropSet;
-            aInput.bOverridingCharHeight = bOverridingCharHeight;
-            aInput.nCharHeight = nCharHeight;
-            WriteRunProperties(rXPropSet, XML_endParaRPr, aInput);
-            bOverridingCharHeight = aInput.bOverridingCharHeight;
-            nCharHeight = aInput.nCharHeight;
-
-            mpFS->endElementNS(XML_a, XML_p);
-        }
+        WriteTextlessParagraph(rXIface);
         return;
     }
+
+    sal_Int32 nParagraphIndex(0);
 
     while( enumeration->hasMoreElements() )
     {
@@ -4713,6 +4792,15 @@ void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bo
 
         if( any >>= paragraph)
         {
+            // A shape of a Diagram can represent several Points, one paragraph of it each. Only
+            // the paragraph that represents the Point being written belongs in it.
+            const bool bOtherPoint(isDiagramModelTextExport() && mnDiagramModelTextParagraph >= 0
+                                   && nParagraphIndex != mnDiagramModelTextParagraph);
+            nParagraphIndex++;
+
+            if (bOtherPoint)
+                continue;
+
             if (bFirstParagraph && bWritePropertiesAsLstStyles)
                 WriteLstStyles(paragraph, bOverridingCharHeight, nCharHeight, rXPropSet);
 
@@ -4986,7 +5074,9 @@ void prepareTextArea(const EnhancedCustomShape2d& rEnhancedCustomShape2d,
     return;
 }
 
-bool IsValidOOXMLFormula(std::u16string_view sFormula)
+// True when the formula states one operation of the OOXML grammar over pieces that are whole
+// numbers, the built-in measures of a shape, or guides written before it.
+bool IsValidOOXMLFormula(std::u16string_view sFormula, const std::set<OUString>& rGuideNames)
 {
     // Accepted Formulas
     // "val n1"
@@ -5019,6 +5109,7 @@ bool IsValidOOXMLFormula(std::u16string_view sFormula)
             OUString sVal = strTokens[i];
             sal_Int64 nVal = sVal.toInt64();
             if (builtInVariables.find(sVal) == builtInVariables.end()
+                && rGuideNames.find(sVal) == rGuideNames.end()
                 && OUString::number(nVal) != sVal)
                 return false;
         }
@@ -5027,52 +5118,313 @@ bool IsValidOOXMLFormula(std::u16string_view sFormula)
     return false;
 }
 
-OUString GetFormula(const OUString& sEquation)
+// A shape states its geometry as a list of equations, and one equation reaches the ones before
+// it by number. The OOXML grammar names a guide instead, so every equation a formula rests on
+// is written as a guide of its own and named from there.
+typedef std::function<OString(sal_Int32)> EquationNamer;
+// Takes a formula, writes a guide holding it and hands back the name of that guide.
+typedef std::function<OString(const OString&)> HelperGuideWriter;
+
+// Reads one piece of a formula: a whole number, the width or the height of the shape, or one
+// of the equations. A piece the writer cannot express reads as an empty string.
+OString lclReadAtom(const OUString& rAtom, const EquationNamer& rNameEquation)
 {
-    assert(!sEquation.isEmpty() && "surely an equation would never be empty...");
-    // TODO: This needs to be completely re-written. It is extremely simplistic/minimal.
-    // What is needed here is the reverse of convertToOOEquation.
-
-    // If the equation is numerical
-    sal_Int64 nValue = sEquation.toInt64();
-    if (OUString::number(nValue) == sEquation)
-        return "val " + sEquation;
-
-    OUString sFormula = sEquation;
-
-    /* replace LO native placeholders with OOXML placeholders
-     * #1: e.g. 'logwidth'
-     * #2: e.g. 'logwidth/2'
-     * #3: e.g. '1234*logwidth/5678'
-     */
-
-    if (sEquation == "logwidth") // #1
-        return u"val w"_ustr;
-    if (sEquation == "logheight")
-        return u"val h"_ustr;
-    if (sEquation.startsWith("logwidth/")) // #2
-        sFormula = u"*/ 1 w "_ustr + sEquation.subView(9);
-    else if (sEquation.startsWith("logheight/"))
-        sFormula = u"*/ 1 h "_ustr + sEquation.subView(10);
-    else
+    if (rAtom.isEmpty())
+        return {};
+    if (rAtom == "logwidth")
+        return "w"_ostr;
+    if (rAtom == "logheight")
+        return "h"_ostr;
+    if (rAtom[0] == '?')
     {
-        size_t nPos = sFormula.indexOf("*logwidth/"); //#3
-        if (nPos != std::string::npos)
-            sFormula = "*/ " + sFormula.replaceAt(nPos, 10, u" w "_ustr);
-        else
+        const OUString aIndex = rAtom.copy(1);
+        const sal_Int32 nIndex = aIndex.toInt32();
+        if (aIndex.isEmpty() || OUString::number(nIndex) != aIndex)
+            return {};
+        return rNameEquation(nIndex);
+    }
+    const sal_Int64 nValue = rAtom.toInt64();
+    if (OUString::number(nValue) != rAtom)
+        return {};
+    return OString::number(nValue);
+}
+
+// Hands back where the given character joins the two halves of an expression, outside any pair
+// of brackets, or -1. The rightmost such place is taken, so that a row of them is read from the
+// left, and the first character is never one, because a sign there belongs to the number after
+// it.
+sal_Int32 lclFindOperator(const OUString& rText, sal_Unicode cOperator)
+{
+    static constexpr std::u16string_view aSigned = u"+-*/(,";
+    sal_Int32 nDepth = 0;
+    sal_Int32 nFound = -1;
+    for (sal_Int32 nPos = 0; nPos < rText.getLength(); ++nPos)
+    {
+        const sal_Unicode cChar = rText[nPos];
+        if (cChar == '(')
+            ++nDepth;
+        else if (cChar == ')')
+            --nDepth;
+        else if (cChar == cOperator && nDepth == 0 && nPos > 0
+                 && aSigned.find(rText[nPos - 1]) == std::u16string_view::npos)
         {
-            nPos = sFormula.indexOf("*logheight/");
-            if (nPos != std::string::npos)
-                sFormula = "*/ " + sFormula.replaceAt(nPos, 11, u" h "_ustr);
+            // A character that follows another operator is the sign of the number after it.
+            nFound = nPos;
+        }
+    }
+    return nFound;
+}
+
+// True when the brackets around the whole expression are one pair, so that dropping them
+// leaves the expression whole.
+bool lclIsWrappedInBrackets(const OUString& rText)
+{
+    if (rText.getLength() < 2 || rText[0] != '(' || rText[rText.getLength() - 1] != ')')
+        return false;
+    sal_Int32 nDepth = 0;
+    for (sal_Int32 nPos = 0; nPos < rText.getLength() - 1; ++nPos)
+    {
+        if (rText[nPos] == '(')
+            ++nDepth;
+        else if (rText[nPos] == ')' && --nDepth == 0)
+            return false;
+    }
+    return true;
+}
+
+// Splits the arguments of a call on the commas that lie outside any pair of brackets.
+std::vector<OUString> lclSplitArguments(const OUString& rText)
+{
+    std::vector<OUString> aParts;
+    sal_Int32 nDepth = 0;
+    sal_Int32 nStart = 0;
+    for (sal_Int32 nPos = 0; nPos < rText.getLength(); ++nPos)
+    {
+        const sal_Unicode cChar = rText[nPos];
+        if (cChar == '(')
+            ++nDepth;
+        else if (cChar == ')')
+            --nDepth;
+        else if (cChar == ',' && nDepth == 0)
+        {
+            aParts.push_back(rText.copy(nStart, nPos - nStart));
+            nStart = nPos + 1;
+        }
+    }
+    aParts.push_back(rText.copy(nStart));
+    return aParts;
+}
+
+OString lclConvertEquation(const OUString& rEquation, const EquationNamer& rNameEquation,
+                           const HelperGuideWriter& rWriteHelper, sal_Int32 nDepth);
+
+// Hands back the name of a piece a formula can carry: a number, the width or the height, or
+// the name of a guide that holds the rest of the expression.
+OString lclConvertOperand(const OUString& rText, const EquationNamer& rNameEquation,
+                          const HelperGuideWriter& rWriteHelper, sal_Int32 nDepth)
+{
+    const OString aAtom = lclReadAtom(rText, rNameEquation);
+    if (!aAtom.isEmpty())
+        return aAtom;
+    const OString aFormula = lclConvertEquation(rText, rNameEquation, rWriteHelper, nDepth + 1);
+    if (aFormula.isEmpty())
+        return {};
+    return rWriteHelper(aFormula);
+}
+
+// Turns one equation of a shape into a formula of the OOXML grammar, which states one
+// operation over three pieces at a time. An expression that holds more than that is broken up
+// over guides of its own. An equation the writer cannot express yields an empty formula.
+OString lclConvertEquation(const OUString& rEquation, const EquationNamer& rNameEquation,
+                           const HelperGuideWriter& rWriteHelper, sal_Int32 nDepth)
+{
+    // A shape whose equations run deeper than this is beyond what the writer unpicks.
+    if (nDepth > 16)
+        return {};
+
+    OUString aText = rEquation.replaceAll(" ", "");
+    while (lclIsWrappedInBrackets(aText))
+        aText = aText.copy(1, aText.getLength() - 2);
+    if (aText.isEmpty())
+        return {};
+
+    static constexpr struct
+    {
+        std::u16string_view aCall;
+        std::string_view aToken;
+        int nArguments;
+    } aCalls[] = {
+        { u"if(", "?:", 3 }, { u"min(", "min", 2 }, { u"max(", "max", 2 },
+        { u"abs(", "abs", 1 }, { u"sqrt(", "sqrt", 1 },
+    };
+    for (const auto& rCall : aCalls)
+    {
+        if (!aText.startsWith(rCall.aCall) || !aText.endsWith(u")"))
+            continue;
+        const sal_Int32 nInside = rCall.aCall.size();
+        const OUString aArguments = aText.copy(nInside, aText.getLength() - nInside - 1);
+        const std::vector<OUString> aParts = lclSplitArguments(aArguments);
+        if (static_cast<int>(aParts.size()) != rCall.nArguments)
+            return {};
+        OString aFormula(rCall.aToken);
+        for (const OUString& rPart : aParts)
+        {
+            const OString aOperand = lclConvertOperand(rPart, rNameEquation, rWriteHelper, nDepth);
+            if (aOperand.isEmpty())
+                return {};
+            aFormula += " " + aOperand;
+        }
+        return aFormula;
+    }
+
+    // The sum and the difference share one operation, which takes the first piece, adds the
+    // second and takes the third away.
+    sal_Int32 nPlus = lclFindOperator(aText, '+');
+    if (nPlus >= 0)
+    {
+        const OUString aRest = aText.copy(nPlus + 1);
+        const sal_Int32 nMinus = lclFindOperator(aRest, '-');
+        const OUString aFirst = aText.copy(0, nPlus);
+        const OUString aSecond = nMinus >= 0 ? aRest.copy(0, nMinus) : aRest;
+        const OUString aThird = nMinus >= 0 ? aRest.copy(nMinus + 1) : u"0"_ustr;
+        const OString aOne = lclConvertOperand(aFirst, rNameEquation, rWriteHelper, nDepth);
+        const OString aTwo = lclConvertOperand(aSecond, rNameEquation, rWriteHelper, nDepth);
+        const OString aThree = lclConvertOperand(aThird, rNameEquation, rWriteHelper, nDepth);
+        if (aOne.isEmpty() || aTwo.isEmpty() || aThree.isEmpty())
+            return {};
+        return "+- " + aOne + " " + aTwo + " " + aThree;
+    }
+    const sal_Int32 nMinus = lclFindOperator(aText, '-');
+    if (nMinus >= 0)
+    {
+        const OString aOne
+            = lclConvertOperand(aText.copy(0, nMinus), rNameEquation, rWriteHelper, nDepth);
+        const OString aTwo
+            = lclConvertOperand(aText.copy(nMinus + 1), rNameEquation, rWriteHelper, nDepth);
+        if (aOne.isEmpty() || aTwo.isEmpty())
+            return {};
+        return "+- " + aOne + " 0 " + aTwo;
+    }
+
+    // The product and the quotient share one operation, which takes the first piece, multiplies
+    // by the second and divides by the third.
+    const sal_Int32 nTimes = lclFindOperator(aText, '*');
+    if (nTimes >= 0)
+    {
+        const OUString aRest = aText.copy(nTimes + 1);
+        const sal_Int32 nOver = lclFindOperator(aRest, '/');
+        const OString aOne
+            = lclConvertOperand(aText.copy(0, nTimes), rNameEquation, rWriteHelper, nDepth);
+        const OString aTwo = lclConvertOperand(nOver >= 0 ? aRest.copy(0, nOver) : aRest,
+                                               rNameEquation, rWriteHelper, nDepth);
+        const OString aThree = nOver >= 0 ? lclConvertOperand(aRest.copy(nOver + 1), rNameEquation,
+                                                              rWriteHelper, nDepth)
+                                          : "1"_ostr;
+        if (aOne.isEmpty() || aTwo.isEmpty() || aThree.isEmpty())
+            return {};
+        return "*/ " + aOne + " " + aTwo + " " + aThree;
+    }
+    const sal_Int32 nOver = lclFindOperator(aText, '/');
+    if (nOver >= 0)
+    {
+        const OString aOne
+            = lclConvertOperand(aText.copy(0, nOver), rNameEquation, rWriteHelper, nDepth);
+        const OString aTwo
+            = lclConvertOperand(aText.copy(nOver + 1), rNameEquation, rWriteHelper, nDepth);
+        if (aOne.isEmpty() || aTwo.isEmpty())
+            return {};
+        return "*/ " + aOne + " 1 " + aTwo;
+    }
+
+    const OString aAtom = lclReadAtom(aText, rNameEquation);
+    if (aAtom.isEmpty())
+        return {};
+    return "val " + aAtom;
+}
+
+// Writes the equations a shape carries as guides, one guide to an equation, so that a formula
+// can name the equations it rests on. An equation is written the first time it is asked for,
+// after the ones it rests on, and a formula the writer cannot express is left out entirely.
+class EquationGuides
+{
+    const cpo::uno::Sequence<OUString>& mrEquations;
+    std::vector<Guide>& mrGuideList;
+    std::set<OUString> maNames;
+    std::map<sal_Int32, OString> maWritten;
+    std::set<sal_Int32> maUnderway;
+    sal_Int32 mnHelperCount = 0;
+
+    OString Write(const OString& rName, const OString& rFormula)
+    {
+        if (!IsValidOOXMLFormula(OUString::fromUtf8(rFormula), maNames))
+            return {};
+        mrGuideList.push_back({ rName, rFormula });
+        maNames.insert(OUString::fromUtf8(rName));
+        return rName;
+    }
+
+    OString WriteHelper(const OString& rFormula)
+    {
+        return Write("gdHelper" + OString::number(mnHelperCount++), rFormula);
+    }
+
+    // Drops the guides written since the list held nSize of them, so that an equation the writer
+    // gives up on leaves nothing of its own behind.
+    void RollBackTo(size_t nSize)
+    {
+        while (mrGuideList.size() > nSize)
+        {
+            maNames.erase(OUString::fromUtf8(mrGuideList.back().sName));
+            mrGuideList.pop_back();
         }
     }
 
-    if (IsValidOOXMLFormula(sFormula))
-        return sFormula;
-    else SAL_WARN("oox.shape","invalid OOXML formula["<<sFormula<<"]");
+    OString Name(sal_Int32 nIndex)
+    {
+        if (nIndex < 0 || nIndex >= mrEquations.getLength())
+            return {};
+        // The answer for an equation is kept, whether it was written or given up on, so that an
+        // equation many others rest on is walked once.
+        const auto aFound = maWritten.find(nIndex);
+        if (aFound != maWritten.end())
+            return aFound->second;
+        // An equation that reaches itself, around however many others, has no value to write.
+        if (!maUnderway.insert(nIndex).second)
+            return {};
+        const size_t nWritten = mrGuideList.size();
+        const OString aFormula = Convert(mrEquations[nIndex]);
+        maUnderway.erase(nIndex);
+        OString aName;
+        if (!aFormula.isEmpty())
+            aName = Write("gdEquation" + OString::number(nIndex), aFormula);
+        if (aName.isEmpty())
+            RollBackTo(nWritten);
+        maWritten.emplace(nIndex, aName);
+        return aName;
+    }
 
-    return OUString();
-}
+public:
+    EquationGuides(const cpo::uno::Sequence<OUString>& rEquations, std::vector<Guide>& rGuideList)
+        : mrEquations(rEquations)
+        , mrGuideList(rGuideList)
+    {
+        for (const Guide& rGuide : rGuideList)
+            maNames.insert(OUString::fromUtf8(rGuide.sName));
+    }
+
+    OString Convert(const OUString& rEquation)
+    {
+        const size_t nWritten = mrGuideList.size();
+        OString aFormula = lclConvertEquation(
+            rEquation, [this](sal_Int32 nIndex) { return Name(nIndex); },
+            [this](const OString& rFormula) { return WriteHelper(rFormula); }, 0);
+        if (!IsValidOOXMLFormula(OUString::fromUtf8(aFormula), maNames))
+            aFormula.clear();
+        if (aFormula.isEmpty())
+            RollBackTo(nWritten);
+        return aFormula;
+    }
+};
 
 void prepareGluePoints(std::vector<Guide>& rGuideList,
                        const cpo::uno::Sequence<OUString>& aEquations,
@@ -5081,6 +5433,7 @@ void prepareGluePoints(std::vector<Guide>& rGuideList,
 {
     if (rGluePoints.hasElements())
     {
+        EquationGuides aGuides(aEquations, rGuideList);
         sal_Int32 nIndex = 0;
         for (auto const& rGluePoint : rGluePoints)
         {
@@ -5117,16 +5470,16 @@ void prepareGluePoints(std::vector<Guide>& rGuideList,
             Guide aGuideY;
             if (bValidIdx1)
             {
-                aGuideX.sFormula = GetFormula(aEquations[nIdx1]).toUtf8();
-                if (aGuideX.sFormula.isEmpty()) // !IsValidOOXMLFormula
+                aGuideX.sFormula = aGuides.Convert(aEquations[nIdx1]);
+                if (aGuideX.sFormula.isEmpty())
                     continue;
             }
             else
                 aGuideX.sFormula = "*/ " + OString::number(nIdx1) + " w " + OString::number(nWidth);
             if (bValidIdx2)
             {
-                aGuideY.sFormula = GetFormula(aEquations[nIdx2]).toUtf8();
-                if (aGuideY.sFormula.isEmpty()) // !IsValidOOXMLFormula
+                aGuideY.sFormula = aGuides.Convert(aEquations[nIdx2]);
+                if (aGuideY.sFormula.isEmpty())
                     continue;
             }
             else
@@ -5329,9 +5682,11 @@ bool DrawingML::WriteCustomGeometry(
     else
     {
         mpFS->startElementNS(XML_a, XML_gdLst);
+        std::set<OUString> aGuideNames;
         for (auto const& elem : aGuideList)
         {
-            assert(IsValidOOXMLFormula(OUString::fromUtf8(elem.sFormula)));
+            assert(IsValidOOXMLFormula(OUString::fromUtf8(elem.sFormula), aGuideNames));
+            aGuideNames.insert(OUString::fromUtf8(elem.sName));
             mpFS->singleElementNS(XML_a, XML_gd, XML_name, elem.sName, XML_fmla, elem.sFormula);
         }
         mpFS->endElementNS(XML_a, XML_gdLst);
@@ -5895,7 +6250,7 @@ bool DrawingML::WriteGraphicClipCustomGeometry(const Reference<XPropertySet>& rX
 }
 
 // version for SdrPathObj
-void DrawingML::WritePolyPolygon(const css::uno::Reference<css::drawing::XShape>& rXShape,
+void DrawingML::WritePolyPolygon(const cpo::uno::Reference<css::drawing::XShape>& rXShape,
                                  const bool bClosed)
 {
     tools::PolyPolygon aPolyPolygon = EscherPropertyContainer::GetPolyPolygon(rXShape);
@@ -6046,38 +6401,6 @@ void DrawingML::WriteFill(const Reference<XPropertySet>& xPropSet, const awt::Si
     FillStyle aFillStyle( FillStyle_NONE );
     xPropSet->getPropertyValue( u"FillStyle"_ustr ) >>= aFillStyle;
 
-    // map full transparent background to no fill
-    if (aFillStyle == FillStyle_SOLID)
-    {
-        OUString sFillTransparenceGradientName;
-
-        if (GetProperty(xPropSet, u"FillTransparenceGradientName"_ustr)
-            && (mAny >>= sFillTransparenceGradientName)
-            && !sFillTransparenceGradientName.isEmpty()
-            && GetProperty(xPropSet, u"FillTransparenceGradient"_ustr))
-        {
-            // check if a fully transparent TransparenceGradient is used
-            // use BGradient constructor & tooling here now
-            const basegfx::BGradient aTransparenceGradient = model::gradient::getFromAny(mAny);
-            basegfx::BColor aSingleColor;
-            const bool bSingleColor(aTransparenceGradient.GetColorStops().isSingleColor(aSingleColor));
-            const bool bCompletelyTransparent(bSingleColor && basegfx::fTools::equal(aSingleColor.luminance(), 1.0));
-
-            if (bCompletelyTransparent)
-            {
-                aFillStyle = FillStyle_NONE;
-            }
-        }
-        else if ( GetProperty( xPropSet, u"FillTransparence"_ustr ) )
-        {
-            // check if a fully transparent FillTransparence is used
-            sal_Int16 nVal = 0;
-            xPropSet->getPropertyValue( u"FillTransparence"_ustr ) >>= nVal;
-            if ( nVal == 100 )
-                aFillStyle = FillStyle_NONE;
-        }
-    }
-
     bool bUseBackground(false);
     if (GetProperty(xPropSet, u"FillUseSlideBackground"_ustr))
         xPropSet->getPropertyValue(u"FillUseSlideBackground"_ustr) >>= bUseBackground;
@@ -6141,6 +6464,7 @@ void DrawingML::WriteShapeStyle( const Reference< XPropertySet >& xPropSet )
     // extract the relevant properties from the grab bag
     Sequence< PropertyValue > aGrabBag;
     Sequence< PropertyValue > aFillRefProperties, aLnRefProperties, aEffectRefProperties;
+    Sequence< PropertyValue > aFontRefProperties;
     mAny >>= aGrabBag;
     for (const auto& rProp : aGrabBag)
     {
@@ -6150,14 +6474,40 @@ void DrawingML::WriteShapeStyle( const Reference< XPropertySet >& xPropSet )
             rProp.Value >>= aLnRefProperties;
         else if( rProp.Name == "StyleEffectRef" )
             rProp.Value >>= aEffectRefProperties;
+        else if( rProp.Name == "StyleFontRef" )
+            rProp.Value >>= aFontRefProperties;
     }
 
     WriteStyleProperties( XML_lnRef, aLnRefProperties );
     WriteStyleProperties( XML_fillRef, aFillRefProperties );
     WriteStyleProperties( XML_effectRef, aEffectRefProperties );
+    WriteFontRefStyle( aFontRefProperties );
+}
 
-    // write mock <a:fontRef>
-    mpFS->singleElementNS(XML_a, XML_fontRef, XML_idx, "minor");
+void DrawingML::WriteFontRefStyle( const Sequence< PropertyValue >& aProperties )
+{
+    OUString sSchemeClr;
+    OUString sIdx(u"minor"_ustr);
+    Sequence< PropertyValue > aTransformations;
+    for( const auto& rProp : aProperties )
+    {
+        if( rProp.Name == "SchemeClr" )
+            rProp.Value >>= sSchemeClr;
+        else if( rProp.Name == "Idx" )
+            rProp.Value >>= sIdx;
+        else if( rProp.Name == "Transformations" )
+            rProp.Value >>= aTransformations;
+    }
+
+    if( sSchemeClr.isEmpty() )
+    {
+        mpFS->singleElementNS(XML_a, XML_fontRef, XML_idx, sIdx.toUtf8());
+        return;
+    }
+
+    mpFS->startElementNS(XML_a, XML_fontRef, XML_idx, sIdx.toUtf8());
+    WriteColor(sSchemeClr, aTransformations);
+    mpFS->endElementNS(XML_a, XML_fontRef);
 }
 
 void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< PropertyValue >& aEffectProps )
@@ -6390,6 +6740,8 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
             mAny >>= rad;
             bHasEffects = rad > 0;
         }
+        if (!bHasEffects && GetProperty(rXPropSet, u"ReflectionEffect"_ustr))
+            mAny >>= bHasEffects;
 
         if (bHasEffects)
         {
@@ -6418,6 +6770,7 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
 
                 WriteShapeEffect( u"outerShdw", aShadowGrabBag );
             }
+            WriteReflectionEffect(rXPropSet, {});
             WriteSoftEdgeEffect(rXPropSet);
             mpFS->endElementNS(XML_a, XML_effectLst);
         }
@@ -6468,6 +6821,7 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
 
         mpFS->startElementNS(XML_a, XML_effectLst);
         bool bGlowWritten = false;
+        bool bReflectionHandled = false;
         for (const auto& rEffect : aEffects)
         {
             if (!bGlowWritten
@@ -6483,6 +6837,13 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
             {
                 WriteShapeEffect( rEffect.Name, aOuterShdwProps );
             }
+            else if (rEffect.Name == "reflection")
+            {
+                Sequence<PropertyValue> aEffectProps;
+                rEffect.Value >>= aEffectProps;
+                WriteReflectionEffect(rXPropSet, aEffectProps);
+                bReflectionHandled = true;
+            }
             else
             {
                 Sequence< PropertyValue > aEffectProps;
@@ -6492,6 +6853,9 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
         }
         if (!bGlowWritten)
             WriteGlowEffect(rXPropSet);
+        // A reflection comes after every stored effect other than the soft edge.
+        if (!bReflectionHandled)
+            WriteReflectionEffect(rXPropSet, {});
         WriteSoftEdgeEffect(rXPropSet); // the last
 
         mpFS->endElementNS(XML_a, XML_effectLst);
@@ -6546,7 +6910,7 @@ void DrawingML::WriteTextGlowEffect(const Reference< XPropertySet >& rXPropSet)
     WriteShapeEffect(u"glowtext", aGlowProps);
 }
 
-void DrawingML::WriteSoftEdgeEffect(const css::uno::Reference<css::beans::XPropertySet>& rXPropSet)
+void DrawingML::WriteSoftEdgeEffect(const cpo::uno::Reference<css::beans::XPropertySet>& rXPropSet)
 {
     if (!rXPropSet->getPropertySetInfo()->hasPropertyByName(u"SoftEdgeRadius"_ustr))
     {
@@ -6564,6 +6928,86 @@ void DrawingML::WriteSoftEdgeEffect(const css::uno::Reference<css::beans::XPrope
                                                                                         aAttribs) };
 
     WriteShapeEffect(u"softEdge", aProps);
+}
+
+namespace
+{
+// DrawingML has 1/1000 of a percent, the shape property has whole percent.
+sal_Int32 toWholePercent(sal_Int32 nThousandthsOfPercent)
+{
+    return static_cast<sal_Int32>(std::lround(nThousandthsOfPercent / 1000.0));
+}
+}
+
+void DrawingML::WriteReflectionEffect(const Reference<XPropertySet>& rXPropSet,
+                                      const Sequence<PropertyValue>& rStoredEffect)
+{
+    if (!rXPropSet->getPropertySetInfo()->hasPropertyByName(u"ReflectionEffect"_ustr))
+        return;
+
+    bool bReflection = false;
+    rXPropSet->getPropertyValue(u"ReflectionEffect"_ustr) >>= bReflection;
+    if (!bReflection)
+        return;
+
+    sal_Int32 nDistance = 0;
+    sal_Int32 nBlurRadius = 0;
+    sal_Int16 nStartTransparency = 0;
+    sal_Int16 nStartPosition = 0;
+    sal_Int16 nEndTransparency = 100;
+    sal_Int16 nEndPosition = 100;
+    rXPropSet->getPropertyValue(u"ReflectionEffectDistance"_ustr) >>= nDistance;
+    rXPropSet->getPropertyValue(u"ReflectionEffectBlurRadius"_ustr) >>= nBlurRadius;
+    rXPropSet->getPropertyValue(u"ReflectionEffectStartTransparency"_ustr) >>= nStartTransparency;
+    rXPropSet->getPropertyValue(u"ReflectionEffectStartPosition"_ustr) >>= nStartPosition;
+    rXPropSet->getPropertyValue(u"ReflectionEffectEndTransparency"_ustr) >>= nEndTransparency;
+    rXPropSet->getPropertyValue(u"ReflectionEffectEndPosition"_ustr) >>= nEndPosition;
+
+    // The stored attributes keep what has no shape property, like the direction and the scale. A
+    // reflection without them is mirrored straight down below the shape, like the presets.
+    comphelper::SequenceAsHashMap aStoredEffect(rStoredEffect);
+    comphelper::SequenceAsHashMap aAttribs(aStoredEffect.getValue(u"Attribs"_ustr));
+    if (aAttribs.empty())
+    {
+        aAttribs[u"dir"_ustr] <<= sal_Int32(5400000);
+        aAttribs[u"sy"_ustr] <<= sal_Int32(-100000);
+        aAttribs[u"algn"_ustr] <<= u"bl"_ustr;
+        aAttribs[u"rotWithShape"_ustr] <<= sal_Int32(0);
+    }
+
+    // A stored value stays when it still gives the value of the shape property, since the stored
+    // one can be more precise. A value that equals the schema default is left out.
+    auto setLength = [&aAttribs](const OUString& rName, gfx::Length aLength)
+    {
+        sal_Int64 nStored = 0;
+        if ((aAttribs.getValue(rName) >>= nStored)
+            && gfx::Length::emu(nStored).as_hmm<sal_Int32>() == aLength.as_hmm<sal_Int32>())
+            return;
+        if (aLength == gfx::Length())
+            aAttribs.erase(rName);
+        else
+            aAttribs[rName] <<= aLength.as_emu<sal_Int32>();
+    };
+    auto setPercent = [&aAttribs](const OUString& rName, sal_Int32 nPercent, sal_Int32 nDefault)
+    {
+        sal_Int32 nStored = 0;
+        if ((aAttribs.getValue(rName) >>= nStored) && toWholePercent(nStored) == nPercent)
+            return;
+        if (nPercent * PER_PERCENT == nDefault)
+            aAttribs.erase(rName);
+        else
+            aAttribs[rName] <<= nPercent * PER_PERCENT;
+    };
+    setLength(u"dist"_ustr, gfx::Length::hmm(nDistance));
+    setLength(u"blurRad"_ustr, gfx::Length::hmm(nBlurRadius));
+    setPercent(u"stA"_ustr, 100 - nStartTransparency, MAX_PERCENT);
+    setPercent(u"stPos"_ustr, nStartPosition, 0);
+    setPercent(u"endA"_ustr, 100 - nEndTransparency, 0);
+    setPercent(u"endPos"_ustr, nEndPosition, MAX_PERCENT);
+
+    Sequence<PropertyValue> aProps{ comphelper::makePropertyValue(
+        u"Attribs"_ustr, aAttribs.getAsConstPropertyValueList()) };
+    WriteShapeEffect(u"reflection", aProps);
 }
 
 void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool bIsText )
@@ -6855,8 +7299,10 @@ void DrawingML::WriteArtisticEffect( const Reference< XPropertySet >& rXPropSet 
     mAny >>= aGrabBag;
     auto pProp = std::find_if(std::cbegin(aGrabBag), std::cend(aGrabBag),
         [](const PropertyValue& rProp) { return rProp.Name == "ArtisticEffectProperties"; });
-    if (pProp != std::cend(aGrabBag))
-        pProp->Value >>= aEffect;
+    if (pProp == std::cend(aGrabBag))
+        // The shape carries a grab bag, but no artistic effect in it.
+        return;
+    pProp->Value >>= aEffect;
     sal_Int32 nEffectToken = ArtisticEffectProperties::getEffectToken( aEffect.Name );
     if( nEffectToken == XML_none )
         return;
@@ -6867,14 +7313,7 @@ void DrawingML::WriteArtisticEffect( const Reference< XPropertySet >& rXPropSet 
     OString sRelId;
     for (const auto& rAttr : aAttrs)
     {
-        sal_Int32 nToken = ArtisticEffectProperties::getEffectToken( rAttr.Name );
-        if( nToken != XML_none )
-        {
-            sal_Int32 nVal = 0;
-            rAttr.Value >>= nVal;
-            aAttrList->add( nToken, OString::number( nVal ) );
-        }
-        else if( rAttr.Name == "OriginalGraphic" )
+        if( rAttr.Name == "OriginalGraphic" )
         {
             Sequence< PropertyValue > aGraphic;
             rAttr.Value >>= aGraphic;
@@ -6888,6 +7327,15 @@ void DrawingML::WriteArtisticEffect( const Reference< XPropertySet >& rXPropSet 
                     rProp.Value >>= aGraphicData;
             }
             sRelId = WriteWdpPicture( sGraphicId, aGraphicData );
+            continue;
+        }
+
+        sal_Int32 nToken = ArtisticEffectProperties::getEffectToken( rAttr.Name );
+        if( nToken != XML_none )
+        {
+            sal_Int32 nVal = 0;
+            rAttr.Value >>= nVal;
+            aAttrList->add( nToken, OString::number( nVal ) );
         }
     }
 
@@ -6931,7 +7379,7 @@ OString DrawingML::WriteWdpPicture( const OUString& rFileId, const Sequence< sal
     return OUStringToOString(aId, RTL_TEXTENCODING_UTF8);
 }
 
-void DrawingML::WriteDiagram(const css::uno::Reference<css::drawing::XShape>& rXShape, sal_Int32 nDiagramId, sal_Int32 nShapeId)
+void DrawingML::WriteDiagram(const cpo::uno::Reference<css::drawing::XShape>& rXShape, sal_Int32 nDiagramId, sal_Int32 nShapeId)
 {
     SdrObject* pObj = SdrObject::getSdrObjectFromXShape(rXShape);
     if (nullptr == pObj)
@@ -7044,7 +7492,15 @@ void DrawingML::WriteDiagram(const css::uno::Reference<css::drawing::XShape>& rX
     // but can be different from diagram's own id
     const sal_Int32 nExpShapeId = nShapeId != -1 ? nShapeId : nDiagramId;
     pDocPrAttrList->add(XML_id, OString::number(nExpShapeId));
+    // A diagram that was given a name keeps it. One that has none is named after its number,
+    // which is what a reader shows for it.
     OString sName = "Diagram" + OString::number(nDiagramId);
+    if (cpo::uno::Reference<css::container::XNamed> xNamed{ rXShape, cpo::uno::UNO_QUERY })
+    {
+        const OUString aShapeName = xNamed->getName();
+        if (!aShapeName.isEmpty())
+            sName = OUStringToOString(aShapeName, RTL_TEXTENCODING_UTF8);
+    }
     pDocPrAttrList->add(XML_name, sName);
 
     if (GetDocumentType() == DOCUMENT_DOCX)
@@ -7084,10 +7540,10 @@ void DrawingML::WriteDiagram(const css::uno::Reference<css::drawing::XShape>& rX
 
         // store size and position of background shape instead of group shape
         // as some shapes may be outside
-        css::uno::Reference<css::drawing::XShapes> xShapes(rXShape, uno::UNO_QUERY);
+        cpo::uno::Reference<css::drawing::XShapes> xShapes(rXShape, uno::UNO_QUERY);
         if (xShapes.is() && xShapes->hasElements())
         {
-            css::uno::Reference<css::drawing::XShape> xShapeBg(xShapes->getByIndex(0),
+            cpo::uno::Reference<css::drawing::XShape> xShapeBg(xShapes->getByIndex(0),
                                                                uno::UNO_QUERY);
             awt::Point aPos = xShapeBg->getPosition();
             awt::Size aSize = xShapeBg->getSize();

@@ -34,7 +34,10 @@
 #include <osl/diagnose.h>
 
 #include <oleembobj.hxx>
+
 #include <utility>
+#include <optional>
+
 #include "olepersist.hxx"
 
 #include "ownview.hxx"
@@ -42,9 +45,10 @@
 #include "olecomponent.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
-OleEmbeddedObject::OleEmbeddedObject( uno::Reference< uno::XComponentContext > xContext,
+OleEmbeddedObject::OleEmbeddedObject( uno::Reference< cpo::uno::XComponentContext > xContext,
                                       const cpo::uno::Sequence< sal_Int8 >& aClassID,
                                       OUString aClassName )
 : m_bReadOnly( false )
@@ -77,7 +81,7 @@ OleEmbeddedObject::OleEmbeddedObject( uno::Reference< uno::XComponentContext > x
 
 // In case of loading from persistent entry the classID of the object
 // will be retrieved from the entry, during construction it is unknown
-OleEmbeddedObject::OleEmbeddedObject( uno::Reference< uno::XComponentContext > xContext, bool bLink )
+OleEmbeddedObject::OleEmbeddedObject( uno::Reference< cpo::uno::XComponentContext > xContext, bool bLink )
 : m_bReadOnly( false )
 , m_bDisposed( false )
 , m_nObjectState( -1 )
@@ -105,7 +109,7 @@ OleEmbeddedObject::OleEmbeddedObject( uno::Reference< uno::XComponentContext > x
 #ifdef _WIN32
 
 // this constructor let object be initialized from clipboard
-OleEmbeddedObject::OleEmbeddedObject( const uno::Reference< uno::XComponentContext >& xContext )
+OleEmbeddedObject::OleEmbeddedObject( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 : m_bReadOnly( false )
 , m_bDisposed( false )
 , m_nObjectState( -1 )
@@ -178,7 +182,7 @@ void OleEmbeddedObject::MakeEventListenerNotification_Impl( const OUString& aEve
         {
             throw; // forEach handles this
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
         }
     };
@@ -386,7 +390,7 @@ uno::Reference< util::XCloseable > OleEmbeddedObject::getComponent()
     if ( m_nObjectState == -1 ) // || m_nObjectState == embed::EmbedStates::LOADED )
     {
         // the object is still not running
-        throw uno::RuntimeException( u"The object is not loaded!"_ustr,
+        throw cpo::uno::RuntimeException( u"The object is not loaded!"_ustr,
                                         static_cast< ::cppu::OWeakObject* >(this) );
     }
 
@@ -400,7 +404,7 @@ uno::Reference< util::XCloseable > OleEmbeddedObject::getComponent()
     assert(!m_pOleComponent.is());
     // TODO/LATER: Is it correct???
     return uno::Reference< util::XCloseable >();
-    // throw uno::RuntimeException(); // TODO
+    // throw cpo::uno::RuntimeException(); // TODO
 }
 
 
@@ -462,7 +466,7 @@ void OleEmbeddedObject::close( bool bDeliverOwnership )
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
-    uno::Reference< uno::XInterface > xSelfHold( static_cast< ::cppu::OWeakObject* >( this ) );
+    uno::Reference< cpo::uno::XInterface > xSelfHold( static_cast< ::cppu::OWeakObject* >( this ) );
     lang::EventObject aSource( static_cast< ::cppu::OWeakObject* >( this ) );
 
     if ( m_pInterfaceContainer )
@@ -478,7 +482,7 @@ void OleEmbeddedObject::close( bool bDeliverOwnership )
                 {
                     static_cast<util::XCloseListener*>(pIterator.next())->queryClosing( aSource, bDeliverOwnership );
                 }
-                catch( const uno::RuntimeException& )
+                catch( const cpo::uno::RuntimeException& )
                 {
                     pIterator.remove();
                 }
@@ -496,7 +500,7 @@ void OleEmbeddedObject::close( bool bDeliverOwnership )
                 {
                     static_cast<util::XCloseListener*>(pCloseIterator.next())->notifyClosing( aSource );
                 }
-                catch( const uno::RuntimeException& )
+                catch( const cpo::uno::RuntimeException& )
                 {
                     pCloseIterator.remove();
                 }
@@ -650,7 +654,7 @@ void OleEmbeddedObject::translateAccelerators(
 
 // XChild
 
-css::uno::Reference< css::uno::XInterface > OleEmbeddedObject::getParent()
+cpo::uno::Reference< cpo::uno::XInterface > OleEmbeddedObject::getParent()
 {
     // begin wrapping related part ====================
     uno::Reference< container::XChild > xWrappedObject( m_xWrappedObject, uno::UNO_QUERY );
@@ -665,7 +669,7 @@ css::uno::Reference< css::uno::XInterface > OleEmbeddedObject::getParent()
 }
 
 
-void OleEmbeddedObject::setParent( const css::uno::Reference< css::uno::XInterface >& xParent )
+void OleEmbeddedObject::setParent( const cpo::uno::Reference< cpo::uno::XInterface >& xParent )
 {
     // begin wrapping related part ====================
     uno::Reference< container::XChild > xWrappedObject( m_xWrappedObject, uno::UNO_QUERY );
@@ -680,12 +684,12 @@ void OleEmbeddedObject::setParent( const css::uno::Reference< css::uno::XInterfa
     m_xParent = xParent;
 }
 
-void OleEmbeddedObject::setStream(const css::uno::Reference<css::io::XStream>& xStream)
+void OleEmbeddedObject::setStream(const cpo::uno::Reference<css::io::XStream>& xStream)
 {
     m_xObjectStream = xStream;
 }
 
-css::uno::Reference<css::io::XStream> OleEmbeddedObject::getStream()
+cpo::uno::Reference<css::io::XStream> OleEmbeddedObject::getStream()
 {
     return m_xObjectStream;
 }

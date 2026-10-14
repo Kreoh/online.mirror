@@ -38,18 +38,18 @@ class XMLBackgroundImageContext final : public XMLElementPropertyContext
     OUString sFilter;
     sal_Int8 nTransparency;
 
-    css::uno::Reference < css::io::XOutputStream > m_xBase64Stream;
+    cpo::uno::Reference < css::io::XOutputStream > m_xBase64Stream;
 
 private:
     void ProcessAttrs(
-            const css::uno::Reference<css::xml::sax::XFastAttributeList > & xAttrList );
+            const cpo::uno::Reference<css::xml::sax::XFastAttributeList > & xAttrList );
 
 public:
 
     XMLBackgroundImageContext(
         SvXMLImport& rImport,
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList > & xAttrList,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList > & xAttrList,
         const XMLPropertyState& rProp,
         sal_Int32 nPosIdx,
         sal_Int32 nFilterIdx,
@@ -59,10 +59,10 @@ public:
 
     virtual ~XMLBackgroundImageContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 

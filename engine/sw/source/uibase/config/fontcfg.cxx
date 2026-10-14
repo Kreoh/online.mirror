@@ -28,7 +28,7 @@
 #include <com/sun/star/i18n/ScriptType.hpp>
 
 using namespace utl;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 static LanguageType lcl_LanguageOfType(sal_Int16 nType, LanguageType eWestern, LanguageType eCJK, LanguageType eCTL)
@@ -270,35 +270,6 @@ sal_Int32 SwStdFontConfig::GetDefaultHeightFor(sal_uInt16 nFontType, LanguageTyp
         nRet = FONTSIZE_KOREAN_DEFAULT;
     }
     return nRet;
-}
-
-void SwStdFontConfig::ChangeInt( sal_uInt16 nFontType, sal_Int32 nHeight )
-{
-    OSL_ENSURE( nFontType < DEF_FONT_COUNT, "invalid index in SwStdFontConfig::ChangeInt()");
-    if( nFontType >= DEF_FONT_COUNT || m_nDefaultFontHeight[nFontType] == nHeight)
-        return;
-
-    SvtLinguOptions aLinguOpt;
-    if (!comphelper::IsFuzzing())
-        SvtLinguConfig().GetOptions( aLinguOpt );
-
-    LanguageType eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
-                 eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
-                 eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
-
-    // #i92090# default height value sets back to -1
-    const sal_Int32 nDefaultHeight = GetDefaultHeightFor(nFontType, lcl_LanguageOfType(nFontType, eWestern, eCJK, eCTL));
-    const bool bIsDefaultHeight = nHeight == nDefaultHeight;
-    if( bIsDefaultHeight && m_nDefaultFontHeight[nFontType] > 0 )
-    {
-        SetModified();
-        m_nDefaultFontHeight[nFontType] = -1;
-    }
-    else if( !bIsDefaultHeight && nHeight != m_nDefaultFontHeight[nFontType] )
-    {
-        SetModified();
-        m_nDefaultFontHeight[nFontType] = nHeight;
-    }
 }
 
 sal_Int32 SwStdFontConfig::GetFontHeight( sal_uInt8 nFont, sal_uInt8 nScriptType, LanguageType eLang )

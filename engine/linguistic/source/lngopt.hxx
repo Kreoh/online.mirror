@@ -84,19 +84,19 @@ class LinguProps :
 
     void    launchEvent( const css::beans::PropertyChangeEvent &rEvt ) const;
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool getPropertyBool(const OUString& aPropertyName);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int16 getPropertyInt16(const OUString& aPropertyName);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::lang::Locale getPropertyLocale(const OUString& aPropertyName);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setProperty(const OUString& aPropertyName, bool p1)
         { setPropertyValue( aPropertyName, cpo::uno::Any(p1) ); }
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setProperty(const OUString& aPropertyName, sal_Int16 p1)
         { setPropertyValue( aPropertyName, cpo::uno::Any(p1) ); }
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setProperty(const OUString& aPropertyName, css::lang::Locale p1)
         { setPropertyValue( aPropertyName, cpo::uno::Any(p1) ); }
 
@@ -169,13 +169,13 @@ public:
         { setProperty(UPN_DEFAULT_LOCALE_CTL, p1); }
 
     // XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
     virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
     virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
-    virtual void addPropertyChangeListener( const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& rxListener ) override;
-    virtual void removePropertyChangeListener( const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& rxListener ) override;
-    virtual void addVetoableChangeListener( const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& rxListener ) override;
-    virtual void removeVetoableChangeListener( const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& rxListener ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& rxListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& rxListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& rxListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& rxListener ) override;
 
     // XFastPropertySet
     virtual void setFastPropertyValue( sal_Int32 nHandle, const cpo::uno::Any& aValue ) override;
@@ -187,8 +187,8 @@ public:
 
     // XComponent
     virtual void dispose() override;
-    virtual void addEventListener( const css::uno::Reference< css::lang::XEventListener >& rxListener ) override;
-    virtual void removeEventListener( const css::uno::Reference< css::lang::XEventListener >& rxListener ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& rxListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& rxListener ) override;
 
     // XServiceInfo
     virtual OUString getImplementationName() override;

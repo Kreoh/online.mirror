@@ -18,7 +18,7 @@ dnl cspell:ignoreRegExp / -isystem /
 # several non-alphanumeric characters, those are split off and used only for the
 # ABOUTBOXPRODUCTVERSIONSUFFIX in openoffice.lst. Why that is necessary, no idea.
 
-AC_INIT([Collabora Office],[26.04.4.0],[],[],[https://www.collaboraoffice.org/])
+AC_INIT([Collabora Office],[26.04.6.0],[],[],[https://www.collaboraoffice.org/])
 
 dnl libnumbertext needs autoconf 2.68, but that can pick up autoconf268 just fine if it is installed
 dnl whereas aclocal (as run by autogen.sh) insists on using autoconf and fails hard
@@ -97,28 +97,23 @@ PathFormat()
     # Return value: $formatted_path and $formatted_path_unix.
     #
     # $formatted_path is the argument in Windows format, but using forward slashes instead of
-    # backslashes, using 8.3 pathname components if necessary (if it otherwise would contains spaces
-    # or shell metacharacters).
+    # backslashes. A pathname holding a space keeps it, so whoever hands the value to a tool puts
+    # quotes around it.
     #
-    # $formatted_path_unix is the argument in a form usable in Cygwin or WSL, using 8.3 components if
-    # necessary. On Cygwin, it is the same as $formatted_path, but on WSL it is $formatted_path as a
-    # Unix pathname.
-    #
-    # Errors out if 8.3 names are needed but aren't present for some of the path components.
+    # $formatted_path_unix is the argument in a form usable in Cygwin or WSL. On Cygwin, it is the
+    # same as $formatted_path, because a Windows binary runs from that spelling; on WSL it is
+    # $formatted_path as a Unix pathname.
 
     # Examples:
     #
     # /home/tml/lo/master-optimised => C:/cygwin64/home/tml/lo/master-optimised
     #
-    # C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe => C:/PROGRA~2/MICROS~3/INSTAL~1/vswhere.exe
+    # C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe
+    #     => C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe
     #
-    # C:\Program Files (x86)\Microsoft Visual Studio\2019\Community => C:/PROGRA~2/MICROS~3/2019/COMMUN~1
+    # /cygdrive/c/Program Files (x86)/Windows Kits/10 => C:/Program Files (x86)/Windows Kits/10
     #
-    # C:/PROGRA~2/WI3CF2~1/10/Include/10.0.18362.0/ucrt => C:/PROGRA~2/WI3CF2~1/10/Include/10.0.18362.0/ucrt
-    #
-    # /cygdrive/c/PROGRA~2/WI3CF2~1/10 => C:/PROGRA~2/WI3CF2~1/10
-    #
-    # C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\ => C:/PROGRA~2/WI3CF2~1/NETFXSDK/4.8/
+    # C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\ => C:/Program Files (x86)/Windows Kits/NETFXSDK/4.8/
     #
     # /usr/bin/find.exe => C:/cygwin64/bin/find.exe
 
@@ -138,31 +133,6 @@ PathFormat()
             formatted_path=$(echo "$formatted_path" | tr -d '\r')
         fi
 
-        pf_conv_to_dos=
-        # spaces,parentheses,brackets,braces are problematic in pathname
-        # so are backslashes
-        case "$formatted_path" in
-            *\ * | *\)* | *\(* | *\{* | *\}* | *\[* | *\]* | *\\* )
-                pf_conv_to_dos="yes"
-            ;;
-        esac
-        if test "$pf_conv_to_dos" = "yes"; then
-            if test "$build_os" = "wsl"; then
-                case "$formatted_path" in
-                    /*)
-                        formatted_path=$(wslpath -w "$formatted_path")
-                        ;;
-                esac
-                formatted_path=$($WSL_LO_HELPER --8.3 "$formatted_path")
-            elif test "$GNUMAKE_WIN_NATIVE" = "TRUE" ; then
-                formatted_path=`cygpath -sm "$formatted_path"`
-            else
-                formatted_path=`cygpath -d "$formatted_path"`
-            fi
-            if test $? -ne 0;  then
-                AC_MSG_ERROR([path conversion failed for "$1".])
-            fi
-        fi
         fp_count_colon=`echo "$formatted_path" | $GREP -c "[:]"`
         fp_count_slash=`echo "$formatted_path" | $GREP -c "[/]"`
         if test "$fp_count_slash$fp_count_colon" != "00"; then
@@ -201,10 +171,6 @@ PathFormat()
                 AC_MSG_ERROR([path conversion failed for "$1".])
             fi
         fi
-        fp_count_space=`echo "$formatted_path" | $GREP -c "[ ]"`
-        if test "$fp_count_space" != "0"; then
-            AC_MSG_ERROR([converted path "$formatted_path" still contains spaces. Short filenames (8.3 filenames) support was disabled on this system?])
-        fi
     fi
     if test "$build_os" = "wsl"; then
         # WSL can't run Windows binaries from Windows pathnames so we need a separate return value in Unix format
@@ -214,18 +180,101 @@ PathFormat()
         formatted_path_unix="$formatted_path"
     fi
     if test -n "$WSL_ONLY_AS_HELPER"; then
-        # if already in unix format, switch to windows format to create shortened path
+        # tool output (vswhere, reg.exe, ...) can carry a trailing CR
+        formatted_path=$(echo "$formatted_path" | tr -d '\r')
+        # the build runs in the Windows realm, so hand back the Windows
+        # spelling, and a Unix one the helper shell can reach it by
         case "$formatted_path" in
             /*)
                 formatted_path=$(wslpath -m "$formatted_path")
                 ;;
         esac
-
-        # cd to /mnt/c to avoid wsl/cmd complaining about not supporting UNC paths/the current working directory
-        formatted_path_unix=$(wslpath -u "$(cd /mnt/c; cmd.exe /c $shortpath_cmd "$formatted_path" | tr -d '\r')")
-        # WSL can't run Windows binaries from Windows pathnames so we need a separate return value in Unix format
-        formatted_path=$(wslpath -m "$formatted_path_unix")
+        formatted_path_unix=$(wslpath -u "$formatted_path")
+    elif test -n "$MSYS_ONLY_AS_HELPER"; then
+        # tool output (vswhere, reg.exe, ...) can carry a trailing CR
+        formatted_path=$(echo "$formatted_path" | tr -d '\r')
+        formatted_path=$(cygpath -m "$formatted_path")
+        formatted_path_unix=$(cygpath -u "$formatted_path")
     fi
+}
+
+reject_awkward_characters()
+{
+    # Args: $1: a pathname. $2: what the pathname is, for the message.
+    #
+    # The build's own pathnames become make targets and prerequisites, and
+    # gbuild writes them into recipes as plain text. Make holds a target name
+    # as one word and has no way to carry a space in it, and a parenthesis,
+    # brace or bracket is taken apart by make or by the shell before the recipe
+    # runs. A pathname outside the build, a compiler's for instance, goes
+    # through none of that and may hold whatever it likes.
+
+    case "$1" in
+    *\ * | *\(* | *\)* | *\{* | *\}* | *\@<:@* | *\@:>@* )
+        AC_MSG_ERROR([the $2 pathname "$1" holds a space or one of ( ) { } @<:@ @:>@. Make cannot carry those in a target name, so put the $2 somewhere without them.])
+        ;;
+    esac
+}
+
+add_to_path_env()
+{
+    # Args: $1: a directory holding programs.
+    #
+    # PATH is separated by colons and a drive letter brings one of its own, so
+    # the entry has to be a Unix pathname. PathFormat hands back the Windows
+    # spelling under cygwin, because a Windows binary runs from it happily;
+    # PATH is the one place that does not hold.
+
+    PathFormat "$1"
+    atpe_dir="$formatted_path_unix"
+    case "$atpe_dir" in
+    ?:*)
+        atpe_dir=`cygpath -u "$atpe_dir"`
+        ;;
+    esac
+    PATH="$atpe_dir:$PATH"
+}
+
+add_to_include_env()
+{
+    # Args: $1: a directory holding headers.
+    #
+    # cl.exe reads the INCLUDE environment variable, whose entries are
+    # separated by semicolons, so a directory holding a space goes in it
+    # unharmed. An -I flag in CFLAGS or CPPFLAGS cannot carry one: autoconf
+    # builds its compile command by expanding those without quotes, and quotes
+    # written into the value are not looked at a second time.
+
+    if test -z "$INCLUDE"; then
+        INCLUDE="$1"
+    else
+        INCLUDE="$INCLUDE;$1"
+    fi
+    export INCLUDE
+    # wsl passes on to Windows programs only what WSLENV names, and under
+    # WSL_ONLY_AS_HELPER configure runs cl.exe from wsl
+    if test -n "$WSL_ONLY_AS_HELPER"; then
+        case ":$WSLENV:" in
+            *:INCLUDE:*)
+                ;;
+            *)
+                export WSLENV=${WSLENV:+$WSLENV:}INCLUDE
+                ;;
+        esac
+    fi
+}
+
+encode_path()
+{
+    # Args: $1: a pathname.
+    #
+    # Return value: $encoded_path, the pathname with a percent written as %25
+    # and a space as %20, in that order. Decoding runs the other way round, so
+    # a pathname that holds a percent of its own comes back exactly as it went
+    # in. An encoded pathname stays one word through a make list, which a
+    # pathname holding a space does not.
+
+    encoded_path=`printf '%s\n' "$1" | $SED -e 's/%/%25/g' -e 's/ /%20/g'`
 }
 
 AbsolutePath()
@@ -341,11 +390,24 @@ dnl ===================================================================
 # if so, we aim to run nearly everything in the Windows realm, and only run autogen/configure
 # in wsl and run a few tools via wsl
 WSL_ONLY_AS_HELPER=
+# the same idea without WSL: autogen/configure run in an MSYS2 shell ($MSYSTEM is set there,
+# and in git-bash), the build runs from git-bash with native tools, and the few unix-only
+# tools (autoconf, flex, bison, gperf, nasm, zip, gettext) come from the MSYS2 installation.
+# Any MSYS-runtime shell triggers this on purpose, plain git-bash included: configure run
+# there needs exactly these conventions (cygpath, Windows-realm build); solenv/bin/run-msys2
+# and the CODA-W front-end always start configure in a real MSYS2 shell, and a plain git-bash
+# has no autotools, so autogen.sh stops early there with a clear message anyway
+MSYS_ONLY_AS_HELPER=
 if test -n "$WSL_DISTRO_NAME" && $(echo $PATH |grep -q -e mingw64 -e clangarm64); then
     WSL_ONLY_AS_HELPER=TRUE
-    shortpath_cmd=$(wslpath -m $srcdir/solenv/bin/shortpath.cmd)
+elif test -n "$MSYSTEM"; then
+    MSYS_ONLY_AS_HELPER=TRUE
+fi
+# for the guards that apply to both helper flavors
+UNIX_ONLY_AS_HELPER="$WSL_ONLY_AS_HELPER$MSYS_ONLY_AS_HELPER"
+if test -n "$UNIX_ONLY_AS_HELPER"; then
     if test -n "$PKG_CONFIG"; then
-        # make sure it is specified in a unix form/a path that wsl can access
+        # make sure it is specified in a unix form/a path that the helper shell can access
         PathFormat "$PKG_CONFIG"
         PKG_CONFIG="$formatted_path_unix"
     fi
@@ -368,7 +430,9 @@ if test -n "$WSL_DISTRO_NAME" && $(echo $PATH |grep -q -e mingw64 -e clangarm64)
              for example: wsl.exe -d MyDistro -u NonDefaultUser])],
         [],
         [with_wsl_command="wsl.exe"])
-    WSL="$with_wsl_command"
+    if test -n "$WSL_ONLY_AS_HELPER"; then
+        WSL="$with_wsl_command"
+    fi
 fi
 AC_SUBST([STRAWBERRY_PERL])
 AC_SUBST([WSL])
@@ -418,7 +482,7 @@ if test -z "$host" -a -z "$build" -a "`wslsys -v 2>/dev/null`" != ""; then
         local result
 
         if test -n "$opt_d" -o -n "$opt_m" -o -n "$opt_w"; then
-            # Print Windows path, possibly in 8.3 form (-d) or with forward slashes (-m)
+            # Print Windows path, with forward slashes for -m
 
             if test -n "$opt_u"; then
                 AC_MSG_ERROR([Invalid cygpath invocation: Both Windows and Unix path output requested])
@@ -439,9 +503,6 @@ if test -z "$host" -a -z "$build" -a "`wslsys -v 2>/dev/null`" != ""; then
                     AC_MSG_ERROR([Invalid cygpath invocation: Path '$input' is not absolute])
                     ;;
             esac
-            if test -n "$opt_d" -o -n "$opt_s"; then
-                input=$($WSL_LO_HELPER --8.3 "$input")
-            fi
             if test -n "$opt_m"; then
                 input="${input//\\//}"
             fi
@@ -467,17 +528,10 @@ if test -z "$host" -a -z "$build" -a "`wslsys -v 2>/dev/null`" != ""; then
         BUILDDIR=.
 
         # Nothing special with these file names, just arbitrary ones picked to test with
-        cygpath -d /usr/lib64/ld-linux-x86-64.so.2
         cygpath -w /usr/lib64/ld-linux-x86-64.so.2
         cygpath -m /usr/lib64/ld-linux-x86-64.so.2
-        cygpath -m -s /usr/lib64/ld-linux-x86-64.so.2
-        # At least on my machine for instance this file does have an 8.3 name
-        cygpath -d /mnt/c/windows/WindowsUpdate.log
-        # But for instance this one doesn't
         cygpath -w /mnt/c/windows/system32/AboutSettingsHandlers.dll
-        cygpath -ws /mnt/c/windows/WindowsUpdate.log
         cygpath -m /mnt/c/windows/system32/AboutSettingsHandlers.dll
-        cygpath -ms /mnt/c/windows/WindowsUpdate.log
 
         cygpath -u 'c:\windows\system32\AboutSettingsHandlers.dll'
         cygpath -u 'c:/windows/system32/AboutSettingsHandlers.dll'
@@ -602,11 +656,6 @@ SRC_ROOT=`pwd`
 cd $BUILDDIR
 x_Cygwin=[\#]
 
-dnl ======================================
-dnl Required GObject introspection version
-dnl ======================================
-INTROSPECTION_REQUIRED_VERSION=1.32.0
-
 dnl ===================================================================
 dnl Search all the common names for GNU Make
 dnl ===================================================================
@@ -649,11 +698,11 @@ else
     fi
 fi
 
-win_short_path_for_make()
+win_path_for_make()
 {
     local short_path="$1"
-    if test "$GNUMAKE_WIN_NATIVE" = "TRUE" ; then
-        cygpath -sm "$short_path"
+    if test "$GNUMAKE_WIN_NATIVE" = "TRUE" -o -n "$MSYS_ONLY_AS_HELPER"; then
+        cygpath -m "$short_path"
     elif test -n "$WSL_ONLY_AS_HELPER"; then
         # when already unix-style path, wslpath doesn't return anything
         case "$short_path" in
@@ -664,7 +713,7 @@ win_short_path_for_make()
         esac
         wslpath -m "$(wslpath -u "$short_path")"
     else
-        cygpath -u "$(cygpath -d "$short_path")"
+        cygpath -u "$short_path"
     fi
 }
 
@@ -681,6 +730,11 @@ if test "$build_os" = "cygwin"; then
     else
         AC_MSG_RESULT([found: $COMSPEC])
     fi
+fi
+
+if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
+    reject_awkward_characters "$SRC_ROOT" "source"
+    reject_awkward_characters "$BUILDDIR" "build"
 fi
 
 AC_SUBST(SRC_ROOT)
@@ -700,7 +754,7 @@ if test -z "$SED"; then
     AC_MSG_ERROR([install sed to run this script])
 fi
 
-if test "$build_os" = "cygwin" -o -n "$WSL_ONLY_AS_HELPER"; then
+if test "$build_os" = "cygwin" -o -n "$UNIX_ONLY_AS_HELPER"; then
     # convenience check for a custom pkgconf used by meson - needs to be a version that uses windows
     # style paths. Needs to be checked before the configure-switches that use PKG_CHECK_MODULES as
     # that would already set the PKG_CONFIG var and then bypass/skip this autoselection
@@ -719,7 +773,7 @@ if test "$build_os" = "cygwin" -o -n "$WSL_ONLY_AS_HELPER"; then
     AC_MSG_CHECKING([whether symbolic links can be created])
     rm -f conftest.symlink conftest.symtarget
     echo conftest > conftest.symtarget
-    cmd.exe /c "mklink conftest.symlink conftest.symtarget" >/dev/null 2>&1
+    MSYS2_ARG_CONV_EXCL="*" cmd.exe /c "mklink conftest.symlink conftest.symtarget" >/dev/null 2>&1
     symlink_ok=$?
     rm -f conftest.symlink conftest.symtarget
     if test "$symlink_ok" = 0; then
@@ -924,25 +978,6 @@ if test -n "$with_android_sdk"; then
 fi
 AC_SUBST(ANDROID_SDK_DIR)
 
-AC_ARG_ENABLE([android-kit],
-    AS_HELP_STRING([--enable-android-kit],
-        [The Android app from the android/ subdir needs several tweaks all
-         over the place that break the COKit when used in the Online-based
-         Android app.  This switch indicates that the intent of this build is
-         actually the Online-based, non-modified COKit.])
-)
-ENABLE_ANDROID_KIT=
-if test -n "$ANDROID_NDK_DIR" ; then
-    if test "$enable_android_kit" = yes; then
-        ENABLE_ANDROID_KIT=TRUE
-        AC_DEFINE(HAVE_FEATURE_ANDROID_KIT)
-        AC_MSG_NOTICE([building the Android version... for the Online-based Android app])
-    else
-        AC_MSG_NOTICE([building the Android version... for the app from the android/ subdir])
-    fi
-fi
-AC_SUBST([ENABLE_ANDROID_KIT])
-
 AC_ARG_ENABLE([kit-always-active],
     AS_HELP_STRING([--enable-kit-always-active],
         [Make comphelper::COKit::isActive() a compile-time constant
@@ -954,21 +989,6 @@ if test "$enable_kit_always_active" = yes; then
     ENABLE_KIT_ALWAYS_ACTIVE=TRUE
 fi
 AC_SUBST(ENABLE_KIT_ALWAYS_ACTIVE)
-
-libo_FUZZ_ARG_ENABLE([android-editing],
-    AS_HELP_STRING([--enable-android-editing],
-        [Enable the experimental editing feature on Android.])
-)
-ENABLE_ANDROID_EDITING=
-if test "$enable_android_editing" = yes; then
-    ENABLE_ANDROID_EDITING=TRUE
-fi
-AC_SUBST([ENABLE_ANDROID_EDITING])
-
-disable_database_connectivity_dependencies()
-{
-    enable_evolution2=no
-}
 
 # ===================================================================
 #
@@ -1009,33 +1029,8 @@ HOST_PLATFORM="$host"
 
 host_cpu_for_clang="$host_cpu"
 
+default_with_system_libxml=no
 case "$host_os" in
-
-solaris*)
-    using_freetype_fontconfig=yes
-    using_x11=yes
-    build_skia=yes
-    _os=SunOS
-
-    dnl ===========================================================
-    dnl Check whether we're using Solaris 10 - SPARC or Intel.
-    dnl ===========================================================
-    AC_MSG_CHECKING([the Solaris operating system release])
-    _os_release=`echo $host_os | $SED -e s/solaris2\.//`
-    if test "$_os_release" -lt "10"; then
-        AC_MSG_ERROR([use Solaris >= 10 to build Collabora Office])
-    else
-        AC_MSG_RESULT([ok ($_os_release)])
-    fi
-
-    dnl Check whether we're using a SPARC or i386 processor
-    AC_MSG_CHECKING([the processor type])
-    if test "$host_cpu" = "sparc" -o "$host_cpu" = "i386"; then
-        AC_MSG_RESULT([ok ($host_cpu)])
-    else
-        AC_MSG_ERROR([only SPARC and i386 processors are supported])
-    fi
-    ;;
 
 linux-gnu*|k*bsd*-gnu*|linux-musl*)
     using_freetype_fontconfig=yes
@@ -1074,7 +1069,6 @@ cygwin*|wsl*)
     fi
     using_x11=no
     test_unix_dlapi=no
-    enable_pagein=no
     build_skia=yes
     _os=WINNT
 
@@ -1095,7 +1089,8 @@ darwin*) # macOS
     fi
     using_x11=no
     build_skia=yes
-    enable_pagein=no
+    # macOS ships libxml/libxslt; prefer the system copy unless overridden.
+    default_with_system_libxml=yes
     if test -n "$LODE_HOME" ; then
         mac_sanitize_path
         AC_MSG_NOTICE([sanitized the PATH to $PATH])
@@ -1130,16 +1125,13 @@ ios*) # iOS
     build_crypto=no
     test_libcmis=no
     test_webdav=no
-    with_gssapi=no
     if test -n "$LODE_HOME" ; then
         mac_sanitize_path
         AC_MSG_NOTICE([sanitized the PATH to $PATH])
     fi
     _os=iOS
     enable_mpl_subset=yes
-    disable_database_connectivity_dependencies
     enable_coinmp=no
-    enable_xmlhelp=no
     with_ppds=no
     # The simulator ran only on Intel Macs when this was written, so it
     # forced the host triple to x86_64. On Apple Silicon the simulator is
@@ -1233,12 +1225,9 @@ linux-android*)
     build_crypto=no
     test_system_freetype=no
     test_webdav=no
-    with_gssapi=no
-    disable_database_connectivity_dependencies
     enable_mpl_subset=yes
     enable_coinmp=yes
     enable_python=no
-    enable_xmlhelp=no
     _os=Android
     ;;
 
@@ -1248,7 +1237,6 @@ haiku*)
     test_gtk3=no
     enable_coinmp=no
     enable_pdfium=no
-    enable_sdremote=no
     _os=Haiku
     ;;
 
@@ -1501,9 +1489,9 @@ dnl ===================================================================
 dnl Sanity checks for Emscripten SDK setup
 dnl ===================================================================
 
-EMSCRIPTEN_MIN_MAJOR=3
-EMSCRIPTEN_MIN_MINOR=1
-EMSCRIPTEN_MIN_TINY=46
+EMSCRIPTEN_MIN_MAJOR=4
+EMSCRIPTEN_MIN_MINOR=0
+EMSCRIPTEN_MIN_TINY=0
 EMSCRIPTEN_MIN_VERSION="${EMSCRIPTEN_MIN_MAJOR}.${EMSCRIPTEN_MIN_MINOR}.${EMSCRIPTEN_MIN_TINY}"
 
 EMSCRIPTEN_WORKERJS=
@@ -1601,13 +1589,6 @@ AC_ARG_ENABLE(database-connectivity,
         [Disable various database connectivity. Work in progress, use only if you are hacking on it.])
 )
 
-# This doesn't mean not building extensions, it means not supporting
-# any extension mechanism at all
-libo_FUZZ_ARG_ENABLE(extensions,
-    AS_HELP_STRING([--disable-extensions],
-        [Disable all add-on extension functionality. Work in progress, use only if you are hacking on it.])
-)
-
 AC_ARG_ENABLE(scripting,
     AS_HELP_STRING([--disable-scripting],
         [Disable BASIC, Java, Python and .NET. Work in progress, use only if you are hacking on it.]),
@@ -1655,6 +1636,12 @@ libo_FUZZ_ARG_ENABLE(mergelibs,
         [Merge several of the smaller libraries into one big "merged" library.])
 )
 
+libo_FUZZ_ARG_ENABLE(unitedlibs,
+    AS_HELP_STRING([--enable-unitedlibs=yes/no],
+        [Merge all of the libraries into a single large library,
+         This option is mutually exclusive with --enable-mergelibs=yes.])
+)
+
 AC_ARG_ENABLE(fetch-external,
     AS_HELP_STRING([--disable-fetch-external],
         [Disables fetching external tarballs from web sources.])
@@ -1687,13 +1674,10 @@ AC_ARG_ENABLE(mpl-subset,
 
 libo_FUZZ_ARG_ENABLE(evolution2,
     AS_HELP_STRING([--enable-evolution2],
-        [Allows the built-in evolution 2 addressbook connectivity build to be
-         enabled.])
-)
-
-AC_ARG_ENABLE(avahi,
-    AS_HELP_STRING([--enable-avahi],
-        [Determines whether to use Avahi to advertise Impress to remote controls.])
+        [Enable the built-in evolution 2 addressbook connectivity build.
+         Disabled by default.]),
+,
+    [enable_evolution2=no]
 )
 
 AC_ARG_ENABLE(msvc-debug-runtime,
@@ -1823,11 +1807,6 @@ libo_FUZZ_ARG_ENABLE(gtk3,
         [Determines whether to use Gtk+ 3.0 vclplug on platforms where Gtk+ 3.0 is available.]),
 ,test "${test_gtk3}" = no -o "${enable_gtk3+set}" = set || enable_gtk3=yes)
 
-AC_ARG_ENABLE(introspection,
-    AS_HELP_STRING([--enable-introspection],
-        [Generate files for GObject introspection.  Requires --enable-gtk3.  (Typically used by
-         Linux distributions.)]))
-
 AC_ARG_ENABLE(split-app-modules,
     AS_HELP_STRING([--enable-split-app-modules],
         [Split file lists for app modules, e.g. base, calc.
@@ -1850,18 +1829,6 @@ libo_FUZZ_ARG_ENABLE(dbus,
         [Determines whether to enable features that depend on dbus.
          e.g. Presentation mode screensaver control, bluetooth presentation control, automatic font install]),
 ,test "${enable_dbus+set}" = set || enable_dbus=yes)
-
-libo_FUZZ_ARG_ENABLE(sdremote,
-    AS_HELP_STRING([--enable-sdremote],
-        [Enable Impress remote control (i.e. the server component).
-         Disabled by default.]),
-,enable_sdremote=no)
-
-libo_FUZZ_ARG_ENABLE(sdremote-bluetooth,
-    AS_HELP_STRING([--enable-sdremote-bluetooth],
-        [Build sdremote with bluetooth support. Requires dbus on Linux.
-         Disabled by default.]),
-,enable_sdremote_bluetooth=no)
 
 libo_FUZZ_ARG_ENABLE(gio,
     AS_HELP_STRING([--disable-gio],
@@ -2091,9 +2058,8 @@ AC_ARG_ENABLE(library-bin-tar,
 )
 
 AC_ARG_ENABLE(dconf,
-    AS_HELP_STRING([--disable-dconf],
-        [Disable the dconf configuration backend (enabled by default where
-         available).]))
+    AS_HELP_STRING([--enable-dconf],
+        [Enable the dconf configuration backend.]))
 
 libo_FUZZ_ARG_ENABLE(formula-logger,
     AS_HELP_STRING(
@@ -2108,9 +2074,9 @@ AC_ARG_ENABLE(opencl,
 ,enable_opencl=yes)
 
 libo_FUZZ_ARG_ENABLE(librelogo,
-    AS_HELP_STRING([--disable-librelogo],
-        [Do not build LibreLogo.]),
-,enable_librelogo=yes)
+    AS_HELP_STRING([--enable-librelogo],
+        [Build LibreLogo. Disabled by default.]),
+,enable_librelogo=no)
 
 AC_ARG_ENABLE(wasm-strip,
     AS_HELP_STRING([--enable-wasm-strip],
@@ -2143,25 +2109,14 @@ else
     enable_emscripten_proxy_posix_sockets=
 fi
 
-AC_ARG_ENABLE(embind-uno,
-    AS_HELP_STRING([--enable-embind-uno],
-        [Enable the UNO embind feature.  (For enabling that against emsdk 4.0.11 or later, see
-         <https://gerrit.libreoffice.org/c/core/+/188465> "Emscripten: Adapt to internal
-         emscripten/val.h change in Emscripten 4.0.11".)]))
-
 AC_ARG_ENABLE(xmlhelp,
-    AS_HELP_STRING([--disable-xmlhelp],
-        [Disable XML help support]),
-,enable_xmlhelp=yes)
+    AS_HELP_STRING([--enable-xmlhelp],
+        [Enable XML help support. Disabled by default.]),
+,enable_xmlhelp=no)
 
 AC_ARG_ENABLE(customtarget-components,
     AS_HELP_STRING([--enable-customtarget-components],
         [Generates the static UNO object constructor mapping from the build.]))
-
-AC_ARG_ENABLE(cli,
-    AS_HELP_STRING([--disable-cli],
-        [Disable the generation of old CLI bindings.]),
-,enable_cli=yes)
 
 AC_ARG_WITH(extra-cc-flags,
     AS_HELP_STRING([--with-extra-cc-flags=...],
@@ -2186,7 +2141,7 @@ AC_ARG_WITH(gcc-home,
 
 AC_ARG_WITH(gnu-patch,
     AS_HELP_STRING([--with-gnu-patch],
-        [Specify location of GNU patch on Solaris or FreeBSD.]),
+        [Specify location of GNU patch on FreeBSD.]),
 ,)
 
 AC_ARG_WITH(build-platform-configure-options,
@@ -2196,7 +2151,7 @@ AC_ARG_WITH(build-platform-configure-options,
 
 AC_ARG_WITH(gnu-cp,
     AS_HELP_STRING([--with-gnu-cp],
-        [Specify location of GNU cp on Solaris or FreeBSD.]),
+        [Specify location of GNU cp on FreeBSD.]),
 ,)
 
 AC_ARG_WITH(external-tar,
@@ -2239,14 +2194,6 @@ libo_FUZZ_ARG_WITH(fonts,
          known to be available on the system then you should use this option.]),
 ,)
 
-libo_FUZZ_ARG_WITH(docrepair-fonts,
-    AS_HELP_STRING([--with-docrepair-fonts],
-        [Collabora Office optionally includes fonts from 'The DocRepair Project' that
-         provide metrically equivalent fallback fonts for a variety of common fonts
-         seen in Office Open XML documents. See https://github.com/docrepair-fonts
-         for more details. This option has no effect when --without-fonts is used.]),
-,)
-
 AC_ARG_ENABLE(noto-font,
     AS_HELP_STRING([--enable-noto-font],
         [Add more Google Noto fonts.]),
@@ -2263,7 +2210,7 @@ AC_ARG_WITH(package-format,
     AS_HELP_STRING([--with-package-format],
         [Specify package format(s) for Collabora Office installation sets. The
          implicit --without-package-format leads to no installation sets being
-         generated. Possible values: archive, bsd, deb, dmg, emscripten,
+         generated. Possible values: archive, deb, emscripten,
          installed, msi, pkg, and rpm.
          Example: --with-package-format='deb rpm']),
 ,)
@@ -2363,8 +2310,8 @@ AC_ARG_WITH(system-expat,
 
 AC_ARG_WITH(system-libxml,
     AS_HELP_STRING([--with-system-libxml],
-        [Use libxml/libxslt already on system.]),,
-    [with_system_libxml=auto])
+        [Use libxml/libxslt already on system. Disabled by default, enabled on macOS.]),,
+    [with_system_libxml="$default_with_system_libxml"])
 
 AC_ARG_WITH(system-lzma,
     AS_HELP_STRING([--with-system-lzma],
@@ -2386,11 +2333,6 @@ AC_ARG_WITH(system-openjpeg,
         [Use the OpenJPEG library already on system.]),,
     [with_system_openjpeg="$with_system_libs"])
 
-AC_ARG_WITH(system-jfreereport,
-    AS_HELP_STRING([--with-system-jfreereport],
-        [Use JFreeReport already on system.]),,
-    [with_system_jfreereport="$with_system_jars"])
-
 AC_ARG_WITH(system-odbc,
     AS_HELP_STRING([--with-system-odbc],
         [Use the odbc headers already on system.]),,
@@ -2400,11 +2342,6 @@ AC_ARG_WITH(system-sane,
     AS_HELP_STRING([--with-system-sane],
         [Use sane.h already on system.]),,
     [with_system_sane="$with_system_headers"])
-
-AC_ARG_WITH(system-bluez,
-    AS_HELP_STRING([--with-system-bluez],
-        [Use bluetooth.h already on system.]),,
-    [with_system_bluez="$with_system_headers"])
 
 AC_ARG_WITH(system-boost,
     AS_HELP_STRING([--with-system-boost],
@@ -2655,10 +2592,10 @@ libo_FUZZ_ARG_WITH(krb5,
 
 libo_FUZZ_ARG_WITH(gssapi,
     AS_HELP_STRING([--with-gssapi],
-        [Enable GSSAPI support in modules that support it.
-         By default automatically enabled on platforms
-         where a good system GSSAPI is available.]),
-,)
+        [Enable GSSAPI support in modules that support it. Disabled by default.]),
+,
+    [with_gssapi=no]
+)
 
 libo_FUZZ_ARG_WITH(lxml,
     AS_HELP_STRING([--without-lxml],
@@ -2731,12 +2668,6 @@ AC_ARG_WITH(branding,
 ,)
 
 
-AC_ARG_WITH(extra-buildid,
-    AS_HELP_STRING([--with-extra-buildid="Tinderbox: Win-x86@6, Branch:master, Date:2012-11-26_00.29.34"],
-        [Show addition build identification in about dialog.]),
-,)
-
-
 AC_ARG_WITH(vendor,
     AS_HELP_STRING([--with-vendor="John the Builder"],
         [Set vendor of the build.]),
@@ -2745,13 +2676,6 @@ AC_ARG_WITH(vendor,
 AC_ARG_WITH(android-package-name,
     AS_HELP_STRING([--with-android-package-name="org.libreoffice"],
         [Set Android package name of the build.]),
-,)
-
-AC_ARG_WITH(compat-oowrappers,
-    AS_HELP_STRING([--with-compat-oowrappers],
-        [Install oo* wrappers in parallel with
-         lo* ones to keep backward compatibility.
-         Has effect only with make distro-pack-install]),
 ,)
 
 AC_ARG_WITH(os-version,
@@ -2907,12 +2831,6 @@ dnl Check for incompatible options set by fuzzing, and reset those
 dnl automatically to working combinations
 dnl ===================================================================
 
-if test "$libo_fuzzed_enable_dbus" = yes -a "$libo_fuzzed_enable_avahi" -a \
-        "$enable_dbus" != "$enable_avahi"; then
-    AC_MSG_NOTICE([Resetting --enable-avahi=$enable_dbus])
-    enable_avahi=$enable_dbus
-fi
-
 add_lopath_after ()
 {
     if ! echo "$LO_PATH" | $EGREP -q "(^|${P_SEP})$1($|${P_SEP})"; then
@@ -2944,7 +2862,7 @@ pathmunge ()
         if test "$build_os" = "cygwin"; then
             if test "$GNUMAKE_WIN_NATIVE" = "TRUE" ; then
                 PathFormat "$1"
-                new_path=`cygpath -sm "$formatted_path"`
+                new_path=`cygpath -m "$formatted_path"`
             else
                 PathFormat "$1"
                 new_path=`cygpath -u "$formatted_path"`
@@ -2984,7 +2902,7 @@ AC_SUBST(COMPRESSIONTOOL)
 
 AC_MSG_CHECKING([for GNU or BSD tar])
 for a in $GNUTAR gtar gnutar tar bsdtar /usr/sfw/bin/gtar; do
-    $a --version 2> /dev/null | grep -E "GNU|bsdtar"  2>&1 > /dev/null
+    $a --version 2> /dev/null | grep -E "GNU|bsdtar|busybox"  2>&1 > /dev/null
     if test $? -eq 0;  then
         GNUTAR=$a
         break
@@ -2997,7 +2915,7 @@ fi
 AC_SUBST(GNUTAR)
 
 AC_MSG_CHECKING([for tar's option to strip components])
-$GNUTAR --help 2> /dev/null | grep -E "bsdtar|strip-components" 2>&1 >/dev/null
+$GNUTAR --help 2>&1 | grep -E "bsdtar|strip-components" 2>&1 >/dev/null
 if test $? -eq 0; then
     STRIP_COMPONENTS="--strip-components"
 else
@@ -3043,22 +2961,18 @@ if test "$enable_wasm_strip" = "yes"; then
     enable_dbus=no
     enable_dconf=no
     test "${enable_dynamic_loading+set}" = set -o "$_os" != Emscripten || enable_dynamic_loading=no
-    enable_extensions=no
     enable_gio=no
     enable_nss=no
     enable_opencl=no
     enable_pdfimport=no
     enable_randr=no
+    enable_readonly_installset=yes
     enable_scripting=no
-    enable_sdremote=no
-    enable_sdremote_bluetooth=no
     enable_skia=no
-    enable_xmlhelp=no
     enable_zxing=no
     test_libepubgen=no
     test_libcmis=no
     with_galleries=no
-    with_gssapi=no
     with_templates=no
     with_x=no
 
@@ -3086,15 +3000,6 @@ fi
 if test "$enable_database_connectivity" != no; then
     BUILD_TYPE="$BUILD_TYPE DBCONNECTIVITY"
     AC_DEFINE(HAVE_FEATURE_DBCONNECTIVITY)
-else
-    disable_database_connectivity_dependencies
-fi
-
-if test -z "$enable_extensions"; then
-    # For iOS and Android Viewer, disable extensions unless specifically overridden with --enable-extensions.
-    if test $_os != iOS && test $_os != Android -o "$ENABLE_ANDROID_KIT" = TRUE ; then
-        enable_extensions=yes
-    fi
 fi
 
 DISABLE_SCRIPTING=''
@@ -3137,11 +3042,6 @@ if test "$enable_customtarget_components" = yes -a "$DISABLE_DYNLOADING" = TRUE;
     fi
 fi
 AC_SUBST(ENABLE_CUSTOMTARGET_COMPONENTS)
-
-if test "$enable_extensions" = yes; then
-    BUILD_TYPE="$BUILD_TYPE EXTENSIONS"
-    AC_DEFINE(HAVE_FEATURE_EXTENSIONS)
-fi
 
 # remember SYSBASE value
 AC_SUBST(SYSBASE)
@@ -3215,26 +3115,39 @@ elif test -n "$enable_ccache" -o \( "$enable_ccache" = "" -a "$enable_icecream" 
         CCACHE_DEPEND_MODE=1
         ;;
     *)
+        if test "$_os" = "WINNT"; then
+            ccache_ext=.exe # e.g. openssl build needs ccache.exe, not just ccache
+        fi
         # try to use our own ccache if it is available and CCACHE was not already defined
         if test -z "$CCACHE"; then
-            if test "$_os" = "WINNT"; then
-                ccache_ext=.exe # e.g. openssl build needs ccache.exe, not just ccache
-            fi
             if test -n "$LODE_HOME" -a -x "$LODE_HOME/opt/bin/ccache$ccache_ext" ; then
                 CCACHE="$LODE_HOME/opt/bin/ccache$ccache_ext"
             elif test -x "/opt/lo/bin/ccache$ccache_ext"; then
                 CCACHE="/opt/lo/bin/ccache$ccache_ext"
             fi
         fi
-        AC_PATH_PROG([CCACHE],[ccache],[not found])
+        dnl ccache.exe rather than ccache, so that a build shell whose PATH is a
+        dnl Linux one does not record a binary make could never run. The suffix is
+        dnl empty off Windows, and Cygwin resolves the bare name to the .exe anyway.
+        AC_PATH_PROG([CCACHE],[ccache$ccache_ext],[not found])
         if test "$CCACHE" != "not found" -a "$_os" = "WINNT"; then
-            CCACHE=`win_short_path_for_make "$CCACHE"`
+            CCACHE=`win_path_for_make "$CCACHE"`
             # check that it has MSVC support (it should recognize it in CCACHE_COMPILERTYPE)
             rm -f conftest.txt
             AC_MSG_CHECKING([whether $CCACHE has MSVC support])
+            dnl wsl passes on only what WSLENV names. Under WSL_ONLY_AS_HELPER
+            dnl configure runs in wsl while the build runs native Windows tools,
+            dnl and a wsl configure and build is a Linux one instead.
+            if test -n "$WSL_ONLY_AS_HELPER"; then
+                export WSLENV=${WSLENV:+$WSLENV:}CCACHE_COMPILERTYPE:CCACHE_LOGFILE
+            fi
             CCACHE_COMPILERTYPE=msvc CCACHE_LOGFILE=conftest.txt $CCACHE echo >/dev/null 2>/dev/null
             if grep -q 'Config: (environment) compiler_type = msvc' conftest.txt; then
                 AC_MSG_RESULT(yes)
+                CCACHE_PROGRAM="$CCACHE"
+                ccache_exe_dir=`dirname "$CCACHE"`
+                add_to_path_env "$ccache_exe_dir"
+                CCACHE=`basename "$CCACHE"`
             else
                 AC_MSG_RESULT(no)
                 CCACHE="not found"
@@ -3253,9 +3166,14 @@ elif test -n "$enable_ccache" -o \( "$enable_ccache" = "" -a "$enable_icecream" 
                 ;;
             *)
                 # for sharing code below, reuse CCACHE env var
+                dnl AC_PATH_PROG caches on a variable named after CCACHE rather than
+                dnl after the program, and the ccache lookup above already filled it.
+                dnl Without clearing it this one finds nothing new and reports that
+                dnl same ccache as sccache.
+                unset ac_cv_path_CCACHE
                 AC_PATH_PROG([CCACHE],[sccache],[not found])
                 if test "$CCACHE" != "not found"; then
-                    CCACHE=`win_short_path_for_make "$CCACHE"`
+                    CCACHE=`win_path_for_make "$CCACHE"`
                     SCCACHE=1
                     CCACHE_DEPEND_MODE=1
                 fi
@@ -3308,10 +3226,57 @@ fi
 if test "$enable_ccache" = "nodepend"; then
     CCACHE_DEPEND_MODE=""
 fi
+AC_SUBST(CCACHE)
 AC_SUBST(CCACHE_BASEDIR)
 AC_SUBST(CCACHE_NOHASHDIR)
 AC_SUBST(CCACHE_COMPILERCHECK)
 AC_SUBST(CCACHE_DEPEND_MODE)
+
+dnl ===================================================================
+dnl  A ccache msbuild can reach
+dnl ===================================================================
+dnl msbuild's CL task never names the compiler on a command line, so ccache
+dnl cannot be put in front of it as an argument. Give msbuild a directory whose
+dnl cl.exe and clang-cl.exe are copies of ccache instead. ccache looks at the
+dnl name it was run under to pick the compiler, so one directory serves both
+dnl the msbuild externals here and the msbuild projects of the windows app.
+MSBUILD_CCACHE=
+MSBUILD_CCACHE_DIR=
+if test -n "$CCACHE" -a -z "$SCCACHE" -a "$_os" = "WINNT"; then
+    msbuild_ccache_dir="$BUILDDIR/msbuild-ccache"
+    msbuild_ccache_origin=`dirname "$CCACHE_PROGRAM"`
+    AS_MKDIR_P([$msbuild_ccache_dir])
+    for msbuild_ccache_name in cl.exe clang-cl.exe ccache.exe; do
+        rm -f "$msbuild_ccache_dir/$msbuild_ccache_name"
+        ln "$CCACHE_PROGRAM" "$msbuild_ccache_dir/$msbuild_ccache_name" 2>/dev/null \
+            || cp -f "$CCACHE_PROGRAM" "$msbuild_ccache_dir/$msbuild_ccache_name"
+    done
+    dnl A copy of ccache in another directory no longer finds the DLLs that sat
+    dnl beside the original, so check that it still runs.
+    AC_MSG_CHECKING([whether $CCACHE runs from $msbuild_ccache_dir])
+    msbuild_ccache_runs=no
+    if (cd "$msbuild_ccache_origin" && "$msbuild_ccache_dir/ccache.exe" --version) \
+            >/dev/null 2>&1; then
+        msbuild_ccache_runs=yes
+    fi
+    rm -f "$msbuild_ccache_dir/ccache.exe"
+    AC_MSG_RESULT([$msbuild_ccache_runs])
+    if test "$msbuild_ccache_runs" = "no"; then
+        rm -f "$msbuild_ccache_dir/cl.exe" "$msbuild_ccache_dir/clang-cl.exe"
+        AC_MSG_WARN([$CCACHE does not run once copied to $msbuild_ccache_dir; msbuild will compile without ccache.])
+    else
+        dnl A backslash here is lost passing through make and the shell, and
+        dnl msbuild then reports MSB6004, so use PathFormat's forward-slash
+        dnl Windows form. The conversion sits here because a plain Cygwin build
+        dnl needs it as much as a helper-shell one does.
+        PathFormat "$msbuild_ccache_dir"
+        MSBUILD_CCACHE="$formatted_path"
+        PathFormat "$msbuild_ccache_origin"
+        MSBUILD_CCACHE_DIR="$formatted_path"
+    fi
+fi
+AC_SUBST(MSBUILD_CCACHE)
+AC_SUBST(MSBUILD_CCACHE_DIR)
 
 # sccache defaults are good enough
 if test "$CCACHE" != "" -a -z "$SCCACHE"; then
@@ -3689,11 +3654,17 @@ if test $_os = iOS; then
     RANLIB=`xcrun -find ranlib`
 fi
 
+dnl The makefiles need to tell the device and the simulator apart, e.g. to pick
+dnl the matching target of an external's own build system.
+ENABLE_IOS_SIMULATOR=
+if test "$enable_ios_simulator" = "yes"; then
+    ENABLE_IOS_SIMULATOR=TRUE
+fi
+AC_SUBST(ENABLE_IOS_SIMULATOR)
+
 AC_MSG_CHECKING([whether to treat the installation as read-only])
 
-if test $_os = Darwin; then
-    enable_readonly_installset=yes
-elif test "$enable_extensions" != yes; then
+if test $_os = Darwin -o $_os = iOS; then
     enable_readonly_installset=yes
 fi
 if test "$enable_readonly_installset" = yes; then
@@ -3813,8 +3784,13 @@ reg_get_value()
     if test "$build_os" = "wsl"; then
         regvalue=$($WSL_LO_HELPER --read-registry $1 "$2/$3" 2>/dev/null)
         return
-    elif test -n "$WSL_ONLY_AS_HELPER"; then
-        regvalue=$(reg.exe query "$(echo $2 | tr '/' '\\')" /v "$3" /reg:$1 |sed -ne "s|\s*$3.*REG_SZ\s*\(.*\)[\s\r]*$|\1|p")
+    elif test -n "$UNIX_ONLY_AS_HELPER"; then
+        # MSYS2_ARG_CONV_EXCL: keep the MSYS argument conversion from turning
+        # the /v and /reg: switches into paths (no effect under WSL).
+        # Capture to the end of the line and strip the CR separately: under
+        # WSL the value line ends in a CR, under MSYS2 the runtime already
+        # translated CRLF away, and the value itself may end in a backslash.
+        regvalue=$(MSYS2_ARG_CONV_EXCL="*" reg.exe query "$(echo $2 | tr '/' '\\')" /v "$3" /reg:$1 |sed -ne "s|\s*$3.*REG_SZ\s*\(.*\)$|\1|p" | tr -d '\r')
         return
     fi
 
@@ -3849,6 +3825,11 @@ reg_list_values()
     if test "$build_os" = "wsl"; then
         reglist=$($WSL_LO_HELPER --list-registry $1 "$2" 2>/dev/null | tr -d '\r')
         return
+    elif test -n "$UNIX_ONLY_AS_HELPER"; then
+        # the subkey names: reg.exe prints the queried key first and then one
+        # full subkey path per line; values are indented, so ^HKEY_ skips them
+        reglist=$(MSYS2_ARG_CONV_EXCL="*" reg.exe query "$(echo $2 | tr '/' '\\')" /reg:$1 2>/dev/null | tr -d '\r' | sed -ne 's|^HKEY_.*\\||p' | sed -e '1d')
+        return
     fi
 
     reglist=$(ls "/proc/registry${1}/${2}")
@@ -3871,7 +3852,7 @@ cygwin*|wsl*)
     COM=MSC
     OS=WNT
     RTL_OS=Windows
-    if test "$GNUMAKE_WIN_NATIVE" = "TRUE" -o -n "$WSL_ONLY_AS_HELPER" ; then
+    if test "$GNUMAKE_WIN_NATIVE" = "TRUE" -o -n "$UNIX_ONLY_AS_HELPER" ; then
         P_SEP=";"
     else
         P_SEP=:
@@ -4004,14 +3985,6 @@ else
 fi
 AC_SUBST(ENABLE_EMSCRIPTEN_PROXY_POSIX_SOCKETS)
 
-if test "$enable_embind_uno" = yes; then
-    ENABLE_EMBIND_UNO=TRUE
-    AC_DEFINE(HAVE_EMBIND_UNO)
-else
-    ENABLE_EMBIND_UNO=
-fi
-AC_SUBST(ENABLE_EMBIND_UNO)
-
 # Use -isystem (gcc) if possible, to avoid warnings in 3rd party headers.
 # NOTE: must _not_ be used for bundled external libraries!
 ISYSTEM=
@@ -4138,8 +4111,18 @@ find_msvc()
         if test -z "$vswhere"; then
             vswhere="c:\\Program Files (x86)"
         fi
-    elif test -n "$WSL_ONLY_AS_HELPER"; then
-        vswhere="$(perl.exe -e 'print $ENV{"ProgramFiles(x86)"}')"
+    elif test -n "$UNIX_ONLY_AS_HELPER"; then
+        # under WSL perl.exe is a Windows perl seeing the real Windows
+        # environment; under MSYS2 the parenthesized name may not survive the
+        # environment hops, so fall back to autogen.sh's PROGRAMFILESX86
+        # re-export and finally to the well-known default
+        vswhere="$(perl.exe -e 'print $ENV{"ProgramFiles(x86)"}' 2>/dev/null)"
+        if test -z "$vswhere"; then
+            vswhere="$PROGRAMFILESX86"
+        fi
+        if test -z "$vswhere"; then
+            vswhere="c:\\Program Files (x86)"
+        fi
     else
         vswhere="$(perl -e 'print $ENV{"ProgramFiles(x86)"}')"
     fi
@@ -4147,14 +4130,14 @@ find_msvc()
     PathFormat "$vswhere"
     vswhere=$formatted_path_unix
     for ver in $vsversions; do
-        vswhereoutput=`$vswhere -version "@<:@ $ver , $(expr ${ver%%.*} + 1) @:}@" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | head -1`
+        vswhereoutput=`"$vswhere" -version "@<:@ $ver , $(expr ${ver%%.*} + 1) @:}@" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | head -1`
         if test -z "$vswhereoutput"; then
-            vswhereoutput=`$vswhere -prerelease -version "@<:@ $ver , $(expr ${ver%%.*} + 1) @:}@" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | head -1`
+            vswhereoutput=`"$vswhere" -prerelease -version "@<:@ $ver , $(expr ${ver%%.*} + 1) @:}@" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | head -1`
         fi
         # Fall back to all MS products (this includes VC++ Build Tools)
         if ! test -n "$vswhereoutput"; then
             AC_MSG_CHECKING([VC++ Build Tools and similar])
-            vswhereoutput=`$vswhere -products \* -version "@<:@ $ver , $(expr ${ver%%.*} + 1) @:}@" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | head -1`
+            vswhereoutput=`"$vswhere" -products \* -version "@<:@ $ver , $(expr ${ver%%.*} + 1) @:}@" -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | head -1`
         fi
         if test -n "$vswhereoutput"; then
             PathFormat "$vswhereoutput"
@@ -4177,7 +4160,7 @@ find_msvc()
             vcyear=2026
             vctoolset=v145
         esac
-        vcbuildnumber=`ls $vctest/VC/Tools/MSVC -A1r | head -1`
+        vcbuildnumber=`ls "$vctest/VC/Tools/MSVC" -A1r | head -1`
 
     fi
 }
@@ -4263,8 +4246,8 @@ if test "$_os" = "WINNT"; then
         MSVC_HOST_PATH="$MSVC_BUILD_PATH"
     fi
 
-    AC_MSG_CHECKING([for short pathname of VC product directory])
-    VC_PRODUCT_DIR=`win_short_path_for_make "$VC_PRODUCT_DIR"`
+    AC_MSG_CHECKING([for VC product directory])
+    VC_PRODUCT_DIR=`win_path_for_make "$VC_PRODUCT_DIR"`
     AC_MSG_RESULT([$VC_PRODUCT_DIR])
 
     UCRTSDKDIR=
@@ -4276,13 +4259,13 @@ if test "$_os" = "WINNT"; then
     AC_MSG_RESULT([$UCRTSDKDIR ($UCRTVERSION)])
     PathFormat "${UCRTSDKDIR}Include/$UCRTVERSION/ucrt"
     ucrtincpath_formatted=$formatted_path
+    encode_path "$ucrtincpath_formatted"
+    ucrtincpath_encoded="$encoded_path"
     # SOLARINC is used for external modules and must be set too.
     # And no, it's not sufficient to set SOLARINC only, as configure
     # itself doesn't honour it.
-    SOLARINC="$SOLARINC -I$ucrtincpath_formatted"
-    CFLAGS="$CFLAGS -I$ucrtincpath_formatted"
-    CXXFLAGS="$CXXFLAGS -I$ucrtincpath_formatted"
-    CPPFLAGS="$CPPFLAGS -I$ucrtincpath_formatted"
+    SOLARINC="$SOLARINC -I$ucrtincpath_encoded"
+    add_to_include_env "$ucrtincpath_formatted"
 
     AC_SUBST(UCRTSDKDIR)
     AC_SUBST(UCRTVERSION)
@@ -4300,7 +4283,7 @@ if test "$_os" = "WINNT"; then
         fi
     fi
     if test -d "$regvalue" ; then
-        MSBUILD_PATH=`win_short_path_for_make "$regvalue"`
+        MSBUILD_PATH=`win_path_for_make "$regvalue"`
         AC_MSG_RESULT([$regvalue])
     else
         AC_MSG_ERROR([MSBuild.exe location not found])
@@ -4329,20 +4312,39 @@ if test "$_os" = "WINNT"; then
         AC_MSG_WARN([No devenv.exe found - this is expected for VC++ Build Tools])
     fi
 
+    dnl cl.exe is named without a directory below, so the compiler's own
+    dnl directory has to be on PATH from here on: for the shell to resolve the
+    dnl name, and for the compiler to find mspdb140.dll and the rest of the
+    dnl DLLs that sit beside it. test_cl_exe does the same for the length of
+    dnl one probe; this is the same thing for the length of configure.
+    add_to_path_env "$MSVC_HOST_PATH"
+
     dnl Save the true MSVC cl.exe for use when CC/CXX is actually clang-cl,
     dnl needed when building CLR code:
     if test -z "$MSVC_CXX"; then
-        # This gives us a posix path with 8.3 filename restrictions
-        MSVC_CXX=`win_short_path_for_make "$MSVC_HOST_PATH/cl.exe"`
+        # This gives us the pathname in the form make wants
+        MSVC_CXX=`win_path_for_make "$MSVC_HOST_PATH/cl.exe"`
     fi
 
+    dnl CC and CXX name the compiler without a directory, because autoconf
+    dnl splits $CC on whitespace to build a compile command and a pathname
+    dnl holding a space does not survive that. The directory went on PATH
+    dnl above, which is also how gbuild names the compiler by default.
+    dnl
+    dnl CC_PROGRAM and CXX_PROGRAM hold the compiler on its own, with no
+    dnl launcher in front of it and no flags after it, for a make rule that
+    dnl has to hand an external build system the whole pathname. They stay
+    dnl empty when the compiler came in from the environment, because then
+    dnl splitting $CC is all there is to go on.
     if test -z "$CC"; then
-        CC=$MSVC_CXX
-        CC_BASE=`first_arg_basename "$CC"`
+        CC=cl.exe
+        CC_BASE=cl.exe
+        CC_PROGRAM=$MSVC_CXX
     fi
     if test -z "$CXX"; then
-        CXX=$MSVC_CXX
-        CXX_BASE=`first_arg_basename "$CXX"`
+        CXX=cl.exe
+        CXX_BASE=cl.exe
+        CXX_PROGRAM=$MSVC_CXX
     fi
 
     if test -n "$CC"; then
@@ -4352,7 +4354,9 @@ if test "$_os" = "WINNT"; then
         PathFormat "$COMPATH"
         COMPATH="$formatted_path"
         COMPATH_unix="$formatted_path_unix"
-        CPPFLAGS="$CPPFLAGS -I$COMPATH/Include"
+        encode_path "$COMPATH"
+        COMPATH_ENCODED="$encoded_path"
+        add_to_include_env "$COMPATH/Include"
 
         VCVER=$vcnumwithdot
         VCTOOLSET=$vctoolset
@@ -4407,7 +4411,7 @@ if test "$_os" = "WINNT"; then
         if test -n "$CXX_X86_BINARY"; then
             AC_MSG_RESULT([provided via environment variable])
         elif test -n "$WIN_MULTI_ARCH"; then
-            CXX_X86_BINARY=`win_short_path_for_make "$MSVC_MULTI_PATH/cl.exe"`
+            CXX_X86_BINARY=`win_path_for_make "$MSVC_MULTI_PATH/cl.exe"`
             AC_MSG_RESULT([found])
         else
             AC_MSG_RESULT([not found])
@@ -4497,6 +4501,51 @@ AC_SUBST(SHOWINCLUDES_PREFIX)
 #
 # prefix C with ccache if needed
 #
+dnl Under wsl, CC becomes two programs with two different launchers:
+dnl
+dnl     /mnt/c/.../ccache.exe  C:/Program Files/.../cl.exe  -c conftest.c
+dnl     \__ the shell runs this __/\__ ccache runs this __/
+dnl
+dnl and each launcher can only open one spelling. The shell reaches a Windows
+dnl binary through /mnt/<drive>/, so ccache keeps that form; ccache is itself a
+dnl Windows process by then and needs C:/, so the compiler takes that one.
+dnl
+dnl Only CC and CXX are respelled. MSVC_CXX and the other compiler variables
+dnl stay as the shell writes them and are converted later, when the /mnt/<drive>/
+dnl postprocessing rewrites config_host.mk for make.
+if test "$CCACHE" != "" -a -n "$WSL_ONLY_AS_HELPER"; then
+    dnl A compiler named without a directory is found on PATH by whoever runs
+    dnl it and needs no respelling. One that came in from the environment
+    dnl carries a pathname, and its first space is the one before the flags.
+    dnl PathFormat takes one pathname at a time.
+    cc_prog=`echo "$CC" | sed 's/ .*//'`
+    case "$cc_prog" in
+    */*)
+        dnl @<:@ and @:>@ are how autoconf spells [ and ].
+        cc_rest=`echo "$CC" | sed 's/^@<:@^ @:>@*//'`
+        PathFormat "$cc_prog"
+        CC="$formatted_path$cc_rest"
+        ;;
+    esac
+    if test -n "$CC_PROGRAM"; then
+        PathFormat "$CC_PROGRAM"
+        CC_PROGRAM="$formatted_path"
+    fi
+    cxx_prog=`echo "$CXX" | sed 's/ .*//'`
+    case "$cxx_prog" in
+    */*)
+        cxx_rest=`echo "$CXX" | sed 's/^@<:@^ @:>@*//'`
+        PathFormat "$cxx_prog"
+        CXX="$formatted_path$cxx_rest"
+        ;;
+    esac
+    if test -n "$CXX_PROGRAM"; then
+        PathFormat "$CXX_PROGRAM"
+        CXX_PROGRAM="$formatted_path"
+    fi
+    AC_MSG_NOTICE([compiler named for ccache as $CC])
+    AC_MSG_NOTICE([and CXX as $CXX])
+fi
 if test "$CCACHE" != ""; then
     AC_MSG_CHECKING([whether $CC_BASE is already ccached])
 
@@ -4519,6 +4568,7 @@ if test "$CCACHE" != ""; then
     else
         CC="$CCACHE $CC"
         CC_BASE="ccache $CC_BASE"
+        CC_LAUNCHER="$CCACHE"
         AC_MSG_RESULT([no])
     fi
     AC_LANG_POP([C])
@@ -4808,15 +4858,15 @@ if test "$enable_ld" != "no"; then
         yes|lld)
             AC_MSG_CHECKING([for lld-link])
             if test "$WIN_BUILD_ARCH" = "x64" -a -x "$VC_PRODUCT_DIR/Tools/Llvm/x64/bin/lld-link.exe"; then
-                LLD_LINK=`win_short_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/x64/bin/lld-link.exe"`
+                LLD_LINK=`win_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/x64/bin/lld-link.exe"`
             elif test "$WIN_BUILD_ARCH" = "arm64" -a -x "$VC_PRODUCT_DIR/Tools/Llvm/ARM64/bin/lld-link.exe"; then
-                LLD_LINK=`win_short_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/ARM64/bin/lld-link.exe"`
+                LLD_LINK=`win_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/ARM64/bin/lld-link.exe"`
             elif test -x "$VC_PRODUCT_DIR/Tools/Llvm/bin/lld-link.exe"; then
-                LLD_LINK=`win_short_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/bin/lld-link.exe"`
+                LLD_LINK=`win_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/bin/lld-link.exe"`
             elif test -n "$PROGRAMFILES" -a -x "$(cygpath -u "$PROGRAMFILES/LLVM/bin/lld-link.exe")"; then
-                LLD_LINK=`win_short_path_for_make "$PROGRAMFILES/LLVM/bin/lld-link.exe"`
+                LLD_LINK=`win_path_for_make "$PROGRAMFILES/LLVM/bin/lld-link.exe"`
             elif test -x "$(cygpath -u "c:/Program Files/LLVM/bin/lld-link.exe")"; then
-                LLD_LINK=`win_short_path_for_make "c:/Program Files/LLVM/bin/lld-link.exe"`
+                LLD_LINK=`win_path_for_make "c:/Program Files/LLVM/bin/lld-link.exe"`
             fi
             if test -n "$LLD_LINK"; then
                 AC_MSG_RESULT([$LLD_LINK])
@@ -4825,7 +4875,7 @@ if test "$enable_ld" != "no"; then
             fi
             ;;
         lld:*)
-            LLD_LINK=`win_short_path_for_make "${enable_ld#lld:}"`
+            LLD_LINK=`win_path_for_make "${enable_ld#lld:}"`
             AC_MSG_CHECKING([for lld-link])
             AC_MSG_RESULT([$LLD_LINK])
             ;;
@@ -4855,7 +4905,7 @@ if test "$_os" = "WINNT"; then
         fastlink_linker=$LLD_LINK
     else
         dnl PATH doesn't cover the MSVC tools yet; link.exe sits next to cl.exe
-        fastlink_linker=`win_short_path_for_make "$MSVC_HOST_PATH/link.exe"`
+        fastlink_linker=`win_path_for_make "$MSVC_HOST_PATH/link.exe"`
     fi
     dnl the link fails on the missing input file, and any mention of the flag in
     dnl the output is a complaint about the flag itself: not being able to use it
@@ -5230,6 +5280,13 @@ freebsd*)
         AC_MSG_ERROR([Unsupported host_cpu $host_cpu for host_os $host_os])
         ;;
     esac
+    dnl Ports install under /usr/local, which neither the compiler nor the
+    dnl linker searches by default. The header and library checks below
+    dnl need the paths, and so does the build, via SOLARINC and the
+    dnl FreeBSD gbuild platform files.
+    SOLARINC="$SOLARINC -I/usr/local/include"
+    CPPFLAGS="$CPPFLAGS -I/usr/local/include"
+    LDFLAGS="$LDFLAGS -L/usr/local/lib"
     ;;
 
 haiku*)
@@ -5499,35 +5556,6 @@ openbsd*)
     SOLARINC="$SOLARINC -I/usr/local/include"
     ;;
 
-solaris*)
-    COM=GCC
-    OS=SOLARIS
-    RTL_OS=Solaris
-    P_SEP=:
-
-    case "$host_cpu" in
-    i*86)
-        CPUNAME=INTEL
-        RTL_ARCH=x86
-        PLATFORMID=solaris_x86
-        ;;
-    sparc)
-        CPUNAME=SPARC
-        RTL_ARCH=SPARC
-        PLATFORMID=solaris_sparc
-        ;;
-    sparc64)
-        CPUNAME=SPARC64
-        RTL_ARCH=SPARC64
-        PLATFORMID=solaris_sparc64
-        ;;
-    *)
-        AC_MSG_ERROR([Unsupported host_cpu $host_cpu for host_os $host_os])
-        ;;
-    esac
-    SOLARINC="$SOLARINC -I/usr/local/include"
-    ;;
-
 emscripten*)
     COM=GCC
     OS=EMSCRIPTEN
@@ -5758,18 +5786,15 @@ AC_MSG_CHECKING([which package format to use])
 if test -n "$with_package_format" -a "$with_package_format" != no; then
     for i in $with_package_format; do
         case "$i" in
-        bsd | deb | pkg | rpm | archive | dmg | installed | emscripten)
+        deb | rpm | archive | installed | emscripten)
             ;;
         *)
             AC_MSG_ERROR([unsupported format $i. Supported by EPM are:
-bsd - FreeBSD, NetBSD, or OpenBSD software distribution
 deb - Debian software distribution
-pkg - Solaris software distribution
 rpm - RedHat software distribution
 
 Collabora Office additionally supports:
 archive - .tar.gz or .zip
-dmg - macOS .dmg
 emscripten - directory with qt_soffice.html etc.
 installed - installation tree
         ])
@@ -5777,8 +5802,8 @@ installed - installation tree
         esac
     done
     # fakeroot is needed to ensure correct file ownerships/permissions
-    # inside deb packages and tar archives created on Linux and Solaris.
-    if test "$OS" = "LINUX" || test "$OS" = "SOLARIS"; then
+    # inside deb packages and tar archives created on Linux.
+    if test "$OS" = "LINUX"; then
         AC_PATH_PROG(FAKEROOT, fakeroot, no)
         if test "$FAKEROOT" = "no"; then
             AC_MSG_ERROR(
@@ -5900,6 +5925,7 @@ dnl machine when doing cross-compilation
 dnl ===================================================================
 
 m4_pattern_allow([PKG_CONFIG_FOR_BUILD])
+m4_pattern_allow([PKG_CONFIG_PATH_FOR_BUILD])
 m4_pattern_allow([PKG_CONFIG_LIBDIR])
 if test "$cross_compiling" = "yes"; then
     AC_MSG_CHECKING([for BUILD platform configuration])
@@ -5952,6 +5978,7 @@ if test "$cross_compiling" = "yes"; then
         CXX_BASE=`first_arg_basename "$CXX"`
     fi
     test -n "$PKG_CONFIG_FOR_BUILD" && export PKG_CONFIG="$PKG_CONFIG_FOR_BUILD"
+    test -n "$PKG_CONFIG_PATH_FOR_BUILD" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH_FOR_BUILD"
     cd CONF-FOR-BUILD
 
     # Handle host configuration, which affects the cross-toolset too
@@ -5979,15 +6006,12 @@ if test "$cross_compiling" = "yes"; then
     test "$with_galleries" = "no" -o -z "$WITH_GALLERY_BUILD" && sub_conf_opts="$sub_conf_opts --with-galleries=no --disable-database-connectivity"
     test "$with_templates" = "no" -o -z "$WITH_TEMPLATES" && sub_conf_opts="$sub_conf_opts --with-templates=no"
     test -n "$with_help" -a "$with_help" != "no" && sub_conf_opts="$sub_conf_opts --with-help=$with_help"
-    test "$enable_extensions" = yes || sub_conf_opts="$sub_conf_opts --disable-extensions"
     test "${enable_ld+set}" = set -a "$build_cpu" = "$host_cpu" && sub_conf_opts="$sub_conf_opts --enable-ld=${enable_ld}"
     test "${enable_pch+set}" = set && sub_conf_opts="$sub_conf_opts --enable-pch=${enable_pch}"
     test "$enable_wasm_strip" = "yes" && sub_conf_opts="$sub_conf_opts --enable-wasm-strip"
-    test "$enable_embind_uno" = "yes" && sub_conf_opts="$sub_conf_opts --enable-embind-uno"
     test "${with_system_lockfile+set}" = set && sub_conf_opts="$sub_conf_opts --with-system-lockfile=${with_system_lockfile}"
-    test "${enable_fuzzers}" = yes && sub_conf_opts="$sub_conf_opts --without-system-libxml"
     if test "$_os" = "Emscripten" -o "$_os" = "Android" -o "$_os" = "iOS"; then
-        sub_conf_opts="$sub_conf_opts --without-system-libxml --without-system-fontconfig --without-system-freetype --without-system-zlib"
+        sub_conf_opts="$sub_conf_opts --without-system-fontconfig --without-system-freetype --without-system-zlib"
     fi
     # windows uses full-internal python and that in turn relies on openssl, so also enable openssl
     # when cross-compiling for aarch64, overriding the defaults below
@@ -6007,15 +6031,12 @@ if test "$cross_compiling" = "yes"; then
         --disable-gtk3 \
         --disable-libcmis \
         --disable-nss \
-        --disable-online-update \
         --disable-opencl \
         --disable-openssl \
         --disable-pdfimport \
         --disable-skia \
-        --disable-xmlhelp \
         --enable-dynamic-loading \
         --enable-icecream="$enable_icecream" \
-        --without-gssapi \
         --without-tls \
         --without-webdav \
         --without-x \
@@ -6315,17 +6336,6 @@ if test $_os != "WINNT" -a $_os != "Darwin"; then
 fi
 AC_SUBST(ENABLE_OOENV)
 
-AC_MSG_CHECKING([whether to build the pagein binaries for oosplash])
-if test "${enable_pagein}" != no -a -z "$DISABLE_DYNLOADING"; then
-    AC_MSG_RESULT([yes])
-    ENABLE_PAGEIN=TRUE
-    AC_DEFINE(HAVE_FEATURE_PAGEIN)
-else
-    AC_MSG_RESULT([no])
-fi
-AC_SUBST(ENABLE_PAGEIN)
-
-
 AC_MSG_CHECKING([whether to enable CPDB support])
 ENABLE_CPDB=""
 CPDB_CFLAGS=""
@@ -6407,6 +6417,9 @@ else
     AbsolutePath "$TARFILE_LOCATION"
     PathFormat "${absolute_path}"
     TARFILE_LOCATION="${formatted_path_unix}"
+    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
+        reject_awkward_characters "$TARFILE_LOCATION" "tarball"
+    fi
 fi
 AC_SUBST(TARFILE_LOCATION)
 
@@ -6625,6 +6638,30 @@ if test -n "$BUILDING_PCH_WITH_OBJ"; then
         AC_MSG_RESULT(no)
     fi
 fi
+if test -n "$PCH_DEBUGINFO" -a "$COM" != MSC; then
+    AC_MSG_CHECKING([whether the vtable survives -fpch-debuginfo])
+    cat > conftest_pch.hxx <<_ACEOF
+#pragma once
+struct A { A() {} virtual ~A(); virtual void f(); };
+_ACEOF
+    cat > conftest_pch.cxx <<_ACEOF
+#include "conftest_pch.hxx"
+A::~A() {}
+void A::f() {}
+_ACEOF
+    pch_debuginfo_flags="$BUILDING_PCH_WITH_OBJ $PCH_INSTANTIATE_TEMPLATES $PCH_CODEGEN $PCH_DEBUGINFO"
+    if $CXX $CXXFLAGS -x c++-header -Xclang -emit-pch $pch_debuginfo_flags -c conftest_pch.hxx \
+            -o conftest_pch.hxx.pch >/dev/null 2>&1 \
+        && $CXX $CXXFLAGS -include-pch conftest_pch.hxx.pch -S conftest_pch.cxx -o conftest_pch.s \
+            >/dev/null 2>&1 \
+        && grep -q '_ZTV1A:' conftest_pch.s; then
+        AC_MSG_RESULT(yes)
+    else
+        AC_MSG_RESULT([no, not using -fpch-debuginfo])
+        PCH_DEBUGINFO=
+    fi
+    rm -f conftest_pch.hxx conftest_pch.cxx conftest_pch.hxx.pch conftest_pch.s
+fi
 AC_SUBST(PCH_DEBUGINFO)
 
 TAB=`printf '\t'`
@@ -6729,7 +6766,7 @@ perl_use_string="use Cwd ; use Digest::MD5"
 perl_use_string_spp="use Cwd ; use Digest::MD5"
 if test "$enable_openssl" = "yes" -a "$with_system_openssl" != "yes"; then
     # OpenSSL needs that to build
-    if test -n "$WSL_ONLY_AS_HELPER"; then
+    if test -n "$UNIX_ONLY_AS_HELPER"; then
         # OpenSSL is built via spp, FindBin is provided by default, but deps might change in future
         perl_use_string_spp="$perl_use_string_spp ; use FindBin ; use Time::Piece"
     else
@@ -6740,7 +6777,7 @@ dnl in WSL_ONLY_AS_HELPER case the test should be done with git-bash-provided-pe
 dnl the wsl container, but that can wait until we require a module that's not provided by default
 if $PERL -e "$perl_use_string">/dev/null 2>&1; then
     AC_MSG_RESULT([all modules found])
-    if test -n "$WSL_ONLY_AS_HELPER"; then
+    if test -n "$UNIX_ONLY_AS_HELPER"; then
         AC_MSG_CHECKING([for required Perl modules in Strawberry Perl])
         if $STRAWBERRY_PERL_UNIX -e "$perl_use_string_spp">/dev/null 2>&1; then
             AC_MSG_RESULT([all modules found])
@@ -6840,59 +6877,6 @@ if test $_os = Darwin; then
     fi
 fi
 
-find_csc()
-{
-    # Return value: $csctest
-
-    unset csctest
-
-    reg_get_value_32 "HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft/NET Framework Setup/NDP/v4/Client" "InstallPath"
-    if test -n "$regvalue"; then
-        csctest=$regvalue
-        return
-    fi
-}
-
-find_al()
-{
-    # Return value: $altest
-
-    unset altest
-
-    # We need this check to detect 4.6.1 or above.
-    for ver in 4.8.1 4.8 4.7.2 4.7.1 4.7 4.6.2 4.6.1; do
-        reg_get_value_32 "HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft/Microsoft SDKs/NETFXSDK/$ver/WinSDK-NetFx40Tools" "InstallationFolder"
-        PathFormat "$regvalue"
-        if test -n "$regvalue" -a \( -f "$formatted_path_unix/al.exe" -o -f "$formatted_path_unix/bin/al.exe" \); then
-            altest=$regvalue
-            return
-        fi
-    done
-
-    reg_list_values_32 "HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft/Microsoft SDKs/Windows"
-    for x in $reglist; do
-        reg_get_value_32 "HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft/Microsoft SDKs/Windows/$x/WinSDK-NetFx40Tools" "InstallationFolder"
-        PathFormat "$regvalue"
-        if test -n "$regvalue" -a \( -f "$formatted_path_unix/al.exe" -o -f "$formatted_path_unix/bin/al.exe" \); then
-            altest=$regvalue
-            return
-        fi
-    done
-}
-
-find_dotnetsdk()
-{
-    unset frametest
-
-    for ver in 4.8.1 4.8 4.7.2 4.7.1 4.7 4.6.2 4.6.1 4.6; do
-        reg_get_value_32 "HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft/Microsoft SDKs/NETFXSDK/$ver" "KitsInstallationFolder"
-        if test -n "$regvalue"; then
-            frametest=$regvalue
-            return
-        fi
-    done
-    AC_MSG_ERROR([The Windows NET SDK (minimum 4.6) not found, check the installation])
-}
 
 find_winsdk_version()
 {
@@ -6977,7 +6961,7 @@ dnl Check for the Windows  SDK.
 dnl =========================================
 if test "$_os" = "WINNT"; then
     AC_MSG_CHECKING([for Windows SDK])
-    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER"; then
+    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
         find_winsdk
         WINDOWS_SDK_HOME=$winsdktest
 
@@ -7058,16 +7042,21 @@ the  Windows SDK are installed.])
     PathFormat "$WINDOWS_SDK_HOME"
     WINDOWS_SDK_HOME="$formatted_path"
     WINDOWS_SDK_HOME_unix="$formatted_path_unix"
-    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER"; then
-        SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME/include -I$COMPATH/Include"
+    encode_path "$WINDOWS_SDK_HOME"
+    WINDOWS_SDK_HOME_ENCODED="$encoded_path"
+    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
+        dnl Every reader of SOLARINC treats it as a list of words, so the
+        dnl directories have to stay one word each and go in encoded. Each
+        dnl reader decodes and quotes where it hands the flags to a tool.
+        SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME_ENCODED/include -I$COMPATH_ENCODED/Include"
         if test -d "$WINDOWS_SDK_HOME_unix/include/um"; then
-            SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME/include/um -I$WINDOWS_SDK_HOME/include/shared"
+            SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME_ENCODED/include/um -I$WINDOWS_SDK_HOME_ENCODED/include/shared"
         elif test -d "$WINDOWS_SDK_HOME_unix/Include/$winsdklibsubdir/um"; then
-            SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME/Include/$winsdklibsubdir/um -I$WINDOWS_SDK_HOME/Include/$winsdklibsubdir/shared"
+            SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME_ENCODED/Include/$winsdklibsubdir/um -I$WINDOWS_SDK_HOME_ENCODED/Include/$winsdklibsubdir/shared"
         fi
         if test "$USE_HEADLESS_CODE" = "TRUE"; then
             if test -d "$WINDOWS_SDK_HOME_unix/Include/$winsdklibsubdir/winrt"; then
-                SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME/Include/$winsdklibsubdir/winrt"
+                SOLARINC="$SOLARINC -I$WINDOWS_SDK_HOME_ENCODED/Include/$winsdklibsubdir/winrt"
             fi
         fi
     fi
@@ -7077,7 +7066,7 @@ AC_SUBST(WINDOWS_SDK_HOME)
 AC_SUBST(WINDOWS_SDK_LIB_SUBDIR)
 AC_SUBST(WINDOWS_SDK_VERSION)
 
-if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER"; then
+if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
     dnl Check midl.exe; this being the first check for a tool in the SDK bin
     dnl dir, it also determines that dir's path w/o an arch segment if any,
     dnl WINDOWS_SDK_BINDIR_NO_ARCH:
@@ -7106,8 +7095,8 @@ if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER
         AC_MSG_RESULT([$MIDL_PATH/midl.exe])
     fi
 
-    # Convert to posix path with 8.3 filename restrictions ( No spaces )
-    MIDL_PATH=`win_short_path_for_make "$MIDL_PATH"`
+    # Convert to the pathname form make wants
+    MIDL_PATH=`win_path_for_make "$MIDL_PATH"`
 
     if test -f "$WINDOWS_SDK_BINDIR_NO_ARCH/msiinfo.exe" \
          -a -f "$WINDOWS_SDK_BINDIR_NO_ARCH/msidb.exe" \
@@ -7127,90 +7116,7 @@ if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER
 
     PathFormat "$MIDL_PATH"
     MIDL_PATH="$formatted_path"
-
-    if test "$enable_cli" = yes; then
-        dnl Check csc.exe
-        AC_MSG_CHECKING([for csc.exe])
-        find_csc
-        PathFormat "$csctest"
-        csctest_unix="$formatted_path_unix"
-        if test -f "$csctest_unix/csc.exe"; then
-            CSC_PATH="$csctest"
-        fi
-        if test ! -f "$csctest_unix/csc.exe"; then
-            AC_MSG_ERROR([csc.exe not found as $CSC_PATH/csc.exe])
-        else
-            AC_MSG_RESULT([$CSC_PATH/csc.exe])
-        fi
-
-        CSC_PATH=`win_short_path_for_make "$CSC_PATH"`
-
-        dnl Check al.exe
-        AC_MSG_CHECKING([for al.exe])
-        if test -n "$winsdkbinsubdir" \
-            -a -f "$winsdktest_unix/Bin/$winsdkbinsubdir/$WIN_BUILD_ARCH/al.exe"
-        then
-            AL_PATH="$winsdktest/Bin/$winsdkbinsubdir/$WIN_BUILD_ARCH"
-        elif test -f "$winsdktest_unix/Bin/$WIN_BUILD_ARCH/al.exe"; then
-            AL_PATH="$winsdktest/Bin/$WIN_BUILD_ARCH"
-        elif test -f "$winsdktest_unix/Bin/al.exe"; then
-            AL_PATH="$winsdktest/Bin"
-        fi
-
-        if test -z "$AL_PATH"; then
-            find_al
-            PathFormat "$altest"
-            altest_unix="$formatted_path_unix"
-            if test -f "$altest_unix/bin/al.exe"; then
-                AL_PATH="$altest/bin"
-            elif test -f "$altest_unix/al.exe"; then
-                AL_PATH="$altest"
-            fi
-        fi
-        PathFormat "$AL_PATH"
-        if test ! -f "$formatted_path_unix/al.exe"; then
-            AC_MSG_ERROR([al.exe not found as $AL_PATH/al.exe])
-        else
-            AC_MSG_RESULT([$AL_PATH/al.exe])
-        fi
-
-        AL_PATH=`win_short_path_for_make "$AL_PATH"`
-
-        dnl Check mscoree.lib / .NET Framework dir
-        AC_MSG_CHECKING(.NET Framework)
-        find_dotnetsdk
-        PathFormat "$frametest"
-        frametest="$formatted_path_unix"
-        if test -f "$frametest/Lib/um/$WIN_BUILD_ARCH/mscoree.lib"; then
-            DOTNET_FRAMEWORK_HOME="$frametest"
-        else
-            if test -f "$winsdktest_unix/lib/mscoree.lib" -o -f "$winsdktest_unix/lib/$winsdklibsubdir/um/$WIN_BUILD_ARCH/mscoree.lib"; then
-                DOTNET_FRAMEWORK_HOME="$winsdktest"
-            fi
-        fi
-        PathFormat "$DOTNET_FRAMEWORK_HOME"
-        if test ! -f "$formatted_path_unix/lib/mscoree.lib" -a ! -f "$formatted_path_unix/lib/$winsdklibsubdir/um/$WIN_BUILD_ARCH/mscoree.lib" -a ! -f "$formatted_path_unix/Lib/um/$WIN_BUILD_ARCH/mscoree.lib"; then
-            AC_MSG_ERROR([mscoree.lib not found])
-        fi
-        AC_MSG_RESULT([found: $DOTNET_FRAMEWORK_HOME])
-
-        PathFormat "$AL_PATH"
-        AL_PATH="$formatted_path"
-
-        PathFormat "$DOTNET_FRAMEWORK_HOME"
-        DOTNET_FRAMEWORK_HOME="$formatted_path"
-
-        PathFormat "$CSC_PATH"
-        CSC_PATH="$formatted_path"
-
-        ENABLE_CLI="TRUE"
-    else
-        ENABLE_CLI=""
-    fi
-else
-    ENABLE_CLI=""
 fi
-AC_SUBST(ENABLE_CLI)
 
 dnl ===================================================================
 dnl Testing for C++ compiler and version...
@@ -7287,12 +7193,18 @@ if test "$CCACHE" != ""; then
     else
         CXX="$CCACHE $CXX"
         CXX_BASE="ccache $CXX_BASE"
+        CXX_LAUNCHER="$CCACHE"
         AC_MSG_RESULT([no])
     fi
     CXXFLAGS=$save_CXXFLAGS
     ac_cxx_werror_flag=$save_ac_cxx_werror_flag
     AC_LANG_POP([C++])
 fi
+
+AC_SUBST(CC_PROGRAM)
+AC_SUBST(CC_LAUNCHER)
+AC_SUBST(CXX_PROGRAM)
+AC_SUBST(CXX_LAUNCHER)
 
 dnl ===================================================================
 dnl Find pre-processors.(should do that _after_ messing with CC/CXX)
@@ -8482,12 +8394,11 @@ if test "$_os" != "WINNT"; then
     # only.
     if test "$CPP_LIBRARY" = GLIBCXX; then
         dnl gcc#19664, gcc#22482, rhbz#162935
-        AC_MSG_CHECKING([if STL headers are visibility safe (GCC bug 22482)])
         AC_EGREP_HEADER(visibility push, string, stlvisok=yes, stlvisok=no)
-        AC_MSG_RESULT([$stlvisok])
         if test "$stlvisok" = "no"; then
             AC_MSG_ERROR([Your libstdc++ headers are not visibility safe. This is no longer supported.])
         fi
+        AC_MSG_NOTICE([STL headers are visibility safe (GCC bug 22482)])
     fi
 
     # As the below test checks things when linking self-compiled dynamic libraries, it presumably is irrelevant
@@ -8800,7 +8711,7 @@ if test $_os = "WINNT"; then
             with_redist=${VCTOOLSET:1}
             find_msms "$with_redist"
             if test -n "$msmdir"; then
-                MSM_PATH=`win_short_path_for_make "${msmdir%/}/"`
+                MSM_PATH=`win_path_for_make "${msmdir%/}/"`
                 SCPDEFS="$SCPDEFS -DWITH_VC_REDIST=$with_redist"
             fi
             break
@@ -8817,7 +8728,7 @@ dnl ===================================================================
 if test "$ENABLE_JAVA" != ""; then
 
     # Windows-specific tests
-    if test "$build_os" = "cygwin" -o -n "$WSL_ONLY_AS_HELPER"; then
+    if test "$build_os" = "cygwin" -o -n "$UNIX_ONLY_AS_HELPER"; then
         if test -z "$with_jdk_home"; then
             dnl See <https://docs.oracle.com/javase/9/migrate/toc.htm#JSMIG-GUID-EEED398E-AE37-4D12-
             dnl AB10-49F82F720027> section "Windows Registry Key Changes":
@@ -8865,11 +8776,10 @@ if test "$ENABLE_JAVA" != ""; then
     dnl check: officebean needs to link -ljawt, and libjpipe.so needs to be
     dnl loaded by java to run JunitTests:
     if test "$build_os" = "cygwin" -a "$cross_compiling" != "yes"; then
-        shortjdkhome=`cygpath -d "$with_jdk_home"`
-        if test $WIN_HOST_BITS -eq 64 -a -f "$with_jdk_home/bin/java.exe" -a "`$shortjdkhome/bin/java.exe -version 2>&1 | $GREP -i 64-bit`" = "" >/dev/null; then
+        if test $WIN_HOST_BITS -eq 64 -a -f "$with_jdk_home/bin/java.exe" -a "`"$with_jdk_home/bin/java.exe" -version 2>&1 | $GREP -i 64-bit`" = "" >/dev/null; then
             AC_MSG_WARN([You are building 64-bit binaries but the JDK $howfound is 32-bit])
             AC_MSG_ERROR([You should pass the --with-jdk-home option pointing to a 64-bit JDK])
-        elif test $WIN_HOST_BITS -eq 32 -a -f "$with_jdk_home/bin/java.exe" -a "`$shortjdkhome/bin/java.exe -version 2>&1 | $GREP -i 64-bit`" != ""  >/dev/null; then
+        elif test $WIN_HOST_BITS -eq 32 -a -f "$with_jdk_home/bin/java.exe" -a "`"$with_jdk_home/bin/java.exe" -version 2>&1 | $GREP -i 64-bit`" != ""  >/dev/null; then
             AC_MSG_WARN([You are building 32-bit binaries but the JDK $howfound is 64-bit])
             AC_MSG_ERROR([You should pass the --with-jdk-home option pointing to a (32-bit) JDK])
         fi
@@ -8877,7 +8787,7 @@ if test "$ENABLE_JAVA" != ""; then
         if test x`echo "$JAVAINTERPRETER" | $GREP -i '\.exe$'` = x; then
             JAVAINTERPRETER="${JAVAINTERPRETER}.exe"
         fi
-        JAVAINTERPRETER=`win_short_path_for_make "$JAVAINTERPRETER"`
+        JAVAINTERPRETER=`win_path_for_make "$JAVAINTERPRETER"`
     elif test "$cross_compiling" != "yes"; then
         case $CPUNAME in
             AARCH64|AXP|X86_64|IA64|POWERPC64|S390X|SPARC64|MIPS64|RISCV64|LOONGARCH64)
@@ -8909,19 +8819,19 @@ if test "$ENABLE_JAVA" != "" -a "$cross_compiling" != "yes"; then
     AC_MSG_CHECKING([the installed JDK])
     if test -n "$JAVAINTERPRETER"; then
         dnl java -version sends output to stderr!
-        if test `$JAVAINTERPRETER -version 2>&1 | $GREP -c "Kaffe"` -gt 0; then
+        if test `$JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" -version 2>&1 | $GREP -c "Kaffe"` -gt 0; then
             AC_MSG_ERROR([No valid check available. Please check the block for your desired java in configure.ac])
-        elif test `$JAVAINTERPRETER --version 2>&1 | $GREP -c "GNU libgcj"` -gt 0; then
+        elif test `$JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" --version 2>&1 | $GREP -c "GNU libgcj"` -gt 0; then
             AC_MSG_ERROR([No valid check available. Please check the block for your desired java in configure.ac])
-        elif test `$JAVAINTERPRETER -version 2>&1 | $AWK '{ print }' | $GREP -c "BEA"` -gt 0; then
+        elif test `$JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" -version 2>&1 | $AWK '{ print }' | $GREP -c "BEA"` -gt 0; then
             AC_MSG_ERROR([No valid check available. Please check the block for your desired java in configure.ac])
-        elif test `$JAVAINTERPRETER -version 2>&1 | $AWK '{ print }' | $GREP -c "IBM"` -gt 0; then
+        elif test `$JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" -version 2>&1 | $AWK '{ print }' | $GREP -c "IBM"` -gt 0; then
             AC_MSG_ERROR([No valid check available. Please check the block for your desired java in configure.ac])
         else
             JDK=sun
 
             dnl Sun JDK specific tests
-            _jdk=`$JAVAINTERPRETER -version 2>&1 | $AWK -F'"' '{ print \$2 }' | $SED '/^$/d' | $SED s/[[-A-Za-z]]*//`
+            _jdk=`$JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" -version 2>&1 | $AWK -F'"' '{ print \$2 }' | $SED '/^$/d' | $SED s/[[-A-Za-z]]*//`
             _jdk_ver=`echo "$_jdk" | $AWK -F. '{ print (($1 * 100) + $2) * 100 + $3;}'`
 
             if test "$_jdk_ver" -lt 10800; then
@@ -8935,7 +8845,7 @@ if test "$ENABLE_JAVA" != "" -a "$cross_compiling" != "yes"; then
                 JDK_SECURITYMANAGER_DISALLOWED=TRUE
             fi
 
-            JAVA_HOME=`echo $JAVAINTERPRETER | $SED -n "s,//*bin//*java,,p"`
+            JAVA_HOME=`echo "$JAVAINTERPRETER" | $SED -n "s,//*bin//*java,,p"`
             if test "$_os" = "WINNT"; then
                 JAVA_HOME=`echo $JAVA_HOME | $SED "s,\.[[eE]][[xX]][[eE]]$,,"`
             fi
@@ -8991,7 +8901,7 @@ if test "$ENABLE_JAVA" != "" -a "$cross_compiling" != "yes"; then
         if test x`echo "$JAVACOMPILER" | $GREP -i '\.exe$'` = x; then
             JAVACOMPILER="${JAVACOMPILER}.exe"
         fi
-        JAVACOMPILER=`win_short_path_for_make "$JAVACOMPILER"`
+        JAVACOMPILER=`win_path_for_make "$JAVACOMPILER"`
     fi
 fi
 
@@ -9017,7 +8927,7 @@ if test "$ENABLE_JAVA" != "" -a "$cross_compiling" != "yes"; then
         if test x`echo "$JAVADOC" | $GREP -i '\.exe$'` = x; then
             JAVADOC="${JAVADOC}.exe"
         fi
-        JAVADOC=`win_short_path_for_make "$JAVADOC"`
+        JAVADOC=`win_path_for_make "$JAVADOC"`
     fi
 
     if test `$JAVADOC --version 2>&1 | $GREP -c "gjdoc"` -gt 0; then
@@ -9096,7 +9006,7 @@ _ACEOF
                 AC_MSG_ERROR([javac does not work - java projects will not build!])
             fi
             AC_MSG_CHECKING([if gij knows its java.home])
-            JAVA_HOME=`$JAVAINTERPRETER findhome`
+            JAVA_HOME=`$JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" findhome`
             if test $? = 0 -a "$JAVA_HOME" != ""; then
                 AC_MSG_RESULT([$JAVA_HOME])
             else
@@ -9107,7 +9017,7 @@ _ACEOF
             # clean-up after ourselves
             rm -f ./findhome.java ./findhome.class
         else
-            JAVA_HOME=`echo $JAVAINTERPRETER | $SED -n "s,//*bin//*$with_java,,p"`
+            JAVA_HOME=`echo "$JAVAINTERPRETER" | $SED -n "s,//*bin//*$with_java,,p"`
         fi
     fi
 
@@ -9181,8 +9091,9 @@ if test -n "$ENABLE_JAVA" -a -z "$JAVAINC"; then
     case "$host_os" in
 
     cygwin*|wsl*)
-        JAVAINC="-I$JAVA_HOME/include/win32"
-        JAVAINC="$JAVAINC -I$JAVA_HOME/include"
+        encode_path "$JAVA_HOME"
+        JAVAINC="-I$encoded_path/include/win32"
+        JAVAINC="$JAVAINC -I$encoded_path/include"
         ;;
 
     darwin*)
@@ -9230,11 +9141,6 @@ if test -n "$ENABLE_JAVA" -a -z "$JAVAINC"; then
         test -d "$JAVA_HOME/include/native_thread" && JAVAINC="$JAVAINC -I$JAVA_HOME/include/native_thread"
         ;;
 
-    solaris*)
-        JAVAINC="-I$JAVA_HOME/include"
-        JAVAINC="$JAVAINC -I$JAVA_HOME/include/solaris"
-        test -d "$JAVA_HOME/include/native_thread" && JAVAINC="$JAVAINC -I$JAVA_HOME/include/native_thread"
-        ;;
     esac
 fi
 SOLARINC="$SOLARINC $JAVAINC"
@@ -9250,7 +9156,7 @@ if test -n "$JAVAINTERPRETER"; then
     for i in $CXX $CXXFLAGS; do
         case $i in
         -shared-libsan)
-            JAVAINTERPRETER="env LD_PRELOAD=libclang_rt.asan.so $JAVAINTERPRETER"
+            JAVAINTERPRETER_LAUNCHER="env LD_PRELOAD=libclang_rt.asan.so"
             break
             ;;
         esac
@@ -9258,6 +9164,7 @@ if test -n "$JAVAINTERPRETER"; then
 fi
 
 AC_SUBST(JAVACFLAGS)
+AC_SUBST(JAVAINTERPRETER_LAUNCHER)
 AC_SUBST(JAVACOMPILER)
 AC_SUBST(JAVAINTERPRETER)
 AC_SUBST(JAVAIFLAGS)
@@ -9286,128 +9193,118 @@ fi
 dnl ===================================================================
 dnl Export file validation
 dnl ===================================================================
-AC_MSG_CHECKING([whether to enable export file validation])
 if test "$with_export_validation" != "no"; then
-    if ! test -d "${SRC_ROOT}/schema"; then
+    AC_MSG_NOTICE([enable export file validation requested, needs Java])
+    if test -z "$JAVAINTERPRETER"; then
+        dnl Java is disabled but a build-time Java interpreter is still
+        dnl needed to run the export validators.
+        AC_PATH_PROG(JAVAINTERPRETER, java)
+    fi
+    dnl macOS ships a /usr/bin/java stub that exits non-zero with
+    dnl "Unable to locate a Java Runtime" when no JDK is installed,
+    dnl so verify the interpreter actually runs.
+    if test -n "$JAVAINTERPRETER" && ! $JAVAINTERPRETER_LAUNCHER "$JAVAINTERPRETER" -version >/dev/null 2>&1; then
+        JAVAINTERPRETER=
+    fi
+    if test -z "$JAVAINTERPRETER"; then
         if test "$with_export_validation" = "yes"; then
-            AC_MSG_ERROR([requested, but schema directory is missing (it is excluded from tarballs)])
-        else
-            AC_MSG_RESULT([no, schema directory is missing (it is excluded from tarballs)])
+            AC_MSG_ERROR([no working Java interpreter found (--with-export-validation)])
         fi
+        AC_MSG_NOTICE([no working Java interpreter found])
+        with_export_validation=no
     else
-        if test -z "$JAVAINTERPRETER"; then
-            dnl Java is disabled but a build-time Java interpreter is still
-            dnl needed to run the export validators.
-            AC_PATH_PROG(JAVAINTERPRETER, java)
-        fi
-        dnl macOS ships a /usr/bin/java stub that exits non-zero with
-        dnl "Unable to locate a Java Runtime" when no JDK is installed,
-        dnl so verify the interpreter actually runs.
-        if test -n "$JAVAINTERPRETER" && ! $JAVAINTERPRETER -version >/dev/null 2>&1; then
-            JAVAINTERPRETER=
-        fi
-        if test -z "$JAVAINTERPRETER"; then
-            if test "$with_export_validation" = "yes"; then
-                AC_MSG_ERROR([export validation requires a working Java interpreter, none found (--with-export-validation)])
+        AC_MSG_NOTICE([Java interpreter found])
+        AC_DEFINE(HAVE_EXPORT_VALIDATION)
+
+        AC_PATH_PROGS(ODFVALIDATOR, odfvalidator)
+        if test -z "$ODFVALIDATOR"; then
+            # remember to download the ODF toolkit with validator later
+            AC_MSG_NOTICE([no odfvalidator found, will download it])
+            BUILD_TYPE="$BUILD_TYPE ODFVALIDATOR"
+            ODFVALIDATOR="$BUILDDIR/bin/odfvalidator.sh"
+
+            # and fetch name of odfvalidator jar name from download.lst
+            ODFVALIDATOR_JAR=`$SED -n -e "s/^ODFVALIDATOR_JAR *:= *\(.*\) */\1/p" $SRC_ROOT/download.lst`
+            AC_SUBST(ODFVALIDATOR_JAR)
+
+            if test -z "$ODFVALIDATOR_JAR"; then
+                AC_MSG_ERROR([cannot determine odfvalidator jar location (--with-export-validation)])
             fi
-            AC_MSG_RESULT([no, no working Java interpreter found])
-            with_export_validation=no
+        fi
+        if test "$build_os" = "cygwin"; then
+            # In case of Cygwin it will be executed from Windows,
+            # so we need to run bash and absolute path to validator
+            # so instead of "odfvalidator" it will be
+            # something like "bash.exe C:\cygwin\opt\lo\bin\odfvalidator"
+            ODFVALIDATOR="bash.exe `cygpath -m "$ODFVALIDATOR"`"
         else
-            AC_MSG_RESULT([yes])
-            AC_DEFINE(HAVE_EXPORT_VALIDATION)
-
-            AC_PATH_PROGS(ODFVALIDATOR, odfvalidator)
-            if test -z "$ODFVALIDATOR"; then
-                # remember to download the ODF toolkit with validator later
-                AC_MSG_NOTICE([no odfvalidator found, will download it])
-                BUILD_TYPE="$BUILD_TYPE ODFVALIDATOR"
-                ODFVALIDATOR="$BUILDDIR/bin/odfvalidator.sh"
-
-                # and fetch name of odfvalidator jar name from download.lst
-                ODFVALIDATOR_JAR=`$SED -n -e "s/^ODFVALIDATOR_JAR *:= *\(.*\) */\1/p" $SRC_ROOT/download.lst`
-                AC_SUBST(ODFVALIDATOR_JAR)
-
-                if test -z "$ODFVALIDATOR_JAR"; then
-                    AC_MSG_ERROR([cannot determine odfvalidator jar location (--with-export-validation)])
-                fi
-            fi
-            if test "$build_os" = "cygwin"; then
-                # In case of Cygwin it will be executed from Windows,
-                # so we need to run bash and absolute path to validator
-                # so instead of "odfvalidator" it will be
-                # something like "bash.exe C:\cygwin\opt\lo\bin\odfvalidator"
-                ODFVALIDATOR="bash.exe `cygpath -m "$ODFVALIDATOR"`"
-            else
-                ODFVALIDATOR="sh $ODFVALIDATOR"
-            fi
-            AC_SUBST(ODFVALIDATOR)
+            ODFVALIDATOR="sh $ODFVALIDATOR"
+        fi
+        AC_SUBST(ODFVALIDATOR)
 
 
-            if test "$enable_cofficeotron" = "yes"; then
-                dnl The native cofficeotron validates the OOXML exports; an
-                dnl empty OFFICEOTRON_JAR makes bin/officeotron.sh run it.
+        if test "$enable_cofficeotron" = "yes"; then
+            dnl The native cofficeotron validates the OOXML exports; an
+            dnl empty OFFICEOTRON_JAR makes bin/officeotron.sh run it.
+            OFFICEOTRON="$BUILDDIR/bin/officeotron.sh"
+        else
+            AC_PATH_PROGS(OFFICEOTRON, officeotron)
+            if test -z "$OFFICEOTRON"; then
+                # remember to download the officeotron with validator later
+                AC_MSG_NOTICE([no officeotron found, will download it])
+                BUILD_TYPE="$BUILD_TYPE OFFICEOTRON"
                 OFFICEOTRON="$BUILDDIR/bin/officeotron.sh"
-            else
-                AC_PATH_PROGS(OFFICEOTRON, officeotron)
-                if test -z "$OFFICEOTRON"; then
-                    # remember to download the officeotron with validator later
-                    AC_MSG_NOTICE([no officeotron found, will download it])
-                    BUILD_TYPE="$BUILD_TYPE OFFICEOTRON"
-                    OFFICEOTRON="$BUILDDIR/bin/officeotron.sh"
 
-                    # and fetch name of officeotron jar name from download.lst
-                    OFFICEOTRON_JAR=`$SED -n -e "s/^OFFICEOTRON_JAR *:= *\(.*\) */\1/p" $SRC_ROOT/download.lst`
-                    if test -z "$OFFICEOTRON_JAR"; then
-                        AC_MSG_ERROR([cannot determine officeotron jar location (--with-export-validation)])
-                    fi
-                else
-                    # check version of existing officeotron
-                    OFFICEOTRON_VER=`$OFFICEOTRON --version | $AWK -F. '{ print \$1*10000+\$2*100+\$3 }'`
-                    if test 0"$OFFICEOTRON_VER" -lt 704; then
-                        AC_MSG_ERROR([officeotron too old])
-                    fi
+                # and fetch name of officeotron jar name from download.lst
+                OFFICEOTRON_JAR=`$SED -n -e "s/^OFFICEOTRON_JAR *:= *\(.*\) */\1/p" $SRC_ROOT/download.lst`
+                if test -z "$OFFICEOTRON_JAR"; then
+                    AC_MSG_ERROR([cannot determine officeotron jar location (--with-export-validation)])
+                fi
+            else
+                # check version of existing officeotron
+                OFFICEOTRON_VER=`$OFFICEOTRON --version | $AWK -F. '{ print \$1*10000+\$2*100+\$3 }'`
+                if test 0"$OFFICEOTRON_VER" -lt 704; then
+                    AC_MSG_ERROR([officeotron too old])
                 fi
             fi
-            AC_SUBST(OFFICEOTRON_JAR)
-            if test "$build_os" = "cygwin"; then
-                # In case of Cygwin it will be executed from Windows,
-                # so we need to run bash and absolute path to validator
-                # so instead of "odfvalidator" it will be
-                # something like "bash.exe C:\cygwin\opt\lo\bin\odfvalidator"
-                OFFICEOTRON="bash.exe `cygpath -m "$OFFICEOTRON"`"
-            else
-                OFFICEOTRON="sh $OFFICEOTRON"
-            fi
+        fi
+        AC_SUBST(OFFICEOTRON_JAR)
+        if test "$build_os" = "cygwin"; then
+            # In case of Cygwin it will be executed from Windows,
+            # so we need to run bash and absolute path to validator
+            # so instead of "odfvalidator" it will be
+            # something like "bash.exe C:\cygwin\opt\lo\bin\odfvalidator"
+            OFFICEOTRON="bash.exe `cygpath -m "$OFFICEOTRON"`"
+        else
+            OFFICEOTRON="sh $OFFICEOTRON"
+        fi
 
-            AC_PATH_PROGS(VERAPDF, verapdf)
-            if test -z "$VERAPDF"; then
-                # remember to download the verapdf with validator later
-                AC_MSG_NOTICE([no verapdf found, will download it])
-                BUILD_TYPE="$BUILD_TYPE VERAPDF"
-                VERAPDF="$BUILDDIR/bin/verapdf.sh"
+        AC_PATH_PROGS(VERAPDF, verapdf)
+        if test -z "$VERAPDF"; then
+            # remember to download the verapdf with validator later
+            AC_MSG_NOTICE([no verapdf found, will download it])
+            BUILD_TYPE="$BUILD_TYPE VERAPDF"
+            VERAPDF="$BUILDDIR/bin/verapdf.sh"
 
-                # and fetch name of verapdf jar name from download.lst
-                VERAPDF_JAR=`$SED -n -e "s/^VERAPDF_JAR *:= *\(.*\) */\1/p" $SRC_ROOT/download.lst`
-                AC_SUBST(VERAPDF_JAR)
+            # and fetch name of verapdf jar name from download.lst
+            VERAPDF_JAR=`$SED -n -e "s/^VERAPDF_JAR *:= *\(.*\) */\1/p" $SRC_ROOT/download.lst`
+            AC_SUBST(VERAPDF_JAR)
 
-                if test -z "$VERAPDF_JAR"; then
-                    AC_MSG_ERROR([cannot determine verapdf jar location (--with-export-validation)])
-                fi
+            if test -z "$VERAPDF_JAR"; then
+                AC_MSG_ERROR([cannot determine verapdf jar location (--with-export-validation)])
             fi
-            if test "$build_os" = "cygwin"; then
-                # In case of Cygwin it will be executed from Windows,
-                # so we need to run bash and absolute path to validator
-                # so instead of "odfvalidator" it will be
-                # something like "bash.exe C:\cygwin\opt\lo\bin\odfvalidator"
-                VERAPDF="bash.exe `cygpath -m "$VERAPDF"`"
-            else
-                VERAPDF="sh $VERAPDF"
-            fi
+        fi
+        if test "$build_os" = "cygwin"; then
+            # In case of Cygwin it will be executed from Windows,
+            # so we need to run bash and absolute path to validator
+            # so instead of "odfvalidator" it will be
+            # something like "bash.exe C:\cygwin\opt\lo\bin\odfvalidator"
+            VERAPDF="bash.exe `cygpath -m "$VERAPDF"`"
+        else
+            VERAPDF="sh $VERAPDF"
         fi
     fi
     AC_SUBST(OFFICEOTRON)
-else
-    AC_MSG_RESULT([no])
 fi
 
 AC_MSG_CHECKING([for Microsoft Binary File Format Validator])
@@ -9419,7 +9316,7 @@ if test "$with_bffvalidator" != "no"; then
     fi
 
     if test "$with_bffvalidator" = "yes"; then
-        BFFVALIDATOR=`win_short_path_for_make "$PROGRAMFILES/Microsoft Office/BFFValidator/BFFValidator.exe"`
+        BFFVALIDATOR=`win_path_for_make "$PROGRAMFILES/Microsoft Office/BFFValidator/BFFValidator.exe"`
     else
         BFFVALIDATOR="$with_bffvalidator"
     fi
@@ -9516,8 +9413,7 @@ if test "$enable_epm" = "yes"; then
             AC_MSG_ERROR([dpkg needed for deb creation. Install dpkg.])
         fi
     fi
-    if echo "$PKGFORMAT" | $EGREP rpm 2>&1 >/dev/null || \
-       echo "$PKGFORMAT" | $EGREP pkg 2>&1 >/dev/null; then
+    if echo "$PKGFORMAT" | $EGREP rpm 2>&1 >/dev/null; then
         if test "$with_epm" = "no" -a "$_os" != "Darwin"; then
             if test "`echo $EPM_VERSION | cut -d'.' -f1`" -lt "4"; then
                 AC_MSG_CHECKING([whether epm is patched for Collabora Office's needs])
@@ -9525,15 +9421,10 @@ if test "$enable_epm" = "yes"; then
                     AC_MSG_RESULT([yes])
                 else
                     AC_MSG_RESULT([no])
-                    if echo "$PKGFORMAT" | $GREP -q rpm; then
-                        _pt="rpm"
-                        AC_MSG_WARN([the rpms will need to be installed with --nodeps])
-                        add_warning "the rpms will need to be installed with --nodeps"
-                    else
-                        _pt="pkg"
-                    fi
-                    AC_MSG_WARN([the ${_pt}s will not be relocatable])
-                    add_warning "the ${_pt}s will not be relocatable"
+                    AC_MSG_WARN([the rpms will need to be installed with --nodeps])
+                    add_warning "the rpms will need to be installed with --nodeps"
+                    AC_MSG_WARN([the rpms will not be relocatable])
+                    add_warning "the rpms will not be relocatable"
                     AC_MSG_WARN([if you want to make sure installation without --nodeps and
                                  relocation will work, you need to patch your epm with the
                                  patch in epm/epm-3.7.patch or build with
@@ -9542,19 +9433,12 @@ if test "$enable_epm" = "yes"; then
             fi
         fi
     fi
-    if echo "$PKGFORMAT" | $EGREP pkg 2>&1 >/dev/null; then
-        AC_PATH_PROG(PKGMK, pkgmk, no)
-        if test "$PKGMK" = "no"; then
-            AC_MSG_ERROR([pkgmk needed for Solaris pkg creation. Install it.])
-        fi
-    fi
     AC_SUBST(RPM)
     AC_SUBST(DPKG)
-    AC_SUBST(PKGMK)
 else
     for i in $PKGFORMAT; do
         case "$i" in
-        bsd | deb | pkg | rpm | native | portable)
+        deb | rpm)
             AC_MSG_ERROR(
                 [--with-package-format='$PKGFORMAT' requires --enable-epm])
             ;;
@@ -9800,7 +9684,7 @@ else
                   esac
                 fi
               ;;
-              solaris* | sunos* | sysv* | sco*)
+              sunos* | sysv* | sco*)
                 case "$host_cpu" in
                   x86_64)
                     objfmt='ELF64'
@@ -9880,19 +9764,17 @@ To get one please:
 _EOS
             if test "$build_os" = "cygwin"; then
 cat << _EOS
-install a pre-compiled binary for Win32
+install it from your Unix environment's package manager:
 
-mkdir -p /opt/lo/bin
-cd /opt/lo/bin
-wget https://dev-www.libreoffice.org/bin/cygwin/nasm.exe
-chmod +x nasm
+  MSYS2:  pacman -S nasm
+  Cygwin: re-run setup and pick nasm from the Devel category
 
 or get and install one from https://www.nasm.us/
 
 Then re-run autogen.sh
 
 Note: autogen.sh will try to use /opt/lo/bin/nasm if the environment variable NASM is not already defined.
-Alternatively, you can install the 'new' nasm where ever you want and make sure that \`command -v nasm\` finds it.
+Alternatively, you can install nasm wherever you want and make sure that \`command -v nasm\` finds it.
 
 _EOS
             else
@@ -10064,27 +9946,6 @@ fi
 # to prevent incompatibilities between internal libxml2 and external libxslt,
 # or vice versa, use with_system_libxml here
 # ===================================================================
-if test "$with_system_libxml" = "auto"; then
-    case "$_os" in
-    WINNT|iOS|Android)
-        with_system_libxml="$with_system_libs"
-        ;;
-    Emscripten)
-        with_system_libxml=no
-        ;;
-    Darwin)
-        with_system_libxml=yes
-        ;;
-    *)
-        if test "$enable_fuzzers" != "yes"; then
-            with_system_libxml="$with_system_libs"
-        else
-            with_system_libxml=no
-        fi
-        ;;
-    esac
-fi
-
 AC_MSG_CHECKING([which libxslt to use])
 if test "$with_system_libxml" = "yes"; then
     AC_MSG_RESULT([external])
@@ -10167,9 +10028,9 @@ else
     fi
     if test "$COM" = "MSC"; then
         if test "$MSVC_USE_DEBUG_RUNTIME" = TRUE; then
-            LIBXML_LIBS="${WORKDIR}/UnpackedTarball/libxml2/Debug/libxml2d.lib"
+            LIBXML_LIBS="${WORKDIR}/UnpackedTarball/libxml2/libxml2d.lib"
         else
-            LIBXML_LIBS="${WORKDIR}/UnpackedTarball/libxml2/Release/libxml2.lib"
+            LIBXML_LIBS="${WORKDIR}/UnpackedTarball/libxml2/libxml2.lib"
         fi
     else
         LIBXML_LIBS="-L${WORKDIR}/UnpackedTarball/libxml2/.libs -lxml2"
@@ -10391,7 +10252,7 @@ if test \( "$cross_compiling" = yes -a -z "$PYTHON_FOR_BUILD" \) -o "$enable_pyt
     SYSTEM_PYTHON=
     PYTHON_VERSION_MAJOR=3
     PYTHON_VERSION_MINOR=14
-    PYTHON_VERSION=${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.5
+    PYTHON_VERSION=${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.7
     if ! grep -q -i python.*${PYTHON_VERSION} ${SRC_ROOT}/download.lst; then
         AC_MSG_ERROR([PYTHON_VERSION ${PYTHON_VERSION} but no matching file in download.lst])
     fi
@@ -10536,7 +10397,11 @@ dnl ===================================================================
 dnl Check for system mdds
 dnl ===================================================================
 MDDS_CFLAGS_internal="-I${WORKDIR}/UnpackedTarball/mdds/include"
-libo_CHECK_SYSTEM_MODULE([mdds],[MDDS],[mdds-3.0 >= 3.0.0])
+dnl The FreeBSD package of mdds 3.1 names its pkg-config file after the
+dnl release, mdds-3.1, while upstream keeps the 3.0 API name for the same
+dnl headers. Accept either.
+PKG_CHECK_EXISTS([mdds-3.1], [mdds_pc_name=mdds-3.1], [mdds_pc_name=mdds-3.0])
+libo_CHECK_SYSTEM_MODULE([mdds],[MDDS],[$mdds_pc_name >= 3.0.0])
 
 dnl ===================================================================
 dnl Check for system dragonbox
@@ -10656,15 +10521,20 @@ if test "$with_system_odbc" = "yes" -o '(' "$with_system_headers" = "yes" -a "$w
     AC_MSG_RESULT([external])
     SYSTEM_ODBC_HEADERS=TRUE
 
-    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER"; then
-        save_CPPFLAGS=$CPPFLAGS
+    if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
+        save_INCLUDE=$INCLUDE
         find_winsdk
         PathFormat "$winsdktest"
-        CPPFLAGS="$CPPFLAGS -I$formatted_path/include/um -I$formatted_path/Include/$winsdklibsubdir/um -I$formatted_path/include -I$formatted_path/include/shared -I$formatted_path/include/$winsdklibsubdir/shared"
+        add_to_include_env "$formatted_path/include/um"
+        add_to_include_env "$formatted_path/Include/$winsdklibsubdir/um"
+        add_to_include_env "$formatted_path/include"
+        add_to_include_env "$formatted_path/include/shared"
+        add_to_include_env "$formatted_path/include/$winsdklibsubdir/shared"
         AC_CHECK_HEADER(sqlext.h, [],
             [AC_MSG_ERROR(odbc not found. install odbc)],
             [#include <windows.h>])
-        CPPFLAGS=$save_CPPFLAGS
+        INCLUDE=$save_INCLUDE
+        export INCLUDE
     else
         AC_CHECK_HEADER(sqlext.h, [],
             [AC_MSG_ERROR(odbc not found. install odbc)],[])
@@ -10843,7 +10713,6 @@ if test "$with_system_harfbuzz" = "yes"; then
     if test "$with_system_graphite" = "no"; then
         AC_MSG_ERROR([--with-system-graphite must be used when --with-system-harfbuzz is used])
     fi
-    AC_MSG_CHECKING([whether system Harfbuzz is built with Graphite support])
     save_LIBS="$LIBS"
     save_CFLAGS="$CFLAGS"
     LIBS="$LIBS $HARFBUZZ_LIBS"
@@ -11067,6 +10936,11 @@ if test "$build_crypto" = yes; then
         BUILD_TYPE="$BUILD_TYPE CRYPTO_NSS"
         AC_DEFINE([USE_CRYPTO_NSS])
     fi
+    dnl On macOS, additionally use the Security framework (Keychain Access) for
+    dnl certificates and signing keys, on top of the NSS crypto engine.
+    if test "$_os" = Darwin; then
+        AC_DEFINE([USE_CRYPTO_APPLE])
+    fi
 fi
 
 ARGON2_CFLAGS_internal="-I${WORKDIR}/UnpackedTarball/argon2/include"
@@ -11171,7 +11045,7 @@ else
         save_CXXFLAGS=$CXXFLAGS
         save_IFS=$IFS
         IFS=$P_SEP
-        for i in $CPLUS_INCLUDE_PATH /usr/include; do
+        for i in $CPLUS_INCLUDE_PATH /usr/include /usr/local/include; do
             dnl Reset IFS as soon as possible, to avoid unexpected side effects (and the
             dnl "/usr/include" fallback makes sure we get here at least once; resetting rather than
             dnl unsetting follows the advice at <https://git.savannah.gnu.org/gitweb/?p=autoconf.git;
@@ -11362,11 +11236,13 @@ dnl ***************************************
 if test "$_os" = "Linux"; then
     AC_MSG_CHECKING([whether the libc is recent enough])
     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-    #include <features.h>
-    #if defined(__GNU_LIBRARY__) && (__GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 1))
-    #error glibc >= 2.1 is required
-    #endif
-    ]])],, [AC_MSG_RESULT([yes])], [AC_MSG_ERROR([no, upgrade libc])])
+        #include <features.h>
+        #if defined(__GNU_LIBRARY__) && (__GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 1))
+        #error glibc >= 2.1 is required
+        #endif
+    ]])],
+    [AC_MSG_RESULT([yes])],
+    [AC_MSG_ERROR([no, upgrade libc])])
 fi
 
 dnl =========================================
@@ -11391,7 +11267,6 @@ AC_PATH_PROG(BISON, bison)
 if test -z "$BISON"; then
     AC_MSG_ERROR([no bison found in \$PATH, install it])
 else
-    AC_MSG_CHECKING([the bison version])
     _bison_version=`$BISON --version | grep GNU | $SED -e 's@^[[^0-9]]*@@' -e 's@ .*@@' -e 's@,.*@@'`
     _bison_longver=`echo $_bison_version | $AWK -F. '{ print \$1*1000+\$2}'`
     dnl Accept newer than 2.0; for --enable-compiler-plugins at least 2.3 is known to be bad and
@@ -11421,7 +11296,6 @@ fi
 if test -z "$FLEX"; then
     AC_MSG_ERROR([no flex found in \$PATH, install it])
 else
-    AC_MSG_CHECKING([the flex version])
     _flex_version=$($FLEX --version | $SED -e 's/^.*\([[[:digit:]]]\{1,\}\.[[[:digit:]]]\{1,\}\.[[[:digit:]]]\{1,\}\).*$/\1/')
     if test $(echo $_flex_version | $AWK -F. '{printf("%d%03d%03d", $1, $2, $3)}') -lt 2006000; then
         AC_MSG_ERROR([failed ($FLEX $_flex_version found, but need at least 2.6.0)])
@@ -11449,7 +11323,7 @@ if test -z "$PATCH"; then
     AC_MSG_ERROR(["patch" not found in \$PATH, install it])
 fi
 
-dnl On Solaris or macOS, check if --with-gnu-patch was used
+dnl On macOS, check if --with-gnu-patch was used
 if test "$_os" = "SunOS" -o "$_os" = "Darwin" -o "$_os" = "FreeBSD"; then
     if test -z "$with_gnu_patch"; then
         GNUPATCH=$PATCH
@@ -11510,7 +11384,7 @@ elif $GNUCP --version 2>/dev/null | grep "GNU fileutils" >/dev/null 2>/dev/null;
     AC_MSG_RESULT([yes])
 else
     case "$build_os" in
-    darwin*|netbsd*|openbsd*|freebsd*|dragonfly*)
+    darwin*|netbsd*|openbsd*|freebsd*|dragonfly*|linux*)
         x_GNUCP=[\#]
         GNUCP=''
         AC_MSG_RESULT([no gnucp found - using the system's cp command])
@@ -11538,7 +11412,7 @@ if test "$_os" = "WINNT"; then
 
     AC_MSG_CHECKING([for the MSVC assembler ($assembler)])
     if test -f "$MSVC_HOST_PATH/$assembler"; then
-        ML_EXE=`win_short_path_for_make "$MSVC_HOST_PATH/$assembler"`
+        ML_EXE=`win_path_for_make "$MSVC_HOST_PATH/$assembler"`
         AC_MSG_RESULT([$ML_EXE])
     else
         AC_MSG_ERROR([not found in $MSVC_HOST_PATH])
@@ -11671,23 +11545,12 @@ fi
 AC_SUBST(LIBINTL_LIBS)
 AC_SUBST(USE_LIBINTL)
 
-if test "$enable_introspection" = yes; then
-    if test "$ENABLE_GTK3" = "TRUE"; then
-        GOBJECT_INTROSPECTION_REQUIRE(INTROSPECTION_REQUIRED_VERSION)
-    else
-        AC_MSG_ERROR([--enable-introspection requires --enable-gtk3])
-    fi
-fi
-
 dnl ===================================================================
 dnl check for dbus support
 dnl ===================================================================
 ENABLE_DBUS=""
 DBUS_CFLAGS=""
 DBUS_LIBS=""
-DBUS_GLIB_CFLAGS=""
-DBUS_GLIB_LIBS=""
-DBUS_HAVE_GLIB=""
 
 if test "$enable_dbus" = "no"; then
     test_dbus=no
@@ -11702,16 +11565,6 @@ if test "$test_dbus" = "yes"; then
     DBUS_CFLAGS=$(printf '%s' "$DBUS_CFLAGS" | sed -e "s/-I/${ISYSTEM?}/g")
     FilterLibs "${DBUS_LIBS}"
     DBUS_LIBS="${filteredlibs}"
-
-    # Glib is needed for BluetoothServer
-    # Sets also DBUS_GLIB_CFLAGS/DBUS_GLIB_LIBS if successful.
-    PKG_CHECK_MODULES(DBUS_GLIB,[glib-2.0 >= 2.4],
-        [
-            DBUS_HAVE_GLIB="TRUE"
-            AC_DEFINE(DBUS_HAVE_GLIB,1)
-        ],
-        AC_MSG_WARN([[No Glib found, Bluetooth support will be disabled]])
-    )
 else
     AC_MSG_RESULT([no])
 fi
@@ -11719,86 +11572,6 @@ fi
 AC_SUBST(ENABLE_DBUS)
 AC_SUBST(DBUS_CFLAGS)
 AC_SUBST(DBUS_LIBS)
-AC_SUBST(DBUS_GLIB_CFLAGS)
-AC_SUBST(DBUS_GLIB_LIBS)
-AC_SUBST(DBUS_HAVE_GLIB)
-
-AC_MSG_CHECKING([whether to enable Impress remote control])
-if test -n "$enable_sdremote" -a "$enable_sdremote" != "no"; then
-    AC_MSG_RESULT([yes])
-    ENABLE_SDREMOTE=TRUE
-    SDREMOTE_ENTITLEMENT="	<key>com.apple.security.network.server</key>
-	<true/>"
-    AC_MSG_CHECKING([whether to enable Bluetooth support in Impress remote control])
-
-    if test $OS = MACOSX; then
-        # The Bluetooth code doesn't compile since macOS SDK 10.15
-        if test "$enable_sdremote_bluetooth" = yes; then
-            AC_MSG_ERROR([macOS SDK $macosx_sdk does not currently support --enable-sdremote-bluetooth])
-        fi
-        add_warning "not building the bluetooth part of the sdremote - used api was removed from macOS SDK 10.15"
-        enable_sdremote_bluetooth=no
-    fi
-    # If not explicitly enabled or disabled, default
-    if test -z "$enable_sdremote_bluetooth"; then
-        case "$OS" in
-        LINUX|MACOSX|WNT)
-            # Default to yes for these
-            enable_sdremote_bluetooth=yes
-            ;;
-        *)
-            # otherwise no
-            enable_sdremote_bluetooth=no
-            ;;
-        esac
-    fi
-    # $enable_sdremote_bluetooth is guaranteed non-empty now
-
-    if test "$enable_sdremote_bluetooth" != "no"; then
-        if test "$OS" = "LINUX"; then
-            if test "$ENABLE_DBUS" = "TRUE" -a "$DBUS_HAVE_GLIB" = "TRUE"; then
-                AC_MSG_RESULT([yes])
-                ENABLE_SDREMOTE_BLUETOOTH=TRUE
-                dnl ===================================================================
-                dnl Check for system bluez
-                dnl ===================================================================
-                AC_MSG_CHECKING([which Bluetooth header to use])
-                if test "$with_system_bluez" = "yes"; then
-                    AC_MSG_RESULT([external])
-                    AC_CHECK_HEADER(bluetooth/bluetooth.h, [],
-                        [AC_MSG_ERROR(bluetooth.h not found. install bluez)], [])
-                    SYSTEM_BLUEZ=TRUE
-                else
-                    AC_MSG_RESULT([internal])
-                    SYSTEM_BLUEZ=
-                fi
-            else
-                AC_MSG_RESULT([no, dbus disabled])
-                ENABLE_SDREMOTE_BLUETOOTH=
-                SYSTEM_BLUEZ=
-            fi
-        else
-            AC_MSG_RESULT([yes])
-            ENABLE_SDREMOTE_BLUETOOTH=TRUE
-            SYSTEM_BLUEZ=
-            SDREMOTE_ENTITLEMENT="$SDREMOTE_ENTITLEMENT
-	<key>com.apple.security.device.bluetooth</key>
-	<true/>"
-        fi
-    else
-        AC_MSG_RESULT([no])
-        ENABLE_SDREMOTE_BLUETOOTH=
-        SYSTEM_BLUEZ=
-    fi
-else
-    ENABLE_SDREMOTE=
-    SYSTEM_BLUEZ=
-    AC_MSG_RESULT([no])
-fi
-AC_SUBST(ENABLE_SDREMOTE)
-AC_SUBST(ENABLE_SDREMOTE_BLUETOOTH)
-AC_SUBST(SDREMOTE_ENTITLEMENT)
-AC_SUBST(SYSTEM_BLUEZ)
 
 dnl ===================================================================
 dnl Check whether to enable GIO support
@@ -11853,16 +11626,13 @@ dnl =================================================
 dnl Check whether to build with dconf support.
 dnl =================================================
 
-if test $_os != Android -a $_os != iOS -a "$enable_dconf" != no; then
+if test $_os != Android -a $_os != iOS -a "$enable_dconf" = yes; then
     PKG_CHECK_MODULES([DCONF], [dconf >= 0.40.0], [], [
-        if test "$enable_dconf" = yes; then
-            AC_MSG_ERROR([dconf not found])
-        else
-            enable_dconf=no
-        fi])
+        AC_MSG_ERROR([dconf not found])
+        ])
 fi
 AC_MSG_CHECKING([whether to enable dconf])
-if test $_os = Android -o $_os = iOS -o "$enable_dconf" = no; then
+if test $_os = Android -o $_os = iOS -o "$enable_dconf" != yes; then
     DCONF_CFLAGS=
     DCONF_LIBS=
     ENABLE_DCONF=
@@ -12054,18 +11824,26 @@ if test \( "$ENABLE_SKIA" = TRUE -o "$ENABLE_PDFIUM" = TRUE \) -a "$COM_IS_CLANG
     else
         if test "$_os" = "WINNT"; then
             AC_MSG_CHECKING([for clang-cl])
+            dnl Remember the directory rather than the program. clang-cl is
+            dnl named without one below, for the same reason cl.exe is: the
+            dnl value carries flags after the name, so whoever runs it splits
+            dnl it on whitespace and a pathname holding a space would not
+            dnl survive that.
+            LO_CLANG_DIR=
             if test "$WIN_BUILD_ARCH" = "x64" -a -x "$VC_PRODUCT_DIR/Tools/Llvm/x64/bin/clang-cl.exe"; then
-                LO_CLANG_CC=`win_short_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/x64/bin/clang-cl.exe"`
+                LO_CLANG_DIR="$VC_PRODUCT_DIR/Tools/Llvm/x64/bin"
             elif test "$WIN_BUILD_ARCH" = "arm64" -a -x "$VC_PRODUCT_DIR/Tools/Llvm/ARM64/bin/clang-cl.exe"; then
-                LO_CLANG_CC=`win_short_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/ARM64/bin/clang-cl.exe"`
+                LO_CLANG_DIR="$VC_PRODUCT_DIR/Tools/Llvm/ARM64/bin"
             elif test -x "$VC_PRODUCT_DIR/Tools/Llvm/bin/clang-cl.exe"; then
-                LO_CLANG_CC=`win_short_path_for_make "$VC_PRODUCT_DIR/Tools/Llvm/bin/clang-cl.exe"`
+                LO_CLANG_DIR="$VC_PRODUCT_DIR/Tools/Llvm/bin"
             elif test -n "$PROGRAMFILES" -a -x "$(cygpath -u "$PROGRAMFILES/LLVM/bin/clang-cl.exe")"; then
-                LO_CLANG_CC=`win_short_path_for_make "$PROGRAMFILES/LLVM/bin/clang-cl.exe"`
+                LO_CLANG_DIR="$PROGRAMFILES/LLVM/bin"
             elif test -x "$(cygpath -u "c:/Program Files/LLVM/bin/clang-cl.exe")"; then
-                LO_CLANG_CC=`win_short_path_for_make "c:/Program Files/LLVM/bin/clang-cl.exe"`
+                LO_CLANG_DIR="c:/Program Files/LLVM/bin"
             fi
-            if test -n "$LO_CLANG_CC"; then
+            if test -n "$LO_CLANG_DIR"; then
+                add_to_path_env "$LO_CLANG_DIR"
+                LO_CLANG_CC=clang-cl.exe
                 dnl explicitly set -m32/-m64
                 LO_CLANG_CC="$LO_CLANG_CC --target=$WIN_CLANG_TARGET -m$WIN_HOST_BITS"
                 LO_CLANG_CXX="$LO_CLANG_CC"
@@ -12477,11 +12255,6 @@ fi
 AC_MSG_RESULT([$WITH_THEMES])
 AC_SUBST([WITH_THEMES])
 
-dnl Should any extra extensions be included?
-dnl There are standalone tests for each of these below.
-WITH_EXTRA_EXTENSIONS=
-AC_SUBST([WITH_EXTRA_EXTENSIONS])
-
 AC_MSG_CHECKING([whether to build opens___.ttf])
 if test "$enable_build_opensymbol" = "yes"; then
     AC_MSG_RESULT([yes])
@@ -12499,24 +12272,17 @@ dnl ===================================================================
 dnl Test whether to include fonts
 dnl ===================================================================
 WITH_FONTS=
-WITH_DOCREPAIR_FONTS=
 AC_MSG_CHECKING([whether to include third-party fonts])
 if test "$with_fonts" != "no"; then
     AC_MSG_RESULT([yes])
     WITH_FONTS=TRUE
     BUILD_TYPE="$BUILD_TYPE MORE_FONTS"
     AC_DEFINE(HAVE_MORE_FONTS)
-    AC_MSG_CHECKING([whether to include 'docrepair' fonts])
-    if test "$with_docrepair_fonts" = "yes"; then
-        AC_MSG_RESULT([yes])
-        WITH_DOCREPAIR_FONTS=TRUE
-    fi
 else
     AC_MSG_RESULT([no])
     SCPDEFS="$SCPDEFS -DWITHOUT_FONTS"
 fi
 AC_SUBST(WITH_FONTS)
-AC_SUBST(WITH_DOCREPAIR_FONTS)
 
 dnl Test whether to include more Google Noto fonts
 dnl ===================================================================
@@ -12709,7 +12475,7 @@ if test "$need_meson" = "yes"; then
                 PathFormat "$MESON"
                 MESON="$formatted_path"
                 AC_MSG_CHECKING([whether meson can be run with "$PYTHON_FOR_BUILD $MESON"])
-                if ($PYTHON_FOR_BUILD $MESON --version >/dev/null) ; then
+                if ($PYTHON_FOR_BUILD "$MESON" --version >/dev/null) ; then
                     _meson_minver=0.61.5
                     if test "$test_cairo" = "yes" -a "$SYSTEM_CAIRO" != "TRUE"; then
                         _meson_minver=1.3.0
@@ -12723,7 +12489,7 @@ if test "$need_meson" = "yes"; then
                         fi
                     fi
                     _meson_minmajmin=`echo $_meson_minver | $AWK -F. '{ print \$1*10000+\$2*100+\$3 }'`
-                    _meson_version=`$PYTHON_FOR_BUILD $MESON --version 2>/dev/null`
+                    _meson_version=`$PYTHON_FOR_BUILD "$MESON" --version 2>/dev/null`
                     _meson_majmin=`echo $_meson_version | $AWK -F. '{ print \$1*10000+\$2*100+\$3 }'`
                     if test "$_meson_majmin" -lt "$_meson_minmajmin"; then
                         AC_MSG_WARN([meson "$_meson_version" is too old, using internal copy])
@@ -12732,7 +12498,7 @@ if test "$need_meson" = "yes"; then
                     else
                         AC_MSG_RESULT([yes])
                         AC_MSG_CHECKING([min version of meson required])
-                        AC_MSG_RESULT([$meson_minver])
+                        AC_MSG_RESULT([$_meson_minver])
                     fi
                 else
                     AC_MSG_RESULT([no])
@@ -12740,7 +12506,11 @@ if test "$need_meson" = "yes"; then
                 fi
             fi
         fi
-        MESON='$(call gb_ExternalExecutable_get_command,python) '"$MESON"
+        dnl From here on MESON is a command line rather than a pathname, and
+        dnl nothing runs it from the shell again: what follows only ever
+        dnl reaches make. So the pathname takes quotes of its own, which is
+        dnl the only chance it gets to survive a space.
+        MESON='$(call gb_ExternalExecutable_get_command,python) "'"$MESON"'"'
     fi
     if test "$_os" = "WINNT" -a -n "$MESON"; then
         # meson reads ProgramFiles(x86) to find vswhere, but dash drops such
@@ -12769,25 +12539,6 @@ else
 fi
 AC_SUBST(x_NINJA)
 AC_SUBST(NINJA)
-
-dnl ===================================================================
-dnl Test whether to use avahi
-dnl ===================================================================
-if test "$_os" = "WINNT"; then
-    # Windows uses bundled mDNSResponder
-    BUILD_TYPE="$BUILD_TYPE MDNSRESPONDER"
-elif test "$_os" != "Darwin" -a "$enable_avahi" = "yes"; then
-    PKG_CHECK_MODULES([AVAHI], [avahi-client >= 0.6.10],
-                      [ENABLE_AVAHI="TRUE"])
-    AC_DEFINE(HAVE_FEATURE_AVAHI)
-    AVAHI_CFLAGS=$(printf '%s' "$AVAHI_CFLAGS" | sed -e "s/-I/${ISYSTEM?}/g")
-    FilterLibs "${AVAHI_LIBS}"
-    AVAHI_LIBS="${filteredlibs}"
-fi
-
-AC_SUBST(ENABLE_AVAHI)
-AC_SUBST(AVAHI_CFLAGS)
-AC_SUBST(AVAHI_LIBS)
 
 dnl ===================================================================
 dnl Test whether to use MSVC /analyze
@@ -12947,7 +12698,7 @@ EOF
         </project>
 EOF
 
-        if test -n "$WSL_ONLY_AS_HELPER"; then
+        if test -n "$UNIX_ONLY_AS_HELPER"; then
             # need to set it directly, since ant only tries java, not java.exe from JAVA_HOME
             export JAVACMD="$JAVAINTERPRETER"
             # similarly it doesn't expect to be called from wsl, so it uses the wsl-realm path when
@@ -12987,10 +12738,10 @@ EOF
     dnl Checking for ant.jar
     if test "$ANT_HOME" != "NO_ANT_HOME"; then
         AC_MSG_CHECKING([Ant lib directory])
-        if test -f $ANT_HOME/lib/ant.jar; then
+        if test -f "$ANT_HOME/lib/ant.jar"; then
             ANT_LIB="$ANT_HOME/lib"
         else
-            if test -f $ANT_HOME/ant.jar; then
+            if test -f "$ANT_HOME/ant.jar"; then
                 ANT_LIB="$ANT_HOME"
             else
                 if test -f /usr/share/java/ant.jar; then
@@ -12999,7 +12750,7 @@ EOF
                     if test -f /usr/share/ant-core/lib/ant.jar; then
                         ANT_LIB=/usr/share/ant-core/lib
                     else
-                        if test -f $ANT_HOME/lib/ant/ant.jar; then
+                        if test -f "$ANT_HOME/lib/ant/ant.jar"; then
                             ANT_LIB="$ANT_HOME/lib/ant"
                         else
                             if test -f /usr/share/lib/ant/ant.jar; then
@@ -13199,15 +12950,19 @@ if test "$WITH_LANG" = "no"; then
     WITH_LANG=
 fi
 
+warn_no_translations=
 if test -n "$WITH_LANG" -a "$WITH_LANG" != "en-US"; then
     if test ! -f "$SRC_ROOT/translations/README"; then
-        AC_MSG_WARN([--with-lang is not supported without the translations repo checked out at $SRC_ROOT/translations; falling back to en-US])
+        warn_no_translations=yes
         WITH_LANG=
     fi
 fi
 
 if test -z "$WITH_LANG" -o "$WITH_LANG" = "en-US"; then
     AC_MSG_RESULT([en-US])
+    if test -n "$warn_no_translations"; then
+        AC_MSG_WARN([--with-lang is not supported without the translations repo checked out at $SRC_ROOT/translations; falling back to en-US])
+    fi
 else
     AC_MSG_RESULT([$WITH_LANG])
     if test -z "$MSGFMT"; then
@@ -13332,7 +13087,7 @@ else
         CUSTOM_BRAND_DIR="$formatted_path"
         for lfile in $brand_files
         do
-            if ! test -f $with_branding/$lfile ; then
+            if ! test -f "$with_branding/$lfile" ; then
                 AC_MSG_WARN([Branded file $lfile does not exist, using the default one])
                 DEFAULT_BRAND_IMAGES="$DEFAULT_BRAND_IMAGES $lfile"
             else
@@ -13369,22 +13124,6 @@ AC_SUBST(PROGRESSPOSITION)
 AC_SUBST(PROGRESSFRAMECOLOR)
 AC_SUBST(PROGRESSTEXTCOLOR)
 AC_SUBST(PROGRESSTEXTBASELINE)
-
-
-dnl ===================================================================
-dnl Custom build version
-dnl ===================================================================
-AC_MSG_CHECKING([for extra build ID])
-if test -n "$with_extra_buildid" -a "$with_extra_buildid" != "yes" ; then
-    EXTRA_BUILDID="$with_extra_buildid"
-fi
-# in tinderboxes, it is easier to set EXTRA_BUILDID via the environment variable instead of configure switch
-if test -n "$EXTRA_BUILDID" ; then
-    AC_MSG_RESULT([$EXTRA_BUILDID])
-else
-    AC_MSG_RESULT([not set])
-fi
-AC_DEFINE_UNQUOTED([EXTRA_BUILDID], ["$EXTRA_BUILDID"])
 
 OOO_VENDOR=
 AC_MSG_CHECKING([for vendor])
@@ -13425,16 +13164,6 @@ if test "$_os" = "Android" ; then
     fi
     AC_SUBST(ANDROID_PACKAGE_NAME)
 fi
-
-AC_MSG_CHECKING([whether to install the compat oo* wrappers])
-if test "$with_compat_oowrappers" = "yes"; then
-    WITH_COMPAT_OOWRAPPERS=TRUE
-    AC_MSG_RESULT(yes)
-else
-    WITH_COMPAT_OOWRAPPERS=
-    AC_MSG_RESULT(no)
-fi
-AC_SUBST(WITH_COMPAT_OOWRAPPERS)
 
 INSTALLDIRNAME=`echo AC_PACKAGE_NAME | $AWK '{gsub(" ", "", $0);print tolower($0)}'`
 AC_MSG_CHECKING([for install dirname])
@@ -13584,6 +13313,13 @@ else
 fi
 AC_SUBST(PARALLELISM)
 
+dnl msbuild has no job server client, so limit how many compiles one external runs at once.
+MSBUILD_CCACHE_WIDTH=4
+if test $PARALLELISM -ne 0 -a $PARALLELISM -lt $MSBUILD_CCACHE_WIDTH; then
+    MSBUILD_CCACHE_WIDTH=$PARALLELISM
+fi
+AC_SUBST(MSBUILD_CCACHE_WIDTH)
+
 AC_MSG_CHECKING([for make load limit])
 if test "$with_load_limit" = "no"; then
     LOADLIMIT=
@@ -13604,7 +13340,7 @@ AC_SUBST(LOADLIMIT)
 # Set up ILIB for MSVC build
 #
 ILIB1=
-if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER"; then
+if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$UNIX_ONLY_AS_HELPER"; then
     ILIB="."
     if test -n "$JAVA_HOME"; then
         ILIB="$ILIB;$JAVA_HOME/lib"
@@ -13623,13 +13359,6 @@ if test "$build_os" = "cygwin" -o "$build_os" = "wsl" -o -n "$WSL_ONLY_AS_HELPER
     ucrtlibpath_formatted=$formatted_path
     ILIB="$ILIB;$ucrtlibpath_formatted"
     ILIB1="$ILIB1 -LIBPATH:$ucrtlibpath_formatted"
-    if test -f "$DOTNET_FRAMEWORK_HOME/lib/mscoree.lib"; then
-        PathFormat "$DOTNET_FRAMEWORK_HOME/lib"
-        ILIB="$ILIB;$formatted_path"
-    else
-        PathFormat "$DOTNET_FRAMEWORK_HOME/Lib/um/$WIN_HOST_ARCH"
-        ILIB="$ILIB;$formatted_path"
-    fi
 
     if test "$cross_compiling" != "yes"; then
         ILIB_FOR_BUILD="$ILIB"
@@ -13657,8 +13386,10 @@ dnl "Bogus error C2440 with consteval constructor (/std:c++20)":
 have_cpp_consteval=
 AC_LANG_PUSH([C++])
 save_CXX=$CXX
+save_LIB="$LIB"
 if test "$COM" = MSC && test "$COM_IS_CLANG" != TRUE; then
-    CXX="env LIB=$ILIB $CXX"
+    LIB="$ILIB"
+    export LIB
 fi
 save_CXXFLAGS=$CXXFLAGS
 CXXFLAGS="$CXXFLAGS $CXXFLAGS_CXX11"
@@ -13718,6 +13449,7 @@ AC_RUN_IFELSE([AC_LANG_PROGRAM([
         AC_MSG_RESULT([yes])
     ], [AC_MSG_RESULT([no])], [AC_MSG_RESULT([assumed no (cross compiling)])])
 CXX=$save_CXX
+LIB=$save_LIB
 CXXFLAGS=$save_CXXFLAGS
 AC_LANG_POP([C++])
 if test -n "$have_cpp_consteval" && test "$COM_IS_CLANG" = TRUE && test -n "$BUILDING_PCH_WITH_OBJ"
@@ -13760,8 +13492,10 @@ dnl <https://github.com/llvm/llvm-project/commit/d8380ad977e94498e170b06449c81f1
 dnl [P1614] Implement [cmp.alg]'s std::{strong,weak,partial}_order" in LLVM 14:
 AC_LANG_PUSH([C++])
 save_CXX=$CXX
+save_LIB="$LIB"
 if test "$COM" = MSC && test "$COM_IS_CLANG" != TRUE; then
-    CXX="env LIB=$ILIB $CXX"
+    LIB="$ILIB"
+    export LIB
 fi
 save_CXXFLAGS=$CXXFLAGS
 CXXFLAGS="$CXXFLAGS $CXXFLAGS_CXX11"
@@ -13774,8 +13508,35 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([
         AC_MSG_RESULT([yes])
     ], [AC_MSG_RESULT([no])])
 CXX=$save_CXX
+LIB=$save_LIB
 CXXFLAGS=$save_CXXFLAGS
 AC_LANG_POP([C++])
+
+# ===================================================================
+# Creating bigger shared library to link against, containing almost all internal code
+# ===================================================================
+AC_MSG_CHECKING([whether to create unitedlibs])
+UNITEDLIBS=
+
+if test $_os = iOS -o $_os = Android; then
+    # Android and iOS have their own different approach for doing this.
+    enable_unitedlibs=no
+fi
+
+if test -n "$enable_unitedlibs" -a "$enable_unitedlibs" != "no"; then
+    if test -n "$enable_mergelibs" -a "$enable_mergelibs" != "no"; then
+        AC_MSG_ERROR([cannot use --enable-mergelibs=yes and --enable-unitedlibs=yes together])
+    elif test "$enable_unitedlibs" = "yes" -o "$enable_unitedlibs" = ""; then
+        UNITEDLIBS="TRUE"
+        AC_MSG_RESULT([yes])
+        AC_DEFINE(ENABLE_UNITEDLIBS)
+    else
+        AC_MSG_ERROR([unknown value --enable-unitedlibs=$enable_unitedlibs])
+    fi
+else
+    AC_MSG_RESULT([no])
+fi
+AC_SUBST([UNITEDLIBS])
 
 # ===================================================================
 # Creating bigger shared library to link against
@@ -13840,11 +13601,6 @@ if test "$enable_mpl_subset" = "yes"; then
     mpl_error_string=
     newline=$'\n    *'
     warn_report=false
-    # cf. m4/libo_check_extension.m4
-    if test "x$WITH_EXTRA_EXTENSIONS" != "x"; then
-        mpl_error_string="$mpl_error_string$newline Need to disable extra extensions enabled using --enable-ext-XXXX."
-    fi
-
     if test "x$mpl_error_string" != "x"; then
         AC_MSG_ERROR([$mpl_error_string])
     fi
@@ -13902,7 +13658,11 @@ if test $_os = WINNT -a -f "$SRC_ROOT/antivirusDetection.vbs" ; then
             if [ [ "$EICAR_STRING" != "$EICAR_TEMP_FILE_CONTENTS" ] ]; then
                 AC_MSG_ERROR([Exclude the build and source directories associated with Collabora Office in the following Antivirus software: $ANTIVIRUS_LIST])
             fi
-            add_warning "To speed up builds and avoid failures in unit tests, it is highly recommended that you exclude the build and source directories associated with Collabora Office in the following Antivirus software: $ANTIVIRUS_LIST"
+            # Both EICAR probes survived, so the source and build directories
+            # are effectively excluded from on-write scanning and no warning
+            # is warranted. A scanner that only checks files on execution
+            # could still slow the build down, hence a notice, not silence.
+            AC_MSG_NOTICE([active Antivirus software found ($ANTIVIRUS_LIST), but the source and build directories appear to be excluded from scanning])
         else
             AC_MSG_RESULT([not found])
         fi
@@ -13913,7 +13673,6 @@ fi
 
 dnl ===================================================================
 
-AC_MSG_CHECKING([for coredumpctl support])
 if test -z "$with_coredumpctl" && test $_os != Linux; then
     with_coredumpctl=no
 fi
@@ -13946,11 +13705,6 @@ else
     else
         WITH_COREDUMPCTL=TRUE
     fi
-fi
-if test -z "$WITH_COREDUMPCTL"; then
-    AC_MSG_RESULT([no])
-else
-    AC_MSG_RESULT([yes])
 fi
 AC_SUBST(COREDUMPCTL)
 AC_SUBST(JQ)
@@ -14016,7 +13770,7 @@ AC_MSG_NOTICE([setting up the build environment variables...])
 
 AC_SUBST(COMPATH)
 
-if test "$build_os" = "cygwin" -o "$build_os" = wsl -o -n "$WSL_ONLY_AS_HELPER"; then
+if test "$build_os" = "cygwin" -o "$build_os" = wsl -o -n "$UNIX_ONLY_AS_HELPER"; then
     if test -d "$COMPATH_unix/atlmfc/lib/spectre"; then
         ATL_LIB="$COMPATH/atlmfc/lib/spectre"
         ATL_INCLUDE="$COMPATH/atlmfc/include"
@@ -14028,8 +13782,8 @@ if test "$build_os" = "cygwin" -o "$build_os" = wsl -o -n "$WSL_ONLY_AS_HELPER";
         ATL_INCLUDE="$WINDOWS_SDK_HOME/include/atl"
     fi
     ATL_LIB="$ATL_LIB/$WIN_HOST_ARCH"
-    ATL_LIB=`win_short_path_for_make "$ATL_LIB"`
-    ATL_INCLUDE=`win_short_path_for_make "$ATL_INCLUDE"`
+    ATL_LIB=`win_path_for_make "$ATL_LIB"`
+    ATL_INCLUDE=`win_path_for_make "$ATL_INCLUDE"`
 fi
 
 if test "$build_os" = "cygwin"; then
@@ -14087,6 +13841,9 @@ if test -n "$LO_PATH_FOR_BUILD"; then
     case "$host_os" in
     cygwin*|wsl*)
         pathmunge "$MSVC_HOST_PATH" "before"
+        if test -n "$LO_CLANG_DIR"; then
+            pathmunge "$LO_CLANG_DIR" "before"
+        fi
         ;;
     esac
 else
@@ -14113,14 +13870,8 @@ else
             # needed for msi packaging - as of 10.0.22621 SDK no arm64 ones yet
             pathmunge "$WINDOWS_SDK_BINDIR_NO_ARCH/x86" "before"
         fi
-        # .NET 4.6 and higher don't have bin directory
-        if test -f "$DOTNET_FRAMEWORK_HOME/bin"; then
-            pathmunge "$DOTNET_FRAMEWORK_HOME/bin" "before"
-        fi
         pathmunge "$WINDOWS_SDK_HOME/bin" "before"
-        pathmunge "$CSC_PATH" "before"
         pathmunge "$MIDL_PATH" "before"
-        pathmunge "$AL_PATH" "before"
         pathmunge "$MSVC_MULTI_PATH" "before"
         pathmunge "$MSVC_BUILD_PATH" "before"
         if test -n "$MSBUILD_PATH" ; then
@@ -14137,14 +13888,11 @@ else
             pathmunge "$JAVA_HOME/bin" "before"
         fi
         pathmunge "$MSVC_HOST_PATH" "before"
-        ;;
-
-    solaris*)
-        pathmunge "/usr/css/bin" "before"
-        if test "$ENABLE_JAVA" != ""; then
-            pathmunge "$JAVA_HOME/bin" "after"
+        if test -n "$LO_CLANG_DIR"; then
+            pathmunge "$LO_CLANG_DIR" "before"
         fi
         ;;
+
     esac
 fi
 
@@ -14173,15 +13921,31 @@ CFLAGS=$my_original_CFLAGS
 CXXFLAGS=$my_original_CXXFLAGS
 CPPFLAGS=$my_original_CPPFLAGS
 
+# A previous configure run without symlink support leaves a plain-directory
+# copy of include/ behind (config.status falls back to cp when ln -s fails),
+# and config.status's rm -f cannot remove a directory on the next run. Clear
+# such a copy here; leave an actual symlink (or an in-tree build) alone.
+if test "$srcdir" != "." -a -d include -a ! -h include; then
+    rm -rf include
+fi
 AC_CONFIG_LINKS([include:include])
 
-if test -n "$WSL_ONLY_AS_HELPER"; then
-    # while we configure in linux, we actually compile in "cygwin" (close enough at least)
+if test -n "$UNIX_ONLY_AS_HELPER"; then
+    # while we configure in linux or MSYS2, we actually compile in "cygwin" (close enough at least)
     build=$build_cpu-$host_vendor-$host_os
     PathFormat "$SRC_ROOT"
     SRC_ROOT="$formatted_path"
     PathFormat "$BUILDDIR"
     BUILDDIR="$formatted_path"
+    # CCACHE_BASEDIR was copied from BUILDDIR long before this, while it still
+    # held the shell's spelling, so it has to follow it here. ccache compares it
+    # against the paths on the command line as plain text: gbuild builds those
+    # out of BUILDDIR, and a base directory written any other way matches none
+    # of them and quietly rewrites nothing.
+    if test -n "$CCACHE_BASEDIR"; then
+        PathFormat "$CCACHE_BASEDIR"
+        CCACHE_BASEDIR="$formatted_path"
+    fi
     # TARFILE_LOCATION and JAVAINTERPRETER are used in the validator scripts
     PathFormat "$TARFILE_LOCATION"
     TARFILE_LOCATION="$formatted_path"
@@ -14205,13 +13969,33 @@ if test -n "$WSL_ONLY_AS_HELPER"; then
     # TODO: maybe switch to strawberry-perl right away?
     # only openssl seems to actually require it (for Pod/Usage.pm and maybe more)
     PERL="perl.exe"
-    # use flex, gperf and nasm from wsl-container
-    # if using absolute path, would need to use double-leading slash for the msys path mangling
-    FLEX="$WSL $FLEX"
-    NASM="$WSL $NASM"
-    # some externals (libebook) check for it with AC_PATH_PROGS, and that only accepts overrides
-    # with an absolute path/requires the value to begin with a slash
-    GPERF="/c/Windows/system32/$WSL gperf"
+    if test -n "$WSL_ONLY_AS_HELPER"; then
+        # use flex, gperf and nasm from wsl-container
+        # if using absolute path, would need to use double-leading slash for the msys path mangling
+        FLEX="$WSL $FLEX"
+        NASM="$WSL $NASM"
+        # some externals (libebook) check for it with AC_PATH_PROGS, and that only accepts overrides
+        # with an absolute path/requires the value to begin with a slash
+        GPERF="/c/Windows/system32/$WSL gperf"
+    else
+        # flex, bison, gperf and the archive tools come from the MSYS2 installation; they
+        # are plain Windows programs, so refer to them by Windows-realm paths that the
+        # recipes run from git-bash can spawn directly (autoconf treats a DOS-style path
+        # as absolute where an absolute path is required)
+        FLEX=$(cygpath -m "$FLEX")
+        BISON=$(cygpath -m "$BISON")
+        GPERF=$(cygpath -m "$GPERF")
+        test -n "$BSDTAR" && BSDTAR=$(cygpath -m "$BSDTAR")
+        test -n "$UNZIP" && UNZIP=$(cygpath -m "$UNZIP")
+        test -n "$ZIP" && ZIP=$(cygpath -m "$ZIP")
+        # nasm, zip, msgfmt/msguniq and autoconf are found through PATH: append the MSYS2
+        # tools at the end, so they only fill in what git-bash does not provide itself
+        LO_PATH="$LO_PATH:$(cygpath -m /usr/bin)"
+        # the build is driven from git-bash, where plain "make" is the native
+        # Win32 make - not MSYS2's /usr/bin/make that configure detected; only
+        # the closing "to build, run" message uses this
+        GNUMAKE="make"
+    fi
     # append strawberry tools dir to PATH (for e.g. windres, ar)
     LO_PATH="$LO_PATH:$STRAWBERRY_TOOLS"
     # temp-dir needs to be in windows realm, hardcode for now
@@ -14220,6 +14004,20 @@ if test -n "$WSL_ONLY_AS_HELPER"; then
         TEMP_DIRECTORY="$BUILDDIR/tmp"
     fi
 fi
+
+# The command prefix that runs its arguments inside the unix helper environment, for the
+# few build steps that need a whole unix toolchain (e.g. regenerating icu's configure
+# with autoconf). Empty on platforms that need no helper, so the tools run directly.
+UNIX_HELPER=
+MSYS2_BASH=
+if test -n "$WSL_ONLY_AS_HELPER"; then
+    UNIX_HELPER="$WSL"
+elif test -n "$MSYS_ONLY_AS_HELPER"; then
+    MSYS2_BASH=$(cygpath -m /usr/bin/bash.exe)
+    UNIX_HELPER="$SRC_ROOT/solenv/bin/run-msys2"
+fi
+AC_SUBST([UNIX_HELPER])
+AC_SUBST([MSYS2_BASH])
 
 # Keep in sync with list of files far up, at AC_MSG_CHECKING([for
 # BUILD platform configuration] - otherwise breaks cross building
@@ -14239,11 +14037,31 @@ AC_CONFIG_FILES([
                  extensions/source/macosx/quicklookthumbnail/appex/Info.plist
                  ])
 # map unix-style mount dirs to windows directories: /mnt/c/foobar -> C:/foobar
+# (or /c/foobar under MSYS2) - the variables computed before the final path
+# conversion (WORKDIR, INSTDIR, ...) still carry the configure realm's form.
 # easier to do it in a postprocessing command than to modify every single variable
 AC_CONFIG_FILES([config_host.mk], [
     if test -n "$WSL_ONLY_AS_HELPER"; then
         sed -i -e 's#/mnt/\([[:alpha:]]\)/#\u\1:/#g' config_host.mk
-    fi], [WSL_ONLY_AS_HELPER=$WSL_ONLY_AS_HELPER])
+    fi
+    if test -n "$MSYS_ONLY_AS_HELPER"; then
+        # only at a value boundary (start of line/word, after a list
+        # separator, a make construct like $(gb_SPACE), or an -I/-L flag), so
+        # that a single-letter directory inside a path (/foo/b/bar) is left
+        # alone. ':' must stay a boundary: the entries of colon-separated
+        # lists like LO_PATH have to come out in Windows form, since the
+        # native make scans PATH for its shell and cannot read posix entries
+        # - but an existing drive colon (C:/D/lo) must not anchor a bogus
+        # conversion of a single-letter directory behind it, so mask the
+        # boundary-preceded drive colons first and restore them at the end
+        # the mask must accept every boundary the conversion accepts (-I/-L
+        # included): config.status runs these commands also when the file is
+        # unchanged, so the whole substitution has to be idempotent over
+        # already-converted content
+        sed -i -e 's#\(^\|[ =:;"(),]\|-I\|-L\)\([[:alpha:]]\):/#\1\2@GBDRIVE@/#g' \
+               -e 's#\(^\|[ =:;"(),]\|-I\|-L\)/\([[:alpha:]]\)/#\1\u\2:/#g' \
+               -e 's#@GBDRIVE@#:#g' config_host.mk
+    fi], [WSL_ONLY_AS_HELPER=$WSL_ONLY_AS_HELPER MSYS_ONLY_AS_HELPER=$MSYS_ONLY_AS_HELPER])
 # also use windows paths in the vs-code workspace file (esp. for the launch configurations that use
 # INSTROOT) and also change the default shell from Cygwin to Git Bash
 AC_CONFIG_FILES([vs-code.code-workspace.template:.vscode/vs-code-template.code-workspace.in], [
@@ -14254,14 +14072,12 @@ AC_CONFIG_FILES([vs-code.code-workspace.template:.vscode/vs-code-template.code-w
 
 AC_CONFIG_HEADERS([config_host/config_afdko.h])
 AC_CONFIG_HEADERS([config_host/config_buildconfig.h])
-AC_CONFIG_HEADERS([config_host/config_buildid.h])
 AC_CONFIG_HEADERS([config_host/config_clang.h])
 AC_CONFIG_HEADERS([config_host/config_cpdb.h])
 AC_CONFIG_HEADERS([config_host/config_crypto.h])
 AC_CONFIG_HEADERS([config_host/config_cups.h])
 AC_CONFIG_HEADERS([config_host/config_dconf.h])
 AC_CONFIG_HEADERS([config_host/config_eot.h])
-AC_CONFIG_HEADERS([config_host/config_extensions.h])
 AC_CONFIG_HEADERS([config_host/config_cairo_rgba.h])
 AC_CONFIG_HEADERS([config_host/config_collab.h])
 AC_CONFIG_HEADERS([config_host/config_cxxabi.h])
@@ -14337,7 +14153,7 @@ to install a pre-compiled binary make for Win32
 
  mkdir -p /opt/lo/bin
  cd /opt/lo/bin
- wget https://dev-www.libreoffice.org/extern/make-4.4.1-msvc.exe
+ wget https://gerrit.collaboraoffice.com/extern/make-4.4.1-msvc.exe
  cp make-4.4.1-msvc.exe make
  chmod +x make
 
@@ -14409,8 +14225,8 @@ rm -f a.out a.wasm a.out.js a.out.wasm
 
 dnl cspell:ignore Randr Xext alignof altlinuxhyph appex bzlib ccached coreutils createmsi cxxabi
 dnl cspell:ignore cygdrive devel devenv dlsym dtrace emconfigure fpch frobozz gnucp
-dnl cspell:ignore ifdef ifndef libc libdl libjpipe libstdc longjmp memcpy mscoree msicreator
-dnl cspell:ignore msiglobal mspdb msys nmake omindex optimised pagein pkgmk qconfig qtbase
+dnl cspell:ignore ifdef ifndef libc libdl libjpipe libstdc longjmp memcpy msicreator
+dnl cspell:ignore msiglobal mspdb msys nmake omindex optimised qconfig qtbase
 dnl cspell:ignore quadrigraph rbbi rpms sccache strbuf stringop tosvg ucrt ustring uuidgen vclplugs
 dnl cspell:ignore vswhere werror wilangid xcent xcrun
 

@@ -30,6 +30,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 using namespace ::ooo::vba::excel::XlAxisType;
 using namespace ::ooo::vba::excel::XlAxisGroup;
@@ -48,12 +49,12 @@ class EnumWrapper : public EnumerationHelper_BASE
         sal_Int32 nIndex;
 public:
         explicit EnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess ) : m_xIndexAccess(std::move( xIndexAccess )), nIndex( 0 ) {}
-        virtual bool SAL_CALL hasMoreElements(  ) override
+        virtual bool hasMoreElements(  ) override
         {
                 return ( nIndex < m_xIndexAccess->getCount() );
         }
 
-        virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+        virtual cpo::uno::Any nextElement(  ) override
         {
                 if ( nIndex < m_xIndexAccess->getCount() )
                         return m_xIndexAccess->getByIndex( nIndex++ );
@@ -64,11 +65,11 @@ public:
 }
 
 uno::Reference< excel::XAxis >
-ScVbaAxes::createAxis( const uno::Reference< excel::XChart >& xChart, const uno::Reference< uno::XComponentContext >& xContext,  sal_Int32 nType, sal_Int32 nAxisGroup )
+ScVbaAxes::createAxis( const uno::Reference< excel::XChart >& xChart, const uno::Reference< cpo::uno::XComponentContext >& xContext,  sal_Int32 nType, sal_Int32 nAxisGroup )
 {
     ScVbaChart* pChart = static_cast< ScVbaChart* >( xChart.get() );
     if ( !pChart )
-        throw uno::RuntimeException(u"Object failure, can't access chart implementation"_ustr  );
+        throw cpo::uno::RuntimeException(u"Object failure, can't access chart implementation"_ustr  );
 
     uno::Reference< beans::XPropertySet > xAxisPropertySet;
     if ((nType == xlCategory) || (nType == xlSeriesAxis) || (nType == xlValue))
@@ -89,11 +90,11 @@ class AxisIndexWrapper : public ::cppu::WeakImplHelper< container::XIndexAccess 
     // if necessary for better performance we could change this into a map and cache the
     // indices -> Axis, currently we create a new Axis object
     // on each getByIndex
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     std::vector< AxesCoordinate > mCoordinates;
     rtl::Reference< ScVbaChart > mxChart;
 public:
-    AxisIndexWrapper( uno::Reference< uno::XComponentContext > xContext, rtl::Reference< ScVbaChart > xChart ) : mxContext(std::move( xContext )), mxChart(std::move( xChart ))
+    AxisIndexWrapper( uno::Reference< cpo::uno::XComponentContext > xContext, rtl::Reference< ScVbaChart > xChart ) : mxContext(std::move( xContext )), mxChart(std::move( xChart ))
     {
         if ( !mxChart.is() )
             return;
@@ -117,8 +118,8 @@ public:
             mCoordinates.emplace_back( xlSecondary, xlSeriesAxis );
 
     }
-    virtual ::sal_Int32 SAL_CALL getCount() override { return mCoordinates.size(); }
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual ::sal_Int32 getCount() override { return mCoordinates.size(); }
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         try
         {
@@ -135,17 +136,17 @@ public:
         }
     }
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
     {
         return cppu::UnoType<excel::XAxis>::get();
     }
-    virtual bool SAL_CALL hasElements( ) override
+    virtual bool hasElements( ) override
     {
         return ( !mCoordinates.empty() );
     }
 };
 
-uno::Reference< container::XIndexAccess > createIndexWrapper( const rtl::Reference< ScVbaChart >& xChart, const uno::Reference< uno::XComponentContext >& xContext )
+uno::Reference< container::XIndexAccess > createIndexWrapper( const rtl::Reference< ScVbaChart >& xChart, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     return new AxisIndexWrapper( xContext, xChart );
 }
@@ -153,23 +154,23 @@ uno::Reference< container::XIndexAccess > createIndexWrapper( const rtl::Referen
 }
 
 // #FIXME The collection semantics will never work as this object is not yet initialised correctly
-ScVbaAxes::ScVbaAxes( const uno::Reference< XHelperInterface >& xParent,const uno::Reference< uno::XComponentContext > & xContext, const rtl::Reference< ScVbaChart >& xChart ) : ScVbaAxes_BASE( xParent, xContext, createIndexWrapper( xChart, xContext )), moChartParent( xChart )
+ScVbaAxes::ScVbaAxes( const uno::Reference< XHelperInterface >& xParent,const uno::Reference< cpo::uno::XComponentContext > & xContext, const rtl::Reference< ScVbaChart >& xChart ) : ScVbaAxes_BASE( xParent, xContext, createIndexWrapper( xChart, xContext )), moChartParent( xChart )
 {
 }
 
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaAxes::getElementType()
 {
     return  cppu::UnoType<excel::XAxes>::get();
 }
 
-uno::Reference< container::XEnumeration > SAL_CALL
+uno::Reference< container::XEnumeration >
 ScVbaAxes::createEnumeration()
 {
     return new EnumWrapper( m_xIndexAccess );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaAxes::Item( const cpo::uno::Any& _nType, const cpo::uno::Any& _oAxisGroup)
 {
     // #TODO map the possible index combinations to a container::XIndexAccess wrapper impl
@@ -178,7 +179,7 @@ ScVbaAxes::Item( const cpo::uno::Any& _nType, const cpo::uno::Any& _oAxisGroup)
     sal_Int32 nAxisGroup = xlPrimary;
     sal_Int32 nType = -1;
     if ( !_nType.hasValue() || !( _nType >>= nType ) )
-        throw uno::RuntimeException(u"Axes::Item Failed to extract type"_ustr  );
+        throw cpo::uno::RuntimeException(u"Axes::Item Failed to extract type"_ustr  );
 
     if ( _oAxisGroup.hasValue() )
         _oAxisGroup >>= nAxisGroup ;

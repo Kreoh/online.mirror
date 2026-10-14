@@ -9,14 +9,8 @@
 
 module com { module sun { module star { module chart2 {
 
-interface XTimeBased : com::sun::star::uno::XInterface
+interface XTimeBased : cpo::uno::XInterface
 {
-
-    /**
-     * @return
-     *      FALSE if the data wrapped around
-     */
-    boolean switchToNext( [in] boolean wrap);
 
     /**
      * point is the zero based index into the time based array
@@ -24,8 +18,6 @@ interface XTimeBased : com::sun::star::uno::XInterface
      * @return FALSE if the point is outside of the supported array
      */
     boolean setToPointInTime( [in] long point );
-
-    void setRange( [in] long start, [in] long end );
 };
 
 }; }; }; };

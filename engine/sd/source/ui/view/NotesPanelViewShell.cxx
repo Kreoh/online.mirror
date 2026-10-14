@@ -9,6 +9,8 @@
 
 #include <NotesPanelViewShell.hxx>
 #include <NotesPanelView.hxx>
+#include <NotesPanelWidget.hxx>
+#include <COKit/COKit.hxx>
 #include <sal/log.hxx>
 
 #include <DrawController.hxx>
@@ -130,6 +132,7 @@ NotesPanelViewShell::NotesPanelViewShell(ViewShellBase& rViewShellBase, vcl::Win
 
 NotesPanelViewShell::~NotesPanelViewShell()
 {
+    mpNotesPanelWidget.disposeAndClear();
     DisposeFunctions();
     mpFrameView->Disconnect();
     // if ( mxClipEvtLstnr.is() )
@@ -153,6 +156,14 @@ void NotesPanelViewShell::Construct()
 
     mpNotesPanelView = std::make_unique<NotesPanelView>(*GetDocSh(), GetActiveWindow(), *this);
     mpView = mpNotesPanelView.get();
+
+    if (comphelper::COKit::isActive())
+    {
+        mpNotesPanelWidget
+            = VclPtr<NotesPanelWidget>::Create(GetActiveWindow(), *this, *mpNotesPanelView,
+                                               reinterpret_cast<sal_uInt64>(&GetViewShellBase()));
+        mpNotesPanelWidget->SendInitialUpdate();
+    }
 
     SetPool(&GetDoc()->GetPool());
     SetZoom(70);
@@ -282,7 +293,7 @@ SdPage* NotesPanelViewShell::getCurrentPage() const
     }
 }
 
-css::uno::Reference<css::drawing::XDrawSubController> NotesPanelViewShell::CreateSubController()
+cpo::uno::Reference<css::drawing::XDrawSubController> NotesPanelViewShell::CreateSubController()
 {
     // SubController appears is only relevant for MainViewShell
     // NotesPanel isn't meant as a MainViewShell
@@ -786,16 +797,6 @@ void NotesPanelViewShell::FuTemporary(SfxRequest& rReq)
         }
         break;
 
-        case SID_REMOTE_DLG:
-        {
-#ifdef ENABLE_SDREMOTE
-            SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-            ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateRemoteDialog(GetFrameWeld()));
-            pDlg->Execute();
-#endif
-        }
-        break;
-
         case SID_CUSTOMSHOW_DLG:
         {
             SetCurrentFunction(FuCustomShowDlg::Create(*this, GetActiveWindow(),
@@ -1282,7 +1283,9 @@ void NotesPanelViewShell::FuSupport(SfxRequest& rReq)
 
         case SID_AUTOSPELL_CHECK:
         {
-            GetDoc()->SetOnlineSpell(!GetDoc()->GetOnlineSpell());
+            const bool bOnlineSpell = !GetDoc()->GetOnlineSpell();
+            GetDoc()->SetOnlineSpell(bOnlineSpell);
+            SdModule::SetAutoSpellProperty(bOnlineSpell, GetDoc()->GetDocumentType());
             rReq.Done();
         }
         break;
@@ -1433,11 +1436,8 @@ void NotesPanelViewShell::Execute(SfxRequest& rReq)
     }
 }
 
-void NotesPanelViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
+void NotesPanelViewShell::InvalidateStyleSlots()
 {
-    // first the base classes
-    ViewShell::MouseButtonUp(rMEvt, pWin);
-
     Invalidate(SID_STYLE_EDIT);
     Invalidate(SID_STYLE_NEW);
     Invalidate(SID_STYLE_DELETE);
@@ -1447,6 +1447,19 @@ void NotesPanelViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* p
     Invalidate(SID_STYLE_NEW_BY_EXAMPLE);
     Invalidate(SID_STYLE_WATERCAN);
     Invalidate(SID_STYLE_FAMILY5);
+}
+
+void NotesPanelViewShell::InvalidateTextState()
+{
+    FuSimpleOutlinerText::InvalidateTextPositionSlots(*this);
+    InvalidateStyleSlots();
+}
+
+void NotesPanelViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
+{
+    ViewShell::MouseButtonUp(rMEvt, pWin);
+
+    InvalidateStyleSlots();
 }
 
 void NotesPanelViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
@@ -1461,11 +1474,7 @@ void NotesPanelViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
         bool bUsedSpellPopup = false;
         if (pOLV && pOLV->IsWrongSpelledWordAtPos(aPos))
         {
-            // Popup for Online-Spelling now handled by DrawDocShell
-            Link<SpellCallbackInfo&, void> aLink
-                = LINK(GetDocSh(), DrawDocShell, OnlineSpellCallback);
-
-            bUsedSpellPopup = pOLV->ExecuteSpellPopup(aPos, aLink);
+            bUsedSpellPopup = pOLV->ExecuteSpellPopup(aPos);
             pOLV->GetEditView().Invalidate();
         }
         if (!bUsedSpellPopup)
@@ -1492,15 +1501,7 @@ bool NotesPanelViewShell::KeyInput(const KeyEvent& rKEvt, ::sd::Window* pWin)
         bReturn = ViewShell::KeyInput(rKEvt, pWin);
     }
 
-    Invalidate(SID_STYLE_EDIT);
-    Invalidate(SID_STYLE_NEW);
-    Invalidate(SID_STYLE_DELETE);
-    Invalidate(SID_STYLE_HIDE);
-    Invalidate(SID_STYLE_SHOW);
-    Invalidate(SID_STYLE_UPDATE_BY_EXAMPLE);
-    Invalidate(SID_STYLE_NEW_BY_EXAMPLE);
-    Invalidate(SID_STYLE_WATERCAN);
-    Invalidate(SID_STYLE_FAMILY5);
+    InvalidateStyleSlots();
 
     return bReturn;
 }

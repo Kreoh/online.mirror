@@ -50,9 +50,10 @@
 #include <com/sun/star/drawing/LineStyle.hpp>
 
 using namespace ::xmloff::token;
+using namespace ::cpo;
 using namespace com::sun::star;
 
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 
 const SvXMLEnumMapEntry<SchXMLAxisDimension> aXMLAxisDimensionMap[] =
 {
@@ -80,8 +81,8 @@ private:
 public:
     SchXMLCategoriesContext( SvXMLImport& rImport,
                                    OUString& rAddress );
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 class DateScaleContext : public SvXMLImportContext
@@ -90,8 +91,8 @@ public:
     DateScaleContext( SvXMLImport& rImport,
                         const Reference< beans::XPropertySet >& rAxisProps );
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
 private:
     Reference< beans::XPropertySet > m_xAxisProps;
@@ -229,7 +230,7 @@ void SchXMLAxisContext::CreateGrid( const OUString& sAutoStyleName, bool bIsMajo
 }
 
 void SchXMLAxisContext::startFastElement( sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     // parse attributes
     for( auto& aIter : sax_fastparser::castToFastAttributeList(xAttrList) )
@@ -566,9 +567,9 @@ void SchXMLAxisContext::SetAxisTitle()
     SchXMLTools::importFormattedText(GetImport(), m_aCurrentAxis.maTitle, xAxis->getAxisTitle());
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLAxisContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLAxisContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     switch( nElement )
     {
@@ -788,7 +789,7 @@ SchXMLCategoriesContext::SchXMLCategoriesContext(
 }
 
 void SchXMLCategoriesContext::startFastElement( sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     for( auto& aIter : sax_fastparser::castToFastAttributeList(xAttrList) )
     {
@@ -824,7 +825,7 @@ sal_Int32 lcl_getTimeUnit( const sax_fastparser::FastAttributeList::FastAttribut
 }
 
 void DateScaleContext::startFastElement( sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if( !m_xAxisProps.is() )
         return;

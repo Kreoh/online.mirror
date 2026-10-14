@@ -45,7 +45,7 @@
 #include <utility>
 
 using namespace utl;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::util;
 using namespace com::sun::star::lang;
@@ -72,10 +72,10 @@ namespace utl{
             ConfigChangeListener_Impl(ConfigItem& rItem, const Sequence< OUString >& rNames);
 
         //XChangesListener
-        virtual void SAL_CALL changesOccurred( const ChangesEvent& Event ) override;
+        virtual void changesOccurred( const ChangesEvent& Event ) override;
 
         //XEventListener
-        virtual void SAL_CALL disposing( const EventObject& Source ) override;
+        virtual void disposing( const EventObject& Source ) override;
     };
 }
 
@@ -212,7 +212,7 @@ static void impl_packLocalizedProperties(  const   Sequence< OUString >&   lInNa
     std::transform(lInValues.begin(), lInValues.end(), lOutValues.getArray(), [](const Any& value)
     {
         // If item is a special localized one ... convert and pack it ...
-        if (value.getValueTypeName() == "com.sun.star.uno.XInterface")
+        if (value.getValueTypeName() == "cpo.uno.XInterface")
         {
             if (auto xSetAccess = value.query<XNameContainer>())
             {
@@ -401,7 +401,7 @@ Sequence< Any > ConfigItem::GetProperties(const Sequence< OUString >& rNames)
 }
 
 Sequence< Any > ConfigItem::GetProperties(
-        css::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
+        cpo::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
         const Sequence< OUString >& rNames,
         bool bAllLocales)
 {
@@ -513,7 +513,7 @@ bool ConfigItem::PutProperties( const Sequence< OUString >& rNames,
 }
 
 bool ConfigItem::PutProperties(
-        css::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
+        cpo::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
         const Sequence< OUString >& rNames,
         const Sequence< Any>& rValues,
         bool bAllLocales)
@@ -696,7 +696,7 @@ Sequence< OUString > ConfigItem::GetNodeNames(const OUString& rNode, ConfigNameF
 }
 
 Sequence< OUString > ConfigItem::GetNodeNames(
-    css::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
+    cpo::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
     const OUString& rNode,
     ConfigNameFormat eFormat)
 {
@@ -736,7 +736,7 @@ bool ConfigItem::ClearNodeSet(const OUString& rNode)
 }
 
 bool ConfigItem::ClearNodeSet(
-    css::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
+    cpo::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
     const OUString& rNode)
 {
     bool bRet = false;
@@ -862,7 +862,7 @@ bool ConfigItem::SetSetProperties(
 
 // Add or change properties
 bool ConfigItem::SetSetProperties(
-    css::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
+    cpo::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
     const OUString& rNode, const Sequence< PropertyValue >& rValues)
 {
     bool bRet = true;
@@ -967,7 +967,7 @@ bool ConfigItem::ReplaceSetProperties(
 }
 
 bool ConfigItem::ReplaceSetProperties(
-    css::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
+    cpo::uno::Reference<css::container::XHierarchicalNameAccess> const & xHierarchyAccess,
     const OUString& rNode,
     const Sequence< PropertyValue >& rValues,
     bool bAllLocales)

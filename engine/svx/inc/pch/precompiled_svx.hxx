@@ -192,11 +192,11 @@
 #include <com/sun/star/text/WritingMode2.hpp>
 #include <com/sun/star/text/textfield/Type.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.h>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cpo/uno/XWeak.hpp>
 #include <com/sun/star/util/NumberFormat.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>

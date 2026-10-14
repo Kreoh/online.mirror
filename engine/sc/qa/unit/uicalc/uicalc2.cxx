@@ -10,28 +10,40 @@
 #include "../helper/qahelper.hxx"
 
 #include <comphelper/compbase.hxx>
+#include <docuno.hxx>
 #include <comphelper/kit.hxx>
 #include <editeng/brushitem.hxx>
 #include <editeng/editobj.hxx>
 #include <editeng/flditem.hxx>
 #include <COKit/COKit.hxx>
+#include <sfx2/printer.hxx>
+#include <sfx2/viewsh.hxx>
 #include <sot/exchange.hxx>
 #include <svx/svdpage.hxx>
+#include <toolkit/awt/vclxdevice.hxx>
 #include <tools/stream.hxx>
+#include <unotools/lingucfg.hxx>
+#include <vcl/gdimtf.hxx>
 #include <vcl/keycodes.hxx>
+#include <vcl/metaact.hxx>
+#include <vcl/print.hxx>
 #include <vcl/scheduler.hxx>
 #include <stlsheet.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/sequence.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <com/sun/star/awt/Key.hpp>
+#include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
 #include <com/sun/star/datatransfer/DataFlavor.hpp>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 #include <com/sun/star/sheet/GlobalSheetSettings.hpp>
+#include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
+#include <com/sun/star/view/XRenderable.hpp>
 #include <dbdata.hxx>
 #include <document.hxx>
 #include <docsh.hxx>
@@ -47,6 +59,7 @@
 #include <viewdata.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 class ScUiCalcTest2 : public ScModelTestBase
 {
@@ -1068,7 +1081,7 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testTdf118983)
     createScDoc("tdf118983.ods");
     ScDocument* pDoc = getScDoc();
 
-    css::uno::Reference<css::sheet::XGlobalSheetSettings> xGlobalSheetSettings
+    cpo::uno::Reference<css::sheet::XGlobalSheetSettings> xGlobalSheetSettings
         = css::sheet::GlobalSheetSettings::create(::comphelper::getProcessComponentContext());
     bool bOldValue = xGlobalSheetSettings->getExpandReferences();
 
@@ -2031,7 +2044,7 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testTdf170567_paste_Biff12_and_save_ODS)
         }
 
         // XTransferable
-        cpo::uno::Any SAL_CALL getTransferData(const datatransfer::DataFlavor& aFlavor) override
+        cpo::uno::Any getTransferData(const datatransfer::DataFlavor& aFlavor) override
         {
             if (!isDataFlavorSupported(aFlavor))
                 return {};
@@ -2040,11 +2053,11 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testTdf170567_paste_Biff12_and_save_ODS)
             aStream.ReadBytes(bytes.getArray(), aStream.remainingSize());
             return cpo::uno::Any(bytes);
         }
-        cpo::uno::Sequence<datatransfer::DataFlavor> SAL_CALL getTransferDataFlavors() override
+        cpo::uno::Sequence<datatransfer::DataFlavor> getTransferDataFlavors() override
         {
             return { getBiff12Flavor() };
         }
-        bool SAL_CALL isDataFlavorSupported(const datatransfer::DataFlavor& aFlavor) override
+        bool isDataFlavorSupported(const datatransfer::DataFlavor& aFlavor) override
         {
             return aFlavor.MimeType.equalsIgnoreAsciiCase(getBiff12Flavor().MimeType);
         }
@@ -2496,6 +2509,264 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testSetHyperlinkKeepSelection)
     // - Actual  : mytext
     // i.e. the cell content was lost, the provided text hint was used.
     CPPUNIT_ASSERT_EQUAL(u"foo"_ustr, pURLField->GetRepresentation());
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testPasteKeepsRefToUncopiedTable)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    insertStringToCell(u"A1"_ustr, u"Value");
+    insertStringToCell(u"A2"_ustr, u"10");
+    insertStringToCell(u"A3"_ustr, u"20");
+
+    auto pTable = std::make_unique<ScDBData>(u"Table1"_ustr, 0, 0, 0, 0, 2, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleMedium2"_ustr;
+    pTable->SetTableStyleInfo(aStyleParam);
+    CPPUNIT_ASSERT(pDoc->GetDBCollection()->getNamedDBs().insert(std::move(pTable)));
+
+    insertStringToCell(u"C1"_ustr, u"=SUM(Table1[Value])");
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(2, 0, 0)));
+
+    goToCell(u"C1"_ustr);
+    dispatchCommand(mxComponent, u".uno:Copy"_ustr, {});
+    goToCell(u"C5"_ustr);
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    // Without the fix in place, this test would have failed with:
+    // - Expected: =SUM(Table1[Value])
+    // - Actual  : =SUM(#REF!)
+    CPPUNIT_ASSERT_EQUAL(u"=SUM(Table1[Value])"_ustr, pDoc->GetFormula(2, 4, 0));
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(2, 4, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testPasteTableWithFormulaRebindsRef)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    insertStringToCell(u"A1"_ustr, u"Value");
+    insertStringToCell(u"A2"_ustr, u"10");
+    insertStringToCell(u"A3"_ustr, u"20");
+
+    auto pTable = std::make_unique<ScDBData>(u"Table1"_ustr, 0, 0, 0, 0, 2, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleMedium2"_ustr;
+    pTable->SetTableStyleInfo(aStyleParam);
+    CPPUNIT_ASSERT(pDoc->GetDBCollection()->getNamedDBs().insert(std::move(pTable)));
+
+    insertStringToCell(u"C1"_ustr, u"=SUM(Table1[Value])");
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(2, 0, 0)));
+
+    goToCell(u"A1:C3"_ustr);
+    dispatchCommand(mxComponent, u".uno:Copy"_ustr, {});
+    goToCell(u"A10"_ustr);
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    CPPUNIT_ASSERT(pDoc->GetDBCollection()->getNamedDBs().findByUpperName(u"TABLE12"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"=SUM(Table12[Value])"_ustr, pDoc->GetFormula(2, 9, 0));
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(2, 9, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testPasteToOtherSheetKeepsRefToUncopiedTable)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    insertStringToCell(u"A1"_ustr, u"Value");
+    insertStringToCell(u"A2"_ustr, u"10");
+    insertStringToCell(u"A3"_ustr, u"20");
+
+    auto pTable = std::make_unique<ScDBData>(u"Table1"_ustr, 0, 0, 0, 0, 2, true, true);
+    ScTableStyleParam aStyleParam;
+    aStyleParam.maStyleID = u"TableStyleMedium2"_ustr;
+    pTable->SetTableStyleInfo(aStyleParam);
+    CPPUNIT_ASSERT(pDoc->GetDBCollection()->getNamedDBs().insert(std::move(pTable)));
+
+    insertStringToCell(u"C1"_ustr, u"=SUM(Table1[Value])");
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(2, 0, 0)));
+
+    insertNewSheet(*pDoc);
+    goToCell(u"$Sheet1.C1"_ustr);
+    dispatchCommand(mxComponent, u".uno:Copy"_ustr, {});
+    goToCell(u"$NewTab.C1"_ustr);
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(u"=SUM(Table1[Value])"_ustr, pDoc->GetFormula(2, 0, 1));
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(2, 0, 1)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testAutomaticSpellCheckingDefault)
+{
+    createScDoc();
+
+    ScTabViewShell* pViewShell = getViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+
+    SvtLinguConfig aLinguConfig;
+    SvtLinguOptions aLinguOptions;
+    aLinguConfig.GetOptions(aLinguOptions);
+    const bool bSharedSpellAuto = aLinguOptions.bIsSpellAuto;
+
+    // Each application keeps its own automatic spell checking setting, and Calc's
+    // starts off
+    CPPUNIT_ASSERT(!ScModule::GetAutoSpellProperty());
+    CPPUNIT_ASSERT(!pViewShell->IsAutoSpell());
+
+    // Tools - Automatic Spell Checking turns it on again
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, {});
+    CPPUNIT_ASSERT(ScModule::GetAutoSpellProperty());
+    CPPUNIT_ASSERT(pViewShell->IsAutoSpell());
+
+    // and the same toggle turns it back off
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, {});
+    CPPUNIT_ASSERT(!ScModule::GetAutoSpellProperty());
+    CPPUNIT_ASSERT(!pViewShell->IsAutoSpell());
+
+    // none of which touches the shared linguistic option
+    aLinguConfig.GetOptions(aLinguOptions);
+    CPPUNIT_ASSERT_EQUAL(bSharedSpellAuto, aLinguOptions.bIsSpellAuto);
+}
+
+namespace
+{
+// Prints the document once and collects the cell text of each page, in drawing order. The
+// printer records into a metafile, so this is the text that would have reached the paper.
+std::vector<std::vector<OUString>>
+lcl_getPrintedPages(const uno::Reference<lang::XComponent>& xComponent, Printer* pPrinter)
+{
+    rtl::Reference<VCLXDevice> pVclDevice = new VCLXDevice();
+    pVclDevice->SetOutputDevice(pPrinter);
+
+    uno::Reference<view::XRenderable> xRenderable(xComponent, uno::UNO_QUERY_THROW);
+    cpo::uno::Any aSelection(xComponent);
+
+    std::vector<beans::PropertyValue> aOptions{
+        comphelper::makePropertyValue(u"RenderDevice"_ustr,
+                                      uno::Reference<awt::XDevice>(pVclDevice)),
+        comphelper::makePropertyValue(u"IsPrinter"_ustr, true),
+        comphelper::makePropertyValue(u"IsLastPage"_ustr, false),
+    };
+
+    sal_Int32 nPages
+        = xRenderable->getRendererCount(aSelection, comphelper::containerToSequence(aOptions));
+
+    std::vector<std::vector<OUString>> aPages;
+    for (sal_Int32 nPage = 0; nPage < nPages; ++nPage)
+    {
+        aOptions.back().Value <<= (nPage + 1 == nPages);
+        cpo::uno::Sequence<beans::PropertyValue> aSequence
+            = comphelper::containerToSequence(aOptions);
+
+        GDIMetaFile aMetaFile;
+        pPrinter->SetConnectMetaFile(&aMetaFile);
+        xRenderable->getRenderer(nPage, aSelection, aSequence);
+        xRenderable->render(nPage, aSelection, aSequence);
+        pPrinter->SetConnectMetaFile(nullptr);
+
+        std::vector<OUString> aTexts;
+        for (size_t nAction = 0; nAction < aMetaFile.GetActionSize(); ++nAction)
+        {
+            MetaAction* pAction = aMetaFile.GetAction(nAction);
+            OUString aText;
+            if (pAction->GetType() == MetaActionType::TEXTARRAY)
+                aText = static_cast<MetaTextArrayAction*>(pAction)->GetText();
+            else if (pAction->GetType() == MetaActionType::TEXT)
+                aText = static_cast<MetaTextAction*>(pAction)->GetText();
+            else if (pAction->GetType() == MetaActionType::STRETCHTEXT)
+                aText = static_cast<MetaStretchTextAction*>(pAction)->GetText();
+            if (aText.startsWith(u"row"))
+                aTexts.push_back(aText);
+        }
+        aPages.push_back(std::move(aTexts));
+    }
+    return aPages;
+}
+
+// Names the first and the last cell of every page on one line. A failure then shows which rows
+// each page carried.
+OUString lcl_describePages(const std::vector<std::vector<OUString>>& rPages)
+{
+    OUStringBuffer aBuffer;
+    for (const auto& rPage : rPages)
+    {
+        if (!aBuffer.isEmpty())
+            aBuffer.append(" ");
+        if (rPage.empty())
+            aBuffer.append("empty");
+        else
+            aBuffer.append(rPage.front() + ".." + rPage.back());
+    }
+    return aBuffer.makeStringAndClear();
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testTdf171366)
+{
+    // The sheet holds 100 rows on A4 portrait paper. That is few enough per landscape page that
+    // the two orientations break the sheet at different rows.
+    createScDoc("tdf171366.fods");
+
+    // The view shell hands back the document's own printer, which is the one a print job uses.
+    SfxViewShell* pViewShell = getViewShell();
+    SfxPrinter* pPrinter = pViewShell->GetPrinter(true);
+    CPPUNIT_ASSERT(pPrinter);
+
+    // The Print Dialog turns the paper size itself and hands it on in 1/100 mm.
+    const Size aTurnedPaper(29700, 21001);
+
+    // The user chooses Landscape in the Print Dialog. The dialog gives the printer the turned
+    // size and marks the printer as carrying a setting of its own.
+    pPrinter->SetPrintPageSize(aTurnedPaper);
+    pPrinter->SetOrientation(Orientation::Landscape);
+    pPrinter->SetUsePrintDialogSetting(true);
+    const OUString aFromDialog = lcl_describePages(lcl_getPrintedPages(mxComponent, pPrinter));
+
+    // The user makes the same turn in Format - Page Style instead. That path always worked.
+    pPrinter->SetUsePrintDialogSetting(false);
+    uno::Reference<style::XStyleFamiliesSupplier> xSupplier(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<container::XNameAccess> xPageStyles(
+        xSupplier->getStyleFamilies()->getByName(u"PageStyles"_ustr), uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPageStyle(xPageStyles->getByName(u"Default"_ustr),
+                                                   uno::UNO_QUERY_THROW);
+    xPageStyle->setPropertyValue(u"IsLandscape"_ustr, cpo::uno::Any(true));
+    xPageStyle->setPropertyValue(
+        u"Size"_ustr, cpo::uno::Any(awt::Size(aTurnedPaper.Width(), aTurnedPaper.Height())));
+    const OUString aFromPageStyle = lcl_describePages(lcl_getPrintedPages(mxComponent, pPrinter));
+
+    // Turning the paper in the Print Dialog splits the sheet the same way as turning it in the
+    // page style. Without the accompanying fix, only the first page was laid out for landscape
+    // paper and the rest kept the portrait splits, so this test failed with:
+    // - Expected: row1..row37 row38..row74 row75..row100
+    // - Actual  : row1..row37 row57..row100 empty
+    CPPUNIT_ASSERT_EQUAL(aFromPageStyle, aFromDialog);
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest2, testPasteWriterTextAndImage)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    // Given a Writer document with a paragraph of text and an image anchored to one of its
+    // characters, all of it copied:
+    mxComponent2 = loadFromDesktop(createFileURL(u"text-and-image.fodt"));
+    dispatchCommand(mxComponent2, u".uno:SelectAll"_ustr, {});
+    dispatchCommand(mxComponent2, u".uno:Copy"_ustr, {});
+
+    // When pasting it into Calc:
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    // Then the image arrives too:
+    ScDrawLayer* pDrawLayer = pDoc->GetDrawLayer();
+    CPPUNIT_ASSERT(pDrawLayer);
+    const SdrPage* pPage = pDrawLayer->GetPage(0);
+    CPPUNIT_ASSERT(pPage);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // i.e. the image was lost, only the text was pasted.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pPage->GetObjCount());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

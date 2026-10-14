@@ -23,6 +23,7 @@
 #include <conditio.hxx>
 #include <formulagroup.hxx>
 #include <tokenarray.hxx>
+#include <token.hxx>
 #include <scitems.hxx>
 #include <cellform.hxx>
 #include <sharedformula.hxx>
@@ -312,7 +313,7 @@ void ScColumn::CopyOneCellFromClip( sc::CopyFromClipContext& rCxt, SCROW nRow1, 
                 std::vector<EditTextObject*> aStrs;
                 aStrs.reserve(nDestSize);
                 for (size_t i = 0; i < nDestSize; ++i)
-                    aStrs.push_back(rSrcCell.getEditText()->Clone().release());
+                    aStrs.push_back(new EditTextObject(*rSrcCell.getEditText()));
 
                 pBlockPos->miCellPos =
                     maCells.set(pBlockPos->miCellPos, nRow1, aStrs.begin(), aStrs.end());
@@ -505,8 +506,8 @@ public:
             case sc::FormulaResultValue::String:
                 if (aRes.mbMultiLine)
                 {
-                    std::unique_ptr<EditTextObject> pObj(mrDoc.CreateSharedStringTextObject(aRes.maString));
-                    maResValues.setValue(nRow, std::move(pObj));
+                    EditTextObject aObj(mrDoc.CreateSharedStringTextObject(aRes.maString));
+                    maResValues.setValue(nRow, std::make_unique<EditTextObject>(std::move(aObj)));
                 }
                 else
                 {
@@ -1106,6 +1107,31 @@ void ScColumn::PreprocessDBDataUpdate(
     aOps.insert(ocTableRef);
     RecompileByOpcodeHandler aFunc(&GetDoc(), aOps, rEndListenCxt, rCompileCxt);
     std::for_each(aGroups.begin(), aGroups.end(), aFunc);
+}
+
+void ScColumn::CollectTableRefFormulas( sal_uInt16 nIndex, std::vector<ScAddress>& rCells )
+{
+    // Walk only the formula-cell groups (skipping value/text blocks), like PreprocessDBDataUpdate.
+    for (const sc::FormulaGroupEntry& rEntry : GetFormulaGroupEntries())
+    {
+        const ScFormulaCell* pTop = rEntry.mbShared ? *rEntry.mpCells : rEntry.mpCell;
+        const ScTokenArray* pCode = pTop ? pTop->GetCode() : nullptr;
+        if (!pCode || !pCode->HasOpCode(ocTableRef))
+            continue;
+
+        bool bMatch = false;
+        formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+        for (const formula::FormulaToken* p = aIter.First(); p && !bMatch; p = aIter.Next())
+            bMatch = (p->GetOpCode() == ocTableRef
+                      && static_cast<const ScTableRefToken*>(p)->GetIndex() == nIndex);
+        if (!bMatch)
+            continue;
+
+        // A shared group shares this code, so every cell in it references the table.
+        const size_t nLen = rEntry.mbShared ? rEntry.mnLength : 1;
+        for (size_t i = 0; i < nLen; ++i)
+            rCells.emplace_back(nCol, static_cast<SCROW>(rEntry.mnRow + i), nTab);
+    }
 }
 
 void ScColumn::CompileHybridFormula(
@@ -1827,6 +1853,16 @@ static bool lcl_InterpretSpan(sc::formula_block::const_iterator& rSpanIter, SCRO
 
             if (!bGroupInterpreted)
             {
+                // Interpret can return with the span's first cell still dirty, when a cycle left
+                // it for the unthreaded pass, so check it the way the cells after it are checked.
+                if (pCellStart->NeedsInterpret())
+                {
+                    SAL_WARN("sc.core.formulagroup", "Internal error, cell " << pCellStart->aPos
+                        << " was left uncalculated, not allowing threading");
+                    bAllowThreading = false;
+                    return bAnyDirty;
+                }
+
                 // Evaluate from second cell in non-grouped style (no point in trying group-interpret again).
                 ++itSpanStart;
                 for (SCROW nIdx = nSpanStart+1; nIdx <= nSpanEnd; ++nIdx, ++itSpanStart)

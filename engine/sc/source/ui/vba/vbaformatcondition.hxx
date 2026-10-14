@@ -30,35 +30,35 @@ typedef ScVbaCondition< ov::excel::XFormatCondition >  ScVbaFormatCondition_BASE
 class ScVbaFormatCondition final : public ScVbaFormatCondition_BASE
 {
     OUString msStyleName;
-    css::uno::Reference< css::sheet::XSheetConditionalEntries > mxSheetConditionalEntries;
-    css::uno::Reference< ov::excel::XFormatConditions> moFormatConditions;
-    css::uno::Reference< ov::excel::XStyle > mxStyle;
-    css::uno::Reference< css::beans::XPropertySet > mxParentRangePropertySet;
+    cpo::uno::Reference< css::sheet::XSheetConditionalEntries > mxSheetConditionalEntries;
+    cpo::uno::Reference< ov::excel::XFormatConditions> moFormatConditions;
+    cpo::uno::Reference< ov::excel::XStyle > mxStyle;
+    cpo::uno::Reference< css::beans::XPropertySet > mxParentRangePropertySet;
 
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     /// @throws css::script::BasicErrorException
-    ScVbaFormatCondition( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                          const css::uno::Reference< css::uno::XComponentContext > & xContext,
-                          const css::uno::Reference< css::sheet::XSheetConditionalEntry >& _xSheetConditionalEntry,
-                          css::uno::Reference< ov::excel::XStyle > ,
-                          css::uno::Reference< ov::excel::XFormatConditions >  _xFormatConditions,
-                          css::uno::Reference< css::beans::XPropertySet >  _xPropertySet );
+    ScVbaFormatCondition( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                          const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext,
+                          const cpo::uno::Reference< css::sheet::XSheetConditionalEntry >& _xSheetConditionalEntry,
+                          cpo::uno::Reference< ov::excel::XStyle > ,
+                          cpo::uno::Reference< ov::excel::XFormatConditions >  _xFormatConditions,
+                          cpo::uno::Reference< css::beans::XPropertySet >  _xPropertySet );
 
     /// @throws css::script::BasicErrorException
     void notifyRange();
     /// @throws css::script::BasicErrorException
-    static css::sheet::ConditionOperator retrieveAPIType(sal_Int32 _nVBAType, const css::uno::Reference< css::sheet::XSheetCondition >& _xSheetCondition );
+    static css::sheet::ConditionOperator retrieveAPIType(sal_Int32 _nVBAType, const cpo::uno::Reference< css::sheet::XSheetCondition >& _xSheetCondition );
 
     //Methods
-    virtual void SAL_CALL Delete(  ) override;
-    virtual void SAL_CALL Modify( ::sal_Int32 Type, const cpo::uno::Any& Operator, const cpo::uno::Any& Formula1, const cpo::uno::Any& Formula2 ) override;
-    virtual ::sal_Int32 SAL_CALL Type(  ) override;
+    virtual void Delete(  ) override;
+    virtual void Modify( ::sal_Int32 Type, const cpo::uno::Any& Operator, const cpo::uno::Any& Formula1, const cpo::uno::Any& Formula2 ) override;
+    virtual ::sal_Int32 Type(  ) override;
     using ScVbaFormatCondition_BASE::Operator;
-    virtual ::sal_Int32 SAL_CALL Operator(  ) override;
-    virtual css::uno::Reference< ::ooo::vba::excel::XInterior > SAL_CALL Interior(  ) override;
-    virtual cpo::uno::Any SAL_CALL Borders( const cpo::uno::Any& Index ) override;
-    virtual css::uno::Reference< ::ooo::vba::excel::XFont > SAL_CALL Font(  ) override;
+    virtual ::sal_Int32 Operator(  ) override;
+    virtual cpo::uno::Reference< ::ooo::vba::excel::XInterior > Interior(  ) override;
+    virtual cpo::uno::Any Borders( const cpo::uno::Any& Index ) override;
+    virtual cpo::uno::Reference< ::ooo::vba::excel::XFont > Font(  ) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

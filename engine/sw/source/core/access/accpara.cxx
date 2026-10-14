@@ -97,6 +97,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 using beans::PropertyValue;
 using beans::UnknownPropertyException;
@@ -265,6 +266,7 @@ void SwAccessibleParagraph::InvalidateContent_( bool bVisibleDataFired )
 
     bool bNewIsBlockQuote = IsBlockQuote();
     bool bNewIsHeading = IsHeading();
+    const sal_Int32 nOldHeadingLevel = m_nHeadingLevel;
     //Get the real heading level, Heading1 ~ Heading10
     m_nHeadingLevel = GetRealHeadingLevel();
     bool bOldIsBlockQuote;
@@ -282,6 +284,12 @@ void SwAccessibleParagraph::InvalidateContent_( bool bVisibleDataFired )
     {
         // The role has changed
         FireAccessibleEvent(AccessibleEventId::ROLE_CHANGED, cpo::uno::Any(), cpo::uno::Any());
+    }
+    else if (m_nHeadingLevel != nOldHeadingLevel)
+    {
+        // The level reported by getExtendedAttributes() has changed
+        FireAccessibleEvent(AccessibleEventId::TEXT_ATTRIBUTE_CHANGED, cpo::uno::Any(),
+                            cpo::uno::Any());
     }
 }
 
@@ -627,7 +635,7 @@ bool SwAccessibleParagraph::GetTextBoundary(
     }
 }
 
-OUString SAL_CALL SwAccessibleParagraph::getAccessibleDescription()
+OUString SwAccessibleParagraph::getAccessibleDescription()
 {
     SolarMutexGuard aGuard;
     ThrowIfDisposed();
@@ -635,14 +643,14 @@ OUString SAL_CALL SwAccessibleParagraph::getAccessibleDescription()
     return OUString();
 }
 
-lang::Locale SAL_CALL SwAccessibleParagraph::getLocale()
+lang::Locale SwAccessibleParagraph::getLocale()
 {
     SolarMutexGuard aGuard;
 
     const SwTextFrame *pTextFrame = GetFrame()->DynCastTextFrame();
     if( !pTextFrame )
     {
-        throw uno::RuntimeException(u"no SwTextFrame"_ustr, getXWeak());
+        throw cpo::uno::RuntimeException(u"no SwTextFrame"_ustr, getXWeak());
     }
 
     lang::Locale aLoc(g_pBreakIt->GetLocale(pTextFrame->GetLangOfChar(TextFrameIndex(0), 0, true)));
@@ -651,7 +659,7 @@ lang::Locale SAL_CALL SwAccessibleParagraph::getLocale()
 }
 
 // #i27138# - paragraphs are in relation CONTENT_FLOWS_FROM and/or CONTENT_FLOWS_TO
-uno::Reference<XAccessibleRelationSet> SAL_CALL SwAccessibleParagraph::getAccessibleRelationSet()
+uno::Reference<XAccessibleRelationSet> SwAccessibleParagraph::getAccessibleRelationSet()
 {
     SolarMutexGuard aGuard;
 
@@ -682,7 +690,7 @@ uno::Reference<XAccessibleRelationSet> SAL_CALL SwAccessibleParagraph::getAccess
     return pHelper;
 }
 
-void SAL_CALL SwAccessibleParagraph::grabFocus()
+void SwAccessibleParagraph::grabFocus()
 {
     SolarMutexGuard aGuard;
 
@@ -748,7 +756,7 @@ static bool lcl_GetBackgroundColor( Color & rColor,
     return false;
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getForeground()
+sal_Int32 SwAccessibleParagraph::getForeground()
 {
     SolarMutexGuard g;
 
@@ -769,7 +777,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getForeground()
     return SwAccessibleContext::getForeground();
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getBackground()
+sal_Int32 SwAccessibleParagraph::getBackground()
 {
     SolarMutexGuard g;
 
@@ -847,7 +855,7 @@ sal_Int32 SwAccessibleParagraph::getCaretPosition()
     return nRet;
 }
 
-bool SAL_CALL SwAccessibleParagraph::setCaretPosition( sal_Int32 nIndex )
+bool SwAccessibleParagraph::setCaretPosition( sal_Int32 nIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -947,7 +955,7 @@ cpo::uno::Sequence< css::style::TabStop > SwAccessibleParagraph::GetCurrentTabSt
         vcl::Window *pWin = GetWindow();
         if (!pWin)
         {
-            throw uno::RuntimeException(u"no Window"_ustr, getXWeak());
+            throw cpo::uno::RuntimeException(u"no Window"_ustr, getXWeak());
         }
 
         SwRect aTmpRect(0, 0, tabs[0].Position, 0);
@@ -1876,7 +1884,7 @@ awt::Rectangle SwAccessibleParagraph::getCharacterBounds(
     vcl::Window *pWin = GetWindow();
     if (!pWin)
     {
-        throw uno::RuntimeException(u"no Window"_ustr, getXWeak());
+        throw cpo::uno::RuntimeException(u"no Window"_ustr, getXWeak());
     }
 
     tools::Rectangle aScreenRect( GetMap()->CoreToPixel( aCoreRect ));
@@ -1907,7 +1915,7 @@ sal_Int32 SwAccessibleParagraph::getIndexAtPoint( const awt::Point& rPoint )
     vcl::Window *pWin = GetWindow();
     if (!pWin)
     {
-        throw uno::RuntimeException(u"no Window"_ustr, getXWeak());
+        throw cpo::uno::RuntimeException(u"no Window"_ustr, getXWeak());
     }
     SwRect aLogBounds( GetBounds( *(GetMap()), GetFrame() ) ); // twip rel to doc root
     Point aPixPos( GetMap()->CoreToPixel( aLogBounds ).TopLeft() );
@@ -2293,7 +2301,7 @@ bool SwAccessibleParagraph::scrollSubstringTo( sal_Int32 nStartIndex,
 
     vcl::Window *pWin = GetWindow();
     if ( ! pWin )
-        throw uno::RuntimeException(u"no Window"_ustr, getXWeak());
+        throw cpo::uno::RuntimeException(u"no Window"_ustr, getXWeak());
 
     /* Start and end character bounds, in pixels, relative to the paragraph */
     awt::Rectangle startR, endR;
@@ -2605,7 +2613,7 @@ const SwTextAttr *SwHyperlinkIter_Impl::next(SwTextNode const** ppNode)
     return pAttr;
 };
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkCount()
+sal_Int32 SwAccessibleParagraph::getHyperLinkCount()
 {
     SolarMutexGuard aGuard;
 
@@ -2622,7 +2630,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkCount()
     return nCount;
 }
 
-uno::Reference< XAccessibleHyperlink > SAL_CALL
+uno::Reference< XAccessibleHyperlink >
     SwAccessibleParagraph::getHyperLink( sal_Int32 nLinkIndex )
 {
     SolarMutexGuard aGuard;
@@ -2669,7 +2677,7 @@ uno::Reference< XAccessibleHyperlink > SAL_CALL
     return xRet;
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkIndex( sal_Int32 nCharIndex )
+sal_Int32 SwAccessibleParagraph::getHyperLinkIndex( sal_Int32 nCharIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -2709,7 +2717,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkIndex( sal_Int32 nCharInde
 }
 
 // #i71360#, #i108125# - adjustments for change tracking text markup
-sal_Int32 SAL_CALL SwAccessibleParagraph::getTextMarkupCount( sal_Int32 nTextMarkupType )
+sal_Int32 SwAccessibleParagraph::getTextMarkupCount( sal_Int32 nTextMarkupType )
 {
     SolarMutexGuard g;
 
@@ -2736,12 +2744,12 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getTextMarkupCount( sal_Int32 nTextMar
 }
 
 //MSAA Extension Implementation in app  module
-bool SAL_CALL SwAccessibleParagraph::scrollToPosition( const css::awt::Point&, bool )
+bool SwAccessibleParagraph::scrollToPosition( const css::awt::Point&, bool )
 {
     return false;
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getSelectedPortionCount(  )
+sal_Int32 SwAccessibleParagraph::getSelectedPortionCount(  )
 {
     SolarMutexGuard g;
 
@@ -2769,9 +2777,8 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getSelectedPortionCount(  )
             if( rTmpCursor.HasMark() )
             {
                 // check whether frame's node(s) are 'inside' pCursor
-                SwPosition* pStart = rTmpCursor.Start();
+                auto [pStart, pEnd] = rTmpCursor.StartEnd();
                 SwNodeOffset nStartIndex = pStart->GetNodeIndex();
-                SwPosition* pEnd = rTmpCursor.End();
                 SwNodeOffset nEndIndex = pEnd->GetNodeIndex();
                 if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
                 {
@@ -2786,7 +2793,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getSelectedPortionCount(  )
 
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getSeletedPositionStart( sal_Int32 nSelectedPortionIndex )
+sal_Int32 SwAccessibleParagraph::getSeletedPositionStart( sal_Int32 nSelectedPortionIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -2797,7 +2804,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getSeletedPositionStart( sal_Int32 nSe
     return nStart;
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getSeletedPositionEnd( sal_Int32 nSelectedPortionIndex )
+sal_Int32 SwAccessibleParagraph::getSeletedPositionEnd( sal_Int32 nSelectedPortionIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -2808,7 +2815,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getSeletedPositionEnd( sal_Int32 nSele
     return nEnd;
 }
 
-bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionIndex )
+bool SwAccessibleParagraph::removeSelection( sal_Int32 selectionIndex )
 {
     SolarMutexGuard g;
 
@@ -2844,9 +2851,8 @@ bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionIndex )
             if( pCursor->HasMark() )
             {
                 // check whether frame's node(s) are 'inside' pCursor
-                SwPosition* pStart = pCursor->Start();
+                auto [pStart, pEnd] = pCursor->StartEnd();
                 SwNodeOffset nStartIndex = pStart->GetNodeIndex();
-                SwPosition* pEnd = pCursor->End();
                 SwNodeOffset nEndIndex = pEnd->GetNodeIndex();
                 if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
                 {
@@ -2871,7 +2877,7 @@ bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionIndex )
     return true;
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection(sal_Int32 startOffset, sal_Int32 endOffset)
+sal_Int32 SwAccessibleParagraph::addSelection(sal_Int32 startOffset, sal_Int32 endOffset)
 {
     SolarMutexGuard aGuard;
 
@@ -2933,7 +2939,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection(sal_Int32 startOffset, sa
     return 0;
 }
 
-TextSegment SAL_CALL SwAccessibleParagraph::getTextMarkup(sal_Int32 nTextMarkupIndex,
+TextSegment SwAccessibleParagraph::getTextMarkup(sal_Int32 nTextMarkupIndex,
                                                           sal_Int32 nTextMarkupType)
 {
     SolarMutexGuard g;
@@ -2960,7 +2966,7 @@ TextSegment SAL_CALL SwAccessibleParagraph::getTextMarkup(sal_Int32 nTextMarkupI
     return pTextMarkupHelper->getTextMarkup( nTextMarkupIndex, nTextMarkupType );
 }
 
-cpo::uno::Sequence<TextSegment> SAL_CALL
+cpo::uno::Sequence<TextSegment>
 SwAccessibleParagraph::getTextMarkupAtIndex(sal_Int32 nCharIndex, sal_Int32 nTextMarkupType)
 {
     SolarMutexGuard g;
@@ -2995,7 +3001,7 @@ SwAccessibleParagraph::getTextMarkupAtIndex(sal_Int32 nCharIndex, sal_Int32 nTex
 }
 
 // #i89175#
-sal_Int32 SAL_CALL SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex )
+sal_Int32 SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex )
 {
     SolarMutexGuard g;
 
@@ -3010,7 +3016,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex
     return nLineNo;
 }
 
-TextSegment SAL_CALL SwAccessibleParagraph::getTextAtLineNumber(sal_Int32 nLineNo)
+TextSegment SwAccessibleParagraph::getTextAtLineNumber(sal_Int32 nLineNo)
 {
     SolarMutexGuard g;
 
@@ -3034,7 +3040,7 @@ TextSegment SAL_CALL SwAccessibleParagraph::getTextAtLineNumber(sal_Int32 nLineN
     return aTextAtLine;
 }
 
-TextSegment SAL_CALL SwAccessibleParagraph::getTextAtLineWithCaret()
+TextSegment SwAccessibleParagraph::getTextAtLineWithCaret()
 {
     SolarMutexGuard g;
 
@@ -3049,7 +3055,7 @@ TextSegment SAL_CALL SwAccessibleParagraph::getTextAtLineWithCaret()
     return TextSegment();
 }
 
-sal_Int32 SAL_CALL SwAccessibleParagraph::getNumberOfLineWithCaret()
+sal_Int32 SwAccessibleParagraph::getNumberOfLineWithCaret()
 {
     SolarMutexGuard g;
 
@@ -3079,7 +3085,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getNumberOfLineWithCaret()
                 vcl::Window *pWin = GetWindow();
                 if (!pWin)
                 {
-                    throw uno::RuntimeException(u"no Window"_ustr, getXWeak());
+                    throw cpo::uno::RuntimeException(u"no Window"_ustr, getXWeak());
                 }
 
                 tools::Rectangle aScreenRect( GetMap()->CoreToPixel( aCursorCoreRect ));
@@ -3146,9 +3152,8 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
         if( rTmpCursor.HasMark() )
         {
             // check whether frame's node(s) are 'inside' pCursor
-            SwPosition* pStart = rTmpCursor.Start();
+            auto [pStart, pEnd] = rTmpCursor.StartEnd();
             SwNodeOffset nStartIndex = pStart->GetNodeIndex();
-            SwPosition* pEnd = rTmpCursor.End();
             SwNodeOffset nEndIndex = pEnd->GetNodeIndex();
             if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
             {
@@ -3260,7 +3265,7 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
     return bRet;
 }
 
-sal_Int16 SAL_CALL SwAccessibleParagraph::getAccessibleRole()
+sal_Int16 SwAccessibleParagraph::getAccessibleRole()
 {
     std::scoped_lock aGuard( m_Mutex );
 
@@ -3273,9 +3278,20 @@ sal_Int16 SAL_CALL SwAccessibleParagraph::getAccessibleRole()
         return AccessibleRole::PARAGRAPH;
 }
 
+bool SwAccessibleParagraph::IsParagraphRole(sal_Int16 nRole)
+{
+    return nRole == AccessibleRole::HEADING || nRole == AccessibleRole::BLOCK_QUOTE
+           || nRole == AccessibleRole::PARAGRAPH;
+}
+
 //Get the real heading level, Heading1 ~ Heading10
 sal_Int32 SwAccessibleParagraph::GetRealHeadingLevel()
 {
+    const SwTextFrame* const pFrame = GetTextFrame();
+    const SwTextNode* const pTextNd = pFrame ? pFrame->GetTextNodeForParaProps() : nullptr;
+    if (pTextNd && pTextNd->IsOutline())
+        return pTextNd->GetAttrOutlineLevel();
+
     rtl::Reference< SwXTextPortion > xPortion = CreateUnoPortion( 0, 0 );
     cpo::uno::Any styleAny = xPortion->getPropertyValue( u"ParaStyleName"_ustr );
     OUString sValue;
@@ -3305,7 +3321,7 @@ bool SwAccessibleParagraph::IsBlockQuote()
     return false;
 }
 
-OUString SAL_CALL SwAccessibleParagraph::getExtendedAttributes()
+OUString SwAccessibleParagraph::getExtendedAttributes()
 {
     SolarMutexGuard g;
 

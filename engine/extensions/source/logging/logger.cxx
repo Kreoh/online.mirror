@@ -23,7 +23,7 @@
 
 #include <com/sun/star/logging/XLogger.hpp>
 #include <com/sun/star/logging/LogLevel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/logging/XLoggerPool.hpp>
 
@@ -41,11 +41,11 @@ namespace logging
 {
 
     using ::com::sun::star::logging::XLogger;
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::lang::XServiceInfo;
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::XInterface;
     using ::cpo::uno::WeakReference;
     using ::com::sun::star::logging::XLogHandler;
     using ::com::sun::star::logging::LogRecord;
@@ -256,9 +256,9 @@ namespace logging
 
 } // namespace logging
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_extensions_LoggerPool(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new logging::LoggerPool(context));

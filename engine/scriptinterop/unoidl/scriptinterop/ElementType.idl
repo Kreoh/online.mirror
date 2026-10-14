@@ -1,0 +1,34 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Office contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+module scriptinterop {
+
+// Discriminator for a body-level element, matching the Google Apps Script Document ElementType
+// enum names.  Grow with additional values as the implementation learns to recognise them:
+enum ElementType {
+    PARAGRAPH,
+    LIST_ITEM,
+    TABLE,
+    TABLE_ROW,
+    TABLE_CELL,
+    INLINE_IMAGE,
+    PAGE_BREAK,
+    HORIZONTAL_RULE,
+    BODY_SECTION,
+    FOOTNOTE,
+    FOOTNOTE_SECTION,
+    TEXT,
+    UNSUPPORTED
+};
+
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

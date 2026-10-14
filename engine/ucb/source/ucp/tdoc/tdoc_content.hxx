@@ -99,19 +99,19 @@ class Content : public ::ucbhelper::ContentImplHelper,
     ContentProvider*  m_pProvider;
 
 private:
-    Content( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+    Content( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
              ContentProvider* pProvider,
-             const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+             const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
             ContentProperties aProps );
-    Content( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+    Content( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
              ContentProvider* pProvider,
-             const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+             const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
              const css::ucb::ContentInfo& Info );
 
     virtual cpo::uno::Sequence< css::beans::Property >
-    getProperties( const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
+    getProperties( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
     virtual cpo::uno::Sequence< css::ucb::CommandInfo >
-    getCommands( const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
+    getCommands( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
     virtual OUString getParentURL() override;
 
     static bool hasData( ContentProvider const * pProvider, const Uri & rUri );
@@ -122,16 +122,16 @@ private:
                           ContentProperties& rProps );
     /// @throws css::ucb::CommandFailedException
     /// @throws css::task::DocumentPasswordRequest
-    /// @throws css::uno::RuntimeException
-    bool storeData( const css::uno::Reference< css::io::XInputStream >& xData,
-                    const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
-    void renameData( const css::uno::Reference< css::ucb::XContentIdentifier >& xOldId,
-                     const css::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
+    /// @throws cpo::uno::RuntimeException
+    bool storeData( const cpo::uno::Reference< css::io::XInputStream >& xData,
+                    const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+    void renameData( const cpo::uno::Reference< css::ucb::XContentIdentifier >& xOldId,
+                     const cpo::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
     bool removeData();
 
     bool copyData( const Uri & rSourceUri, const OUString & rNewName );
 
-    css::uno::Reference< css::ucb::XContentIdentifier >
+    cpo::uno::Reference< css::ucb::XContentIdentifier >
     makeNewIdentifier( const OUString& rTitle );
 
     typedef rtl::Reference< Content > ContentRef;
@@ -139,36 +139,36 @@ private:
     void queryChildren( ContentRefList& rChildren );
 
     bool exchangeIdentity(
-                const css::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
+                const cpo::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
 
-    css::uno::Reference< css::sdbc::XRow >
+    cpo::uno::Reference< css::sdbc::XRow >
     getPropertyValues( const cpo::uno::Sequence< css::beans::Property >& rProperties );
     cpo::uno::Sequence< cpo::uno::Any >
     /// @throws cpo::uno::Exception
     setPropertyValues(
             const cpo::uno::Sequence< css::beans::PropertyValue >& rValues,
-            const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
     /// @throws cpo::uno::Exception
     cpo::uno::Any
     open( const css::ucb::OpenCommandArgument2& rArg,
-          const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+          const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
 
     /// @throws cpo::uno::Exception
-    void insert( const css::uno::Reference< css::io::XInputStream >& xData,
+    void insert( const cpo::uno::Reference< css::io::XInputStream >& xData,
                  sal_Int32 nNameClashResolve,
-                 const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+                 const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
     /// @throws cpo::uno::Exception
     void destroy( bool bDeletePhysical,
-                  const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+                  const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
     /// @throws cpo::uno::Exception
     void transfer( const css::ucb::TransferInfo& rInfo,
-                   const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+                   const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
-    static css::uno::Reference< css::sdbc::XRow >
-    getPropertyValues( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+    static cpo::uno::Reference< css::sdbc::XRow >
+    getPropertyValues( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
                        const cpo::uno::Sequence< css::beans::Property >& rProperties,
                        const ContentProperties& rData,
                        ContentProvider* pProvider,
@@ -176,78 +176,78 @@ private:
 
 
     static bool commitStorage(
-        const css::uno::Reference< css::embed::XStorage > & xStorage );
+        const cpo::uno::Reference< css::embed::XStorage > & xStorage );
 
     static bool closeOutputStream(
-        const css::uno::Reference< css::io::XOutputStream > & xOut );
+        const cpo::uno::Reference< css::io::XOutputStream > & xOut );
 
     /// @throws css::ucb::CommandFailedException
     /// @throws css::task::DocumentPasswordRequest
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XInputStream >
-    getInputStream( const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XInputStream >
+    getInputStream( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
     /// @throws css::ucb::CommandFailedException
     /// @throws css::task::DocumentPasswordRequest
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XOutputStream >
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XOutputStream >
     getTruncatedOutputStream(
-        const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
-    css::uno::Reference< css::ucb::XContent >
+    cpo::uno::Reference< css::ucb::XContent >
     queryChildContent( std::u16string_view rRelativeChildUri );
 
     /// @throws css::ucb::CommandFailedException
     /// @throws css::task::DocumentPasswordRequest
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XStream >
-    getStream( const css::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XStream >
+    getStream( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
 
 public:
     // Create existing content. Fail, if not already exists.
     static rtl::Reference<Content> create(
-            const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
             ContentProvider* pProvider,
-            const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier );
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier );
 
     // Create new content. Fail, if already exists.
     static rtl::Reference<Content> create(
-            const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
             ContentProvider* pProvider,
-            const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
             const css::ucb::ContentInfo& Info );
 
     virtual ~Content() override;
 
     // XInterface
-    virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type & rType ) override;
-    virtual void SAL_CALL acquire()
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
         noexcept override;
-    virtual void SAL_CALL release()
+    virtual void release()
         noexcept override;
 
     // XTypeProvider
-    virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
-    virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes() override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL
+    virtual OUString
     getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
     // XContent
-    virtual OUString SAL_CALL
+    virtual OUString
     getContentType() override;
-    virtual css::uno::Reference< css::ucb::XContentIdentifier > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
     getIdentifier() override;
 
     // XCommandProcessor
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
     execute( const css::ucb::Command& aCommand,
              sal_Int32 CommandId,
-             const css::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
-    virtual void SAL_CALL
+             const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+    virtual void
     abort( sal_Int32 CommandId ) override;
 
 
@@ -255,17 +255,17 @@ public:
 
 
     // XContentCreator
-    virtual cpo::uno::Sequence< css::ucb::ContentInfo > SAL_CALL
+    virtual cpo::uno::Sequence< css::ucb::ContentInfo >
     queryCreatableContentsInfo() override;
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XContent >
     createNewContent( const css::ucb::ContentInfo& Info ) override;
 
 
     // Non-interface methods.
 
 
-    static css::uno::Reference< css::sdbc::XRow >
-    getPropertyValues( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+    static cpo::uno::Reference< css::sdbc::XRow >
+    getPropertyValues( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
                        const cpo::uno::Sequence< css::beans::Property >& rProperties,
                        ContentProvider* pProvider,
                        const OUString& rContentId );

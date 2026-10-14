@@ -24,7 +24,7 @@
 #include <com/sun/star/awt/UnoControlDialogModelProvider.hpp>
 #include <com/sun/star/awt/tab/XTabPage.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <tools/debug.hxx>
 #include <vcl/outdev.hxx>
@@ -35,8 +35,8 @@
 #include <helper/unopropertyarrayhelper.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::awt;
 
 UnoControlTabPageModel::UnoControlTabPageModel( Reference< XComponentContext > const & i_factory )
@@ -56,12 +56,12 @@ UnoControlTabPageModel::UnoControlTabPageModel( Reference< XComponentContext > c
     ImplRegisterProperty( BASEPROPERTY_IMAGEURL );
 }
 
-OUString SAL_CALL UnoControlTabPageModel::getImplementationName()
+OUString UnoControlTabPageModel::getImplementationName()
 {
     return u"stardiv.Toolkit.UnoControlTabPageModel"_ustr;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL UnoControlTabPageModel::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > UnoControlTabPageModel::getSupportedServiceNames()
 {
     cpo::uno::Sequence< OUString > aNames = ControlModelContainerBase::getSupportedServiceNames( );
     aNames.realloc( aNames.getLength() + 1 );
@@ -109,7 +109,7 @@ uno::Reference< beans::XPropertySetInfo > UnoControlTabPageModel::getPropertySet
     return xInfo;
 }
 ////----- XInitialization -------------------------------------------------------------------
-void SAL_CALL UnoControlTabPageModel::initialize (const Sequence<Any>& rArguments)
+void UnoControlTabPageModel::initialize (const Sequence<Any>& rArguments)
 {
     sal_Int16 nPageId = -1;
     if ( rArguments.getLength() == 1 )
@@ -156,7 +156,7 @@ void SAL_CALL UnoControlTabPageModel::initialize (const Sequence<Any>& rArgument
 }
 
 
-UnoControlTabPage::UnoControlTabPage( const uno::Reference< uno::XComponentContext >& rxContext )
+UnoControlTabPage::UnoControlTabPage( const uno::Reference< cpo::uno::XComponentContext >& rxContext )
     :UnoControlTabPage_Base(rxContext)
     ,m_bWindowListener(false)
 {
@@ -172,22 +172,22 @@ OUString UnoControlTabPage::GetComponentServiceName() const
     return u"TabPageModel"_ustr;
 }
 
-OUString SAL_CALL UnoControlTabPage::getImplementationName()
+OUString UnoControlTabPage::getImplementationName()
 {
     return u"stardiv.Toolkit.UnoControlTabPage"_ustr;
 }
 
-bool SAL_CALL UnoControlTabPage::supportsService(OUString const & ServiceName)
+bool UnoControlTabPage::supportsService(OUString const & ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL UnoControlTabPage::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> UnoControlTabPage::getSupportedServiceNames()
 {
     return { u"com.sun.star.awt.tab.UnoControlTabPage"_ustr };
 }
 
-void SAL_CALL UnoControlTabPage::disposing( const lang::EventObject& Source )
+void UnoControlTabPage::disposing( const lang::EventObject& Source )
 {
      ControlContainerBase::disposing( Source );
 }
@@ -217,7 +217,7 @@ static ::Size ImplMapPixelToAppFont( OutputDevice const * pOutDev, const ::Size&
     return aTmp;
 }
 // css::awt::XWindowListener
-void SAL_CALL UnoControlTabPage::windowResized( const css::awt::WindowEvent& e )
+void UnoControlTabPage::windowResized( const css::awt::WindowEvent& e )
 {
     OutputDevice*pOutDev = Application::GetDefaultDevice();
     DBG_ASSERT( pOutDev, "Missing Default Device!" );
@@ -251,7 +251,7 @@ void SAL_CALL UnoControlTabPage::windowResized( const css::awt::WindowEvent& e )
 
 }
 
-void SAL_CALL UnoControlTabPage::windowMoved( const css::awt::WindowEvent& e )
+void UnoControlTabPage::windowMoved( const css::awt::WindowEvent& e )
 {
     OutputDevice*pOutDev = Application::GetDefaultDevice();
     DBG_ASSERT( pOutDev, "Missing Default Device!" );
@@ -273,21 +273,21 @@ void SAL_CALL UnoControlTabPage::windowMoved( const css::awt::WindowEvent& e )
 
 }
 
-void SAL_CALL UnoControlTabPage::windowShown( const css::lang::EventObject& ) {}
+void UnoControlTabPage::windowShown( const css::lang::EventObject& ) {}
 
-void SAL_CALL UnoControlTabPage::windowHidden( const css::lang::EventObject& ) {}
+void UnoControlTabPage::windowHidden( const css::lang::EventObject& ) {}
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlTabPageModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlTabPageModel(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoControlTabPage_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoControlTabPage(context));

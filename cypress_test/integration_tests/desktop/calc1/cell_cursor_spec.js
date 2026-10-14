@@ -117,6 +117,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test jumping on large cell
 	});
 
 	it('Check selected text visual.', function() {
+		cy.viewport(1000, helper.maxScreenshotableViewportHeight);
+
 		cy.cGet('#insertsheet-button').click();
 
 		helper.processToIdle(this.win);
@@ -137,6 +139,10 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test jumping on large cell
 		helper.typeIntoDocument('{ctrl}a');
 
 		helper.processToIdle(this.win);
+
+		cy.cGet('#busypopup').should('not.exist');
+
+		helper.waitForCanvasAnimation(this.win);
 
 		cy.cGet('#document-container').compareSnapshot('text-selection', 0.02);
 	});
@@ -189,28 +195,31 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test Cell Selections', fun
 	it('Check non-range cell selection with CTRL', function() {
 		calcHelper.clickOnACell(1, 1, 2, 3);
 
-		// Press CTRL and hold.
-		cy.cGet('div.clipboard').type('{ctrl}', { force: true, release: false });
+		helper.waitForTimers(this.win, 'clicktimer');
+		helper.processToIdle(this.win);
+		calcHelper.clickOnACell(2, 3, 4, 3, { ctrlKey: true });
 
-		cy.wait(500);
-		calcHelper.clickOnACell(2, 3, 4, 3);
+		helper.waitForTimers(this.win, 'clicktimer');
+		helper.processToIdle(this.win);
+		calcHelper.clickOnACell(4, 3, 2, 6, { ctrlKey: true });
 
-		cy.wait(500);
-		calcHelper.clickOnACell(4, 3, 2, 6);
-
-		// Press SHIFT and hold.
-		cy.cGet('div.clipboard').type('{shift}', { force: true, release: false });
-
-		cy.wait(500);
-		calcHelper.clickOnACell(2, 6, 2, 10);
+		helper.waitForTimers(this.win, 'clicktimer');
+		helper.processToIdle(this.win);
+		calcHelper.clickOnACell(2, 6, 2, 10, { shiftKey: true });
 
 		helper.processToIdle(this.win);
+
+		helper.waitForCanvasAnimation(this.win);
 
 		cy.cGet('#document-container').compareSnapshot('selections', 0.02);
 	});
 
 	it('Should not scroll after a right click', function() {
 		helper.typeIntoInputField(helper.addressInputSelector, 'Z1000');
+
+		// Right-clicking before the jump is processed moves the cell cursor back
+		// to where the view was, and the context menu closes.
+		helper.processToIdle(this.win);
 
 		cy.cGet('#document-container').rightclick();
 		const pasteEntry = helper.getContextMenuItem('Paste');
@@ -234,7 +243,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test Cell Selections', fun
 			cy.cGet('#document-container').realMouseMove(left + 150, topY + 150);
 		});
 
-		cy.wait(1000);
+		helper.processToIdle(this.win);
+
+		helper.waitForCanvasAnimation(this.win);
 
 		// This doesn't pass without the fix in this commit.
 		cy.cGet('#document-container').compareSnapshot('scroll-check', 0.02);
@@ -337,6 +348,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test triple click content 
 	});
 
 	it('Triple click should select the cell content.', function() {
+		cy.viewport(1000, helper.maxScreenshotableViewportHeight);
+
 		calcHelper.enterCellAddressAndConfirm(this.win, 'A1');
 
 		// Triple click on second first in second row
@@ -350,6 +363,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test triple click content 
 
 		helper.waitForTimers(this.win, 'clicktimer');
 		helper.processToIdle(this.win);
+
+		helper.waitForCanvasAnimation(this.win);
 
 		//TODO: The blinking cursor changes between frames, so the difference swings with
 		// the screenshot timing, requiring a ridiculously large threshold:

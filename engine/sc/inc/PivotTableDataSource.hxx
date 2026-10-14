@@ -28,24 +28,24 @@ typedef cppu::WeakImplHelper<css::chart2::data::XDataSource,
 class PivotTableDataSource final : public PivotTableDataSource_Base, public SfxListener
 {
 public:
-    explicit PivotTableDataSource(std::vector<css::uno::Reference<css::chart2::data::XLabeledDataSequence>>&& xLabeledSequence);
+    explicit PivotTableDataSource(std::vector<cpo::uno::Reference<css::chart2::data::XLabeledDataSequence>>&& xLabeledSequence);
     virtual ~PivotTableDataSource() override;
     virtual void Notify(SfxBroadcaster& rBroadcaster, const SfxHint& rHint) override;
 
     // XDataSource
-    virtual cpo::uno::Sequence<css::uno::Reference<css::chart2::data::XLabeledDataSequence>> SAL_CALL
+    virtual cpo::uno::Sequence<cpo::uno::Reference<css::chart2::data::XLabeledDataSequence>>
         getDataSequences() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override;
+    virtual bool supportsService(const OUString& rServiceName) override;
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL
+    virtual cpo::uno::Sequence<OUString>
         getSupportedServiceNames() override;
 
 private:
-    std::vector<css::uno::Reference<css::chart2::data::XLabeledDataSequence>> m_xLabeledSequence;
+    std::vector<cpo::uno::Reference<css::chart2::data::XLabeledDataSequence>> m_xLabeledSequence;
 };
 
 }

@@ -27,8 +27,8 @@
 
 namespace com::sun::star {
     namespace frame { class XModel; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ooo::vba {
     class XDialogsBase;
@@ -40,11 +40,11 @@ typedef InheritedHelperInterfaceWeakImpl< ov::XDialogsBase > VbaDialogsBase_BASE
 class VBAHELPER_DLLPUBLIC VbaDialogsBase : public VbaDialogsBase_BASE
 {
 public:
-    VbaDialogsBase( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > &xContext ): VbaDialogsBase_BASE( xParent, xContext ) {}
+    VbaDialogsBase( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > &xContext ): VbaDialogsBase_BASE( xParent, xContext ) {}
 
     // XCollection
-    virtual ::sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL Item( const cpo::uno::Any& Index ) override;
+    virtual ::sal_Int32 getCount() override;
+    virtual cpo::uno::Any Item( const cpo::uno::Any& Index ) override;
 };
 
 #endif // INCLUDED_VBAHELPER_VBADIALOGSBASE_HXX

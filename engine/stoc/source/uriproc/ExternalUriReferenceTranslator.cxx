@@ -34,8 +34,8 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 
-namespace com::sun::star::uno { class XInterface; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XInterface; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace {
 
@@ -49,17 +49,17 @@ public:
     Translator(const Translator&) = delete;
     Translator& operator=(const Translator&) = delete;
 
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL supportsService(OUString const & serviceName) override;
+    virtual bool supportsService(OUString const & serviceName) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
     translateToInternal(OUString const & externalUriReference) override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
     translateToExternal(OUString const & internalUriReference) override;
 
 private:
@@ -177,8 +177,8 @@ OUString Translator::translateToExternal(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_uri_ExternalUriReferenceTranslator_get_implementation(css::uno::XComponentContext* ,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_uri_ExternalUriReferenceTranslator_get_implementation(cpo::uno::XComponentContext* ,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return ::cppu::acquire(new Translator);

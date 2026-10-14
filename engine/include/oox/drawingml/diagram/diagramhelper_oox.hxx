@@ -25,6 +25,9 @@
 #include <oox/shape/ShapeFilterBase.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/diagram/DiagramHelper_svx.hxx>
+#include <basegfx/range/b2drange.hxx>
+#include <com/sun/star/awt/Point.hpp>
+#include <com/sun/star/awt/Size.hpp>
 
 namespace oox::drawingml {
 
@@ -49,20 +52,30 @@ class DiagramHelper_oox final : public svx::diagram::DiagramHelper_svx
     const std::shared_ptr< SmartArtDiagram >    mpDiagramPtr;
     std::shared_ptr<::oox::drawingml::Theme>    mpDiagramThemePtr;
 
+    // Where the frame of the Diagram lies within the group that draws it, in parts of the width
+    // and the height of the group. The frame is the room the layout fills, the group covers what
+    // the shapes drew, and that reaches outside the frame where a shape sticks out of it. The
+    // group itself runs from (0, 0) to (1, 1), so a frame the shapes cover exactly is that too.
+    basegfx::B2DRange maFrameInGroup;
+
     // data values set by addDiagramNode to be used by next reLayout call
-    // when a new ode gets added
+    // when a new Node gets added
     OUString msNewNodeId;
     OUString msNewNodeText;
+    OUString msNewNodeTemplateId;
 
     bool hasDiagramData() const;
 
+    // Hands the fill, line and text attributes of xOldShape, and its text, to xNewShape. The
+    // shape geometry is not changed. nOldHeight is the height that xOldShapehad
+    // sizes alone.
     static void moveDiagramModelDataFromOldToNewXShape(
-        const css::uno::Reference<css::drawing::XShape>& xOldShape,
-        const css::uno::Reference<css::drawing::XShape>& xNewShape);
+        const cpo::uno::Reference<css::drawing::XShape>& xOldShape,
+        const cpo::uno::Reference<css::drawing::XShape>& xNewShape, tools::Long nOldHeight);
 
 protected:
     // access associated SdrObjGroup/XShape/RootShape
-    virtual css::uno::Reference< css::drawing::XShape >& accessRootShape() override;
+    virtual cpo::uno::Reference< css::drawing::XShape >& accessRootShape() override;
 
 public:
     DiagramHelper_oox(
@@ -84,9 +97,16 @@ public:
     // returns vector of (id, text)
     virtual std::vector<std::pair<OUString, OUString>> getDiagramChildren(const OUString& rParentId) const override;
 
+    // true for a node that holds no nodes below it, false for a node that holds nodes
+    virtual bool isChildNode(std::u16string_view rNodeId) const override;
+
+    // true for a node that can take a node below it, which depends on the layout
+    virtual bool canHoldChildNode(std::u16string_view rNodeId) const override;
+
     // add/remove new top-level node to data model, returns its id
-    virtual OUString addDiagramNode(const OUString& rText, SdrModel& rDrawModel) override;
-    virtual bool removeDiagramNode(const OUString& rNodeId, SdrModel& rDrawModel) override;
+    virtual OUString addDiagramNode(std::u16string_view rText, SdrModel& rDrawModel,
+                                    std::u16string_view rAnchorNode, bool bAsChild) override;
+    virtual bool removeDiagramNode(std::u16string_view rNodeId, SdrModel& rDrawModel) override;
     virtual void TextInformationChange() override;
     virtual void ItemSetInformationChange(std::span< const SfxPoolItem* const > aChangedItems) override;
 
@@ -94,7 +114,14 @@ public:
     virtual std::shared_ptr< svx::diagram::DiagramDataState > extractDiagramDataState() const override;
     virtual void applyDiagramDataState(const std::shared_ptr< svx::diagram::DiagramDataState >& rState) override;
 
-    void doAnchor(css::uno::Reference<css::drawing::XShape>& rTarget);
+    // rFramePosition and rFrameSize are the frame of the Diagram in EMU, in the coordinates the
+    // shapes of the group were placed in.
+    void doAnchor(cpo::uno::Reference<css::drawing::XShape>& rTarget,
+                  const css::awt::Point& rFramePosition, const css::awt::Size& rFrameSize);
+
+    // make DiagramNodes use FitSize in edit mode
+    void applyTextFitToSizeToDiagramNodes(const cpo::uno::Reference<css::drawing::XShape>& rTarget,
+                                          bool bKeepFontScale);
     const std::shared_ptr< ::oox::drawingml::Theme >& getOrCreateThemePtr(
         const rtl::Reference< oox::shape::ShapeFilterBase>& rxFilter ) const;
 
@@ -106,9 +133,9 @@ public:
     virtual bool checkMinimalDataDoms() const override;
 
     // helpers to write some specific DiagramDoms
-    void writeDiagramOOXData(DrawingML& rOriginalDrawingML, css::uno::Reference<css::io::XOutputStream>& xOutputStream, std::u16string_view rDrawingRelId) const;
-    void writeDiagramReducedOOXData(css::uno::Reference<css::io::XOutputStream>& xOutputStream) const;
-    void writeDiagramOOXDrawing(DrawingML& rOriginalDrawingML, css::uno::Reference<css::io::XOutputStream>& xOutputStream) const;
+    void writeDiagramOOXData(DrawingML& rOriginalDrawingML, cpo::uno::Reference<css::io::XOutputStream>& xOutputStream, std::u16string_view rDrawingRelId) const;
+    void writeDiagramReducedOOXData(cpo::uno::Reference<css::io::XOutputStream>& xOutputStream) const;
+    void writeDiagramOOXDrawing(DrawingML& rOriginalDrawingML, cpo::uno::Reference<css::io::XOutputStream>& xOutputStream) const;
 
     // needed to create DiagramHelper_oox in svx' SdrObjGroup copy constructor
     virtual DiagramHelper_oox* clone() const override;

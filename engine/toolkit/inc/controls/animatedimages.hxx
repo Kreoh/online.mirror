@@ -24,7 +24,7 @@
 #include <cppuhelper/implbase1.hxx>
 
 namespace com::sun::star::container { class XContainerListener; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace toolkit
 {
@@ -36,37 +36,29 @@ namespace toolkit
     class AnimatedImagesControlModel : public AnimatedImagesControlModel_Base
     {
     public:
-                                        AnimatedImagesControlModel( css::uno::Reference< css::uno::XComponentContext > const & i_factory );
+                                        AnimatedImagesControlModel( cpo::uno::Reference< cpo::uno::XComponentContext > const & i_factory );
                                         AnimatedImagesControlModel( const AnimatedImagesControlModel& i_copySource );
 
         virtual rtl::Reference<UnoControlModel> Clone() const override;
 
         // XPropertySet
-        css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
+        cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
 
         // XPersistObject
-        OUString SAL_CALL getServiceName() override;
+        OUString getServiceName() override;
 
         // XServiceInfo
-        OUString SAL_CALL getImplementationName(  ) override;
-        cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        OUString getImplementationName(  ) override;
+        cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
         // XAnimatedImages
-        virtual ::sal_Int32 SAL_CALL getStepTime() override;
-        virtual void SAL_CALL setStepTime( ::sal_Int32 _steptime ) override;
-        virtual bool SAL_CALL getAutoRepeat() override;
-        virtual void SAL_CALL setAutoRepeat( bool _autorepeat ) override;
-        virtual ::sal_Int16 SAL_CALL getScaleMode() override;
-        virtual void SAL_CALL setScaleMode( ::sal_Int16 _scalemode ) override;
-        virtual ::sal_Int32 SAL_CALL getImageSetCount(  ) override;
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getImageSet( ::sal_Int32 i_index ) override;
-        virtual void SAL_CALL insertImageSet( ::sal_Int32 i_index, const cpo::uno::Sequence< OUString >& i_imageURLs ) override;
-        virtual void SAL_CALL replaceImageSet( ::sal_Int32 i_index, const cpo::uno::Sequence< OUString >& i_imageURLs ) override;
-        virtual void SAL_CALL removeImageSet( ::sal_Int32 i_index ) override;
+        virtual ::sal_Int32 getImageSetCount(  ) override;
+        virtual cpo::uno::Sequence< OUString > getImageSet( ::sal_Int32 i_index ) override;
+        virtual void insertImageSet( ::sal_Int32 i_index, const cpo::uno::Sequence< OUString >& i_imageURLs ) override;
 
         // XAnimatedImages::XContainer
-        virtual void SAL_CALL addContainerListener( const css::uno::Reference< css::container::XContainerListener >& i_listener ) override;
-        virtual void SAL_CALL removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& i_listener ) override;
+        virtual void addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& i_listener ) override;
+        virtual void removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& i_listener ) override;
 
     protected:
                                         virtual ~AnimatedImagesControlModel() override;

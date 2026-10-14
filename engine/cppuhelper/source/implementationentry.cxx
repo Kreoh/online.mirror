@@ -23,7 +23,7 @@
 
 #include <osl/diagnose.h>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
@@ -74,8 +74,7 @@ void * component_getFactoryHelper(
             xFactory = entries[i].createFactory(
                 entries[i].create,
                 implName,
-                entries[i].getSupportedServiceNames(),
-                entries[i].moduleCounter );
+                entries[i].getSupportedServiceNames());
         }
     }
 

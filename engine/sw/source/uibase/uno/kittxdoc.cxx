@@ -35,7 +35,9 @@
 #include <sfx2/kit/helper.hxx>
 
 #include <IDocumentMarkAccess.hxx>
+#include <IDocumentOutlineNodes.hxx>
 #include <IDocumentRedlineAccess.hxx>
+#include <svx/seclabel/SecLabelStore.hxx>
 #include <doc.hxx>
 #include <docsh.hxx>
 #include <fmtrfmrk.hxx>
@@ -55,6 +57,7 @@
 #include <unocontentcontrol.hxx>
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
+#include <cntfrm.hxx>
 #include <com/sun/star/text/XTextContent.hpp>
 
 #include <com/sun/star/text/XPageCursor.hpp>
@@ -75,6 +78,7 @@
 #include <sax/tools/converter.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -823,7 +827,7 @@ void GetDocStructureDocProps(tools::JsonWriter& rJsonWriter, const SwDocShell* p
     rJsonWriter.put("Type", aType);
 
     // PropertySet -> JSON
-    css::uno::Reference<css::beans::XPropertyContainer> aUserDefinedProperties
+    cpo::uno::Reference<css::beans::XPropertyContainer> aUserDefinedProperties
         = xDocProps->getUserDefinedProperties();
     uno::Reference<beans::XPropertySet> aUserDefinedPropertySet(aUserDefinedProperties,
                                                                 uno::UNO_QUERY);
@@ -1391,6 +1395,58 @@ void GetExtractLinkTargets(tools::JsonWriter& rJsonWriter, SwDocShell* pDocShell
     WriteLinkTargets(xDoc->getLinks(), /*subcontent*/ false, rJsonWriter);
 }
 
+/// Implements getCommandValues(".uno:SecurityLabel"): the document's STANAG label
+/// as a self-describing marking string (empty when the document has no label), for
+/// the browser's read-only classification banner.
+void GetSecurityLabel(tools::JsonWriter& rJsonWriter, SwDocShell* pDocShell)
+{
+    const cpo::uno::Reference<css::frame::XModel> xModel
+        = pDocShell ? pDocShell->GetModel() : nullptr;
+    const OUString aMarking = xModel.is() ? svx::seclabel::readMarking(xModel) : OUString();
+    // Standard {commandName, commandValues} envelope so the browser routes it by
+    // command name (the kit forwards this JSON verbatim, adding no envelope).
+    rJsonWriter.put("commandName", ".uno:SecurityLabel");
+    auto aValues = rJsonWriter.startNode("commandValues");
+    rJsonWriter.put("marking", aMarking);
+    // Whether this document's format can carry a label; the browser hides the command
+    // and its button when false (only OOXML supports the customXml part).
+    rJsonWriter.put("supported", xModel.is() && svx::seclabel::modelSupportsLabel(xModel));
+}
+
+/// Implements getCommandValues(".uno:Headings"): every heading of the document in order,
+/// which the accessibility tree cannot give since it only holds what is near the view, and
+/// which side of the caret each one is on in document order, which their position cannot
+/// tell across columns.
+void GetHeadings(tools::JsonWriter& rJsonWriter, SwDocShell* pDocShell)
+{
+    rJsonWriter.put("commandName", ".uno:Headings");
+    auto aValues = rJsonWriter.startNode("commandValues");
+    auto aHeadings = rJsonWriter.startArray("headings");
+
+    SwWrtShell* pWrtShell = pDocShell ? pDocShell->GetWrtShell() : nullptr;
+    if (!pWrtShell)
+        return;
+
+    const SwRootFrame* pLayout = pWrtShell->GetLayout();
+    const IDocumentOutlineNodes& rOutline = pDocShell->GetDoc()->getIDocumentOutlineNodes();
+    const SwNodeOffset nCaret = pWrtShell->GetCursor()->GetPoint()->GetNodeIndex();
+    for (IDocumentOutlineNodes::tSortedOutlineNodeList::size_type i = 0;
+         i < rOutline.getOutlineNodesCount(); ++i)
+    {
+        if (!rOutline.isOutlineInLayout(i, *pLayout))
+            continue;
+        auto aHeading = rJsonWriter.startStruct();
+        const SwNodeOffset nNode = rOutline.getOutlineNode(i)->GetIndex();
+        rJsonWriter.put("side", nNode < nCaret ? "above" : nNode == nCaret ? "caret" : "below");
+        rJsonWriter.put("level", rOutline.getOutlineLevel(i) + 1);
+        rJsonWriter.put("text", rOutline.getOutlineText(i, pLayout, true, false, false));
+        rJsonWriter.put("target", SwGetOutlineLinkName(i, pDocShell->GetDoc()));
+        rJsonWriter.put("index", static_cast<sal_Int64>(i));
+        if (const SwContentFrame* pFrame = rOutline.getOutlineNode(i)->getLayoutFrame(pLayout))
+            rJsonWriter.put("rect", pFrame->getFrameArea().SVRect().toString());
+    }
+}
+
 /// Implements getCommandValues(".uno:Sections").
 ///
 /// Parameters:
@@ -1436,7 +1492,9 @@ bool SwXTextDocument::supportsCommand(std::u16string_view rCommand)
             u"Field",
             u"Layout",
             u"ExtractDocumentStructure",
-            u"ExtractLinkTargets" };
+            u"ExtractLinkTargets",
+            u"SecurityLabel",
+            u"Headings" };
 
     return std::find(vForward.begin(), vForward.end(), rCommand) != vForward.end();
 }
@@ -1537,6 +1595,14 @@ void SwXTextDocument::getCommandValues(tools::JsonWriter& rJsonWriter, std::stri
     else if (o3tl::starts_with(rCommand, ".uno:Layout"sv))
     {
         GetLayout(rJsonWriter, m_pDocShell);
+    }
+    else if (o3tl::starts_with(rCommand, ".uno:SecurityLabel"sv))
+    {
+        GetSecurityLabel(rJsonWriter, m_pDocShell);
+    }
+    else if (o3tl::starts_with(rCommand, ".uno:Headings"sv))
+    {
+        GetHeadings(rJsonWriter, m_pDocShell);
     }
 }
 

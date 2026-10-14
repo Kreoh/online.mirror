@@ -14,10 +14,12 @@
 #include <tools/json_writer.hxx>
 #include <sfx2/viewsh.hxx>
 #include <unotools/datetime.hxx>
+#include <tools/datetimeutils.hxx>
 #include <comphelper/kit.hxx>
 #include <COKit/COKit.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sdr::annotation
 {
@@ -97,6 +99,7 @@ void Annotation::toData(AnnotationData& rData)
     rData.m_Author = m_Author;
     rData.m_Initials = m_Initials;
     rData.m_DateTime = m_DateTime;
+    rData.m_DateTimeUTC = m_DateTimeUTC;
     rData.m_Text = GetTextImpl(g);
     rData.m_Threaded = m_Threaded;
     rData.m_Resolved = m_Resolved;
@@ -112,6 +115,7 @@ void Annotation::fromData(const AnnotationData& rData)
     m_Author = rData.m_Author;
     m_Initials = rData.m_Initials;
     m_DateTime = rData.m_DateTime;
+    m_DateTimeUTC = rData.m_DateTimeUTC;
     SetTextImpl(rData.m_Text, g);
     m_Threaded = rData.m_Threaded;
     m_Resolved = rData.m_Resolved;
@@ -119,7 +123,7 @@ void Annotation::fromData(const AnnotationData& rData)
     m_SizeExplicit = rData.m_SizeExplicit;
 }
 
-Annotation::Annotation(const css::uno::Reference<css::uno::XComponentContext>& rxContext,
+Annotation::Annotation(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext,
                        SdrPage* pPage)
     : cppu::PropertySetMixin<office::XAnnotation>(rxContext, IMPLEMENTS_PROPERTY_SET,
                                                   cpo::uno::Sequence<OUString>())
@@ -160,7 +164,7 @@ void Annotation::SetTextImpl(OUString const& rText, const std::unique_lock<std::
     return xText->setString(rText);
 }
 
-uno::Reference<text::XText> SAL_CALL Annotation::getTextRange()
+uno::Reference<text::XText> Annotation::getTextRange()
 {
     std::unique_lock g(m_aMutex);
     return getTextRangeImpl(g);
@@ -255,10 +259,15 @@ OString Annotation::ToJSON(CommentNotificationType nType)
             aJsonWriter.put("id", id);
             aJsonWriter.put("author", m_Author);
             aJsonWriter.put("dateTime", utl::toISO8601(m_DateTime));
+            // The moment the annotation was written, when it is known. dateTime beside it is
+            // the author's wall clock with no zone; this one is the same moment in UTC. A year
+            // of zero means none is known.
+            if (m_DateTimeUTC.Year != 0)
+                aJsonWriter.put("dateTimeUtc", DateTimeToOString(DateTime(m_DateTimeUTC)));
             aJsonWriter.put("text", GetTextImpl(g));
-            // The page's stable unique id as a number; 0 stands for no page, a value the
-            // ids never take.
-            aJsonWriter.put("part", mpPage ? mpPage->GetUniqueID() : sal_uInt64(0));
+            // The page's GUID as a braced string; an empty string stands for no page, a
+            // value the identifiers never take.
+            aJsonWriter.put("part", mpPage ? mpPage->GetGuid().getString() : OString());
             tools::Rectangle aRectangle(
                 Point(std::round(o3tl::toTwips(m_Position.X, o3tl::Length::mm)),
                       std::round(o3tl::toTwips(m_Position.Y, o3tl::Length::mm))),

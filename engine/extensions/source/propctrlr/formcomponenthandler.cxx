@@ -57,7 +57,7 @@
 #include <com/sun/star/sdb/XQueriesSupplier.hpp>
 #include <com/sun/star/form/ListSourceType.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/sdb/XSingleSelectQueryComposer.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
@@ -114,7 +114,7 @@ namespace pcr
 
 
     using namespace ::com::sun::star;
-    using namespace uno;
+    using namespace ::cpo;
     using namespace cpo::uno;
     using namespace lang;
     using namespace beans;
@@ -2041,7 +2041,7 @@ namespace pcr
             Reference< XForm > xAsForm( m_xComponent, UNO_QUERY );
             if ( xAsForm.is() )
             {
-                Reference< XForm > xFormsParent( xAsForm->getParent(), css::uno::UNO_QUERY );
+                Reference< XForm > xFormsParent( xAsForm->getParent(), cpo::uno::UNO_QUERY );
                 m_bComponentIsSubForm = xFormsParent.is();
             }
 
@@ -2725,7 +2725,7 @@ namespace pcr
             bHandleNonLink = xModel.is();
         }
 
-        Reference< XFilePickerControlAccess > xController(aFileDlg.GetFilePicker(), UNO_QUERY);
+        Reference< XFilePicker > xController(aFileDlg.GetFilePicker());
         DBG_ASSERT(xController.is(), "FormComponentPropertyHandler::impl_browseForImage_nothrow: missing the controller interface on the file picker!");
         if (xController.is())
         {
@@ -2973,9 +2973,9 @@ namespace pcr
 
 } // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_FormComponentPropertyHandler_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::FormComponentPropertyHandler(context));
 }

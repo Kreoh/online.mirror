@@ -46,10 +46,10 @@ namespace framework::pattern::frame{
     @return [bool]
             true if closing failed.
  */
-inline bool closeIt(const css::uno::Reference< css::uno::XInterface >& xResource)
+inline bool closeIt(const cpo::uno::Reference< cpo::uno::XInterface >& xResource)
 {
-    css::uno::Reference< css::util::XCloseable > xClose  (xResource, css::uno::UNO_QUERY);
-    css::uno::Reference< css::lang::XComponent > xDispose(xResource, css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::util::XCloseable > xClose  (xResource, cpo::uno::UNO_QUERY);
+    cpo::uno::Reference< css::lang::XComponent > xDispose(xResource, cpo::uno::UNO_QUERY);
 
     try
     {
@@ -65,7 +65,7 @@ inline bool closeIt(const css::uno::Reference< css::uno::XInterface >& xResource
         { return false; }
     catch(const css::lang::DisposedException&)
         {} // disposed is closed is ...
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; } // should not be suppressed!
     catch(const cpo::uno::Exception&)
         { return false;  } // ??? We defined to return a boolean value instead of throwing exceptions...

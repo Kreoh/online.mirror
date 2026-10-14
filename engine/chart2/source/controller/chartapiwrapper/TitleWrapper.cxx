@@ -43,9 +43,10 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using ::com::sun::star::beans::Property;
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
@@ -55,19 +56,19 @@ namespace {
 class WrappedTitleStringProperty : public WrappedProperty
 {
 public:
-    explicit WrappedTitleStringProperty( const Reference< uno::XComponentContext >& xContext );
+    explicit WrappedTitleStringProperty( const Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual void setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const override;
     virtual Any getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const override;
     virtual Any getPropertyDefault( const Reference< beans::XPropertyState >& xInnerPropertyState ) const override;
 
 protected:
-    Reference< uno::XComponentContext > m_xContext;
+    Reference< cpo::uno::XComponentContext > m_xContext;
 };
 
 }
 
-WrappedTitleStringProperty::WrappedTitleStringProperty( const Reference< uno::XComponentContext >& xContext )
+WrappedTitleStringProperty::WrappedTitleStringProperty( const Reference< cpo::uno::XComponentContext >& xContext )
     : ::chart::WrappedProperty( u"String"_ustr, OUString() )
     , m_xContext( xContext )
 {
@@ -300,7 +301,7 @@ OUString TitleWrapper::getShapeType()
 void TitleWrapper::dispose()
 {
     std::unique_lock g(m_aMutex);
-    Reference< uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
+    Reference< cpo::uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
     m_aEventListenerContainer.disposeAndClear( g, lang::EventObject( xSource ) );
 
     clearWrappedPropertySet(g);

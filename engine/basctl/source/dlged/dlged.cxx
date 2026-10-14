@@ -55,8 +55,8 @@ namespace basctl
 
 using namespace comphelper;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
 
@@ -91,7 +91,7 @@ DlgEdHint::~DlgEdHint()
 
 void DlgEditor::ShowDialog()
 {
-    const uno::Reference< uno::XComponentContext >&  xContext = getProcessComponentContext();
+    const uno::Reference< cpo::uno::XComponentContext >&  xContext = getProcessComponentContext();
 
     // create a dialog
     uno::Reference< awt::XUnoControlDialog > xDlg = awt::UnoControlDialog::create( xContext );
@@ -179,8 +179,8 @@ bool DlgEditor::RemarkDialog()
 
 DlgEditor::DlgEditor (
     vcl::Window& rWindow_, DialogWindowLayout& rLayout_,
-    css::uno::Reference<css::frame::XModel> const& xModel,
-    css::uno::Reference<css::container::XNameContainer> const & xDialogModel
+    cpo::uno::Reference<css::frame::XModel> const& xModel,
+    cpo::uno::Reference<css::container::XNameContainer> const & xDialogModel
 )
     :pHScroll(nullptr)
     ,pVScroll(nullptr)
@@ -253,7 +253,7 @@ DlgEditor::~DlgEditor()
     ::comphelper::disposeComponent( m_xControlContainer );
 }
 
-Reference< awt::XControlContainer > const & DlgEditor::GetWindowControlContainer()
+rtl::Reference< UnoControlContainer > const & DlgEditor::GetWindowControlContainer()
 {
     if (!m_xControlContainer.is())
         m_xControlContainer = VCLUnoHelper::CreateControlContainer(&rWindow);
@@ -437,7 +437,7 @@ Reference< util::XNumberFormatsSupplier > const & DlgEditor::GetNumberFormatsSup
 {
     if ( !m_xSupplier.is() )
     {
-        const Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+        const Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
         Reference< util::XNumberFormatsSupplier > xSupplier( util::NumberFormatsSupplier::createWithDefaultLocale(xContext) );
 
         ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
@@ -488,7 +488,7 @@ void DlgEditor::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle
         bFirstDraw = false;
 
         // get property set
-        css::uno::Reference<css::beans::XPropertySet> xPSet(pDlgEdForm->GetUnoControlModel(), css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::beans::XPropertySet> xPSet(pDlgEdForm->GetUnoControlModel(), cpo::uno::UNO_QUERY);
 
         if (xPSet.is())
         {

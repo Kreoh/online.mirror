@@ -31,7 +31,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 namespace sd::framework {
@@ -157,7 +157,7 @@ void ConfigurationControllerResourceManager::ActivateResource (
             SAL_INFO("sd.fwk", __func__ << ":    resource creation failed");
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }
@@ -219,7 +219,7 @@ void ConfigurationControllerResourceManager::DeactivateResource (
 #endif
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }

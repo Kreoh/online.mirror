@@ -33,6 +33,7 @@
 #include "passwordcontainer.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -109,7 +110,7 @@ namespace uui {
 
 
 PasswordContainerHelper::PasswordContainerHelper(
-    uno::Reference< uno::XComponentContext > const & xContext ):
+    uno::Reference< cpo::uno::XComponentContext > const & xContext ):
     m_xPasswordContainer(task::PasswordContainer::create(xContext))
 {}
 
@@ -271,7 +272,7 @@ bool PasswordContainerHelper::addRecord(
 
 
 PasswordContainerInteractionHandler::PasswordContainerInteractionHandler(
-    const uno::Reference< uno::XComponentContext >& xContext )
+    const uno::Reference< cpo::uno::XComponentContext >& xContext )
 : m_aPwContainerHelper( xContext )
 {
 }
@@ -287,7 +288,7 @@ PasswordContainerInteractionHandler::~PasswordContainerInteractionHandler()
 
 
 // virtual
-OUString SAL_CALL
+OUString
 PasswordContainerInteractionHandler::getImplementationName()
 {
     return u"com.sun.star.comp.uui.PasswordContainerInteractionHandler"_ustr;
@@ -295,7 +296,7 @@ PasswordContainerInteractionHandler::getImplementationName()
 
 
 // virtual
-bool SAL_CALL
+bool
 PasswordContainerInteractionHandler::supportsService(
         const OUString& ServiceName )
 {
@@ -304,7 +305,7 @@ PasswordContainerInteractionHandler::supportsService(
 
 
 // virtual
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 PasswordContainerInteractionHandler::getSupportedServiceNames()
 {
     return { u"com.sun.star.task.PasswordContainerInteractionHandler"_ustr };
@@ -315,7 +316,7 @@ PasswordContainerInteractionHandler::getSupportedServiceNames()
 
 
 // virtual
-void SAL_CALL
+void
 PasswordContainerInteractionHandler::handle(
         const uno::Reference< task::XInteractionRequest >& rRequest )
 {
@@ -323,7 +324,7 @@ PasswordContainerInteractionHandler::handle(
 }
 
 // virtual
-bool SAL_CALL
+bool
 PasswordContainerInteractionHandler::handleInteractionRequest(
         const uno::Reference< task::XInteractionRequest >& rRequest )
 {
@@ -378,9 +379,9 @@ PasswordContainerInteractionHandler::handleInteractionRequest(
 
 } // namespace uui
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_uui_PasswordContainerInteractionHandler_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new uui::PasswordContainerInteractionHandler(context));
 }

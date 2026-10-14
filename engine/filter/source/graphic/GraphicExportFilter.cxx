@@ -35,8 +35,9 @@
 #include <vcl/glyphitemcache.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
-GraphicExportFilter::GraphicExportFilter( uno::Reference< uno::XComponentContext > xContext  )
+GraphicExportFilter::GraphicExportFilter( uno::Reference< cpo::uno::XComponentContext > xContext  )
     : mxContext(std::move(xContext))
     , mnTargetWidth(0)
     , mnTargetHeight(0)
@@ -205,8 +206,8 @@ bool GraphicExportFilter::filterRenderDocument() const
 
 bool GraphicExportFilter::filterExportShape(
         const cpo::uno::Sequence< css::beans::PropertyValue > & rDescriptor,
-        const css::uno::Reference< css::drawing::XShapes > & rxShapes,
-        const css::uno::Reference< css::drawing::XShape > & rxShape ) const
+        const cpo::uno::Reference< css::drawing::XShapes > & rxShapes,
+        const cpo::uno::Reference< css::drawing::XShape > & rxShape ) const
 {
     uno::Reference< lang::XComponent > xSourceDoc;
     if (rxShapes.is())
@@ -250,9 +251,9 @@ void GraphicExportFilter::initialize( const cpo::uno::Sequence< cpo::uno::Any > 
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_GraphicExportFilter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new GraphicExportFilter(context));
 }

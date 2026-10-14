@@ -34,7 +34,7 @@
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 
 // namespaces
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
@@ -676,7 +676,7 @@ void ColumnsWidget::InsertColumns()
     }
 }
 
-SvxTableToolBoxControl::SvxTableToolBoxControl(const css::uno::Reference<css::uno::XComponentContext>& rContext)
+SvxTableToolBoxControl::SvxTableToolBoxControl(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : PopupWindowController(rContext, nullptr, OUString())
 {
 }
@@ -726,15 +726,15 @@ cpo::uno::Sequence<OUString> SvxTableToolBoxControl::getSupportedServiceNames()
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_TableToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire(new SvxTableToolBoxControl(rContext));
 }
 
-SvxColumnsToolBoxControl::SvxColumnsToolBoxControl(const css::uno::Reference<css::uno::XComponentContext>& rContext)
+SvxColumnsToolBoxControl::SvxColumnsToolBoxControl(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : PopupWindowController(rContext, nullptr, OUString())
 {
 }
@@ -784,9 +784,9 @@ cpo::uno::Sequence<OUString> SvxColumnsToolBoxControl::getSupportedServiceNames(
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_ColumnsToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire(new SvxColumnsToolBoxControl(rContext));

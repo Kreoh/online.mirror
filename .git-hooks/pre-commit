@@ -132,18 +132,28 @@ sub check_author()
 sub check_prettier()
 {
     # limit to the dirs the prettier target formats
-    my @staged = split(/\n/, `git diff --cached --name-only --diff-filter=ACMR -- browser/src browser/js browser/admin/src`);
+    my @staged = split(/\n/, `git diff --cached --name-only --diff-filter=ACMR -- browser/src browser/js browser/admin/src browser/mocha_tests`);
     return unless @staged;
 
     if (-e "browser/Makefile") {
-        # The browser tree is configured for WSL/Linux: the prettier target runs
-        # node at the path autoconf detected there (e.g. /usr/bin/node), which does
-        # not exist under Git Bash/MSYS. Committing from there can't run the check,
-        # so skip it instead of failing the commit - the WSL/Linux build and CI
-        # still enforce formatting.
+        # Under Git Bash/MSYS the prettier target only works if this tree was
+        # configured there too, so browser/Makefile records a native node. A
+        # tree configured under WSL/Linux records a node path (e.g.
+        # /usr/bin/node) that does not exist here; committing from Git Bash
+        # can't run the check then, so skip it instead of failing the commit -
+        # the WSL/Linux build and CI still enforce formatting.
         if ($^O =~ /^(?:msys|MSWin32|cygwin)$/i) {
-            print "Skipping code formatting check (Git Bash/MSYS; prettier needs the WSL toolchain)\n";
-            return;
+            my $node = '';
+            if (open my $mk, '<', 'browser/Makefile') {
+                while (<$mk>) {
+                    if (/^NODE = (.+?)\s*$/) { $node = $1; last; }
+                }
+                close $mk;
+            }
+            unless ($node ne '' && $node ne 'no' && (-x $node || -x "$node.exe")) {
+                print "Skipping code formatting check (no native node configured in browser/Makefile)\n";
+                return;
+            }
         }
 
         # the prettier target wants paths relative to browser/
@@ -225,21 +235,28 @@ EOM
 open( FILES, "git diff --cached --name-only --diff-filter=A -z $against -- ':(top,exclude)engine/' |" ) ||  die "Cannot run git diff.";
 while (<FILES>)
 {
-    if (/\.ui$/) # .ui files can get large
+    foreach my $file (split(/\0/))
     {
-        continue;
-    }
-    if (/\.xsl$/) # XSLT
-    {
-        continue;
-    }
-    my $size = `git cat-file -s :$_`;
-    # For now let's say large is 500KB
-    my $limit = 500;
-    if ($size > $limit * 1024)
-    {
-        print "Error: Attempt to add a large file: $_, pleasy try to fit into $limit KB.\n";
-        exit( 1 );
+        if ($file =~ /\.ui$/) # .ui files can get large
+        {
+            next;
+        }
+        if ($file =~ /\.xsl$/) # XSLT
+        {
+            next;
+        }
+        if ($file =~ m{^browser/node_shrinkpack/}) # vendored npm package tarballs
+        {
+            next;
+        }
+        my $size = `git cat-file -s ":$file"`;
+        # For now let's say large is 500KB
+        my $limit = 500;
+        if ($size > $limit * 1024)
+        {
+            print "Error: Attempt to add a large file: $file, please try to fit into $limit KB.\n";
+            exit( 1 );
+        }
     }
 }
 

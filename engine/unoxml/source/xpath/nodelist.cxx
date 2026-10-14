@@ -23,7 +23,7 @@
 
 #include "../dom/document.hxx"
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::xml::dom;
 
 namespace XPath
@@ -46,7 +46,7 @@ namespace XPath
     /**
     The number of nodes in the list.
     */
-    sal_Int32 SAL_CALL CNodeList::getLength()
+    sal_Int32 CNodeList::getLength()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -59,7 +59,7 @@ namespace XPath
     /**
     Returns the indexth item in the collection.
     */
-    Reference< XNode > SAL_CALL CNodeList::item(sal_Int32 index)
+    Reference< XNode > CNodeList::item(sal_Int32 index)
     {
         ::osl::MutexGuard const g(m_rMutex);
 

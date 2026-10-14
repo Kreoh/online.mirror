@@ -30,9 +30,10 @@
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
-ScVbaFileDialog::ScVbaFileDialog( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const sal_Int32 nType )
+ScVbaFileDialog::ScVbaFileDialog( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const sal_Int32 nType )
     : ScVbaFileDialog_BASE( xParent, xContext)
     , m_nType(nType)
     , m_sTitle(u"FileDialog"_ustr)
@@ -75,7 +76,7 @@ void ScVbaFileDialog::setAllowMultiSelect(const cpo::uno::Any& rAllowMultiSelect
     rAllowMultiSelect >>= m_bMultiSelectMode;
 }
 
-uno::Reference< excel::XFileDialogSelectedItems > SAL_CALL ScVbaFileDialog::getSelectedItems()
+uno::Reference< excel::XFileDialogSelectedItems > ScVbaFileDialog::getSelectedItems()
 {
     // TODO use InitialFileName when m_xItems is empty
     return m_xItems;
@@ -96,7 +97,7 @@ sal_Int32 ScVbaFileDialog::Show()
             break;
         case office::MsoFileDialogType::msoFileDialogFilePicker:
             {
-                uno::Reference<ui::dialogs::XFilePicker3> xFilePicker =
+                uno::Reference<ui::dialogs::XFilePicker> xFilePicker =
                         ui::dialogs::FilePicker::createWithMode(
                                 mxContext, ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE );
 
@@ -121,7 +122,7 @@ sal_Int32 ScVbaFileDialog::Show()
             break;
         case office::MsoFileDialogType::msoFileDialogFolderPicker:
             {
-                uno::Reference< ui::dialogs::XFolderPicker2 > xFolderPicker =
+                uno::Reference< ui::dialogs::XFolderPicker > xFolderPicker =
                         ui::dialogs::FolderPicker::create(mxContext);
 
                 if( !m_sInitialFileName.isEmpty() )
@@ -146,10 +147,10 @@ sal_Int32 ScVbaFileDialog::Show()
             }
             break;
         default:
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
     }
 
-    m_xItems = css::uno::Reference< ov::excel::XFileDialogSelectedItems >(
+    m_xItems = cpo::uno::Reference< ov::excel::XFileDialogSelectedItems >(
             new ScVbaFileDialogSelectedItems(this, mxContext, std::move(sSelectedPaths)) );
     return nRet;
 }

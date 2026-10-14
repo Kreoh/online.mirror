@@ -12,7 +12,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
@@ -34,6 +34,7 @@
 #include <comphelper/configurationlistener.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace sfx2
 {
@@ -76,22 +77,22 @@ class ClassificationCategoriesController : public ClassificationCategoriesContro
     DECL_LINK(SelectHdl, weld::ComboBox&, void);
 
 public:
-    explicit ClassificationCategoriesController(const uno::Reference<uno::XComponentContext>& rContext);
+    explicit ClassificationCategoriesController(const uno::Reference<cpo::uno::XComponentContext>& rContext);
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& rServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     // WeakComponentImplHelperBase
     using ClassificationCategoriesControllerBase::disposing;
     void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
     // XToolbarController
-    uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
+    uno::Reference<awt::XWindow> createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
 
     // XStatusListener
-    void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) override;
+    void statusChanged(const frame::FeatureStateEvent& rEvent) override;
 
     void removeEntries();
 };
@@ -144,7 +145,7 @@ void ClassificationPropertyListener::setProperty(const cpo::uno::Any& /*rPropert
     m_rController.removeEntries();
 }
 
-ClassificationCategoriesController::ClassificationCategoriesController(const uno::Reference<uno::XComponentContext>& rContext)
+ClassificationCategoriesController::ClassificationCategoriesController(const uno::Reference<cpo::uno::XComponentContext>& rContext)
     : ClassificationCategoriesControllerBase(rContext, uno::Reference<frame::XFrame>(), u".uno:ClassificationApply"_ustr)
     , m_pClassification(nullptr)
     , m_xListener(new comphelper::ConfigurationListener(u"/org.openoffice.Office.Paths/Paths/Classification"_ustr))
@@ -359,7 +360,7 @@ void ClassificationControl::setCategoryStateFromPolicy(const SfxClassificationHe
 
 } // namespace sfx2
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface* com_sun_star_sfx2_ClassificationCategoriesController_get_implementation(uno::XComponentContext* pContext, const cpo::uno::Sequence<cpo::uno::Any>&)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface* com_sun_star_sfx2_ClassificationCategoriesController_get_implementation(cpo::uno::XComponentContext* pContext, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new sfx2::ClassificationCategoriesController(pContext));
 }

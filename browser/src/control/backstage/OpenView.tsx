@@ -23,7 +23,7 @@ namespace BackstageTemplates {
   export interface CloudTileData {
     id: string;
     typeName: string;
-    iconName: string;
+    kind: CloudProviderKind;
     userName: string;
     onClick: () => void;
     onEdit: () => void;
@@ -71,7 +71,10 @@ namespace BackstageTemplates {
 
   export interface OpenTileProps {
     label: string;
-    iconName: string;
+    // The tile draws either an embedded icon named in BackstageSVGIcons, or the
+    // background image of the given classes. Exactly one of the two is given.
+    iconName?: string;
+    iconClass?: string;
     subtitle?: string;
     onClick?: () => void;
     extraClass?: string;
@@ -79,7 +82,6 @@ namespace BackstageTemplates {
   }
 
   export function openTile(props: OpenTileProps): HTMLElement {
-    const svg = BackstageSVGIcons[props.iconName];
     const ariaLabel = props.subtitle
       ? `${props.label} (${props.subtitle})`
       : props.label;
@@ -96,12 +98,15 @@ namespace BackstageTemplates {
         onClick={props.inert ? undefined : props.onClick}
       >
         <span
-          class="backstage-open-tile-icon"
+          class={['backstage-open-tile-icon', props.iconClass]
+            .filter(Boolean)
+            .join(' ')}
           aria-hidden="true"
-          dangerouslySetInnerHTML={
-            svg ? { __html: app.LOUtil.sanitize(svg, 'svg') } : undefined
-          }
-        />
+        >
+          {props.iconName
+            ? BackstageTemplates.inlineIcon(props.iconName)
+            : null}
+        </span>
         <span class="backstage-open-tile-label">{props.label}</span>
         {props.subtitle ? (
           <span class="backstage-open-tile-sublabel">{props.subtitle}</span>
@@ -111,8 +116,6 @@ namespace BackstageTemplates {
   }
 
   function cloudProviderTile(t: CloudTileData): HTMLElement {
-    const svg = BackstageSVGIcons[t.iconName];
-    const editIcon = BackstageSVGIcons['lc_edit.svg'];
     return (
       <div
         class="backstage-open-tile is-cloud-provider"
@@ -122,11 +125,11 @@ namespace BackstageTemplates {
         onClick={t.onClick}
       >
         <span
-          class="backstage-open-tile-icon"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={
-            svg ? { __html: app.LOUtil.sanitize(svg, 'svg') } : undefined
+          class={
+            'backstage-open-tile-icon ' +
+            BackstageCloudKinds.iconClasses(t.kind)
           }
+          aria-hidden="true"
         />
         <span class="backstage-open-tile-label">{t.typeName}</span>
         <span class="backstage-open-tile-sublabel">{t.userName}</span>
@@ -139,12 +142,9 @@ namespace BackstageTemplates {
             e.stopPropagation();
             t.onEdit();
           }}
-          dangerouslySetInnerHTML={
-            editIcon
-              ? { __html: app.LOUtil.sanitize(editIcon, 'svg') }
-              : undefined
-          }
-        />
+        >
+          {BackstageTemplates.inlineIcon('lc_edit.svg')}
+        </button>
       </div>
     );
   }

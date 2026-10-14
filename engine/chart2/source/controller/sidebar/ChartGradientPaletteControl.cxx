@@ -25,6 +25,7 @@
 #include <vcl/graph.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace chart::sidebar
 {
@@ -32,7 +33,7 @@ constexpr tools::Long BORDER = ChartGradientPaletteLayout::ItemBorder;
 constexpr tools::Long SIZE = ChartGradientPaletteLayout::ItemSize;
 
 ChartGradientPaletteControl::ChartGradientPaletteControl(
-    const uno::Reference<uno::XComponentContext>& rContext)
+    const uno::Reference<cpo::uno::XComponentContext>& rContext)
     : PopupWindowController(rContext, nullptr, OUString())
     , meGradientVariation(ChartGradientVariation::Unknown)
     , mnGradientType(ChartGradientType::Invalid)
@@ -238,9 +239,9 @@ cpo::uno::Sequence<OUString> ChartGradientPaletteControl::getSupportedServiceNam
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_chart2_ChartGradientPaletteControl_get_implementation(
-    uno::XComponentContext* rContext, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* rContext, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ChartGradientPaletteControl(rContext));
 }

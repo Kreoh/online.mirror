@@ -23,13 +23,13 @@
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-void SAL_CALL VbaDialogBase::Show()
+void VbaDialogBase::Show()
 {
     if (auto xModel = getModel())
     {
         OUString aURL = mapIndexToName(mnIndex);
         if (aURL.isEmpty())
-            throw uno::RuntimeException(u"Unable to open the specified dialog"_ustr);
+            throw cpo::uno::RuntimeException(u"Unable to open the specified dialog"_ustr);
 
         dispatchRequests(xModel, aURL, {});
     }

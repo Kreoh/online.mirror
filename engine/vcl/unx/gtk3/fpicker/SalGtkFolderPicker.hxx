@@ -27,36 +27,36 @@
 
 class SalGtkFolderPicker :
     public SalGtkPicker,
-    public cppu::WeakImplHelper<css::ui::dialogs::XFolderPicker2, css::lang::XInitialization>
+    public cppu::WeakImplHelper<css::ui::dialogs::XFolderPicker, css::lang::XInitialization>
 {
     public:
 
         // constructor
-        SalGtkFolderPicker( const css::uno::Reference< css::uno::XComponentContext >& xServiceMgr );
+        SalGtkFolderPicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& xServiceMgr );
 
         // XExecutableDialog functions
 
-        virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
+        virtual void setTitle( const OUString& aTitle ) override;
 
-        virtual sal_Int16 SAL_CALL execute(  ) override;
+        virtual sal_Int16 execute(  ) override;
 
         // XFolderPicker functions
 
-        virtual void SAL_CALL setDisplayDirectory( const OUString& rDirectory ) override;
+        virtual void setDisplayDirectory( const OUString& rDirectory ) override;
 
-        virtual OUString SAL_CALL getDisplayDirectory(  ) override;
+        virtual OUString getDisplayDirectory(  ) override;
 
-        virtual OUString SAL_CALL getDirectory( ) override;
+        virtual OUString getDirectory( ) override;
 
-        virtual void SAL_CALL setDescription( const OUString& rDescription ) override;
+        virtual void setDescription( const OUString& rDescription ) override;
 
         // XInitialization
 
-        virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
         // XCancellable
 
-        virtual void SAL_CALL cancel( ) override;
+        virtual void cancel( ) override;
 
     private:
         SalGtkFolderPicker( const SalGtkFolderPicker& ) = delete;

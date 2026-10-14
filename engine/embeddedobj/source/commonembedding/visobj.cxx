@@ -30,6 +30,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 void OCommonEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt::Size& aSize )
 {
@@ -195,7 +196,7 @@ embed::VisualRepresentation OCommonEmbeddedObject::getPreferredVisualRepresentat
                 cppu::UnoType<cpo::uno::Sequence< sal_Int8 >>::get() );
 
         if( !xTransferable->isDataFlavorSupported( aDataFlavor ))
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         aVisualRepresentation.Data = xTransferable->getTransferData( aDataFlavor );
         aVisualRepresentation.Flavor = std::move(aDataFlavor);
     }

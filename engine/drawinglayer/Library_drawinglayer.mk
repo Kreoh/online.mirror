@@ -89,6 +89,7 @@ $(eval $(call gb_Library_add_exception_objects,drawinglayer,\
     drawinglayer/source/attribute/lineattribute \
     drawinglayer/source/attribute/linestartendattribute \
     drawinglayer/source/attribute/materialattribute3d \
+    drawinglayer/source/attribute/ReflectionAttribute \
     drawinglayer/source/attribute/sdrallattribute3d \
     drawinglayer/source/attribute/sdrfillattribute \
     drawinglayer/source/attribute/sdrfillgraphicattribute \
@@ -149,6 +150,7 @@ $(eval $(call gb_Library_add_exception_objects,drawinglayer,\
     drawinglayer/source/primitive2d/PolyPolygonGraphicPrimitive2D \
     drawinglayer/source/primitive2d/PolyPolygonSelectionPrimitive2D \
     drawinglayer/source/primitive2d/primitivetools2d \
+    drawinglayer/source/primitive2d/ReflectionPrimitive2D \
     drawinglayer/source/primitive2d/sceneprimitive2d \
     drawinglayer/source/primitive2d/sdrdecompositiontools2d \
     drawinglayer/source/primitive2d/shadowprimitive2d \
@@ -210,6 +212,8 @@ $(eval $(call gb_Library_add_exception_objects,drawinglayer,\
     drawinglayer/source/processor3d/zbufferprocessor3d \
     drawinglayer/source/texture/texture3d \
     drawinglayer/source/tools/converters \
+    drawinglayer/source/tools/EuclideanDistanceTransform \
+    drawinglayer/source/tools/GaussianGridBlur \
     drawinglayer/source/tools/emfplushelper \
     drawinglayer/source/tools/emfphelperdata \
     drawinglayer/source/tools/emfpbrush \

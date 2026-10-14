@@ -1,0 +1,63 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Office contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+module scriptinterop {
+
+interface XBody;
+interface XContainerElement;
+interface XFootnote;
+interface XInlineImage;
+interface XParagraph;
+interface XTable;
+interface XTableCell;
+interface XTableRow;
+interface XText;
+
+// Common base for the heterogeneous children of a body (paragraphs, tables, etc.):
+interface XElement: XBase {
+    XBody asBody();
+
+    XFootnote asFootnote();
+
+    XContainerElement asFootnoteSection();
+
+    XInlineImage asInlineImage();
+
+    XParagraph asListItem();
+
+    XParagraph asParagraph();
+
+    XTable asTable();
+
+    XTableCell asTableCell();
+
+    XTableRow asTableRow();
+
+    XText asText();
+
+    XElement copy();
+
+    com::sun::star::beans::Optional<XElement> getNextSibling();
+
+    com::sun::star::beans::Optional<XElement> getParent();
+
+    com::sun::star::beans::Optional<XElement> getPreviousSibling();
+
+    string getText();
+
+    ElementType getType();
+
+    XElement removeFromParent();
+};
+
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

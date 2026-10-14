@@ -26,6 +26,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -70,6 +71,9 @@ public:
     static unsigned int NumPreSpawnedChildren;
 #if !MOBILEAPP
     static bool NoCapsForKit;
+    static bool RequireLandlock;
+    static bool LandlockAvailable;
+    static bool CapabilityJailUnusable;
     static bool NoSeccomp;
     static bool AdminEnabled;
     static bool UnattendedRun; ///< True when run from an unattended test, not interactive.
@@ -85,7 +89,6 @@ public:
 #endif
     static std::string UserInterface;
     static std::string ConfigFile;
-    static std::string ConfigDir;
     static std::string SysTemplate;
     static std::string LoTemplate;
     static std::string CleanupChildRoot;
@@ -141,7 +144,6 @@ public:
     static unsigned MaxDocuments;
     static std::string HardwareResourceWarning;
     static std::string OverrideWatermark;
-    static std::set<const Poco::Util::AbstractConfiguration*> PluginConfigurations;
     static std::chrono::steady_clock::time_point StartTime;
     static std::string BuyProductUrl;
     static std::string LatestVersion;
@@ -153,6 +155,8 @@ public:
     static int getClientPortNumber();
     /// For testing only [!] DocumentBrokers are mostly single-threaded with their own thread
     static std::vector<std::shared_ptr<DocumentBroker>> getBrokersTestOnly();
+    /// Runs the callback in the thread of the prisoner poll, which talks to the forkit.
+    static void runInPrisonerPollTestOnly(const std::function<void()>& callback);
 
     // Return a map for fast searches. Used in testing and in admin for cleanup
     static std::set<pid_t> getKitPids();
@@ -180,7 +184,7 @@ public:
     {
         std::string lowerCaseExtension = extension;
         std::transform(lowerCaseExtension.begin(), lowerCaseExtension.end(), lowerCaseExtension.begin(), ::tolower);
-        if constexpr (Util::isMobileApp())
+        if (Util::isMobileApp())
         {
             if (lowerCaseExtension == "pdf")
                 return true; // true for only pdf - it is not editable
@@ -212,6 +216,10 @@ public:
 
     /// Sends a message to ForKit through PrisonerPoll. An empty configId is the primordial forkit.
     static bool sendMessageToForKit(const std::string& message, const std::string& configId=std::string());
+
+    /// Sends a message to the primordial ForKit, holding it until ForKit has connected back if it
+    /// is still starting up.
+    static bool queueMessageToPrimordialForKit(const std::string& message);
 
     /// Terminates spare kits that aren't assigned a document yet.
     static void requestTerminateSpareKits();
@@ -300,7 +308,10 @@ private:
     /// The actual main implementation.
     void innerMain();
 
-    static void appendAllowedHostsFrom(const Poco::Util::LayeredConfiguration& conf, const std::string& root, std::vector<std::string>& allowed);
+    /// onlyAllowed: skip entries whose [@allow] attribute is not true.
+    static void appendAllowedHostsFrom(const Poco::Util::LayeredConfiguration& conf,
+                                       const std::string& root, std::vector<std::string>& allowed,
+                                       bool onlyAllowed = false);
     static void appendAllowedAliasGroups(const Poco::Util::LayeredConfiguration& conf, std::vector<std::string>& allowed);
 
 private:

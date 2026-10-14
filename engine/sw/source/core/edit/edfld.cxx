@@ -242,8 +242,7 @@ void SwEditShell::UpdateOneField(SwField &rField)
                 SwPaM aCurPam( *rPaM.GetMark(), *rPaM.GetPoint() );
                 SwPaM aPam( *rPaM.GetPoint() );
 
-                SwPosition *pCurStt = aCurPam.Start(), *pCurEnd =
-                    aCurPam.End();
+                auto [pCurStt, pCurEnd] = aCurPam.StartEnd();
                 /*
                  * In case that there are two contiguous fields in a PaM, the aPam goes step by step
                  * to the end. aCurPam is reduced in each loop. If aCurPam was searched completely,
@@ -364,16 +363,6 @@ void SwEditShell::UnlockExpFields()
 bool SwEditShell::IsExpFieldsLocked() const
 {
     return GetDoc()->getIDocumentFieldsAccess().IsExpFieldsLocked();
-}
-
-void SwEditShell::SetFieldUpdateFlags( SwFieldUpdateFlags eFlags )
-{
-    getIDocumentSettingAccess().setFieldUpdateFlags( eFlags );
-}
-
-SwFieldUpdateFlags SwEditShell::GetFieldUpdateFlags() const
-{
-    return getIDocumentSettingAccess().getFieldUpdateFlags( false );
 }
 
 void SwEditShell::SetLabelDoc( bool bFlag )

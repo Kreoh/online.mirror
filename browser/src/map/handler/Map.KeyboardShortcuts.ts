@@ -16,14 +16,14 @@ declare var ThisIsTheQtApp: any;
 declare var ThisIsTheWindowsApp: any;
 
 function isCtrlKey (e: KeyboardEvent) {
-    if ((window as any).ThisIsTheiOSApp || window.L.Browser.mac)
+    if (window.ThisIsTheiOSApp || window.L.Browser.mac)
         return e.metaKey;
     else
         return e.ctrlKey;
 }
 
 function isMacCtrlKey (e: KeyboardEvent) {
-    if ((window as any).ThisIsTheiOSApp || window.L.Browser.mac)
+    if (window.ThisIsTheiOSApp || window.L.Browser.mac)
         return e.ctrlKey;
     else
         return false;
@@ -266,7 +266,10 @@ class KeyboardShortcuts {
             // In read-only mode, block shortcuts that send uno commands to core, or
             // that run an extension's own command (an opaque script we cannot
             // otherwise tell apart from one that edits the document), unless they
-            // are explicitly meant for read-only use.
+            // are explicitly meant for read-only use.  (Extensions are hidden entirely by
+            // Control.Extension.ts's loadExtensions when a doc opens in a restricted mode, so the
+            // ext: branch here only fires for a doc that was editable at open and has since been
+            // toggled into view mode.)
             const isExtensionAction =
                 !!shortcut.dispatchAction && shortcut.dispatchAction.startsWith('ext:');
 
@@ -312,6 +315,15 @@ class KeyboardShortcuts {
     public processEvent(language: string, event: KeyboardEvent) : boolean {
         if (!this.map) {
             throw 'KeyboardShortcuts not initialized';
+        }
+
+        // The language comes from the URL, so it can carry a region -
+        // 'de-DE' rather than 'de'.  Only a few of those have a table of
+        // their own ('pt-BR'); the rest use their base language's, the way
+        // the shortcut tooltips already do.
+        const dash = language.indexOf('-');
+        if (dash !== -1 && !this.definitions.has(language)) {
+            language = language.substring(0, dash);
         }
 
         if (this.processEventImpl(language, event)) {
@@ -438,6 +450,8 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
 
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'w', platform: Platform.CODAWINDOWS | Platform.CODAQT, unoAction: '.uno:CloseWin', showViewModeAttention: false }),
 
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT, key: 'E', dispatchAction: 'switchtoedit', viewType: ViewType.ReadOnly, showViewModeAttention: false }),
+
     /*
         Disable F5 or assign it something to prevent browser refresh.
         Disable multi-sheet selection shortcuts in Calc.
@@ -485,13 +499,19 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', key: 'F2' }),
     new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', key: 'F3', unoAction: '.uno:ExpandGlossary' }),
     new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', modifier: Mod.CTRL, key: 'F3' }),
+    // browsers fire no keypress for function keys
+    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', key: 'F4',
+        unoAction: '.uno:GraphicDialog' }),
+    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F4',
+        unoAction: '.uno:JumpToNextFrame' }),
     new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', key: 'F5' }),
-    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', key: 'F12', unoAction: '.uno:DefaultNumbering', platform: Platform.CODAWINDOWS | Platform.CODAMAC | Platform.CODAQT }),
 
     // Impress.
     new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', key: 'F5', dispatchAction: 'presentation' }),
     new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', key: 'PageUp', dispatchAction: 'previouspart', viewType: ViewType.ReadOnly }),
     new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', key: 'PageDown', dispatchAction: 'nextpart', viewType: ViewType.ReadOnly }),
+    new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', modifier: Mod.CTRL, key: 'a', dispatchAction: 'selectallslides',
+        condition: () => app.map.keyboard._slideSorterFocused() }),
 
     // Draw.
     new ShortcutDescriptor({ docType: 'drawing', eventType: 'keydown', key: 'F5' }),
@@ -499,6 +519,8 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ docType: 'drawing', eventType: 'keydown', key: 'PageDown', dispatchAction: 'nextpart', viewType: ViewType.ReadOnly }),
     new ShortcutDescriptor({ docType: 'drawing', eventType: 'keydown', key: 'End', dispatchAction: 'lastpart', viewType: ViewType.ReadOnly }),
     new ShortcutDescriptor({ docType: 'drawing', eventType: 'keydown', key: 'Home', dispatchAction: 'firstpart', viewType: ViewType.ReadOnly }),
+    new ShortcutDescriptor({ docType: 'drawing', eventType: 'keydown', modifier: Mod.CTRL, key: 'a', dispatchAction: 'selectallslides',
+        condition: () => app.map.keyboard._slideSorterFocused() }),
 
 
     // Prevent F7 from triggering Caret Browsing in desktop apps.
@@ -522,8 +544,9 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
 ));
 
 // German shortcuts: only online-specific dispatchAction entries and
-// passthrough shortcuts.  UNO command bindings are generated from
-// Accelerators.xcu (see below).
+// passthrough shortcuts.  A shortcut that is a UNO command belongs in
+// core's Accelerators.xcu, which the kit reads in the view's own
+// language.
 keyboardShortcuts.definitions.set('de', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ eventType: 'keydown', key: 'F12', dispatchAction: 'saveas' }),
     new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F5', dispatchAction: 'presentation' }),
@@ -535,42 +558,9 @@ keyboardShortcuts.definitions.set('de', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT, key: '`', preventDefault: false, platform: Platform.MAC }), // Cycle through windows
 ));
 
-// Danish shortcuts: same caveats as for german
+// Danish shortcuts: same rule as for German
 keyboardShortcuts.definitions.set('da', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'b', dispatchAction: 'home-search' }),
 ));
-
-// Register per-language keyboard shortcuts generated from core's
-// Accelerators.xcu by scripts/unoshortcuts.py.
-if (typeof unoShortcutsL10NKeyBindings !== 'undefined') {
-    for (const [lang, bindings] of Object.entries(unoShortcutsL10NKeyBindings)) {
-        let existing = keyboardShortcuts.definitions.get(lang);
-        if (!existing) {
-            existing = new Array<ShortcutDescriptor>();
-            keyboardShortcuts.definitions.set(lang, existing);
-        }
-
-        // Track key+modifier combos already defined manually so we
-        // don't create duplicates (which would throw in findShortcut).
-        const existingKeys = new Set<string>();
-        for (const d of existing) {
-            existingKeys.add(d.key + '|' + d.modifier);
-        }
-
-        for (const b of bindings) {
-            const k = b.key + '|' + b.modifier;
-            if (!existingKeys.has(k)) {
-                existing.push(new ShortcutDescriptor({
-                    eventType: 'keydown',
-                    key: b.key,
-                    modifier: b.modifier,
-                    unoAction: b.unoAction,
-                    docType: b.docType,
-                }));
-                existingKeys.add(k);
-            }
-        }
-    }
-}
 
 window.KeyboardShortcuts = keyboardShortcuts;

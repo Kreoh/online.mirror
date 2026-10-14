@@ -75,6 +75,7 @@
  */
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace sfx2 {
 
@@ -118,12 +119,12 @@ static bool isReservedFile(std::u16string_view i_rPath)
 
 
 uno::Reference<rdf::XURI> createBaseURI(
-    uno::Reference<uno::XComponentContext> const & i_xContext,
+    uno::Reference<cpo::uno::XComponentContext> const & i_xContext,
     uno::Reference<frame::XModel> const & i_xModel,
     OUString const & i_rPkgURI, std::u16string_view i_rSubDocument)
 {
     if (!i_xContext.is() || (!i_xModel.is() && i_rPkgURI.isEmpty())) {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     OUString pkgURI(i_rPkgURI);
@@ -145,7 +146,7 @@ uno::Reference<rdf::XURI> createBaseURI(
         SAL_WARN_IF(!xContentId.is(), "sfx", "createBaseURI: cannot create ContentIdentifier");
         if (!xContentId.is())
         {
-            throw uno::RuntimeException(u"createBaseURI: cannot create ContentIdentifier"_ustr);
+            throw cpo::uno::RuntimeException(u"createBaseURI: cannot create ContentIdentifier"_ustr);
         }
         pkgURI = xContentId->getContentIdentifier();
         assert(!pkgURI.isEmpty());
@@ -164,7 +165,7 @@ uno::Reference<rdf::XURI> createBaseURI(
             pkgURI = ::rtl::Uri::decode(
                     pkgURI, rtl_UriDecodeStrict, RTL_TEXTENCODING_UTF8);
             if (pkgURI.isEmpty()) {
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             }
             ::rtl::Bootstrap::expandMacros(pkgURI);
         }
@@ -215,13 +216,13 @@ uno::Reference<rdf::XURI> createBaseURI(
 struct DocumentMetadataAccess_Impl
 {
     // note: these are all initialized in constructor, and loadFromStorage
-    const uno::Reference<uno::XComponentContext> m_xContext;
+    const uno::Reference<cpo::uno::XComponentContext> m_xContext;
     const SfxObjectShell & m_rXmlIdRegistrySupplier;
     uno::Reference<rdf::XURI> m_xBaseURI;
     uno::Reference<rdf::XRepository> m_xRepository;
     uno::Reference<rdf::XNamedGraph> m_xManifest;
     DocumentMetadataAccess_Impl(
-            uno::Reference<uno::XComponentContext> i_xContext,
+            uno::Reference<cpo::uno::XComponentContext> i_xContext,
             SfxObjectShell const & i_rRegistrySupplier)
       : m_xContext(std::move(i_xContext))
       , m_rXmlIdRegistrySupplier(i_rRegistrySupplier)
@@ -233,7 +234,7 @@ struct DocumentMetadataAccess_Impl
 // this is... a hack.
 template<sal_Int16 Constant>
 static uno::Reference<rdf::XURI> const &
-getURI(uno::Reference< uno::XComponentContext > const & i_xContext)
+getURI(uno::Reference< cpo::uno::XComponentContext > const & i_xContext)
 {
     static uno::Reference< rdf::XURI > xURI(
         rdf::URI::createKnown(i_xContext, Constant), uno::UNO_SET_THROW);
@@ -329,7 +330,7 @@ addFile(struct DocumentMetadataAccess_Impl const & i_rImpl,
                     rType);
             }
         }
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -371,14 +372,14 @@ static void
 removeFile(struct DocumentMetadataAccess_Impl const & i_rImpl,
     uno::Reference<rdf::XURI> const& i_xPart)
 {
-    if (!i_xPart.is()) throw uno::RuntimeException();
+    if (!i_xPart.is()) throw cpo::uno::RuntimeException();
     try {
         i_rImpl.m_xManifest->removeStatements(i_rImpl.m_xBaseURI,
             getURI<rdf::URIs::PKG_HASPART>(i_rImpl.m_xContext),
             i_xPart);
         i_rImpl.m_xManifest->removeStatements(i_xPart,
             getURI<rdf::URIs::RDF_TYPE>(i_rImpl.m_xContext), nullptr);
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -400,7 +401,7 @@ getAllParts(struct DocumentMetadataAccess_Impl const & i_rImpl)
         while (xEnum->hasMoreElements()) {
             rdf::Statement stmt;
             if (!(xEnum->nextElement() >>= stmt)) {
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             }
             const uno::Reference<rdf::XURI> xPart(stmt.Object,
                 uno::UNO_QUERY);
@@ -408,7 +409,7 @@ getAllParts(struct DocumentMetadataAccess_Impl const & i_rImpl)
             ret.push_back(xPart);
         }
         return ret;
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -423,7 +424,7 @@ isPartOfType(struct DocumentMetadataAccess_Impl const & i_rImpl,
     uno::Reference<rdf::XURI> const & i_xPart,
     uno::Reference<rdf::XURI> const & i_xType)
 {
-    if (!i_xPart.is() || !i_xType.is()) throw uno::RuntimeException();
+    if (!i_xPart.is() || !i_xType.is()) throw cpo::uno::RuntimeException();
     try {
         const uno::Reference<container::XEnumeration> xEnum(
             i_rImpl.m_xManifest->getStatements(i_xPart,
@@ -431,7 +432,7 @@ isPartOfType(struct DocumentMetadataAccess_Impl const & i_rImpl,
                 i_xType),
             uno::UNO_SET_THROW);
         return xEnum->hasMoreElements();
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -458,7 +459,7 @@ getAllParts(struct DocumentMetadataAccess_Impl const& i_rImpl,
             rdf::Statement stmt;
             if (!(xEnum->nextElement() >>= stmt))
             {
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             }
             const uno::Reference<rdf::XURI> xPart(stmt.Object, uno::UNO_QUERY);
             if (!xPart.is())
@@ -473,7 +474,7 @@ getAllParts(struct DocumentMetadataAccess_Impl const& i_rImpl,
         }
         return ret;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -574,7 +575,7 @@ readStream(struct DocumentMetadataAccess_Impl & i_rImpl,
     try {
         OUString dir;
         OUString rest;
-        if (!splitPath(i_rPath, dir, rest)) throw uno::RuntimeException();
+        if (!splitPath(i_rPath, dir, rest)) throw cpo::uno::RuntimeException();
         if (dir.isEmpty()) {
             if (!i_xStorage->isStreamElement(i_rPath)) {
                 throw mkException(
@@ -641,7 +642,7 @@ retry:
         readStream(i_rImpl, i_xStorage, i_rPath, i_rBaseURI);
     } catch (const ucb::InteractiveAugmentedIOException & e) {
         if (handleError(e, i_xHandler)) goto retry;
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -688,7 +689,7 @@ writeStream(struct DocumentMetadataAccess_Impl & i_rImpl,
 {
     OUString dir;
     OUString rest;
-    if (!splitPath(i_rPath, dir, rest)) throw uno::RuntimeException();
+    if (!splitPath(i_rPath, dir, rest)) throw cpo::uno::RuntimeException();
     try {
         if (dir.isEmpty()) {
             exportStream(i_rImpl, i_xStorage, i_xGraphName, i_rPath,
@@ -716,7 +717,7 @@ writeStream(struct DocumentMetadataAccess_Impl & i_rImpl,
                 xTransaction->commit();
             }
         }
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const io::IOException &) {
         throw;
@@ -806,16 +807,16 @@ static void init(struct DocumentMetadataAccess_Impl & i_rImpl)
 
     // add top-level content files
     if (!addContentOrStylesFileImpl(i_rImpl, s_content)) {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
     if (!addContentOrStylesFileImpl(i_rImpl, s_styles)) {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 }
 
 
 DocumentMetadataAccess::DocumentMetadataAccess(
-        uno::Reference< uno::XComponentContext > const & i_xContext,
+        uno::Reference< cpo::uno::XComponentContext > const & i_xContext,
         const SfxObjectShell & i_rRegistrySupplier)
     : m_pImpl(new DocumentMetadataAccess_Impl(i_xContext, i_rRegistrySupplier))
 {
@@ -823,14 +824,14 @@ DocumentMetadataAccess::DocumentMetadataAccess(
 }
 
 DocumentMetadataAccess::DocumentMetadataAccess(
-        uno::Reference< uno::XComponentContext > const & i_xContext,
+        uno::Reference< cpo::uno::XComponentContext > const & i_xContext,
         const SfxObjectShell & i_rRegistrySupplier,
         OUString const & i_rURI)
     : m_pImpl(new DocumentMetadataAccess_Impl(i_xContext, i_rRegistrySupplier))
 {
     OSL_ENSURE(!i_rURI.isEmpty(), "DMA::DMA: no URI given!");
     OSL_ENSURE(i_rURI.endsWith("/"), "DMA::DMA: URI without / given!");
-    if (!i_rURI.endsWith("/")) throw uno::RuntimeException();
+    if (!i_rURI.endsWith("/")) throw cpo::uno::RuntimeException();
     m_pImpl->m_xBaseURI.set(rdf::URI::create(m_pImpl->m_xContext, i_rURI));
     m_pImpl->m_xRepository.set(rdf::Repository::create(m_pImpl->m_xContext),
             uno::UNO_SET_THROW);
@@ -848,7 +849,7 @@ DocumentMetadataAccess::~DocumentMetadataAccess()
 }
 
 // css::rdf::XRepositorySupplier:
-uno::Reference< rdf::XRepository > SAL_CALL
+uno::Reference< rdf::XRepository >
 DocumentMetadataAccess::getRDFRepository()
 {
     OSL_ENSURE(m_pImpl->m_xRepository.is(), "repository not initialized");
@@ -856,40 +857,40 @@ DocumentMetadataAccess::getRDFRepository()
 }
 
 // css::rdf::XNode:
-OUString SAL_CALL
+OUString
 DocumentMetadataAccess::getStringValue()
 {
     return m_pImpl->m_xBaseURI->getStringValue();
 }
 
 // css::rdf::XURI:
-OUString SAL_CALL
+OUString
 DocumentMetadataAccess::getNamespace()
 {
     return m_pImpl->m_xBaseURI->getNamespace();
 }
 
-OUString SAL_CALL
+OUString
 DocumentMetadataAccess::getLocalName()
 {
     return m_pImpl->m_xBaseURI->getLocalName();
 }
 
 // css::rdf::XDocumentMetadataAccess:
-uno::Reference< rdf::XMetadatable > SAL_CALL
+uno::Reference< rdf::XMetadatable >
 DocumentMetadataAccess::getElementByMetadataReference(
     const css::beans::StringPair & i_rReference)
 {
     const IXmlIdRegistry * pReg(
         m_pImpl->m_rXmlIdRegistrySupplier.GetXmlIdRegistry() );
     if (!pReg) {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"DocumentMetadataAccess::getElementByXmlId: no registry"_ustr, *this);
     }
     return pReg->GetElementByMetadataReference(i_rReference);
 }
 
-uno::Reference< rdf::XMetadatable > SAL_CALL
+uno::Reference< rdf::XMetadatable >
 DocumentMetadataAccess::getElementByURI(
     const uno::Reference< rdf::XURI > & i_xURI )
 {
@@ -912,7 +913,7 @@ DocumentMetadataAccess::getElementByURI(
     return getElementByMetadataReference( beans::StringPair(path, idref) );
 }
 
-cpo::uno::Sequence<uno::Reference<rdf::XURI>> SAL_CALL
+cpo::uno::Sequence<uno::Reference<rdf::XURI>>
 DocumentMetadataAccess::getMetadataGraphsWithType(const uno::Reference<rdf::XURI>& i_xType)
 {
     if (!i_xType.is())
@@ -925,7 +926,7 @@ DocumentMetadataAccess::getMetadataGraphsWithType(const uno::Reference<rdf::XURI
     return ::comphelper::containerToSequence(getAllParts(*m_pImpl, i_xType));
 }
 
-uno::Reference<rdf::XURI> SAL_CALL
+uno::Reference<rdf::XURI>
 DocumentMetadataAccess::addMetadataFile(const OUString & i_rFileName,
     const cpo::uno::Sequence < uno::Reference< rdf::XURI > > & i_rTypes)
 {
@@ -963,7 +964,7 @@ DocumentMetadataAccess::addMetadataFile(const OUString & i_rFileName,
     return xGraphName;
 }
 
-uno::Reference<rdf::XURI> SAL_CALL
+uno::Reference<rdf::XURI>
 DocumentMetadataAccess::importMetadataFile(::sal_Int16 i_Format,
     const uno::Reference< io::XInputStream > & i_xInStream,
     const OUString & i_rFileName,
@@ -1006,7 +1007,7 @@ DocumentMetadataAccess::importMetadataFile(::sal_Int16 i_Format,
     return xGraphName;
 }
 
-void SAL_CALL
+void
 DocumentMetadataAccess::removeMetadataFile(
     const uno::Reference< rdf::XURI > & i_xGraphName)
 {
@@ -1024,7 +1025,7 @@ DocumentMetadataAccess::removeMetadataFile(
     removeFile(*m_pImpl, i_xGraphName);
 }
 
-void SAL_CALL
+void
 DocumentMetadataAccess::addContentOrStylesFile(
     const OUString & i_rFileName)
 {
@@ -1042,7 +1043,7 @@ DocumentMetadataAccess::addContentOrStylesFile(
     }
 }
 
-void SAL_CALL
+void
 DocumentMetadataAccess::removeContentOrStylesFile(
     const OUString & i_rFileName)
 {
@@ -1070,7 +1071,7 @@ DocumentMetadataAccess::removeContentOrStylesFile(
         // remove file from manifest
         removeFile(*m_pImpl, xPart);
 
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -1080,7 +1081,7 @@ DocumentMetadataAccess::removeContentOrStylesFile(
     }
 }
 
-void SAL_CALL DocumentMetadataAccess::loadMetadataFromStorage(
+void DocumentMetadataAccess::loadMetadataFromStorage(
     const uno::Reference< embed::XStorage > & i_xStorage,
     const uno::Reference<rdf::XURI> & i_xBaseURI,
     const uno::Reference<task::XInteractionHandler> & i_xHandler)
@@ -1165,7 +1166,7 @@ void SAL_CALL DocumentMetadataAccess::loadMetadataFromStorage(
                 // something else! just ignore it...
             }
         }
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const cpo::uno::Exception &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -1181,7 +1182,7 @@ void SAL_CALL DocumentMetadataAccess::loadMetadataFromStorage(
         importFile(*m_pImpl, i_xStorage, baseURI, i_xHandler, aMfstMetadataFile);
 }
 
-void SAL_CALL DocumentMetadataAccess::storeMetadataToStorage(
+void DocumentMetadataAccess::storeMetadataToStorage(
     const uno::Reference< embed::XStorage > & i_xStorage)
 {
     if (!i_xStorage.is()) {
@@ -1196,7 +1197,7 @@ void SAL_CALL DocumentMetadataAccess::storeMetadataToStorage(
     const OUString baseURI( m_pImpl->m_xBaseURI->getStringValue() );
     try {
         writeStream(*m_pImpl, i_xStorage, xManifest, s_manifest, baseURI);
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const io::IOException &) {
         cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -1229,7 +1230,7 @@ void SAL_CALL DocumentMetadataAccess::storeMetadataToStorage(
             }
             try {
                 writeStream(*m_pImpl, i_xStorage, xName, relName, baseURI);
-            } catch (const uno::RuntimeException &) {
+            } catch (const cpo::uno::RuntimeException &) {
                 throw;
             } catch (const io::IOException &) {
                 cpo::uno::Any anyEx = cppu::getCaughtException();
@@ -1250,7 +1251,7 @@ void SAL_CALL DocumentMetadataAccess::storeMetadataToStorage(
     }
 }
 
-void SAL_CALL
+void
 DocumentMetadataAccess::loadMetadataFromMedium(
     const cpo::uno::Sequence< beans::PropertyValue > & i_rMedium)
 {
@@ -1277,7 +1278,7 @@ DocumentMetadataAccess::loadMetadataFromMedium(
             xStorage = ::comphelper::OStorageHelper::GetStorageFromURL2(
                             URL, embed::ElementModes::READ, m_pImpl->m_xContext);
         }
-    } catch (const uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         throw;
     } catch (const io::IOException &) {
         throw;
@@ -1288,7 +1289,7 @@ DocumentMetadataAccess::loadMetadataFromMedium(
                     "exception"_ustr, *this, anyEx);
     }
     if (!xStorage.is()) {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"DocumentMetadataAccess::loadMetadataFromMedium: "
             "cannot get Storage"_ustr, *this);
     }
@@ -1308,7 +1309,7 @@ DocumentMetadataAccess::loadMetadataFromMedium(
     loadMetadataFromStorage(xStorage, xBaseURI, xIH);
 }
 
-void SAL_CALL
+void
 DocumentMetadataAccess::storeMetadataToMedium(
     const cpo::uno::Sequence< beans::PropertyValue > & i_rMedium)
 {
@@ -1333,7 +1334,7 @@ DocumentMetadataAccess::storeMetadataToMedium(
     }
 
     if (!xStorage.is()) {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"DocumentMetadataAccess::storeMetadataToMedium: "
             "cannot get Storage"_ustr, *this);
     }
@@ -1363,7 +1364,7 @@ DocumentMetadataAccess::storeMetadataToMedium(
         }
         task::ErrorCodeIOException ex(
             "DocumentMetadataAccess::storeMetadataToMedium Commit failed: " + nError.toString(),
-            uno::Reference< uno::XInterface >(), sal_uInt32(nError.GetCode()));
+            uno::Reference< cpo::uno::XInterface >(), sal_uInt32(nError.GetCode()));
         throw lang::WrappedTargetException(OUString(), *this,
                 cpo::uno::Any(ex));
     }

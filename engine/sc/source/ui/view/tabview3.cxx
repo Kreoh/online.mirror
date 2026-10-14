@@ -18,6 +18,8 @@
  */
 
 #include <officecfg/Office/Calc.hxx>
+#include <drawview.hxx>
+#include <docuno.hxx>
 #include <rangelst.hxx>
 #include <scitems.hxx>
 
@@ -109,6 +111,7 @@ ScRange lcl_getSubRangeByIndex( const ScRange& rRange, sal_Int32 nIndex )
 } // anonymous namespace
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 ScExtraEditViewManager::~ScExtraEditViewManager()
 {
@@ -465,16 +468,21 @@ void ScTabView::SetCursor( SCCOL nPosX, SCROW nPosY, bool bNew )
     // excluding overlapping area with aNewColArea
     tools::Rectangle aNewRowArea(0, aOldSize.getHeight(), aOldSize.getWidth(), aNewSize.getHeight());
 
+    // The newly tiled area is in print twips, from column widths and row heights
+    // rather than any one view's pixel grid, so every view - not just this one -
+    // can use the same rectangle regardless of its own zoom.
+    const int nPart = aViewData.GetViewShell()->getPart();
+
     // Only invalidate if spreadsheet extended to the right
     if (aNewColArea.getOpenWidth())
     {
-        KitHelper::notifyInvalidation(aViewData.GetViewShell(), &aNewColArea);
+        KitHelper::notifyInvalidationAllViews(pModelObj, nPart, &aNewColArea, false);
     }
 
     // Only invalidate if spreadsheet extended to the bottom
     if (aNewRowArea.getOpenHeight())
     {
-        KitHelper::notifyInvalidation(aViewData.GetViewShell(), &aNewRowArea);
+        KitHelper::notifyInvalidationAllViews(pModelObj, nPart, &aNewRowArea, false);
     }
 
     // Provide size in the payload, so clients don't have to
@@ -558,6 +566,10 @@ void ScTabView::CellContentChanged()
 
     InvalidateAttribs();                    // attributes updates
 
+    // A recalculation can resize the dynamic array the cursor is in.
+    if (ScGridWindow* pWin = pGridWin[aViewData.GetActivePart()].get())
+        pWin->NotifyDynamicArrayBorder();
+
     aViewData.GetViewShell()->UpdateInputHandler();
 }
 
@@ -602,6 +614,9 @@ void ScTabView::SelectionChanged(bool bFromPaste)
     rBindings.Invalidate( FID_MERGE_ON );
     rBindings.Invalidate( FID_MERGE_OFF );
     rBindings.Invalidate( FID_MERGE_TOGGLE );
+    rBindings.Invalidate( FID_HANDLEDUPLICATERECORDS );
+    rBindings.Invalidate( SID_REMOVE_DUPLICATES );
+    rBindings.Invalidate( SID_SUMMARIZE_WITH_PIVOT );
     rBindings.Invalidate( SID_AUTOFILTER_HIDE );
     rBindings.Invalidate( SID_UNFILTER );
     rBindings.Invalidate( SID_REIMPORT_DATA );
@@ -644,6 +659,7 @@ void ScTabView::SelectionChanged(bool bFromPaste)
     rBindings.Invalidate( SID_DELETE );
     rBindings.Invalidate( SID_DELETE_CONTENTS );
     rBindings.Invalidate( FID_DELETE_CELL );
+    rBindings.Invalidate( SID_DEL_ROWS );
     rBindings.Invalidate( FID_CELL_FORMAT );
     rBindings.Invalidate( SID_ENABLE_HYPHENATION );
     rBindings.Invalidate( SID_INSERT_THREADED_COMMENT );
@@ -1224,12 +1240,29 @@ bool ScTabView::SelMouseButtonDown( const MouseEvent& rMEvt )
 
     // #i3875# *Hack*
     bool bMod1Locked = (aViewData.GetViewShell()->GetLockedModifiers() & KEY_MOD1) != 0;
-    aViewData.SetSelCtrlMouseClick( rMEvt.IsMod1() || bMod1Locked );
+    // IsMod3() is the Command key on macOS, sent as a separate modifier from Ctrl
+    // (KEY_MOD1) since the two are distinct physical keys there; treat it the same
+    // as Ctrl so Command-click extends the selection the way Ctrl-click does elsewhere.
+    aViewData.SetSelCtrlMouseClick( rMEvt.IsMod1() || rMEvt.IsMod3() || bMod1Locked );
 
     if ( pSelEngine )
     {
         bMoveIsShift = rMEvt.IsShift();
-        bRet = pSelEngine->SelMouseButtonDown( rMEvt );
+        // MouseEvent::GetModifier() only reports KEY_SHIFT/KEY_MOD1/KEY_MOD2, so
+        // the generic SelectionEngine below never sees KEY_MOD3 (Command) at all
+        // and treats the click as unmodified. Fold it into KEY_MOD1 here, at the
+        // Calc-specific call site, rather than widening what GetModifier() itself
+        // reports for every other KEY_MOD3 consumer.
+        if ( rMEvt.IsMod3() && !rMEvt.IsMod1() )
+        {
+            MouseEvent aCtrlEquivEvt( rMEvt.GetPosPixel(), rMEvt.GetClicks(), rMEvt.GetMode(),
+                                      rMEvt.GetButtons(), rMEvt.GetModifier() | KEY_MOD1 );
+            if ( rMEvt.getLogicPosition() )
+                aCtrlEquivEvt.setLogicPosition( *rMEvt.getLogicPosition() );
+            bRet = pSelEngine->SelMouseButtonDown( aCtrlEquivEvt );
+        }
+        else
+            bRet = pSelEngine->SelMouseButtonDown( rMEvt );
         bMoveIsShift = false;
     }
 
@@ -1694,7 +1727,9 @@ void ScTabView::MarkColumns(SCCOL nCol, sal_Int16 nModifier)
         InitBlockMode( nStartCol, 0, nTab, true, true);
         MarkCursor( nCol, rDoc.MaxRow(), nTab );
         bMoveIsShift = false;
-        SetCursor( nCol, 0 );
+        // The cursor goes on the topmost cell of the column the client has in view, the same
+        // cell a mouse click on the column header picks.
+        SetCursor( nCol, aViewData.GetKitVisibleTopLeftCell().Row() );
         SelectionChanged();
     }
 }
@@ -1721,7 +1756,9 @@ void ScTabView::MarkRows(SCROW nRow, sal_Int16 nModifier)
         InitBlockMode( 0, nStartRow, nTab, true, false, true );
         MarkCursor( rDoc.MaxCol(), nRow, nTab );
         bMoveIsShift = false;
-        SetCursor( 0, nRow );
+        // The cursor goes on the leftmost cell of the row the client has in view, the same cell
+        // a mouse click on the row header picks.
+        SetCursor( aViewData.GetKitVisibleTopLeftCell().Col(), nRow );
         SelectionChanged();
     }
 }
@@ -2232,8 +2269,8 @@ class ScTextEditOverlayObject : public sdr::overlay::OverlayObject, public EditV
     virtual void EditViewSelectionChange() override;
     virtual OutputDevice& EditViewOutputDevice() const override;
     virtual Point EditViewPointerPosPixel() const override;
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const override;
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget() override;
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const override;
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget() override;
     virtual void EditViewInputContext(const InputContext& rInputContext) override;
     virtual void EditViewCursorRect(const tools::Rectangle& rRect, int nExtTextInputWidth) override;
 
@@ -2406,13 +2443,13 @@ Point ScTextEditOverlayObject::EditViewPointerPosPixel() const
     return pActiveWin->GetPointerPosPixel();
 }
 
-css::uno::Reference<css::datatransfer::clipboard::XClipboard> ScTextEditOverlayObject::GetClipboard() const
+cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> ScTextEditOverlayObject::GetClipboard() const
 {
     ScGridWindow* pActiveWin(static_cast<ScGridWindow*>(mrScTabView.GetWindowByPos(maScSplitPos)));
     return pActiveWin->GetClipboard();
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget> ScTextEditOverlayObject::GetDropTarget()
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> ScTextEditOverlayObject::GetDropTarget()
 {
     ScGridWindow* pActiveWin(static_cast<ScGridWindow*>(mrScTabView.GetWindowByPos(maScSplitPos)));
     return pActiveWin->GetDropTarget();
@@ -3603,6 +3640,8 @@ void ScTabView::ZoomChanged()
     UpdateScrollBars();
 
     SyncGridWindowMapModeFromDrawMapMode();
+
+    aViewData.GetViewShell()->UpdateInPlaceClientGridOffset();
 
     // VisArea...
     SetNewVisArea();

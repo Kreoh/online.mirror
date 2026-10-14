@@ -626,9 +626,9 @@ void Dialog::dispose()
     mpActionArea.reset();
     mpContentArea.reset();
 
-    const css::uno::Reference< css::uno::XComponentContext >& xContext(
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext(
             comphelper::getProcessComponentContext() );
-    css::uno::Reference<css::frame::XGlobalEventBroadcaster> xEventBroadcaster(css::frame::theGlobalEventBroadcaster::get(xContext), css::uno::UNO_SET_THROW);
+    cpo::uno::Reference<css::frame::XGlobalEventBroadcaster> xEventBroadcaster(css::frame::theGlobalEventBroadcaster::get(xContext), cpo::uno::UNO_SET_THROW);
     css::document::DocumentEvent aObject;
     aObject.EventName = u"DialogClosed"_ustr;
     aObject.Supplement <<= GetText(); // title
@@ -957,6 +957,25 @@ bool Dialog::ImplStartExecute(bool async)
             return false;
         }
 
+        // A document with nobody to answer a dialog cancels its own, whatever the process-wide
+        // mode is. One process holds the documents of every window, so the answer is the one
+        // for the document this dialog belongs to. A dialog that belongs to no document is
+        // answered for by the load that is running, if one is.
+        if (bModal
+            && comphelper::COKit::areDialogsSuppressed(
+                   GetKitNotifier() ? GetKitNotifier()->getKitDocId() : comphelper::COKit::NoDocId))
+        {
+            if (o3tl::IsRunningUnitTest())
+            { // helps starbasic unit tests show their errors
+                std::cerr << "Dialog \"" << ImplGetDialogText(this)
+                          << "\" cancelled, nobody can answer it\n";
+            }
+
+            SAL_INFO("vcl", "Dialog \"" << ImplGetDialogText(this)
+                                        << "\" cancelled, nobody can answer it");
+            return false;
+        }
+
         switch ( Application::GetDialogCancelMode() )
         {
         case DialogCancelMode::Off:
@@ -987,9 +1006,6 @@ bool Dialog::ImplStartExecute(bool async)
                 "vcl",
                 "Dialog \"" << ImplGetDialogText(this)
                     << "\" cancelled in silent mode");
-            return false;
-
-        case DialogCancelMode::KitSilent:
             return false;
 
         default: // default cannot happen
@@ -1033,7 +1049,7 @@ bool Dialog::ImplStartExecute(bool async)
     // FIXME: no layouting, workaround some clipping issues
     ImplAdjustNWFSizes();
 
-    const css::uno::Reference< css::uno::XComponentContext >& xContext(
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext(
         comphelper::getProcessComponentContext());
     bool bForceFocusAndToFront(officecfg::Office::Common::View::NewDocumentHandling::ForceFocusAndToFront::get());
     ShowFlags showFlags = bForceFocusAndToFront ? ShowFlags::ForegroundTask : ShowFlags::NONE;
@@ -1042,8 +1058,8 @@ bool Dialog::ImplStartExecute(bool async)
     if (bModal)
         pSVData->maAppData.mnModalMode++;
 
-    css::uno::Reference<css::frame::XGlobalEventBroadcaster> xEventBroadcaster(
-        css::frame::theGlobalEventBroadcaster::get(xContext), css::uno::UNO_SET_THROW);
+    cpo::uno::Reference<css::frame::XGlobalEventBroadcaster> xEventBroadcaster(
+        css::frame::theGlobalEventBroadcaster::get(xContext), cpo::uno::UNO_SET_THROW);
     css::document::DocumentEvent aObject;
     aObject.EventName = u"DialogExecute"_ustr;
     aObject.Supplement <<= GetText(); // title
@@ -1658,9 +1674,9 @@ void Dialog::Activate()
 {
     if (GetType() == WindowType::MODELESSDIALOG)
     {
-        const css::uno::Reference< css::uno::XComponentContext >& xContext(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext(
                 comphelper::getProcessComponentContext() );
-        css::uno::Reference<css::frame::XGlobalEventBroadcaster> xEventBroadcaster(css::frame::theGlobalEventBroadcaster::get(xContext), css::uno::UNO_SET_THROW);
+        cpo::uno::Reference<css::frame::XGlobalEventBroadcaster> xEventBroadcaster(css::frame::theGlobalEventBroadcaster::get(xContext), cpo::uno::UNO_SET_THROW);
         css::document::DocumentEvent aObject;
         aObject.EventName = u"ModelessDialogVisible"_ustr;
         aObject.Supplement <<= GetText(); // title

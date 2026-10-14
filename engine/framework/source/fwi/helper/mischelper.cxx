@@ -29,9 +29,9 @@
 #include <helper/mischelper.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 namespace framework
@@ -132,15 +132,15 @@ void FillLangItems( std::set< OUString > &rLangItems,
 }
 
 auto (*g_pGetMultiplexerListener)(
-    css::uno::Reference<css::uno::XComponentContext> const & xComponentContext,
-    uno::Reference<uno::XInterface> const&,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & xComponentContext,
+    uno::Reference<cpo::uno::XInterface> const&,
     std::function<bool (uno::Reference<ui::XContextChangeEventListener> const&)> const&)
     -> uno::Reference<ui::XContextChangeEventListener> = nullptr;
 
 uno::Reference<ui::XContextChangeEventListener>
 GetFirstListenerWith_Impl(
-    css::uno::Reference<css::uno::XComponentContext> const & xComponentContext,
-    uno::Reference<uno::XInterface> const& xEventFocus,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & xComponentContext,
+    uno::Reference<cpo::uno::XInterface> const& xEventFocus,
     std::function<bool (uno::Reference<ui::XContextChangeEventListener> const&)> const& rPredicate)
 {
     assert(g_pGetMultiplexerListener != nullptr); // should not be called too early, nor too late

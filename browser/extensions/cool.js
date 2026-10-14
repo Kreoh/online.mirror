@@ -6,6 +6,130 @@
 (function () {
 	window.cool = window.cool || {};
 
+	// --- Localization -------------------------------------------------------------------------
+	//
+	// COOL opens extension pages with ?lang=<UI language>&dir=<ltr|rtl>. The extension's
+	// translations live in l10n/<lang>.json under its own directory (built from po/<lang>.po,
+	// see README.md); cool.js loads the catalog for the UI language and offers gettext-style
+	// helpers, so a page can write English and stay translatable:
+	//
+	//   cool.lang                 "de", "pt-BR", ... (never empty; defaults to en-US)
+	//   cool.dir                  "ltr" or "rtl"
+	//   cool.l10n.ready           Promise resolved once the catalog is loaded (or found missing)
+	//   cool._(msgid)             translation of msgid, or msgid itself
+	//   cool._n(one, many, n)     plural form for n, using the catalog's Plural-Forms rule
+	//   <span data-l10n="Save">Save</span>     translated on load; also data-l10n-title,
+	//                                          data-l10n-placeholder, data-l10n-aria-label
+	//   cool.l10n.apply(element)  translate data-l10n attributes under element (added later)
+	const pageParams = new URLSearchParams(window.location.search);
+	window.cool.lang = pageParams.get('lang') || 'en-US';
+	window.cool.dir = pageParams.get('dir') === 'rtl' ? 'rtl' : 'ltr';
+	let catalog = null;
+	// po2json.py joins msgid and msgid_plural, and the plural forms, with NUL.
+	const NUL = "\u0000";
+
+	// The extension's own directory: everything up to and including /extensions/<id>/ in
+	// this page's URL, whether built in or shipped as a preset.
+	function extensionBase() {
+		const m = /^(.*\/extensions\/[^/]+\/)/.exec(window.location.href);
+		return m ? m[1] : new URL('./', window.location.href).href;
+	}
+
+	function catalogCandidates(lang) {
+		const norm = lang.replace(/-/g, '_');
+		const parts = norm.split('_');
+		if (parts[0] === 'en') return [];
+		const out = [norm];
+		if (parts.length > 1) out.push(parts[0]);
+		return out;
+	}
+
+	async function loadCatalog() {
+		// Over http(s), a sandboxed frame with an opaque origin cannot fetch from COOL:
+		if (window.origin === 'null' && window.location.protocol.startsWith('http'))
+			return null;
+		for (const cand of catalogCandidates(window.cool.lang)) {
+			try {
+				const resp = await fetch(extensionBase() + 'l10n/' + cand + '.json');
+				if (!resp.ok) continue;
+				const obj = await resp.json();
+				if (obj && typeof obj === 'object') return obj;
+			} catch (err) {
+				// try the next candidate
+			}
+		}
+		return null;
+	}
+
+	window.cool._ = function (msgid) {
+		if (catalog && Object.prototype.hasOwnProperty.call(catalog, msgid) && catalog[msgid] !== '') {
+			return catalog[msgid];
+		}
+		return msgid;
+	};
+
+	let pluralRule = null;
+	function pluralIndex(n) {
+		if (pluralRule === null) {
+			pluralRule = false;
+			const rule = catalog && catalog[NUL + 'plural-forms'];
+			const m = rule && /plural\s*=\s*([^;]+)/.exec(rule);
+			if (m) {
+				try {
+					// The catalog is the extension's own data, not user input.
+					pluralRule = new Function('n', 'return Number(' + m[1] + ');');
+				} catch (err) {
+					pluralRule = false;
+				}
+			}
+		}
+		if (pluralRule) return pluralRule(n);
+		return n === 1 ? 0 : 1;
+	}
+
+	window.cool._n = function (one, many, n) {
+		const key = one + NUL + many;
+		if (catalog && Object.prototype.hasOwnProperty.call(catalog, key)) {
+			const forms = catalog[key].split(NUL);
+			const form = forms[Math.min(pluralIndex(n), forms.length - 1)];
+			if (form) return form;
+		}
+		return n === 1 ? one : many;
+	};
+
+	function applyL10n(root) {
+		const scope = root || document;
+		const set = (attr, apply) => {
+			const nodes = scope.querySelectorAll ? scope.querySelectorAll('[' + attr + ']') : [];
+			for (const el of nodes) apply(el, window.cool._(el.getAttribute(attr)));
+			if (scope.getAttribute && scope.hasAttribute(attr)) apply(scope, window.cool._(scope.getAttribute(attr)));
+		};
+		set('data-l10n', (el, text) => { el.textContent = text; });
+		set('data-l10n-title', (el, text) => { el.title = text; });
+		set('data-l10n-placeholder', (el, text) => { el.placeholder = text; });
+		set('data-l10n-aria-label', (el, text) => { el.setAttribute('aria-label', text); });
+	}
+
+	window.cool.l10n = {
+		apply: applyL10n,
+		ready: (async () => {
+			document.documentElement.lang = window.cool.lang;
+			document.documentElement.dir = window.cool.dir;
+			catalog = await loadCatalog();
+			if (document.readyState === 'loading') {
+				await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+			}
+			if (catalog) applyL10n(document);
+			return catalog !== null;
+		})(),
+	};
+
+	// The host opens a dialog page with coolRole=dialog in its query, and the call, proxy, save
+	// and dialog ids made in a dialog carry this prefix so that the host can send each reply to
+	// the frame that is waiting for it:
+	window.cool.idPrefix =
+		new URLSearchParams(location.search).get('coolRole') === 'dialog' ? 'dlg-' : '';
+
 	let nextCallId = 0;
 	const pending = Object.create(null);
 
@@ -68,25 +192,49 @@
 	// function application's JSON-decoded return value, or rejects with an Error whose `.name`,
 	// `.message` and `.stack` reflect the JS engine's own error.
 	//
+	// The first argument may also be an `{fn, source, line}` object, giving an explicit source
+	// name and 1-based start line reported back in stack traces.
+	//
 	// The function `fn` is shipped as source text via `fn.toString()` and evaluated on the
 	// server side, so it must be self-contained: it cannot close over variables in the iframe's
 	// scope, but it can use the JS UNO `uno` global and its own arguments and locals.  The
 	// `args` must be JSON-serializable.
-	window.cool.callRemote = function (fn) {
+	window.cool.callRemote = function (fnOrOpts) {
 		const args = Array.prototype.slice.call(arguments, 1);
-		const callId = String(nextCallId++);
+		let fn, source, line;
+		if (typeof fnOrOpts === 'function') {
+			fn = fnOrOpts;
+			const loc = detectCallerLocation();
+			if (loc) {
+				source = loc.source;
+				line = loc.line;
+			} else {
+				source = '<input>';
+				line = 1;
+			}
+		} else {
+			fn = fnOrOpts.fn;
+			source = fnOrOpts.source;
+			line = fnOrOpts.line;
+		}
+		return window.cool._postCall({
+			msgId: 'Extension_Call',
+			fn: fn.toString(),
+			source,
+			line,
+			args: args
+		});
+	};
+
+	// Post message to the host under a new callId, and return a Promise that the host's
+	// Extension_CallResult for that callId settles:
+	window.cool._postCall = function (message) {
+		const callId = window.cool.idPrefix + String(nextCallId++);
 		const promise = new Promise(function (resolve, reject) {
 			pending[callId] = { resolve: resolve, reject: reject };
 		});
-		const loc = detectCallerLocation();
-		window.parent.postMessage(JSON.stringify({
-			msgId: 'Extension_Call',
-			callId: callId,
-			fn: fn.toString(),
-			source: loc ? loc.source : '<input>',
-			line: loc ? loc.line : 1,
-			args: args
-		}), '*');
+		window.parent.postMessage(
+			JSON.stringify(Object.assign({ callId: callId }, message)), '*');
 		return promise;
 	};
 
@@ -121,17 +269,19 @@
 	// the method's UNO arguments and may return a value (or a Promise of one) to be sent back
 	// as the listener method's return value (only relevant for non-void methods).
 	//
-	// Returns a handle with a `.detach()` method.
+	// Returns `{ready, detach}`: `ready` resolves after the kit-side attach script has run;
+	// `detach()` runs `spec.detach` on the kit as the matching callRemote.
 	function attachListenerImpl(typeName, spec, facade) {
-		const proxyId = 'p' + (nextProxyId++);
+		const proxyId = window.cool.idPrefix + 'p' + (nextProxyId++);
 		listeners[proxyId] = {
 			on: spec.on,
 			detach: spec.detach,
 			facade: facade
 		};
-		window.cool.callRemote(
+		const ready = window.cool.callRemote(
 			attachTrampoline, typeName, proxyId, spec.attach.toString(), facade);
 		return {
+			ready,
 			detach: function () {
 				const entry = listeners[proxyId];
 				if (!entry) return;
@@ -143,6 +293,70 @@
 	}
 	window.cool.attachListener = function (typeName, spec) {
 		return attachListenerImpl(typeName, spec, false);
+	};
+
+	// Register a handler map under a caller-chosen proxyId; pairs with a kit-side
+	// `$internal.createProxy(type, proxyId)` inside one callRemote body whose runner takes
+	// the proxy back before returning:
+	window.cool.registerProxy = function (proxyId, handlers) {
+		listeners[proxyId] = { on: handlers, detach: null, facade: false };
+	};
+	window.cool.unregisterProxy = function (proxyId) {
+		delete listeners[proxyId];
+	};
+
+	// cool.onCommand = function (id) {...}: receives `panel: true` commands
+	// from the notebookbar, menus and shortcuts. Commands posted before the
+	// handler exists are queued and delivered on assignment.
+	let commandHandler = null;
+	const pendingCommands = [];
+	function deliverCommand(id) {
+		try {
+			commandHandler(id);
+		} catch (err) {
+			console.warn('cool.onCommand threw:', err);
+		}
+	}
+	Object.defineProperty(window.cool, 'onCommand', {
+		enumerable: true,
+		get: function () { return commandHandler; },
+		set: function (fn) {
+			commandHandler = (typeof fn === 'function') ? fn : null;
+			if (!commandHandler) return;
+			while (pendingCommands.length) deliverCommand(pendingCommands.shift());
+		}
+	});
+	// Save a file the extension generated (e.g. an exported SVG). COOL saves it
+	// the platform way: a download or a save to the WOPI host in Online, a
+	// filesystem save in the desktop app. `content` is a string (text files) or
+	// a Uint8Array / number[] of bytes; `mimeType` defaults to
+	// application/octet-stream. Resolves with how it was saved ("download",
+	// "host", "filesystem") or rejects if it could not be saved.
+	let nextSaveId = 0;
+	const pendingSaves = Object.create(null);
+	window.cool.saveFile = function (filename, content, mimeType) {
+		const saveId = window.cool.idPrefix + 's' + (nextSaveId++);
+		let bytes;
+		if (typeof content === 'string') {
+			bytes = Array.from(new TextEncoder().encode(content));
+		} else if (content instanceof Uint8Array) {
+			bytes = Array.from(content);
+		} else if (Array.isArray(content)) {
+			bytes = content;
+		} else {
+			return Promise.reject(new Error('saveFile: content must be a string or bytes'));
+		}
+		const promise = new Promise(function (resolve, reject) {
+			pendingSaves[saveId] = { resolve: resolve, reject: reject };
+		});
+		window.parent.postMessage(JSON.stringify({
+			msgId: 'Extension_SaveFile',
+			saveId: saveId,
+			filename: filename,
+			mimeType: mimeType || 'application/octet-stream',
+			bytes: bytes,
+		}), '*');
+		return promise;
 	};
 
 	// Open a modal dialog whose content is a page under the extension's own base URL, and
@@ -159,7 +373,7 @@
 	// opts: { url, title, width, height }.  url is relative to the extension's base URL.
 	window.cool.dialog = {
 		open: function (opts) {
-			const dialogId = 'd' + (nextDialogId++);
+			const dialogId = window.cool.idPrefix + 'd' + (nextDialogId++);
 			const promise = new Promise(function (resolve) {
 				pendingDialogs[dialogId] = { resolve: resolve };
 			});
@@ -338,6 +552,22 @@
 					console.warn('cool.document.' + handlerName + ' threw:', err);
 				}
 			}
+		} else if (data.msgId === 'Extension_Command') {
+			// A `panel: true` command from the notebookbar, a menu or a
+			// shortcut: the extension handles it with cool.onCommand(id).
+			// The command that opened the panel can arrive before the page's
+			// scripts have assigned the handler; keep it until they do.
+			if (typeof commandHandler === 'function') {
+				deliverCommand(data.commandId);
+			} else {
+				pendingCommands.push(data.commandId);
+			}
+		} else if (data.msgId === 'Extension_SaveFileResult') {
+			const entry = pendingSaves[data.saveId];
+			if (!entry) return;
+			delete pendingSaves[data.saveId];
+			if (data.err !== undefined) entry.reject(new Error(data.err));
+			else entry.resolve(data.how);
 		} else if (data.msgId === 'Extension_DialogResult') {
 			const entry = pendingDialogs[data.dialogId];
 			if (!entry) {
@@ -353,7 +583,8 @@
 			window.parent.postMessage(JSON.stringify({
 				msgId: 'Extension_TeardownDone'
 			}), '*');
-		} else {
+		} else if (!(window.cool._handleHostMessage
+		             && window.cool._handleHostMessage(data))) {
 			console.warn('postMessage has unexpected msgId: ' + data.msgId);
 		}
 	});
@@ -381,6 +612,9 @@
 	}
 	window.addEventListener('load', postHeight);
 	if (typeof ResizeObserver !== 'undefined') {
-		new ResizeObserver(postHeight).observe(document.body);
+		// This script may be loaded from <head>, before <body> exists.
+		const observeBody = () => new ResizeObserver(postHeight).observe(document.body);
+		if (document.body) observeBody();
+		else document.addEventListener('DOMContentLoaded', observeBody, { once: true });
 	}
 })();

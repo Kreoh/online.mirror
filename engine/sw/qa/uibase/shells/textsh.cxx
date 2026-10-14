@@ -17,6 +17,7 @@
 
 #include <docary.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <frmmgr.hxx>
 #include <wrtsh.hxx>
 #include <formatflysplit.hxx>
@@ -24,7 +25,7 @@
 #include <cmdid.h>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 
 namespace
 {

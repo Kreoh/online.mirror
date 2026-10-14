@@ -970,7 +970,7 @@ public:
         }
 
         SCCOL nTransCol = mnCol1 + nRow - mnTopRow - mnFilteredRows + mnRowDestOffset;
-        mrClipTab.SetEditText(nTransCol, mnTransRow, ScEditUtil::Clone(*p, mrClipTab.GetDoc()));
+        mrClipTab.SetEditText(nTransCol, mnTransRow, std::make_unique<EditTextObject>(ScEditUtil::Clone(*p, mrClipTab.GetDoc())));
     }
 
     void operator() (size_t nRow, const ScFormulaCell* p)
@@ -2278,18 +2278,6 @@ void ScTable::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rProgress
 
     if(mpCondFormatList)
         mpCondFormatList->CompileXML();
-}
-
-bool ScTable::CompileErrorCells( sc::CompileFormulaContext& rCxt, FormulaError nErrCode )
-{
-    bool bCompiled = false;
-    for (SCCOL i = 0; i < aCol.size(); ++i)
-    {
-        if (aCol[i].CompileErrorCells(rCxt, nErrCode))
-            bCompiled = true;
-    }
-
-    return bCompiled;
 }
 
 void ScTable::CalcAfterLoad( sc::CompileFormulaContext& rCxt, bool bStartListening )

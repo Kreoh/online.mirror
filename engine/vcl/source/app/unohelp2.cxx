@@ -32,6 +32,7 @@
 #include <COKit/COKit.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace vcl::unohelper {
 
@@ -77,7 +78,7 @@ namespace vcl::unohelper {
         }
     }
 
-    // css::uno::XInterface
+    // cpo::uno::XInterface
     cpo::uno::Any TextDataObject::queryInterface( const cpo::uno::Type & rType )
     {
         cpo::uno::Any aRet = ::cppu::queryInterface( rType, static_cast< datatransfer::XTransferable* >(this) );

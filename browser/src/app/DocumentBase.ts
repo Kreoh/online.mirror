@@ -38,7 +38,7 @@ class DocumentBase {
 		} else if (app.map._docLayer._docType === 'spreadsheet') {
 			this._activeLayout = new ViewLayoutCalc();
 		} else {
-			this._activeLayout = new ViewLayoutImpress();
+			this._activeLayout = ViewLayoutVector.forAPresentation();
 		}
 		this._fileSize = new cool.SimplePoint(0, 0);
 		this.tableMiddleware = new TableMiddleware();
@@ -75,11 +75,12 @@ class DocumentBase {
 
 		this._activeLayout.dispose();
 		this._activeLayout = newLayout;
+
+		newLayout.setStartYPosition();
 	}
 
 	// Swap the layout at runtime (e.g. mobile Impress toggling fileBasedView
-	// when switching between read-only and edit). Preserves scroll-x position
-	// where possible; pY is rebuilt from scratch by the new layout.
+	// when switching between read-only and edit).
 	public swapLayout(newLayout: ViewLayoutBase): void {
 		this.activeLayout = newLayout;
 		app.sectionContainer.onNewDocumentTopLeft();

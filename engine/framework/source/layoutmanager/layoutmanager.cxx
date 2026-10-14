@@ -69,8 +69,8 @@
 
 //      using namespace
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
@@ -1484,7 +1484,7 @@ void LayoutManager::createElement( const OUString& aName )
         else if ( aElementType.equalsIgnoreAsciiCase("dockingwindow"))
         {
             // Add layout manager as listener for docking and other window events
-            uno::Reference< uno::XInterface > xThis( static_cast< OWeakObject* >(this), uno::UNO_QUERY );
+            uno::Reference< cpo::uno::XInterface > xThis( static_cast< OWeakObject* >(this), uno::UNO_QUERY );
             uno::Reference< ui::XUIElement > xUIElement( implts_createDockingWindow( aName ));
 
             if ( xUIElement.is() )
@@ -2529,7 +2529,7 @@ void LayoutManager::implts_createMSCompatibleMenuBar( const OUString& aName )
     assert(nFormsMenu != -1);
 
     // Create the MS compatible Form menu
-    css::uno::Reference< css::ui::XUIElement > xFormsMenu = implts_createElement( u"private:resource/menubar/mscompatibleformsmenu"_ustr );
+    cpo::uno::Reference< css::ui::XUIElement > xFormsMenu = implts_createElement( u"private:resource/menubar/mscompatibleformsmenu"_ustr );
     if(!xFormsMenu.is())
         return;
 
@@ -2597,7 +2597,7 @@ void LayoutManager::implts_notifyListeners(short nEvent, const cpo::uno::Any& rI
         {
             static_cast<frame::XLayoutManagerListener*>(pIterator.next())->layoutEvent(aSource, nEvent, rInfoParam);
         }
-        catch( const uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
             pIterator.remove();
         }
@@ -2869,7 +2869,7 @@ void LayoutManager::elementInserted( const ui::ConfigurationEvent& Event )
             uno::Reference< XPropertySet > xPropSet( xElementSettings, uno::UNO_QUERY );
             if ( xPropSet.is() )
             {
-                if ( Event.Source == uno::Reference< uno::XInterface >( m_xDocCfgMgr, uno::UNO_QUERY ))
+                if ( Event.Source == uno::Reference< cpo::uno::XInterface >( m_xDocCfgMgr, uno::UNO_QUERY ))
                     xPropSet->setPropertyValue( u"ConfigurationSource"_ustr, Any( m_xDocCfgMgr ));
             }
             xElementSettings->updateSettings();
@@ -3090,9 +3090,9 @@ uno::Reference< beans::XPropertySetInfo > LayoutManager::getPropertySetInfo()
 
 } // namespace framework
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_LayoutManager_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new framework::LayoutManager(context));

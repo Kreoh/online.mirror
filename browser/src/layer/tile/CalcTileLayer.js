@@ -13,7 +13,7 @@
  * Calc tile layer is used to display a spreadsheet document
  */
 
-/* global app RenderManager cool FocusCellSection SplitterLinesSection */
+/* global app RenderManager cool CellRangeMarkerSection FocusCellSection SplitterLinesSection */
 
 window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 	options: {
@@ -82,7 +82,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 
 		app.sectionContainer.addSection(new app.definitions.CellFillMarkerSection());
 		app.sectionContainer.addSection(new SplitterLinesSection());
-		app.sectionContainer.addSection(new app.definitions.TableFillMarkerSection());
+
+		this._cellRangeMarkerSection = new CellRangeMarkerSection();
+		app.sectionContainer.addSection(this._cellRangeMarkerSection);
 
 		this.insertMode = false;
 		this._resetInternalState();
@@ -163,7 +165,10 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			this._replayPrintTwipsMsgAllViews('cellviewcursor');
 			this._replayPrintTwipsMsgAllViews('textviewselection');
 			// Hide previous tab's shown comment (if any).
-			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).hideAllComments();
+			let section = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			if (section) {
+				section.hideAllComments();
+			}
 			this._sheetSwitch.gotSetPart(part);
 			this._syncTileContainerSize();
 		}
@@ -187,13 +192,16 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		app.activeDocument.activeLayout.refreshTiles();
 	},
 
-	_restrictDocumentSize: function () {
+	// The extent (in twips) the scrollable area should span: the data area plus a
+	// screen of margin to scroll into, up to the size of the sheet. Null when the
+	// document already spans exactly that.
+	_restrictedDocumentSize: function () {
 		if (this._documentSizeFrozen) {
-			return;
+			return null;
 		}
 
-		if (!this.sheetGeometry || !this._lastColumn || !this._lastRow) {
-			return;
+		if (!this.sheetGeometry) {
+			return null;
 		}
 
 		var maxDocSize = this.sheetGeometry.getSize('tiletwips');
@@ -235,22 +243,60 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			newDocHeight = Math.min(app.activeDocument.fileSize.y + mapSizeTwips.y, maxDocSize.y);
 		}
 
-		var shouldRestrict = (newDocWidth !== app.activeDocument.fileSize.x ||
-				newDocHeight !== app.activeDocument.fileSize.y);
-
-		if (!shouldRestrict) {
-			return;
+		if (newDocWidth === app.activeDocument.fileSize.x &&
+				newDocHeight === app.activeDocument.fileSize.y) {
+			return null;
 		}
 
+		return new cool.SimplePoint(newDocWidth, newDocHeight);
+	},
+
+	_applyDocumentSize: function (size) {
+		app.activeDocument.fileSize = size;
+		app.activeDocument.activeLayout.viewSize = size.clone();
+
 		// When there will be a Intern conversion, we should use CSS pixels.
-		var newSizePx = this._twipsToPixels(new cool.Point(newDocWidth, newDocHeight));
+		const sizePx = this._twipsToPixels(new cool.Point(size.x, size.y));
+		this._docPixelSize = sizePx.clone();
+		this._map.fire('scrolllimits', sizePx.clone());
+	},
 
-		this._docPixelSize = newSizePx.clone();
-		app.activeDocument.fileSize = new cool.SimplePoint(newDocWidth, newDocHeight);
-		app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
+	_restrictDocumentSize: function () {
+		const size = this._restrictedDocumentSize();
+		if (!size)
+			return;
 
-		this._map.fire('scrolllimits', newSizePx.clone());
+		this._applyDocumentSize(size);
+		this._syncTileContainerSize();
+	},
 
+	// The scrollable area only reaches the cells this view has been to, so a position
+	// outside it cannot be scrolled to until the area covers it. The area grows here even
+	// while the document size is frozen, because the scroll happens right away. One grow
+	// to a given position does not lead to another, so the freeze is not needed for it.
+	extendDocumentSizeToInclude: function (position) {
+		if (!this.sheetGeometry)
+			return;
+
+		const fileSize = app.activeDocument.fileSize;
+		const maxDocumentSize = this.sheetGeometry.getSize('tiletwips');
+
+		// A frame past the position, so it can still be centered.
+		const frameSize = app.activeDocument.activeLayout.frameSize;
+		const newWidth = Math.min(maxDocumentSize.x, Math.max(fileSize.x, position.x + frameSize.x));
+		const newHeight = Math.min(maxDocumentSize.y, Math.max(fileSize.y, position.y + frameSize.y));
+
+		// A size waiting for the freeze to end replaces the current one, so it has to
+		// cover the position as well.
+		if (this._pendingDocumentSize) {
+			this._pendingDocumentSize.x = Math.max(this._pendingDocumentSize.x, newWidth);
+			this._pendingDocumentSize.y = Math.max(this._pendingDocumentSize.y, newHeight);
+		}
+
+		if (newWidth === fileSize.x && newHeight === fileSize.y)
+			return;
+
+		this._applyDocumentSize(new cool.SimplePoint(newWidth, newHeight));
 		this._syncTileContainerSize();
 	},
 
@@ -268,13 +314,13 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		this._documentSizeFrozen = false;
 
 		if (this._pendingDocumentSize) {
-			app.activeDocument.fileSize = this._pendingDocumentSize.clone();
-			app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
+			this._applyDocumentSize(this._pendingDocumentSize);
 			this._pendingDocumentSize = null;
 			this._syncTileContainerSize();
 		}
-
-		this._restrictDocumentSize();
+		else {
+			this._restrictDocumentSize();
+		}
 	},
 
 	_getCursorPosSize: function () {
@@ -385,10 +431,8 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 	},
 
 	_syncTileContainerSize: function() {
-		// Remember the frame size and scroll position across the relayout.
+		// Remember the frame size across the relayout.
 		const oldFrame = app.activeDocument.activeLayout.frameSize;
-		const scrollX = app.activeDocument.activeLayout.viewedRectangle.pX1;
-		const scrollY = app.activeDocument.activeLayout.viewedRectangle.pY1;
 
 		// Size the spacers, then let the canvas match the document container
 		// automatically: onResize(0, 0) reads the container's own size. Calc no
@@ -396,18 +440,27 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		// shrinks to the content via the spacers during the relayout.
 		this._updateSpacerSizes();
 		app.sectionContainer.onResize(0, 0);
-		this._updateHeaderSections();
 
 		// The viewed rectangle spans the visible frame (the tiles section). Now
-		// that the layout has settled, rebuild it at that size (twips at the
-		// current zoom) and re-apply the scroll position. Nothing else maintains
-		// the viewed rectangle on load/resize, so establishing it here is what
-		// makes the document draw on load and after a resize.
-		const frame = app.activeDocument.activeLayout.frameSize;
-		app.activeDocument.activeLayout.viewedRectangle = cool.SimpleRectangle.fromCorePixels(
-			[scrollX, scrollY, frame.pX, frame.pY]);
-		app.activeDocument.activeLayout.scrollTo(scrollX, scrollY);
+		// that the layout has settled, rebuild it at that size from the scroll
+		// position the layout holds. Nothing else maintains the viewed rectangle
+		// on load/resize, so establishing it here is what makes the document draw
+		// on load and after a resize.
+		app.activeDocument.activeLayout.rebuildViewedRectangle();
 
+		if (this.widthShrinked || this.heightShrinked) {
+			const restrictedSize = this._restrictedDocumentSize();
+			if (restrictedSize) {
+				this._applyDocumentSize(restrictedSize);
+				this._updateSpacerSizes();
+				app.sectionContainer.onResize(0, 0);
+				app.activeDocument.activeLayout.rebuildViewedRectangle();
+			}
+		}
+
+		this._updateHeaderSections();
+
+		const frame = app.activeDocument.activeLayout.frameSize;
 		const widthIncreased = oldFrame.pX < frame.pX;
 		const heightIncreased = oldFrame.pY < frame.pY;
 
@@ -445,8 +498,7 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				this._pendingDocumentSize = new cool.SimplePoint(statusJSON.width, statusJSON.height);
 			}
 			else {
-				app.activeDocument.fileSize = new cool.SimplePoint(statusJSON.width, statusJSON.height);
-				app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
+				this._applyDocumentSize(new cool.SimplePoint(statusJSON.width, statusJSON.height));
 
 				if (app.map._docLoaded)
 					this._syncTileContainerSize();
@@ -460,7 +512,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				this._resetInternalState();
 				window.keyboard.applyOnscreenKeyboardMode();
 			} else {
-				this._selectedPart = statusJSON.selectedpart;
+				// The status names the selected sheet by its part identifier,
+				// the sheet index in decimal form.
+				this._selectedPart = parseInt(statusJSON.selectedpart);
 			}
 
 			this._lastColumn = statusJSON.lastcolumn;
@@ -478,21 +532,6 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			app.activeDocument.setActiveViewID(this._viewId);
 
 			console.assert(this._viewId >= 0, 'Incorrect viewId received: ' + this._viewId);
-
-			var frameSize = app.activeDocument.activeLayout.frameSize;
-			var sizePx = this._twipsToPixels(new cool.Point(app.activeDocument.fileSize.x, app.activeDocument.fileSize.y));
-			var width = sizePx.x;
-			var height = sizePx.y;
-
-			if (width < frameSize.cX || height < frameSize.cY) {
-				width = Math.max(width, frameSize.cX);
-				height = Math.max(height, frameSize.cY);
-				this._docPixelSize = {x: width, y: height};
-				this._map.fire('scrolllimits', {x: width, y: height});
-			}
-			else {
-				this._updateScrollLimits();
-			}
 
 			this._adjustCanvasSectionsForLayoutChange();
 
@@ -975,51 +1014,43 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			}
 		}
 		else if (e.commandName === 'AutoFilterInfo') {
-			app.calc.autoFilterCell = { 'row': e.state.row, 'column': e.state.column };
+			app.calc.filterPopupCell = { 'popupId': e.state.popupId, 'row': e.state.row, 'column': e.state.column };
 		}
 		else if (e.commandName === 'AutoFilterChange')
 		{
 			this.sheetGeometry.autoFilterChanged = true;
 		}
 		else if (e.commandName === 'PivotTableFilterInfo') {
-			app.calc.pivotTableFilterCell = { 'row': e.state.row, 'column': e.state.column };
+			app.calc.filterPopupCell = { 'popupId': e.state.popupId, 'row': e.state.row, 'column': e.state.column };
 		}
-		else if (e.commandName === 'TableAutoFillInfo') {
-			this._onTableAutoFillStateChanged(e.state.rectangle);
-		}
-		else if (e.commandName === 'SparklineGroup') {
-			this._onSparklineGroupMsg(e.state);
+		else if (e.commandName === 'CellRangeMarker') {
+			this._onCellRangeMarkerMsg(e.state);
 		}
 		else if (e.commandName === 'CellFormulaError') {
 			this._onCellFormulaError(e.state);
 		}
 	},
 
-	_onTableAutoFillStateChanged: function (textMsg) {
-		var tablefillMarkerSection = app.sectionContainer.getSectionWithName(app.CSections.TableFillMarker.name);
-		if (textMsg.match('EMPTY')) {
-			if (tablefillMarkerSection)
-				tablefillMarkerSection.calculatePositionViaCellCursor(null);
-			this._tableAutoFillAreaPixels = null;
-		}
-		else
-		{
-			var strTwips = textMsg.match(/\d+/g);
-			if (strTwips != null && this._map.isEditMode()) {
-				var topLeftTwips = new cool.Point(parseInt(strTwips[0]), parseInt(strTwips[1]));
-				var offset = new cool.Point(parseInt(strTwips[2]), parseInt(strTwips[3]));
+	// Cells the engine wants marked out. A kind of marker owns the ranges under its name, each
+	// given as "startColumn, startRow, endColumn, endRow". No ranges clears the kind.
+	_onCellRangeMarkerMsg: function (state) {
+		if (!state || !state.name)
+			return;
 
-				var topLeftPixels = this._twipsToCorePixels(topLeftTwips);
-				var offsetPixels = this._twipsToCorePixels(offset);
-				this._tableAutoFillAreaPixels = app.LOUtil.createRectangle(topLeftPixels.x, topLeftPixels.y, offsetPixels.x, offsetPixels.y);
-
-				if (tablefillMarkerSection)
-					tablefillMarkerSection.calculatePositionViaCellCursor([this._tableAutoFillAreaPixels.x1, this._tableAutoFillAreaPixels.y1]);
-			}
-			else {
-				this._tableAutoFillAreaPixels = null;
-			}
+		if (!state.cellRanges || !state.cellRanges.length) {
+			this._cellRangeMarkerSection.clearMarkers(state.name);
+			return;
 		}
+
+		const cellRanges = state.cellRanges.map(function (cellRange) {
+			return this._parseCellRange(cellRange);
+		}, this);
+
+		this._cellRangeMarkerSection.setMarkers(state.name, cellRanges, state.part, {
+			color: state.color ? '#' + state.color : undefined,
+			dashed: state.dashed,
+			fillOpacity: state.fillOpacity,
+			handleCommand: state.handleCommand });
 	},
 
 	_onSplitStateChanged: function (e, isSplitCol) {
@@ -1115,12 +1146,12 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			this._oldSheetGeomMsg = textMsg;
 			this._handleSheetGeometryDataMsg(values, differentSheet);
 			this._syncTileContainerSize();
-		} else if (values.comments) {
+		} else if (values.comments && !window.mode.isInteractivePreview()) {
 			values.comments.forEach(function(comment) {
 				comment.id = String(comment.id);
 			});
 			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).importComments(values.comments);
-		} else if (values.commentsPos) {
+		} else if (values.commentsPos && !window.mode.isInteractivePreview()) {
 			var section = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
 			// invalidate all comments
 			section.sectionProperties.commentList.forEach(function (comment) {
@@ -1329,37 +1360,54 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 
 		let freePane = paneRectangles[paneRectangles.length - 1]; // Last pane, this should be the scrollable - not frozen one.
 
-		// Horizontal split
+		// Horizontal split.
 		if (app.calc.cellCursorRectangle.x2 > app.calc.splitCoordinate.x) {
-			if (app.calc.cellCursorRectangle.width > freePane.width)
-				return scroll; // no scroll needed.
-
-			if (app.calc.cellCursorRectangle.x1 < freePane.x1) {
-				scroll.x = app.calc.cellCursorRectangle.x1 - freePane.x1;
-			}
-			else if (app.calc.cellCursorRectangle.x2 > freePane.x2) {
-				scroll.x = app.calc.cellCursorRectangle.x2 - freePane.x2;
-			}
+			scroll.x = this._freePaneScrollForAxis(
+				app.calc.cellCursorRectangle.x1, app.calc.cellCursorRectangle.x2,
+				freePane.x1, freePane.x2);
 		}
 
-		// Vertical split
+		// Vertical split.
 		if (app.calc.cellCursorRectangle.y2 > app.calc.splitCoordinate.y) {
-			if (app.calc.cellCursorRectangle.height > freePane.height)
-				return scroll; // no scroll needed.
-
-			// try to center in free pane the top of a cell
-			if (app.calc.cellCursorRectangle.y1 < freePane.y1)
-				scroll.y = app.calc.cellCursorRectangle.y1 - freePane.y1;
-
-			// then check if end of a cell is visible
-			if (app.calc.cellCursorRectangle.y2 > freePane.y2 + scroll.y)
-				scroll.y = scroll.y + (app.calc.cellCursorRectangle.y2 - freePane.y2);
+			scroll.y = this._freePaneScrollForAxis(
+				app.calc.cellCursorRectangle.y1, app.calc.cellCursorRectangle.y2,
+				freePane.y1, freePane.y2);
 		}
 
 		return scroll;
 	},
 
-	getSelectedPart: function () {
-		return this._selectedPart;
+	// How far the pane past a freeze has to move on one axis to show the cell
+	// cursor, given the cursor's and the pane's start and end on that axis.
+	_freePaneScrollForAxis: function (cellStart, cellEnd, paneStart, paneEnd) {
+		if (cellEnd - cellStart > paneEnd - paneStart) {
+			// The cell is bigger than the pane, so no scroll can show all of it.
+			// Its start edge is the one worth having on screen - that is where
+			// the content of the cell begins - but only move the view when
+			// doing so gains something.
+
+			// The start edge is on screen already.
+			if (cellStart >= paneStart && cellStart <= paneEnd)
+				return 0;
+
+			// The cell covers the whole pane, so the view sits somewhere in the
+			// middle of it. Scrolling could not bring the start edge into view
+			// without leaving the cell, and the user is reading here.
+			if (cellStart <= paneStart && cellEnd >= paneEnd)
+				return 0;
+
+			// The start edge is off screen and the cell does not fill the
+			// pane, so there is room to show it. Pull it to the near edge.
+			return cellStart - paneStart;
+		}
+
+		// The cell fits, so move by as little as brings all of it into view.
+		if (cellStart < paneStart)
+			return cellStart - paneStart;
+
+		if (cellEnd > paneEnd)
+			return cellEnd - paneEnd;
+
+		return 0;
 	},
 });

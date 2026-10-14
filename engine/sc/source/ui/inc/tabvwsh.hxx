@@ -22,6 +22,8 @@
 #include <formula/errorcodes.hxx>
 #include <formula/opcode.hxx>
 #include <svx/fmshell.hxx>
+#include <svx/svdobjkind.hxx>
+#include <svl/style.hxx>
 #include <sfx2/viewsh.hxx>
 #include <editeng/svxenum.hxx>
 #include <o3tl/deleter.hxx>
@@ -37,7 +39,14 @@
 #include <memory>
 #include <map>
 
+namespace com::sun::star::drawing { class XShapes; }
+namespace com::sun::star::table { struct CellRangeAddress; }
+
+class SdrObject;
 class SdrOle2Obj;
+namespace com::sun::star::drawing { class XShapes; }
+namespace com::sun::star::table { struct CellRangeAddress; }
+class ScTableSheetObj;
 class SfxAbstractTabDialog;
 class SfxBindings;
 class SfxChildWindow;
@@ -67,6 +76,7 @@ class ScDrawTransferObj;
 class ScCondFormatDlgData;
 class ScDispatchProviderInterceptor;
 class ScTableShell;
+class ScTableSheetObj;
 
 namespace sc {
     class SparklineShell;
@@ -231,7 +241,6 @@ private:
     DECL_LINK( FormControlActivated, LinkParamNone*, void );
     DECL_LINK( DialogClosedHdl, css::ui::dialogs::DialogClosedEvent*, void );
     DECL_LINK( GoToRefErrorHdl, weld::Button&, void );
-    DECL_LINK( InfoBarSettingsHandler, weld::Button&, void );
 
 protected:
     virtual void    Activate(bool bMDI) override;
@@ -249,7 +258,7 @@ protected:
     virtual void    QueryObjAreaPixel( tools::Rectangle& rRect ) const override;
 
     virtual OUString GetSelectionText( bool bWholeWord = false, bool bOnlyASample = false ) override;
-    virtual bool     HasSelection( bool bText = true ) const override;
+    virtual bool HasSelection(bool bMustHaveText) const override;
 
     virtual void    WriteUserData(OUString &, bool bBrowse = false) override;
     virtual void    ReadUserData(const OUString &, bool bBrowse = false) override;
@@ -279,8 +288,13 @@ public:
 
     weld::Window*   GetDialogParent();
 
+    // Rename the Table at the cursor via a name-input dialog (SID_RENAME_CALCTABLE).
+    void            ExecuteRenameCalcTable();
+
     SC_DLLPUBLIC bool IsRefInputMode() const;
     void            ExecuteInputDirect();
+
+    void MarkWholeDBRangeAtCursor();
 
     void HandleDuplicateRecordsHighlight(const rtl::Reference<ScTableSheetObj>& ActiveSheet,
                                 const css::table::CellRangeAddress& aRange,
@@ -289,7 +303,8 @@ public:
     void HandleDuplicateRecordsRemove(const rtl::Reference<ScTableSheetObj>& ActiveSheet,
                                 const css::table::CellRangeAddress& aRange,
                                 bool bIncludesHeaders, bool bDuplicateRows,
-                                const std::vector<int>& rSelectedEntries);
+                                const std::vector<int>& rSelectedEntries,
+                                sal_Int32* pnRemoved = nullptr, sal_Int32* pnRemaining = nullptr);
     rtl::Reference<ScTableSheetObj> GetRangeWithSheet(css::table::CellRangeAddress& rRangeData, bool& bHasData, bool bHasUnoArguments);
     void            ExtendSingleSelection(css::table::CellRangeAddress& rRangeData);
 
@@ -395,7 +410,9 @@ public:
     virtual std::unique_ptr<SfxTabPage> CreatePrintOptionsPage(weld::Container* pPage, weld::DialogController* pController, const SfxItemSet &rOptions) override;
 
     void            ConnectObject( const SdrOle2Obj* pObj );
-    void            ActivateObject(SdrOle2Obj* pObj, sal_Int32 nVerb);
+    SC_DLLPUBLIC void ActivateObject(SdrOle2Obj* pObj, sal_Int32 nVerb);
+    void            SetInPlaceClientGridOffset(SfxInPlaceClient& rClient, SdrObject& rObject);
+    void            UpdateInPlaceClientGridOffset();
 
     void            DeactivateOle();
 
@@ -486,8 +503,8 @@ public:
     static void invalidateAllViewsKitSheetViewPositions(ScDocShell& rDocShell,
                                                         SCTAB nDefaultViewTab);
     void KitSendFormulabarUpdate(const EditView* pEditView, const OUString& rText, const ESelection& rSelection);
-    css::uno::Reference<css::drawing::XShapes> getSelectedXShapes();
-    SC_DLLPUBLIC static css::uno::Reference<css::datatransfer::XTransferable2> GetClipData(vcl::Window* pWin);
+    cpo::uno::Reference<css::drawing::XShapes> getSelectedXShapes();
+    SC_DLLPUBLIC static cpo::uno::Reference<css::datatransfer::XTransferable2> GetClipData(vcl::Window* pWin);
 
     void InitFormEditData(ScDocShell& rShell);
     void ClearFormEditData();

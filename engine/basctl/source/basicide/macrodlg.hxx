@@ -47,9 +47,6 @@ public:
 private:
     OUString                       m_aMacrosInTxtBaseStr;
 
-    // For forwarding to Assign dialog
-    ::css::uno::Reference< ::css::frame::XFrame > m_xDocumentFrame;
-
     bool                    bForceStoreBasic;
 
     Mode                    nMode;
@@ -67,8 +64,6 @@ private:
 
     void                EnableButton(weld::Button& rButton, bool bEnable);
 
-    static OUString     GetInfo( SbxVariable* pVar );
-
     void                StoreMacroDescription();
     void                RestoreMacroDescription();
 
@@ -81,7 +76,6 @@ private:
     std::unique_ptr<weld::TreeIter> m_xMacroBoxIter;
     std::unique_ptr<weld::Button> m_xRunButton;
     std::unique_ptr<weld::Button> m_xCloseButton;
-    std::unique_ptr<weld::Button> m_xAssignButton;
     std::unique_ptr<weld::Button> m_xEditButton;
     std::unique_ptr<weld::Button> m_xDelButton;
     std::unique_ptr<weld::Button> m_xNewButton;
@@ -89,7 +83,7 @@ private:
     std::unique_ptr<weld::Button> m_xNewLibButton;
     std::unique_ptr<weld::Button> m_xNewModButton;
 public:
-    MacroChooser(weld::Window *pParent, const ::css::uno::Reference< ::css::frame::XFrame >& xDocFrame);
+    MacroChooser(weld::Window *pParent);
     virtual ~MacroChooser() override;
 
     SbMethod*           GetMacro();

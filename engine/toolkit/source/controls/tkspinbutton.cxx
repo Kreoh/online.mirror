@@ -20,7 +20,7 @@
 #include <com/sun/star/awt/ScrollBarOrientation.hpp>
 #include <com/sun/star/awt/XSpinValue.hpp>
 #include <com/sun/star/awt/XAdjustmentListener.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <comphelper/uno3.hxx>
 #include <cppuhelper/implbase2.hxx>
@@ -30,7 +30,7 @@
 
 #include <helper/unopropertyarrayhelper.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::lang;
@@ -45,20 +45,20 @@ protected:
     ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
 public:
-    explicit UnoSpinButtonModel( const css::uno::Reference< css::uno::XComponentContext >& i_factory );
+    explicit UnoSpinButtonModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_factory );
     UnoSpinButtonModel(const UnoSpinButtonModel & rOther) : UnoControlModel(rOther) {}
 
     rtl::Reference<UnoControlModel> Clone() const override { return new UnoSpinButtonModel( *this ); }
 
     // XMultiPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
 
     // XPersistObject
-    OUString SAL_CALL getServiceName() override;
+    OUString getServiceName() override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName(  ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName(  ) override;
+    cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 
@@ -80,43 +80,43 @@ public:
     OUString             GetComponentServiceName() const override;
 
     DECLARE_UNO3_AGG_DEFAULTS( UnoSpinButtonControl, UnoControlBase )
-    cpo::uno::Any  SAL_CALL queryAggregation( const cpo::uno::Type & rType ) override;
+    cpo::uno::Any  queryAggregation( const cpo::uno::Type & rType ) override;
 
-    void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& Toolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
-    void SAL_CALL disposing( const css::lang::EventObject& Source ) override { UnoControlBase::disposing( Source ); }
-    void SAL_CALL dispose(  ) override;
+    void createPeer( const cpo::uno::Reference< css::awt::XToolkit >& Toolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
+    void disposing( const css::lang::EventObject& Source ) override { UnoControlBase::disposing( Source ); }
+    void dispose(  ) override;
 
     // XTypeProvider
     DECLARE_XTYPEPROVIDER()
 
     // XAdjustmentListener
-    void SAL_CALL adjustmentValueChanged( const css::awt::AdjustmentEvent& rEvent ) override;
+    void adjustmentValueChanged( const css::awt::AdjustmentEvent& rEvent ) override;
 
     // XSpinValue
-    virtual void SAL_CALL addAdjustmentListener( const css::uno::Reference< css::awt::XAdjustmentListener >& listener ) override;
-    virtual void SAL_CALL removeAdjustmentListener( const css::uno::Reference< css::awt::XAdjustmentListener >& listener ) override;
-    virtual void SAL_CALL setValue( sal_Int32 value ) override;
-    virtual void SAL_CALL setValues( sal_Int32 minValue, sal_Int32 maxValue, sal_Int32 currentValue ) override;
-    virtual sal_Int32 SAL_CALL getValue(  ) override;
-    virtual void SAL_CALL setMinimum( sal_Int32 minValue ) override;
-    virtual void SAL_CALL setMaximum( sal_Int32 maxValue ) override;
-    virtual sal_Int32 SAL_CALL getMinimum(  ) override;
-    virtual sal_Int32 SAL_CALL getMaximum(  ) override;
-    virtual void SAL_CALL setSpinIncrement( sal_Int32 spinIncrement ) override;
-    virtual sal_Int32 SAL_CALL getSpinIncrement(  ) override;
-    virtual void SAL_CALL setOrientation( sal_Int32 orientation ) override;
-    virtual sal_Int32 SAL_CALL getOrientation(  ) override;
+    virtual void addAdjustmentListener( const cpo::uno::Reference< css::awt::XAdjustmentListener >& listener ) override;
+    virtual void removeAdjustmentListener( const cpo::uno::Reference< css::awt::XAdjustmentListener >& listener ) override;
+    virtual void setValue( sal_Int32 value ) override;
+    virtual void setValues( sal_Int32 minValue, sal_Int32 maxValue, sal_Int32 currentValue ) override;
+    virtual sal_Int32 getValue(  ) override;
+    virtual void setMinimum( sal_Int32 minValue ) override;
+    virtual void setMaximum( sal_Int32 maxValue ) override;
+    virtual sal_Int32 getMinimum(  ) override;
+    virtual sal_Int32 getMaximum(  ) override;
+    virtual void setSpinIncrement( sal_Int32 spinIncrement ) override;
+    virtual sal_Int32 getSpinIncrement(  ) override;
+    virtual void setOrientation( sal_Int32 orientation ) override;
+    virtual sal_Int32 getOrientation(  ) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName(  ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName(  ) override;
+    cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 
     //= UnoSpinButtonModel
 
 
-    UnoSpinButtonModel::UnoSpinButtonModel( const css::uno::Reference< css::uno::XComponentContext >& i_factory )
+    UnoSpinButtonModel::UnoSpinButtonModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_factory )
         :UnoControlModel( i_factory )
     {
         ImplRegisterProperty( BASEPROPERTY_BACKGROUNDCOLOR );
@@ -181,13 +181,13 @@ public:
     }
 
 
-    OUString SAL_CALL UnoSpinButtonModel::getImplementationName(  )
+    OUString UnoSpinButtonModel::getImplementationName(  )
     {
         return u"stardiv.Toolkit.UnoSpinButtonModel"_ustr;
     }
 
 
-    Sequence< OUString > SAL_CALL UnoSpinButtonModel::getSupportedServiceNames()
+    Sequence< OUString > UnoSpinButtonModel::getSupportedServiceNames()
     {
         const cpo::uno::Sequence<OUString> vals { u"com.sun.star.awt.UnoControlSpinButtonModel"_ustr };
         return comphelper::concatSequences( UnoControlModel::getSupportedServiceNames(), vals );
@@ -241,13 +241,13 @@ public:
     }
 
 
-    OUString SAL_CALL UnoSpinButtonControl::getImplementationName(  )
+    OUString UnoSpinButtonControl::getImplementationName(  )
     {
         return u"stardiv.Toolkit.UnoSpinButtonControl"_ustr;
     }
 
 
-    Sequence< OUString > SAL_CALL UnoSpinButtonControl::getSupportedServiceNames()
+    Sequence< OUString > UnoSpinButtonControl::getSupportedServiceNames()
     {
         const cpo::uno::Sequence<OUString> vals { u"com.sun.star.awt.UnoControlSpinButton"_ustr };
         return comphelper::concatSequences( UnoControlBase::getSupportedServiceNames(), vals );
@@ -300,13 +300,13 @@ public:
     }
 
 
-    void SAL_CALL UnoSpinButtonControl::setValue( sal_Int32 value )
+    void UnoSpinButtonControl::setValue( sal_Int32 value )
     {
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_SPINVALUE ), Any( value ), true );
     }
 
 
-    void SAL_CALL UnoSpinButtonControl::setValues( sal_Int32 minValue, sal_Int32 maxValue, sal_Int32 currentValue )
+    void UnoSpinButtonControl::setValues( sal_Int32 minValue, sal_Int32 maxValue, sal_Int32 currentValue )
     {
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_SPINVALUE_MIN ), Any( minValue ), true );
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_SPINVALUE_MAX ), Any( maxValue ), true );
@@ -314,7 +314,7 @@ public:
     }
 
 
-    sal_Int32 SAL_CALL UnoSpinButtonControl::getValue(  )
+    sal_Int32 UnoSpinButtonControl::getValue(  )
     {
         ::osl::MutexGuard aGuard( GetMutex() );
         sal_Int32 nValue = 0;
@@ -327,19 +327,19 @@ public:
     }
 
 
-    void SAL_CALL UnoSpinButtonControl::setMinimum( sal_Int32 minValue )
+    void UnoSpinButtonControl::setMinimum( sal_Int32 minValue )
     {
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_SPINVALUE_MIN ), Any( minValue ), true );
     }
 
 
-    void SAL_CALL UnoSpinButtonControl::setMaximum( sal_Int32 maxValue )
+    void UnoSpinButtonControl::setMaximum( sal_Int32 maxValue )
     {
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_SPINVALUE_MAX ), Any( maxValue ), true );
     }
 
 
-    sal_Int32 SAL_CALL UnoSpinButtonControl::getMinimum(  )
+    sal_Int32 UnoSpinButtonControl::getMinimum(  )
     {
         ::osl::MutexGuard aGuard( GetMutex() );
         sal_Int32 nMin = 0;
@@ -352,7 +352,7 @@ public:
     }
 
 
-    sal_Int32 SAL_CALL UnoSpinButtonControl::getMaximum(  )
+    sal_Int32 UnoSpinButtonControl::getMaximum(  )
     {
         ::osl::MutexGuard aGuard( GetMutex() );
         sal_Int32 nMax = 0;
@@ -365,13 +365,13 @@ public:
     }
 
 
-    void SAL_CALL UnoSpinButtonControl::setSpinIncrement( sal_Int32 spinIncrement )
+    void UnoSpinButtonControl::setSpinIncrement( sal_Int32 spinIncrement )
     {
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_SPININCREMENT ), Any( spinIncrement ), true );
     }
 
 
-    sal_Int32 SAL_CALL UnoSpinButtonControl::getSpinIncrement(  )
+    sal_Int32 UnoSpinButtonControl::getSpinIncrement(  )
     {
         ::osl::MutexGuard aGuard( GetMutex() );
         sal_Int32 nIncrement = 0;
@@ -384,13 +384,13 @@ public:
     }
 
 
-    void SAL_CALL UnoSpinButtonControl::setOrientation( sal_Int32 orientation )
+    void UnoSpinButtonControl::setOrientation( sal_Int32 orientation )
     {
         ImplSetPropertyValue( GetPropertyName( BASEPROPERTY_ORIENTATION ), Any( orientation ), true );
     }
 
 
-    sal_Int32 SAL_CALL UnoSpinButtonControl::getOrientation(  )
+    sal_Int32 UnoSpinButtonControl::getOrientation(  )
     {
         ::osl::MutexGuard aGuard( GetMutex() );
         sal_Int32 nOrientation = ScrollBarOrientation::HORIZONTAL;
@@ -404,17 +404,17 @@ public:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoSpinButtonModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoSpinButtonModel(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_UnoSpinButtonControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UnoSpinButtonControl());

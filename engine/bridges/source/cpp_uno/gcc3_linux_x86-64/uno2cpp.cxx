@@ -21,7 +21,7 @@
 #include <typeinfo>
 
 #include <cpo/uno/genfunc.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <o3tl/runtimetooustring.hxx>
 #include <uno/data.h>
 
@@ -34,7 +34,7 @@
 #include "callvirtualmethod.hxx"
 #include "share.hxx"
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::cpo::uno;
 
 namespace {
@@ -419,9 +419,9 @@ void unoInterfaceProxyDispatch(
     }
     default:
     {
-        ::com::sun::star::uno::RuntimeException aExc(
+        ::cpo::uno::RuntimeException aExc(
             u"illegal member type description!"_ustr,
-            ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >() );
+            ::cpo::uno::Reference< ::cpo::uno::XInterface >() );
 
         cpo::uno::Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();
         // binary identical null reference

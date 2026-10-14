@@ -229,6 +229,9 @@ static void ResizeFrameCols(SwFormatCol& rCol,
 void SwView::ExecTabWin( SfxRequest const & rReq )
 {
     SwWrtShell &rSh         = GetWrtShell();
+    // The ruler reads and writes one fly frame, so with several selected it changes nothing.
+    if (rSh.IsMultipleFlyFramesSelected())
+        return;
     const FrameTypeFlags nFrameType   = rSh.GetSelectedObjCount() ?
                                     FrameTypeFlags::DRAWOBJ :
                                         rSh.GetFrameType(nullptr,true);
@@ -289,14 +292,14 @@ void SwView::ExecTabWin( SfxRequest const & rReq )
                 {
                     SwFormatVertOrient aVertOrient(pFormat->GetVertOrient());
                     aVertOrient.SetVertOrient(text::VertOrientation::NONE);
-                    aVertOrient.SetPos(aVertOrient.GetPos() + nDeltaX );
+                    aVertOrient.adjustPosition(gfx::Length::twip(nDeltaX));
                     aSet.Put( aVertOrient );
                 }
                 else
                 {
                     SwFormatHoriOrient aHoriOrient( pFormat->GetHoriOrient() );
                     aHoriOrient.SetHoriOrient( text::HoriOrientation::NONE );
-                    aHoriOrient.SetPos( aHoriOrient.GetPos() + nDeltaX );
+                    aHoriOrient.adjustPosition(gfx::Length::twip(nDeltaX));
                     aSet.Put( aHoriOrient );
                 }
 
@@ -440,14 +443,14 @@ void SwView::ExecTabWin( SfxRequest const & rReq )
                 {
                     SwFormatHoriOrient aHoriOrient(pFormat->GetHoriOrient());
                     aHoriOrient.SetHoriOrient(text::HoriOrientation::NONE);
-                    aHoriOrient.SetPos(aHoriOrient.GetPos() + nDeltaY );
+                    aHoriOrient.adjustPosition(gfx::Length::twip(nDeltaY));
                     aSet.Put( aHoriOrient );
                 }
                 else
                 {
                     SwFormatVertOrient aVertOrient(pFormat->GetVertOrient());
                     aVertOrient.SetVertOrient(text::VertOrientation::NONE);
-                    aVertOrient.SetPos(aVertOrient.GetPos() + nDeltaY );
+                    aVertOrient.adjustPosition(gfx::Length::twip(nDeltaY));
                     aSet.Put( aVertOrient );
                 }
                 SwFormatFrameSize aSize(pFormat->GetFrameSize());

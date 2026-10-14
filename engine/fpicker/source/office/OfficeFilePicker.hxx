@@ -21,7 +21,7 @@
 #include <cppuhelper/implbase5.hxx>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/XFilePreview.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerListener.hpp>
 #include <com/sun/star/ui/dialogs/XAsynchronousExecutableDialog.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -33,11 +33,11 @@
 
 #include <vector>
 
-struct FilterEntry;
+struct SvtFilterEntry;
 struct ElementEntry_Impl;
 enum class PickerFlags;
 
-typedef ::std::vector< FilterEntry >           FilterList;     // can be maintained more effectively
+typedef ::std::vector< SvtFilterEntry >        FilterList;     // can be maintained more effectively
 typedef ::std::vector< ElementEntry_Impl >     ElementList;
 
 typedef css::beans::StringPair                 UnoFilterEntry;
@@ -46,8 +46,7 @@ typedef cpo::uno::Sequence< UnoFilterEntry >   UnoFilterList;  // can be transpo
 // class SvtFilePicker ---------------------------------------------------
 
 typedef cppu::ImplInheritanceHelper <svt::OCommonPicker
-                            ,   css::ui::dialogs::XFilePicker3
-                            ,   css::ui::dialogs::XFilePickerControlAccess
+                            ,   css::ui::dialogs::XFilePicker
                             ,   css::ui::dialogs::XFilePreview
                             ,   css::lang::XServiceInfo
                             ,   css::ui::dialogs::XAsynchronousExecutableDialog
@@ -73,9 +72,9 @@ protected:
     cpo::uno::Sequence< OUString >
                         m_aDenyList;
 
-    css::uno::Reference< css::ui::dialogs::XFilePickerListener >
+    cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >
                         m_xListener;
-    css::uno::Reference< css::ui::dialogs::XDialogClosedListener >
+    cpo::uno::Reference< css::ui::dialogs::XDialogClosedListener >
                         m_xDlgClosedListener;
 
 public:
@@ -92,7 +91,7 @@ public:
     // XAsynchronousExecutableDialog functions
 
     virtual void setDialogTitle( const OUString& _rTitle ) override;
-    virtual void startExecuteModal( const css::uno::Reference< css::ui::dialogs::XDialogClosedListener >& xListener ) override;
+    virtual void startExecuteModal( const cpo::uno::Reference< css::ui::dialogs::XDialogClosedListener >& xListener ) override;
 
 
     // XFilePicker functions
@@ -102,7 +101,6 @@ public:
     virtual void           setDefaultName( const OUString& aName ) override;
     virtual void           setDisplayDirectory( const OUString& aDirectory ) override;
     virtual OUString    getDisplayDirectory() override;
-    virtual cpo::uno::Sequence< OUString > getFiles() override;
     virtual cpo::uno::Sequence< OUString > getSelectedFiles() override;
 
 
@@ -119,8 +117,8 @@ public:
     // XFilePickerNotifier functions
 
 
-    virtual void           addFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
-    virtual void           removeFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+    virtual void           addFilePickerListener( const cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+    virtual void           removeFilePickerListener( const cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
 
 
     // XFilePreview functions
@@ -154,9 +152,9 @@ public:
      { ::svt::OCommonPicker::cancel(); }
     virtual void           dispose() override
      { ::svt::OCommonPicker::dispose(); }
-    virtual void           addEventListener(const css::uno::Reference<css::lang::XEventListener>& l) override
+    virtual void           addEventListener(const cpo::uno::Reference<css::lang::XEventListener>& l) override
      { ::svt::OCommonPicker::addEventListener(l); }
-    virtual void           removeEventListener(const css::uno::Reference<css::lang::XEventListener>& l) override
+    virtual void           removeEventListener(const cpo::uno::Reference<css::lang::XEventListener>& l) override
      { ::svt::OCommonPicker::removeEventListener(l); }
 
 

@@ -46,7 +46,7 @@ class ScAccessibleDocument final
 {
 public:
     ScAccessibleDocument(
-        const css::uno::Reference<css::accessibility::XAccessible>& rxParent,
+        const cpo::uno::Reference<css::accessibility::XAccessible>& rxParent,
         ScTabViewShell* pViewShell,
         ScSplitPos eSplitPos);
 
@@ -62,7 +62,7 @@ protected:
 
 public:
 
-     virtual void SAL_CALL disposing() override;
+     virtual void disposing() override;
 
    ///=====  SfxListener  =====================================================
 
@@ -70,59 +70,59 @@ public:
 
     ///=====  XAccessibleComponent  ============================================
 
-    virtual css::uno::Reference< css::accessibility::XAccessible >
-        SAL_CALL getAccessibleAtPoint(
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
+        getAccessibleAtPoint(
         const css::awt::Point& rPoint ) override;
 
-    virtual void SAL_CALL grabFocus(  ) override;
+    virtual void grabFocus(  ) override;
 
     ///=====  XAccessibleContext  ==============================================
 
     /// Return the number of currently visible children.
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getAccessibleChildCount() override;
 
     /// Return the specified child or NULL if index is invalid.
-    virtual css::uno::Reference< css::accessibility::XAccessible> SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessible>
         getAccessibleChild(sal_Int64 nIndex) override;
 
     /// Return the set of current states.
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getAccessibleStateSet() override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
         getAccessibleName() override;
 
-    virtual OUString SAL_CALL getExtendedAttributes() override ;
+    virtual OUString getExtendedAttributes() override ;
     ///=====  XAccessibleSelection  ===========================================
 
-    virtual void SAL_CALL
+    virtual void
         selectAccessibleChild( sal_Int64 nChildIndex ) override;
 
-    virtual bool SAL_CALL
+    virtual bool
         isAccessibleChildSelected( sal_Int64 nChildIndex ) override;
 
-    virtual void SAL_CALL
+    virtual void
         clearAccessibleSelection(  ) override;
 
-    virtual void SAL_CALL
+    virtual void
         selectAllAccessibleChildren(  ) override;
 
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getSelectedAccessibleChildCount(  ) override;
 
-    virtual css::uno::Reference<
-        css::accessibility::XAccessible > SAL_CALL
+    virtual cpo::uno::Reference<
+        css::accessibility::XAccessible >
         getSelectedAccessibleChild( sal_Int64 nSelectedChildIndex ) override;
 
-    virtual void SAL_CALL
+    virtual void
         deselectAccessibleChild( sal_Int64 nChildIndex ) override;
 
     ///=====  XSelectionListener  =============================================
 
-    virtual void SAL_CALL selectionChanged( const css::lang::EventObject& aEvent ) override;
+    virtual void selectionChanged( const css::lang::EventObject& aEvent ) override;
 
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     ///=====  IAccessibleViewForwarder  ========================================
 
@@ -162,7 +162,7 @@ public:
 
     rtl::Reference<utl::AccessibleRelationSetHelper> GetRelationSet(const ScAddress* pAddress) const;
 
-    css::uno::Reference< css::accessibility::XAccessible >
+    cpo::uno::Reference< css::accessibility::XAccessible >
         GetAccessibleSpreadsheet();
 
 protected:
@@ -186,7 +186,7 @@ private:
     rtl::Reference<ScAccessibleSpreadsheet> mpAccessibleSpreadsheet;
     std::unique_ptr<ScChildrenShapes> mpChildrenShapes;
     rtl::Reference<ScAccessibleEditObject> mpTempAccEdit;
-    css::uno::Reference<css::accessibility::XAccessible> mxTempAcc;
+    cpo::uno::Reference<css::accessibility::XAccessible> mxTempAcc;
     tools::Rectangle maVisArea;
     bool mbCompleteSheetSelected;
 
@@ -200,8 +200,8 @@ private:
 
     bool IsDefunc(sal_Int64 nParentStates);
 
-    void AddChild(const css::uno::Reference<css::accessibility::XAccessible>& xAcc, bool bFireEvent);
-    void RemoveChild(const css::uno::Reference<css::accessibility::XAccessible>& xAcc, bool bFireEvent);
+    void AddChild(const cpo::uno::Reference<css::accessibility::XAccessible>& xAcc, bool bFireEvent);
+    void RemoveChild(const cpo::uno::Reference<css::accessibility::XAccessible>& xAcc, bool bFireEvent);
 
     OUString GetCurrentCellName() const;
     static const OUString & GetCurrentCellDescription();
@@ -211,9 +211,9 @@ public:
     ScDocument *GetDocument() const ;
     ScAddress   GetCurCellAddress() const;
 
-    virtual sal_Int32 SAL_CALL getForeground(  ) override;
+    virtual sal_Int32 getForeground(  ) override;
 
-    virtual sal_Int32 SAL_CALL getBackground(  ) override;
+    virtual sal_Int32 getBackground(  ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

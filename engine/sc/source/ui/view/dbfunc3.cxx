@@ -74,8 +74,8 @@
 using namespace com::sun::star;
 using ::cpo::uno::Any;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::UNO_QUERY;
+using ::cpo::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::container::XNameAccess;
 using ::com::sun::star::sheet::XDimensionsSupplier;
@@ -613,6 +613,34 @@ void ScDBFunc::DeleteCalcTable()
     }
     else
         ErrorMessage(STR_TABLE_NOTFOUND);
+}
+
+void ScDBFunc::ConvertCalcTableToRange()
+{
+    std::shared_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(
+        GetViewData().GetDialogParent(), VclMessageType::Question, VclButtonsType::YesNo,
+        ScResId(STR_QUERY_CONVERT_CALCTABLE_TO_RANGE)));
+    xBox->set_default_response(RET_YES);
+    xBox->SetInstallKitNotifierHdl(LINK(this, ScDBFunc, InstallKitNotifierHdl));
+    xBox->runAsync(xBox, [this](sal_Int32 nResult) {
+        if (nResult != RET_YES)
+            return;
+
+        ScViewData& rViewData = GetViewData();
+        ScDocShell* pDocSh = rViewData.GetDocShell();
+        ScDBData* pDBObj = pDocSh->GetDocument().GetTableDBAtCursor(
+            rViewData.GetCurX(), rViewData.GetCurY(), rViewData.CurrentTabForData(),
+            ScDBDataPortion::AREA);
+
+        if (!pDBObj)
+        {
+            ErrorMessage(STR_TABLE_NOTFOUND);
+            return;
+        }
+
+        ScDBDocFunc(*pDocSh).ConvertTableToRange(pDBObj);
+        CursorPosChanged(); // shells may be switched
+    });
 }
 
 // consolidate

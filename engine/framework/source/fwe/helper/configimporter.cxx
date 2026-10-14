@@ -23,6 +23,7 @@
 #include <com/sun/star/ui/XUIConfigurationManager2.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace framework
 {
@@ -30,7 +31,7 @@ namespace framework
 bool UIConfigurationImporterOOo1x::ImportCustomToolbars(
     const uno::Reference< ui::XUIConfigurationManager2 >& rContainerFactory,
     std::vector< uno::Reference< container::XIndexContainer > >& rSeqContainer,
-    const uno::Reference< uno::XComponentContext >& rxContext,
+    const uno::Reference< cpo::uno::XComponentContext >& rxContext,
     const uno::Reference< embed::XStorage >& rToolbarStorage )
 {
     bool bResult ( false );
@@ -57,7 +58,7 @@ bool UIConfigurationImporterOOo1x::ImportCustomToolbars(
                 }
             }
         }
-        catch ( const uno::RuntimeException& )
+        catch ( const cpo::uno::RuntimeException& )
         {
             throw;
         }

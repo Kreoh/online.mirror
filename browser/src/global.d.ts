@@ -153,8 +153,7 @@ interface AppInterface {
 		otherCellCursors: any;
 		splitCoordinate: null | cool.SimplePoint;
 		partHashes: null | Array<any>; // hashes used to distinguish parts (we use sheet name)
-		autoFilterCell: any; // The cell of the current autofilter popup.
-		pivotTableFilterCell: any; // The cell of the current pivot table filter popup.
+		filterPopupCell: any; // The cell a filter popup belongs to: { popupId, column, row }.
 		isRTL(): boolean;
 		isSelectedPartSheetView(): boolean;
 	};
@@ -164,9 +163,12 @@ interface AppInterface {
 		hasOverviewPage: boolean; // Whether the document has an Overview slide (part 0 when present).
 		savedViewMode: string | null; // 'normal' | 'notes' | 'master' | null
 		twipsCorrection: number;
-		getIndexFromPart(part: number): number;
+		getIndexFromPart(part: string): number;
 		isSlideHidden(partNo: number): boolean;
 		areAllSlidesHidden(): boolean;
+		isSlideImportSupported(): boolean;
+		getSelectedSlidesCount(): number;
+		getSelectedSectionName(): string | null;
 	};
 	writer: {
 		compareDocumentProperties: CompareDocumentProperties | null;
@@ -203,6 +205,7 @@ interface AppInterface {
 	file: {
 		editComment: boolean;
 		allowManageRedlines: boolean;
+		reviewMode: boolean;
 		readOnly: boolean;
 		modified: boolean;
 		permission: string;
@@ -216,7 +219,6 @@ interface AppInterface {
 		writer: {
 			pageRectangleList: Array<any>;
 		};
-		exportFormats: Array<any>;
 	};
 	roundedDpiScale: number;
 	following: {
@@ -226,12 +228,35 @@ interface AppInterface {
 	tile: {
 		size: null | cool.SimplePoint;
 	};
+	exportFormats: Array<ExportFormat>;
+	getExportFormats: (docType: string) => Array<ExportFormat>;
+	initExportFormats: (docType: string) => void;
+	updateExportFormatsVisibility: () => void;
+	isExportEntryVisible: (id: string) => boolean;
 	languages: Array<{ translated: string; neutral: string; iso: string }>;
+	// The sentence checking rule packages the engine reports as installed.
+	sentenceCheckingPackages?: Array<{ id: string; locale: string }>;
+	// Whether this document is running with this user's own document
+	// settings. It is running with whoever opened it first's.
+	userPresetsApplied?: boolean;
+	// Whether a document settings change made now would be felt in this
+	// document, rather than waiting for the next one to be opened.
+	documentSettingsLive?: boolean;
 	favouriteLanguages: Array<string>;
 	tableStyles: TableStylesService;
-	impressTableStyles: ImpressTableStylesService;
+	tableStyleGallery: TableStyleGalleryService;
+	onboardingTour: OnboardingTourController | null;
 	colorLastSelection: any;
 	serverAudit: any;
+	remoteLinks: Array<{
+		name?: string;
+		state: string;
+		lastModifiedTime?: string;
+		persistentLink: string;
+		access?: string;
+	}>;
+	// One-time token authorizing this view to call a POST to /cool/links
+	linkToken: string;
 	events: DocEvents;
 	showNavigator: boolean;
 
@@ -256,8 +281,16 @@ interface Document {
 // Extend the global Element interface with checkVisibility, which the DOM
 // types of the TypeScript release in use do not declare yet. It answers
 // whether the element is rendered, so a display: none ancestor makes it false.
+// Every option defaults to false, so visibility: hidden and a skipped
+// content-visibility subtree only count as invisible when asked for.
+interface CheckVisibilityOptions {
+	contentVisibilityAuto?: boolean;
+	opacityProperty?: boolean;
+	visibilityProperty?: boolean;
+}
+
 interface Element {
-	checkVisibility(): boolean;
+	checkVisibility(options?: CheckVisibilityOptions): boolean;
 }
 
 // Extend StringConstructor
@@ -301,7 +334,7 @@ interface ErrorMessages {
 	sessionexpired: string;
 	faileddocloading: string;
 	invalidLink: string;
-	leavind: string;
+	leaving: string;
 	docloadtimeout: string;
 	docunloadingretry: string;
 	docunloadinggiveup: string;
@@ -323,6 +356,11 @@ interface ErrorMessages {
 		notfound: string;
 		toolarge: string;
 	};
+}
+
+interface PluralParseRule {
+	nplurals: number;
+	select: (n: number) => number;
 }
 
 // Accessibility validator interface for Cypress tests
@@ -351,35 +389,56 @@ interface Window {
 		isTablet(): boolean;
 		isCODesktop(): boolean;
 		isChromebook(): boolean;
+		isInteractivePreview(): boolean;
 		getDeviceFormFactor(): string;
 	};
 	prefs: {
 		useBrowserSetting: boolean;
 		getBoolean(key: string, defaultValue?: boolean): boolean;
+		getNumber(key: string, defaultValue?: number): number;
 		get(key: string, defaultValue?: any): any;
 		_initializeBrowserSetting(msg: string): void;
 		set(key: string, value: any): void;
 		remove(key: string): void;
 		setMultiple(prefs: Record<string, string>): void;
 		sendPendingBrowserSettingsUpdate(): void;
+		recordStoredBrowserSettings(
+			settings: Record<string, string | number>,
+		): void;
 		canPersist: boolean;
 		prefersDarkOS(): boolean;
 		hasExplicitDarkModePref(): boolean;
 		seedDarkModeDefault(): boolean;
+		spellOnlineForLoad(): string;
 	};
 	KeyboardShortcuts: KeyboardShortcuts;
 
+	PluralForms: {
+		parseRule: (header: string) => null | PluralParseRule;
+		defaultRule: PluralParseRule;
+	};
+	_n: (singular: string, plural: string, count: number) => string;
+
+	// The theme and the document background the load message carried.
+	themeSentWithLoad?: { theme: boolean; background: boolean };
+
 	starterScreen: boolean;
 	aiEthicalRatingMessage: boolean;
+	showAISidebar: boolean;
+	showAINotebookbar: boolean;
 	allowUpdateNotification: boolean;
 	autoShowWelcome: boolean;
 	bundlejsLoaded: boolean;
 	canvasSlideshowEnabled: boolean;
+	remoteLinksEnabled: boolean;
 	deeplEnabled: boolean;
 	documentSigningEnabled: boolean;
 	deviceFormFactor?: string;
 	enableAccessibility: boolean;
 	enableExperimentalFeatures: boolean;
+	// True when jsdialogs in the Qt shell render as their own native
+	// windows. Left unset in the application, so the value is false.
+	enablePopoutDialogs?: boolean;
 	enableDebug: boolean;
 	simulateError: (name: string) => boolean;
 	enableMacrosExecution: boolean;
@@ -396,6 +455,7 @@ interface Window {
 	protocolDebug: boolean;
 	routeToken: string;
 	mobileDialogId?: number;
+	savedUIState: boolean;
 	sidebarId: number;
 	userInterfaceMode: string;
 	ThisIsAMobileApp: boolean;
@@ -419,6 +479,8 @@ interface Window {
 	wopiHostId: string;
 	vendor: string;
 	copyrightYear: string;
+	WOPIPostmessageReady: boolean;
+	coolPreview: boolean;
 
 	socket: SockInterface;
 	errorMessages: ErrorMessages;
@@ -435,6 +497,7 @@ interface Window {
 	initializedUI?: () => void; // initializedUI is an optional function, potentially defined in branding
 	setupToolbar(map: any): void; // TODO should be L.Map
 	makeWsUrl: (url: string) => string;
+	makeHttpUrl: (path: string) => string;
 	getBorderStyleUNOCommand: (
 		a: number,
 		b: number,
@@ -444,14 +507,43 @@ interface Window {
 		f: number,
 		g: number,
 	) => string;
+	getUNOCommand: (unoData: UnoCommand) => string;
+	getColorPickerData: (type: string) => any;
+	getConditionalFormatMenuElements: (
+		more: string,
+		dropdown: boolean,
+	) => HTMLElement;
+	getConditionalColorScaleMenuElements: (
+		more: string,
+		dropdown: boolean,
+	) => HTMLElement;
+	getConditionalDataBarMenuElements: (
+		more: string,
+		dropdown: boolean,
+	) => HTMLElement;
+	getConnectorsPopupElements: (
+		callback: EventListenerOrEventListenerObject,
+	) => HTMLElement;
+	getInsertTablePopupElements: (
+		callback: EventListenerOrEventListenerObject,
+	) => HTMLElement;
+	getShapesPopupElements: (
+		callback: EventListenerOrEventListenerObject,
+	) => HTMLElement;
+	editorUpdate: (e: Event) => void;
+	unoCmdToToolbarId: (name: string) => string;
 	L: any;
 	createWebSocket(url: string): SockInterface;
 	getAccessibilityState(): boolean;
+	getFocusRingColor(): string;
 	makeClientVisibleArea(): string;
 	postMobileDebug(msg: string): void;
 
 	removeAccessKey(text: string): string;
 	contextMenuWizard: boolean;
+
+	RenderManager: typeof RenderManager;
+	TextSelections: typeof TextSelections;
 }
 
 // For localization

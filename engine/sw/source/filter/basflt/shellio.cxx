@@ -68,15 +68,7 @@
 #include <unotextrange.hxx>
 
 using namespace ::com::sun::star;
-
-static bool sw_MergePortions(SwNode* pNode, void *)
-{
-    if (pNode->IsTextNode())
-    {
-        pNode->GetTextNode()->FileLoadedInitHints();
-    }
-    return true;
-}
+using namespace ::cpo;
 
 void SwAsciiOptions::Reset()
 {
@@ -357,7 +349,7 @@ ErrCodeMsg SwReader::Read( const Reader& rOptions )
     // This is only necessary for formats that may contain RSIDs (ODF,MSO).
     // It's too hard to figure out which nodes were inserted in Insert->File
     // case (redlines, flys, footnotes, header/footer) so just do every node.
-    mxDoc->GetNodes().ForEach(&sw_MergePortions);
+    mxDoc->GetNodes().FileLoadedInitHints();
 
     mxDoc->SetInReading( false );
     mxDoc->SetInXMLImport( false );
@@ -693,6 +685,14 @@ void Reader::StartPaste(SwPasteInfo& rPasteInfo)
     rPasteInfo.m_rPam.Move(fnMoveBackward);
 }
 
+void Reader::TakePastedParagraphFormat(SwTextNode& rEmptyNode, SwTextNode& rPastedNode)
+{
+    rEmptyNode.ChgFormatColl(rPastedNode.GetTextColl());
+    // Lists would need manual merging, so a list paragraph only gives its style.
+    if (!rPastedNode.GetNoCondAttr(RES_PARATR_LIST_ID, /*bInParents=*/false))
+        rPastedNode.CopyCollFormat(rEmptyNode);
+}
+
 void Reader::EndPaste(SwPasteInfo& rPasteInfo)
 {
     // Clean up the fake paragraphs.
@@ -730,15 +730,7 @@ void Reader::EndPaste(SwPasteInfo& rPasteInfo)
                     if (pTextNode->GetText().getLength())
                         pDelNd->FormatToTextAttr(pTextNode);
                     else
-                    {
-                        pTextNode->ChgFormatColl(pDelNd->GetTextColl());
-                        if (!pDelNd->GetNoCondAttr(RES_PARATR_LIST_ID, /*bInParents=*/false))
-                        {
-                            // Lists would need manual merging, but copy paragraph direct
-                            // formatting otherwise.
-                            pDelNd->CopyCollFormat(*pTextNode);
-                        }
-                    }
+                        TakePastedParagraphFormat(*pTextNode, *pDelNd);
                     pTextNode->JoinNext();
                 }
             }

@@ -22,6 +22,7 @@
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmlprmap.hxx>
 #include "xmlsubti.hxx"
+#include "xmlsheetviewi.hxx"
 #include <formula/grammar.hxx>
 #include <vcl/svapp.hxx>
 #include <dociter.hxx>
@@ -142,13 +143,15 @@ class ScXMLImport: public SvXMLImport
 
     ScMyLabelRanges            maMyLabelRanges;
     ScMyImportValidations      maValidations;
+    /// The sheet views read so far. They are created once every sheet is complete.
+    std::vector<ScXMLSheetViewData> maSheetViews;
     std::unique_ptr<ScMyImpDetectiveOpArray>    pDetectiveOpArray;
     std::optional<SolarMutexGuard> moSolarMutexGuard;
 
     std::unique_ptr<XMLNumberFormatAttributesExportHelper> pNumberFormatAttributesExportHelper;
     std::unique_ptr<ScMyStyleNumberFormats> pStyleNumberFormats;
-    css::uno::Reference <css::util::XNumberFormats> xNumberFormats;
-    css::uno::Reference <css::util::XNumberFormatTypes> xNumberFormatTypes;
+    cpo::uno::Reference <css::util::XNumberFormats> xNumberFormats;
+    cpo::uno::Reference <css::util::XNumberFormatTypes> xNumberFormatTypes;
 
     rtl::Reference<ScCellRangesObj> mxSheetCellRanges; // css::sheet::XSheetCellRangeContainer
 
@@ -169,20 +172,20 @@ protected:
     // This method is called after the namespace map has been updated, but
     // before a context for the current element has been pushed.
     virtual SvXMLImportContext *CreateFastContext( sal_Int32 nElement,
-        const ::css::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const ::cpo::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
     virtual XMLShapeImportHelper* CreateShapeImport() override;
 
 public:
     ScXMLImport(
-        const css::uno::Reference< css::uno::XComponentContext >& rContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
         OUString const & implementationName, SvXMLImportFlags nImportFlag,
         const cpo::uno::Sequence< OUString > & sSupportedServiceNames = {});
 
     virtual ~ScXMLImport() noexcept override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence<cpo::uno::Any>& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence<cpo::uno::Any>& aArguments ) override;
 
     // namespace office
     // NB: in contrast to other CreateFooContexts, this particular one handles
@@ -234,6 +237,11 @@ public:
         maMyLabelRanges.push_back(std::move(aMyLabelRange));
     }
 
+    void AddSheetView(ScXMLSheetViewData aSheetView)
+    {
+        maSheetViews.push_back(std::move(aSheetView));
+    }
+
     void AddValidation(const ScMyImportValidation& rValidation) { maValidations.push_back(rValidation); }
     bool GetValidation(const OUString& sName, ScMyImportValidation& aValidation);
 
@@ -249,7 +257,7 @@ public:
     ScMyStylesImportHelper* GetStylesImportHelper() { return pStylesImportHelper.get(); }
     sal_Int32 SetCurrencySymbol(const sal_Int32 nKey, std::u16string_view rCurrency);
     bool IsCurrencySymbol(const sal_Int32 nNumberFormat, std::u16string_view sCurrencySymbol, std::u16string_view sBankSymbol);
-    void SetType(const css::uno::Reference <css::beans::XPropertySet>& rProperties,
+    void SetType(const cpo::uno::Reference <css::beans::XPropertySet>& rProperties,
         sal_Int32& rNumberFormat,
         const sal_Int16 nCellType,
         std::u16string_view rCurrency);
@@ -273,10 +281,10 @@ public:
     void SetStylesToRangesFinished();
 
     // XImporter
-    virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
+    virtual void setTargetDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
-    virtual void SAL_CALL startDocument() override;
-    virtual void SAL_CALL endDocument() override;
+    virtual void startDocument() override;
+    virtual void endDocument() override;
 
     virtual void DisposingModel() override;
 
@@ -304,6 +312,7 @@ public:
     void SetSheetNamedRanges();
     void SetLabelRanges();
     void SetStringRefSyntaxIfMissing();
+    void ApplySheetViews();
 
     /** Extracts the formula string, the formula grammar namespace URL, and a
         grammar enum value from the passed formula attribute value.

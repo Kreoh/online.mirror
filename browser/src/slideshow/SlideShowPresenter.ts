@@ -105,7 +105,8 @@ interface SlideInfo {
 	next: string;
 	prev: string;
 	indexInSlideShow?: number;
-	uniqueID: number;
+	// The slide's part identifier: the page's GUID in braced form.
+	part: string;
 	slideWidth: number;
 	slideHeight: number;
 }
@@ -123,6 +124,9 @@ class SlideShowPresenter {
 	_presentationInfo: PresentationInfo = null;
 	_slideCompositor: SlideCompositor = null;
 	_fullscreen: Element = null;
+	_fullscreenResizeObserver: ResizeObserver = null;
+	// True while the Android shell has been told that a slide show is on screen.
+	private _androidSlideShowReported: boolean = false;
 	_presenterContainer: HTMLDivElement = null;
 	_slideShowCanvas: HTMLCanvasElement = null;
 	// On the web build this is the in-page iframe the slideshow renders into.
@@ -182,6 +186,7 @@ class SlideShowPresenter {
 		this._map.on('presentationinfo', this.onSlideShowInfo, this);
 		this._map.on('newfullscreen', this._onStart, this);
 		this._map.on('newpresentinwindow', this._onStartInWindow, this);
+		this._map.on('slideshowback', this._onAndroidBack, this);
 		window.L.DomEvent.on(
 			document,
 			'fullscreenchange',
@@ -212,6 +217,7 @@ class SlideShowPresenter {
 		this._map.off('presentationinfo', this.onSlideShowInfo, this);
 		this._map.off('newfullscreen', this._onStart, this);
 		this._map.off('newpresentinwindow', this._onStartInWindow, this);
+		this._map.off('slideshowback', this._onAndroidBack, this);
 		window.L.DomEvent.off(
 			document,
 			'fullscreenchange',
@@ -459,15 +465,55 @@ class SlideShowPresenter {
 			// window.addEventListener('keydown', this._onCanvasKeyDown.bind(this));
 			window.addEventListener('keydown', this._onKeyDownHandler, true);
 			this.centerCanvas();
+			// The window manager grows the window to the screen some time after
+			// this event arrives, so fit the slide again every time the full
+			// screen element settles on a size.
+			this._fullscreenResizeObserver = new ResizeObserver(() =>
+				this.centerCanvas(),
+			);
+			this._fullscreenResizeObserver.observe(this._fullscreen);
 		} else {
+			this._stopWatchingFullscreenSize();
 			// we need to cleanup current/prev slide
 			this._slideShowNavigator.quit();
 		}
 	}
 
+	// Tells the Android shell whether a slide show is on screen.
+	private _postAndroidSlideShow(active: boolean) {
+		this._androidSlideShowReported = active;
+		window.postMobileMessage('SLIDESHOW ' + (active ? 'on' : 'off'));
+	}
+
+	// Tells the Android shell whether a slide show is on screen, once per change.
+	private _reportAndroidSlideShow(active: boolean) {
+		if (!window.ThisIsTheAndroidApp) return;
+		if (active === this._androidSlideShowReported) return;
+		this._postAndroidSlideShow(active);
+	}
+
+	// The hardware back button on Android ends the slide show, like Escape.
+	private _onAndroidBack() {
+		if (!this._slideShowCanvas) {
+			this._postAndroidSlideShow(false);
+			return;
+		}
+		this._slideShowNavigator.quit();
+	}
+
+	private _stopWatchingFullscreenSize() {
+		if (!this._fullscreenResizeObserver) return;
+		this._fullscreenResizeObserver.disconnect();
+		this._fullscreenResizeObserver = null;
+	}
+
 	_stopFullScreen() {
+		this._reportAndroidSlideShow(false);
 		if (!this._slideShowCanvas) return;
 
+		this._stopWatchingFullscreenSize();
+
+		this.stopLoader();
 		if (this._slideCompositor) this._slideCompositor.deleteResources();
 		this._slideRenderer.deleteResources();
 
@@ -506,8 +552,11 @@ class SlideShowPresenter {
 					.clientHeight;
 			}
 		} else if (this.isFullscreen()) {
-			winWidth = window.screen.width;
-			winHeight = window.screen.height;
+			// The styles below are in CSS pixels, so measure the full screen
+			// element itself. Browser zoom scales that box, and the screen
+			// dimensions do not follow it.
+			winWidth = this._fullscreen.clientWidth;
+			winHeight = this._fullscreen.clientHeight;
 		}
 
 		if (!winWidth || !winHeight) return;
@@ -574,6 +623,7 @@ class SlideShowPresenter {
 			height,
 			showSwitchMonitors,
 		);
+		this._reportAndroidSlideShow(true);
 
 		if (this._isWelcomePresentation) {
 			const closeBtn = window.L.DomUtil.create(
@@ -1075,19 +1125,13 @@ class SlideShowPresenter {
 		this._canvasLoader = null;
 	}
 
-	_generateSlideWindowHtml(title: string) {
-		const sanitizer = document.createElement('div');
-		sanitizer.innerText = title;
-
-		const sanitizedTitle = sanitizer.innerHTML;
-
+	_generateSlideWindowHtml() {
 		return `
 			<!DOCTYPE html>
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
 				<meta name="viewport" content="width=device-width, initial-scale=1">
-				<title>${sanitizedTitle}</title>
 				<link rel="stylesheet" href="progressbar.css" />
 			</head>
 			<body>
@@ -1150,7 +1194,7 @@ class SlideShowPresenter {
 	_doInWindowPresentation(showSwitchMonitors: boolean) {
 		const popupTitle =
 			_('Windowed Presentation: ') + this._map['wopi'].BaseFileName;
-		const htmlContent = this._generateSlideWindowHtml(popupTitle);
+		const htmlContent = this._generateSlideWindowHtml();
 
 		// On the Qt and macOS shells a full screen show or a presenter-console
 		// show opens its own window with window.origOpen. A plain "Present in
@@ -1185,8 +1229,10 @@ class SlideShowPresenter {
 		}
 
 		this._getProxyDocumentNode().open();
+		// eslint-disable-next-line no-restricted-syntax -- fixed markup
 		this._getProxyDocumentNode().write(htmlContent);
 		this._getProxyDocumentNode().close();
+		this._getProxyDocumentNode().title = popupTitle;
 
 		this._slideShowWindowProxy.focus();
 
@@ -1259,6 +1305,7 @@ class SlideShowPresenter {
 
 	slideshowWindowCleanUp = () => {
 		app.timerRegistry.clearInterval(this._windowCloseInterval);
+		this._reportAndroidSlideShow(false);
 		this._slideShowNavigator.quit();
 		this._map.uiManager.closeSnackbar();
 		this._slideShowCanvas = null;
@@ -1532,6 +1579,17 @@ class SlideShowPresenter {
 			);
 			this._slideShowHandler.setMetaPresentation(this._metaPresentation);
 			this._slideShowNavigator.setMetaPresentation(this._metaPresentation);
+		} else if (this._canvasLoader) {
+			// The loader is on the canvas while the first slide of this show is
+			// being fetched. Take the newer info, and let the fetch that is
+			// already running bring the slide. This answers a refresh that was
+			// asked for in the meantime as well.
+			this._metaPresentation.update(data);
+			this._presentationInfoChanged = false;
+			this._updateAnimatedElementsCanvasSize(
+				this._slideCompositor.getCanvasSize(),
+			);
+			return;
 		} else {
 			// don't allow user interaction
 			this._slideShowNavigator.disable();
@@ -1574,15 +1632,7 @@ class SlideShowPresenter {
 		this._slideShowCanvas.height = canvasSize[1];
 		this.centerCanvas();
 
-		// animated elements needs to update canvas size
-		this._metaPresentation.getMetaSlides().forEach((metaSlide) => {
-			if (metaSlide.animationsHandler) {
-				const animElemMap = metaSlide.animationsHandler.getAnimatedElementMap();
-				animElemMap.forEach((animatedElement) => {
-					animatedElement.updateCanvasSize(canvasSize);
-				});
-			}
-		});
+		this._updateAnimatedElementsCanvasSize(canvasSize);
 
 		this.startLoader();
 
@@ -1594,6 +1644,19 @@ class SlideShowPresenter {
 			skipTransition,
 			this._startEffect,
 		);
+	}
+
+	/// The animated elements draw at the canvas size, so every new set of meta
+	/// slides is given it.
+	private _updateAnimatedElementsCanvasSize(canvasSize: [number, number]) {
+		this._metaPresentation.getMetaSlides().forEach((metaSlide) => {
+			if (metaSlide.animationsHandler) {
+				const animElemMap = metaSlide.animationsHandler.getAnimatedElementMap();
+				animElemMap.forEach((animatedElement) => {
+					animatedElement.updateCanvasSize(canvasSize);
+				});
+			}
+		});
 	}
 
 	onSlideShowInfoChanged() {

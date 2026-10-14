@@ -11,6 +11,9 @@
 #include <memory>
 
 #include <sfx2/docfile.hxx>
+#include <com/sun/star/sheet/XCellRangesAccess.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 
 #include <svl/sharedstringpool.hxx>
 #include <svx/svdpage.hxx>
@@ -57,8 +60,8 @@
 #include <vcl/idletask.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class ScFiltersTest3 : public ScModelTestBase
 {
@@ -1858,13 +1861,13 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest3, testTdf128951)
     createScDoc();
 
     // 2. Create a new sheet instance
-    css::uno::Reference<css::lang::XMultiServiceFactory> xFac(mxComponent,
-                                                              css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xFac(mxComponent,
+                                                              cpo::uno::UNO_QUERY_THROW);
     auto xSheet = xFac->createInstance(u"com.sun.star.sheet.Spreadsheet"_ustr);
 
     // 3. Insert sheet into the spreadsheet (was throwing IllegalArgumentException)
-    css::uno::Reference<css::sheet::XSpreadsheetDocument> xDoc(mxComponent,
-                                                               css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::sheet::XSpreadsheetDocument> xDoc(mxComponent,
+                                                               cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_NO_THROW(
         xDoc->getSheets()->insertByName(u"mustNotThrow"_ustr, cpo::uno::Any(xSheet)));
 }
@@ -2004,9 +2007,9 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest3, testTdf130725)
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 
     // 2. Insert 0.0042 into a cell as a formula, to force the conversion from string to double
-    css::uno::Reference<css::sheet::XCellRangesAccess> xSheets(xDoc->getSheets(),
-                                                               css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::table::XCell> xCell = xSheets->getCellByPosition(0, 0, 0);
+    cpo::uno::Reference<css::sheet::XCellRangesAccess> xSheets(xDoc->getSheets(),
+                                                               cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::table::XCell> xCell = xSheets->getCellByPosition(0, 0, 0);
     xCell->setFormula(u"0.0042"_ustr); // this assumes en-US locale
 
     // 3. Check that the value is the nearest double-precision representation of the decimal 0.0042
@@ -2073,6 +2076,17 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest3, testTwoCellAnchorEditAsOneCell)
     tools::Rectangle aRect = pObj->GetSnapRect();
     CPPUNIT_ASSERT_DOUBLES_EQUAL(12091.0, static_cast<double>(aRect.GetWidth()), 1.0);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(7620.0, static_cast<double>(aRect.GetHeight()), 1.0);
+
+    pPage = pDrawLayer->GetPage(1);
+    CPPUNIT_ASSERT(pPage);
+    pObj = pPage->GetObj(0);
+    CPPUNIT_ASSERT(pObj);
+
+    // bounding box must correctly reflect rotation, 120 degrees CCW (240 degrees CW in Excel)
+    CPPUNIT_ASSERT_EQUAL((12000_deg100).get(), pObj->GetRotateAngle().get());
+    aRect = pObj->GetSnapRect();
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(11302.0, static_cast<double>(aRect.GetWidth()), 1.0);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(12252.0, static_cast<double>(aRect.GetHeight()), 1.0);
 }
 
 CPPUNIT_TEST_FIXTURE(ScFiltersTest3, testThreadedCommentImport)
@@ -2087,6 +2101,15 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest3, testThreadedCommentImport)
     CPPUNIT_ASSERT(pNote->GetText().indexOf(u"a comment on A2") >= 0);
     // Author should be the display name, not the tc={guid} placeholder.
     CPPUNIT_ASSERT_EQUAL(u"Mike Kaganski"_ustr, pNote->GetAuthor());
+
+    // The note takes its date from the root entry, because the legacy comment part holds none.
+    // Without the accompanying fix in place, this test would have failed with an empty string:
+    // the note had no date of its own, so a client had nothing to put on the comment card.
+    CPPUNIT_ASSERT_EQUAL(u"2026-03-24T09:25:49Z"_ustr, pNote->GetDateUTC());
+    CPPUNIT_ASSERT(!pNote->GetDate().isEmpty());
+    // The moment carries the marker that says it is one. Read without it, a client in another
+    // zone would take it for the author's wall clock and show the wrong time.
+    CPPUNIT_ASSERT(pNote->GetDateUTC().endsWith("Z"));
 
     // Threaded comment data should be attached.
     const ScThreadedCommentData* pData = pNote->GetThreadedCommentData();

@@ -26,10 +26,10 @@
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/EventObject.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Type.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <com/sun/star/util/ChangesEvent.hpp>
 #include <com/sun/star/util/ChangesSet.hpp>
 #include <com/sun/star/util/ElementChange.hpp>
@@ -83,7 +83,7 @@ void RootAccess::initBroadcaster(
     for (auto const& changesListener : changesListeners_)
     {
         cppu::OWeakObject* pSource = this;
-        css::uno::Reference< css::uno::XInterface > xBase( pSource, css::uno::UNO_QUERY );
+        cpo::uno::Reference< cpo::uno::XInterface > xBase( pSource, cpo::uno::UNO_QUERY );
         broadcaster->addChangesNotification(
             changesListener,
             css::util::ChangesEvent(
@@ -110,14 +110,14 @@ void RootAccess::setAlive(bool b) {
 }
 
 void RootAccess::addChangesListener(
-    css::uno::Reference< css::util::XChangesListener > const & aListener)
+    cpo::uno::Reference< css::util::XChangesListener > const & aListener)
 {
     assert(thisIs(IS_ANY));
     {
         osl::MutexGuard g(*lock_);
         checkLocalizedPropertyAccess();
         if (!aListener.is()) {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"null listener"_ustr, getXWeak());
         }
         if (!isDisposed()) {
@@ -132,7 +132,7 @@ void RootAccess::addChangesListener(
 }
 
 void RootAccess::removeChangesListener(
-    css::uno::Reference< css::util::XChangesListener > const & aListener)
+    cpo::uno::Reference< css::util::XChangesListener > const & aListener)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);
@@ -211,7 +211,7 @@ const rtl::Reference< Node > & RootAccess::getNode() {
         node_ = getComponents().resolvePathRepresentation(
             pathRepresentation_, &canonic, &path_, &finalizedLayer);
         if (!node_.is()) {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 "cannot find " + pathRepresentation_, nullptr);
                 // RootAccess::queryInterface indirectly calls
                 // RootAccess::getNode, so if this RootAccess were passed out in

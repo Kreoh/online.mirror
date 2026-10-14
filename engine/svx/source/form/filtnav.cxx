@@ -60,9 +60,9 @@ using namespace ::dbtools;
 
 namespace svxform
 {
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::container::XIndexAccess;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY;
     using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::form::runtime::XFormController;
     using ::com::sun::star::form::runtime::XFilterController;
@@ -79,9 +79,9 @@ namespace svxform
     using ::com::sun::star::sdbc::XRowSet;
     using ::com::sun::star::lang::Locale;
     using ::com::sun::star::sdb::SQLContext;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using ::cpo::uno::Exception;
     using ::cpo::uno::Sequence;
 
@@ -218,12 +218,12 @@ public:
     FmFilterAdapter(FmFilterModel* pModel, const Reference< XIndexAccess >& xControllers);
 
 // XEventListener
-    virtual void SAL_CALL disposing(const EventObject& Source) override;
+    virtual void disposing(const EventObject& Source) override;
 
 // XFilterControllerListener
-    virtual void SAL_CALL predicateExpressionChanged( const FilterEvent& Event ) override;
-    virtual void SAL_CALL disjunctiveTermRemoved( const FilterEvent& Event ) override;
-    virtual void SAL_CALL disjunctiveTermAdded( const FilterEvent& Event ) override;
+    virtual void predicateExpressionChanged( const FilterEvent& Event ) override;
+    virtual void disjunctiveTermRemoved( const FilterEvent& Event ) override;
+    virtual void disjunctiveTermAdded( const FilterEvent& Event ) override;
 
 // helpers
     /// @throws RuntimeException
@@ -294,7 +294,7 @@ void FmFilterAdapter::setText(sal_Int32 nRowPos,
 
 // XEventListener
 
-void SAL_CALL FmFilterAdapter::disposing(const EventObject& /*e*/)
+void FmFilterAdapter::disposing(const EventObject& /*e*/)
 {
 }
 
@@ -384,7 +384,7 @@ void FmFilterAdapter::predicateExpressionChanged( const FilterEvent& Event )
 }
 
 
-void SAL_CALL FmFilterAdapter::disjunctiveTermRemoved( const FilterEvent& Event )
+void FmFilterAdapter::disjunctiveTermRemoved( const FilterEvent& Event )
 {
     SolarMutexGuard aGuard;
 
@@ -419,7 +419,7 @@ void SAL_CALL FmFilterAdapter::disjunctiveTermRemoved( const FilterEvent& Event 
 }
 
 
-void SAL_CALL FmFilterAdapter::disjunctiveTermAdded( const FilterEvent& Event )
+void FmFilterAdapter::disjunctiveTermAdded( const FilterEvent& Event )
 {
     SolarMutexGuard aGuard;
 

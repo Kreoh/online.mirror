@@ -114,8 +114,8 @@
 #include <comphelper/sequenceashashmap.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
@@ -286,10 +286,10 @@ namespace
     {
         OUString href, name, targetFrame, ustyleName, vstyleName;
         bool serverMap = false;
-        css::uno::Reference<css::container::XNameReplace> events;
+        cpo::uno::Reference<css::container::XNameReplace> events;
 
         HyperlinkData() = default;
-        HyperlinkData(const css::uno::Reference<css::beans::XPropertySet>& rPropSet);
+        HyperlinkData(const cpo::uno::Reference<css::beans::XPropertySet>& rPropSet);
 
         bool operator==(const HyperlinkData&) const;
 
@@ -297,7 +297,7 @@ namespace
         void exportEvents(SvXMLExport& rExport);
     };
 
-    HyperlinkData::HyperlinkData(const css::uno::Reference<css::beans::XPropertySet>& rPropSet)
+    HyperlinkData::HyperlinkData(const cpo::uno::Reference<css::beans::XPropertySet>& rPropSet)
     {
         const auto xPropSetInfo(rPropSet->getPropertySetInfo());
 
@@ -1351,7 +1351,7 @@ struct XMLTextParagraphExport::DocumentListNodes
         OUString list_id;
     };
     std::vector<NodeData> docListNodes;
-    DocumentListNodes(const css::uno::Reference<css::frame::XModel>& xModel,
+    DocumentListNodes(const cpo::uno::Reference<css::frame::XModel>& xModel,
                       const std::vector<sal_Int32>& aDocumentNodeOrder)
     {
         // Sequence of nodes, each of them represented by three-element sequence,
@@ -1788,7 +1788,7 @@ bool XMLTextParagraphExport::ExportListId() const
 }
 
 #ifndef NDEBUG
-static bool isInShapesTextFrame(const css::uno::Reference<css::text::XTextContent>& xTextContent)
+static bool isInShapesTextFrame(const cpo::uno::Reference<css::text::XTextContent>& xTextContent)
 {
     auto xTextRange = xTextContent.query<css::text::XTextRange>();
     if (!xTextRange)
@@ -1811,7 +1811,7 @@ static bool isInShapesTextFrame(const css::uno::Reference<css::text::XTextConten
 }
 #endif
 
-void XMLTextParagraphExport::RecordNodeIndex(const css::uno::Reference<css::text::XTextContent>& xTextContent)
+void XMLTextParagraphExport::RecordNodeIndex(const cpo::uno::Reference<css::text::XTextContent>& xTextContent)
 {
     if (!bInDocumentNodeOrderCollection)
         return;
@@ -2036,11 +2036,15 @@ void XMLTextParagraphExport::exportParagraph(
 //  else
 //      rPropSetHelper.getValues( xPropSet );
 
+    // The automatic style is collected from the view of the paragraph the application offers
+    // for it, which may report more as the paragraph's own than the paragraph itself does.
+    Reference<XPropertySet> xAutoStylePropSet(getParagraphAutoStylePropertySet(xPropSet));
+
     if( bExportParagraph )
     {
         if( bAutoStyles )
         {
-            Add( XmlStyleFamily::TEXT_PARAGRAPH, rPropSetHelper, xPropSet );
+            Add( XmlStyleFamily::TEXT_PARAGRAPH, rPropSetHelper, xAutoStylePropSet );
         }
         else
         {
@@ -2077,7 +2081,7 @@ void XMLTextParagraphExport::exportParagraph(
                 }
             }
 
-            OUString sAutoStyle = Find( XmlStyleFamily::TEXT_PARAGRAPH, xPropSet, sStyle );
+            OUString sAutoStyle = Find( XmlStyleFamily::TEXT_PARAGRAPH, xAutoStylePropSet, sStyle );
             if ( sAutoStyle.isEmpty() )
                 sAutoStyle = sStyle;
             if( !sAutoStyle.isEmpty() )
@@ -3689,7 +3693,7 @@ void XMLTextParagraphExport::exportTitleAndDescription(
 }
 
 void XMLTextParagraphExport::exportTextRangeSpan(
-    const css::uno::Reference< css::text::XTextRange > & rTextRange,
+    const cpo::uno::Reference< css::text::XTextRange > & rTextRange,
     Reference< XPropertySet > const & xPropSet,
     Reference < XPropertySetInfo > & xPropSetInfo,
     const bool bIsUICharStyle,
@@ -3942,6 +3946,12 @@ void XMLTextParagraphExport::recordTrackedChangesNoXText()
 {
     if (nullptr != m_pRedlineExport)
         m_pRedlineExport->SetCurrentXText();
+}
+
+Reference<XPropertySet> XMLTextParagraphExport::getParagraphAutoStylePropertySet(
+    const Reference<XPropertySet>& rPropSet) const
+{
+    return rPropSet;
 }
 
 void XMLTextParagraphExport::exportTableAutoStyles() {}

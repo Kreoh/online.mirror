@@ -22,9 +22,9 @@
 #include <indexentrysupplier.hxx>
 #include <localedata.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::cpo::uno;
 

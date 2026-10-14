@@ -3634,6 +3634,26 @@ namespace xmloff::token {
 
         TOKEN( "horizontal-rule",                 XML_HORIZONTAL_RULE ),
 
+        TOKEN( "guid",                            XML_GUID ),
+        TOKEN( "date-utc",                        XML_DATE_UTC ),
+        TOKEN( "source-modified-time",            XML_SOURCE_MODIFIED_TIME ),
+        TOKEN( "source-page-guid",                XML_SOURCE_PAGE_GUID ),
+
+        TOKEN( "sheet-views",                     XML_SHEET_VIEWS ),
+        TOKEN( "sheet-view",                      XML_SHEET_VIEW ),
+        TOKEN( "hidden-columns",                  XML_HIDDEN_COLUMNS ),
+        TOKEN( "filter-guid",                     XML_FILTER_GUID ),
+
+        TOKEN( "reflection",                      XML_REFLECTION ),
+        TOKEN( "reflection-distance",             XML_REFLECTION_DISTANCE ),
+        TOKEN( "reflection-blur",                 XML_REFLECTION_BLUR ),
+        TOKEN( "reflection-start-transparency",   XML_REFLECTION_START_TRANSPARENCY ),
+        TOKEN( "reflection-start-position",       XML_REFLECTION_START_POSITION ),
+        TOKEN( "reflection-end-transparency",     XML_REFLECTION_END_TRANSPARENCY ),
+        TOKEN( "reflection-end-position",         XML_REFLECTION_END_POSITION ),
+
+        TOKEN( "airplane",                        XML_AIRPLANE ),
+
 #if OSL_DEBUG_LEVEL > 0
         { 0, nullptr, std::nullopt,               XML_TOKEN_END }
 #else

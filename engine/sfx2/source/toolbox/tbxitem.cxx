@@ -18,11 +18,7 @@
  */
 
 
-#ifdef __sun
-#include <ctime>
-#endif
-
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/util/URL.hpp>
@@ -62,7 +58,7 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::frame::status;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::cpo::uno;
 
@@ -276,7 +272,7 @@ void SfxToolBoxControl::Dispatch( const OUString& aCommand, cpo::uno::Sequence< 
 }
 
 // XStatusListener
-void SAL_CALL SfxToolBoxControl::statusChanged( const FeatureStateEvent& rEvent )
+void SfxToolBoxControl::statusChanged( const FeatureStateEvent& rEvent )
 {
     SfxViewFrame* pViewFrame = nullptr;
     Reference < XController > xController;
@@ -356,7 +352,7 @@ void SAL_CALL SfxToolBoxControl::statusChanged( const FeatureStateEvent& rEvent 
                 if (tmpState != SfxItemState::UNKNOWN && tmpState != SfxItemState::DISABLED &&
                     tmpState != SfxItemState::INVALID &&
                     tmpState != SfxItemState::DEFAULT && tmpState != SfxItemState::SET)
-                    throw css::uno::RuntimeException(u"unknown status"_ustr);
+                    throw cpo::uno::RuntimeException(u"unknown status"_ustr);
                 eState = tmpState;
                 pItem.reset(new SfxVoidItem( nSlotId ));
             }
@@ -385,32 +381,32 @@ void SAL_CALL SfxToolBoxControl::statusChanged( const FeatureStateEvent& rEvent 
 }
 
 // XToolbarController
-void SAL_CALL SfxToolBoxControl::execute( sal_Int16 KeyModifier )
+void SfxToolBoxControl::execute( sal_Int16 KeyModifier )
 {
     SolarMutexGuard aGuard;
     Select( static_cast<sal_uInt16>(KeyModifier) );
 }
 
-void SAL_CALL SfxToolBoxControl::click()
+void SfxToolBoxControl::click()
 {
     SolarMutexGuard aGuard;
     Click();
 }
 
-void SAL_CALL SfxToolBoxControl::doubleClick()
+void SfxToolBoxControl::doubleClick()
 {
     SolarMutexGuard aGuard;
     DoubleClick();
 }
 
-Reference< css::awt::XWindow > SAL_CALL SfxToolBoxControl::createPopupWindow()
+Reference< css::awt::XWindow > SfxToolBoxControl::createPopupWindow()
 {
     SolarMutexGuard aGuard;
     CreatePopupWindow();
     return nullptr;
 }
 
-Reference< css::awt::XWindow > SAL_CALL SfxToolBoxControl::createItemWindow( const Reference< css::awt::XWindow >& rParent )
+Reference< css::awt::XWindow > SfxToolBoxControl::createItemWindow( const Reference< css::awt::XWindow >& rParent )
 {
     SolarMutexGuard aGuard;
     return VCLUnoHelper::GetInterface( CreateItemWindow( VCLUnoHelper::GetWindow( rParent )));

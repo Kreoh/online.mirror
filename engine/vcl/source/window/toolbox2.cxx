@@ -37,6 +37,7 @@
 #include <vcl/settings.hxx>
 #include <vcl/IconThemeInfo.hxx>
 #include <vcl/commandinfoprovider.hxx>
+#include <vcl/kit.hxx>
 
 #include <accessibility/vclxaccessibletoolbox.hxx>
 #include <svdata.hxx>
@@ -444,7 +445,7 @@ void ToolBox::InsertItem( ToolBoxItemId nItemId, const OUString& rText, const OU
     CallEventListeners( VclEventId::ToolboxItemAdded, reinterpret_cast< void* >( nNewPos ) );
 }
 
-void ToolBox::InsertItem(const OUString& rCommand, const css::uno::Reference<css::frame::XFrame>& rFrame, ToolBoxItemBits nBits,
+void ToolBox::InsertItem(const OUString& rCommand, const cpo::uno::Reference<css::frame::XFrame>& rFrame, ToolBoxItemBits nBits,
                          const Size& rRequestedSize, ImplToolItems::size_type nPos)
 {
     OUString aModuleName(vcl::CommandInfoProvider::GetModuleIdentifier(rFrame));
@@ -1792,24 +1793,11 @@ void ToolBox::DumpAsPropertyTree(tools::JsonWriter& rJsonWriter)
                 // Emit icon name so COOL can resolve it as a local SVG
                 // (crisp at any DPI). COOL checks "icon" first; if the SVG
                 // is not available it falls back to the base64 "image" below.
-                OUString sIconName = GetItemIconName(nId);
+                // e.g. "chart2/res/dataeditor_icon05.png" -> "lc_dataeditor_icon05.svg"
+                // e.g. "cmd/sc_paste.png"                 -> "lc_paste.svg"
+                const OUString sIconName = vcl::kit::svgIconName(GetItemIconName(nId));
                 if (!sIconName.isEmpty())
-                {
-                    // e.g. "chart2/res/dataeditor_icon05.png" -> "lc_dataeditor_icon05.svg"
-                    // e.g. "cmd/sc_paste.png"              -> "lc_paste.svg"
-                    sal_Int32 nSlash = sIconName.lastIndexOf('/');
-                    OUString sFileName = (nSlash >= 0) ? sIconName.copy(nSlash + 1) : sIconName;
-                    if (sFileName.endsWith(".png"))
-                        sFileName = OUString::Concat(sFileName.subView(0, sFileName.getLength() - 4)) + ".svg";
-                    else if (sFileName.indexOf('.') < 0)
-                        sFileName += ".svg";
-                    // Strip sc_/lc_ size prefix before adding the
-                    // canonical lc_ prefix that COOL expects.
-                    if (sFileName.startsWith("sc_") || sFileName.startsWith("lc_"))
-                        sFileName = sFileName.copy(3);
-                    sFileName = "lc_" + sFileName;
-                    rJsonWriter.put("icon", sFileName);
-                }
+                    rJsonWriter.put("icon", sIconName);
 
                 // Always emit base64 PNG as fallback for COOL instances
                 // that don't have the corresponding SVG in browser/images/

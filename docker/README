@@ -19,10 +19,11 @@ The source build keeps the established technical coolwsd executable and /cool ro
 compatibility. Product identity, container metadata and installed user-facing content use Online
 Office.
 
-The older from-packages and Alpine routes remain upstream development material. They are not used
-to publish the Kreoh Online Office image.
+Native builds and tests run only in Jenkins. Build authorisation does not authorise
+publication or deployment. Local inspection and checks that do not compile are permitted.
 
-Runtime
-
-Use cool-seccomp-profile.json as the container seccomp profile where supported. It improves
-isolation and permits coolwsd to create document processes efficiently.
+Upstream also supplies a separate from-packages build, image SBOM aggregation and
+publication tooling under from-packages/scripts. Its base-image, optional Python,
+platform and signing choices do not replace this distribution's source pipeline.
+See ../SBOM.md for the upstream SBOM format and scan limitations. The source pipeline
+retains its immutable-rootfs scan and validates its neutral SPDX 3.0.1 document name.

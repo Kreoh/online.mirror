@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <rtl/ref.hxx>
 #include <rtl/ustring.hxx>
 
@@ -50,7 +50,7 @@ public:
             The type of the resource that will be created by the factory.
         @param rxFactory
             The factory that will create resource objects of the specified type.
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void AddFactory (
         const OUString& rsURL,
@@ -60,7 +60,7 @@ public:
         @param rxFactory
             Unregister the this factory for all URLs that it has been
             registered for.
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void RemoveFactoryForReference(
         const rtl::Reference<sd::framework::ResourceFactory>& rxFactory);
@@ -72,7 +72,7 @@ public:
             When a factory for the specified URL has been registered by a
             previous call to AddFactory() then a reference to that factory
             is returned.  Otherwise an empty reference is returned.
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     rtl::Reference<sd::framework::ResourceFactory> GetFactory (
         const OUString& rsURL);
@@ -92,7 +92,7 @@ private:
     FactoryPatternList maFactoryPatternList;
 
     rtl::Reference<::sd::DrawController> mxControllerManager;
-    css::uno::Reference<css::util::XURLTransformer> mxURLTransformer;
+    cpo::uno::Reference<css::util::XURLTransformer> mxURLTransformer;
 
     /** Look up the factory for the given URL.
         @param rsURLBase
@@ -100,7 +100,7 @@ private:
             stripped off by the caller.
         @return
             When the factory has not yet been added then return NULL.
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     rtl::Reference<sd::framework::ResourceFactory> FindFactory (
         const OUString& rsURLBase);

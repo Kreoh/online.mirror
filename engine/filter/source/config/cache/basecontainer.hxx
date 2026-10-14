@@ -23,7 +23,7 @@
 #include "filtercache.hxx"
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/util/XRefreshable.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XContainerQuery.hpp>
 #include <com/sun/star/util/XFlushable.hpp>
@@ -164,7 +164,7 @@ class BaseContainer : public ::cppu::WeakImplHelper< css::lang::XServiceInfo    
             @descr  If no exception occurs, its guaranteed, that the member m_rFlushCache
                     was initialized right and can be used further.
 
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
          */
         void impl_initFlushMode(std::unique_lock<std::mutex>& rGuard);
 
@@ -236,18 +236,18 @@ class BaseContainer : public ::cppu::WeakImplHelper< css::lang::XServiceInfo    
         // must be implemented really by derived class...
         // We implement return of an empty result here only!
         // But we show an assertion :-)
-        virtual css::uno::Reference< css::container::XEnumeration > createSubSetEnumerationByQuery(const OUString& sQuery) override;
+        virtual cpo::uno::Reference< css::container::XEnumeration > createSubSetEnumerationByQuery(const OUString& sQuery) override;
 
-        virtual css::uno::Reference< css::container::XEnumeration > createSubSetEnumerationByProperties(const cpo::uno::Sequence< css::beans::NamedValue >& lProperties) override;
+        virtual cpo::uno::Reference< css::container::XEnumeration > createSubSetEnumerationByProperties(const cpo::uno::Sequence< css::beans::NamedValue >& lProperties) override;
 
 
         // XFlushable
 
         virtual void flush() override;
 
-        virtual void addFlushListener(const css::uno::Reference< css::util::XFlushListener >& xListener) override;
+        virtual void addFlushListener(const cpo::uno::Reference< css::util::XFlushListener >& xListener) override;
 
-        virtual void removeFlushListener(const css::uno::Reference< css::util::XFlushListener >& xListener) override;
+        virtual void removeFlushListener(const cpo::uno::Reference< css::util::XFlushListener >& xListener) override;
 };
 
 } // namespace filter::config

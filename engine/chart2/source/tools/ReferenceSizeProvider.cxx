@@ -32,9 +32,10 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 using namespace ::chart::DataSeriesProperties;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
@@ -77,8 +78,7 @@ void ReferenceSizeProvider::setValuesAtTitle(
             for( uno::Reference< XFormattedString > const & formattedStr : aStrSeq )
             {
                 RelativeSizeHelper::adaptFontSizes(
-                    Reference< beans::XPropertySet >( formattedStr, uno::UNO_QUERY ),
-                    aOldRefSize, getPageSize());
+                    formattedStr, aOldRefSize, getPageSize());
             }
         }
 

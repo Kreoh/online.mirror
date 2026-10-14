@@ -40,8 +40,8 @@
 #include <officecfg/Office/Common.hxx>
 
 using namespace css;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::frame;
 using namespace com::sun::star::beans;
@@ -62,7 +62,7 @@ class RecentFilesMenuController :  public svt::PopupMenuControllerBase
     using svt::PopupMenuControllerBase::disposing;
 
 public:
-    RecentFilesMenuController( const uno::Reference< uno::XComponentContext >& xContext,
+    RecentFilesMenuController( const uno::Reference< cpo::uno::XComponentContext >& xContext,
                                const cpo::uno::Sequence< cpo::uno::Any >& args );
 
     // XServiceInfo
@@ -99,7 +99,7 @@ public:
 
 private:
     virtual void impl_setPopupMenu(std::unique_lock<std::mutex>& rGuard) override;
-    void fillPopupMenu(std::unique_lock<std::mutex>& rGuard, css::uno::Reference<css::awt::XPopupMenu > const & rPopupMenu );
+    void fillPopupMenu(std::unique_lock<std::mutex>& rGuard, cpo::uno::Reference<css::awt::XPopupMenu > const & rPopupMenu );
     void executeEntry( sal_Int32 nIndex );
     void executeEntryImpl(std::unique_lock<std::mutex>& rGuard, sal_Int32 nIndex);
 
@@ -108,7 +108,7 @@ private:
     bool                      m_bShowToolbarEntries;
 };
 
-RecentFilesMenuController::RecentFilesMenuController( const uno::Reference< uno::XComponentContext >& xContext,
+RecentFilesMenuController::RecentFilesMenuController( const uno::Reference< cpo::uno::XComponentContext >& xContext,
                                                       const cpo::uno::Sequence< cpo::uno::Any >& args ) :
     svt::PopupMenuControllerBase( xContext ),
     m_bDisabled( false ),
@@ -126,9 +126,9 @@ RecentFilesMenuController::RecentFilesMenuController( const uno::Reference< uno:
     }
 }
 
-void InsertItem(const css::uno::Reference<css::awt::XPopupMenu>& rPopupMenu,
+void InsertItem(const cpo::uno::Reference<css::awt::XPopupMenu>& rPopupMenu,
                 const OUString& rCommand,
-                const css::uno::Reference<css::frame::XFrame>& rFrame)
+                const cpo::uno::Reference<css::frame::XFrame>& rFrame)
 {
     sal_uInt16 nItemId = rPopupMenu->getItemCount() + 1;
 
@@ -138,7 +138,7 @@ void InsertItem(const css::uno::Reference<css::awt::XPopupMenu>& rPopupMenu,
         auto aProperties = vcl::CommandInfoProvider::GetCommandProperties(rCommand, aModuleName);
         OUString aLabel(vcl::CommandInfoProvider::GetPopupLabelForCommand(aProperties));
         OUString aTooltip(vcl::CommandInfoProvider::GetTooltipForCommand(rCommand, aProperties, rFrame));
-        css::uno::Reference<css::graphic::XGraphic> xGraphic(vcl::CommandInfoProvider::GetXGraphicForCommand(rCommand, rFrame));
+        cpo::uno::Reference<css::graphic::XGraphic> xGraphic(vcl::CommandInfoProvider::GetXGraphicForCommand(rCommand, rFrame));
 
         rPopupMenu->insertItem(nItemId, aLabel, 0, -1);
         rPopupMenu->setItemImage(nItemId, xGraphic, false);
@@ -523,9 +523,9 @@ void RecentFilesMenuController::dispatch(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_RecentFilesMenuController_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &args)
 {
     return cppu::acquire(new RecentFilesMenuController(context, args));

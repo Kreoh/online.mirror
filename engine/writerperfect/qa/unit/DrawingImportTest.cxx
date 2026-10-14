@@ -13,7 +13,7 @@
 #include <com/sun/star/drawing/XShapeDescriptor.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/text/XText.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/supportsservice.hxx>
 
@@ -27,20 +27,20 @@
 
 namespace
 {
-namespace uno = css::uno;
+namespace uno = cpo::uno;
 
 class DrawingImportFilter : public writerperfect::ImportFilter<OdgGenerator>
 {
 public:
-    explicit DrawingImportFilter(const uno::Reference<uno::XComponentContext>& rxContext)
+    explicit DrawingImportFilter(const uno::Reference<cpo::uno::XComponentContext>& rxContext)
         : writerperfect::ImportFilter<OdgGenerator>(rxContext)
     {
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 private:
     virtual bool doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName) override;
@@ -65,17 +65,17 @@ bool DrawingImportFilter::doDetectFormat(librevenge::RVNGInputStream&, OUString&
 }
 
 // XServiceInfo
-OUString SAL_CALL DrawingImportFilter::getImplementationName()
+OUString DrawingImportFilter::getImplementationName()
 {
     return u"org.libreoffice.comp.Wpft.QA.DrawingImportFilter"_ustr;
 }
 
-bool SAL_CALL DrawingImportFilter::supportsService(const OUString& rServiceName)
+bool DrawingImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL DrawingImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> DrawingImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };

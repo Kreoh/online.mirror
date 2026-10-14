@@ -25,7 +25,7 @@
 #include <unotools/mediadescriptor.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/frame/XLoadable.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/diagnose_ex.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 
@@ -33,9 +33,10 @@ namespace chart
 {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 ChartFrameLoader::ChartFrameLoader(
-        uno::Reference<uno::XComponentContext> const & xContext)
+        uno::Reference<cpo::uno::XComponentContext> const & xContext)
         : m_bCancelRequired( false )
 {
     m_xCC = xContext;
@@ -175,8 +176,8 @@ void ChartFrameLoader::cancel()
 
 } //namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_ChartFrameLoader_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_ChartFrameLoader_get_implementation(cpo::uno::XComponentContext *context,
                                                              cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::ChartFrameLoader(context));

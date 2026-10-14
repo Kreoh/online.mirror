@@ -16,11 +16,11 @@
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/table/CellRangeAddress.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 
-using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star;
 
 namespace sc_apitest
@@ -30,7 +30,7 @@ class ScLabelRangeObj : public UnoApiTest, public apitest::XLabelRange
 public:
     ScLabelRangeObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScLabelRangeObj);
@@ -47,7 +47,7 @@ ScLabelRangeObj::ScLabelRangeObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScLabelRangeObj::init()
+uno::Reference<cpo::uno::XInterface> ScLabelRangeObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 

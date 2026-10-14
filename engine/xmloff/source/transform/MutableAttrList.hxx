@@ -31,7 +31,7 @@ class XMLMutableAttributeList : public ::cppu::WeakImplHelper<
         css::xml::sax::XAttributeList,
         css::util::XCloneable>
 {
-    css::uno::Reference< css::xml::sax::XAttributeList> m_xAttrList;
+    cpo::uno::Reference< css::xml::sax::XAttributeList> m_xAttrList;
 
     rtl::Reference<comphelper::AttributeList> m_pMutableAttrList;
 
@@ -39,21 +39,21 @@ class XMLMutableAttributeList : public ::cppu::WeakImplHelper<
 
 public:
     XMLMutableAttributeList();
-    XMLMutableAttributeList( const css::uno::Reference<
+    XMLMutableAttributeList( const cpo::uno::Reference<
         css::xml::sax::XAttributeList> & rAttrList,
            bool bClone=false );
     virtual ~XMLMutableAttributeList() override;
 
     // css::xml::sax::XAttributeList
-    virtual sal_Int16 SAL_CALL getLength() override;
-    virtual OUString SAL_CALL getNameByIndex(sal_Int16 i) override;
-    virtual OUString SAL_CALL getTypeByIndex(sal_Int16 i) override;
-    virtual OUString SAL_CALL getTypeByName(const OUString& aName) override;
-    virtual OUString SAL_CALL getValueByIndex(sal_Int16 i) override;
-    virtual OUString SAL_CALL getValueByName(const OUString& aName) override;
+    virtual sal_Int16 getLength() override;
+    virtual OUString getNameByIndex(sal_Int16 i) override;
+    virtual OUString getTypeByIndex(sal_Int16 i) override;
+    virtual OUString getTypeByName(const OUString& aName) override;
+    virtual OUString getValueByIndex(sal_Int16 i) override;
+    virtual OUString getValueByName(const OUString& aName) override;
 
     // css::util::XCloneable
-    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone() override;
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone() override;
 
     // methods that are not contained in any interface
     void SetValueByIndex( sal_Int16 i, const OUString& rValue );
@@ -61,7 +61,7 @@ public:
 //  void Clear();
     void RemoveAttributeByIndex( sal_Int16 i );
     void RenameAttributeByIndex( sal_Int16 i, const OUString& rNewName );
-    void AppendAttributeList( const css::uno::Reference< css::xml::sax::XAttributeList > & );
+    void AppendAttributeList( const cpo::uno::Reference< css::xml::sax::XAttributeList > & );
 
     sal_Int16 GetIndexByName( const OUString& rName ) const;
 };

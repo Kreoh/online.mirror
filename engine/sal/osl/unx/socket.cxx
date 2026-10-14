@@ -24,6 +24,7 @@
 #include "system.hxx"
 
 #include <osl/socket.h>
+#include <osl/time.h>
 
 #include <rtl/alloc.h>
 #include <rtl/byteseq.h>
@@ -40,7 +41,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #ifdef FREEBSD
-#include <netinet/ip.h>
+#include <netinet/in.h>
 #endif
 #include <netinet/tcp.h>
 #include <poll.h>

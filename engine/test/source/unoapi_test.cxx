@@ -31,7 +31,7 @@
 #include <utility>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 UnoApiTest::UnoApiTest(OUString path)
@@ -92,7 +92,7 @@ void UnoApiTest::setTestInteractionHandler(const char* pPassword,
     xInteractionHandler
         = rtl::Reference<TestInteractionHandler>(new TestInteractionHandler(sPassword));
     rPropertyValue.Name = u"InteractionHandler"_ustr;
-    rPropertyValue.Value <<= css::uno::Reference<task::XInteractionHandler2>(xInteractionHandler);
+    rPropertyValue.Value <<= cpo::uno::Reference<task::XInteractionHandler2>(xInteractionHandler);
 }
 
 #if HAVE_EXPORT_VALIDATION
@@ -382,7 +382,7 @@ void UnoApiTest::save(TestFilter eFilter, const cpo::uno::Sequence<beans::Proper
         skipValidation();
     }
 
-    css::uno::Reference<frame::XStorable> xStorable(mxComponent, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<frame::XStorable> xStorable(mxComponent, cpo::uno::UNO_QUERY_THROW);
     xStorable->storeToURL(maTempFile.GetURL(), aMediaDescriptor.getAsConstPropertyValueList());
 
     if (eFilter == TestFilter::PDF_WRITER)
@@ -412,6 +412,9 @@ void UnoApiTest::saveAndReload(TestFilter eFilter, const char* pPassword)
 
 std::unique_ptr<vcl::pdf::PDFiumDocument> UnoApiTest::parsePDFExport(const OString& rPassword)
 {
+    // Clear memory - for several calls in a test
+    maMemory.Seek(0);
+    maMemory.SetStreamSize(0);
     SvFileStream aFile(maTempFile.GetURL(), StreamMode::READ);
     maMemory.WriteStream(aFile);
     std::shared_ptr<vcl::pdf::PDFium> pPDFium = vcl::pdf::PDFiumLibrary::get();

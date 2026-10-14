@@ -28,7 +28,7 @@
 #include <strings.hrc>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::accessibility;
 
@@ -59,7 +59,7 @@ SwAccessibleFootnote::~SwAccessibleFootnote()
 {
 }
 
-OUString SAL_CALL SwAccessibleFootnote::getAccessibleDescription()
+OUString SwAccessibleFootnote::getAccessibleDescription()
 {
     SolarMutexGuard aGuard;
 

@@ -44,21 +44,21 @@ public:
     virtual ~DragAndDropClient();
 
     // css::datatransfer::dnd::XDragGestureListener
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SAL_DLLPRIVATE virtual void dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge );
 
     // css::datatransfer::dnd::XDragSourceListener
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SAL_DLLPRIVATE virtual void dragDropEnd(const css::datatransfer::dnd::DragSourceDropEvent& dsde );
 
     // css::datatransfer::dnd::XDropTargetListener
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SAL_DLLPRIVATE virtual void drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SAL_DLLPRIVATE virtual void dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SAL_DLLPRIVATE virtual void dragExit( const css::datatransfer::dnd::DropTargetEvent& dte );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SAL_DLLPRIVATE virtual void dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde );
 };
 
@@ -75,30 +75,30 @@ public:
     VCL_DLLPUBLIC   DragAndDropWrapper( DragAndDropClient* pClient );
                     virtual ~DragAndDropWrapper() override;
 
-    // css::uno::XInterface
-    cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type & rType ) override;
-    void          SAL_CALL acquire() noexcept override  { OWeakObject::acquire(); }
-    void          SAL_CALL release() noexcept override  { OWeakObject::release(); }
+    // cpo::uno::XInterface
+    cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    void          acquire() noexcept override  { OWeakObject::acquire(); }
+    void          release() noexcept override  { OWeakObject::release(); }
 
     // css::lang::XEventListener
-    VCL_DLLPUBLIC void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    VCL_DLLPUBLIC void disposing( const css::lang::EventObject& Source ) override;
 
     // css::datatransfer::dnd::XDragGestureListener
-    void SAL_CALL dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge ) override;
+    void dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge ) override;
 
     // css::datatransfer::dnd::XDragSourceListener
-    void SAL_CALL dragDropEnd( const css::datatransfer::dnd::DragSourceDropEvent& dsde ) override;
-    void SAL_CALL dragEnter( const css::datatransfer::dnd::DragSourceDragEvent& dsde ) override;
-    void SAL_CALL dragExit( const css::datatransfer::dnd::DragSourceEvent& dse ) override;
-    void SAL_CALL dragOver( const css::datatransfer::dnd::DragSourceDragEvent& dsde ) override;
-    void SAL_CALL dropActionChanged( const css::datatransfer::dnd::DragSourceDragEvent& dsde ) override;
+    void dragDropEnd( const css::datatransfer::dnd::DragSourceDropEvent& dsde ) override;
+    void dragEnter( const css::datatransfer::dnd::DragSourceDragEvent& dsde ) override;
+    void dragExit( const css::datatransfer::dnd::DragSourceEvent& dse ) override;
+    void dragOver( const css::datatransfer::dnd::DragSourceDragEvent& dsde ) override;
+    void dropActionChanged( const css::datatransfer::dnd::DragSourceDragEvent& dsde ) override;
 
     // css::datatransfer::dnd::XDropTargetListener
-    void SAL_CALL drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) override;
-    void SAL_CALL dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee ) override;
-    void SAL_CALL dragExit( const css::datatransfer::dnd::DropTargetEvent& dte ) override;
-    void SAL_CALL dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
-    void SAL_CALL dropActionChanged( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
+    void drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) override;
+    void dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee ) override;
+    void dragExit( const css::datatransfer::dnd::DropTargetEvent& dte ) override;
+    void dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
+    void dropActionChanged( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
 };
 
 }  // namespace vcl::unohelper

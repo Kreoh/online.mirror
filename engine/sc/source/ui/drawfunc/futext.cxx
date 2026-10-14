@@ -18,6 +18,7 @@
  */
 
 #include <svx/svddef.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <svx/svdoutl.hxx>
 #include <editeng/outlobj.hxx>
 #include <svx/sdtaaitm.hxx>
@@ -32,6 +33,7 @@
 #include <svx/svxids.hrc>
 #include <editeng/eeitem.hxx>
 #include <svl/itemset.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <osl/diagnose.h>
 
 #include <futext.hxx>
@@ -99,7 +101,7 @@ static void lcl_UpdateHyphenator( Outliner& rOutliner, const SdrObject* pObj )
 {
     // use hyphenator only if hyphenation attribute is set
     if ( pObj && pObj->GetMergedItem(EE_PARA_HYPHENATE).GetValue() ) {
-            css::uno::Reference<css::linguistic2::XHyphenator> xHyphenator( LinguMgr::GetHyphenator() );
+            cpo::uno::Reference<css::linguistic2::XHyphenator> xHyphenator( LinguMgr::GetHyphenator() );
             rOutliner.SetHyphenator( xHyphenator );
     }
 }

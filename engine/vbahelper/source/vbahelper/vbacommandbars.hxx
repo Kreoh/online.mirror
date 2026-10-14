@@ -32,19 +32,19 @@ private:
     VbaCommandBarHelperRef m_pCBarHelper;
 
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaCommandBars( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< css::container::XIndexAccess >& xIndexAccess, const css::uno::Reference< css::frame::XModel >& xModel );
+    /// @throws cpo::uno::RuntimeException
+    ScVbaCommandBars( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, const cpo::uno::Reference< css::container::XIndexAccess >& xIndexAccess, const cpo::uno::Reference< css::frame::XModel >& xModel );
     virtual ~ScVbaCommandBars() override;
 
     // XCommandBars
-    virtual css::uno::Reference< ov::XCommandBar > SAL_CALL Add( const cpo::uno::Any& Name, const cpo::uno::Any& Position, const cpo::uno::Any& MenuBar, const cpo::uno::Any& Temporary ) override;
+    virtual cpo::uno::Reference< ov::XCommandBar > Add( const cpo::uno::Any& Name, const cpo::uno::Any& Position, const cpo::uno::Any& MenuBar, const cpo::uno::Any& Temporary ) override;
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
 
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2*/ ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2*/ ) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

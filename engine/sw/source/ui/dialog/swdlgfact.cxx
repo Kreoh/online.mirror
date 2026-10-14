@@ -76,14 +76,14 @@
 #include <mailmrge.hxx>
 #include <mergetbl.hxx>
 #include <multmrk.hxx>
-#include <seclabeldlg.hxx>
+#include <SwSecurityLabelTarget.hxx>
+#include <svx/seclabel/SecurityLabelDialog.hxx>
 #include <num.hxx>
 #include <outline.hxx>
 #include <column.hxx>
 #include <cnttab.hxx>
 #include <swuicnttab.hxx>
 #include <regionsw.hxx>
-#include <optcomp.hxx>
 #include <optload.hxx>
 #include <optpage.hxx>
 #include <swuiidxmrk.hxx>
@@ -98,8 +98,8 @@
 
 using namespace css;
 using namespace css::frame;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -426,9 +426,9 @@ class AbstractSwInsertDBColAutoPilot_Impl
 public:
     using AbstractDialogImpl_NoSync::AbstractDialogImpl_NoSync;
     void DataToDoc(const cpo::uno::Sequence<cpo::uno::Any>& rSelection,
-                   css::uno::Reference<css::sdbc::XDataSource> rxSource,
-                   css::uno::Reference<css::sdbc::XConnection> xConnection,
-                   css::uno::Reference<css::sdbc::XResultSet> xResultSet) override
+                   cpo::uno::Reference<css::sdbc::XDataSource> rxSource,
+                   cpo::uno::Reference<css::sdbc::XConnection> xConnection,
+                   cpo::uno::Reference<css::sdbc::XResultSet> xResultSet) override
     {
         m_pDlg->DataToDoc(rSelection, rxSource, xConnection, xResultSet);
     }
@@ -709,13 +709,18 @@ public:
 
 bool AbstractSwFieldDlg_Impl::StartExecuteAsync(AsyncContext& rCtx)
 {
-    return SfxTabDialogController::runAsync(m_pDlg,
+    const bool bStarted = SfxTabDialogController::runAsync(m_pDlg,
                                             [rCtx, pDlg = m_pDlg](sal_Int32 nResult)
                                             {
                                                 pDlg->Close();
                                                 if (rCtx.isSet())
                                                     rCtx.maEndDialogFn(nResult);
                                             });
+    // A refused dialog never reaches its end handler, so the owner that the context names is
+    // disposed here.
+    if (!bStarted)
+        rCtx.mxOwner.disposeAndClear();
+    return bStarted;
 }
 }
 
@@ -745,8 +750,8 @@ public:
 }
 
 VclPtr<AbstractSwRenameXNamedDlg> SwAbstractDialogFactory_Impl::CreateSwRenameXNamedDlg(weld::Widget* pParent,
-    css::uno::Reference< css::container::XNamed > & xNamed,
-    css::uno::Reference< css::container::XNameAccess > & xNameAccess)
+    cpo::uno::Reference< css::container::XNamed > & xNamed,
+    cpo::uno::Reference< css::container::XNameAccess > & xNameAccess)
 {
     return VclPtr<AbstractSwRenameXNamedDlg_Impl>::Create(pParent,xNamed, xNameAccess);
 }
@@ -965,7 +970,7 @@ public:
     {
         return m_pDlg->GetSelection();
     }
-    css::uno::Reference<css::sdbc::XResultSet> GetResultSet() const override
+    cpo::uno::Reference<css::sdbc::XResultSet> GetResultSet() const override
     {
         return m_pDlg->GetResultSet();
     }
@@ -1031,11 +1036,11 @@ VclPtr<VclAbstractDialog> SwAbstractDialogFactory_Impl::CreateMultiTOXMarkDlg(we
     return VclPtr<AbstractMultiTOXMarkDlg_Impl>::Create(pParent, rTOXMgr);
 }
 
-VclPtr<VclAbstractDialog> SwAbstractDialogFactory_Impl::CreateSecurityLabelDlg(weld::Window* pParent)
+VclPtr<VclAbstractDialog> SwAbstractDialogFactory_Impl::CreateSecurityLabelDlg(weld::Window* pParent, SwWrtShell& rSh)
 {
-    using AbstractSecurityLabelDlg_Impl
-        = vcl::AbstractDialogImpl_Async<VclAbstractDialog, SwSecurityLabelDlg>;
-    return VclPtr<AbstractSecurityLabelDlg_Impl>::Create(pParent);
+    // The dialog itself lives in svx; Writer supplies the marking placement target.
+    return svx::seclabel::CreateSecurityLabelDialog(
+        pParent, std::make_unique<SwSecurityLabelTarget>(rSh));
 }
 
 namespace
@@ -1254,52 +1259,16 @@ CreateTabPage SwAbstractDialogFactory_Impl::GetTabPageCreatorFunc( sal_uInt16 nI
     CreateTabPage pRet = nullptr;
     switch ( nId )
     {
-        case RID_SW_TP_OPTCOMPATIBILITY_PAGE :
-            pRet = SwCompatibilityOptPage::Create;
-            break;
-        case RID_SW_TP_OPTLOAD_PAGE :
-            pRet = SwLoadOptPage::Create;
-            break;
         case RID_SW_TP_OPTCAPTION_PAGE:
             return SwCaptionOptPage::Create;
-        case RID_SW_TP_CONTENT_OPT:
-        case RID_SW_TP_HTML_CONTENT_OPT:
-            pRet = SwContentOptPage::Create;
-            break;
-        case RID_SW_TP_OPTSHDWCRSR:
-        case RID_SW_TP_HTML_OPTSHDWCRSR:
-            pRet = SwShdwCursorOptionsTabPage::Create;
-            break;
-        case RID_SW_TP_REDLINE_OPT :
-            pRet = SwRedlineOptionsTabPage::Create;
-            break;
-        case RID_SW_TP_OPTTEST_PAGE :
-#ifdef DBG_UTIL
-            pRet = SwTestTabPage::Create;
-#endif
-            break;
         case TP_OPTPRINT_PAGE :
-        case RID_SW_TP_HTML_OPTPRINT_PAGE:
-        case RID_SW_TP_OPTPRINT_PAGE:
             pRet = SwAddPrinterTabPage::Create;
-            break;
-        case RID_SW_TP_STD_FONT:
-        case RID_SW_TP_STD_FONT_CJK:
-        case RID_SW_TP_STD_FONT_CTL:
-            pRet = SwStdFontTabPage::Create;
-            break;
-        case RID_SW_TP_HTML_OPTTABLE_PAGE:
-        case RID_SW_TP_OPTTABLE_PAGE:
-            pRet = SwTableOptionsTabPage::Create;
             break;
         case RID_SW_TP_DOC_STAT :
             pRet = SwDocStatPage::Create;
             break;
         case RID_SW_TP_MAILCONFIG:
             pRet = SwMailConfigPage::Create;
-        break;
-        case RID_SW_TP_COMPARISON_OPT :
-            pRet = SwCompareOptionsTabPage::Create;
         break;
     }
 

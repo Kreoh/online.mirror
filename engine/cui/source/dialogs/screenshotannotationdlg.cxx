@@ -25,7 +25,7 @@
 #include <basegfx/range/b2irange.hxx>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/datatransfer/clipboard/SystemClipboard.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
 #include <com/sun/star/datatransfer/DataFlavor.hpp>
@@ -56,6 +56,7 @@
 #include <cppuhelper/implbase.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -339,7 +340,7 @@ IMPL_LINK_NOARG(ScreenshotAnnotationDlg_Impl, copyButtonHandler, weld::Button&, 
     // Create a BitmapTransferable
     rtl::Reference<TransferableHelper> xClipCntnr = new BitmapTransferable(aTargetBitmap);
     // Get the system clipboard
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
         css::datatransfer::clipboard::SystemClipboard::create(
             comphelper::getProcessComponentContext());
 
@@ -361,7 +362,7 @@ IMPL_LINK_NOARG(ScreenshotAnnotationDlg_Impl, saveButtonHandler, weld::Button&, 
                                                              FileDialogFlags::NONE, mpParentWindow);
     aFileDlg.SetContext(sfx2::FileDialogHelper::ScreenshotAnnotation);
 
-    const uno::Reference< ui::dialogs::XFilePicker3 > xFilePicker = aFileDlg.GetFilePicker();
+    const uno::Reference< ui::dialogs::XFilePicker > xFilePicker = aFileDlg.GetFilePicker();
 
     xFilePicker->setTitle(maSaveAsText);
 

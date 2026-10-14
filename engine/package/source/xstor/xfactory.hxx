@@ -22,7 +22,7 @@
 
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/implbase.hxx>
 #include <osl/diagnose.h>
@@ -30,23 +30,23 @@
 class OStorageFactory : public ::cppu::WeakImplHelper< css::lang::XSingleServiceFactory,
                                                 css::lang::XServiceInfo >
 {
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 
 public:
-    explicit OStorageFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext )
+    explicit OStorageFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext )
     : m_xContext( xContext )
     {
         OSL_ENSURE( xContext.is(), "No service manager is provided!" );
     }
 
     // XSingleServiceFactory
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance() override;
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance() override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
 };
 

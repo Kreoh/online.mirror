@@ -27,7 +27,7 @@
 #include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/xml/sax/SAXInvalidCharacterException.hpp>
 #include <com/sun/star/xml/sax/XWriter.hpp>
@@ -44,7 +44,7 @@
 #include <memory>
 
 using namespace ::cppu;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::xml::sax;
@@ -1016,7 +1016,7 @@ public:
     }
 
 public: // XActiveDataSource
-    virtual void SAL_CALL setOutputStream(const Reference<XOutputStream>& aStream) override
+    virtual void setOutputStream(const Reference<XOutputStream>& aStream) override
     {
         try
         {
@@ -1038,39 +1038,39 @@ public: // XActiveDataSource
                                                            e.WrappedException);
         }
     }
-    virtual Reference<XOutputStream> SAL_CALL getOutputStream() override { return m_out; }
+    virtual Reference<XOutputStream> getOutputStream() override { return m_out; }
 
 public: // XDocumentHandler
-    virtual void SAL_CALL startDocument() override;
+    virtual void startDocument() override;
 
-    virtual void SAL_CALL endDocument() override;
+    virtual void endDocument() override;
 
-    virtual void SAL_CALL startElement(const OUString& aName,
+    virtual void startElement(const OUString& aName,
                                        const Reference<XAttributeList>& xAttribs) override;
 
-    virtual void SAL_CALL endElement(const OUString& aName) override;
+    virtual void endElement(const OUString& aName) override;
 
-    virtual void SAL_CALL characters(const OUString& aChars) override;
+    virtual void characters(const OUString& aChars) override;
 
-    virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces) override;
-    virtual void SAL_CALL processingInstruction(const OUString& aTarget,
+    virtual void ignorableWhitespace(const OUString& aWhitespaces) override;
+    virtual void processingInstruction(const OUString& aTarget,
                                                 const OUString& aData) override;
-    virtual void SAL_CALL setDocumentLocator(const Reference<XLocator>& xLocator) override;
-    virtual void SAL_CALL setCustomEntityNames(
+    virtual void setDocumentLocator(const Reference<XLocator>& xLocator) override;
+    virtual void setCustomEntityNames(
         const ::cpo::uno::Sequence<::css::beans::Pair<::rtl::OUString, ::rtl::OUString>>&
             replacements) override;
 
 public: // XExtendedDocumentHandler
-    virtual void SAL_CALL startCDATA() override;
-    virtual void SAL_CALL endCDATA() override;
-    virtual void SAL_CALL comment(const OUString& sComment) override;
-    virtual void SAL_CALL unknown(const OUString& sString) override;
-    virtual void SAL_CALL allowLineBreak() override;
+    virtual void startCDATA() override;
+    virtual void endCDATA() override;
+    virtual void comment(const OUString& sComment) override;
+    virtual void unknown(const OUString& sString) override;
+    virtual void allowLineBreak() override;
 
 public: // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
-    bool SAL_CALL supportsService(const OUString& ServiceName) override;
+    OUString getImplementationName() override;
+    Sequence<OUString> getSupportedServiceNames() override;
+    bool supportsService(const OUString& ServiceName) override;
 
 private:
     sal_Int32 getIndentPrefixLength(sal_Int32 nFirstLineBreakOccurrence) noexcept;
@@ -1456,8 +1456,8 @@ void SAXWriter::unknown(const OUString& sString)
 
 } // namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_extensions_xml_sax_Writer_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_extensions_xml_sax_Writer_get_implementation(cpo::uno::XComponentContext*,
                                                           cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SAXWriter);

@@ -20,16 +20,17 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-ScVbaPages::ScVbaPages( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess >& xPages ) : ScVbaPages_BASE( xParent, xContext, xPages )
+ScVbaPages::ScVbaPages( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess >& xPages ) : ScVbaPages_BASE( xParent, xContext, xPages )
 {
 }
 
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaPages::getElementType()
 {
     // return cppu::UnoType<msforms::XPage>::get();
-    return cppu::UnoType<uno::XInterface>::get();
+    return cppu::UnoType<cpo::uno::XInterface>::get();
 }
 
 cpo::uno::Any
@@ -44,7 +45,7 @@ ScVbaPages::getServiceImplName()
     return u"ScVbaPages"_ustr;
 }
 
-uno::Reference< container::XEnumeration > SAL_CALL
+uno::Reference< container::XEnumeration >
 ScVbaPages::createEnumeration()
 {
     // #STUB

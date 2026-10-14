@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <jvmaccess/virtualmachine.hxx>
 
 #ifdef HAVE_64BIT_POINTERS
@@ -88,15 +88,15 @@ namespace connectivity
 
         OUString toString() const;
 
-        static void ThrowSQLException(JNIEnv * pEnv,const css::uno::Reference< css::uno::XInterface> & _rContext);
+        static void ThrowSQLException(JNIEnv * pEnv,const cpo::uno::Reference< cpo::uno::XInterface> & _rContext);
         static void ThrowLoggedSQLException(
             const ::comphelper::EventLogger& _rLogger,
             JNIEnv* pEnvironment,
-            const css::uno::Reference< css::uno::XInterface >& _rxContext
+            const cpo::uno::Reference< cpo::uno::XInterface >& _rxContext
         );
-        static void ThrowRuntimeException(JNIEnv * pEnv,const css::uno::Reference< css::uno::XInterface> & _rContext);
+        static void ThrowRuntimeException(JNIEnv * pEnv,const cpo::uno::Reference< cpo::uno::XInterface> & _rContext);
 
-        static ::rtl::Reference< jvmaccess::VirtualMachine > getVM(const css::uno::Reference< css::uno::XComponentContext >& _rxContext=nullptr);
+        static ::rtl::Reference< jvmaccess::VirtualMachine > getVM(const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext=nullptr);
 
         static jclass   findMyClass(const char* _pClassName);
         void            obtainMethodId_throwSQL(JNIEnv* _pEnv, const char* _pMethodName, const char* _pSignature, jmethodID& _inout_MethodID) const;

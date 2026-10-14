@@ -21,9 +21,9 @@ $(call gb_ExternalProject_get_state_target,cppunit,build) :
 		/p:Platform=$(gb_MSBUILD_PLATFORM) \
 			/p:PlatformToolset=$(VCTOOLSET) /p:VisualStudioVersion=$(VCVER) /ToolsVersion:Current \
 			$(if $(filter 10,$(WINDOWS_SDK_VERSION)),/p:WindowsTargetPlatformVersion=$(UCRTVERSION))" \
-		&& msbuild.exe cppunit_dll.vcxproj /p:Configuration=$${PROFILEFLAGS}  \
+		&& $(gb_MSBUILD_CCACHE_ENV) msbuild.exe cppunit_dll.vcxproj /p:Configuration=$${PROFILEFLAGS} $(gb_MSBUILD_DEPENDENCY_TRACKING) $(gb_MSBUILD_DEBUGINFO) $(gb_MSBUILD_CCACHE) \
 		&& cd ../DllPlugInTester \
-		&& msbuild.exe DllPlugInTester.vcxproj /p:Configuration=$${PROFILEFLAGS} \
+		&& $(gb_MSBUILD_CCACHE_ENV) msbuild.exe DllPlugInTester.vcxproj /p:Configuration=$${PROFILEFLAGS} $(gb_MSBUILD_DEPENDENCY_TRACKING) $(gb_MSBUILD_DEBUGINFO) $(gb_MSBUILD_CCACHE) \
 	,src/cppunit)
 	$(call gb_Trace_EndRange,cppunit,EXTERNAL)
 else
@@ -49,7 +49,6 @@ $(call gb_ExternalProject_get_state_target,cppunit,build) :
 			$(gb_CONFIGURE_PLATFORMS) \
 			$(if $(filter MACOSX,$(OS)),--prefix=/@.__________________________________________________NONE) \
 			$(if $(filter WNT,$(OS)),LDFLAGS="-Wl$(COMMA)--enable-runtime-pseudo-reloc-v2") \
-			$(if $(filter SOLARIS,$(OS)),LIBS="-lm") \
 			$(if $(filter ANDROID,$(OS)),LIBS="$(gb_STDLIBS)") \
 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
 			$(if $(ENABLE_DEBUG),--enable-debug,--disable-debug) \

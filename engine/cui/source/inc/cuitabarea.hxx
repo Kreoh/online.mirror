@@ -106,7 +106,7 @@ class SvxTransparenceTabPage : public SfxTabPage
     std::unique_ptr<weld::MetricSpinButton> m_xMtrTransparent;
 
     // gradient transparency
-    std::unique_ptr<weld::Widget> m_xGridGradient;
+    std::unique_ptr<weld::Container> m_xGridGradient;
     std::unique_ptr<weld::ComboBox> m_xLbTrgrGradientType;
     std::unique_ptr<weld::Label> m_xFtTrgrCenterX;
     std::unique_ptr<weld::MetricSpinButton> m_xMtrTrgrCenterX;
@@ -188,7 +188,7 @@ class SvxAreaTabPage : public SfxTabPage
 {
     static const WhichRangesContainer pAreaRanges;
 private:
-    std::unique_ptr<SfxTabPage> m_xFillTabPage;
+    std::map<FillType, std::unique_ptr<SfxTabPage>> m_aFillTabPages;
 
     XColorListRef         m_pColorList;
     XGradientListRef      m_pGradientList;
@@ -222,7 +222,8 @@ private:
     DECL_LINK(SwitchPageHdl_Impl, const OUString&, void);
 
     std::unique_ptr<SfxTabPage> CreateFillStyleTabPage(FillType eFillType);
-    void SelectFillTypeByPage(FillType eFillType, const SfxItemSet* _pSet = nullptr);
+    void createFillTabPages();
+    SfxTabPage* getCurrentFillTabPage();
 
     OUString getPageId(FillType eFillType);
 
@@ -245,8 +246,6 @@ public:
     CreateWithSlideBackground(weld::Container* pPage, weld::DialogController* pController,
                               const SfxItemSet*);
     static const WhichRangesContainer & GetRanges() { return pAreaRanges; }
-
-    virtual OUString GetAllStrings() override;
 
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;
@@ -283,7 +282,7 @@ private:
     SvxRectCtl m_aCtlPosition;
     SvxXShadowPreview  m_aCtlXRectPreview;
     std::unique_ptr<weld::CheckButton> m_xTsbShowShadow;
-    std::unique_ptr<weld::Widget> m_xGridShadow;
+    std::unique_ptr<weld::Container> m_xGridShadow;
     std::unique_ptr<weld::MetricSpinButton> m_xMtrDistance;
     std::unique_ptr<ColorListBox> m_xLbShadowColor;
     std::unique_ptr<weld::MetricSpinButton> m_xMtrTransparent;
@@ -678,8 +677,8 @@ private:
     std::unique_ptr<weld::ComboBox> m_xSelectPalette;
     std::unique_ptr<weld::RadioButton> m_xRbRGB;
     std::unique_ptr<weld::RadioButton> m_xRbCMYK;
-    std::unique_ptr<weld::Widget> m_xRGBcustom;
-    std::unique_ptr<weld::Widget> m_xRGBpreset;
+    std::unique_ptr<weld::Container> m_xRGBcustom;
+    std::unique_ptr<weld::Container> m_xRGBpreset;
     std::unique_ptr<weld::Entry> m_xRpreset;
     std::unique_ptr<weld::Entry> m_xGpreset;
     std::unique_ptr<weld::Entry> m_xBpreset;
@@ -688,8 +687,8 @@ private:
     std::unique_ptr<weld::SpinButton> m_xBcustom;
     std::unique_ptr<weld::HexColorControl> m_xHexpreset;
     std::unique_ptr<weld::HexColorControl> m_xHexcustom;
-    std::unique_ptr<weld::Widget> m_xCMYKcustom;
-    std::unique_ptr<weld::Widget> m_xCMYKpreset;
+    std::unique_ptr<weld::Container> m_xCMYKcustom;
+    std::unique_ptr<weld::Container> m_xCMYKpreset;
     std::unique_ptr<weld::Entry> m_xCpreset;
     std::unique_ptr<weld::Entry> m_xYpreset;
     std::unique_ptr<weld::Entry> m_xMpreset;
@@ -701,7 +700,6 @@ private:
     std::unique_ptr<weld::Button> m_xBtnAdd;
     std::unique_ptr<weld::Button> m_xBtnDelete;
     std::unique_ptr<weld::Button> m_xBtnWorkOn;
-    std::unique_ptr<weld::Button> m_xMoreColors;
     std::unique_ptr<weld::CustomWeld> m_xCtlPreviewOld;
     std::unique_ptr<weld::CustomWeld> m_xCtlPreviewNew;
 
@@ -721,7 +719,6 @@ private:
     void AddColorFromNameDialog(const OUString& aName);
     DECL_LINK(ClickWorkOnHdl_Impl, weld::Button&, void);
     DECL_LINK(ClickDeleteHdl_Impl, weld::Button&, void);
-    DECL_LINK(OnMoreColorsClick, weld::Button&, void);
 
     DECL_LINK(SelectPaletteLBHdl, weld::ComboBox&, void);
     DECL_LINK( SelectionChangedHdl, weld::IconView&, void );

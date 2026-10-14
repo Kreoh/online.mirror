@@ -19,14 +19,15 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppu/unotype.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -40,7 +41,7 @@ class ScStyleFamiliesObj : public UnoApiTest,
 public:
     ScStyleFamiliesObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual uno::Reference<sheet::XSpreadsheetDocument> getTargetDoc() override;
     virtual uno::Reference<lang::XComponent> getSourceComponent() override;
     virtual OUString getTestURL() override;
@@ -88,7 +89,7 @@ ScStyleFamiliesObj::ScStyleFamiliesObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScStyleFamiliesObj::init()
+uno::Reference<cpo::uno::XInterface> ScStyleFamiliesObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_MESSAGE("no calc document", xDoc.is());

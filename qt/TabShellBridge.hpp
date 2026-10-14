@@ -29,16 +29,22 @@ public slots:
     void requestSync(); // strip is ready; push the initial state
     void tabActivated(int tabId);
     void tabCloseRequested(int tabId);
+    void tabContextMenuRequested(int tabId, int x, int y);
     void newTabRequested();
     void tabReordered(int fromIndex, int toIndex);
     void tabDragStarted(int tabId);
     void tabDragEnded(int tabId, bool inStripDropHandled);
     void tabAdoptFromOtherWindow(int srcTabId, int insertAt);
     void targetDragOver(int insertAt);
+    // The pointer rests on a tab. x and y are the tab's bottom left corner in the strip, and
+    // the colours are the strip's theme colours as CSS colour strings.
+    void tabHoverStarted(int tabId, int x, int y, const QString& background, const QString& text,
+                         const QString& border);
+    void tabHoverEnded();
     void debug(const QString& message);
 
 signals:
-    // tabsJson: JSON array of {id, title, docType, modified, active}.
+    // tabsJson: JSON array of {id, title, docType, modified, active, hasThumbnail}.
     void tabsChanged(const QString& tabsJson);
     void themeChanged(const QString& theme);
     // The native drag left the strip's view; the page clears its markers.

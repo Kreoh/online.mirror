@@ -105,14 +105,14 @@
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <o3tl/string_view.hxx>
 
 #include <memory>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 namespace{
@@ -169,7 +169,7 @@ struct ScPasteJob
     ScCellShell* pCellShell;
     std::shared_ptr<SfxRequest> xRequest;
     const ScTransferObj* pOwnClip;
-    css::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
+    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
     ScTabViewShell* pTabViewShell;
     InsertDeleteFlags nFlags;
     ScPasteFunc nFunction;
@@ -1556,7 +1556,7 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
 
                 if ( nFormat != SotClipboardFormatId::NONE )
                 {
-                    css::uno::Reference<css::datatransfer::XTransferable2> xTransferable(ScTabViewShell::GetClipData(GetViewData().GetActiveWin()));
+                    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable(ScTabViewShell::GetClipData(GetViewData().GetActiveWin()));
                     bool bCells = ( ScTransferObj::GetOwnClipboard(xTransferable) != nullptr );
                     bool bDraw = ( ScDrawTransferObj::GetOwnClipboard(xTransferable) != nullptr );
                     bool bOle = ( nFormat == SotClipboardFormatId::EMBED_SOURCE );
@@ -1581,7 +1581,7 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                 ScDocument& rDoc = GetViewData().GetDocument();
                 bool bOtherDoc = !rDoc.IsClipboardSource();
                 // keep a reference in case the clipboard is changed during dialog or PasteFromClip
-                css::uno::Reference<css::datatransfer::XTransferable2> xTransferable(
+                cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable(
                     ScTabViewShell::GetClipData(GetViewData().GetActiveWin()));
                 const ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard(xTransferable);
                 if ( pOwnClip )
@@ -1863,7 +1863,7 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
             // this makes FID_INS_CELL_CONTENTS superfluous
             {
                 vcl::Window* pWin = GetViewData().GetActiveWin();
-                css::uno::Reference<css::datatransfer::XTransferable2> xTransferable(ScTabViewShell::GetClipData(pWin));
+                cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable(ScTabViewShell::GetClipData(pWin));
 
                 //  Clipboard-ID given as parameter? Basic "PasteSpecial(Format)"
                 const SfxPoolItem* pItem=nullptr;
@@ -1904,14 +1904,18 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                     {
                         bool bDraw = ( ScDrawTransferObj::GetOwnClipboard(xTransferable) != nullptr );
 
+                        TransferableDataHelper aDataHelper(
+                            TransferableDataHelper::CreateFromSystemClipboard(
+                                pWin, DownloadRemoteContent::Yes));
+
                         SvxClipboardFormatItem aFormats( SID_CLIPBOARD_FORMAT_ITEMS );
-                        GetPossibleClipboardFormats( aFormats );
+                        GetPossibleClipboardFormats( aFormats, aDataHelper );
 
                         sal_uInt16 nFormatCount = aFormats.Count();
                         if ( nFormatCount )
                         {
                             SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                            ScopedVclPtr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog(pTabViewShell->GetFrameWeld()));
+                            VclPtr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog(pTabViewShell->GetFrameWeld()));
                             for (sal_uInt16 i=0; i<nFormatCount; i++)
                             {
                                 SotClipboardFormatId nFormatId = aFormats.GetClipbrdFormatId( i );
@@ -1929,27 +1933,38 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                             OUString sLabel(vcl::CommandInfoProvider::GetTooltipLabelForCommand(aProperties));
                             pDlg->InsertUno(u".uno:PasteTextImportDialog"_ustr, sLabel);
 
-                            TransferableDataHelper aDataHelper(
-                                TransferableDataHelper::CreateFromSystemClipboard( pWin ) );
-                            SotClipboardFormatId nFormat = pDlg->GetFormat( aDataHelper.GetTransferable() );
-                            if (nFormat != SotClipboardFormatId::NONE)
-                            {
-                                {
-                                    weld::WaitObject aWait( GetViewData().GetDialogParent() );
-                                    if ( bDraw && nFormat == SotClipboardFormatId::EMBED_SOURCE )
-                                        pTabViewShell->PasteDraw();
+                            auto xDatahelper = std::make_shared<TransferableDataHelper>(
+                                std::move(aDataHelper));
+                            pDlg->PreGetFormat(*xDatahelper);
+
+                            auto xRequest = std::make_shared<SfxRequest>(rReq);
+                            rReq.Ignore(); // the 'old' request is not relevant any more
+                            pDlg->StartExecuteAsync(
+                                [pDlg, xDatahelper, xRequest, pTabViewShell, bDraw, nSlot](sal_Int32 nResult) {
+                                    SotClipboardFormatId nFormat = (nResult == RET_OK)
+                                        ? pDlg->GetFormatOnly()
+                                        : SotClipboardFormatId::NONE;
+                                    if (nFormat != SotClipboardFormatId::NONE)
+                                    {
+                                        {
+                                            weld::WaitObject aWait(pTabViewShell->GetFrameWeld());
+                                            if (bDraw && nFormat == SotClipboardFormatId::EMBED_SOURCE)
+                                                pTabViewShell->PasteDraw();
+                                            else
+                                                pTabViewShell->PasteFromSystem(nFormat);
+                                        }
+                                        xRequest->SetReturnValue(SfxInt16Item(nSlot, 1)); // 1 = success
+                                        xRequest->AppendItem(
+                                            SfxUInt32Item(nSlot, static_cast<sal_uInt32>(nFormat)));
+                                        xRequest->Done();
+                                    }
                                     else
-                                        pTabViewShell->PasteFromSystem(nFormat);
-                                }
-                                rReq.SetReturnValue(SfxInt16Item(nSlot, 1));    // 1 = success
-                                rReq.AppendItem( SfxUInt32Item( nSlot, static_cast<sal_uInt32>(nFormat) ) );
-                                rReq.Done();
-                            }
-                            else
-                            {
-                                rReq.SetReturnValue(SfxInt16Item(nSlot, 0));    // 0 = fail
-                                rReq.Ignore();
-                            }
+                                    {
+                                        xRequest->SetReturnValue(SfxInt16Item(nSlot, 0)); // 0 = fail
+                                        xRequest->Ignore();
+                                    }
+                                    pDlg->disposeOnce();
+                                });
                         }
                         else
                             rReq.SetReturnValue(SfxInt16Item(nSlot, 0));        // 0 = fail
@@ -3291,11 +3306,11 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                 const OUString aFormula = pTabViewShell->DoAutoSum( bRangeFinder, bSubTotal , eFunction );
                 if ( !aFormula.isEmpty() )
                 {
-                    const sal_Int32 nPar = aFormula.indexOf( '(' );
+                    const sal_Int32 nArgStart = ScGlobal::GetAutoSumArgStart( aFormula, bSubTotal );
                     const sal_Int32 nLen = aFormula.getLength();
                     ScInputHandler* pHdl = pScMod->GetInputHdl( pTabViewShell );
 
-                    if ( pHdl && nPar != -1 )
+                    if ( pHdl && nArgStart != -1 )
                     {
                         if ( !pScMod->IsEditMode() )
                         {
@@ -3311,7 +3326,7 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                             pHdl->DataChanging();
                             pEditView->SetSelection(aTextSel);
                             pEditView->InsertText(aFormula);
-                            pEditView->SetSelection( bRangeFinder ? ESelection( 0, nPar + ( bSubTotal ? 3 : 1 ), 0, nLen - 1 ) : ESelection( 0, nLen - 1, 0, nLen - 1 ) );
+                            pEditView->SetSelection( bRangeFinder ? ESelection( 0, nArgStart, 0, nLen - 1 ) : ESelection( 0, nLen - 1, 0, nLen - 1 ) );
                             pHdl->DataChanged();
 
                             if ( bRangeFinder )
@@ -3724,6 +3739,61 @@ void ErrorOrRunPivotLayoutDialog(TranslateId pSrcErrorId,
     RunPivotLayoutDialog(pScMod, pTabViewShell, pNewDPObject);
 }
 
+// Open the pivot layout dialog for the marked range, shrunk to its data area.
+// Returns false when the mark is not one simple area, then no dialog is shown.
+bool RunPivotLayoutDialogForSelection(ScViewData& rViewData, const ScAddress& rDestPos,
+                                      ScModule* pScMod)
+{
+    //! use database ranges (select before type dialog?)
+    ScRange aRange;
+    ScMarkType eType = rViewData.GetSimpleArea(aRange);
+    if ( (eType & SC_MARK_SIMPLE) != SC_MARK_SIMPLE )
+        return false;
+
+    ScDocument& rDoc = rViewData.GetDocument();
+    ScMarkData& rMark = rViewData.GetMarkData();
+    ScTabViewShell* pTabViewShell = rViewData.GetViewShell();
+    ScAddress aDestPos = rDestPos;
+    TranslateId pSrcErrorId;
+
+    // Shrink the range to the data area.
+    SCCOL nStartCol = aRange.aStart.Col(), nEndCol = aRange.aEnd.Col();
+    SCROW nStartRow = aRange.aStart.Row(), nEndRow = aRange.aEnd.Row();
+    if (rDoc.ShrinkToDataArea(aRange.aStart.Tab(), nStartCol, nStartRow, nEndCol, nEndRow))
+    {
+        aRange.aStart.SetCol(nStartCol);
+        aRange.aStart.SetRow(nStartRow);
+        aRange.aEnd.SetCol(nEndCol);
+        aRange.aEnd.SetRow(nEndRow);
+        rMark.SetMarkArea(aRange);
+        pTabViewShell->MarkRange(aRange);
+    }
+
+    if ( rDoc.HasSubTotalCells( aRange ) )
+    {
+        //  confirm selection if it contains SubTotal cells
+        std::shared_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(pTabViewShell->GetFrameWeld(),
+                                                    VclMessageType::Question, VclButtonsType::YesNo,
+                                                    ScResId(STR_DATAPILOT_SUBTOTAL)));
+        xQueryBox->set_default_response(RET_YES);
+        xQueryBox->runAsync(xQueryBox, [aRange, &rDoc, aDestPos,
+                                        pScMod, pTabViewShell, pSrcErrorId] (int nResult2) mutable {
+            if (nResult2 == RET_NO)
+                return;
+
+            std::unique_ptr<ScDPObject> pNewDPObject;
+            SetupRangeForPivotTableDialog(aRange, aDestPos, &rDoc, pSrcErrorId, pNewDPObject);
+            ErrorOrRunPivotLayoutDialog(pSrcErrorId, aDestPos, pScMod, pTabViewShell, pNewDPObject);
+        });
+        return true;
+    }
+
+    std::unique_ptr<ScDPObject> pNewDPObject;
+    SetupRangeForPivotTableDialog(aRange, aDestPos, &rDoc, pSrcErrorId, pNewDPObject);
+    ErrorOrRunPivotLayoutDialog(pSrcErrorId, aDestPos, pScMod, pTabViewShell, pNewDPObject);
+    return true;
+}
+
 }
 
 void ScCellShell::ExecuteDataPilotDialog()
@@ -3749,7 +3819,7 @@ void ScCellShell::ExecuteDataPilotDialog()
     else            // create new table
     {
         // tdf#169108 - create anonymous database range or data
-        pTabViewShell->GetDBData( true, SC_DB_MAKE );
+        ScDBData* pCursorDBData = pTabViewShell->GetDBData( true, SC_DB_MAKE );
         ScMarkData& rMark = GetViewData().GetMarkData();
         if ( !rMark.IsMarked() && !rMark.IsMultiMarked() )
             pTabViewShell->MarkDataArea( false );
@@ -3757,6 +3827,18 @@ void ScCellShell::ExecuteDataPilotDialog()
         //  output to cursor position for non-sheet data
         ScAddress aDestPos( rData.GetCurX(), rData.GetCurY(),
                                 rData.CurrentTabForData() );
+
+        // On a phone the source is always the selection.
+        if (pTabViewShell->isKitMobilePhone())
+        {
+            if (!RunPivotLayoutDialogForSelection(rData, aDestPos, pScMod))
+            {
+                std::unique_ptr<ScDPObject> pNoObject;
+                ErrorOrRunPivotLayoutDialog(STR_NOMULTISELECT, aDestPos, pScMod, pTabViewShell,
+                                            pNoObject);
+            }
+            return;
+        }
 
         //  first select type of source data
 
@@ -3774,8 +3856,23 @@ void ScCellShell::ExecuteDataPilotDialog()
         for (; itr != itrEnd; ++itr)
             pTypeDlg->AppendNamedRange(itr->second->GetName());
 
+        // Also offer named database ranges (including styled tables), and note
+        // the one under the cursor (an anonymous range is not named, so it
+        // never matches) to default to it below.
+        OUString aCursorDBName;
+        if (ScDBCollection* pDBs = rDoc.GetDBCollection())
+            for (const auto& rxDB : pDBs->getNamedDBs())
+            {
+                pTypeDlg->AppendNamedRange(rxDB->GetName());
+                if (rxDB.get() == pCursorDBData)
+                    aCursorDBName = rxDB->GetName();
+            }
+
+        if (!aCursorDBName.isEmpty())
+            pTypeDlg->SelectNamedRange(aCursorDBName);
+
         pTypeDlg->StartExecuteAsync([this, pTypeDlg, pTabViewShell,
-                                    pScMod, pFact, &rDoc, &rMark, aDestPos](int nResult) mutable {
+                                    pScMod, pFact, &rDoc, aDestPos](int nResult) mutable {
 
             if (nResult == RET_OK )
             {
@@ -3850,51 +3947,7 @@ void ScCellShell::ExecuteDataPilotDialog()
                     }
                     else        // selection
                     {
-                        //! use database ranges (select before type dialog?)
-                        ScRange aRange;
-                        ScMarkType eType = GetViewData().GetSimpleArea(aRange);
-                        if ( (eType & SC_MARK_SIMPLE) == SC_MARK_SIMPLE )
-                        {
-                            ScDocument* pDoc = &rDoc;
-
-                            // Shrink the range to the data area.
-                            SCCOL nStartCol = aRange.aStart.Col(), nEndCol = aRange.aEnd.Col();
-                            SCROW nStartRow = aRange.aStart.Row(), nEndRow = aRange.aEnd.Row();
-                            if (rDoc.ShrinkToDataArea(aRange.aStart.Tab(), nStartCol, nStartRow, nEndCol, nEndRow))
-                            {
-                                aRange.aStart.SetCol(nStartCol);
-                                aRange.aStart.SetRow(nStartRow);
-                                aRange.aEnd.SetCol(nEndCol);
-                                aRange.aEnd.SetRow(nEndRow);
-                                rMark.SetMarkArea(aRange);
-                                pTabViewShell->MarkRange(aRange);
-                            }
-
-                            if ( rDoc.HasSubTotalCells( aRange ) )
-                            {
-                                //  confirm selection if it contains SubTotal cells
-                                std::shared_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(pTabViewShell->GetFrameWeld(),
-                                                                            VclMessageType::Question, VclButtonsType::YesNo,
-                                                                            ScResId(STR_DATAPILOT_SUBTOTAL)));
-                                xQueryBox->set_default_response(RET_YES);
-                                xQueryBox->runAsync(xQueryBox, [aRange, pDoc, pTypeDlg, aDestPos,
-                                                                pScMod, pTabViewShell, pSrcErrorId] (int nResult2) mutable {
-                                    if (nResult2 == RET_NO)
-                                        return;
-
-                                    std::unique_ptr<ScDPObject> pNewDPObject;
-                                    SetupRangeForPivotTableDialog(aRange, aDestPos, pDoc, pSrcErrorId, pNewDPObject);
-                                    ErrorOrRunPivotLayoutDialog(pSrcErrorId, aDestPos, pScMod, pTabViewShell, pNewDPObject);
-                                });
-
-                                pTypeDlg->disposeOnce();
-                                return;
-                            }
-
-                            std::unique_ptr<ScDPObject> pNewDPObject;
-                            SetupRangeForPivotTableDialog(aRange, aDestPos, pDoc, pSrcErrorId, pNewDPObject);
-                            ErrorOrRunPivotLayoutDialog(pSrcErrorId, aDestPos, pScMod, pTabViewShell, pNewDPObject);
-                        }
+                        RunPivotLayoutDialogForSelection(GetViewData(), aDestPos, pScMod);
                     }
                 }
             }

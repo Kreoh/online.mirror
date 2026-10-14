@@ -27,6 +27,8 @@
 #include <rtl/ustring.hxx>
 #include <swporlayoutcontext.hxx>
 
+#include <optional>
+
 class SwTextSizeInfo;
 class SwTextPaintInfo;
 class SwTextFormatInfo;
@@ -51,6 +53,7 @@ private:
     bool m_bJoinBorderWithNext;
     bool m_bIsFieldmarkText;
     SwTwips m_nExtraBlankWidth = 0;    // width of spaces after the break
+    SwTwips m_nTrailingBlankWidth = 0; // width of the blanks that end Width()
     SwTwips m_nExtraShrunkWidth = 0;   // width of not shrunk line
     SwTwips m_nExtraSpaceSize = 0;     // extra space over normal space width
     bool m_bModifiedWidth = false;     // applied custom letter spacing and scale width
@@ -79,6 +82,8 @@ public:
     void SubPrtWidth( const SwTwips nNew ) { Width( Width() - nNew ); }
     SwTwips ExtraBlankWidth() const { return m_nExtraBlankWidth; }
     void ExtraBlankWidth(const SwTwips nNew) { m_nExtraBlankWidth = nNew; }
+    SwTwips TrailingBlankWidth() const { return m_nTrailingBlankWidth; }
+    void TrailingBlankWidth(const SwTwips nNew) { m_nTrailingBlankWidth = nNew; }
     SwTwips ExtraShrunkWidth() const { return m_nExtraShrunkWidth; }
     void ExtraShrunkWidth(const SwTwips nNew) { m_nExtraShrunkWidth = nNew; }
     SwTwips ExtraSpaceSize() const { return m_nExtraSpaceSize; }
@@ -204,6 +209,7 @@ inline SwLinePortion &SwLinePortion::operator=(const SwLinePortion &rPortion)
     m_bJoinBorderWithPrev = rPortion.m_bJoinBorderWithPrev;
     m_bJoinBorderWithNext = rPortion.m_bJoinBorderWithNext;
     m_nExtraBlankWidth = rPortion.m_nExtraBlankWidth;
+    m_nTrailingBlankWidth = rPortion.m_nTrailingBlankWidth;
     m_nExtraShrunkWidth = rPortion.m_nExtraShrunkWidth;
     m_nExtraSpaceSize = rPortion.m_nExtraSpaceSize;
     m_bModifiedWidth = rPortion.m_bModifiedWidth;
@@ -223,6 +229,7 @@ inline SwLinePortion::SwLinePortion(const SwLinePortion &rPortion) :
     m_bJoinBorderWithNext( rPortion.m_bJoinBorderWithNext ),
     m_bIsFieldmarkText( rPortion.m_bIsFieldmarkText ),
     m_nExtraBlankWidth(rPortion.m_nExtraBlankWidth),
+    m_nTrailingBlankWidth(rPortion.m_nTrailingBlankWidth),
     m_nExtraShrunkWidth(rPortion.m_nExtraShrunkWidth),
     m_nExtraSpaceSize(rPortion.m_nExtraSpaceSize),
     m_bModifiedWidth(rPortion.m_bModifiedWidth),

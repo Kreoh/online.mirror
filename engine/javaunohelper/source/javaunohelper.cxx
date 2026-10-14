@@ -49,7 +49,7 @@
 #endif
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 /*
  * Class:     com_sun_star_comp_helper_SharedLibraryLoader
@@ -80,7 +80,7 @@ jboolean Java_com_sun_star_comp_helper_SharedLibraryLoader_component_1writeInfo(
         oslGenericFunction pSym = lib.getFunctionSymbol(COMPONENT_GETENV);
         if (pSym)
         {
-            Environment java_env, loader_env;
+            cpo::uno::Environment java_env, loader_env;
 
             const char * pEnvTypeName = nullptr;
             (*reinterpret_cast<component_getImplementationEnvironmentFunc>(pSym))(
@@ -103,7 +103,7 @@ jboolean Java_com_sun_star_comp_helper_SharedLibraryLoader_component_1writeInfo(
             {
                 if (loader_env.is() && java_env.is())
                 {
-                    Mapping java2dest(java_env.get(), loader_env.get());
+                    cpo::uno::Mapping java2dest(java_env.get(), loader_env.get());
 
                     if ( java2dest.is() )
                     {
@@ -169,7 +169,7 @@ jobject Java_com_sun_star_comp_helper_SharedLibraryLoader_component_1getFactory(
         oslGenericFunction pSym = lib.getFunctionSymbol(COMPONENT_GETENV);
         if (pSym)
         {
-            Environment java_env, loader_env;
+            cpo::uno::Environment java_env, loader_env;
 
             const char * pEnvTypeName = nullptr;
             (*reinterpret_cast<component_getImplementationEnvironmentFunc>(pSym))(
@@ -193,8 +193,8 @@ jobject Java_com_sun_star_comp_helper_SharedLibraryLoader_component_1getFactory(
             {
                 if (loader_env.is() && java_env.is())
                 {
-                    Mapping java2dest( java_env.get(), loader_env.get() );
-                    Mapping dest2java( loader_env.get(), java_env.get() );
+                    cpo::uno::Mapping java2dest( java_env.get(), loader_env.get() );
+                    cpo::uno::Mapping dest2java( loader_env.get(), java_env.get() );
 
                     if (dest2java.is() && java2dest.is())
                     {
@@ -222,7 +222,7 @@ jobject Java_com_sun_star_comp_helper_SharedLibraryLoader_component_1getFactory(
                         if (pSSF)
                         {
                             jobject jglobal = static_cast<jobject>(dest2java.mapInterface(
-                                pSSF, cppu::UnoType<XInterface>::get()));
+                                pSSF, cppu::UnoType<cpo::uno::XInterface>::get()));
                             joSLL_cpp = pJEnv->NewLocalRef( jglobal );
                             pJEnv->DeleteGlobalRef( jglobal );
                             if (env)

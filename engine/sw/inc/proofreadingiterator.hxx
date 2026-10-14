@@ -12,12 +12,12 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 namespace com::sun::star {
     namespace linguistic2 { class XProofreadingIterator; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 // A simple wrapper around the css.linguistic2.ProofreadingIterator
 // single-instance service.  The first time that service implementation gets
@@ -26,8 +26,8 @@ namespace com::sun::star {
 
 namespace sw::proofreadingiterator {
 
-css::uno::Reference<css::linguistic2::XProofreadingIterator> get(
-    css::uno::Reference<css::uno::XComponentContext> const & context);
+cpo::uno::Reference<css::linguistic2::XProofreadingIterator> get(
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & context);
 
 void dispose();
 

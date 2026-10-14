@@ -260,8 +260,8 @@ public:
 
 private:
 
-    static const CharClass      *pCharClassEnglish;     // character classification for en_US locale
-    static const CharClass      *pCharClassLocalized;   // character classification for UI locale
+    static std::optional<CharClass> goCharClassEnglish;     // character classification for en_US locale
+    static std::optional<CharClass> goCharClassLocalized;   // character classification for UI locale
     static const Convention     *pConventions[ formula::FormulaGrammar::CONV_LAST ];
 
     static const struct AddInMap
@@ -313,6 +313,7 @@ private:
     {
         boost::intrusive_ptr<ScTableRefToken> mxToken;
         sal_uInt16  mnLevel;
+        bool        mbCloseAfterColumn = false;  /// bare [@Col] owes the column's ocTableRefClose
         TableRefEntry( ScTableRefToken* p ) : mxToken(p), mnLevel(0) {}
     };
     std::vector<TableRefEntry> maTableRefs;     /// "stack" of currently active ocTableRef tokens
@@ -362,7 +363,7 @@ private:
     bool ParseDoubleReference( const OUString& rSymbol, const OUString* pErrRef = nullptr );
     bool ParsePredetectedReference( const OUString& rSymbol );
     bool ParsePredetectedErrRefReference( const OUString& rName, const OUString* pErrRef );
-    bool ParseMacro( const OUString& );
+    bool ParseMacro( const OUString&, bool bParenFollows );
     bool ParseNamedRange( const OUString&, bool onlyCheck = false );
     bool ParseLocalName( const OUString& );
     bool ParseExternalNamedRange( const OUString& rSymbol, bool& rbInvalidExternalNameRange );
@@ -523,6 +524,11 @@ public:
     /** TODO : Move this to somewhere appropriate. */
     static bool DoubleRefToPosSingleRefScalarCase(const ScRange& rRange, ScAddress& rAdr,
                                                   const ScAddress& rFormulaPos);
+
+    /** The same for a range in another document, where the shape of the range
+        decides and not whether the formula position lies within it. */
+    static bool ExternalDoubleRefToPosSingleRef(const ScRange& rRange, ScAddress& rAdr,
+                                                const ScAddress& rFormulaPos);
 
     bool HasUnhandledPossibleImplicitIntersections() const { return !mUnhandledPossibleImplicitIntersections.empty(); }
 

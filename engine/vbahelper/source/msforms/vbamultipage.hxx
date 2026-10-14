@@ -33,16 +33,16 @@ class ScVbaMultiPage : public MultiPageImpl_BASE
 {
 public:
     ScVbaMultiPage(
-        const css::uno::Reference< ov::XHelperInterface >& xParent,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::uno::XInterface >& xControl,
-        const css::uno::Reference< css::frame::XModel >& xModel,
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< cpo::uno::XInterface >& xControl,
+        const cpo::uno::Reference< css::frame::XModel >& xModel,
         std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper);
 
    // Attributes
-    virtual sal_Int32 SAL_CALL getValue() override;
-    virtual void SAL_CALL setValue( sal_Int32 _value ) override;
-    virtual cpo::uno::Any SAL_CALL Pages( const cpo::uno::Any& index ) override;
+    virtual sal_Int32 getValue() override;
+    virtual void setValue( sal_Int32 _value ) override;
+    virtual cpo::uno::Any Pages( const cpo::uno::Any& index ) override;
 
     //XHelperInterface
     virtual OUString getServiceImplName() override;

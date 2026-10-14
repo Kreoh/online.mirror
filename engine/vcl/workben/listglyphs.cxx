@@ -24,7 +24,7 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <iostream>
 #include <fstream>
@@ -59,7 +59,7 @@ private:
     void Init() override;
     void DeInit() override;
 
-    css::uno::Reference<css::lang::XMultiServiceFactory> xServiceManager;
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xServiceManager;
     bool mbStdOut = false;
     OUString maFilename;
     OUString maFontname;
@@ -188,13 +188,13 @@ void ListGlyphs::Init()
         osl::File aFile(maFilename);
 
         if (!aFile.open(osl_File_OpenFlag_Create))
-            throw css::uno::RuntimeException("Can not create file: " + aArg);
+            throw cpo::uno::RuntimeException("Can not create file: " + aArg);
 
         aFile.close();
     }
 
     auto xContext = cppu::defaultBootstrap_InitialComponentContext();
-    xServiceManager.set(xContext->getServiceManager(), css::uno::UNO_QUERY);
+    xServiceManager.set(xContext->getServiceManager(), cpo::uno::UNO_QUERY);
 
     if (!xServiceManager.is())
         Application::Abort(u"Bootstrap failure - no service manager"_ustr);
@@ -206,8 +206,8 @@ void ListGlyphs::Init()
 
 void ListGlyphs::DeInit()
 {
-    auto xContext = css::uno::Reference<css::lang::XComponent>(
-        comphelper::getProcessComponentContext(), css::uno::UNO_QUERY_THROW);
+    auto xContext = cpo::uno::Reference<css::lang::XComponent>(
+        comphelper::getProcessComponentContext(), cpo::uno::UNO_QUERY_THROW);
     xContext->dispose();
     ::comphelper::setProcessServiceFactory(nullptr);
 }

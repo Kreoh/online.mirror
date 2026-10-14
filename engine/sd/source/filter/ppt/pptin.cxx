@@ -95,6 +95,7 @@
 #include <string_view>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SdPPTImport::SdPPTImport( SdDrawDocument& rDocument, SvStream& rDocStream, SotStorage& rStorage, SfxMedium& rMedium )
     : maParam(rDocStream)
@@ -233,7 +234,7 @@ bool ImplSdPPTImport::Import()
     SdrOutliner& rOutl = mrDoc.GetDrawOutliner();
     EEControlBits nControlWord = rOutl.GetEditEngine().GetControlWord();
     nControlWord |=  EEControlBits::ULSPACESUMMATION;
-    const_cast<EditEngine&>(rOutl.GetEditEngine()).SetControlWord( nControlWord );
+    rOutl.GetEditEngine().SetControlWord( nControlWord );
 
     SdrLayerAdmin& rAdmin = mrDoc.GetLayerAdmin();
     mnBackgroundObjectsLayerID = rAdmin.GetLayerID( sUNO_LayerName_background_objects );
@@ -2764,7 +2765,7 @@ rtl::Reference<SdrObject> ImplSdPPTImport::ProcessObj( SvStream& rSt, DffObjData
 }
 
 bool
-ImplSdPPTImport::ReadFormControl( rtl::Reference<SotStorage>& rSrc1, css::uno::Reference< css::form::XFormComponent > & rFormComp ) const
+ImplSdPPTImport::ReadFormControl( rtl::Reference<SotStorage>& rSrc1, cpo::uno::Reference< css::form::XFormComponent > & rFormComp ) const
 {
     uno::Reference< frame::XModel > xModel;
     if (  mrDoc.GetDocSh() )

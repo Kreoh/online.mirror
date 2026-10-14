@@ -45,7 +45,7 @@
 #include <com/sun/star/frame/XModel2.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #if ENABLE_YRS
 #include <com/sun/star/io/SequenceInputStream.hpp>
@@ -84,12 +84,12 @@ using ::com::sun::star::task::XInteractionHandler;
 using ::com::sun::star::task::XInteractionHandler2;
 using ::cpo::uno::Any;
 using ::cpo::uno::Exception;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::RuntimeException;
+using ::cpo::uno::Reference;
+using ::cpo::uno::RuntimeException;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
-using ::com::sun::star::uno::UNO_SET_THROW;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_SET_THROW;
 using ::com::sun::star::util::XCloseable;
 using ::com::sun::star::document::XViewDataSupplier;
 using ::com::sun::star::container::XIndexAccess;
@@ -100,22 +100,22 @@ namespace {
 
 class SfxFrameLoader_Impl : public ::cppu::WeakImplHelper< css::frame::XSynchronousFrameLoader, css::lang::XServiceInfo >
 {
-    css::uno::Reference < css::uno::XComponentContext >  m_aContext;
+    cpo::uno::Reference < cpo::uno::XComponentContext >  m_aContext;
 
 public:
-    explicit SfxFrameLoader_Impl( const css::uno::Reference < css::uno::XComponentContext >& _rxContext );
+    explicit SfxFrameLoader_Impl( const cpo::uno::Reference < cpo::uno::XComponentContext >& _rxContext );
 
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL supportsService(OUString const & ServiceName) override;
+    virtual bool supportsService(OUString const & ServiceName) override;
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 
     // XSynchronousFrameLoader
 
-    virtual bool SAL_CALL load( const cpo::uno::Sequence< css::beans::PropertyValue >& _rArgs, const css::uno::Reference< css::frame::XFrame >& _rxFrame ) override;
-    virtual void SAL_CALL cancel() override;
+    virtual bool load( const cpo::uno::Sequence< css::beans::PropertyValue >& _rArgs, const cpo::uno::Reference< css::frame::XFrame >& _rxFrame ) override;
+    virtual void cancel() override;
 
 protected:
     virtual                 ~SfxFrameLoader_Impl() override;
@@ -126,7 +126,7 @@ private:
                         ) const;
 
     static OUString     impl_askForFilter_nothrow(
-                            const css::uno::Reference< css::task::XInteractionHandler >& i_rxHandler,
+                            const cpo::uno::Reference< css::task::XInteractionHandler >& i_rxHandler,
                             const OUString& i_rDocumentURL
                         );
 
@@ -138,7 +138,7 @@ private:
 
     static bool         impl_createNewDocWithSlotParam(
                             const sal_uInt16 _nSlotID,
-                            const css::uno::Reference< css::frame::XFrame >& i_rxFrame,
+                            const cpo::uno::Reference< css::frame::XFrame >& i_rxFrame,
                             const bool i_bHidden
                         );
 
@@ -155,7 +155,7 @@ private:
                         );
 
     static SfxObjectShellRef   impl_findObjectShell(
-                            const css::uno::Reference< css::frame::XModel2 >& i_rxDocument
+                            const cpo::uno::Reference< css::frame::XModel2 >& i_rxDocument
                         );
 
     static void         impl_handleCaughtError_nothrow(
@@ -177,16 +177,16 @@ private:
                                   ::comphelper::NamedValueCollection& io_rDescriptor
                         );
 
-    static css::uno::Reference< css::frame::XController2 >
+    static cpo::uno::Reference< css::frame::XController2 >
                         impl_createDocumentView(
-                            const css::uno::Reference< css::frame::XModel2 >& i_rModel,
-                            const css::uno::Reference< css::frame::XFrame >& i_rFrame,
+                            const cpo::uno::Reference< css::frame::XModel2 >& i_rModel,
+                            const cpo::uno::Reference< css::frame::XFrame >& i_rFrame,
                             const ::comphelper::NamedValueCollection& i_rViewFactoryArgs,
                             const OUString& i_rViewName
                         );
 };
 
-SfxFrameLoader_Impl::SfxFrameLoader_Impl( const Reference< css::uno::XComponentContext >& _rxContext )
+SfxFrameLoader_Impl::SfxFrameLoader_Impl( const Reference< cpo::uno::XComponentContext >& _rxContext )
     :m_aContext( _rxContext )
 {
 }
@@ -625,7 +625,7 @@ std::shared_ptr<const SfxFilter> getEmptyURLFilter(std::u16string_view sURL)
     return pFilter;
 }
 
-bool SAL_CALL SfxFrameLoader_Impl::load( const Sequence< PropertyValue >& rArgs,
+bool SfxFrameLoader_Impl::load( const Sequence< PropertyValue >& rArgs,
                                              const Reference< XFrame >& _rTargetFrame )
 {
     ENSURE_OR_THROW( _rTargetFrame.is(), "illegal NULL frame" );
@@ -860,28 +860,28 @@ void SfxFrameLoader_Impl::cancel()
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SfxFrameLoader_Impl::getImplementationName()
+OUString SfxFrameLoader_Impl::getImplementationName()
 {
     return u"com.sun.star.comp.office.FrameLoader"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL SfxFrameLoader_Impl::supportsService( const OUString& sServiceName )
+bool SfxFrameLoader_Impl::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL SfxFrameLoader_Impl::getSupportedServiceNames()
+Sequence< OUString > SfxFrameLoader_Impl::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.SynchronousFrameLoader"_ustr, u"com.sun.star.frame.OfficeFrameLoader"_ustr };
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_office_FrameLoader_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SfxFrameLoader_Impl(context));

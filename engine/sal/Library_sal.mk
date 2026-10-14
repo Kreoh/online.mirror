@@ -12,8 +12,6 @@ $(eval $(call gb_Library_Library,sal))
 
 $(eval $(call gb_Library_set_precompiled_header,sal,sal/inc/pch/precompiled_sal))
 
-$(eval $(call gb_Library_set_is_ure_library_or_dependency,sal))
-
 $(eval $(call gb_Library_set_include,sal,\
 	$$(INCLUDE) \
 	-I$(SRCDIR)/sal/inc \
@@ -68,10 +66,6 @@ $(eval $(call gb_Library_add_libs,sal,\
 		-ldl \
 		-lrt \
 	) \
-	$(if $(filter SOLARIS,$(OS)), \
-		-lnsl \
-		-lsocket \
-	) \
 	$(if $(filter HAIKU,$(OS)), \
 		-lnetwork \
 	) \
@@ -116,7 +110,6 @@ $(eval $(call gb_Library_add_exception_objects,sal,\
 	sal/rtl/strbuf \
 	sal/rtl/strimp \
 	sal/rtl/string \
-	sal/rtl/unload \
 	sal/rtl/uri \
 	sal/rtl/ustrbuf \
 	sal/rtl/ustring \

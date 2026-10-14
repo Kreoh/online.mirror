@@ -38,12 +38,12 @@ namespace logging
 {
     using ::com::sun::star::logging::XConsoleHandler;
     using ::com::sun::star::lang::XServiceInfo;
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::logging::XLogFormatter;
     using ::cpo::uno::Sequence;
     using ::com::sun::star::logging::LogRecord;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::XInterface;
     using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::beans::NamedValue;
 
@@ -253,9 +253,9 @@ namespace logging
 
 } // namespace logging
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_extensions_ConsoleHandler(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &arguments)
 {
     return cppu::acquire(new logging::ConsoleHandler(context, arguments));

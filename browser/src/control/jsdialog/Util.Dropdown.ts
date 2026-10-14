@@ -235,9 +235,13 @@ JSDialog.OpenDropdown = function (
 			data: any,
 			builder: JSBuilder,
 		) {
+			// The entry position comes as a number or a 'pos;...' string; other
+			// payloads belong to the widget inside the dropdown and carry no
+			// entry position.
 			let pos = -1;
 			if (typeof data === 'number') pos = data;
-			else pos = data ? parseInt(data.substr(0, data.indexOf(';'))) : -1;
+			else if (typeof data === 'string')
+				pos = parseInt(data.substr(0, data.indexOf(';')));
 			const entry = targetEntries && pos >= 0 ? targetEntries[pos] : null;
 			if (entry) {
 				entry.pos = pos;
@@ -365,5 +369,12 @@ JSDialog.CloseAllDropdowns = function () {
 JSDialog.GetDropdown = function (id: string) {
 	// remember it can get some random numbers due to JSDialog.MakeIdUnique
 	// TODO: use some register for it
-	return document.body.querySelector('[id^="' + id + '"].modalpopup');
+	const selector = '[id^="' + id + '"].modalpopup';
+	let dropdown = document.body.querySelector(selector);
+	if (!dropdown) {
+		JSDialog.ForEachPopoutDocument((childDocument: Document) => {
+			if (!dropdown) dropdown = childDocument.body.querySelector(selector);
+		});
+	}
+	return dropdown;
 };

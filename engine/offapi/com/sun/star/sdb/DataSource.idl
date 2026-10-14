@@ -19,7 +19,6 @@
 
 
  module com {  module sun {  module star {  module sdbc {
-     published interface XIsolatedConnection;
      published interface XDataSource;
  };};};};
 
@@ -28,7 +27,6 @@
 
  published interface XCompletedConnection;
  published interface XQueryDefinitionsSupplier;
- published interface XBookmarksSupplier;
 
 
 /** is a factory to establish database connections. It should be registered at
@@ -44,14 +42,6 @@ published service DataSource
                 provided during user interaction.
      */
     interface XCompletedConnection;
-
-    /** useful for establishing isolated connections which are not shared among others
-        as it is the case when using XCompletedConnection or com::sun::star::sdbc::XDataSource.
-        @see XCompletedConnection
-        @see com::sun::star::sdbc::XDataSource
-     */
-    interface com::sun::star::sdbc::XIsolatedConnection;
-
 
     /** is provided to flush a DataSource within to a Database Context.
      */
@@ -72,17 +62,6 @@ published service DataSource
     /* useful for establishing connections and to get and set the login timeout.
     */
     interface com::sun::star::sdbc::XDataSource;
-
-    /** provides access to bookmarks to documents associated with the data source
-        <p>
-        The object returned by the
-        com::sun::star::sdb::XBookmarksSupplier::getBookmarks()
-        supports the
-        com::sun::star::sdb::DefinitionContainer
-        service.
-        </p>
-     */
-    [optional] interface XBookmarksSupplier;
 
     /** is the name of the data source.
 

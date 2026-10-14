@@ -26,11 +26,11 @@ namespace frm
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::frame;
     using namespace ::com::sun::star::util;
 
-    ControlFeatureInterception::ControlFeatureInterception( const Reference< XComponentContext >& _rxORB )
+    ControlFeatureInterception::ControlFeatureInterception( const Reference< cpo::uno::XComponentContext >& _rxORB )
         :m_pUrlTransformer( new UrlTransformer( _rxORB ) )
     {
     }
@@ -120,7 +120,7 @@ namespace frm
             xInterceptor->setSlaveDispatchProvider( nullptr );
 
             // start over with the next chain element
-            xInterceptor.set(xSlave, css::uno::UNO_QUERY);
+            xInterceptor.set(xSlave, cpo::uno::UNO_QUERY);
         }
     }
 

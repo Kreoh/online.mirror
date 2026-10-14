@@ -41,7 +41,7 @@
 
 #endif /* defined _WIN32 */
 
-#if defined(__sun) || defined(LINUX) || defined(NETBSD) || defined(FREEBSD) || defined(OPENBSD)    \
+#if defined(LINUX) || defined(NETBSD) || defined(FREEBSD) || defined(OPENBSD)    \
     || defined(DRAGONFLY) || defined(ANDROID) || defined(HAIKU)
 #define SAL_UNX
 #define SAL_DLLEXTENSION ".so"
@@ -86,6 +86,13 @@
 #define SAL_PATHDELIMITER '/'
 #define SAL_NEWLINE_STRING "\n"
 #define SAL_CONFIGFILE(name) name "rc"
+#endif
+
+#ifndef SAL_DLLPREFIX
+#define SAL_DLLPREFIX ""
+#endif
+#ifndef SAL_DLLEXTENSION
+#define SAL_DLLEXTENSION ""
 #endif
 
 /* The following spell is for Solaris and its descendants.

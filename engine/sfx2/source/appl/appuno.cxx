@@ -30,6 +30,7 @@
 #include <sal/config.h>
 #include <sal/log.hxx>
 #include <comphelper/interaction.hxx>
+#include <comphelper/propertyvalue.hxx>
 #include <osl/diagnose.h>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
@@ -49,12 +50,13 @@
 #include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 
+#include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::ucb;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
@@ -91,7 +93,6 @@ constexpr SfxFormalArgument aFormalArgs[] = {
     { static_cast<const SfxType*>(&aSfxBoolItem_Impl), u"NoEmbDataSet"_ustr, SID_NO_EMBEDDED_DS },
     { static_cast<const SfxType*>(&aSfxBoolItem_Impl), u"IsRedactMode"_ustr, SID_IS_REDACT_MODE },
     { static_cast<const SfxType*>(&aSfxStringItem_Impl), u"RedactionStyle"_ustr, SID_REDACTION_STYLE },
-    { static_cast<const SfxType*>(&aSfxStringItem_Impl), u"AdditionsTag"_ustr, FN_PARAM_ADDITIONS_TAG },
     { static_cast<const SfxType*>(&aSfxBoolItem_Impl), u"RedactImages"_ustr, SID_REDACT_IMAGE},
 };
 
@@ -910,8 +911,50 @@ void TransformParameters( sal_uInt16 nSlotId, const cpo::uno::Sequence<beans::Pr
 #endif
 }
 
-comphelper::SequenceAsHashMap TransformItems(sal_uInt16 nSlotId, const SfxItemSet& rSet,
-                                             const SfxSlot* pSlot)
+namespace
+{
+// deduces the const and non-const vector, so that operator[] gets a mutable iterator
+template <class TArgs> auto findArg(TArgs& rArgs, std::u16string_view aName)
+{
+    return std::ranges::find_if(rArgs, [aName](const auto& rArg) { return rArg.first == aName; });
+}
+}
+
+Any& SfxUnoArguments::operator[](const OUString& rName)
+{
+    if (auto it = findArg(m_aArgs, rName); it != m_aArgs.end())
+        return it->second;
+    return m_aArgs.emplace_back(rName, Any()).second;
+}
+
+Any SfxUnoArguments::getValue(std::u16string_view aName) const
+{
+    if (auto it = findArg(m_aArgs, aName); it != m_aArgs.end())
+        return it->second;
+    return {};
+}
+
+bool SfxUnoArguments::contains(std::u16string_view aName) const
+{
+    return findArg(m_aArgs, aName) != m_aArgs.end();
+}
+
+void SfxUnoArguments::erase(std::u16string_view aName)
+{
+    if (auto it = findArg(m_aArgs, aName); it != m_aArgs.end())
+        m_aArgs.erase(it);
+}
+
+Sequence<PropertyValue> SfxUnoArguments::getAsConstPropertyValueList() const
+{
+    Sequence<PropertyValue> aRet(m_aArgs.size());
+    std::ranges::transform(m_aArgs, aRet.getArray(), [](const auto& rArg) {
+        return comphelper::makePropertyValue(rArg.first, rArg.second);
+    });
+    return aRet;
+}
+
+SfxUnoArguments TransformItems(sal_uInt16 nSlotId, const SfxItemSet& rSet, const SfxSlot* pSlot)
 {
     if ( !pSlot )
         pSlot = SFX_SLOTPOOL().GetSlot( nSlotId );
@@ -1290,7 +1333,7 @@ comphelper::SequenceAsHashMap TransformItems(sal_uInt16 nSlotId, const SfxItemSe
         return {};
 
     // convert every item into a property
-    comphelper::SequenceAsHashMap aSequ;
+    SfxUnoArguments aSequ;
 
     if ( !pSlot->IsMode(SfxSlotMode::METHOD) )
     {
@@ -1633,13 +1676,13 @@ comphelper::SequenceAsHashMap TransformItems(sal_uInt16 nSlotId, const SfxItemSe
     return aSequ;
 }
 
-void SAL_CALL FilterOptionsContinuation::setFilterOptions(
+void FilterOptionsContinuation::setFilterOptions(
                 const cpo::uno::Sequence<beans::PropertyValue>& rProps )
 {
     rProperties = rProps;
 }
 
-cpo::uno::Sequence< beans::PropertyValue > SAL_CALL
+cpo::uno::Sequence< beans::PropertyValue >
     FilterOptionsContinuation::getFilterOptions()
 {
     return rProperties;
@@ -1649,7 +1692,7 @@ cpo::uno::Sequence< beans::PropertyValue > SAL_CALL
 RequestFilterOptions::RequestFilterOptions( uno::Reference< frame::XModel > const & rModel,
                               const cpo::uno::Sequence< beans::PropertyValue >& rProperties )
 {
-    uno::Reference< uno::XInterface > temp2;
+    uno::Reference< cpo::uno::XInterface > temp2;
     document::FilterOptionsRequest aOptionsRequest( OUString(),
                                                     temp2,
                                                     rModel,
@@ -1661,13 +1704,13 @@ RequestFilterOptions::RequestFilterOptions( uno::Reference< frame::XModel > cons
     m_xOptions = new FilterOptionsContinuation;
 }
 
-cpo::uno::Any SAL_CALL RequestFilterOptions::getRequest()
+cpo::uno::Any RequestFilterOptions::getRequest()
 {
     return m_aRequest;
 }
 
 cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > >
-    SAL_CALL RequestFilterOptions::getContinuations()
+    RequestFilterOptions::getContinuations()
 {
     return { m_xAbort, m_xOptions };
 }
@@ -1682,13 +1725,13 @@ class RequestPackageReparation_Impl : public ::cppu::WeakImplHelper< task::XInte
 public:
     explicit RequestPackageReparation_Impl( const OUString& aName );
     bool    isApproved() const;
-    virtual cpo::uno::Any SAL_CALL getRequest() override;
-    virtual cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations() override;
+    virtual cpo::uno::Any getRequest() override;
+    virtual cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > getContinuations() override;
 };
 
 RequestPackageReparation_Impl::RequestPackageReparation_Impl( const OUString& aName )
 {
-    uno::Reference< uno::XInterface > temp2;
+    uno::Reference< cpo::uno::XInterface > temp2;
     document::BrokenPackageRequest aBrokenPackageRequest( OUString(), temp2, aName );
     m_aRequest <<= aBrokenPackageRequest;
     m_xApprove = new comphelper::OInteractionApprove;
@@ -1700,13 +1743,13 @@ bool RequestPackageReparation_Impl::isApproved() const
     return m_xApprove->wasSelected();
 }
 
-cpo::uno::Any SAL_CALL RequestPackageReparation_Impl::getRequest()
+cpo::uno::Any RequestPackageReparation_Impl::getRequest()
 {
     return m_aRequest;
 }
 
 cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > >
-    SAL_CALL RequestPackageReparation_Impl::getContinuations()
+    RequestPackageReparation_Impl::getContinuations()
 {
     return { m_xApprove, m_xDisapprove };
 }
@@ -1725,7 +1768,7 @@ bool RequestPackageReparation::isApproved() const
     return mxImpl->isApproved();
 }
 
-css::uno::Reference < task::XInteractionRequest > RequestPackageReparation::GetRequest() const
+cpo::uno::Reference < task::XInteractionRequest > RequestPackageReparation::GetRequest() const
 {
     return mxImpl;
 }
@@ -1738,25 +1781,25 @@ class NotifyBrokenPackage_Impl : public ::cppu::WeakImplHelper< task::XInteracti
 
 public:
     explicit NotifyBrokenPackage_Impl(const OUString& rName);
-    virtual cpo::uno::Any SAL_CALL getRequest() override;
-    virtual cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations() override;
+    virtual cpo::uno::Any getRequest() override;
+    virtual cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > getContinuations() override;
 };
 
 NotifyBrokenPackage_Impl::NotifyBrokenPackage_Impl( const OUString& aName )
 {
-    uno::Reference< uno::XInterface > temp2;
+    uno::Reference< cpo::uno::XInterface > temp2;
     document::BrokenPackageRequest aBrokenPackageRequest( OUString(), temp2, aName );
     m_aRequest <<= aBrokenPackageRequest;
     m_xAbort = new comphelper::OInteractionAbort;
 }
 
-cpo::uno::Any SAL_CALL NotifyBrokenPackage_Impl::getRequest()
+cpo::uno::Any NotifyBrokenPackage_Impl::getRequest()
 {
     return m_aRequest;
 }
 
 cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > >
-    SAL_CALL NotifyBrokenPackage_Impl::getContinuations()
+    NotifyBrokenPackage_Impl::getContinuations()
 {
     return { m_xAbort };
 }
@@ -1770,7 +1813,7 @@ NotifyBrokenPackage::~NotifyBrokenPackage()
 {
 }
 
-css::uno::Reference < task::XInteractionRequest > NotifyBrokenPackage::GetRequest() const
+cpo::uno::Reference < task::XInteractionRequest > NotifyBrokenPackage::GetRequest() const
 {
     return mxImpl;
 }

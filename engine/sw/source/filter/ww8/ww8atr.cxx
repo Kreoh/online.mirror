@@ -4642,11 +4642,11 @@ void WW8AttributeOutput::FormatVertOrientation( const SwFormatVertOrient& rFlyVe
     if ( !m_rWW8Export.m_bOutFlyFrameAttrs )
         return;
 
-    short nPos;
+    sal_Int16 nPos;
     switch( rFlyVert.GetVertOrient() )
     {
         case text::VertOrientation::NONE:
-            nPos = static_cast<short>(rFlyVert.GetPos());
+            nPos = MakeSafePositioningValue(rFlyVert.getPosition().as_twip<SwTwips>());
             break;
         case text::VertOrientation::CENTER:
         case text::VertOrientation::LINE_CENTER:
@@ -4680,11 +4680,11 @@ void WW8AttributeOutput::FormatHorizOrientation( const SwFormatHoriOrient& rFlyH
     if ( !m_rWW8Export.m_bOutFlyFrameAttrs )
         return;
 
-    short nPos;
+    sal_Int16 nPos;
     switch( rFlyHori.GetHoriOrient() )
     {
         case text::HoriOrientation::NONE:
-            nPos = static_cast<short>(rFlyHori.GetPos());
+            nPos = MakeSafePositioningValue(rFlyHori.getPosition().as_twip<SwTwips>());
             if( !nPos )
                 nPos = 1;   // WW: 0 is reserved
             break;
@@ -4725,7 +4725,7 @@ void WW8AttributeOutput::FormatAnchor( const SwFormatAnchor& rAnchor )
         case RndStdIds::FLY_AT_CHAR:
         case RndStdIds::FLY_AT_PARA:
         case RndStdIds::FLY_AS_CHAR:
-            // vertical: page | horizontal: page
+            // pcVert (2) : para | pcHorz (0) : para (column)
             nP |= (2 << 4) | (0 << 6);
             break;
         default:
@@ -6126,8 +6126,9 @@ const SwRedlineData* AttributeOutputBase::GetParagraphMarkerRedline( const SwTex
         if ( pRedl->GetRedlineData().GetType() != aRedlineType )
             continue;
 
-        SwNodeOffset uStartNodeIndex = pRedl->Start()->GetNodeIndex();
-        SwNodeOffset uEndNodeIndex   = pRedl->End()->GetNodeIndex();
+        auto [pStart, pEnd] = pRedl->StartEnd(); // SwPosition*
+        SwNodeOffset uStartNodeIndex = pStart->GetNodeIndex();
+        SwNodeOffset uEndNodeIndex = pEnd->GetNodeIndex();
         SwNodeOffset uNodeIndex = rNode.GetIndex();
 
         if( uStartNodeIndex <= uNodeIndex && uNodeIndex < uEndNodeIndex )

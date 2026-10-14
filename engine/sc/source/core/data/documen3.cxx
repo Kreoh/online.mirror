@@ -21,6 +21,7 @@
 #include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
 #include <com/sun/star/sheet/TableValidationVisibility.hpp>
 #include <scitems.hxx>
+#include <docuno.hxx>
 #include <editeng/langitem.hxx>
 #include <svl/srchitem.hxx>
 #include <sfx2/linkmgr.hxx>
@@ -83,6 +84,7 @@
 #include <brdcst.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -379,6 +381,55 @@ std::vector<const ScDBData*> ScDocument::GetAllNamedDBsInArea(const ScRange& rRa
         return pDBCollection->GetAllNamedDBsInArea(rRange);
     else
         return std::vector<const ScDBData*>();
+}
+
+bool ScDocument::RangeReachesDBStructure(const ScRange& rRange, const ScDBData* pIgnore)
+{
+    const SCTAB nTab = rRange.aStart.Tab();
+    auto bHitsOther = [&](const ScDBData* pOther) {
+        if (!pOther || pOther == pIgnore)
+            return false;
+        ScRange aOther;
+        pOther->GetArea(aOther);
+        return aOther.aStart.Tab() == nTab && rRange.Intersects(aOther);
+    };
+    if (pDBCollection)
+    {
+        for (const auto& rOther : pDBCollection->getNamedDBs())
+            if (bHitsOther(rOther.get()))
+                return true;
+        for (const auto& rOther : pDBCollection->getAnonDBs())
+            if (bHitsOther(rOther.get()))
+                return true;
+    }
+    // Sheet-local / document anonymous DB ranges (e.g. an AutoFilter on a plain range).
+    // Plain named ranges are not DB ranges and intentionally do not block.
+    if (bHitsOther(GetAnonymousDBData(nTab)) || bHitsOther(GetAnonymousDBData()))
+        return true;
+    if (const ScDPCollection* pDPs = GetDPCollection())
+        if (pDPs->HasTable(rRange))
+            return true;
+    return false;
+}
+
+std::vector<OUString> ScDocument::GetTablesCoveredBy(const ScMarkData& rMark) const
+{
+    std::vector<OUString> aNames;
+    if (!pDBCollection)
+        return aNames;
+
+    for (const auto& rxData : pDBCollection->getNamedDBs())
+    {
+        if (!rxData->GetTableStyleInfo())
+            continue;
+
+        ScRange aArea;
+        rxData->GetArea(aArea);
+        if (rMark.GetTableSelect(aArea.aStart.Tab()) && rMark.IsAllMarked(aArea))
+            aNames.push_back(rxData->GetUpperName());
+    }
+
+    return aNames;
 }
 
 void ScDocument::RefreshDirtyTableColumnNames()
@@ -1276,78 +1327,38 @@ void ScDocument::GetSearchAndReplaceStart( const SvxSearchItem& rSearchItem,
     {
         if ( rSearchItem.GetRowDirection() )
         {
-            if ( rSearchItem.GetPattern() )
-            {
+            rRow = MaxRow();
+            if (!bReplace || rSearchItem.GetPattern())
+                rCol = MaxCol() + 1;
+            else // bReplace
                 rCol = MaxCol();
-                rRow = MaxRow()+1;
-            }
-            else if ( bReplace )
-            {
-                rCol = MaxCol();
-                rRow = MaxRow();
-            }
-            else
-            {
-                rCol = MaxCol()+1;
-                rRow = MaxRow();
-            }
         }
         else
         {
-            if ( rSearchItem.GetPattern() )
-            {
-                rCol = MaxCol()+1;
+            rCol = MaxCol();
+            if (!bReplace  || rSearchItem.GetPattern())
+                rRow = MaxRow() + 1;
+            else // bReplace
                 rRow = MaxRow();
-            }
-            else if ( bReplace )
-            {
-                rCol = MaxCol();
-                rRow = MaxRow();
-            }
-            else
-            {
-                rCol = MaxCol();
-                rRow = MaxRow()+1;
-            }
         }
     }
     else
     {
         if ( rSearchItem.GetRowDirection() )
         {
-            if ( rSearchItem.GetPattern() )
-            {
-                rCol = 0;
-                rRow = SCROW(-1);
-            }
-            else if ( bReplace )
-            {
-                rCol = 0;
-                rRow = 0;
-            }
-            else
-            {
+            rRow = 0;
+            if (!bReplace || rSearchItem.GetPattern())
                 rCol = SCCOL(-1);
-                rRow = 0;
-            }
+            else // bReplace
+                rCol = 0;
         }
         else
         {
-            if ( rSearchItem.GetPattern() )
-            {
-                rCol = SCCOL(-1);
-                rRow = 0;
-            }
-            else if ( bReplace )
-            {
-                rCol = 0;
-                rRow = 0;
-            }
-            else
-            {
-                rCol = 0;
+            rCol = 0;
+            if (!bReplace || rSearchItem.GetPattern())
                 rRow = SCROW(-1);
-            }
+            else // bReplace
+                rRow = 0;
         }
     }
 }
@@ -1627,11 +1638,11 @@ void ScDocument::GetFilterEntries(
     SCROW nEndRow;
     pDBData->GetArea( nAreaTab, nStartCol, nStartRow, nEndCol, nEndRow );
 
+    // A totals row is a summary, not data
+    if (pDBData->HasTotals() && nEndRow > nStartRow)
+        --nEndRow;
     if (pDBData->HasHeader())
         ++nStartRow;
-    // For Table Styles area, exclude total row
-    if (pDBData->HasTotals() && pDBData->GetTableStyleInfo())
-        --nEndRow;
 
     ScQueryParam aParam;
     pDBData->GetQueryParam( aParam );

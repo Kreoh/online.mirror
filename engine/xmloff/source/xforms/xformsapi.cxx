@@ -21,13 +21,12 @@
 #include "xformsapi.hxx"
 
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/xforms/XFormsSupplier.hpp>
 #include <com/sun/star/xforms/XDataTypeRepository.hpp>
 #include <com/sun/star/xforms/Model.hpp>
-#include <com/sun/star/xforms/XModel2.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/xsd/DataTypeClass.hpp>
 
@@ -40,16 +39,16 @@
 #include <xmloff/xmlnamespace.hxx>
 #include <xmloff/xmltkmap.hxx>
 
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 using cpo::uno::Sequence;
-using com::sun::star::uno::UNO_QUERY;
-using com::sun::star::uno::UNO_QUERY_THROW;
+using cpo::uno::UNO_QUERY;
+using cpo::uno::UNO_QUERY_THROW;
 using com::sun::star::beans::XPropertySet;
 using com::sun::star::container::XNameAccess;
 using com::sun::star::xforms::XFormsSupplier;
 using com::sun::star::xforms::XDataTypeRepository;
 using com::sun::star::xforms::Model;
-using com::sun::star::xforms::XModel2;
+using com::sun::star::xforms::XModel;
 using com::sun::star::container::XNameContainer;
 using cpo::uno::Any;
 using cpo::uno::Exception;
@@ -57,16 +56,16 @@ using cpo::uno::Exception;
 using namespace com::sun::star;
 using namespace xmloff::token;
 
-Reference<XModel2> xforms_createXFormsModel()
+Reference<XModel> xforms_createXFormsModel()
 {
-    Reference<XModel2> xModel = Model::create( comphelper::getProcessComponentContext() );
+    Reference<XModel> xModel = Model::create( comphelper::getProcessComponentContext() );
 
     return xModel;
 }
 
 void xforms_addXFormsModel(
     const Reference<frame::XModel>& xDocument,
-    const Reference<xforms::XModel2>& xModel )
+    const Reference<xforms::XModel>& xModel )
 {
     bool bSuccess = false;
     try
@@ -116,7 +115,7 @@ static Reference<XPropertySet> lcl_findXFormsBindingOrSubmission(
                 const Sequence<OUString> aNames = xForms->getElementNames();
                 for( const auto& rName : aNames )
                 {
-                    Reference<xforms::XModel2> xModel(
+                    Reference<xforms::XModel> xModel(
                         xForms->getByName( rName ), UNO_QUERY );
                     if( xModel.is() )
                     {

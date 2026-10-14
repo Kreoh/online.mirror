@@ -20,9 +20,11 @@
 #undef SC_DLLIMPLEMENTATION
 
 #include "scdlgfact.hxx"
+#include <drawview.hxx>
 
 #include <scuiasciiopt.hxx>
 #include <scuiautofmt.hxx>
+#include <tablestyledlg.hxx>
 #include <corodlg.hxx>
 #include <dapidata.hxx>
 #include <dapitype.hxx>
@@ -56,16 +58,9 @@
 #include <textdlgs.hxx>
 #include <sortdlg.hxx>
 #include <textimportoptions.hxx>
-#include <opredlin.hxx>
-#include <tpcalc.hxx>
 #include <tpprint.hxx>
 #include <tpstat.hxx>
-#include <tpusrlst.hxx>
-#include <tpview.hxx>
-#include <tpformula.hxx>
 #include <datafdlg.hxx>
-#include <tpcompatibility.hxx>
-#include <tpdefaults.hxx>
 #include <condformatmgr.hxx>
 #include <scres.hrc>
 #include <svx/dialogs.hrc>
@@ -150,6 +145,14 @@ public:
     sal_uInt16 GetIndex() const override { return m_pDlg->GetIndex(); }
     OUString GetCurrFormatName() override { return m_pDlg->GetCurrFormatName(); }
 };
+
+class AbstractScTableStyleDlg_Impl
+    : public vcl::AbstractDialogImpl_Async<AbstractScTableStyleDlg, ScTableStyleDlg>
+{
+public:
+    using AbstractDialogImpl_BASE::AbstractDialogImpl_BASE;
+    std::unique_ptr<ScTableStyle> TakeStyle() override { return m_pDlg->TakeStyle(); }
+};
 }
 
 VclPtr<AbstractScAutoFormatDlg> ScAbstractDialogFactory_Impl::CreateScAutoFormatDlg(weld::Window* pParent,
@@ -158,6 +161,12 @@ VclPtr<AbstractScAutoFormatDlg> ScAbstractDialogFactory_Impl::CreateScAutoFormat
                                                                 ScViewData& rViewData)
 {
     return VclPtr<AbstractScAutoFormatDlg_Impl>::Create(pParent, pAutoFormat, pSelFormatData, rViewData);
+}
+
+VclPtr<AbstractScTableStyleDlg> ScAbstractDialogFactory_Impl::CreateScTableStyleDlg(weld::Window* pParent,
+                                                                ScDocument& rDoc)
+{
+    return VclPtr<AbstractScTableStyleDlg_Impl>::Create(pParent, rDoc);
 }
 
 namespace
@@ -239,6 +248,7 @@ public:
     bool IsNamedRange() const override { return m_pDlg->IsNamedRange(); }
     OUString GetSelectedNamedRange() const override { return m_pDlg->GetSelectedNamedRange(); }
     void AppendNamedRange(const OUString& rName) override { m_pDlg->AppendNamedRange(rName); }
+    void SelectNamedRange(const OUString& rName) override { m_pDlg->SelectNamedRange(rName); }
 };
 }
 
@@ -956,7 +966,12 @@ public:
     }
     bool StartExecuteAsync(VclAbstractDialog::AsyncContext& rCtx) override
     {
-        return SfxTabDialogController::runAsync(m_pDlg, rCtx.maEndDialogFn);
+        const bool bStarted = SfxTabDialogController::runAsync(m_pDlg, rCtx.maEndDialogFn);
+        // A refused dialog never reaches its end handler, so the owner that the context names
+        // is disposed here.
+        if (!bStarted)
+            rCtx.mxOwner.disposeAndClear();
+        return bStarted;
     }
     const SfxItemSet* GetOutputItemSet() const override { return m_pDlg->GetOutputItemSet(); }
     void SetCurPageId(const OUString& rName) override { m_pDlg->SetCurPageId(rName); }
@@ -973,26 +988,10 @@ CreateTabPage ScAbstractDialogFactory_Impl::GetTabPageCreatorFunc( sal_uInt16 nI
 {
     switch (nId)
     {
-        case SID_SC_TP_CHANGES:
-            return ScRedlineOptionsTabPage::Create;
-        case SID_SC_TP_CALC:
-            return ScTpCalcOptions::Create;
-        case SID_SC_TP_FORMULA:
-            return ScTpFormulaOptions::Create;
-        case SID_SC_TP_COMPATIBILITY:
-            return ScTpCompatOptions::Create;
-        case RID_SC_TP_DEFAULTS:
-            return ScTpDefaultsOptions::Create;
         case RID_SC_TP_PRINT:
             return ScTpPrintOptions::Create;
         case SID_SC_TP_STAT:
             return ScDocStatPage::Create;
-        case SID_SC_TP_USERLISTS:
-             return ScTpUserLists::Create;
-        case SID_SC_TP_CONTENT:
-            return ScTpContentOptions::Create;
-        case SID_SC_TP_LAYOUT:
-            return ScTpLayoutOptions::Create;
         default:
             break;
     }

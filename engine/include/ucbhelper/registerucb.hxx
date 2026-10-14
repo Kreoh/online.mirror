@@ -25,12 +25,11 @@
 
 #include <ucbhelper/ucbhelperdllapi.h>
 
-namespace com::sun::star::uno { template <class interface_type> class Reference; }
+namespace cpo::uno { template <class interface_type> class Reference; }
 namespace com::sun::star {
-    namespace uno { class XComponentContext; }
     namespace ucb { class XContentProviderManager; }
 }
-
+namespace cpo::uno { class XComponentContext; }
 
 namespace ucbhelper {
 
@@ -80,12 +79,12 @@ typedef std::vector< ContentProviderData > ContentProviderDataList;
     @param pInfo  If not null, this output parameter is filled with
     information about the (attemptively) registered provider.
 
-    @throws css::uno::RuntimeException
+    @throws cpo::uno::RuntimeException
  */
 
 UCBHELPER_DLLPUBLIC bool registerAtUcb(
-    css::uno::Reference< css::ucb::XContentProviderManager > const & rManager,
-    css::uno::Reference< css::uno::XComponentContext > const & rxContext,
+    cpo::uno::Reference< css::ucb::XContentProviderManager > const & rManager,
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & rxContext,
     OUString const & rName,
     OUString const & rArguments,
     OUString const & rTemplate);

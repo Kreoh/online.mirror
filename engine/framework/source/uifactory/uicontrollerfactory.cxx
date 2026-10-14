@@ -31,7 +31,7 @@
 #include <comphelper/compbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::lang;
 using namespace css::beans;
@@ -50,19 +50,17 @@ public:
     virtual ~UIControllerFactory() override;
 
     // XMultiComponentFactory
-    virtual css::uno::Reference< css::uno::XInterface > createInstanceWithContext( const OUString& aServiceSpecifier, const css::uno::Reference< css::uno::XComponentContext >& Context ) override;
-    virtual css::uno::Reference< css::uno::XInterface > createInstanceWithArgumentsAndContext( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments, const css::uno::Reference< css::uno::XComponentContext >& Context ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithContext( const OUString& aServiceSpecifier, const cpo::uno::Reference< cpo::uno::XComponentContext >& Context ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArgumentsAndContext( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments, const cpo::uno::Reference< cpo::uno::XComponentContext >& Context ) override;
     virtual cpo::uno::Sequence< OUString > getAvailableServiceNames() override;
 
     // XUIControllerRegistration
     virtual bool hasController( const OUString& aCommandURL, const OUString& aModuleName ) override;
-    virtual void registerController( const OUString& aCommandURL, const OUString& aModuleName, const OUString& aControllerImplementationName ) override;
-    virtual void deregisterController( const OUString& aCommandURL, const OUString& aModuleName ) override;
 
 protected:
-    UIControllerFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext, std::u16string_view rUINode  );
+    UIControllerFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, std::u16string_view rUINode  );
     bool                                                    m_bConfigRead;
-    css::uno::Reference< css::uno::XComponentContext >       m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >       m_xContext;
     rtl::Reference<ConfigurationAccess_ControllerFactory>    m_pConfigAccess;
 
 private:
@@ -194,45 +192,10 @@ bool UIControllerFactory::hasController(
     return ( !m_pConfigAccess->getServiceFromCommandModule( aCommandURL, aModuleName ).isEmpty() );
 }
 
-void UIControllerFactory::registerController(
-    const OUString& aCommandURL,
-    const OUString& aModuleName,
-    const OUString& aControllerImplementationName )
-{
-    // SAFE
-    std::unique_lock g(m_aMutex);
-
-    if ( !m_bConfigRead )
-    {
-        m_bConfigRead = true;
-        m_pConfigAccess->readConfigurationData();
-    }
-
-    m_pConfigAccess->addServiceToCommandModule( aCommandURL, aModuleName, aControllerImplementationName );
-    // SAFE
-}
-
-void UIControllerFactory::deregisterController(
-    const OUString& aCommandURL,
-    const OUString& aModuleName )
-{
-    // SAFE
-    std::unique_lock g(m_aMutex);
-
-    if ( !m_bConfigRead )
-    {
-        m_bConfigRead = true;
-        m_pConfigAccess->readConfigurationData();
-    }
-
-    m_pConfigAccess->removeServiceFromCommandModule( aCommandURL, aModuleName );
-    // SAFE
-}
-
 class PopupMenuControllerFactory :  public UIControllerFactory
 {
 public:
-    explicit PopupMenuControllerFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit PopupMenuControllerFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual OUString getImplementationName() override
     {
@@ -259,7 +222,7 @@ PopupMenuControllerFactory::PopupMenuControllerFactory( const Reference< XCompon
 class ToolbarControllerFactory :  public UIControllerFactory
 {
 public:
-    explicit ToolbarControllerFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit ToolbarControllerFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual OUString getImplementationName() override
     {
@@ -286,7 +249,7 @@ ToolbarControllerFactory::ToolbarControllerFactory( const Reference< XComponentC
 class StatusbarControllerFactory :  public UIControllerFactory
 {
 public:
-    explicit StatusbarControllerFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit StatusbarControllerFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual OUString getImplementationName() override
     {
@@ -312,25 +275,25 @@ StatusbarControllerFactory::StatusbarControllerFactory( const Reference< XCompon
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_PopupMenuControllerFactory_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new PopupMenuControllerFactory(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_ToolBarControllerFactory_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ToolbarControllerFactory(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_StatusBarControllerFactory_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new StatusbarControllerFactory(context));

@@ -168,23 +168,15 @@ abstract class CPath extends CEventsHandler {
 	}
 
 	updatePathAllPanes(paintArea?: cool.Bounds) {
-		var viewBounds = this.renderer.getBounds().clone();
-
 		if (this.fixed) {
 			// Ignore freeze-panes.
-			var fixedMapArea = new cool.Bounds(
-				new cool.Point(0, 0),
-				viewBounds.getSize()
-			);
+			var fixedMapArea = this.renderer.getFixedBounds();
 			this.updatePath(fixedMapArea, fixedMapArea);
 			this.updateTestData();
 			return;
 		}
 
-		var splitPanesContext = this.renderer.getSplitPanesContext();
-		var paneBoundsList: Array<cool.Bounds> = splitPanesContext ?
-			splitPanesContext.getPxBoundList() :
-			[viewBounds];
+		var paneBoundsList: Array<cool.Bounds> = this.renderer.getPaneBoundsList();
 
 		let maxXBound = 0;
 		let maxYBound = 0;

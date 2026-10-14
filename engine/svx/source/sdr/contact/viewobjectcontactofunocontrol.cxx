@@ -39,7 +39,7 @@
 #include <com/sun/star/awt/InvalidateStyle.hpp>
 #include <com/sun/star/util/XModeChangeListener.hpp>
 #include <com/sun/star/util/XModeChangeBroadcaster.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/container/XContainer.hpp>
 
@@ -105,10 +105,10 @@ namespace sdr::contact {
 
 
     using namespace ::com::sun::star::awt::InvalidateStyle;
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::cpo::uno::Exception;
     using ::com::sun::star::awt::XControl;
     using ::com::sun::star::awt::XControlModel;
@@ -352,7 +352,7 @@ namespace sdr::contact {
 
         /** retrieves the control container for a given output device
          */
-        virtual Reference< XControlContainer >
+        virtual rtl::Reference< UnoControlContainer >
                         getControlContainer( const OutputDevice& _rDevice ) const = 0;
 
         /** determines whether a given layer is visible
@@ -374,7 +374,7 @@ namespace sdr::contact {
         virtual ~SdrPageViewAccess() {}
 
         virtual bool    isDesignMode() const override;
-        virtual Reference< XControlContainer >
+        virtual rtl::Reference< UnoControlContainer >
                         getControlContainer( const OutputDevice& _rDevice ) const override;
         virtual bool    isLayerVisible( SdrLayerID _nLayerID ) const override;
     };
@@ -387,9 +387,9 @@ namespace sdr::contact {
     }
 
 
-    Reference< XControlContainer > SdrPageViewAccess::getControlContainer( const OutputDevice& _rDevice ) const
+    rtl::Reference< UnoControlContainer > SdrPageViewAccess::getControlContainer( const OutputDevice& _rDevice ) const
     {
-        Reference< XControlContainer > xControlContainer = m_rPageView.GetControlContainer( _rDevice );
+        rtl::Reference< UnoControlContainer > xControlContainer = m_rPageView.GetControlContainer( _rDevice );
         DBG_ASSERT( xControlContainer.is() || nullptr == m_rPageView.FindPageWindow( _rDevice ),
             "SdrPageViewAccess::getControlContainer: the output device is known, but there is no control container for it?" );
         return xControlContainer;
@@ -409,9 +409,9 @@ namespace sdr::contact {
     class InvisibleControlViewAccess : public IPageViewAccess
     {
     private:
-        Reference< XControlContainer >& m_rControlContainer;
+        rtl::Reference< UnoControlContainer >& m_rControlContainer;
     public:
-        explicit InvisibleControlViewAccess( Reference< XControlContainer >& _inout_ControlContainer )
+        explicit InvisibleControlViewAccess( rtl::Reference< UnoControlContainer >& _inout_ControlContainer )
             :m_rControlContainer( _inout_ControlContainer )
         {
         }
@@ -419,7 +419,7 @@ namespace sdr::contact {
         virtual ~InvisibleControlViewAccess() {}
 
         virtual bool    isDesignMode() const override;
-        virtual Reference< XControlContainer >
+        virtual rtl::Reference< UnoControlContainer >
                         getControlContainer( const OutputDevice& _rDevice ) const override;
         virtual bool    isLayerVisible( SdrLayerID _nLayerID ) const override;
     };
@@ -432,7 +432,7 @@ namespace sdr::contact {
     }
 
 
-    Reference< XControlContainer > InvisibleControlViewAccess::getControlContainer( const OutputDevice& _rDevice ) const
+    rtl::Reference< UnoControlContainer > InvisibleControlViewAccess::getControlContainer( const OutputDevice& _rDevice ) const
     {
         if ( !m_rControlContainer.is() )
         {
@@ -471,7 +471,7 @@ namespace sdr::contact {
         virtual ~DummyPageViewAccess() {}
 
         virtual bool    isDesignMode() const override;
-        virtual Reference< XControlContainer >
+        virtual rtl::Reference< UnoControlContainer >
                         getControlContainer( const OutputDevice& _rDevice ) const override;
         virtual bool    isLayerVisible( SdrLayerID _nLayerID ) const override;
     };
@@ -484,7 +484,7 @@ namespace sdr::contact {
     }
 
 
-    Reference< XControlContainer > DummyPageViewAccess::getControlContainer( const OutputDevice& /*_rDevice*/ ) const
+    rtl::Reference< UnoControlContainer > DummyPageViewAccess::getControlContainer( const OutputDevice& /*_rDevice*/ ) const
     {
         return nullptr;
     }
@@ -521,7 +521,7 @@ namespace sdr::contact {
         ControlHolder                   m_aControl;
 
         /// the ControlContainer where we inserted our control
-        Reference< XContainer >         m_xContainer;
+        rtl::Reference< UnoControlContainer > m_xContainer;
 
         /// the output device for which the control was created
         VclPtr<OutputDevice>            m_pOutputDeviceForWindow;
@@ -632,24 +632,24 @@ namespace sdr::contact {
         virtual ~ViewObjectContactOfUnoControl_Impl() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const EventObject& Source ) override;
+        virtual void disposing( const EventObject& Source ) override;
 
         // XWindowListener
-        virtual void SAL_CALL windowResized( const WindowEvent& e ) override;
-        virtual void SAL_CALL windowMoved( const WindowEvent& e ) override;
-        virtual void SAL_CALL windowShown( const EventObject& e ) override;
-        virtual void SAL_CALL windowHidden( const EventObject& e ) override;
+        virtual void windowResized( const WindowEvent& e ) override;
+        virtual void windowMoved( const WindowEvent& e ) override;
+        virtual void windowShown( const EventObject& e ) override;
+        virtual void windowHidden( const EventObject& e ) override;
 
         // XPropertyChangeListener
-        virtual void SAL_CALL propertyChange( const PropertyChangeEvent& evt ) override;
+        virtual void propertyChange( const PropertyChangeEvent& evt ) override;
 
         // XModeChangeListener
-        virtual void SAL_CALL modeChanged( const ModeChangeEvent& _rSource ) override;
+        virtual void modeChanged( const ModeChangeEvent& _rSource ) override;
 
         // XContainerListener
-        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
-        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
-        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
+        virtual void elementInserted( const css::container::ContainerEvent& Event ) override;
+        virtual void elementRemoved( const css::container::ContainerEvent& Event ) override;
+        virtual void elementReplaced( const css::container::ContainerEvent& Event ) override;
 
     private:
         /** retrieves the SdrPageView which our associated SdrPageViewWindow belongs to
@@ -1039,7 +1039,7 @@ namespace sdr::contact {
 
         m_pOutputDeviceForWindow = const_cast< OutputDevice * >( &_rDevice );
         m_aControl = std::move(aControl);
-        m_xContainer.set(_rPageView.getControlContainer( _rDevice ), css::uno::UNO_QUERY);
+        m_xContainer = _rPageView.getControlContainer( _rDevice );
         DBG_ASSERT( (   m_xContainer.is()                                           // either have a XControlContainer
                     ||  (   ( !_rPageView.getControlContainer( _rDevice ).is() )    // or don't have any container,
                         &&  ( _rDevice.GetOwnerWindow() == nullptr )  // which is allowed for non-Window instances only
@@ -1084,7 +1084,7 @@ namespace sdr::contact {
         {
             const OUString& sControlServiceName( _rUnoObject.GetUnoControlTypeName() );
 
-            const Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+            const Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
             _out_rControl = Reference<XControl>( xContext->getServiceManager()->createInstanceWithContext(sControlServiceName, xContext), UNO_QUERY_THROW );
 
             // tdf#150886 for calc/writer/impress make forms ignore the platform theme
@@ -1293,7 +1293,7 @@ namespace sdr::contact {
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::disposing( const EventObject& Source )
+    void ViewObjectContactOfUnoControl_Impl::disposing( const EventObject& Source )
     {
         SolarMutexGuard aSolarGuard;
             // some code below - in particular our disposal - might trigger actions which require the
@@ -1314,37 +1314,37 @@ namespace sdr::contact {
             return;
         }
 
-        DBG_ASSERT( Source.Source == m_xContainer, "ViewObjectContactOfUnoControl_Impl::disposing: Who's this?" );
+        DBG_ASSERT( dynamic_cast<UnoControlContainer*>(Source.Source.get()) == m_xContainer.get(), "ViewObjectContactOfUnoControl_Impl::disposing: Who's this?" );
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowResized( const WindowEvent& /*e*/ )
+    void ViewObjectContactOfUnoControl_Impl::windowResized( const WindowEvent& /*e*/ )
     {
         // not interested in
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowMoved( const WindowEvent& /*e*/ )
+    void ViewObjectContactOfUnoControl_Impl::windowMoved( const WindowEvent& /*e*/ )
     {
         // not interested in
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowShown( const EventObject& /*e*/ )
+    void ViewObjectContactOfUnoControl_Impl::windowShown( const EventObject& /*e*/ )
     {
         SolarMutexGuard aSolarGuard;
         m_bControlIsVisible = true;
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowHidden( const EventObject& /*e*/ )
+    void ViewObjectContactOfUnoControl_Impl::windowHidden( const EventObject& /*e*/ )
     {
         SolarMutexGuard aSolarGuard;
         m_bControlIsVisible = false;
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::propertyChange( const PropertyChangeEvent& /*_rEvent*/ )
+    void ViewObjectContactOfUnoControl_Impl::propertyChange( const PropertyChangeEvent& /*_rEvent*/ )
     {
         SolarMutexGuard aSolarGuard;
             // (re)painting might require VCL operations, which need the SolarMutex
@@ -1365,7 +1365,7 @@ namespace sdr::contact {
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::modeChanged( const ModeChangeEvent& _rSource )
+    void ViewObjectContactOfUnoControl_Impl::modeChanged( const ModeChangeEvent& _rSource )
     {
         SolarMutexGuard aSolarGuard;
 
@@ -1387,30 +1387,30 @@ namespace sdr::contact {
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementInserted( const ContainerEvent& /*_Event*/ )
+    void ViewObjectContactOfUnoControl_Impl::elementInserted( const ContainerEvent& /*_Event*/ )
     {
         // not interested in
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementRemoved( const ContainerEvent& Event )
+    void ViewObjectContactOfUnoControl_Impl::elementRemoved( const ContainerEvent& Event )
     {
         SolarMutexGuard aSolarGuard;
             // some code below - in particular our disposal - might trigger actions which require the
             // SolarMutex. In particular, in our disposal, we remove ourself as listener from the control,
             // which alone needs the SolarMutex. Of course this - a removeFooListener needed the SolarMutex -
             // is the real bug. Toolkit really is infested with solar mutex usage ... :( #i82169#
-        DBG_ASSERT( Event.Source == m_xContainer, "ViewObjectContactOfUnoControl_Impl::elementRemoved: where did this come from?" );
+        DBG_ASSERT( dynamic_cast<UnoControlContainer*>(Event.Source.get()) == m_xContainer.get(), "ViewObjectContactOfUnoControl_Impl::elementRemoved: where did this come from?" );
 
         if ( m_aControl == Event.Element )
             impl_dispose_nothrow( false );
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementReplaced( const ContainerEvent& Event )
+    void ViewObjectContactOfUnoControl_Impl::elementReplaced( const ContainerEvent& Event )
     {
         SolarMutexGuard aSolarGuard;
-        DBG_ASSERT( Event.Source == m_xContainer, "ViewObjectContactOfUnoControl_Impl::elementReplaced: where did this come from?" );
+        DBG_ASSERT( dynamic_cast<UnoControlContainer*>(Event.Source.get()) == m_xContainer.get(), "ViewObjectContactOfUnoControl_Impl::elementReplaced: where did this come from?" );
 
         if ( ! ( m_aControl == Event.ReplacedElement ) )
             return;
@@ -1600,7 +1600,7 @@ namespace sdr::contact {
 
 
     Reference< XControl > ViewObjectContactOfUnoControl::getTemporaryControlForWindow(
-        const vcl::Window& _rWindow, Reference< XControlContainer >& _inout_ControlContainer, const SdrUnoObj& _rUnoObject )
+        const vcl::Window& _rWindow, rtl::Reference< UnoControlContainer >& _inout_ControlContainer, const SdrUnoObj& _rUnoObject )
     {
         ControlHolder aControl;
 

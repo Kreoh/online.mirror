@@ -34,7 +34,7 @@ namespace abp
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::beans;
@@ -42,7 +42,7 @@ using namespace cpo::uno;
     using namespace ::com::sun::star::sdbc;
 
     OAdminDialogInvokation::OAdminDialogInvokation(const Reference< XComponentContext >& _rxContext,
-                    css::uno::Reference< css::beans::XPropertySet > _xDataSource,
+                    cpo::uno::Reference< css::beans::XPropertySet > _xDataSource,
                     weld::Window* _pMessageParent)
         :m_xContext(_rxContext)
         ,m_xDataSource(std::move(_xDataSource))
@@ -67,9 +67,9 @@ using namespace cpo::uno;
             // the parameters for the call
             Sequence<Any> aArguments(comphelper::InitAnyPropertySequence(
             {
-                {"ParentWindow", Any(m_pMessageParent->GetXWindow())},
-                {"Title", Any(compmodule::ModuleRes(RID_STR_ADMINDIALOGTITLE))},
-                {"InitialSelection", Any(m_xDataSource)}, // the name of the new data source
+                {u"ParentWindow"_ustr, Any(m_pMessageParent->GetXWindow())},
+                {u"Title"_ustr, Any(compmodule::ModuleRes(RID_STR_ADMINDIALOGTITLE))},
+                {u"InitialSelection"_ustr, Any(m_xDataSource)}, // the name of the new data source
             }));
 
 

@@ -35,6 +35,7 @@
 #include <comphelper/errcode.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -55,15 +56,15 @@ public:
     PDFPasswordRequest& operator=(const PDFPasswordRequest&) = delete;
 
     // XInteractionRequest
-    virtual cpo::uno::Any SAL_CALL getRequest(  ) override;
-    virtual cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations(  ) override;
+    virtual cpo::uno::Any getRequest(  ) override;
+    virtual cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > > getContinuations(  ) override;
 
     // XInteractionPassword
-    virtual void SAL_CALL setPassword( const OUString& rPwd ) override;
-    virtual OUString SAL_CALL getPassword() override;
+    virtual void setPassword( const OUString& rPwd ) override;
+    virtual OUString getPassword() override;
 
     // XInteractionContinuation
-    virtual void SAL_CALL select() override;
+    virtual void select() override;
 
     bool isSelected() const { std::scoped_lock const guard( m_aMutex ); return m_bSelected; }
 
@@ -75,7 +76,7 @@ PDFPasswordRequest::PDFPasswordRequest( bool bFirstTry, const OUString& rName ) 
     m_aRequest(
         cpo::uno::Any(
             task::DocumentPasswordRequest2(
-                OUString(), uno::Reference< uno::XInterface >(),
+                OUString(), uno::Reference< cpo::uno::XInterface >(),
                 task::InteractionClassification_QUERY,
                 (bFirstTry
                  ? task::PasswordRequestMode_PASSWORD_ENTER

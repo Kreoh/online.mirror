@@ -81,7 +81,7 @@
 #include <optional>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace sd::slidesorter::controller {
 
@@ -322,17 +322,6 @@ void SlotManager::FuTemporary (SfxRequest& rRequest)
                 *pDocument));
             pDlg->Execute();
             rRequest.Done ();
-        }
-        break;
-
-        case SID_REMOTE_DLG:
-        {
-#ifdef ENABLE_SDREMOTE
-            SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-            vcl::Window* pWin = mrSlideSorter.GetContentWindow();
-            ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateRemoteDialog(pWin ? pWin->GetFrameWeld() : nullptr));
-            pDlg->Execute();
-#endif
         }
         break;
 

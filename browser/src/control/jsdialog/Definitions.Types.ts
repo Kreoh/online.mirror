@@ -30,6 +30,7 @@ interface WidgetJSON {
 	width?: string; // inside grid - width in number of columns
 	hexpand?: boolean; // horizontal expand in grid column
 	sizeGroupId?: string; // size group ID; widgets sharing an ID get their min-width equalized
+	vexpand?: boolean; // vertical expand in grid row
 	halign?: string; // horizontal alignment within the grid cell (start, center, end)
 	valign?: string; // vertical alignment within the grid cell (start, center, end)
 	labelledBy?: string | string[];
@@ -38,7 +39,11 @@ interface WidgetJSON {
 	aria?: AriaLabelAttributes; // ARIA Label attributes
 	ariaLive?: 'polite' | 'assertive' | 'off';
 	gridKeyboardNavigation?: boolean; // receives keyboard navigation for elements in col/rows
+	cssClass?: string; // extra class(es) on the widget root, next to the builder's own
 }
+
+// A widget that can carry a list of entries, such as a combo box or the styles icon view
+type WidgetWithEntries = WidgetJSON & { entries?: Array<unknown> };
 
 interface JSBuilderOptions {
 	cssClass: string; // class added to every widget root
@@ -55,6 +60,40 @@ interface JSBuilderOptions {
 	suffix: string; // add a suffix to the element ID to make it unique among different builder instances.
 }
 
+// The component a builder belongs to: a dialog, the notebookbar or the mobile wizard.
+interface JSBuilderParent {
+	goLevelDown: (contentToShow: Element) => void;
+	setTabs: (tabs: Element, builder: JSBuilder) => void;
+	rememberOpenTab: (
+		dialogId: WindowId | number,
+		tabControlId: string,
+		index: number,
+	) => void;
+	takeOpenTab: (
+		dialogId: WindowId | number,
+		tabControlId: string,
+	) => number | undefined;
+	rememberFillType: (
+		dialogId: WindowId | number,
+		notebookId: string,
+		index: number,
+	) => void;
+	lastFillType: (
+		dialogId: WindowId | number,
+		notebookId: string,
+	) => number | undefined;
+	setFillTypeOpener: (
+		dialogId: WindowId | number,
+		notebookId: string,
+		open: (index: number) => void,
+	) => void;
+	openFillType: (
+		dialogId: WindowId | number,
+		notebookId: string,
+		index: number,
+	) => boolean;
+}
+
 interface JSBuilder {
 	_currentDepth: number; // mobile-wizard only FIXME: encapsulate
 	_responses: any;
@@ -66,7 +105,7 @@ interface JSBuilder {
 	options: JSBuilderOptions; // current state
 	map: MapInterface; // reference to map
 	rendersCache: any; // on demand content cache
-	wizard: any;
+	wizard: JSBuilderParent;
 	windowId?: WindowId | number;
 
 	build: (
@@ -75,7 +114,20 @@ interface JSBuilder {
 		hasVerticalParent: boolean,
 	) => boolean;
 	updateWidget: (parentContainer: Element, updateJSON: WidgetJSON) => void;
-	executeAction: (parentContainer: Element, actionJSON: ActionData) => void;
+	_createTabClick: (
+		builder: JSBuilder,
+		tabIndex: number,
+		tabs: HTMLButtonElement[],
+		contentDivs: HTMLElement[],
+		tabIds: string[],
+	) => () => void;
+	// parentContainer may be an element, or a function returning one (or
+	// undefined) for a caller whose container can be replaced before this
+	// runs - it is applied on a deferred layouting task, not immediately.
+	executeAction: (
+		parentContainer: Element | (() => Element | undefined),
+		actionJSON: ActionData,
+	) => void;
 	callback: JSDialogCallback;
 	_defaultCallbackHandlerSendMessage: JSDialogCallback;
 	_defaultCallbackHandler: JSDialogCallback;
@@ -208,6 +260,9 @@ interface PopupData extends JSDialogJSON {
 	hasClose: boolean;
 	noOverlay: boolean;
 	popupParent?: string;
+	// The popup takes the width of its content instead of at least the width of the element it
+	// opens from.
+	fitContent?: boolean;
 	clickToClose?: string; // raw id of the element that closes the popup when clicked
 	clickToCloseElement?: HTMLElement; // clickToClose resolved to a DOM element by addHandlers
 	clickToCloseText?: string; // clickToClose text when the closing element is a treeview entry
@@ -236,6 +291,7 @@ type NotebookbarTabEntry = {
 	text: string; // visible in the UI
 	name: string; // identifier for tab widget
 	context: string; // list of contexts (separated by '|') in which the element/tab is visible
+	keepSelected?: boolean; // a context change does not switch away from it
 	accessibility: NotebookbarAccessibilityDescriptor;
 };
 
@@ -283,6 +339,7 @@ interface MenuDefinition extends WidgetJSON {
 
 interface HtmlContentJson extends WidgetJSON {
 	htmlId: string;
+	viewIds?: Array<number>;
 	closeCallback?: EventListenerOrEventListenerObject;
 	isReadOnlyMode?: boolean;
 	canUserWrite?: boolean;
@@ -361,17 +418,50 @@ interface ToolItemWidgetJSON extends WidgetJSON {
 
 interface DeckWidgetJSON extends WidgetJSON {
 	headerText?: string; // title shown in a heading row above the deck's panels
+	name?: string; // legacy deck id
 }
 
 interface PanelWidgetJSON extends WidgetJSON {
 	hidden: boolean; // is hidden
+	expanded?: boolean; // true when the section starts open
 	command: string; // command to trigger options for a panel
 	text: string; // panel title
 	name?: string; // legacy panel id
 	closeCommand?: string; // UNO command that leaves the panel's deck
 }
 
-type ExpanderWidgetJSON = any;
+// type: 'expander' - a section that folds shut under the text of its first child
+interface ExpanderWidgetJSON extends WidgetJSON {
+	expanded?: boolean; // true when the section starts open
+	hidden?: boolean;
+	command?: string; // command to trigger options for the section
+	// A second thing the heading says about what it holds, beside the name
+	secondaryText?: string;
+}
+
+// type: 'progressbar'
+interface ProgressBarWidgetJSON extends WidgetJSON {
+	value?: number; // steps done
+	maxValue?: number; // steps in the whole, 100 when not given
+	infinite?: boolean; // the whole is not known, so the bar moves on its own
+}
+
+// type: 'spinfield'
+interface SpinFieldWidgetJSON extends WidgetJSON {
+	value?: number;
+	min?: number;
+	max?: number;
+	step?: number;
+	unit?: string;
+}
+
+// type: 'slider'
+interface SliderWidgetJSON extends WidgetJSON {
+	value?: number;
+	min?: number;
+	max?: number;
+	step?: number;
+}
 
 // type: 'fixedtext'
 interface TextWidget extends WidgetJSON {
@@ -390,11 +480,13 @@ interface TextWidget extends WidgetJSON {
 interface PushButtonWidget extends WidgetJSON {
 	symbol?: string;
 	text?: string;
-	image?: string;
+	icon?: string; // icon theme link name, resolved to one of our own SVGs
+	image?: string; // base64 bitmap, the fallback when we ship no such icon
 	isToggle?: boolean;
 	checked?: boolean;
 	command?: string;
 	hidden?: boolean; // todo: deprecate it in favor of WidgetJson.visible
+	has_default?: boolean; // the button that Enter presses in its dialog
 }
 
 // type: 'menubutton'
@@ -410,6 +502,15 @@ interface MenuButtonWidgetJSON extends WidgetJSON {
 	icon?: string; // theme-aware icon file name, e.g. 'lc_recsearch.svg'
 	accessKey?: string;
 	noLabel?: boolean; // suppress text label, show icon only
+	inlineLabel?: boolean; // overrides the builder's inline label setting
+	// which end of the button the content sits at: 'left' or 'right', absent for the middle
+	xalign?: string;
+}
+
+// type: 'image'
+interface ImageWidgetJSON extends WidgetJSON {
+	// the picture itself, either a base64 bitmap or the address of one of our SVGs
+	image?: string;
 }
 
 // type: 'buttonbox'
@@ -515,6 +616,14 @@ interface IconViewEntry {
 	text: string; // label of an entry
 	tooltip?: string; // tooltip of an entry
 	ondemand?: boolean; // if true then we ignore image property and request it on demand (when shown)
+	command?: string; // uno command whose icon the client draws itself
+}
+
+// Payload of the iconview 'contextmenu' callback.
+interface IconViewContextMenuData {
+	row: number | string; // unique id of the entry under the pointer
+	clientX: number; // pointer position in viewport coordinates
+	clientY: number;
 }
 
 interface IconViewJSON extends WidgetJSON {
@@ -526,6 +635,9 @@ interface IconViewJSON extends WidgetJSON {
 
 interface IconViewListJSON extends WidgetJSON {
 	children: Array<IconViewJSON>;
+	horizontal?: boolean;
+	expanderAccessKey?: string;
+	nameFromIconView?: boolean;
 }
 
 interface IconViewElement extends HTMLElement {
@@ -580,6 +692,12 @@ interface ChipWidgetJSON extends WidgetJSON {
 	actions?: ChipAction[]; // optional trailing action buttons inside the pill
 }
 
+// type: 'progressdots'
+interface ProgressDotsWidgetJSON extends WidgetJSON {
+	count: number; // number of steps, one dot each
+	current: number; // index of the current step, starting at 0
+}
+
 // type: 'checkbox'
 interface CheckboxWidgetJSON extends WidgetJSON {
 	text: string;
@@ -599,4 +717,52 @@ interface AriaLabelAttributes {
 
 interface SeparatorWidgetJSON extends WidgetJSON {
 	orientation: 'horizontal' | 'vertical';
+}
+
+// one uniformly formatted stretch of a paragraph, offsets are characters from the paragraph start
+interface EditEngineRun {
+	start: number;
+	end: number;
+	bold?: boolean;
+	italic?: boolean;
+	underline?: string; // single, double, dotted, dashed or wave
+	strikeout?: boolean;
+	color?: string; // #rrggbb
+	family?: string; // font family name
+	size?: number; // font height in points
+	escapement?: string; // super or sub
+	spellError?: boolean;
+}
+
+interface EditEngineParagraph {
+	text: string;
+	runs?: EditEngineRun[];
+	depth?: number; // outline level, zero for the topmost
+	bulletText?: string; // rendered bullet or number
+	align?: string; // left, right, center or justify
+	family?: string; // default font family; runs inherit it unless they carry their own
+	size?: number; // default font size in points; runs inherit it
+	color?: string; // #rrggbb default text color; runs inherit it
+}
+
+// paragraph plus character index, the pair the engine text model addresses text with
+interface EditEnginePosition {
+	para: number;
+	index: number;
+}
+
+interface EditEngineSelection {
+	startPara: number;
+	startIndex: number;
+	endPara: number;
+	endIndex: number;
+}
+
+// customType: 'editengine'
+interface EditEngineWidgetJSON {
+	paragraphs: EditEngineParagraph[];
+	selection: EditEngineSelection;
+	readOnly?: boolean;
+	lockedBy?: number; // view id of another view that edits the same text, so this one only shows it
+	extra?: any; // whatever the concrete engine-side widget adds
 }

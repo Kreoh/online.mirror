@@ -11,37 +11,38 @@
 #include "vbamenuitem.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaMenuItem::ScVbaMenuItem( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< XCommandBarControl > xCommandBarControl ) : MenuItem_BASE( rParent, rContext ), m_xCommandBarControl(std::move( xCommandBarControl ))
+ScVbaMenuItem::ScVbaMenuItem( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< XCommandBarControl > xCommandBarControl ) : MenuItem_BASE( rParent, rContext ), m_xCommandBarControl(std::move( xCommandBarControl ))
 {
 }
 
-OUString SAL_CALL
+OUString
 ScVbaMenuItem::getCaption()
 {
     return m_xCommandBarControl->getCaption();
 }
 
-void SAL_CALL
+void
 ScVbaMenuItem::setCaption( const OUString& _caption )
 {
     m_xCommandBarControl->setCaption( _caption );
 }
 
-OUString SAL_CALL
+OUString
 ScVbaMenuItem::getOnAction()
 {
     return m_xCommandBarControl->getOnAction();
 }
 
-void SAL_CALL
+void
 ScVbaMenuItem::setOnAction( const OUString& _onaction )
 {
     m_xCommandBarControl->setOnAction( _onaction );
 }
 
-void SAL_CALL
+void
 ScVbaMenuItem::Delete( )
 {
     m_xCommandBarControl->Delete();

@@ -172,8 +172,6 @@ sub add_lowercase_productname_setupscriptvariable
                 $value =~ s/\s//g;
                 $newline = "\%UNIXPRODUCTNAME " . lc($value) . "\n";
                 push(@{$variablesref} ,$newline);
-                $newline = "\%SYSTEMINTUNIXPACKAGENAME " . lc($value) . "\n";
-                push(@{$variablesref} ,$newline);
                 $newline = "\%UNIXPACKAGENAME " . lc($value) . "\n";
                 push(@{$variablesref} ,$newline);
                 $value = $original;
@@ -182,8 +180,6 @@ sub add_lowercase_productname_setupscriptvariable
                 $newline = "\%WITHOUTDOTUNIXPRODUCTNAME " . lc($value) . "\n";
                 push(@{$variablesref} ,$newline);
                 $newline = "\%WITHOUTDOTUNIXPACKAGENAME " . lc($value) . "\n";
-                push(@{$variablesref} ,$newline);
-                $newline = "\%SOLARISBRANDPACKAGENAME " . lc($value) . "\n";
                 push(@{$variablesref} ,$newline);
                 $value = $original;
             }
@@ -467,13 +463,11 @@ sub replace_preset_properties
 {
     my ($allvariables) = @_;
 
-    # SOLARISBRANDPACKAGENAME
+    # SYSTEMINTUNIXPACKAGENAME
     # needs to be replaced by
-    # PRESETSOLARISBRANDPACKAGENAME
+    # PRESETSYSTEMINTUNIXPACKAGENAME
 
     my @presetproperties = ();
-    push(@presetproperties, "SOLARISBRANDPACKAGENAME");
-    push(@presetproperties, "SYSTEMINTUNIXPACKAGENAME");
 
 
     foreach my $property ( @presetproperties )

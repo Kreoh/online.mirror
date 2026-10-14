@@ -151,6 +151,11 @@ public:
     /// Load unit test hook shared library from this path
     static bool init(UnitType type, const std::string& unitLibPath);
 
+    /// Start the timeout of a kit test loaded by init(). ForKit calls this once the engine
+    /// preinit is done, so the time spent there, which can be long in a sanitizer build, does
+    /// not count against the test.
+    static void startKitTimeout();
+
     /// Uninitialize the unit-test and return the global exit code.
     /// Returns 0 on success.
     static int uninit();
@@ -329,14 +334,15 @@ private:
     /// Based on COOL_TEST_OPTIONS envar, filter the tests.
     static void filter();
 
-    /// Returns true iff there are more valid test instances to dereference.
-    static bool haveMoreTests()
-    {
-        // The last test is the dummy one, used to avoid having a null instance.
-        // Check that we have a valid one after the next one, otherwise it's the dummy.
-        return GlobalArray && GlobalIndex >= 0 && GlobalArray[GlobalIndex + 1] &&
-               GlobalArray[GlobalIndex + 2];
-    }
+    /// Returns true iff a test after the current one matches the filter. The dummy instance at
+    /// the end of GlobalArray is not a test.
+    static bool haveMoreTests();
+
+    /// Returns true iff the test at the given index matches the filter.
+    static bool matchesFilter(std::size_t index);
+
+    /// Returns a new dummy instance of the given type, the last entry of GlobalArray.
+    static UnitBase* createDummy(UnitType type);
 
     /// Self-test.
     static void selfTest();
@@ -533,8 +539,8 @@ public:
 
     // ---------------- TileCache hooks ----------------
     /// Called before the lookupTile call returns. Should always be called to fire events.
-    virtual void lookupTile(int part, int mode, int width, int height, int tilePosX, int tilePosY,
-                            int tileWidth, int tileHeight,
+    virtual void lookupTile(const std::string& part, int mode, int width, int height,
+                            int tilePosX, int tilePosY, int tileWidth, int tileHeight,
                             std::shared_ptr<TileData> &tile);
 
     // ---------------- DocumentBroker hooks ----------------
@@ -600,6 +606,11 @@ public:
     virtual void onDocBrokerRemoveSession(const std::string&, const std::shared_ptr<ClientSession>&)
     {
     }
+
+    /// Called each time a DocumentBroker sets out to refresh the lock it holds in storage, whether
+    /// or not a request goes out to the host.
+    virtual void onDocBrokerRefreshLock(const std::string& /*docKey*/) {}
+
     /// Called when document presets install is launched
     virtual void onDocBrokerPresetsInstallStart() {}
     /// Called when document presets install is finished
@@ -629,11 +640,11 @@ public:
     virtual void onDocBrokerViewLoaded(const std::string&, const std::shared_ptr<ClientSession>&) {}
 
     // ---------------- TileCache events ----------------
-    virtual void onTileCacheHit(int /*part*/, int /*mode*/,
+    virtual void onTileCacheHit(const std::string& /*part*/, int /*mode*/,
                                 int /*width*/, int /*height*/,
                                 int /*tilePosX*/, int /*tilePosY*/,
                                 int /*tileWidth*/, int /*tileHeight*/) {}
-    virtual void onTileCacheMiss(int /*part*/, int /*mode*/,
+    virtual void onTileCacheMiss(const std::string& /*part*/, int /*mode*/,
                                  int /*width*/, int /*height*/,
                                  int /*tilePosX*/, int /*tilePosY*/,
                                  int /*tileWidth*/, int /*tileHeight*/) {}
@@ -699,6 +710,14 @@ public:
     /// LOKit (and some synthetic internal) callbacks
     virtual bool filterLoKitCallback(const COKitCallbackType /* type */,
                                      const std::string& /* payload */)
+    {
+        return false;
+    }
+
+    /// The UNO command that an insert request turned into, with its arguments as a JSON object.
+    /// Returns true to stop the command from reaching the engine.
+    virtual bool filterInsertCommand(const std::string& /* command */,
+                                     const std::string& /* arguments */)
     {
         return false;
     }

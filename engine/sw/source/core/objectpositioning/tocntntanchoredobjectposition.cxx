@@ -463,11 +463,11 @@ void SwToContentAnchoredObjectPosition::CalcPosition()
             // (including the xml-filter)
             {
                 // determine position
-                SwTwips nAttrRelPosY = nRelPosY - nAlignAreaOffset;
+                gfx::Length nAttrRelPosY = gfx::Length::twip(nRelPosY - nAlignAreaOffset);
                 // set
-                if ( nAttrRelPosY != aVert.GetPos() )
+                if (nAttrRelPosY != aVert.getPosition())
                 {
-                    aVert.SetPos( nAttrRelPosY );
+                    aVert.setPosition(nAttrRelPosY);
                     const_cast<SwFrameFormat&>(rFrameFormat).LockModify();
                     const_cast<SwFrameFormat&>(rFrameFormat).SetFormatAttr( aVert );
                     const_cast<SwFrameFormat&>(rFrameFormat).UnlockModify();
@@ -557,7 +557,7 @@ void SwToContentAnchoredObjectPosition::CalcPosition()
                     nVertOffsetToFrameAnchorPos = aRectFnSet.YDiff(ToCharTopOfLine().as_twip<SwTwips>(),
                                                                     nTopOfOrient );
                 }
-                nRelPosY = nVertOffsetToFrameAnchorPos - aVert.GetPos();
+                nRelPosY = nVertOffsetToFrameAnchorPos - aVert.getPosition().as_twip<SwTwips>();
             }
             else
             {
@@ -624,12 +624,12 @@ void SwToContentAnchoredObjectPosition::CalcPosition()
                     SwTwips nPageBottom = aRectFnSet.GetBottom(aPgPrtRect);
                     nVertOffsetToFrameAnchorPos += aRectFnSet.YDiff(nPageBottom, nTopOfOrient);
                 }
-                nRelPosY = nVertOffsetToFrameAnchorPos + aVert.GetPos();
+                nRelPosY = nVertOffsetToFrameAnchorPos + aVert.getPosition().as_twip<SwTwips>();
                 if (bFollowSplitFly)
                 {
                     // This is a follow of a split fly: shift it up to match the anchor position,
                     // because the vertical offset is meant to be handled only on the first page.
-                    nRelPosY -= aVert.GetPos();
+                    nRelPosY -= aVert.getPosition().as_twip<SwTwips>();
 
                     if (aVert.GetRelationOrient() == text::RelOrientation::PAGE_FRAME
                         && rPageAlignLayFrame.IsPageFrame())
@@ -966,14 +966,19 @@ void SwToContentAnchoredObjectPosition::CalcPosition()
                         aRelPos.setY( nTmpRelPosY );
                         GetAnchoredObj().SetObjTop( nTopOfAnch + aRelPos.Y() );
                     }
-                    // If the anchor frame is the first content of the table cell
+                    // If the anchor frame has no follow
                     // and the object still doesn't fit, the table frame is notified,
                     // that the object doesn't fit into the table cell.
+                    // The cell area is valid outside a row split. While the table rebuilds the
+                    // last line of a row split, the cell has the height of the split row, so
+                    // the distance to its bottom is meaningful there as well.
                     nDist = aRectFnSet.BottomDist( GetAnchoredObj().GetObjRect(),
                         aRectFnSet.GetPrtBottom(*pUpperOfOrientFrame) );
                     if ( nDist < 0 &&
-                         pOrientFrame == &rAnchorTextFrame && !pOrientFrame->GetIndPrev() &&
-                         pUpperOfOrientFrame->isFrameAreaDefinitionValid() )
+                         pOrientFrame == &rAnchorTextFrame &&
+                         !pOrientFrame->GetFollow() &&
+                         ( pUpperOfOrientFrame->isFrameAreaDefinitionValid() ||
+                           pOrientFrame->FindTabFrame()->IsRebuildLastLine() ) )
                     {
                         const_cast<SwTabFrame*>(pOrientFrame->FindTabFrame())
                                                         ->SetDoesObjsFit( false );
@@ -1089,6 +1094,22 @@ void SwToContentAnchoredObjectPosition::CalcPosition()
                 }
             }
         }
+        else if ( !bIgnoreVertLayoutInCell && DoesObjFollowsTextFlow() &&
+                  pOrientFrame->IsInTab() )
+        {
+            // Aligned at a page area inside a table cell: the cell is the page area of an object
+            // that follows the text flow, so the object has to fit the cell. The position stays
+            // as it is. When the object does not fit, the table frame is told so.
+            nDist = aRectFnSet.BottomDist( GetAnchoredObj().GetObjRect(),
+                aRectFnSet.GetPrtBottom(*pUpperOfOrientFrame) );
+            if ( nDist < 0 &&
+                 pOrientFrame == &rAnchorTextFrame &&
+                 !pOrientFrame->GetFollow() )
+            {
+                const_cast<SwTabFrame*>(pOrientFrame->FindTabFrame())
+                                                ->SetDoesObjsFit( false );
+            }
+        }
 
         // keep layout frame vertical position is oriented at.
         mpVertPosOrientFrame = pUpperOfOrientFrame;
@@ -1152,11 +1173,11 @@ void SwToContentAnchoredObjectPosition::CalcPosition()
         // save calculated horizontal position - needed for filters
         // (including the xml-filter)
         {
-            SwTwips nAttrRelPosX = nRelPosX - nHoriOffsetToFrameAnchorPos;
-            if ( aHori.GetHoriOrient() != text::HoriOrientation::NONE &&
-                 aHori.GetPos() != nAttrRelPosX )
+            gfx::Length nAttrRelPosX = gfx::Length::twip(nRelPosX - nHoriOffsetToFrameAnchorPos);
+            if (aHori.GetHoriOrient() != text::HoriOrientation::NONE &&
+                aHori.getPosition() != nAttrRelPosX)
             {
-                aHori.SetPos( nAttrRelPosX );
+                aHori.setPosition(nAttrRelPosX);
                 const_cast<SwFrameFormat&>(rFrameFormat).LockModify();
                 const_cast<SwFrameFormat&>(rFrameFormat).SetFormatAttr( aHori );
                 const_cast<SwFrameFormat&>(rFrameFormat).UnlockModify();

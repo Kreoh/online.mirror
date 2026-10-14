@@ -57,7 +57,7 @@
 
 #include <dbggui.hxx>
 #include <salinst.hxx>
-#include <graphic/Manager.hxx>
+#include <vcl/graphic/Manager.hxx>
 #include <salframe.hxx>
 #include <salsys.hxx>
 #include <svdata.hxx>
@@ -70,7 +70,7 @@
 #include <schedulerimpl.hxx>
 #endif
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/awt/XToolkit.hpp>
 #include <comphelper/kit.hxx>
 #include <comphelper/threadpool.hxx>
@@ -90,7 +90,7 @@
 #include <thread>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace {
 void InitSettings(ImplSVData* pSVData);
@@ -300,19 +300,6 @@ void Application::Abort( const OUString& rErrorText )
     SalAbort( rErrorText, dumpCore );
 }
 
-size_t Application::GetReservedKeyCodeCount()
-{
-    return SAL_N_ELEMENTS(ReservedKeys);
-}
-
-const vcl::KeyCode* Application::GetReservedKeyCode( size_t i )
-{
-    if( i >= GetReservedKeyCodeCount() )
-        return nullptr;
-    else
-        return &ReservedKeys[i];
-}
-
 void Application::notifyWindow(vcl::KitWindowId /*nKitWindowId*/,
                                const OUString& /*rAction*/,
                                const std::vector<vcl::KitPayloadItem>& /*rPayload = std::vector<KitPayloadItem>()*/) const
@@ -389,10 +376,21 @@ static bool InnerYield(bool i_bWait, bool i_bAllEvents)
     // is in OSX specific code
     pSVData->maAppData.mnDispatchLevel++;
 
+    ViewShellDocId nOldDocId(-1);
+    if (comphelper::COKit::isActive())
+        nOldDocId = comphelper::COKit::getDocId();
+
     // do not wait for events if application was already quit; in that
     // case only dispatch events already available
     bool bProcessedEvent = pSVData->mpDefInst->DoYield(
             i_bWait && !pSVData->maAppData.mbAppQuit, i_bAllEvents );
+
+    // Yield may have loaded another document and changed the current docId, restore the old
+    // value. If there is a view to restore this doesn't matter much, but if there isn't yet, as
+    // in the case of loading a new document, then this ensures that the next view to be created
+    // is created with the expected document id.
+    if (nOldDocId.get() != -1)
+        comphelper::COKit::setDocId(nOldDocId);
 
     pSVData->maAppData.mnDispatchLevel--;
 
@@ -411,23 +409,11 @@ bool Application::Reschedule( bool i_bAllEvents )
         return false;
     }
     int nOldView = -1;
-    ViewShellDocId nOldDocId(-1);
     if (comphelper::COKit::isActive())
-    {
         nOldView = comphelper::COKit::getView();
-        nOldDocId = comphelper::COKit::getDocId();
-    }
     bool bRet = InnerYield(false, i_bAllEvents);
     if (comphelper::COKit::isActive())
     {
-        // Yield may have changed the current docId, restore the old value,
-        // (which is cheap). If there is a view to restore this doesn't matter
-        // much, but if there isn't yet, as in the case of loading a new
-        // document, then this ensures that the next view to be created is
-        // created with the expected document id.
-        assert(nOldDocId.get() != -1 && "won't be unset");
-        comphelper::COKit::setDocId(nOldDocId);
-
         int nNewView = comphelper::COKit::getView();
         if (nOldView != -1 && nNewView != -1 && nOldView != nNewView)
         {
@@ -891,7 +877,11 @@ bool Application::KitHandleMouseEvent(VclEventId nEvent, vcl::Window* pWindow, c
     aMouseEvent.mnTime = tools::Time::GetSystemTicks();
     aMouseEvent.mnX = pEvent->GetPosPixel().X();
     aMouseEvent.mnY = pEvent->GetPosPixel().Y();
-    aMouseEvent.mnCode = pEvent->GetButtons() | pEvent->GetModifier();
+    // GetModifier() reports only KEY_SHIFT/KEY_MOD1/KEY_MOD2; a kit client can
+    // also send KEY_MOD3 (the browser's stand-in for a remote macOS client's
+    // Command key, distinct from Ctrl there), so fold it in separately here.
+    aMouseEvent.mnCode = pEvent->GetButtons() | pEvent->GetModifier()
+                          | (pEvent->IsMod3() ? KEY_MOD3 : 0);
 
     switch (nEvent)
     {
@@ -909,13 +899,8 @@ bool Application::KitHandleMouseEvent(VclEventId nEvent, vcl::Window* pWindow, c
             bSuccess = ImplKitHandleMouseEvent(pWindow, NotifyEventType::MOUSEBUTTONDOWN, false,
                                                aMouseEvent.mnX, aMouseEvent.mnY,
                                                aMouseEvent.mnTime,
-#ifdef MACOSX
                                                aMouseEvent.mnButton |
                                                (aMouseEvent.mnCode & (KEY_SHIFT | KEY_MOD1 | KEY_MOD2 | KEY_MOD3)),
-#else
-                                               aMouseEvent.mnButton |
-                                               (aMouseEvent.mnCode & (KEY_SHIFT | KEY_MOD1 | KEY_MOD2)),
-#endif
                                                ImplGetMouseButtonMode(&aMouseEvent),
                                                pEvent->GetClicks());
             break;
@@ -925,13 +910,8 @@ bool Application::KitHandleMouseEvent(VclEventId nEvent, vcl::Window* pWindow, c
             bSuccess = ImplKitHandleMouseEvent(pWindow, NotifyEventType::MOUSEBUTTONUP, false,
                                                aMouseEvent.mnX, aMouseEvent.mnY,
                                                aMouseEvent.mnTime,
-#ifdef MACOSX
                                                aMouseEvent.mnButton |
                                                (aMouseEvent.mnCode & (KEY_SHIFT | KEY_MOD1 | KEY_MOD2 | KEY_MOD3)),
-#else
-                                               aMouseEvent.mnButton |
-                                               (aMouseEvent.mnCode & (KEY_SHIFT | KEY_MOD1 | KEY_MOD2)),
-#endif
                                                ImplGetMouseButtonMode(&aMouseEvent),
                                                pEvent->GetClicks());
             break;
@@ -1467,9 +1447,9 @@ SystemWindowFlags Application::GetSystemWindowMode()
     return ImplGetSVData()->maAppData.mnSysWinMode;
 }
 
-css::uno::Reference< css::awt::XToolkit > Application::GetVCLToolkit()
+cpo::uno::Reference< css::awt::XToolkit > Application::GetVCLToolkit()
 {
-    css::uno::Reference< css::awt::XToolkit > xT;
+    cpo::uno::Reference< css::awt::XToolkit > xT;
     UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper();
     if ( pWrapper )
         xT = pWrapper->GetVCLToolkit();
@@ -1494,7 +1474,14 @@ UnoWrapperBase* UnoWrapperBase::GetUnoWrapper( bool bCreateIfNotExist )
     {
 #ifndef DISABLE_DYNLOADING
         osl::Module aTkLib;
+#if ENABLE_UNITEDLIBS
+        if (osl_isUnitedLibActive())
+            aTkLib.loadRelative(&thisModule, SAL_MODULENAME("unitedlo"));
+        else
+            aTkLib.loadRelative(&thisModule, TK_DLL_NAME);
+#else
         aTkLib.loadRelative(&thisModule, TK_DLL_NAME);
+#endif
         if (aTkLib.is())
         {
             FN_TkCreateUnoWrapper fnCreateWrapper = reinterpret_cast<FN_TkCreateUnoWrapper>(aTkLib.getFunctionSymbol("CreateUnoWrapper"));
@@ -1606,21 +1593,15 @@ void Application::AppEvent( const ApplicationEvent& /*rAppEvent*/ )
 {
 }
 
-bool Application::hasNativeFileSelection()
-{
-    ImplSVData* pSVData = ImplGetSVData();
-    return pSVData->mpDefInst->hasNativeFileSelection();
-}
-
-Reference< ui::dialogs::XFilePicker2 >
-Application::createFilePicker( const Reference< uno::XComponentContext >& xSM )
+Reference< ui::dialogs::XFilePicker >
+Application::createFilePicker( const Reference< cpo::uno::XComponentContext >& xSM )
 {
     ImplSVData* pSVData = ImplGetSVData();
     return pSVData->mpDefInst->createFilePicker( xSM );
 }
 
-Reference< ui::dialogs::XFolderPicker2 >
-Application::createFolderPicker( const Reference< uno::XComponentContext >& xSM )
+Reference< ui::dialogs::XFolderPicker >
+Application::createFolderPicker( const Reference< cpo::uno::XComponentContext >& xSM )
 {
     ImplSVData* pSVData = ImplGetSVData();
     return pSVData->mpDefInst->createFolderPicker( xSM );
@@ -1759,6 +1740,28 @@ void trimMemory(int nTarget)
         pSVData->dropCaches();
     }
     // else for now caches re-fill themselves as/when used.
+}
+
+OUString svgIconName(std::u16string_view rIconPath)
+{
+    if (rIconPath.empty())
+        return OUString();
+
+    const size_t nSlash = rIconPath.rfind(u'/');
+    std::u16string_view aFileName
+        = (nSlash != std::u16string_view::npos) ? rIconPath.substr(nSlash + 1) : rIconPath;
+
+    OUString aName(aFileName);
+    if (aName.endsWith(".png"))
+        aName = OUString::Concat(aName.subView(0, aName.getLength() - 4)) + ".svg";
+    else if (aName.indexOf('.') < 0)
+        aName += ".svg";
+
+    // Drop the size prefix before adding the canonical one the client expects.
+    if (aName.startsWith("sc_") || aName.startsWith("lc_"))
+        aName = aName.copy(3);
+
+    return "lc_" + aName;
 }
 
 } // namespace kit, namespace vcl

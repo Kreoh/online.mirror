@@ -25,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <string_view>
 #include <type_traits>
 
 class Session;
@@ -123,8 +124,17 @@ public:
     void setAllowManageRedlines(bool allow) { _isAllowManageRedlines = allow; }
     bool isAllowManageRedlines() const { return _isAllowManageRedlines; }
 
-    /// Returns true iff the view is either non-readonly or can change comments or manage redlines.
-    bool isEditable() const { return !isReadOnly() || isAllowChangeComments() || isAllowManageRedlines(); }
+    /// Whether the view is read-only until it enters the document's password to modify.
+    void setLockedByPassword(bool locked) { _isLockedByPassword = locked; }
+    bool isLockedByPassword() const { return _isLockedByPassword; }
+
+    /// Returns true iff the view is either non-readonly or can change comments or manage redlines,
+    /// and has entered the document's password to modify, if it has one.
+    bool isEditable() const
+    {
+        return !_isLockedByPassword &&
+               (!isReadOnly() || isAllowChangeComments() || isAllowManageRedlines());
+    }
 
     /// if certification verification was disabled for the wopi server
     bool isDisableVerifyHost() const { return _disableVerifyHost; }
@@ -224,6 +234,14 @@ public:
         return _userSettingsPersistenceAvailable;
     }
 
+    /// True when the configuration this document is running with is this
+    /// user's own. One document is one kit and one configuration, installed
+    /// for the session that opened it, so a later joiner's settings are saved
+    /// but take effect only in a document they open themselves.
+    void setUserPresetsApplied(bool bApplied) { _userPresetsApplied = bApplied; }
+
+    bool areUserPresetsApplied() const { return _userPresetsApplied; }
+
     void setUserExtraInfo(const std::string& userExtraInfo) { _userExtraInfo = userExtraInfo; }
 
     void setUserPrivateInfo(const std::string& userPrivateInfo) { _userPrivateInfo = userPrivateInfo; }
@@ -237,8 +255,6 @@ public:
     const std::string& getUserNameAnonym() const { return _userNameAnonym; }
 
     bool isDocPasswordProtected() const { return _isDocPasswordProtected; }
-
-    const std::string& getDocOptions() const { return _docOptions; }
 
     bool hasWatermark() const { return !_watermarkText.empty() && _watermarkOpacity > 0.0; }
 
@@ -278,6 +294,16 @@ public:
 
     void setSpellOnline(const std::string& val) { _spellOnline = val; }
 
+    /// Picks the automatic spell checking choice that applies to one document
+    /// type out of the per-document-type value the client sends, which spells
+    /// out the types it has a choice for, as in "text:true,spreadsheet:false".
+    /// A value that names no document type comes from a client that kept one
+    /// choice for every application, so it stands for all of them. Returns an
+    /// empty string when nothing was chosen for this document type, leaving
+    /// the default to core.
+    static std::string spellOnlineForDocType(const std::string& spellOnline,
+                                             std::string_view docType);
+
     const std::string& getFormattingMarks() const { return _formattingMarks; }
 
     void setFormattingMarks(const std::string& val) { _formattingMarks = val; }
@@ -285,6 +311,10 @@ public:
     const std::string& getDarkTheme() const { return _darkTheme; }
 
     void setDarkTheme(const std::string& val) { _darkTheme = val; }
+
+    const std::string& getFocusRingColor() const { return _focusRingColor; }
+
+    void setFocusRingColor(const std::string& val) { _focusRingColor = val; }
 
     const std::string& getDarkBackground() const { return _darkBackground; }
 
@@ -314,6 +344,7 @@ public:
     const std::string& getDocTemplate() const { return _docTemplate; }
 
     const std::string& getInFilterOption() const { return _inFilterOptions; }
+    void setInFilterOptions(const std::string& options) { _inFilterOptions = options; }
 
     const std::string& getZoteroAPIKey() const { return _zoteroAPIKey; }
 
@@ -368,9 +399,9 @@ protected:
             const std::string& name, const std::string& id, bool readonly);
     virtual ~Session();
 
-    /// Parses the options of the "load" command,
-    /// shared between MasterProcessSession::loadDocument() and ChildProcessSession::loadDocument().
-    void parseDocOptions(const StringVector& tokens, int& part, std::string& timestamp);
+    /// Applies one name=value option of a browser's "load" message. Returns false, applying
+    /// nothing, for a name that a browser's load message does not carry.
+    bool applyBrowserLoadOption(const std::string& name, std::string& value, std::string& part);
 
     void updateLastActivityTime()
     {
@@ -392,6 +423,7 @@ private:
 
     virtual bool _handleInput(const char* buffer, int length) = 0;
 
+protected:
     /// A session ID specific to an end-to-end connection (from user to lokit).
     const std::string _id;
 
@@ -409,9 +441,6 @@ private:
 
     /// Password provided, if any, to open the document
     std::string _docPassword;
-
-    /// Document options: a JSON string, containing options (rendering, also possibly load in the future).
-    std::string _docOptions;
 
     /// Id of the user to whom the session belongs to.
     std::string _userId;
@@ -457,6 +486,10 @@ private:
 
     /// The start value for Dark Theme whether it is active or not on start.
     std::string _darkTheme;
+
+    /// The colour the client paints its own focus and selection marks in, as a
+    /// CSS colour, for example "#0b87e7". Empty when the client named none.
+    std::string _focusRingColor;
     ///
     /// The start value for Dark Background whether it is active or not on start.
     std::string _darkBackground;
@@ -489,6 +522,7 @@ private:
     /// Defaults false: batch/convert brokers that skip
     /// updateSessionWithWopiInfo inherit a safe "no persistence" answer.
     bool _userSettingsPersistenceAvailable = false;
+    bool _userPresetsApplied = false;
 
     /// True if we have been disconnected.
     std::atomic<bool> _disconnected;
@@ -516,6 +550,9 @@ private:
     /// Whether the session can add/change comments.
     /// Must have _isWritable=true, regardless of _isReadOnly.
     bool _isAllowManageRedlines = false;
+
+    /// Whether the view is still read-only because it has not entered the document's edit password
+    bool _isLockedByPassword = false;
 
     /// If password is provided or not
     bool _haveDocPassword;

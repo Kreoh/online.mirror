@@ -26,10 +26,10 @@
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/XFilePreview.hpp>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/basemutex.hxx>
@@ -44,10 +44,9 @@ namespace vista{
 
 
 typedef ::cppu::WeakComponentImplHelper<
-                css::ui::dialogs::XFilePicker3,
-                css::ui::dialogs::XFilePickerControlAccess,
+                css::ui::dialogs::XFilePicker,
                 css::ui::dialogs::XFilePreview,
-                css::ui::dialogs::XFolderPicker2,
+                css::ui::dialogs::XFolderPicker,
                 css::lang::XInitialization,
                 css::lang::XServiceInfo >   TVistaFilePickerBase;
 
@@ -75,9 +74,9 @@ public:
     // XFilePickerNotifier
 
 
-    virtual void addFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+    virtual void addFilePickerListener( const cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
 
-    virtual void removeFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+    virtual void removeFilePickerListener( const cpo::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
 
 
     // XExecutableDialog functions
@@ -99,9 +98,6 @@ public:
 
     virtual OUString getDisplayDirectory(  ) override;
 
-    virtual cpo::uno::Sequence< OUString > getFiles(  ) override;
-
-    // XFilePicker2 functions
     virtual cpo::uno::Sequence< OUString > getSelectedFiles(  ) override;
 
 
@@ -175,7 +171,7 @@ public:
 
     // XEventListener
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void disposing( const css::lang::EventObject& aEvent );
 
 

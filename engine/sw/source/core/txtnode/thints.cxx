@@ -31,6 +31,7 @@
 #include <editeng/charhiddenitem.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/lrspitem.hxx>
+#include <editeng/wghtitem.hxx>
 #include <txtinet.hxx>
 #include <txtflcnt.hxx>
 #include <fmtfld.hxx>
@@ -1186,7 +1187,26 @@ SwTextAttr* MakeTextAttr( SwDoc & rDoc, const SfxItemSet& rSet,
                         sal_Int32 nStt, sal_Int32 nEnd )
 {
     IStyleAccess& rStyleAccess = rDoc.GetIStyleAccess();
-    const std::shared_ptr<SfxItemSet> pAutoStyle = rStyleAccess.getAutomaticStyle( rSet, IStyleAccess::AUTO_STYLE_CHAR );
+    std::shared_ptr<SfxItemSet> pAutoStyle;
+    if (rDoc.IsInMergedPaste())
+    {
+        // Merged paste: keep target character properties and only merge selected properties from
+        // source.
+        SfxItemSet aFiltered(rSet);
+        SfxWhichIter aIter(aFiltered);
+        for (sal_uInt16 nWhich = aIter.FirstWhich(); nWhich; nWhich = aIter.NextWhich())
+        {
+            if (!SwTextNode::IsCharItemKeptInMergedPaste(nWhich))
+            {
+                aFiltered.ClearItem(nWhich);
+            }
+        }
+        pAutoStyle = rStyleAccess.getAutomaticStyle(aFiltered, IStyleAccess::AUTO_STYLE_CHAR);
+    }
+    else
+    {
+        pAutoStyle = rStyleAccess.getAutomaticStyle(rSet, IStyleAccess::AUTO_STYLE_CHAR);
+    }
     SwFormatAutoFormat aNewAutoFormat;
     aNewAutoFormat.SetStyleHandle( pAutoStyle );
     SwTextAttr* pNew = MakeTextAttr( rDoc, aNewAutoFormat, nStt, nEnd );
@@ -1290,7 +1310,7 @@ void SwTextNode::DestroyAttr( SwTextAttr* pAttr )
         {
             if (SwDocShell* pDocSh = rDoc.GetDocShell())
             {
-                const css::uno::Reference<css::rdf::XResource> xSubject = pMeta->MakeUnoObject();
+                const cpo::uno::Reference<css::rdf::XResource> xSubject = pMeta->MakeUnoObject();
                 rtl::Reference<SwXTextDocument> xModel = pDocSh->GetBaseModel();
                 SwRDFHelper::clearStatements(xModel, u"urn:bails"_ustr, xSubject);
             }

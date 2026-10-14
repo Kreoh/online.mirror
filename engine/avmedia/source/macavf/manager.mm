@@ -24,6 +24,7 @@
 #include <rtl/ref.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace avmedia::macavf {
 
@@ -36,7 +37,7 @@ Manager::~Manager()
 {}
 
 
-uno::Reference< media::XPlayer > Manager::createPlayer( const OUString& rURL )
+cpo::uno::Reference< media::XPlayer > Manager::createPlayer( const OUString& rURL )
 {
     rtl::Reference<Player>              xPlayer( new Player() );
     INetURLObject                       aURL( rURL );
@@ -44,7 +45,7 @@ uno::Reference< media::XPlayer > Manager::createPlayer( const OUString& rURL )
     if( !xPlayer->create( aURL.GetMainURL( INetURLObject::DecodeMechanism::Unambiguous ) )  )
         return {};
 
-    return uno::Reference<media::XPlayer>(xPlayer);
+    return cpo::uno::Reference<media::XPlayer>(xPlayer);
 }
 
 
@@ -67,9 +68,9 @@ cpo::uno::Sequence< OUString > Manager::getSupportedServiceNames(  )
 
 } // namespace avmedia::macavf
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_avmedia_Manager_MacAVF_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ::avmedia::macavf::Manager());
 }

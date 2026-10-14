@@ -34,9 +34,10 @@
 
 #include "instancelocker.hxx"
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 // OInstanceLocker
@@ -57,7 +58,7 @@ OInstanceLocker::~OInstanceLocker()
         try {
             dispose();
         }
-        catch ( uno::RuntimeException& )
+        catch ( cpo::uno::RuntimeException& )
         {}
     }
 }
@@ -113,9 +114,9 @@ void OInstanceLocker::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aAr
         throw lang::DisposedException(); // TODO
 
     if ( !m_refCount )
-        throw uno::RuntimeException(); // the object must be refcounted already!
+        throw cpo::uno::RuntimeException(); // the object must be refcounted already!
 
-    uno::Reference< uno::XInterface > xInstance;
+    uno::Reference< cpo::uno::XInterface > xInstance;
     uno::Reference< embed::XActionsApproval > xApproval;
 
     try
@@ -124,13 +125,13 @@ void OInstanceLocker::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aAr
         if ( nLen < 2 || nLen > 3 )
             throw lang::IllegalArgumentException(
                             u"Wrong count of parameters!"_ustr,
-                            uno::Reference< uno::XInterface >(),
+                            uno::Reference< cpo::uno::XInterface >(),
                             0 );
 
         if ( !( aArguments[0] >>= xInstance ) || !xInstance.is() )
             throw lang::IllegalArgumentException(
                     u"Nonempty reference is expected as the first argument!"_ustr,
-                    uno::Reference< uno::XInterface >(),
+                    uno::Reference< cpo::uno::XInterface >(),
                     0 );
 
         sal_Int32 nModes = 0;
@@ -144,14 +145,14 @@ void OInstanceLocker::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aAr
         {
             throw lang::IllegalArgumentException(
                     u"The correct modes set is expected as the second argument!"_ustr,
-                    uno::Reference< uno::XInterface >(),
+                    uno::Reference< cpo::uno::XInterface >(),
                     0 );
         }
 
         if ( nLen == 3 && !( aArguments[2] >>= xApproval ) )
             throw lang::IllegalArgumentException(
                     u"If the third argument is provided, it must be XActionsApproval implementation!"_ustr,
-                    uno::Reference< uno::XInterface >(),
+                    uno::Reference< cpo::uno::XInterface >(),
                     0 );
 
         m_xLockListener = new OLockListener( uno::Reference< lang::XComponent > ( static_cast< lang::XComponent* >( this ) ),
@@ -190,7 +191,7 @@ cpo::uno::Sequence< OUString > OInstanceLocker::getSupportedServiceNames()
 
 
 OLockListener::OLockListener( cpo::uno::WeakReference< lang::XComponent > xWrapper,
-                    uno::Reference< uno::XInterface > xInstance,
+                    uno::Reference< cpo::uno::XInterface > xInstance,
                     sal_Int32 nMode,
                     uno::Reference< embed::XActionsApproval > xApproval )
 : m_xInstance(std::move( xInstance ))
@@ -436,9 +437,9 @@ void OLockListener::Init()
     m_bInitialized = true;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_embed_InstanceLocker(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new OInstanceLocker());

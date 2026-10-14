@@ -40,7 +40,7 @@ public:
     AbortContinuation(const AbortContinuation&) = delete;
     AbortContinuation& operator=(const AbortContinuation&)= delete;
 
-    virtual void SAL_CALL select() override {}
+    virtual void select() override {}
 
 private:
     virtual ~AbortContinuation() override {}
@@ -56,7 +56,7 @@ public:
     RetryContinuation(const RetryContinuation&) = delete;
     RetryContinuation& operator=(const RetryContinuation&) = delete;
 
-    virtual void SAL_CALL select() override;
+    virtual void select() override;
 
     bool isSelected() const;
 
@@ -67,7 +67,7 @@ private:
     bool m_bSelected;
 };
 
-void SAL_CALL InteractionRequest::RetryContinuation::select()
+void InteractionRequest::RetryContinuation::select()
 {
     std::scoped_lock aGuard(m_aMutex);
     m_bSelected = true;
@@ -86,13 +86,13 @@ InteractionRequest::InteractionRequest(cpo::uno::Any aRequest):
     m_aContinuations = { new AbortContinuation, m_xRetryContinuation };
 }
 
-cpo::uno::Any SAL_CALL InteractionRequest::getRequest()
+cpo::uno::Any InteractionRequest::getRequest()
 {
     return m_aRequest;
 }
 
-cpo::uno::Sequence< css::uno::Reference< css::task::XInteractionContinuation > >
-SAL_CALL InteractionRequest::getContinuations()
+cpo::uno::Sequence< cpo::uno::Reference< css::task::XInteractionContinuation > >
+InteractionRequest::getContinuations()
 {
     return m_aContinuations;
 }

@@ -26,6 +26,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::ooo::vba;
+using namespace ::cpo;
 
 
 SwVbaTableHelper::SwVbaTableHelper( uno::Reference< text::XTextTable > xTextTable ) : mxTextTable(std::move( xTextTable ))
@@ -37,11 +38,11 @@ SwTable* SwVbaTableHelper::GetSwTable( const uno::Reference< text::XTextTable >&
 {
     SwXTextTable* pXTextTable = dynamic_cast<SwXTextTable*>(xTextTable.get());
     if( !pXTextTable )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     SwFrameFormat* pFrameFormat = pXTextTable->GetFrameFormat();
     if( !pFrameFormat )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     SwTable* pTable = SwTable::FindTable( pFrameFormat );
     return pTable;
@@ -77,7 +78,7 @@ sal_Int32 SwVbaTableHelper::getTabRowIndex( const OUString& rCellName )
     sal_Int32 nRet = 0;
     SwTableBox* pBox = const_cast<SwTableBox*>(m_pTable->GetTableBox( rCellName ));
     if( !pBox )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     const SwTableLine* pLine = pBox->GetUpper();
     const SwTableLines* pLines = pLine->GetUpper()
@@ -90,7 +91,7 @@ sal_Int32 SwVbaTableHelper::getTabColIndex( const OUString& rCellName )
 {
     const SwTableBox* pBox = m_pTable->GetTableBox( rCellName );
     if( !pBox )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return pBox->GetUpper()->GetBoxPos( pBox );
 }
 
@@ -138,17 +139,17 @@ SwTableBox* SwVbaTableHelper::GetTabBox( sal_Int32 nCol, sal_Int32 nRow )
     SwTableLines& rLines = m_pTable->GetTabLines();
     sal_Int32 nRowCount = rLines.size();
     if (nRow < 0 || nRow >= nRowCount)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     SwTableLine* pLine = rLines[ nRow ];
     sal_Int32 nColCount = pLine->GetTabBoxes().size();
     if (nCol < 0 || nCol >= nColCount)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     SwTableBox* pStart = pLine->GetTabBoxes()[ nCol ];
 
     if( !pStart )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return pStart;
 }
@@ -237,7 +238,7 @@ void SwVbaTableHelper::SetColWidth( sal_Int32 _width, sal_Int32 nCol, sal_Int32 
     double dAbsWidth = Millimeter::getInHundredthsOfOneMillimeter( _width );
     sal_Int32 nTableWidth = getTableWidth( );
     if (!nTableWidth)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     sal_Int32 nNewWidth = dAbsWidth/nTableWidth * UNO_TABLE_COLUMN_SUM;
 
     SwTableBox* pStart = GetTabBox( nCol, nRow );

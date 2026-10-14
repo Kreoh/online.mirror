@@ -68,8 +68,8 @@
 #include <sfx2/viewsh.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
@@ -120,7 +120,7 @@ ErrCodeMsg SwXMLWriter::Write_(const SfxItemSet* pMediumItemSet)
     });
 
     // Get service factory
-    const uno::Reference< uno::XComponentContext >& xContext =
+    const uno::Reference< cpo::uno::XComponentContext >& xContext =
             comphelper::getProcessComponentContext();
 
     // Get data sink ...
@@ -478,7 +478,7 @@ ErrCodeMsg SwXMLWriter::Write( SwPaM& rPaM, SfxMedium& rMed,
 bool SwXMLWriter::WriteThroughComponent(
     const uno::Reference<XComponent> & xComponent,
     const char* pStreamName,
-    const uno::Reference<uno::XComponentContext> & rxContext,
+    const uno::Reference<cpo::uno::XComponentContext> & rxContext,
     const char* pServiceName,
     const Sequence<Any> & rArguments,
     const Sequence<beans::PropertyValue> & rMediaDesc )

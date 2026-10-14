@@ -19,6 +19,7 @@
 #include <document.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLMappingsContext::ScXMLMappingsContext( ScXMLImport& rImport ) :
@@ -33,7 +34,7 @@ ScXMLMappingsContext::~ScXMLMappingsContext()
     GetScImport().UnlockSolarMutex();
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLMappingsContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLMappingsContext::createFastChildContext(
                                       sal_Int32 nElement,
                                       const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
@@ -123,7 +124,7 @@ ScXMLMappingContext::ScXMLMappingContext( ScXMLImport& rImport,
 }
 
 uno::Reference<xml::sax::XFastContextHandler>
-    SAL_CALL ScXMLMappingContext::createFastChildContext(
+    ScXMLMappingContext::createFastChildContext(
         sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& /*xAttrList*/)
 {
     SvXMLImportContext *pContext = nullptr;

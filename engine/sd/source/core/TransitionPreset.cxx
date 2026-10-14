@@ -45,11 +45,12 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::animations;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_QUERY_THROW;
 using ::cpo::uno::Any;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Exception;
 using ::com::sun::star::lang::XMultiServiceFactory;
 using ::com::sun::star::container::XEnumerationAccess;
@@ -58,7 +59,7 @@ using ::com::sun::star::beans::NamedValue;
 
 namespace sd {
 
-TransitionPreset::TransitionPreset( const css::uno::Reference< css::animations::XAnimationNode >& xNode )
+TransitionPreset::TransitionPreset( const cpo::uno::Reference< css::animations::XAnimationNode >& xNode )
 {
     // first locate preset id
     const Sequence< NamedValue > aUserData( xNode->getUserData() );
@@ -69,7 +70,7 @@ TransitionPreset::TransitionPreset( const css::uno::Reference< css::animations::
 
     // second, locate transition filter element
     Reference< XEnumerationAccess > xEnumerationAccess( xNode, UNO_QUERY_THROW );
-    Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+    Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
     Reference< XTransitionFilter > xTransition( xEnumeration->nextElement(), UNO_QUERY_THROW );
 
     mnTransition = xTransition->getTransition();
@@ -219,7 +220,8 @@ bool TransitionPreset::importTransitionsFile( TransitionPresetList& rList,
             TransitionSubType::COMBHORIZONTAL,
             TransitionSubType::FANOUTHORIZONTAL,
             TransitionSubType::HEART,
-            TransitionSubType::ROTATEIN
+            TransitionSubType::ROTATEIN,
+            TransitionSubType::AIRPLANE
     };
 
     const std::set<sal_Int16> KitMiscShapeWipeNonSupportedTransitionSubTypes = {
@@ -233,7 +235,7 @@ bool TransitionPreset::importTransitionsFile( TransitionPresetList& rList,
     try {
         xAnimationNode = implImportEffects( xServiceFactory, aURL );
         Reference< XEnumerationAccess > xEnumerationAccess( xAnimationNode, UNO_QUERY_THROW );
-        Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), css::uno::UNO_SET_THROW );
+        Reference< XEnumeration > xEnumeration( xEnumerationAccess->createEnumeration(), cpo::uno::UNO_SET_THROW );
 
         while( xEnumeration->hasMoreElements() )
         {
@@ -345,7 +347,7 @@ bool TransitionPreset::importTransitionPresetList( TransitionPresetList& rList )
 
     try
     {
-        const uno::Reference< uno::XComponentContext >& xContext(
+        const uno::Reference< cpo::uno::XComponentContext >& xContext(
             comphelper::getProcessComponentContext() );
         Reference< XMultiServiceFactory > xServiceFactory(
             xContext->getServiceManager(), UNO_QUERY_THROW );

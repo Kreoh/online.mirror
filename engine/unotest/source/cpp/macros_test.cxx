@@ -12,7 +12,7 @@
 #include <vector>
 
 #include <com/sun/star/document/MacroExecMode.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/DispatchHelper.hpp>
 #include <com/sun/star/packages/zip/ZipFileAccess.hpp>
 #include <com/sun/star/security/CertificateValidity.hpp>
@@ -35,6 +35,7 @@
 #include <vcl/scheduler.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace unotest
 {
@@ -89,7 +90,7 @@ MacrosTest::dispatchCommand(const uno::Reference<lang::XComponent>& xComponent,
     uno::Reference<frame::XDispatchProvider> xFrame(xController->getFrame(), uno::UNO_QUERY);
     CPPUNIT_ASSERT(xFrame.is());
 
-    const uno::Reference<uno::XComponentContext>& xContext
+    const uno::Reference<cpo::uno::XComponentContext>& xContext
         = ::comphelper::getProcessComponentContext();
     uno::Reference<frame::XDispatchHelper> xDispatchHelper(frame::DispatchHelper::create(xContext));
     CPPUNIT_ASSERT(xDispatchHelper.is());
@@ -112,11 +113,11 @@ public:
     {
     }
 
-    virtual void SAL_CALL disposing(lang::EventObject const&) override
+    virtual void disposing(lang::EventObject const&) override
     {
         CPPUNIT_ASSERT(m_Received);
     }
-    virtual void SAL_CALL statusChanged(frame::FeatureStateEvent const& rEvent) override
+    virtual void statusChanged(frame::FeatureStateEvent const& rEvent) override
     {
         if (!m_Received)
         {
@@ -130,7 +131,7 @@ public:
 
 cpo::uno::Any
 MacrosTest::queryDispatchStatus(uno::Reference<lang::XComponent> const& xComponent,
-                                uno::Reference<uno::XComponentContext> const& xContext,
+                                uno::Reference<cpo::uno::XComponentContext> const& xContext,
                                 OUString const& rURL)
 {
     cpo::uno::Any ret;
@@ -160,9 +161,9 @@ MacrosTest::queryDispatchStatus(uno::Reference<lang::XComponent> const& xCompone
 std::unique_ptr<SvStream> MacrosTest::parseExportStream(const OUString& url,
                                                         const OUString& rStreamName)
 {
-    const uno::Reference<uno::XComponentContext>& xComponentContext
+    const uno::Reference<cpo::uno::XComponentContext>& xComponentContext
         = comphelper::getProcessComponentContext();
-    uno::Reference<packages::zip::XZipFileAccess2> const xZipNames(
+    uno::Reference<packages::zip::XZipFileAccess> const xZipNames(
         packages::zip::ZipFileAccess::createWithURL(xComponentContext, url));
     uno::Reference<io::XInputStream> const xInputStream(xZipNames->getByName(rStreamName),
                                                         uno::UNO_QUERY);
@@ -211,9 +212,9 @@ struct Valid
 {
     DateTime now;
     OUString subjectName;
-    const css::uno::Reference<css::xml::crypto::XSecurityEnvironment>& env;
+    const cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment>& env;
     Valid(const cpo::uno::Sequence<css::beans::PropertyValue>& rFilterData,
-          const css::uno::Reference<css::xml::crypto::XSecurityEnvironment>& rEnv)
+          const cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment>& rEnv)
         : now(DateTime::SYSTEM)
         , env(rEnv)
     {
@@ -223,7 +224,7 @@ struct Valid
                 propVal.Value >>= subjectName;
         }
     }
-    bool operator()(const css::uno::Reference<css::security::XCertificate>& cert) const
+    bool operator()(const cpo::uno::Reference<css::security::XCertificate>& cert) const
     {
         if (!now.IsBetween(DateTime(cert->getNotValidBefore()), DateTime(cert->getNotValidAfter())))
             return false;
@@ -236,16 +237,16 @@ struct Valid
 };
 }
 
-bool MacrosTest::IsValid(const css::uno::Reference<css::security::XCertificate>& cert,
-                         const css::uno::Reference<css::xml::crypto::XSecurityEnvironment>& env)
+bool MacrosTest::IsValid(const cpo::uno::Reference<css::security::XCertificate>& cert,
+                         const cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment>& env)
 {
     const Valid test({}, env);
     return test(cert);
 }
 
-css::uno::Reference<css::security::XCertificate> MacrosTest::GetValidCertificate(
-    const cpo::uno::Sequence<css::uno::Reference<css::security::XCertificate>>& certs,
-    const css::uno::Reference<css::xml::crypto::XSecurityEnvironment>& env,
+cpo::uno::Reference<css::security::XCertificate> MacrosTest::GetValidCertificate(
+    const cpo::uno::Sequence<cpo::uno::Reference<css::security::XCertificate>>& certs,
+    const cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment>& env,
     const cpo::uno::Sequence<css::beans::PropertyValue>& rFilterData)
 {
     if (auto it = std::find_if(certs.begin(), certs.end(), Valid(rFilterData, env));

@@ -19,10 +19,10 @@
 #include "sal/config.h"
 
 #include "cpo/uno/Exception.hpp"
-#include "com/sun/star/uno/Reference.hxx"
+#include "cpo/uno/Reference.hxx"
 #include "cpo/uno/Sequence.hxx"
-#include "com/sun/star/uno/XComponentContext.hpp"
-#include "com/sun/star/uno/XInterface.hpp"
+#include "cpo/uno/XComponentContext.hpp"
+#include "cpo/uno/XInterface.hpp"
 #include "cppuhelper/factory.hxx"
 #include "cppuhelper/implbase1.hxx"
 #include "cppuhelper/implementationentry.hxx"
@@ -41,7 +41,7 @@ class Service: public cppu::WeakImplHelper1< test::types::XTest > {
 public:
     Service() {}
 
-    virtual void SAL_CALL throwException() {
+    virtual void throwException() {
         throw test::types::TestException(
             rtl::OUString("test"),
             static_cast< cppu::OWeakObject * >(this));
@@ -56,8 +56,8 @@ private:
 
 namespace CppTest {
 
-css::uno::Reference< css::uno::XInterface > create(
-    css::uno::Reference< css::uno::XComponentContext > const &)
+cpo::uno::Reference< cpo::uno::XInterface > create(
+    cpo::uno::Reference< cpo::uno::XComponentContext > const &)
 {
     return static_cast< cppu::OWeakObject * >(new Service);
 }
@@ -81,7 +81,7 @@ cppu::ImplementationEntry entries[] = {
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return cppu::component_getFactoryHelper(

@@ -162,25 +162,11 @@ if test "z$OOO_VENDOR" != "zDebian" ; then
         if test "$OOO_VENDOR" = "Mandriva" -o \( "$OOO_VENDOR" = "SUSE" -a "$SPLIT_APP_MODULES" = "TRUE" \) ; then
             test -f gid_Module_Langpack_Basis_$lang     && lang_lists="$lang_lists gid_Module_Langpack_Basis_$lang" || :
             test -f gid_Module_Langpack_Brand_$lang     && lang_lists="$lang_lists gid_Module_Langpack_Brand_$lang" || :
-            test -f gid_Module_Langpack_Resource_$lang  && lang_lists="$lang_lists gid_Module_Langpack_Resource_$lang" || :
-            test -f gid_Module_Langpack_Impress_$lang   && lang_lists="$lang_lists gid_Module_Langpack_Impress_$lang" || :
-            test -f gid_Module_Langpack_Draw_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Draw_$lang" || :
-            test -f gid_Module_Langpack_Math_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Math_$lang" || :
-            test -f gid_Module_Langpack_Calc_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Calc_$lang" || :
-            test -f gid_Module_Langpack_Base_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Base_$lang" || :
-            test -f gid_Module_Langpack_Writer_$lang    && lang_lists="$lang_lists gid_Module_Langpack_Writer_$lang" || :
             # Place helps on dedicated packages.
             test -f gid_Module_Helppack_Help_$lang      && sort -u gid_Module_Helppack_Help_$lang > $FILELISTSDIR/help_${lang}_list.txt || :
         else
             test -f gid_Module_Langpack_Basis_$lang     && lang_lists="$lang_lists gid_Module_Langpack_Basis_$lang" || :
             test -f gid_Module_Langpack_Brand_$lang     && lang_lists="$lang_lists gid_Module_Langpack_Brand_$lang" || :
-            test -f gid_Module_Langpack_Resource_$lang  && lang_lists="$lang_lists gid_Module_Langpack_Resource_$lang" || :
-            test -f gid_Module_Langpack_Impress_$lang   && lang_lists="$lang_lists gid_Module_Langpack_Impress_$lang" || :
-            test -f gid_Module_Langpack_Draw_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Draw_$lang" || :
-            test -f gid_Module_Langpack_Math_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Math_$lang" || :
-            test -f gid_Module_Langpack_Calc_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Calc_$lang" || :
-            test -f gid_Module_Langpack_Base_$lang      && lang_lists="$lang_lists gid_Module_Langpack_Base_$lang" || :
-            test -f gid_Module_Langpack_Writer_$lang    && lang_lists="$lang_lists gid_Module_Langpack_Writer_$lang" || :
             test -f gid_Module_Helppack_Help_$lang      && lang_lists="$lang_lists gid_Module_Helppack_Help_$lang" || :
         fi
         if test -n "$lang_lists" ; then
@@ -280,18 +266,10 @@ if test "z$OOO_VENDOR" != "zDebian" ; then
             program/javaldx \
             program/msfontextract \
             program/oosplash.bin \
-            program/pagein \
-            program/pagein-calc \
-            program/pagein-common \
-            program/pagein-draw \
-            program/pagein-impress \
-            program/pagein-writer \
-            program/pkgchk.bin \
             program/pluginapp.bin \
             program/setofficelang.bin \
             program/soffice.bin \
             program/uno.bin \
-            program/unopkg.bin \
             program/uri-encode
         do
             mv_file_between_flists core_list.txt common_list.txt "$INSTALLDIR/$f"
@@ -379,7 +357,6 @@ else
         done
         create_package_directory gid_Module_Langpack_Basis_`echo $l | sed -e s/-/_/g`     pkg/libreoffice-l10n-$l
         create_package_directory gid_Module_Langpack_Brand_`echo $l | sed -e s/-/_/g`     pkg/libreoffice-l10n-$l
-        create_package_directory gid_Module_Langpack_Resource_`echo $l | sed -e s/-/_/g`  pkg/libreoffice-l10n-$l
         create_package_directory gid_Module_Helppack_Help_`echo $l | sed -e s/-/_/g`      pkg/libreoffice-help-$l
 
         # some help files are in _Langpack_{Writer,Impress,...}_<lang>
@@ -390,35 +367,6 @@ else
         rmdir pkg/libreoffice-l10n-$l/$INSTALLDIR/help/$d
     done
 
-    # move_wrappers <directory_name> <name> [...]
-    move_wrappers()
-    {
-        directory=$1
-        shift
-        mkdir -m755 -p "$directory"/usr/bin
-        while test -n "$1"; do
-            mv usr/*bin/"$1$BINSUFFIX" "$directory"/usr/bin
-            shift
-        done
-    }
-    move_wrappers pkg/libreoffice-common soffice unopkg
-    if test "$COMPAT_OOWRAPPERS" = "YES" ; then
-        move_wrappers pkg/libreoffice-common ooffice oofromtemplate
-        move_wrappers pkg/libreoffice-base oobase
-        move_wrappers pkg/libreoffice-writer oowriter ooweb
-        move_wrappers pkg/libreoffice-calc oocalc
-        move_wrappers pkg/libreoffice-impress ooimpress
-        move_wrappers pkg/libreoffice-math oomath
-        move_wrappers pkg/libreoffice-draw oodraw
-    fi
-    move_wrappers pkg/libreoffice-common libreoffice lofromtemplate
-    move_wrappers pkg/libreoffice-base lobase
-    move_wrappers pkg/libreoffice-writer lowriter loweb
-    move_wrappers pkg/libreoffice-calc localc
-    move_wrappers pkg/libreoffice-impress loimpress
-    move_wrappers pkg/libreoffice-math lomath
-    move_wrappers pkg/libreoffice-draw lodraw
-
     # Move all libraries, binaries, *.rdb from -common to -core
     for d in $INSTALLDIR/program $INSTALLDIR/program; do \
       if [ ! -d $DESTDIR/pkg/libreoffice-core/$d ]; then \
@@ -426,28 +374,11 @@ else
       fi &&
       ( cd pkg/libreoffice-common/$d
         find -maxdepth 1 \
-           -regex '\./\(.*\.so.*\|.*\.bin\|pagein\|msfontextract\|.*\.rdb\|javaldx\|uri-encode\)' \
+           -regex '\./\(.*\.so.*\|.*\.bin\|msfontextract\|.*\.rdb\|javaldx\|uri-encode\)' \
            -exec mv {} $DESTDIR/pkg/libreoffice-core/$d \;
       ); \
     done
 
-    # install additional ooo-build scripts & misc stuff
-    mkdir -p pkg/libreoffice-common/usr/share/man/man1
-    if test "$COMPAT_OOWRAPPERS" = "YES" ; then
-        mv usr/share/man/man1/openoffice$BINSUFFIX.1 \
-            pkg/libreoffice-common/usr/share/man/man1
-    fi
-    mv usr/share/man/man1/libreoffice$BINSUFFIX.1 \
-        pkg/libreoffice-common/usr/share/man/man1
-    mkdir -p pkg/libreoffice-common/etc/bash_completion.d
-    if test "$COMPAT_OOWRAPPERS" = "YES" ; then
-        mv etc/bash_completion.d/ooffice$BINSUFFIX.sh \
-            pkg/libreoffice-common/etc/bash_completion.d
-    fi
-    mv etc/bash_completion.d/libreoffice$BINSUFFIX.sh \
-        pkg/libreoffice-common/etc/bash_completion.d
-    mv .$INSTALLDIR/program/java-set-classpath \
-        pkg/libreoffice-common/$INSTALLDIR/program
     if echo $WITH_LANG_LIST | grep -q en-US; then
         for i in forms/resume.ott officorr/project-proposal.ott; do \
             mkdir -p pkg/libreoffice-common/$INSTALLDIR/share/template/en-US/`dirname $i`; \

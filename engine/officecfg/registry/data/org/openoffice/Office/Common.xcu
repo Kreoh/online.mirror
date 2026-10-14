@@ -50,51 +50,6 @@
       <value install:module="wnt">true</value>
     </prop>
   </node>
-  <node oor:name="I18N">
-    <node oor:name="CTL">
-      <prop oor:name="CTLFont" install:module="ctl">
-        <value>true</value>
-      </prop>
-      <prop oor:name="CTLVerticalText" install:module="ctl">
-        <value>true</value>
-      </prop>
-      <prop oor:name="CTLSequenceChecking" install:module="ctlseqcheck">
-        <value>true</value>
-      </prop>
-      <prop oor:name="CTLSequenceCheckingRestricted" install:module="ctlseqcheck">
-        <value>true</value>
-      </prop>
-      <prop oor:name="CTLSequenceCheckingTypeAndReplace" install:module="ctlseqcheck">
-        <value>true</value>
-      </prop>
-    </node>
-    <node oor:name="CJK" install:module="cjk">
-      <prop oor:name="VerticalText">
-        <value>true</value>
-      </prop>
-      <prop oor:name="Ruby">
-        <value>true</value>
-      </prop>
-      <prop oor:name="JapaneseFind">
-        <value>true</value>
-      </prop>
-      <prop oor:name="EmphasisMarks">
-        <value>true</value>
-      </prop>
-      <prop oor:name="DoubleLines">
-        <value>true</value>
-      </prop>
-      <prop oor:name="CJKFont">
-        <value>true</value>
-      </prop>
-      <prop oor:name="ChangeCaseMap">
-        <value>true</value>
-      </prop>
-      <prop oor:name="AsianTypography">
-        <value>true</value>
-      </prop>
-    </node>
-  </node>
   <node oor:name="Menus">
     <node oor:name="New">
       <node oor:name="m0" oor:op="replace" install:module="writer">
@@ -262,24 +217,6 @@
         </prop>
       </node>
     </node>
-    <prop oor:name="SendFeedbackURL" oor:type="xs:string">
-      <value>https://hub.libreoffice.org/send-feedback/</value>
-    </prop>
-    <prop oor:name="QA_URL" oor:type="xs:string">
-      <value>https://hub.libreoffice.org/forum/</value>
-    </prop>
-    <prop oor:name="DocumentationURL" oor:type="xs:string">
-      <value>https://hub.libreoffice.org/documentation/</value>
-    </prop>
-    <prop oor:name="InstallJavaURL" oor:type="xs:string">
-      <value>https://hub.libreoffice.org/InstallJava/</value>
-    </prop>
-    <prop oor:name="VolunteerURL" oor:type="xs:string">
-      <value>https://hub.libreoffice.org/volunteersupport/</value>
-    </prop>
-    <prop oor:name="ExtensionsURL" oor:type="xs:string">
-      <value>https://hub.libreoffice.org/extensions/</value>
-    </prop>
   </node>
   <node oor:name="Forms">
     <node oor:name="ControlLayout">
@@ -299,8 +236,6 @@
     </node>
   </node>
   <node oor:name="Misc">
-    <prop oor:name="UseSystemColorDialog">
-    </prop>
     <prop oor:name="UseSystemFileDialog">
     </prop>
     <prop oor:name="UseSystemPrintDialog" install:module="macosx">

@@ -31,7 +31,8 @@
 
 
 using namespace osl;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
 using namespace com::sun::star::lang;
 
 namespace comphelper
@@ -214,7 +215,7 @@ sal_Int32 OInterfaceContainerHelper2::removeInterface( const Reference<XInterfac
     {
         // It is not valid to compare the pointer directly, but it's faster.
         auto it = std::find_if(aData.pAsVector->begin(), aData.pAsVector->end(),
-            [&rListener](const css::uno::Reference<css::uno::XInterface>& rItem) {
+            [&rListener](const cpo::uno::Reference<cpo::uno::XInterface>& rItem) {
                 return rItem.get() == rListener.get(); });
 
         // interface not found, use the correct compare method
@@ -275,7 +276,7 @@ void OInterfaceContainerHelper2::disposeAndClear( const EventObject & rEvt )
             if( xLst.is() )
                 xLst->disposing( rEvt );
         }
-        catch ( RuntimeException & )
+        catch ( cpo::uno::RuntimeException & )
         {
             // be robust, if e.g. a remote bridge has disposed already.
             // there is no way to delegate the error to the caller :o(.

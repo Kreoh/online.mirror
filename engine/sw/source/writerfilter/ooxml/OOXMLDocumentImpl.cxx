@@ -51,7 +51,10 @@
 // this extern variable is declared in OOXMLStreamImpl.hxx
 OUString customTarget;
 OUString embeddingsTarget;
+
 using namespace ::com::sun::star;
+using namespace ::cpo;
+
 namespace writerfilter::ooxml
 {
 
@@ -102,7 +105,7 @@ void OOXMLDocument::resolveFastSubStream(Stream & rStreamHandler,
 
     if (xParser.is())
     {
-        uno::Reference<uno::XComponentContext> xContext(mpStream->getContext());
+        uno::Reference<cpo::uno::XComponentContext> xContext(mpStream->getContext());
         rtl::Reference<OOXMLFastDocumentHandler> pDocHandler =
                         new OOXMLFastDocumentHandler(xContext, &rStreamHandler, this, mnXNoteId);
 
@@ -154,7 +157,7 @@ uno::Reference<xml::dom::XDocument> OOXMLDocument::importSubStream(OOXMLStream::
     {
         try
         {
-            uno::Reference<uno::XComponentContext> xContext(mpStream->getContext());
+            uno::Reference<cpo::uno::XComponentContext> xContext(mpStream->getContext());
             uno::Reference<xml::dom::XDocumentBuilder> xDomBuilder(xml::dom::DocumentBuilder::create(xContext));
             xRet = xDomBuilder->parse(xInputStream);
         }
@@ -204,7 +207,7 @@ void OOXMLDocument::importSubStreamRelations(const OOXMLStream::Pointer_t& pStre
     {
         try
         {
-             uno::Reference<uno::XComponentContext> xcpContext(pStream->getContext());
+             uno::Reference<cpo::uno::XComponentContext> xcpContext(pStream->getContext());
              uno::Reference<xml::dom::XDocumentBuilder> xDomBuilder(xml::dom::DocumentBuilder::create(xcpContext));
              xRelation = xDomBuilder->parse(xcpInputStream);
         }
@@ -332,12 +335,26 @@ void OOXMLDocument::resolveCommentsExtendedStream(Stream& rStream)
     resolveFastSubStream(rStream, OOXMLStream::StreamType_t::COMMENTS_EXTENDED);
 }
 
+void OOXMLDocument::resolveCommentsIdsStream(Stream& rStream)
+{
+    resolveFastSubStream(rStream, OOXMLStream::StreamType_t::COMMENTS_IDS);
+}
+
+void OOXMLDocument::resolveCommentsExtensibleStream(Stream& rStream)
+{
+    resolveFastSubStream(rStream, OOXMLStream::StreamType_t::COMMENTS_EXTENSIBLE);
+}
+
 void OOXMLDocument::resolveComment(Stream & rStream,
                                        const sal_Int32 nId)
 {
     if (!mbCommentsExtendedResolved)
     {
         resolveCommentsExtendedStream(rStream);
+        // The durable ids these two streams share are what ties a comment to the moment it was
+        // written, so both have to be read before the first comment.
+        resolveCommentsIdsStream(rStream);
+        resolveCommentsExtensibleStream(rStream);
         mbCommentsExtendedResolved = true;
     }
 
@@ -345,6 +362,38 @@ void OOXMLDocument::resolveComment(Stream & rStream,
         getXNoteStream(OOXMLStream::StreamType_t::COMMENTS, nId);
 
     resolveFastSubStreamWithId(rStream, pStream, NS_ooxml::LN_annotation);
+}
+
+void OOXMLDocument::resolveWebSettingsStream(Stream& /*rStream*/)
+{
+    OOXMLStream::Pointer_t pStream;
+    try
+    {
+        pStream
+            = OOXMLDocumentFactory::createStream(mpStream, OOXMLStream::StreamType_t::WEBSETTINGS);
+    }
+    catch (cpo::uno::Exception const&)
+    {
+        // No webSettings relationship
+        return;
+    }
+    if (!pStream)
+        return;
+
+    uno::Reference<io::XInputStream> xInputStream = pStream->getDocumentStream();
+    if (!xInputStream.is())
+        return;
+
+    try
+    {
+        uno::Reference<xml::dom::XDocumentBuilder> xDomBuilder(
+            xml::dom::DocumentBuilder::create(pStream->getContext()));
+        mxWebSettingsDom = xDomBuilder->parse(xInputStream);
+    }
+    catch (cpo::uno::Exception const&)
+    {
+        TOOLS_WARN_EXCEPTION("writerfilter", "failed to parse word/webSettings.xml");
+    }
 }
 
 OOXMLPropertySet * OOXMLDocument::getPicturePropSet
@@ -433,7 +482,7 @@ namespace {
 // Ensures that the indicator is reset after exiting OOXMLDocument::resolve
 class StatusIndicatorGuard{
 public:
-    explicit StatusIndicatorGuard(css::uno::Reference<css::task::XStatusIndicator> xStatusIndicator)
+    explicit StatusIndicatorGuard(cpo::uno::Reference<css::task::XStatusIndicator> xStatusIndicator)
         :mxStatusIndicator(std::move(xStatusIndicator))
     {
     }
@@ -445,7 +494,7 @@ public:
     }
 
 private:
-    css::uno::Reference<css::task::XStatusIndicator> mxStatusIndicator;
+    cpo::uno::Reference<css::task::XStatusIndicator> mxStatusIndicator;
 };
 }
 
@@ -487,7 +536,7 @@ void OOXMLDocument::resolve(Stream & rStream)
     if (!xParser.is())
         return;
 
-    uno::Reference<uno::XComponentContext> xContext(mpStream->getContext());
+    uno::Reference<cpo::uno::XComponentContext> xContext(mpStream->getContext());
 
     rStream.setDocumentReference(this);
 
@@ -512,7 +561,9 @@ void OOXMLDocument::resolve(Stream & rStream)
     resolveEmbeddingsStream(mpStream);
 
     // Custom xml's are handled as part of grab bag.
-    resolveCustomXmlStream(rStream);
+    resolveCustomXmlStream();
+
+    resolveWebSettingsStream(rStream);
 
     resolveFastSubStream(rStream, OOXMLStream::StreamType_t::FONTTABLE);
     resolveFastSubStream(rStream, OOXMLStream::StreamType_t::STYLES);
@@ -537,7 +588,7 @@ void OOXMLDocument::resolve(Stream & rStream)
         if (!rShell || !rShell->IsContinueImportOnFilterExceptions())
             throw;
     }
-    catch (uno::RuntimeException const&)
+    catch (cpo::uno::RuntimeException const&)
     {
         throw;
     }
@@ -569,7 +620,7 @@ void OOXMLDocument::incrementProgress()
     }
 }
 
-void OOXMLDocument::resolveCustomXmlStream(Stream & rStream)
+void OOXMLDocument::resolveCustomXmlStream()
 {
     // Resolving all item[n].xml files from CustomXml folder.
     uno::Reference<embed::XRelationshipAccess> xRelationshipAccess;
@@ -609,7 +660,6 @@ void OOXMLDocument::resolveCustomXmlStream(Stream & rStream)
             {
                 aCustomXmlDomList.push_back(customXmlTemp);
                 aCustomXmlDomPropsList.push_back(mxCustomXmlProsDom);
-                resolveFastSubStream(rStream, OOXMLStream::StreamType_t::CUSTOMXML);
             }
 
             bFound = false;
@@ -657,6 +707,8 @@ void OOXMLDocument::resolveGlossaryStream(Stream & /*rStream*/)
 
         const OUString gType = aRelDefinition.getOrDefault(u"Type"_ustr, OUString{});
         OOXMLStream::StreamType_t nType(OOXMLStream::StreamType_t::UNKNOWN);
+        // A part that has no kind of its own is reached by the relationship that names it.
+        bool bByRelation = false;
         if (gType == u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"_ustr || gType == u"http://purl.oclc.org/ooxml/officeDocument/relationships/settings"_ustr)
         {
             nType = OOXMLStream::StreamType_t::SETTINGS;
@@ -687,6 +739,19 @@ void OOXMLDocument::resolveGlossaryStream(Stream & /*rStream*/)
             nType = OOXMLStream::StreamType_t::FONTTABLE;
             aRelDefinition.put(sContentType, u"application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"_ustr);
         }
+        else if (gType == u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"_ustr || gType == u"http://purl.oclc.org/ooxml/officeDocument/relationships/numbering"_ustr)
+        {
+            nType = OOXMLStream::StreamType_t::NUMBERING;
+            aRelDefinition.put(sContentType, u"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"_ustr);
+        }
+        else if (gType == u"http://schemas.microsoft.com/office/2007/relationships/stylesWithEffects"_ustr)
+        {
+            // A second copy of the styles, written for a reader that knows the effects the 2007
+            // extensions add. Nothing here reads it, and it is carried over beside the styles it
+            // stands next to, which are carried over as they were read.
+            bByRelation = true;
+            aRelDefinition.put(sContentType, u"application/vnd.ms-word.stylesWithEffects+xml"_ustr);
+        }
         else if (aRelDefinition.getOrDefault(u"TargetMode"_ustr, OUString{}) != "External")
         {
             // Some internal relation, but we don't create a DOM for it here yet?
@@ -697,11 +762,15 @@ void OOXMLDocument::resolveGlossaryStream(Stream & /*rStream*/)
             continue;
         }
 
-        if (nType != OOXMLStream::StreamType_t::UNKNOWN)
+        if (nType != OOXMLStream::StreamType_t::UNKNOWN || bByRelation)
         {
             try
             {
-                auto gStream = OOXMLDocumentFactory::createStream(pStream, nType);
+                auto gStream
+                    = bByRelation
+                          ? OOXMLDocumentFactory::createStream(
+                                pStream, aRelDefinition.getOrDefault<OUString>(sId, {}))
+                          : OOXMLDocumentFactory::createStream(pStream, nType);
                 uno::Reference xInputStream = gStream->getDocumentStream();
                 uno::Reference xContext(pStream->getContext());
                 uno::Reference xDomBuilder(xml::dom::DocumentBuilder::create(xContext));
@@ -879,6 +948,11 @@ const uno::Reference<xml::dom::XDocument> & OOXMLDocument::getThemeDom() const
 const cpo::uno::Sequence<uno::Reference<xml::dom::XDocument> >& OOXMLDocument::getCustomXmlDomList( ) const
 {
     return mxCustomXmlDomList;
+}
+
+const uno::Reference<xml::dom::XDocument>& OOXMLDocument::getWebSettingsDom() const
+{
+    return mxWebSettingsDom;
 }
 
 const cpo::uno::Sequence<uno::Reference<xml::dom::XDocument> >& OOXMLDocument::getCustomXmlDomPropsList( ) const

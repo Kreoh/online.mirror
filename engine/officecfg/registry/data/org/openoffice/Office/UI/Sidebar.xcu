@@ -543,32 +543,6 @@
         </prop>
       </node>
 
-      <node oor:name="MediaPlaybackPanel" oor:op="replace">
-        <prop oor:name="Title" oor:type="xs:string">
-          <value xml:lang="en-US">Media Playback</value>
-        </prop>
-        <prop oor:name="Id" oor:type="xs:string">
-          <value>MediaPlaybackPanel</value>
-        </prop>
-        <prop oor:name="DeckId" oor:type="xs:string">
-          <value>PropertyDeck</value>
-        </prop>
-        <prop oor:name="ContextList">
-          <value oor:separator=";">
-            any, Media,  visible ;
-          </value>
-        </prop>
-        <prop oor:name="ImplementationURL" oor:type="xs:string">
-          <value>private:resource/toolpanel/SvxPanelFactory/MediaPlaybackPanel</value>
-        </prop>
-        <prop oor:name="OrderIndex" oor:type="xs:int">
-          <value>100</value>
-        </prop>
-        <prop oor:name="WantsAWT" oor:type="xs:boolean">
-          <value>false</value>
-        </prop>
-      </node>
-
       <node oor:name="PageStylesPanel" oor:op="replace">
         <prop oor:name="Title" oor:type="xs:string">
           <value xml:lang="en-US">Styles</value>
@@ -933,6 +907,11 @@
         </prop>
         <prop oor:name="WantsAWT" oor:type="xs:boolean">
           <value>false</value>
+        </prop>
+        <!-- In online the Line section lives in the notebookbar, which a mobile
+             phone does not have -->
+        <prop oor:name="KitMobilePhoneOnly" oor:type="xs:boolean">
+          <value>true</value>
         </prop>
       </node>
 

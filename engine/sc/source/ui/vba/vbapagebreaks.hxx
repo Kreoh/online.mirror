@@ -26,27 +26,24 @@ namespace com::sun::star::sheet
 {
 class XSheetPageBreak;
 }
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 typedef CollTestImplHelper<ov::excel::XHPageBreaks> ScVbaHPageBreaks_BASE;
 
 class ScVbaHPageBreaks : public ScVbaHPageBreaks_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaHPageBreaks(const css::uno::Reference<ov::XHelperInterface>& xParent,
-                     const css::uno::Reference<css::uno::XComponentContext>& xContext,
-                     const css::uno::Reference<css::sheet::XSheetPageBreak>& xSheetPageBreak);
+    /// @throws cpo::uno::RuntimeException
+    ScVbaHPageBreaks(const cpo::uno::Reference<ov::XHelperInterface>& xParent,
+                     const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
+                     const cpo::uno::Reference<css::sheet::XSheetPageBreak>& xSheetPageBreak);
 
     // XHPageBreaks
-    virtual cpo::uno::Any SAL_CALL Add(const cpo::uno::Any& Before) override;
+    virtual cpo::uno::Any Add(const cpo::uno::Any& Before) override;
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference<css::container::XEnumeration> SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference<css::container::XEnumeration> createEnumeration() override;
     virtual cpo::uno::Any createCollectionObject(const cpo::uno::Any&) override;
 
     // XHelperInterface
@@ -60,19 +57,19 @@ typedef CollTestImplHelper<ov::excel::XVPageBreaks> ScVbaVPageBreaks_BASE;
 class ScVbaVPageBreaks : public ScVbaVPageBreaks_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaVPageBreaks(const css::uno::Reference<ov::XHelperInterface>& xParent,
-                     const css::uno::Reference<css::uno::XComponentContext>& xContext,
-                     const css::uno::Reference<css::sheet::XSheetPageBreak>& xSheetPageBreak);
+    /// @throws cpo::uno::RuntimeException
+    ScVbaVPageBreaks(const cpo::uno::Reference<ov::XHelperInterface>& xParent,
+                     const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
+                     const cpo::uno::Reference<css::sheet::XSheetPageBreak>& xSheetPageBreak);
 
     virtual ~ScVbaVPageBreaks() override;
 
     // XVPageBreaks
-    virtual cpo::uno::Any SAL_CALL Add(const cpo::uno::Any& Before) override;
+    virtual cpo::uno::Any Add(const cpo::uno::Any& Before) override;
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference<css::container::XEnumeration> SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference<css::container::XEnumeration> createEnumeration() override;
     virtual cpo::uno::Any createCollectionObject(const cpo::uno::Any&) override;
 
     // XHelperInterface

@@ -39,6 +39,11 @@ interface DebugTool {
 	onAdd: () => void;
 	onRemove: () => void;
 	input?: DebugToolInput;
+	/// Name of the tool this one belongs under. It is drawn indented and is offered only while
+	/// that tool is on.
+	dependsOn?: string;
+	/// Left running when the debug panel closes, instead of being switched off with it.
+	keepOnClose?: boolean;
 }
 
 interface DebugTimeArray {
@@ -68,6 +73,8 @@ class DebugManager {
 	private _overlayData: OverlaysInterface;
 
 	private tileOverlaysOn: boolean;
+	public renderGeometryOn: boolean;
+	public vectorOn: boolean;
 
 	public tileInvalidationsOn: boolean;
 	private _tileInvalidationMessages: Map<number, string>;
@@ -87,6 +94,8 @@ class DebugManager {
 	private _pingQueue: number[];
 	private _pingTimes: DebugTimeArray;
 	private _pingTimeoutId: TimeoutHdl;
+
+	private _keyWatch: ((event: KeyboardEvent) => void) | undefined;
 
 	public logIncomingMessages: boolean;
 	private logOutgoingMessages: boolean;
@@ -122,6 +131,10 @@ class DebugManager {
 		this._painter = null;
 		this.debugOn = false;
 		this.debugNeverStarted = true;
+
+		// The vector switch starts out at what the document was opened with, and is what the
+		// rendering follows from then on.
+		this.vectorOn = window.coolParams.get('vector') === 'true';
 	}
 
 	public toggle(): void {
@@ -190,9 +203,10 @@ class DebugManager {
 	private _stop(): void {
 		this.debugOn = false;
 
-		// Deactivate all checked tools
+		// Deactivate the checked tools, apart from the ones that are kept: what those draw
+		// stays as it is until the panel is opened again and they are switched off there.
 		for (const entry of this._toolEntries) {
-			if (entry.checkbox.checked) {
+			if (entry.checkbox.checked && !entry.tool.keepOnClose) {
 				entry.tool.onRemove();
 			}
 		}
@@ -237,6 +251,88 @@ class DebugManager {
 		}
 	}
 
+	/*
+		The sections that draw a page from primitives and answer for the mouse are added while a
+		document loads, and only when the vector rendering was on then. The switch turns it on
+		while the document is open, so they are added and removed with it instead.
+	*/
+	private static updateVectorSections(): void {
+		const wanted = RenderManager.isVectorRendering();
+		const present = app.sectionContainer.doesSectionExist(
+			app.CSections.VectorContent.name,
+		);
+		if (wanted === present) return;
+
+		if (wanted) {
+			app.sectionContainer.addSection(new cool.VectorContentSection());
+			app.sectionContainer.addSection(new RenderGeometrySection());
+		} else {
+			app.sectionContainer.removeSection(app.CSections.VectorContent.name);
+			app.sectionContainer.removeSection(app.CSections.RenderGeometry.name);
+		}
+
+		// The objects the client holds answer what lies under the mouse while they are there,
+		// so the engine is asked for the pointer only while they are not.
+		RenderGeometrySection.requestPointerFromServer(!wanted);
+
+		// Drawing from the objects has a layout of its own, with the lawn round the page.
+		ViewLayoutVector.switchTheRendering();
+	}
+
+	/// Offer the tools that belong under the given one, or take the offer away. One that is on
+	/// when the offer goes is switched off first, so what it draws goes with it.
+	private setDependentToolsEnabled(name: string, enabled: boolean): void {
+		for (const entry of this._toolEntries) {
+			if (entry.tool.dependsOn !== name) continue;
+
+			if (!enabled && entry.checkbox.checked) {
+				entry.checkbox.checked = false;
+				entry.tool.onRemove();
+			}
+			entry.checkbox.disabled = !enabled;
+		}
+	}
+
+	/*
+		Every key event of the whole page, with the element it went to and the element that has the
+		focus. The document's own handler sees only what reaches the document container, so a key
+		that goes somewhere else - a toolbar, a dialog, a panel - shows up here and nowhere else.
+	*/
+	private watchKeysAtTheDocument(wanted: boolean): void {
+		if (wanted === (this._keyWatch !== undefined)) return;
+
+		if (!wanted) {
+			document.removeEventListener('keydown', this._keyWatch, true);
+			document.removeEventListener('keyup', this._keyWatch, true);
+			this._keyWatch = undefined;
+			return;
+		}
+
+		const nameOf = (element: Element | null): string =>
+			element
+				? element.tagName +
+					(element.id ? '#' + element.id : '') +
+					(element.className
+						? '.' + String(element.className).split(' ')[0]
+						: '')
+				: 'none';
+
+		this._keyWatch = (event: KeyboardEvent): void => {
+			app.console.log(
+				'key at the document:',
+				event.type,
+				event.key,
+				'to',
+				nameOf(event.target as Element),
+				'focus',
+				nameOf(document.activeElement),
+			);
+		};
+
+		document.addEventListener('keydown', this._keyWatch, true);
+		document.addEventListener('keyup', this._keyWatch, true);
+	}
+
 	private _addDebugTool(tool: DebugTool) {
 		// Create category fieldset if it doesn't exist
 		let fieldset = this._panel.querySelector(
@@ -278,6 +374,14 @@ class DebugManager {
 				toolInput.onChange(value);
 			});
 		}
+		if (tool.dependsOn) {
+			label.className = 'debug-panel-subtool';
+			const owner = this._toolEntries.find(
+				(entry) => entry.tool.name === tool.dependsOn,
+			);
+			checkbox.disabled = owner === undefined || !owner.checkbox.checked;
+		}
+
 		fieldset.appendChild(label);
 
 		this._toolEntries.push({ tool, checkbox });
@@ -301,6 +405,10 @@ class DebugManager {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const self = this; // easier than using (function (){}).bind(this) each time
 
+		// A document drawn from vector primitives has no tiles, so the switches that watch or
+		// steer the tiles are left out of its panel.
+		const tilesDrawn = !RenderManager.isVectorRendering();
+
 		this._addDebugTool({
 			name: 'Data Overlay',
 			category: 'Display',
@@ -320,61 +428,128 @@ class DebugManager {
 			},
 		});
 
-		this._addDebugTool({
-			name: 'Tile Overlays',
-			category: 'Display',
-			startsOn: false,
-			onAdd: function () {
-				Util.ensureValue(self._painter);
-				self.tileOverlaysOn = true;
-				self._painter.update();
-			},
-			onRemove: function () {
-				Util.ensureValue(self._painter);
-				self.tileOverlaysOn = false;
-				self._painter.update();
-			},
-		});
+		// The vector rendering is a Draw and Impress thing: the engine sends the primitives for
+		// those documents only, and switching it in a text document or a spreadsheet would drop
+		// every tile for nothing.
+		const docType = self._docLayer._docType;
+		const vectorDocument = docType === 'presentation' || docType === 'drawing';
 
-		this._addDebugTool({
-			name: 'Tile Invalidations',
-			category: 'Display',
-			startsOn: false,
-			onAdd: function () {
-				self.tileInvalidationsOn = true;
-				self._tileInvalidationMessages = new Map();
-				self._tileInvalidationId = 0;
-				self._tileInvalidationKeypressQueue = [];
-				self._tileInvalidationKeypressTimes = self.getTimeArray();
-				self._tileInvalidationTimeout();
-			},
-			onRemove: function () {
-				Util.ensureValue(self._painter);
-				self.tileInvalidationsOn = false;
-				self.clearOverlayMessage('tileInvalidationMessages');
-				self.clearOverlayMessage('tileInvalidationTime');
-				clearTimeout(self._tileInvalidationTimeoutId);
-				self._painter.update();
-			},
-		});
+		if (vectorDocument)
+			this._addDebugTool({
+				name: 'Vector',
+				category: 'Display',
+				startsOn: cool.VectorRenderingConfig.isEnabled(),
+				keepOnClose: true,
+				onAdd: function () {
+					self.vectorOn = true;
+					RenderManager.reinitialize(self._docLayer._docType);
+					DebugManager.updateVectorSections();
+					GraphicSelection.drawingSwitched();
+					self.setDependentToolsEnabled('Vector', true);
+					app.sectionContainer.requestReDraw();
+				},
+				onRemove: function () {
+					self.setDependentToolsEnabled('Vector', false);
+					self.vectorOn = false;
+					RenderManager.reinitialize(self._docLayer._docType);
+					DebugManager.updateVectorSections();
+					GraphicSelection.drawingSwitched();
 
-		this._addDebugTool({
-			name: 'Tile data',
-			category: 'Display',
-			startsOn: true,
-			onAdd: function () {
-				self.tileDataOn = true;
-				self._tileDataTotalMessages = 0;
-				self._tileDataTotalLoads = 0;
-				self._tileDataTotalUpdates = 0;
-				self._tileDataTotalDeltas = 0;
-				self._tileDataTotalInvalidates = 0;
-			},
-			onRemove: function () {
-				self.tileDataOn = false;
-				self.clearOverlayMessage('top-tileData');
-			},
-		});
+					// The engine and the kit took note that this view draws from the objects when
+					// it first asked for them; they are told it draws from tiles again.
+					if (!RenderManager.isVectorRendering())
+						app.socket.sendMessage('commandvalues command=.uno:DrawFromTiles');
+
+					// The manager that draws tiles starts out holding none, and the next
+					// request for them waits for something to change the view. Ask now.
+					if (!RenderManager.isVectorRendering())
+						self._docLayer._requestNewTiles();
+
+					app.sectionContainer.requestReDraw();
+				},
+			});
+
+		// The geometry of each object is drawn from the vector rendering cache. The tool turns
+		// the drawing of that geometry on. The section that holds it is there whenever the
+		// document is drawn from vector primitives.
+		if (vectorDocument)
+			this._addDebugTool({
+				name: 'Vector Overlays',
+				category: 'Display',
+				startsOn: self.renderGeometryOn,
+				dependsOn: 'Vector',
+				keepOnClose: true,
+				onAdd: function () {
+					self.renderGeometryOn = true;
+					RenderGeometrySection.update();
+				},
+				onRemove: function () {
+					self.renderGeometryOn = false;
+					RenderGeometrySection.update();
+				},
+			});
+
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Tile Overlays',
+				category: 'Display',
+				startsOn: false,
+				onAdd: function () {
+					Util.ensureValue(self._painter);
+					self.tileOverlaysOn = true;
+					self._painter.update();
+				},
+				onRemove: function () {
+					Util.ensureValue(self._painter);
+					self.tileOverlaysOn = false;
+					self._painter.update();
+				},
+			});
+		}
+
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Tile Invalidations',
+				category: 'Display',
+				startsOn: false,
+				onAdd: function () {
+					self.tileInvalidationsOn = true;
+					self._tileInvalidationMessages = new Map();
+					self._tileInvalidationId = 0;
+					self._tileInvalidationKeypressQueue = [];
+					self._tileInvalidationKeypressTimes = self.getTimeArray();
+					self._tileInvalidationTimeout();
+				},
+				onRemove: function () {
+					Util.ensureValue(self._painter);
+					self.tileInvalidationsOn = false;
+					self.clearOverlayMessage('tileInvalidationMessages');
+					self.clearOverlayMessage('tileInvalidationTime');
+					clearTimeout(self._tileInvalidationTimeoutId);
+					self._painter.update();
+				},
+			});
+		}
+
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Tile data',
+				category: 'Display',
+				startsOn: true,
+				onAdd: function () {
+					self.tileDataOn = true;
+					self._tileDataTotalMessages = 0;
+					self._tileDataTotalLoads = 0;
+					self._tileDataTotalUpdates = 0;
+					self._tileDataTotalDeltas = 0;
+					self._tileDataTotalInvalidates = 0;
+				},
+				onRemove: function () {
+					self.tileDataOn = false;
+					self.clearOverlayMessage('top-tileData');
+				},
+			});
+		}
 
 		/*
 		 * Doesn't seem to do anything
@@ -404,33 +579,37 @@ class DebugManager {
 			},
 		});
 
-		this._addDebugTool({
-			name: 'Tile pixel grid section',
-			category: 'Display',
-			startsOn: false,
-			onAdd: function () {
-				Util.ensureValue(self._painter);
-				self._painter._addTilePixelGridSection();
-			},
-			onRemove: function () {
-				Util.ensureValue(self._painter);
-				self._painter._removeTilePixelGridSection();
-			},
-		});
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Tile pixel grid section',
+				category: 'Display',
+				startsOn: false,
+				onAdd: function () {
+					Util.ensureValue(self._painter);
+					self._painter._addTilePixelGridSection();
+				},
+				onRemove: function () {
+					Util.ensureValue(self._painter);
+					self._painter._removeTilePixelGridSection();
+				},
+			});
+		}
 
-		this._addDebugTool({
-			name: 'Tile preload map',
-			category: 'Display',
-			startsOn: false,
-			onAdd: function () {
-				Util.ensureValue(self._painter);
-				self._painter._addPreloadMap();
-			},
-			onRemove: function () {
-				Util.ensureValue(self._painter);
-				self._painter._removePreloadMap();
-			},
-		});
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Tile preload map',
+				category: 'Display',
+				startsOn: false,
+				onAdd: function () {
+					Util.ensureValue(self._painter);
+					self._painter._addPreloadMap();
+				},
+				onRemove: function () {
+					Util.ensureValue(self._painter);
+					self._painter._removePreloadMap();
+				},
+			});
+		}
 
 		if (this._docLayer.isCalc()) {
 			this._addDebugTool({
@@ -536,9 +715,11 @@ class DebugManager {
 			startsOn: true,
 			onAdd: function () {
 				self.logKeyboardEvents = true;
+				self.watchKeysAtTheDocument(true);
 			},
 			onRemove: function () {
 				self.logKeyboardEvents = false;
+				self.watchKeysAtTheDocument(false);
 			},
 		});
 
@@ -566,29 +747,31 @@ class DebugManager {
 			},
 		});
 
-		this._addDebugTool({
-			name: 'Tile Dumping',
-			category: 'Logging',
-			startsOn: false,
-			onAdd: function () {
-				app.socket.sendMessage('toggletiledumping true');
-			},
-			onRemove: function () {
-				app.socket.sendMessage('toggletiledumping false');
-			},
-		});
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Tile Dumping',
+				category: 'Logging',
+				startsOn: false,
+				onAdd: function () {
+					app.socket.sendMessage('toggletiledumping true');
+				},
+				onRemove: function () {
+					app.socket.sendMessage('toggletiledumping false');
+				},
+			});
 
-		this._addDebugTool({
-			name: 'Debug Deltas',
-			category: 'Logging',
-			startsOn: false,
-			onAdd: function () {
-				RenderManager.setDebugDeltas(true);
-			},
-			onRemove: function () {
-				RenderManager.setDebugDeltas(false);
-			},
-		});
+			this._addDebugTool({
+				name: 'Debug Deltas',
+				category: 'Logging',
+				startsOn: false,
+				onAdd: function () {
+					RenderManager.setDebugDeltas(true);
+				},
+				onRemove: function () {
+					RenderManager.setDebugDeltas(false);
+				},
+			});
+		}
 
 		this._addDebugTool({
 			name: 'Event delay watchdog',
@@ -679,17 +862,19 @@ class DebugManager {
 			},
 		});
 
-		this._addDebugTool({
-			name: 'Test refetching tiles',
-			category: 'Functionality',
-			startsOn: false,
-			onAdd: function () {
-				BitmapTileManager.setLimitedCacheSize();
-			},
-			onRemove: function () {
-				BitmapTileManager.setDefaultCacheSize();
-			},
-		});
+		if (tilesDrawn) {
+			this._addDebugTool({
+				name: 'Test refetching tiles',
+				category: 'Functionality',
+				startsOn: false,
+				onAdd: function () {
+					BitmapTileManager.setLimitedCacheSize();
+				},
+				onRemove: function () {
+					BitmapTileManager.setDefaultCacheSize();
+				},
+			});
+		}
 
 		this._addDebugTool({
 			name: 'Randomize user settings',

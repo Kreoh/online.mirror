@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CPPUHELPER_EXC_HLP_HXX
 #define INCLUDED_CPPUHELPER_EXC_HLP_HXX
 
-#include "cpo/uno/Any.hxx"
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <cpo/uno/Any.hxx>
+#include <cppuhelper/cppuhelperdllapi.h>
 
 namespace cppu
 {
@@ -42,7 +42,7 @@ CPPUHELPER_DLLPUBLIC void throwException(const cpo::uno::Any& rExc);
     {
         ...
     }
-    catch (css::uno::RuntimeException &)
+    catch (cpo::uno::RuntimeException &)
     {
         // you ought not handle RuntimeExceptions:
         throw;

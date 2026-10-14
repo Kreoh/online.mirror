@@ -31,13 +31,13 @@
 #include <com/sun/star/connection/ConnectionSetupException.hpp>
 #include <com/sun/star/connection/NoConnectException.hpp>
 #include <com/sun/star/connection/XConnector.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include "connector.hxx"
 
 using namespace ::osl;
 using namespace ::cppu;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::connection;
@@ -52,13 +52,13 @@ namespace {
         explicit OConnector(const Reference< XComponentContext > &xCtx);
 
         // Methods
-        virtual Reference< XConnection > SAL_CALL connect(
+        virtual Reference< XConnection > connect(
             const OUString& sConnectionDescription ) override;
 
     public: // XServiceInfo
-                virtual OUString              SAL_CALL getImplementationName() override;
-                virtual Sequence< OUString >  SAL_CALL getSupportedServiceNames() override;
-                virtual bool              SAL_CALL supportsService(const OUString& ServiceName) override;
+                virtual OUString              getImplementationName() override;
+                virtual Sequence< OUString >  getSupportedServiceNames() override;
+                virtual bool              supportsService(const OUString& ServiceName) override;
     };
 
 }
@@ -68,7 +68,7 @@ OConnector::OConnector(const Reference< XComponentContext > &xCtx)
     , _xCtx( xCtx )
 {}
 
-Reference< XConnection > SAL_CALL OConnector::connect( const OUString& sConnectionDescription )
+Reference< XConnection > OConnector::connect( const OUString& sConnectionDescription )
 {
     // split string into tokens
     try
@@ -166,9 +166,9 @@ Sequence< OUString > OConnector::getSupportedServiceNames()
     return { u"com.sun.star.connection.Connector"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 io_OConnector_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OConnector(context));
 }

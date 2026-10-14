@@ -79,7 +79,7 @@ excludelist:
     - com/sun/star/sheet/XDataPilotDataLayoutFieldSupplier.hpp
     - com/sun/star/sheet/XDataPilotFieldGrouping.hpp
     - com/sun/star/sheet/XDataPilotField.hpp
-    - com/sun/star/sheet/XDataPilotTable2.hpp
+    - com/sun/star/sheet/XDataPilotTable.hpp
     - com/sun/star/sheet/XDataPilotTables.hpp
     sc/inc/datauno.hxx:
     # base class has to be a complete type
@@ -165,7 +165,7 @@ excludelist:
     - com/sun/star/container/XNameAccess.hpp
     - com/sun/star/lang/XServiceInfo.hpp
     - com/sun/star/sheet/FormulaToken.hpp
-    - com/sun/star/sheet/XSheetCondition2.hpp
+    - com/sun/star/sheet/XSheetCondition.hpp
     - com/sun/star/sheet/XMultiFormulaTokens.hpp
     - com/sun/star/sheet/XSheetConditionalEntries.hpp
     - com/sun/star/sheet/XSheetConditionalEntry.hpp
@@ -614,7 +614,7 @@ excludelist:
     - ooo/vba/excel/XRange.hpp
     sc/source/ui/vba/vbarange.cxx:
     # Actually used
-    - com/sun/star/uno/XComponentContext.hpp
+    - cpo/uno/XComponentContext.hpp
     sc/source/ui/vba/vbasheetobjects.hxx:
     # base class has to be a complete type
     - ooo/vba/excel/XGraphicObjects.hpp
@@ -633,7 +633,7 @@ excludelist:
     - ooo/vba/excel/XWindows.hpp
     sc/source/ui/vba/vbaworkbooks.cxx:
     # Actually used
-    - com/sun/star/uno/XComponentContext.hpp
+    - cpo/uno/XComponentContext.hpp
     sc/source/ui/vba/vbaworksheet.hxx:
     # base class has to be a complete type
     - ooo/vba/excel/XWorksheet.hpp
@@ -1031,7 +1031,7 @@ excludelist:
     - com/sun/star/sheet/XNamedRanges.hpp
     sc/source/ui/vba/vbapagebreaks.cxx:
     # Actually used
-    - com/sun/star/uno/XComponentContext.hpp
+    - cpo/uno/XComponentContext.hpp
     sc/source/ui/vba/vbawsfunction.cxx:
     # Actually used
     - com/sun/star/beans/XIntrospectionAccess.hpp

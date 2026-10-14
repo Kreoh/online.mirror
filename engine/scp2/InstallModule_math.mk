@@ -11,15 +11,10 @@ $(eval $(call gb_InstallModule_InstallModule,scp2/math))
 
 $(eval $(call gb_InstallModule_use_auto_install_libs,scp2/math,\
 	math \
-	math_brand \
 ))
 
 $(eval $(call gb_InstallModule_define_if_set,scp2/math,\
 	ENABLE_MACOSX_SANDBOX \
-))
-
-$(eval $(call gb_InstallModule_add_templates,scp2/math,\
-    scp2/source/templates/module_langpack_math \
 ))
 
 $(eval $(call gb_InstallModule_add_scpfiles,scp2/math,\

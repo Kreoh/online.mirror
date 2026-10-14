@@ -281,17 +281,15 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 	var button = window.L.DomUtil.create('button', 'ui-combobox-button ' + builder.options.cssClass, container);
 	button.setAttribute('aria-expanded', false);
 
-	const dataAriaLabel = data.aria && data.aria.label ? data.aria.label : '';
-	const buttonARIALabel = dataAriaLabel
-		? _('Open ') + dataAriaLabel + _(' list')
-		: _('Open list');
-	const updatedAriaLabelData = {
-		labelledBy: data.labelledBy,
-		aria: {
-			label: buttonARIALabel
-		}
-	}
-	JSDialog.SetupA11yLabelForLabelableElement(parentContainer, button, updatedAriaLabelData, builder);
+	app.layoutingService.appendLayoutingTask(function () {
+		app.layoutingService.appendLayoutingTask(function () {
+			const name = JSDialog.GetA11yLabelText(parentContainer, content, data, builder) ||
+				(data.aria && data.aria.label ? data.aria.label : '');
+			button.setAttribute('aria-label', name
+				? _('Open {name}').replace('{name}', name)
+				: _('Open list'));
+		});
+	});
 
 	var arrow = window.L.DomUtil.create('span', builder.options.cssClass + ' ui-listbox-arrow', button);
 	arrow.id = 'listbox-arrow-' + data.id;
@@ -379,8 +377,11 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 	};
 
 	if (data.enabled === false) {
+		container.setAttribute('disabled', 'true');
 		container.disabled = true;
+		content.setAttribute('disabled', 'true');
 		content.disabled = true;
+		button.setAttribute('disabled', 'true');
 		button.disabled = true;
 	}
 
@@ -546,6 +547,15 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 			clickFunction();
 	});
 
+	// The field shows its own text while no picture is there, so the name and
+	// the preview never appear at once.
+	const showValuePreview = function (preview, text, image) {
+		preview.src = image;
+		preview.alt = text;
+		preview.title = text;
+		window.L.DomUtil.addClass(container, 'ui-combobox-rendered-value');
+	};
+
 	container.updateRenders = function (pos) {
 		if (container._selectedValuePos === parseInt(pos)) {
 			var valuePreview = container.querySelector(
@@ -554,7 +564,7 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 				builder.rendersCache[data.id] &&
 				builder.rendersCache[data.id].images[pos];
 			if (valuePreview && cachedValue)
-				valuePreview.src = cachedValue;
+				showValuePreview(valuePreview, entries[pos].text, cachedValue);
 		}
 
 		var dropdownRoot = JSDialog.GetDropdown(data.id);
@@ -588,20 +598,16 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 				return;
 			}
 
-			window.L.DomUtil.addClass(container, 'ui-combobox-rendered-value');
-
 			if (!preview)
 				preview = window.L.DomUtil.create(
 					'img', 'ui-combobox-value-preview', container);
 
-			preview.alt = entry.text;
-			preview.title = entry.text;
-
 			var cache = builder.rendersCache[data.id];
 			if (cache && cache.images[container._selectedValuePos]) {
-				preview.src = cache.images[container._selectedValuePos];
+				showValuePreview(preview, entry.text,
+					cache.images[container._selectedValuePos]);
 			} else {
-				preview.removeAttribute('src');
+				window.L.DomUtil.removeClass(container, 'ui-combobox-rendered-value');
 				var pendingKey = data.id + ':' + container._selectedValuePos;
 				if (!app.pendingOnDemandRenderRequests.has(pendingKey)) {
 					app.pendingOnDemandRenderRequests.add(pendingKey);
@@ -663,6 +669,12 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 		if (JSDialog.GetDropdown(data.id))
 			JSDialog.CloseDropdown(data.id);
 	};
+
+	// The builder sets the tooltip from the widget data after this returns, so mark the box later.
+	if (data.id === 'fontnamecombobox' && builder.map)
+		app.layoutingService.appendLayoutingTask(function () {
+			builder.map.markFontNameBox(container);
+		});
 
 	return false;
 };

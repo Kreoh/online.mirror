@@ -27,6 +27,7 @@
 #include "switchpersistencestream.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 struct SPStreamData_Impl
 {
@@ -88,7 +89,7 @@ void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io:
     uno::Reference< io::XInputStream > xNewInStream = xStream->getInputStream();
     uno::Reference< io::XOutputStream > xNewOutStream = xStream->getOutputStream();
     if ( !xNewInStream.is() || !xNewOutStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     sal_Int64 nPos = 0;
     bool bInOpen = false;
@@ -98,7 +99,7 @@ void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io:
     {
         // check that the length is the same
         if ( m_pStreamData->m_xOrigSeekable->getLength() != xNewSeekable->getLength() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // get the current position
         nPos = m_pStreamData->m_xOrigSeekable->getPosition();
@@ -121,7 +122,7 @@ void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io:
     uno::Reference< io::XSeekable > xNewSeekable( xInputStream, uno::UNO_QUERY_THROW );
     uno::Reference< io::XOutputStream > xNewOutStream;
     if ( !xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     sal_Int64 nPos = 0;
     bool bInOpen = false;
@@ -131,7 +132,7 @@ void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io:
     {
         // check that the length is the same
         if ( m_pStreamData->m_xOrigSeekable->getLength() != xNewSeekable->getLength() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // get the current position
         nPos = m_pStreamData->m_xOrigSeekable->getPosition();
@@ -171,10 +172,10 @@ void SwitchablePersistenceStream::CopyAndSwitchPersistenceTo( const uno::Referen
     uno::Reference< io::XInputStream > xTargetInStream = xTargetStream->getInputStream();
     uno::Reference< io::XOutputStream > xTargetOutStream = xTargetStream->getOutputStream();
     if ( !xTargetInStream.is() || !xTargetOutStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if ( !m_pStreamData->m_xOrigInStream.is() || !m_pStreamData->m_xOrigSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     sal_Int64 nPos = m_pStreamData->m_xOrigSeekable->getPosition();
     m_pStreamData->m_xOrigSeekable->seek( 0 );
@@ -198,7 +199,7 @@ void SwitchablePersistenceStream::CloseAll_Impl()
 }
 
 // css::io::XStream
-uno::Reference< io::XInputStream > SAL_CALL SwitchablePersistenceStream::getInputStream(  )
+uno::Reference< io::XInputStream > SwitchablePersistenceStream::getInputStream(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -207,7 +208,7 @@ uno::Reference< io::XInputStream > SAL_CALL SwitchablePersistenceStream::getInpu
     return static_cast< io::XInputStream* >( this );
 }
 
-uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOutputStream(  )
+uno::Reference< io::XOutputStream > SwitchablePersistenceStream::getOutputStream(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -217,7 +218,7 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 }
 
 // css::io::XInputStream
-::sal_Int32 SAL_CALL SwitchablePersistenceStream::readBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead )
+::sal_Int32 SwitchablePersistenceStream::readBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -226,12 +227,12 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_pStreamData->m_xOrigInStream->readBytes( aData, nBytesToRead );
 }
 
-::sal_Int32 SAL_CALL SwitchablePersistenceStream::readSomeBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead )
+::sal_Int32 SwitchablePersistenceStream::readSomeBytes( cpo::uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -240,7 +241,7 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_pStreamData->m_xOrigInStream->readBytes( aData, nMaxBytesToRead );
 }
@@ -254,7 +255,7 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if (m_pStreamData->m_pByteReader)
         return m_pStreamData->m_pByteReader->readSomeBytes( aData, nBytesToRead );
@@ -267,7 +268,7 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
     }
 }
 
-void SAL_CALL SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
+void SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -276,12 +277,12 @@ void SAL_CALL SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_pStreamData->m_xOrigInStream->skipBytes( nBytesToSkip );
 }
 
-::sal_Int32 SAL_CALL SwitchablePersistenceStream::available(  )
+::sal_Int32 SwitchablePersistenceStream::available(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -290,12 +291,12 @@ void SAL_CALL SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_pStreamData->m_xOrigInStream->available();
 }
 
-void SAL_CALL SwitchablePersistenceStream::closeInput()
+void SwitchablePersistenceStream::closeInput()
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -308,7 +309,7 @@ void SAL_CALL SwitchablePersistenceStream::closeInput()
 }
 
 // css::io::XOutputStream
-void SAL_CALL SwitchablePersistenceStream::writeBytes( const cpo::uno::Sequence< ::sal_Int8 >& aData )
+void SwitchablePersistenceStream::writeBytes( const cpo::uno::Sequence< ::sal_Int8 >& aData )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -320,12 +321,12 @@ void SAL_CALL SwitchablePersistenceStream::writeBytes( const cpo::uno::Sequence<
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigOutStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_pStreamData->m_xOrigOutStream->writeBytes( aData );
 }
 
-void SAL_CALL SwitchablePersistenceStream::flush(  )
+void SwitchablePersistenceStream::flush(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -340,12 +341,12 @@ void SAL_CALL SwitchablePersistenceStream::flush(  )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigOutStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_pStreamData->m_xOrigOutStream->flush();
 }
 
-void SAL_CALL SwitchablePersistenceStream::closeOutput(  )
+void SwitchablePersistenceStream::closeOutput(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -358,7 +359,7 @@ void SAL_CALL SwitchablePersistenceStream::closeOutput(  )
 }
 
 // css::io::XTruncate
-void SAL_CALL SwitchablePersistenceStream::truncate(  )
+void SwitchablePersistenceStream::truncate(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -370,13 +371,13 @@ void SAL_CALL SwitchablePersistenceStream::truncate(  )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigTruncate.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_pStreamData->m_xOrigTruncate->truncate();
 }
 
 // css::io::XSeekable
-void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
+void SwitchablePersistenceStream::seek( ::sal_Int64 location )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -385,12 +386,12 @@ void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_pStreamData->m_xOrigSeekable->seek( location );
 }
 
-::sal_Int64 SAL_CALL SwitchablePersistenceStream::getPosition(  )
+::sal_Int64 SwitchablePersistenceStream::getPosition(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -399,12 +400,12 @@ void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_pStreamData->m_xOrigSeekable->getPosition();
 }
 
-::sal_Int64 SAL_CALL SwitchablePersistenceStream::getLength(  )
+::sal_Int64 SwitchablePersistenceStream::getLength(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -413,12 +414,12 @@ void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
 
     // the original stream data should be provided
     if ( !m_pStreamData->m_xOrigSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_pStreamData->m_xOrigSeekable->getLength();
 }
 
-void SAL_CALL SwitchablePersistenceStream::waitForCompletion()
+void SwitchablePersistenceStream::waitForCompletion()
 {
     if ( !m_pStreamData )
         throw io::NotConnectedException();

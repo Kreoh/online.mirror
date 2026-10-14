@@ -377,6 +377,7 @@ protected:
     void PutCode( FormulaTokenRef& );
     void Factor();
     void RangeLine();
+    void SpillOperator();
     void UnionLine();
     void IntersectionLine();
     void CallLine();
@@ -481,6 +482,10 @@ private:
     void CheckSetForceArrayParameter( FormulaTokenRef const & rCurr, sal_uInt8 nParam );
 
     void ForceArrayOperator( FormulaTokenRef const & rCurr );
+
+    bool NextTokenIsOpCode( OpCode eOpCode );
+
+    bool NextTokenAsTableRefColumn( OUStringBuffer& rBuffer );
 
     class CurrentFactor
     {

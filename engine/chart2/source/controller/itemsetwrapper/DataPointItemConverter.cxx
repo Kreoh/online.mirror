@@ -59,8 +59,9 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 using namespace ::chart::DataSeriesProperties;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace chart::wrapper {
 
@@ -200,7 +201,7 @@ bool lcl_UseSourceFormatFromItemToPropertySet( sal_uInt16 nWhichId, const SfxIte
 
 DataPointItemConverter::DataPointItemConverter(
     const rtl::Reference<::chart::ChartModel> & xChartModel,
-    const uno::Reference< uno::XComponentContext > & xContext,
+    const uno::Reference< cpo::uno::XComponentContext > & xContext,
     const uno::Reference< beans::XPropertySet > & rPropertySet,
     const rtl::Reference< DataSeries > & xSeries,
     SfxItemPool& rItemPool,

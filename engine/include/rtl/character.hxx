@@ -18,12 +18,13 @@
  */
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 
-#include "sal/types.h"
+#include <sal/types.h>
 
 #include <type_traits>
 
@@ -35,269 +36,201 @@ namespace rtl
 
     @return  True if code is a Unicode code point.
 */
-inline SAL_CONSTEXPR bool isUnicodeCodePoint(sal_uInt32 code) { return code <= 0x10FFFF; }
+inline constexpr bool isUnicodeCodePoint(sal_uInt32 code) { return code <= 0x10FFFF; }
+
+/// @cond INTERNAL
+namespace detail
+{
+template <typename T>
+concept AtMost32BitIntegral = std::integral<T> && sizeof(T) <= sizeof(sal_uInt32)
+                              && !std::same_as<T, bool> && std::same_as<T, std::remove_cv_t<T>>;
+
+/* Excludes char and signed char: a byte >= 0x80 can be negative in them, and would convert to
+   an invalid code point. */
+template <typename T>
+concept CodePointArgument
+    = AtMost32BitIntegral<T> && !std::same_as<T, char> && !std::same_as<T, signed char>;
+}
+/// @endcond
+
+/** Convert a character to a type accepted by the functions below.
+
+    @param c  A character or a Unicode code point.
+
+    @return  c converted to unsigned char if it is char or signed char, so that a byte >= 0x80
+    stays positive; otherwise, c unchanged.
+*/
+template <detail::AtMost32BitIntegral T> constexpr auto toCodePointArgument(T c)
+{
+    if constexpr (detail::CodePointArgument<T>)
+        return c;
+    else
+        return static_cast<unsigned char>(c);
+}
 
 /** Check for ASCII character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII character (0x00--0x7F).
+    @return  True if c is an ASCII character (0x00--0x7F).
  */
-inline SAL_CONSTEXPR bool isAscii(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAscii(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return code <= 0x7F;
 }
 
-bool isAscii(char) = delete;
-bool isAscii(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAscii(T code)
-{
-    return isAscii(sal_uInt32(code));
-}
-
 /** Check for ASCII lower case character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII lower case alphabetic character (ASCII
+    @return  True if c is an ASCII lower case alphabetic character (ASCII
     'a'--'z').
  */
-inline SAL_CONSTEXPR bool isAsciiLowerCase(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiLowerCase(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return code >= 'a' && code <= 'z';
 }
 
-bool isAsciiLowerCase(char) = delete;
-bool isAsciiLowerCase(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiLowerCase(T code)
-{
-    return isAsciiLowerCase(sal_uInt32(code));
-}
-
 /** Check for ASCII upper case character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII upper case alphabetic character (ASCII
+    @return  True if c is an ASCII upper case alphabetic character (ASCII
     'A'--'Z').
  */
-inline SAL_CONSTEXPR bool isAsciiUpperCase(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiUpperCase(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return code >= 'A' && code <= 'Z';
 }
 
-bool isAsciiUpperCase(char) = delete;
-bool isAsciiUpperCase(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiUpperCase(T code)
-{
-    return isAsciiUpperCase(sal_uInt32(code));
-}
-
 /** Check for ASCII alphabetic character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII alphabetic character (ASCII 'A'--'Z' or
+    @return  True if c is an ASCII alphabetic character (ASCII 'A'--'Z' or
     'a'--'z').
  */
-inline SAL_CONSTEXPR bool isAsciiAlpha(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiAlpha(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return isAsciiLowerCase(code) || isAsciiUpperCase(code);
 }
 
-bool isAsciiAlpha(char) = delete;
-bool isAsciiAlpha(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiAlpha(T code)
-{
-    return isAsciiAlpha(sal_uInt32(code));
-}
-
 /** Check for ASCII digit character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII (decimal) digit character (ASCII
+    @return  True if c is an ASCII (decimal) digit character (ASCII
     '0'--'9').
  */
-inline SAL_CONSTEXPR bool isAsciiDigit(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiDigit(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return code >= '0' && code <= '9';
 }
 
-bool isAsciiDigit(char) = delete;
-bool isAsciiDigit(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiDigit(T code)
-{
-    return isAsciiDigit(sal_uInt32(code));
-}
-
 /** Check for ASCII alphanumeric character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII alphanumeric character (ASCII '0'--'9',
+    @return  True if c is an ASCII alphanumeric character (ASCII '0'--'9',
     'A'--'Z', or 'a'--'z').
  */
-inline SAL_CONSTEXPR bool isAsciiAlphanumeric(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiAlphanumeric(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return isAsciiDigit(code) || isAsciiAlpha(code);
 }
 
-bool isAsciiAlphanumeric(char) = delete;
-bool isAsciiAlphanumeric(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiAlphanumeric(T code)
-{
-    return isAsciiAlphanumeric(sal_uInt32(code));
-}
-
 /** Check for ASCII canonic hexadecimal digit character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII canonic (i.e., upper case) hexadecimal
+    @return  True if c is an ASCII canonic (i.e., upper case) hexadecimal
     digit character (ASCII '0'--'9' or 'A'--'F').
  */
-inline SAL_CONSTEXPR bool isAsciiCanonicHexDigit(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiCanonicHexDigit(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return isAsciiDigit(code) || (code >= 'A' && code <= 'F');
 }
 
-bool isAsciiCanonicHexDigit(char) = delete;
-bool isAsciiCanonicHexDigit(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiCanonicHexDigit(T code)
-{
-    return isAsciiCanonicHexDigit(sal_uInt32(code));
-}
-
 /** Check for ASCII hexadecimal digit character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII hexadecimal digit character (ASCII
+    @return  True if c is an ASCII hexadecimal digit character (ASCII
     '0'--'9', 'A'--'F', or 'a'--'f').
  */
-inline SAL_CONSTEXPR bool isAsciiHexDigit(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiHexDigit(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return isAsciiCanonicHexDigit(code) || (code >= 'a' && code <= 'f');
 }
 
-bool isAsciiHexDigit(char) = delete;
-bool isAsciiHexDigit(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiHexDigit(T code)
-{
-    return isAsciiHexDigit(sal_uInt32(code));
-}
-
 /** Check for ASCII octal digit character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII octal digit character (ASCII '0'--'7').
+    @return  True if c is an ASCII octal digit character (ASCII '0'--'7').
  */
-inline SAL_CONSTEXPR bool isAsciiOctalDigit(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiOctalDigit(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return code >= '0' && code <= '7';
 }
 
-bool isAsciiOctalDigit(char) = delete;
-bool isAsciiOctalDigit(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiOctalDigit(T code)
-{
-    return isAsciiOctalDigit(sal_uInt32(code));
-}
-
 /** Check for ASCII white space character.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  True if code is an ASCII white space character as defined by C for
+    @return  True if c is an ASCII white space character as defined by C for
     isspace in the "C" locale (ASCII ' ', '\\f', '\\n', '\\r', '\\t' '\\v').
 */
-inline SAL_CONSTEXPR bool isAsciiWhiteSpace(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr bool isAsciiWhiteSpace(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return code == ' ' || code == '\f' || code == '\n' || code == '\r' || code == '\t'
            || code == '\v';
 }
 
-bool isAsciiWhiteSpace(char) = delete;
-bool isAsciiWhiteSpace(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32), bool>
-isAsciiWhiteSpace(T code)
-{
-    return isAsciiWhiteSpace(sal_uInt32(code));
-}
-
 /** Convert a character, if ASCII, to upper case.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  code converted to ASCII upper case.
+    @return  c converted to ASCII upper case.
 */
-inline SAL_CONSTEXPR sal_uInt32 toAsciiUpperCase(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr sal_uInt32 toAsciiUpperCase(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return isAsciiLowerCase(code) ? code - 32 : code;
 }
 
-sal_uInt32 toAsciiUpperCase(char) = delete;
-sal_uInt32 toAsciiUpperCase(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32),
-                                  sal_uInt32>
-toAsciiUpperCase(T code)
-{
-    return toAsciiUpperCase(sal_uInt32(code));
-}
-
 /** Convert a character, if ASCII, to lower case.
 
-    @param code  A Unicode code point.
+    @param c  A Unicode code point.
 
-    @return  code converted to ASCII lower case.
+    @return  c converted to ASCII lower case.
 */
-inline SAL_CONSTEXPR sal_uInt32 toAsciiLowerCase(sal_uInt32 code)
+template <detail::CodePointArgument T> constexpr sal_uInt32 toAsciiLowerCase(T c)
 {
+    const auto code = static_cast<sal_uInt32>(c);
     assert(isUnicodeCodePoint(code));
     return isAsciiUpperCase(code) ? code + 32 : code;
-}
-
-sal_uInt32 toAsciiLowerCase(char) = delete;
-sal_uInt32 toAsciiLowerCase(signed char) = delete;
-template <typename T>
-inline constexpr std::enable_if_t<std::is_integral_v<T> && sizeof(T) <= sizeof(sal_uInt32),
-                                  sal_uInt32>
-toAsciiLowerCase(T code)
-{
-    return toAsciiLowerCase(sal_uInt32(code));
 }
 
 /** Compare two characters ignoring ASCII case.
@@ -310,7 +243,7 @@ toAsciiLowerCase(T code)
              < 0 if code1 is less than code2,
              > 0 if code1 is greater than code2.
  */
-inline SAL_CONSTEXPR sal_Int32 compareIgnoreAsciiCase(sal_uInt32 code1, sal_uInt32 code2)
+inline constexpr sal_Int32 compareIgnoreAsciiCase(sal_uInt32 code1, sal_uInt32 code2)
 {
     assert(isUnicodeCodePoint(code1));
     assert(isUnicodeCodePoint(code2));
@@ -334,7 +267,7 @@ sal_uInt32 const surrogatesLowLast = 0xDFFF;
 
     @return  True if code is a surrogate code point (0xD800--0xDFFF).
 */
-inline SAL_CONSTEXPR bool isSurrogate(sal_uInt32 code)
+inline constexpr bool isSurrogate(sal_uInt32 code)
 {
     assert(isUnicodeCodePoint(code));
     return code >= detail::surrogatesHighFirst && code <= detail::surrogatesLowLast;
@@ -346,7 +279,7 @@ inline SAL_CONSTEXPR bool isSurrogate(sal_uInt32 code)
 
     @return  True if code is a high surrogate code point (0xD800--0xDBFF).
 */
-inline SAL_CONSTEXPR bool isHighSurrogate(sal_uInt32 code)
+inline constexpr bool isHighSurrogate(sal_uInt32 code)
 {
     assert(isUnicodeCodePoint(code));
     return code >= detail::surrogatesHighFirst && code <= detail::surrogatesHighLast;
@@ -358,7 +291,7 @@ inline SAL_CONSTEXPR bool isHighSurrogate(sal_uInt32 code)
 
     @return  True if code is a low surrogate code point (0xDC00--0xDFFF).
 */
-inline SAL_CONSTEXPR bool isLowSurrogate(sal_uInt32 code)
+inline constexpr bool isLowSurrogate(sal_uInt32 code)
 {
     assert(isUnicodeCodePoint(code));
     return code >= detail::surrogatesLowFirst && code <= detail::surrogatesLowLast;
@@ -370,7 +303,7 @@ inline SAL_CONSTEXPR bool isLowSurrogate(sal_uInt32 code)
 
     @return  The UTF-16 high surrogate half for the give code point.
  */
-inline SAL_CONSTEXPR sal_Unicode getHighSurrogate(sal_uInt32 code)
+inline constexpr sal_Unicode getHighSurrogate(sal_uInt32 code)
 {
     assert(isUnicodeCodePoint(code));
     assert(code >= 0x10000);
@@ -383,7 +316,7 @@ inline SAL_CONSTEXPR sal_Unicode getHighSurrogate(sal_uInt32 code)
 
     @return  The UTF-16 low surrogate half for the give code point.
  */
-inline SAL_CONSTEXPR sal_Unicode getLowSurrogate(sal_uInt32 code)
+inline constexpr sal_Unicode getLowSurrogate(sal_uInt32 code)
 {
     assert(isUnicodeCodePoint(code));
     assert(code >= 0x10000);
@@ -398,7 +331,7 @@ inline SAL_CONSTEXPR sal_Unicode getLowSurrogate(sal_uInt32 code)
 
     @return  The code point represented by the surrogate pair.
 */
-inline SAL_CONSTEXPR sal_uInt32 combineSurrogates(sal_uInt32 high, sal_uInt32 low)
+inline constexpr sal_uInt32 combineSurrogates(sal_uInt32 high, sal_uInt32 low)
 {
     assert(isHighSurrogate(high));
     assert(isLowSurrogate(low));
@@ -416,7 +349,7 @@ inline SAL_CONSTEXPR sal_uInt32 combineSurrogates(sal_uInt32 high, sal_uInt32 lo
     @return  The number of UTF-16 code units placed into the output (either one
     or two).
 */
-inline SAL_CONSTEXPR std::size_t splitSurrogates(sal_uInt32 code, sal_Unicode* output)
+inline constexpr std::size_t splitSurrogates(sal_uInt32 code, sal_Unicode* output)
 {
     assert(isUnicodeCodePoint(code));
     assert(output != NULL);
@@ -439,7 +372,7 @@ inline SAL_CONSTEXPR std::size_t splitSurrogates(sal_uInt32 code, sal_Unicode* o
 
     @return  True if code is a Unicode scalar value.
 */
-inline SAL_CONSTEXPR bool isUnicodeScalarValue(sal_uInt32 code)
+inline constexpr bool isUnicodeScalarValue(sal_uInt32 code)
 {
     return isUnicodeCodePoint(code) && !isSurrogate(code);
 }

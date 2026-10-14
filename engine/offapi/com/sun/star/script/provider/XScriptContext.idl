@@ -31,7 +31,7 @@ module com { module sun { module star { module script { module provider {
     a document. It is required to be passed as the first argument for any
     Java scripts.
 */
-interface XScriptContext : ::com::sun::star::uno::XInterface {
+interface XScriptContext : ::cpo::uno::XInterface {
 
     /**
         Obtain the document reference on which the script can operate
@@ -69,9 +69,9 @@ interface XScriptContext : ::com::sun::star::uno::XInterface {
         other uno components
 
         @returns
-          com::sun::star::uno::XComponentContext interface
+          cpo::uno::XComponentContext interface
     */
-    ::com::sun::star::uno::XComponentContext getComponentContext();
+    ::cpo::uno::XComponentContext getComponentContext();
 
 
 };

@@ -21,7 +21,7 @@
 
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::xml::dom;
 using namespace css::xml::sax;
 
@@ -37,7 +37,7 @@ namespace DOM
 
     void CCDATASection::saxify(const Reference< XDocumentHandler >& i_xHandler)
     {
-        if (!i_xHandler.is()) throw RuntimeException();
+        if (!i_xHandler.is()) throw cpo::uno::RuntimeException();
         Reference< XExtendedDocumentHandler > xExtended(i_xHandler, UNO_QUERY);
         if (xExtended.is()) {
             xExtended->startCDATA();
@@ -46,12 +46,12 @@ namespace DOM
         }
     }
 
-    OUString SAL_CALL CCDATASection::getNodeName()
+    OUString CCDATASection::getNodeName()
     {
         return u"#cdata-section"_ustr;
     }
 
-    OUString SAL_CALL CCDATASection::getNodeValue()
+    OUString CCDATASection::getNodeValue()
     {
         return CCharacterData::getData();
     }

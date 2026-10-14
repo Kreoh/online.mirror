@@ -18,11 +18,11 @@
  */
 
 #include <ucbhelper/commandenvironment.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace com::sun::star::task;
 using namespace com::sun::star::ucb;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace com::sun::star::task { class XInteractionHandler; }
 namespace com::sun::star::ucb { class XProgressHandler; }
@@ -60,13 +60,13 @@ CommandEnvironment::~CommandEnvironment()
 // XCommandEnvironment methods.
 
 // virtual
-Reference< XInteractionHandler > SAL_CALL CommandEnvironment::getInteractionHandler()
+Reference< XInteractionHandler > CommandEnvironment::getInteractionHandler()
 {
     return m_pImpl->m_xInteractionHandler;
 }
 
 // virtual
-Reference< XProgressHandler > SAL_CALL CommandEnvironment::getProgressHandler()
+Reference< XProgressHandler > CommandEnvironment::getProgressHandler()
 {
     return m_pImpl->m_xProgressHandler;
 }

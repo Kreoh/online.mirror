@@ -57,6 +57,13 @@ define gb_Helper_native_path
 $(call gb_Output_error,gb_Helper_native_path: Do not use. Should not be necessary.)
 endef
 
+# Configure writes a space in a detected pathname as %20 and a percent as %25,
+# because a pathname holding a space stops being one word the moment make reads
+# a list. gb_Helper_decode_path turns the pathname back, taking %20 first so
+# that a pathname which held a percent of its own comes back as it was. What it
+# returns belongs in quotes, because it may hold a space again.
+gb_Helper_decode_path = $(subst %25,%,$(subst %20, ,$(1)))
+
 # cygwin seems to eat one backslash when executing command, thus replace with '\\'
 define gb_Helper_windows_path
 $(subst /,\\,$(1))
@@ -77,6 +84,7 @@ $(subst $(TARFILE_LOCATION)/,$(TARFILE_LOCATION_CYG)/,$(subst $(SRCDIR)/,$(SRCDI
 endef
 
 ifneq ($(MSYSTEM),)
+ifneq ($(WSL),)
 # paths to reach into windows realm from within wsl
 SRCDIR_WSL := $(shell $(WSL) wslpath -u $(SRCDIR))
 BUILDDIR_WSL := $(shell $(WSL) wslpath -u $(BUILDDIR))
@@ -88,7 +96,12 @@ define gb_Helper_wsl_path
 $(subst $(TARFILE_LOCATION)/,$(TARFILE_LOCATION_WSL)/,$(subst $(SRCDIR)/,$(SRCDIR_WSL)/,$(subst $(BUILDDIR)/,$(BUILDDIR_WSL)/,$(subst $(INSTDIR)/,$(INSTDIR_WSL)/,$(subst $(WORKDIR)/,$(WORKDIR_WSL)/,$(1))))))
 endef
 else
-# not needed for cygwin
+# msys2-as-helper: the MSYS2 tools (zip, msgfmt, ...) want /c/... paths,
+# which is exactly the cygwin-style conversion
+gb_Helper_wsl_path=$(call gb_Helper_cyg_path,$(1))
+endif
+else
+# not needed for cygwin: the tools there take the C:/... paths as they are
 gb_Helper_wsl_path=$(1)
 endif
 
@@ -96,6 +109,17 @@ else
 # noop for non-Windows
 gb_Helper_wsl_path=$(1)
 gb_Helper_cyg_path=$(1)
+endif
+
+# Info-ZIP builds an archive in a temporary file and moves it into place when it is complete.
+# The Windows build of zip chooses that temporary name without an atomic check, so on Windows each
+# target writes its temporary file in a directory of its own. Every other platform lets zip build
+# the archive where it stands, which gives it the same permissions as any other file the build
+# creates.
+ifeq ($(OS),WNT)
+gb_Helper_zip_temporary_directory = -b $(1)
+else
+gb_Helper_zip_temporary_directory =
 endif
 
 define gb_Helper_make_clean_target
@@ -229,7 +253,25 @@ $$(eval $$(call gb_Output_error,$(1) is not a valid group for installed librarie
 endif
 $(call gb_Helper__register_libraries,$(1),$(3))
 
-gb_Library_MODULE_$(2) += $(filter-out $(gb_MERGEDLIBS),$(3))
+gb_Library_MODULE_$(2) += $(filter-out $(gb_MERGEDLIBS) $(gb_UNITEDLIBS),$(3))
+
+endef
+
+# $(call gb_Helper_register_external_libraries_for_install,external,layer,installmodule,libs)
+define gb_Helper_register_external_libraries_for_install
+$(if $(strip $(4)),,$(call gb_Output_error,gb_Helper_register_external_libraries_for_install: no libraries - need 4 parameters))
+$(call gb_Helper_register_libraries_for_install,$(2),$(3),$(4))
+
+gb_Externals += $(foreach lib,$(4),$(1);native;$$(call gb_Library_get_target,$(lib)))
+
+endef
+
+# for static linking or header only libraries:
+# $(call gb_Helper_LinkTarget_use_external,linktarget,external)
+define gb_Helper_LinkTarget_use_external
+gb_External_StaticLink += $(call gb_LinkTarget__get_workdir_linktargetobject,$(1));$(2)
+$(if $(gb_PARTIAL_BUILD),,$(if $(call gb_LinkTarget__is_merged,$(1)),\
+gb_External_StaticLink += $(call gb_LinkTarget__get_workdir_linktargetobject,$(call gb_Library_get_linktarget,merged));$(2)))
 
 endef
 
@@ -273,6 +315,15 @@ gb_Jar_MODULE_$(2) += $(3)
 
 endef
 
+# $(call gb_Helper_register_external_jars_for_install,external,layer,installmodule,jars)
+define gb_Helper_register_external_jars_for_install
+$(if $(strip $(4)),,$(call gb_Output_error,gb_Helper_register_external_jars_for_install: no jars - need 4 parameters))
+$(call gb_Helper_register_jars_for_install,$(2),$(3),$(4))
+
+gb_Externals += $(foreach jar,$(4),$(1);jar;$$(call gb_Jar_get_install_target,$(jar)))
+
+endef
+
 define gb_Helper__register_packages
 $(foreach target,$(1),\
  $(if $(filter $(target),$(gb_Package_REGISTERED)),\
@@ -296,6 +347,15 @@ $(if $(2),,$(call gb_Output_error,gb_Helper_register_packages_for_install: no pa
 $(call gb_Helper__register_packages,$(2))
 
 gb_Package_MODULE_$(1) += $(2)
+
+endef
+
+# $(call gb_Helper_register_external_packages_for_install,external,installmodule,packages)
+define gb_Helper_register_external_packages_for_install
+$(if $(strip $(3)),,$(call gb_Output_error,gb_Helper_register_external_packages_for_install: no packages - need 3 parameters))
+$(call gb_Helper_register_packages_for_install,$(2),$(3))
+
+gb_Externals += $(foreach pkg,$(3),$(1);pkg;$(pkg))
 
 endef
 
@@ -382,6 +442,14 @@ $(if $(gb_QUIET_EXTERNAL), \
             && rm $$TEMPFILE \
             || ( cat $$TEMPFILE && rm $$TEMPFILE && false ) )), \
     ( $(1) ))
+endef
+
+gb_Helper_LOCALEDIRS := ca-valencia:ca@valencia kmr-Latn:kmr@latin \
+                        sr-Latn:sr@latin hu-Hung:hu@hung
+
+# call gb_Helper_get_localedir,language
+define gb_Helper_get_localedir
+$(or $(patsubst $(1):%,%,$(filter $(1):%,$(gb_Helper_LOCALEDIRS))),$(subst -,_,$(1)))
 endef
 
 # call gb_pkgconfig_file,name,version,cflags,libs[,additional-lines]

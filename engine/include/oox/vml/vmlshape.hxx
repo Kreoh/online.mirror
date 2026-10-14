@@ -24,7 +24,7 @@
 #include <vector>
 
 #include <com/sun/star/awt/Point.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <oox/dllapi.h>
 #include <oox/vml/vmlformatting.hxx>
 #include <rtl/ustring.hxx>
@@ -122,6 +122,10 @@ struct ShapeTypeModel
     explicit            ShapeTypeModel();
 
     void                assignUsed( const ShapeTypeModel& rSource );
+
+    /** Returns true when the shape sits in the text flow, without a position of its own. */
+    bool                isInline() const
+                            { return maPosition != "absolute" && maPosition != "relative"; }
 };
 
 
@@ -267,9 +271,9 @@ public:
     virtual const ShapeBase* getChildById( const OUString& rShapeId ) const;
 
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    css::uno::Reference< css::drawing::XShape >
+    cpo::uno::Reference< css::drawing::XShape >
                         convertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const ShapeParentAnchor* pParentAnchor = nullptr ) const;
 
     /** Returns bounds of Shape */
@@ -285,14 +289,14 @@ protected:
     explicit            ShapeBase( Drawing& rDrawing );
 
     /** Derived classes create the corresponding XShape and insert it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const = 0;
 
     /** Always called after implConvertAndInsert for the same task.*/
-    virtual css::uno::Reference<css::drawing::XShape> finalImplConvertAndInsert(
-        const css::uno::Reference<css::drawing::XShape>& rxShape) const
+    virtual cpo::uno::Reference<css::drawing::XShape> finalImplConvertAndInsert(
+        const cpo::uno::Reference<css::drawing::XShape>& rxShape) const
     {
         return rxShape;
     };
@@ -304,7 +308,7 @@ protected:
 
     /** Converts common shape properties such as formatting attributes. */
     void                convertShapeProperties(
-                            const css::uno::Reference< css::drawing::XShape >& rxShape ) const;
+                            const cpo::uno::Reference< css::drawing::XShape >& rxShape ) const;
 
 protected:
     ShapeModel          maShapeModel;       ///< The model structure containing shape data.
@@ -322,21 +326,21 @@ public:
 
 protected:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
-    virtual css::uno::Reference<css::drawing::XShape> finalImplConvertAndInsert(
-        const css::uno::Reference<css::drawing::XShape>& rxShape) const override;
+    virtual cpo::uno::Reference<css::drawing::XShape> finalImplConvertAndInsert(
+        const cpo::uno::Reference<css::drawing::XShape>& rxShape) const override;
     /** Used by both RectangleShape and ComplexShape. */
-    css::uno::Reference<css::drawing::XShape>createEmbeddedPictureObject(
-        const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+    cpo::uno::Reference<css::drawing::XShape>createEmbeddedPictureObject(
+        const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
         const css::awt::Rectangle& rShapeRect, OUString const & rGraphicPath ) const;
 
-    css::uno::Reference<css::drawing::XShape>createPictureObject(
-            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+    cpo::uno::Reference<css::drawing::XShape>createPictureObject(
+            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
             const css::awt::Rectangle& rShapeRect,
-            css::uno::Reference<css::graphic::XGraphic> const & rxGraphic) const;
+            cpo::uno::Reference<css::graphic::XGraphic> const & rxGraphic) const;
 
 private:
     OUString     maService;          ///< Name of the UNO shape service.
@@ -350,9 +354,9 @@ public:
     explicit            RectangleShape( Drawing& rDrawing );
 private:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference<css::drawing::XShape>
+    virtual cpo::uno::Reference<css::drawing::XShape>
                         implConvertAndInsert(
-                            const css::uno::Reference<css::drawing::XShapes>& rxShapes,
+                            const cpo::uno::Reference<css::drawing::XShapes>& rxShapes,
                             const css::awt::Rectangle& rShapeRect) const override;
 };
 
@@ -373,9 +377,9 @@ public:
 
 private:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 };
 
@@ -384,9 +388,9 @@ class LineShape final : public SimpleShape
 {
 public:
     explicit            LineShape( Drawing& rDrawing );
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 
 
@@ -406,9 +410,9 @@ public:
 
 private:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 };
 
@@ -421,9 +425,9 @@ public:
 
 protected:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 };
 
@@ -437,9 +441,9 @@ public:
 
 private:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 };
 
@@ -466,9 +470,9 @@ public:
 
 private:
     /** Creates the corresponding XShape and inserts it into the passed container. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         implConvertAndInsert(
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 
 private:

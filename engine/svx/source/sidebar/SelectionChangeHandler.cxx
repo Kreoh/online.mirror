@@ -26,7 +26,8 @@
 
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace svx::sidebar {
 
@@ -47,7 +48,7 @@ SelectionChangeHandler::~SelectionChangeHandler()
 }
 
 
-void SAL_CALL SelectionChangeHandler::selectionChanged (const lang::EventObject&)
+void SelectionChangeHandler::selectionChanged (const lang::EventObject&)
 {
     if (maSelectionChangeCallback)
     {
@@ -62,7 +63,7 @@ void SAL_CALL SelectionChangeHandler::selectionChanged (const lang::EventObject&
 }
 
 
-void SAL_CALL SelectionChangeHandler::disposing (const lang::EventObject&)
+void SelectionChangeHandler::disposing (const lang::EventObject&)
 {
 }
 

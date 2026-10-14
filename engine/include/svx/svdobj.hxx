@@ -36,6 +36,7 @@
 #include <tools/link.hxx>
 #include <tools/gen.hxx>
 #include <unotools/resmgr.hxx>
+#include <svx/sdrhandlerails.hxx>
 
 #include <unordered_set>
 
@@ -302,8 +303,8 @@ public:
     // Copy constructor
     SdrObject(SdrModel& rSdrModel, SdrObject const & rSource);
 
-    virtual void SAL_CALL acquire() noexcept override final;
-    virtual void SAL_CALL release() noexcept override final;
+    virtual void acquire() noexcept override final;
+    virtual void release() noexcept override final;
 
     sal_uInt64 GetUniqueID() const { return maUniqueID.getID(); }
 
@@ -513,6 +514,16 @@ public:
     virtual void AddToHdlList(SdrHdlList& rHdlList) const;
     virtual void addCropHandles(SdrHdlList& rTarget) const;
 
+    /** How far the given handle of this object may be moved, in the object's own logic
+        coordinates, which is what SdrHdl::GetPos answers in.
+
+        False where the object says nothing about that handle, and then whoever asked may move it
+        wherever it likes. An object that limits a handle says so here rather than only inside the
+        drag it does itself, so that a reader which runs the drag on its own can hold the handle
+        to the same places.
+     */
+    virtual bool GetHandleRails(const SdrHdl& rHandle, SdrHandleRails& rRails) const;
+
     /// The standard transformations (Move,Resize,Rotate,Mirror,Shear) are
     /// taken over by the View (TakeXorPoly(),...).
     /// Object type specific dragging like corner radius of Rectangle,
@@ -678,6 +689,11 @@ public:
     void SetOutlinerParaObject(std::optional<OutlinerParaObject> pTextObject);
     virtual void NbcSetOutlinerParaObject(std::optional<OutlinerParaObject> pTextObject, bool bAdjustTextFrameWidthAndHeight = true);
     virtual OutlinerParaObject* GetOutlinerParaObject() const;
+
+    // Multiplies every length the text holds - the size of its letters, the room between two
+    // of them, and the room its paragraphs keep between their lines and around themselves - by
+    // the scale for the direction that length runs in
+    void scaleText(double fScaleX, double fScaleY, bool bUndo);
     virtual void NbcReformatText();
 
     void BurnInStyleSheetAttributes();
@@ -815,9 +831,9 @@ public:
     bool deleteUserData(UserDataID aID);
 
     // access to the UNO representation of the shape
-    css::uno::Reference< css::drawing::XShape > getUnoShape();
+    cpo::uno::Reference< css::drawing::XShape > getUnoShape();
 
-    static SdrObject* getSdrObjectFromXShape( const css::uno::Reference< css::uno::XInterface >& xInt );
+    static SdrObject* getSdrObjectFromXShape( const cpo::uno::Reference< cpo::uno::XInterface >& xInt );
 
     // notifies a change in the given property, to all applicable listeners registered at the associated SvxShape
     //
@@ -909,7 +925,7 @@ public:
     ///
     /// The implementation _must_ call the same method of its parent
     /// class (preferably as the first step)!
-    virtual void setUnoShape( const css::uno::Reference< css::drawing::XShape >& _rxUnoShape );
+    virtual void setUnoShape( const cpo::uno::Reference< css::drawing::XShape >& _rxUnoShape );
 
     const cpo::uno::WeakReference< css::drawing::XShape >& getWeakUnoShape() const { return maWeakUnoShape; }
 

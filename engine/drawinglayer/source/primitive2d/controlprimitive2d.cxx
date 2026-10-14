@@ -23,7 +23,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/awt/XControl.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <utility>
 #include <rtl/ustrbuf.hxx>
@@ -42,6 +42,7 @@
 #include <officecfg/Office/Common.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace drawinglayer::primitive2d
 {
@@ -64,7 +65,7 @@ namespace drawinglayer::primitive2d
             if(aUnoControlTypeName.isEmpty())
                 return;
 
-            const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+            const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
             uno::Reference< awt::XControl > xXControl(
                 xContext->getServiceManager()->createInstanceWithContext(aUnoControlTypeName, xContext), uno::UNO_QUERY);
 

@@ -111,6 +111,10 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/core/extedit \
     svx/source/core/graphichelper \
     svx/source/core/extendedprimitive2dxmldump \
+    svx/source/seclabel/SecLabelStore \
+    svx/source/seclabel/SecurityLabelTarget \
+    svx/source/seclabel/SpifPolicy \
+    svx/source/seclabel/StanagLabel \
     svx/source/customshapes/EnhancedCustomShape2d \
     svx/source/customshapes/EnhancedCustomShapeFunctionParser \
     svx/source/customshapes/EnhancedCustomShapeGeometry \
@@ -424,6 +428,7 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/table/tablemodel \
     svx/source/table/tablerow \
     svx/source/table/tablerows \
+    svx/source/table/TableStylePreviewPaint \
     svx/source/table/tableundo \
     svx/source/table/viewcontactoftableobj \
     svx/source/theme/ThemeColorChangerCommon \

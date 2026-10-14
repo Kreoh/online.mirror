@@ -147,7 +147,6 @@
 #define RID_SVXSTR_XMLSEC_QUERY_LOSINGSCRIPTINGSIGNATURE NC_("RID_SVXSTR_XMLSEC_QUERY_LOSINGSCRIPTINGSIGNATURE", "Saving with password will remove all existing scripting signatures, and (depending on macro security settings) macros in the document may no longer be runnable.\nDo you want to continue saving the document with password?")
 #define RID_SVXSTR_XMLSEC_QUERY_SAVEBEFORESIGN  NC_("RID_SVXSTR_XMLSEC_QUERY_SAVEBEFORESIGN", "The document has to be saved before it can be signed.\nDo you want to save the document?")
 #define STR_QUERY_CANCELCHECKOUT                NC_("STR_QUERY_CANCELCHECKOUT", "This will discard all changes on the server since check-out.\nDo you want to proceed?")
-#define STR_QUERY_REMEMBERSIGNATURE             NC_("STR_QUERY_REMEMBERSIGNATURE", "Do you want to remember that signature for each save?")
 #define STR_INFO_WRONGDOCFORMAT                 NC_("STR_INFO_WRONGDOCFORMAT", "This document must be saved in OpenDocument file format before it can be digitally signed.")
 #define RID_XMLSEC_DOCUMENTSIGNED               NC_("RID_XMLSEC_DOCUMENTSIGNED", " (Signed)")
 #define STR_EMBEDDED_TITLE                      NC_("STR_EMBEDDED_TITLE", " (Embedded document)")
@@ -238,9 +237,6 @@
 
 #define STR_STYLE_FILTER_HIERARCHICAL           NC_("STR_STYLE_FILTER_HIERARCHICAL", "Hierarchical")
 
-#define STR_MACRO_LOSS                          NC_("STR_MACRO_LOSS", "Do you really want to cancel the recording? Any steps recorded up to this point will be lost.")
-#define STR_CANCEL_RECORDING                    NC_("STR_CANCEL_RECORDING", "Cancel Recording")
-
 #define RID_CNT_STR_WAITING                     NC_("RID_CNT_STR_WAITING", "The templates are being initialized for first-time usage.")
 
 #define STR_NODEFPRINTER                        NC_("STR_NODEFPRINTER", "No default printer found.\nPlease choose a printer and try again.")
@@ -296,7 +292,6 @@
 #define STR_MACROS_DISABLED_CONTENT_UNSIGNED    NC_("STR_MACROS_DISABLED_CONTENT_UNSIGNED", "Macros are signed, but the document (containing document events) is not signed.")
 #define STR_MACROS                              NC_("STR_MACROS", "Show Macros")
 #define STR_SECURITY_OPTIONS                    NC_("STR_MACROS", "Show Security Options")
-#define STR_EVENTS                              NC_("STR_EVENTS", "Show Events")
 
 // Translators: default Impress template names
 #define STR_TEMPLATE_NAME1                      NC_("STR_TEMPLATE_NAME1", "Grey Elegant")

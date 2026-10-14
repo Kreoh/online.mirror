@@ -42,6 +42,7 @@
 #include <cellsuno.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 //  an AutoFormat has always 16 entries
 #define SC_AF_FIELD_COUNT 16
@@ -153,8 +154,8 @@ ScAutoFormatsObj::~ScAutoFormatsObj()
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-ScAutoFormatsObj_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ScAutoFormatsObj_get_implementation(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SolarMutexGuard aGuard;
     ScDLL::Init();
@@ -182,12 +183,12 @@ rtl::Reference<ScAutoFormatObj> ScAutoFormatsObj::GetObjectByName_Impl(std::u16s
 
 // container::XNameContainer
 
-void SAL_CALL ScAutoFormatsObj::insertByName( const OUString& aName, const cpo::uno::Any& aElement )
+void ScAutoFormatsObj::insertByName( const OUString& aName, const cpo::uno::Any& aElement )
 {
     SolarMutexGuard aGuard;
     bool bDone = false;
     //  Reflection need not be uno::XInterface, can be any interface...
-    uno::Reference< uno::XInterface > xInterface(aElement, uno::UNO_QUERY);
+    uno::Reference< cpo::uno::XInterface > xInterface(aElement, uno::UNO_QUERY);
     if ( xInterface.is() )
     {
         ScAutoFormatObj* pFormatObj = dynamic_cast<ScAutoFormatObj*>( xInterface.get() );
@@ -219,7 +220,7 @@ void SAL_CALL ScAutoFormatsObj::insertByName( const OUString& aName, const cpo::
             else
             {
                 OSL_FAIL("AutoFormat could not be inserted");
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             }
         }
     }
@@ -231,7 +232,7 @@ void SAL_CALL ScAutoFormatsObj::insertByName( const OUString& aName, const cpo::
     }
 }
 
-void SAL_CALL ScAutoFormatsObj::replaceByName( const OUString& aName, const cpo::uno::Any& aElement )
+void ScAutoFormatsObj::replaceByName( const OUString& aName, const cpo::uno::Any& aElement )
 {
     SolarMutexGuard aGuard;
     //! combine?
@@ -239,7 +240,7 @@ void SAL_CALL ScAutoFormatsObj::replaceByName( const OUString& aName, const cpo:
     insertByName( aName, aElement );
 }
 
-void SAL_CALL ScAutoFormatsObj::removeByName( const OUString& aName )
+void ScAutoFormatsObj::removeByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
     ScAutoFormat* pFormats = ScGlobal::GetOrCreateAutoFormat();
@@ -258,7 +259,7 @@ void SAL_CALL ScAutoFormatsObj::removeByName( const OUString& aName )
 
 // container::XEnumerationAccess
 
-uno::Reference<container::XEnumeration> SAL_CALL ScAutoFormatsObj::createEnumeration()
+uno::Reference<container::XEnumeration> ScAutoFormatsObj::createEnumeration()
 {
     SolarMutexGuard aGuard;
     return new ScIndexEnumeration(this, u"com.sun.star.sheet.TableAutoFormatEnumeration"_ustr);
@@ -266,13 +267,13 @@ uno::Reference<container::XEnumeration> SAL_CALL ScAutoFormatsObj::createEnumera
 
 // container::XIndexAccess
 
-sal_Int32 SAL_CALL ScAutoFormatsObj::getCount()
+sal_Int32 ScAutoFormatsObj::getCount()
 {
     SolarMutexGuard aGuard;
     return ScGlobal::GetOrCreateAutoFormat()->size();
 }
 
-cpo::uno::Any SAL_CALL ScAutoFormatsObj::getByIndex( sal_Int32 nIndex )
+cpo::uno::Any ScAutoFormatsObj::getByIndex( sal_Int32 nIndex )
 {
     SolarMutexGuard aGuard;
     rtl::Reference< ScAutoFormatObj > xFormat(GetObjectByIndex_Impl(static_cast<sal_uInt16>(nIndex)));
@@ -281,12 +282,12 @@ cpo::uno::Any SAL_CALL ScAutoFormatsObj::getByIndex( sal_Int32 nIndex )
     return cpo::uno::Any(uno::Reference< container::XNamed >(xFormat));
 }
 
-cpo::uno::Type SAL_CALL ScAutoFormatsObj::getElementType()
+cpo::uno::Type ScAutoFormatsObj::getElementType()
 {
     return cppu::UnoType<container::XNamed>::get();    // must match getByIndex
 }
 
-bool SAL_CALL ScAutoFormatsObj::hasElements()
+bool ScAutoFormatsObj::hasElements()
 {
     SolarMutexGuard aGuard;
     return ( getCount() != 0 );
@@ -294,7 +295,7 @@ bool SAL_CALL ScAutoFormatsObj::hasElements()
 
 // container::XNameAccess
 
-cpo::uno::Any SAL_CALL ScAutoFormatsObj::getByName( const OUString& aName )
+cpo::uno::Any ScAutoFormatsObj::getByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
     rtl::Reference< ScAutoFormatObj > xFormat(GetObjectByName_Impl(aName));
@@ -303,7 +304,7 @@ cpo::uno::Any SAL_CALL ScAutoFormatsObj::getByName( const OUString& aName )
     return cpo::uno::Any(uno::Reference< container::XNamed >(xFormat));
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL ScAutoFormatsObj::getElementNames()
+cpo::uno::Sequence<OUString> ScAutoFormatsObj::getElementNames()
 {
     SolarMutexGuard aGuard;
     ScAutoFormat* pFormats = ScGlobal::GetOrCreateAutoFormat();
@@ -318,7 +319,7 @@ cpo::uno::Sequence<OUString> SAL_CALL ScAutoFormatsObj::getElementNames()
     return aSeq;
 }
 
-bool SAL_CALL ScAutoFormatsObj::hasByName( const OUString& aName )
+bool ScAutoFormatsObj::hasByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
     sal_uInt16 nDummy;
@@ -365,7 +366,7 @@ rtl::Reference<ScAutoFormatFieldObj> ScAutoFormatObj::GetObjectByIndex_Impl(sal_
 
 // container::XEnumerationAccess
 
-uno::Reference<container::XEnumeration> SAL_CALL ScAutoFormatObj::createEnumeration()
+uno::Reference<container::XEnumeration> ScAutoFormatObj::createEnumeration()
 {
     SolarMutexGuard aGuard;
     return new ScIndexEnumeration(this, u"com.sun.star.sheet.TableAutoFormatEnumeration"_ustr);
@@ -373,7 +374,7 @@ uno::Reference<container::XEnumeration> SAL_CALL ScAutoFormatObj::createEnumerat
 
 // container::XIndexAccess
 
-sal_Int32 SAL_CALL ScAutoFormatObj::getCount()
+sal_Int32 ScAutoFormatObj::getCount()
 {
     SolarMutexGuard aGuard;
     if (IsInserted())
@@ -382,7 +383,7 @@ sal_Int32 SAL_CALL ScAutoFormatObj::getCount()
         return 0;
 }
 
-cpo::uno::Any SAL_CALL ScAutoFormatObj::getByIndex( sal_Int32 nIndex )
+cpo::uno::Any ScAutoFormatObj::getByIndex( sal_Int32 nIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -394,12 +395,12 @@ cpo::uno::Any SAL_CALL ScAutoFormatObj::getByIndex( sal_Int32 nIndex )
     return cpo::uno::Any();
 }
 
-cpo::uno::Type SAL_CALL ScAutoFormatObj::getElementType()
+cpo::uno::Type ScAutoFormatObj::getElementType()
 {
     return cppu::UnoType<beans::XPropertySet>::get();  // must match getByIndex
 }
 
-bool SAL_CALL ScAutoFormatObj::hasElements()
+bool ScAutoFormatObj::hasElements()
 {
     SolarMutexGuard aGuard;
     return ( getCount() != 0 );
@@ -407,7 +408,7 @@ bool SAL_CALL ScAutoFormatObj::hasElements()
 
 // container::XNamed
 
-OUString SAL_CALL ScAutoFormatObj::getName()
+OUString ScAutoFormatObj::getName()
 {
     SolarMutexGuard aGuard;
     ScAutoFormat* pFormats = ScGlobal::GetOrCreateAutoFormat();
@@ -417,7 +418,7 @@ OUString SAL_CALL ScAutoFormatObj::getName()
     return OUString();
 }
 
-void SAL_CALL ScAutoFormatObj::setName( const OUString& aNewName )
+void ScAutoFormatObj::setName( const OUString& aNewName )
 {
     SolarMutexGuard aGuard;
     ScAutoFormat* pFormats = ScGlobal::GetOrCreateAutoFormat();
@@ -427,7 +428,7 @@ void SAL_CALL ScAutoFormatObj::setName( const OUString& aNewName )
         lcl_FindAutoFormatIndex( *pFormats, aNewName, nDummy ))
     {
         //  not inserted or name exists
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     ScAutoFormat::iterator it = pFormats->begin();
@@ -457,14 +458,14 @@ void SAL_CALL ScAutoFormatObj::setName( const OUString& aNewName )
 
 // beans::XPropertySet
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL ScAutoFormatObj::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> ScAutoFormatObj::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
     static uno::Reference< beans::XPropertySetInfo > aRef(new SfxItemPropertySetInfo( aPropSet.getPropertyMap() ));
     return aRef;
 }
 
-void SAL_CALL ScAutoFormatObj::setPropertyValue(
+void ScAutoFormatObj::setPropertyValue(
                         const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     SolarMutexGuard aGuard;
@@ -495,7 +496,7 @@ void SAL_CALL ScAutoFormatObj::setPropertyValue(
     pFormats->SetSaveLater(true);
 }
 
-cpo::uno::Any SAL_CALL ScAutoFormatObj::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any ScAutoFormatObj::getPropertyValue( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
     cpo::uno::Any aAny;
@@ -546,14 +547,14 @@ ScAutoFormatFieldObj::~ScAutoFormatFieldObj()
 
 // beans::XPropertySet
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL ScAutoFormatFieldObj::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> ScAutoFormatFieldObj::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
     static uno::Reference< beans::XPropertySetInfo > aRef(new SfxItemPropertySetInfo( aPropSet.getPropertyMap() ));
     return aRef;
 }
 
-void SAL_CALL ScAutoFormatFieldObj::setPropertyValue(
+void ScAutoFormatFieldObj::setPropertyValue(
                         const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     SolarMutexGuard aGuard;
@@ -654,7 +655,7 @@ void SAL_CALL ScAutoFormatFieldObj::setPropertyValue(
     }
 }
 
-cpo::uno::Any SAL_CALL ScAutoFormatFieldObj::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any ScAutoFormatFieldObj::getPropertyValue( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
     cpo::uno::Any aVal;

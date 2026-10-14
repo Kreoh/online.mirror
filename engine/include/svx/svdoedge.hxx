@@ -63,7 +63,9 @@ public:
     void SetConnectorId( sal_uInt16 nId ) { m_nConId = nId; };
 
     bool IsBestConnection() const { return m_bBestConn; };
+    bool IsBestVertex() const { return m_bBestVertex; };
     bool IsAutoVertex() const { return m_bAutoVertex; };
+    bool IsAutoCorner() const { return m_bAutoCorner; };
     sal_uInt16 GetConnectorId() const { return m_nConId; };
     SdrObject* GetSdrObject() const { return m_pSdrObj; }
 };
@@ -230,6 +232,10 @@ public:
 
     void    SetEdgeTrackPath( const basegfx::B2DPolyPolygon& rPoly );
     basegfx::B2DPolyPolygon GetEdgeTrackPath() const;
+    /// True while the run was set from outside rather than laid out, and is kept as it is.
+    bool IsEdgeTrackUserDefined() const { return m_bEdgeTrackUserDefined; }
+    /// Lets go of a run that was set from outside, so the next layout works it out again.
+    void ForgetUserDefinedEdgeTrack() { m_bEdgeTrackUserDefined = false; }
 
     SAL_DLLPRIVATE virtual basegfx::B2DPolyPolygon TakeXorPoly() const override;
     SAL_DLLPRIVATE virtual sal_uInt32 GetHdlCount() const override;
@@ -269,8 +275,8 @@ public:
     SAL_DLLPRIVATE virtual Point GetSnapPoint(sal_uInt32 i) const override;
     SAL_DLLPRIVATE virtual bool IsPolyObj() const override;
     SAL_DLLPRIVATE virtual sal_uInt32 GetPointCount() const override;
-    SAL_DLLPRIVATE virtual Point GetPoint(sal_uInt32 i) const override;
-    SAL_DLLPRIVATE virtual void NbcSetPoint(const Point& rPnt, sal_uInt32 i) override;
+    virtual Point GetPoint(sal_uInt32 i) const override;
+    virtual void NbcSetPoint(const Point& rPnt, sal_uInt32 i) override;
 
     SAL_DLLPRIVATE virtual std::unique_ptr<SdrObjGeoData> NewGeoData() const override;
     SAL_DLLPRIVATE virtual void SaveGeoData(SdrObjGeoData& rGeo) const override;

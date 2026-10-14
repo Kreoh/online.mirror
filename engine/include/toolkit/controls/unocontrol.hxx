@@ -26,14 +26,13 @@
 #include <com/sun/star/beans/XPropertiesChangeListener.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/awt/XUnitConversion.hpp>
-#include <com/sun/star/awt/XStyleSettingsSupplier.hpp>
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <osl/mutex.hxx>
 #include <toolkit/helper/listenermultiplexer.hxx>
 #include <tools/long.hxx>
 #include <comphelper/interfacecontainer3.hxx>
 #include <cppuhelper/weakref.hxx>
-#include <cppuhelper/implbase9.hxx>
+#include <cppuhelper/implbase8.hxx>
 #include <com/sun/star/util/XModeChangeBroadcaster.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <memory>
@@ -60,7 +59,7 @@ struct UnoControlComponentInfos
 struct UnoControl_Data;
 
 
-typedef ::cppu::WeakAggImplHelper9  <   css::awt::XControl
+typedef ::cppu::WeakAggImplHelper8  <   css::awt::XControl
                                     ,   css::awt::XWindow2
                                     ,   css::awt::XView
                                     ,   css::beans::XPropertiesChangeListener
@@ -68,7 +67,6 @@ typedef ::cppu::WeakAggImplHelper9  <   css::awt::XControl
                                     ,   css::accessibility::XAccessible
                                     ,   css::util::XModeChangeBroadcaster
                                     ,   css::awt::XUnitConversion
-                                    ,   css::awt::XStyleSettingsSupplier
                                     >   UnoControl_Base;
 
 class TOOLKIT_DLLPUBLIC UnoControl :    public UnoControl_Base
@@ -76,7 +74,7 @@ class TOOLKIT_DLLPUBLIC UnoControl :    public UnoControl_Base
 private:
     ::osl::Mutex    maMutex;
 
-    css::uno::Reference< css::awt::XVclWindowPeer >  mxVclWindowPeer;
+    cpo::uno::Reference< css::awt::XVclWindowPeer >  mxVclWindowPeer;
 
 protected:
     EventListenerMultiplexer            maDisposeListeners;
@@ -88,9 +86,9 @@ protected:
     PaintListenerMultiplexer            maPaintListeners;
     ::comphelper::OInterfaceContainerHelper3<css::util::XModeChangeListener> maModeChangeListeners;
 
-    css::uno::Reference< css::uno::XInterface >       mxContext;
-    css::uno::Reference< css::awt::XControlModel >    mxModel;
-    css::uno::Reference< css::awt::XGraphics >        mxGraphics;
+    cpo::uno::Reference< cpo::uno::XInterface >       mxContext;
+    cpo::uno::Reference< css::awt::XControlModel >    mxModel;
+    cpo::uno::Reference< css::awt::XGraphics >        mxGraphics;
 
     cpo::uno::WeakReferenceHelper   maAccessibleContext;    /// our most recent XAccessibleContext instance
 
@@ -105,11 +103,11 @@ protected:
 
     ::osl::Mutex&                                                               GetMutex() { return maMutex; }
 
-    css::uno::Reference< css::awt::XWindow >          getParentPeer() const;
+    cpo::uno::Reference< css::awt::XWindow >          getParentPeer() const;
     virtual void                                                                updateFromModel();
     void                                                                        peerCreated();
     bool                                                                        ImplCheckLocalize( OUString& _rPossiblyLocalizable );
-    css::uno::Reference< css::awt::XVclWindowPeer >      ImplGetCompatiblePeer();
+    cpo::uno::Reference< css::awt::XVclWindowPeer >      ImplGetCompatiblePeer();
     virtual void                                                                ImplSetPeerProperty( const OUString& rPropName, const cpo::uno::Any& rVal );
     virtual void                                                                PrepareWindowDescriptor( css::awt::WindowDescriptor& rDesc );
     virtual void                                                                ImplModelPropertiesChanged( const cpo::uno::Sequence< css::beans::PropertyChangeEvent >& rEvents );
@@ -117,10 +115,10 @@ protected:
     void                                                                        ImplLockPropertyChangeNotification( const OUString& rPropertyName, bool bLock );
     void                                                                        ImplLockPropertyChangeNotifications( const cpo::uno::Sequence< OUString >& rPropertyNames, bool bLock );
 
-    void DisposeAccessibleContext(css::uno::Reference<
+    void DisposeAccessibleContext(cpo::uno::Reference<
             css::lang::XComponent> const& xContext);
 
-    void setPeer( const css::uno::Reference< css::awt::XVclWindowPeer >& _xPeer)
+    void setPeer( const cpo::uno::Reference< css::awt::XVclWindowPeer >& _xPeer)
     {
         mxVclWindowPeer = _xPeer;
     }
@@ -137,90 +135,87 @@ public:
     virtual OUString GetComponentServiceName() const;
 
     // css::lang::XTypeProvider
-    cpo::uno::Sequence< sal_Int8 >                     SAL_CALL getImplementationId() override;
+    cpo::uno::Sequence< sal_Int8 >                     getImplementationId() override;
 
     // css::lang::XComponent
-    void SAL_CALL dispose(  ) override;
-    void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    void dispose(  ) override;
+    void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // XEventListener
-    void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    void disposing( const css::lang::EventObject& Source ) override;
 
     // css::awt::XWindow2
-    virtual void SAL_CALL setOutputSize( const css::awt::Size& aSize ) override;
-    virtual css::awt::Size SAL_CALL getOutputSize(  ) override;
-    virtual bool SAL_CALL isVisible(  ) override;
-    virtual bool SAL_CALL isActive(  ) override;
-    virtual bool SAL_CALL isEnabled(  ) override;
-    virtual bool SAL_CALL hasFocus(  ) override;
+    virtual void setOutputSize( const css::awt::Size& aSize ) override;
+    virtual css::awt::Size getOutputSize(  ) override;
+    virtual bool isVisible(  ) override;
+    virtual bool isActive(  ) override;
+    virtual bool isEnabled(  ) override;
+    virtual bool hasFocus(  ) override;
 
     // css::awt::XWindow
-    void SAL_CALL setPosSize( sal_Int32 X, sal_Int32 Y, sal_Int32 Width, sal_Int32 Height, sal_Int16 Flags ) override;
-    css::awt::Rectangle SAL_CALL getPosSize(  ) override;
-    void SAL_CALL setVisible( bool Visible ) override;
-    void SAL_CALL setEnable( bool Enable ) override;
-    void SAL_CALL setFocus(  ) override;
-    void SAL_CALL addWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) override;
-    void SAL_CALL removeWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) override;
-    void SAL_CALL addFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) override;
-    void SAL_CALL removeFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) override;
-    void SAL_CALL addKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
-    void SAL_CALL removeKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
-    void SAL_CALL addMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) override;
-    void SAL_CALL removeMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) override;
-    void SAL_CALL addMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
-    void SAL_CALL removeMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
-    void SAL_CALL addPaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) override;
-    void SAL_CALL removePaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) override;
+    void setPosSize( sal_Int32 X, sal_Int32 Y, sal_Int32 Width, sal_Int32 Height, sal_Int16 Flags ) override;
+    css::awt::Rectangle getPosSize(  ) override;
+    void setVisible( bool Visible ) override;
+    void setEnable( bool Enable ) override;
+    void setFocus(  ) override;
+    void addWindowListener( const cpo::uno::Reference< css::awt::XWindowListener >& xListener ) override;
+    void removeWindowListener( const cpo::uno::Reference< css::awt::XWindowListener >& xListener ) override;
+    void addFocusListener( const cpo::uno::Reference< css::awt::XFocusListener >& xListener ) override;
+    void removeFocusListener( const cpo::uno::Reference< css::awt::XFocusListener >& xListener ) override;
+    void addKeyListener( const cpo::uno::Reference< css::awt::XKeyListener >& xListener ) override;
+    void removeKeyListener( const cpo::uno::Reference< css::awt::XKeyListener >& xListener ) override;
+    void addMouseListener( const cpo::uno::Reference< css::awt::XMouseListener >& xListener ) override;
+    void removeMouseListener( const cpo::uno::Reference< css::awt::XMouseListener >& xListener ) override;
+    void addMouseMotionListener( const cpo::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
+    void removeMouseMotionListener( const cpo::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
+    void addPaintListener( const cpo::uno::Reference< css::awt::XPaintListener >& xListener ) override;
+    void removePaintListener( const cpo::uno::Reference< css::awt::XPaintListener >& xListener ) override;
 
     // css::awt::XView
-    bool SAL_CALL setGraphics( const css::uno::Reference< css::awt::XGraphics >& aDevice ) override;
-    css::uno::Reference< css::awt::XGraphics > SAL_CALL getGraphics(  ) override;
-    css::awt::Size SAL_CALL getSize(  ) override;
-    void SAL_CALL draw( sal_Int32 nX, sal_Int32 nY ) override;
-    void SAL_CALL setZoom( float fZoomX, float fZoomY ) override;
+    bool setGraphics( const cpo::uno::Reference< css::awt::XGraphics >& aDevice ) override;
+    cpo::uno::Reference< css::awt::XGraphics > getGraphics(  ) override;
+    css::awt::Size getSize(  ) override;
+    void draw( sal_Int32 nX, sal_Int32 nY ) override;
+    void setZoom( float fZoomX, float fZoomY ) override;
 
     // css::awt::XControl
-    void SAL_CALL setContext( const css::uno::Reference< css::uno::XInterface >& Context ) override;
-    css::uno::Reference< css::uno::XInterface > SAL_CALL getContext(  ) override;
-    void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& Toolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
-    css::uno::Reference< css::awt::XWindowPeer > SAL_CALL getPeer(  ) override;
-    bool SAL_CALL setModel( const css::uno::Reference< css::awt::XControlModel >& Model ) override;
-    css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel(  ) override;
-    css::uno::Reference< css::awt::XView > SAL_CALL getView(  ) override;
-    void SAL_CALL setDesignMode( bool bOn ) override;
-    bool SAL_CALL isDesignMode(  ) override;
-    bool SAL_CALL isTransparent(  ) override;
+    void setContext( const cpo::uno::Reference< cpo::uno::XInterface >& Context ) override;
+    cpo::uno::Reference< cpo::uno::XInterface > getContext(  ) override;
+    void createPeer( const cpo::uno::Reference< css::awt::XToolkit >& Toolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
+    cpo::uno::Reference< css::awt::XWindowPeer > getPeer(  ) override;
+    bool setModel( const cpo::uno::Reference< css::awt::XControlModel >& Model ) override;
+    cpo::uno::Reference< css::awt::XControlModel > getModel(  ) override;
+    cpo::uno::Reference< css::awt::XView > getView(  ) override;
+    void setDesignMode( bool bOn ) override;
+    bool isDesignMode(  ) override;
+    bool isTransparent(  ) override;
 
     // css::lang::XServiceInfo
-    OUString SAL_CALL getImplementationName(  ) override;
-    bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    OUString getImplementationName(  ) override;
+    bool supportsService( const OUString& ServiceName ) override;
+    cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
     // XAccessible
-    virtual css::uno::Reference< css::accessibility::XAccessibleContext > SAL_CALL getAccessibleContext(  ) override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleContext > getAccessibleContext(  ) override;
 
     // XModeChangeBroadcaster
-    virtual void SAL_CALL addModeChangeListener( const css::uno::Reference< css::util::XModeChangeListener >& _rxListener ) override;
-    virtual void SAL_CALL removeModeChangeListener( const css::uno::Reference< css::util::XModeChangeListener >& _rxListener ) override;
-    virtual void SAL_CALL addModeChangeApproveListener( const css::uno::Reference< css::util::XModeChangeApproveListener >& _rxListener ) override;
-    virtual void SAL_CALL removeModeChangeApproveListener( const css::uno::Reference< css::util::XModeChangeApproveListener >& _rxListener ) override;
+    virtual void addModeChangeListener( const cpo::uno::Reference< css::util::XModeChangeListener >& _rxListener ) override;
+    virtual void removeModeChangeListener( const cpo::uno::Reference< css::util::XModeChangeListener >& _rxListener ) override;
+    virtual void addModeChangeApproveListener( const cpo::uno::Reference< css::util::XModeChangeApproveListener >& _rxListener ) override;
+    virtual void removeModeChangeApproveListener( const cpo::uno::Reference< css::util::XModeChangeApproveListener >& _rxListener ) override;
 
     // XUnitConversion
-    virtual css::awt::Point SAL_CALL convertPointToLogic( const css::awt::Point& Point, ::sal_Int16 TargetUnit ) override;
-    virtual css::awt::Point SAL_CALL convertPointToPixel( const css::awt::Point& aPoint, ::sal_Int16 SourceUnit ) override;
-    virtual css::awt::Size SAL_CALL convertSizeToLogic( const css::awt::Size& aSize, ::sal_Int16 TargetUnit ) override;
-    virtual css::awt::Size SAL_CALL convertSizeToPixel( const css::awt::Size& aSize, ::sal_Int16 SourceUnit ) override;
+    virtual css::awt::Point convertPointToLogic( const css::awt::Point& Point, ::sal_Int16 TargetUnit ) override;
+    virtual css::awt::Point convertPointToPixel( const css::awt::Point& aPoint, ::sal_Int16 SourceUnit ) override;
+    virtual css::awt::Size convertSizeToLogic( const css::awt::Size& aSize, ::sal_Int16 TargetUnit ) override;
+    virtual css::awt::Size convertSizeToPixel( const css::awt::Size& aSize, ::sal_Int16 SourceUnit ) override;
 
-    // XStyleSettingsSupplier
-    virtual css::uno::Reference< css::awt::XStyleSettings > SAL_CALL getStyleSettings() override;
-
-    css::uno::Reference< css::awt::XVclWindowPeer > getVclWindowPeer();
+    cpo::uno::Reference< css::awt::XVclWindowPeer > getVclWindowPeer();
 
 protected:
     // css::beans::XPropertiesChangeListener
-    void SAL_CALL propertiesChange( const cpo::uno::Sequence< css::beans::PropertyChangeEvent >& evt ) override;
+    void propertiesChange( const cpo::uno::Sequence< css::beans::PropertyChangeEvent >& evt ) override;
 };
 
 

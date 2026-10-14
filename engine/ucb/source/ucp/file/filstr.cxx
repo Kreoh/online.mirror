@@ -22,13 +22,14 @@
 #include <com/sun/star/io/BufferSizeExceededException.hpp>
 #include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <osl/diagnose.h>
 #include "filstr.hxx"
 #include "filerror.hxx"
 
 using namespace fileaccess;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 /******************************************************************************/
 /*                                                                            */
@@ -71,14 +72,14 @@ XStream_impl::~XStream_impl()
     {
         OSL_FAIL("unexpected situation");
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         OSL_FAIL("unexpected situation");
     }
 }
 
 
-uno::Reference< io::XInputStream > SAL_CALL
+uno::Reference< io::XInputStream >
 XStream_impl::getInputStream(  )
 {
     {
@@ -89,7 +90,7 @@ XStream_impl::getInputStream(  )
 }
 
 
-uno::Reference< io::XOutputStream > SAL_CALL
+uno::Reference< io::XOutputStream >
 XStream_impl::getOutputStream(  )
 {
     {
@@ -100,7 +101,7 @@ XStream_impl::getOutputStream(  )
 }
 
 
-void SAL_CALL XStream_impl::truncate()
+void XStream_impl::truncate()
 {
     if (osl::FileBase::E_None != m_aFile.setSize(0))
         throw io::IOException();
@@ -113,7 +114,7 @@ void SAL_CALL XStream_impl::truncate()
 // XStream_impl private non interface methods
 
 
-sal_Int32 SAL_CALL
+sal_Int32
 XStream_impl::readBytes(
     cpo::uno::Sequence< sal_Int8 >& aData,
     sal_Int32 nBytesToRead )
@@ -159,7 +160,7 @@ XStream_impl::readSomeBytes(
     return static_cast<sal_Int32>(nrc);
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 XStream_impl::readSomeBytes(
     cpo::uno::Sequence< sal_Int8 >& aData,
     sal_Int32 nMaxBytesToRead )
@@ -168,14 +169,14 @@ XStream_impl::readSomeBytes(
 }
 
 
-void SAL_CALL
+void
 XStream_impl::skipBytes( sal_Int32 nBytesToSkip )
 {
     m_aFile.setPos( osl_Pos_Current, sal_uInt64( nBytesToSkip ) );
 }
 
 
-sal_Int32 SAL_CALL
+sal_Int32
 XStream_impl::available()
 {
     sal_Int64 avail = getLength() - getPosition();
@@ -183,7 +184,7 @@ XStream_impl::available()
 }
 
 
-void SAL_CALL
+void
 XStream_impl::writeBytes( const cpo::uno::Sequence< sal_Int8 >& aData )
 {
     sal_uInt32 length = aData.getLength();
@@ -213,7 +214,7 @@ XStream_impl::closeStream()
     }
 }
 
-void SAL_CALL
+void
 XStream_impl::closeInput()
 {
     std::scoped_lock aGuard( m_aMutex );
@@ -224,7 +225,7 @@ XStream_impl::closeInput()
 }
 
 
-void SAL_CALL
+void
 XStream_impl::closeOutput()
 {
     std::scoped_lock aGuard( m_aMutex );
@@ -235,17 +236,17 @@ XStream_impl::closeOutput()
 }
 
 
-void SAL_CALL
+void
 XStream_impl::seek( sal_Int64 location )
 {
     if( location < 0 )
-        throw lang::IllegalArgumentException( u""_ustr, uno::Reference< uno::XInterface >(), 0 );
+        throw lang::IllegalArgumentException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), 0 );
     if( osl::FileBase::E_None != m_aFile.setPos( osl_Pos_Absolut, sal_uInt64( location ) ) )
         throw io::IOException();
 }
 
 
-sal_Int64 SAL_CALL
+sal_Int64
 XStream_impl::getPosition()
 {
     sal_uInt64 uPos;
@@ -254,7 +255,7 @@ XStream_impl::getPosition()
     return sal_Int64( uPos );
 }
 
-sal_Int64 SAL_CALL
+sal_Int64
 XStream_impl::getLength()
 {
     sal_uInt64 uEndPos;
@@ -263,7 +264,7 @@ XStream_impl::getLength()
     return sal_Int64( uEndPos );
 }
 
-void SAL_CALL
+void
 XStream_impl::flush()
 {}
 

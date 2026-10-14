@@ -13,7 +13,7 @@
 
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 #include <comphelper/kit.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <sfx2/filedlghelper.hxx>
@@ -24,6 +24,7 @@
 #include "EPUBExportFilter.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -74,8 +75,8 @@ namespace writerperfect
 {
 EPUBExportDialog::EPUBExportDialog(weld::Window* pParent,
                                    comphelper::SequenceAsHashMap& rFilterData,
-                                   uno::Reference<uno::XComponentContext> xContext,
-                                   css::uno::Reference<css::lang::XComponent> xDocument)
+                                   uno::Reference<cpo::uno::XComponentContext> xContext,
+                                   cpo::uno::Reference<css::lang::XComponent> xDocument)
     : GenericDialogController(pParent, u"writerperfect/ui/exportepub.ui"_ustr, u"EpubDialog"_ustr)
     , m_xContext(std::move(xContext))
     , m_rFilterData(rFilterData)
@@ -191,7 +192,7 @@ IMPL_LINK_NOARG(EPUBExportDialog, CoverClickHdl, weld::Button&, void)
 
 IMPL_LINK_NOARG(EPUBExportDialog, MediaClickHdl, weld::Button&, void)
 {
-    uno::Reference<ui::dialogs::XFolderPicker2> xFolderPicker
+    uno::Reference<ui::dialogs::XFolderPicker> xFolderPicker
         = sfx2::createFolderPicker(m_xContext, m_xDialog.get());
     if (xFolderPicker->execute() != ui::dialogs::ExecutableDialogResults::OK)
         return;

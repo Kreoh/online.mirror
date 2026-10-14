@@ -18,7 +18,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 
 	getShortcutsBarData: function() {
 		return [
-			!this.map['wopi'].HideSaveOption ?
+			!this.map['wopi'].HideSaveOption && !this.map.isReadOnlyMode() ?
 				{
 					'id': 'shortcutstoolbox',
 					'type': 'toolbox',
@@ -101,7 +101,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'text': _('Table'),
 				'name': 'Table',
 				'context': 'Table',
-				'accessibility': { focusBack: true, combination: 'T', de: null }
+				'accessibility': { focusBack: true, combination: 'TB', de: null }
 			},
 			{
 				'id': 'Shape-tab-label',
@@ -180,7 +180,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 
 	getFileTab: function() {
 		var content = [];
-		var hasSave = !this.map['wopi'].HideSaveOption;
+		var hasSave = !this.map['wopi'].HideSaveOption && !this.map.isReadOnlyMode();
 		var hasSaveAs = !this.map['wopi'].UserCanNotWriteRelative;
 		var hasShare = this.map['wopi'].EnableShare;
 		var hasRevisionHistory = window.L.Params.revHistoryEnabled;
@@ -213,7 +213,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 			);
 		}
 
-		if (hasSaveAs) {
+		if (hasSaveAs && !this.map['wopi'].HideExportOption) {
 			content.push(
 				{
 					'id': 'exportas:ExportAsMenu',
@@ -426,7 +426,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 
 		}
 
-		if (window.wopiSettingBaseUrl) {
+		if (app.LOUtil.canOpenSettings()) {
 			content.push({
 				'type': 'separator',
 				'id': 'file-properties-break',
@@ -526,7 +526,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 								'type': 'checkbox',
 								'command': 'showruler',
 								'text': _('Ruler'),
-								'accessibility': { focusBack: true, combination: 'U', de: 'L' }
+								'accessibility': { focusBack: true, combination: 'RU', de: 'L' }
 							}
 						]
 					},
@@ -595,6 +595,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'id':'invertbackground',
 				'class': 'unoinvertbackground',
 				'type': 'bigcustomtoolitem',
+				'visible': window.prefs.getBoolean('darkTheme'),
 				'text': _('Invert Background'),
 				'accessibility': { focusBack: true, combination: 'BG', de: null }
 			},
@@ -604,7 +605,14 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Sidebar'),
 				'command': '.uno:SidebarDeck.PropertyDeck',
-				'accessibility': { focusBack: true, combination: 'SB', de: null }
+				'accessibility': { focusBack: true, combination: 'SD', de: null }
+			},
+			{
+				'id': 'view-shapes-deck',
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:SidebarDeck.ShapesDeck', 'presentation'),
+				'command': '.uno:SidebarDeck.ShapesDeck',
+				'accessibility': { focusBack: true, combination: 'SH', de: null }
 			},
 			{
 				'id': 'view-navigator',
@@ -997,7 +1005,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 								'type': 'container',
 								'children': [
 									{
-										'id': 'SectionBottom13',
+										'id': 'home-para-spacing',
 										'type': 'toolbox',
 										'children': [
 											{
@@ -1105,6 +1113,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 								]
 							},
 							{
+								'id': 'home-chart-table',
 								'type': 'toolbox',
 								'children': [
 									{
@@ -1307,7 +1316,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 										'class': 'unoselectbackground',
 										'type': 'customtoolitem',
 										'text': _UNO('.uno:SelectBackground', 'presentation'),
-										'accessibility': { focusBack: true, combination: 'SB', de: null }
+										'accessibility': { focusBack: true, combination: 'SG', de: null }
 									}
 								]
 							}

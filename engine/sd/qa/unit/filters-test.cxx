@@ -19,6 +19,7 @@
 #include <DrawDocShell.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// Test loading of files to assure they do not crash on load.
 class SdFiltersTest
@@ -44,7 +45,7 @@ public:
     CPPUNIT_TEST_SUITE_END();
 
 private:
-    uno::Reference<uno::XInterface> m_xDrawComponent;
+    uno::Reference<cpo::uno::XInterface> m_xDrawComponent;
 };
 
 bool SdFiltersTest::load(const OUString &rFilter, const OUString &rURL,

@@ -254,7 +254,7 @@ const SdrObjKind nObjectTypes[] =
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::ui;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -468,7 +468,7 @@ namespace
 
 // check if the control has one of the interfaces we can use for searching
 // *_pCurrentText will be filled with the current text of the control (as used when searching this control)
-bool IsSearchableControl( const css::uno::Reference< css::uno::XInterface>& _rxControl,
+bool IsSearchableControl( const cpo::uno::Reference< cpo::uno::XInterface>& _rxControl,
     OUString* _pCurrentText )
 {
     if ( !_rxControl.is() )
@@ -724,7 +724,7 @@ bool FmXFormShell::IsReadonlyDoc_Lock() const
 
 //  EventListener
 
-void SAL_CALL FmXFormShell::disposing(const lang::EventObject& e)
+void FmXFormShell::disposing(const lang::EventObject& e)
 {
     SolarMutexGuard g;
 
@@ -762,7 +762,7 @@ void SAL_CALL FmXFormShell::disposing(const lang::EventObject& e)
 }
 
 
-void SAL_CALL FmXFormShell::propertyChange(const PropertyChangeEvent& evt)
+void FmXFormShell::propertyChange(const PropertyChangeEvent& evt)
 {
     SolarMutexGuard g;
 
@@ -828,7 +828,7 @@ void FmXFormShell::invalidateFeatures( const ::std::vector< sal_Int32 >& _rFeatu
 }
 
 
-void SAL_CALL FmXFormShell::formActivated(const lang::EventObject& rEvent)
+void FmXFormShell::formActivated(const lang::EventObject& rEvent)
 {
     SolarMutexGuard g;
 
@@ -841,7 +841,7 @@ void SAL_CALL FmXFormShell::formActivated(const lang::EventObject& rEvent)
 }
 
 
-void SAL_CALL FmXFormShell::formDeactivated(const lang::EventObject& rEvent)
+void FmXFormShell::formDeactivated(const lang::EventObject& rEvent)
 {
     SolarMutexGuard g;
 
@@ -1948,8 +1948,8 @@ bool FmXFormShell::setCurrentSelection_Lock( InterfaceBag&& _rSelection )
     // TODO: this should happen elsewhere, but not here - shouldn't it?
     if ( !m_aCurrentSelection.empty() )
     {
-        Reference< XChild > xCur; if ( m_aCurrentSelection.size() == 1 ) xCur.set(*m_aCurrentSelection.begin(), css::uno::UNO_QUERY);
-        Reference< XChild > xNew; if ( _rSelection.size() == 1 ) xNew.set(*_rSelection.begin(), css::uno::UNO_QUERY);
+        Reference< XChild > xCur; if ( m_aCurrentSelection.size() == 1 ) xCur.set(*m_aCurrentSelection.begin(), cpo::uno::UNO_QUERY);
+        Reference< XChild > xNew; if ( _rSelection.size() == 1 ) xNew.set(*_rSelection.begin(), cpo::uno::UNO_QUERY);
 
         // is there nothing to be selected, or the parents differ, and the parent of the current object
         // is a selection supplier, then deselect
@@ -2463,7 +2463,7 @@ IMPL_LINK(FmXFormShell, OnSearchContextRequest_Lock, FmSearchContext&, rfmscCont
 
   // XContainerListener
 
-void SAL_CALL FmXFormShell::elementInserted(const ContainerEvent& evt)
+void FmXFormShell::elementInserted(const ContainerEvent& evt)
 {
     SolarMutexGuard g;
 
@@ -2479,7 +2479,7 @@ void SAL_CALL FmXFormShell::elementInserted(const ContainerEvent& evt)
 }
 
 
-void SAL_CALL FmXFormShell::elementReplaced(const ContainerEvent& evt)
+void FmXFormShell::elementReplaced(const ContainerEvent& evt)
 {
     SolarMutexGuard g;
 
@@ -2494,7 +2494,7 @@ void SAL_CALL FmXFormShell::elementReplaced(const ContainerEvent& evt)
 }
 
 
-void SAL_CALL FmXFormShell::elementRemoved(const ContainerEvent& evt)
+void FmXFormShell::elementRemoved(const ContainerEvent& evt)
 {
     SolarMutexGuard g;
 
@@ -2600,7 +2600,7 @@ void FmXFormShell::impl_RemoveElement_nothrow_Lock(const Reference<XInterface>& 
 }
 
 
-void SAL_CALL FmXFormShell::selectionChanged(const lang::EventObject& rEvent)
+void FmXFormShell::selectionChanged(const lang::EventObject& rEvent)
 {
     SolarMutexGuard g;
 

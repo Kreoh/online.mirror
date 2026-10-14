@@ -33,7 +33,7 @@ import cpo.uno.Exception;
 import com.sun.star.uno.Any;
 import com.sun.star.uno.AnyConverter;
 import cpo.uno.Type;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 
 import com.sun.star.lang.XMultiComponentFactory;
 import com.sun.star.lang.XComponent;
@@ -207,7 +207,7 @@ public class ScriptSelector {
             client.setLocation(x, y);
 
             client.show();
-        } catch (com.sun.star.uno.RuntimeException rue) {
+        } catch (cpo.uno.RuntimeException rue) {
             rue.printStackTrace();
         } catch (java.lang.Exception e) {
             e.printStackTrace();

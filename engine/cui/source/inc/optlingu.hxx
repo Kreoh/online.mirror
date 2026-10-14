@@ -20,7 +20,7 @@
 
 #include <sfx2/tabdlg.hxx>
 #include <svx/langbox.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/configuration/XReadWriteAccess.hpp>
 
@@ -48,11 +48,10 @@ class SvxEditModulesDlg : public weld::GenericDialogController
     std::unique_ptr<weld::Button> m_xPrioUpPB;
     std::unique_ptr<weld::Button> m_xPrioDownPB;
     std::unique_ptr<weld::Button> m_xBackPB;
-    std::unique_ptr<weld::LinkButton> m_xMoreDictsLink;
     std::unique_ptr<weld::Button> m_xClosePB;
     std::unique_ptr<SvxLanguageBox> m_xLanguageLB;
 
-    css::uno::Reference< css::configuration::XReadWriteAccess> m_xReadWriteAccess;
+    cpo::uno::Reference< css::configuration::XReadWriteAccess> m_xReadWriteAccess;
 
     DECL_LINK( SelectHdl_Impl, weld::TreeView&, void );
     DECL_LINK( UpDownHdl_Impl, weld::Button&, void );
@@ -60,7 +59,6 @@ class SvxEditModulesDlg : public weld::GenericDialogController
     DECL_LINK( BackHdl_Impl, weld::Button&, void );
     DECL_LINK( LangSelectListBoxHdl_Impl, weld::ComboBox&, void );
     DECL_LINK( BoxCheckButtonHdl_Impl, const weld::TreeView::iter_col&, void );
-    DECL_LINK(OnLinkClick, weld::LinkButton&, bool);
     void LangSelectHdl_Impl(const SvxLanguageBox* pBox);
 
 public:
@@ -93,13 +91,13 @@ private:
 
     ImplSVEvent* m_nDlbClickEventId;
 
-    css::uno::Reference<
+    cpo::uno::Reference<
         css::linguistic2::XLinguProperties >     xProp;
 
-    css::uno::Reference<
+    cpo::uno::Reference<
         css::linguistic2::XDictionaryList >      xDicList;
     cpo::uno::Sequence<
-        css::uno::Reference<
+        cpo::uno::Reference<
             css::linguistic2::XDictionary > >    aDics;
 
     std::unique_ptr<SvxLinguData_Impl>  pLinguData;
@@ -115,10 +113,9 @@ private:
     std::unique_ptr<weld::TreeView> m_xLinguOptionsCLB;
     std::unique_ptr<weld::Button> m_xLinguOptionsEditPB;
     std::unique_ptr<weld::Box> m_xMoreDictsBox;
-    std::unique_ptr<weld::LinkButton> m_xMoreDictsLink;
 
-    void    AddDicBoxEntry( const css::uno::Reference< css::linguistic2::XDictionary > &rxDic, sal_uInt16 nIdx );
-    static sal_uInt32 GetDicUserData( const css::uno::Reference< css::linguistic2::XDictionary > &rxDic, sal_uInt16 nIdx );
+    void    AddDicBoxEntry( const cpo::uno::Reference< css::linguistic2::XDictionary > &rxDic, sal_uInt16 nIdx );
+    static sal_uInt32 GetDicUserData( const cpo::uno::Reference< css::linguistic2::XDictionary > &rxDic, sal_uInt16 nIdx );
 
     DECL_LINK( SelectHdl_Impl, weld::TreeView&, void );
     DECL_LINK( ClickHdl_Impl, weld::Button&, void );
@@ -126,7 +123,6 @@ private:
     DECL_LINK( ModulesBoxCheckButtonHdl_Impl, const weld::TreeView::iter_col&, void );
     DECL_LINK( DicsBoxCheckButtonHdl_Impl, const weld::TreeView::iter_col&, void );
     DECL_LINK( PostDblClickHdl_Impl, void *, void);
-    DECL_LINK(OnLinkClick, weld::LinkButton&, bool);
 
     void                UpdateModulesBox_Impl();
     void                UpdateDicBox_Impl();
@@ -136,12 +132,13 @@ public:
     static std::unique_ptr<SfxTabPage> Create( weld::Container* pPage, weld::DialogController* pController, const SfxItemSet* rSet );
     virtual ~SvxLinguTabPage() override;
 
-    virtual OUString GetAllStrings() override;
-
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
 
     void                HideModulesGroup();
+
+    // hands what FillItemSet collected to the places that keep it
+    static void         ApplyLanguageOptions(const SfxItemSet& rSet);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

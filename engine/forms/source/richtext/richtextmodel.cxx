@@ -44,7 +44,7 @@
 namespace frm
 {
     using namespace comphelper;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::awt;
     using namespace ::com::sun::star::lang;
@@ -283,7 +283,7 @@ using namespace cpo::uno;
         );
     }
 
-    css::uno::Reference< css::util::XCloneable > ORichTextModel::createClone()
+    cpo::uno::Reference< css::util::XCloneable > ORichTextModel::createClone()
 {
     rtl::Reference<ORichTextModel> pClone = new ORichTextModel(this, getContext());
     pClone->clonedFrom(this);
@@ -631,8 +631,8 @@ using namespace cpo::uno;
 } // namespace frm
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_forms_ORichTextModel_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_forms_ORichTextModel_get_implementation(cpo::uno::XComponentContext* context,
                                                           cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ORichTextModel(context));

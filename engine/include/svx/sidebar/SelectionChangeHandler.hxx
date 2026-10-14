@@ -41,13 +41,13 @@ class SVX_DLLPUBLIC SelectionChangeHandler final
 public:
     SelectionChangeHandler (
         std::function<OUString ()> aSelectionChangeCallback,
-        const css::uno::Reference<css::frame::XController>& rxController,
+        const cpo::uno::Reference<css::frame::XController>& rxController,
         const vcl::EnumContext::Context eDefaultContext);
     virtual ~SelectionChangeHandler() override;
 
-    virtual void SAL_CALL selectionChanged (const css::lang::EventObject& rEvent) override;
+    virtual void selectionChanged (const css::lang::EventObject& rEvent) override;
 
-    virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent) override;
+    virtual void disposing (const css::lang::EventObject& rEvent) override;
 
     virtual void disposing(std::unique_lock<std::mutex>&) override;
 
@@ -59,7 +59,7 @@ private:
     SelectionChangeHandler& operator=(const SelectionChangeHandler&) = delete;
 
     const std::function<OUString ()> maSelectionChangeCallback;
-    css::uno::Reference<css::frame::XController> mxController;
+    cpo::uno::Reference<css::frame::XController> mxController;
     const vcl::EnumContext::Context meDefaultContext;
     bool mbIsConnected;
 };

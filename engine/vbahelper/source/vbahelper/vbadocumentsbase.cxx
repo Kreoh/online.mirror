@@ -43,6 +43,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 typedef  std::unordered_map< OUString,
                              sal_Int32 > NameIndexHash;
@@ -56,20 +57,20 @@ namespace {
 
 class DocumentsEnumImpl : public ::cppu::WeakImplHelper< container::XEnumeration >
 {
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     Documents m_documents;
     Documents::const_iterator m_it;
 
 public:
     /// @throws uno::RuntimeException
-    DocumentsEnumImpl( uno::Reference< uno::XComponentContext > xContext, Documents&& docs ) :  m_xContext(std::move( xContext )), m_documents( std::move(docs) )
+    DocumentsEnumImpl( uno::Reference< cpo::uno::XComponentContext > xContext, Documents&& docs ) :  m_xContext(std::move( xContext )), m_documents( std::move(docs) )
     {
         m_it = m_documents.begin();
     }
     /// @throws uno::RuntimeException
-    explicit DocumentsEnumImpl( uno::Reference< uno::XComponentContext > xContext ) :  m_xContext(std::move( xContext ))
+    explicit DocumentsEnumImpl( uno::Reference< cpo::uno::XComponentContext > xContext ) :  m_xContext(std::move( xContext ))
     {
-        uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( m_xContext );
+        uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( m_xContext );
         uno::Reference< container::XEnumeration > xComponents = xDesktop->getComponents()->createEnumeration();
         while( xComponents->hasMoreElements() )
         {
@@ -80,12 +81,12 @@ public:
         m_it = m_documents.begin();
     }
     // XEnumeration
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return m_it != m_documents.end();
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( !hasMoreElements() )
         {
@@ -112,12 +113,12 @@ namespace {
 
 class DocumentsAccessImpl : public DocumentsAccessImpl_BASE
 {
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     Documents m_documents;
     NameIndexHash namesToIndices;
 public:
     /// @throws uno::RuntimeException
-    DocumentsAccessImpl( uno::Reference< uno::XComponentContext > xContext, VbaDocumentsBase::DOCUMENT_TYPE eDocType ) :m_xContext(std::move( xContext ))
+    DocumentsAccessImpl( uno::Reference< cpo::uno::XComponentContext > xContext, VbaDocumentsBase::DOCUMENT_TYPE eDocType ) :m_xContext(std::move( xContext ))
     {
         uno::Reference< container::XEnumeration > xEnum = new DocumentsEnumImpl( m_xContext );
         sal_Int32 nIndex=0;
@@ -138,16 +139,16 @@ public:
     }
 
     //XEnumerationAccess
-    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) override
+    virtual uno::Reference< container::XEnumeration > createEnumeration(  ) override
     {
         return new DocumentsEnumImpl( m_xContext, std::vector(m_documents) );
     }
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) override
+    virtual ::sal_Int32 getCount(  ) override
     {
         return m_documents.size();
     }
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0
             || o3tl::make_unsigned(Index) >= m_documents.size() )
@@ -156,18 +157,18 @@ public:
     }
 
     //XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override
+    virtual cpo::uno::Type getElementType(  ) override
     {
         return cppu::UnoType<frame::XModel>::get();
     }
 
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual bool hasElements(  ) override
     {
         return (!m_documents.empty());
     }
 
     //XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override
+    virtual cpo::uno::Any getByName( const OUString& aName ) override
     {
         NameIndexHash::const_iterator it = namesToIndices.find( aName );
         if ( it == namesToIndices.end() )
@@ -176,12 +177,12 @@ public:
 
     }
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override
     {
         return comphelper::mapKeysToSequence( namesToIndices );
     }
 
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override
+    virtual bool hasByName( const OUString& aName ) override
     {
         NameIndexHash::const_iterator it = namesToIndices.find( aName );
         return (it != namesToIndices.end());
@@ -191,7 +192,7 @@ public:
 
 }
 
-VbaDocumentsBase::VbaDocumentsBase( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< css::uno::XComponentContext >& xContext, DOCUMENT_TYPE eDocType ) : VbaDocumentsBase_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( new DocumentsAccessImpl( xContext, eDocType ) ) ), meDocType( eDocType )
+VbaDocumentsBase::VbaDocumentsBase( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, DOCUMENT_TYPE eDocType ) : VbaDocumentsBase_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( new DocumentsAccessImpl( xContext, eDocType ) ) ), meDocType( eDocType )
 {
 }
 
@@ -247,14 +248,14 @@ cpo::uno::Any VbaDocumentsBase::createDocument()
     {
     }
 
-    uno::Reference< frame::XDesktop2 > xLoader = frame::Desktop::create(mxContext);
+    uno::Reference< frame::XDesktop > xLoader = frame::Desktop::create(mxContext);
     OUString sURL;
     if( meDocType == WORD_DOCUMENT )
         sURL = u"private:factory/swriter"_ustr;
     else if( meDocType == EXCEL_DOCUMENT )
         sURL = u"private:factory/scalc"_ustr;
     else
-        throw uno::RuntimeException( u"Not implemented"_ustr );
+        throw cpo::uno::RuntimeException( u"Not implemented"_ustr );
 
     // prepare the media descriptor
     comphelper::SequenceAsHashMap aMediaDesc;
@@ -297,7 +298,7 @@ cpo::uno::Any VbaDocumentsBase::openDocument( const OUString& rFileName, const c
         aURL = rFileName;
     else
         osl::FileBase::getFileURLFromSystemPath( rFileName, aURL );
-    uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( mxContext );
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( mxContext );
 
     cpo::uno::Sequence< beans::PropertyValue > sProps( rProps );
     sProps.realloc( sProps.getLength() + 1 );

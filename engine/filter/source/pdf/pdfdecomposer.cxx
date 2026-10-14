@@ -21,10 +21,11 @@
 
 #include <com/sun/star/graphic/XPdfDecomposer.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XBinaryDataContainer.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -32,7 +33,7 @@ namespace
 class XPdfDecomposer : public ::cppu::WeakImplHelper<graphic::XPdfDecomposer, lang::XServiceInfo>
 {
 public:
-    explicit XPdfDecomposer(uno::Reference<uno::XComponentContext> const& context);
+    explicit XPdfDecomposer(uno::Reference<cpo::uno::XComponentContext> const& context);
     XPdfDecomposer(const XPdfDecomposer&) = delete;
     XPdfDecomposer& operator=(const XPdfDecomposer&) = delete;
 
@@ -47,22 +48,13 @@ public:
     cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
-XPdfDecomposer::XPdfDecomposer(uno::Reference<uno::XComponentContext> const&) {}
+XPdfDecomposer::XPdfDecomposer(uno::Reference<cpo::uno::XComponentContext> const&) {}
 
 /** Get PDF page size in mm100 */
-bool getPdfPageSizeMM100(const BinaryDataContainer& rDataContainer, sal_Int32 nPageIndex,
+bool getPdfPageSizeMM100(vcl::pdf::PDFiumDocument& rPdfDocument, sal_Int32 nPageIndex,
                          double& rfWidthMM100, double& rfHeightMM100)
 {
-    auto pPdfium = vcl::pdf::PDFiumLibrary::get();
-    if (!pPdfium)
-        return false;
-
-    std::unique_ptr<vcl::pdf::PDFiumDocument> pPdfDocument
-        = pPdfium->openDocument(rDataContainer.getData(), rDataContainer.getSize(), OString());
-    if (!pPdfDocument)
-        return false;
-
-    std::unique_ptr<vcl::pdf::PDFiumPage> pPdfPage = pPdfDocument->openPage(nPageIndex);
+    std::unique_ptr<vcl::pdf::PDFiumPage> pPdfPage = rPdfDocument.openPage(nPageIndex);
     if (!pPdfPage)
         return false;
 
@@ -93,9 +85,14 @@ XPdfDecomposer::getDecomposition(const uno::Reference<util::XBinaryDataContainer
 
     BinaryDataContainer aDataContainer = vcl::convertUnoBinaryDataContainer(xDataContainer);
 
+    std::shared_ptr<vcl::pdf::PDFiumDocument> pPdfDocument
+        = vcl::pdf::PDFiumLibrary::openDocumentShared(aDataContainer);
+    if (!pPdfDocument)
+        return {};
+
     double fPageWidthMM100 = 0.0;
     double fPageHeightMM100 = 0.0;
-    if (!getPdfPageSizeMM100(aDataContainer, nPageIndex, fPageWidthMM100, fPageHeightMM100))
+    if (!getPdfPageSizeMM100(*pPdfDocument, nPageIndex, fPageWidthMM100, fPageHeightMM100))
         return {};
 
     const basegfx::B2DHomMatrix aTransform(
@@ -123,8 +120,8 @@ cpo::uno::Sequence<OUString> XPdfDecomposer::getSupportedServiceNames()
 }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-filter_PdfDecomposer_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+filter_PdfDecomposer_get_implementation(cpo::uno::XComponentContext* context,
                                         cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XPdfDecomposer(context));

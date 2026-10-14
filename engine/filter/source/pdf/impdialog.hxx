@@ -52,7 +52,7 @@ class ImpPDFTabSecurityPage;
 /// Class tabbed dialog
 class ImpPDFTabDialog final : public SfxTabDialogController
 {
-    css::uno::Reference<css::lang::XComponent> mrDoc;
+    cpo::uno::Reference<css::lang::XComponent> mrDoc;
 
     FilterConfigItem maConfigItem;
     FilterConfigItem maConfigI18N;
@@ -120,7 +120,7 @@ class ImpPDFTabDialog final : public SfxTabDialogController
     sal_Int32 mnChangesAllowed = 0;
     bool mbCanCopyOrExtract = false;
     bool mbCanExtractForAccessibility = true;
-    css::uno::Reference< css::beans::XMaterialHolder > mxPreparedPasswords;
+    cpo::uno::Reference< css::beans::XMaterialHolder > mxPreparedPasswords;
 
     bool mbIsPageRangeChecked = false;
     OUString msPageRange = OUString(' ');
@@ -138,7 +138,7 @@ class ImpPDFTabDialog final : public SfxTabDialogController
     OUString msSignLocation;
     OUString msSignContact;
     OUString msSignReason;
-    css::uno::Reference<css::security::XCertificate> maSignCertificate;
+    cpo::uno::Reference<css::security::XCertificate> maSignCertificate;
     OUString msSignTSA;
 
     OUString maWatermarkText;
@@ -153,7 +153,7 @@ public:
     friend class                ImpPDFTabSigningPage;
 
     ImpPDFTabDialog(weld::Window* pParent, const cpo::uno::Sequence< css::beans::PropertyValue >& rFilterData,
-                    const css::uno::Reference< css::lang::XComponent >& rDoc);
+                    const cpo::uno::Reference< css::lang::XComponent >& rDoc);
     virtual                     ~ImpPDFTabDialog() override;
 
     cpo::uno::Sequence< css::beans::PropertyValue >   GetFilterData();
@@ -187,7 +187,7 @@ class ImpPDFTabGeneralPage : public SfxTabPage
     std::unique_ptr<weld::Entry> mxEdSheets;
     std::unique_ptr<weld::RadioButton> mxRbLosslessCompression;
     std::unique_ptr<weld::RadioButton> mxRbJPEGCompression;
-    std::unique_ptr<weld::Widget> mxQualityFrame;
+    std::unique_ptr<weld::Container> mxQualityFrame;
     std::unique_ptr<weld::MetricSpinButton> mxNfQuality;
     std::unique_ptr<weld::CheckButton> mxCbReduceImageResolution;
     std::unique_ptr<weld::ComboBox> mxCoReduceImageResolution;
@@ -195,7 +195,7 @@ class ImpPDFTabGeneralPage : public SfxTabPage
     std::unique_ptr<weld::ComboBox> mxRbPDFVersion;
     std::unique_ptr<weld::CheckButton> mxCbTaggedPDF;
     std::unique_ptr<weld::CheckButton> mxCbExportFormFields;
-    std::unique_ptr<weld::Widget> mxFormsOptionGrid;
+    std::unique_ptr<weld::Container> mxFormsOptionGrid;
     std::unique_ptr<weld::ComboBox> mxLbFormsFormat;
     std::unique_ptr<weld::CheckButton> mxCbAllowDuplicateFieldNames;
     std::unique_ptr<weld::CheckButton> mxCbExportBookmarks;
@@ -335,26 +335,26 @@ class ImpPDFTabSecurityPage : public SfxTabPage
     cpo::uno::Sequence< css::beans::NamedValue > maPreparedOwnerPassword;
     OUString                    msOwnerPwdTitle;
 
-    css::uno::Reference< css::beans::XMaterialHolder > mxPreparedPasswords;
+    cpo::uno::Reference< css::beans::XMaterialHolder > mxPreparedPasswords;
 
     std::unique_ptr<weld::Button> mxPbSetPwd;
-    std::unique_ptr<weld::Widget> mxUserPwdSet;
-    std::unique_ptr<weld::Widget> mxUserPwdUnset;
-    std::unique_ptr<weld::Widget> mxUserPwdPdfa;
-    std::unique_ptr<weld::Widget> mxOwnerPwdSet;
-    std::unique_ptr<weld::Widget> mxOwnerPwdUnset;
-    std::unique_ptr<weld::Widget> mxOwnerPwdPdfa;
-    std::unique_ptr<weld::Widget> mxPrintPermissions;
+    std::unique_ptr<weld::Container> mxUserPwdSet;
+    std::unique_ptr<weld::Container> mxUserPwdUnset;
+    std::unique_ptr<weld::Container> mxUserPwdPdfa;
+    std::unique_ptr<weld::Container> mxOwnerPwdSet;
+    std::unique_ptr<weld::Container> mxOwnerPwdUnset;
+    std::unique_ptr<weld::Container> mxOwnerPwdPdfa;
+    std::unique_ptr<weld::Frame> mxPrintPermissions;
     std::unique_ptr<weld::RadioButton> mxRbPrintNone;
     std::unique_ptr<weld::RadioButton> mxRbPrintLowRes;
     std::unique_ptr<weld::RadioButton> mxRbPrintHighRes;
-    std::unique_ptr<weld::Widget> mxChangesAllowed;
+    std::unique_ptr<weld::Frame> mxChangesAllowed;
     std::unique_ptr<weld::RadioButton> mxRbChangesNone;
     std::unique_ptr<weld::RadioButton> mxRbChangesInsDel;
     std::unique_ptr<weld::RadioButton> mxRbChangesFillForm;
     std::unique_ptr<weld::RadioButton> mxRbChangesComment;
     std::unique_ptr<weld::RadioButton> mxRbChangesAnyNoCopy;
-    std::unique_ptr<weld::Widget> mxContent;
+    std::unique_ptr<weld::Frame> mxContent;
     std::unique_ptr<weld::CheckButton> mxCbEnableCopy;
     std::unique_ptr<weld::CheckButton> mxCbEnableAccessibility;
     std::unique_ptr<weld::Label> mxPasswordTitle;
@@ -412,7 +412,7 @@ public:
 //class to implement the digital signing
 class ImpPDFTabSigningPage : public SfxTabPage
 {
-    css::uno::Reference< css::security::XCertificate > maSignCertificate;
+    cpo::uno::Reference< css::security::XCertificate > maSignCertificate;
 
     std::unique_ptr<weld::Entry> mxEdSignCert;
     std::unique_ptr<weld::Button> mxPbSignCertSelect;

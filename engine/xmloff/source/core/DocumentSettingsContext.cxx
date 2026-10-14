@@ -51,6 +51,7 @@
 #include "xmlenums.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 namespace {
@@ -60,10 +61,10 @@ class XMLMyList
     std::vector<beans::PropertyValue> aProps;
     sal_uInt32                        nCount;
 
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 
 public:
-    explicit XMLMyList(uno::Reference<uno::XComponentContext> xContext);
+    explicit XMLMyList(uno::Reference<cpo::uno::XComponentContext> xContext);
 
     void push_back(beans::PropertyValue const & aProp) { aProps.push_back(aProp); nCount++; }
     cpo::uno::Sequence<beans::PropertyValue> GetSequence();
@@ -73,7 +74,7 @@ public:
 
 }
 
-XMLMyList::XMLMyList(uno::Reference<uno::XComponentContext> xContext)
+XMLMyList::XMLMyList(uno::Reference<cpo::uno::XComponentContext> xContext)
 :   nCount(0),
     m_xContext(std::move(xContext))
 {
@@ -148,14 +149,14 @@ class XMLConfigItemContext : public SvXMLImportContext
 
 public:
     XMLConfigItemContext(SvXMLImport& rImport,
-                                    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
+                                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
                                     cpo::uno::Any& rAny,
                                     OUString aItemName,
                                     XMLConfigBaseContext* pBaseContext);
 
-    virtual void SAL_CALL characters( const OUString& rChars ) override;
+    virtual void characters( const OUString& rChars ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
     void ManipulateConfigItem();
 };
@@ -167,10 +168,10 @@ public:
                                     cpo::uno::Any& rAny,
                                     XMLConfigBaseContext* pBaseContext);
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-            sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+            sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 class XMLConfigItemMapNamedContext : public XMLConfigBaseContext
@@ -180,10 +181,10 @@ public:
                                     cpo::uno::Any& rAny,
                                     XMLConfigBaseContext* pBaseContext);
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-            sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+            sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 class XMLConfigItemMapIndexedContext : public XMLConfigBaseContext
@@ -197,10 +198,10 @@ public:
                                     OUString aConfigItemName,
                                     XMLConfigBaseContext* pBaseContext);
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-            sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+            sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 }
@@ -241,9 +242,9 @@ XMLDocumentSettingsContext::~XMLDocumentSettingsContext()
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler >  XMLDocumentSettingsContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler >  XMLDocumentSettingsContext::createFastChildContext(
             sal_Int32 nElement,
-            const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+            const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
     OUString sName;
@@ -367,9 +368,9 @@ XMLConfigItemSetContext::XMLConfigItemSetContext(SvXMLImport& rImport,
     // here are no attributes
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLConfigItemSetContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLConfigItemSetContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     return CreateSettingsContext(GetImport(), nElement, xAttrList, maProp, this);
 }
@@ -382,7 +383,7 @@ void XMLConfigItemSetContext::endFastElement(sal_Int32 )
 }
 
 XMLConfigItemContext::XMLConfigItemContext(SvXMLImport& rImport,
-                                    const css::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
+                                    const cpo::uno::Reference< css::xml::sax::XFastAttributeList>& xAttrList,
                                     cpo::uno::Any& rTempAny,
                                     OUString aTempItemName,
                                     XMLConfigBaseContext* pTempBaseContext)
@@ -514,7 +515,7 @@ void XMLConfigItemContext::ManipulateConfigItem()
     {
         try
         {
-            uno::Reference< uno::XComponentContext > xContext( GetImport().GetComponentContext() );
+            uno::Reference< cpo::uno::XComponentContext > xContext( GetImport().GetComponentContext() );
             uno::Reference< util::XStringSubstitution > xStringSubstitution( util::PathSubstitution::create(xContext) );
 
             OUString aURL;
@@ -535,9 +536,9 @@ XMLConfigItemMapNamedContext::XMLConfigItemMapNamedContext(SvXMLImport& rImport,
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLConfigItemMapNamedContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLConfigItemMapNamedContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     return CreateSettingsContext(GetImport(), nElement, xAttrList, maProp, this);
 }
@@ -563,9 +564,9 @@ XMLConfigItemMapIndexedContext::XMLConfigItemMapIndexedContext(SvXMLImport& rImp
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLConfigItemMapIndexedContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLConfigItemMapIndexedContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     return CreateSettingsContext(GetImport(), nElement, xAttrList, maProp, this);
 }

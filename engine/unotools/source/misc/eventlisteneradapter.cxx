@@ -30,7 +30,7 @@
 namespace utl
 {
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::lang;
 
     //= OEventListenerImpl
@@ -51,7 +51,7 @@ namespace utl
         const Reference< XComponent >&  getComponent() const { return m_xComponent; }
 
     protected:
-        virtual void SAL_CALL disposing( const EventObject& _rSource ) override;
+        virtual void disposing( const EventObject& _rSource ) override;
     };
 
     OEventListenerImpl::OEventListenerImpl( OEventListenerAdapter* _pAdapter, const Reference< XComponent >& _rxComp )
@@ -81,7 +81,7 @@ namespace utl
         }
     }
 
-    void SAL_CALL OEventListenerImpl::disposing( const EventObject& _rSource )
+    void OEventListenerImpl::disposing( const EventObject& _rSource )
     {
         Reference< XEventListener > xDeleteUponLeaving = m_xKeepMeAlive;
         m_xKeepMeAlive.clear();
@@ -109,7 +109,7 @@ namespace utl
         stopAllComponentListening( );
     }
 
-    void OEventListenerAdapter::stopComponentListening( const css::uno::Reference< css::lang::XComponent >& _rxComp )
+    void OEventListenerAdapter::stopComponentListening( const cpo::uno::Reference< css::lang::XComponent >& _rxComp )
     {
         if ( m_pImpl->aListeners.empty() )
             return;

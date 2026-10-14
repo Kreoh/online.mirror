@@ -31,9 +31,9 @@
 
 #include <algorithm>
 
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -159,7 +159,7 @@ void RTL_Impl_CreatePropertySet( SbxArray& rPar )
     xPropAcc->setPropertyValues( *pArg );
 
     // Build a SbUnoObject and return it
-    auto xUnoObj = tools::make_ref<SbUnoObject>( "stardiv.uno.beans.PropertySet", Any(xInterface) );
+    auto xUnoObj = tools::make_ref<SbUnoObject>( u"stardiv.uno.beans.PropertySet"_ustr, Any(xInterface) );
     if( xUnoObj->getUnoAny().hasValue() )
     {
         // Return object

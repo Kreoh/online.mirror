@@ -40,6 +40,7 @@
 #include <test/a11y/XAccessibleEventBroadcasterTester.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -54,10 +55,10 @@ public:
     }
 
     // XEventListener
-    virtual void SAL_CALL disposing(const lang::EventObject&) override {}
+    virtual void disposing(const lang::EventObject&) override {}
 
     // XAccessibleEventListener
-    virtual void SAL_CALL notifyEvent(const accessibility::AccessibleEventObject& aEvent) override
+    virtual void notifyEvent(const accessibility::AccessibleEventObject& aEvent) override
     {
         std::cout << "Listener got event: " << AccessibilityTools::debugString(aEvent) << std::endl;
         uno::Reference<accessibility::XAccessible> xOld(aEvent.OldValue, uno::UNO_QUERY);
@@ -74,7 +75,7 @@ public:
 }
 
 XAccessibleEventBroadcasterTester::XAccessibleEventBroadcasterTester(
-    const css::uno::Reference<css::accessibility::XAccessibleEventBroadcaster>& xBroadcaster,
+    const cpo::uno::Reference<css::accessibility::XAccessibleEventBroadcaster>& xBroadcaster,
     const std::function<void()>& rFireEventFunc)
     : mxBroadcaster(xBroadcaster)
     , m_aFireEventFunc(rFireEventFunc)

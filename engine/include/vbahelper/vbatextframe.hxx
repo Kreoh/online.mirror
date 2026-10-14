@@ -19,7 +19,7 @@
 #ifndef INCLUDED_VBAHELPER_VBATEXTFRAME_HXX
 #define INCLUDED_VBAHELPER_VBATEXTFRAME_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <ooo/vba/msforms/XTextFrame.hpp>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
@@ -30,8 +30,8 @@
 namespace com::sun::star {
     namespace beans { class XPropertySet; }
     namespace drawing { class XShape; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ooo::vba {
     class XHelperInterface;
@@ -42,8 +42,8 @@ typedef InheritedHelperInterfaceWeakImpl< ov::msforms::XTextFrame > VbaTextFrame
 class VBAHELPER_DLLPUBLIC VbaTextFrame : public VbaTextFrame_BASE
 {
 protected:
-    css::uno::Reference< css::drawing::XShape > m_xShape;
-    css::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
 protected:
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
@@ -51,21 +51,21 @@ protected:
     sal_Int32 getMargin( const OUString& sMarginType );
     void setMargin( const OUString& sMarginType, float fMargin );
 public:
-    VbaTextFrame( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext , css::uno::Reference< css::drawing::XShape > xShape);
+    VbaTextFrame( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext , cpo::uno::Reference< css::drawing::XShape > xShape);
     // Attributes
-    virtual bool SAL_CALL getAutoSize() override;
-    virtual void SAL_CALL setAutoSize( bool _autosize ) override;
-    virtual float SAL_CALL getMarginBottom() override;
-    virtual void SAL_CALL setMarginBottom( float _marginbottom ) override;
-    virtual float SAL_CALL getMarginTop() override;
-    virtual void SAL_CALL setMarginTop( float _margintop ) override;
-    virtual float SAL_CALL getMarginLeft() override;
-    virtual void SAL_CALL setMarginLeft( float _marginleft ) override;
-    virtual float SAL_CALL getMarginRight() override;
-    virtual void SAL_CALL setMarginRight( float _marginright ) override;
+    virtual bool getAutoSize() override;
+    virtual void setAutoSize( bool _autosize ) override;
+    virtual float getMarginBottom() override;
+    virtual void setMarginBottom( float _marginbottom ) override;
+    virtual float getMarginTop() override;
+    virtual void setMarginTop( float _margintop ) override;
+    virtual float getMarginLeft() override;
+    virtual void setMarginLeft( float _marginleft ) override;
+    virtual float getMarginRight() override;
+    virtual void setMarginRight( float _marginright ) override;
 
     // Methods
-    virtual cpo::uno::Any SAL_CALL Characters(  ) override;
+    virtual cpo::uno::Any Characters(  ) override;
 
 };
 

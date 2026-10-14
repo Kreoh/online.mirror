@@ -36,8 +36,9 @@
 #include "officeinstallationdirectories.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
-static bool makeCanonicalFileURL( OUString & rURL )
+bool comphelper::makeCanonicalFileURL( OUString & rURL )
 {
     OSL_ENSURE(comphelper::isFileUrl(rURL), "File URL expected!");
 
@@ -80,7 +81,7 @@ constexpr OUString g_aOfficeBrandDirMacro(u"$(brandbaseurl)"_ustr);
 constexpr OUString g_aUserDirMacro(u"$(userdataurl)"_ustr);
 
 OfficeInstallationDirectories::OfficeInstallationDirectories(
-        uno::Reference< uno::XComponentContext > xCtx )
+        uno::Reference< cpo::uno::XComponentContext > xCtx )
 : m_xCtx(std::move( xCtx ))
 {
 }
@@ -235,9 +236,9 @@ void OfficeInstallationDirectories::initDirs()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_util_OfficeInstallationDirectories(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(

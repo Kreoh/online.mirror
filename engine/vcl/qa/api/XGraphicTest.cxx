@@ -26,6 +26,7 @@
 namespace
 {
 using namespace css;
+using namespace ::cpo;
 
 class XGraphicTest : public test::BootstrapFixture
 {
@@ -119,14 +120,14 @@ void XGraphicTest::testGraphicProvider()
     OUString aGraphicURL = getFullUrl(u"TestGraphic.png");
 
     { // Load lazy
-        uno::Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
+        uno::Reference<cpo::uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
         uno::Reference<graphic::XGraphicProvider> xGraphicProvider;
         xGraphicProvider.set(graphic::GraphicProvider::create(xContext), uno::UNO_SET_THROW);
 
         auto aMediaProperties(comphelper::InitPropertySequence({
-            { "URL", cpo::uno::Any(aGraphicURL) },
-            { "LazyRead", cpo::uno::Any(true) },
-            { "LoadAsLink", cpo::uno::Any(false) },
+            { u"URL"_ustr, cpo::uno::Any(aGraphicURL) },
+            { u"LazyRead"_ustr, cpo::uno::Any(true) },
+            { u"LoadAsLink"_ustr, cpo::uno::Any(false) },
         }));
 
         uno::Reference<graphic::XGraphic> xGraphic(
@@ -158,14 +159,14 @@ void XGraphicTest::testGraphicProvider()
     }
 
     { // Load as link
-        uno::Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
+        uno::Reference<cpo::uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
         uno::Reference<graphic::XGraphicProvider> xGraphicProvider;
         xGraphicProvider.set(graphic::GraphicProvider::create(xContext), uno::UNO_SET_THROW);
 
         auto aMediaProperties(comphelper::InitPropertySequence({
-            { "URL", cpo::uno::Any(aGraphicURL) },
-            { "LazyRead", cpo::uno::Any(false) },
-            { "LoadAsLink", cpo::uno::Any(true) },
+            { u"URL"_ustr, cpo::uno::Any(aGraphicURL) },
+            { u"LazyRead"_ustr, cpo::uno::Any(false) },
+            { u"LoadAsLink"_ustr, cpo::uno::Any(true) },
         }));
 
         uno::Reference<graphic::XGraphic> xGraphic(
@@ -195,14 +196,14 @@ void XGraphicTest::testGraphicProvider()
     }
 
     { // Load lazy and as link
-        uno::Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
+        uno::Reference<cpo::uno::XComponentContext> xContext(comphelper::getProcessComponentContext());
         uno::Reference<graphic::XGraphicProvider> xGraphicProvider;
         xGraphicProvider.set(graphic::GraphicProvider::create(xContext), uno::UNO_SET_THROW);
 
         auto aMediaProperties(comphelper::InitPropertySequence({
-            { "URL", cpo::uno::Any(aGraphicURL) },
-            { "LazyRead", cpo::uno::Any(true) },
-            { "LoadAsLink", cpo::uno::Any(true) },
+            { u"URL"_ustr, cpo::uno::Any(aGraphicURL) },
+            { u"LazyRead"_ustr, cpo::uno::Any(true) },
+            { u"LoadAsLink"_ustr, cpo::uno::Any(true) },
         }));
 
         uno::Reference<graphic::XGraphic> xGraphic(

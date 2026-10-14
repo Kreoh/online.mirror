@@ -27,6 +27,29 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sheet Operations.', { test
 		calcHelper.assertNumberofSheets(2);
 	});
 
+	it('Insert sheet rapidly keeps order', function () {
+		calcHelper.assertNumberofSheets(1);
+		// Fire the clicks synchronously, in one tick, so none of them can be
+		// separated by a status round-trip from the server - that's what
+		// "rapidly" means for the bug this guards against. Six clicks is
+		// enough to run past the tab strip's own divider elements, which
+		// would otherwise mask the very first couple of clicks going stale.
+		cy.cGet('#spreadsheet-toolbar #insertsheet').then(function ($el) {
+			for (var i = 0; i < 6; i++) {
+				$el[0].click();
+			}
+		});
+		calcHelper.assertNumberofSheets(7);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab1').should('have.text', 'Sheet2');
+		cy.cGet('#spreadsheet-tab2').should('have.text', 'Sheet3');
+		cy.cGet('#spreadsheet-tab3').should('have.text', 'Sheet4');
+		cy.cGet('#spreadsheet-tab4').should('have.text', 'Sheet5');
+		cy.cGet('#spreadsheet-tab5').should('have.text', 'Sheet6');
+		cy.cGet('#spreadsheet-tab6').should('have.text', 'Sheet7');
+		cy.cGet('#spreadsheet-tab6').should('have.class', 'spreadsheet-tab-selected');
+	});
+
 	it.skip('Switching sheet sets the view that contains cell-cursor', function () {
 		calcHelper.assertNumberofSheets(1);
 		helper.typeIntoInputField(helper.addressInputSelector, 'A1');
@@ -179,8 +202,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sheet Operations.', { test
 		//show sheet
 		calcHelper.selectOptionFromContextMenu('Show Sheet');
 		cy.cGet('#show-sheets-modal').should('exist');
-		cy.cGet('#hidden-part-checkbox-Sheet2').check();
-		cy.cGet('#show-sheets-modal-response').click();
+		cy.cGet('#hidden-part-checkbox-0-input').check();
+		cy.cGet('#show-sheets-modal-response-button').click();
 		calcHelper.assertNumberofSheets(2);
 	});
 

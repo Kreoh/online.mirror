@@ -46,9 +46,9 @@ namespace abp
 
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 
-    OAddressBookSourcePilot::OAddressBookSourcePilot(weld::Window* _pParent, const Reference< XComponentContext >& _rxORB)
+    OAddressBookSourcePilot::OAddressBookSourcePilot(weld::Window* _pParent, const Reference< cpo::uno::XComponentContext >& _rxORB)
         :vcl::RoadmapWizardMachine(_pParent)
         ,m_xORB(_rxORB)
         ,m_aNewDataSource(_rxORB)

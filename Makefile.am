@@ -13,18 +13,35 @@ ETAGS=ctags -e
 # number so make does not pile on new jobs while the machine is already busy.
 # On a host shared by several builds each one backs off instead of all running
 # a full set of jobs at once. An explicit -j or -l wins. Without nproc, no
-# change.
-NPROC := $(shell nproc 2>/dev/null)
+# change. Only make 4.4 and later show -j and -l in MAKEFLAGS while parsing,
+# so older makes get no default. 4.4 also added the intcmp function, which
+# expands to y here and to nothing on an older make.
+NPROC := $(and $(intcmp 1,1,,y),$(shell nproc 2>/dev/null))
 MAKEFLAGS := $(MAKEFLAGS) \
 	$(if $(findstring j,$(MAKEFLAGS)),,$(if $(NPROC),-j$(NPROC))) \
 	$(if $(findstring l,$(MAKEFLAGS)),,$(if $(NPROC),-l$(NPROC)))
 
 # For `make run` skip the build-time unit test execution in test/.
-export COOL_SKIP_UNITTESTS ?= $(if $(filter run,$(MAKECMDGOALS)),1,)
+export COOL_SKIP_UNITTESTS ?= $(if $(filter run run-gdb,$(MAKECMDGOALS)),1,)
+
+# Configure again when autogen.input changes. Only autogen.py reads that file,
+# so the rules Automake generates for configure.ac are not sufficient.
+# Include it here so that make restarts itself after running autogen.py.
+# Note that configure will invoke `make am--depfiles` so it must be filtered here.
+autogen_input_goals = $(filter-out %clean %clean-am am--depfiles,$(or $(MAKECMDGOALS),all))
+
+# Do not use "-include", if configure fails it causes make to restart itself in an infinite loop.
+include $(top_builddir)/autogen-input.mk
+
+$(top_builddir)/autogen-input.mk: $(if $(autogen_input_goals),$(wildcard $(top_builddir)/autogen.input))
+	$(if $<,$(PYTHON) $(abs_top_srcdir)/autogen.py)
+	@echo '# Marks the autogen.input that the build tree was configured from.' > $@
+
+DISTCLEANFILES = autogen-input.mk
 
 build-samples:
 	$(QUIET_MKDIRP) mkdir -p $(abs_top_builddir)/test/samples
-	$(QUIET_SAMPLES) $(abs_top_srcdir)/scripts/build-samples.py $(abs_top_srcdir)/test/samples $(abs_top_srcdir)/test/samples
+	$(QUIET_SAMPLES) $(PYTHON) $(abs_top_srcdir)/scripts/build-samples.py $(abs_top_srcdir)/test/samples $(abs_top_srcdir)/test/samples
 
 if ENABLE_MOBILEAPP
 
@@ -33,11 +50,6 @@ SUBDIRS = macos browser
 else !ENABLE_MACOSAPP
 if ENABLE_QTAPP
 SUBDIRS = qt browser
-
-if ENABLE_QTAPP_TESTS
-check-qtapp:
-	$(MAKE) $(AM_MAKEFLAGS) -C qt check-qtapp
-endif ENABLE_QTAPP_TESTS
 
 else !ENABLE_QTAPP
 if ENABLE_WASM
@@ -62,6 +74,13 @@ else !ENABLE_FUZZERS
 
 SUBDIRS = browser .
 
+if ENABLE_QTAPP
+SUBDIRS += qt
+endif
+
+# The unit tests and the cypress tests need coolwsd; a --disable-server tree
+# builds the browser bundle and the qt app only.
+if ENABLE_SERVER
 if ENABLE_TESTS
 SUBDIRS += test
 endif
@@ -69,11 +88,14 @@ endif
 if ENABLE_CYPRESS
 SUBDIRS += cypress_test
 endif
+endif ENABLE_SERVER
 
 bin_PROGRAMS =
+if ENABLE_SERVER
 if ENABLE_DEBUG
 bin_PROGRAMS += coolwsd-inproc
 endif
+endif ENABLE_SERVER
 
 endif !ENABLE_FUZZERS
 
@@ -83,17 +105,23 @@ QUIET_MKDIRP = $(QUIET_MKDIRP_$(V))
 QUIET_MKDIRP_ = $(QUIET_MKDIRP_$(AM_DEFAULT_VERBOSITY))
 QUIET_MKDIRP_0 = @echo "  MKDIRP  " $@;
 
+server_mans = man/coolwsd.1 \
+              man/coolforkit-caps.1 \
+              man/coolforkit-ns.1 \
+              man/coolconvert.1 \
+              man/coolconfig.1 \
+              man/coolstress.1 \
+              man/coolwsd-systemplate-setup.1 \
+              man/coolmount.1
+
+# Everything the server installs: binaries come via install-exec-local below,
+# the rest are these primaries. All of it is skipped with --disable-server, so
+# a qt app package gets only the browser bundle and the app.
+if ENABLE_SERVER
+
 dist_bin_SCRIPTS = coolwsd-systemplate-setup
 
-man_MANS = man/coolwsd.1 \
-           man/coolforkit-caps.1 \
-           man/coolforkit-ns.1 \
-           man/coolconvert.1 \
-           man/coolconfig.1 \
-           man/coolstress.1 \
-           man/coolwsd-systemplate-setup.1 \
-           man/coolmount.1
-
+man_MANS = $(server_mans)
 
 dist_doc_DATA = COPYING \
                 wsd/README.vars \
@@ -102,22 +130,21 @@ dist_doc_DATA = COPYING \
                 wsd/healthchecks.txt \
                 THIRDPARTYLICENSES
 
-if !ENABLE_FUZZERS
-# The SBOM rule pulls in coolforkit-ns (via online-office-sbom.spdx.json:
-# coolforkit-ns), so gate it out of fuzzer builds where the binary is not
-# wanted.
-doc_DATA = online-office-sbom.spdx.json
-endif
-
 coolwsddatadir = @COOLWSD_DATADIR@
 
 coolwsddata_DATA = discovery.xml \
                    favicon.ico
 
+if !ENABLE_FUZZERS
+# The SBOM generator hashes the installed binaries (via
+# online-office-sbom.spdx.json: $(GBUILD_EXES)), so gate it out of fuzzer
+# builds where those are not wanted.
+coolwsddata_DATA += online-office-sbom.spdx.json
+endif
+
 coolwsdconfigdir = @COOLWSD_CONFIGDIR@
 
-coolwsdconfig_DATA = coolwsd.xml \
-		     coolkitconfig.xcu
+coolwsdconfig_DATA = coolwsd.xml
 
 apache2configdir = ${sysconfdir}/apache2/conf-available
 
@@ -126,6 +153,8 @@ apache2config_DATA = etc/apache2/coolwsd.conf
 nginxconfigdir = ${sysconfdir}/nginx/snippets
 
 nginxconfig_DATA = etc/nginx/coolwsd.conf
+
+endif ENABLE_SERVER
 
 ACLOCAL_AMFLAGS = -I m4
 
@@ -204,11 +233,15 @@ shared_sources = \
                  common/Util-server.cpp \
                  common/Util-unix.cpp \
                  common/Util.cpp \
+                 common/Watchdog-unix.cpp \
                  kit/KitQueue.cpp \
                  kit/LogUI.cpp \
+                 net/FakeSocket-stub.cpp \
                  net/HttpHelper.cpp \
                  net/HttpRequest.cpp \
                  net/NetUtil.cpp \
+                 net/Socket-server.cpp \
+                 net/Socket-unix.cpp \
                  net/Socket.cpp \
                  wsd/Exceptions.cpp
 if ENABLE_SSL
@@ -232,6 +265,7 @@ coolwsd_sources = \
                   wsd/ContentType.cpp \
                   wsd/DeckSpec.cpp \
                   wsd/DocumentBroker.cpp \
+                  wsd/Extensions.cpp \
                   wsd/FileServer.cpp \
                   wsd/FileServerUtil.cpp \
                   wsd/HealthCheck.cpp \
@@ -241,6 +275,8 @@ coolwsd_sources = \
                   wsd/ProxyRequestHandler.cpp \
                   wsd/QuarantineUtil.cpp \
                   wsd/RemoteConfig.cpp \
+                  wsd/RemoteDocumentBroker.cpp \
+                  wsd/RemoteLinks.cpp \
                   wsd/RequestDetails.cpp \
                   wsd/RequestVettingStation.cpp \
                   wsd/ServerAuditUtil.cpp \
@@ -257,7 +293,9 @@ coolwsd_sources = \
 
 noinst_PROGRAMS =
 
+if ENABLE_SERVER
 noinst_LIBRARIES = libsimd.a libkitwsdglobals.a
+endif
 
 libsimd_a_SOURCES = kit/DeltaSimd.c
 libsimd_a_CFLAGS = @SIMD_CFLAGS@
@@ -296,9 +334,9 @@ if ENABLE_DEBUG
 coolwsd_inproc_SOURCES = $(coolwsd_sources) \
                          $(shared_sources) \
                          $(coolforkit_sources) \
-                         wsd/coolwsd-inproc.cpp
+                         wsd/coolwsd-inproc.cpp \
+                         wsd/coolwsd-main.cpp
 
-coolwsd_inproc_CPPFLAGS = $(AM_CPPFLAGS) -DENABLE_INPROC=1
 coolwsd_inproc_LDADD = libsimd.a libkitwsdglobals.a $(POCO_LIBS_HOST)
 coolwsd_inproc_LDFLAGS = $(POCO_LIBS_WHOLE) $(AM_LDFLAGS)
 
@@ -328,6 +366,7 @@ wsd_headers = \
               wsd/DocumentToolDescriptions.hpp \
               wsd/DocumentBroker.hpp \
               wsd/Exceptions.hpp \
+              wsd/Extensions.hpp \
               wsd/FileServer.hpp \
               wsd/HealthCheck.hpp \
               wsd/HostUtil.hpp \
@@ -341,6 +380,8 @@ wsd_headers = \
               wsd/ProxyRequestHandler.hpp \
               wsd/QuarantineUtil.hpp \
               wsd/RemoteConfig.hpp \
+              wsd/RemoteDocumentBroker.hpp \
+              wsd/RemoteLinks.hpp \
               wsd/RequestDetails.hpp \
               wsd/RequestVettingStation.hpp \
               wsd/SenderQueue.hpp \
@@ -377,6 +418,7 @@ shared_headers = \
                  common/FileUtil.hpp \
                  common/Globals.hpp \
                  common/HexUtil.hpp \
+                 common/IpNetwork.hpp \
                  common/JailUtil.hpp \
                  common/JsonUtil.hpp \
                  common/Landlock.hpp \
@@ -394,8 +436,11 @@ shared_headers = \
                  common/RegexUtil.hpp \
                  common/RenderTiles.hpp \
                  common/RotatingToken.hpp \
+                 common/SaveResult.hpp \
                  common/Seccomp.hpp \
+                 common/ServerPrivateInfo.hpp \
                  common/Session.hpp \
+                 common/SettingsSecrets.hpp \
                  common/SettingsStorage.hpp \
                  common/SigHandlerTrap.hpp \
                  common/SigUtil.hpp \
@@ -406,6 +451,7 @@ shared_headers = \
                  common/StringVector.hpp \
                  common/Syscall.hpp \
                  common/ThreadPool.hpp \
+                 common/TilePrioritizer.hpp \
                  common/TraceEvent.hpp \
                  common/Unit.hpp \
                  common/Uri.hpp \
@@ -480,18 +526,17 @@ dist-hook:
 # engine is present here, in the git checkout where make dist runs). genlangmaps
 # runs first because unocommands.py --translate is driven by the generated
 # uno-localizations.json.
-	$(abs_top_srcdir)/scripts/genlangmaps.py $(distdir) $(abs_top_srcdir)/engine
-	$(abs_top_srcdir)/scripts/unocommands.py --update $(distdir) $(abs_top_srcdir)/engine
-	$(abs_top_srcdir)/scripts/unocommands.py --translate $(distdir) $(abs_top_srcdir)/engine/translations
-	$(abs_top_srcdir)/scripts/unoshortcuts.py --update $(distdir) $(abs_top_srcdir)/engine
+	$(PYTHON) $(abs_top_srcdir)/scripts/genlangmaps.py $(distdir) $(abs_top_srcdir)/engine
+	$(PYTHON) $(abs_top_srcdir)/scripts/unocommands.py --update $(distdir) $(abs_top_srcdir)/engine
+	$(PYTHON) $(abs_top_srcdir)/scripts/unocommands.py --translate $(distdir) $(abs_top_srcdir)/engine/translations
+	$(PYTHON) $(abs_top_srcdir)/scripts/unoshortcuts.py --update $(distdir) $(abs_top_srcdir)/engine
 
 EXTRA_DIST = \
-             $(man_MANS) \
+             $(server_mans) \
              $(gbuild_sources) \
              README.md \
+             SBOM.md \
              THIRDPARTYLICENSES \
-             cool-sbom-template.spdx.json \
-             coolkitconfig.xcu.in \
              coolwsd.service \
              coolwsd.spec \
              coolwsd.xml.in \
@@ -534,12 +579,15 @@ EXTRA_DIST = \
              gbuild/Module_gbuild.mk \
              gbuild/StaticLibrary_dummytraceevent.mk \
              gbuild/StaticLibrary_forkit.mk \
+             gbuild/StaticLibrary_forkitmain.mk \
              gbuild/StaticLibrary_globals.mk \
              gbuild/StaticLibrary_kitglobals.mk \
              gbuild/StaticLibrary_shared.mk \
              gbuild/StaticLibrary_simd.mk \
+             gbuild/StaticLibrary_wsd.mk \
              gbuild/StaticLibrary_wsdglobals.mk \
              scripts/create-sbom.py \
+             scripts/sbom-externals.json \
              scripts/genlangmaps.py \
              scripts/refresh-git-hooks \
              scripts/unocommands.py \
@@ -556,17 +604,28 @@ endif
 
 CLEANUP_COVERAGE=rm -rf ${abs_top_srcdir}/gcov; find . -iname "*.gcda" -delete
 
+if ENABLE_SERVER
 GBUILD_EXES = coolconfig coolconvert coolforkit-caps coolforkit-ns coolmount coolstress coolwsd
 
 GBUILD_EXES_NOINST = clientnb coconvert connect coolbench coolmap coolsocketdump lokitclient
+else
+GBUILD_EXES =
+
+GBUILD_EXES_NOINST =
+endif
 
 build-gbuild: FORCE
 	$(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) ONLINE.CAP_LIBS='$(CAP_LIBS)' ONLINE.SIMD_CFLAGS='$(SIMD_CFLAGS)' Module_gbuild
 $(GBUILD_EXES) $(GBUILD_EXES_NOINST): build-gbuild
 
+# The qt app links libwsd.a and libshared.a from gbuild. With --disable-server
+# nothing else of the gbuild module is wanted, so build just those two.
+build-qtapp-gbuild-libs: FORCE
+	$(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) ONLINE.CAP_LIBS='$(CAP_LIBS)' ONLINE.SIMD_CFLAGS='$(SIMD_CFLAGS)' StaticLibrary_shared StaticLibrary_wsd
+
 # Similar to build-gbuild, but for the --enable-fuzzers case.
 build-fuzzer-gbuild-libs: FORCE
-	$(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) ONLINE.CAP_LIBS='$(CAP_LIBS)' ONLINE.SIMD_CFLAGS='$(SIMD_CFLAGS)' ONLINE.FUZZER_CFLAGS='-fsanitize=fuzzer-no-link' StaticLibrary_shared
+	$(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) ONLINE.CAP_LIBS='$(CAP_LIBS)' ONLINE.SIMD_CFLAGS='$(SIMD_CFLAGS)' ONLINE.FUZZER_CFLAGS='-fsanitize=fuzzer-no-link' StaticLibrary_shared StaticLibrary_wsd StaticLibrary_forkit StaticLibrary_dummytraceevent
 
 FORCE:
 
@@ -576,6 +635,8 @@ SYSTEM_STAMP = @SYSTEMPLATE_PATH@/system_stamp
 RUN_GDB = $(if $(GDB_FRONTEND),$(GDB_FRONTEND),gdb --tui --args)
 TEST_APPARMOR=$(shell if test 1 -eq `cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2> /dev/null || echo 0`; then echo "enabled"; fi)
 ENABLE_NAMESPACE = $(if $(TEST_APPARMOR),podman unshare,)
+
+LANDLOCK_ENV = COOL_FORCE_LANDLOCK=1
 
 if ENABLE_FUZZERS
 CLEANUP_DEPS=
@@ -670,7 +731,14 @@ check-apparmour-namespaces:
 		(echo "WARNING: to workaround this, either (a) disable with sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 or (b) install podman" && false); \
 	fi
 
-run: setup-wsd check-apparmour-namespaces
+run: setup-wsd
+	$(LANDLOCK_ENV) ./coolwsd $(COMMON_PARAMS) \
+			--o:logging.file[@enable]=${OUTPUT_TO_FILE} --o:logging.level=trace \
+			--o:logging_ui_cmd.file[@enable]=${OUTPUT_TO_FILE} \
+			--o:trace_event[@enable]=true \
+			$(RUN_EXTRA)
+
+namespace-run: setup-wsd check-apparmour-namespaces $(SYSTEM_STAMP)
 	$(ENABLE_NAMESPACE) ./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=${OUTPUT_TO_FILE} --o:logging.level=trace \
 			--o:logging_ui_cmd.file[@enable]=${OUTPUT_TO_FILE} \
@@ -687,7 +755,7 @@ run-nocaps: setup-wsd
 
 if ENABLE_DEBUG
 run-one: setup-wsd
-	$(ENABLE_NAMESPACE) ./coolwsd $(COMMON_PARAMS) \
+	$(LANDLOCK_ENV) ./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=true --o:logging.level=trace \
 			--o:logging_ui_cmd.file[@enable]=true \
 			--singlekit
@@ -723,7 +791,7 @@ sync-impress:
 	browser-sync start --config browsersync-config.js --startPath "browser/96c23f663/debug.html?file_path=/$(abs_top_srcdir)/test/samples/impress-edit.fodp"
 
 run-trace: setup-wsd
-	$(ENABLE_NAMESPACE) ./coolwsd $(COMMON_PARAMS) \
+	$(LANDLOCK_ENV) ./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=false --o:logging.level=trace \
 			--o:logging_ui_cmd.file[@enable]=false \
 			--o:trace[@enable]=true --o:trace.path=${builddir}/trace.txt.gz \
@@ -731,28 +799,28 @@ run-trace: setup-wsd
 
 run-valgrind: setup-wsd
 	@echo "Launching coolwsd under valgrind (but not forkit/coolkit, yet)"
-	$(ENABLE_NAMESPACE) valgrind --tool=memcheck --trace-children=no -v --read-var-info=yes \
+	$(LANDLOCK_ENV) valgrind --tool=memcheck --trace-children=no -v --read-var-info=yes \
 		./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=false --o:logging.level=trace \
 			--o:logging_ui_cmd.file[@enable]=false
 
 run-gdb: setup-wsd
 	@echo "Launching coolwsd under gdb"
-	$(ENABLE_NAMESPACE) $(RUN_GDB) \
+	$(LANDLOCK_ENV) $(RUN_GDB) \
 		./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=false --o:logging.level=error \
 			--o:logging_ui_cmd.file[@enable]=false
 
 run-callgrind: setup-wsd
 	@echo "Launching coolwsd under valgrind's callgrind"
-	$(ENABLE_NAMESPACE) valgrind --tool=callgrind --simulate-cache=yes --dump-instr=yes --num-callers=50 --error-limit=no --trace-children=yes \
+	$(LANDLOCK_ENV) valgrind --tool=callgrind --simulate-cache=yes --dump-instr=yes --num-callers=50 --error-limit=no --trace-children=yes \
 		./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=false --o:logging.level=error \
 			--o:logging_ui_cmd.file[@enable]=false
 
 run-strace: setup-wsd
 	@echo "Launching coolwsd under strace"
-	$(ENABLE_NAMESPACE) strace -o strace.log -f -tt -s 256 \
+	$(LANDLOCK_ENV) strace -o strace.log -f -tt -s 256 \
 		./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=false --o:logging.level=error \
 			--o:logging_ui_cmd.file[@enable]=false
@@ -764,7 +832,7 @@ run-tcmalloc: setup-wsd
 		exit 1; \
 	fi
 	@echo see https://gperftools.github.io/gperftools/heapprofile.html for Modifying Runtime Behavior via env variables
-	$(ENABLE_NAMESPACE) LD_PRELOAD=libtcmalloc.so.4 ./coolwsd $(COMMON_PARAMS) \
+	$(LANDLOCK_ENV) LD_PRELOAD=libtcmalloc.so.4 ./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=${OUTPUT_TO_FILE} --o:logging.level=trace \
 			--o:logging_ui_cmd.file[@enable]=${OUTPUT_TO_FILE} \
 			--o:trace_event[@enable]=true
@@ -775,21 +843,35 @@ SYSTEM_STAMP =
 
 endif
 
-.PHONY: cleanup setup-wsd
+systemplate: $(SYSTEM_STAMP)
 
 if ENABLE_FUZZERS
 ALL_LOCAL_DEPS=build-fuzzer-gbuild-libs
 else
+if ENABLE_SERVER
 ALL_LOCAL_DEPS=coolwsd
+else
+ALL_LOCAL_DEPS=build-qtapp-gbuild-libs
+endif
 endif
 
-all-local: $(ALL_LOCAL_DEPS) @JAILS_PATH@ @CACHE_PATH@ $(SYSTEM_STAMP)
+if ENABLE_SERVER
+all-local: $(ALL_LOCAL_DEPS) @JAILS_PATH@ @CACHE_PATH@
 	@abs_srcdir='$(abs_top_srcdir)' $(abs_top_srcdir)/scripts/refresh-git-hooks
+else
+all-local: $(ALL_LOCAL_DEPS)
+	@abs_srcdir='$(abs_top_srcdir)' $(abs_top_srcdir)/scripts/refresh-git-hooks
+endif
 
 # just run the build without any tests
 build-nocheck: all-am
 
 endif
+
+if ENABLE_QTAPP_TESTS
+check-qtapp:
+	$(MAKE) $(AM_MAKEFLAGS) -C qt check-qtapp
+endif ENABLE_QTAPP_TESTS
 
 distclean-local:
 	rm -rf $(top_srcdir)/scripts/__pycache__
@@ -838,6 +920,7 @@ all_compiled_sources = $(sort \
 	$(shared_sources) \
 	$(coolwsd_sources) \
 	$(coolforkit_sources) \
+	wsd/coolwsd-main.cpp \
 	$(libsimd_a_SOURCES) \
 	$(libkitwsdglobals_a_SOURCES) \
 )
@@ -910,6 +993,7 @@ prettier: browser/node_modules
 prettier-write: browser/node_modules
 	@$(MAKE) -C browser prettier-write
 
+if ENABLE_SERVER
 install-exec-hook:
 	cd $(DESTDIR)$(bindir) && \
 	test -e coolconfig && $(LN_S) coolconfig loolconfig || true; \
@@ -919,6 +1003,7 @@ install-exec-hook:
 install-exec-local: $(GBUILD_EXES)
 	test -z "$(GBUILD_EXES)" || $(MKDIR_P) "$(DESTDIR)$(bindir)"
 	for exe in $(GBUILD_EXES); do $(INSTALL_PROGRAM) "$$exe" "$(DESTDIR)$(bindir)/$$exe"; done
+endif ENABLE_SERVER
 
 stress_file=$(abs_top_srcdir)/test/data/hello-world.odt
 trace_dir=$(abs_top_srcdir)/test/traces
@@ -1005,5 +1090,45 @@ czech: all-local presets-dir
 	@echo "Running unit-tests only"
 	$(MAKE) check -C test
 
-online-office-sbom.spdx.json: coolforkit-ns
-	$(QUIET_SBOM) python3 $(abs_top_srcdir)/scripts/create-sbom.py $(abs_top_builddir)
+online-office-sbom.spdx.json: $(GBUILD_EXES) coolwsd.xml \
+		$(abs_top_srcdir)/scripts/create-sbom.py \
+		$(abs_top_srcdir)/scripts/sbom-externals.json \
+		$(abs_top_builddir)/browser/npm-shrinkwrap.json
+	@$(MAKE) $(AM_MAKEFLAGS) -C browser sbom-shipped-js.txt
+	$(QUIET_SBOM) $(PYTHON) $(abs_top_srcdir)/scripts/create-sbom.py \
+		--srcdir $(abs_top_srcdir) \
+		--builddir $(abs_top_builddir) \
+		--engine-builddir $(ENGINE_BUILDDIR) \
+		--version $(PACKAGE_VERSION)
+
+# Consistency checks for the SBOM inputs: annotations in
+# scripts/sbom-externals.json vs gbuild, POCO's bundled sources, the npm
+# shrinkwrap, and the direct-dependency policy for THIRDPARTYLICENSES.
+sbom-check:
+	@$(MAKE) $(AM_MAKEFLAGS) -C browser sbom-shipped-js.txt
+	$(PYTHON) $(abs_top_srcdir)/scripts/create-sbom.py \
+		--srcdir $(abs_top_srcdir) \
+		--builddir $(abs_top_builddir) \
+		--engine-builddir $(ENGINE_BUILDDIR) \
+		--check
+
+# Check the SBOM's cpe23 identifiers against a vulnerability database: an
+# identifier that matches nothing hides every CVE of that component, which is
+# not visible in a scan - the scan just comes back clean. Needs grype's
+# database ('grype db update'), so this is a maintainer target, not part of
+# the build or 'make check'.
+sbom-audit: online-office-sbom.spdx.json
+	$(PYTHON) $(abs_top_srcdir)/scripts/audit-sbom-cpes.py \
+		$(ENGINE_BUILDDIR)/workdir/CustomTarget/instsetoo_native/sbom/*.json \
+		$(abs_top_builddir)/online-office-sbom.spdx.json
+
+# Report bundled components that are behind their latest upstream release.
+# A vulnerability scan cannot answer this: a component several releases old
+# with no CVEs yet scans clean. Queries release-monitoring.org, so it needs
+# network access.
+sbom-freshness: online-office-sbom.spdx.json
+	$(PYTHON) $(abs_top_srcdir)/scripts/check-external-freshness.py \
+		$(ENGINE_BUILDDIR)/workdir/CustomTarget/instsetoo_native/sbom/collaboraofficebasis-core-sbom.spdx.json \
+		$(abs_top_builddir)/online-office-sbom.spdx.json
+
+.PHONY: cleanup setup-wsd systemplate sbom-check sbom-audit sbom-freshness

@@ -47,7 +47,7 @@
 #include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <svx/sdrpaintwindow.hxx>
 
 #include <svx/strings.hrc>
@@ -61,7 +61,7 @@ namespace svxform
     #define EXPLORER_SYNC_DELAY                 200
         // Time (in ms) until explorer synchronizes the view after select or deselect
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::beans;

@@ -25,13 +25,18 @@
 #include "seinitializer_nssimpl.hxx"
 #include "securityenvironment_nssimpl.hxx"
 
+#ifdef MACOSX
+#include <apple/seinitializer_appleimpl.hxx>
+#endif
+
 #include <cert.h>
 
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
-SEInitializer_NssImpl::SEInitializer_NssImpl( const css::uno::Reference< css::uno::XComponentContext > &rxContext )
+SEInitializer_NssImpl::SEInitializer_NssImpl( const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext )
 {
     m_xContext = rxContext;
 }
@@ -41,7 +46,7 @@ SEInitializer_NssImpl::~SEInitializer_NssImpl()
 }
 
 /* XSEInitializer */
-uno::Reference< css::xml::crypto::XXMLSecurityContext > SAL_CALL
+uno::Reference< css::xml::crypto::XXMLSecurityContext >
     SEInitializer_NssImpl::createSecurityContext( const OUString& )
 {
     CERTCertDBHandle    *pCertHandle = nullptr ;
@@ -74,7 +79,7 @@ uno::Reference< css::xml::crypto::XXMLSecurityContext > SAL_CALL
     }
 }
 
-void SAL_CALL SEInitializer_NssImpl::freeSecurityContext( const uno::Reference< css::xml::crypto::XXMLSecurityContext >& )
+void SEInitializer_NssImpl::freeSecurityContext( const uno::Reference< css::xml::crypto::XXMLSecurityContext >& )
 {
     /*
      * because the security context will free all its content when it
@@ -86,15 +91,15 @@ void SAL_CALL SEInitializer_NssImpl::freeSecurityContext( const uno::Reference< 
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SEInitializer_NssImpl::getImplementationName(  )
+OUString SEInitializer_NssImpl::getImplementationName(  )
 {
     return u"com.sun.star.xml.crypto.SEInitializer"_ustr;
 }
-bool SAL_CALL SEInitializer_NssImpl::supportsService( const OUString& rServiceName )
+bool SEInitializer_NssImpl::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService( this, rServiceName );
 }
-cpo::uno::Sequence< OUString > SAL_CALL SEInitializer_NssImpl::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SEInitializer_NssImpl::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.xml.crypto.SEInitializer"_ustr };
 }
@@ -104,14 +109,14 @@ namespace {
 class NSSInitializer_NssImpl : public SEInitializer_NssImpl
 {
 public:
-    explicit NSSInitializer_NssImpl(const uno::Reference<uno::XComponentContext>& xContext);
-    OUString SAL_CALL getImplementationName() override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    explicit NSSInitializer_NssImpl(const uno::Reference<cpo::uno::XComponentContext>& xContext);
+    OUString getImplementationName() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
 }
 
-NSSInitializer_NssImpl::NSSInitializer_NssImpl(const uno::Reference<uno::XComponentContext>& xContext)
+NSSInitializer_NssImpl::NSSInitializer_NssImpl(const uno::Reference<cpo::uno::XComponentContext>& xContext)
     : SEInitializer_NssImpl(xContext)
 {
 }
@@ -121,23 +126,28 @@ OUString NSSInitializer_NssImpl::getImplementationName()
     return u"com.sun.star.xml.crypto.NSSInitializer"_ustr;
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL NSSInitializer_NssImpl::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> NSSInitializer_NssImpl::getSupportedServiceNames()
 {
     return { u"com.sun.star.xml.crypto.NSSInitializer"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_xml_crypto_NSSInitializer_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new NSSInitializer_NssImpl(pCtx));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_xml_crypto_SEInitializer_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
+#ifdef MACOSX
+    // The macOS initializer extends the NSS one with Keychain support.
+    return cppu::acquire(new SEInitializer_AppleImpl(pCtx));
+#else
     return cppu::acquire(new SEInitializer_NssImpl(pCtx));
+#endif
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -31,7 +31,7 @@ namespace pcr
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
 
@@ -110,7 +110,7 @@ using namespace cpo::uno;
         return new ::cppu::OPropertyArrayHelper(aProps);
     }
 
-    std::unique_ptr<weld::DialogController> OControlFontDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+    std::unique_ptr<weld::DialogController> OControlFontDialog::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
     {
         ControlCharacterDialog::createItemSet(m_pFontItems, m_pItemPool, maFontList);
 
@@ -138,9 +138,9 @@ using namespace cpo::uno;
 
 }   // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_OControlFontDialog_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::OControlFontDialog(context));
 }

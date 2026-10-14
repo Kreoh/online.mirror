@@ -35,15 +35,15 @@ namespace utl
 class UNLESS_MERGELIBS(UNOTOOLS_DLLPUBLIC) ProgressHandlerWrap final
     : public ::cppu::WeakImplHelper<css::ucb::XProgressHandler>
 {
-    css::uno::Reference<css::task::XStatusIndicator> m_xStatusIndicator;
+    cpo::uno::Reference<css::task::XStatusIndicator> m_xStatusIndicator;
 
 public:
-    ProgressHandlerWrap(css::uno::Reference<css::task::XStatusIndicator> xSI);
+    ProgressHandlerWrap(cpo::uno::Reference<css::task::XStatusIndicator> xSI);
 
     // XProgressHandler
-    virtual void SAL_CALL push(const cpo::uno::Any& Status) override;
-    virtual void SAL_CALL update(const cpo::uno::Any& Status) override;
-    virtual void SAL_CALL pop() override;
+    virtual void push(const cpo::uno::Any& Status) override;
+    virtual void update(const cpo::uno::Any& Status) override;
+    virtual void pop() override;
 };
 
 } // namespace utl

@@ -31,13 +31,13 @@
 #include <com/sun/star/ui/UIElementType.hpp>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 
 namespace sfx2::sidebar {
 
 Reference<ui::XUIElement> SidebarPanelBase::Create (
     const OUString& rsResourceURL,
-    const css::uno::Reference<css::frame::XFrame>& rxFrame,
+    const cpo::uno::Reference<css::frame::XFrame>& rxFrame,
     std::unique_ptr<PanelLayout> xControl,
     const css::ui::LayoutSize& rLayoutSize)
 {
@@ -52,7 +52,7 @@ Reference<ui::XUIElement> SidebarPanelBase::Create (
 
 SidebarPanelBase::SidebarPanelBase (
     OUString sResourceURL,
-    css::uno::Reference<css::frame::XFrame> xFrame,
+    cpo::uno::Reference<css::frame::XFrame> xFrame,
     std::unique_ptr<PanelLayout> xControl,
     const css::ui::LayoutSize& rLayoutSize)
     : mxFrame(std::move(xFrame)),
@@ -62,7 +62,7 @@ SidebarPanelBase::SidebarPanelBase (
 {
     if (mxFrame.is())
     {
-        css::uno::Reference<css::ui::XContextChangeEventMultiplexer> xMultiplexer (
+        cpo::uno::Reference<css::ui::XContextChangeEventMultiplexer> xMultiplexer (
             css::ui::ContextChangeEventMultiplexer::get(
                 ::comphelper::getProcessComponentContext()));
         xMultiplexer->addContextChangeEventListener(this, mxFrame->getController());
@@ -88,7 +88,7 @@ void SidebarPanelBase::disposing(std::unique_lock<std::mutex>&)
 
     if (mxFrame.is())
     {
-        css::uno::Reference<css::ui::XContextChangeEventMultiplexer> xMultiplexer (
+        cpo::uno::Reference<css::ui::XContextChangeEventMultiplexer> xMultiplexer (
             css::ui::ContextChangeEventMultiplexer::get(
                 ::comphelper::getProcessComponentContext()));
         xMultiplexer->removeAllContextChangeEventListeners(this);
@@ -97,7 +97,7 @@ void SidebarPanelBase::disposing(std::unique_lock<std::mutex>&)
 }
 
 // XContextChangeEventListener
-void SAL_CALL SidebarPanelBase::notifyContextChangeEvent (
+void SidebarPanelBase::notifyContextChangeEvent (
     const ui::ContextChangeEventObject& rEvent)
 {
     SolarMutexGuard aGuard;
@@ -113,7 +113,7 @@ void SAL_CALL SidebarPanelBase::notifyContextChangeEvent (
     }
 }
 
-void SAL_CALL SidebarPanelBase::disposing (
+void SidebarPanelBase::disposing (
     const css::lang::EventObject&)
 {
     SolarMutexGuard aGuard;
@@ -122,40 +122,40 @@ void SAL_CALL SidebarPanelBase::disposing (
     mxControl.reset();
 }
 
-css::uno::Reference<css::frame::XFrame> SAL_CALL SidebarPanelBase::getFrame()
+cpo::uno::Reference<css::frame::XFrame> SidebarPanelBase::getFrame()
 {
     return mxFrame;
 }
 
-OUString SAL_CALL SidebarPanelBase::getResourceURL()
+OUString SidebarPanelBase::getResourceURL()
 {
     return msResourceURL;
 }
 
-sal_Int16 SAL_CALL SidebarPanelBase::getType()
+sal_Int16 SidebarPanelBase::getType()
 {
     return ui::UIElementType::TOOLPANEL;
 }
 
-Reference<XInterface> SAL_CALL SidebarPanelBase::getRealInterface()
+Reference<cpo::uno::XInterface> SidebarPanelBase::getRealInterface()
 {
     return getXWeak();
 }
 
-Reference<accessibility::XAccessible> SAL_CALL SidebarPanelBase::createAccessible (
+Reference<accessibility::XAccessible> SidebarPanelBase::createAccessible (
     const Reference<accessibility::XAccessible>&)
 {
     // Not implemented.
     return nullptr;
 }
 
-Reference<awt::XWindow> SAL_CALL SidebarPanelBase::getWindow()
+Reference<awt::XWindow> SidebarPanelBase::getWindow()
 {
     // Not implemented
     return nullptr;
 }
 
-ui::LayoutSize SAL_CALL SidebarPanelBase::getHeightForWidth (const sal_Int32 nWidth)
+ui::LayoutSize SidebarPanelBase::getHeightForWidth (const sal_Int32 nWidth)
 {
     SolarMutexGuard aGuard;
 
@@ -174,7 +174,7 @@ ui::LayoutSize SAL_CALL SidebarPanelBase::getHeightForWidth (const sal_Int32 nWi
     }
 }
 
-sal_Int32 SAL_CALL SidebarPanelBase::getMinimalWidth ()
+sal_Int32 SidebarPanelBase::getMinimalWidth ()
 {
     SolarMutexGuard aGuard;
 
@@ -183,7 +183,7 @@ sal_Int32 SAL_CALL SidebarPanelBase::getMinimalWidth ()
     return aSize.Width();
 }
 
-void SAL_CALL SidebarPanelBase::updateModel(const css::uno::Reference<css::frame::XModel>& xModel)
+void SidebarPanelBase::updateModel(const cpo::uno::Reference<css::frame::XModel>& xModel)
 {
     SolarMutexGuard aGuard;
 

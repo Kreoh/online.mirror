@@ -20,7 +20,7 @@
 #pragma once
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XTransientDocumentsDocumentContentFactory.hpp>
 
 #include <cppuhelper/implbase.hxx>
@@ -33,24 +33,24 @@ class DocumentContentFactory :
             css::lang::XServiceInfo >
 {
 public:
-    explicit DocumentContentFactory( css::uno::Reference< css::uno::XComponentContext > );
+    explicit DocumentContentFactory( cpo::uno::Reference< cpo::uno::XComponentContext > );
     virtual ~DocumentContentFactory() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL
+    virtual bool
     supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
     // XTransientDocumentsDocumentContentFactory
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    createDocumentContent( const css::uno::Reference< css::frame::XModel >& Model ) override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    createDocumentContent( const cpo::uno::Reference< css::frame::XModel >& Model ) override;
 
 private:
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
 };
 
 } // namespace tdoc_ucp

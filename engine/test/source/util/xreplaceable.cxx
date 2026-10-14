@@ -19,7 +19,8 @@
 #include <test/callgrind.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
@@ -43,7 +44,7 @@ void XReplaceable::testReplaceAll()
     xSearchDescr->setSearchString(maSearchString);
 
     //check that at least one object is there that will be replaced
-    uno::Reference<uno::XInterface> xElement = xReplaceable->findFirst(xSearchDescr);
+    uno::Reference<cpo::uno::XInterface> xElement = xReplaceable->findFirst(xSearchDescr);
     CPPUNIT_ASSERT(xElement.is());
 
     //check that there is none object with the replace string

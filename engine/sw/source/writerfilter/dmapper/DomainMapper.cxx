@@ -71,7 +71,7 @@
 #include <com/sun/star/text/XTextColumns.hpp>
 #include <com/sun/star/text/RubyPosition.hpp>
 #include <com/sun/star/text/ScriptHintType.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/text/FontEmphasis.hpp>
 #include <com/sun/star/awt/CharSet.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -100,6 +100,7 @@
 #include <SwXTextDefaults.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace oox;
 
 namespace writerfilter::dmapper{
@@ -112,7 +113,7 @@ struct
 } CT_PageSz;
 
 
-DomainMapper::DomainMapper( const uno::Reference< uno::XComponentContext >& xContext,
+DomainMapper::DomainMapper( const uno::Reference< cpo::uno::XComponentContext >& xContext,
                             uno::Reference<io::XInputStream> const& xInputStream,
                             rtl::Reference<SwXTextDocument> const& xModel,
                             bool bRepairStorage,
@@ -205,7 +206,7 @@ DomainMapper::DomainMapper( const uno::Reference< uno::XComponentContext >& xCon
         m_pImpl->m_xDocumentStorage = comphelper::OStorageHelper::GetStorageOfFormatFromInputStream(
             OFOPXML_STORAGE_FORMAT_STRING, xInputStream, xContext, bRepairStorage);
 
-        uno::Reference< uno::XInterface > xTemp = xContext->getServiceManager()->createInstanceWithContext(
+        uno::Reference< cpo::uno::XInterface > xTemp = xContext->getServiceManager()->createInstanceWithContext(
                                 u"com.sun.star.document.OOXMLDocumentPropertiesImporter"_ustr,
                                 xContext);
 
@@ -401,7 +402,8 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                 {
                     if (nIntValue > 0)
                     {
-                        sal_Int16 nTransformedValue = sal_Int16((255.0 - nIntValue) * 10000.0 / 255.0);
+                        sal_Int16 nTransformedValue
+                            = ConversionHelper::convertThemeTintOrShade(nIntValue);
                         aComplexColor.addTransformation({model::TransformationType::Tint, sal_Int16(nTransformedValue)});
                     }
                 }
@@ -409,7 +411,8 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                 {
                     if (nIntValue > 0)
                     {
-                        sal_Int16 nTransformedValue = sal_Int16((255.0 - nIntValue) * 10000.0 / 255.0);
+                        sal_Int16 nTransformedValue
+                            = ConversionHelper::convertThemeTintOrShade(nIntValue);
                         aComplexColor.addTransformation({model::TransformationType::Shade, sal_Int16(nTransformedValue)});
                     }
                 }
@@ -2084,7 +2087,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     }
     break;  // sprmPFWidowControl
     case NS_ooxml::LN_CT_PPrBase_overflowPunct:
-        rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, cpo::uno::Any( nIntValue == 0 ));
+        // The element says whether punctuation may reach past the end of the line, which is what
+        // hanging punctuation is, so the two say the same thing and neither turns the other over.
+        rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, cpo::uno::Any( nIntValue != 0 ));
         break;
     case NS_ooxml::LN_CT_PPrBase_topLinePunct:
         break;
@@ -2706,12 +2711,14 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
 
                     if (pThemeColorHandler->mnTint > 0 )
                     {
-                        sal_Int16 nTint = sal_Int16((255 - pThemeColorHandler->mnTint) * 10000 / 255);
+                        sal_Int16 nTint
+                            = ConversionHelper::convertThemeTintOrShade(pThemeColorHandler->mnTint);
                         aComplexColor.addTransformation({model::TransformationType::Tint, nTint});
                     }
                     if (pThemeColorHandler->mnShade > 0)
                     {
-                        sal_Int16 nShade = sal_Int16((255 - pThemeColorHandler->mnShade) * 10000 / 255);
+                        sal_Int16 nShade
+                            = ConversionHelper::convertThemeTintOrShade(pThemeColorHandler->mnShade);
                         aComplexColor.addTransformation({model::TransformationType::Shade, nShade});
                     }
                 }
@@ -4441,7 +4448,7 @@ void DomainMapper::lcl_text(const sal_uInt8 * data_, size_t len)
             }
         }
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         TOOLS_WARN_EXCEPTION("writerfilter", "");
     }
@@ -4986,7 +4993,7 @@ void DomainMapper::lcl_utext(const sal_Unicode *const data_, size_t len)
         }
         m_pImpl->SetIsFirstRun(false);
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
     }
 }
@@ -5140,13 +5147,13 @@ void DomainMapper::handleParaJustification(const sal_Int32 nIntValue, const ::to
         if ( GetSettingsTable()->GetWordCompatibilityMode() >= 15 )
         {
             rContext->Insert( PROP_PARA_WORD_SPACING_MINIMUM, cpo::uno::Any( sal_uInt16(75) ) );
-            rContext->Insert( PROP_PARA_WORD_SPACING_MAXIMUM, cpo::uno::Any( sal_uInt16(133) ) );
+            rContext->Insert( PROP_PARA_WORD_SPACING_MAXIMUM, cpo::uno::Any( sal_uInt16(150) ) );
         }
         break;
     case NS_ooxml::LN_Value_ST_Jc_lowKashida:
         nAdjust = style::ParagraphAdjust_BLOCK;
         // modify this value also in sw/source/filter/ww8/docxattributeoutput.cxx
-        nWordSpacing = 133;
+        nWordSpacing = 150;
         break;
     case NS_ooxml::LN_Value_ST_Jc_mediumKashida:
         nAdjust = style::ParagraphAdjust_BLOCK;
@@ -5458,6 +5465,16 @@ void DomainMapper::finishParagraph(const bool bRemove, const bool bNoNumbering)
 void DomainMapper::commentProps(const OUString& sId, const CommentProperties& rProps)
 {
     m_pImpl->commentProps(sId, rProps);
+}
+
+void DomainMapper::commentDurableId(const OUString& sParaId, const OUString& sDurableId)
+{
+    m_pImpl->commentDurableId(sParaId, sDurableId);
+}
+
+void DomainMapper::commentDateUtc(const OUString& sDurableId, const OUString& sDateUtc)
+{
+    m_pImpl->commentDateUtc(sDurableId, sDateUtc);
 }
 
 rtl::Reference<SwXStyleFamily> const & DomainMapper::GetCharacterStyles()

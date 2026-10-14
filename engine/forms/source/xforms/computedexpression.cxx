@@ -32,7 +32,7 @@
 #include <unotools/textsearch.hxx>
 #include <comphelper/processfactory.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using com::sun::star::xml::xpath::XPathAPI;
 using com::sun::star::xml::xpath::XXPathAPI;
 using com::sun::star::xml::xpath::XPathExtension;
@@ -153,7 +153,7 @@ Reference<XXPathAPI> ComputedExpression::_getXPathAPI(const xforms::EvaluationCo
     Reference<XXPathAPI> xXPath( XPathAPI::create( comphelper::getProcessComponentContext() ) );
 
     // register xforms extension#
-    const Reference< XComponentContext >& aComponentContext = comphelper::getProcessComponentContext();
+    const Reference< cpo::uno::XComponentContext >& aComponentContext = comphelper::getProcessComponentContext();
     Reference< XXPathExtension > aExtension = XPathExtension::createWithModel(aComponentContext, aContext.mxModel, aContext.mxContextNode);
     xXPath->registerExtensionInstance(aExtension);
 

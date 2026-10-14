@@ -42,13 +42,12 @@
 using namespace     ::com::sun::star::container;
 using namespace     ::com::sun::star::lang;
 using namespace     ::com::sun::star::ui::dialogs;
-using namespace     ::com::sun::star::uno;
 using namespace ::cpo::uno;
 using namespace     ::com::sun::star::beans;
 using namespace     ::com::sun::star::awt;
 
 
-struct FilterEntry
+struct SvtFilterEntry
 {
 protected:
     OUString     m_sTitle;
@@ -57,13 +56,13 @@ protected:
     UnoFilterList       m_aSubFilters;
 
 public:
-    FilterEntry( OUString _aTitle, OUString _aFilter )
+    SvtFilterEntry( OUString _aTitle, OUString _aFilter )
         :m_sTitle(std::move( _aTitle ))
         ,m_sFilter(std::move( _aFilter ))
     {
     }
 
-    FilterEntry( OUString _aTitle, const UnoFilterList& _rSubFilters );
+    SvtFilterEntry( OUString _aTitle, const UnoFilterList& _rSubFilters );
 
     const OUString& getTitle() const { return m_sTitle; }
     const OUString& getFilter() const { return m_sFilter; }
@@ -81,20 +80,20 @@ public:
 };
 
 
-FilterEntry::FilterEntry( OUString _aTitle, const UnoFilterList& _rSubFilters )
+SvtFilterEntry::SvtFilterEntry( OUString _aTitle, const UnoFilterList& _rSubFilters )
     :m_sTitle(std::move( _aTitle ))
     ,m_aSubFilters( _rSubFilters )
 {
 }
 
 
-bool FilterEntry::hasSubFilters( ) const
+bool SvtFilterEntry::hasSubFilters( ) const
 {
     return m_aSubFilters.hasElements();
 }
 
 
-void FilterEntry::getSubFilters( UnoFilterList& _rSubFilterList )
+void SvtFilterEntry::getSubFilters( UnoFilterList& _rSubFilterList )
 {
     _rSubFilterList = m_aSubFilters;
 }
@@ -329,7 +328,7 @@ namespace {
         explicit FilterTitleMatch( const OUString& _rTitle ) : rTitle( _rTitle ) { }
 
 
-        bool operator () ( const FilterEntry& _rEntry )
+        bool operator () ( const SvtFilterEntry& _rEntry )
         {
             bool bMatch;
             if ( !_rEntry.hasSubFilters() )
@@ -518,15 +517,6 @@ Sequence< OUString > SvtFilePicker::getSelectedFiles()
 
     return comphelper::containerToSequence(m_xDlg->GetPathList());
 }
-
-Sequence< OUString > SvtFilePicker::getFiles()
-{
-    Sequence< OUString > aFiles = getSelectedFiles();
-    if (aFiles.getLength() > 1)
-        aFiles.realloc(1);
-    return aFiles;
-}
-
 
 // XFilePickerControlAccess functions
 
@@ -837,7 +827,7 @@ void SvtFilePicker::appendFilterGroup( const OUString& sGroupTitle,
     ensureFilterList( sInitialCurrentFilter );
 
     // append the filter
-    m_pFilterList->insert( m_pFilterList->end(), FilterEntry( sGroupTitle, aFilters ) );
+    m_pFilterList->insert( m_pFilterList->end(), SvtFilterEntry( sGroupTitle, aFilters ) );
 }
 
 
@@ -859,7 +849,7 @@ void SvtFilePicker::appendFilter( const OUString& aTitle,
     ensureFilterList( aTitle );
 
     // append the filter
-    m_pFilterList->insert( m_pFilterList->end(), FilterEntry( aTitle, aFilter ) );
+    m_pFilterList->insert( m_pFilterList->end(), SvtFilterEntry( aTitle, aFilter ) );
 }
 
 
@@ -975,9 +965,9 @@ Sequence< OUString > SvtFilePicker::getSupportedServiceNames()
     return { u"com.sun.star.ui.dialogs.OfficeFilePicker"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 fpicker_SvtFilePicker_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SvtFilePicker());
 }
@@ -1021,9 +1011,9 @@ Sequence< OUString > SvtRemoteFilePicker::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 fpicker_SvtRemoteFilePicker_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SvtRemoteFilePicker());
 }

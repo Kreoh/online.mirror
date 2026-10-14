@@ -25,6 +25,7 @@ SwTestViewCallback::SwTestViewCallback(
     , m_nOwnCursorInvalidatedBy(-1)
     , m_bOwnCursorAtOrigin(false)
     , m_bViewCursorInvalidated(false)
+    , m_nViewCursorMovedBy(-1)
     , m_bOwnSelectionSet(false)
     , m_bViewSelectionSet(false)
     , m_bTilesInvalidated(false)
@@ -102,6 +103,7 @@ void SwTestViewCallback::callbackImpl(COKitCallbackType eType, const char* pPayl
             boost::property_tree::ptree aTree;
             boost::property_tree::read_json(aStream, aTree);
             OString aRect(aTree.get_child("rectangle").get_value<std::string>());
+            m_nViewCursorMovedBy = aTree.get("editorViewId", -1);
 
             cpo::uno::Sequence<OUString> aSeq
                 = comphelper::string::convertCommaSeparated(OUString::fromUtf8(aRect));
@@ -198,6 +200,27 @@ void SwTestViewCallback::callbackImpl(COKitCallbackType eType, const char* pPayl
         case COKitCallbackType::CURSOR_VISIBLE:
         {
             m_bCursorVisible = aPayload == "true";
+            break;
+        }
+        case COKitCallbackType::A11Y_FOCUS_CHANGED:
+        {
+            m_aA11yFocusedParagraph.clear();
+            std::stringstream aStream(pPayload);
+            boost::property_tree::read_json(aStream, m_aA11yFocusedParagraph);
+            break;
+        }
+        case COKitCallbackType::A11Y_FOCUSED_CELL_CHANGED:
+        {
+            m_aA11yFocusedCell.clear();
+            std::stringstream aStream(pPayload);
+            boost::property_tree::read_json(aStream, m_aA11yFocusedCell);
+            break;
+        }
+        case COKitCallbackType::A11Y_SELECTION_CHANGED:
+        {
+            m_aA11ySelection.clear();
+            std::stringstream aStream(pPayload);
+            boost::property_tree::read_json(aStream, m_aA11ySelection);
             break;
         }
         default:

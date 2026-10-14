@@ -43,6 +43,7 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 #define QUERYINT( xint ) \
     if( rType == cppu::UnoType<xint>::get() ) \
@@ -57,6 +58,7 @@ using namespace ::com::sun::star;
 #define WID_STRING1 5
 #define WID_STRING2 6
 #define WID_STRING3 7
+#define WID_STRING4 8
 
 class SvxUnoFieldData_Impl
 {
@@ -68,6 +70,7 @@ public:
     OUString    msString1;
     OUString    msString2;
     OUString    msString3;
+    OUString    msString4;
     util::DateTime maDateTime;
 
     OUString    msPresentation;
@@ -96,6 +99,7 @@ static const SfxItemPropertySet* ImplGetFieldItemPropertySet( sal_Int32 mnId )
         { UNO_TC_PROP_URL_REPRESENTATION, WID_STRING1, ::cppu::UnoType<OUString>::get(),  0, 0 },
         { UNO_TC_PROP_URL_TARGET,         WID_STRING2, ::cppu::UnoType<OUString>::get(),  0, 0 },
         { UNO_TC_PROP_URL,                WID_STRING3, ::cppu::UnoType<OUString>::get(),  0, 0 },
+        { UNO_TC_PROP_NAME,               WID_STRING4, ::cppu::UnoType<OUString>::get(),  0, 0 },
     };
     static const SfxItemPropertySet aUrlFieldPropertySet_Impl(aUrlFieldPropertyMap_Impl);
 
@@ -340,6 +344,7 @@ SvxUnoTextField::SvxUnoTextField( uno::Reference< text::XTextRange > xAnchor, co
                 mpImpl->msString1 = static_cast<const SvxURLField*>(pData)->GetRepresentation();
                 mpImpl->msString2 = static_cast<const SvxURLField*>(pData)->GetTargetFrame();
                 mpImpl->msString3 = static_cast<const SvxURLField*>(pData)->GetURL();
+                mpImpl->msString4 = static_cast<const SvxURLField*>(pData)->GetName();
                 mpImpl->mnInt16 = sal::static_int_cast< sal_Int16 >(
                     static_cast<const SvxURLField*>(pData)->GetFormat());
                 break;
@@ -426,6 +431,7 @@ std::unique_ptr<SvxFieldData> SvxUnoTextField::CreateFieldData() const noexcept
     case text::textfield::Type::URL:
         pData.reset( new SvxURLField( mpImpl->msString3, mpImpl->msString1, !mpImpl->msString1.isEmpty() ? SvxURLFormat::Repr : SvxURLFormat::Url ) );
         static_cast<SvxURLField*>(pData.get())->SetTargetFrame( mpImpl->msString2 );
+        static_cast<SvxURLField*>(pData.get())->SetName( mpImpl->msString4 );
         if( static_cast<SvxURLFormat>(mpImpl->mnInt16) >= SvxURLFormat::AppDefault &&
             static_cast<SvxURLFormat>(mpImpl->mnInt16) <= SvxURLFormat::Repr )
             static_cast<SvxURLField*>(pData.get())->SetFormat( static_cast<SvxURLFormat>(mpImpl->mnInt16) );
@@ -676,7 +682,7 @@ void SvxUnoTextField::setPropertyValue( const OUString& aPropertyName, const cpo
     SolarMutexGuard aGuard;
 
     if( mpImpl == nullptr )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if (aPropertyName == UNO_TC_PROP_ANCHOR)
     {
@@ -720,6 +726,10 @@ void SvxUnoTextField::setPropertyValue( const OUString& aPropertyName, const cpo
         break;
     case WID_STRING3:
         if(aValue >>= mpImpl->msString3)
+            return;
+        break;
+    case WID_STRING4:
+        if(aValue >>= mpImpl->msString4)
             return;
         break;
     }
@@ -768,6 +778,9 @@ cpo::uno::Any SvxUnoTextField::getPropertyValue( const OUString& PropertyName )
         break;
     case WID_STRING3:
         aValue <<= mpImpl->msString3;
+        break;
+    case WID_STRING4:
+        aValue <<= mpImpl->msString4;
         break;
     }
 
@@ -870,9 +883,9 @@ bool SvxUnoTextField::supportsService( const OUString& ServiceName )
     return cppu::supportsService( this, ServiceName );
 }
 
-uno::Reference< uno::XInterface > SvxUnoTextCreateTextField( std::u16string_view ServiceSpecifier )
+uno::Reference< cpo::uno::XInterface > SvxUnoTextCreateTextField( std::u16string_view ServiceSpecifier )
 {
-    uno::Reference< uno::XInterface > xRet;
+    uno::Reference< cpo::uno::XInterface > xRet;
 
     // #i93308# up to OOo 3.2 we used this wrong namespace name with the capital T & F. This is
     // fixed since OOo 3.2 but for compatibility we will still provide support for the wrong notation.

@@ -22,11 +22,11 @@
 #include <cppuhelper/component.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 using namespace osl;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 
@@ -87,7 +87,7 @@ void OComponentHelper::release() noexcept
                 {
                     dispose();
                 }
-                catch (css::uno::RuntimeException & exc)
+                catch (cpo::uno::RuntimeException & exc)
                 {
                     // release should not throw exceptions
                     SAL_WARN( "cppuhelper", exc );

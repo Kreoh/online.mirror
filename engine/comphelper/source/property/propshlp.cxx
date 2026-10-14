@@ -29,7 +29,7 @@
 #include <memory>
 #include <sal/log.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
@@ -447,7 +447,7 @@ void OPropertySetHelper::setFastPropertyValueImpl(std::unique_lock<std::mutex>& 
     {
         throw; /* allowed to leave */
     }
-    catch (const css::uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw; /* allowed to leave */
     }

@@ -49,7 +49,7 @@ class XSecParser::Context
         virtual ~Context() = default;
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& /*xAttrs*/)
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& /*xAttrs*/)
         {
         }
 
@@ -81,7 +81,7 @@ class XSecParser::UnknownContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -121,7 +121,7 @@ class XSecParser::ReferencedContextImpl
         {
         }
 
-        OUString CheckIdAttrReferenced(css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs)
+        OUString CheckIdAttrReferenced(cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs)
         {
             OUString const id(m_rParser.HandleIdAttr(xAttrs));
             if (!id.isEmpty() && m_rParser.m_pXSecController->haveReferenceForId(id))
@@ -383,9 +383,13 @@ class XSecParser::DsKeyInfoContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
-            m_rParser.HandleIdAttr(xAttrs);
+            OUString const id{m_rParser.HandleIdAttr(xAttrs)};
+            if (!id.isEmpty() && m_rParser.m_pXSecController->haveReferenceForId(id))
+            {
+                m_rParser.m_pXSecController->setKeyInfoReferenced();
+            }
         }
 
         virtual std::unique_ptr<Context> CreateChildContext(
@@ -422,7 +426,7 @@ class XSecParser::DsSignatureValueContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -454,7 +458,7 @@ class XSecParser::DsDigestValueContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& /*xAttrs*/) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& /*xAttrs*/) override
         {
             m_rValue.clear();
         }
@@ -481,7 +485,7 @@ class XSecParser::DsDigestMethodContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             OUString ouAlgorithm = xAttrs->getValueByName(u"Algorithm"_ustr);
 
@@ -520,7 +524,7 @@ class XSecParser::DsTransformContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             OUString ouAlgorithm = xAttrs->getValueByName(u"Algorithm"_ustr);
 
@@ -581,7 +585,7 @@ class XSecParser::DsReferenceContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
 
@@ -649,7 +653,7 @@ class XSecParser::DsSignatureMethodContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             OUString ouAlgorithm = xAttrs->getValueByName(u"Algorithm"_ustr);
             if (ouAlgorithm == ALGO_ECDSASHA1 || ouAlgorithm == ALGO_ECDSASHA256
@@ -671,7 +675,7 @@ class XSecParser::DsSignedInfoContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -712,7 +716,7 @@ class XSecParser::XadesEncapsulatedX509CertificateContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -739,7 +743,7 @@ class XSecParser::XadesCertificateValuesContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -768,7 +772,7 @@ class XSecParser::XadesUnsignedSignaturePropertiesContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -811,7 +815,7 @@ class XSecParser::XadesUnsignedPropertiesContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_rParser.HandleIdAttr(xAttrs);
         }
@@ -993,6 +997,9 @@ class XSecParser::XadesCertContext
     : public XSecParser::ReferencedContextImpl
 {
     private:
+        /// ETSI EN 319 132-1 V1.3 says SigningCertificate and SigningCertificateV2
+        /// are mutually exclusive so just handle both in simplest way.
+        bool const m_isV2;
         sal_Int32 m_nReferenceDigestID = css::xml::crypto::DigestID::SHA1;
         OUString m_CertDigest;
         OUString m_X509IssuerName;
@@ -1001,8 +1008,9 @@ class XSecParser::XadesCertContext
     public:
         XadesCertContext(XSecParser& rParser,
                 std::optional<SvXMLNamespaceMap>&& pOldNamespaceMap,
-                bool const isReferenced)
+                bool const isReferenced, bool const isV2)
             : ReferencedContextImpl(rParser, std::move(pOldNamespaceMap), isReferenced)
+            , m_isV2(isV2)
         {
         }
 
@@ -1026,10 +1034,15 @@ class XSecParser::XadesCertContext
             {
                 return std::make_unique<XadesCertDigestContext>(m_rParser, std::move(pOldNamespaceMap), m_CertDigest, m_nReferenceDigestID);
             }
-            if (nNamespace == XML_NAMESPACE_XADES132 && rName == "IssuerSerial")
+            if (!m_isV2 && nNamespace == XML_NAMESPACE_XADES132 && rName == "IssuerSerial")
             {
                 return std::make_unique<DsX509IssuerSerialContext>(m_rParser, std::move(pOldNamespaceMap), m_X509IssuerName, m_X509SerialNumber);
             }
+            // note: only the digest is actually used currently so issuer/serial
+            // is not needed, but add this to mark the location in case it's
+            // needed later (it is DER-encoded RFC 5035 IssuerSerial) ...
+            // (yes, this is in the same versioned namespace as the old element)
+//            if (m_isV2 && nNamespace == XML_NAMESPACE_XADES132 && rName == "IssuerSerialV2")
             return XSecParser::Context::CreateChildContext(std::move(pOldNamespaceMap), nNamespace, rName);
         }
 };
@@ -1037,11 +1050,15 @@ class XSecParser::XadesCertContext
 class XSecParser::XadesSigningCertificateContext
     : public XSecParser::ReferencedContextImpl
 {
+    private:
+        bool const m_isV2;
+
     public:
         XadesSigningCertificateContext(XSecParser& rParser,
                 std::optional<SvXMLNamespaceMap>&& pOldNamespaceMap,
-                bool const isReferenced)
+                bool const isReferenced, bool const isV2)
             : ReferencedContextImpl(rParser, std::move(pOldNamespaceMap), isReferenced)
+            , m_isV2(isV2)
         {
         }
 
@@ -1051,7 +1068,7 @@ class XSecParser::XadesSigningCertificateContext
         {
             if (nNamespace == XML_NAMESPACE_XADES132 && rName == "Cert")
             {
-                return std::make_unique<XadesCertContext>(m_rParser, std::move(pOldNamespaceMap), m_isReferenced);
+                return std::make_unique<XadesCertContext>(m_rParser, std::move(pOldNamespaceMap), m_isReferenced, m_isV2);
             }
             return XSecParser::Context::CreateChildContext(std::move(pOldNamespaceMap), nNamespace, rName);
         }
@@ -1101,7 +1118,7 @@ class XSecParser::XadesSignedSignaturePropertiesContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             CheckIdAttrReferenced(xAttrs);
         }
@@ -1116,7 +1133,11 @@ class XSecParser::XadesSignedSignaturePropertiesContext
             }
             if (nNamespace == XML_NAMESPACE_XADES132 && rName == "SigningCertificate")
             {
-                return std::make_unique<XadesSigningCertificateContext>(m_rParser, std::move(pOldNamespaceMap), m_isReferenced);
+                return std::make_unique<XadesSigningCertificateContext>(m_rParser, std::move(pOldNamespaceMap), m_isReferenced, false);
+            }
+            if (nNamespace == XML_NAMESPACE_XADES132 && rName == "SigningCertificateV2")
+            {
+                return std::make_unique<XadesSigningCertificateContext>(m_rParser, std::move(pOldNamespaceMap), m_isReferenced, true);
             }
             if (nNamespace == XML_NAMESPACE_LO_EXT && rName == "SignatureLine")
             {
@@ -1139,7 +1160,7 @@ class XSecParser::XadesSignedPropertiesContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             CheckIdAttrReferenced(xAttrs);
         }
@@ -1166,10 +1187,11 @@ class XSecParser::XadesQualifyingPropertiesContext
                 bool const isReferenced)
             : ReferencedContextImpl(rParser, std::move(pOldNamespaceMap), isReferenced)
         {
+            rParser.m_pXSecController->setXAdES();
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             CheckIdAttrReferenced(xAttrs);
         }
@@ -1250,7 +1272,7 @@ class XSecParser::DsSignaturePropertyContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             m_Id = CheckIdAttrReferenced(xAttrs);
         }
@@ -1308,7 +1330,7 @@ class XSecParser::DsSignaturePropertiesContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             CheckIdAttrReferenced(xAttrs);
         }
@@ -1337,7 +1359,7 @@ class XSecParser::DsObjectContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             CheckIdAttrReferenced(xAttrs);
         }
@@ -1370,7 +1392,7 @@ class XSecParser::DsSignatureContext
         }
 
         virtual void StartElement(
-            css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
+            cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs) override
         {
             OUString const ouIdAttr(m_rParser.HandleIdAttr(xAttrs));
             m_rParser.m_rXMLSignatureHelper.StartVerifySignatureElement();
@@ -1379,6 +1401,11 @@ class XSecParser::DsSignatureContext
             {
                 m_rParser.m_pXSecController->setId( ouIdAttr );
             }
+        }
+
+        virtual void EndElement() override
+        {
+            m_rParser.m_pXSecController->resolveSigningCertificate();
         }
 
         virtual std::unique_ptr<Context> CreateChildContext(
@@ -1446,7 +1473,7 @@ XSecParser::XSecParser(XMLSignatureHelper& rXMLSignatureHelper,
                          GetXMLToken(XML_N_LO_EXT), XML_NAMESPACE_LO_EXT);
 }
 
-OUString XSecParser::HandleIdAttr(css::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs)
+OUString XSecParser::HandleIdAttr(cpo::uno::Reference<css::xml::sax::XAttributeList> const& xAttrs)
 {
     OUString ouIdAttr = getIdAttr(xAttrs);
     if (!ouIdAttr.isEmpty())
@@ -1456,7 +1483,7 @@ OUString XSecParser::HandleIdAttr(css::uno::Reference<css::xml::sax::XAttributeL
     return ouIdAttr;
 }
 
-OUString XSecParser::getIdAttr(const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
+OUString XSecParser::getIdAttr(const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
 {
     OUString ouIdAttr = xAttribs->getValueByName(u"id"_ustr);
 
@@ -1471,7 +1498,7 @@ OUString XSecParser::getIdAttr(const css::uno::Reference< css::xml::sax::XAttrib
 /*
  * XDocumentHandler
  */
-void SAL_CALL XSecParser::startDocument(  )
+void XSecParser::startDocument(  )
 {
     if (m_xNextHandler.is())
     {
@@ -1479,7 +1506,7 @@ void SAL_CALL XSecParser::startDocument(  )
     }
 }
 
-void SAL_CALL XSecParser::endDocument(  )
+void XSecParser::endDocument(  )
 {
     if (m_xNextHandler.is())
     {
@@ -1487,9 +1514,9 @@ void SAL_CALL XSecParser::endDocument(  )
     }
 }
 
-void SAL_CALL XSecParser::startElement(
+void XSecParser::startElement(
     const OUString& rName,
-    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
+    const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
 {
     assert(m_pNamespaceMap);
     std::optional<SvXMLNamespaceMap> pRewindMap(
@@ -1545,7 +1572,7 @@ void SAL_CALL XSecParser::startElement(
     }
 }
 
-void SAL_CALL XSecParser::endElement(const OUString& rName)
+void XSecParser::endElement(const OUString& rName)
 {
     assert(!m_ContextStack.empty()); // this should be checked by sax parser?
 
@@ -1579,7 +1606,7 @@ void SAL_CALL XSecParser::endElement(const OUString& rName)
     m_ContextStack.pop();
 }
 
-void SAL_CALL XSecParser::characters(const OUString& rChars)
+void XSecParser::characters(const OUString& rChars)
 {
     assert(!m_ContextStack.empty()); // this should be checked by sax parser?
     m_ContextStack.top()->Characters(rChars);
@@ -1590,7 +1617,7 @@ void SAL_CALL XSecParser::characters(const OUString& rChars)
     }
 }
 
-void SAL_CALL XSecParser::ignorableWhitespace( const OUString& aWhitespaces )
+void XSecParser::ignorableWhitespace( const OUString& aWhitespaces )
 {
     if (m_xNextHandler.is())
     {
@@ -1598,7 +1625,7 @@ void SAL_CALL XSecParser::ignorableWhitespace( const OUString& aWhitespaces )
     }
 }
 
-void SAL_CALL XSecParser::processingInstruction( const OUString& aTarget, const OUString& aData )
+void XSecParser::processingInstruction( const OUString& aTarget, const OUString& aData )
 {
     if (m_xNextHandler.is())
     {
@@ -1606,7 +1633,7 @@ void SAL_CALL XSecParser::processingInstruction( const OUString& aTarget, const 
     }
 }
 
-void SAL_CALL XSecParser::setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator )
+void XSecParser::setDocumentLocator( const cpo::uno::Reference< css::xml::sax::XLocator >& xLocator )
 {
     if (m_xNextHandler.is())
     {
@@ -1617,7 +1644,7 @@ void SAL_CALL XSecParser::setDocumentLocator( const css::uno::Reference< css::xm
 /*
  * XInitialization
  */
-void SAL_CALL XSecParser::initialize(
+void XSecParser::initialize(
     const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     aArguments[0] >>= m_xNextHandler;

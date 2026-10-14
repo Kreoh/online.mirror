@@ -25,11 +25,12 @@
 #include <com/sun/star/frame/XModel.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 VbaWindowBase::VbaWindowBase(
         const uno::Reference< XHelperInterface >& xParent,
-        const uno::Reference< uno::XComponentContext >& xContext,
+        const uno::Reference< cpo::uno::XComponentContext >& xContext,
         const uno::Reference< frame::XController >& xController ) :
     WindowBaseImpl_BASE( xParent, xContext )
 {
@@ -37,19 +38,19 @@ VbaWindowBase::VbaWindowBase(
 }
 
 VbaWindowBase::VbaWindowBase( cpo::uno::Sequence< cpo::uno::Any > const & args,
-        uno::Reference< uno::XComponentContext > const & xContext ) :
+        uno::Reference< cpo::uno::XComponentContext > const & xContext ) :
     WindowBaseImpl_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0, false ), xContext )
 {
     construct( getXSomethingFromArgs< frame::XController >( args, 2 ) );
 }
 
-bool SAL_CALL
+bool
 VbaWindowBase::getVisible()
 {
     return getWindow2()->isVisible();
 }
 
-void SAL_CALL
+void
 VbaWindowBase::setVisible( bool _visible )
 {
     getWindow2()->setVisible( _visible );
@@ -77,49 +78,49 @@ static void setPosSize( const uno::Reference< awt::XWindow >& xWindow, sal_Int32
     }
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 VbaWindowBase::getHeight()
 {
     return getWindow()->getPosSize().Height;
 }
 
-void SAL_CALL
+void
 VbaWindowBase::setHeight( sal_Int32 _height )
 {
     setPosSize( getWindow(), _height, css::awt::PosSize::HEIGHT );
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 VbaWindowBase::getLeft()
 {
     return getWindow()->getPosSize().X;
 }
 
-void SAL_CALL
+void
 VbaWindowBase::setLeft( sal_Int32 _left )
 {
     setPosSize( getWindow(), _left, css::awt::PosSize::X );
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 VbaWindowBase::getTop()
 {
     return getWindow()->getPosSize().Y;
 }
 
-void SAL_CALL
+void
 VbaWindowBase::setTop( sal_Int32 _top )
 {
     setPosSize( getWindow(), _top, css::awt::PosSize::Y );
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 VbaWindowBase::getWidth()
 {
     return getWindow()->getPosSize().Width;
 }
 
-void SAL_CALL
+void
 VbaWindowBase::setWidth( sal_Int32 _width )
 {
     setPosSize( getWindow(), _width, css::awt::PosSize::WIDTH );
@@ -158,7 +159,7 @@ uno::Reference< awt::XWindow2 > VbaWindowBase::getWindow2() const
 
 void VbaWindowBase::construct( const uno::Reference< frame::XController >& xController )
 {
-    if( !xController.is() ) throw uno::RuntimeException();
+    if( !xController.is() ) throw cpo::uno::RuntimeException();
     uno::Reference< frame::XFrame > xFrame( xController->getFrame(), uno::UNO_SET_THROW );
     uno::Reference< awt::XWindow > xWindow( xFrame->getContainerWindow(), uno::UNO_SET_THROW );
     m_xController = xController;

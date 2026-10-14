@@ -42,39 +42,39 @@ class XMLSecurityContext_MSCryptImpl : public ::cppu::WeakImplHelper<
 {
     private:
         //xmlSecKeysMngrPtr m_pKeysMngr ;
-        css::uno::Reference< css::xml::crypto::XSecurityEnvironment > m_xSecurityEnvironment ;
+        cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment > m_xSecurityEnvironment ;
 
     public:
         XMLSecurityContext_MSCryptImpl();
 
         //Methods from XXMLSecurityContext
-        virtual sal_Int32 SAL_CALL addSecurityEnvironment(
-            const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment
+        virtual sal_Int32 addSecurityEnvironment(
+            const cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment
             ) override;
 
-        virtual ::sal_Int32 SAL_CALL getSecurityEnvironmentNumber(  ) override;
+        virtual ::sal_Int32 getSecurityEnvironmentNumber(  ) override;
 
-        virtual css::uno::Reference<
-            css::xml::crypto::XSecurityEnvironment > SAL_CALL
+        virtual cpo::uno::Reference<
+            css::xml::crypto::XSecurityEnvironment >
             getSecurityEnvironmentByIndex( ::sal_Int32 index ) override;
 
-        virtual css::uno::Reference<
-            css::xml::crypto::XSecurityEnvironment > SAL_CALL
+        virtual cpo::uno::Reference<
+            css::xml::crypto::XSecurityEnvironment >
             getSecurityEnvironment(  ) override;
 
-        virtual ::sal_Int32 SAL_CALL getDefaultSecurityEnvironmentIndex(  ) override;
+        virtual ::sal_Int32 getDefaultSecurityEnvironmentIndex(  ) override;
 
-        virtual void SAL_CALL setDefaultSecurityEnvironmentIndex( sal_Int32 nDefaultEnvIndex ) override;
+        virtual void setDefaultSecurityEnvironmentIndex( sal_Int32 nDefaultEnvIndex ) override;
 
 
         //Methods from XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
+        virtual OUString getImplementationName() override;
 
-        virtual bool SAL_CALL supportsService(
+        virtual bool supportsService(
             const OUString& ServiceName
         ) override;
 
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 }
@@ -83,12 +83,12 @@ XMLSecurityContext_MSCryptImpl::XMLSecurityContext_MSCryptImpl()
 {
 }
 
-sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::addSecurityEnvironment(
-    const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment)
+sal_Int32 XMLSecurityContext_MSCryptImpl::addSecurityEnvironment(
+    const cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment)
 {
     if( !aSecurityEnvironment.is() )
     {
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
     }
 
     m_xSecurityEnvironment = aSecurityEnvironment;
@@ -97,55 +97,55 @@ sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::addSecurityEnvironment(
 }
 
 
-sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentNumber(  )
+sal_Int32 XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentNumber(  )
 {
     return 1;
 }
 
-css::uno::Reference< css::xml::crypto::XSecurityEnvironment > SAL_CALL
+cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >
     XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentByIndex( sal_Int32 index )
 {
     if (index != 0)
     {
-        throw uno::RuntimeException() ;
+        throw cpo::uno::RuntimeException() ;
     }
     return m_xSecurityEnvironment;
 }
 
-css::uno::Reference< css::xml::crypto::XSecurityEnvironment > SAL_CALL
+cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >
     XMLSecurityContext_MSCryptImpl::getSecurityEnvironment(  )
 {
     return m_xSecurityEnvironment;
 }
 
-sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::getDefaultSecurityEnvironmentIndex(  )
+sal_Int32 XMLSecurityContext_MSCryptImpl::getDefaultSecurityEnvironmentIndex(  )
 {
     return 0;
 }
 
-void SAL_CALL XMLSecurityContext_MSCryptImpl::setDefaultSecurityEnvironmentIndex( sal_Int32 /*nDefaultEnvIndex*/ )
+void XMLSecurityContext_MSCryptImpl::setDefaultSecurityEnvironmentIndex( sal_Int32 /*nDefaultEnvIndex*/ )
 {
     //dummy
 }
 
 /* XServiceInfo */
-OUString SAL_CALL XMLSecurityContext_MSCryptImpl::getImplementationName() {
-    return "com.sun.star.xml.crypto.XMLSecurityContext" ;
+OUString XMLSecurityContext_MSCryptImpl::getImplementationName() {
+    return u"com.sun.star.xml.crypto.XMLSecurityContext"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL XMLSecurityContext_MSCryptImpl::supportsService( const OUString& serviceName) {
+bool XMLSecurityContext_MSCryptImpl::supportsService( const OUString& serviceName) {
     return cppu::supportsService(this, serviceName);
 }
 
 /* XServiceInfo */
-cpo::uno::Sequence< OUString > SAL_CALL XMLSecurityContext_MSCryptImpl::getSupportedServiceNames() {
-    return { "com.sun.star.xml.crypto.XMLSecurityContext" };
+cpo::uno::Sequence< OUString > XMLSecurityContext_MSCryptImpl::getSupportedServiceNames() {
+    return { u"com.sun.star.xml.crypto.XMLSecurityContext"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_xml_crypto_XMLSecurityContext_get_implementation(
-    uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new XMLSecurityContext_MSCryptImpl);
 }

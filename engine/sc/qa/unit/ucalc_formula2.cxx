@@ -9,6 +9,8 @@
 
 #include "helper/qahelper.hxx"
 #include <clipparam.hxx>
+#include <compiler.hxx>
+#include <tokenarray.hxx>
 #include <scopetools.hxx>
 #include <formulacell.hxx>
 #include <global.hxx>
@@ -156,6 +158,8 @@ protected:
     void testExtRefFuncT(ScDocument* pDoc, ScDocument& rExtDoc);
     void testExtRefFuncOFFSET(ScDocument* pDoc, ScDocument& rExtDoc);
     void testExtRefFuncVLOOKUP(ScDocument* pDoc, ScDocument& rExtDoc);
+    void testExtRefImplicitIntersection(ScDocument* pDoc, ScDocument& rExtDoc);
+    void testExtRefEmptySearch(ScDocument* pDoc, ScDocument& rExtDoc);
     void testExtRefConcat(ScDocument* pDoc, ScDocument& rExtDoc);
 };
 
@@ -2076,6 +2080,84 @@ void TestFormula2::testExtRefFuncVLOOKUP(ScDocument* pDoc, ScDocument& rExtDoc)
     CPPUNIT_ASSERT_EQUAL(u"B2"_ustr, pDoc->GetString(ScAddress(1, 0, 0)));
 }
 
+void TestFormula2::testExtRefImplicitIntersection(ScDocument* pDoc, ScDocument& rExtDoc)
+{
+    clearRange(pDoc, ScRange(0, 0, 0, 1, 9, 0));
+    clearRange(&rExtDoc, ScRange(0, 0, 0, 1, 9, 0));
+
+    // A1:A5 = 1..5, B1:B5 = 10..50.
+    for (SCROW nRow = 0; nRow < 5; ++nRow)
+    {
+        rExtDoc.SetValue(ScAddress(0, nRow, 0), nRow + 1.0);
+        rExtDoc.SetValue(ScAddress(1, nRow, 0), (nRow + 1.0) * 10);
+    }
+
+    // @ takes the same intersection, here where its result feeds an operator.
+    pDoc->SetString(ScAddress(0, 1, 0), u"=@'file:///extdata.fake'#Data.A1:A5*1"_ustr);
+    CPPUNIT_ASSERT_EQUAL(2.0, pDoc->GetValue(ScAddress(0, 1, 0)));
+
+    // A scalar Value parameter takes an implicit intersection, row 3 looks up A3.
+    pDoc->SetString(ScAddress(0, 2, 0),
+                    u"=XLOOKUP('file:///extdata.fake'#Data.A1:A5;"
+                    u"'file:///extdata.fake'#Data.A1:A5;"
+                    u"'file:///extdata.fake'#Data.B1:B5)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(30.0, pDoc->GetValue(ScAddress(0, 2, 0)));
+
+    // Without an intersection the result is an error, not the first element.
+    pDoc->SetString(ScAddress(0, 7, 0),
+                    u"=XLOOKUP('file:///extdata.fake'#Data.A1:A5;"
+                    u"'file:///extdata.fake'#Data.A1:A5;"
+                    u"'file:///extdata.fake'#Data.B1:B5)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(int(FormulaError::NoValue),
+                         static_cast<int>(pDoc->GetFormulaCell(ScAddress(0, 7, 0))->GetErrCode()));
+
+    // An entire column must not create a JumpMatrix over all of its rows.
+    pDoc->SetString(ScAddress(0, 3, 0),
+                    u"=XLOOKUP('file:///extdata.fake'#Data.A1:A1048576;"
+                    u"'file:///extdata.fake'#Data.A1:A1048576;"
+                    u"'file:///extdata.fake'#Data.B1:B1048576)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(40.0, pDoc->GetValue(ScAddress(0, 3, 0)));
+
+    // A range that the formula position does not intersect is an error, as
+    // for a sheet local range, and not the top left cell.
+    pDoc->SetString(ScAddress(0, 8, 0), u"='file:///extdata.fake'#Data.A1:A5"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"#VALUE!"_ustr, pDoc->GetString(ScAddress(0, 8, 0)));
+
+    // In array context the entire column is trimmed to the data area instead.
+    ScMarkData aMark(pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    pDoc->InsertMatrixFormula(0, 5, 0, 5, aMark,
+                              u"=XLOOKUP('file:///extdata.fake'#Data.A1:A1048576;"
+                              u"'file:///extdata.fake'#Data.A1:A5;"
+                              u"'file:///extdata.fake'#Data.B1:B5)"_ustr);
+    const ScMatrix* pMat = pDoc->GetFormulaCell(ScAddress(0, 5, 0))->GetMatrix();
+    CPPUNIT_ASSERT_MESSAGE("matrix expected", pMat != nullptr);
+    SCSIZE nMatCols, nMatRows;
+    pMat->GetDimensions(nMatCols, nMatRows);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("entire column not trimmed to the data area", SCSIZE(1),
+                                 nMatCols);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("entire column not trimmed to the data area", SCSIZE(5),
+                                 nMatRows);
+    CPPUNIT_ASSERT_EQUAL(10.0, pDoc->GetValue(ScAddress(0, 5, 0)));
+}
+
+void TestFormula2::testExtRefEmptySearch(ScDocument* pDoc, ScDocument& rExtDoc)
+{
+    clearRange(pDoc, ScRange(0, 0, 0, 1, 9, 0));
+    clearRange(&rExtDoc, ScRange(0, 0, 0, 1, 9, 0));
+
+    // A1:A2 hold data, A3 stays empty, B3 marks the row.
+    rExtDoc.SetValue(ScAddress(0, 0, 0), 1.0);
+    rExtDoc.SetValue(ScAddress(0, 1, 0), 2.0);
+    rExtDoc.SetValue(ScAddress(1, 2, 0), 99.0);
+
+    // An empty search value finds an empty cell, here through a matrix.
+    pDoc->SetString(ScAddress(0, 0, 0),
+                    u"=XLOOKUP($B$9;'file:///extdata.fake'#Data.A1:A3;"
+                    u"'file:///extdata.fake'#Data.B1:B3)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(99.0, pDoc->GetValue(ScAddress(0, 0, 0)));
+}
+
 void TestFormula2::testExtRefConcat(ScDocument* pDoc, ScDocument& rExtDoc)
 {
     clearRange(pDoc, ScRange(0, 0, 0, 1, 9, 0));
@@ -2186,6 +2268,8 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testExternalRefFunctions)
     testExtRefFuncT(m_pDoc, rExtDoc);
     testExtRefFuncOFFSET(m_pDoc, rExtDoc);
     testExtRefFuncVLOOKUP(m_pDoc, rExtDoc);
+    testExtRefImplicitIntersection(m_pDoc, rExtDoc);
+    testExtRefEmptySearch(m_pDoc, rExtDoc);
     testExtRefConcat(m_pDoc, rExtDoc);
 
     // Unload the external document shell.
@@ -2515,6 +2599,67 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testFuncFORMULA)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TestFormula2, testFuncTableRefEscapedAt)
+{
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true); // turn on auto calc.
+
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    ScDBCollection* pDBs = m_pDoc->GetDBCollection();
+    CPPUNIT_ASSERT_MESSAGE("Failed to fetch DB collection object.", pDBs);
+    std::unique_ptr<ScDBData> pData(new ScDBData(u"table"_ustr, 0, 0, 0, 1, 2));
+    CPPUNIT_ASSERT_MESSAGE("Failed to insert \"table\" database range.",
+                           pDBs->getNamedDBs().insert(std::move(pData)));
+
+    const std::vector<std::vector<const char*>> aData
+        = { { "@foo", "Header2" }, { "1", "2" }, { "4", "8" } };
+    const ScAddress aTablePos(0, 0, 0);
+    CPPUNIT_ASSERT_EQUAL(aTablePos, insertRangeData(m_pDoc, aTablePos, aData).aStart);
+
+    // MSO reads an unescaped '@' as its shorthand for [#This Row], so a column whose name
+    // holds one is addressed with the '@' escaped.
+    const ScAddress aPos(3, 1, 0);
+    m_pDoc->SetString(aPos, u"=SUM(table[['@foo]])"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"5"_ustr, m_pDoc->GetString(aPos));
+    CPPUNIT_ASSERT_EQUAL(u"=SUM(table[['@foo]])"_ustr, m_pDoc->GetFormula(3, 1, 0));
+
+    // '@' is normalised away on input, so both spellings store the same tokens. The UI
+    // shows MSO's shorthand, the OOXML export keeps the long form.
+    for (const char* pInput : { "=SUM(table[@Header2])", "=SUM(table[@[Header2]])",
+                                "=SUM(table[[#This Row];[Header2]])" })
+    {
+        const ScAddress aAtPos(4, 1, 0);
+        m_pDoc->SetString(aAtPos, OUString::createFromAscii(pInput));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pInput, u"2"_ustr, m_pDoc->GetString(aAtPos));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pInput, u"=SUM(table[@Header2])"_ustr,
+                                     m_pDoc->GetFormula(4, 1, 0));
+        const ScFormulaCell* pFC = m_pDoc->GetFormulaCell(aAtPos);
+        CPPUNIT_ASSERT(pFC);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pInput, u"=SUM(table[[#This Row],[Header2]])"_ustr,
+                                     pFC->GetFormula(formula::FormulaGrammar::GRAM_OOXML));
+    }
+
+    // MSO brackets both columns of a range: =SUM(Table2[@[a b]:[a'#b]]).
+    const ScAddress aRangePos(6, 1, 0);
+    m_pDoc->SetString(aRangePos, u"=SUM(table[[#This Row];['@foo]:[Header2]])"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"3"_ustr, m_pDoc->GetString(aRangePos));
+    CPPUNIT_ASSERT_EQUAL(u"=SUM(table[@['@foo]:[Header2]])"_ustr, m_pDoc->GetFormula(6, 1, 0));
+
+    // A column name carrying an escape has to keep its brackets, MSO rejects [@a'#b].
+    const ScAddress aEscPos(5, 1, 0);
+    m_pDoc->SetString(aEscPos, u"=SUM(table[[#This Row];['@foo]])"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"1"_ustr, m_pDoc->GetString(aEscPos));
+    CPPUNIT_ASSERT_EQUAL(u"=SUM(table[@['@foo]])"_ustr, m_pDoc->GetFormula(5, 1, 0));
+
+    // A name that is no column of the table has to report that, the bracket the shorthand
+    // injected is closed either way.
+    const ScAddress aBadPos(7, 1, 0);
+    m_pDoc->SetString(aBadPos, u"=SUM(table[@Nosuch])"_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"#NAME?"_ustr, m_pDoc->GetString(aBadPos));
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(TestFormula2, testFuncTableRef)
 {
     sc::AutoCalcSwitch aACSwitch(*m_pDoc, true); // turn on auto calc.
@@ -2573,7 +2718,13 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testFuncTableRef)
             { "this_row_header1", "table[[#This Row];[Header1]]", "1", "4", "16", "#VALUE!" },
             { "this_row_header2", "table[[#This Row];[Header2]]", "1", "8", "32", "#VALUE!" },
             { "this_row_range_header_1_to_2", "table[[#This Row];[Header1]:[Header2]]", "2", "12",
-              "48", "#VALUE!" } };
+              "48", "#VALUE!" },
+            // '@' is MSO's shorthand for [#This Row] and must give the same results.
+            { "at_header1", "table[@Header1]", "1", "4", "16", "#VALUE!" },
+            { "at_header2", "table[@Header2]", "1", "8", "32", "#VALUE!" },
+            { "at_bracketed_header1", "table[@[Header1]]", "1", "4", "16", "#VALUE!" },
+            { "at_range_header_1_to_2", "table[@[Header1]:[Header2]]", "2", "12", "48",
+              "#VALUE!" } };
 
     {
         // Insert named expressions.
@@ -5456,11 +5607,47 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testHoriQueryEmptyCell)
     CPPUNIT_ASSERT_EQUAL_MESSAGE("XLOOKUP empty", u"$D$1"_ustr,
                                  m_pDoc->GetString(ScAddress(0, 3, 0)));
 
+    // A reference to an empty cell looks for an empty cell as well, not for "".
+    m_pDoc->SetFormula(ScAddress(0, 5, 0), u"=CELL(\"ADDRESS\"; XLOOKUP(I1;A1:H1;A1:H1))"_ustr,
+                       formula::FormulaGrammar::GRAM_NATIVE_UI);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("XLOOKUP empty cell reference", u"$D$1"_ustr,
+                                 m_pDoc->GetString(ScAddress(0, 5, 0)));
+
     // criterion <> counts empty cells too.
     m_pDoc->SetFormula(ScAddress(0, 4, 0), u"=COUNTIF(A1:H1;\"<>y\")"_ustr,
                        formula::FormulaGrammar::GRAM_NATIVE_UI);
     // Without fix, count was 2
     CPPUNIT_ASSERT_EQUAL_MESSAGE("COUNTIF not equal", 7.0, m_pDoc->GetValue(ScAddress(0, 4, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testXMatchEmptyCell)
+{
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+    m_pDoc->SetString(0, 0, 0, u"x"_ustr); // col, row, tab
+    m_pDoc->SetString(1, 0, 0, u"y"_ustr);
+    m_pDoc->SetString(2, 0, 0, u"z"_ustr);
+    // D1:H1 stay empty, so the first empty cell is D1, at position 4.
+
+    m_pDoc->SetFormula(ScAddress(0, 2, 0), u"=XMATCH(;A1:H1)"_ustr,
+                       formula::FormulaGrammar::GRAM_NATIVE_UI);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("XMATCH empty", 4.0, m_pDoc->GetValue(ScAddress(0, 2, 0)));
+
+    // A reference to an empty cell looks for an empty cell as well, not for "".
+    m_pDoc->SetFormula(ScAddress(0, 3, 0), u"=XMATCH(I1;A1:H1)"_ustr,
+                       formula::FormulaGrammar::GRAM_NATIVE_UI);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("XMATCH empty cell reference", 4.0,
+                                 m_pDoc->GetValue(ScAddress(0, 3, 0)));
+
+    // The search value reaches ScXMatch() as a matrix element under a JumpMatrix.
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_pDoc->InsertMatrixFormula(0, 5, 0, 6, aMark, u"=XMATCH(I1:I2;A1:H1)"_ustr);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("XMATCH empty from a matrix", 4.0,
+                                 m_pDoc->GetValue(ScAddress(0, 5, 0)));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("XMATCH empty from a matrix", 4.0,
+                                 m_pDoc->GetValue(ScAddress(0, 6, 0)));
 
     m_pDoc->DeleteTab(0);
 }
@@ -6967,6 +7154,47 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testFuncLetWithOdffParameters)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TestFormula2, testFuncLetNameShadowing)
+{
+    // A name bound inside a LET subformula hides an outer LET name of the same
+    // spelling, so the inner formula computes with its own binding.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    // The LAMBDA parameter x hides the LET name x, so f(7) is 7*3.
+    ScAddress aPos(0, 0, 0);
+    m_pDoc->SetString(aPos, u"=LET(x;5;f;LAMBDA(x;x*3);f(7))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(aPos));
+
+    // A parameter of another spelling computes the same value.
+    aPos.IncRow();
+    m_pDoc->SetString(aPos, u"=LET(x;5;f;LAMBDA(z;z*3);f(7))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(21.0, m_pDoc->GetValue(aPos));
+
+    // A LET name that no parameter rebinds stays visible in the lambda body.
+    aPos.IncRow();
+    m_pDoc->SetString(aPos, u"=LET(x;5;f;LAMBDA(z;z*3+x);f(7))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(26.0, m_pDoc->GetValue(aPos));
+
+    // A nested LET rebinding x in its first binding: the inner result uses the
+    // inner x, the rest of the outer formula still the outer one.
+    aPos.IncRow();
+    m_pDoc->SetString(aPos, u"=LET(x;5;LET(x;7;x*2)+x)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(19.0, m_pDoc->GetValue(aPos));
+
+    // The same with the rebinding in the second binding of the inner LET.
+    aPos.IncRow();
+    m_pDoc->SetString(aPos, u"=LET(x;5;LET(y;1;x;7;x*2)+x)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(19.0, m_pDoc->GetValue(aPos));
+
+    // The value expression of the rebinding sees the outer x.
+    aPos.IncRow();
+    m_pDoc->SetString(aPos, u"=LET(x;5;LET(y;1;x;x+2;x*9)+x)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(68.0, m_pDoc->GetValue(aPos));
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(TestFormula2, testCallBuiltInThroughCallable)
 {
     // A built-in function used as a value and then called gets routed through
@@ -7376,6 +7604,32 @@ std::unique_ptr<ScTokenArray> compileInNativeGrammar(ScDocument& rDocument,
     return pCode;
 }
 
+// Compile a formula in native grammar down to RPN and return the parse error.
+// FormulaError::NONE means the whole formula parsed as one expression.
+FormulaError parseErrorInNativeGrammar(ScDocument& rDocument, const OUString& rFormula)
+{
+    const ScAddress aPosition(1, 0, 0);
+    std::unique_ptr<ScTokenArray> pCode = compileInNativeGrammar(rDocument, rFormula, aPosition);
+    ScCompiler aCompiler(rDocument, aPosition, *pCode, formula::FormulaGrammar::GRAM_NATIVE);
+    aCompiler.CompileTokenArray();
+    return pCode->GetCodeError();
+}
+
+// Compile a formula in a grammar where a blank is the intersection operator and print it as
+// OOXML. Calc A1 uses an exclamation mark for that operator instead.
+OUString compileInXlA1SyntaxAndPrintAsOoxml(ScDocument& rDocument, const OUString& rFormula)
+{
+    const ScAddress aPosition(1, 0, 0);
+    ScCompiler aCompiler(rDocument, aPosition, formula::FormulaGrammar::GRAM_ENGLISH_XL_A1,
+                         true, false);
+    std::unique_ptr<ScTokenArray> pCode = aCompiler.CompileString(rFormula);
+    CPPUNIT_ASSERT(pCode);
+    ScCompiler aRpnCompiler(rDocument, aPosition, *pCode,
+                            formula::FormulaGrammar::GRAM_ENGLISH_XL_A1);
+    aRpnCompiler.CompileTokenArray();
+    return printAsOoxml(rDocument, *pCode, aPosition);
+}
+
 // Compile a formula in native grammar and print it as OOXML.
 OUString compileAndPrintAsOoxml(ScDocument& rDocument, const OUString& rFormula)
 {
@@ -7491,6 +7745,11 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testImplicitIntersectionTakesOperandWhole)
     CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(A1:INDEX(B1:B10,5))"_ustr,
                          resolveAndPrintAsOoxml(*m_pDoc, u"A1:INDEX(B1:B10;5)"_ustr));
 
+    // An arithmetic operator is above the @ in the grammar, so it ends the operand and the
+    // wrapper closes before it.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(A1:A3)+1"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"@A1:A3+1"_ustr));
+
     // Whitespace between a function name and its parenthesis is dropped on save,
     // and the call stays inside the wrapper as if it had never been there.
     CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(SUM(A1:A3))"_ustr,
@@ -7530,13 +7789,26 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testImplicitIntersectionMarkersWrapOneAnother
 
 CPPUNIT_TEST_FIXTURE(TestFormula2, testSpilledRangeBindsTighterThanSignAndMarker)
 {
-    // The # postfix reads as _xlfn.ANCHORARRAY around the operand it follows, and
-    // binds tighter than the sign or the @ in front of that operand.
+    // The # postfix becomes _xlfn.ANCHORARRAY around the operand before it, and binds
+    // tighter than a sign or an @ in front of that operand. A document from another
+    // application has the same nesting, so these are the forms actually in use.
     m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    // On its own the wrapper encloses just the reference before the #.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(A1)"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"A1#"_ustr));
+
+    // An already parenthesised operand keeps its parentheses inside the wrapper.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY((A1))"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"(A1)#"_ustr));
 
     // The sign stays outside the wrapper.
     CPPUNIT_ASSERT_EQUAL(u"-_xlfn.ANCHORARRAY(A1)"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"-A1#"_ustr));
+
+    // A percent sign after the # ends up after both wrappers.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(_xlfn.ANCHORARRAY(A1))%"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"@A1#%"_ustr));
 
     // The @ wrapper goes around the # one, whatever form the operand takes.
     CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(_xlfn.ANCHORARRAY(A1))"_ustr,
@@ -7554,6 +7826,11 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testSpilledRangeBindsTighterThanSignAndMarker
     CPPUNIT_ASSERT_EQUAL(u"SUM( _xlfn.SINGLE(_xlfn.ANCHORARRAY(A1)))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"SUM( @A1#)"_ustr));
 
+    // Whitespace before the operator that ends the operand stays outside the wrapper as well,
+    // so the operand is still one parenthesised group and that pair serves as the call's.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(A1) + 1"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"@(A1) + 1"_ustr));
+
     // A # on an argument inside a wrapped call wraps just that argument.
     CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(SUM(_xlfn.ANCHORARRAY(A1)))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"@SUM(A1#)"_ustr));
@@ -7561,17 +7838,76 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testSpilledRangeBindsTighterThanSignAndMarker
     m_pDoc->DeleteTab(0);
 }
 
-CPPUNIT_TEST_FIXTURE(TestFormula2, testSpilledRangeTakesTheWrapperThePercentSignClosed)
+CPPUNIT_TEST_FIXTURE(TestFormula2, testIntersectionNextToASpilledRangeSurvives)
 {
-    // The percent sign ends an @ operand, so a # behind it takes the @ wrapper too.
+    // A # on either operand leaves the intersection operator between them alone, because the
+    // spill range the # yields is a reference like any other operand.
     m_pDoc->InsertTab(0, u"Sheet1"_ustr);
 
-    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(_xlfn.SINGLE(A1)%)"_ustr,
+    CPPUNIT_ASSERT_EQUAL(u"A1:A5 _xlfn.ANCHORARRAY(C1)"_ustr,
+                         compileInXlA1SyntaxAndPrintAsOoxml(*m_pDoc, u"=A1:A5 C1#"_ustr));
+
+    // Same with the # on the operand before the blank.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(A1) C1"_ustr,
+                         compileInXlA1SyntaxAndPrintAsOoxml(*m_pDoc, u"=A1# C1"_ustr));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testPostfixOperatorWithoutAFactorIsNoFormula)
+{
+    // The # binds to the factor before it and a percent sign ends that factor, so a # or a
+    // union operator after one has nothing to bind to and the formula doesn't parse. OOXML
+    // has no spelling for either shape.
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    CPPUNIT_ASSERT_EQUAL(FormulaError::OperatorExpected,
+                         parseErrorInNativeGrammar(*m_pDoc, u"=A1%#"_ustr));
+    CPPUNIT_ASSERT_EQUAL(FormulaError::OperatorExpected,
+                         parseErrorInNativeGrammar(*m_pDoc, u"=A1%~B2%"_ustr));
+
+    // The same operators parse fine when there is a factor in front of them.
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NONE, parseErrorInNativeGrammar(*m_pDoc, u"=A1#"_ustr));
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NONE, parseErrorInNativeGrammar(*m_pDoc, u"=A1#%"_ustr));
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NONE, parseErrorInNativeGrammar(*m_pDoc, u"=A1~B2%"_ustr));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testSpilledRangeOperatorNextToAnExclamationMark)
+{
+    // A # before an exclamation mark lexes as the start of an error constant and swallows
+    // the mark, so the intersection operator is gone and the formula doesn't parse.
+    // Parentheses keep them apart, the only way to write such an intersection.
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    const FormulaError eRunTogether = parseErrorInNativeGrammar(*m_pDoc, u"=A1#!C1"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("=A1#!C1 should not read as a formula",
+                           FormulaError::NONE != eRunTogether);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NONE,
+                         parseErrorInNativeGrammar(*m_pDoc, u"=(A1#)!C1"_ustr));
+
+    // An exclamation mark before the # is fine, nothing runs the two together in that order.
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NONE,
+                         parseErrorInNativeGrammar(*m_pDoc, u"=A1:C2!A1#"_ustr));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testSpilledRangeDroppedWithNoFactorInFrontOfIt)
+{
+    // A percent sign ends the factor before it, so a # after one has nothing to enclose and
+    // is dropped. OOXML has no spelling for that shape either, and no parse produces one.
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    CPPUNIT_ASSERT_EQUAL(u"A1%"_ustr, compileAndPrintAsOoxml(*m_pDoc, u"A1%#"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(A1)%"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"@A1%#"_ustr));
-    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(_xlfn.SINGLE(-A1)%)"_ustr,
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(-A1)%"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"@-A1%#"_ustr));
 
-    // A union list that follows such a wrapper begins in front of it as well.
+    // A union list that comes after an @ wrapper closed by the percent sign starts before
+    // that wrapper.
     CPPUNIT_ASSERT_EQUAL(u"(_xlfn.SINGLE(-A1)%,B2)"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"@-A1%~B2"_ustr));
 
@@ -7640,34 +7976,288 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testUnionStaysInsideImplicitIntersectionWrapp
     CPPUNIT_ASSERT_EQUAL(u"(_xlfn.SINGLE( (A1,B2)))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"(@ A1~B2)"_ustr));
 
-    // A # takes the whole list, so an @ on one part of it wraps the list's wrapper.
-    CPPUNIT_ASSERT_EQUAL(u"_xlfn.SINGLE(_xlfn.ANCHORARRAY((A1,B2)))"_ustr,
+    // A # takes the list part before it, and an @ in front of that part wraps around the #.
+    CPPUNIT_ASSERT_EQUAL(u"(A1,_xlfn.SINGLE(_xlfn.ANCHORARRAY(B2)))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"A1~@B2#"_ustr));
+
+    // An already parenthesised union list fills the wrapper on its own, for either operator.
+    // Both forms show up in documents from another application.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY((A1,B2))"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"(A1~B2)#"_ustr));
+
+    // A percent sign closes the wrapper before it, so the union list that opens after it
+    // starts at the wrapper and the scope's parentheses hold the list.
+    CPPUNIT_ASSERT_EQUAL(u"(_xlfn.SINGLE( A1)%,B2)"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"(@ A1%~B2)"_ustr));
 
     m_pDoc->DeleteTab(0);
 }
 
-CPPUNIT_TEST_FIXTURE(TestFormula2, testPostfixOperatorsApplyToTheWholeExpression)
+CPPUNIT_TEST_FIXTURE(TestFormula2, testPostfixOperatorsBindWhereTheGrammarPutsThem)
 {
-    // The # and the % follow every operator that binds tighter than they do, so
-    // each takes the whole expression in front of it as its operand rather than
-    // the last part of it.
+    // The # takes the factor before it and nothing wider. The % is above every reference
+    // operator, so it takes the whole expression in front of it instead. A document from
+    // another application draws the same line.
     m_pDoc->InsertTab(0, u"Sheet1"_ustr);
 
-    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY((A1,B2))"_ustr,
+    // One part of a union list is a factor, so the # takes that part and the % the list.
+    CPPUNIT_ASSERT_EQUAL(u"(A1,_xlfn.ANCHORARRAY(B2))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"A1~B2#"_ustr));
     CPPUNIT_ASSERT_EQUAL(u"(A1,B2)%"_ustr, compileAndPrintAsOoxml(*m_pDoc, u"A1~B2%"_ustr));
 
-    // The range operator binds tighter still, and a range built with it goes
-    // inside the wrapper whole.
-    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(A1:INDEX(B1:B10,5))"_ustr,
-                         compileAndPrintAsOoxml(*m_pDoc, u"A1:INDEX(B1:B10;5)#"_ustr));
+    // The first part of the list is a factor too, so a # there takes only that part and the
+    // list's own parentheses end up outside the wrapper.
+    CPPUNIT_ASSERT_EQUAL(u"(_xlfn.ANCHORARRAY(A1),B2)"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"A1#~B2"_ustr));
 
-    // A prefix sign on one part of a union list stays outside the wrapper too.
+    // A range reference is a single factor and goes inside the wrapper as a whole. A range
+    // built with the range operator has a factor on either side, and the # takes only the
+    // one before it.
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(A1:A3)"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"A1:A3#"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"A1:_xlfn.ANCHORARRAY(INDEX(B1:B10,5))"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"A1:INDEX(B1:B10;5)#"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"_xlfn.ANCHORARRAY(A1):C1"_ustr,
+                         compileAndPrintAsOoxml(*m_pDoc, u"A1#:C1"_ustr));
+
+    // A percent sign is above the union operator, so the one after the list goes after the
+    // list's own parentheses, while the one on the first part stays where it is.
+    CPPUNIT_ASSERT_EQUAL(u"(A1%,B2)%"_ustr, compileAndPrintAsOoxml(*m_pDoc, u"A1%~B2%"_ustr));
+
+    // A prefix sign is above the # too, so it stays outside the wrapper.
     CPPUNIT_ASSERT_EQUAL(u"(A1,-_xlfn.ANCHORARRAY(B2))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"A1~-B2#"_ustr));
     CPPUNIT_ASSERT_EQUAL(u"SUM((A1,-_xlfn.ANCHORARRAY(B2)))"_ustr,
                          compileAndPrintAsOoxml(*m_pDoc, u"SUM(A1~-B2#)"_ustr));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testAnOperatorOnAUnionListHasNoValue)
+{
+    // A union list holds several ranges, so there is no single value for an operator to work
+    // on and the formula gives #VALUE!. The producing application does the same.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(0, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(0, 1, 0), 400.0);
+    m_pDoc->SetValue(ScAddress(1, 0, 0), 200.0);
+
+    m_pDoc->SetString(ScAddress(3, 0, 0), u"=(A1~B1)%"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 0, 0)));
+
+    // A percent sign written on the last part of the list is the same, because it is above
+    // the union operator wherever it is put.
+    m_pDoc->SetString(ScAddress(3, 1, 0), u"=(A1~B1%)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 1, 0)));
+
+    // SUM takes the list as a whole, so the one that fails is the operator after it.
+    m_pDoc->SetString(ScAddress(3, 2, 0), u"=SUM((A1~B1)%)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 2, 0)));
+
+    // A list isn't a string either.
+    m_pDoc->SetString(ScAddress(3, 3, 0), u"=(A1~B1)&\"x\""_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 3, 0)));
+
+    // On its own the list is still a reference list that SUM adds up, written either way.
+    m_pDoc->SetString(ScAddress(3, 5, 0), u"=SUM((A1~B1))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 5, 0)));
+    m_pDoc->SetString(ScAddress(3, 6, 0), u"=SUM((A1;B1))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 6, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testAValueAmongTheUnionListPartsHasNoValue)
+{
+    // A union joins references, so a part that turned its reference into a value leaves
+    // nothing to join and the list gives #VALUE!. The producing application agrees.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(0, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(1, 0, 0), 200.0);
+
+    // The percent sign sits on a reference, so the part joins and the calculation complains.
+    m_pDoc->SetFormula(ScAddress(3, 0, 0), u"=(A1, B1%)"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 0, 0)));
+
+    // A chain of percent signs is the same.
+    m_pDoc->SetFormula(ScAddress(3, 1, 0), u"=(A1, B1%%)"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 1, 0)));
+
+    // Same on a middle part, which no file has: the producing application allows a percent
+    // sign only on the last one.
+    m_pDoc->SetFormula(ScAddress(3, 5, 0), u"=(A1, B1%, A1)"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 5, 0)));
+
+    // An arithmetic operator after the reference makes a value of it too.
+    m_pDoc->SetFormula(ScAddress(3, 2, 0), u"=(A1, B1+A1)"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 2, 0)));
+
+    // Written out, the union joins anything beside it, so a plain number or string errors too.
+    m_pDoc->SetString(ScAddress(3, 3, 0), u"=(A1~5)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 3, 0)));
+    m_pDoc->SetString(ScAddress(3, 4, 0), u"=(A1~\"x\")"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 4, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testAUnionListPartJoinsWhenItBeginsWithAReference)
+{
+    // The separator joins two parts into a union if the left returns a reference and the
+    // right starts with one, or with a function that returns one.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(0, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(1, 0, 0), 200.0);
+
+    // A nested list works on either side of the separator, and a cell in both counts twice.
+    m_pDoc->SetFormula(ScAddress(3, 0, 0), u"=SUM((A1, (A1,B1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(400.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+    m_pDoc->SetFormula(ScAddress(3, 1, 0), u"=SUM(((A1,B1), B1))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(500.0, m_pDoc->GetValue(ScAddress(3, 1, 0)));
+
+    // IF, CHOOSE and INDEX return a reference, so a part can start with any of them.
+    m_pDoc->SetFormula(ScAddress(3, 2, 0), u"=SUM((A1, IF(TRUE,B1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 2, 0)));
+    m_pDoc->SetFormula(ScAddress(3, 3, 0), u"=SUM((A1, CHOOSE(1,B1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 3, 0)));
+    m_pDoc->SetFormula(ScAddress(3, 4, 0), u"=SUM((B1, INDEX(A1:B1,1,1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 4, 0)));
+
+    // In a longer list every separator joins in turn, onto the union built so far.
+    m_pDoc->SetFormula(ScAddress(3, 5, 0), u"=SUM((A1, B1, A1))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(400.0, m_pDoc->GetValue(ScAddress(3, 5, 0)));
+
+    // IFS, SWITCH and XLOOKUP return a reference too.
+    m_pDoc->SetFormula(ScAddress(3, 11, 0), u"=SUM((A1, _xlfn.IFS(TRUE, B1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 11, 0)));
+    m_pDoc->SetFormula(ScAddress(3, 12, 0), u"=SUM((A1, _xlfn.SWITCH(1,1,B1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 12, 0)));
+    m_pDoc->SetFormula(ScAddress(3, 13, 0), u"=SUM((A1, _xlfn.XLOOKUP(200, B1:B1, B1:B1)))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 13, 0)));
+
+    // An error constant part becomes the result of the union, wherever the blank around the
+    // separator is.
+    m_pDoc->SetFormula(ScAddress(3, 14, 0), u"=(A1, #REF!)"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(3, 14, 0)));
+    m_pDoc->SetFormula(ScAddress(3, 16, 0), u"=(A1 ,#REF!)"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(3, 16, 0)));
+
+    // The same list read the way it arrives from a file: no leading equals sign, and the
+    // implicit intersections worked out during the parse.
+    {
+        ScCompiler aCompiler(*m_pDoc, ScAddress(3, 17, 0), formula::FormulaGrammar::GRAM_OOXML,
+                             true, false);
+        std::unique_ptr<ScTokenArray> pArray = aCompiler.CompileString(u"(A1 ,#REF!)"_ustr);
+        aCompiler.CompileTokenArray();
+        m_pDoc->SetFormula(ScAddress(3, 17, 0), *pArray);
+        CPPUNIT_ASSERT_EQUAL(FormulaError::NoRef, m_pDoc->GetErrCode(ScAddress(3, 17, 0)));
+    }
+
+    // An @ part sits on the reference after it, and a bare list has no value anyway.
+    m_pDoc->SetFormula(ScAddress(3, 15, 0), u"=(A1, _xlfn.SINGLE(B1))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoValue, m_pDoc->GetErrCode(ScAddress(3, 15, 0)));
+
+    // Shapes the producing application refuses, so no file has them. A part not starting
+    // with a reference stays out of the list, leaving two expressions that do not parse.
+    const std::vector<OUString> aRefusedShapes = {
+        u"=(A1%, B1)"_ustr, u"=(A1, -B1)"_ustr, u"=(A1, 5)"_ustr,
+        u"=(A1, \"x\")"_ustr, u"=(A1, SUM(A1:B1))"_ustr,
+    };
+    SCROW nRow = 6;
+    for (const OUString& rShape : aRefusedShapes)
+    {
+        m_pDoc->SetFormula(ScAddress(3, nRow, 0), rShape, formula::FormulaGrammar::GRAM_OOXML);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(OUStringToOString(rShape, RTL_TEXTENCODING_UTF8).getStr(),
+                                     FormulaError::OperatorExpected,
+                                     m_pDoc->GetErrCode(ScAddress(3, nRow, 0)));
+        ++nRow;
+    }
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testAFunctionCallMayFollowTheRangeOperator)
+{
+    // A1:IF has letters that are also a valid column name, so the symbol lexes like a range
+    // but names none. The parenthesis after it makes it a range operator followed by a call,
+    // so the reference in front stands on its own and the call gives the other end of the
+    // range.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(0, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(0, 1, 0), 40.0);
+
+    m_pDoc->SetFormula(ScAddress(3, 0, 0), u"=SUM(A1:IF(TRUE,A2))"_ustr,
+                       formula::FormulaGrammar::GRAM_OOXML);
+    CPPUNIT_ASSERT_EQUAL(140.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    // The display grammar reads the symbol the same way.
+    m_pDoc->SetString(ScAddress(3, 1, 0), u"=SUM(A1:IF(TRUE();A2))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(140.0, m_pDoc->GetValue(ScAddress(3, 1, 0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testAUnionListMeetsTheIntersectionOperator)
+{
+    // A parenthesised union list is a reference like any other, so the whitespace
+    // intersection operator takes it as the left operand. The whitespace is an operator only
+    // under the OOXML grammar, the way a formula arrives from a file, so compile it that way.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(0, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(1, 0, 0), 200.0);
+    m_pDoc->SetValue(ScAddress(0, 1, 0), 40.0);
+    m_pDoc->SetValue(ScAddress(1, 1, 0), 300.0);
+
+    auto setOoxmlFormula = [this](const ScAddress& rPosition, const OUString& rFormula) {
+        ScCompiler aCompiler(*m_pDoc, rPosition, formula::FormulaGrammar::GRAM_OOXML);
+        std::unique_ptr<ScTokenArray> pArray = aCompiler.CompileString(rFormula);
+        aCompiler.CompileTokenArray();
+        m_pDoc->SetFormula(rPosition, *pArray);
+    };
+
+    setOoxmlFormula(ScAddress(3, 0, 0), u"=SUM((A1:B1, A2:B2) A1:A2)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(140.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
+
+    // A parenthesised expression works on the right of the operator the same way. The blank
+    // before the parenthesis keeps it a group instead of a call.
+    setOoxmlFormula(ScAddress(3, 1, 0), u"=SUM(A1:B1 (A1:B1))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(300.0, m_pDoc->GetValue(ScAddress(3, 1, 0)));
+    setOoxmlFormula(ScAddress(3, 2, 0), u"=SUM((A1:B1, A2:B2) (A1:B1, A2:B2))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(640.0, m_pDoc->GetValue(ScAddress(3, 2, 0)));
+
+    // A union list can be the right operand as well as the left one.
+    setOoxmlFormula(ScAddress(3, 4, 0), u"=SUM(A1:A2 (A1:B1, A2:B2))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(140.0, m_pDoc->GetValue(ScAddress(3, 4, 0)));
+
+    // Ranges that share no cell intersect to nothing, which is the #NULL! error.
+    setOoxmlFormula(ScAddress(3, 3, 0), u"=A1:B1 (A2:B2)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(FormulaError::NoCode, m_pDoc->GetErrCode(ScAddress(3, 3, 0)));
 
     m_pDoc->DeleteTab(0);
 }
@@ -7693,8 +8283,8 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testUnionParenthesesEncloseExactlyTheirList)
     CPPUNIT_ASSERT_EQUAL(u"($A$1,_xlfn.SINGLE($B$2))"_ustr,
                          printAsOoxml(*m_pDoc, aMarkerInList, ScAddress(1, 0, 0)));
 
-    // A percent sign in front of the union operator, likewise. The sign follows the
-    // first part of the list, so the list still begins in front of that part.
+    // Same for a percent sign before the union operator. The sign comes after the first part
+    // of the list, so the list still starts before that part.
     ScTokenArray aPercentInList(*m_pDoc);
     aPercentInList.AddSingleReference(aFirst);
     aPercentInList.AddOpCode(ocPercentSign);
@@ -7837,6 +8427,24 @@ CPPUNIT_TEST_FIXTURE(TestFormula2, testLongImplicitIntersectionChainSavesComplet
 
     const OUString aFormula = printAsOoxml(*m_pDoc, aCode, ScAddress(1, 0, 0));
     CPPUNIT_ASSERT(!aFormula.isEmpty());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula2, testAReferenceListTakesAFunctionResult)
+{
+    // A reference list is built from the parts of a parenthesised expression, and a part can
+    // be the result of a function that returns a reference. INDEX is one of those, so SUM
+    // adds the cell it picked to the rest of the list.
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+    m_pDoc->InsertTab(0, u"Sheet1"_ustr);
+
+    m_pDoc->SetValue(ScAddress(0, 0, 0), 100.0);
+    m_pDoc->SetValue(ScAddress(0, 1, 0), 400.0);
+    m_pDoc->SetValue(ScAddress(1, 0, 0), 200.0);
+
+    m_pDoc->SetString(ScAddress(3, 0, 0), u"=SUM((INDEX(A1:A2;2);B1))"_ustr);
+    CPPUNIT_ASSERT_EQUAL(600.0, m_pDoc->GetValue(ScAddress(3, 0, 0)));
 
     m_pDoc->DeleteTab(0);
 }

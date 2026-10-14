@@ -34,6 +34,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 namespace {
@@ -126,7 +127,7 @@ void XsltFilterTest::testXsltCopyNew()
         cpo::uno::Any(beans::NamedValue(u"PublicType"_ustr, cpo::uno::Any(OUString())))
     };
 
-    uno::Reference<ucb::XSimpleFileAccess3> xSFA =
+    uno::Reference<ucb::XSimpleFileAccess> xSFA =
         ucb::SimpleFileAccess::create(getComponentContext());
 
     uno::Reference<io::XInputStream> xIn = xSFA->openFileRead(source);
@@ -182,7 +183,7 @@ void XsltFilterTest::testXsltCopyOld()
         cpo::uno::Any(beans::NamedValue(u"PublicType"_ustr, cpo::uno::Any(OUString())))
     };
 
-    uno::Reference<ucb::XSimpleFileAccess3> xSFA =
+    uno::Reference<ucb::XSimpleFileAccess> xSFA =
         ucb::SimpleFileAccess::create(getComponentContext());
 
     uno::Reference<io::XInputStream> xIn = xSFA->openFileRead(source);
@@ -244,7 +245,7 @@ void XsltFilterTest::testXsltOutputStreamOnly()
         cpo::uno::Any(beans::NamedValue(u"PublicType"_ustr, cpo::uno::Any(OUString())))
     };
 
-    uno::Reference<ucb::XSimpleFileAccess3> xSFA =
+    uno::Reference<ucb::XSimpleFileAccess> xSFA =
         ucb::SimpleFileAccess::create(getComponentContext());
 
     uno::Reference<io::XInputStream> xIn = xSFA->openFileRead(source);

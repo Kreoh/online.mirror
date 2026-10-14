@@ -23,7 +23,7 @@
 #include <tools/debug.hxx>
 #include <tools/inetmime.hxx>
 #include <tools/stream.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/util/XStringWidth.hpp>
 #include <o3tl/enumarray.hxx>
 #include <osl/diagnose.h>
@@ -48,6 +48,7 @@
 #include <comphelper/string.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 //  INetURLObject
 
@@ -128,11 +129,6 @@ using namespace css;
    ; private
    https-url = "HTTPS://" hostport ["/" segment *("/" segment) ["?" *uric]]
    segment = *(escaped / alphanum / "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / "-" / "." / ":" / ";" / "=" / "@" / "_" / "~")
-
-
-   ; private
-   slot-url = "SLOT:" path ["?" *uric]
-   path = *(escaped / alphanum / "!" / "$" / "'" / "(" / ")" / "*" / "+" / "," / "-" / "." / "/" / ":" / ";" / "=" / "@" / "_" / "~")
 
 
    ; private
@@ -327,7 +323,6 @@ INetURLObject::getSchemeInfo(INetProtocol eTheScheme)
     static constexpr OUString PRIVATE = u"private"_ustr;
     static constexpr OUString VND_HELP = u"vnd.sun.star.help"_ustr;
     static constexpr OUString HTTPS = u"https"_ustr;
-    static constexpr OUString SLOT = u"slot"_ustr;
     static constexpr OUString MACRO = u"macro"_ustr;
     static constexpr OUString JAVASCRIPT = u"javascript"_ustr;
     static constexpr OUString DATA = u"data"_ustr;
@@ -375,9 +370,6 @@ INetURLObject::getSchemeInfo(INetProtocol eTheScheme)
         SchemeInfo{
             HTTPS, u"https://"_ustr, true, false, false, false, true, true,
             true, true},
-        SchemeInfo{
-            SLOT, u"slot:"_ustr, false, false, false, false, false, false, false,
-            true},
         SchemeInfo{
             MACRO, u"macro:"_ustr, false, false, false, false, false, false,
             false, true},
@@ -2151,8 +2143,7 @@ bool INetURLObject::convertIntToExt(std::u16string_view rTheIntURIRef,
     bool bConvert = pPrefix && pPrefix->m_eKind == PrefixInfo::Kind::Internal;
     if (bConvert)
     {
-        comphelper::string::replaceAt(aSynExtURIRef, 0, p - pBegin,
-                pPrefix->m_aTranslatedPrefix);
+        aSynExtURIRef.replaceAt(0, p - pBegin, pPrefix->m_aTranslatedPrefix);
     }
     rTheExtURIRef = decode(aSynExtURIRef, eDecodeMechanism, eCharset);
     return bConvert;
@@ -2174,8 +2165,7 @@ bool INetURLObject::convertExtToInt(std::u16string_view rTheExtURIRef,
     bool bConvert = pPrefix && pPrefix->m_eKind == PrefixInfo::Kind::External;
     if (bConvert)
     {
-        comphelper::string::replaceAt(aSynIntURIRef, 0, p - pBegin,
-            pPrefix->m_aTranslatedPrefix);
+        aSynIntURIRef.replaceAt(0, p - pBegin, pPrefix->m_aTranslatedPrefix);
     }
     rTheIntURIRef = decode(aSynIntURIRef, eDecodeMechanism, eCharset);
     return bConvert;
@@ -2219,8 +2209,6 @@ INetURLObject::PrefixInfo const * INetURLObject::getPrefix(sal_Unicode const *& 
             { u"private:trashcan:"_ustr, u"staroffice.trashcan:"_ustr,
               INetProtocol::PrivSoffice, PrefixInfo::Kind::Internal },
             { u"sftp:"_ustr, u""_ustr, INetProtocol::Sftp, PrefixInfo::Kind::Official },
-            { u"slot:"_ustr, u"staroffice.slot:"_ustr, INetProtocol::Slot,
-              PrefixInfo::Kind::Internal },
             { u"smb:"_ustr, u""_ustr, INetProtocol::Smb, PrefixInfo::Kind::Official },
             { u"staroffice.component:"_ustr, u".component:"_ustr, INetProtocol::Component,
               PrefixInfo::Kind::External },
@@ -2239,8 +2227,6 @@ INetURLObject::PrefixInfo const * INetURLObject::getPrefix(sal_Unicode const *& 
               PrefixInfo::Kind::External },
             { u"staroffice.searchfolder:"_ustr, u"private:searchfolder:"_ustr,
               INetProtocol::PrivSoffice, PrefixInfo::Kind::External },
-            { u"staroffice.slot:"_ustr, u"slot:"_ustr, INetProtocol::Slot,
-              PrefixInfo::Kind::External },
             { u"staroffice.trashcan:"_ustr, u"private:trashcan:"_ustr,
               INetProtocol::PrivSoffice, PrefixInfo::Kind::External },
             { u"staroffice.uno:"_ustr, u".uno:"_ustr, INetProtocol::Uno,
@@ -3122,7 +3108,6 @@ bool INetURLObject::parsePath(INetProtocol eScheme,
 
 
         case INetProtocol::PrivSoffice:
-        case INetProtocol::Slot:
         case INetProtocol::Hid:
         case INetProtocol::Macro:
         case INetProtocol::Uno:
@@ -4908,32 +4893,35 @@ bool isExoticNestedProtocol(const OUString& rURL, sal_Int32 nStart)
 
 bool INetURLObject::IsExoticProtocol() const
 {
-    if (m_eScheme == INetProtocol::Slot ||
-        m_eScheme == INetProtocol::Macro ||
-        m_eScheme == INetProtocol::Uno ||
-        m_eScheme == INetProtocol::VndSunStarExpand ||
-        isSchemeEqualTo(u"vnd.sun.star.script") ||
-        isSchemeEqualTo(u"service") ||
-        // Follina, Microsoft Support Diagnostic Tool
-        isSchemeEqualTo(u"ms-msdt") ||
-        // https://learn.microsoft.com/en-us/office/client-developer/office-uri-schemes
-        isSchemeEqualTo(u"ms-word") ||
-        isSchemeEqualTo(u"ms-powerpoint") ||
-        isSchemeEqualTo(u"ms-excel") ||
-        isSchemeEqualTo(u"ms-visio") ||
-        isSchemeEqualTo(u"ms-access") ||
-        isSchemeEqualTo(u"ms-project") ||
-        isSchemeEqualTo(u"ms-publisher") ||
-        isSchemeEqualTo(u"ms-spd") ||
-        isSchemeEqualTo(u"ms-infopath") ||
-        isSchemeEqualTo(u"search-ms"))
+    // We take a default-deny approach, and check if the protocol is outside
+    // of the acceptable ones.
+
+    if (m_eScheme == INetProtocol::NotValid
+        || m_eScheme == INetProtocol::Ftp
+        || m_eScheme == INetProtocol::Http
+        || m_eScheme == INetProtocol::File
+        || m_eScheme == INetProtocol::Mailto
+        || m_eScheme == INetProtocol::VndSunStarWebdav
+        || m_eScheme == INetProtocol::PrivSoffice
+        || m_eScheme == INetProtocol::VndSunStarHelp
+        || m_eScheme == INetProtocol::Https
+        || m_eScheme == INetProtocol::Data
+        || m_eScheme == INetProtocol::Cid
+        || m_eScheme == INetProtocol::VndSunStarHier
+        || m_eScheme == INetProtocol::Component
+        || m_eScheme == INetProtocol::Ldap
+        || m_eScheme == INetProtocol::Db
+        || m_eScheme == INetProtocol::VndSunStarCmd
+        || m_eScheme == INetProtocol::Telnet
+        || m_eScheme == INetProtocol::VndSunStarTdoc
+        || m_eScheme == INetProtocol::Smb
+        || m_eScheme == INetProtocol::Hid
+        || m_eScheme == INetProtocol::Sftp
+        || m_eScheme == INetProtocol::Cmis)
+            return false;
+
+    if (m_eScheme == INetProtocol::VndSunStarPkg)
     {
-        SAL_INFO_IF(
-            m_eScheme == INetProtocol::VndSunStarExpand, "tools.urlobj",
-            "<" << m_aAbsURIRef.toString() << "> considered exotic");
-        return true;
-    }
-    if (m_eScheme == INetProtocol::VndSunStarPkg) {
         // The package content provider (ucb/source/ucp/package/pkguri.cxx)
         // treats the whole authority between "://" and the next '/' as the
         // nested package url. GetHost() returns only the part after any '@',
@@ -4945,15 +4933,31 @@ bool INetURLObject::IsExoticProtocol() const
         }
         return isExoticNestedProtocol(sPayloadURL, nStart + 3);
     }
-    if (isSchemeEqualTo(u"vnd.sun.star.zip"))
+
+    if (m_eScheme == INetProtocol::Generic)
     {
-        OUString sPayloadURL = GetURLPath(INetURLObject::DecodeMechanism::NONE);
-        if (!sPayloadURL.startsWith(u"//")) {
-            return false;
+        // Various things parse to INetProtocol::Generic, of which only some are known-good.
+        if (isSchemeEqualTo(u"vnd.sun.star.zip"))
+        {
+            OUString sPayloadURL = GetURLPath(INetURLObject::DecodeMechanism::NONE);
+            if (!sPayloadURL.startsWith(u"//")) {
+                return false;
+            }
+            return isExoticNestedProtocol(sPayloadURL, 2);
         }
-        return isExoticNestedProtocol(sPayloadURL, 2);
+        else if (isSchemeEqualTo(u"vnd.sun.star.webdavs"))
+            return false;
+        else if (isSchemeEqualTo(u"webdav"))
+            return false;
+        else if (isSchemeEqualTo(u"webdavs"))
+            return false;
+        else if (isSchemeEqualTo(u"vnd.libreoffice.image"))
+            return false;
     }
-    return false;
+
+    // anything else is exotic
+    SAL_INFO("tools.urlobj", "<" << m_aAbsURIRef.toString() << "> considered exotic");
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

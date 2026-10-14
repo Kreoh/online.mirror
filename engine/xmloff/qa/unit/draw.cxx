@@ -18,6 +18,7 @@
 #include <com/sun/star/drawing/Hatch.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XMasterPageTarget.hpp>
+#include <com/sun/star/text/XTextField.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
@@ -37,6 +38,7 @@
 #include <docmodel/theme/Theme.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// Covers xmloff/source/draw/ fixes.
 class XmloffDrawTest : public UnoApiXmlTest
@@ -89,6 +91,29 @@ uno::Reference<drawing::XShape> XmloffDrawTest::getShape(sal_uInt8 nShapeIndex)
     return xShape;
 }
 
+CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testHyperlinkName)
+{
+    // the accessible name of a hyperlink
+    loadFromFile(u"hyperlink-name.fodp");
+
+    auto getHyperlinkName = [this]() -> OUString {
+        uno::Reference<beans::XPropertySet> xPortion(getShapeTextPortion(0, getShape(0)));
+        CPPUNIT_ASSERT(xPortion.is());
+        auto xField = xPortion->getPropertyValue(u"TextField"_ustr).queryThrow<text::XTextField>();
+        OUString aName;
+        xField.queryThrow<beans::XPropertySet>()->getPropertyValue(u"Name"_ustr) >>= aName;
+        return aName;
+    };
+
+    CPPUNIT_ASSERT_EQUAL(u"Collabora Office home page"_ustr, getHyperlinkName());
+
+    saveAndReload(TestFilter::ODP);
+
+    // office:name was dropped on import and never written on export, so the name a document
+    // carried did not survive a round trip
+    CPPUNIT_ASSERT_EQUAL(u"Collabora Office home page"_ustr, getHyperlinkName());
+}
+
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testTextBoxLoss)
 {
     // Load a document that has a shape with a textbox in it. Save it to ODF and reload.
@@ -130,8 +155,8 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeExport)
         xDrawPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
     uno::Reference<beans::XPropertySet> xMasterPage(xDrawPage->getMasterPage(), uno::UNO_QUERY);
 
-    auto pTheme = std::make_shared<model::Theme>("mytheme");
-    auto pColorSet = std::make_shared<model::ColorSet>("mycolorscheme");
+    auto pTheme = std::make_shared<model::Theme>(u"mytheme"_ustr);
+    auto pColorSet = std::make_shared<model::ColorSet>(u"mycolorscheme"_ustr);
     pColorSet->add(model::ThemeColorType::Dark1, 0x0);
     pColorSet->add(model::ThemeColorType::Light1, 0x1);
     pColorSet->add(model::ThemeColorType::Dark2, 0x2);
@@ -895,8 +920,8 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testTdf156975_ThemeExport)
     uno::Reference<beans::XPropertySet> xMasterPageProps(xDrawPage->getMasterPage(),
                                                          uno::UNO_QUERY);
 
-    auto pTheme = std::make_shared<model::Theme>("Custom");
-    auto pColorSet = std::make_shared<model::ColorSet>("My Colors");
+    auto pTheme = std::make_shared<model::Theme>(u"Custom"_ustr);
+    auto pColorSet = std::make_shared<model::ColorSet>(u"My Colors"_ustr);
     pColorSet->add(model::ThemeColorType::Dark1, 0x000000);
     pColorSet->add(model::ThemeColorType::Light1, 0xffff11);
     pColorSet->add(model::ThemeColorType::Dark2, 0x002200);
@@ -1125,6 +1150,21 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPdfExportAsOdg)
         // - Actual  : -1
         CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aGraphic.getPageNumber());
     }
+}
+
+CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testAutoGrowHeightEmptyText)
+{
+    // Given a text frame that grows to fit its text, holds no text, and states a height of
+    // 0.442cm:
+    loadFromFile(u"autogrow-height-empty-text.fodp");
+
+    uno::Reference<drawing::XShape> xShape(getShape(0));
+
+    // Then the height stated in the file survives the import. An empty frame holds no text
+    // to measure, so the file is the only sound source of a height. Before the fix the
+    // frame came out at 937, the height of an empty paragraph at the 24pt document default
+    // font rather than the 10pt the shape itself uses.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(442), xShape->getSize().Height);
 }
 
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testEmptyGraphicShapeOdf)

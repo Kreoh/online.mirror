@@ -41,7 +41,7 @@ GBUILDDIR:=$(SRCDIR)/solenv/gbuild
 # FOR TAIL_BUILD THE IMPACT IS HUGE!
 # (unless you are doing make -r, which we should explicitly NOT require from
 # users)
-MAKEFLAGS += r
+MAKEFLAGS += -r
 .SUFFIXES:
 
 true := T
@@ -275,13 +275,6 @@ ifeq (,$(SAL_USE_VCLPLUGIN))
 gb_TEST_ENV_VARS += SAL_USE_VCLPLUGIN=svp
 endif
 
-# This is used to detect whether LibreOffice is being built (as opposed to building
-# 3rd-party code). Used for tag deprecation for API we want to
-# ensure is not used at all externally while we clean
-# out our internal usage, for code in sal/ that should be used only internally, etc.
-gb_DEFS_INTERNAL := \
-	-DLIBO_INTERNAL_ONLY \
-
 include $(GBUILDDIR)/Deliver.mk
 
 $(eval $(call gb_Deliver_init))
@@ -320,7 +313,6 @@ include $(foreach class, \
 	CustomTarget \
 	ExternalProject \
 	Gallery \
-	Pagein \
 	PrecompiledHeaders \
 	Pyuno \
 	PythonTest \
@@ -336,10 +328,6 @@ include $(foreach class, \
 	UnoApi \
 	UnpackedTarball \
 	InternalUnoApi \
-	CliAssembly \
-	CliLibrary \
-	CliNativeLibrary \
-	CliUnoApi \
 	DotnetLibrary \
 	DotnetTest \
 	Zip \
@@ -347,8 +335,6 @@ include $(foreach class, \
 	Configuration \
 	HelpTarget \
 	AllLangHelp \
-	Extension \
-	ExtensionPackage \
 	Dictionary \
 	InstallModuleTarget \
 	InstallModule \
@@ -386,18 +372,23 @@ endif
 endef
 
 # Setup for ccache.
+# locale, because ccache hashes LANG and two shells on one machine need not
+# agree about it: VS Code's terminal sets it and Git Bash does not, and the same
+# build from the two windows then shares nothing. That is not about precompiled
+# headers, so it is set either way. pch_defines and time_macros are for the PCHs.
+gb_CCACHE_SLOPPINESS_VALUES := locale
 ifneq ($(gb_ENABLE_PCH),)
-# CCACHE_SLOPPINESS should contain pch_defines,time_macros for PCHs.
+gb_CCACHE_SLOPPINESS_VALUES := locale,pch_defines,time_macros
+endif
 gb_CCACHE_SLOPPINESS :=
 ifeq ($(shell test -z "$$CCACHE_SLOPPINESS" && echo 1),1)
-gb_CCACHE_SLOPPINESS := CCACHE_SLOPPINESS=pch_defines,time_macros
+gb_CCACHE_SLOPPINESS := CCACHE_SLOPPINESS=$(gb_CCACHE_SLOPPINESS_VALUES)
 else
-ifeq ($(shell echo "$$CCACHE_SLOPPINESS" | grep -q pch_defines | grep -q time_macros && echo 1),1)
-gb_CCACHE_SLOPPINESS := CCACHE_SLOPPINESS=$CCACHE_SLOPPINESS:pch_defines,time_macros
-endif
+# The setting from the environment is kept and the above added to it, with
+# spaces turned into commas so the assignment stays one word. Repeats are fine.
+gb_CCACHE_SLOPPINESS := CCACHE_SLOPPINESS=$(subst $(gb_SPACE),$(COMMA),$(CCACHE_SLOPPINESS)),$(gb_CCACHE_SLOPPINESS_VALUES)
 endif
 gb_COMPILER_SETUP += $(gb_CCACHE_SLOPPINESS)
-endif
 ifneq ($(CCACHE_BASEDIR),)
 export CCACHE_BASEDIR
 # With a base directory set, ccache works in relative paths and the generated
@@ -421,6 +412,7 @@ gb_COMPILER_SETUP += CCACHE_DEPEND=1
 endif
 
 $(WORKDIR)/%/.dir:
-	mkdir -p $(@D) && touch $@
+	mkdir -p $(@D)
+	touch $@
 
 # vim: set noet sw=4:

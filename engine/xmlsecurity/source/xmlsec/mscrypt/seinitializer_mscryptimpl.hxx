@@ -22,7 +22,7 @@
 #include <com/sun/star/xml/crypto/XXMLSecurityContext.hpp>
 #include <com/sun/star/xml/crypto/XSEInitializer.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 
 class SEInitializer_MSCryptImpl : public cppu::WeakImplHelper
@@ -43,25 +43,25 @@ class SEInitializer_MSCryptImpl : public cppu::WeakImplHelper
  ******************************************************************************/
 {
 private:
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
 
 public:
-    explicit SEInitializer_MSCryptImpl(const css::uno::Reference< css::uno::XComponentContext > &rxContext);
+    explicit SEInitializer_MSCryptImpl(const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext);
     virtual ~SEInitializer_MSCryptImpl() override;
 
     /* XSEInitializer */
-    virtual css::uno::Reference< css::xml::crypto::XXMLSecurityContext >
-        SAL_CALL createSecurityContext( const OUString& certDB ) override;
+    virtual cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext >
+        createSecurityContext( const OUString& certDB ) override;
 
-    virtual void SAL_CALL freeSecurityContext( const css::uno::Reference<
+    virtual void freeSecurityContext( const cpo::uno::Reference<
         css::xml::crypto::XXMLSecurityContext >& securityContext ) override;
 
     /* XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual OUString getImplementationName(  ) override;
 
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

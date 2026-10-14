@@ -119,7 +119,6 @@
       <menu:menuitem menu:id=".uno:NotesMasterPage" menu:style="radio"/>
       <menu:menuitem menu:id=".uno:HandoutMode" menu:style="radio"/>
       <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:UIPicker" menu:style="text"/>
       <menu:menuitem menu:id=".uno:AvailableToolbars" menu:style="text"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:StatusBarVisible" menu:style="text"/>
@@ -587,7 +586,6 @@
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:RehearseTimings"/>
       <menu:menuitem menu:id=".uno:CustomShowDialog"/>
-      <menu:menuitem menu:id=".uno:Remote"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:PresentationDialog"/>
     </menu:menupopup>
@@ -614,7 +612,6 @@
       <menu:menuitem menu:id=".uno:RedactDoc" menu:style="text"/>
       <menu:menuitem menu:id=".uno:AutoRedactDoc" menu:style="text"/>
       <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:PresentationMinimizer"/>
       <menu:menuitem menu:id=".uno:ImageMapDialog"/>
       <menu:menuitem menu:id=".uno:BmpMask"/>
       <menu:menuitem menu:id=".uno:AVMediaPlayer"/>
@@ -639,7 +636,6 @@
         <menu:menupopup>
           <menu:menuitem menu:id=".uno:MacroManager"/>
           <menu:menuseparator/>
-          <menu:menuitem menu:id=".uno:MacroRecorder"/>
           <menu:menuitem menu:id=".uno:RunMacro"/>
           <menu:menuitem menu:id=".uno:BasicIDEAppear"/>
           <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
@@ -651,8 +647,6 @@
       <menu:menuitem menu:id=".uno:DevelopmentToolsDockingWindow"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:OpenXMLFilterSettings"/>
-      <menu:menuitem menu:id=".uno:ConfigureDialog" menu:style="text"/>
-      <menu:menuitem menu:id=".uno:OptionsTreeDialog"/>
     </menu:menupopup>
   </menu:menu>
   <menu:menu menu:id=".uno:WindowList">
@@ -666,11 +660,7 @@
     <menu:menupopup>
       <menu:menuitem menu:id=".uno:HelpIndex"/>
       <menu:menuitem menu:id=".uno:ExtendedHelp"/>
-      <menu:menuitem menu:id=".uno:Documentation" menu:style="text"/>
       <menu:menuitem menu:id=".uno:CommandPopup" menu:style="text"/>
-      <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:QuestionAnswers"/>
-      <menu:menuitem menu:id=".uno:SendFeedback"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:ShowLicense" menu:style="text"/>
     </menu:menupopup>

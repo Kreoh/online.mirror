@@ -11,6 +11,9 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		desktopHelper.switchUIToNotebookbar();
 		desktopHelper.sidebarToggle();
 		desktopHelper.selectZoomLevel('50', false);
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
 	});
 
 	it('Insert', function() {
@@ -201,30 +204,35 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('.cool-annotation-content-resolved').should('exist');
 
 		/* scenario 1:
-		 *   - hide all comments -> all hidden
-		 *   - show all comments -> all visible
+		 *   - hide all comments -> both hidden, and the resolved choice goes off
+		 *                          with them
+		 *   - show all comments -> only the unresolved comment comes back
 		 */
 		desktopHelper.toggleComments();
 		cy.cGet('#comment-container-1').should('be.not.visible');
 		cy.cGet('#comment-container-2').should('be.not.visible');
 		desktopHelper.toggleComments();
 		cy.cGet('#comment-container-1').should('be.visible');
-		cy.cGet('#comment-container-2').should('be.visible');
+		cy.cGet('#comment-container-2').should('be.not.visible');
 
 		/* scenario 2:
-		 *   - hide resolved comments -> resolved comment hidden
-		 *   - hide all comments 	  -> both hidden
-		 *   - show all comments 	  -> resolved comment hidden
+		 *   - show resolved comments -> both visible
 		 */
 		desktopHelper.toggleComments(/*resolved = */ true);
 		cy.cGet('#comment-container-1').should('be.visible');
-		cy.cGet('#comment-container-2').should('be.not.visible');
+		cy.cGet('#comment-container-2').should('be.visible');
+
+		/* scenario 3:
+		 *   - hide all comments      -> both hidden
+		 *   - show resolved comments -> the comments come back on with them, so
+		 *                              both are visible
+		 */
 		desktopHelper.toggleComments();
 		cy.cGet('#comment-container-1').should('be.not.visible');
 		cy.cGet('#comment-container-2').should('be.not.visible');
-		desktopHelper.toggleComments();
+		desktopHelper.toggleComments(/*resolved = */ true);
 		cy.cGet('#comment-container-1').should('be.visible');
-		cy.cGet('#comment-container-2').should('be.not.visible');
+		cy.cGet('#comment-container-2').should('be.visible');
 	});
 
 	it('Visibility at Different Zoom Levels', function() {
@@ -810,6 +818,102 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('#annotation-reply-textarea-1').should('have.focus');
 	});
 
+	it('A reply outlives the comment it answered', function () {
+		desktopHelper.insertComment('first comment');
+		addReply(this.win, 1, 'middle');
+		addReply(this.win, 2, 'last');
+
+		cy.cGet('#comment-container-3').then(function (card) {
+			const before = card[0].getBoundingClientRect().top;
+
+			cy.cGet('#comment-annotation-menu-2').click();
+			cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
+			cy.cGet('#comment-container-2').should('not.exist');
+
+			// It is still laid out, so it takes the place the removed comment left.
+			cy.cGet('#comment-container-3').should(function (moved) {
+				expect(moved[0].getBoundingClientRect().top, 'top of the surviving reply')
+					.to.be.lessThan(before);
+			});
+		});
+
+		// It is still a working comment, so it answers a click.
+		cy.cGet('#comment-container-3').click();
+		cy.cGet('#comment-container-3').should('have.class', 'annotation-active');
+	});
+
+	// Opens the Reply pane on a comment, writes in it and posts it. The reply that comes back
+	// is the next comment in the thread, and it is in its laid out place when this returns.
+	function addReply(win, id, text) {
+		cy.cGet('#comment-annotation-menu-' + id).click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-' + id).should('have.focus').type(text);
+		cy.cGet('#annotation-reply-' + id).click();
+		helper.processToIdle(win);
+	}
+
+	it('Reply box stays in view when the comment is long', function () {
+		// Long enough that the card would run past the bottom of the view once the
+		// reply pane is added to it. The text has no trailing space, which would not
+		// survive being typed into the comment.
+		desktopHelper.insertComment('lorem ipsum dolor sit amet.'.repeat(25));
+
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').should('have.focus');
+
+		cy.cGet('#document-container').then(function (container) {
+			const view = container[0].getBoundingClientRect();
+
+			cy.cGet('#annotation-reply-textarea-1').should(function (textarea) {
+				expect(textarea[0].getBoundingClientRect().top).to.be.at.least(view.top);
+			});
+			cy.cGet('#annotation-reply-1').should(function (button) {
+				expect(button[0].getBoundingClientRect().bottom).to.be.at.most(view.bottom);
+			});
+		});
+	});
+
+	// The card and the line drawn to the text it points at, in viewport pixels. The check is
+	// retried until it holds, because the layout runs after the click that asks for it.
+	function cardAndConnector(id, check) {
+		cy.cGet('#comment-arrow-container line').should('exist');
+		cy.cGet('#comment-container-' + id).should(function (card) {
+			const line = card[0].ownerDocument.querySelector('#comment-arrow-container line');
+			check(card[0].getBoundingClientRect(), line.getBoundingClientRect());
+		});
+	}
+
+	it('A selected comment sits level with the text it points at', function () {
+		// Long enough that the card used to be moved up the view and away from its text.
+		// The card is taller than the view, so its middle is off screen, and its author
+		// row is the part of it that stays in view.
+		desktopHelper.insertComment('lorem ipsum dolor sit amet.'.repeat(25));
+		cy.cGet('#comment-container-1 .cool-annotation-author-header').click();
+
+		cardAndConnector(1, function (card, connector) {
+			expect(card.top, 'card top against the line to its text')
+				.to.be.closeTo(connector.top, 40);
+		});
+	});
+
+	it('A reply answers a click while its thread is selected', function () {
+		desktopHelper.insertComment('first comment');
+		addReply(this.win, 1, 'a reply');
+
+		// The card's box reaches down past its reply, so its middle is over the reply.
+		// Its author row is the part of it that is drawn.
+		cy.cGet('#comment-container-1 .cool-annotation-author-header').click();
+
+		cy.cGet('#comment-annotation-menu-2').should(function (menu) {
+			const box = menu[0].getBoundingClientRect();
+			const front = menu[0].ownerDocument.elementFromPoint(box.left + box.width / 2,
+				box.top + box.height / 2);
+			expect(front && front.id, 'what a click on the reply menu reaches')
+				.to.equal('comment-annotation-menu-2');
+		});
+	});
+
 	it('Modify focuses the modify textbox', function () {
 		desktopHelper.insertComment();
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
@@ -1377,5 +1481,64 @@ describe(['tagdesktop'], 'Annotation with @mention', function() {
 		cy.cGet('#comment-container-1').should('exist').should('have.class', 'annotation-active');
 		cy.getFrameWindow().then(function(win) { win.app.sectionContainer.getSectionWithName('scroll').scrollVerticalWithOffset(10); });
 		cy.cGet('#comment-container-1').should('exist').should('not.have.class', 'annotation-active');
+	})
+
+	it('Keep full view comment on scroll', function() {
+		// Given a full-view comment in a document:
+		desktopHelper.insertComment('test comment');
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-active');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Open in full view').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-pop-up');
+
+		// When scrolling:
+		cy.getFrameWindow().then(function(win) { win.app.sectionContainer.getSectionWithName('scroll').scrollVerticalWithOffset(10); });
+
+		// Then make sure the comment is still in full-view:
+		// Without the accompanying fix in place, this test would have failed with:
+		// AssertionError: Timed out retrying after 60000ms: expected '<div#comment-container-1.cool-annotation.cool-annotation-collapsed-show>' to have class 'annotation-active'
+		// i.e. the annotation's active state was lost for a full-view comment on scroll.
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-active');
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-pop-up');
+	})
+});
+
+describe(['tagdesktop'], 'Large Annotation Tests', function() {
+	beforeEach(function() {
+		cy.viewport(1920, 1080);
+		helper.setupAndLoadDocument('writer/annotation-large.odt');
+		desktopHelper.switchUIToNotebookbar();
+		desktopHelper.sidebarToggle();
+		// A cursor update from core closes any comment the cursor is not in.
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+	});
+
+	it('Full view fits in viewport', function() {
+		// Given a large comment in a document:
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-active');
+
+		// When opening it in full view:
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Open in full view').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-pop-up');
+
+		// Then make sure the card's wrapper fits inside the document area:
+		cy.cGet('#document-container').then(function($doc) {
+			var docBottom = $doc[0].getBoundingClientRect().bottom;
+			cy.cGet('#comment-container-1 .cool-annotation-content-wrapper').should(function($el) {
+				var wrapperBottom = $el[0].getBoundingClientRect().bottom;
+				// Without the accompanying fix in place, this test would have failed with:
+				// AssertionError: Timed out retrying after 60000ms: wrapper bottom vs document bottom: expected 1080 to be at most 1047
+				// i.e. the comment bottom was cut off and you couldn't scroll down
+				// further.
+				expect(wrapperBottom, 'wrapper bottom vs document bottom').to.be.at.most(docBottom);
+			});
+		});
 	})
 });

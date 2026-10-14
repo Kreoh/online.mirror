@@ -384,7 +384,23 @@ class TreeViewControl {
 			nameInput.setAttribute('aria-label', headerNameLabel);
 
 			if (data && columnIndex !== undefined) {
-				const commitEdit = () => {
+				// Stable id so _updateWidgetImpl's id-based focus restore finds
+				// the same box across a widget rebuild; the marker lets it keep
+				// the text typed so far as well.
+				nameInput.id = data.id + '-header-' + columnIndex + '-name';
+				nameInput.dataset.keepValueOnRebuild = '';
+				// Keep the input's intrinsic width out of the column's
+				// min-content, the grid track decides the width.
+				nameInput.size = 1;
+
+				const engineValue = header.headerName;
+				// Commit on blur rather than on 'change': a value restored by
+				// _updateWidgetImpl after a rebuild never sets the dirty flag,
+				// so 'change' would not fire for it.
+				nameInput.addEventListener('blur', () => {
+					// Window lost focus (Alt+Tab): keep the text, commit later.
+					if (!document.hasFocus()) return;
+					if (nameInput.value === engineValue) return;
 					builder.callback(
 						'treeview',
 						'headernamechanged',
@@ -392,11 +408,23 @@ class TreeViewControl {
 						{ column: columnIndex, value: nameInput.value },
 						builder,
 					);
-				};
-				nameInput.addEventListener('change', commitEdit);
+				});
 				nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
 					if (e.key === 'Enter') {
+						e.preventDefault();
 						nameInput.blur();
+					} else if (e.key === 'Escape') {
+						// Revert an uncommitted edit and stay in the box; an
+						// unchanged box lets Escape bubble up to close the dialog.
+						if (nameInput.value !== engineValue) {
+							nameInput.value = engineValue;
+							e.preventDefault();
+							e.stopPropagation();
+						}
+					} else if (TreeViewControl.headerNameOwnedKeys.includes(e.key)) {
+						// Caret movement and '*' belong to the text box; keep
+						// them away from the grid's row navigation handler.
+						e.stopPropagation();
 					}
 				});
 			}
@@ -1947,7 +1975,7 @@ class TreeViewControl {
 		);
 	}
 
-	filterEntries(filter: string) {
+	filterEntries(filter: string, immediately: boolean = false) {
 		if (this._filterTimer) clearTimeout(this._filterTimer);
 
 		var entriesToHide: Array<HTMLElement> = [];
@@ -1972,14 +2000,17 @@ class TreeViewControl {
 			entriesToHide.push(entry);
 		});
 
-		this._filterTimer = setTimeout(() => {
+		const hideEntries = () => {
 			allEntries.forEach((entry) => {
 				window.L.DomUtil.removeClass(entry, 'hidden');
 			});
 			entriesToHide.forEach((entry) => {
 				window.L.DomUtil.addClass(entry, 'hidden');
 			});
-		}, 100);
+		};
+
+		if (immediately) hideEntries();
+		else this._filterTimer = setTimeout(hideEntries, 100);
 	}
 
 	highlightEntries(searchTerm: string) {
@@ -2550,18 +2581,19 @@ class TreeViewControl {
 		builder: JSBuilder,
 		level: number,
 		parent: HTMLElement,
+		selection: { hasSelectedEntry: boolean } = { hasSelectedEntry: false },
 	) {
-		let hasSelectedEntry = false;
 		for (const index in entries) {
-			hasSelectedEntry = hasSelectedEntry || entries[index].selected;
-			this.fillEntry(data, entries[index], builder, level, parent);
+			if (entries[index].selected) selection.hasSelectedEntry = true;
+			this.fillEntry(data, entries[index], builder, level, parent, selection);
 		}
 
 		if (entries && entries.length === 0) this.makeEmptyList(data, builder);
 
 		// we need to provide a way for making the treeview control focusable
-		// when no entry is selected
-		if (level === 1 && !hasSelectedEntry) this.makeTreeViewFocusable(true);
+		// when no entry is selected, at the top level or inside a subtree
+		if (level === 1 && !selection.hasSelectedEntry)
+			this.makeTreeViewFocusable(true);
 	}
 
 	showSearchBar(parent: HTMLElement) {
@@ -2582,6 +2614,17 @@ class TreeViewControl {
 			this.filterEntries(searchBox.value),
 		);
 
+		// A rebuilt treeview is built while the old one is still on the page. The
+		// new field takes over the text of the old field with the same id, and the
+		// entries are filtered at once, so the list keeps its filtered state.
+		const previousSearchBox = document.getElementById(
+			searchBox.id,
+		) as HTMLInputElement;
+		if (previousSearchBox && previousSearchBox.value) {
+			searchBox.value = previousSearchBox.value;
+			this.filterEntries(searchBox.value, true);
+		}
+
 		const searchContainer = document.createElement('div');
 		searchContainer.className = 'ui-treeview-search-container';
 		searchContainer.style.gridColumn = '1 / ' + this._maxColumnsIncludingState;
@@ -2596,6 +2639,7 @@ class TreeViewControl {
 		builder: JSBuilder,
 		level: number,
 		parent: HTMLElement,
+		selection?: { hasSelectedEntry: boolean },
 	): Array<HTMLElement> {
 		const entryElements = new Array<HTMLElement>();
 		const row: HTMLElement = this.fillRow(data, entry, builder, level, parent);
@@ -2620,7 +2664,14 @@ class TreeViewControl {
 				this._maxColumnsIncludingState = this._columns + dummyColumns + 1;
 			}
 
-			this.fillEntries(data, entry.children, builder, level + 1, subGrid);
+			this.fillEntries(
+				data,
+				entry.children,
+				builder,
+				level + 1,
+				subGrid,
+				selection,
+			);
 		}
 
 		return entryElements;
@@ -2698,6 +2749,18 @@ class TreeViewControl {
 		if (data.type === 'menu') return true;
 		return false;
 	}
+
+	// Keys the grid's container handler would otherwise turn into row
+	// navigation while the user is editing a column header name.
+	static headerNameOwnedKeys = [
+		'ArrowUp',
+		'ArrowDown',
+		'ArrowLeft',
+		'ArrowRight',
+		'Home',
+		'End',
+		'*',
+	];
 
 	// True when the key was typed into a text field, such as the tree's own
 	// search box, where it should edit that field rather than jump in the list.

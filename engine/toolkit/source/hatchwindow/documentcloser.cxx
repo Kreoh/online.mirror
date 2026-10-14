@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
@@ -36,6 +36,7 @@
 #include <toolkit/helper/vclunohelper.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -45,7 +46,7 @@ class ODocumentCloser : public ::cppu::WeakImplHelper< css::lang::XComponent,
                                                         css::lang::XServiceInfo >
 {
     std::mutex m_aMutex;
-    css::uno::Reference< css::frame::XFrame > m_xFrame;
+    cpo::uno::Reference< css::frame::XFrame > m_xFrame;
     ::comphelper::OInterfaceContainerHelper4<lang::XEventListener> m_aListenersContainer; // list of listeners
 
     bool m_bDisposed;
@@ -54,14 +55,14 @@ public:
     explicit ODocumentCloser(const cpo::uno::Sequence< cpo::uno::Any >& aArguments);
 
 // XComponent
-    virtual void SAL_CALL dispose() override;
-    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    virtual void dispose() override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
 // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 class MainThreadFrameCloserRequest
@@ -146,26 +147,26 @@ ODocumentCloser::ODocumentCloser(const cpo::uno::Sequence< cpo::uno::Any >& aArg
 {
     std::unique_lock aGuard( m_aMutex );
     if ( !m_refCount )
-        throw uno::RuntimeException(); // the object must be refcounted already!
+        throw cpo::uno::RuntimeException(); // the object must be refcounted already!
 
     sal_Int32 nLen = aArguments.getLength();
     if ( nLen != 1 )
         throw lang::IllegalArgumentException(
                         u"Wrong count of parameters!"_ustr,
-                        uno::Reference< uno::XInterface >(),
+                        uno::Reference< cpo::uno::XInterface >(),
                         0 );
 
     if ( !( aArguments[0] >>= m_xFrame ) || !m_xFrame.is() )
         throw lang::IllegalArgumentException(
                 u"Nonempty reference is expected as the first argument!"_ustr,
-                uno::Reference< uno::XInterface >(),
+                uno::Reference< cpo::uno::XInterface >(),
                 0 );
 }
 
 
 // XComponent
 
-void SAL_CALL ODocumentCloser::dispose()
+void ODocumentCloser::dispose()
 {
     std::unique_lock aGuard( m_aMutex );
 
@@ -187,7 +188,7 @@ void SAL_CALL ODocumentCloser::dispose()
 }
 
 
-void SAL_CALL ODocumentCloser::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
+void ODocumentCloser::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -197,33 +198,33 @@ void SAL_CALL ODocumentCloser::addEventListener( const uno::Reference< lang::XEv
 }
 
 
-void SAL_CALL ODocumentCloser::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
+void ODocumentCloser::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
     m_aListenersContainer.removeInterface( aGuard, xListener );
 }
 
 // XServiceInfo
-OUString SAL_CALL ODocumentCloser::getImplementationName(  )
+OUString ODocumentCloser::getImplementationName(  )
 {
     return u"com.sun.star.comp.embed.DocumentCloser"_ustr;
 }
 
-bool SAL_CALL ODocumentCloser::supportsService( const OUString& ServiceName )
+bool ODocumentCloser::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL ODocumentCloser::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > ODocumentCloser::getSupportedServiceNames()
 {
     return { u"com.sun.star.embed.DocumentCloser"_ustr };
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_embed_DocumentCloser_get_implementation(
-    SAL_UNUSED_PARAMETER css::uno::XComponentContext *,
+    SAL_UNUSED_PARAMETER cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &arguments)
 {
     return cppu::acquire(new ODocumentCloser(arguments));

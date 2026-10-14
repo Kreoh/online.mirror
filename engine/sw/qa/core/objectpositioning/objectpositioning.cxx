@@ -9,8 +9,12 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <com/sun/star/text/HoriOrientation.hpp>
+#include <com/sun/star/text/RelOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/text/XTextFramesSupplier.hpp>
 
 #include <comphelper/propertysequence.hxx>
 #include <editeng/ulspitem.hxx>
@@ -18,6 +22,7 @@
 #include <wrtsh.hxx>
 #include <unotxdoc.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
@@ -33,7 +38,8 @@
 #include <vcl/scheduler.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -569,6 +575,175 @@ CPPUNIT_TEST_FIXTURE(Test, testFloattableNestedOverlap)
     // Without the accompanying fix in place, this test would have failed, the content was laid out
     // on 3 pages in Writer.
     CPPUNIT_ASSERT(!pPage2->GetNext());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testAlignedVmlShapesFlushAtCellEdges)
+{
+    // Given a DOCX with a table cell that holds two VML shapes with the default wrap distance
+    // of the format: a wrap-through shape aligned to the left edge of the cell text area and a
+    // tight-wrapped text frame aligned to its right edge:
+    createSwDoc("aligned-objects-in-cell.docx");
+
+    // Then make sure the shape sits flush at the left edge of the cell text area, which
+    // starts at 1824:
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1823
+    // - Actual  : 2003
+    // The wrap distance of the shape pushed it 180 twips inside the edge it is aligned to,
+    // while the wrap distance of the format only keeps text away from the shape.
+    assertXPath(pXmlDoc, "//SwAnchoredDrawObject/bounds", "left", u"1823");
+
+    // And make sure the text frame sits flush at the right edge of the cell text area, which
+    // ends at 6809:
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 6809
+    // - Actual  : 6629
+    assertXPath(pXmlDoc, "//anchored/fly[1]/infos/bounds", "right", u"6809");
+
+    // And make sure both objects keep their wrap distance in the model, so a later save
+    // writes the distance back unchanged:
+    uno::Reference<text::XTextFramesSupplier> xSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xFrames(xSupplier->getTextFrames(),
+                                                    uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xFrame(xFrames->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(318), getProperty<sal_Int32>(xFrame, u"LeftMargin"_ustr));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(318), getProperty<sal_Int32>(xFrame, u"RightMargin"_ustr));
+    uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xShape(xDrawPageSupplier->getDrawPage()->getByIndex(0),
+                                               uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(318), getProperty<sal_Int32>(xShape, u"LeftMargin"_ustr));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(318), getProperty<sal_Int32>(xShape, u"RightMargin"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFlyAutoWidthKeptInsideCell)
+{
+    // A table cell holds a grow-with-content frame that follows the text flow and is aligned
+    // to the right edge of the cell text area. The content of the frame is a table that is
+    // wider than the cell.
+    createSwDoc("aligned-objects-in-cell.docx");
+    uno::Reference<text::XTextFramesSupplier> xSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xFrames(xSupplier->getTextFrames(),
+                                                    uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xFrame(xFrames->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(getProperty<bool>(xFrame, u"IsFollowingTextFlow"_ustr));
+
+    // The frame stays inside the cell text area, which runs from 1824 to 6810, keeps a margin
+    // of its own border and padding width (262 twips) on the left, and stays aligned to the
+    // right edge of the cell text area.
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 4724
+    // - Actual  : 5248
+    // Only the content area of the frame was limited to the cell text area, so the frame
+    // overshot the cell by its own border and padding width and was clipped and moved off
+    // the edge it is aligned to.
+    assertXPath(pXmlDoc, "(//fly[infos])[1]/infos/bounds", "width", u"4724");
+    assertXPath(pXmlDoc, "(//fly[infos])[1]/infos/bounds", "right", u"6809");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testRightAlignedShapeStaysInParagraphArea)
+{
+    // A paragraph holds two shapes that are aligned to the paragraph area: one at the left edge
+    // with the text wrapped on its right, and a wrap-through one at the right edge. The document
+    // adds the fly offsets of the format, so the left shape pushes the text start of the
+    // paragraph to the right.
+    createSwDoc("right-aligned-shape-beside-fly-paragraph-area.fodt");
+    uno::Reference<beans::XPropertySet> xShape(getShapeByName(u"Right shape"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(text::RelOrientation::FRAME,
+                         getProperty<sal_Int16>(xShape, u"HoriOrientRelation"_ustr));
+    CPPUNIT_ASSERT_EQUAL(text::HoriOrientation::RIGHT,
+                         getProperty<sal_Int16>(xShape, u"HoriOrient"_ustr));
+
+    // The right shape ends at the right edge of the paragraph.
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    sal_Int32 nParagraphRight
+        = getXPath(pXmlDoc, "//txt[anchored/SwAnchoredDrawObject]/infos/bounds", "right")
+              .toInt32();
+    sal_Int32 nShapeRight
+        = getXPath(pXmlDoc, "//SwAnchoredDrawObject[SdrObject/@name='Right shape']/bounds",
+                   "right")
+              .toInt32();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 11055
+    // - Actual  : 12756
+    // The text start pushed by the left shape was added to the alignment area, but the area
+    // kept its full width, so the shape landed one left shape width past the paragraph edge,
+    // outside the page.
+    CPPUNIT_ASSERT_EQUAL(nParagraphRight, nShapeRight);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testRightAlignedShapeBesideFly)
+{
+    // A table cell holds an empty paragraph with two objects anchored to it: a tight-wrapped
+    // text frame aligned to the left edge of the cell text area, and a wrap-through shape
+    // aligned to the right edge of it. The text frame pushes the text start of the paragraph
+    // to the right.
+    createSwDoc("right-aligned-shape-beside-fly.docx");
+
+    // The shape is 1002 twips wide and ends at the right edge of the cell text area, which is
+    // also the right edge of the anchor paragraph.
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    sal_Int32 nParagraphRight
+        = getXPath(pXmlDoc, "//txt[anchored/SwAnchoredDrawObject[@page-frame]]/infos/bounds",
+                   "right")
+              .toInt32();
+    sal_Int32 nShapeLeft
+        = getXPath(pXmlDoc, "//SwAnchoredDrawObject[@page-frame]/bounds", "left").toInt32();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 10155
+    // - Actual  : 15060
+    // The text start pushed by the text frame was added to the alignment area, but the area
+    // kept its full width, so the shape landed one text frame width too far right, outside
+    // the page.
+    CPPUNIT_ASSERT_EQUAL(nParagraphRight - 1001, nShapeLeft);
+
+    // And the shape keeps its alignment. Nothing turned it into an absolute position.
+    uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xDrawPage = xDrawPageSupplier->getDrawPage();
+    bool bFound = false;
+    for (sal_Int32 i = 0; i < xDrawPage->getCount(); ++i)
+    {
+        uno::Reference<lang::XServiceInfo> xInfo(xDrawPage->getByIndex(i), uno::UNO_QUERY);
+        if (!xInfo->supportsService(u"com.sun.star.drawing.CustomShape"_ustr))
+            continue;
+        uno::Reference<beans::XPropertySet> xShape(xInfo, uno::UNO_QUERY);
+        CPPUNIT_ASSERT_EQUAL(text::HoriOrientation::RIGHT,
+                             getProperty<sal_Int16>(xShape, u"HoriOrient"_ustr));
+        bFound = true;
+    }
+    CPPUNIT_ASSERT(bFound);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFlyInSplitRowMovesWithRow)
+{
+    // A table row starts near the page bottom. Its cell holds an empty paragraph, a paragraph
+    // that anchors a text frame following the text flow and aligned to the top of the cell, and
+    // a nested table below the frame. The frame is taller than the space left on the page.
+    createSwDoc("fly-in-split-row.docx");
+    uno::Reference<text::XTextFramesSupplier> xSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xFrames(xSupplier->getTextFrames(),
+                                                    uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xFrame(xFrames->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(getProperty<bool>(xFrame, u"IsFollowingTextFlow"_ustr));
+
+    // The row moves to the next page as a whole and the frame keeps its full height there.
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 0
+    // - Actual  : 1
+    // The row was split, the anchor paragraph stayed in the part on the first page and the
+    // frame was cut at the page bottom, showing 4385 of its 6000 twips.
+    assertXPath(pXmlDoc, "//page[1]//anchored/fly", 0);
+    assertXPath(pXmlDoc, "//page[2]/body/tab/row/cell/txt/anchored/fly/infos/bounds", "height",
+                u"6000");
+    sal_Int32 nFlyBottom
+        = getXPath(pXmlDoc, "//page[2]/body/tab/row/cell/txt/anchored/fly/infos/bounds",
+                   "bottom")
+              .toInt32();
+    sal_Int32 nBodyBottom
+        = getXPath(pXmlDoc, "//page[2]/body/infos/bounds", "bottom").toInt32();
+    CPPUNIT_ASSERT_LESS(nBodyBottom, nFlyBottom);
 }
 }
 

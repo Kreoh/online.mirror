@@ -18,6 +18,7 @@
  */
 
 #include <xiescher.hxx>
+#include <docuno.hxx>
 
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
@@ -134,11 +135,11 @@ using namespace com::sun::star;
 using ::cpo::uno::Any;
 using ::com::sun::star::beans::XPropertySet;
 using ::cpo::uno::Exception;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
-using ::com::sun::star::uno::UNO_SET_THROW;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_SET_THROW;
 using ::com::sun::star::beans::NamedValue;
 using ::com::sun::star::container::XIndexContainer;
 using ::com::sun::star::container::XNameContainer;
@@ -1516,9 +1517,9 @@ void XclImpTextObj::DoPreProcessSdrObj( XclImpDffConverter& rDffConv, SdrObject&
             if( maTextData.mxString->IsRich() )
             {
                 // rich text
-                std::unique_ptr< EditTextObject > xEditObj(
+                std::optional< EditTextObject > xEditObj(
                     XclImpStringHelper::CreateTextObject( GetRoot(), *maTextData.mxString ) );
-                OutlinerParaObject aOutlineObj(std::move(xEditObj));
+                OutlinerParaObject aOutlineObj(std::move(*xEditObj));
                 aOutlineObj.SetOutlinerMode( OutlinerMode::TextObject );
                 pTextObj->NbcSetOutlinerParaObject( std::move(aOutlineObj) );
             }

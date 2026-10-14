@@ -44,35 +44,11 @@ Module gid_Module_Root_Brand
     Dirs = (gid_Brand_Dir_Program,
             gid_Brand_Dir_Share,
             gid_Brand_Dir_Share_Config,
-            gid_Brand_Dir_Share_Extensions,
-            gid_Brand_Dir_Share_Uno_Packages,
-            gid_Brand_Dir_Share_Uno_Packages_Cache,
             gid_Brand_Dir_Share_Ure,
             gid_Brand_Dir_Share_Ure_Share,
-            gid_Brand_Dir_Share_Registry,
-            gid_Brand_Dir_Share_Xdg);
+            gid_Brand_Dir_Share_Registry);
     Files = (auto_brand_ALL,
-	     gid_Brand_File_Desktophelper_Txt,
-             gid_Brand_File_Share_Xdg_Calc,
-             gid_Brand_File_Share_Xdg_Draw,
-             gid_Brand_File_Share_Xdg_Impress,
-             gid_Brand_File_Share_Xdg_Math,
-             gid_Brand_File_Share_Xdg_QStart,
-             gid_Brand_File_Share_Xdg_StartCenter,
-             gid_Brand_File_Share_Xdg_Writer,
-             gid_Brand_File_Share_Xdg_XsltFilter);
-End
-
-// Language specific brand module
-
-Module gid_Module_Langpack_Brand_Template
-    ParentID = gid_Module_Langpack_Languageroot;
-    Name = "gid_Module_Langpack_Brand_Template";
-    Description = "gid_Module_Langpack_Brand_Template";
-    Styles = (TEMPLATEMODULE);
-    InstallOrder = "1050";
-    Dirs = (gid_Brand_Dir_Program_Shell);
-    Files = (gid_Brand_File_Share_Registry_Cjk_Xcd);
+	     gid_Brand_File_Desktophelper_Txt);
 End
 
 // Directories
@@ -101,24 +77,6 @@ Directory gid_Brand_Dir_Share_Config
     DosName = "config";
 End
 
-Directory gid_Brand_Dir_Share_Uno_Packages
-    ParentID = gid_Brand_Dir_Share;
-    DosName = "uno_packages";
-    Styles = (CREATE);
-End
-
-Directory gid_Brand_Dir_Share_Uno_Packages_Cache
-    ParentID = gid_Brand_Dir_Share_Uno_Packages;
-    DosName = "cache";
-    Styles = (CREATE);
-End
-
-Directory gid_Brand_Dir_Share_Uno_Packages_Cache_Uno_Packages
-    ParentID = gid_Brand_Dir_Share_Uno_Packages_Cache;
-    DosName = "uno_packages";
-    Styles = (CREATE);
-End
-
 #if defined MACOSX
 
 Directory gid_Brand_Dir_Share_Ure
@@ -137,88 +95,6 @@ Directory gid_Brand_Dir_Share_Registry
     ParentID = gid_Brand_Dir_Share;
     DosName = "registry";
 End
-
-#if defined UNX && ! defined MACOSX
-Directory gid_Brand_Dir_Share_Xdg
-    ParentID = gid_Brand_Dir_Share;
-    DosName = "xdg";
-End
-#endif
-
-// Files
-
-File gid_Brand_File_Share_Registry_Cjk_Xcd
-    TXT_FILE_BODY;
-    Styles = (PACKED,MAKE_LANG_SPECIFIC);
-    Dir = gid_Brand_Dir_Share_Registry;
-    Name (ja) = "cjk.xcd";
-    Name (ko) = "cjk.xcd";
-    Name (zh-CN) = "cjk.xcd";
-    Name (zh-TW) = "cjk.xcd";
-End
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_Calc
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "calc.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_Draw
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "draw.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_Impress
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "impress.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_Math
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "math.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_Writer
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "writer.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_StartCenter
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "startcenter.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
-
-#if defined UNX && ! defined MACOSX
-File gid_Brand_File_Share_Xdg_XsltFilter
-    TXT_FILE_BODY;
-    Dir = gid_Brand_Dir_Share_Xdg;
-    Name = "xsltfilter.desktop";
-    Styles = (PACKED,SCPZIP_REPLACE);
-End
-#endif
 
 // Profiles
 
@@ -421,14 +297,6 @@ ProfileItem gid_Brand_Profileitem_Soffice_SecureUserConfigMode
     Value = "1";
 End
 
-ProfileItem gid_Brand_Profileitem_Soffice_SecureUserConfigExtensions
-    ProfileID = gid_Brand_Profile_Soffice_Ini;
-    ModuleID = gid_Module_Root_Brand;
-    Section = "Bootstrap";
-    Key = "SecureUserConfigExtensions";
-    Value = "true";
-End
-
 ProfileItem gid_Brand_Profileitem_Version_Buildid
     ProfileID = gid_Brand_Profile_Version_Ini;
     ModuleID = gid_Module_Root_Brand;
@@ -547,68 +415,12 @@ ProfileItem gid_Brand_Profileitem_Fundamental_Lo_Java_Dir
     Value = "${BRAND_BASE_DIR}/" LIBO_SHARE_JAVA_FOLDER;
 End
 
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_Bundled_Extensions
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "BUNDLED_EXTENSIONS";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":BUNDLED_EXTENSIONS}";
-End
-
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_Bundled_Extensions_User
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "BUNDLED_EXTENSIONS_USER";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":BUNDLED_EXTENSIONS_USER}";
-End
-
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_Shared_Packages_Cache
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "UNO_SHARED_PACKAGES_CACHE";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":UNO_SHARED_PACKAGES_CACHE}";
-End
-
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_Shared_Extensions_User
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "SHARED_EXTENSIONS_USER";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":SHARED_EXTENSIONS_USER}";
-End
-
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_User_Packages_Cache
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "UNO_USER_PACKAGES_CACHE";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":UNO_USER_PACKAGES_CACHE}";
-End
-
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_Tmp_Extensions
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "TMP_EXTENSIONS";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":TMP_EXTENSIONS}";
-End
-
-ProfileItem gid_Brand_Profileitem_Fundamental_Uno_Bak_Extensions
-    ModuleID = gid_Module_Root_Brand;
-    ProfileID = gid_Brand_Profile_Fundamental_Ini;
-    Section = "Bootstrap";
-    Key = "BAK_EXTENSIONS";
-    Value = "${$ORIGIN/" PROFILENAME(louno) ":TMP_EXTENSIONS}";
-End
-
 ProfileItem gid_Brand_Profileitem_Fundamental_Ure_More_Types
     ModuleID = gid_Module_Root_Brand;
     ProfileID = gid_Brand_Profile_Fundamental_Ini;
     Section = "Bootstrap";
     Key = "URE_MORE_TYPES";
-    Value = "<$ORIGIN/types>* ${${$ORIGIN/" PROFILENAME(louno) ":PKG_UserUnoFile}:UNO_TYPES} ${${$ORIGIN/" PROFILENAME(louno) ":PKG_SharedUnoFile}:UNO_TYPES} ${${$ORIGIN/" PROFILENAME(louno) ":PKG_BundledUnoFile}:UNO_TYPES}";
+    Value = "<$ORIGIN/types>*";
 End
 
 ProfileItem gid_Brand_Profileitem_Fundamental_Ure_More_Services
@@ -616,7 +428,7 @@ ProfileItem gid_Brand_Profileitem_Fundamental_Ure_More_Services
     ProfileID = gid_Brand_Profile_Fundamental_Ini;
     Section = "Bootstrap";
     Key = "URE_MORE_SERVICES";
-    Value = "${${$ORIGIN/" PROFILENAME(louno) ":PKG_UserUnoFile}:UNO_SERVICES} ${${$ORIGIN/" PROFILENAME(louno) ":PKG_SharedUnoFile}:UNO_SERVICES} ${${$ORIGIN/" PROFILENAME(louno) ":PKG_BundledUnoFile}:UNO_SERVICES} <$ORIGIN/services>*";
+    Value = "<$ORIGIN/services>*";
 End
 
 ProfileItem gid_Brand_Profileitem_Fundamental_Ure_More_Java_Types
@@ -624,7 +436,7 @@ ProfileItem gid_Brand_Profileitem_Fundamental_Ure_More_Java_Types
     ProfileID = gid_Brand_Profile_Fundamental_Ini;
     Section = "Bootstrap";
     Key = "URE_MORE_JAVA_TYPES";
-    Value = "${BRAND_BASE_DIR}/" LIBO_SHARE_JAVA_FOLDER "/libreoffice.jar ${BRAND_BASE_DIR}/" LIBO_SHARE_JAVA_FOLDER "/ScriptFramework.jar ${${$ORIGIN/" PROFILENAME(louno) ":PKG_UserUnoFile}:UNO_JAVA_CLASSPATH} ${${$ORIGIN/" PROFILENAME(louno) ":PKG_SharedUnoFile}:UNO_JAVA_CLASSPATH} ${${$ORIGIN/" PROFILENAME(louno) ":PKG_BundledUnoFile}:UNO_JAVA_CLASSPATH}";
+    Value = "${BRAND_BASE_DIR}/" LIBO_SHARE_JAVA_FOLDER "/libreoffice.jar ${BRAND_BASE_DIR}/" LIBO_SHARE_JAVA_FOLDER "/ScriptFramework.jar";
 End
 
 ProfileItem gid_Brand_Profileitem_Fundamental_Ure_Java_Jfw_Shared_Data
@@ -676,7 +488,11 @@ ProfileItem gid_Brand_Profileitem_Fundamental_Configuration_Layers
     ModuleID = gid_Module_Root_Brand;
     Section = "Bootstrap";
     Key = "CONFIGURATION_LAYERS";
-    Value = "xcsxcu:${BRAND_BASE_DIR}/" LIBO_SHARE_FOLDER "/registry res:${BRAND_BASE_DIR}/" LIBO_SHARE_FOLDER "/registry" CONFIGURATION_LAYERS_DCONF CONFIGURATION_LAYERS_WINREG " bundledext:${${BRAND_BASE_DIR}/" LIBO_ETC_FOLDER "/" PROFILENAME(louno) ":BUNDLED_EXTENSIONS_USER}/registry/com.sun.star.comp.deployment.configuration.PackageRegistryBackend/configmgr.ini sharedext:${${BRAND_BASE_DIR}/" LIBO_ETC_FOLDER "/" PROFILENAME(louno) ":SHARED_EXTENSIONS_USER}/registry/com.sun.star.comp.deployment.configuration.PackageRegistryBackend/configmgr.ini userext:${${BRAND_BASE_DIR}/" LIBO_ETC_FOLDER "/" PROFILENAME(louno) ":UNO_USER_PACKAGES_CACHE}/registry/com.sun.star.comp.deployment.configuration.PackageRegistryBackend/configmgr.ini" CONFIGURATION_LAYERS_WINUSERREG " user:!${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" PROFILENAME(bootstrap) ":UserInstallation}/user/registrymodifications.xcu";
+    // The "sharedext" layer holds the shared AutoText, Dictionary and Template
+    // paths that desktop/source/lib/init.cxx files into it at run time. The ini
+    // does not exist; the layer starts out empty. It ranks above the shipped
+    // defaults and below the user's own settings.
+    Value = "xcsxcu:${BRAND_BASE_DIR}/" LIBO_SHARE_FOLDER "/registry res:${BRAND_BASE_DIR}/" LIBO_SHARE_FOLDER "/registry" CONFIGURATION_LAYERS_DCONF CONFIGURATION_LAYERS_WINREG " sharedext:${BRAND_BASE_DIR}/" LIBO_SHARE_FOLDER "/registry/sharedext.ini" CONFIGURATION_LAYERS_WINUSERREG " user:!${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" PROFILENAME(bootstrap) ":UserInstallation}/user/registrymodifications.xcu";
 End
 #undef CONFIGURATION_LAYERS_DCONF
 #undef CONFIGURATION_LAYERS_WINREG

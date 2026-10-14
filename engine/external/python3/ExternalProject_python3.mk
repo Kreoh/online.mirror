@@ -40,10 +40,12 @@ $(call gb_ExternalProject_get_state_target,python3,build) :
 	$(call gb_ExternalProject_run,build,\
 		MAKEFLAGS= CL=-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS \
 			MSBuild.exe pcbuild.sln /t:Build $(gb_MSBUILD_CONFIG_AND_PLATFORM) \
+			$(gb_MSBUILD_DEPENDENCY_TRACKING) $(gb_MSBUILD_DEBUGINFO) \
 			/p:bz2Dir=$(gb_UnpackedTarball_workdir)/bzip2 \
 			/p:opensslIncludeDir=$(gb_UnpackedTarball_workdir)/openssl/include \
 			/p:opensslOutDir=$(gb_UnpackedTarball_workdir)/openssl \
 			/p:IncludeExternals=true \
+			/p:KillPython=false \
 			/p:zlibLib=$(gb_StaticLibrary_WORKDIR)/zlib.lib \
 			/p:zlibNgDir=$(gb_UnpackedTarball_workdir)/zlib \
 			/p:sqlite3Dir=$(gb_UnpackedTarball_workdir)/sqlite3 \

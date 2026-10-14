@@ -51,13 +51,15 @@
 
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing;
 using namespace ::xmloff::token;
 
 void SwXMLExport::ExportFormat(const SwFormat& rFormat, enum XMLTokenEnum eFamily,
-        ::std::optional<OUString> const oStyleName)
+        ::std::optional<OUString> const oStyleName, const SfxItemSet* pItemSet)
 {
+    const SfxItemSet& rItemSet = pItemSet ? *pItemSet : rFormat.GetAttrSet();
     // <style:style ...>
     CheckAttrList();
 
@@ -157,7 +159,7 @@ void SwXMLExport::ExportFormat(const SwFormat& rFormat, enum XMLTokenEnum eFamil
         {
             m_pTableItemMapper->setMapEntries( xItemMap );
             m_pTableItemMapper->exportXML( *this,
-                                           rFormat.GetAttrSet(),
+                                           rItemSet,
                                            GetTwipUnitConverter(),
                                            ePropToken );
         }

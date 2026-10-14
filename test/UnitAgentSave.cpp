@@ -16,11 +16,13 @@
 #include <config.h>
 
 #include <common/Unit.hpp>
+#include <common/JsonUtil.hpp>
 #include <net/HttpRequest.hpp>
 #include <test/WopiTestServer.hpp>
 #include <test/helpers.hpp>
 #include <test/lokassert.hpp>
 #include <wsd/ClientSession.hpp>
+#include <wsd/DocumentBroker.hpp>
 
 #include <Poco/JSON/Object.h>
 #include <Poco/Util/LayeredConfiguration.h>
@@ -175,10 +177,19 @@ public:
             LOK_ASSERT_MESSAGE("Consuming the late response must recover the view",
                                session->canRegisterSaveRequest());
             const std::size_t ordinary = session->registerSaveRequest();
-            LOK_ASSERT_MESSAGE("Cancelling an ordinary timed-out response must recover the view",
-                               session->cancelSaveResponse(ordinary));
-            LOK_ASSERT_MESSAGE("A later ordinary save must be accepted after timeout recovery",
-                               session->canRegisterSaveRequest());
+            session->rejectSaveResponse(ordinary);
+            LOK_ASSERT_MESSAGE("An unresolved ordinary response must also block agent saves",
+                               !session->canRegisterSaveRequest());
+            const auto lateOrdinary = session->consumeSaveResponse();
+            LOK_ASSERT(lateOrdinary && lateOrdinary->rejected);
+            LOK_ASSERT_EQUAL(ordinary, lateOrdinary->requestId);
+            const std::size_t unsent = session->registerSaveRequest();
+            LOK_ASSERT_MESSAGE("Cancelling a different request must not release the slot",
+                               !session->cancelSaveResponse(unsent + 1));
+            LOK_ASSERT(!session->canRegisterSaveRequest());
+            LOK_ASSERT_MESSAGE("A request cancelled before sending may release its slot",
+                               session->cancelSaveResponse(unsent));
+            LOK_ASSERT(session->canRegisterSaveRequest());
             const std::size_t later = session->registerSaveRequest();
             const auto laterOrdinary = session->consumeSaveResponse();
             LOK_ASSERT(laterOrdinary);
@@ -777,61 +788,94 @@ public:
 
 class UnitOrdinarySaveTimeoutRecovery final : public AgentSaveTestBase
 {
-    STATE_ENUM(Phase, Load, WaitLoad, WaitModified, WaitFirstSaveResponse, WaitTimeout,
-               WaitPutFile, Done)
+    STATE_ENUM(Phase, Load, WaitLoad, WaitTransport, WaitFirstSaveResponse, WaitTimeout,
+               WaitRejected, WaitNoUpload, WaitPutFile, Done)
     _phase;
+    std::weak_ptr<ClientSession> _savingSession;
+    Poco::JSON::Object::Ptr _delayedResult;
     std::chrono::steady_clock::time_point _retryAfter;
+    bool _sawGenuineSaveResponse = false;
+    bool _accepted = false;
+    bool _uploaded = false;
 
 public:
     UnitOrdinarySaveTimeoutRecovery()
         : AgentSaveTestBase("UnitOrdinarySaveTimeoutRecovery")
         , _phase(Phase::Load)
     {
-        setTimeout(std::chrono::seconds(20));
+        setTimeout(std::chrono::seconds(30));
     }
 
-    bool onDocumentLoaded(const std::string&) override
+    void configure(Poco::Util::LayeredConfiguration& config) override
     {
-        if (_phase != Phase::WaitLoad)
-            return true;
-
-        TRANSITION_STATE(_phase, Phase::WaitModified);
-        WSD_CMD("key type=input char=97 key=0");
-        WSD_CMD("key type=up char=0 key=512");
-        return true;
+        config.setBool("security.enable_websocket_urp", true);
     }
 
-    bool onDocumentModified(const std::string&) override
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
     {
-        if (_phase != Phase::WaitModified)
-            return true;
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
 
+    void onDocBrokerViewLoaded(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitLoad || !session->isAgentRenderView())
+            return;
+        _savingSession = session;
+        TRANSITION_STATE(_phase, Phase::WaitTransport);
+        LOK_ASSERT(bindAgentTransport(session));
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitTransport || !session->isWebsocketUrpEnabled())
+            return;
+        const auto savingSession = _savingSession.lock();
+        LOK_ASSERT(savingSession);
         TRANSITION_STATE(_phase, Phase::WaitFirstSaveResponse);
-        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
-        return true;
+        // Start an ordinary forced save on the view later used for agent saves.
+        LOK_ASSERT(savingSession->getDocumentBroker()->manualSave(
+            savingSession, true, false, std::string(), false));
     }
 
     bool filterChildMessage(const std::vector<char>& payload) override
     {
+        const std::string message(payload.data(), payload.size());
+        constexpr std::string_view prefix = "unocommandresult:";
+        const auto position = message.find(prefix);
+        if (position == std::string::npos || message.find(".uno:Save") == std::string::npos)
+            return false;
+        if (_phase == Phase::WaitPutFile)
+        {
+            _sawGenuineSaveResponse = true;
+            return false;
+        }
         if (_phase != Phase::WaitFirstSaveResponse)
             return false;
-
-        const std::string message(payload.data(), payload.size());
-        if (message.find("unocommandresult:") == std::string::npos ||
-            message.find(".uno:Save") == std::string::npos)
-            return false;
-
+        LOK_ASSERT(JsonUtil::parseJSON(message.substr(position + prefix.size()), _delayedResult));
         _retryAfter = std::chrono::steady_clock::now() + std::chrono::seconds(7);
         TRANSITION_STATE(_phase, Phase::WaitTimeout);
         return true;
     }
 
     std::unique_ptr<http::Response>
-    assertPutFileRequest(const Poco::Net::HTTPRequest&) override
+    assertPutFileRequest(const Poco::Net::HTTPRequest& request) override
     {
         LOK_ASSERT_STATE(_phase, Phase::WaitPutFile);
-        TRANSITION_STATE(_phase, Phase::Done);
-        passTest("An ordinary save recovered after its earlier response timed out");
+        LOK_ASSERT_MESSAGE("Only a genuine new Core response may upload", _sawGenuineSaveResponse);
+        LOK_ASSERT_EQUAL_STR(std::string(OperationId),
+                            request.get("X-COOL-WOPI-ExtendedData", std::string()));
+        LOK_ASSERT_EQUAL_STR("Bearer " + std::string(AgentToken),
+                            request.get("Authorization", std::string()));
+        _uploaded = true;
+        if (_accepted)
+        {
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest("A delayed ordinary response cannot authorise an agent upload");
+        }
         return nullptr;
     }
 
@@ -840,16 +884,50 @@ public:
         if (_phase == Phase::Load)
         {
             TRANSITION_STATE(_phase, Phase::WaitLoad);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
-            WSD_CMD("load url=" + getWopiSrc());
+            startAgentRenderSession();
         }
         else if (_phase == Phase::WaitTimeout &&
                  std::chrono::steady_clock::now() >= _retryAfter)
         {
+            TRANSITION_STATE(_phase, Phase::WaitRejected);
+            requestAgentSave(AgentToken, OperationId,
+                [this](const std::shared_ptr<http::Session>& controlSession)
+                {
+                    LOK_ASSERT(controlSession->response());
+                    LOK_ASSERT_EQUAL(http::StatusCode::Conflict,
+                                     controlSession->response()->statusCode());
+                    const auto savingSession = _savingSession.lock();
+                    LOK_ASSERT(savingSession);
+                    const auto broker = savingSession->getDocumentBroker();
+                    broker->addCallback([this, broker, savingSession]
+                    {
+                        LOK_ASSERT(!savingSession->canRegisterSaveRequest());
+                        // Deliver the actual held result to the broker on its own thread.
+                        broker->handleSaveResponse(savingSession, _delayedResult);
+                        LOK_ASSERT(savingSession->canRegisterSaveRequest());
+                        LOK_ASSERT(!broker->isAsyncUploading());
+                        _retryAfter = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+                        TRANSITION_STATE(_phase, Phase::WaitNoUpload);
+                    });
+                });
+        }
+        else if (_phase == Phase::WaitNoUpload &&
+                 std::chrono::steady_clock::now() >= _retryAfter)
+        {
             TRANSITION_STATE(_phase, Phase::WaitPutFile);
-            WSD_CMD("key type=input char=98 key=0");
-            WSD_CMD("key type=up char=0 key=512");
-            WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+            requestAgentSave(AgentToken, OperationId,
+                [this](const std::shared_ptr<http::Session>& controlSession)
+                {
+                    LOK_ASSERT(controlSession->response());
+                    LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
+                                     controlSession->response()->statusCode());
+                    _accepted = true;
+                    if (_uploaded)
+                    {
+                        TRANSITION_STATE(_phase, Phase::Done);
+                        passTest("A delayed ordinary response cannot authorise an agent upload");
+                    }
+                });
         }
     }
 };

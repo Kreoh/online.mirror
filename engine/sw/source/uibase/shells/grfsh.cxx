@@ -113,6 +113,14 @@ void SwGrfShell::Execute(SfxRequest &rReq)
 {
     SwWrtShell &rSh = GetShell();
 
+    // The graphic commands act on one image. With several images selected every state is
+    // disabled and every request is ignored.
+    if (rSh.IsMultipleFlyFramesSelected())
+    {
+        rReq.Ignore();
+        return;
+    }
+
     sal_uInt16 nSlot = rReq.GetSlot();
     switch(nSlot)
     {
@@ -591,6 +599,9 @@ void SwGrfShell::Execute(SfxRequest &rReq)
 
 void SwGrfShell::ExecAttr( SfxRequest const &rReq )
 {
+    if (GetShell().IsMultipleFlyFramesSelected())
+        return;
+
     GraphicType nGrfType = GraphicType::NONE;
     if (CNT_GRF == GetShell().GetCntType())
         nGrfType = GetShell().GetGraphicType();
@@ -764,9 +775,24 @@ void SwGrfShell::ExecAttr( SfxRequest const &rReq )
     GetView().GetViewFrame().GetBindings().Invalidate(rReq.GetSlot());
 }
 
+namespace
+{
+    // These attributes and filters never show on a Gif
+    bool lcl_IsGifGraphic( const GraphicObject* pGrafObj )
+    {
+        return pGrafObj && GraphicHelper::IsGifGraphic( pGrafObj->GetGraphic() );
+    }
+}
+
 void SwGrfShell::GetAttrState(SfxItemSet &rSet)
 {
     SwWrtShell &rSh = GetShell();
+    if (rSh.IsMultipleFlyFramesSelected())
+    {
+        StateDisableItems(rSet);
+        return;
+    }
+
     SfxItemSet aCoreSet( GetPool(), aNoTextNodeSetRange );
     rSh.GetCurAttr( aCoreSet );
     bool bParentCntProt = FlyProtectFlags::NONE != rSh.IsSelObjProtected( FlyProtectFlags::Content|FlyProtectFlags::Parent );
@@ -850,14 +876,24 @@ void SwGrfShell::GetAttrState(SfxItemSet &rSet)
 
         case SID_ATTR_GRAF_LUMINANCE:
             if( !bParentCntProt )
-                rSet.Put( SfxInt16Item( nWhich,
-                        aCoreSet.Get(RES_GRFATR_LUMINANCE).GetValue() ));
+            {
+                if( lcl_IsGifGraphic( rSh.GetGraphicObj() ) )
+                    bDisable = true;
+                else
+                    rSet.Put( SfxInt16Item( nWhich,
+                            aCoreSet.Get(RES_GRFATR_LUMINANCE).GetValue() ));
+            }
             break;
 
         case SID_ATTR_GRAF_CONTRAST:
             if( !bParentCntProt )
-                rSet.Put( SfxInt16Item( nWhich,
-                        aCoreSet.Get(RES_GRFATR_CONTRAST).GetValue() ));
+            {
+                if( lcl_IsGifGraphic( rSh.GetGraphicObj() ) )
+                    bDisable = true;
+                else
+                    rSet.Put( SfxInt16Item( nWhich,
+                            aCoreSet.Get(RES_GRFATR_CONTRAST).GetValue() ));
+            }
             break;
 
         case SID_ATTR_GRAF_RED:
@@ -892,7 +928,8 @@ void SwGrfShell::GetAttrState(SfxItemSet &rSet)
                 if ( pGrafObj )
                 {
                     if( pGrafObj->IsAnimated() ||
-                        GraphicType::GdiMetafile == pGrafObj->GetType() )
+                        GraphicType::GdiMetafile == pGrafObj->GetType() ||
+                        lcl_IsGifGraphic( pGrafObj ) )
                         bDisable = true;
                     else
                         rSet.Put( SfxUInt16Item( nWhich,
@@ -909,7 +946,12 @@ void SwGrfShell::GetAttrState(SfxItemSet &rSet)
 
         case SID_ATTR_GRAF_MODE:
             if( !bParentCntProt )
-                rSet.Put( SfxUInt16Item( nWhich, static_cast<sal_uInt16>(aCoreSet.Get(RES_GRFATR_DRAWMODE).GetValue()) ));
+            {
+                if( lcl_IsGifGraphic( rSh.GetGraphicObj() ) )
+                    bDisable = true;
+                else
+                    rSet.Put( SfxUInt16Item( nWhich, static_cast<sal_uInt16>(aCoreSet.Get(RES_GRFATR_DRAWMODE).GetValue()) ));
+            }
             break;
 
         case SID_GRFFILTER:
@@ -941,7 +983,8 @@ void SwGrfShell::GetAttrState(SfxItemSet &rSet)
                     }
                     else
                     {
-                        bDisable = eGraphicType != GraphicType::Bitmap;
+                        bDisable = eGraphicType != GraphicType::Bitmap ||
+                                   lcl_IsGifGraphic( rSh.GetGraphicObj() );
                     }
                 }
             }
@@ -968,6 +1011,9 @@ void SwGrfShell::GetAttrState(SfxItemSet &rSet)
 
 void SwGrfShell::ExecuteRotation(SfxRequest const &rReq)
 {
+    if (GetShell().IsMultipleFlyFramesSelected())
+        return;
+
     // RotGrfFlyFrame: Modify rotation attribute instead of manipulating the graphic
     Degree10 aRotation;
 
@@ -1009,6 +1055,12 @@ void SwGrfShell::ExecuteRotation(SfxRequest const &rReq)
 void SwGrfShell::GetAttrStateForRotation(SfxItemSet &rSet)
 {
     SwWrtShell& rShell = GetShell();
+    if (rShell.IsMultipleFlyFramesSelected())
+    {
+        StateDisableItems(rSet);
+        return;
+    }
+
     bool bIsParentContentProtected = FlyProtectFlags::NONE != rShell.IsSelObjProtected( FlyProtectFlags::Content|FlyProtectFlags::Parent );
 
     SetGetStateSet( &rSet );

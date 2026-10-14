@@ -27,6 +27,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 const cpo::uno::Any aLongAnyTrue( sal_Int16(-1) );
 const cpo::uno::Any aLongAnyFalse( sal_Int16( 0 ) );
@@ -111,12 +112,12 @@ public:
 
 }
 
-SwVbaFont::SwVbaFont( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess >& xPalette, uno::Reference< css::beans::XPropertySet > const & xPropertySet )
+SwVbaFont::SwVbaFont( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess >& xPalette, uno::Reference< css::beans::XPropertySet > const & xPropertySet )
     : SwVbaFont_BASE( xParent, xContext, xPalette, xPropertySet, Component::WORD )
 {
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getUnderline()
 {
     sal_Int32 nOOVal = 0;
@@ -124,7 +125,7 @@ SwVbaFont::getUnderline()
     return cpo::uno::Any( UnderLineMapper::instance().getMSOFromOOO( nOOVal ) );
 }
 
-void SAL_CALL
+void
 SwVbaFont::setUnderline( const cpo::uno::Any& _underline )
 {
     sal_Int32 nMSOVal = 0;
@@ -142,7 +143,7 @@ SwVbaFont::getServiceImplName()
     return u"SwVbaFont"_ustr;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getColorIndex()
 {
     sal_Int32 nColor = 0;
@@ -162,7 +163,7 @@ SwVbaFont::getColorIndex()
     }
     return cpo::uno::Any( nIndex );
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getSubscript()
 {
     bool bRes = false;
@@ -172,7 +173,7 @@ SwVbaFont::getSubscript()
     return aLongAnyFalse;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getSuperscript()
 {
     bool bRes = false;
@@ -182,7 +183,7 @@ SwVbaFont::getSuperscript()
     return aLongAnyFalse;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getBold()
 {
     bool bRes = false;
@@ -192,7 +193,7 @@ SwVbaFont::getBold()
     return aLongAnyFalse;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getItalic()
 {
     bool bRes = false;
@@ -202,7 +203,7 @@ SwVbaFont::getItalic()
     return aLongAnyFalse;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getStrikethrough()
 {
     bool bRes = false;
@@ -212,7 +213,7 @@ SwVbaFont::getStrikethrough()
     return aLongAnyFalse;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaFont::getShadow()
 {
     bool bRes = false;

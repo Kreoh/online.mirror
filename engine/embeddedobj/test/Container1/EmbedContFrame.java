@@ -30,9 +30,9 @@ import com.sun.star.connection.XConnection;
 
 import com.sun.star.bridge.XUnoUrlResolver;
 import com.sun.star.uno.UnoRuntime;
-import com.sun.star.uno.XInterface;
+import cpo.uno.XInterface;
 import cpo.uno.XNamingService;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 
 import com.sun.star.container.*;
 import com.sun.star.beans.*;
@@ -102,7 +102,7 @@ public class EmbedContFrame extends Frame
 
     public static XMultiServiceFactory connectOfficeGetServiceFactory()
     throws cpo.uno.Exception,
-    com.sun.star.uno.RuntimeException,
+    cpo.uno.RuntimeException,
     Exception
     {
         String sConnectionString = "uno:socket,host=localhost,port=8100;urp;StarOffice.NamingService";

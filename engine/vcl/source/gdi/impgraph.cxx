@@ -42,6 +42,7 @@
 #include <impgraph.hxx>
 #include <com/sun/star/graphic/XPrimitive2D.hpp>
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
+#include <vcl/alpha.hxx>
 #include <vcl/dibtools.hxx>
 #include <map>
 #include <memory>
@@ -209,6 +210,7 @@ ImpGraphic& ImpGraphic::operator=(const ImpGraphic& rImpGraphic)
         maSwapInfo = rImpGraphic.maSwapInfo;
         mbDummyContext = rImpGraphic.mbDummyContext;
         maGraphicExternalLink = rImpGraphic.maGraphicExternalLink;
+        mbHasTransparentPixels = rImpGraphic.mbHasTransparentPixels;
 
         mpAnimationContainer.reset();
         if (rImpGraphic.mpAnimationContainer)
@@ -259,6 +261,7 @@ ImpGraphic& ImpGraphic::operator=(ImpGraphic&& rImpGraphic)
     maVectorGraphicData = std::move(rImpGraphic.maVectorGraphicData);
     maGraphicExternalLink = rImpGraphic.maGraphicExternalLink;
     mbPrepared = rImpGraphic.mbPrepared;
+    mbHasTransparentPixels = rImpGraphic.mbHasTransparentPixels;
 
     rImpGraphic.clear();
     rImpGraphic.mbDummyContext = false;
@@ -319,25 +322,73 @@ bool ImpGraphic::operator==( const ImpGraphic& rOther ) const
     return bRet;
 }
 
+namespace
+{
+/// The link types whose data never becomes vector graphic data. A graphic that carries one of
+/// them decodes either to a grid of pixels or to a metafile, so its vector graphic data is empty.
+bool hasNoVectorGraphicData(GfxLinkType eLinkType)
+{
+    switch (eLinkType)
+    {
+        case GfxLinkType::NativeGif:
+        case GfxLinkType::NativeJpg:
+        case GfxLinkType::NativePng:
+        case GfxLinkType::NativeTif:
+        case GfxLinkType::NativeBmp:
+        case GfxLinkType::NativeWebp:
+        case GfxLinkType::EpsBuffer:
+        case GfxLinkType::NativeMet:
+        case GfxLinkType::NativePct:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/// The link types whose data becomes vector graphic data when the graphic is read in. The WMF
+/// type covers EMF too.
+bool hasVectorGraphicData(GfxLinkType eLinkType)
+{
+    switch (eLinkType)
+    {
+        case GfxLinkType::NativeSvg:
+        case GfxLinkType::NativeWmf:
+        case GfxLinkType::NativePdf:
+            return true;
+        default:
+            return false;
+    }
+}
+}
+
 const std::shared_ptr<VectorGraphicData>& ImpGraphic::getVectorGraphicData() const
 {
-    // If the type is clearly a bitmap, we know the vector graphic data will be empty, no need to
-    // swap in.
-    if (mpGfxLink)
-    {
-        switch (mpGfxLink->GetType())
-        {
-            case GfxLinkType::NativePng:
-            case GfxLinkType::NativeJpg:
-                return maVectorGraphicData;
-            default:
-                break;
-        }
-    }
+    // The link type settles some of the formats on its own. A graphic that carries one of those
+    // keeps its vector graphic data empty, so there is nothing to read the image in for.
+    if (mpGfxLink && hasNoVectorGraphicData(mpGfxLink->GetType()))
+        return maVectorGraphicData;
 
     ensureAvailable();
 
     return maVectorGraphicData;
+}
+
+bool ImpGraphic::isVectorGraphic() const
+{
+    // The graphic is in memory already, so its own data answers the question exactly.
+    if (isAvailable())
+        return bool(maVectorGraphicData);
+
+    // The link type alone settles the common formats, which keeps the graphic swapped out.
+    if (mpGfxLink)
+    {
+        if (hasVectorGraphicData(mpGfxLink->GetType()))
+            return true;
+        if (hasNoVectorGraphicData(mpGfxLink->GetType()))
+            return false;
+    }
+
+    return bool(getVectorGraphicData());
 }
 
 void BitmapContainer::createSwapInfo(SwapInfo& rSwapInfo)
@@ -484,6 +535,7 @@ void ImpGraphic::clear()
     clearGraphics();
     meType = GraphicType::NONE;
     mnSizeBytes = 0;
+    mbHasTransparentPixels.reset();
 
     changeExisting(mnSizeBytes);
     maGraphicExternalLink.msURL.clear();
@@ -526,6 +578,27 @@ bool ImpGraphic::isAlpha() const
             return mpBitmapContainer->isAlpha();
     }
     return false;
+}
+
+bool ImpGraphic::hasTransparentPixels() const
+{
+    if (!isTransparent())
+        return false;
+
+    if (meType != GraphicType::Bitmap || maVectorGraphicData)
+        return true;
+
+    if (isSwappedOut())
+        return mbHasTransparentPixels.value_or(true);
+
+    if (mpAnimationContainer || !mpBitmapContainer)
+        return true;
+
+    if (!mbHasTransparentPixels.has_value())
+        mbHasTransparentPixels
+            = mpBitmapContainer->getBitmapRef().CreateAlphaMask().hasAlpha();
+
+    return *mbHasTransparentPixels;
 }
 
 bool ImpGraphic::isAnimated() const
@@ -709,12 +782,12 @@ const GDIMetaFile& ImpGraphic::getGDIMetaFile() const
         // representation. Use a strict virtual hook (MetafileAccessor)
         // to access the MetafilePrimitive2D directly. Also see comments in
         // XEmfParser about this.
-        const std::deque< css::uno::Reference< css::graphic::XPrimitive2D > > aSequence(maVectorGraphicData->getPrimitive2DSequence());
+        const std::deque< cpo::uno::Reference< css::graphic::XPrimitive2D > > aSequence(maVectorGraphicData->getPrimitive2DSequence());
 
         if (1 == aSequence.size())
         {
             // try to cast to MetafileAccessor implementation
-            const css::uno::Reference< css::graphic::XPrimitive2D >& xReference(aSequence[0]);
+            const cpo::uno::Reference< css::graphic::XPrimitive2D >& xReference(aSequence[0]);
             auto pUnoPrimitive = static_cast< const drawinglayer::primitive2d::UnoPrimitive2D* >(xReference.get());
             if (pUnoPrimitive)
             {
@@ -1003,16 +1076,33 @@ void ImpGraphic::setPrefMapMode(const MapMode& rPrefMapMode)
     setValuesForPrefMapMod(rPrefMapMode);
 }
 
+sal_Int64 ImpGraphic::getAccountedSizeBytes() const
+{
+    sal_Int64 nSize = isAvailable() ? getSizeBytes() : 0;
+
+    // Copies of one graphic share the vector data of a PDF page, so each copy carries an
+    // equal share of the bytes and together the copies count the data once.
+    if (maVectorGraphicData && maVectorGraphicData->getType() == VectorGraphicDataType::Pdf)
+        nSize /= maVectorGraphicData.use_count();
+
+    return nSize;
+}
+
 void ImpGraphic::ensureCurrentSizeInBytes()
 {
-    if (isAvailable())
-        changeExisting(getSizeBytes());
-    else
-        changeExisting(0);
+    sal_Int64 nNewSize = getAccountedSizeBytes();
+
+    if (nNewSize != getCurrentSizeInBytes())
+        changeExisting(nNewSize);
 }
 
 sal_Int64 ImpGraphic::getSizeBytes() const
 {
+    // A PDF page carries a share of the file bytes that changes as other pages of the same
+    // file load and unload, so it is queried fresh every time instead of being cached.
+    if (maVectorGraphicData && maVectorGraphicData->getType() == VectorGraphicDataType::Pdf)
+        return maVectorGraphicData->getSizeBytes().second;
+
     if (mnSizeBytes > 0)
         return mnSizeBytes;
 
@@ -1304,7 +1394,22 @@ bool ImpGraphic::swapOutContent(SvStream& rStream)
 bool ImpGraphic::swapOut()
 {
     if (isSwappedOut())
-        return false;
+    {
+        // The graphic content is out already. What can still be in memory is the encoded data
+        // in the link, read back by a caller that wanted a look at the raw bytes.
+        if (!mpGfxLink || !mpGfxLink->getDataContainer().canSwapOut())
+            return false;
+
+        mpGfxLink->getDataContainer().swapOut();
+
+        // The graphic goes back to costing nothing once the bytes really left memory.
+        if (mpGfxLink->getSizeBytes() > 0)
+            return false;
+
+        swappedOut(0);
+
+        return true;
+    }
 
     bool bResult = false;
 
@@ -1382,8 +1487,31 @@ bool ImpGraphic::ensureAvailable() const
         bResult = pThis->swapIn();
     }
 
+    // the accounted size of a PDF page is recomputed on every access
+    if (maVectorGraphicData && maVectorGraphicData->getType() == VectorGraphicDataType::Pdf)
+        const_cast<ImpGraphic*>(this)->ensureCurrentSizeInBytes();
+
     resetLastUsed();
     return bResult;
+}
+
+void ImpGraphic::ensureEncodedDataAvailable() const
+{
+    if (!mpGfxLink)
+        return;
+
+    // Asking the link for its bytes brings them back from the temporary file they were written
+    // to, and there they stay until a reduction takes them out again.
+    (void)mpGfxLink->getDataContainer().getData();
+
+    // The graphic content is still out, and what it costs now is the encoded data that just came
+    // in. The memory manager is told so, so its running total counts those bytes.
+    if (isSwappedOut() && mpGfxLink->getSizeBytes() > 0)
+    {
+        auto pThis = const_cast<ImpGraphic*>(this);
+        pThis->registerIntoManager();
+        pThis->changeExisting(mpGfxLink->getSizeBytes());
+    }
 }
 
 void ImpGraphic::updateFromLoadedGraphic(const ImpGraphic* pGraphic)
@@ -1432,11 +1560,15 @@ void ImpGraphic::updateFromLoadedGraphic(const ImpGraphic* pGraphic)
 
         mbSwapOut = false;
     }
+
+    // The loaded content is measured while it is in memory, so the graphic still knows its size
+    // after it is swapped out again.
+    ensureCurrentSizeInBytes();
 }
 
 void ImpGraphic::dumpState(rtl::OStringBuffer &rState)
 {
-    if (meType == GraphicType::NONE && mnSizeBytes == 0)
+    if (meType == GraphicType::NONE && getCurrentSizeInBytes() == 0)
         return; // uninteresting.
 
     rState.append("\n\t");
@@ -1448,7 +1580,7 @@ void ImpGraphic::dumpState(rtl::OStringBuffer &rState)
 
     rState.append(static_cast<sal_Int32>(meType));
     rState.append("\tsize:\t");
-    rState.append(mnSizeBytes);
+    rState.append(getCurrentSizeInBytes());
     rState.append("\tgfxl:\t");
     rState.append(static_cast<sal_Int64>(mpGfxLink ? mpGfxLink->getSizeBytes() : -1));
     rState.append("\t");
@@ -1574,7 +1706,7 @@ bool ImpGraphic::swapIn()
 
     if (bReturn)
     {
-        swappedIn(getSizeBytes());
+        swappedIn(getAccountedSizeBytes());
     }
 
     return bReturn;
@@ -1746,7 +1878,9 @@ BitmapChecksum ImpGraphic::getChecksum() const
     {
         // We have a compressed stream: then do the CRC on it to avoid
         // decompressing just for checksum purposes.
+        ensureEncodedDataAvailable();
         mnChecksum = mpGfxLink->getDataContainer().getChecksum();
+
         if (mnChecksum != 0)
             return mnChecksum;
     }
@@ -1791,12 +1925,24 @@ sal_Int32 ImpGraphic::getPageNumber() const
 
 bool ImpGraphic::canReduceMemory() const
 {
-    return !isSwappedOut();
+    if (!isSwappedOut())
+        return true;
+
+    // The graphic content is out already, and what is left to give back is the encoded data in
+    // the link, for as long as those bytes can be written out to a temporary file.
+    return mpGfxLink && mpGfxLink->getDataContainer().canSwapOut();
 }
 
 bool ImpGraphic::reduceMemory()
 {
     return swapOut();
+}
+
+void ImpGraphic::refreshCurrentSizeInBytes()
+{
+    // only a PDF page has an accounted size that changes without an access
+    if (maVectorGraphicData && maVectorGraphicData->getType() == VectorGraphicDataType::Pdf)
+        ensureCurrentSizeInBytes();
 }
 
 std::chrono::high_resolution_clock::time_point ImpGraphic::getLastUsed() const

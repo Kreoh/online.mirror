@@ -25,12 +25,22 @@ gb_MKTEMP := mktemp --tmpdir=$(TMPDIR) gbuild.XXXXXX
 # Only trust dash when it copies a here-document larger than that buffer back
 # intact: feed it a 5000-space body and check the 5001 bytes come back.
 gb_DASH := $(shell command -v dash 2>/dev/null)
-gb_RUN_CONFIGURE := CONFIG_SHELL=$(shell cygpath -ms /bin/sh)
+# autoconf's configure starts itself again with exec $CONFIG_SHELL, without quotes, so the value
+# must hold no space. $(1) is the Unix pathname of the shell and $(2) its Windows pathname, which is
+# the value unless it holds a space, as that of the shell of Git for Windows under Program Files
+# does. A make built for Cygwin or MSYS gets the Unix pathname then. A native Windows make, as run
+# from Git Bash, cannot run a Unix pathname given as SHELL in the Makefiles the externals' configure
+# generates, so it gets the 8.3 form of the pathname instead, and stops if there is none. This is a
+# stopgap until the build no longer runs from Git Bash.
+gb_CONFIG_SHELL_PATHNAME = $(if $(word 2,$(2)),$(if $(filter Windows32,$(MAKE_HOST)),$(call gb_CONFIG_SHELL_SHORT_PATHNAME,$(2),$(shell cygpath -ms $(1) 2>/dev/null)),$(1)),$(2))
+# $(1) is the Windows pathname of the shell and $(2) its 8.3 form, empty if there is none.
+gb_CONFIG_SHELL_SHORT_PATHNAME = $(if $(and $(2),$(if $(word 2,$(2)),,true)),$(2),$(error The shell $(1) has a space in its pathname and no 8.3 name to use instead. Install Git for Windows in a directory without spaces))
+gb_RUN_CONFIGURE := CONFIG_SHELL=$(call gb_CONFIG_SHELL_PATHNAME,/bin/sh,$(shell cygpath -m /bin/sh))
 ifneq ($(gb_DASH),)
 ifeq ($(shell printf 'cat <<EOF\n%5000s\nEOF\n' | $(gb_DASH) 2>/dev/null | wc -c | tr -dc 0-9),5001)
-gb_RUN_CONFIGURE := CONFIG_SHELL=$(shell cygpath -ms $(gb_DASH))
+gb_RUN_CONFIGURE := CONFIG_SHELL=$(call gb_CONFIG_SHELL_PATHNAME,$(gb_DASH),$(shell cygpath -m $(gb_DASH)))
 ifeq ($(shell $(gb_DASH) -c 'set -o pipefail' >/dev/null 2>&1 && echo yes),yes)
-SHELL := $(shell cygpath -ms $(gb_DASH))
+SHELL := $(shell cygpath -m $(gb_DASH))
 endif
 endif
 endif
@@ -65,6 +75,26 @@ gb_MSBUILD_PLATFORM := $(strip \
 gb_MSBUILD_CONFIG_AND_PLATFORM := \
 	/p:Configuration=$(gb_MSBUILD_CONFIG) \
 	/p:Platform=$(gb_MSBUILD_PLATFORM)
+
+# Each msbuild call gets its own worker processes, which exit when it does.
+export MSBUILDDISABLENODEREUSE := 1
+
+# msbuild's librarian and linker tasks log every file they open, into a .tlog beside the objects.
+gb_MSBUILD_DEPENDENCY_TRACKING := $(if $(gb_FULLDEPS),,/p:TrackFileAccess=false)
+
+# ccache cannot cache a compile that writes its debug info into a shared PDB.
+# msbuild reads the props path as a Windows path.
+gb_MSBUILD_DEBUGINFO := $(if $(ENABLE_Z7_DEBUG),/p:ForceImportBeforeCppTargets=$(shell cygpath -m $(GBUILDDIR)/platform/msbuild-debuginfo.props))
+
+# ccache refuses a cl command line that names more than one source file. UseMultiToolTask makes
+# msbuild run one cl per source instead of batching them into a single CL task.
+gb_MSBUILD_CCACHE := $(if $(MSBUILD_CCACHE),/p:CLToolPath=$(MSBUILD_CCACHE) /p:CLToolExe=cl.exe \
+	/p:UseMultiToolTask=true /p:MultiProcMaxCount=$(MSBUILD_CCACHE_WIDTH))
+
+# CXX is "<ccache> <compiler> <extra cxx flags>". config_host.mk spells the ccache word the same
+# in both variables, so dropping CCACHE leaves the compiler as the first word.
+gb_MSBUILD_CCACHE_ENV := $(if $(MSBUILD_CCACHE),\
+	CCACHE_COMPILER=$(firstword $(filter-out $(CCACHE),$(CXX))))
 
 gb_CONFIGURE_PLATFORMS := \
 	$(if $(and $(filter i686-pc-cygwin,$(HOST_PLATFORM)),$(filter x86_64-pc-cygwin,$(BUILD_PLATFORM))), \

@@ -24,6 +24,7 @@
 #include <com/sun/star/io/XStream.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sfx2
 {
@@ -59,7 +60,7 @@ bool DocumentSigner::signDocument(uno::Reference<security::XCertificate> const& 
             xMetaInf = xWriteableZipStore->openStorageElement(u"META-INF"_ustr,
                                                               embed::ElementModes::READWRITE);
             if (!xMetaInf.is())
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
         if (xMetaInf.is())
         {

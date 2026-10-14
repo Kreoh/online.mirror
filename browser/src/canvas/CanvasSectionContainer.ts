@@ -289,6 +289,12 @@ class CanvasSectionContainer {
 		return this.context;
 	}
 
+	// Where the mouse was last seen, in the coordinates of this container, or null while it has not
+	// been seen at all.
+	public getMousePosition (): Array<number> {
+		return this.mousePosition;
+	}
+
 	public setDocumentAnchorSection(sectionName: string) {
 		var section: CanvasSectionObject = this.getSectionWithName(sectionName);
 		if (section) {
@@ -441,6 +447,17 @@ class CanvasSectionContainer {
 		return [point[0] - section.myTopLeft[0], point[1] - section.myTopLeft[1]];
 	}
 
+	// Bound sections can have different origins: a document object section moves with the document.
+	private convertPositionBetweenSections (from: CanvasSectionObject, to: CanvasSectionObject, position: Array<number>): cool.SimplePoint {
+		if (!position)
+			return null;
+
+		return cool.SimplePoint.fromCorePixels([
+			position[0] + from.myTopLeft[0] - to.myTopLeft[0],
+			position[1] + from.myTopLeft[1] - to.myTopLeft[1],
+		]);
+	}
+
 	private convertPositionToCanvasLocale (e: any): Array<number> {
 		var rect: any = this.canvas.getBoundingClientRect();
 		var x: number, y: number;
@@ -501,6 +518,30 @@ class CanvasSectionContainer {
 
 	public isDraggingSomething(): boolean {
 		return this.draggingSomething;
+	}
+
+	/*
+		Ends a drag that is under way without waiting for the button to come up, as Escape does.
+		The section that started it is told, so what it shows of the drag goes with it.
+	*/
+	public cancelDragging (): void {
+		if (!this.draggingSomething)
+			return;
+
+		const section = this.getSectionWithName(this.sectionOnMouseDown);
+		this.clearMousePositions();
+
+		if (section) {
+			// A drag reaches the sections bound to the one it started on, and each of them may be
+			// showing something of it, so each of them is told that it is off.
+			section.onDragCancel();
+			for (let i = 0; i < section.boundsList.length; i++) {
+				if (section.boundsList[i] !== section)
+					section.boundsList[i].onDragCancel();
+			}
+		}
+
+		this.requestReDraw();
 	}
 
 	// Capture/release can throw if the pointer is gone or was never captured;
@@ -789,7 +830,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (let i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					deliver(section.boundsList[i], (position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), e);
+					deliver(section.boundsList[i], this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -801,8 +842,8 @@ class CanvasSectionContainer {
 		this.propagateClickLike(section, position, e, (target, point, ev) => target.onClick(point, ev));
 	}
 
-	private propagateOnMiddleClick(section: CanvasSectionObject, position: Array<number>, e: MouseEvent) {
-		this.propagateClickLike(section, position, e, (target, point, ev) => target.onMiddleClick(point, ev));
+	private propagateOnMiddleClick(section: CanvasSectionObject, position: Array<number>, e: MouseEvent, openHyperlink: boolean) {
+		this.propagateClickLike(section, position, e, (target, point, ev) => target.onMiddleClick(point, ev, openHyperlink));
 	}
 
 	private propagateOnDoubleClick(section: CanvasSectionObject, position: Array<number>, e: MouseEvent) {
@@ -822,7 +863,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onDoubleClick(position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]) : null, e);
+					section.boundsList[i].onDoubleClick(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -845,7 +886,7 @@ class CanvasSectionContainer {
 
 		for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 			if (section.boundsList[i].interactable)
-				section.boundsList[i].onMouseLeave((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), e);
+				section.boundsList[i].onMouseLeave(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 			if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 				break; // Stop propagation.
@@ -859,7 +900,7 @@ class CanvasSectionContainer {
 
 		for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 			if (section.boundsList[i].interactable)
-				section.boundsList[i].onMouseEnter((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), e);
+				section.boundsList[i].onMouseEnter(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 			if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 				break; // Stop propagation.
@@ -883,7 +924,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onMouseMove((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), dragDistance, e);
+					section.boundsList[i].onMouseMove(this.convertPositionBetweenSections(section, section.boundsList[i], position), dragDistance, e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -910,7 +951,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onMouseDown((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), e);
+					section.boundsList[i].onMouseDown(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -935,7 +976,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onMouseUp((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), e);
+					section.boundsList[i].onMouseUp(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -960,7 +1001,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onContextMenu(cool.SimplePoint.fromCorePixels([position[0], position[1]]), e);
+					section.boundsList[i].onContextMenu(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -985,7 +1026,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onMouseWheel((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), delta, e);
+					section.boundsList[i].onMouseWheel(this.convertPositionBetweenSections(section, section.boundsList[i], position), delta, e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -1034,7 +1075,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onMultiTouchMove((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), distance, e);
+					section.boundsList[i].onMultiTouchMove(this.convertPositionBetweenSections(section, section.boundsList[i], position), distance, e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -1083,7 +1124,7 @@ class CanvasSectionContainer {
 		if (propagate) {
 			for (var i: number = section.boundsList.length - 1; i > -1; i--) {
 				if (section.boundsList[i].interactable)
-					section.boundsList[i].onDrop((position ? cool.SimplePoint.fromCorePixels([position[0], position[1]]): null), e);
+					section.boundsList[i].onDrop(this.convertPositionBetweenSections(section, section.boundsList[i], position), e);
 
 				if (section.boundsList[i].name === this.lowestPropagatedBoundSection)
 					break; // Stop propagation.
@@ -1198,7 +1239,7 @@ class CanvasSectionContainer {
 		const mousePosition = this.convertPositionToCanvasLocale(e);
 		const section: CanvasSectionObject = this.findSectionContainingPoint(mousePosition);
 		if (section) {
-			this.propagateOnMiddleClick(section, this.convertPositionToSectionLocale(section, mousePosition), e);
+			this.propagateOnMiddleClick(section, this.convertPositionToSectionLocale(section, mousePosition), e, /* openHyperlink */ true);
 		}
 		this.clearMousePositions();
 	}
@@ -1296,13 +1337,24 @@ class CanvasSectionContainer {
 			// The engine shows the hand pointer while the mouse is over a
 			// hyperlink. Only then does the middle button act as a click
 			// that opens the link: consume the press here, before the
-			// browser would start the autoscroll. A middle-button press
-			// anywhere else is left to the browser, so pasting the primary
-			// selection keeps working.
+			// browser would start the autoscroll.
 			this.middleClickOnHyperlink = this.isPointerOverHyperlink();
 			if (this.middleClickOnHyperlink) {
 				e.preventDefault();
 				e.stopPropagation();
+			} else {
+				// A middle-button press elsewhere is left to the browser, so
+				// pasting the primary selection keeps working, but the paste is
+				// that press's own default action - it happens before any event
+				// fired after this one, such as auxclick. Move the cell or text
+				// cursor to the pointer now, the same as a left click would, so
+				// the paste lands there instead of wherever the cursor was left
+				// before.
+				const mousePosition = this.convertPositionToCanvasLocale(e);
+				const section: CanvasSectionObject = this.findSectionContainingPoint(mousePosition);
+				if (section) {
+					this.propagateOnMiddleClick(section, this.convertPositionToSectionLocale(section, mousePosition), e, /* openHyperlink */ false);
+				}
 			}
 			return;
 		}
@@ -1319,6 +1371,25 @@ class CanvasSectionContainer {
 				this.sectionOnMouseDown = section.name;
 				this.propagateOnMouseDown(section, this.convertPositionToSectionLocale(section, this.positionOnMouseDown), e);
 			}
+
+			/*
+				Pressing a button on something that cannot take the keyboard focus leaves the focus
+				on the document body, and the handler that sends keys to the document listens
+				inside the document container, so a key pressed before the button comes up goes
+				nowhere. Escape during a drag is the case that shows it.
+
+				The browser moves the focus as what it does after this handler, so the state to
+				look at is the one right afterwards. Take the focus back where it has fallen out of
+				the document, and leave it where it sits somewhere on purpose, in a dialog or a
+				sidebar.
+			*/
+			app.timerRegistry.setTimeout(
+				'focusafterpress',
+				() => {
+					if (document.activeElement === document.body) app.map.focus();
+				},
+				0,
+			);
 		}
 	}
 
@@ -1400,7 +1471,7 @@ class CanvasSectionContainer {
 		var point = this.convertPositionToCanvasLocale(e);
 		var delta: Array<number>;
 
-		if (e.deltaMode === 1)
+		if (e.deltaMode === WheelEvent.DOM_DELTA_LINE)
 			delta = [e.deltaX * this.scrollLineHeight, e.deltaY * this.scrollLineHeight];
 		else
 			delta = [e.deltaX, e.deltaY];
@@ -1552,12 +1623,25 @@ class CanvasSectionContainer {
 		this.stopLongPress();
 	}
 
+	// A drag that carries one of these types is a slide preview being reordered in the slide
+	// sorter, or a thumbnail brought in from the slide import pane; the document area takes no
+	// drops from either.
+	private isSlideDrag(e: DragEvent): boolean {
+		if (!e.dataTransfer || !e.dataTransfer.types) return false;
+		return (
+			e.dataTransfer.types.includes('application/x-cool-slide') ||
+			e.dataTransfer.types.includes('application/x-cool-slide-import')
+		);
+	}
+
 	private onDragOver(e: DragEvent) {
+		if (this.isSlideDrag(e)) return;
 		// This is necessary to prevent window from taking the dropped object.
 		e.preventDefault();
 	}
 
 	private onDrop(e: DragEvent) {
+		if (this.isSlideDrag(e)) return;
 		e.preventDefault();
 
 		const point = this.convertPositionToCanvasLocale(e);

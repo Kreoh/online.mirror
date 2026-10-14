@@ -9,6 +9,9 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <com/sun/star/awt/FontUnderline.hpp>
+#include <com/sun/star/util/XPropertyReplace.hpp>
+
 #include <officecfg/Office/Writer.hxx>
 #include <test/commontesttools.hxx>
 #include <vcl/event.hxx>
@@ -23,6 +26,13 @@
 #include <comphelper/configuration.hxx>
 
 #include <svx/svdpage.hxx>
+#include <svx/svdview.hxx>
+#include <sfx2/bindings.hxx>
+#include <sfx2/request.hxx>
+#include <com/sun/star/text/XText.hpp>
+#include <com/sun/star/text/XTextTable.hpp>
+#include <rtl/strbuf.hxx>
+#include <utility>
 
 #include <editeng/brushitem.hxx>
 #include <hintids.hxx>
@@ -30,24 +40,35 @@
 #include <cmdid.h>
 #include <docufld.hxx>
 #include <drawdoc.hxx>
+#include <dflyobj.hxx>
 #include <edtwin.hxx>
+#include <flyfrm.hxx>
 #include <fmtfsize.hxx>
+#include <frameformats.hxx>
 #include <i18nutil/paper.hxx>
+#include <itabenum.hxx>
+#include <names.hxx>
 #include <pagedesc.hxx>
 #include <pagefrm.hxx>
 #include <rootfrm.hxx>
+#include <swdtflvr.hxx>
 #include <PostItMgr.hxx>
+#include <translatehelper.hxx>
 #include <view.hxx>
 #include <wrtsh.hxx>
 #include <unotxdoc.hxx>
 #include <ndtxt.hxx>
 #include <IDocumentDrawModelAccess.hxx>
+#include <redline.hxx>
+#include <rootfrm.hxx>
+#include <txtfrm.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentRedlineAccess.hxx>
 #include <svx/svxids.hrc>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -112,6 +133,27 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf113213_addToList)
     pWrtShell->Undo();
     CPPUNIT_ASSERT_EQUAL(u"1."_ustr,
                          getProperty<OUString>(getParagraph(6), u"ListLabelString"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf149061_moveNumParas)
+{
+    // given a document with a list containing some subPoints
+    createSwDoc("tdf149061_moveNumParas.odt");
+
+    // Move 'First Point' below 'Second Point' and its subpoint
+    dispatchCommand(mxComponent, u".uno:MoveDownSubItems"_ustr, {});
+    // Without the fix, this action was prevented by the section.
+    getParagraph(3, u"First Point."_ustr);
+
+    // Position the cursor on 'A Point'
+    dispatchCommand(mxComponent, u".uno:GoToEndOfDoc"_ustr, {}); // subpoint
+    dispatchCommand(mxComponent, u".uno:GoToPrevPara"_ustr, {}); // B Point
+    dispatchCommand(mxComponent, u".uno:GoToPrevPara"_ustr, {}); // A Point
+
+    // Move 'A Point' below 'B Point' and its subpoint
+    dispatchCommand(mxComponent, u".uno:MoveDownSubItems"_ustr, {});
+    // Without the fix, this separated B from its subpoint - leaving the subpoint under A.
+    getParagraph(8, u"A Point"_ustr);
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf108791)
@@ -400,6 +442,40 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf108791)
     }
 }
 
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testRedlineTooltipListsCommentAnchorChanges)
+{
+    // Given "Cec", three adjacent comments, each anchored in its own tracked insertion by Author A,
+    // Author B and Author C, then "ipour" inserted by Author D:
+    createSwDoc("redline-comment-anchors.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    auto pTextFrame
+        = static_cast<SwTextFrame*>(pWrtShell->GetLayout()->GetLower()->GetLower()->GetLower());
+    const SwTextNode* pTextNode = pTextFrame->GetTextNodeForFirstText();
+
+    // Returns the authors of the changes in the tooltip when hovering the character at nIndex.
+    auto getAuthors = [&](sal_Int32 nIndex) {
+        SwRect aChar;
+        pTextFrame->GetCharRect(aChar, SwPosition(*pTextNode, nIndex));
+        SwRect aNextChar;
+        pTextFrame->GetCharRect(aNextChar, SwPosition(*pTextNode, nIndex + 1));
+        Point aPoint((aChar.Left() + aNextChar.Left()) / 2, aChar.Center().Y());
+        SwContentAtPos aContentAtPos(IsAttrAtPos::Redline);
+        CPPUNIT_ASSERT(pWrtShell->GetContentAtPos(aPoint, aContentAtPos));
+        OUString aAuthors = aContentAtPos.aFnd.pRedl->GetAuthorString();
+        for (const SwRangeRedline* pRedline : aContentAtPos.aCommentAnchorRedlines)
+            aAuthors += ", " + pRedline->GetAuthorString();
+        return aAuthors;
+    };
+
+    // Then hovering the text on either side of the comments lists the changes on the anchors too:
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: Author A, Author B, Author C
+    // - Actual  : Author A
+    // i.e. the changes that hold only a comment anchor never appeared in a tooltip.
+    CPPUNIT_ASSERT_EQUAL(u"Author A, Author B, Author C"_ustr, getAuthors(2));
+    CPPUNIT_ASSERT_EQUAL(u"Author D, Author A, Author B, Author C"_ustr, getAuthors(6));
+}
+
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf162120AutoRTL)
 {
     createSwDoc("tdf162120-auto-rtl.fodt");
@@ -635,6 +711,26 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testResolveCommentThreadPartiallyResolved
     CPPUNIT_ASSERT(pReply->GetResolved());
 }
 
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf135857_findWithoutUnderline)
+{
+    // given a document contains a few underlined words and a few explicitly un-underlined words
+
+    createSwDoc("tdf135857_findWithoutUnderline.odt");
+
+    // Get the count of a FindAll of all runs that are not underlined.
+    uno::Reference<util::XSearchable> xSearch(mxComponent, uno::UNO_QUERY);
+    uno::Reference<util::XSearchDescriptor> xSearchDes = xSearch->createSearchDescriptor();
+
+    // specifying the search attributes
+    uno::Reference<util::XPropertyReplace> xProp(xSearchDes, uno::UNO_QUERY);
+    uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence(
+        { { "CharUnderline", uno::Any(css::awt::FontUnderline::NONE) } }));
+    xProp->setSearchAttributes(aDescriptor);
+
+    // In the UI, this results in 5 matches. UNO seems to produce different results
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xSearch->findAll(xSearchDes)->getCount());
+}
+
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf36582_findReplaceRedline)
 {
     // given a two-paragraph document, where the first paragraph contains a change tracking deletion
@@ -843,6 +939,479 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testHeaderFlyClickInBody)
     CPPUNIT_ASSERT_MESSAGE(
         "image anchored in header should be selected by click when editing header",
         pWrtShell->GetSelectedFlyFrame() != nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf36181_findReplaceParaStyle)
+{
+    // given a document with various paragraph styles
+
+    createSwDoc("tdf36181_findReplaceParaStyle.odt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwView& rView = pWrtShell->GetView();
+
+    // initialize find/replace static environment
+    SfxItemSet aSet(rView.GetPool(), svl::Items<SID_SEARCH_ITEM, SID_SEARCH_ITEM>);
+    rView.StateSearch(aSet); // initializes SwView::GetSearchItem
+    SvxSearchItem& rInit = *SwView::GetSearchItem();
+    rInit.SetSearchString(u"Body Text"_ustr);
+    rInit.SetReplaceString(u"Caption"_ustr);
+    rInit.SetPattern(true); // paragraph styles replacement
+    rInit.SetSelection(true); // only search inside of the current selection
+    rInit.SetBackward(false); // search forward - important to specify to avoid other tests...
+    rInit.SetCommand(SvxSearchCmd::REPLACE);
+
+    // pre-select something - that is what the bug is about...
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+
+    // Execute 'Replace' one instance
+    SfxItemSet aFn(rView.GetPool(), svl::Items<FN_REPEAT_SEARCH, FN_REPEAT_SEARCH>);
+    SfxRequest aRequest(FN_REPEAT_SEARCH, SfxCallMode::SYNCHRON, aFn);
+    rView.ExecSearch(aRequest);
+
+    // Without the fix, the Title style was also replaced by the Caption style
+    CPPUNIT_ASSERT_EQUAL(u"Title"_ustr,
+                         getProperty<OUString>(getParagraph(1), u"ParaStyleName"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Caption"_ustr,
+                         getProperty<OUString>(getParagraph(2), u"ParaStyleName"_ustr));
+    // Without the fix, all of the selection applied the Caption style
+    CPPUNIT_ASSERT_EQUAL(u"Text body indent"_ustr,
+                         getProperty<OUString>(getParagraph(3), u"ParaStyleName"_ustr));
+}
+
+/// Fake translator for SwTranslateHelper::TranslateRanges: strips the HTML
+/// tags of the exported fragment and returns the content prefixed with "de:".
+OString FakeTranslate(const OString& rHtml)
+{
+    OStringBuffer aText;
+    bool bInTag = false;
+    for (sal_Int32 i = 0; i < rHtml.getLength(); ++i)
+    {
+        const char c = rHtml[i];
+        if (c == '<')
+            bInTag = true;
+        else if (c == '>')
+            bInTag = false;
+        else if (!bInTag)
+            aText.append(c);
+    }
+    return "<span>de:"_ostr + aText.makeStringAndClear() + "</span>"_ostr;
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTranslateTextSelection)
+{
+    createSwDoc();
+    SwWrtShell* pWrtSh = getSwDocShell()->GetWrtShell();
+    pWrtSh->Insert(u"Hello World"_ustr);
+
+    // Select the whole paragraph and "translate" it.
+    pWrtSh->SelAll();
+    sal_Int32 nCalls = 0;
+    auto aTranslate = [&nCalls](const OString& rHtml, OString& /*rError*/) -> OString
+    {
+        ++nCalls;
+        return FakeTranslate(rHtml);
+    };
+    bool bCancel = false;
+    CPPUNIT_ASSERT(SwTranslateHelper::TranslateRanges(*pWrtSh, aTranslate, bCancel));
+
+    // The original text is replaced by the translation, not kept.
+    CPPUNIT_ASSERT_EQUAL(u"de:Hello World"_ustr, getParagraph(1)->getString());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), nCalls);
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTranslateTableSelection)
+{
+    createSwDoc();
+    SwWrtShell* pWrtSh = getSwDocShell()->GetWrtShell();
+
+    // Insert a 3-row x 2-column table.
+    SwInsertTableOptions aTableOpt(SwInsertTableFlags::DefaultBorder, 0);
+    pWrtSh->InsertTable(aTableOpt, 3, 2);
+
+    // Fill the cells via the model (independent of layout): the text cursor
+    // after InsertTable would need layout to step between the cells.
+    uno::Reference<text::XTextTable> xTable(getParagraphOrTable(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xTable.is());
+    for (const char* pCellName : { "A1", "B1", "A2", "B2", "A3", "B3" })
+    {
+        uno::Reference<text::XText> xCellText(
+            xTable->getCellByName(OUString::createFromAscii(pCellName)), uno::UNO_QUERY);
+        CPPUNIT_ASSERT(xCellText.is());
+        xCellText->setString(OUString::createFromAscii(pCellName));
+    }
+
+    // Move the cursor back to the start of the table: after InsertTable it is
+    // outside the table, where SelTable() would fail.
+    CPPUNIT_ASSERT(pWrtSh->MoveTable(GotoPrevTable, fnTableStart));
+
+    // Select the whole table, i.e. a table box selection of all 6 cells.
+    pWrtSh->SelTable();
+    CPPUNIT_ASSERT(pWrtSh->IsTableMode());
+
+    sal_Int32 nCalls = 0;
+    auto aTranslate = [&nCalls](const OString& rHtml, OString& /*rError*/) -> OString
+    {
+        ++nCalls;
+        return FakeTranslate(rHtml);
+    };
+    bool bCancel = false;
+    CPPUNIT_ASSERT(SwTranslateHelper::TranslateRanges(*pWrtSh, aTranslate, bCancel));
+
+    // Every cell was translated separately: without handling the box
+    // selection, only the first cell was exported and its translation was
+    // pasted into every selected cell, appended after the original text.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(6), nCalls);
+    const std::pair<const char*, const char*> aCases[] = {
+        { "A1", "de:A1" }, { "B1", "de:B1" }, { "A2", "de:A2" },
+        { "B2", "de:B2" }, { "A3", "de:A3" }, { "B3", "de:B3" },
+    };
+    for (const auto& rCase : aCases)
+    {
+        uno::Reference<text::XText> xCellText(
+            xTable->getCellByName(OUString::createFromAscii(rCase.first)), uno::UNO_QUERY);
+        CPPUNIT_ASSERT(xCellText.is());
+        // The cell contains its own translation and the original text is gone.
+        CPPUNIT_ASSERT_EQUAL(OUString::createFromAscii(rCase.second), xCellText->getString());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf129449_findReplaceParaStyle2)
+{
+    // given a document that starts (and ends) with an empty paragraph with Title style
+
+    createSwDoc("tdf129449_findReplaceParaStyle2.odt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwView& rView = pWrtShell->GetView();
+
+    // initialize find/replace static environment
+    SfxItemSet aSet(rView.GetPool(), svl::Items<SID_SEARCH_ITEM, SID_SEARCH_ITEM>);
+    rView.StateSearch(aSet); // initializes SwView::GetSearchItem
+    SvxSearchItem& rInit = *SwView::GetSearchItem();
+    rInit.SetSearchString(u"Title"_ustr);
+    rInit.SetReplaceString(u"Caption"_ustr);
+    rInit.SetPattern(true); // paragraph styles replacement
+    rInit.SetBackward(true); // find the previous result
+    rInit.SetCommand(SvxSearchCmd::FIND);
+
+    // Go to the end of document, so we can test finding backwards
+    dispatchCommand(mxComponent, u".uno:GoToEndOfDoc"_ustr, {});
+
+    // Execute 'Find' - should find the first paragraph
+    SfxItemSet aFn(rView.GetPool(), svl::Items<FN_REPEAT_SEARCH, FN_REPEAT_SEARCH>);
+    SfxRequest aRequest(FN_REPEAT_SEARCH, SfxCallMode::SYNCHRON, aFn);
+    rView.ExecSearch(aRequest);
+
+    // Sanity check - no change requested yet.
+    CPPUNIT_ASSERT_EQUAL(u"Title"_ustr,
+                         getProperty<OUString>(getParagraph(1), u"ParaStyleName"_ustr));
+
+    // Find doesn't tell us much. Change it to replace (it replaces what was already found)
+    // and moves to the next item
+    rInit.SetCommand(SvxSearchCmd::REPLACE);
+    rInit.SetBackward(false); // after replacing, test using search forward for the last paragraph
+    rView.ExecSearch(aRequest);
+
+    // Test the replacement of the first paragraph. Without the fix, the Title style was not found.
+    CPPUNIT_ASSERT_EQUAL(u"Caption"_ustr,
+                         getProperty<OUString>(getParagraph(1), u"ParaStyleName"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Title"_ustr,
+                         getProperty<OUString>(getParagraph(3), u"ParaStyleName"_ustr));
+
+    // Last Paragraph found - now do the actual replace.
+    rView.ExecSearch(aRequest);
+    // Test the replacement of the last paragraph. Without the fix, the Title style was not found.
+    CPPUNIT_ASSERT_EQUAL(u"Caption"_ustr,
+                         getProperty<OUString>(getParagraph(3), u"ParaStyleName"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf129449_findReplaceParaStyle3)
+{
+    // given a document that starts (and ends) with an empty paragraph with Title style
+
+    createSwDoc("tdf129449_findReplaceParaStyle2.odt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwView& rView = pWrtShell->GetView();
+
+    // initialize find/replace static environment
+    SfxItemSet aSet(rView.GetPool(), svl::Items<SID_SEARCH_ITEM, SID_SEARCH_ITEM>);
+    rView.StateSearch(aSet); // initializes SwView::GetSearchItem
+    SvxSearchItem& rInit = *SwView::GetSearchItem();
+    rInit.SetSearchString(u"Title"_ustr);
+    rInit.SetPattern(true); // paragraph styles replacement
+    rInit.SetBackward(false); // find the next result
+    rInit.SetCommand(SvxSearchCmd::FIND);
+
+    // Go to the end of document (wrap around to find the first paragraph in the document)
+    dispatchCommand(mxComponent, u".uno:GoToEndOfDoc"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(SwNodeOffset(11), pWrtShell->GetCursor()->GetPointNode().GetIndex());
+
+    // Execute search with 'Find' - should find the first paragraph's style
+    SfxItemSet aFn(rView.GetPool(), svl::Items<FN_REPEAT_SEARCH, FN_REPEAT_SEARCH>);
+    SfxRequest aRequest(FN_REPEAT_SEARCH, SfxCallMode::SYNCHRON, aFn);
+    rView.ExecSearch(aRequest);
+
+    // Without the fix, the Cursor had not moved.
+    CPPUNIT_ASSERT_EQUAL(SwNodeOffset(9), pWrtShell->GetCursor()->GetPointNode().GetIndex());
+
+    // Go to the start of document (wrap around to find the last paragraph in the document)
+    dispatchCommand(mxComponent, u".uno:GoToStartOfDoc"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(SwNodeOffset(9), pWrtShell->GetCursor()->GetPointNode().GetIndex());
+
+    rInit.SetBackward(true); // find the previous result
+    rView.ExecSearch(aRequest);
+
+    // Without the fix, the Cursor had not moved.
+    CPPUNIT_ASSERT_EQUAL(SwNodeOffset(11), pWrtShell->GetCursor()->GetPointNode().GetIndex());
+
+    // Get the count of a FindAll for the paragraphs with a Title style
+    uno::Reference<util::XSearchable> xSearch(mxComponent, uno::UNO_QUERY);
+    uno::Reference<util::XSearchDescriptor> xSearchDes = xSearch->createSearchDescriptor();
+
+    // specifying the search attributes
+    uno::Reference<beans::XPropertySet> xPropSet(xSearchDes, uno::UNO_QUERY_THROW);
+    xSearchDes->setPropertyValue(u"SearchStyles"_ustr, uno::Any(true));
+    xSearchDes->setSearchString(u"Title"_ustr);
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xSearch->findAll(xSearchDes)->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTdf124442)
+{
+    // Create a new empty Writer document
+    createSwDoc();
+
+    SwDoc* pDoc = getSwDoc();
+    SwCursorShell* pShell(pDoc->GetEditShell());
+    CPPUNIT_ASSERT(pShell);
+    SwPaM* pCursor = pShell->GetCursor();
+    IDocumentContentOperations& rIDCO(pDoc->getIDocumentContentOperations());
+    rIDCO.InsertString(*pCursor, u"Test search not found bug"_ustr);
+
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwView& rView = pWrtShell->GetView();
+
+    SfxItemSet aSet(rView.GetPool(), svl::Items<SID_SEARCH_ITEM, SID_SEARCH_ITEM>);
+    rView.StateSearch(aSet); // initializes SwView::GetSearchItem
+    SvxSearchItem& rSearchItem = *SwView::GetSearchItem();
+    rSearchItem.SetCommand(SvxSearchCmd::FIND);
+
+    SfxItemSet aFn(rView.GetPool(), svl::Items<FN_REPEAT_SEARCH, FN_REPEAT_SEARCH>);
+    SfxRequest aRequest(FN_REPEAT_SEARCH, SfxCallMode::SYNCHRON, aFn);
+    OUString sText;
+    OUString sSearchString;
+
+    // Test when a forward search finds a unique match at the end of the document followed by a
+    // backward search.
+    sSearchString = u"bug"_ustr;
+    rSearchItem.SetSearchString(sSearchString);
+
+    rSearchItem.SetBackward(false);
+    rView.ExecSearch(aRequest);
+    rSearchItem.SetBackward(true);
+    rView.ExecSearch(aRequest);
+
+    pWrtShell->GetSelectedText(sText);
+
+    // Without the patch in place assert failed with:
+    // equality assertion failed
+    // - Expected: bug
+    // - Actual  :
+    CPPUNIT_ASSERT_EQUAL(sSearchString, sText);
+
+    // Test when a backward search finds a unique match at the start of the document followed by a
+    // forward search.
+    sSearchString = u"Test"_ustr;
+    rSearchItem.SetSearchString(sSearchString);
+
+    rSearchItem.SetBackward(true);
+    rView.ExecSearch(aRequest);
+    rSearchItem.SetBackward(false);
+    rView.ExecSearch(aRequest);
+
+    pWrtShell->GetSelectedText(sText);
+
+    // Without the patch in place assert failed with:
+    // equality assertion failed
+    // - Expected: Test
+    // - Actual  :
+    CPPUNIT_ASSERT_EQUAL(sSearchString, sText);
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testDeleteSeveralSelectedImagesTracked)
+{
+    // With change tracking on, deleting two selected images records a deletion for each and
+    // keeps both images in the document until the change is accepted.
+    createSwDoc("two-images.fodt");
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->SetRedlineFlags(RedlineFlags::On | RedlineFlags::ShowInsert | RedlineFlags::ShowDelete);
+    CPPUNIT_ASSERT(pDoc->getIDocumentRedlineAccess().IsRedlineOn());
+
+    SdrPage* pPage = pDoc->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    SdrView* pView = pWrtShell->GetDrawView();
+    pView->MarkObj(pPage->GetObj(0), pView->GetSdrPageView());
+    pView->MarkObj(pPage->GetObj(1), pView->GetSdrPageView());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pWrtShell->GetSelectedFlyFrames().size());
+
+    pWrtShell->DelRight();
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pDoc->GetSpzFrameFormats()->size());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(2),
+                         pDoc->getIDocumentRedlineAccess().GetRedlineTable().size());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testDeleteSeveralSelectedImages)
+{
+    // Deleting a selection that holds two images removes both, and one undo brings both back.
+    createSwDoc("two-images.fodt");
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SdrPage* pPage = pDoc->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pPage->GetObjCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pDoc->GetSpzFrameFormats()->size());
+
+    // Mark both images on the draw view, as a multi-selection would.
+    SdrView* pView = pWrtShell->GetDrawView();
+    pView->MarkObj(pPage->GetObj(0), pView->GetSdrPageView());
+    pView->MarkObj(pPage->GetObj(1), pView->GetSdrPageView());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pWrtShell->GetSelectedFlyFrames().size());
+
+    pWrtShell->DelSelectedObj();
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pView->GetMarkedObjectList().GetMarkCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pPage->GetObjCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pDoc->GetSpzFrameFormats()->size());
+
+    pWrtShell->Undo();
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pPage->GetObjCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pDoc->GetSpzFrameFormats()->size());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testTransformSeveralSelectedImages)
+{
+    // A position sent for a selection of two images moves both by the same distance, and a
+    // width sent for it scales both.
+    createSwDoc("two-images.fodt");
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SdrPage* pPage = pDoc->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    SdrView* pView = pWrtShell->GetDrawView();
+    pView->MarkObj(pPage->GetObj(0), pView->GetSdrPageView());
+    pView->MarkObj(pPage->GetObj(1), pView->GetSdrPageView());
+    // The frame shell handles the transform command. The view switches to it on a timer
+    // after a selection change, so do that switch here.
+    pWrtShell->GetView().SelectShell();
+
+    std::vector<SwFlyFrame*> aFlyFrames = pWrtShell->GetSelectedFlyFrames();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aFlyFrames.size());
+    const SwRect aOldFirst(aFlyFrames[0]->getFrameArea());
+    const SwRect aOldSecond(aFlyFrames[1]->getFrameArea());
+    const tools::Rectangle aOldUnion(pView->GetMarkedObjRect());
+
+    // The requested position is the new top left corner of the whole selection.
+    const tools::Long nDeltaX = 500;
+    const tools::Long nDeltaY = 300;
+    dispatchCommand(mxComponent, u".uno:TransformDialog"_ustr,
+                    { comphelper::makePropertyValue(u"TransformPosX"_ustr,
+                                                    sal_Int32(aOldUnion.Left() + nDeltaX)),
+                      comphelper::makePropertyValue(u"TransformPosY"_ustr,
+                                                    sal_Int32(aOldUnion.Top() + nDeltaY)) });
+
+    CPPUNIT_ASSERT_EQUAL(aOldFirst.Left() + nDeltaX, aFlyFrames[0]->getFrameArea().Left());
+    CPPUNIT_ASSERT_EQUAL(aOldFirst.Top() + nDeltaY, aFlyFrames[0]->getFrameArea().Top());
+    CPPUNIT_ASSERT_EQUAL(aOldSecond.Left() + nDeltaX, aFlyFrames[1]->getFrameArea().Left());
+    CPPUNIT_ASSERT_EQUAL(aOldSecond.Top() + nDeltaY, aFlyFrames[1]->getFrameArea().Top());
+
+    // Doubling the width of the whole selection doubles the width of each image.
+    const tools::Rectangle aMovedUnion(pView->GetMarkedObjRect());
+    dispatchCommand(mxComponent, u".uno:TransformDialog"_ustr,
+                    { comphelper::makePropertyValue(u"TransformWidth"_ustr,
+                                                    sal_uInt32(aMovedUnion.GetWidth() * 2)) });
+
+    // The scaled width may be one twip off after the fraction is applied.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(aOldFirst.Width() * 2.0, aFlyFrames[0]->getFrameArea().Width(), 1.0);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(aOldSecond.Width() * 2.0, aFlyFrames[1]->getFrameArea().Width(), 1.0);
+    CPPUNIT_ASSERT_EQUAL(aOldFirst.Height(), aFlyFrames[0]->getFrameArea().Height());
+
+    // One undo step takes the resize back, a second one the move.
+    pWrtShell->Undo();
+    CPPUNIT_ASSERT_EQUAL(aOldFirst.Width(), aFlyFrames[0]->getFrameArea().Width());
+    pWrtShell->Undo();
+    CPPUNIT_ASSERT_EQUAL(aOldFirst.Left(), aFlyFrames[0]->getFrameArea().Left());
+    CPPUNIT_ASSERT_EQUAL(aOldSecond.Left(), aFlyFrames[1]->getFrameArea().Left());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testCopySeveralSelectedImages)
+{
+    // Copying a selection of two images and pasting it adds two more images to the document.
+    createSwDoc("two-images.fodt");
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SdrPage* pPage = pDoc->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    SdrView* pView = pWrtShell->GetDrawView();
+    pView->MarkObj(pPage->GetObj(0), pView->GetSdrPageView());
+    pView->MarkObj(pPage->GetObj(1), pView->GetSdrPageView());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pWrtShell->GetSelectedFlyFrames().size());
+
+    rtl::Reference<SwTransferable> xTransfer = new SwTransferable(*pWrtShell);
+    xTransfer->Copy();
+
+    // Paste into the text behind the anchor paragraph, with no image selected.
+    pWrtShell->UnSelectFrame();
+    pWrtShell->LeaveSelFrameMode();
+    pWrtShell->EndOfSection();
+    TransferableDataHelper aHelper(xTransfer);
+    SwTransferable::Paste(*pWrtShell, aHelper);
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), pDoc->GetSpzFrameFormats()->size());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), pPage->GetObjCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest11, testSelectSeveralImages)
+{
+    // A second image added to a selected image keeps both selected as one graphic selection,
+    // adding a selected image again takes it out, and a plain selection replaces the set.
+    createSwDoc("two-images.fodt");
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SdrPage* pPage = pDoc->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+    SdrObject* pFirst = pPage->GetObj(0);
+    SdrObject* pSecond = pPage->GetObj(1);
+
+    CPPUNIT_ASSERT(pWrtShell->SelectObj(Point(), 0, pFirst));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pWrtShell->GetSelectedFlyFrames().size());
+    CPPUNIT_ASSERT(!pWrtShell->IsMultipleFlyFramesSelected());
+
+    CPPUNIT_ASSERT(pWrtShell->SelectObj(Point(), SW_ADD_SELECT, pSecond));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pWrtShell->GetSelectedFlyFrames().size());
+    CPPUNIT_ASSERT(pWrtShell->IsFrameSelected());
+    CPPUNIT_ASSERT(pWrtShell->IsMultipleFlyFramesSelected());
+    CPPUNIT_ASSERT_EQUAL(static_cast<int>(SelectionType::Graphic),
+                         static_cast<int>(pWrtShell->GetSelectionType()));
+    // The first image stands for the selection.
+    CPPUNIT_ASSERT_EQUAL(DynCastSwVirtFlyDrawObj(pFirst)->GetFlyFrame(),
+                         pWrtShell->GetSelectedFlyFrame());
+
+    // Adding the first image again removes it, and the second one stays selected alone.
+    CPPUNIT_ASSERT(pWrtShell->SelectObj(Point(), SW_ADD_SELECT, pFirst));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pWrtShell->GetSelectedFlyFrames().size());
+    CPPUNIT_ASSERT_EQUAL(DynCastSwVirtFlyDrawObj(pSecond)->GetFlyFrame(),
+                         pWrtShell->GetSelectedFlyFrame());
+
+    // Removing the last image leaves nothing selected and the cursor in the text.
+    CPPUNIT_ASSERT(!pWrtShell->SelectObj(Point(), SW_ADD_SELECT, pSecond));
+    CPPUNIT_ASSERT(!pWrtShell->IsFrameSelected());
+    CPPUNIT_ASSERT_EQUAL(static_cast<int>(SelectionType::Text),
+                         static_cast<int>(pWrtShell->GetSelectionType()));
+
+    // A selection without the add flag replaces a set of images.
+    CPPUNIT_ASSERT(pWrtShell->SelectObj(Point(), 0, pFirst));
+    CPPUNIT_ASSERT(pWrtShell->SelectObj(Point(), SW_ADD_SELECT, pSecond));
+    CPPUNIT_ASSERT(pWrtShell->SelectObj(Point(), 0, pSecond));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pWrtShell->GetSelectedFlyFrames().size());
+    CPPUNIT_ASSERT_EQUAL(DynCastSwVirtFlyDrawObj(pSecond)->GetFlyFrame(),
+                         pWrtShell->GetSelectedFlyFrame());
 }
 
 } // end of anonymous namespace

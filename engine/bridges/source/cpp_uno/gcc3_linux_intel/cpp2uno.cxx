@@ -23,7 +23,7 @@
 #include <typeinfo>
 
 #include <cpo/uno/genfunc.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <sal/log.hxx>
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
@@ -36,7 +36,7 @@
 #include "call.hxx"
 #include "share.hxx"
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace

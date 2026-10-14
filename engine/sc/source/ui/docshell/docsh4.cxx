@@ -22,6 +22,8 @@
 #include <com/sun/star/frame/Desktop.hpp>
 
 #include <scitems.hxx>
+#include <sfx2/viewfrm.hxx>
+#include <drawview.hxx>
 #include <editeng/flstitem.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <sfx2/linkmgr.hxx>
@@ -108,8 +110,9 @@
 #include <formulacell.hxx>
 #include <documentlinkmgr.hxx>
 #include <tablestyle.hxx>
+#include <chrono>
+#include <optional>
 #include <memory>
-#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 #include <helpids.h>
 #include <editeng/eeitem.hxx>
 #include <editeng/langitem.hxx>
@@ -122,6 +125,7 @@
 #include <sfx2/kit/helper.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 void ScDocShell::SetInitialLinkUpdate( const SfxMedium* pMed )
 {
@@ -167,8 +171,7 @@ ScLkUpdMode ScDocShell::GetLinkUpdateModeState() const
         nSet = LM_NEVER;
     }
     else if (nSet == LM_ALWAYS
-            && !(SvtSecurityOptions::isTrustedLocationUriForUpdatingLinks(
-                    GetMedium() == nullptr ? OUString() : GetMedium()->GetName())
+            && !(IsTrustedLocationForUpdatingLinks()
                 || (IsDocShared()
                     && SvtSecurityOptions::isTrustedLocationUriForUpdatingLinks(
                         GetSharedFileURL()))))
@@ -218,7 +221,7 @@ void ScDocShell::ReloadAllLinks()
     {
         registerDeferredFormImageLinks(GetDeferredFormControlImages(), *pLinkMgr);
         ClearDeferredFormControlImages();
-        pLinkMgr->UpdateAllLinks(false, nullptr, u""_ustr);
+        pLinkMgr->UpdateAllLinks(false, u""_ustr);
     }
 }
 
@@ -252,7 +255,8 @@ bool ScDocShell::HasUpdatableLinks() const
 
 bool ScDocShell::HasExternalLinks() const
 {
-    return GetDocument().HasExternalLinks() || !GetDeferredFormControlImages().empty();
+    return GetDocument().HasExternalLinks() || !GetDeferredFormControlImages().empty()
+           || HasExternalDatabaseForms();
 }
 
 namespace
@@ -492,9 +496,42 @@ void ScDocShell::Execute( SfxRequest& rReq )
             rReq.Done();
             break;
         case FID_HARD_RECALC:
-            DoHardRecalc();
+        {
+            // The return value holds how long the calculation took, in whole
+            // microseconds. A recalculation that did not run answers without one.
+            std::optional<std::chrono::nanoseconds> oCalcDuration = DoHardRecalc();
+            if (oCalcDuration)
+            {
+                const sal_Int64 nMicroseconds
+                    = std::chrono::duration_cast<std::chrono::microseconds>(*oCalcDuration).count();
+                rReq.SetReturnValue(
+                    SfxStringItem(FID_HARD_RECALC, OUString::number(nMicroseconds)));
+            }
             rReq.Done();
             break;
+        }
+        case FID_CALCULATE_SHEET:
+        {
+            const SfxInt32Item* pTabItem = rReq.GetArg<SfxInt32Item>(FID_CALCULATE_SHEET);
+            // Without an argument the command works on the sheet on screen.
+            SCTAB nTab = 0;
+            if (pTabItem)
+                nTab = static_cast<SCTAB>(pTabItem->GetValue());
+            else if (ScTabViewShell* pViewShell = GetBestViewShell())
+                nTab = pViewShell->GetViewData().GetTabNumber();
+            // The return value holds how long the calculation took, in whole
+            // microseconds. A sheet that was not calculated answers without one.
+            std::optional<std::chrono::nanoseconds> oCalcDuration = DoHardRecalcSheet(nTab);
+            if (oCalcDuration)
+            {
+                const sal_Int64 nMicroseconds
+                    = std::chrono::duration_cast<std::chrono::microseconds>(*oCalcDuration).count();
+                rReq.SetReturnValue(
+                    SfxStringItem(FID_CALCULATE_SHEET, OUString::number(nMicroseconds)));
+            }
+            rReq.Done();
+            break;
+        }
         case SID_UPDATETABLINKS:
             {
                 // Draw-layer fill bitmap links are registered as the shapes are
@@ -1339,16 +1376,6 @@ void ScDocShell::Execute( SfxRequest& rReq )
             }
         }
         break;
-        case SID_NOTEBOOKBAR:
-        {
-            const SfxStringItem* pFile = rReq.GetArg( SID_NOTEBOOKBAR );
-
-            if ( pBindings && sfx2::SfxNotebookBar::IsActive() )
-                sfx2::SfxNotebookBar::ExecMethod(*pBindings, pFile ? pFile->GetValue() : u""_ustr);
-            else if ( pBindings )
-                sfx2::SfxNotebookBar::CloseMethod(*pBindings);
-        }
-        break;
         case SID_LANGUAGE_STATUS:
         {
             OUString aLangText;
@@ -1857,8 +1884,13 @@ void ScDocShell::DoRecalc( bool bApi )
             pFC->SetDirty();
     }
     m_pDocument->CalcFormulaTree();
-    if ( pSh )
-        pSh->UpdateCharts(true);
+    UpdateAfterRecalc(pSh);
+}
+
+void ScDocShell::UpdateAfterRecalc(ScTabViewShell* pViewShell)
+{
+    if (pViewShell)
+        pViewShell->UpdateCharts(true);
 
     m_pDocument->BroadcastUno( SfxHint( SfxHintId::DataChanged ) );
 
@@ -1872,14 +1904,13 @@ void ScDocShell::DoRecalc( bool bApi )
         PostDataChanged();
 }
 
-void ScDocShell::DoHardRecalc()
+std::optional<std::chrono::nanoseconds> ScDocShell::DoHardRecalc()
 {
     if (m_pDocument->IsInDocShellRecalc())
     {
         SAL_WARN("sc","ScDocShell::DoHardRecalc tries re-entering while in Recalc; probably Forms->BASIC->Dispatcher.");
-        return;
+        return std::nullopt;
     }
-    auto start = std::chrono::steady_clock::now();
     ScDocShellRecalcGuard aGuard(*m_pDocument);
     weld::WaitObject aWaitObj( GetActiveDialogParent() );
     ScTabViewShell* pSh = GetBestViewShell();
@@ -1888,7 +1919,9 @@ void ScDocShell::DoHardRecalc()
         ScTabView::UpdateInputLine();     // InputEnterHandler
         pSh->UpdateInputHandler();
     }
+    auto aStart = std::chrono::steady_clock::now();
     m_pDocument->CalcAll();
+    const std::chrono::nanoseconds aCalcDuration = std::chrono::steady_clock::now() - aStart;
     GetDocFunc().DetectiveRefresh();    // creates own Undo
     if ( pSh )
         pSh->UpdateCharts(true);
@@ -1911,8 +1944,42 @@ void ScDocShell::DoHardRecalc()
         m_pDocument->SetStreamValid(nTab, false);
 
     PostPaintGridAll();
-    auto end = std::chrono::steady_clock::now();
-    SAL_INFO("sc.timing", "ScDocShell::DoHardRecalc(): took " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms");
+    SAL_INFO("sc.timing", "ScDocShell::DoHardRecalc(): calculation took " << std::chrono::duration_cast<std::chrono::milliseconds>(aCalcDuration).count() << "ms");
+    return aCalcDuration;
+}
+
+std::optional<std::chrono::nanoseconds> ScDocShell::DoHardRecalcSheet(SCTAB nTab)
+{
+    ScDocument& rDocument = GetDocument();
+    if (nTab < 0 || nTab >= rDocument.GetTableCount())
+        return std::nullopt;
+
+    if (rDocument.IsInDocShellRecalc())
+    {
+        SAL_WARN("sc", "ScDocShell::DoHardRecalcSheet tries re-entering while in Recalc.");
+        return std::nullopt;
+    }
+
+    ScTabViewShell* pViewShell = GetBestViewShell();
+    // Only under this guard is a formula group with an IF, IFS or SWITCH
+    // parallelised, so the sheet calculates as it would in a full recalculation.
+    ScDocShellRecalcGuard aRecalcGuard(rDocument);
+    rDocument.SetDirty(ScRange(0, 0, nTab, rDocument.MaxCol(), rDocument.MaxRow(), nTab),
+                       /*bIncludeEmptyCells*/ false);
+
+    auto aStart = std::chrono::steady_clock::now();
+    rDocument.CalcFormulaTree(/*bOnlyForced*/ false,
+                              /*bProgressBar*/ false,
+                              /*bSetAllDirty*/ false);
+    const std::chrono::nanoseconds aCalcDuration = std::chrono::steady_clock::now() - aStart;
+
+    UpdateAfterRecalc(pViewShell);
+
+    SAL_INFO("sc.timing",
+             "ScDocShell::DoHardRecalcSheet(): calculation took "
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(aCalcDuration).count()
+                 << "ms");
+    return aCalcDuration;
 }
 
 void ScDocShell::DoAutoStyle( const ScRange& rRange, const OUString& rStyle )
@@ -2559,16 +2626,6 @@ void ScDocShell::GetState( SfxItemSet &rSet )
                 rSet.Put( SvxFontListItem( m_pImpl->pFontList.get(), nWhich ) );
                 break;
 
-            case SID_NOTEBOOKBAR:
-                {
-                    if (SfxBindings* pBindings = GetViewBindings())
-                    {
-                        bool bVisible = sfx2::SfxNotebookBar::StateMethod(*pBindings,
-                                                                          u"modules/scalc/ui/");
-                        rSet.Put( SfxBoolItem( SID_NOTEBOOKBAR, bVisible ) );
-                    }
-                }
-                break;
 
             case SID_LANGUAGE_STATUS:
                 {
@@ -3040,6 +3097,10 @@ void ScDocShell::KitCommentNotify(KitCommentNotificationType nType, const ScDocu
         {
             aAnnotation.put("author", pNote->GetAuthor());
             aAnnotation.put("dateTime", pNote->GetDate());
+            // The moment the note was written, when it is known. dateTime beside it is the
+            // author's wall clock with no zone; this one is the same moment in UTC.
+            if (!pNote->GetDateUTC().isEmpty())
+                aAnnotation.put("dateTimeUtc", pNote->GetDateUTC());
             if (const auto* pData = pNote->GetThreadedCommentData())
             {
                 aAnnotation.put("text", pData->maRoot.maText);
@@ -3217,7 +3278,7 @@ uno::Reference< frame::XModel > ScDocShell::LoadSharedDocument()
     try
     {
         mod->SetInSharedDocLoading(true);
-        uno::Reference< frame::XDesktop2 > xLoader = frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+        uno::Reference< frame::XDesktop > xLoader = frame::Desktop::create( ::comphelper::getProcessComponentContext() );
         cpo::uno::Sequence aArgs{ comphelper::makePropertyValue(u"Hidden"_ustr, true) };
 
         if ( GetMedium() )

@@ -56,6 +56,7 @@
 #define MAX_PAGES_FOR_FUZZING 2048
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 CGMImpressOutAct::CGMImpressOutAct(CGM& rCGM, const uno::Reference< frame::XModel > & rModel)
     : mnCurrentPage(0)
@@ -112,7 +113,7 @@ bool CGMImpressOutAct::ImplCreateShape( const OUString& rType )
 {
     if (comphelper::IsFuzzing())
         return false;
-    uno::Reference< uno::XInterface > xNewShape( maXMultiServiceFactory->createInstance( rType ) );
+    uno::Reference< cpo::uno::XInterface > xNewShape( maXMultiServiceFactory->createInstance( rType ) );
     maXShape.set( xNewShape, uno::UNO_QUERY );
     maXPropSet.set( xNewShape, uno::UNO_QUERY );
     if ( maXShape.is() && maXPropSet.is() )

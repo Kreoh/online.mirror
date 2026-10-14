@@ -46,7 +46,7 @@
 using namespace ::com::sun::star;
 using namespace ::oox::core;
 using namespace ::oox::drawingml;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::xml::sax;
@@ -128,12 +128,50 @@ SlideFragmentHandler::~SlideFragmentHandler()
             pMasterPersistPtr->setPath( aNotesFragmentPath );
             rFilter.getMasterPages().push_back( pMasterPersistPtr );
             FragmentHandlerRef xMasterFragmentHandler( new SlideFragmentHandler( rFilter, aNotesFragmentPath, pMasterPersistPtr, Master ) );
+
+            // A notes master names a theme of its own, which is where the colors of a notes page
+            // come from.
+            OUString aThemeFragmentPath
+                = xMasterFragmentHandler->getFragmentPathFromFirstTypeFromOfficeDoc( u"theme" );
+            if( !aThemeFragmentPath.isEmpty() )
+            {
+                bool bRead = false;
+                pMasterPersistPtr->setTheme( rFilter.importTheme( aThemeFragmentPath, bRead ) );
+            }
+
             rFilter.importFragment( xMasterFragmentHandler );
             mpSlidePersistPtr->setMasterPersist( pMasterPersistPtr );
         }
+
+        // The colors of the notes page are read through the persist of the page itself, so it
+        // needs the theme its master holds.
+        if( SlidePersistPtr pNotesMaster = mpSlidePersistPtr->getMasterPersist() )
+            mpSlidePersistPtr->setTheme( pNotesMaster->getTheme() );
+
         return this;
     }
     case PPT_TOKEN( notesMaster ):      // CT_NotesMaster
+        return this;
+    case OOX_TOKEN( coext, pageGuid ):  // globally unique identifier of the page
+        // A notes master fragment is parsed with the SlidePersist of the notes page it was
+        // reached through, so its identifier has no page of its own to land on.
+        if (mpSlidePersistPtr->isMasterPage() && mpSlidePersistPtr->isNotesPage())
+            return this;
+        try
+        {
+            OUString sGuid = rAttribs.getStringDefaulted(XML_val);
+            Reference< css::beans::XPropertySet > xSet(mpSlidePersistPtr->getPage(), UNO_QUERY);
+            if (!sGuid.isEmpty() && xSet.is())
+            {
+                Reference< css::beans::XPropertySetInfo > xInfo(xSet->getPropertySetInfo());
+                if (xInfo.is() && xInfo->hasPropertyByName(u"Guid"_ustr))
+                    xSet->setPropertyValue(u"Guid"_ustr, Any(sGuid));
+            }
+        }
+        catch (const cpo::uno::Exception&)
+        {
+            TOOLS_WARN_EXCEPTION("oox", "while importing the globally unique identifier of the page");
+        }
         return this;
     case PPT_TOKEN( cSld ):             // CT_CommonSlideData
         maSlideName = rAttribs.getStringDefaulted(XML_name);

@@ -45,7 +45,7 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/office/XAnnotation.hpp>
 #include <com/sun/star/text/XText.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <comphelper/processfactory.hxx>
@@ -56,6 +56,7 @@
 #include <unotools/ucbstreamhelper.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 SdPdfFilter::SdPdfFilter(SfxMedium& rMedium, sd::DrawDocShell& rDocShell)
     : SdFilter(rMedium, rDocShell)
@@ -410,7 +411,7 @@ bool SdPdfFilter::Export() { return false; }
 
 extern "C" SAL_DLLPUBLIC_EXPORT bool TestFODGExportPDF(SvStream& rStream)
 {
-    const uno::Reference<uno::XComponentContext>& xContext(
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(
         comphelper::getProcessComponentContext());
     uno::Reference<css::frame::XModel2> xModel(
         xContext->getServiceManager()->createInstanceWithContext(
@@ -430,7 +431,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestFODGExportPDF(SvStream& rStream)
 
         uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(
             comphelper::getProcessServiceFactory());
-        uno::Reference<uno::XInterface> xInterface(
+        uno::Reference<cpo::uno::XInterface> xInterface(
             xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr),
             uno::UNO_QUERY);
 
@@ -465,7 +466,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestFODGExportPDF(SvStream& rStream)
         xFODGFilter->filter(aDescriptor);
     }
 
-    css::uno::Reference<css::util::XCloseable> xClose(xModel, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::util::XCloseable> xClose(xModel, cpo::uno::UNO_QUERY);
     xClose->close(false);
 
     return ret;

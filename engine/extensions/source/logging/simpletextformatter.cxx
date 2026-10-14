@@ -21,7 +21,7 @@
 
 #include <com/sun/star/logging/XLogFormatter.hpp>
 #include <com/sun/star/logging/LogLevel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <cppuhelper/implbase.hxx>
@@ -30,7 +30,7 @@
 namespace logging
 {
 using css::logging::LogRecord;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace
@@ -89,8 +89,8 @@ Sequence<OUString> SimpleTextFormatter::getSupportedServiceNames()
 
 } // namespace logging
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_extensions_SimpleTextFormatter(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_extensions_SimpleTextFormatter(cpo::uno::XComponentContext*,
                                                  cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new logging::SimpleTextFormatter());

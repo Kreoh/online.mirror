@@ -84,6 +84,8 @@
 #define STR_UNDO_DELETEPAGES                            NC_("STR_UNDO_DELETEPAGES", "Delete slides")
 #define STR_UNDO_DELETEPAGES_DRAW                       NC_("STR_UNDO_DELETEPAGES_DRAW", "Delete pages")
 #define STR_UNDO_INSERTPAGES                            NC_("STR_UNDO_INSERTPAGES", "Insert slides")
+#define STR_UNDO_UPDATE_LINKED_SLIDES                   NC_("STR_UNDO_UPDATE_LINKED_SLIDES", "Update linked slides")
+#define STR_UNDO_BREAK_SLIDE_LINK                       NC_("STR_UNDO_BREAK_SLIDE_LINK", "Unlink slide from its source")
 #define STR_ASK_DELETE_LAYER                            NC_("STR_ASK_DELETE_LAYER", "Are you sure you want to delete the layer \"$\"?\nNote: All objects on this layer will be deleted!")
 #define STR_ASK_DELETE_ALL_PICTURES                     NC_("STR_ASK_DELETE_ALL_PICTURES", "Do you really want to delete all images?")
 #define STR_UNDO_CHANGE_TITLE_AND_LAYOUT                NC_("STR_UNDO_CHANGE_TITLE_AND_LAYOUT", "Modify title and outline")
@@ -134,7 +136,6 @@
 #define STR_PLAY                                        NC_("STR_PLAY", "~Play")
 #define STR_STOP                                        NC_("STR_STOP", "Sto~p")
 #define STR_UNDO_ORIGINALSIZE                           NC_("STR_UNDO_ORIGINALSIZE", "Original Size")
-#define STR_WARN_SCALE_FAIL                             NC_("STR_WARN_SCALE_FAIL", "The specified scale is invalid.\nDo you want to enter a new one?")
 #define STR_CLICK_ACTION_NONE                           NC_("STR_CLICK_ACTION_NONE", "No action")
 #define STR_CLICK_ACTION_PREVPAGE                       NC_("STR_CLICK_ACTION_PREVPAGE", "Go to previous slide")
 #define STR_CLICK_ACTION_NEXTPAGE                       NC_("STR_CLICK_ACTION_NEXTPAGE", "Go to next slide")
@@ -484,5 +485,21 @@
 #define STR_UNDO_RENAME_SLIDE_SECTION                   NC_("STR_UNDO_RENAME_SLIDE_SECTION", "Rename section")
 #define STR_UNDO_MOVE_SLIDE_SECTION                     NC_("STR_UNDO_MOVE_SLIDE_SECTION", "Move section")
 #define STR_UNDO_REMOVE_SLIDE_SECTION_AND_SLIDES        NC_("STR_UNDO_REMOVE_SLIDE_SECTION_AND_SLIDES", "Remove section and slides")
+
+// The rows of the presentation cleanup list. An image row reads as two lines: the first says where
+// the image sits and, where one slide has more than one image to report, which of them it is. The
+// detail under it says how many bytes the stored image data takes and the resolution the image is
+// stored at, and falls back to the resolution alone for an image the document keeps no encoded
+// data for. A row about a cropped image says instead how much of the picture is cropped away, and
+// falls back to that share alone in the same way.
+
+// The names the undo stack shows for the cleanups the presentation cleanup session carries out.
+#define STR_LINT_UNDO_FIX_ALL                           NC_("STR_LINT_UNDO_FIX_ALL", "Presentation cleanup")
+#define STR_LINT_UNDO_COMPRESS_IMAGE                    NC_("STR_LINT_UNDO_COMPRESS_IMAGE", "Compress image")
+#define STR_LINT_UNDO_TRIM_IMAGE                        NC_("STR_LINT_UNDO_TRIM_IMAGE", "Trim cropped image")
+#define STR_LINT_UNDO_DELETE_HIDDEN_SLIDE               NC_("STR_LINT_UNDO_DELETE_HIDDEN_SLIDE", "Delete hidden slide")
+#define STR_LINT_UNDO_DELETE_UNUSED_MASTER              NC_("STR_LINT_UNDO_DELETE_UNUSED_MASTER", "Delete unused master slide")
+#define STR_LINT_UNDO_CLEAR_NOTES                       NC_("STR_LINT_UNDO_CLEAR_NOTES", "Clear speaker notes")
+#define STR_LINT_UNDO_REPLACE_OBJECT                    NC_("STR_LINT_UNDO_REPLACE_OBJECT", "Replace object with image")
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

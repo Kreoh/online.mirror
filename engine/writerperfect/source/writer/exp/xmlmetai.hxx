@@ -25,9 +25,9 @@ public:
 
     rtl::Reference<XMLImportContext>
     CreateChildContext(const OUString& rName,
-                       const css::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
+                       const cpo::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
 
-    void SAL_CALL endElement(const OUString& rName) override;
+    void endElement(const OUString& rName) override;
 
 private:
     librevenge::RVNGPropertyList m_aPropertyList;
@@ -41,24 +41,24 @@ public:
     ~XMPParser() override;
 
     // XDocumentHandler
-    void SAL_CALL startDocument() override;
+    void startDocument() override;
 
-    void SAL_CALL endDocument() override;
+    void endDocument() override;
 
-    void SAL_CALL
+    void
     startElement(const OUString& rName,
-                 const css::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
+                 const cpo::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
 
-    void SAL_CALL endElement(const OUString& rName) override;
+    void endElement(const OUString& rName) override;
 
-    void SAL_CALL characters(const OUString& rChars) override;
+    void characters(const OUString& rChars) override;
 
-    void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces) override;
+    void ignorableWhitespace(const OUString& aWhitespaces) override;
 
-    void SAL_CALL processingInstruction(const OUString& aTarget, const OUString& aData) override;
+    void processingInstruction(const OUString& aTarget, const OUString& aData) override;
 
-    void SAL_CALL
-    setDocumentLocator(const css::uno::Reference<css::xml::sax::XLocator>& xLocator) override;
+    void
+    setDocumentLocator(const cpo::uno::Reference<css::xml::sax::XLocator>& xLocator) override;
 
 private:
     librevenge::RVNGPropertyList& mrMetaData;

@@ -10,15 +10,10 @@
 $(eval $(call gb_InstallModule_InstallModule,scp2/draw))
 
 $(eval $(call gb_InstallModule_use_auto_install_libs,scp2/draw,\
-	draw_brand \
 ))
 
 $(eval $(call gb_InstallModule_define_if_set,scp2/draw,\
 	ENABLE_MACOSX_SANDBOX \
-))
-
-$(eval $(call gb_InstallModule_add_templates,scp2/draw,\
-    scp2/source/templates/module_langpack_draw \
 ))
 
 $(eval $(call gb_InstallModule_add_scpfiles,scp2/draw,\

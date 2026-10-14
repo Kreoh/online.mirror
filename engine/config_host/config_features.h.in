@@ -50,20 +50,6 @@
 
 #define HAVE_FEATURE_MULTIUSER_ENVIRONMENT 0
 
-/*
- * Whether the OS has Avahi support,
- * This library is used for zeroconf service publication on the local network
- * for the Impress remote control, so that the remote can automatically
- * discover the running libO instance and its IP address.
- *
- * This library should be present on most modern linux distributions
- * but not on "all" of them. For now, you should add --enable-avahi for
- * this to be taken into account. Otherwise the test of its presence
- * will not take place.
- */
-
-#define HAVE_FEATURE_AVAHI 0
-
 /* MACOSX_SANDBOX - whether Collabora Office runs in a macOS sandbox
  *
  * When building Collabora Office for distribution through the Mac App Store,
@@ -107,12 +93,6 @@
 #define HAVE_FEATURE_PDFIMPORT 0
 
 /*
- * Whether we are avoiding the tweaks needed for the Android app from the
- * android/ subdir.
- */
-#define HAVE_FEATURE_ANDROID_KIT 0
-
-/*
  * Whether COKit::isActive() is a compile-time constant.
  * Enables dead code elimination for non-COKit code paths.
  */
@@ -123,12 +103,6 @@
  * Can be turned off with --without-xmlhelp
  */
 #define HAVE_FEATURE_XMLHELP 0
-
-/*
- * Whether oosplash calls pagein binaries to speed up library loading.
- * Probably not useful nowadays with SSD based systems.
- */
-#define HAVE_FEATURE_PAGEIN 0
 
 /*
  * Whether Calc supports jumbo sheets (more than 1m rows), which can overflow

@@ -11,9 +11,11 @@
 
 #include <config.h>
 
+#include <wsd/Extensions.hpp>
 #include <wsd/COOLWSD.hpp>
 #include <qt/CodaConfig.hpp>
 #include <qt/CODocumentBroker.hpp>
+#include <qt/CursorFix.hpp>
 #include <qt/DBusService.hpp>
 #include <net/FakeSocket.hpp>
 #include <common/Log.hpp>
@@ -23,6 +25,8 @@
 #include <qt/WebView.hpp>
 #include <qt/qt.hpp>
 
+#include <Poco/File.h>
+#include <Poco/Path.h>
 #include <Poco/URI.h>
 
 #include <QApplication>
@@ -130,6 +134,11 @@ namespace
     {
         const char *varName = "QTWEBENGINE_CHROMIUM_FLAGS";
         std::string val = (getenv(varName) ? getenv(varName) : "");
+        // The document window's page keeps driving the logic of the other native windows
+        // (dialogs, slideshow) even while one of them covers it or holds the focus, so Chromium
+        // must not throttle the timers or rendering of occluded or background pages.
+        val = "--disable-renderer-backgrounding --disable-backgrounding-occluded-windows "
+              "--disable-background-timer-throttling " + val;
         // cool#14039: renderer accessibility triggers a check-box state crash, so
         // it is disabled unless QT_ACCESSIBILITY=1 (e.g. for screen-reader / Orca
         // testing).
@@ -177,6 +186,8 @@ int main(int argc, char** argv)
 
     QApplication app(argc, argv);
 
+    installBitmapCursorFix();
+
     user_name = getUserName();
 
     updateBrowserEnvironment();
@@ -191,8 +202,10 @@ int main(int argc, char** argv)
     else if (translator.load("coda_" + locale, dataDir + "/translations"))
         app.installTranslator(&translator);
 
-    // default application name
+    // default application name and version, the latter is what --version prints
     QApplication::setApplicationName(APP_NAME);
+    QApplication::setApplicationVersion(
+        QString::fromStdString(Util::getCoolVersion() + " (git hash: " + Util::getCoolVersionHash() + ")"));
     // Lets window managers associate our windows with the installed desktop file.
     QGuiApplication::setDesktopFileName("com.collaboraoffice.Office");
     QApplication::setWindowIcon(QIcon::fromTheme("com.collaboraoffice.Office.startcenter"));
@@ -209,6 +222,10 @@ int main(int argc, char** argv)
     QCommandLineOption forcedReadOnlyOption(
         QStringList() << "readonly",
         "Open Collabora Office in read-only mode, only for document viewing."
+    );
+    QCommandLineOption editOption(
+        QStringList() << "edit",
+        "Open a document ready to edit, rather than read-only with an Edit button."
     );
     QCommandLineOption logLevelOption(
         QStringList() << "log-level",
@@ -240,6 +257,7 @@ int main(int argc, char** argv)
     );
     argParser.addOption(debugOption);
     argParser.addOption(forcedReadOnlyOption);
+    argParser.addOption(editOption);
     argParser.addOption(logLevelOption);
     argParser.addOption(logDisabledAreasOption);
     argParser.addOption(textDocumentOption);
@@ -262,6 +280,7 @@ int main(int argc, char** argv)
 
     bool forcedReadOnly = argParser.isSet(forcedReadOnlyOption);
     CodaConfig::instance().setForcedReadOnly(forcedReadOnly);
+    CodaConfig::instance().setStartInEditMode(argParser.isSet(editOption));
 
     Log::initialize(QApplication::applicationName().toStdString(), logLevel);
     Log::setDisabledAreas(argParser.value(logDisabledAreasOption).toStdString());
@@ -325,6 +344,10 @@ int main(int argc, char** argv)
             return std::make_shared<CODocumentBroker>(type, uri, uriPublic, docKey, configId,
                                                       mobileAppDocId);
         });
+
+#if ENABLE_DEBUG
+    Extensions::synthesizeBuiltinExtensionsIndex(getBrowserDistDir() + "/extensions");
+#endif
 
     // COOLWSD in a background thread
     coolwsdThread = std::thread(

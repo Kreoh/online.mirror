@@ -24,7 +24,7 @@
 #include <sal/log.hxx>
 
 #include <cpo/uno/genfunc.hxx>
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include "cpo/uno/RuntimeException.hpp"
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
 
@@ -39,7 +39,7 @@
 
 
 using namespace ::osl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace

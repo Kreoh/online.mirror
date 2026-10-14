@@ -693,10 +693,12 @@ bool ScMatrixToken::operator==( const FormulaToken& r ) const
         && pMatrix == static_cast<const ScMatrixToken&>(r).GetMatrix();
 }
 
-ScMatrixRangeToken::ScMatrixRangeToken( const sc::RangeMatrix& rMat ) :
-    ScMatrixToken(rMat.mpMat)
+ScMatrixRangeToken::ScMatrixRangeToken(sc::RangeMatrix const& rMatrix, bool bReference)
+    : ScMatrixToken(rMatrix.mpMat)
+    , mbReference(bReference)
 {
-    maRef.InitRange(rMat.mnCol1, rMat.mnRow1, rMat.mnTab1, rMat.mnCol2, rMat.mnRow2, rMat.mnTab2);
+    maRef.InitRange(rMatrix.mnCol1, rMatrix.mnRow1, rMatrix.mnTab1, rMatrix.mnCol2,
+                    rMatrix.mnRow2, rMatrix.mnTab2);
 }
 
 ScMatrixRangeToken::ScMatrixRangeToken( const ScMatrixRangeToken& ) = default;
@@ -1237,7 +1239,8 @@ void ScTokenArray::CheckForThreading( const FormulaToken& r )
         ocUDExternal,
         ocDde,
         ocWebservice,
-        ocGetPivotData
+        ocGetPivotData,
+        ocSpill
     });
 
     // Don't enable threading once we decided to disable it.
@@ -1550,7 +1553,7 @@ void ScTokenArray::CheckToken( const FormulaToken& r )
                 ;
         }
     }
-    else if (ocStartUnaryOperators <= eOp && eOp < ocStopUnaryOperators)
+    else if (isBinaryOperatorOpCode(eOp) || isUnaryOperatorOpCode(eOp))
     {
         if (ScInterpreter::GetGlobalConfig().mbOpenCLSubsetOnly &&
             ScInterpreter::GetGlobalConfig().mpOpenCLSubsetOpCodes->find(eOp) == ScInterpreter::GetGlobalConfig().mpOpenCLSubsetOpCodes->end())
@@ -2276,6 +2279,103 @@ FormulaToken* ScTokenArray::AddDBRange( sal_uInt16 n )
 FormulaToken* ScTokenArray::AddTableRef( sal_uInt16 n )
 {
     return Add( new ScTableRefToken(n, ScTableRefToken::TABLE));
+}
+
+bool ScTokenArray::HasTableRef( sal_uInt16 nIndex ) const
+{
+    FormulaTokenArrayPlainIterator aIter(*this);
+    for (const FormulaToken* p = aIter.First(); p; p = aIter.Next())
+    {
+        if (p->GetOpCode() == ocTableRef
+            && static_cast<const ScTableRefToken*>(p)->GetIndex() == nIndex)
+            return true;
+    }
+    return false;
+}
+
+std::unique_ptr<ScTokenArray> ScTokenArray::ConvertTableRefsToRange(
+    sal_uInt16 nIndex, const ScAddress& rPos ) const
+{
+    if (!HasOpCode(ocTableRef))
+        return nullptr;
+
+    auto pNew = std::make_unique<ScTokenArray>(*mxSheetLimits);
+    bool bChanged = false;
+
+    FormulaTokenArrayPlainIterator aIter(*this);
+    for (const FormulaToken* p = aIter.First(); p; p = aIter.Next())
+    {
+        if (p->GetOpCode() != ocTableRef
+            || static_cast<const ScTableRefToken*>(p)->GetIndex() != nIndex)
+        {
+            // A reference to a different table stays structured.
+            pNew->AddToken(*p);
+            continue;
+        }
+
+        // Emit the resolved area (already computed by ScCompiler::HandleTableRef) as an absolute
+        // reference, made 3D only when it points at another sheet.
+        const FormulaToken* pRef = static_cast<const ScTableRefToken*>(p)->GetAreaRefRPN();
+        if (pRef && pRef->GetType() == svDoubleRef)
+        {
+            const ScRange aAbs = static_cast<const ScDoubleRefToken*>(pRef)->GetDoubleRef().toAbs(
+                *mxSheetLimits, rPos);
+            ScComplexRefData aOut;
+            aOut.InitRange(aAbs);
+            if (aAbs.aStart.Tab() != rPos.Tab())
+                aOut.Ref1.SetFlag3D(true);
+            pNew->AddDoubleReference(aOut);
+            bChanged = true;
+        }
+        else if (pRef && pRef->GetType() == svSingleRef)
+        {
+            const ScAddress aAbs = static_cast<const ScSingleRefToken*>(pRef)->GetSingleRef().toAbs(
+                *mxSheetLimits, rPos);
+            ScSingleRefData aOut;
+            aOut.InitAddress(aAbs);
+            if (aAbs.Tab() != rPos.Tab())
+                aOut.SetFlag3D(true);
+            pNew->AddSingleReference(aOut);
+            bChanged = true;
+        }
+        else
+        {
+            // Unresolved (should not happen while the range exists): keep it untouched.
+            pNew->AddToken(*p);
+            continue;
+        }
+
+        // Drop the specifier tokens that follow, counting bracket levels so the nested
+        // [[Col1]:[Col3]] form is consumed whole (mirrors the suppression in
+        // FormulaCompiler::CreateStringFromTokenArray).
+        if (const FormulaToken* pk = aIter.PeekNext(); pk && pk->GetOpCode() == ocTableRefOpen)
+        {
+            int nLevel = 0;
+            for (;;)
+            {
+                const FormulaToken* q = aIter.PeekNext();
+                if (!q)
+                    break;
+                const OpCode e = q->GetOpCode();
+                if (e == ocTableRefOpen)
+                    ++nLevel;
+                else if (e == ocTableRefClose)
+                    --nLevel;
+                else if (e != ocTableRefItemAll && e != ocTableRefItemHeaders
+                         && e != ocTableRefItemData && e != ocTableRefItemTotals
+                         && e != ocTableRefItemThisRow && e != ocSep && e != ocPush
+                         && e != ocRange && e != ocSpaces && e != ocWhitespace)
+                    break; // unexpected token: leave it for the normal copy above
+                aIter.Next(); // consume
+                if (nLevel <= 0)
+                    break;
+            }
+        }
+    }
+
+    if (!bChanged)
+        return nullptr;
+    return pNew;
 }
 
 FormulaToken* ScTokenArray::AddExternalName( sal_uInt16 nFileId, const svl::SharedString& rName )

@@ -28,6 +28,9 @@
 #include <wsd/COOLWSD.hpp>
 #include <wsd/Exceptions.hpp>
 
+#include <Poco/JSON/Array.h>
+#include <Poco/JSON/Object.h>
+
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -572,11 +575,12 @@ void AdminModel::mergeServerAudit(const std::map<std::string, std::string>& entr
     bool changed = false;
     for (const auto& entry : entries)
     {
-        // is_admin is per-user, hardwarewarning is read live, ok is no problem,
+        // is_admin is per-user, hardwarewarning is read live, any status starting
+        // with "ok" is no problem (the suffix only names which mechanism is in use),
         // info_ codes carry a bare value (a number, true/false) that is never "ok"
         // and is not a condition to report
         if (entry.first == "is_admin" || entry.first == "hardwarewarning" ||
-            entry.second == "ok" || entry.first.starts_with("info_"))
+            entry.second.starts_with("ok") || entry.first.starts_with("info_"))
             continue;
 
         auto it = _serverAudit.find(entry.first);
@@ -1431,46 +1435,43 @@ void AdminModel::sendMigrateMsgAfterSave(bool lastSaveSuccessful, const std::str
     {
         return;
     }
-    std::ostringstream oss;
-    std::string saveSuccessful = lastSaveSuccessful ? "true" : "false";
-    oss << "migrate: {";
-    oss << "\"afterSave\""
-           ":true,";
-    oss << "\"saved\":" << saveSuccessful;
+    // The route token and the server id came off the wire from the controller, so let the JSON
+    // writer quote them.
+    Poco::JSON::Object migrate;
+    migrate.set("afterSave", true);
+    migrate.set("saved", lastSaveSuccessful);
     if (lastSaveSuccessful)
     {
-        oss << ',';
-        oss << "\"routeToken\"" << ':' << '"' << getCurrentMigToken() << '"' << ',';
-        oss << "\"serverId\"" << ':' << '"' << getTargetMigServerId() << '"' << '}';
+        migrate.set("routeToken", getCurrentMigToken());
+        migrate.set("serverId", getTargetMigServerId());
     }
     else
     {
-        oss << '}';
         resetMigratingInfo();
     }
+
+    std::ostringstream oss;
+    oss << "migrate: ";
+    migrate.stringify(oss);
     COOLWSD::alertUserInternal(docKey, oss.str());
 }
 
 std::string AdminModel::getWopiSrcMap() const
 {
-    std::ostringstream oss;
-    oss << "wopiSrcMap: {";
-    oss << "\"routeToken\": \"" << COOLWSD::RouteToken << "\",";
-    oss << "\"wopiSrc\": [";
-    size_t count = 0;
+    Poco::JSON::Array::Ptr wopiSrc(new Poco::JSON::Array());
     for (const auto& it : _documents)
     {
         if (!it.second.isExpired())
-        {
-            oss << "\"" << it.second.getWopiSrc() << "\"";
-            if (count < _documents.size() - 1)
-            {
-                oss << ',';
-            }
-        }
-        count++;
+            wopiSrc->add(it.second.getWopiSrc());
     }
-    oss << "]}";
+
+    Poco::JSON::Object map;
+    map.set("routeToken", COOLWSD::RouteToken);
+    map.set("wopiSrc", wopiSrc);
+
+    std::ostringstream oss;
+    oss << "wopiSrcMap: ";
+    map.stringify(oss);
     return oss.str();
 }
 

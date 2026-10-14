@@ -20,9 +20,19 @@
 // mobileAppDocId. True for iOS and the CODA desktop apps.
 // The plain server and Android instead run one document per process.
 #if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
-#define DOCS_SHARE_PROCESS 1
+#define DOCS_SHARE_PROCESS true
 #else
-#define DOCS_SHARE_PROCESS 0
+#define DOCS_SHARE_PROCESS false
+#endif
+
+// The CODA desktop apps keep the user's configuration in a profile directory of
+// their own, which common/SettingsStorage.cpp reads and writes. iOS and Android
+// have no such store and do not build that file, so the code that reaches for
+// one is theirs alone, and MOBILEAPP is too wide a test for it.
+#if defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+#define APP_HAS_SETTINGS_STORE 1
+#else
+#define APP_HAS_SETTINGS_STORE 0
 #endif
 
 constexpr int DEFAULT_CLIENT_PORT_NUMBER = 9980;

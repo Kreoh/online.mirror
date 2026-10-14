@@ -27,18 +27,18 @@ class XMLTextDropCapImportContext : public XMLElementPropertyContext
     OUString sStyleName;
 
 private:
-    void ProcessAttrs(const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
+    void ProcessAttrs(const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
 
 public:
     XMLTextDropCapImportContext(
         SvXMLImport& rImport, sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList,
         const XMLPropertyState& rProp, sal_Int32 nWholeWOrdIdx,
         ::std::vector<XMLPropertyState>& rProps);
 
     virtual ~XMLTextDropCapImportContext() override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
     const OUString& GetStyleName() const { return sStyleName; }
 };

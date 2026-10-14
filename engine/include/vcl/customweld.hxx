@@ -105,11 +105,11 @@ public:
     }
     virtual int GetSurroundingText(OUString& /*rSurrounding*/) { return -1; }
     virtual bool DeleteSurroundingText(const Selection& /*rRange*/) { return false; }
-    css::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget()
+    cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget()
     {
         return m_pDrawingArea->get_drop_target();
     }
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const
     {
         return m_pDrawingArea->get_clipboard();
     }
@@ -215,12 +215,20 @@ public:
         return false;
     }
 
-    virtual void SetWidget(weld::CustomWidget* pWidget) { m_pWidget = pWidget; }
+    void SetWidget(weld::CustomWidget* pWidget) { m_pWidget = pWidget; }
 
     void Invalidate()
     {
         if (m_pWidget)
             m_pWidget->send_update();
+    }
+
+    /// Sends the model as an action, so the client patches the widget in place rather than tearing
+    /// it down and rebuilding it as a full widget update does.
+    void SendUpdateAction()
+    {
+        if (m_pWidget)
+            m_pWidget->send_update_action();
     }
 
     virtual ~CustomClientWidgetController();

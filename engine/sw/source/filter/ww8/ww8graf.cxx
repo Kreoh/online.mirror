@@ -1050,8 +1050,8 @@ std::optional<OutlinerParaObject> SwWW8ImplReader::ImportAsOutliner(OUString &rS
                 m_pDrawEditEngine->QuickDelete(aFirstChar);
         }
 
-        std::unique_ptr<EditTextObject> pTemporaryText = m_pDrawEditEngine->CreateTextObject();
-        pRet.emplace( std::move(pTemporaryText) );
+        EditTextObject aTemporaryText = m_pDrawEditEngine->CreateTextObject();
+        pRet.emplace( std::move(aTemporaryText) );
         pRet->SetOutlinerMode( OutlinerMode::TextObject );
 
         m_pDrawEditEngine->SetText( OUString() );
@@ -1858,11 +1858,12 @@ void SwWW8ImplReader::MatchSdrItemsIntoFlySet( SdrObject const * pSdrObj,
     if (nOutside)
     {
         SwFormatHoriOrient aHori = rFlySet.Get(RES_HORI_ORIENT);
-        aHori.SetPos(MakeSafePositioningValue(aHori.GetPos()-nOutside));
+        aHori.setPosition(gfx::Length::twip(MakeSafePositioningValue(
+            aHori.getPosition().as_twip<sal_Int32>() - nOutside)));
         rFlySet.Put(aHori);
 
         SwFormatVertOrient aVert = rFlySet.Get(RES_VERT_ORIENT);
-        aVert.SetPos(aVert.GetPos()-nOutside);
+        aVert.adjustPosition(gfx::Length::twip(-nOutside));
         rFlySet.Put(aVert);
     }
 

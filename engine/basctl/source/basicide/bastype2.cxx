@@ -27,7 +27,6 @@
 #include <tools/urlobj.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <svtools/imagemgr.hxx>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
 #include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
@@ -51,8 +50,8 @@
 namespace basctl
 {
 
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 
 void ModuleInfoHelper::getObjectName( const uno::Reference< container::XNameContainer >& rLib, const OUString& rModName, OUString& rObjName )
@@ -695,8 +694,7 @@ bool SbTreeListBox::IsEntryProtected(const weld::TreeIter* pEntry)
             Reference< script::XLibraryContainer > xModLibContainer( rDocument.getLibraryContainer( E_SCRIPTS ) );
             if ( xModLibContainer.is() && xModLibContainer->hasByName( aOULibName ) )
             {
-                Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-                if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aOULibName ) && !xPasswd->isLibraryPasswordVerified( aOULibName ) )
+                if ( xModLibContainer->isLibraryPasswordProtected( aOULibName ) && !xModLibContainer->isLibraryPasswordVerified( aOULibName ) )
                 {
                     bProtected = true;
                 }
@@ -756,7 +754,7 @@ OUString SbTreeListBox::GetRootEntryBitmaps(const ScriptDocument& rDocument)
     if ( rDocument.isDocument() )
     {
         OUString sFactoryURL;
-        const Reference<uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+        const Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
         Reference< frame::XModuleManager2 > xModuleManager( frame::ModuleManager::create(xContext) );
         try
         {

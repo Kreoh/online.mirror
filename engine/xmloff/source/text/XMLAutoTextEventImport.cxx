@@ -18,9 +18,9 @@
  */
 
 #include "XMLAutoTextEventImport.hxx"
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/document/XEventsSupplier.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include "XMLAutoTextContainerEventImport.hxx"
 #include <xmloff/xmlnamespace.hxx>
@@ -30,16 +30,16 @@
 using namespace ::com::sun::star;
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::cpo::uno::Type;
-using ::com::sun::star::uno::XInterface;
+using ::cpo::uno::XInterface;
 using ::com::sun::star::document::XEventsSupplier;
 using ::com::sun::star::container::XNameReplace;
 using ::xmloff::token::XML_AUTO_TEXT_EVENTS;
 
 XMLAutoTextEventImport::XMLAutoTextEventImport(
-    const css::uno::Reference<css::uno::XComponentContext>& xContext)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext)
     : SvXMLImport(xContext, u"com.sun.star.comp.Writer.XMLOasisAutotextEventsImporter"_ustr)
 {
 }
@@ -78,9 +78,9 @@ SvXMLImportContext* XMLAutoTextEventImport::CreateFastContext(
     return nullptr;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisAutotextEventsImporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XMLAutoTextEventImport(context));
 }

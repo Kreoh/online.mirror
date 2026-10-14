@@ -40,7 +40,7 @@
 #include <IDocumentDeviceAccess.hxx>
 #include <edtwin.hxx>
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
@@ -960,8 +960,8 @@ Sequence< OUString > SwXViewSettings::getSupportedServiceNames()
     return aRet;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-SwXModule_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+SwXModule_get_implementation(cpo::uno::XComponentContext*,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwXModule());

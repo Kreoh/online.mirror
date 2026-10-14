@@ -39,6 +39,7 @@ namespace chart
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
 LegendPositionResources::LegendPositionResources(weld::Builder& rBuilder)
     : m_xRbtLeft(rBuilder.weld_radio_button(u"left"_ustr))
@@ -50,7 +51,7 @@ LegendPositionResources::LegendPositionResources(weld::Builder& rBuilder)
 }
 
 LegendPositionResources::LegendPositionResources(weld::Builder& rBuilder,
-    uno::Reference< uno::XComponentContext > xCC)
+    uno::Reference< cpo::uno::XComponentContext > xCC)
     : m_xCC(std::move(xCC))
     , m_xCbxShow(rBuilder.weld_check_button(u"show"_ustr))
     , m_xRbtLeft(rBuilder.weld_radio_button(u"left"_ustr))

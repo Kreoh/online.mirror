@@ -35,7 +35,7 @@
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
@@ -47,9 +47,10 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace
@@ -177,7 +178,7 @@ Reference< chart2::XDataSeries > SchXMLImportHelper::GetNewDataSeries(
             xDoc->getFirstDiagram(), uno::UNO_QUERY_THROW );
         Sequence< Reference< chart2::XCoordinateSystem > > aCooSysSeq(
             xCooSysCnt->getCoordinateSystems());
-        const Reference< uno::XComponentContext >& xContext(
+        const Reference< cpo::uno::XComponentContext >& xContext(
             comphelper::getProcessComponentContext() );
 
         if( nCoordinateSystemIndex < aCooSysSeq.getLength())
@@ -241,7 +242,7 @@ Reference< chart2::XDataSeries > SchXMLImportHelper::GetNewDataSeries(
 }
 
 SchXMLImport::SchXMLImport(
-    const Reference< uno::XComponentContext >& xContext,
+    const Reference< cpo::uno::XComponentContext >& xContext,
     OUString const & implementationName, SvXMLImportFlags nImportFlags ) :
     SvXMLImport( xContext, implementationName, nImportFlags ),
     maImportHelper(new SchXMLImportHelper)
@@ -322,7 +323,7 @@ SvXMLImportContext* SchXMLImport::CreateStylesContext()
     return pStylesCtxt;
 }
 
-void SAL_CALL SchXMLImport::setTargetDocument(const uno::Reference<lang::XComponent>& xDoc)
+void SchXMLImport::setTargetDocument(const uno::Reference<lang::XComponent>& xDoc)
 {
     uno::Reference<chart2::XChartDocument> xOldDoc(GetModel(), uno::UNO_QUERY);
     if (xOldDoc.is() && xOldDoc->hasControllersLocked())
@@ -361,8 +362,8 @@ void SAL_CALL SchXMLImport::setTargetDocument(const uno::Reference<lang::XCompon
 
 // first version: everything comes from one storage
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_Chart_XMLOasisImporter_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Chart_XMLOasisImporter_get_implementation(cpo::uno::XComponentContext* pCtx,
                                                             cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SchXMLImport(pCtx, u"SchXMLImport"_ustr, SvXMLImportFlags::ALL));
@@ -370,23 +371,23 @@ com_sun_star_comp_Chart_XMLOasisImporter_get_implementation(uno::XComponentConte
 
 // multiple storage version: one for content / styles / meta
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Chart_XMLOasisMetaImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SchXMLImport(pCtx, u"SchXMLImport.Meta"_ustr, SvXMLImportFlags::META));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Chart_XMLOasisStylesImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SchXMLImport(pCtx, u"SchXMLImport.Styles"_ustr, SvXMLImportFlags::STYLES));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Chart_XMLOasisContentImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SchXMLImport(pCtx, u"SchXMLImport.Content"_ustr,
                                           SvXMLImportFlags::CONTENT | SvXMLImportFlags::AUTOSTYLES

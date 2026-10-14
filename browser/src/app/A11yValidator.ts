@@ -145,10 +145,27 @@ class A11yValidator {
 		}
 	}
 
+	/// The widget an image belongs to, which is the nearest one the walk
+	/// validates on its own.
+	private owningWidget(image: Element): Element | null {
+		let at = image.parentElement;
+		while (at) {
+			if (this._directlyValidatedElements?.has(at)) return at;
+			at = at.parentElement;
+		}
+		return null;
+	}
+
 	private checkImageAltAttribute(type: string, element: HTMLElement): void {
 		const images = element.querySelectorAll('img');
 
 		images.forEach((img, index) => {
+			// Every widget with an id is validated on its own, so an image
+			// inside another one is that widget's to answer for. Without this
+			// one image is reported once per ancestor it sits under.
+			const owner = this.owningWidget(img);
+			if (owner && owner !== element) return;
+
 			const hasAlt = img.hasAttribute('alt');
 			const altValue = img.getAttribute('alt');
 
@@ -356,8 +373,9 @@ class A11yValidator {
 		);
 		if (decorativeImages.length === 0) return;
 
-		// If there is any focusable element, the frame has accessible content
-		if (JSDialog.FindFocusableWithin(content, 'next')) return;
+		// Markup, not live focus: a widget on an unselected tab page is
+		// hidden and still counts as content of the frame.
+		if (content.querySelector(JSDialog.FocusableSelector)) return;
 
 		// If there are any form controls (even disabled), the frame has
 		// real content rather than only decorative images
@@ -418,6 +436,90 @@ class A11yValidator {
 				);
 				errorCount++;
 			}
+		});
+
+		return errorCount;
+	}
+
+	private getAssociatedLabelElements(element: HTMLElement): HTMLElement[] {
+		const labelEls: HTMLElement[] = [];
+		const labelFor = document.querySelector(`label[for="${element.id}"]`);
+		if (labelFor instanceof HTMLElement) labelEls.push(labelFor);
+		const labelledBy = element.getAttribute('aria-labelledby');
+		if (labelledBy) {
+			for (const id of labelledBy.trim().split(/\s+/)) {
+				const target = document.getElementById(id);
+				if (target) labelEls.push(target);
+			}
+		}
+		return labelEls;
+	}
+
+	// A hidden label keeps its association, so the association alone is not enough.
+	private hasVisibleAssociatedLabel(element: HTMLElement): boolean {
+		return this.getAssociatedLabelElements(element).some((label) =>
+			this.isVisible(label),
+		);
+	}
+
+	// A frame that groups form controls is built as a fieldset, so its caption is
+	// a legend and carries no aria-labelledby.
+	private static readonly GroupSelector =
+		'fieldset, [role="group"][aria-labelledby]';
+
+	// One caption can serve a row of fields: each carries its own name for a
+	// screen reader while the group's caption is what the eye reads.
+	private groupCaptionIsVisible(
+		element: HTMLElement,
+		container: HTMLElement,
+	): boolean {
+		let group = element.closest(A11yValidator.GroupSelector);
+		while (group instanceof HTMLElement && container.contains(group)) {
+			const id = group.getAttribute('aria-labelledby');
+			const caption = id
+				? container.querySelector(`[id="${id}"]`)
+				: group.querySelector(':scope > legend');
+			if (caption instanceof HTMLElement && this.isVisible(caption))
+				return true;
+			group = group.parentElement
+				? group.parentElement.closest(A11yValidator.GroupSelector)
+				: null;
+		}
+		return false;
+	}
+
+	private hasOwnAccessibleName(element: HTMLElement): boolean {
+		return (
+			this.getAssociatedLabelElements(element).length > 0 ||
+			!!element.getAttribute('aria-label')?.trim()
+		);
+	}
+
+	// An aria-label or tooltip leaves a sighted user with no label on screen.
+	private checkSpinButtonsHaveVisibleLabel(container: HTMLElement): number {
+		const spinButtons = container.querySelectorAll('input[role="spinbutton"]');
+		let errorCount = 0;
+
+		spinButtons.forEach((el) => {
+			const htmlEl = el as HTMLElement;
+
+			if (!this.isVisible(htmlEl)) return;
+			if (this.hasVisibleAssociatedLabel(htmlEl)) return;
+
+			// A name of its own, unseen, plus a caption on the group is the
+			// shared-caption pattern, not a widget nobody named.
+			if (
+				this.hasOwnAccessibleName(htmlEl) &&
+				this.groupCaptionIsVisible(htmlEl, container)
+			)
+				return;
+
+			console.error(
+				new A11yValidatorException(
+					`In '${this.getDialogTitle(htmlEl)}' at '${this.getElementPath(htmlEl)}': spinbutton '${htmlEl.id}' is missing a visible label. A spinbutton needs a visible on-screen <label>, a visible element named by aria-labelledby, or a name of its own inside a group whose caption is visible; an aria-label or tooltip alone is not enough for a sighted user.`,
+				),
+			);
+			errorCount++;
 		});
 
 		return errorCount;
@@ -542,7 +644,9 @@ class A11yValidator {
 			this.validateContainer(
 				dialogElement,
 				content instanceof HTMLElement ? content : undefined,
-			) + this.checkInitialFocusNotCloseButton(dialogElement);
+			) +
+			this.checkInitialFocusNotCloseButton(dialogElement) +
+			this.checkSpinButtonsHaveVisibleLabel(dialogElement);
 
 		if (errorCount === 0) {
 			console.error('A11yValidator: dialog passed all checks');
@@ -694,7 +798,7 @@ class A11yValidator {
 	}
 
 	private checkDuplicateShortcuts(selectedTabId: string): number {
-		const notebookbar = (window as any).app?.map?.uiManager?.notebookbar;
+		const notebookbar = window.app?.map?.uiManager?.notebookbar;
 		if (!notebookbar) return 0;
 
 		const tabs = notebookbar.getTabs();

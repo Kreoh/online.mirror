@@ -40,7 +40,7 @@
 using namespace dbaccess;
 using namespace ::connectivity;
 using namespace ::dbtools;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbcx;
@@ -66,7 +66,7 @@ namespace
 }
 
 
-OptimisticSet::OptimisticSet(const Reference<XComponentContext>& _rContext,
+OptimisticSet::OptimisticSet(const Reference<cpo::uno::XComponentContext>& _rContext,
                              const Reference< XConnection>& i_xConnection,
                              const Reference< XSingleSelectQueryAnalyzer >& _xComposer,
                              const ORowSetValueVector& _aParameterValueForCache,

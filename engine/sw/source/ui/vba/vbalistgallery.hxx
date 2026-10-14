@@ -28,16 +28,16 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XListGallery > SwVbaLi
 class SwVbaListGallery : public SwVbaListGallery_BASE
 {
 private:
-    css::uno::Reference< css::text::XTextDocument > mxTextDocument;
+    cpo::uno::Reference< css::text::XTextDocument > mxTextDocument;
     sal_Int32 mnType;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaListGallery( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext, css::uno::Reference< css::text::XTextDocument >  xTextDoc, sal_Int32 nType );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaListGallery( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< css::text::XTextDocument >  xTextDoc, sal_Int32 nType );
     virtual ~SwVbaListGallery() override;
 
     // Methods
-    virtual cpo::uno::Any SAL_CALL ListTemplates( const cpo::uno::Any& index ) override;
+    virtual cpo::uno::Any ListTemplates( const cpo::uno::Any& index ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

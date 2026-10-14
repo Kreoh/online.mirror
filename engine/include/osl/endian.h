@@ -20,7 +20,7 @@
 #ifndef INCLUDED_OSL_ENDIAN_H
 #define INCLUDED_OSL_ENDIAN_H
 
-#include "sal/types.h"
+#include <sal/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,13 +51,6 @@ extern "C" {
 #elif defined FREEBSD
 #   include <sys/param.h>
 #   include <machine/endian.h>
-#   if defined _LITTLE_ENDIAN
-#       define OSL_LITENDIAN
-#   elif defined _BIG_ENDIAN
-#       define OSL_BIGENDIAN
-#   endif
-#elif defined __sun
-#   include <sys/isa_defs.h>
 #   if defined _LITTLE_ENDIAN
 #       define OSL_LITENDIAN
 #   elif defined _BIG_ENDIAN

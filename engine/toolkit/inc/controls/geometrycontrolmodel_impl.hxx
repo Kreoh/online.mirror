@@ -23,20 +23,20 @@
 
 template <class CONTROLMODEL>
 OGeometryControlModel<CONTROLMODEL>::OGeometryControlModel(
-    const css::uno::Reference<css::uno::XComponentContext>& i_factory)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& i_factory)
     : OGeometryControlModel_Base(new CONTROLMODEL(i_factory))
 {
 }
 
 template <class CONTROLMODEL>
 OGeometryControlModel<CONTROLMODEL>::OGeometryControlModel(
-    css::uno::Reference<css::util::XCloneable>& _rxAggregateInstance)
+    cpo::uno::Reference<css::util::XCloneable>& _rxAggregateInstance)
     : OGeometryControlModel_Base(_rxAggregateInstance)
 {
 }
 
 template <class CONTROLMODEL>
-::cppu::IPropertyArrayHelper& SAL_CALL OGeometryControlModel<CONTROLMODEL>::getInfoHelper()
+::cppu::IPropertyArrayHelper& OGeometryControlModel<CONTROLMODEL>::getInfoHelper()
 {
     return *this->getArrayHelper();
 }
@@ -54,14 +54,14 @@ void OGeometryControlModel<CONTROLMODEL>::fillProperties(
 }
 
 template <class CONTROLMODEL>
-cpo::uno::Sequence<sal_Int8> SAL_CALL OGeometryControlModel<CONTROLMODEL>::getImplementationId()
+cpo::uno::Sequence<sal_Int8> OGeometryControlModel<CONTROLMODEL>::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
 
 template <class CONTROLMODEL>
 rtl::Reference<OGeometryControlModel_Base> OGeometryControlModel<CONTROLMODEL>::createClone_Impl(
-    css::uno::Reference<css::util::XCloneable>& _rxAggregateInstance)
+    cpo::uno::Reference<css::util::XCloneable>& _rxAggregateInstance)
 {
     return new OGeometryControlModel<CONTROLMODEL>(_rxAggregateInstance);
 }

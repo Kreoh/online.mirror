@@ -23,7 +23,7 @@
 #include <officecfg/Setup.hxx>
 #include <com/sun/star/container/XContainer.hpp>
 #include <com/sun/star/ucb/IllegalIdentifierException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/queryinterface.hxx>
@@ -37,12 +37,13 @@
 #include "content.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace chelp;
 
 
 // ContentProvider Implementation.
 
-ContentProvider::ContentProvider( const uno::Reference< uno::XComponentContext >& rxContext )
+ContentProvider::ContentProvider( const uno::Reference< cpo::uno::XComponentContext >& rxContext )
     : ContentProvider_Base( rxContext )
     , isInitialized( false )
 {
@@ -55,18 +56,18 @@ ContentProvider::~ContentProvider()
 
 // XServiceInfo methods.
 
-OUString SAL_CALL ContentProvider::getImplementationName()
+OUString ContentProvider::getImplementationName()
 {
     return u"CHelpContentProvider"_ustr;
 }
 
-bool SAL_CALL
+bool
 ContentProvider::supportsService(const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 ContentProvider::getSupportedServiceNames()
 {
     return { u"com.sun.star.help.XMLHelp"_ustr, u"com.sun.star.ucb.HelpContentProvider"_ustr };
@@ -75,7 +76,7 @@ ContentProvider::getSupportedServiceNames()
 // XContentProvider methods.
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 ContentProvider::queryContent(
         const uno::Reference< ucb::XContentIdentifier >& xCanonicId )
 {
@@ -92,7 +93,7 @@ ContentProvider::queryContent(
     }
 
     if( !m_pDatabases )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // Check, if a content with given id already exists...
     rtl::Reference< ucbhelper::ContentImplHelper > xContent
@@ -113,7 +114,7 @@ ContentProvider::queryContent(
     return xContent;
 }
 
-void SAL_CALL
+void
 ContentProvider::dispose()
 {
     if(m_xContainer.is())
@@ -123,7 +124,7 @@ ContentProvider::dispose()
     }
 }
 
-void SAL_CALL
+void
 ContentProvider::elementReplaced(const container::ContainerEvent& Event)
 {
     if(!m_pDatabases)
@@ -164,7 +165,7 @@ void ContentProvider::init()
     // now adding as configuration change listener for the stylesheet
     m_xContainer.set(
         officecfg::Office::Common::Help::get(),
-        css::uno::UNO_QUERY_THROW);
+        cpo::uno::UNO_QUERY_THROW);
     m_xContainer->addContainerListener( this );
 
     OUString setupversion(
@@ -188,9 +189,9 @@ void ContentProvider::subst( OUString& instpath )
     instpath = aOptions.SubstituteVariable( instpath );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 CHelpContentProvider_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ContentProvider(context));
 }

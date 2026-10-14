@@ -18,6 +18,7 @@
  */
 
 #include <scitems.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <editeng/eeitem.hxx>
 
 #include <officecfg/Office/Common.hxx>
@@ -31,6 +32,7 @@
 #include <svl/itemset.hxx>
 #include <tools/multisel.hxx>
 #include <vcl/commandevent.hxx>
+#include <vcl/ptrstyle.hxx>
 #include <vcl/settings.hxx>
 #include <o3tl/deleter.hxx>
 #include <o3tl/unit_conversion.hxx>

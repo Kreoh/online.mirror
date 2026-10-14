@@ -28,8 +28,6 @@
 #include <basobj.hxx>
 #include <basctl/basctldllpublic.hxx>
 #include <svx/passwd.hxx>
-#include <ucbhelper/content.hxx>
-#include <rtl/uri.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/filedlghelper.hxx>
@@ -43,26 +41,20 @@
 #include <vcl/svapp.hxx>
 #include <vcl/weld.hxx>
 
-#include <com/sun/star/io/Pipe.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/script/DocumentScriptLibraryContainer.hpp>
 #include <com/sun/star/script/DocumentDialogLibraryContainer.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
-#include <com/sun/star/script/XLibraryContainerExport.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
-#include <com/sun/star/ucb/XCommandEnvironment.hpp>
-#include <com/sun/star/ucb/NameClash.hpp>
-#include <com/sun/star/packages/manifest/ManifestWriter.hpp>
 #include <unotools/pathoptions.hxx>
 
 #include <com/sun/star/util/VetoException.hpp>
 #include <com/sun/star/script/ModuleSizeExceededRequest.hpp>
 
 #include <comphelper/processfactory.hxx>
-#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <o3tl/string_view.hxx>
 
@@ -72,7 +64,7 @@ namespace basctl
 {
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::ucb;
@@ -200,27 +192,6 @@ IMPL_LINK_NOARG(GotoLineDialog, OkButtonHandler, weld::Button&, void)
     }
 }
 
-// ExportDialog
-IMPL_LINK_NOARG(ExportDialog, OkButtonHandler, weld::Button&, void)
-{
-    m_bExportAsPackage = m_xExportAsPackageButton->get_active();
-    m_xDialog->response(RET_OK);
-}
-
-ExportDialog::ExportDialog(weld::Window * pParent)
-    : GenericDialogController(pParent, u"modules/BasicIDE/ui/exportdialog.ui"_ustr, u"ExportDialog"_ustr)
-    , m_bExportAsPackage(false)
-    , m_xExportAsPackageButton(m_xBuilder->weld_radio_button(u"extension"_ustr))
-    , m_xOKButton(m_xBuilder->weld_button(u"ok"_ustr))
-{
-    m_xExportAsPackageButton->set_active(true);
-    m_xOKButton->connect_clicked(LINK(this, ExportDialog, OkButtonHandler));
-}
-
-ExportDialog::~ExportDialog()
-{
-}
-
 // LibPage
 LibPage::LibPage(weld::Container* pParent, OrganizeDialog* pDialog)
     : OrganizePage(pParent, u"modules/BasicIDE/ui/libpage.ui"_ustr, u"LibPage"_ustr, pDialog)
@@ -276,8 +247,8 @@ IMPL_LINK(LibPage, EditingEntryHdl, const weld::TreeIter&, rIter, bool)
     }
 
     // check, if library is readonly
-    Reference< script::XLibraryContainer2 > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
-    Reference< script::XLibraryContainer2 > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
+    Reference< script::XLibraryContainer > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
+    Reference< script::XLibraryContainer > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
     if ( ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && xModLibContainer->isLibraryReadOnly( aLibName ) && !xModLibContainer->isLibraryLink( aLibName ) ) ||
          ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) && xDlgLibContainer->isLibraryReadOnly( aLibName ) && !xDlgLibContainer->isLibraryLink( aLibName ) ) )
     {
@@ -292,8 +263,7 @@ IMPL_LINK(LibPage, EditingEntryHdl, const weld::TreeIter&, rIter, bool)
     {
         bool bOK = true;
         // check password
-        Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-        if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aLibName ) && !xPasswd->isLibraryPasswordVerified( aLibName ) )
+        if ( xModLibContainer->isLibraryPasswordProtected( aLibName ) && !xModLibContainer->isLibraryPasswordVerified( aLibName ) )
         {
             OUString aPassword;
             bOK = QueryPassword(m_pDialog->getDialog(), xModLibContainer, aLibName, aPassword);
@@ -319,11 +289,11 @@ IMPL_LINK(LibPage, EditedEntryHdl, const IterString&, rIterString, bool)
     {
         try
         {
-            Reference< script::XLibraryContainer2 > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
+            Reference< script::XLibraryContainer > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
             if ( xModLibContainer.is() )
                 xModLibContainer->renameLibrary( aOldName, sNewName );
 
-            Reference< script::XLibraryContainer2 > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
+            Reference< script::XLibraryContainer > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
             if ( xDlgLibContainer.is() )
                 xDlgLibContainer->renameLibrary( aOldName, sNewName );
 
@@ -380,8 +350,8 @@ void LibPage::CheckButtons()
         return;
 
     OUString aLibName = m_xLibBox->get_text(*xCur, 0);
-    Reference< script::XLibraryContainer2 > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
-    Reference< script::XLibraryContainer2 > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
+    Reference< script::XLibraryContainer > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
+    Reference< script::XLibraryContainer > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
 
     if ( m_eCurLocation == LIBRARY_LOCATION_SHARE )
     {
@@ -509,29 +479,25 @@ IMPL_LINK( LibPage, ButtonHdl, weld::Button&, rButton, void )
         // check, if library is password protected
         if ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) )
         {
-            Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-            if ( xPasswd.is() )
+            bool const bProtected = xModLibContainer->isLibraryPasswordProtected( aLibName );
+
+            // change password dialog
+            SvxPasswordDialog aDlg(m_pDialog->getDialog(), !bProtected);
+            aDlg.SetCheckPasswordHdl(LINK(this, LibPage, CheckPasswordHdl));
+
+            if (aDlg.run() == RET_OK)
             {
-                bool const bProtected = xPasswd->isLibraryPasswordProtected( aLibName );
+                bool const bNewProtected = xModLibContainer->isLibraryPasswordProtected( aLibName );
 
-                // change password dialog
-                SvxPasswordDialog aDlg(m_pDialog->getDialog(), !bProtected);
-                aDlg.SetCheckPasswordHdl(LINK(this, LibPage, CheckPasswordHdl));
-
-                if (aDlg.run() == RET_OK)
+                if ( bNewProtected != bProtected )
                 {
-                    bool const bNewProtected = xPasswd->isLibraryPasswordProtected( aLibName );
-
-                    if ( bNewProtected != bProtected )
-                    {
-                        int nPos = m_xLibBox->get_iter_index_in_parent(*xCurEntry);
-                        m_xLibBox->remove(*xCurEntry);
-                        ImpInsertLibEntry(aLibName, nPos);
-                        m_xLibBox->set_cursor(nPos);
-                    }
-
-                    MarkDocumentModified( m_aCurDocument );
+                    int nPos = m_xLibBox->get_iter_index_in_parent(*xCurEntry);
+                    m_xLibBox->remove(*xCurEntry);
+                    ImpInsertLibEntry(aLibName, nPos);
+                    m_xLibBox->set_cursor(nPos);
                 }
+
+                MarkDocumentModified( m_aCurDocument );
             }
         }
     }
@@ -547,7 +513,7 @@ IMPL_LINK( LibPage, CheckPasswordHdl, SvxPasswordDialog *, pDlg, bool )
         return bRet;
 
     OUString aLibName(m_xLibBox->get_text(*xCurEntry, 0));
-    Reference< script::XLibraryContainerPassword > xPasswd( m_aCurDocument.getLibraryContainer( E_SCRIPTS ), UNO_QUERY );
+    Reference< script::XLibraryContainer > xPasswd( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
 
     if ( xPasswd.is() )
     {
@@ -596,11 +562,11 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
 {
     basctl::EnsureIde();
 
-    const Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     // file open dialog
     sfx2::FileDialogHelper aDlg(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, FileDialogFlags::NONE, pDialog);
     aDlg.SetContext(sfx2::FileDialogHelper::BasicInsertLib);
-    const Reference <XFilePicker3>& xFP = aDlg.GetFilePicker();
+    const Reference <XFilePicker>& xFP = aDlg.GetFilePicker();
 
     xFP->setTitle(IDEResId(RID_STR_APPENDLIBS));
 
@@ -632,8 +598,8 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
     GetExtraData()->SetAddLibFilter( xFP->getCurrentFilter() );
 
     // library containers for import
-    Reference< script::XLibraryContainer2 > xModLibContImport;
-    Reference< script::XLibraryContainer2 > xDlgLibContImport;
+    Reference< script::XLibraryContainer > xModLibContImport;
+    Reference< script::XLibraryContainer > xDlgLibContImport;
 
     // file URLs
     Sequence< OUString > aFiles = xFP->getSelectedFiles();
@@ -651,7 +617,7 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
         xDlgURLObj->setBase( aDlgBase );
     }
 
-    Reference< XSimpleFileAccess3 > xSFA( SimpleFileAccess::create(comphelper::getProcessComponentContext()) );
+    Reference< XSimpleFileAccess > xSFA( SimpleFileAccess::create(comphelper::getProcessComponentContext()) );
 
     OUString aModURL( xModURLObj->GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
     if ( xSFA->exists( aModURL ) )
@@ -736,9 +702,9 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
                 if (rView.get_toggle(nLib) == TRISTATE_TRUE)
                 {
                     OUString aLibName(rView.get_text(nLib));
-                    Reference<script::XLibraryContainer2> xModLibContainer(
+                    Reference<script::XLibraryContainer> xModLibContainer(
                         rDocument.getLibraryContainer(E_SCRIPTS));
-                    Reference<script::XLibraryContainer2> xDlgLibContainer(
+                    Reference<script::XLibraryContainer> xDlgLibContainer(
                         rDocument.getLibraryContainer(E_DIALOGS));
 
                     // check, if the library is already existing
@@ -796,8 +762,7 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
                     OUString aPassword;
                     if ( xModLibContImport.is() && xModLibContImport->hasByName( aLibName ) )
                     {
-                        Reference< script::XLibraryContainerPassword > xPasswd( xModLibContImport, UNO_QUERY );
-                        if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aLibName ) && !xPasswd->isLibraryPasswordVerified( aLibName ) && !bReference )
+                        if ( xModLibContImport->isLibraryPasswordProtected( aLibName ) && !xModLibContImport->isLibraryPasswordVerified( aLibName ) && !bReference )
                         {
                             bOK = QueryPassword(pDialog, xModLibContImport, aLibName, aPassword,
                                                 true, true);
@@ -878,16 +843,12 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
                                     // set password
                                     if ( bOK )
                                     {
-                                        Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-                                        if ( xPasswd.is() )
+                                        try
                                         {
-                                            try
-                                            {
-                                                xPasswd->changeLibraryPassword( aLibName, OUString(), aPassword );
-                                            }
-                                            catch (...)
-                                            {
-                                            }
+                                            xModLibContainer->changeLibraryPassword( aLibName, OUString(), aPassword );
+                                        }
+                                        catch (...)
+                                        {
                                         }
                                     }
                                 }
@@ -960,15 +921,14 @@ void ImportLib(const ScriptDocument& rDocument, weld::Dialog* pDialog,
 void Export(const ScriptDocument& rDocument, const OUString& aLibName, weld::Dialog* pDialog)
 {
     // Password verification
-    Reference<script::XLibraryContainer2> xModLibContainer(rDocument.getLibraryContainer(E_SCRIPTS));
+    Reference<script::XLibraryContainer> xModLibContainer(rDocument.getLibraryContainer(E_SCRIPTS));
 
     if ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && !xModLibContainer->isLibraryLoaded( aLibName ) )
     {
         bool bOK = true;
 
         // check password
-        Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-        if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aLibName ) && !xPasswd->isLibraryPasswordVerified( aLibName ) )
+        if ( xModLibContainer->isLibraryPasswordProtected( aLibName ) && !xModLibContainer->isLibraryPasswordVerified( aLibName ) )
         {
             OUString aPassword;
             bOK = QueryPassword(pDialog, xModLibContainer, aLibName, aPassword);
@@ -977,20 +937,9 @@ void Export(const ScriptDocument& rDocument, const OUString& aLibName, weld::Dia
             return;
     }
 
-    std::unique_ptr<ExportDialog> xNewDlg(new ExportDialog(pDialog));
-    if (xNewDlg->run() != RET_OK)
-        return;
-
     try
     {
-        bool bExportAsPackage = xNewDlg->isExportAsPackage();
-        //tdf#112063 ensure closing xNewDlg is not selected as
-        //parent of file dialog from ExportAs...
-        xNewDlg.reset();
-        if (bExportAsPackage)
-            ExportAsPackage(rDocument, aLibName, pDialog);
-        else
-            ExportAsBasic(rDocument, aLibName, pDialog);
+        ExportAsBasic(rDocument, aLibName, pDialog);
     }
     catch(const util::VetoException& ) // user canceled operation
     {
@@ -1000,157 +949,18 @@ void Export(const ScriptDocument& rDocument, const OUString& aLibName, weld::Dia
 void implExportLib(const ScriptDocument& rScriptDocument, const OUString& aLibName,
                    const OUString& aTargetURL, const Reference<task::XInteractionHandler>& Handler)
 {
-    Reference<script::XLibraryContainerExport> xModLibContainerExport(
-        rScriptDocument.getLibraryContainer(E_SCRIPTS), UNO_QUERY);
-    Reference<script::XLibraryContainerExport> xDlgLibContainerExport(
-        rScriptDocument.getLibraryContainer(E_DIALOGS), UNO_QUERY);
+    Reference<script::XLibraryContainer> xModLibContainerExport(
+        rScriptDocument.getLibraryContainer(E_SCRIPTS));
+    Reference<script::XLibraryContainer> xDlgLibContainerExport(
+        rScriptDocument.getLibraryContainer(E_DIALOGS));
     if ( xModLibContainerExport.is() )
         xModLibContainerExport->exportLibrary(aLibName, aTargetURL, Handler);
 
     if (!xDlgLibContainerExport.is())
         return;
-    Reference<container::XNameAccess> xNameAcc(xDlgLibContainerExport, UNO_QUERY);
-    if (!xNameAcc.is())
-        return;
-    if (!xNameAcc->hasByName(aLibName))
+    if (!xDlgLibContainerExport->hasByName(aLibName))
         return;
     xDlgLibContainerExport->exportLibrary(aLibName, aTargetURL, Handler);
-}
-
-// Implementation XCommandEnvironment
-
-namespace {
-
-class OLibCommandEnvironment : public cppu::WeakImplHelper< XCommandEnvironment >
-{
-    Reference< task::XInteractionHandler > mxInteraction;
-
-public:
-    explicit OLibCommandEnvironment(const Reference<task::XInteractionHandler>& xInteraction)
-        : mxInteraction( xInteraction )
-    {}
-
-    // Methods
-    virtual Reference< task::XInteractionHandler > getInteractionHandler() override;
-    virtual Reference< XProgressHandler > getProgressHandler() override;
-};
-
-}
-
-Reference< task::XInteractionHandler > OLibCommandEnvironment::getInteractionHandler()
-{
-    return mxInteraction;
-}
-
-Reference< XProgressHandler > OLibCommandEnvironment::getProgressHandler()
-{
-    Reference< XProgressHandler > xRet;
-    return xRet;
-}
-
-void ExportAsPackage(const ScriptDocument& rScriptDocument, const OUString& aLibName,
-                     weld::Dialog* pDialog)
-{
-    EnsureIde();
-    // file open dialog
-    sfx2::FileDialogHelper aDlg(ui::dialogs::TemplateDescription::FILESAVE_SIMPLE,
-                                FileDialogFlags::NONE, pDialog);
-    aDlg.SetContext(sfx2::FileDialogHelper::BasicExportPackage);
-    const Reference <XFilePicker3>& xFP = aDlg.GetFilePicker();
-
-    const Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
-    Reference< task::XInteractionHandler2 > xHandler( task::InteractionHandler::createWithParent(xContext, nullptr) );
-    Reference< XSimpleFileAccess3 > xSFA = SimpleFileAccess::create(xContext);
-
-    xFP->setTitle(IDEResId(RID_STR_EXPORTPACKAGE));
-
-    // filter
-    OUString aTitle(IDEResId(RID_STR_PACKAGE_BUNDLE));
-    xFP->appendFilter( aTitle, u"*.oxt"_ustr ); // library files
-
-    xFP->setCurrentFilter( aTitle );
-
-    if ( xFP->execute() != RET_OK )
-        return;
-
-    GetExtraData()->SetAddLibPath(xFP->getDisplayDirectory());
-
-    Sequence< OUString > aFiles = xFP->getSelectedFiles();
-    INetURLObject aURL( aFiles[0] );
-    if( aURL.getExtension().isEmpty() )
-        aURL.setExtension( u"oxt" );
-
-    OUString aPackageURL( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
-
-    OUString aTmpPath = SvtPathOptions().GetTempPath();
-    INetURLObject aInetObj( aTmpPath );
-    aInetObj.insertName( aLibName, true, INetURLObject::LAST_SEGMENT, INetURLObject::EncodeMechanism::All );
-    OUString aSourcePath = aInetObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
-    if( xSFA->exists( aSourcePath ) )
-        xSFA->kill( aSourcePath );
-    Reference< task::XInteractionHandler > xDummyHandler( new DummyInteractionHandler( xHandler ) );
-    implExportLib(rScriptDocument, aLibName, aTmpPath, xDummyHandler);
-
-    Reference< XCommandEnvironment > xCmdEnv = new OLibCommandEnvironment(xHandler);
-
-    ::ucbhelper::Content sourceContent( aSourcePath, xCmdEnv, comphelper::getProcessComponentContext() );
-
-    OUString destFolder = "vnd.sun.star.zip://" +
-                          ::rtl::Uri::encode( aPackageURL,
-                                              rtl_UriCharClassRegName,
-                                              rtl_UriEncodeIgnoreEscapes,
-                                              RTL_TEXTENCODING_UTF8 ) +
-                          "/";
-
-    if( xSFA->exists( aPackageURL ) )
-        xSFA->kill( aPackageURL );
-
-    ::ucbhelper::Content destFolderContent( destFolder, xCmdEnv, comphelper::getProcessComponentContext() );
-    destFolderContent.transferContent(
-        sourceContent, ::ucbhelper::InsertOperation::Copy,
-        OUString(), NameClash::OVERWRITE );
-
-    INetURLObject aMetaInfInetObj( aTmpPath );
-    aMetaInfInetObj.insertName( u"META-INF",
-        true, INetURLObject::LAST_SEGMENT, INetURLObject::EncodeMechanism::All );
-    OUString aMetaInfFolder = aMetaInfInetObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
-    if( xSFA->exists( aMetaInfFolder ) )
-        xSFA->kill( aMetaInfFolder );
-    xSFA->createFolder( aMetaInfFolder );
-
-    std::vector< Sequence<beans::PropertyValue> > manifest;
-
-    OUString fullPath = aLibName
-                      + "/" ;
-    auto attribs(::comphelper::InitPropertySequence({
-        { "FullPath", Any(fullPath) },
-        { "MediaType", Any(u"application/vnd.sun.star.basic-library"_ustr) }
-    }));
-    manifest.push_back( attribs );
-
-    // write into pipe:
-    Reference<packages::manifest::XManifestWriter> xManifestWriter = packages::manifest::ManifestWriter::create( xContext );
-    Reference<io::XOutputStream> xPipe( io::Pipe::create( xContext ), UNO_QUERY_THROW );
-    xManifestWriter->writeManifestSequence(
-        xPipe, Sequence< Sequence<beans::PropertyValue> >(
-            manifest.data(), manifest.size() ) );
-
-    aMetaInfInetObj.insertName( u"manifest.xml",
-        true, INetURLObject::LAST_SEGMENT, INetURLObject::EncodeMechanism::All );
-
-    // write buffered pipe data to content:
-    ::ucbhelper::Content manifestContent( aMetaInfInetObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ), xCmdEnv, comphelper::getProcessComponentContext() );
-    manifestContent.writeStream( Reference<io::XInputStream>( xPipe, UNO_QUERY_THROW ), true );
-
-    ::ucbhelper::Content MetaInfContent( aMetaInfFolder, xCmdEnv, comphelper::getProcessComponentContext() );
-    destFolderContent.transferContent(
-        MetaInfContent, ::ucbhelper::InsertOperation::Copy,
-        OUString(), NameClash::OVERWRITE );
-
-    if( xSFA->exists( aSourcePath ) )
-        xSFA->kill( aSourcePath );
-    if( xSFA->exists( aMetaInfFolder ) )
-        xSFA->kill( aMetaInfFolder );
 }
 
 void ExportAsBasic(const ScriptDocument& rScriptDocument, const OUString& aLibName,
@@ -1158,8 +968,8 @@ void ExportAsBasic(const ScriptDocument& rScriptDocument, const OUString& aLibNa
 {
     EnsureIde();
     // Folder picker
-    const Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
-    Reference<XFolderPicker2> xFolderPicker = sfx2::createFolderPicker(xContext, pDialog);
+    const Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    Reference<XFolderPicker> xFolderPicker = sfx2::createFolderPicker(xContext, pDialog);
     Reference< task::XInteractionHandler2 > xHandler( task::InteractionHandler::createWithParent(xContext, nullptr) );
 
     xFolderPicker->setTitle(IDEResId(RID_STR_EXPORTBASIC));
@@ -1191,8 +1001,8 @@ void LibPage::DeleteCurrent()
 
     // check, if library is link
     bool bIsLibraryLink = false;
-    Reference< script::XLibraryContainer2 > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
-    Reference< script::XLibraryContainer2 > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
+    Reference< script::XLibraryContainer > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
+    Reference< script::XLibraryContainer > xDlgLibContainer( m_aCurDocument.getLibraryContainer( E_DIALOGS ) );
     if ( ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && xModLibContainer->isLibraryLink( aLibName ) ) ||
          ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) && xDlgLibContainer->isLibraryLink( aLibName ) ) )
     {
@@ -1281,14 +1091,10 @@ void LibPage::ImpInsertLibEntry( const OUString& rLibName, int nPos )
 {
     // check, if library is password protected
     bool bProtected = false;
-    Reference< script::XLibraryContainer2 > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
+    Reference< script::XLibraryContainer > xModLibContainer( m_aCurDocument.getLibraryContainer( E_SCRIPTS ) );
     if ( xModLibContainer.is() && xModLibContainer->hasByName( rLibName ) )
     {
-        Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
-        if ( xPasswd.is() )
-        {
-            bProtected = xPasswd->isLibraryPasswordProtected( rLibName );
-        }
+        bProtected = xModLibContainer->isLibraryPasswordProtected( rLibName );
     }
 
     m_xLibBox->insert_text(nPos, rLibName);
@@ -1374,9 +1180,9 @@ void createLibImpl(weld::Window* pWin, const ScriptDocument& rDocument,
             // tdf#151741 - store all libraries to the file system, otherwise they
             // cannot be renamed/moved since the SfxLibraryContainer::renameLibrary
             // moves the folders/files on the file system
-            Reference<script::XLibraryContainer2> xModLibContainer(
+            Reference<script::XLibraryContainer> xModLibContainer(
                 rDocument.getLibraryContainer(E_SCRIPTS));
-            Reference<script::XLibraryContainer2> xDlgLibContainer(
+            Reference<script::XLibraryContainer> xDlgLibContainer(
                 rDocument.getLibraryContainer(E_DIALOGS));
             Reference<script::XPersistentLibraryContainer> xModPersLibContainer(xModLibContainer,
                                                                                 UNO_QUERY);

@@ -10,10 +10,17 @@
 #include <swmodeltestbase.hxx>
 
 #include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/document/XEmbeddedObjectSupplier2.hpp>
+#include <com/sun/star/drawing/ShadingPattern.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/style/DropCapFormat.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
+#include <com/sun/star/text/HoriOrientation.hpp>
+#include <com/sun/star/text/XTextTablesSupplier.hpp>
 
 #include <comphelper/propertyvalue.hxx>
+#include <docmodel/color/ComplexColor.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <cppuhelper/implbase.hxx>
 
 #include <pam.hxx>
@@ -23,7 +30,8 @@
 #include <wrtsh.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -44,15 +52,15 @@ public:
     sal_Int32 mnLastValue = -1;
     OUString maText;
 
-    void SAL_CALL start(const OUString& rText, sal_Int32 /*nRange*/) override
+    void start(const OUString& rText, sal_Int32 /*nRange*/) override
     {
         ++mnStartCount;
         maText = rText;
     }
-    void SAL_CALL end() override { ++mnEndCount; }
-    void SAL_CALL setText(const OUString& rText) override { maText = rText; }
-    void SAL_CALL setValue(sal_Int32 nValue) override { mnLastValue = nValue; }
-    void SAL_CALL reset() override {}
+    void end() override { ++mnEndCount; }
+    void setText(const OUString& rText) override { maText = rText; }
+    void setValue(sal_Int32 nValue) override { mnLastValue = nValue; }
+    void reset() override {}
 };
 
 DECLARE_OOXMLEXPORT_TEST(testTdf38575_fullWidthLine, "tdf38575_fullWidthLine.docx")
@@ -163,6 +171,373 @@ CPPUNIT_TEST_FIXTURE(Test, testDocxSaveReportsProgress)
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), xRecorder->mnStartCount);
     CPPUNIT_ASSERT(xRecorder->mnLastValue >= 0);
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), xRecorder->mnEndCount);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf109308_dropCap)
+{
+    // Given a paragraph starting with a drop cap three lines tall
+    createSwDoc("tdf109308_dropCap.fodt");
+    save(TestFilter::DOCX);
+
+    // Word wants the initial in a framed paragraph of its own, followed by a paragraph
+    // with the rest of the text. Without the fix the drop cap was not written at all.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:framePr", "dropCap", u"drop");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:framePr", "lines", u"3");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:framePr", "hSpace", u"283");
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[1]/w:r/w:t", u"L");
+
+    // Word does not enlarge the initial itself, so the size of it has to be written out:
+    // in half-points, well above the 24 of the 12pt body text
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:spacing", "lineRule", u"exact");
+    CPPUNIT_ASSERT_GREATER(
+        sal_Int32(24),
+        getXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r/w:rPr/w:sz", "val").toInt32());
+
+    // and the text the initial was taken from stays in the paragraph that follows
+    CPPUNIT_ASSERT(getXPathContent(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/w:t")
+                       .startsWith("orem ipsum"));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf109308_dropCapRoundtrip)
+{
+    createSwDoc("tdf109308_dropCap.fodt");
+    saveAndReload(TestFilter::DOCX);
+
+    // The two paragraphs Word needs have to come back as the single one they were
+    CPPUNIT_ASSERT_EQUAL(1, getParagraphs());
+
+    uno::Reference<beans::XPropertySet> xParagraph(getParagraph(1), uno::UNO_QUERY);
+    auto aDropCap = getProperty<css::style::DropCapFormat>(xParagraph, u"DropCapFormat"_ustr);
+    CPPUNIT_ASSERT_EQUAL(sal_Int8(3), aDropCap.Lines);
+    CPPUNIT_ASSERT_EQUAL(sal_Int8(1), aDropCap.Count);
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(499), aDropCap.Distance);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf109308_dropCapHyperlink)
+{
+    // Given a paragraph with a drop cap whose whole text is one hyperlink
+    createSwDoc("tdf109308_dropCapHyperlink.fodt");
+    save(TestFilter::DOCX);
+
+    // The initial cannot be given a paragraph of its own here, because the hyperlink
+    // wraps the runs of both paragraphs and the first paragraph would have to end inside
+    // it. Without the fix the file was written that way and could not be opened again.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p", 1);
+    assertXPath(pXmlDoc, "//w:framePr", 0);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:hyperlink", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf109308_dropCapRuby)
+{
+    // Given a paragraph with a drop cap whose whole text carries a ruby
+    createSwDoc("tdf109308_dropCapRuby.fodt");
+    save(TestFilter::DOCX);
+
+    // The initial cannot be given a paragraph of its own here either, because the ruby
+    // wraps the runs of both paragraphs and the first paragraph would have to end between
+    // the ruby base and the end of the ruby, which is a file that does not open.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p", 1);
+    assertXPath(pXmlDoc, "//w:framePr", 0);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r/w:ruby", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf109308_dropCapSdt)
+{
+    // Given a paragraph with a drop cap whose initial sits in a structured document tag
+    // that the document model cannot show, so it is only known from a grab bag
+    createSwDoc("tdf109308_dropCapSdt.docx");
+    save(TestFilter::DOCX);
+
+    // The tag wraps the runs, so the paragraph cannot be split for the initial. The size
+    // of a drop cap has to be given up with the frame, or the file would open with a large
+    // letter in the middle of a sentence.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    assertXPath(pXmlDoc, "//w:framePr", 0);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]//w:sdt", 1);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]//w:r[1]/w:rPr/w:sz", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf109308_dropCapNumbered)
+{
+    // Given a numbered paragraph that starts with a drop cap, where the list comes from
+    // the paragraph style
+    createSwDoc("tdf109308_dropCapNumbered.docx");
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:framePr", "dropCap", u"drop");
+
+    // The paragraph that frames the initial carries the paragraph style, so it has to be
+    // taken out of the list again, or the number would be shown twice. Without the fix
+    // nothing did that and the initial got a number of its own.
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:numPr/w:numId", "val", u"0");
+
+    // The number belongs in front of the text, which is in the paragraph that follows
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:pPr/w:numPr/w:numId", "val", u"1");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCharStyleShadingPattern)
+{
+    // A character style whose shading is a 20 percent pattern.
+    createSwDoc("special_styles.docx");
+
+    // Without the fix a named character style had nowhere to keep the pattern, so the style
+    // held only the color that the pattern and the fill blend into.
+    uno::Reference<beans::XPropertySet> xStyle(
+        getStyles(u"CharacterStyles"_ustr)->getByName(u"Message Header Char"_ustr),
+        uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(drawing::ShadingPattern::PCT20),
+                         getProperty<sal_Int32>(xStyle, u"CharShadingValue"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testShadingPatternKeepsFillColor)
+{
+    createSwDoc("char-style-shading-pattern.docx");
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/styles.xml"_ustr);
+    // Without the fix a 15 percent shading was always written over white, so the yellow of this
+    // style turned grey.
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='Shaded']/w:rPr/w:shd", "fill",
+                u"FFFF00");
+
+    // This one blends red over white, which no 15 percent shading over black reaches, so it
+    // keeps the color it shows rather than a shading that would paint something else.
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='ShadedRed']/w:rPr/w:shd", "val",
+                u"clear");
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='ShadedRed']/w:rPr/w:shd", "fill",
+                u"FFD8D8");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testShadingPatternsOtherThanPct15)
+{
+    createSwDoc("char-shading-patterns.docx");
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/styles.xml"_ustr);
+    // Without the fix only a 15 percent shading was written back as a shading, and every other
+    // one came out as a plain fill of the color it blends into.
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='Pct35Yellow']/w:rPr/w:shd", "val",
+                u"pct35");
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='Pct35Yellow']/w:rPr/w:shd", "fill",
+                u"FFFF00");
+
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='DiagStripe']/w:rPr/w:shd", "val",
+                u"diagStripe");
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='DiagStripe']/w:rPr/w:shd", "fill",
+                u"00FF00");
+
+    // A solid shading paints its own color over the whole fill, so that color is the one the
+    // style shows.
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='SolidRed']/w:rPr/w:shd", "val", u"solid");
+    assertXPath(pXmlDoc, "/w:styles/w:style[@w:styleId='SolidRed']/w:rPr/w:shd", "color",
+                u"FF0000");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCharShadingRoundTripOnSavedFile)
+{
+    // A run shaded with a 15 percent pattern, in a file that was saved out in this format
+    // rather than built by hand for the test.
+    createSwDoc("fdo65400.docx");
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    // A 15 percent pattern over white blends to the grey the brush item holds, and the fill
+    // worked back out of that grey is white again, so the run goes out as it came in.
+    assertXPath(pXmlDoc, "//w:r/w:rPr/w:shd[@w:val='pct15']", 1);
+    assertXPath(pXmlDoc, "//w:r/w:rPr/w:shd[@w:val='pct15']", "color", u"auto");
+    assertXPath(pXmlDoc, "//w:r/w:rPr/w:shd[@w:val='pct15']", "fill", u"FFFFFF");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCharShadingThemeFill)
+{
+    createSwDoc("char-shading-theme-fill.docx");
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    // Without the fix the theme color of a character shading was dropped and only the color it
+    // resolves to came back, so the shading no longer followed the document theme.
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r/w:rPr/w:shd", "themeFill", u"accent1");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/w:rPr/w:shd", "themeFill", u"accent1");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/w:rPr/w:shd", "themeFillTint", u"33");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCharShadingThemeFillOnlyWithItsOwnFill)
+{
+    createSwDoc();
+
+    // A run shaded with a 15 percent pattern over a color that no fill blends into, and a
+    // theme color on top of that. The document is built here because no file in the corpus
+    // carries a character shading of that shape.
+    uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY_THROW);
+    xTextDocument->getText()->setString(u"shaded"_ustr);
+    uno::Reference<beans::XPropertySet> xRun(getRun(getParagraph(1), 1), uno::UNO_QUERY_THROW);
+    xRun->setPropertyValue(u"CharBackColor"_ustr, cpo::uno::Any(sal_Int32(0xffd8d8)));
+    xRun->setPropertyValue(u"CharShadingValue"_ustr,
+                           cpo::uno::Any(sal_Int32(drawing::ShadingPattern::PCT15)));
+    model::ComplexColor aComplexColor;
+    aComplexColor.setThemeColor(model::ThemeColorType::Accent1);
+    xRun->setPropertyValue(u"CharBackgroundComplexColor"_ustr,
+                           cpo::uno::Any(model::color::createXComplexColor(aComplexColor)));
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    // The color written is the one the pattern and the fill blend into, which the theme color
+    // does not name, so the run goes out with that color alone.
+    assertXPath(pXmlDoc, "//w:r/w:rPr/w:shd", "val", u"clear");
+    assertXPath(pXmlDoc, "//w:r/w:rPr/w:shd", "fill", u"FFD8D8");
+    assertXPathNoAttribute(pXmlDoc, "//w:r/w:rPr/w:shd", "themeFill");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCellBorderThemeColor)
+{
+    // A cell whose borders name a theme color, one of them with a tint, one with a shade, and
+    // one border with a plain color.
+    createSwDoc("cell-border-theme-color.docx");
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    // Without the fix the theme color was read but never reached the cell, so only the color it
+    // resolves to came back and the borders stopped following the document theme.
+    assertXPath(pXmlDoc, "//w:tcBorders/w:top", "themeColor", u"accent1");
+    assertXPath(pXmlDoc, "//w:tcBorders/w:top", "themeTint", u"33");
+    assertXPath(pXmlDoc, "//w:tcBorders/w:start", "themeColor", u"accent2");
+    assertXPath(pXmlDoc, "//w:tcBorders/w:start", "themeShade", u"80");
+    assertXPath(pXmlDoc, "//w:tcBorders/w:end", "themeColor", u"accent3");
+
+    // The border that names no theme color keeps only its own color.
+    assertXPathNoAttribute(pXmlDoc, "//w:tcBorders/w:bottom", "themeColor");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testHyperlinkKeepsNoEmptyStyledSpan)
+{
+    // Hyperlink fields whose text already carries the hyperlink character style.
+    createSwDoc("fdo76597.docx");
+
+    save(TestFilter::ODT);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    // Resetting the character style of such a run was refused, because it was asked for by
+    // the name an English user interface shows rather than the one the API knows, so every
+    // hyperlink left an empty styled span behind.
+    // Without the fix there were 42 of them, one per hyperlink.
+    assertXPath(pXmlDoc, "//text:span[@text:style-name='Internet_20_link']", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTableAlignmentFromTableStyle)
+{
+    // The first table takes its alignment from the w:jc of its table style, the second one
+    // overrides the w:jc of its style with a direct one, and the third one takes it from a
+    // style that spells the very same thing as w:trPr/w:jc instead of w:tblPr/w:jc.
+    auto verify = [this]() {
+        uno::Reference<text::XTextTablesSupplier> xSupplier(mxComponent, uno::UNO_QUERY_THROW);
+        uno::Reference<container::XNameAccess> xTables = xSupplier->getTextTables();
+
+        // Without the accompanying fix in place, this test would have failed with:
+        // - Expected: 2
+        // - Actual  : 7
+        // i.e. the table was left aligned, the w:jc of the table style having been dropped.
+        CPPUNIT_ASSERT_EQUAL(
+            text::HoriOrientation::CENTER,
+            getProperty<sal_Int16>(xTables->getByName(u"Table1"_ustr), u"HoriOrient"_ustr));
+        CPPUNIT_ASSERT_EQUAL(
+            text::HoriOrientation::LEFT_AND_WIDTH,
+            getProperty<sal_Int16>(xTables->getByName(u"Table2"_ustr), u"HoriOrient"_ustr));
+        // Without the accompanying fix in place, this test would have failed with:
+        // - Expected: 2
+        // - Actual  : 7
+        // i.e. a w:trPr directly under a w:style was dropped whole, so the row spelling of
+        // the table's alignment never reached the style.
+        CPPUNIT_ASSERT_EQUAL(
+            text::HoriOrientation::CENTER,
+            getProperty<sal_Int16>(xTables->getByName(u"Table3"_ustr), u"HoriOrient"_ustr));
+    };
+
+    createSwDoc("table-style-jc.docx");
+    verify();
+    saveAndReload(TestFilter::DOCX);
+    verify();
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTableStyleJcStaysInStyle)
+{
+    createSwDoc("table-style-jc.docx");
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlStyles = parseExport(u"word/styles.xml"_ustr);
+    // Without the accompanying fix in place, this test would have failed, as the table style
+    // was written back without its w:jc, the alignment having been dropped from the style.
+    assertXPath(pXmlStyles, "/w:styles/w:style[@w:styleId='CenteredTable']/w:tblPr/w:jc", "val",
+                u"center");
+    assertXPath(pXmlStyles, "/w:styles/w:style[@w:styleId='RightTable']/w:tblPr/w:jc", "val",
+                u"right");
+    // Word spells a table's alignment either in w:tblPr or in w:trPr; a style is written back
+    // with the one it was written with, rather than having it moved to the other.
+    assertXPath(pXmlStyles, "/w:styles/w:style[@w:styleId='RowCenteredTable']/w:trPr/w:jc", "val",
+                u"center");
+    assertXPath(pXmlStyles, "/w:styles/w:style[@w:styleId='RowCenteredTable']/w:tblPr/w:jc", 0);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    // The first table's alignment comes from its style, so the table itself must not claim it:
+    // that would leave the style no longer in charge of the alignment it defines. Without the
+    // fix there was a <w:jc w:val="center"/> here.
+    assertXPath(pXmlDoc, "//w:tbl[1]/w:tblPr/w:jc", 0);
+    // The second table really does override its style, so this one stays direct formatting.
+    assertXPath(pXmlDoc, "//w:tbl[2]/w:tblPr/w:jc", "val", u"start");
+    // The third table's alignment comes from its style too, whichever way the style spells it.
+    assertXPath(pXmlDoc, "//w:tbl[3]/w:tblPr/w:jc", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testEquationFontSize)
+{
+    // Each equation is drawn at the size its run properties give it, and an equation whose runs
+    // give none takes the 11pt of the text around it. Without the fix all three came out at the
+    // 12pt default of the formula editor.
+    createSwDoc("math-font-size.docx");
+
+    const sal_Int16 aExpectedSizes[] = { 8, 11, 20 };
+    for (size_t i = 0; i < std::size(aExpectedSizes); ++i)
+    {
+        uno::Reference<document::XEmbeddedObjectSupplier2> xFormula(getShape(i + 1),
+                                                                    uno::UNO_QUERY);
+        CPPUNIT_ASSERT(xFormula.is());
+        CPPUNIT_ASSERT_EQUAL(
+            aExpectedSizes[i],
+            getProperty<sal_Int16>(xFormula->getEmbeddedObject(), u"BaseFontHeight"_ustr));
+    }
+
+    save(TestFilter::DOCX);
+
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
+    // The size goes back out on the equation's runs, in half points, so the sizes survive a
+    // round trip. Without the fix the export wrote no size at all.
+    assertXPath(pXmlDoc, "//w:p[1]/m:oMath/m:r/w:rPr/w:sz", "val", u"16");
+    assertXPath(pXmlDoc, "//w:p[2]/m:oMath/m:r/w:rPr/w:sz", "val", u"22");
+    assertXPath(pXmlDoc, "//w:p[3]/m:oMath/m:f/m:num/m:r/w:rPr/w:sz", "val", u"40");
+    // The fraction bar is drawn by the fraction itself, and takes its size from the control
+    // properties rather than from the runs above and below it.
+    assertXPath(pXmlDoc, "//w:p[3]/m:oMath/m:f/m:fPr/m:ctrlPr/w:rPr/w:sz", "val", u"40");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf168607_tabstopZero)
+{
+    // Given a 1 page document, where the default tab-stop length is zero
+
+    createSwDoc("tdf168607_tabstopZero.docx");
+    CPPUNIT_ASSERT_EQUAL(1, getPages());
+
+    saveAndReload(TestFilter::DOC);
+
+    CPPUNIT_ASSERT_EQUAL(1, getPages());
 }
 
 } // end of anonymous namespace

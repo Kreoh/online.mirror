@@ -20,11 +20,13 @@
 #pragma once
 
 #include <i18nlangtag/lang.h>
+#include <svl/typedwhich.hxx>
 #include <vcl/pdfwriter.hxx>
 #include "swrect.hxx"
 #include "swtypes.hxx"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace vcl
@@ -32,6 +34,7 @@ namespace vcl
     class PDFExtOutDevData;
 }
 class OutputDevice;
+class SvxLanguageItem;
 class SwFrame;
 class SwLinePortion;
 class SwPageFrame;
@@ -41,6 +44,7 @@ class SwEditShell;
 class StringRangeEnumerator;
 class SwTextAttr;
 class SwTextNode;
+struct SwPosition;
 class SwTextPaintInfo;
 class SwTextFrame;
 
@@ -118,9 +122,15 @@ struct Por_Info
       Ruby: 0-> Ruby 1-> RT 2-> RB
     */
     int const m_Mode;
+    /// the element to enter, created before the portion paints, or -1 to create one
+    const sal_Int32 m_nExistingId;
 
-    Por_Info(const SwLinePortion& rPor, const SwTextPainter& rTextPainer, int const nMode)
-        : mrPor(rPor), mrTextPainter(rTextPainer), m_Mode(nMode) {};
+    Por_Info(const SwLinePortion& rPor, const SwTextPainter& rTextPainer, const int nMode,
+             const sal_Int32 nExistingId = -1)
+        : mrPor(rPor)
+        , mrTextPainter(rTextPainer)
+        , m_Mode(nMode)
+        , m_nExistingId(nExistingId){};
 };
 
 struct lt_TableColumn
@@ -137,9 +147,8 @@ class SwTaggedPDFHelper
 {
     private:
 
-    // This will be incremented for each BeginTag() call.
-    // It denotes the number of tags to close during EndStructureElements();
-    sal_uInt8 m_nEndStructureElement;
+    // opened by this helper, innermost last
+    std::vector<sal_Int32> m_aOpenedTags;
 
     //  If an already existing tag is reopened for follows of flow frames,
     // this value stores the tag id which has to be restored.
@@ -152,9 +161,14 @@ class SwTaggedPDFHelper
     const Por_Info* mpPorInfo;
 
     void OpenTagImpl(void const* pKey);
-    sal_Int32 BeginTagImpl(void const* pKey,vcl::pdf::StructElement aTagRole, const OUString& rTagName);
+    sal_Int32 BeginTagImpl(void const* pKey, vcl::pdf::StructElement aTagRole,
+                           const OUString& rTagName, sal_Int32 nExistingId = -1);
     void BeginTag(vcl::pdf::StructElement aTagRole, const OUString& rTagName);
     void EndTag();
+    void DeferTag();
+    bool IsDeferredTagCurrent() const;
+    void EndDeferredTag();
+    void EndDeferredTags();
 
     void SetAttributes(vcl::pdf::StructElement eType);
 
@@ -164,15 +178,28 @@ class SwTaggedPDFHelper
     void BeginInlineStructureElements();
     void EndStructureElements();
 
+    // what an open link or span leaves for this portion to do
+    enum class Continuation
+    {
+        None, // nothing is open that covers it
+        Whole, // the open tag covers it, so no new tag
+        SpanInLink // the link goes on, but its properties do not
+    };
+
     void EndCurrentAll();
     void EndCurrentSpan();
     void CreateCurrentSpan(SwTextPaintInfo const& rInf, OUString const& rStyleName);
-    bool CheckContinueSpan(SwTextPaintInfo const& rInf, std::u16string_view rStyleName, SwTextAttr const* pInetFormatAttr);
+    Continuation CheckContinuation(SwTextPaintInfo const& rInf, OUString const& rStyleName,
+                                   SwTextAttr const* pInetFormatAttr);
 
     bool CheckReopenTag();
     void CheckRestoreTag() const;
 
     public:
+
+    /// a Ruby's RB and RT, created before either sub-line paints so that they end up in that order
+    static std::pair<sal_Int32, sal_Int32> CreateRubyKids(const OutputDevice& rOut,
+                                                          const SwFrame& rFrame);
 
     // pFrameInfo != 0 => BeginBlockStructureElement
     // pPorInfo != 0 => BeginInlineStructureElement
@@ -180,8 +207,6 @@ class SwTaggedPDFHelper
     SwTaggedPDFHelper( const Num_Info* pNumInfo, const Frame_Info* pFrameInfo, const Por_Info* pPorInfo,
                        OutputDevice const & rOut );
     ~SwTaggedPDFHelper();
-
-    static void EndCurrentLink(OutputDevice const&);
 };
 
 /*
@@ -217,10 +242,18 @@ class SwEnhancedPDFExportHelper
 
     const SwPrintData& mrPrintData;
 
-    void EnhancedPDFExport(LanguageType const eLanguageDefault);
+    void EnhancedPDFExport(LanguageType const eLanguageDefault,
+                           const TypedWhichId<SvxLanguageItem> nLanguageWhich);
 
     /// Exports bibliography entry links.
     void ExportAuthorityEntryLinks();
+
+    /// Creates a destination, and remembers the node it points at, to name it once tagging is done.
+    /// The target is either the node the cursor jumped to since rBeforeJump, or one known outright.
+    sal_Int32 CreateDestination(const SwPageFrame* pCurrPage, const SwRect& rRect,
+                                sal_Int32 nPageNum, const SwPosition& rBeforeJump);
+    sal_Int32 CreateDestination(const SwPageFrame* pCurrPage, const SwRect& rRect,
+                                sal_Int32 nPageNum, const SwTextNode* pTarget);
 
     sal_Int32 CalcOutputPageNum( const SwRect& rRect ) const;
     std::vector< sal_Int32 > CalcOutputPageNums( const SwRect& rRect ) const;

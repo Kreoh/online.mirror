@@ -101,6 +101,7 @@
 #include <comphelper/kit.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLTableRowCellContext::ParaFormat::ParaFormat(const ScEditEngineDefaulter& rEditEngine) :
@@ -636,7 +637,7 @@ void ScXMLTableRowCellContext::PushParagraphEnd()
     ++mnCurParagraph;
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLTableRowCellContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLTableRowCellContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -956,6 +957,7 @@ void ScXMLTableRowCellContext::SetAnnotation(const ScAddress& rPos)
             }
             pNote->SetDate( aDate );
         }
+        pNote->SetDateUTC(mxAnnotationData->maCreateDateUTC);
         pNote->SetAuthor( mxAnnotationData->maAuthor );
         if (mxAnnotationData->mpThreadedCommentData)
             pNote->SetThreadedCommentData(std::move(mxAnnotationData->mpThreadedCommentData));
@@ -1137,7 +1139,7 @@ void ScXMLTableRowCellContext::PutTextCell( const ScAddress& rCurrentPos,
                 // This edit engine uses the SfxItemPool instance returned
                 // from pDoc->GetEditPool() to create the text object, which
                 // is a prerequisite for using this constructor of ScEditCell.
-                rDoc.setEditCell(rCurrentPos, mpEditEngine->CreateTextObject());
+                rDoc.setEditCell(rCurrentPos, std::make_unique<EditTextObject>(mpEditEngine->CreateTextObject()));
             }
         }
         else if ( nCurrentCol > 0 && pOUText && !pOUText->isEmpty() )
@@ -1571,7 +1573,7 @@ bool ScXMLTableRowCellContext::IsPossibleErrorString() const
             GetScImport().GetFormulaErrorConstant(*maStringValue) != FormulaError::NONE);
 }
 
-void SAL_CALL ScXMLTableRowCellContext::endFastElement(sal_Int32 /*nElement*/)
+void ScXMLTableRowCellContext::endFastElement(sal_Int32 /*nElement*/)
 {
     HasSpecialCaseFormulaText();
     if( bFormulaTextResult && (mbPossibleErrorCell || mbCheckWithCompilerForError) )

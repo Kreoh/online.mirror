@@ -39,9 +39,10 @@
 
 
 using namespace css;
-using com::sun::star::uno::Reference;
-using com::sun::star::uno::XInterface;
-using com::sun::star::uno::UNO_QUERY;
+using namespace ::cpo;
+using cpo::uno::Reference;
+using cpo::uno::XInterface;
+using cpo::uno::UNO_QUERY;
 using cpo::uno::Sequence;
 using com::sun::star::container::XNameContainer;
 using com::sun::star::beans::XPropertySet;
@@ -52,7 +53,7 @@ using com::sun::star::beans::XPropertySet;
 namespace vcl::graphic
 {
 
-void SearchForGraphics(uno::Reference<uno::XInterface> const & xInterface,
+void SearchForGraphics(uno::Reference<cpo::uno::XInterface> const & xInterface,
                        std::vector<uno::Reference<css::graphic::XGraphic>> & raGraphicList)
 {
     uno::Reference<beans::XPropertySet> xPropertySet(xInterface, UNO_QUERY);

@@ -31,6 +31,63 @@ std::string getexe(std::string exename, bool maybeempty) {
     return command;
 }
 
+bool lookupenv(const std::string& name, std::string& value)
+{
+    char* buffer;
+    size_t length;
+    _dupenv_s(&buffer, &length, name.c_str());
+    if (!buffer)
+        return false;
+    value = buffer;
+    free(buffer);
+    return true;
+}
+
+// Put the launcher, ccache or whatever else runs the compiler, in front of the command and move the
+// compiler itself to the head of the arguments. The launcher comes from <prefix>CC_LAUNCHER, or
+// <prefix>CXX_LAUNCHER, where that variable exists, and an existing but empty one means the build
+// runs the compiler directly. Where the variable does not exist the launcher and the compiler are
+// still joined inside command, and the word ccache marks where the launcher ends.
+void splitlauncher(const std::string& env_prefix, const std::string& variable, std::string& command,
+                   std::string& args)
+{
+    std::string launcher;
+    if (lookupenv(env_prefix + variable + "_LAUNCHER", launcher))
+    {
+        if (!launcher.empty())
+        {
+            args.insert(0, "\"" + command + "\" ");
+            command = launcher;
+        }
+        return;
+    }
+
+    size_t pos = command.find("ccache ");
+    size_t len = strlen("ccache ");
+    if (pos == std::string::npos)
+    {
+        pos = command.find("ccache.exe ");
+        len = strlen("ccache.exe ");
+    }
+    if (pos != std::string::npos)
+    {
+        args.insert(0, command.substr(pos + len));
+        command = command.substr(0, pos + len - 1);
+    }
+}
+
+// Turn a pathname that configure encoded back into its real spelling. %20 is a space and %25 a
+// percent, taken in that order so that a pathname which held a percent of its own comes back as it
+// was.
+static std::string decodepath(std::string path)
+{
+    for (size_t pos = path.find("%20"); pos != std::string::npos; pos = path.find("%20", pos + 1))
+        path.replace(pos, 3, " ");
+    for (size_t pos = path.find("%25"); pos != std::string::npos; pos = path.find("%25", pos + 1))
+        path.replace(pos, 3, "%");
+    return path;
+}
+
 void setupccenv() {
     // Set-up library path
     std::string libpath="LIB=";
@@ -75,7 +132,7 @@ void setupccenv() {
 
         if(len>2) {
             includepath.append(";");
-            includepath.append(inctmp,pos+2,len-2);
+            includepath.append(decodepath(inctmp.substr(pos+2,len-2)));
         }
         pos=endpos;
     }
@@ -265,18 +322,6 @@ int startprocess(std::string command, std::string args, bool verbose)
     si.dwFlags |= STARTF_USESTDHANDLES;
     si.hStdOutput=childout_write;
     si.hStdError=childout_write;
-
-    // support ccache
-    size_t pos=command.find("ccache ");
-    size_t len = strlen("ccache ");
-    if(pos == std::string::npos) {
-        pos=command.find("ccache.exe ");
-        len = strlen("ccache.exe ");
-    }
-    if(pos != std::string::npos) {
-        args.insert(0,command.substr(pos+len));
-        command=command.substr(0,pos+len-1);
-    }
 
     auto cmdline = "\"" + command + "\" " + args;
 

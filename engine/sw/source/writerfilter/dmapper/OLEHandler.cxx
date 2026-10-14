@@ -41,13 +41,14 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
 #include <com/sun/star/text/WrapTextMode.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <svx/xmleohlp.hxx>
 #include <unotxdoc.hxx>
 
 namespace writerfilter::dmapper {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 OLEHandler::OLEHandler(DomainMapper& rDomainMapper) :
@@ -138,12 +139,12 @@ css::awt::Size OLEHandler::getSize() const
     return m_xShape->getSize();
 }
 
-css::uno::Reference<css::graphic::XGraphic> OLEHandler::getReplacement() const
+cpo::uno::Reference<css::graphic::XGraphic> OLEHandler::getReplacement() const
 {
     if (!m_xShape)
         return nullptr;
     uno::Reference<beans::XPropertySet> xShapeProps(m_xShape, uno::UNO_QUERY);
-    css::uno::Reference<css::graphic::XGraphic> xReplacement;
+    cpo::uno::Reference<css::graphic::XGraphic> xReplacement;
     xShapeProps->getPropertyValue(getPropertyName(PROP_BITMAP)) >>= xReplacement;
     return xReplacement;
 }
@@ -199,7 +200,7 @@ void OLEHandler::lcl_sprm(Sprm & rSprm)
     }
 }
 
-void OLEHandler::importStream(const uno::Reference<uno::XComponentContext>& xComponentContext, const uno::Reference<text::XTextDocument>& xTextDocument, const uno::Reference<text::XTextContent>& xOLE)
+void OLEHandler::importStream(const uno::Reference<cpo::uno::XComponentContext>& xComponentContext, const uno::Reference<text::XTextDocument>& xTextDocument, const uno::Reference<text::XTextContent>& xOLE)
 {
     OUString aFilterService;
     if (m_sProgId == "Word.Document.12")
@@ -215,7 +216,7 @@ void OLEHandler::importStream(const uno::Reference<uno::XComponentContext>& xCom
         return;
 
     // Create the filter service.
-    uno::Reference<uno::XInterface> xInterface = xComponentContext->getServiceManager()->createInstanceWithContext(aFilterService, xComponentContext);
+    uno::Reference<cpo::uno::XInterface> xInterface = xComponentContext->getServiceManager()->createInstanceWithContext(aFilterService, xComponentContext);
 
     // Set target document.
     uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY);

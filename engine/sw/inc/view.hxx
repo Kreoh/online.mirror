@@ -19,12 +19,12 @@
 #ifndef INCLUDED_SW_INC_VIEW_HXX
 #define INCLUDED_SW_INC_VIEW_HXX
 
+#include <tools/fldunit.hxx>
 #include <vcl/timer.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/objsh.hxx>
 #include <editeng/svxenum.hxx>
 #include <sfx2/zoomitem.hxx>
-#include <svx/ruler.hxx>
 #include <svx/fmshell.hxx>
 #include <svx/svdobj.hxx>
 #include <svl/style.hxx>
@@ -39,6 +39,8 @@
 
 #include <COKit/COKit.hxx>
 
+#include <vector>
+
 class SwTextFormatColl;
 class SwPageDesc;
 class SwFrameFormat;
@@ -51,6 +53,7 @@ class SwDocShell;
 class SwScrollbar;
 class SvBorder;
 class Ruler;
+class SvxRuler;
 class SvxSearchItem;
 class SearchAttrItemList;
 class SvxSearchDialog;
@@ -279,11 +282,13 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
 
     int m_nMaxOutlineLevelShown = 10;
 
+    /// The names of the table styles that the document's tables use, sorted, as of the last
+    /// attribute change notification.
+    std::vector<OUString> m_aUsedTableStyleNames;
+
     bool m_bIsSpotlightCharDF = false;
     bool m_bIsSpotlightParaStyles = false;
     bool m_bIsSpotlightCharStyles = false;
-
-    bool m_bDying = false;
 
     static constexpr sal_uInt16 MAX_ZOOM_PERCENT = 600;
     static constexpr sal_uInt16 MIN_ZOOM_PERCENT = 20;
@@ -386,6 +391,7 @@ protected:
 
     // for SwWebView
     void            SetShell( SfxShell* pS )            { m_pShell = pS; }
+    bool IsInDtor() const { return m_bInDtor; }
 
     virtual void    Activate(bool) override;
     virtual void    Deactivate(bool) override;
@@ -426,7 +432,7 @@ public:
 
     OUString                GetSelectionTextParam( bool bCompleteWords,
                                                    bool bEraseTrail );
-    virtual bool            HasSelection( bool bText = true ) const override;
+    virtual bool            HasSelection(bool bMustHaveText) const override;
     virtual OUString        GetSelectionText( bool bCompleteWords = false, bool bOnlyASample = false ) override;
     virtual bool            PrepareClose( bool bUI = true ) override;
     virtual void            MarginChanged() override;
@@ -468,7 +474,6 @@ public:
     bool            ExecSpellPopup(const Point& rPt, bool bIsMouseEvent);
     void            ExecSmartTagPopup( const Point& rPt );
 
-    DECL_DLLPRIVATE_LINK( OnlineSpellCallback, SpellCallbackInfo&, void );
     bool            ExecDrwTextSpellPopup(const Point& rPt);
 
     void            SetTabColFromDocPos( const Point &rPt ) { m_aTabColFromDocPos = rPt; }
@@ -520,7 +525,7 @@ public:
     void            CreateTab();
     void            KillTab();
 
-    bool            StatVRuler() const { return m_pVRuler->IsVisible(); }
+    bool            StatVRuler() const;
     void            ChangeVRulerMetric(FieldUnit eUnit);
     void            GetVRulerMetric(FieldUnit& rToFill) const;
 
@@ -565,6 +570,7 @@ public:
     bool     IsDrawSelMode() const     { return m_bDrawSelMode; }
     void            SetSelDrawSlot();
     void     FlipDrawSelMode()   { m_bDrawSelMode = !m_bDrawSelMode; }
+    void     SetDrawSelMode(bool bSet) { m_bDrawSelMode = bSet; }
     void            NoRotate();     // turn off rotate mode
     void            ToggleRotate();     // switch between move and rotate mode
 
@@ -587,6 +593,10 @@ public:
 
     // attributes have changed
     DECL_LINK( AttrChangedNotify, LinkParamNone*, void );
+
+    /// Refresh the table style list in every view of the document when the set of table
+    /// styles that the document's tables use differs from the last one seen.
+    void CheckUsedTableStyles();
 
     // form control has been activated
     DECL_DLLPRIVATE_LINK( FormControlActivated, LinkParamNone*, void );
@@ -646,8 +656,6 @@ public:
 
     SwView(SfxViewFrame& rFrame, SfxViewShell*);
     virtual ~SwView() override;
-
-    void SetDying() override;
 
     void NotifyDBChanged();
 

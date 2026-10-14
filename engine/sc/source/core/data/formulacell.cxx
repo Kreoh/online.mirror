@@ -452,11 +452,25 @@ void adjustRangeName(FormulaIndexToken* pToken, ScDocument& rNewDoc, const ScDoc
     pToken->SetSheet(nSheet);
 }
 
-void adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScDocument& rOldDoc)
+/// Point a table token at nIndex; 0 leaves it unresolvable, which prints as #NAME!.
+void setTableIndex(formula::FormulaToken* pToken, sal_uInt16 nIndex)
+{
+    if (pToken->GetOpCode() == ocDBArea)
+        static_cast<FormulaIndexToken*>(pToken)->SetIndex(nIndex);
+    else if (pToken->GetOpCode() == ocTableRef)
+        static_cast<ScTableRefToken*>(pToken)->SetIndex(nIndex);
+    else
+        assert(!"setTableIndex - neither ocDBArea nor ocTableRef");
+}
+
+/// @return true when the token was re-pointed at a table the paste has just planted, so the
+///         caller knows to derive its column anchor from that table as well.
+bool adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScDocument& rOldDoc,
+                   bool bSameDocPaste)
 {
     ScDBCollection* pOldDBCollection = rOldDoc.GetDBCollection();
     if (!pOldDBCollection)
-        return;//strange error case, don't do anything
+        return false;//strange error case, don't do anything
 
     auto eOpCode = pToken->GetOpCode();
     sal_uInt16 nIndex = 0;
@@ -465,23 +479,39 @@ void adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScD
     else if (eOpCode == ocTableRef)
         nIndex = static_cast<ScTableRefToken*>(pToken)->GetIndex();
     else
-        assert(false);
+        assert(!"adjustDBRange - neither ocDBArea nor ocTableRef");
 
-    ScDBCollection::NamedDBs& aOldNamedDBs = pOldDBCollection->getNamedDBs();
-    ScDBData* pDBData = aOldNamedDBs.findByIndex(nIndex);
-    if (!pDBData)
-        return; //invalid index
-    OUString aDBName = pDBData->GetUpperName();
-
-    //search in new document
     ScDBCollection* pNewDBCollection = rNewDoc.GetDBCollection();
     if (!pNewDBCollection)
     {
         rNewDoc.SetDBCollection(std::unique_ptr<ScDBCollection>(new ScDBCollection(rNewDoc)));
         pNewDBCollection = rNewDoc.GetDBCollection();
     }
+
+    // The paste noted which table of ours it planted this one as, whatever it ended up
+    // called (ScDocument::CopyDBsFromClip). Without a note the name is the only handle.
+    const sal_uInt16 nRebound = pNewDBCollection->getPasteRebind(nIndex);
+
+    // Same-document paste: an index names the same table on any sheet, so one the
+    // paste did not plant needs no adjusting. Must come before the clipboard lookup
+    // below - the clip carries only tables the copied range overlapped, so a
+    // reference to any other one would miss there and be reset to 0.
+    if (bSameDocPaste && !nRebound)
+        return false;
+
+    ScDBCollection::NamedDBs& aOldNamedDBs = pOldDBCollection->getNamedDBs();
+    ScDBData* pDBData = aOldNamedDBs.findByIndex(nIndex);
+    if (!pDBData)
+    {
+        if (rOldDoc.IsClipboard())
+            setTableIndex(pToken, 0);
+        return false; //invalid index
+    }
+
+    //search in new document
     ScDBCollection::NamedDBs& aNewNamedDBs = pNewDBCollection->getNamedDBs();
-    ScDBData* pNewDBData = aNewNamedDBs.findByUpperName(aDBName);
+    ScDBData* pNewDBData = nRebound ? aNewNamedDBs.findByIndex(nRebound)
+                                    : aNewNamedDBs.findByUpperName(pDBData->GetUpperName());
     if (!pNewDBData)
     {
         // No matching table in the destination. For a clipboard paste leave it
@@ -498,24 +528,15 @@ void adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScD
         // #REF! instead.
         if (rOldDoc.IsClipboard())
         {
-            if (eOpCode == ocDBArea)
-                static_cast<FormulaIndexToken*>(pToken)->SetIndex(0);
-            else if (eOpCode == ocTableRef)
-                static_cast<ScTableRefToken*>(pToken)->SetIndex(0);
-            else
-                assert(false);
-            return;
+            setTableIndex(pToken, 0);
+            return false;
         }
         pNewDBData = new ScDBData(*pDBData);
         bool ins = aNewNamedDBs.insert(std::unique_ptr<ScDBData>(pNewDBData));
         assert(ins); (void)ins;
     }
-    if (eOpCode == ocDBArea)
-        static_cast<FormulaIndexToken*>(pToken)->SetIndex(pNewDBData->GetIndex());
-    else if (eOpCode == ocTableRef)
-        static_cast<ScTableRefToken*>(pToken)->SetIndex(pNewDBData->GetIndex());
-    else
-        assert(false);
+    setTableIndex(pToken, pNewDBData->GetIndex());
+    return nRebound != 0;
 }
 
 }
@@ -868,20 +889,70 @@ ScFormulaCell::ScFormulaCell(const ScFormulaCell& rCell, ScDocument& rDoc, const
     bool bClipMode = rCell.rDocument.IsClipboard();
 
     //update ScNameTokens
+    // Column anchors to re-point, with the cell of the planted table each will name.
+    std::vector<std::pair<ScSingleRefToken*, ScAddress>> aAnchors;
     if (!rDocument.IsClipOrUndo() || rDoc.IsUndo())
     {
-        if (!rDocument.IsClipboardSource() || aPos.Tab() != rCell.aPos.Tab())
+        // A same-tab paste needs no name adjusting, but a table reference still does: the
+        // paste may have planted its table as another one (CopyDBsFromClip).
+        const bool bSameDocPaste = rDocument.IsClipboardSource();
+        bool bAdjustNames = !bSameDocPaste || aPos.Tab() != rCell.aPos.Tab();
+        bool bGlobalNamesToLocal = ((nCloneFlags & ScCloneFlags::NamesToLocal) != ScCloneFlags::Default);
+
+        bool bInSpan = false;
+        sal_uInt16 nLevel = 0;
+        ScRange aSrcArea, aOwnArea;
+
+        formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+        for (formula::FormulaToken* pToken = aIter.First(); pToken; pToken = aIter.Next())
         {
-            bool bGlobalNamesToLocal = ((nCloneFlags & ScCloneFlags::NamesToLocal) != ScCloneFlags::Default);
-            formula::FormulaToken* pToken = nullptr;
-            formula::FormulaTokenArrayPlainIterator aIter(*pCode);
-            while((pToken = aIter.GetNextName())!= nullptr)
+            const OpCode eOpCode = pToken->GetOpCode();
+            if (eOpCode == ocName && pToken->GetType() == formula::svIndex)
             {
-                OpCode eOpCode = pToken->GetOpCode();
-                if (eOpCode == ocName)
+                if (bAdjustNames)
                     adjustRangeName(static_cast<FormulaIndexToken*>(pToken), rDoc, rCell.rDocument, aPos, rCell.aPos, bGlobalNamesToLocal);
-                else if (eOpCode == ocDBArea || eOpCode == ocTableRef)
-                    adjustDBRange(pToken, rDoc, rCell.rDocument);
+            }
+            else if ((eOpCode == ocDBArea || eOpCode == ocTableRef)
+                     && pToken->GetType() == formula::svIndex)
+            {
+                const sal_uInt16 nClipIndex = (eOpCode == ocTableRef)
+                    ? static_cast<ScTableRefToken*>(pToken)->GetIndex() : sal_uInt16(0);
+                bInSpan = false;
+                if (adjustDBRange(pToken, rDoc, rCell.rDocument, bSameDocPaste)
+                    && eOpCode == ocTableRef)
+                {
+                    const ScDBData* pSrc = rCell.rDocument.GetDBCollection()
+                                               ->getNamedDBs().findByIndex(nClipIndex);
+                    const ScDBData* pOwn
+                        = rDoc.GetDBCollection()->getNamedDBs().findByIndex(
+                            static_cast<ScTableRefToken*>(pToken)->GetIndex());
+                    if (pSrc && pOwn)
+                    {
+                        pSrc->GetArea(aSrcArea);
+                        pOwn->GetArea(aOwnArea);
+                        bInSpan = true;
+                    }
+                }
+            }
+            else if (eOpCode == ocTableRefOpen)
+                ++nLevel;
+            else if (eOpCode == ocTableRefClose)
+            {
+                if (nLevel > 0)
+                    --nLevel;
+                if (nLevel == 0)
+                    bInSpan = false;
+            }
+            else if (bInSpan && nLevel > 0 && pToken->GetType() == formula::svSingleRef)
+            {
+                auto pRefToken = static_cast<ScSingleRefToken*>(pToken);
+                const ScAddress aAnchor
+                    = pRefToken->GetSingleRef().toAbs(rCell.rDocument, rCell.aPos);
+                aAnchors.emplace_back(
+                    pRefToken,
+                    ScAddress(aOwnArea.aStart.Col() + (aAnchor.Col() - aSrcArea.aStart.Col()),
+                              aOwnArea.aStart.Row() + (aAnchor.Row() - aSrcArea.aStart.Row()),
+                              aOwnArea.aStart.Tab()));
             }
         }
 
@@ -892,6 +963,10 @@ ScFormulaCell::ScFormulaCell(const ScFormulaCell& rCell, ScDocument& rDoc, const
         }
 
         pCode->AdjustAbsoluteRefs( rCell.rDocument, rCell.aPos, aPos, bCopyBetweenDocs );
+
+        // Assign last, so no other reference adjustment shifts them afterwards.
+        for (const auto& [pRefToken, rTarget] : aAnchors)
+            pRefToken->GetSingleRef().InitAddress(rTarget);
 
         if ((nCloneFlags & ScCloneFlags::AdjustCrossSheetRefs) != ScCloneFlags::Default)
         {
@@ -1667,13 +1742,12 @@ bool intendsArrayResultInRange(formula::FormulaToken* const* pRpn,
             // svDoubleRef push. The result is always a multi-cell
             // reference, so the array flag flows through.
             bResultArray = true;
-        else if (ocStartBinaryOperators <= eOp && eOp < ocStopBinaryOperators
-                 && eOp != ocAnd && eOp != ocOr)
+        else if (isBinaryOperatorOpCode(eOp) && eOp != ocAnd && eOp != ocOr)
             // ocAnd and ocOr share the binary-operator opcode range but
             // reduce their arguments to a scalar boolean. Treat them as
             // function-form reducers, not elementwise operators.
             bResultArray = bAnyArrayArgument;
-        else if (ocStartUnaryOperators <= eOp && eOp < ocStopUnaryOperators)
+        else if (isUnaryOperatorOpCode(eOp))
             bResultArray = bAnyArrayArgument;
         aStackIsArray.push_back(bResultArray);
     }
@@ -3130,7 +3204,7 @@ bool ScFormulaCell::IsHyperLinkCell() const
     return pCode && pCode->IsHyperLink();
 }
 
-std::unique_ptr<EditTextObject> ScFormulaCell::CreateURLObject()
+EditTextObject ScFormulaCell::CreateURLObject()
 {
     OUString aCellText;
     OUString aURL;
@@ -3273,6 +3347,11 @@ const ScMatrix* ScFormulaCell::GetMatrix()
             Interpret();
     }
     return aResult.GetMatrix().get();
+}
+
+ScConstMatrixRef ScFormulaCell::GetRawResultMatrix() const
+{
+    return aResult.GetMatrixIgnoringError();
 }
 
 bool ScFormulaCell::GetMatrixOrigin( const ScDocument& rDoc, ScAddress& rPos ) const
@@ -4601,6 +4680,19 @@ ScFormulaCell::CompareState ScFormulaCell::CompareByTokenArray( const ScFormulaC
                 assert(dynamic_cast<FormulaStringToken*>(pThisTok));
                 assert(dynamic_cast<FormulaStringToken*>(pOtherTok));
                 if(static_cast<FormulaStringToken*>(pThisTok)->GetString() != static_cast<FormulaStringToken*>(pOtherTok)->GetString())
+                    return NotEqual;
+            }
+            break;
+            case formula::svStringName:
+            case formula::svDPFieldName:
+            {
+                // A LET or LAMBDA binding name. Two formulas that differ only in
+                // such a name compute different results, so they must not share
+                // one token array.
+                assert(dynamic_cast<FormulaStringNameToken*>(pThisTok));
+                assert(dynamic_cast<FormulaStringNameToken*>(pOtherTok));
+                if (static_cast<FormulaStringNameToken*>(pThisTok)->GetString()
+                    != static_cast<FormulaStringNameToken*>(pOtherTok)->GetString())
                     return NotEqual;
             }
             break;

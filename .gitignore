@@ -15,9 +15,9 @@ doc/cpp/**
 **/.clangd
 **/.cache
 Makefile
+!qt/freebsd/editors/*/Makefile
 !/gbuild/Makefile
 Makefile.in
-coolkitconfig.xcu
 coolwsd.spec
 coolwsd.xml
 aclocal.m4
@@ -51,8 +51,7 @@ compile_commands.json
 macos/coolwsd/gmake-wrapper.sh
 macos/coda/coda/Assets.xcassets
 /qt/run-from-build
-scripts/__pycache__
-browser/introdocs/__pycache__
+__pycache__/
 
 # Test stuff
 systemplate
@@ -92,6 +91,9 @@ coolwsd.log
 *.mo
 *.tmp
 *.sw?
+
+# snapcraft pack drops the built package in the working directory
+*.snap
 
 gcov/*
 *.gcno
@@ -164,7 +166,6 @@ ios/Mobile/Info.plist
 ios/Mobile/Fonts
 ios/Mobile/Branding
 ios/Mobile/Resources/Settings.bundle/Root.plist
-ios/Mobile/coolkitconfig.xcu
 
 ios/FakeQuickLook/Info.plist
 
@@ -192,7 +193,6 @@ BUNDLE-VERSION
 gtk/mobile
 
 # Wasm app build artifacts
-/wasm/emscripten-module.js
 /wasm/exports
 /wasm/online.data
 /wasm/online.js
@@ -246,12 +246,14 @@ copilot.json
 
 # autoconf stuff
 autogen.input
+/autogen-input.mk
 
 # MacOS file manager metadata
 .DS_Store
 
 # SBOM
 collabora-online-sbom.spdx.json
+browser/sbom-shipped-js.txt
 
 # Visual Studio projects for CODA-W
 windows/coda/.vs
@@ -265,16 +267,12 @@ windows/coda/x64/
 
 # CODA-W generated files
 windows/coda/config.props
-windows/coda/ccache-shim/
 
 # CODA-Q
 .flatpak-builder/
 qt/flatpak/build-dir/
 qt/flatpak/repo/
 qt/translations/*.qm
-
-# po2json.py
-browser/util/__pycache__
 
 # coplugin
 /clang/plugin.so
@@ -287,3 +285,4 @@ browser/util/__pycache__
 # This needs to stay at the end, to honor engine/.gitignore:
 !engine/**
 /engine/translations
+/engine/tmp/

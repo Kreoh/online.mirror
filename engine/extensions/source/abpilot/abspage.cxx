@@ -22,7 +22,7 @@
 
 namespace abp
 {
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 
     AddressBookSourcePage::AddressBookSourcePage(weld::Container* pPage, OAddressBookSourcePilot* pDialog, const OUString& rUIXMLDescription, const OUString& rID)
         : AddressBookSourcePage_Base(pPage, pDialog, rUIXMLDescription, rID)
@@ -62,7 +62,7 @@ namespace abp
         return m_pDialog->getSettings();
     }
 
-    const Reference< XComponentContext > & AddressBookSourcePage::getORB() const
+    const Reference< cpo::uno::XComponentContext > & AddressBookSourcePage::getORB() const
     {
         return m_pDialog->getORB();
     }

@@ -13,6 +13,7 @@
 
 #include <comphelper/hash.hxx>
 #include <rtl/string.hxx>
+#include <sfx2/kit/helper.hxx>
 #include <svx/svdocapt.hxx>
 #include <tools/Guid.hxx>
 #include <tools/datetime.hxx>
@@ -44,6 +45,9 @@ InsertThreadedCommentOperation::InsertThreadedCommentOperation(ScDocShell& rDocS
 
 bool InsertThreadedCommentOperation::runImplementation()
 {
+    // Read the clock of the timezone the user of the current view is in.
+    SfxKitTimezoneGuard aTimezoneGuard;
+
     ScDocShellModificator aModificator(mrDocShell);
     ScDocument& rDoc = mrDocShell.GetDocument();
 
@@ -131,7 +135,10 @@ bool InsertThreadedCommentOperation::runImplementation()
 
         auto pThreaded = std::make_unique<ScThreadedCommentData>();
         pThreaded->maRoot.maGuid = tools::Guid(tools::Guid::Generate).getOUString();
-        pThreaded->maRoot.maDateTime = utl::toISO8601(DateTime(DateTime::SYSTEM).GetUNODateTime());
+        // A threaded comment entry carries the moment it was written, in UTC. The note's own
+        // date beside it is the author's wall clock.
+        pThreaded->maRoot.maDateTime
+            = utl::toISO8601(DateTime::CreateSystemUTC().GetUNODateTime());
         pThreaded->maRoot.maPersonId = aPersonId;
         pThreaded->maRoot.maText = maText;
 

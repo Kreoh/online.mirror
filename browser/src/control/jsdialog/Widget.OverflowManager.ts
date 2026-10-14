@@ -19,8 +19,13 @@ class OverflowManager {
 	parentContainer: HTMLElement;
 	data: ContainerWidgetJSON;
 	lastMaxWidth: number = -1;
+	// content width (scrollWidth) of the container at the end of the last fold pass
+	lastContentWidth: number = -1;
+	// visible width (offsetWidth) of the container at the end of the last fold pass
+	lastContainerWidth: number = -1;
 	scheduledRefresh: TaskId = '';
-	initialSizeResizeObserver: ResizeObserver | null = null;
+	sizeObserver: ResizeObserver | null = null;
+	contentObserver: MutationObserver | null = null;
 
 	constructor(parentContainer: Element, data: ContainerWidgetJSON) {
 		this.parentContainer = parentContainer as HTMLElement;
@@ -30,19 +35,71 @@ class OverflowManager {
 		if (app.map) app.map.on('refreshoverflows', this.onRefresh, this);
 		else app.console.error('OverflowManager: no app.map available');
 
-		// In classic mode the first onRefresh can fire before the parent has
-		// been laid out, leaving scrollWidth at 0 and every group folded.
-		// Re-run once the container actually has a measurable width.
+		// The widths the fold decision depends on keep changing after the
+		// container is built: the parent is laid out late (classic mode, or
+		// the notebookbar hidden until edit permission arrives), widget
+		// updates and show/hide actions arrive in deferred layouting tasks,
+		// and the UI font loads asynchronously. Watch the container and run
+		// the fold decision again whenever the measured widths change.
 		if (typeof ResizeObserver !== 'undefined') {
-			this.initialSizeResizeObserver = new ResizeObserver(() => {
-				if (this.parentContainer.scrollWidth > 0) {
-					this.initialSizeResizeObserver?.disconnect();
-					this.initialSizeResizeObserver = null;
-					this.onRefresh({ force: true } as Event & { force?: boolean });
-				}
+			this.sizeObserver = new ResizeObserver(() => {
+				if (this.parentContainer.scrollWidth > 0) this.verifyFoldState();
 			});
-			this.initialSizeResizeObserver.observe(this.parentContainer);
+			this.sizeObserver.observe(this.parentContainer);
 		}
+
+		if (typeof MutationObserver !== 'undefined') {
+			this.contentObserver = new MutationObserver((records) =>
+				this.verifyFoldState(
+					records.some((record) => this.changesFoldedItemVisibility(record)),
+				),
+			);
+			this.contentObserver.observe(this.parentContainer, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ['class', 'style'],
+				attributeOldValue: true,
+			});
+		}
+
+		if (document.fonts && document.fonts.ready)
+			document.fonts.ready.then(() => this.verifyFoldState());
+	}
+
+	// True when the record shows an item of a folded group being hidden or
+	// shown. A folded group keeps its items in a display: none container, so
+	// such a change leaves every measured width as it was.
+	changesFoldedItemVisibility(record: MutationRecord): boolean {
+		if (record.attributeName !== 'class') return false;
+		const item = record.target as HTMLElement;
+		if (!item.parentElement?.closest('.hidden-overflow-container'))
+			return false;
+		const wasHidden = /(^|\s)hidden(\s|$)/.test(record.oldValue || '');
+		return wasHidden !== item.classList.contains('hidden');
+	}
+
+	// Runs the fold decision again when the current widths differ from the
+	// ones recorded at the end of the last onRefresh, or when force is set.
+	// When nothing changed this is three property reads and no DOM
+	// modification, so it is cheap enough to call from the observers on every
+	// content change.
+	verifyFoldState(force: boolean = false) {
+		if (!this.parentContainer) return;
+		// a scheduled refresh will run the full fold decision anyway
+		if (this.scheduledRefresh !== '') return;
+		// hidden containers measure as zero width, skip them
+		if (this.parentContainer.offsetParent === null) return;
+
+		if (
+			!force &&
+			this.lastContentWidth === this.parentContainer.scrollWidth &&
+			this.lastContainerWidth === this.parentContainer.offsetWidth &&
+			this.lastMaxWidth === window.innerWidth
+		)
+			return;
+
+		this.onRefresh({ force: true } as Event & { force?: boolean });
 	}
 
 	calculateMaxWidth(): number {
@@ -76,7 +133,7 @@ class OverflowManager {
 		);
 
 		// Width not known yet -> defer the decision. The ResizeObserver
-		// installed in the constructor will retrigger onRefresh once the
+		// installed in the constructor retriggers the fold decision once the
 		// container has been measured; folding now would leave every group
 		// collapsed until the next window resize.
 		if (requiredWidth === 0) return false;
@@ -99,8 +156,16 @@ class OverflowManager {
 			app.layoutingService.cancelLayoutingTask(this.scheduledRefresh);
 		}
 
+		// Force the deferred refresh to actually measure: an intervening
+		// synchronous refreshoverflows call (e.g. from a notebookbar tab
+		// switch) may already have set lastMaxWidth for this window size
+		// from a premature measurement, taken before the newly shown
+		// content (icons, fonts) has settled. Without force, onRefresh's
+		// lastMaxWidth guard would then skip this later, layout-settled
+		// measurement and leave the earlier, possibly wrong fold state in
+		// place.
 		this.scheduledRefresh = app.layoutingService.appendLayoutingTask(() =>
-			this.onRefresh(event),
+			this.onRefresh({ force: true } as Event & { force?: boolean }),
 		);
 	}
 
@@ -146,6 +211,10 @@ class OverflowManager {
 				if (typeof element.foldGroup === 'function') element.foldGroup();
 			}
 		}
+
+		// remember the widths this fold decision was computed from
+		this.lastContentWidth = this.parentContainer.scrollWidth;
+		this.lastContainerWidth = this.parentContainer.offsetWidth;
 	}
 }
 

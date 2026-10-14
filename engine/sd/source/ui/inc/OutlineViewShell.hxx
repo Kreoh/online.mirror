@@ -132,7 +132,7 @@ public:
     */
     virtual void UpdatePreview (SdPage* pPage) override;
 
-    virtual css::uno::Reference<css::drawing::XDrawSubController> CreateSubController() override;
+    virtual cpo::uno::Reference<css::drawing::XDrawSubController> CreateSubController() override;
 
     /** Make the given page the new current page.  This method
         notifies the controller and adapts the selection of the
@@ -142,8 +142,8 @@ public:
     */
     void SetCurrentPage (SdPage* pPage);
 
-    void UpdateTitleObject( SdPage* pPage, Paragraph const * pPara );
-    void UpdateOutlineObject( SdPage* pPage, Paragraph* pPara );
+    void UpdateTitleObject( SdPage* pPage, sal_Int32 nParaPos );
+    void UpdateOutlineObject( SdPage* pPage, sal_Int32 nParaPos );
 
 private:
     OUString m_StrOldPageName;

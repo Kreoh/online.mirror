@@ -29,7 +29,7 @@
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/util/XChangesListener.hpp>
 #include <cppuhelper/basemutex.hxx>
@@ -59,23 +59,23 @@ public:
     virtual ~VbaEventsHelperBase() override;
 
     // script::vba::XVBAEventProcessor
-    virtual bool SAL_CALL hasVbaEventHandler( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs ) override;
-    virtual bool SAL_CALL processVbaEvent( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs ) override;
+    virtual bool hasVbaEventHandler( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs ) override;
+    virtual bool processVbaEvent( sal_Int32 nEventId, const cpo::uno::Sequence< cpo::uno::Any >& rArgs ) override;
 
     // document::XEventListener
-    virtual void SAL_CALL notifyEvent( const css::document::EventObject& rEvent ) override;
+    virtual void notifyEvent( const css::document::EventObject& rEvent ) override;
 
     // util::XChangesListener
-    virtual void SAL_CALL changesOccurred( const css::util::ChangesEvent& rEvent ) override;
+    virtual void changesOccurred( const css::util::ChangesEvent& rEvent ) override;
 
     // lang::XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& rEvent ) override;
+    virtual void disposing( const css::lang::EventObject& rEvent ) override;
     using WeakComponentImplHelperBase::disposing;
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override;
+    bool supportsService(OUString const & ServiceName) override;
 
     // ::cppu::OComponentHelper
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 
     // little helpers ---------------------------------------------------------
 
@@ -132,7 +132,7 @@ protected:
     /** Derived classes do additional preparations and return whether the
         event handler has to be called.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     virtual bool implPrepareEvent(
         EventQueue& rEventQueue,
@@ -142,7 +142,7 @@ protected:
     /** Derived classes have to return the argument list for the specified VBA event handler.
 
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     virtual cpo::uno::Sequence< cpo::uno::Any > implBuildArgumentList(
         const EventHandlerInfo& rInfo,
@@ -151,7 +151,7 @@ protected:
     /** Derived classes may do additional postprocessing. Called even if the
         event handler does not exist, or if an error occurred during execution.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     virtual void implPostProcessEvent(
         EventQueue& rEventQueue,
@@ -161,7 +161,7 @@ protected:
     /** Derived classes have to return the name of the Basic document module.
 
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     virtual OUString implGetDocumentModuleName(
         const EventHandlerInfo& rInfo,
@@ -186,7 +186,7 @@ private:
 
 
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     OUString getEventHandlerPath(
         const EventHandlerInfo& rInfo,
@@ -194,24 +194,24 @@ private:
 
     /** On first call, accesses the Basic library containing the VBA source code.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void ensureVBALibrary();
 
     /** Returns the type of the Basic module with the specified name.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     sal_Int32 getModuleType( const OUString& rModuleName );
 
     /** Updates the map containing paths to event handlers for a Basic module.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     ModulePathMap& updateModulePathMap( const OUString& rModuleName );
 
 protected:
-    css::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
     SfxObjectShell* mpShell;
 
 private:
@@ -220,7 +220,7 @@ private:
 
     EventHandlerInfoMap maEventInfos;
     EventHandlerPathMap maEventPaths;
-    css::uno::Reference< css::script::vba::XVBAModuleInfo > mxModuleInfos;
+    cpo::uno::Reference< css::script::vba::XVBAModuleInfo > mxModuleInfos;
     OUString maLibraryName;
 };
 

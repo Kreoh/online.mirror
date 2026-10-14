@@ -47,11 +47,11 @@ void SidebarWinAccessible::ChangeSidebarItem(const SwAnnotationItem& rSidebarIte
     mpAnchorFrame = rSidebarItem.maLayoutInfo.mpAnchorFrame;
 }
 
-css::uno::Reference<css::accessibility::XAccessible> SidebarWinAccessible::getAccessibleParent()
+cpo::uno::Reference<css::accessibility::XAccessible> SidebarWinAccessible::getAccessibleParent()
 {
     SolarMutexGuard aGuard;
 
-    css::uno::Reference<css::accessibility::XAccessible> xAccParent;
+    cpo::uno::Reference<css::accessibility::XAccessible> xAccParent;
 
     if (mpAnchorFrame && mrViewShell.GetAccessibleMap())
     {
@@ -61,7 +61,7 @@ css::uno::Reference<css::accessibility::XAccessible> SidebarWinAccessible::getAc
     return xAccParent;
 }
 
-sal_Int64 SAL_CALL SidebarWinAccessible::getAccessibleIndexInParent()
+sal_Int64 SidebarWinAccessible::getAccessibleIndexInParent()
 {
     SolarMutexGuard aGuard;
 

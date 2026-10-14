@@ -26,11 +26,12 @@
 #include "vbarange.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 ScVbaPane::ScVbaPane(
-        const css::uno::Reference< ov::XHelperInterface >& xParent,
-        uno::Reference< uno::XComponentContext > xContext,
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         const uno::Reference< frame::XModel >& rModel,
         const uno::Reference< sheet::XViewPane >& rViewPane ) :
     m_xModel(rModel, uno::UNO_SET_THROW),
@@ -40,39 +41,39 @@ ScVbaPane::ScVbaPane(
 {
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaPane::getScrollColumn()
 {
     return ( m_xViewPane->getFirstVisibleColumn() + 1 );
 }
 
-void SAL_CALL
+void
 ScVbaPane::setScrollColumn( sal_Int32 _scrollcolumn )
 {
     if( _scrollcolumn < 1 )
     {
-        throw uno::RuntimeException(u"Column number should not be less than 1"_ustr );
+        throw cpo::uno::RuntimeException(u"Column number should not be less than 1"_ustr );
     }
     m_xViewPane->setFirstVisibleColumn( _scrollcolumn - 1 );
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaPane::getScrollRow()
 {
     return ( m_xViewPane->getFirstVisibleRow() + 1 );
 }
 
-void SAL_CALL
+void
 ScVbaPane::setScrollRow( sal_Int32 _scrollrow )
 {
     if( _scrollrow < 1 )
     {
-        throw uno::RuntimeException(u"Row number should not be less than 1"_ustr );
+        throw cpo::uno::RuntimeException(u"Row number should not be less than 1"_ustr );
     }
     m_xViewPane->setFirstVisibleRow( _scrollrow - 1 );
 }
 
-uno::Reference< excel::XRange > SAL_CALL
+uno::Reference< excel::XRange >
 ScVbaPane::getVisibleRange()
 {
     // TODO: Excel includes partly visible rows/columns, Calc does not
@@ -86,7 +87,7 @@ ScVbaPane::getVisibleRange()
 }
 
 //Method
-void SAL_CALL
+void
 ScVbaPane::SmallScroll( const cpo::uno::Any& Down, const cpo::uno::Any& Up, const cpo::uno::Any& ToRight, const cpo::uno::Any& ToLeft )
 {
     OUString messageBuffer;
@@ -127,7 +128,7 @@ ScVbaPane::SmallScroll( const cpo::uno::Any& Down, const cpo::uno::Any& Up, cons
             messageBuffer += "Error getting parameter: ToLeft\n";
     }
     if( !messageBuffer.isEmpty() )
-        throw uno::RuntimeException( messageBuffer );
+        throw cpo::uno::RuntimeException( messageBuffer );
 
     sal_Int32 newStartRow = visibleRange.StartRow + downRows;
     if( newStartRow < 0 )
@@ -139,7 +140,7 @@ ScVbaPane::SmallScroll( const cpo::uno::Any& Down, const cpo::uno::Any& Up, cons
     m_xViewPane->setFirstVisibleColumn( newStartCol );
 }
 
-void SAL_CALL
+void
 ScVbaPane::LargeScroll( const cpo::uno::Any& Down, const cpo::uno::Any& Up, const cpo::uno::Any& ToRight, const cpo::uno::Any& ToLeft )
 {
     OUString messageBuffer;
@@ -182,7 +183,7 @@ ScVbaPane::LargeScroll( const cpo::uno::Any& Down, const cpo::uno::Any& Up, cons
             messageBuffer += "Error getting parameter: ToLeft\n";
     }
     if( !messageBuffer.isEmpty() )
-        throw uno::RuntimeException( messageBuffer );
+        throw cpo::uno::RuntimeException( messageBuffer );
 
     sal_Int32 newStartRow = visibleRange.StartRow + (downPages * vertPageSize );
     if( newStartRow < 0 )

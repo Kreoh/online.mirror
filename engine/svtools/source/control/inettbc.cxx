@@ -24,7 +24,7 @@
 #include <svtools/inettbc.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/beans/Property.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
@@ -64,8 +64,8 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::ucb;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class SvtURLBox_Impl
 {
@@ -95,7 +95,7 @@ class SvtMatchContext_Impl: public salhelper::Thread
 
     std::mutex mutex_;
     bool stopped_;
-    css::uno::Reference< css::ucb::XCommandProcessor > processor_;
+    cpo::uno::Reference< css::ucb::XCommandProcessor > processor_;
     sal_Int32 commandId_;
 
     DECL_LINK(                Select_Impl, void*, void );
@@ -156,7 +156,7 @@ void SvtMatchContext_Impl::FillPicklist(std::vector<OUString>& rPickList)
 
 void SvtMatchContext_Impl::Stop()
 {
-    css::uno::Reference< css::ucb::XCommandProcessor > proc;
+    cpo::uno::Reference< css::ucb::XCommandProcessor > proc;
     sal_Int32 id(0);
     {
         std::scoped_lock g(mutex_);
@@ -461,9 +461,9 @@ void SvtMatchContext_Impl::doExecute()
                     bool folder = false;
                     if (aURLObject.hasFinalSlash()) {
                         try {
-                            const css::uno::Reference< css::uno::XComponentContext >&
+                            const cpo::uno::Reference< cpo::uno::XComponentContext >&
                                 ctx(comphelper::getProcessComponentContext());
-                            css::uno::Reference<
+                            cpo::uno::Reference<
                                 css::ucb::XUniversalContentBroker > ucb(
                                     css::ucb::UniversalContentBroker::create(
                                         ctx));
@@ -474,13 +474,13 @@ void SvtMatchContext_Impl::doExecute()
                                   /* Attributes */ {} }
                             };
                             cpo::uno::Any res;
-                            css::uno::Reference< css::ucb::XCommandProcessor >
+                            cpo::uno::Reference< css::ucb::XCommandProcessor >
                                 proc(
                                     ucb->queryContent(
                                         ucb->createContentIdentifier(aMainURL)),
-                                    css::uno::UNO_QUERY_THROW);
-                            css::uno::Reference< css::ucb::XCommandProcessor2 >
-                                proc2(proc, css::uno::UNO_QUERY);
+                                    cpo::uno::UNO_QUERY_THROW);
+                            cpo::uno::Reference< css::ucb::XCommandProcessor2 >
+                                proc2(proc, cpo::uno::UNO_QUERY);
                             sal_Int32 id = proc->createCommandIdentifier();
                             try {
                                 {
@@ -493,13 +493,13 @@ void SvtMatchContext_Impl::doExecute()
                                         u"getPropertyValues"_ustr, -1,
                                         cpo::uno::Any(prop)),
                                     id,
-                                    css::uno::Reference<
+                                    cpo::uno::Reference<
                                         css::ucb::XCommandEnvironment >());
                             } catch (...) {
                                 if (proc2.is()) {
                                     try {
                                         proc2->releaseCommandIdentifier(id);
-                                    } catch (css::uno::RuntimeException &) {
+                                    } catch (cpo::uno::RuntimeException &) {
                                         TOOLS_WARN_EXCEPTION("svtools.control", "ignoring");
                                     }
                                 }
@@ -520,8 +520,8 @@ void SvtMatchContext_Impl::doExecute()
                                     return;
                                 }
                             }
-                            css::uno::Reference< css::sdbc::XRow > row(
-                                res, css::uno::UNO_QUERY_THROW);
+                            cpo::uno::Reference< css::sdbc::XRow > row(
+                                res, cpo::uno::UNO_QUERY_THROW);
                             folder = row->getBoolean(1) && !row->wasNull();
                         } catch (cpo::uno::Exception &) {
                             TOOLS_WARN_EXCEPTION("svtools.control", "ignoring");
@@ -680,26 +680,11 @@ bool SvtURLBox_Impl::TildeParsing([[maybe_unused]] OUString& aText,
             sal_Int32 nNameEnd = aText.indexOf( '/' );
             OUString aUserName = aText.copy( 1, ( nNameEnd != -1 ) ? nNameEnd : ( aText.getLength() - 1 ) );
 
-            struct passwd* pPasswd = nullptr;
-#ifdef __sun
-            Sequence< sal_Int8 > sBuf( 1024 );
-            struct passwd aTmp;
-            sal_Int32 nRes = getpwnam_r( OUStringToOString( aUserName, RTL_TEXTENCODING_ASCII_US ).getStr(),
-                                  &aTmp,
-                                  (char*)sBuf.getArray(),
-                                  1024,
-                                  &pPasswd );
-            if( !nRes && pPasswd )
-                aParseTilde = OUString::createFromAscii(pPasswd->pw_dir);
-            else
-                return false; // no such user
-#else
-            pPasswd = getpwnam( OUStringToOString( aUserName, RTL_TEXTENCODING_ASCII_US ).getStr() );
+            struct passwd* pPasswd = getpwnam( OUStringToOString( aUserName, RTL_TEXTENCODING_ASCII_US ).getStr() );
             if( pPasswd )
                 aParseTilde = OUString::createFromAscii(pPasswd->pw_dir);
             else
                 return false; // no such user
-#endif
 
             // in case the path is "~username" then there should
             // be no trailing slash at the end

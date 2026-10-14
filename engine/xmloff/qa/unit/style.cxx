@@ -25,6 +25,7 @@
 #include <unotools/saveopt.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// Covers xmloff/source/style/ fixes.
 class XmloffStyleTest : public UnoApiXmlTest
@@ -111,7 +112,7 @@ CPPUNIT_TEST_FIXTURE(XmloffStyleTest, testFontSorting)
         OString aName(reinterpret_cast<char const*>(pName));
 
         // Ignore numbers at the end, those are just appended to make all names unique.
-        while (rtl::isAsciiDigit(static_cast<sal_uInt32>(aName[aName.getLength() - 1])))
+        while (rtl::isAsciiDigit(static_cast<unsigned char>(aName[aName.getLength() - 1])))
         {
             aName = aName.copy(0, aName.getLength() - 1);
         }

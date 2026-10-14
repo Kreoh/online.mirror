@@ -23,7 +23,7 @@
 
 #include <com/sun/star/ucb/AlreadyInitializedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/window.hxx>
@@ -35,18 +35,18 @@ namespace pcr
 {
 
 
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::inspection::XPropertyControl;
-    using ::com::sun::star::uno::RuntimeException;
+    using ::cpo::uno::RuntimeException;
     using ::cpo::uno::Sequence;
     using ::cpo::uno::Any;
     using ::cpo::uno::Exception;
     using ::com::sun::star::inspection::XObjectInspectorUI;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::XInterface;
     using ::com::sun::star::ucb::AlreadyInitializedException;
     using ::com::sun::star::lang::IllegalArgumentException;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY;
     using ::com::sun::star::awt::XWindow;
 
     DefaultHelpProvider::DefaultHelpProvider()
@@ -142,7 +142,7 @@ namespace pcr
 
         try
         {
-            Reference< XWindow > xControlWindow( _rxControl->getControlWindow(), css::uno::UNO_SET_THROW );
+            Reference< XWindow > xControlWindow( _rxControl->getControlWindow(), cpo::uno::UNO_SET_THROW );
             pControlWindow = VCLUnoHelper::GetWindow( xControlWindow );
         }
         catch( const Exception& )
@@ -172,9 +172,9 @@ namespace pcr
 
 } // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_DefaultHelpProvider_get_implementation(
-    css::uno::XComponentContext*  , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext*  , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::DefaultHelpProvider());
 }

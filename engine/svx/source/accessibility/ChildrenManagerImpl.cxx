@@ -48,7 +48,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 
 namespace accessibility {
 
@@ -114,7 +115,7 @@ sal_Int64 ChildrenManagerImpl::GetChildCount() const noexcept
 }
 
 
-const css::uno::Reference<css::drawing::XShape>& ChildrenManagerImpl::GetChildShape(sal_Int64 nIndex)
+const cpo::uno::Reference<css::drawing::XShape>& ChildrenManagerImpl::GetChildShape(sal_Int64 nIndex)
 {
     // Check whether the given index is valid.
     if (nIndex < 0 || o3tl::make_unsigned(nIndex) >= maVisibleChildren.size())
@@ -529,7 +530,7 @@ void ChildrenManagerImpl::RemoveShape (const Reference<drawing::XShape>& rxShape
 }
 
 
-void ChildrenManagerImpl::SetShapeList (const css::uno::Reference<css::drawing::XShapes>& xShapeList)
+void ChildrenManagerImpl::SetShapeList (const cpo::uno::Reference<css::drawing::XShapes>& xShapeList)
 {
     mxShapeList = xShapeList;
 }
@@ -640,7 +641,7 @@ void ChildrenManagerImpl::SetInfo (const AccessibleShapeTreeInfo& rShapeTreeInfo
 }
 
 // lang::XEventListener
-void SAL_CALL
+void
     ChildrenManagerImpl::disposing (const lang::EventObject& rEventObject)
 {
     if (rEventObject.Source == maShapeTreeInfo.GetModelBroadcaster()
@@ -670,7 +671,7 @@ void SAL_CALL
 // document::XEventListener
 /** Listen for new and removed shapes.
 */
-void SAL_CALL
+void
     ChildrenManagerImpl::notifyEvent (
         const document::EventObject& rEventObject)
 {
@@ -687,7 +688,7 @@ void SAL_CALL
 }
 
 // view::XSelectionChangeListener
-void  SAL_CALL
+void
     ChildrenManagerImpl::selectionChanged (const lang::EventObject& /*rEvent*/)
 {
     UpdateSelection ();
@@ -707,7 +708,7 @@ void ChildrenManagerImpl::impl_dispose()
             xSelectionSupplier->removeSelectionChangeListener(this);
         }
     }
-    catch( uno::RuntimeException&)
+    catch( cpo::uno::RuntimeException&)
     {}
 
     try
@@ -716,7 +717,7 @@ void ChildrenManagerImpl::impl_dispose()
             xController->removeEventListener(
                 static_cast<document::XEventListener*>(this));
     }
-    catch( uno::RuntimeException&)
+    catch( cpo::uno::RuntimeException&)
     {}
 
     maShapeTreeInfo.SetController (nullptr);
@@ -729,7 +730,7 @@ void ChildrenManagerImpl::impl_dispose()
                 static_cast<document::XEventListener*>(this));
         maShapeTreeInfo.SetModelBroadcaster (nullptr);
     }
-    catch( uno::RuntimeException& )
+    catch( cpo::uno::RuntimeException& )
     {}
 
     ClearAccessibleShapeList ();
@@ -751,7 +752,7 @@ void ChildrenManagerImpl::ViewForwarderChanged()
 // IAccessibleParent
 bool ChildrenManagerImpl::ReplaceChild (
     AccessibleShape* pCurrentChild,
-    const css::uno::Reference< css::drawing::XShape >& _rxShape,
+    const cpo::uno::Reference< css::drawing::XShape >& _rxShape,
     const tools::Long /*_nIndex*/,
     const AccessibleShapeTreeInfo& _rShapeTreeInfo)
 {
@@ -861,7 +862,7 @@ void ChildrenManagerImpl::UpdateSelection()
         }
 
         // tdf#139220 to quickly find if a given drawing::XShape is selected
-        std::vector<css::uno::Reference<css::drawing::XShape>> aSortedSelectedShapes;
+        std::vector<cpo::uno::Reference<css::drawing::XShape>> aSortedSelectedShapes;
         if (!xSelectedShape.is() && xSelectedShapeAccess.is())
         {
             sal_Int32 nCount = xSelectedShapeAccess->getCount();
@@ -874,7 +875,7 @@ void ChildrenManagerImpl::UpdateSelection()
                 aSortedSelectedShapes.reserve(nCount);
                 for (sal_Int32 i = 0; i < nCount; ++i)
                 {
-                    css::uno::Reference<css::drawing::XShape> xShape(xSelectedShapeAccess->getByIndex(i), uno::UNO_QUERY);
+                    cpo::uno::Reference<css::drawing::XShape> xShape(xSelectedShapeAccess->getByIndex(i), uno::UNO_QUERY);
                     aSortedSelectedShapes.push_back(xShape);
                 }
             }

@@ -20,9 +20,9 @@
 #ifndef INCLUDED_SALHELPER_TIMER_HXX
 #define INCLUDED_SALHELPER_TIMER_HXX
 
-#include "salhelper/simplereferenceobject.hxx"
-#include "osl/time.h"
-#include "salhelper/salhelperdllapi.h"
+#include <salhelper/simplereferenceobject.hxx>
+#include <osl/time.h>
+#include <salhelper/salhelperdllapi.h>
 
 namespace salhelper
 {
@@ -185,7 +185,7 @@ protected:
 
     /** Destructor.
      */
-    virtual ~Timer() SAL_OVERRIDE;
+    virtual ~Timer() override;
 
     /** What should be done when the 'timer fires'.
      */
@@ -213,11 +213,11 @@ private:
 
     /** Copy constructor deleted.
      */
-    Timer( const Timer& rTimer ) SAL_DELETED_FUNCTION;
+    Timer( const Timer& rTimer ) = delete;
 
     /** Copy assignment operator deleted.
      */
-    void operator=( const Timer& rTimer ) SAL_DELETED_FUNCTION;
+    void operator=( const Timer& rTimer ) = delete;
 
     friend class TimerManager;
 };

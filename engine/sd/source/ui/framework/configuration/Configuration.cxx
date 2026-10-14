@@ -30,7 +30,7 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 using ::sd::framework::FrameworkHelper;
 
@@ -186,7 +186,7 @@ rtl::Reference<Configuration> Configuration::createClone()
 
 //----- XNamed ----------------------------------------------------------------
 
-OUString SAL_CALL Configuration::getName()
+OUString Configuration::getName()
 {
     std::unique_lock aGuard (m_aMutex);
     OUStringBuffer aString;
@@ -209,7 +209,7 @@ OUString SAL_CALL Configuration::getName()
     return aString.makeStringAndClear();
 }
 
-void SAL_CALL Configuration::setName (const OUString&)
+void Configuration::setName (const OUString&)
 {
     // ignored.
 }

@@ -34,7 +34,7 @@
 
 #include <sfx2/viewfrm.hxx>
 #include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/uno/DeploymentException.hpp>
+#include <cpo/uno/DeploymentException.hpp>
 #include <framework/AbstractView.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
@@ -42,7 +42,7 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 using ::sd::framework::FrameworkHelper;
 
@@ -169,7 +169,7 @@ vcl::Window* ViewTabBar::GetAnchorWindow(
             if (xCC.is())
                 xPane = dynamic_cast<framework::AbstractPane*>(xCC->getResource(rxViewTabBarId->getAnchor()).get());
         }
-        catch (const RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
         }
 
@@ -179,7 +179,7 @@ vcl::Window* ViewTabBar::GetAnchorWindow(
             if (auto pPane = dynamic_cast<framework::Pane*>(xPane.get()))
                 pWindow = pPane->GetWindow()->GetParent();
         }
-        catch (const RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
         }
     }
@@ -202,7 +202,7 @@ void ViewTabBar::Listener::notifyConfigurationChange (
 
 //----- XEventListener --------------------------------------------------------
 
-void SAL_CALL ViewTabBar::Listener::disposing(
+void ViewTabBar::Listener::disposing(
     const lang::EventObject& rEvent)
 {
     if (rEvent.Source == cppu::getXWeak(mrParent.mxConfigurationController.get()))
@@ -245,7 +245,7 @@ bool ViewTabBar::ActivatePage(size_t nIndex)
         rtl::Reference<framework::ConfigurationController> xConfigurationController (
             mxController->getConfigurationController());
         if ( ! xConfigurationController.is())
-            throw RuntimeException();
+            throw cpo::uno::RuntimeException();
         rtl::Reference<sd::framework::AbstractView> xView;
         try
         {
@@ -253,7 +253,7 @@ bool ViewTabBar::ActivatePage(size_t nIndex)
                           new sd::framework::ResourceId(
                               FrameworkHelper::msCenterPaneURL)).get());
         }
-        catch (const DeploymentException&)
+        catch (const cpo::uno::DeploymentException&)
         {
         }
 
@@ -272,7 +272,7 @@ bool ViewTabBar::ActivatePage(size_t nIndex)
             return true;
         }
     }
-    catch (const RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd.view");
     }

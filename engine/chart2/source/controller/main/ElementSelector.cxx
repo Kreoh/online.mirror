@@ -37,10 +37,10 @@ namespace chart
 {
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 SelectorListBox::SelectorListBox(vcl::Window* pParent)
@@ -302,8 +302,8 @@ uno::Reference< awt::XWindow > ElementSelectorToolbarController::createItemWindo
 
 } // chart2
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart_ElementSelectorToolbarController_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart_ElementSelectorToolbarController_get_implementation(cpo::uno::XComponentContext *,
                                                                             cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::ElementSelectorToolbarController );

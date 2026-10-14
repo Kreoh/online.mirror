@@ -18,6 +18,7 @@
  */
 
 #include <svx/svxdlg.hxx>
+#include <docuno.hxx>
 #include <svx/dialogs.hrc>
 #include <sc.hrc>
 
@@ -61,6 +62,7 @@
 #include <vcl/unohelp2.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 SFX_IMPL_INTERFACE(ScDrawShell, SfxShell)
 
@@ -94,7 +96,7 @@ void ScDrawShell::setModified()
     const SfxObjectShell* pShell = GetObjectShell();
     if ( pShell )
     {
-        css::uno::Reference< css::util::XModifiable > xModif( pShell->GetModel(), css::uno::UNO_QUERY );
+        cpo::uno::Reference< css::util::XModifiable > xModif( pShell->GetModel(), cpo::uno::UNO_QUERY );
         if ( xModif.is() )
             xModif->setModified( true );
     }
@@ -155,16 +157,16 @@ void ScDrawShell::ExecDrawAttr( SfxRequest& rReq )
             if (pArgs && pArgs->Count () >= 3)
             {
                 const SfxUInt32Item* handleNumItem = rReq.GetArg<SfxUInt32Item>(FN_PARAM_1);
-                const SfxUInt32Item* newPosXTwips = rReq.GetArg<SfxUInt32Item>(FN_PARAM_2);
-                const SfxUInt32Item* newPosYTwips = rReq.GetArg<SfxUInt32Item>(FN_PARAM_3);
+                const SfxInt32Item* newPosXTwips = rReq.GetArg<SfxInt32Item>(FN_PARAM_2);
+                const SfxInt32Item* newPosYTwips = rReq.GetArg<SfxInt32Item>(FN_PARAM_3);
                 const SfxInt32Item* OrdNum = rReq.GetArg<SfxInt32Item>(FN_PARAM_4);
 
                 const sal_uLong handleNum = handleNumItem->GetValue();
-                const sal_uLong newPosX = convertTwipToMm100(newPosXTwips->GetValue());
-                const sal_uLong newPosY = convertTwipToMm100(newPosYTwips->GetValue());
+                const tools::Long newPosX = convertTwipToMm100(newPosXTwips->GetValue());
+                const tools::Long newPosY = convertTwipToMm100(newPosYTwips->GetValue());
 
                 bool bNegateX = comphelper::COKit::isActive() && rViewData.GetDocument().IsLayoutRTL(rViewData.CurrentTabForData());
-                pView->MoveShapeHandle(handleNum, Point(bNegateX ? -static_cast<tools::Long>(newPosX) : newPosX, newPosY), OrdNum ? OrdNum->GetValue() : -1);
+                pView->MoveShapeHandle(handleNum, Point(bNegateX ? -newPosX : newPosX, newPosY), OrdNum ? OrdNum->GetValue() : -1);
             }
         }
         break;
@@ -245,7 +247,7 @@ void ScDrawShell::ExecDrawAttr( SfxRequest& rReq )
                         pView->BegUndo();
 
                     pView->SetAttrToMarked(*pNewArgs, false);
-                    svx::applyBareLineColorToMarked(*pView, *pReqArgs);
+                    svx::applyBareLineAttributesToMarked(*pView, *pReqArgs);
 
                     if (bUndo)
                         pView->EndUndo();
@@ -393,6 +395,13 @@ void ScDrawShell::ExecDrawAttr( SfxRequest& rReq )
         case SID_ATTR_GLOW_TEXT_RADIUS:
         case SID_ATTR_GLOW_TEXT_TRANSPARENCY:
         case SID_ATTR_SOFTEDGE_RADIUS:
+        case SID_ATTR_REFLECTION:
+        case SID_ATTR_REFLECTION_DISTANCE:
+        case SID_ATTR_REFLECTION_BLUR_RADIUS:
+        case SID_ATTR_REFLECTION_START_TRANSPARENCY:
+        case SID_ATTR_REFLECTION_START_POSITION:
+        case SID_ATTR_REFLECTION_END_TRANSPARENCY:
+        case SID_ATTR_REFLECTION_END_POSITION:
         case SID_ATTR_TEXTCOLUMNS_NUMBER:
         case SID_ATTR_TEXTCOLUMNS_SPACING:
             if (const SfxItemSet* pNewArgs = rReq.GetArgs())
@@ -435,7 +444,7 @@ void ScDrawShell::ExecuteMacroAssign(SdrObject* pObj, weld::Window* pWin)
     aNamesItem.AddEvent( ScResId(RID_SCSTR_ONCLICK), OUString(), SvMacroItemId::OnClick );
     xItemSet->Put( aNamesItem );
 
-    css::uno::Reference < css::frame::XFrame > xFrame;
+    cpo::uno::Reference < css::frame::XFrame > xFrame;
     if (GetViewShell())
         xFrame = GetViewShell()->GetViewFrame().GetFrame().GetFrameInterface();
 

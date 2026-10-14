@@ -22,6 +22,7 @@
 #include "numfmuno.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
 class SvNumFmtSuppl_Impl
@@ -68,14 +69,14 @@ void SvNumberFormatsSupplierObj::SetNumberFormatter(SvNumberFormatter* pNew)
 
 // XNumberFormatsSupplier
 
-uno::Reference<beans::XPropertySet> SAL_CALL SvNumberFormatsSupplierObj::getNumberFormatSettings()
+uno::Reference<beans::XPropertySet> SvNumberFormatsSupplierObj::getNumberFormatSettings()
 {
     ::osl::MutexGuard aGuard( pImpl->aMutex );
 
     return new SvNumberFormatSettingsObj( *this, pImpl->aMutex );
 }
 
-uno::Reference<util::XNumberFormats> SAL_CALL SvNumberFormatsSupplierObj::getNumberFormats()
+uno::Reference<util::XNumberFormats> SvNumberFormatsSupplierObj::getNumberFormats()
 {
     ::osl::MutexGuard aGuard( pImpl->aMutex );
 

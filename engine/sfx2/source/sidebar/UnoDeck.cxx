@@ -22,6 +22,7 @@
 #include <vcl/svapp.hxx>
 
 using namespace css;
+using namespace ::cpo;
 using namespace ::sfx2::sidebar;
 
 SfxUnoDeck::SfxUnoDeck(uno::Reference<frame::XFrame> _xFrame, OUString deckId):
@@ -35,12 +36,12 @@ SidebarController* SfxUnoDeck::getSidebarController()
     return SidebarController::GetSidebarControllerForFrame(xFrame);
 }
 
-OUString SAL_CALL SfxUnoDeck::getId()
+OUString SfxUnoDeck::getId()
 {
     return mDeckId;
 }
 
-OUString SAL_CALL  SfxUnoDeck::getTitle()
+OUString  SfxUnoDeck::getTitle()
 {
     SolarMutexGuard aGuard;
 
@@ -57,7 +58,7 @@ OUString SAL_CALL  SfxUnoDeck::getTitle()
     return pTitleBar->GetTitle();
 }
 
-void SAL_CALL SfxUnoDeck::setTitle( const OUString& newTitle )
+void SfxUnoDeck::setTitle( const OUString& newTitle )
 {
     SolarMutexGuard aGuard;
 
@@ -79,7 +80,7 @@ void SAL_CALL SfxUnoDeck::setTitle( const OUString& newTitle )
     }
 }
 
-bool SAL_CALL SfxUnoDeck::isActive()
+bool SfxUnoDeck::isActive()
 {
     SolarMutexGuard aGuard;
 
@@ -88,7 +89,7 @@ bool SAL_CALL SfxUnoDeck::isActive()
 }
 
 
-void SAL_CALL SfxUnoDeck::activate( const bool bActivate )
+void SfxUnoDeck::activate( const bool bActivate )
 {
     SolarMutexGuard aGuard;
 
@@ -106,7 +107,7 @@ void SAL_CALL SfxUnoDeck::activate( const bool bActivate )
 
 }
 
-uno::Reference<ui::XPanels> SAL_CALL SfxUnoDeck::getPanels()
+uno::Reference<ui::XPanels> SfxUnoDeck::getPanels()
 {
     SolarMutexGuard aGuard;
 
@@ -114,7 +115,7 @@ uno::Reference<ui::XPanels> SAL_CALL SfxUnoDeck::getPanels()
     return panels;
 }
 
-sal_Int32 SAL_CALL SfxUnoDeck::getOrderIndex()
+sal_Int32 SfxUnoDeck::getOrderIndex()
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -123,7 +124,7 @@ sal_Int32 SAL_CALL SfxUnoDeck::getOrderIndex()
     return index;
 }
 
-void SAL_CALL SfxUnoDeck::setOrderIndex( const sal_Int32 newOrderIndex )
+void SfxUnoDeck::setOrderIndex( const sal_Int32 newOrderIndex )
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -138,7 +139,7 @@ void SAL_CALL SfxUnoDeck::setOrderIndex( const sal_Int32 newOrderIndex )
     }
 }
 
-void SAL_CALL SfxUnoDeck::moveFirst()
+void SfxUnoDeck::moveFirst()
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -161,7 +162,7 @@ void SAL_CALL SfxUnoDeck::moveFirst()
     }
 }
 
-void SAL_CALL SfxUnoDeck::moveLast()
+void SfxUnoDeck::moveLast()
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -184,7 +185,7 @@ void SAL_CALL SfxUnoDeck::moveLast()
     }
 }
 
-void SAL_CALL SfxUnoDeck::moveUp()
+void SfxUnoDeck::moveUp()
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -215,7 +216,7 @@ void SAL_CALL SfxUnoDeck::moveUp()
     }
 }
 
-void SAL_CALL SfxUnoDeck::moveDown()
+void SfxUnoDeck::moveDown()
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();

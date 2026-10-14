@@ -24,7 +24,8 @@
 #include <config_feature_desktop.h>
 
 #include <app.hxx>
-#include <dp_misc.h>
+
+#include <officepipe.hxx>
 #include "officeipcthread.hxx"
 #include "cmdlineargs.hxx"
 #include <com/sun/star/frame/TerminationVetoException.hpp>
@@ -44,7 +45,6 @@
 #include <rtl/process.h>
 #include <o3tl/string_view.hxx>
 #include <comphelper/diagnose_ex.hxx>
-#include <comphelper/scopeguard.hxx>
 
 #include <cassert>
 #include <cstdlib>
@@ -57,7 +57,7 @@
 #endif
 
 using namespace desktop;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
 using namespace ::cpo::uno;
@@ -720,7 +720,7 @@ RequestHandler::Status PipeIpcThread::enable(rtl::Reference<IpcThread> * thread)
     OUString aPipeIdent;
     try
     {
-        aPipeIdent = dp_misc::generateOfficePipeId();
+        aPipeIdent = desktop::generateOfficePipeId();
     }
     catch (const cpo::uno::Exception&)
     {
@@ -1075,8 +1075,6 @@ bool IpcThread::process(OString const & arguments, bool * waitProcessed) {
 void PipeIpcThread::execute()
 {
     assert(m_handler != nullptr);
-    dp_misc::setOfficeIpcThreadRunning(true);
-    comphelper::ScopeGuard resetThreadRunning([]() { dp_misc::setOfficeIpcThreadRunning(false); });
     do
     {
         osl::StreamPipe aStreamPipe;

@@ -51,20 +51,23 @@
 #include <DocumentRenderer.hxx>
 #include <optsitem.hxx>
 #include <sdmod.hxx>
+#include <tools/PresentationLintSession.hxx>
 
 #include <com/sun/star/document/XViewDataSupplier.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
-#include <com/sun/star/uno/DeploymentException.hpp>
+#include <cpo/uno/DeploymentException.hpp>
 #include <framework/FrameworkHelper.hxx>
 
 #include <sal/log.hxx>
 #include <rtl/ref.hxx>
+#include <unomodel.hxx>
 #include <sfx2/msg.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svl/intitem.hxx>
+#include <svl/stritem.hxx>
 #include <svl/whiter.hxx>
 #include <svx/theme/ThemeColorChangerCommon.hxx>
 #include <vcl/commandinfoprovider.hxx>
@@ -80,7 +83,11 @@
 #include <editeng/editview.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svdobj.hxx>
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <svx/svdedxv.hxx>
 #include <svx/svdobjkind.hxx>
+#include <svx/sidebar/SelectionAnalyzer.hxx>
 #include <vcl/EnumContext.hxx>
 #include <tools/svborder.hxx>
 #include <o3tl/unreachable.hxx>
@@ -99,7 +106,7 @@ using namespace com::sun::star::beans;
 using namespace com::sun::star::container;
 using namespace com::sun::star::drawing::framework;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace {
@@ -145,6 +152,11 @@ public:
     std::shared_ptr<ViewShellManager> mpViewShellManager;
     std::shared_ptr<sdtools::EventMultiplexer> mpEventMultiplexer;
     std::unique_ptr<FormShellManager> mpFormShellManager;
+
+    /** The cleanup run of this view, made when the client first asks for something and gone once
+        the client asks for it to go or the view itself does.
+    */
+    std::unique_ptr<lint::LintSession> mpLintSession;
 
     explicit Implementation (ViewShellBase& rBase);
     ~Implementation();
@@ -436,14 +448,14 @@ OUString ViewShellBase::GetSelectionText(bool bCompleteWords, bool /*bOnlyASampl
         :   SfxViewShell::GetSelectionText(bCompleteWords);
 }
 
-bool ViewShellBase::HasSelection(bool bText) const
+bool ViewShellBase::HasSelection(bool bMustHaveText) const
 {
     std::shared_ptr<ViewShell> const pMainShell(GetMainViewShell());
     DrawViewShell *const pDrawViewShell(
             dynamic_cast<DrawViewShell*>(pMainShell.get()));
     return pDrawViewShell
-        ?   pDrawViewShell->HasSelection(bText)
-        :   SfxViewShell::HasSelection(bText);
+        ?   pDrawViewShell->HasSelection(bMustHaveText)
+        :   SfxViewShell::HasSelection(bMustHaveText);
 }
 
 void ViewShellBase::InnerResizePixel (const Point& rOrigin, const Size &rSize, bool)
@@ -655,6 +667,26 @@ void ViewShellBase::Execute (SfxRequest& rRequest)
             mpImpl->ProcessRestoreEditingViewSlot();
             break;
 
+        case SID_PRESENTATION_CLEANUP:
+        {
+            OUString sRequestJson;
+            if (const SfxStringItem* pDataJson = rRequest.GetArg<SfxStringItem>(FN_PARAM_1))
+                sRequestJson = pDataJson->GetValue();
+
+            if (!mpImpl->mpLintSession)
+                mpImpl->mpLintSession = std::make_unique<lint::LintSession>(*this);
+
+            // The session answers the request from inside this call where it can, and waits for a
+            // turn of the scheduler where it has more work to do. A request that asks for the
+            // session to go leaves its answer behind, and the session is released here.
+            if (mpImpl->mpLintSession->handleRequest(sRequestJson)
+                == lint::LintSession::Outcome::Release)
+                mpImpl->mpLintSession.reset();
+
+            rRequest.Done();
+        }
+        break;
+
         case SID_PROTECTPOS:
         case SID_PROTECTSIZE:
         {
@@ -819,19 +851,27 @@ std::vector<OUString> ViewShellBase::GetParentContextNames() const
 {
     std::vector<OUString> aParents;
 
-    // While text inside a shape is edited the primary context is the text
-    // context, which maps to the home tab. Report the shape context too so the
-    // Shape tab stays available. A table carries its own context that already
-    // covers its text, and an OLE object owns the ribbon during in-place edit,
-    // so leave those out.
+    // While text inside an object is edited the primary context is the text
+    // context, which maps to the home tab. Report the context the object has
+    // when it is selected too, so its tab stays available, but only when that
+    // is a shape context. A text box or a placeholder has the text object
+    // context, a table carries its own context that already covers its text,
+    // and an OLE object owns the ribbon during in-place edit, so none of these
+    // report a parent context.
     SdrView* pView = GetDrawView();
     if (pView && pView->IsTextEdit())
     {
         const SdrObject* pObj = pView->GetTextEditObject();
-        if (pObj && pObj->GetObjIdentifier() != SdrObjKind::Table
-            && pObj->GetObjIdentifier() != SdrObjKind::OLE2)
-            aParents.push_back(
-                vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Draw));
+        if (pObj)
+        {
+            const vcl::EnumContext::Context eContext
+                = svx::sidebar::SelectionAnalyzer::GetContextForObjectId_SD(
+                    pObj->GetObjIdentifier(),
+                    svx::sidebar::SelectionAnalyzer::ViewType::Standard);
+            if (eContext == vcl::EnumContext::Context::Draw
+                || eContext == vcl::EnumContext::Context::DrawLine)
+                aParents.push_back(vcl::EnumContext::GetContextName(eContext));
+        }
     }
 
     return aParents;
@@ -926,6 +966,25 @@ OUString ViewShellBase::GetInitialViewShellType() const
     return sRequestedView;
 }
 
+void ViewShellBase::textEditContentChanged()
+{
+    if (!mpDocShell)
+        return;
+
+    // The edit belongs to this view, so the object it runs on comes from here rather than from
+    // whichever view the document happens to call its current one.
+    std::shared_ptr<ViewShell> pViewShell = GetMainViewShell();
+    const SdrObjEditView* pView = pViewShell ? pViewShell->GetView() : nullptr;
+    const SdrObject* pEdited = pView && pView->IsTextEdit() ? pView->GetTextEditObject() : nullptr;
+    if (!pEdited)
+        return;
+
+    rtl::Reference<SdXImpressDocument> xModel(
+        dynamic_cast<SdXImpressDocument*>(mpDocShell->GetModel().get()));
+    if (xModel)
+        xModel->notifyTextEditChanged(*pEdited);
+}
+
 const SdViewOptions& ViewShellBase::GetViewOptions() const
 {
     return mpImpl->maViewOptions;
@@ -1002,6 +1061,21 @@ int ViewShellBase::getPart() const
     return 0;
 }
 
+OString ViewShellBase::getPartId() const
+{
+    ViewShell* pViewShell = framework::FrameworkHelper::Instance(*const_cast<ViewShellBase*>(this))->GetViewShell(FrameworkHelper::msCenterPaneURL).get();
+
+    // Every kind of view shell reports its current page, so the identifier stays a page GUID
+    // in the outline and slide sorter views too.
+    if (pViewShell)
+    {
+        if (SdPage* pPage = pViewShell->getCurrentPage())
+            return pPage->GetGuid().getString();
+    }
+
+    return OString::number(getPart());
+}
+
 int ViewShellBase::getEditMode() const
 {
     ViewShell* pViewShell = framework::FrameworkHelper::Instance(*const_cast<ViewShellBase*>(this))->GetViewShell(FrameworkHelper::msCenterPaneURL).get();
@@ -1017,6 +1091,8 @@ int ViewShellBase::getEditMode() const
                     return 0;
                 case PageKind::Notes:
                     return 2;
+                case PageKind::Handout:
+                    return 4;
                 default:
                     assert(!"Unhandled page kind");
                     return 0;
@@ -1026,6 +1102,10 @@ int ViewShellBase::getEditMode() const
             {
                 case PageKind::Standard:
                     return 1;
+                case PageKind::Notes:
+                    return 3;
+                case PageKind::Handout:
+                    return 4;
                 default:
                     assert(!"Unhandled page kind");
                     return 1;
@@ -1060,6 +1140,14 @@ void ViewShellBase::setEditMode(int nMode)
             pDrawViewShell->SetPageKind(PageKind::Notes);
             pDrawViewShell->ChangeEditMode(EditMode::Page, false);
             break;
+        case 3:
+            pDrawViewShell->SetPageKind(PageKind::Notes);
+            pDrawViewShell->ChangeEditMode(EditMode::MasterPage, false);
+            break;
+        case 4:
+            pDrawViewShell->SetPageKind(PageKind::Handout);
+            pDrawViewShell->ChangeEditMode(EditMode::MasterPage, false);
+            break;
         }
 
         /*
@@ -1089,6 +1177,11 @@ void ViewShellBase::afterCallbackRegistered()
         std::set<Color> aDocumentColors = pDocShell->GetDocColors();
         svx::theme::notifyKit(pThemeColors, aDocumentColors);
     }
+
+    // A view drawn from the model has no page view to ask which layers are hidden, so a view
+    // that has just started listening is told at once, before any layer changes.
+    if (auto* pDrawViewShell = dynamic_cast<DrawViewShell*>(GetMainViewShell().get()))
+        pDrawViewShell->NotifyHiddenLayers();
 
     if (comphelper::COKit::isActive() && mpDocument && mpDocument->GetStartWithPresentation())
     {

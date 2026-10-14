@@ -23,7 +23,7 @@
 #include <rtl/ref.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <com/sun/star/script/provider/XScriptProviderFactory.hpp>
@@ -43,7 +43,7 @@ private:
 
     mutable rtl::Reference< ActiveMSPList > m_MSPList;
 
-    const css::uno::Reference< css::uno::XComponentContext > m_xComponentContext;
+    const cpo::uno::Reference< cpo::uno::XComponentContext > m_xComponentContext;
 
     const rtl::Reference< ActiveMSPList > & getActiveMSPList() const;
 
@@ -52,20 +52,20 @@ protected:
 
 public:
     explicit MasterScriptProviderFactory(
-        css::uno::Reference< css::uno::XComponentContext > const & xComponentContext );
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xComponentContext );
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL
+    virtual bool
         supportsService( OUString const & serviceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
         getSupportedServiceNames() override;
 
     // XScriptProviderFactory
-    virtual css::uno::Reference< css::script::provider::XScriptProvider >
-        SAL_CALL createScriptProvider( const cpo::uno::Any& context ) override;
+    virtual cpo::uno::Reference< css::script::provider::XScriptProvider >
+        createScriptProvider( const cpo::uno::Any& context ) override;
 };
 
 

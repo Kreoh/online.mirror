@@ -16,15 +16,9 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
-#include <csignal>
 #include <mutex>
 #include <thread>
 #include <vector>
-
-extern "C"
-{
-    void handleUserProfileSignal(const int /* signal */);
-}
 
 /*
  * A class to watch to see when threads are not making progress.
@@ -40,18 +34,18 @@ class Watchdog final : private std::thread
 
     static const uint64_t MsToTrigger = 75;
 
+    /// Install the handler that runs when a thread receives the profiling signal.
+    static void installProfileSignalHandler();
+
+    /// Send the profiling signal to one thread.
+    static void requestThreadProfile(ProcUtil::ThreadId threadId);
+
 public:
     Watchdog()
     {
         startThread();
 
-        // Steal SIGUSR2 from the backtrace handler for profiling
-        struct sigaction action;
-
-        sigemptyset(&action.sa_mask);
-        action.sa_flags = 0;
-        action.sa_handler = handleUserProfileSignal;
-        sigaction(SIGUSR2, &action, nullptr);
+        installProfileSignalHandler();
     }
 
     ~Watchdog()
@@ -80,7 +74,10 @@ public:
     {
         if (_thread)
         {
-            _exit = true;
+            {
+                std::unique_lock<std::mutex> guard(_lock);
+                _exit = true;
+            }
             _condition.notify_all();
             _thread->join();
             _thread.reset();
@@ -102,8 +99,8 @@ public:
                     // out of the poll for longer than threshold:
                     if (msSinceEpoc - snapshot > MsToTrigger)
                     {
-                        // Signal the poorly behaved thread to profile it
-                        ProcUtil::killThreadById(*tid, SIGUSR2);
+                        // Profile the poorly behaved thread
+                        requestThreadProfile(*tid);
                         break;
                     }
                 }

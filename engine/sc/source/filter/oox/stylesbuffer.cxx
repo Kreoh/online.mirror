@@ -30,7 +30,6 @@
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
 #include <com/sun/star/awt/XDevice.hpp>
-#include <com/sun/star/awt/XFont2.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/style/XStyle.hpp>
@@ -55,11 +54,13 @@
 #include <editeng/boxitem.hxx>
 #include <editeng/lineitem.hxx>
 #include <editeng/brushitem.hxx>
+#include <svx/pageitem.hxx>
 #include <svx/rotmodit.hxx>
 #include <tools/fontenum.hxx>
 #include <tools/UnitConversion.hxx>
 #include <utility>
 #include <vcl/unohelp.hxx>
+#include <o3tl/enumrange.hxx>
 #include <rtl/tencinfo.h>
 #include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
@@ -97,7 +98,7 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::style;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 
 namespace {
@@ -855,7 +856,7 @@ void Font::finalizeImport()
         if( !xDevice.is() )
             return;
 
-        Reference< XFont2 > xFont( xDevice->getFont(aGlyphDesc), UNO_QUERY );
+        Reference< XFont > xFont( xDevice->getFont(aGlyphDesc) );
         if( !xFont.is() )
             return;
 
@@ -2578,33 +2579,22 @@ void TableStyle::setName(const OUString& rName)
 
 void TableStyle::importTableStyleElement(const AttributeList& rAttribs)
 {
-    TableStyleElementInfo aInfo;
-    aInfo.mnDxfID = rAttribs.getInteger(XML_dxfId, -1);
     OUString aTableStyleElementName = rAttribs.getString(XML_type, OUString());
-    static const std::unordered_map<OUString, ScTableStyleElement> aTableStyleElementMap
-        = { { u"wholeTable"_ustr, ScTableStyleElement::WholeTable },
-            { u"firstColumnStripe"_ustr, ScTableStyleElement::FirstColumnStripe },
-            { u"secondColumnStripe"_ustr, ScTableStyleElement::SecondColumnStripe },
-            { u"firstRowStripe"_ustr, ScTableStyleElement::FirstRowStripe },
-            { u"secondRowStripe"_ustr, ScTableStyleElement::SecondRowStripe },
-            { u"firstColumn"_ustr, ScTableStyleElement::FirstColumn },
-            { u"lastColumn"_ustr, ScTableStyleElement::LastColumn },
-            { u"headerRow"_ustr, ScTableStyleElement::HeaderRow },
-            { u"totalRow"_ustr, ScTableStyleElement::TotalRow },
-            { u"firstHeaderCell"_ustr, ScTableStyleElement::FirstHeaderCell },
-            { u"lastHeaderCell"_ustr, ScTableStyleElement::LastHeaderCell }
-        };
-    auto aElementItr = aTableStyleElementMap.find(aTableStyleElementName);
-    if (aElementItr == aTableStyleElementMap.end())
+    for (ScTableStyleElement eElement : o3tl::enumrange<ScTableStyleElement>())
     {
-        SAL_WARN("sc", "TableStyle::importTableStyleElement - unknown Table Style Element");
+        const char* pElementName = ScfTools::GetTableStyleElementOOXMLName(eElement);
+        if (!pElementName || !aTableStyleElementName.equalsAscii(pElementName))
+            continue;
+
+        TableStyleElementInfo aInfo;
+        aInfo.mnDxfID = rAttribs.getInteger(XML_dxfId, -1);
+        aInfo.mnStripeCount = rAttribs.getInteger(XML_size, 1);
+
+        maTableStyleElements.insert({eElement, aInfo});
         return;
     }
 
-    ScTableStyleElement eElement = aElementItr->second;
-    aInfo.mnStripeCount = rAttribs.getInteger(XML_size, 1);
-
-    maTableStyleElements.insert({eElement, aInfo});
+    SAL_WARN("sc", "TableStyle::importTableStyleElement - unknown Table Style Element");
 }
 
 void TableStyle::finalizeImport(const DxfVector& rDxfs)
@@ -2640,7 +2630,7 @@ void TableStyle::finalizeImport(const DxfVector& rDxfs)
                 pTableStyle->SetColStripeSize(nStripeCount, -1);
                 break;
             case ScTableStyleElement::SecondColumnStripe:
-                pTableStyle->SetRowStripeSize(-1, nStripeCount);
+                pTableStyle->SetColStripeSize(-1, nStripeCount);
                 break;
             default:
                 SAL_WARN("sc", "the stripe count should only be set for row and column stripe elements");
@@ -2823,7 +2813,22 @@ void CellStyle::createCellStyle()
 
     // bDefStyle==true omits default pool items in CreatePattern()
     if( bCreatePattern && mpStyleSheet && pXF )
+    {
         mpStyleSheet->GetItemSet().Put( pXF->createPattern( bDefStyle ).GetItemSet() );
+
+        // The font that the style defines but does not apply still decides, like in MSO, whether
+        // a table style may paint over the font of its cells, see
+        // ScPatternAttr::CanApplyTableItemToCell.
+        if( !bDefStyle && !pXF->isFontUsed() )
+        {
+            if( FontRef xFont = pXF->getFont() )
+            {
+                SfxItemSetFixed<ATTR_FONT, ATTR_FONT_RELIEF> aExcludedFont( *rDoc.GetPool() );
+                xFont->fillToItemSet( aExcludedFont, false );
+                mpStyleSheet->GetItemSet().Put( SvxSetItem( ATTR_EXCLUDED_FONT, aExcludedFont ) );
+            }
+        }
+    }
 }
 
 void CellStyle::finalizeImport( const OUString& rFinalName )
@@ -3071,6 +3076,11 @@ TableStyleRef StylesBuffer::createTableStyle()
     return xTableStyle;
 }
 
+void StylesBuffer::importTableStylesAttribs( const AttributeList& rAttribs )
+{
+    maDefaultTableStyleName = rAttribs.getString( XML_defaultTableStyle, OUString() );
+}
+
 DxfRef StylesBuffer::createExtDxf()
 {
     DxfRef xDxf = std::make_shared<Dxf>( *this );
@@ -3129,6 +3139,11 @@ void StylesBuffer::finalizeImport()
     // differential formatting (for conditional formatting)
     maDxfs.forEachMem( &Dxf::finalizeImport );
     maTableStyles.forEachMem( &TableStyle::finalizeImport, maDxfs );
+    if (!maDefaultTableStyleName.isEmpty())
+    {
+        if (ScTableStyles* pStyles = getScDocument().GetTableStyles())
+            pStyles->SetDefaultStyleName(maDefaultTableStyleName);
+    }
 }
 
 ::Color StylesBuffer::getPaletteColor( sal_Int32 nPaletteIdx ) const

@@ -44,7 +44,6 @@
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/new.hxx>
-#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <sfx2/printer.hxx>
 #include <sfx2/evntconf.hxx>
@@ -100,7 +99,7 @@
 #include <cmdid.h>
 #include <helpids.h>
 #include <strings.hrc>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/ListboxControlActions.hpp>
@@ -127,8 +126,8 @@
 #include <memory>
 
 using namespace ::com::sun::star::ui::dialogs;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 using namespace ::sfx2;
 
@@ -565,7 +564,7 @@ void SwDocShell::Execute(SfxRequest& rReq)
                         FileDialogHelper aDlgHelper(TemplateDescription::FILEOPEN_SIMPLE,
                                                     FileDialogFlags::NONE, pDialogParent);
                         aDlgHelper.SetContext(FileDialogHelper::WriterLoadTemplate);
-                        uno::Reference < XFilePicker3 > xFP = aDlgHelper.GetFilePicker();
+                        uno::Reference < XFilePicker > xFP = aDlgHelper.GetFilePicker();
 
                         SfxObjectFactory &rFact = GetFactory();
                         SfxFilterMatcher aMatcher( rFact.GetFactoryName() );
@@ -781,7 +780,7 @@ void SwDocShell::Execute(SfxRequest& rReq)
                             ErrCodeMsg eErr = aWrt.Write( xWrt );
                             if( !eErr.IgnoreWarning() )
                             {
-                                const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+                                const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
                                 uno::Reference< frame::XDispatchProvider > xProv = drawing::ModuleDispatcher::create( xContext );
 
                                 uno::Reference< frame::XDispatchHelper > xHelper( frame::DispatchHelper::create(xContext) );
@@ -839,7 +838,7 @@ void SwDocShell::Execute(SfxRequest& rReq)
                     pStrm->Seek( STREAM_SEEK_TO_BEGIN );
                     if ( nWhich == FN_OUTLINE_TO_IMPRESS )
                     {
-                        const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+                        const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
                         uno::Reference< frame::XDispatchProvider > xProv = drawing::ModuleDispatcher::create( xContext );
 
                         uno::Reference< frame::XDispatchHelper > xHelper( frame::DispatchHelper::create(xContext) );
@@ -979,7 +978,7 @@ void SwDocShell::Execute(SfxRequest& rReq)
                         };
                         aDlgHelper.SetControlHelpIds( nControlIds, aMasterHelpIds );
                     }
-                    uno::Reference < XFilePicker3 > xFP = aDlgHelper.GetFilePicker();
+                    uno::Reference < XFilePicker > xFP = aDlgHelper.GetFilePicker();
 
                     std::shared_ptr<const SfxFilter> pFlt;
                     TranslateId pStrId;
@@ -1015,7 +1014,7 @@ void SwDocShell::Execute(SfxRequest& rReq)
                     }
                     if(!bError)
                     {
-                        uno::Reference<XFilePickerControlAccess> xCtrlAcc(xFP, UNO_QUERY);
+                        uno::Reference<XFilePickerControlAccess> xCtrlAcc(xFP);
 
                         bool    bOutline[MAXLEVEL] = {false};
                         const SwOutlineNodes& rOutlNds = m_xDoc->GetNodes().GetOutLineNds();
@@ -1283,20 +1282,6 @@ void SwDocShell::Execute(SfxRequest& rReq)
                                                                                   rBindings);
                     weld::DialogController::runAsync(xDlg, [](sal_Int32 /*nResult*/){});
                 }
-            }
-        }
-        break;
-        case SID_NOTEBOOKBAR:
-        {
-            const SfxStringItem* pFile = rReq.GetArg( SID_NOTEBOOKBAR );
-            SfxViewShell* pViewShell = GetView()? GetView(): SfxViewShell::Current();
-            SfxBindings& rBindings( pViewShell->GetViewFrame().GetBindings() );
-
-            if ( SfxNotebookBar::IsActive() )
-                sfx2::SfxNotebookBar::ExecMethod( rBindings, pFile ? pFile->GetValue() : u""_ustr );
-            else
-            {
-                sfx2::SfxNotebookBar::CloseMethod( rBindings );
             }
         }
         break;

@@ -47,6 +47,7 @@
 #include <memory>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 GalleryGraphicImportRet GalleryGraphicImport( const INetURLObject& rURL, Graphic& rGraphic,
                              OUString& rFilterName )
@@ -202,7 +203,7 @@ bool FileExists( const INetURLObject& rURL )
         catch( const ucb::ContentCreationException& )
         {
         }
-        catch( const uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
         }
         catch( const cpo::uno::Exception& )
@@ -234,7 +235,7 @@ bool CreateDir( const INetURLObject& rURL )
         catch( const ucb::ContentCreationException& )
         {
         }
-        catch( const uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
         }
         catch( const cpo::uno::Exception& )
@@ -261,7 +262,7 @@ bool CopyFile(  const INetURLObject& rSrcURL, const INetURLObject& rDstURL )
     catch( const ucb::ContentCreationException& )
     {
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
     }
     catch( const cpo::uno::Exception& )
@@ -286,7 +287,7 @@ bool KillFile( const INetURLObject& rURL )
         {
             bRet = false;
         }
-        catch( const uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
             bRet = false;
         }

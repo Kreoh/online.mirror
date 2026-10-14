@@ -42,16 +42,17 @@ SwList::SwList( OUString sListId,
             // crashtesting ooo84576-1.odt, which manages to trigger a broken document structure
             // in our code. This is just a workaround to prevent an infinite loop leading to OOM.
             SAL_WARN("sw.core", "corrupt document structure, bailing out of infinite loop");
-            throw css::uno::RuntimeException(u"corrupt document structure, bailing out of infinite loop"_ustr);
+            throw cpo::uno::RuntimeException(u"corrupt document structure, bailing out of infinite loop"_ustr);
         }
         aVisited[static_cast<sal_Int32>(nIndex)] = true;
         SwPaM aPam( *pNode, *pNode->EndOfSectionNode() );
+        auto [pStart, pEnd] = aPam.StartEnd(); // SwPosition*
 
         maListTrees.emplace_back(
             std::make_unique<SwNodeNum>( &rDefaultListStyle ),
             std::make_unique<SwNodeNum>( &rDefaultListStyle ),
             std::make_unique<SwNodeNum>( &rDefaultListStyle ),
-            std::make_unique<SwPaM>( *(aPam.Start()), *(aPam.End()) ));
+            std::make_unique<SwPaM>(*pStart, *pEnd));
 
         pNode = pNode->EndOfSectionNode();
         if (pNode != &rNodes.GetEndOfContent())

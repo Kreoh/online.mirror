@@ -49,8 +49,8 @@
 
 using namespace utl;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::sdb;
@@ -1610,26 +1610,26 @@ public:
     {
     }
 
-    virtual void SAL_CALL selectionChanged(const EventObject& /*rEvent*/) override
+    virtual void selectionChanged(const EventObject& /*rEvent*/) override
     {
     }
 
-    virtual void SAL_CALL disposing(const EventObject&) override
+    virtual void disposing(const EventObject&) override
     {
         m_rParent.stopDBChangeListening();
     }
 
-    virtual void SAL_CALL dispatch(const css::util::URL& rURL, const cpo::uno::Sequence< css::beans::PropertyValue >& /*rArgs*/) override
+    virtual void dispatch(const css::util::URL& rURL, const cpo::uno::Sequence< css::beans::PropertyValue >& /*rArgs*/) override
     {
         if (rURL.Complete.equalsAscii(SwXDispatch::GetDBChangeURL()))
             m_rParent.updateCurrentDBDataFromDocument();
     }
 
-    virtual void SAL_CALL addStatusListener(const css::uno::Reference< css::frame::XStatusListener >&, const css::util::URL&) override
+    virtual void addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener >&, const css::util::URL&) override
     {
     }
 
-    virtual void SAL_CALL removeStatusListener(const css::uno::Reference< css::frame::XStatusListener >&, const css::util::URL&) override
+    virtual void removeStatusListener(const cpo::uno::Reference< css::frame::XStatusListener >&, const css::util::URL&) override
     {
     }
 };

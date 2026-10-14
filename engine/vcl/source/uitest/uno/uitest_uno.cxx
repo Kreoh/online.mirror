@@ -10,7 +10,7 @@
 #include <comphelper/compbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ui/test/XUITest.hpp>
 
 #include <memory>
@@ -34,31 +34,31 @@ public:
 
     UITestUnoObj();
 
-    bool SAL_CALL executeCommand(const OUString& rCommand) override;
+    bool executeCommand(const OUString& rCommand) override;
 
-    bool SAL_CALL executeCommandWithParameters(const OUString& rCommand,
+    bool executeCommandWithParameters(const OUString& rCommand,
         const cpo::uno::Sequence< css::beans::PropertyValue >& rArgs) override;
 
-    bool SAL_CALL executeCommandForProvider(
+    bool executeCommandForProvider(
         const OUString& rCommand,
-        const css::uno::Reference<css::frame::XDispatchProvider>& xProvider) override;
+        const cpo::uno::Reference<css::frame::XDispatchProvider>& xProvider) override;
 
-    bool SAL_CALL executeDialog(const OUString& rCommand) override;
+    bool executeDialog(const OUString& rCommand) override;
 
-    css::uno::Reference<css::ui::test::XUIObject> SAL_CALL getTopFocusWindow() override;
+    cpo::uno::Reference<css::ui::test::XUIObject> getTopFocusWindow() override;
 
-    css::uno::Reference<css::ui::test::XUIObject> SAL_CALL getFocusWindow() override;
+    cpo::uno::Reference<css::ui::test::XUIObject> getFocusWindow() override;
 
-    css::uno::Reference<css::ui::test::XUIObject> SAL_CALL getFloatWindow() override;
+    cpo::uno::Reference<css::ui::test::XUIObject> getFloatWindow() override;
 
-    css::uno::Reference<css::ui::test::XUIObject>
-        SAL_CALL getWindow(const css::uno::Reference<css::awt::XWindow>& xWindow) override;
+    cpo::uno::Reference<css::ui::test::XUIObject>
+        getWindow(const cpo::uno::Reference<css::awt::XWindow>& xWindow) override;
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override;
+    bool supportsService(OUString const & ServiceName) override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
 }
@@ -67,62 +67,62 @@ UITestUnoObj::UITestUnoObj()
 {
 }
 
-bool SAL_CALL UITestUnoObj::executeCommand(const OUString& rCommand)
+bool UITestUnoObj::executeCommand(const OUString& rCommand)
 {
     SolarMutexGuard aGuard;
     return UITest::executeCommand(rCommand);
 }
 
-bool SAL_CALL UITestUnoObj::executeCommandWithParameters(const OUString& rCommand,
+bool UITestUnoObj::executeCommandWithParameters(const OUString& rCommand,
     const cpo::uno::Sequence< css::beans::PropertyValue >& rArgs)
 {
     SolarMutexGuard aGuard;
     return UITest::executeCommandWithParameters(rCommand,rArgs);
 }
 
-bool SAL_CALL UITestUnoObj::executeCommandForProvider(
+bool UITestUnoObj::executeCommandForProvider(
     const OUString& rCommand,
-    const css::uno::Reference<css::frame::XDispatchProvider>& xProvider)
+    const cpo::uno::Reference<css::frame::XDispatchProvider>& xProvider)
 {
     SolarMutexGuard aGuard;
     return UITest::executeCommandForProvider(rCommand, xProvider);
 }
 
-bool SAL_CALL UITestUnoObj::executeDialog(const OUString& rCommand)
+bool UITestUnoObj::executeDialog(const OUString& rCommand)
 {
     SolarMutexGuard aGuard;
     return UITest::executeDialog(rCommand);
 }
 
-css::uno::Reference<css::ui::test::XUIObject> SAL_CALL UITestUnoObj::getTopFocusWindow()
+cpo::uno::Reference<css::ui::test::XUIObject> UITestUnoObj::getTopFocusWindow()
 {
     SolarMutexGuard aGuard;
     std::unique_ptr<UIObject> pObj = UITest::getFocusTopWindow();
     if (!pObj)
-        throw css::uno::RuntimeException(u"UITest::getFocusTopWindow did not find a window"_ustr);
+        throw cpo::uno::RuntimeException(u"UITest::getFocusTopWindow did not find a window"_ustr);
     return new UIObjectUnoObj(std::move(pObj));
 }
 
-css::uno::Reference<css::ui::test::XUIObject> SAL_CALL UITestUnoObj::getFocusWindow()
+cpo::uno::Reference<css::ui::test::XUIObject> UITestUnoObj::getFocusWindow()
 {
     SolarMutexGuard aGuard;
     std::unique_ptr<UIObject> pObj = UITest::getFocusWindow();
     if (!pObj)
-        throw css::uno::RuntimeException(u"UITest::getFocusWindow did not find a window"_ustr);
+        throw cpo::uno::RuntimeException(u"UITest::getFocusWindow did not find a window"_ustr);
     return new UIObjectUnoObj(std::move(pObj));
 }
 
-css::uno::Reference<css::ui::test::XUIObject> SAL_CALL UITestUnoObj::getFloatWindow()
+cpo::uno::Reference<css::ui::test::XUIObject> UITestUnoObj::getFloatWindow()
 {
     SolarMutexGuard aGuard;
     std::unique_ptr<UIObject> pObj = UITest::getFloatWindow();
     if (!pObj)
-        throw css::uno::RuntimeException(u"UITest::getFloatWindow did not find a window"_ustr);
+        throw cpo::uno::RuntimeException(u"UITest::getFloatWindow did not find a window"_ustr);
     return new UIObjectUnoObj(std::move(pObj));
 }
 
-css::uno::Reference<css::ui::test::XUIObject>
-    SAL_CALL UITestUnoObj::getWindow(const css::uno::Reference<::css::awt::XWindow>& xWindow)
+cpo::uno::Reference<css::ui::test::XUIObject>
+    UITestUnoObj::getWindow(const cpo::uno::Reference<::css::awt::XWindow>& xWindow)
 {
     if (!xWindow.is())
         return {};
@@ -135,7 +135,7 @@ css::uno::Reference<css::ui::test::XUIObject>
     return new UIObjectUnoObj(pWindow->GetUITestFactory()(pWindow));
 }
 
-OUString SAL_CALL UITestUnoObj::getImplementationName()
+OUString UITestUnoObj::getImplementationName()
 {
     return u"org.libreoffice.uitest.UITest"_ustr;
 }
@@ -150,8 +150,8 @@ cpo::uno::Sequence<OUString> UITestUnoObj::getSupportedServiceNames()
     return { u"com.sun.star.ui.test.UITest"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-UITest_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+UITest_get_implementation(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new UITestUnoObj());
 }

@@ -33,6 +33,7 @@
 #include <dpobject.hxx>
 #include <queryparam.hxx>
 #include <queryentry.hxx>
+#include <refupdatecontext.hxx>
 #include <mid.h>
 #include <globstr.hrc>
 #include <scresid.hxx>
@@ -330,6 +331,13 @@ ScTableStyleParam::ScTableStyleParam():
 {
 }
 
+bool ScTableStyleParam::IsUnstyled() const
+{
+    // A gallery entry for the unstyled choice carries the name "None", while the
+    // OOXML filter writes and reads "none", so accept the name in any spelling.
+    return maStyleID.isEmpty() || maStyleID.equalsIgnoreAsciiCase(u"none");
+}
+
 bool ScTableStyleParam::operator==(const ScTableStyleParam& rParam) const
 {
     if(maStyleID != rParam.maStyleID)
@@ -353,6 +361,12 @@ bool ScTableStyleParam::operator==(const ScTableStyleParam& rParam) const
 bool ScDBData::less::operator() (const std::unique_ptr<ScDBData>& left, const std::unique_ptr<ScDBData>& right) const
 {
     return ScGlobal::GetTransliteration().compareString(left->GetUpperName(), right->GetUpperName()) < 0;
+}
+
+void ScDBData::SetName(const OUString& rName)
+{
+    aName = rName;
+    aUpper = ScGlobal::getCharClass().uppercase(rName);
 }
 
 ScDBData::ScDBData( const OUString& rName,
@@ -894,7 +908,7 @@ void ScDBData::ImportTotalRowParam(ScSubTotalParam& rSubTotalParam,
                         std::unique_ptr<ScTokenArray> pArr(new ScTokenArray(rDoc));
                         pArr->AddOpCode(ocSubTotal);
                         pArr->AddOpCode(ocOpen);
-                        pArr->AddDouble(static_cast<double>(eSubType));
+                        pArr->AddDouble(static_cast<double>(eSubType) + 100);
                         pArr->AddOpCode(ocSep);
                         // Table refs structure
                         pArr->AddTableRef(GetIndex());
@@ -963,6 +977,70 @@ void ScDBData::CreateTotalRowParam(ScSubTotalParam& rSubTotalParam) const
         rSubTotalParam.SetCustFuncs(static_cast<sal_uInt16>(0), vColFuncs, vColFuncs.size());
         rSubTotalParam.SetNumFmts(static_cast<sal_uInt16>(0), vColNumFmts, vColNumFmts.size());
     }
+}
+
+void ScDBData::ClearTotalRowParam(ScSubTotalParam& rSubTotalParam)
+{
+    rSubTotalParam.aGroups[0].AllocCustFuncs(0);
+    rSubTotalParam.aGroups[0].AllocSubLabels(0);
+    rSubTotalParam.aGroups[0].AllocNumFmts(0);
+}
+
+void ScDBData::AdjustTotalsRowFormulas(SCCOL nDx, SCCOL nColShift, SCCOL nNewCol1, SCCOL nNewCol2,
+                                       const sc::RefUpdateContext* pRefCxt)
+{
+    if (!mpSubTotal)
+        return;
+
+    // Old per-column key -> new column, or -1 when the column was dropped.
+    const auto mapCol = [&](SCCOL nKey) {
+        SCCOL nNew = nKey;
+        if (nKey >= nColShift)
+            nNew = nKey + nDx;
+        else if (nDx < 0 && nKey >= nColShift + nDx)
+            return SCCOL(-1); // inside the deleted column block
+        if (nNew < nNewCol1 || nNew > nNewCol2)
+            return SCCOL(-1); // no longer covered by the table area
+        return nNew;
+    };
+
+    // group 0 holds the styled-table Total Row per-column data (see CreateTotalRowParam).
+    auto& rGroup = mpSubTotal->aGroups[0];
+
+    std::vector<std::pair<SCCOL, std::unique_ptr<ScTokenArray>>> vColFuncs;
+    for (auto& rFunc : rGroup.custfuncs())
+    {
+        const SCCOL nNew = mapCol(rFunc.first);
+        if (nNew < 0)
+            continue;
+        // Reference-update the stashed formula like a live cell: all refs shift or become #REF!.
+        if (pRefCxt && rFunc.second)
+            rFunc.second->AdjustReferenceInName(*pRefCxt, ScAddress(rFunc.first, nEndRow, nTable));
+        vColFuncs.emplace_back(nNew, std::move(rFunc.second));
+    }
+
+    std::vector<std::pair<SCCOL, OUString>> vColLabels;
+    for (const auto& rLabel : rGroup.sublabels())
+    {
+        const SCCOL nNew = mapCol(rLabel.first);
+        if (nNew >= 0)
+            vColLabels.emplace_back(nNew, rLabel.second);
+    }
+
+    std::vector<std::pair<SCCOL, sal_uInt32>> vColNumFmts;
+    for (const auto& rNumFmt : rGroup.numfmts())
+    {
+        const SCCOL nNew = mapCol(rNumFmt.first);
+        if (nNew >= 0)
+            vColNumFmts.emplace_back(nNew, rNumFmt.second);
+    }
+
+    mpSubTotal->SetCustFuncs(static_cast<sal_uInt16>(0), vColFuncs,
+                             static_cast<sal_uInt16>(vColFuncs.size()));
+    mpSubTotal->SetSubLabels(static_cast<sal_uInt16>(0), vColLabels,
+                             static_cast<sal_uInt16>(vColLabels.size()));
+    mpSubTotal->SetNumFmts(static_cast<sal_uInt16>(0), vColNumFmts,
+                           static_cast<sal_uInt16>(vColNumFmts.size()));
 }
 
 bool ScDBData::HasTearRiskAtBand(const ScDocument& rDoc, SCROW nShiftRow) const
@@ -1045,29 +1123,8 @@ bool ScDBData::IsBandBlockedAtRow(const ScDocument& rDoc, SCROW nShiftRow) const
 
 bool ScDBData::BandReachesStructure(ScDocument& rDoc, const ScRange& rBand) const
 {
-    auto bHitsOther = [&](const ScDBData* pOther) {
-        if (!pOther || pOther == this)
-            return false;
-        ScRange aOther;
-        pOther->GetArea(aOther);
-        return aOther.aStart.Tab() == nTable && rBand.Intersects(aOther);
-    };
-    if (const ScDBCollection* pDBs = rDoc.GetDBCollection())
-    {
-        for (const auto& rOther : pDBs->getNamedDBs())
-            if (bHitsOther(rOther.get()))
-                return true;
-        for (const auto& rOther : pDBs->getAnonDBs())
-            if (bHitsOther(rOther.get()))
-                return true;
-    }
-    // Sheet-local / document anonymous DB ranges (e.g. an AutoFilter on a plain range).
-    // Plain named ranges are not DB ranges and intentionally do not block.
-    if (bHitsOther(rDoc.GetAnonymousDBData(nTable)) || bHitsOther(rDoc.GetAnonymousDBData()))
+    if (rDoc.RangeReachesDBStructure(rBand, this))
         return true;
-    if (const ScDPCollection* pDPs = rDoc.GetDPCollection())
-        if (pDPs->HasTable(rBand))
-            return true;
     return rDoc.HasAttrib(rBand.aStart.Col(), rBand.aStart.Row(), nTable, rBand.aEnd.Col(),
                           rBand.aEnd.Row(), nTable, HasAttrFlags::Merged | HasAttrFlags::Overlapped);
 }
@@ -1131,13 +1188,20 @@ std::vector<TableColumnAttributes> ScDBData::GetTotalRowAttributes(formula::Form
                 while ((pCell = aIter.GetNext(nCol, nRow)) != nullptr)
                 {
                     TableColumnAttributes aNameAttr;
-                    if (pCell->getType() != CELLTYPE_FORMULA)
+                    aNameAttr.mbHasContent = true;
+                    CellType eCellType = pCell->getType();
+                    if (eCellType == CELLTYPE_STRING || eCellType == CELLTYPE_EDIT)
                     {
+                        // A totals row label describes text content, so only cells that
+                        // actually hold text qualify. A plain number in the totals row is
+                        // exported as a number and carries no label, since declaring it as
+                        // a label would leave the exported table column and its underlying
+                        // cell disagreeing about the cell's type.
                         OUString aStr = pCell->getString(rDoc);
                         if (!aStr.isEmpty())
                             aNameAttr.maTotalsRowLabel = aStr;
                     }
-                    else
+                    else if (eCellType == CELLTYPE_FORMULA)
                     {
                         if (ScFormulaCell* pFC = pCell->getFormula())
                         {
@@ -1268,15 +1332,16 @@ OUString ScDBData::GetSimpleSubTotalFunction(const ScTokenArray* pTokens, SCCOL 
             if (nIdx == 2) // { ocPush, formula::svDouble }
             {
                 sal_Int32 nFunc = static_cast<sal_Int32>(static_cast<formula::FormulaDoubleToken*>(t)->GetDouble());
-                if (nFunc > 100.)
-                    nFunc -= 100;
 
-                if (nFunc < 1 || nFunc > 11)
+                // A named totalsRowFunction stands for the 100+ family only. Below that the
+                // formula still belongs in the totals row, but it has to travel as its own
+                // custom formula, or the column would claim a function it does not hold.
+                if (nFunc < 101 || nFunc > 111)
                 {
                     return u"custom"_ustr;
                 }
                 else
-                    eSubType = static_cast<ScSubTotalFunc>(nFunc);
+                    eSubType = static_cast<ScSubTotalFunc>(nFunc - 100);
             }
             else if (nIdx == 4) // { ocTableRef, formula::svIndex }
             {
@@ -1443,6 +1508,17 @@ bool ScDBData::UpdateReference(const ScDocument& rDoc, UpdateRefMode eUpdateRefM
     {
         // MoveTo() invalidates column names via SetArea(); adjust, remember and set new.
         AdjustTableColumnNames( eUpdateRefMode, nDx, nCol1, nOldCol1, nOldCol2, theCol1, theCol2);
+        // Reference-update the stored Total Row formulas on a column insert/delete.
+        if ((theCol1 != nOldCol1 || theCol2 != nOldCol2) && mpContainer)
+        {
+            sc::RefUpdateContext aRefCxt(mpContainer->GetDocument());
+            aRefCxt.meMode = eUpdateRefMode;
+            aRefCxt.maRange = ScRange(nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
+            aRefCxt.mnColDelta = nDx;
+            aRefCxt.mnRowDelta = nDy;
+            aRefCxt.mnTabDelta = nDz;
+            AdjustTotalsRowFormulas(nDx, nCol1, theCol1, theCol2, &aRefCxt);
+        }
         ::std::vector<OUString> aNames( maTableColumnNames);
         bool bTableColumnNamesDirty = mbTableColumnNamesDirty;
         // tdf#48025, tdf#141946: update the column index of the filter criteria,
@@ -2045,7 +2121,7 @@ void ScDBData::Notify( const SfxHint& rHint )
     {
         ScDocument& rDoc = mpContainer->GetDocument();
         if (rDoc.IsInInterpreter() || rDoc.IsCalculatingFormulaTree()
-            || rDoc.IsFinalTrackFormulas())
+            || rDoc.IsFinalTrackFormulas() || rDoc.IsCompilingDBFormula())
             return;
 
         const auto& rBulkHint = static_cast<const sc::BulkDataHint&>(rHint);
@@ -2074,7 +2150,8 @@ void ScDBData::Notify( const SfxHint& rHint )
     const bool bIsRecalcHint =
         rDoc.IsInInterpreter()
         || rDoc.IsCalculatingFormulaTree()
-        || rDoc.IsFinalTrackFormulas();
+        || rDoc.IsFinalTrackFormulas()
+        || rDoc.IsCompilingDBFormula();
 
     // Per-cell classification for band hits. If any cell of the hint was
     // classified as a band/overflow hit, skip the header-dirty fallback
@@ -2524,6 +2601,36 @@ ScDBCollection::NamedDBs::iterator ScDBCollection::NamedDBs::erase(const iterato
     return m_DBs.erase(itr);
 }
 
+bool ScDBCollection::NamedDBs::rename(const OUString& rOldName, const OUString& rNewName)
+{
+    iterator it = findByUpperName2(ScGlobal::getCharClass().uppercase(rOldName));
+    if (it == m_DBs.end())
+        return false;   // source not found
+    // Reject only if a *different* table already has the target name; a case-only
+    // rename ("Foo" -> "FOO") maps to the same entry and must be allowed.
+    ScDBData* pExisting = findByUpperName(ScGlobal::getCharClass().uppercase(rNewName));
+    if (pExisting && pExisting != it->get())
+        return false;
+    auto aNode = m_DBs.extract(it);
+    aNode.value()->SetName(rNewName);
+    m_DBs.insert(std::move(aNode));
+    return true;
+}
+
+OUString ScDBCollection::NamedDBs::getFreshTableName(std::u16string_view rSourceName)
+{
+    // A pasted copy of Table1 becomes Table12, of Sales becomes Sales7: the full
+    // source name carries a number. Probe from 2 for the lowest that is free.
+    sal_Int32 nNumber = 2;
+    OUString aNewName;
+    do
+    {
+        aNewName = OUString::Concat(rSourceName) + OUString::number(nNumber);
+        ++nNumber;
+    } while (findByUpperName(ScGlobal::getCharClass().uppercase(aNewName)));
+    return aNewName;
+}
+
 bool ScDBCollection::NamedDBs::empty() const
 {
     return m_DBs.empty();
@@ -2639,6 +2746,14 @@ ScDBCollection::ScDBCollection(ScDocument& rDocument) :
 ScDBCollection::ScDBCollection(const ScDBCollection& r) :
     rDoc(r.rDoc), nEntryIndex(r.nEntryIndex), maNamedDBs(r.maNamedDBs, *this), maAnonDBs(r.maAnonDBs) {}
 
+sal_uInt16 ScDBCollection::getPasteRebind(sal_uInt16 nClipIndex) const
+{
+    for (const auto& rRebind : maPasteRebinds)
+        if (rRebind.first == nClipIndex)
+            return rRebind.second;
+    return 0;
+}
+
 const ScDBData* ScDBCollection::GetTableDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab,
                                              ScDBDataPortion ePortion) const
 {
@@ -2661,6 +2776,27 @@ ScDBData* ScDBCollection::GetTableDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab,
         return itr->get();
 
     return nullptr;
+}
+
+bool ScDBCollection::WouldTakeHeaderRow(const ScRange& rRange) const
+{
+    for (const ScDBData* pData : GetAllNamedDBsInArea(rRange))
+    {
+        if (!pData->HasHeader())
+            continue;
+
+        ScRange aArea;
+        pData->GetArea(aArea);
+
+        // Taking the whole range is allowed, that just removes the range.
+        if (rRange.Contains(aArea))
+            continue;
+
+        if (rRange.aStart.Row() <= aArea.aStart.Row() && rRange.aEnd.Row() >= aArea.aStart.Row())
+            return true;
+    }
+
+    return false;
 }
 
 const ScDBData* ScDBCollection::GetDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab, ScDBDataPortion ePortion) const

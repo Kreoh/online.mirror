@@ -13,6 +13,21 @@ module scriptinterop {
 
 interface XSpreadsheet : XBase
 {
+    XSheet getActiveSheet();
+
+    XSheet getSheetByName([in] string name);
+
+    [overload insertSheet] XSheet insertSheet([in] string name);
+
+    [overload insertSheet] XSheet insertSheetWithDefaultName();
+
+    XRange getRangeByName([in] string name);
+
+    void flush();
+
+    string getName();
+
+    sequence< XSheet > getSheets();
 };
 
 };

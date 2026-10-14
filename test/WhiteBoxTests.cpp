@@ -65,9 +65,11 @@ class WhiteBoxTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testTileData);
     CPPUNIT_TEST(testRectanglesIntersect);
     CPPUNIT_TEST(testJson);
+    CPPUNIT_TEST(testWopiSecurityLabelFlag);
     CPPUNIT_TEST(testAnonymization);
     CPPUNIT_TEST(testStat);
     CPPUNIT_TEST(testReadFile);
+    CPPUNIT_TEST(testIsPlainFileName);
     CPPUNIT_TEST(testStringCompare);
     CPPUNIT_TEST(testJsonUtilEscapeJSONValue);
     CPPUNIT_TEST(testStateEnum);
@@ -93,9 +95,11 @@ class WhiteBoxTests : public CPPUNIT_NS::TestFixture
     void testTileData();
     void testRectanglesIntersect();
     void testJson();
+    void testWopiSecurityLabelFlag();
     void testAnonymization();
     void testStat();
     void testReadFile();
+    void testIsPlainFileName();
     void testStringCompare();
     void testJsonUtilEscapeJSONValue();
     void testStateEnum();
@@ -146,6 +150,16 @@ void WhiteBoxTests::testCOOLProtocolFunctions()
 
     LOK_ASSERT(COOLProtocol::getTokenStringFromMessage(message, "bar", bar));
     LOK_ASSERT_EQUAL_STR("hello-sailor", bar);
+
+    // An insert of slides adds pages to the document.
+    LOK_ASSERT(COOLProtocol::tokenIndicatesDocumentModification(
+        StringVector::tokenize("slideimport insert file=source.odp slides=0,1 at=2")));
+
+    // Opening the quick find panel leaves the document as it was, with or without the argument.
+    LOK_ASSERT(!COOLProtocol::tokenIndicatesDocumentModification(
+        StringVector::tokenize("uno .uno:QuickFind")));
+    LOK_ASSERT(!COOLProtocol::tokenIndicatesDocumentModification(
+        StringVector::tokenize("uno .uno:QuickFind?QuickFind:bool=true")));
 
     LOK_ASSERT_EQUAL(static_cast<std::size_t>(1), Util::trimmed("A").size());
     LOK_ASSERT_EQUAL_STR("A", Util::trimmed("A"));
@@ -216,6 +230,15 @@ void WhiteBoxTests::testCOOLProtocolFunctions()
 
     ints = COOLProtocol::tokenizeInts(std::string(",,,"));
     LOK_ASSERT_EQUAL(static_cast<std::size_t>(0), ints.size());
+
+    // Arguments, a fragment and a sub-command are not part of the command name.
+    LOK_ASSERT_EQUAL_STR("SecurityLabel", COOLProtocol::getUnoCommandName(".uno:SecurityLabel"));
+    LOK_ASSERT_EQUAL_STR("securitylabel",
+                         COOLProtocol::getUnoCommandName(".uno:securitylabel?Type:string=x"));
+    LOK_ASSERT_EQUAL_STR("SecurityLabel", COOLProtocol::getUnoCommandName(".uno:SecurityLabel#x"));
+    LOK_ASSERT_EQUAL_STR("SecurityLabel", COOLProtocol::getUnoCommandName(".uno:SecurityLabel.x"));
+    LOK_ASSERT_EQUAL_STR("", COOLProtocol::getUnoCommandName("slot:1234"));
+    LOK_ASSERT_EQUAL_STR("", COOLProtocol::getUnoCommandName("vnd.sun.star.script:a.py$b"));
 }
 
 void WhiteBoxTests::testSplitting()
@@ -534,6 +557,39 @@ void WhiteBoxTests::testRegexListMatcher()
     LOK_ASSERT(matcher.match("10.10.001.001"));
     LOK_ASSERT(!matcher.match("10.10.10.10"));
     LOK_ASSERT(matcher.match("10.10.250.254"));
+
+    // Networks in CIDR notation, mixed with the regular expressions above.
+    matcher.allow("100.64.0.0/10");
+    LOK_ASSERT(matcher.match("100.64.0.1"));
+    LOK_ASSERT(matcher.match("100.127.255.254"));
+    LOK_ASSERT(matcher.match("::ffff:100.100.1.1"));
+    LOK_ASSERT(!matcher.match("100.128.0.1"));
+    LOK_ASSERT(!matcher.match("100.64.0.0/10"));
+    LOK_ASSERT(matcher.match("10.10.250.254"));
+    LOK_ASSERT(matcher.match("www1example"));
+
+    matcher.deny("100.64.5.0/24");
+    LOK_ASSERT(matcher.match("100.64.4.255"));
+    LOK_ASSERT(!matcher.match("100.64.5.1"));
+    LOK_ASSERT(!matcher.match("::ffff:100.64.5.1"));
+    LOK_ASSERT(matcher.match("100.64.6.0"));
+
+    matcher.allow("fd00::/8");
+    LOK_ASSERT(matcher.match("fd12::1"));
+    LOK_ASSERT(!matcher.match("fe80::1"));
+
+    // Denying a network that was allowed removes the allow, as for regexes.
+    matcher.deny("fd00::/8");
+    LOK_ASSERT(!matcher.match("fd12::1"));
+
+    LOK_ASSERT(matcher.matchExist("100.64.5.1"));
+    LOK_ASSERT(!matcher.matchExist("203.0.113.1"));
+
+    matcher.clear();
+    LOK_ASSERT(matcher.empty());
+    LOK_ASSERT(!matcher.match("100.64.0.1"));
+    matcher.allow("100.64.0.0/10");
+    LOK_ASSERT(!matcher.empty());
 }
 
 void WhiteBoxTests::testRegexListMatcher_Init()
@@ -733,6 +789,30 @@ void WhiteBoxTests::testJson()
     LOK_ASSERT_EQUAL_STR("user@user.com", stringValue);
 }
 
+void WhiteBoxTests::testWopiSecurityLabelFlag()
+{
+    constexpr std::string_view testname = __func__;
+
+    // The CheckFileInfo contract WOPIFileInfo relies on for UserCanChangeSecurityLabel:
+    // findJSONValue leaves the caller's default untouched when the key is absent (so the
+    // default-true "can change" holds for an unset host), and parses an explicit value.
+    const auto canChange = [](const char* json) -> bool
+    {
+        Poco::JSON::Object::Ptr object;
+        JsonUtil::parseJSON(json, object);
+        bool value = true; // WOPIFileInfo's default
+        JsonUtil::findJSONValue(object, "UserCanChangeSecurityLabel", value);
+        return value;
+    };
+
+    // Absent => allowed (default): an unset host setting keeps today's behaviour.
+    LOK_ASSERT_EQUAL(true, canChange(R"({"BaseFileName":"test.docx"})"));
+    // Explicit false => the marking is locked.
+    LOK_ASSERT_EQUAL(false, canChange(R"({"UserCanChangeSecurityLabel":false})"));
+    // Explicit true => allowed.
+    LOK_ASSERT_EQUAL(true, canChange(R"({"UserCanChangeSecurityLabel":true})"));
+}
+
 void WhiteBoxTests::testAnonymization()
 {
     constexpr std::string_view testname = __func__;
@@ -916,7 +996,39 @@ void WhiteBoxTests::testReadFile()
     LOK_ASSERT(size > 0);
     LOK_ASSERT_EQUAL(static_cast<std::size_t>(size), status.size());
     LOK_ASSERT(status.starts_with("Name:"));
+
+    // Content over maxSize is an error also when the size is not known up front.
+    std::string clipped;
+    LOK_ASSERT_EQUAL(static_cast<ssize_t>(-1), FileUtil::readFile("/proc/self/status", clipped, 128));
+    LOK_ASSERT(clipped.empty());
+
+    // The overload that returns the buffer reads the same content.
+    const std::unique_ptr<std::vector<char>> owned = FileUtil::readFile("/proc/self/status");
+    LOK_ASSERT(owned);
+    LOK_ASSERT(Util::toString(*owned).starts_with("Name:"));
 #endif
+
+    // A file that cannot be read yields a null pointer.
+    LOK_ASSERT(!FileUtil::readFile("/missing/file/path"));
+}
+
+void WhiteBoxTests::testIsPlainFileName()
+{
+    constexpr std::string_view testname = __func__;
+
+    LOK_ASSERT(FileUtil::isPlainFileName("hello.odt"));
+    LOK_ASSERT(FileUtil::isPlainFileName("..hidden"));
+    LOK_ASSERT(FileUtil::isPlainFileName("a..b"));
+
+    LOK_ASSERT(!FileUtil::isPlainFileName(""));
+    LOK_ASSERT(!FileUtil::isPlainFileName("."));
+    LOK_ASSERT(!FileUtil::isPlainFileName(".."));
+    LOK_ASSERT(!FileUtil::isPlainFileName("dir/file.odt"));
+    LOK_ASSERT(!FileUtil::isPlainFileName("dir\\file.odt"));
+    LOK_ASSERT(!FileUtil::isPlainFileName("/file.odt"));
+    LOK_ASSERT(!FileUtil::isPlainFileName("file.odt/"));
+    LOK_ASSERT(!FileUtil::isPlainFileName("file\nname.odt"));
+    LOK_ASSERT(!FileUtil::isPlainFileName("file\x7fname.odt"));
 }
 
 void WhiteBoxTests::testStringCompare()

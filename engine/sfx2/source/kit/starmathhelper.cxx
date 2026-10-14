@@ -13,6 +13,7 @@
 #include <sfx2/kit/componenthelpers.hxx>
 #include <sfx2/kit/helper.hxx>
 #include <sfx2/objsh.hxx>
+#include <sfx2/viewsh.hxx>
 
 #include <comphelper/dispatchcommand.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
@@ -35,12 +36,12 @@ KitStarMathHelper::KitStarMathHelper(const SfxViewShell* pViewShell)
         {
             if (const auto& xEmbObj = pIPClient->GetObject())
             {
-                css::uno::Reference<css::lang::XServiceInfo> xComp(xEmbObj->getComponent(),
-                                                                   css::uno::UNO_QUERY);
+                cpo::uno::Reference<css::lang::XServiceInfo> xComp(xEmbObj->getComponent(),
+                                                                   cpo::uno::UNO_QUERY);
                 if (xComp && xComp->supportsService(u"com.sun.star.formula.FormulaProperties"_ustr))
                 {
-                    if (css::uno::Reference<css::frame::XModel> xModel{ xComp,
-                                                                        css::uno::UNO_QUERY })
+                    if (cpo::uno::Reference<css::frame::XModel> xModel{ xComp,
+                                                                        cpo::uno::UNO_QUERY })
                     {
                         if (auto xController = xModel->getCurrentController())
                         {
@@ -109,7 +110,7 @@ vcl::Window* KitStarMathHelper::GetGraphicWindow()
     {
         if (mxFrame)
         {
-            css::uno::Reference<css::awt::XWindow> xDockerWin = mxFrame->getContainerWindow();
+            cpo::uno::Reference<css::awt::XWindow> xDockerWin = mxFrame->getContainerWindow();
             mpGraphicWindow.reset(FindSmGraphicWindow(VCLUnoHelper::GetWindow(xDockerWin)));
         }
     }
@@ -134,6 +135,41 @@ const SfxViewShell* KitStarMathHelper::GetSmViewShell()
         });
     }
     return nullptr;
+}
+
+const SfxViewShell* KitStarMathHelper::FindContainerViewShell(const SfxViewShell* pSmViewShell)
+{
+    if (!pSmViewShell)
+        return nullptr;
+
+    const vcl::Window* pSmWindow = pSmViewShell->GetWindow();
+    if (!pSmWindow)
+        return nullptr;
+
+    return SfxViewShell::GetFirst(false, [pSmViewShell, pSmWindow](const SfxViewShell& rShell) {
+        if (&rShell == pSmViewShell || !rShell.GetIPClient())
+            return false;
+        const vcl::Window* pGraphicWindow = KitStarMathHelper(&rShell).GetGraphicWindow();
+        return pGraphicWindow
+               && (pGraphicWindow == pSmWindow || pSmWindow->IsChild(pGraphicWindow));
+    });
+}
+
+void KitStarMathHelper::SendCaret(const SfxViewShell& rSmViewShell)
+{
+    const SfxViewShell* pContainerViewShell = FindContainerViewShell(&rSmViewShell);
+    const int nViewId = sal_Int32(
+        (pContainerViewShell ? *pContainerViewShell : rSmViewShell).GetViewShellId());
+    if (const auto payload
+        = rSmViewShell.getKitPayload(COKitCallbackType::INVALIDATE_VISIBLE_CURSOR, nViewId))
+    {
+        rSmViewShell.viewCallbackWithViewId(COKitCallbackType::INVALIDATE_VISIBLE_CURSOR, *payload,
+                                            nViewId);
+    }
+    if (const auto payload = rSmViewShell.getKitPayload(COKitCallbackType::TEXT_SELECTION, nViewId))
+    {
+        rSmViewShell.viewCallback(COKitCallbackType::TEXT_SELECTION, *payload);
+    }
 }
 
 tools::Rectangle KitStarMathHelper::GetBoundingBox() const

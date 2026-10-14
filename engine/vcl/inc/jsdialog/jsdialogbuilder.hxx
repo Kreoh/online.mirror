@@ -46,29 +46,29 @@ class JSDropTarget final
     : public comphelper::WeakComponentImplHelper<
           css::datatransfer::dnd::XDropTarget, css::lang::XInitialization, css::lang::XServiceInfo>
 {
-    std::vector<css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> m_aListeners;
+    std::vector<cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>> m_aListeners;
 
 public:
     JSDropTarget();
 
     // XInitialization
-    virtual void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArgs) override;
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArgs) override;
 
     // XDropTarget
-    virtual void SAL_CALL addDropTargetListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override;
-    virtual void SAL_CALL removeDropTargetListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override;
-    virtual bool SAL_CALL isActive() override;
-    virtual void SAL_CALL setActive(bool active) override;
-    virtual sal_Int8 SAL_CALL getDefaultActions() override;
-    virtual void SAL_CALL setDefaultActions(sal_Int8 actions) override;
+    virtual void addDropTargetListener(
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override;
+    virtual void removeDropTargetListener(
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>&) override;
+    virtual bool isActive() override;
+    virtual void setActive(bool active) override;
+    virtual sal_Int8 getDefaultActions() override;
+    virtual void setDefaultActions(sal_Int8 actions) override;
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    bool SAL_CALL supportsService(OUString const& ServiceName) override;
+    bool supportsService(OUString const& ServiceName) override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     void fire_drop(const css::datatransfer::dnd::DropTargetDropEvent& dtde);
 
@@ -144,15 +144,15 @@ public:
     JSInstanceBuilder(weld::Widget* pParent, vcl::Window* pVclParent, std::u16string_view rUIRoot,
                       const OUString& rUIFile, Type eBuilderType, sal_uInt64 nKitWindowId = 0,
                       const std::u16string_view& sTypeOfJSON = u"",
-                      const css::uno::Reference<css::frame::XFrame>& rFrame
-                      = css::uno::Reference<css::frame::XFrame>());
+                      const cpo::uno::Reference<css::frame::XFrame>& rFrame
+                      = cpo::uno::Reference<css::frame::XFrame>());
 
     static std::unique_ptr<JSInstanceBuilder>
     CreateDialogBuilder(weld::Widget* pParent, const OUString& rUIRoot, const OUString& rUIFile);
 
     static std::unique_ptr<JSInstanceBuilder>
     CreateNotebookbarBuilder(vcl::Window* pParent, const OUString& rUIRoot, const OUString& rUIFile,
-                             const css::uno::Reference<css::frame::XFrame>& rFrame,
+                             const cpo::uno::Reference<css::frame::XFrame>& rFrame,
                              sal_uInt64 nWindowId = 0);
     static std::unique_ptr<JSInstanceBuilder>
     CreateSidebarBuilder(weld::Widget* pParent, const OUString& rUIRoot, const OUString& rUIFile,
@@ -173,6 +173,11 @@ public:
                                                                         const OUString& rUIRoot,
                                                                         const OUString& rUIFile,
                                                                         sal_uInt64 nKitWindowId);
+
+    static std::unique_ptr<JSInstanceBuilder> CreateNotesPanelBuilder(vcl::Window* pParent,
+                                                                      const OUString& rUIRoot,
+                                                                      const OUString& rUIFile,
+                                                                      sal_uInt64 nKitWindowId);
 
     virtual ~JSInstanceBuilder() override;
     virtual std::unique_ptr<weld::MessageDialog> weld_message_dialog(const OUString& id) override;
@@ -209,7 +214,9 @@ public:
     virtual std::unique_ptr<weld::CustomWidget> weld_custom_widget(const OUString& id) override;
     virtual std::unique_ptr<weld::Widget> weld_widget(const OUString& id) override;
     virtual std::unique_ptr<weld::Image> weld_image(const OUString& id) override;
+    virtual std::unique_ptr<weld::ProgressBar> weld_progress_bar(const OUString& id) override;
     virtual std::unique_ptr<weld::LevelBar> weld_level_bar(const OUString& id) override;
+    virtual std::unique_ptr<weld::Scale> weld_scale(const OUString& id) override;
     virtual std::unique_ptr<weld::Calendar> weld_calendar(const OUString& id) override;
 
     static std::unique_ptr<weld::MessageDialog> CreateMessageDialog(weld::Widget* pParent,
@@ -363,7 +370,7 @@ public:
         }
     }
 
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() override
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() override
     {
         if (!m_xDropTarget)
             m_xDropTarget.set(new JSDropTarget);
@@ -726,7 +733,7 @@ public:
     virtual void set_item_icon_name(const OUString& rIdent, const OUString& rIconName) override;
     using JSWidget<SalInstanceToolbar, ::ToolBox>::set_item_image;
     virtual void set_item_image(const OUString& rIdent,
-                                const css::uno::Reference<css::graphic::XGraphic>& rImage) override;
+                                const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override;
 };
 
 class JSTextView final : public JSWidget<SalInstanceTextView, ::VclMultiLineEdit>
@@ -794,6 +801,7 @@ public:
 
     virtual void set_column_header_color(int nColumn, const Color& rColor) override;
     virtual void set_column_header_name(int nColumn, const OUString& rName) override;
+    virtual void clear_column_header_names() override;
 
     // OnDemandRenderingHandler
     virtual void render_entry(int pos, int dpiscale) override;
@@ -866,7 +874,7 @@ public:
 
     virtual void set_label(const OUString& rText) override;
     virtual void set_image(VirtualDevice* pDevice) override;
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override;
     virtual void do_set_active(bool active) override;
 };
 
@@ -915,6 +923,7 @@ public:
                    bool bTakeOwnership);
 
     virtual void send_update() override;
+    virtual void send_update_action() override;
 };
 
 class JSWidgetInstance : public JSWidget<SalInstanceWidget, vcl::Window>
@@ -925,6 +934,24 @@ public:
         : JSWidget<SalInstanceWidget, vcl::Window>(pSender, pObject, pBuilder, bTakeOwnership)
     {
     }
+
+    // weld_widget() wraps any window, a container of other widgets included -
+    // for those, like JSContainer, the whole subtree has to be refreshed on the
+    // client: Window::Enable() walks the children, but an action carries only
+    // this widget's id.
+    virtual void set_sensitive(bool sensitive) override
+    {
+        if (!m_xWidget->GetChildCount())
+        {
+            JSWidget::set_sensitive(sensitive);
+            return;
+        }
+
+        bool bIsSensitive = SalInstanceWidget::get_sensitive();
+        SalInstanceWidget::set_sensitive(sensitive);
+        if (bIsSensitive != sensitive)
+            sendUpdate();
+    }
 };
 
 class JSImage : public JSWidget<SalInstanceImage, FixedImage>
@@ -933,8 +960,17 @@ public:
     JSImage(JSDialogSender* pSender, FixedImage* pImage, SalInstanceBuilder* pBuilder,
             bool bTakeOwnership);
     virtual void set_image(VirtualDevice* pDevice) override;
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) override;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) override;
     virtual void set_from_icon_name(const OUString& rIconName) override;
+};
+
+class JSProgressBar : public JSWidget<SalInstanceProgressBar, ::ProgressBar>
+{
+public:
+    JSProgressBar(JSDialogSender* pSender, ::ProgressBar* pProgressBar,
+                  SalInstanceBuilder* pBuilder, bool bTakeOwnership);
+    virtual void set_percentage(int nValue) override;
+    virtual void set_text(const OUString& rText) override;
 };
 
 class JSLevelBar : public JSWidget<SalInstanceLevelBar, ::ProgressBar>
@@ -943,6 +979,16 @@ public:
     JSLevelBar(JSDialogSender* pSender, ::ProgressBar* pProgressBar, SalInstanceBuilder* pBuilder,
                bool bTakeOwnership);
     virtual void set_percentage(double fPercentage) override;
+};
+
+class JSScale final : public JSWidget<SalInstanceScale, ::Slider>
+{
+public:
+    JSScale(JSDialogSender* pSender, ::Slider* pSlider, SalInstanceBuilder* pBuilder,
+            bool bTakeOwnership);
+    virtual void set_value(int nValue) override;
+    virtual void set_range(int nMin, int nMax) override;
+    virtual void set_increments(int nStep, int nPage) override;
 };
 
 class JSCalendar : public JSWidget<SalInstanceCalendar, ::Calendar>

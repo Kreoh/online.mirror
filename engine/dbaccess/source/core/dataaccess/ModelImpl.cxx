@@ -65,8 +65,8 @@ using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::embed;
 using namespace ::com::sun::star::container;
@@ -574,7 +574,7 @@ void ODatabaseModelImpl::disposing( const css::lang::EventObject& Source )
         bool bStore = false;
         for (OWeakConnectionArray::iterator i = m_aConnections.begin(); i != m_aConnections.end(); )
         {
-            css::uno::Reference< css::sdbc::XConnection > xIterConn ( *i );
+            cpo::uno::Reference< css::sdbc::XConnection > xIterConn ( *i );
             if ( !xIterConn.is())
             {
                 i = m_aConnections.erase(i);
@@ -852,7 +852,7 @@ bool ODatabaseModelImpl::commitStorageIfWriteable_ignoreErrors( const Reference<
         // For that, we need a temporary copy of the original file.
         osl::File::RC rc = osl::File::copy(sLocation, sTmpFileUrl);
         if (rc != osl::FileBase::E_None)
-            throw uno::RuntimeException(u"Could not create temp file"_ustr);
+            throw cpo::uno::RuntimeException(u"Could not create temp file"_ustr);
     }
 
     bool bSuccess = false;
@@ -884,7 +884,7 @@ bool ODatabaseModelImpl::commitStorageIfWriteable_ignoreErrors( const Reference<
                     = comphelper::OStorageHelper::GetStorageOfFormatFromURL(
                         ZIP_STORAGE_FORMAT_STRING, sTmpFileUrl, ElementModes::READ);
                 if (!xReadOrig.is())
-                    throw uno::RuntimeException("Could not read " + sTmpFileUrl);
+                    throw cpo::uno::RuntimeException("Could not read " + sTmpFileUrl);
                 uno::Reference<embed::XStorage> xMetaInf
                     = xReadOrig->openStorageElement(u"META-INF"_ustr, embed::ElementModes::READ);
 
@@ -1142,7 +1142,7 @@ Reference< XStorageBasedLibraryContainer > ODatabaseModelImpl::getLibraryContain
 
     rtl::Reference< ODatabaseDocument > xDocument( getModel_noCreate() );
     if (!xDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
         // this is only to be called if there already exists a document model - in fact, it is
         // to be called by the document model only
 
@@ -1364,7 +1364,7 @@ SignatureState ODatabaseModelImpl::getScriptingSignatureState()
 }
 
 bool ODatabaseModelImpl::hasTrustedScriptingSignature(
-    const css::uno::Reference<css::task::XInteractionHandler>& _rxInteraction)
+    const cpo::uno::Reference<css::task::XInteractionHandler>& _rxInteraction)
 {
     bool bResult = false;
 

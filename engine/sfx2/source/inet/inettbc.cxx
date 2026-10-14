@@ -38,7 +38,7 @@
 #include <vcl/InterimItemWindow.hxx>
 #include <sfx2/sfxsids.hrc>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::frame;
@@ -199,7 +199,7 @@ IMPL_LINK_NOARG(SfxURLToolBoxControl_Impl, OpenHdl, weld::ComboBox&, bool)
     SvtURLBox* pURLBox = GetURLBox();
     OpenURL( pURLBox->GetURL() );
 
-    Reference< XDesktop2 > xDesktop = Desktop::create( m_xContext );
+    Reference< XDesktop > xDesktop = Desktop::create( m_xContext );
     Reference< XFrame > xFrame = xDesktop->getActiveFrame();
     if (!xFrame.is())
         return true;

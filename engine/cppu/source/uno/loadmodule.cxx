@@ -35,7 +35,15 @@ namespace cppu::detail {
 
 #ifndef DISABLE_DYNLOADING
 
-bool loadModule(osl::Module& rModule, OUString const & name) {
+bool loadModule(osl::Module& rModule, std::u16string_view name) {
+
+#if ENABLE_UNITEDLIBS
+    if (osl_isUnitedLibActive())
+    {
+        return rModule.load(SAL_MODULENAME("unitedlo"), SAL_LOADMODULE_GLOBAL | SAL_LOADMODULE_LAZY);
+    }
+#endif
+
     static OUString base = [] {
             OUString url;
             if (!osl::Module::getUrlFromAddress(
@@ -51,12 +59,7 @@ bool loadModule(osl::Module& rModule, OUString const & name) {
         SAL_INFO("cppu", "osl::Module::getUrlFromAddress had failed");
         return false;
     }
-    OUString b =
-#if defined SAL_DLLPREFIX
-        SAL_DLLPREFIX +
-#endif
-        name +
-        SAL_DLLEXTENSION;
+    OUString b = OUString::Concat(SAL_DLLPREFIX) + name + SAL_DLLEXTENSION;
     try {
         b = rtl::Uri::convertRelToAbs(base, b);
     } catch (rtl::MalformedUriException & e) {

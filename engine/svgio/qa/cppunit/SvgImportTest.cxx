@@ -27,7 +27,7 @@
 #include <string_view>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::io;
 using namespace css::graphic;
 using namespace ::cpo::uno;
@@ -42,6 +42,7 @@ protected:
 
     Primitive2DSequence parseSvg(std::u16string_view aSource);
     xmlDocUniquePtr dumpAndParseSvg(std::u16string_view aSource);
+    xmlDocUniquePtr dumpAndParseSvgText(const OString& rSvg, const OUString& rLocation);
 };
 
 Primitive2DSequence Test::parseSvg(std::u16string_view aSource)
@@ -74,6 +75,21 @@ xmlDocUniquePtr Test::dumpAndParseSvg(std::u16string_view aSource)
     return pDocument;
 }
 
+xmlDocUniquePtr Test::dumpAndParseSvgText(const OString& rSvg, const OUString& rLocation)
+{
+    const Reference<XSvgParser> xSvgParser = SvgTools::create(m_xContext);
+
+    Sequence<sal_Int8> aData(reinterpret_cast<const sal_Int8*>(rSvg.getStr()), rSvg.getLength());
+    Reference<XInputStream> xStream(new comphelper::SequenceInputStream(aData));
+
+    drawinglayer::Primitive2dXmlDump dumper;
+    xmlDocUniquePtr pDocument
+        = dumper.dumpAndParse(xSvgParser->getDecomposition(xStream, rLocation));
+
+    CPPUNIT_ASSERT(pDocument);
+    return pDocument;
+}
+
 void Test::checkRectPrimitive(Primitive2DSequence const & rPrimitive)
 {
     drawinglayer::Primitive2dXmlDump dumper;
@@ -97,8 +113,8 @@ namespace
 bool arePrimitive2DSequencesEqual(const Primitive2DSequence& rA, const Primitive2DSequence& rB)
 {
     auto rv = std::mismatch(rA.begin(), rA.end(), rB.begin(), rB.end(),
-        [](const css::uno::Reference<css::graphic::XPrimitive2D>& a,
-           const css::uno::Reference<css::graphic::XPrimitive2D>& b)
+        [](const cpo::uno::Reference<css::graphic::XPrimitive2D>& a,
+           const cpo::uno::Reference<css::graphic::XPrimitive2D>& b)
         {
             return drawinglayer::primitive2d::arePrimitive2DReferencesEqual(a, b);
         });
@@ -365,6 +381,23 @@ CPPUNIT_TEST_FIXTURE(Test, testFilterFeImage)
     xmlDocUniquePtr pDocument = dumpAndParseSvg(u"/svgio/qa/cppunit/data/filterFeImage.svg");
 
     assertXPath(pDocument, "/primitive2D/transform/transform/bitmap");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testImageOutsideSvgNeedsLocation)
+{
+    const OUString aImageUrl
+        = m_directories.getURLFromSrc(u"/svgio/qa/cppunit/data/externalImage.png");
+    const OString aSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\""
+                         " xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"200\" height=\"200\">"
+                         "<image x=\"10\" y=\"10\" width=\"100\" height=\"100\" xlink:href=\""
+                         + aImageUrl.toUtf8() + "\"/></svg>";
+
+    // An SVG inside a document has no location, and its picture outside the SVG stays out.
+    assertXPath(dumpAndParseSvgText(aSvg, OUString()), "//bitmap", 0);
+
+    // The same SVG read from a location shows the picture.
+    assertXPath(dumpAndParseSvgText(aSvg, m_directories.getURLFromSrc(u"/svgio/qa/cppunit/data/")),
+                "//bitmap", 1);
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf87309)
@@ -1366,7 +1399,7 @@ CPPUNIT_TEST_FIXTURE(Test, testBehaviourWhenWidthAndHeightIsOrIsNotSet)
         basegfx::B2DRange aRange;
         cpo::uno::Sequence<beans::PropertyValue> aViewParameters;
 
-        for (css::uno::Reference<css::graphic::XPrimitive2D> const & xReference : aSequence)
+        for (cpo::uno::Reference<css::graphic::XPrimitive2D> const & xReference : aSequence)
         {
             if (xReference.is())
             {
@@ -1391,7 +1424,7 @@ CPPUNIT_TEST_FIXTURE(Test, testBehaviourWhenWidthAndHeightIsOrIsNotSet)
         basegfx::B2DRange aRange;
         cpo::uno::Sequence<beans::PropertyValue> aViewParameters;
 
-        for (css::uno::Reference<css::graphic::XPrimitive2D> const & xReference : aSequence)
+        for (cpo::uno::Reference<css::graphic::XPrimitive2D> const & xReference : aSequence)
         {
             if (xReference.is())
             {

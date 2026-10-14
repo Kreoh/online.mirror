@@ -15,6 +15,7 @@
 #include <rtl/ustring.hxx>
 #include <vcl/weld.hxx>
 #include <com/sun/star/frame/XFrame.hpp>
+#include <vector>
 
 /**
  * Welded wrapper for NotebookBar used for online
@@ -27,13 +28,34 @@ class UNLESS_MERGELIBS(VCL_DLLPUBLIC) WeldedTabbedNotebookbar
     std::unique_ptr<weld::Toolbar> m_xWeldedToolbar;
 
 public:
+    struct ExtraToolbar
+    {
+        OUString m_aControllerService;
+        std::unique_ptr<weld::Builder> m_xBuilder;
+        std::unique_ptr<weld::Toolbar> m_xToolbar;
+    };
+
+    struct ExtraPanel
+    {
+        OUString m_aUIFilePath;
+        OUString m_aToolbarId;
+        OUString m_aControllerService;
+    };
+
     WeldedTabbedNotebookbar(const VclPtr<vcl::Window>& pContainerWindow,
                             const OUString& rUIFilePath,
-                            const css::uno::Reference<css::frame::XFrame>& rFrame,
-                            sal_uInt64 nWindowId);
+                            const cpo::uno::Reference<css::frame::XFrame>& rFrame,
+                            sal_uInt64 nWindowId,
+                            const std::vector<ExtraPanel>& rExtraPanels = {});
 
     weld::Toolbar& getWeldedToolbar() { return *m_xWeldedToolbar; }
+
+    std::vector<ExtraToolbar>& getExtraPanels() { return m_aExtraToolbars; }
+
     weld::Builder& getBuilder() { return *m_xBuilder; }
+
+private:
+    std::vector<ExtraToolbar> m_aExtraToolbars;
 };
 
 #endif // INCLUDED_SFX2_NOTEBOOKBAR_SFXNOTEBOOKBAR_HXX

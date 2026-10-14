@@ -62,6 +62,7 @@
 #include <unotextbodyhf.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static void disableScrollBars(uno::Reference< beans::XPropertySet > const & xViewProps,
     bool bEnableOnlineMode)
@@ -179,7 +180,7 @@ void SwOneExampleFrame::CreateControl()
     if(!m_sArgumentURL.isEmpty())
         sTempURL = m_sArgumentURL;
 
-    uno::Reference<frame::XDesktop2> xDesktop = frame::Desktop::create(::comphelper::getProcessComponentContext());
+    uno::Reference<frame::XDesktop> xDesktop = frame::Desktop::create(::comphelper::getProcessComponentContext());
     cpo::uno::Sequence<beans::PropertyValue> args( comphelper::InitPropertySequence({
             { u"DocumentService"_ustr, cpo::uno::Any(u"com.sun.star.text.TextDocument"_ustr) },
             { u"OpenFlags"_ustr, cpo::uno::Any(u"-RB"_ustr) },

@@ -23,8 +23,6 @@ officecfg_XCSFILES := \
     Office/Draw \
     Office/Embedding \
     Office/Events \
-    Office/ExtensionDependencies \
-    Office/ExtensionManager \
     Office/Histories \
     Office/Impress \
     Office/Java \
@@ -35,7 +33,6 @@ officecfg_XCSFILES := \
     Office/Math \
     Office/OptionsDialog \
     Office/Paths \
-    Office/PresentationMinimizer \
     Office/ProtocolHandler \
     Office/Recovery \
     Office/Scripting \

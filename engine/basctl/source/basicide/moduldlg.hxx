@@ -72,23 +72,6 @@ public:
     sal_Int32 GetLineNumber() const;
 };
 
-class ExportDialog : public weld::GenericDialogController
-{
-private:
-    bool m_bExportAsPackage;
-
-    std::unique_ptr<weld::RadioButton> m_xExportAsPackageButton;
-    std::unique_ptr<weld::Button> m_xOKButton;
-
-    DECL_LINK(OkButtonHandler, weld::Button&, void);
-
-public:
-    explicit ExportDialog(weld::Window * pParent);
-    virtual ~ExportDialog() override;
-
-    bool isExportAsPackage () const { return m_bExportAsPackage; }
-};
-
 class LibDialog : public weld::GenericDialogController
 {
 private:
@@ -199,9 +182,7 @@ public:
 
 void implExportLib(const ScriptDocument& rScriptDocument, const OUString& aLibName,
                    const OUString& aTargetURL,
-                   const css::uno::Reference<css::task::XInteractionHandler>& Handler);
-void ExportAsPackage(const ScriptDocument& rScriptDocument, const OUString& aLibName,
-                     weld::Dialog* pDialog);
+                   const cpo::uno::Reference<css::task::XInteractionHandler>& Handler);
 void ExportAsBasic(const ScriptDocument& rScriptDocument, const OUString& aLibName,
                    weld::Dialog* pDialog);
 
@@ -215,10 +196,10 @@ private:
 
     DECL_LINK(ActivatePageHdl, const OUString&, void);
 
-    void SetCurrentEntry(const css::uno::Reference<css::frame::XFrame>& xDocFrame);
+    void SetCurrentEntry(const cpo::uno::Reference<css::frame::XFrame>& xDocFrame);
 
 public:
-    OrganizeDialog(weld::Window* pParent, const css::uno::Reference<css::frame::XFrame>& xDocFrame, sal_Int16 tabId);
+    OrganizeDialog(weld::Window* pParent, const cpo::uno::Reference<css::frame::XFrame>& xDocFrame, sal_Int16 tabId);
     virtual ~OrganizeDialog() override;
 };
 

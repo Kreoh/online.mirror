@@ -74,7 +74,8 @@
 #include <memory>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using vcl::EnumContext;
 
 namespace sd {
@@ -94,14 +95,14 @@ public:
                             explicit ScannerEventListener( DrawViewShell* pParent ) : mpParent( pParent )  {}
 
     // XEventListener
-    virtual void SAL_CALL   disposing( const lang::EventObject& rEventObject ) override;
+    virtual void   disposing( const lang::EventObject& rEventObject ) override;
 
     void                    ParentDestroyed() { mpParent = nullptr; }
 };
 
 }
 
-void SAL_CALL ScannerEventListener::disposing( const lang::EventObject& /*rEventObject*/ )
+void ScannerEventListener::disposing( const lang::EventObject& /*rEventObject*/ )
 {
     if( mpParent )
         mpParent->ScannerEvent();
@@ -344,7 +345,7 @@ void DrawViewShell::Construct(DrawDocShell* pDocSh, PageKind eInitialPageKind)
 
     mnLockCount = 0;
 
-    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
 
     try
     {
@@ -352,7 +353,7 @@ void DrawViewShell::Construct(DrawDocShell* pDocSh, PageKind eInitialPageKind)
 
         mxScannerListener = new ScannerEventListener( this );
     }
-    catch (DeploymentException const &)
+    catch (cpo::uno::DeploymentException const &)
     {
         SAL_INFO("sd", "Scanner manager not available");
     }
@@ -375,9 +376,9 @@ void DrawViewShell::Init (bool bIsMainViewShell)
         StartListening (*GetDocSh());
 }
 
-css::uno::Reference<css::drawing::XDrawSubController> DrawViewShell::CreateSubController()
+cpo::uno::Reference<css::drawing::XDrawSubController> DrawViewShell::CreateSubController()
 {
-    css::uno::Reference<css::drawing::XDrawSubController> xSubController;
+    cpo::uno::Reference<css::drawing::XDrawSubController> xSubController;
 
     if (IsMainViewShell())
     {

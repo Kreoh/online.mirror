@@ -106,23 +106,6 @@ bool lclFillListBox(weld::TreeView& rLBox, const std::vector<ScDPLabelData::Memb
     return bEmpty;
 }
 
-/** This table represents the order of the strings in the resource string array. */
-const PivotFunc spnFunctions[] =
-{
-    PivotFunc::Sum,
-    PivotFunc::Count,
-    PivotFunc::Average,
-    PivotFunc::Median,
-    PivotFunc::Max,
-    PivotFunc::Min,
-    PivotFunc::Product,
-    PivotFunc::CountNum,
-    PivotFunc::StdDev,
-    PivotFunc::StdDevP,
-    PivotFunc::StdVar,
-    PivotFunc::StdVarP
-};
-
 const sal_uInt16 SC_BASEITEM_PREV_POS = 0;
 const sal_uInt16 SC_BASEITEM_NEXT_POS = 1;
 const sal_uInt16 SC_BASEITEM_USER_POS = 2;
@@ -148,7 +131,7 @@ void ScDPFunctionListBox::SetSelection( PivotFunc nFuncMask )
     {
         for( sal_Int32 nEntry = 0, nCount = m_xControl->n_children(); nEntry < nCount; ++nEntry )
         {
-            if (bool(nFuncMask & spnFunctions[ nEntry ]))
+            if (bool(nFuncMask & ScDPDataFieldFunctions[ nEntry ]))
                 m_xControl->select(nEntry);
             else
                 m_xControl->unselect(nEntry);
@@ -161,7 +144,7 @@ PivotFunc ScDPFunctionListBox::GetSelection() const
     PivotFunc nFuncMask = PivotFunc::NONE;
     std::vector<int> aRows = m_xControl->get_selected_rows();
     for (int nSel : aRows)
-        nFuncMask |= spnFunctions[nSel];
+        nFuncMask |= ScDPDataFieldFunctions[nSel];
     return nFuncMask;
 }
 
@@ -173,7 +156,7 @@ void ScDPFunctionListBox::FillFunctionNames()
     for (size_t nIndex = 0; nIndex < SAL_N_ELEMENTS(SCSTR_DPFUNCLISTBOX); ++nIndex)
         m_xControl->append_text(ScResId(SCSTR_DPFUNCLISTBOX[nIndex]));
     m_xControl->thaw();
-    assert(m_xControl->n_children() == SAL_N_ELEMENTS(spnFunctions));
+    assert(m_xControl->n_children() == SAL_N_ELEMENTS(ScDPDataFieldFunctions));
 }
 
 namespace
@@ -656,7 +639,7 @@ ScDPSubtotalOptDlg::ScDPSubtotalOptDlg(weld::Window* pParent, ScDPObject& rDPObj
     , m_xRbSortAsc(m_xBuilder->weld_radio_button(u"ascending"_ustr))
     , m_xRbSortDesc(m_xBuilder->weld_radio_button(u"descending"_ustr))
     , m_xRbSortMan(m_xBuilder->weld_radio_button(u"manual"_ustr))
-    , m_xLayoutFrame(m_xBuilder->weld_widget(u"layoutframe"_ustr))
+    , m_xLayoutFrame(m_xBuilder->weld_frame(u"layoutframe"_ustr))
     , m_xLbLayout(m_xBuilder->weld_combo_box(u"layout"_ustr))
     , m_xCbLayoutEmpty(m_xBuilder->weld_check_button(u"emptyline"_ustr))
     , m_xCbRepeatItemLabels(m_xBuilder->weld_check_button(u"repeatitemlabels"_ustr))
@@ -667,7 +650,7 @@ ScDPSubtotalOptDlg::ScDPSubtotalOptDlg(weld::Window* pParent, ScDPObject& rDPObj
     , m_xLbShowFrom(m_xBuilder->weld_combo_box(u"from"_ustr))
     , m_xFtShowUsing(m_xBuilder->weld_label(u"usingft"_ustr))
     , m_xLbShowUsing(m_xBuilder->weld_combo_box(u"using"_ustr))
-    , m_xHideFrame(m_xBuilder->weld_widget(u"hideframe"_ustr))
+    , m_xHideFrame(m_xBuilder->weld_frame(u"hideframe"_ustr))
     , m_xLbHide(m_xBuilder->weld_tree_view(u"hideitems"_ustr))
     , m_xFtHierarchy(m_xBuilder->weld_label(u"hierarchyft"_ustr))
     , m_xLbHierarchy(m_xBuilder->weld_combo_box(u"hierarchy"_ustr))

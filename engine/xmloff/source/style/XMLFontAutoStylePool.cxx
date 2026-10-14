@@ -19,6 +19,7 @@
 
 #include <o3tl/sorted_vector.hxx>
 #include <tools/fontenum.hxx>
+#include <iomanip>
 #include <utility>
 #include <xmloff/xmlnamespace.hxx>
 #include <xmloff/xmltoken.hxx>
@@ -44,10 +45,11 @@
 #include <XMLBase64Export.hxx>
 #include <AutoStyleEntry.hxx>
 #include <comphelper/hash.hxx>
+#include <iomanip>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::xmloff::token;
 
 class XMLFontAutoStylePoolEntry_Impl

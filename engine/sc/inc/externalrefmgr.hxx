@@ -30,6 +30,7 @@
 #include "types.hxx"
 #include "rangelst.hxx"
 #include <osl/mutex.hxx>
+#include <formula/token.hxx>
 #include <formula/types.hxx>
 #include <tools/solar.h>
 
@@ -492,6 +493,13 @@ public:
         access the cache table, e.g. in getCacheTable().
      */
     SC_DLLPUBLIC void getAllCachedTableNames(sal_uInt16 nFileId, ::std::vector<OUString>& rTabNames) const;
+
+    /** Shrink the end of a range to the data area of the external sheet, so
+     *  an entire column or row does not turn into a matrix of MAXROW+1 rows.
+        The start is left alone, and the range is left alone if the extent is
+        not known. Does not load the source document.
+     */
+    void shrinkToDataArea(sal_uInt16 nFileId, const OUString& rTabName, ScRange& rRange);
 
     /**
      * Get the span (distance+sign(distance)) of two sheets of a specified

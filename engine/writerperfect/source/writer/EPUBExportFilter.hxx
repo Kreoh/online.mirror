@@ -18,10 +18,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace writerperfect
 {
@@ -35,25 +32,25 @@ class EPUBExportFilter
     : public cppu::WeakImplHelper<css::document::XFilter, css::document::XExporter,
                                   css::lang::XServiceInfo>
 {
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
-    css::uno::Reference<css::lang::XComponent> mxSourceDocument;
-    css::uno::Reference<css::task::XStatusIndicator> mxStatusIndicator;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::lang::XComponent> mxSourceDocument;
+    cpo::uno::Reference<css::task::XStatusIndicator> mxStatusIndicator;
 
 public:
-    EPUBExportFilter(css::uno::Reference<css::uno::XComponentContext> xContext);
+    EPUBExportFilter(cpo::uno::Reference<cpo::uno::XComponentContext> xContext);
 
     // XFilter
-    bool SAL_CALL filter(const cpo::uno::Sequence<css::beans::PropertyValue>& rDescriptor) override;
-    void SAL_CALL cancel() override;
+    bool filter(const cpo::uno::Sequence<css::beans::PropertyValue>& rDescriptor) override;
+    void cancel() override;
 
     // XExporter
-    void SAL_CALL
-    setSourceDocument(const css::uno::Reference<css::lang::XComponent>& xDocument) override;
+    void
+    setSourceDocument(const cpo::uno::Reference<css::lang::XComponent>& xDocument) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& rServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     /// Gives the default EPUB version.
     static sal_Int32 GetDefaultVersion();

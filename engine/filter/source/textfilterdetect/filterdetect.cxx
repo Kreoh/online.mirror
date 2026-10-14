@@ -31,6 +31,7 @@ constexpr OUString WRITER_DOCSERVICE = u"com.sun.star.text.TextDocument"_ustr;
 constexpr OUString CALC_DOCSERVICE = u"com.sun.star.sheet.SpreadsheetDocument"_ustr;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -251,8 +252,8 @@ cpo::uno::Sequence<OUString> PlainTextFilterDetect::getSupportedServiceNames()
     return PlainTextFilterDetect_getSupportedServiceNames();
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_filters_PlainTextFilterDetect_get_implementation(css::uno::XComponentContext* ,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_filters_PlainTextFilterDetect_get_implementation(cpo::uno::XComponentContext* ,
                                                                    cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new PlainTextFilterDetect);

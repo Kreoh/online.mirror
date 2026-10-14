@@ -30,8 +30,8 @@ class FilterOptionsContinuation final : public comphelper::OInteraction< css::do
     cpo::uno::Sequence< css::beans::PropertyValue > rProperties;
 
 public:
-    virtual void SAL_CALL setFilterOptions( const cpo::uno::Sequence< css::beans::PropertyValue >& rProp ) override;
-    virtual cpo::uno::Sequence< css::beans::PropertyValue > SAL_CALL getFilterOptions(  ) override;
+    virtual void setFilterOptions( const cpo::uno::Sequence< css::beans::PropertyValue >& rProp ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getFilterOptions(  ) override;
 };
 
 class RequestFilterOptions final : public ::cppu::WeakImplHelper< css::task::XInteractionRequest >
@@ -42,7 +42,7 @@ class RequestFilterOptions final : public ::cppu::WeakImplHelper< css::task::XIn
     rtl::Reference<FilterOptionsContinuation>      m_xOptions;
 
 public:
-    RequestFilterOptions( css::uno::Reference< css::frame::XModel > const & rModel,
+    RequestFilterOptions( cpo::uno::Reference< css::frame::XModel > const & rModel,
                               const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties );
 
     bool    isAbort() const { return m_xAbort->wasSelected(); }
@@ -52,10 +52,10 @@ public:
         return m_xOptions->getFilterOptions();
     }
 
-    virtual cpo::uno::Any SAL_CALL getRequest() override;
+    virtual cpo::uno::Any getRequest() override;
 
-    virtual cpo::uno::Sequence< css::uno::Reference< css::task::XInteractionContinuation >
-            > SAL_CALL getContinuations() override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::task::XInteractionContinuation >
+            > getContinuations() override;
 };
 
 #endif

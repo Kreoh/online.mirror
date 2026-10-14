@@ -44,6 +44,7 @@
 #include <stack>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -243,7 +244,7 @@ bool SvxHlinkDlgMarkWnd::RefreshFromDoc(const OUString& aURL)
 {
     mnError = LERR_NOERROR;
 
-    uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( ::comphelper::getProcessComponentContext() );
     uno::Reference< lang::XComponent > xComp;
 
     if( !aURL.isEmpty() )

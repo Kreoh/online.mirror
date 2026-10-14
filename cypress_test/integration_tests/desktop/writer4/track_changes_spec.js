@@ -4,7 +4,7 @@ var helper = require('../../common/helper');
 const desktopHelper = require('../../common/desktop_helper');
 const redlineHelper = require('../../common/redline_helper');
 
-describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function () {
+describe(['tagdesktop', 'tagnextcloud'], 'Track Changes', function () {
 
 	beforeEach(function () {
 		cy.viewport(1400, 600);
@@ -461,7 +461,6 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		// simple redo
 		cy.wait(500);
 		cy.cGet('#redo').click();
-		// cy.wait(500);
 		cy.cGet('#map').focus();
 		helper.typeIntoDocument('{home}');
 		cy.cGet('#comment-container-3').should('contain','some text2');

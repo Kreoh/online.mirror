@@ -11,6 +11,9 @@
 
 #include <osl/thread.h>
 #include <svl/numformat.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <drwlayer.hxx>
 #include <svl/zformat.hxx>
 #include <svx/svdograf.hxx>
 
@@ -49,7 +52,8 @@
 #include "helper/qahelper.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class ScFiltersTest2 : public ScModelTestBase
 {
@@ -636,6 +640,35 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testExternalRefCacheXLSX)
     CPPUNIT_ASSERT_EQUAL(u"Charlie"_ustr, pDoc->GetString(ScAddress(0, 3, 0)));
 }
 
+CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testExternalRefWholeColumnXLOOKUP)
+{
+    createScDoc("xlsx/external-ref-wholecol-xlookup.xlsx");
+    ScDocument* pDoc = getScDoc();
+
+    // Excel's cached results are applied on import, recalculate to run the formulas.
+    pDoc->CalcAll();
+
+    // Entire external columns, the search value takes an implicit intersection.
+    for (SCROW nRow = 1; nRow <= 5; ++nRow)
+        CPPUNIT_ASSERT_EQUAL(9.0 + nRow, pDoc->GetValue(ScAddress(1, nRow, 0)));
+
+    // Array formula over an entire column right of the cached ones.
+    CPPUNIT_ASSERT_EQUAL(u"#N/A"_ustr, pDoc->GetString(ScAddress(1, 9, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testExternalRefWholeColumnResult)
+{
+    createScDoc("xlsx/external-ref-wholecol-xlookup.xlsx");
+    ScDocument* pDoc = getScDoc();
+
+    // Excel's cached results are applied on import, recalculate to run the formulas.
+    pDoc->CalcAll();
+
+    // D2:D6 are @ on an entire external column, each row takes its own.
+    for (SCROW nRow = 1; nRow <= 5; ++nRow)
+        CPPUNIT_ASSERT_EQUAL(9.0 + nRow, pDoc->GetValue(ScAddress(3, nRow, 0)));
+}
+
 CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testExternalRefCacheODS)
 {
     createScDoc("ods/external-ref-cache.ods");
@@ -774,6 +807,24 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testTdf145054)
     ScDBData* pDBData
         = pDoc->GetDBCollection()->getNamedDBs().findByName(u"__Anonymous_Sheet_DB__1"_ustr);
     CPPUNIT_ASSERT(pDBData);
+}
+
+CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testTdf99913TableFilteredRows)
+{
+    // Table1 is A1:C11 with a colour filter on column B, which hides rows 5-11
+    createScDoc("xlsx/tdf145054.xlsx");
+    ScDocument* pDoc = getScDoc();
+
+    // XLSX does not tell filtered and manually hidden rows apart, so the rows hidden in a table
+    // with an autofilter must be flagged as filtered, like the rows of a sheet autofilter.
+    CPPUNIT_ASSERT(!pDoc->RowHidden(3, 0));
+    CPPUNIT_ASSERT(!pDoc->RowFiltered(3, 0));
+    for (SCROW nRow = 4; nRow <= 10; ++nRow)
+    {
+        CPPUNIT_ASSERT(pDoc->RowHidden(nRow, 0));
+        CPPUNIT_ASSERT_MESSAGE(OString("row " + OString::number(nRow + 1)).getStr(),
+                               pDoc->RowFiltered(nRow, 0));
+    }
 }
 
 CPPUNIT_TEST_FIXTURE(ScFiltersTest2, testTdf84762)

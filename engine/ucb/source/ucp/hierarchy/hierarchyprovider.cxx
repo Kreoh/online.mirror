@@ -41,6 +41,7 @@
 #include "../inc/urihelper.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace hierarchy_ucp;
 
 
@@ -48,7 +49,7 @@ using namespace hierarchy_ucp;
 
 
 HierarchyContentProvider::HierarchyContentProvider(
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 : HierarchyContentProvider_Base( rxContext )
 {
 }
@@ -61,11 +62,11 @@ HierarchyContentProvider::~HierarchyContentProvider()
 
 // XServiceInfo methods.
 
-OUString SAL_CALL HierarchyContentProvider::getImplementationName()                       \
+OUString HierarchyContentProvider::getImplementationName()                       \
 {
     return u"com.sun.star.comp.ucb.HierarchyContentProvider"_ustr;
 }
-bool SAL_CALL HierarchyContentProvider::supportsService( const OUString& ServiceName )
+bool HierarchyContentProvider::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
@@ -76,9 +77,9 @@ cpo::uno::Sequence< OUString > HierarchyContentProvider::getSupportedServiceName
 
 // Service factory implementation.
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_HierarchyContentProvider_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new HierarchyContentProvider(context));
 }
@@ -87,7 +88,7 @@ ucb_HierarchyContentProvider_get_implementation(
 
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 HierarchyContentProvider::queryContent(
         const uno::Reference< ucb::XContentIdentifier >& Identifier )
 {
@@ -121,7 +122,7 @@ HierarchyContentProvider::queryContent(
 
 
 // virtual
-void SAL_CALL HierarchyContentProvider::initialize(
+void HierarchyContentProvider::initialize(
                                 const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     if ( aArguments.hasElements() )
@@ -209,7 +210,7 @@ HierarchyContentProvider::getRootConfigReadNameAccess(
                         uno::UNO_QUERY );
             }
         }
-        catch ( uno::RuntimeException const & )
+        catch ( cpo::uno::RuntimeException const & )
         {
             throw;
         }

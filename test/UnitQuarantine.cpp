@@ -22,9 +22,10 @@
 #include <testlog.hpp>
 #include <common/FileUtil.hpp>
 #include <wsd/DocumentBroker.hpp>
-#include <wsd/Process.hpp>
 
+#include <Poco/File.h>
 #include <Poco/Net/HTTPRequest.h>
+#include <Poco/Path.h>
 #include <csignal>
 #include <ctime>
 
@@ -58,7 +59,6 @@ class UnitQuarantineConflict : public WOPIUploadConflictCommon
 
     std::string _quarantinePath;
     bool _unloadingModifiedDocDetected;
-    bool _putFailed;
 
     static constexpr std::size_t LimitStoreFailures = 2;
     static constexpr bool SaveOnExit = true;
@@ -67,7 +67,6 @@ public:
     UnitQuarantineConflict()
         : Base("UnitQuarantineConflict", OriginalDocContent)
         , _unloadingModifiedDocDetected(true)
-        , _putFailed(false)
     {
     }
 
@@ -101,9 +100,6 @@ public:
 
     void onDocBrokerCreate(const std::string& docKey) override
     {
-        // reset for the next document
-        _putFailed = false;
-
         Base::onDocBrokerCreate(docKey);
 
         if (_scenario == Scenario::VerifyOverwrite)
@@ -116,8 +112,11 @@ public:
             // With always_save_on_exit=true and limit_store_failures=LimitStoreFailures,
             // we expect exactly two PutFile requests per document.
             setExpectedPutFile(LimitStoreFailures);
-            setExpectedCheckFileInfo(2); // Conflict recovery requires second CFI.
         }
+
+        // Every failed upload is followed by a CheckFileInfo to reconcile with
+        // storage, on top of the one we do when loading.
+        setExpectedCheckFileInfo(getExpectedPutFile() + 1);
     }
 
     std::unique_ptr<http::Response>
@@ -147,10 +146,10 @@ public:
         const std::string wopiTimestamp = request.get("X-COOL-WOPI-Timestamp", std::string());
         const bool force = wopiTimestamp.empty(); // Without a timestamp we force to always store.
 
-        // We don't expect overwriting by forced uploading.
-        LOK_ASSERT_EQUAL_MESSAGE("Unexpected overwritting the document in storage", _putFailed, force);
-
-        _putFailed = true;
+        // We don't expect overwriting by forced uploading. Nothing writes to
+        // storage here, so there is no conflict and every upload, the retry and
+        // the always_save_on_exit one included, keeps its timestamp guard.
+        LOK_ASSERT_EQUAL_MESSAGE("Unexpected overwritting the document in storage", false, force);
 
         // Internal Server Error.
         return std::make_unique<http::Response>(http::StatusCode::InternalServerError);
@@ -194,23 +193,14 @@ public:
         TST_LOG("Testing " << name(_scenario) << ": [" << message << ']');
         LOK_ASSERT_STATE(_phase, Phase::WaitDocClose);
 
-        if (getCountCheckFileInfo() == 1)
-        {
-            LOK_ASSERT_MESSAGE("Expect only savefailed errors on first upload",
-                               message.starts_with("error: cmd=storage kind=savefailed"));
-        }
-        else
-        {
-            // Once the first upload fails, we issue CheckFileInfo, which detects the conflict.
-            // The conflict error may carry a trailing " errordetail=" token.
-            LOK_ASSERT_MESSAGE(
-                "Expect only documentconflict errors after the second CheckFileInfo",
-                message.starts_with("error: cmd=storage kind=documentconflict"));
+        // Uploading fails permanently, but nothing ever writes to storage, so the
+        // timestamp there never moves and there is nothing to conflict with.
+        LOK_ASSERT_MESSAGE("Expect only savefailed errors",
+                           message.starts_with("error: cmd=storage kind=savefailed"));
 
-            // Close the document.
-            TST_LOG("Closing the document");
-            WSD_CMD("closedocument");
-        }
+        // Close the document.
+        TST_LOG("Closing the document");
+        WSD_CMD("closedocument");
 
         return true;
     }
@@ -240,7 +230,7 @@ public:
         LOK_ASSERT_EQUAL_MESSAGE("Unexpected contents in storage", std::string(OriginalDocContent),
                                  getFileContent());
 
-        const std::string documentUrl = Uri::encode(helpers::getTestServerURI() + "/wopi/files/0");
+        const std::string documentUrl = Uri::encode(getWopiHostURI() + "/wopi/files/0");
         const std::string quarantinePath = _quarantinePath + '/' + documentUrl;
         const std::vector<std::string> files = getQuarantineFiles(testname, quarantinePath);
         LOK_ASSERT_MESSAGE("Expected 1 quaratined files in [" << quarantinePath << ']',
@@ -257,12 +247,14 @@ class UnitQuarantineCrash : public WopiTestServer
 
     STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifyStatus, WaitUpload, Unload, Done) _phase;
     std::string _quarantinePath;
-    std::vector<pid_t> _kitsPids;
+    /// The kit that hosts the document, -1 until it is attached.
+    pid_t _docKitPid;
 
 public:
     UnitQuarantineCrash()
         : Base("UnitQuarantineCrash")
         , _phase(Phase::Load)
+        , _docKitPid(-1)
     {
     }
 
@@ -290,10 +282,10 @@ public:
         FileUtil::removeFile(_quarantinePath, true);
     }
 
-    void newChild(const std::shared_ptr<ChildProcess>& child) override
+    void onDocBrokerAttachKitProcess(const std::string& docKey, int pid) override
     {
-        _kitsPids.push_back(child->getPid());
-        TST_LOG("New Kit PID: " << _kitsPids.back());
+        TST_LOG("DocBroker [" << docKey << "] attached to kit: " << pid);
+        _docKitPid = pid;
     }
 
     bool onDocumentLoaded(const std::string& message) override
@@ -342,12 +334,10 @@ public:
         {
             TRANSITION_STATE(_phase, Phase::Unload);
 
-            // Kill the kit.
-            for (const auto& pid : _kitsPids)
-            {
-                TST_LOG("Killing kit: " << pid);
-                ::kill(pid, SIGKILL);
-            }
+            // Kill only the kit that hosts the document, so the spare kits stay usable for the
+            // next test.
+            TST_LOG("Killing kit: " << _docKitPid);
+            ::kill(_docKitPid, SIGKILL);
         }
 
         return true;
@@ -356,7 +346,7 @@ public:
     void kitKilled(int count) override
     {
         TST_LOG("Kit killed");
-        LOK_ASSERT(static_cast<std::size_t>(count) <= _kitsPids.size());
+        LOK_ASSERT_EQUAL_MESSAGE("Expected only 1 killed kit", 1, count);
     }
 
     // Called when we have modified document data at exit.
@@ -379,7 +369,7 @@ public:
         TST_LOG("Testing with dockey [" << docKey << "] closed.");
         LOK_ASSERT_STATE(_phase, Phase::Unload);
 
-        const std::string documentUrl = Uri::encode(helpers::getTestServerURI() + "/wopi/files/0");
+        const std::string documentUrl = Uri::encode(getWopiHostURI() + "/wopi/files/0");
         const std::string quarantinePath = _quarantinePath + '/' + documentUrl;
         const std::vector<std::string> files = getQuarantineFiles(testname, quarantinePath);
         LOK_ASSERT_MESSAGE("Expected 1 quaratined files in [" << quarantinePath << ']',
@@ -420,7 +410,7 @@ public:
 UnitBase** unit_create_wsd_multi(void)
 {
     return new UnitBase*[3]{
-        new UnitQuarantineCrash(), // Crash first, since we need to know of all new Kit processes.
+        new UnitQuarantineCrash(),
         new UnitQuarantineConflict(), nullptr
     };
 }

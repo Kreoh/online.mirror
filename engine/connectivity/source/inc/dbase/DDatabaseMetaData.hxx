@@ -29,17 +29,13 @@ namespace connectivity::dbase
 
     class ODbaseDatabaseMetaData :  public file::ODatabaseMetaData
     {
-        virtual css::uno::Reference< css::sdbc::XResultSet > impl_getTypeInfo_throw() override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > impl_getTypeInfo_throw() override;
         virtual bool isReadOnly(  ) override;
         virtual OUString getURL(  ) override;
-        virtual css::uno::Reference< css::sdbc::XResultSet > getColumns( const cpo::uno::Any& catalog, const OUString& schemaPattern, const OUString& tableNamePattern, const OUString& columnNamePattern ) override;
-        virtual css::uno::Reference< css::sdbc::XResultSet > getIndexInfo( const cpo::uno::Any& catalog, const OUString& schema, const OUString& table, bool unique, bool approximate ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getColumns( const cpo::uno::Any& catalog, const OUString& schemaPattern, const OUString& tableNamePattern, const OUString& columnNamePattern ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getIndexInfo( const cpo::uno::Any& catalog, const OUString& schema, const OUString& table, bool unique, bool approximate ) override;
 
-        virtual sal_Int32 getMaxBinaryLiteralLength(  ) override;
-        virtual sal_Int32 getMaxCharLiteralLength(  ) override;
         virtual sal_Int32 getMaxColumnNameLength(  ) override;
-        virtual sal_Int32 getMaxColumnsInIndex(  ) override;
-        virtual sal_Int32 getMaxColumnsInTable(  ) override;
 
         virtual bool supportsAlterTableWithAddColumn(  ) override;
         virtual bool supportsAlterTableWithDropColumn(  ) override;

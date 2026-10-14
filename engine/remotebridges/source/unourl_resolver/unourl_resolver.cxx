@@ -30,7 +30,7 @@
 #include <cppuhelper/unourl.hxx>
 
 using namespace cppu;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::connection;
@@ -50,12 +50,12 @@ public:
     explicit ResolverImpl( const Reference< XComponentContext > & xSMgr );
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString & rServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     // XUnoUrlResolver
-    virtual Reference< XInterface > SAL_CALL resolve( const OUString & rUnoUrl ) override;
+    virtual Reference< XInterface > resolve( const OUString & rUnoUrl ) override;
 };
 
 }
@@ -118,9 +118,9 @@ Reference< XInterface > ResolverImpl::resolve( const OUString & rUnoUrl )
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 remotebridges_ResolverImpl_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ResolverImpl(context));
 }

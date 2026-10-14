@@ -32,9 +32,10 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::com::sun::star::beans::Property;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::cpo::uno::Any;
 
@@ -90,7 +91,7 @@ MinMaxLineWrapper::~MinMaxLineWrapper()
 void MinMaxLineWrapper::dispose()
 {
     std::unique_lock g(m_aMutex);
-    Reference< uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
+    Reference< cpo::uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
     m_aEventListenerContainer.disposeAndClear( g, lang::EventObject( xSource ) );
 }
 

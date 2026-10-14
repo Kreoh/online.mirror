@@ -23,6 +23,8 @@
 #include <svtools/embedhlp.hxx>
 #include <drawinglayer/primitive2d/Primitive2DContainer.hxx>
 #include <rtl/ref.hxx>
+#include <optional>
+#include "swtypes.hxx"
 #include <com/sun/star/beans/PropertyValue.hpp>
 
 class SvxDrawPage;
@@ -63,13 +65,13 @@ public:
     ~SwOLEObj() COVERITY_NOEXCEPT_FALSE;
 
     bool UnloadObject();
-    static bool UnloadObject( css::uno::Reference< css::embed::XEmbeddedObject > const & xObj,
+    static bool UnloadObject( cpo::uno::Reference< css::embed::XEmbeddedObject > const & xObj,
                                 const SwDoc* pDoc,
                                 sal_Int64 nAspect );
 
     OUString GetDescription();
 
-    css::uno::Reference < css::embed::XEmbeddedObject > const & GetOleRef();
+    cpo::uno::Reference < css::embed::XEmbeddedObject > const & GetOleRef();
     svt::EmbeddedObjectRef& GetObject();
     const OUString& GetCurrentPersistName() const { return m_aName; }
     OUString GetStyleString();
@@ -105,6 +107,8 @@ class SW_DLLPUBLIC SwOLENode final: public SwNoTextNode
     // updates are allowed
     cpo::uno::Sequence<css::beans::PropertyValue> maDeferredMediaDescriptor;
 
+    std::optional<SwTwips> moFormulaBaselinePos;
+
     SwOLENode(  const SwNode& rWhere,
                 const svt::EmbeddedObjectRef&,
                 SwGrfFormatColl *pGrfColl,
@@ -121,6 +125,9 @@ class SW_DLLPUBLIC SwOLENode final: public SwNoTextNode
     using SwNoTextNode::GetGraphic;
 
 public:
+    const std::optional<SwTwips>& GetFormulaBaselinePos() const { return moFormulaBaselinePos; }
+    void SetFormulaBaselinePos(SwTwips nPos) { moFormulaBaselinePos = nPos; }
+
     const SwOLEObj& GetOLEObj() const { return maOLEObj; }
           SwOLEObj& GetOLEObj()       { return maOLEObj; }
     virtual ~SwOLENode() override;

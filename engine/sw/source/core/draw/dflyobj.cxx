@@ -718,24 +718,21 @@ void SwVirtFlyDrawObj::NbcMove(const Size& rSiz)
         tools::Long lYDiff = aNewPos.Y() - aOldPos.Y();
         if( GetFlyFrame()->GetAnchorFrame()->IsVertical() )
         {
-            //lXDiff -= rVert.GetPos();
-            //lYDiff += rHori.GetPos();
-
             if ( GetFlyFrame()->GetAnchorFrame()->IsVertLR() )
             {
-                lXDiff += rVert.GetPos();
+                lXDiff += rVert.getPosition().as_twip<SwTwips>();
                 lXDiff = -lXDiff;
             }
             else
             {
-                lXDiff -= rVert.GetPos();
-                lYDiff += rHori.GetPos();
+                lXDiff -= rVert.getPosition().as_twip<SwTwips>();
+                lYDiff += rHori.getPosition().as_twip<SwTwips>();
             }
         }
         else
         {
-            lXDiff += rHori.GetPos();
-            lYDiff += rVert.GetPos();
+            lXDiff += rHori.getPosition().as_twip<SwTwips>();
+            lYDiff += rVert.getPosition().as_twip<SwTwips>();
         }
 
         if( GetFlyFrame()->GetAnchorFrame()->IsRightToLeft() &&
@@ -933,7 +930,8 @@ void SwVirtFlyDrawObj::NbcCrop(const basegfx::B2DPoint& rRef, double fxFact, dou
 
     // Apply values
     pSh->StartAllAction();
-    // pSh->StartUndo(SwUndoId::START);
+    // Group: crop changes the crop item, the frame size and possibly the position.
+    pSh->StartUndo(SwUndoId::START);
 
     // Set new crop values in twips
     aCrop.SetLeft  (o3tl::toTwips(nLeftCrop, o3tl::Length::mm100));
@@ -998,7 +996,7 @@ void SwVirtFlyDrawObj::NbcCrop(const basegfx::B2DPoint& rRef, double fxFact, dou
         NbcMove(aDeltaMove);
     }
 
-    // pSh->EndUndo(SwUndoId::END);
+    pSh->EndUndo(SwUndoId::END);
     pSh->EndAllAction();
 }
 
@@ -1102,39 +1100,31 @@ void SwVirtFlyDrawObj::NbcResize(const Point& rRef, double xFact, double yFact)
 
         SwFrameFormat *pFormat = GetFormat();
         const SwFormatFrameSize aOldFrameSz( pFormat->GetFrameSize() );
+        // An image with a caption is a percentage of its caption frame wide, so the caption frame
+        // is resized to give the image the new size, and the image keeps its width percentage.
+        bool bUpdateHeightPercent = false;
+        const bool bCaptionFly = GetFlyFrame()->ChgCaptionFlySize(
+            aSz, GetFlyFrame()->getFrameArea().SSize(), bUpdateHeightPercent );
         GetFlyFrame()->ChgSize( aSz );
         SwFormatFrameSize aFrameSz( pFormat->GetFrameSize() );
 
-        if ( aFrameSz.GetWidthPercent() || aFrameSz.GetHeightPercent() )
+        if ( bCaptionFly ? bUpdateHeightPercent
+                         : ( aFrameSz.GetWidthPercent() || aFrameSz.GetHeightPercent() ) )
         {
-            tools::Long nRelWidth, nRelHeight;
-            const SwFrame *pRel = GetFlyFrame()->IsFlyLayFrame() ?
-                                GetFlyFrame()->GetAnchorFrame() :
-                                GetFlyFrame()->GetAnchorFrame()->GetUpper();
-            const SwViewShell *pSh = GetFlyFrame()->getRootFrame()->GetCurrShell();
+            // The new percentage is of the same size as the layout takes the percentage of.
+            const Size aReference = GetFlyFrame()->GetPercentReference( aFrameSz );
+            const tools::Long nRelWidth = aReference.Width();
+            const tools::Long nRelHeight = aReference.Height();
 
-            if ( pSh && pRel->IsBodyFrame() &&
-                 pSh->GetViewOptions()->getBrowseMode() &&
-                 pSh->VisArea().HasArea() )
-            {
-                nRelWidth  = pSh->GetBrowseWidth();
-                nRelHeight = pSh->VisArea().Height();
-                const Size aBorder = pSh->GetOut()->PixelToLogic( pSh->GetBrowseBorder() );
-                nRelHeight -= 2*aBorder.Height();
-            }
-            else
-            {
-                nRelWidth  = pRel->getFramePrintArea().Width();
-                nRelHeight = pRel->getFramePrintArea().Height();
-            }
-
-            if ( aFrameSz.GetWidthPercent() && aFrameSz.GetWidthPercent() != SwFormatFrameSize::SYNCED &&
+            if ( !bCaptionFly && nRelWidth > 0 && aFrameSz.GetWidthPercent() &&
+                 aFrameSz.GetWidthPercent() != SwFormatFrameSize::SYNCED &&
                  aOldFrameSz.GetWidth() != aFrameSz.GetWidth() )
             {
                 aFrameSz.SetWidthPercent( sal_uInt8(aSz.Width() * 100.0 / nRelWidth + 0.5) );
             }
 
-            if ( aFrameSz.GetHeightPercent() && aFrameSz.GetHeightPercent() != SwFormatFrameSize::SYNCED &&
+            if ( nRelHeight > 0 && aFrameSz.GetHeightPercent() &&
+                 aFrameSz.GetHeightPercent() != SwFormatFrameSize::SYNCED &&
                  aOldFrameSz.GetHeight() != aFrameSz.GetHeight() )
             {
                 aFrameSz.SetHeightPercent( sal_uInt8(aSz.Height() * 100.0 / nRelHeight + 0.5) );

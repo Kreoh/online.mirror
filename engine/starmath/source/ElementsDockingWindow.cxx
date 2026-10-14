@@ -39,6 +39,7 @@
 #include <vcl/uitest/logger.hxx>
 #include <vcl/virdev.hxx>
 
+#include <cassert>
 #include <unordered_map>
 
 namespace
@@ -482,12 +483,103 @@ const std::vector<std::pair<const SmElementDescr*, size_t>> s_a5CategoryDescript
     { asPair(s_a5ExamplesList) },
 };
 
+// The name of each separator-delimited group of each category above, in order
+const std::vector<std::vector<TranslateId>> s_a5CategoryGroupNames{
+    // UnaryBinaryOperators
+    { RID_ELEMENTGROUP_UNARY_OPERATORS,
+      RID_ELEMENTGROUP_BINARY_OPERATORS,
+      RID_ELEMENTGROUP_LOGICAL_OPERATORS },
+    // Relations
+    { RID_ELEMENTGROUP_COMMON_RELATIONS,
+      RID_ELEMENTGROUP_ADVANCED_RELATIONS,
+      RID_ELEMENTGROUP_DOUBLE_ARROWS,
+      RID_ELEMENTGROUP_PRECEDENCE },
+    // SetOperations
+    { RID_ELEMENTGROUP_MEMBERSHIP,
+      RID_ELEMENTGROUP_UNIONS_INTERSECTIONS,
+      RID_ELEMENTGROUP_NUMBER_SETS },
+    // Functions
+    { RID_ELEMENTGROUP_COMMON_FUNCTIONS,
+      RID_ELEMENTGROUP_TRIGONOMETRIC,
+      RID_ELEMENTGROUP_ARABIC_TRIGONOMETRIC,
+      RID_ELEMENTGROUP_ARABIC_TRIGONOMETRIC_ALT,
+      RID_ELEMENTGROUP_INVERSE_FUNCTIONS,
+      RID_ELEMENTGROUP_OTHER_FUNCTIONS },
+    // Operators
+    { RID_ELEMENTGROUP_LIMITS,
+      RID_ELEMENTGROUP_LIMIT_INFERIOR,
+      RID_ELEMENTGROUP_LIMIT_SUPERIOR,
+      RID_ELEMENTGROUP_PERSIAN_LIMITS,
+      RID_ELEMENTGROUP_SUMMATIONS,
+      RID_ELEMENTGROUP_ARABIC_SUMMATIONS,
+      RID_ELEMENTGROUP_PRODUCTS,
+      RID_ELEMENTGROUP_COPRODUCTS,
+      RID_ELEMENTGROUP_INTEGRALS,
+      RID_ELEMENTGROUP_DOUBLE_INTEGRALS,
+      RID_ELEMENTGROUP_TRIPLE_INTEGRALS,
+      RID_ELEMENTGROUP_CONTOUR_INTEGRALS,
+      RID_ELEMENTGROUP_SURFACE_INTEGRALS,
+      RID_ELEMENTGROUP_VOLUME_INTEGRALS,
+      RID_ELEMENTGROUP_OTHER_LARGE_OPERATORS },
+    // Attributes
+    { RID_ELEMENTGROUP_ACCENTS,
+      RID_ELEMENTGROUP_OVERBARS_UNDERBARS,
+      RID_ELEMENTGROUP_FONT_ATTRIBUTES,
+      RID_ELEMENTGROUP_COLORS,
+      RID_ELEMENTGROUP_MORE_COLORS },
+    // Brackets
+    { RID_ELEMENTGROUP_GROUPING,
+      RID_ELEMENTGROUP_BRACKETS,
+      RID_ELEMENTGROUP_SCALABLE_BRACKETS,
+      RID_ELEMENTGROUP_OVERBRACES_UNDERBRACES,
+      RID_ELEMENTGROUP_EVALUATION_BARS },
+    // Formats
+    { RID_ELEMENTGROUP_SCRIPTS,
+      RID_ELEMENTGROUP_SPACING_ALIGNMENT,
+      RID_ELEMENTGROUP_STACKS_MATRICES },
+    // Others
+    { RID_ELEMENTGROUP_LETTERLIKE_SYMBOLS,
+      RID_ELEMENTGROUP_ARROWS,
+      RID_ELEMENTGROUP_DOTS },
+    // Examples
+    { RID_CATEGORY_EXAMPLES },
+};
+
 } // namespace
 
 // static
 const std::vector<TranslateId>& SmElementsControl::categories()
 {
     return s_a5Categories;
+}
+
+// static
+OUString SmElementsControl::groupName(int nCategory, int nGroup)
+{
+    if (o3tl::make_unsigned(nCategory) >= s_a5CategoryGroupNames.size())
+        return SmResId(RID_CATEGORY_USERDEFINED);
+
+    const std::vector<TranslateId>& rNames = s_a5CategoryGroupNames[nCategory];
+    assert(rNames.size() == o3tl::make_unsigned(groupCount(nCategory)));
+    if (o3tl::make_unsigned(nGroup) >= rNames.size())
+        return OUString();
+    return SmResId(rNames[nGroup]);
+}
+
+// static
+int SmElementsControl::groupCount(int nCategory)
+{
+    if (o3tl::make_unsigned(nCategory) >= s_a5CategoryDescriptions.size())
+        return 1;
+
+    const auto& [aElementsArray, aElementsArraySize] = s_a5CategoryDescriptions[nCategory];
+    int nGroups = 1;
+    for (size_t i = 0; i < aElementsArraySize; i++)
+    {
+        if (std::get<0>(aElementsArray[i]).empty())
+            ++nGroups;
+    }
+    return nGroups;
 }
 
 struct ElementData
@@ -507,6 +599,7 @@ SmElementsControl::SmElementsControl(std::unique_ptr<weld::IconView> pIconView,
                                      std::unique_ptr<weld::Menu> pMenu)
     : mpDocShell(new SmDocShell(SfxModelFlags::EMBEDDED_OBJECT))
     , mnCurrentSetIndex(-1)
+    , mnCurrentGroup(-1)
     , m_nSmSyntaxVersion(SmModule::get()->GetConfig()->GetDefaultSmSyntaxVersion())
     , m_bAllowDelete(false)
     , mpIconView(std::move(pIconView))
@@ -616,15 +709,16 @@ int SmElementsControl::GetElementPos(const OUString& itemId)
     return weld::fromId<ElementData*>(itemId)->maPos;
 }
 
-void SmElementsControl::setElementSetIndex(int nSetIndex, bool bForceBuild)
+void SmElementsControl::setElementSetIndex(int nSetIndex, bool bForceBuild, int nGroup)
 {
-    if (!bForceBuild && mnCurrentSetIndex == nSetIndex)
+    if (!bForceBuild && mnCurrentSetIndex == nSetIndex && mnCurrentGroup == nGroup)
         return;
     mnCurrentSetIndex = nSetIndex;
+    mnCurrentGroup = nGroup;
     build();
 }
 
-void SmElementsControl::addElements(int nCategory)
+void SmElementsControl::addElements(int nCategory, int nGroup)
 {
     mpIconView->freeze();
     mpIconView->clear();
@@ -635,14 +729,17 @@ void SmElementsControl::addElements(int nCategory)
     {
         const auto& [aElementsArray, aElementsArraySize] = s_a5CategoryDescriptions[nCategory];
 
+        int nCurrentGroup = 0;
         for (size_t i = 0; i < aElementsArraySize; i++)
         {
             const auto& [element, elementHelp, elementVisual, visualTranslatable] = aElementsArray[i];
             if (element.empty())
             {
-                mpIconView->append_separator({});
+                ++nCurrentGroup;
+                if (nGroup == -1)
+                    mpIconView->append_separator({});
             }
-            else
+            else if (nGroup == -1 || nGroup == nCurrentGroup)
             {
                 OUString aElement(element);
                 OUString aVisual(elementVisual.empty() ? aElement : OUString(elementVisual));
@@ -673,7 +770,7 @@ void SmElementsControl::build()
     switch(m_nSmSyntaxVersion)
     {
         case 5:
-            addElements(mnCurrentSetIndex);
+            addElements(mnCurrentSetIndex, mnCurrentGroup);
             m_sHoveredItem = u"nil"_ustr; // if list is empty we must not use the previously hovered item
             break;
         case 6:

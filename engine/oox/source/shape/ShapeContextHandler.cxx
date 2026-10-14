@@ -43,12 +43,11 @@
 #include <svx/svdoedge.hxx>
 #include <svx/svdobj.hxx>
 
-#include <drawingml/connectorhelper.hxx>
-
 #include <memory>
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace oox::shape {
 using namespace core;
@@ -354,7 +353,14 @@ void ShapeContextHandler::endFastElement(::sal_Int32 Element)
     uno::Reference<XFastContextHandler> xContextHandler(getContextHandler());
 
     if (xContextHandler.is())
-        xContextHandler->endFastElement(Element);
+    {
+        // A shape can arrive in pieces, with its text handled in between, and the context for
+        // the rest of it is then made in the middle of the shape. Such a context never saw the
+        // shape element start, so it is not the one to end it either.
+        auto* pHandler = dynamic_cast<oox::core::ContextHandler2Helper*>(xContextHandler.get());
+        if (!pHandler || pHandler->getCurrentElementWithMce() != XML_ROOT_CONTEXT)
+            xContextHandler->endFastElement(Element);
+    }
     // In case a textbox is sent, and later we get additional properties for
     // the textbox, then the wps context is not cleared, so do that here.
     if (Element != (NMSP_wps | XML_wsp))
@@ -526,28 +532,7 @@ ShapeContextHandler::getShape()
                 lcl_createShapeMap(pShape, aShapeMap);
 
                 // Traverse aShapeMap and generate edge related properties.
-                for (auto& rIt : aShapeMap)
-                {
-                    if ((rIt.second)->getServiceName() == "com.sun.star.drawing.ConnectorShape")
-                    {
-                        ConnectorHelper::applyConnections(rIt.second, aShapeMap);
-
-                        if (rIt.second->getConnectorName() == u"bentConnector3"_ustr
-                           || rIt.second->getConnectorName() == u"bentConnector4"_ustr
-                           || rIt.second->getConnectorName() == u"bentConnector5"_ustr)
-                        {
-                           ConnectorHelper::applyBentHandleAdjustments(rIt.second);
-                        }
-                        else if (rIt.second->getConnectorName() == u"curvedConnector3"_ustr
-                           || rIt.second->getConnectorName() == u"curvedConnector4"_ustr
-                           || rIt.second->getConnectorName() == u"curvedConnector5"_ustr)
-                        {
-                            ConnectorHelper::applyCurvedHandleAdjustments(rIt.second);
-                        }
-                        // else use the default path of LibreOffice.
-                        // curveConnector2 and bentConnector2 do not have handles.
-                    }
-                }
+                oox::drawingml::connectConnectorShapes(aShapeMap);
                 xResult = pShape->getXShape();
                 mxWordprocessingCanvasContext.clear();
             }
@@ -614,15 +599,15 @@ ShapeContextHandler::getShape()
     return xResult;
 }
 
-void ShapeContextHandler::setDrawPage(const css::uno::Reference< css::drawing::XDrawPage > & the_value)
+void ShapeContextHandler::setDrawPage(const cpo::uno::Reference< css::drawing::XDrawPage > & the_value)
 {
     mxDrawPage = the_value;
 }
 
-void ShapeContextHandler::setModel(const css::uno::Reference< css::frame::XModel > & the_value)
+void ShapeContextHandler::setModel(const cpo::uno::Reference< css::frame::XModel > & the_value)
 {
     if( !mxShapeFilterBase.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     uno::Reference<lang::XComponent> xComp(the_value, uno::UNO_QUERY_THROW);
     mxShapeFilterBase->setTargetDocument(xComp);
 }
@@ -670,7 +655,7 @@ void ShapeContextHandler::setMediaDescriptor(const cpo::uno::Sequence<beans::Pro
     maMediaDescriptor = rMediaDescriptor;
 }
 
-void ShapeContextHandler::setGraphicMapper(css::uno::Reference<css::graphic::XGraphicMapper> const & rxGraphicMapper)
+void ShapeContextHandler::setGraphicMapper(cpo::uno::Reference<css::graphic::XGraphicMapper> const & rxGraphicMapper)
 {
     mxShapeFilterBase->setGraphicMapper(rxGraphicMapper);
 }

@@ -40,14 +40,14 @@ class SAL_DLLPUBLIC_TEMPLATE ActiveDataSink_Base
   */
 class UNLESS_MERGELIBS(UCBHELPER_DLLPUBLIC) ActiveDataSink final : public ActiveDataSink_Base
 {
-    css::uno::Reference<css::io::XInputStream> m_xStream;
+    cpo::uno::Reference<css::io::XInputStream> m_xStream;
 
 public:
     // XActiveDataSink methods.
-    virtual void SAL_CALL
-    setInputStream(const css::uno::Reference<css::io::XInputStream>& aStream) override;
+    virtual void
+    setInputStream(const cpo::uno::Reference<css::io::XInputStream>& aStream) override;
 
-    virtual css::uno::Reference<css::io::XInputStream> SAL_CALL getInputStream() override;
+    virtual cpo::uno::Reference<css::io::XInputStream> getInputStream() override;
 };
 
 } /* namespace ucbhelper */

@@ -63,9 +63,7 @@ class Cursor {
 		this.update();
 
 		if (this.map._docLayer.isCalc())
-			this.map.on('splitposchanged move', this.update, this);
-		else
-			this.map.on('move', this.update, this);
+			this.map.on('splitposchanged', this.update, this);
 
 		window.addEventListener('blur', this.onFocusBlur);
 		window.addEventListener('focus', this.onFocusBlur);
@@ -96,7 +94,8 @@ class Cursor {
 		if (this.map._docLayer._docType === 'presentation') {
 			$('.leaflet-interactive').css('cursor', '');
 		} else {
-			$('#document-canvas').css('cursor', '');
+			const canvas = document.getElementById('document-canvas');
+			if (canvas) canvas.style.cursor = '';
 		}
 		if (this.container && this.domAttached) {
 			this.map.getCursorOverlayContainer().removeChild(this.container);

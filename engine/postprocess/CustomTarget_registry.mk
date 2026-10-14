@@ -21,9 +21,6 @@ postprocess_DRIVERS :=
 postprocess_XCDS := \
 	base.xcd \
 	calc.xcd \
-	cjk.xcd \
-	ctl.xcd \
-	ctlseqcheck.xcd \
 	draw.xcd \
 	graphicfilter.xcd \
 	impress.xcd \
@@ -54,15 +51,6 @@ postprocess_FILES_calc := \
 	$(postprocess_MOD)/org/openoffice/Office/Embedding-calc.xcu \
 	$(postprocess_MOD)/org/openoffice/Setup-calc.xcu
 
-postprocess_DEPS_cjk := main
-postprocess_FILES_cjk := \
-	$(postprocess_MOD)/org/openoffice/Office/Common-cjk.xcu \
-	$(postprocess_MOD)/org/openoffice/Office/Writer-cjk.xcu
-
-postprocess_DEPS_ctl := main
-postprocess_FILES_ctl := \
-	$(postprocess_MOD)/org/openoffice/Office/Common-ctl.xcu
-
 postprocess_DEPS_draw := main
 postprocess_FILES_draw := \
 	$(postprocess_XCS)/Office/UI/DrawWindowState.xcs \
@@ -87,11 +75,9 @@ postprocess_FILES_graphicfilter := \
 
 postprocess_DEPS_impress := main
 postprocess_FILES_impress := \
-	$(postprocess_XCS)/Office/PresentationMinimizer.xcs \
 	$(postprocess_XCS)/Office/UI/Effects.xcs \
 	$(postprocess_XCS)/Office/UI/ImpressWindowState.xcs \
 	$(if $(ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS),, \
-	    $(postprocess_XCU)/Office/PresentationMinimizer.xcu \
 	    $(postprocess_XCU)/Office/UI/Effects.xcu \
 	    $(postprocess_XCU)/Office/UI/ImpressWindowState.xcu \
 	    $(call gb_XcuFilterFiltersTarget_get_target,fcfg_impress_filters.xcu) \
@@ -135,8 +121,6 @@ postprocess_FILES_main := \
 	$(postprocess_XCS)/Office/Draw.xcs \
 	$(postprocess_XCS)/Office/Embedding.xcs \
 	$(postprocess_XCS)/Office/Events.xcs \
-	$(postprocess_XCS)/Office/ExtensionDependencies.xcs \
-	$(postprocess_XCS)/Office/ExtensionManager.xcs \
 	$(postprocess_XCS)/Office/Histories.xcs \
 	$(postprocess_XCS)/Office/Impress.xcs \
 	$(postprocess_XCS)/Office/Java.xcs \
@@ -200,8 +184,6 @@ postprocess_FILES_main := \
 	$(postprocess_XCU)/Office/Compatibility.xcu \
 	$(postprocess_XCU)/Office/DataAccess.xcu \
 	$(postprocess_XCU)/Office/Embedding.xcu \
-	$(postprocess_XCU)/Office/ExtensionDependencies.xcu \
-	$(postprocess_XCU)/Office/ExtensionManager.xcu \
 	$(postprocess_XCU)/Office/Histories.xcu \
 	$(postprocess_XCU)/Office/Impress.xcu \
 	$(postprocess_XCU)/Office/Jobs.xcu \

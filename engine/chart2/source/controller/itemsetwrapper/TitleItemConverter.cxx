@@ -33,6 +33,7 @@
 #include <memory>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace chart::wrapper {
 
@@ -70,16 +71,12 @@ FormattedStringsConverter::FormattedStringsConverter(
     bool bHasRefSize = (pRefSize && xParentProp.is());
     for( uno::Reference< chart2::XFormattedString > const & formattedStr : aStrings )
     {
-        uno::Reference< beans::XPropertySet > xProp( formattedStr, uno::UNO_QUERY );
-        if( xProp.is())
-        {
-            if( bHasRefSize )
-                m_aConverters.emplace_back(
-                    new CharacterPropertyItemConverter(
-                        xProp, rItemPool, pRefSize, u"ReferencePageSize"_ustr, xParentProp));
-            else
-                m_aConverters.emplace_back( new CharacterPropertyItemConverter( xProp, rItemPool ));
-        }
+        if( bHasRefSize )
+            m_aConverters.emplace_back(
+                new CharacterPropertyItemConverter(
+                    formattedStr, rItemPool, pRefSize, u"ReferencePageSize"_ustr, xParentProp));
+        else
+            m_aConverters.emplace_back( new CharacterPropertyItemConverter( formattedStr, rItemPool ));
     }
 }
 

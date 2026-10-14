@@ -27,10 +27,10 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::i18n;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 CharClass::CharClass(
-            const Reference< uno::XComponentContext > & rxContext,
+            const Reference< cpo::uno::XComponentContext > & rxContext,
             LanguageTag aLanguageTag
             )
     : maLanguageTag(std::move( aLanguageTag))

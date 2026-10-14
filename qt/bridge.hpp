@@ -45,14 +45,9 @@ class Bridge : public QObject
     int _closeNotificationPipeForForwardingThread[2];
     std::thread _app2js;
     bool _modified = false;
-    // true between sending a copy/cut command and receiving its COMMANDRESULT
-    bool _copyInProgress = false;
     // How many times we have reloaded the page because the server was still
     // cleaning up the previous use of this document when we tried to load it.
     int _docUnloadingRetries = 0;
-    // true between showing the deferred cross-window paste progress snackbar and
-    // receiving the paste's COMMANDRESULT; touched only on the GUI thread.
-    bool _pasteInProgress = false;
     // true from JS-side SAVESTARTED until the JS-side SAVECOMPLETED:
     // that brackets both the .uno:Save round-trip and (for remote
     // docs) the JS-driven collabUploadFile POST that pushes the
@@ -71,11 +66,18 @@ class Bridge : public QObject
     // step (driven by _saveAndClose in JS) has already run, so the
     // re-entry can proceed straight to teardown.
     bool _readyToClose = false;
+    bool _detached = false;
+
+    // true when this bridge goes away while the document stays loaded under its appDocId.
+    bool _keepDocumentLoaded = false;
 
     // true while the document was opened from a template and has not yet been
     // saved to a real file. While set, a save is turned into a Save As so the
     // template working copy is never written back as if it were the document.
     bool _requiresSaveAs = false;
+
+    // The user has not yet chosen a name for this new document.
+    bool _isNewDocument = false;
 
     void promptSaveLocation(std::function<void(const std::string&, const std::string&)> callback);
     void saveDocumentAs();
@@ -100,6 +102,8 @@ public:
     // Redirect the first save of a template-based document to Save As.
     void setRequiresSaveAs(bool requiresSaveAs) { _requiresSaveAs = requiresSaveAs; }
 
+    void setNewDocument(bool isNewDocument) { _isNewDocument = isNewDocument; }
+
     // TODO: move these to webview...
     // Helper: post JavaScript code safely on GUI thread
     void evalJS(const std::string& script);
@@ -122,6 +126,11 @@ public:
     /// is invoked immediately.
     void onSaveComplete(std::function<void()> callback);
 
+    /// Ask the page to save the document and leave it open, and run the callback when the
+    /// save result comes back, whether the save succeeded or not. Returns false when a save
+    /// or a callback is already outstanding, in which case the callback is not taken.
+    bool requestSave(std::function<void()> onComplete);
+
     /// Announce an orderly close to the per-document collab broker
     /// by asking the page's JS to send {"type":"bye"} on its
     /// WebSocket.  Must be called from the host window's closeEvent
@@ -132,6 +141,21 @@ public:
     /// host window's closeEvent re-entry uses this to skip the
     /// save-if-dirty path and proceed with teardown.
     bool isReadyToClose() const { return _readyToClose; }
+
+    /// Release the connection to the in-process server after the renderer that drove this
+    /// view died. The document stays loaded under its appDocId.
+    void detachFromView();
+
+    /// True from the moment the connection to the in-process server is released until
+    /// a new one is established. The document stays loaded in the engine throughout.
+    bool isDetached() const { return _detached; }
+
+    /// Take the reattaching side of the next HULLO: allocate a fresh socket and rejoin
+    /// the document already loaded under this bridge's appDocId.
+    void markDetached() { _detached = true; }
+
+    /// Leave the document loaded when this bridge is destroyed.
+    void keepDocumentLoaded() { _keepDocumentLoaded = true; }
 
     /// Set _readyToClose so that the next closeEvent re-entry
     /// proceeds with teardown.  Used by the save-in-flight defer

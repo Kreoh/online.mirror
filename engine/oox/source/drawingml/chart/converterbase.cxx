@@ -29,7 +29,7 @@
 #include <com/sun/star/chart2/RelativeSize.hpp>
 #include <com/sun/star/chart2/XTitle.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
 #include <basegfx/numeric/ftools.hxx>
@@ -47,7 +47,8 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 using ::oox::core::XmlFilterBase;
 
@@ -219,9 +220,9 @@ ConverterRoot::~ConverterRoot()
 {
 }
 
-Reference< XInterface > ConverterRoot::createInstance( const OUString& rServiceName ) const
+Reference< cpo::uno::XInterface > ConverterRoot::createInstance( const OUString& rServiceName ) const
 {
-    Reference< XInterface > xInt;
+    Reference< cpo::uno::XInterface > xInt;
     try
     {
         Reference<XMultiServiceFactory> xMSF(getComponentContext()->getServiceManager(), uno::UNO_QUERY_THROW);
@@ -235,7 +236,7 @@ Reference< XInterface > ConverterRoot::createInstance( const OUString& rServiceN
     return xInt;
 }
 
-Reference< XComponentContext > const & ConverterRoot::getComponentContext() const
+Reference< cpo::uno::XComponentContext > const & ConverterRoot::getComponentContext() const
 {
     return mxData->mrFilter.getComponentContext();
 }

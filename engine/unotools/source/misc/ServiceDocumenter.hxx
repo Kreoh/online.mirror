@@ -13,7 +13,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <utility>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace unotools::misc {
 
@@ -21,34 +21,34 @@ class ServiceDocumenter : public ::cppu::WeakImplHelper<
     css::script::XServiceDocumenter, css::lang::XServiceInfo>
 {
     public:
-        ServiceDocumenter(css::uno::Reference< css::uno::XComponentContext> xContext)
+        ServiceDocumenter(cpo::uno::Reference< cpo::uno::XComponentContext> xContext)
             : m_xContext(std::move(xContext))
             , m_sCoreBaseUrl(u"http://example.com"_ustr)
             , m_sServiceBaseUrl(u"https://api.libreoffice.org/docs/idl/ref"_ustr)
             {};
 
         //  XServiceInfo
-        virtual bool SAL_CALL supportsService(const OUString& sServiceName) override;
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual bool supportsService(const OUString& sServiceName) override;
+        virtual OUString getImplementationName() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
         // XServiceDocumenter
-        virtual OUString SAL_CALL getCoreBaseUrl() override
+        virtual OUString getCoreBaseUrl() override
             { return m_sCoreBaseUrl; };
-        virtual void SAL_CALL setCoreBaseUrl( const OUString& sCoreBaseUrl ) override
+        virtual void setCoreBaseUrl( const OUString& sCoreBaseUrl ) override
             { m_sCoreBaseUrl = sCoreBaseUrl; };
-        virtual OUString SAL_CALL getServiceBaseUrl() override
+        virtual OUString getServiceBaseUrl() override
             { return m_sServiceBaseUrl; };
-        virtual void SAL_CALL setServiceBaseUrl( const OUString& sServiceBaseUrl ) override
+        virtual void setServiceBaseUrl( const OUString& sServiceBaseUrl ) override
             { m_sServiceBaseUrl = sServiceBaseUrl; };
-        virtual void SAL_CALL showServiceDocs( const ::css::uno::Reference< ::css::lang::XServiceInfo >& xService) override;
-        virtual void SAL_CALL showInterfaceDocs( const ::css::uno::Reference< ::css::lang::XTypeProvider >& xTypeProvider ) override;
-        virtual void SAL_CALL showCoreDocs( const ::css::uno::Reference< ::css::lang::XServiceInfo >& xService) override;
+        virtual void showServiceDocs( const ::cpo::uno::Reference< ::css::lang::XServiceInfo >& xService) override;
+        virtual void showInterfaceDocs( const ::cpo::uno::Reference< ::css::lang::XTypeProvider >& xTypeProvider ) override;
+        virtual void showCoreDocs( const ::cpo::uno::Reference< ::css::lang::XServiceInfo >& xService) override;
     protected:
         virtual ~ServiceDocumenter() override
             {};
     private:
-        css::uno::Reference< css::uno::XComponentContext> m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext> m_xContext;
         OUString m_sCoreBaseUrl;
         OUString m_sServiceBaseUrl;
 };

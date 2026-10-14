@@ -60,6 +60,7 @@
 #include <frozen/bits/elsa_std.h>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace os = orcus::spreadsheet;
 
@@ -415,7 +416,7 @@ void ScOrcusFactory::finalize()
                         maDoc.setStringCell(rToken.maPos, std::get<0>(s));
                         break;
                     case 1: // std::unique_ptr<EditTextObject>
-                        maDoc.setEditCell(rToken.maPos, std::get<1>(s)->Clone());
+                        maDoc.setEditCell(rToken.maPos, std::make_unique<EditTextObject>(*std::get<1>(s)));
                         break;
                 }
                 ++nCellCount;
@@ -1599,7 +1600,7 @@ size_t ScOrcusSharedStrings::commit_segments()
     for (const auto & [ rSel, rFormat ] : maFormatSegments)
         mrEditEngine.QuickSetAttribs(rFormat, rSel);
 
-    auto nPos = mrFactory.appendFormattedString(mrEditEngine.CreateTextObject());
+    auto nPos = mrFactory.appendFormattedString(std::make_unique<EditTextObject>(mrEditEngine.CreateTextObject()));
     mrEditEngine.Clear();
     maFormatSegments.clear();
     return nPos;

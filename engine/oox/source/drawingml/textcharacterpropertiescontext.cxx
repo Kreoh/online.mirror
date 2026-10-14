@@ -34,7 +34,7 @@
 #include <sal/log.hxx>
 
 using namespace ::oox::core;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace oox::drawingml {
 
@@ -154,7 +154,11 @@ ContextHandlerRef TextCharacterPropertiesContext::onCreateContext( sal_Int32 aEl
             mrTextCharacterProperties.moUnderlineFillFollowText = true;
         break;
         case A_TOKEN( uFill ):      // CT_TextUnderlineFillGroupWrapper->EG_FillProperties (not supported)
-            return new SimpleFillPropertiesContext( *this, mrTextCharacterProperties.maUnderlineColor);
+            // A fill of its own replaces a uFillTx that the run inherits from a list style
+            mrTextCharacterProperties.moUnderlineFillFollowText = false;
+            return new SimpleFillPropertiesContext(*this,
+                                                   mrTextCharacterProperties.maUnderlineColor,
+                                                   mrTextCharacterProperties.maUnderlineOOXColor);
 
         // CT_FontCollection
         case A_TOKEN( latin ):      // CT_TextFont
@@ -172,7 +176,9 @@ ContextHandlerRef TextCharacterPropertiesContext::onCreateContext( sal_Int32 aEl
 
         case A_TOKEN( hlinkClick ):     // CT_Hyperlink
         case A_TOKEN( hlinkMouseOver ): // CT_Hyperlink
-            return new HyperLinkContext( *this, rAttribs,  mrTextCharacterProperties.maHyperlinkPropertyMap );
+            return new HyperLinkContext( *this, rAttribs,
+                                         mrTextCharacterProperties.maHyperlinkPropertyMap,
+                                         /*bTextRun=*/true );
         case W_TOKEN( rFonts ):
             if( rAttribs.hasAttribute(W_TOKEN(ascii)) )
             {
@@ -242,7 +248,9 @@ ContextHandlerRef TextCharacterPropertiesContext::onCreateContext( sal_Int32 aEl
             {
                 oox::drawingml::Color theColor;
                 theColor.setSrgbClr(colorAttrib.value());
-                mrTextCharacterProperties.maUnderlineColor = theColor.getComplexColor();
+                mrTextCharacterProperties.maUnderlineColor
+                    = theColor.createComplexColor(getFilter().getGraphicHelper(), -1);
+                mrTextCharacterProperties.maUnderlineOOXColor = std::move(theColor);
             }
             break;
         }

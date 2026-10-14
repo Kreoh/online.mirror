@@ -59,10 +59,11 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::comphelper;
 
 
-bool KillFile_Impl( const OUString& aURL, const uno::Reference< uno::XComponentContext >& xContext )
+bool KillFile_Impl( const OUString& aURL, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     if ( !xContext.is() )
         return false;
@@ -71,7 +72,7 @@ bool KillFile_Impl( const OUString& aURL, const uno::Reference< uno::XComponentC
 
     try
     {
-        uno::Reference < ucb::XSimpleFileAccess3 > xAccess(
+        uno::Reference < ucb::XSimpleFileAccess > xAccess(
                 ucb::SimpleFileAccess::create( xContext ) );
 
         xAccess->kill( aURL );
@@ -85,7 +86,7 @@ bool KillFile_Impl( const OUString& aURL, const uno::Reference< uno::XComponentC
 }
 
 
-OUString GetNewTempFileURL_Impl( const uno::Reference< uno::XComponentContext >& xContext )
+OUString GetNewTempFileURL_Impl( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     SAL_WARN_IF( !xContext.is(), "embeddedobj.ole", "No factory is provided!" );
 
@@ -104,14 +105,14 @@ OUString GetNewTempFileURL_Impl( const uno::Reference< uno::XComponentContext >&
     }
 
     if ( aResult.isEmpty() )
-        throw uno::RuntimeException(u"Cannot create tempfile."_ustr);
+        throw cpo::uno::RuntimeException(u"Cannot create tempfile."_ustr);
 
     return aResult;
 }
 
 
 OUString GetNewFilledTempFile_Impl( const uno::Reference< io::XInputStream >& xInStream,
-                                      const uno::Reference< uno::XComponentContext >& xContext )
+                                      const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     OSL_ENSURE( xInStream.is() && xContext.is(), "Wrong parameters are provided!" );
 
@@ -120,7 +121,7 @@ OUString GetNewFilledTempFile_Impl( const uno::Reference< io::XInputStream >& xI
     if ( !aResult.isEmpty() )
     {
         try {
-            uno::Reference < ucb::XSimpleFileAccess3 > xTempAccess(
+            uno::Reference < ucb::XSimpleFileAccess > xTempAccess(
                     ucb::SimpleFileAccess::create( xContext ) );
 
             uno::Reference< io::XOutputStream > xTempOutStream = xTempAccess->openFileWrite( aResult );
@@ -141,7 +142,7 @@ OUString GetNewFilledTempFile_Impl( const uno::Reference< io::XInputStream >& xI
             KillFile_Impl( aResult, xContext );
             throw;
         }
-        catch( const uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
             KillFile_Impl( aResult, xContext );
             throw;
@@ -158,7 +159,7 @@ OUString GetNewFilledTempFile_Impl( const uno::Reference< io::XInputStream >& xI
 #ifdef _WIN32
 /// @throws io::IOException
 /// @throws uno::RuntimeException
-static OUString GetNewFilledTempFile_Impl( const uno::Reference< embed::XOptimizedStorage >& xParentStorage, const OUString& aEntryName, const uno::Reference< uno::XComponentContext >& xContext )
+static OUString GetNewFilledTempFile_Impl( const uno::Reference< embed::XOptimizedStorage >& xParentStorage, const OUString& aEntryName, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     OUString aResult;
 
@@ -173,7 +174,7 @@ static OUString GetNewFilledTempFile_Impl( const uno::Reference< embed::XOptimiz
         xTempFile->setRemoveFile( false );
         aResult = xTempFile->getUri();
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         throw;
     }
@@ -191,7 +192,7 @@ static OUString GetNewFilledTempFile_Impl( const uno::Reference< embed::XOptimiz
 static void SetStreamMediaType_Impl( const uno::Reference< io::XStream >& xStream, const OUString& aMediaType )
 {
     uno::Reference< beans::XPropertySet > xPropSet( xStream, uno::UNO_QUERY_THROW );
-    xPropSet->setPropertyValue("MediaType", cpo::uno::Any( aMediaType ) );
+    xPropSet->setPropertyValue(u"MediaType"_ustr, cpo::uno::Any( aMediaType ) );
 }
 #endif
 
@@ -278,11 +279,11 @@ uno::Reference< io::XStream > OleEmbeddedObject::TryToGetAcceptableFormat_Impl( 
 {
     // TODO/LATER: Actually this should be done by a centralized component ( may be a graphical filter )
     if ( !m_xContext.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< io::XInputStream > xInStream = xStream->getInputStream();
     if ( !xInStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< io::XSeekable > xSeek( xStream, uno::UNO_QUERY_THROW );
     xSeek->seek( 0 );
@@ -340,7 +341,7 @@ uno::Reference< io::XStream > OleEmbeddedObject::TryToGetAcceptableFormat_Impl( 
         uno::Reference < io::XOutputStream > xResultOut = xResult->getOutputStream();
         uno::Reference < io::XInputStream > xResultIn = xResult->getInputStream();
         if ( !xResultOut.is() || !xResultIn.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         xSeek->seek( nHeaderOffset ); // header size for these formats
         ::comphelper::OStorageHelper::CopyInputToOutput( xInStream, xResultOut );
@@ -362,7 +363,7 @@ void OleEmbeddedObject::InsertVisualCache_Impl( const uno::Reference< io::XStrea
     OSL_ENSURE( xTargetStream.is() && xCachedVisualRepresentation.is(), "Invalid arguments!" );
 
     if ( !xTargetStream.is() || !xCachedVisualRepresentation.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xTargetStream),
                                      cpo::uno::Any(true) }; // do not create copy
@@ -389,7 +390,7 @@ void OleEmbeddedObject::InsertVisualCache_Impl( const uno::Reference< io::XStrea
     // TODO/LATER: might need to be extended in future (actually makes sense only for SO7 format)
     uno::Reference< io::XInputStream > xInCacheStream = xCachedVisualRepresentation->getInputStream();
     if ( !xInCacheStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // write 0xFFFFFFFF at the beginning
     cpo::uno::Sequence< sal_Int8 > aData( 4 );
@@ -502,7 +503,7 @@ void OleEmbeddedObject::RemoveVisualCache_Impl( const uno::Reference< io::XStrea
 {
     OSL_ENSURE( xTargetStream.is(), "Invalid argument!" );
     if ( !xTargetStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xTargetStream),
                                      cpo::uno::Any(true) }; // do not create copy
@@ -549,7 +550,7 @@ bool OleEmbeddedObject::HasVisReplInStream()
                 try
                 {
                     // open temporary file for reading
-                    uno::Reference < ucb::XSimpleFileAccess3 > xTempAccess(
+                    uno::Reference < ucb::XSimpleFileAccess > xTempAccess(
                             ucb::SimpleFileAccess::create( m_xContext ) );
 
                     xStream = xTempAccess->openFileRead( m_aTempURL );
@@ -899,7 +900,7 @@ void OleEmbeddedObject::OnViewChanged_Impl()
         // The view is changed while the object is in running state, save the new object
         m_xCachedVisualRepresentation.clear();
         SaveObject_Impl();
-        MakeEventListenerNotification_Impl( "OnVisAreaChanged", aGuard );
+        MakeEventListenerNotification_Impl( u"OnVisAreaChanged"_ustr, aGuard );
     }
 
 }
@@ -972,7 +973,7 @@ void OleEmbeddedObject::CreateOleComponent_Impl(
             catch (const sal::systools::ComError& e)
             {
                 // Callers expect a UNO exception where an in-process server cannot be instantiated
-                throw uno::RuntimeException(o3tl::runtimeToOUString(e.what()));
+                throw cpo::uno::RuntimeException(o3tl::runtimeToOUString(e.what()));
             }
         }
 
@@ -990,7 +991,7 @@ void OleEmbeddedObject::CreateOleComponentAndLoad_Impl(
     if ( !m_pOleComponent )
     {
         if ( !m_xObjectStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         CreateOleComponent_Impl( pOleComponent );
 
@@ -999,7 +1000,7 @@ void OleEmbeddedObject::CreateOleComponentAndLoad_Impl(
 
         GetTempURL_Impl();
         if ( m_aTempURL.isEmpty() )
-            throw uno::RuntimeException(); // TODO
+            throw cpo::uno::RuntimeException(); // TODO
 
         m_pOleComponent->LoadEmbeddedObject( m_aTempURL );
     }
@@ -1011,7 +1012,7 @@ void OleEmbeddedObject::CreateOleComponentFromClipboard_Impl( OleComponent* pOle
     if ( !m_pOleComponent )
     {
         if ( !m_xObjectStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         CreateOleComponent_Impl( pOleComponent );
 
@@ -1025,7 +1026,7 @@ void OleEmbeddedObject::CreateOleComponentFromClipboard_Impl( OleComponent* pOle
 uno::Reference< io::XOutputStream > OleEmbeddedObject::GetStreamForSaving()
 {
     if ( !m_xObjectStream.is() )
-        throw uno::RuntimeException(); //TODO:
+        throw cpo::uno::RuntimeException(); //TODO:
 
     uno::Reference< io::XOutputStream > xOutStream = m_xObjectStream->getOutputStream();
     if ( !xOutStream.is() )
@@ -1047,10 +1048,10 @@ void OleEmbeddedObject::StoreObjectToStream(uno::Reference<io::XOutputStream> co
 
     // now all the changes should be in temporary location
     if ( m_aTempURL.isEmpty() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // open temporary file for reading
-    uno::Reference < ucb::XSimpleFileAccess3 > xTempAccess(
+    uno::Reference < ucb::XSimpleFileAccess > xTempAccess(
             ucb::SimpleFileAccess::create( m_xContext ) );
 
     uno::Reference< io::XInputStream > xTempInStream = xTempAccess->openFileRead( m_aTempURL );
@@ -1177,7 +1178,7 @@ void OleEmbeddedObject::StoreToLocation_Impl(
         if ( !xTargetStream.is() )
             throw io::IOException(); //TODO: access denied
 
-        SetStreamMediaType_Impl( xTargetStream, "application/vnd.sun.star.oleobject" );
+        SetStreamMediaType_Impl( xTargetStream, u"application/vnd.sun.star.oleobject"_ustr );
         uno::Reference< io::XOutputStream > xOutStream = xTargetStream->getOutputStream();
         if ( !xOutStream.is() )
             throw io::IOException(); //TODO: access denied
@@ -1441,7 +1442,7 @@ void OleEmbeddedObject::setPersistentEntry(
 
             if ( aURL.isEmpty() )
                 throw lang::IllegalArgumentException(
-                                    "Empty URL is provided in the media descriptor!",
+                                    u"Empty URL is provided in the media descriptor!"_ustr,
                                     static_cast< ::cppu::OWeakObject* >(this),
                                     4 );
 
@@ -1463,7 +1464,7 @@ void OleEmbeddedObject::setPersistentEntry(
             //TODO:
         //}
         else
-            throw lang::IllegalArgumentException( "Wrong connection mode is provided!",
+            throw lang::IllegalArgumentException( u"Wrong connection mode is provided!"_ustr,
                                         static_cast< ::cppu::OWeakObject* >(this),
                                         3 );
     }
@@ -1576,7 +1577,7 @@ void OleEmbeddedObject::saveCompleted( bool bUseNew )
 
     OSL_ENSURE( m_xNewObjectStream.is() && m_xNewParentStorage.is() , "Internal object information is broken!" );
     if ( !m_xNewObjectStream.is() || !m_xNewParentStorage.is() )
-        throw uno::RuntimeException(); // TODO: broken internal information
+        throw cpo::uno::RuntimeException(); // TODO: broken internal information
 
     if ( bUseNew )
     {
@@ -1747,7 +1748,7 @@ void OleEmbeddedObject::storeOwn()
         if ( !m_xObjectStream.is() )
             throw io::IOException(); //TODO: access denied
 
-        SetStreamMediaType_Impl( m_xObjectStream, "application/vnd.sun.star.oleobject" );
+        SetStreamMediaType_Impl( m_xObjectStream, u"application/vnd.sun.star.oleobject"_ustr );
         uno::Reference< io::XOutputStream > xOutStream = m_xObjectStream->getOutputStream();
         if ( !xOutStream.is() )
             throw io::IOException(); //TODO: access denied

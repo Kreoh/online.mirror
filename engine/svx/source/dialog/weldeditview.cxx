@@ -527,7 +527,7 @@ public:
     EditEngine* GetEditEngine() { return m_pEditEngine; }
     EditView* GetEditView() { return m_pEditView; }
 
-    void SAL_CALL dispose() override
+    void dispose() override
     {
         if (!isAlive())
             return;
@@ -553,12 +553,12 @@ public:
 
     // XAccessibleComponent
 
-    virtual css::uno::Reference<css::accessibility::XAccessible>
-        SAL_CALL getAccessibleAtPoint(const css::awt::Point& rPoint) override
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
+        getAccessibleAtPoint(const css::awt::Point& rPoint) override
     {
         SolarMutexGuard aGuard;
         if (!m_xTextHelper)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         return m_xTextHelper->GetAt(rPoint);
     }
@@ -566,7 +566,7 @@ public:
     virtual css::awt::Rectangle implGetBounds() override
     {
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         const Point aOutPos;
         const Size aOutSize(m_pController->GetOutputSizePixel());
@@ -580,11 +580,11 @@ public:
         return aRet;
     }
 
-    virtual css::awt::Point SAL_CALL getLocationOnScreen() override
+    virtual css::awt::Point getLocationOnScreen() override
     {
         SolarMutexGuard aGuard;
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         css::awt::Point aScreenLoc(0, 0);
 
@@ -598,70 +598,70 @@ public:
         return aScreenLoc;
     }
 
-    virtual void SAL_CALL grabFocus() override { m_pController->GrabFocus(); }
+    virtual void grabFocus() override { m_pController->GrabFocus(); }
 
-    virtual sal_Int32 SAL_CALL getForeground() override
+    virtual sal_Int32 getForeground() override
     {
         SolarMutexGuard aGuard;
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         Color nCol = m_pEditEngine->GetAutoColor();
         return static_cast<sal_Int32>(nCol);
     }
 
-    virtual sal_Int32 SAL_CALL getBackground() override
+    virtual sal_Int32 getBackground() override
     {
         SolarMutexGuard aGuard;
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         Color nCol = m_pEditEngine->GetBackgroundColor();
         return static_cast<sal_Int32>(nCol);
     }
 
     // XAccessibleContext
-    virtual sal_Int64 SAL_CALL getAccessibleChildCount() override
+    virtual sal_Int64 getAccessibleChildCount() override
     {
         if (m_xTextHelper)
             return m_xTextHelper->GetChildCount();
         return 0;
     }
 
-    virtual css::uno::Reference<css::accessibility::XAccessible>
-        SAL_CALL getAccessibleChild(sal_Int64 i) override
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
+        getAccessibleChild(sal_Int64 i) override
     {
         if (m_xTextHelper)
             return m_xTextHelper->GetChild(i);
         throw css::lang::IndexOutOfBoundsException(); // there is no child...
     }
 
-    virtual css::uno::Reference<css::accessibility::XAccessible>
-        SAL_CALL getAccessibleParent() override
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
+        getAccessibleParent() override
     {
         SolarMutexGuard aGuard;
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         return m_pController->GetDrawingArea()->get_accessible_parent();
     }
 
-    virtual sal_Int64 SAL_CALL getAccessibleIndexInParent() override
+    virtual sal_Int64 getAccessibleIndexInParent() override
     {
         SolarMutexGuard aGuard;
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         // -1 for child not found/no parent (according to specification)
         sal_Int64 nRet = -1;
 
-        css::uno::Reference<css::accessibility::XAccessible> xParent(getAccessibleParent());
+        cpo::uno::Reference<css::accessibility::XAccessible> xParent(getAccessibleParent());
         if (!xParent)
             return nRet;
 
         try
         {
-            css::uno::Reference<css::accessibility::XAccessibleContext> xParentContext(
+            cpo::uno::Reference<css::accessibility::XAccessibleContext> xParentContext(
                 xParent->getAccessibleContext());
 
             //  iterate over parent's children and search for this object
@@ -670,7 +670,7 @@ public:
                 sal_Int64 nChildCount = xParentContext->getAccessibleChildCount();
                 for (sal_Int64 nChild = 0; (nChild < nChildCount) && (-1 == nRet); ++nChild)
                 {
-                    css::uno::Reference<css::accessibility::XAccessible> xChild(
+                    cpo::uno::Reference<css::accessibility::XAccessible> xChild(
                         xParentContext->getAccessibleChild(nChild));
                     if (xChild.get() == this)
                         nRet = nChild;
@@ -685,12 +685,12 @@ public:
         return nRet;
     }
 
-    virtual sal_Int16 SAL_CALL getAccessibleRole() override
+    virtual sal_Int16 getAccessibleRole() override
     {
         return css::accessibility::AccessibleRole::TEXT_FRAME;
     }
 
-    virtual OUString SAL_CALL getAccessibleDescription() override
+    virtual OUString getAccessibleDescription() override
     {
         SolarMutexGuard aGuard;
 
@@ -704,7 +704,7 @@ public:
         return aRet;
     }
 
-    virtual OUString SAL_CALL getAccessibleId() override
+    virtual OUString getAccessibleId() override
     {
         SolarMutexGuard aGuard;
 
@@ -714,7 +714,7 @@ public:
         return OUString();
     }
 
-    virtual OUString SAL_CALL getAccessibleName() override
+    virtual OUString getAccessibleName() override
     {
         SolarMutexGuard aGuard;
 
@@ -728,17 +728,17 @@ public:
         return aRet;
     }
 
-    virtual css::uno::Reference<css::accessibility::XAccessibleRelationSet>
-        SAL_CALL getAccessibleRelationSet() override
+    virtual cpo::uno::Reference<css::accessibility::XAccessibleRelationSet>
+        getAccessibleRelationSet() override
     {
         SolarMutexGuard aGuard;
         if (!m_pController)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         return m_pController->GetDrawingArea()->get_accessible_relation_set();
     }
 
-    virtual sal_Int64 SAL_CALL getAccessibleStateSet() override
+    virtual sal_Int64 getAccessibleStateSet() override
     {
         SolarMutexGuard aGuard;
         sal_Int64 nStateSet = 0;
@@ -765,23 +765,23 @@ public:
         return nStateSet;
     }
 
-    virtual css::lang::Locale SAL_CALL getLocale() override
+    virtual css::lang::Locale getLocale() override
     {
         SolarMutexGuard aGuard;
         return LanguageTag(m_pEditEngine->GetDefaultLanguage()).getLocale();
     }
 
     // XAccessibleEventBroadcaster
-    virtual void SAL_CALL addAccessibleEventListener(
-        const css::uno::Reference<css::accessibility::XAccessibleEventListener>& rListener) override
+    virtual void addAccessibleEventListener(
+        const cpo::uno::Reference<css::accessibility::XAccessibleEventListener>& rListener) override
     {
         if (!m_xTextHelper) // not disposing (about to destroy view shell)
             return;
         m_xTextHelper->AddEventListener(rListener);
     }
 
-    virtual void SAL_CALL removeAccessibleEventListener(
-        const css::uno::Reference<css::accessibility::XAccessibleEventListener>& rListener) override
+    virtual void removeAccessibleEventListener(
+        const cpo::uno::Reference<css::accessibility::XAccessibleEventListener>& rListener) override
     {
         if (!m_xTextHelper) // not disposing (about to destroy view shell)
             return;
@@ -1393,8 +1393,8 @@ void WeldTextForwarder::CopyText(const SvxTextForwarder& rSource)
     EditEngine* pEditEngine = m_rEditAcc.GetEditEngine();
     if (pEditEngine && pSourceEditEngine)
     {
-        std::unique_ptr<EditTextObject> pNewTextObject = pSourceEditEngine->CreateTextObject();
-        pEditEngine->SetText(*pNewTextObject);
+        EditTextObject aNewTextObject = pSourceEditEngine->CreateTextObject();
+        pEditEngine->SetText(aNewTextObject);
     }
 }
 
@@ -1608,14 +1608,14 @@ void WeldEditView::LoseFocus()
 
 bool WeldEditView::CanFocus() const { return true; }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget> WeldEditView::GetDropTarget()
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> WeldEditView::GetDropTarget()
 {
     if (!m_xDropTarget)
         m_xDropTarget = weld::CustomWidgetController::GetDropTarget();
     return m_xDropTarget;
 }
 
-css::uno::Reference<css::datatransfer::clipboard::XClipboard> WeldEditView::GetClipboard() const
+cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> WeldEditView::GetClipboard() const
 {
     return weld::CustomWidgetController::GetClipboard();
 }

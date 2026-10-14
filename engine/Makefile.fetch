@@ -111,6 +111,8 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,COINMP,COINMP_TARBALL) \
 	$(call fetch_Optional,CPPUNIT,CPPUNIT_TARBALL) \
 	$(call fetch_Optional,CURL,CURL_TARBALL) \
+	$(call fetch_Optional,COFFICEOTRON,ECMA376_OPC_TARBALL) \
+	$(call fetch_Optional,COFFICEOTRON,ECMA376_TRANSITIONAL_TARBALL) \
 	$(call fetch_Optional,EBOOK,EBOOK_TARBALL) \
 	$(call fetch_Optional,EPM,EPM_TARBALL) \
 	$(call fetch_Optional,EPUBGEN,EPUBGEN_TARBALL) \
@@ -129,17 +131,6 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,ICU,ICU_TARBALL) \
 	$(call fetch_Optional,ICU,ICU_DATA_TARBALL) \
 	$(call fetch_Optional,JAVA_WEBSOCKET,JAVA_WEBSOCKET_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_FLOW_ENGINE_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_FLUTE_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBBASE_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBFONTS_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBFORMULA_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBLAYOUT_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBLOADER_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBREPOSITORY_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBSERIALIZER_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_LIBXML_TARBALL) \
-	$(call fetch_Optional,JFREEREPORT,JFREEREPORT_SAC_TARBALL) \
 	$(call fetch_Optional,LIBJPEG_TURBO,LIBJPEG_TURBO_TARBALL) \
 	$(call fetch_Optional,LCMS2,LCMS2_TARBALL) \
 	$(call fetch_Optional,LIBEOT,LIBEOT_TARBALL) \
@@ -159,7 +150,6 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,MDDS,MDDS_TARBALL) \
 	$(call fetch_Optional,ZXCVBN,ZXCVBN_C_TARBALL) \
 	$(call fetch_Optional,ZXING,ZXING_TARBALL) \
-	$(call fetch_Optional,MDNSRESPONDER,MDNSRESPONDER_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_CALADEA_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_CARLITO_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_DEJAVU_TARBALL) \
@@ -183,6 +173,15 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,MORE_FONTS,FONT_NOTO_SANS_LAO_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_NOTO_SERIF_LAO_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_NOTO_SANS_LISU_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_MORE_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_JP_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_KR_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_SC_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_TC_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_JP_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_KR_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_SC_TARBALL) \
+	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_TC_TARBALL) \
 	$(if $(MPL_SUBSET),,$(call fetch_Optional,MORE_FONTS,FONT_CULMUS_TARBALL)) \
 	$(call fetch_Optional,MORE_FONTS,FONT_LIBRE_HEBREW_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_ALEF_TARBALL) \
@@ -197,6 +196,7 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,MORE_FONTS,FONT_LUGRASIMO_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_LUMANOSIMO_TARBALL) \
 	$(call fetch_Optional,MORE_FONTS,FONT_LUNASIMA_TARBALL) \
+	$(call fetch_Optional,MORE_FONTS,FONT_OPENDYSLEXIC_TARBALL) \
 	$(call fetch_Optional,MESON,MESON_TARBALL) \
 	$(call fetch_Optional,MSPUB,MSPUB_TARBALL) \
 	$(call fetch_Optional,MWAW,MWAW_TARBALL) \
@@ -207,6 +207,7 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,ORCUS,ORCUS_TARBALL) \
 	$(call fetch_Optional,PAGEMAKER,PAGEMAKER_TARBALL) \
 	$(call fetch_Optional,PDFIUM,PDFIUM_TARBALL) \
+	POCO_TARBALL \
 	$(call fetch_Optional,PYTHON,PYTHON_TARBALL) \
 	$(if $(filter WNT,$(OS)),PYTHON_BOOTSTRAP_TARBALL) \
 	$(call fetch_Optional,QXP,QXP_TARBALL) \
@@ -214,6 +215,7 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,REDLAND,RASQAL_TARBALL) \
 	$(call fetch_Optional,REDLAND,REDLAND_TARBALL) \
 	$(call fetch_Optional,REVENGE,REVENGE_TARBALL) \
+	$(call fetch_Optional,RNV,RNV_TARBALL) \
 	$(call fetch_Optional,QUICKJS,QUICKJS_TARBALL) \
 	$(call fetch_Optional,SKIA,SKIA_TARBALL) \
 	$(call fetch_Optional,SQLITE3,SQLITE3_TARBALL) \
@@ -228,54 +230,24 @@ fetch_SRC_TARBALLS := \
 	$(call fetch_Optional,ZSTD,ZSTD_TARBALL) \
 	$(call fetch_Optional,ZMF,ZMF_TARBALL)
 
-fetch_RNV_TARBALLS := \
-	$(call fetch_Optional,RNV,RNV_TARBALL)
-
-fetch_ECMA376_TARBALLS := \
-	$(call fetch_Optional,COFFICEOTRON,ECMA376_OPC_TARBALL) \
-	$(call fetch_Optional,COFFICEOTRON,ECMA376_TRANSITIONAL_TARBALL)
-
 fetch_EXTERN_TARBALLS := \
 	$(call fetch_Optional,OPENSYMBOL,OPENSYMBOL_TTF) \
 	$(call fetch_Optional,ODFVALIDATOR,ODFVALIDATOR_JAR) \
 	$(call fetch_Optional,OFFICEOTRON,OFFICEOTRON_JAR) \
 	$(call fetch_Optional,VERAPDF,VERAPDF_JAR)
 
-fetch_NOTO_TARBALLS := \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_MORE_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_JP_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_KR_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_SC_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SANS_TC_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_JP_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_KR_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_SC_TARBALL) \
-	$(call fetch_Optional,NOTO_FONT,FONT_NOTO_SERIF_TC_TARBALL)
-
-fetch_OPENDYSLEXIC_TARBALLS := \
-	$(call fetch_Optional,MORE_FONTS,FONT_OPENDYSLEXIC_TARBALL)
-
-# POCO is built unconditionally (engine/external/poco) and is not on the
-# LibreOffice tarball mirror, so it is always fetched from its upstream release.
-fetch_POCO_TARBALLS := POCO_TARBALL
-
 # Print resolved filenames of all tarballs needed for the current build configuration.
 # Used by bin/cached-fetch.sh to populate from cache without re-downloading.
 fetch-names: $(BUILDDIR)/config_$(gb_Side).mk
-	@echo $(foreach item,$(fetch_SRC_TARBALLS) $(fetch_EXTERN_TARBALLS) $(fetch_NOTO_TARBALLS) $(fetch_OPENDYSLEXIC_TARBALLS) $(fetch_POCO_TARBALLS),$($(item)))
+	@echo $(foreach item,$(fetch_SRC_TARBALLS) $(fetch_EXTERN_TARBALLS),$($(item)))
 
 download: $(WORKDIR)/download
 
 $(WORKDIR)/download: $(BUILDDIR)/config_$(gb_Side).mk $(SRCDIR)/download.lst $(SRCDIR)/Makefile.fetch
 	-@mkdir -p $(TARFILE_LOCATION)/tmp
 	@date >> $(fetch_LOGFILE)
-	$(foreach item,$(fetch_SRC_TARBALLS),$(call fetch_Download_item,https://dev-www.libreoffice.org/src,$(item)))
-	$(foreach item,$(fetch_EXTERN_TARBALLS),$(call fetch_Download_item,https://dev-www.libreoffice.org/extern,$(item)))
-	$(foreach item,$(fetch_RNV_TARBALLS),$(call fetch_Download_item,https://downloads.sourceforge.net/project/rnv/Sources/1.7.10,$(item)))
-	$(foreach item,$(fetch_ECMA376_TARBALLS),$(call fetch_Download_item,https://ecma-international.org/wp-content/uploads,$(item)))
-	$(foreach item,$(fetch_NOTO_TARBALLS),$(call fetch_Download_item,https://github.com/CollaboraOnline/online/releases/download/for-code-assets/,$(item)))
-	$(foreach item,$(fetch_OPENDYSLEXIC_TARBALLS),$(call fetch_Download_item,https://github.com/antijingoist/opendyslexic/releases/download/v0.91.12,$(item)))
-	$(foreach item,$(fetch_POCO_TARBALLS),$(call fetch_Download_item,https://pocoproject.org/releases/poco-1.15.3,$(item)))
+	$(foreach item,$(fetch_SRC_TARBALLS),$(call fetch_Download_item,https://gerrit.collaboraoffice.com/src,$(item)))
+	$(foreach item,$(fetch_EXTERN_TARBALLS),$(call fetch_Download_item,https://gerrit.collaboraoffice.com/extern,$(item)))
 	-@mkdir -p $(TARFILE_LOCATION)/cargo
 	$(if $(call fetch_Optional,YRS,1),\
 		CARGO_HOME=$(TARFILE_LOCATION)/cargo cargo fetch $(if $(verbose),--verbose,) --locked --manifest-path $(SRCDIR)/external/y-crdt/Cargo.toml)

@@ -440,7 +440,7 @@ tools::Long ScColumn::GetNeededSize(
 
         if ( aSet.Get(EE_PARA_HYPHENATE).GetValue() ) {
 
-            css::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
+            cpo::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
             pEngine->SetHyphenator( xXHyphenator );
         }
 
@@ -1245,7 +1245,7 @@ public:
 
             // Overwrite the existing object.
             delete pObj;
-            pObj = mpEngine->CreateTextObject().release();
+            pObj = new EditTextObject(mpEngine->CreateTextObject());
         }
         else                                            // create String
         {
@@ -3560,14 +3560,45 @@ namespace {
 class CompileDBFormulaHandler
 {
     sc::CompileFormulaContext& mrCxt;
+    formula::unordered_opcode_set maOps;
 
 public:
     explicit CompileDBFormulaHandler( sc::CompileFormulaContext& rCxt ) :
-        mrCxt(rCxt) {}
-
-    void operator() (size_t, ScFormulaCell* p)
+        mrCxt(rCxt)
     {
-        p->CompileDBFormula(mrCxt);
+        maOps.insert(ocDBArea);
+        maOps.insert(ocTableRef);
+    }
+
+    void operator() ( sc::FormulaGroupEntry& rEntry )
+    {
+        if (!rEntry.mbShared)
+        {
+            rEntry.mpCell->CompileDBFormula(mrCxt);
+            return;
+        }
+
+        ScFormulaCell** ppBeg = rEntry.mpCells;
+        ScFormulaCell** ppEnd = ppBeg + rEntry.mnLength;
+        if (!(*ppBeg)->GetCode()->HasOpCodes(maOps))
+            return;
+
+        // End listening while the old RPN still describes what each cell listens to.
+        ScDocument& rDoc = mrCxt.getDoc();
+        for (ScFormulaCell** pp = ppBeg; pp != ppEnd; ++pp)
+        {
+            (*pp)->EndListeningTo(rDoc);
+            rDoc.RemoveFromFormulaTree(*pp);
+        }
+
+        (*ppBeg)->SetCompile(true);
+        (*ppBeg)->CompileTokenArray(mrCxt, true /*bNoListening*/);
+
+        for (ScFormulaCell** pp = ppBeg; pp != ppEnd; ++pp)
+        {
+            (*pp)->StartListeningTo(rDoc);
+            (*pp)->SetDirty();
+        }
     }
 };
 
@@ -3587,8 +3618,10 @@ public:
 
 void ScColumn::CompileDBFormula( sc::CompileFormulaContext& rCxt )
 {
+    std::vector<sc::FormulaGroupEntry> aGroups = GetFormulaGroupEntries();
+
     CompileDBFormulaHandler aFunc(rCxt);
-    sc::ProcessFormula(maCells, aFunc);
+    std::for_each(aGroups.begin(), aGroups.end(), aFunc);
     RegroupFormulaCells();
 }
 

@@ -27,6 +27,7 @@
 #include "officerestartmanager.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace comphelper
 {
@@ -36,7 +37,7 @@ namespace comphelper
 void OOfficeRestartManager::requestRestart( const uno::Reference< task::XInteractionHandler >& /* xInteractionHandler */ )
 {
     if ( !m_xContext.is() )
-        throw uno::RuntimeException(u"no component context"_ustr);
+        throw cpo::uno::RuntimeException(u"no component context"_ustr);
 
     {
         std::unique_lock aGuard( m_aMutex );
@@ -94,7 +95,7 @@ void OOfficeRestartManager::notify( const cpo::uno::Any& /* aData */ )
 
         if ( m_xContext.is() )
         {
-            uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(m_xContext);
+            uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(m_xContext);
 
             // Turn Quickstarter veto off
             uno::Reference< beans::XPropertySet > xPropertySet( xDesktop, uno::UNO_QUERY_THROW );
@@ -146,9 +147,9 @@ cpo::uno::Sequence< OUString > OOfficeRestartManager::getSupportedServiceNames()
 } // namespace comphelper
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_task_OfficeRestartManager(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new comphelper::OOfficeRestartManager(context));

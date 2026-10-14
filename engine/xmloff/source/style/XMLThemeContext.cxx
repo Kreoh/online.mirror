@@ -22,11 +22,12 @@
 #include <docmodel/theme/Theme.hxx>
 
 using namespace css;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 XMLThemeContext::XMLThemeContext(
     SvXMLImport& rImport, const uno::Reference<xml::sax::XFastAttributeList>& xAttrList,
-    css::uno::Reference<css::uno::XInterface> const& xObjectWithThemeProperty)
+    cpo::uno::Reference<cpo::uno::XInterface> const& xObjectWithThemeProperty)
     : SvXMLImportContext(rImport)
     , m_xObjectWithThemeProperty(xObjectWithThemeProperty)
     , mpTheme(new model::Theme)
@@ -63,7 +64,7 @@ XMLThemeContext::~XMLThemeContext()
     }
 }
 
-uno::Reference<xml::sax::XFastContextHandler> SAL_CALL XMLThemeContext::createFastChildContext(
+uno::Reference<xml::sax::XFastContextHandler> XMLThemeContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttribs)
 {
     if (nElement == XML_ELEMENT(LO_EXT, XML_THEME_COLORS))
@@ -101,7 +102,7 @@ XMLThemeColorsContext::~XMLThemeColorsContext()
 }
 
 uno::Reference<xml::sax::XFastContextHandler>
-    SAL_CALL XMLThemeColorsContext::createFastChildContext(
+    XMLThemeColorsContext::createFastChildContext(
         sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttribs)
 {
     if (nElement == XML_ELEMENT(LO_EXT, XML_COLOR))

@@ -37,7 +37,7 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <com/sun/star/presentation/EffectNodeType.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <oox/core/xmlfilterbase.hxx>
 #include <oox/ppt/pptfilterhelpers.hxx>
@@ -49,7 +49,7 @@
 using namespace ::oox::core;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::animations;
@@ -141,7 +141,7 @@ namespace oox::ppt {
     {
     }
 
-    void fixMainSequenceTiming( const css::uno::Reference< css::animations::XAnimationNode >& xNode )
+    void fixMainSequenceTiming( const cpo::uno::Reference< css::animations::XAnimationNode >& xNode )
     {
         try
         {
@@ -202,7 +202,7 @@ namespace oox::ppt {
         }
     }
 
-    void fixInteractiveSequenceTiming( const css::uno::Reference< css::animations::XAnimationNode >& xNode )
+    void fixInteractiveSequenceTiming( const cpo::uno::Reference< css::animations::XAnimationNode >& xNode )
     {
         try
         {

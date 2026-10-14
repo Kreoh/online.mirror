@@ -28,8 +28,8 @@
 
 namespace comphelper
 {
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::logging::XLoggerPool;
     using ::com::sun::star::logging::LoggerPool;
     using ::com::sun::star::logging::XLogger;
@@ -95,7 +95,7 @@ namespace comphelper
         return false;
     }
 
-    const css::uno::Reference<css::logging::XLogger> & EventLogger::getLogger() const
+    const cpo::uno::Reference<css::logging::XLogger> & EventLogger::getLogger() const
     {
         return m_pImpl->getLogger();
     }

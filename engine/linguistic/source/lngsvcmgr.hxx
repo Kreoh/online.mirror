@@ -24,11 +24,10 @@
 
 #include <comphelper/kit.hxx>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/linguistic2/XLinguServiceManager2.hpp>
 #include <com/sun/star/util/XModifyBroadcaster.hpp>
-#include <com/sun/star/util/XModifyListener.hpp>
 #include <unotools/configitem.hxx>
 #include <rtl/ref.hxx>
 #include <vcl/timer.hxx>
@@ -52,8 +51,7 @@ class LngSvcMgr :
     public cppu::WeakImplHelper
     <
         css::linguistic2::XLinguServiceManager2,
-        css::lang::XServiceInfo,
-        css::util::XModifyListener
+        css::lang::XServiceInfo
     >,
     private utl::ConfigItem,
     public comphelper::COKit::ThreadJoinable
@@ -61,9 +59,6 @@ class LngSvcMgr :
     friend class LngSvcMgrListenerHelper;
 
     ::comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>  aEvtListeners;
-
-    css::uno::Reference<
-        css::util::XModifyBroadcaster>                  xMB;
 
     Idle                                                aUpdateIdle;
 
@@ -118,7 +113,6 @@ class LngSvcMgr :
     virtual void    ImplCommit() override;
 
     void UpdateAll();
-    void stopListening();
     DECL_LINK( updateAndBroadcast, Timer*, void );
 
 public:
@@ -126,11 +120,11 @@ public:
     virtual ~LngSvcMgr() override;
 
     // XLinguServiceManager
-    virtual css::uno::Reference< css::linguistic2::XSpellChecker > getSpellChecker(  ) override;
-    virtual css::uno::Reference< css::linguistic2::XHyphenator > getHyphenator(  ) override;
-    virtual css::uno::Reference< css::linguistic2::XThesaurus > getThesaurus(  ) override;
-    virtual bool addLinguServiceManagerListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    virtual bool removeLinguServiceManagerListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual cpo::uno::Reference< css::linguistic2::XSpellChecker > getSpellChecker(  ) override;
+    virtual cpo::uno::Reference< css::linguistic2::XHyphenator > getHyphenator(  ) override;
+    virtual cpo::uno::Reference< css::linguistic2::XThesaurus > getThesaurus(  ) override;
+    virtual bool addLinguServiceManagerListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual bool removeLinguServiceManagerListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
     virtual cpo::uno::Sequence< OUString > getAvailableServices( const OUString& aServiceName, const css::lang::Locale& aLocale ) override;
     virtual void setConfiguredServices( const OUString& aServiceName, const css::lang::Locale& aLocale, const cpo::uno::Sequence< OUString >& aServiceImplNames ) override;
     virtual cpo::uno::Sequence< OUString > getConfiguredServices( const OUString& aServiceName, const css::lang::Locale& aLocale ) override;
@@ -140,8 +134,8 @@ public:
 
     // XComponent
     virtual void dispose(  ) override;
-    virtual void addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    virtual void removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // XServiceInfo
     virtual OUString getImplementationName(  ) override;
@@ -149,16 +143,13 @@ public:
     virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
     // XEventListener
-    virtual void disposing( const css::lang::EventObject& rSource ) override;
 
-    // XModifyListener
-    virtual void modified( const css::lang::EventObject& rEvent ) override;
 
     // comphelper::COKit::ThreadJoinable
     virtual bool joinThreads() override;
 
     bool    AddLngSvcEvtBroadcaster(
-                const css::uno::Reference< css::linguistic2::XLinguServiceEventBroadcaster > &rxBroadcaster );
+                const cpo::uno::Reference< css::linguistic2::XLinguServiceEventBroadcaster > &rxBroadcaster );
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -56,8 +56,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::xmloff::token;
 
 namespace {
@@ -272,8 +272,8 @@ public:
             XmlStyleFamily nFamily,
             SvXMLStylesContext& rStyles );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 };
 
 }
@@ -287,7 +287,7 @@ uno::Reference < style::XStyle > SwXMLTextStyleContext_Impl::Create()
                                                     uno::UNO_QUERY );
         if( xFactory.is() )
         {
-            uno::Reference < uno::XInterface > xIfc =
+            uno::Reference < cpo::uno::XInterface > xIfc =
                 xFactory->createInstance( u"com.sun.star.style.ConditionalParagraphStyle"_ustr );
             if( xIfc.is() )
                 xNewStyle.set( xIfc, uno::UNO_QUERY );
@@ -352,9 +352,9 @@ SwXMLTextStyleContext_Impl::SwXMLTextStyleContext_Impl( SwXMLImport& rImport,
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLTextStyleContext_Impl::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLTextStyleContext_Impl::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if( nElement == XML_ELEMENT(STYLE, XML_MAP) )
     {
@@ -380,7 +380,7 @@ class SwXMLCellStyleContext : public XMLPropStyleContext
     void AddDataFormat();
 public:
     using XMLPropStyleContext::XMLPropStyleContext;
-    virtual void FillPropertySet(const css::uno::Reference<css::beans::XPropertySet>& rPropSet) override;
+    virtual void FillPropertySet(const cpo::uno::Reference<css::beans::XPropertySet>& rPropSet) override;
     virtual void SetAttribute(sal_Int32 nElement, const OUString& rValue) override;
 };
 
@@ -418,8 +418,8 @@ public:
 
     virtual void CreateAndInsert( bool bOverwrite ) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
     // The item set may be empty!
     SfxItemSet *GetItemSet() { return m_oItemSet ? &*m_oItemSet : nullptr; }
@@ -478,7 +478,7 @@ void SwXMLCellStyleContext::AddDataFormat()
         GetProperties().emplace_back(nIndex, Any(nNumberFormat));
 }
 
-void SwXMLCellStyleContext::FillPropertySet(const css::uno::Reference<css::beans::XPropertySet>& rPropSet)
+void SwXMLCellStyleContext::FillPropertySet(const cpo::uno::Reference<css::beans::XPropertySet>& rPropSet)
 {
     AddDataFormat();
     XMLPropStyleContext::FillPropertySet(rPropSet);
@@ -580,7 +580,7 @@ void SwXMLItemSetStyleContext_Impl::CreateAndInsert( bool bOverwrite )
         m_pTextStyle->CreateAndInsert( bOverwrite );
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLItemSetStyleContext_Impl::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLItemSetStyleContext_Impl::createFastChildContext(
     sal_Int32 nElement,
     const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -708,7 +708,7 @@ protected:
 
     using SvXMLStylesContext::CreateStyleChildContext;
     virtual SvXMLStyleContext *CreateStyleChildContext( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 
     using SvXMLStylesContext::CreateStyleStyleChildContext;
     virtual SvXMLStyleContext *CreateStyleStyleChildContext( XmlStyleFamily nFamily,
@@ -735,7 +735,7 @@ public:
 
     virtual bool InsertStyleFamily( XmlStyleFamily nFamily ) const override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
 private:
     mutable std::unique_ptr<SvXMLImportPropertyMapper> mxTableTablePropMapper;
@@ -748,7 +748,7 @@ private:
 
 SvXMLStyleContext *SwXMLStylesContext_Impl::CreateStyleChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList )
 {
     SvXMLStyleContext* pContext = nullptr;
 
@@ -962,7 +962,7 @@ public:
 
     SwXMLMasterStylesContext_Impl( SwXMLImport& rImport );
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 }

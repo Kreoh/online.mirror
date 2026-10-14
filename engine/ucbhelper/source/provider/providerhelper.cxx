@@ -39,6 +39,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace ucbhelper_impl
 {
@@ -61,7 +62,7 @@ struct ContentProviderImplHelper_Impl
 namespace ucbhelper {
 
 ContentProviderImplHelper::ContentProviderImplHelper(
-    uno::Reference< uno::XComponentContext > xContext )
+    uno::Reference< cpo::uno::XComponentContext > xContext )
 : m_pImpl( new ucbhelper_impl::ContentProviderImplHelper_Impl ),
   m_xContext(std::move( xContext ))
 {
@@ -73,14 +74,14 @@ ContentProviderImplHelper::~ContentProviderImplHelper()
 }
 
 // virtual
-bool SAL_CALL ContentProviderImplHelper::supportsService(
+bool ContentProviderImplHelper::supportsService(
                                             const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // virtual
-sal_Int32 SAL_CALL ContentProviderImplHelper::compareContentIds(
+sal_Int32 ContentProviderImplHelper::compareContentIds(
         const uno::Reference< css::ucb::XContentIdentifier >& Id1,
         const uno::Reference< css::ucb::XContentIdentifier >& Id2 )
 {

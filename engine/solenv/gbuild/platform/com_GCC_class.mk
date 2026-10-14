@@ -81,7 +81,7 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(if $(COMPILER_TEST),-fsyntax-only -ferror-limit=0 -Xclang -verify) \
 		$(if $(6), $(call gb_CObject__filter_out_clang_cflags,$(2)),$(2)) \
 		$(if $(WARNINGS_DISABLED),$(gb_CXXFLAGS_DISABLE_WARNINGS)) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
+		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef)) \
 		$(if $(COMPILER_TEST),,-c) $(3) \
 		-o $(1) \
 		$(if $(COMPILER_TEST),,$(call gb_cxx_dep_generation_options,$(1),$(4))) \
@@ -144,7 +144,7 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(if $(WARNINGS_DISABLED),$(gb_CXXFLAGS_DISABLE_WARNINGS)) \
 		$(gb_COMPILERDEPFLAGS) \
 		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
+		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef)) \
 		$(gb_NO_PCH_TIMESTAMP) \
 		$(gb_PrecompiledHeader_extra_pch_cxxflags) \
 		$(5) \
@@ -174,7 +174,7 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(if $(WARNINGS_DISABLED),$(gb_CXXFLAGS_DISABLE_WARNINGS)) \
 		$(gb_COMPILERDEPFLAGS) \
 		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
+		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef)) \
 		$(gb_NO_PCH_TIMESTAMP) \
 		$(5) \
 		-E $(patsubst %.cxx,%.hxx,$(3)) \
@@ -234,7 +234,7 @@ endef
 
 define gb_UIConfig__gla11y_command
 $(call gb_Helper_abbreviate_dirs,\
-	$(gb_UIConfig_LXML_PATH) $(if $(SYSTEM_LIBXML)$(SYSTEM_LIBXSLT),,$(gb_Helper_set_ld_path)) \
+	$(gb_UIConfig_LXML_PATH) $(if $(filter LXML,$(BUILD_TYPE)),$(if $(SYSTEM_LIBXML)$(SYSTEM_LIBXSLT),,$(gb_Helper_set_ld_path))) \
 	$(call gb_ExternalExecutable_get_command,python) \
 	$(gb_UIConfig_gla11y_SCRIPT) $(gb_UIConfig_gla11y_PARAMETERS) -o $@ $(UIFILES)
 )

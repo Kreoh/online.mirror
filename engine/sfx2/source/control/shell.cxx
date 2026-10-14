@@ -18,7 +18,6 @@
  */
 
 #include <com/sun/star/embed/VerbDescriptor.hpp>
-#include <com/sun/star/embed/VerbAttributes.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <officecfg/Office/Common.hxx>
 #include <rtl/ustring.hxx>
@@ -48,10 +47,10 @@
 #include <tools/debug.hxx>
 
 #include <memory>
-#include <vector>
 #include <map>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 struct SfxShell_Impl: public SfxBroadcaster
 {
@@ -65,9 +64,7 @@ struct SfxShell_Impl: public SfxBroadcaster
     SfxRepeatTarget*            pRepeatTarget; // SbxObjectRef xParent;
     bool                        bActive;
     SfxDisableFlags             nDisableFlags;
-    std::unique_ptr<svtools::AsynchronLink> pExecuter;
     std::unique_ptr<svtools::AsynchronLink> pUpdater;
-    std::vector<std::unique_ptr<SfxSlot> >  aSlotArr;
 
     cpo::uno::Sequence < css::embed::VerbDescriptor > aVerbList;
     ::sfx2::sidebar::ContextChangeBroadcaster maContextChangeBroadcaster;
@@ -81,7 +78,7 @@ struct SfxShell_Impl: public SfxBroadcaster
     {
     }
 
-    virtual ~SfxShell_Impl() override { pExecuter.reset(); pUpdater.reset();}
+    virtual ~SfxShell_Impl() override { pUpdater.reset();}
 };
 
 
@@ -284,13 +281,13 @@ void SfxShell::HandleOpenXmlFilterSettings(SfxRequest & rReq)
         uno::Reference < ui::dialogs::XExecutableDialog > xDialog = ui::dialogs::XSLTFilterDialog::create( ::comphelper::getProcessComponentContext() );
 
         // set dialog parent
-        css::uno::Reference<com::sun::star::lang::XInitialization> xInit(xDialog,
-                                                                         css::uno::UNO_QUERY);
+        cpo::uno::Reference<com::sun::star::lang::XInitialization> xInit(xDialog,
+                                                                         cpo::uno::UNO_QUERY);
         if (xInit.is())
         {
             if (SfxViewShell* pViewShell = GetViewShell())
             {
-                css::uno::Reference<css::awt::XWindow> xDialogParent
+                cpo::uno::Reference<css::awt::XWindow> xDialogParent
                     = VCLUnoHelper::GetInterface(pViewShell->GetWindow());
                 cpo::uno::Sequence<cpo::uno::Any> aSeq(comphelper::InitAnyPropertySequence(
                     { { u"ParentWindow"_ustr, cpo::uno::Any(xDialogParent) } }));
@@ -419,24 +416,6 @@ bool SfxShell::IsConditionalFastCall( const SfxRequest &rReq )
 }
 
 
-static void ShellCall_Impl( void* pObj, void* pArg )
-{
-    static_cast<SfxShell*>(pObj)->ExecuteSlot( *static_cast<SfxRequest*>(pArg) );
-}
-
-void SfxShell::ExecuteSlot( SfxRequest& rReq, bool bAsync )
-{
-    if( !bAsync )
-        ExecuteSlot( rReq );
-    else
-    {
-        if( !pImpl->pExecuter )
-            pImpl->pExecuter.reset( new svtools::AsynchronLink(
-                LINK_NONMEMBER( this, ShellCall_Impl ) ) );
-        pImpl->pExecuter->Call( new SfxRequest( rReq ) );
-    }
-}
-
 const SfxPoolItemHolder& SfxShell::ExecuteSlot
 (
     SfxRequest          &rReq,  // the relayed <SfxRequest>
@@ -447,11 +426,7 @@ const SfxPoolItemHolder& SfxShell::ExecuteSlot
         pIF = GetInterface();
 
     sal_uInt16 nSlot = rReq.GetSlot();
-    const SfxSlot* pSlot = nullptr;
-    if ( nSlot >= SID_VERB_START && nSlot <= SID_VERB_END )
-        pSlot = GetVerbSlot_Impl(nSlot);
-    if ( !pSlot )
-        pSlot = pIF->GetSlot(nSlot);
+    const SfxSlot* pSlot = pIF->GetSlot(nSlot);
     assert(pSlot && "slot not supported");
 
     SfxExecFunc pFunc = pSlot->GetExecFnc();
@@ -475,11 +450,7 @@ SfxPoolItemHolder SfxShell::GetSlotState
     bool bItemStateSet(false);
     SfxItemPool &rPool = GetPool();
 
-    const SfxSlot* pSlot = nullptr;
-    if ( nSlotId >= SID_VERB_START && nSlotId <= SID_VERB_END )
-        pSlot = GetVerbSlot_Impl(nSlotId);
-    if ( !pSlot )
-        pSlot = pIF->GetSlot(nSlotId);
+    const SfxSlot* pSlot = pIF->GetSlot(nSlotId);
     if ( pSlot )
         // Map on Which-Id if possible
         nSlotId = pSlot->GetWhich( rPool );
@@ -539,12 +510,6 @@ SfxPoolItemHolder SfxShell::GetSlotState
     return SfxPoolItemHolder(rPool, pItem);
 }
 
-static SFX_EXEC_STUB(SfxShell, VerbExec)
-static void SfxStubSfxShellVerbState(SfxShell *, SfxItemSet& rSet)
-{
-    SfxShell::VerbState( rSet );
-}
-
 void SfxShell::SetVerbs(const cpo::uno::Sequence < css::embed::VerbDescriptor >& aVerbs)
 {
     SfxViewShell *pViewSh = dynamic_cast<SfxViewShell*>( this );
@@ -552,49 +517,6 @@ void SfxShell::SetVerbs(const cpo::uno::Sequence < css::embed::VerbDescriptor >&
     DBG_ASSERT(pViewSh, "Only call SetVerbs at the ViewShell!");
     if ( !pViewSh )
         return;
-
-    // First make all Statecaches dirty, so that no-one no longer tries to use
-    // the Slots
-    {
-        SfxBindings *pBindings =
-            pViewSh->GetViewFrame().GetDispatcher()->GetBindings();
-        sal_uInt16 nCount = pImpl->aSlotArr.size();
-        for (sal_uInt16 n1=0; n1<nCount ; n1++)
-        {
-            sal_uInt16 nId = SID_VERB_START + n1;
-            pBindings->Invalidate(nId, false, true);
-        }
-    }
-
-    sal_uInt16 nr=0;
-    for (sal_Int32 n=0; n<aVerbs.getLength(); n++)
-    {
-        sal_uInt16 nSlotId = SID_VERB_START + nr++;
-        DBG_ASSERT(nSlotId <= SID_VERB_END, "Too many Verbs!");
-        if (nSlotId > SID_VERB_END)
-            break;
-
-        SfxSlot* pNewSlot = new SfxSlot{
-            nSlotId, SfxGroupId::NONE,
-            // Verb slots must be executed asynchronously, so that they can be
-            // destroyed while executing.
-            SfxSlotMode::ASYNCHRON | SfxSlotMode::CONTAINER,
-            0, 0,
-            SFX_STUB_PTR(SfxShell, VerbExec), SFX_STUB_PTR(SfxShell, VerbState),
-            nullptr, // HACK(SFX_TYPE(SfxVoidItem)) ???
-            nullptr, nullptr, 0, SfxDisableFlags::NONE, u""_ustr};
-
-        if (!pImpl->aSlotArr.empty())
-        {
-            SfxSlot& rSlot = *pImpl->aSlotArr[0];
-            pNewSlot->pNextSlot = rSlot.pNextSlot;
-            rSlot.pNextSlot = pNewSlot;
-        }
-        else
-            pNewSlot->pNextSlot = pNewSlot;
-
-        pImpl->aSlotArr.insert(pImpl->aSlotArr.begin() + static_cast<sal_uInt16>(n), std::unique_ptr<SfxSlot>(pNewSlot));
-    }
 
     pImpl->aVerbList = aVerbs;
 
@@ -607,53 +529,6 @@ void SfxShell::SetVerbs(const cpo::uno::Sequence < css::embed::VerbDescriptor >&
 const cpo::uno::Sequence < css::embed::VerbDescriptor >& SfxShell::GetVerbs() const
 {
     return pImpl->aVerbList;
-}
-
-void SfxShell::VerbExec(SfxRequest& rReq)
-{
-    sal_uInt16 nId = rReq.GetSlot();
-    SfxViewShell *pViewShell = GetViewShell();
-    if ( !pViewShell )
-        return;
-
-    bool bReadOnly = pViewShell->GetObjectShell()->IsReadOnly();
-    const cpo::uno::Sequence < css::embed::VerbDescriptor > aList = pViewShell->GetVerbs();
-    sal_Int32 nVerb = 0;
-    for (const auto& rVerb : aList)
-    {
-        // check for ReadOnly verbs
-        if ( bReadOnly && !(rVerb.VerbAttributes & embed::VerbAttributes::MS_VERBATTR_NEVERDIRTIES) )
-            continue;
-
-        // check for verbs that shouldn't appear in the menu
-        if ( !(rVerb.VerbAttributes & embed::VerbAttributes::MS_VERBATTR_ONCONTAINERMENU) )
-            continue;
-
-        if (nId == SID_VERB_START + nVerb++)
-        {
-            pViewShell->DoVerb(rVerb.VerbID);
-            rReq.Done();
-            return;
-        }
-    }
-}
-
-void SfxShell::VerbState(SfxItemSet& )
-{
-}
-
-const SfxSlot* SfxShell::GetVerbSlot_Impl(sal_uInt16 nId) const
-{
-    cpo::uno::Sequence < css::embed::VerbDescriptor > rList = pImpl->aVerbList;
-
-    DBG_ASSERT(nId >= SID_VERB_START && nId <= SID_VERB_END,"Wrong VerbId!");
-    sal_uInt16 nIndex = nId - SID_VERB_START;
-    DBG_ASSERT(nIndex < rList.getLength(),"Wrong VerbId!");
-
-    if (nIndex < rList.getLength())
-        return pImpl->aSlotArr[nIndex].get();
-    else
-        return nullptr;
 }
 
 SfxObjectShell* SfxShell::GetObjectShell()
@@ -699,15 +574,6 @@ void SfxShell::SetDisableFlags( SfxDisableFlags nFlags )
 SfxDisableFlags SfxShell::GetDisableFlags() const
 {
     return pImpl->nDisableFlags;
-}
-
-std::optional<SfxItemSet> SfxShell::CreateItemSet( sal_uInt16 )
-{
-    return {};
-}
-
-void SfxShell::ApplyItemSet( sal_uInt16, const SfxItemSet& )
-{
 }
 
 void SfxShell::SetContextName (const OUString& rsContextName)

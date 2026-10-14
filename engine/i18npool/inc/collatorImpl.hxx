@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/i18n/XCollator.hpp>
 #include <com/sun/star/lang/Locale.hpp>
 #include <cppuhelper/implbase.hxx>
@@ -28,8 +28,8 @@
 #include <vector>
 #include <optional>
 
-namespace com::sun::star::i18n { class XLocaleData5; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace com::sun::star::i18n { class XLocaleData; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace i18npool {
 
@@ -45,7 +45,7 @@ class CollatorImpl : public cppu::WeakImplHelper
 public:
 
     // Constructors
-    CollatorImpl( const css::uno::Reference < css::uno::XComponentContext >& rxContext );
+    CollatorImpl( const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext );
     // Destructor
     virtual ~CollatorImpl() override;
 
@@ -79,9 +79,9 @@ private:
         css::lang::Locale aLocale;
         OUString algorithm;
         OUString service;
-        css::uno::Reference < XCollator > xC;
+        cpo::uno::Reference < XCollator > xC;
         lookupTableItem(css::lang::Locale _aLocale, OUString _algorithm, OUString _service,
-                        css::uno::Reference < XCollator > _xC) : aLocale(std::move(_aLocale)), algorithm(std::move(_algorithm)), service(std::move(_service)), xC(std::move(_xC)) {}
+                        cpo::uno::Reference < XCollator > _xC) : aLocale(std::move(_aLocale)), algorithm(std::move(_algorithm)), service(std::move(_service)), xC(std::move(_xC)) {}
         bool equals(const css::lang::Locale& rLocale, std::u16string_view _algorithm) {
         return aLocale.Language == rLocale.Language &&
             aLocale.Country == rLocale.Country &&
@@ -93,14 +93,14 @@ private:
     std::optional<lookupTableItem>     cachedItem;
 
     // Service Factory
-    css::uno::Reference < css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference < cpo::uno::XComponentContext > m_xContext;
     // lang::Locale Data
-    css::uno::Reference < css::i18n::XLocaleData5 >     mxLocaleData;
+    cpo::uno::Reference < css::i18n::XLocaleData >      mxLocaleData;
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool createCollator(const css::lang::Locale& rLocale, const OUString& serviceName,
         const OUString& rSortAlgorithm);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void loadCachedCollator(const css::lang::Locale& rLocale, const OUString& rSortAlgorithm);
 };
 

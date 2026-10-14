@@ -47,6 +47,7 @@ namespace writerfilter::dmapper
 using namespace ::com::sun::star;
 using namespace ::css::xml::xpath;
 using namespace ::comphelper;
+using namespace ::cpo;
 
 /// w:sdt's w:dropDownList doesn't have width, so guess the size based on the longest string.
 static awt::Size lcl_getOptimalWidth(const StyleSheetTablePtr& pStyleSheet,
@@ -87,7 +88,7 @@ static awt::Size lcl_getOptimalWidth(const StyleSheetTablePtr& pStyleSheet,
 }
 
 SdtHelper::SdtHelper(DomainMapper_Impl& rDM_Impl,
-                     css::uno::Reference<css::uno::XComponentContext> xContext)
+                     cpo::uno::Reference<cpo::uno::XComponentContext> xContext)
     : m_rDM_Impl(rDM_Impl)
     , m_xComponentContext(std::move(xContext))
     , m_aControlType(SdtControlType::unknown)
@@ -103,7 +104,7 @@ SdtHelper::~SdtHelper() = default;
 void SdtHelper::loadPropertiesXMLs()
 {
     // Initialize properties xml storage (m_xPropertiesXMLs)
-    uno::Reference<uno::XInterface> xTemp
+    uno::Reference<cpo::uno::XInterface> xTemp
         = m_xComponentContext->getServiceManager()->createInstanceWithContext(
             u"com.sun.star.document.OOXMLDocumentPropertiesImporter"_ustr, m_xComponentContext);
     uno::Reference<document::XOOXMLDocumentPropertiesImporter> xImporter(xTemp, uno::UNO_QUERY);

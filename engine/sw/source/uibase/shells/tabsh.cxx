@@ -38,6 +38,8 @@
 #include <svx/svddef.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svxdlg.hxx>
+#include <svx/svxids.hrc>
+#include <tools/json_writer.hxx>
 #include <sfx2/bindings.hxx>
 #include <vcl/weld.hxx>
 #include <sfx2/request.hxx>
@@ -58,6 +60,7 @@
 #include <fmtrowsplt.hxx>
 #include <fmtfsize.hxx>
 #include <node.hxx>
+#include <pagedesc.hxx>
 #include <swmodule.hxx>
 #include <wrtsh.hxx>
 #include <rootfrm.hxx>
@@ -67,6 +70,9 @@
 #include <inputwin.hxx>
 #include <uiitems.hxx>
 #include <tabsh.hxx>
+#include <tblafmt.hxx>
+#include <ThemeColorChanger.hxx>
+#include <tblafmtpreview.hxx>
 #include <swtablerep.hxx>
 #include <tablemgr.hxx>
 #include <cellatr.hxx>
@@ -92,6 +98,7 @@
 #include <swabstdlg.hxx>
 
 #include <memory>
+#include <unordered_map>
 
 using ::editeng::SvxBorderLine;
 using namespace ::com::sun::star;
@@ -1906,6 +1913,196 @@ void SwTableShell::GetLineStyleState(SfxItemSet &rSet)
     SvxLineItem aLine( SID_FRAME_LINESTYLE );
     aLine.SetLine(pLine);
     rSet.Put( aLine );
+}
+
+void SwTableShell::ExecTableDesignStyle(SfxRequest& rReq)
+{
+    SwWrtShell &rSh = GetShell();
+    const SfxItemSet *pArgs = rReq.GetArgs();
+    if (!pArgs)
+        return;
+
+    switch (rReq.GetSlot())
+    {
+        case FN_TABLE_SET_STYLE:
+        {
+            if (const SfxStringItem* pArg = pArgs->GetItemIfSet(FN_TABLE_SET_STYLE, false))
+            {
+                rSh.SetTableStyleLive(TableStyleName(pArg->GetValue()));
+            }
+            break;
+        }
+        case SID_TABLE_STYLE_SETTINGS:
+        {
+            SwTableStyleSettings aSettings;
+            if (const SwTableNode* pTableNode = rSh.IsCursorInTable())
+                aSettings = pTableNode->GetTable().GetTableStyleSettings();
+
+            const SfxBoolItem* pPoolItem = nullptr;
+            if ((pPoolItem = pArgs->GetItemIfSet(ID_VAL_USEFIRSTROWSTYLE, false)))
+                aSettings.m_bUseFirstRowStyle = pPoolItem->GetValue();
+            if ((pPoolItem = pArgs->GetItemIfSet(ID_VAL_USELASTROWSTYLE, false)))
+                aSettings.m_bUseLastRowStyle = pPoolItem->GetValue();
+            if ((pPoolItem = pArgs->GetItemIfSet(ID_VAL_USEBANDINGROWSTYLE, false)))
+                aSettings.m_bUseRowBandingStyle = pPoolItem->GetValue();
+            if ((pPoolItem = pArgs->GetItemIfSet(ID_VAL_USEFIRSTCOLUMNSTYLE, false)))
+                aSettings.m_bUseFirstColumnStyle = pPoolItem->GetValue();
+            if ((pPoolItem = pArgs->GetItemIfSet(ID_VAL_USELASTCOLUMNSTYLE, false)))
+                aSettings.m_bUseLastColumnStyle = pPoolItem->GetValue();
+            if ((pPoolItem = pArgs->GetItemIfSet(ID_VAL_USEBANDINGCOLUMNSTYLE, false)))
+                aSettings.m_bUseColumnBandingStyle = pPoolItem->GetValue();
+
+            rSh.SetTableStyleSettingsLive(aSettings);
+            break;
+        }
+    }
+
+    rReq.Done();
+}
+
+void SwTableShell::GetTableDesignStyleState(SfxItemSet &rSet)
+{
+    SwWrtShell &rSh = GetShell();
+    const SwTableNode* pTableNode = rSh.IsCursorInTable();
+
+    SfxWhichIter aIter( rSet );
+    for (sal_uInt16 nSlot = aIter.FirstWhich(); nSlot; nSlot = aIter.NextWhich())
+    {
+        switch (nSlot)
+        {
+            case FN_TABLE_SET_STYLE:
+            {
+                OUString sStyleName;
+                if (pTableNode)
+                    sStyleName = pTableNode->GetTable().GetTableStyleName().toString();
+                rSet.Put(SfxStringItem(FN_TABLE_SET_STYLE, sStyleName));
+                break;
+            }
+            case SID_TABLE_STYLE_SETTINGS:
+            {
+                SwTableStyleSettings aSettings;
+                if (pTableNode)
+                    aSettings = pTableNode->GetTable().GetTableStyleSettings();
+
+                tools::JsonWriter aJson;
+                aJson.put("UseFirstRowStyle", aSettings.m_bUseFirstRowStyle);
+                aJson.put("UseLastRowStyle", aSettings.m_bUseLastRowStyle);
+                aJson.put("UseBandingRowStyle", aSettings.m_bUseRowBandingStyle);
+                aJson.put("UseFirstColumnStyle", aSettings.m_bUseFirstColumnStyle);
+                aJson.put("UseLastColumnStyle", aSettings.m_bUseLastColumnStyle);
+                aJson.put("UseBandingColumnStyle", aSettings.m_bUseColumnBandingStyle);
+                const OString aStr = aJson.finishAndGetAsOString();
+                rSet.Put(SfxStringItem(SID_TABLE_STYLE_SETTINGS,
+                        OStringToOUString(aStr, RTL_TEXTENCODING_UTF8)));
+                break;
+            }
+            case SID_TABLE_STYLE_LIST:
+            {
+                // Preview each style using the current table's own row/column role
+                // settings, so the swatches match what applying them would look like.
+                SwTableStyleSettings aSettings;
+                if (pTableNode)
+                    aSettings = pTableNode->GetTable().GetTableStyleSettings();
+
+                // The preview draws its own text lines in black or white, whichever one
+                // is readable against the current page style's background color.
+                const SwPageDesc& rPageDesc = rSh.GetPageDesc(rSh.GetCurPageDesc());
+                const Color& rPageBackColor
+                    = rPageDesc.GetMaster().GetAttrSet().Get(RES_BACKGROUND).GetColor();
+                const bool bIsPageDark
+                    = rPageBackColor != COL_TRANSPARENT && rPageBackColor.IsDark();
+
+                // The list is grouped into sections in a fixed order: the styles the
+                // document's tables use, then the styles outside the built-in catalog (the
+                // default style and user styles), then the catalog's Plain, Grid and List
+                // tables. A used style appears in its catalog section as well. Each section
+                // that has styles opens with a separator entry carrying its title.
+                const SwDoc& rDoc = *rSh.GetDoc();
+                const SwTableAutoFormatTable& rStyles = rDoc.GetTableStyles();
+                tools::JsonWriter aJson;
+                {
+                    auto aArray = aJson.startArray("TableStyles");
+                    bool bSectionOpen = false;
+                    auto aOpenSection = [&aJson, &bSectionOpen](TranslateId pTitle)
+                    {
+                        auto aSeparatorStruct = aJson.startStruct();
+                        aJson.put("Separator", true);
+                        aJson.put("Title", SwResId(pTitle));
+                        bSectionOpen = true;
+                    };
+                    // A used style is listed twice, so each preview is kept for the second
+                    // entry.
+                    std::unordered_map<OUString, OUString> aPreviews;
+                    auto aPutStyle = [&aJson, &aSettings, bIsPageDark, &rDoc,
+                                      &aPreviews](const SwTableAutoFormat& rStyle)
+                    {
+                        auto aStyleStruct = aJson.startStruct();
+                        const OUString& rName = rStyle.GetName().toString();
+                        aJson.put("Name", rName);
+                        aJson.put("DisplayName", rStyle.GetUIName().toString());
+                        auto it = aPreviews.find(rName);
+                        if (it == aPreviews.end())
+                        {
+                            // The browser falls back to a placeholder icon if this is empty,
+                            // so one style's rendering failure doesn't blank the whole list.
+                            OString aDataUri;
+                            try
+                            {
+                                aDataUri = sw::CreateTableStylePreviewDataUri(
+                                    rStyle, aSettings, bIsPageDark,
+                                    &sw::GetDocumentThemeColors(rDoc));
+                            }
+                            catch (...)
+                            {
+                            }
+                            it = aPreviews
+                                     .emplace(rName,
+                                              OStringToOUString(aDataUri, RTL_TEXTENCODING_UTF8))
+                                     .first;
+                        }
+                        aJson.put("Image", it->second);
+                    };
+
+                    // A used style is listed here whether it is hidden or not: the document
+                    // has it, so the user must be able to see and pick it.
+                    for (size_t i = 0; i < rStyles.size(); ++i)
+                    {
+                        const SwTableAutoFormat& rStyle = rStyles[i];
+                        if (!rDoc.IsUsed(rStyle))
+                            continue;
+                        if (!bSectionOpen)
+                            aOpenSection(STR_TABSTYLE_GROUP_USED);
+                        aPutStyle(rStyle);
+                    }
+
+                    using CatalogGroup = SwTableAutoFormat::CatalogGroup;
+                    const std::pair<CatalogGroup, TranslateId> aSections[] = {
+                        { CatalogGroup::None, STR_TABSTYLE_GROUP_CUSTOM },
+                        { CatalogGroup::Plain, STR_TABSTYLE_GROUP_PLAIN },
+                        { CatalogGroup::Grid, STR_TABSTYLE_GROUP_GRID },
+                        { CatalogGroup::List, STR_TABSTYLE_GROUP_LIST },
+                    };
+                    for (const auto& [eGroup, pTitle] : aSections)
+                    {
+                        bSectionOpen = false;
+                        for (size_t i = 0; i < rStyles.size(); ++i)
+                        {
+                            const SwTableAutoFormat& rStyle = rStyles[i];
+                            if (rStyle.IsHidden() || rStyle.GetCatalogGroup() != eGroup)
+                                continue;
+                            if (!bSectionOpen)
+                                aOpenSection(pTitle);
+                            aPutStyle(rStyle);
+                        }
+                    }
+                }
+                const OString aStr = aJson.finishAndGetAsOString();
+                rSet.Put(SfxStringItem(SID_TABLE_STYLE_LIST,
+                        OStringToOUString(aStr, RTL_TEXTENCODING_UTF8)));
+                break;
+            }
+        }
+    }
 }
 
 void SwTableShell::ExecNumberFormat(SfxRequest const & rReq)

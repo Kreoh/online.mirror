@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
@@ -87,7 +87,6 @@
 #include <sfx2/filedlghelper.hxx>
 #include <sfx2/templatedlg.hxx>
 #include <sfx2/sfxsids.hrc>
-#include <o3tl/string_view.hxx>
 #include <openuriexternally.hxx>
 #include <tools/hostfilter.hxx>
 
@@ -98,8 +97,8 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::container;
@@ -218,7 +217,7 @@ ErrCode CheckPasswd_Impl
 
                 if ( bIsEncrypted )
                 {
-                    css::uno::Reference<css::awt::XWindow> xWin(pDoc ? pDoc->GetDialogParent(pFile) : nullptr);
+                    cpo::uno::Reference<css::awt::XWindow> xWin(pDoc ? pDoc->GetDialogParent(pFile) : nullptr);
                     if (xWin)
                         xWin->setVisible(true);
 
@@ -365,12 +364,12 @@ ErrCodeMsg SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUStrin
 
         uno::Reference< embed::XStorage > xTempStorage = ::comphelper::OStorageHelper::GetTemporaryStorage();
         if( !xTempStorage.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         xDoc->GetStorage()->copyToStorage( xTempStorage );
 
         if ( !xDoc->DoSaveCompleted( new SfxMedium( xTempStorage, OUString() ) ) )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
     }
     catch( cpo::uno::Exception& )
     {
@@ -388,13 +387,13 @@ ErrCodeMsg SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUStrin
     xDoc->SetModified(false);
     xDoc->ResetError();
 
-    css::uno::Reference< css::frame::XModel >  xModel = xDoc->GetModel();
+    cpo::uno::Reference< css::frame::XModel >  xModel = xDoc->GetModel();
     if ( xModel.is() )
     {
         std::unique_ptr<SfxItemSet> pNew = xDoc->GetMedium()->GetItemSet().Clone();
         pNew->ClearItem( SID_PROGRESS_STATUSBAR_CONTROL );
         pNew->ClearItem( SID_FILTER_NAME );
-        comphelper::SequenceAsHashMap aArgs = TransformItems(SID_OPENDOC, *pNew);
+        SfxUnoArguments aArgs = TransformItems(SID_OPENDOC, *pNew);
         aArgs[u"Title"_ustr] <<= xDoc->GetTitle(SFX_TITLE_DETECT);
         xModel->attachResource(OUString(), aArgs.getAsConstPropertyValueList());
     }
@@ -585,18 +584,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         OUString aCommand( pFileNameItem->GetValue() );
         const SfxSlot* pSlot = GetInterface()->GetSlot( aCommand );
         if ( pSlot )
-        {
             pFileNameItem = nullptr;
-        }
-        else
-        {
-            if ( aCommand.startsWith("slot:") )
-            {
-                sal_uInt16 nSlotId = static_cast<sal_uInt16>(o3tl::toInt32(aCommand.subView(5)));
-                if ( nSlotId == SID_OPENDOC )
-                    pFileNameItem = nullptr;
-            }
-        }
     }
 
     if ( !pFileNameItem )
@@ -1066,7 +1054,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
     }
 
     // convert items to properties for framework API calls
-    comphelper::SequenceAsHashMap aArgs = TransformItems(SID_OPENDOC, *rReq.GetArgs());
+    SfxUnoArguments aArgs = TransformItems(SID_OPENDOC, *rReq.GetArgs());
     // Any Referer (that was relevant in the above call to
     // SvtSecurityOptions::isSecureMacroUri) is no longer relevant, assuming
     // this "open" request is initiated directly by the user:

@@ -185,6 +185,7 @@ void SwNodes::ChgNode( SwNodeIndex const & rDelPos, SwNodeOffset nSz,
 
                 if( RES_CONDTXTFMTCOLL == rTextNd.GetTextColl()->Which() )
                     rTextNd.ChkCondColl();
+                rTextNd.ChkTableStyleRoleColl();
             }
             else if( rNd.IsContentNode() )
                 static_cast<SwContentNode&>(rNd).InvalidateNumRule();
@@ -339,6 +340,7 @@ void SwNodes::ChgNode( SwNodeIndex const & rDelPos, SwNodeOffset nSz,
 
                     if( RES_CONDTXTFMTCOLL == pTextNd->GetTextColl()->Which() )
                         pTextNd->ChkCondColl();
+                    pTextNd->ChkTableStyleRoleColl();
                 }
                 else
                 {
@@ -1073,6 +1075,22 @@ void SwNodes::SectionUpDown( const SwNodeIndex & aStart, const SwNodeIndex & aEn
     }
 }
 
+namespace
+{
+    // Nothing updates the pointer from a SwTableBox to its cell's start node, so an emptied cell
+    // keeps its start and end node while the table that owns the cell stays. nLastSurvivingNode is
+    // the index of the last node that this deletion leaves in place, so a table at or below it
+    // stays and a table above it goes.
+    bool IsStartNodeOfSurvivingTableBox(const SwNode* pNode, SwNodeOffset nLastSurvivingNode)
+    {
+        const SwStartNode* pStartNode = pNode->GetStartNode();
+        if (!pStartNode || pStartNode->GetStartNodeType() != SwTableBoxStartNode)
+            return false;
+        const SwTableNode* pTableNode = pStartNode->FindTableNode();
+        return pTableNode && pTableNode->GetIndex() <= nLastSurvivingNode;
+    }
+}
+
 void SwNodes::Delete(const SwNodeIndex &rIndex, SwNodeOffset nNodes)
 {
     Delete(rIndex.GetNode(), nNodes);
@@ -1196,7 +1214,8 @@ void SwNodes::Delete(const SwNode &rIndex, SwNodeOffset nNodes)
             --aRg.aEnd;
             while(  pTmpNode &&
                     ( pCurrentNode = &aRg.aEnd.GetNode())->GetStartNode() &&
-                    pCurrentNode->StartOfSectionIndex() )
+                    pCurrentNode->StartOfSectionIndex() &&
+                    !IsStartNodeOfSurvivingTableBox(pCurrentNode, aRg.aStart.GetIndex()) )
             {
                 // remove end and start node
                 DelNodes( aRg.aEnd, SwNodeOffset(2) );
@@ -1235,7 +1254,9 @@ void SwNodes::Delete(const SwNode &rIndex, SwNodeOffset nNodes)
     // delete all empty start/end node pairs
     while( aRg.aEnd.GetNode().GetEndNode() &&
             ( pCurrentNode = &aRg.aStart.GetNode())->GetStartNode() &&
-            pCurrentNode->StartOfSectionIndex() )
+            pCurrentNode->StartOfSectionIndex() &&
+            !IsStartNodeOfSurvivingTableBox(pCurrentNode,
+                                            aRg.aStart.GetIndex() - SwNodeOffset(1)) )
     // but none of the holy 5. (???)
     {
         DelNodes( aRg.aStart, SwNodeOffset(2) );  // delete start and end node
@@ -2305,6 +2326,17 @@ void SwNodes::ForEach( SwNodeOffset nStart, SwNodeOffset nEnd,
             nElem = p->nElem;
         }
     }
+}
+
+void SwNodes::FileLoadedInitHints()
+{
+    ForEach(
+        [](SwNode* pNode, void*)
+        {
+            if (SwTextNode* pTextNode = pNode->GetTextNode())
+                pTextNode->FileLoadedInitHints();
+            return true;
+        });
 }
 
 void SwNodes::ForEach( const SwNodeIndex& rStart, const SwNodeIndex& rEnd,

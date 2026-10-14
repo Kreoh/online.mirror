@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstring>
@@ -29,13 +29,13 @@
 #include <type_traits>
 #include <utility>
 
-#include "rtl/ustrbuf.h"
-#include "rtl/ustring.hxx"
-#include "rtl/stringutils.hxx"
-#include "sal/types.h"
+#include <rtl/ustrbuf.h>
+#include <rtl/ustring.hxx>
+#include <rtl/stringutils.hxx>
+#include <sal/types.h>
 
-#include "o3tl/safeint.hxx"
-#include "rtl/stringconcat.hxx"
+#include <o3tl/safeint.hxx>
+#include <rtl/stringconcat.hxx>
 
 #ifdef RTL_STRING_UNITTEST
 extern bool rtl_string_unittest_invalid_conversion;
@@ -329,7 +329,7 @@ public:
 
         @return the string previously contained in the buffer.
      */
-    SAL_WARN_UNUSED_RESULT OUString makeStringAndClear()
+    [[nodiscard]] OUString makeStringAndClear()
     {
         return OUString(
                   rtl_uStringBuffer_makeStringAndClear( &pData, &nCapacity ),
@@ -614,7 +614,7 @@ public:
     template< typename T >
     typename libreoffice_internal::Enable< void,
         !libreoffice_internal::CharPtrDetector< T* >::ok && !libreoffice_internal::SalUnicodePtrDetector< T* >::ok >::Type
-        append( T* ) SAL_DELETED_FUNCTION;
+        append( T* ) = delete;
     /// @endcond
 
     // This overload is needed because OUString has a ctor from rtl_uString*, but
@@ -1123,6 +1123,13 @@ public:
         return *this;
     }
 
+    /** Similar to OUString::replaceAt, but for an OUStringBuffer.
+
+        Replace n = count characters
+        from position index in this string with newStr.
+     */
+    SAL_DLLPUBLIC void replaceAt(sal_Int32 index, sal_Int32 count, std::u16string_view newStr );
+
     /** Allows access to the internal data of this OUStringBuffer, for effective
         manipulation.
 
@@ -1388,7 +1395,7 @@ public:
       @param     beginIndex   the beginning index, inclusive.
       @return    the specified substring.
     */
-    SAL_WARN_UNUSED_RESULT std::u16string_view subView( sal_Int32 beginIndex ) const
+    [[nodiscard]] std::u16string_view subView( sal_Int32 beginIndex ) const
     {
         assert(beginIndex >= 0);
         assert(beginIndex <= getLength());
@@ -1407,7 +1414,7 @@ public:
       @param     count        the number of characters.
       @return    the specified substring.
     */
-    SAL_WARN_UNUSED_RESULT std::u16string_view subView( sal_Int32 beginIndex, sal_Int32 count ) const
+    [[nodiscard]] std::u16string_view subView( sal_Int32 beginIndex, sal_Int32 count ) const
     {
         assert(beginIndex >= 0);
         assert(count >= 0);
@@ -1450,6 +1457,27 @@ public:
         rtl_uString *pNew = NULL;
         rtl_uStringbuffer_newFromStr_WithLength( &pNew, getStr() + beginIndex, count );
         return OUStringBuffer( pNew, count + 16 );
+    }
+
+    /** Removes all occurrences of a character.
+
+        @param c        The character to be removed
+
+        @return         this
+     */
+    OUStringBuffer& remove(sal_Unicode c)
+    {
+        sal_Int32 index = 0;
+        while (true)
+        {
+            if (index >= getLength())
+                break;
+            index = indexOf(c, index);
+            if (index == -1)
+                break;
+            remove(index, 1);
+        }
+        return *this;
     }
 
 private:

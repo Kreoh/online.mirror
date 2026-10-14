@@ -78,6 +78,7 @@
 #include <svtools/HtmlWriter.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
 #define HTML_DFLT_EMBED_WIDTH (o3tl::toTwips(125, o3tl::Length::mm10))
@@ -251,7 +252,7 @@ void SwHTMLParser::SetSpace( const Size& rPixSpace,
             if( text::HoriOrientation::NONE == rHoriOri.GetHoriOrient() )
             {
                 SwFormatHoriOrient aHoriOri( rHoriOri );
-                aHoriOri.SetPos( aHoriOri.GetPos() + nLeftSpace );
+                aHoriOri.adjustPosition(gfx::Length::twip(nLeftSpace));
                 rFlyItemSet.Put( aHoriOri );
             }
         }
@@ -287,7 +288,7 @@ void SwHTMLParser::SetSpace( const Size& rPixSpace,
         if( text::VertOrientation::NONE == rVertOri.GetVertOrient() )
         {
             SwFormatVertOrient aVertOri( rVertOri );
-            aVertOri.SetPos( aVertOri.GetPos() + nUpperSpace );
+            aVertOri.adjustPosition(gfx::Length::twip(nUpperSpace));
             rFlyItemSet.Put( aVertOri );
         }
     }
@@ -460,6 +461,10 @@ bool SwHTMLParser::InsertEmbed()
     // do not insert plugin if it has neither URL nor type
     bool bHasType = !aType.isEmpty();
     if( !bHasURL && !bHasType && !bHasData )
+        return true;
+
+    if ((bHasURL || bHasData)
+        && (!m_xDoc->AllowAccessLink() || aURLObj.IsExoticProtocol()))
         return true;
 
     if (!m_aEmbeds.empty())

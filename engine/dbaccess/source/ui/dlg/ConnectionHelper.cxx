@@ -36,7 +36,7 @@
 #include "dsselect.hxx"
 #include <svl/filenotation.hxx>
 #include <com/sun/star/awt/XSystemDependentWindowPeer.hpp>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/lang/SystemDependent.hpp>
 #include <com/sun/star/mozilla/MozillaBootstrap.hpp>
@@ -61,7 +61,7 @@
 namespace dbaui
 {
     using namespace ::com::sun::star;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::ucb;
     using namespace ::com::sun::star::ui::dialogs;
@@ -148,7 +148,7 @@ using namespace cpo::uno;
             {
                 try
                 {
-                    Reference< XFolderPicker2 > xFolderPicker = sfx2::createFolderPicker(m_xORB, GetFrameWeld());
+                    Reference< XFolderPicker > xFolderPicker = sfx2::createFolderPicker(m_xORB, GetFrameWeld());
 
                     bool bDoBrowse = false;
                     OUString sOldPath = getURLNoPrefix();
@@ -245,7 +245,7 @@ using namespace cpo::uno;
                 HWND hWnd = nullptr;
 
                 weld::Window* pDialog = GetFrameWeld();
-                css::uno::Reference<css::awt::XSystemDependentWindowPeer> xSysDepWin(pDialog->GetXWindow(), css::uno::UNO_QUERY);
+                cpo::uno::Reference<css::awt::XSystemDependentWindowPeer> xSysDepWin(pDialog->GetXWindow(), cpo::uno::UNO_QUERY);
                 if (xSysDepWin.is())
                 {
                     cpo::uno::Sequence<sal_Int8> aProcessIdent(16);

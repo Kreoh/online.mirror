@@ -663,7 +663,7 @@
           automatically.</desc>
           <label>Correct two initial capitals</label>
         </info>
-        <value>true</value>
+        <value>false</value>
       </prop>
       <prop oor:name="CapitalAtStartSentence" oor:type="xs:boolean" oor:nillable="false">
         <!-- UIHints: Tools  AutoCorrect/AutoFormat  Options - Capitalize first
@@ -1436,36 +1436,6 @@
           <desc>Contains all help bookmarks.</desc>
         </info>
       </set>
-      <prop oor:name="SendFeedbackURL" oor:type="xs:string" oor:nillable="false">
-        <info>
-          <desc>Specifies the URL used with the UNO command SendFeedback (SID_SEND_FEEDBACK).</desc>
-        </info>
-      </prop>
-      <prop oor:name="VolunteerURL" oor:type="xs:string" oor:nillable="false">
-        <info>
-          <desc>Specifies the URL opened per click on the brand image at the start center.</desc>
-        </info>
-      </prop>
-      <prop oor:name="QA_URL" oor:type="xs:string" oor:nillable="false">
-        <info>
-          <desc>Specifies the URL used with the UNO command QuestionAnswers (SID_Q_AND_A).</desc>
-        </info>
-      </prop>
-      <prop oor:name="DocumentationURL" oor:type="xs:string" oor:nillable="false">
-        <info>
-          <desc>Specifies the URL used with the UNO command Documentation (SID_DOCUMENTATION).</desc>
-        </info>
-      </prop>
-      <prop oor:name="InstallJavaURL" oor:type="xs:string" oor:nillable="false">
-        <info>
-          <desc>Specifies the URL used for Install Java message box.</desc>
-        </info>
-      </prop>
-      <prop oor:name="ExtensionsURL" oor:type="xs:string" oor:nillable="false">
-        <info>
-          <desc>Specifies the URL used for Extensions box.</desc>
-        </info>
-      </prop>
     </group>
     <group oor:name="History">
       <info>
@@ -1908,7 +1878,7 @@
             </info>
           </enumeration>
         </constraints>
-        <value>1</value>
+        <value>0</value>
       </prop>
       <prop oor:name="EnableExpertConfiguration" oor:type="xs:boolean" oor:nillable="false">
         <info>
@@ -4946,15 +4916,6 @@
         </info>
         <value>true</value>
       </prop>
-      <prop oor:name="UseSystemColorDialog" oor:type="xs:boolean" oor:nillable="false">
-        <info>
-          <desc>Determines if the system's color pickers should be
-          used. If false, the proprietary color picker implementation
-          will be used. Relevant on platforms where color picker
-          integration is implemented.</desc>
-        </info>
-        <value>true</value>
-      </prop>
       <prop oor:name="UseSystemFileDialog" oor:type="xs:boolean" oor:nillable="false">
         <info>
           <desc>Determines if the system's file and folder pickers should be
@@ -5001,7 +4962,7 @@
           <desc>Allows to specify whether locking should be used at all.
           Use this setting only for debugging purpose.</desc>
         </info>
-        <value>true</value>
+        <value>false</value>
       </prop>
       <prop oor:name="AllowOverrideLocking" oor:type="xs:boolean" oor:nillable="false">
         <info>
@@ -5117,13 +5078,6 @@
           <desc>A string identifying the OpenCL device that was successfully selected and passed the OpenCL calculation tests. The syntax of this value is purposely not documented. For LibreOffice internal use only, do not inspect this value or try to modify it from any level of user code.</desc>
         </info>
         <value>none</value>
-      </prop>
-      <prop oor:name="MacroRecorderMode" oor:type="xs:boolean" oor:nillable="false">
-        <info>
-          <desc>Determines if the limited, and awkward code producing
-          macro recorder should be enabled in the user interface.</desc>
-        </info>
-        <value>false</value>
       </prop>
       <prop oor:name="SymbolSet" oor:type="xs:short" oor:nillable="false">
         <!-- UIHints: Tools  Options General View -->
@@ -5860,7 +5814,7 @@
           </desc>
           <label>Defines the maximum number of lines visible in a ListBox.</label>
         </info>
-        <value>25</value>
+        <value>11</value>
       </prop>
       <prop oor:name="ColorValueSetColumnCount" oor:type="xs:short">
         <info>
@@ -6269,7 +6223,7 @@
             <desc>Specifies, whether CJK font settings are available (true) or
             not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="VerticalText" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6277,7 +6231,7 @@
             <desc>Specifies, whether vertical text is available (true) or not
             (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="AsianTypography" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6285,7 +6239,7 @@
             <desc>Specifies, whether Asian typography options like compression
             and forbidden characters are available (true) or not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="JapaneseFind" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6293,7 +6247,7 @@
             <desc>Specifies, whether Japanese find options are selectable for
             search and replace (true) or not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="Ruby" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6301,7 +6255,7 @@
             <desc>Specifies whether Rubys are available (true) or not
             (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="ChangeCaseMap" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6309,7 +6263,7 @@
             <desc>Specifies whether case mapping to half and full width,
             hiragana and katakana are available (true) or not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="DoubleLines" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6317,7 +6271,7 @@
             <desc>Specifies whether writing in double lines is available (true)
             or not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="EmphasisMarks" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6325,7 +6279,7 @@
             <desc>Specifies whether emphasis marks are available (true) or not
             (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
       </group>
       <group oor:name="CTL">
@@ -6339,7 +6293,7 @@
             <desc>Specifies whether CTL font settings are available (true) or
             not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="CTLVerticalText" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6347,7 +6301,7 @@
             <desc>Specifies whether vertical text settings are available (true)
             or not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="CTLSequenceChecking" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6355,7 +6309,7 @@
             <desc>Specifies whether CTL strings are checked for the correct
             input sequence(true) or not (false).</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="CTLSequenceCheckingRestricted" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6364,7 +6318,7 @@
             correct input sequence(true) or not (false). Is only effective when
             CTLSequenceChecking is true.</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="CTLSequenceCheckingTypeAndReplace" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: setup -->
@@ -6372,7 +6326,7 @@
             <desc>Specifies whether CTL input sequences are corrected while
             typing. Is only effective when CTLSequenceChecking is true.</desc>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="CTLCursorMovement" oor:type="xs:int" oor:nillable="false">
           <!-- UIHints: options-->

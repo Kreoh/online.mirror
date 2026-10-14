@@ -59,7 +59,7 @@ class IUnknownWrapper : public cppu::WeakImplHelper< css::bridge::XBridgeSupplie
 
 {
 public:
-    IUnknownWrapper(css::uno::Reference<css::lang::XMultiServiceFactory> const &xFactory,
+    IUnknownWrapper(cpo::uno::Reference<css::lang::XMultiServiceFactory> const &xFactory,
                     sal_uInt8 unoWrapperClass, sal_uInt8 comWrapperClass);
 
     ~IUnknownWrapper() override;
@@ -68,7 +68,7 @@ public:
     cpo::uno::Any queryInterface(const cpo::uno::Type& t) override;
 
     // XInvokation
-    virtual css::uno::Reference< css::beans::XIntrospectionAccess > getIntrospection(  ) override;
+    virtual cpo::uno::Reference< css::beans::XIntrospectionAccess > getIntrospection(  ) override;
     virtual cpo::uno::Any invoke( const OUString& aFunctionName,
                                  const cpo::uno::Sequence< cpo::uno::Any >& aParams,
                                  cpo::uno::Sequence< sal_Int16 >& aOutParamIndex,
@@ -126,8 +126,8 @@ protected:
                                        cpo::uno::Sequence< cpo::uno::Any >& OutParam);
 
     // UnoConversionUtilities -------------------------------------------------------------------------------
-    virtual css::uno::Reference<css::uno::XInterface> createUnoWrapperInstance() override;
-    virtual css::uno::Reference<css::uno::XInterface> createComWrapperInstance() override;
+    virtual cpo::uno::Reference<cpo::uno::XInterface> createUnoWrapperInstance() override;
+    virtual cpo::uno::Reference<cpo::uno::XInterface> createComWrapperInstance() override;
 
     /**Obtains a FUNCDESC structure for a function.
        Fills the FUNCDESC structure if ITypeInfo provides information for
@@ -149,11 +149,11 @@ protected:
     // These functions are for the case if an object of this class wraps an IDispatch
     // object that implements UNO interfaces. In that case the member m_seqTypes
     // is set through XInitialization::initialize.
-    void getMethodInfo(std::u16string_view sName, css::uno::TypeDescription& methodDescription);
+    void getMethodInfo(std::u16string_view sName, cpo::uno::TypeDescription& methodDescription);
     // After return attributInfo contains typelib_InterfaceAttributeTypeDescription::pAttributeTypeRef
-    void getAttributeInfo(std::u16string_view sName, css::uno::TypeDescription& attributeInfo);
+    void getAttributeInfo(std::u16string_view sName, cpo::uno::TypeDescription& attributeInfo);
     // used by get MethodInfo
-    css::uno::TypeDescription  getInterfaceMemberDescOfCurrentCall(std::u16string_view sName);
+    cpo::uno::TypeDescription  getInterfaceMemberDescOfCurrentCall(std::u16string_view sName);
     /** Returns always a valid ITypeInfo interface or throws a BridgeRuntimeError.
         The returned interface does not need to be AddRef'ed as long as it is locally
         used. The interface is kept in the instance of this class.
@@ -224,7 +224,7 @@ protected:
     */
     bool  m_bOriginalDispatch;
     DispIdMap           m_dispIdMap;
-    css::uno::Reference<css::reflection::XIdlClass>*       m_pxIdlClass;
+    cpo::uno::Reference<css::reflection::XIdlClass>*       m_pxIdlClass;
 
 
     // used by isJScriptObject

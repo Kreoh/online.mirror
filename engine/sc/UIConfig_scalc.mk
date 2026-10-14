@@ -31,7 +31,6 @@ $(eval $(call gb_UIConfig_add_popupmenufiles,modules/scalc,\
 	sc/uiconfig/scalc/popupmenu/freezepanes \
 	sc/uiconfig/scalc/popupmenu/graphic \
 	sc/uiconfig/scalc/popupmenu/media \
-	sc/uiconfig/scalc/popupmenu/notebookbar \
 	sc/uiconfig/scalc/popupmenu/oleobject \
 	sc/uiconfig/scalc/popupmenu/pagebreak \
 	sc/uiconfig/scalc/popupmenu/pivot \
@@ -79,7 +78,6 @@ $(eval $(call gb_UIConfig_add_toolbarfiles,modules/scalc,\
 	sc/uiconfig/scalc/toolbar/insertcellsbar \
 	sc/uiconfig/scalc/toolbar/linesbar \
 	sc/uiconfig/scalc/toolbar/mediaobjectbar \
-	sc/uiconfig/scalc/toolbar/notebookbarshortcuts \
 	sc/uiconfig/scalc/toolbar/previewbar \
 	sc/uiconfig/scalc/toolbar/singlemode \
 	sc/uiconfig/scalc/toolbar/standardbar \
@@ -142,7 +140,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/filtersubdropdown \
 	sc/uiconfig/scalc/ui/footerdialog \
 	sc/uiconfig/scalc/ui/formatcellsdialog \
-	sc/uiconfig/scalc/ui/formulacalculationoptions \
 	sc/uiconfig/scalc/ui/fourieranalysisdialog \
 	sc/uiconfig/scalc/ui/floatingborderstyle \
 	sc/uiconfig/scalc/ui/floatinglinestyle \
@@ -166,11 +163,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/leftheaderdialog \
 	sc/uiconfig/scalc/ui/listmenu \
 	sc/uiconfig/scalc/ui/namerangesdialog \
-	sc/uiconfig/scalc/ui/notebookbar \
-	sc/uiconfig/scalc/ui/notebookbar_compact \
-	sc/uiconfig/scalc/ui/notebookbar_groups \
-	sc/uiconfig/scalc/ui/notebookbar_groupedbar_full \
-	sc/uiconfig/scalc/ui/notebookbar_groupedbar_compact \
+	sc/uiconfig/scalc/ui/newtablestyle \
 	sc/uiconfig/scalc/ui/notebookbar_online \
 	sc/uiconfig/scalc/ui/numberbox \
 	sc/uiconfig/scalc/ui/managenamesdialog \
@@ -191,15 +184,9 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/navigatorpanel \
 	sc/uiconfig/scalc/ui/nosolutiondialog \
 	sc/uiconfig/scalc/ui/onlyactivesheetsaveddialog \
-	sc/uiconfig/scalc/ui/optcalculatepage \
-	sc/uiconfig/scalc/ui/optchangespage \
-	sc/uiconfig/scalc/ui/optcompatibilitypage \
-	sc/uiconfig/scalc/ui/optdefaultpage \
 	sc/uiconfig/scalc/ui/optdlg \
-	sc/uiconfig/scalc/ui/optformula \
 	sc/uiconfig/scalc/ui/optimalcolwidthdialog \
 	sc/uiconfig/scalc/ui/optimalrowheightdialog \
-	sc/uiconfig/scalc/ui/optsortlists \
 	sc/uiconfig/scalc/ui/pagelistmenu \
 	sc/uiconfig/scalc/ui/pagetemplatedialog \
 	sc/uiconfig/scalc/ui/pastespecial \
@@ -210,6 +197,8 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/pivotfielddialog \
 	sc/uiconfig/scalc/ui/pivotfilterdialog \
 	sc/uiconfig/scalc/ui/pivottablelayoutdialog \
+	sc/uiconfig/scalc/ui/pivottablelayoutdialog-mobile \
+	sc/uiconfig/scalc/ui/pivottablelayoutentry-mobile \
 	sc/uiconfig/scalc/ui/posbox \
 	sc/uiconfig/scalc/ui/printareasdialog \
 	sc/uiconfig/scalc/ui/printeroptions \
@@ -219,6 +208,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/randomnumbergenerator \
 	sc/uiconfig/scalc/ui/recalcquerydialog \
 	sc/uiconfig/scalc/ui/regressiondialog \
+	sc/uiconfig/scalc/ui/resizetablerangedialog \
 	sc/uiconfig/scalc/ui/retypepassdialog \
 	sc/uiconfig/scalc/ui/retypepassworddialog \
 	sc/uiconfig/scalc/ui/rightfooterdialog \
@@ -228,7 +218,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/standardfilterdialog \
 	sc/uiconfig/scalc/ui/scenariodialog \
 	sc/uiconfig/scalc/ui/scenariomenu \
-	sc/uiconfig/scalc/ui/scgeneralpage \
 	sc/uiconfig/scalc/ui/searchresults \
 	sc/uiconfig/scalc/ui/selectdatasource \
 	sc/uiconfig/scalc/ui/selectrange \
@@ -271,7 +260,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/tabcolordialog \
 	sc/uiconfig/scalc/ui/textimportoptions \
 	sc/uiconfig/scalc/ui/textimportcsv \
-	sc/uiconfig/scalc/ui/tpviewpage \
 	sc/uiconfig/scalc/ui/ttestdialog \
 	sc/uiconfig/scalc/ui/ungroupdialog \
 	sc/uiconfig/scalc/ui/validationdialog \

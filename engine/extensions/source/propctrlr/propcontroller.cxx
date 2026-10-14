@@ -52,7 +52,7 @@
 namespace pcr
 {
     using namespace ::com::sun::star;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::awt;
     using namespace ::com::sun::star::beans;
@@ -1373,9 +1373,9 @@ using namespace cpo::uno;
             if ( _rFactoryDescriptor >>= sServiceName )
                 xHandler.set( _rContext->getServiceManager()->createInstanceWithContext( sServiceName, _rContext ), UNO_QUERY );
             else if ( _rFactoryDescriptor >>= xServiceFac )
-                xHandler.set(xServiceFac->createInstance(), css::uno::UNO_QUERY);
+                xHandler.set(xServiceFac->createInstance(), cpo::uno::UNO_QUERY);
             else if ( _rFactoryDescriptor >>= xComponentFac )
-                xHandler.set(xComponentFac->createInstanceWithContext( _rContext ), css::uno::UNO_QUERY);
+                xHandler.set(xComponentFac->createInstanceWithContext( _rContext ), cpo::uno::UNO_QUERY);
             OSL_ENSURE(xHandler.is(),"lcl_createHandler: Can not create handler");
             return xHandler;
         }
@@ -1636,9 +1636,9 @@ using namespace cpo::uno;
 
 } // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_OPropertyBrowserController_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::OPropertyBrowserController(context));
 }

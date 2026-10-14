@@ -23,6 +23,7 @@
 #include <qt/CodaConfig.hpp>
 #include <qt/DBusService.hpp>
 #include <net/FakeSocket.hpp>
+#include <wsd/DocumentBroker.hpp>
 #include <common/LangUtil.hpp>
 #include <common/Log.hpp>
 #include <common/MobileApp.hpp>
@@ -148,19 +149,31 @@ std::string getUILanguage()
     return lang;
 }
 
+/// The directory new documents are created in.  XDG only tells us where the
+/// documents directory belongs; on a fresh account it does not exist yet, so
+/// create it here and fall back to the home directory when it cannot be
+/// created.
 QString getDocumentsDirectory()
 {
-    QString documentsDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    if (documentsDir.isEmpty())
-    {
-        // Fallback to home directory if Documents doesn't exist
-        documentsDir = QDir::homePath();
-    }
-    return documentsDir;
+    const QString documentsDir =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    if (!documentsDir.isEmpty() && QDir().mkpath(documentsDir))
+        return documentsDir;
+
+    LOG_WRN("Cannot create the documents directory " << documentsDir.toStdString()
+            << ", falling back to the home directory");
+    return QDir::homePath();
 }
 
-Poco::Path getTemplatePath(const std::string& templateType, const std::string& templatePath)
+/// Resolve the template to copy.  pbUsedRequestedTemplate, when given, says
+/// whether the returned path is the requested template rather than the blank
+/// document this falls back to.
+Poco::Path getTemplatePath(const std::string& templateType, const std::string& templatePath,
+                           bool* pbUsedRequestedTemplate = nullptr)
 {
+    if (pbUsedRequestedTemplate)
+        *pbUsedRequestedTemplate = false;
+
     Poco::Path resolvedPath;
 
     if (!templatePath.empty())
@@ -172,9 +185,8 @@ Poco::Path getTemplatePath(const std::string& templateType, const std::string& t
         }
         else
         {
-            // Relative path - resolve against browser/dist
-            resolvedPath = Poco::Path(getDataDir());
-            resolvedPath.append("browser/dist");
+            // Relative path - resolve against the browser web assets
+            resolvedPath = Poco::Path(getBrowserDistDir());
             resolvedPath.append(templatePath);
         }
     }
@@ -193,12 +205,14 @@ Poco::Path getTemplatePath(const std::string& templateType, const std::string& t
         else if (templateType == "draw")
             templateFileName = "Drawing.odg";
 
-        Poco::Path defaultPath(getDataDir());
-        defaultPath.append("browser/dist/templates");
+        Poco::Path defaultPath(getBrowserDistDir());
+        defaultPath.append("templates");
         defaultPath.append(templateFileName);
         return defaultPath;
     }
 
+    if (pbUsedRequestedTemplate)
+        *pbUsedRequestedTemplate = true;
     return resolvedPath;
 }
 
@@ -378,6 +392,19 @@ QStringList droppedLocalFiles(const QMimeData* mimeData)
     return files;
 }
 
+bool hasOnlyImageFiles(const QStringList& files)
+{
+    if (files.isEmpty())
+        return false;
+    for (const QString& file : files)
+    {
+        QString ext = QFileInfo(file).suffix().toLower();
+        if (ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "gif" && ext != "svg" && ext != "webp")
+            return false;
+    }
+    return true;
+}
+
 constexpr const char* PORTAL_FILETRANSFER_MIME = "application/vnd.portal.filetransfer";
 
 bool hasDroppableFiles(const QMimeData* mimeData)
@@ -496,6 +523,12 @@ void CODAWebEngineView::dragEnterEvent(QDragEnterEvent* event)
         return;
     }
 
+    if (hasOnlyImageFiles(droppedLocalFiles(event->mimeData())))
+    {
+        QWebEngineView::dragEnterEvent(event);
+        return;
+    }
+
     if (hasDroppableFiles(event->mimeData()))
     {
         event->acceptProposedAction();
@@ -511,6 +544,12 @@ void CODAWebEngineView::dragMoveEvent(QDragMoveEvent* event)
         return;
     }
 
+    if (hasOnlyImageFiles(droppedLocalFiles(event->mimeData())))
+    {
+        QWebEngineView::dragMoveEvent(event);
+        return;
+    }
+
     if (hasDroppableFiles(event->mimeData()))
         event->acceptProposedAction();
 }
@@ -518,12 +557,18 @@ void CODAWebEngineView::dragMoveEvent(QDragMoveEvent* event)
 void CODAWebEngineView::dragLeaveEvent(QDragLeaveEvent* event)
 {
     setDropFeedbackVisible(false);
-    event->accept();
+    QWebEngineView::dragLeaveEvent(event);
 }
 
 void CODAWebEngineView::dropEvent(QDropEvent* event)
 {
     if (event->source())
+    {
+        QWebEngineView::dropEvent(event);
+        return;
+    }
+
+    if (hasOnlyImageFiles(droppedLocalFiles(event->mimeData())))
     {
         QWebEngineView::dropEvent(event);
         return;
@@ -563,8 +608,11 @@ QWebEngineView* CODAWebEngineView::createWindow(QWebEnginePage::WebWindowType /*
     QWebEnginePage* page = childView->page();
     QObject::connect(page, &QWebEnginePage::windowCloseRequested, page,
                      [child]() {
+                         // StandaloneWindow::closeEvent deletes the WebView and with it the
+                         // page emitting this signal, so the close runs from the event loop
+                         // instead, once the emission has finished.
                          if (QMainWindow* window = child->mainWindow())
-                             window->close();
+                             QTimer::singleShot(0, window, [window]() { window->close(); });
                      });
 
     childWindow->setCloseCallback(
@@ -602,6 +650,59 @@ void CODAWebEngineView::claimChildWindow(WebView* child, const QUrl& url)
         if (_presenterConsole == child)
             return;
         _presenterConsole = child;
+    }
+    else if (role == "coda-dialog-close")
+    {
+        // A fragment-only navigation the dialog page uses to ask the shell to close its own
+        // window, so teardown takes the same path a click on the title-bar close button does.
+        QMainWindow* dialogWindow = child->mainWindow();
+        QTimer::singleShot(0, dialogWindow, [dialogWindow]() { dialogWindow->close(); });
+        return;
+    }
+    else if (role == "coda-dialog" || role == "coda-dialog-modal")
+    {
+        QMainWindow* dialogWindow = child->mainWindow();
+        // This can run again for the same window once its URL is already known, so a property
+        // on the window keeps the claim to a single run.
+        if (dialogWindow->property("codaDialogClaimed").toBool())
+            return;
+        dialogWindow->setProperty("codaDialogClaimed", true);
+
+        // Each dialog open creates a fresh window, unlike the document window, which lives for
+        // the whole session. Without this, one hidden window per dialog ever opened builds up.
+        dialogWindow->setAttribute(Qt::WA_DeleteOnClose);
+
+        _dialogWindows.append(dialogWindow);
+
+        QWidget* documentWindow = window();
+        dialogWindow->setParent(documentWindow, Qt::Dialog);
+        if (role == "coda-dialog-modal")
+            dialogWindow->setWindowModality(Qt::WindowModal);
+
+        QWebEnginePage* childPage = child->webEngineView()->page();
+        dialogWindow->setWindowTitle(childPage->title());
+        QObject::connect(childPage, &QWebEnginePage::titleChanged, dialogWindow,
+                         &QWidget::setWindowTitle);
+
+        // The page requests the size that fits its content; the window is shown for the first
+        // time centered over the document window at that size. That size is also the smallest
+        // the window can be, so the whole dialog stays visible wherever the user drags the
+        // frame, and a window dragged larger hands the extra room to the dialog.
+        QObject::connect(childPage, &QWebEnginePage::geometryChangeRequested, dialogWindow,
+                         [dialogWindow, documentWindow](const QRect& geometry)
+                         {
+                             dialogWindow->setMinimumSize(geometry.size());
+                             if (!dialogWindow->isVisible())
+                             {
+                                 dialogWindow->resize(geometry.size());
+                                 const QRect parentGeometry = documentWindow->frameGeometry();
+                                 dialogWindow->move(
+                                     parentGeometry.center()
+                                     - QPoint(geometry.width() / 2, geometry.height() / 2));
+                                 dialogWindow->show();
+                             }
+                         });
+        return;
     }
     else
     {
@@ -684,17 +785,36 @@ CODAWebEngineView::~CODAWebEngineView()
         QObject::disconnect(_screenRemoved);
 
     endPresentation();
+
+    // A popped-out dialog window is a top-level window of its own, so it does not go away with
+    // the document view. Closing it here, while the document's page is still alive, lets the
+    // dialog report the close to the document.
+    for (const QPointer<QMainWindow>& dialogWindow : _dialogWindows)
+        if (dialogWindow)
+            dialogWindow->close();
 }
 
 WebView::WebView(QWebEngineProfile* profile, bool isWelcome)
     : QObject(nullptr)
     , _mainWindow(nullptr)
-    , _webView(std::make_unique<CODAWebEngineView>(nullptr))
+    , _profile(profile)
+    , _viewDiscarded(false)
     , _isWelcome(isWelcome)
     , _bridge(nullptr)
 {
-    QWebEnginePage* page = new LoggingWebEnginePage(profile, _webView.get());
+    createWebEngineView();
+    s_instances.push_back(this);
+}
+
+void WebView::createWebEngineView()
+{
+    _viewLiveSince.start();
+    _webView = std::make_unique<CODAWebEngineView>(nullptr);
+    _webView->setMainWindow(_mainWindow);
+
+    QWebEnginePage* page = new LoggingWebEnginePage(_profile, _webView.get());
     _webView->setPage(page);
+    page->setBackgroundColor(Qt::transparent);
 
     seedPrefs(page);
 
@@ -726,11 +846,47 @@ WebView::WebView(QWebEngineProfile* profile, bool isWelcome)
                          request.accept();
                      });
 
-    s_instances.push_back(this);
+    // The web engine process that renders this view died. The view is now blank and the
+    // JavaScript that drove it is gone. A view opened by window.open, the slideshow and
+    // the presenter console, has no bridge of its own and nothing to release.
+    QObject::connect(page, &QWebEnginePage::renderProcessTerminated,
+                     [this](QWebEnginePage::RenderProcessTerminationStatus status, int exitCode)
+                     {
+                         LOG_WRN("the renderer died for appDocId "
+                                 << _document._appDocId << ", client fd "
+                                 << _document._fakeClientFd << ", termination status "
+                                 << static_cast<int>(status) << ", exit code " << exitCode);
+                         if (!_bridge)
+                             return;
+
+                         _bridge->detachFromView();
+
+                         // Load the page again, which gives the view a fresh renderer.
+                         // The document keeps its appDocId, so the new connection rejoins
+                         // the document still loaded in the engine, with any unsaved
+                         // changes. The reload waits for the event loop, so it runs after
+                         // this handler returns.
+                         QPointer<QWebEngineView> view(_webView.get());
+                         QTimer::singleShot(0, this,
+                                            [view]
+                                            {
+                                                if (view)
+                                                    view->reload();
+                                            });
+                     });
+
+    // Set the zoom factor before any page loads, so the window opens at the
+    // stored zoom instead of visibly rescaling.
+    applyUIZoom();
 }
 
 WebView::~WebView() {
     std::erase(s_instances, this);
+
+    // A discarded view has no bridge, and the document it left loaded is nobody else's
+    // to end.
+    if (_viewDiscarded)
+        closeDetachedDocument(_document._appDocId);
 
     // Only delete our bridge - Qt's parent-child ownership handles the rest
     // Note: QWebChannel was created with page as parent: new QWebChannel(_webView->page())
@@ -739,6 +895,92 @@ WebView::~WebView() {
         delete _bridge;
         _bridge = nullptr;
     }
+}
+
+bool WebView::mayDiscardView() const
+{
+    // The starter screen and the welcome page hold no document of their own. A remote
+    // document is driven by the page's collab connection, which a rebuilt page does not
+    // take up again. A template working copy carries the redirect of its first save in
+    // the bridge, which a rebuilt bridge does not have.
+    if (_viewDiscarded || !_bridge || isStarterScreen() || _isWelcome)
+        return false;
+    if (_document._remoteInfo || _templateWorkingDir)
+        return false;
+    if (_document._fileURL.getPath().empty())
+        return false;
+    // A running presentation ends with the view it was started from.
+    if (_webView && _webView->isPresenting())
+        return false;
+    return true;
+}
+
+bool WebView::isReadyToDiscardView() const
+{
+    // Only a document whose content is already on disk is dropped, so the drop can cost
+    // no content at all.
+    return !isDocumentModified() && !isSaveInFlight();
+}
+
+int WebView::millisecondsUntilViewSettled() const
+{
+    // A view is kept for a few seconds after it is built, so that switching quickly
+    // between more tabs than the limit allows leaves the views it just built alone. The
+    // page needs about a second of that to load and rejoin its document.
+    constexpr qint64 settleMilliseconds = 5000;
+    const qint64 remaining = settleMilliseconds - _viewLiveSince.elapsed();
+    return remaining <= 0 ? 0 : static_cast<int>(remaining);
+}
+
+bool WebView::requestSave(std::function<void()> onComplete)
+{
+    return _bridge && _bridge->requestSave(std::move(onComplete));
+}
+
+void WebView::discardView()
+{
+    if (_viewDiscarded || !_bridge)
+        return;
+
+    LOG_INF("discarding the view of appDocId " << _document._appDocId << ", client fd "
+                                               << _document._fakeClientFd);
+
+    endPresentation();
+
+    // Release the connection first, which marks the document as one that is kept loaded
+    // with no view of its own.
+    _bridge->detachFromView();
+    // The bridge belongs to the page and goes with it. The document stays loaded for the
+    // next bridge that carries the same appDocId.
+    _bridge->keepDocumentLoaded();
+    delete _bridge;
+    _bridge = nullptr;
+
+    _viewDiscarded = true;
+    _webView.reset();
+}
+
+void WebView::restoreDiscardedView()
+{
+    if (!_viewDiscarded)
+        return;
+
+    LOG_INF("restoring the view of appDocId " << _document._appDocId);
+
+    createWebEngineView();
+    _viewDiscarded = false;
+
+    QWebChannel* channel = new QWebChannel(_webView->page());
+
+    assert(_bridge == nullptr);
+    _bridge = new Bridge(channel, this, _document, nullptr, _webView.get());
+    // The page's HULLO takes a fresh socket to the document still loaded under this
+    // appDocId, rather than loading the file again.
+    _bridge->markDetached();
+    channel->registerObject("bridge", _bridge);
+    _webView->page()->setWebChannel(channel);
+
+    _webView->load(QUrl(_loadedUrl));
 }
 
 void WebView::onWindowActiveChanged(bool active)
@@ -785,6 +1027,35 @@ void WebView::updateTitle(const QString& docTitle)
         _onTitleChange(windowTitle);
     else if (_mainWindow)
         _mainWindow->setWindowTitle(windowTitle);
+}
+
+void WebView::onDocumentUnmodified()
+{
+    if (_onUnmodified)
+        _onUnmodified();
+}
+
+void WebView::onDocumentModifiedStatusChanged(bool modified)
+{
+    if (_onModifiedStatusChange)
+        _onModifiedStatusChange(modified);
+}
+
+void WebView::updateThumbnail(const std::string& dataUrl)
+{
+    constexpr std::string_view prefix = "data:image/png;base64,";
+    if (!dataUrl.starts_with(prefix))
+        return;
+
+    QImage image;
+    const QByteArray base64 = QByteArray::fromStdString(dataUrl.substr(prefix.size()));
+    if (!image.loadFromData(QByteArray::fromBase64(base64), "PNG"))
+        return;
+
+    const bool isFirstThumbnail = _thumbnail.isNull();
+    _thumbnail = std::move(image);
+    if (_onThumbnailChange)
+        _onThumbnailChange(isFirstThumbnail);
 }
 
 QString WebView::composedWindowTitle() const
@@ -848,6 +1119,7 @@ void WebView::load(const Poco::URI& fileURL, bool newFile, bool isStarterMode, b
             ._fileURL = {},
             ._fakeClientFd = -1,
             ._appDocId = 0,
+            ._remoteInfo = {},
         };
         _docType = QStringLiteral("starter");
     }
@@ -858,25 +1130,29 @@ void WebView::load(const Poco::URI& fileURL, bool newFile, bool isStarterMode, b
             ._fileURL = fileURL,
             ._fakeClientFd = fakeSocketSocket(),
             ._appDocId = coda::generateNewAppDocId(),
+            ._remoteInfo = {},
         };
         _docType = _isWelcome ? QStringLiteral("welcome")
                               : docTypeFromExtension(QString::fromStdString(fileURL.getPath()));
+        LOG_INF("load into webview with appDocId " << _document._appDocId << ", client fd "
+                                                   << _document._fakeClientFd << ", file "
+                                                   << _document._fileURL.toString());
     }
 
     // setup js c++ communication
     QWebChannel* channel = new QWebChannel(_webView->page());
-    // query gnome font scaling factor asynchronously and apply it to the web view
-    queryGnomeFontScalingUpdateZoom();
 
     assert(_bridge == nullptr);
     _bridge = new Bridge(channel, this, _document, nullptr, _webView.get());
     if (requiresSaveAs)
         _bridge->setRequiresSaveAs(true);
+    if (newFile)
+        _bridge->setNewDocument(true);
     channel->registerObject("bridge", _bridge);
     _webView->page()->setWebChannel(channel);
 
-    Poco::Path coolHtmlPath(getDataDir());
-    coolHtmlPath.append("/browser/dist/cool.html");
+    Poco::Path coolHtmlPath(getBrowserDistDir());
+    coolHtmlPath.append("cool-qt.html");
     Poco::URI urlAndQuery(coolHtmlPath);
     urlAndQuery.setScheme("file");
     std::string uiLanguage = getUILanguage();
@@ -894,6 +1170,8 @@ void WebView::load(const Poco::URI& fileURL, bool newFile, bool isStarterMode, b
             "permission", CodaConfig::instance().isForcedReadOnly() ? "readonly" : "edit");
         urlAndQuery.addQueryParameter("appdocid", std::to_string(_document._appDocId));
         urlAndQuery.addQueryParameter("userinterfacemode", "notebookbar");
+        if (CodaConfig::instance().wantsVector())
+            urlAndQuery.addQueryParameter("vector", "true");
     }
 
     // Dark mode: the user's saved choice wins, otherwise follow the system theme.
@@ -903,9 +1181,10 @@ void WebView::load(const Poco::URI& fileURL, bool newFile, bool isStarterMode, b
 
     if (!isStarterMode)
     {
-        // A brand new file and a template-based document both open ready to edit;
-        // an existing file opens read-only until the user chooses to edit it.
-        if (!newFile && !requiresSaveAs)
+        // A brand new file and a template-based document both open ready to edit. An existing
+        // file opens read-only until the user chooses to edit it, unless it was asked to open
+        // ready to edit.
+        if (!newFile && !requiresSaveAs && !CodaConfig::instance().startsInEditMode())
             urlAndQuery.addQueryParameter("startreadonly", "true");
         if (_isWelcome)
             urlAndQuery.addQueryParameter("welcome", "true");
@@ -913,6 +1192,7 @@ void WebView::load(const Poco::URI& fileURL, bool newFile, bool isStarterMode, b
 
     const std::string urlAndQueryStr = urlAndQuery.toString();
     LOG_TRC("Open URL: " << urlAndQueryStr);
+    _loadedUrl = QString::fromStdString(urlAndQueryStr);
 
     if (isStarterMode)
     {
@@ -957,6 +1237,8 @@ void coda::addRemoteCoolParams(QUrl& url,
     q.addQueryItem("appdocid",
         QString::number(document._appDocId));
     q.addQueryItem("userinterfacemode", "notebookbar");
+    if (CodaConfig::instance().wantsVector())
+        q.addQueryItem("vector", "true");
     if (portalPrefersDark())
         q.addQueryItem("darkTheme", "true");
     url.setQuery(q);
@@ -974,18 +1256,21 @@ void WebView::loadRemote(std::shared_ptr<coda::RemoteDocInfo> remoteInfo)
     // the tab falls back to the generic icon.
     _docType = QStringLiteral("other");
 
-    queryGnomeFontScalingUpdateZoom();
+    LOG_INF("load remote into webview with appDocId " << _document._appDocId << ", client fd "
+                                                      << _document._fakeClientFd);
+
     assert(_bridge == nullptr);
     _bridge = coda::attachRemoteBridge(
         _webView->page(), _document, this, nullptr, _webView.get());
 
-    Poco::Path coolHtmlPath(getDataDir());
-    coolHtmlPath.append("/browser/dist/cool.html");
+    Poco::Path coolHtmlPath(getBrowserDistDir());
+    coolHtmlPath.append("cool-qt.html");
     QUrl urlAndQuery = QUrl::fromLocalFile(
         QString::fromStdString(coolHtmlPath.toString()));
     coda::addRemoteCoolParams(urlAndQuery, _document);
 
     LOG_TRC("Open remote URL: " << urlAndQuery.toString().toStdString());
+    _loadedUrl = urlAndQuery.toString();
 
     // Tab/window title is a generic "<APP_NAME>" until the page-JS
     // resolves the actual filename via /co/collab/fetch - at which
@@ -998,7 +1283,9 @@ void WebView::loadRemote(std::shared_ptr<coda::RemoteDocInfo> remoteInfo)
 QString WebView::createNewDocumentFile(const std::string& templateType, const std::string& templatePath, const std::string& basename)
 {
     // Get template file path
-    Poco::Path templatePathObj = getTemplatePath(templateType, templatePath);
+    bool bUsedRequestedTemplate = false;
+    Poco::Path templatePathObj =
+        getTemplatePath(templateType, templatePath, &bUsedRequestedTemplate);
 
     // Get user's Documents directory
     QString documentsDir = getDocumentsDirectory();
@@ -1006,16 +1293,26 @@ QString WebView::createNewDocumentFile(const std::string& templateType, const st
     // Get document name prefix and extension based on template type
     auto [docNamePrefix, extension] = getDocumentNameInfo(templateType, basename);
 
-    // Find the next available document name
-    QString newFilePath = findNextAvailableDocumentName(documentsDir, docNamePrefix, extension);
-
-    // Copy template to the new location
-    QString templateFilePath = QString::fromStdString(templatePathObj.toString());
-    if (!QFile::copy(templateFilePath, newFilePath))
+    // Copy an intro document once and reopen that copy on later clicks;
+    // deleting it gives a fresh copy.  A request naming a template that does
+    // not resolve gets the blank document, which is a new file every time.
+    const bool reuseCopy = bUsedRequestedTemplate;
+    QString newFilePath =
+        QDir(documentsDir).filePath(QString("%1.%2").arg(docNamePrefix).arg(extension));
+    if (!reuseCopy || !QFileInfo::exists(newFilePath))
     {
-        LOG_ERR("Failed to copy template from " << templateFilePath.toStdString()
-                << " to " << newFilePath.toStdString());
-        return {};
+        if (!reuseCopy)
+            newFilePath = findNextAvailableDocumentName(documentsDir, docNamePrefix, extension);
+
+        // Copy the template to the new location; a template carrying an l10n
+        // stream is translated in place by the kit when the copy is loaded.
+        QString templateFilePath = QString::fromStdString(templatePathObj.toString());
+        if (!QFile::copy(templateFilePath, newFilePath))
+        {
+            LOG_ERR("Failed to copy template from " << templateFilePath.toStdString()
+                    << " to " << newFilePath.toStdString());
+            return {};
+        }
     }
 
     return newFilePath;
@@ -1154,6 +1451,33 @@ void WebView::endPresentation()
         _webView->endPresentation();
 }
 
+void WebView::applyUIZoom()
+{
+    // A discarded view has no web view. Restoring the view applies the zoom.
+    if (!_webView)
+        return;
+
+    const int percent = Desktop::getUIZoomPercent();
+    if (percent > 0)
+    {
+        // QtWebEngine accepts zoom factors from 0.25 to 5.0.
+        _webView->setZoomFactor(std::clamp(percent / 100.0, 0.25, 5.0));
+    }
+    else
+    {
+        // No explicit zoom: reset to 1.0 and follow the system text scaling,
+        // which arrives asynchronously from the desktop portal.
+        _webView->setZoomFactor(1.0);
+        queryGnomeFontScalingUpdateZoom();
+    }
+}
+
+void WebView::applyUIZoomToAll()
+{
+    for (WebView* instance : s_instances)
+        instance->applyUIZoom();
+}
+
 void WebView::queryGnomeFontScalingUpdateZoom()
 {
     QDBusInterface portalInterface("org.freedesktop.portal.Desktop",
@@ -1170,10 +1494,10 @@ void WebView::queryGnomeFontScalingUpdateZoom()
 
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, _webView.get());
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished,
-                     [this](QDBusPendingCallWatcher* watcher)
+                     [this](QDBusPendingCallWatcher* finishedCall)
                      {
-                         QDBusPendingReply<QVariant> reply = *watcher;
-                         watcher->deleteLater();
+                         QDBusPendingReply<QVariant> reply = *finishedCall;
+                         finishedCall->deleteLater();
 
                          if (reply.isError())
                              return;
@@ -1194,9 +1518,15 @@ void WebView::queryGnomeFontScalingUpdateZoom()
                              innerVariant = innerDbusVariant.variant();
                          }
 
+                         // The user may have picked an explicit zoom while
+                         // this query was in flight; that choice wins.
+                         if (Desktop::getUIZoomPercent() > 0)
+                             return;
+
                          bool ok;
                          double factor = innerVariant.toDouble(&ok);
-                         if (ok)
+                         // The reply can arrive after the view was discarded.
+                         if (ok && _webView)
                              _webView->setZoomFactor(factor);
                      });
 }

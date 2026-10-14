@@ -244,14 +244,14 @@ typelib_TypeClass __cdecl cpp_mediate(void** pCallStack, const sal_Int32 nFuncti
                           + " vtable index " + OUString::number(nFunctionIndex) + "/"
                           + OUString::number(pInterfaceTD->nMapFunctionIndexToMemberIndex);
         SAL_WARN("bridges", sError);
-        throw uno::RuntimeException(sError, static_cast<uno::XInterface*>(pThis));
+        throw cpo::uno::RuntimeException(sError, static_cast<cpo::uno::XInterface*>(pThis));
     }
 
     // determine called method
     sal_Int32 nMemberPos = pInterfaceTD->pMapFunctionIndexToMemberIndex[nFunctionIndex];
     assert(nMemberPos < pInterfaceTD->nAllMembers);
 
-    uno::TypeDescription aMemberDescr(pInterfaceTD->ppAllMembers[nMemberPos]);
+    cpo::uno::TypeDescription aMemberDescr(pInterfaceTD->ppAllMembers[nMemberPos]);
 
     SAL_INFO("bridges", "Calling " << OUString::unacquired(&aMemberDescr.get()->pTypeName));
 
@@ -304,7 +304,7 @@ typelib_TypeClass __cdecl cpp_mediate(void** pCallStack, const sal_Int32 nFuncti
                         static_cast<cpo::uno::Type*>(pCallStack[nCppStackPos])->getTypeLibType());
                     if (pQueryTD)
                     {
-                        uno::XInterface* pInterface = nullptr;
+                        cpo::uno::XInterface* pInterface = nullptr;
 
                         pCppI->getBridge()->getCppEnv()->getRegisteredInterface(
                             pCppI->getBridge()->getCppEnv(), reinterpret_cast<void**>(&pInterface),
@@ -341,8 +341,8 @@ typelib_TypeClass __cdecl cpp_mediate(void** pCallStack, const sal_Int32 nFuncti
             break;
         }
         default:
-            throw uno::RuntimeException("no member description found!",
-                                        static_cast<uno::XInterface*>(pThis));
+            throw cpo::uno::RuntimeException(u"no member description found!"_ustr,
+                                             static_cast<cpo::uno::XInterface*>(pThis));
     }
 
     return eRet;

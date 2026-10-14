@@ -37,12 +37,27 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Preset tests.', function()
                 cy.cGet('.notebookbar > .unoSpellingAndGrammarDialog > button').first().click();
 
 		// we should end up with the "there are no misspelling" Information messagebox.
-		// Scope to its own #Information; the underlying SpellingDialog stays visible
+		// Scope to its own title; the underlying SpellingDialog stays visible
 		// behind it and a bare .ui-dialog-title would match both and concatenate.
-		cy.cGet('#Information.ui-dialog-title').should('have.text', 'Information');
+		cy.cGet('.ui-dialog-title').filter(':contains("Information")')
+			.should('have.text', 'Information');
 
 		cy.cGet('body').type('{esc}');
 		cy.cGet('body').type('{esc}');
+	});
+
+	// The shared presets and the installation both hold a "standard" autotext group, and each
+	// group has a "TY" entry. Expanding "TY" gives the shared text.
+	it('Verify shared autotext wins a duplicated group name.', function() {
+		// Add some text and expand via autotext
+		ceHelper.type('TY');
+
+		// F3
+		cy.get('@clipboard').trigger('keydown', { key: "F3", code: "F3", which: 114, force: true })
+
+		writerHelper.selectAllTextOfDoc();
+		helper.copy();
+		cy.cGet('#copy-paste-container p').should('contain.text', 'Thank you from the whole organization.');
 	});
 
 	// Ensure that user autotext was installed.
@@ -68,9 +83,10 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Preset tests.', function()
                 cy.cGet('.notebookbar > .unoSpellingAndGrammarDialog > button').first().click();
 
 		// we should end up with the "there are no misspelling" Information messagebox.
-		// Scope to its own #Information; the underlying SpellingDialog stays visible
+		// Scope to its own title; the underlying SpellingDialog stays visible
 		// behind it and a bare .ui-dialog-title would match both and concatenate.
-		cy.cGet('#Information.ui-dialog-title').should('have.text', 'Information');
+		cy.cGet('.ui-dialog-title').filter(':contains("Information")')
+			.should('have.text', 'Information');
 
 		cy.cGet('body').type('{esc}');
 		cy.cGet('body').type('{esc}');

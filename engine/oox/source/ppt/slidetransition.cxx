@@ -33,7 +33,7 @@
 #include <oox/token/tokens.hxx>
 #include <oox/ppt/pptfilterhelpers.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::animations;
 using namespace ::com::sun::star::presentation;
 
@@ -455,6 +455,11 @@ namespace oox::ppt {
         {
             mnTransitionType = TransitionType::MISCSHAPEWIPE;
             mnTransitionSubType = TransitionSubType::LEFTTORIGHT;
+        }
+        else if (sPresetTransition == u"airplane")
+        {
+            mnTransitionType = TransitionType::MISCSHAPEWIPE;
+            mnTransitionSubType = TransitionSubType::AIRPLANE;
         }
         else
         {

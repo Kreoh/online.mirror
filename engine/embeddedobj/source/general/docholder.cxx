@@ -73,6 +73,7 @@
                             m_pEmbedObj->getCurrentState()!=embed::EmbedStates::UI_ACTIVE) ? 0 : 4 )
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -151,7 +152,7 @@ static void InsertMenu_Impl( const uno::Reference< container::XIndexContainer >&
 namespace embeddedobj
 {
 
-DocumentHolder::DocumentHolder( uno::Reference< uno::XComponentContext > xContext,
+DocumentHolder::DocumentHolder( uno::Reference< cpo::uno::XComponentContext > xContext,
                                 OCommonEmbeddedObject* pEmbObj )
 : m_pEmbedObj( pEmbObj ),
   m_xContext(std::move( xContext )),
@@ -162,7 +163,7 @@ DocumentHolder::DocumentHolder( uno::Reference< uno::XComponentContext > xContex
   m_nNoBorderResizeReact( 0 ),
   m_nNoResizeReact( 0 )
 {
-    uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( m_xContext );
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( m_xContext );
     osl_atomic_increment(&m_refCount);
     try
     {
@@ -236,9 +237,9 @@ void DocumentHolder::CloseFrame()
 void DocumentHolder::FreeOffice()
 {
     try {
-        uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( m_xContext );
+        uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( m_xContext );
         xDesktop->removeTerminateListener( this );
-    } catch (const css::uno::DeploymentException&) {
+    } catch (const cpo::uno::DeploymentException&) {
         // if this happens, the desktop is already gone
     }
 
@@ -426,7 +427,7 @@ bool DocumentHolder::ShowInplace( const uno::Reference< awt::XWindowPeer >& xPar
                                                 awt::Rectangle(),//aOwnRectangle,
                                                 awt::WindowAttribute::SHOW | awt::VclWindowPeerAttribute::CLIPCHILDREN );
 
-        uno::Reference< awt::XToolkit2 > xToolkit = awt::Toolkit::create(m_xContext);
+        uno::Reference< awt::XToolkit > xToolkit = awt::Toolkit::create(m_xContext);
 
         uno::Reference< awt::XWindowPeer > xNewWinPeer = xToolkit->createWindow( aOwnWinDescriptor );
         uno::Reference< awt::XWindow > xOwnWindow( xNewWinPeer, uno::UNO_QUERY_THROW );
@@ -528,7 +529,7 @@ uno::Reference< container::XIndexAccess > DocumentHolder::RetrieveOwnMenu_Impl()
         // no internal document configuration, use the one from the module
         uno::Reference< frame::XModuleManager2 > xModuleMan = frame::ModuleManager::create(m_xContext);
         OUString aModuleIdent =
-            xModuleMan->identify( uno::Reference< uno::XInterface >( m_xComponent, uno::UNO_QUERY ) );
+            xModuleMan->identify( uno::Reference< cpo::uno::XInterface >( m_xComponent, uno::UNO_QUERY ) );
 
         if ( !aModuleIdent.isEmpty() )
         {
@@ -544,7 +545,7 @@ uno::Reference< container::XIndexAccess > DocumentHolder::RetrieveOwnMenu_Impl()
     }
 
     if ( !xResult.is() )
-        throw uno::RuntimeException(u"Unable to retrieve the UI configuration menu."_ustr, getXWeak());
+        throw cpo::uno::RuntimeException(u"Unable to retrieve the UI configuration menu."_ustr, getXWeak());
 
     return xResult;
 }
@@ -569,7 +570,7 @@ void DocumentHolder::FindConnectPoints(
             }
 
         if ( aCommand.isEmpty() )
-            throw uno::RuntimeException("CommandURL is empty at index: " + OUString::number(nInd),  xMenu);
+            throw cpo::uno::RuntimeException("CommandURL is empty at index: " + OUString::number(nInd),  xMenu);
 
         if ( aCommand == ".uno:PickList" )
             nConnectPoints[0] = nInd;
@@ -638,7 +639,7 @@ bool DocumentHolder::MergeMenus_Impl( const uno::Reference< css::frame::XLayoutM
             uno::UNO_QUERY_THROW );
         uno::Reference< container::XIndexAccess > xContMenu = xUISettings->getSettings( true );
         if ( !xContMenu.is() )
-            throw uno::RuntimeException(u"Unable to merge the menu"_ustr, getXWeak());
+            throw cpo::uno::RuntimeException(u"Unable to merge the menu"_ustr, getXWeak());
 
         uno::Reference< container::XIndexAccess > xOwnMenu = RetrieveOwnMenu_Impl();
         uno::Reference< frame::XDispatchProvider > xOwnDisp( m_xFrame, uno::UNO_QUERY_THROW );
@@ -953,7 +954,7 @@ bool DocumentHolder::LoadDocToFrame( bool bInPlace )
         aArgs.put( u"ReadOnly"_ustr, m_bReadOnly );
 
         // set document title to show in the title bar
-        css::uno::Reference< css::frame::XTitle > xModelTitle( xDoc, css::uno::UNO_QUERY );
+        cpo::uno::Reference< css::frame::XTitle > xModelTitle( xDoc, cpo::uno::UNO_QUERY );
         if( xModelTitle.is() && m_pEmbedObj && !m_pEmbedObj->getContainerName().isEmpty() )
         {
             std::locale aResLoc = Translate::Create("sfx");
@@ -1176,7 +1177,7 @@ void DocumentHolder::notifyEvent( const document::EventObject& Event )
 }
 
 
-void DocumentHolder::borderWidthsChanged( const uno::Reference< uno::XInterface >& aObject,
+void DocumentHolder::borderWidthsChanged( const uno::Reference< cpo::uno::XInterface >& aObject,
                                                     const frame::BorderWidths& aNewSize )
 {
     // TODO: may require mutex introduction ???

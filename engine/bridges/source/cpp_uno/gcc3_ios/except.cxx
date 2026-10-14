@@ -28,7 +28,7 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include "cpo/uno/RuntimeException.hpp"
 #include "cpo/uno/genfunc.hxx"
 #include <sal/log.hxx>
 #include "osl/mutex.hxx"
@@ -40,7 +40,7 @@
 #include "share.hxx"
 
 using namespace ::osl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::cpo::uno;
 
 namespace CPPU_CURRENT_NAMESPACE {
@@ -345,7 +345,7 @@ void fillUnoException(uno_Any * pUnoExc, uno_Mapping * pCpp2Uno)
     __cxa_exception * header = __cxxabiv1::__cxa_get_globals()->caughtExceptions;
     if (! header)
     {
-        RuntimeException aRE( "no exception header!" );
+        RuntimeException aRE( u"no exception header!"_ustr );
         cpo::uno::Type const & rType = cppu::UnoType<decltype(aRE)>::get();
         uno_type_any_constructAndConvert( pUnoExc, &aRE, rType.getTypeLibType(), pCpp2Uno );
         SAL_WARN("bridges", aRE.Message);

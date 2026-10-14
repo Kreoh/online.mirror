@@ -46,6 +46,10 @@ constexpr auto IgnoredList
 
 constexpr auto MobileDialogList
     = frozen::make_unordered_set<std::u16string_view>({
+        { u"modules/scalc/ui/pivottablelayoutdialog-mobile.ui" },
+        { u"modules/scalc/ui/pivottablelayoutentry-mobile.ui" },
+        { u"modules/schart/ui/chartwizard-mobile.ui" },
+        { u"modules/schart/ui/tp_ChartType-mobile.ui" },
         { u"modules/swriter/ui/watermarkdialog.ui" },
         { u"modules/swriter/ui/wordcount-mobile.ui" },
         { u"svx/ui/findreplacedialog-mobile.ui" }
@@ -68,6 +72,7 @@ constexpr auto CuiDialogList
         { u"cui/ui/charnamepage.ui" },
         { u"cui/ui/colorpage.ui" },
         { u"cui/ui/colorpickerdialog.ui" },
+        { u"cui/ui/comment.ui" },
         { u"cui/ui/croppage.ui" },
         { u"cui/ui/diagramdialog.ui" },
         { u"cui/ui/effectspage.ui" },
@@ -149,7 +154,8 @@ constexpr auto SfxDialogList
         { u"sfx/ui/linefragment.ui" },
         { u"sfx/ui/managestylepage.ui" },
         { u"sfx/ui/newstyle.ui" },
-        { u"sfx/ui/password.ui" }
+        { u"sfx/ui/password.ui" },
+        { u"sfx/ui/securityinfopage.ui" }
     });
 
 constexpr auto ScalcDialogList
@@ -159,6 +165,7 @@ constexpr auto ScalcDialogList
         { u"modules/scalc/ui/analysisofvariancedialog.ui" },
         { u"modules/scalc/ui/cellprotectionpage.ui" },
         { u"modules/scalc/ui/chardialog.ui" },
+        { u"modules/scalc/ui/checkwarningdialog.ui" },
         { u"modules/scalc/ui/chisquaretestdialog.ui" },
         { u"modules/scalc/ui/colwidthdialog.ui" },
         { u"modules/scalc/ui/conditionaleasydialog.ui" },
@@ -192,7 +199,9 @@ constexpr auto ScalcDialogList
         { u"modules/scalc/ui/mergecellsdialog.ui" },
         { u"modules/scalc/ui/movecopysheet.ui" },
         { u"modules/scalc/ui/movingaveragedialog.ui" },
+        { u"modules/scalc/ui/newtablestyle.ui" },
         { u"modules/scalc/ui/nosolutiondialog.ui" },
+        { u"modules/scalc/ui/onlyactivesheetsaveddialog.ui" },
         { u"modules/scalc/ui/optimalcolwidthdialog.ui" },
         { u"modules/scalc/ui/optimalrowheightdialog.ui" },
         { u"modules/scalc/ui/paradialog.ui" },
@@ -209,6 +218,7 @@ constexpr auto ScalcDialogList
         { u"modules/scalc/ui/samplingdialog.ui" },
         { u"modules/scalc/ui/selectsource.ui" },
         { u"modules/scalc/ui/sheetprintpage.ui" },
+        { u"modules/scalc/ui/showchangesdialog.ui" },
         { u"modules/scalc/ui/simplerefdialog.ui" },
         { u"modules/scalc/ui/solverdlg.ui" },
         { u"modules/scalc/ui/solveroptionsdialog.ui" },
@@ -235,6 +245,9 @@ constexpr auto ScalcDialogList
         { u"modules/scalc/ui/selectsheetviewdialog.ui" },
         { u"modules/scalc/ui/definetablerangedialog.ui" },
         { u"modules/scalc/ui/printareasdialog.ui" },
+        { u"modules/scalc/ui/resizetablerangedialog.ui" },
+        { u"modules/scalc/ui/inputstringdialog.ui" },
+        { u"modules/scalc/ui/duplicaterecordsdlg.ui" },
     });
 
 constexpr auto SwriterDialogList
@@ -275,7 +288,6 @@ constexpr auto SwriterDialogList
         { u"modules/swriter/ui/inputfielddialog.ui" },
         { u"modules/swriter/ui/insertbookmark.ui" },
         { u"modules/swriter/ui/insertbreak.ui" },
-        { u"modules/swriter/ui/seclabeldialog.ui" },
         { u"modules/swriter/ui/insertcaption.ui" },
         { u"modules/swriter/ui/inserttable.ui" },
         { u"modules/swriter/ui/insertsectiondialog.ui" },
@@ -396,6 +408,7 @@ constexpr auto OtherDialogList
         { u"svx/ui/redlinecontrol.ui" },
         { u"svx/ui/redlinefilterpage.ui" },
         { u"svx/ui/redlineviewpage.ui" },
+        { u"svx/ui/seclabeldialog.ui" },
         { u"svx/ui/themecoloreditdialog.ui" },
         { u"svx/ui/themedialog.ui" },
         // uui
@@ -512,7 +525,6 @@ constexpr auto SidebarList
         { u"svx/ui/accessibilitychecklevel.ui" },
         { u"svx/ui/defaultshapespanel.ui" },
         { u"svx/ui/inspectortextpanel.ui" },
-        { u"svx/ui/mediaplayback.ui" },
         { u"svx/ui/sidebararea.ui" },
         { u"svx/ui/sidebareffect.ui" },
         { u"svx/ui/sidebarempty.ui" },
@@ -544,6 +556,13 @@ constexpr auto QuickFindList
         { u"modules/swriter/ui/sidebarquickfind.ui" },
 });
 
+
+// ========== NOTESPANEL ================================================== //
+
+constexpr auto NotesPanelList
+    = frozen::make_unordered_set<std::u16string_view>({
+        { u"modules/simpress/ui/notespanel.ui" }
+});
 
 // ========== NOTEBOOKBAR ================================================= //
 
@@ -677,6 +696,11 @@ bool isBuilderEnabledForQuickFind(std::u16string_view rUIFile)
     return isInMap(QuickFindList, rUIFile);
 }
 
+bool isBuilderEnabledForNotesPanel(std::u16string_view rUIFile)
+{
+    return isInMap(NotesPanelList, rUIFile);
+}
+
 bool isInterimBuilderEnabledForNotebookbar(std::u16string_view rUIFile)
 {
     return isInMap(NotebookbarList, rUIFile);
@@ -738,9 +762,6 @@ std::vector<OUString> completeCalcDialogList(const o3tl::sorted_vector<OUString>
         // Skip this one, its marked in calc as: "TODO: handle this case in COKit too"
         // for SID_OUTLINE_REMOVE
         if (entry == u"modules/scalc/ui/ungroupdialog.ui")
-            continue;
-        // Skip this one for now, it can only be seen in certain xlsx documents
-        else if (entry == u"modules/scalc/ui/definetablerangedialog.ui")
             continue;
         // Skip this one, I think it can only happen on loading
         // an archaic lotus 123 file
@@ -808,6 +829,18 @@ std::vector<OUString> completeImpressSidebarList(const o3tl::sorted_vector<OUStr
     return missing;
 }
 
+std::vector<OUString> completeDrawDialogList(const o3tl::sorted_vector<OUString>& entries)
+{
+    std::vector<OUString> missing;
+    for (const auto& entry : SdrawDialogList)
+    {
+        OUString sEntry(entry);
+        if (!entries.contains(sEntry))
+            missing.push_back(sEntry);
+    }
+    return missing;
+}
+
 std::vector<OUString> completeCommonSidebarList(const o3tl::sorted_vector<OUString>& entries,
                                                 COKitDocumentType docType)
 {
@@ -861,12 +894,8 @@ std::vector<OUString> completeCommonSidebarList(const o3tl::sorted_vector<OUStri
 
         if (docType != COKitDocumentType::PRESENTATION && docType != COKitDocumentType::DRAWING)
         {
-            // Skip this one, in practice it appears in draw/impress
-            // TODO: it should probably be made to appear in writer/calc too
-            if (entry == u"svx/ui/mediaplayback.ui")
-                continue;
             // Skip this one, its context means it can only appear in draw/impress
-            else if (entry == u"svx/ui/defaultshapespanel.ui")
+            if (entry == u"svx/ui/defaultshapespanel.ui")
                 continue;
             // Skip this one, its context means it can only appear in draw/impress
             else if (entry == u"svx/ui/sidebarlists.ui")
@@ -898,6 +927,11 @@ std::vector<OUString> completeCommonDialogList(const o3tl::sorted_vector<OUStrin
                 // Spelling dialog's Options... button
                 continue;
             }
+
+            // The Security Label rides in the OOXML customXml part, so the command
+            // is only meaningful on those documents; every a11y fixture is ODF.
+            if (entry == u"svx/ui/seclabeldialog.ui")
+                continue;
 
             if (docType != COKitDocumentType::TEXT)
             {
@@ -987,6 +1021,10 @@ std::vector<OUString> completeCommonDialogList(const o3tl::sorted_vector<OUStrin
                 {
                     continue;
                 }
+                // Impress and Draw have no change tracking, so there is no way to
+                // reach the dialog for commenting on a tracked change.
+                if (entry == u"cui/ui/comment.ui")
+                    continue;
                 // .uno:StyleNewByExample doesn't seem to be enabled for impress
                 if (entry == u"sfx/ui/managestylepage.ui" ||
                     entry == u"sfx/ui/newstyle.ui")

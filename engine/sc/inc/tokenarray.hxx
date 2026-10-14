@@ -21,13 +21,15 @@
 
 #include <formula/token.hxx>
 #include <rtl/ref.hxx>
-#include "document.hxx"
+#include "sheetlimits.hxx"
 #include "scdllapi.h"
 #include "types.hxx"
 #include "calcmacros.hxx"
 #include "address.hxx"
 #include "global.hxx"
 #include <formula/tokenarray.hxx>
+
+class ScDocument;
 
 namespace sc {
 
@@ -157,6 +159,13 @@ public:
      * @param bCheckCopyArea should reference pointing into the copy area be adjusted independently from being absolute, should be true only for copy&paste between documents
      */
     void AdjustAbsoluteRefs( const ScDocument& rOldDoc, const ScAddress& rOldPos, const ScAddress& rNewPos, bool bCheckCopyArea );
+
+    /** Copy of this array with structured references to database range nIndex flattened to plain
+        ranges (nullptr if none); references to other tables stay structured. */
+    std::unique_ptr<ScTokenArray> ConvertTableRefsToRange( sal_uInt16 nIndex, const ScAddress& rPos ) const;
+
+    /** True if this array holds a structured reference to database range nIndex. */
+    bool HasTableRef( sal_uInt16 nIndex ) const;
 
     /** Adjust relative tab references when copying a formula to a new table.
         Non-zero relative tab offsets are recalculated so they still resolve

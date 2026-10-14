@@ -39,7 +39,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 using ::sd::framework::FrameworkHelper;
@@ -72,16 +72,16 @@ public:
     void CallListeners (EventMultiplexerEvent& rEvent);
 
     //===== lang::XEventListener ==============================================
-    virtual void SAL_CALL
+    virtual void
         disposing (const css::lang::EventObject& rEventObject) override;
 
     //===== beans::XPropertySetListener =======================================
-    virtual void SAL_CALL
+    virtual void
         propertyChange (
             const css::beans::PropertyChangeEvent& rEvent) override;
 
     //===== view::XSelectionChangeListener ====================================
-    virtual void SAL_CALL
+    virtual void
         selectionChanged (
             const css::lang::EventObject& rEvent) override;
 
@@ -90,7 +90,7 @@ public:
         frame it is listening to.  This usually happens when the view shell
         in the center pane is replaced by another view shell.
     */
-    virtual void SAL_CALL
+    virtual void
         frameAction (const css::frame::FrameActionEvent& rEvent) override;
 
     //===== sd::framework::ConfigurationChangeListener ==================
@@ -150,7 +150,7 @@ EventMultiplexer::~EventMultiplexer()
     {
         mpImpl->dispose();
     }
-    catch (const RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
     }
     catch (const cpo::uno::Exception&)
@@ -394,7 +394,7 @@ void EventMultiplexer::Implementation::DisconnectFromController()
 
 //=====  lang::XEventListener  ================================================
 
-void SAL_CALL EventMultiplexer::Implementation::disposing (
+void EventMultiplexer::Implementation::disposing (
     const lang::EventObject& rEventObject)
 {
     if (mbListeningToController)
@@ -417,7 +417,7 @@ void SAL_CALL EventMultiplexer::Implementation::disposing (
 
 //=====  beans::XPropertySetListener  =========================================
 
-void SAL_CALL EventMultiplexer::Implementation::propertyChange (
+void EventMultiplexer::Implementation::propertyChange (
     const beans::PropertyChangeEvent& rEvent)
 {
     if (m_bDisposed)
@@ -444,7 +444,7 @@ void SAL_CALL EventMultiplexer::Implementation::propertyChange (
 
 //===== frame::XFrameActionListener  ==========================================
 
-void SAL_CALL EventMultiplexer::Implementation::frameAction (
+void EventMultiplexer::Implementation::frameAction (
     const frame::FrameActionEvent& rEvent)
 {
     Reference<frame::XFrame> xFrame (mxFrameWeak);
@@ -477,7 +477,7 @@ void SAL_CALL EventMultiplexer::Implementation::frameAction (
 
 //===== view::XSelectionChangeListener ========================================
 
-void SAL_CALL EventMultiplexer::Implementation::selectionChanged (
+void EventMultiplexer::Implementation::selectionChanged (
     const lang::EventObject& )
 {
     CallListeners (EventMultiplexerEventId::EditViewSelection);

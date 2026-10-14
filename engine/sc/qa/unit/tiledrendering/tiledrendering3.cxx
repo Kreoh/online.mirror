@@ -8,16 +8,22 @@
  */
 
 #include <sctiledrenderingtest.hxx>
+#include <sc.hrc>
+#include <drawview.hxx>
 
 #include <boost/property_tree/json_parser.hpp>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <comphelper/SetFlagContextHelper.hxx>
+#include <comphelper/scopeguard.hxx>
 #include <sfx2/dispatch.hxx>
+#include <sfx2/bindings.hxx>
 #include <sfx2/viewfrm.hxx>
+#include <svl/ptitem.hxx>
 #include <svl/stritem.hxx>
 #include <svl/numformat.hxx>
 #include <svl/zformat.hxx>
@@ -28,10 +34,23 @@
 #include <comphelper/dispatchcommand.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/kit/helper.hxx>
+#include <sfx2/kit/componenthelpers.hxx>
+#include <sfx2/ipclient.hxx>
+#include <svx/svdpage.hxx>
+#include <svx/svdoole2.hxx>
+#include <svx/svdouno.hxx>
+#include <drawview.hxx>
+#include <com/sun/star/embed/EmbedVerbs.hpp>
 #include <vcl/virdev.hxx>
+#include <vcl/keycodes.hxx>
+#include <editeng/brushitem.hxx>
 #include <editeng/colritem.hxx>
+#include <editeng/editview.hxx>
+#include <editeng/eeitem.hxx>
 #include <docmodel/color/ComplexColor.hxx>
 #include <tools/json_writer.hxx>
+#include <tools/datetime.hxx>
+#include <unotools/datetime.hxx>
 #include <unotools/syslocaleoptions.hxx>
 #include <unotools/useroptions.hxx>
 
@@ -46,12 +65,14 @@
 #include <docsh.hxx>
 #include <tabvwsh.hxx>
 #include <gridwin.hxx>
+#include <drwlayer.hxx>
 #include <sctestviewcallback.hxx>
 #include <o3tl/unit_conversion.hxx>
 #include <cstdlib>
 #include <regex>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -1268,11 +1289,13 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetViewRenderState)
     int nFirstViewId = KitHelper::getCurrentView();
     ScTestViewCallback aView1;
 
-    CPPUNIT_ASSERT_EQUAL("S;Default"_ostr, pModelObj->getViewRenderState());
+    // No leading letters: Calc starts with automatic spell checking off, and the
+    // document background is the default white one
+    CPPUNIT_ASSERT_EQUAL(";Default"_ostr, pModelObj->getViewRenderState());
     // Create a second view
     KitHelper::createView();
     ScTestViewCallback aView2;
-    CPPUNIT_ASSERT_EQUAL("S;Default"_ostr, pModelObj->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(";Default"_ostr, pModelObj->getViewRenderState());
     // Set second view to dark scheme
     {
         cpo::uno::Sequence<beans::PropertyValue> aPropertyValues
@@ -1281,11 +1304,11 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetViewRenderState)
             });
         dispatchCommand(mxComponent, u".uno:ChangeTheme"_ustr, aPropertyValues);
     }
-    CPPUNIT_ASSERT_EQUAL("S;Dark"_ostr, pModelObj->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(";Dark"_ostr, pModelObj->getViewRenderState());
 
     // Switch back to first view and make sure it's the same
     KitHelper::setView(nFirstViewId);
-    CPPUNIT_ASSERT_EQUAL("S;Default"_ostr, pModelObj->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(";Default"_ostr, pModelObj->getViewRenderState());
 }
 
 // Cell text with a dark color of its own is drawn in a light variant once the document background
@@ -1298,6 +1321,19 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvertedBackgroundLightensText)
 
     ScModelObj* pModelObj = createDoc("empty.ods");
     ScTestViewCallback aView;
+
+    // The color configuration belongs to the process and every test in this file shares it, so put
+    // the document background back on the way out, whatever the assertions below do.
+    const Color aDocColorBefore = aColorConfig.GetColorValue(svtools::DOCCOLOR).nColor;
+    comphelper::ScopeGuard aRestoreDocColor(
+        [aDocColorBefore]
+        {
+            svtools::EditableColorConfig aRestore;
+            svtools::ColorConfigValue aValue;
+            aValue.nColor = aDocColorBefore;
+            aRestore.SetColorValue(svtools::DOCCOLOR, aValue);
+        });
+
     dispatchCommand(mxComponent, u".uno:ChangeTheme"_ustr,
                     comphelper::InitPropertySequence(
                         { { "NewTheme", cpo::uno::Any(u"Light"_ustr) } }));
@@ -1326,6 +1362,134 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvertedBackgroundLightensText)
     model::ComplexColor aRawColor;
     pDoc->GetPattern(0, 0, 0)->fillColor(aRawColor, ScAutoFontColorMode::Raw);
     CPPUNIT_ASSERT_EQUAL(COL_BLACK, aRawColor.getFinalColor());
+}
+
+// A cell with no background of its own is edited on the document background of the view that does
+// the editing, so the background another view chose after it does not decide what an automatic
+// text color has to read on
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellEditBackgroundFollowsEditingView)
+{
+    svtools::EditableColorConfig aColorConfig;
+    aColorConfig.AddScheme(u"Dark"_ustr);
+    aColorConfig.AddScheme(u"Light"_ustr);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTestViewCallback aView1;
+    const int nFirstViewId = KitHelper::getCurrentView();
+
+    ScDocument* pDoc = pModelObj->GetDocument();
+    pDoc->SetString(ScAddress(0, 0, 0), u"Lorem ipsum"_ustr);
+
+    // The color configuration belongs to the process and every test in this file shares it, so put
+    // the document background back on the way out, whatever the assertions below do.
+    const Color aDocColorBefore = aColorConfig.GetColorValue(svtools::DOCCOLOR).nColor;
+    comphelper::ScopeGuard aRestoreDocColor(
+        [aDocColorBefore]
+        {
+            svtools::EditableColorConfig aRestore;
+            svtools::ColorConfigValue aValue;
+            aValue.nColor = aDocColorBefore;
+            aRestore.SetColorValue(svtools::DOCCOLOR, aValue);
+        });
+
+    // A second view inverts its document background, which leaves the dark color in the color
+    // configuration of the process as well.
+    KitHelper::createView();
+    ScTestViewCallback aView2;
+    dispatchCommand(mxComponent, u".uno:InvertBackground"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "NewTheme", cpo::uno::Any(u"Dark"_ustr) } }));
+    Scheduler::ProcessEventsToIdle();
+
+    // The first view keeps the light background it opened with.
+    KitHelper::setView(nFirstViewId);
+    ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    CPPUNIT_ASSERT(!pViewShell->GetViewRenderingData().GetDocColor().IsDark());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+
+    ScViewData& rViewData = pViewShell->GetViewData();
+    EditView* pEditView = rViewData.GetEditView(rViewData.GetActivePart());
+    CPPUNIT_ASSERT(pEditView);
+
+    // Without the fix both of these were read from the color configuration, which the second view
+    // had turned dark, so this view edited on a dark background and its automatic text was white.
+    CPPUNIT_ASSERT(!pEditView->GetBackgroundColor().IsDark());
+    CPPUNIT_ASSERT(!pEditView->getEditEngine().GetBackgroundColor().IsDark());
+}
+
+// A cell of a table is edited with the font colour and the fill that its table style gives it,
+// so the cell keeps its look while it is edited
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testTableStyleCellEditFontAndFill)
+{
+    // Table1 is A1:E7 in TableStyleLight4 with banded rows, and Text 1 of the theme is red-brown,
+    // so is the font of Normal. H10 is outside the table, with Normal like A2.
+    loadFromURL(m_directories.getURLFromSrc(u"/sc/qa/unit/data/xlsx/",
+                                            u"tablestyle-cellstyle-excluded-font.xlsx"));
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering({});
+    ScDocument* pDoc = pModelObj->GetDocument();
+    ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+
+    // A2 is in the first data row, which has the band fill
+    const SvxBrushItem* pBandFill = pDoc->GetTableFillItem(0, 1, 0);
+    CPPUNIT_ASSERT(pBandFill);
+    const Color aBandColor = pBandFill->GetColor();
+    const SfxItemSet* pTableFont = pDoc->GetTableFormatSet(0, 1, 0);
+    CPPUNIT_ASSERT(pTableFont);
+    const Color aTableTextColor = pTableFont->Get(ATTR_FONT_COLOR).GetValue();
+    const Color aNormalColor(0x912D0A);
+    CPPUNIT_ASSERT(aTableTextColor != aNormalColor);
+
+    auto editCell = [pModelObj, pViewShell](SCCOL nCol, SCROW nRow) {
+        pViewShell->SetCursor(nCol, nRow);
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+        Scheduler::ProcessEventsToIdle();
+        ScViewData& rViewData = pViewShell->GetViewData();
+        EditView* pEditView = rViewData.GetEditView(rViewData.GetActivePart());
+        CPPUNIT_ASSERT(pEditView);
+        return pEditView;
+    };
+    auto getTextColor = [](EditView* pEditView) {
+        const SfxItemSet aAttribs = pEditView->getEditEngine().GetAttribs(ESelection::All());
+        return aAttribs.Get(EE_CHAR_COLOR).GetValue();
+    };
+
+    // Without the fix in place, A2 was edited in the red-brown of Normal, on white
+    EditView* pEditView = editCell(0, 1);
+    CPPUNIT_ASSERT_EQUAL(aTableTextColor, getTextColor(pEditView));
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->GetBackgroundColor());
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->getEditEngine().GetBackgroundColor());
+
+    // Painting a tile sets the background of the edit view again
+    getTile(pModelObj, 0, 0, 3840, 3840);
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->GetBackgroundColor());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+    Scheduler::ProcessEventsToIdle();
+
+    // E2 has the Zeit cell style, which defines a font with an automatic colour but does not apply
+    // it, so E2 is edited in the red-brown of Normal like it is painted, on the same band fill
+    pEditView = editCell(4, 1);
+    CPPUNIT_ASSERT_EQUAL(aNormalColor, getTextColor(pEditView));
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->GetBackgroundColor());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+    Scheduler::ProcessEventsToIdle();
+
+    // H10 has the same pattern as A2, but no table style, so nothing of the table may stay from
+    // the previous edits
+    pEditView = editCell(7, 9);
+    CPPUNIT_ASSERT_EQUAL(aNormalColor, getTextColor(pEditView));
+    CPPUNIT_ASSERT(pEditView->GetBackgroundColor() != aBandColor);
 }
 
 /*
@@ -1489,6 +1653,128 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testExtendEditInvalidateRectForText)
 
     // Text that fits inside the cell: the rectangle is left unchanged.
     CPPUNIT_ASSERT_EQUAL(aCell, ScGridWindow::ExtendEditInvalidateRectForText(aCell, 50));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testForeignEditPaintKeepsEditArea)
+{
+    // The cell range an in-place edit covers is measured against the editing view's own output
+    // area, so a second view painting that same edit into its tiles leaves the range as it is.
+    // The paint hands the editing view an area rounded to the painting view's pixels, and a
+    // single line of text in a default row already sits within about 80 units (1/100 mm) of the
+    // height at which the edit takes in the row below. Before the fix one coarse pixel of
+    // rounding was enough to take that row in, and the painting view then drew the opaque edit
+    // rectangle over the cell below the edited one.
+    ScopedVclPtrInstance<VirtualDevice> xDevice(DeviceFormat::WITHOUT_ALPHA);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+
+    ScTabViewShell* pView1 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView1);
+
+    // A 256 px tile holds 3840 twips at zoom 1.0, so 3072 twips per tile is zoom 1.25. The paint
+    // picks the view whose zoom matches the tile, and every zoom here divides exactly in both
+    // places, so each paint below belongs to the view it is meant for.
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 15360, 7680));
+    pModelObj->setClientZoom(256, 256, 3072, 3072);
+    pModelObj->paintTile(*xDevice, 256, 256, 0, 0, 3072, 3072);
+    Scheduler::ProcessEventsToIdle();
+
+    // a short text in a plain cell: the edit covers that one cell
+    typeCharsInCell("text", 0, 2, pView1, pModelObj, /*bInEdit*/ false, /*bCommit*/ false);
+    Scheduler::ProcessEventsToIdle();
+
+    ScViewData& rViewData1 = pView1->GetViewData();
+    CPPUNIT_ASSERT(hasEditView(rViewData1));
+    const SCROW nEditEndRow = rViewData1.GetEditEndRow();
+    const SCCOL nEditEndCol = rViewData1.GetEditEndCol();
+    const SCCOL nEditStartCol = rViewData1.GetEditStartCol();
+    CPPUNIT_ASSERT_EQUAL(rViewData1.GetEditStartRow(), nEditEndRow);
+
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    // 15360 twips per 256 px tile is zoom 0.25 and 7680 is zoom 0.5, where one pixel is worth
+    // over 100 and about 53 units. The rounding direction of the area the paint hands over
+    // follows the pixel grid, so the edit is painted at both.
+    const int aCoarseTiles[] = { 15360, 7680 };
+    for (const int nTileTwips : aCoarseTiles)
+    {
+        pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, nTileTwips, nTileTwips));
+        pModelObj->setClientZoom(256, 256, nTileTwips, nTileTwips);
+        pModelObj->paintTile(*xDevice, 256, 256, 0, 0, nTileTwips, nTileTwips);
+
+        // The range is read straight after the paint, before a pending event can restart the
+        // edit and measure the range again against view 1's own output area.
+        CPPUNIT_ASSERT_MESSAGE("view 1 is still editing the cell after the foreign paint",
+                               hasEditView(rViewData1));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("the painting view extended the edit over further rows",
+                                     nEditEndRow, rViewData1.GetEditEndRow());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("the painting view extended the edit over further columns",
+                                     nEditEndCol, rViewData1.GetEditEndCol());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("the painting view moved the edit's first column",
+                                     nEditStartCol, rViewData1.GetEditStartCol());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testForeignEditInvalidatesEveryEditedRow)
+{
+    // A view that only watches another view's edit sees it through its tiles, so it has to be
+    // told to repaint every row the text of that edit reaches. Before the fix only the row of
+    // the edited cell was invalidated, and once the text grew past the tile holding that row the
+    // watching view kept showing the cells below as they were before the edit.
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+
+    // the watching view, which does nothing but receive the invalidations
+    ScTestViewCallback aWatchingView;
+
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    Scheduler::ProcessEventsToIdle();
+    auto* pEditingViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pEditingViewShell);
+
+    // an area tall enough for the edit to grow over several rows
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 15360, 7680));
+    Scheduler::ProcessEventsToIdle();
+
+    // Ctrl+Enter breaks the line inside the cell, so the text takes in the rows below it.
+    typeCharsInCell("a", 0, 0, pEditingViewShell, pModelObj, /*bInEdit*/ false, /*bCommit*/ false);
+    for (int i = 0; i < 4; ++i)
+    {
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN | KEY_MOD1);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN | KEY_MOD1);
+        Scheduler::ProcessEventsToIdle();
+        typeCharsInCell("a", 0, 0, pEditingViewShell, pModelObj, /*bInEdit*/ true,
+                        /*bCommit*/ false);
+    }
+
+    ScViewData& rEditingViewData = pEditingViewShell->GetViewData();
+    CPPUNIT_ASSERT(hasEditView(rEditingViewData));
+    const SCROW nFirstRow = rEditingViewData.GetEditStartRow();
+    const SCROW nLastRow = rEditingViewData.GetEditEndRow();
+    CPPUNIT_ASSERT_MESSAGE("the broken lines did not grow the edit past its own row",
+                           nLastRow > nFirstRow + 1);
+
+    // One more character: what the watching view is told to repaint has to hold the whole edit.
+    aWatchingView.m_aInvalidations.clear();
+    typeCharsInCell("a", 0, 0, pEditingViewShell, pModelObj, /*bInEdit*/ true, /*bCommit*/ false);
+    CPPUNIT_ASSERT_MESSAGE("the watching view was told nothing about the edit",
+                           !aWatchingView.m_aInvalidations.empty());
+
+    // The last row of the edit begins this far below the top of the sheet, in twips.
+    const tools::Long nLastRowTop
+        = pDoc->GetRowHeight(0, nLastRow - 1, rEditingViewData.CurrentTabForData());
+    tools::Long nInvalidatedBottom = 0;
+    for (const tools::Rectangle& rInvalidation : aWatchingView.m_aInvalidations)
+    {
+        if (rInvalidation.Bottom() > nInvalidatedBottom)
+            nInvalidatedBottom = rInvalidation.Bottom();
+    }
+    CPPUNIT_ASSERT_MESSAGE("the rows the edit grew over were left out of the invalidation",
+                           nInvalidatedBottom >= nLastRowTop);
 }
 
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testOpenURL)
@@ -1739,15 +2025,12 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellInvalidationDocWithExistingZo
     assertXPath(pSheet1Xml, "//x:sheetViews/x:sheetView", "zoomScale", u"150");
 }
 
-CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInputHandlerSyncedZoom)
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellEditLayoutSettingsSameForEveryView)
 {
     ScModelObj* pModelObj = createDoc("cell-edit-300zoom-settings.ods");
 
     // Set View #1 to initial 150%
     pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 17933, 4853));
-    // Before the fix, this zoom would leave the EditEngine reference device
-    // at the zoom level stored in the document, so normal rendering and
-    // editing rendering happened with different MapModes
     pModelObj->setClientZoom(256, 256, 1333, 1333);
 
     ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
@@ -1768,13 +2051,13 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInputHandlerSyncedZoom)
     EditView* pEditView1 = pViewData1->GetEditView(SC_SPLIT_BOTTOMLEFT);
     CPPUNIT_ASSERT(pEditView1);
     EditEngine& rEditEngine1 = pEditView1->getEditEngine();
-    // These must match, if they don't then text will have a different width in edit and view modes
-    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("EditEngine Ref Dev Zoom and ViewData Zoom should match",
-                                         pViewData1->GetZoomX(),
-                                         rEditEngine1.GetRefMapMode().GetScaleX(), 0.000001);
-    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("EditEngine Ref Dev Zoom and ViewData Zoom should match",
-                                         pViewData1->GetZoomY(),
-                                         rEditEngine1.GetRefMapMode().GetScaleY(), 0.000001);
+    // Every view shares the edit engine of the cell that is being edited, so it lays the text
+    // out at a fixed 1:1 reference scale that no single view's zoom moves. Each view scales
+    // that laid out text to its own zoom while it paints.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("The cell edit engine keeps a fixed reference scale",
+                                         1.0, rEditEngine1.GetRefMapMode().GetScaleX(), 0.000001);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("The cell edit engine keeps a fixed reference scale",
+                                         1.0, rEditEngine1.GetRefMapMode().GetScaleY(), 0.000001);
 
     // Create a View #2
     KitHelper::createView();
@@ -1807,6 +2090,77 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInputHandlerSyncedZoom)
     // dancing for the second user as they toggle in and out of edit mode, but
     // each user should have the same settings.
     CPPUNIT_ASSERT_EQUAL(rEditEngine1.GetControlWord(), rEditEngine2.GetControlWord());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellEditSelectionSameAtEveryZoom)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    constexpr SCCOL nCol = 0;
+    constexpr SCROW nRow = 0;
+    constexpr SCTAB nTab = 0;
+
+    // The further a selection reaches into the text, the more the width of one character after
+    // another adds up, so a long text tells two layouts apart where a short one would not.
+    pDoc->SetString(nCol, nRow, nTab,
+                    u"asdasd asdaf asdasd asdaf asdasd asdaf asdasd asdaf"_ustr);
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScTestViewCallback aView;
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 17933, 4853));
+
+    // The rectangles that highlight the whole text of the cell while it is edited at the given
+    // zoom, each of them as "left, top, width, height" in print twips.
+    auto aSelectionAtZoom = [pModelObj, pView, &aView](int nTileTwips) -> OUString
+    {
+        pModelObj->setClientZoom(256, 256, nTileTwips, nTileTwips);
+        pView->SetCursor(nCol, nRow);
+        Scheduler::ProcessEventsToIdle();
+
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+        Scheduler::ProcessEventsToIdle();
+
+        aView.m_aTextSelectionResult.clear();
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_MOD1 | awt::Key::A);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_MOD1 | awt::Key::A);
+        Scheduler::ProcessEventsToIdle();
+
+        CPPUNIT_ASSERT(!aView.m_aTextSelectionResult.empty());
+        OUString aSelection;
+        for (size_t nRect = 0; nRect < aView.m_aTextSelectionResult.m_aRelRects.size(); ++nRect)
+        {
+            if (nRect > 0)
+                aSelection += u"; "_ustr;
+            const tools::Rectangle aBounds = aView.m_aTextSelectionResult.getBounds(nRect);
+            aSelection += OUString::number(aBounds.Left()) + ", " + OUString::number(aBounds.Top())
+                          + ", " + OUString::number(aBounds.GetWidth()) + ", "
+                          + OUString::number(aBounds.GetHeight());
+        }
+
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+        Scheduler::ProcessEventsToIdle();
+
+        return aSelection;
+    };
+
+    const OUString aSelectionAtSmallZoom = aSelectionAtZoom(3185);
+    const OUString aSelectionAtLargeZoom = aSelectionAtZoom(741);
+
+    // The rectangles of a selection inside a cell that is being edited are worked out once and
+    // sent to every view, so they have to describe the same place in the document whatever the
+    // zoom of the view that edits. Without the fix the text was laid out at that view's zoom,
+    // the rectangles came out at other widths, and a view at another zoom drew the highlight
+    // over the wrong characters.
+    CPPUNIT_ASSERT_EQUAL(aSelectionAtSmallZoom, aSelectionAtLargeZoom);
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
 }
 
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testStatusBarLocale)
@@ -2164,6 +2518,49 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testFreezeRowOrColumn)
     // - Expected: 8
     // - Actual  : 1
     CPPUNIT_ASSERT_EQUAL(std::string("8"), index);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testFreezeStateInReadOnlyView)
+{
+    // The first row and the first column of this sheet are frozen.
+    createDoc("frozen-panes.ods");
+    SfxViewShell* pView = SfxViewShell::Current();
+    SfxBindings& rBindings = pView->GetViewFrame().GetBindings();
+    KitHelper::setViewReadOnly(KitHelper::getCurrentView(), true);
+    Scheduler::ProcessEventsToIdle();
+
+    // A read-only view has to be told where the sheet is frozen. Without the
+    // accompanying fix the state arrived empty and the client showed the sheet
+    // unfrozen. The freeze index is in X for both slots. Y holds the sheet
+    // number.
+    std::unique_ptr<SfxPoolItem> pColumn;
+    CPPUNIT_ASSERT(SfxItemState::DISABLED
+                   != rBindings.QueryState(sal_uInt16(SID_WINDOW_FIX_COL), pColumn));
+    auto pColumnPoint = dynamic_cast<SfxPointItem*>(pColumn.get());
+    CPPUNIT_ASSERT(pColumnPoint);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1), pColumnPoint->GetValue().X());
+
+    std::unique_ptr<SfxPoolItem> pRow;
+    CPPUNIT_ASSERT(SfxItemState::DISABLED
+                   != rBindings.QueryState(sal_uInt16(SID_WINDOW_FIX_ROW), pRow));
+    auto pRowPoint = dynamic_cast<SfxPointItem*>(pRow.get());
+    CPPUNIT_ASSERT(pRowPoint);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1), pRowPoint->GetValue().X());
+
+    // The freeze is shared by all the views of a sheet, so a read-only view
+    // must not be able to move it.
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = {
+        comphelper::makePropertyValue(u"Index"_ustr, cpo::uno::Any(static_cast<sal_Int32>(4))),
+    };
+    comphelper::dispatchCommand(u".uno:FreezePanesColumn"_ustr, aPropertyValues);
+    Scheduler::ProcessEventsToIdle();
+
+    // The sheet is still frozen at the first column.
+    pColumn.reset();
+    rBindings.QueryState(sal_uInt16(SID_WINDOW_FIX_COL), pColumn);
+    pColumnPoint = dynamic_cast<SfxPointItem*>(pColumn.get());
+    CPPUNIT_ASSERT(pColumnPoint);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1), pColumnPoint->GetValue().X());
 }
 
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCursorVisibilityAfterPaste)
@@ -2679,6 +3076,118 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testChartSelectionCoords)
                            aChartAreaPtwips.Contains(aActualChartWall));
 }
 
+namespace
+{
+// The top left corner of a cell in display twips, which is where the grid draws the cell at the
+// current zoom.
+Point lcl_getCellTileTwipsPos(const ScViewData& rViewData, SCCOL nCol, SCROW nRow)
+{
+    const Point aPixelPos = rViewData.GetScrPos(nCol, nRow, rViewData.GetActivePart(), true);
+    return Point(aPixelPos.X() / rViewData.GetPPTX(), aPixelPos.Y() / rViewData.GetPPTY());
+}
+}
+
+// A chart in edit mode stays on its anchor cell when the zoom changes while it is being edited.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testChartEditModeFollowsZoom)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("chartsel.ods");
+    auto* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const ScViewData& rViewData = pTabViewShell->GetViewData();
+
+    SdrPage* pPage = pDoc->GetDrawLayer()->GetPage(0);
+    auto* pChart = dynamic_cast<SdrOle2Obj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pChart);
+    constexpr SCCOL nAnchorCol = 1;
+    constexpr SCROW nAnchorRow = 500;
+    const Point aAnchorPrintTwips = rViewData.GetPrintTwipsPos(nAnchorCol, nAnchorRow);
+    tools::Rectangle aLogicRect = pChart->GetLogicRect();
+    aLogicRect.SetPos(o3tl::convert(aAnchorPrintTwips, o3tl::Length::twip, o3tl::Length::mm100));
+    pChart->SetLogicRect(aLogicRect);
+    ScDrawLayer::SetCellAnchoredFromPosition(*pChart, *pDoc, 0, false);
+
+    // 256 pixel tiles cover 3840 twips at 100% zoom.
+    pModelObj->setClientZoom(256, 256, 3840, 3840);
+    pTabViewShell->ActivateObject(pChart, embed::EmbedVerbs::MS_OLEVERB_PRIMARY);
+    Scheduler::ProcessEventsToIdle();
+    SfxInPlaceClient* pClient = pTabViewShell->GetIPClient();
+    CPPUNIT_ASSERT(pClient);
+    CPPUNIT_ASSERT(pClient->IsObjectInPlaceActive());
+
+    // The tiles paint the chart at this bounding box, in tile twips.
+    KitChartHelper aChartHelper(pTabViewShell);
+    Point aChartPos = aChartHelper.GetChartBoundingBox().TopLeft();
+    Point aAnchorPos = lcl_getCellTileTwipsPos(rViewData, nAnchorCol, nAnchorRow);
+    constexpr tools::Long nTolerance = 15;
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.X() - aAnchorPos.X()));
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.Y() - aAnchorPos.Y()));
+
+    // Zoom to 120% while the chart is still in edit mode.
+    pModelObj->setClientZoom(256, 256, 3200, 3200);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(pClient->IsObjectInPlaceActive());
+
+    aChartPos = aChartHelper.GetChartBoundingBox().TopLeft();
+    aAnchorPos = lcl_getCellTileTwipsPos(rViewData, nAnchorCol, nAnchorRow);
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.X() - aAnchorPos.X()));
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.Y() - aAnchorPos.Y()));
+}
+
+// A click on a chart far down the sheet selects it, also after the zoom changed.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testChartClickSelectsAfterZoom)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("chartsel.ods");
+    auto* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const ScViewData& rViewData = pTabViewShell->GetViewData();
+    ScDrawView* pDrawView = pTabViewShell->GetScDrawView();
+    CPPUNIT_ASSERT(pDrawView);
+
+    SdrPage* pPage = pDoc->GetDrawLayer()->GetPage(0);
+    auto* pChart = dynamic_cast<SdrOle2Obj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pChart);
+    constexpr SCCOL nAnchorCol = 1;
+    constexpr SCROW nAnchorRow = 500;
+    const Point aAnchorPrintTwips = rViewData.GetPrintTwipsPos(nAnchorCol, nAnchorRow);
+    tools::Rectangle aLogicRect = pChart->GetLogicRect();
+    aLogicRect.SetPos(o3tl::convert(aAnchorPrintTwips, o3tl::Length::twip, o3tl::Length::mm100));
+    pChart->SetLogicRect(aLogicRect);
+    ScDrawLayer::SetCellAnchoredFromPosition(*pChart, *pDoc, 0, false);
+    const Size aChartSizeTwips
+        = o3tl::convert(aLogicRect.GetSize(), o3tl::Length::mm100, o3tl::Length::twip);
+
+    // Clicks in the middle of the chart, in tile twips of the current zoom.
+    auto clickChart = [&]() {
+        const Point aAnchorPos = lcl_getCellTileTwipsPos(rViewData, nAnchorCol, nAnchorRow);
+        const Point aCenter(aAnchorPos.X() + aChartSizeTwips.Width() / 2,
+                            aAnchorPos.Y() + aChartSizeTwips.Height() / 2);
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, aCenter.X(), aCenter.Y(), 1, 1,
+                                  0);
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, aCenter.X(), aCenter.Y(), 1, 1, 0);
+        Scheduler::ProcessEventsToIdle();
+    };
+    // Clicks on the top left cell, which drops any drawing selection.
+    auto clickAwayFromChart = [&]() {
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, 100, 100, 1, 1, 0);
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, 100, 100, 1, 1, 0);
+        Scheduler::ProcessEventsToIdle();
+    };
+
+    pModelObj->setClientZoom(256, 256, 3840, 3840);
+    clickChart();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDrawView->GetMarkedObjectList().GetMarkCount());
+    clickAwayFromChart();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pDrawView->GetMarkedObjectList().GetMarkCount());
+
+    pModelObj->setClientZoom(256, 256, 3200, 3200);
+    clickChart();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDrawView->GetMarkedObjectList().GetMarkCount());
+}
+
 // Filling a cell that a neighbour's text overflows across must invalidate the
 // columns that overflow covered.
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvalidateForOverflowingText)
@@ -2716,6 +3225,180 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvalidateForOverflowingText)
 
     // But not the whole row to the sheet edge, which the width hint avoids.
     CPPUNIT_ASSERT_LESS(tools::Long(32212230), aInvalidation.Right());
+}
+
+#ifndef _WIN32 // osl_setTimezone has no effect on Windows
+namespace
+{
+/// The comment timezone tests put the server on UTC and the author in Kolkata, which is five and a
+/// half hours ahead of it the whole year round. Restores what it found on delete.
+class KitTimezoneSetup
+{
+    std::pair<bool, OUString> m_aOldDefaultTimezone;
+
+public:
+    KitTimezoneSetup(int nAuthorView)
+        : m_aOldDefaultTimezone(KitHelper::getDefaultTimezone())
+    {
+        KitHelper::setDefaultTimezone(true, u"UTC"_ustr);
+        comphelper::COKit::setTimezone(true, u"UTC"_ustr);
+        KitHelper::setViewTimezone(nAuthorView, true, u"Asia/Kolkata"_ustr);
+    }
+
+    ~KitTimezoneSetup()
+    {
+        KitHelper::setDefaultTimezone(m_aOldDefaultTimezone.first, m_aOldDefaultTimezone.second);
+        comphelper::COKit::setTimezone(m_aOldDefaultTimezone.first, m_aOldDefaultTimezone.second);
+    }
+
+    static tools::Time GetAuthorOffset() { return tools::Time(5, 30); }
+};
+
+/// Whether the given ISO 8601 string falls in the window the two server-clock readings bound, once
+/// the author's offset is added to both.
+bool isAuthorLocalTime(std::u16string_view rDateTime, const DateTime& rBefore, const DateTime& rAfter)
+{
+    css::util::DateTime aParsed;
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(rDateTime, aParsed));
+    const tools::Time aOffset = KitTimezoneSetup::GetAuthorOffset();
+    return DateTime(aParsed).IsBetween(rBefore + aOffset, rAfter + aOffset);
+}
+
+/// Whether the given ISO 8601 string falls in the window the two server-clock readings bound. The
+/// server keeps UTC in these tests, so this is the test for a moment rather than a wall clock.
+bool isUtcTime(std::u16string_view rDateTime, const DateTime& rBefore, const DateTime& rAfter)
+{
+    css::util::DateTime aParsed;
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(rDateTime, aParsed));
+    return DateTime(aParsed).IsBetween(rBefore, rAfter);
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testNoteDateTimeUsesViewTimezone)
+{
+    // A new cell note is stamped with the clock of the timezone its author reads.
+    createDoc("small.ods");
+    ScTestViewCallback aView;
+    ScTabViewShell* pTabViewShell = aView.getTabViewShell();
+    CPPUNIT_ASSERT(pTabViewShell);
+    pTabViewShell->SetCursor(2, 3);
+
+    KitTimezoneSetup aTimezoneSetup(aView.getViewID());
+
+    const DateTime aBefore(DateTime::SYSTEM);
+    dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr,
+                    comphelper::InitPropertySequence({
+                        { "Text", cpo::uno::Any(u"a note"_ustr) },
+                        { "Author", cpo::uno::Any(u"Kit Author"_ustr) },
+                    }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    // Without the accompanying fix in place, this test would have failed: the note carried the
+    // server's own reading of the clock, five and a half hours behind the author's.
+    const OUString aDateTime = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTime"));
+    CPPUNIT_ASSERT(isAuthorLocalTime(aDateTime, aBefore, aAfter));
+
+    // The moment goes out beside it, marked as UTC, so a client can show the note on the
+    // reader's own clock rather than the author's.
+    const OUString aDateTimeUtc = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTimeUtc"));
+    CPPUNIT_ASSERT(aDateTimeUtc.endsWith("Z"));
+    // It carries whole seconds, so the lower bound drops its fraction.
+    DateTime aFlooredBefore = aBefore;
+    aFlooredBefore.SetNanoSec(0);
+    CPPUNIT_ASSERT(isUtcTime(aDateTimeUtc, aFlooredBefore, aAfter));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testThreadedCommentDateTimeUsesViewTimezone)
+{
+    // A threaded comment carries two stamps, the note's own and the one on its root entry. Both
+    // read the clock of the timezone the author is in.
+    ScModelObj* pModelObj = createDoc("small.ods");
+    ScTestViewCallback aView;
+    ScTabViewShell* pTabViewShell = aView.getTabViewShell();
+    CPPUNIT_ASSERT(pTabViewShell);
+    pTabViewShell->SetCursor(2, 3);
+
+    KitTimezoneSetup aTimezoneSetup(aView.getViewID());
+
+    const DateTime aBefore(DateTime::SYSTEM);
+    dispatchCommand(mxComponent, u".uno:InsertThreadedComment"_ustr,
+                    comphelper::InitPropertySequence({
+                        { "Text", cpo::uno::Any(u"a comment"_ustr) },
+                        { "Author", cpo::uno::Any(u"Kit Author"_ustr) },
+                    }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    const OUString aDateTime = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTime"));
+    CPPUNIT_ASSERT(isAuthorLocalTime(aDateTime, aBefore, aAfter));
+
+    // The threaded entry holds the moment instead, which is what the slot it round-trips through
+    // asks for. Without the accompanying fix in place, this test would have failed: the entry
+    // carried the author's wall clock, five and a half hours ahead of the moment.
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const ScPostIt* pNote = pDoc->GetNote(ScAddress(2, 3, 0));
+    CPPUNIT_ASSERT(pNote);
+    const ScThreadedCommentData* pThreaded = pNote->GetThreadedCommentData();
+    CPPUNIT_ASSERT(pThreaded);
+    CPPUNIT_ASSERT(isUtcTime(pThreaded->maRoot.maDateTime, aBefore, aAfter));
+}
+#endif
+
+namespace
+{
+// The state a check box control carries, 0 when it is cleared and 1 when it is ticked.
+sal_Int16 lcl_getCheckBoxState(const SdrPage* pPage, size_t nIndex)
+{
+    auto* pUnoObject = dynamic_cast<SdrUnoObj*>(pPage->GetObj(nIndex));
+    CPPUNIT_ASSERT(pUnoObject);
+    cpo::uno::Reference<beans::XPropertySet> xModel(pUnoObject->GetUnoControlModel(),
+                                                    cpo::uno::UNO_QUERY_THROW);
+    sal_Int16 nState = -1;
+    xModel->getPropertyValue(u"State"_ustr) >>= nState;
+    return nState;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testClickOnStackedCheckBoxesTicksTheTopOne)
+{
+    // Two check boxes sit on exactly the same spot, the second one on top of the first.
+    ScModelObj* pModelObj = createDoc("stacked-checkboxes.fods");
+    ScTestViewCallback aView;
+    ScTabViewShell* pTabViewShell = aView.getTabViewShell();
+    CPPUNIT_ASSERT(pTabViewShell);
+
+    ScDrawLayer* pDrawLayer = pModelObj->GetDocument()->GetDrawLayer();
+    CPPUNIT_ASSERT(pDrawLayer);
+    const SdrPage* pPage = pDrawLayer->GetPage(0);
+    CPPUNIT_ASSERT(pPage);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pPage->GetObjCount());
+
+    // A client paints before it clicks, which is what brings the live controls into being.
+    getTile(pModelObj, 0, 0, 3840, 3840);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), lcl_getCheckBoxState(pPage, 0));
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), lcl_getCheckBoxState(pPage, 1));
+
+    const tools::Rectangle aControlRect = o3tl::convert(
+        pPage->GetObj(1)->GetLogicRect(), o3tl::Length::mm100, o3tl::Length::twip);
+    // Only the check box glyph answers a click. Each control in the document is smaller than
+    // the glyph, so the glyph covers the whole of it and any point inside will do.
+    const Point aClickPoint = aControlRect.Center();
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, aClickPoint.X(), aClickPoint.Y(),
+                              /*count=*/1, /*buttons=*/MOUSE_LEFT, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, aClickPoint.X(), aClickPoint.Y(),
+                              /*count=*/1, /*buttons=*/MOUSE_LEFT, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the accompanying fix in place, this test would have failed: the click went to the
+    // check box underneath, so the one the user sees stayed cleared.
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), lcl_getCheckBoxState(pPage, 0));
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(1), lcl_getCheckBoxState(pPage, 1));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

@@ -31,37 +31,19 @@
 
 #include <unordered_map>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 
 SvtCompatibility::SvtCompatibility(const OUString& itemName)
     : root(officecfg::Office::Compatibility::AllFileFormats::get())
-    , item(root->getByName(itemName), css::uno::UNO_QUERY_THROW)
+    , item(root->getByName(itemName), cpo::uno::UNO_QUERY_THROW)
 {
-}
-
-SvtCompatibility::SvtCompatibility(const std::shared_ptr<comphelper::ConfigurationChanges>& batch,
-               const OUString& itemName)
-    : root(officecfg::Office::Compatibility::AllFileFormats::get(batch))
-    , item(root->getByName(itemName), css::uno::UNO_QUERY_THROW)
-{
-}
-
-void SvtCompatibility::set(const OUString& option, bool value)
-{
-    item->setPropertyValue(option, cpo::uno::Any(value));
 }
 
 bool SvtCompatibility::get(const OUString& option) const
 {
     return item->getPropertyValue(option).get<bool>();
-}
-
-bool SvtCompatibility::getPropertyReadOnly(const OUString& option) const
-{
-    auto info = item->getPropertySetInfo();
-    return info->getPropertyByName(option).Attributes & css::beans::PropertyAttribute::READONLY;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

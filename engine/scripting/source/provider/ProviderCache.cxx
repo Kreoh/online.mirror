@@ -27,7 +27,7 @@
 #include "ProviderCache.hxx"
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::script;
 
@@ -44,17 +44,6 @@ ProviderCache::ProviderCache( const Reference< XComponentContext >& xContext, co
     populateCache();
 }
 
-
-ProviderCache::ProviderCache( const Reference< XComponentContext >& xContext, const Sequence< Any >& scriptContext, const Sequence< OUString >& denyList ) : m_sDenyList( denyList ), m_Sctx( scriptContext ), m_xContext( xContext )
-
-{
-    // initialise m_hProviderDetailsCache with details of ScriptProviders
-    // will use createContentEnumeration
-
-    m_xMgr = m_xContext->getServiceManager();
-    ENSURE_OR_THROW( m_xMgr.is(), "ProviderCache::ProviderCache() failed to obtain ServiceManager" );
-    populateCache();
-}
 
 ProviderCache::~ProviderCache()
 {
@@ -151,9 +140,8 @@ ProviderCache::populateCache()
             if ( serviceNames.hasElements() )
             {
                 auto pName = std::find_if(serviceNames.begin(), serviceNames.end(),
-                    [this](const OUString& rName) {
-                        return rName.startsWith("com.sun.star.script.provider.ScriptProviderFor")
-                            && !isInDenyList(rName);
+                    [](const OUString& rName) {
+                        return rName.startsWith("com.sun.star.script.provider.ScriptProviderFor");
                     });
                 if (pName != serviceNames.end())
                 {
@@ -194,11 +182,6 @@ ProviderCache::createProvider( ProviderDetails& details )
     return details.provider;
 }
 
-bool
-ProviderCache::isInDenyList( const OUString& serviceName ) const
-{
-    return comphelper::findValue(m_sDenyList, serviceName) != -1;
-}
 } //end namespace
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

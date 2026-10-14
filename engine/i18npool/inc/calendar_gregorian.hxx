@@ -81,18 +81,12 @@ public:
     virtual cpo::uno::Sequence < css::i18n::CalendarItem > getMonths() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem > getDays() override;
     virtual OUString getDisplayName(sal_Int16 nCalendarDisplayIndex, sal_Int16 nIdx, sal_Int16 nNameType) override;
-
-    // Methods in XExtendedCalendar
     virtual OUString getDisplayString( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode ) override;
-
-    // XCalendar3
     virtual css::i18n::Calendar2 getLoadedCalendar2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getDays2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getMonths2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getGenitiveMonths2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getPartitiveMonths2() override;
-
-    // XCalendar4
     virtual void setLocalDateTime(double TimeInDays) override;
     virtual double getLocalDateTime() override;
 
@@ -111,14 +105,14 @@ protected:
     sal_Int16 fieldValue[FIELD_INDEX_COUNT];
     sal_Int16 fieldSetValue[FIELD_INDEX_COUNT];
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void mapToGregorian();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void mapFromGregorian();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void getValue();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OUString getDisplayStringImpl( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode, bool bEraMode );
 
 private:
@@ -126,12 +120,12 @@ private:
 
     /** Submit fieldSetValue array according to fieldSet.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void submitFields();
     /** Set fields internally.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void setValue();
     /** Obtain combined field values for timezone offset (minutes+secondmillis)
@@ -198,7 +192,7 @@ public:
     // Constructors
     Calendar_buddhist();
 
-    // Methods in XExtendedCalendar
+    // Methods in XCalendar
     virtual OUString getDisplayString( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode ) override;
 };
 

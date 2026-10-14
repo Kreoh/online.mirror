@@ -44,7 +44,7 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::ui::dialogs;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 SalAquaFolderPicker::SalAquaFolderPicker()
 {
@@ -79,7 +79,7 @@ sal_Int16 SalAquaFolderPicker::execute()
         break;
 
     default:
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"The dialog returned with an unknown result!"_ustr, getXWeak());
         break;
     }
@@ -118,7 +118,7 @@ OUString SalAquaFolderPicker::getDirectory()
     SAL_INFO("fpicker.aqua", "# of items: " << nFiles);
 
     if (nFiles < 1) {
-        throw uno::RuntimeException(u"no directory selected"_ustr, getXWeak());
+        throw cpo::uno::RuntimeException(u"no directory selected"_ustr, getXWeak());
     }
 
     OUString aDirectory;
@@ -169,9 +169,9 @@ void SalAquaFolderPicker::disposing( const lang::EventObject& )
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 fpicker_SalAquaFolderPicker_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SalAquaFolderPicker());
 }

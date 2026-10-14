@@ -7,6 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#pragma once
+
+#include <rtl/ustring.hxx>
+
 /// SdrCompatibilityFlags that are implemented in SdrModelImpl
 enum class SdrCompatibilityFlag
 {
@@ -15,7 +19,17 @@ enum class SdrCompatibilityFlag
     ConnectorUseSnapRect, ///< for tdf#149756
     IgnoreBreakAfterMultilineField, ///< for tdf#148966
     UseTrailingEmptyLinesInLayout, ///< for tdf#168010
-    LAST = UseTrailingEmptyLinesInLayout /// add new items above
+    LineSpacingBelowBaselineLegacy, ///< for tdf#163590 true == all the extra height a line gains
+                                    ///< from its line spacing sits below the baseline
+    TextFittingLegacy, ///< for tdf#163590 true == the older shrink-on-overflow fitting
+    LAST = TextFittingLegacy /// add new items above
+};
+
+/// The name a SdrCompatibilityFlag is stored under in the settings of a document
+struct SdrCompatibilityFlagName
+{
+    OUString maName;
+    SdrCompatibilityFlag meFlag;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

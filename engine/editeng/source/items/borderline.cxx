@@ -67,7 +67,12 @@ namespace editeng
 
 bool SvxBorderLine::setComplexColorFromAny(cpo::uno::Any const& rValue)
 {
-    css::uno::Reference<css::util::XComplexColor> xComplexColor;
+    // A border without a theme color reads as an empty value, and setting that back means
+    // there is no theme color to take.
+    if (!rValue.hasValue())
+        return true;
+
+    cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
     if (!(rValue >>= xComplexColor))
         return false;
 

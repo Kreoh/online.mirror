@@ -399,6 +399,7 @@ public:
 
     void        SetAnonymousDBData(std::unique_ptr<ScDBData> pDBData);
     ScDBData*   GetAnonymousDBData() { return pDBDataNoName.get();}
+    const ScDBData* GetAnonymousDBData() const { return pDBDataNoName.get(); }
 
     const OUString& GetCodeName() const { return aCodeName; }
     void        SetCodeName( const OUString& rNewName ) { aCodeName = rNewName; }
@@ -694,8 +695,6 @@ public:
                 position on each iteration and upon return points to the last
                 position broadcasted. */
     bool BroadcastBroadcasters( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, SfxHintId nHint );
-
-    bool CompileErrorCells( sc::CompileFormulaContext& rCxt, FormulaError nErrCode );
 
     void UpdateReference(
         sc::RefUpdateContext& rCxt, ScDocument* pUndoDoc = nullptr,
@@ -1066,6 +1065,9 @@ public:
 
     void PreprocessDBDataUpdate(
         sc::EndListeningContext& rEndListenCxt, sc::CompileFormulaContext& rCompileCxt );
+
+    /** Append positions of this sheet's formula cells with a structured reference to database range nIndex. */
+    void CollectTableRefFormulas( sal_uInt16 nIndex, std::vector<ScAddress>& rCells );
 
     ScConditionalFormatList* GetCondFormList();
     const ScConditionalFormatList* GetCondFormList() const;

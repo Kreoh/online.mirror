@@ -85,8 +85,8 @@
 #include <basic/basicmanagerrepository.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::script;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::document;
@@ -131,15 +131,15 @@ class SfxModelListener_Impl : public ::cppu::WeakImplHelper< css::util::XCloseLi
     SfxObjectShell* mpDoc;
 public:
     explicit SfxModelListener_Impl( SfxObjectShell* pDoc ) : mpDoc(pDoc) {};
-    virtual void SAL_CALL queryClosing( const css::lang::EventObject& aEvent, bool bDeliverOwnership ) override ;
-    virtual void SAL_CALL notifyClosing( const css::lang::EventObject& aEvent ) override ;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& aEvent ) override ;
+    virtual void queryClosing( const css::lang::EventObject& aEvent, bool bDeliverOwnership ) override ;
+    virtual void notifyClosing( const css::lang::EventObject& aEvent ) override ;
+    virtual void disposing( const css::lang::EventObject& aEvent ) override ;
 
 };
 
 } // namespace
 
-void SAL_CALL SfxModelListener_Impl::queryClosing( const css::lang::EventObject& , bool bDeliverOwnership)
+void SfxModelListener_Impl::queryClosing( const css::lang::EventObject& , bool bDeliverOwnership)
 {
     if (mpDoc->Get_Impl()->m_nClosingLockLevel)
     {
@@ -149,13 +149,13 @@ void SAL_CALL SfxModelListener_Impl::queryClosing( const css::lang::EventObject&
     }
 }
 
-void SAL_CALL SfxModelListener_Impl::notifyClosing( const css::lang::EventObject& )
+void SfxModelListener_Impl::notifyClosing( const css::lang::EventObject& )
 {
     SolarMutexGuard aSolarGuard;
     mpDoc->Broadcast( SfxHint(SfxHintId::Deinitializing) );
 }
 
-void SAL_CALL SfxModelListener_Impl::disposing( const css::lang::EventObject& _rEvent )
+void SfxModelListener_Impl::disposing( const css::lang::EventObject& _rEvent )
 {
     // am I ThisComponent in AppBasic?
     SolarMutexGuard aSolarGuard;
@@ -210,6 +210,7 @@ SfxObjectShell_Impl::SfxObjectShell_Impl( SfxObjectShell& _rDocShell )
     ,bPreserveVersions( true )
     ,m_bMacroSignBroken( false )
     ,m_bNoBasicCapabilities( false )
+    ,m_bMacroCallsAllowed( false )
     ,m_bDocRecoverySupport( true )
     ,bQueryLoadTemplate( true )
     ,bLoadReadonly( false )
@@ -238,7 +239,6 @@ SfxObjectShell_Impl::SfxObjectShell_Impl( SfxObjectShell& _rDocShell )
     ,m_nModifyPasswordHash( 0 )
     ,m_bModifyPasswordEntered( false )
     ,m_bSavingForSigning( false )
-    ,m_bAllowModifiedBackAfterSigning( false )
 {
     SfxObjectShell* pDoc = &_rDocShell;
     std::vector<SfxObjectShell*> &rArr = SfxGetpApp()->GetObjectShells_Impl();
@@ -258,8 +258,8 @@ SfxObjectShell::SfxObjectShell( const SfxModelFlags i_nCreationFlags )
     , bHasName(false)
     , bIsInGenerateThumbnail (false)
     , mbAvoidRecentDocs(false)
-    , bRememberSignature(false)
     , bPendingLinkUpdateInfobar(false)
+    , mbHasExternalDatabaseForms(false)
 {
     if (i_nCreationFlags & SfxModelFlags::EMBEDDED_OBJECT)
         eCreateMode = SfxObjectCreateMode::EMBEDDED;
@@ -289,8 +289,8 @@ SfxObjectShell::SfxObjectShell(SfxObjectCreateMode eMode)
     , bHasName(false)
     , bIsInGenerateThumbnail(false)
     , mbAvoidRecentDocs(false)
-    , bRememberSignature(false)
     , bPendingLinkUpdateInfobar(false)
+    , mbHasExternalDatabaseForms(false)
 {
 }
 
@@ -772,21 +772,18 @@ Reference< XStorageBasedLibraryContainer > SfxObjectShell::GetDialogContainer()
 Reference< XStorageBasedLibraryContainer > SfxObjectShell::GetBasicContainer()
 {
 #if HAVE_FEATURE_SCRIPTING
-    if (!comphelper::IsFuzzing())
+    try
     {
-        try
-        {
-            if ( !pImpl->m_bNoBasicCapabilities )
-                return lcl_getOrCreateLibraryContainer( true, pImpl->xBasicLibraries, GetModel() );
+        if ( !pImpl->m_bNoBasicCapabilities )
+            return lcl_getOrCreateLibraryContainer( true, pImpl->xBasicLibraries, GetModel() );
 
-            BasicManager* pBasMgr = lcl_getBasicManagerForDocument( *this );
-            if ( pBasMgr )
-                return pBasMgr->GetScriptLibraryContainer();
-        }
-        catch (const css::ucb::ContentCreationException&)
-        {
-            TOOLS_WARN_EXCEPTION("sfx.doc", "");
-        }
+        BasicManager* pBasMgr = lcl_getBasicManagerForDocument( *this );
+        if ( pBasMgr )
+            return pBasMgr->GetScriptLibraryContainer();
+    }
+    catch (const css::ucb::ContentCreationException&)
+    {
+        TOOLS_WARN_EXCEPTION("sfx.doc", "");
     }
     SAL_WARN("sfx.doc", "SfxObjectShell::GetBasicContainer: falling back to the application - is this really expected here?");
 #endif
@@ -876,7 +873,7 @@ cpo::uno::Sequence< OUString > SfxObjectShell::GetEventNames()
 }
 
 
-css::uno::Reference< css::frame::XModel3 > SfxObjectShell::GetModel() const
+cpo::uno::Reference< css::frame::XModel3 > SfxObjectShell::GetModel() const
 {
     return GetBaseModel();
 }
@@ -892,7 +889,7 @@ void SfxObjectShell::SetBaseModel( SfxBaseModel* pModel )
 }
 
 
-css::uno::Reference< css::frame::XModel3 > SfxObjectShell::GetBaseModel() const
+cpo::uno::Reference< css::frame::XModel3 > SfxObjectShell::GetBaseModel() const
 {
     return pImpl->pBaseModel;
 }
@@ -1051,7 +1048,7 @@ SfxObjectShell* SfxObjectShell::CreateObject( const OUString& rServiceName, SfxO
 
 Reference<lang::XComponent> SfxObjectShell::CreateAndLoadComponent( const SfxItemSet& rSet )
 {
-    comphelper::SequenceAsHashMap aProps = TransformItems(SID_OPENDOC, rSet);
+    SfxUnoArguments aProps = TransformItems(SID_OPENDOC, rSet);
     const SfxStringItem* pFileNameItem = rSet.GetItem<SfxStringItem>(SID_FILE_NAME, false);
     const SfxStringItem* pTargetItem = rSet.GetItem<SfxStringItem>(SID_TARGETNAME, false);
     OUString aURL;
@@ -1076,7 +1073,7 @@ Reference<lang::XComponent> SfxObjectShell::CreateAndLoadComponent( const SfxIte
     return xComp;
 }
 
-SfxObjectShell* SfxObjectShell::GetShellFromComponent(const Reference<uno::XInterface>& xComp)
+SfxObjectShell* SfxObjectShell::GetShellFromComponent(const Reference<cpo::uno::XInterface>& xComp)
 {
     try
     {
@@ -1093,13 +1090,13 @@ SfxObjectShell* SfxObjectShell::GetShellFromComponent(const Reference<uno::XInte
     return nullptr;
 }
 
-SfxObjectShell* SfxObjectShell::GetParentShell(const css::uno::Reference<css::uno::XInterface>& xChild)
+SfxObjectShell* SfxObjectShell::GetParentShell(const cpo::uno::Reference<cpo::uno::XInterface>& xChild)
 {
     SfxObjectShell* pResult = nullptr;
 
     try
     {
-        if (css::uno::Reference<css::container::XChild> xChildModel{ xChild, css::uno::UNO_QUERY })
+        if (cpo::uno::Reference<css::container::XChild> xChildModel{ xChild, cpo::uno::UNO_QUERY })
             pResult = GetShellFromComponent(xChildModel->getParent());
     }
     catch (const cpo::uno::Exception&)

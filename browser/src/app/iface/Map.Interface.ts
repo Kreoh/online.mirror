@@ -34,6 +34,7 @@ interface MapInterface extends Evented {
 	_textInput: {
 		debug(value: boolean): void;
 		_isDebugOn: boolean;
+		onVisibleAreaChanged?(): void;
 		update(): void;
 	};
 	addressInputField: AddressInputField;
@@ -77,7 +78,6 @@ interface MapInterface extends Evented {
 			no_auth_header?: string;
 			permission?: 'edit' | 'readonly' | 'view';
 		};
-		renderingOptions: string;
 		tileWidthTwips: number;
 		tileHeightTwips: number;
 		wopiSrc: string;
@@ -100,6 +100,8 @@ interface MapInterface extends Evented {
 		UserCanWrite: boolean;
 		HideChangeTrackingControls: boolean;
 		EnableRemoteLinkPicker: boolean;
+		EnableRemoteSlideImport: boolean;
+		EnableInsertRemoteFile: boolean;
 		HideSaveOption: boolean;
 	};
 
@@ -158,6 +160,7 @@ interface MapInterface extends Evented {
 	menubar: Menubar;
 	userList: UserList;
 	sidebar: Sidebar;
+	notesPanel: NotesPanel;
 	getViewColor(viewId: number): number;
 
 	// TODO fix types:
@@ -177,7 +180,11 @@ interface MapInterface extends Evented {
 	showComments(on?: boolean): void;
 	showResolvedComments(on?: boolean): void;
 	navigator: NavigatorPanel;
+	slideImportPane: SlideImportPane;
+	slideLinks: SlideLinks;
+	slideLinkToolbar: SlideLinkToolbar;
 	paneExpander: PaneExpander;
+	paneSplitter: PaneSplitter;
 	setPart(
 		part: number | string,
 		external?: boolean,
@@ -219,6 +226,8 @@ interface MapInterface extends Evented {
 	zoomIn(delta: number, options?: any, animate?: boolean): MapInterface;
 	zoomOut(delta: number, options?: any, animate?: boolean): MapInterface;
 	cancelSearch(): void;
+	isSearching(): boolean;
+	_onGotFocus(): void;
 	goToPage(page: string | number): void;
 	serverAuditDialog?: ServerAuditDialog;
 	_lockAccessibilityOn: boolean;
@@ -241,6 +250,7 @@ interface MapInterface extends Evented {
 	hideSlide(): void;
 	showSlide(): void;
 	sidebarFromNotebookbar: SidebarFromNotebookbarPanel;
+	cleanupSidebar: CleanupSidebar;
 	mobileTopBar?: MobileTopBar;
 
 	// TODO: window.L.control.lokDialog

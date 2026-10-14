@@ -26,6 +26,7 @@
 #include <svx/svdpage.hxx>
 
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <drawdoc.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <IDocumentMarkAccess.hxx>
@@ -41,7 +42,8 @@
 #include <fmtftntx.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {

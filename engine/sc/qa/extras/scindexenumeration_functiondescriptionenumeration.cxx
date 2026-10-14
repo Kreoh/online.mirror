@@ -13,12 +13,13 @@
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -28,7 +29,7 @@ class ScIndexEnumeration_FunctionDescriptionEnumeration : public UnoApiTest,
 public:
     ScIndexEnumeration_FunctionDescriptionEnumeration();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScIndexEnumeration_FunctionDescriptionEnumeration);
@@ -46,7 +47,7 @@ ScIndexEnumeration_FunctionDescriptionEnumeration::
 {
 }
 
-uno::Reference<uno::XInterface> ScIndexEnumeration_FunctionDescriptionEnumeration::init()
+uno::Reference<cpo::uno::XInterface> ScIndexEnumeration_FunctionDescriptionEnumeration::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_MESSAGE("no calc document", xDoc.is());

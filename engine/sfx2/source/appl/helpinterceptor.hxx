@@ -42,13 +42,13 @@ friend class HelpDispatch_Impl;
 friend class SfxHelpWindow_Impl;
 
     // the component which's dispatches we're intercepting
-    css::uno::Reference< css::frame::XDispatchProviderInterception > m_xIntercepted;
+    cpo::uno::Reference< css::frame::XDispatchProviderInterception > m_xIntercepted;
 
     // chaining
-    css::uno::Reference< css::frame::XDispatchProvider > m_xSlaveDispatcher;
-    css::uno::Reference< css::frame::XDispatchProvider > m_xMasterDispatcher;
+    cpo::uno::Reference< css::frame::XDispatchProvider > m_xSlaveDispatcher;
+    cpo::uno::Reference< css::frame::XDispatchProvider > m_xMasterDispatcher;
 
-    css::uno::Reference< css::frame::XStatusListener > m_xListener;
+    cpo::uno::Reference< css::frame::XStatusListener > m_xListener;
 
     std::vector<OUString>       m_vHistoryUrls;
     VclPtr<SfxHelpWindow_Impl>  m_pWindow;
@@ -61,34 +61,34 @@ public:
     HelpInterceptor_Impl();
     virtual ~HelpInterceptor_Impl() override;
 
-    void                    setInterception( const css::uno::Reference< css::frame::XFrame >& xFrame );
+    void                    setInterception( const cpo::uno::Reference< css::frame::XFrame >& xFrame );
     const OUString&         GetCurrentURL() const { return m_aCurrentURL; }
 
     bool                HasHistoryPred() const;     // is there a predecessor for the current in the history
     bool                HasHistorySucc() const;     // is there a successor for the current in the history
 
     // XDispatchProvider
-    virtual css::uno::Reference< css::frame::XDispatch > SAL_CALL
+    virtual cpo::uno::Reference< css::frame::XDispatch >
                             queryDispatch( const css::util::URL& aURL, const OUString& aTargetFrameName, sal_Int32 nSearchFlags ) override;
-    virtual cpo::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::frame::XDispatch > >
                             queryDispatches( const cpo::uno::Sequence< css::frame::DispatchDescriptor >& aDescripts ) override;
 
     // XDispatchProviderInterceptor
-    virtual css::uno::Reference< css::frame::XDispatchProvider > SAL_CALL
+    virtual cpo::uno::Reference< css::frame::XDispatchProvider >
                             getSlaveDispatchProvider(  ) override;
-    virtual void SAL_CALL   setSlaveDispatchProvider( const css::uno::Reference< css::frame::XDispatchProvider >& xNewSlave ) override;
-    virtual css::uno::Reference< css::frame::XDispatchProvider > SAL_CALL
+    virtual void   setSlaveDispatchProvider( const cpo::uno::Reference< css::frame::XDispatchProvider >& xNewSlave ) override;
+    virtual cpo::uno::Reference< css::frame::XDispatchProvider >
                             getMasterDispatchProvider(  ) override;
-    virtual void SAL_CALL   setMasterDispatchProvider( const css::uno::Reference< css::frame::XDispatchProvider >& xNewMaster ) override;
+    virtual void   setMasterDispatchProvider( const cpo::uno::Reference< css::frame::XDispatchProvider >& xNewMaster ) override;
 
     // XInterceptorInfo
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
                             getInterceptedURLs(  ) override;
 
     // XDispatch
-    virtual void SAL_CALL   dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
-    virtual void SAL_CALL   addStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
-    virtual void SAL_CALL   removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
+    virtual void   dispatch( const css::util::URL& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
+    virtual void   addStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
+    virtual void   removeStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xControl, const css::util::URL& aURL ) override;
 
     // extras
     void                    InitWaiter( SfxHelpWindow_Impl* pWindow )
@@ -108,8 +108,8 @@ private:
 public:
     explicit HelpListener_Impl( HelpInterceptor_Impl* pInter );
 
-    virtual void SAL_CALL   statusChanged( const css::frame::FeatureStateEvent& Event ) override;
-    virtual void SAL_CALL   disposing( const css::lang::EventObject& obj ) override;
+    virtual void   statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+    virtual void   disposing( const css::lang::EventObject& obj ) override;
 
     void                    SetChangeHdl( const Link<HelpListener_Impl&,void>& rLink ) { aChangeLink = rLink; }
     const OUString&         GetFactory() const { return aFactory; }
@@ -119,17 +119,17 @@ public:
 class HelpStatusListener_Impl : public cppu::WeakImplHelper< css::frame::XStatusListener >
 {
 private:
-    css::uno::Reference < css::frame::XDispatch > xDispatch;
+    cpo::uno::Reference < css::frame::XDispatch > xDispatch;
     css::frame::FeatureStateEvent                 aStateEvent;
 
 public:
     HelpStatusListener_Impl(
-        css::uno::Reference < css::frame::XDispatch > const & xDispatch,
+        cpo::uno::Reference < css::frame::XDispatch > const & xDispatch,
         css::util::URL const & rURL);
     virtual ~HelpStatusListener_Impl() override;
 
-    virtual void SAL_CALL   statusChanged( const css::frame::FeatureStateEvent& Event ) override;
-    virtual void SAL_CALL   disposing( const css::lang::EventObject& obj ) override;
+    virtual void   statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+    virtual void   disposing( const css::lang::EventObject& obj ) override;
     const css::frame::FeatureStateEvent&
                             GetStateEvent() const {return aStateEvent;}
 };

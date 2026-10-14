@@ -11,15 +11,15 @@
 #ifndef INCLUDED_OOX_CRYPTO_DOCUMENTENCRYPTION_HXX
 #define INCLUDED_OOX_CRYPTO_DOCUMENTENCRYPTION_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 
 namespace com::sun::star {
     namespace io { class XStream; }
     namespace packages { class XPackageEncryption; }
     namespace beans { struct NamedValue; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace oox::ole { class OleStorage; }
 
@@ -28,16 +28,16 @@ namespace oox::crypto {
 class DocumentEncryption
 {
 private:
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-    css::uno::Reference< css::io::XStream > mxDocumentStream;
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
+    cpo::uno::Reference< css::io::XStream > mxDocumentStream;
     oox::ole::OleStorage& mrOleStorage;
 
-    css::uno::Reference< css::packages::XPackageEncryption > mxPackageEncryption;
+    cpo::uno::Reference< css::packages::XPackageEncryption > mxPackageEncryption;
     const cpo::uno::Sequence< css::beans::NamedValue >& mMediaEncData;
 
 public:
-    DocumentEncryption(const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-        css::uno::Reference< css::io::XStream > const & xDocumentStream,
+    DocumentEncryption(const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+        cpo::uno::Reference< css::io::XStream > const & xDocumentStream,
         oox::ole::OleStorage& rOleStorage,
         const cpo::uno::Sequence< css::beans::NamedValue >& rMediaEncData);
 

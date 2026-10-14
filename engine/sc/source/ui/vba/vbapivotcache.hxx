@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #pragma once
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/sheet/XDataPilotTable.hpp>
 
 #include <ooo/vba/excel/XPivotCache.hpp>
@@ -27,11 +27,11 @@ typedef InheritedHelperInterfaceWeakImpl<ov::excel::XPivotCache > PivotCacheImpl
 
 class ScVbaPivotCache : public PivotCacheImpl_BASE
 {
-    css::uno::Reference< css::sheet::XDataPilotTable > m_xTable;
+    cpo::uno::Reference< css::sheet::XDataPilotTable > m_xTable;
 public:
-    ScVbaPivotCache( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, css::uno::Reference< css::sheet::XDataPilotTable > xTable );
+    ScVbaPivotCache( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, cpo::uno::Reference< css::sheet::XDataPilotTable > xTable );
 
-    virtual void SAL_CALL Refresh() override;
+    virtual void Refresh() override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

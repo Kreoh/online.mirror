@@ -74,7 +74,7 @@
 #include <com/sun/star/ucb/UnsupportedOpenModeException.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
 #include <com/sun/star/ucb/XPersistentPropertySet.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include "webdavcontent.hxx"
 #include "webdavprovider.hxx"
@@ -86,6 +86,7 @@
 #include "DAVProperties.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace http_dav_ucp;
 
 namespace
@@ -196,7 +197,7 @@ static DAVOptionsCache aStaticDAVOptionsCache;
 
 // ctr for content on an existing webdav resource
 Content::Content(
-          const uno::Reference< uno::XComponentContext >& rxContext,
+          const uno::Reference< cpo::uno::XComponentContext >& rxContext,
           ContentProvider* pProvider,
           const uno::Reference< ucb::XContentIdentifier >& Identifier,
           rtl::Reference< DAVSessionFactory > const & rSessionFactory )
@@ -228,7 +229,7 @@ Content::Content(
 
 // ctr for content on a non-existing webdav resource
 Content::Content(
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             ContentProvider* pProvider,
             const uno::Reference< ucb::XContentIdentifier >& Identifier,
             rtl::Reference< DAVSessionFactory > const & rSessionFactory,
@@ -266,21 +267,21 @@ Content::~Content()
 
 
 // virtual
-void SAL_CALL Content::acquire() noexcept
+void Content::acquire() noexcept
 {
     ContentImplHelper::acquire();
 }
 
 
 // virtual
-void SAL_CALL Content::release() noexcept
+void Content::release() noexcept
 {
     ContentImplHelper::release();
 }
 
 
 // virtual
-cpo::uno::Any SAL_CALL Content::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any Content::queryInterface( const cpo::uno::Type & rType )
 {
     // Note: isFolder may require network activities! So call it only
     //       if it is really necessary!!!
@@ -306,7 +307,7 @@ cpo::uno::Any SAL_CALL Content::queryInterface( const cpo::uno::Type & rType )
 
             return isFolder( xCmdEnv ) ? aRet : cpo::uno::Any();
         }
-        catch ( uno::RuntimeException const & )
+        catch ( cpo::uno::RuntimeException const & )
         {
             throw;
         }
@@ -326,7 +327,7 @@ XTYPEPROVIDER_COMMON_IMPL( Content );
 
 
 // virtual
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL Content::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > Content::getTypes()
 {
     bool bFolder = false;
     try
@@ -334,7 +335,7 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL Content::getTypes()
         bFolder
             = isFolder( uno::Reference< ucb::XCommandEnvironment >() );
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -382,14 +383,14 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL Content::getTypes()
 
 
 // virtual
-OUString SAL_CALL Content::getImplementationName()
+OUString Content::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.WebDAVContent"_ustr;
 }
 
 
 // virtual
-cpo::uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > Content::getSupportedServiceNames()
 {
     cpo::uno::Sequence<OUString> aSNS { WEBDAV_CONTENT_SERVICE_NAME };
     return aSNS;
@@ -400,7 +401,7 @@ cpo::uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
 
 
 // virtual
-OUString SAL_CALL Content::getContentType()
+OUString Content::getContentType()
 {
     bool bFolder = false;
     try
@@ -408,7 +409,7 @@ OUString SAL_CALL Content::getContentType()
         bFolder
             = isFolder( uno::Reference< ucb::XCommandEnvironment >() );
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -427,7 +428,7 @@ OUString SAL_CALL Content::getContentType()
 
 
 // virtual
-cpo::uno::Any SAL_CALL Content::execute(
+cpo::uno::Any Content::execute(
         const ucb::Command& aCommand,
         sal_Int32 /*CommandId*/,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
@@ -773,7 +774,7 @@ cpo::uno::Any SAL_CALL Content::execute(
 
 
 // virtual
-void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
+void Content::abort( sal_Int32 /*CommandId*/ )
 {
     try
     {
@@ -1041,7 +1042,7 @@ void Content::removeProperty( const OUString& Name,
 }
 
 // virtual
-void SAL_CALL Content::addProperty( const OUString& Name,
+void Content::addProperty( const OUString& Name,
                                     sal_Int16 Attributes,
                                     const cpo::uno::Any& DefaultValue )
 {
@@ -1056,7 +1057,7 @@ void SAL_CALL Content::addProperty( const OUString& Name,
 }
 
 // virtual
-void SAL_CALL Content::removeProperty( const OUString& Name )
+void Content::removeProperty( const OUString& Name )
 {
     removeProperty( Name,
                     uno::Reference< ucb::XCommandEnvironment >() );
@@ -1067,7 +1068,7 @@ void SAL_CALL Content::removeProperty( const OUString& Name )
 
 
 // virtual
-cpo::uno::Sequence< ucb::ContentInfo > SAL_CALL
+cpo::uno::Sequence< ucb::ContentInfo >
 Content::queryCreatableContentsInfo()
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
@@ -1100,7 +1101,7 @@ Content::queryCreatableContentsInfo()
 
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 Content::createNewContent( const ucb::ContentInfo& Info )
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
@@ -1187,7 +1188,7 @@ OUString Content::getParentURL()
 
 // static
 uno::Reference< sdbc::XRow > Content::getPropertyValues(
-    const uno::Reference< uno::XComponentContext >& rxContext,
+    const uno::Reference< cpo::uno::XComponentContext >& rxContext,
     const cpo::uno::Sequence< beans::Property >& rProperties,
     const ContentProperties& rData,
     const rtl::Reference< ::ucbhelper::ContentProviderImplHelper >& rProvider,
@@ -1310,7 +1311,7 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
     std::unique_ptr< DAVResourceAccess > xResAccess;
     OUString aUnescapedTitle;
     bool bHasAll = false;
-    uno::Reference< uno::XComponentContext > xContext;
+    uno::Reference< cpo::uno::XComponentContext > xContext;
     uno::Reference< ucb::XContentIdentifier > xIdentifier;
     rtl::Reference< ::ucbhelper::ContentProviderImplHelper > xProvider;
 
@@ -2550,7 +2551,7 @@ void Content::insert(
                         // Abort.
                         throw ucb::CommandFailedException(
                                     OUString(),
-                                    uno::Reference< uno::XInterface >(),
+                                    uno::Reference< cpo::uno::XInterface >(),
                                     aExAsAny );
 //                            break;
 
@@ -2560,7 +2561,7 @@ void Content::insert(
                                     "Unknown interaction selection!" );
                         throw ucb::CommandFailedException(
                                     u"Unknown interaction selection!"_ustr,
-                                    uno::Reference< uno::XInterface >(),
+                                    uno::Reference< cpo::uno::XInterface >(),
                                     aExAsAny );
 //                            break;
                 }
@@ -2727,7 +2728,7 @@ void Content::transfer(
         const ucb::TransferInfo & rArgs,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
 {
-    uno::Reference< uno::XComponentContext > xContext;
+    uno::Reference< cpo::uno::XComponentContext > xContext;
     uno::Reference< ucb::XContentIdentifier >    xIdentifier;
     uno::Reference< ucb::XContentProvider >      xProvider;
     std::unique_ptr< DAVResourceAccess > xResAccess;
@@ -4022,7 +4023,7 @@ void Content::initOptsCacheLifeTime()
 
 
 void Content::getResourceOptions(
-                    const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+                    const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
                     DAVOptions& rDAVOptions,
                     const std::unique_ptr< DAVResourceAccess > & rResAccess,
                     bool * networkAccessAllowed )
@@ -4256,7 +4257,7 @@ void Content::getResourceOptions(
 }
 
 //static
-bool Content::isResourceAvailable( const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+bool Content::isResourceAvailable( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
                                   const std::unique_ptr< DAVResourceAccess > & rResAccess,
                                   DAVOptions& rDAVOptions )
 {

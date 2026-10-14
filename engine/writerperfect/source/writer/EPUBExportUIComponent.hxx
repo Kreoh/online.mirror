@@ -25,10 +25,7 @@ namespace weld
 class DialogController;
 }
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace writerperfect
 {
@@ -40,34 +37,34 @@ class EPUBExportUIComponent
                                   css::document::XExporter>
 {
 public:
-    EPUBExportUIComponent(css::uno::Reference<css::uno::XComponentContext> xContext);
+    EPUBExportUIComponent(cpo::uno::Reference<cpo::uno::XComponentContext> xContext);
 
     // XPropertyAccess
-    cpo::uno::Sequence<css::beans::PropertyValue> SAL_CALL getPropertyValues() override;
-    void SAL_CALL
+    cpo::uno::Sequence<css::beans::PropertyValue> getPropertyValues() override;
+    void
     setPropertyValues(const cpo::uno::Sequence<css::beans::PropertyValue>& rProperties) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& rServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     // XExecutableDialog
-    void SAL_CALL setTitle(const OUString& rTitle) override;
-    sal_Int16 SAL_CALL execute() override;
+    void setTitle(const OUString& rTitle) override;
+    sal_Int16 execute() override;
 
     // XAsynchronousExecutableDialog
-    void SAL_CALL setDialogTitle(const OUString& aTitle) override;
+    void setDialogTitle(const OUString& aTitle) override;
 
-    void SAL_CALL startExecuteModal(
-        const css::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener) override;
+    void startExecuteModal(
+        const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener) override;
 
     // XExporter
-    void SAL_CALL
-    setSourceDocument(const css::uno::Reference<css::lang::XComponent>& xDocument) override;
+    void
+    setSourceDocument(const cpo::uno::Reference<css::lang::XComponent>& xDocument) override;
 
     // XInitialization
-    void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+    void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
 
 private:
     /// The full set of property values.
@@ -75,9 +72,9 @@ private:
     /// The filter data key.
     comphelper::SequenceAsHashMap maFilterData;
     /// UNO context.
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
-    css::uno::Reference<css::lang::XComponent> mxSourceDocument;
-    css::uno::Reference<css::awt::XWindow> mxDialogParent;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::lang::XComponent> mxSourceDocument;
+    cpo::uno::Reference<css::awt::XWindow> mxDialogParent;
     std::shared_ptr<weld::DialogController> mxAsyncDialog;
 };
 

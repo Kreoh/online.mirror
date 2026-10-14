@@ -15,7 +15,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <sal/log.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace chart {
 
@@ -27,7 +27,7 @@ ChartToolbarController::ChartToolbarController(const cpo::uno::Sequence<cpo::uno
         rProperty >>= aPropValue;
         if (aPropValue.Name == "Frame")
         {
-            mxFramesSupplier.set(aPropValue.Value, css::uno::UNO_QUERY);
+            mxFramesSupplier.set(aPropValue.Value, cpo::uno::UNO_QUERY);
             break;
         }
     }
@@ -43,15 +43,15 @@ void ChartToolbarController::execute(sal_Int16 /*nKeyModifier*/)
 
 void ChartToolbarController::click()
 {
-    css::uno::Reference<css::frame::XFrame> xActiveFrame = mxFramesSupplier->getActiveFrame();
+    cpo::uno::Reference<css::frame::XFrame> xActiveFrame = mxFramesSupplier->getActiveFrame();
     if (!xActiveFrame.is())
         return;
 
-    css::uno::Reference<css::frame::XController> xActiveController = xActiveFrame->getController();
+    cpo::uno::Reference<css::frame::XController> xActiveController = xActiveFrame->getController();
     if (!xActiveController.is())
         return;
 
-    css::uno::Reference<css::frame::XDispatch> xDispatch(xActiveController, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::frame::XDispatch> xDispatch(xActiveController, cpo::uno::UNO_QUERY);
     if (!xDispatch.is())
         return;
 
@@ -66,15 +66,15 @@ void ChartToolbarController::doubleClick()
 }
 
 
-css::uno::Reference<css::awt::XWindow> ChartToolbarController::createPopupWindow()
+cpo::uno::Reference<css::awt::XWindow> ChartToolbarController::createPopupWindow()
 {
-    return css::uno::Reference<css::awt::XWindow>();
+    return cpo::uno::Reference<css::awt::XWindow>();
 }
 
-css::uno::Reference<css::awt::XWindow> ChartToolbarController::createItemWindow(
-        const css::uno::Reference<css::awt::XWindow>& /*rParent*/)
+cpo::uno::Reference<css::awt::XWindow> ChartToolbarController::createItemWindow(
+        const cpo::uno::Reference<css::awt::XWindow>& /*rParent*/)
 {
-    return css::uno::Reference<css::awt::XWindow>();
+    return cpo::uno::Reference<css::awt::XWindow>();
 }
 
 void ChartToolbarController::statusChanged(const css::frame::FeatureStateEvent& /*rEvent*/)
@@ -112,8 +112,8 @@ cpo::uno::Sequence<OUString> ChartToolbarController::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-org_libreoffice_chart2_Chart2ToolboxController(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const & rProperties)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_libreoffice_chart2_Chart2ToolboxController(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const & rProperties)
 {
     return cppu::acquire(new ::chart::ChartToolbarController(rProperties));
 }

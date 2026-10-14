@@ -28,7 +28,13 @@
 /* Set in CODALib.vcxproj differently for Release and Debug */
 
 /* Destination for Trace Event output */
-#undef COOLWSD_TRACEEVENTFILE
+#define COOLWSD_TRACEEVENTFILE "/should/not/be/used"
+
+/* Default location of coolwsd log file */
+#define COOLWSD_LOGFILE "/should/not/be/used"
+
+/* Default location of coolwsd UI command log file */
+#define COOLWSD_LOGFILE_UICMD "/should/not/be/used"
 
 /* The user-name which is allowed to run coolwsd and its tools */
 #undef COOL_USER_ID
@@ -59,7 +65,7 @@
 #define ENABLE_SSL 0
 
 /* Whether to default to using SSL_VERIFY_PEER */
-#undef SSL_VERIFY
+#define SSL_VERIFY "true"
 
 /* Whether to enable support key */
 #define ENABLE_SUPPORT_KEY 0
@@ -85,8 +91,11 @@
 /* Define to 1 if you have the `pipe2' function. */
 #define HAVE_PIPE2 0
 
+/* Define to 1 if you have the <security/pam_appl.h> header file. */
+#define HAVE_SECURITY_PAM_APPL_H 0
+
 /* Default value of help root URL */
-#undef HELP_URL
+#define HELP_URL ""
 
 /* Default value of feature_lock.impress_unlock_highlights */
 #undef IMPRESS_UNLOCK_HIGHLIGHTS
@@ -159,18 +168,8 @@ typedef int pid_t;
 
 #define strcasecmp _stricmp
 
-#define POLLIN   0x001
-#define POLLPRI  0x002
-#define POLLOUT  0x004
-#define POLLERR  0x008
-#define POLLHUP  0x010
-#define POLLNVAL 0x020
-
-struct pollfd {
-  int fd;
-  short events;
-  short revents;
-};
+// Provides POLLIN, POLLOUT, struct pollfd and the rest of the poll vocabulary.
+#include <winsock2.h>
 
 // I give up, let's define these here
 #define EX_OK 0

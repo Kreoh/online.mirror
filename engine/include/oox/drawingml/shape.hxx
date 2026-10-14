@@ -29,7 +29,7 @@
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 
 #include <oox/core/xmlfilterbase.hxx>
@@ -42,6 +42,8 @@
 #include <sal/types.h>
 
 namespace basegfx { class B2DHomMatrix; }
+
+namespace oox { class AttributeList; }
 
 namespace com::sun::star {
     namespace awt { struct Rectangle; }
@@ -73,6 +75,11 @@ typedef std::shared_ptr< CustomShapeProperties > CustomShapePropertiesPtr;
 typedef ::std::map< OUString, ShapePtr > ShapeIdMap;
 
 typedef std::vector<ConnectorShapeProperties> ConnectorShapePropertiesList;
+
+/** Connects each connector shape in the map to the shapes of the map that its start and end
+    connections name, and moves the handles of bent and curved connectors to where the document
+    has them. The shapes must already be inserted. */
+OOX_DLLPUBLIC void connectConnectorShapes(ShapeIdMap& rShapeMap);
 
 struct ShapeStyleRef
 {
@@ -166,6 +173,12 @@ public:
     void                            setRotation( sal_Int32 nRotation ) { mnRotation = nRotation; }
     sal_Int32                       getRotation() const { return mnRotation; }
     void                            setDiagramRotation( sal_Int32 nRotation ) { mnDiagramRotation = nRotation; }
+    sal_Int32                       getDiagramRotation() const { return mnDiagramRotation; }
+    /// The turn the text inside the shape is given against the shape, in 60000ths of a degree
+    /// clockwise, as a Diagram layout asks for it: the text of a turned shape standing upright
+    /// again. Nothing where the layout asks for none.
+    void                            setDiagramTextPreRotation( sal_Int32 nRotation ) { moDiagramTextPreRotation = nRotation; }
+    const std::optional<sal_Int32>& getDiagramTextPreRotation() const { return moDiagramTextPreRotation; }
     void                            setFlip( bool bFlipH, bool bFlipV ) { mbFlipH = bFlipH; mbFlipV = bFlipV; }
     bool                            getFlipH() const { return mbFlipH; }
     bool                            getFlipV() const { return mbFlipV; }
@@ -187,6 +200,9 @@ public:
     void                            setFPublished(bool bFPublished) { mbFPublished = bFPublished; }
     void                            setTitle(const OUString& rTitle) { msTitle = rTitle; }
     void                            setHidden( bool bHidden ) { mbHidden = bHidden; }
+    /** Reads what the file says about the shape beside how it is drawn: the identifier it is
+        referred to by, its name, the text that stands in for it, and whether it is shown. */
+    void                            setNonVisualProperties( const ::oox::AttributeList& rAttribs );
     void                            setHiddenMasterShape( bool bHiddenMasterShape ) { mbHiddenMasterShape = bHiddenMasterShape; }
     void                            setLocked( bool bLocked ) { mbLocked = bLocked; }
     void                            setSubType( sal_Int32 nSubType ) { mnSubType = nSubType; }
@@ -216,13 +232,13 @@ public:
     void                addShape(
                             ::oox::core::XmlFilterBase& rFilterBase,
                             const Theme* pTheme,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const basegfx::B2DHomMatrix& aTransformation,
                             const FillProperties& rShapeOrParentShapeFillProps,
                             ShapeIdMap* pShapeMap = nullptr,
                             const oox::drawingml::ShapePtr& pParentGroupShape = nullptr);
 
-    const css::uno::Reference< css::drawing::XShape > &
+    const cpo::uno::Reference< css::drawing::XShape > &
                         getXShape() const { return mxShape; }
 
     SAL_DLLPRIVATE void applyShapeReference( const Shape& rReferencedShape,
@@ -302,12 +318,12 @@ protected:
         FRAMETYPE_TABLE ///< A table embedded in a shape.
     };
 
-    SAL_DLLPRIVATE css::uno::Reference< css::drawing::XShape > const &
+    SAL_DLLPRIVATE cpo::uno::Reference< css::drawing::XShape > const &
                         createAndInsert(
                             ::oox::core::XmlFilterBase& rFilterBase,
                             const OUString& rServiceName,
                             const Theme* pTheme,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             bool bClearText,
                             const oox::drawingml::ShapePtr& pPlaceholder,
                             basegfx::B2DHomMatrix& aTransformation,
@@ -319,13 +335,13 @@ protected:
                             ::oox::core::XmlFilterBase& rFilterBase,
                             Shape& rMaster,
                             const Theme* pTheme,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             ShapeIdMap* pShapeMap,
                             const basegfx::B2DHomMatrix& aTransformation );
 
     SAL_DLLPRIVATE void convertSmartArtToMetafile( ::oox::core::XmlFilterBase const& rFilterBase );
 
-    SAL_DLLPRIVATE css::uno::Reference< css::drawing::XShape >
+    SAL_DLLPRIVATE cpo::uno::Reference< css::drawing::XShape >
                         renderDiagramToGraphic( ::oox::core::XmlFilterBase const & rFilterBase );
 
     SAL_DLLPRIVATE OUString finalizeServiceName(
@@ -335,7 +351,7 @@ protected:
 
     virtual void        finalizeXShape(
                             ::oox::core::XmlFilterBase& rFilter,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes );
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes );
 
     SAL_DLLPRIVATE void putPropertyToGrabBag(
                             const OUString& sPropertyName, const cpo::uno::Any& aPropertyValue );
@@ -368,7 +384,7 @@ protected:
     PropertyMap                 maShapeProperties;
     PropertyMap                 maDefaultShapeProperties;
     TextListStylePtr            mpMasterTextListStyle;
-    css::uno::Reference< css::drawing::XShape > mxShape;
+    cpo::uno::Reference< css::drawing::XShape > mxShape;
     ConnectorShapePropertiesList maConnectorShapePropertiesList;
 
     OUString                    msConnectorName;
@@ -428,6 +444,7 @@ private:
 
     sal_Int32                       mnRotation;
     sal_Int32                       mnDiagramRotation; // rotates shape prior to sizing, does not affect text rotation
+    std::optional<sal_Int32>        moDiagramTextPreRotation;
     bool                            mbFlipH;
     bool                            mbFlipV;
     bool                            mbHidden;

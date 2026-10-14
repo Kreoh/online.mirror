@@ -222,18 +222,33 @@ class WriterTableTab implements NotebookbarTab {
 										type: 'toolitem',
 										text: _UNO('.uno:SetMinimalRowHeight', 'text'),
 										command: '.uno:SetMinimalRowHeight',
+										accessibility: {
+											focusBack: true,
+											combination: 'MH',
+											de: null,
+										},
 									} as ToolItemWidgetJSON,
 									{
 										id: 'SetOptimalRowHeight',
 										type: 'toolitem',
 										text: _UNO('.uno:SetOptimalRowHeight', 'text'),
 										command: '.uno:SetOptimalRowHeight',
+										accessibility: {
+											focusBack: true,
+											combination: 'OH',
+											de: null,
+										},
 									} as ToolItemWidgetJSON,
 									{
 										id: 'DistributeRows',
 										type: 'toolitem',
 										text: _UNO('.uno:DistributeRows', 'text'),
 										command: '.uno:DistributeRows',
+										accessibility: {
+											focusBack: true,
+											combination: 'DR',
+											de: null,
+										},
 									} as ToolItemWidgetJSON,
 								],
 							} as ToolboxWidgetJSON,
@@ -246,18 +261,33 @@ class WriterTableTab implements NotebookbarTab {
 										type: 'toolitem',
 										text: _UNO('.uno:SetMinimalColumnWidth', 'text'),
 										command: '.uno:SetMinimalColumnWidth',
+										accessibility: {
+											focusBack: true,
+											combination: 'MW',
+											de: null,
+										},
 									} as ToolItemWidgetJSON,
 									{
 										id: 'SetOptimalColumnWidth',
 										type: 'toolitem',
 										text: _UNO('.uno:SetOptimalColumnWidth', 'text'),
 										command: '.uno:SetOptimalColumnWidth',
+										accessibility: {
+											focusBack: true,
+											combination: 'OW',
+											de: null,
+										},
 									} as ToolItemWidgetJSON,
 									{
 										id: 'DistributeColumns',
 										type: 'toolitem',
 										text: _UNO('.uno:DistributeColumns', 'text'),
 										command: '.uno:DistributeColumns',
+										accessibility: {
+											focusBack: true,
+											combination: 'DC',
+											de: null,
+										},
 									} as ToolItemWidgetJSON,
 								],
 							} as ToolboxWidgetJSON,
@@ -438,71 +468,6 @@ class WriterTableTab implements NotebookbarTab {
 			} as SeparatorWidgetJSON,
 			{
 				type: 'overflowgroup',
-				id: 'table-design',
-				name: _('Design'),
-				accessibility: { focusBack: true, combination: 'SD', de: null },
-				more: {
-					command: '.uno:TableDialog',
-					accessibility: { focusBack: true, combination: 'MT', de: null },
-				},
-				children: [
-					{
-						id: 'table-table-dialog',
-						type: 'bigtoolitem',
-						text: _UNO('.uno:TableDialog', 'text', true),
-						command: '.uno:TableDialog',
-						accessibility: { focusBack: false, combination: 'SD', de: null },
-					},
-					{
-						id: 'table-line-style-container',
-						type: 'container',
-						children: [
-							{
-								type: 'toolbox',
-								children: [
-									{
-										type: 'menubutton',
-										id: 'set-border-style:BorderStyleMenuWriter',
-										noLabel: true,
-										text: _('Borders'),
-										command: '.uno:SetBorderStyle',
-										accessibility: {
-											focusBack: true,
-											combination: 'BL',
-											de: null,
-										},
-									} as MenuButtonWidgetJSON,
-								],
-							} as ToolboxWidgetJSON,
-							{
-								type: 'toolbox',
-								children: [
-									{
-										type: 'menubutton',
-										id: 'table-xline-color:ColorPickerMenu',
-										noLabel: true,
-										text: _('Cell Background'),
-										command: '.uno:TableCellBackgroundColor',
-										accessibility: {
-											focusBack: true,
-											combination: 'BC',
-											de: null,
-										},
-									} as MenuButtonWidgetJSON,
-								],
-							} as ToolboxWidgetJSON,
-						],
-						vertical: true,
-					} as ContainerWidgetJSON,
-				],
-			} as OverflowGroupWidgetJSON,
-			{
-				type: 'separator',
-				id: 'table-bigtoolitem-break',
-				orientation: 'vertical',
-			} as SeparatorWidgetJSON,
-			{
-				type: 'overflowgroup',
 				id: 'table-number-format',
 				name: _('Format'),
 				accessibility: { focusBack: true, combination: 'FO', de: null },
@@ -632,12 +597,20 @@ class WriterTableTab implements NotebookbarTab {
 				orientation: 'vertical',
 			} as SeparatorWidgetJSON,
 			{
-				type: 'bigtoolitem',
-				id: 'table-insert-caption-dialog',
-				text: _UNO('.uno:InsertCaptionDialog', 'text'),
-				command: '.uno:InsertCaptionDialog',
+				type: 'overflowgroup',
+				id: 'table-caption-group',
+				name: _('Caption'),
 				accessibility: { focusBack: true, combination: 'IC', de: null },
-			} as ToolItemWidgetJSON,
+				children: [
+					{
+						type: 'bigtoolitem',
+						id: 'table-insert-caption-dialog',
+						text: _UNO('.uno:InsertCaptionDialog', 'text'),
+						command: '.uno:InsertCaptionDialog',
+						accessibility: { focusBack: true, combination: 'IC', de: null },
+					} as ToolItemWidgetJSON,
+				],
+			} as OverflowGroupWidgetJSON,
 		];
 		return content;
 	}

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <xistyle.hxx>
+#include <docuno.hxx>
 #include <sfx2/objsh.hxx>
 #include <svtools/ctrltool.hxx>
 #include <editeng/editobj.hxx>
@@ -81,6 +82,7 @@
 #include <o3tl/string_view.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 typedef ::cppu::WeakImplHelper< container::XIndexAccess > XIndexAccess_BASE;
 typedef ::std::vector< Color > ColorVec;
@@ -93,23 +95,23 @@ public:
     explicit PaletteIndex( ColorVec&& rColorTable ) : maColor( std::move(rColorTable) ) {}
 
     // Methods XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount() override
+    virtual ::sal_Int32 getCount() override
     {
          return  maColor.size();
     }
 
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         //--Index;  // apparently the palette is already 1 based
         return cpo::uno::Any( sal_Int32( maColor[ Index ] ) );
     }
 
     // Methods XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
     {
         return ::cppu::UnoType<sal_Int32>::get();
     }
-    virtual bool SAL_CALL hasElements() override
+    virtual bool hasElements() override
     {
         return (!maColor.empty());
     }

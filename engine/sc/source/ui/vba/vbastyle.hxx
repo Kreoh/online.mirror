@@ -31,31 +31,31 @@ typedef ScVbaFormat< ov::excel::XStyle > ScVbaStyle_BASE;
 
 class ScVbaStyle final : public ScVbaStyle_BASE
 {
-    css::uno::Reference< css::style::XStyle > mxStyle;
-    css::uno::Reference< css::container::XNameContainer > mxStyleFamilyNameContainer;
-    /// @throws css::uno::RuntimeException
+    cpo::uno::Reference< css::style::XStyle > mxStyle;
+    cpo::uno::Reference< css::container::XNameContainer > mxStyleFamilyNameContainer;
+    /// @throws cpo::uno::RuntimeException
     /// @throws css::script::BasicErrorException
     void initialise();
 public:
     /// @throws css::script::BasicErrorException
-    /// @throws css::uno::RuntimeException
-    ScVbaStyle( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, const OUString& sStyleName, const rtl::Reference<ScModelObj>& _xModel );
+    /// @throws cpo::uno::RuntimeException
+    ScVbaStyle( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, const OUString& sStyleName, const rtl::Reference<ScModelObj>& _xModel );
     /// @throws css::script::BasicErrorException
-    /// @throws css::uno::RuntimeException
-    ScVbaStyle( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, const css::uno::Reference< css::beans::XPropertySet >& _xPropertySet, const rtl::Reference<ScModelObj>& _cModel );
-    /// @throws css::uno::RuntimeException
-    static css::uno::Reference< css::container::XNameAccess > getStylesNameContainer( const rtl::Reference<ScModelObj>& xModel );
-    virtual css::uno::Reference< ov::XHelperInterface > thisHelperIface() override { return this; };
+    /// @throws cpo::uno::RuntimeException
+    ScVbaStyle( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, const cpo::uno::Reference< css::beans::XPropertySet >& _xPropertySet, const rtl::Reference<ScModelObj>& _cModel );
+    /// @throws cpo::uno::RuntimeException
+    static cpo::uno::Reference< css::container::XNameAccess > getStylesNameContainer( const rtl::Reference<ScModelObj>& xModel );
+    virtual cpo::uno::Reference< ov::XHelperInterface > thisHelperIface() override { return this; };
     // XStyle Methods
-    virtual bool SAL_CALL BuiltIn() override;
-    virtual void SAL_CALL setName( const OUString& Name ) override;
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL setNameLocal( const OUString& NameLocal ) override;
-    virtual OUString SAL_CALL getNameLocal() override;
-    virtual void SAL_CALL Delete() override;
+    virtual bool BuiltIn() override;
+    virtual void setName( const OUString& Name ) override;
+    virtual OUString getName() override;
+    virtual void setNameLocal( const OUString& NameLocal ) override;
+    virtual OUString getNameLocal() override;
+    virtual void Delete() override;
     // XFormat
-    virtual void SAL_CALL setMergeCells( const cpo::uno::Any& MergeCells ) override;
-    virtual cpo::uno::Any SAL_CALL getMergeCells(  ) override;
+    virtual void setMergeCells( const cpo::uno::Any& MergeCells ) override;
+    virtual cpo::uno::Any getMergeCells(  ) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

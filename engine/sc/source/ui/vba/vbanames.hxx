@@ -29,24 +29,24 @@ typedef CollTestImplHelper< ov::excel::XNames > ScVbaNames_BASE;
 
 class ScVbaNames final : public ScVbaNames_BASE
 {
-    css::uno::Reference< css::frame::XModel > mxModel;
-    css::uno::Reference< css::sheet::XNamedRanges > mxNames;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::sheet::XNamedRanges > mxNames;
 
-    const css::uno::Reference< css::frame::XModel >&  getModel() const { return mxModel; }
+    const cpo::uno::Reference< css::frame::XModel >&  getModel() const { return mxModel; }
 
 public:
-    ScVbaNames( const css::uno::Reference< ov::XHelperInterface >& xParent,  const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< css::sheet::XNamedRanges >& xNames , css::uno::Reference< css::frame::XModel > xModel );
+    ScVbaNames( const cpo::uno::Reference< ov::XHelperInterface >& xParent,  const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, const cpo::uno::Reference< css::sheet::XNamedRanges >& xNames , cpo::uno::Reference< css::frame::XModel > xModel );
 
     ScDocument& getScDocument();
 
     virtual ~ScVbaNames() override;
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // Methods
-    virtual cpo::uno::Any SAL_CALL Add( const cpo::uno::Any& aName ,
+    virtual cpo::uno::Any Add( const cpo::uno::Any& aName ,
                     const cpo::uno::Any& aRefersTo,
                     const cpo::uno::Any& aVisible,
                     const cpo::uno::Any& aMacroType,

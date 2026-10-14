@@ -45,7 +45,7 @@ class UnoReferencePrinter(object):
                 return '%s to (%s) %s' % (self.typename, str(iface.dynamic_type), str(iface))
             except Exception:
                 # fallback for potential problem:
-                # base class 'com::sun::star::uno::XInterface' is ambiguous
+                # base class 'cpo::uno::XInterface' is ambiguous
                 return '%s to (XInterface) %s' % (self.typename, str(iface))
 
         else:
@@ -143,7 +143,7 @@ def build_pretty_printers():
     # basic UNO stuff
     printer.add('_uno_Any', UnoAnyPrinter)
     printer.add('cpo::uno::Any', UnoAnyPrinter)
-    printer.add('com::sun::star::uno::Reference', UnoReferencePrinter)
+    printer.add('cpo::uno::Reference', UnoReferencePrinter)
     printer.add('cpo::uno::Sequence', UnoSequencePrinter)
     printer.add('cpo::uno::Type', UnoTypePrinter)
     printer.add('cppu_threadpool::ThreadPool', CppuThreadpoolThreadPoolPrinter)

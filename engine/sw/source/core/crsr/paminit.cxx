@@ -26,7 +26,7 @@ const SwMoveFnCollection aFwrd = {
     /* fnPos        */  &GoNextPos,
     /* fnDoc        */  &GoEndDoc,
     /* fnSections   */  &GoEndSection,
-    /* fnCmpOp      */  &SwPosition::operator<,
+    /* fnCmpOp      */  &SwPosition::operator<=,
     /* fnGetHint    */  &GetFrwrdTextHint,
     /* fnSearch     */  &utl::TextSearch::SearchForward,
     /* fnSection    */  &GoStartOfSection
@@ -37,7 +37,7 @@ const SwMoveFnCollection aBwrd = {
     /* fnPos        */  &GoPreviousPos,
     /* fnDoc        */  &GoStartDoc,
     /* fnSections   */  &GoStartSection,
-    /* fnCmpOp      */  &SwPosition::operator>,
+    /* fnCmpOp      */  &SwPosition::operator>=,
     /* fnGetHint    */  &GetBkwrdTextHint,
     /* fnSearch     */  &utl::TextSearch::SearchBackward,
     /* fnSection    */  &GoEndOfSection

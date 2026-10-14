@@ -15,6 +15,7 @@
 
 #include <autonamecache.hxx>
 #include <tokenarray.hxx>
+#include <formula/token.hxx>
 #include <sharedformulagroups.hxx>
 #include <externalrefmgr.hxx>
 #include <tokenstringcontext.hxx>
@@ -30,7 +31,7 @@
 #include <utility>
 #include <comphelper/string.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::sheet;
 using namespace ::cpo::uno;
 
@@ -79,16 +80,16 @@ void stripRedundantParentheses(ScTokenArray& rArray,
 }
 
 // Rewrite each four-token span
-//   ocSpill ocOpen <push> ocClose
+//   ocAnchorArray ocOpen <push> ocClose
 // to
 //   <push> ocSpill
-// so the parse array matches the native postfix form.
+// so the parse array matches the native postfix form. Inverse of what the export does.
 void liftAnchorArrayToPostfix(ScTokenArray& rArray)
 {
     sal_uInt16 nPosition = 0;
     while (nPosition + 1 < rArray.GetLen())
     {
-        if (rArray.TokenAt(nPosition)->GetOpCode() == ocSpill
+        if (rArray.TokenAt(nPosition)->GetOpCode() == ocAnchorArray
             && rArray.TokenAt(nPosition + 1)->GetOpCode() == ocOpen)
         {
             // Find the parenthesis that closes the one right after the
@@ -107,12 +108,9 @@ void liftAnchorArrayToPostfix(ScTokenArray& rArray)
             }
             if (nClose < rArray.GetLen())
             {
-                // Turn #(operand) into operand#: move the spill opcode
-                // past the operand and drop the wrapper parentheses,
-                // keeping any inner ones. The reference keeps the spill
-                // token alive when it leaves its old slot.
-                formula::FormulaTokenRef pSpill(rArray.TokenAt(nPosition));
-                rArray.ReplaceToken(nClose, pSpill.get(),
+                // Put the postfix operator behind the operand and drop the
+                // wrapper parentheses, keeping any inner ones.
+                rArray.ReplaceToken(nClose, new formula::FormulaByteToken(ocSpill),
                                     formula::FormulaTokenArray::CODE_ONLY);
                 rArray.RemoveToken(nPosition + 1, 1);
                 rArray.RemoveToken(nPosition, 1);
@@ -249,6 +247,16 @@ void applySharedFormulas(
             if (rDesc.mbDynamicArrayMaster)
                 pCell->SetDynamicArrayMaster(true);
 
+            // OOXML expresses the @ of a plain =@ref# cell by leaving it out, so put it back.
+            // The cm attribute is the cell's own, so one member of the group can be a master.
+            ScTokenArray* pCellCode = pCell->GetCode();
+            if (!rDesc.mbDynamicArrayMaster && pCellCode->GetLen() == 2
+                && pCellCode->TokenAt(0)->GetType() == formula::svSingleRef
+                && pCellCode->TokenAt(1)->GetOpCode() == ocSpill)
+            {
+                ScFormulaCell::ResolveImplicitIntersection(*pCellCode, rDoc.getDoc(), aPos);
+            }
+
             rDoc.setFormulaCell(aPos, pCell);
             const bool bNeedNumberFormat = ((rDoc.getDoc().GetNumberFormat(
                             aPos.Col(), aPos.Row(), aPos.Tab()) % SV_COUNTRY_LANGUAGE_OFFSET) == 0);
@@ -380,6 +388,16 @@ void applyCellFormulas(
         stripRedundantParentheses(*pCode, {ocSingleValue});
         liftAnchorArrayToPostfix(*pCode);
         aCompiler.CompileTokenArray(); // Generate RPN tokens.
+        // OOXML leaves the @ of a plain =@ref# cell out of the text, expressing it by
+        // keeping the cell a non-array formula, so put it back. Anything wider keeps its
+        // _xlfn.SINGLE, so only the bare shape qualifies: one reference and the operator,
+        // not even parentheses. A dynamic-array master spills instead, so it gets no @.
+        if (!rItem.mbDynamicArrayMaster && pCode->GetLen() == 2
+            && pCode->TokenAt(0)->GetType() == formula::svSingleRef
+            && pCode->TokenAt(1)->GetOpCode() == ocSpill)
+        {
+            ScFormulaCell::ResolveImplicitIntersection(*pCode, rDoc.getDoc(), aPos);
+        }
 
         ScFormulaCell* pCell = new ScFormulaCell(rDoc.getDoc(), aPos, std::move(pCode));
         if (rItem.mbDynamicArrayMaster)

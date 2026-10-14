@@ -32,7 +32,7 @@
 #include <comphelper/sequence.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/linguistic2/DictionaryEventFlags.hpp>
 #include <com/sun/star/linguistic2/DictionaryListEventFlags.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
@@ -49,8 +49,8 @@
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
@@ -528,7 +528,7 @@ uno::Reference< XDictionaryEntry >
             bool bSearchPosDics, bool bSearchSpellEntry )
 {
     osl::MutexGuard aGuard( GetLinguMutex() );
-    std::map<LanguageType, std::vector<css::uno::Reference<css::linguistic2::XDictionary>>> aDictionaryMap;
+    std::map<LanguageType, std::vector<cpo::uno::Reference<css::linguistic2::XDictionary>>> aDictionaryMap;
     return SearchDicList( this, rWord, LinguLocaleToLanguage( rLocale ),
                             bSearchPosDics, bSearchSpellEntry, aDictionaryMap );
 }
@@ -808,13 +808,13 @@ static bool IsVers2OrNewer( const OUString& rFileURL, LanguageType& nLng, bool& 
         return false;
 
     // get stream to be used
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     // get XInputStream stream
     uno::Reference< io::XInputStream > xStream;
     try
     {
-        uno::Reference< ucb::XSimpleFileAccess3 > xAccess( ucb::SimpleFileAccess::create(xContext) );
+        uno::Reference< ucb::XSimpleFileAccess > xAccess( ucb::SimpleFileAccess::create(xContext) );
         xStream = xAccess->openFileRead( rFileURL );
     }
     catch (const cpo::uno::Exception &)
@@ -831,9 +831,9 @@ static bool IsVers2OrNewer( const OUString& rFileURL, LanguageType& nLng, bool& 
     return 2 == nDicVersion || nDicVersion >= 5;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 linguistic_DicList_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new DicList());
 }

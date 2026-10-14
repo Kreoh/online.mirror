@@ -21,36 +21,26 @@
 
 #include <connectivity/sdbcx/VView.hxx>
 
-#include <com/sun/star/sdbcx/XAlterView.hpp>
 #include <com/sun/star/sdb/tools/XViewAccess.hpp>
 
 #include <comphelper/uno3.hxx>
-#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase.hxx>
 
 namespace dbaccess
 {
 
     // View
     typedef ::connectivity::sdbcx::OView                                View_Base;
-    typedef ::cppu::ImplHelper1< css::sdbcx::XAlterView >  View_IBASE;
-    class View :public View_Base
-                ,public View_IBASE
+    class View : public View_Base
     {
     public:
         View(
-            const css::uno::Reference< css::sdbc::XConnection >& _rxConnection,
+            const cpo::uno::Reference< css::sdbc::XConnection >& _rxConnection,
             bool _bCaseSensitive,
             const OUString& _rCatalogName,
             const OUString& _rSchemaName,
             const OUString& _rName
         );
-
-        // UNO
-        DECLARE_XINTERFACE()
-        DECLARE_XTYPEPROVIDER()
-
-        // XAlterView
-        virtual void alterCommand( const OUString& NewCommand ) override;
 
     protected:
         virtual ~View() override;
@@ -60,7 +50,7 @@ namespace dbaccess
         virtual void getFastPropertyValue( cpo::uno::Any& _rValue, sal_Int32 _nHandle ) const override;
 
     private:
-         css::uno::Reference< css::sdb::tools::XViewAccess>     m_xViewAccess;
+         cpo::uno::Reference< css::sdb::tools::XViewAccess>     m_xViewAccess;
         sal_Int32                                               m_nCommandHandle;
     private:
         using View_Base::getFastPropertyValue;

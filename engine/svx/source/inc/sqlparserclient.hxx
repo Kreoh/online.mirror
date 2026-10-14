@@ -23,7 +23,7 @@
 #include <config_options.h>
 #include <svx/ParseContext.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <memory>
 
@@ -50,13 +50,13 @@ namespace svxform
         mutable std::shared_ptr< ::connectivity::OSQLParser > m_pParser;
 
         OSQLParserClient(
-            const css::uno::Reference< css::uno::XComponentContext >& rxContext);
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext);
 
         std::unique_ptr< ::connectivity::OSQLParseNode > predicateTree(
                 OUString& _rErrorMessage,
                 const OUString& _rStatement,
-                const css::uno::Reference< css::util::XNumberFormatter >& _rxFormatter,
-                const css::uno::Reference< css::beans::XPropertySet >& _rxField
+                const cpo::uno::Reference< css::util::XNumberFormatter >& _rxFormatter,
+                const cpo::uno::Reference< css::beans::XPropertySet >& _rxField
             ) const;
     };
 

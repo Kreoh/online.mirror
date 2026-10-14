@@ -44,11 +44,11 @@
 #include "com/sun/star/security/Policy.hpp"
 #include "cpo/uno/Exception.hpp"
 #include "cpo/uno/NamingService.hpp"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include "cpo/uno/Reference.hxx"
+#include "cpo/uno/RuntimeException.hpp"
 #include "cpo/uno/Sequence.hxx"
-#include "com/sun/star/uno/XComponentContext.hpp"
-#include "com/sun/star/uno/XInterface.hpp"
+#include "cpo/uno/XComponentContext.hpp"
+#include "cpo/uno/XInterface.hpp"
 #include "com/sun/star/uri/ExternalUriReferenceTranslator.hpp"
 #include "com/sun/star/uri/UriReferenceFactory.hpp"
 #include "com/sun/star/uri/VndSunStarPkgUrlReferenceFactory.hpp"
@@ -79,10 +79,10 @@ namespace {
 class Service: public ::cppu::WeakImplHelper1< css::lang::XMain > {
 public:
     explicit Service(
-        css::uno::Reference< css::uno::XComponentContext > const & context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context):
         context_(context) {}
 
-    virtual ::sal_Int32 SAL_CALL run(
+    virtual ::sal_Int32 run(
         cpo::uno::Sequence< ::rtl::OUString > const &);
 
 private:
@@ -92,10 +92,10 @@ private:
     virtual ~Service() {}
 
     void test(
-        css::uno::Reference< test::types::XTest > const & test,
+        cpo::uno::Reference< test::types::XTest > const & test,
         ::rtl::OUString const & name);
 
-    css::uno::Reference< css::uno::XComponentContext > context_;
+    cpo::uno::Reference< cpo::uno::XComponentContext > context_;
 };
 
 ::sal_Int32 Service::run(cpo::uno::Sequence< ::rtl::OUString > const &) {
@@ -122,19 +122,19 @@ private:
     };
     for (::std::size_t i = 0; i < SAL_N_ELEMENTS(services); ++i) {
         ::rtl::OUString name(::rtl::OUString::createFromAscii(services[i]));
-        css::uno::Reference< css::uno::XInterface > instance;
+        cpo::uno::Reference< cpo::uno::XInterface > instance;
         try {
             instance = context_->getServiceManager()->createInstanceWithContext(
                 name, context_);
-        } catch (css::uno::RuntimeException &) {
+        } catch (cpo::uno::RuntimeException &) {
             throw;
         } catch (cpo::uno::Exception &) {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 ::rtl::OUString("error creating instance"),
                 static_cast< ::cppu::OWeakObject * >(this));
         }
         if (!instance.is()) {
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 "no instance: " + name,
                 static_cast< ::cppu::OWeakObject * >(this));
         }
@@ -166,10 +166,10 @@ private:
         "com.sun.star.reflection.theTypeDescriptionManager"
     };
     for (std::size_t i = 0; i != SAL_N_ELEMENTS(singletons); ++i) {
-        css::uno::Reference< css::uno::XInterface > instance(
+        cpo::uno::Reference< cpo::uno::XInterface > instance(
             context_->getValueByName(
                 "/singletons/" + rtl::OUString::createFromAscii(singletons[i])),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
     }
     css::util::theMacroExpander::get(context_);
     test(
@@ -182,7 +182,7 @@ private:
 }
 
 void Service::test(
-    css::uno::Reference< test::types::XTest > const & test,
+    cpo::uno::Reference< test::types::XTest > const & test,
     ::rtl::OUString const & name)
 {
     bool ok = false;
@@ -192,7 +192,7 @@ void Service::test(
         ok = true;
     }
     if (!ok) {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             (name
              + ::rtl::OUString(".throwException failed")),
             static_cast< ::cppu::OWeakObject * >(this));
@@ -201,8 +201,8 @@ void Service::test(
 
 namespace CppMain {
 
-css::uno::Reference< css::uno::XInterface > create(
-    css::uno::Reference< css::uno::XComponentContext > const & context)
+cpo::uno::Reference< cpo::uno::XInterface > create(
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & context)
 {
     return static_cast< ::cppu::OWeakObject * >(new Service(context));
 }
@@ -225,14 +225,14 @@ cpo::uno::Sequence< ::rtl::OUString > getSupportedServiceNames() {
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL component_writeInfo(
+extern "C" SAL_DLLPUBLIC_EXPORT bool component_writeInfo(
     void * serviceManager, void * registryKey)
 {
     return ::cppu::component_writeInfoHelper(
         serviceManager, registryKey, entries);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return ::cppu::component_getFactoryHelper(

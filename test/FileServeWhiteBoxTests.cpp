@@ -19,8 +19,11 @@
 #include <wsd/FileServer.hpp>
 #include <common/ContainerUtil.hpp>
 #include <common/FileUtil.hpp>
+#include <common/Util.hpp>
 #include <test/lokassert.hpp>
 
+#include <Poco/File.h>
+#include <Poco/Path.h>
 #include <Poco/String.h>
 
 #include <cppunit/TestAssert.h>
@@ -38,7 +41,10 @@ class FileServeTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testPreProcessedFile);
     CPPUNIT_TEST(testPreProcessedFileRoundtrip);
     CPPUNIT_TEST(testPreProcessedFileSubstitution);
+    CPPUNIT_TEST(testOnlyAConfiguredOriginRelaysMessages);
     CPPUNIT_TEST(testCSPMergeNewlines);
+    CPPUNIT_TEST(testCSPKeepsOutBadSources);
+    CPPUNIT_TEST(testSettingsUploadFileId);
     CPPUNIT_TEST_SUITE_END();
 
     void testUIDefaults();
@@ -46,7 +52,10 @@ class FileServeTests : public CPPUNIT_NS::TestFixture
     void testPreProcessedFile();
     void testPreProcessedFileRoundtrip();
     void testPreProcessedFileSubstitution();
+    void testOnlyAConfiguredOriginRelaysMessages();
     void testCSPMergeNewlines();
+    void testCSPKeepsOutBadSources();
+    void testSettingsUploadFileId();
 
     void preProcessedFileSubstitution(const std::string_view testname,
                                       const Util::UnorderedStringMap<std::string>& variables);
@@ -93,6 +102,26 @@ void FileServeTests::testUIDefaults()
             uiMode, uiTheme, savedUIState));
 
     LOK_ASSERT_EQUAL_STR("notebookbar", uiMode);
+
+    // The AI Assistant is a widget of its own, set without disturbing the
+    // property deck beside it.
+    LOK_ASSERT_EQUAL_STR(
+        "{\"text\":{\"ShowAISidebar\":\"true\",\"ShowSidebar\":\"false\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON("TextAISidebar=true;TextSidebar=false",
+                                                   uiMode, uiTheme, savedUIState));
+
+    LOK_ASSERT_EQUAL_STR(
+        "{\"presentation\":{\"ShowAISidebar\":\"false\"},\"spreadsheet\":{\"ShowAISidebar\":"
+        "\"true\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON(
+            "SpreadsheetAISidebar=true;PresentationAISidebar=false", uiMode, uiTheme,
+            savedUIState));
+
+    // The tab and the sidebar are separate defaults; both may be set at once.
+    LOK_ASSERT_EQUAL_STR(
+        "{\"text\":{\"ShowAINotebookbar\":\"true\",\"ShowAISidebar\":\"false\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON("TextAINotebookbar=true;TextAISidebar=false",
+                                                   uiMode, uiTheme, savedUIState));
 }
 
 void FileServeTests::testCSSVars()
@@ -371,7 +400,7 @@ void FileServeTests::testPreProcessedFileRoundtrip()
 
         if (data)
         {
-            const std::string orig(data->data(), data->size());
+            const std::string orig = Util::toString(*data);
             PreProcessedFile ppf(file, orig);
             LOK_ASSERT_EQUAL(file, ppf.filename());
             LOK_ASSERT_EQUAL(data->size(), ppf.size());
@@ -397,7 +426,7 @@ void FileServeTests::preProcessedFileSubstitution(
 
         if (data)
         {
-            std::string orig(data->data(), data->size());
+            std::string orig = Util::toString(*data);
             PreProcessedFile ppf(file, orig);
             LOK_ASSERT_EQUAL(file, ppf.filename());
             LOK_ASSERT_EQUAL(data->size(), ppf.size());
@@ -411,6 +440,7 @@ void FileServeTests::preProcessedFileSubstitution(
             replaceIfExist(orig, std::string("<!--%CSS_VARIABLES%-->"), "CSS_VARIABLES", variables);
             replaceIfExist(orig, std::string("%POSTMESSAGE_ORIGIN%"), "POSTMESSAGE_ORIGIN",
                            variables);
+            replaceIfExist(orig, std::string("%RELAY_ORIGIN%"), "RELAY_ORIGIN", variables);
             replaceIfExist(orig, std::string("%BRANDING_THEME%"), "BRANDING_THEME", variables);
             replaceIfExist(orig, std::string("<!--%BRANDING_JS%-->"), "BRANDING_JS", variables);
             replaceIfExist(orig, std::string("%FOOTER%"), "FOOTER", variables);
@@ -450,6 +480,7 @@ void FileServeTests::testPreProcessedFileSubstitution()
         { "CSS_VARIABLES",
           "<style>:root {--co-somestyle-text:#123456;--co-somestyle-size:15px;}</style>" },
         { "POSTMESSAGE_ORIGIN", "https://www.example.com:8080" },
+        { "RELAY_ORIGIN", "https://relay.example.com" },
         { "BRANDING_THEME", "cool_brand" },
         { "BRANDING_JS", "branding.js" },
         { "FOOTER", "<div><b>blah blah footer</b></div>" },
@@ -460,6 +491,50 @@ void FileServeTests::testPreProcessedFileSubstitution()
     preProcessedFileSubstitution(testname, variables);
     preProcessedFileSubstitution(std::string(testname) + "_empty",
                                  Util::UnorderedStringMap<std::string>());
+}
+
+void FileServeTests::testOnlyAConfiguredOriginRelaysMessages()
+{
+    constexpr std::string_view testname = __func__;
+
+    // The configured list arrives with its sources separated by spaces, and a leading one.
+    const std::string configured = " https://relay.example.com https://other.example.com:8443";
+
+    // A source the administrator wrote is taken as it stands.
+    LOK_ASSERT_EQUAL_STR("https://relay.example.com",
+                         FileServerRequestHandler::relayOriginFromForm("https://relay.example.com",
+                                                                      configured));
+    LOK_ASSERT_EQUAL_STR("https://other.example.com:8443",
+                         FileServerRequestHandler::relayOriginFromForm(
+                             "https://other.example.com:8443", configured));
+
+    // Anything that is not one of those sources, character for character, is dropped.
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm("relay.example.com",
+                                                                          configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://relay.example.com/", configured));
+    LOK_ASSERT_EQUAL_STR(
+        "", FileServerRequestHandler::relayOriginFromForm("http://relay.example.com", configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://relay.example.com:443", configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://evil.relay.example.com", configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm("", configured));
+
+    // The host a WOPISrc points at is no ground for relaying, so an origin that only appears
+    // there is dropped as well.
+    LOK_ASSERT_EQUAL_STR(
+        "", FileServerRequestHandler::relayOriginFromForm("https://wopi.example.net", configured));
+
+    // With no source configured at all nothing is accepted.
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://relay.example.com", std::string()));
+
+    // A list wrapped over several lines in the configuration file still names its sources.
+    LOK_ASSERT_EQUAL_STR("https://relay.example.com",
+                         FileServerRequestHandler::relayOriginFromForm(
+                             "https://relay.example.com",
+                             "https://other.example.com:8443\n   https://relay.example.com"));
 }
 
 void FileServeTests::testCSPMergeNewlines()
@@ -480,6 +555,134 @@ void FileServeTests::testCSPMergeNewlines()
         LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("frame-ancestors"));
         LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("img-src"));
     }
+
+    // Value on new line in a config file written with carriage returns.
+    {
+        ContentSecurityPolicy csp("\r\n        frame-ancestors https://example.com; img-src https://example.com\r\n    ");
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("frame-ancestors"));
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("img-src"));
+    }
+}
+
+void FileServeTests::testCSPKeepsOutBadSources()
+{
+    constexpr std::string_view testname = __func__;
+
+    // A URL carrying a carriage return and a newline stays out, and the good source stays in.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("frame-src", "https://good.example.com");
+        csp.appendDirectiveUrl("frame-src", "https://evil.example.com\r\n\r\n<script>");
+        LOK_ASSERT_EQUAL_STR(" https://good.example.com", csp.getDirective("frame-src"));
+    }
+
+    // A space in a URL cannot smuggle a second source into the directive.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("frame-src", "https://evil.example.com *");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("frame-src"));
+    }
+
+    // A tab is whitespace to the policy, so it cannot smuggle one either.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("frame-src", "https://evil.example.com\t*");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("frame-src"));
+    }
+
+    // A comma would start a second policy, so a URL holding one stays out.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("img-src", "https://evil.example.com,https://other.example.com");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("img-src"));
+    }
+
+    // A list of good sources still goes in whole.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirective("frame-ancestors", "example.com:* other.example.com:*");
+        LOK_ASSERT_EQUAL_STR(" example.com:* other.example.com:*",
+                             csp.getDirective("frame-ancestors"));
+    }
+
+    // One bad source keeps the whole list out.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirective("frame-ancestors", "example.com:* evil.example.com\r\n:*");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("frame-ancestors"));
+    }
+}
+
+// The settings-upload forward path: coolwsd receives a settings file from the browser and
+// forwards it to the WOPI host, deriving the host-side fileId from the form's filePath + the
+// uploaded file's name. Guards the path validation (traversal, absolute, disabled per-user
+// extensions) and the fileId construction that feed that forward.
+void FileServeTests::testSettingsUploadFileId()
+{
+    constexpr std::string_view testname = __func__;
+
+    std::string fileId;
+
+    // A shared (systemconfig) SPIF policy: accepted, fileId = filePath + fileName.
+    fileId.clear();
+    LOK_ASSERT(FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/systemconfig/spif/", "spif-nato.xml", fileId));
+    LOK_ASSERT_EQUAL_STR("/settings/systemconfig/spif/spif-nato.xml", fileId);
+
+    // A per-user (userconfig) SPIF policy: accepted.
+    fileId.clear();
+    LOK_ASSERT(FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "mine.xml", fileId));
+    LOK_ASSERT_EQUAL_STR("/settings/userconfig/spif/mine.xml", fileId);
+
+    // Another round-trip group is equally fine.
+    fileId.clear();
+    LOK_ASSERT(FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/wordbook/", "en_US.dic", fileId));
+    LOK_ASSERT_EQUAL_STR("/settings/userconfig/wordbook/en_US.dic", fileId);
+
+    // Per-user extension installation is disabled: rejected, fileId untouched.
+    fileId = "sentinel";
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/extensions/", "evil.zip", fileId));
+    LOK_ASSERT_EQUAL_STR("sentinel", fileId);
+
+    // Duplicate slashes must not smuggle a path past the extensions check.
+    fileId.clear();
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings//userconfig/extensions/", "evil.zip", fileId));
+
+    // A path must be absolute.
+    fileId.clear();
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "settings/userconfig/spif/", "x.xml", fileId));
+
+    // No traversal: "/../", "/./", or a trailing "/.." / "/.".
+    fileId.clear();
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/../etc/", "passwd", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/./spif/", "x.xml", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/spif/..", "x.xml", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/spif/.", "x.xml", fileId));
+
+    // The file name is a single path segment.
+    fileId = "sentinel";
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/", "extensions/evil.zip", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "../extensions/evil.zip", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "..\\evil.zip", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "..", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", ".", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "", fileId));
+    LOK_ASSERT_EQUAL_STR("sentinel", fileId);
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(FileServeTests);

@@ -31,7 +31,10 @@ namespace Desktop
     Poco::Path getConfigPath();
     std::string getDataDir();
 
-    void uploadSettings(const std::string& payload);
+    // Stores one settings file the Options dialog has uploaded. Returns whether
+    // it belongs to the xcu group, the one the engine reads, so the caller knows
+    // whether there is anything to apply to the open documents.
+    bool uploadSettings(const std::string& payload);
 
     FileResult fetchSettingsFile(const std::string& relPath);
 
@@ -39,10 +42,20 @@ namespace Desktop
 
     void syncSettings(const std::function<void(const std::vector<char>&)>& sendFileCallback);
 
+    // The configuration the engine reads: the directory the dialog writes its
+    // groups into, in the user's own profile. An app has no jail, so nothing
+    // is staged anywhere and the engine is pointed straight at it.
+    Poco::Path getUserConfigRoot();
+
     // Native-owned per-user UI preferences (preferences.json in the config dir).
     // getDarkMode() returns nullopt when the user has not chosen yet.
     std::optional<bool> getDarkMode();
     void setDarkMode(bool value);
+
+    // The zoom of the whole application user interface, as a percentage.
+    // Zero means no explicit zoom is stored and the system scaling applies.
+    int getUIZoomPercent();
+    void setUIZoomPercent(int percent);
 
     // Fetch the AI provider's model list (proxy for the desktop, which has no
     // server). payload is {"provider","apiKey","baseUrl"}; returns the provider's

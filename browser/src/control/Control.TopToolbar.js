@@ -32,7 +32,7 @@ class TopToolbar extends JSDialog.Toolbar {
 
 	onRemove() {
 		if (this.parentContainer) {
-			this.parentContainer.outerHTML = '';
+			this.parentContainer.remove();
 			this.parentContainer = null;
 		}
 
@@ -51,12 +51,14 @@ class TopToolbar extends JSDialog.Toolbar {
 
 		// In case it contains garbage
 		if (this.parentContainer) {
-			this.parentContainer.outerHTML = '';
+			this.parentContainer.remove();
 			this.parentContainer = null;
 		}
 
 		// Use original template as provided by server
-		$('#toolbar-logo').after(this.map.toolbarUpTemplate.cloneNode(true));
+		const toolbarLogo = document.getElementById('toolbar-logo');
+		if (toolbarLogo)
+			toolbarLogo.after(this.map.toolbarUpTemplate.cloneNode(true));
 		this.parentContainer = window.L.DomUtil.get('toolbar-up');
 		window.L.DomUtil.addClass(this.parentContainer, 'ui-toolbar');
 	}
@@ -325,7 +327,16 @@ class TopToolbar extends JSDialog.Toolbar {
 		this.reset();
 
 		var items = this.getToolItems();
-		this.builder.build(this.parentContainer, items);
+
+		var json = {
+			id: this.toolbarElementId,
+			dialogid: this.toolbarElementId,
+			jsontype: 'toolbar',
+			type: 'toolbox',
+			children: items,
+		};
+		this.model.fullUpdateKeepingEntries(json);
+		this.builder.build(this.parentContainer, this.model.getSnapshot().children);
 
 		if (window.mode.isSmallScreenDevice()) {
 			JSDialog.MakeScrollable(this.parentContainer, this.parentContainer.querySelector('div'));
@@ -363,23 +374,26 @@ class TopToolbar extends JSDialog.Toolbar {
 
 		switch (docType) {
 		case 'spreadsheet':
-			if (this.parentContainer) {
-				['reset', 'textalign', 'wraptextbutton', 'breakspacing', 'insertannotation', 'conditionalformatdialog',
-					'numberformatcurrency', 'numberformatpercent',
-					'numberformatincdecimals', 'numberformatdecdecimals', 'break-number', 'togglemergecells', 'breakmergecells',
-					'setborderstyle', 'sortascending', 'sortdescending', 'breaksorting', 'backgroundcolor', 'breaksidebar', 'sidebar', 'printoptions'
-				].forEach((id) => {
-					this.showItem(id, true);
-				});
+			{
+				if (this.parentContainer) {
+					['reset', 'textalign', 'wraptextbutton', 'breakspacing', 'insertannotation', 'conditionalformatdialog',
+						'numberformatcurrency', 'numberformatpercent',
+						'numberformatincdecimals', 'numberformatdecdecimals', 'break-number', 'togglemergecells', 'breakmergecells',
+						'setborderstyle', 'sortascending', 'sortdescending', 'breaksorting', 'backgroundcolor', 'breaksidebar', 'sidebar', 'printoptions'
+					].forEach((id) => {
+						this.showItem(id, true);
+					});
 
-				this.showItem('print', false);
-				this.showItem('styles', false);
-			}
+					this.showItem('print', false);
+					this.showItem('styles', false);
+				}
 
-			$('#toolbar-wrapper').addClass('spreadsheet');
-			if (window.mode.isTablet()) {
-				$(this.map.options.documentContainer).addClass('tablet');
-				$('#toolbar-wrapper').addClass('tablet');
+				const toolbarWrapper = document.getElementById('toolbar-wrapper');
+				if (toolbarWrapper) toolbarWrapper.classList.add('spreadsheet');
+				if (window.mode.isTablet()) {
+					$(this.map.options.documentContainer).addClass('tablet');
+					if (toolbarWrapper) toolbarWrapper.classList.add('tablet');
+				}
 			}
 
 			break;
@@ -399,14 +413,11 @@ class TopToolbar extends JSDialog.Toolbar {
 		case 'presentation':
 			{
 				// Fill the style combobox with Impress layouts
-				var stylesContainer = document.getElementById('styles');
-				if (stylesContainer && stylesContainer.updateEntries) {
-					var layoutEntries = [];
-					window.L.Styles.impressLayout.forEach(function(layout) {
-						layoutEntries.push(layout.translatedName);
-					});
-					stylesContainer.updateEntries(layoutEntries);
-				}
+				var layoutEntries = [];
+				window.L.Styles.impressLayout.forEach(function(layout) {
+					layoutEntries.push(layout.translatedName);
+				});
+				this.updateComboboxEntries('styles', layoutEntries);
 			}
 
 			if (this.parentContainer) {
@@ -454,10 +465,21 @@ class TopToolbar extends JSDialog.Toolbar {
 					el.setAttribute('disabled', 'true');
 			}
 		});
+
+		if (this.map['wopi']) {
+			var hideSave = this.map['wopi'].HideSaveOption || e.detail.perm !== 'edit';
+			this.showItem('save', !hideSave && this.map.uiManager.isButtonVisible('save'));
+			if (window.mode.isDesktop() && hideSave && this.map['wopi'].HidePrintOption) {
+				this.showItem('savebreak', false);
+			} else if (window.mode.isDesktop()) {
+				this.showItem('savebreak', true);
+			}
+		}
 	}
 
 	onWopiProps(e) {
-		if (e.HideSaveOption) {
+		var hideSave = e.HideSaveOption || this.map.isReadOnlyMode();
+		if (hideSave) {
 			this.showItem('save', false);
 		}
 		if (e.HidePrintOption) {
@@ -467,7 +489,7 @@ class TopToolbar extends JSDialog.Toolbar {
 		// On desktop we only have Save and Print buttons before the first
 		// splitter/break. Hide the splitter if we hid both save and print.
 		// TODO: Apply the same logic to mobile/tablet to avoid beginning with a splitter.
-		if (window.mode.isDesktop() && e.HideSaveOption && e.HidePrintOption) {
+		if (window.mode.isDesktop() && hideSave && e.HidePrintOption) {
 			this.showItem('savebreak', false);
 		}
 
@@ -533,12 +555,11 @@ class TopToolbar extends JSDialog.Toolbar {
 			styles.forEach(addStyleEntry);
 		}
 
+		this.updateComboboxEntries('styles', entries);
+
 		var container = document.getElementById('styles');
-		if (container && container.updateEntries) {
-			container.updateEntries(entries);
-			if (this.stylesSelectValue)
-				container.onSetText(this.stylesSelectValue);
-		}
+		if (container && this.stylesSelectValue)
+			container.onSetText(this.stylesSelectValue);
 	}
 
 	processStateChangedCommand(commandName, state) {

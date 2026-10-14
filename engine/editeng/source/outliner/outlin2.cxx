@@ -29,12 +29,10 @@
 #include <editeng/forbiddencharacterstable.hxx>
 
 #include <editeng/outliner.hxx>
-#include "paralist.hxx"
-#include <outleeng.hxx>
 #include <editeng/editstat.hxx>
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::linguistic2;
 
 
@@ -223,19 +221,51 @@ void Outliner::SetMinColumnWrapHeight(tools::Long nVal)
     pEditEngine->SetMinColumnWrapHeight(nVal);
 }
 
-bool Outliner::IsExpanded( Paragraph const * pPara ) const
+bool Outliner::IsExpanded( sal_Int32 nPara ) const
 {
-    return pParaList->HasVisibleChildren( pPara );
+    return HasVisibleChildren( nPara );
 }
 
-Paragraph* Outliner::GetParent( Paragraph const * pParagraph ) const
+sal_Int32 Outliner::GetParent( sal_Int32 nPara ) const
 {
-    return pParaList->GetParent( pParagraph );
+    sal_Int32 nParaPrev = nPara-1;
+    while ( nParaPrev >= 0 && ( pEditEngine->GetNumberingDepth(nParaPrev) >= pEditEngine->GetNumberingDepth(nPara) ) )
+    {
+        --nParaPrev;
+    }
+
+    return nParaPrev;
 }
 
-sal_Int32 Outliner::GetChildCount( Paragraph const * pParent ) const
+bool Outliner::HasHiddenChildren( sal_Int32 nPara ) const
 {
-    return pParaList->GetChildCount( pParent );
+    sal_Int32 nParaNext = nPara+1;
+    if (nParaNext >= pEditEngine->GetParagraphCount())
+        return false;
+    return ( pEditEngine->GetNumberingDepth(nParaNext) > pEditEngine->GetNumberingDepth(nPara) )
+        && !pEditEngine->IsBulletVisible(nParaNext);
+}
+
+bool Outliner::HasVisibleChildren( sal_Int32 nPara ) const
+{
+    sal_Int32 nParaNext = nPara+1;
+    if (nParaNext >= pEditEngine->GetParagraphCount())
+        return false;
+    return ( pEditEngine->GetNumberingDepth(nParaNext) > pEditEngine->GetNumberingDepth(nPara) )
+        && pEditEngine->IsBulletVisible(nParaNext);
+}
+
+sal_Int32 Outliner::GetChildCount( sal_Int32 nPara ) const
+{
+    sal_Int32 nChildCount = 0;
+    sal_Int32 nParaNext = nPara+1;
+    while ( nParaNext < pEditEngine->GetParagraphCount()
+            && ( pEditEngine->GetNumberingDepth(nParaNext) > pEditEngine->GetNumberingDepth(nPara) ) )
+    {
+        nChildCount++;
+        ++nParaNext;
+    }
+    return nChildCount;
 }
 
 Size Outliner::CalcTextSize()
@@ -425,7 +455,7 @@ bool Outliner::IsTextPos( const Point& rPaperPos, sal_uInt16 nBorder, bool* pbBu
         sal_Int32 nPara = pEditEngine->FindParagraph( aDocPos.Y() );
         if ((nPara != EE_PARA_MAX) && ImplHasNumberFormat(nPara))
         {
-            tools::Rectangle aBulArea = ImpCalcBulletArea( nPara, true, true );
+            tools::Rectangle aBulArea = ImpCalcBulletHitArea( nPara );
             if ( aBulArea.Contains( rPaperPos ) )
             {
                 bTextPos = true;
@@ -487,6 +517,21 @@ void Outliner::setRoundFontSizeToPt(bool bRound) const
     pEditEngine->setRoundFontSizeToPt(bRound);
 }
 
+void Outliner::setLineSpacingBelowBaseline(bool bBelow) const
+{
+    pEditEngine->setLineSpacingBelowBaseline(bBelow);
+}
+
+void Outliner::setTextFitting(EETextFitting eFitting) const
+{
+    pEditEngine->setTextFitting(eFitting);
+}
+
+void Outliner::setTextFittingHeight(tools::Long nHeight) const
+{
+    pEditEngine->setTextFittingHeight(nHeight);
+}
+
 void Outliner::EraseVirtualDevice()
 {
     pEditEngine->EraseVirtualDevice();
@@ -495,11 +540,6 @@ void Outliner::EraseVirtualDevice()
 bool Outliner::ShouldCreateBigTextObject() const
 {
     return pEditEngine->ShouldCreateBigTextObject();
-}
-
-const EditEngine& Outliner::GetEditEngine() const
-{
-    return *pEditEngine;
 }
 
 void Outliner::SetVertical(bool bVertical)

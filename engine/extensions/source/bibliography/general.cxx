@@ -46,8 +46,8 @@
 #include <sfx2/objsh.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::form;
 using namespace ::com::sun::star::sdb;
 
@@ -130,7 +130,7 @@ BibGeneralPage::BibGeneralPage(vcl::Window* pParent, BibDataManager* pMan)
     : InterimItemWindow(pParent, u"modules/sbibliography/ui/generalpage.ui"_ustr, u"GeneralPage"_ustr)
     , BibShortCutHandler(this)
     , xScrolledWindow(m_xBuilder->weld_scrolled_window(u"scrolledwindow"_ustr))
-    , xGrid(m_xBuilder->weld_widget(u"grid"_ustr))
+    , xGrid(m_xBuilder->weld_container(u"grid"_ustr))
     , xIdentifierFT(m_xBuilder->weld_label(u"shortname"_ustr))
     , xIdentifierED(m_xBuilder->weld_entry(u"shortnamecontrol"_ustr))
     , xAuthTypeFT(m_xBuilder->weld_label(u"authtype"_ustr))
@@ -478,7 +478,7 @@ BibGeneralPage::~BibGeneralPage()
 class ChangeListener : public cppu::WeakImplHelper<css::beans::XPropertyChangeListener>
 {
 public:
-    explicit ChangeListener(css::uno::Reference<css::beans::XPropertySet> xPropSet)
+    explicit ChangeListener(cpo::uno::Reference<css::beans::XPropertySet> xPropSet)
         : m_xPropSet(std::move(xPropSet))
         , m_bSelfChanging(false)
     {
@@ -497,7 +497,7 @@ public:
     virtual void WriteBack() = 0;
 
 protected:
-    css::uno::Reference<css::beans::XPropertySet> m_xPropSet;
+    cpo::uno::Reference<css::beans::XPropertySet> m_xPropSet;
     bool m_bSelfChanging;
 };
 
@@ -506,7 +506,7 @@ namespace
     class EntryChangeListener : public ChangeListener
     {
     public:
-        explicit EntryChangeListener(weld::Entry& rEntry, const css::uno::Reference<css::beans::XPropertySet>& rPropSet,
+        explicit EntryChangeListener(weld::Entry& rEntry, const cpo::uno::Reference<css::beans::XPropertySet>& rPropSet,
                                      BibGeneralPage& rPage)
             : ChangeListener(rPropSet)
             , m_rEntry(rEntry)
@@ -597,7 +597,7 @@ namespace
             }
             m_xPropSet->setPropertyValue(u"Text"_ustr, Any(aText));
 
-            css::uno::Reference<css::form::XBoundComponent> xBound(m_xPropSet, css::uno::UNO_QUERY);
+            cpo::uno::Reference<css::form::XBoundComponent> xBound(m_xPropSet, cpo::uno::UNO_QUERY);
             if (xBound.is())
                 xBound->commit();
 
@@ -619,7 +619,7 @@ namespace
     class ComboBoxChangeListener : public ChangeListener
     {
     public:
-        explicit ComboBoxChangeListener(weld::ComboBox& rComboBox, const css::uno::Reference<css::beans::XPropertySet>& rPropSet)
+        explicit ComboBoxChangeListener(weld::ComboBox& rComboBox, const cpo::uno::Reference<css::beans::XPropertySet>& rPropSet)
             : ChangeListener(rPropSet)
             , m_rComboBox(rComboBox)
         {
@@ -671,7 +671,7 @@ namespace
             Sequence<sal_Int16> aSelection{ o3tl::narrowing<sal_Int16>(m_rComboBox.get_active()) };
             m_xPropSet->setPropertyValue(u"SelectedItems"_ustr, Any(aSelection));
 
-            css::uno::Reference<css::form::XBoundComponent> xBound(m_xPropSet, css::uno::UNO_QUERY);
+            cpo::uno::Reference<css::form::XBoundComponent> xBound(m_xPropSet, cpo::uno::UNO_QUERY);
             if (xBound.is())
                 xBound->commit();
 

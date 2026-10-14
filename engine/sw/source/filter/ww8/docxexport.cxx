@@ -24,6 +24,7 @@
 #include "docxattributeoutput.hxx"
 #include "docxsdrexport.hxx"
 #include "docxhelper.hxx"
+#include "NamespaceAdjustmentHandler.hxx"
 
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
@@ -78,6 +79,7 @@
 #include <fmtline.hxx>
 #include <fmtpdsc.hxx>
 #include <frmfmt.hxx>
+#include <frameformats.hxx>
 #include <section.hxx>
 #include <ftninfo.hxx>
 #include <pagedesc.hxx>
@@ -113,6 +115,7 @@
 using namespace sax_fastparser;
 using namespace ::comphelper;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::oox;
 
 using oox::vml::VMLExport;
@@ -457,7 +460,7 @@ OString DocxExport::OutputChart( uno::Reference< frame::XModel > const & xModel,
     // TODO: With Chart extracted this cannot really happen since
     // no Chart could've been added at all
     oox::drawingml::ChartExport aChartExport(XML_w, pChartFS, xModel, &m_rFilter, oox::drawingml::DOCUMENT_DOCX);
-    css::uno::Reference<css::util::XModifiable> xModifiable(xModel, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::util::XModifiable> xModifiable(xModel, cpo::uno::UNO_QUERY);
     const bool bOldModified = xModifiable && xModifiable->isModified();
 
     // Currently, content in ../embeddings is simply grab-bagged as OOEmbeddings
@@ -534,7 +537,7 @@ OString DocxExport::WriteOLEObject(SwOLEObj& rObject, OUString & io_rProgID)
     }
 
     uno::Reference <embed::XEmbeddedObject> xObj( rObject.GetOleRef() );
-    uno::Reference<uno::XComponentContext> const xContext(
+    uno::Reference<cpo::uno::XComponentContext> const xContext(
         GetFilter().getComponentContext());
 
     OUString sMediaType;
@@ -733,6 +736,8 @@ ErrCode DocxExport::ExportDocument_Impl()
     WriteGlossary();
 
     WriteCustomXml();
+
+    WriteWebSettings();
 
     WriteEmbeddings();
 
@@ -954,25 +959,68 @@ void DocxExport::WritePostitFields()
     pPostitFS->endElementNS( XML_w, XML_comments );
     pPostitFS->endDocument();
 
-    if (eHasProperties != DocxAttributeOutput::hasProperties::yes)
+    if (eHasProperties == DocxAttributeOutput::hasProperties::yes)
+    {
+        m_rFilter.addRelation(m_pDocumentFS->getOutputStream(),
+                              oox::getRelationship(Relationship::COMMENTSEXTENDED),
+                              u"commentsExtended.xml");
+
+        pPostitFS = m_rFilter.openFragmentStreamWithSerializer(
+            u"word/commentsExtended.xml"_ustr,
+            u"application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"_ustr);
+
+        pPostitFS->startElementNS(XML_w15, XML_commentsEx, // Add namespaces manually now
+                                  FSNS(XML_xmlns, XML_mc), m_rFilter.getNamespaceURL(OOX_NS(mce)),
+                                  FSNS(XML_xmlns, XML_w15), m_rFilter.getNamespaceURL(OOX_NS(w15)),
+                                  FSNS(XML_mc, XML_Ignorable), "w15");
+        m_pAttrOutput->SetSerializer(pPostitFS);
+        m_pAttrOutput->WritePostItFieldsResolved();
+        m_pAttrOutput->SetSerializer(m_pDocumentFS);
+        pPostitFS->endElementNS(XML_w15, XML_commentsEx);
+        pPostitFS->endDocument();
+    }
+
+    // The moment each comment was written goes in its own part, tied to the comment by a durable
+    // id that a second part maps to the comment's paragraph id. The w:date in comments.xml is the
+    // author's wall clock, which cannot say which moment it was. A comment has a moment whether or
+    // not it is resolved or a reply, so this does not depend on the part above.
+    if (!m_pAttrOutput->HasPostitFieldsWithDateUTC())
         return;
 
     m_rFilter.addRelation(m_pDocumentFS->getOutputStream(),
-                          oox::getRelationship(Relationship::COMMENTSEXTENDED),
-                          u"commentsExtended.xml");
+                          oox::getRelationship(Relationship::COMMENTSIDS),
+                          u"commentsIds.xml");
 
     pPostitFS = m_rFilter.openFragmentStreamWithSerializer(
-        u"word/commentsExtended.xml"_ustr,
-        u"application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"_ustr);
+        u"word/commentsIds.xml"_ustr,
+        u"application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml"_ustr);
 
-    pPostitFS->startElementNS(XML_w15, XML_commentsEx, // Add namespaces manually now
+    pPostitFS->startElementNS(XML_w16cid, XML_commentsIds,
                               FSNS(XML_xmlns, XML_mc), m_rFilter.getNamespaceURL(OOX_NS(mce)),
-                              FSNS(XML_xmlns, XML_w15), m_rFilter.getNamespaceURL(OOX_NS(w15)),
-                              FSNS(XML_mc, XML_Ignorable), "w15");
+                              FSNS(XML_xmlns, XML_w16cid), m_rFilter.getNamespaceURL(OOX_NS(w16cid)),
+                              FSNS(XML_mc, XML_Ignorable), "w16cid");
     m_pAttrOutput->SetSerializer(pPostitFS);
-    m_pAttrOutput->WritePostItFieldsResolved();
+    m_pAttrOutput->WritePostItFieldsIds();
     m_pAttrOutput->SetSerializer(m_pDocumentFS);
-    pPostitFS->endElementNS(XML_w15, XML_commentsEx);
+    pPostitFS->endElementNS(XML_w16cid, XML_commentsIds);
+    pPostitFS->endDocument();
+
+    m_rFilter.addRelation(m_pDocumentFS->getOutputStream(),
+                          oox::getRelationship(Relationship::COMMENTSEXTENSIBLE),
+                          u"commentsExtensible.xml");
+
+    pPostitFS = m_rFilter.openFragmentStreamWithSerializer(
+        u"word/commentsExtensible.xml"_ustr,
+        u"application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml"_ustr);
+
+    pPostitFS->startElementNS(XML_w16cex, XML_commentsExtensible,
+                              FSNS(XML_xmlns, XML_mc), m_rFilter.getNamespaceURL(OOX_NS(mce)),
+                              FSNS(XML_xmlns, XML_w16cex), m_rFilter.getNamespaceURL(OOX_NS(w16cex)),
+                              FSNS(XML_mc, XML_Ignorable), "w16cex");
+    m_pAttrOutput->SetSerializer(pPostitFS);
+    m_pAttrOutput->WritePostItFieldsExtensible();
+    m_pAttrOutput->SetSerializer(m_pDocumentFS);
+    pPostitFS->endElementNS(XML_w16cex, XML_commentsExtensible);
     pPostitFS->endDocument();
 }
 
@@ -1224,6 +1272,38 @@ WriteCompat(SwDoc const& rDoc, ::sax_fastparser::FSHelperPtr const& rpFS) -> voi
         rpFS->singleElementNS(XML_w, XML_doNotBreakWrappedTables);
     }
 
+}
+
+namespace
+{
+/// True when the document, one of its styles or one of its paragraphs asks for hyphenated text.
+bool lcl_hasAnyHyphenation(const SwDoc& rDoc)
+{
+    if (rDoc.GetDefault(RES_PARATR_HYPHENZONE).IsHyphen())
+        return true;
+
+    for (const SwTextFormatColl* pColl : *rDoc.GetTextFormatColls())
+    {
+        if (const SvxHyphenZoneItem* pItem = pColl->GetItemIfSet(RES_PARATR_HYPHENZONE, false);
+            pItem && pItem->IsHyphen())
+            return true;
+    }
+
+    const SwNodes& rNodes = rDoc.GetNodes();
+    for (SwNodeOffset nNode(0); nNode < rNodes.Count(); ++nNode)
+    {
+        const SwTextNode* pTextNode = rNodes[nNode]->GetTextNode();
+        if (!pTextNode)
+            continue;
+        const SwAttrSet* pSet = pTextNode->GetpSwAttrSet();
+        if (!pSet)
+            continue;
+        if (const SvxHyphenZoneItem* pItem = pSet->GetItemIfSet(RES_PARATR_HYPHENZONE, false);
+            pItem && pItem->IsHyphen())
+            return true;
+    }
+    return false;
+}
 }
 
 void DocxExport::WriteSettings()
@@ -1564,9 +1644,13 @@ void DocxExport::WriteSettings()
         pFS->singleElementNS( XML_w, XML_defaultTabStop, FSNS( XML_w, XML_val ),
             OString::number(m_aSettings.defaultTabStop) );
 
-    // Automatic hyphenation: it's a global setting in Word, it's a paragraph setting in Writer.
-    // Set it's value to "auto" and disable on paragraph level, if no hyphenation is used there.
-    pFS->singleElementNS(XML_w, XML_autoHyphenation, FSNS(XML_w, XML_val), "true");
+    /*  Automatic hyphenation is a setting of the whole document in OOXML and a setting of each
+        paragraph in Writer, so it goes out as true and is turned off again on the paragraphs
+        that do not hyphenate. A document where nothing hyphenates says nothing at all, because
+        reading w:autoHyphenation puts the hyphenation properties on the default paragraph
+        style, so a round trip would add properties the document never had. */
+    if (lcl_hasAnyHyphenation(m_rDoc))
+        pFS->singleElementNS(XML_w, XML_autoHyphenation, FSNS(XML_w, XML_val), "true");
 
     // Hyphenation details set depending on default style, otherwise on body style
     SwTextFormatColl* pColl = m_rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool(SwPoolFormatId::COLL_STANDARD, /*bRegardLanguage=*/false);
@@ -1849,6 +1933,28 @@ void DocxExport::WriteGlossary()
     }
 }
 
+static OUString lcl_GetStoreItemID(const uno::Reference<xml::dom::XDocument>& xDocumentProps)
+{
+    if (!xDocumentProps.is())
+        return OUString();
+
+    uno::Reference<xml::xpath::XXPathAPI> xXPathAPI
+        = xml::xpath::XPathAPI::create(comphelper::getProcessComponentContext());
+    xXPathAPI->registerNS(u"ds"_ustr,
+                          u"http://schemas.openxmlformats.org/officeDocument/2006/customXml"_ustr);
+
+    try
+    {
+        return xXPathAPI->eval(xDocumentProps, u"string(/ds:datastoreItem/@ds:itemID)"_ustr)
+            ->getString();
+    }
+    catch (cpo::uno::Exception const&)
+    {
+        TOOLS_WARN_EXCEPTION("sw.ww8", "custom xml store id");
+        return OUString();
+    }
+}
+
 static void lcl_UpdateXmlValues(const SdtData& rSdtData,
                                 const uno::Reference<xml::dom::XDocument>& xDocument)
 {
@@ -1909,16 +2015,27 @@ void DocxExport::WriteCustomXml()
                 "customXml/item" + OUString::number(j + 1) + ".xml", u"application/xml"_ustr);
 
             uno::Reference<xml::dom::XDocument> xItemDom = customXmlDom;
-            if (m_SdtData.size())
+            const OUString aStoreItemID = lcl_GetStoreItemID(customXmlDomProps);
+            if (!aStoreItemID.isEmpty())
             {
                 // A data-bound content control can hold a value the user has edited since the
-                // document was loaded, so write the current values into the stored XML. The edit
-                // goes to a copy, which leaves the document model as it is.
-                uno::Reference<xml::dom::XDocument> xCopy(customXmlDom->cloneNode(true),
-                                                          uno::UNO_QUERY_THROW);
+                // document was loaded, so write the current values into the stored XML. Each
+                // value goes to the item its own data binding names. The edit goes to a copy,
+                // which leaves the document model as it is.
+                uno::Reference<xml::dom::XDocument> xCopy;
                 for (const SdtData& rSdtData : m_SdtData)
+                {
+                    if (rSdtData.storeItemID != aStoreItemID)
+                        continue;
+
+                    if (!xCopy.is())
+                        xCopy.set(customXmlDom->cloneNode(true), uno::UNO_QUERY_THROW);
+
                     lcl_UpdateXmlValues(rSdtData, xCopy);
-                xItemDom = xCopy;
+                }
+
+                if (xCopy.is())
+                    xItemDom = xCopy;
             }
 
             uno::Reference<xml::sax::XSAXSerializable> xSerializer(xItemDom, uno::UNO_QUERY_THROW);
@@ -1942,6 +2059,40 @@ void DocxExport::WriteCustomXml()
                     Concat2View("itemProps"+OUString::number(j+1)+".xml" ));
         }
     }
+}
+
+void DocxExport::WriteWebSettings()
+{
+    uno::Reference<beans::XPropertySetInfo> xPropSetInfo = m_xTextDoc->getPropertySetInfo();
+    if (!xPropSetInfo->hasPropertyByName(UNO_NAME_MISC_OBJ_INTEROPGRABBAG))
+        return;
+
+    cpo::uno::Reference<css::xml::dom::XDocument> xWebSettingsDom;
+    cpo::uno::Sequence<beans::PropertyValue> propList;
+    m_xTextDoc->getPropertyValue(UNO_NAME_MISC_OBJ_INTEROPGRABBAG) >>= propList;
+    auto pProp = std::find_if(std::cbegin(propList), std::cend(propList),
+                              [](const beans::PropertyValue& rProp)
+                              { return rProp.Name == "OOXWebSettings"; });
+    if (pProp != std::cend(propList))
+        pProp->Value >>= xWebSettingsDom;
+
+    if (!xWebSettingsDom.is())
+        return;
+
+    m_rFilter.addRelation(m_pDocumentFS->getOutputStream(),
+                          oox::getRelationship(oox::Relationship::WEBSETTINGS),
+                          u"webSettings.xml");
+
+    uno::Reference<xml::sax::XSAXSerializable> xSerializer(xWebSettingsDom,
+                                                            uno::UNO_QUERY_THROW);
+    uno::Reference<xml::sax::XWriter> xWriter
+        = xml::sax::Writer::create(comphelper::getProcessComponentContext());
+    xWriter->setOutputStream(GetFilter().openFragmentStream(
+        u"word/webSettings.xml"_ustr,
+        u"application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml"_ustr));
+    xSerializer->serialize(
+        uno::Reference<xml::sax::XDocumentHandler>(new NamespaceAdjustmentHandler(m_rFilter,
+            xWriter)), cpo::uno::Sequence<beans::StringPair>());
 }
 
 void DocxExport::WriteVBA()
@@ -2018,8 +2169,8 @@ void DocxExport::WriteEmbeddings()
             continue;
 
         OUString contentType;
-        if (css::uno::Reference<css::beans::XPropertySet> xProps{ embeddingsStream,
-                                                                  css::uno::UNO_QUERY })
+        if (cpo::uno::Reference<css::beans::XPropertySet> xProps{ embeddingsStream,
+                                                                  cpo::uno::UNO_QUERY })
         {
             try
             {

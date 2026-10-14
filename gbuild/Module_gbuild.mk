@@ -46,10 +46,12 @@ $(eval $(call gb_Module_add_targets,gbuild, \
     Executable_lokitclient \
     StaticLibrary_dummytraceevent \
     StaticLibrary_forkit \
+    StaticLibrary_forkitmain \
     StaticLibrary_globals \
     StaticLibrary_kitglobals \
     StaticLibrary_shared \
     StaticLibrary_simd \
+    StaticLibrary_wsd \
     StaticLibrary_wsdglobals \
 ))
 

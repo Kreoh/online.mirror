@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/table/XTableChart.hpp>
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/chart/XAxisXSupplier.hpp>
@@ -36,26 +36,26 @@ class ScVbaChart : public ChartImpl_BASE
 {
 friend class ScVbaAxis;
 
-    css::uno::Reference< css::chart::XChartDocument > mxChartDocument;
-    css::uno::Reference< css::table::XTableChart > mxTableChart;
-    css::uno::Reference< css::beans::XPropertySet > mxDiagramPropertySet;
-    css::uno::Reference< css::beans::XPropertySet > mxChartPropertySet;
-    css::uno::Reference< css::chart::XAxisXSupplier > xAxisXSupplier;
-    css::uno::Reference< css::chart::XAxisYSupplier> xAxisYSupplier;
-    css::uno::Reference< css::chart::XAxisZSupplier > xAxisZSupplier;
-    css::uno::Reference< css::chart::XTwoAxisXSupplier > xTwoAxisXSupplier;
-    css::uno::Reference< css::chart::XTwoAxisYSupplier > xTwoAxisYSupplier;
+    cpo::uno::Reference< css::chart::XChartDocument > mxChartDocument;
+    cpo::uno::Reference< css::table::XTableChart > mxTableChart;
+    cpo::uno::Reference< css::beans::XPropertySet > mxDiagramPropertySet;
+    cpo::uno::Reference< css::beans::XPropertySet > mxChartPropertySet;
+    cpo::uno::Reference< css::chart::XAxisXSupplier > xAxisXSupplier;
+    cpo::uno::Reference< css::chart::XAxisYSupplier> xAxisYSupplier;
+    cpo::uno::Reference< css::chart::XAxisZSupplier > xAxisZSupplier;
+    cpo::uno::Reference< css::chart::XTwoAxisXSupplier > xTwoAxisXSupplier;
+    cpo::uno::Reference< css::chart::XTwoAxisYSupplier > xTwoAxisYSupplier;
 
     static cpo::uno::Sequence< OUString > getDefaultSeriesDescriptions( sal_Int32 nCount );
     /// @throws css::script::BasicErrorException
     void setDefaultChartType() ;
     /// @throws css::script::BasicErrorException
     void setDiagram( const OUString& _sDiagramType);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool isStacked();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool is100PercentStacked();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int32 getStackedType( sal_Int32 _nStacked, sal_Int32 _n100PercentStacked, sal_Int32 _nUnStacked );
     /// @throws css::script::BasicErrorException
     sal_Int32 getSolidType(sal_Int32 _nDeep, sal_Int32 _nVertiStacked, sal_Int32 _nVerti100PercentStacked, sal_Int32 _nVertiUnStacked, sal_Int32 _nHoriStacked, sal_Int32 _nHori100PercentStacked, sal_Int32 _nHoriUnStacked);
@@ -67,33 +67,33 @@ friend class ScVbaAxis;
     sal_Int32 getMarkerType(sal_Int32 _nWithMarkers, sal_Int32 _nWithoutMarkers);
     void assignDiagramAttributes();
 public:
-    ScVbaChart( const css::uno::Reference< ov::XHelperInterface >& _xParent, const css::uno::Reference< css::uno::XComponentContext >& _xContext, const css::uno::Reference< css::lang::XComponent >& _xChartComponent, css::uno::Reference< css::table::XTableChart >  _xTableChart );
+    ScVbaChart( const cpo::uno::Reference< ov::XHelperInterface >& _xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& _xContext, const cpo::uno::Reference< css::lang::XComponent >& _xChartComponent, cpo::uno::Reference< css::table::XTableChart >  _xTableChart );
 
     // Non-interface
-    const css::uno::Reference< css::beans::XPropertySet >& xDiagramPropertySet() const { return mxDiagramPropertySet; }
-    /// @throws css::uno::RuntimeException
+    const cpo::uno::Reference< css::beans::XPropertySet >& xDiagramPropertySet() const { return mxDiagramPropertySet; }
+    /// @throws cpo::uno::RuntimeException
     bool is3D();
     /// @throws css::script::BasicErrorException
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::beans::XPropertySet > getAxisPropertySet(sal_Int32 _nAxisType, sal_Int32 _nAxisGroup);
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::beans::XPropertySet > getAxisPropertySet(sal_Int32 _nAxisType, sal_Int32 _nAxisGroup);
     // Methods
-    virtual OUString SAL_CALL getName() override;
-    virtual cpo::uno::Any SAL_CALL SeriesCollection(const cpo::uno::Any&) override;
-    virtual ::sal_Int32 SAL_CALL getChartType() override;
-    virtual void SAL_CALL setChartType( ::sal_Int32 _charttype ) override;
-    virtual void SAL_CALL Activate(  ) override;
-    virtual void SAL_CALL setSourceData( const css::uno::Reference< ::ooo::vba::excel::XRange >& range, const cpo::uno::Any& PlotBy ) override;
-    virtual ::sal_Int32 SAL_CALL Location(  ) override;
-    virtual ::sal_Int32 SAL_CALL getLocation(  ) override;
-    virtual void SAL_CALL setLocation( ::sal_Int32 where, const cpo::uno::Any& Name ) override;
-    virtual bool SAL_CALL getHasTitle(  ) override;
-    virtual void SAL_CALL setHasTitle( bool bTitle ) override;
-    virtual bool SAL_CALL getHasLegend(  ) override;
-    virtual void SAL_CALL setHasLegend( bool bLegend ) override;
-    virtual void SAL_CALL setPlotBy( ::sal_Int32 xlRowCol ) override;
-    virtual ::sal_Int32 SAL_CALL getPlotBy(  ) override;
-    virtual css::uno::Reference< ov::excel::XChartTitle > SAL_CALL getChartTitle(  ) override;
-    virtual cpo::uno::Any SAL_CALL Axes( const cpo::uno::Any& Type, const cpo::uno::Any& AxisGroup ) override;
+    virtual OUString getName() override;
+    virtual cpo::uno::Any SeriesCollection(const cpo::uno::Any&) override;
+    virtual ::sal_Int32 getChartType() override;
+    virtual void setChartType( ::sal_Int32 _charttype ) override;
+    virtual void Activate(  ) override;
+    virtual void setSourceData( const cpo::uno::Reference< ::ooo::vba::excel::XRange >& range, const cpo::uno::Any& PlotBy ) override;
+    virtual ::sal_Int32 Location(  ) override;
+    virtual ::sal_Int32 getLocation(  ) override;
+    virtual void setLocation( ::sal_Int32 where, const cpo::uno::Any& Name ) override;
+    virtual bool getHasTitle(  ) override;
+    virtual void setHasTitle( bool bTitle ) override;
+    virtual bool getHasLegend(  ) override;
+    virtual void setHasLegend( bool bLegend ) override;
+    virtual void setPlotBy( ::sal_Int32 xlRowCol ) override;
+    virtual ::sal_Int32 getPlotBy(  ) override;
+    virtual cpo::uno::Reference< ov::excel::XChartTitle > getChartTitle(  ) override;
+    virtual cpo::uno::Any Axes( const cpo::uno::Any& Type, const cpo::uno::Any& AxisGroup ) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

@@ -53,7 +53,7 @@ class ScCellFieldsObj final : public cppu::WeakImplHelper<
                         public SfxListener
 {
 private:
-    css::uno::Reference<css::text::XTextRange> mxContent;
+    cpo::uno::Reference<css::text::XTextRange> mxContent;
     ScDocShell*             pDocShell;
     ScAddress               aCellPos;
     std::unique_ptr<ScEditSource> mpEditSource;
@@ -62,42 +62,42 @@ private:
     /// mutex to lock the InterfaceContainerHelper
     std::mutex              aMutex;
 
-    css::uno::Reference<css::text::XTextField>
+    cpo::uno::Reference<css::text::XTextField>
             GetObjectByIndex_Impl(sal_Int32 Index) const;
 
 public:
     ScCellFieldsObj(
-        css::uno::Reference<css::text::XTextRange> xContent,
+        cpo::uno::Reference<css::text::XTextRange> xContent,
         ScDocShell* pDocSh, const ScAddress& rPos);
     virtual ~ScCellFieldsObj() override;
 
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
                             // XContainer
-    virtual void SAL_CALL   addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
-    virtual void SAL_CALL   removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    virtual void   addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    virtual void   removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
 
                             // XRefreshable
-    virtual void SAL_CALL refresh(  ) override;
-    virtual void SAL_CALL addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
-    virtual void SAL_CALL removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void refresh(  ) override;
+    virtual void addRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void removeRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ScHeaderFieldsObj final : public cppu::WeakImplHelper<
@@ -116,7 +116,7 @@ private:
     /// mutex to lock the InterfaceContainerHelper
     std::mutex                  aMutex;
 
-    css::uno::Reference< css::text::XTextField>
+    cpo::uno::Reference< css::text::XTextField>
             GetObjectByIndex_Impl(sal_Int32 Index) const;
 
 public:
@@ -124,30 +124,30 @@ public:
     virtual                 ~ScHeaderFieldsObj() override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
                             // XContainer
-    virtual void SAL_CALL   addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
-    virtual void SAL_CALL   removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    virtual void   addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    virtual void   removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
 
                             // XRefreshable
-    virtual void SAL_CALL refresh(  ) override;
-    virtual void SAL_CALL addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
-    virtual void SAL_CALL removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void refresh(  ) override;
+    virtual void addRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void removeRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 /**
@@ -170,7 +170,7 @@ class ScEditFieldObj final : public ScEditFieldObj_Base
 
     sal_Int32 meType;
     std::unique_ptr<SvxFieldData> mpData;
-    css::uno::Reference<css::text::XTextRange> mpContent;
+    cpo::uno::Reference<css::text::XTextRange> mpContent;
 
     css::util::DateTime maDateTime;
     sal_Int32 mnNumFormat;
@@ -193,7 +193,7 @@ private:
 
 public:
     ScEditFieldObj(
-        css::uno::Reference<css::text::XTextRange> xContent,
+        cpo::uno::Reference<css::text::XTextRange> xContent,
         std::unique_ptr<ScEditSource> pEditSrc, sal_Int32 eType, const ESelection& rSel);
     virtual ~ScEditFieldObj() override;
 
@@ -202,40 +202,40 @@ public:
     bool IsInserted() const;
     SvxFieldItem CreateFieldItem();
     void InitDoc(
-        const css::uno::Reference<css::text::XTextRange>& rContent,
+        const cpo::uno::Reference<css::text::XTextRange>& rContent,
         std::unique_ptr<ScEditSource> pEditSrc, const ESelection& rSel);
 
                             // XTextField
-    virtual OUString SAL_CALL getPresentation( bool bShowCommand ) override;
+    virtual OUString getPresentation( bool bShowCommand ) override;
 
                             // XTextContent
-    virtual void SAL_CALL attach( const css::uno::Reference< css::text::XTextRange >& xTextRange ) override;
-    virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
+    virtual void attach( const cpo::uno::Reference< css::text::XTextRange >& xTextRange ) override;
+    virtual cpo::uno::Reference< css::text::XTextRange >
                             getAnchor() override;
 
                             // XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo >
-                            SAL_CALL getPropertySetInfo() override;
-    virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName,
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+                            getPropertySetInfo() override;
+    virtual void setPropertyValue( const OUString& aPropertyName,
                                     const cpo::uno::Any& aValue ) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) override;
-    virtual void SAL_CALL addPropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
-    virtual void SAL_CALL removePropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
-    virtual void SAL_CALL addVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
-    virtual void SAL_CALL removeVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
                             // XTypeProvider
-    virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes() override;
-    virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -35,15 +35,15 @@ void ThemeColorsToolBoxControl::disposing(std::unique_lock<std::mutex>& rGuard)
     svt::ToolboxController::disposing(rGuard);
 }
 
-void SAL_CALL
+void
 ThemeColorsToolBoxControl::statusChanged(const css::frame::FeatureStateEvent& /*rEvent*/)
 {
 }
 
-css::uno::Reference<css::awt::XWindow>
-ThemeColorsToolBoxControl::createItemWindow(const css::uno::Reference<css::awt::XWindow>& rParent)
+cpo::uno::Reference<css::awt::XWindow>
+ThemeColorsToolBoxControl::createItemWindow(const cpo::uno::Reference<css::awt::XWindow>& rParent)
 {
-    css::uno::Reference<css::awt::XWindow> xItemWindow;
+    cpo::uno::Reference<css::awt::XWindow> xItemWindow;
 
     VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(rParent);
     if (pParent)
@@ -56,33 +56,33 @@ ThemeColorsToolBoxControl::createItemWindow(const css::uno::Reference<css::awt::
     return xItemWindow;
 }
 
-void SAL_CALL ThemeColorsToolBoxControl::update() {}
+void ThemeColorsToolBoxControl::update() {}
 
-OUString SAL_CALL ThemeColorsToolBoxControl::getImplementationName()
+OUString ThemeColorsToolBoxControl::getImplementationName()
 {
     return u"com.sun.star.comp.svx.ThemeColorsToolBoxControl"_ustr;
 }
 
-bool SAL_CALL ThemeColorsToolBoxControl::supportsService(const OUString& rServiceName)
+bool ThemeColorsToolBoxControl::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL ThemeColorsToolBoxControl::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> ThemeColorsToolBoxControl::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
 // Export function for service registration
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_svx_ThemeColorsToolBoxControl_get_implementation(
-    css::uno::XComponentContext* /*rxContext*/, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* /*rxContext*/, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ThemeColorsToolBoxControl());
 }
 
 ThemeColorsPaneWrapper::ThemeColorsPaneWrapper(
-    vcl::Window* pParent, const css::uno::Reference<css::frame::XFrame>& rxFrame)
+    vcl::Window* pParent, const cpo::uno::Reference<css::frame::XFrame>& rxFrame)
     : InterimItemWindow(pParent, u"svx/ui/themeselectorpanel.ui"_ustr, u"ThemeSelectorPanel"_ustr,
                         true, reinterpret_cast<sal_uInt64>(SfxViewShell::Current()))
     , svx::ThemeColorsPaneBase(m_xBuilder->weld_icon_view(u"iconview_theme_colors"_ustr))

@@ -40,21 +40,21 @@ typedef CollTestImplHelper< ov::XCollection > ScVbaSheetObjects_BASE;
 class ScVbaSheetObjectsBase : public ScVbaSheetObjects_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScVbaSheetObjectsBase( const ScVbaObjectContainerRef& rxContainer );
     virtual ~ScVbaSheetObjectsBase() override;
 
     /** Updates the collection by fetching all shapes from the draw page.
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     void collectShapes();
 
     // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
+    virtual cpo::uno::Type getElementType() override;
 
     // ScVbaCollectionBase
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& rSource ) override;
@@ -72,11 +72,11 @@ typedef ::cppu::ImplInheritanceHelper< ScVbaSheetObjectsBase, ov::excel::XGraphi
 class ScVbaGraphicObjectsBase : public ScVbaGraphicObjects_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScVbaGraphicObjectsBase( const ScVbaObjectContainerRef& rxContainer );
 
     // XGraphicObjects
-    virtual cpo::uno::Any SAL_CALL Add(
+    virtual cpo::uno::Any Add(
         const cpo::uno::Any& rLeft,
         const cpo::uno::Any& rTop,
         const cpo::uno::Any& rWidth,
@@ -87,12 +87,12 @@ public:
 class ScVbaButtons : public ScVbaGraphicObjectsBase
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScVbaButtons(
-        const css::uno::Reference< ov::XHelperInterface >& rxParent,
-        const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-        const css::uno::Reference< css::frame::XModel >& rxModel,
-        const css::uno::Reference< css::sheet::XSpreadsheet >& rxSheet,
+        const cpo::uno::Reference< ov::XHelperInterface >& rxParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+        const cpo::uno::Reference< css::frame::XModel >& rxModel,
+        const cpo::uno::Reference< css::sheet::XSpreadsheet >& rxSheet,
         bool bOptionButtons);
 
     VBAHELPER_DECL_XHELPERINTERFACE

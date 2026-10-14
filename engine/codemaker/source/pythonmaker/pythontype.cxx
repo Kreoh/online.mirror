@@ -141,7 +141,7 @@ OString mapUnoTypeToPythonHint(std::u16string_view unoTypeName, TypeManager cons
         {
             OString pySimpleNameOfNucleus; // This will hold the final, safe Python class name
             sal_Int32 lastDotInNucleus = nucleus.lastIndexOf('.');
-            // Extract the simple name (e.g., "XInterface" from "com.sun.star.uno.XInterface")
+            // Extract the simple name (e.g., "XInterface" from "cpo.uno.XInterface")
             if (lastDotInNucleus != -1)
             {
                 pySimpleNameOfNucleus = getSafePythonIdentifier(
@@ -908,7 +908,7 @@ void PythonStubGenerator::generateInterface(const unoidl::InterfaceTypeEntity* e
 
     // The root UNO interface, XInterface, should inherit from ABC. All others
     // will then inherit it transitively.
-    if (m_unoName == u"com.sun.star.uno.XInterface" || bases.empty())
+    if (m_unoName == u"cpo.uno.XInterface" || bases.empty())
     {
         addImportLine("from abc import ABC, abstractmethod"_ostr);
         baseClassesStr.append("ABC");
@@ -1080,7 +1080,7 @@ void PythonStubGenerator::generateService(const unoidl::SingleInterfaceBasedServ
     {
         // All factory methods will require an XComponentContext, so we resolve its Python type hint once.
         OString contextTypeHint
-            = mapUnoTypeToPythonHint(u"com.sun.star.uno.XComponentContext", *m_typeManager,
+            = mapUnoTypeToPythonHint(u"cpo.uno.XComponentContext", *m_typeManager,
                                      m_moduleName, m_pyClassName, m_imports, m_dependentTypes);
 
         // Iterate through each constructor defined in the IDL. Each constructor
@@ -1183,7 +1183,7 @@ void PythonStubGenerator::generateSingleton(const unoidl::InterfaceBasedSingleto
 
     // It takes the component context as a parameter.
     OString contextTypeHint
-        = mapUnoTypeToPythonHint(u"com.sun.star.uno.XComponentContext", *m_typeManager,
+        = mapUnoTypeToPythonHint(u"cpo.uno.XComponentContext", *m_typeManager,
                                  m_moduleName, m_pyClassName, m_imports, m_dependentTypes);
     m_buffer.append("ctx: ");
     m_buffer.append(contextTypeHint);
@@ -1200,7 +1200,7 @@ void PythonStubGenerator::generateSingleton(const unoidl::InterfaceBasedSingleto
     // A singleton's get() method can raise a DeploymentException if it fails.
     // We document this in the docstring.
     OString deploymentExcHint
-        = mapUnoTypeToPythonHint(u"com.sun.star.uno.DeploymentException", *m_typeManager,
+        = mapUnoTypeToPythonHint(u"cpo.uno.DeploymentException", *m_typeManager,
                                  m_moduleName, m_pyClassName, m_imports, m_dependentTypes);
 
     m_buffer.append(getIndent());

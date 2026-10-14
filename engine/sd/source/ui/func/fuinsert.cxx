@@ -35,6 +35,7 @@
 #include <com/sun/star/media/XPlayer.hpp>
 
 #include <svl/stritem.hxx>
+#include <sfx2/cokitfilepicker.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/kit/helper.hxx>
 #include <sfx2/msgpool.hxx>
@@ -86,6 +87,7 @@
 #include <comphelper/kit.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace sd {
 
@@ -141,6 +143,14 @@ void FuInsertGraphic::DoExecute( SfxRequest& rReq )
         }
 
         nError = GraphicFilter::LoadGraphic( aFileName, aFilterName, aGraphic, &GraphicFilter::GetGraphicFilter() );
+    }
+    // In a COKit app the picker runs natively, and the picked image arrives as a new dispatch
+    // of the command carrying FileName.
+    else if (sfx2::COKitFilePicker::requestAndRedispatch(
+                 u".uno:InsertGraphic"_ustr, u"FileName"_ustr,
+                 sfx2::COKitFilePicker::graphicImportFilters(), SdResId(STR_INSERTGRAPHIC)))
+    {
+        return;
     }
     else
     {
@@ -226,7 +236,8 @@ rtl::Reference<FuPoor> FuInsertClipboard::Create( ViewShell& rViewSh, ::sd::Wind
 
 void FuInsertClipboard::DoExecute( SfxRequest&  )
 {
-    auto pDataHelper = std::make_shared<TransferableDataHelper>(TransferableDataHelper::CreateFromSystemClipboard(mpWindow));
+    auto pDataHelper = std::make_shared<TransferableDataHelper>(
+        TransferableDataHelper::CreateFromSystemClipboard(mpWindow, DownloadRemoteContent::Yes));
 
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
     VclPtr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog(mrViewShell.GetFrameWeld()));
@@ -741,10 +752,10 @@ void FuInsertAVMedia::DoExecute( SfxRequest& rReq )
         if (!pFrame)
             return;
 
-        css::uno::Reference<css::frame::XDispatchProvider> xDispatchProvider(pFrame->GetFrame().GetFrameInterface(), css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::frame::XDispatchProvider> xDispatchProvider(pFrame->GetFrame().GetFrameInterface(), cpo::uno::UNO_QUERY);
 
         rtl::Reference<avmedia::PlayerListener> xPlayerListener(new avmedia::PlayerListener(
-            [xDispatchProvider, aURL, bLink](const css::uno::Reference<css::media::XPlayer>& rPlayer){
+            [xDispatchProvider, aURL, bLink](const cpo::uno::Reference<css::media::XPlayer>& rPlayer){
                 css::awt::Size aSize = rPlayer->getPreferredPlayerWindowSize();
                 avmedia::MediaWindow::dispatchInsertAVMedia(xDispatchProvider, aSize, aURL, bLink);
             }));
@@ -754,10 +765,17 @@ void FuInsertAVMedia::DoExecute( SfxRequest& rReq )
         if( mpWindow )
             mpWindow->LeaveWait();
 
-        if (!bIsMediaURL && !bAPI)
-            ::avmedia::MediaWindow::executeFormatErrorBox(mpWindow->GetFrameWeld());
+        if (bIsMediaURL)
+            return;
 
-        return;
+        // No media player could open the URL to measure it. A URL that came with the command
+        // goes in at the size its file headers give, or at the default size.
+        if (!bAPI)
+        {
+            ::avmedia::MediaWindow::executeFormatErrorBox(mpWindow->GetFrameWeld());
+            return;
+        }
+        aPrefSize = ::avmedia::MediaWindow::readVideoSize(aURL);
     }
 
     InsertMediaURL(aURL, aPrefSize, bLink);
@@ -787,9 +805,20 @@ void FuInsertAVMedia::InsertMediaURL(const OUString& rURL, const Size& rPrefSize
     else
         aSize = Size( 5000, 5000 );
 
+    // A video's own pixel size can be larger than the page. It shrinks to fit inside the page
+    // borders, keeping its shape.
+    if (SdrPageView* pPageView = mpView->GetSdrPageView())
+    {
+        const SdrPage* pPage = pPageView->GetPage();
+        Size aPageSize(pPage->GetSize());
+        aPageSize.AdjustWidth(-(pPage->GetLeftBorder() + pPage->GetRightBorder()));
+        aPageSize.AdjustHeight(-(pPage->GetUpperBorder() + pPage->GetLowerBorder()));
+        aSize = ::avmedia::MediaWindow::shrinkToFit(aSize, aPageSize);
+    }
+
     if( mpWindow )
     {
-        aPos = mpWindow->PixelToLogic( ::tools::Rectangle( aPos, mpWindow->GetOutputSizePixel() ).Center() );
+        aPos = mpWindow->GetVisibleCenter();
         aPos.AdjustX( -(aSize.Width() >> 1) );
         aPos.AdjustY( -(aSize.Height() >> 1) );
     }

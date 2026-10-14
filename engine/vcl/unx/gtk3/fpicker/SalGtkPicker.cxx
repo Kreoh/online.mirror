@@ -36,7 +36,8 @@
 using namespace ::rtl;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 OUString SalGtkPicker::uritounicode(const gchar* pIn) const
 {
@@ -115,13 +116,13 @@ RunDialog::~RunDialog()
     g_source_remove_by_user_data (this);
 }
 
-void SAL_CALL RunDialog::windowOpened(const css::lang::EventObject& e)
+void RunDialog::windowOpened(const css::lang::EventObject& e)
 {
     SolarMutexGuard g;
 
     //Don't popdown dialogs if a tooltip appears elsewhere, that's ok, but do pop down
     //if another dialog/frame is launched.
-    css::uno::Reference<css::awt::XWindow> xWindow(e.Source, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::awt::XWindow> xWindow(e.Source, cpo::uno::UNO_QUERY);
     if (xWindow.is())
     {
         UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper();
@@ -134,7 +135,7 @@ void SAL_CALL RunDialog::windowOpened(const css::lang::EventObject& e)
     g_timeout_add_full(G_PRIORITY_HIGH_IDLE, 0, reinterpret_cast<GSourceFunc>(canceldialog), this, nullptr);
 }
 
-void SAL_CALL RunDialog::queryTermination( const css::lang::EventObject& )
+void RunDialog::queryTermination( const css::lang::EventObject& )
 {
     SolarMutexGuard g;
 
@@ -145,7 +146,7 @@ void SAL_CALL RunDialog::queryTermination( const css::lang::EventObject& )
     throw css::frame::TerminationVetoException();
 }
 
-void SAL_CALL RunDialog::notifyTermination( const css::lang::EventObject& )
+void RunDialog::notifyTermination( const css::lang::EventObject& )
 {
 }
 
@@ -160,9 +161,9 @@ namespace
     class ExecuteInfo
     {
     private:
-        css::uno::Reference<css::frame::XDesktop> mxDesktop;
+        cpo::uno::Reference<css::frame::XDesktop> mxDesktop;
     public:
-        ExecuteInfo(css::uno::Reference<css::frame::XDesktop> xDesktop)
+        ExecuteInfo(cpo::uno::Reference<css::frame::XDesktop> xDesktop)
             : mxDesktop(std::move(xDesktop))
         {
         }
@@ -219,7 +220,7 @@ IMPL_STATIC_LINK(RunDialog, TerminateDesktop, void*, p, void)
     delete pExecuteInfo;
 }
 
-SalGtkPicker::SalGtkPicker( uno::Reference<uno::XComponentContext> xContext )
+SalGtkPicker::SalGtkPicker( uno::Reference<cpo::uno::XComponentContext> xContext )
     : m_pParentWidget(nullptr)
     , m_pDialog(nullptr)
     , m_xContext(std::move(xContext))

@@ -59,10 +59,9 @@ SwUndRng::SwUndRng( const SwPaM& rPam )
 
 void SwUndRng::SetValues( const SwPaM& rPam )
 {
-    const SwPosition *pStart = rPam.Start();
+    auto [pStart, pEnd] = rPam.StartEnd(); // SwPosition*
     if( rPam.HasMark() )
     {
-        const SwPosition *pEnd = rPam.End();
         m_nEndNode = pEnd->GetNodeIndex();
         m_nEndContent = pEnd->GetContentIndex();
     }
@@ -705,6 +704,9 @@ OUString GetUndoComment(SwUndoId eId)
         case SwUndoId::RENAME_TABLE:
             pId = STR_RENAMETABLE_UNDO;
             break;
+        case SwUndoId::TABLE_STYLE:
+            pId = STR_UNDO_TABLE_STYLE;
+            break;
     }
 
     assert(pId);
@@ -793,7 +795,7 @@ void SwUndoSaveContent::MoveToUndoNds( SwPaM& rPaM, SwNodeIndex* pNodeIdx,
     SwPosition aPos( pEndNdIdx ? rNds.GetEndOfPostIts()
                                : rNds.GetEndOfExtras() );
 
-    const SwPosition* pStart = rPaM.Start(), *pEnd = rPaM.End();
+    auto [pStart, pEnd] = rPaM.StartEnd();
 
     SwNodeOffset nTmpMvNode = aPos.GetNodeIndex();
 
@@ -1320,8 +1322,9 @@ void SwUndoSaveSection::SaveSection(
 
     {
         // move certain indexes out of deleted range
-        SwNodeIndex aSttIdx( aPam.Start()->GetNode() );
-        SwNodeIndex aEndIdx( aPam.End()->GetNode() );
+        auto [pStart, pEnd] = aPam.StartEnd(); // SwPosition*
+        SwNodeIndex aSttIdx(pStart->GetNode());
+        SwNodeIndex aEndIdx(pEnd->GetNode());
         SwNodeIndex aMvStt( aEndIdx, 1 );
         SwDoc::CorrAbs( aSttIdx, aEndIdx, SwPosition( aMvStt ), true );
     }
@@ -1496,8 +1499,8 @@ bool SwUndo::FillSaveData(
     {
         SwRangeRedline* pRedl = rTable[n];
 
-        const SwComparePosition eCmpPos =
-            ComparePosition( *pStart, *pEnd, *pRedl->Start(), *pRedl->End() );
+        auto [pRStart, pREnd] = pRedl->StartEnd(); // SwPosition*
+        const SwComparePosition eCmpPos = ComparePosition(*pStart, *pEnd, *pRStart, *pREnd);
         if ( eCmpPos != SwComparePosition::Before
              && eCmpPos != SwComparePosition::Behind
              && eCmpPos != SwComparePosition::CollideEnd
@@ -1520,7 +1523,7 @@ bool SwUndo::FillSaveDataForFormat(
 {
     rSData.clear();
 
-    const SwPosition *pStart = rRange.Start(), *pEnd = rRange.End();
+    auto [pStart, pEnd] = rRange.StartEnd();
     const SwRedlineTable& rTable = rRange.GetDoc().getIDocumentRedlineAccess().GetRedlineTable();
     SwRedlineTable::size_type n = 0;
     rRange.GetDoc().getIDocumentRedlineAccess().GetRedline( *pStart, &n );
@@ -1543,7 +1546,8 @@ bool SwUndo::FillSaveDataForFormat(
         }
         if (bSaveRedline)
         {
-            const SwComparePosition eCmpPos = ComparePosition( *pStart, *pEnd, *pRedl->Start(), *pRedl->End() );
+            auto [pRStart, pREnd] = pRedl->StartEnd(); // SwPosition*
+            const SwComparePosition eCmpPos = ComparePosition(*pStart, *pEnd, *pRStart, *pREnd);
             if ( eCmpPos != SwComparePosition::Before
                  && eCmpPos != SwComparePosition::Behind
                  && eCmpPos != SwComparePosition::CollideEnd

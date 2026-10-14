@@ -32,12 +32,13 @@
 #include <unoparagraph.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace writerfilter::dmapper
 {
 void TableManager::clearData() {}
 
-void TableManager::openCell(const css::uno::Reference<css::text::XTextRange>& rHandle,
+void TableManager::openCell(const cpo::uno::Reference<css::text::XTextRange>& rHandle,
                             const TablePropertyMapPtr& pProps)
 {
 #ifdef DBG_UTIL
@@ -210,14 +211,23 @@ void TableManager::tableExceptionProps(const TablePropertyMapPtr& pProps)
     TagLogger::getInstance().startElement("tablemanager.tableExceptionProps");
 #endif
 
-    if (getTableExceptionProps())
-    {
-        getTableExceptionProps()->InsertProps(pProps.get());
-        assert(getCellProps() && "setTableExceptionProps creates cellProps");
-        getCellProps()->InsertProps(pProps.get());
-    }
+    // The tblPrEx of a row arrives at the start of the row, right after the depth of the table
+    // the row belongs to. That table level starts only with the first paragraph of its first
+    // cell, so for the first row of a nested table the properties arrive before the level
+    // exists and wait for it.
+    sal_uInt32 nDepth = mnTableExceptionDepth;
+    sal_uInt32 nCurrentDepth = mTableDataStack.empty() ? 0 : mTableDataStack.back()->getDepth();
+    if (nDepth > nCurrentDepth)
+        mState.addPendingTableExceptionProperties(nDepth, pProps);
     else
-        mState.setTableExceptionProps(pProps);
+    {
+        SAL_WARN_IF(nDepth < nCurrentDepth, "writerfilter",
+                    "table exception properties for a level that already ended");
+        if (getTableExceptionProps())
+            getTableExceptionProps()->InsertProps(pProps.get());
+        else
+            mState.setTableExceptionProps(pProps);
+    }
 
 #ifdef DBG_UTIL
     TagLogger::getInstance().endElement();
@@ -283,13 +293,19 @@ bool TableManager::sprm(Sprm& rSprm)
         case NS_ooxml::LN_tblRow:
             endRow();
             break;
+        case NS_ooxml::LN_tblPrExDepth:
+        {
+            const Value* pValue = rSprm.getValue();
+            mnTableExceptionDepth = pValue ? pValue->getInt() : 0;
+        }
+        break;
         default:
             bRet = false;
     }
     return bRet;
 }
 
-void TableManager::closeCell(const css::uno::Reference<css::text::XTextRange>& rHandle)
+void TableManager::closeCell(const cpo::uno::Reference<css::text::XTextRange>& rHandle)
 {
 #ifdef DBG_UTIL
     TagLogger::getInstance().startElement("tablemanager.closeCell");
@@ -365,7 +381,7 @@ void TableManager::endParagraphGroup()
 
     else if (isInCell())
     {
-        ensureOpenCell(getCellProps());
+        ensureOpenCell(mState.getCellPropertiesWithExceptions());
 
         if (mState.isCellEnd())
         {
@@ -409,6 +425,8 @@ void TableManager::HandleSmallerRows()
     {
         rtl::Reference<SwXText> xTextAppendAndConvert = dynamic_cast<SwXText*>(
             mpTableDataHandler->getDomainMapperImpl().GetTopTextAppend().get());
+        if (!xTextAppendAndConvert.is())
+            return;
 
         for (unsigned int nRow = 0; nRow < nRows; ++nRow)
         {
@@ -519,10 +537,12 @@ void TableManager::endLevel()
     uno::Reference<text::XTextCursor> xCursor;
     if (mpTableDataHandler != nullptr)
     {
-        if (mTableDataStack.size() > 1)
+        // The bottom of the stack is the level of the surrounding text, so a table is nested in
+        // another table's cell only from the third level on. For such an inner table, create a
+        // cursor from the outer cell's start position, in case that would become invalid during
+        // the current table resolution.
+        if (mTableDataStack.size() > 2)
         {
-            // This is an inner table: create a cursor from the outer cell's start position, in case
-            // that would become invalid during the current table resolution.
             TableData::Pointer_t pUpperTableData = mTableDataStack[mTableDataStack.size() - 2];
             RowData::Pointer_t pRow = pUpperTableData->getCurrentRow();
             unsigned int nCells = pRow->getCellCount();
@@ -540,7 +560,7 @@ void TableManager::endLevel()
                             xCursor->goLeft(1, false);
                         }
                     }
-                    catch (const uno::RuntimeException&)
+                    catch (const cpo::uno::RuntimeException&)
                     {
                         TOOLS_WARN_EXCEPTION(
                             "writerfilter",
@@ -583,7 +603,7 @@ void TableManager::endLevel()
                 xCursor->goRight(1, false);
                 pTableData->SetCellStart(xCursor->getStart());
             }
-            catch (const uno::RuntimeException&)
+            catch (const cpo::uno::RuntimeException&)
             {
                 TOOLS_WARN_EXCEPTION("writerfilter", "TableManager::endLevel: goRight() failed");
             }
@@ -630,7 +650,7 @@ void TableManager::startLevel()
     }
 
     mTableDataStack.push_back(pTableData2);
-    mState.startLevel();
+    mState.startLevel(pTableData2->getDepth());
 }
 
 bool TableManager::isInTable()
@@ -641,7 +661,7 @@ bool TableManager::isInTable()
     return bInTable;
 }
 
-void TableManager::handle(const css::uno::Reference<css::text::XTextRange>& rHandle)
+void TableManager::handle(const cpo::uno::Reference<css::text::XTextRange>& rHandle)
 {
 #ifdef DBG_UTIL
     TagLogger::getInstance().startElement("tablemanager.handle");
@@ -668,7 +688,7 @@ void TableManager::endRow()
     sal_uInt32 nGridBefore = getCurrentGridBefore();
     if (pTableData && nGridBefore > 0 && pTableData->getCurrentRow()->getCellCount() > 0)
     {
-        const css::uno::Reference<css::text::XTextRange>& xRowStart
+        const cpo::uno::Reference<css::text::XTextRange>& xRowStart
             = pTableData->getCurrentRow()->getCellStart(0);
         if (xRowStart.is())
         {
@@ -744,6 +764,7 @@ void TableManager::setCellLastParaAfterAutospacing(bool bIsAfterAutospacing)
 TableManager::TableManager()
     : mnTableDepthNew(0)
     , mnTableDepth(0)
+    , mnTableExceptionDepth(0)
     , mbKeepUnfinishedRow(false)
 {
     setRowEnd(false);
@@ -765,7 +786,7 @@ bool CellData::IsValid() const
     {
         mStart->getStart();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }

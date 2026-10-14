@@ -20,11 +20,11 @@
 #pragma once
 
 #include "TokenContext.hxx"
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 namespace com::sun::star {
     namespace xml::dom { class XDocument; }
-    namespace xforms { class XModel2; }
+    namespace xforms { class XModel; }
 }
 
 class SvXMLImport;
@@ -32,35 +32,35 @@ class SvXMLImport;
 /** import the xforms:instance element */
 class XFormsInstanceContext : public TokenContext
 {
-    css::uno::Reference<css::xforms::XModel2> mxModel;
-    css::uno::Reference<css::xml::dom::XDocument> mxInstance;
+    cpo::uno::Reference<css::xforms::XModel> mxModel;
+    cpo::uno::Reference<css::xml::dom::XDocument> mxInstance;
     OUString msId;
     OUString msURL;
 
 public:
     XFormsInstanceContext( SvXMLImport& rImport,
-                           const css::uno::Reference<css::xforms::XModel2> & xModel );
+                           const cpo::uno::Reference<css::xforms::XModel> & xModel );
 
     // implement SvXMLImportContext & TokenContext methods:
     // We override CreateChildContext, because we want to read
     // arbitrary DOM elements. For the attributes, we use the
     // TokenContext mechanism.
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createUnknownChildContext(
         const OUString& Namespace, const OUString& Name,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
-    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
+    virtual void endUnknownElement(const OUString & Namespace, const OUString & Name) override;
 
 protected:
     virtual void HandleAttribute(const sax_fastparser::FastAttributeList::FastAttributeIter & aIter ) override;
 
     virtual SvXMLImportContext* HandleChild(
         sal_Int32 nElementToken,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

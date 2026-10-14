@@ -55,6 +55,7 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -658,8 +659,9 @@ static std::string makeIPAddress(const sockaddr& ai_addr)
     char addrstr[INET6_ADDRSTRLEN];
 
     static_assert(INET6_ADDRSTRLEN >= INET_ADDRSTRLEN, "ipv6 addresses are longer than ipv4");
+    int nFamily = ai_addr.sa_family;
     const void* inAddr = nullptr;
-    switch (ai_addr.sa_family)
+    switch (nFamily)
     {
         case AF_INET:
         {
@@ -670,7 +672,14 @@ static std::string makeIPAddress(const sockaddr& ai_addr)
         case AF_INET6:
         {
             auto ipv6 = reinterpret_cast<const sockaddr_in6*>(&ai_addr);
-            inAddr = &(ipv6->sin6_addr);
+            // An IPv4-mapped IPv6 address connects to its IPv4 address.
+            if (IN6_IS_ADDR_V4MAPPED(&ipv6->sin6_addr))
+            {
+                nFamily = AF_INET;
+                inAddr = &(ipv6->sin6_addr.s6_addr[12]);
+            }
+            else
+                inAddr = &(ipv6->sin6_addr);
             break;
         }
     }
@@ -681,7 +690,7 @@ static std::string makeIPAddress(const sockaddr& ai_addr)
         return std::string();
     }
 
-    const char* result = inet_ntop(ai_addr.sa_family, inAddr, addrstr, sizeof(addrstr));
+    const char* result = inet_ntop(nFamily, inAddr, addrstr, sizeof(addrstr));
     if (!result)
     {
         SAL_WARN("ucb.ucp.webdav.curl", "inet_ntop failure");
@@ -696,12 +705,11 @@ static curl_socket_t opensocket_callback(void* /*clientp*/, curlsocktype purpose
 {
     if (purpose == CURLSOCKTYPE_IPCXN)
     {
-        if (address->family == AF_INET && makeIPAddress(address->addr) == "169.254.169.254")
-        {
-            SAL_WARN("ucb.ucp.webdav.curl", "ignoring instance metadata ip");
-            return CURL_SOCKET_BAD;
-        }
-        else if (address->family == AF_INET6 && makeIPAddress(address->addr) == "fd00:ec2::254")
+        const std::string aAddress = makeIPAddress(address->addr);
+        if (aAddress.starts_with("169.254.") // AWS-alike link-local
+            || aAddress == "100.100.100.200" // Alibaba
+            || aAddress == "fd00:ec2::254" // AWS IPv6
+            || aAddress == "fd20:ce::254") // Google IPv6
         {
             SAL_WARN("ucb.ucp.webdav.curl", "ignoring instance metadata ip");
             return CURL_SOCKET_BAD;
@@ -712,7 +720,7 @@ static curl_socket_t opensocket_callback(void* /*clientp*/, curlsocktype purpose
 
 #endif
 
-CurlSession::CurlSession(uno::Reference<uno::XComponentContext> xContext,
+CurlSession::CurlSession(uno::Reference<cpo::uno::XComponentContext> xContext,
                          ::rtl::Reference<DAVSessionFactory> const& rpFactory, OUString const& rURI,
                          cpo::uno::Sequence<beans::NamedValue> const& rFlags,
                          ::ucbhelper::InternetProxyDecider const& rProxyDecider)
@@ -1258,7 +1266,7 @@ auto CurlProcessor::ProcessRequest(
     if (HostFilter::isForbidden(rURI.GetHost()))
     {
         SAL_WARN("ucb.ucp.webdav.curl", "Access denied to host: " << rURI.GetHost());
-        throw uno::RuntimeException(u"access to host denied"_ustr);
+        throw cpo::uno::RuntimeException(u"access to host denied"_ustr);
     }
 
     if (pEnv)
@@ -1272,7 +1280,7 @@ auto CurlProcessor::ProcessRequest(
                 curl_slist_append(pRequestHeaderList.release(), utf8Header.getStr()));
             if (!pRequestHeaderList)
             {
-                throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+                throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
             }
         }
     }
@@ -1286,7 +1294,7 @@ auto CurlProcessor::ProcessRequest(
             auto const len(xSeekable->getLength() - xSeekable->getPosition());
             if ((**pxInStream).readBytes(data, len) != len)
             {
-                throw uno::RuntimeException(u"short readBytes"_ustr);
+                throw cpo::uno::RuntimeException(u"short readBytes"_ustr);
             }
         }
         else
@@ -1555,7 +1563,7 @@ auto CurlProcessor::ProcessRequest(
                             pRequestHeaderList.release(), "X-FORMS_BASED_AUTH_ACCEPTED: f"));
                         if (!pRequestHeaderList)
                         {
-                            throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+                            throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
                         }
                     }
                         [[fallthrough]]; // SP, no cookie, or cookie failed: try NTLM/Negotiate
@@ -1798,7 +1806,7 @@ auto CurlProcessor::PropFind(
     pList.reset(curl_slist_append(pList.release(), "Content-Type: application/xml"));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString depth;
     switch (nDepth)
@@ -1818,7 +1826,7 @@ auto CurlProcessor::PropFind(
     pList.reset(curl_slist_append(pList.release(), depth.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     uno::Reference<io::XSequenceOutputStream> const xSeqOutStream(
@@ -1960,7 +1968,7 @@ auto CurlSession::PROPPATCH(OUString const& rURIReference,
     pList.reset(curl_slist_append(pList.release(), "Content-Type: application/xml"));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     // generate XML document for PROPPATCH
@@ -2158,7 +2166,7 @@ auto CurlSession::PUT(OUString const& rURIReference,
     uno::Reference<io::XSeekable> const xSeekable(rxInStream, uno::UNO_QUERY);
     if (!xSeekable.is())
     {
-        throw uno::RuntimeException(u"TODO: not seekable"_ustr);
+        throw cpo::uno::RuntimeException(u"TODO: not seekable"_ustr);
     }
     curl_off_t const len(xSeekable->getLength() - xSeekable->getPosition());
 
@@ -2178,7 +2186,7 @@ auto CurlSession::PUT(OUString const& rURIReference,
         pList.reset(curl_slist_append(pList.release(), utf8If.getStr()));
         if (!pList)
         {
-            throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+            throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
         }
     }
 
@@ -2207,20 +2215,20 @@ auto CurlSession::POST(OUString const& rURIReference, OUString const& rContentTy
         curl_slist_append(nullptr, "Transfer-Encoding: chunked"));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString const utf8ContentType("Content-Type: "
                                   + OUStringToOString(rContentType, RTL_TEXTENCODING_ASCII_US));
     pList.reset(curl_slist_append(pList.release(), utf8ContentType.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString const utf8Referer("Referer: " + OUStringToOString(rReferer, RTL_TEXTENCODING_ASCII_US));
     pList.reset(curl_slist_append(pList.release(), utf8Referer.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     ::std::vector<CurlOption> const options{ { CURLOPT_POST, 1L, nullptr } };
@@ -2255,20 +2263,20 @@ auto CurlSession::POST(OUString const& rURIReference, OUString const& rContentTy
         curl_slist_append(nullptr, "Transfer-Encoding: chunked"));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString const utf8ContentType("Content-Type: "
                                   + OUStringToOString(rContentType, RTL_TEXTENCODING_ASCII_US));
     pList.reset(curl_slist_append(pList.release(), utf8ContentType.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString const utf8Referer("Referer: " + OUStringToOString(rReferer, RTL_TEXTENCODING_ASCII_US));
     pList.reset(curl_slist_append(pList.release(), utf8Referer.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     ::std::vector<CurlOption> const options{ { CURLOPT_POST, 1L, nullptr } };
@@ -2303,13 +2311,13 @@ auto CurlProcessor::MoveOrCopy(CurlSession& rSession, std::u16string_view rSourc
         curl_slist_append(nullptr, utf8Destination.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString const utf8Overwrite(OString::Concat("Overwrite: ") + (isOverwrite ? "T" : "F"));
     pList.reset(curl_slist_append(pList.release(), utf8Overwrite.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     ::std::vector<CurlOption> const options{ { CURLOPT_CUSTOMREQUEST, pMethod,
@@ -2485,7 +2493,7 @@ auto CurlSession::LOCK(OUString const& rURIReference, ucb::Lock /*const*/& rLock
     pList.reset(curl_slist_append(pList.release(), "Content-Type: application/xml"));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString depth;
     switch (rLock.Depth)
@@ -2505,7 +2513,7 @@ auto CurlSession::LOCK(OUString const& rURIReference, ucb::Lock /*const*/& rLock
     pList.reset(curl_slist_append(pList.release(), depth.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
     OString timeout;
     switch (rLock.Timeout)
@@ -2524,7 +2532,7 @@ auto CurlSession::LOCK(OUString const& rURIReference, ucb::Lock /*const*/& rLock
     pList.reset(curl_slist_append(pList.release(), timeout.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     auto const acquiredLocks
@@ -2553,7 +2561,7 @@ auto CurlProcessor::Unlock(CurlSession& rSession, CurlUri const& rURI,
         curl_slist_append(nullptr, utf8LockToken.getStr()));
     if (!pList)
     {
-        throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+        throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
     }
 
     ::std::vector<CurlOption> const options{ { CURLOPT_CUSTOMREQUEST, "UNLOCK",
@@ -2596,7 +2604,7 @@ auto CurlSession::NonInteractive_LOCK(OUString const& rURI, ::std::u16string_vie
         pList.reset(curl_slist_append(pList.release(), utf8If.getStr()));
         if (!pList)
         {
-            throw uno::RuntimeException(u"curl_slist_append failed"_ustr);
+            throw cpo::uno::RuntimeException(u"curl_slist_append failed"_ustr);
         }
 
         auto const acquiredLocks
@@ -2665,15 +2673,15 @@ public:
     WebDAVManager() {}
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.comp.WebDAVManager"_ustr;
     }
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override
+    virtual bool supportsService(const OUString& ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.ucb.WebDAVManager"_ustr };
     }
@@ -2686,8 +2694,8 @@ public:
 
 } // anonymous namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-ucb_webdav_manager_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ucb_webdav_manager_get_implementation(cpo::uno::XComponentContext*,
                                       cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new WebDAVManager());

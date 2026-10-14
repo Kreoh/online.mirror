@@ -48,7 +48,7 @@
 namespace pcr
 {
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::script;
@@ -248,7 +248,7 @@ using namespace cpo::uno;
         URL aURL; aURL.Complete = u".uno:OpenHyperlink"_ustr;
         xTransformer->parseStrict( aURL );
 
-        Reference< XDesktop2 > xDispProv = Desktop::create( m_xContext );
+        Reference< XDesktop > xDispProv = Desktop::create( m_xContext );
         Reference< XDispatch > xDispatch( xDispProv->queryDispatch( aURL, OUString(), 0 ), UNO_SET_THROW );
 
         Sequence aDispatchArgs{ comphelper::makePropertyValue(u"URL"_ustr, _rURL) };
@@ -312,7 +312,7 @@ using namespace cpo::uno;
         m_xComponent.set( xIntrospectionAccess->queryAdapter( cppu::UnoType<XPropertySet>::get() ), UNO_QUERY_THROW );
         // now that we survived so far, remember m_xComponentIntrospectionAccess
         m_xComponentIntrospectionAccess = std::move(xIntrospectionAccess);
-        m_xPropertyState.set(m_xComponent, css::uno::UNO_QUERY);
+        m_xPropertyState.set(m_xComponent, cpo::uno::UNO_QUERY);
 
         m_bPropertyMapInitialized = false;
         m_aProperties.clear();
@@ -614,20 +614,20 @@ using namespace cpo::uno;
         m_xTypeConverter.clear();
         m_xPropertyState.clear();
     }
-    void GenericPropertyHandler::addEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener )
+    void GenericPropertyHandler::addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener )
     {
         GenericPropertyHandler_Base::WeakComponentImplHelperBase::addEventListener( Listener );
     }
-    void GenericPropertyHandler::removeEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener )
+    void GenericPropertyHandler::removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener )
     {
         GenericPropertyHandler_Base::WeakComponentImplHelperBase::removeEventListener( Listener );
     }
 
 }   // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_GenericPropertyHandler_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::GenericPropertyHandler(context));
 }

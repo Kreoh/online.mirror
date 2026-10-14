@@ -44,7 +44,7 @@
 //  Defines
 
 using namespace ::com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::frame;
@@ -71,7 +71,7 @@ cpo::uno::Sequence< OUString > LanguageSelectionMenuController::getSupportedServ
 }
 
 
-LanguageSelectionMenuController::LanguageSelectionMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext )
+LanguageSelectionMenuController::LanguageSelectionMenuController( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext )
     : svt::PopupMenuControllerBase(xContext)
     , m_bShowMenu(true)
     , m_nScriptType(SvtScriptType::LATIN | SvtScriptType::ASIAN | SvtScriptType::COMPLEX)
@@ -281,9 +281,9 @@ void LanguageSelectionMenuController::initializeImpl( std::unique_lock<std::mute
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_LanguageSelectionMenuController_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::LanguageSelectionMenuController(context));
 }

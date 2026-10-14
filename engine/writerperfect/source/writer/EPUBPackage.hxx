@@ -12,7 +12,7 @@
 #include <libepubgen/EPUBPackage.h>
 
 #include <cpo/uno/Sequence.h>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 namespace com::sun::star
 {
@@ -28,28 +28,25 @@ namespace io
 {
 class XOutputStream;
 }
-namespace uno
-{
-class XComponentContext;
-}
 namespace xml::sax
 {
 class XWriter;
 }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace writerperfect
 {
 /// The epub package has direct access to the resulting ZIP file.
 class EPUBPackage : public libepubgen::EPUBPackage
 {
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
-    css::uno::Reference<css::embed::XHierarchicalStorageAccess> mxStorage;
-    css::uno::Reference<css::io::XOutputStream> mxOutputStream;
-    css::uno::Reference<css::xml::sax::XWriter> mxOutputWriter;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::embed::XHierarchicalStorageAccess> mxStorage;
+    cpo::uno::Reference<css::io::XOutputStream> mxOutputStream;
+    cpo::uno::Reference<css::xml::sax::XWriter> mxOutputWriter;
 
 public:
-    explicit EPUBPackage(css::uno::Reference<css::uno::XComponentContext> xContext,
+    explicit EPUBPackage(cpo::uno::Reference<cpo::uno::XComponentContext> xContext,
                          const cpo::uno::Sequence<css::beans::PropertyValue>& rDescriptor);
 
     ~EPUBPackage() override;

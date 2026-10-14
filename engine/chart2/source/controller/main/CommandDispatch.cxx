@@ -27,14 +27,14 @@
 
 using namespace ::com::sun::star;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
 {
 
 CommandDispatch::CommandDispatch(
-    const Reference< uno::XComponentContext > & xContext ) :
+    const Reference< cpo::uno::XComponentContext > & xContext ) :
         m_xContext( xContext )
 {
 }
@@ -49,7 +49,7 @@ void CommandDispatch::initialize()
 /// is called when this is disposed
 void CommandDispatch::disposing(std::unique_lock<std::mutex>& rGuard)
 {
-    Reference< uno::XInterface > xEventSource(static_cast< cppu::OWeakObject* >( this ));
+    Reference< cpo::uno::XInterface > xEventSource(static_cast< cppu::OWeakObject* >( this ));
     for( auto& rElement : m_aListeners )
         rElement.second.disposeAndClear( rGuard, xEventSource );
     m_aListeners.clear();
@@ -97,7 +97,7 @@ void CommandDispatch::disposing( const lang::EventObject& /* Source */ )
 {}
 
 void CommandDispatch::fireAllStatusEvents(
-    const css::uno::Reference< css::frame::XStatusListener > & xSingleListener )
+    const cpo::uno::Reference< css::frame::XStatusListener > & xSingleListener )
 {
     fireStatusEvent( OUString(), xSingleListener );
 }

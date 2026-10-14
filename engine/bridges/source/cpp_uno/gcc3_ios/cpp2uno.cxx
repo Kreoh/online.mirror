@@ -21,7 +21,7 @@
 
 #include <typeinfo>
 
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <sal/log.hxx>
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
@@ -39,7 +39,7 @@ const int nVtableOffsets = 4;
 
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace
@@ -319,7 +319,7 @@ namespace
 
         if (nFunctionIndex >= pTypeDescr->nMapFunctionIndexToMemberIndex)
         {
-            throw RuntimeException( "illegal vtable index!", (XInterface *)pCppI );
+            throw RuntimeException( u"illegal vtable index!"_ustr, (XInterface *)pCppI );
         }
 
         sal_Int32 nMemberPos =
@@ -413,7 +413,7 @@ namespace
         }
         default:
         {
-            throw RuntimeException( "no member description found!", (XInterface *)pCppI );
+            throw RuntimeException( u"no member description found!"_ustr, (XInterface *)pCppI );
         }
         }
 

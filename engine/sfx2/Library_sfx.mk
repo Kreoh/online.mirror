@@ -169,7 +169,6 @@ $(eval $(call gb_Library_add_exception_objects,sfx,\
     sfx2/source/devtools/DocumentModelTreeHandler \
     sfx2/source/devtools/ObjectInspectorTreeHandler \
     sfx2/source/devtools/ObjectInspectorWidgets \
-    sfx2/source/dialog/AdditionsDialogHelper \
     sfx2/source/dialog/basedlgs \
     sfx2/source/dialog/checkin \
     sfx2/source/dialog/dialoghelper \
@@ -189,8 +188,6 @@ $(eval $(call gb_Library_add_exception_objects,sfx,\
     sfx2/source/dialog/newstyle \
     sfx2/source/dialog/partwnd \
     sfx2/source/dialog/passwd \
-    sfx2/source/dialog/printopt \
-    sfx2/source/dialog/recfloat \
     sfx2/source/dialog/securitypage \
     sfx2/source/dialog/sfxdlg \
     sfx2/source/dialog/splitwin \
@@ -248,7 +245,6 @@ $(eval $(call gb_Library_add_exception_objects,sfx,\
     sfx2/source/explorer/nochaos \
     sfx2/source/inet/inettbc \
     sfx2/source/notebookbar/SfxNotebookBar \
-    sfx2/source/notebookbar/NotebookbarTabControl \
     sfx2/source/notify/eventsupplier \
     sfx2/source/notify/globalevents \
     sfx2/source/notify/hintpost \
@@ -294,6 +290,7 @@ $(eval $(call gb_Library_add_exception_objects,sfx,\
     sfx2/source/toolbox/weldutils \
     sfx2/source/view/classificationcontroller \
     sfx2/source/view/classificationhelper \
+    sfx2/source/view/cokitfilepicker \
     sfx2/source/view/frame \
     sfx2/source/view/frame2 \
     sfx2/source/view/frmload \
@@ -303,7 +300,6 @@ $(eval $(call gb_Library_add_exception_objects,sfx,\
     sfx2/source/view/kithelper \
     sfx2/source/view/printer \
     sfx2/source/view/sfxbasecontroller \
-    sfx2/source/view/userinputinterception \
     sfx2/source/view/viewfac \
     sfx2/source/view/viewfrm \
     sfx2/source/view/viewfrm2 \

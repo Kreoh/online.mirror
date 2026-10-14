@@ -19,8 +19,11 @@
 
 #include <config_features.h>
 
+#include <cstdlib>
+
 #include <tools/debug.hxx>
 #include <tools/inetmsg.hxx>
+#include <comphelper/configuration.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
@@ -43,11 +46,12 @@
 #include <com/sun/star/script/provider/XScript.hpp>
 #include <com/sun/star/script/provider/XScriptProvider.hpp>
 #include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
+#include <com/sun/star/script/vba/XVBACompatibility.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarScriptUrl.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <cpo/uno/Any.h>
 #include <com/sun/star/task/ErrorCodeRequest2.hpp>
 
@@ -70,6 +74,7 @@
 #include <basic/sbx.hxx>
 #include <svtools/sfxecode.hxx>
 
+#include <unotools/securityoptions.hxx>
 #include <unotools/ucbhelper.hxx>
 #include <tools/urlobj.hxx>
 #include <svl/sharecontrolfile.hxx>
@@ -77,12 +82,18 @@
 #include <vcl/svapp.hxx>
 #include <framework/interaction.hxx>
 #include <framework/documentundoguard.hxx>
+#include <framework/documentmacrocalls.hxx>
+#include <com/sun/star/ui/UIConfigurationManager.hpp>
 #include <comphelper/interaction.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/documentconstants.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 #include <ucbhelper/simpleinteractionrequest.hxx>
 #include <officecfg/Office/Common.hxx>
+
+#include <unicode/errorcode.h>
+#include <unicode/regex.h>
+#include <unicode/unistr.h>
 
 #include <sfx2/brokenpackageint.hxx>
 #include <sfx2/signaturestate.hxx>
@@ -114,8 +125,8 @@
 #include <memory>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::frame;
@@ -664,6 +675,14 @@ bool SfxObjectShell::HasSharedXMLFlagSet() const
 
 #endif
 
+bool SfxObjectShell::IsTrustedLocationForUpdatingLinks() const
+{
+    if (GetCreateMode() == SfxObjectCreateMode::EMBEDDED)
+        return SvtSecurityOptions::GetMacroSecurityLevel() == 0;
+    return SvtSecurityOptions::isTrustedLocationUriForUpdatingLinks(
+        pMedium == nullptr ? OUString() : pMedium->GetName());
+}
+
 bool SfxObjectShell::IsDocShared() const
 {
 #if HAVE_FEATURE_MULTIUSER_ENVIRONMENT
@@ -979,6 +998,31 @@ void SfxObjectShell::BreakMacroSign_Impl( bool bBreakMacroSign )
 }
 
 
+bool SfxObjectShell::DocumentUIConfigurationHasMacroCalls_Impl()
+{
+    try
+    {
+        uno::Reference<embed::XStorage> xStorage = GetStorage();
+        if (!xStorage.is() || !xStorage->hasByName(u"Configurations2"_ustr))
+            return false;
+        uno::Reference<embed::XStorage> xConfigStorage
+            = xStorage->openStorageElement(u"Configurations2"_ustr, embed::ElementModes::READ);
+        // A separate manager reads the folder, so the model's own manager is still created when
+        // the view first asks for it.
+        uno::Reference<ui::XUIConfigurationManager2> xConfiguration
+            = ui::UIConfigurationManager::create(comphelper::getProcessComponentContext());
+        xConfiguration->setStorage(xConfigStorage);
+        const bool bHasMacroCalls = framework::documentConfigurationHasMacroCalls(xConfiguration);
+        xConfiguration->dispose();
+        return bHasMacroCalls;
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("sfx.doc", "");
+    }
+    return false;
+}
+
 void SfxObjectShell::CheckSecurityOnLoading_Impl()
 {
     if (GetErrorCode() == ERRCODE_IO_BROKENPACKAGE)
@@ -1000,10 +1044,25 @@ void SfxObjectShell::CheckSecurityOnLoading_Impl()
     CheckEncryption_Impl( xInteraction );
 
     // check macro security
+    if (!GetMacroCallsSeenWhileLoading() && DocumentUIConfigurationHasMacroCalls_Impl())
+        SetMacroCallsSeenWhileLoading();
     const bool bHasValidContentSignature = HasValidSignatures();
     const bool bHasMacros = pImpl->aMacroMode.hasMacros();
-    pImpl->aMacroMode.checkMacrosOnLoading( xInteraction, bHasValidContentSignature, bHasMacros );
+    const bool bMacrosAllowed = pImpl->aMacroMode.checkMacrosOnLoading(
+        xInteraction, bHasValidContentSignature, bHasMacros);
     pImpl->m_bHadCheckedMacrosOnLoad = bHasMacros;
+    pImpl->m_bMacroCallsAllowed = bMacrosAllowed;
+    if (pImpl->pBaseModel.is())
+        pImpl->pBaseModel->SetUIConfigurationMacroCallsAllowed_Impl(bMacrosAllowed);
+
+    // A document in VBA compatibility mode gets its Basic project loaded once macros are allowed.
+    if (bMacrosAllowed)
+    {
+        uno::Reference<script::vba::XVBACompatibility> xVBACompat(GetBasicContainer(),
+                                                                  uno::UNO_QUERY);
+        if (xVBACompat.is() && xVBACompat->getVBACompatibilityMode())
+            xVBACompat->setVBACompatibilityMode(true);
+    }
 }
 
 bool SfxObjectShell::GetHadCheckedMacrosOnLoad() const
@@ -1138,7 +1197,7 @@ void SfxObjectShell::InitOwnModel_Impl()
         SfxItemSet& rSet = GetMedium()->GetItemSet();
         if ( !GetMedium()->IsReadOnly() )
             rSet.ClearItem( SID_INPUTSTREAM );
-        comphelper::SequenceAsHashMap aArgs = TransformItems(SID_OPENDOC, rSet);
+        SfxUnoArguments aArgs = TransformItems(SID_OPENDOC, rSet);
         xModel->attachResource(GetMedium()->GetOrigURL(), aArgs.getAsConstPropertyValueList());
         impl_addToModelCollection(xModel);
     }
@@ -1471,6 +1530,31 @@ ErrCode SfxObjectShell::CallBasic( std::u16string_view rMacro,
     return nRet;
 }
 
+bool SfxObjectShell::isScriptURLAllowed(const OUString& rScriptURL)
+{
+    std::optional<cpo::uno::Sequence<OUString>> allowedEvents(
+        officecfg::Office::Common::Security::Scripting::AllowedDocumentEventURLs::get());
+    // When AllowedDocumentEventURLs is empty, all event URLs are allowed
+    if (!allowedEvents)
+        return true;
+
+    icu::ErrorCode status;
+    const uint32_t rMatcherFlags = UREGEX_CASE_INSENSITIVE;
+    icu::UnicodeString usInput(rScriptURL.getStr());
+    const cpo::uno::Sequence<OUString>& rAllowedEvents = *allowedEvents;
+    for (auto const& allowedEvent : rAllowedEvents)
+    {
+        icu::UnicodeString usRegex(allowedEvent.getStr());
+        icu::RegexMatcher rmatch1(usRegex, usInput, rMatcherFlags, status);
+        if (rScriptURL.startsWith(allowedEvent) || rmatch1.matches(status))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool SfxObjectShell::isScriptAccessAllowed( const Reference< XInterface >& _rxScriptContext )
 {
     try
@@ -1478,8 +1562,12 @@ bool SfxObjectShell::isScriptAccessAllowed( const Reference< XInterface >& _rxSc
         Reference< XEmbeddedScripts > xScripts( _rxScriptContext, UNO_QUERY );
         if ( !xScripts.is() )
         {
-            Reference< XScriptInvocationContext > xContext( _rxScriptContext, UNO_QUERY_THROW );
-            xScripts.set( xContext->getScriptContainer(), UNO_SET_THROW );
+            Reference< XScriptInvocationContext > xContext( _rxScriptContext, UNO_QUERY );
+            if (!xContext)
+                return false;
+            xScripts = xContext->getScriptContainer();
+            if (!xScripts)
+                return false;
         }
 
         return xScripts->getAllowMacroExecution();
@@ -1491,6 +1579,13 @@ bool SfxObjectShell::isScriptAccessAllowed( const Reference< XInterface >& _rxSc
     return false;
 }
 
+bool SfxObjectShell::isDocumentScriptAllowed(const OUString& rScriptURL,
+                                             const Reference<XInterface>& rxDocument)
+{
+    return isScriptURLAllowed(rScriptURL) && isScriptAccessAllowed(rxDocument)
+           && !UnTrustedScript(rScriptURL);
+}
+
 // don't allow LibreLogo to be used with our mouseover/etc dom-alike events
 bool SfxObjectShell::UnTrustedScript(const OUString& rScriptURL)
 {
@@ -1498,9 +1593,9 @@ bool SfxObjectShell::UnTrustedScript(const OUString& rScriptURL)
         return false;
 
     // ensure URL Escape Codes are decoded
-    css::uno::Reference<css::uri::XUriReference> uri(
+    cpo::uno::Reference<css::uri::XUriReference> uri(
         css::uri::UriReferenceFactory::create(comphelper::getProcessComponentContext())->parse(rScriptURL));
-    css::uno::Reference<css::uri::XVndSunStarScriptUrl> sfUri(uri, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::uri::XVndSunStarScriptUrl> sfUri(uri, cpo::uno::UNO_QUERY);
 
     if (!sfUri.is())
         return false;
@@ -1566,6 +1661,8 @@ ErrCode SfxObjectShell::CallXScript( const Reference< XInterface >& _rxScriptCon
                 xProps->setPropertyValue(u"Caller"_ustr, cpo::uno::Any( aArgs ) );
             }
         }
+        if (comphelper::IsFuzzing())
+            std::abort();
         aRet = xScript->invoke( aParams, aOutParamIndex, aOutParam );
     }
     catch ( const cpo::uno::Exception& )
@@ -1745,9 +1842,14 @@ bool SfxObjectShell::AdjustMacroMode()
     return pImpl->aMacroMode.adjustMacroMode( xInteraction );
 }
 
-css::uno::Reference<css::awt::XWindow> SfxObjectShell::GetDialogParent( SfxMedium const * pLoadingMedium )
+bool SfxObjectShell::IsMacroExecutionAllowed() const
 {
-    css::uno::Reference<css::awt::XWindow> xWindow;
+    return pImpl->getCurrentMacroExecMode() == MacroExecMode::ALWAYS_EXECUTE_NO_WARN;
+}
+
+cpo::uno::Reference<css::awt::XWindow> SfxObjectShell::GetDialogParent( SfxMedium const * pLoadingMedium )
+{
+    cpo::uno::Reference<css::awt::XWindow> xWindow;
     SfxItemSet& rSet = pLoadingMedium ? pLoadingMedium->GetItemSet() : GetMedium()->GetItemSet();
     const SfxUnoFrameItem* pUnoItem = rSet.GetItem(SID_FILLFRAME, false);
     if ( pUnoItem )
@@ -1788,7 +1890,7 @@ css::uno::Reference<css::awt::XWindow> SfxObjectShell::GetDialogParent( SfxMediu
         if ( !pHiddenItem || !pHiddenItem->GetValue() )
         {
             xWindow->setVisible(true);
-            css::uno::Reference<css::awt::XTopWindow> xTopWindow(xWindow, uno::UNO_QUERY);
+            cpo::uno::Reference<css::awt::XTopWindow> xTopWindow(xWindow, uno::UNO_QUERY);
             SAL_WARN_IF(!xTopWindow, "sfx.appl", "XTopWindow not available from XWindow");
             if (xTopWindow)
                 xTopWindow->toFront();
@@ -1929,7 +2031,7 @@ SignatureState SfxObjectShell_Impl::getScriptingSignatureState()
 }
 
 bool SfxObjectShell_Impl::hasTrustedScriptingSignature(
-    const css::uno::Reference<css::task::XInteractionHandler>& _rxInteraction)
+    const cpo::uno::Reference<css::task::XInteractionHandler>& _rxInteraction)
 {
     bool bResult = false;
 
@@ -2046,7 +2148,7 @@ bool SfxObjectShell::isEditDocLocked() const
     {
         return comphelper::NamedValueCollection::getOrDefault(xModel->getArgs2( { u"LockEditDoc"_ustr } ), u"LockEditDoc", false);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("sfx.appl", "unexpected RuntimeException");
     }
@@ -2062,7 +2164,7 @@ bool SfxObjectShell::isContentExtractionLocked() const
     {
         return comphelper::NamedValueCollection::getOrDefault(xModel->getArgs2( { u"LockContentExtraction"_ustr } ), u"LockContentExtraction", false);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("sfx.appl", "unexpected RuntimeException");
     }
@@ -2078,7 +2180,7 @@ bool SfxObjectShell::isExportLocked() const
     {
         return comphelper::NamedValueCollection::getOrDefault(xModel->getArgs2( { u"LockExport"_ustr } ), u"LockExport", false);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("sfx.appl", "unexpected RuntimeException");
     }

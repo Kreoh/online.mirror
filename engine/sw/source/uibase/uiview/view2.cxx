@@ -24,7 +24,7 @@
 #include <o3tl/any.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <com/sun/star/sdb/DatabaseContext.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/ListboxControlActions.hpp>
@@ -44,6 +44,7 @@
 #include <svl/urihelper.hxx>
 #include <sfx2/passwd.hxx>
 #include <sfx2/sfxdlg.hxx>
+#include <sfx2/cokitfilepicker.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <editeng/langitem.hxx>
 #include <svx/linkwarn.hxx>
@@ -70,6 +71,8 @@
 #include <sfx2/dispatch.hxx>
 #include <svl/whiter.hxx>
 #include <svl/ptitem.hxx>
+#include <svl/intitem.hxx>
+#include <svl/stritem.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <vcl/errinf.hxx>
 #include <tools/hostfilter.hxx>
@@ -133,6 +136,7 @@
 #include <swabstdlg.hxx>
 #include <fmthdft.hxx>
 #include <unotextrange.hxx>
+#include <unotxdoc.hxx>
 #include <docstat.hxx>
 #include <wordcountdialog.hxx>
 #include <OnlineAccessibilityCheck.hxx>
@@ -170,8 +174,8 @@ const char sStatusDelim[] = " : ";
 using namespace sfx2;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::scanner;
 using namespace ::com::sun::star::beans;
@@ -400,6 +404,14 @@ bool SwView::InsertGraphicDlg( SfxRequest& rReq )
     const SfxStringItem* pName = rReq.GetArg(SID_INSERT_GRAPHIC);
     bool bShowError = !pName || comphelper::COKit::isActive();
 
+    // In a COKit app the picker runs natively, and the picked image arrives as a new dispatch
+    // of the command carrying FileName.
+    if (!pName
+        && sfx2::COKitFilePicker::requestAndRedispatch(
+               u".uno:InsertGraphic"_ustr, u"FileName"_ustr,
+               sfx2::COKitFilePicker::graphicImportFilters(), SwResId(STR_INSERT_GRAPHIC)))
+        return false;
+
     // No file pickers in a non-desktop (mobile app) build.
 
 #if HAVE_FEATURE_DESKTOP
@@ -414,12 +426,11 @@ bool SwView::InsertGraphicDlg( SfxRequest& rReq )
         pFileDlg->SetTitle(SwResId(STR_INSERT_GRAPHIC ));
         pFileDlg->SetContext( FileDialogHelper::WriterInsertImage );
 
-        uno::Reference < XFilePicker3 > xFP = pFileDlg->GetFilePicker();
-        uno::Reference < XFilePickerControlAccess > xCtrlAcc(xFP, UNO_QUERY);
+        uno::Reference < XFilePicker > xFP = pFileDlg->GetFilePicker();
         if(nHtmlMode & HTMLMODE_ON)
         {
-            xCtrlAcc->setValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0, Any(true));
-            xCtrlAcc->enableControl( ExtendedFilePickerElementIds::CHECKBOX_LINK, false);
+            xFP->setValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0, Any(true));
+            xFP->enableControl( ExtendedFilePickerElementIds::CHECKBOX_LINK, false);
         }
 
         std::vector<OUString> aFormats;
@@ -458,11 +469,11 @@ bool SwView::InsertGraphicDlg( SfxRequest& rReq )
         {
             Any aTemplates(&aListBoxEntries, cppu::UnoType<decltype(aListBoxEntries)>::get());
 
-            xCtrlAcc->setValue( ExtendedFilePickerElementIds::LISTBOX_IMAGE_TEMPLATE,
+            xFP->setValue( ExtendedFilePickerElementIds::LISTBOX_IMAGE_TEMPLATE,
                 ListboxControlActions::ADD_ITEMS , aTemplates );
 
             Any aSelectPos(&nSelect, cppu::UnoType<decltype(nSelect)>::get());
-            xCtrlAcc->setValue( ExtendedFilePickerElementIds::LISTBOX_IMAGE_TEMPLATE,
+            xFP->setValue( ExtendedFilePickerElementIds::LISTBOX_IMAGE_TEMPLATE,
                 ListboxControlActions::SET_SELECT_ITEM, aSelectPos );
         }
         catch (const cpo::uno::Exception&)
@@ -491,10 +502,10 @@ bool SwView::InsertGraphicDlg( SfxRequest& rReq )
             {
                 try
                 {
-                    Any aVal = xCtrlAcc->getValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0);
+                    Any aVal = xFP->getValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0);
                     OSL_ENSURE(aVal.hasValue(), "Value CBX_INSERT_AS_LINK not found");
                     bAsLink = !aVal.hasValue() || *o3tl::doAccess<bool>(aVal);
-                    Any aTemplateValue = xCtrlAcc->getValue(
+                    Any aTemplateValue = xFP->getValue(
                         ExtendedFilePickerElementIds::LISTBOX_IMAGE_TEMPLATE,
                         ListboxControlActions::GET_SELECTED_ITEM );
                     OUString sTmpl;
@@ -608,6 +619,56 @@ bool SwView::InsertGraphicDlg( SfxRequest& rReq )
 
     return bReturn;
 }
+
+/* Applies the track changes mode once any password prompt is out of the way. */
+static void lcl_ApplyTrackChangesMode(SwDocShell *pDocShell, sal_uInt16 nSlot, bool bOn)
+{
+    SfxRedlineRecordingMode eRedlineRecordingMode = SfxRedlineRecordingMode::AllViews;
+    if (nSlot == FN_TRACK_CHANGES_IN_THIS_VIEW)
+    {
+        eRedlineRecordingMode = SfxRedlineRecordingMode::ThisView;
+    }
+    pDocShell->SetChangeRecording( bOn, /*bLockAllViews=*/true, eRedlineRecordingMode );
+
+    // Notify all view shells of this document, as the track changes mode is document-global.
+    for (SfxViewFrame* pViewFrame = SfxViewFrame::GetFirst(pDocShell); pViewFrame; pViewFrame = SfxViewFrame::GetNext(*pViewFrame, pDocShell))
+    {
+        pViewFrame->GetBindings().Invalidate(FN_REDLINE_ON);
+        pViewFrame->GetBindings().Update(FN_REDLINE_ON);
+        pViewFrame->GetBindings().Invalidate(FN_TRACK_CHANGES_IN_THIS_VIEW);
+        pViewFrame->GetBindings().Update(FN_TRACK_CHANGES_IN_THIS_VIEW);
+        pViewFrame->GetBindings().Invalidate(FN_TRACK_CHANGES_IN_ALL_VIEWS);
+        pViewFrame->GetBindings().Update(FN_TRACK_CHANGES_IN_ALL_VIEWS);
+    }
+}
+
+
+static bool lcl_IsRedlinePasswordCorrect(SwDocShell *pDocShell,
+                                         const Sequence <sal_Int8> &rStoredPasswd,
+                                         std::u16string_view rEnteredPasswd)
+{
+    if (rStoredPasswd.getLength() == 1 && rStoredPasswd[0] == 1)
+    {
+        // dummy RedlinePassword from OOXML import: get real password info
+        // from the grab-bag to verify the password
+        const cpo::uno::Sequence< css::beans::PropertyValue > aDocumentProtection =
+            static_cast<SfxObjectShell*>(pDocShell)->GetDocumentProtectionFromGrabBag();
+
+        return
+            // password is ok, if there is no DocumentProtection in the GrabBag,
+            // i.e. the dummy RedlinePassword imported from an OpenDocument file
+            !aDocumentProtection.hasElements() ||
+            // verify password with the password info imported from OOXML
+            ::comphelper::DocPasswordHelper::IsModifyPasswordCorrect(rEnteredPasswd,
+                ::comphelper::DocPasswordHelper::ConvertPasswordInfo ( aDocumentProtection ) );
+    }
+
+    // the simplified RedlinePassword
+    Sequence <sal_Int8> aNewPasswd = rStoredPasswd;
+    SvPasswordHelper::GetHashPassword( aNewPasswd, rEnteredPasswd );
+    return SvPasswordHelper::CompareHashPassword(rStoredPasswd, rEnteredPasswd);
+}
+
 
 void SwView::Execute(SfxRequest &rReq)
 {
@@ -764,70 +825,47 @@ void SwView::Execute(SfxRequest &rReq)
                 {
                     OSL_ENSURE( !oOn.value(), "SwView::Execute(): password set and redlining off doesn't match!" );
 
+                    std::shared_ptr<SfxRequest> xRequest = std::make_shared<SfxRequest>(rReq);
+                    rReq.Ignore();
+                    bIgnore = true;
+
                     // xmlsec05:    new password dialog
-                    SfxPasswordDialog aPasswdDlg(GetFrameWeld());
-                    aPasswdDlg.SetMinLen(1);
-                    //#i69751# the result of Execute() can be ignored
-                    (void)aPasswdDlg.run();
-                    OUString sNewPasswd(aPasswdDlg.GetPassword());
-
-                    // password verification
-                    bool bPasswordOk = false;
-                    if (aPasswd.getLength() == 1 && aPasswd[0] == 1)
+                    std::shared_ptr<SfxPasswordDialog> xPasswdDlg =
+                            std::make_shared<SfxPasswordDialog>(GetFrameWeld());
+                    xPasswdDlg->SetMinLen(1);
+                    // run() would do this for us, runAsync() does not
+                    xPasswdDlg->PreRun();
+                    const bool bOn = oOn.value();
+                    weld::DialogController::runAsync(xPasswdDlg,
+                        [this, xPasswdDlg, xRequest, nSlot, bOn](sal_Int32 /*nResult*/)
                     {
-                        // dummy RedlinePassword from OOXML import: get real password info
-                        // from the grab-bag to verify the password
-                        const cpo::uno::Sequence< css::beans::PropertyValue > aDocumentProtection =
-                            static_cast<SfxObjectShell*>(GetDocShell())->
-                                                   GetDocumentProtectionFromGrabBag();
+                        //#i69751# the result of the dialog can be ignored
+                        const OUString sNewPasswd(xPasswdDlg->GetPassword());
+                        SwDocShell* pShell = GetDocShell();
+                        IDocumentRedlineAccess& rRedlineAccess =
+                                m_pWrtShell->getIDocumentRedlineAccess();
+                        const Sequence <sal_Int8> aStoredPasswd =
+                                rRedlineAccess.GetRedlinePassword();
 
-                        bPasswordOk =
-                            // password is ok, if there is no DocumentProtection in the GrabBag,
-                            // i.e. the dummy RedlinePassword imported from an OpenDocument file
-                            !aDocumentProtection.hasElements() ||
-                            // verify password with the password info imported from OOXML
-                            ::comphelper::DocPasswordHelper::IsModifyPasswordCorrect(sNewPasswd,
-                                ::comphelper::DocPasswordHelper::ConvertPasswordInfo ( aDocumentProtection ) );
-                    }
-                    else
-                    {
-                        // the simplified RedlinePassword
-                        Sequence <sal_Int8> aNewPasswd = rIDRA.GetRedlinePassword();
-                        SvPasswordHelper::GetHashPassword( aNewPasswd, sNewPasswd );
-                        bPasswordOk = SvPasswordHelper::CompareHashPassword(aPasswd, sNewPasswd);
-                    }
+                        if (!lcl_IsRedlinePasswordCorrect(pShell, aStoredPasswd, sNewPasswd))
+                        {   // xmlsec05: message box for wrong password
+                            std::shared_ptr<weld::MessageDialog> xInfoBox(
+                                Application::CreateMessageDialog(
+                                    GetFrameWeld(), VclMessageType::Info, VclButtonsType::Ok,
+                                    SfxResId(RID_SVXSTR_INCORRECT_PASSWORD)));
+                            xInfoBox->runAsync(xInfoBox, [xInfoBox](sal_uInt32) {});
+                            xRequest->Ignore();
+                            return;
+                        }
 
-                    if (bPasswordOk)
-                        rIDRA.SetRedlinePassword(Sequence <sal_Int8> ());
-                    else
-                    {   // xmlsec05: message box for wrong password
-                        std::shared_ptr<weld::MessageDialog> xInfoBox(
-                            Application::CreateMessageDialog(
-                                GetFrameWeld(), VclMessageType::Info, VclButtonsType::Ok,
-                                SfxResId(RID_SVXSTR_INCORRECT_PASSWORD)));
-                        xInfoBox->runAsync(xInfoBox, [](sal_uInt32) {});
-                        break;
-                    }
+                        rRedlineAccess.SetRedlinePassword(Sequence <sal_Int8> ());
+                        lcl_ApplyTrackChangesMode(pShell, nSlot, bOn);
+                        xRequest->Done();
+                    });
+                    break;
                 }
 
-                SwDocShell* pDocShell = GetDocShell();
-                SfxRedlineRecordingMode eRedlineRecordingMode = SfxRedlineRecordingMode::AllViews;
-                if (nSlot == FN_TRACK_CHANGES_IN_THIS_VIEW)
-                {
-                    eRedlineRecordingMode = SfxRedlineRecordingMode::ThisView;
-                }
-                pDocShell->SetChangeRecording( oOn.value(), /*bLockAllViews=*/true, eRedlineRecordingMode );
-
-                // Notify all view shells of this document, as the track changes mode is document-global.
-                for (SfxViewFrame* pViewFrame = SfxViewFrame::GetFirst(pDocShell); pViewFrame; pViewFrame = SfxViewFrame::GetNext(*pViewFrame, pDocShell))
-                {
-                    pViewFrame->GetBindings().Invalidate(FN_REDLINE_ON);
-                    pViewFrame->GetBindings().Update(FN_REDLINE_ON);
-                    pViewFrame->GetBindings().Invalidate(FN_TRACK_CHANGES_IN_THIS_VIEW);
-                    pViewFrame->GetBindings().Update(FN_TRACK_CHANGES_IN_THIS_VIEW);
-                    pViewFrame->GetBindings().Invalidate(FN_TRACK_CHANGES_IN_ALL_VIEWS);
-                    pViewFrame->GetBindings().Update(FN_TRACK_CHANGES_IN_ALL_VIEWS);
-                }
+                lcl_ApplyTrackChangesMode(GetDocShell(), nSlot, oOn.value());
             }
         }
         break;
@@ -839,34 +877,50 @@ void SwView::Execute(SfxRequest &rReq)
                 && static_cast<const SfxBoolItem*>(pItem)->GetValue() == aPasswd.hasElements() )
                 break;
 
+            std::shared_ptr<SfxRequest> xRequest = std::make_shared<SfxRequest>(rReq);
+            rReq.Ignore();
+            bIgnore = true;
+
             // xmlsec05:    new password dialog
             //              message box for wrong password
-            SfxPasswordDialog aPasswdDlg(GetFrameWeld());
-            aPasswdDlg.SetMinLen(1);
-            if (!aPasswd.hasElements())
-                aPasswdDlg.ShowExtras(SfxShowExtras::CONFIRM);
-            if (aPasswdDlg.run())
+            std::shared_ptr<SfxPasswordDialog> xPasswdDlg =
+                    std::make_shared<SfxPasswordDialog>(GetFrameWeld());
+            xPasswdDlg->SetMinLen(1);
+            const bool bHadPassword = aPasswd.hasElements();
+            if (!bHadPassword)
+                xPasswdDlg->ShowExtras(SfxShowExtras::CONFIRM);
+            // run() would do this for us, runAsync() does not
+            xPasswdDlg->PreRun();
+            weld::DialogController::runAsync(xPasswdDlg,
+                [this, xPasswdDlg, xRequest, bHadPassword](sal_Int32 nResult)
             {
-                RedlineFlags nOn = RedlineFlags::On;
-                OUString sNewPasswd(aPasswdDlg.GetPassword());
-                Sequence <sal_Int8> aNewPasswd =
-                        rIDRA.GetRedlinePassword();
-                SvPasswordHelper::GetHashPassword( aNewPasswd, sNewPasswd );
-                if(!aPasswd.hasElements())
+                if (!nResult)
                 {
-                    rIDRA.SetRedlinePassword(aNewPasswd);
+                    xRequest->Ignore();
+                    return;
                 }
-                else if(SvPasswordHelper::CompareHashPassword(aPasswd, sNewPasswd))
+
+                IDocumentRedlineAccess& rRedlineAccess = m_pWrtShell->getIDocumentRedlineAccess();
+                const Sequence <sal_Int8> aStoredPasswd = rRedlineAccess.GetRedlinePassword();
+
+                RedlineFlags nOn = RedlineFlags::On;
+                const OUString sNewPasswd(xPasswdDlg->GetPassword());
+                Sequence <sal_Int8> aNewPasswd = aStoredPasswd;
+                SvPasswordHelper::GetHashPassword( aNewPasswd, sNewPasswd );
+                if(!bHadPassword)
                 {
-                    rIDRA.SetRedlinePassword(Sequence <sal_Int8> ());
+                    rRedlineAccess.SetRedlinePassword(aNewPasswd);
+                }
+                else if(SvPasswordHelper::CompareHashPassword(aStoredPasswd, sNewPasswd))
+                {
+                    rRedlineAccess.SetRedlinePassword(Sequence <sal_Int8> ());
                     nOn = RedlineFlags::NONE;
                 }
-                const RedlineFlags nMode = rIDRA.GetRedlineFlags();
+                const RedlineFlags nMode = rRedlineAccess.GetRedlineFlags();
                 m_pWrtShell->SetRedlineFlagsAndCheckInsMode( (nMode & ~RedlineFlags::On) | nOn);
-                rReq.AppendItem( SfxBoolItem( FN_REDLINE_PROTECT, !(nMode&RedlineFlags::On) ) );
-            }
-            else
-                bIgnore = true;
+                xRequest->AppendItem( SfxBoolItem( FN_REDLINE_PROTECT, !(nMode&RedlineFlags::On) ) );
+                xRequest->Done();
+            });
         }
         break;
         case FN_REDLINE_SHOW:
@@ -1506,6 +1560,22 @@ void SwView::Execute(SfxRequest &rReq)
             if( pArgs && SfxItemState::SET == pArgs->GetItemState(SID_JUMPTOMARK, false, &pItem))
                 JumpToSwMark( SwMarkName(static_cast<const SfxStringItem*>(pItem)->GetValue()) );
         break;
+        case FN_GOTO_OUTLINE_INDEX:
+        {
+            const SfxUInt32Item* pIndex = rReq.GetArg<SfxUInt32Item>(FN_GOTO_OUTLINE_INDEX);
+            const SfxStringItem* pName = rReq.GetArg<SfxStringItem>(FN_PARAM_1);
+            if (!pIndex || !pName)
+                break;
+            // Another view may have added or removed a heading since the index was read.
+            const SwOutlineNodes::size_type nIndex = pIndex->GetValue();
+            m_pWrtShell->EnterStdMode();
+            if (nIndex < m_pWrtShell->GetDoc()->GetNodes().GetOutLineNds().size()
+                && SwGetOutlineLinkName(nIndex, m_pWrtShell->GetDoc()) == pName->GetValue())
+                m_pWrtShell->GotoOutline(nIndex);
+            else
+                m_pWrtShell->GotoOutline(pName->GetValue());
+        }
+        break;
         case SID_GALLERY :
             // First make sure that the sidebar is visible
             GetViewFrame().ShowChildWindow(SID_SIDEBAR);
@@ -1688,13 +1758,13 @@ void SwView::Execute(SfxRequest &rReq)
                 if (pSdrView == nullptr)
                     break;
                 const SfxUInt32Item* handleNumItem = rReq.GetArg<SfxUInt32Item>(FN_PARAM_1);
-                const SfxUInt32Item* newPosXTwips = rReq.GetArg<SfxUInt32Item>(FN_PARAM_2);
-                const SfxUInt32Item* newPosYTwips = rReq.GetArg<SfxUInt32Item>(FN_PARAM_3);
+                const SfxInt32Item* newPosXTwips = rReq.GetArg<SfxInt32Item>(FN_PARAM_2);
+                const SfxInt32Item* newPosYTwips = rReq.GetArg<SfxInt32Item>(FN_PARAM_3);
                 const SfxInt32Item* OrdNum = rReq.GetArg<SfxInt32Item>(FN_PARAM_4);
 
                 const sal_uLong handleNum = handleNumItem->GetValue();
-                const sal_uLong newPosX = newPosXTwips->GetValue();
-                const sal_uLong newPosY = newPosYTwips->GetValue();
+                const tools::Long newPosX = newPosXTwips->GetValue();
+                const tools::Long newPosY = newPosYTwips->GetValue();
                 const Point mPoint(newPosX, newPosY);
                 const SdrHdl* handle = pSdrView->GetHdlList().GetHdl(handleNum);
                 if (!handle)
@@ -3103,17 +3173,7 @@ void SwView::GenerateFormLetter(bool bUseCurrentDocument)
                 std::unique_ptr<weld::MessageDialog> xWarning(xBuilder->weld_message_dialog(u"WarnDataSourceDialog"_ustr));
                 OUString sTmp(xWarning->get_primary_text());
                 xWarning->set_primary_text(sTmp.replaceFirst("%1", sSource));
-                if (RET_OK == xWarning->run())
-                {
-                    SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-                    VclPtr<VclAbstractDialog> pDlg(pFact->CreateVclDialog( nullptr, SID_OPTIONS_DATABASES ));
-                    pDlg->StartExecuteAsync(
-                        [pDlg] (sal_Int32 /*nResult*/)->void
-                        {
-                            pDlg->disposeOnce();
-                        }
-                    );
-                }
+                xWarning->run();
                 return ;
             }
         }

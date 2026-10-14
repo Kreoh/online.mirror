@@ -19,7 +19,7 @@
 
 #include "filterdetect.hxx"
 #include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/beans/PropertyState.hpp>
 #include <cppuhelper/supportsservice.hxx>
@@ -31,7 +31,7 @@
 #include <o3tl/string_view.hxx>
 
 using namespace com::sun::star::container;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::beans;
 
@@ -75,7 +75,7 @@ bool IsMediaTypeXML( const OUString& mediaType )
 OUString FilterDetect::detect( cpo::uno::Sequence< css::beans::PropertyValue >& aArguments )
 {
     OUString sUrl;
-    css::uno::Reference< css::io::XInputStream > xInStream;
+    cpo::uno::Reference< css::io::XInputStream > xInStream;
 
     sal_Int32 nLength = aArguments.getLength();
     sal_Int32 location=nLength;
@@ -228,9 +228,9 @@ Sequence< OUString > FilterDetect::getSupportedServiceNames(  )
     return { u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_XMLFilterDetect_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new FilterDetect(context));
 }

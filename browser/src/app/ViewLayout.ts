@@ -54,7 +54,11 @@ class ViewLayoutBase {
 	protected lastViewedRectangle: cool.SimpleRectangle; // Previously viewed rectangle.
 
 	protected clientVisibleAreaCommand: string = ''; // Last visible area command. Checked to avoid sending the same command multiple times.
-	protected _viewedRectangle: cool.SimpleRectangle; // Currently viewed rectangle.
+	// Currently viewed rectangle. Written through the viewedRectangle
+	// property, which keeps lastViewedRectangle and the section container in
+	// step; setZoomFrameViewedRectangle is the one exception, for the
+	// intermediate frames of a zoom.
+	protected _viewedRectangle: cool.SimpleRectangle;
 	protected _viewSize: cool.SimplePoint; // Scrollable area (document extent plus any comment overflow).
 	// Scrollable extent WITHOUT comment overflow - the layout's own document/page
 	// extent. Stacked-page layouts capture it when they recompute their layout;
@@ -67,6 +71,9 @@ class ViewLayoutBase {
 	// app.events is a bridge over DOM events, so the resize handler is kept bound
 	// here: off has to be given the same function reference that on registered.
 	private readonly boundOnResize = () => this.onResize();
+	// Where the replaced layout was reading, measured while its scale is still in
+	// effect. A subclass changes the zoom as soon as this constructor returns.
+	private previousPageTop = -1;
 
 	constructor() {
 		this._viewedRectangle = new cool.SimpleRectangle(0, 0, 0, 0);
@@ -89,6 +96,10 @@ class ViewLayoutBase {
 		app.layoutingService.appendLayoutingTask(() =>
 			this.rebuildSingleWindowView(),
 		);
+
+		const previous = app.activeDocument?.activeLayout;
+		if (previous && previous.isWriterLayout())
+			this.previousPageTop = previous.firstVisiblePageTop();
 	}
 
 	// Drops the subscriptions this layout made, so that only the layout which is
@@ -119,6 +130,24 @@ class ViewLayoutBase {
 		);
 	}
 
+	/*
+		Whether the layout lays room before the document, so that the view can start before the
+		document's origin. Only the layout of the vector view does, with the lawn round its page;
+		the scroll section asks this where it would otherwise read the start of the view.
+	*/
+	public laysRoomBeforeTheDocument(): boolean {
+		return false;
+	}
+
+	/// Shows that point of the document at the middle of the frame, as far as the layout's limits
+	/// allow. A layout that holds its view in other terms says how.
+	public showAtTheMiddle(point: cool.SimplePoint): void {
+		// The view is placed and built again. The frame did not change, so nothing is fitted
+		// anew, which a resize of a presentation would do.
+		this.setViewRectangleFromPointAndScale(point, app.twipsToPixels);
+		this.updateViewData();
+	}
+
 	public adjustViewZoomLevel() {
 		if (app.map._docLayer)
 			app.map._docLayer._fitWidthZoom(undefined, undefined, true);
@@ -142,8 +171,10 @@ class ViewLayoutBase {
 		return result;
 	}
 
+	// Forget the area last sent, so the next send goes out even when the area
+	// is unchanged.
 	public resetClientVisibleArea(): void {
-		this.lastViewedRectangle = new cool.SimpleRectangle(0, 0, 0, 0);
+		this.clientVisibleAreaCommand = '';
 	}
 
 	// The message text for the current visible area, in whole twips.
@@ -182,6 +213,9 @@ class ViewLayoutBase {
 
 		this.onVisibleAreaChanged();
 		app.socket.sendMessage(visibleAreaCommand);
+
+		if (app.map._textInput && app.map._textInput.onVisibleAreaChanged)
+			app.map._textInput.onVisibleAreaChanged();
 
 		if (app.map.contextToolbar) app.map.contextToolbar.hideContextToolbar(); // hide context toolbar when scroll/window resize etc...
 
@@ -322,6 +356,12 @@ class ViewLayoutBase {
 		return false;
 	}
 
+	// True when the viewed rectangle spans the pages on screen, built from the
+	// page geometry, instead of being the frame placed at the scroll position.
+	protected buildsViewedRectangleFromPages(): boolean {
+		return false;
+	}
+
 	// Single resize handler, bound to app.events 'resize' in the constructor and
 	// dispatched polymorphically. First resize the canvas / document-anchor
 	// section (the doc layer's _syncTileContainerSize; Calc's override is
@@ -340,12 +380,10 @@ class ViewLayoutBase {
 	private rebuildSingleWindowView(): void {
 		if (!this.usesSingleWindowView()) return; // subclasses handle their own
 
-		// applyZoom rebuilds the viewed rectangle around the zoom anchor
-		// (setViewRectangleFromPointAndScale) which may leave a non-negative scroll
-		// offset (when zoomed in) or the negative centering origin (when it fits).
-		// Fold only the real (non-negative) scroll back into scrollProperties, then
-		// let refreshVisibleAreaRectangle re-derive and re-centre the rectangle for
-		// the current frame/zoom and request the tiles.
+		// A zoom or a resize can leave the scroll position past the end of a
+		// document that has just become shorter or narrower on screen, so clamp it
+		// here, then let refreshVisibleAreaRectangle re-derive and re-centre the
+		// rectangle for the current frame/zoom and request the tiles.
 		// The scroll stays inside the range the document itself spans,
 		// [0, base view size - frame]. The base size leaves out the comment
 		// overflow, so a document narrower than the frame keeps its centred
@@ -359,11 +397,11 @@ class ViewLayoutBase {
 
 		this.scrollProperties.viewX = Math.min(
 			maxX,
-			Math.max(0, this._viewedRectangle.pX1),
+			Math.max(0, this.scrollProperties.viewX),
 		);
 		this.scrollProperties.viewY = Math.min(
 			maxY,
-			Math.max(0, this._viewedRectangle.pY1),
+			Math.max(0, this.scrollProperties.viewY),
 		);
 		this.updateViewData();
 	}
@@ -388,18 +426,19 @@ class ViewLayoutBase {
 	// Shared, map-free zoom for the new-structure layouts. ZoomControl calls
 	// these; the data (scale, viewed rectangle, tile requests) lives here so the
 	// map is not involved. This is the single-scrollable-window model (Calc,
-	// single-page). Stacked-page layouts (ViewLayoutMultiPage/FileBased) whose
-	// viewed rectangle is computed from page geometry override the positioning
-	// (setViewRectangleFromPointAndScale) and applyZoom as needed.
+	// single-page).
 
-	// Rebuild the viewed rectangle for a new zoom: centre it on the given
-	// document-space point and size it to the current frame at the given scale.
-	// point is in twips, scale is the twips-to-core-pixel factor for the new
-	// zoom.
+	// Move the scroll position for a new zoom: centre the frame on the given
+	// document-space point at the given scale, then let the layout rebuild its
+	// viewed rectangle from the new position. point is in twips, scale is the
+	// twips-to-core-pixel factor for the new zoom.
 	public setViewRectangleFromPointAndScale(
 		point: cool.SimplePoint,
 		scale: number,
 	): void {
+		// A rectangle built from the pages does not follow the scroll position.
+		if (this.buildsViewedRectangleFromPages()) return;
+
 		if (!scale) return;
 		const frame = this.frameSize;
 		const widthTwips = Math.round(frame.pX / scale);
@@ -417,12 +456,9 @@ class ViewLayoutBase {
 			Math.max(0, Math.round(point.y - heightTwips / 2)),
 		);
 
-		this.viewedRectangle = new cool.SimpleRectangle(
-			x,
-			y,
-			widthTwips,
-			heightTwips,
-		);
+		this.scrollProperties.viewX = Math.round(x * scale);
+		this.scrollProperties.viewY = Math.round(y * scale);
+		this.refreshVisibleAreaRectangle();
 	}
 
 	// The document-space point (twips) a zoom should keep fixed on screen.
@@ -515,7 +551,8 @@ class ViewLayoutBase {
 		this.applyZoom(targetZoom, anchorTwips);
 
 		// Restore the cursor and selection handles hidden for the animation.
-		if (app.file.textCursor.visible) docLayer._cursorMarker.setOpacity(1);
+		if (docLayer._cursorMarker && app.file.textCursor.visible)
+			docLayer._cursorMarker.setOpacity(1);
 		const textInput: any = app.map._textInput;
 		if (textInput._cursorHandler) textInput._cursorHandler.setOpacity(1);
 		TextSelections.showHandles();
@@ -533,7 +570,13 @@ class ViewLayoutBase {
 	// Used by both the animated end and the non-animated path. Map-free: the
 	// scale is applied via _updateTileTwips (not _resetView) and the doc type's
 	// 'zoomend' listeners do the rest of the post-zoom work.
-	public applyZoom(targetZoom: number, anchorTwips?: cool.SimplePoint): void {
+	// anchorOnCanvas is the canvas point the anchor stood under. This layout centers the anchor
+	// and does not read it. A layout that keeps the anchor under that point does.
+	public applyZoom(
+		targetZoom: number,
+		anchorTwips?: cool.SimplePoint,
+		anchorOnCanvas?: cool.SimplePoint,
+	): void {
 		// The zoom internals used here (_zoom, _clientZoom, _tileZoom,
 		// _updateTileTwips) are not on the typed interfaces; cast for now while
 		// the map is still being removed from the zoom path.
@@ -583,6 +626,7 @@ class ViewLayoutBase {
 		if (zoomChanged) {
 			map.fire('zoomend');
 			map.fire('zoomlevelschange');
+			RenderManager.resetPreFetching(true);
 		}
 	}
 
@@ -769,15 +813,9 @@ class ViewLayoutBase {
 				}
 			}
 
-			this._viewedRectangle = documentRectangles[nearest].clone();
-
-			app.sectionContainer.onNewDocumentTopLeft();
-			app.sectionContainer.requestReDraw();
+			this.viewedRectangle = documentRectangles[nearest].clone();
 		} else {
-			this._viewedRectangle = resultingRectangle;
-
-			app.sectionContainer.onNewDocumentTopLeft();
-			app.sectionContainer.requestReDraw();
+			this.viewedRectangle = resultingRectangle;
 		}
 	}
 
@@ -799,15 +837,12 @@ class ViewLayoutBase {
 		// the negative-origin viewed rectangle used by ViewLayoutCompareChanges.
 		const centering = this.getCenteringOffset();
 
-		this._viewedRectangle = cool.SimpleRectangle.fromCorePixels([
+		this.viewedRectangle = cool.SimpleRectangle.fromCorePixels([
 			this.scrollProperties.viewX - centering[0],
 			this.scrollProperties.viewY - centering[1],
 			documentAnchor.size[0],
 			documentAnchor.size[1],
 		]);
-
-		app.sectionContainer.onNewDocumentTopLeft();
-		app.sectionContainer.requestReDraw();
 	}
 
 	// Default commit used by scroll(): rebuild the viewed rectangle and fetch
@@ -825,6 +860,9 @@ class ViewLayoutBase {
 		if (app.map._docLayer?._cursorMarker)
 			app.map._docLayer._cursorMarker.update();
 
+		if (app.UI.horizontalRuler) app.UI.horizontalRuler.fixOffset();
+		if (app.UI.verticalRuler) app.UI.verticalRuler.fixOffset();
+
 		app.map._docLayer._sendClientZoom();
 		this.sendClientVisibleArea();
 
@@ -834,6 +872,14 @@ class ViewLayoutBase {
 		// stops counting as pending and coherency-paused drawing resumes as
 		// soon as the visible tiles are ready.
 		RenderManager.requestVisibleTiles(this.currentCoordList);
+
+		this.onViewMoved();
+	}
+
+	protected onViewMoved(): void {
+		RenderManager.resetPreFetching(true);
+
+		app.events.fire('viewmoved', null);
 	}
 
 	// Reset currentCoordList and return the per-frame constants shared by the
@@ -884,6 +930,10 @@ class ViewLayoutBase {
 		part: PartNumber,
 		added: Set<string>,
 	): void {
+		// The tiles are of the shown view mode, such as the notes page or
+		// the master page of a presentation. Mode 0 is the normal view.
+		const mode = app.activeDocument ? app.activeDocument.activeModes[0] : 0;
+
 		for (let c = 0; c <= columnCount; c++) {
 			for (let r = 0; r <= rowCount; r++) {
 				const coords = new TileCoordData(
@@ -891,7 +941,7 @@ class ViewLayoutBase {
 					startY + r * tileSize,
 					zoom,
 					part,
-					0,
+					mode,
 				);
 
 				const key = coords.key();
@@ -919,6 +969,13 @@ class ViewLayoutBase {
 		) as cool.CommentSection;
 
 		if (commentSection && commentSection.sectionProperties.selectedComment) {
+			if (
+				commentSection.isShownBig(
+					commentSection.sectionProperties.selectedComment,
+				)
+			)
+				// Deselecting the comment would also close its full-view.
+				return;
 			commentSection.unselect();
 		}
 	}
@@ -976,6 +1033,9 @@ class ViewLayoutBase {
 		if (scrolled) {
 			this.updateViewData();
 			app.sectionContainer.requestReDraw();
+
+			// Following our own caret only holds while the caret is on screen.
+			if (userIsScrolling) app.updateFollowingUsers();
 		}
 
 		return scrolled;
@@ -992,6 +1052,67 @@ class ViewLayoutBase {
 		pY -= this.viewedRectangle.pY1;
 
 		this.scroll(pX, pY, userIsScrolling);
+	}
+
+	// The document position (twips) of the top of the first page that the view
+	// shows enough of. A page showing less than the fraction is passed over, so a
+	// few pixels peeking in at the top edge do not count as being on screen. When
+	// no page reaches the fraction the most visible one wins.
+	private firstVisiblePageTop(): number {
+		const minimumVisibleFraction = 0.4;
+		const viewTop = this._documentAnchorPosition[1];
+		const viewBottom = viewTop + this.frameSize.pY;
+
+		let mostVisibleTop = 0;
+		let mostVisibleFraction = 0;
+
+		for (const page of app.file.writer.pageRectangleList) {
+			const top = this.documentToViewY(new cool.SimplePoint(page[0], page[1]));
+			const bottom = this.documentToViewY(
+				new cool.SimplePoint(page[0], page[1] + page[3]),
+			);
+
+			const height = bottom - top;
+			if (height <= 0) continue;
+
+			const fraction =
+				(Math.min(bottom, viewBottom) - Math.max(top, viewTop)) / height;
+
+			if (fraction >= minimumVisibleFraction) return page[1];
+
+			if (fraction > mostVisibleFraction) {
+				mostVisibleFraction = fraction;
+				mostVisibleTop = page[1];
+			}
+		}
+
+		return mostVisibleTop;
+	}
+
+	// Only the Writer layouts lay the document out in pages.
+	private isWriterLayout(): boolean {
+		return [
+			'ViewLayoutWriter',
+			'ViewLayoutMultiPage',
+			'ViewLayoutCompareChanges',
+		].includes(this.type);
+	}
+
+	// Open this layout on the part of the document the replaced one was showing.
+	public setStartYPosition(): void {
+		if (!this.isWriterLayout()) return;
+		if (this.previousPageTop < 0) return;
+
+		const pageTop = this.previousPageTop;
+
+		app.layoutingService.appendLayoutingTask(() => {
+			const target = new cool.SimplePoint(this.viewedRectangle.x1, pageTop);
+
+			this.scroll(
+				0,
+				this.documentToViewY(target) - this._documentAnchorPosition[1],
+			);
+		});
 	}
 
 	public setOverviewPageVisArea(point: cool.SimplePoint): void {

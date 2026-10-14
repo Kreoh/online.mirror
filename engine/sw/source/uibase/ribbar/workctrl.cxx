@@ -58,8 +58,8 @@
 #define NAVI_ENTRIES 21
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
 
@@ -678,7 +678,7 @@ bool NavElementBox_Impl::DoKeyInput(const KeyEvent& rKEvt)
     return ChildKeyInput(rKEvt);
 }
 
-NavElementToolBoxControl::NavElementToolBoxControl( const uno::Reference< uno::XComponentContext >& rxContext )
+NavElementToolBoxControl::NavElementToolBoxControl( const uno::Reference< cpo::uno::XComponentContext >& rxContext )
  : NavElementToolBoxControl_Base( rxContext,
                            uno::Reference< frame::XFrame >(),
                            u".uno:NavElement"_ustr ),
@@ -687,17 +687,17 @@ NavElementToolBoxControl::NavElementToolBoxControl( const uno::Reference< uno::X
 }
 
 // XServiceInfo
-bool SAL_CALL NavElementToolBoxControl::supportsService( const OUString& ServiceName )
+bool NavElementToolBoxControl::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-OUString SAL_CALL NavElementToolBoxControl::getImplementationName()
+OUString NavElementToolBoxControl::getImplementationName()
 {
     return u"lo.writer.NavElementToolBoxController"_ustr;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL NavElementToolBoxControl::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > NavElementToolBoxControl::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
@@ -714,7 +714,7 @@ void NavElementToolBoxControl::disposing(std::unique_lock<std::mutex>& rGuard)
 }
 
 // XStatusListener
-void SAL_CALL NavElementToolBoxControl::statusChanged( const frame::FeatureStateEvent& rEvent )
+void NavElementToolBoxControl::statusChanged( const frame::FeatureStateEvent& rEvent )
 {
     if (!m_pBox)
         return;
@@ -739,24 +739,24 @@ void SAL_CALL NavElementToolBoxControl::statusChanged( const frame::FeatureState
 }
 
 // XToolbarController
-void SAL_CALL NavElementToolBoxControl::execute( sal_Int16 /*KeyModifier*/ )
+void NavElementToolBoxControl::execute( sal_Int16 /*KeyModifier*/ )
 {
 }
 
-void SAL_CALL NavElementToolBoxControl::click()
+void NavElementToolBoxControl::click()
 {
 }
 
-void SAL_CALL NavElementToolBoxControl::doubleClick()
+void NavElementToolBoxControl::doubleClick()
 {
 }
 
-uno::Reference< awt::XWindow > SAL_CALL NavElementToolBoxControl::createPopupWindow()
+uno::Reference< awt::XWindow > NavElementToolBoxControl::createPopupWindow()
 {
     return uno::Reference< awt::XWindow >();
 }
 
-uno::Reference< awt::XWindow > SAL_CALL NavElementToolBoxControl::createItemWindow(
+uno::Reference< awt::XWindow > NavElementToolBoxControl::createItemWindow(
     const uno::Reference< awt::XWindow >& xParent )
 {
     uno::Reference< awt::XWindow > xItemWindow;
@@ -767,7 +767,7 @@ uno::Reference< awt::XWindow > SAL_CALL NavElementToolBoxControl::createItemWind
 
         std::unique_ptr<weld::ComboBox> xWidget(m_pBuilder->weld_combo_box(u"NavElementWidget"_ustr));
 
-        xItemWindow = css::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
+        xItemWindow = cpo::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
 
         m_xWeldBox.reset(new NavElementBox_Base(std::move(xWidget), m_xFrame));
         m_pBox = m_xWeldBox.get();
@@ -787,9 +787,9 @@ uno::Reference< awt::XWindow > SAL_CALL NavElementToolBoxControl::createItemWind
     return xItemWindow;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 lo_writer_NavElementToolBoxController_get_implementation(
-    css::uno::XComponentContext *rxContext,
+    cpo::uno::XComponentContext *rxContext,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire( new NavElementToolBoxControl( rxContext ) );
@@ -803,15 +803,15 @@ class PrevNextScrollToolboxController : public PrevNextScrollToolboxController_B
 public:
     enum Type { PREVIOUS, NEXT };
 
-    PrevNextScrollToolboxController( const css::uno::Reference< css::uno::XComponentContext >& rxContext, Type eType );
+    PrevNextScrollToolboxController( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext, Type eType );
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+    virtual void statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
 private:
     Type                     meType;
@@ -819,9 +819,9 @@ private:
 
 }
 
-PrevNextScrollToolboxController::PrevNextScrollToolboxController( const css::uno::Reference< css::uno::XComponentContext > & rxContext, Type eType )
+PrevNextScrollToolboxController::PrevNextScrollToolboxController( const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext, Type eType )
     : PrevNextScrollToolboxController_Base( rxContext,
-            css::uno::Reference< css::frame::XFrame >(),
+            cpo::uno::Reference< css::frame::XFrame >(),
             (eType == PREVIOUS) ? u".uno:ScrollToPrevious"_ustr: u".uno:ScrollToNext"_ustr ),
       meType( eType )
 {
@@ -829,25 +829,25 @@ PrevNextScrollToolboxController::PrevNextScrollToolboxController( const css::uno
 }
 
 // XServiceInfo
-OUString SAL_CALL PrevNextScrollToolboxController::getImplementationName()
+OUString PrevNextScrollToolboxController::getImplementationName()
 {
     return meType == PrevNextScrollToolboxController::PREVIOUS?
         u"lo.writer.PreviousScrollToolboxController"_ustr :
         u"lo.writer.NextScrollToolboxController"_ustr;
 }
 
-bool SAL_CALL PrevNextScrollToolboxController::supportsService( const OUString& ServiceName )
+bool PrevNextScrollToolboxController::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL PrevNextScrollToolboxController::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > PrevNextScrollToolboxController::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
 // XStatusListener
-void SAL_CALL PrevNextScrollToolboxController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
+void PrevNextScrollToolboxController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
 {
     if (rEvent.FeatureURL.Path == "NavElement")
     {
@@ -875,17 +875,17 @@ void SAL_CALL PrevNextScrollToolboxController::statusChanged( const css::frame::
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 lo_writer_PreviousScrollToolboxController_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire( new PrevNextScrollToolboxController( context, PrevNextScrollToolboxController::PREVIOUS ) );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 lo_writer_NextScrollToolboxController_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire( new PrevNextScrollToolboxController( context, PrevNextScrollToolboxController::NEXT ) );

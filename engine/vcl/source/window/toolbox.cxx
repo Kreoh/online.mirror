@@ -34,6 +34,7 @@
 
 #include <tools/poly.hxx>
 #include <sal/log.hxx>
+#include <comphelper/scripturl.hxx>
 #include <o3tl/string_view.hxx>
 #include <osl/diagnose.h>
 
@@ -1267,7 +1268,7 @@ ToolBox::ToolBox( vcl::Window* pParent, WinBits nStyle ) :
 }
 
 ToolBox::ToolBox(vcl::Window* pParent, const OUString& rID,
-    const OUString& rUIXMLDescription, const css::uno::Reference<css::frame::XFrame> &rFrame)
+    const OUString& rUIXMLDescription, const cpo::uno::Reference<css::frame::XFrame> &rFrame)
     : DockingWindow(WindowType::TOOLBOX, "vcl::ToolBox maLayoutIdle")
 {
     ImplInitToolBoxData();
@@ -3561,10 +3562,7 @@ namespace
 {
     bool DispatchableCommand(std::u16string_view rName)
     {
-        return o3tl::starts_with(rName, u".uno")  ||
-               o3tl::starts_with(rName, u"slot:")  ||
-               o3tl::starts_with(rName, u"macro:")  ||
-               o3tl::starts_with(rName, u"vnd.sun.star.script");
+        return o3tl::starts_with(rName, u".uno") || comphelper::isScriptURL(rName);
     }
 }
 

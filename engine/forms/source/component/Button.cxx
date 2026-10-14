@@ -41,7 +41,7 @@ namespace frm
 {
 
 using namespace comphelper;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -117,7 +117,7 @@ void OButtonModel::describeFixedProperties( Sequence< Property >& _rProps ) cons
 }
 
 
-css::uno::Reference< css::util::XCloneable > OButtonModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OButtonModel::createClone()
 {
     rtl::Reference<OButtonModel> pClone = new OButtonModel(this, getContext());
     pClone->clonedFrom(this);
@@ -759,15 +759,15 @@ void OButtonControl::releaseDispatchProviderInterceptor( const Reference< XDispa
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OButtonModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OButtonModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OButtonModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OButtonControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OButtonControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OButtonControl(component));

@@ -43,7 +43,7 @@
 #include <tools/debug.hxx>
 #include <comphelper/diagnose_ex.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::container;
@@ -162,7 +162,7 @@ SdrTableRTFParser::SdrTableRTFParser( SdrTableObj& rTableObj )
 
 void SdrTableRTFParser::Read( SvStream& rStream )
 {
-    EditEngine& rEdit = const_cast< EditEngine& >( mpOutliner->GetEditEngine() );
+    EditEngine& rEdit = mpOutliner->GetEditEngine();
 
     Link<RtfImportInfo&,void> aOldLink( rEdit.GetRtfImportHdl() );
     rEdit.SetRtfImportHdl( LINK( this, SdrTableRTFParser, RTFImportHdl ) );

@@ -21,7 +21,7 @@
 
 #include <cppuhelper/implbase.hxx>
 #include <ooo/vba/word/XWindow.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <vbahelper/vbahelperinterface.hxx>
 #include <vbahelper/vbawindowbase.hxx>
@@ -34,25 +34,25 @@ typedef cppu::ImplInheritanceHelper< VbaWindowBase, ov::word::XWindow > WindowIm
 class SwVbaWindow : public WindowImpl_BASE
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SwVbaWindow(
-        const css::uno::Reference< ov::XHelperInterface >& xParent,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
         const rtl::Reference< SwXTextDocument >& xModel,
-        const css::uno::Reference< css::frame::XController >& xController );
+        const cpo::uno::Reference< css::frame::XController >& xController );
 
     // Attributes
-    virtual cpo::uno::Any SAL_CALL getView() override;
-    virtual void SAL_CALL setView( const cpo::uno::Any& _view ) override;
-    virtual cpo::uno::Any SAL_CALL getWindowState() override;
-    virtual void SAL_CALL setWindowState( const cpo::uno::Any& _windowstate ) override;
-    virtual OUString SAL_CALL getCaption() override;
-    virtual void SAL_CALL setCaption( const OUString& _caption ) override;
+    virtual cpo::uno::Any getView() override;
+    virtual void setView( const cpo::uno::Any& _view ) override;
+    virtual cpo::uno::Any getWindowState() override;
+    virtual void setWindowState( const cpo::uno::Any& _windowstate ) override;
+    virtual OUString getCaption() override;
+    virtual void setCaption( const OUString& _caption ) override;
     // Methods
-    virtual void SAL_CALL Activate(  ) override;
-    virtual void SAL_CALL Close( const cpo::uno::Any& SaveChanges, const cpo::uno::Any& RouteDocument ) override;
-    virtual cpo::uno::Any SAL_CALL Panes( const cpo::uno::Any& aIndex ) override;
-    virtual cpo::uno::Any SAL_CALL ActivePane() override;
+    virtual void Activate(  ) override;
+    virtual void Close( const cpo::uno::Any& SaveChanges, const cpo::uno::Any& RouteDocument ) override;
+    virtual cpo::uno::Any Panes( const cpo::uno::Any& aIndex ) override;
+    virtual cpo::uno::Any ActivePane() override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

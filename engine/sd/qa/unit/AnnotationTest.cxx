@@ -35,6 +35,7 @@
 #include <DrawViewShell.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 class AnnotationTest : public SdModelTestBase
 {
@@ -373,6 +374,10 @@ CPPUNIT_TEST_FIXTURE(AnnotationTest, testAnnotationDuplicatePage)
         CPPUNIT_ASSERT_EQUAL(u"Comment"_ustr, xAnnotation->GetText());
     }
 
+    // The moment the comment was written has to travel with the copy as well.
+    const util::DateTime aDateTimeUTC(0, 3, 2, 1, 15, 6, 2026, true);
+    pPage1->getAnnotations().at(0)->setDateTimeUTC(aDateTimeUTC);
+
     // Let's duplicate the page
     dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
 
@@ -410,6 +415,11 @@ CPPUNIT_TEST_FIXTURE(AnnotationTest, testAnnotationDuplicatePage)
 
         // Check text of the annotation
         CPPUNIT_ASSERT_EQUAL(u"Comment"_ustr, xAnnotation->GetText());
+
+        // The copy carries the same moment as the original
+        CPPUNIT_ASSERT_EQUAL(aDateTimeUTC.Year, xAnnotation->getDateTimeUTC().Year);
+        CPPUNIT_ASSERT_EQUAL(aDateTimeUTC.Hours, xAnnotation->getDateTimeUTC().Hours);
+        CPPUNIT_ASSERT_EQUAL(aDateTimeUTC.Minutes, xAnnotation->getDateTimeUTC().Minutes);
 
         // Annotation in page 1 is not the same instance as annotation in page 2
         // We verify the annotation was copied
@@ -655,6 +665,206 @@ CPPUNIT_TEST_FIXTURE(AnnotationTest, testAnnotationThreadedFields)
         }
     }
     CPPUNIT_ASSERT_EQUAL(3, nVerified);
+}
+
+CPPUNIT_TEST_FIXTURE(AnnotationTest, testModernCommentImport)
+{
+    // A presentation whose comments are held in the newer comment part keeps them on load, as
+    // one thread with the replies hanging off its root.
+    createSdImpressDoc("pptx/modern-comments.pptx");
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdPage* pPage = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    // Without the accompanying fix in place, this test would have failed with an expected 3 but
+    // an actual 0: the part was not read at all, so every comment was dropped on load.
+    auto const& rAnnotations = pPage->getAnnotations();
+    CPPUNIT_ASSERT_EQUAL(size_t(3), rAnnotations.size());
+
+    // The author comes from the separate author list the entries refer to by id.
+    for (auto const& xAnnotation : rAnnotations)
+    {
+        CPPUNIT_ASSERT_EQUAL(u"Comment Author"_ustr, xAnnotation->getAuthor());
+        CPPUNIT_ASSERT_EQUAL(u"CA"_ustr, xAnnotation->getInitials());
+        CPPUNIT_ASSERT(xAnnotation->IsThreaded());
+    }
+
+    // The thread root comes first, then its two replies in the order the file lists them.
+    CPPUNIT_ASSERT_EQUAL(u"Make this colorful"_ustr, rAnnotations[0]->GetText());
+    CPPUNIT_ASSERT_EQUAL(u"Nice and big"_ustr, rAnnotations[1]->GetText());
+    CPPUNIT_ASSERT_EQUAL(u"Faster"_ustr, rAnnotations[2]->GetText());
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), rAnnotations[0]->GetParentId());
+    CPPUNIT_ASSERT_EQUAL(rAnnotations[0]->GetId(), rAnnotations[1]->GetParentId());
+    CPPUNIT_ASSERT_EQUAL(rAnnotations[0]->GetId(), rAnnotations[2]->GetParentId());
+
+    // The created value is a moment in UTC, so it is recorded as one and not only as a wall
+    // clock. Without that a reader in another zone is shown the author's clock as their own.
+    for (auto const& xAnnotation : rAnnotations)
+        CPPUNIT_ASSERT_EQUAL(xAnnotation->getDateTime().Year, xAnnotation->getDateTimeUTC().Year);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(22), rAnnotations[0]->getDateTimeUTC().Minutes);
+
+    // The time each entry carries is kept as the file has it.
+    util::DateTime aDateTime = rAnnotations[0]->getDateTime();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2026), aDateTime.Year);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(8), aDateTime.Month);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(21), aDateTime.Day);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(16), aDateTime.Hours);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(22), aDateTime.Minutes);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(22), aDateTime.Seconds);
+}
+
+CPPUNIT_TEST_FIXTURE(AnnotationTest, testAnnotationDateUtcOdfRoundtrip)
+{
+    // An annotation records the moment it was written beside the author's wall clock, and that
+    // moment survives a save and reload.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr, {});
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdPage* pPage = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pPage->getAnnotations().size());
+
+    // Inserting an annotation records a moment, so the year is a real one rather than the zero
+    // that stands for "nothing recorded".
+    CPPUNIT_ASSERT(pPage->getAnnotations()[0]->getDateTimeUTC().Year != 0);
+
+    // A known moment, so what lands in the file can be compared against it.
+    util::DateTime aDateTimeUTC(0, 3, 2, 1, 15, 6, 2026, true);
+    pPage->getAnnotations()[0]->setDateTimeUTC(aDateTimeUTC);
+
+    // Saving a presentation that has an annotation does not pass export validation, because the
+    // element is written in the officeooo namespace rather than the office one. That predates
+    // this and is why nothing here round-trips a presentation with a comment.
+    skipValidation();
+    saveAndReload(TestFilter::ODP);
+    auto pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdPage* pReloadedPage = pReloaded->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pReloadedPage->getAnnotations().size());
+
+    // Without the accompanying fix in place, this test would have failed: ODF kept the wall
+    // clock alone, so the zone it was read in was lost.
+    util::DateTime aReloaded = pReloadedPage->getAnnotations()[0]->getDateTimeUTC();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2026), aReloaded.Year);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(6), aReloaded.Month);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(15), aReloaded.Day);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), aReloaded.Hours);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), aReloaded.Minutes);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), aReloaded.Seconds);
+}
+
+CPPUNIT_TEST_FIXTURE(AnnotationTest, testAnnotationDateUtcPptxRoundtrip)
+{
+    // A comment written in one timezone and read in another has to show the moment it was
+    // written. Only the wall clock survives a PPTX round trip today, and a wall clock with no
+    // zone read by someone elsewhere is their own clock, so the time shown is wrong by the
+    // difference between the two zones.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr, {});
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdPage* pPage = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pPage->getAnnotations().size());
+
+    // What an author in Europe/Copenhagen leaves behind on a August afternoon: the clock they
+    // read, and the moment it stood for, two hours behind it.
+    pPage->getAnnotations()[0]->setDateTime(util::DateTime(0, 0, 30, 14, 20, 8, 2026, false));
+    pPage->getAnnotations()[0]->setDateTimeUTC(util::DateTime(0, 0, 30, 12, 20, 8, 2026, true));
+
+    saveAndReload(TestFilter::PPTX);
+
+    auto pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdPage* pReloadedPage = pReloaded->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pReloadedPage->getAnnotations().size());
+    auto const& xReloaded = pReloadedPage->getAnnotations()[0];
+
+    // Without the accompanying fix in place, this test would have failed with an expected 2026
+    // and an actual 0: only the older comment part was written, which has nowhere to put a
+    // moment, so a reader in Asia/Kolkata was shown 14:30 on their own clock for a comment
+    // written at 18:00 theirs.
+    util::DateTime aDateTimeUTC = xReloaded->getDateTimeUTC();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2026), aDateTimeUTC.Year);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(12), aDateTimeUTC.Hours);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(30), aDateTimeUTC.Minutes);
+
+    // The author's own clock does not come back, and cannot: the part that carries the moment
+    // holds one time per comment and that time is the moment. Every reader is shown the right
+    // time on their own clock from it, so nothing is lost that a reader sees.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(12), xReloaded->getDateTime().Hours);
+}
+
+CPPUNIT_TEST_FIXTURE(AnnotationTest, testModernCommentPptxRoundtrip)
+{
+    // A thread of comments keeps its shape through a PPTX round trip, because the newer comment
+    // part has somewhere to put the replies.
+    createSdImpressDoc("pptx/modern-comments.pptx");
+
+    saveAndReload(TestFilter::PPTX);
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdPage* pPage = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    // Without the accompanying fix in place, this test would have failed: the older part was the
+    // only one written, and it flattens a thread into separate comments.
+    auto const& rAnnotations = pPage->getAnnotations();
+    CPPUNIT_ASSERT_EQUAL(size_t(3), rAnnotations.size());
+    CPPUNIT_ASSERT_EQUAL(u"Make this colorful"_ustr, rAnnotations[0]->GetText());
+    CPPUNIT_ASSERT_EQUAL(u"Nice and big"_ustr, rAnnotations[1]->GetText());
+    CPPUNIT_ASSERT_EQUAL(u"Faster"_ustr, rAnnotations[2]->GetText());
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), rAnnotations[0]->GetParentId());
+    CPPUNIT_ASSERT_EQUAL(rAnnotations[0]->GetId(), rAnnotations[1]->GetParentId());
+    CPPUNIT_ASSERT_EQUAL(rAnnotations[0]->GetId(), rAnnotations[2]->GetParentId());
+
+    // The moment each entry was written comes back too.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(22), rAnnotations[0]->getDateTimeUTC().Minutes);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(22), rAnnotations[0]->getDateTimeUTC().Seconds);
+    CPPUNIT_ASSERT_EQUAL(u"Comment Author"_ustr, rAnnotations[0]->getAuthor());
+}
+
+CPPUNIT_TEST_FIXTURE(AnnotationTest, testReplyWithoutRootPptxRoundtrip)
+{
+    // Deleting a comment leaves its replies on the page, each still naming the comment as its
+    // parent. Such a reply has to survive a PPTX round trip as a comment of its own.
+    createSdImpressDoc();
+    for (const auto& rText : { u"Root"_ustr, u"Reply"_ustr })
+    {
+        dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr,
+                        comphelper::InitPropertySequence({ { u"Text"_ustr, cpo::uno::Any(rText) } }));
+    }
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdPage* pPage = pXImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pPage->getAnnotations().size());
+
+    auto xRoot = pPage->getAnnotations()[0];
+    auto xReply = pPage->getAnnotations()[1];
+    xReply->SetParentId(xRoot->GetId());
+    pPage->removeAnnotation(xRoot);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pPage->getAnnotations().size());
+
+    saveAndReload(TestFilter::PPTX);
+
+    auto pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdPage* pReloadedPage = pReloaded->GetDoc()->GetSdPage(0, PageKind::Standard);
+
+    // Without the accompanying fix in place, this test would have failed with an expected 1 and
+    // an actual 0: the reply was only ever written inside the entry it answered, which was
+    // gone, so the newer comment part had no trace of it and the older part is not read when
+    // the newer one is there.
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pReloadedPage->getAnnotations().size());
+    CPPUNIT_ASSERT_EQUAL(u"Reply"_ustr, pReloadedPage->getAnnotations()[0]->GetText());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), pReloadedPage->getAnnotations()[0]->GetParentId());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

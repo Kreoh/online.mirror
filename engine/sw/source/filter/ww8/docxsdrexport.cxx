@@ -46,6 +46,7 @@
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace oox;
 using namespace sax_fastparser;
 
@@ -902,7 +903,8 @@ void DocxSdrExport::startDMLAnchorInline(const SwFrameFormat* pFrameFormat, cons
         // Position is either determined by coordinates aPos or alignment keywords like 'center'.
         // First prepare them.
         const SwFormatVertOrient& rVertOri(pFrameFormat->GetVertOrient());
-        awt::Point aPos(rHoriOri.GetPos(), rVertOri.GetPos());
+        awt::Point aPos(rHoriOri.getPosition().as_twip<sal_Int32>(),
+                        rVertOri.getPosition().as_twip<sal_Int32>());
 
         aPos.X += nPosXDiff; // Make the postponed position move of frames.
         aPos.Y += nPosYDiff;

@@ -14,7 +14,7 @@
 #include <com/sun/star/sheet/XActivationBroadcaster.hpp>
 #include <com/sun/star/sheet/XActivationEventListener.hpp>
 #include <com/sun/star/sheet/XSpreadsheetView.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ref.hxx>
@@ -22,7 +22,8 @@
 #include <cppunit/TestAssert.h>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
@@ -36,12 +37,12 @@ public:
     {
     }
     bool mbListenerCalled;
-    virtual void SAL_CALL
+    virtual void
     activeSpreadsheetChanged(const sheet::ActivationEvent& /* xEvent */) override
     {
         mbListenerCalled = true;
     }
-    virtual void SAL_CALL disposing(const lang::EventObject& /* xEventObj */) override {}
+    virtual void disposing(const lang::EventObject& /* xEventObj */) override {}
 };
 }
 

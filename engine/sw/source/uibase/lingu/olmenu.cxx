@@ -74,6 +74,7 @@
 #include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// @returns : the language for the selected text that is set for the
 ///     specified attribute (script type).
@@ -449,12 +450,27 @@ SwSpellPopup::SwSpellPopup(
     m_nCheckedLanguage = LanguageTag::convertToLanguageType( rResult.aLocale );
     bool bUseImagesInMenus = Application::GetSettings().GetStyleSettings().GetUseImagesInMenus();
 
+    OUString aProofreaderName;
+    uno::Reference< lang::XServiceInfo > xInfo( rResult.xProofreader, uno::UNO_QUERY );
+    if (xInfo.is())
+        aProofreaderName = xInfo->getImplementationName();
+
     sal_uInt16 nPos = 0;
     OUString aMessageText( rResult.aErrors[ nErrorInResult ].aShortComment );
     m_xPopupMenu->InsertSeparator({}, nPos++);
     m_xPopupMenu->InsertItem(MN_SHORT_COMMENT, aMessageText, MenuItemBits::NOSELECT, {}, nPos++);
     if (bUseImagesInMenus)
-        m_xPopupMenu->SetItemImage(MN_SHORT_COMMENT, Image(StockImage::Yes, BMP_INFO_16));
+    {
+        // The icon beside the message tells which checker found the error:
+        // the sentence checker has an icon of its own, any other checker
+        // gets the generic info icon.
+        // An image that did not load still takes the icon column, drawing an
+        // empty box beside the message.
+        Image aInfoImage(StockImage::Yes,
+            aProofreaderName == "cpo.lingu.Lightproof" ? BMP_LIGHTPROOF_16 : BMP_INFO_16);
+        if (!!aInfoImage)
+            m_xPopupMenu->SetItemImage(MN_SHORT_COMMENT, aInfoImage);
+    }
 
     // Add an item to show detailed infos if the FullCommentURL property is defined
     const beans::PropertyValues  aProperties = rResult.aErrors[ nErrorInResult ].aProperties;
@@ -485,12 +501,9 @@ SwSpellPopup::SwSpellPopup(
 
         if (bUseImagesInMenus)
         {
-            uno::Reference< lang::XServiceInfo > xInfo( rResult.xProofreader, uno::UNO_QUERY );
-            if (xInfo.is())
-            {
-                aSuggestionImageUrl = SvtLinguConfig().GetSpellAndGrammarContextSuggestionImage( xInfo->getImplementationName() );
+            aSuggestionImageUrl = SvtLinguConfig().GetSpellAndGrammarContextSuggestionImage( aProofreaderName );
+            if (!aSuggestionImageUrl.isEmpty())
                 aImage = Image( aSuggestionImageUrl );
-            }
         }
 
         sal_uInt16 nItemId = MN_SUGGESTION_START;
@@ -689,12 +702,6 @@ void SwSpellPopup::checkRedline()
             nId = m_nRedlinePrevId;
         m_xPopupMenu->EnableItem(nId, aSet.Get(nWhich).Which() != 0);
     }
-}
-
-void SwSpellPopup::Execute( const tools::Rectangle& rWordPos, vcl::Window* pWin )
-{
-    sal_uInt16 nRet = m_xPopupMenu->Execute(pWin, pWin->LogicToPixel(rWordPos));
-    Execute( nRet );
 }
 
 void SwSpellPopup::Execute( sal_uInt16 nId )

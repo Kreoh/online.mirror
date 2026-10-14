@@ -154,6 +154,18 @@ window.L.TextInput = window.L.Layer.extend({
 					that2._onKeyUp(e);
 				};
 			};
+
+			// The iOS app calls this once the on-screen keyboard is dismissed.
+			window.onNativeKeyboardHidden = function () {
+				if (
+					app.map.getDocType() === 'spreadsheet' &&
+					app.file.textCursor.visible
+				) {
+					app.setCursorVisibility(false);
+					app.dispatcher.acceptFormulaInPlace();
+				}
+			};
+
 			window.postMobileMessage('FOCUSIFHWKBD');
 		}
 
@@ -164,6 +176,7 @@ window.L.TextInput = window.L.Layer.extend({
 		window.MagicToGetHWKeyboardWorking = null;
 		window.MagicKeyDownHandler = null;
 		window.MagicKeyUpHandler = null;
+		window.onNativeKeyboardHidden = null;
 
 		if (this._container && this._container.parentNode) {
 			this._container.parentNode.removeChild(this._container);
@@ -241,7 +254,11 @@ window.L.TextInput = window.L.Layer.extend({
 			this._a11yFocusTime = Date.now();
 			this._a11yFocusDescription = this._textArea.getAttribute('aria-description');
 
-			if (!this._isSelectionValid() || this._isCursorAtBeginning()) {
+			// e.g. the paragraph changed through a dialog
+			if (this.hasAccessibilitySupport() && (this._remoteContent !== undefined
+				|| this._remoteSelectionEnd !== undefined || this._remotePosition !== undefined)) {
+				this._updateFocusedParagraph();
+			} else if (!this._isSelectionValid() || this._isCursorAtBeginning()) {
 				if (this.hasAccessibilitySupport()) {
 					this._setSelectionRange(this._lastSelectionStart, this._lastSelectionEnd);
 				} else {
@@ -376,16 +393,73 @@ window.L.TextInput = window.L.Layer.extend({
 		return 	this._textArea.innerHTML;
 	},
 
-	_wrapContent: function(content) {
-		var wrappedContent = this.hasAccessibilitySupport()
-			? '<span id="readable-content" aria-hidden="false">' + content + '</span>'
-			: content;
+	_wrapContent: function(content, links, images) {
+		const escapedContent = this._escapeWithLinks(content, links, images);
+		const wrappedContent = this.hasAccessibilitySupport()
+			? '<span id="readable-content" role="presentation">' + escapedContent + '</span>'
+			: escapedContent;
 		return content.length === 0
 			? this._initialContent
 			: this._preSpaceChar + wrappedContent + this._postSpaceChar;
 	},
 
+	// links: { start, end, url } ranges of content, in order
+	// images: { position, name, description } of U+FFFC (OBJECT REPLACEMENT CHARACTER) characters
+	// in content, in order
+	_createLinkedNodes: function(content, links, images) {
+		const nodes = [];
+		let pos = 0;
+		for (const link of links || []) {
+			const start = parseInt(link.start);
+			const end = parseInt(link.end);
+			if (start < pos || end <= start || end > content.length)
+				continue;
+			nodes.push(...this._createImageNodes(content, pos, start, images));
+			const anchor = document.createElement('a');
+			anchor.setAttribute('href', window.sanitizeUrl(link.url));
+			anchor.append(...this._createImageNodes(content, start, end, images));
+			nodes.push(anchor);
+			pos = end;
+		}
+		nodes.push(...this._createImageNodes(content, pos, content.length, images));
+		return nodes;
+	},
+
+	// the text between start and end, with its images; the character stays in the text
+	_createImageNodes: function(content, start, end, images) {
+		const nodes = [];
+		let pos = start;
+		for (const image of images || []) {
+			const position = parseInt(image.position);
+			if (!Number.isInteger(position) || position < pos || position >= end
+				|| content.charAt(position) !== '\ufffc')
+				continue;
+			if (position > pos)
+				nodes.push(document.createTextNode(content.substring(pos, position)));
+			const node = document.createElement('span');
+			// one unit for the caret, so a reader announces it entered and left, as for <img>
+			node.setAttribute('contenteditable', 'false');
+			node.setAttribute('role', 'img');
+			node.setAttribute('aria-label', image.name);
+			if (image.description && image.description !== image.name)
+				node.setAttribute('aria-description', image.description);
+			node.textContent = content.charAt(position);
+			nodes.push(node);
+			pos = position + 1;
+		}
+		if (pos < end)
+			nodes.push(document.createTextNode(content.substring(pos, end)));
+		return nodes;
+	},
+
+	_escapeWithLinks: function(content, links, images) {
+		const span = document.createElement('span');
+		span.append(...this._createLinkedNodes(content, links, images));
+		return span.innerHTML;
+	},
+
 	resetContent: function() {
+		// eslint-disable-next-line no-restricted-syntax -- fixed spacer markup
 		this._textArea.innerHTML = this._initialContent;
 	},
 
@@ -422,9 +496,11 @@ window.L.TextInput = window.L.Layer.extend({
 	update: function() {
 		if (this._container && this._map && app.file.textCursor.rectangle && app.activeDocument) {
 			var rect = app.file.textCursor.rectangle;
-			var pos = new cool.Point(
-				Math.round(rect.v1X / app.dpiScale),
-				Math.round(rect.v1Y / app.dpiScale)
+			// the container is fixed, so its position is relative to the viewport
+			const canvasRect = app.sectionContainer.getCanvasBoundingClientRect();
+			const pos = new cool.Point(
+				Math.round(canvasRect.left + rect.v1X / app.dpiScale),
+				Math.round(canvasRect.top + rect.v1Y / app.dpiScale)
 			);
 			this._setPos(pos);
 		}
@@ -547,7 +623,7 @@ window.L.TextInput = window.L.Layer.extend({
 		// Move and display under-caret marker
 
 		if (window.touch.currentlyUsingTouchscreen() && !app.activeDocument.activeView.hasTextSelection && this._cursorHandler) {
-			this._cursorHandler.setPosition(app.file.textCursor.rectangle.pX1, app.file.textCursor.rectangle.pY2 + (0 * app.dpiScale));
+			this._cursorHandler.moveUnderCaret();
 			this._cursorHandler.setShowSection(true);
 		} else if (this._cursorHandler) {
 			this._cursorHandler.setShowSection(false);
@@ -576,9 +652,15 @@ window.L.TextInput = window.L.Layer.extend({
 		this._map.fire('handlerstatus', {hidden: false});
 	},
 
+	// the editable's caret from its top left corner
+	_getCaretOffset: function() {
+		return { x: 0, y: 0 };
+	},
+
 	_setPos: function(pos) {
-		// the offset is needed since we have to move away from the edited text
-		// or double clicks for selecting text doesn't work properly
+		const caret = this._getCaretOffset();
+		pos.x -= caret.x;
+		pos.y -= caret.y;
 		if (window.L.Browser.cypressTest) {
 			// Some cypress tests require for the editable area to be as near as possible
 			// to the caret overlay when editing. In fact a synthetic mouse click on
@@ -588,8 +670,9 @@ window.L.TextInput = window.L.Layer.extend({
 			pos.x += 10;
 			pos.y += 10;
 		}
-		else {
-			pos.y += this._isDebugOn ? 50 : 200;
+		else if (this._isDebugOn) {
+			// keeps the visible debugging box off the text
+			pos.y += 50;
 		}
 		this._container.style.transform = 'translate(' + pos.x + 'px, ' + pos.y + 'px)';
 	},
@@ -1390,6 +1473,8 @@ window.L.TextInput = window.L.Layer.extend({
 
 	// When the cursor is on a text node return the position wrt. the whole plain text content
 	// When the cursor is on a pre- / post-space node return -1 / -2
+	// When the cursor is between elements of the content, e.g. beside an image, return the
+	// position of the text after it
 	// Otherwise return undefined
 	_getSelection: function(isStart) {
 		var selection = window.getSelection();
@@ -1419,8 +1504,15 @@ window.L.TextInput = window.L.Layer.extend({
 					return -2;
 			}
 		}
-		if (node.nodeType !== Node.TEXT_NODE)
-			return;
+		if (node.nodeType !== Node.TEXT_NODE) {
+			// beside an image the caret is between elements: count the text before it
+			if (node === this._textArea || !this._textArea.contains(node))
+				return;
+			const before = document.createRange();
+			before.setStart(this._textArea, 0);
+			before.setEnd(node, offset);
+			return before.toString().length;
+		}
 
 		var walker = document.createTreeWalker(this._textArea, NodeFilter.SHOW_TEXT);
 		var currentNode = walker.nextNode();
@@ -1446,6 +1538,13 @@ window.L.TextInput = window.L.Layer.extend({
 	// start/end refer to the string represented by the whole plain text content
 	// it's not possible to set range start/end position at <img> delimiters
 	_setSelectionRange: function(start, end) {
+		// Putting the selection inside the contenteditable focuses it, so a
+		// cursor update must not run while the keyboard is on another widget.
+		const active = document.activeElement;
+		if (active && active !== document.body && active !== this._textArea &&
+			!this._textArea.contains(active))
+			return;
+
 		this._statusLog('_setSelectionRange [');
 		var selection = window.getSelection();
 		selection.removeAllRanges();
@@ -1478,7 +1577,17 @@ window.L.TextInput = window.L.Layer.extend({
 		var msg = '_setSelectionRange:\n' +
 			'    start: ' + start + ', end: ' + end +'\n';
 
+		// the character of an image is not editable: the caret goes before or after its element
+		const outsideImage = function(node, offset) {
+			const image = node.parentNode.closest('[role="img"]');
+			if (!image)
+				return [node, offset];
+			const index = Array.prototype.indexOf.call(image.parentNode.childNodes, image);
+			return [image.parentNode, offset > 0 ? index + 1 : index];
+		};
 		var startContainer = null;
+		let endContainer = null;
+		let lastNode = null;
 		var walker = document.createTreeWalker(this._textArea, NodeFilter.SHOW_TEXT);
 		var currentNode = walker.nextNode(); // first text node in <div>
 		var pos = 0;
@@ -1487,20 +1596,29 @@ window.L.TextInput = window.L.Layer.extend({
 			msg += '    current node: ' + currentNode + ', text content: "' + currentNode.textContent + '"\n';
 			var len = currentNode.textContent.length;
 			msg += '    pos: ' + pos + ', len: ' + len +'\n';
-			if (!startContainer && start <= pos + len) {
+			// after an image, the offset belongs to the text that follows it, not inside the image
+			const inImage = currentNode.parentNode.closest('[role="img"]') !== null;
+			if (!startContainer && (start < pos + len || (start === pos + len && !inImage))) {
 				startContainer = currentNode;
-				range.setStart(currentNode, start - pos);
+				range.setStart(...outsideImage(currentNode, start - pos));
 				msg += '    current node set as start: offset: ' + (start - pos) + '\n';
 			}
 			// The range end is set only after the range start has been set.
-			if (startContainer && end <= pos + len) {
-				range.setEnd(currentNode, end - pos);
+			if (startContainer && (end < pos + len || (end === pos + len && !inImage))) {
+				endContainer = currentNode;
+				range.setEnd(...outsideImage(currentNode, end - pos));
 				msg += '    current node set as end:   offset: ' + (end - pos) + '\n';
 				break;
 			}
+			lastNode = currentNode;
 			pos += len;
 			currentNode = walker.nextNode();
 		}
+		// an image ends the paragraph: the caret goes after it
+		if (!startContainer && lastNode)
+			range.setStart(...outsideImage(lastNode, lastNode.textContent.length));
+		if (!endContainer && lastNode)
+			range.setEnd(...outsideImage(lastNode, lastNode.textContent.length));
 
 		// Get the selection object and add the range to it
 		selection.addRange(range);

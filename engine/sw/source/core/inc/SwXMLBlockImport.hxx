@@ -34,11 +34,11 @@ private:
     // This method is called after the namespace map has been updated, but
     // before a context for the current element has been pushed.
     virtual SvXMLImportContext* CreateFastContext( sal_Int32 Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 
 public:
     SwXMLBlockListImport(
-        const css::uno::Reference< css::uno::XComponentContext >& rContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
         SwXMLTextBlocks &rBlocks );
 
     SwXMLTextBlocks& getBlockList()
@@ -54,18 +54,18 @@ class SwXMLTextBlockImport final : public SvXMLImport
     // This method is called after the namespace map has been updated, but
     // before a context for the current element has been pushed.
     virtual SvXMLImportContext* CreateFastContext( sal_Int32 Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 
 public:
     bool m_bTextOnly;
     OUString &m_rText;
     SwXMLTextBlockImport(
-        const css::uno::Reference< css::uno::XComponentContext >& rContext,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
         OUString &rNewText, bool bNewTextOnly );
 
     virtual ~SwXMLTextBlockImport()
         noexcept override;
-    virtual void SAL_CALL endDocument() override;
+    virtual void endDocument() override;
 };
 
 enum SwXMLTextBlockToken : sal_Int32
@@ -85,8 +85,8 @@ public:
     virtual ~SwXMLTextBlockTokenHandler() override;
 
     //XFastTokenHandler
-    sal_Int32 SAL_CALL getTokenFromUTF8( const cpo::uno::Sequence< sal_Int8 >& Identifier ) override;
-    cpo::uno::Sequence< sal_Int8 > SAL_CALL getUTF8Identifier( sal_Int32 Token ) override;
+    sal_Int32 getTokenFromUTF8( const cpo::uno::Sequence< sal_Int8 >& Identifier ) override;
+    cpo::uno::Sequence< sal_Int8 > getUTF8Identifier( sal_Int32 Token ) override;
 
     //Much fast direct C++ shortcut to the method that matters
     virtual sal_Int32 getTokenDirect(std::string_view token) const override;
@@ -111,8 +111,8 @@ public:
     virtual ~SwXMLBlockListTokenHandler() override;
 
     //XFastTokenHandler
-    sal_Int32 SAL_CALL getTokenFromUTF8( const cpo::uno::Sequence< sal_Int8 >& Identifier ) override;
-    cpo::uno::Sequence< sal_Int8 > SAL_CALL getUTF8Identifier( sal_Int32 Token ) override;
+    sal_Int32 getTokenFromUTF8( const cpo::uno::Sequence< sal_Int8 >& Identifier ) override;
+    cpo::uno::Sequence< sal_Int8 > getUTF8Identifier( sal_Int32 Token ) override;
 
     //Much fast direct C++ shortcut to the method that matters
     virtual sal_Int32 getTokenDirect(std::string_view token) const override;

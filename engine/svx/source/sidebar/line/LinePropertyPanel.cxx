@@ -31,7 +31,8 @@
 #include <svl/itemset.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace svx::sidebar {
 
@@ -98,19 +99,9 @@ void LinePropertyPanel::NotifyItemUpdate(
             updateLineWidth(bDisabled, bSetOrDefault, pState);
             break;
         }
-        case SID_ATTR_LINE_START:
+        default:
         {
-            updateLineStart(bDisabled, bSetOrDefault, pState);
-            break;
-        }
-        case SID_ATTR_LINE_END:
-        {
-            updateLineEnd(bDisabled, bSetOrDefault, pState);
-            break;
-        }
-        case SID_LINEEND_LIST:
-        {
-            updateLineEndList(pState);
+            updateLineEnds(nSID, eState, pState);
             break;
         }
     }

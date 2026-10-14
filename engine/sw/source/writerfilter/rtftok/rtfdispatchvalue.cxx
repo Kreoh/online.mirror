@@ -9,6 +9,8 @@
 
 #include "rtfdocumentimpl.hxx"
 
+#include <algorithm>
+
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/text/WrapTextMode.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
@@ -263,6 +265,15 @@ bool RTFDocumentImpl::dispatchCharacterAttributeValue(RTFKeyword nKeyword, int n
 
 bool RTFDocumentImpl::dispatchParagraphSprmValue(RTFKeyword nKeyword, int nParam)
 {
+    // far deeper table nesting than any real document uses
+    constexpr int nMaxTableDepth = 1024;
+    if (nKeyword == RTFKeyword::ITAP && nParam > nMaxTableDepth)
+    {
+        SAL_WARN("writerfilter.rtf",
+                 "table nesting depth " << nParam << " limited to " << nMaxTableDepth);
+        nParam = nMaxTableDepth;
+    }
+
     int nSprm = 0;
     tools::SvRef<RTFValue> pIntValue(new RTFValue(nParam));
 
@@ -899,10 +910,10 @@ RTFError RTFDocumentImpl::dispatchValue(RTFKeyword nKeyword, int nParam)
         {
             LanguageTag aTag((LanguageType(static_cast<sal_uInt16>(nParam))));
             auto pValue = new RTFValue(aTag.getBcp47());
-            putNestedAttribute(m_aStates.top().getCharacterSprms(),
-                               (nKeyword == RTFKeyword::DEFLANG ? NS_ooxml::LN_EG_RPrBase_lang
+            putNestedAttribute(m_aStates.top().getCharacterSprms(), NS_ooxml::LN_EG_RPrBase_lang,
+                               (nKeyword == RTFKeyword::DEFLANG ? NS_ooxml::LN_CT_Language_val
                                                                 : NS_ooxml::LN_CT_Language_bidi),
-                               nSprm, pValue);
+                               pValue);
         }
         break;
         case RTFKeyword::CHCBPAT:
@@ -961,7 +972,8 @@ RTFError RTFDocumentImpl::dispatchValue(RTFKeyword nKeyword, int nParam)
         case RTFKeyword::EXPND:
         {
             // Convert quarter-points to twentieths of a point
-            auto pValue = new RTFValue(nParam * 5);
+            auto pValue = new RTFValue(static_cast<int>(
+                std::clamp<sal_Int64>(sal_Int64(nParam) * 5, SAL_MIN_INT32, SAL_MAX_INT32)));
             m_aStates.top().getCharacterSprms().set(NS_ooxml::LN_EG_RPrBase_spacing, pValue);
         }
         break;
@@ -1022,7 +1034,7 @@ RTFError RTFDocumentImpl::dispatchValue(RTFKeyword nKeyword, int nParam)
             if (nParam == 2)
                 nParam = 1;
             else if (nParam > 1)
-                nParam = nParam * 2 / 5;
+                nParam = sal_Int64(nParam) * 2 / 5;
             auto pValue = new RTFValue(nParam);
             putBorderProperty(m_aStates, NS_ooxml::LN_CT_Border_sz, pValue);
         }
@@ -1215,8 +1227,7 @@ RTFError RTFDocumentImpl::dispatchValue(RTFKeyword nKeyword, int nParam)
             if (pTight)
                 pTight->getAttributes().set(NS_ooxml::LN_CT_WrapTight_wrapText, pValue);
             else
-                m_aStates.top().getCharacterAttributes().set(NS_ooxml::LN_CT_WrapSquare_wrapText,
-                                                             pValue);
+                m_aStates.top().getShape().setWrapSide(nValue);
         }
         break;
         case RTFKeyword::SHPWR:
@@ -1262,11 +1273,12 @@ RTFError RTFDocumentImpl::dispatchValue(RTFKeyword nKeyword, int nParam)
         case RTFKeyword::COLW:
         case RTFKeyword::COLSR:
         {
-            RTFSprms& rAttributes = getLastAttributes(m_aStates.top().getSectionSprms(),
+            RTFSprms* pAttributes = getLastAttributes(m_aStates.top().getSectionSprms(),
                                                       NS_ooxml::LN_EG_SectPrContents_cols);
-            rAttributes.set((nKeyword == RTFKeyword::COLW ? NS_ooxml::LN_CT_Column_w
-                                                          : NS_ooxml::LN_CT_Column_space),
-                            pIntValue);
+            if (pAttributes)
+                pAttributes->set((nKeyword == RTFKeyword::COLW ? NS_ooxml::LN_CT_Column_w
+                                                               : NS_ooxml::LN_CT_Column_space),
+                                 pIntValue);
         }
         break;
         case RTFKeyword::PAPERH:

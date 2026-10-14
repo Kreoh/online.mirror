@@ -20,9 +20,10 @@
 #include <comphelper/sequence.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
-ScVbaAxisTitle::ScVbaAxisTitle( const uno::Reference< XHelperInterface >& xParent,  const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< drawing::XShape >& _xTitleShape ) :  AxisTitleBase( xParent, xContext, _xTitleShape )
+ScVbaAxisTitle::ScVbaAxisTitle( const uno::Reference< XHelperInterface >& xParent,  const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< drawing::XShape >& _xTitleShape ) :  AxisTitleBase( xParent, xContext, _xTitleShape )
 {
 }
 

@@ -51,7 +51,7 @@ using namespace ModuleB;
 using namespace ModuleC;
 using namespace ModuleA::ModuleB;
 using namespace com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::lang;
 using namespace css::beans;
@@ -64,12 +64,12 @@ class OInterfaceA : public WeakImplHelper< XInterfaceA >
 {
 public:
 
-    virtual void SAL_CALL methodA() throw (RuntimeException)
+    virtual void methodA() throw (RuntimeException)
         {}
 
-    virtual void SAL_CALL methodB(sal_Int16 /*aShort*/) throw (RuntimeException)
+    virtual void methodB(sal_Int16 /*aShort*/) throw (RuntimeException)
         {}
-    virtual Sequence< StructB > SAL_CALL methodC(const StructC& /*aStructC*/, StructA& /*aStructA*/) throw (RuntimeException)
+    virtual Sequence< StructB > methodC(const StructC& /*aStructC*/, StructA& /*aStructA*/) throw (RuntimeException)
         { return Sequence< StructB >(); }
 };
 
@@ -193,7 +193,7 @@ static bool test_corefl( const Reference< XIdlReflection > & xRefl )
     OSL_ENSURE(xRefl->forName("[]ModuleA.StructA")->getTypeClass() == TypeClass_SEQUENCE, "test_RegCoreReflection(): error 48");
     OSL_ENSURE(xRefl->forName("[]ModuleA.StructA")->getComponentType().is(), "test_RegCoreReflection(): error 49");
     OSL_ENSURE(xRefl->forName("[][]ModuleA.StructA")->getComponentType()->getComponentType()->getName() == "ModuleA.StructA", "test_RegCoreReflection(): error 50");
-    OSL_ENSURE(xRefl->forName("[]com.sun.star.uno.XInterface") == xRefl->forName("ModuleA.StructC")->getField(OUString("aInterfaceSeq"))->getType(), "test_RegCoreReflection(): error 51");
+    OSL_ENSURE(xRefl->forName("[]cpo.uno.XInterface") == xRefl->forName("ModuleA.StructC")->getField(OUString("aInterfaceSeq"))->getType(), "test_RegCoreReflection(): error 51");
 
     StructC aStructC;
     aStructC.aLong = aConstLong;

@@ -32,7 +32,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::xmloff::token;
@@ -75,7 +75,7 @@ bool BasicElementBase::getBoolAttr(bool* pRet, sal_Int32 nToken,
 // BasicLibrariesElement
 
 BasicLibrariesElement::BasicLibrariesElement(SvXMLImport& rImport,
-                                             const css::uno::Reference<css::frame::XModel>& rxModel)
+                                             const cpo::uno::Reference<css::frame::XModel>& rxModel)
     : BasicElementBase(rImport)
 {
     // try the XEmbeddedScripts interface
@@ -188,7 +188,7 @@ BasicLibrariesElement::createFastChildContext(sal_Int32 nElement,
 // BasicEmbeddedLibraryElement
 
 BasicEmbeddedLibraryElement::BasicEmbeddedLibraryElement(
-    SvXMLImport& rImport, const Reference<script::XLibraryContainer2>& rxLibContainer,
+    SvXMLImport& rImport, const Reference<script::XLibraryContainer>& rxLibContainer,
     OUString aLibName, bool bReadOnly)
     : BasicElementBase(rImport)
     , m_xLibContainer(rxLibContainer)

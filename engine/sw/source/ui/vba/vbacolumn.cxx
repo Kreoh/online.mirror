@@ -29,8 +29,9 @@
 using namespace ::ooo::vba;
 using namespace ::ooo::vba::word;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SwVbaColumn::SwVbaColumn( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< text::XTextTable >  xTextTable, sal_Int32 nIndex ) :
+SwVbaColumn::SwVbaColumn( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< text::XTextTable >  xTextTable, sal_Int32 nIndex ) :
     SwVbaColumn_BASE( rParent, rContext ), mxTextTable(std::move( xTextTable )), mnIndex( nIndex )
 {
 }
@@ -39,14 +40,14 @@ SwVbaColumn::~SwVbaColumn()
 {
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 SwVbaColumn::getWidth( )
 {
     SwVbaTableHelper aTableHelper( mxTextTable );
     return aTableHelper.GetColWidth( mnIndex );
 }
 
-void SAL_CALL
+void
 SwVbaColumn::setWidth( sal_Int32 _width )
 {
 
@@ -54,7 +55,7 @@ SwVbaColumn::setWidth( sal_Int32 _width )
     aTableHelper.SetColWidth( _width, mnIndex );
 }
 
-void SAL_CALL
+void
 SwVbaColumn::Select( )
 {
     SelectColumn( getCurrentWordDoc(mxContext), mxTextTable, mnIndex, mnIndex );

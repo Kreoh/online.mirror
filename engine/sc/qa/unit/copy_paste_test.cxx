@@ -10,6 +10,7 @@
 #include <sal/config.h>
 
 #include "helper/qahelper.hxx"
+#include <docuno.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <cppu/unotype.hxx>
 
@@ -31,7 +32,7 @@
 #include <editeng/postitem.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 class ScCopyPasteTest : public ScModelTestBase
 {

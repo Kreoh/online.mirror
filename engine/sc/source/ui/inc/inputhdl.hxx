@@ -20,6 +20,7 @@
 #pragma once
 
 #include <global.hxx>
+#include <unotools/resmgr.hxx>
 #include <address.hxx>
 #include <tools/solar.h>
 #include <typedstrdata.hxx>
@@ -27,6 +28,7 @@
 #include <tools/fract.hxx>
 #include <tools/gen.hxx>
 #include <tools/link.hxx>
+#include <vcl/mapmod.hxx>
 #include <vcl/vclptr.hxx>
 #include <editeng/svxenum.hxx>
 #include "viewdata.hxx"
@@ -41,9 +43,11 @@ class ScTabViewShell;
 class ScInputWindow;
 class ScPatternAttr;
 class ScEditEngineDefaulter;
+class VirtualDevice;
 struct PasteOrDropInfos;
 class EditView;
 class EditTextObject;
+class SvxURLField;
 class ScInputHdlState;
 class ScRangeFindList;
 class Timer;
@@ -106,6 +110,8 @@ private:
 
     bool                    bProtected:1;
     bool                    bLastIsSymbol:1;
+    /// The last cell that started input mode is in a table with a table style.
+    bool                    mbLastInTable:1;
     bool                    mbDocumentDisposing:1;
     /// To indicate if there is a partial prefix completion.
     bool                    mbPartialPrefix:1;
@@ -116,6 +122,9 @@ private:
 
     double                  fScaleX;                    // for ref MapMode
     double                  fScaleY;
+
+    /// The device the text of a cell in edit mode is measured on.
+    VclPtr<VirtualDevice>   mpRefDevice;
 
     ScTabViewShell*         pRefViewSh;
     ScTabViewShell*         pActiveViewSh;
@@ -132,6 +141,8 @@ private:
                             pRangeFindList;
     std::optional<ScEnterMode>
                             monPrevBlockMode;
+    /// The address links of the cell that are shown as plain text while the cell is edited.
+    std::vector<SvxURLField> maUnlinkedURLFields;
 
 private:
     void            UpdateActiveView();
@@ -148,11 +159,15 @@ private:
      */
     bool            StartTable(sal_Unicode cTyped, bool bFromCommand, bool bInputActivated,
                                ScEditEngineDefaulter* pTopEngine, const ErrorHdl& errorHdl);
+    void            RemoveURLFieldsFromEditEngine();
+    void            RestoreURLFieldsInEditEngine();
     void            RemoveSelection();
     bool            StartsLikeFormula( std::u16string_view rStr ) const;
     void            UpdateFormulaMode();
     static void     InvalidateAttribs();
     void            ImplCreateEditEngine();
+    /// Reference map mode to lay the cell edit engine out with.
+    MapMode         GetRefMapMode() const;
     DECL_LINK( DelayTimer, Timer*, void );
     void            GetColData();
     void            UseColData();

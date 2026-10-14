@@ -36,7 +36,7 @@
 #include <salvd.hxx>
 #include <svdata.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 bool VirtualDevice::CanEnableNativeWidget() const
 {
@@ -166,9 +166,9 @@ void VirtualDevice::ImplInitVirDev( const OutputDevice* pOutDev,
     if ( !mpVirDev )
     {
         // do not abort but throw an exception, may be the current thread terminates anyway (plugin-scenario)
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"Could not create system bitmap!"_ustr,
-            css::uno::Reference< css::uno::XInterface >() );
+            cpo::uno::Reference< cpo::uno::XInterface >() );
     }
 
     mnBitCount = pOutDev->GetBitCount();
@@ -383,7 +383,13 @@ bool VirtualDevice::SetOutputSizePixelScaleOffsetAndKitBuffer(
     assert( rNewSize.Width() >= 1 );
     assert( rNewSize.Height() >= 1 );
 
+#ifdef IOS
+    // iOS doesn't support SetSizeUsingBuffer. Not setting the size here means
+    // that no visible content will render to slides in presentations, for instance...
+    bool bRet = mpVirDev->SetSize( rNewSize.Width(), rNewSize.Height(), false );
+#else
     bool bRet = mpVirDev->SetSizeUsingBuffer( rNewSize.Width(), rNewSize.Height(), pBuffer );
+#endif
     if ( bRet )
     {
         mnOutWidth  = rNewSize.Width();

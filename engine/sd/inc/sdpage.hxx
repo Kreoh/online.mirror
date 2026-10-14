@@ -50,7 +50,6 @@ class SdrOutliner;
 class SdrTextObj;
 class SdPageLink;
 class SfxItemSet;
-class Paragraph;
 class Outliner;
 class SdStyleSheet;
 class Graphic;
@@ -120,6 +119,8 @@ friend class sd::UndoAttrObject;
     OUString    maCreatedPageName;        ///< generated page name by GetPageName.
     OUString    maFileName;               ///< file name.
     OUString    maBookmarkName;           ///< Bookmark name.
+    OUString    maSourceModifiedTime;     ///< time the source document was last modified, ISO8601.
+    OUString    maSourcePageGuid;         ///< identifier of the slide of the source, braced form.
     bool    mbScaleObjects;           ///< Objects should be scaled
     rtl_TextEncoding meCharSet;           ///< Text encoding
     sal_uInt16  mnPaperBin;               ///< PaperBin
@@ -131,7 +132,7 @@ friend class sd::UndoAttrObject;
     std::vector<std::pair<basegfx::B2DRectangle, OUString>> maLinkAnnotations;
 
     /** holds the smil animation sequences for this page */
-    css::uno::Reference< css::animations::XAnimationNode > mxAnimationNode;
+    cpo::uno::Reference< css::animations::XAnimationNode > mxAnimationNode;
 
     /** a helper class to manipulate effects inside the main sequence */
     std::shared_ptr< sd::MainSequence > mpMainSequence;
@@ -175,7 +176,7 @@ public:
     SD_DLLPUBLIC rtl::Reference<SdrObject> CreateDefaultPresObj(PresObjKind eObjKind);
     SD_DLLPUBLIC void DestroyDefaultPresObj(PresObjKind eObjKind);
     SD_DLLPUBLIC SdrObject* GetPresObj(PresObjKind eObjKind, int nIndex = 1, bool bFuzzySearch = false );
-    PresObjKind     GetPresObjKind(SdrObject* pObj) const;
+    SD_DLLPUBLIC PresObjKind GetPresObjKind(SdrObject* pObj) const;
     OUString        GetPresObjText(PresObjKind eObjKind) const;
     SfxStyleSheet* GetStyleSheetForMasterPageBackground() const;
     SfxStyleSheet*  GetStyleSheetForPresObj(PresObjKind eObjKind) const;
@@ -211,6 +212,10 @@ public:
         the icon standing in for the image it waits for. It carries the placeholder's identity but
         belongs to no page yet, so the caller decides how it takes the old object's place. */
     rtl::Reference<SdrObject> MakePresObjPlaceholder(SdrObject& rObj);
+
+    /** Sets the layers of its master that the page shows. When they differ from the layers it
+        showed, the model announces a change of the page, the same as for a new background. */
+    SD_DLLPUBLIC void SetMasterPageVisibleLayers(const SdrLayerIDSet& rVisibleLayers);
 
     SD_DLLPUBLIC void SetAutoLayout(AutoLayout eLayout, bool bInit=false, bool bCreate=false);
     AutoLayout      GetAutoLayout() const { return meAutoLayout; }
@@ -273,6 +278,8 @@ public:
     sal_Int32   getTransitionFadeColor() const { return mnTransitionFadeColor;}
     void        setTransitionFadeColor( sal_Int32 nTransitionFadeColor );
 
+    static constexpr double DEFAULT_TRANSITION_DURATION = 2.0;
+
     double      getTransitionDuration() const { return mfTransitionDuration;}
     void        setTransitionDuration( double fTransitionDuration );
 
@@ -286,8 +293,12 @@ public:
     const OUString& GetFileName() const       { return maFileName; }
     void            SetBookmarkName(const OUString& aName) { maBookmarkName = aName; }
     const OUString& GetBookmarkName() const       { return maBookmarkName; }
+    void            SetSourceModifiedTime(const OUString& aTime) { maSourceModifiedTime = aTime; }
+    const OUString& GetSourceModifiedTime() const { return maSourceModifiedTime; }
+    void            SetSourcePageGuid(const OUString& aGuid) { maSourcePageGuid = aGuid; }
+    const OUString& GetSourcePageGuid() const { return maSourcePageGuid; }
 
-    void            ConnectLink();
+    SD_DLLPUBLIC void ConnectLink();
     void            DisconnectLink();
 
     void            ScaleObjects(const Size& rNewPageSize, const ::tools::Rectangle& rNewBorderRect,
@@ -300,6 +311,10 @@ public:
                                   bool bReplaceStyleSheets = true,
                                   bool bSetMasterPage = true,
                                   bool bReverseOrder = false);
+    /// Puts the page under the given master. When that is another master than before, and the
+    /// page is in the document, the model announces it the way it announces a change to the
+    /// page's own properties.
+    void ChangeMasterPage(SdPage& rMasterPage);
     void            EndListenOutlineText();
 
     void    SetPaperBin(sal_uInt16 nBin) { mnPaperBin = nBin; }
@@ -314,15 +329,15 @@ public:
 
     /** @return the main animation node
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
-    css::uno::Reference< css::animations::XAnimationNode > const & getAnimationNode();
+    cpo::uno::Reference< css::animations::XAnimationNode > const & getAnimationNode();
 
     /** sets the main animation node
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
-    void setAnimationNode( css::uno::Reference< css::animations::XAnimationNode > const & xNode );
+    void setAnimationNode( cpo::uno::Reference< css::animations::XAnimationNode > const & xNode );
 
     /// @return a helper class to manipulate effects inside the main sequence
     SD_DLLPUBLIC std::shared_ptr< sd::MainSequence > const & getMainSequence();
@@ -334,7 +349,7 @@ public:
     bool hasAnimationNode() const;
 
     /// @return the SdPage implementation for the given XDrawPage or 0 if not available
-    static SdPage* getImplementation( const css::uno::Reference< css::drawing::XDrawPage >& xPage );
+    static SdPage* getImplementation( const cpo::uno::Reference< css::drawing::XDrawPage >& xPage );
 
     /** removes all custom animations for the given shape */
     void removeAnimations( const SdrObject* pObj );
@@ -362,10 +377,10 @@ public:
         bool bEdit ) override;
 
     /** callback from the sd::View when a new paragraph for one object on this page is created */
-    void onParagraphInserted( const ::Outliner* pOutliner, Paragraph const * pPara, SdrObject* pObj );
+    void onParagraphInserted( sal_Int32 nParaPos, SdrObject* pObj );
 
     /** callback from the sd::View when a paragraph from one object on this page is removed */
-    void onParagraphRemoving( const ::Outliner* pOutliner, Paragraph const * pPara, SdrObject* pObj );
+    void onParagraphRemoving( const ::Outliner* pOutliner, sal_Int32 nParaPos, SdrObject* pObj );
 
     /** callback from the sd::View when an object just left text edit mode */
     void onEndTextEdit( SdrObject* pObj );
@@ -384,7 +399,7 @@ public:
 
     /** Set the "precious" flag to the given value.
     */
-    void SetPrecious (const bool bIsPrecious);
+    SD_DLLPUBLIC void SetPrecious (const bool bIsPrecious);
 
     /** The "precious" flag is used for master pages to prevent some unused
         master pages from being deleted automatically.  For pages
@@ -411,7 +426,10 @@ public:
         return maLinkAnnotations;
     }
 
-    bool Equals(const SdPage&) const;
+    // True when the two pages hold the same content, the same background and the same page
+    // settings. With bIgnoreLayoutName the name of the layout is left out of the comparison,
+    // which is what tells whether two master pages hold one design under two names.
+    bool Equals(const SdPage&, bool bIgnoreLayoutName = false) const;
     virtual void dumpAsXml(xmlTextWriterPtr pWriter) const override;
     sal_uInt16 getPageId() const { return mnPageId; }
 

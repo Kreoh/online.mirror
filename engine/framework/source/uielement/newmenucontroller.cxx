@@ -41,6 +41,7 @@
 #include <toolkit/awt/vclxmenu.hxx>
 #include <tools/urlobj.hxx>
 #include <unotools/dynamicmenuoptions.hxx>
+#include <unotools/securityoptions.hxx>
 #include <osl/mutex.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
@@ -48,7 +49,7 @@
 constexpr OUString aSlotNewDocDirect = u".uno:AddDirect"_ustr;
 constexpr OUString aSlotAutoPilot = u".uno:AutoPilotMenu"_ustr;
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::frame;
@@ -79,8 +80,8 @@ private:
     bool m_bEnabled = false;
 };
 
-bool isSlotActive(const OUString& slot, const css::uno::Reference<css::frame::XFrame>& frame,
-    const css::uno::Reference<css::util::XURLTransformer>& transformer)
+bool isSlotActive(const OUString& slot, const cpo::uno::Reference<css::frame::XFrame>& frame,
+    const cpo::uno::Reference<css::util::XURLTransformer>& transformer)
 {
     if (auto provider = frame.query<css::frame::XDispatchProvider>())
     {
@@ -313,7 +314,7 @@ void NewMenuController::retrieveShortcutsFromConfiguration(
     }
 }
 
-NewMenuController::NewMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
+NewMenuController::NewMenuController( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) :
     svt::PopupMenuControllerBase( xContext ),
     m_bShowImages( true ),
     m_bNewMenu( false ),
@@ -350,6 +351,7 @@ void NewMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu > const &
         SvtDynamicMenuOptions::GetMenu( m_bNewMenu ? EDynamicMenuType::NewMenu : EDynamicMenuType::WizardMenu );
 
     sal_uInt16 nItemId = 1;
+    const bool bMacrosDisabled = SvtSecurityOptions::IsMacroDisabled();
 
     for ( const auto& aDynamicMenuEntry : aDynamicMenuEntries )
     {
@@ -362,6 +364,10 @@ void NewMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu > const &
         {
             rPopupMenu->insertItem(nItemId, aDynamicMenuEntry.sTitle, 0, -1);
             rPopupMenu->setCommand(nItemId, aDynamicMenuEntry.sURL);
+
+            // a macro: url is refused while macros are disabled
+            if ( bMacrosDisabled && aDynamicMenuEntry.sURL.startsWith("macro:") )
+                rPopupMenu->enableItem(nItemId, false);
 
             void* nAttributePtr = MenuAttributes::CreateAttribute( aDynamicMenuEntry.sTargetName, aDynamicMenuEntry.sImageIdentifier );
             pPopupMenu->setUserValue(nItemId, nAttributePtr, MenuAttributes::ReleaseAttribute);
@@ -499,9 +505,9 @@ void NewMenuController::initializeImpl( std::unique_lock<std::mutex>& rGuard, co
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_NewMenuController_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::NewMenuController(context));
 }

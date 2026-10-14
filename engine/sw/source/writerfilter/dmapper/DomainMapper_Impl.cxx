@@ -28,7 +28,7 @@
 #include "SdtHelper.hxx"
 #include "DomainMapperTableHandler.hxx"
 #include "TagLogger.hxx"
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
@@ -93,6 +93,7 @@
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <comphelper/indexedpropertyvalues.hxx>
+#include <sax/tools/converter.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/unotext.hxx>
 #include <o3tl/deleter.hxx>
@@ -159,7 +160,9 @@
 #include <unoparagraph.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace oox;
+
 namespace writerfilter::dmapper{
 
 //line numbering for header/footer
@@ -352,7 +355,7 @@ static bool IsFieldNestingAllowed(const FieldContextPtr& pOuter, const FieldCont
 
 DomainMapper_Impl::DomainMapper_Impl(
             DomainMapper& rDMapper,
-            uno::Reference<uno::XComponentContext> xContext,
+            uno::Reference<cpo::uno::XComponentContext> xContext,
             rtl::Reference<SwXTextDocument> const& xModel,
             SourceDocumentType eDocumentType,
             comphelper::SequenceAsHashMap const & rMediaDesc) :
@@ -758,7 +761,7 @@ void DomainMapper_Impl::AddDummyParaForTableInSection()
      return sName;
  }
 
-static void reanchorObjects(const uno::Reference<uno::XInterface>& xFrom,
+static void reanchorObjects(const uno::Reference<cpo::uno::XInterface>& xFrom,
                             const uno::Reference<text::XTextRange>& xTo,
                             const uno::Reference<drawing::XDrawPage>& xDrawPage)
 {
@@ -1061,7 +1064,7 @@ void DomainMapper_Impl::PopSdt()
     {
         xCursor = xText->createTextCursorByRange(xStart);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("writerfilter", "DomainMapper_Impl::DomainMapper_Impl::PopSdt: createTextCursorByRange() failed");
         // We redline form controls and that gets us confused when
@@ -1880,7 +1883,7 @@ static void lcl_AddRange(
     rtl::Reference<SwXTextCursor> xParaCursor = dynamic_cast<SwXTextCursor*>(
         xTextAppend->createTextCursorByRange( rAppendContext.xCursor.is() ? static_cast<text::XSentenceCursor*>(rAppendContext.xCursor.get()) : xTextAppend->getEnd()).get() );
     if (!xParaCursor)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     pToBeSavedProperties->SetEndingRange(xParaCursor->getStart());
     xParaCursor->gotoStartOfParagraph( false );
 
@@ -2308,8 +2311,9 @@ void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaCon
     TagLogger::getInstance().attribute("isTextAppend", sal_uInt32(xTextAppend.is()));
 #endif
 
+    // A file may name a paragraph style it never defines, which leaves nothing to read the
+    // numbering and the spacing below out of; everything that uses it checks first.
     const StyleSheetEntryPtr pEntry = GetStyleSheetTable()->FindStyleSheetByConvertedStyleName( GetCurrentParaStyleName() );
-    SAL_WARN_IF(!pEntry, "writerfilter.dmapper", "no style sheet found");
     sal_Int32 nListId = pParaContext ? pParaContext->props().GetListId() : -1;
     bool isNumberingViaStyle(false);
     bool isNumberingViaRule = nListId > -1;
@@ -2542,11 +2546,15 @@ void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaCon
                 rtl::Reference<SwXTextCursor> xParaCursor = dynamic_cast<SwXTextCursor*>
                     (xTextAppend->createTextCursorByRange(xTextAppend->getEnd()).get());
                 if (!xParaCursor)
-                    throw uno::RuntimeException();
+                    throw cpo::uno::RuntimeException();
                 //select paragraph
                 xParaCursor->gotoStartOfParagraph( true );
                 xParaCursor->setPropertyToDefault(getPropertyName(PROP_CHAR_ESCAPEMENT));
+                // The size the initial is written with belongs to the frame Word puts it
+                // in, not to the character: Writer's layout sizes a drop cap itself.
                 xParaCursor->setPropertyToDefault(getPropertyName(PROP_CHAR_HEIGHT));
+                xParaCursor->setPropertyToDefault(getPropertyName(PROP_CHAR_HEIGHT_ASIAN));
+                xParaCursor->setPropertyToDefault(getPropertyName(PROP_CHAR_HEIGHT_COMPLEX));
                 //handles (2) and part of (6)
                 pToBeSavedProperties = new ParagraphProperties(pParaContext->props());
                 sal_Int32 nCount = xParaCursor->getString().getLength();
@@ -2887,7 +2895,7 @@ void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaCon
                         rtl::Reference<SwXTextCursor> xParaCursor = dynamic_cast<SwXTextCursor*>(
                             xTextAppend->createTextCursorByRange(xTextAppend->getEnd()).get());
                         if (!xParaCursor)
-                            throw uno::RuntimeException();
+                            throw cpo::uno::RuntimeException();
                         //select paragraph
                         xParaCursor->gotoStartOfParagraph( true );
 
@@ -3057,7 +3065,7 @@ void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaCon
                     CheckParaMarkerRedline( xCur );
                 }
 
-                css::uno::Reference<css::beans::XPropertySet> xParaProps(xTextRange, uno::UNO_QUERY);
+                cpo::uno::Reference<css::beans::XPropertySet> xParaProps(xTextRange, uno::UNO_QUERY);
 
                 // table style precedence and not hidden shapes anchored to hidden empty table paragraphs
                 if (xParaProps && !IsInComments()
@@ -3067,12 +3075,14 @@ void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaCon
                     // table style has got bigger precedence than docDefault style
                     // collect these pending paragraph properties to process in endTable()
                     rtl::Reference<SwXTextCursor> xCur = dynamic_cast<SwXTextCursor*>(xTextRange->getText( )->createTextCursor().get());
+                    if (!xCur)
+                        throw cpo::uno::RuntimeException();
                     xCur->gotoEnd(false);
                     xCur->goLeft(1, false);
                     rtl::Reference<SwXTextCursor> xParaCursor = dynamic_cast<SwXTextCursor*>
                             (xTextRange->getText()->createTextCursorByRange(static_cast<text::XSentenceCursor*>(xCur.get())).get());
                     if (!xParaCursor)
-                        throw uno::RuntimeException();
+                        throw cpo::uno::RuntimeException();
                     xParaCursor->gotoStartOfParagraph(false);
                     if (0 < m_StreamStateStack.top().nTableDepth)
                     {
@@ -3321,6 +3331,19 @@ void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaCon
                 m_bAnnotationResolved = item->second.bDone;
                 m_sAnnotationParent = item->second.sParaIdParent;
             }
+            // The moment is held against the comment's durable id, which a third part ties to
+            // this paragraph id.
+            if (const auto durableId = m_aCommentDurableIds.find(sParaId);
+                durableId != m_aCommentDurableIds.end())
+            {
+                if (const auto dateUtc = m_aCommentDatesUtc.find(durableId->second);
+                    dateUtc != m_aCommentDatesUtc.end())
+                {
+                    css::util::DateTime aDateUtc;
+                    if (::sax::Converter::parseDateTime(aDateUtc, dateUtc->second))
+                        m_oAnnotationDateUtc = aDateUtc;
+                }
+            }
             m_sAnnotationImportedParaId = sParaId;
         }
     }
@@ -3500,7 +3523,7 @@ void DomainMapper_Impl::applyToggleAttributes(const PropertyMapPtr& pPropertyMap
     }
 }
 
-void DomainMapper_Impl::MergeAtContentImageRedlineWithNext(const css::uno::Reference<css::text::XTextAppend>& xTextAppend)
+void DomainMapper_Impl::MergeAtContentImageRedlineWithNext(const cpo::uno::Reference<css::text::XTextAppend>& xTextAppend)
 {
     // remove workaround for change tracked images, if they are part of a redline,
     // i.e. if the next run is a tracked change with the same type, author and date,
@@ -3828,7 +3851,7 @@ void DomainMapper_Impl::appendStarMath( const Value& val )
         xStarMath->setPropertyValue(getPropertyName( PROP_BOTTOM_MARGIN ),
             cpo::uno::Any(sal_Int32(0)));
 
-        uno::Reference< uno::XInterface > xInterface( formula->getComponent(), uno::UNO_QUERY );
+        uno::Reference< cpo::uno::XInterface > xInterface( formula->getComponent(), uno::UNO_QUERY );
         // set zero margins for object's component
         uno::Reference< beans::XPropertySet > xComponentProperties( xInterface, uno::UNO_QUERY_THROW );
         xComponentProperties->setPropertyValue(getPropertyName( PROP_LEFT_MARGIN ),
@@ -3839,9 +3862,21 @@ void DomainMapper_Impl::appendStarMath( const Value& val )
             cpo::uno::Any(sal_Int32(0)));
         xComponentProperties->setPropertyValue(getPropertyName( PROP_BOTTOM_MARGIN ),
             cpo::uno::Any(sal_Int32(0)));
+
+        auto* pFormula = dynamic_cast<oox::FormulaImExportBase*>(xInterface.get());
+        // A formula whose own markup carries no font size is drawn at the size of the text
+        // around it, which the styles and the document defaults hold.
+        double fCharHeight = 0;
+        if (pFormula && pFormula->getFormulaFontSizeInHalfPoints() == 0
+            && (GetAnyProperty(PROP_CHAR_HEIGHT, GetTopContextOfType(CONTEXT_CHARACTER))
+                >>= fCharHeight))
+        {
+            pFormula->setFormulaFontSizeInHalfPoints(std::lround(fCharHeight * 2));
+        }
+
         Size size( 1000, 1000 );
-        if( oox::FormulaImExportBase* formulaimport = dynamic_cast< oox::FormulaImExportBase* >( xInterface.get()))
-            size = formulaimport->getFormulaSize();
+        if( pFormula )
+            size = pFormula->getFormulaSize();
         xStarMath->setPropertyValue(getPropertyName( PROP_WIDTH ),
             cpo::uno::Any( sal_Int32(size.Width())));
         xStarMath->setPropertyValue(getPropertyName( PROP_HEIGHT ),
@@ -3917,18 +3952,18 @@ static void checkAndAddPropVal(const OUString& prop, const cpo::uno::Any& val,
 }
 
 static uno::Reference<lang::XComponent>
-getParagraphOfRange(const css::uno::Reference<css::text::XTextRange>& xRange)
+getParagraphOfRange(const cpo::uno::Reference<css::text::XTextRange>& xRange)
 {
     uno::Reference<container::XEnumerationAccess> xEA{ xRange, uno::UNO_QUERY_THROW };
     return { xEA->createEnumeration()->nextElement(), uno::UNO_QUERY_THROW };
 }
 
-static void copyAllProps(const css::uno::Reference<css::uno::XInterface>& from,
-                         const css::uno::Reference<css::uno::XInterface>& to)
+static void copyAllProps(const cpo::uno::Reference<cpo::uno::XInterface>& from,
+                         const cpo::uno::Reference<cpo::uno::XInterface>& to)
 {
-    css::uno::Reference<css::beans::XPropertySet> xFromProps(from, css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::beans::XPropertySetInfo> xFromInfo(xFromProps->getPropertySetInfo(),
-                                                                css::uno::UNO_SET_THROW);
+    cpo::uno::Reference<css::beans::XPropertySet> xFromProps(from, cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::beans::XPropertySetInfo> xFromInfo(xFromProps->getPropertySetInfo(),
+                                                                cpo::uno::UNO_SET_THROW);
     cpo::uno::Sequence<css::beans::Property> rawProps(xFromInfo->getProperties());
     std::vector<OUString> props;
     props.reserve(rawProps.getLength());
@@ -3936,7 +3971,7 @@ static void copyAllProps(const css::uno::Reference<css::uno::XInterface>& from,
         if ((prop.Attributes & css::beans::PropertyAttribute::READONLY) == 0)
             props.push_back(prop.Name);
 
-    if (css::uno::Reference<css::beans::XPropertyState> xFromState{ from, css::uno::UNO_QUERY })
+    if (cpo::uno::Reference<css::beans::XPropertyState> xFromState{ from, cpo::uno::UNO_QUERY })
     {
         const auto propsSeq = comphelper::containerToSequence(props);
         const auto statesSeq = xFromState->getPropertyStates(propsSeq);
@@ -3948,8 +3983,8 @@ static void copyAllProps(const css::uno::Reference<css::uno::XInterface>& from,
 
     std::vector<cpo::uno::Any> values;
     values.reserve(props.size());
-    if (css::uno::Reference<css::beans::XMultiPropertySet> xFromMulti{ xFromProps,
-                                                                       css::uno::UNO_QUERY })
+    if (cpo::uno::Reference<css::beans::XMultiPropertySet> xFromMulti{ xFromProps,
+                                                                       cpo::uno::UNO_QUERY })
     {
         const auto propsSeq = comphelper::containerToSequence(props);
         const auto valuesSeq = xFromMulti->getPropertyValues(propsSeq);
@@ -3968,9 +4003,9 @@ static void copyAllProps(const css::uno::Reference<css::uno::XInterface>& from,
     }
     assert(props.size() == values.size());
 
-    css::uno::Reference<css::beans::XPropertySet> xToProps(to, css::uno::UNO_QUERY_THROW);
-    if (css::uno::Reference<css::beans::XMultiPropertySet> xToMulti{ xToProps,
-                                                                     css::uno::UNO_QUERY })
+    cpo::uno::Reference<css::beans::XPropertySet> xToProps(to, cpo::uno::UNO_QUERY_THROW);
+    if (cpo::uno::Reference<css::beans::XMultiPropertySet> xToMulti{ xToProps,
+                                                                     cpo::uno::UNO_QUERY })
     {
         try
         {
@@ -4875,6 +4910,12 @@ void DomainMapper_Impl::PopAnnotation()
         m_xAnnotationField->setPropertyValue(u"ParaIdParent"_ustr, cpo::uno::Any(m_sAnnotationParent));
         m_xAnnotationField->setPropertyValue(u"ParaId"_ustr, cpo::uno::Any(m_sAnnotationImportedParaId));
 
+        if (m_oAnnotationDateUtc)
+        {
+            m_xAnnotationField->setPropertyValue(u"DateTimeUTC"_ustr,
+                                                 cpo::uno::Any(*m_oAnnotationDateUtc));
+        }
+
         // See if the annotation will be a single position or a range.
         if (m_nAnnotationId == -1 || !m_aAnnotationPositions[m_nAnnotationId].m_xStart.is() || !m_aAnnotationPositions[m_nAnnotationId].m_xEnd.is())
         {
@@ -4952,6 +4993,7 @@ void DomainMapper_Impl::PopAnnotation()
     m_xAnnotationField.clear();
     m_sAnnotationParent.clear();
     m_sAnnotationImportedParaId.clear();
+    m_oAnnotationDateUtc.reset();
     m_nAnnotationId = -1;
     m_bAnnotationResolved = false;
 }
@@ -5044,9 +5086,12 @@ void DomainMapper_Impl::PushShapeContext( const uno::Reference< drawing::XShape 
                                     const cpo::uno::Any aProp = GetPropertyFromStyleSheet(eId, pEntry, /*bDocDefaults=*/true, /*bPara=*/true);
                                     if (aProp.hasValue())
                                     {
-                                        if (xFrame)
+                                        // A text frame has no character properties of its own,
+                                        // the text inside it carries them.
+                                        if (xFrame && xFramePropertySet->getPropertySetInfo()
+                                                          ->hasPropertyByName(sPropName))
                                             xFramePropertySet->setPropertyValue(sPropName, aProp);
-                                        else
+                                        else if (!xFrame)
                                             xShapePropertySet->setPropertyValue(sPropName, aProp);
                                     }
                                 }
@@ -5278,7 +5323,7 @@ void DomainMapper_Impl::UpdateEmbeddedShapeProps(const uno::Reference< drawing::
         {
             xEmbedded->setName(name);
         }
-        catch (uno::RuntimeException const&)
+        catch (cpo::uno::RuntimeException const&)
         {
             // ignore - document may contain duplicates (testchartoleobjectembeddings.docx)
         }
@@ -5309,7 +5354,7 @@ void DomainMapper_Impl::PopShapeContext()
     {
         appendTextContent( xObj, cpo::uno::Sequence< beans::PropertyValue >() );
     }
-    catch ( const uno::RuntimeException& )
+    catch ( const cpo::uno::RuntimeException& )
     {
         // this is normal: the shape is already attached
     }
@@ -5337,7 +5382,7 @@ void DomainMapper_Impl::PopShapeContext()
     {
         aShapeSize = xShape->getSize();
     }
-    catch (const css::uno::RuntimeException& e)
+    catch (const cpo::uno::RuntimeException& e)
     {
         // May happen e.g. when text frame has no frame format
         // See sw/qa/extras/ooxmlimport/data/n779627.docx
@@ -6059,7 +6104,7 @@ void DomainMapper_Impl::SetNumberFormat( const OUString& rCommand,
         {
             try
             {
-                css::uno::Reference<css::i18n::XNumberFormatCode> const xNumberFormatCode =
+                cpo::uno::Reference<css::i18n::XNumberFormatCode> const xNumberFormatCode =
                     i18n::NumberFormatMapper::create(m_xComponentContext);
                 sFormatString = xNumberFormatCode->getFormatCode(
                     css::i18n::NumberFormatIndex::DATE_SYSTEM_SHORT, aCurrentLocale).Code;
@@ -6121,7 +6166,7 @@ void DomainMapper_Impl::ChainTextFrames()
         return ;
 
     struct TextFramesForChaining {
-        css::uno::Reference< css::drawing::XShape > xShape;
+        cpo::uno::Reference< css::drawing::XShape > xShape;
         sal_Int32 nId;
         sal_Int32 nSeq;
         OUString s_mso_next_textbox;
@@ -6311,7 +6356,7 @@ void DomainMapper_Impl::PopTextBoxContent()
     }
 }
 
-void DomainMapper_Impl::AttachTextBoxContentToShape(const css::uno::Reference<css::drawing::XShape> & xShape)
+void DomainMapper_Impl::AttachTextBoxContentToShape(const cpo::uno::Reference<css::drawing::XShape> & xShape)
 {
     // Without textbox or shape pointless to continue
     if (m_xPendingTextBoxFrames.empty() || !xShape)
@@ -6416,7 +6461,7 @@ rtl::Reference<SwXFieldMaster> DomainMapper_Impl::FindOrCreateFieldMaster(const 
 {
     // query master, create if not available
     if (!m_xTextDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     rtl::Reference< SwXTextFieldMasters > xFieldMasterAccess = m_xTextDocument->getSwXTextFieldMasters();
     rtl::Reference< SwXFieldMaster > xMaster;
     OUString sFieldMasterService( OUString::createFromAscii(pFieldMasterService) );
@@ -7639,7 +7684,7 @@ void DomainMapper_Impl::handleToc
         else
         {
             // create TOC section
-            css::uno::Reference<css::text::XTextRange> xTextRangeEndOfTocHeader = GetTopTextAppend()->getEnd();
+            cpo::uno::Reference<css::text::XTextRange> xTextRangeEndOfTocHeader = GetTopTextAppend()->getEnd();
             xTOC = createSectionForRange(m_StreamStateStack.top().xSdtEntryStart, xTextRangeEndOfTocHeader, sTOCServiceName, false);
 
             // init [xTOCMarkerCursor]
@@ -9378,7 +9423,10 @@ void DomainMapper_Impl::PopFieldContext()
                                     {
                                         if (!charStyle.isEmpty() && charStyle.equalsIgnoreAsciiCase("Internet Link"))
                                         {
-                                            xCrsrProperties->setPropertyValue(u"CharStyleName"_ustr, cpo::uno::Any(u"Default Style"_ustr));
+                                            // "Standard" is the name the API knows the
+                                            // default character style by; "Default Style" is
+                                            // what an English user interface calls it.
+                                            xCrsrProperties->setPropertyValue(u"CharStyleName"_ustr, cpo::uno::Any(u"Standard"_ustr));
                                         }
                                         else
                                         {
@@ -9890,7 +9938,7 @@ void  DomainMapper_Impl::ImportGraphic(const writerfilter::Reference<Properties>
 void DomainMapper_Impl::SetLineNumbering( sal_Int32 nLnnMod, sal_uInt32 nLnc, sal_Int32 ndxaLnn )
 {
     if (!m_xTextDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     if( !m_bLineNumberingSet )
     {
         try
@@ -10140,7 +10188,7 @@ void DomainMapper_Impl::ApplySettingsTable()
         // A distance of zero means the document has no automatic tab stops. The document
         // default only takes a positive distance, so store the smallest one it accepts.
         if (nDefTab == 0)
-            nDefTab = convertTwipToMm100(1);
+            nDefTab = 1;
         xTextDefaults->setPropertyValue( getPropertyName( PROP_TAB_STOP_DISTANCE ), cpo::uno::Any(nDefTab) );
         if (m_pSettingsTable->GetLinkStyles())
         {
@@ -10470,6 +10518,16 @@ void DomainMapper_Impl::substream(Id rName,
 void DomainMapper_Impl::commentProps(const OUString& sId, const CommentProperties& rProps)
 {
     m_aCommentProps[sId] = rProps;
+}
+
+void DomainMapper_Impl::commentDurableId(const OUString& sParaId, const OUString& sDurableId)
+{
+    m_aCommentDurableIds[sParaId] = sDurableId;
+}
+
+void DomainMapper_Impl::commentDateUtc(const OUString& sDurableId, const OUString& sDateUtc)
+{
+    m_aCommentDatesUtc[sDurableId] = sDateUtc;
 }
 
 

@@ -44,7 +44,7 @@ import com.sun.star.util.URL;
 import com.sun.star.util.XURLTransformer;
 import com.sun.star.uno.AnyConverter;
 import cpo.uno.Type;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 import com.sun.star.util.XMacroExpander;
 
 import java.text.DecimalFormat;
@@ -296,7 +296,7 @@ public class utils {
         // is the last character a '/' or a '\'?
         boolean lastCharSet = dir.endsWith("/") || dir.endsWith("\\");
 
-        if (idx < 0) { // linux or solaris
+        if (idx < 0) { // linux
             dir = "/" + dir;
             dir += lastCharSet ? "" : "/";
         } else {  // windows

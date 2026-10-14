@@ -33,9 +33,7 @@
 #include <ZipEntry.hxx>
 #include <CRC32.hxx>
 
-namespace com::sun::star::uno {
-    class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 #define UNBUFF_STREAM_DATA          0
 #define UNBUFF_STREAM_RAW           1
@@ -49,12 +47,12 @@ class XUnbufferedStream final : public cppu::WeakImplHelper
 {
     rtl::Reference<comphelper::RefCountedMutex> maMutexHolder;
 
-    css::uno::Reference < css::io::XInputStream > mxZipStream;
-    css::uno::Reference < css::io::XSeekable > mxZipSeek;
+    cpo::uno::Reference < css::io::XInputStream > mxZipStream;
+    cpo::uno::Reference < css::io::XSeekable > mxZipSeek;
     cpo::uno::Sequence < sal_Int8 > maCompBuffer, maHeader;
     ZipEntry maEntry;
     sal_Int32 mnBlockSize;
-    css::uno::Reference< css::xml::crypto::XCipherContext > m_xCipherContext;
+    cpo::uno::Reference< css::xml::crypto::XCipherContext > m_xCipherContext;
     std::unique_ptr<ZipUtils::Inflater> maInflater;
     bool mbRawStream, mbWrappedRaw;
     sal_Int16 mnHeaderToRead;
@@ -64,10 +62,10 @@ class XUnbufferedStream final : public cppu::WeakImplHelper
 
 public:
     XUnbufferedStream(
-                 const css::uno::Reference< css::uno::XComponentContext >& xContext,
+                 const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
                  rtl::Reference<comphelper::RefCountedMutex> aMutexHolder,
                  ZipEntry const & rEntry,
-                 css::uno::Reference < css::io::XInputStream > const & xNewZipStream,
+                 cpo::uno::Reference < css::io::XInputStream > const & xNewZipStream,
                  const ::rtl::Reference< EncryptionData >& rData,
                  sal_Int8 nStreamMode,
                  ::std::optional<sal_Int64> oDecryptedSize,
@@ -77,7 +75,7 @@ public:
     // allows to read package raw stream
     XUnbufferedStream(
                  rtl::Reference<comphelper::RefCountedMutex> aMutexHolder,
-                 const css::uno::Reference < css::io::XInputStream >& xRawStream,
+                 const cpo::uno::Reference < css::io::XInputStream >& xRawStream,
                  const ::rtl::Reference< EncryptionData >& rData );
 
     sal_Int64 getSize() const { return mnZipSize; }
@@ -85,11 +83,11 @@ public:
     virtual ~XUnbufferedStream() override;
 
     // XInputStream
-    virtual sal_Int32 SAL_CALL readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) override;
-    virtual sal_Int32 SAL_CALL readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead ) override;
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override;
-    virtual sal_Int32 SAL_CALL available(  ) override;
-    virtual void SAL_CALL closeInput(  ) override;
+    virtual sal_Int32 readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) override;
+    virtual sal_Int32 readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead ) override;
+    virtual void skipBytes( sal_Int32 nBytesToSkip ) override;
+    virtual sal_Int32 available(  ) override;
+    virtual void closeInput(  ) override;
 };
 #endif
 

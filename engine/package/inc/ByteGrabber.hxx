@@ -20,7 +20,7 @@
 #define INCLUDED_PACKAGE_INC_BYTEGRABBER_HXX
 
 #include <cpo/uno/Sequence.h>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <comphelper/bytereader.hxx>
 #include <array>
 
@@ -29,33 +29,33 @@ namespace com::sun::star {
 }
 class ByteGrabber final
 {
-    css::uno::Reference < css::io::XInputStream > xStream;
-    css::uno::Reference < css::io::XSeekable > xSeek;
+    cpo::uno::Reference < css::io::XInputStream > xStream;
+    cpo::uno::Reference < css::io::XSeekable > xSeek;
     comphelper::ByteReader* mpByteReader;
     std::array<sal_Int8, 8> maBuffer;
     cpo::uno::Sequence < sal_Int8 > aSequence;
 
 public:
-    ByteGrabber (css::uno::Reference < css::io::XInputStream > const & xIstream);
+    ByteGrabber (cpo::uno::Reference < css::io::XInputStream > const & xIstream);
     ~ByteGrabber();
 
-    void setInputStream (const css::uno::Reference < css::io::XInputStream >& xNewStream);
+    void setInputStream (const cpo::uno::Reference < css::io::XInputStream >& xNewStream);
     // XInputStream
     /// @throws css::io::NotConnectedException
     /// @throws css::io::BufferSizeExceededException
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int32 readBytes( sal_Int8* aData, sal_Int32 nBytesToRead );
     // XSeekable
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void seek( sal_Int64 location );
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int64 getPosition(  );
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int64 getLength(  );
 
     sal_uInt16 ReadUInt16();

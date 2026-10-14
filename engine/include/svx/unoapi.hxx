@@ -38,18 +38,18 @@ enum class SdrObjKind  : sal_uInt16;
  * Creates a StarOffice API wrapper with the given type and inventor
  * Deprecated: This will be replaced with a function returning XShape.
  *
- * @throws css::uno::RuntimeException
+ * @throws cpo::uno::RuntimeException
  */
 SVXCORE_DLLPUBLIC rtl::Reference<SvxShape> CreateSvxShapeByTypeAndInventor(SdrObjKind nType, SdrInventor nInventor, OUString const & referer);
 
 /** Returns a StarOffice API wrapper for the given SdrObject */
-SVXCORE_DLLPUBLIC css::uno::Reference< css::drawing::XShape > GetXShapeForSdrObject( SdrObject* pObj ) noexcept;
+SVXCORE_DLLPUBLIC cpo::uno::Reference< css::drawing::XShape > GetXShapeForSdrObject( SdrObject* pObj ) noexcept;
 
 /** Returns a StarOffice API wrapper for the given SdrPage */
-SVXCORE_DLLPUBLIC css::uno::Reference< css::drawing::XDrawPage > GetXDrawPageForSdrPage( SdrPage* pPage ) noexcept;
+SVXCORE_DLLPUBLIC cpo::uno::Reference< css::drawing::XDrawPage > GetXDrawPageForSdrPage( SdrPage* pPage ) noexcept;
 
 /** Returns the SdrPage from the given StarOffice API wrapper */
-SVXCORE_DLLPUBLIC SdrPage* GetSdrPageFromXDrawPage( const css::uno::Reference< css::drawing::XDrawPage >& xDrawPage ) noexcept ;
+SVXCORE_DLLPUBLIC SdrPage* GetSdrPageFromXDrawPage( const cpo::uno::Reference< css::drawing::XDrawPage >& xDrawPage ) noexcept ;
 
 /**
  * Maps the vcl MapUnit enum to an API constant MeasureUnit.
@@ -84,7 +84,7 @@ SVXCORE_DLLPUBLIC bool SvxFieldUnitToMeasureUnit( const FieldUnit nVcl, short& e
  *
  * @throws std::exception
 */
-[[nodiscard]] OUString
+[[nodiscard]] SVXCORE_DLLPUBLIC OUString
     SvxUnogetInternalNameForItem(const sal_uInt16 nWhich, const OUString& rApiName);
 
 #endif // INCLUDED_SVX_UNOAPI_HXX

@@ -36,14 +36,14 @@
 
 namespace com::sun::star::ui::dialogs
 {
-    class XFilePicker3;
-    class XFolderPicker2;
+    class XFilePicker;
+    class XFolderPicker;
     struct FilePickerEvent;
     struct DialogClosedEvent;
 }
 namespace com::sun::star::awt { class XWindow; }
-namespace com::sun::star::uno { template <typename > class Reference; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { template <typename > class Reference; }
+namespace cpo::uno { class XComponentContext; }
 namespace weld { class Window; }
 
 enum class SignatureState;
@@ -83,7 +83,6 @@ public:
         UnknownContext,
         AcceleratorConfig,
         AutoRedact,
-        BasicExportPackage,
         BasicExportDialog,
         BasicExportSource,
         BasicImportDialog,
@@ -137,6 +136,14 @@ public:
 private:
     Link<FileDialogHelper*,void>  m_aDialogClosedLink;
     ErrCode m_nError;
+
+    // The files a COKit app's native picker delivered. While this holds a value the
+    // result accessors answer from it, and the UNO file picker was never run.
+    std::optional<cpo::uno::Sequence<OUString>> m_oKitPickedFiles;
+
+    // Alive as long as this helper is. The native picker's completion holds a weak
+    // reference and drops its answer when the helper is gone by the time the user picks.
+    std::shared_ptr<void> m_xKitPickToken;
 
     rtl::Reference< FileDialogHelper_Impl > mpImpl;
 
@@ -211,7 +218,7 @@ public:
             specifies the URL of the folder whose content is to be displayed.<br/>
             If the URL doesn't denote a valid (existent and accessible) folder, the
             request is silently dropped.
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
             if the invocation of any of the file picker or UCB methods throws a RuntimeException.
     */
     void                     SetDisplayFolder( const OUString& _rURL );
@@ -225,7 +232,7 @@ public:
         with the following differences:
         <ul><li>The FileDialogHelper remembers the given file name, and upon execution,
                 strips its extension if the dialog is set up for "automatic file name extension".</li>
-            <li>Exceptions thrown from the <code>XFilePicker3</code> are caught and silenced.</li>
+            <li>Exceptions thrown from the <code>XFilePicker</code> are caught and silenced.</li>
         </ul>
     */
     void                     SetFileName( const OUString& _rFileName );
@@ -234,7 +241,7 @@ public:
     OUString                 GetDisplayDirectory() const;
     ErrCode                  GetGraphic( Graphic& rGraphic ) const;
 
-    const css::uno::Reference < css::ui::dialogs::XFilePicker3 >& GetFilePicker() const;
+    const cpo::uno::Reference < css::ui::dialogs::XFilePicker >& GetFilePicker() const;
 
     // XFilePickerListener methods
     void   FileSelectionChanged();
@@ -292,9 +299,9 @@ ErrCode FileOpenDialog_Impl( weld::Window* pParent,
                              const cpo::uno::Sequence< OUString >& rDenyList,
                              std::optional<bool>& rShowFilterDialog );
 
-css::uno::Reference<css::ui::dialogs::XFolderPicker2> SFX2_DLLPUBLIC createFolderPicker(const css::uno::Reference<css::uno::XComponentContext>& rContext, weld::Window* pPreferredParent);
+cpo::uno::Reference<css::ui::dialogs::XFolderPicker> SFX2_DLLPUBLIC createFolderPicker(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext, weld::Window* pPreferredParent);
 
-ErrCode RequestPassword(const std::shared_ptr<const SfxFilter>& pCurrentFilter, OUString const & aURL, SfxItemSet* pSet, const css::uno::Reference<css::awt::XWindow>& rParent);
+ErrCode RequestPassword(const std::shared_ptr<const SfxFilter>& pCurrentFilter, OUString const & aURL, SfxItemSet* pSet, const cpo::uno::Reference<css::awt::XWindow>& rParent);
 ErrCode SetPassword(const std::shared_ptr<const SfxFilter>& pCurrentFilter, SfxItemSet* pSet,
                     const OUString& rPasswordToOpen, std::u16string_view rPasswordToModify,
                     bool bAllowPasswordReset = false);

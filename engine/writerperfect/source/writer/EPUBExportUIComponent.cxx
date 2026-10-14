@@ -17,10 +17,11 @@
 #include "EPUBExportDialog.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace writerperfect
 {
-EPUBExportUIComponent::EPUBExportUIComponent(uno::Reference<uno::XComponentContext> xContext)
+EPUBExportUIComponent::EPUBExportUIComponent(uno::Reference<cpo::uno::XComponentContext> xContext)
     : mxContext(std::move(xContext))
 {
 }
@@ -66,7 +67,7 @@ cpo::uno::Sequence<OUString> EPUBExportUIComponent::getSupportedServiceNames()
 
 void EPUBExportUIComponent::setTitle(const OUString& /*rTitle*/) {}
 
-void SAL_CALL EPUBExportUIComponent::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
+void EPUBExportUIComponent::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
 {
     ::comphelper::NamedValueCollection aProperties(rArguments);
     if (aProperties.has(u"ParentWindow"_ustr))
@@ -84,16 +85,16 @@ sal_Int16 EPUBExportUIComponent::execute()
     return ui::dialogs::ExecutableDialogResults::CANCEL;
 }
 
-void SAL_CALL EPUBExportUIComponent::setSourceDocument(
-    const css::uno::Reference<css::lang::XComponent>& xDocument)
+void EPUBExportUIComponent::setSourceDocument(
+    const cpo::uno::Reference<css::lang::XComponent>& xDocument)
 {
     mxSourceDocument = xDocument;
 }
 
-void SAL_CALL EPUBExportUIComponent::setDialogTitle(const OUString& aTitle) { setTitle(aTitle); }
+void EPUBExportUIComponent::setDialogTitle(const OUString& aTitle) { setTitle(aTitle); }
 
-void SAL_CALL EPUBExportUIComponent::startExecuteModal(
-    const css::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener)
+void EPUBExportUIComponent::startExecuteModal(
+    const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener)
 {
     SolarMutexGuard aSolarGuard;
 
@@ -115,9 +116,9 @@ void SAL_CALL EPUBExportUIComponent::startExecuteModal(
     });
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_EPUBExportUIComponent_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new EPUBExportUIComponent(pCtx));
 }

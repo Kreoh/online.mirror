@@ -20,6 +20,7 @@
 #pragma once
 
 #include <sfx2/objsh.hxx>
+#include <unotools/resmgr.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
 #include <sfx2/viewsh.hxx>
@@ -31,9 +32,10 @@
 #include <document.hxx>
 #include <shellids.hxx>
 #include <optutil.hxx>
-#include <docuno.hxx>
 
+#include <chrono>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <map>
@@ -46,6 +48,8 @@ class INetURLObject;
 class ScViewData;
 class ScDocFunc;
 class ScDrawLayer;
+class ScModelObj;
+struct ScFormatSaveData;
 class ScTabViewShell;
 class ScAutoStyleList;
 class ScMarkData;
@@ -95,6 +99,7 @@ class SAL_DLLPUBLIC_RTTI ScDocShell final: public SfxObjectShell, public SfxList
     bool                m_bUpdateEnabled:1;
     bool                m_bAreasChangedNeedBroadcast:1;
     bool mbExpandRefsWarningShown:1 = false;
+    bool m_bRestoringHeaderColumnNames:1 = false;
     sal_uInt16          m_nDocumentLock;
     sal_Int16           m_nCanUpdate;  // stores the UpdateDocMode from loading a document till update links
     std::unique_ptr<ScDBData> m_pOldAutoDBRange;
@@ -106,11 +111,11 @@ class SAL_DLLPUBLIC_RTTI ScDocShell final: public SfxObjectShell, public SfxList
 
     std::unique_ptr<ScDocShellModificator, o3tl::default_delete<ScDocShellModificator>> m_pModificator; // #109979#; is used to load XML (created in BeforeXMLLoading and destroyed in AfterXMLLoading)
 
-    css::uno::Reference< ooo::vba::excel::XWorkbook> mxAutomationWorkbookObject;
+    cpo::uno::Reference< ooo::vba::excel::XWorkbook> mxAutomationWorkbookObject;
 
     // Only used by Vba helper functions
-    css::uno::Reference<css::script::vba::XVBAScriptListener>   m_xVBAListener;
-    css::uno::Reference<css::datatransfer::XTransferable2>      m_xClipData;
+    cpo::uno::Reference<css::script::vba::XVBAScriptListener>   m_xVBAListener;
+    cpo::uno::Reference<css::datatransfer::XTransferable2>      m_xClipData;
 
     void          InitItems();
     void          DoEnterHandler();
@@ -128,10 +133,10 @@ class SAL_DLLPUBLIC_RTTI ScDocShell final: public SfxObjectShell, public SfxList
                         ScDocShell & mrDocShell;
     };
 
-    bool ImportFrom(SfxMedium&, const css::uno::Reference<css::text::XTextRange>&) override;
+    bool ImportFrom(SfxMedium&, const cpo::uno::Reference<css::text::XTextRange>&) override;
 
-    bool          LoadXML( SfxMedium* pMedium, const css::uno::Reference< css::embed::XStorage >& );
-    bool          SaveXML( SfxMedium* pMedium, const css::uno::Reference< css::embed::XStorage >& );
+    bool          LoadXML( SfxMedium* pMedium, const cpo::uno::Reference< css::embed::XStorage >& );
+    bool          SaveXML( SfxMedium* pMedium, const cpo::uno::Reference< css::embed::XStorage >& );
     SCTAB         GetSaveTab();
 
     friend bool TestImportDBF(SvStream &rStream);
@@ -151,9 +156,12 @@ class SAL_DLLPUBLIC_RTTI ScDocShell final: public SfxObjectShell, public SfxList
     void          UnlockDocument_Impl(sal_uInt16 nNew);
 
     void          EnableSharedSettings( bool bEnable );
-    css::uno::Reference< css::frame::XModel > LoadSharedDocument();
+    cpo::uno::Reference< css::frame::XModel > LoadSharedDocument();
 
     void          UseSheetSaveEntries();
+
+    /// Refreshes the charts, broadcasts the change and repaints.
+    void UpdateAfterRecalc(ScTabViewShell* pViewShell);
 
     std::unique_ptr<ScDocFunc> CreateDocFunc();
 
@@ -186,7 +194,7 @@ public:
     virtual std::set<Color> GetDocColors() override;
     virtual std::shared_ptr<model::ColorSet> GetThemeColors() override;
 
-    virtual bool    InitNew( const css::uno::Reference< css::embed::XStorage >& ) override;
+    virtual bool    InitNew( const cpo::uno::Reference< css::embed::XStorage >& ) override;
     virtual bool    Load( SfxMedium& rMedium ) override;
     virtual bool    LoadFrom( SfxMedium& rMedium ) override;
     virtual bool    ConvertFrom( SfxMedium &rMedium ) override;
@@ -223,8 +231,8 @@ public:
     ScDocument&     GetDocument()   { return *m_pDocument; }
     ScDocFunc&      GetDocFunc()    { return *m_pDocFunc; }
 
-    css::uno::Reference<css::datatransfer::XTransferable2> const & GetClipData() const { return m_xClipData; }
-    void SetClipData(const css::uno::Reference<css::datatransfer::XTransferable2>& xTransferable) { m_xClipData = xTransferable; }
+    cpo::uno::Reference<css::datatransfer::XTransferable2> const & GetClipData() const { return m_xClipData; }
+    void SetClipData(const cpo::uno::Reference<css::datatransfer::XTransferable2>& xTransferable) { m_xClipData = xTransferable; }
 
     SfxPrinter*     GetPrinter( bool bCreateIfNotExist = true );
     sal_uInt16      SetPrinter( VclPtr<SfxPrinter> const & pNewPrinter, SfxPrinterChangeFlags nDiffFlags = SFX_PRINTER_ALL );
@@ -292,7 +300,13 @@ public:
     bool            MoveTable( SCTAB nSrcTab, SCTAB nDestTab, bool bCopy, bool bRecord );
 
     SC_DLLPUBLIC void DoRecalc( bool bApi );
-    SC_DLLPUBLIC void DoHardRecalc();
+    /// Recalculates every formula in the document. Returns the time the
+    /// calculation alone took, or nothing when a calculation is already running.
+    SC_DLLPUBLIC std::optional<std::chrono::nanoseconds> DoHardRecalc();
+    /// Marks every formula on one sheet dirty and calculates it. Returns the
+    /// time the calculation alone took, or nothing when there is no such sheet
+    /// or a calculation is already running.
+    std::optional<std::chrono::nanoseconds> DoHardRecalcSheet(SCTAB nTab);
 
     void            UpdateOle(const ScViewData& rViewData, bool bSnapSize = false);
     bool            IsOle() const;
@@ -308,7 +322,7 @@ public:
     void            PerformLinkUpdate() override;
     bool            HasUpdatableLinks() const override;
     /** The document's HasExternalLinks together with the deferred form-control
-        images the shell keeps itself. */
+        images and the external database forms the shell keeps itself. */
     bool            HasExternalLinks() const;
     SC_DLLPUBLIC void SetInitialLinkUpdate( const SfxMedium* pMedium );
     void            AllowLinkUpdate();
@@ -422,6 +436,11 @@ public:
 
     SAL_RET_MAYBENULL static ScDocShell* GetShellByNum( sal_uInt16 nDocNo );
     static bool       HasAutomaticTableName( std::u16string_view rFilter );
+
+                        /** Whether writing the document out through this filter warns that
+                            only the active sheet reaches the file. True while the document
+                            has more than one sheet to lose and the warning is turned on. */
+    bool              WillWarnOnlyActiveSheetSaved( std::u16string_view rFilter ) const;
     static void       KitCommentNotify(KitCommentNotificationType nType, const ScDocument& rDocument, const ScAddress& rPos, const ScPostIt* pNote);
 
     DECL_LINK( RefreshDBDataHdl, Timer*, void );
@@ -446,9 +465,9 @@ public:
 
     void SnapVisArea( tools::Rectangle& rRect ) const;
 
-    SC_DLLPUBLIC void RegisterAutomationWorkbookObject(css::uno::Reference< ooo::vba::excel::XWorkbook > const& xWorkbook);
+    SC_DLLPUBLIC void RegisterAutomationWorkbookObject(cpo::uno::Reference< ooo::vba::excel::XWorkbook > const& xWorkbook);
 
-    ScModelObj* GetModel() const { return static_cast<ScModelObj*>(SfxObjectShell::GetModel().get()); }
+    SC_DLLPUBLIC ScModelObj* GetModel() const;
 
     void AddDelayedInfobarEntry(const OUString& sId, const OUString& sPrimaryMessage,
                                 const OUString& sSecondaryMessage, InfobarType aInfobarType,
@@ -502,58 +521,6 @@ public:
     explicit ScDocShellModificator( ScDocShell& );
     ~ScDocShellModificator();
     void            SetDocumentModified();
-};
-
-//#i97876# Spreadsheet data changes are not notified
-namespace HelperNotifyChanges
-{
-    inline bool isDataAreaInvalidateType(std::u16string_view rType)
-    {
-        if (rType == u"delete-content")
-            return true;
-        if (rType == u"delete-rows")
-            return true;
-        if (rType == u"delete-columns")
-            return true;
-        if (rType == u"undo")
-            return true;
-        if (rType == u"redo")
-            return true;
-        if (rType == u"paste")
-            return true;
-        if (rType == u"note")
-            return true;
-
-        return false;
-    }
-
-    inline bool getMustPropagateChangesModel(const ScModelObj* pModelObj)
-    {
-        return pModelObj && pModelObj->HasChangesListeners();
-    }
-
-    inline void Notify(ScModelObj &rModelObj, const ScRangeList &rChangeRanges,
-        const OUString &rType = u"cell-change"_ustr,
-        const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties =
-            cpo::uno::Sequence< css::beans::PropertyValue >())
-    {
-        rModelObj.NotifyChanges(rType, rChangeRanges, rProperties);
-    }
-
-    inline void NotifyIfChangesListeners(const ScDocShell &rDocShell, const ScRange &rRange,
-        const OUString &rType = u"cell-change"_ustr)
-    {
-        ScModelObj* pModelObj = rDocShell.GetModel();
-        ScRangeList aChangeRanges(rRange);
-
-        if (getMustPropagateChangesModel(pModelObj))
-            Notify(*pModelObj, aChangeRanges, rType);
-        else if (pModelObj) // possibly need to invalidate getCellArea results
-        {
-            Notify(*pModelObj, aChangeRanges, isDataAreaInvalidateType(rType)
-                ? u"data-area-invalidate"_ustr : u"data-area-extend"_ustr);
-        }
-    }
 };
 
 void VBA_InsertModule( ScDocument& rDoc, SCTAB nTab, const OUString& sModuleSource );

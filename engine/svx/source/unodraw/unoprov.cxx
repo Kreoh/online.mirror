@@ -65,6 +65,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxShapePropertyMap()
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -90,6 +91,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxTextShapePropertyMap()
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -116,6 +118,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxConnectorPropertyMap()
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -142,6 +145,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxDimensioningPropertyMa
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -168,6 +172,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxCirclePropertyMap()
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -196,6 +201,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxPolyPolygonPropertyMap
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -227,6 +233,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxGraphicObjectPropertyM
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -373,6 +380,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxAllPropertyMap()
     {
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         LINE_PROPERTIES
@@ -439,6 +447,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxOle2PropertyMap()
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -629,6 +638,7 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxCustomShapePropertyMap
         LINKTARGET_PROPERTIES
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         TEXT_PROPERTIES
@@ -656,6 +666,8 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxMediaShapePropertyMap(
         { u"Zoom"_ustr, OWN_ATTR_MEDIA_ZOOM, cppu::UnoType<css::media::ZoomLevel>::get(), 0, 0},
         { UNO_NAME_MISC_OBJ_MOVEPROTECT, SDRATTR_OBJMOVEPROTECT, cppu::UnoType<bool>::get(),0, 0},
         { UNO_NAME_MISC_OBJ_SIZEPROTECT, SDRATTR_OBJSIZEPROTECT, cppu::UnoType<bool>::get(),0, 0},
+        { UNO_NAME_MISC_OBJ_PRINTABLE, SDRATTR_OBJPRINTABLE, cppu::UnoType<bool>::get(),0, 0},
+        { u"Visible"_ustr, SDRATTR_OBJVISIBLE, cppu::UnoType<bool>::get(),0, 0},
         { UNO_NAME_MISC_OBJ_BOUNDRECT, OWN_ATTR_BOUNDRECT, cppu::UnoType<css::awt::Rectangle>::get(), css::beans::PropertyAttribute::READONLY, 0},
         { u"UINameSingular"_ustr,               OWN_ATTR_UINAME_SINGULAR        , ::cppu::UnoType<OUString>::get(),    css::beans::PropertyAttribute::READONLY,   0},
         // #i68101#
@@ -686,6 +698,8 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxTableShapePropertyMap(
         { u"Transformation"_ustr,               OWN_ATTR_TRANSFORMATION, cppu::UnoType<css::drawing::HomogenMatrix3>::get(), 0, 0 },
         { UNO_NAME_MISC_OBJ_MOVEPROTECT,  SDRATTR_OBJMOVEPROTECT, cppu::UnoType<bool>::get(),0, 0},
         { UNO_NAME_MISC_OBJ_SIZEPROTECT,  SDRATTR_OBJSIZEPROTECT, cppu::UnoType<bool>::get(),0, 0},
+        { UNO_NAME_MISC_OBJ_PRINTABLE,    SDRATTR_OBJPRINTABLE, cppu::UnoType<bool>::get(),0, 0},
+        { u"Visible"_ustr,                SDRATTR_OBJVISIBLE, cppu::UnoType<bool>::get(),0, 0},
         { UNO_NAME_MISC_OBJ_BOUNDRECT,    OWN_ATTR_BOUNDRECT, cppu::UnoType<css::awt::Rectangle>::get(), css::beans::PropertyAttribute::READONLY, 0},
         { UNO_NAME_MISC_OBJ_NAME,         SDRATTR_OBJECTNAME, cppu::UnoType<OUString>::get(),    0,      0},
         { u"UINameSingular"_ustr,               OWN_ATTR_UINAME_SINGULAR        , ::cppu::UnoType<OUString>::get(),    css::beans::PropertyAttribute::READONLY,   0},
@@ -712,6 +726,7 @@ static std::span<comphelper::PropertyMapEntry const> ImplGetSvxDrawingDefaultsPr
     {
         GLOW_PROPERTIES
         SOFTEDGE_PROPERTIES
+        REFLECTION_PROPERTIES
         GLOW_TEXT_PROPERTIES
         SHADOW_PROPERTIES
         LINE_PROPERTIES_DEFAULTS
@@ -746,37 +761,37 @@ const UHashMapImpl& GetUHashImpl()
 {
     static UHashMapImpl const aImpl
     {
-            { "com.sun.star.drawing.RectangleShape",       SdrObjKind::Rectangle },
-            { "com.sun.star.drawing.EllipseShape",         SdrObjKind::CircleOrEllipse },
-            { "com.sun.star.drawing.ControlShape",         SdrObjKind::UNO  },
-            { "com.sun.star.drawing.ConnectorShape",       SdrObjKind::Edge },
-            { "com.sun.star.drawing.MeasureShape",         SdrObjKind::Measure },
-            { "com.sun.star.drawing.LineShape",            SdrObjKind::Line },
-            { "com.sun.star.drawing.PolyPolygonShape",     SdrObjKind::Polygon },
-            { "com.sun.star.drawing.PolyLineShape",        SdrObjKind::PolyLine },
-            { "com.sun.star.drawing.OpenBezierShape",      SdrObjKind::PathLine },
-            { "com.sun.star.drawing.ClosedBezierShape",    SdrObjKind::PathFill },
-            { "com.sun.star.drawing.OpenFreeHandShape",    SdrObjKind::FreehandLine },
-            { "com.sun.star.drawing.ClosedFreeHandShape",  SdrObjKind::FreehandFill },
-            { "com.sun.star.drawing.PolyPolygonPathShape", SdrObjKind::PathPoly },
-            { "com.sun.star.drawing.PolyLinePathShape",    SdrObjKind::PathPolyLine },
-            { "com.sun.star.drawing.GraphicObjectShape",   SdrObjKind::Graphic },
-            { "com.sun.star.drawing.GroupShape",           SdrObjKind::Group },
-            { "com.sun.star.drawing.TextShape",            SdrObjKind::Text },
-            { "com.sun.star.drawing.OLE2Shape",            SdrObjKind::OLE2 },
-            { "com.sun.star.drawing.PageShape",            SdrObjKind::Page },
-            { "com.sun.star.drawing.CaptionShape",         SdrObjKind::Caption },
-            { "com.sun.star.drawing.FrameShape",           SdrObjKind::OLEPluginFrame },
-            { "com.sun.star.drawing.CustomShape",          SdrObjKind::CustomShape },
-            { "com.sun.star.drawing.MediaShape",           SdrObjKind::Media },
-            { "com.sun.star.drawing.AnnotationShape",      SdrObjKind::Annotation },
+            { u"com.sun.star.drawing.RectangleShape"_ustr,       SdrObjKind::Rectangle },
+            { u"com.sun.star.drawing.EllipseShape"_ustr,         SdrObjKind::CircleOrEllipse },
+            { u"com.sun.star.drawing.ControlShape"_ustr,         SdrObjKind::UNO  },
+            { u"com.sun.star.drawing.ConnectorShape"_ustr,       SdrObjKind::Edge },
+            { u"com.sun.star.drawing.MeasureShape"_ustr,         SdrObjKind::Measure },
+            { u"com.sun.star.drawing.LineShape"_ustr,            SdrObjKind::Line },
+            { u"com.sun.star.drawing.PolyPolygonShape"_ustr,     SdrObjKind::Polygon },
+            { u"com.sun.star.drawing.PolyLineShape"_ustr,        SdrObjKind::PolyLine },
+            { u"com.sun.star.drawing.OpenBezierShape"_ustr,      SdrObjKind::PathLine },
+            { u"com.sun.star.drawing.ClosedBezierShape"_ustr,    SdrObjKind::PathFill },
+            { u"com.sun.star.drawing.OpenFreeHandShape"_ustr,    SdrObjKind::FreehandLine },
+            { u"com.sun.star.drawing.ClosedFreeHandShape"_ustr,  SdrObjKind::FreehandFill },
+            { u"com.sun.star.drawing.PolyPolygonPathShape"_ustr, SdrObjKind::PathPoly },
+            { u"com.sun.star.drawing.PolyLinePathShape"_ustr,    SdrObjKind::PathPolyLine },
+            { u"com.sun.star.drawing.GraphicObjectShape"_ustr,   SdrObjKind::Graphic },
+            { u"com.sun.star.drawing.GroupShape"_ustr,           SdrObjKind::Group },
+            { u"com.sun.star.drawing.TextShape"_ustr,            SdrObjKind::Text },
+            { u"com.sun.star.drawing.OLE2Shape"_ustr,            SdrObjKind::OLE2 },
+            { u"com.sun.star.drawing.PageShape"_ustr,            SdrObjKind::Page },
+            { u"com.sun.star.drawing.CaptionShape"_ustr,         SdrObjKind::Caption },
+            { u"com.sun.star.drawing.FrameShape"_ustr,           SdrObjKind::OLEPluginFrame },
+            { u"com.sun.star.drawing.CustomShape"_ustr,          SdrObjKind::CustomShape },
+            { u"com.sun.star.drawing.MediaShape"_ustr,           SdrObjKind::Media },
+            { u"com.sun.star.drawing.AnnotationShape"_ustr,      SdrObjKind::Annotation },
 
-            { "com.sun.star.drawing.Shape3DSceneObject",   SdrObjKind::E3D_Scene },
-            { "com.sun.star.drawing.Shape3DCubeObject",    SdrObjKind::E3D_Cube },
-            { "com.sun.star.drawing.Shape3DSphereObject",  SdrObjKind::E3D_Sphere },
-            { "com.sun.star.drawing.Shape3DLatheObject",   SdrObjKind::E3D_Lathe },
-            { "com.sun.star.drawing.Shape3DExtrudeObject", SdrObjKind::E3D_Extrusion },
-            { "com.sun.star.drawing.Shape3DPolygonObject", SdrObjKind::E3D_Polygon },
+            { u"com.sun.star.drawing.Shape3DSceneObject"_ustr,   SdrObjKind::E3D_Scene },
+            { u"com.sun.star.drawing.Shape3DCubeObject"_ustr,    SdrObjKind::E3D_Cube },
+            { u"com.sun.star.drawing.Shape3DSphereObject"_ustr,  SdrObjKind::E3D_Sphere },
+            { u"com.sun.star.drawing.Shape3DLatheObject"_ustr,   SdrObjKind::E3D_Lathe },
+            { u"com.sun.star.drawing.Shape3DExtrudeObject"_ustr, SdrObjKind::E3D_Extrusion },
+            { u"com.sun.star.drawing.Shape3DPolygonObject"_ustr, SdrObjKind::E3D_Polygon },
     };
 
     return aImpl;

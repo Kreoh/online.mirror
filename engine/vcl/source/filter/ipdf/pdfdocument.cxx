@@ -12,6 +12,7 @@
 
 #include <map>
 #include <memory>
+#include <ranges>
 #include <vector>
 
 #include <cpo/uno/Sequence.hxx>
@@ -637,7 +638,14 @@ void PDFDocument::WriteXRef(sal_uInt64 nXRefOffset, PDFReferenceElement const* p
 
         // Write stream data.
         SvMemoryStream aXRefStream;
-        const size_t nOffsetLen = 3;
+        sal_uInt64 nMaxOffset = 0;
+        for (const auto& rXRef : m_aXRef)
+            if (rXRef.second.GetDirty())
+                nMaxOffset = std::max(nMaxOffset, rXRef.second.GetOffset());
+        // the second field has to hold the largest offset the update writes
+        size_t nOffsetLen = 1;
+        for (sal_uInt64 nRest = nMaxOffset; nRest > 0xff; nRest >>= 8)
+            ++nOffsetLen;
         // 3 additional bytes: predictor, the first and the third field.
         const size_t nLineLength = nOffsetLen + 3;
         // This is the line as it appears before tweaking according to the predictor.
@@ -680,8 +688,7 @@ void PDFDocument::WriteXRef(sal_uInt64 nXRefOffset, PDFReferenceElement const* p
                 size_t nByte = nOffsetLen - i - 1;
                 // Fields requiring more than one byte are stored with the
                 // high-order byte first.
-                unsigned char nCh = (rEntry.GetOffset() & (0xff << (nByte * 8))) >> (nByte * 8);
-                aOrigLine[nPos++] = nCh;
+                aOrigLine[nPos++] = static_cast<unsigned char>(rEntry.GetOffset() >> (nByte * 8));
             }
 
             // Third field.
@@ -701,8 +708,10 @@ void PDFDocument::WriteXRef(sal_uInt64 nXRefOffset, PDFReferenceElement const* p
         }
 
         m_aEditBuffer.WriteNumberAsString(nXRefStreamId);
-        m_aEditBuffer.WriteOString(
-            " 0 obj\n<</DecodeParms<</Columns 5/Predictor 12>>/Filter/FlateDecode");
+        m_aEditBuffer.WriteOString(" 0 obj\n<</DecodeParms<</Columns ");
+        // the bytes of a row apart from the predictor byte, so it follows /W
+        m_aEditBuffer.WriteNumberAsString(nLineLength - 1);
+        m_aEditBuffer.WriteOString("/Predictor 12>>/Filter/FlateDecode");
 
         // ID.
         auto pID = dynamic_cast<PDFArrayElement*>(m_pXRefStream->Lookup("ID"_ostr));
@@ -780,7 +789,8 @@ void PDFDocument::WriteXRef(sal_uInt64 nXRefOffset, PDFReferenceElement const* p
         m_aEditBuffer.WriteOString("/Size ");
         m_aEditBuffer.WriteNumberAsString(m_aXRef.size());
 
-        m_aEditBuffer.WriteOString("/Type/XRef/W[1 3 1]>>\nstream\n");
+        m_aEditBuffer.WriteOString(rtl::Concat2View(
+            "/Type/XRef/W[1 " + OString::number(sal_Int32(nOffsetLen)) + " 1]>>\nstream\n"));
         aXRefStream.Seek(0);
         m_aEditBuffer.WriteStream(aXRefStream);
         m_aEditBuffer.WriteOString("\nendstream\nendobj\n\n");
@@ -1261,7 +1271,7 @@ bool PDFDocument::Tokenize(SvStream& rStream, TokenizeMode eMode,
                             return false;
                         }
 
-                        PDFDocument::SkipLineBreaks(rStream);
+                        PDFDocument::SkipEndOfLine(rStream);
                         auto pStreamElement = new PDFStreamElement(nLength);
                         if (pObject)
                             pObject->SetStream(pStreamElement);
@@ -1606,14 +1616,16 @@ void PDFDocument::ReadXRefStream(SvStream& rStream)
     std::vector<char> aBuf(nLength);
     rStream.ReadBytes(aBuf.data(), aBuf.size());
 
-    auto pFilter = dynamic_cast<PDFNameElement*>(pObject->Lookup("Filter"_ostr));
-    if (!pFilter)
+    PDFElement* pFilterElement = pObject->Lookup("Filter"_ostr);
+    auto pFilter = dynamic_cast<PDFNameElement*>(pFilterElement);
+    if (pFilterElement && !pFilter)
     {
-        SAL_WARN("vcl.filter", "PDFDocument::ReadXRefStream: no Filter found");
+        // ISO 32000-2 Table 5 allows an array of filters, which this reader does not apply
+        SAL_WARN("vcl.filter", "PDFDocument::ReadXRefStream: filter is not a name");
         return;
     }
 
-    if (pFilter->GetValue() != "FlateDecode")
+    if (pFilter && pFilter->GetValue() != "FlateDecode")
     {
         SAL_WARN("vcl.filter",
                  "PDFDocument::ReadXRefStream: unexpected filter: " << pFilter->GetValue());
@@ -1636,16 +1648,21 @@ void PDFDocument::ReadXRefStream(SvStream& rStream)
                 nPredictor = pPredictor->GetValue();
     }
 
-    SvMemoryStream aSource(aBuf.data(), aBuf.size(), StreamMode::READ);
     SvMemoryStream aStream;
-    ZCodec aZCodec;
-    aZCodec.BeginCompression();
-    aZCodec.Decompress(aSource, aStream);
-    if (!aZCodec.EndCompression())
+    if (pFilter)
     {
-        SAL_WARN("vcl.filter", "PDFDocument::ReadXRefStream: decompression failed");
-        return;
+        SvMemoryStream aSource(aBuf.data(), aBuf.size(), StreamMode::READ);
+        ZCodec aZCodec;
+        aZCodec.BeginCompression();
+        aZCodec.Decompress(aSource, aStream);
+        if (!aZCodec.EndCompression())
+        {
+            SAL_WARN("vcl.filter", "PDFDocument::ReadXRefStream: decompression failed");
+            return;
+        }
     }
+    else
+        aStream.WriteBytes(aBuf.data(), aBuf.size());
 
     // Look up the first and the last entry we need to read.
     auto pIndex = dynamic_cast<PDFArrayElement*>(pObject->Lookup("Index"_ostr));
@@ -1705,8 +1722,9 @@ void PDFDocument::ReadXRefStream(SvStream& rStream)
         return;
     }
     int aW[nWSize];
-    // First character is the (kind of) repeated predictor.
-    int nLineLength = 1;
+    // only a PNG predictor tags each row with the one it used
+    const int nPredictorBytes = nPredictor > 1 ? 1 : 0;
+    int nLineLength = nPredictorBytes;
     for (size_t i = 0; i < nWSize; ++i)
     {
         auto pI = dynamic_cast<PDFNumberElement*>(pW->GetElements()[i]);
@@ -1719,7 +1737,7 @@ void PDFDocument::ReadXRefStream(SvStream& rStream)
         nLineLength += aW[i];
     }
 
-    if (nPredictor > 1 && nLineLength - 1 != nColumns)
+    if (nPredictor > 1 && nLineLength - nPredictorBytes != nColumns)
     {
         SAL_WARN("vcl.filter",
                  "PDFDocument::ReadXRefStream: /DecodeParms/Columns is inconsistent with /W");
@@ -1754,7 +1772,8 @@ void PDFDocument::ReadXRefStream(SvStream& rStream)
                 switch (nPredictor)
                 {
                     case 1:
-                        // No prediction.
+                        // no prediction, so the line is what the stream holds
+                        aFilteredLine[i] = aOrigLine[i];
                         break;
                     case 12:
                         // PNG prediction: up (on all rows).
@@ -1767,8 +1786,8 @@ void PDFDocument::ReadXRefStream(SvStream& rStream)
                 }
             }
 
-            // First character is already handled above.
-            int nPos = 1;
+            // the predictor byte, where there is one, is already handled above
+            int nPos = nPredictorBytes;
             size_t nType = 0;
             // Start of the current field in the stream data.
             int nOffset = nPos;
@@ -1916,22 +1935,26 @@ void PDFDocument::SkipWhitespace(SvStream& rStream)
     }
 }
 
-void PDFDocument::SkipLineBreaks(SvStream& rStream)
+void PDFDocument::SkipEndOfLine(SvStream& rStream)
 {
     char ch = 0;
 
-    while (true)
+    rStream.ReadChar(ch);
+    if (rStream.eof())
+        return;
+
+    if (ch == '\r')
     {
         rStream.ReadChar(ch);
         if (rStream.eof())
-            break;
-
-        if (ch != '\n' && ch != '\r')
-        {
-            rStream.SeekRel(-1);
             return;
-        }
+        if (ch != '\n')
+            rStream.SeekRel(-1);
+        return;
     }
+
+    if (ch != '\n')
+        rStream.SeekRel(-1);
 }
 
 size_t PDFDocument::GetObjectOffset(size_t nIndex) const
@@ -2040,6 +2063,14 @@ PDFObjectElement* PDFDocument::GetCatalog()
     return pRoot->LookupObject();
 }
 
+std::vector<PDFObjectElement*> PDFDocument::GetObjects()
+{
+    // the map holds what the file lists and what ParseStoredObjects unpacked from an object
+    // stream, so an object is here whether or not it stands in the file
+    auto aObjects = m_aIDObjects | std::views::values;
+    return { aObjects.begin(), aObjects.end() };
+}
+
 std::vector<PDFObjectElement*> PDFDocument::GetPages()
 {
     std::vector<PDFObjectElement*> aRet;
@@ -2115,6 +2146,13 @@ std::vector<PDFObjectElement*> PDFDocument::GetSignatureWidgets()
     }
 
     return aRet;
+}
+
+void PDFDocument::appendStringObject(OStringBuffer& rLine, std::string_view aBytes,
+                                     sal_Int32 /*nObject*/)
+{
+    pdf::COSWriter aWriter(rLine);
+    aWriter.writeLiteral(aBytes);
 }
 
 std::vector<unsigned char> PDFDocument::DecodeHexString(PDFHexStringElement const* pElement)
@@ -2259,7 +2297,6 @@ const OString& PDFHexStringElement::GetValue() const { return m_aValue; }
 
 bool PDFLiteralStringElement::Read(SvStream& rStream)
 {
-    char nPrevCh = 0;
     char ch = 0;
     rStream.ReadChar(ch);
     if (ch != '(')
@@ -2267,19 +2304,21 @@ bool PDFLiteralStringElement::Read(SvStream& rStream)
         SAL_INFO("vcl.filter", "PDFHexStringElement::Read: expected '(' as first character");
         return false;
     }
-    nPrevCh = ch;
     rStream.ReadChar(ch);
 
     // Start with 1 nesting level as we read a '(' above already.
     int nDepth = 1;
+    bool bEscaped = false;
     OStringBuffer aBuf;
     while (!rStream.eof())
     {
-        if (ch == '(' && nPrevCh != '\\')
-            ++nDepth;
-
-        if (ch == ')' && nPrevCh != '\\')
-            --nDepth;
+        if (!bEscaped)
+        {
+            if (ch == '(')
+                ++nDepth;
+            else if (ch == ')')
+                --nDepth;
+        }
 
         if (nDepth == 0)
         {
@@ -2289,8 +2328,9 @@ bool PDFLiteralStringElement::Read(SvStream& rStream)
                      "PDFLiteralStringElement::Read: m_aValue is '" << m_aValue << "'");
             return true;
         }
+        // a REVERSE SOLIDUS escapes the next character unless it is itself escaped
+        bEscaped = !bEscaped && ch == '\\';
         aBuf.append(ch);
-        nPrevCh = ch;
         rStream.ReadChar(ch);
     }
 
@@ -2929,6 +2969,13 @@ bool PDFNameElement::Read(SvStream& rStream)
 
     return false;
 }
+
+void PDFNameElement::writeString(OStringBuffer& rBuffer)
+{
+    rBuffer.append("/");
+    pdf::COSWriter::appendName(m_aValue, rBuffer); // this does the necessary escaping
+}
+
 
 const OString& PDFNameElement::GetValue() const { return m_aValue; }
 

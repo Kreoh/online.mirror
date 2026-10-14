@@ -44,7 +44,8 @@
 #include <unotools/saveopt.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -325,7 +326,7 @@ void Test::testGraphicShape()
         // download can proceed, then pump the event loop to let the
         // async download complete before export
         getSwDocShell()->getEmbeddedObjectContainer().setUserAllowsLinkUpdate(true);
-        getSwDoc()->GetEditShell()->GetLinkManager().UpdateAllLinks(false, nullptr, u""_ustr);
+        getSwDoc()->GetEditShell()->GetLinkManager().UpdateAllLinks(false, u""_ustr);
         Scheduler::ProcessEventsToIdle();
 
         // Export the document and import again for a check
@@ -333,7 +334,7 @@ void Test::testGraphicShape()
 
         // allow link updates on the reloaded document too
         getSwDocShell()->getEmbeddedObjectContainer().setUserAllowsLinkUpdate(true);
-        getSwDoc()->GetEditShell()->GetLinkManager().UpdateAllLinks(false, nullptr, u""_ustr);
+        getSwDoc()->GetEditShell()->GetLinkManager().UpdateAllLinks(false, u""_ustr);
         Scheduler::ProcessEventsToIdle();
 
         // Check whether graphic exported well
@@ -1279,7 +1280,7 @@ CPPUNIT_TEST_FIXTURE(Test, testListLabelPDFExport)
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
         comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
-    css::uno::Reference<frame::XStorable> xStorable(mxComponent, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<frame::XStorable> xStorable(mxComponent, cpo::uno::UNO_QUERY_THROW);
     xStorable->storeToURL(maTempFile.GetURL(), aMediaDescriptor.getAsConstPropertyValueList());
 
     // Parse the export result with pdfium.
@@ -1400,11 +1401,8 @@ CPPUNIT_TEST_FIXTURE(Test, testListLabelPDFExport)
     CPPUNIT_ASSERT_EQUAL(static_cast<decltype(nLbl)>(6), nLblTJ + nLblTj);
 
     auto nL(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject0 : aDocument.GetObjects())
     {
-        auto pObject0 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject0)
-            continue;
         auto pType0 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject0->Lookup("Type"_ostr));
         if (!pType0 || pType0->GetValue() != "StructElem")
         {
@@ -1686,7 +1684,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTableOfContentLinksHaveContentSet)
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
         comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
-    css::uno::Reference<frame::XStorable> xStorable(mxComponent, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<frame::XStorable> xStorable(mxComponent, cpo::uno::UNO_QUERY_THROW);
     xStorable->storeToURL(maTempFile.GetURL(), aMediaDescriptor.getAsConstPropertyValueList());
 
     // Parse the export result with pdfium.
@@ -1750,7 +1748,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf143311)
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
         comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
-    css::uno::Reference<frame::XStorable> xStorable(mxComponent, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<frame::XStorable> xStorable(mxComponent, cpo::uno::UNO_QUERY_THROW);
     xStorable->storeToURL(maTempFile.GetURL(), aMediaDescriptor.getAsConstPropertyValueList());
 
     vcl::filter::PDFDocument aDocument;

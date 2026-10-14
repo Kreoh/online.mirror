@@ -26,22 +26,115 @@ $(eval $(call gb_UnoApi_add_idlfiles,scriptinterop,,\
 ))
 
 $(eval $(call gb_UnoApi_add_idlfiles,scriptinterop,scriptinterop,\
+    AlignmentPosition \
+    ArrowStyle \
+    AuthMode \
+    AutofitType \
+    AutoTextType \
+    CellMergeState \
+    ColorType \
+    ContentAlignment \
+    DashStyle \
+    ElementType \
+    FillType \
+    GlyphType \
+    HorizontalAlignment \
+    HttpResponse \
     ImageOptions \
+    LineCategory \
+    LineFillType \
+    LineType \
+    LinkType \
+    ListPreset \
+    PageBackgroundType \
+    PageElementType \
+    PageType \
+    ParagraphAlignment \
+    ParagraphHeading \
+    PlaceholderType \
+    PredefinedLayout \
+    SelectionType \
+    ShapeType \
+    SlideLinkingMode \
+    SlidePosition \
+    SpacingMode \
+    TextAlignment \
+    TextBaselineOffset \
+    TextDirection \
+    ThemeColorType \
+    VideoSourceType \
+    XAffineTransform \
+    XAffineTransformBuilder \
+    XAutofit \
+    XAutoText \
     XBase \
+    XBlob \
+    XBody \
+    XBorder \
+    XChart \
+    XClientRuntime \
+    XColor \
+    XColorScheme \
+    XConnectionSite \
+    XContainerElement \
+    XCursor \
     XDocument \
     XDrawing \
+    XEditablePageBase \
+    XElement \
     XFactory \
+    XFill \
+    XFootnote \
+    XGroup \
+    XImage \
+    XInlineImage \
+    XLayout \
+    XLine \
+    XLineFill \
+    XLink \
+    XList \
+    XListStyle \
+    XMaster \
+    XNotesMaster \
+    XNotesPage \
     XPage \
+    XPageBackground \
+    XPageBase \
+    XPageElement \
+    XPageElementBase \
+    XPageElementRange \
+    XPageRange \
     XParagraph \
+    XParagraphStyle \
+    XPictureFill \
+    XPivotTable \
+    XPoint \
     XPresentation \
+    XRange \
+    XRangeBuilder \
+    XRangeElement \
     XSelection \
     XShape \
+    XSheet \
     XSlide \
     XSlideSelection \
+    XSlideTable \
+    XSlideTableCell \
+    XSlideTableCellRange \
+    XSlideTableColumn \
+    XSlideTableRow \
+    XSolidFill \
     XSpreadsheet \
+    XTable \
+    XTableCell \
+    XTableRow \
+    XText \
     XTextParagraph \
     XTextRange \
     XTextStyle \
+    XThemeColor \
+    XVideo \
+    XWordArt \
 ))
 
 # vim: set noet sw=4 ts=4:

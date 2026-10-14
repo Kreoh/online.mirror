@@ -23,7 +23,9 @@
 
 #include <salframe.hxx>
 
+#include <iomanip>
 #include <vector>
+#include <iomanip>
 
 #ifdef IOS
 #include <quartz/salgdi.h>

@@ -19,6 +19,7 @@
 #include <comphelper/sequenceashashmap.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -32,16 +33,16 @@ public:
     MathTypeFilter();
 
     // XFilter
-    bool SAL_CALL filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor) override;
-    void SAL_CALL cancel() override;
+    bool filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor) override;
+    void cancel() override;
 
     // XImporter
-    void SAL_CALL setTargetDocument(const uno::Reference<lang::XComponent>& xDoc) override;
+    void setTargetDocument(const uno::Reference<lang::XComponent>& xDoc) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& rServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 }
 
@@ -110,9 +111,9 @@ cpo::uno::Sequence<OUString> MathTypeFilter::getSupportedServiceNames()
     return { u"com.sun.star.document.ImportFilter"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Math_MathTypeFilter_get_implementation(
-    uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new MathTypeFilter);
 }

@@ -30,7 +30,7 @@
 namespace frm
 {
 using namespace ::comphelper;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -59,7 +59,7 @@ OHiddenModel::~OHiddenModel( )
 }
 
 
-css::uno::Reference< css::util::XCloneable > OHiddenModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OHiddenModel::createClone()
 {
     rtl::Reference<OHiddenModel> pClone = new OHiddenModel(this, getContext());
     pClone->clonedFrom(this);
@@ -166,8 +166,8 @@ void OHiddenModel::read(const Reference<XObjectInputStream>& _rxInStream)
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OHiddenModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OHiddenModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OHiddenModel(component));

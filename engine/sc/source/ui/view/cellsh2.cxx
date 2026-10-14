@@ -67,12 +67,15 @@
 #include <queryentry.hxx>
 #include <markdata.hxx>
 #include <documentlinkmgr.hxx>
+#include <warnbox.hxx>
 #include <officecfg/Office/Common.hxx>
 
 #include <o3tl/make_shared.hxx>
+#include <o3tl/string_view.hxx>
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 static bool lcl_GetTextToColumnsRange( const ScViewData& rData, ScRange& rRange, bool bDoEmptyCheckOnly )
 {
@@ -225,6 +228,37 @@ namespace
             ScModule::get()->UnregisterRefController(static_cast<sal_uInt16>(ScValidationDlg::SLOTID), m_xDlg);
         }
     };
+
+    // A cell range as the client states it, "startColumn, startRow, endColumn, endRow" on the
+    // sheet nTab of rDoc. False unless it holds four numbers that name a range of that sheet.
+    bool lcl_ParseCellRange(std::u16string_view aCellRange, const ScDocument& rDoc, SCTAB nTab,
+                            ScRange& rRange)
+    {
+        sal_Int32 nIndex = 0;
+        sal_Int64 aCells[4] = {};
+        for (sal_Int64& rCell : aCells)
+        {
+            if (nIndex < 0)
+                return false;
+
+            const std::u16string_view aCell = o3tl::trim(o3tl::getToken(aCellRange, 0, ',', nIndex));
+            if (aCell.empty()
+                || aCell.find_first_not_of(u"0123456789") != std::u16string_view::npos)
+                return false;
+
+            rCell = o3tl::toInt64(aCell);
+        }
+
+        // The digits above keep every number at zero or above, and the range runs from its first
+        // cell to its last, so the last cell is the one to hold against the sheet.
+        if (aCells[0] > aCells[2] || aCells[1] > aCells[3] || aCells[2] > rDoc.MaxCol()
+            || aCells[3] > rDoc.MaxRow())
+            return false;
+
+        rRange = ScRange(SCCOL(aCells[0]), SCROW(aCells[1]), nTab, SCCOL(aCells[2]),
+                         SCROW(aCells[3]), nTab);
+        return true;
+    }
 }
 
 void ScCellShell::ExecuteDB( SfxRequest& rReq )
@@ -269,7 +303,7 @@ void ScCellShell::ExecuteDB( SfxRequest& rReq )
                 {
                     //  show database beamer: SfxViewFrame call must be synchronous
 
-                    rViewFrame.ExecuteSlot( rReq, false );      // false = synchronous
+                    rViewFrame.ExecuteSlot( rReq );
 
                     //  select current database in database beamer
 
@@ -801,6 +835,42 @@ void ScCellShell::ExecuteDB( SfxRequest& rReq )
             }
             break;
 
+        case SID_SET_CALC_TABLE_RANGE:
+            {
+                // CellRange holds the range the table covers from now on. The table is the one
+                // that starts at the first of those cells, so a moved start resizes nothing.
+                const SfxStringItem* pRangeItem
+                    = pReqArgs ? pReqArgs->GetItemIfSet(SID_SET_CALC_TABLE_RANGE) : nullptr;
+                if (!pRangeItem)
+                    break;
+
+                ScDocument& rDoc = GetViewData().GetDocument();
+
+                ScRange aNewRange;
+                if (!lcl_ParseCellRange(pRangeItem->GetValue(), rDoc,
+                                        GetViewData().GetTabNumber(), aNewRange))
+                    break;
+
+                ScDBData* pDBData = rDoc.GetTableDBAtCursor(
+                    aNewRange.aStart.Col(), aNewRange.aStart.Row(), aNewRange.aStart.Tab(),
+                    ScDBDataPortion::AREA);
+                if (!pDBData)
+                    break;
+
+                ScRange aOldRange;
+                pDBData->GetArea(aOldRange);
+                if (aOldRange.aStart != aNewRange.aStart)
+                    break;
+
+                ScDBDocFunc aFunc(*GetViewData().GetDocShell());
+                aFunc.ResizeTable(*pDBData, aNewRange);
+
+                // The range goes out again whether the resize went through or was refused.
+                pTabViewShell->UpdateAllOverlays();
+                rReq.Done();
+            }
+            break;
+
         case SID_SELECT_DB:
             {
                 if ( pReqArgs )
@@ -1152,21 +1222,59 @@ void ScCellShell::ExecuteDB( SfxRequest& rReq )
                             {
                                 ScDocument& rImportDoc = pDocSh->GetDocument();
 
-                                OUString aUndo = ScResId( STR_UNDO_TEXTTOCOLUMNS );
-                                pDocSh->GetUndoManager()->EnterListAction( aUndo, aUndo, 0, nViewShellId );
-
-                                ScImportExport aImport( rImportDoc, aRange.aStart );
                                 ScAsciiOptions aOptions;
                                 pDlg->GetOptions( aOptions );
                                 pDlg->SaveParameters();
-                                aImport.SetExtOptions( aOptions );
-                                aImport.SetApi( false );
-                                aImport.SetImportBroadcast( true );
-                                aImport.SetOverwriting( true );
-                                pStream->Seek( 0 );
-                                aImport.ImportStream( *pStream, OUString(), SotClipboardFormatId::STRING );
 
-                                pDocSh->GetUndoManager()->LeaveListAction();
+                                auto aImportFunc =
+                                    [pStream, pDocSh, aRange, nViewShellId, aOptions]
+                                    {
+                                        ScDocument& rDestDoc = pDocSh->GetDocument();
+
+                                        OUString aUndo = ScResId( STR_UNDO_TEXTTOCOLUMNS );
+                                        pDocSh->GetUndoManager()->EnterListAction( aUndo, aUndo, 0, nViewShellId );
+
+                                        ScImportExport aImport( rDestDoc, aRange.aStart );
+                                        aImport.SetExtOptions( aOptions );
+                                        // The overwrite warning is put up below, so don't let
+                                        // ScImportExport ask a second time.
+                                        aImport.SetApi( true );
+                                        aImport.SetImportBroadcast( true );
+                                        aImport.SetOverwriting( true );
+                                        pStream->Seek( 0 );
+                                        aImport.ImportStream( *pStream, OUString(), SotClipboardFormatId::STRING );
+
+                                        pDocSh->GetUndoManager()->LeaveListAction();
+                                    };
+
+                                // Splitting a cell writes into the columns to its right, so find
+                                // out how far the data would reach and ask before throwing away
+                                // whatever is in the way. ScImportExport does check this itself,
+                                // but only with a synchronous dialog, which tiled rendering can
+                                // neither show nor wait for.
+                                ScImportExport aProbe( rImportDoc, aRange.aStart );
+                                aProbe.SetExtOptions( aOptions );
+                                aProbe.SetDetermineRangeOnly( true );
+                                pStream->Seek( 0 );
+                                aProbe.ImportStream( *pStream, OUString(), SotClipboardFormatId::STRING );
+
+                                const ScRange& rDest = aProbe.GetRange();
+                                const SCCOL nFirstOverwritten = aRange.aStart.Col() + 1;
+                                if ( rDest.aEnd.Col() >= nFirstOverwritten &&
+                                     !rImportDoc.IsBlockEmpty( nFirstOverwritten, rDest.aStart.Row(),
+                                                               rDest.aEnd.Col(), rDest.aEnd.Row(),
+                                                               aRange.aStart.Tab() ) )
+                                {
+                                    ScReplaceWarnBox::AskOverwriteAsync(
+                                        ScDocShell::GetActiveDialogParent(),
+                                        [aImportFunc](bool bOverwrite)
+                                        {
+                                            if ( bOverwrite )
+                                                aImportFunc();
+                                        });
+                                }
+                                else
+                                    aImportFunc();
                             }
 
                             pDlg->disposeOnce();

@@ -50,7 +50,7 @@
 #include <brdwin.hxx>
 #include <window.h>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 class SystemWindow::ImplData
 {
@@ -94,7 +94,7 @@ SystemWindow::SystemWindow(WindowType eType, const char* pIdleDebugName, bool tr
 }
 
 void SystemWindow::loadUI(vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription,
-    const css::uno::Reference<css::frame::XFrame> &rFrame)
+    const cpo::uno::Reference<css::frame::XFrame> &rFrame)
 {
     mbIsDeferredInit = true;
     mpDialogParent = pParent; //should be unset in doDeferredInit
@@ -917,36 +917,6 @@ void SystemWindow::SetMenuBar(MenuBar* pMenuBar)
         if( pNewWindow )
             mpImplData->mpTaskPaneList->AddWindow( pNewWindow );
     }
-}
-
-void SystemWindow::SetNotebookBar(const OUString& rUIXMLDescription,
-                                  const css::uno::Reference<css::frame::XFrame>& rFrame,
-                                  std::unique_ptr<NotebookBarAddonsItem> pNotebookBarAddonsItem,
-                                  bool bReloadNotebookbar)
-{
-    mbInSetNoteBookBar = true;
-
-    if (rUIXMLDescription != maNotebookBarUIFile || bReloadNotebookbar)
-    {
-        static_cast<ImplBorderWindow*>(mpWindowImpl->mpBorderWindow.get())
-            ->SetNotebookBar(rUIXMLDescription, rFrame, std::move(pNotebookBarAddonsItem));
-        maNotebookBarUIFile = rUIXMLDescription;
-        if(GetNotebookBar())
-            GetNotebookBar()->SetSystemWindow(this);
-    }
-
-    mbInSetNoteBookBar = false;
-}
-
-void SystemWindow::CloseNotebookBar()
-{
-    static_cast<ImplBorderWindow*>(mpWindowImpl->mpBorderWindow.get())->CloseNotebookBar();
-    maNotebookBarUIFile.clear();
-}
-
-VclPtr<NotebookBar> const & SystemWindow::GetNotebookBar() const
-{
-    return static_cast<ImplBorderWindow*>(mpWindowImpl->mpBorderWindow.get())->GetNotebookBar();
 }
 
 void SystemWindow::SetMenuBarMode( MenuBarMode nMode )

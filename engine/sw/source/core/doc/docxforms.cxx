@@ -19,10 +19,9 @@
 
 #include <doc.hxx>
 #include <docsh.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/frame/XModule.hpp>
 #include <com/sun/star/xforms/Model.hpp>
-#include <com/sun/star/xforms/XModel2.hpp>
 #include <com/sun/star/xforms/XFormsUIHelper1.hpp>
 #include <com/sun/star/xforms/XForms.hpp>
 #include <comphelper/processfactory.hxx>
@@ -30,12 +29,13 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using uno::Reference;
 using uno::UNO_QUERY;
 using cpo::uno::Any;
 using cpo::uno::Exception;
-using xforms::XModel2;
+using xforms::XModel;
 using frame::XModule;
 using xforms::XFormsUIHelper1;
 using com::sun::star::container::XIndexAccess;
@@ -59,7 +59,7 @@ void SwDoc::initXForms( bool bCreateDefaultModel )
         Reference< XModule > xModule;
         SwDocShell* pShell( GetDocShell() );
         if ( pShell )
-            xModule.set(pShell->GetModel(), css::uno::UNO_QUERY);
+            xModule.set(pShell->GetModel(), cpo::uno::UNO_QUERY);
         OSL_ENSURE( xModule.is(), "SwDoc::initXForms: no XModule at the document!" );
         if ( xModule.is() )
             xModule->setIdentifier( u"com.sun.star.xforms.XMLFormDocument"_ustr );
@@ -68,7 +68,7 @@ void SwDoc::initXForms( bool bCreateDefaultModel )
         if( bCreateDefaultModel && mxXForms.is() )
         {
             OUString sName(u"Model 1"_ustr);
-            Reference<XModel2> xModel = xforms::Model::create( comphelper::getProcessComponentContext() );
+            Reference<XModel> xModel = xforms::Model::create( comphelper::getProcessComponentContext() );
             xModel->setID( sName );
             Reference<XFormsUIHelper1> xHelper( xModel, uno::UNO_QUERY );
             if (!xHelper)

@@ -54,8 +54,8 @@
 
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::text;
 using namespace com::sun::star::style;
 using namespace ::com::sun::star::i18n;
@@ -70,9 +70,9 @@ struct SvXMLUnitConverter::Impl
     util::Date m_aNullDate;
     mutable uno::Reference< text::XNumberingTypeInfo > m_xNumTypeInfo;
     mutable uno::Reference< i18n::XCharacterClassification > m_xCharClass;
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
 
-    Impl(uno::Reference<uno::XComponentContext> xContext,
+    Impl(uno::Reference<cpo::uno::XComponentContext> xContext,
             sal_Int16 const eCoreMeasureUnit,
             sal_Int16 const eXMLMeasureUnit,
             SvtSaveOptions::ODFSaneDefaultVersion const nODFVersion)
@@ -131,7 +131,7 @@ SvtSaveOptions::ODFSaneDefaultVersion SvXMLUnitConverter::getSaneDefaultVersion(
 */
 
 SvXMLUnitConverter::SvXMLUnitConverter(
-    const uno::Reference<uno::XComponentContext>& xContext,
+    const uno::Reference<cpo::uno::XComponentContext>& xContext,
     sal_Int16 const eCoreMeasureUnit,
     sal_Int16 const eXMLMeasureUnit,
     SvtSaveOptions::ODFSaneDefaultVersion const nODFVersion)
@@ -342,12 +342,12 @@ bool SvXMLUnitConverter::convertDouble(double& rValue,
 }
 
 /** get the Null Date of the XModel and set it to the UnitConverter */
-bool SvXMLUnitConverter::setNullDate(const css::uno::Reference <css::frame::XModel>& xModel)
+bool SvXMLUnitConverter::setNullDate(const cpo::uno::Reference <css::frame::XModel>& xModel)
 {
-    css::uno::Reference <css::util::XNumberFormatsSupplier> xNumberFormatsSupplier (xModel, css::uno::UNO_QUERY);
+    cpo::uno::Reference <css::util::XNumberFormatsSupplier> xNumberFormatsSupplier (xModel, cpo::uno::UNO_QUERY);
     if (xNumberFormatsSupplier.is())
     {
-        const css::uno::Reference <css::beans::XPropertySet> xPropertySet = xNumberFormatsSupplier->getNumberFormatSettings();
+        const cpo::uno::Reference <css::beans::XPropertySet> xPropertySet = xNumberFormatsSupplier->getNumberFormatSettings();
         return xPropertySet.is() && (xPropertySet->getPropertyValue(u"NullDate"_ustr) >>= m_pImpl->m_aNullDate);
     }
     return false;

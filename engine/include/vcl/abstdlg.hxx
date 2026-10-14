@@ -30,7 +30,7 @@
 #include <functional>
 #include <memory>
 
-namespace com::sun::star::uno { template <class interface_type> class Reference; }
+namespace cpo::uno { template <class interface_type> class Reference; }
 
 namespace com::sun::star::frame { class XModel; }
 
@@ -152,12 +152,6 @@ protected:
     virtual ~AbstractQrCodeGenDialog() override = default;
 };
 
-class VCL_DLLPUBLIC AbstractAdditionsDialog : public VclAbstractDialog
-{
-protected:
-    virtual ~AbstractAdditionsDialog() override = default;
-};
-
 /** Edit Diagram dialog */
 class VCL_DLLPUBLIC AbstractDiagramDialog : public VclAbstractDialog
 {
@@ -180,29 +174,26 @@ class VCL_DLLPUBLIC VclAbstractDialogFactory
 public:
     virtual             ~VclAbstractDialogFactory();    // needed for export of vtable
     static VclAbstractDialogFactory* Create();
-    // The Id is an implementation detail of the factory
-    virtual VclPtr<VclAbstractDialog> CreateVclDialog(weld::Window* pParent, sal_uInt32 nId) = 0;
-
     // creates instance of PasswordToOpenModifyDialog from cui
     virtual VclPtr<AbstractPasswordToOpenModifyDialog> CreatePasswordToOpenModifyDialog(weld::Window * pParent, sal_uInt16 nMaxPasswdLen, bool bIsPasswordToModify) = 0;
 
     // creates instance of SignatureDialog from cui
     virtual VclPtr<AbstractSignatureLineDialog>
     CreateSignatureLineDialog(weld::Window* pParent,
-                              const css::uno::Reference<css::frame::XModel> xModel,
+                              const cpo::uno::Reference<css::frame::XModel> xModel,
                               bool bEditExisting)
         = 0;
 
     // creates instance of SignSignatureDialog from cui
     virtual VclPtr<AbstractSignSignatureLineDialog>
     CreateSignSignatureLineDialog(weld::Window* pParent,
-                                  const css::uno::Reference<css::frame::XModel> xModel)
+                                  const cpo::uno::Reference<css::frame::XModel> xModel)
         = 0;
 
     // creates instance of QrCodeDialog from cui
     virtual VclPtr<AbstractQrCodeGenDialog>
     CreateQrCodeGenDialog(weld::Window* pParent,
-                              const css::uno::Reference<css::frame::XModel> xModel,
+                              const cpo::uno::Reference<css::frame::XModel> xModel,
                               bool bEditExisting)
         = 0;
 
@@ -211,8 +202,6 @@ public:
         weld::Dialog& rParentDialog) = 0;
 
     // create additions dialog
-    virtual VclPtr<AbstractAdditionsDialog>
-        CreateAdditionsDialog(weld::Window* pParent, const OUString& sAdditionsTag) = 0;
 
     virtual VclPtr<AbstractDiagramDialog> CreateDiagramDialog(
         weld::Window* pParent,

@@ -16,19 +16,12 @@
 
 #include <COKit/COKit.hxx>
 
-#include <cstdlib>
 #include <string>
 #include <unordered_map>
 
 namespace LOKitHelper
 {
     constexpr auto tunnelledDialogImageCacheSize = 100;
-
-    struct StringDeleter
-    {
-        void operator()(char* string) { std::free(string); }
-    };
-    using ScopedString = std::unique_ptr<char, StringDeleter>;
 
     inline std::string documentTypeToString(COKitDocumentType type)
     {
@@ -126,10 +119,9 @@ namespace LOKitHelper
 
     inline void fetchCalcSpecificData(COKitDocument *loKitDocument, std::unordered_map<std::string, std::string> &resultInfo, int part)
     {
-        long lastColumn, lastRow;
-        loKitDocument->getDataArea(part, &lastColumn, &lastRow);
-        resultInfo["lastcolumn"] = std::to_string(lastColumn);
-        resultInfo["lastrow"] = std::to_string(lastRow);
+        const COKitDataArea aDataArea = loKitDocument->getDataArea(part);
+        resultInfo["lastcolumn"] = std::to_string(aDataArea.nLastColumn);
+        resultInfo["lastrow"] = std::to_string(aDataArea.nLastRow);
 
         std::string value(loKitDocument->getCommandValues(".uno:DefinePrintArea"));
         if (!value.empty())
@@ -153,17 +145,16 @@ namespace LOKitHelper
         std::unordered_map<std::string, std::string> resultInfo;
 
         const int partsCount = loKitDocument->getParts();
-        const int selectedPart = loKitDocument->getPart();
+        const std::string selectedPart = loKitDocument->getPart();
 
-        long width, height;
-        loKitDocument->getDocumentSize(&width, &height);
+        const COKitSize aDocSize = loKitDocument->getDocumentSize();
         int viewId = loKitDocument->getView();
 
         resultInfo["type"] = '"' + documentTypeToString(type) + '"';
         resultInfo["partscount"] = std::to_string(partsCount);
-        resultInfo["selectedpart"] = std::to_string(selectedPart);
-        resultInfo["width"] = std::to_string(width);
-        resultInfo["height"] = std::to_string(height);
+        resultInfo["selectedpart"] = '"' + selectedPart + '"';
+        resultInfo["width"] = std::to_string(aDocSize.nWidth);
+        resultInfo["height"] = std::to_string(aDocSize.nHeight);
         resultInfo["viewid"] = std::to_string(viewId);
 
         std::string value(loKitDocument->getCommandValues(".uno:ReadOnly"));
@@ -205,7 +196,8 @@ namespace LOKitHelper
         std::string hasComments = "false";
 
         if (type == COKitDocumentType::SPREADSHEET)
-            fetchCalcSpecificData(loKitDocument, resultInfo, selectedPart);
+            // A spreadsheet's part identifier is the sheet index in decimal form.
+            fetchCalcSpecificData(loKitDocument, resultInfo, std::atoi(selectedPart.c_str()));
         else if (type == COKitDocumentType::TEXT)
             fetchWriterSpecificData(loKitDocument, resultInfo, mode, hasComments);
 

@@ -87,18 +87,21 @@ const XParaPortion& XParaPortionList::operator [](size_t i) const
     return *maList[i];
 }
 
-ContentInfo::ContentInfo( SfxItemPool& rPool ) :
+EditTextObjectParagraph::EditTextObjectParagraph( SfxItemPool& rPool ) :
     eFamily(SfxStyleFamily::Para),
     aParaAttribs(SfxItemSet::makeFixedSfxItemSet<EE_PARA_START, EE_CHAR_END>(rPool))
 {
 }
 
 // the real Copy constructor is nonsense, since I have to work with another Pool!
-ContentInfo::ContentInfo( const ContentInfo& rCopyFrom, SfxItemPool& rPoolToUse ) :
+EditTextObjectParagraph::EditTextObjectParagraph( const EditTextObjectParagraph& rCopyFrom, SfxItemPool& rPoolToUse ) :
     maText(rCopyFrom.maText),
     aStyle(rCopyFrom.aStyle),
     eFamily(rCopyFrom.eFamily),
-    aParaAttribs(SfxItemSet::makeFixedSfxItemSet<EE_PARA_START, EE_CHAR_END>(rPoolToUse))
+    aParaAttribs(SfxItemSet::makeFixedSfxItemSet<EE_PARA_START, EE_CHAR_END>(rPoolToUse)),
+    mnNumberingDepth(rCopyFrom.mnNumberingDepth),
+    mnNumberingStartValue(rCopyFrom.mnNumberingStartValue),
+    mbNumberingRestart(rCopyFrom.mbNumberingRestart)
 {
     // this should ensure that the Items end up in the correct Pool!
     aParaAttribs.Set( rCopyFrom.GetParaAttribs() );
@@ -112,38 +115,41 @@ ContentInfo::ContentInfo( const ContentInfo& rCopyFrom, SfxItemPool& rPoolToUse 
         mpWrongs.reset(rCopyFrom.GetWrongList()->Clone());
 }
 
-ContentInfo::~ContentInfo()
+EditTextObjectParagraph::~EditTextObjectParagraph()
 {
     maCharAttribs.clear();
 }
 
-void ContentInfo::NormalizeString( svl::SharedStringPool& rPool )
+void EditTextObjectParagraph::NormalizeString( svl::SharedStringPool& rPool )
 {
     maText = rPool.intern(OUString(maText.getData()));
 }
 
 
-OUString ContentInfo::GetText() const
+OUString EditTextObjectParagraph::GetText() const
 {
     rtl_uString* p = const_cast<rtl_uString*>(maText.getData());
     return OUString(p);
 }
 
-sal_Int32 ContentInfo::GetTextLen() const
+sal_Int32 EditTextObjectParagraph::GetTextLen() const
 {
     const rtl_uString* p = maText.getData();
     return p->length;
 }
 
-void ContentInfo::SetText( const OUString& rStr )
+void EditTextObjectParagraph::SetText( const OUString& rStr )
 {
     maText = svl::SharedString(rStr.pData, nullptr);
 }
 
-void ContentInfo::dumpAsXml(xmlTextWriterPtr pWriter) const
+void EditTextObjectParagraph::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
     (void)xmlTextWriterStartElement(pWriter, BAD_CAST("ContentInfo"));
     (void)xmlTextWriterWriteAttribute(pWriter, BAD_CAST("style"), BAD_CAST(aStyle.toUtf8().getStr()));
+    (void)xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("nNumberingDepth"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(mnNumberingDepth));
+    (void)xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("mnNumberingStartValue"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(mnNumberingStartValue));
+    (void)xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("mbNumberingRestart"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(mbNumberingRestart));
     (void)xmlTextWriterStartElement(pWriter, BAD_CAST("text"));
     OUString aText = GetText();
     // TODO share code with sax_fastparser::FastSaxSerializer::write().
@@ -161,18 +167,18 @@ void ContentInfo::dumpAsXml(xmlTextWriterPtr pWriter) const
     (void)xmlTextWriterEndElement(pWriter);
 }
 
-const WrongList* ContentInfo::GetWrongList() const
+const WrongList* EditTextObjectParagraph::GetWrongList() const
 {
     return mpWrongs.get();
 }
 
-void ContentInfo::SetWrongList( WrongList* p )
+void EditTextObjectParagraph::SetWrongList( WrongList* p )
 {
     mpWrongs.reset(p);
 }
 
 // #i102062#
-bool ContentInfo::isWrongListEqual(const ContentInfo& rCompare) const
+bool EditTextObjectParagraph::isWrongListEqual(const EditTextObjectParagraph& rCompare) const
 {
     if(GetWrongList() == rCompare.GetWrongList())
         return true;
@@ -184,7 +190,7 @@ bool ContentInfo::isWrongListEqual(const ContentInfo& rCompare) const
 }
 
 #if DEBUG_EDIT_ENGINE
-void ContentInfo::Dump() const
+void EditTextObjectParagraph::Dump() const
 {
     cout << "--" << endl;
     cout << "text: '" << OUString(const_cast<rtl_uString*>(maText.getData())) << "'" << endl;
@@ -199,26 +205,22 @@ void ContentInfo::Dump() const
 }
 #endif
 
-bool ContentInfo::Equals(const ContentInfo& rCompare, bool bComparePool) const
+bool EditTextObjectParagraph::Equals(const EditTextObjectParagraph& rCompare, bool bComparePool) const
 {
     return maText == rCompare.maText && aStyle == rCompare.aStyle && eFamily == rCompare.eFamily
            && aParaAttribs.Equals(rCompare.aParaAttribs, bComparePool)
-           && maCharAttribs == rCompare.maCharAttribs;
-}
-
-EditTextObject::~EditTextObject() = default;
-
-std::unique_ptr<EditTextObject> EditTextObjectImpl::Clone() const
-{
-    return std::make_unique<EditTextObjectImpl>(*this);
+           && maCharAttribs == rCompare.maCharAttribs
+           && mnNumberingDepth == rCompare.mnNumberingDepth
+           && mnNumberingStartValue == rCompare.mnNumberingStartValue
+           && mbNumberingRestart == rCompare.mbNumberingRestart;
 }
 
 bool EditTextObject::Equals( const EditTextObject& rCompare ) const
 {
-    return toImpl(*this).Equals(toImpl(rCompare), false /*bComparePool*/);
+    return Equals(rCompare, false /*bComparePool*/);
 }
 
-void EditTextObjectImpl::dumpAsXml(xmlTextWriterPtr pWriter) const
+void EditTextObject::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
     bool bOwns = false;
     if (!pWriter)
@@ -234,7 +236,7 @@ void EditTextObjectImpl::dumpAsXml(xmlTextWriterPtr pWriter) const
     sal_Int32 nCount = GetParagraphCount();
     for (sal_Int32 i = 0; i < nCount; ++i)
     {
-        maContents[i]->dumpAsXml(pWriter);
+        maParagraphs[i]->dumpAsXml(pWriter);
     }
     (void)xmlTextWriterEndElement(pWriter);
 
@@ -246,7 +248,7 @@ void EditTextObjectImpl::dumpAsXml(xmlTextWriterPtr pWriter) const
 }
 
 #if DEBUG_EDIT_ENGINE
-void EditTextObjectImpl::Dump() const
+void EditTextObject::Dump() const
 {
     for (auto const& content : maContents)
         content.Dump();
@@ -269,7 +271,7 @@ static rtl::Reference<SfxItemPool> getEditEngineItemPool(SfxItemPool* pPool, Map
     return pRetval;
 }
 
-EditTextObjectImpl::EditTextObjectImpl(SfxItemPool* pP, MapUnit eDefaultMetric, bool bVertical,
+EditTextObject::EditTextObject(SfxItemPool* pP, MapUnit eDefaultMetric, bool bVertical,
     TextRotation eRotation, SvtScriptType eScriptType)
     : mpPool(getEditEngineItemPool(pP, eDefaultMetric))
     , meUserType(OutlinerMode::DontKnow)
@@ -280,7 +282,7 @@ EditTextObjectImpl::EditTextObjectImpl(SfxItemPool* pP, MapUnit eDefaultMetric, 
 {
 }
 
-EditTextObjectImpl::EditTextObjectImpl( const EditTextObjectImpl& r )
+EditTextObject::EditTextObject( const EditTextObject& r )
     : mpPool(r.mpPool)
     , meUserType(r.meUserType)
     , meScriptType(r.meScriptType)
@@ -290,60 +292,63 @@ EditTextObjectImpl::EditTextObjectImpl( const EditTextObjectImpl& r )
 {
     // Do not copy PortionInfo
 
-    maContents.reserve(r.maContents.size());
-    for (auto const& content : r.maContents)
-        maContents.push_back(std::unique_ptr<ContentInfo>(new ContentInfo(*content, *mpPool)));
+    maParagraphs.reserve(r.maParagraphs.size());
+    for (auto const& content : r.maParagraphs)
+        maParagraphs.push_back(std::unique_ptr<EditTextObjectParagraph>(new EditTextObjectParagraph(*content, *mpPool)));
 }
 
-EditTextObjectImpl::~EditTextObjectImpl()
+EditTextObject::EditTextObject( EditTextObject&& ) noexcept = default;
+
+EditTextObject::~EditTextObject()
 {
     ClearPortionInfo();
 
     // Remove contents before deleting the pool instance since each content
     // has to access the pool instance in its destructor.
-    maContents.clear();
+    maParagraphs.clear();
 }
 
+EditTextObject& EditTextObject::operator=(EditTextObject&&) = default;
 
-void EditTextObjectImpl::SetUserType( OutlinerMode n )
+void EditTextObject::SetUserType( OutlinerMode n )
 {
     meUserType = n;
 }
 
-void EditTextObjectImpl::NormalizeString( svl::SharedStringPool& rPool )
+void EditTextObject::NormalizeString( svl::SharedStringPool& rPool )
 {
-    for (auto const& content : maContents)
+    for (auto const& content : maParagraphs)
     {
-        ContentInfo& rInfo = *content;
+        EditTextObjectParagraph& rInfo = *content;
         rInfo.NormalizeString(rPool);
     }
 }
 
-std::vector<svl::SharedString> EditTextObjectImpl::GetSharedStrings() const
+std::vector<svl::SharedString> EditTextObject::GetSharedStrings() const
 {
     std::vector<svl::SharedString> aSSs;
-    aSSs.reserve(maContents.size());
-    for (auto const& content : maContents)
+    aSSs.reserve(maParagraphs.size());
+    for (auto const& content : maParagraphs)
     {
-        const ContentInfo& rInfo = *content;
+        const EditTextObjectParagraph& rInfo = *content;
         aSSs.push_back(rInfo.GetSharedString());
     }
     return aSSs;
 }
 
-bool EditTextObjectImpl::IsEffectivelyVertical() const
+bool EditTextObject::IsEffectivelyVertical() const
 {
     return (mbVertical && meRotation == TextRotation::NONE) ||
         (!mbVertical && meRotation != TextRotation::NONE);
 }
 
-bool EditTextObjectImpl::IsTopToBottom() const
+bool EditTextObject::IsTopToBottom() const
 {
     return (mbVertical && meRotation == TextRotation::NONE) ||
         (!mbVertical && meRotation == TextRotation::TOPTOBOTTOM);
 }
 
-void EditTextObjectImpl::SetVertical( bool bVert)
+void EditTextObject::SetVertical( bool bVert)
 {
     if (bVert != mbVertical)
     {
@@ -352,12 +357,12 @@ void EditTextObjectImpl::SetVertical( bool bVert)
     }
 }
 
-bool EditTextObjectImpl::GetVertical() const
+bool EditTextObject::GetVertical() const
 {
     return mbVertical;
 }
 
-void EditTextObjectImpl::SetRotation(TextRotation nRotation)
+void EditTextObject::SetRotation(TextRotation nRotation)
 {
     if (meRotation != nRotation)
     {
@@ -366,44 +371,36 @@ void EditTextObjectImpl::SetRotation(TextRotation nRotation)
     }
 }
 
-TextRotation EditTextObjectImpl::GetRotation() const
+TextRotation EditTextObject::GetRotation() const
 {
     return meRotation;
 }
 
-XEditAttribute EditTextObjectImpl::CreateAttrib( const SfxPoolItem& rItem, sal_Int32 nStart, sal_Int32 nEnd )
+EditTextObjectParagraph* EditTextObject::CreateAndInsertParagraph()
 {
-    return XEditAttribute(*mpPool, rItem, nStart, nEnd);
+    maParagraphs.push_back(std::unique_ptr<EditTextObjectParagraph>(new EditTextObjectParagraph(*mpPool)));
+    return maParagraphs.back().get();
 }
 
-ContentInfo* EditTextObjectImpl::CreateAndInsertContent()
+sal_Int32 EditTextObject::GetParagraphCount() const
 {
-    maContents.push_back(std::unique_ptr<ContentInfo>(new ContentInfo(*mpPool)));
-    return maContents.back().get();
-}
-
-sal_Int32 EditTextObjectImpl::GetParagraphCount() const
-{
-    size_t nSize = maContents.size();
+    size_t nSize = maParagraphs.size();
     if (nSize > EE_PARA_MAX)
     {
-        SAL_WARN( "editeng", "EditTextObjectImpl::GetParagraphCount - overflow " << nSize);
+        SAL_WARN( "editeng", "EditTextObject::GetParagraphCount - overflow " << nSize);
         return EE_PARA_MAX;
     }
     return static_cast<sal_Int32>(nSize);
 }
 
-OUString EditTextObjectImpl::GetText(sal_Int32 nPara) const
+OUString EditTextObject::GetText(sal_Int32 nPara) const
 {
-    if (nPara < 0 || o3tl::make_unsigned(nPara) >= maContents.size())
-        return OUString();
-
-    return maContents[nPara]->GetText();
+    return maParagraphs[nPara]->GetText();
 }
 
-OUString EditTextObjectImpl::GetText(LineEnd eEnd) const
+OUString EditTextObject::GetText(LineEnd eEnd) const
 {
-    const size_t nParas = maContents.size();
+    const size_t nParas = maParagraphs.size();
     if (nParas == 0)
         return OUString();
 
@@ -415,28 +412,55 @@ OUString EditTextObjectImpl::GetText(LineEnd eEnd) const
     {
         if (!aSep.isEmpty() && nPara > 0)
             aBuffer.append(aSep);
-        aBuffer.append(maContents[nPara]->GetText());
+        aBuffer.append(maParagraphs[nPara]->GetText());
     }
 
     return aBuffer.makeStringAndClear();
 }
 
-sal_Int32 EditTextObjectImpl::GetTextLen(sal_Int32 nPara ) const
+sal_Int32 EditTextObject::GetTextLen(sal_Int32 nPara ) const
 {
-    if (nPara < 0 || o3tl::make_unsigned(nPara) >= maContents.size())
-        return 0;
-
-    return maContents[nPara]->GetTextLen();
+    return maParagraphs[nPara]->GetTextLen();
 }
 
-void EditTextObjectImpl::ClearPortionInfo()
+sal_Int16 EditTextObject::GetNumberingDepth(sal_Int32 nPara) const
+{
+    return maParagraphs[nPara]->GetNumberingDepth();
+}
+
+void EditTextObject::SetNumberingDepth(sal_Int32 nPara, sal_Int16 nDepth)
+{
+    maParagraphs[nPara]->SetNumberingDepth(nDepth);
+}
+
+sal_Int16 EditTextObject::GetNumberingStartValue(sal_Int32 nPara) const
+{
+    return maParagraphs[nPara]->GetNumberingStartValue();
+}
+
+void EditTextObject::SetNumberingStartValue(sal_Int32 nPara, sal_Int16 nStartValue)
+{
+    maParagraphs[nPara]->SetNumberingStartValue(nStartValue);
+}
+
+bool EditTextObject::IsNumberingRestart(sal_Int32 nPara) const
+{
+    return maParagraphs[nPara]->IsNumberingRestart();
+}
+
+void EditTextObject::SetNumberingRestart(sal_Int32 nPara, bool bRestart)
+{
+    maParagraphs[nPara]->SetNumberingRestart(bRestart);
+}
+
+void EditTextObject::ClearPortionInfo()
 {
     mpPortionInfo.reset();
 }
 
-bool EditTextObjectImpl::HasOnlineSpellErrors() const
+bool EditTextObject::HasOnlineSpellErrors() const
 {
-    for (auto const& content : maContents)
+    for (auto const& content : maParagraphs)
     {
         if ( content->GetWrongList() && !content->GetWrongList()->empty() )
             return true;
@@ -444,13 +468,10 @@ bool EditTextObjectImpl::HasOnlineSpellErrors() const
     return false;
 }
 
-void EditTextObjectImpl::GetCharAttribs( sal_Int32 nPara, std::vector<EECharAttrib>& rLst ) const
+void EditTextObject::GetCharAttribs( sal_Int32 nPara, std::vector<EECharAttrib>& rLst ) const
 {
-    if (nPara < 0 || o3tl::make_unsigned(nPara) >= maContents.size())
-        return;
-
     rLst.clear();
-    const ContentInfo& rC = *maContents[nPara];
+    const EditTextObjectParagraph& rC = *maParagraphs[nPara];
     for (const XEditAttribute & rAttr : rC.maCharAttribs)
     {
         EECharAttrib aEEAttr(rAttr.GetStart(), rAttr.GetEnd(), rAttr.GetItem());
@@ -458,16 +479,16 @@ void EditTextObjectImpl::GetCharAttribs( sal_Int32 nPara, std::vector<EECharAttr
     }
 }
 
-bool EditTextObjectImpl::IsFieldObject() const
+bool EditTextObject::IsFieldObject() const
 {
     return GetField() != nullptr;
 }
 
-const SvxFieldItem* EditTextObjectImpl::GetField() const
+const SvxFieldItem* EditTextObject::GetField() const
 {
-    if (maContents.size() == 1)
+    if (maParagraphs.size() == 1)
     {
-        const ContentInfo& rC = *maContents[0];
+        const EditTextObjectParagraph& rC = *maParagraphs[0];
         if (rC.GetText().getLength() == 1)
         {
             size_t nAttribs = rC.maCharAttribs.size();
@@ -482,12 +503,9 @@ const SvxFieldItem* EditTextObjectImpl::GetField() const
     return nullptr;
 }
 
-const SvxFieldData* EditTextObjectImpl::GetFieldData(sal_Int32 nPara, size_t nPos, sal_Int32 nType) const
+const SvxFieldData* EditTextObject::GetFieldData(sal_Int32 nPara, size_t nPos, sal_Int32 nType) const
 {
-    if (nPara < 0 || o3tl::make_unsigned(nPara) >= maContents.size())
-        return nullptr;
-
-    const ContentInfo& rC = *maContents[nPara];
+    const EditTextObjectParagraph& rC = *maParagraphs[nPara];
     if (nPos >= rC.maCharAttribs.size())
         // URL position is out-of-bound.
         return nullptr;
@@ -515,12 +533,12 @@ const SvxFieldData* EditTextObjectImpl::GetFieldData(sal_Int32 nPara, size_t nPo
     return nullptr; // field not found.
 }
 
-bool EditTextObjectImpl::HasField( sal_Int32 nType ) const
+bool EditTextObject::HasField( sal_Int32 nType ) const
 {
-    size_t nParagraphs = maContents.size();
+    size_t nParagraphs = maParagraphs.size();
     for (size_t nPara = 0; nPara < nParagraphs; ++nPara)
     {
-        const ContentInfo& rC = *maContents[nPara];
+        const EditTextObjectParagraph& rC = *maParagraphs[nPara];
         size_t nAttrs = rC.maCharAttribs.size();
         for (size_t nAttr = 0; nAttr < nAttrs; ++nAttr)
         {
@@ -540,19 +558,19 @@ bool EditTextObjectImpl::HasField( sal_Int32 nType ) const
     return false;
 }
 
-const SfxItemSet& EditTextObjectImpl::GetParaAttribs(sal_Int32 nPara) const
+const SfxItemSet& EditTextObject::GetParaAttribs(sal_Int32 nPara) const
 {
-    const ContentInfo& rC = *maContents[nPara];
+    const EditTextObjectParagraph& rC = *maParagraphs[nPara];
     return rC.GetParaAttribs();
 }
 
-bool EditTextObjectImpl::RemoveCharAttribs( sal_uInt16 _nWhich )
+bool EditTextObject::RemoveCharAttribs( sal_uInt16 _nWhich )
 {
     bool bChanged = false;
 
-    for ( size_t nPara = maContents.size(); nPara; )
+    for ( size_t nPara = maParagraphs.size(); nPara; )
     {
-        ContentInfo& rC = *maContents[--nPara];
+        EditTextObjectParagraph& rC = *maParagraphs[--nPara];
 
         for (size_t nAttr = rC.maCharAttribs.size(); nAttr; )
         {
@@ -598,16 +616,16 @@ public:
 
 }
 
-void EditTextObjectImpl::GetAllSections( std::vector<editeng::Section>& rAttrs ) const
+void EditTextObject::GetAllSections( std::vector<editeng::Section>& rAttrs ) const
 {
     std::vector<editeng::Section> aAttrs;
-    aAttrs.reserve(maContents.size());
+    aAttrs.reserve(maParagraphs.size());
     std::vector<size_t> aBorders;
 
-    for (size_t nPara = 0; nPara < maContents.size(); ++nPara)
+    for (size_t nPara = 0; nPara < maParagraphs.size(); ++nPara)
     {
         aBorders.clear();
-        const ContentInfo& rC = *maContents[nPara];
+        const EditTextObjectParagraph& rC = *maParagraphs[nPara];
         aBorders.push_back(0);
         aBorders.push_back(rC.GetText().getLength());
         for (const XEditAttribute & rAttr : rC.maCharAttribs)
@@ -651,9 +669,9 @@ void EditTextObjectImpl::GetAllSections( std::vector<editeng::Section>& rAttrs )
 
     // Go through all formatted paragraphs, and store format items.
     std::vector<editeng::Section>::iterator itAttr = aAttrs.begin();
-    for (sal_Int32 nPara = 0; nPara < static_cast<sal_Int32>(maContents.size()); ++nPara)
+    for (sal_Int32 nPara = 0; nPara < static_cast<sal_Int32>(maParagraphs.size()); ++nPara)
     {
-        const ContentInfo& rC = *maContents[nPara];
+        const EditTextObjectParagraph& rC = *maParagraphs[nPara];
 
         itAttr = std::find_if(itAttr, aAttrs.end(), FindByParagraph(nPara));
         if (itAttr == aAttrs.end())
@@ -701,36 +719,30 @@ void EditTextObjectImpl::GetAllSections( std::vector<editeng::Section>& rAttrs )
     rAttrs.swap(aAttrs);
 }
 
-void EditTextObjectImpl::GetStyleSheet(sal_Int32 nPara, OUString& rName, SfxStyleFamily& rFamily) const
+void EditTextObject::GetStyleSheet(sal_Int32 nPara, OUString& rName, SfxStyleFamily& rFamily) const
 {
-    if (nPara < 0 || o3tl::make_unsigned(nPara) >= maContents.size())
-        return;
-
-    const ContentInfo& rC = *maContents[nPara];
+    const EditTextObjectParagraph& rC = *maParagraphs[nPara];
     rName = rC.GetStyle();
     rFamily = rC.GetFamily();
 }
 
-void EditTextObjectImpl::SetStyleSheet(sal_Int32 nPara, const OUString& rName, const SfxStyleFamily& rFamily)
+void EditTextObject::SetStyleSheet(sal_Int32 nPara, const OUString& rName, const SfxStyleFamily& rFamily)
 {
-    if (nPara < 0 || o3tl::make_unsigned(nPara) >= maContents.size())
-        return;
-
-    ContentInfo& rC = *maContents[nPara];
+    EditTextObjectParagraph& rC = *maParagraphs[nPara];
     rC.SetStyle(rName);
     rC.SetFamily(rFamily);
 }
 
-bool EditTextObjectImpl::ImpChangeStyleSheets(
+bool EditTextObject::ImpChangeStyleSheets(
                     std::u16string_view rOldName, SfxStyleFamily eOldFamily,
                     const OUString& rNewName, SfxStyleFamily eNewFamily )
 {
-    const size_t nParagraphs = maContents.size();
+    const size_t nParagraphs = maParagraphs.size();
     bool bChanges = false;
 
     for (size_t nPara = 0; nPara < nParagraphs; ++nPara)
     {
-        ContentInfo& rC = *maContents[nPara];
+        EditTextObjectParagraph& rC = *maParagraphs[nPara];
         if ( rC.GetFamily() == eOldFamily )
         {
             if ( rC.GetStyle() == rOldName )
@@ -744,7 +756,7 @@ bool EditTextObjectImpl::ImpChangeStyleSheets(
     return bChanges;
 }
 
-bool EditTextObjectImpl::ChangeStyleSheets(
+bool EditTextObject::ChangeStyleSheets(
                     std::u16string_view rOldName, SfxStyleFamily eOldFamily,
                     const OUString& rNewName, SfxStyleFamily eNewFamily)
 {
@@ -755,18 +767,18 @@ bool EditTextObjectImpl::ChangeStyleSheets(
     return bChanges;
 }
 
-void EditTextObjectImpl::ChangeStyleSheetName( SfxStyleFamily eFamily,
+void EditTextObject::ChangeStyleSheetName( SfxStyleFamily eFamily,
                 std::u16string_view rOldName, const OUString& rNewName )
 {
     ImpChangeStyleSheets( rOldName, eFamily, rNewName, eFamily );
 }
 
-bool EditTextObjectImpl::operator==( const EditTextObject& rCompare ) const
+bool EditTextObject::operator==( const EditTextObject& rCompare ) const
 {
-    return Equals(toImpl(rCompare), true);
+    return Equals(rCompare, true);
 }
 
-bool EditTextObjectImpl::Equals( const EditTextObjectImpl& rCompare, bool bComparePool ) const
+bool EditTextObject::Equals( const EditTextObject& rCompare, bool bComparePool ) const
 {
     if( this == &rCompare )
         return true;
@@ -780,17 +792,22 @@ bool EditTextObjectImpl::Equals( const EditTextObjectImpl& rCompare, bool bCompa
         return false;
 
     return std::equal(
-        maContents.begin(), maContents.end(), rCompare.maContents.begin(), rCompare.maContents.end(),
+        maParagraphs.begin(), maParagraphs.end(), rCompare.maParagraphs.begin(), rCompare.maParagraphs.end(),
         [bComparePool](const auto& c1, const auto& c2) { return c1->Equals(*c2, bComparePool); });
 }
 
 // #i102062#
-bool EditTextObjectImpl::isWrongListEqual(const EditTextObject& rComp) const
+bool EditTextObject::isWrongListEqual(const EditTextObject& rCompare) const
 {
-    const EditTextObjectImpl& rCompare = toImpl(rComp);
     return std::equal(
-        maContents.begin(), maContents.end(), rCompare.maContents.begin(), rCompare.maContents.end(),
+        maParagraphs.begin(), maParagraphs.end(), rCompare.maParagraphs.begin(), rCompare.maParagraphs.end(),
         [](const auto& c1, const auto& c2) { return c1->isWrongListEqual(*c2); });
 }
+
+editeng::FieldUpdater EditTextObject::GetFieldUpdater()
+{ return editeng::FieldUpdater(*this); }
+
+void EditTextObject::SetPortionInfo( std::unique_ptr<XParaPortionList> pP )
+{ mpPortionInfo = std::move(pP); }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

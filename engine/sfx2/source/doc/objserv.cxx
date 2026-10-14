@@ -40,6 +40,7 @@
 #include <com/sun/star/security/DocumentSignatureInformation.hpp>
 #include <com/sun/star/security/DocumentDigitalSignatures.hpp>
 #include <comphelper/diagnose_ex.hxx>
+#include <com/sun/star/form/XLoadable.hpp>
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <svl/whiter.hxx>
@@ -104,7 +105,6 @@
 #include <com/sun/star/document/XDocumentProperties.hpp>
 
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
-#include <com/sun/star/frame/XDesktop2.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 
 #include <guisaveas.hxx>
@@ -126,8 +126,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::beans;
@@ -156,11 +156,11 @@ public:
 
     void SetPreventClose( bool bPrevent ) { m_bPreventClose = bPrevent; }
 
-    virtual void SAL_CALL queryClosing( const lang::EventObject& aEvent, bool bDeliverOwnership ) override;
+    virtual void queryClosing( const lang::EventObject& aEvent, bool bDeliverOwnership ) override;
 
-    virtual void SAL_CALL notifyClosing( const lang::EventObject& aEvent ) override ;
+    virtual void notifyClosing( const lang::EventObject& aEvent ) override ;
 
-    virtual void SAL_CALL disposing( const lang::EventObject& aEvent ) override ;
+    virtual void disposing( const lang::EventObject& aEvent ) override ;
 
 } ;
 
@@ -172,7 +172,7 @@ SfxClosePreventer_Impl::SfxClosePreventer_Impl()
 {
 }
 
-void SAL_CALL SfxClosePreventer_Impl::queryClosing( const lang::EventObject&, bool bDeliverOwnership )
+void SfxClosePreventer_Impl::queryClosing( const lang::EventObject&, bool bDeliverOwnership )
 {
     if ( m_bPreventClose )
     {
@@ -183,10 +183,10 @@ void SAL_CALL SfxClosePreventer_Impl::queryClosing( const lang::EventObject&, bo
     }
 }
 
-void SAL_CALL SfxClosePreventer_Impl::notifyClosing( const lang::EventObject& )
+void SfxClosePreventer_Impl::notifyClosing( const lang::EventObject& )
 {}
 
-void SAL_CALL SfxClosePreventer_Impl::disposing( const lang::EventObject& )
+void SfxClosePreventer_Impl::disposing( const lang::EventObject& )
 {}
 
 namespace {
@@ -344,7 +344,7 @@ void SfxObjectShell::CheckOut( )
         if (SfxViewFrame* pViewFrame = GetFrame())
             pViewFrame->RemoveInfoBar( u"checkout" );
     }
-    catch ( const uno::RuntimeException& e )
+    catch ( const cpo::uno::RuntimeException& e )
     {
         if (SfxViewFrame* pFrame = GetFrame())
         {
@@ -366,7 +366,7 @@ void SfxObjectShell::CancelCheckOut( )
         if ( xModifiable.is( ) )
             xModifiable->setModified( false );
     }
-    catch ( const uno::RuntimeException& e )
+    catch ( const cpo::uno::RuntimeException& e )
     {
         if (SfxViewFrame* pFrame = GetFrame())
         {
@@ -395,7 +395,7 @@ void SfxObjectShell::CheckIn( )
             }
         }
     }
-    catch ( const uno::RuntimeException& e )
+    catch ( const cpo::uno::RuntimeException& e )
     {
         if (SfxViewFrame* pFrame = GetFrame())
         {
@@ -413,7 +413,7 @@ cpo::uno::Sequence< document::CmisVersion > SfxObjectShell::GetCmisVersions( ) c
         uno::Reference< document::XCmisDocument > xCmisDoc( GetModel(), uno::UNO_QUERY_THROW );
         return xCmisDoc->getAllVersions( );
     }
-    catch ( const uno::RuntimeException& e )
+    catch ( const cpo::uno::RuntimeException& e )
     {
         if (SfxViewFrame* pFrame = GetFrame())
         {
@@ -542,6 +542,28 @@ static weld::Window* GetReqDialogParent(const SfxRequest &rReq, const SfxObjectS
 void SfxObjectShell::ExecFile_Impl(SfxRequest &rReq)
 {
     sal_uInt16 nId = rReq.GetSlot();
+
+    if (nId == SID_EXPORTDOCASPDF)
+    {
+        // See if a signing cert/key is passed as a parameter (the COKit case:
+        // the kit annotates the interactive .uno:ExportToPDF with the
+        // certificate from the session's user private info, the same way it
+        // does for .uno:Signature): if so, put it on the view before the PDF
+        // export dialog is created, so its signature tab is offered and can
+        // sign from it.
+        const SfxStringItem* pSignatureCert = rReq.GetArg<SfxStringItem>(FN_PARAM_1);
+        const SfxStringItem* pSignatureKey = rReq.GetArg<SfxStringItem>(FN_PARAM_2);
+        SfxViewFrame* pSignFrame = GetFrame();
+        SfxViewShell* pSignViewShell = pSignFrame ? pSignFrame->GetViewShell() : nullptr;
+        if (pSignViewShell && pSignatureCert && pSignatureKey
+            && !pSignatureCert->GetValue().isEmpty() && !pSignatureKey->GetValue().isEmpty())
+        {
+            svl::crypto::CertificateOrName aCertificateOrName;
+            aCertificateOrName.m_xCertificate = KitHelper::getSigningCertificate(
+                pSignatureCert->GetValue().toUtf8(), pSignatureKey->GetValue().toUtf8());
+            pSignViewShell->SetSigningCertificate(aCertificateOrName);
+        }
+    }
 
     if( SID_SIGNATURE == nId || SID_MACRO_SIGNATURE == nId )
     {
@@ -821,7 +843,7 @@ void SfxObjectShell::ExecFile_Impl(SfxRequest &rReq)
 
         case SID_REDACTDOC:
         {
-            css::uno::Reference<css::frame::XModel> xModel = GetModel();
+            cpo::uno::Reference<css::frame::XModel> xModel = GetModel();
             if(!xModel.is())
                 return;
 
@@ -857,7 +879,7 @@ void SfxObjectShell::ExecFile_Impl(SfxRequest &rReq)
             SfxRedactionHelper::getPageMetaFilesFromDoc(aMetaFiles, aPageSizes, nPages, aRenderer);
 
             // Create an empty Draw component.
-            uno::Reference<frame::XDesktop2> xDesktop = css::frame::Desktop::create(comphelper::getProcessComponentContext());
+            uno::Reference<frame::XDesktop> xDesktop = css::frame::Desktop::create(comphelper::getProcessComponentContext());
             uno::Reference<lang::XComponent> xComponent = xDesktop->loadComponentFromURL(u"private:factory/sdraw"_ustr, u"_default"_ustr, 0, {});
 
             if (!xComponent.is())
@@ -1073,7 +1095,7 @@ void SfxObjectShell::ExecFile_Impl(SfxRequest &rReq)
                     if (xCtrl.is())
                         xParentWindow = xCtrl->getFrame()->getContainerWindow();
 
-                    const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+                    const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
                     uno::Reference< task::XInteractionHandler2 > xInteract(
                         task::InteractionHandler::createWithParent(xContext, xParentWindow) );
@@ -1116,7 +1138,7 @@ void SfxObjectShell::ExecFile_Impl(SfxRequest &rReq)
 
                     throw task::ErrorCodeIOException(
                         u"SfxObjectShell::ExecFile_Impl: ERRCODE_IO_CANTWRITE"_ustr,
-                        uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_IO_CANTWRITE));
+                        uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_IO_CANTWRITE));
                 }
 
                 const SfxSlot* pSlot = GetModule()->GetSlotPool()->GetSlot( bForceSaveAs ? SID_SAVEASDOC : nId );
@@ -1289,9 +1311,6 @@ void SfxObjectShell::ExecFile_Impl(SfxRequest &rReq)
                     SetReadOnlyUI(false);
                 }
             }
-
-            if (nId == SID_SAVEDOC && bRememberSignature && rSignatureInfosRemembered.hasElements())
-                ResignDocument(rSignatureInfosRemembered);
 
             rReq.SetReturnValue( SfxBoolItem(0, nErrorCode == ERRCODE_NONE ) );
 
@@ -1610,10 +1629,9 @@ void SfxObjectShell::GetState_Impl(SfxItemSet &rSet)
                         aInfobarType = InfobarType::DANGER;
                         break;
                     case SignatureState::INVALID:
-                        // If we are remembering the certificates, it should be kept as valid
-                        sMessage = SfxResId(bRememberSignature ? STR_SIGNATURE_OK : STR_SIGNATURE_INVALID);
+                        sMessage = SfxResId(STR_SIGNATURE_INVALID);
                         // Warning only, I've tried Danger and it looked too scary
-                        aInfobarType = ( bRememberSignature ? InfobarType::INFO : InfobarType::WARNING );
+                        aInfobarType = InfobarType::WARNING;
                         break;
                     case SignatureState::NOTVALIDATED:
                         sMessage = SfxResId(STR_SIGNATURE_NOTVALIDATED);
@@ -1756,6 +1774,24 @@ void SfxObjectShell::AllowLinkUpdate()
 {
     getEmbeddedObjectContainer().setUserAllowsLinkUpdate(true);
     PerformLinkUpdate();
+
+    std::vector<cpo::uno::WeakReference<css::form::XLoadable>> aDeferredForms;
+    aDeferredForms.swap(maDeferredDatabaseForms);
+    for (const auto& rxDeferred : aDeferredForms)
+    {
+        cpo::uno::Reference<css::form::XLoadable> xForm(rxDeferred);
+        if (!xForm.is() || xForm->isLoaded())
+            continue;
+        try
+        {
+            xForm->load();
+        }
+        catch (const cpo::uno::Exception&)
+        {
+            TOOLS_WARN_EXCEPTION("sfx.doc", "SfxObjectShell::AllowLinkUpdate: form load");
+        }
+    }
+
     SfxViewFrame* pViewFrame = SfxViewFrame::GetFirst(this);
     if (pViewFrame)
         pViewFrame->RemoveInfoBar(u"enablecontent");
@@ -1997,20 +2033,6 @@ cpo::uno::Sequence< security::DocumentSignatureInformation > SfxObjectShell::Get
     return aResult;
 }
 
-void SfxObjectShell::SetRememberCurrentSignature(bool bRemember)
-{
-    if (bRemember)
-    {
-        rSignatureInfosRemembered = GetDocumentSignatureInformation(false);
-        bRememberSignature = true;
-    }
-    else
-    {
-        rSignatureInfosRemembered = cpo::uno::Sequence<security::DocumentSignatureInformation>();
-        bRememberSignature = false;
-    }
-}
-
 SignatureState SfxObjectShell::ImplGetSignatureState( bool bScriptingContent )
 {
     SignatureState* pState = bScriptingContent ? &pImpl->nScriptingSignatureState : &pImpl->nDocumentSignatureState;
@@ -2062,15 +2084,11 @@ bool SfxObjectShell::PrepareForSigning(weld::Window* pDialogParent)
         if (nVersion >= SvtSaveOptions::ODFSVER_012)
         {
             OUString sQuestion(bHasSign ? SfxResId(STR_XMLSEC_QUERY_SAVESIGNEDBEFORESIGN) : SfxResId(RID_SVXSTR_XMLSEC_QUERY_SAVEBEFORESIGN));
-            std::unique_ptr<weld::MessageDialog> xQuestion;
+            std::unique_ptr<weld::MessageDialog> xQuestion(
+                Application::CreateMessageDialog(pDialogParent,
+                    VclMessageType::Question, VclButtonsType::YesNo, sQuestion));
 
-            if (!bRememberSignature)
-            {
-                xQuestion = Application::CreateMessageDialog(pDialogParent,
-                                                           VclMessageType::Question, VclButtonsType::YesNo, sQuestion);
-            }
-
-            if ( bRememberSignature || ( xQuestion != nullptr && xQuestion->run() == RET_YES ) )
+            if ( xQuestion->run() == RET_YES )
             {
                 sal_uInt16 nId = SID_SAVEDOC;
                 if ( !GetMedium() || GetMedium()->GetName().isEmpty() )
@@ -2117,12 +2135,7 @@ bool SfxObjectShell::PrepareForSigning(weld::Window* pDialogParent)
     }
 
     // the document is not modified currently, so it can not become modified after signing
-    pImpl->m_bAllowModifiedBackAfterSigning = false;
-    if ( IsEnableSetModified() || /*bRememberSignature == */true )
-    {
-        EnableSetModified( false );
-        pImpl->m_bAllowModifiedBackAfterSigning = true;
-    }
+    EnableSetModified( false );
 
     // we have to store to the original document, the original medium should be closed for this time
     if ( ConnectTmpStorage_Impl( pMedium->GetStorage(), pMedium ) )
@@ -2154,8 +2167,7 @@ void SfxObjectShell::AfterSigning(bool bSignSuccess, bool bSignScriptingContent)
     if ( bSignSuccess )
         RecheckSignature(bSignScriptingContent);
 
-    if ( pImpl->m_bAllowModifiedBackAfterSigning || /* bRememberSignature ==*/ true )
-        EnableSetModified();
+    EnableSetModified();
 }
 
 bool SfxObjectShell::CheckIsReadonly(bool bSignScriptingContent, weld::Window* pDialogParent)
@@ -2250,25 +2262,6 @@ void SfxObjectShell::SignDocumentContent(weld::Window* pDialogParent, const std:
     });
 }
 
-bool SfxObjectShell::ResignDocument(cpo::uno::Sequence< security::DocumentSignatureInformation >& rSignaturesInfo)
-{
-    bool bSignSuccess = true;
-
-    // This should be at most one element, automatic iteration to avoid pointing issues in case no signs
-    for (auto & rInfo : rSignaturesInfo)
-    {
-        auto xCert = rInfo.Signer;
-        if (xCert.is())
-        {
-            svl::crypto::SigningContext aSigningContext;
-            aSigningContext.m_xCertificate = std::move(xCert);
-            bSignSuccess &= SignDocumentContentUsingCertificate(aSigningContext);
-        }
-    }
-
-    return bSignSuccess;
-}
-
 bool SfxObjectShell::SignDocumentContentUsingCertificate(svl::crypto::SigningContext& rSigningContext)
 {
     // 1. PrepareForSigning
@@ -2325,11 +2318,9 @@ bool SfxObjectShell::SignDocumentContentUsingCertificate(svl::crypto::SigningCon
     }
 
     // the document is not modified currently, so it can not become modified after signing
-    pImpl->m_bAllowModifiedBackAfterSigning = false;
     if ( IsEnableSetModified() )
     {
         EnableSetModified( false );
-        pImpl->m_bAllowModifiedBackAfterSigning = true;
     }
 
     // we have to store to the original document, the original medium should be closed for this time

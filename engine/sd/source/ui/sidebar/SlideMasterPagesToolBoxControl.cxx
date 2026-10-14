@@ -13,7 +13,7 @@ SlideMasterPagesToolBoxControl::SlideMasterPagesToolBoxControl() {}
 
 SlideMasterPagesToolBoxControl::~SlideMasterPagesToolBoxControl() {}
 
-void SAL_CALL
+void
 SlideMasterPagesToolBoxControl::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
 {
     SAL_INFO("sd", "initialize called for SlideMasterPagesToolBoxControl");
@@ -21,7 +21,7 @@ SlideMasterPagesToolBoxControl::initialize(const cpo::uno::Sequence<cpo::uno::An
     svt::ToolboxController::initialize(rArguments);
 }
 
-void SAL_CALL
+void
 SlideMasterPagesToolBoxControl::statusChanged(const css::frame::FeatureStateEvent& /*rEvent*/)
 {
     // Handle status changes if needed
@@ -37,10 +37,10 @@ void SlideMasterPagesToolBoxControl::disposing(std::unique_lock<std::mutex>& rGu
     svt::ToolboxController::disposing(rGuard);
 }
 
-css::uno::Reference<css::awt::XWindow> SlideMasterPagesToolBoxControl::createItemWindow(
-    const css::uno::Reference<css::awt::XWindow>& rParent)
+cpo::uno::Reference<css::awt::XWindow> SlideMasterPagesToolBoxControl::createItemWindow(
+    const cpo::uno::Reference<css::awt::XWindow>& rParent)
 {
-    css::uno::Reference<css::awt::XWindow> xItemWindow;
+    cpo::uno::Reference<css::awt::XWindow> xItemWindow;
     SAL_INFO("sd", "createItemWindow called for SlideMasterPagesToolBoxControl");
 
     VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(rParent);
@@ -65,24 +65,24 @@ css::uno::Reference<css::awt::XWindow> SlideMasterPagesToolBoxControl::createIte
     return xItemWindow;
 }
 
-OUString SAL_CALL SlideMasterPagesToolBoxControl::getImplementationName()
+OUString SlideMasterPagesToolBoxControl::getImplementationName()
 {
     return u"com.sun.star.comp.sd.SlideMasterPagesToolBoxControl"_ustr;
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL SlideMasterPagesToolBoxControl::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> SlideMasterPagesToolBoxControl::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-bool SAL_CALL SlideMasterPagesToolBoxControl::supportsService(const OUString& rServiceName)
+bool SlideMasterPagesToolBoxControl::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_sd_SlideMasterPagesToolBoxControl_get_implementation(
-    css::uno::XComponentContext* /*rxContext*/, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* /*rxContext*/, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SlideMasterPagesToolBoxControl());
 }

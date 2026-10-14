@@ -37,7 +37,7 @@
 #include <sfx2/strings.hrc>
 #include <helpids.h>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 constexpr OUString USERITEM_NAME = u"UserItem"_ustr;
@@ -47,7 +47,7 @@ struct TabPageImpl
 {
     bool                        mbStandard;
     SfxOkDialogController*      mpSfxDialogController;
-    css::uno::Reference< css::frame::XFrame > mxFrame;
+    cpo::uno::Reference< css::frame::XFrame > mxFrame;
 
     TabPageImpl() : mbStandard(false), mpSfxDialogController(nullptr) {}
 };
@@ -113,17 +113,17 @@ static auto Find(const SfxTabDlgData_Impl& rArr, std::u16string_view rId)
                         [rId](const auto& item) { return item->sId == rId; });
 }
 
-void SfxTabPage::SetFrame(const css::uno::Reference< css::frame::XFrame >& xFrame)
+void SfxTabPage::SetFrame(const cpo::uno::Reference< css::frame::XFrame >& xFrame)
 {
     if (mpImpl)
         mpImpl->mxFrame = xFrame;
 }
 
-css::uno::Reference< css::frame::XFrame > SfxTabPage::GetFrame() const
+cpo::uno::Reference< css::frame::XFrame > SfxTabPage::GetFrame() const
 {
     if (mpImpl)
         return mpImpl->mxFrame;
-    return css::uno::Reference< css::frame::XFrame >();
+    return cpo::uno::Reference< css::frame::XFrame >();
 }
 
 static bool isKitMobilePhone()
@@ -161,19 +161,6 @@ bool SfxTabPage::FillItemSet( SfxItemSet* )
 {
     return false;
 }
-
-/*
-Returns the visible strings of a dialog.
-
-Supported items:
-- label
-- check button
-- radio button
-- toggle button
-- link button
-- button
-*/
-OUString SfxTabPage::GetAllStrings() { return OUString(); }
 
 void SfxTabPage::Reset( const SfxItemSet* )
 {
@@ -977,7 +964,7 @@ void SfxTabDialogController::setPreviewsToSamePlace()
             continue;
         if (!pDataObject->xTabPage->m_xBuilder)
             continue;
-        std::unique_ptr<weld::Widget> pGrid = pDataObject->xTabPage->m_xBuilder->weld_widget(u"maingrid"_ustr);
+        std::unique_ptr<weld::Container> pGrid = pDataObject->xTabPage->m_xBuilder->weld_container(u"maingrid"_ustr);
         if (!pGrid)
             continue;
         aGrids.emplace_back(std::move(pGrid));

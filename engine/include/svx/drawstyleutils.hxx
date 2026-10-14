@@ -13,6 +13,7 @@
 
 #include <svx/svxdllapi.h>
 
+class SdrMarkList;
 class SfxItemSet;
 class SdrView;
 
@@ -23,20 +24,35 @@ namespace svx
  * transparent fill/line color becomes "no fill/line", a bare fill color forces
  * a solid fill, and the line width and gradient JSON arguments are expanded.
  *
- * A bare line color is left alone; use applyBareLineColorToMarked() for that.
+ * Bare line attributes are left alone; use applyBareLineAttributesToMarked()
+ * for those.
  */
 SVXCORE_DLLPUBLIC void convertDrawStyleArguments(SfxItemSet& rArgs);
 
 /**
- * Make a bare line color (non-transparent SID_ATTR_LINE_COLOR in @p rArgs with
- * no explicit non-None line style) visible on the objects marked in @p rView.
+ * Make bare line attributes in @p rArgs visible on the objects marked in
+ * @p rView.
  *
- * Every marked object whose resolved line style (parents included) is None is
- * switched to a solid line; objects that already have a line keep their style.
- * Does nothing when @p rArgs carries no bare line color. Changes are registered
- * for undo when enabled; the caller owns any BegUndo()/EndUndo() grouping.
+ * A bare line attribute is a non-transparent line color or a line width given
+ * without an explicit non-None line style. Picking either only makes sense if
+ * the line is meant to be seen, so every marked object whose resolved line
+ * style (parents included) is None is switched to a solid line; objects that
+ * already have a line keep their style. Does nothing when @p rArgs carries no
+ * bare line attribute. Changes are registered for undo when enabled; the
+ * caller owns any BegUndo()/EndUndo() grouping.
  */
-SVXCORE_DLLPUBLIC void applyBareLineColorToMarked(SdrView& rView, const SfxItemSet& rArgs);
+SVXCORE_DLLPUBLIC void applyBareLineAttributesToMarked(SdrView& rView, const SfxItemSet& rArgs);
+
+/**
+ * Whether a fill colour could ever be seen on the objects marked in
+ * @p rMarkList.
+ *
+ * A picture without a single transparent pixel covers its whole area, so a fill
+ * behind it can never show. Only a selection made up entirely of such pictures
+ * answers false; anything else - an empty selection, a shape, a picture with
+ * some transparency - keeps the fill colour meaningful.
+ */
+SVXCORE_DLLPUBLIC bool canFillColorShowThroughMarked(const SdrMarkList& rMarkList);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

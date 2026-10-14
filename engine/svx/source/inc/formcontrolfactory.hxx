@@ -26,7 +26,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/XNumberFormats.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 
 #include <string_view>
@@ -41,7 +41,7 @@ namespace svxform
     class FormControlFactory
     {
     public:
-        FormControlFactory( const css::uno::Reference<css::uno::XComponentContext>& _rContext );
+        FormControlFactory( const cpo::uno::Reference<cpo::uno::XComponentContext>& _rContext );
         FormControlFactory();
         ~FormControlFactory();
 
@@ -58,40 +58,40 @@ namespace svxform
         */
         sal_Int16 initializeControlModel(
                     const DocumentType _eDocType,
-                    const css::uno::Reference< css::beans::XPropertySet >& _rxControlModel,
+                    const cpo::uno::Reference< css::beans::XPropertySet >& _rxControlModel,
                     const tools::Rectangle& _rControlBoundRect
                 );
 
         sal_Int16 initializeControlModel( const DocumentType _eDocType, const SdrUnoObj& _rObject );
-        void      initializeControlModel( const DocumentType _eDocType, const css::uno::Reference< css::beans::XPropertySet >& _rxControlModel );
+        void      initializeControlModel( const DocumentType _eDocType, const cpo::uno::Reference< css::beans::XPropertySet >& _rxControlModel );
 
         void initializeTextFieldLineEnds(
-                    const css::uno::Reference< css::beans::XPropertySet >& _rxModel
+                    const cpo::uno::Reference< css::beans::XPropertySet >& _rxModel
                 );
 
         static void initializeFieldDependentProperties(
-                    const css::uno::Reference< css::beans::XPropertySet >& _rxDatabaseField,
-                    const css::uno::Reference< css::beans::XPropertySet >& _rxControlModel,
-                    const css::uno::Reference< css::util::XNumberFormats >& _rxNumberFormats
+                    const cpo::uno::Reference< css::beans::XPropertySet >& _rxDatabaseField,
+                    const cpo::uno::Reference< css::beans::XPropertySet >& _rxControlModel,
+                    const cpo::uno::Reference< css::util::XNumberFormats >& _rxNumberFormats
                 );
 
         static OUString getDefaultName(
                     const sal_Int16 nClassId,
-                    const css::uno::Reference< css::lang::XServiceInfo >& _rxObject
+                    const cpo::uno::Reference< css::lang::XServiceInfo >& _rxObject
                 );
 
         static OUString getDefaultUniqueName_ByComponentType(
-                    const css::uno::Reference< css::container::XNameAccess >& _rxContainer,
-                    const css::uno::Reference< css::beans::XPropertySet >& _rxObject
+                    const cpo::uno::Reference< css::container::XNameAccess >& _rxContainer,
+                    const cpo::uno::Reference< css::beans::XPropertySet >& _rxObject
                 );
 
         static OUString getUniqueName(
-                    const css::uno::Reference< css::container::XNameAccess >& _rxContainer,
+                    const cpo::uno::Reference< css::container::XNameAccess >& _rxContainer,
                     std::u16string_view _rBaseName
                 );
 
     private:
-        css::uno::Reference<css::uno::XComponentContext>  m_xContext;
+        cpo::uno::Reference<cpo::uno::XComponentContext>  m_xContext;
     };
 
 

@@ -37,6 +37,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -46,9 +47,9 @@ class NamesEnumeration : public EnumerationHelperImpl
     uno::Reference< sheet::XNamedRanges > m_xNames;
 public:
     /// @throws uno::RuntimeException
-    NamesEnumeration( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration,  uno::Reference< frame::XModel > xModel , uno::Reference< sheet::XNamedRanges > xNames ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ), m_xModel(std::move( xModel )), m_xNames(std::move( xNames )) {}
+    NamesEnumeration( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration,  uno::Reference< frame::XModel > xModel , uno::Reference< sheet::XNamedRanges > xNames ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ), m_xModel(std::move( xModel )), m_xNames(std::move( xNames )) {}
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         uno::Reference< sheet::XNamedRange > xNamed( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
         return cpo::uno::Any( uno::Reference< excel::XName > ( new ScVbaName( m_xParent, m_xContext, xNamed ,m_xNames , m_xModel ) ) );
@@ -58,10 +59,10 @@ public:
 
 }
 
-ScVbaNames::ScVbaNames(const css::uno::Reference< ov::XHelperInterface >& xParent,
-            const css::uno::Reference< css::uno::XComponentContext >& xContext,
-            const css::uno::Reference< css::sheet::XNamedRanges >& xNames,
-            css::uno::Reference< css::frame::XModel > xModel ):
+ScVbaNames::ScVbaNames(const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+            const cpo::uno::Reference< css::sheet::XNamedRanges >& xNames,
+            cpo::uno::Reference< css::frame::XModel > xModel ):
             ScVbaNames_BASE(  xParent , xContext , uno::Reference< container::XIndexAccess >( xNames, uno::UNO_QUERY ) ),
             mxModel(std::move( xModel )),
             mxNames( xNames )
@@ -79,7 +80,7 @@ ScVbaNames::getScDocument()
     uno::Reference< frame::XModel > xModel( getModel() , uno::UNO_SET_THROW );
     ScTabViewShell * pTabViewShell = excel::getBestViewShell( xModel );
     if ( !pTabViewShell )
-        throw uno::RuntimeException( u"No ViewShell available"_ustr );
+        throw cpo::uno::RuntimeException( u"No ViewShell available"_ustr );
     ScViewData& rViewData = pTabViewShell->GetViewData();
     return rViewData.GetDocument();
 }
@@ -113,7 +114,7 @@ ScVbaNames::Add( const cpo::uno::Any& Name ,
                 sName = sName.copy(nIndex+1);
             if (ScRangeData::IsNameValid(sName, getScDocument())
                 != ScRangeData::IsNameValidType::NAME_VALID)
-                throw uno::RuntimeException( u"This Name is not valid ."_ustr );
+                throw cpo::uno::RuntimeException( u"This Name is not valid ."_ustr );
         }
     }
     rtl::Reference< ScCellRangeObj > xUnoRange;

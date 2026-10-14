@@ -25,11 +25,12 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 template< typename... Ifc >
 ScVbaPageBreak< Ifc... >::ScVbaPageBreak( const uno::Reference< XHelperInterface >& xParent,
-                    const uno::Reference< uno::XComponentContext >& xContext,
+                    const uno::Reference< cpo::uno::XComponentContext >& xContext,
                     uno::Reference< beans::XPropertySet > xProps,
                     sheet::TablePageBreakData aTablePageBreakData):
             ScVbaPageBreak_BASE( xParent, xContext ),
@@ -112,9 +113,9 @@ ScVbaHPageBreak::getServiceNames()
 template class ScVbaPageBreak< excel::XVPageBreak >;
 
 /* class ScVbaVPageBreak */
-ScVbaVPageBreak::ScVbaVPageBreak( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                                  const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                                  const css::uno::Reference< css::beans::XPropertySet >& xProps,
+ScVbaVPageBreak::ScVbaVPageBreak( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                                  const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                                  const cpo::uno::Reference< css::beans::XPropertySet >& xProps,
                                   css::sheet::TablePageBreakData aTablePageBreakData )
 :   ScVbaVPageBreak_BASE( xParent, xContext, xProps, aTablePageBreakData )
 {

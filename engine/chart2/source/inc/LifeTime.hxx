@@ -22,7 +22,6 @@
 #include <osl/conditn.hxx>
 #include <comphelper/interfacecontainer4.hxx>
 
-namespace com::sun::star::document { class XStorageChangeListener; }
 namespace com::sun::star::lang { class XComponent; }
 namespace com::sun::star::lang { class XEventListener; }
 namespace com::sun::star::util { class CloseVetoException; }
@@ -42,13 +41,12 @@ public:
     virtual ~LifeTimeManager();
 
     bool        impl_isDisposed( bool bAssert=true );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool    dispose();
 
     mutable std::mutex                    m_aAccessMutex;
     ::comphelper::OInterfaceContainerHelper4<css::util::XCloseListener> m_aCloseListeners;
     ::comphelper::OInterfaceContainerHelper4<css::util::XModifyListener> m_aModifyListeners;
-    ::comphelper::OInterfaceContainerHelper4<css::document::XStorageChangeListener> m_aStorageChangeListeners;
     ::comphelper::OInterfaceContainerHelper4<css::lang::XEventListener> m_aEventListeners;
     ::comphelper::OInterfaceContainerHelper4<css::view::XSelectionChangeListener> m_aSelectionChangeListeners;
 
@@ -92,8 +90,8 @@ public:
     void    g_close_isNeedToCancelLongLastingCalls( bool bDeliverOwnership, css::util::CloseVetoException const & ex );
     void    g_close_endTryClose();
     void    g_close_endTryClose_doClose();
-/// @throws css::uno::RuntimeException
-    void    g_addCloseListener( const css::uno::Reference< css::util::XCloseListener > & xListener );
+/// @throws cpo::uno::RuntimeException
+    void    g_addCloseListener( const cpo::uno::Reference< css::util::XCloseListener > & xListener );
 
 private:
     virtual bool    impl_canStartApiCall() override;

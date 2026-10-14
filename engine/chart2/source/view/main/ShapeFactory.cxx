@@ -65,7 +65,8 @@
 #include <numbers>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 
 namespace chart
 {
@@ -832,22 +833,30 @@ static drawing::PolyPolygonBezierCoords getCircularArcBezierCoords(
         P2 = rTransformationFromUnitCircle*(aStart*P2);
         P3 = rTransformationFromUnitCircle*(aStart*P3);
 
-        pPoints[nPoint].X = static_cast< sal_Int32 >( P0.getX());
-        pPoints[nPoint].Y = static_cast< sal_Int32 >( P0.getY());
+        // The coordinates are truncated to whole 1/100 mm. A coordinate
+        // that is mathematically a whole number, like the topmost point
+        // of a circle, comes out of the transformations a tiny amount
+        // above or below it, and which side depends on how the platform
+        // rounds its floating-point operations. approxValue removes that
+        // noise, so the truncation gives the same point everywhere.
+        auto toInt = [](double f) { return static_cast<sal_Int32>(rtl::math::approxValue(f)); };
+
+        pPoints[nPoint].X = toInt(P0.getX());
+        pPoints[nPoint].Y = toInt(P0.getY());
         pFlags [nPoint++] = drawing::PolygonFlags_NORMAL;
 
-        pPoints[nPoint].X = static_cast< sal_Int32 >( P1.getX());
-        pPoints[nPoint].Y = static_cast< sal_Int32 >( P1.getY());
+        pPoints[nPoint].X = toInt(P1.getX());
+        pPoints[nPoint].Y = toInt(P1.getY());
         pFlags[nPoint++] = drawing::PolygonFlags_CONTROL;
 
-        pPoints[nPoint].X = static_cast< sal_Int32 >( P2.getX());
-        pPoints[nPoint].Y = static_cast< sal_Int32 >( P2.getY());
+        pPoints[nPoint].X = toInt(P2.getX());
+        pPoints[nPoint].Y = toInt(P2.getY());
         pFlags [nPoint++] = drawing::PolygonFlags_CONTROL;
 
         if(nSegment==(nSegmentCount-1))
         {
-            pPoints[nPoint].X = static_cast< sal_Int32 >( P3.getX());
-            pPoints[nPoint].Y = static_cast< sal_Int32 >( P3.getY());
+            pPoints[nPoint].X = toInt(P3.getX());
+            pPoints[nPoint].Y = toInt(P3.getY());
             pFlags [nPoint++] = drawing::PolygonFlags_NORMAL;
         }
     }
@@ -2139,8 +2148,7 @@ rtl::Reference<SvxShapeText>
                     xShape->insertString( xInsertCursor, xFormattedString[nN]->getString(), false );
                     bNotEmpty = true;
                     xSelectionCursor->gotoEnd( true ); // select current paragraph
-                    uno::Reference< beans::XPropertySet > xStringProperties( xFormattedString[nN], uno::UNO_QUERY );
-                    PropertyMapper::setMappedProperties( xSelectionProp, xStringProperties,
+                    PropertyMapper::setMappedProperties( xSelectionProp, xFormattedString[nN],
                         PropertyMapper::getPropertyNameMapForTextShapeProperties() );
                 }
             }
@@ -2248,9 +2256,8 @@ rtl::Reference<SvxShapeText>
                         OUString aLabel = ShapeFactory::getStackedString(rxFS->getString(), bStackCharacters);
                         if (nLBreaks-- > 0)
                             aLabel += OUStringChar('\r');
-                        uno::Reference< beans::XPropertySet > xSourceProps(rxFS, uno::UNO_QUERY);
                         cpo::uno::Sequence<beans::PropertyValue> aPropVals =
-                            PropertyMapper::getPropVals(xSourceProps,
+                            PropertyMapper::getPropVals(rxFS,
                                 PropertyMapper::getPropertyNameMapForTextShapeProperties());
                         xShape->appendTextPortion(aLabel, aPropVals);
                     }
@@ -2262,9 +2269,8 @@ rtl::Reference<SvxShapeText>
                 {
                     if (!rxFS->getString().isEmpty())
                     {
-                        uno::Reference< beans::XPropertySet > xSourceProps(rxFS, uno::UNO_QUERY);
                         cpo::uno::Sequence<beans::PropertyValue> aPropVals =
-                            PropertyMapper::getPropVals(xSourceProps,
+                            PropertyMapper::getPropVals(rxFS,
                                 PropertyMapper::getPropertyNameMapForTextShapeProperties());
                         xShape->appendTextPortion(rxFS->getString(), aPropVals);
                     }

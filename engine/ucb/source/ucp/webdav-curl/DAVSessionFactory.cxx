@@ -24,6 +24,7 @@
 
 using namespace http_dav_ucp;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 DAVSessionFactory::~DAVSessionFactory()
 {
@@ -32,7 +33,7 @@ DAVSessionFactory::~DAVSessionFactory()
 rtl::Reference< DAVSession > DAVSessionFactory::createDAVSession(
                 const OUString & inUri,
                 const cpo::uno::Sequence< beans::NamedValue >& rFlags,
-                const uno::Reference< uno::XComponentContext > & rxContext )
+                const uno::Reference< cpo::uno::XComponentContext > & rxContext )
 {
     std::unique_lock aGuard( m_aMutex );
 

@@ -20,7 +20,6 @@
 #pragma once
 
 #include <com/sun/star/sdbcx/XUsersSupplier.hpp>
-#include <com/sun/star/sdbcx/XAuthorizable.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <comphelper/proparrhlp.hxx>
 #include <cppuhelper/compbase.hxx>
@@ -36,7 +35,6 @@ namespace connectivity::sdbcx
     typedef OCollection OUsers;
 
     typedef ::cppu::WeakComponentImplHelper<   css::sdbcx::XUsersSupplier,
-                                               css::sdbcx::XAuthorizable,
                                                css::container::XNamed,
                                                css::lang::XServiceInfo> OGroup_BASE;
 
@@ -75,14 +73,9 @@ namespace connectivity::sdbcx
         // ::cppu::OComponentHelper
         virtual void disposing() override;
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
         // XUsersSupplier
-        virtual css::uno::Reference< css::container::XNameAccess > getUsers(  ) override;
-        // XAuthorizable
-        virtual sal_Int32 getPrivileges( const OUString& objName, sal_Int32 objType ) override;
-        virtual sal_Int32 getGrantablePrivileges( const OUString& objName, sal_Int32 objType ) override;
-        virtual void grantPrivileges( const OUString& objName, sal_Int32 objType, sal_Int32 objPrivileges ) override;
-        virtual void revokePrivileges( const OUString& objName, sal_Int32 objType, sal_Int32 objPrivileges ) override;
+        virtual cpo::uno::Reference< css::container::XNameAccess > getUsers(  ) override;
 
         // XNamed
         virtual OUString getName(  ) override;

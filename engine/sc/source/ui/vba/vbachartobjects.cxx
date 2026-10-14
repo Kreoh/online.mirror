@@ -24,6 +24,7 @@
 #include <ooo/vba/excel/XlChartType.hpp>
 
 #include "vbachartobjects.hxx"
+#include <docuno.hxx>
 #include "vbachartobject.hxx"
 #include <docsh.hxx>
 #include <cellsuno.hxx>
@@ -37,6 +38,7 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 namespace {
@@ -47,8 +49,8 @@ class ChartObjectEnumerationImpl : public EnumerationHelperImpl
 
 public:
     /// @throws uno::RuntimeException
-    ChartObjectEnumerationImpl( const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration, uno::Reference< drawing::XDrawPageSupplier >  _xDrawPageSupplier, const uno::Reference< XHelperInterface >& _xParent ) : EnumerationHelperImpl( _xParent, xContext, xEnumeration ), xDrawPageSupplier(std::move( _xDrawPageSupplier )) {}
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    ChartObjectEnumerationImpl( const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration, uno::Reference< drawing::XDrawPageSupplier >  _xDrawPageSupplier, const uno::Reference< XHelperInterface >& _xParent ) : EnumerationHelperImpl( _xParent, xContext, xEnumeration ), xDrawPageSupplier(std::move( _xDrawPageSupplier )) {}
+    virtual cpo::uno::Any nextElement(  ) override
     {
         cpo::uno::Any ret;
 
@@ -66,7 +68,7 @@ public:
         {
             throw;
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             throw;
         }
@@ -84,7 +86,7 @@ public:
 
 }
 
-ScVbaChartObjects::ScVbaChartObjects( const css::uno::Reference< ov::XHelperInterface >& _xParent, const css::uno::Reference< css::uno::XComponentContext >& _xContext, const css::uno::Reference< css::table::XTableCharts >& _xTableCharts, uno::Reference< drawing::XDrawPageSupplier >  _xDrawPageSupplier ) : ChartObjects_BASE(_xParent, _xContext, css::uno::Reference< css::container::XIndexAccess >( _xTableCharts, css::uno::UNO_QUERY ) ), xTableCharts( _xTableCharts ) , xDrawPageSupplier(std::move( _xDrawPageSupplier ))
+ScVbaChartObjects::ScVbaChartObjects( const cpo::uno::Reference< ov::XHelperInterface >& _xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& _xContext, const cpo::uno::Reference< css::table::XTableCharts >& _xTableCharts, uno::Reference< drawing::XDrawPageSupplier >  _xDrawPageSupplier ) : ChartObjects_BASE(_xParent, _xContext, cpo::uno::Reference< css::container::XIndexAccess >( _xTableCharts, cpo::uno::UNO_QUERY ) ), xTableCharts( _xTableCharts ) , xDrawPageSupplier(std::move( _xDrawPageSupplier ))
 {
 
 }
@@ -102,14 +104,14 @@ ScVbaChartObjects::getChartObjectNames() const
     try
     {
         // c++ hackery
-        uno::Reference< uno::XInterface > xIf( xDrawPageSupplier, uno::UNO_QUERY_THROW );
+        uno::Reference< cpo::uno::XInterface > xIf( xDrawPageSupplier, uno::UNO_QUERY_THROW );
         ScCellRangesBase* pUno = dynamic_cast< ScCellRangesBase* >( xIf.get() );
         ScDocShell* pDocShell = nullptr;
         if ( !pUno )
-            throw uno::RuntimeException(u"Failed to obtain the impl class from the drawpage"_ustr );
+            throw cpo::uno::RuntimeException(u"Failed to obtain the impl class from the drawpage"_ustr );
         pDocShell = pUno->GetDocShell();
         if ( !pDocShell )
-            throw uno::RuntimeException(u"Failed to obtain the docshell implclass"_ustr );
+            throw cpo::uno::RuntimeException(u"Failed to obtain the docshell implclass"_ustr );
 
         uno::Reference< sheet::XSpreadsheets > xSpreadsheets = pDocShell->GetModel()->getSheets();
         std::vector< OUString > aChartNamesVector;
@@ -125,13 +127,13 @@ ScVbaChartObjects::getChartObjectNames() const
     }
     catch (cpo::uno::Exception& )
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
     return sChartNames;
 }
 
 // XChartObjects
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaChartObjects::Add( double _nX, double _nY, double _nWidth, double _nHeight )
 {
     try
@@ -155,7 +157,7 @@ ScVbaChartObjects::Add( double _nX, double _nY, double _nWidth, double _nHeight 
     }
     return aNULL();
 }
-void SAL_CALL ScVbaChartObjects::Delete(  )
+void ScVbaChartObjects::Delete(  )
 {
     const cpo::uno::Sequence< OUString > sChartNames = xTableCharts->getElementNames();
     for (const auto& rChartName : sChartNames)
@@ -167,7 +169,7 @@ void SAL_CALL ScVbaChartObjects::Delete(  )
 uno::Reference< container::XEnumeration >
 ScVbaChartObjects::createEnumeration()
 {
-    css::uno::Reference< container::XEnumerationAccess > xEnumAccess( xTableCharts, uno::UNO_QUERY_THROW );
+    cpo::uno::Reference< container::XEnumerationAccess > xEnumAccess( xTableCharts, uno::UNO_QUERY_THROW );
     return new ChartObjectEnumerationImpl( mxContext, xEnumAccess->createEnumeration(), xDrawPageSupplier, getParent() /* sheet */);
 }
 

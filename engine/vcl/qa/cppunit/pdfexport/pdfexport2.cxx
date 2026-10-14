@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 
 #include <config_fonts.h>
 #include <config_vclplug.h>
@@ -21,20 +22,30 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/text/XTextField.hpp>
+#include <com/sun/star/text/ControlCharacter.hpp>
+#include <com/sun/star/text/ReferenceFieldPart.hpp>
+#include <com/sun/star/text/ReferenceFieldSource.hpp>
+#include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 
 #include <comphelper/propertysequence.hxx>
+#include <comphelper/scopeguard.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <basegfx/vector/b2dsize.hxx>
 #include <unotools/tempfile.hxx>
 #include <vcl/filter/pdfdocument.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <tools/stream.hxx>
 #include <tools/zcodec.hxx>
 #include <tools/XmlWalker.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <unotools/streamwrap.hxx>
+#include <rtl/character.hxx>
 #include <rtl/math.hxx>
 #include <o3tl/string_view.hxx>
 #include <IDocumentDeviceAccess.hxx>
@@ -53,9 +64,11 @@
 static std::ostream& operator<<(std::ostream& rStream, const std::set<rtl::OString>& rSet);
 #endif
 
+#include <test/pdftesttools.hxx>
 #include <test/unoapi_test.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 #if !defined _WIN32
 static std::ostream& operator<<(std::ostream& rStream, const std::set<OString>& rSet)
@@ -88,7 +101,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf160705)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -106,11 +119,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf160705)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     int nTable(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
 
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "StructElem")
@@ -156,8 +166,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf159895)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "PDFUACompliance", cpo::uno::Any(true) },
-        { "ExportFormFields", cpo::uno::Any(true) },
+        { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+        { u"ExportFormFields"_ustr, cpo::uno::Any(true) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -175,11 +185,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf159895)
     std::vector<vcl::filter::PDFObjectElement*> aPages = aDocument.GetPages();
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObj : aDocument.GetObjects())
     {
-        auto pObj = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObj)
-            continue;
 
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObj->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "XObject")
@@ -322,11 +329,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf141171)
     CPPUNIT_ASSERT(aDocument.Read(aStream));
 
     int nImages(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Subtype"_ostr));
         if (pType && pType->GetValue() == "Image")
         {
@@ -380,7 +384,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf129085)
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
         // if the Quality is too high (like 90) then the image will be a DIB,
         // not a JPEG! 80 works currently but set it lower to be sure...
-        { "Quality", cpo::uno::Any(sal_Int32(50)) },
+        { u"Quality"_ustr, cpo::uno::Any(sal_Int32(50)) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -460,6 +464,99 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTocLink)
     // Without the accompanying fix in place, this test would have failed, as the page contained no
     // links.
     CPPUNIT_ASSERT(pPdfPage->hasLinks());
+}
+
+// Inserts three cross-reference fields to a one-digit bookmark target, separated only by
+// ", ", the way consecutive caption numbers are.
+void lcl_insertAdjacentReferenceFields(const uno::Reference<lang::XComponent>& xComponent,
+                                       float fCharHeight)
+{
+    uno::Reference<text::XTextDocument> xTextDocument(xComponent, uno::UNO_QUERY);
+    uno::Reference<text::XText> xText = xTextDocument->getText();
+    uno::Reference<text::XTextCursor> xCursor = xText->createTextCursor();
+    uno::Reference<lang::XMultiServiceFactory> xFactory(xComponent, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xCursorProps(xCursor, uno::UNO_QUERY);
+    xCursorProps->setPropertyValue(u"CharHeight"_ustr, cpo::uno::Any(fCharHeight));
+
+    xText->insertString(xCursor, u"1"_ustr, /*bAbsorb=*/false);
+    xCursor->goLeft(1, /*bExpand=*/true);
+    uno::Reference<text::XTextContent> xBookmark(
+        xFactory->createInstance(u"com.sun.star.text.Bookmark"_ustr), uno::UNO_QUERY);
+    uno::Reference<container::XNamed> xBookmarkName(xBookmark, uno::UNO_QUERY);
+    xBookmarkName->setName(u"Target"_ustr);
+    xText->insertTextContent(xCursor, xBookmark, /*bAbsorb=*/true);
+
+    xCursor->gotoEnd(/*bExpand=*/false);
+    xText->insertControlCharacter(xCursor, text::ControlCharacter::PARAGRAPH_BREAK,
+                                  /*bAbsorb=*/false);
+
+    auto insertReferenceField = [&]() {
+        xCursor->gotoEnd(/*bExpand=*/false);
+        uno::Reference<text::XTextField> xField(
+            xFactory->createInstance(u"com.sun.star.text.TextField.GetReference"_ustr),
+            uno::UNO_QUERY);
+        uno::Reference<beans::XPropertySet> xFieldProps(xField, uno::UNO_QUERY);
+        xFieldProps->setPropertyValue(
+            u"ReferenceFieldSource"_ustr,
+            cpo::uno::Any(sal_Int16(text::ReferenceFieldSource::BOOKMARK)));
+        xFieldProps->setPropertyValue(u"ReferenceFieldPart"_ustr,
+                                      cpo::uno::Any(sal_Int16(text::ReferenceFieldPart::TEXT)));
+        xFieldProps->setPropertyValue(u"SourceName"_ustr, cpo::uno::Any(u"Target"_ustr));
+        xField->attach(xCursor);
+    };
+
+    insertReferenceField();
+    xCursor->gotoEnd(/*bExpand=*/false);
+    xText->insertString(xCursor, u", "_ustr, /*bAbsorb=*/false);
+    insertReferenceField();
+    xCursor->gotoEnd(/*bExpand=*/false);
+    xText->insertString(xCursor, u", "_ustr, /*bAbsorb=*/false);
+    insertReferenceField();
+}
+
+int lcl_countAnnotations(const std::unique_ptr<vcl::pdf::PDFiumDocument>& pPdfDocument)
+{
+    std::unique_ptr<vcl::pdf::PDFiumPage> pPdfPage = pPdfDocument->openPage(/*nIndex=*/0);
+    CPPUNIT_ASSERT(pPdfPage);
+    return pPdfPage->getAnnotationCount();
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testAdjacentReferenceFieldLinks)
+{
+    // Every one of three adjacent one-digit cross-reference fields gets its own clickable
+    // area in the exported PDF, at every font size.
+    for (float fCharHeight : { 12.0f, 8.0f, 6.0f })
+    {
+        loadFromURL(u"private:factory/swriter"_ustr);
+        lcl_insertAdjacentReferenceFields(mxComponent, fCharHeight);
+
+        save(TestFilter::PDF_WRITER);
+
+        OString aMessage("font size " + OString::number(fCharHeight));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), 3, lcl_countAnnotations(parsePDFExport()));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testAdjacentReferenceFieldLinksWideCaret)
+{
+    // The width of the text caret is a desktop setting, and can be set wider than a small
+    // glyph. The clickable areas stay independent of it.
+    AllSettings aOldSettings(Application::GetSettings());
+    comphelper::ScopeGuard aSettingsGuard(
+        [&aOldSettings] { Application::SetSettings(aOldSettings); });
+    AllSettings aSettings(aOldSettings);
+    StyleSettings aStyleSettings(aSettings.GetStyleSettings());
+    // 6 pixels is 90 twips at 96 dots per inch, wider than an 8 point digit.
+    aStyleSettings.SetCursorSize(6);
+    aSettings.SetStyleSettings(aStyleSettings);
+    Application::SetSettings(aSettings);
+
+    loadFromURL(u"private:factory/swriter"_ustr);
+    lcl_insertAdjacentReferenceFields(mxComponent, 8.0f);
+
+    save(TestFilter::PDF_WRITER);
+
+    CPPUNIT_ASSERT_EQUAL(3, lcl_countAnnotations(parsePDFExport()));
 }
 
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testReduceSmallImage)
@@ -615,13 +712,13 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testReduceImage)
     uno::Reference<io::XOutputStream> xOutputStream(new utl::OStreamWrapper(aOutputStream));
 
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "ReduceImageResolution", cpo::uno::Any(false) } }));
+        comphelper::InitPropertySequence({ { u"ReduceImageResolution"_ustr, cpo::uno::Any(false) } }));
 
     // This is intentionally in an "unlucky" order, output stream comes before filter data.
     cpo::uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence({
-        { "FilterName", cpo::uno::Any(u"writer_pdf_Export"_ustr) },
-        { "OutputStream", cpo::uno::Any(xOutputStream) },
-        { "FilterData", cpo::uno::Any(aFilterData) },
+        { u"FilterName"_ustr, cpo::uno::Any(u"writer_pdf_Export"_ustr) },
+        { u"OutputStream"_ustr, cpo::uno::Any(xOutputStream) },
+        { u"FilterData"_ustr, cpo::uno::Any(aFilterData) },
     }));
     xFilter->filter(aDescriptor);
     aOutputStream.Close();
@@ -818,7 +915,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testVersion15)
 
     // Save as PDF.
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
-        { { "SelectPdfVersion", cpo::uno::Any(static_cast<sal_Int32>(15)) } }));
+        { { u"SelectPdfVersion"_ustr, cpo::uno::Any(static_cast<sal_Int32>(15)) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
@@ -844,9 +941,9 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf160196)
         = xDocumentPropertiesSupplier->getDocumentProperties();
     xDocumentProperties->setTitle(u"Title"_ustr);
 
-    cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) },
-                                           { "SelectPdfVersion", cpo::uno::Any(sal_Int32(20)) } }));
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
+        { { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+          { u"SelectPdfVersion"_ustr, cpo::uno::Any(sal_Int32(20)) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     // Without the fix in place, the validation would have failed
@@ -857,7 +954,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTaggedNestedTableInRepeatedHeaderRow)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -879,11 +976,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTaggedNestedTableInRepeatedHeaderRow)
     int nTables(0);
     int nRows(0);
     int nParagraphs(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (!pType || pType->GetValue() != "StructElem")
             continue;
@@ -914,7 +1008,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testVersion20)
 
     // Save as PDF.
     cpo::uno::Sequence<beans::PropertyValue> aFilterData = comphelper::InitPropertySequence(
-        { { "SelectPdfVersion", cpo::uno::Any(static_cast<sal_Int32>(20)) } });
+        { { u"SelectPdfVersion"_ustr, cpo::uno::Any(static_cast<sal_Int32>(20)) } });
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
@@ -1074,7 +1168,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testFormFontName)
 {
     // Import the bugdoc and export as PDF.
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "ExportFormFields", cpo::uno::Any(true) },
+        { u"ExportFormFields"_ustr, cpo::uno::Any(true) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -1320,11 +1414,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf160117)
     bool bFound1 = false;
     bool bFound2 = false;
     bool bFound3 = false;
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "FontDescriptor")
         {
@@ -1438,7 +1529,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testPdfUaMetadata)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -1517,9 +1608,9 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testPdfUaMetadata)
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf139736)
 {
     // Enable PDF/UA
-    cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) },
-                                           { "SelectPdfVersion", cpo::uno::Any(sal_Int32(17)) } }));
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
+        { { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+          { u"SelectPdfVersion"_ustr, cpo::uno::Any(sal_Int32(17)) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -1624,9 +1715,9 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf139736)
 
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf168057)
 {
-    cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) },
-                                           { "SelectPdfVersion", cpo::uno::Any(sal_Int32(20)) } }));
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
+        { { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+          { u"SelectPdfVersion"_ustr, cpo::uno::Any(sal_Int32(20)) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     loadFromFile(u"tdf168057.odt");
@@ -1637,10 +1728,10 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf168057)
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152231)
 {
     // Enable PDF/UA
-    cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) },
-                                           { "ExportNotesInMargin", cpo::uno::Any(true) },
-                                           { "SelectPdfVersion", cpo::uno::Any(sal_Int32(17)) } }));
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
+        { { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+          { u"ExportNotesInMargin"_ustr, cpo::uno::Any(true) },
+          { u"SelectPdfVersion"_ustr, cpo::uno::Any(sal_Int32(17)) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     vcl::filter::PDFDocument aDocument;
@@ -1724,11 +1815,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152231)
     CPPUNIT_ASSERT_GREATEREQUAL(1, nArtifacts);
 
     int nPara(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "StructElem")
         {
@@ -1749,7 +1837,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152231)
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf136805)
 {
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "SelectPdfVersion", cpo::uno::Any(static_cast<sal_Int32>(1)) },
+        { u"SelectPdfVersion"_ustr, cpo::uno::Any(static_cast<sal_Int32>(1)) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -1762,8 +1850,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157517)
 {
     // Only reproduced with PPDF-A/2 / bDF-A/3b and PDF/UA.
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "PDFUACompliance", cpo::uno::Any(true) },
-        { "SelectPdfVersion", cpo::uno::Any(static_cast<sal_Int32>(3)) },
+        { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+        { u"SelectPdfVersion"_ustr, cpo::uno::Any(static_cast<sal_Int32>(3)) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -1775,7 +1863,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157517)
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152218)
 {
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "PDFUACompliance", cpo::uno::Any(true) },
+        { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -1788,11 +1876,11 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152235)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
-        { { "PDFUACompliance", cpo::uno::Any(true) },
-          { "Watermark", cpo::uno::Any(u"kendy"_ustr) },
+        { { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+          { u"Watermark"_ustr, cpo::uno::Any(u"kendy"_ustr) },
           // need to set a font to avoid assertions about missing "Helvetica"
-          { "WatermarkFontName", cpo::uno::Any(u"Liberation Sans"_ustr) },
-          { "SelectPdfVersion", cpo::uno::Any(sal_Int32(17)) } }));
+          { u"WatermarkFontName"_ustr, cpo::uno::Any(u"Liberation Sans"_ustr) },
+          { u"SelectPdfVersion"_ustr, cpo::uno::Any(sal_Int32(17)) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     loadFromURL(u"private:factory/swriter"_ustr);
@@ -1877,7 +1965,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152235)
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf167290)
 {
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "SelectPdfVersion", cpo::uno::Any(static_cast<sal_Int32>(1)) },
+        { u"SelectPdfVersion"_ustr, cpo::uno::Any(static_cast<sal_Int32>(1)) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -1889,7 +1977,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf149140)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     vcl::filter::PDFDocument aDocument;
@@ -1905,11 +1993,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf149140)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     int nTH(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "StructElem")
         {
@@ -1944,11 +2029,280 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf149140)
     CPPUNIT_ASSERT_EQUAL(6, nTH);
 }
 
+// the structure element type of a table cell that a row's kid refers to
+OString GetCellType(vcl::filter::PDFElement* pElement)
+{
+    auto pRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pElement);
+    CPPUNIT_ASSERT(pRef);
+    auto pCell = pRef->LookupObject();
+    CPPUNIT_ASSERT(pCell);
+    auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pCell->Lookup("S"_ostr));
+    CPPUNIT_ASSERT(pS);
+    return pS->GetValue();
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf173162)
+{
+    loadFromFile(u"StructureNamespaces.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"PDFUACompliance"_ustr, true),
+                                    comphelper::makePropertyValue(u"SelectPdfVersion"_ustr,
+                                                                  sal_Int32(20)) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    static constexpr OString aPDF17("http://iso.org/pdf/ssn"_ostr);
+    static constexpr OString aPDF20("http://iso.org/pdf2/ssn"_ostr);
+
+    // the namespace each element points at, by object
+    std::unordered_map<vcl::filter::PDFObjectElement*, OString> aNamespaceOf;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
+        if (!pType || pType->GetValue() != "Namespace")
+            continue;
+        auto pURI = dynamic_cast<vcl::filter::PDFLiteralStringElement*>(pObject->Lookup("NS"_ostr));
+        CPPUNIT_ASSERT(pURI);
+        aNamespaceOf[pObject] = pURI->GetValue();
+
+        // the 1.7 namespace needs none: for it the structure tree root's RoleMap is the fallback
+        auto pMap
+            = dynamic_cast<vcl::filter::PDFDictionaryElement*>(pObject->Lookup("RoleMapNS"_ostr));
+        if (pURI->GetValue() == aPDF17)
+            CPPUNIT_ASSERT_MESSAGE("the 1.7 namespace maps nothing", !pMap);
+        else
+            CPPUNIT_ASSERT(pMap);
+    }
+    // one for PDF 2.0 and one for the types it dropped
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aNamespaceOf.size());
+
+    CPPUNIT_ASSERT(aDocument.GetCatalog());
+    auto pRootRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(
+        aDocument.GetCatalog()->Lookup("StructTreeRoot"_ostr));
+    CPPUNIT_ASSERT(pRootRef);
+    CPPUNIT_ASSERT(pRootRef->LookupObject());
+    auto pNamespaces = dynamic_cast<vcl::filter::PDFArrayElement*>(
+        pRootRef->LookupObject()->Lookup("Namespaces"_ostr));
+    CPPUNIT_ASSERT(pNamespaces);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pNamespaces->GetElements().size());
+    for (const auto pElement : pNamespaces->GetElements())
+    {
+        auto pRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pElement);
+        CPPUNIT_ASSERT(pRef);
+        CPPUNIT_ASSERT_MESSAGE("the root names a namespace object",
+                               aNamespaceOf.contains(pRef->LookupObject()));
+    }
+
+    // The references have to be separated in the bytes themselves: "1 0 R2 0 R" is not two
+    // references, and this parser reads it as though it were, so check them. veraPDF is
+    // stricter - it fails to parse such a file and reports nothing, which reads as a pass.
+    // The structure tree rides in an object stream, so the bytes to read are what it holds.
+    SvStream* pStream = maTempFile.GetStream(StreamMode::READ);
+    pStream->Seek(0);
+    const OString aFile(PdfTestTools::getObjectStreamsData(aDocument)
+                        + read_uInt8s_ToOString(*pStream, pStream->remainingSize()));
+    const sal_Int32 nStart(aFile.indexOf("/Namespaces ["));
+    CPPUNIT_ASSERT_GREATER(sal_Int32(-1), nStart);
+    const sal_Int32 nEnd(aFile.indexOf("]", nStart));
+    CPPUNIT_ASSERT_GREATER(nStart, nEnd);
+    const std::string_view aArray(aFile.subView(nStart, nEnd - nStart));
+    for (size_t nR = aArray.find('R'); nR != std::string_view::npos; nR = aArray.find('R', nR + 1))
+    {
+        const bool bSeparated(nR + 1 == aArray.size()
+                              || !rtl::isAsciiDigit(static_cast<unsigned char>(aArray[nR + 1])));
+        CPPUNIT_ASSERT_MESSAGE(
+            OString(OString::Concat("unseparated references in ") + aArray).getStr(), bSeparated);
+    }
+
+    // the namespace each structure type landed in
+    std::unordered_map<OString, OString> aNamespaceOfType;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
+        if (!pType || pType->GetValue() != "StructElem")
+            continue;
+        auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        if (!pS)
+            continue;
+        auto pNS = dynamic_cast<vcl::filter::PDFReferenceElement*>(pObject->Lookup("NS"_ostr));
+        CPPUNIT_ASSERT_MESSAGE("every element in a PDF 2.0 file names its namespace", pNS);
+        const OString aURI(aNamespaceOf[pNS->LookupObject()]);
+        const auto aEntry(aNamespaceOfType.emplace(pS->GetValue(), aURI));
+        if (!aEntry.second)
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("one type, two namespaces", aEntry.first->second, aURI);
+    }
+
+    // the types PDF 2.0 dropped, which ISO 14289-2 8.2.4 accepts only in the 1.7 namespace
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["TOC"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["TOCI"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["Index"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["BlockQuote"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["Quote"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["Code"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF17, aNamespaceOfType["BibEntry"_ostr]);
+    // and the ones it kept
+    CPPUNIT_ASSERT_EQUAL(aPDF20, aNamespaceOfType["Document"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF20, aNamespaceOfType["H1"_ostr]);
+    CPPUNIT_ASSERT_EQUAL(aPDF20, aNamespaceOfType["Link"_ostr]);
+    // the footnote takes the type PDF 2.0 put in place of Note
+    CPPUNIT_ASSERT_EQUAL(aPDF20, aNamespaceOfType["FENote"_ostr]);
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf166963)
+{
+    // Takes about two minutes locally, most of it in the PDFDocument below, which rescans its
+    // element list once per object. Disable the test if that costs CI too much.
+    //
+    // A table with more rows than ncMaxPDFArraySize, so its kid list has to be split into Div
+    // containers, and with a repeated heading row, which is emitted as a NonStructElement: that
+    // gives the Table element more children than kids, which is what the split used to mishandle.
+    utl::TempFileNamed aSource(u"tdf166963", true, u".fodt");
+    aSource.EnableKillingFile();
+    SvStream* pSource = aSource.GetStream(StreamMode::WRITE | StreamMode::TRUNC);
+    pSource->WriteOString(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<office:document"
+        " xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\""
+        " xmlns:style=\"urn:oasis:names:tc:opendocument:xmlns:style:1.0\""
+        " xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\""
+        " xmlns:table=\"urn:oasis:names:tc:opendocument:xmlns:table:1.0\""
+        " xmlns:fo=\"urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0\""
+        " xmlns:svg=\"urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0\""
+        " office:version=\"1.3\""
+        " office:mimetype=\"application/vnd.oasis.opendocument.text\">"
+        "<office:font-face-decls><style:font-face"
+        " style:name=\"Liberation Serif\""
+        " svg:font-family=\"&apos;Liberation Serif&apos;\"/>"
+        "</office:font-face-decls>"
+        "<office:styles><style:default-style style:family=\"paragraph\">"
+        "<style:text-properties style:font-name=\"Liberation Serif\""
+        " fo:font-size=\"6pt\" fo:language=\"en\" fo:country=\"US\"/>"
+        "</style:default-style></office:styles>"
+        "<office:body><office:text><table:table table:name=\"T\">"
+        "<table:table-column/>"
+        "<table:table-header-rows><table:table-row><table:table-cell"
+        " office:value-type=\"string\"><text:p>h</text:p></table:table-cell>"
+        "</table:table-row></table:table-header-rows>");
+    for (int i = 0; i < 8300; ++i)
+        pSource->WriteOString("<table:table-row><table:table-cell office:value-type=\"string\">"
+                              "<text:p>r</text:p></table:table-cell></table:table-row>");
+    pSource->WriteOString("</table:table></office:text></office:body></office:document>");
+    aSource.CloseStream();
+
+    loadFromURL(aSource.GetURL());
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // which element actually lists each structure element as its kid
+    std::unordered_map<vcl::filter::PDFObjectElement*, vcl::filter::PDFObjectElement*> aLister;
+    std::vector<vcl::filter::PDFObjectElement*> aElements;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
+        if (!pType)
+            continue;
+        const bool bRoot(pType->GetValue() == "StructTreeRoot");
+        if (!bRoot && pType->GetValue() != "StructElem")
+            continue;
+        if (!bRoot)
+            aElements.push_back(pObject);
+        auto pKids = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject->Lookup("K"_ostr));
+        if (!pKids)
+            continue;
+        for (const auto pKid : pKids->GetElements())
+        {
+            auto pRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pKid);
+            if (!pRef)
+                continue;
+            CPPUNIT_ASSERT_MESSAGE("a structure element is the kid of two elements",
+                                   aLister.emplace(pRef->LookupObject(), pObject).second);
+        }
+    }
+    // a generated container holds exactly ncMaxPDFArraySize kids; without one the kid list
+    // never overflowed and the document proves nothing
+    size_t nFullContainers(0);
+    for (const auto pElement : aElements)
+    {
+        auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pElement->Lookup("S"_ostr));
+        auto pKids = dynamic_cast<vcl::filter::PDFArrayElement*>(pElement->Lookup("K"_ostr));
+        if (pS && pS->GetValue() == "Div" && pKids && pKids->GetElements().size() == 8191)
+            ++nFullContainers;
+    }
+    CPPUNIT_ASSERT_EQUAL(size_t(1), nFullContainers);
+
+    for (const auto pElement : aElements)
+    {
+        auto pParent = dynamic_cast<vcl::filter::PDFReferenceElement*>(pElement->Lookup("P"_ostr));
+        CPPUNIT_ASSERT(pParent);
+        CPPUNIT_ASSERT_MESSAGE("a structure element that nothing lists as its kid",
+                               aLister.contains(pElement));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("a structure element claims a parent that does not list it",
+                                     aLister.at(pElement), pParent->LookupObject());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf173194)
+{
+    loadFromFile(u"TableHeadingDerived.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"PDFUACompliance"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    SvFileStream aStream(maTempFile.GetURL(), StreamMode::READ);
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(aStream));
+
+    vcl::filter::PDFObjectElement* pTableSE(nullptr);
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
+        auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        if (pType && pType->GetValue() == "StructElem" && pS && pS->GetValue() == "Table")
+        {
+            CPPUNIT_ASSERT(!pTableSE);
+            pTableSE = pObject;
+        }
+    }
+    CPPUNIT_ASSERT(pTableSE);
+
+    auto pRows = dynamic_cast<vcl::filter::PDFArrayElement*>(pTableSE->Lookup("K"_ostr));
+    CPPUNIT_ASSERT(pRows);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pRows->GetElements().size());
+
+    // the first column is Table Heading in row one and a style derived from it in row two,
+    // so both rows read TH then TD
+    for (const auto pRowElement : pRows->GetElements())
+    {
+        auto pRowRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pRowElement);
+        CPPUNIT_ASSERT(pRowRef);
+        auto pRow = pRowRef->LookupObject();
+        CPPUNIT_ASSERT(pRow);
+        auto pRowS = dynamic_cast<vcl::filter::PDFNameElement*>(pRow->Lookup("S"_ostr));
+        CPPUNIT_ASSERT(pRowS);
+        CPPUNIT_ASSERT_EQUAL("TR"_ostr, pRowS->GetValue());
+
+        auto pCells = dynamic_cast<vcl::filter::PDFArrayElement*>(pRow->Lookup("K"_ostr));
+        CPPUNIT_ASSERT(pCells);
+        CPPUNIT_ASSERT_EQUAL(size_t(2), pCells->GetElements().size());
+        CPPUNIT_ASSERT_EQUAL("TH"_ostr, GetCellType(pCells->GetElement(0)));
+        CPPUNIT_ASSERT_EQUAL("TD"_ostr, GetCellType(pCells->GetElement(1)));
+    }
+}
+
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testNestedSection)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -1965,11 +2319,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testNestedSection)
     CPPUNIT_ASSERT_EQUAL(size_t(3), aPages.size());
 
     int nDoc(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructElem")
         {
@@ -2095,7 +2446,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157817)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -2113,11 +2464,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157817)
     CPPUNIT_ASSERT_EQUAL(size_t(2), aPages.size());
 
     vcl::filter::PDFObjectElement* pTOC(nullptr);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructElem")
         {
@@ -2292,7 +2640,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf135638)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -2310,11 +2658,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf135638)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     int nFigure(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "StructElem")
         {
@@ -2389,7 +2734,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157703)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -2407,11 +2752,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157703)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     vcl::filter::PDFObjectElement* pDocument(nullptr);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructElem")
         {
@@ -2470,7 +2812,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -2488,11 +2830,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
     CPPUNIT_ASSERT_EQUAL(size_t(2), aPages.size());
 
     int nDoc(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructElem")
         {
@@ -2581,25 +2920,18 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
                 auto pKids10010
                     = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject10010->Lookup("K"_ostr));
                 CPPUNIT_ASSERT(pKids10010);
-                // assume there are no MCID ref at this level
+                // the paragraph is wholly in one language, so it names it itself
+                auto pLang10010 = dynamic_cast<vcl::filter::PDFLiteralStringElement*>(
+                    pObject10010->Lookup("Lang"_ostr));
+                CPPUNIT_ASSERT(pLang10010);
+                CPPUNIT_ASSERT_EQUAL("en-GB"_ostr, pLang10010->GetValue());
+                // and its content needs no span between
                 auto vKids10010 = pKids10010->GetElements();
-                // only one span
-                CPPUNIT_ASSERT_EQUAL(size_t(1), vKids10010.size());
-
-                auto pRefKid100100 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids10010[0]);
-                CPPUNIT_ASSERT(pRefKid100100);
-                auto pObject100100 = pRefKid100100->LookupObject();
-                CPPUNIT_ASSERT(pObject100100);
-                auto pType100100 = dynamic_cast<vcl::filter::PDFNameElement*>(
-                    pObject100100->Lookup("Type"_ostr));
-                CPPUNIT_ASSERT_EQUAL("StructElem"_ostr, pType100100->GetValue());
-                auto pS100100
-                    = dynamic_cast<vcl::filter::PDFNameElement*>(pObject100100->Lookup("S"_ostr));
-                CPPUNIT_ASSERT_EQUAL("Span"_ostr, pS100100->GetValue());
-                // this span exists because of lang
-                auto pLang100100 = dynamic_cast<vcl::filter::PDFLiteralStringElement*>(
-                    pObject100100->Lookup("Lang"_ostr));
-                CPPUNIT_ASSERT_EQUAL("en-GB"_ostr, pLang100100->GetValue());
+                CPPUNIT_ASSERT_EQUAL(size_t(8), vKids10010.size());
+                for (const auto pKid : vKids10010)
+                {
+                    CPPUNIT_ASSERT(!dynamic_cast<vcl::filter::PDFReferenceElement*>(pKid));
+                }
 
                 auto pRefKid101 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids10[1]);
                 CPPUNIT_ASSERT(pRefKid101);
@@ -2661,6 +2993,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
                 auto pKids10110
                     = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject10110->Lookup("K"_ostr));
                 CPPUNIT_ASSERT(pKids10110);
+                // this paragraph is in the language of the document, so it names none
+                CPPUNIT_ASSERT(!pObject10110->Lookup("Lang"_ostr));
                 auto vKids10110 = pKids10110->GetElements();
                 // only MCIDs, no span
                 for (size_t i = 0; i < vKids10110.size(); ++i)
@@ -2729,89 +3063,48 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
                 auto pKids10210
                     = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject10210->Lookup("K"_ostr));
                 CPPUNIT_ASSERT(pKids10210);
-                // assume there are no MCID ref at this level
                 auto vKids10210 = pKids10210->GetElements();
-                // 2 span and a hyperlink
-                CPPUNIT_ASSERT_EQUAL(size_t(3), vKids10210.size());
+                CPPUNIT_ASSERT_EQUAL(size_t(8), vKids10210.size());
+                // this paragraph too is wholly in one language and names it itself
+                auto pLang10210 = dynamic_cast<vcl::filter::PDFLiteralStringElement*>(
+                    pObject10210->Lookup("Lang"_ostr));
+                CPPUNIT_ASSERT(pLang10210);
+                CPPUNIT_ASSERT_EQUAL("en-GB"_ostr, pLang10210->GetValue());
 
-                auto pRefKid102100 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids10210[0]);
-                CPPUNIT_ASSERT(pRefKid102100);
-                auto pObject102100 = pRefKid102100->LookupObject();
-                CPPUNIT_ASSERT(pObject102100);
-                auto pType102100 = dynamic_cast<vcl::filter::PDFNameElement*>(
-                    pObject102100->Lookup("Type"_ostr));
-                CPPUNIT_ASSERT_EQUAL("StructElem"_ostr, pType102100->GetValue());
-                auto pS102100
-                    = dynamic_cast<vcl::filter::PDFNameElement*>(pObject102100->Lookup("S"_ostr));
-                CPPUNIT_ASSERT_EQUAL("Span"_ostr, pS102100->GetValue());
-                auto pKids102100
-                    = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject102100->Lookup("K"_ostr));
-                CPPUNIT_ASSERT(pKids102100);
-                auto vKids102100 = pKids102100->GetElements();
-                for (size_t i = 0; i < vKids102100.size(); ++i)
+                // its own text needs no span, so the only elements left are the two links, and
+                // neither repeats the language
+                std::vector<vcl::filter::PDFObjectElement*> aLinks;
+                for (const auto pKid : vKids10210)
                 {
-                    auto pKid = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids102100[i]);
-                    CPPUNIT_ASSERT(!pKid);
+                    auto pRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pKid);
+                    if (!pRef)
+                        continue;
+                    auto pLinked = pRef->LookupObject();
+                    CPPUNIT_ASSERT(pLinked);
+                    CPPUNIT_ASSERT_EQUAL(
+                        "StructElem"_ostr,
+                        dynamic_cast<vcl::filter::PDFNameElement*>(pLinked->Lookup("Type"_ostr))
+                            ->GetValue());
+                    CPPUNIT_ASSERT_EQUAL("Link"_ostr, dynamic_cast<vcl::filter::PDFNameElement*>(
+                                                          pLinked->Lookup("S"_ostr))
+                                                          ->GetValue());
+                    CPPUNIT_ASSERT(!pLinked->Lookup("Lang"_ostr));
+                    aLinks.push_back(pLinked);
                 }
+                CPPUNIT_ASSERT_EQUAL(size_t(2), aLinks.size());
 
-                auto pRefKid102101 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids10210[1]);
-                CPPUNIT_ASSERT(pRefKid102101);
-                auto pObject102101 = pRefKid102101->LookupObject();
-                CPPUNIT_ASSERT(pObject102101);
-                auto pType102101 = dynamic_cast<vcl::filter::PDFNameElement*>(
-                    pObject102101->Lookup("Type"_ostr));
-                CPPUNIT_ASSERT_EQUAL("StructElem"_ostr, pType102101->GetValue());
-                auto pS102101
-                    = dynamic_cast<vcl::filter::PDFNameElement*>(pObject102101->Lookup("S"_ostr));
-                CPPUNIT_ASSERT_EQUAL("Link"_ostr, pS102101->GetValue());
-                auto pKids102101
-                    = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject102101->Lookup("K"_ostr));
-                CPPUNIT_ASSERT(pKids102101);
-                auto vKids102101 = pKids102101->GetElements();
-                int nRef(0);
-                for (size_t i = 0; i < vKids102101.size(); ++i)
+                // the hyperlink comes before the footnote in the text, so it is the first
+                // of the two
+                auto pKidsHyperlink
+                    = dynamic_cast<vcl::filter::PDFArrayElement*>(aLinks[0]->Lookup("K"_ostr));
+                CPPUNIT_ASSERT(pKidsHyperlink);
+                int nAnnots(0);
+                for (const auto pKid : pKidsHyperlink->GetElements())
                 {
-                    auto pKid = dynamic_cast<vcl::filter::PDFDictionaryElement*>(vKids102101[i]);
-                    if (pKid)
-                    {
-                        ++nRef; // annotation
-                    }
+                    if (dynamic_cast<vcl::filter::PDFDictionaryElement*>(pKid))
+                        ++nAnnots;
                 }
-                CPPUNIT_ASSERT_EQUAL(1, nRef);
-
-                auto pRefKid102102 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids10210[2]);
-                CPPUNIT_ASSERT(pRefKid102102);
-                auto pObject102102 = pRefKid102102->LookupObject();
-                CPPUNIT_ASSERT(pObject102102);
-                auto pType102102 = dynamic_cast<vcl::filter::PDFNameElement*>(
-                    pObject102102->Lookup("Type"_ostr));
-                CPPUNIT_ASSERT_EQUAL("StructElem"_ostr, pType102102->GetValue());
-                auto pS102102
-                    = dynamic_cast<vcl::filter::PDFNameElement*>(pObject102102->Lookup("S"_ostr));
-                CPPUNIT_ASSERT_EQUAL("Span"_ostr, pS102102->GetValue());
-                auto pKids102102
-                    = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject102102->Lookup("K"_ostr));
-                CPPUNIT_ASSERT(pKids102102);
-                auto vKids102102 = pKids102102->GetElements();
-                // there is a footnote
-                int nFtn(0);
-                for (size_t i = 0; i < vKids102102.size(); ++i)
-                {
-                    auto pKid = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids102102[i]);
-                    if (pKid)
-                    {
-                        auto pObject = pKid->LookupObject();
-                        CPPUNIT_ASSERT(pObject);
-                        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(
-                            pObject->Lookup("Type"_ostr));
-                        CPPUNIT_ASSERT_EQUAL("StructElem"_ostr, pType->GetValue());
-                        auto pS
-                            = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
-                        CPPUNIT_ASSERT_EQUAL("Link"_ostr, pS->GetValue());
-                        ++nFtn;
-                    }
-                }
-                CPPUNIT_ASSERT_EQUAL(1, nFtn);
+                CPPUNIT_ASSERT_EQUAL(1, nAnnots);
 
                 auto pRefKid103 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids10[3]);
                 CPPUNIT_ASSERT(pRefKid103);
@@ -2870,6 +3163,10 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
                 auto pS10310
                     = dynamic_cast<vcl::filter::PDFNameElement*>(pObject10310->Lookup("S"_ostr));
                 CPPUNIT_ASSERT_EQUAL("Standard"_ostr, pS10310->GetValue());
+                auto pLang10310 = dynamic_cast<vcl::filter::PDFLiteralStringElement*>(
+                    pObject10310->Lookup("Lang"_ostr));
+                CPPUNIT_ASSERT(pLang10310);
+                CPPUNIT_ASSERT_EQUAL("en-GB"_ostr, pLang10310->GetValue());
                 auto pKids10310
                     = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject10310->Lookup("K"_ostr));
                 CPPUNIT_ASSERT(pKids10310);
@@ -2901,6 +3198,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
                                      dynamic_cast<vcl::filter::PDFNameElement*>(
                                          pDictA103101->LookupElement("TextDecorationType"_ostr))
                                          ->GetValue());
+                // the span stands for the strikeout, and no longer repeats the language
+                CPPUNIT_ASSERT(!pObject103101->Lookup("Lang"_ostr));
 
                 // now the footnote container - following the list
                 auto pRefKid11 = dynamic_cast<vcl::filter::PDFReferenceElement*>(vKids1[1]);
@@ -2988,9 +3287,9 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testSpans)
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157182)
 {
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "PDFUACompliance", cpo::uno::Any(true) },
+        { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
         // only happens with PDF/A-1
-        { "SelectPdfVersion", cpo::uno::Any(static_cast<sal_Int32>(1)) },
+        { u"SelectPdfVersion"_ustr, cpo::uno::Any(static_cast<sal_Int32>(1)) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -3005,7 +3304,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf57423)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -3022,96 +3321,50 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf57423)
     std::vector<vcl::filter::PDFObjectElement*> aPages = aDocument.GetPages();
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
-    int nFigure(0);
-    int nFormula(0);
-    int nDiv(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    // each kind's descriptions in one string, so the assertion does not depend on the order the
+    // objects come back in
+    OUString aFigures;
+    OUString aFormulas;
+    OUString aDivs;
+    auto aAlt = [](vcl::filter::PDFObjectElement* pObject) -> OUString {
+        auto pAlt = dynamic_cast<vcl::filter::PDFHexStringElement*>(pObject->Lookup("Alt"_ostr));
+        return pAlt ? vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pAlt) : OUString();
+    };
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
-        if (pType && pType->GetValue() == "StructElem")
-        {
-            auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
-            if (pS && pS->GetValue() == "Figure")
-            {
-                switch (nFigure)
-                {
-                    case 2:
-                        CPPUNIT_ASSERT_EQUAL(u"QR Code - Tells how to get to Mosegaard"_ustr,
-                                             ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                                                 *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                                                     pObject->Lookup("Alt"_ostr))));
-                        break;
-                    case 0:
-                        CPPUNIT_ASSERT_EQUAL(u"Title: Arrows - Description:  Explains the "
-                                             u"different arrow appearances"_ustr,
-                                             ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                                                 *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                                                     pObject->Lookup("Alt"_ostr))));
-                        break;
-                    case 1:
-                        CPPUNIT_ASSERT_EQUAL(
-                            u"My blue triangle - Does not need further description"_ustr,
-                            ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                                *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                                    pObject->Lookup("Alt"_ostr))));
-                        break;
-                }
-                ++nFigure;
-            }
-            if (pS && pS->GetValue() == "Formula")
-            {
-                CPPUNIT_ASSERT_EQUAL(
-                    u"Equation 1 - Now we give the full description of eq 1 here"_ustr,
-                    ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                        *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                            pObject->Lookup("Alt"_ostr))));
-                ++nFormula;
-            }
-            if (pS && pS->GetValue() == "Div")
-            {
-                switch (nDiv)
-                {
-                    case 0:
-                        CPPUNIT_ASSERT_EQUAL(u"This frame has a description"_ustr,
-                                             ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                                                 *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                                                     pObject->Lookup("Alt"_ostr))));
-                        break;
-                    case 1:
-                        // no properties set on this
-                        CPPUNIT_ASSERT(!pObject->Lookup("Alt"_ostr));
-                        break;
-                    case 2:
-                        CPPUNIT_ASSERT_EQUAL(u"My textbox - Has a light background"_ustr,
-                                             ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                                                 *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                                                     pObject->Lookup("Alt"_ostr))));
-                        break;
-                    case 3:
-                        CPPUNIT_ASSERT_EQUAL(u"Hey!  There is no alternate text for Frame "
-                                             u"// but maybe not needed?"_ustr,
-                                             ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(
-                                                 *dynamic_cast<vcl::filter::PDFHexStringElement*>(
-                                                     pObject->Lookup("Alt"_ostr))));
-                        break;
-                }
-                ++nDiv;
-            }
-        }
+        if (!pType || pType->GetValue() != "StructElem")
+            continue;
+        auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        if (!pS)
+            continue;
+        if (pS->GetValue() == "Figure")
+            aFigures += aAlt(pObject) + "|";
+        else if (pS->GetValue() == "Formula")
+            aFormulas += aAlt(pObject) + "|";
+        else if (pS->GetValue() == "Div")
+            aDivs += aAlt(pObject) + "|";
     }
-    CPPUNIT_ASSERT_EQUAL(3, nFigure);
-    CPPUNIT_ASSERT_EQUAL(1, nFormula);
-    CPPUNIT_ASSERT_EQUAL(4, nDiv);
+
+    CPPUNIT_ASSERT_EQUAL(
+        u"QR Code - Tells how to get to Mosegaard|"
+        "My blue triangle - Does not need further description|"
+        "Title: Arrows - Description:  Explains the different arrow appearances|"_ustr,
+        aFigures);
+    CPPUNIT_ASSERT_EQUAL(u"Equation 1 - Now we give the full description of eq 1 here|"_ustr,
+                         aFormulas);
+    // the first frame here has no properties set on it
+    CPPUNIT_ASSERT_EQUAL(u"|This frame has a description|"
+                         "Hey!  There is no alternate text for Frame // but maybe not needed?|"
+                         "My textbox - Has a light background|"_ustr,
+                         aDivs);
 }
 
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf154982)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -3128,11 +3381,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf154982)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     int nFigure(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "StructElem")
         {
@@ -3191,8 +3441,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157397)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "PDFUACompliance", cpo::uno::Any(true) },
-        { "ExportFormFields", cpo::uno::Any(true) },
+        { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+        { u"ExportFormFields"_ustr, cpo::uno::Any(true) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -3211,11 +3461,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157397)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     vcl::filter::PDFObjectElement* pDocument(nullptr);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructElem")
         {
@@ -3357,7 +3604,9 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf157397)
                 CPPUNIT_ASSERT_EQUAL("Link"_ostr, pASubtype->GetValue());
                 auto pAContents = dynamic_cast<vcl::filter::PDFHexStringElement*>(
                     pAnnot->Lookup("Contents"_ostr));
-                CPPUNIT_ASSERT(!pAContents);
+                CPPUNIT_ASSERT_EQUAL(
+                    u"https://de.wikipedia.org/wiki/Kl\u00E4ranlage#Mechanische_Vorreinigung"_ustr,
+                    ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pAContents));
                 CPPUNIT_ASSERT_EQUAL("Link"_ostr, pASubtype->GetValue());
                 auto pAA
                     = dynamic_cast<vcl::filter::PDFDictionaryElement*>(pAnnot->Lookup("A"_ostr));
@@ -3522,7 +3771,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf135192)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -3539,11 +3788,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf135192)
     CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
 
     int nTable(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructElem")
         {
@@ -3655,7 +3901,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf154955)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     vcl::filter::PDFDocument aDocument;
@@ -3738,11 +3984,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf154955)
     CPPUNIT_ASSERT_GREATEREQUAL(1, nArtifacts);
 
     int nFigure(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "StructElem")
         {
@@ -3789,7 +4032,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf155190)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -3807,11 +4050,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf155190)
 
     int nDiv(0);
     int nFigure(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
 
         auto pS1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("S"_ostr));
@@ -3879,7 +4119,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testMediaShapeAnnot)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -3943,11 +4183,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testMediaShapeAnnot)
 
     // check ParentTree to find StructElem
     int nRoots(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructTreeRoot")
         {
@@ -4019,7 +4256,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testFlyFrameHyperlinkAnnot)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "PDFUACompliance", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"PDFUACompliance"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -4066,11 +4303,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testFlyFrameHyperlinkAnnot)
 
     // check ParentTree to find StructElem
     int nRoots(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructTreeRoot")
         {
@@ -4153,8 +4387,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testFormControlAnnot)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "PDFUACompliance", cpo::uno::Any(true) },
-        { "ExportFormFields", cpo::uno::Any(true) },
+        { u"PDFUACompliance"_ustr, cpo::uno::Any(true) },
+        { u"ExportFormFields"_ustr, cpo::uno::Any(true) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -4204,11 +4438,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testFormControlAnnot)
 
     // check ParentTree to find StructElem
     int nRoots(0);
-    for (const auto& rDocElement : aDocument.GetElements())
+    for (auto* pObject1 : aDocument.GetObjects())
     {
-        auto pObject1 = dynamic_cast<vcl::filter::PDFObjectElement*>(rDocElement.get());
-        if (!pObject1)
-            continue;
         auto pType1 = dynamic_cast<vcl::filter::PDFNameElement*>(pObject1->Lookup("Type"_ostr));
         if (pType1 && pType1->GetValue() == "StructTreeRoot")
         {
@@ -4293,7 +4524,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf142129)
 
     // Enable Outlines export
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "ExportBookmarks", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"ExportBookmarks"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
@@ -4622,8 +4853,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testURIs)
     {
         // Test the filename rewriting
         cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-            { "ExportLinksRelativeFsys", cpo::uno::Any(uri.relativeFsys) },
-            { "ConvertOOoTargetToPDFTarget", cpo::uno::Any(true) },
+            { u"ExportLinksRelativeFsys"_ustr, cpo::uno::Any(uri.relativeFsys) },
+            { u"ConvertOOoTargetToPDFTarget"_ustr, cpo::uno::Any(true) },
         }));
         comphelper::SequenceAsHashMap aMediaDescriptor;
         aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -4706,8 +4937,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testExternalLinkOutsideDocTreeStaysAbsolute
     uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
     xModel->attachResource(maTempFile.GetURL(), xModel->getArgs());
 
-    cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "ExportLinksRelativeFsys", cpo::uno::Any(true) } }));
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
+        { { u"ExportLinksRelativeFsys"_ustr, cpo::uno::Any(true) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
@@ -4752,6 +4983,40 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testPdfImageAnnots)
     // - Actual  : 3
     // i.e. not only the hyperlink but also the 2 comments were exported, leading to duplication.
     CPPUNIT_ASSERT_EQUAL(1, pPdfPage->getAnnotationCount());
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testPdfImageEncryptedStrings)
+{
+    // Given a document with a PDF image whose annotations carry a hyperlink:
+    loadFromFile(u"pdf-image-annots.odg");
+
+    // When saving as encrypted PDF:
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData = {
+        comphelper::makePropertyValue(u"EncryptFile"_ustr, true),
+        comphelper::makePropertyValue(u"DocumentOpenPassword"_ustr, u"secret"_ustr),
+    };
+    comphelper::SequenceAsHashMap aMediaDescriptor;
+    aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
+    save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
+
+    std::unique_ptr<vcl::pdf::PDFiumDocument> pPdfDocument = parsePDFExport("secret"_ostr);
+
+    // Then make sure the hyperlink copied out of the image reads back through the password,
+    // which a string encrypted against the wrong object would not:
+    std::unique_ptr<vcl::pdf::PDFiumPage> pPdfPage = pPdfDocument->openPage(0);
+    CPPUNIT_ASSERT(pPdfPage);
+    int nLinkIndex = 0;
+    std::unique_ptr<vcl::pdf::PDFiumLink> pLink
+        = pPdfPage->enumerateLink(&nLinkIndex, pPdfDocument.get());
+    CPPUNIT_ASSERT(pLink);
+    // the target the fixture's embedded PDF carries
+    CPPUNIT_ASSERT_EQUAL(u"https://www.example.com/"_ustr, pLink->getURIPath());
+
+    // Without the accompanying fix the copier wrote the string out as it read it, so it
+    // stood in the file unenciphered and came back out of the decryption as noise
+    const std::string_view aFile(static_cast<const char*>(maMemory.GetData()), maMemory.GetSize());
+    CPPUNIT_ASSERT(aFile.find("/Encrypt") != std::string_view::npos);
+    CPPUNIT_ASSERT_EQUAL(std::string_view::npos, aFile.find("www.example.com"));
 }
 
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testPdfImageEncryption)
@@ -4880,7 +5145,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf139627)
     int rehmim = 0, kasreh = 1, jehtatweel = 2;
 
     CPPUNIT_ASSERT_EQUAL(u"رم"_ustr, sText[rehmim].trim());
-    CPPUNIT_ASSERT_EQUAL(OUString::fromUtf8("\xD8\xAC\xD9\x90"), sText[kasreh].trim());
+    CPPUNIT_ASSERT_EQUAL(OUString::fromUtf8("\xD9\x90\xD8\xAC"), sText[kasreh].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, sText[jehtatweel].trim());
 
     // "Kasreh" should be within "jeh" character
@@ -4938,7 +5203,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testRexportFilterSingletonArray)
 {
     // the test fails with tagged PDF enabled
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "UseTaggedPDF", cpo::uno::Any(false) } }));
+        comphelper::InitPropertySequence({ { u"UseTaggedPDF"_ustr, cpo::uno::Any(false) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
@@ -5083,7 +5348,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf152246)
 {
     // Import the bugdoc and export as PDF.
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence({
-        { "ExportFormFields", cpo::uno::Any(true) },
+        { u"ExportFormFields"_ustr, cpo::uno::Any(true) },
     }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
@@ -5151,11 +5416,8 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf155161)
 
     // Check that all fonts in the document are Type 3 fonts
     std::set<OString> aFontNames;
-    for (const auto& aElement : aDocument.GetElements())
+    for (auto* pObject : aDocument.GetObjects())
     {
-        auto pObject = dynamic_cast<vcl::filter::PDFObjectElement*>(aElement.get());
-        if (!pObject)
-            continue;
         auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         if (pType && pType->GetValue() == "Font")
         {
@@ -5348,7 +5610,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf159817)
 {
     // Enable PDF/UA
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "ExportFormFields", cpo::uno::Any(false) } }));
+        comphelper::InitPropertySequence({ { u"ExportFormFields"_ustr, cpo::uno::Any(false) } }));
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     loadFromFile(u"tdf159817.fodt");
@@ -5542,9 +5804,9 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf134226)
 
     CPPUNIT_ASSERT_EQUAL(u"ة"_ustr, aText[0].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[1].trim());
-    CPPUNIT_ASSERT_EQUAL(u"ق\r\n\u0651"_ustr, aText[2].trim());
+    CPPUNIT_ASSERT_EQUAL(u"\u0651ق"_ustr, aText[2].trim());
     CPPUNIT_ASSERT_EQUAL(u"ش"_ustr, aText[3].trim());
-    CPPUNIT_ASSERT_EQUAL(u"ق\u0651"_ustr, aText[4].trim());
+    CPPUNIT_ASSERT_EQUAL(u"\u0651ق"_ustr, aText[4].trim());
     CPPUNIT_ASSERT_EQUAL(u"ش"_ustr, aText[5].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[6].trim());
     CPPUNIT_ASSERT_EQUAL(u"ة"_ustr, aText[7].trim());
@@ -5599,13 +5861,13 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf71956)
     CPPUNIT_ASSERT_EQUAL(12, nTextObjectCount);
 
     CPPUNIT_ASSERT_EQUAL(u"ه"_ustr, aText[0].trim());
-    CPPUNIT_ASSERT_EQUAL(u"ل\r\n\u064e\u0651\u0670"_ustr, aText[1].trim());
+    CPPUNIT_ASSERT_EQUAL(u"\u064e\u0651\u0670ل"_ustr, aText[1].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[2].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[3].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[4].trim());
     CPPUNIT_ASSERT_EQUAL(u"ل"_ustr, aText[5].trim());
     CPPUNIT_ASSERT_EQUAL(u"ل"_ustr, aText[6].trim());
-    CPPUNIT_ASSERT_EQUAL(u"ل\u064e\u0651\u0670"_ustr, aText[7].trim());
+    CPPUNIT_ASSERT_EQUAL(u"\u064e\u0651\u0670ل"_ustr, aText[7].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[8].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[9].trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText[10].trim());
@@ -6019,19 +6281,19 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf151748KashidaSpace)
     CPPUNIT_ASSERT_EQUAL(17, nTextObjectCount);
 
     // Box 1: Not enough room for kashida
-    CPPUNIT_ASSERT_EQUAL(u"تخوردگی خط"_ustr, aText.at(0).trim());
+    CPPUNIT_ASSERT_EQUAL(u"خط تخوردگی"_ustr, aText.at(0).trim());
     CPPUNIT_ASSERT_EQUAL(u"وتوسط"_ustr, aText.at(1).trim());
 
     // Box 2: One kashida toward end
     CPPUNIT_ASSERT_EQUAL(u"وردگی"_ustr, aText.at(2).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(3).trim()); // Kashida
-    CPPUNIT_ASSERT_EQUAL(u"تخ خط"_ustr, aText.at(4).trim());
+    CPPUNIT_ASSERT_EQUAL(u"خط تخ"_ustr, aText.at(4).trim());
     CPPUNIT_ASSERT_EQUAL(u"وتوسط"_ustr, aText.at(5).trim());
 
     // Box 3: Two kashida
     CPPUNIT_ASSERT_EQUAL(u"وردگی"_ustr, aText.at(6).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(7).trim()); // Kashida
-    CPPUNIT_ASSERT_EQUAL(u"تخ ط"_ustr, aText.at(8).trim());
+    CPPUNIT_ASSERT_EQUAL(u"ط تخ"_ustr, aText.at(8).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(9).trim()); // Kashida
     CPPUNIT_ASSERT_EQUAL(u"خ"_ustr, aText.at(10).trim());
     CPPUNIT_ASSERT_EQUAL(u"وتوسط"_ustr, aText.at(11).trim());
@@ -6081,7 +6343,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf163105SwKashidaSpaceExpansion)
 
     CPPUNIT_ASSERT_EQUAL(u"یده"_ustr, aText.at(0).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(1).trim());
-    CPPUNIT_ASSERT_EQUAL(u"کش ه"_ustr, aText.at(2).trim()); // This span is whitespace justified
+    CPPUNIT_ASSERT_EQUAL(u"ه کش"_ustr, aText.at(2).trim()); // This span is whitespace justified
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(3).trim());
     CPPUNIT_ASSERT_EQUAL(u"نویس"_ustr, aText.at(4).trim());
 
@@ -6129,7 +6391,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf163105Writer)
 
     CPPUNIT_ASSERT_EQUAL(u"ارسی"_ustr, aText.at(0).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(1).trim());
-    CPPUNIT_ASSERT_EQUAL(u"ف تن"_ustr, aText.at(2).trim()); // This span is whitespace justified
+    CPPUNIT_ASSERT_EQUAL(u"تن ف"_ustr, aText.at(2).trim()); // This span is whitespace justified
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(3).trim());
     CPPUNIT_ASSERT_EQUAL(u"م"_ustr, aText.at(4).trim());
 
@@ -6177,7 +6439,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf163105Editeng)
 
     CPPUNIT_ASSERT_EQUAL(u"ارسی"_ustr, aText.at(0).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(1).trim());
-    CPPUNIT_ASSERT_EQUAL(u"ف تن"_ustr, aText.at(2).trim()); // This span is whitespace justified
+    CPPUNIT_ASSERT_EQUAL(u"تن ف"_ustr, aText.at(2).trim()); // This span is whitespace justified
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(3).trim());
     CPPUNIT_ASSERT_EQUAL(u"م"_ustr, aText.at(4).trim());
 
@@ -6232,15 +6494,15 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf140767SyriacJustification)
 
     CPPUNIT_ASSERT_EQUAL(u"ܝ"_ustr, aText.at(0).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(1).trim());
-    CPPUNIT_ASSERT_EQUAL(u"ܛ\r\nܺ"_ustr, aText.at(2).trim());
+    CPPUNIT_ASSERT_EQUAL(u"ܺܛ"_ustr, aText.at(2).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(3).trim());
-    CPPUNIT_ASSERT_EQUAL(u"ܚܰ"_ustr, aText.at(4).trim());
+    CPPUNIT_ASSERT_EQUAL(u"ܰܚ"_ustr, aText.at(4).trim());
     CPPUNIT_ASSERT_EQUAL(u"ܕ"_ustr, aText.at(5).trim()); // This span is whitespace justified
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(6).trim());
-    CPPUNIT_ASSERT_EQUAL(u"ܓܰ"_ustr, aText.at(7).trim());
+    CPPUNIT_ASSERT_EQUAL(u"ܰܓ"_ustr, aText.at(7).trim());
     CPPUNIT_ASSERT_EQUAL(u"ܒ"_ustr, aText.at(8).trim());
     CPPUNIT_ASSERT_EQUAL(u""_ustr, aText.at(9).trim());
-    CPPUNIT_ASSERT_EQUAL(u"ܐܰ"_ustr, aText.at(10).trim());
+    CPPUNIT_ASSERT_EQUAL(u"ܰܐ"_ustr, aText.at(10).trim());
 
     // Without kashida justification, this space will be 224.328
     CPPUNIT_ASSERT_LESS(90.0, aRect.at(5).getWidth());
@@ -6383,7 +6645,7 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testFormRoundtrip)
     comphelper::SequenceAsHashMap aMediaDescriptor;
     aMediaDescriptor[u"FilterName"_ustr] <<= u"draw_pdf_Export"_ustr;
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "UseTaggedPDF", cpo::uno::Any(true) } }));
+        comphelper::InitPropertySequence({ { u"UseTaggedPDF"_ustr, cpo::uno::Any(true) } }));
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
 
     loadFromFile(u"FilledUpForm.pdf");
@@ -6516,6 +6778,54 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf164106SplitReorderedClusters)
     fnCompareIndices(4, 11);
     fnCompareIndices(5, 12);
     fnCompareIndices(6, 13);
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testObjectStreams)
+{
+    // the bytes of the export, since what is asserted is the shape of the file itself
+    auto aExport = [this](const cpo::uno::Sequence<beans::PropertyValue>& rFilterData) {
+        comphelper::SequenceAsHashMap aMediaDescriptor;
+        aMediaDescriptor[u"FilterData"_ustr] <<= rFilterData;
+        loadFromFile(u"SimpleTestDocument.fodt");
+        maTempFile.CloseStream();
+        save(TestFilter::PDF_WRITER, aMediaDescriptor.getAsConstPropertyValueList());
+        maTempFile.CloseStream();
+        SvStream* pStream = maTempFile.GetStream(StreamMode::READ);
+        pStream->Seek(0);
+        return read_uInt8s_ToOString(*pStream, pStream->remainingSize());
+    };
+
+    const OString aTagged(aExport({ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) }));
+    CPPUNIT_ASSERT(aTagged.indexOf("/Type/ObjStm") != -1);
+    CPPUNIT_ASSERT(aTagged.indexOf("/Type/XRef") != -1);
+    // a cross-reference stream replaces the table, so neither the keyword nor a table is left
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1), aTagged.indexOf("\ntrailer\n"));
+
+    // the structure tree has to stay reachable through all of that
+    vcl::filter::PDFDocument aDocument;
+    SvFileStream aStream(maTempFile.GetURL(), StreamMode::READ);
+    CPPUNIT_ASSERT(aDocument.Read(aStream));
+    int nStructElements(0);
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
+        if (pType && pType->GetValue() == "StructElem")
+            ++nStructElements;
+    }
+    CPPUNIT_ASSERT_GREATER(0, nStructElements);
+
+    // ISO 32000-2 7.5.7 put object streams at PDF 1.5, and PDF/A-1b is built on 1.4
+    const OString aArchive(
+        aExport({ comphelper::makePropertyValue(u"SelectPdfVersion"_ustr, sal_Int32(1)) }));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1), aArchive.indexOf("/Type/ObjStm"));
+    CPPUNIT_ASSERT(aArchive.indexOf("\ntrailer\n") != -1);
+
+    // sdext finds the embedded original document through the trailer, so a hybrid file keeps one
+    const OString aHybrid(aExport({ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true),
+                                    comphelper::makePropertyValue(u"IsAddStream"_ustr, true) }));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1), aHybrid.indexOf("/Type/ObjStm"));
+    CPPUNIT_ASSERT(aHybrid.indexOf("/AdditionalStreams ") != -1);
+    CPPUNIT_ASSERT(aHybrid.indexOf("\ntrailer\n") != -1);
 }
 
 CPPUNIT_TEST_FIXTURE(PdfExportTest2, testPDFAttachmentsWithEncryptedFile)
@@ -6813,6 +7123,183 @@ CPPUNIT_TEST_FIXTURE(PdfExportTest2, tdf150076BackgroundPdf)
     // - Actual  : 3
     // Where 5 means form (i.e. embedded PDF) and 3 means it's just an image
     CPPUNIT_ASSERT_EQUAL(vcl::pdf::PDFPageObjectType::Form, pPageObject->getType());
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, cool16122BadPantoneElement)
+{
+    vcl::filter::PDFDocument aDocument;
+    loadFromFile(u"cool16122.odt");
+    save(TestFilter::PDF_WRITER);
+
+    // Parse the export result.
+    SvFileStream aStream(maTempFile.GetURL(), StreamMode::READ);
+    // Previously this would have failed here with "PDFDocument::Tokenize: unexpected 'C' keyword at byte position 280"
+    CPPUNIT_ASSERT(aDocument.Read(aStream));
+
+    // But just to be sure, check that the PANTONE element round-trips properly
+    bool bFound = false;
+    for (const auto& rDocElement : aDocument.GetElements())
+    {
+        if (auto pObject = dynamic_cast<vcl::filter::PDFNameElement*>(rDocElement.get()))
+            if (pObject->GetValue() == "PANTONE 293 C")
+            {
+                bFound = true;
+                break;
+            }
+    }
+    CPPUNIT_ASSERT(bFound);
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testTdf168462)
+{
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    loadFromFile(u"master-background-artifact.fodp");
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+    std::vector<vcl::filter::PDFObjectElement*> aPages = aDocument.GetPages();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
+    vcl::filter::PDFObjectElement* pContents = aPages[0]->LookupObject("Contents"_ostr);
+    CPPUNIT_ASSERT(pContents);
+    vcl::filter::PDFStreamElement* pStream = pContents->GetStream();
+    CPPUNIT_ASSERT(pStream);
+    SvMemoryStream& rObjectStream = pStream->GetMemory();
+    SvMemoryStream aUncompressed;
+    ZCodec aZCodec;
+    aZCodec.BeginCompression();
+    rObjectStream.Seek(0);
+    aZCodec.Decompress(rObjectStream, aUncompressed);
+    CPPUNIT_ASSERT(aZCodec.EndCompression());
+
+    // an operator shares its line with its operands, and sometimes with another operator
+    auto isPaintingOperator = [](const std::string_view line) {
+        for (size_t nPos = 0; nPos != std::string_view::npos;)
+        {
+            const size_t nStart = line.find_first_not_of(' ', nPos);
+            if (nStart == std::string_view::npos)
+                break;
+            nPos = line.find(' ', nStart);
+            const std::string_view aToken(
+                line.substr(nStart, nPos == std::string_view::npos ? nPos : nPos - nStart));
+            for (const auto op :
+                 { "f", "f*", "F", "S", "s", "B", "B*", "b", "b*", "Do", "TJ", "Tj" })
+            {
+                if (aToken == op)
+                    return true;
+            }
+        }
+        return false;
+    };
+
+    auto pStart = static_cast<const char*>(aUncompressed.GetData());
+    const char* const pEnd = pStart + aUncompressed.GetSize();
+    int nOpenMarks(0);
+    int nArtifacts(0);
+    OStringBuffer aUntagged;
+    // ISO 14289-1 7.1: content is either tagged or marked as an artifact
+    while (pStart != pEnd)
+    {
+        const auto pLineEnd = std::find(pStart, pEnd, '\n');
+        const std::string_view line(pStart, pLineEnd - pStart);
+        pStart = pLineEnd == pEnd ? pEnd : pLineEnd + 1;
+
+        if (line == "EMC")
+            --nOpenMarks;
+        else if (o3tl::ends_with(line, "BMC") || o3tl::ends_with(line, "BDC"))
+        {
+            ++nOpenMarks;
+            if (o3tl::starts_with(line, "/Artifact"))
+                ++nArtifacts;
+        }
+        else if (nOpenMarks == 0 && isPaintingOperator(line))
+            aUntagged.append(OString::Concat(line) + " ");
+    }
+
+    // without the fix the background was painted outside every marked-content section
+    CPPUNIT_ASSERT_MESSAGE(aUntagged.toString().getStr(), aUntagged.isEmpty());
+    // the page decoration, and the background the slide takes from its master page
+    CPPUNIT_ASSERT_EQUAL(2, nArtifacts);
+    CPPUNIT_ASSERT_EQUAL(0, nOpenMarks);
+}
+
+CPPUNIT_TEST_FIXTURE(PdfExportTest2, testStyleNamedStructureTypes)
+{
+    loadFromFile(u"style-named-tags.fodt");
+
+    // the structure types the file carries, and what its role map makes of the names
+    auto aExport = [this](sal_Int32 nVersion) {
+        cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true),
+                                        comphelper::makePropertyValue(u"SelectPdfVersion"_ustr,
+                                                                      nVersion) };
+        save(TestFilter::PDF_WRITER,
+             { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+        vcl::filter::PDFDocument aDocument;
+        // the temp file hands out one stream and keeps it, so the second export needs a new one
+        maTempFile.CloseStream();
+        CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+        OStringBuffer aTypes;
+        for (auto* pObject : aDocument.GetObjects())
+        {
+            auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
+            if (!pType || pType->GetValue() != "StructElem")
+                continue;
+            auto pS = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+            CPPUNIT_ASSERT(pS);
+            aTypes.append(pS->GetValue() + " ");
+        }
+
+        auto pCatalog = aDocument.GetCatalog();
+        CPPUNIT_ASSERT(pCatalog);
+        auto pStructTreeRoot = dynamic_cast<vcl::filter::PDFReferenceElement*>(
+            pCatalog->Lookup("StructTreeRoot"_ostr));
+        CPPUNIT_ASSERT(pStructTreeRoot);
+        CPPUNIT_ASSERT(pStructTreeRoot->LookupObject());
+        auto pRoleMap = dynamic_cast<vcl::filter::PDFDictionaryElement*>(
+            pStructTreeRoot->LookupObject()->Lookup("RoleMap"_ostr));
+        CPPUNIT_ASSERT(pRoleMap);
+        OStringBuffer aRoles;
+        // GetItems is sorted, unlike the map the writer keeps
+        for (const auto& rRole : pRoleMap->GetItems())
+        {
+            auto pValue = dynamic_cast<vcl::filter::PDFNameElement*>(rRole.second);
+            CPPUNIT_ASSERT(pValue);
+            aRoles.append(rRole.first + "=" + pValue->GetValue() + " ");
+        }
+        return std::pair(aTypes.makeStringAndClear(), aRoles.makeStringAndClear());
+    };
+
+    // Without the fix, a style named after a standard type kept that name, and the role map
+    // remapped the type - /Index/P among them - so the first sequence read Index, not Index-1.
+    //
+    // a style named after a type, or after another style, takes the first free name beside
+    // its own; the run in Source Text is the one element really of the Code type, and the
+    // style really called Code1 keeps a name of its own, being a different style
+    const auto[aTypes17, aRoles17] = aExport(17);
+    CPPUNIT_ASSERT_EQUAL(u8"Document Table TR TD Étude TD Étude"
+                         " Code-1 Title Index-1 Code1 H-1 THead-1 H7 Sub Artifact-1 Code-1-1 H7-1 "
+                         "Standard Code-2 Code Étude-1 "_ostr,
+                         aTypes17);
+    CPPUNIT_ASSERT_EQUAL(
+        u8"Artifact-1=P Code-1=P Code-1-1=P Code-2=Span Code1=P H-1=P"
+        " H7=P H7-1=H6 Index-1=P Standard=P Sub=P THead-1=P Title=P Étude=P Étude-1=Span "_ostr,
+        aRoles17);
+
+    // PDF 2.0 has a Title type, and heading levels without limit, so Title names its own
+    // elements while H7 and Sub have to give way
+    const auto[aTypes20, aRoles20] = aExport(20);
+    CPPUNIT_ASSERT_EQUAL(u8"Document Table TR TD Étude TD Étude"
+                         " Code-1 Title Index-1 Code1 H-1 THead-1 H7-1 Sub-1 Artifact-1 Code-1-1 "
+                         "H7 Standard Code-2 Code Étude-1 "_ostr,
+                         aTypes20);
+    CPPUNIT_ASSERT_EQUAL(
+        u8"Artifact-1=P Code-1=P Code-1-1=P Code-2=Span Code1=P H-1=P"
+        " H7-1=P Index-1=P Standard=P Sub-1=P THead-1=P Étude=P Étude-1=Span "_ostr,
+        aRoles20);
+    // the heading keeps the standard name, which is why nothing maps it
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1), aRoles20.indexOf("H7="));
 }
 
 } // end anonymous namespace

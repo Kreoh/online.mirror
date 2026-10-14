@@ -19,12 +19,12 @@
 #include <com/sun/star/reflection/XConstantsTypeDescription.hpp>
 #include <com/sun/star/reflection/XDump.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/DeploymentException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <cpo/uno/Type.hxx>
 #include <cpo/uno/TypeClass.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <config_typesizes.h>
 #include <cppu/unotype.hxx>
 #include <cppuhelper/basemutex.hxx>
@@ -40,10 +40,7 @@
 #include <typelib/typedescription.hxx>
 #include <uno/sequence2.h>
 
-namespace com::sun::star::uno
-{
-class XInterface;
-}
+namespace cpo::uno { class XInterface; }
 
 namespace
 {
@@ -57,27 +54,27 @@ template <typename T> OUString hex(T value, sal_Int32 width)
     return buf.makeStringAndClear();
 }
 
-css::uno::TypeDescription getTypeDescription(cpo::uno::Type const& type)
+cpo::uno::TypeDescription getTypeDescription(cpo::uno::Type const& type)
 {
     typelib_TypeDescription* d = nullptr;
     type.getDescription(&d);
-    return css::uno::TypeDescription(d);
+    return cpo::uno::TypeDescription(d);
 }
 
 OUString
-getIdentifier(css::uno::Reference<css::reflection::XConstantTypeDescription> const& constant)
+getIdentifier(cpo::uno::Reference<css::reflection::XConstantTypeDescription> const& constant)
 {
     auto const n = constant->getName();
     auto const i = n.lastIndexOf('.');
     if (i == -1 || i == n.getLength() - 1)
     {
-        throw css::uno::DeploymentException("bad constant name " + n);
+        throw cpo::uno::DeploymentException("bad constant name " + n);
     }
     return n.copy(i + 1);
 }
 
 OUString
-dumpBitset(cpo::uno::Sequence<css::uno::Reference<css::reflection::XConstantTypeDescription>> const&
+dumpBitset(cpo::uno::Sequence<cpo::uno::Reference<css::reflection::XConstantTypeDescription>> const&
                constants,
            sal_uInt64 value)
 {
@@ -102,21 +99,21 @@ dumpBitset(cpo::uno::Sequence<css::uno::Reference<css::reflection::XConstantType
 class Dump : public cppu::BaseMutex, public cppu::WeakComponentImplHelper<css::reflection::XDump>
 {
 public:
-    explicit Dump(css::uno::Reference<css::uno::XComponentContext> const& context)
+    explicit Dump(cpo::uno::Reference<cpo::uno::XComponentContext> const& context)
         : WeakComponentImplHelper(m_aMutex)
         , manager_(context->getValueByName(
                        u"/singletons/com.sun.star.reflection.theTypeDescriptionManager"_ustr),
-                   css::uno::UNO_QUERY_THROW)
+                   cpo::uno::UNO_QUERY_THROW)
     {
     }
 
-    void SAL_CALL disposing() override
+    void disposing() override
     {
         osl::MutexGuard g(m_aMutex);
         manager_.clear();
     }
 
-    OUString SAL_CALL dumpValue(cpo::uno::Any const& value) override
+    OUString dumpValue(cpo::uno::Any const& value) override
     {
         switch (value.getValueTypeClass())
         {
@@ -228,15 +225,15 @@ public:
         }
     }
 
-    OUString SAL_CALL dumpAny(cpo::uno::Any const& value) override
+    OUString dumpAny(cpo::uno::Any const& value) override
     {
         return "[" + value.getValueTypeName() + ": " + dumpValue(value) + "]";
     }
 
-    OUString SAL_CALL dumpConstant(OUString const& constantsGroup,
+    OUString dumpConstant(OUString const& constantsGroup,
                                    cpo::uno::Any const& value) override
     {
-        css::uno::Reference<css::container::XHierarchicalNameAccess> manager;
+        cpo::uno::Reference<css::container::XHierarchicalNameAccess> manager;
         {
             osl::MutexGuard g(m_aMutex);
             if (rBHelper.bDisposed)
@@ -245,7 +242,7 @@ public:
             }
             manager = manager_;
         }
-        css::uno::Reference<css::reflection::XConstantsTypeDescription> g;
+        cpo::uno::Reference<css::reflection::XConstantsTypeDescription> g;
         try
         {
             manager_->getByHierarchicalName(constantsGroup) >>= g;
@@ -322,7 +319,7 @@ public:
     }
 
 private:
-    css::uno::Reference<css::container::XHierarchicalNameAccess> manager_;
+    cpo::uno::Reference<css::container::XHierarchicalNameAccess> manager_;
 
     void dumpCompoundType(typelib_CompoundTypeDescription const* description, void const* data,
                           OUStringBuffer* buffer)
@@ -347,8 +344,8 @@ private:
 };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_stoc_Dump_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_stoc_Dump_get_implementation(cpo::uno::XComponentContext* context,
                                                cpo::uno::Sequence<cpo::uno::Any> const& arguments)
 {
     SAL_WARN_IF(arguments.hasElements(), "stoc", "unexpected singleton arguments");

@@ -96,6 +96,54 @@ CPPUNIT_TEST_FIXTURE(StylesPreviewWindowTest, testStyleAliasAsPreviewName)
     CPPUNIT_ASSERT_MESSAGE("Character style preview is blank", lcl_HasContent(aPreview));
 }
 
+// A document lists Standard under the name shown in the UI, Default Paragraph
+// Style, while the seeded default styles list it under its programmatic name.
+// Both must end up as one entry.
+CPPUNIT_TEST_FIXTURE(StylesPreviewWindowTest, testDefaultStyleNotListedTwice)
+{
+    loadFromFile(u"nospacing.docx");
+    SfxObjectShell* pDocShell = SfxObjectShell::Current();
+    CPPUNIT_ASSERT(pDocShell);
+
+    // seeded the way StylesPreviewToolBoxControl does it, with the display name
+    StylePreviewList aDefaults{ { u"Standard"_ustr, u"Default Paragraph Style"_ustr,
+                                  SfxStyleFamily::Para },
+                                { u"Heading 1"_ustr, u"Heading 1"_ustr, SfxStyleFamily::Para } };
+
+    const StylePreviewList aStyles = StylesPreviewWindow_Base::GetStyleList(pDocShell, aDefaults);
+
+    const auto nShown
+        = std::count_if(aStyles.begin(), aStyles.end(), [](const StylePreviewDescriptor& r) {
+              return r.translatedName == "Default Paragraph Style";
+          });
+    // Without the fix the document entry and the seeded default were both kept.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), static_cast<sal_Int32>(nShown));
+
+    // The style the document does not recommend stays out.
+    CPPUNIT_ASSERT_MESSAGE("No Spacing is not a quick style here",
+                           !lcl_HasStyle(aStyles, u"No Spacing"));
+}
+
+// All styles is commonly set to 1 - shouldn't be used for top toolbar widget
+CPPUNIT_TEST_FIXTURE(StylesPreviewWindowTest, testStylePaneFilterAllStyles)
+{
+    loadFromFile(u"stylePaneAllStyles.docx");
+    SfxObjectShell* pDocShell = SfxObjectShell::Current();
+    CPPUNIT_ASSERT(pDocShell);
+
+    const StylePreviewList aStyles
+        = StylesPreviewWindow_Base::GetStyleList(pDocShell, StylePreviewList());
+
+    // Normal carries w:qFormat, so it is offered.
+    CPPUNIT_ASSERT_MESSAGE("The recommended style is missing",
+                           lcl_HasStyle(aStyles, u"Default Paragraph Style"));
+
+    // No Spacing is a visible style the document does not mark w:qFormat. With
+    // w:allStyles="1" honoured it came through, along with every other style.
+    CPPUNIT_ASSERT_MESSAGE("A style without qFormat should not be offered",
+                           !lcl_HasStyle(aStyles, u"No Spacing"));
+}
+
 // The document sets the DOCX style pane filter to "Recommended" (visibleStyles).
 // The preview then lists the recommended (qFormat) styles and hides plain custom
 // ones that are neither recommended nor otherwise selected.

@@ -76,7 +76,7 @@ DispatchRecorderSupplier::~DispatchRecorderSupplier()
 
     @change     09.04.2002 by Andreas Schluens
  */
-void DispatchRecorderSupplier::setDispatchRecorder( const css::uno::Reference< css::frame::XDispatchRecorder >& xRecorder )
+void DispatchRecorderSupplier::setDispatchRecorder( const cpo::uno::Reference< css::frame::XDispatchRecorder >& xRecorder )
 {
     SolarMutexGuard g;
     m_xDispatchRecorder=xRecorder;
@@ -96,7 +96,7 @@ void DispatchRecorderSupplier::setDispatchRecorder( const css::uno::Reference< c
 
     @change     09.04.2002 by Andreas Schluens
  */
-css::uno::Reference< css::frame::XDispatchRecorder > DispatchRecorderSupplier::getDispatchRecorder()
+cpo::uno::Reference< css::frame::XDispatchRecorder > DispatchRecorderSupplier::getDispatchRecorder()
 {
     SolarMutexGuard g;
     return m_xDispatchRecorder;
@@ -117,24 +117,24 @@ css::uno::Reference< css::frame::XDispatchRecorder > DispatchRecorderSupplier::g
  */
 void DispatchRecorderSupplier::dispatchAndRecord( const css::util::URL&                                  aURL        ,
                                                            const cpo::uno::Sequence< css::beans::PropertyValue >& lArguments  ,
-                                                           const css::uno::Reference< css::frame::XDispatch >&    xDispatcher )
+                                                           const cpo::uno::Reference< css::frame::XDispatch >&    xDispatcher )
 {
     SolarMutexClearableGuard aReadLock;
-    css::uno::Reference< css::frame::XDispatchRecorder > xRecorder = m_xDispatchRecorder;
+    cpo::uno::Reference< css::frame::XDispatchRecorder > xRecorder = m_xDispatchRecorder;
     aReadLock.clear();
 
     // clear unspecific situations
     if (!xDispatcher.is())
-        throw css::uno::RuntimeException(u"specification violation: dispatcher is NULL"_ustr, static_cast< ::cppu::OWeakObject* >(this));
+        throw cpo::uno::RuntimeException(u"specification violation: dispatcher is NULL"_ustr, static_cast< ::cppu::OWeakObject* >(this));
 
     if (!xRecorder.is())
-        throw css::uno::RuntimeException(u"specification violation: no valid dispatch recorder available"_ustr, static_cast< ::cppu::OWeakObject* >(this));
+        throw cpo::uno::RuntimeException(u"specification violation: no valid dispatch recorder available"_ustr, static_cast< ::cppu::OWeakObject* >(this));
 
     // check, if given dispatch supports record functionality by itself ...
     // or must be wrapped.
-    css::uno::Reference< css::frame::XRecordableDispatch > xRecordable(
+    cpo::uno::Reference< css::frame::XRecordableDispatch > xRecordable(
         xDispatcher,
-        css::uno::UNO_QUERY);
+        cpo::uno::UNO_QUERY);
 
     if (xRecordable.is())
         xRecordable->dispatchAndRecord(aURL,lArguments,xRecorder);
@@ -151,9 +151,9 @@ void DispatchRecorderSupplier::dispatchAndRecord( const css::util::URL&         
 
 }   // namespace framework
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_DispatchRecorderSupplier_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::DispatchRecorderSupplier());
 }

@@ -38,6 +38,7 @@
 #endif
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 namespace
@@ -431,7 +432,7 @@ void unoInterfaceProxyDispatch(
             if (!cpp_call(pThis, aVtableSlot, pMethodTD->pReturnTypeRef, pMethodTD->nParams,
                           pMethodTD->pParams, pReturn, pArgs, ppException))
             {
-                uno::RuntimeException aExc( "Too many parameters!" );
+                cpo::uno::RuntimeException aExc( u"Too many parameters!"_ustr );
 
                 cpo::uno::Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();
                 ::uno_type_any_construct(*ppException, &aExc, rExcType.getTypeLibType(), nullptr);
@@ -441,7 +442,7 @@ void unoInterfaceProxyDispatch(
     }
     default:
     {
-        uno::RuntimeException aExc("Illegal member type description!", uno::Reference<uno::XInterface>());
+        cpo::uno::RuntimeException aExc(u"Illegal member type description!"_ustr, uno::Reference<cpo::uno::XInterface>());
 
         cpo::uno::Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();
         // binary identical null reference

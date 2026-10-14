@@ -20,7 +20,7 @@
 #pragma once
 
 #include <xmloff/xmlictxt.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <cpo/uno/Sequence.h>
 
 namespace com::sun::star {
@@ -37,7 +37,7 @@ namespace com::sun::star {
 class XMLSectionImportContext final : public SvXMLImportContext
 {
     /// TextSection (as XPropertySet) for passing down to data source elements
-    css::uno::Reference<css::beans::XPropertySet> xSectionPropertySet;
+    cpo::uno::Reference<css::beans::XPropertySet> xSectionPropertySet;
 
     OUString sXmlId;
     OUString sStyleName;
@@ -62,17 +62,17 @@ public:
 
 private:
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 
     void ProcessAttributes(
-        const css::uno::Reference<css::xml::sax::XFastAttributeList> & xAttrList );
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList> & xAttrList );
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

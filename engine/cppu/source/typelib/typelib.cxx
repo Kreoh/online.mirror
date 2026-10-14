@@ -626,6 +626,8 @@ extern "C" void typelib_typedescription_newEmpty(
     pRet->bComplete = true;
     pRet->nSize = 0;
     pRet->nAlignment = 0;
+    pRet->nAnnotations = 0;
+    pRet->ppAnnotations = nullptr;
     pRet->pWeakRef = nullptr;
     pRet->bOnDemand = false;
     *ppRet = pRet;
@@ -819,6 +821,7 @@ extern "C" void typelib_typedescription_newInterface(
     sal_Int32 nMembers,
     typelib_TypeDescriptionReference ** ppMembers ) noexcept
 {
+    // coverity[callee_ptr_arith : FALSE] - the count beside it is 0 or 1
     typelib_typedescription_newMIInterface(
         ppRet, pTypeName, pBaseInterface == nullptr ? 0 : 1,
         &pBaseInterface, nMembers, ppMembers);
@@ -1281,6 +1284,23 @@ static void typelib_typedescription_destructExtendedMembers(
 }
 
 
+extern "C" void typelib_typedescription_setAnnotations(
+    typelib_TypeDescription * desc, sal_Int32 count, rtl_uString ** annotations) noexcept
+{
+    auto const copy = count == 0 ? nullptr : new rtl_uString *[count];
+    for (sal_Int32 i = 0; i != count; ++i) {
+        copy[i] = annotations[i];
+        rtl_uString_acquire(copy[i]);
+    }
+    for (sal_Int32 i = 0; i != desc->nAnnotations; ++i) {
+        rtl_uString_release(desc->ppAnnotations[i]);
+    }
+    delete[] desc->ppAnnotations;
+    desc->nAnnotations = count;
+    desc->ppAnnotations = copy;
+}
+
+
 extern "C" void typelib_typedescription_release(
     typelib_TypeDescription * pTD ) noexcept
 {
@@ -1315,6 +1335,12 @@ extern "C" void typelib_typedescription_release(
     }
 
     typelib_typedescription_destructExtendedMembers( pTD );
+    for (sal_Int32 i = 0; i != pTD->nAnnotations; ++i) {
+        rtl_uString_release(pTD->ppAnnotations[i]);
+    }
+    delete[] pTD->ppAnnotations;
+    pTD->ppAnnotations = nullptr;
+    pTD->nAnnotations = 0;
     rtl_uString_release( pTD->pTypeName );
 
 #if OSL_DEBUG_LEVEL > 0
@@ -1514,6 +1540,7 @@ extern "C" void typelib_typedescription_register(
                     typelib_typedescription_release( pTDR->pType );
                 }
 
+                // coverity[deref_after_free : FALSE] - pTDR->pType is pTDR, held by getByName()
                 pTDR->pType->bOnDemand = (*ppNewDescription)->bOnDemand;
                 // initialized
                 pTDR->pType->pWeakRef = pTDR;
@@ -1521,6 +1548,7 @@ extern "C" void typelib_typedescription_register(
 
             typelib_typedescription_release( *ppNewDescription );
             // pTDR was acquired by getByName(), so it must not be acquired again
+            // coverity[deref_after_free : FALSE] - getByName() still holds a reference here
             *ppNewDescription = pTDR->pType;
             return;
         }

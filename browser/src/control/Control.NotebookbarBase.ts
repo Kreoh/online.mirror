@@ -105,9 +105,11 @@ class NotebookbarBase extends JSDialogComponent {
 	protected setupContainer(parentContainer?: HTMLElement) {
 		// remove old toolbar
 		let toolbar = window.L.DomUtil.get('toolbar-up');
-		if (toolbar) toolbar.outerHTML = '';
+		if (toolbar) toolbar.remove();
 		// create toolbar from template
-		$('#toolbar-logo').after(this.map.toolbarUpTemplate.cloneNode(true));
+		const toolbarLogo = document.getElementById('toolbar-logo');
+		if (toolbarLogo)
+			toolbarLogo.after(this.map.toolbarUpTemplate.cloneNode(true));
 		toolbar = window.L.DomUtil.get('toolbar-up');
 
 		this.container = window.L.DomUtil.create(
@@ -118,6 +120,14 @@ class NotebookbarBase extends JSDialogComponent {
 	}
 
 	protected onJSUpdate(e: { data: UpdateData }) {
+		if (
+			e.data &&
+			e.data.jsontype === this.allowedJsonType &&
+			e.data.control &&
+			this.impl?.onCoreWidgetUpdate?.(e.data.control)
+		)
+			return true;
+
 		if (super.onJSUpdate(e)) {
 			this.impl?.setInitialized(true);
 			return true;
@@ -180,6 +190,10 @@ class NotebookbarBase extends JSDialogComponent {
 
 	public hideTabs() {
 		this.impl?.hideTabs();
+	}
+
+	public selectTab(tabName: string) {
+		this.impl?.selectTab(tabName);
 	}
 
 	public refreshContextTabsVisibility() {

@@ -25,6 +25,7 @@
 #include <com/sun/star/ucb/UniversalContentBroker.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/bootstrap.hxx>
+#include <osl/time.h>
 #include <sal/log.hxx>
 #include <tools/stream.hxx>
 #include <vcl/toolkit/fixed.hxx>
@@ -35,6 +36,7 @@
 #include <vcl/wrkwin.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
     const int WIDTH = 1000, HEIGHT = 800;
@@ -145,7 +147,7 @@ void IconTestApp::Init()
 {
     nRet = EXIT_SUCCESS;
 
-    uno::Reference<uno::XComponentContext> xContext =
+    uno::Reference<cpo::uno::XComponentContext> xContext =
         cppu::defaultBootstrap_InitialComponentContext();
     uno::Reference<lang::XMultiComponentFactory> xFactory =
         xContext->getServiceManager();

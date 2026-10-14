@@ -96,7 +96,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="debug";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -106,7 +106,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
@@ -114,7 +114,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="debug";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -123,7 +123,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -133,7 +133,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="warning";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -143,7 +143,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
@@ -153,7 +153,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="warning";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -162,13 +162,12 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <PostBuildEvent>
       <Command>
-        xcopy $(OnlineBuildDir)\coolkitconfig.xcu $(OutDir)..\ /q /y
         robocopy $(OnlineBuildDir)\browser\dist $(OutDir)..\cool *.* /E /XF debug.html framed.doc.html framed.html load.doc.html multidocs.html tsconfig.tsbuildinfo l10n-all.js wasm.html $(CoolSrcExclude) /NFL /NDL /NJH /NJS /NP
         xcopy $(OnlineBuildDir)\browser\dist\src\layer\tile\CanvasTileUtils.js $(OutDir)..\cool\src\layer\tile\ /q /y
         xcopy $(OnlineBuildDir)\browser\dist\src\app\TaskWorker.js $(OutDir)..\cool\src\app\ /q /y
@@ -182,7 +181,6 @@
         del $(OutDir)..\..\Release\program\twain32shim.exe
         del $(OutDir)..\..\Release\program\uno.exe
         del $(OutDir)..\..\Release\program\unoinfo.exe
-        del $(OutDir)..\..\Release\program\unopkg.exe
         rem Delete the libmerged stub DLLs. Their real code is linked into
         rem mergedlo.dll, so each stub file is exactly 21 bytes. Matching that exact
         rem size rather than a fixed name list stays correct when a different set of
@@ -190,6 +188,7 @@
         rem DLL is never removed, only the 21-byte stubs.
         for %%F in ("$(OutDir)..\..\Release\program\*.dll") do if %%~zF EQU 21 ( echo Removing merge stub %%~nxF &amp; del "%%F" )
         xcopy ..\..\..\browser\templates $(OutDir)..\templates\ /s /q /y
+        xcopy ..\..\..\qt\translations\*.ts $(OutDir)translations\ /q /y
       </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -226,7 +225,10 @@
     <ClCompile Include="..\..\..\kit\KitQueue.cpp" />
     <ClCompile Include="..\..\..\kit\KitWebSocket.cpp" />
     <ClCompile Include="..\..\..\kit\LogUI.cpp" />
+    <ClCompile Include="..\..\..\common\Watchdog-windows.cpp" />
     <ClCompile Include="..\..\..\net\FakeSocket.cpp" />
+    <ClCompile Include="..\..\..\net\HttpRequest.cpp" />
+    <ClCompile Include="..\..\..\net\Socket-windows.cpp" />
     <ClCompile Include="..\..\..\net\Socket.cpp" />
     <ClCompile Include="..\..\..\wsd\AIChatSession.cpp" />
     <ClCompile Include="..\..\..\wsd\AIUtil.cpp" />
@@ -235,6 +237,7 @@
     <ClCompile Include="..\..\..\wsd\ClientSession.cpp" />
     <ClCompile Include="..\..\..\wsd\DeckSpec.cpp" />
     <ClCompile Include="..\..\..\wsd\DocumentBroker.cpp" />
+    <ClCompile Include="..\..\..\wsd\Extensions.cpp" />
     <ClCompile Include="..\..\..\wsd\dumpWsdState.cpp" />
     <ClCompile Include="..\..\..\wsd\RequestDetails.cpp" />
     <ClCompile Include="..\..\..\wsd\RequestVettingStation.cpp" />

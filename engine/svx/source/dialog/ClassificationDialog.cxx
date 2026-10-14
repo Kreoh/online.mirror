@@ -154,7 +154,7 @@ void writeResultToXml(tools::XmlWriter & rXmlWriter,
 
 } // end anonymous namespace
 
-ClassificationDialog::ClassificationDialog(weld::Window* pParent, const css::uno::Reference<css::document::XDocumentProperties>& rDocProps,
+ClassificationDialog::ClassificationDialog(weld::Window* pParent, const cpo::uno::Reference<css::document::XDocumentProperties>& rDocProps,
                                            const bool bPerParagraph, std::function<void()> aParagraphSignHandler)
     : GenericDialogController(pParent, u"svx/ui/classificationdialog.ui"_ustr, u"AdvancedDocumentClassificationDialog"_ustr)
     , maHelper(rDocProps)
@@ -511,12 +511,12 @@ std::vector<ClassificationResult> ClassificationDialog::getResult()
     std::vector<ClassificationResult> aClassificationResults;
 
     ClassificationEditEngine& rEdEngine = m_xEditWindow->getEditEngine();
-    std::unique_ptr<EditTextObject> pEditText(rEdEngine.CreateTextObject());
+    EditTextObject aEditText(rEdEngine.CreateTextObject());
 
     sal_Int32 nCurrentParagraph = -1;
 
     std::vector<editeng::Section> aSections;
-    pEditText->GetAllSections(aSections);
+    aEditText.GetAllSections(aSections);
     for (editeng::Section const & rSection : aSections)
     {
         while (nCurrentParagraph < rSection.mnParagraph)
@@ -570,9 +570,9 @@ IMPL_LINK(ClassificationDialog, SelectClassificationHdl, weld::ComboBox&, rBox, 
     if (nSelected < 0 || m_nCurrentSelectedCategory == nSelected)
         return;
 
-    std::unique_ptr<EditTextObject> pEditText(m_xEditWindow->getEditEngine().CreateTextObject());
+    EditTextObject aEditText(m_xEditWindow->getEditEngine().CreateTextObject());
     std::vector<editeng::Section> aSections;
-    pEditText->GetAllSections(aSections);
+    aEditText.GetAllSections(aSections);
 
     // if we are replacing an existing field
     bool bReplaceExisting = false;

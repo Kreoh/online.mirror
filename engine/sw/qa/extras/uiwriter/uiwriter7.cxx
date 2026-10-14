@@ -75,7 +75,8 @@
 #include <test/commontesttools.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -365,6 +366,53 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testTextSearch)
     // check of the end result
     CPPUNIT_ASSERT_EQUAL(u"mCelqy xWorpqd mThzq mis ma mtasq"_ustr,
                          pCursor->GetPointNode().GetTextNode()->GetText());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testTdf131431)
+{
+    // the goal of this test is to check if replaceAll does not go into an infinite loop
+
+    // load document with underlined text with empty and non empty lines
+    createSwDoc("tdf131431.odt");
+
+    // setup search for any underline text
+    uno::Sequence<beans::PropertyValue> aSearchAttribute(comphelper::InitPropertySequence(
+        { { "CharUnderline", uno::Any(sal_Int32(css::awt::FontUnderline::SINGLE)) } }));
+
+    // setup replace to also apply green highlight color
+    uno::Sequence<beans::PropertyValue> aReplaceAttribute(
+        comphelper::InitPropertySequence({ { "CharBackColor", uno::Any(sal_Int32(0x00FF00)) } }));
+
+    uno::Reference<util::XReplaceable> xReplace(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<util::XReplaceDescriptor> xReplaceDes = xReplace->createReplaceDescriptor();
+    uno::Reference<util::XPropertyReplace> xPropReplace(xReplaceDes, uno::UNO_QUERY_THROW);
+    xPropReplace->setSearchAttributes(aSearchAttribute);
+    xPropReplace->setReplaceAttributes(aReplaceAttribute);
+
+    // time out after 30 seconds if replaceAll hasn't returned
+    std::atomic<bool> completed{ false };
+    std::thread TimeoutThread([&completed]() {
+        for (int i = 0; i < 300; ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (completed)
+            {
+                return;
+            }
+        }
+        CPPUNIT_FAIL("Test timed out after 30 seconds - infinite loop detected");
+    });
+
+    // actual test
+    sal_Int32 nReplaceCount = xReplace->replaceAll(xReplaceDes);
+
+    completed = true;
+    TimeoutThread.join();
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(9), nReplaceCount);
+
+    // a simple 'search' should also report the same number
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(9), xReplace->findAll(xReplaceDes)->getCount());
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testTdf147583_backwardSearch)
@@ -1691,7 +1739,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testTdf89714)
 {
     createSwDoc();
     uno::Reference<lang::XMultiServiceFactory> xFact(mxComponent, uno::UNO_QUERY);
-    uno::Reference<uno::XInterface> xInterface(
+    uno::Reference<cpo::uno::XInterface> xInterface(
         xFact->createInstance(u"com.sun.star.text.Defaults"_ustr), uno::UNO_QUERY);
     uno::Reference<beans::XPropertyState> xPropState(xInterface, uno::UNO_QUERY);
     //enabled Paragraph Orphan and Widows by default starting in LO5.1
@@ -1725,7 +1773,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testPropertyDefaults)
 {
     createSwDoc();
     uno::Reference<lang::XMultiServiceFactory> xFact(mxComponent, uno::UNO_QUERY);
-    uno::Reference<uno::XInterface> xInterface(
+    uno::Reference<cpo::uno::XInterface> xInterface(
         xFact->createInstance(u"com.sun.star.text.Defaults"_ustr), uno::UNO_QUERY);
     uno::Reference<beans::XPropertySet> xPropSet(xInterface, uno::UNO_QUERY_THROW);
     uno::Reference<beans::XPropertyState> xPropState(xInterface, uno::UNO_QUERY);
@@ -2157,7 +2205,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testTdf90883TableBoxGetCoordinates)
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testEmbeddedDataSource)
 {
     // Initially no data source.
-    uno::Reference<uno::XComponentContext> xComponentContext(
+    uno::Reference<cpo::uno::XComponentContext> xComponentContext(
         comphelper::getProcessComponentContext());
     uno::Reference<sdb::XDatabaseContext> xDatabaseContext
         = sdb::DatabaseContext::create(xComponentContext);
@@ -2174,7 +2222,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testEmbeddedDataSource)
     CPPUNIT_ASSERT(xDataSource.is());
     auto xConnection = xDataSource->getConnection(u""_ustr, u""_ustr);
     uno::Reference<container::XNameAccess> xTables
-        = css::uno::Reference<css::sdbcx::XTablesSupplier>(xConnection, uno::UNO_QUERY_THROW)
+        = cpo::uno::Reference<css::sdbcx::XTablesSupplier>(xConnection, uno::UNO_QUERY_THROW)
               ->getTables();
     CPPUNIT_ASSERT(xTables.is());
     CPPUNIT_ASSERT(xTables->hasByName(u"Sheet1"_ustr));
@@ -2188,7 +2236,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest7, testEmbeddedDataSource)
     xDataSource.set(xDatabaseContext->getByName(u"calc-data-source"_ustr), uno::UNO_QUERY);
     CPPUNIT_ASSERT(xDataSource.is());
     xConnection = xDataSource->getConnection(u""_ustr, u""_ustr);
-    xTables = css::uno::Reference<css::sdbcx::XTablesSupplier>(xConnection, uno::UNO_QUERY_THROW)
+    xTables = cpo::uno::Reference<css::sdbcx::XTablesSupplier>(xConnection, uno::UNO_QUERY_THROW)
                   ->getTables();
     CPPUNIT_ASSERT(xTables.is());
     CPPUNIT_ASSERT(xTables->hasByName(u"Sheet1"_ustr));

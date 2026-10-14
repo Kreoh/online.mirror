@@ -50,7 +50,7 @@
 #include <com/sun/star/packages/WrongPasswordException.hpp>
 #include <com/sun/star/packages/zip/ZipIOException.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
-#include <com/sun/star/script/vba/XVBACompatibility.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/rdf/XDocumentMetadataAccess.hpp>
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
@@ -78,8 +78,8 @@
 #include <unonames.hxx>
 
 using namespace com::sun::star;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 ScXMLImportWrapper::ScXMLImportWrapper( ScDocShell& rDocSh, SfxMedium* pM, uno::Reference < embed::XStorage > xStor ) :
     mrDocShell(rDocSh),
@@ -102,7 +102,7 @@ uno::Reference <task::XStatusIndicator> ScXMLImportWrapper::GetStatusIndicator()
     return xStatusIndicator;
 }
 
-ErrCodeMsg ScXMLImportWrapper::ImportFromComponent(const uno::Reference<uno::XComponentContext>& xContext,
+ErrCodeMsg ScXMLImportWrapper::ImportFromComponent(const uno::Reference<cpo::uno::XComponentContext>& xContext,
     const uno::Reference<frame::XModel>& xModel,
     xml::sax::InputSource& aParserInput,
     const OUString& sComponentName, const OUString& sDocName,
@@ -281,7 +281,7 @@ ErrCodeMsg ScXMLImportWrapper::ImportFromComponent(const uno::Reference<uno::XCo
 
 bool ScXMLImportWrapper::Import( ImportFlags nMode, ErrCodeMsg& rError )
 {
-    const uno::Reference<uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
+    const uno::Reference<cpo::uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
 
     xml::sax::InputSource aParserInput;
     if (pMedium)
@@ -300,7 +300,7 @@ bool ScXMLImportWrapper::Import( ImportFlags nMode, ErrCodeMsg& rError )
         { u"ProgressMax"_ustr, 0, ::cppu::UnoType<sal_Int32>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0},
         { u"ProgressCurrent"_ustr, 0, ::cppu::UnoType<sal_Int32>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0},
         { u"NumberStyles"_ustr, 0, cppu::UnoType<container::XNameAccess>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0},
-        { u"PrivateData"_ustr, 0, cppu::UnoType<uno::XInterface>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0 },
+        { u"PrivateData"_ustr, 0, cppu::UnoType<cpo::uno::XInterface>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0 },
         { u"BaseURI"_ustr, 0, ::cppu::UnoType<OUString>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0 },
         { u"StreamRelPath"_ustr, 0, ::cppu::UnoType<OUString>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0 },
         { u"StreamName"_ustr, 0, ::cppu::UnoType<OUString>::get(), css::beans::PropertyAttribute::MAYBEVOID, 0 },
@@ -557,14 +557,12 @@ bool ScXMLImportWrapper::Import( ImportFlags nMode, ErrCodeMsg& rError )
         bool bVBACompat = false;
         if ( (xInfoSet->getPropertyValue(u"VBACompatibilityMode"_ustr) >>= bVBACompat) && bVBACompat )
         {
-            /*  Set library container to VBA compatibility mode, this
-                forces loading the Basic project, which in turn creates the
-                VBA Globals object and does all related initialization. */
+            // Set library container to VBA compatibility mode without loading the Basic project.
             if ( xModel.is() ) try
             {
-                uno::Reference< script::vba::XVBACompatibility > xVBACompat( xModel->getPropertyValue(
+                uno::Reference< beans::XPropertySet > xLibraries( xModel->getPropertyValue(
                     u"BasicLibraries"_ustr ), uno::UNO_QUERY_THROW );
-                xVBACompat->setVBACompatibilityMode( true );
+                xLibraries->setPropertyValue( u"DeferredVBACompatibilityMode"_ustr, uno::Any( true ) );
             }
             catch( const cpo::uno::Exception& )
             {
@@ -595,7 +593,7 @@ static bool lcl_HasValidStream(const ScDocument& rDoc)
     return false;
 }
 
-bool ScXMLImportWrapper::ExportToComponent(const uno::Reference<uno::XComponentContext>& xContext,
+bool ScXMLImportWrapper::ExportToComponent(const uno::Reference<cpo::uno::XComponentContext>& xContext,
     const uno::Reference<frame::XModel>& xModel, const uno::Reference<xml::sax::XWriter>& xWriter,
     const cpo::uno::Sequence<beans::PropertyValue>& aDescriptor, const OUString& sName,
     const OUString& sMediaType, const OUString& sComponentName,
@@ -726,7 +724,7 @@ bool ScXMLImportWrapper::Export(bool bStylesOnly)
     if (pDrawLayer)
         pDrawLayer->setLock(bOldLock);
 
-    const uno::Reference<uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
 
     uno::Reference<xml::sax::XWriter> xWriter = xml::sax::Writer::create(xContext);
 

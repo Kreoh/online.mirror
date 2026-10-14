@@ -21,7 +21,7 @@
 
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/ui/XUIElementFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -47,26 +47,26 @@ public:
     const SmPanelFactory& operator=(const SmPanelFactory&) = delete;
 
     // XUIElementFactory
-    css::uno::Reference<css::ui::XUIElement> SAL_CALL
+    cpo::uno::Reference<css::ui::XUIElement>
     createUIElement(const OUString& ResourceURL,
                     const cpo::uno::Sequence<css::beans::PropertyValue>& Arguments) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(OUString const& ServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(OUString const& ServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
-css::uno::Reference<css::ui::XUIElement> SAL_CALL SmPanelFactory::createUIElement(
+cpo::uno::Reference<css::ui::XUIElement> SmPanelFactory::createUIElement(
     const OUString& ResourceURL, const cpo::uno::Sequence<css::beans::PropertyValue>& Arguments)
 {
     try
     {
         const comphelper::NamedValueCollection aArguments(Arguments);
         auto xFrame(
-            aArguments.getOrDefault(u"Frame"_ustr, css::uno::Reference<css::frame::XFrame>()));
+            aArguments.getOrDefault(u"Frame"_ustr, cpo::uno::Reference<css::frame::XFrame>()));
         auto xParentWindow(aArguments.getOrDefault(u"ParentWindow"_ustr,
-                                                   css::uno::Reference<css::awt::XWindow>()));
+                                                   cpo::uno::Reference<css::awt::XWindow>()));
         const sal_uInt64 nBindingsValue(
             aArguments.getOrDefault(u"SfxBindings"_ustr, sal_uInt64(0)));
         SfxBindings* pBindings = reinterpret_cast<SfxBindings*>(nBindingsValue);
@@ -76,12 +76,12 @@ css::uno::Reference<css::ui::XUIElement> SAL_CALL SmPanelFactory::createUIElemen
             pParent = pTunnel->getWidget();
 
         if (!pParent)
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"SmPanelFactory::createUIElement: no ParentWindow"_ustr);
         if (!xFrame)
-            throw css::uno::RuntimeException(u"SmPanelFactory::createUIElement: no Frame"_ustr);
+            throw cpo::uno::RuntimeException(u"SmPanelFactory::createUIElement: no Frame"_ustr);
         if (!pBindings)
-            throw css::uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"SmPanelFactory::createUIElement: no SfxBindings"_ustr);
 
         std::unique_ptr<PanelLayout> pPanel;
@@ -102,7 +102,7 @@ css::uno::Reference<css::ui::XUIElement> SAL_CALL SmPanelFactory::createUIElemen
             return sfx2::sidebar::SidebarPanelBase::Create(ResourceURL, xFrame, std::move(pPanel),
                                                            aLayoutSize);
     }
-    catch (const css::uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -133,8 +133,8 @@ cpo::uno::Sequence<OUString> SmPanelFactory::getSupportedServiceNames()
 
 } // end of unnamed namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-org_libreoffice_comp_Math_sidebar_SmPanelFactory(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_libreoffice_comp_Math_sidebar_SmPanelFactory(cpo::uno::XComponentContext*,
                                                  cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SmPanelFactory);

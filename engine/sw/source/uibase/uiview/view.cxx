@@ -38,7 +38,6 @@
 #include <vcl/inputctx.hxx>
 #include <svl/eitem.hxx>
 #include <unotools/configmgr.hxx>
-#include <unotools/lingucfg.hxx>
 #include <unotools/useroptions.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/docfile.hxx>
@@ -52,6 +51,7 @@
 #include <svx/fmview.hxx>
 #include <unotxvw.hxx>
 #include <cmdid.h>
+#include <svx/svxids.hrc>
 #include <svl/hint.hxx>
 #include <swmodule.hxx>
 #include <inputwin.hxx>
@@ -77,6 +77,7 @@
 #include <usrpref.hxx>
 #include <srcview.hxx>
 #include <doc.hxx>
+#include <swtable.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentDrawModelAccess.hxx>
@@ -130,8 +131,8 @@
 #include <IDocumentRedlineAccess.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::scanner;
 using namespace ::com::sun::star::sdb;
@@ -334,8 +335,8 @@ void SwView::SelectShell()
 {
     // Attention: Maintain the SelectShell for the WebView additionally
 
-    // In case of m_bDying, our SfxShells are already gone, don't try to select a shell at all.
-    if(m_bInDtor || m_bDying)
+    // A view about to be deleted must not create new SfxShells
+    if (IsInDtor() || IsDying())
         return;
 
     // Decision if the UpdateTable has to be called
@@ -687,6 +688,33 @@ IMPL_LINK_NOARG(SwView, AttrChangedNotify, LinkParamNone*, void)
         // actual cursor position is a post-it field
         m_pPostItMgr->SetShadowState( m_pWrtShell->GetPostItFieldAtCursor() );
     }
+
+    CheckUsedTableStyles();
+}
+
+void SwView::CheckUsedTableStyles()
+{
+    // The table style list opens with the styles that the document's tables use. Applying a
+    // style, undo and redo, deleting or pasting a table and another view's edit can all
+    // change that set.
+    std::vector<OUString> aNames;
+    const SwDoc& rDoc = *m_pWrtShell->GetDoc();
+    for (size_t i = 0, nCount = rDoc.GetTableFrameFormatCount(true); i < nCount; ++i)
+    {
+        const SwTable* pTable = SwTable::FindTable(&rDoc.GetTableFrameFormat(i, true));
+        if (pTable && !pTable->GetTableStyleName().isEmpty())
+            aNames.push_back(pTable->GetTableStyleName().toString());
+    }
+    std::sort(aNames.begin(), aNames.end());
+    aNames.erase(std::unique(aNames.begin(), aNames.end()), aNames.end());
+    if (aNames == m_aUsedTableStyleNames)
+        return;
+
+    m_aUsedTableStyleNames = std::move(aNames);
+    SwDocShell* pDocShell = GetDocShell();
+    for (SfxViewFrame* pFrame = SfxViewFrame::GetFirst(pDocShell); pFrame;
+         pFrame = SfxViewFrame::GetNext(*pFrame, pDocShell))
+        pFrame->GetBindings().Invalidate(SID_TABLE_STYLE_LIST);
 }
 
 IMPL_LINK_NOARG(SwView, TimeoutHdl, Timer *, void)
@@ -949,10 +977,7 @@ SwView::SwView(SfxViewFrame& _rFrame, SfxViewShell* pOldSh)
     const SwMasterUsrPref* pUsrPref = SwModule::get()->GetUsrPref(bWebDShell);
     SwViewOption aUsrPref( *pUsrPref);
 
-    //! get lingu options without loading lingu DLL
-    SvtLinguOptions aLinguOpt;
-    SvtLinguConfig().GetOptions( aLinguOpt );
-    aUsrPref.SetOnlineSpell( aLinguOpt.bIsSpellAuto );
+    aUsrPref.SetOnlineSpell( SwModule::GetAutoSpellProperty() );
 
     // Inherit the per-view setting from the per-document one.
     aUsrPref.SetRedlineRecordingOn(rDocSh.GetDoc()->getIDocumentRedlineAccess().IsRedlineOn());
@@ -1318,11 +1343,6 @@ SwView::~SwView()
     m_pEditWin.disposeAndClear();
 
     m_pFormatClipboard.reset();
-}
-
-void SwView::SetDying()
-{
-    m_bDying = true;
 }
 
 void SwView::afterCallbackRegistered()
@@ -1898,6 +1918,10 @@ void SwView::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
                 }
             }
             break;
+        case SfxHintId::ThemeColorsChanged:
+            // The table style gallery draws its previews in the document's theme colors.
+            GetViewFrame().GetBindings().Invalidate(SID_TABLE_STYLE_LIST);
+            break;
         case SfxHintId::ModeChanged:
             {
                 // Modal mode change-over?
@@ -2171,7 +2195,7 @@ OUString SwView::GetDataSourceName() const
 
 bool SwView::IsDataSourceAvailable(const OUString& sDataSourceName)
 {
-    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     Reference< XDatabaseContext> xDatabaseContext = DatabaseContext::create(xContext);
 
     return xDatabaseContext->hasByName(sDataSourceName);

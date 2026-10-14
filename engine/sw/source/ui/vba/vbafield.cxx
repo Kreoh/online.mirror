@@ -35,13 +35,14 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SwVbaField::SwVbaField(  const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const  uno::Reference< css::text::XTextField >& xTextField) : SwVbaField_BASE( rParent, rContext )
+SwVbaField::SwVbaField(  const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, const  uno::Reference< css::text::XTextField >& xTextField) : SwVbaField_BASE( rParent, rContext )
 {
     mxTextField.set( xTextField, uno::UNO_SET_THROW );
 }
 
-bool SAL_CALL SwVbaField::Update()
+bool SwVbaField::Update()
 {
     uno::Reference< util::XUpdatable > xUpdatable( mxTextField, uno::UNO_QUERY );
     if( xUpdatable.is() )
@@ -220,7 +221,7 @@ sal_Int32 SwVbaReadFieldParams::FindNextStringPiece(const sal_Int32 nStart)
 // SwVbaFields
 
 static cpo::uno::Any lcl_createField( const uno::Reference< XHelperInterface >& xParent,
-                                 const uno::Reference< uno::XComponentContext >& xContext,
+                                 const uno::Reference< cpo::uno::XComponentContext >& xContext,
                                  const cpo::uno::Any& aSource )
 {
     uno::Reference< text::XTextField > xTextField( aSource, uno::UNO_QUERY_THROW );
@@ -233,12 +234,12 @@ namespace {
 class FieldEnumeration : public ::cppu::WeakImplHelper< css::container::XEnumeration >
 {
     uno::Reference< XHelperInterface > mxParent;
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     rtl::Reference< SwXTextDocument > mxModel;
     uno::Reference< container::XEnumeration > mxEnumeration;
 public:
     FieldEnumeration( uno::Reference< XHelperInterface >  xParent,
-                      uno::Reference< uno::XComponentContext > xContext,
+                      uno::Reference< cpo::uno::XComponentContext > xContext,
                       rtl::Reference< SwXTextDocument > xModel,
                       uno::Reference< container::XEnumeration > xEnumeration )
     : mxParent(std::move( xParent )),
@@ -247,11 +248,11 @@ public:
       mxEnumeration(std::move( xEnumeration ))
     {
     }
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return mxEnumeration->hasMoreElements();
     }
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( !hasMoreElements() )
             throw container::NoSuchElementException();
@@ -263,23 +264,23 @@ class FieldCollectionHelper : public ::cppu::WeakImplHelper< container::XIndexAc
                                                              container::XEnumerationAccess >
 {
     uno::Reference< XHelperInterface > mxParent;
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     rtl::Reference< SwXTextDocument > mxModel;
     rtl::Reference< SwXTextFieldTypes > mxEnumerationAccess;
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     FieldCollectionHelper( uno::Reference< XHelperInterface > xParent,
-                           uno::Reference< uno::XComponentContext > xContext,
+                           uno::Reference< cpo::uno::XComponentContext > xContext,
                            const rtl::Reference< SwXTextDocument >& xModel )
     : mxParent(std::move( xParent )), mxContext(std::move( xContext )), mxModel( xModel )
     {
         mxEnumerationAccess = xModel->getSwTextFields();
     }
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override { return  mxEnumerationAccess->getElementType(); }
-    virtual bool SAL_CALL hasElements(  ) override { return mxEnumerationAccess->hasElements(); }
+    virtual cpo::uno::Type getElementType(  ) override { return  mxEnumerationAccess->getElementType(); }
+    virtual bool hasElements(  ) override { return mxEnumerationAccess->hasElements(); }
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) override
+    virtual ::sal_Int32 getCount(  ) override
     {
         uno::Reference< container::XEnumeration > xEnumeration =  mxEnumerationAccess->createEnumeration();
         sal_Int32 nCount = 0;
@@ -290,7 +291,7 @@ public:
         }
         return nCount;
     }
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         if( Index < 0 || Index >= getCount() )
             throw lang::IndexOutOfBoundsException();
@@ -308,7 +309,7 @@ public:
         throw lang::IndexOutOfBoundsException();
     }
     // XEnumerationAccess
-    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) override
+    virtual uno::Reference< container::XEnumeration > createEnumeration(  ) override
     {
         uno::Reference< container::XEnumeration > xEnumeration =  mxEnumerationAccess->createEnumeration();
         return uno::Reference< container::XEnumeration >( new FieldEnumeration( mxParent, mxContext, mxModel, xEnumeration ) );
@@ -318,15 +319,15 @@ public:
 }
 
 SwVbaFields::SwVbaFields( const uno::Reference< XHelperInterface >& xParent,
-                          const uno::Reference< uno::XComponentContext > & xContext,
+                          const uno::Reference< cpo::uno::XComponentContext > & xContext,
                           const rtl::Reference< SwXTextDocument >& xModel )
 : SwVbaFields_BASE( xParent, xContext , uno::Reference< container::XIndexAccess >( new FieldCollectionHelper( xParent, xContext, xModel ) ) ),
   mxModel( xModel )
 {
 }
 
-uno::Reference< word::XField > SAL_CALL
-SwVbaFields::Add( const css::uno::Reference< ::ooo::vba::word::XRange >& Range, const cpo::uno::Any& Type, const cpo::uno::Any& Text, const cpo::uno::Any& /*PreserveFormatting*/ )
+uno::Reference< word::XField >
+SwVbaFields::Add( const cpo::uno::Reference< ::ooo::vba::word::XRange >& Range, const cpo::uno::Any& Type, const cpo::uno::Any& Text, const cpo::uno::Any& /*PreserveFormatting*/ )
 {
     sal_Int32 nType = word::WdFieldType::wdFieldEmpty;
     Type >>= nType;
@@ -352,7 +353,7 @@ SwVbaFields::Add( const css::uno::Reference< ::ooo::vba::word::XRange >& Range, 
     }
     else
     {
-        throw uno::RuntimeException(u"Not implemented"_ustr );
+        throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
     }
 
     SwVbaRange& rVbaRange = dynamic_cast<SwVbaRange&>(*Range);
@@ -458,7 +459,7 @@ uno::Reference< text::XTextField > SwVbaFields::Create_Field_DocProperty( const 
     SAL_INFO("sw.vba", "SwVbaFields::Create_Field_DocProperty, the document property name is " << aDocProperty );
     if( aDocProperty.isEmpty() )
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     bool bCustom = true;
@@ -481,7 +482,7 @@ uno::Reference< text::XTextField > SwVbaFields::Create_Field_DocProperty( const 
     }
     else if( sFieldService.isEmpty() )
     {
-        throw uno::RuntimeException(u"Not implemented"_ustr );
+        throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
     }
 
     uno::Reference< text::XTextField > xTextField( mxModel->createInstance( sFieldService ), uno::UNO_QUERY_THROW );
@@ -495,7 +496,7 @@ uno::Reference< text::XTextField > SwVbaFields::Create_Field_DocProperty( const 
     return xTextField;
 }
 
-uno::Reference< container::XEnumeration > SAL_CALL
+uno::Reference< container::XEnumeration >
 SwVbaFields::createEnumeration()
 {
     uno::Reference< container::XEnumerationAccess > xEnumerationAccess( m_xIndexAccess, uno::UNO_QUERY_THROW );
@@ -509,7 +510,7 @@ SwVbaFields::createCollectionObject( const cpo::uno::Any& aSource )
     return lcl_createField( mxParent, mxContext, aSource );
 }
 
-sal_Int32 SAL_CALL SwVbaFields::Update()
+sal_Int32 SwVbaFields::Update()
 {
     sal_Int32 nUpdate = 1;
     try
@@ -533,7 +534,7 @@ SwVbaFields::getServiceImplName()
 }
 
 // XEnumerationAccess
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 SwVbaFields::getElementType()
 {
     return  cppu::UnoType<word::XField>::get();

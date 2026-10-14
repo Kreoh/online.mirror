@@ -165,6 +165,14 @@ window.L.Map.include({
 	},
 
 	showResolvedComments: function(on: boolean = false) {
+		// A resolved comment is shown only while comments as a whole are shown,
+		// so choosing them turns the comments on as well.
+		if (on) {
+			const shown = this.stateChangeHandler.getItemValue('showannotations');
+			if (shown !== 'true' && shown !== true)
+				this.showComments(true);
+		}
+
 		const unoCommand = '.uno:ShowResolvedAnnotations';
 		this.sendUnoCommand(unoCommand);
 		app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).setViewResolved(on);
@@ -172,6 +180,14 @@ window.L.Map.include({
 	},
 
 	showComments: function(on: boolean = false) {
+		// Resolved comments are a part of the comments, so their own choice is
+		// switched off along with them.
+		if (!on) {
+			const resolved = this.stateChangeHandler.getItemValue('.uno:ShowResolvedAnnotations');
+			if (resolved === 'true' || resolved === true)
+				this.showResolvedComments(false);
+		}
+
 		app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).setView(on);
 		this.uiManager.setDocTypePref('ShowAnnotations', on);
 		this.fire('commandstatechanged', {commandName : 'showannotations', state : on ? 'true': 'false'});
@@ -222,6 +238,10 @@ export class CommentSection extends CanvasSectionObject {
 		calcCommandStateChanged: boolean;
 		commentList: Array<Comment>;
 		selectedComment: Comment | null;
+		// The comment whose text is shown at its full height, which is the one the user last
+		// acted on. It is null while no comment is selected. A thread has one root and many
+		// replies, and any of them can be this one.
+		expandedComment: Comment | null;
 		calcCurrentComment: Comment | null;
 		marginY: number;
 		offset: number;
@@ -287,6 +307,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.sectionProperties.doNotHideCommentTimer = null; // For _goToCalcComment, where comment needs to show, despite async events trying to hide it
 		this.sectionProperties.commentList = new Array(0);
 		this.sectionProperties.selectedComment = null;
+		this.sectionProperties.expandedComment = null;
 		this.sectionProperties.arrow = null;
 		this.sectionProperties.show = null;
 		this.sectionProperties.showResolved = false;
@@ -295,7 +316,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.sectionProperties.width = Math.round(1 * app.dpiScale); // Configurable variable.
 		this.sectionProperties.scrollAnnotation = null; // For impress, when 1 or more comments exist.
 		this.sectionProperties.commentWidth = CommentSection.getCommentWidth();
-		this.sectionProperties.commentWidthBigger =  588 * app.dpiScale;
+		this.sectionProperties.commentWidthBigger = CommentSection.getBiggerCommentWidth();
 		this.sectionProperties.deflectionOfSelectedComment = 160; // CSS pixels.
 		this.sectionProperties.showSelectedBigger = false;
 		this.sectionProperties.calcCurrentComment = null; // We don't automatically show a Calc comment when cursor is on its cell. But we remember it to show if user presses Alt+C keys.
@@ -507,6 +528,10 @@ export class CommentSection extends CanvasSectionObject {
 		return 200 * 1.3 * app.dpiScale;
 	}
 
+	public static getBiggerCommentWidth(): number {
+		return 588 * app.dpiScale;
+	}
+
 	/// If the current layout has more than one pages in a row, so the comment should be next to
 	/// the document content instead of next to the page.
 	private static isMultiColumnLayout(): boolean {
@@ -528,7 +553,8 @@ export class CommentSection extends CanvasSectionObject {
 		}
 		else {
 			const availableSpace = (this.containerObject.getDocumentAnchorSection().size[0] - app.activeDocument.fileSize.pX) * 0.5;
-			return Math.round(availableSpace);
+			// Rounding down keeps the two margins together within the gap.
+			return Math.floor(availableSpace);
 		}
 	}
 
@@ -856,7 +882,11 @@ export class CommentSection extends CanvasSectionObject {
 			}
 
 			if (commentData.dateTime) {
-				const d = new Date(commentData.dateTime.replace(/,.*/, 'Z'));
+				// As on the comment card: the moment when the server sends one, the author's
+				// wall clock otherwise.
+				const d = commentData.dateTimeUtc ?
+					new Date(commentData.dateTimeUtc) :
+					new Date(commentData.dateTime.replace(/,.*/, ''));
 				const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
 				$(contentDate).text(isNaN(d.getTime()) ? comment.dateTime: d.toLocaleDateString((<any>String).locale, <any>dateOptions));
 			}
@@ -1330,6 +1360,10 @@ export class CommentSection extends CanvasSectionObject {
 			// Select the root comment
 			var idx = this.getRootIndexOf(annotation.sectionProperties.data.id);
 
+			// Selection covers a whole thread, so clicking a reply selects its root.
+			// This is the card the click landed on, and the one shown in full.
+			this.sectionProperties.expandedComment = annotation;
+
 			// no need to reselect comment, it will cause to scroll to root comment unnecessarily
 			if (this.sectionProperties.selectedComment === this.sectionProperties.commentList[idx]) {
 				this.update();
@@ -1362,7 +1396,8 @@ export class CommentSection extends CanvasSectionObject {
 				this.sectionProperties.selectedComment?.setContainerPos(true, this.sectionProperties.canvasContainerBounds);
 			}
 
-			if (app.map._docLayer._docType === 'presentation' || app.map._docLayer._docType === 'drawing')
+			if (app.map._docLayer._docType === 'presentation' || app.map._docLayer._docType === 'drawing'
+				|| app.map._docLayer._docType === 'text')
 				this.listenForClickOutsideComment(true);
 
 			this.update();
@@ -1531,6 +1566,7 @@ export class CommentSection extends CanvasSectionObject {
 
 			const previouslySelectedComment = this.sectionProperties.selectedComment;
 			this.sectionProperties.selectedComment = null;
+			this.sectionProperties.expandedComment = null;
 			if (app.map._docLayer._docType !== 'spreadsheet') {
 				previouslySelectedComment.setContainerPos(true, this.sectionProperties.canvasContainerBounds); // Must be done after we clear the selection since as it resets the z-index based on this...
 			}
@@ -1551,6 +1587,22 @@ export class CommentSection extends CanvasSectionObject {
 		document.addEventListener('keydown', this.escapeListener);
 	}
 
+	// Whether a card of the thread that starts at rootIndex is in edit mode.
+	private threadInEditMode (rootIndex: number): boolean {
+		const commentList = this.sectionProperties.commentList;
+		if (rootIndex < 0)
+			return false;
+
+		for (let i = rootIndex; i < commentList.length; i++) {
+			// A comment with no parent is the root of the next thread.
+			if (i > rootIndex && commentList[i].sectionProperties.data.parent === '0')
+				break;
+			if (commentList[i].isEdit())
+				return true;
+		}
+		return false;
+	}
+
 	// In Impress and Draw a comment is opened by clicking its avatar and stays
 	// open until the user clicks away onto the slide or the grey area around it.
 	// The whole document view, slide and grey area alike, is painted on the
@@ -1564,8 +1616,21 @@ export class CommentSection extends CanvasSectionObject {
 			return;
 
 		const selected = this.sectionProperties.selectedComment;
-		if (selected && !selected.isEdit())
-			this.unselect();
+		if (!selected)
+			return;
+
+		// A reply pane can be open on any card of the thread, not only on its root.
+		if (this.threadInEditMode(this.getRootIndexOf(selected.sectionProperties.data.id)))
+			return;
+
+		// A click that leaves the text cursor where it was sends no new position, so
+		// ask the open comment again with the position as it stands.
+		if (app.map._docLayer._docType === 'text') {
+			selected.onCursorPositionChanged(app.file.textCursor.rectangle.clone());
+			return;
+		}
+
+		this.unselect();
 	};
 
 	// The listener lives only while a comment is open, attached on select and
@@ -1798,6 +1863,9 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public onResize (): void {
+		// A browser zoom changes app.dpiScale and arrives as a resize.
+		this.sectionProperties.commentWidth = CommentSection.getCommentWidth();
+		this.sectionProperties.commentWidthBigger = CommentSection.getBiggerCommentWidth();
 		this.checkCollapseState();
 		// When window is resized, it may mean that comment wizard is closed. So we hide the highlights.
 		this.removeHighlighters();
@@ -1811,6 +1879,12 @@ export class CommentSection extends CanvasSectionObject {
 		}
 
 		this._commentPositionDirty = true;
+	}
+
+	// The comments are laid out again on the next frame, without animation.
+	public layoutOnNextDraw (): void {
+		this._commentPositionDirty = true;
+		app.sectionContainer.requestReDraw();
 	}
 
 	public onDraw (frameCount?: number, elapsedTime?: number): void {
@@ -1830,7 +1904,9 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public showHideComment (annotation: Comment): void {
-		// This manually shows/hides comments
+		// This manually shows/hides comments. A hidden comment is shown again only while comments
+		// as a whole are shown.
+		const commentsShown = this.sectionProperties.show !== false;
 		if (!this.sectionProperties.showResolved && app.map._docLayer._docType === 'text') {
 			const hide = annotation.isContainerVisible() && annotation.sectionProperties.data.resolved === 'true';
 
@@ -1841,7 +1917,8 @@ export class CommentSection extends CanvasSectionObject {
 				annotation.hide();
 				annotation.update();
 			}
-			else if (!hide && !annotation.isContainerVisible() && annotation.sectionProperties.data.resolved === 'false') {
+			else if (!hide && !annotation.isContainerVisible() && annotation.sectionProperties.data.resolved === 'false'
+				&& commentsShown) {
 				annotation.show();
 				annotation.update();
 			}
@@ -1849,7 +1926,7 @@ export class CommentSection extends CanvasSectionObject {
 		}
 		else if (app.map._docLayer._docType === 'presentation' || app.map._docLayer._docType === 'drawing') {
 			if (annotation.sectionProperties.partIndex === app.map._docLayer._selectedPart || app.file.fileBasedView) {
-				if (!annotation.isContainerVisible()) {
+				if (!annotation.isContainerVisible() && commentsShown) {
 					annotation.show();
 					annotation.update();
 					this.update();
@@ -2191,6 +2268,8 @@ export class CommentSection extends CanvasSectionObject {
 			var removed = this.getComment(id);
 			if (removed) {
 				this.adjustParentRemove(removed);
+				if (this.sectionProperties.expandedComment === removed)
+					this.sectionProperties.expandedComment = this.sectionProperties.selectedComment;
 				if (this.sectionProperties.selectedComment === removed) {
 					this.unselect();
 					this.removeItem(id);
@@ -2282,7 +2361,8 @@ export class CommentSection extends CanvasSectionObject {
 			const comment = this.getComment(id);
 			if (comment) {
 				const selection = obj[dataroot].searchSelection.split(",");
-				comment.selectText(parseInt(selection[0]), parseInt(selection[1]), parseInt(selection[2]), parseInt(selection[3]));
+				comment.selectText(parseInt(selection[0]), parseInt(selection[1]), parseInt(selection[2]), parseInt(selection[3]),
+					obj[dataroot].searchText, obj[dataroot].searchOccurrence);
 				this.showHideComment(comment);
 			}
 		}
@@ -2349,7 +2429,7 @@ export class CommentSection extends CanvasSectionObject {
 	// We will add their part's position to comment's variables.
 	// When we are saving their position, we will remove the additions before sending the information.
 	private adjustCommentFileBasedView (comment: any): void {
-		var index = app.impress.getIndexFromPart(parseInt(comment.part));
+		var index = app.impress.getIndexFromPart(comment.part);
 		const layout = app.activeDocument.activeLayout;
 		const fbLayout =
 			layout && layout.type === 'ViewLayoutFileBased'
@@ -2711,7 +2791,12 @@ export class CommentSection extends CanvasSectionObject {
 				yOrigin = this.sectionProperties.commentList[selectedIndex].sectionProperties.data.anchorSPoint.vY;
 				var tempCrd: Array<number> = this.sectionProperties.commentList[selectedIndex].sectionProperties.data.anchorSPoint.vToArray();
 				var resolved:string = this.sectionProperties.commentList[selectedIndex].sectionProperties.data.resolved;
-				if (!resolved || resolved === 'false' || this.sectionProperties.showResolved) {
+				// In full view the card sits centred over the document instead of in
+				// the comment column, so the connector would run to empty space.
+				if (this.sectionProperties.showSelectedBigger) {
+					this.hideArrow();
+				}
+				else if (!resolved || resolved === 'false' || this.sectionProperties.showResolved) {
 					var posX = isRTL ? (this.containerObject.getDocumentAnchorSection().size[0] + x + 15) : x;
 					this.showArrow([tempCrd[0], tempCrd[1]], [posX, tempCrd[1]]);
 				}
@@ -2730,7 +2815,7 @@ export class CommentSection extends CanvasSectionObject {
 			// upwards from that shared top anchor pushes them above the slide into
 			// the toolbar. Keep them in a single top-down stack with the selected
 			// comment expanded in place instead.
-			var stackFromTop = !selectedIndex
+			var stackFromTop = selectedIndex === null
 				|| app.map._docLayer._docType === 'presentation'
 				|| app.map._docLayer._docType === 'drawing';
 			if (stackFromTop) {
@@ -2784,6 +2869,11 @@ export class CommentSection extends CanvasSectionObject {
 			extraWidth,
 			commentBottomY,
 		);
+
+		// The layout sets how much of each comment text is shown, so a search match in a comment
+		// is scrolled into view after it.
+		for (const comment of this.sectionProperties.commentList)
+			comment.revealSearchSelection();
 
 		this.disableLayoutAnimation = false;
 	}
@@ -2906,6 +2996,12 @@ export class CommentSection extends CanvasSectionObject {
 			}
 		}
 
+		// The list records the collapsed layout only while comments are shown, so a list that
+		// was hidden when the layout collapsed takes the collapsed state on here. A click on a
+		// collapsed comment opens it only when the list is collapsed as well.
+		if (state && commentShouldCollapse && !this.isCollapsed)
+			this.setCollapsed();
+
 		CommentSection.showingEveryComment = false;
 		this.update();
 	}
@@ -2923,14 +3019,28 @@ export class CommentSection extends CanvasSectionObject {
 		this.updateIdIndexMap();
 	}
 
-	// reset theis size to default (100px text)
+	// How tall the text can be for the whole card to fit the view.
+	// The rest of the card is measured from the page.
+	private maxContentHeightInView (comment: Comment): number {
+		const contentHeight = comment.sectionProperties.contentNode.getBoundingClientRect().height;
+		const rest = comment.getCommentHeight(true) - contentHeight;
+		return this.sectionProperties.canvasContainerBounds.height - rest
+			- 2 * this.sectionProperties.marginY / app.dpiScale;
+	}
+
+	// Give each comment its default text height, capped to what fits in view.
 	private resetCommentsSize (): void {
 		if (app.map._docLayer._docType === 'text') {
 			for (var i = 0; i < this.sectionProperties.commentList.length;i++) {
-				if (this.sectionProperties.commentList[i].sectionProperties.contentNode.style.display !== 'none') {
-					const maxHeight = (this.sectionProperties.commentList[i] === this.sectionProperties.selectedComment) ?
+				const comment = this.sectionProperties.commentList[i];
+				if (comment.sectionProperties.contentNode.style.display !== 'none') {
+					const maxHeight = (comment === this.sectionProperties.expandedComment) ?
 						this.annotationMaxSize : this.annotationMinSize;
-					this.sectionProperties.commentList[i].sectionProperties.contentNode.style.maxHeight = maxHeight + 'px';
+					// A comment in reply or edit state keeps this ceiling for as long
+					// as it stays open, so cap it to the visible area here.
+					const fits = Math.max(this.maxContentHeightInView(comment), this.annotationMinSize);
+					comment.sectionProperties.contentNode.style.maxHeight =
+						Math.round(Math.min(maxHeight, fits)) + 'px';
 				}
 			}
 		}
@@ -3005,9 +3115,7 @@ export class CommentSection extends CanvasSectionObject {
 							const oldContent = Math.min(actHeight, oldMaxHeight);
 
 							// Don't let a comment grow past the visible area; its text scrolls instead.
-							// Reserve marginY at both the top and bottom (setContainerPos leaves a gap there).
-							const chrome = comment.getCommentHeight(false) - oldContent;
-							maxSize = Math.min(maxSize, this.sectionProperties.canvasContainerBounds.height - chrome - 2 * this.sectionProperties.marginY / app.dpiScale);
+							maxSize = Math.min(maxSize, this.maxContentHeightInView(comment));
 							contentNode.style.maxHeight = Math.round(maxSize) + 'px';
 
 							// Without this, a later layout(false) would reuse a stale value.
@@ -3114,9 +3222,14 @@ export class CommentSection extends CanvasSectionObject {
 
 	private orderTextComments() {
 		var newOrder = [];
+		const ids = new Set(this.sectionProperties.commentList.map(
+			(comment: Comment) => comment.sectionProperties.data.id));
 
 		for (var i = 0; i < this.sectionProperties.commentList.length; i++) {
 			var comment = this.sectionProperties.commentList[i];
+			// A reply whose parent has gone carries on as a thread of its own.
+			if (!comment.isRootComment() && !ids.has(comment.sectionProperties.data.parent))
+				comment.setAsRootComment();
 
 			if (comment.isRootComment()) {
 				newOrder.push(comment);
@@ -3294,6 +3407,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.containerObject.resumeDrawing();
 
 		this.sectionProperties.selectedComment = null;
+		this.sectionProperties.expandedComment = null;
 		this.checkSize();
 	}
 
@@ -3315,6 +3429,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.containerObject.resumeDrawing();
 
 		this.sectionProperties.selectedComment = null;
+		this.sectionProperties.expandedComment = null;
 		this.checkSize();
 		this.clearAutoSaveStatus();
 	}

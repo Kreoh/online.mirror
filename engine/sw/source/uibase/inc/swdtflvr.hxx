@@ -77,6 +77,9 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SwTransferable final : public Transfe
     friend class SwView_Impl;
     SfxObjectShellLock              m_aDocShellRef;
     TransferableObjectDescriptor    m_aObjDesc;
+    /// Visible area of the clipboard document in twips, fitted to its content. Empty means the
+    /// fixed default area.
+    tools::Rectangle m_aOleVisArea;
     tools::SvRef<SwTransferDdeLink>  m_xDdeLink;
 
     SwWrtShell      *m_pWrtShell;
@@ -97,7 +100,7 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SwTransferable final : public Transfe
     bool m_bCleanUp   :1; //D&D cleanup after Drop (not by internal Drop)
 
     // helper methods for the copy
-    css::uno::Reference < css::embed::XEmbeddedObject > FindOLEObj( sal_Int64& nAspect ) const;
+    cpo::uno::Reference < css::embed::XEmbeddedObject > FindOLEObj( sal_Int64& nAspect ) const;
     const Graphic* FindOLEReplacementGraphic() const;
     void DeleteSelection();
 
@@ -164,7 +167,7 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SwTransferable final : public Transfe
                                         const css::datatransfer::DataFlavor& rFlavor ) override;
     virtual void        DragFinished( sal_Int8 nDropAction ) override;
     virtual void        ObjectReleased() override;
-    virtual bool SAL_CALL isComplex() override;
+    virtual bool isComplex() override;
 
     using TransferableHelper::StartDrag;
 
@@ -176,7 +179,8 @@ public:
 
     // set properties on the document, like PageMargin, VisArea.
     // And set real Size
-    static void InitOle( SfxObjectShell* pDoc );
+    static void InitOle(SfxObjectShell* pDoc,
+                        const tools::Rectangle& rVisArea = tools::Rectangle());
 
     // copy - methods and helper methods for the copy
     SW_DLLPUBLIC int  Cut();

@@ -32,11 +32,11 @@ class Proxy : public uno_Interface
 {
     oslInterlockedCount                 m_nRef;
 
-    css::uno::Environment                   m_from;
-    css::uno::Environment                   m_to;
+    cpo::uno::Environment                   m_from;
+    cpo::uno::Environment                   m_to;
 
-    css::uno::Mapping                       m_from_to;
-    css::uno::Mapping                       m_to_from;
+    cpo::uno::Mapping                       m_from_to;
+    cpo::uno::Mapping                       m_to_from;
 
     // mapping information
     uno_Interface                    *  m_pUnoI; // wrapped interface
@@ -47,7 +47,7 @@ class Proxy : public uno_Interface
     void                              * m_pProbeContext;
 
 public:
-    explicit Proxy(css::uno::Mapping                        to_from,
+    explicit Proxy(cpo::uno::Mapping                        to_from,
                    uno_Environment                        * pTo,
                    uno_Environment                        * pFrom,
                    uno_Interface                          * pUnoI,

@@ -27,11 +27,28 @@ namespace drawinglayer::primitive2d
 /* Returns 8-bit alpha mask created from passed mask.
 
    Negative fErodeDilateRadius values mean erode, positive - dilate.
+   fBlurRadius is how far the blur reaches in pixels, three deviations of its Gaussian.
    nTransparency defines minimal transparency level.
 */
 AlphaMask ProcessAndBlurAlphaMask(const AlphaMask& rMask, double fErodeDilateRadius,
                                   double fBlurRadius, sal_uInt8 nTransparency,
                                   bool bConvertTo1Bit = true);
+
+/* Returns the 8-bit alpha mask of a glow halo around the object in rMask.
+
+   The object is grown by half of fGlowRadius, using a Euclidean distance transform so that the
+   growth is the same in every direction, and the result is blurred over the other half. Corners
+   therefore come out the way a blur makes them: a convex one thinner, a concave one filled in.
+
+   fGlowRadius is the width of the halo in pixels. nTransparency defines minimal transparency level.
+*/
+AlphaMask CreateGlowAlphaMask(const AlphaMask& rMask, double fGlowRadius, sal_uInt8 nTransparency);
+
+/* Returns rBitmap with a Gaussian blur of fBlurRadius pixels, with the color and the alpha channel
+   blurred together. The color is weighted by its alpha while it is blurred, so a transparent pixel
+   adds nothing to the color of its neighbours. fBlurRadius can be a fraction of a pixel.
+*/
+Bitmap BlurBitmapWithAlpha(const Bitmap& rBitmap, double fBlurRadius);
 
 drawinglayer::geometry::ViewInformation2D
 expandB2DRangeAtViewInformation2D(const drawinglayer::geometry::ViewInformation2D& rViewInfo,

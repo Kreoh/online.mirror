@@ -1,4 +1,4 @@
-/* global cy require*/
+/* global cy require expect */
 
 var helper = require('./helper');
 
@@ -60,6 +60,19 @@ function openQuickFind() {
 	cy.log('<< openQuickFind - end');
 }
 
+// Waits until the comment list has loaded again for the state that the document sends once
+// after it loads. That load builds every comment anew, so a selection in a comment lasts only
+// when it is made after it.
+function waitForCommentListLoad(win) {
+	cy.log('>> waitForCommentListLoad - start');
+
+	cy.waitUntil(() =>
+		win.app.map.stateChangeHandler.getItemValue('.uno:ShowTrackedChanges') !== undefined);
+	helper.processToIdle(win);
+
+	cy.log('<< waitForCommentListLoad - end');
+}
+
 function searchInQuickFind(text) {
 	cy.log('>> searchInQuickFind - start');
 
@@ -73,6 +86,20 @@ function searchInQuickFind(text) {
 	cy.log('<< searchInQuickFind - end');
 }
 
+// Waits until the document status has told the view about every page. The
+// engine reports a Writer document page by page while it lays it out, and a
+// jump past the pages the view knows about stops at the last known page.
+function waitForPageCount(expectedCount) {
+	cy.log('>> waitForPageCount - start');
+
+	cy.getFrameWindow().should(function(win) {
+		expect(win.app.file.writer.pageRectangleList.length, 'pages known to the view')
+			.to.equal(expectedCount);
+	});
+
+	cy.log('<< waitForPageCount - end');
+}
+
 function assertQuickFindMatches(expectedCount) {
 	cy.log('>> assertQuickFindMatches - start');
 
@@ -84,5 +111,7 @@ function assertQuickFindMatches(expectedCount) {
 module.exports.selectAllTextOfDoc = selectAllTextOfDoc;
 module.exports.openFileProperties = openFileProperties;
 module.exports.openQuickFind = openQuickFind;
+module.exports.waitForCommentListLoad = waitForCommentListLoad;
 module.exports.searchInQuickFind = searchInQuickFind;
 module.exports.assertQuickFindMatches = assertQuickFindMatches;
+module.exports.waitForPageCount = waitForPageCount;

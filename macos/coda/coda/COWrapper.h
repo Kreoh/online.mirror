@@ -19,10 +19,23 @@
 + (void)startServer;
 + (void)stopServer;
 
+// The file the log is being written to, or nil when it goes to standard error.
++ (NSString *_Nullable)logFilePath;
+
 + (void)handleHULLOWithDocument:(Document *_Nonnull)document;
 + (void)handleByeWith:(Document *_Nonnull)document NS_SWIFT_NAME(bye(_:));
+/**
+ * Release this document's connection to the in-process server, leaving the
+ * document loaded under its appDocId.
+ */
++ (void)detachDocument:(Document *_Nonnull)document NS_SWIFT_NAME(detach(_:));
 + (void)handleMessageWith:(Document *_Nonnull)document message:(NSString *_Nonnull)message;
 + (void)saveAsWith:(Document *_Nonnull)document url:(NSString *_Nonnull)url format:(NSString *_Nonnull)format filterOptions:(NSString *_Nullable)filterOptions;
+// The path on disk of the media file that the document's server side registered under the
+// given tag, or nil when this document is not loaded or the tag is not one of its media files.
++ (NSString *_Nullable)embeddedMediaPathWithDocument:(Document *_Nonnull)document
+                                                 tag:(NSString *_Nonnull)tag
+    NS_SWIFT_NAME(embeddedMediaPath(document:tag:));
 + (BOOL)advertiseClipboard:(NSArray<NSString *> *_Nonnull)mimeTypes;
 + (void)materializeClipboard;
 
@@ -40,8 +53,11 @@
 + (void)LOG_DBG:(NSString *_Nonnull)message NS_SWIFT_NAME(LOG_DBG(_:));
 + (void)LOG_ERR:(NSString *_Nonnull)message NS_SWIFT_NAME(LOG_ERR(_:));
 + (void)LOG_TRC:(NSString *_Nonnull)message NS_SWIFT_NAME(LOG_TRC(_:));
++ (bool)traceEnabled NS_SWIFT_NAME(traceEnabled());
 
 + (bool)isRtlLanguage:(NSString *_Nonnull)language;
+
++ (bool)isWelcomeEnabled NS_SWIFT_NAME(isWelcomeEnabled());
 
 + (bool)darkModeWithSystemDefault:(bool)systemDefault NS_SWIFT_NAME(darkMode(systemDefault:));
 + (void)setDarkMode:(bool)value NS_SWIFT_NAME(setDarkMode(_:));

@@ -180,12 +180,47 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
     /// Handle this document webview is registered under in WebDriverManager.
     private var webDriverHandle: String?
 
+    /// True while this document's view has been dropped on purpose. The document stays
+    /// loaded in the engine.
+    private(set) var isViewDiscarded = false
+
+    /// When the webview now in place was built.
+    private var viewLiveSince = Date()
+
+    /// The value of the live-view limit's counter when this document's window last became
+    /// the main one. The higher the value, the more recently the user was on it.
+    var lastActiveTick: UInt64 = 0
+
+    /// True while a drop of this view waits for the save it asked for.
+    var dropWaitsForSave = false
+
+    /// True from the moment this view is asked to save for a drop until its window is main
+    /// again, so one drop asks for one save.
+    var dropSaveAsked = false
+
     var displayConnectionObserver: AnyObject!
     var screenCount: Int = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        buildWebView()
+
+        if isUITesting {
+            let scrollView = NSScrollView(frame: NSRect(x: -10000, y: 0, width: 100, height: 100))
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+            textView.isEditable = false
+            textView.setAccessibilityIdentifier("CODA.TestMessageLog")
+            scrollView.documentView = textView
+            self.view.addSubview(scrollView)
+            testMessageLog = textView
+        }
+    }
+
+    /**
+     * Make the webview that holds the document, and put it in this controller's view.
+     */
+    private func buildWebView() {
         // Setup jsHandler as the entry point to call back from JavaScript
         let contentController = WKUserContentController()
         contentController.addScriptMessageHandler(self, contentWorld: .page, name: "lok")
@@ -195,6 +230,13 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
         config.preferences.isElementFullscreenEnabled = true
         config.userContentController = contentController
         ViewController.allowLocalCrossFrameAccess(config)
+        // Media embedded in the document, such as a video on a slide, reaches the page as
+        // cool: URLs. WebKit copies this configuration, handler included, for the windows that
+        // the page opens, such as the slideshow.
+        config.setURLSchemeHandler(CoolURLSchemeHandler(viewController: self), forURLScheme: "cool")
+        // The page is our own, so a slideshow video may start, with sound, as soon as its slide
+        // appears, with no click first.
+        config.mediaTypesRequiringUserActionForPlayback = []
 
         // Create the web view
         webView = CODAWebView(frame: .zero, configuration: config)
@@ -219,19 +261,11 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
             webView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
         ])
 
-        if isUITesting {
-            let scrollView = NSScrollView(frame: NSRect(x: -10000, y: 0, width: 100, height: 100))
-            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
-            textView.isEditable = false
-            textView.setAccessibilityIdentifier("CODA.TestMessageLog")
-            scrollView.documentView = textView
-            self.view.addSubview(scrollView)
-            testMessageLog = textView
-        }
-
         // Register this webview with the WebDriver manager (no-op when
         // the WebDriver server is not running).
         webDriverHandle = WebDriverManager.shared.register(webView: webView)
+
+        viewLiveSince = Date()
     }
 
     deinit {
@@ -245,6 +279,9 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
      */
     func loadDocument(_ document: Document) {
         self.document = document
+        // The page in front of the user is a new one from here, whether this is the first
+        // load, a reload after its renderer died, or a view built again after a discard.
+        viewLiveSince = Date()
         let permission = document.isWelcome ? "view" : "edit"
         self.document.loadDocumentInWebView(webView: webView, permission: permission, isWelcome: document.isWelcome)
     }
@@ -264,7 +301,9 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
     }
 
     /**
-     * Make the picking of images work in our webView (via the WKUIDelegate).
+     * Show an open panel for a file input element in our webView (the WKUIDelegate
+     * callback). The panel offers every file type: the public WKOpenPanelParameters
+     * does not carry the input element's accept attribute.
      */
     func webView(_ webView: WKWebView,
                  runOpenPanelWith parameters: WKOpenPanelParameters,
@@ -273,11 +312,8 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
 
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = parameters.allowsDirectories
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-
-        // Let the use pick just images
-        panel.allowedContentTypes = [UTType.image]
 
         panel.beginSheetModal(for: view.window!) { result in
             if result == .OK {
@@ -527,6 +563,41 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
                     }
                     return (nil, nil)
                 }
+                else if body.hasPrefix("extensionsavefile ") {
+                    // A JS extension (see browser Control.Extension.ts) generated a
+                    // file - e.g. LibreLogo's PICTURE "x.svg" export - and asked to
+                    // save it to the filesystem. The bytes travel base64 in the
+                    // message; write them to a temp file and offer a save panel,
+                    // mirroring the exportfile flow.
+                    var name = "file"
+                    var base64: String?
+                    for item in body.dropFirst("extensionsavefile ".count).components(separatedBy: " ") {
+                        if item.hasPrefix("name=") {
+                            name = String(item.dropFirst("name=".count)).removingPercentEncoding ?? "file"
+                        } else if item.hasPrefix("data=") {
+                            base64 = String(item.dropFirst("data=".count))
+                        }
+                        // mime= is accepted but not needed for a filesystem save
+                    }
+                    guard let base64 = base64, let data = Data(base64Encoded: base64) else {
+                        COWrapper.LOG_ERR("extensionsavefile: missing or invalid data")
+                        return (nil, nil)
+                    }
+                    let sanitized = (name as NSString).lastPathComponent
+                    let savePanel = NSSavePanel()
+                    savePanel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+                    savePanel.nameFieldStringValue = sanitized.isEmpty ? "file" : sanitized
+                    savePanel.begin { result in
+                        if result == .OK, let dstURL = savePanel.url {
+                            do {
+                                try data.write(to: dstURL)
+                            } catch {
+                                COWrapper.LOG_ERR("extensionsavefile: write failed: \(error)")
+                            }
+                        }
+                    }
+                    return (nil, nil)
+                }
                 else if body.hasPrefix("TEXTCLIPBOARD ") {
                     let text = String(body.dropFirst("TEXTCLIPBOARD ".count))
                     NSPasteboard.general.clearContents()
@@ -567,12 +638,93 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
                                              handler: WKScriptMessageHandlerWithReply) {
         contentController.addScriptMessageHandler(handler, contentWorld: .page, name: "error")
         contentController.addScriptMessageHandler(handler, contentWorld: .page, name: "debug")
+#if DEBUG
+        addConsoleForwarding(to: contentController, handler: handler)
+#endif
     }
 
     /** Counterpart to addDiagnosticMessageHandlers, for use when tearing a web view down. */
     static func removeDiagnosticMessageHandlers(from contentController: WKUserContentController?) {
         contentController?.removeScriptMessageHandler(forName: "error")
         contentController?.removeScriptMessageHandler(forName: "debug")
+#if DEBUG
+        contentController?.removeScriptMessageHandler(forName: "console")
+#endif
+    }
+
+    private static func addConsoleForwarding(to contentController: WKUserContentController,
+                                             handler: WKScriptMessageHandlerWithReply) {
+        contentController.addScriptMessageHandler(handler, contentWorld: .page, name: "console")
+        let levels = COWrapper.traceEnabled()
+            ? "['debug', 'log', 'info', 'warn', 'error']" : "['warn', 'error']"
+        let source = consoleForwardingScript.replacingOccurrences(of: "%LEVELS%", with: levels)
+        contentController.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart,
+                                                     forMainFrameOnly: false, in: .page))
+    }
+
+    private static let consoleForwardingScript = #"""
+        (function () {
+            const port = window.webkit && window.webkit.messageHandlers
+                && window.webkit.messageHandlers.console;
+            if (!port) return;
+            const shorten = function (url) {
+                return String(url).replace(/^.*\/Contents\/Resources\//, '');
+            };
+            const describe = function (value) {
+                if (typeof value === 'string') return value;
+                if (value instanceof Error)
+                    return value.stack ? value.message + '\n' + value.stack : String(value);
+                try {
+                    const json = JSON.stringify(value);
+                    return json === undefined ? String(value) : json;
+                } catch (e) {
+                    return String(value);
+                }
+            };
+            const send = function (level, text, where) {
+                try {
+                    const reply = port.postMessage({ level: level, message: text, location: where });
+                    if (reply && reply.catch) reply.catch(function () {});
+                } catch (e) {
+                }
+            };
+            // In a WebKit stack, line 2 is the code that called the console method:
+            const callerLocation = function () {
+                const line = (new Error().stack || '').split('\n')[2] || '';
+                return shorten(line.substring(line.indexOf('@') + 1));
+            };
+            for (const level of %LEVELS%) {
+                const original = console[level];
+                console[level] = function (...args) {
+                    send(level, args.map(describe).join(' '), callerLocation());
+                    return original.apply(console, args);
+                };
+            }
+            window.addEventListener('error', function (event) {
+                const where = event.filename
+                    ? shorten(event.filename) + ':' + event.lineno + ':' + event.colno
+                    : shorten(window.location.pathname);
+                send('error', 'Uncaught ' + (event.error ? describe(event.error) : event.message),
+                     where);
+            });
+            window.addEventListener('unhandledrejection', function (event) {
+                send('error', 'Unhandled rejection: ' + describe(event.reason),
+                     shorten(window.location.pathname));
+            });
+        })();
+        """#
+
+    private static func logConsoleMessage(_ message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any],
+              let level = body["level"] as? String,
+              let text = body["message"] as? String else { return }
+        let location = body["location"] as? String ?? ""
+        let line = "JS console [\(level)] \(location): \(text)"
+        if level == "warn" || level == "error" {
+            COWrapper.LOG_DBG(line)
+        } else {
+            COWrapper.LOG_TRC(line)
+        }
     }
 
     /** Logs an "error" or "debug" message from a web view. Returns true if it was one of those. */
@@ -583,6 +735,9 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
             return true
         case "debug":
             COWrapper.LOG_DBG("Debug from WebView: \(message.body as? String ?? "")")
+            return true
+        case "console":
+            logConsoleMessage(message)
             return true
         default:
             return false
@@ -723,6 +878,7 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
                 switch type {
                     case "calc": kind = .spreadsheet
                     case "impress": kind = .presentation
+                    case "draw": kind = .drawing
                     default : kind = .text
                 }
 
@@ -758,6 +914,12 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
             (NSDocumentController.shared as? DocumentController)?.focusOrPresentOpenPanel(onPick: onOpened)
 
             onClose?()
+            return (nil, nil)
+        }
+        else if body == "uno .uno:Quit" {
+            // Terminating asks AppKit to review every open document first, so a document that has
+            // changed is saved before the application goes away.
+            NSApp.terminate(nil)
             return (nil, nil)
         }
 
@@ -825,6 +987,11 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
 
         let childWebView = WKWebView(frame: .zero, configuration: configuration)
         childWebView.uiDelegate = self
+
+#if DEBUG
+        // Enable possibility to debug the slideshow and presenter console windows from Safari
+        childWebView.isInspectable = true
+#endif
 
         installDisplayConnectionMonitor()
 
@@ -968,6 +1135,118 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
 
         // Bring back the menu bar and Dock.
         NSApp.presentationOptions = []
+    }
+
+    /**
+     * Destroy this document's webview, and with it the web content process that renders it.
+     * The document stays loaded in the engine with any unsaved change.
+     */
+    func discardView() {
+        if isViewDiscarded || webView == nil {
+            return
+        }
+
+        NSLog("CollaboraOffice: discarding the view of appDocId \(document?.appDocId ?? -1)")
+
+        // The presentation and console windows are extra views onto this document and they
+        // are driven by the webview that is about to go.
+        endPresentation()
+
+        // Release the connection first, which marks the document as one that is kept loaded
+        // with no view of its own.
+        document?.detachFromView()
+
+        if let handle = webDriverHandle {
+            WebDriverManager.shared.unregister(handle: handle)
+            webDriverHandle = nil
+        }
+
+        // The message handler holds this controller, and the page it belongs to is going.
+        webView.configuration.userContentController.removeAllScriptMessageHandlers()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.removeFromSuperview()
+        webView = nil
+
+        isViewDiscarded = true
+    }
+
+    /**
+     * Build a webview again and rejoin the document left loaded under this document's
+     * appDocId.
+     */
+    func restoreView() {
+        guard isViewDiscarded, let document = self.document else {
+            return
+        }
+
+        NSLog("CollaboraOffice: restoring the view of appDocId \(document.appDocId)")
+
+        isViewDiscarded = false
+        buildWebView()
+        loadDocument(document)
+    }
+
+    /// True when this view is one that may be dropped at all: it shows a document with a
+    /// file of its own, and nothing else is drawing from it.
+    var mayDiscardView: Bool {
+        guard let document = self.document, !isViewDiscarded, webView != nil else {
+            return false
+        }
+        // The welcome page holds no document of its own, and a document with no file would
+        // need a Save As dialog to get one.
+        if document.isWelcome || document.fileURL == nil {
+            return false
+        }
+        return presentationController == nil && consoleController == nil
+    }
+
+    /// True while any part of this document's window is on screen. A background tab, a
+    /// minimised window and a window on another Space are all off screen by this measure.
+    var isWindowVisible: Bool {
+        guard let window = view.window else {
+            return false
+        }
+        return window.occlusionState.contains(.visible)
+    }
+
+    /// True when this view can be dropped right now, which asks only whether the document
+    /// holds a change that is not on disk yet.
+    var isReadyToDiscardView: Bool {
+        guard let document = self.document else {
+            return false
+        }
+        return !document.isModified && !document.isSaveInFlight
+    }
+
+    /// Milliseconds this view still has to stay live before it may be dropped, or 0 when it
+    /// has had its time. A view keeps its place for a few seconds after it is built, which
+    /// is long enough to load its page and rejoin its document.
+    var msUntilViewSettled: Int {
+        let settleSeconds = 5.0
+        let remaining = settleSeconds - Date().timeIntervalSince(viewLiveSince)
+        return remaining <= 0 ? 0 : Int(remaining * 1000)
+    }
+
+    /// The web content process that rendered this webview died. The webview is now blank
+    /// and the JavaScript that drove it is gone.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        let isMain = webView == self.webView
+        let isPresentation = self.presentationController != nil && webView == self.presentationController.webView
+        let isConsole = self.consoleController != nil && webView == self.consoleController.webView
+        let which = isMain ? "main" : (isPresentation ? "presentation" : (isConsole ? "console" : "other"))
+        NSLog("CollaboraOffice: the \(which) renderer died for appDocId \(self.document?.appDocId ?? -1), client fd \(self.document?.fakeClientFd ?? -1)")
+
+        // The presentation and console windows are extra views onto this same document,
+        // and only the main webview holds the connection to the in-process server.
+        if isMain, let document = self.document {
+            document.detachFromView()
+
+            // Load the page again into the same webview, which gives it a fresh renderer.
+            // The document keeps its appDocId, so the new connection rejoins the document
+            // still loaded in the engine, with any unsaved changes.
+            loadDocument(document)
+        }
     }
 
     func webViewDidClose(_ webView: WKWebView) {

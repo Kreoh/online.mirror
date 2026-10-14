@@ -23,7 +23,7 @@
 #include <com/sun/star/sdb/TableDefinition.hpp>
 #include <com/sun/star/sdb/CommandDefinition.hpp>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::comphelper;
@@ -34,7 +34,7 @@ namespace dbaccess
 
 // OCommandContainer
 
-OCommandContainer::OCommandContainer( const Reference< css::uno::XComponentContext >& _xORB
+OCommandContainer::OCommandContainer( const Reference< cpo::uno::XComponentContext >& _xORB
                                      ,const Reference< XInterface >&    _xParentContainer
                                      ,const TContentPtr& _pImpl
                                      ,bool _bTables

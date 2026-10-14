@@ -69,13 +69,22 @@ public:
     bool m_bViewLock;
     bool m_bTilesInvalidated;
     std::vector<tools::Rectangle> m_aInvalidations;
+    /// The part each entry of m_aInvalidations names.
+    std::vector<int> m_aInvalidationParts;
     std::map<int, bool> m_aViewCursorInvalidations;
     std::map<int, bool> m_aViewCursorVisibilities;
     bool m_bViewSelectionSet;
+    /// Every text selection payload this view was sent, in the order they arrived.
+    std::vector<OString> m_aTextSelections;
     boost::property_tree::ptree m_aCommentCallbackResult;
     OString m_ShapeSelection;
     std::vector<std::string> m_aStateChanged;
     std::map<std::string, boost::property_tree::ptree> m_aStateChanges;
+    /// Number of jsdialog "select" actions seen for a given control id.
+    std::map<std::string, int> m_aJSDialogSelectCounts;
+    /** The results the uno commands reported, in the order they arrived. Each entry is the whole
+        payload: the name of the command, whether it worked and the result it carries. */
+    std::vector<boost::property_tree::ptree> m_aCommandResults;
     TestKitCallbackWrapper m_callbackWrapper;
     bool invalidatedAll;
     int editModeOfInvalidation;

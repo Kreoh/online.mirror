@@ -45,11 +45,11 @@ namespace binaryurp {
 
 IncomingRequest::IncomingRequest(
     rtl::Reference< Bridge > const & bridge, rtl::ByteSequence tid,
-    OUString oid, css::uno::UnoInterfaceReference object,
-    css::uno::TypeDescription type, sal_uInt16 functionId,
-    bool synchronous, css::uno::TypeDescription const & member, bool setter,
+    OUString oid, cpo::uno::UnoInterfaceReference object,
+    cpo::uno::TypeDescription type, sal_uInt16 functionId,
+    bool synchronous, cpo::uno::TypeDescription const & member, bool setter,
     std::vector< BinaryAny >&& inArguments, bool currentContextMode,
-    css::uno::UnoInterfaceReference currentContext):
+    cpo::uno::UnoInterfaceReference currentContext):
     bridge_(bridge), tid_(std::move(tid)), oid_(std::move(oid)), object_(std::move(object)), type_(std::move(type)),
     member_(member), currentContext_(std::move(currentContext)),
     inArguments_(std::move(inArguments)), functionId_(functionId),
@@ -68,7 +68,7 @@ void IncomingRequest::execute() const {
     bool isExc;
     try {
         bool resetCc = false;
-        css::uno::UnoInterfaceReference oldCc;
+        cpo::uno::UnoInterfaceReference oldCc;
         if (currentContextMode_) {
             oldCc = current_context::get();
             current_context::set(currentContext_);
@@ -78,11 +78,11 @@ void IncomingRequest::execute() const {
             try {
                 isExc = !execute_throw(&ret, &outArgs);
             } catch (const std::exception & e) {
-                throw css::uno::RuntimeException(
+                throw cpo::uno::RuntimeException(
                     "caught C++ exception: "
                     + o3tl::runtimeToOUString(e.what()));
             }
-        } catch (const css::uno::RuntimeException &) {
+        } catch (const cpo::uno::RuntimeException &) {
             cpo::uno::Any exc(cppu::getCaughtException());
             ret = bridge_->mapCppToBinaryAny(exc);
             isExc = true;
@@ -90,7 +90,7 @@ void IncomingRequest::execute() const {
         if (resetCc) {
             current_context::set(oldCc);
         }
-    } catch (const css::uno::RuntimeException &) {
+    } catch (const cpo::uno::RuntimeException &) {
         cpo::uno::Any exc(cppu::getCaughtException());
         ret = bridge_->mapCppToBinaryAny(exc);
         isExc = true;
@@ -101,7 +101,7 @@ void IncomingRequest::execute() const {
             bridge_->getWriter()->queueReply(
                 tid_, member_, setter_, isExc, ret, std::move(outArgs), false);
             return;
-        } catch (const css::uno::RuntimeException & e) {
+        } catch (const cpo::uno::RuntimeException & e) {
             SAL_INFO("binaryurp", "caught " << e);
         } catch (const std::exception & e) {
             SAL_INFO("binaryurp", "caught C++ exception " << e.what());
@@ -126,7 +126,7 @@ bool IncomingRequest::execute_throw(
     assert(returnValue != nullptr);
     assert(
         returnValue->getType().equals(
-            css::uno::TypeDescription(cppu::UnoType<void>::get())));
+            cpo::uno::TypeDescription(cppu::UnoType<void>::get())));
     assert(outArguments != nullptr);
     assert(outArguments->empty());
     bool isExc = false;
@@ -139,8 +139,8 @@ bool IncomingRequest::execute_throw(
         break;
     case SPECIAL_FUNCTION_ID_QUERY_INTERFACE:
         if (!object_.is()) {
-            css::uno::Reference< css::uno::XInterface > ifc;
-            css::uno::Reference< css::bridge::XInstanceProvider > prov(
+            cpo::uno::Reference< cpo::uno::XInterface > ifc;
+            cpo::uno::Reference< css::bridge::XInstanceProvider > prov(
                 bridge_->getProvider());
             if (prov.is()) {
                 try {
@@ -150,21 +150,21 @@ bool IncomingRequest::execute_throw(
                 }
             }
             if (ifc.is()) {
-                css::uno::UnoInterfaceReference unoIfc(
+                cpo::uno::UnoInterfaceReference unoIfc(
                     static_cast< uno_Interface * >(
                         bridge_->getCppToBinaryMapping().mapInterface(
                             ifc.get(),
-                            (css::uno::TypeDescription(
+                            (cpo::uno::TypeDescription(
                                 cppu::UnoType<
-                                    css::uno::Reference<
-                                        css::uno::XInterface > >::get()).
+                                    cpo::uno::Reference<
+                                        cpo::uno::XInterface > >::get()).
                              get()))),
                     SAL_NO_ACQUIRE);
                 *returnValue = BinaryAny(
-                    css::uno::TypeDescription(
+                    cpo::uno::TypeDescription(
                         cppu::UnoType<
-                            css::uno::Reference<
-                                css::uno::XInterface > >::get()),
+                            cpo::uno::Reference<
+                                cpo::uno::XInterface > >::get()),
                     &unoIfc.m_pUnoI);
             }
             break;
@@ -173,13 +173,13 @@ bool IncomingRequest::execute_throw(
     default:
         {
             assert(object_.is());
-            css::uno::TypeDescription retType;
+            cpo::uno::TypeDescription retType;
             std::vector< std::vector< char > > outBufs;
             std::vector< void * > args;
             switch (member_.get()->eTypeClass) {
             case typelib_TypeClass_INTERFACE_ATTRIBUTE:
                 {
-                    css::uno::TypeDescription t(
+                    cpo::uno::TypeDescription t(
                         reinterpret_cast<
                             typelib_InterfaceAttributeTypeDescription * >(
                                 member_.get())->
@@ -199,18 +199,18 @@ bool IncomingRequest::execute_throw(
                         reinterpret_cast<
                             typelib_InterfaceMethodTypeDescription * >(
                                 member_.get());
-                    retType = css::uno::TypeDescription(mtd->pReturnTypeRef);
+                    retType = cpo::uno::TypeDescription(mtd->pReturnTypeRef);
                     std::vector< BinaryAny >::const_iterator i(
                         inArguments_.begin());
                     for (sal_Int32 j = 0; j != mtd->nParams; ++j) {
                         void * p;
                         if (mtd->pParams[j].bIn) {
                             p = i++->getValue(
-                                css::uno::TypeDescription(
+                                cpo::uno::TypeDescription(
                                     mtd->pParams[j].pTypeRef));
                         } else {
                             outBufs.emplace_back(size_t_round(
-                                    css::uno::TypeDescription(
+                                    cpo::uno::TypeDescription(
                                         mtd->pParams[j].pTypeRef).
                                     get()->nSize));
                             p = outBufs.back().data();
@@ -239,7 +239,7 @@ bool IncomingRequest::execute_throw(
             isExc = pexc != nullptr;
             if (isExc) {
                 *returnValue = BinaryAny(
-                    css::uno::TypeDescription(
+                    cpo::uno::TypeDescription(
                         cppu::UnoType< cpo::uno::Any >::get()),
                     &exc);
                 uno_any_destruct(&exc, nullptr);
@@ -262,7 +262,7 @@ bool IncomingRequest::execute_throw(
                     for (sal_Int32 k = 0; k != mtd->nParams; ++k) {
                         if (mtd->pParams[k].bOut) {
                             *i++ = BinaryAny(
-                                css::uno::TypeDescription(
+                                cpo::uno::TypeDescription(
                                     mtd->pParams[k].pTypeRef),
                                 args[k]);
                         }

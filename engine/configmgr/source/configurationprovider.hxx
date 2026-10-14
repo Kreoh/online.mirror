@@ -21,19 +21,15 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
-namespace com::sun::star {
-    namespace uno {
-        class XComponentContext;
-        class XInterface;
-    }
-}
+namespace cpo::uno { class XInterface; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace configmgr::configuration_provider {
 
-css::uno::Reference< css::uno::XInterface > createDefault(
-    css::uno::Reference< css::uno::XComponentContext >
+cpo::uno::Reference< cpo::uno::XInterface > createDefault(
+    cpo::uno::Reference< cpo::uno::XComponentContext >
         const & context);
 
 }

@@ -13,6 +13,8 @@
 #include <redline.hxx>
 #include <doc.hxx>
 #include <docary.hxx>
+#include <node.hxx>
+#include <swtable.hxx>
 
 /// Covers sw/source/core/docnode/ fixes.
 class Test : public SwModelTestBase
@@ -64,6 +66,50 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf156267)
     dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
 
     CPPUNIT_ASSERT_EQUAL(1, getPages());
+}
+
+namespace
+{
+/// Counts the boxes of all tables in the document, and the cell sections in the document.
+std::pair<size_t, int> CountTableBoxesAndCellSections(SwDoc& rDoc)
+{
+    SwNodes& rNodes = rDoc.GetNodes();
+    size_t nBoxes = 0;
+    int nCellSections = 0;
+    for (SwNodeOffset nNode(0); nNode < rNodes.Count(); ++nNode)
+    {
+        if (const SwTableNode* pTableNode = rNodes[nNode]->GetTableNode())
+            nBoxes += pTableNode->GetTable().GetTabSortBoxes().size();
+        const SwStartNode* pStartNode = rNodes[nNode]->GetStartNode();
+        if (pStartNode && pStartNode->GetStartNodeType() == SwTableBoxStartNode)
+            ++nCellSections;
+    }
+    return { nBoxes, nCellSections };
+}
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTableBoxKeepsItsCellSection)
+{
+    // Given a document whose tracked deletion carries on across a cell mark, so applying it at
+    // import empties one cell of the table:
+    createSwDoc("ofz515655013.doc");
+
+    // Then every box of every table still has a cell section of its own:
+    auto [nBoxes, nCellSections] = CountTableBoxesAndCellSections(*getSwDoc());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(26), nBoxes);
+    CPPUNIT_ASSERT_EQUAL(26, nCellSections);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTableKeepsCellInsideDeletion)
+{
+    // Given a document whose tracked deletion starts in one cell and ends two cells later, so the
+    // cell between them lies wholly inside the deletion:
+    createSwDoc("ofz566727923.doc");
+
+    // Then every box of every table still has a cell section of its own:
+    auto [nBoxes, nCellSections] = CountTableBoxesAndCellSections(*getSwDoc());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(25), nBoxes);
+    CPPUNIT_ASSERT_EQUAL(25, nCellSections);
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

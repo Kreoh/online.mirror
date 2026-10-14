@@ -36,6 +36,7 @@ using ::oox::core::ContextHandler2Helper;
 using ::oox::core::ContextHandlerRef;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 DoubleSequenceContext::DoubleSequenceContext( ContextHandler2Helper& rParent, DataSequenceModel& rModel ) :
     DataSequenceContextBase( rParent, rModel ),
@@ -185,7 +186,7 @@ SvNumberFormatter* DoubleSequenceContext::getNumberFormatter()
 {
     if( mpNumberFormatter == nullptr )
     {
-        uno::Reference<uno::XComponentContext> rContext =
+        uno::Reference<cpo::uno::XComponentContext> rContext =
                                 getFilter().getComponentContext();
         mpNumberFormatter.reset(
                 new SvNumberFormatter(rContext, LANGUAGE_SYSTEM) );

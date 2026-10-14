@@ -12,6 +12,7 @@
 #include <config.h>
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <sstream>
 
@@ -81,7 +82,24 @@ void RecentFiles::add(const std::string& uri, const std::string& displayUri)
         { uri, displayUri,
           std::chrono::time_point<std::chrono::system_clock>(std::chrono::system_clock::now()) });
 
-    // Save the list.
+    save();
+}
+
+void RecentFiles::remove(const std::string& uri)
+{
+    assert(_initialised);
+
+    for (auto it = _mostRecentlyUsed.begin(); it != _mostRecentlyUsed.end(); it++)
+        if (it->uri == uri)
+        {
+            _mostRecentlyUsed.erase(it);
+            save();
+            return;
+        }
+}
+
+void RecentFiles::save()
+{
     std::ofstream stream;
     FileUtil::openFileToOFStream(_fileName, stream);
     if (!stream.is_open() || stream.bad())
@@ -110,7 +128,7 @@ std::string RecentFiles::serialiseFiltered(std::set<std::string> dropTheseURIs)
 
     result = "[ ";
     int n = 0;
-    for (int i = 0; i < _mostRecentlyUsed.size(); i++)
+    for (std::size_t i = 0; i < _mostRecentlyUsed.size(); i++)
     {
         if (dropTheseURIs.contains(_mostRecentlyUsed[i].uri))
             continue;

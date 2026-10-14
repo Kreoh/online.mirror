@@ -7,6 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <config_options.h>
 #include <sal/config.h>
 
 #include <algorithm>
@@ -30,9 +31,9 @@
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/loader/XImplementationLoader.hpp>
 #include <com/sun/star/registry/InvalidRegistryException.hpp>
-#include <com/sun/star/uno/DeploymentException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/component_context.hxx>
@@ -103,7 +104,7 @@ class Parser {
 public:
     Parser(
         OUString const & uri,
-        css::uno::Reference< css::uno::XComponentContext > alienContext,
+        cpo::uno::Reference< cpo::uno::XComponentContext > alienContext,
         cppuhelper::ServiceManager::Data * data);
 
     Parser(const Parser&) = delete;
@@ -121,7 +122,7 @@ private:
     OUString getNameAttribute();
 
     xmlreader::XmlReader reader_;
-    css::uno::Reference< css::uno::XComponentContext > alienContext_;
+    cpo::uno::Reference< cpo::uno::XComponentContext > alienContext_;
     cppuhelper::ServiceManager::Data * data_;
     OUString attrLoader_;
     OUString attrUri_;
@@ -133,7 +134,7 @@ private:
 
 Parser::Parser(
     OUString const & uri,
-    css::uno::Reference< css::uno::XComponentContext > alienContext,
+    cpo::uno::Reference< cpo::uno::XComponentContext > alienContext,
     cppuhelper::ServiceManager::Data * data):
     reader_(uri), alienContext_(std::move(alienContext)), data_(data)
 {
@@ -487,7 +488,7 @@ cpo::uno::Any ContentEnumeration::nextElement()
 css::beans::Property getDefaultContextProperty() {
     return css::beans::Property(
         u"DefaultContext"_ustr, -1,
-        cppu::UnoType< css::uno::XComponentContext >::get(),
+        cppu::UnoType< cpo::uno::XComponentContext >::get(),
         css::beans::PropertyAttribute::READONLY);
 }
 
@@ -509,32 +510,32 @@ public:
 private:
     virtual ~SingletonFactory() override {}
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstanceWithContext(
-        css::uno::Reference< css::uno::XComponentContext > const & Context) override;
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & Context) override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstanceWithArgumentsAndContext(
         cpo::uno::Sequence< cpo::uno::Any > const & Arguments,
-        css::uno::Reference< css::uno::XComponentContext > const & Context) override;
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & Context) override;
 
     rtl::Reference< cppuhelper::ServiceManager > manager_;
     std::shared_ptr< cppuhelper::ServiceManager::Data::Implementation >
         implementation_;
 };
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 SingletonFactory::createInstanceWithContext(
-    css::uno::Reference< css::uno::XComponentContext > const & Context)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & Context)
 {
     manager_->loadImplementation(Context, implementation_);
     return implementation_->createInstance(Context, true);
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 SingletonFactory::createInstanceWithArgumentsAndContext(
     cpo::uno::Sequence< cpo::uno::Any > const & Arguments,
-    css::uno::Reference< css::uno::XComponentContext > const & Context)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & Context)
 {
     manager_->loadImplementation(Context, implementation_);
     return implementation_->createInstanceWithArguments(
@@ -561,19 +562,19 @@ public:
 private:
     virtual ~ImplementationWrapper() override {}
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstanceWithContext(
-        css::uno::Reference< css::uno::XComponentContext > const & Context) override;
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & Context) override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstanceWithArgumentsAndContext(
         cpo::uno::Sequence< cpo::uno::Any > const & Arguments,
-        css::uno::Reference< css::uno::XComponentContext > const & Context) override;
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & Context) override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstance() override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     createInstanceWithArguments(
         cpo::uno::Sequence< cpo::uno::Any > const & Arguments) override;
 
@@ -589,9 +590,9 @@ private:
         implementation_;
 };
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 ImplementationWrapper::createInstanceWithContext(
-    css::uno::Reference< css::uno::XComponentContext > const & Context)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & Context)
 {
     std::shared_ptr< cppuhelper::ServiceManager::Data::Implementation > impl = implementation_.lock();
     assert(impl);
@@ -599,10 +600,10 @@ ImplementationWrapper::createInstanceWithContext(
     return impl->createInstance(Context, false);
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 ImplementationWrapper::createInstanceWithArgumentsAndContext(
     cpo::uno::Sequence< cpo::uno::Any > const & Arguments,
-    css::uno::Reference< css::uno::XComponentContext > const & Context)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & Context)
 {
     std::shared_ptr< cppuhelper::ServiceManager::Data::Implementation > impl = implementation_.lock();
     assert(impl);
@@ -611,13 +612,13 @@ ImplementationWrapper::createInstanceWithArgumentsAndContext(
         Context, false, Arguments);
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 ImplementationWrapper::createInstance()
 {
     return createInstanceWithContext(manager_->getContext());
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 ImplementationWrapper::createInstanceWithArguments(
     cpo::uno::Sequence< cpo::uno::Any > const & Arguments)
 {
@@ -645,7 +646,7 @@ ImplementationWrapper::getSupportedServiceNames()
     if (impl->services.size()
         > o3tl::make_unsigned(SAL_MAX_INT32))
     {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             ("Implementation " + impl->name
              + " supports too many services"),
             static_cast< cppu::OWeakObject * >(this));
@@ -655,12 +656,12 @@ ImplementationWrapper::getSupportedServiceNames()
 
 }
 
-css::uno::Reference<css::uno::XInterface>
+cpo::uno::Reference<cpo::uno::XInterface>
 cppuhelper::ServiceManager::Data::Implementation::createInstance(
-    css::uno::Reference<css::uno::XComponentContext> const & context,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & context,
     bool singletonRequest)
 {
-    css::uno::Reference<css::uno::XInterface> inst;
+    cpo::uno::Reference<cpo::uno::XInterface> inst;
     if (isSingleInstance) {
         std::unique_lock g(mutex);
         if (!singleInstance.is()) {
@@ -674,12 +675,12 @@ cppuhelper::ServiceManager::Data::Implementation::createInstance(
     return inst;
 }
 
-css::uno::Reference<css::uno::XInterface>
+cpo::uno::Reference<cpo::uno::XInterface>
 cppuhelper::ServiceManager::Data::Implementation::createInstanceWithArguments(
-    css::uno::Reference<css::uno::XComponentContext> const & context,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & context,
     bool singletonRequest, cpo::uno::Sequence<cpo::uno::Any> const & arguments)
 {
-    css::uno::Reference<css::uno::XInterface> inst;
+    cpo::uno::Reference<cpo::uno::XInterface> inst;
     if (isSingleInstance) {
         std::unique_lock g(mutex);
         if (!singleInstance.is()) {
@@ -693,12 +694,12 @@ cppuhelper::ServiceManager::Data::Implementation::createInstanceWithArguments(
     return inst;
 }
 
-css::uno::Reference<css::uno::XInterface>
+cpo::uno::Reference<cpo::uno::XInterface>
 cppuhelper::ServiceManager::Data::Implementation::doCreateInstance(
-    css::uno::Reference<css::uno::XComponentContext> const & context)
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & context)
 {
     if (constructorFn) {
-        return css::uno::Reference<css::uno::XInterface>(
+        return cpo::uno::Reference<cpo::uno::XInterface>(
             constructorFn(context.get(), cpo::uno::Sequence<cpo::uno::Any>()),
             SAL_NO_ACQUIRE);
     } else if (factory1.is()) {
@@ -709,21 +710,21 @@ cppuhelper::ServiceManager::Data::Implementation::doCreateInstance(
     }
 }
 
-css::uno::Reference<css::uno::XInterface>
+cpo::uno::Reference<cpo::uno::XInterface>
 cppuhelper::ServiceManager::Data::Implementation::doCreateInstanceWithArguments(
-    css::uno::Reference<css::uno::XComponentContext> const & context,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & context,
     cpo::uno::Sequence<cpo::uno::Any> const & arguments)
 {
     if (constructorFn) {
-        css::uno::Reference<css::uno::XInterface> inst(
+        cpo::uno::Reference<cpo::uno::XInterface> inst(
             constructorFn(context.get(), arguments), SAL_NO_ACQUIRE);
         //HACK: The constructor will either observe arguments and return inst
         // that does not implement XInitialization (or null), or ignore
         // arguments and return inst that implements XInitialization; this
         // should be removed again once XInitialization-based implementations
         // have become rare:
-        css::uno::Reference<css::lang::XInitialization> init(
-            inst, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::lang::XInitialization> init(
+            inst, cpo::uno::UNO_QUERY);
         if (init.is()) {
             init->initialize(arguments);
         }
@@ -739,7 +740,7 @@ cppuhelper::ServiceManager::Data::Implementation::doCreateInstanceWithArguments(
 
 void cppuhelper::ServiceManager::Data::Implementation::updateDisposeInstance(
     bool singletonRequest,
-    css::uno::Reference<css::uno::XInterface> const & instance)
+    cpo::uno::Reference<cpo::uno::XInterface> const & instance)
 {
     // This is an optimization, to only call dispose once (from the component
     // context) on a singleton that is obtained both via the component context
@@ -752,8 +753,8 @@ void cppuhelper::ServiceManager::Data::Implementation::updateDisposeInstance(
         disposeInstance.clear();
         dispose = false;
     } else if (shallDispose()) {
-        css::uno::Reference<css::lang::XComponent> comp(
-            instance, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::lang::XComponent> comp(
+            instance, cpo::uno::UNO_QUERY);
         if (comp.is()) {
             std::unique_lock g(mutex);
             if (dispose) {
@@ -779,14 +780,14 @@ void cppuhelper::ServiceManager::addSingletonContextEntries(
             cppu::ContextEntry_Init(
                 "/singletons/" + rName,
                 cpo::uno::Any(
-                    css::uno::Reference<css::lang::XSingleComponentFactory>(
+                    cpo::uno::Reference<css::lang::XSingleComponentFactory>(
                         new SingletonFactory(this, rImpls[0]))),
                 true));
     }
 }
 
 void cppuhelper::ServiceManager::loadImplementation(
-        css::uno::Reference< css::uno::XComponentContext > const & context,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
         std::shared_ptr< Data::Implementation > const & implementation)
 {
     assert(implementation);
@@ -800,12 +801,12 @@ void cppuhelper::ServiceManager::loadImplementation(
     try {
         uri = cppu::bootstrap_expandUri(implementation->uri);
     } catch (css::lang::IllegalArgumentException & e) {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             "Cannot expand URI" + implementation->uri + ": " + e.Message,
             static_cast< cppu::OWeakObject * >(this));
     }
     cppuhelper::WrapperConstructorFn ctor;
-    css::uno::Reference< css::uno::XInterface > f0;
+    cpo::uno::Reference< cpo::uno::XInterface > f0;
     // Special handling of SharedLibrary loader, with support for environment,
     // constructor, and prefix arguments:
     if (!implementation->alienContext.is()
@@ -833,31 +834,31 @@ void cppuhelper::ServiceManager::loadImplementation(
             !implementation->prefix.isEmpty(), "cppuhelper",
             "Loader " << implementation->loader
                 << " and non-empty prefix " << implementation->prefix);
-        css::uno::Reference< css::uno::XComponentContext > ctxt;
-        css::uno::Reference< css::lang::XMultiComponentFactory > smgr;
+        cpo::uno::Reference< cpo::uno::XComponentContext > ctxt;
+        cpo::uno::Reference< css::lang::XMultiComponentFactory > smgr;
         if (implementation->alienContext.is()) {
             ctxt = implementation->alienContext;
-            smgr.set(ctxt->getServiceManager(), css::uno::UNO_SET_THROW);
+            smgr.set(ctxt->getServiceManager(), cpo::uno::UNO_SET_THROW);
         } else {
             assert(context.is());
             ctxt = context;
             smgr = this;
         }
-        css::uno::Reference< css::loader::XImplementationLoader > loader(
+        cpo::uno::Reference< css::loader::XImplementationLoader > loader(
             smgr->createInstanceWithContext(implementation->loader, ctxt),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
         f0 = loader->activate(
             implementation->name, OUString(), uri,
-            css::uno::Reference< css::registry::XRegistryKey >());
+            cpo::uno::Reference< css::registry::XRegistryKey >());
     }
-    css::uno::Reference<css::lang::XSingleComponentFactory> f1;
-    css::uno::Reference<css::lang::XSingleServiceFactory> f2;
+    cpo::uno::Reference<css::lang::XSingleComponentFactory> f1;
+    cpo::uno::Reference<css::lang::XSingleServiceFactory> f2;
     if (!ctor) {
-        f1.set(f0, css::uno::UNO_QUERY);
+        f1.set(f0, cpo::uno::UNO_QUERY);
         if (!f1.is()) {
-            f2.set(f0, css::uno::UNO_QUERY);
+            f2.set(f0, cpo::uno::UNO_QUERY);
             if (!f2.is()) {
-                throw css::uno::DeploymentException(
+                throw cpo::uno::DeploymentException(
                     ("Implementation " + implementation->name
                      + " does not provide a constructor or factory"),
                     static_cast< cppu::OWeakObject * >(this));
@@ -879,8 +880,8 @@ void cppuhelper::ServiceManager::loadImplementation(
 }
 
 void cppuhelper::ServiceManager::disposing(std::unique_lock<std::mutex>& rGuard) {
-    std::vector< css::uno::Reference<css::lang::XComponent> > sngls;
-    std::vector< css::uno::Reference< css::lang::XComponent > > comps;
+    std::vector< cpo::uno::Reference<css::lang::XComponent> > sngls;
+    std::vector< cpo::uno::Reference< css::lang::XComponent > > comps;
     Data clear;
     {
         for (const auto& rEntry : data_.namedImplementations)
@@ -916,7 +917,7 @@ void cppuhelper::ServiceManager::disposing(std::unique_lock<std::mutex>& rGuard)
     {
         try {
             rxSngl->dispose();
-        } catch (css::uno::RuntimeException & e) {
+        } catch (cpo::uno::RuntimeException & e) {
             SAL_WARN("cppuhelper", "Ignoring " << e << " while disposing singleton");
         }
     }
@@ -936,7 +937,7 @@ void cppuhelper::ServiceManager::initialize(
     {
         throw css::lang::IllegalArgumentException(
             u"invalid ServiceManager::initialize argument"_ustr,
-            css::uno::Reference<css::uno::XInterface>(), 0);
+            cpo::uno::Reference<cpo::uno::XInterface>(), 0);
     }
     preloadImplementations();
 }
@@ -959,7 +960,7 @@ cppuhelper::ServiceManager::getSupportedServiceNames()
     return { u"com.sun.star.lang.MultiServiceFactory"_ustr, u"com.sun.star.lang.ServiceManager"_ustr };
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 cppuhelper::ServiceManager::createInstance(
     OUString const & aServiceSpecifier)
 {
@@ -967,7 +968,7 @@ cppuhelper::ServiceManager::createInstance(
     return createInstanceWithContext(aServiceSpecifier, context_);
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 cppuhelper::ServiceManager::createInstanceWithArguments(
     OUString const & ServiceSpecifier,
     cpo::uno::Sequence< cpo::uno::Any > const & Arguments)
@@ -985,33 +986,33 @@ cppuhelper::ServiceManager::getAvailableServiceNames()
         return cpo::uno::Sequence< OUString >();
     }
     if (data_.services.size() > o3tl::make_unsigned(SAL_MAX_INT32)) {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             u"getAvailableServiceNames: too many services"_ustr,
             static_cast< cppu::OWeakObject * >(this));
     }
     return comphelper::mapKeysToSequence(data_.services);
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 cppuhelper::ServiceManager::createInstanceWithContext(
     OUString const & aServiceSpecifier,
-    css::uno::Reference< css::uno::XComponentContext > const & Context)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & Context)
 {
     std::shared_ptr< Data::Implementation > impl(
         findServiceImplementation(Context, aServiceSpecifier));
-    return impl == nullptr ? css::uno::Reference<css::uno::XInterface>()
+    return impl == nullptr ? cpo::uno::Reference<cpo::uno::XInterface>()
                            : impl->createInstance(Context, false);
 }
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
 cppuhelper::ServiceManager::createInstanceWithArgumentsAndContext(
     OUString const & ServiceSpecifier,
     cpo::uno::Sequence< cpo::uno::Any > const & Arguments,
-    css::uno::Reference< css::uno::XComponentContext > const & Context)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & Context)
 {
     std::shared_ptr< Data::Implementation > impl(
         findServiceImplementation(Context, ServiceSpecifier));
-    return impl == nullptr ? css::uno::Reference<css::uno::XInterface>()
+    return impl == nullptr ? cpo::uno::Reference<cpo::uno::XInterface>()
                            : impl->createInstanceWithArguments(Context, false, Arguments);
 }
 
@@ -1028,17 +1029,17 @@ bool cppuhelper::ServiceManager::hasElements()
           && data_.dynamicImplementations.empty());
 }
 
-css::uno::Reference< css::container::XEnumeration >
+cpo::uno::Reference< css::container::XEnumeration >
 cppuhelper::ServiceManager::createEnumeration()
 {
-    throw css::uno::RuntimeException(
+    throw cpo::uno::RuntimeException(
         u"ServiceManager createEnumeration: method not supported"_ustr,
         static_cast< cppu::OWeakObject * >(this));
 }
 
 bool cppuhelper::ServiceManager::has(cpo::uno::Any const &)
 {
-    throw css::uno::RuntimeException(
+    throw cpo::uno::RuntimeException(
         u"ServiceManager has: method not supported"_ustr,
         static_cast< cppu::OWeakObject * >(this));
 }
@@ -1048,7 +1049,7 @@ void cppuhelper::ServiceManager::insert(cpo::uno::Any const & aElement)
     cpo::uno::Sequence< css::beans::NamedValue > args;
     if (aElement >>= args) {
         std::vector< OUString > uris;
-        css::uno::Reference< css::uno::XComponentContext > alienContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext > alienContext;
         for (const auto & arg : args) {
             if (arg.Name == "uri") {
                 OUString uri;
@@ -1078,7 +1079,7 @@ void cppuhelper::ServiceManager::insert(cpo::uno::Any const & aElement)
         insertRdbFiles(uris, alienContext);
         return;
     }
-    css::uno::Reference< css::lang::XServiceInfo > info;
+    cpo::uno::Reference< css::lang::XServiceInfo > info;
     if ((aElement >>= info) && info.is()) {
         insertLegacyFactory(info);
         return;
@@ -1110,7 +1111,7 @@ void cppuhelper::ServiceManager::remove(cpo::uno::Any const & aElement)
         removeRdbFiles(uris);
         return;
     }
-    css::uno::Reference< css::lang::XServiceInfo > info;
+    cpo::uno::Reference< css::lang::XServiceInfo > info;
     if ((aElement >>= info) && info.is()) {
         if (!removeLegacyFactory(info, true)) {
             throw css::container::NoSuchElementException(
@@ -1129,7 +1130,7 @@ void cppuhelper::ServiceManager::remove(cpo::uno::Any const & aElement)
         u"Bad remove element"_ustr, static_cast< cppu::OWeakObject * >(this), 0);
 }
 
-css::uno::Reference< css::container::XEnumeration >
+cpo::uno::Reference< css::container::XEnumeration >
 cppuhelper::ServiceManager::createContentEnumeration(
     OUString const & aServiceName)
 {
@@ -1177,7 +1178,7 @@ cppuhelper::ServiceManager::createContentEnumeration(
     return new ContentEnumeration(std::move(factories));
 }
 
-css::uno::Reference< css::beans::XPropertySetInfo >
+cpo::uno::Reference< css::beans::XPropertySetInfo >
 cppuhelper::ServiceManager::getPropertySetInfo()
 {
     return this;
@@ -1208,7 +1209,7 @@ cpo::uno::Any cppuhelper::ServiceManager::getPropertyValue(
 
 void cppuhelper::ServiceManager::addPropertyChangeListener(
     OUString const & aPropertyName,
-    css::uno::Reference< css::beans::XPropertyChangeListener > const &
+    cpo::uno::Reference< css::beans::XPropertyChangeListener > const &
         xListener)
 {
     if (!aPropertyName.isEmpty() && aPropertyName != "DefaultContext") {
@@ -1221,7 +1222,7 @@ void cppuhelper::ServiceManager::addPropertyChangeListener(
 
 void cppuhelper::ServiceManager::removePropertyChangeListener(
     OUString const & aPropertyName,
-    css::uno::Reference< css::beans::XPropertyChangeListener > const &
+    cpo::uno::Reference< css::beans::XPropertyChangeListener > const &
         aListener)
 {
     if (!aPropertyName.isEmpty() && aPropertyName != "DefaultContext") {
@@ -1234,7 +1235,7 @@ void cppuhelper::ServiceManager::removePropertyChangeListener(
 
 void cppuhelper::ServiceManager::addVetoableChangeListener(
     OUString const & PropertyName,
-    css::uno::Reference< css::beans::XVetoableChangeListener > const &
+    cpo::uno::Reference< css::beans::XVetoableChangeListener > const &
         aListener)
 {
     if (!PropertyName.isEmpty() && PropertyName != "DefaultContext") {
@@ -1247,7 +1248,7 @@ void cppuhelper::ServiceManager::addVetoableChangeListener(
 
 void cppuhelper::ServiceManager::removeVetoableChangeListener(
     OUString const & PropertyName,
-    css::uno::Reference< css::beans::XVetoableChangeListener > const &
+    cpo::uno::Reference< css::beans::XVetoableChangeListener > const &
         aListener)
 {
     if (!PropertyName.isEmpty() && PropertyName != "DefaultContext") {
@@ -1285,18 +1286,18 @@ void cppuhelper::ServiceManager::disposing(
     css::lang::EventObject const & Source)
 {
     removeLegacyFactory(
-        css::uno::Reference< css::lang::XServiceInfo >(
-            Source.Source, css::uno::UNO_QUERY_THROW),
+        cpo::uno::Reference< css::lang::XServiceInfo >(
+            Source.Source, cpo::uno::UNO_QUERY_THROW),
         false);
 }
 
 void cppuhelper::ServiceManager::removeEventListenerFromComponent(
-    css::uno::Reference< css::lang::XComponent > const & component)
+    cpo::uno::Reference< css::lang::XComponent > const & component)
 {
     assert(component.is());
     try {
         component->removeEventListener(this);
-    } catch (css::uno::RuntimeException & e) {
+    } catch (cpo::uno::RuntimeException & e) {
         SAL_INFO(
             "cppuhelper",
             "Ignored removeEventListener RuntimeException " + e.Message);
@@ -1334,7 +1335,7 @@ void cppuhelper::ServiceManager::readRdbDirectory(
         }
         [[fallthrough]];
     default:
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             OUString::Concat("Cannot open directory ") + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
@@ -1352,10 +1353,10 @@ void cppuhelper::ServiceManager::readRdbFile(
 {
     try {
         Parser(
-            uri, css::uno::Reference< css::uno::XComponentContext >(), &data_);
+            uri, cpo::uno::Reference< cpo::uno::XComponentContext >(), &data_);
     } catch (css::container::NoSuchElementException &) {
         if (!optional) {
-            throw css::uno::DeploymentException(
+            throw cpo::uno::DeploymentException(
                 uri + ": no such file",
                 static_cast< cppu::OWeakObject * >(this));
         }
@@ -1364,11 +1365,11 @@ void cppuhelper::ServiceManager::readRdbFile(
 #if !ENABLE_FUZZERS
     catch (css::registry::InvalidRegistryException & e) {
         if (!readLegacyRdbFile(uri)) {
-            throw css::uno::DeploymentException(
+            throw cpo::uno::DeploymentException(
                 "InvalidRegistryException: " + e.Message,
                 static_cast< cppu::OWeakObject * >(this));
         }
-    } catch (css::uno::RuntimeException &) {
+    } catch (cpo::uno::RuntimeException &) {
         if (!readLegacyRdbFile(uri)) {
             throw;
         }
@@ -1404,7 +1405,7 @@ bool cppuhelper::ServiceManager::readLegacyRdbFile(OUString const & uri) {
     }
     RegistryKey rootKey;
     if (reg.openRootKey(rootKey) != RegError::NO_ERROR) {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             "Failure reading legacy rdb file " + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
@@ -1415,7 +1416,7 @@ bool cppuhelper::ServiceManager::readLegacyRdbFile(OUString const & uri) {
     case RegError::KEY_NOT_EXISTS:
         return true;
     default:
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             "Failure reading legacy rdb file " + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
@@ -1427,8 +1428,8 @@ bool cppuhelper::ServiceManager::readLegacyRdbFile(OUString const & uri) {
         std::shared_ptr< Data::Implementation > impl =
             std::make_shared<Data::Implementation>(
                 name, readLegacyRdbString(uri, implKey, u"UNO/ACTIVATOR"_ustr),
-                readLegacyRdbString(uri, implKey, u"UNO/LOCATION"_ustr), "", "", "", false,
-                css::uno::Reference< css::uno::XComponentContext >(), uri);
+                readLegacyRdbString(uri, implKey, u"UNO/LOCATION"_ustr), u""_ustr, u""_ustr, u""_ustr, false,
+                cpo::uno::Reference< cpo::uno::XComponentContext >(), uri);
         if (!data_.namedImplementations.emplace(name, impl).second)
         {
             throw css::registry::InvalidRegistryException(
@@ -1461,7 +1462,7 @@ OUString cppuhelper::ServiceManager::readLegacyRdbString(
         || t != RegValueType::STRING
         || s == 0 || s > o3tl::make_unsigned(SAL_MAX_INT32))
     {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             OUString::Concat("Failure reading legacy rdb file ") + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
@@ -1477,7 +1478,7 @@ OUString cppuhelper::ServiceManager::readLegacyRdbString(
              | RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_ERROR
              | RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR)))
     {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             OUString::Concat("Failure reading legacy rdb file ") + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
@@ -1496,14 +1497,14 @@ void cppuhelper::ServiceManager::readLegacyRdbStrings(
     case RegError::KEY_NOT_EXISTS:
         return;
     default:
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             OUString::Concat("Failure reading legacy rdb file ") + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
     OUString prefix(subkey.getName() + "/");
     RegistryKeyNames names;
     if (subkey.getKeyNames(OUString(), names) != RegError::NO_ERROR) {
-        throw css::uno::DeploymentException(
+        throw cpo::uno::DeploymentException(
             OUString::Concat("Failure reading legacy rdb file ") + uri,
             static_cast< cppu::OWeakObject * >(this));
     }
@@ -1516,7 +1517,7 @@ void cppuhelper::ServiceManager::readLegacyRdbStrings(
 
 void cppuhelper::ServiceManager::insertRdbFiles(
     std::vector< OUString > const & uris,
-    css::uno::Reference< css::uno::XComponentContext > const & alienContext)
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & alienContext)
 {
     Data extra;
     for (const auto& rUri : uris)
@@ -1537,15 +1538,15 @@ void cppuhelper::ServiceManager::insertRdbFiles(
 }
 
 void cppuhelper::ServiceManager::insertLegacyFactory(
-    css::uno::Reference< css::lang::XServiceInfo > const & factoryInfo)
+    cpo::uno::Reference< css::lang::XServiceInfo > const & factoryInfo)
 {
     assert(factoryInfo.is());
     OUString name(factoryInfo->getImplementationName());
-    css::uno::Reference< css::lang::XSingleComponentFactory > f1(
-        factoryInfo, css::uno::UNO_QUERY);
-    css::uno::Reference< css::lang::XSingleServiceFactory > f2;
+    cpo::uno::Reference< css::lang::XSingleComponentFactory > f1(
+        factoryInfo, cpo::uno::UNO_QUERY);
+    cpo::uno::Reference< css::lang::XSingleServiceFactory > f2;
     if (!f1.is()) {
-        f2.set(factoryInfo, css::uno::UNO_QUERY);
+        f2.set(factoryInfo, cpo::uno::UNO_QUERY);
         if (!f2.is()) {
             throw css::lang::IllegalArgumentException(
                 (u"Bad XServiceInfo argument implements neither"
@@ -1553,8 +1554,8 @@ void cppuhelper::ServiceManager::insertLegacyFactory(
                 static_cast< cppu::OWeakObject * >(this), 0);
         }
     }
-    css::uno::Reference< css::lang::XComponent > comp(
-        factoryInfo, css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::lang::XComponent > comp(
+        factoryInfo, cpo::uno::UNO_QUERY);
     std::shared_ptr< Data::Implementation > impl =
         std::make_shared<Data::Implementation>(name, f1, f2, comp);
     Data extra;
@@ -1613,8 +1614,8 @@ bool cppuhelper::ServiceManager::insertExtraData(Data const & extra) {
         return true;
 
     assert(context_.is());
-    css::uno::Reference< css::container::XNameContainer > cont(
-        context_, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::container::XNameContainer > cont(
+        context_, cpo::uno::UNO_QUERY_THROW);
     for (const auto& [rName, rImpls] : extra.singletons)
     {
         OUString name("/singletons/" + rName);
@@ -1682,12 +1683,12 @@ void cppuhelper::ServiceManager::removeRdbFiles(
 }
 
 bool cppuhelper::ServiceManager::removeLegacyFactory(
-    css::uno::Reference< css::lang::XServiceInfo > const & factoryInfo,
+    cpo::uno::Reference< css::lang::XServiceInfo > const & factoryInfo,
     bool removeListener)
 {
     assert(factoryInfo.is());
     std::shared_ptr< Data::Implementation > clear;
-    css::uno::Reference< css::lang::XComponent > comp;
+    cpo::uno::Reference< css::lang::XComponent > comp;
     {
         std::unique_lock g(m_aMutex);
         Data::DynamicImplementations::iterator i(
@@ -1749,7 +1750,7 @@ void cppuhelper::ServiceManager::removeImplementation(const OUString & name) {
 
 std::shared_ptr< cppuhelper::ServiceManager::Data::Implementation >
 cppuhelper::ServiceManager::findServiceImplementation(
-    css::uno::Reference< css::uno::XComponentContext > const & context,
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
     OUString const & specifier)
 {
     std::shared_ptr< Data::Implementation > impl;
@@ -1814,7 +1815,7 @@ void cppuhelper::ServiceManager::preloadImplementations() {
 #else
     OUString aUri;
     std::unique_lock g(m_aMutex);
-    css::uno::Environment aSourceEnv(css::uno::Environment::getCurrent());
+    cpo::uno::Environment aSourceEnv(cpo::uno::Environment::getCurrent());
 
     std::cerr << "preload:";
     std::vector<OUString> aReported;
@@ -1876,13 +1877,17 @@ void cppuhelper::ServiceManager::preloadImplementations() {
         }
         catch (css::lang::IllegalArgumentException& aError)
         {
-            throw css::uno::DeploymentException(
+            throw cpo::uno::DeploymentException(
                 "Cannot expand URI" + rEntry.second->uri + ": " + aError.Message,
                 static_cast< cppu::OWeakObject * >(this));
         }
 
         // load component library
+#if ENABLE_UNITEDLIBS
+        osl::Module aModule(SAL_MODULENAME("unitedlo"), SAL_LOADMODULE_NOW | SAL_LOADMODULE_GLOBAL);
+#else
         osl::Module aModule(aUri, SAL_LOADMODULE_NOW | SAL_LOADMODULE_GLOBAL);
+#endif
 
         if (!aModule.is())
         {
@@ -1893,8 +1898,8 @@ void cppuhelper::ServiceManager::preloadImplementations() {
             !rEntry.second->environment.isEmpty())
         {
             oslGenericFunction fpFactory;
-            css::uno::Environment aTargetEnv;
-            css::uno::Reference<css::uno::XInterface> xFactory;
+            cpo::uno::Environment aTargetEnv;
+            cpo::uno::Reference<cpo::uno::XInterface> xFactory;
 
             if(rEntry.second->constructorName.isEmpty())
             {
@@ -1913,7 +1918,7 @@ void cppuhelper::ServiceManager::preloadImplementations() {
                 {
                     throw css::loader::CannotActivateFactoryException(
                         ("no factory symbol \"" + aSymFactory + "\" in component library :" + aUri),
-                        css::uno::Reference<css::uno::XInterface>());
+                        cpo::uno::Reference<cpo::uno::XInterface>());
                 }
 
                 aTargetEnv = cppuhelper::detail::getEnvironment(rEntry.second->environment, rEntry.second->name);
@@ -1923,7 +1928,7 @@ void cppuhelper::ServiceManager::preloadImplementations() {
                 {
                     // invoke function component factory
                     OString aImpl(OUStringToOString(rEntry.second->name, RTL_TEXTENCODING_ASCII_US));
-                    xFactory.set(css::uno::Reference<css::uno::XInterface>(static_cast<css::uno::XInterface *>(
+                    xFactory.set(cpo::uno::Reference<cpo::uno::XInterface>(static_cast<cpo::uno::XInterface *>(
                         (*fpComponentFactory)(aImpl.getStr(), this, nullptr)), SAL_NO_ACQUIRE));
                 }
             }
@@ -1935,18 +1940,18 @@ void cppuhelper::ServiceManager::preloadImplementations() {
                     aModule.getFunctionSymbol(rEntry.second->constructorName) : nullptr;
             }
 
-            css::uno::Reference<css::lang::XSingleComponentFactory> xSCFactory;
-            css::uno::Reference<css::lang::XSingleServiceFactory> xSSFactory;
+            cpo::uno::Reference<css::lang::XSingleComponentFactory> xSCFactory;
+            cpo::uno::Reference<css::lang::XSingleServiceFactory> xSSFactory;
 
             // query interface XSingleComponentFactory or XSingleServiceFactory
             if (xFactory.is())
             {
-                xSCFactory.set(xFactory, css::uno::UNO_QUERY);
+                xSCFactory.set(xFactory, cpo::uno::UNO_QUERY);
                 if (!xSCFactory.is())
                 {
-                    xSSFactory.set(xFactory, css::uno::UNO_QUERY);
+                    xSSFactory.set(xFactory, cpo::uno::UNO_QUERY);
                     if (!xSSFactory.is())
-                        throw css::uno::DeploymentException(
+                        throw cpo::uno::DeploymentException(
                             ("Implementation " + rEntry.second->name
                              + " does not provide a constructor or factory"),
                             static_cast< cppu::OWeakObject * >(this));
@@ -1962,6 +1967,7 @@ void cppuhelper::ServiceManager::preloadImplementations() {
 
         }
 
+#if !ENABLE_UNITEDLIBS
         // Some libraries use other (non-UNO) libraries requiring preinit
         oslGenericFunction fpPreload = aModule.getFunctionSymbol("kit_preload_hook");
         if (fpPreload)
@@ -1976,10 +1982,38 @@ void cppuhelper::ServiceManager::preloadImplementations() {
                 g.lock();
             }
         }
-
+#endif
         // leak aModule
         aModule.release();
     }
+
+#if ENABLE_UNITEDLIBS
+    osl::Module aModule(SAL_MODULENAME("unitedlo"), SAL_LOADMODULE_NOW | SAL_LOADMODULE_GLOBAL);
+    static const char * aKitPreloadHooks[] {
+        "kit_preload_hook_sc",
+        "kit_preload_hook_sd",
+        "kit_preload_hook_sw"
+    };
+    static std::vector<oslGenericFunction> aPreloaded;
+    for (const auto & s : aKitPreloadHooks)
+    {
+        oslGenericFunction fpPreload = aModule.getFunctionSymbol(s);
+        if (fpPreload)
+        {
+            if (std::find(aPreloaded.begin(), aPreloaded.end(), fpPreload) == aPreloaded.end())
+            {
+                aPreloaded.push_back(fpPreload);
+                // unlock because we may be instantiating some services here
+                g.unlock();
+                fpPreload();
+                g.lock();
+            }
+        }
+    }
+    // leak aModule
+    aModule.release();
+#endif
+
     std::cerr << std::endl;
 
     if (aMissingMsg.getLength() > 0)
@@ -2004,10 +2038,10 @@ void cppuhelper::ServiceManager::preloadImplementations() {
         { u"uno"_ustr,  u"gcc3"_ustr, u""_ustr },
     };
 
-    static std::vector<css::uno::Mapping> maMaps;
+    static std::vector<cpo::uno::Mapping> maMaps;
     for (auto &it : aMappingLoad)
     {
-        maMaps.push_back(css::uno::Mapping(it.maFrom, it.maTo, it.maPurpose));
+        maMaps.push_back(cpo::uno::Mapping(it.maFrom, it.maTo, it.maPurpose));
     }
 #endif
 }

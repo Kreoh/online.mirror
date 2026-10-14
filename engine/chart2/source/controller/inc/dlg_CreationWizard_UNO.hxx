@@ -25,15 +25,15 @@
 #include <com/sun/star/frame/XTerminateListener.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ui/dialogs/XAsynchronousExecutableDialog.hpp>
 #include <rtl/ref.hxx>
 
-#include "dlg_CreationWizard.hxx"
 #include <tools/link.hxx>
+#include <vcl/weld.hxx>
 
 namespace com::sun::star::awt { class XWindow; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace chart
 {
@@ -50,7 +50,7 @@ class CreationWizardUnoDlg final : public cppu::BaseMutex
 public:
     CreationWizardUnoDlg() = delete;
 
-    CreationWizardUnoDlg( css::uno::Reference< css::uno::XComponentContext > xContext );
+    CreationWizardUnoDlg( cpo::uno::Reference< cpo::uno::XComponentContext > xContext );
     virtual ~CreationWizardUnoDlg() override;
 
     // XInterface
@@ -70,7 +70,7 @@ public:
 
     // XAsynchronousExecutableDialog
     virtual void setDialogTitle( const OUString& aTitle ) override;
-    virtual void startExecuteModal( const css::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener ) override;
+    virtual void startExecuteModal( const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener ) override;
 
     // XInitialization
     virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
@@ -82,13 +82,13 @@ public:
     virtual void disposing( const css::lang::EventObject& Source ) override;
 
     //XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
     virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
     virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
-    virtual void addPropertyChangeListener( const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
-    virtual void removePropertyChangeListener( const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
-    virtual void addVetoableChangeListener( const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
-    virtual void removeVetoableChangeListener( const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
 
 protected:
     // ____ OComponentHelper ____
@@ -101,10 +101,10 @@ private:
 
 private:
     rtl::Reference< ::chart::ChartModel     >            m_xChartModel;
-    css::uno::Reference< css::uno::XComponentContext>    m_xCC;
-    css::uno::Reference< css::awt::XWindow >             m_xParentWindow;
+    cpo::uno::Reference< cpo::uno::XComponentContext>    m_xCC;
+    cpo::uno::Reference< css::awt::XWindow >             m_xParentWindow;
 
-    std::shared_ptr<CreationWizard> m_xDialog;
+    std::shared_ptr<weld::DialogController> m_xDialog;
     bool            m_bUnlockControllersOnExecute;
 };
 

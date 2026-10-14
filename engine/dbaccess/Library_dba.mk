@@ -74,7 +74,6 @@ $(eval $(call gb_Library_add_exception_objects,dba,\
     dbaccess/source/core/api/preparedstatement \
     dbaccess/source/core/api/PrivateRow \
     dbaccess/source/core/api/query \
-    dbaccess/source/core/api/querycomposer \
     dbaccess/source/core/api/querycontainer \
     dbaccess/source/core/api/querydescriptor \
     dbaccess/source/core/api/resultcolumn \
@@ -92,7 +91,6 @@ $(eval $(call gb_Library_add_exception_objects,dba,\
     dbaccess/source/core/api/View \
     dbaccess/source/core/api/viewcontainer \
     dbaccess/source/core/api/WrappedResultSet \
-    dbaccess/source/core/dataaccess/bookmarkcontainer \
     dbaccess/source/core/dataaccess/commandcontainer \
     dbaccess/source/core/dataaccess/commanddefinition \
     dbaccess/source/core/dataaccess/ComponentDefinition \
@@ -116,7 +114,6 @@ $(eval $(call gb_Library_add_exception_objects,dba,\
     dbaccess/source/core/dataaccess/SharedConnection \
     dbaccess/source/core/misc/apitools \
     dbaccess/source/core/misc/ContainerMediator \
-    dbaccess/source/core/misc/DatabaseDataProvider \
     dbaccess/source/core/misc/dsntypes \
     dbaccess/source/core/misc/objectnameapproval \
     dbaccess/source/core/misc/PropertyForward \

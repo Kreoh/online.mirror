@@ -50,7 +50,7 @@ namespace comphelper
 {
 class OAccessible;
 }
-typedef css::uno::Reference<css::accessibility::XAccessibleRelationSet> a11yrelationset;
+typedef cpo::uno::Reference<css::accessibility::XAccessibleRelationSet> a11yrelationset;
 enum class PointerStyle;
 class CommandEvent;
 class Formatter;
@@ -376,8 +376,8 @@ public:
     // reset to default background
     virtual void set_background() = 0;
 
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() = 0;
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard> get_clipboard() const = 0;
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> get_drop_target() = 0;
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> get_clipboard() const = 0;
 
     virtual void connect_get_property_tree(const Link<tools::JsonWriter&, void>& rLink) = 0;
     virtual void get_property_tree(tools::JsonWriter& rJsonWriter) = 0;
@@ -401,7 +401,7 @@ public:
     virtual void move(weld::Widget* pWidget, weld::Container* pNewParent) = 0;
     // create an XWindow as a child of this container. The XWindow is
     // suitable to contain css::awt::XControl items
-    virtual css::uno::Reference<css::awt::XWindow> CreateChildFrame() = 0;
+    virtual cpo::uno::Reference<css::awt::XWindow> CreateChildFrame() = 0;
     // rLink is called when the focus transitions from a widget outside the container
     // to a widget inside the container or vice versa
     virtual void connect_container_focus_changed(const Link<Container&, void>& rLink)
@@ -438,6 +438,9 @@ class VCL_DLLPUBLIC CustomWidget : virtual public Widget
 {
 public:
     virtual void send_update() = 0;
+    /// Sends the widget model as an action, so the client patches the widget in place instead of
+    /// rebuilding it. A no-op outside the client-rendered path.
+    virtual void send_update_action() = 0;
     virtual void set_custom_client_controller(CustomClientWidgetController* /*p*/) = 0;
     virtual CustomClientWidgetController* get_custom_client_controller() = 0;
 };
@@ -593,7 +596,7 @@ public:
     virtual void set_window_state(const OUString& rStr) = 0;
     virtual OUString get_window_state(vcl::WindowDataMask nMask) const = 0;
 
-    virtual css::uno::Reference<css::awt::XWindow> GetXWindow() = 0;
+    virtual cpo::uno::Reference<css::awt::XWindow> GetXWindow() = 0;
 
     void connect_help(const Link<Widget&, bool>& rLink) { m_aHelpRequestHdl = rLink; }
 
@@ -1001,6 +1004,11 @@ public:
     // get the width needed to show the menu launcher in a custom row
     virtual int get_menu_button_width() const = 0;
 
+    // Draw the current value with the custom renderer too, rather than showing it as text:
+    virtual void set_render_selected_entry(bool /*on*/) {}
+    // Let a custom-rendered row take the whole width of the box:
+    virtual void set_whole_width_preview(bool /*on*/) {}
+
     // for mru support
     virtual int get_max_mru_count() const = 0;
     virtual void set_max_mru_count(int nCount) = 0;
@@ -1301,7 +1309,7 @@ public:
     // col index -1 sets the expander image
     virtual void set_image(int row, VirtualDevice& rImage, int col = -1) = 0;
     // col index -1 sets the expander image
-    virtual void set_image(int row, const css::uno::Reference<css::graphic::XGraphic>& rImage,
+    virtual void set_image(int row, const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                            int col = -1)
         = 0;
     virtual void set_text_emphasis(int row, bool bOn, int col) = 0;
@@ -1458,7 +1466,7 @@ public:
     virtual void set_image(const TreeIter& rIter, VirtualDevice& rImage, int col = -1) = 0;
     // col index -1 sets the expander image
     virtual void set_image(const TreeIter& rIter,
-                           const css::uno::Reference<css::graphic::XGraphic>& rImage, int col = -1)
+                           const cpo::uno::Reference<css::graphic::XGraphic>& rImage, int col = -1)
         = 0;
     virtual void set_font_color(const TreeIter& rIter, const Color& rColor) = 0;
 
@@ -1621,6 +1629,9 @@ public:
     virtual void set_column_title(int nColumn, const OUString& rTitle) = 0;
     virtual void set_column_header_color(int /*nColumn*/, const Color& /*rColor*/) {}
     virtual void set_column_header_name(int /*nColumn*/, const OUString& /*rName*/) {}
+    // Forget every column header name, so only the columns named again
+    // afterwards get a name box.
+    virtual void clear_column_header_names() {}
     // Mark the column-title headers as non-clickable pure labels (no sort /
     // column-click). Default no-op; backends that render clickable headers
     // override it.
@@ -1896,7 +1907,7 @@ public:
     virtual void set_label(const OUString& rText) = 0;
     // pDevice, the image for the button, or nullptr to unset
     virtual void set_image(VirtualDevice* pDevice) = 0;
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) = 0;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) = 0;
     virtual void set_from_icon_name(const OUString& rIconName) = 0;
     virtual OUString get_label() const = 0;
     void clicked() { signal_clicked(); }
@@ -1914,7 +1925,7 @@ public:
        set_accessible_name if you do. */
     virtual void set_custom_button(VirtualDevice* pDevice) = 0;
 
-    virtual void connect_clicked(const Link<Button&, void>& rLink) { m_aClickHdl = rLink; }
+    void connect_clicked(const Link<Button&, void>& rLink) { m_aClickHdl = rLink; }
 };
 
 class VCL_DLLPUBLIC Toggleable : virtual public Widget
@@ -2081,6 +2092,8 @@ public:
 
 class VCL_DLLPUBLIC Scale : virtual public Widget
 {
+    friend class ::KitTrigger;
+
     Link<Scale&, void> m_aValueChangedHdl;
 
 protected:
@@ -2430,7 +2443,7 @@ class VCL_DLLPUBLIC Image : virtual public Widget
 public:
     virtual void set_from_icon_name(const OUString& rIconName) = 0;
     virtual void set_image(VirtualDevice* pDevice) = 0;
-    virtual void set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage) = 0;
+    virtual void set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage) = 0;
 };
 
 class VCL_DLLPUBLIC Calendar : virtual public Widget
@@ -3066,7 +3079,7 @@ public:
 
     virtual void insert(int pos, const OUString& rId, const OUString& rStr,
                         const OUString* pIconName, VirtualDevice* pImageSurface,
-                        const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                        const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                         TriState eCheckRadioFalse)
         = 0;
 
@@ -3099,7 +3112,7 @@ public:
         insert(-1, rId, rStr, nullptr, &rImage, nullptr, TRISTATE_INDET);
     }
     void append(const OUString& rId, const OUString& rStr,
-                const css::uno::Reference<css::graphic::XGraphic>& rImage)
+                const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
     {
         insert(-1, rId, rStr, nullptr, nullptr, rImage, TRISTATE_INDET);
     }
@@ -3163,7 +3176,7 @@ public:
     virtual void set_item_icon_name(const OUString& rIdent, const OUString& rIconName) = 0;
     virtual void set_item_image_mirrored(const OUString& rIdent, bool bMirrored) = 0;
     virtual void set_item_image(const OUString& rIdent,
-                                const css::uno::Reference<css::graphic::XGraphic>& rIcon)
+                                const cpo::uno::Reference<css::graphic::XGraphic>& rIcon)
         = 0;
     virtual void set_item_image(const OUString& rIdent, VirtualDevice* pDevice) = 0;
 
@@ -3176,7 +3189,7 @@ public:
     virtual void set_item_ident(int nIndex, const OUString& rIdent) = 0;
     virtual void set_item_label(int nIndex, const OUString& rLabel) = 0;
     virtual void set_item_image(int nIndex,
-                                const css::uno::Reference<css::graphic::XGraphic>& rIcon)
+                                const cpo::uno::Reference<css::graphic::XGraphic>& rIcon)
         = 0;
     virtual void set_item_tooltip_text(int nIndex, const OUString& rTip) = 0;
     virtual void set_item_accessible_name(int nIndex, const OUString& rName) = 0;
@@ -3233,13 +3246,6 @@ public:
     {
         m_aValueChangeHdl = rLink;
     }
-};
-
-class VCL_DLLPUBLIC ColorChooserDialog : virtual public Dialog
-{
-public:
-    virtual void set_color(const Color& rColor) = 0;
-    virtual Color get_color() const = 0;
 };
 
 class VCL_DLLPUBLIC SizeGroup

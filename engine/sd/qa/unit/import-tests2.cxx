@@ -88,6 +88,7 @@
 #include <strings.hrc>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 class SdImportTest2 : public SdModelTestBase
 {
@@ -1083,6 +1084,42 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf89064)
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), xNotesPage->getCount());
 }
 
+CPPUNIT_TEST_FIXTURE(SdImportTest2, testNotesPageTheme)
+{
+    // The notes master of this document names a theme of its own.
+    createSdImpressDoc("pptx/tdf104788.pptx");
+    uno::Reference<presentation::XPresentationPage> xPage(getPage(0), uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XDrawPage> xNotesPage(xPage->getNotesPage(), uno::UNO_SET_THROW);
+    for (sal_Int32 nShape = 0; nShape < xNotesPage->getCount(); ++nShape)
+    {
+        uno::Reference<text::XText> xText(xNotesPage->getByIndex(nShape), uno::UNO_QUERY);
+        if (!xText.is())
+            continue;
+        uno::Reference<container::XEnumerationAccess> xParagraphs(xText, uno::UNO_QUERY_THROW);
+        uno::Reference<container::XEnumeration> xEnum(xParagraphs->createEnumeration());
+        while (xEnum->hasMoreElements())
+        {
+            uno::Reference<container::XEnumerationAccess> xPortions(xEnum->nextElement(),
+                                                                    uno::UNO_QUERY);
+            if (!xPortions.is())
+                continue;
+            uno::Reference<container::XEnumeration> xPortionEnum(xPortions->createEnumeration());
+            while (xPortionEnum->hasMoreElements())
+            {
+                uno::Reference<beans::XPropertySet> xPortion(xPortionEnum->nextElement(),
+                                                             uno::UNO_QUERY);
+                if (!xPortion.is())
+                    continue;
+                OUString aFontName;
+                xPortion->getPropertyValue(u"CharFontName"_ustr) >>= aFontName;
+                // The text takes the font the theme names, not the name of the slot it sits in.
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("unresolved theme font on a notes page", false,
+                                             aFontName.startsWith("+"));
+            }
+        }
+    }
+}
+
 CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf108925)
 {
     // Test document contains bulleting with too small bullet size (1%) which breaks the lower constraint
@@ -1332,7 +1369,7 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf114821)
 
     // These Labels have custom position, so the exported LabelPlacement (reference point) by MSO is OUTSIDE/OUTEND
     // Check the first label
-    const css::uno::Reference<css::beans::XPropertySet> aPropSet0(
+    const cpo::uno::Reference<css::beans::XPropertySet> aPropSet0(
         aSeriesSeq[0]->getDataPointByIndex(0));
     CPPUNIT_ASSERT(aPropSet0.is());
     sal_Int32 aPlacement;
@@ -1340,14 +1377,14 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf114821)
     CPPUNIT_ASSERT_EQUAL(css::chart::DataLabelPlacement::OUTSIDE, aPlacement);
 
     // Check the second label
-    const css::uno::Reference<css::beans::XPropertySet> aPropSet1(
+    const cpo::uno::Reference<css::beans::XPropertySet> aPropSet1(
         aSeriesSeq[0]->getDataPointByIndex(1));
     CPPUNIT_ASSERT(aPropSet1.is());
     aPropSet1->getPropertyValue(u"LabelPlacement"_ustr) >>= aPlacement;
     CPPUNIT_ASSERT_EQUAL(css::chart::DataLabelPlacement::OUTSIDE, aPlacement);
 
     // Check the third label
-    const css::uno::Reference<css::beans::XPropertySet> aPropSet2(
+    const cpo::uno::Reference<css::beans::XPropertySet> aPropSet2(
         aSeriesSeq[0]->getDataPointByIndex(2));
     CPPUNIT_ASSERT(aPropSet2.is());
     aPropSet2->getPropertyValue(u"LabelPlacement"_ustr) >>= aPlacement;
@@ -2287,7 +2324,7 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf153012)
     cpo::uno::Sequence<uno::Reference<chart2::XDataSeries>> aSeriesSeq(xDSCnt->getDataSeries());
     CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aSeriesSeq.getLength());
 
-    css::uno::Reference<css::beans::XPropertySet> xPropSet1(aSeriesSeq[0]->getDataPointByIndex(1),
+    cpo::uno::Reference<css::beans::XPropertySet> xPropSet1(aSeriesSeq[0]->getDataPointByIndex(1),
                                                             uno::UNO_SET_THROW);
     Color aFillColor;
     xPropSet1->getPropertyValue(u"FillColor"_ustr) >>= aFillColor;
@@ -2472,7 +2509,7 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testHTMLClipboardImport)
         }
 
         // XTransferable
-        cpo::uno::Any SAL_CALL getTransferData(const datatransfer::DataFlavor& aFlavor) override
+        cpo::uno::Any getTransferData(const datatransfer::DataFlavor& aFlavor) override
         {
             if (!isDataFlavorSupported(aFlavor))
                 return {};
@@ -2481,11 +2518,11 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testHTMLClipboardImport)
             aStream.ReadBytes(bytes.getArray(), aStream.remainingSize());
             return cpo::uno::Any(bytes);
         }
-        cpo::uno::Sequence<datatransfer::DataFlavor> SAL_CALL getTransferDataFlavors() override
+        cpo::uno::Sequence<datatransfer::DataFlavor> getTransferDataFlavors() override
         {
             return { getHTMLFlavor() };
         }
-        bool SAL_CALL isDataFlavorSupported(const datatransfer::DataFlavor& aFlavor) override
+        bool isDataFlavorSupported(const datatransfer::DataFlavor& aFlavor) override
         {
             return aFlavor.MimeType.equalsIgnoreAsciiCase(getHTMLFlavor().MimeType);
         }
@@ -2994,6 +3031,117 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testCool16083_contentPlaceholderStaysEmpty)
             CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), rCase.aPrompt,
                                          pParagraphs->GetTextObject().GetText(0));
     }
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest2, testEmptyPptHasOneSlide)
+{
+    // Given a PPT file that holds no slides at all:
+    createSdImpressDoc("ppt/empty-deck.ppt");
+
+    // The import gives it one empty slide with its notes page, and the notes page is not listed
+    // as a second slide.
+    SdDrawDocument* pDoc = getSdDocShell()->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), pDoc->GetSdPageCount(PageKind::Notes));
+
+    // The slide survives a round trip through PPTX.
+    saveAndReload(TestFilter::PPTX);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1),
+                         getSdDocShell()->GetDoc()->GetSdPageCount(PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest2, testPlaceholderInheritsNoWrapFromLayout)
+{
+    // The layout's narrow body placeholder has wrap="none", and the slide's placeholder that
+    // refers to it has an empty bodyPr.
+    createSdImpressDoc("pptx/narrow-placeholder-no-wrap.pptx");
+
+    // The slide's text stays on one line, wider than the box.
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0));
+    CPPUNIT_ASSERT_EQUAL(u"First contact"_ustr,
+                         xShape.queryThrow<text::XTextRange>()->getString());
+    CPPUNIT_ASSERT(!xShape->getPropertyValue(u"TextWordWrap"_ustr).get<bool>());
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest2, testCool16279_LayoutPlaceholderKeepsMasterAutofit)
+{
+    // The slide master autofits the text of its title and body, and the Title and Content
+    // layout's placeholders have an empty bodyPr, so they inherit that
+    createSdImpressDoc("pptx/master-and-eleven-layouts.pptx");
+
+    uno::Reference<drawing::XMasterPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xDoc.is());
+    uno::Reference<drawing::XShapes> xLayout(xDoc->getMasterPages()->getByIndex(1),
+                                             uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL(u"Title and Content"_ustr,
+                         xLayout.queryThrow<container::XNamed>()->getName());
+
+    static constexpr std::u16string_view aPlaceholders[] = { u"Title 1", u"Content Placeholder 2" };
+    for (const std::u16string_view& aName : aPlaceholders)
+    {
+        uno::Reference<beans::XPropertySet> xShape;
+        for (sal_Int32 i = 0; i < xLayout->getCount() && !xShape; i++)
+        {
+            if (xLayout->getByIndex(i).queryThrow<container::XNamed>()->getName() == aName)
+                xShape.set(xLayout->getByIndex(i), uno::UNO_QUERY_THROW);
+        }
+        CPPUNIT_ASSERT(xShape);
+
+        // Without the fix in place, this test would have failed with:
+        // - Expected: 3 (TextFitToSizeType_AUTOFIT)
+        // - Actual  : 0 (TextFitToSizeType_NONE)
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(
+            OUString(aName).toUtf8().getStr(), drawing::TextFitToSizeType_AUTOFIT,
+            xShape->getPropertyValue(u"TextFitToSize"_ustr).get<drawing::TextFitToSizeType>());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest2, testCustomShapedLayoutPlaceholderNotOnSlide)
+{
+    // The layout holds two ellipse-shaped body placeholders, with the prompts "Prompt one" and
+    // "Prompt two", and the slide fills only the first of them.
+    createSdImpressDoc("pptx/narrow-placeholder-no-wrap.pptx");
+
+    const auto checkLayoutPlaceholders = [this](const char* pWhen) {
+        // Both prompts stay on the master page as placeholders, which the slide does not paint.
+        SdDrawDocument* pDoc = getSdDocShell()->GetDoc();
+        int nPromptsFound = 0;
+        for (sal_uInt16 nMaster = 0; nMaster < pDoc->GetMasterSdPageCount(PageKind::Standard);
+             ++nMaster)
+        {
+            SdPage* pMasterPage = pDoc->GetMasterSdPage(nMaster, PageKind::Standard);
+            for (size_t nObject = 0; nObject < pMasterPage->GetObjCount(); ++nObject)
+            {
+                SdrObject* pObject = pMasterPage->GetObj(nObject);
+                OutlinerParaObject* pParagraphs = pObject->GetOutlinerParaObject();
+                if (!pParagraphs)
+                    continue;
+                const OUString aText = pParagraphs->GetTextObject().GetText(0);
+                const OString aMessage = OString::Concat(pWhen) + ": " + aText.toUtf8();
+                CPPUNIT_ASSERT_MESSAGE(aMessage.getStr(), pObject->IsNotVisibleAsMaster());
+                if (aText == "Prompt one" || aText == "Prompt two")
+                {
+                    ++nPromptsFound;
+                    CPPUNIT_ASSERT_EQUAL_MESSAGE(aMessage.getStr(), PresObjKind::Outline,
+                                                 pMasterPage->GetPresObjKind(pObject));
+                }
+            }
+        }
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pWhen, 2, nPromptsFound);
+
+        // The slide's own placeholder keeps the ellipse of the layout placeholder it refers to.
+        uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0));
+        comphelper::SequenceAsHashMap aGeometry(
+            xShape->getPropertyValue(u"CustomShapeGeometry"_ustr));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pWhen, u"ooxml-ellipse"_ustr,
+                                     aGeometry[u"Type"_ustr].get<OUString>());
+    };
+
+    checkLayoutPlaceholders("after load");
+    saveAndReload(TestFilter::PPTX);
+    checkLayoutPlaceholders("after a PPTX round trip");
+    saveAndReload(TestFilter::ODP);
+    checkLayoutPlaceholders("after an ODP round trip");
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

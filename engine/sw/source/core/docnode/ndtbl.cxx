@@ -26,7 +26,11 @@
 #include <editeng/protitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <svl/stritem.hxx>
+#include <svl/itemiter.hxx>
 #include <editeng/shaditem.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
+#include <ThemeColorChanger.hxx>
 #include <fmtfsize.hxx>
 #include <formatflysplit.hxx>
 #include <fmtornt.hxx>
@@ -148,8 +152,7 @@ typedef std::map<SwFrameFormat *, SwTableBoxFormat *> DfltBoxAttrMap_t;
 typedef std::vector<DfltBoxAttrMap_t *> DfltBoxAttrList_t;
 
 static void
-lcl_SetDfltBoxAttr(SwTableBox& rBox, DfltBoxAttrList_t & rBoxFormatArr,
-        sal_uInt8 const nId, SwTableAutoFormat const*const pAutoFormat = nullptr)
+lcl_SetDfltBoxAttr(SwTableBox& rBox, DfltBoxAttrList_t & rBoxFormatArr, sal_uInt8 const nId)
 {
     DfltBoxAttrMap_t * pMap = rBoxFormatArr[ nId ];
     if (!pMap)
@@ -171,14 +174,7 @@ lcl_SetDfltBoxAttr(SwTableBox& rBox, DfltBoxAttrList_t & rBoxFormatArr,
         // format does not exist, so create it
         pNewTableBoxFormat = rDoc.MakeTableBoxFormat();
         pNewTableBoxFormat->SetFormatAttr( pBoxFrameFormat->GetAttrSet().Get( RES_FRM_SIZE ) );
-
-        if( pAutoFormat )
-            pAutoFormat->UpdateToSet( nId, false, false,
-                                    const_cast<SfxItemSet&>(static_cast<SfxItemSet const &>(pNewTableBoxFormat->GetAttrSet())),
-                                    SwTableAutoFormatUpdateFlags::Box,
-                                    rDoc.GetNumberFormatter() );
-        else
-            ::lcl_SetDfltBoxAttr( *pNewTableBoxFormat, nId );
+        ::lcl_SetDfltBoxAttr( *pNewTableBoxFormat, nId );
 
         (*pMap)[pBoxFrameFormat] = pNewTableBoxFormat;
     }
@@ -195,25 +191,6 @@ static SwTableBoxFormat *lcl_CreateDfltBoxFormat( SwDoc &rDoc, std::vector<SwTab
             pBoxFormat->SetFormatAttr( SwFormatFrameSize( SwFrameSize::Variable,
                                             USHRT_MAX / nCols, 0 ));
         ::lcl_SetDfltBoxAttr( *pBoxFormat, nId );
-        rBoxFormatArr[ nId ] = pBoxFormat;
-    }
-    return rBoxFormatArr[nId];
-}
-
-static SwTableBoxFormat *lcl_CreateAFormatBoxFormat( SwDoc &rDoc, std::vector<SwTableBoxFormat*> &rBoxFormatArr,
-                                    const SwTableAutoFormat& rAutoFormat,
-                                    const sal_uInt16 nRows, const sal_uInt16 nCols, sal_uInt8 nId )
-{
-    if( !rBoxFormatArr[nId] )
-    {
-        SwTableBoxFormat* pBoxFormat = rDoc.MakeTableBoxFormat();
-        rAutoFormat.UpdateToSet( nId, nRows==1, nCols==1,
-                                const_cast<SfxItemSet&>(static_cast<SfxItemSet const &>(pBoxFormat->GetAttrSet())),
-                                SwTableAutoFormatUpdateFlags::Box,
-                                rDoc.GetNumberFormatter( ) );
-        if( USHRT_MAX != nCols )
-            pBoxFormat->SetFormatAttr( SwFormatFrameSize( SwFrameSize::Variable,
-                                            USHRT_MAX / nCols, 0 ));
         rBoxFormatArr[ nId ] = pBoxFormat;
     }
     return rBoxFormatArr[nId];
@@ -510,19 +487,19 @@ const SwTable* SwDoc::InsertTable( const SwInsertTableOptions& rInsTableOpts,
     rNdTable.SetRowsToRepeat( nRowsToRepeat );
     rNdTable.SetTableModel( bNewModel );
 
+    // A table style is resolved live once the table exists, so its cells start out with the
+    // plain shared box format, the same as the cells of a table without default borders.
     std::vector<SwTableBoxFormat*> aBoxFormatArr;
     SwTableBoxFormat* pBoxFormat = nullptr;
-    if( !bDfltBorders && !pTAFormat )
+    if( !bDfltBorders || pTAFormat )
     {
         pBoxFormat = MakeTableBoxFormat();
         pBoxFormat->SetFormatAttr( SwFormatFrameSize( SwFrameSize::Variable, USHRT_MAX / nCols, 0 ));
     }
     else
     {
-        const sal_uInt16 nBoxArrLen = pTAFormat ? 16 : 4;
-        aBoxFormatArr.resize( nBoxArrLen, nullptr );
+        aBoxFormatArr.resize( 4, nullptr );
     }
-    SfxItemSet aCharSet(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_BEGIN, RES_PARATR_LIST_END-1>(GetAttrPool()));
 
     SwNodeIndex aNdIdx( *pTableNd, 1 ); // Set to StartNode of first Box
     SwTableLines& rLines = rNdTable.GetTabLines();
@@ -534,24 +511,7 @@ const SwTable* SwDoc::InsertTable( const SwInsertTableOptions& rInsTableOpts,
         for( sal_uInt16 i = 0; i < nCols; ++i )
         {
             SwTableBoxFormat *pBoxF;
-            if( pTAFormat )
-            {
-                sal_uInt8 nId = SwTableAutoFormat::CountPos(i, nCols, n, nRows);
-                pBoxF = ::lcl_CreateAFormatBoxFormat( *this, aBoxFormatArr, *pTAFormat,
-                                                nRows, nCols, nId );
-
-                // Set the Paragraph/Character Attributes if needed
-                if( pTAFormat->IsFont() || pTAFormat->IsJustify() )
-                {
-                    aCharSet.ClearItem();
-                    pTAFormat->UpdateToSet( nId, nRows==1, nCols==1, aCharSet,
-                                        SwTableAutoFormatUpdateFlags::Char, nullptr );
-                    if( aCharSet.Count() )
-                        GetNodes()[ aNdIdx.GetIndex()+1 ]->GetContentNode()->
-                            SetAttr( aCharSet );
-                }
-            }
-            else if( bDfltBorders )
+            if( bDfltBorders && !pTAFormat )
             {
                 sal_uInt8 nBoxId = (i < nCols - 1 ? 0 : 1) + (n ? 2 : 0 );
                 pBoxF = ::lcl_CreateDfltBoxFormat( *this, aBoxFormatArr, nCols, nBoxId);
@@ -581,6 +541,15 @@ const SwTable* SwDoc::InsertTable( const SwInsertTableOptions& rInsTableOpts,
             aNdIdx += SwNodeOffset(3); // StartNode, TextNode, EndNode  == 3 Nodes
         }
     }
+
+    if( pTAFormat )
+    {
+        if( !GetTableStyles().FindAutoFormat( pTAFormat->GetName() ) )
+            GetTableStyles().AddAutoFormat( *pTAFormat );
+        rNdTable.SetTableStyleName( pTAFormat->GetName() );
+        ApplyTableStyleLive( *pTableNd );
+    }
+
     // Insert Frames
     pTableNd->MakeOwnFrames();
 
@@ -796,9 +765,17 @@ const SwTable* SwDoc::TextToTable( const SwInsertTableOptions& rInsTableOpts,
     pTableFormat->SetFormatAttr( SwFormatHoriOrient( 0, eAdjust ) );
     rNdTable.RegisterToFormat(*pTableFormat);
 
-    if( pTAFormat || ( rInsTableOpts.mnInsMode & SwInsertTableFlags::DefaultBorder) )
+    if( pTAFormat )
     {
-        sal_uInt8 nBoxArrLen = pTAFormat ? 16 : 4;
+        // The style is resolved live; the cells keep the plain formats they already have.
+        if( !GetTableStyles().FindAutoFormat( pTAFormat->GetName() ) )
+            GetTableStyles().AddAutoFormat( *pTAFormat );
+        rNdTable.SetTableStyleName( pTAFormat->GetName() );
+        ApplyTableStyleLive( *rNdTable.GetTableNode() );
+    }
+    else if( rInsTableOpts.mnInsMode & SwInsertTableFlags::DefaultBorder )
+    {
+        const sal_uInt8 nBoxArrLen = 4;
         std::unique_ptr< DfltBoxAttrList_t > aBoxFormatArr1;
         std::optional< std::vector<SwTableBoxFormat*> > aBoxFormatArr2;
         if( bUseBoxFormat )
@@ -809,10 +786,6 @@ const SwTable* SwDoc::TextToTable( const SwInsertTableOptions& rInsTableOpts,
         {
             aBoxFormatArr2 = std::vector<SwTableBoxFormat*>( nBoxArrLen, nullptr );
         }
-
-        SfxItemSet aCharSet(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_BEGIN, RES_PARATR_LIST_END-1>(GetAttrPool()));
-
-        SwHistory* pHistory = pUndo ? &pUndo->GetHistory() : nullptr;
 
         SwTableBoxFormat *pBoxF = nullptr;
         SwTableLines& rLines = rNdTable.GetTabLines();
@@ -826,59 +799,14 @@ const SwTable* SwDoc::TextToTable( const SwInsertTableOptions& rInsTableOpts,
                 SwTableBox* pBox = rBoxes[ i ];
                 bool bChgSz = false;
 
-                if( pTAFormat )
-                {
-                    sal_uInt8 nId = static_cast<sal_uInt8>(!n ? 0 : (( n+1 == nRows )
-                                            ? 12 : (4 * (1 + ((n-1) & 1 )))));
-                    nId = nId + static_cast<sal_uInt8>(!i ? 0 :
-                                ( i+1 == nCols ? 3 : (1 + ((i-1) & 1))));
-                    if( bUseBoxFormat )
-                        ::lcl_SetDfltBoxAttr( *pBox, *aBoxFormatArr1, nId, pTAFormat );
-                    else
-                    {
-                        bChgSz = nullptr == (*aBoxFormatArr2)[ nId ];
-                        pBoxF = ::lcl_CreateAFormatBoxFormat( *this, *aBoxFormatArr2,
-                                                *pTAFormat, USHRT_MAX, USHRT_MAX, nId );
-                    }
-
-                    // Set Paragraph/Character Attributes if needed
-                    if( pTAFormat->IsFont() || pTAFormat->IsJustify() )
-                    {
-                        aCharSet.ClearItem();
-                        pTAFormat->UpdateToSet( nId, nRows==1, nCols==1, aCharSet,
-                                            SwTableAutoFormatUpdateFlags::Char, nullptr );
-                        if( aCharSet.Count() )
-                        {
-                            SwNodeOffset nSttNd = pBox->GetSttIdx()+1;
-                            SwNodeOffset nEndNd = pBox->GetSttNd()->EndOfSectionIndex();
-                            for( ; nSttNd < nEndNd; ++nSttNd )
-                            {
-                                SwContentNode* pNd = GetNodes()[ nSttNd ]->GetContentNode();
-                                if( pNd )
-                                {
-                                    if( pHistory )
-                                    {
-                                        SwRegHistory aReg( pNd, *pNd, pHistory );
-                                        pNd->SetAttr( aCharSet );
-                                    }
-                                    else
-                                        pNd->SetAttr( aCharSet );
-                                }
-                            }
-                        }
-                    }
-                }
+                sal_uInt8 nId = (i < nCols - 1 ? 0 : 1) + (n ? 2 : 0 );
+                if( bUseBoxFormat )
+                    ::lcl_SetDfltBoxAttr( *pBox, *aBoxFormatArr1, nId );
                 else
                 {
-                    sal_uInt8 nId = (i < nCols - 1 ? 0 : 1) + (n ? 2 : 0 );
-                    if( bUseBoxFormat )
-                        ::lcl_SetDfltBoxAttr( *pBox, *aBoxFormatArr1, nId );
-                    else
-                    {
-                        bChgSz = nullptr == (*aBoxFormatArr2)[ nId ];
-                        pBoxF = ::lcl_CreateDfltBoxFormat( *this, *aBoxFormatArr2,
-                                                        USHRT_MAX, nId );
-                    }
+                    bChgSz = nullptr == (*aBoxFormatArr2)[ nId ];
+                    pBoxF = ::lcl_CreateDfltBoxFormat( *this, *aBoxFormatArr2,
+                                                    USHRT_MAX, nId );
                 }
 
                 if( !bUseBoxFormat )
@@ -3688,6 +3616,7 @@ SwTableNode* SwNodes::SplitTable( SwNode& rPos, bool bAfter,
         pNewTableNd->GetTable().RegisterToFormat( *pNewTableFormat );
 
         pNewTableNd->GetTable().SetTableStyleName(rTable.GetTableStyleName());
+        pNewTableNd->GetTable().SetTableStyleSettings(rTable.GetTableStyleSettings());
 
         // Calculate a new Size?
         // lcl_ChgTableSize: Only execute the second call if the first call was
@@ -3868,192 +3797,455 @@ bool SwNodes::MergeTable( SwNode& rPos, bool bWithPrev )
 
 namespace {
 
-// Use the PtrArray's ForEach method
-struct SetAFormatTabPara
+/// One id for a role position together with the single-row and single-column variants, which
+/// select different boxes of the style for the same position.
+sal_uInt8 lcl_TableStyleRoleKey(sal_uInt8 nPos, bool bSingleRow, bool bSingleCol)
 {
-    SwTableAutoFormat& rTableFormat;
-    SwUndoTableAutoFormat* pUndo;
-    sal_uInt16 nEndBox, nCurBox;
-    sal_uInt8 nAFormatLine, nAFormatBox;
-    bool bSingleRowTable;
-
-    explicit SetAFormatTabPara( const SwTableAutoFormat& rNew )
-        : rTableFormat( const_cast<SwTableAutoFormat&>(rNew) ), pUndo( nullptr ),
-        nEndBox( 0 ), nCurBox( 0 ), nAFormatLine( 0 ), nAFormatBox( 0 ), bSingleRowTable(false)
-    {}
-};
-
+    return static_cast<sal_uInt8>(nPos + (bSingleRow ? 16 : 0) + (bSingleCol ? 32 : 0));
 }
 
-// Forward declare so that the Lines and Boxes can use recursion
-static bool lcl_SetAFormatBox(FndBox_ &, SetAFormatTabPara *pSetPara, bool bResetDirect);
-static bool lcl_SetAFormatLine(FndLine_ &, SetAFormatTabPara *pPara, bool bResetDirect);
-
-static bool lcl_SetAFormatLine(FndLine_ & rLine, SetAFormatTabPara *pPara, bool bResetDirect)
+/// The role position of the top-level cell in row nRow and column nCol.
+sal_uInt8 lcl_TableStyleRolePosition(const SwTable& rTable, size_t nRow, size_t nRows,
+                                     size_t nCol, size_t nCols)
 {
-    for (auto const& it : rLine.GetBoxes())
-    {
-        lcl_SetAFormatBox(*it, pPara, bResetDirect);
-    }
-    return true;
+    const SwTableStyleSettings& rSettings = rTable.GetTableStyleSettings();
+    const sal_uInt8 nRowRole = SwTableAutoFormat::GetTableStyleRowRole(nRow, nRows, rSettings);
+    const sal_uInt8 nColRole = SwTableAutoFormat::GetTableStyleColRole(nCol, nCols, rSettings);
+    return static_cast<sal_uInt8>(nRowRole * SwTableAutoFormat::nRoleCount + nColRole);
 }
 
-static bool lcl_SetAFormatBox(FndBox_ & rBox, SetAFormatTabPara *pSetPara, bool bResetDirect)
+/// Look up (or lazily build) the frame format this table shares between every cell in the
+/// given role, so that toggling a role or switching styles later is a re-parenting of a few
+/// shared formats rather than a rewrite of every cell's attributes.
+SwTableBoxFormat* lcl_GetOrCreateTableStyleRoleFormat(SwDoc& rDoc, SwTable& rTable,
+        const SwTableAutoFormat& rStyle, sal_uInt8 nPos, bool bSingleRow, bool bSingleCol)
 {
-    if (!rBox.GetUpper()->GetUpper()) // Box on first level?
-    {
-        if( !pSetPara->nCurBox )
-            pSetPara->nAFormatBox = 0;
-        else if( pSetPara->nCurBox == pSetPara->nEndBox )
-            pSetPara->nAFormatBox = 3;
-        else //Even column(1) or Odd column(2)
-            pSetPara->nAFormatBox = static_cast<sal_uInt8>(1 + ((pSetPara->nCurBox-1) & 1));
-    }
+    const sal_uInt8 nRoleKey = lcl_TableStyleRoleKey(nPos, bSingleRow, bSingleCol);
+    if (SwTableBoxFormat* pExisting = rTable.FindTableStyleRoleFormat(nRoleKey))
+        return pExisting;
 
-    if (rBox.GetBox()->GetSttNd())
+    SfxItemSet aBoxSet(rDoc.GetAttrPool(), aTableBoxSetRange);
+    rStyle.UpdateToSet(nPos, bSingleRow, bSingleCol, aBoxSet, SwTableAutoFormatUpdateFlags::Box, nullptr);
+    // A theme color the style gives takes the document theme's value for it.
+    sw::ResolveThemeColors(aBoxSet, sw::GetDocumentThemeColors(rDoc));
+
+    SwTableBoxFormat* pRoleFormat = rDoc.MakeTableBoxFormat();
+    // Only the box border and background resolve live for now; leave every other item unset
+    // on the role format so a cell's own size, protection, etc. are never masked by it.
+    if (const SvxBoxItem* pBox = aBoxSet.GetItemIfSet(RES_BOX, false))
+        pRoleFormat->SetFormatAttr(*pBox);
+    if (const SvxBrushItem* pBackground = aBoxSet.GetItemIfSet(RES_BACKGROUND, false))
+        pRoleFormat->SetFormatAttr(*pBackground);
+
+    rTable.AddTableStyleRoleFormat(nRoleKey, pRoleFormat);
+    return pRoleFormat;
+}
+
+/// Look up (or lazily build) the paragraph collection that carries the text formatting the
+/// style defines for the given role, on top of the paragraph style rBase. Returns nullptr
+/// when the role defines no text formatting, so that such paragraphs simply keep rBase.
+SwTextFormatColl* lcl_GetOrCreateTableStyleRoleColl(SwDoc& rDoc, SwTable& rTable,
+        const SwTableAutoFormat& rStyle, sal_uInt8 nPos, bool bSingleRow, bool bSingleCol,
+        SwTextFormatColl& rBase)
+{
+    const sal_uInt8 nRoleKey = lcl_TableStyleRoleKey(nPos, bSingleRow, bSingleCol);
+    if (SwTextFormatColl* pExisting = rTable.FindTableStyleRoleColl(nRoleKey, rBase))
+        return pExisting;
+
+    // Only the text items the style really defines for this role go onto the collection;
+    // everything else keeps coming from the paragraph style below it.
+    SfxItemSet aTextSet(rDoc.GetAttrPool(), aTextFormatCollSetRange);
+    rStyle.UpdateToSet(nPos, bSingleRow, bSingleCol, aTextSet,
+            SwTableAutoFormatUpdateFlags::Char | SwTableAutoFormatUpdateFlags::DefinedOnly,
+            nullptr);
+    if (!aTextSet.Count())
+        return nullptr;
+    // A theme color the style gives takes the document theme's value for it.
+    sw::ResolveThemeColors(aTextSet, sw::GetDocumentThemeColors(rDoc));
+
+    SwTextFormatColl* pRoleColl = rDoc.MakeTableStyleRoleColl(rBase);
+    pRoleColl->SetFormatAttr(aTextSet);
+    rTable.AddTableStyleRoleColl(nRoleKey, rBase, pRoleColl);
+    return pRoleColl;
+}
+
+/// Resolve the text formatting of every paragraph in the cell whose section starts at
+/// rBoxStart against the role at nPos, or end the table style text layer for them when
+/// pStyle is null. Paragraphs of a table nested in the cell belong to that table's own
+/// style and are left alone.
+void lcl_ApplyTableStyleRoleToCellText(SwDoc& rDoc, SwTable& rTable,
+        const SwTableAutoFormat* pStyle, sal_uInt8 nPos, bool bSingleRow, bool bSingleCol,
+        const SwStartNode& rBoxStart)
+{
+    SwNodes& rNodes = rDoc.GetNodes();
+    SwNodeOffset nIndex = rBoxStart.GetIndex() + 1;
+    const SwNodeOffset nEnd = rBoxStart.EndOfSectionIndex();
+    while (nIndex < nEnd)
     {
-        SwTableBox* pSetBox = rBox.GetBox();
-        if (!pSetBox->HasDirectFormatting() || bResetDirect)
+        SwNode* pNode = rNodes[nIndex];
+        if (pNode->IsTableNode())
         {
-            if (bResetDirect)
-                pSetBox->SetDirectFormatting(false);
+            nIndex = pNode->EndOfSectionIndex() + 1;
+            continue;
+        }
+        if (SwTextNode* pTextNode = pNode->GetTextNode())
+        {
+            SwTextFormatColl* pRoleColl = pStyle
+                ? lcl_GetOrCreateTableStyleRoleColl(rDoc, rTable, *pStyle, nPos, bSingleRow,
+                                                    bSingleCol, pTextNode->GetTextFormatColl())
+                : nullptr;
+            pTextNode->SetTableStyleRoleColl(pRoleColl);
+        }
+        ++nIndex;
+    }
+}
 
-            SwDoc& rDoc = pSetBox->GetFrameFormat()->GetDoc();
-            SfxItemSet aCharSet(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_BEGIN, RES_PARATR_LIST_END-1>(rDoc.GetAttrPool()));
-            SfxItemSet aBoxSet(rDoc.GetAttrPool(), aTableBoxSetRange);
-            sal_uInt8 nPos = pSetPara->nAFormatLine * 4 + pSetPara->nAFormatBox;
-            const bool bSingleRowTable = pSetPara->bSingleRowTable;
-            const bool bSingleColTable = pSetPara->nEndBox == 0;
-            pSetPara->rTableFormat.UpdateToSet(nPos, bSingleRowTable, bSingleColTable, aCharSet, SwTableAutoFormatUpdateFlags::Char, nullptr);
-            pSetPara->rTableFormat.UpdateToSet(nPos, bSingleRowTable, bSingleColTable, aBoxSet, SwTableAutoFormatUpdateFlags::Box, rDoc.GetNumberFormatter());
+}
 
-            if (aCharSet.Count())
+SwTextFormatColl* SwDoc::GetTableStyleRoleColl(SwTable& rTable, const SwStartNode& rBoxStart,
+                                               SwTextFormatColl& rBase)
+{
+    const TableStyleName& rStyleName = rTable.GetTableStyleName();
+    if (rStyleName.isEmpty())
+        return nullptr;
+    const SwTableAutoFormat* pStyle = GetTableStyles().FindAutoFormat(rStyleName);
+    if (!pStyle)
+        return nullptr;
+
+    const SwTableBox* pBox = rTable.GetTableBox(rBoxStart.GetIndex());
+    if (!pBox)
+        return nullptr;
+    // Roles follow the top-level grid: a cell of a sub table (old table model) takes the role
+    // of the top-level cell that holds it.
+    const SwTableLine* pLine = pBox->GetUpper();
+    while (pLine && pLine->GetUpper())
+    {
+        pBox = pLine->GetUpper();
+        pLine = pBox->GetUpper();
+    }
+    if (!pLine)
+        return nullptr;
+
+    const SwTableLines& rLines = rTable.GetTabLines();
+    const SwTableBoxes& rBoxes = pLine->GetTabBoxes();
+    const sal_uInt16 nRow = rLines.GetPos(pLine);
+    const auto aBoxIt = std::find(rBoxes.begin(), rBoxes.end(), pBox);
+    if (nRow == USHRT_MAX || aBoxIt == rBoxes.end())
+        return nullptr;
+    const size_t nRows = rLines.size();
+    const size_t nCols = rBoxes.size();
+    const size_t nCol = std::distance(rBoxes.begin(), aBoxIt);
+    const sal_uInt8 nPos = lcl_TableStyleRolePosition(rTable, nRow, nRows, nCol, nCols);
+    return lcl_GetOrCreateTableStyleRoleColl(*this, rTable, *pStyle, nPos, nRows == 1,
+                                             nCols == 1, rBase);
+}
+
+bool SwDoc::ApplyTableStyleLive(SwTableNode& rTableNode, bool bResetCellFormatting,
+                                bool bStyleDefinitionChanged)
+{
+    SwTable& rTable = rTableNode.GetTable();
+    const TableStyleName& rStyleName = rTable.GetTableStyleName();
+    const SwTableStyleSettings& rSettings = rTable.GetTableStyleSettings();
+    SwTableAutoFormat* pStyle
+        = rStyleName.isEmpty() ? nullptr : GetTableStyles().FindAutoFormat(rStyleName);
+
+    // A cached role format or collection is only valid for the exact style, settings and
+    // style definition it was built under. When any of those changed, start from a clean
+    // cache; the Take calls keep the old objects around just long enough to free whichever
+    // ones end up with no cells or paragraphs still using them, below. When nothing changed,
+    // the cache stays and only the cells and paragraphs whose role moved get re-derived, so a
+    // row insert does not disturb the rest of the table.
+    std::vector<SwTableBoxFormat*> aPreviousRoleFormats;
+    std::vector<SwTextFormatColl*> aPreviousRoleColls;
+    if (bStyleDefinitionChanged || !rTable.HasTableStyleRoleCacheFor(rStyleName, rSettings))
+    {
+        aPreviousRoleFormats = rTable.TakeTableStyleRoleFormats();
+        aPreviousRoleColls = rTable.TakeTableStyleRoleColls();
+    }
+
+    bool bChangedAnyBox = false;
+    const SwTableLines& rLines = rTable.GetTabLines();
+    const size_t nRows = rLines.size();
+    for (size_t nRow = 0; nRow < nRows; ++nRow)
+    {
+        const SwTableBoxes& rBoxes = rLines[nRow]->GetTabBoxes();
+        const size_t nCols = rBoxes.size();
+        for (size_t nCol = 0; nCol < nCols; ++nCol)
+        {
+            SwTableBox* pBox = rBoxes[nCol];
+            // A box without its own start node is a container for a nested table rather
+            // than a real cell; leave whatever formatting it already has alone.
+            if (!pBox->GetSttNd())
+                continue;
+
+            const sal_uInt8 nPos
+                = pStyle ? lcl_TableStyleRolePosition(rTable, nRow, nRows, nCol, nCols) : 0;
+            lcl_ApplyTableStyleRoleToCellText(*this, rTable, pStyle, nPos, nRows == 1,
+                                              nCols == 1, *pBox->GetSttNd());
+
+            SwTableBoxFormat* pOwnFormat = pBox->ClaimFrameFormat();
+            // Without a style, fall back to the same parent a freshly created table box
+            // format gets, so the cell's border and background resolve like any other
+            // never-styled cell instead of keeping a stale derivation.
+            SwFrameFormat* pTargetFormat = pStyle
+                ? lcl_GetOrCreateTableStyleRoleFormat(*this, rTable, *pStyle, nPos,
+                                                      nRows == 1, nCols == 1)
+                : GetDfltFrameFormat();
+            const bool bRederive = pOwnFormat->DerivedFrom() != pTargetFormat;
+            if (!bRederive && !bResetCellFormatting)
+                continue;
+
+            // The cell's effective border and background before the change.
+            SwAttrSet aOldEffective(GetAttrPool(), aTableBoxSetRange);
+            aOldEffective.Put(pOwnFormat->GetFormatAttr(RES_BOX));
+            aOldEffective.Put(pOwnFormat->GetFormatAttr(RES_BACKGROUND));
+
+            // A cell's own border and background are the user's and normally stay; only an
+            // explicit request replaces them with the style's.
+            if (bResetCellFormatting)
             {
-                SwNodeOffset nSttNd = pSetBox->GetSttIdx()+1;
-                SwNodeOffset nEndNd = pSetBox->GetSttNd()->EndOfSectionIndex();
-                for (; nSttNd < nEndNd; ++nSttNd)
+                pOwnFormat->ResetFormatAttr(RES_BOX);
+                pOwnFormat->ResetFormatAttr(RES_BACKGROUND);
+            }
+            if (bRederive)
+                pOwnFormat->SetDerivedFrom(pTargetFormat);
+
+            // The cell frames learn about the border and background that took effect the
+            // same way they do for direct formatting: a table-box format change for the
+            // collapsing-borders bookkeeping of the neighbouring row, and an attribute change
+            // for the items themselves, which positions the cell's content again.
+            pOwnFormat->CallSwClientNotify(sw::TableBoxFormatChanged(*pOwnFormat, *pBox));
+            SwAttrSet aNewEffective(GetAttrPool(), aTableBoxSetRange);
+            aNewEffective.Put(pOwnFormat->GetFormatAttr(RES_BOX));
+            aNewEffective.Put(pOwnFormat->GetFormatAttr(RES_BACKGROUND));
+            SwAttrSetChg aOldChg(pOwnFormat->GetAttrSet(), aOldEffective);
+            SwAttrSetChg aNewChg(pOwnFormat->GetAttrSet(), aNewEffective);
+            pOwnFormat->CallSwClientNotify(sw::AttrSetChangeHint(&aOldChg, &aNewChg));
+            bChangedAnyBox = true;
+        }
+    }
+
+    // Any of the previous role formats left with no cells still deriving from them (because
+    // this table no longer uses that role, or no longer uses a style at all) can go.
+    for (SwTableBoxFormat* pOldFormat : aPreviousRoleFormats)
+        if (!pOldFormat->HasWriterListeners())
+            delete pOldFormat;
+    for (SwTextFormatColl* pOldColl : aPreviousRoleColls)
+        if (!pOldColl->HasWriterListeners())
+            delete pOldColl;
+    rTable.SetTableStyleRoleCacheFor(rStyleName, rSettings);
+
+    if (bChangedAnyBox)
+    {
+        // The cached HTML layout was computed from cell borders that just changed.
+        rTable.SetHTMLTableLayout(std::shared_ptr<SwHTMLTableLayout>());
+        getIDocumentState().SetModified();
+    }
+
+    return pStyle != nullptr;
+}
+
+bool SwDoc::ApplyTableStyleLiveWithUndo(SwTableNode& rTableNode,
+                                        std::unique_ptr<SwUndoTableStyleLive> pUndo,
+                                        bool bResetCellFormatting, bool bApplyTableProperties)
+{
+    IDocumentUndoRedo& rUndoRedo = GetIDocumentUndoRedo();
+    const bool bUndo = pUndo != nullptr;
+    if (bUndo)
+    {
+        rUndoRedo.AppendUndo(std::move(pUndo));
+        // The attribute changes made below are part of applying the style and settings pair,
+        // not actions of their own: undoing puts the previous pair back, see
+        // SwUndoTableStyleLive, rather than replaying each change.
+        rUndoRedo.DoUndo(false);
+    }
+
+    if (bApplyTableProperties)
+    {
+        SwTable& rTable = rTableNode.GetTable();
+        if (const SwTableAutoFormat* pStyle
+            = GetTableStyles().FindAutoFormat(rTable.GetTableStyleName()))
+            pStyle->RestoreTableProperties(rTable);
+    }
+
+    const bool bRet = ApplyTableStyleLive(rTableNode, bResetCellFormatting);
+
+    if (bUndo)
+        rUndoRedo.DoUndo(true);
+    return bRet;
+}
+
+namespace {
+
+/// Whether an own color means the same as the style's color: the same value and, when the
+/// own color carries a theme color, the same theme reference with the same transformations
+/// on the style's side. An own color without a theme reference compares by its value alone,
+/// since a file format that keeps no theme reference for it cannot say more than the value.
+/// An own theme reference over a style color without one is a link the style does not give,
+/// so the two differ. The other fields a complex color records on the way through a file
+/// format do not matter here.
+bool lcl_SameColor(const Color& rColor, const model::ComplexColor& rComplexColor,
+                   const Color& rOtherColor, const model::ComplexColor& rOtherComplexColor)
+{
+    if (rColor != rOtherColor)
+        return false;
+    if (!rComplexColor.isValidThemeType())
+        return true;
+    if (!rOtherComplexColor.isValidThemeType())
+        return false;
+    return rComplexColor.getThemeColorType() == rOtherComplexColor.getThemeColorType()
+           && rComplexColor.getTransformations() == rOtherComplexColor.getTransformations();
+}
+
+bool lcl_SameBorderLine(const editeng::SvxBorderLine* pLine, const editeng::SvxBorderLine* pOther)
+{
+    if (!pLine || !pOther)
+        return pLine == pOther;
+    // A double line can split the same total width into different parts.
+    return *pLine == *pOther
+           || (pLine->GetBorderLineStyle() == pOther->GetBorderLineStyle()
+               && pLine->GetWidth() == pOther->GetWidth()
+               && pLine->GetOutWidth() == pOther->GetOutWidth()
+               && pLine->GetInWidth() == pOther->GetInWidth()
+               && pLine->GetDistance() == pOther->GetDistance()
+               && lcl_SameColor(pLine->GetColor(), pLine->getComplexColor(), pOther->GetColor(),
+                                pOther->getComplexColor()));
+}
+
+/// Whether a paragraph's or cell's own item repeats what the table style gives it. Colors
+/// compare by what they mean, see lcl_SameColor, since a loaded item and the style's item
+/// can differ in the fields a complex color carries along without looking any different.
+bool lcl_ItemRepeatsStyle(const SfxPoolItem& rOwn, const SfxPoolItem& rBaked)
+{
+    if (rOwn == rBaked)
+        return true;
+    switch (rOwn.Which())
+    {
+        case RES_CHRATR_COLOR:
+        {
+            const auto& rOwnColor = static_cast<const SvxColorItem&>(rOwn);
+            const auto& rBakedColor = static_cast<const SvxColorItem&>(rBaked);
+            return lcl_SameColor(rOwnColor.GetValue(), rOwnColor.getComplexColor(),
+                                 rBakedColor.GetValue(), rBakedColor.getComplexColor());
+        }
+        case RES_BACKGROUND:
+        {
+            const auto& rOwnBrush = static_cast<const SvxBrushItem&>(rOwn);
+            const auto& rBakedBrush = static_cast<const SvxBrushItem&>(rBaked);
+            return !rOwnBrush.GetGraphicObject() && !rBakedBrush.GetGraphicObject()
+                   && lcl_SameColor(rOwnBrush.GetColor(), rOwnBrush.getComplexColor(),
+                                    rBakedBrush.GetColor(), rBakedBrush.getComplexColor());
+        }
+        case RES_BOX:
+        {
+            const auto& rOwnBox = static_cast<const SvxBoxItem&>(rOwn);
+            const auto& rBakedBox = static_cast<const SvxBoxItem&>(rBaked);
+            for (SvxBoxItemLine eLine : { SvxBoxItemLine::TOP, SvxBoxItemLine::BOTTOM,
+                                          SvxBoxItemLine::LEFT, SvxBoxItemLine::RIGHT })
+            {
+                if (!lcl_SameBorderLine(rOwnBox.GetLine(eLine), rBakedBox.GetLine(eLine))
+                    || rOwnBox.GetDistance(eLine) != rBakedBox.GetDistance(eLine))
+                    return false;
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+/// The which ids of the items in rOwnSet that are also in rBakedSet with the same value.
+std::vector<sal_uInt16> lcl_GetItemsRepeating(const SfxItemSet& rOwnSet, const SfxItemSet& rBakedSet)
+{
+    std::vector<sal_uInt16> aRepeated;
+    if (!rBakedSet.Count())
+        return aRepeated;
+    SfxItemIter aIter(rBakedSet);
+    for (const SfxPoolItem* pBakedItem = aIter.GetCurItem(); pBakedItem;
+         pBakedItem = aIter.NextItem())
+    {
+        const SfxPoolItem* pOwnItem = nullptr;
+        if (SfxItemState::SET == rOwnSet.GetItemState(pBakedItem->Which(), false, &pOwnItem)
+            && lcl_ItemRepeatsStyle(*pOwnItem, *pBakedItem))
+            aRepeated.push_back(pBakedItem->Which());
+    }
+    return aRepeated;
+}
+
+}
+
+void SwDoc::StripBakedTableStyleFormatting(SwTableNode& rTableNode, bool bCompleteStyleBoxes)
+{
+    if (!ApplyTableStyleLive(rTableNode))
+        return;
+
+    SwTable& rTable = rTableNode.GetTable();
+    const SwTableAutoFormat* pStyle = GetTableStyles().FindAutoFormat(rTable.GetTableStyleName());
+    const SwTableLines& rLines = rTable.GetTabLines();
+    const size_t nRows = rLines.size();
+    for (size_t nRow = 0; nRow < nRows; ++nRow)
+    {
+        const SwTableBoxes& rBoxes = rLines[nRow]->GetTabBoxes();
+        const size_t nCols = rBoxes.size();
+        for (size_t nCol = 0; nCol < nCols; ++nCol)
+        {
+            SwTableBox* pBox = rBoxes[nCol];
+            if (!pBox->GetSttNd())
+                continue;
+
+            // What the old code wrote into a cell of this role: the complete box and text
+            // item sets of the style box, defaults included, not just the items the style
+            // defines. A paragraph attribute that equals such a default (a body cell set to
+            // regular weight, say) is dropped too, so the same paragraph style shows through.
+            const sal_uInt8 nPos = lcl_TableStyleRolePosition(rTable, nRow, nRows, nCol, nCols);
+            SfxItemSet aBakedBoxSet(GetAttrPool(), aTableBoxSetRange);
+            pStyle->UpdateToSet(nPos, nRows == 1, nCols == 1, aBakedBoxSet,
+                                SwTableAutoFormatUpdateFlags::Box, GetNumberFormatter());
+            // The values to compare with are the ones the style resolves to in this document.
+            sw::ResolveThemeColors(aBakedBoxSet, sw::GetDocumentThemeColors(*this));
+            SfxItemSet aBakedTextSet(GetAttrPool(), aTextFormatCollSetRange);
+            pStyle->UpdateToSet(nPos, nRows == 1, nCols == 1, aBakedTextSet,
+                                bCompleteStyleBoxes
+                                    ? SwTableAutoFormatUpdateFlags::Char
+                                    : SwTableAutoFormatUpdateFlags::Char
+                                          | SwTableAutoFormatUpdateFlags::DefinedOnly,
+                                nullptr);
+            sw::ResolveThemeColors(aBakedTextSet, sw::GetDocumentThemeColors(*this));
+
+            SwTableBoxFormat* pOwnFormat = pBox->GetFrameFormat();
+            for (sal_uInt16 nWhich : { sal_uInt16(RES_BOX), sal_uInt16(RES_BACKGROUND) })
+            {
+                const SfxPoolItem* pOwnItem = nullptr;
+                const SfxPoolItem* pBakedItem = nullptr;
+                if (SfxItemState::SET == pOwnFormat->GetItemState(nWhich, false, &pOwnItem)
+                    && SfxItemState::SET == aBakedBoxSet.GetItemState(nWhich, false, &pBakedItem)
+                    && lcl_ItemRepeatsStyle(*pOwnItem, *pBakedItem))
                 {
-                    SwContentNode* pNd = rDoc.GetNodes()[ nSttNd ]->GetContentNode();
-                    if (pNd)
-                        pNd->SetAttr(aCharSet);
+                    pOwnFormat = pBox->ClaimFrameFormat();
+                    pOwnFormat->ResetFormatAttr(nWhich);
                 }
             }
 
-            if (aBoxSet.Count())
+            SwNodeOffset nIndex = pBox->GetSttIdx() + 1;
+            const SwNodeOffset nEnd = pBox->GetSttNd()->EndOfSectionIndex();
+            for (; nIndex < nEnd; ++nIndex)
             {
-                if (pSetPara->pUndo && SfxItemState::SET == aBoxSet.GetItemState(RES_BOXATR_FORMAT))
-                    pSetPara->pUndo->SaveBoxContent( *pSetBox );
-
-                pSetBox->ClaimFrameFormat()->SetFormatAttr(aBoxSet);
+                SwNode* pNode = GetNodes()[nIndex];
+                if (pNode->IsTableNode())
+                {
+                    nIndex = pNode->EndOfSectionIndex();
+                    continue;
+                }
+                SwTextNode* pTextNode = pNode->GetTextNode();
+                if (!pTextNode || !pTextNode->GetpSwAttrSet())
+                    continue;
+                const std::vector<sal_uInt16> aRepeated
+                    = lcl_GetItemsRepeating(*pTextNode->GetpSwAttrSet(), aBakedTextSet);
+                if (!aRepeated.empty())
+                    pTextNode->ResetAttr(aRepeated);
             }
         }
     }
-    else
-    {
-        // Not sure how this situation can occur, but apparently we have some kind of table in table.
-        // I am guessing at how to best handle singlerow in this situation.
-        const bool bOrigSingleRowTable = pSetPara->bSingleRowTable;
-        pSetPara->bSingleRowTable = rBox.GetLines().size() == 1;
-        for (auto const& rpFndLine : rBox.GetLines())
-        {
-            lcl_SetAFormatLine(*rpFndLine, pSetPara, bResetDirect);
-        }
-        pSetPara->bSingleRowTable = bOrigSingleRowTable;
-    }
-
-    if (!rBox.GetUpper()->GetUpper()) // a BaseLine
-        ++pSetPara->nCurBox;
-    return true;
-}
-
-bool SwDoc::SetTableAutoFormat(const SwSelBoxes& rBoxes,
-        const SwTableAutoFormat& rNew, bool bResetDirect,
-        TableStyleName const*const pStyleNameToSet)
-{
-    OSL_ENSURE( !rBoxes.empty(), "No valid Box list" );
-    SwTableNode* pTableNd = const_cast<SwTableNode*>(rBoxes[0]->GetSttNd()->FindTableNode());
-    if( !pTableNd )
-        return false;
-
-    // Find all Boxes/Lines
-    FndBox_ aFndBox( nullptr, nullptr );
-    {
-        FndPara aPara( rBoxes, &aFndBox );
-        ForEach_FndLineCopyCol( pTableNd->GetTable().GetTabLines(), &aPara );
-    }
-    if( aFndBox.GetLines().empty() )
-        return false;
-
-    SwTable &table = pTableNd->GetTable();
-    table.SetHTMLTableLayout(std::shared_ptr<SwHTMLTableLayout>());
-
-    FndBox_* pFndBox = &aFndBox;
-    while( 1 == pFndBox->GetLines().size() &&
-            1 == pFndBox->GetLines().front()->GetBoxes().size())
-    {
-        pFndBox = pFndBox->GetLines().front()->GetBoxes()[0].get();
-    }
-
-    if( pFndBox->GetLines().empty() ) // One too far? (only one sel. Box)
-        pFndBox = pFndBox->GetUpper()->GetUpper();
-
-    // Disable Undo, but first store parameters
-    SwUndoTableAutoFormat* pUndo = nullptr;
-    bool const bUndo(GetIDocumentUndoRedo().DoesUndo());
-    if (bUndo)
-    {
-        pUndo = new SwUndoTableAutoFormat( *pTableNd, rNew );
-        GetIDocumentUndoRedo().AppendUndo(std::unique_ptr<SwUndo>(pUndo));
-        GetIDocumentUndoRedo().DoUndo(false);
-    }
-
-    if (pStyleNameToSet)
-    {   // tdf#98226 do this here where undo can record it
-        pTableNd->GetTable().SetTableStyleName(*pStyleNameToSet);
-    }
-
-    rNew.RestoreTableProperties(table);
-
-    SetAFormatTabPara aPara( rNew );
-    FndLines_t& rFLns = pFndBox->GetLines();
-    aPara.bSingleRowTable = rFLns.size() == 1;
-
-    for (FndLines_t::size_type n = 0; n < rFLns.size(); ++n)
-    {
-        FndLine_* pLine = rFLns[n].get();
-
-        // Set Upper to 0 (thus simulate BaseLine)
-        FndBox_* pSaveBox = pLine->GetUpper();
-        pLine->SetUpper( nullptr );
-
-        if( !n )
-            aPara.nAFormatLine = 0;
-        else if (static_cast<size_t>(n+1) == rFLns.size())
-            aPara.nAFormatLine = 3;
-        else
-            aPara.nAFormatLine = static_cast<sal_uInt8>(1 + ((n-1) & 1 ));
-
-        aPara.nAFormatBox = 0;
-        aPara.nCurBox = 0;
-        aPara.nEndBox = pLine->GetBoxes().size()-1;
-        aPara.pUndo = pUndo;
-        for (auto const& it : pLine->GetBoxes())
-        {
-            lcl_SetAFormatBox(*it, &aPara, bResetDirect);
-        }
-
-        pLine->SetUpper( pSaveBox );
-    }
-
-    if( pUndo )
-    {
-        GetIDocumentUndoRedo().DoUndo(bUndo);
-    }
-
-    getIDocumentState().SetModified();
-    getIDocumentFieldsAccess().SetFieldsDirty( true, nullptr, SwNodeOffset(0) );
-
-    return true;
 }
 
 /**
@@ -4822,7 +5014,7 @@ std::unique_ptr<SwTableAutoFormat> SwDoc::DelTableStyle(const TableStyleName& rN
 
     std::unique_ptr<SwTableAutoFormat> pReleasedFormat = GetTableStyles().ReleaseAutoFormat(rName);
 
-    std::vector<SwTable*> vAffectedTables;
+    std::vector<std::pair<SwTable*, SwTableStyleSettings>> vAffectedTables;
     if (pReleasedFormat)
     {
         size_t nTableCount = GetTableFrameFormatCount(true);
@@ -4832,10 +5024,17 @@ std::unique_ptr<SwTableAutoFormat> SwDoc::DelTableStyle(const TableStyleName& rN
             SwTable* pTable = SwTable::FindTable(pFrameFormat);
             if (pTable->GetTableStyleName() == pReleasedFormat->GetName())
             {
+                // Keep the table's settings for undo before they are reset below: the
+                // style being deleted is what gave them meaning, but a later undo restores
+                // the style and expects its own settings back too, not the defaults.
+                vAffectedTables.emplace_back(pTable, pTable->GetTableStyleSettings());
                 pTable->SetTableStyleName(TableStyleName());
-                vAffectedTables.push_back(pTable);
+                pTable->SetTableStyleSettings(SwTableStyleSettings());
             }
         }
+
+        for (const auto& rAffectedTable : vAffectedTables)
+            ApplyTableStyleLive(*rAffectedTable.first->GetTableNode());
 
         getIDocumentState().SetModified();
 
@@ -4865,8 +5064,8 @@ void SwDoc::ChgTableStyle(const TableStyleName& rName, const SwTableAutoFormat& 
         SwFrameFormat* pFrameFormat = &GetTableFrameFormat(i, true);
         SwTable* pTable = SwTable::FindTable(pFrameFormat);
         if (pTable->GetTableStyleName() == rName)
-            if (SwFEShell* pFEShell = GetDocShell()->GetFEShell())
-                pFEShell->UpdateTableStyleFormatting(pTable->GetTableNode());
+            ApplyTableStyleLive(*pTable->GetTableNode(), /*bResetCellFormatting=*/false,
+                                /*bStyleDefinitionChanged=*/true);
     }
 
     getIDocumentState().SetModified();

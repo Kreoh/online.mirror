@@ -49,16 +49,16 @@ namespace svxform
 {
 
 
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::script::XEventAttacherManager;
     using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::script::XScriptListener;
     using ::com::sun::star::script::ScriptEvent;
     using ::com::sun::star::lang::EventObject;
     using ::cpo::uno::Any;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::com::sun::star::lang::DisposedException;
-    using ::com::sun::star::uno::RuntimeException;
+    using ::cpo::uno::RuntimeException;
     using ::cpo::uno::Exception;
     using ::cpo::uno::Sequence;
     using ::com::sun::star::awt::XControl;
@@ -81,10 +81,10 @@ namespace svxform
         explicit FormScriptListener( FormScriptingEnvironment * pScriptExecutor );
 
         // XScriptListener
-        virtual void SAL_CALL firing( const ScriptEvent& aEvent ) override;
-        virtual Any SAL_CALL approveFiring( const ScriptEvent& aEvent ) override;
+        virtual void firing( const ScriptEvent& aEvent ) override;
+        virtual Any approveFiring( const ScriptEvent& aEvent ) override;
         // XEventListener
-        virtual void SAL_CALL disposing( const EventObject& Source ) override;
+        virtual void disposing( const EventObject& Source ) override;
 
         // lifetime control
         void dispose();
@@ -397,10 +397,6 @@ namespace svxform
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUnoControlContainer",u"setTabControllers"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUnoControlContainer",u"addTabController"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUnoControlContainer",u"removeTabController"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUserInputInterception",u"addKeyHandler"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUserInputInterception",u"removeKeyHandler"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUserInputInterception",u"addMouseClickHandler"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XUserInputInterception",u"removeMouseClickHandler"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XVclContainer",u"addVclContainerListener"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XVclContainer",u"removeVclContainerListener"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.awt.XVclContainerListener",u"windowAdded"),
@@ -479,7 +475,6 @@ namespace svxform
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.document.XEventBroadcaster",u"addEventListener"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.document.XEventBroadcaster",u"removeEventListener"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.document.XEventListener",u"notifyEvent"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.document.XStorageChangeListener",u"notifyStorageChange"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.drawing.XControlShape",u"setControl"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.form.XApproveActionBroadcaster",u"addApproveActionListener"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.form.XApproveActionBroadcaster",u"removeApproveActionListener"),
@@ -663,8 +658,8 @@ namespace svxform
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.lang.XConnectionPointContainer",u"advise"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.lang.XConnectionPointContainer",u"unadvise"),
             pair<std::u16string_view,std::u16string_view>(u"com.sun.star.script.XAllListener",u"firing"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.uno.XInterface",u"acquire"),
-            pair<std::u16string_view,std::u16string_view>(u"com.sun.star.uno.XInterface",u"release"),
+            pair<std::u16string_view,std::u16string_view>(u"cpo.uno.XInterface",u"acquire"),
+            pair<std::u16string_view,std::u16string_view>(u"cpo.uno.XInterface",u"release"),
             pair<std::u16string_view,std::u16string_view>(u"cpo.uno.XReference",u"dispose")};
 
         pair<std::u16string_view,std::u16string_view> k(_rListenerType, _rMethodName);
@@ -681,7 +676,7 @@ namespace svxform
     }
 
 
-    void SAL_CALL FormScriptListener::firing( const ScriptEvent& _rEvent )
+    void FormScriptListener::firing( const ScriptEvent& _rEvent )
     {
         if ( _rEvent.ScriptType == "VBAInterop" )
            return; // not handled here
@@ -702,7 +697,7 @@ namespace svxform
     }
 
 
-    Any SAL_CALL FormScriptListener::approveFiring( const ScriptEvent& _rEvent )
+    Any FormScriptListener::approveFiring( const ScriptEvent& _rEvent )
     {
         Any aResult;
 
@@ -714,7 +709,7 @@ namespace svxform
     }
 
 
-    void SAL_CALL FormScriptListener::disposing( const EventObject& /*Source*/ )
+    void FormScriptListener::disposing( const EventObject& /*Source*/ )
     {
         // not interested in
     }

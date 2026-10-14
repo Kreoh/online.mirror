@@ -27,14 +27,14 @@
 
 using namespace ::com::sun::star::accessibility;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 DocumentFocusListener::DocumentFocusListener(AquaA11yFocusTracker& rTracker) :
     m_aFocusTracker(rTracker)
 {
 }
 
-void SAL_CALL
+void
 DocumentFocusListener::disposing( const EventObject& aEvent )
 {
     // Unref the object here, but do not remove as listener since the object
@@ -43,7 +43,7 @@ DocumentFocusListener::disposing( const EventObject& aEvent )
         m_aRefList.erase(aEvent.Source);
 }
 
-void SAL_CALL
+void
 DocumentFocusListener::notifyEvent( const AccessibleEventObject& aEvent )
 {
     try {

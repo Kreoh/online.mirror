@@ -21,7 +21,7 @@
 
 #include <vcl/idle.hxx>
 #include <comphelper/errcode.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <vcl/vclptr.hxx>
 #include "patattr.hxx"
 #include <sal/types.h>
@@ -29,7 +29,6 @@
 #include "interpretercontext.hxx"
 #include "rangelst.hxx"
 #include "rangenam.hxx"
-#include "recursionhelper.hxx"
 #include "tabopparams.hxx"
 #include "types.hxx"
 #include <formula/grammar.hxx>
@@ -51,13 +50,14 @@
 #include <map>
 #include <shared_mutex>
 #include <optional>
+#include <o3tl/enumarray.hxx>
+#include <svx/compatflags.hxx>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "markdata.hxx"
-#include "drwlayer.hxx"
 
 #include "SheetViewTypes.hxx"
 
@@ -137,8 +137,10 @@ class SfxItemPool;
 class SfxPrinter;
 class SfxStyleSheetBase;
 class SvMemoryStream;
+class SvStream;
 class SvxBoxInfoItem;
 class SvxBoxItem;
+class SvxBrushItem;
 class SvxForbiddenCharactersTable;
 namespace sfx2 {
     class LinkManager;
@@ -161,12 +163,14 @@ class ScDetOpList;
 class ScDocOptions;
 class ScDocProtection;
 class ScDocumentPool;
+class ScDrawLayer;
 class ScExtDocOptions;
 class ScExternalRefManager;
 class ScFormulaCell;
 class ScMacroManager;
 class ScOutlineTable;
 class ScPrintRangeSaver;
+class ScRecursionHelper;
 class ScStyleSheet;
 class ScStyleSheetPool;
 class ScTable;
@@ -383,25 +387,15 @@ private:
 public:
     SC_DLLPUBLIC CellAttributeHelper& getCellAttributeHelper() const;
 
-    void setConnectionVector(const ConnectionVector& rIn)
-    {
-        maConnectionVector = rIn;
-    }
+    SC_DLLPUBLIC void setConnectionVector(const ConnectionVector& rIn);
 
     const ConnectionVector& getConnectionVector() const
     {
         return maConnectionVector;
     }
 
-    void setSheetQueryTables(SCTAB nTab, QueryTableModelVector aIn)
-    {
-        maSheetQueryTables[nTab] = std::move(aIn);
-    }
-    const QueryTableModelVector* getSheetQueryTables(SCTAB nTab) const
-    {
-        auto it = maSheetQueryTables.find(nTab);
-        return it == maSheetQueryTables.end() ? nullptr : &it->second;
-    }
+    SC_DLLPUBLIC void setSheetQueryTables(SCTAB nTab, QueryTableModelVector aIn);
+    SC_DLLPUBLIC const QueryTableModelVector* getSheetQueryTables(SCTAB nTab) const;
     bool hasAnyQueryTables() const { return !maSheetQueryTables.empty(); }
 
     void UpdateQueryTables(const sc::RefUpdateInsertTabContext& rCxt);
@@ -426,6 +420,8 @@ private:
     VclPtr<SfxPrinter>  mpPrinter;
     VclPtr<VirtualDevice> mpVirtualDevice_100th_mm;
     std::unique_ptr<ScDrawLayer> mpDrawLayer;           // SdrModel
+    // The compatibility flags set while there is no draw layer, all empty once it is made.
+    o3tl::enumarray<SdrCompatibilityFlag, std::optional<bool>> maPendingCompatibilityFlags;
     rtl::Reference<XColorList> pColorList;
     std::unique_ptr<ScValidationDataList> pValidationList;              // validity
     sal_uInt32 mnLastValidationListMax = 0;
@@ -498,7 +494,7 @@ private:
 
     Idle                aTrackIdle;
 
-    css::uno::Reference< css::script::vba::XVBAEventProcessor >
+    cpo::uno::Reference< css::script::vba::XVBAEventProcessor >
                         mxVbaEvents;
 
     // Stores Goal Seek settings
@@ -654,6 +650,8 @@ private:
 
     bool                mbTrackFormulasPending  : 1;
     bool                mbFinalTrackFormulas    : 1;
+    // True while CompileDBFormula() recompiles table/DB refs (its SetDirty is not a user edit).
+    bool                mbCompilingDBFormula    : 1;
     // This indicates if a ScDocShell::DoRecalc() or ScDocShell::DoHardRecalc() is in progress.
     bool                mbDocShellRecalc        : 1;
     // This indicates if a ScOutputData::LayoutStrings() is in progress.
@@ -662,8 +660,6 @@ private:
     size_t              mnMutationGuardFlags;
 
     bool mbConnectionXml = false;
-    bool mbCustomXml = false;
-    OUString aCustomXmlFragmentPath;
     bool mbXmlMapsXml = false;
     std::string sXmlMapsContent;
 
@@ -673,14 +669,6 @@ public:
 
     void setHasConnectionXml(bool bUse) { mbConnectionXml = bUse; }
     bool hasConnectionXml() { return mbConnectionXml; }
-
-    void setHasCustomXml(bool bUse, const OUString& sCustomXmlPath)
-    {
-        mbCustomXml = bUse;
-        aCustomXmlFragmentPath = sCustomXmlPath;
-    }
-    const OUString & getCustomXmlItems() { return aCustomXmlFragmentPath; }
-    bool hasCustomXml() { return mbCustomXml; }
 
     void setHasXmlMaps(bool bUse, const std::string& sContent)
     {
@@ -723,6 +711,8 @@ public:
     void              GetDocStat( ScDocStat& rDocStat );
 
     SC_DLLPUBLIC void  InitDrawLayer( ScDocShell* pDocShell = nullptr );
+    void               SetCompatibilityFlag(SdrCompatibilityFlag eFlag, bool bEnabled);
+    bool               GetCompatibilityFlag(SdrCompatibilityFlag eFlag) const;
 
     ScInterpreterContext& GetNonThreadedContext() const
     {
@@ -898,6 +888,17 @@ public:
      */
     SC_DLLPUBLIC void CompileHybridFormula();
 
+    /** Collect positions of formula cells with a structured reference to database range nIndex. */
+    SC_DLLPUBLIC void CollectTableRefFormulas( sal_uInt16 nIndex, std::vector<ScAddress>& rCells );
+    /** Flatten structured references to database range nIndex in the given cells to plain ranges. */
+    SC_DLLPUBLIC void ConvertTableRefsToRange( sal_uInt16 nIndex, const std::vector<ScAddress>& rCells );
+    /** True if any named expression holds a structured reference to database range nIndex. */
+    SC_DLLPUBLIC bool HasTableRefInNames( sal_uInt16 nIndex ) const;
+    /** Flattened copy of all range names, resolving structured references to database range nIndex
+        to plain ranges; true if any name changed. */
+    SC_DLLPUBLIC bool ConvertTableRefsToRangeInNames( sal_uInt16 nIndex,
+                                                      std::map<OUString, ScRangeName>& rFlatNames );
+
     /**
      * Insert a new named expression to the global scope.
      *
@@ -950,12 +951,25 @@ public:
     SC_DLLPUBLIC const ScDBData* GetDBAtArea(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2) const;
     SC_DLLPUBLIC ScDBData*       GetDBAtArea(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2);
     std::vector<const ScDBData*> GetAllNamedDBsInArea(const ScRange& rRange) const;
+    /// True if rRange intersects a database range (named or anonymous, pIgnore excepted) or a
+    /// pivot table. Merged cells are left to the callers they block (resize, not paste).
+    bool                         RangeReachesDBStructure(const ScRange& rRange, const ScDBData* pIgnore = nullptr);
+    /// Upper names of the styled tables rMark covers whole.
+    std::vector<OUString>        GetTablesCoveredBy(const ScMarkData& rMark) const;
     void                         RefreshDirtyTableColumnNames();
     SC_DLLPUBLIC sc::ExternalDataMapper& GetExternalDataMapper();
     /** True when the document holds at least one external data mapping. Checks
         without creating the mapper, so it stays cheap for documents that have
         none. */
     SC_DLLPUBLIC bool HasDataProviderMappings() const;
+
+    /** True when the document holds a database range that imports from a data source again each
+        time its refresh delay runs out. */
+    bool HasRefreshingDBImport() const;
+
+    /** True when a pivot table takes its data from a database document named by URL rather than
+        from a registered data source. */
+    bool HasDataPilotDatabaseLink() const;
 
     /** True when the document holds anything that fetches content from outside
         the document and so needs the user to agree before it updates. */
@@ -995,6 +1009,16 @@ public:
     /// one of its reference cells.
     SC_DLLPUBLIC bool HasMatrixBlocker(const ScRange& rRange) const;
 
+    /// The output range of the dynamic array master at rOrigin. For a #SPILL! master this is
+    /// the wanted range and rBlocked is set. False if there is no multi-cell master there.
+    SC_DLLPUBLIC bool GetDynamicArrayOutputRange(const ScAddress& rOrigin, ScRange& rRange,
+                                                 bool& rBlocked) const;
+
+    /// Like GetDynamicArrayOutputRange, for the array that contains rCell. A #SPILL! master
+    /// matches only at its origin cell.
+    SC_DLLPUBLIC bool FindDynamicArrayRangeAt(const ScAddress& rCell, ScRange& rRange,
+                                              bool& rBlocked) const;
+
     // Pending matrix resize tracking (expand, contract, or collapse-on-spill).
     void MarkPendingMatrixResize(const ScAddress& rPos) { maPendingMatrixResizes.insert(rPos); }
     bool HasPendingMatrixResizes() const { return !maPendingMatrixResizes.empty(); }
@@ -1027,7 +1051,7 @@ public:
     SdrObject*      GetObjectAtPoint( SCTAB nTab, const Point& rPos );
     bool            HasChartAtPoint( SCTAB nTab, const Point& rPos, OUString& rName );
 
-    css::uno::Reference< css::chart2::XChartDocument > GetChartByName( std::u16string_view rChartName );
+    cpo::uno::Reference< css::chart2::XChartDocument > GetChartByName( std::u16string_view rChartName );
 
     SC_DLLPUBLIC void GetChartRanges( std::u16string_view rChartName, std::vector< ScRangeList >& rRanges, const ScDocument& rSheetNameDoc );
     void              SetChartRanges( std::u16string_view rChartName, const std::vector< ScRangeList >& rRanges );
@@ -1039,7 +1063,7 @@ public:
                                        bool bColHeaders, bool bRowHeaders, bool bAdd );
     void              GetOldChartParameters( std::u16string_view rName,
                                              ScRangeList& rRanges, bool& rColHeaders, bool& rRowHeaders );
-    css::uno::Reference<
+    cpo::uno::Reference<
             css::embed::XEmbeddedObject >
                     FindOleObjectByName( std::u16string_view rName );
 
@@ -1254,6 +1278,11 @@ public:
     bool            SetDdeLinkResultMatrix( size_t nDdePos, const ScMatrixRef& pResults );
 
     SAL_RET_MAYBENULL SfxBindings*  GetViewBindings();
+
+    /** Invalidates a slot in every view of this document, for state that belongs to
+        the document as a whole rather than to one view's cursor or selection. */
+    void                            InvalidateSlotInAllViews( sal_uInt16 nSlotId );
+
     ScDocShell*                     GetDocumentShell() const    { return mpShell; }
     SC_DLLPUBLIC ScDrawLayer*       GetDrawLayer() { return mpDrawLayer.get();  }
     SC_DLLPUBLIC const ScDrawLayer* GetDrawLayer() const { return mpDrawLayer.get();  }
@@ -1326,6 +1355,7 @@ public:
      * This is very important.</p>
      */
     SC_DLLPUBLIC bool  SetEditText( const ScAddress& rPos, std::unique_ptr<EditTextObject> pEditText );
+    SC_DLLPUBLIC bool  SetEditText( const ScAddress& rPos, EditTextObject aEditText );
     void               SetEditText( const ScAddress& rPos, const EditTextObject& rEditText, const SfxItemPool* pEditPool );
     SC_DLLPUBLIC void  SetEditText( const ScAddress& rPos, const OUString& rStr );
     SC_DLLPUBLIC SCROW GetFirstEditTextRow( const ScRange& rRange ) const;
@@ -1417,7 +1447,7 @@ public:
     void                                      RemoveEditTextCharAttribs( const ScAddress& rPos, const ScPatternAttr& rAttr );
     SC_DLLPUBLIC double                       RoundValueAsShown( double fVal, sal_uInt32 nFormat, const ScInterpreterContext* pContext = nullptr ) const;
     SC_DLLPUBLIC sal_uInt32                   GetNumberFormat( SCCOL nCol, SCROW nRow, SCTAB nTab ) const;
-    sal_uInt32                                GetNumberFormat( const ScRange& rRange ) const;
+    SC_DLLPUBLIC sal_uInt32 GetNumberFormat(const ScRange& rRange) const;
     SC_DLLPUBLIC sal_uInt32                   GetNumberFormat( const ScInterpreterContext& rContext, const ScAddress& ) const;
     SC_DLLPUBLIC void                         SetNumberFormat( const ScAddress& rPos, sal_uInt32 nNumberFormat );
 
@@ -1574,18 +1604,6 @@ public:
     void              CompileAll();
     void              CompileXML();
 
-    /**
-     * Re-compile formula cells with error.
-     *
-     * @param nErrCode specified error code to match. Only those cells with
-     *                 this error code will be re-compiled.  If this value is
-     *                 0, cells with any error values will be re-compiled.
-     *
-     * @return true if at least one cell is re-compiled, false if no cells are
-     *         re-compiled.
-     */
-    bool CompileErrorCells(FormulaError nErrCode);
-
     ScAutoNameCache*     GetAutoNameCache()     { return pAutoNameCache.get(); }
     void                 SetPreviewFont( std::unique_ptr<SfxItemSet> pFontSet );
     SfxItemSet*          GetPreviewFont() { return pPreviewFont.get(); }
@@ -1708,7 +1726,8 @@ public:
      */
     SC_DLLPUBLIC void           GetDataArea( SCTAB nTab, SCCOL& rStartCol, SCROW& rStartRow,
                                              SCCOL& rEndCol, SCROW& rEndRow,
-                                             bool bIncludeOld, bool bOnlyDown ) const;
+                                             bool bIncludeOld, bool bOnlyDown,
+                                             bool bExcludeDBRange = false ) const;
 
     /**
      * Returns true if there is a non-empty subrange in the range given as input.
@@ -1835,7 +1854,7 @@ public:
 
     SC_DLLPUBLIC void            DeleteAreaTab(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2,
                                                SCTAB nTab, InsertDeleteFlags nDelFlag);
-    void                         DeleteAreaTab(const ScRange& rRange, InsertDeleteFlags nDelFlag);
+    SC_DLLPUBLIC void            DeleteAreaTab(const ScRange& rRange, InsertDeleteFlags nDelFlag);
 
     SC_DLLPUBLIC void            CopyToClip( const ScClipParam& rClipParam, ScDocument* pClipDoc,
                                              const ScMarkData* pMarks, bool bKeepScenarioFlags,
@@ -2027,6 +2046,11 @@ public:
     const ScPatternAttr*                    GetSelectionPattern( const ScMarkData& rMark );
     std::unique_ptr<ScPatternAttr>          CreateSelectionPattern( const ScMarkData& rMark, bool bDeep = true );
     SC_DLLPUBLIC const SfxItemSet*          GetTableFormatSet( SCCOL nCol, SCROW nRow, SCTAB nTab ) const;
+    /// The fill that the table style of a table gives the cell, nullptr outside a table
+    SC_DLLPUBLIC const SvxBrushItem*        GetTableFillItem( SCCOL nCol, SCROW nRow, SCTAB nTab ) const;
+    /// The background colour of the cell: its own fill, or else the fill of its table style,
+    /// transparent when it has neither
+    SC_DLLPUBLIC Color                      GetCellBackgroundColor( SCCOL nCol, SCROW nRow, SCTAB nTab ) const;
     SC_DLLPUBLIC void                       AddCondFormatData( const ScRangeList& rRange, SCTAB nTab, sal_uInt32 nIndex );
     void                                    RemoveCondFormatData( const ScRangeList& rRange, SCTAB nTab, sal_uInt32 nIndex );
 
@@ -2043,7 +2067,7 @@ public:
         return static_cast<const T*>(GetEffItem(nCol, nRow, nTab, sal_uInt16(nWhich)));
     }
 
-    SC_DLLPUBLIC const css::uno::Reference< css::i18n::XBreakIterator >& GetBreakIterator();
+    SC_DLLPUBLIC const cpo::uno::Reference< css::i18n::XBreakIterator >& GetBreakIterator();
     bool                        HasStringWeakCharacters( const OUString& rString );
     SC_DLLPUBLIC SvtScriptType  GetStringScriptType( const OUString& rString );
     // pCell is an optimization, must point to rPos
@@ -2666,6 +2690,8 @@ public:
     bool                IsTrackFormulasPending() const { return mbTrackFormulasPending; }
     void                FinalTrackFormulas( SfxHintId nHintId );
     bool                IsFinalTrackFormulas() const { return mbFinalTrackFormulas; }
+    bool                IsCompilingDBFormula() const { return mbCompilingDBFormula; }
+    void                SetCompilingDBFormula(bool bSet) { mbCompilingDBFormula = bSet; }
     inline bool         IsInFormulaTree( const ScFormulaCell* pCell ) const;
     inline bool         IsInFormulaTrack( const ScFormulaCell* pCell ) const;
     HardRecalcState     GetHardRecalcState() const { return eHardRecalcState; }
@@ -2785,7 +2811,7 @@ public:
     void               AddUnoObject( SfxListener& rObject );
     void               RemoveUnoObject( SfxListener& rObject );
     void               BroadcastUno( const SfxHint &rHint );
-    void               AddUnoListenerCall( const css::uno::Reference<
+    void               AddUnoListenerCall( const cpo::uno::Reference<
                                            css::util::XModifyListener >& rListener,
                                            const css::lang::EventObject& rEvent );
 
@@ -2796,7 +2822,7 @@ public:
     SC_DLLPUBLIC ScFieldEditEngine& GetEditEngine();
     SC_DLLPUBLIC ScNoteEditEngine&  GetNoteEngine();
 
-    std::unique_ptr<EditTextObject> CreateSharedStringTextObject( const svl::SharedString& rSS );
+    EditTextObject CreateSharedStringTextObject( const svl::SharedString& rSS );
 
     std::unique_ptr<ScRefreshTimerControl> const & GetRefreshTimerControlAddress() const
                                        { return pRefreshTimerControl; }
@@ -2813,9 +2839,9 @@ public:
     void SC_DLLPUBLIC GetSortParam( ScSortParam& rParam, SCTAB nTab );
     void SC_DLLPUBLIC SetSortParam( const ScSortParam& rParam, SCTAB nTab );
 
-    void SetVbaEventProcessor( const css::uno::Reference< css::script::vba::XVBAEventProcessor >& rxVbaEvents )
+    void SetVbaEventProcessor( const cpo::uno::Reference< css::script::vba::XVBAEventProcessor >& rxVbaEvents )
                         { mxVbaEvents = rxVbaEvents; }
-    const css::uno::Reference< css::script::vba::XVBAEventProcessor >& GetVbaEventProcessor() const { return mxVbaEvents; }
+    const cpo::uno::Reference< css::script::vba::XVBAEventProcessor >& GetVbaEventProcessor() const { return mxVbaEvents; }
 
     /** Should only be GRAM_PODF or GRAM_ODFF. */
     void                              SetStorageGrammar( formula::FormulaGrammar::Grammar eGrammar );
@@ -3021,14 +3047,7 @@ public:
         if (mpDoc)
             mpDoc->BeginDrawUndo();
     }
-    ~DrawUndoGuard()
-    {
-        if (mpDoc)
-        {
-            if (auto* pLayer = mpDoc->GetDrawLayer())
-                (void)pLayer->GetCalcUndo();
-        }
-    }
+    ~DrawUndoGuard();
     DrawUndoGuard(const DrawUndoGuard&) = delete;
     DrawUndoGuard& operator=(const DrawUndoGuard&) = delete;
 };
@@ -3111,6 +3130,24 @@ public:
     ~ScDocShellRecalcGuard()
     {
         mrDoc.SetDocShellRecalc(false);
+    }
+};
+
+class ScCompilingDBFormulaGuard
+{
+    ScDocument& mrDoc;
+
+public:
+    ScCompilingDBFormulaGuard(ScDocument& rDoc)
+        : mrDoc(rDoc)
+    {
+        assert(!mrDoc.IsCompilingDBFormula());
+        mrDoc.SetCompilingDBFormula(true);
+    }
+
+    ~ScCompilingDBFormulaGuard()
+    {
+        mrDoc.SetCompilingDBFormula(false);
     }
 };
 

@@ -27,6 +27,7 @@
 #include <unotextrange.hxx>
 #include <unotxdoc.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <ndtxt.hxx>
 #include <textlinebreak.hxx>
 #include <textcontentcontrol.hxx>
@@ -35,6 +36,7 @@
 #include <strings.hrc>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// Covers sw/source/core/unocore/ fixes.
 class SwCoreUnocoreTest : public SwModelTestBase
@@ -67,7 +69,7 @@ CPPUNIT_TEST_FIXTURE(SwCoreUnocoreTest, testTdf119081)
         = SwXTextRange::CreateXTextRange(*pDoc, *rCursor.GetPoint(), nullptr);
     uno::Reference<text::XTextAppend> xTextAppend(xInsertPosition->getText(), uno::UNO_QUERY);
     // Without the accompanying fix in place, this test would have failed with:
-    // An uncaught exception of type com.sun.star.uno.RuntimeException
+    // An uncaught exception of type cpo.uno.RuntimeException
     xTextAppend->insertTextPortion(u"x"_ustr, {}, xInsertPosition);
 
     // Verify that the string is indeed inserted.
@@ -580,7 +582,7 @@ CPPUNIT_TEST_FIXTURE(SwCoreUnocoreTest, testInsertFileInContentControlException)
     xCursor->goLeft(1, false);
     OUString aURL(createFileURL(u"tdf119081.odt"));
     uno::Reference<document::XDocumentInsertable> xInsertable(xCursor, uno::UNO_QUERY);
-    CPPUNIT_ASSERT_THROW(xInsertable->insertDocumentFromURL(aURL, {}), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xInsertable->insertDocumentFromURL(aURL, {}), cpo::uno::RuntimeException);
 
     // Accept inserting a document outside the content control:
     xCursor->goRight(1, false);
@@ -942,10 +944,10 @@ struct SelectionChangeListener : public cppu::WeakImplHelper<view::XSelectionCha
 public:
     SelectionChangeListener();
     // view::XSelectionChangeListener
-    void SAL_CALL selectionChanged(const lang::EventObject& rEvent) override;
+    void selectionChanged(const lang::EventObject& rEvent) override;
 
     // lang::XEventListener
-    void SAL_CALL disposing(const lang::EventObject& rSource) override;
+    void disposing(const lang::EventObject& rSource) override;
 };
 }
 
@@ -954,11 +956,11 @@ SelectionChangeListener::SelectionChangeListener() {}
 void SelectionChangeListener::selectionChanged(const lang::EventObject& rEvent)
 {
     uno::Reference<view::XSelectionSupplier> xSelectionSupplier(rEvent.Source, uno::UNO_QUERY);
-    css::uno::Reference<css::container::XIndexAccess> xSelection(xSelectionSupplier->getSelection(),
-                                                                 css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::container::XIndexAccess> xSelection(xSelectionSupplier->getSelection(),
+                                                                 cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xSelection->getCount());
-    css::uno::Reference<css::text::XTextRange> xTextRange(xSelection->getByIndex(0),
-                                                          css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextRange> xTextRange(xSelection->getByIndex(0),
+                                                          cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT(xTextRange->getString().startsWith("test"));
 }
 

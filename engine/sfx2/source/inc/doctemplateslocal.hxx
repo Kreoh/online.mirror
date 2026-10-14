@@ -24,7 +24,7 @@
 #include <com/sun/star/beans/StringPair.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <vector>
 
@@ -38,7 +38,7 @@ class DocTemplLocaleHelper : public cppu::WeakImplHelper < css::xml::sax::XDocum
     std::vector< css::beans::StringPair > const & GetParsingResult() const;
 
     /// @throws cpo::uno::Exception
-    static std::vector< css::beans::StringPair > ReadLocalizationSequence_Impl( const css::uno::Reference< css::io::XInputStream >& xInStream, const OUString& aStringID, const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    static std::vector< css::beans::StringPair > ReadLocalizationSequence_Impl( const cpo::uno::Reference< css::io::XInputStream >& xInStream, const OUString& aStringID, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
 public:
     virtual ~DocTemplLocaleHelper() override;
@@ -48,29 +48,29 @@ public:
     static
     std::vector< css::beans::StringPair >
     ReadGroupLocalizationSequence(
-        const css::uno::Reference< css::io::XInputStream >& xInStream,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext );
+        const cpo::uno::Reference< css::io::XInputStream >& xInStream,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     // writes sequence of elements ( GroupName, GroupUIName )
     /// @throws cpo::uno::Exception
     static
     void WriteGroupLocalizationSequence(
-        const css::uno::Reference< css::io::XOutputStream >& xOutStream,
+        const cpo::uno::Reference< css::io::XOutputStream >& xOutStream,
         const std::vector< css::beans::StringPair >& aSequence,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext );
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     static OUString GetStandardGroupString();
     static std::vector<OUString> GetBuiltInGroupNames();
 
     // XDocumentHandler
-    virtual void SAL_CALL startDocument() override;
-    virtual void SAL_CALL endDocument() override;
-    virtual void SAL_CALL startElement( const OUString& aName, const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
-    virtual void SAL_CALL endElement( const OUString& aName ) override;
-    virtual void SAL_CALL characters( const OUString& aChars ) override;
-    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) override;
-    virtual void SAL_CALL processingInstruction( const OUString& aTarget, const OUString& aData ) override;
-    virtual void SAL_CALL setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
+    virtual void startDocument() override;
+    virtual void endDocument() override;
+    virtual void startElement( const OUString& aName, const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
+    virtual void endElement( const OUString& aName ) override;
+    virtual void characters( const OUString& aChars ) override;
+    virtual void ignorableWhitespace( const OUString& aWhitespaces ) override;
+    virtual void processingInstruction( const OUString& aTarget, const OUString& aData ) override;
+    virtual void setDocumentLocator( const cpo::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
 };
 
 #endif

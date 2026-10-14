@@ -21,9 +21,9 @@
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::com::sun::star;
@@ -32,7 +32,7 @@ namespace {
 
 class Implementation:
     public cppu::ImplInheritanceHelper<
-        NameContainer<css::uno::Reference<css::beans::XPropertySet>>,
+        NameContainer<cpo::uno::Reference<css::beans::XPropertySet>>,
         css::lang::XServiceInfo>
 {
     OUString getImplementationName() override
@@ -49,8 +49,8 @@ class Implementation:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_form_XForms_get_implementation(uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_XForms_get_implementation(cpo::uno::XComponentContext*,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new Implementation);

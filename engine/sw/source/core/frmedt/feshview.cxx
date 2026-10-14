@@ -109,13 +109,16 @@
 #define SCROLLVAL 75
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 SwFlyFrame *GetFlyFromMarked( const SdrMarkList *pLst, SwViewShell *pSh )
 {
     if ( !pLst )
         pLst = pSh->HasDrawView() ? &pSh->Imp()->GetDrawView()->GetMarkedObjectList():nullptr;
 
-    if ( pLst && pLst->GetMarkCount() == 1 )
+    // A single marked fly frame is the selected fly. When several graphic fly frames are
+    // marked together, the first one stands for the selection.
+    if ( pLst && ( pLst->GetMarkCount() == 1 || ::IsGraphicFlyMarkList( *pLst ) ) )
     {
         SdrObject *pO = pLst->GetMark( 0 )->GetMarkedSdrObj();
         if (SwVirtFlyDrawObj* pVirtO = DynCastSwVirtFlyDrawObj(pO))
@@ -178,89 +181,96 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
     SwFlyFrame* pOldSelFly = nullptr;
     const Point aOldPos( pDView->GetAllMarkedRect().TopLeft() );
 
+    // A graphic fly frame may join a selection that holds only graphic fly frames. Every other
+    // combination replaces the old selection.
+    bool bAddGraphic = false;
+    if ( bAddSelect && bHadSelection )
+    {
+        bAddGraphic = pObj
+            ? ( ::IsGraphicFlyMarkList( rMrkList ) && GetObjCntType( *pObj ) == OBJCNT_GRF )
+            : CanAddGraphicToSelection( rPt );
+    }
+
     if( bHadSelection )
     {
         // call Unmark when !bAddSelect or if fly was selected
         bool bUnmark = !bAddSelect;
 
-        if ( rMrkList.GetMarkCount() == 1 )
+        // if fly was selected, deselect it first
+        pOldSelFly = ::GetFlyFromMarked( &rMrkList, this );
+        if ( pOldSelFly && !bAddGraphic )
         {
-            // if fly was selected, deselect it first
-            pOldSelFly = ::GetFlyFromMarked( &rMrkList, this );
-            if ( pOldSelFly )
+            const sal_uInt16 nType = GetCntType();
+            if( nType != CNT_TXT || (SW_LEAVE_FRAME & nFlag) ||
+                ( pOldSelFly->GetFormat()->GetProtect().IsContentProtected()
+                 && !IsReadOnlyAvailable() ))
             {
-                const sal_uInt16 nType = GetCntType();
-                if( nType != CNT_TXT || (SW_LEAVE_FRAME & nFlag) ||
-                    ( pOldSelFly->GetFormat()->GetProtect().IsContentProtected()
-                     && !IsReadOnlyAvailable() ))
-                {
-                    SdrObject *pOldObj = rMrkList.GetMark(0)->GetMarkedSdrObj();
-                    // If a fly is deselected, which contains graphic, OLE or
-                    // otherwise, the cursor should be removed from it.
-                    // Similar if a fly with protected content is deselected.
-                    // For simplicity we put the cursor next to the upper-left
-                    // corner.
-                    Point aPt( pOldSelFly->getFrameArea().Pos() );
-                    aPt.setX(aPt.getX() - 1);
-                    bool bUnLockView = !IsViewLocked();
-                    LockView( true );
-                    SetCursor( aPt, true );
+                SdrObject *pOldObj = rMrkList.GetMark(0)->GetMarkedSdrObj();
+                // If a fly is deselected, which contains graphic, OLE or
+                // otherwise, the cursor should be removed from it.
+                // Similar if a fly with protected content is deselected.
+                // For simplicity we put the cursor next to the upper-left
+                // corner.
+                Point aPt( pOldSelFly->getFrameArea().Pos() );
+                aPt.setX(aPt.getX() - 1);
+                bool bUnLockView = !IsViewLocked();
+                LockView( true );
+                SetCursor( aPt, true );
 
-                    // in tables, fix lost position, when the selected image was
-                    // anchored as character at beginning of the table row:
-                    // in this case, the text cursor was positionated after the
-                    // floating table, and not before the image, as in other positions
-                    // in the table row (and if the table wasn't a floating one,
-                    // the text cursor lost completely)
-                    if ( SW_LEAVE_FRAME & nFlag )
+                // in tables, fix lost position, when the selected image was
+                // anchored as character at beginning of the table row:
+                // in this case, the text cursor was positionated after the
+                // floating table, and not before the image, as in other positions
+                // in the table row (and if the table wasn't a floating one,
+                // the text cursor lost completely)
+                if ( SW_LEAVE_FRAME & nFlag )
+                {
+                    const SwContact* pContact = GetUserCall(pOldObj);
+                    if ( pContact && pContact->ObjAnchoredAsChar() &&
+                            pOldSelFly->GetAnchorFrame() &&
+                            pOldSelFly->GetAnchorFrame()->GetUpper() )
                     {
-                        const SwContact* pContact = GetUserCall(pOldObj);
-                        if ( pContact && pContact->ObjAnchoredAsChar() &&
-                                pOldSelFly->GetAnchorFrame() &&
-                                pOldSelFly->GetAnchorFrame()->GetUpper() )
+                        const SwNode * pOldNd = pContact->GetAnchorNode().FindTableNode();
+                        const SwNode * pNewNd = GetCursor()->GetPointNode().FindTableNode();
+                        // the original image was in a table, but the cursor is not in that
+                        if ( pOldNd && pOldNd != pNewNd )
                         {
-                            const SwNode * pOldNd = pContact->GetAnchorNode().FindTableNode();
-                            const SwNode * pNewNd = GetCursor()->GetPointNode().FindTableNode();
-                            // the original image was in a table, but the cursor is not in that
-                            if ( pOldNd && pOldNd != pNewNd )
-                            {
-                                const SwRect& rCellFrame =
-                                    pOldSelFly->GetAnchorFrame()->GetUpper()->getFrameArea();
-                                Point aPtCellTopRight( rCellFrame.Pos() );
-                                aPtCellTopRight.setX( aPtCellTopRight.X() + rCellFrame.Width() );
-                                if ( SwWrtShell* pWrtShell = dynamic_cast<SwWrtShell*>(this) )
-                                    // put the text cursor in the same cell
-                                    pWrtShell->SelectTableRowCol( aPtCellTopRight );
-                            }
-                            // same table, but not in the same cell
-                            else if ( pOldNd && pOldNd == pNewNd &&
-                                    GetCursor()->GetPointNode().GetTextNode() &&
-                                    pContact->GetAnchorNode().GetTableBox() !=
-                                    GetCursor()->GetPointNode().GetTextNode()->GetTableBox() )
-                            {
-                                aPt.setX( aPt.getX() + 2 + pOldSelFly->getFrameArea().Width() );
-                                // put the text cursor after the object
-                                SetCursor( aPt, true );
-                            }
+                            const SwRect& rCellFrame =
+                                pOldSelFly->GetAnchorFrame()->GetUpper()->getFrameArea();
+                            Point aPtCellTopRight( rCellFrame.Pos() );
+                            aPtCellTopRight.setX( aPtCellTopRight.X() + rCellFrame.Width() );
+                            if ( SwWrtShell* pWrtShell = dynamic_cast<SwWrtShell*>(this) )
+                                // put the text cursor in the same cell
+                                pWrtShell->SelectTableRowCol( aPtCellTopRight );
+                        }
+                        // same table, but not in the same cell
+                        else if ( pOldNd && pOldNd == pNewNd &&
+                                GetCursor()->GetPointNode().GetTextNode() &&
+                                pContact->GetAnchorNode().GetTableBox() !=
+                                GetCursor()->GetPointNode().GetTextNode()->GetTableBox() )
+                        {
+                            aPt.setX( aPt.getX() + 2 + pOldSelFly->getFrameArea().Width() );
+                            // put the text cursor after the object
+                            SetCursor( aPt, true );
                         }
                     }
-
-                    if( bUnLockView )
-                        LockView( false );
-                }
-                if ( nType & CNT_GRF &&
-                     static_cast<SwNoTextFrame*>(pOldSelFly->Lower())->HasAnimation() )
-                {
-                    GetWin()->Invalidate( pOldSelFly->getFrameArea().SVRect() );
                 }
 
-                // Cancel crop mode
-                if ( SdrDragMode::Crop == GetDragMode() )
-                    SetDragMode( SdrDragMode::Move );
-
-                bUnmark = true;
+                if( bUnLockView )
+                    LockView( false );
             }
+            if ( nType & CNT_GRF &&
+                 static_cast<SwNoTextFrame*>(pOldSelFly->Lower())->HasAnimation() )
+            {
+                GetWin()->Invalidate( pOldSelFly->getFrameArea().SVRect() );
+            }
+
+            bUnmark = true;
         }
+        // Cancel crop mode
+        if ( pOldSelFly && SdrDragMode::Crop == GetDragMode() )
+            SetDragMode( SdrDragMode::Move );
+
         if ( bUnmark )
         {
             pDView->UnmarkAll();
@@ -291,7 +301,9 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
     if ( pObj )
     {
         OSL_ENSURE( !bEnterGroup, "SW_ENTER_GROUP is not supported" );
-        pDView->MarkObj( pObj, Imp()->GetPageView() );
+        // Adding an image that is already selected removes it from the selection instead, the
+        // way the hit test below toggles a marked object.
+        pDView->MarkObj( pObj, Imp()->GetPageView(), bAddGraphic && pDView->IsObjMarked( pObj ) );
     }
     else
     {
@@ -308,10 +320,10 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
 
     const bool bRet = 0 != rMrkList.GetMarkCount();
 
-    if ( rMrkList.GetMarkCount() > 1 )
+    if ( rMrkList.GetMarkCount() > 1 && !::IsGraphicFlyMarkList( rMrkList ) )
     {
-        // It sucks if Drawing objects were selected and now
-        // additionally a fly is selected.
+        // Several graphic fly frames may stay selected together. Any other selection that
+        // holds a fly frame collapses to that fly frame.
         for ( size_t i = 0; i < rMrkList.GetMarkCount(); ++i )
         {
             SdrObject *pTmpObj = rMrkList.GetMark( i )->GetMarkedSdrObj();
@@ -346,12 +358,8 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
         }
     }
 
-    if ( rMrkList.GetMarkCount() == 1 )
-    {
-        SwFlyFrame *pSelFly = ::GetFlyFromMarked( &rMrkList, this );
-        if (pSelFly)
-            pSelFly->SelectionHasChanged(this);
-    }
+    for ( SwFlyFrame* pSelectedFly : GetSelectedFlyFrames() )
+        pSelectedFly->SelectionHasChanged(this);
 
     SwFrameFormat* pNewDrawFormat = nullptr;
     if (!(nFlag & SW_ALLOW_TEXTBOX))
@@ -382,16 +390,21 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
     if ( bRet )
     {
         ::lcl_GrabCursor(this, pOldSelFly, pNewDrawFormat);
-        if ( GetCntType() & CNT_GRF )
+        // An animated image stands still while it is selected.
+        for ( const SwFlyFrame* pSelectedFly : GetSelectedFlyFrames() )
         {
-            const SwFlyFrame *pTmp = GetFlyFromMarked( &rMrkList, this );
-            OSL_ENSURE( pTmp, "Graphic without Fly" );
-            if ( pTmp && static_cast<const SwNoTextFrame*>(pTmp->Lower())->HasAnimation() )
-                static_cast<const SwNoTextFrame*>(pTmp->Lower())->StopAnimation( GetOut() );
+            const SwFrame* pLower = pSelectedFly->Lower();
+            if ( pLower && pLower->IsNoTextFrame() &&
+                 static_cast<const SwNoTextFrame*>(pLower)->HasAnimation() )
+                static_cast<const SwNoTextFrame*>(pLower)->StopAnimation( GetOut() );
         }
     }
-    else if ( !pOldSelFly && bHadSelection )
+    else if ( bHadSelection && ( !pOldSelFly || bAddGraphic ) )
+    {
+        // Nothing is selected any more. When the last image was removed from the selection the
+        // text cursor is still inside it, so it goes back next to the old selection.
         SetCursor( aOldPos, true);
+    }
 
     if( bRet || !bHadSelection )
         CallChgLnk();
@@ -1364,6 +1377,67 @@ SdrObject* SwFEShell::GetObjAt( const Point& rPt )
     return pRet;
 }
 
+bool SwFEShell::IsTextOverBgObjectAt(const Point& rPt, const SdrObject* pObj)
+{
+    // Can return false in a number of cases, eg. when not background object
+    if (!pObj)
+        return false;
+
+    // #i89920#
+    // Do not select object in background which is overlapping this text
+    // at the given position.
+    const SwContact* pContact = ::GetUserCall(pObj);
+    if (!pContact)
+        return false;
+
+    const SwAnchoredObject* pAnchoredObj = pContact->GetAnchoredObj(pObj);
+    const SwFrameFormat* pFormat = pAnchoredObj->GetFrameFormat();
+    const SwFormatSurround& rSurround = pFormat->GetSurround();
+    // Function only relevant for objects with Through wrap
+    if (rSurround.GetSurround() != css::text::WrapTextMode_THROUGH)
+        return false;
+
+    // Not background object
+    const SdrLayerID nLayerId = pObj->GetLayer();
+    const IDocumentDrawModelAccess& rIDDMA = getIDocumentDrawModelAccess();
+    if (nLayerId != rIDDMA.GetHeaderFooterHellId() && nLayerId != rIDDMA.GetHellId())
+        return false;
+
+    const SwPageFrame* pPageFrame = GetLayout()->GetPageAtPos(rPt);
+    const SwContentFrame* pContentFrame(pPageFrame?pPageFrame->ContainsContent():nullptr);
+    while (pContentFrame)
+    {
+        if (pContentFrame->UnionFrame().Contains(rPt))
+        {
+            const SwTextFrame* pTextFrame = pContentFrame->DynCastTextFrame();
+            if (pTextFrame)
+            {
+                SwPosition aPos(GetDoc()->GetNodes());
+                Point aTmpPt(rPt);
+                if (pTextFrame->GetKeyCursorOfst(&aPos, aTmpPt))
+                {
+                    SwRect aCursorCharRect;
+                    if (pTextFrame->GetCharRect(aCursorCharRect, aPos))
+                    {
+                        if (aCursorCharRect.Overlaps(SwRect(pObj->GetLastBoundRect())))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return true;
+            }
+            break;
+        }
+
+        pContentFrame = pContentFrame->GetNextContentFrame();
+    }
+    return false;
+}
+
 // Test if there is an object at that position and if it should be selected.
 bool SwFEShell::ShouldObjectBeSelected(const Point& rPt, bool *pSelectFrameInsteadOfCroppedImage)
 {
@@ -1383,64 +1457,8 @@ bool SwFEShell::ShouldObjectBeSelected(const Point& rPt, bool *pSelectFrameInste
 
         if (pObj)
         {
-            bRet = true;
-            const IDocumentDrawModelAccess& rIDDMA = getIDocumentDrawModelAccess();
-            // #i89920#
-            // Do not select object in background which is overlapping this text
-            // at the given position.
-            bool bObjInBackground( false );
-            if ( pObj->GetLayer() == rIDDMA.GetHellId() )
-            {
-                if (const SwContact* pContact = ::GetUserCall( pObj ))
-                {
-                    const SwAnchoredObject* pAnchoredObj = pContact->GetAnchoredObj( pObj );
-                    const SwFrameFormat* pFormat = pAnchoredObj->GetFrameFormat();
-                    const SwFormatSurround& rSurround = pFormat->GetSurround();
-                    if ( rSurround.GetSurround() == css::text::WrapTextMode_THROUGH )
-                    {
-                        bObjInBackground = true;
-                    }
-                }
-            }
-            if ( bObjInBackground )
-            {
-                const SwPageFrame* pPageFrame = GetLayout()->GetPageAtPos( rPt );
-                if( pPageFrame )
-                {
-                    const SwContentFrame* pContentFrame( pPageFrame->ContainsContent() );
-                    while ( pContentFrame )
-                    {
-                        if ( pContentFrame->UnionFrame().Contains( rPt ) )
-                        {
-                            const SwTextFrame* pTextFrame = pContentFrame->DynCastTextFrame();
-                            if ( pTextFrame )
-                            {
-                                SwPosition aPos(GetDoc()->GetNodes());
-                                Point aTmpPt( rPt );
-                                if (pTextFrame->GetKeyCursorOfst(&aPos, aTmpPt))
-                                {
-                                    SwRect aCursorCharRect;
-                                    if (pTextFrame->GetCharRect(aCursorCharRect,
-                                                aPos))
-                                    {
-                                        if ( aCursorCharRect.Overlaps( SwRect( pObj->GetLastBoundRect() ) ) )
-                                        {
-                                            bRet = false;
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                bRet = false;
-                            }
-                            break;
-                        }
-
-                        pContentFrame = pContentFrame->GetNextContentFrame();
-                    }
-                }
-            }
+            // Text in front takes precedence over background object
+            bRet = !IsTextOverBgObjectAt(rPt, pObj);
 
             // Don't select header / footer objects in body edition and vice-versa
             SwContact* pContact = static_cast<SwContact*>(pObj->GetUserCall());
@@ -1456,6 +1474,7 @@ bool SwFEShell::ShouldObjectBeSelected(const Point& rPt, bool *pSelectFrameInste
 
             if ( bRet )
             {
+                const IDocumentDrawModelAccess& rIDDMA = getIDocumentDrawModelAccess();
                 const SdrPage* pPage = rIDDMA.GetDrawModel()->GetPage(0);
                 for(auto it = pPage->begin() + pObj->GetOrdNum() + 1; it != pPage->end(); ++it)
                 {
@@ -2312,12 +2331,12 @@ bool SwFEShell::EndMark()
         {
             bool bShowHdl = false;
             SwDrawView* pDView = Imp()->GetDrawView();
-            // frames are not selected this way, except when
-            // it is only one frame
+            // Fly frames are not selected this way, except when the band holds one fly frame
+            // alone or only graphic fly frames.
             SdrMarkList &rMrkList = const_cast<SdrMarkList&>(pDView->GetMarkedObjectList());
             SwFlyFrame* pOldSelFly = ::GetFlyFromMarked( &rMrkList, this );
 
-            if ( rMrkList.GetMarkCount() > 1 )
+            if ( rMrkList.GetMarkCount() > 1 && !::IsGraphicFlyMarkList( rMrkList ) )
             {
                 size_t i = 0;
                 while (i < rMrkList.GetMarkCount())

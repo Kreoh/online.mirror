@@ -63,7 +63,7 @@ namespace connectivity::odbc
         css::sdbc::SQLWarning                             m_aLastWarning;
     protected:
         unotools::WeakReference< OResultSet >             m_xResultSet;   // The last ResultSet created
-        css::uno::Reference< css::sdbc::XStatement>       m_xGeneratedStatement;
+        cpo::uno::Reference< css::sdbc::XStatement>       m_xGeneratedStatement;
         //  for this Statement
 
         std::vector< OUString>   m_aBatchVector;
@@ -101,19 +101,19 @@ namespace connectivity::odbc
         void setUsingBookmarks(bool _bUseBookmark)  ;
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void reset();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void clearMyResultSet();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setWarning (const css::sdbc::SQLWarning &ex);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         bool lockIfNecessary (const OUString& sql);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getColumnCount();
 
 
@@ -122,7 +122,7 @@ namespace connectivity::odbc
         // returns NULL if the current result is not a ResultSet.
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         rtl::Reference<OResultSet> getResultSet(bool checkCount);
         /**
             creates the driver specific resultset (factory)
@@ -130,7 +130,7 @@ namespace connectivity::odbc
         virtual rtl::Reference<OResultSet> createResultSet();
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         SQLLEN getRowCount();
 
 
@@ -157,7 +157,7 @@ namespace connectivity::odbc
 
     public:
         OStatement_Base(OConnection* _pConnection );
-        using OStatement_BASE::operator css::uno::Reference< css::uno::XInterface >;
+        using OStatement_BASE::operator cpo::uno::Reference< cpo::uno::XInterface >;
 
         const Functions& functions() const { return m_pConnection->functions(); }
         // OComponentHelper
@@ -171,12 +171,12 @@ namespace connectivity::odbc
         virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
         // XStatement
-        virtual css::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override ;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override ;
         virtual sal_Int32 executeUpdate( const OUString& sql ) override ;
         virtual bool execute( const OUString& sql ) override ;
-        virtual css::uno::Reference< css::sdbc::XConnection > getConnection(  ) override ;
+        virtual cpo::uno::Reference< css::sdbc::XConnection > getConnection(  ) override ;
         // XWarningsSupplier
         virtual cpo::uno::Any getWarnings(  ) override;
         virtual void clearWarnings(  ) override;
@@ -185,11 +185,11 @@ namespace connectivity::odbc
         // XCloseable
         virtual void close(  ) override;
         // XMultipleResults
-        virtual css::uno::Reference< css::sdbc::XResultSet > getResultSet(  ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getResultSet(  ) override;
         virtual sal_Int32 getUpdateCount(  ) override;
         virtual bool getMoreResults(  ) override;
         //XGeneratedResultSet
-        virtual css::uno::Reference< css::sdbc::XResultSet > getGeneratedValues(  ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getGeneratedValues(  ) override;
 
         // other methods
         SQLHANDLE getConnectionHandle() { return m_pConnection->getConnection(); }

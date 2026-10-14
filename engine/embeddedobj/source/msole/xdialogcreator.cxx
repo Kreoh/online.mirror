@@ -62,7 +62,7 @@ public:
     InitializedOleGuard()
     {
         if ( !SUCCEEDED( OleInitialize( nullptr ) ) )
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
     }
 
     ~InitializedOleGuard()
@@ -81,6 +81,7 @@ typedef UINT STDAPICALLTYPE OleUIInsertObjectA_Type(LPOLEUIINSERTOBJECTA);
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::comphelper;
 
 static cpo::uno::Sequence< sal_Int8 > GetRelatedInternalID_Impl( const cpo::uno::Sequence< sal_Int8 >& aClassID )
@@ -130,12 +131,12 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceByDialog(
 #ifdef _WIN32
 
     if ( !xStorage.is() )
-        throw lang::IllegalArgumentException( "No parent storage is provided!",
+        throw lang::IllegalArgumentException( u"No parent storage is provided!"_ustr,
                                             static_cast< ::cppu::OWeakObject* >(this),
                                             1 );
 
     if ( !sEntName.getLength() )
-        throw lang::IllegalArgumentException( "Empty element name is provided!",
+        throw lang::IllegalArgumentException( u"Empty element name is provided!"_ustr,
                                             static_cast< ::cppu::OWeakObject* >(this),
                                             2 );
 
@@ -187,9 +188,9 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceByDialog(
         OUString aFileName(o3tl::toU(szFile));
         OUString aFileURL;
         if ( osl::FileBase::getFileURLFromSystemPath( aFileName, aFileURL ) != osl::FileBase::E_None )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
-        cpo::uno::Sequence< beans::PropertyValue > aMediaDescr{ comphelper::makePropertyValue("URL",
+        cpo::uno::Sequence< beans::PropertyValue > aMediaDescr{ comphelper::makePropertyValue(u"URL"_ustr,
                                                                                          aFileURL) };
 
         // TODO: use config helper for type detection
@@ -202,17 +203,17 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceByDialog(
             xEmbCreator = embed::OLEEmbeddedObjectFactory::create( m_xContext );
 
         if ( !xEmbCreator.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference<task::XStatusIndicator> xProgress;
         OUString aProgressText;
         comphelper::SequenceAsHashMap aMap(aInObjArgs);
-        auto it = aMap.find("StatusIndicator");
+        auto it = aMap.find(u"StatusIndicator"_ustr);
         if (it != aMap.end())
         {
             it->second >>= xProgress;
         }
-        it = aMap.find("StatusIndicatorText");
+        it = aMap.find(u"StatusIndicatorText"_ustr);
         if (it != aMap.end())
         {
             it->second >>= aProgressText;
@@ -249,12 +250,12 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceByDialog(
             if ( nBufSize && nBufSize == GetMetaFileBitsEx( pMF->hMF, nBufSize, pBuf+22 ) )
             {
                 datatransfer::DataFlavor aFlavor(
-                    "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"",
-                    "Image WMF",
+                    u"application/x-openoffice-wmf;windows_formatname=\"Image WMF\""_ustr,
+                    u"Image WMF"_ustr,
                     cppu::UnoType<cpo::uno::Sequence< sal_Int8 >>::get() );
 
-                aObjectInfo.Options = { { "Icon", cpo::uno::Any(aMetafile) },
-                                        { "IconFormat", cpo::uno::Any(aFlavor) } };
+                aObjectInfo.Options = { { u"Icon"_ustr, cpo::uno::Any(aMetafile) },
+                                        { u"IconFormat"_ustr, cpo::uno::Any(aFlavor) } };
             }
 
             GlobalUnlock( io.hMetaPict );
@@ -263,7 +264,7 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceByDialog(
 
     OSL_ENSURE( aObjectInfo.Object.is(), "No object was created!" );
     if ( !aObjectInfo.Object.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return aObjectInfo;
 #else
@@ -281,12 +282,12 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceInitFromClipbo
 
 #ifdef _WIN32
     if ( !xStorage.is() )
-        throw lang::IllegalArgumentException( "No parent storage is provided!",
+        throw lang::IllegalArgumentException( u"No parent storage is provided!"_ustr,
                                             static_cast< ::cppu::OWeakObject* >(this),
                                             1 );
 
     if ( !sEntryName.getLength() )
-        throw lang::IllegalArgumentException( "Empty element name is provided!",
+        throw lang::IllegalArgumentException( u"Empty element name is provided!"_ustr,
                                             static_cast< ::cppu::OWeakObject* >(this),
                                             2 );
 
@@ -306,7 +307,7 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceInitFromClipbo
 
     OSL_ENSURE( aObjectInfo.Object.is(), "No object was created!" );
     if ( !aObjectInfo.Object.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return aObjectInfo;
 #else
@@ -317,7 +318,7 @@ embed::InsertedObjectInfo MSOLEDialogObjectCreator::createInstanceInitFromClipbo
 
 OUString MSOLEDialogObjectCreator::getImplementationName()
 {
-    return "com.sun.star.comp.embed.MSOLEObjectSystemCreator";
+    return u"com.sun.star.comp.embed.MSOLEObjectSystemCreator"_ustr;
 }
 
 
@@ -329,13 +330,13 @@ bool MSOLEDialogObjectCreator::supportsService( const OUString& ServiceName )
 
 cpo::uno::Sequence< OUString > MSOLEDialogObjectCreator::getSupportedServiceNames()
 {
-    return { "com.sun.star.embed.MSOLEObjectSystemCreator",
-             "com.sun.star.comp.embed.MSOLEObjectSystemCreator" };
+    return { u"com.sun.star.embed.MSOLEObjectSystemCreator"_ustr,
+             u"com.sun.star.comp.embed.MSOLEObjectSystemCreator"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 embeddedobj_MSOLEDialogObjectCreator_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new MSOLEDialogObjectCreator(context));
 }

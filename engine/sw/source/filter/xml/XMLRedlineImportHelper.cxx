@@ -47,7 +47,7 @@
 #include <unocrsrhelper.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::xmloff::token;
 
@@ -363,7 +363,7 @@ XMLRedlineImportHelper::~XMLRedlineImportHelper()
         else
             m_xImportInfoPropertySet->setPropertyValue( g_sRedlineProtectionKey, aAny);
     }
-    catch (const uno::RuntimeException &) // fdo#65882
+    catch (const cpo::uno::RuntimeException &) // fdo#65882
     {
         SAL_WARN( "sw", "potentially benign ordering issue during shutdown" );
     }

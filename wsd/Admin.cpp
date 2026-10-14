@@ -39,12 +39,15 @@
 #include <wsd/Auth.hpp>
 #include <wsd/COOLWSD.hpp>
 
+#include <Poco/JSON/Object.h>
 #include <Poco/Net/HTTPRequest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <string>
 #include <poll.h>
@@ -359,39 +362,59 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
             LOG_ERR("Failed to update the route token, invalid JSON parsing: " << tokens[1]);
         }
     }
-    else if (tokens.equals(0, "migrate") && tokens.size() > 1)
+    else if (tokens.equals(0, "migrate"))
     {
+        // migrate <saved|unsaved|readonly> <docKey> <routeToken> <serverId>
+        if (tokens.size() < 5)
+        {
+            LOG_WRN("Incomplete migrate command with " << tokens.size()
+                                                       << " arguments, five are expected");
+            return;
+        }
+
         const std::string docStatus = tokens[1];
         const std::string dockey = tokens[2];
         const std::string routeToken = tokens[3];
         const std::string serverId = tokens[4];
-        if (!dockey.empty() && !routeToken.empty() && !serverId.empty())
+        if (dockey.empty() || routeToken.empty() || serverId.empty())
         {
-            model.setMigratingInfo(dockey, routeToken, serverId);
-            std::ostringstream oss;
-            oss << "migrate: {";
-            oss << "\"afterSave\"" ":false,";
-            if (docStatus == "unsaved" && !model.isDocSaved(dockey))
-            {
-                COOLWSD::autoSave(dockey);
-                oss << "\"saved\"" ":false,";
-            }
-            else if ((docStatus == "readonly" && model.isDocReadOnly(dockey)) ||
-                     (docStatus == "saved" && model.isDocSaved(dockey)))
-            {
-                oss << "\"saved\"" ":true,";
-            }
-            oss << "\"routeToken\"" << ':' << '"' << routeToken << '"' << ',';
-            oss << "\"serverId\"" << ':' << '"' << serverId << '"' << '}';
-            COOLWSD::alertUserInternal(dockey, oss.str());
-            if (SigUtil::getShutdownRequestFlag())
-                COOLWSD::setMigrationMsgReceived(dockey);
+            LOG_WRN("Empty argument in migrate command for docKey [" << dockey << ']');
+            return;
+        }
+
+        // A document that is saved or read-only is handed over straight away. The state the
+        // controller names only decides whether a save is asked for first, so a document that
+        // has been saved since the controller looked at it still migrates.
+        const bool alreadySaved = model.isDocSaved(dockey) || model.isDocReadOnly(dockey);
+        const bool needsSave = !alreadySaved && docStatus == "unsaved";
+        if (!needsSave && !alreadySaved)
+        {
+            LOG_WRN("Not migrating docKey [" << dockey << "], it is modified and the controller "
+                                                "expects it to be ["
+                                             << docStatus << "], so no save was asked for");
         }
         else
         {
-            LOG_WRN("Document migration failed for dockey:" << dockey <<
-                        ", reason has been changed");
+            model.setMigratingInfo(dockey, routeToken, serverId);
+
+            if (needsSave)
+                COOLWSD::autoSave(dockey);
+
+            // The route token and the server id come off the wire, so let the JSON writer quote
+            // them.
+            Poco::JSON::Object migrate;
+            migrate.set("afterSave", false);
+            migrate.set("saved", alreadySaved);
+            migrate.set("routeToken", routeToken);
+            migrate.set("serverId", serverId);
+            std::ostringstream oss;
+            oss << "migrate: ";
+            migrate.stringify(oss);
+            COOLWSD::alertUserInternal(dockey, oss.str());
         }
+
+        if (SigUtil::getShutdownRequestFlag())
+            COOLWSD::setMigrationMsgReceived(dockey);
     }
     else if (tokens.equals(0, "wopiSrcMap"))
     {
@@ -399,10 +422,11 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
     }
     else if(tokens.equals(0, "verifyauth"))
     {
-        if (tokens.size() < 2)
+        if (tokens.size() < 3)
         {
-            LOG_DBG("Auth command without any token");
+            LOG_DBG("Auth command without a token or an id");
             sendTextFrame("InvalidAuthToken");
+            return;
         }
         std::string jwtToken, id;
         COOLProtocol::getTokenString(tokens[1], "jwt", jwtToken);
@@ -711,15 +735,17 @@ void Admin::pollingThread()
             }
         }
 
-        // (re)-connect (with sync. DNS - urk) to one monitor at a time
-        if (_pendingConnects.size())
+        // (re)-connect (with sync. DNS - urk) to one monitor at a time, the one whose retry
+        // interval elapsed first.
+        auto earliest = std::min_element(_pendingConnects.begin(), _pendingConnects.end(),
+                                         [](const MonitorConnectRecord& lhs,
+                                            const MonitorConnectRecord& rhs)
+                                         { return lhs.getWhen() < rhs.getWhen(); });
+        if (earliest != _pendingConnects.end() && earliest->getWhen() < now)
         {
-            MonitorConnectRecord rec = _pendingConnects[0];
-            if (rec.getWhen() < now)
-            {
-                _pendingConnects.erase(_pendingConnects.begin());
-                connectToMonitorSync(rec.getUri());
-            }
+            const std::string uri = earliest->getUri();
+            _pendingConnects.erase(earliest);
+            connectToMonitorSync(uri);
         }
 
         bool dumpMetrics = true;
@@ -747,21 +773,51 @@ void Admin::pollingThread()
     if (!COOLWSD::IndirectionServerEnabled)
         return;
 
-    // if don't have monitor connection to the controller we set the _migrateMsgReceived
-    // for each docbroker so that docbroker can cleanup the documents
+    // Without a monitor connection to the controller nothing will hand these documents a new
+    // route, so every DocumentBroker is told the migration message it waits for has arrived and
+    // cleans its document up.
+    //
+    // The controller is the monitor named by indirection_endpoint.controller_monitor_url. A
+    // configuration that names none falls back to a monitor whose address carries the word
+    // controller.
+    const std::string controllerUri =
+        ConfigUtil::getString("indirection_endpoint.controller_monitor_url", "");
     bool controllerMonitorConnection = false;
+    bool controllerFoundNotConnected = false;
+    std::string openMonitors;
     for (const auto& pair : _monitorSockets)
     {
-        if (pair.first.find("controller") != std::string::npos)
+        if (!openMonitors.empty())
+            openMonitors += ", ";
+        openMonitors += pair.first;
+
+        const bool isController = controllerUri.empty()
+                                      ? pair.first.find("controller") != std::string::npos
+                                      : Util::iequal(pair.first, controllerUri);
+        if (!isController)
+            continue;
+
+        if (pair.second->isConnected())
         {
             controllerMonitorConnection = true;
             break;
         }
+
+        controllerFoundNotConnected = true;
     }
 
     if (!controllerMonitorConnection)
     {
-        LOG_WRN("Monitor connection to the controller doesn't exist, skipping shutdown migration");
+        LOG_ERR("Monitor connection to the controller doesn't exist, skipping shutdown migration. "
+                "The controller is "
+                << (controllerUri.empty()
+                        ? std::string("the monitor whose address carries the word controller, "
+                                      "since indirection_endpoint.controller_monitor_url is empty")
+                        : "indirection_endpoint.controller_monitor_url [" + controllerUri + ']')
+                << ". Monitors currently open: [" << openMonitors << "]. "
+                << (controllerFoundNotConnected
+                        ? "The controller was among them, but its socket is not connected."
+                        : "None of them is the controller."));
         COOLWSD::setAllMigrationMsgReceived();
         return;
     }
@@ -1114,7 +1170,7 @@ void Admin::cleanupResourceConsumingDocs()
 
 void Admin::cleanupLostKits()
 {
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return; // we might look lost ourselves.
 
     static std::map<pid_t, std::time_t> mapKitsLost;
@@ -1180,6 +1236,18 @@ void Admin::dumpState(std::ostream& os) const
         }
     }
 
+    const auto now = std::chrono::steady_clock::now();
+    os << "Pending monitor connects: " << _pendingConnects.size() << ":\n";
+    for (const auto& pending : _pendingConnects)
+    {
+        const auto remaining =
+            std::chrono::duration_cast<std::chrono::milliseconds>(pending.getWhen() - now);
+        if (remaining >= std::chrono::milliseconds::zero())
+            os << pending.getUri() << ": due in " << remaining << '\n';
+        else
+            os << pending.getUri() << ": overdue by " << -remaining << '\n';
+    }
+
     os << "Admin Metrics:\n";
     getMetrics(os);
     os << '\n';
@@ -1211,30 +1279,41 @@ void MonitorSocketHandler::performWrites(std::size_t capacity)
     return AdminSocketHandler::performWrites(capacity);
 }
 
-void MonitorSocketHandler::onDisconnect()
+/// Schedules another attempt at this monitor, after the retry interval the
+/// configuration gives it, and says what left it needing one. It returns false
+/// when the configuration names no such monitor, in which case nothing is
+/// scheduled.
+static bool scheduleMonitorRetry(const std::string& uri, const std::string_view reason)
 {
-    bool reconnect = false;
-    // schedule monitor reconnect only if monitor uri exist in configuration
+    const std::string uriWithoutParam = uri.substr(0, uri.find('?'));
     for (const auto& monitor : Admin::getMonitorList())
     {
-        const std::string uriWithoutParam = _uri.substr(0, _uri.find('?'));
-        if (Util::iequal(monitor.first, uriWithoutParam))
-        {
-            LOG_ERR("Monitor " << _uri << " dis-connected, re-trying in " << monitor.second  << " seconds");
-            Admin::instance().scheduleMonitorConnect(
-                _uri, std::chrono::steady_clock::now() + std::chrono::seconds(monitor.second));
-            Admin::instance().deleteMonitorSocket(uriWithoutParam);
-            reconnect = true;
-            break;
-        }
-    }
+        if (!Util::iequal(monitor.first, uriWithoutParam))
+            continue;
 
-    if (!reconnect)
+        LOG_ERR("Monitor " << uri << ' ' << reason << ", re-trying in " << monitor.second
+                           << " seconds");
+        Admin::instance().scheduleMonitorConnect(
+            uri, std::chrono::steady_clock::now() + std::chrono::seconds(monitor.second));
+        return true;
+    }
+    return false;
+}
+
+/// Takes the socket out of the map, so the next attempt at this monitor starts a new connection,
+/// and schedules that attempt while the configuration still names the monitor.
+void MonitorSocketHandler::onDisconnect()
+{
+    Admin::instance().deleteMonitorSocket(_uri.substr(0, _uri.find('?')));
+
+    if (!scheduleMonitorRetry(_uri, "dis-connected"))
         LOG_TRC("Remove monitor " << _uri);
 }
 
 void Admin::connectToMonitorSync(const std::string &uri)
 {
+    ASSERT_CORRECT_THREAD();
+
     const std::string uriWithoutParam = uri.substr(0, uri.find('?'));
     if (_monitorSockets.find(uriWithoutParam) != _monitorSockets.end())
     {
@@ -1243,6 +1322,16 @@ void Admin::connectToMonitorSync(const std::string &uri)
     }
 
     LOG_TRC("Add monitor " << uri);
+    auto handler = std::make_shared<MonitorSocketHandler>(this, uri);
+    if (!insertNewWebSocketSync(Poco::URI(uri), handler))
+    {
+        // The monitor stays out of _monitorSockets, so the attempt scheduled here gets
+        // past the check above and connects again.
+        if (!scheduleMonitorRetry(uri, "could not be reached"))
+            LOG_TRC("Remove monitor " << uri);
+        return;
+    }
+
     static const bool logMonitorConnect =
         ConfigUtil::getConfigValue<bool>("admin_console.logging.monitor_connect", true);
     if (logMonitorConnect)
@@ -1250,9 +1339,7 @@ void Admin::connectToMonitorSync(const std::string &uri)
         LOG_ANY("Connected to remote monitor with uri [" << uriWithoutParam << ']');
     }
 
-    auto handler = std::make_shared<MonitorSocketHandler>(this, uri);
     _monitorSockets.insert({uriWithoutParam, handler});
-    insertNewWebSocketSync(Poco::URI(uri), handler);
     AdminSocketHandler::subscribeAsync(handler);
 }
 
@@ -1349,43 +1436,39 @@ void Admin::startMonitors()
         LOG_TRC("No monitors configured.");
 }
 
-void Admin::updateMonitors(std::vector<std::pair<std::string,int>>& oldMonitors)
+void Admin::updateMonitors()
 {
-    if (oldMonitors.empty())
-    {
-        startMonitors();
-        return;
-    }
-
-    std::unordered_map<std::string, bool> currentMonitorMap;
+    // The configuration is read here, on the thread that has just rewritten it, and applied on
+    // the Admin thread, which owns the monitor sockets.
+    std::set<std::string> configured;
     for (const auto& monitor : getMonitorList())
-    {
-        currentMonitorMap[monitor.first] = true;
-    }
+        configured.insert(monitor.first);
 
-    // shutdown monitors which does not not exist in currentMonitorMap
-    for (const auto& monitor : oldMonitors)
-    {
-        if (!currentMonitorMap[monitor.first])
+    addCallback(
+        [this, configured = std::move(configured)]
         {
-            auto socketHandler = _monitorSockets[monitor.first];
-            if (socketHandler != nullptr)
+            for (auto it = _monitorSockets.begin(); it != _monitorSockets.end();)
             {
-                socketHandler->shutdown();
-                _monitorSockets.erase(monitor.first);
-            }
-        }
-    }
+                if (configured.find(it->first) != configured.end())
+                {
+                    ++it;
+                    continue;
+                }
 
-    startMonitors();
+                LOG_TRC("Remove monitor " << it->first << ", the configuration no longer names it");
+                it->second->shutdown();
+                it = _monitorSockets.erase(it);
+            }
+
+            startMonitors();
+        });
 }
 
 void Admin::deleteMonitorSocket(const std::string& uriWithoutParam)
 {
-    if (_monitorSockets.find(uriWithoutParam) != _monitorSockets.end())
-    {
-        _monitorSockets.erase(uriWithoutParam);
-    }
+    ASSERT_CORRECT_THREAD();
+
+    _monitorSockets.erase(uriWithoutParam);
 }
 
 void Admin::stop()

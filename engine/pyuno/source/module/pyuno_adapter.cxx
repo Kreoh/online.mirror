@@ -23,7 +23,7 @@
 #include <com/sun/star/beans/MethodConcept.hpp>
 #include <com/sun/star/beans/UnknownPropertyException.hpp>
 #include <com/sun/star/script/CannotConvertException.hpp>
-#include <com/sun/star/script/XInvocationAdapterFactory2.hpp>
+#include <com/sun/star/script/XInvocationAdapterFactory.hpp>
 #include <com/sun/star/beans/XIntrospection.hpp>
 
 #include <comphelper/sequence.hxx>
@@ -34,10 +34,10 @@
 
 using com::sun::star::beans::XIntrospectionAccess;
 using cpo::uno::Any;
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 using cpo::uno::Sequence;
-using com::sun::star::uno::RuntimeException;
-using com::sun::star::uno::XInterface;
+using cpo::uno::RuntimeException;
+using cpo::uno::XInterface;
 using cpo::uno::Type;
 using com::sun::star::lang::XUnoTunnel;
 using com::sun::star::lang::IllegalArgumentException;

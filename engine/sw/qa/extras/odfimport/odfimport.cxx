@@ -54,15 +54,19 @@
 #include <vcl/graph.hxx>
 #include <vcl/scheduler.hxx>
 
+#include <IDocumentMarkAccess.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <wrtsh.hxx>
 #include <ndtxt.hxx>
+#include <ndhints.hxx>
+#include <txatbase.hxx>
 #include <swdtflvr.hxx>
 #include <view.hxx>
 #include <edtwin.hxx>
 #include <olmenu.hxx>
 #include <hintids.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <fmtcntnt.hxx>
 #include <ndgrf.hxx>
 #include <ndole.hxx>
@@ -79,7 +83,8 @@
 #endif
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -438,6 +443,21 @@ CPPUNIT_TEST_FIXTURE(Test, testPageStyleLayoutDefault)
     uno::Reference<beans::XPropertySet> xPropertySet(getStyles(u"PageStyles"_ustr)->getByName(u"Standard"_ustr), uno::UNO_QUERY);
     // This was style::PageStyleLayout_MIRRORED.
     CPPUNIT_ASSERT_EQUAL(style::PageStyleLayout_ALL, getProperty<style::PageStyleLayout>(xPropertySet, u"PageStyleLayout"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFormControlImplementationOutsideForms)
+{
+    // a form with two controls: one names a form component service, the other names a form
+    // component by an implementation name outside the form namespaces
+    createSwDoc("form-control-implementation.fodt");
+    uno::Reference<drawing::XDrawPageSupplier> const xDPS(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<form::XFormsSupplier> const xFS(xDPS->getDrawPage(), uno::UNO_QUERY_THROW);
+    uno::Reference<container::XIndexContainer> const xForms(xFS->getForms(), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xForms->getCount());
+    uno::Reference<container::XNameAccess> const xForm(xForms->getByIndex(0), uno::UNO_QUERY_THROW);
+    // only the control named by a form component service is imported
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), uno::Reference<container::XIndexAccess>(xForm, uno::UNO_QUERY_THROW)->getCount());
+    CPPUNIT_ASSERT(xForm->hasByName(u"TextBox"_ustr));
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTimeFormFormats)
@@ -1543,7 +1563,7 @@ CPPUNIT_TEST_FIXTURE(Test, testForcepoint108)
 
 #ifdef _WIN32
 template <class T>
-void runWindowsFileZoneTests(css::uno::Reference<css::frame::XDesktop2> const & aDesktop,
+void runWindowsFileZoneTests(cpo::uno::Reference<css::frame::XDesktop> const & aDesktop,
                              const OUString& sFileName, sal_Int32 configValue, sal_Int32 zoneId,
                              bool expectedResult)
 {
@@ -1869,6 +1889,67 @@ CPPUNIT_TEST_FIXTURE(Test, testHorizontalRuleOldOdf)
     // keeps a document saved before the marker existed rendering the way it was written
     createSwDoc("fdo75872_aoo40.odt");
     CPPUNIT_ASSERT(!getProperty<bool>(getShape(1), u"HorizontalRule"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFieldmarkBelowNestedTable)
+{
+    // a fieldmark in a table cell whose first content is a nested table is imported, and the
+    // document it is in loads
+    createSwDoc("fieldmark-below-nested-table.fodt");
+
+    IDocumentMarkAccess& rMarkAccess(*getSwDoc()->getIDocumentMarkAccess());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), rMarkAccess.getFieldmarksCount());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testNoSettingsFitsTextTheNewWay)
+{
+    // A minimal document with no settings.xml, like the empty templates that storage hosts copy
+    // for a new document, fits text the new way.
+    createSwDoc("no-settings.odt");
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(!getProperty<bool>(xSettings, u"TextFittingLegacy"_ustr));
+    CPPUNIT_ASSERT(!getProperty<bool>(xSettings, u"LineSpacingBelowBaselineLegacy"_ustr));
+
+    // A document saved before these settings existed keeps the older fitting.
+    createSwDoc("fdo75872_aoo40.odt");
+    xFactory.set(mxComponent, uno::UNO_QUERY);
+    xSettings.set(xFactory->createInstance(u"com.sun.star.document.Settings"_ustr),
+                  uno::UNO_QUERY);
+    CPPUNIT_ASSERT(getProperty<bool>(xSettings, u"TextFittingLegacy"_ustr));
+    CPPUNIT_ASSERT(getProperty<bool>(xSettings, u"LineSpacingBelowBaselineLegacy"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testForeignSettingsFitsTextTheNewWay)
+{
+    // A document with a settings.xml that holds none of our settings, as other producers write
+    // it, fits text the new way.
+    createSwDoc("foreign-settings.odt");
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(!getProperty<bool>(xSettings, u"TextFittingLegacy"_ustr));
+    CPPUNIT_ASSERT(!getProperty<bool>(xSettings, u"LineSpacingBelowBaselineLegacy"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFlatOdfRsidOnlySpanIgnoredForPortions)
+{
+    // Given a flat ODF document with a span whose only attribute is an RSID:
+    createSwDoc("rsid-only-span.fodt");
+
+    // Then that span is marked to be ignored when text portions are merged, as it is after loading
+    // the same document as a package:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    CPPUNIT_ASSERT(pTextNode);
+    CPPUNIT_ASSERT(pTextNode->GetpSwpHints());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pTextNode->GetpSwpHints()->Count());
+    const SwTextAttr* pSpan = pTextNode->GetpSwpHints()->Get(0);
+    // Without the fix in place, this test would have failed, the span was not marked, so any later
+    // change to the paragraph left its portions inconsistent.
+    CPPUNIT_ASSERT(pSpan->IsFormatIgnoreStart());
+    CPPUNIT_ASSERT(pSpan->IsFormatIgnoreEnd());
 }
 
 } // end of anonymous namespace

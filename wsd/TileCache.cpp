@@ -63,22 +63,17 @@ TileCache::TileCache(std::string docURL, const std::chrono::system_clock::time_p
     , _maxCacheSize(1024 * 1024)
     , _dontCache(dontCache)
 {
-#ifndef BUILDING_TESTS
     LOG_INF(
         "TileCache ctor for uri ["
         << Anonymizer::anonymizeUrl(_docURL) << "], modifiedTime="
         << std::chrono::duration_cast<std::chrono::seconds>(modifiedTime.time_since_epoch()).count()
         << "], dontCache=" << _dontCache);
-#endif
-    (void)modifiedTime;
 }
 
 TileCache::~TileCache()
 {
     _owner = ProcUtil::ThreadId();
-#ifndef BUILDING_TESTS
     LOG_INF("~TileCache dtor for uri [" << Anonymizer::anonymizeUrl(_docURL) << "].");
-#endif
 }
 
 void TileCache::clear()
@@ -344,8 +339,6 @@ void TileCache::saveTileAndNotify(const TileDesc& desc, const char *data, const 
                 if (session)
                 {
                     session->sendTileNow(desc, tile);
-                    if (auto db = session->getDocumentBroker())
-                        db->recordFirstTileSent();
                 }
             }
         }
@@ -361,6 +354,33 @@ void TileCache::saveTileAndNotify(const TileDesc& desc, const char *data, const 
     }
     else
         LOG_DBG("No subscribers for: " << cacheFileName(desc));
+}
+
+void TileCache::forgetGoneTile(const TileDesc& desc)
+{
+    ASSERT_CORRECT_THREAD_OWNER(_owner);
+
+    std::shared_ptr<TileBeingRendered> tileBeingRendered = findTileBeingRendered(desc);
+    if (!tileBeingRendered)
+    {
+        LOG_DBG("No subscribers for gone tile: " << cacheFileName(desc));
+        return;
+    }
+
+    // A preview is answered with the description of the tile and no pixels. A plain tile of a gone
+    // page gets no answer.
+    if (desc.isPreview())
+    {
+        const std::string message = desc.serialize("tilegone:");
+        for (const auto& subscriber : tileBeingRendered->getSubscribers())
+        {
+            std::shared_ptr<ClientSession> session = subscriber.lock();
+            if (session)
+                session->sendTextFrame(message);
+        }
+    }
+
+    forgetTileBeingRendered(desc, tileBeingRendered);
 }
 
 bool TileCache::getTextStream(StreamType type, const std::string& fileName, std::string& content)
@@ -413,7 +433,7 @@ Blob TileCache::lookupCachedStream(StreamType type, const std::string& name)
     return Blob();
 }
 
-bool TileCache::invalidateTiles(int part, int mode, int x, int y, int width, int height, CanonicalViewId canonicalViewId)
+bool TileCache::invalidateTiles(const std::string& part, int mode, int x, int y, int width, int height, CanonicalViewId canonicalViewId)
 {
     LOG_TRC("Removing invalidated tiles: part: " << part << ", mode: " << mode <<
             ", x: " << x << ", y: " << y <<
@@ -455,7 +475,8 @@ bool TileCache::invalidateTiles(int part, int mode, int x, int y, int width, int
 
 bool TileCache::invalidateTiles(const std::string& tiles, CanonicalViewId canonicalViewId)
 {
-    int part = 0, mode = 0;
+    std::string part("0");
+    int mode = 0;
     TileWireId wireId = 0;
     const Util::Rectangle invalidateRect = TileCache::parseInvalidateMsg(tiles, part, mode, wireId);
 
@@ -463,7 +484,7 @@ bool TileCache::invalidateTiles(const std::string& tiles, CanonicalViewId canoni
                     invalidateRect.getWidth(), invalidateRect.getHeight(), canonicalViewId);
 }
 
-Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &part, int &mode, TileWireId &wireId)
+Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, std::string &part, int &mode, TileWireId &wireId)
 {
     StringVector tokens = StringVector::tokenize(tiles);
 
@@ -487,39 +508,37 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
     }
 
     mode = 0;
-    part = 0;
+    part = "0";
     wireId = 0;
     if (tokenCount == 2 && tokens.equals(1, "EMPTY"))
     {
-        part = -1;
+        part = "-1";
         return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
     }
     else if (tokenCount == 3 && tokens.equals(1, "EMPTY,"))
     {
-        part = -1;
+        part = "-1";
         if (!tokens.getUInt32(2, "wid", wireId))
             assert(false && "missing wid");
         return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
     }
     else if (tokenCount == 4 && tokens.equals(1, "EMPTY,"))
     {
-        if (stringToInteger(tokens[2], part))
-        {
-            if (!tokens.getUInt32(3, "wid", wireId))
-                assert(false && "missing wid");
-            return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
-        }
+        // The part token may end with the comma that separated it from a mode.
+        part = std::string(Util::rtrim(tokens[2], ','));
+        if (!tokens.getUInt32(3, "wid", wireId))
+            assert(false && "missing wid");
+        return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
     }
     else if (tokenCount == 5 && tokens.equals(1, "EMPTY,"))
     {
-        if (stringToInteger(tokens[2], part))
+        // The part token ends with the comma separating it from the mode.
+        part = std::string(Util::rtrim(tokens[2], ','));
+        if (stringToInteger(tokens[3], mode))
         {
-            if (stringToInteger(tokens[3], mode))
-            {
-                if (!tokens.getUInt32(4, "wid", wireId))
-                    assert(false && "missing wid");
-                return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
-            }
+            if (!tokens.getUInt32(4, "wid", wireId))
+                assert(false && "missing wid");
+            return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
         }
     }
     else
@@ -529,7 +548,7 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
         int width = 0;
         int height = 0;
         if (tokenCount == 7 &&
-            getTokenInteger(tokens[1], "part", part) &&
+            getTokenString(tokens[1], "part", part) &&
             getNonNegTokenInteger(tokens[2], "x", x) &&
             getNonNegTokenInteger(tokens[3], "y", y) &&
             getNonNegTokenInteger(tokens[4], "width", width) &&
@@ -539,7 +558,7 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
             return Util::Rectangle(x, y, width, height);
         }
         else if (tokenCount == 8 &&
-            getTokenInteger(tokens[1], "part", part) &&
+            getTokenString(tokens[1], "part", part) &&
             getTokenInteger(tokens[2], "mode", mode) &&
             getNonNegTokenInteger(tokens[3], "x", x) &&
             getNonNegTokenInteger(tokens[4], "y", y) &&
@@ -552,7 +571,7 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
     }
 
     LOG_ERR("Unexpected invalidatetiles request [" << tiles << "].");
-    part = -1;
+    part = "-1";
     return Util::Rectangle(0, 0, 0, 0);
 }
 
@@ -566,18 +585,9 @@ std::string TileCache::cacheFileName(const TileDesc& tile)
     return oss.str();
 }
 
-bool TileCache::parseCacheFileName(const std::string& fileName, int& part, int& mode, int& width, int& height,
-                                   int& tilePosX, int& tilePosY, int& tileWidth, int& tileHeight,
-                                   int& nviewid)
+bool TileCache::intersectsTile(const TileDesc &tileDesc, const std::string& part, int mode, int x, int y, int width, int height, CanonicalViewId canonicalViewId)
 {
-    return std::sscanf(fileName.c_str(), "%d_%d_%d_%dx%d.%d,%d.%dx%d.png", &nviewid, &part, &mode,
-                       &width, &height, &tilePosX, &tilePosY, &tileWidth, &tileHeight)
-           == 8;
-}
-
-bool TileCache::intersectsTile(const TileDesc &tileDesc, int part, int mode, int x, int y, int width, int height, CanonicalViewId canonicalViewId)
-{
-    if (part != -1 && tileDesc.getPart() != part)
+    if (part != "-1" && tileDesc.getPart() != part)
         return false;
 
     if (mode != tileDesc.getEditMode())
@@ -793,7 +803,6 @@ void TileCache::setMaxCacheSize(size_t cacheSize)
     ensureCacheSize();
 }
 
-#ifdef BUILDING_TESTS
 void TileCache::injectTileBeingRenderedForTest(
     const TileDesc& tile,
     std::chrono::steady_clock::time_point startTime,
@@ -804,7 +813,6 @@ void TileCache::injectTileBeingRenderedForTest(
         tileBeingRendered->getSubscribers().push_back(subscriber);
     _tilesBeingRendered[tile] = std::move(tileBeingRendered);
 }
-#endif
 
 void TileCache::saveDataToStreamCache(StreamType type, const std::string &fileName, const char *data, const size_t size)
 {

@@ -25,8 +25,6 @@ gb_Executable_FILENAMES := $(foreach group,$(gb_Executable_VALIDGROUPS),\
 ifneq (,$(filter-out MACOSX WNT,$(OS)))
 gb_Executable_FILENAMES := $(patsubst uno:uno,uno:uno.bin,$(gb_Executable_FILENAMES))
 endif
-gb_Executable_FILENAMES := $(patsubst unopkg_bin:unopkg_bin%,unopkg_bin:unopkg$(if $(filter-out MACOSX,$(OS)),.bin),$(gb_Executable_FILENAMES))
-gb_Executable_FILENAMES := $(patsubst unopkg_com:unopkg_com%,unopkg_com:unopkg.com,$(gb_Executable_FILENAMES))
 ifneq ($(OS),MACOSX)
 gb_Executable_FILENAMES := $(patsubst gengal:gengal,gengal:gengal.bin,$(gb_Executable_FILENAMES))
 endif
@@ -57,7 +55,7 @@ endif
 
 # Make has no support for 'or' clauses in conditionals,
 # we use a filter expression instead.
-ifneq (,$(filter SOLARIS GCC,$(OS) $(COM)))
+ifneq (,$(filter GCC,$(OS) $(COM)))
 ifeq ($(OS),MACOSX)
 # libpyuno_wrapper.dylib => pyuno.so
 gb_Library_FILENAMES := $(patsubst pyuno_wrapper:libpyuno_wrapper.dylib,pyuno_wrapper:pyuno.so,$(gb_Library_FILENAMES))

@@ -33,7 +33,7 @@
 #include <editeng/flditem.hxx>
 #include <svl/languageoptions.hxx>
 #include <editeng/editdata.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <editeng/editengdllapi.h>
 
 #include <config_collab.h>
@@ -151,10 +151,10 @@ public:
     }
 
     // Access to clipboard
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const = 0;
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const = 0;
 
     // implemented if drag and drop support is wanted
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget()
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget()
     {
         return nullptr;
     }
@@ -276,7 +276,7 @@ public:
 
     // especially for Oliver Specht
     Point           GetWindowPosTopLeft( sal_Int32 nParagraph );
-    SAL_DLLPRIVATE void            MoveParagraphs( Range aParagraphs, sal_Int32 nNewPos );
+    void            MoveParagraphs( Range aParagraphs, sal_Int32 nNewPos );
     SAL_DLLPRIVATE void            MoveParagraphs( tools::Long nDiff );
 
     const SfxItemSet& GetEmptyItemSet() const;
@@ -302,12 +302,12 @@ public:
     void            SetControlWord( EVControlBits nWord );
     EVControlBits   GetControlWord() const;
 
-    std::unique_ptr<EditTextObject> CreateTextObject();
+    EditTextObject CreateTextObject();
     void            InsertText( const EditTextObject& rTextObject );
-    void            InsertText( css::uno::Reference< css::datatransfer::XTransferable > const & xDataObj, const OUString& rBaseURL, bool bUseSpecial );
+    void            InsertText( cpo::uno::Reference< css::datatransfer::XTransferable > const & xDataObj, const OUString& rBaseURL, bool bUseSpecial );
 
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const;
-    css::uno::Reference<css::datatransfer::XTransferable> GetTransferable() const;
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const;
+    cpo::uno::Reference<css::datatransfer::XTransferable> GetTransferable() const;
 
     // An EditView, so that when TRUE the update will be free from flickering:
     // @return the previous bUpdateLayout state
@@ -333,8 +333,7 @@ public:
 
     SAL_DLLPRIVATE bool            IsCursorAtWrongSpelledWord();
     bool            IsWrongSpelledWordAtPos( const Point& rPosPixel, bool bMarkIfWrong = false );
-    bool ExecuteSpellPopup(const Point& rPosPixel, const Link<SpellCallbackInfo&, void>& rCallBack,
-                           bool bAddOtherOption = false);
+    bool ExecuteSpellPopup(const Point& rPosPixel, bool bAddOtherOption = false);
     OUString        SpellIgnoreWord();
 
     void                InsertField( const SvxFieldItem& rFld );
@@ -383,8 +382,8 @@ public:
     */
     static LanguageType CheckLanguage(
                             const OUString &rText,
-                            const css::uno::Reference< css::linguistic2::XSpellChecker >& xSpell,
-                            const css::uno::Reference< css::linguistic2::XLanguageGuessing >& xLangGuess,
+                            const cpo::uno::Reference< css::linguistic2::XSpellChecker >& xSpell,
+                            const cpo::uno::Reference< css::linguistic2::XLanguageGuessing >& xLangGuess,
                             bool bIsParaText );
     /// Allows adjusting the point or mark of the selection to a document coordinate.
     void SetCursorLogicPosition(const Point& rPosition, bool bPoint, bool bClearMark);

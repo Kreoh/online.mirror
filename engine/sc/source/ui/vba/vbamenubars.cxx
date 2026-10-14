@@ -14,6 +14,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 namespace {
@@ -21,18 +22,18 @@ namespace {
 class MenuBarEnumeration : public ::cppu::WeakImplHelper< container::XEnumeration >
 {
     uno::Reference< XHelperInterface > m_xParent;
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     uno::Reference< container::XEnumeration > m_xEnumeration;
 public:
     /// @throws uno::RuntimeException
-    MenuBarEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< uno::XComponentContext > xContext, uno::Reference< container::XEnumeration > xEnumeration) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xEnumeration(std::move( xEnumeration ))
+    MenuBarEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< cpo::uno::XComponentContext > xContext, uno::Reference< container::XEnumeration > xEnumeration) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xEnumeration(std::move( xEnumeration ))
     {
     }
-    virtual bool SAL_CALL hasMoreElements() override
+    virtual bool hasMoreElements() override
     {
         return m_xEnumeration->hasMoreElements();
     }
-    virtual cpo::uno::Any SAL_CALL nextElement() override
+    virtual cpo::uno::Any nextElement() override
     {
         // FIXME: should be add menubar
         if( !hasMoreElements() )
@@ -46,7 +47,7 @@ public:
 
 }
 
-ScVbaMenuBars::ScVbaMenuBars( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, uno::Reference< XCommandBars > xCommandBars ) : MenuBars_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBars(std::move( xCommandBars ))
+ScVbaMenuBars::ScVbaMenuBars( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, uno::Reference< XCommandBars > xCommandBars ) : MenuBars_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBars(std::move( xCommandBars ))
 {
 }
 
@@ -55,7 +56,7 @@ ScVbaMenuBars::~ScVbaMenuBars()
 }
 
 // XEnumerationAccess
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaMenuBars::getElementType()
 {
     return cppu::UnoType<excel::XMenuBar>::get();
@@ -75,14 +76,14 @@ ScVbaMenuBars::createCollectionObject( const cpo::uno::Any& aSource )
     return aSource;
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaMenuBars::getCount()
 {
     return m_xCommandBars->getCount();
 }
 
 // ScVbaCollectionBaseImpl
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaMenuBars::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2*/ )
 {
     sal_Int16 nIndex = 0;
@@ -96,7 +97,7 @@ ScVbaMenuBars::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2
         return cpo::uno::Any( xMenuBar );
     }
 
-    throw uno::RuntimeException(u"Not implemented"_ustr );
+    throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
 }
 
 // XHelperInterface

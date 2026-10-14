@@ -76,6 +76,7 @@
 		BE74B1F42D3F963F009786DF /* Util-mobile.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Util-mobile.cpp"; path = "../../../common/Util-mobile.cpp"; sourceTree = "<group>"; };
 		BE74B1F52D3F963F009786DF /* Util-server.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Util-server.cpp"; path = "../../../common/Util-server.cpp"; sourceTree = "<group>"; };
 		BE74B1F62D3F963F009786DF /* Util-unix.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Util-unix.cpp"; path = "../../../common/Util-unix.cpp"; sourceTree = "<group>"; };
+		BE5C4E032F13A000009786DF /* Watchdog-unix.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Watchdog-unix.cpp"; path = "../../../common/Watchdog-unix.cpp"; sourceTree = "<group>"; };
 		BE74B1F72D3F963F009786DF /* Util-windows.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Util-windows.cpp"; path = "../../../common/Util-windows.cpp"; sourceTree = "<group>"; };
 		BE74B1F82D3F963F009786DF /* Watchdog.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Watchdog.hpp; path = ../../../common/Watchdog.hpp; sourceTree = "<group>"; };
 		BE74B1F92D3F96CB009786DF /* Delta.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Delta.hpp; path = ../../../kit/Delta.hpp; sourceTree = "<group>"; };
@@ -94,7 +95,6 @@
 		BE74B2082D3F96CB009786DF /* KitWebSocket.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = KitWebSocket.cpp; path = ../../../kit/KitWebSocket.cpp; sourceTree = "<group>"; };
 		BE74B2092D3F96CB009786DF /* SetupKitEnvironment.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = SetupKitEnvironment.hpp; path = ../../../kit/SetupKitEnvironment.hpp; sourceTree = "<group>"; };
 		BE74B20A2D3F96CB009786DF /* StateRecorder.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = StateRecorder.hpp; path = ../../../kit/StateRecorder.hpp; sourceTree = "<group>"; };
-		BE74B20B2D3F96CB009786DF /* TestStubs.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = TestStubs.cpp; path = ../../../kit/TestStubs.cpp; sourceTree = "<group>"; };
 		BE74B20C2D3F96CB009786DF /* Watermark.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Watermark.hpp; path = ../../../kit/Watermark.hpp; sourceTree = "<group>"; };
 		BE74B20D2D3F971C009786DF /* AsyncDNS.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = AsyncDNS.hpp; path = ../../../net/AsyncDNS.hpp; sourceTree = "<group>"; };
 		BE74B20E2D3F971C009786DF /* Buffer.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Buffer.hpp; path = ../../../net/Buffer.hpp; sourceTree = "<group>"; };
@@ -112,6 +112,7 @@
 		BE74B21A2D3F971C009786DF /* ServerSocket.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = ServerSocket.hpp; path = ../../../net/ServerSocket.hpp; sourceTree = "<group>"; };
 		BE74B21B2D3F971C009786DF /* Socket.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Socket.hpp; path = ../../../net/Socket.hpp; sourceTree = "<group>"; };
 		BE74B21C2D3F971C009786DF /* Socket.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Socket.cpp; path = ../../../net/Socket.cpp; sourceTree = "<group>"; };
+		BE5C4E012F13A000009786DF /* Socket-unix.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Socket-unix.cpp"; path = "../../../net/Socket-unix.cpp"; sourceTree = "<group>"; };
 		BE74B21D2D3F971C009786DF /* Ssl.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Ssl.hpp; path = ../../../net/Ssl.hpp; sourceTree = "<group>"; };
 		BE74B21E2D3F971C009786DF /* Ssl.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Ssl.cpp; path = ../../../net/Ssl.cpp; sourceTree = "<group>"; };
 		BE74B21F2D3F971C009786DF /* SslSocket.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = SslSocket.hpp; path = ../../../net/SslSocket.hpp; sourceTree = "<group>"; };
@@ -163,7 +164,6 @@
 		BE74B24D2D3F97AB009786DF /* SpecialBrokers.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SpecialBrokers.cpp; path = ../../../wsd/SpecialBrokers.cpp; sourceTree = "<group>"; };
 		BE74B24E2D3F97AB009786DF /* Storage.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Storage.hpp; path = ../../../wsd/Storage.hpp; sourceTree = "<group>"; };
 		BE74B24F2D3F97AB009786DF /* Storage.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Storage.cpp; path = ../../../wsd/Storage.cpp; sourceTree = "<group>"; };
-		BE74B2502D3F97AB009786DF /* TestStubs.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = TestStubs.cpp; path = ../../../wsd/TestStubs.cpp; sourceTree = "<group>"; };
 		BE74B2512D3F97AB009786DF /* TileCache.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = TileCache.hpp; path = ../../../wsd/TileCache.hpp; sourceTree = "<group>"; };
 		BE74B2522D3F97AB009786DF /* TileCache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = TileCache.cpp; path = ../../../wsd/TileCache.cpp; sourceTree = "<group>"; };
 		BE74B2532D3F97AB009786DF /* TileDesc.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = TileDesc.hpp; path = ../../../wsd/TileDesc.hpp; sourceTree = "<group>"; };
@@ -256,6 +256,7 @@
 				BE74B1F42D3F963F009786DF /* Util-mobile.cpp */,
 				BE74B1F52D3F963F009786DF /* Util-server.cpp */,
 				BE74B1F62D3F963F009786DF /* Util-unix.cpp */,
+				BE5C4E032F13A000009786DF /* Watchdog-unix.cpp */,
 				BE74B1F72D3F963F009786DF /* Util-windows.cpp */,
 				BE74B1F82D3F963F009786DF /* Watchdog.hpp */,
 			);
@@ -281,7 +282,6 @@
 				BE74B2082D3F96CB009786DF /* KitWebSocket.cpp */,
 				BE74B2092D3F96CB009786DF /* SetupKitEnvironment.hpp */,
 				BE74B20A2D3F96CB009786DF /* StateRecorder.hpp */,
-				BE74B20B2D3F96CB009786DF /* TestStubs.cpp */,
 				BE74B20C2D3F96CB009786DF /* Watermark.hpp */,
 			);
 			path = kit;
@@ -306,6 +306,7 @@
 				BE74B21A2D3F971C009786DF /* ServerSocket.hpp */,
 				BE74B21B2D3F971C009786DF /* Socket.hpp */,
 				BE74B21C2D3F971C009786DF /* Socket.cpp */,
+				BE5C4E012F13A000009786DF /* Socket-unix.cpp */,
 				BE74B21D2D3F971C009786DF /* Ssl.hpp */,
 				BE74B21E2D3F971C009786DF /* Ssl.cpp */,
 				BE74B21F2D3F971C009786DF /* SslSocket.hpp */,
@@ -364,7 +365,6 @@
 				BE74B24D2D3F97AB009786DF /* SpecialBrokers.cpp */,
 				BE74B24E2D3F97AB009786DF /* Storage.hpp */,
 				BE74B24F2D3F97AB009786DF /* Storage.cpp */,
-				BE74B2502D3F97AB009786DF /* TestStubs.cpp */,
 				BE74B2512D3F97AB009786DF /* TileCache.hpp */,
 				BE74B2522D3F97AB009786DF /* TileCache.cpp */,
 				BE74B2532D3F97AB009786DF /* TileDesc.hpp */,

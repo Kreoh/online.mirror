@@ -39,6 +39,7 @@
 #include <vcl/BitmapWriteAccess.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 using drawinglayer::primitive2d::Primitive2DSequence;
 using drawinglayer::primitive2d::Primitive2DReference;
@@ -89,7 +90,7 @@ Bitmap loadFromName(const OUString& rFileName, const ImageLoadFlags eFlags)
 
 void loadFromSvg(SvStream& rStream, const OUString& sPath, Bitmap& rBitmap, double fScalingFactor)
 {
-    const uno::Reference<uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
     const uno::Reference<graphic::XSvgParser> xSvgParser = graphic::SvgTools::create(xContext);
 
     std::size_t nSize = rStream.remainingSize();
@@ -109,7 +110,7 @@ void loadFromSvg(SvStream& rStream, const OUString& sPath, Bitmap& rBitmap, doub
 
     geometry::RealRectangle2D aRealRect;
     basegfx::B2DRange aRange;
-    for (css::uno::Reference<css::graphic::XPrimitive2D> const & xReference : aPrimitiveSequence)
+    for (cpo::uno::Reference<css::graphic::XPrimitive2D> const & xReference : aPrimitiveSequence)
     {
         if (xReference.is())
         {
@@ -125,7 +126,7 @@ void loadFromSvg(SvStream& rStream, const OUString& sPath, Bitmap& rBitmap, doub
 
     double nDPI = 96 * fScalingFactor;
 
-    const css::uno::Reference<css::graphic::XPrimitive2DRenderer> xPrimitive2DRenderer = css::graphic::Primitive2DTools::create(xContext);
+    const cpo::uno::Reference<css::graphic::XPrimitive2DRenderer> xPrimitive2DRenderer = css::graphic::Primitive2DTools::create(xContext);
     std::unique_ptr<Bitmap> xBitmap(reinterpret_cast<Bitmap*>(
         xPrimitive2DRenderer->rasterize(aPrimitiveSequence, aViewParameters, nDPI, nDPI, aRealRect, 256*256)));
 

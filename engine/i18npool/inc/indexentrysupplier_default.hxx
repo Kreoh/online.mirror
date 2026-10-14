@@ -31,7 +31,7 @@ class Index;
 
 class IndexEntrySupplier_Unicode final : public IndexEntrySupplier_Common {
 public:
-    IndexEntrySupplier_Unicode( const css::uno::Reference < css::uno::XComponentContext >& rxContext );
+    IndexEntrySupplier_Unicode( const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext );
     virtual ~IndexEntrySupplier_Unicode() override;
 
     virtual bool loadAlgorithm(
@@ -78,13 +78,13 @@ public:
 class Index
 {
 public:
-    Index(const css::uno::Reference < css::uno::XComponentContext >& rxContext);
+    Index(const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext);
     ~Index();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void init(const css::lang::Locale& rLocale, const OUString& algorithm);
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void makeIndexKeys(const css::lang::Locale &rLocale, std::u16string_view algorithm);
     sal_Int16 getIndexWeight(const OUString& rIndexEntry);
     OUString getIndexDescription(const OUString& rIndexEntry);

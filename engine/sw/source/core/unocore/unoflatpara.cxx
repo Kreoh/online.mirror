@@ -53,6 +53,7 @@
 #include <com/sun/star/text/XTextRange.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace SwUnoCursorHelper {
 
@@ -78,7 +79,7 @@ SwXFlatParagraph::~SwXFlatParagraph()
 
 
 // XPropertySet
-uno::Reference< beans::XPropertySetInfo > SAL_CALL
+uno::Reference< beans::XPropertySetInfo >
 SwXFlatParagraph::getPropertySetInfo()
 {
     static const comphelper::PropertyMapEntry s_Entries[] = {
@@ -90,14 +91,14 @@ SwXFlatParagraph::getPropertySetInfo()
     return new comphelper::PropertySetInfo(s_Entries);
 }
 
-void SAL_CALL
+void
 SwXFlatParagraph::setPropertyValue(const OUString&, const cpo::uno::Any&)
 {
     throw lang::IllegalArgumentException(u"no values can be set"_ustr,
             getXWeak(), 0);
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwXFlatParagraph::getPropertyValue(const OUString& rPropertyName)
 {
     SolarMutexGuard g;
@@ -129,7 +130,7 @@ SwXFlatParagraph::getPropertyValue(const OUString& rPropertyName)
     return cpo::uno::Any();
 }
 
-void SAL_CALL
+void
 SwXFlatParagraph::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
@@ -138,7 +139,7 @@ SwXFlatParagraph::addPropertyChangeListener(
         "SwXFlatParagraph::addPropertyChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXFlatParagraph::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
@@ -147,7 +148,7 @@ SwXFlatParagraph::removePropertyChangeListener(
         "SwXFlatParagraph::removePropertyChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXFlatParagraph::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
@@ -156,7 +157,7 @@ SwXFlatParagraph::addVetoableChangeListener(
         "SwXFlatParagraph::addVetoableChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXFlatParagraph::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
@@ -166,32 +167,32 @@ SwXFlatParagraph::removeVetoableChangeListener(
 }
 
 
-css::uno::Reference< css::container::XStringKeyMap > SAL_CALL SwXFlatParagraph::getMarkupInfoContainer()
+cpo::uno::Reference< css::container::XStringKeyMap > SwXFlatParagraph::getMarkupInfoContainer()
 {
     return SwXTextMarkup::getMarkupInfoContainer();
 }
 
-void SAL_CALL SwXFlatParagraph::commitTextRangeMarkup(::sal_Int32 nType, const OUString & aIdentifier, const uno::Reference< text::XTextRange> & xRange,
-                                                      const css::uno::Reference< css::container::XStringKeyMap > & xMarkupInfoContainer)
+void SwXFlatParagraph::commitTextRangeMarkup(::sal_Int32 nType, const OUString & aIdentifier, const uno::Reference< text::XTextRange> & xRange,
+                                                      const cpo::uno::Reference< css::container::XStringKeyMap > & xMarkupInfoContainer)
 {
     SolarMutexGuard aGuard;
     SwXTextMarkup::commitTextRangeMarkup( nType, aIdentifier, xRange,  xMarkupInfoContainer );
 }
 
-void SAL_CALL SwXFlatParagraph::commitStringMarkup(::sal_Int32 nType, const OUString & rIdentifier, ::sal_Int32 nStart, ::sal_Int32 nLength, const css::uno::Reference< css::container::XStringKeyMap > & rxMarkupInfoContainer)
+void SwXFlatParagraph::commitStringMarkup(::sal_Int32 nType, const OUString & rIdentifier, ::sal_Int32 nStart, ::sal_Int32 nLength, const cpo::uno::Reference< css::container::XStringKeyMap > & rxMarkupInfoContainer)
 {
     SolarMutexGuard aGuard;
     SwXTextMarkup::commitStringMarkup( nType, rIdentifier, nStart, nLength,  rxMarkupInfoContainer );
 }
 
 // text::XFlatParagraph:
-OUString SAL_CALL SwXFlatParagraph::getText()
+OUString SwXFlatParagraph::getText()
 {
     return maExpandText;
 }
 
 // text::XFlatParagraph:
-void SAL_CALL SwXFlatParagraph::setChecked( ::sal_Int32 nType, bool bVal )
+void SwXFlatParagraph::setChecked( ::sal_Int32 nType, bool bVal )
 {
     SolarMutexGuard aGuard;
 
@@ -214,7 +215,7 @@ void SAL_CALL SwXFlatParagraph::setChecked( ::sal_Int32 nType, bool bVal )
 }
 
 // text::XFlatParagraph:
-bool SAL_CALL SwXFlatParagraph::isChecked( ::sal_Int32 nType )
+bool SwXFlatParagraph::isChecked( ::sal_Int32 nType )
 {
     SolarMutexGuard aGuard;
     if (GetTextNode())
@@ -231,14 +232,14 @@ bool SAL_CALL SwXFlatParagraph::isChecked( ::sal_Int32 nType )
 }
 
 // text::XFlatParagraph:
-bool SAL_CALL SwXFlatParagraph::isModified()
+bool SwXFlatParagraph::isModified()
 {
     SolarMutexGuard aGuard;
     return !GetTextNode() || GetTextNode()->GetText() != maOrigText;
 }
 
 // text::XFlatParagraph:
-lang::Locale SAL_CALL SwXFlatParagraph::getLanguageOfText(::sal_Int32 nPos, ::sal_Int32 nLen)
+lang::Locale SwXFlatParagraph::getLanguageOfText(::sal_Int32 nPos, ::sal_Int32 nLen)
 {
     SolarMutexGuard aGuard;
     if (!GetTextNode())
@@ -249,7 +250,7 @@ lang::Locale SAL_CALL SwXFlatParagraph::getLanguageOfText(::sal_Int32 nPos, ::sa
 }
 
 // text::XFlatParagraph:
-lang::Locale SAL_CALL SwXFlatParagraph::getPrimaryLanguageOfText(::sal_Int32 nPos, ::sal_Int32 nLen)
+lang::Locale SwXFlatParagraph::getPrimaryLanguageOfText(::sal_Int32 nPos, ::sal_Int32 nLen)
 {
     SolarMutexGuard aGuard;
 
@@ -261,7 +262,7 @@ lang::Locale SAL_CALL SwXFlatParagraph::getPrimaryLanguageOfText(::sal_Int32 nPo
 }
 
 // text::XFlatParagraph:
-void SAL_CALL SwXFlatParagraph::changeText(::sal_Int32 nPos, ::sal_Int32 nLen, const OUString & aNewText, const cpo::uno::Sequence< css::beans::PropertyValue > & aAttributes)
+void SwXFlatParagraph::changeText(::sal_Int32 nPos, ::sal_Int32 nLen, const OUString & aNewText, const cpo::uno::Sequence< css::beans::PropertyValue > & aAttributes)
 {
     SolarMutexGuard aGuard;
 
@@ -295,7 +296,7 @@ void SAL_CALL SwXFlatParagraph::changeText(::sal_Int32 nPos, ::sal_Int32 nLen, c
 }
 
 // text::XFlatParagraph:
-void SAL_CALL SwXFlatParagraph::changeAttributes(::sal_Int32 nPos, ::sal_Int32 nLen, const cpo::uno::Sequence< css::beans::PropertyValue > & aAttributes)
+void SwXFlatParagraph::changeAttributes(::sal_Int32 nPos, ::sal_Int32 nLen, const cpo::uno::Sequence< css::beans::PropertyValue > & aAttributes)
 {
     SolarMutexGuard aGuard;
 
@@ -324,7 +325,7 @@ void SAL_CALL SwXFlatParagraph::changeAttributes(::sal_Int32 nPos, ::sal_Int32 n
 }
 
 // text::XFlatParagraph:
-cpo::uno::Sequence< ::sal_Int32 > SAL_CALL SwXFlatParagraph::getLanguagePortions()
+cpo::uno::Sequence< ::sal_Int32 > SwXFlatParagraph::getLanguagePortions()
 {
     return cpo::uno::Sequence< ::sal_Int32>();
 }

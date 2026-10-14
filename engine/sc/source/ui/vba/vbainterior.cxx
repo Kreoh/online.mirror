@@ -36,6 +36,7 @@
 #include <frozen/map.h>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 using namespace ::ooo::vba::excel::XlPattern;
 
@@ -66,13 +67,13 @@ constexpr auto aPatternMap = frozen::make_map<sal_Int32, sal_Int32>({
     { xlPatternVertical, 6 }
 });
 
-ScVbaInterior::ScVbaInterior( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, uno::Reference< beans::XPropertySet >   xProps, ScDocument* pScDoc ) : ScVbaInterior_BASE( xParent, xContext ), m_xProps(std::move(xProps)), m_pScDoc( pScDoc )
+ScVbaInterior::ScVbaInterior( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, uno::Reference< beans::XPropertySet >   xProps, ScDocument* pScDoc ) : ScVbaInterior_BASE( xParent, xContext ), m_xProps(std::move(xProps)), m_pScDoc( pScDoc )
 {
     // auto color
     m_aPattColor = Color(0);
     m_nPattern = 0;
     if ( !m_xProps.is() )
-        throw lang::IllegalArgumentException(u"properties"_ustr, uno::Reference< uno::XInterface >(), 2 );
+        throw lang::IllegalArgumentException(u"properties"_ustr, uno::Reference< cpo::uno::XInterface >(), 2 );
 }
 
 cpo::uno::Any
@@ -129,13 +130,13 @@ uno::Reference< container::XIndexAccess >
 ScVbaInterior::getPalette() const
 {
     if ( !m_pScDoc )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     ScDocShell* pShell = m_pScDoc->GetDocumentShell();
     ScVbaPalette aPalette( pShell );
     return aPalette.getPalette();
 }
 
-void SAL_CALL
+void
 ScVbaInterior::setColorIndex( const cpo::uno::Any& _colorindex )
 {
     sal_Int32 nIndex = 0;
@@ -186,7 +187,7 @@ ScVbaInterior::GetColorIndex( const sal_Int32 nColor )
     return nIndex;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaInterior::getColorIndex()
 {
     sal_Int32 nColor = 0;
@@ -281,7 +282,7 @@ ScVbaInterior::SetUserDefinedAttributes( const OUString& sName, const cpo::uno::
     }
 }
 // OOo do not support below API
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaInterior::getPattern()
 {
     // XlPattern
@@ -290,11 +291,11 @@ ScVbaInterior::getPattern()
         return cpo::uno::Any( GetAttributeData( aPattern ) );
     return cpo::uno::Any( excel::XlPattern::xlPatternNone );
 }
-void SAL_CALL
+void
 ScVbaInterior::setPattern( const cpo::uno::Any& _pattern )
 {
     if( !(_pattern >>= m_nPattern) )
-        throw uno::RuntimeException(u"Invalid Pattern index"_ustr );
+        throw cpo::uno::RuntimeException(u"Invalid Pattern index"_ustr );
 
     SetUserDefinedAttributes( PATTERN, SetAttributeData( m_nPattern ) );
     SetMixedColor();
@@ -323,7 +324,7 @@ ScVbaInterior::GetBackColor()
     }
     return aBackColor;
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaInterior::getPatternColor()
 {
     // 0 is the default color. no filled.
@@ -335,18 +336,18 @@ ScVbaInterior::getPatternColor()
     }
     return cpo::uno::Any( sal_Int32( 0 ) );
 }
-void SAL_CALL
+void
 ScVbaInterior::setPatternColor( const cpo::uno::Any& _patterncolor )
 {
     sal_Int32 nPattColor = 0;
     if( !(_patterncolor >>= nPattColor) )
-        throw uno::RuntimeException(u"Invalid Pattern Color"_ustr );
+        throw cpo::uno::RuntimeException(u"Invalid Pattern Color"_ustr );
 
     SetUserDefinedAttributes( PATTERNCOLOR, SetAttributeData( XLRGBToOORGB( nPattColor ) ) );
     SetMixedColor();
 
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaInterior::getPatternColorIndex()
 {
     sal_Int32 nColor = 0;
@@ -354,12 +355,12 @@ ScVbaInterior::getPatternColorIndex()
 
     return cpo::uno::Any( GetColorIndex( nColor ) );
 }
-void SAL_CALL
+void
 ScVbaInterior::setPatternColorIndex( const cpo::uno::Any& _patterncolorindex )
 {
     sal_Int32 nColorIndex = 0;
     if( !(_patterncolorindex >>= nColorIndex) )
-        throw uno::RuntimeException(u"Invalid Pattern Color"_ustr );
+        throw cpo::uno::RuntimeException(u"Invalid Pattern Color"_ustr );
 
     if( nColorIndex == 0 )
         return;
@@ -369,35 +370,35 @@ ScVbaInterior::setPatternColorIndex( const cpo::uno::Any& _patterncolorindex )
 
 }
 
-cpo::uno::Any SAL_CALL ScVbaInterior::getThemeColor()
+cpo::uno::Any ScVbaInterior::getThemeColor()
 {
     // Just a stub for now.
     return cpo::uno::Any(static_cast<sal_Int32>(0));
 }
 
-void SAL_CALL ScVbaInterior::setThemeColor(const cpo::uno::Any& /*rAny*/)
+void ScVbaInterior::setThemeColor(const cpo::uno::Any& /*rAny*/)
 {
     // Just a stub for now.
 }
 
-cpo::uno::Any SAL_CALL ScVbaInterior::getTintAndShade()
-{
-    // Just a stub for now.
-    return cpo::uno::Any(static_cast<double>(0));
-}
-
-void SAL_CALL ScVbaInterior::setTintAndShade(const cpo::uno::Any& /*rAny*/)
-{
-    // Just a stub for now.
-}
-
-cpo::uno::Any SAL_CALL ScVbaInterior::getPatternTintAndShade()
+cpo::uno::Any ScVbaInterior::getTintAndShade()
 {
     // Just a stub for now.
     return cpo::uno::Any(static_cast<double>(0));
 }
 
-void SAL_CALL ScVbaInterior::setPatternTintAndShade(const cpo::uno::Any& /*rAny*/)
+void ScVbaInterior::setTintAndShade(const cpo::uno::Any& /*rAny*/)
+{
+    // Just a stub for now.
+}
+
+cpo::uno::Any ScVbaInterior::getPatternTintAndShade()
+{
+    // Just a stub for now.
+    return cpo::uno::Any(static_cast<double>(0));
+}
+
+void ScVbaInterior::setPatternTintAndShade(const cpo::uno::Any& /*rAny*/)
 {
     // Just a stub for now.
 }

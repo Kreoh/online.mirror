@@ -11,7 +11,7 @@
 #include <string_view>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/xml/crypto/SEInitializer.hpp>
 
 #include <comphelper/processfactory.hxx>
@@ -31,6 +31,7 @@
 #include <pdfsignaturehelper.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -64,12 +65,12 @@ int pdfVerify(int nArgc, char** pArgv)
     }
 
     // Initialize nss / mscrypto.
-    uno::Reference<uno::XComponentContext> xComponentContext;
+    uno::Reference<cpo::uno::XComponentContext> xComponentContext;
     try
     {
         xComponentContext = cppu::defaultBootstrap_InitialComponentContext();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("xmlsecurity.workben",
                              "cppu::defaultBootstrap_InitialComponentContext() failed:");
@@ -94,7 +95,7 @@ int pdfVerify(int nArgc, char** pArgv)
     {
         xSEInitializer = xml::crypto::SEInitializer::create(xComponentContext);
     }
-    catch (const uno::DeploymentException&)
+    catch (const cpo::uno::DeploymentException&)
     {
         TOOLS_WARN_EXCEPTION("xmlsecurity.workben",
                              "DeploymentException while creating SEInitializer:");

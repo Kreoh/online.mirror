@@ -86,16 +86,16 @@
 #include <comphelper/diagnose_ex.hxx>
 #include <svx/svxbmpnumiconview.hxx>
 
-using namespace com::sun::star::uno;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::text;
 using namespace com::sun::star::container;
 using namespace com::sun::star::style;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace css::beans;
 using namespace css::lang;
 using namespace css::text;
@@ -1140,7 +1140,7 @@ IMPL_LINK_NOARG(SvxBitmapPickTabPage, ClickAddBrowseHdl_Impl, weld::Button&, voi
         return;
 
     uno::Reference< lang::XMultiServiceFactory > xFactory = ::comphelper::getProcessServiceFactory();
-    uno::Reference<ucb::XSimpleFileAccess3> xSimpleFileAccess(
+    uno::Reference<ucb::XSimpleFileAccess> xSimpleFileAccess(
                  ucb::SimpleFileAccess::create( ::comphelper::getComponentContext(xFactory) ) );
     if ( !xSimpleFileAccess->exists( aUserImageURL ))
         return;
@@ -1229,7 +1229,7 @@ SvxNumOptionsTabPage::SvxNumOptionsTabPage(weld::Container* pPage, weld::DialogC
     , nNumItemId(SID_ATTR_NUMBERING_RULE)
     , m_aRatioTop(ConnectorType::Top)
     , m_aRatioBottom(ConnectorType::Bottom)
-    , m_xGrid(m_xBuilder->weld_widget(u"grid2"_ustr))
+    , m_xGrid(m_xBuilder->weld_container(u"grid2"_ustr))
     , m_xLevelLB(m_xBuilder->weld_tree_view(u"levellb"_ustr))
     , m_xFmtLB(m_xBuilder->weld_combo_box(u"numfmtlb"_ustr))
     , m_xSeparatorFT(m_xBuilder->weld_label(u"separator"_ustr))
@@ -1263,7 +1263,7 @@ SvxNumOptionsTabPage::SvxNumOptionsTabPage(weld::Container* pPage, weld::DialogC
     , m_xImgRatioBottom(new weld::CustomWeld(*m_xBuilder, u"daRatioBottom"_ustr, m_aRatioBottom))
     , m_xOrientFT(m_xBuilder->weld_label(u"orientft"_ustr))
     , m_xOrientLB(m_xBuilder->weld_combo_box(u"orientlb"_ustr))
-    , m_xAllLevelsFrame(m_xBuilder->weld_widget(u"levelsframe"_ustr))
+    , m_xAllLevelsFrame(m_xBuilder->weld_frame(u"levelsframe"_ustr))
     , m_xSameLevelCB(m_xBuilder->weld_check_button(u"allsame"_ustr))
     , m_xPreviewWIN(new weld::CustomWeld(*m_xBuilder, u"preview"_ustr, m_aPreviewWIN))
 {

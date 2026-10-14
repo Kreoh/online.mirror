@@ -65,7 +65,7 @@
 #include <pres.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace sd {
 
@@ -476,7 +476,14 @@ bool FuText::MouseButtonDown(const MouseEvent& rMEvt)
     }
     else if ( rMEvt.GetClicks() == 2 && !mpView->IsTextEdit() )
     {
-        MouseEvent aMEvt( mpWindow->GetPointerPosPixel() );
+        // The text edited is that of the object the press met, as when the selection hands a
+        // double press over, and the edit starts where the press was: on a desktop that is where
+        // the pointer is and the first press of the two has told the object already, while
+        // presses that come from elsewhere may bring the second press alone.
+        if (SdrTextObj* pHit = DynCastSdrTextObj(aVEvt.mpObj))
+            mxTextObj = pHit;
+
+        MouseEvent aMEvt( rMEvt.GetPosPixel() );
         SetInEditMode( aMEvt, false );
     }
 
@@ -1015,12 +1022,11 @@ void FuText::SetInEditMode(const MouseEvent& rMEvt, bool bQuickDrag)
         {
             ::Outliner* pOutl = mpView->GetTextEditOutliner();
             sal_Int32 nParagraphCnt = pOutl->GetParagraphCount();
-            Paragraph* p1stPara = pOutl->GetParagraph( 0 );
 
-            if (nParagraphCnt==1 && p1stPara)
+            if (nParagraphCnt==1)
             {
                 // with only one paragraph
-                if (pOutl->GetText(p1stPara).isEmpty())
+                if (pOutl->GetText(0).isEmpty())
                 {
                     bEmptyOutliner = true;
                 }
@@ -1144,7 +1150,7 @@ void FuText::DeleteDefaultText()
     if( bIsUndoEnabled )
         pOutliner->EnableUndo(false);
 
-    pOutliner->SetText( OUString(), pOutliner->GetParagraph( 0 ) );
+    pOutliner->SetText( OUString(), 0 );
 
     if( bIsUndoEnabled )
         pOutliner->EnableUndo(true);

@@ -41,6 +41,7 @@
 #include "itemholder1.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -1113,7 +1114,7 @@ uno::Reference< util::XChangesBatch > const & SvtLinguConfig::GetMainUpdateAcces
     try
     {
         // get configuration provider
-        const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
         uno::Reference< lang::XMultiServiceFactory > xConfigurationProvider =
                 configuration::theDefaultProvider::get( xContext );
 
@@ -1145,6 +1146,10 @@ OUString SvtLinguConfig::GetVendorImageUrl_Impl(
         xImagesNA.set( xImagesNA->getByName(u"Images"_ustr), uno::UNO_QUERY_THROW );
 
         uno::Reference< container::XNameAccess > xNA( xImagesNA->getByName(u"ServiceNameEntries"_ustr), uno::UNO_QUERY_THROW );
+        // Most checkers register no image of their own, which is not a
+        // failure worth an exception and a backtrace in the log.
+        if (!xNA->hasByName( rServiceImplName ))
+            return aRes;
         xNA.set( xNA->getByName( rServiceImplName ), uno::UNO_QUERY_THROW );
         cpo::uno::Any aAny(xNA->getByName(u"VendorImagesNode"_ustr));
         OUString aVendorImagesNode;

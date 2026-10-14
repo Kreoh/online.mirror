@@ -21,7 +21,7 @@
 
 #include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/script/browse/XBrowseNode.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 
 class BasicManager;
@@ -40,27 +40,27 @@ namespace basprov
     class BasicLibraryNodeImpl : public BasicLibraryNodeImpl_BASE
     {
     private:
-        css::uno::Reference< css::uno::XComponentContext >    m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext >    m_xContext;
         OUString                                              m_sScriptingContext;
         BasicManager*                                         m_pBasicManager;
-        css::uno::Reference< css::script::XLibraryContainer > m_xLibContainer;
-        css::uno::Reference< css::container::XNameContainer > m_xLibrary;
+        cpo::uno::Reference< css::script::XLibraryContainer > m_xLibContainer;
+        cpo::uno::Reference< css::container::XNameContainer > m_xLibrary;
         OUString                                              m_sLibName;
         bool                                                  m_bIsAppScript;
 
     public:
-        BasicLibraryNodeImpl( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+        BasicLibraryNodeImpl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
         OUString  sScriptingContext,
             BasicManager* pBasicManager,
-            const css::uno::Reference< css::script::XLibraryContainer >& xLibContainer,
+            const cpo::uno::Reference< css::script::XLibraryContainer >& xLibContainer,
             OUString sLibName, bool isAppScript );
         virtual ~BasicLibraryNodeImpl() override;
 
         // XBrowseNode
-        virtual OUString SAL_CALL getName(  ) override;
-        virtual cpo::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes(  ) override;
-        virtual bool SAL_CALL hasChildNodes(  ) override;
-        virtual sal_Int16 SAL_CALL getType(  ) override;
+        virtual OUString getName(  ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::script::browse::XBrowseNode > > getChildNodes(  ) override;
+        virtual bool hasChildNodes(  ) override;
+        virtual sal_Int16 getType(  ) override;
     };
 
 

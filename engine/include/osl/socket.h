@@ -20,8 +20,13 @@
 #ifndef INCLUDED_OSL_SOCKET_H
 #define INCLUDED_OSL_SOCKET_H
 
-#include "rtl/ustring.h"
-#include "osl/time.h"
+#include <rtl/ustring.h>
+
+#if defined __cplusplus
+struct TimeValue;
+#else
+#include <osl/time.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

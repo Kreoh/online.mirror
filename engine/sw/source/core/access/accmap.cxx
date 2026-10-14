@@ -81,6 +81,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 using namespace ::sw::access;
 
 namespace {
@@ -90,7 +91,7 @@ class SwDrawModellListener_Impl : public SfxListener,
 {
     mutable std::mutex maListenerMutex;
     ::comphelper::OInterfaceContainerHelper4<css::document::XEventListener> maEventListeners;
-    std::unordered_multimap<css::uno::Reference< css::drawing::XShape >, css::uno::Reference< css::document::XShapeEventListener >> maShapeListeners;
+    std::unordered_multimap<cpo::uno::Reference< css::drawing::XShape >, cpo::uno::Reference< css::document::XShapeEventListener >> maShapeListeners;
     SdrModel *mpDrawModel;
 protected:
     virtual ~SwDrawModellListener_Impl() override;
@@ -99,11 +100,11 @@ public:
     explicit SwDrawModellListener_Impl( SdrModel& rDrawModel );
 
     // css::document::XEventBroadcaster
-    virtual void SAL_CALL addEventListener( const uno::Reference< document::XEventListener >& xListener ) override;
-    virtual void SAL_CALL removeEventListener( const uno::Reference< document::XEventListener >& xListener ) override;
+    virtual void addEventListener( const uno::Reference< document::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const uno::Reference< document::XEventListener >& xListener ) override;
     // css::document::XShapeEventBroadcaster
-    virtual void SAL_CALL addShapeEventListener( const css::uno::Reference< css::drawing::XShape >& xShape, const css::uno::Reference< css::document::XShapeEventListener >& xListener ) override;
-    virtual void SAL_CALL removeShapeEventListener( const css::uno::Reference< css::drawing::XShape >& xShape, const css::uno::Reference< css::document::XShapeEventListener >& xListener ) override;
+    virtual void addShapeEventListener( const cpo::uno::Reference< css::drawing::XShape >& xShape, const cpo::uno::Reference< css::document::XShapeEventListener >& xListener ) override;
+    virtual void removeShapeEventListener( const cpo::uno::Reference< css::drawing::XShape >& xShape, const cpo::uno::Reference< css::document::XShapeEventListener >& xListener ) override;
 
     virtual void        Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
     void Dispose();
@@ -122,20 +123,20 @@ SwDrawModellListener_Impl::~SwDrawModellListener_Impl()
     Dispose();
 }
 
-void SAL_CALL SwDrawModellListener_Impl::addEventListener( const uno::Reference< document::XEventListener >& xListener )
+void SwDrawModellListener_Impl::addEventListener( const uno::Reference< document::XEventListener >& xListener )
 {
     std::unique_lock g(maListenerMutex);
     maEventListeners.addInterface( g, xListener );
 }
 
-void SAL_CALL SwDrawModellListener_Impl::removeEventListener( const uno::Reference< document::XEventListener >& xListener )
+void SwDrawModellListener_Impl::removeEventListener( const uno::Reference< document::XEventListener >& xListener )
 {
     std::unique_lock g(maListenerMutex);
     maEventListeners.removeInterface( g, xListener );
 }
 
-void SAL_CALL SwDrawModellListener_Impl::addShapeEventListener(
-                const css::uno::Reference< css::drawing::XShape >& xShape,
+void SwDrawModellListener_Impl::addShapeEventListener(
+                const cpo::uno::Reference< css::drawing::XShape >& xShape,
                 const uno::Reference< document::XShapeEventListener >& xListener )
 {
     assert(xShape.is() && "no shape?");
@@ -143,8 +144,8 @@ void SAL_CALL SwDrawModellListener_Impl::addShapeEventListener(
     maShapeListeners.emplace(xShape, xListener);
 }
 
-void SAL_CALL SwDrawModellListener_Impl::removeShapeEventListener(
-                const css::uno::Reference< css::drawing::XShape >& xShape,
+void SwDrawModellListener_Impl::removeShapeEventListener(
+                const cpo::uno::Reference< css::drawing::XShape >& xShape,
                 const uno::Reference< document::XShapeEventListener >& xListener )
 {
     std::unique_lock aGuard(maListenerMutex);
@@ -192,7 +193,7 @@ void SwDrawModellListener_Impl::Notify( SfxBroadcaster& /*rBC*/,
             {
                 aIter.next()->notifyEvent( aEvent );
             }
-            catch( uno::RuntimeException const & )
+            catch( cpo::uno::RuntimeException const & )
             {
                 TOOLS_WARN_EXCEPTION("sw.a11y", "Runtime exception caught while notifying shape");
             }
@@ -859,8 +860,8 @@ void SwAccessibleMap::FireEvent( const SwAccessibleEvent_Impl& rEvent )
         if (aIter != maFrameMap.end())
         {
             rtl::Reference < SwAccessibleContext > xContext( (*aIter).second.get() );
-            if (xContext.is() && (xContext->getAccessibleRole() == AccessibleRole::PARAGRAPH
-                                  || xContext->getAccessibleRole() == AccessibleRole::BLOCK_QUOTE))
+            if (xContext.is()
+                && SwAccessibleParagraph::IsParagraphRole(xContext->getAccessibleRole()))
             {
                 xAccImpl = xContext.get();
             }
@@ -1163,9 +1164,8 @@ void SwAccessibleMap::InvalidateShapeInParaSelection()
                             {
                                 bMarked = true;
                                 // check whether nHere is 'inside' pCursor
-                                SwPosition* pStart = rTmpCursor.Start();
+                                auto [pStart, pEnd] = rTmpCursor.StartEnd();
                                 SwNodeOffset nStartIndex = pStart->GetNodeIndex();
-                                SwPosition* pEnd = rTmpCursor.End();
                                 SwNodeOffset nEndIndex = pEnd->GetNodeIndex();
                                 if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
                                 {
@@ -1265,8 +1265,9 @@ void SwAccessibleMap::InvalidateShapeInParaSelection()
                             if (xAccParent.is())
                             {
                                 uno::Reference< XAccessibleContext > xAccContext = xAccParent->getAccessibleContext();
-                                if(xAccContext.is() && (xAccContext->getAccessibleRole() == AccessibleRole::PARAGRAPH ||
-                                                         xAccContext->getAccessibleRole() == AccessibleRole::BLOCK_QUOTE))
+                                if (xAccContext.is()
+                                    && SwAccessibleParagraph::IsParagraphRole(
+                                           xAccContext->getAccessibleRole()))
                                 {
                                     SwAccessibleParagraph* pAccPara = static_cast< SwAccessibleParagraph *>(xAccContext.get());
                                     if(pAccFrame->IsSelectedInDoc())
@@ -1296,8 +1297,9 @@ void SwAccessibleMap::InvalidateShapeInParaSelection()
         {
             if( rTmpCursor.HasMark() )
             {
-                SwNodeIndex nStartIndex( rTmpCursor.Start()->GetNode() );
-                SwNodeIndex nEndIndex( rTmpCursor.End()->GetNode() );
+                auto [pStart, pEnd] = rTmpCursor.StartEnd();
+                SwNodeIndex nStartIndex(pStart->GetNode());
+                SwNodeIndex nEndIndex(pEnd->GetNode());
                 for (; nStartIndex <= nEndIndex; ++nStartIndex)
                 {
                     SwFrame *pFrame = nullptr;
@@ -1506,8 +1508,9 @@ void SwAccessibleMap::DoInvalidateShapeSelection(bool bInvalidateFocusMode /*=fa
                     if (xPara.is())
                     {
                         uno::Reference< XAccessibleContext > xParaContext = xPara->getAccessibleContext();
-                        if (xParaContext.is() && (xParaContext->getAccessibleRole() == AccessibleRole::PARAGRAPH
-                                                  || xParaContext->getAccessibleRole() == AccessibleRole::BLOCK_QUOTE))
+                        if (xParaContext.is()
+                            && SwAccessibleParagraph::IsParagraphRole(
+                                   xParaContext->getAccessibleRole()))
                         {
                             SwAccessibleParagraph* pAccPara = static_cast< SwAccessibleParagraph *>(xPara.get());
                             if (pAccPara)
@@ -1527,8 +1530,8 @@ void SwAccessibleMap::DoInvalidateShapeSelection(bool bInvalidateFocusMode /*=fa
         {
             uno::Reference< XAccessible > xPara = pAccShape->getAccessibleParent();
             uno::Reference< XAccessibleContext > xParaContext = xPara->getAccessibleContext();
-            if (xParaContext.is() && (xParaContext->getAccessibleRole() == AccessibleRole::PARAGRAPH
-                                      || xParaContext->getAccessibleRole() == AccessibleRole::BLOCK_QUOTE))
+            if (xParaContext.is()
+                && SwAccessibleParagraph::IsParagraphRole(xParaContext->getAccessibleRole()))
             {
                 SwAccessibleParagraph* pAccPara = static_cast< SwAccessibleParagraph *>(xPara.get());
                 if (!m_setParaAdd.contains(pAccPara))
@@ -2847,7 +2850,7 @@ bool SwAccessibleMap::ReplaceChild (
 }
 
 XAccessible*
-    SwAccessibleMap::GetAccessibleCaption (const css::uno::Reference< css::drawing::XShape >&)
+    SwAccessibleMap::GetAccessibleCaption (const cpo::uno::Reference< css::drawing::XShape >&)
 {
     return nullptr;
 }

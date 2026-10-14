@@ -33,17 +33,24 @@
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineDash.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/text/WritingMode2.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/table/XMergeableCell.hpp>
 
 #include <docmodel/uno/UnoGradientTools.hxx>
 #include <svx/svdotable.hxx>
+#include <svx/seclabel/SpifPolicy.hxx>
+#include <svx/seclabel/StanagLabel.hxx>
+#include <svx/seclabel/SecLabelStore.hxx>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <rtl/uri.hxx>
+#include <tools/stream.hxx>
 #include <vcl/filter/PngImageReader.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 class SdOOXMLExportTest1 : public SdModelTestBase
 {
@@ -110,12 +117,18 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testTdf149128)
     save(TestFilter::PPTX);
 
     xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    // The connector names the two shapes it joins and the point on each of them it meets,
+    // whatever numbers those shapes were given.
+    const OUString aFirstShape
+        = getXPath(pXmlDoc, "/p:sld/p:cSld/p:spTree/p:sp[1]/p:nvSpPr/p:cNvPr", "id");
+    const OUString aSecondShape
+        = getXPath(pXmlDoc, "/p:sld/p:cSld/p:spTree/p:sp[2]/p:nvSpPr/p:cNvPr", "id");
     assertXPath(pXmlDoc, "/p:sld/p:cSld/p:spTree/p:cxnSp/p:nvCxnSpPr/p:cNvCxnSpPr/a:stCxn", "id",
-                u"10");
+                aFirstShape);
     assertXPath(pXmlDoc, "/p:sld/p:cSld/p:spTree/p:cxnSp/p:nvCxnSpPr/p:cNvCxnSpPr/a:stCxn", "idx",
                 u"0");
     assertXPath(pXmlDoc, "/p:sld/p:cSld/p:spTree/p:cxnSp/p:nvCxnSpPr/p:cNvCxnSpPr/a:endCxn", "id",
-                u"11");
+                aSecondShape);
     assertXPath(pXmlDoc, "/p:sld/p:cSld/p:spTree/p:cxnSp/p:nvCxnSpPr/p:cNvCxnSpPr/a:endCxn", "idx",
                 u"2");
 }
@@ -769,7 +782,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testFdo90607)
     SdrTextObj* pTxtObj = DynCastSdrTextObj(pPage->GetObj(1));
     CPPUNIT_ASSERT_MESSAGE("no text object", pTxtObj != nullptr);
     OutlinerParaObject* pOutlinerParagraphObject = pTxtObj->GetOutlinerParaObject();
-    const sal_Int16 nDepth = pOutlinerParagraphObject->GetDepth(0);
+    const sal_Int16 nDepth = pOutlinerParagraphObject->GetNumberingDepth(0);
     CPPUNIT_ASSERT_MESSAGE("not equal", nDepth != -1);
 }
 
@@ -1179,7 +1192,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testTdf112633)
                 u"../media/hdphoto1.wdp");
 
     // Check the .wdp file exists
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     CPPUNIT_ASSERT_EQUAL(true, xNameAccess->hasByName(u"ppt/media/hdphoto1.wdp"_ustr));
@@ -1239,6 +1252,76 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testCustomXml)
     CPPUNIT_ASSERT(pRelsDoc);
     assertXPath(pRelsDoc, "/rels:Relationships/rels:Relationship[@Target='../customXml/item1.xml']",
                 1);
+}
+
+CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testSecurityLabel)
+{
+    // Apply a STANAG label to an empty presentation and round-trip through PPTX: the
+    // customXml binding part must survive and read back (the generic grab-bag path).
+    createSdImpressDoc();
+
+    static const OString aSpif(
+        R"xml(<?xml version="1.0" encoding="utf-8"?>
+<spif:SPIF xmlns:spif="http://www.xmlspif.org/spif" schemaVersion="1.0" version="1">
+  <spif:securityPolicyId name="SPIF Collabora" id="1.2.826.0.1310.1.2.0" />
+  <spif:securityClassifications>
+    <spif:securityClassification name="SECRET" color="red" lacv="4" hierarchy="4" />
+  </spif:securityClassifications>
+  <spif:securityCategoryTagSets>
+    <spif:securityCategoryTagSet name="Release Categories" id="1.2.826.0.1310.1.2.0.0">
+      <spif:securityCategoryTag name="Releasable To" tagType="enumerated" enumType="permissive">
+        <spif:tagCategory name="CANADA" lacv="4407630" obsolete="false" />
+        <spif:tagCategory name="UNITED KINGDOM" lacv="5591873" obsolete="false" />
+      </spif:securityCategoryTag>
+    </spif:securityCategoryTagSet>
+  </spif:securityCategoryTagSets>
+</spif:SPIF>)xml"_ostr);
+    SvMemoryStream aPolicyStream(const_cast<char*>(aSpif.getStr()), aSpif.getLength(),
+                                 StreamMode::READ);
+    svx::seclabel::SpifPolicy aPolicy;
+    CPPUNIT_ASSERT(aPolicy.parse(aPolicyStream));
+
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    const std::vector<bool> aSelected{ true, true };
+    const svx::seclabel::StanagLabel aLabel = aPolicy.buildLabel(
+        u"SECRET"_ustr, aSelected, u"2026-06-21T10:00:00Z"_ustr, u"2027-06-21T10:00:00Z"_ustr);
+    // Applying the label must flag the document modified (so it prompts to save).
+    uno::Reference<util::XModifiable> xModifiable(xModel, uno::UNO_QUERY_THROW);
+    xModifiable->setModified(false);
+    svx::seclabel::storeLabelPart(
+        xModel, aLabel.toBindingXml(),
+        svx::seclabel::buildItemProps(u"{B6E4D8A1-1A35-4F0E-9B7A-71F4C0F5E0D3}"_ustr,
+                                      svx::seclabel::STANAG_BINDING_SCHEMA));
+    CPPUNIT_ASSERT(xModifiable->isModified());
+
+    saveAndReload(TestFilter::PPTX);
+
+    // The exported customXml part carries a spec-conformant 4774 label (generic
+    // exportCustomFragments path). local-name() XPath sidesteps the STANAG default
+    // namespaces.
+    xmlDocUniquePtr pXml = parseExport(u"customXml/item1.xml"_ustr);
+    CPPUNIT_ASSERT(pXml);
+    assertXPath(pXml, "//*[local-name()='PolicyIdentifier']", "URI",
+                u"urn:oid:1.2.826.0.1310.1.2.0");
+    assertXPathContent(pXml, "//*[local-name()='PolicyIdentifier']", u"SPIF Collabora");
+    assertXPathContent(pXml, "//*[local-name()='Classification']", u"SECRET");
+    assertXPath(pXml, "//*[local-name()='Category']", "TagName", u"Releasable To");
+    assertXPath(pXml, "//*[local-name()='Category']", "Type", u"PERMISSIVE");
+    assertXPathContent(pXml, "(//*[local-name()='GenericValue'])[1]", u"CANADA");
+    assertXPathContent(pXml, "(//*[local-name()='GenericValue'])[2]", u"UNITED KINGDOM");
+    assertXPathContent(pXml, "//*[local-name()='CreationDateTime']", u"2026-06-21T10:00:00Z");
+    assertXPath(pXml, "//*[local-name()='OriginatorConfidentialityLabel']", "ReviewDateTime",
+                u"2027-06-21T10:00:00Z");
+
+    // Read the label back out of the reloaded document.
+    uno::Reference<frame::XModel> xReloaded(mxComponent, uno::UNO_QUERY);
+    svx::seclabel::StanagLabel aReadBack;
+    CPPUNIT_ASSERT(svx::seclabel::readLabel(xReloaded, aReadBack));
+    CPPUNIT_ASSERT_EQUAL(u"SECRET"_ustr, aReadBack.aClassification);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aReadBack.aCategories.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aReadBack.aCategories[0].aValues.size());
+    CPPUNIT_ASSERT_EQUAL(u"CANADA"_ustr, aReadBack.aCategories[0].aValues[0]);
+    CPPUNIT_ASSERT_EQUAL(u"UNITED KINGDOM"_ustr, aReadBack.aCategories[0].aValues[1]);
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testTdf94238)
@@ -1477,9 +1560,13 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testTdf128345FullTransparentGradient)
     createSdImpressDoc("odp/tdf128345_FullTransparentGradient.odp");
     save(TestFilter::PPTX);
 
-    // Make sure the shape has no fill. Without the patch, fill was solid red.
+    // The shape keeps the colour of its fill and states that nothing of it shows, so a reader
+    // that makes the fill solid again arrives at the colour the document holds.
     xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
-    assertXPath(pXmlDoc, "//p:sld/p:cSld/p:spTree/p:sp/p:spPr/a:noFill");
+    assertXPath(pXmlDoc, "//p:sld/p:cSld/p:spTree/p:sp/p:spPr/a:solidFill/a:srgbClr", "val",
+                u"FF0000");
+    assertXPath(pXmlDoc, "//p:sld/p:cSld/p:spTree/p:sp/p:spPr/a:solidFill/a:srgbClr/a:alpha",
+                "val", u"0");
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest1, testTdf128345GradientLinear)

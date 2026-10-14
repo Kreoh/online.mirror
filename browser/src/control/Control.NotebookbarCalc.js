@@ -94,6 +94,8 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'context': 'Chart|Series|ErrorBar|Axis|Grid|ChartElements|Trendline|ChartTitle|ChartLegend|ChartLabel',
 				'accessibility': { focusBack: true,	combination: 'CH', de: null }
 			},
+			app.LOUtil.isAIAssistantAvailable(this.map)
+				? JSDialog.AIAssistantTab.getEntry() : null,
 			{
 				'id': 'View-tab-label',
 				'text': _('View'),
@@ -144,6 +146,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			this.getShapeTab(),
 			this.getPictureTab(),
 			this.getChartTab(),
+			this.getAIAssistantTab(),
 			this.getViewTab(),
 			this.getSparklineTab(),
 			this.getCalcTableTab(),
@@ -160,7 +163,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 
 	getFileTab: function() {
 		var content = [];
-		var hasSave = !this.map['wopi'].HideSaveOption;
+		var hasSave = !this.map['wopi'].HideSaveOption && !this.map.isReadOnlyMode();
 		var hasSaveAs = !this.map['wopi'].UserCanNotWriteRelative;
 		var hasShare = this.map['wopi'].EnableShare;
 		var hasRevisionHistory = window.L.Params.revHistoryEnabled;
@@ -200,7 +203,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			);
 		}
 
-		if (hasSaveAs) {
+		if (hasSaveAs && !this.map['wopi'].HideExportOption) {
 			content.push({
 				'id': 'exportas:ExportAsMenu',
 				'command': 'exportas',
@@ -351,8 +354,40 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			});
 		}
 
+		// Stack Properties with Security label when the format supports a label
+		// (OOXML); otherwise Properties alone as a bigtoolitem so it fills the column.
+		// The engine reports support and refreshes the notebookbar (Map.js).
 		content.push(
-			{
+			(this.map && this.map._securityLabelSupported === true) ? {
+				'type': 'container',
+				'children': [
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'properties',
+								'type': 'toolitem',
+								'text': _('Properties'),
+								'command': '.uno:SetDocumentProperties',
+								'accessibility': { focusBack: true,	combination: 'FP', de: 'I' }
+							}
+						]
+					},
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'securitylabel',
+								'type': 'toolitem',
+								'text': _('Security label'),
+								'command': '.uno:SecurityLabel',
+								'accessibility': { focusBack: true, combination: 'SL', de: null }
+							}
+						]
+					}
+				],
+				'vertical': 'true'
+			} : {
 				'type': 'container',
 				'children': [
 					{
@@ -395,7 +430,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			);
 		}
 
-		if (window.wopiSettingBaseUrl) {
+		if (app.LOUtil.canOpenSettings()) {
 			content.push({
 				'type': 'separator',
 				'id': 'file-properties-break',
@@ -1675,6 +1710,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'id':'invertbackground',
 				'class': 'unoinvertbackground',
 				'type': 'bigcustomtoolitem',
+				'visible': window.prefs.getBoolean('darkTheme'),
 				'text': _('Invert Background'),
 				'accessibility': { focusBack: true, combination: 'BG', de: null }
 			},
@@ -1693,20 +1729,6 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'command': '.uno:Navigator',
 				'accessibility': { focusBack: true,	combination: 'NV', de: null }
 			},
-			// Show the AI Assistant only to a non-anonymous user who may either
-			// configure AI or already has a configured provider. A guest can do
-			// neither, so they never see it.
-			!this.map['wopi'].IsAnonymousUser &&
-			(!this.map['wopi'].DisableAISettings || this.map['wopi'].AIConfigured) ? {
-				'id': 'view-ai-sidebar',
-				'type': 'bigcustomtoolitem',
-				'text': _('AI Assistant'),
-				'tooltip': _('AI Assistant'),
-				'icon': 'lc_ai_sidebar.svg',
-				'command': 'aichat',
-				'accessibility': { focusBack: true, combination: 'AI', de: null }
-			} : {},
-
 		];
 
 		return this.getTabPage('View', content);
@@ -2350,11 +2372,18 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'toolbox',
 						'children': [
 							{
-								'id': 'formula-calculate',
-								'type': 'toolitem',
+								'id': 'formula-calculate:CalculateMenu',
+								'type': 'menubutton',
 								'text': _UNO('.uno:Calculate', 'spreadsheet'),
+								'noLabel': true,
 								'command': '.uno:Calculate',
-								'accessibility': { focusBack: true,	combination: 'RC', de: null }
+								'applyCallback': '.uno:Calculate',
+								'accessibility': { focusBack: true,	combination: 'RC', de: null },
+								'menu': [
+									{ type: 'comboboxentry', id: 'formula-calculate-all', text: _UNO('.uno:Calculate', 'spreadsheet'), uno: '.uno:Calculate' },
+									{ type: 'comboboxentry', id: 'formula-calculate-sheet', text: _UNO('.uno:CalculateSheet', 'spreadsheet'), uno: '.uno:CalculateSheet' },
+									{ type: 'comboboxentry', id: 'formula-calculate-hard', text: _UNO('.uno:CalculateHard', 'spreadsheet'), uno: '.uno:CalculateHard' },
+								]
 							}
 						]
 					}
@@ -2626,6 +2655,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 								'text': _UNO('.uno:TextToColumns', 'spreadsheet'),
 								'command': '.uno:TextToColumns',
 								'accessibility': { focusBack: true,	combination: 'CT', de: null }
+							},
+							{
+								'id': 'data-handle-duplicate-records',
+								'type': 'toolitem',
+								'text': _UNO('.uno:HandleDuplicateRecords', 'spreadsheet'),
+								'command': '.uno:HandleDuplicateRecords',
+								'accessibility': { focusBack: true,	combination: 'HD', de: null }
 							}
 						]
 					}
@@ -2647,7 +2683,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 	},
 
 	getReviewTab: function() {
-		// Note: when adding track changes elements, consider this._map['wopi'].HideChangeTrackingControls
+		var hideChangeTrackingControls = this._map['wopi'].HideChangeTrackingControls;
 		var content = [
 			{
 				'type': 'overflowgroup',
@@ -2759,6 +2795,59 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				]
 			},
 			{ type: 'separator', id: 'review-deletenote-break', orientation: 'vertical' },
+			hideChangeTrackingControls ? {} : {
+				'type': 'overflowgroup',
+				'id': 'review-tracking',
+				'name': _('Tracking'),
+				'accessibility': { focusBack: true, combination: 'TR', de: null },
+				'children' : [
+					{
+						'id': 'review-track-changes',
+						'type': 'bigtoolitem',
+						'text': _UNO('.uno:TraceChangeMode', 'spreadsheet'),
+						'command': '.uno:TraceChangeMode',
+						'accessibility': { focusBack: true, combination: 'RC', de: null }
+					},
+					{
+						'type': 'container',
+						'children': [
+							{
+								'type': 'toolbox',
+								'children': [
+									{
+										'id': 'review-show-changes',
+										'type': 'toolitem',
+										'text': _UNO('.uno:ShowChanges', 'spreadsheet'),
+										'command': '.uno:ShowChanges',
+										'accessibility': { focusBack: true, combination: 'VC', de: null }
+									}
+								]
+							},
+							{
+								'type': 'toolbox',
+								'children': [
+									{
+										'id': 'review-manage-changes',
+										'type': 'toolitem',
+										'text': _UNO('.uno:AcceptChanges', 'spreadsheet'),
+										'command': '.uno:AcceptChanges',
+										'accessibility': { focusBack: true, combination: 'MC', de: null }
+									}
+								]
+							}
+						],
+						'vertical': 'true'
+					},
+					{
+						'id': 'review-comment-change',
+						'type': 'toolitem',
+						'text': _('Comment on Change'),
+						'command': '.uno:CommentChange',
+						'accessibility': { focusBack: true, combination: 'CH', de: null }
+					},
+				]
+			},
+			hideChangeTrackingControls ? {} : { type: 'separator', id: 'review-tracking-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
 				'id': 'review-protect',
@@ -2774,6 +2863,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 								'text': _UNO('.uno:Protect', 'spreadsheet'),
 								'command': '.uno:Protect',
 								'accessibility': { focusBack: true,	combination: 'DP', de: null }
+							},
+							hideChangeTrackingControls ? {} : {
+								'id': 'review-protect-changes',
+								'type': 'bigtoolitem',
+								'text': _UNO('.uno:ProtectTraceChangeMode', 'spreadsheet'),
+								'command': '.uno:ProtectTraceChangeMode',
+								'accessibility': { focusBack: true, combination: 'PC', de: null }
 							}
 						]
 					},
@@ -2956,39 +3052,10 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'vertical': 'true'
 			},
 			{ type: 'separator', id: 'shape-fliphorizontal-break', orientation: 'vertical' },
-			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'shape-xline-color:ColorPickerMenu',
-								'noLabel': true,
-								'type': 'toolitem',
-								'text': _UNO('.uno:XLineColor'),
-								'command': '.uno:XLineColor',
-								'accessibility': { focusBack: true,	combination: 'DX', de: null }
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'shape-fill-color:ColorPickerMenu',
-								'noLabel': true,
-								'type': 'toolitem',
-								'text': _UNO('.uno:FillColor'),
-								'command': '.uno:FillColor',
-								'accessibility': { focusBack: true,	combination: 'FC', de: null }
-							}
-						]
-					}
-				],
-				'vertical': 'true'
-			},
+			this.getShapeFillColorButton(),
 			{ type: 'separator', id: 'shape-fillcolor-break', orientation: 'vertical' },
+			this.getShapeLineSection(),
+			{ type: 'separator', id: 'shape-line-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
 				'id': 'shape-wrap',
@@ -3283,39 +3350,10 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				]
 			},
 			{ type: 'separator', id: 'picture-transparency-break', orientation: 'vertical' },
-			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'picture-xline-color:ColorPickerMenu',
-								'type': 'menubutton',
-								'noLabel': true,
-								'text': _UNO('.uno:XLineColor'),
-								'command': '.uno:XLineColor',
-								'accessibility': { focusBack: true,	combination: 'DX', de: null }
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'picture-fill-color:ColorPickerMenu',
-								'type': 'menubutton',
-								'noLabel': true,
-								'text': _UNO('.uno:FillColor'),
-								'command': '.uno:FillColor',
-								'accessibility': { focusBack: true,	combination: 'FC', de: null }
-							}
-						]
-					}
-				],
-				'vertical': 'true'
-			},
+			this.getPictureFillColorButton(),
 			{ type: 'separator', id: 'picture-fillcolor-break', orientation: 'vertical' },
+			this.getPictureLineSection(),
+			{ type: 'separator', id: 'picture-line-break', orientation: 'vertical' },
 			{
 				'id': 'picture-transform-dialog',
 				'type': 'bigtoolitem',
@@ -3598,9 +3636,11 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			},
 			{ type: 'separator', id: 'picture-leavegroup-break', orientation: 'vertical' },
 			{
+				'id': 'picture-crop',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Crop'),
 				'command': '.uno:Crop',
+				'accessibility': { focusBack: true, combination: 'CR', de: null },
 				'context': 'Graphic'
 			},
 		];

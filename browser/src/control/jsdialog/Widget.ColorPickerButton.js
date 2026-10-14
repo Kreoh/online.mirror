@@ -15,6 +15,23 @@
 
 /* global app JSDialog */
 
+var colorPreviews = [];
+
+function registerColorPreview(command, node, update) {
+	colorPreviews.push({ command: command, node: node, update: update });
+}
+
+function refreshColorPreviews(command) {
+	// a tab rebuild replaces these elements; let the stale ones go
+	colorPreviews = colorPreviews.filter(function (preview) {
+		return preview.node.isConnected;
+	});
+
+	colorPreviews.forEach(function (preview) {
+		if (preview.command === command) preview.update();
+	});
+}
+
 function parseHexColor(color) {
 	if (color === 'transparent') return -1;
 	else return parseInt('0x' + color);
@@ -44,6 +61,8 @@ JSDialog.getCurrentColor = function (data, builder) {
 	var selectedColor = builder.map['stateChangeHandler'].getItemValue(
 		data.command,
 	);
+
+	if (selectedColor === 'disabled') selectedColor = null;
 
 	if (!selectedColor || selectedColor < 0)
 		selectedColor = builder._getUnoStateForItemId(data.id, builder);
@@ -133,7 +152,9 @@ JSDialog.sendColorCommand = function (builder, data, color, themeData) {
 		params[colorParameterID].value,
 	);
 	builder.map.sendUnoCommand(data.command, params);
+
 	app.colorLastSelection[data.command] = color;
+	refreshColorPreviews(data.command);
 };
 
 JSDialog.colorPickerButton = function (parentContainer, data, builder) {
@@ -168,7 +189,9 @@ JSDialog.colorPickerButton = function (parentContainer, data, builder) {
 		// add menu id for dropdown
 		if (data.id.indexOf(':ColorPickerMenu') === -1)
 			data.id = data.id + ':ColorPickerMenu';
-		data.noLabel = true;
+
+		var isBig = data.type === 'bigtoolitem';
+		data.noLabel = !isBig;
 
 		// make it a split button
 		data.applyCallback = applyFunction;
@@ -190,9 +213,20 @@ JSDialog.colorPickerButton = function (parentContainer, data, builder) {
 				'selected-color',
 				menubutton.button,
 			);
+			if (menubutton.label)
+				menubutton.button.insertBefore(valueNode, menubutton.label);
 			valueNode.addEventListener('click', applyFunction);
 
 			var updateFunction = function () {
+				if (menubutton.container.hasAttribute('disabled')) {
+					if (data.disabledTooltip)
+						menubutton.container.setAttribute(
+							'data-cooltip',
+							builder._cleanText(data.disabledTooltip),
+						);
+					return;
+				}
+
 				if (app.colorLastSelection[data.command] !== undefined) {
 					var selectedColor = app.colorLastSelection[data.command];
 				} else {
@@ -234,6 +268,8 @@ JSDialog.colorPickerButton = function (parentContainer, data, builder) {
 					menubutton.container.setAttribute('data-cooltip', tooltip);
 				}
 			};
+
+			registerColorPreview(data.command, menubutton.container, updateFunction);
 
 			builder.map.on(
 				'commandstatechanged',

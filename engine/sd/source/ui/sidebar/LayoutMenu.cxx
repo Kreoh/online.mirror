@@ -63,7 +63,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 using namespace ::sd::slidesorter;
 using ::sd::framework::FrameworkHelper;
@@ -129,7 +129,7 @@ constexpr snew_slide_value_info standard[] =
 LayoutMenu::LayoutMenu (
     weld::Widget* pParent,
     ViewShellBase& rViewShellBase,
-    css::uno::Reference<css::ui::XSidebar> xSidebar)
+    cpo::uno::Reference<css::ui::XSidebar> xSidebar)
     : PanelLayout( pParent, u"LayoutPanel"_ustr, u"modules/simpress/ui/layoutpanel.ui"_ustr ),
       mrBase(rViewShellBase),
       mxLayoutIconView(m_xBuilder->weld_icon_view(u"layoutpanel_icons"_ustr)),
@@ -395,7 +395,7 @@ void LayoutMenu::AssignLayoutToSelectedSlides (AutoLayout aLayout)
             SfxRequest aRequest(mrBase.GetViewFrame(), SID_ASSIGN_LAYOUT);
             aRequest.AppendItem(SfxUInt32Item (ID_VAL_WHATPAGE, (rpPage->GetPageNum()-1)/2));
             aRequest.AppendItem(SfxUInt32Item (ID_VAL_WHATLAYOUT, aLayout));
-            pMainViewShell->ExecuteSlot (aRequest, false);
+            pMainViewShell->ExecuteSlot (aRequest);
         }
     }
     while(false);
@@ -470,7 +470,7 @@ void LayoutMenu::Fill()
                 sCenterPaneViewName = xView->getResourceId()->getResourceURL();
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {}
 
     std::span<const snew_slide_value_info> pInfo;

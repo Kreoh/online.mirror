@@ -34,6 +34,7 @@
 #include <view.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace {
 
@@ -106,24 +107,24 @@ class MMCurrentEntryController : public MMCurrentEntryController_Base
     DECL_LINK(CurrentEditUpdatedHdl, weld::Entry&, bool);
 
 public:
-    explicit MMCurrentEntryController(const uno::Reference<uno::XComponentContext>& rContext)
+    explicit MMCurrentEntryController(const uno::Reference<cpo::uno::XComponentContext>& rContext)
         : MMCurrentEntryController_Base(rContext, uno::Reference<frame::XFrame>(), u".uno:MailMergeCurrentEntry"_ustr)
         , m_xCurrentEdit(nullptr)
     {
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"lo.writer.MMCurrentEntryController"_ustr;
     }
 
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override
+    virtual bool supportsService(const OUString& rServiceName) override
     {
         return cppu::supportsService(this, rServiceName);
     }
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.frame.ToolbarController"_ustr };
     }
@@ -133,10 +134,10 @@ public:
     virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
     // XToolbarController
-    virtual uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
+    virtual uno::Reference<awt::XWindow> createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) override;
+    virtual void statusChanged(const frame::FeatureStateEvent& rEvent) override;
 };
 
 class ExcludeCheckBox final : public InterimItemWindow
@@ -199,24 +200,24 @@ class MMExcludeEntryController : public MMExcludeEntryController_Base
     DECL_STATIC_LINK(MMExcludeEntryController, ExcludeHdl, weld::Toggleable&, void);
 
 public:
-    explicit MMExcludeEntryController(const uno::Reference<uno::XComponentContext>& rContext)
+    explicit MMExcludeEntryController(const uno::Reference<cpo::uno::XComponentContext>& rContext)
         : MMExcludeEntryController_Base(rContext, uno::Reference<frame::XFrame>(), u".uno:MailMergeExcludeEntry"_ustr)
         , m_xExcludeCheckbox(nullptr)
     {
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"lo.writer.MMExcludeEntryController"_ustr;
     }
 
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override
+    virtual bool supportsService(const OUString& rServiceName) override
     {
         return cppu::supportsService(this, rServiceName);
     }
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.frame.ToolbarController"_ustr };
     }
@@ -226,10 +227,10 @@ public:
     virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
     // XToolbarController
-    virtual uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
+    virtual uno::Reference<awt::XWindow> createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) override;
+    virtual void statusChanged(const frame::FeatureStateEvent& rEvent) override;
 };
 
 void MMCurrentEntryController::disposing(std::unique_lock<std::mutex>& rGuard)
@@ -354,17 +355,17 @@ void MMExcludeEntryController::statusChanged(const frame::FeatureStateEvent& rEv
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 lo_writer_MMCurrentEntryController_get_implementation(
-    uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new MMCurrentEntryController(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 lo_writer_MMExcludeEntryController_get_implementation(
-    uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new MMExcludeEntryController(context));

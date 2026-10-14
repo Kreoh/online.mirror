@@ -23,9 +23,9 @@
 
 using namespace dbaui;
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_openoffice_comp_dbu_ODBTypeWizDialog_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new ODBTypeWizDialog(context));
 }
@@ -33,7 +33,7 @@ org_openoffice_comp_dbu_ODBTypeWizDialog_get_implementation(
 namespace dbaui
 {
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
 
@@ -75,7 +75,7 @@ Reference<XPropertySetInfo>  ODBTypeWizDialog::getPropertySetInfo()
     return new ::cppu::OPropertyArrayHelper(aProps);
 }
 
-std::unique_ptr<weld::DialogController> ODBTypeWizDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+std::unique_ptr<weld::DialogController> ODBTypeWizDialog::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
 {
     return std::make_unique<ODbTypeWizDialog>(Application::GetFrameWeld(rParent), m_pDatasourceItems.get(), m_aContext, m_aInitialSelection);
 }

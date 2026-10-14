@@ -38,6 +38,7 @@ struct ScSortParam;
 struct ScQueryParam;
 struct ScSubTotalParam;
 class ScTokenArray;
+namespace sc { struct RefUpdateContext; }
 
 class SC_DLLPUBLIC ScDatabaseSettingItem final : public SfxPoolItem
 {
@@ -88,6 +89,11 @@ struct TableColumnAttributes
     std::optional<OUString> maTotalsRowLabel = std::nullopt;
     std::optional<OUString> maTotalsFunction = std::nullopt;
     std::optional<OUString> maCustomFunction = std::nullopt;
+    // Whether the totals row cell for this column holds any value at all, whether or
+    // not that value ended up producing a label or a function above. A column whose
+    // totals row cell is empty is not the same as a column whose cell holds content
+    // that this class chose not to describe as a label or a function.
+    bool mbHasContent = false;
 };
 
 // xmlColumnPr attributes
@@ -129,7 +135,13 @@ protected:
 
 struct SAL_DLLPUBLIC_RTTI ScTableStyleParam
 {
+    // The style applied to the table. The name of a table style, or one of the
+    // names that stand for no style at all: an empty string, or "none" in any
+    // spelling, which is what a gallery entry for the unstyled choice carries.
     OUString maStyleID;
+
+    // True when maStyleID names no style, so the table is drawn unstyled.
+    SC_DLLPUBLIC bool IsUnstyled() const;
     bool mbRowStripes;
     bool mbColumnStripes;
     bool mbFirstColumn;
@@ -152,7 +164,7 @@ private:
     ScDBDataContainerBase* mpContainer;
 
     /// DBParam
-    const OUString aName;
+    OUString aName;
     OUString aUpper;
     OUString        aTableType;
     SCTAB           nTable;
@@ -224,6 +236,8 @@ public:
     bool        operator== (const ScDBData& rData) const;
 
     const OUString& GetName() const { return aName; }
+    // Rename in place; only valid while out of a name-keyed container (see NamedDBs::rename).
+    void            SetName(const OUString& rName);
     const OUString& GetUpperName() const { return aUpper; }
     SCTAB       GetTab() const                  { return nTable; }
     void        GetArea(SCTAB& rTab, SCCOL& rCol1, SCROW& rRow1, SCCOL& rCol2, SCROW& rRow2) const;
@@ -237,6 +251,7 @@ public:
     void        MoveTo(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2,
                        SCCOL nUpdateCol = -1);
     void        SetByRow(bool bByR)             { bByRow = bByR; }
+    bool        IsByRow() const                 { return bByRow; }
     bool        HasHeader() const               { return bHasHeader; }
     /// On flag change, surgically re-registers the header listener.
     SC_DLLPUBLIC void SetHeader(bool bHasH);
@@ -344,6 +359,12 @@ public:
                                                 const std::vector<TableColumnAttributes>& rAttributesVector,
                                                 formula::FormulaGrammar::Grammar eGrammar) const;
     SC_DLLPUBLIC void       CreateTotalRowParam(ScSubTotalParam& rSubTotalParam) const;
+    static void             ClearTotalRowParam(ScSubTotalParam& rSubTotalParam);
+
+    /// Realign the stored (Total Row off) per-column formulas to a column insert/delete/resize.
+    SC_DLLPUBLIC void       AdjustTotalsRowFormulas(SCCOL nDx, SCCOL nColShift,
+                                                    SCCOL nNewCol1, SCCOL nNewCol2,
+                                                    const sc::RefUpdateContext* pRefCxt = nullptr);
 
     /// Returns true if a column-bounded row shift in this table's column range starting
     /// at nShiftRow would tear an adjacent fixed-range structure: a pivot table, another
@@ -357,6 +378,8 @@ public:
     /// pivot table, or merged cells — the cases HasTearRiskAtBand's from-afar checks miss (a
     /// same-width/narrower neighbour, or one reached by a right-drag). False for a shrink.
     bool WouldResizeOverlap(ScDocument& rDoc, const ScRange& rNewArea) const;
+
+    SCROW GetMinRowSpan() const { return bHasTotals ? 2 : 1; }
 
     /// Returns true if toggling Total Row on this table (bAddTotal = true to add, false
     /// to remove) would be refused because of tear-risk at the row immediately below
@@ -466,6 +489,14 @@ public:
         /** Removes the named database ranges of the sheet. */
         void deleteOnTab(SCTAB nTab);
 
+        /** Rename rOldName to rNewName in place, keeping the same ScDBData object.
+            @return false if rOldName is missing or rNewName already exists. */
+        bool rename(const OUString& rOldName, const OUString& rNewName);
+
+        /// Free name for a pasted copy of rSourceName: the full source name plus the
+        /// lowest number from 2 up that is not taken.
+        OUString getFreshTableName(std::u16string_view rSourceName);
+
         bool empty() const;
         size_t size() const;
         bool operator== (const NamedDBs& r) const;
@@ -509,6 +540,7 @@ private:
     sal_uInt16 nEntryIndex;         ///< counter for unique indices
     NamedDBs maNamedDBs;
     AnonDBs maAnonDBs;
+    std::vector<std::pair<sal_uInt16, sal_uInt16>> maPasteRebinds;   ///< see clearPasteRebinds()
 
 public:
     ScDBCollection(ScDocument& rDocument);
@@ -520,8 +552,21 @@ public:
     AnonDBs& getAnonDBs() { return maAnonDBs;}
     const AnonDBs& getAnonDBs() const { return maAnonDBs;}
 
+    /// Which table of this document the paste in progress planted a clip table as, as the
+    /// clip's index paired with the planted one. Filled by CopyDBsFromClip, read back by
+    /// adjustDBRange to re-point the tokens the paste carries, and dropped at the end of
+    /// CopyFromClip so that no note outlives the paste that made it.
+    void clearPasteRebinds() { maPasteRebinds.clear(); }
+    void addPasteRebind(sal_uInt16 nClipIndex, sal_uInt16 nOwnIndex) { maPasteRebinds.emplace_back(nClipIndex, nOwnIndex); }
+    sal_uInt16 getPasteRebind(sal_uInt16 nClipIndex) const;
+
     const ScDBData* GetTableDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab, ScDBDataPortion ePortion) const;
     ScDBData* GetTableDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab, ScDBDataPortion ePortion);
+
+    /// True if the range covers part of a named range's header row but not the whole range.
+    /// MSO refuses such a deletion rather than promoting the row below to header.
+    bool WouldTakeHeaderRow(const ScRange& rRange) const;
+
     const ScDBData* GetDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab, ScDBDataPortion ePortion) const;
     ScDBData* GetDBAtCursor(SCCOL nCol, SCROW nRow, SCTAB nTab, ScDBDataPortion ePortion);
     const ScDBData* GetDBAtArea(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2) const;

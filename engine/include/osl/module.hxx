@@ -20,20 +20,20 @@
 #ifndef INCLUDED_OSL_MODULE_HXX
 #define INCLUDED_OSL_MODULE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 
-#include "rtl/ustring.hxx"
-#include "osl/module.h"
+#include <rtl/ustring.hxx>
+#include <osl/module.h>
 
 namespace osl
 {
 
 class Module
 {
-    Module( const Module&) SAL_DELETED_FUNCTION;
-    Module& operator = ( const Module&) SAL_DELETED_FUNCTION;
+    Module( const Module&) = delete;
+    Module& operator = ( const Module&) = delete;
 
 public:
     static bool getUrlFromAddress(void * addr, ::rtl::OUString & libraryUrl) {

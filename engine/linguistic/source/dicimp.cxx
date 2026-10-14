@@ -50,9 +50,9 @@ using namespace utl;
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
-using namespace com::sun::star::linguistic2;
+using namespace ::cpo;
 using namespace ::cpo::uno;
+using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
 
@@ -270,13 +270,13 @@ ErrCode DictionaryNeo::loadEntries(const OUString &rMainURL)
     if (rMainURL.isEmpty())
         return ERRCODE_NONE;
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     // get XInputStream stream
     uno::Reference< io::XInputStream > xStream;
     try
     {
-        uno::Reference< ucb::XSimpleFileAccess3 > xAccess( ucb::SimpleFileAccess::create(xContext) );
+        uno::Reference< ucb::XSimpleFileAccess > xAccess( ucb::SimpleFileAccess::create(xContext) );
         xStream = xAccess->openFileRead( rMainURL );
     }
     catch (const cpo::uno::Exception &)
@@ -404,7 +404,7 @@ ErrCode DictionaryNeo::saveEntries(const OUString &rURL)
         return ERRCODE_NONE;
     DBG_ASSERT(!INetURLObject( rURL ).HasError(), "lng : invalid URL");
 
-    const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
 
     // get XOutputStream stream
     uno::Reference<io::XStream> xStream;
@@ -466,7 +466,7 @@ ErrCode DictionaryNeo::saveEntries(const OUString &rURL)
     try
     {
         pStream.reset();
-        uno::Reference< ucb::XSimpleFileAccess3 > xAccess(ucb::SimpleFileAccess::create(xContext));
+        uno::Reference< ucb::XSimpleFileAccess > xAccess(ucb::SimpleFileAccess::create(xContext));
         Reference<io::XInputStream> xInputStream(xStream, UNO_QUERY_THROW);
         uno::Reference<io::XSeekable> xSeek(xInputStream, UNO_QUERY_THROW);
         xSeek->seek(0);

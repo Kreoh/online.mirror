@@ -27,7 +27,7 @@
 using namespace com::sun::star::lang;
 using namespace com::sun::star::sdbc;
 using namespace com::sun::star::ucb;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 
@@ -73,19 +73,19 @@ void CachedDynamicResultSet
 }
 
 // XInterface methods.
-void SAL_CALL CachedDynamicResultSet::acquire()
+void CachedDynamicResultSet::acquire()
     noexcept
 {
     OWeakObject::acquire();
 }
 
-void SAL_CALL CachedDynamicResultSet::release()
+void CachedDynamicResultSet::release()
     noexcept
 {
     OWeakObject::release();
 }
 
-Any SAL_CALL CachedDynamicResultSet
+Any CachedDynamicResultSet
     ::queryInterface( const Type&  rType )
 {
     //list all interfaces inclusive baseclasses of interfaces
@@ -115,17 +115,17 @@ XTYPEPROVIDER_IMPL_4( CachedDynamicResultSet
 
 // XServiceInfo methods.
 
-OUString SAL_CALL CachedDynamicResultSet::getImplementationName()
+OUString CachedDynamicResultSet::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.CachedDynamicResultSet"_ustr;
 }
 
-bool SAL_CALL CachedDynamicResultSet::supportsService( const OUString& ServiceName )
+bool CachedDynamicResultSet::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL CachedDynamicResultSet::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > CachedDynamicResultSet::getSupportedServiceNames()
 {
     return { u"com.sun.star.ucb.CachedDynamicResultSet"_ustr };
 }
@@ -157,15 +157,15 @@ CachedDynamicResultSetFactory::~CachedDynamicResultSetFactory()
 
 // CachedDynamicResultSetFactory XServiceInfo methods.
 
-OUString SAL_CALL CachedDynamicResultSetFactory::getImplementationName()
+OUString CachedDynamicResultSetFactory::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.CachedDynamicResultSetFactory"_ustr;
 }
-bool SAL_CALL CachedDynamicResultSetFactory::supportsService( const OUString& ServiceName )
+bool CachedDynamicResultSetFactory::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
-cpo::uno::Sequence< OUString > SAL_CALL CachedDynamicResultSetFactory::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > CachedDynamicResultSetFactory::getSupportedServiceNames()
 {
     return { u"com.sun.star.ucb.CachedDynamicResultSetFactory"_ustr };
 }
@@ -174,9 +174,9 @@ cpo::uno::Sequence< OUString > SAL_CALL CachedDynamicResultSetFactory::getSuppor
 
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_CachedDynamicResultSetFactory_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new CachedDynamicResultSetFactory(context));
 }
@@ -185,7 +185,7 @@ ucb_CachedDynamicResultSetFactory_get_implementation(
 
 
 //virtual
-Reference< XDynamicResultSet > SAL_CALL CachedDynamicResultSetFactory
+Reference< XDynamicResultSet > CachedDynamicResultSetFactory
     ::createCachedDynamicResultSet(
           const Reference< XDynamicResultSet > & SourceStub
         , const Reference< XContentIdentifierMapping > & ContentIdentifierMapping )

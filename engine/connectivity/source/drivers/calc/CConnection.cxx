@@ -38,7 +38,7 @@ using namespace connectivity::file;
 typedef connectivity::file::OConnection OConnection_BASE;
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::sdbcx;
@@ -115,7 +115,7 @@ Reference< XSpreadsheetDocument> const & OCalcConnection::acquireDoc()
         pArgs[2].Value <<= m_sPassword;
     }
 
-    Reference< XDesktop2 > xDesktop = Desktop::create( getDriver()->getComponentContext() );
+    Reference< XDesktop > xDesktop = Desktop::create( getDriver()->getComponentContext() );
     Reference< XComponent > xComponent;
     Any aLoaderException;
     try
@@ -211,7 +211,7 @@ Reference< XDatabaseMetaData > OCalcConnection::getMetaData(  )
 }
 
 
-css::uno::Reference< XTablesSupplier > OCalcConnection::createCatalog()
+cpo::uno::Reference< XTablesSupplier > OCalcConnection::createCatalog()
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     rtl::Reference< connectivity::sdbcx::OCatalog > xTab = m_xCatalog;

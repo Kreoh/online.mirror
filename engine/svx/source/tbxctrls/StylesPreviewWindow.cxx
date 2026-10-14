@@ -130,7 +130,7 @@ StylePreviewCache::JsonStylePreviewCacheClear StylePreviewCache::gJsonIdleClear;
 
 StyleStatusListener::StyleStatusListener(
     StylesPreviewWindow_Base* pPreviewControl,
-    const css::uno::Reference<css::frame::XDispatchProvider>& xDispatchProvider)
+    const cpo::uno::Reference<css::frame::XDispatchProvider>& xDispatchProvider)
     : SfxStatusListener(xDispatchProvider, SID_STYLE_FAMILY2, u".uno:ParaStyle"_ustr)
     , m_pPreviewControl(pPreviewControl)
 {
@@ -205,8 +205,8 @@ bool StylesPreviewWindow_Base::Command(const CommandEvent& rEvent)
     {
         cpo::uno::Sequence<css::beans::PropertyValue> aArgs(0);
 
-        const css::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
-                                                                           css::uno::UNO_QUERY);
+        const cpo::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
+                                                                           cpo::uno::UNO_QUERY);
         SfxToolBoxControl::Dispatch(
             xProvider,
             rIdent == "update" ? u".uno:StyleUpdateByExample"_ustr : u".uno:EditStyle"_ustr, aArgs);
@@ -428,7 +428,7 @@ void StyleItemController::DrawText(vcl::RenderContext& rRenderContext)
 
 StylesPreviewWindow_Base::StylesPreviewWindow_Base(
     weld::Builder& xBuilder, const StylePreviewList& rDefaultStyles,
-    const css::uno::Reference<css::frame::XFrame>& xFrame)
+    const cpo::uno::Reference<css::frame::XFrame>& xFrame)
     : m_xFrame(xFrame)
     , m_xStylesView(xBuilder.weld_icon_view(u"stylesview"_ustr))
     , m_aUpdateTask(*this)
@@ -442,8 +442,8 @@ StylesPreviewWindow_Base::StylesPreviewWindow_Base(
     m_xStylesView->connect_get_image(LINK(this, StylesPreviewWindow_Base, GetPreviewImage));
     m_xStylesView->connect_query_tooltip(LINK(this, StylesPreviewWindow_Base, QueryTooltip));
 
-    const css::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
-                                                                       css::uno::UNO_QUERY);
+    const cpo::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
+                                                                       cpo::uno::UNO_QUERY);
     m_xStatusListener = new StyleStatusListener(this, xProvider);
 
     m_pStylePoolChangeListener.reset(new StylePoolChangeListener(this));
@@ -487,8 +487,8 @@ IMPL_LINK(StylesPreviewWindow_Base, Selected, weld::IconView&, rIconView, void)
         comphelper::makePropertyValue(u"Style"_ustr, pStyle->commonName),
         comphelper::makePropertyValue(u"FamilyName"_ustr, lcl_GetStyleFamilyName(pStyle->eFamily))
     };
-    const css::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
-                                                                       css::uno::UNO_QUERY);
+    const cpo::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
+                                                                       cpo::uno::UNO_QUERY);
     SfxToolBoxControl::Dispatch(xProvider, u".uno:StyleApply"_ustr, aArgs);
 }
 
@@ -502,8 +502,8 @@ IMPL_LINK(StylesPreviewWindow_Base, DoubleClick, weld::IconView&, rIconView, boo
         comphelper::makePropertyValue(u"Param"_ustr, pStyle->commonName),
         comphelper::makePropertyValue(u"Family"_ustr, sal_Int16(pStyle->eFamily))
     };
-    const css::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
-                                                                       css::uno::UNO_QUERY);
+    const cpo::uno::Reference<css::frame::XDispatchProvider> xProvider(m_xFrame,
+                                                                       cpo::uno::UNO_QUERY);
     SfxToolBoxControl::Dispatch(xProvider, u".uno:EditStyle"_ustr, aArgs);
 
     return true;
@@ -681,8 +681,8 @@ StylePaneFormatFilter lcl_GetStylePaneFormatFilter(SfxObjectShell* pDocShell)
 
     try
     {
-        css::uno::Reference<css::beans::XPropertySet> xDocProps(pDocShell->GetModel(),
-                                                                css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::beans::XPropertySet> xDocProps(pDocShell->GetModel(),
+                                                                cpo::uno::UNO_QUERY);
         if (!xDocProps.is()
             || !xDocProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
             return aFilter;
@@ -736,12 +736,19 @@ OUString lcl_GetStyleAlias(const SfxStyleSheetBase& rStyle)
 inline void lcl_AppendStyle(StylePreviewList& rAllStyles, const OUString& rName,
                             const OUString& rDisplayName, SfxStyleFamily eFamily)
 {
-    const auto aFound = std::find_if(rAllStyles.begin(), rAllStyles.end(),
-                                     [&rName, eFamily](const StylePreviewDescriptor& element) {
-                                         return element.eFamily == eFamily
-                                                && (element.commonName == rName
-                                                    || element.translatedName == rName);
-                                     });
+    // The same style reaches us under its programmatic name and under the name
+    // shown in the UI, because the document lists it one way and the default
+    // styles the other. Standard is shown as Default Paragraph Style, so
+    // matching only the programmatic name let it through twice. Compare both
+    // names we were given against both names the entry carries.
+    const auto aFound
+        = std::find_if(rAllStyles.begin(), rAllStyles.end(),
+                       [&rName, &rDisplayName, eFamily](const StylePreviewDescriptor& element) {
+                           return element.eFamily == eFamily
+                                  && (element.commonName == rName || element.translatedName == rName
+                                      || element.commonName == rDisplayName
+                                      || element.translatedName == rDisplayName);
+                       });
 
     if (aFound == rAllStyles.end())
         rAllStyles.emplace_back<StylePreviewDescriptor>({ rName, rDisplayName, eFamily });
@@ -753,17 +760,6 @@ void lcl_AppendStyle(StylePreviewList& rAllStyles, const SfxStyleSheetBase& rSty
     const OUString aAlias = lcl_GetStyleAlias(rStyle);
     lcl_AppendStyle(rAllStyles, rStyle.GetName(), aAlias.isEmpty() ? rStyle.GetName() : aAlias,
                     eFamily);
-}
-
-void lcl_AppendStyles(StylePreviewList& rAllStyles, SfxStyleSheetBasePool* pPool,
-                      SfxStyleFamily eFamily, SfxStyleSearchBits eBits)
-{
-    if (!pPool)
-        return;
-
-    auto xIter = pPool->CreateIterator(eFamily, eBits);
-    for (SfxStyleSheetBase* pStyle = xIter->First(); pStyle; pStyle = xIter->Next())
-        lcl_AppendStyle(rAllStyles, *pStyle, eFamily);
 }
 
 // The "Recommended" set: flagged as favourites (qFormat), except semiHidden
@@ -785,17 +781,7 @@ void lcl_AppendFilteredStyles(StylePreviewList& rAllStyles, SfxStyleSheetBasePoo
     if (!pPool)
         return;
 
-    // "All styles" shows every visible style of the family; the other categories
-    // are subsets of it, so there is nothing left to add.
-    if (rFilter.bAllStyles)
-    {
-        lcl_AppendStyles(rAllStyles, pPool, eFamily, SfxStyleSearchBits::AllVisible);
-        return;
-    }
-
-    // "Recommended" (visibleStyles) shows the recommended styles.
-    if (rFilter.bVisibleStyles)
-        lcl_AppendRecommendedStyles(rAllStyles, pPool, eFamily);
+    lcl_AppendRecommendedStyles(rAllStyles, pPool, eFamily);
 
     auto xIter = pPool->CreateIterator(eFamily, SfxStyleSearchBits::AllVisible);
     for (SfxStyleSheetBase* pStyle = xIter->First(); pStyle; pStyle = xIter->Next())
@@ -826,13 +812,8 @@ StylePreviewList StylesPreviewWindow_Base::GetStyleList(SfxObjectShell* pDocShel
         aFilter = lcl_GetStylePaneFormatFilter(pDocShell);
     }
 
-    // A document with no explicit style pane filter defaults to the "Recommended"
+    // A document with no explicit style pane filter adds the default styles below
     const bool bNoImportedFilter = !aFilter.bValid;
-    if (!aFilter.bValid)
-    {
-        aFilter.bValid = true;
-        aFilter.bVisibleStyles = true;
-    }
 
     StylePreviewList aAllStyles;
     if (pStyleSheetPool)
@@ -881,7 +862,7 @@ void StylesPreviewWindow_Base::UpdateStylesList()
 
 StylesPreviewWindow_Impl::StylesPreviewWindow_Impl(
     vcl::Window* pParent, const StylePreviewList& rDefaultStyles,
-    const css::uno::Reference<css::frame::XFrame>& xFrame)
+    const cpo::uno::Reference<css::frame::XFrame>& xFrame)
     : InterimItemWindow(pParent, u"svx/ui/stylespreview.ui"_ustr, u"ApplyStyleBox"_ustr, true,
                         reinterpret_cast<sal_uInt64>(SfxViewShell::Current()))
     , StylesPreviewWindow_Base(*m_xBuilder, rDefaultStyles, xFrame)

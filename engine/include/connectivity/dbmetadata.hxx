@@ -24,8 +24,8 @@
 #include <rtl/ustring.hxx>
 
 namespace com::sun::star::sdbc { class XConnection; }
-namespace com::sun::star::uno { class XComponentContext; }
-namespace com::sun::star::uno { template <class interface_type> class Reference; }
+namespace cpo::uno { class XComponentContext; }
+namespace cpo::uno { template <class interface_type> class Reference; }
 
 namespace dbtools
 {
@@ -64,11 +64,11 @@ namespace dbtools
                 are <NULL/>
             @throws css::sdbc::SQLException
                 if obtaining the meta data from the connection throws an SQLException
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if obtaining the meta data from the connection throws a RuntimeException
         */
         DatabaseMetaData(
-            const css::uno::Reference< css::sdbc::XConnection >& _connection );
+            const cpo::uno::Reference< css::sdbc::XConnection >& _connection );
         DatabaseMetaData( const DatabaseMetaData& _copyFrom );
         DatabaseMetaData& operator=( const DatabaseMetaData& _copyFrom );
         DatabaseMetaData(DatabaseMetaData&& _copyFrom) noexcept;
@@ -80,7 +80,7 @@ namespace dbtools
 
         /** resets the instance so that it's based on a new connection
         */
-        void    reset( const css::uno::Reference< css::sdbc::XConnection >& _connection )
+        void    reset( const cpo::uno::Reference< css::sdbc::XConnection >& _connection )
         {
             *this = DatabaseMetaData( _connection );
         }

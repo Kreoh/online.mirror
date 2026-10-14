@@ -18,32 +18,29 @@
  */
 
 #include <connectiontools.hxx>
-#include "tablename.hxx"
 #include "objectnames.hxx"
-#include "datasourcemetadata.hxx"
 
 #include <comphelper/namedvaluecollection.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/statementcomposer.hxx>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 
 namespace sdbtools
 {
 
     using namespace ::com::sun::star;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::sdb::tools::XTableName;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::sdb::tools::XObjectNames;
-    using ::com::sun::star::sdb::tools::XDataSourceMetaData;
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::XInterface;
     using ::cpo::uno::Any;
     using ::com::sun::star::sdbc::XConnection;
     using ::com::sun::star::lang::IllegalArgumentException;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
 
     // ConnectionTools
     ConnectionTools::ConnectionTools( const Reference<XComponentContext>& _rContext )
@@ -55,23 +52,12 @@ using namespace cpo::uno;
     {
     }
 
-    Reference< XTableName > ConnectionTools::createTableName()
-    {
-        EntryGuard aGuard( *this );
-        return new TableName( getContext(), getConnection() );
-    }
-
     Reference< XObjectNames > ConnectionTools::getObjectNames()
     {
         EntryGuard aGuard( *this );
         return new ObjectNames( getContext(), getConnection() );
     }
 
-    Reference< XDataSourceMetaData > ConnectionTools::getDataSourceMetaData()
-    {
-        EntryGuard aGuard( *this );
-        return new DataSourceMetaData( getContext(), getConnection() );
-    }
     Reference< container::XNameAccess > ConnectionTools::getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, Reference< lang::XComponent >& keepFieldsAlive )
     {
         EntryGuard aGuard( *this );
@@ -80,13 +66,6 @@ using namespace cpo::uno;
         if ( aErrorInfo.isValid() )
             aErrorInfo.doThrow();
         return xRet;
-    }
-    Reference< sdb::XSingleSelectQueryComposer > ConnectionTools::getComposer( ::sal_Int32 commandType, const OUString& command )
-    {
-        EntryGuard aGuard( *this );
-        dbtools::StatementComposer aComposer(getConnection(), command, commandType, true );
-        aComposer.setDisposeComposer(false);
-        return aComposer.getComposer();
     }
 
     OUString ConnectionTools::getImplementationName()
@@ -125,9 +104,9 @@ using namespace cpo::uno;
 
 } // namespace sdbtools
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_dbaccess_ConnectionTools_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new sdbtools::ConnectionTools(context));
 }

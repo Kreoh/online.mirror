@@ -26,16 +26,22 @@
 #include <sfx2/kit/helper.hxx>
 #include <comphelper/kit.hxx>
 #include <comphelper/scopeguard.hxx>
+#include <o3tl/string_view.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <vcl/jsdialog/executor.hxx>
+#include <vcl/keycodes.hxx>
 #include <tools/json_writer.hxx>
+#include <tools/datetime.hxx>
+#include <unotools/datetime.hxx>
 #include <vcl/virdev.hxx>
 #include <unotxdoc.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/document/UpdateDocMode.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
+#include <com/sun/star/text/XTextGraphicObjectsSupplier.hpp>
 #include <sfx2/linkmgr.hxx>
 #include <svx/fillbitmaplink.hxx>
 #include <svx/xbtmpit.hxx>
@@ -49,6 +55,7 @@
 #include <PostItMgr.hxx>
 #include <postithelper.hxx>
 #include <docufld.hxx>
+#include <fmtinfmt.hxx>
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
 #include <docsh.hxx>
@@ -57,9 +64,16 @@
 #include <cmdid.h>
 #include <viewimp.hxx>
 #include <dview.hxx>
+#include <AnnotationWin.hxx>
+#include <editeng/outliner.hxx>
+#include <itabenum.hxx>
+#include <ThemeColorChanger.hxx>
+#include <svx/ColorSets.hxx>
+#include <docmodel/theme/ColorSet.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -399,6 +413,54 @@ std::vector<OString> FilterStateChanges(const std::vector<OString>& rChanges,
     return aRet;
 }
 
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testTableStyleListFollowsThemeChange)
+{
+    // Given a document with the cursor in a table, so the table style list is being reported:
+    SwXTextDocument* pXTextDocument = createDoc();
+    CPPUNIT_ASSERT(pXTextDocument);
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->InsertTable(SwInsertTableOptions(SwInsertTableFlags::DefaultBorder, 0), 2, 2);
+    pWrtShell->SttEndDoc(/*bStt=*/true);
+    if (!pWrtShell->IsCursorInTable())
+        pWrtShell->Down(/*bSelect=*/false, 1);
+    CPPUNIT_ASSERT(pWrtShell->IsCursorInTable());
+    // The view rebuilds its shell stack from a timer. Do it now, so the table shell that serves
+    // the table style list is in place.
+    pWrtShell->GetView().SelectShell();
+    {
+        // Listen to the table style list, as the kit does for every command it shows:
+        SfxViewFrame& rFrame = pWrtShell->GetView().GetViewFrame();
+        SfxSlotPool& rSlotPool = SfxSlotPool::GetSlotPool(&rFrame);
+        uno::Reference<util::XURLTransformer> xParser(util::URLTransformer::create(m_xContext));
+        util::URL aCommandURL;
+        aCommandURL.Complete = u".uno:TableStyleList"_ustr;
+        xParser->parseStrict(aCommandURL);
+        const SfxSlot* pSlot = rSlotPool.GetUnoSlot(aCommandURL.Path);
+        CPPUNIT_ASSERT(pSlot);
+        rFrame.GetBindings().GetDispatch(pSlot, aCommandURL, false);
+    }
+    // The bindings report states from their timer. A freshly registered slot reports once on
+    // the first run, so let that pass before recording. Twice, so the second run also covers
+    // the case where the first one only found the message list dirty.
+    pWrtShell->GetView().GetViewFrame().GetBindings().GetTimer().Invoke();
+    pWrtShell->GetView().GetViewFrame().GetBindings().GetTimer().Invoke();
+    CPPUNIT_ASSERT(!FilterStateChanges(aView.m_aStateChanges, ".uno:TableStyleList").empty());
+    aView.m_aStateChanges.clear();
+
+    // When the document gets another theme:
+    model::ColorSet const* pForest = svx::ColorSets::get().getColorSet(u"Forest");
+    CPPUNIT_ASSERT(pForest);
+    sw::ThemeColorChanger aChanger(getSwDocShell());
+    aChanger.apply(std::make_shared<model::ColorSet>(*pForest));
+    pWrtShell->GetView().GetViewFrame().GetBindings().GetTimer().Invoke();
+    pWrtShell->GetView().GetViewFrame().GetBindings().GetTimer().Invoke();
+
+    // Then the table style list is reported again, so the previews show the new colors:
+    std::vector<OString> aChanges = FilterStateChanges(aView.m_aStateChanges, ".uno:TableStyleList");
+    CPPUNIT_ASSERT(!aChanges.empty());
+}
+
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testTrackChangesPerViewEnableOne)
 {
     // Given a document with two views:
@@ -564,6 +626,49 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testTrackChangesPerViewDelete)
     // - Actual  : 2
     // i.e. the deletion in view 2 was recorded.
     CPPUNIT_ASSERT_EQUAL(static_cast<SwRedlineTable::size_type>(1), pWrtShell2->GetRedlineCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testEnterAtCoincidentCursorLeavesOtherCursorBehind)
+{
+    // Given 2 views with their cursors at exactly the same position in a paragraph:
+    SwXTextDocument* pXTextDocument = createDoc();
+    CPPUNIT_ASSERT(pXTextDocument);
+    SwTestViewCallback aView1;
+    int nView1 = KitHelper::getCurrentView();
+    SwWrtShell* pWrtShell1 = pXTextDocument->GetDocShell()->GetWrtShell();
+    pWrtShell1->Insert(u"Hello World"_ustr);
+    KitHelper::createView();
+    SwTestViewCallback aView2;
+    int nView2 = KitHelper::getCurrentView();
+    SwWrtShell* pWrtShell2 = pXTextDocument->GetDocShell()->GetWrtShell();
+
+    KitHelper::setView(nView1);
+    pWrtShell1->SttEndDoc(/*bStt=*/true);
+    pWrtShell1->Right(SwCursorSkipMode::Chars, /*bSelect=*/false, 5, /*bBasicCall=*/false);
+    KitHelper::setView(nView2);
+    pWrtShell2->SttEndDoc(/*bStt=*/true);
+    pWrtShell2->Right(SwCursorSkipMode::Chars, /*bSelect=*/false, 5, /*bBasicCall=*/false);
+
+    const SwNodeOffset nOldNode = pWrtShell1->GetCursor()->GetPoint()->GetNodeIndex();
+    CPPUNIT_ASSERT_EQUAL(nOldNode, pWrtShell2->GetCursor()->GetPoint()->GetNodeIndex());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), pWrtShell1->GetCursor()->GetPoint()->GetContentIndex());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), pWrtShell2->GetCursor()->GetPoint()->GetContentIndex());
+
+    // When view 1 presses Enter, splitting the paragraph where both cursors sit:
+    KitHelper::setView(nView1);
+    pWrtShell1->SplitNode();
+
+    // Then view 1's own cursor moves on to the new, second paragraph:
+    CPPUNIT_ASSERT_EQUAL(nOldNode + SwNodeOffset(1), pWrtShell1->GetCursor()->GetPoint()->GetNodeIndex());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), pWrtShell1->GetCursor()->GetPoint()->GetContentIndex());
+
+    // View 2's cursor stays on the original paragraph, at its new, shorter end.
+    // Without the fix, this failed with:
+    // - Expected: nOldNode
+    // - Actual  : nOldNode + 1
+    // i.e. view 2's cursor was carried into the new paragraph along with view 1's.
+    CPPUNIT_ASSERT_EQUAL(nOldNode, pWrtShell2->GetCursor()->GetPoint()->GetNodeIndex());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), pWrtShell2->GetCursor()->GetPoint()->GetContentIndex());
 }
 
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testTrackChangesPerDocInsert)
@@ -1383,6 +1488,655 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testNavigatorContentTreeKeyedToOwning
     pOwningView->GetViewFrame().SetChildWindow(SID_NAVIGATOR, false);
     KitHelper::destroyView(nForeignView);
     Scheduler::ProcessEventsToIdle();
+}
+
+#ifndef _WIN32 // osl_setTimezone has no effect on Windows
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testCommentDateTimeUsesViewTimezone)
+{
+    // A new comment is stamped with the clock of the timezone its author reads, so the client
+    // shows the time the comment was written in the author's own zone.
+    createDoc("dummy.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SwTestViewCallback aView;
+    pWrtShell->Insert(u"word"_ustr);
+    SwPostItMgr* pPostItMgr = getSwDocShell()->GetView()->GetPostItMgr();
+    CPPUNIT_ASSERT(pPostItMgr);
+
+    // The server keeps time in UTC and the author reads the clock in Kolkata, which is five and a
+    // half hours ahead of it the whole year round.
+    const std::pair<bool, OUString> aOldDefaultTimezone = KitHelper::getDefaultTimezone();
+    comphelper::ScopeGuard aRestoreTimezone(
+        [aOldDefaultTimezone]()
+        {
+            KitHelper::setDefaultTimezone(aOldDefaultTimezone.first, aOldDefaultTimezone.second);
+            comphelper::COKit::setTimezone(aOldDefaultTimezone.first, aOldDefaultTimezone.second);
+        });
+    KitHelper::setDefaultTimezone(true, u"UTC"_ustr);
+    comphelper::COKit::setTimezone(true, u"UTC"_ustr);
+    KitHelper::setViewTimezone(KitHelper::getCurrentView(), true, u"Asia/Kolkata"_ustr);
+    const tools::Time aAuthorOffset(5, 30);
+
+    // Both readings are in the server's zone, so the comment has to fall between them once the
+    // author's offset is added.
+    const DateTime aBefore(DateTime::SYSTEM);
+    comphelper::dispatchCommand(u".uno:InsertAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { "Text", cpo::uno::Any(u"a comment"_ustr) },
+                                    { "Author", cpo::uno::Any(u"Author"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    const DateTime aExpectedFrom = aBefore + aAuthorOffset;
+    const DateTime aExpectedTo = aAfter + aAuthorOffset;
+    // Without the accompanying fix in place, this test would have failed: the comment carried the
+    // server's own reading of the clock, five and a half hours behind the author's.
+    CPPUNIT_ASSERT(
+        getOnlyPostItField(*pPostItMgr)->GetDateTime().IsBetween(aExpectedFrom, aExpectedTo));
+
+    // The client is told the same time. The string carries no zone, so the client reads it as a
+    // plain wall clock in its own zone, which is the author's zone.
+    const OUString aNotifiedDateTime = OUString::createFromAscii(
+        aView.m_aComment.get_child("dateTime").get_value<std::string>());
+    css::util::DateTime aParsed;
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(aNotifiedDateTime, aParsed));
+    CPPUNIT_ASSERT(DateTime(aParsed).IsBetween(aExpectedFrom, aExpectedTo));
+
+    // The moment goes out beside it, marked as UTC, so a client can show the comment on the
+    // reader's own clock rather than the author's. Without the accompanying fix in place, this
+    // test would have failed: the payload carried the wall clock alone.
+    const OUString aNotifiedDateTimeUtc = OUString::createFromAscii(
+        aView.m_aComment.get_child("dateTimeUtc").get_value<std::string>());
+    CPPUNIT_ASSERT(aNotifiedDateTimeUtc.endsWith("Z"));
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(aNotifiedDateTimeUtc, aParsed));
+    // The server keeps UTC in this test, so the moment falls between the two readings with no
+    // offset added, unlike the wall clock above. It carries whole seconds, so the lower bound
+    // drops its fraction.
+    DateTime aFlooredBefore = aBefore;
+    aFlooredBefore.SetNanoSec(0);
+    CPPUNIT_ASSERT(DateTime(aParsed).IsBetween(aFlooredBefore, aAfter));
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testCommentDateTimeWithoutViewTimezone)
+{
+    // A client that never sent a timezone gets comments stamped with the server's clock.
+    createDoc("dummy.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SwTestViewCallback aView;
+    pWrtShell->Insert(u"word"_ustr);
+    SwPostItMgr* pPostItMgr = getSwDocShell()->GetView()->GetPostItMgr();
+    CPPUNIT_ASSERT(pPostItMgr);
+
+    const std::pair<bool, OUString> aOldDefaultTimezone = KitHelper::getDefaultTimezone();
+    comphelper::ScopeGuard aRestoreTimezone(
+        [aOldDefaultTimezone]()
+        {
+            KitHelper::setDefaultTimezone(aOldDefaultTimezone.first, aOldDefaultTimezone.second);
+            comphelper::COKit::setTimezone(aOldDefaultTimezone.first, aOldDefaultTimezone.second);
+        });
+    KitHelper::setDefaultTimezone(true, u"Asia/Yerevan"_ustr); // Always UTC+04
+    comphelper::COKit::setTimezone(true, u"Asia/Yerevan"_ustr);
+    // This is what a load without a timezone leaves on the view: marked as set, but empty.
+    KitHelper::setViewTimezone(KitHelper::getCurrentView(), true, OUString());
+
+    const DateTime aBefore(DateTime::SYSTEM);
+    comphelper::dispatchCommand(u".uno:InsertAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { "Text", cpo::uno::Any(u"a comment"_ustr) },
+                                    { "Author", cpo::uno::Any(u"Author"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    // Both readings are in the server's zone, and so is the comment.
+    CPPUNIT_ASSERT(getOnlyPostItField(*pPostItMgr)->GetDateTime().IsBetween(aBefore, aAfter));
+}
+#endif
+
+/// Opens the QuickFind panel of rView while it lives.
+class QuickFindPanelOpener
+{
+    SwView& m_rView;
+    OUString m_sKey;
+
+public:
+    explicit QuickFindPanelOpener(SwView& rView)
+        : m_rView(rView)
+        , m_sKey(OUString::number(reinterpret_cast<sal_uInt64>(static_cast<SfxViewShell*>(&rView)))
+                 + "quickfind")
+    {
+        m_rView.GetViewFrame().ToggleChildWindow(SID_QUICKFIND);
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    // The panel keeps positions in the document, so it is closed before the document.
+    ~QuickFindPanelOpener()
+    {
+        m_rView.GetViewFrame().SetChildWindow(SID_QUICKFIND, false);
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    /// Searches rTerm the way the client does: sets the text of the search field, then
+    /// activates it.
+    void search(const OUString& rTerm)
+    {
+        StringMap aChange;
+        aChange[u"cmd"_ustr] = u"change"_ustr;
+        aChange[u"type"_ustr] = u"edit"_ustr;
+        aChange[u"data"_ustr] = rTerm;
+        CPPUNIT_ASSERT(jsdialog::ExecuteAction(m_sKey, u"Find"_ustr, aChange));
+        StringMap aActivate;
+        aActivate[u"cmd"_ustr] = u"activate"_ustr;
+        aActivate[u"type"_ustr] = u"edit"_ustr;
+        CPPUNIT_ASSERT(jsdialog::ExecuteAction(m_sKey, u"Find"_ustr, aActivate));
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    /// Picks row nRow of the results, counting the page divider rows too.
+    void pickRow(int nRow)
+    {
+        StringMap aSelect;
+        aSelect[u"cmd"_ustr] = u"select"_ustr;
+        aSelect[u"type"_ustr] = u"treeview"_ustr;
+        aSelect[u"data"_ustr] = OUString::number(nRow);
+        CPPUNIT_ASSERT(jsdialog::ExecuteAction(m_sKey, u"searchfinds"_ustr, aSelect));
+        Scheduler::ProcessEventsToIdle();
+    }
+};
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testQuickFindFindsTextInComments)
+{
+    // The navigator search lists a match inside a comment together with the matches in the
+    // document text. Picking the comment match tells the client to select the matched text in
+    // the comment, and typing afterwards still goes to the document. Picking a document match
+    // selects that text in the document again.
+    SwXTextDocument* pXTextDocument = createDoc("dummy.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SwTestViewCallback aView;
+    // The comment is anchored in a paragraph of its own, so the row of the match in the document
+    // text shows only letters.
+    pWrtShell->Insert(u"apple tree"_ustr);
+    pWrtShell->SplitNode();
+    SwPostItMgr* pPostItMgr = getSwDocShell()->GetView()->GetPostItMgr();
+    CPPUNIT_ASSERT(pPostItMgr);
+
+    comphelper::dispatchCommand(u".uno:InsertAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Text"_ustr, cpo::uno::Any(u"red apple"_ustr) },
+                                    { u"Author"_ustr, cpo::uno::Any(u"Author"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    sal_uInt32 nPostItId = getOnlyPostItField(*pPostItMgr)->GetPostItId();
+
+    QuickFindPanelOpener aQuickFind(*getSwDocShell()->GetView());
+    aQuickFind.search(u"apple"_ustr);
+
+    // The rows are the page 1 divider, the match in the document text, then the match in the
+    // comment, which is anchored in the paragraph after it.
+    aQuickFind.pickRow(2);
+
+    // The client is told which text of the comment to select.
+    CPPUNIT_ASSERT_EQUAL(std::string("SearchHighlight"),
+                         aView.m_aComment.get_child("action").get_value<std::string>());
+    CPPUNIT_ASSERT_EQUAL(nPostItId, aView.m_aComment.get_child("id").get_value<sal_uInt32>());
+    CPPUNIT_ASSERT_EQUAL(std::string("0,4,0,9"),
+                         aView.m_aComment.get_child("searchSelection").get_value<std::string>());
+    CPPUNIT_ASSERT(!pPostItMgr->HasActiveSidebarWin());
+
+    // A key typed now goes to the document and leaves the comment text as it was.
+    pXTextDocument->postKeyEvent(COKitKeyEventType::DOWN, 'X', 0);
+    pXTextDocument->postKeyEvent(COKitKeyEventType::UP, 'X', 0);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(u"red apple"_ustr, getOnlyPostItField(*pPostItMgr)->GetPar2());
+    CPPUNIT_ASSERT(pWrtShell->GetCursor()->GetPointNode().GetTextNode()->GetText().indexOf('X')
+                   >= 0);
+
+    aQuickFind.pickRow(1);
+    CPPUNIT_ASSERT(!pPostItMgr->HasActiveSidebarWin());
+    CPPUNIT_ASSERT_EQUAL(u"apple"_ustr, pWrtShell->GetSelText());
+
+    // Text put in front of the match after the search moves the match along with it.
+    comphelper::dispatchCommand(u".uno:EditAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Id"_ustr, cpo::uno::Any(OUString::number(nPostItId)) },
+                                    { u"Text"_ustr, cpo::uno::Any(u"apple red apple"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    aQuickFind.pickRow(2);
+    CPPUNIT_ASSERT_EQUAL(std::string("0,10,0,15"),
+                         aView.m_aComment.get_child("searchSelection").get_value<std::string>());
+
+    // When the matched text itself was changed, the match nearest to the old place is picked.
+    comphelper::dispatchCommand(u".uno:EditAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Id"_ustr, cpo::uno::Any(OUString::number(nPostItId)) },
+                                    { u"Text"_ustr, cpo::uno::Any(u"apple red APPLE"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    aQuickFind.pickRow(2);
+    CPPUNIT_ASSERT_EQUAL(std::string("0,0,0,5"),
+                         aView.m_aComment.get_child("searchSelection").get_value<std::string>());
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testQuickFindFindsTextInResolvedComments)
+{
+    // The navigator search also lists a match in a resolved comment while resolved comments are
+    // hidden. Picking the match shows the resolved comments and selects the match.
+    createDoc("dummy.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SwTestViewCallback aView;
+    pWrtShell->Insert(u"tree"_ustr);
+    SwPostItMgr* pPostItMgr = getSwDocShell()->GetView()->GetPostItMgr();
+    CPPUNIT_ASSERT(pPostItMgr);
+
+    comphelper::dispatchCommand(u".uno:InsertAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Text"_ustr, cpo::uno::Any(u"red apple"_ustr) },
+                                    { u"Author"_ustr, cpo::uno::Any(u"Author"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    sal_uInt32 nPostItId = getOnlyPostItField(*pPostItMgr)->GetPostItId();
+    comphelper::dispatchCommand(u".uno:ResolveComment"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Id"_ustr, cpo::uno::Any(OUString::number(nPostItId)) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    if (pWrtShell->GetViewOptions()->IsResolvedPostIts())
+    {
+        comphelper::dispatchCommand(u".uno:ShowResolvedAnnotations"_ustr, {});
+        Scheduler::ProcessEventsToIdle();
+    }
+    CPPUNIT_ASSERT(!pWrtShell->GetViewOptions()->IsResolvedPostIts());
+    CPPUNIT_ASSERT(!pPostItMgr->GetPostItFields()[0]->mbShow);
+
+    QuickFindPanelOpener aQuickFind(*getSwDocShell()->GetView());
+    aQuickFind.search(u"apple"_ustr);
+    // The rows are the page 1 divider and the match in the resolved comment.
+    aQuickFind.pickRow(1);
+
+    CPPUNIT_ASSERT(pWrtShell->GetViewOptions()->IsResolvedPostIts());
+    CPPUNIT_ASSERT(pPostItMgr->GetPostItFields()[0]->mbShow);
+    CPPUNIT_ASSERT_EQUAL(std::string("SearchHighlight"),
+                         aView.m_aComment.get_child("action").get_value<std::string>());
+    CPPUNIT_ASSERT_EQUAL(std::string("0,4,0,9"),
+                         aView.m_aComment.get_child("searchSelection").get_value<std::string>());
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testQuickFindCommentMatchEditedAway)
+{
+    // When a resolved comment no longer has the search term, picking its match selects nothing
+    // and leaves the resolved comments hidden.
+    createDoc("dummy.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SwTestViewCallback aView;
+    pWrtShell->Insert(u"tree"_ustr);
+    SwPostItMgr* pPostItMgr = getSwDocShell()->GetView()->GetPostItMgr();
+    CPPUNIT_ASSERT(pPostItMgr);
+
+    comphelper::dispatchCommand(u".uno:InsertAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Text"_ustr, cpo::uno::Any(u"red apple"_ustr) },
+                                    { u"Author"_ustr, cpo::uno::Any(u"Author"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    sal_uInt32 nPostItId = getOnlyPostItField(*pPostItMgr)->GetPostItId();
+    comphelper::dispatchCommand(u".uno:ResolveComment"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Id"_ustr, cpo::uno::Any(OUString::number(nPostItId)) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    if (pWrtShell->GetViewOptions()->IsResolvedPostIts())
+    {
+        comphelper::dispatchCommand(u".uno:ShowResolvedAnnotations"_ustr, {});
+        Scheduler::ProcessEventsToIdle();
+    }
+    CPPUNIT_ASSERT(!pWrtShell->GetViewOptions()->IsResolvedPostIts());
+
+    QuickFindPanelOpener aQuickFind(*getSwDocShell()->GetView());
+    aQuickFind.search(u"apple"_ustr);
+
+    comphelper::dispatchCommand(u".uno:EditAnnotation"_ustr,
+                                comphelper::InitPropertySequence({
+                                    { u"Id"_ustr, cpo::uno::Any(OUString::number(nPostItId)) },
+                                    { u"Text"_ustr, cpo::uno::Any(u"red pear"_ustr) },
+                                }));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(u"red pear"_ustr, getOnlyPostItField(*pPostItMgr)->GetPar2());
+
+    // The rows are the page 1 divider and the match that was in the resolved comment.
+    aQuickFind.pickRow(1);
+
+    CPPUNIT_ASSERT(!pWrtShell->GetViewOptions()->IsResolvedPostIts());
+    CPPUNIT_ASSERT(aView.m_aComment.get_child("action").get_value<std::string>()
+                   != "SearchHighlight");
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testQuickFindFindsTextAfterLinkInComment)
+{
+    // A link in a comment counts as one character in the selection that the client is told
+    // about, so a match after the link is still selected in the right place. The client also
+    // gets the matched text and how many times it occurs earlier in the paragraph.
+    createDoc("dummy.fodt");
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    setupCOKitViewCallback(pWrtShell->GetSfxViewShell());
+    SwTestViewCallback aView;
+    pWrtShell->Insert(u"tree"_ustr);
+
+    comphelper::dispatchCommand(
+        u".uno:InsertAnnotation"_ustr,
+        comphelper::InitPropertySequence({
+            { u"Html"_ustr, cpo::uno::Any(u"<div>A kiwi, see <a href=\"https://example.com/\">"
+                                          "https://example.com/</a> for the kiwi</div>"_ustr) },
+            { u"Author"_ustr, cpo::uno::Any(u"Author"_ustr) },
+        }));
+    Scheduler::ProcessEventsToIdle();
+
+    QuickFindPanelOpener aQuickFind(*getSwDocShell()->GetView());
+    aQuickFind.search(u"kiwi"_ustr);
+    // The rows are the page 1 divider and the two matches in the comment.
+    aQuickFind.pickRow(2);
+
+    // "A kiwi, see " is 12 characters, the link is 1 and " for the " is 9.
+    CPPUNIT_ASSERT_EQUAL(std::string("0,22,0,26"),
+                         aView.m_aComment.get_child("searchSelection").get_value<std::string>());
+    // The client also learns the matched text and that it is the second "kiwi" of the paragraph.
+    CPPUNIT_ASSERT_EQUAL(std::string("kiwi"),
+                         aView.m_aComment.get_child("searchText").get_value<std::string>());
+    CPPUNIT_ASSERT_EQUAL(1, aView.m_aComment.get_child("searchOccurrence").get_value<int>());
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yContextParagraphInCell)
+{
+    // Given the cursor in the first of two paragraphs of a table cell on page 3, which is visible:
+    createDoc("a11y-context-cell.fodt");
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->InsertPageBreak();
+    pWrtShell->InsertPageBreak();
+    SwPageFrame* pPage3
+        = pWrtShell->GetLayout()->GetLower()->GetNext()->GetNext()->DynCastPageFrame();
+    pWrtShell->setKitVisibleArea(pPage3->getFrameArea().SVRect());
+    pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+    pWrtShell->Down(/*bSelect=*/false, 2);
+    Scheduler::ProcessEventsToIdle();
+    const std::string aRect = aView.m_aA11yFocusedCell.get_child("paragraph.afterRects")
+                                  .begin()
+                                  ->second.get_value<std::string>();
+    const double fRectTop = o3tl::toInt32(o3tl::getToken(aRect, 1, ','));
+
+    // When the cursor moves into the second paragraph:
+    pWrtShell->Down(/*bSelect=*/false);
+    const double fParagraphTop = pWrtShell->GetCharRect().Top();
+
+    // Then the rectangle sent for it is in document coordinates:
+    // Without the fix, there was no rectangle, or it was relative to the cell.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(fParagraphTop, fRectTop, 45.0);
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yFocusedParagraphLinks)
+{
+    // Given a short hyperlink, then one wrapping over two lines:
+    createDoc("a11y-hyperlink.fodt");
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+
+    // When the cursor moves into the first paragraph:
+    pWrtShell->Down(/*bSelect=*/false);
+    pWrtShell->Up(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the focused paragraph reports the link's range and URL:
+    boost::property_tree::ptree aLinks = aView.m_aA11yFocusedParagraph.get_child("links");
+    // Without the fix, there was no "links" node.
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLinks.size());
+    boost::property_tree::ptree aLink = aLinks.begin()->second;
+    CPPUNIT_ASSERT_EQUAL(6, aLink.get<int>("start"));
+    CPPUNIT_ASSERT_EQUAL(27, aLink.get<int>("end"));
+    CPPUNIT_ASSERT_EQUAL(std::string("https://www.collaboraonline.com/"),
+                         aLink.get<std::string>("url"));
+    // The paragraph after it carries its link too:
+    aLinks = aView.m_aA11yFocusedParagraph.get_child("afterLinks").begin()->second;
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLinks.size());
+    aLink = aLinks.begin()->second;
+    CPPUNIT_ASSERT_EQUAL(6, aLink.get<int>("start"));
+    CPPUNIT_ASSERT_EQUAL(150, aLink.get<int>("end"));
+    CPPUNIT_ASSERT_EQUAL(std::string("https://www.example.com/long"),
+                         aLink.get<std::string>("url"));
+
+    // And when the cursor moves into the second paragraph:
+    pWrtShell->Down(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+    const SwNodeOffset nParagraph = pWrtShell->GetCursor()->GetPoint()->GetNodeIndex();
+    pWrtShell->Down(/*bSelect=*/false);
+    CPPUNIT_ASSERT_EQUAL(nParagraph, pWrtShell->GetCursor()->GetPoint()->GetNodeIndex());
+
+    // Then the link wrapping over two lines is still reported as one:
+    aLinks = aView.m_aA11yFocusedParagraph.get_child("links");
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLinks.size());
+    aLink = aLinks.begin()->second;
+    CPPUNIT_ASSERT_EQUAL(6, aLink.get<int>("start"));
+    CPPUNIT_ASSERT_EQUAL(150, aLink.get<int>("end"));
+    CPPUNIT_ASSERT_EQUAL(std::string("https://www.example.com/long"),
+                         aLink.get<std::string>("url"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yFocusedParagraphLinkURLChangeSameText)
+{
+    // Given the cursor moving between two paragraphs of the same text and link:
+    createDoc("a11y-hyperlink.fodt");
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+    pWrtShell->Down(/*bSelect=*/false);
+    pWrtShell->Up(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+    pWrtShell->EndOfSection(/*bSelect=*/false);
+    pWrtShell->SttPara(/*bSelect=*/false);
+    pWrtShell->Right(SwCursorSkipMode::Chars, /*bSelect=*/false, 6, /*bBasicCall=*/false);
+    pWrtShell->Right(SwCursorSkipMode::Chars, /*bSelect=*/true, 21, /*bBasicCall=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // When only the URL of the second paragraph's link changes:
+    pWrtShell->SetAttrItem(SwFormatINetFormat(u"https://www.example.org/"_ustr, OUString()));
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the focused paragraph reports the new URL:
+    boost::property_tree::ptree aLinks = aView.m_aA11yFocusedParagraph.get_child("links");
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLinks.size());
+    // Without the fix, the change was taken for one in the first paragraph and ignored.
+    CPPUNIT_ASSERT_EQUAL(std::string("https://www.example.org/"),
+                         aLinks.begin()->second.get<std::string>("url"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yFocusedParagraphLinkURLChange)
+{
+    // Given a selected hyperlink:
+    createDoc("a11y-hyperlink.fodt");
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+    pWrtShell->Down(/*bSelect=*/false);
+    pWrtShell->Up(/*bSelect=*/false);
+    pWrtShell->Right(SwCursorSkipMode::Chars, /*bSelect=*/false, 6, /*bBasicCall=*/false);
+    pWrtShell->Right(SwCursorSkipMode::Chars, /*bSelect=*/true, 21, /*bBasicCall=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // When only its URL changes:
+    pWrtShell->SetAttrItem(SwFormatINetFormat(u"https://www.example.org/"_ustr, OUString()));
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the focused paragraph reports the new URL:
+    boost::property_tree::ptree aLinks = aView.m_aA11yFocusedParagraph.get_child("links");
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLinks.size());
+    CPPUNIT_ASSERT_EQUAL(std::string("https://www.example.org/"),
+                         aLinks.begin()->second.get<std::string>("url"));
+
+    // And when the link is removed:
+    dispatchCommand(mxComponent, u".uno:RemoveHyperlink"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the focused paragraph reports no link:
+    CPPUNIT_ASSERT(!aView.m_aA11yFocusedParagraph.get_child_optional("links"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yFocusedParagraphImage)
+{
+    // Given an image anchored as a character, in the paragraph after the first one:
+    createDoc("a11y-image.fodt");
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+    pWrtShell->Down(/*bSelect=*/false);
+    pWrtShell->Up(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the paragraph after the caret reports the image:
+    boost::property_tree::ptree aImages
+        = aView.m_aA11yFocusedParagraph.get_child("afterImages").begin()->second;
+    // Without the fix, there was no "afterImages" node.
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aImages.size());
+
+    // And when the cursor moves into that paragraph:
+    pWrtShell->Down(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the image is reported at the character standing for it, with its alternative text:
+    CPPUNIT_ASSERT_EQUAL(std::string("Before \xef\xbf\xbc after."),
+                         aView.m_aA11yFocusedParagraph.get<std::string>("content"));
+    aImages = aView.m_aA11yFocusedParagraph.get_child("images");
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aImages.size());
+    const boost::property_tree::ptree& rImage = aImages.begin()->second;
+    CPPUNIT_ASSERT_EQUAL(7, rImage.get<int>("position"));
+    CPPUNIT_ASSERT_EQUAL(std::string("A red square"), rImage.get<std::string>("name"));
+    CPPUNIT_ASSERT_EQUAL(std::string("A small square filled with red"),
+                         rImage.get<std::string>("description"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yImageSelection)
+{
+    for (const char* pFile : { "a11y-image.fodt", "a11y-image-at-paragraph.fodt" })
+    {
+        // Given an image anchored as a character or to a paragraph, and the cursor in its
+        // paragraph:
+        SwXTextDocument* pXTextDocument = createDoc(pFile);
+        SwTestViewCallback aView;
+        SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+        pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+        pWrtShell->Down(/*bSelect=*/false);
+        Scheduler::ProcessEventsToIdle();
+
+        // When the image is selected from the keyboard (Shift+F4):
+        dispatchCommand(mxComponent, u".uno:JumpToNextFrame"_ustr, {});
+        Scheduler::ProcessEventsToIdle();
+
+        // Then the selection of the image is reported, by its name:
+        CPPUNIT_ASSERT_MESSAGE(pFile, pWrtShell->IsSelFrameMode());
+        // Without the fix, an image anchored as a character had no selection report.
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("create"),
+                                     aView.m_aA11ySelection.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("A red square"),
+                                     aView.m_aA11ySelection.get<std::string>("name"));
+
+        // And when the cursor goes back to the text:
+        pXTextDocument->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_ESCAPE);
+        pXTextDocument->postKeyEvent(COKitKeyEventType::UP, 0, KEY_ESCAPE);
+        Scheduler::ProcessEventsToIdle();
+
+        // Then the end of the selection is reported, as the client blocks typing until then:
+        CPPUNIT_ASSERT_MESSAGE(pFile, !pWrtShell->IsSelFrameMode());
+        // Without the fix, the end of the selection was never reported.
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("remove"),
+                                     aView.m_aA11ySelection.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("A red square"),
+                                     aView.m_aA11ySelection.get<std::string>("name"));
+
+        // And when the same image is selected again:
+        aView.m_aA11ySelection.clear();
+        dispatchCommand(mxComponent, u".uno:JumpToNextFrame"_ustr, {});
+        Scheduler::ProcessEventsToIdle();
+
+        // Then that selection is reported too:
+        CPPUNIT_ASSERT_MESSAGE(pFile, pWrtShell->IsSelFrameMode());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("create"),
+                                     aView.m_aA11ySelection.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("A red square"),
+                                     aView.m_aA11ySelection.get<std::string>("name"));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yRenamedImageDeselection)
+{
+    for (const char* pFile : { "a11y-image.fodt", "a11y-image-at-paragraph.fodt" })
+    {
+        // Given a selected image, anchored as a character or to a paragraph:
+        SwXTextDocument* pXTextDocument = createDoc(pFile);
+        SwTestViewCallback aView;
+        SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+        pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+        pWrtShell->Down(/*bSelect=*/false);
+        dispatchCommand(mxComponent, u".uno:JumpToNextFrame"_ustr, {});
+        Scheduler::ProcessEventsToIdle();
+        CPPUNIT_ASSERT_MESSAGE(pFile, pWrtShell->IsSelFrameMode());
+
+        // When it gets a new title, as from its Alt Text dialog, and the cursor goes back to the
+        // text:
+        mxComponent.queryThrow<text::XTextGraphicObjectsSupplier>()
+            ->getGraphicObjects()
+            ->getByName(u"Image1"_ustr)
+            .get<Reference<beans::XPropertySet>>()
+            ->setPropertyValue(u"Title"_ustr, Any(u"A blue square"_ustr));
+        Scheduler::ProcessEventsToIdle();
+        pXTextDocument->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_ESCAPE);
+        pXTextDocument->postKeyEvent(COKitKeyEventType::UP, 0, KEY_ESCAPE);
+        Scheduler::ProcessEventsToIdle();
+
+        // Then the end of the selection is reported under the new title:
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("remove"),
+                                     aView.m_aA11ySelection.get<std::string>("action"));
+        // Without the fix, the old title "A red square" was reported.
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(pFile, std::string("A blue square"),
+                                     aView.m_aA11ySelection.get<std::string>("name"));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testA11yFocusedParagraphBlockQuote)
+{
+    // Given a block quote with a link, after a plain paragraph:
+    createDoc("a11y-blockquote.fodt");
+    SwTestViewCallback aView;
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GetSfxViewShell()->SetKitAccessibilityState(true);
+    pWrtShell->Down(/*bSelect=*/false);
+    pWrtShell->Up(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // When the cursor moves into the block quote:
+    pWrtShell->Down(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then it is the focused paragraph, with its link:
+    // Without the fix, no paragraph was reported at all.
+    CPPUNIT_ASSERT_EQUAL(std::string("Quoted from the Collabora website."),
+                         aView.m_aA11yFocusedParagraph.get<std::string>("content"));
+    boost::property_tree::ptree aLinks = aView.m_aA11yFocusedParagraph.get_child("links");
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLinks.size());
+    CPPUNIT_ASSERT_EQUAL(std::string("https://www.collaboraonline.com/"),
+                         aLinks.begin()->second.get<std::string>("url"));
+
+    // And when the cursor moves back up:
+    pWrtShell->Up(/*bSelect=*/false);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the block quote is the paragraph after the caret:
+    CPPUNIT_ASSERT_EQUAL(
+        std::string("Quoted from the Collabora website."),
+        aView.m_aA11yFocusedParagraph.get_child("after").begin()->second.get_value<std::string>());
 }
 }
 

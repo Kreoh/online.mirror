@@ -14,7 +14,7 @@
  * Collabora Online toolbar
  */
 
-/* global app $ _ _UNO JSDialog URLPopUpSection cool */
+/* global app $ _ _UNO JSDialog URLPopUpSection cool Util */
 /*eslint indent: [error, "tab", { "outerIIFEBody": 0 }]*/
 
 (function(global) {
@@ -288,8 +288,9 @@ var sendInsertTableFunction = function(event) {
 	var col = $(event.target).index() + 1;
 	var row = $(event.target).parent().index() + 1;
 	$('.col').removeClass('bright');
-	var status = $('#inserttable-status')
-	status.html('<br/>');
+	const status = Util.getElementOrWarn('inserttable-status');
+	// eslint-disable-next-line no-restricted-syntax -- fixed markup
+	if (status) status.innerHTML = '<br/>';
 	var msg = 'uno .uno:InsertTable {' +
 		' "Columns": { "type": "long","value": '
 		+ col +
@@ -1051,6 +1052,32 @@ function onCommandResult(e) {
 		setTimeout(function () {
 			map._docLayer.scrollToPos(new cool.SimplePoint(app.file.textCursor.rectangle.x1, app.file.textCursor.rectangle.y1));
 		}, 0);
+	} else if (
+		(commandName === '.uno:CalculateSheet' ||
+			commandName === '.uno:CalculateHard') &&
+		e.success === true &&
+		e.result &&
+		e.result.value &&
+		!isNaN(e.result.value)
+	) {
+		// Both commands answer with the microseconds their calculation took.
+		const milliseconds = parseInt(e.result.value, 10) / 1000;
+		const elapsed =
+			milliseconds < 10
+				? milliseconds.toFixed(1)
+				: Math.round(milliseconds).toString();
+		const message =
+			commandName === '.uno:CalculateSheet'
+				? _('Sheet recalculated in %1 ms')
+				: _('Document recalculated in %1 ms');
+		// A timing is worth a glance, so it goes away on its own well before
+		// the ten seconds a snackbar lasts by default.
+		map.uiManager.showSnackbar(
+			message.replace('%1', elapsed),
+			null,
+			null,
+			2000,
+		);
 	}
 }
 
@@ -1061,21 +1088,23 @@ function onUpdatePermission(e) {
 		var enabledButtons = ['closemobile', 'undo', 'redo', 'fold'];
 
 		// copy the first array
-		var items = toolbar.getToolItems(app.map.getDocType()).slice();
+		var items = toolbar.getToolItems().slice();
 		for (var idx in items) {
 			var found = enabledButtons.filter(function(id) { return id === items[idx].id; });
 			var alwaysEnable = found.length !== 0;
 
 			if (e.detail.perm === 'edit') {
-				var unoCmd = map.getDocType() === 'spreadsheet' ? items[idx].unosheet : getUNOCommand(items[idx].uno);
+				var unoCmd = map.getDocType() === 'spreadsheet' ? undefined : getUNOCommand(items[idx].uno);
 				var keepDisabled = map['stateChangeHandler'].getItemValue(unoCmd) === 'disabled';
 				if (!keepDisabled || alwaysEnable)
 					toolbar.enableItem(items[idx].id, true);
 				$('.main-nav').removeClass('readonly');
-				$('#toolbar-down').removeClass('readonly');
+				const toolbarDown1 = document.getElementById('toolbar-down');
+				if (toolbarDown1) toolbarDown1.classList.remove('readonly');
 			} else if (!alwaysEnable) {
 				$('.main-nav').addClass('readonly');
-				$('#toolbar-down').addClass('readonly');
+				const toolbarDown2 = document.getElementById('toolbar-down');
+				if (toolbarDown2) toolbarDown2.classList.add('readonly');
 				toolbar.enableItem(items[idx].id, false);
 			}
 		}
@@ -1083,13 +1112,18 @@ function onUpdatePermission(e) {
 		if (window.mode.isDesktop())
 			return;
 
+		const toolbarMobileBack = document.getElementById('toolbar-mobile-back');
 		if (e.detail.perm === 'edit') {
-			$('#toolbar-mobile-back').removeClass('editmode-off');
-			$('#toolbar-mobile-back').addClass('editmode-on');
+			if (toolbarMobileBack) {
+				toolbarMobileBack.classList.remove('editmode-off');
+				toolbarMobileBack.classList.add('editmode-on');
+			}
 			toolbar.updateItem({id: 'closemobile', type: 'customtoolitem', w2icon: 'editmode'});
 		} else {
-			$('#toolbar-mobile-back').removeClass('editmode-on');
-			$('#toolbar-mobile-back').addClass('editmode-off');
+			if (toolbarMobileBack) {
+				toolbarMobileBack.classList.remove('editmode-on');
+				toolbarMobileBack.classList.add('editmode-off');
+			}
 			toolbar.updateItem({id: 'closemobile', type: 'customtoolitem', w2icon: 'closemobile'});
 		}
 	}
@@ -1112,7 +1146,7 @@ function editorUpdate(e) { // eslint-disable-line no-unused-vars
 
 global.editorUpdate = editorUpdate;
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
 	// Attach insert file action
 	// Update supported media mime type insertion
 	const supportedGraphicMime = app.LOUtil.graphicMimeFilter.join(",");
@@ -1163,13 +1197,17 @@ function setupToolbar(e) {
 				toolbar.showItem('cancelsearch', false);
 			}
 			window.L.DomUtil.addClass(searchInput, 'search-not-found');
-			$('#findthis').addClass('search-not-found');
+			const findThis = Util.getElementOrWarn('findthis');
+			if (findThis) findThis.classList.add('search-not-found');
 			const searchbox = document.getElementById('searchbox');
 			if(searchbox && !searchbox.hasAttribute('aria-live'))
 				searchbox.setAttribute('aria-live', 'polite');
 			app.searchService.resetSelection();
 			setTimeout(function () {
-				$('#findthis').removeClass('search-not-found');
+				// Query again: the element found above may no longer be the
+				// live one after this delay.
+				const findThis = Util.getElementOrWarn('findthis');
+				if (findThis) findThis.classList.remove('search-not-found');
 				window.L.DomUtil.removeClass(searchInput, 'search-not-found');
 			}, 800);
 		}
@@ -1196,8 +1234,9 @@ function setupToolbar(e) {
 	map.on('wopiprops', onWopiProps);
 	map.on('commandresult', onCommandResult);
 
+	const closebuttonwrapper = Util.getElementOrWarn('closebuttonwrapper');
 	if (map.options.wopi && window.L.Params.closeButtonEnabled && !window.mode.isSmallScreenDevice()) {
-		$('#closebuttonwrapper').css('display', 'flex');
+		if (closebuttonwrapper) closebuttonwrapper.style.display = 'flex';
 		var button = window.L.DomUtil.get('closebutton');
 		if (button) {
 			const closeButtonText = _('Close document');
@@ -1206,19 +1245,23 @@ function setupToolbar(e) {
 			window.L.control.attachTooltipEventListener(button, map);
 		}
 	} else if (!window.L.Params.closeButtonEnabled) {
-		$('#closebuttonwrapper').hide();
-		$('#closebuttonwrapperseparator').hide();
+		if (closebuttonwrapper) closebuttonwrapper.style.display = 'none';
+		const closebuttonwrapperseparator = document.getElementById('closebuttonwrapperseparator');
+		if (closebuttonwrapperseparator) closebuttonwrapperseparator.style.display = 'none';
 	} else if (window.L.Params.closeButtonEnabled && !window.mode.isSmallScreenDevice()) {
-		$('#closebuttonwrapper').css('display', 'flex');
+		if (closebuttonwrapper) closebuttonwrapper.style.display = 'flex';
 	}
 
-	$('#closebutton').click(function () {
-		let dispatcher = global.app.dispatcher;
-		if (!dispatcher)
-			dispatcher = new app.definitions['dispatcher']('global');
+	const closebutton = Util.getElementOrWarn('closebutton');
+	if (closebutton) {
+		closebutton.addEventListener('click', function () {
+			let dispatcher = global.app.dispatcher;
+			if (!dispatcher)
+				dispatcher = new app.definitions['dispatcher']('global');
 
-		dispatcher.dispatch('closeapp');
-	});
+			dispatcher.dispatch('closeapp');
+		});
+	}
 }
 
 global.setupToolbar = setupToolbar;

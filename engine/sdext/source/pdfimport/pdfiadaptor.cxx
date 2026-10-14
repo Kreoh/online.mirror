@@ -34,18 +34,19 @@
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
 namespace pdfi
 {
 
-PDFIHybridAdaptor::PDFIHybridAdaptor( const uno::Reference< uno::XComponentContext >& xContext ) :
+PDFIHybridAdaptor::PDFIHybridAdaptor( const uno::Reference< cpo::uno::XComponentContext >& xContext ) :
     m_xContext( xContext )
 {
 }
 
 // XFilter
-bool SAL_CALL PDFIHybridAdaptor::filter( const cpo::uno::Sequence< beans::PropertyValue >& rFilterData )
+bool PDFIHybridAdaptor::filter( const cpo::uno::Sequence< beans::PropertyValue >& rFilterData )
 {
     bool bRet = false;
     if( m_xModel.is() )
@@ -173,12 +174,12 @@ bool SAL_CALL PDFIHybridAdaptor::filter( const cpo::uno::Sequence< beans::Proper
     return bRet;
 }
 
-void SAL_CALL PDFIHybridAdaptor::cancel()
+void PDFIHybridAdaptor::cancel()
 {
 }
 
 //XImporter
-void SAL_CALL PDFIHybridAdaptor::setTargetDocument( const uno::Reference< lang::XComponent >& xDocument )
+void PDFIHybridAdaptor::setTargetDocument( const uno::Reference< lang::XComponent >& xDocument )
 {
     SAL_INFO("sdext.pdfimport", "PDFIAdaptor::setTargetDocument" );
     m_xModel.set( xDocument, uno::UNO_QUERY );
@@ -201,9 +202,9 @@ cpo::uno::Sequence<OUString> PDFIHybridAdaptor::getSupportedServiceNames()
     return {u"com.sun.star.document.ImportFilter"_ustr};
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 sdext_PDFIHybridAdaptor_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pdfi::PDFIHybridAdaptor( context ));
 }

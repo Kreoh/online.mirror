@@ -23,7 +23,7 @@
 using namespace svx;
 
 TextCharacterSpacingPopup::TextCharacterSpacingPopup(
-    const css::uno::Reference<css::uno::XComponentContext>& rContext)
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : PopupWindowController(rContext, nullptr, OUString())
 {
 }
@@ -72,9 +72,9 @@ cpo::uno::Sequence<OUString> TextCharacterSpacingPopup::getSupportedServiceNames
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_svx_CharacterSpacingToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* rContext, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new TextCharacterSpacingPopup(rContext));
 }

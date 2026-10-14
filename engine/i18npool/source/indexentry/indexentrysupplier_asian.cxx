@@ -25,13 +25,13 @@
 #include <indexentrysupplier_asian.hxx>
 #include "data/indexdata_alphanumeric.h"
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 
 namespace i18npool {
 
 IndexEntrySupplier_asian::IndexEntrySupplier_asian(
-    const Reference < XComponentContext >& rxContext ) : IndexEntrySupplier_Common(rxContext)
+    const Reference < cpo::uno::XComponentContext >& rxContext ) : IndexEntrySupplier_Common(rxContext)
 {
     implementationName = "com.sun.star.i18n.IndexEntrySupplier_asian";
 }

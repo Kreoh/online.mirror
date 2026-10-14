@@ -20,7 +20,7 @@
 #pragma once
 
 #include <com/sun/star/script/browse/XBrowseNode.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 
 class SbModule;
@@ -39,22 +39,22 @@ namespace basprov
     class BasicModuleNodeImpl : public BasicModuleNodeImpl_BASE
     {
     private:
-        css::uno::Reference< css::uno::XComponentContext >    m_xContext;
+        cpo::uno::Reference< cpo::uno::XComponentContext >    m_xContext;
         OUString m_sScriptingContext;
         SbModule* m_pModule;
         bool m_bIsAppScript;
 
     public:
-        BasicModuleNodeImpl( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+        BasicModuleNodeImpl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
             OUString sScriptingContext,
             SbModule* pModule, bool isAppScript );
         virtual ~BasicModuleNodeImpl() override;
 
         // XBrowseNode
-        virtual OUString SAL_CALL getName(  ) override;
-        virtual cpo::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes(  ) override;
-        virtual bool SAL_CALL hasChildNodes(  ) override;
-        virtual sal_Int16 SAL_CALL getType(  ) override;
+        virtual OUString getName(  ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::script::browse::XBrowseNode > > getChildNodes(  ) override;
+        virtual bool hasChildNodes(  ) override;
+        virtual sal_Int16 getType(  ) override;
     };
 
 

@@ -830,15 +830,29 @@ setPart(KitDocumentView* pDocView, const std::string& rString)
     if (!priv->m_pDocument)
         return;
 
-    // The payload names the part by its part number, while the widget tracks
-    // and reports parts by their index in document order.
+    // The payload names the part by its part identifier, while the widget
+    // tracks and reports parts by their index in document order.
     {
         std::scoped_lock<std::mutex> aGuard(g_aKitMutex);
         priv->m_nPartId = priv->m_pDocument->getPartIndex(
-            std::stoi(rString),
+            rString.c_str(),
             priv->m_pDocument->getEditMode());
     }
     g_signal_emit(pDocView, doc_view_signals[PART_CHANGED], 0, priv->m_nPartId);
+}
+
+/// The index the payload's part identifier addresses now in document order, or -1 when no
+/// part of the document carries that identifier.
+static int
+partIndexFromTree(KitDocumentView* pDocView, const boost::property_tree::ptree& rTree)
+{
+    KitDocumentViewPrivate& priv = getPrivate(pDocView);
+    if (!priv->m_pDocument)
+        return -1;
+
+    const std::string aPartId = rTree.get<std::string>("part");
+    std::scoped_lock<std::mutex> aGuard(g_aKitMutex);
+    return priv->m_pDocument->getPartIndex(aPartId.c_str(), priv->m_pDocument->getEditMode());
 }
 
 static void
@@ -883,7 +897,9 @@ static void refreshSize(KitDocumentView* pDocView)
 {
     KitDocumentViewPrivate& priv = getPrivate(pDocView);
 
-    priv->m_pDocument->getDocumentSize(&priv->m_nDocumentWidthTwips, &priv->m_nDocumentHeightTwips);
+    const COKitSize aDocSize = priv->m_pDocument->getDocumentSize();
+    priv->m_nDocumentWidthTwips = aDocSize.nWidth;
+    priv->m_nDocumentHeightTwips = aDocSize.nHeight;
     float zoom = priv->m_fZoom;
     gint nScaleFactor = gtk_widget_get_scale_factor(GTK_WIDGET(pDocView));
     gint nTileSizePixelsScaled = nTileSizePixels * nScaleFactor;
@@ -1216,7 +1232,7 @@ callback (gpointer pData)
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
         int nViewId = aTree.get<int>("viewId");
-        int nPart = aTree.get<int>("part");
+        const int nPart = partIndexFromTree(pDocView, aTree);
         const std::string rRectangle = aTree.get<std::string>("selection");
         if (rRectangle != "EMPTY")
             priv->m_aGraphicViewSelections[nViewId] = ViewRectangle(nPart, payloadToRectangle(pDocView, rRectangle.c_str()));
@@ -1300,7 +1316,7 @@ callback (gpointer pData)
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
         int nViewId = aTree.get<int>("viewId");
-        int nPart = aTree.get<int>("part");
+        const int nPart = partIndexFromTree(pDocView, aTree);
         const std::string rRectangle = aTree.get<std::string>("rectangle");
         priv->m_aViewCursors[nViewId] = ViewRectangle(nPart, payloadToRectangle(pDocView, rRectangle.c_str()));
         gtk_widget_queue_draw(GTK_WIDGET(pDocView));
@@ -1312,7 +1328,7 @@ callback (gpointer pData)
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
         int nViewId = aTree.get<int>("viewId");
-        int nPart = aTree.get<int>("part");
+        const int nPart = partIndexFromTree(pDocView, aTree);
         const std::string rSelection = aTree.get<std::string>("selection");
         priv->m_aTextViewSelectionRectangles[nViewId] = ViewRectangles(nPart, payloadToRectangles(pDocView, rSelection.c_str()));
         gtk_widget_queue_draw(GTK_WIDGET(pDocView));
@@ -1336,7 +1352,7 @@ callback (gpointer pData)
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
         int nViewId = aTree.get<int>("viewId");
-        int nPart = aTree.get<int>("part");
+        const int nPart = partIndexFromTree(pDocView, aTree);
         const std::string rRectangle = aTree.get<std::string>("rectangle");
         if (rRectangle != "EMPTY")
             priv->m_aCellViewCursors[nViewId] = ViewRectangle(nPart, payloadToRectangle(pDocView, rRectangle.c_str()));
@@ -1355,7 +1371,7 @@ callback (gpointer pData)
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
         int nViewId = aTree.get<int>("viewId");
-        int nPart = aTree.get<int>("part");
+        const int nPart = partIndexFromTree(pDocView, aTree);
         const std::string rRectangle = aTree.get<std::string>("rectangle");
         if (rRectangle != "EMPTY")
             priv->m_aViewLockRectangles[nViewId] = ViewRectangle(nPart, payloadToRectangle(pDocView, rRectangle.c_str()));
@@ -1508,10 +1524,10 @@ callback (gpointer pData)
     case COKitCallbackType::CORE_LOG:
     case COKitCallbackType::TOOLTIP:
     case COKitCallbackType::SHAPE_INNER_TEXT:
-    case COKitCallbackType::CLIPBOARD_MIMETYPES:
     case COKitCallbackType::SHAPE_DRAG_PREVIEW:
     case COKitCallbackType::VECTOR_PRIMITIVES_DELTA:
     case COKitCallbackType::PRESENTATION_INFO:
+    case COKitCallbackType::SLIDE_LINKS_CHANGED:
     {
         // TODO: Implement me
         break;
@@ -2407,15 +2423,12 @@ setPartInThread(gpointer data)
     setDocumentView(priv->m_pDocument, priv->m_nViewId);
 
     // The widget names parts by their index in document order, while the
-    // document boundary names parts of a presentation or drawing document by
-    // their stable page unique ids.
-    const unsigned long long nPartNumber = priv->m_pDocument->getPartUniqueId(
+    // document boundary names parts by their part identifiers.
+    const std::string aPartId = priv->m_pDocument->getPartId(
         nPart,
         priv->m_pDocument->getEditMode());
-    if (nPartNumber != 0 && nPartNumber <= o3tl::make_unsigned(std::numeric_limits<int>::max()))
-        nPart = static_cast<int>(nPartNumber);
-
-    priv->m_pDocument->setPart(nPart );
+    if (!aPartId.empty())
+        priv->m_pDocument->setPart(aPartId.c_str());
     aGuard.unlock();
 
     kit_doc_view_reset_view(pDocView);
@@ -2486,7 +2499,8 @@ paintTile(KitDocumentViewPrivate& priv,
     std::unique_lock<std::mutex> aGuard(g_aKitMutex);
     setDocumentView(priv->m_pDocument, priv->m_nViewId);
 
-    priv->m_pDocument->paintTile(pBuffer,
+    priv->m_pDocument->paintTile(std::span(pBuffer, static_cast<size_t>(nTileSizePixelsScaled)
+                                                        * nTileSizePixelsScaled * 4),
                                          nTileSizePixelsScaled, nTileSizePixelsScaled,
                                          rTileRectangle.x, rTileRectangle.y,
                                          pixelToTwip(nTileSizePixelsScaled, pLOEvent->m_fPaintTileZoom * nScaleFactor),
@@ -3761,10 +3775,11 @@ kit_doc_view_get_part (KitDocumentView* pDocView)
     std::scoped_lock<std::mutex> aGuard(g_aKitMutex);
     setDocumentView(priv->m_pDocument, priv->m_nViewId);
 
-    // The boundary reports the current part by its part number, while the
+    // The boundary reports the current part by its part identifier, while the
     // widget reports parts by their index in document order.
+    const std::string aPartId = priv->m_pDocument->getPart();
     return priv->m_pDocument->getPartIndex(
-        priv->m_pDocument->getPart(),
+        aPartId.c_str(),
         priv->m_pDocument->getEditMode());
 }
 
@@ -3821,7 +3836,7 @@ kit_doc_view_get_part_name (KitDocumentView* pDocView, int nPart)
 
     std::scoped_lock<std::mutex> aGuard(g_aKitMutex);
     setDocumentView(priv->m_pDocument, priv->m_nViewId);
-    return priv->m_pDocument->getPartName(nPart );
+    return g_strdup(priv->m_pDocument->getPartName(nPart).c_str());
 }
 
 SAL_DLLPUBLIC_EXPORT void
@@ -3989,13 +4004,13 @@ kit_doc_view_copy_selection (KitDocumentView* pDocView,
     std::stringstream ss;
     ss << "COKitDocument::getTextSelection('" << pMimeType << "')";
     g_info("%s", ss.str().c_str());
-    std::string usedMimeType;
-    auto const selection = pDocument->getTextSelection(pMimeType, &usedMimeType);
+    auto const selection = pDocument->getTextSelection(pMimeType);
     if (selection.empty()) {
         return nullptr;
     }
     if (pUsedMimeType != nullptr) {
-        *pUsedMimeType = g_strdup(usedMimeType.c_str());
+        // The engine only ever echoed the requested type back.
+        *pUsedMimeType = g_strdup(pMimeType);
     }
     return g_strdup(selection.c_str());
 }
@@ -4045,7 +4060,7 @@ kit_doc_view_get_version_info (KitDocumentView* pDocView)
 {
     KitDocumentViewPrivate& priv = getPrivate(pDocView);
 
-    return priv->m_pOffice->getVersionInfo();
+    return g_strdup(priv->m_pOffice->getVersionInfo().c_str());
 }
 
 

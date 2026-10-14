@@ -18,6 +18,7 @@
 #include <svx/svdmark.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svdobj.hxx>
+#include <svx/svdograf.hxx>
 #include <svx/svdundo.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svxids.hrc>
@@ -55,7 +56,7 @@ void convertDrawStyleArguments(SfxItemSet& rArgs)
 
     // A fully transparent line color means "no line". A non-transparent line
     // color is left as-is here: it is visible alongside any style, and forcing
-    // solid is done per object by applyBareLineColorToMarked().
+    // solid is done per object by applyBareLineAttributesToMarked().
     if (const SfxPoolItem* pColorItem = rArgs.GetItem(SID_ATTR_LINE_COLOR, false))
     {
         const Color aColor = static_cast<const XLineColorItem*>(pColorItem)->GetColorValue();
@@ -82,19 +83,24 @@ void convertDrawStyleArguments(SfxItemSet& rArgs)
     }
 }
 
-void applyBareLineColorToMarked(SdrView& rView, const SfxItemSet& rArgs)
+void applyBareLineAttributesToMarked(SdrView& rView, const SfxItemSet& rArgs)
 {
-    // A bare line color is a non-transparent line color with no explicit,
-    // non-None line style in the request.
-    const SfxPoolItem* pLineColor = rArgs.GetItem(SID_ATTR_LINE_COLOR, false);
     const SfxPoolItem* pLineStyle = rArgs.GetItem(SID_ATTR_LINE_STYLE, false);
-    const bool bBareLineColor
+    if (pLineStyle
+        && static_cast<const XLineStyleItem*>(pLineStyle)->GetValue()
+               != css::drawing::LineStyle_NONE)
+        return;
+
+    const SfxPoolItem* pLineColor = rArgs.GetItem(SID_ATTR_LINE_COLOR, false);
+    const bool bVisibleLineColor
         = pLineColor
-          && !static_cast<const XLineColorItem*>(pLineColor)->GetColorValue().IsFullyTransparent()
-          && (!pLineStyle
-              || static_cast<const XLineStyleItem*>(pLineStyle)->GetValue()
-                     == css::drawing::LineStyle_NONE);
-    if (!bBareLineColor)
+          && !static_cast<const XLineColorItem*>(pLineColor)->GetColorValue().IsFullyTransparent();
+    if (pLineColor && !bVisibleLineColor)
+        return;
+
+    const bool bLineWidth = rArgs.GetItem(SID_ATTR_LINE_WIDTH, false)
+                            || rArgs.GetItemIfSet(SID_ATTR_LINE_WIDTH_ARG, false);
+    if (!bVisibleLineColor && !bLineWidth)
         return;
 
     const bool bUndo = rView.IsUndoEnabled();
@@ -112,6 +118,26 @@ void applyBareLineColorToMarked(SdrView& rView, const SfxItemSet& rArgs)
         pObj->SetMergedItem(XLineStyleItem(css::drawing::LineStyle_SOLID));
         pObj->BroadcastObjectChange();
     }
+}
+
+bool canFillColorShowThroughMarked(const SdrMarkList& rMarkList)
+{
+    const size_t nMarkCount(rMarkList.GetMarkCount());
+
+    if (0 == nMarkCount)
+        return true;
+
+    for (size_t a = 0; a < nMarkCount; ++a)
+    {
+        const SdrMark* pMark = rMarkList.GetMark(a);
+        const SdrGrafObj* pGraphicObject
+            = pMark ? dynamic_cast<const SdrGrafObj*>(pMark->GetMarkedSdrObj()) : nullptr;
+
+        if (!pGraphicObject || pGraphicObject->GetGraphic().HasTransparentPixels())
+            return true;
+    }
+
+    return false;
 }
 }
 

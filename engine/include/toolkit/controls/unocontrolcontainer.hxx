@@ -45,7 +45,7 @@ class TOOLKIT_DLLPUBLIC UnoControlContainer : public UnoControlContainer_Base
 {
 private:
     std::unique_ptr<UnoControlHolderList>   mpControls;
-    cpo::uno::Sequence< css::uno::Reference< css::awt::XTabController > >    maTabControllers;
+    cpo::uno::Sequence< cpo::uno::Reference< css::awt::XTabController > >    maTabControllers;
     ContainerListenerMultiplexer            maCListeners;
 
 protected:
@@ -53,62 +53,62 @@ protected:
 
 public:
                 UnoControlContainer();
-                UnoControlContainer( const css::uno::Reference< css::awt::XVclWindowPeer >& xPeer );
+                UnoControlContainer( const cpo::uno::Reference< css::awt::XVclWindowPeer >& xPeer );
                 virtual ~UnoControlContainer() override;
 
 
     // css::lang::XComponent
-    void SAL_CALL dispose() override;
+    void dispose() override;
 
     // css::lang::XEventListener
-    void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    void disposing( const css::lang::EventObject& Source ) override;
 
     // css::container::XContainer
-    void SAL_CALL addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
-    void SAL_CALL removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
 
     // css::container::XIdentifierContainer
-    virtual ::sal_Int32 SAL_CALL insert( const cpo::uno::Any& aElement ) override;
+    virtual ::sal_Int32 insert( const cpo::uno::Any& aElement ) override;
 
     // css::container::XIdentifierReplace
-    virtual void SAL_CALL removeByIdentifier( ::sal_Int32 Identifier ) override;
-    virtual void SAL_CALL replaceByIdentifer( ::sal_Int32 Identifier, const cpo::uno::Any& aElement ) override;
+    virtual void removeByIdentifier( ::sal_Int32 Identifier ) override;
+    virtual void replaceByIdentifer( ::sal_Int32 Identifier, const cpo::uno::Any& aElement ) override;
 
     // css::container::XIdentifierAccess
-    virtual cpo::uno::Any SAL_CALL getByIdentifier( ::sal_Int32 Identifier ) override;
-    virtual cpo::uno::Sequence< ::sal_Int32 > SAL_CALL getIdentifiers(  ) override;
+    virtual cpo::uno::Any getByIdentifier( ::sal_Int32 Identifier ) override;
+    virtual cpo::uno::Sequence< ::sal_Int32 > getIdentifiers(  ) override;
 
     // css::container::XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override;
-    virtual bool SAL_CALL hasElements(  ) override;
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
 
     // css::awt::XControlContainer
-    void SAL_CALL setStatusText( const OUString& StatusText ) override;
-    cpo::uno::Sequence< css::uno::Reference< css::awt::XControl > > SAL_CALL getControls(  ) override;
-    css::uno::Reference< css::awt::XControl > SAL_CALL getControl( const OUString& aName ) override;
-    void SAL_CALL addControl( const OUString& Name, const css::uno::Reference< css::awt::XControl >& Control ) override;
-    void SAL_CALL removeControl( const css::uno::Reference< css::awt::XControl >& Control ) override;
+    void setStatusText( const OUString& StatusText ) override;
+    cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControl > > getControls(  ) override;
+    cpo::uno::Reference< css::awt::XControl > getControl( const OUString& aName ) override;
+    void addControl( const OUString& Name, const cpo::uno::Reference< css::awt::XControl >& Control ) override;
+    void removeControl( const cpo::uno::Reference< css::awt::XControl >& Control ) override;
 
     // css::awt::XUnoControlContainer
-    void SAL_CALL setTabControllers( const cpo::uno::Sequence< css::uno::Reference< css::awt::XTabController > >& TabControllers ) override;
-    cpo::uno::Sequence< css::uno::Reference< css::awt::XTabController > > SAL_CALL getTabControllers(  ) override;
-    void SAL_CALL addTabController( const css::uno::Reference< css::awt::XTabController >& TabController ) override;
-    void SAL_CALL removeTabController( const css::uno::Reference< css::awt::XTabController >& TabController ) override;
+    void setTabControllers( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XTabController > >& TabControllers ) override;
+    cpo::uno::Sequence< cpo::uno::Reference< css::awt::XTabController > > getTabControllers(  ) override;
+    void addTabController( const cpo::uno::Reference< css::awt::XTabController >& TabController ) override;
+    void removeTabController( const cpo::uno::Reference< css::awt::XTabController >& TabController ) override;
 
     // css::awt::XControl
-    void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& Toolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
+    void createPeer( const cpo::uno::Reference< css::awt::XToolkit >& Toolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
 
     // css::awt::XWindow
-    void SAL_CALL setVisible( bool Visible ) override;
+    void setVisible( bool Visible ) override;
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 protected:
     virtual void PrepareWindowDescriptor( css::awt::WindowDescriptor& rDesc ) override;
-    virtual void removingControl( const css::uno::Reference< css::awt::XControl >& _rxControl );
-    virtual void addingControl( const css::uno::Reference< css::awt::XControl >& _rxControl );
+    virtual void removingControl( const cpo::uno::Reference< css::awt::XControl >& _rxControl );
+    virtual void addingControl( const cpo::uno::Reference< css::awt::XControl >& _rxControl );
 
     /** ensures that the given control has a peer, if necessary and possible
         @param _rxControl
@@ -117,7 +117,7 @@ protected:
             our mutex is locked
     */
     virtual void    impl_createControlPeerIfNecessary(
-        const css::uno::Reference< css::awt::XControl >& _rxControl
+        const cpo::uno::Reference< css::awt::XControl >& _rxControl
     );
 private:
     /** adds the control to the container, does necessary notifications, and the like
@@ -129,7 +129,7 @@ private:
             the ID of the newly added control
     */
     sal_Int32 impl_addControl(
-        const css::uno::Reference< css::awt::XControl >& _rxControl,
+        const cpo::uno::Reference< css::awt::XControl >& _rxControl,
         const OUString* _pName = nullptr
     );
 
@@ -142,7 +142,7 @@ private:
     */
     void      impl_removeControl(
         sal_Int32 _nId,
-        const css::uno::Reference< css::awt::XControl >& _rxControl
+        const cpo::uno::Reference< css::awt::XControl >& _rxControl
     );
 
 };

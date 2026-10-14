@@ -51,8 +51,9 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Any;
 
 constexpr OUString m_aMultiClick = u"MultiClick"_ustr;
@@ -297,7 +298,7 @@ OUString ObjectIdentifier::createClassifiedIdentifierForObject(
 }
 
 OUString ObjectIdentifier::createClassifiedIdentifierForObject(
-          const Reference< uno::XInterface >& xObject
+          const Reference< cpo::uno::XInterface >& xObject
         , const rtl::Reference<::chart::ChartModel>& xChartModel )
 {
     OUString aRet;

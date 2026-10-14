@@ -26,7 +26,7 @@
 #include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/task/XStatusIndicatorFactory.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertyvalue.hxx>
@@ -58,8 +58,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ui::dialogs;
 
 bool InsertObjectDialog_Impl::IsCreateNew() const
@@ -74,7 +74,7 @@ uno::Reference< io::XInputStream > InsertObjectDialog_Impl::GetIconIfIconified( 
 
 InsertObjectDialog_Impl::InsertObjectDialog_Impl(weld::Window* pParent,
     const OUString& rUIXMLDescription, const OUString& rID,
-    css::uno::Reference < css::embed::XStorage > xStorage)
+    cpo::uno::Reference < css::embed::XStorage > xStorage)
     : GenericDialogController(pParent, rUIXMLDescription, rID)
     , m_xStorage(std::move( xStorage ))
     , aCnt( m_xStorage )
@@ -91,7 +91,7 @@ IMPL_LINK_NOARG(SvInsertOleDlg, BrowseHdl, weld::Button&, void)
 {
     sfx2::FileDialogHelper aHelper(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, FileDialogFlags::NONE, m_xDialog.get());
     aHelper.SetContext(sfx2::FileDialogHelper::InsertOLE);
-    const Reference< XFilePicker3 >& xFilePicker = aHelper.GetFilePicker();
+    const Reference< XFilePicker >& xFilePicker = aHelper.GetFilePicker();
 
     // add filter
     try
@@ -289,7 +289,7 @@ short SvInsertOleDlg::run()
 
             if ( !aFileName.isEmpty() )
             {
-                const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+                const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
                 uno::Reference< task::XInteractionHandler2 > xInteraction(
                     task::InteractionHandler::createWithParent(xContext, nullptr) );
 
@@ -375,7 +375,7 @@ uno::Reference< io::XInputStream > SvInsertOleDlg::GetIconIfIconified( OUString*
 
 
 SfxInsertFloatingFrameDialog::SfxInsertFloatingFrameDialog(weld::Window *pParent,
-                            const css::uno::Reference < css::embed::XStorage >& xStorage)
+                            const cpo::uno::Reference < css::embed::XStorage >& xStorage)
     : InsertObjectDialog_Impl(pParent, u"cui/ui/insertfloatingframe.ui"_ustr, u"InsertFloatingFrameDialog"_ustr,
                               xStorage)
 {

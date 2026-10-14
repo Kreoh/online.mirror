@@ -13,10 +13,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace
 {
@@ -29,32 +26,32 @@ public:
     {
     }
 
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     {
         return u"com.sun.star.comp.testuno.Constructors"_ustr;
     }
 
-    bool SAL_CALL supportsService(OUString const& ServiceName) override
+    bool supportsService(OUString const& ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.testuno.ImplicitConstructor"_ustr,
                  u"com.sun.star.testuno.ExplicitConstructors"_ustr };
     }
 
-    cpo::uno::Sequence<cpo::uno::Any> SAL_CALL getArguments() override { return m_aArgs; }
+    cpo::uno::Sequence<cpo::uno::Any> getArguments() override { return m_aArgs; }
 
 private:
     cpo::uno::Sequence<cpo::uno::Any> m_aArgs;
 };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_testuno_Constructors_get_implementation(
-    css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new ConstructorsTest(args));
 }

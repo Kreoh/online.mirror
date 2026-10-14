@@ -35,6 +35,7 @@
 #include <editeng/editobj.hxx>
 #include <editeng/editstat.hxx>
 #include <editeng/editview.hxx>
+#include <editeng/flditem.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/svxacorr.hxx>
 #include <editeng/unolingu.hxx>
@@ -46,6 +47,7 @@
 #include <sfx2/docfile.hxx>
 #include <sfx2/printer.hxx>
 #include <svl/numformat.hxx>
+#include <svl/urihelper.hxx>
 #include <svl/zforlist.hxx>
 #include <svtools/langtab.hxx>
 #include <unotools/localedatawrapper.hxx>
@@ -57,6 +59,7 @@
 #include <vcl/cursor.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/virdev.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/json_writer.hxx>
 #include <formula/formulahelper.hxx>
@@ -79,6 +82,7 @@
 #include <patattr.hxx>
 #include <viewdata.hxx>
 #include <document.hxx>
+#include <dbdata.hxx>
 #include <docpool.hxx>
 #include <editutil.hxx>
 #include <appoptio.hxx>
@@ -93,6 +97,7 @@
 #include <funcdesc.hxx>
 #include <markdata.hxx>
 #include <tokenarray.hxx>
+#include <token.hxx>
 #include <gridwin.hxx>
 #include <output.hxx>
 #include <fillinfo.hxx>
@@ -355,6 +360,81 @@ static inline void incPos( const sal_Unicode c, sal_Int32& rPos, ESelection& rSe
     }
 }
 
+// Extend a half-scanned structured (table) reference (Table[Unit Price],
+// Table[[#Data];[Col]]) to its end, so the reference finder highlights the whole specifier.
+// A ' escapes the next character; the depth count handles nested brackets.
+static void lcl_ExtendToStructuredRefEnd( const sal_Unicode* pChar, sal_Int32 nLen,
+                                          sal_Int32 nStart, sal_Int32& rPos, ESelection& rSel )
+{
+    sal_Int32 nBracket = 0;
+    sal_Int32 nEnd = nStart;
+    for (; nEnd < nLen && (nEnd < rPos || nBracket > 0); ++nEnd)
+    {
+        if (pChar[nEnd] == '\'' && nEnd + 1 < nLen)
+            ++nEnd;                             // skip the escaped character (none if ' is last)
+        else if (pChar[nEnd] == '[')
+            ++nBracket;
+        else if (pChar[nEnd] == ']' && nBracket > 0)
+            --nBracket;
+    }
+    while (rPos < nEnd)
+        incPos( pChar[rPos], rPos, rSel );
+}
+
+// Resolve a structured (table) reference - Table[Col], Table[[#Data];[Col]],
+// Table[[Col1]:[Col3]], Table[@Col] - to the range it covers. HandleTableRef folds the
+// whole specifier into one ocTableRef token's area reference, so compiling the string
+// and reading that back gives the exact cells.
+static bool lcl_ResolveTableRef( ScDocument& rDoc, const ScAddress& rPos,
+                                 const OUString& rStr, ScRange& rRange )
+{
+    // No named tables: this cannot be a structured reference, so skip the compile.
+    const ScDBCollection* pDBs = rDoc.GetDBCollection();
+    if ( !pDBs || pDBs->getNamedDBs().empty() )
+        return false;
+
+    // In R1C1 syntax the compiler treats '[' and ']' as reference offsets (R[-1]C[2]),
+    // so Table1[Col] would not tokenize as a table ref. A structured reference has no
+    // cell addresses, so parse it with an A1 convention regardless of the document
+    // syntax; the resolved cells are the same.
+    formula::FormulaGrammar::Grammar eGram = rDoc.GetGrammar();
+    if ( formula::FormulaGrammar::extractRefConvention( eGram )
+            == formula::FormulaGrammar::CONV_XL_R1C1 )
+        eGram = formula::FormulaGrammar::mergeToGrammar( eGram, formula::FormulaGrammar::CONV_XL_A1 );
+
+    ScCompiler aComp( rDoc, rPos, eGram );
+    std::unique_ptr<ScTokenArray> pArr( aComp.CompileString( rStr ) );
+    if ( !pArr || !pArr->HasOpCode( ocTableRef ) )
+        return false;
+
+    aComp.EnableJumpCommandReorder( true );
+    aComp.CompileTokenArray();   // resolves each ocTableRef's inner area reference
+
+    formula::FormulaTokenArrayPlainIterator aIter( *pArr );
+    for ( const formula::FormulaToken* p = aIter.First(); p; p = aIter.Next() )
+    {
+        if ( p->GetOpCode() != ocTableRef )
+            continue;
+        const formula::FormulaToken* pRef =
+            static_cast<const ScTableRefToken*>(p)->GetAreaRefRPN();
+        if ( !pRef )
+            continue;
+        if ( pRef->GetType() == formula::svDoubleRef )
+        {
+            ScComplexRefData aRef( static_cast<const ScDoubleRefToken*>(pRef)->GetDoubleRef() );
+            rRange = aRef.toAbs( rDoc, rPos );
+            return true;
+        }
+        if ( pRef->GetType() == formula::svSingleRef )
+        {
+            ScSingleRefData aRef( static_cast<const ScSingleRefToken*>(pRef)->GetSingleRef() );
+            rRange.aStart = rRange.aEnd = aRef.toAbs( rDoc, rPos );
+            return true;
+        }
+    }
+    return false;
+}
+
 void ScInputHandler::InitRangeFinder( const OUString& rFormula )
 {
     DeleteRangeFinder();
@@ -433,6 +513,10 @@ handle_r1c1:
             goto handle_r1c1;
         }
 
+        // Keep a structured (table) reference in one piece so the whole specifier
+        // reaches the parser below.
+        lcl_ExtendToStructuredRefEnd( pChar, nLen, nStart, nPos, aSel );
+
         if ( nPos > nStart )
         {
             OUString aTest = rFormula.copy( nStart, nPos-nStart );
@@ -462,6 +546,23 @@ handle_r1c1:
                 }
 
                 Color nColor = pRangeFindList->Insert( ScRangeFindData( aRange, nFlags, aSel));
+
+                SfxItemSet aSet( mpEditEngine->GetEmptyItemSet() );
+                aSet.Put( SvxColorItem( nColor, EE_CHAR_COLOR ) );
+                mpEditEngine->QuickSetAttribs( aSet, aSel );
+                ++nCount;
+            }
+            else if ( aTest.indexOf('[') > 0 && lcl_ResolveTableRef( rDoc, aCursorPos, aTest, aRange ) )
+            {
+                // Structured reference, e.g. =SUM(Table1[Column]). Highlight the
+                // resolved range; the true flag marks it non-draggable.
+                if (!nCount)
+                {
+                    mpEditEngine->SetUpdateLayout( false );
+                    pRangeFindList.reset(new ScRangeFindList( pDocSh->GetTitle() ));
+                }
+
+                Color nColor = pRangeFindList->Insert( ScRangeFindData( aRange, ScRefFlags::VALID, aSel, /*bTableRef*/true ));
 
                 SfxItemSet aSet( mpEditEngine->GetEmptyItemSet() );
                 aSet.Put( SvxColorItem( nColor, EE_CHAR_COLOR ) );
@@ -553,13 +654,16 @@ void ScInputHandler::UpdateKitReferenceMarks()
     ScDocShell* pDocSh = rViewData.GetDocShell();
     ScRangeFindList* pRangeFinder = GetRangeFindList();
 
-    if ( !pRangeFinder && !rViewData.IsRefMode() )
+    // A fill drag reports its range as a cell marker of its own.
+    const bool bRefMark = rViewData.IsRefMode() && rViewData.GetRefType() != SC_REFTYPE_FILL;
+
+    if (!pRangeFinder && !bRefMark)
         return;
 
     sal_uInt16 nAdditionalMarks = 0;
     std::vector<ReferenceMark> aReferenceMarks( 1 );
 
-    if ( rViewData.IsRefMode() )
+    if (bRefMark)
     {
         nAdditionalMarks = 1;
 
@@ -847,6 +951,7 @@ ScInputHandler::ScInputHandler()
         bInOwnChange( false ),
         bProtected( false ),
         bLastIsSymbol( false ),
+        mbLastInTable( false ),
         mbDocumentDisposing(false),
         mbPartialPrefix(false),
         mbEditingExistingContent(false),
@@ -879,6 +984,19 @@ ScInputHandler::~ScInputHandler()
 
     if ( pInputWin && pInputWin->GetInputHandler() == this )
         pInputWin->SetInputHandler( nullptr );
+
+    mpRefDevice.disposeAndClear();
+}
+
+MapMode ScInputHandler::GetRefMapMode() const
+{
+    // The edit engine of a cell in edit mode is shared between the views. Its reference scale
+    // decides where the lines of text break, so in the kit it stays a fixed 1:1 scale and every
+    // view scales the laid out text to its own zoom while it paints.
+    if ( comphelper::COKit::isActive() )
+        return MapMode( MapUnit::Map100thMM );
+
+    return MapMode( MapUnit::Map100thMM, Point(), fScaleX, fScaleY );
 }
 
 void ScInputHandler::SetRefScale( double fX, double fY )
@@ -888,10 +1006,7 @@ void ScInputHandler::SetRefScale( double fX, double fY )
         fScaleX = fX;
         fScaleY = fY;
         if (mpEditEngine)
-        {
-            MapMode aMode( MapUnit::Map100thMM, Point(), fScaleX, fScaleY );
-            mpEditEngine->SetRefMapMode( aMode );
-        }
+            mpEditEngine->SetRefMapMode( GetRefMapMode() );
     }
 }
 
@@ -900,21 +1015,28 @@ void ScInputHandler::UpdateRefDevice()
     if (!mpEditEngine)
         return;
 
-    bool bTextWysiwyg = ScModule::get()->GetInputOptions().GetTextWysiwyg();
-    if ( bTextWysiwyg && pActiveViewSh )
+    //  Outside the kit the text is measured on the printer when the user asked to be shown the
+    //  layout of the printed page.
+    const bool bPrinterRefDevice = !comphelper::COKit::isActive() && pActiveViewSh
+                                   && ScModule::get()->GetInputOptions().GetTextWysiwyg();
+    if ( bPrinterRefDevice )
         mpEditEngine->SetRefDevice( pActiveViewSh->GetViewData().GetDocument().GetPrinter() );
     else
-        mpEditEngine->SetRefDevice( nullptr );
-
-    MapMode aMode( MapUnit::Map100thMM, Point(), fScaleX, fScaleY );
-    mpEditEngine->SetRefMapMode( aMode );
-
-    //  SetRefDevice(NULL) uses VirtualDevice, SetRefMapMode forces creation of a local VDev,
-    //  so the DigitLanguage can be safely modified (might use an own VDev instead of NULL).
-    if ( !( bTextWysiwyg && pActiveViewSh ) )
     {
-        mpEditEngine->GetRefDevice()->SetDigitLanguage( ScModule::GetOptDigitLanguage() );
+        //  The text is measured on a device of this handler's own. The printer and the device
+        //  editeng hands out instead are shared with other code that sets its own map mode on
+        //  them, and the map mode of the device decides where the lines of the text break. The
+        //  digit language is safe to change on an own device for the same reason.
+        if ( !mpRefDevice )
+            mpRefDevice = VclPtr<VirtualDevice>::Create();
+        mpRefDevice->SetMapMode( GetRefMapMode() );
+        mpEditEngine->SetRefDevice( mpRefDevice );
     }
+
+    mpEditEngine->SetRefMapMode( GetRefMapMode() );
+
+    if ( !bPrinterRefDevice )
+        mpEditEngine->GetRefDevice()->SetDigitLanguage( ScModule::GetOptDigitLanguage() );
 }
 
 void ScInputHandler::ImplCreateEditEngine()
@@ -1004,18 +1126,21 @@ void ScInputHandler::UpdateSpellSettings( bool bFromStartTab )
         rDoc.ApplyAsianEditSettings( *mpEditEngine );
         mpEditEngine->SetDefaultHorizontalTextDirection(
             rDoc.GetEditTextDirection( rViewData.CurrentTabForData() ) );
-        mpEditEngine->SetFirstWordCapitalization( false );
+        // Cell text belongs to a grid rather than to prose, so a lower case
+        // letter stays as typed, both at the start of the cell and after a
+        // line break added with Ctrl+Enter.
+        mpEditEngine->SetCapitalizeSentenceStart( false );
     }
 
     //  Language is set separately, so the speller is needed only if online spelling is active
     if ( bOnlineSpell ) {
-        css::uno::Reference<css::linguistic2::XSpellChecker> xXSpellChecker1( LinguMgr::GetSpellChecker() );
+        cpo::uno::Reference<css::linguistic2::XSpellChecker> xXSpellChecker1( LinguMgr::GetSpellChecker() );
         mpEditEngine->SetSpeller( xXSpellChecker1 );
     }
 
     bool bHyphen = maLastPattern && maLastPattern.getScPatternAttr()->GetItem(ATTR_HYPHENATE).GetValue();
     if ( bHyphen ) {
-        css::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
+        cpo::uno::Reference<css::linguistic2::XHyphenator> xXHyphenator( LinguMgr::GetHyphenator() );
         mpEditEngine->SetHyphenator( xXHyphenator );
     }
 }
@@ -2592,7 +2717,17 @@ bool ScInputHandler::StartTable(sal_Unicode cTyped, bool bFromCommand, bool bInp
             const ScPatternAttr* pPattern = rDoc.GetPattern( aCursorPos.Col(),
                                                               aCursorPos.Row(),
                                                               aCursorPos.Tab() );
-            if (!ScPatternAttr::areSame(pPattern, maLastPattern.getScPatternAttr()))
+            // A table style gives cells of the same pattern different fonts and fills, e.g. in
+            // the header and in the data rows, so the pattern alone does not tell what changed.
+            const SfxItemSet* pTableSet = rDoc.GetTableFormatSet( aCursorPos.Col(),
+                                                                  aCursorPos.Row(),
+                                                                  aCursorPos.Tab() );
+            const SvxBrushItem* pTableFill = rDoc.GetTableFillItem( aCursorPos.Col(),
+                                                                    aCursorPos.Row(),
+                                                                    aCursorPos.Tab() );
+            const bool bInTable = pTableSet || pTableFill;
+            if (bInTable || mbLastInTable
+                || !ScPatternAttr::areSame(pPattern, maLastPattern.getScPatternAttr()))
             {
                 // Percent format?
                 const SfxItemSet& rAttrSet = pPattern->GetItemSet();
@@ -2623,19 +2758,28 @@ bool ScInputHandler::StartTable(sal_Unicode cTyped, bool bFromCommand, bool bInp
                 //! EditEngine changes) implemented as a SetParaAttribs.
                 //! Any problems?
 
-                pPattern->FillEditItemSet( pEditDefaults.get() );
+                pPattern->FillEditItemSet( pEditDefaults.get(), nullptr, pTableSet );
                 mpEditEngine->SetDefaults( *pEditDefaults );
                 maLastPattern.setScPatternAttr(pPattern);
                 bLastIsSymbol = pPattern->IsSymbolFont();
+                mbLastInTable = bInTable;
 
                 //  Background color must be known for automatic font color.
                 //  For transparent cell background, the document background color must be used.
 
-                Color aBackCol = pPattern->GetItem( ATTR_BACKGROUND ).GetColor();
+                Color aBackCol = rDoc.GetCellBackgroundColor( aCursorPos.Col(), aCursorPos.Row(),
+                                                              aCursorPos.Tab() );
                 ScModule* pScMod = ScModule::get();
                 if ( aBackCol.IsTransparent() ||
                         Application::GetSettings().GetStyleSettings().GetHighContrastMode() )
-                    aBackCol = pScMod->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
+                {
+                    // A cell with no background of its own sits on the document background of the
+                    // view that is being edited, so an automatic text color is picked against the
+                    // background this user sees rather than the one another view left behind.
+                    aBackCol = pActiveViewSh
+                                   ? pActiveViewSh->GetColorConfigColor(svtools::DOCCOLOR)
+                                   : pScMod->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
+                }
                 mpEditEngine->SetBackgroundColor( aBackCol );
 
                 // Adjustment
@@ -2658,6 +2802,14 @@ bool ScInputHandler::StartTable(sal_Unicode cTyped, bool bFromCommand, bool bInp
             //  UpdateSpellSettings enables online spelling if needed
             //  -> also call if attributes are unchanged
             UpdateSpellSettings( true ); // uses pLastPattern
+
+            // A cell recognized as an email or web address holds its whole content as one
+            // field, and a field has no cursor positions inside it, only before and after,
+            // so the user could never place the cursor in the middle of the address to edit
+            // it. Turn any field back into plain text before editing starts, the same text
+            // CompleteAutoCorrect() already produces when it turns plain text into a field,
+            // so committing the edit re-creates the field if the address is still intact.
+            RemoveURLFieldsFromEditEngine();
 
             // Fill EditEngine
             OUString aStr;
@@ -3162,6 +3314,55 @@ static void lcl_SelectionToEnd( EditView* pView )
         pView->SetSelection(ESelection::AtEnd());
 }
 
+/// The ranges of plain text between the fields of paragraph nPar, as pairs of start and end
+/// positions. A field takes up one character of the paragraph but its text can be longer, so
+/// only in these ranges is each position of the text the same position in the paragraph.
+static std::vector<std::pair<sal_Int32, sal_Int32>>
+lcl_GetTextRangesBetweenFields(const EditEngine& rEngine, sal_Int32 nPar)
+{
+    std::vector<std::pair<sal_Int32, sal_Int32>> aTextRanges;
+    sal_Int32 nTextStart = 0;
+    for (const EFieldInfo& rFieldInfo : rEngine.GetFieldInfo(nPar))
+    {
+        aTextRanges.emplace_back(nTextStart, rFieldInfo.aPosition.nIndex);
+        nTextStart = rFieldInfo.aPosition.nIndex + 1;
+    }
+    aTextRanges.emplace_back(nTextStart, rEngine.GetTextLen(nPar));
+    return aTextRanges;
+}
+
+/// Whether the cursor of the view is at the start of an address or inside it, in the plain text.
+static bool lcl_IsCursorBeforeURLEnd(const EditView& rView, SvxAutoCorrect& rAutoCorrect)
+{
+    if (rView.HasSelection())
+        return false;
+
+    const EditEngine& rEngine = rView.getEditEngine();
+    const ESelection aSel = rView.GetSelection();
+    const sal_Int32 nPar = aSel.end.nPara;
+    const sal_Int32 nCursor = aSel.end.nIndex;
+    CharClass& rCharClass = rAutoCorrect.GetCharClass(rEngine.GetDefaultLanguage());
+
+    for (const auto& [nRangeStart, nRangeEnd] : lcl_GetTextRangesBetweenFields(rEngine, nPar))
+    {
+        if (nCursor < nRangeStart || nCursor >= nRangeEnd)
+            continue;
+
+        const OUString aText = rEngine.GetText(ESelection(nPar, nRangeStart, nPar, nRangeEnd));
+        sal_Int32 nSearchStart = 0;
+        while (nSearchStart < aText.getLength())
+        {
+            sal_Int32 nUrlStart = nSearchStart, nUrlEnd = aText.getLength();
+            if (URIHelper::FindFirstURLInText(aText, nUrlStart, nUrlEnd, rCharClass).isEmpty())
+                break;
+            if (nRangeStart + nUrlStart <= nCursor && nCursor < nRangeStart + nUrlEnd)
+                return true;
+            nSearchStart = nUrlEnd;
+        }
+    }
+    return false;
+}
+
 void ScInputHandler::EnterHandler( ScEnterMode nBlockMode, bool bBeforeSavingInKit )
 {
     if (!mbDocumentDisposing && comphelper::COKit::isActive()
@@ -3199,11 +3400,29 @@ void ScInputHandler::EnterHandler( ScEnterMode nBlockMode, bool bBeforeSavingInK
 
         vcl::Window* pFrameWin = pActiveViewSh->GetFrameWin();
 
+        // CompleteAutoCorrect() reads a link from the text up to the end of the word at the
+        // cursor. With the cursor inside an address, that word can end at a dot or a slash in
+        // the middle of the address, so links are not read from the text during this call.
+        SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+        const bool bOldSetINetAttr
+            = pAutoCorrect && pAutoCorrect->IsAutoCorrFlag(ACFlags::SetINetAttr);
+        if (bOldSetINetAttr && lcl_IsCursorBeforeURLEnd(*pActiveView, *pAutoCorrect))
+            pAutoCorrect->SetAutoCorrFlag(ACFlags::SetINetAttr, false);
+
         if (pTopView)
             pTopView->CompleteAutoCorrect(); // CompleteAutoCorrect for both Views
         if (pTableView)
             pTableView->CompleteAutoCorrect(pFrameWin);
+
+        // The SvxAutoCorrect object is shared, so the flag gets its original value back.
+        if (bOldSetINetAttr)
+            pAutoCorrect->SetAutoCorrFlag(ACFlags::SetINetAttr, true);
         aString = GetEditText(mpEditEngine.get());
+
+        // CompleteAutoCorrect() links only the address at the cursor, so an address that was a
+        // link before editing and is now elsewhere in the text gets its link back here.
+        if (!bFormulaMode)
+            RestoreURLFieldsInEditEngine();
     }
     lcl_RemoveTabs(aString);
     lcl_RemoveTabs(aPreAutoCorrectString);
@@ -3266,7 +3485,7 @@ void ScInputHandler::EnterHandler( ScEnterMode nBlockMode, bool bBeforeSavingInK
 void ScInputHandler::EnterHandler2(ScEnterMode nBlockMode, bool bForget, OUString aString,
                                    const OUString& aPreAutoCorrectString)
 {
-    std::unique_ptr<EditTextObject> pObject;
+    std::optional<EditTextObject> oObject;
     std::unique_ptr<ScPatternAttr> pCellAttrs;
     bool bMatrix = (nBlockMode == ScEnterMode::MATRIX);
     SfxApplication* pSfxApp = SfxGetpApp();
@@ -3413,7 +3632,7 @@ void ScInputHandler::EnterHandler2(ScEnterMode nBlockMode, bool bForget, OUStrin
         if (bAttrib)
         {
             mpEditEngine->ClearSpellErrors();
-            pObject = mpEditEngine->CreateTextObject();
+            oObject.emplace(mpEditEngine->CreateTextObject());
         }
         else if (ScModule::get()->GetAppOptions().GetAutoComplete()) // Adjust Upper/Lower case
         {
@@ -3520,14 +3739,14 @@ void ScInputHandler::EnterHandler2(ScEnterMode nBlockMode, bool bForget, OUStrin
             {
                 ScInputStatusItem aItem(FID_INPUTLINE_STATUS,
                                        aCursorPos, aCursorPos, aCursorPos,
-                                       aPreAutoCorrectString, pObject.get());
+                                       aPreAutoCorrectString, oObject ? &*oObject : nullptr);
                 aArgs[0] = &aItem;
                 rBindings.Execute(nId, aArgs);
             }
 
             ScInputStatusItem aItemCorrected(FID_INPUTLINE_STATUS,
                                              aCursorPos, aCursorPos, aCursorPos,
-                                             aString, pObject.get());
+                                             aString, oObject ? &*oObject : nullptr);
 
             sc::MisspellRangeResult aMisspellRangeResult;
             if ( !aMisspellRanges.empty() )
@@ -4665,6 +4884,133 @@ Size ScInputHandler::GetTextSize()
     return aSize;
 }
 
+void ScInputHandler::RemoveURLFieldsFromEditEngine()
+{
+    maUnlinkedURLFields.clear();
+    if (!mpEditEngine)
+        return;
+
+    SfxItemSet aSet = mpEditEngine->GetAttribs(ESelection::All());
+    if (aSet.GetItemState(EE_FEATURE_FIELD, false) == SfxItemState::DEFAULT)
+        return;
+
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    if (!pAutoCorrect)
+        return;
+    CharClass& rCharClass = pAutoCorrect->GetCharClass(mpEditEngine->GetDefaultLanguage());
+
+    sal_Int32 nParCnt = mpEditEngine->GetParagraphCount();
+    for (sal_Int32 nPar = 0; nPar < nParCnt; ++nPar)
+    {
+        std::vector<sal_Int32> aPortionEnds;
+        mpEditEngine->GetPortions( nPar, aPortionEnds );
+
+        // Replace from the last portion back to the first, so an earlier portion's
+        // position is not shifted by a field replaced with a differently sized text.
+        sal_Int32 nPortionStart = 0;
+        std::vector<std::pair<sal_Int32, sal_Int32>> aPortionRanges;
+        for (sal_Int32 nPortionEnd : aPortionEnds)
+        {
+            aPortionRanges.emplace_back( nPortionStart, nPortionEnd );
+            nPortionStart = nPortionEnd;
+        }
+
+        for (auto aRangeIt = aPortionRanges.rbegin(); aRangeIt != aPortionRanges.rend(); ++aRangeIt)
+        {
+            if (aRangeIt->second - aRangeIt->first != 1)
+                continue; // a field is always exactly one character wide
+
+            SfxItemSet aPortionSet = mpEditEngine->GetAttribs( nPar, aRangeIt->first, aRangeIt->second );
+            const SvxFieldItem* pFieldItem = aPortionSet.GetItemIfSet( EE_FEATURE_FIELD );
+            if (!pFieldItem)
+                continue;
+
+            auto pUrlField = dynamic_cast<const SvxURLField*>(pFieldItem->GetField());
+            if (!pUrlField)
+                continue;
+
+            // Only turn the field back into plain text when that text is itself the
+            // recognized address. On commit, CompleteAutoCorrect() reads the address at
+            // the cursor back into a field, and RestoreURLFieldsInEditEngine() does the
+            // same for an address elsewhere in the text. A field whose displayed text
+            // differs from its target, such as one set up through the Hyperlink dialog
+            // with a separate label, cannot be recreated that way, so leave it as a field.
+            const OUString& rRepresentation = pUrlField->GetRepresentation();
+            sal_Int32 nUrlStart = 0, nUrlEnd = rRepresentation.getLength();
+            OUString aFoundUrl = URIHelper::FindFirstURLInText(
+                rRepresentation, nUrlStart, nUrlEnd, rCharClass );
+            if (aFoundUrl != pUrlField->GetURL() || nUrlStart != 0
+                || nUrlEnd != rRepresentation.getLength())
+                continue;
+
+            maUnlinkedURLFields.push_back(*pUrlField);
+            mpEditEngine->QuickInsertText( rRepresentation,
+                ESelection( nPar, aRangeIt->first, nPar, aRangeIt->second ) );
+        }
+    }
+}
+
+void ScInputHandler::RestoreURLFieldsInEditEngine()
+{
+    std::vector<SvxURLField> aUnlinkedFields;
+    aUnlinkedFields.swap(maUnlinkedURLFields);
+    if (!mpEditEngine || aUnlinkedFields.empty())
+        return;
+
+    SvxAutoCorrect* pAutoCorrect = SvxAutoCorrCfg::Get().GetAutoCorrect();
+    if (!pAutoCorrect)
+        return;
+    CharClass& rCharClass = pAutoCorrect->GetCharClass(mpEditEngine->GetDefaultLanguage());
+
+    sal_Int32 nParCnt = mpEditEngine->GetParagraphCount();
+    for (sal_Int32 nPar = 0; nPar < nParCnt; ++nPar)
+    {
+        // Only an address that is still the whole text of one of the links gets its link back,
+        // so an address the user changed stays plain text. Each link goes back to the first
+        // matching address only, so the same address typed again elsewhere stays plain text.
+        std::vector<std::pair<ESelection, SvxURLField>> aFoundFields;
+        for (const auto& [nRangeStart, nRangeEnd] :
+             lcl_GetTextRangesBetweenFields(*mpEditEngine, nPar))
+        {
+            if (nRangeEnd <= nRangeStart)
+                continue;
+
+            const OUString aText
+                = mpEditEngine->GetText(ESelection(nPar, nRangeStart, nPar, nRangeEnd));
+            sal_Int32 nSearchStart = 0;
+            while (nSearchStart < aText.getLength() && !aUnlinkedFields.empty())
+            {
+                sal_Int32 nUrlStart = nSearchStart, nUrlEnd = aText.getLength();
+                OUString aFoundUrl
+                    = URIHelper::FindFirstURLInText(aText, nUrlStart, nUrlEnd, rCharClass);
+                if (aFoundUrl.isEmpty())
+                    break;
+
+                std::u16string_view aFoundText = aText.subView(nUrlStart, nUrlEnd - nUrlStart);
+                auto aFieldIt = std::find_if(aUnlinkedFields.begin(), aUnlinkedFields.end(),
+                    [&aFoundUrl, &aFoundText](const SvxURLField& rField) {
+                        return rField.GetURL() == aFoundUrl
+                               && rField.GetRepresentation() == aFoundText;
+                    });
+                if (aFieldIt != aUnlinkedFields.end())
+                {
+                    aFoundFields.emplace_back(
+                        ESelection(nPar, nRangeStart + nUrlStart, nPar, nRangeStart + nUrlEnd),
+                        std::move(*aFieldIt));
+                    aUnlinkedFields.erase(aFieldIt);
+                }
+                nSearchStart = nUrlEnd;
+            }
+        }
+
+        // Insert from the last address back to the first, so an earlier address keeps its
+        // position when a later one shrinks to a single field character.
+        for (auto aFoundIt = aFoundFields.rbegin(); aFoundIt != aFoundFields.rend(); ++aFoundIt)
+            mpEditEngine->QuickInsertField(SvxFieldItem(aFoundIt->second, EE_FEATURE_FIELD),
+                                           aFoundIt->first);
+    }
+}
+
 bool ScInputHandler::GetTextAndFields( ScEditEngineDefaulter& rDestEngine )
 {
     bool bRet = false;
@@ -4676,9 +5022,8 @@ bool ScInputHandler::GetTextAndFields( ScEditEngineDefaulter& rDestEngine )
         if ( eFieldState == SfxItemState::INVALID || eFieldState == SfxItemState::SET )
         {
             // Copy content
-            std::unique_ptr<EditTextObject> pObj = mpEditEngine->CreateTextObject();
-            rDestEngine.SetTextCurrentDefaults(*pObj);
-            pObj.reset();
+            EditTextObject aObj = mpEditEngine->CreateTextObject();
+            rDestEngine.SetTextCurrentDefaults(aObj);
 
             sal_Int32 nParCnt = mpEditEngine->GetParagraphCount();
             // Delete attributes
@@ -4813,7 +5158,7 @@ ScInputHdlState::ScInputHdlState( const ScAddress& rCurPos,
         aStartPos   ( rStartPos ),
         aEndPos     ( rEndPos ),
         aString     (std::move( _aString )),
-        pEditData   ( pData ? pData->Clone() : nullptr )
+        pEditData   ( pData ? std::make_unique<EditTextObject>(*pData) : nullptr )
 {
 }
 
@@ -4845,7 +5190,7 @@ ScInputHdlState& ScInputHdlState::operator=( const ScInputHdlState& r )
         aString     = r.aString;
         pEditData.reset();
         if (r.pEditData)
-            pEditData = r.pEditData->Clone();
+            pEditData = std::make_unique<EditTextObject>(*r.pEditData);
     }
     return *this;
 }

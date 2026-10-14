@@ -21,7 +21,7 @@
 
 #include <AbstractView.hxx>
 #include <com/sun/star/ui/XToolPanel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/drawing/framework/XResourceId.hpp>
 #include <com/sun/star/awt/XPaintListener.hpp>
 
@@ -42,38 +42,38 @@ namespace sd::colortoolpanel
     {
     public:
         SingleColorPanel(
-            const css::uno::Reference< css::uno::XComponentContext >& i_rContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& i_rContext,
             const rtl::Reference< ConfigurationController >& i_rConfigController,
-            const css::uno::Reference< css::drawing::framework::XResourceId >& i_rResourceId
+            const cpo::uno::Reference< css::drawing::framework::XResourceId >& i_rResourceId
         );
 
         // XToolPanel
-        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL getWindow(  ) throw (css::uno::RuntimeException);
-        virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL createAccessible( const css::uno::Reference< css::accessibility::XAccessible >& ParentAccessible ) throw (css::uno::RuntimeException);
+        virtual cpo::uno::Reference< css::awt::XWindow > getWindow(  ) throw (cpo::uno::RuntimeException);
+        virtual cpo::uno::Reference< css::accessibility::XAccessible > createAccessible( const cpo::uno::Reference< css::accessibility::XAccessible >& ParentAccessible ) throw (cpo::uno::RuntimeException);
 
         // XView
         // (no methods)
 
         // XResource
-        virtual css::uno::Reference< css::drawing::framework::XResourceId > SAL_CALL getResourceId(  ) throw (css::uno::RuntimeException);
-        virtual bool SAL_CALL isAnchorOnly(  ) throw (css::uno::RuntimeException);
+        virtual cpo::uno::Reference< css::drawing::framework::XResourceId > getResourceId(  ) throw (cpo::uno::RuntimeException);
+        virtual bool isAnchorOnly(  ) throw (cpo::uno::RuntimeException);
 
         // XPaintListener
-        virtual void SAL_CALL windowPaint( const css::awt::PaintEvent& e ) throw (css::uno::RuntimeException);
+        virtual void windowPaint( const css::awt::PaintEvent& e ) throw (cpo::uno::RuntimeException);
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException);
+        virtual void disposing( const css::lang::EventObject& Source ) throw (cpo::uno::RuntimeException);
 
         // XComponent equivalents
-        virtual void SAL_CALL disposing();
+        virtual void disposing();
 
     protected:
         ~SingleColorPanel();
 
     private:
-        css::uno::Reference< css::uno::XComponentContext >            m_xContext;
-        css::uno::Reference< css::drawing::framework::XResourceId >   m_xResourceId;
-        css::uno::Reference< css::awt::XWindow >                      m_xWindow;
+        cpo::uno::Reference< cpo::uno::XComponentContext >            m_xContext;
+        cpo::uno::Reference< css::drawing::framework::XResourceId >   m_xResourceId;
+        cpo::uno::Reference< css::awt::XWindow >                      m_xWindow;
     };
 
 } } // namespace sd::colortoolpanel

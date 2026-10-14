@@ -44,6 +44,7 @@
 #include <edtwin.hxx>
 #include <view.hxx>
 #include <wrtsh.hxx>
+#include <doc.hxx>
 #include <viewopt.hxx>
 #include <prtopt.hxx>
 #include <cfgitems.hxx>
@@ -195,10 +196,6 @@ void SwView::ExecutePrint(SfxRequest& rReq)
                 TranslateId pResId = bWeb ? STR_WEBOPTIONS : STR_TEXTOPTIONS;
                 xInfoBox->set_primary_text(xInfoBox->get_primary_text().replaceFirst("%1", SwResId(pResId)));
                 xInfoBox->run();
-                SfxUInt16Item aDefPage(SID_SW_EDITOPTIONS, TP_OPTPRINT_PAGE);
-                GetViewFrame().GetDispatcher()->ExecuteList(SID_SW_EDITOPTIONS,
-                            SfxCallMode::SYNCHRON|SfxCallMode::RECORD,
-                            { &aDefPage });
             }
         }
         break;
@@ -254,7 +251,7 @@ void SwView::ExecutePrint(SfxRequest& rReq)
                     medium = sh->GetMedium();
                 }
                 pSh->GetLinkManager().UpdateAllLinks(
-                    false, nullptr, medium == nullptr ? OUString() : medium->GetName() );
+                    false, medium == nullptr ? OUString() : medium->GetName() );
             }
             SfxRequest aReq( rReq );
             SfxBoolItem aBool(SID_SELECTION, bPrintSelection);

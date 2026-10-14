@@ -54,8 +54,9 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 	},
 
 	_setupBackButton: function() {
-		this.backButton = $('#mobile-wizard-back');
-		this.backButton.click(function() { history.back(); });
+		this.backButton = document.getElementById('mobile-wizard-back');
+		if (this.backButton)
+			this.backButton.addEventListener('click', function() { history.back(); });
 	},
 
 	_showWizardSidebar: function() {
@@ -63,9 +64,21 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 	},
 
 	_closeWizard: function() {
+		const sidebarRequested = this.map.showSidebar
+			|| window.mobileWizard === true || window.pageMobileWizard === true;
+		let sidebarClosed = false;
 		var items = this.contents.length;
-		while (items--)
-			this.removeWindow(this.contents[0]);
+		while (items--) {
+			const content = this.contents[0];
+			if (content.isSidebar)
+				sidebarClosed = true;
+			this.removeWindow(content);
+			content.notifyPopupDismissed();
+		}
+		if (sidebarRequested && !sidebarClosed) {
+			this.map.sendUnoCommand('.uno:SidebarHide');
+			this.map.showSidebar = false;
+		}
 	},
 
 	_hideWizard: function() {
@@ -82,8 +95,10 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).removeHighlighters();
 		}
 
-		if (!this.contents.length)
-			$('#mobile-wizard').hide();
+		if (!this.contents.length) {
+			const mobileWizardEl = document.getElementById('mobile-wizard');
+			if (mobileWizardEl) mobileWizardEl.style.display = 'none';
+		}
 
 		document.getElementById('mobile-wizard').classList.remove('menuwizard');
 		document.getElementById('mobile-wizard').classList.remove('shapeswizard');
@@ -94,7 +109,8 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 		}
 
 		if (this.map.isEditMode()) {
-			$('#toolbar-down').show();
+			const toolbarDown = document.getElementById('toolbar-down');
+			if (toolbarDown) toolbarDown.style.display = 'block';
 		}
 		if (window.ThisIsTheAndroidApp)
 			window.postMobileMessage('MOBILEWIZARD hide');
@@ -112,9 +128,6 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 		if (window.insertionMobileWizard === true)
 			window.insertionMobileWizard = false;
 
-		if (window.pageMobileWizard === true)
-			window.pageMobilewizard = false;
-
 		if (window.commentWizard === true)
 			window.commentWizard = false;
 
@@ -129,7 +142,8 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 	},
 
 	isOpen: function() {
-		return $('#mobile-wizard').is(':visible');
+		const mobileWizardEl = document.getElementById('mobile-wizard');
+		return !!mobileWizardEl && getComputedStyle(mobileWizardEl).display !== 'none';
 	},
 
 	_updateToolbarItemStateByClose: function() {
@@ -182,6 +196,9 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 			var existingWindow = this._getContentForWindowId(data.id);
 			if (existingWindow) {
 				existingWindow._onMobileWizard(data, callback);
+			} else if (data.action === 'close' || data.action === 'fadeout') {
+				// No window has this id, so the open windows stay as they are.
+				return;
 			} else {
 				var newWindow = window.L.control.mobileWizardWindow(this, 'mobile-wizard-content-' + data.id);
 				for (var i in this.contents)
@@ -204,6 +221,11 @@ window.L.Control.MobileWizard = window.L.Control.extend({
 
 			this.map.removeControl(window);
 			this.contents.splice(pos, 1);
+			// The engine keeps the sidebar deck open until it is told otherwise, and
+			// it sends the deck contents only when the deck opens. Closing it here
+			// makes the next show of the same deck arrive with its contents.
+			if (window.isSidebar)
+				this.map.sendUnoCommand('.uno:SidebarHide');
 			if (this.contents.length) {
 				var parentWindow = this.contents[this.contents.length - 1];
 				parentWindow.showWindow();

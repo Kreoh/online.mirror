@@ -40,6 +40,7 @@
 #include <drawdoc.hxx>
 #include <stlpool.hxx>
 #include <pglink.hxx>
+#include <SlideLink.hxx>
 
 #include <strings.hxx>
 #include <DrawDocShell.hxx>
@@ -49,8 +50,8 @@
 
 using namespace ::sd;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /*************************************************************************
 |*
@@ -72,6 +73,16 @@ using namespace cpo::uno;
 |*                                   (for undo operations)
 |*
 \************************************************************************/
+
+void SdPage::ChangeMasterPage(SdPage& rMasterPage)
+{
+    // The page draws under another master from here on, which is a change to the page as much
+    // as a new background is. A page that is not in the document yet is still being built.
+    const bool bMasterMoved = !TRG_HasMasterPage() || &TRG_GetMasterPage() != &rMasterPage;
+    TRG_SetMasterPage(rMasterPage);
+    if (bMasterMoved && IsInserted())
+        getSdrModelFromSdrPage().Broadcast(SdrHint(SdrHintKind::PageOrderChange, this));
+}
 
 void SdPage::SetPresentationLayout(std::u16string_view rLayoutName,
                                    bool bReplaceStyleSheets,
@@ -126,7 +137,7 @@ void SdPage::SetPresentationLayout(std::u16string_view rLayoutName,
             pFoundMaster = static_cast< SdDrawDocument& >(getSdrModelFromSdrPage()).GetSdPage( 0, mePageKind );
 
         if( pFoundMaster )
-            TRG_SetMasterPage(*pFoundMaster);
+            ChangeMasterPage(*pFoundMaster);
     }
 
     /*********************************************************************
@@ -287,9 +298,18 @@ bool SdPage::IsReadOnly() const
 
 void SdPage::ConnectLink()
 {
+    // A page written out of a presentation records the slide of that presentation it came from,
+    // under a reference that names no document. Such a record is read off the page as it stands
+    // and there is nothing to resolve behind it.
+    if (maFileName == sd::SlideLink::OriginReference())
+        return;
+
     sfx2::LinkManager* pLinkManager(getSdrModelFromSdrPage().GetLinkManager());
 
-    if (!(pLinkManager && !mpPageLink && !maFileName.isEmpty() && !maBookmarkName.isEmpty() &&
+    // A page that records the identifier of the slide it came from names the slide it reads by
+    // that identifier, so it holds a link of its own without naming a slide.
+    const bool bNamesSourceSlide = !maBookmarkName.isEmpty() || !maSourcePageGuid.isEmpty();
+    if (!(pLinkManager && !mpPageLink && !maFileName.isEmpty() && bNamesSourceSlide &&
         mePageKind==PageKind::Standard && !IsMasterPage() &&
         static_cast< SdDrawDocument& >(getSdrModelFromSdrPage()).IsNewOrLoadCompleted()))
         return;
@@ -357,6 +377,8 @@ void SdPage::lateInit(const SdPage& rSrcPage)
     maCreatedPageName.clear();
     maFileName = rSrcPage.maFileName;
     maBookmarkName = rSrcPage.maBookmarkName;
+    maSourceModifiedTime = rSrcPage.maSourceModifiedTime;
+    maSourcePageGuid = rSrcPage.maSourcePageGuid;
     mbScaleObjects = rSrcPage.mbScaleObjects;
     meCharSet = rSrcPage.meCharSet;
     mnPaperBin = rSrcPage.mnPaperBin;
@@ -506,8 +528,11 @@ void SdPage::setTransitionDuration ( double fTransitionDuration )
     ActionChanged();
 }
 
-bool SdPage::Equals(const SdPage& rOtherPage) const
+bool SdPage::Equals(const SdPage& rOtherPage, bool bIgnoreLayoutName) const
 {
+    if (!bIgnoreLayoutName && maLayoutName != rOtherPage.maLayoutName)
+        return false;
+
     if (GetObjCount() != rOtherPage.GetObjCount() ||
         mePageKind != rOtherPage.mePageKind ||
         meAutoLayout != rOtherPage.meAutoLayout ||
@@ -515,7 +540,6 @@ bool SdPage::Equals(const SdPage& rOtherPage) const
         !rtl::math::approxEqual(mfTime, rOtherPage.mfTime) ||
         mbSoundOn != rOtherPage.mbSoundOn ||
         mbExcluded != rOtherPage.mbExcluded ||
-        maLayoutName != rOtherPage.maLayoutName ||
         !maSoundLink.sameLink(rOtherPage.maSoundLink) ||
         mbLoopSound != rOtherPage.mbLoopSound ||
         mbStopSound != rOtherPage.mbStopSound ||
@@ -529,6 +553,21 @@ bool SdPage::Equals(const SdPage& rOtherPage) const
         mbTransitionDirection != rOtherPage.mbTransitionDirection ||
         mnTransitionFadeColor != rOtherPage.mnTransitionFadeColor ||
         !rtl::math::approxEqual(mfTransitionDuration, rOtherPage.mfTransitionDuration))
+        return false;
+
+    // The background of a page is held partly as hard attributes on the page and partly in the
+    // background style sheet the page points at. Two pages count as the same only when both
+    // sides of that agree, and the sheets are compared by their contents because each page
+    // carries the sheet of the document it belongs to.
+    if (!getSdrPageProperties().GetItemSet().Equals(
+            rOtherPage.getSdrPageProperties().GetItemSet(), false))
+        return false;
+
+    SfxStyleSheet* pBackground = getSdrPageProperties().GetStyleSheet();
+    SfxStyleSheet* pOtherBackground = rOtherPage.getSdrPageProperties().GetStyleSheet();
+    if (bool(pBackground) != bool(pOtherBackground))
+        return false;
+    if (pBackground && !pBackground->GetItemSet().Equals(pOtherBackground->GetItemSet(), false))
         return false;
 
     for(size_t i = 0; i < GetObjCount(); ++i)
@@ -550,7 +589,7 @@ void SdPage::addAnnotation(rtl::Reference<sdr::annotation::Annotation> const& xA
     NotifyDocumentEvent(
         static_cast<SdDrawDocument&>(getSdrModelFromSdrPage()),
         u"OnAnnotationInserted"_ustr,
-        uno::Reference<uno::XInterface>(static_cast<cppu::OWeakObject*>(xAnnotation.get()), UNO_QUERY));
+        uno::Reference<cpo::uno::XInterface>(static_cast<cppu::OWeakObject*>(xAnnotation.get()), UNO_QUERY));
 }
 
 void SdPage::addAnnotationNoNotify(rtl::Reference<sdr::annotation::Annotation> const& xAnnotation, int nIndex)
@@ -584,7 +623,7 @@ void SdPage::removeAnnotation(rtl::Reference<sdr::annotation::Annotation> const&
     NotifyDocumentEvent(
         static_cast<SdDrawDocument&>(getSdrModelFromSdrPage()),
         u"OnAnnotationRemoved"_ustr,
-        uno::Reference<uno::XInterface>(static_cast<cppu::OWeakObject*>(xAnnotation.get()), UNO_QUERY));
+        uno::Reference<cpo::uno::XInterface>(static_cast<cppu::OWeakObject*>(xAnnotation.get()), UNO_QUERY));
 }
 
 void SdPage::removeAnnotationNoNotify(rtl::Reference<sdr::annotation::Annotation> const& xAnnotation)
@@ -649,6 +688,10 @@ void SdPage::dumpAsXml(xmlTextWriterPtr pWriter) const
     if (pPageKind)
         (void)xmlTextWriterWriteAttribute(pWriter, BAD_CAST("mePageKind"), BAD_CAST(pPageKind));
 
+
+    (void)xmlTextWriterWriteAttribute(
+        pWriter, BAD_CAST("maSourcePageGuid"),
+        BAD_CAST(OUStringToOString(maSourcePageGuid, RTL_TEXTENCODING_UTF8).getStr()));
 
     FmFormPage::dumpAsXml(pWriter);
     (void)xmlTextWriterEndElement(pWriter);

@@ -63,7 +63,7 @@ protected:
     DlgEdObj(
         SdrModel& rSdrModel,
         const OUString& rModelName,
-        const css::uno::Reference< css::lang::XMultiServiceFactory >& rxSFac);
+        const cpo::uno::Reference< css::lang::XMultiServiceFactory >& rxSFac);
 
     // protected destructor
     virtual ~DlgEdObj() override;
@@ -112,29 +112,29 @@ public:
     virtual void SetRectFromProps();
     virtual void SetPropsFromRect();
 
-    css::uno::Reference< css::awt::XControl > GetControl() const;
+    cpo::uno::Reference< css::awt::XControl > GetControl() const;
 
     virtual void PositionAndSizeChange( const css::beans::PropertyChangeEvent& evt );
     /// @throws css::container::NoSuchElementException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void NameChange( const  css::beans::PropertyChangeEvent& evt );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void TabIndexChange( const  css::beans::PropertyChangeEvent& evt );
 
     // PropertyChangeListener
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void _propertyChange(const css::beans::PropertyChangeEvent& evt);
 
     // ContainerListener
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void _elementInserted();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void _elementReplaced();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void _elementRemoved();
 
     virtual void SetLayer(SdrLayerID nLayer) override;
-    void MakeDataAware( const css::uno::Reference< css::frame::XModel >& xModel );
+    void MakeDataAware( const cpo::uno::Reference< css::frame::XModel >& xModel );
 };
 
 

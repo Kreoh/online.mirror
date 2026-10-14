@@ -35,7 +35,7 @@
 #include <docmodel/color/ComplexColor.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using ::oox::core::ContextHandler2;
 using ::oox::core::ContextHandlerRef;
 
@@ -588,15 +588,17 @@ ContextHandlerRef FillPropertiesContext::createFillContext(
     return nullptr;
 }
 
-SimpleFillPropertiesContext::SimpleFillPropertiesContext(ContextHandler2Helper const & rParent, model::ComplexColor& rColor)
+SimpleFillPropertiesContext::SimpleFillPropertiesContext(ContextHandler2Helper const & rParent, model::ComplexColor& rColor, Color& rOOXColor)
     : FillPropertiesContext(rParent, *this)
     , mrColor(rColor)
+    , mrOOXColor(rOOXColor)
 {
 }
 
 SimpleFillPropertiesContext::~SimpleFillPropertiesContext()
 {
-    mrColor = getBestSolidColor().createComplexColor(getFilter().getGraphicHelper(), -1);
+    mrOOXColor = getBestSolidColor();
+    mrColor = mrOOXColor.createComplexColor(getFilter().getGraphicHelper(), -1);
 }
 
 BlipExtensionContext::BlipExtensionContext(ContextHandler2Helper const & rParent, BlipFillProperties& rBlipProps, model::BlipFill* pBlipFill)

@@ -59,6 +59,7 @@ const sal_uInt8 cFtnEdnCont = 0x4;
 namespace writerfilter::ooxml
 {
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace oox;
 using namespace ::com::sun::star::xml::sax;
 
@@ -67,7 +68,7 @@ using namespace ::com::sun::star::xml::sax;
  */
 
 OOXMLFastContextHandler::OOXMLFastContextHandler
-(uno::Reference< uno::XComponentContext > const & context)
+(uno::Reference< cpo::uno::XComponentContext > const & context)
 : mpParent(nullptr),
   mId(0),
   mnDefine(0),
@@ -161,7 +162,7 @@ bool OOXMLFastContextHandler::prepareMceContext(Token_t nElement, const uno::Ref
 }
 
 // xml::sax::XFastContextHandler:
-void SAL_CALL OOXMLFastContextHandler::startFastElement
+void OOXMLFastContextHandler::startFastElement
 (sal_Int32 Element,
  const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
 {
@@ -209,13 +210,13 @@ void SAL_CALL OOXMLFastContextHandler::startFastElement
     }
 }
 
-void SAL_CALL OOXMLFastContextHandler::startUnknownElement
+void OOXMLFastContextHandler::startUnknownElement
 (const OUString & /*Namespace*/, const OUString & /*Name*/,
  const uno::Reference< xml::sax::XFastAttributeList > & /*Attribs*/)
 {
 }
 
-void SAL_CALL OOXMLFastContextHandler::endFastElement(sal_Int32 Element)
+void OOXMLFastContextHandler::endFastElement(sal_Int32 Element)
 {
     if (Element == (NMSP_mce | XML_Choice) || Element == (NMSP_mce | XML_Fallback))
         m_bDiscardChildren = false;
@@ -247,12 +248,12 @@ void OOXMLFastContextHandler::lcl_endFastElement
     OOXMLFactory::endAction(this);
 }
 
-void SAL_CALL OOXMLFastContextHandler::endUnknownElement
+void OOXMLFastContextHandler::endUnknownElement
 (const OUString & , const OUString & )
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
  OOXMLFastContextHandler::createFastChildContext
 (sal_Int32 Element,
  const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
@@ -274,7 +275,7 @@ uno::Reference< xml::sax::XFastContextHandler >
     return OOXMLFactory::createFastChildContext(this, Element);
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
 OOXMLFastContextHandler::createUnknownChildContext
 (const OUString &,
  const OUString &,
@@ -283,7 +284,7 @@ OOXMLFastContextHandler::createUnknownChildContext
     return uno::Reference<xml::sax::XFastContextHandler>(new OOXMLFastContextHandler(*this));
 }
 
-void SAL_CALL OOXMLFastContextHandler::characters
+void OOXMLFastContextHandler::characters
 (const OUString & aChars)
 {
     lcl_characters(aChars);
@@ -362,6 +363,20 @@ void OOXMLFastContextHandler::sendTableDepth() const
         OOXMLValue pVal = OOXMLValue::createInteger(1);
         pProps->add(NS_ooxml::LN_inTbl, pVal, OOXMLProperty::SPRM);
     }
+
+    mpStream->props(pProps.get());
+}
+
+void OOXMLFastContextHandler::sendTableExceptionDepth() const
+{
+    if (mnTableDepth <= 0)
+        return;
+
+    // The depth of the table whose row carries the exception properties. It travels on its own
+    // token, so the paragraph group that is still open before the row keeps its cell state.
+    OOXMLPropertySet::Pointer_t pProps(new OOXMLPropertySet);
+    OOXMLValue aValue = OOXMLValue::createInteger(mnTableDepth);
+    pProps->add(NS_ooxml::LN_tblPrExDepth, aValue, OOXMLProperty::SPRM);
 
     mpStream->props(pProps.get());
 }
@@ -1051,7 +1066,7 @@ void OOXMLFastContextHandlerProperties::lcl_endFastElement
             sendPropertiesToParent();
         }
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -1327,7 +1342,7 @@ OOXMLFastContextHandlerTable::~OOXMLFastContextHandlerTable()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
 OOXMLFastContextHandlerTable::createFastChildContext
 (sal_Int32 Element,
  const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
@@ -1803,7 +1818,7 @@ void OOXMLFastContextHandlerShape::lcl_startFastElement
     }
 }
 
-void SAL_CALL OOXMLFastContextHandlerShape::startUnknownElement
+void OOXMLFastContextHandlerShape::startUnknownElement
 (const OUString & Namespace,
  const OUString & Name,
  const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
@@ -1916,7 +1931,7 @@ void OOXMLFastContextHandlerShape::lcl_endFastElement
         mpStream->endShape( );
 }
 
-void SAL_CALL OOXMLFastContextHandlerShape::endUnknownElement
+void OOXMLFastContextHandlerShape::endUnknownElement
 (const OUString & Namespace,
  const OUString & Name)
 {
@@ -1997,7 +2012,7 @@ OOXMLFastContextHandlerShape::lcl_createFastChildContext
     return xContextHandler;
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
 OOXMLFastContextHandlerShape::createUnknownChildContext
 (const OUString & Namespace,
  const OUString & Name,
@@ -2059,7 +2074,7 @@ OOXMLFastContextHandlerWrapper::~OOXMLFastContextHandlerWrapper()
 {
 }
 
-void SAL_CALL OOXMLFastContextHandlerWrapper::startUnknownElement
+void OOXMLFastContextHandlerWrapper::startUnknownElement
 (const OUString & Namespace,
  const OUString & Name,
  const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
@@ -2068,7 +2083,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::startUnknownElement
         mxWrappedContext->startUnknownElement(Namespace, Name, Attribs);
 }
 
-void SAL_CALL OOXMLFastContextHandlerWrapper::endUnknownElement
+void OOXMLFastContextHandlerWrapper::endUnknownElement
 (const OUString & Namespace,
  const OUString & Name)
 {
@@ -2076,7 +2091,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endUnknownElement
         mxWrappedContext->endUnknownElement(Namespace, Name);
 }
 
-void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element)
+void OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element)
 {
     OOXMLFastContextHandler::endFastElement(Element);
     if (mxShadowContext.is())
@@ -2096,7 +2111,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element
                     case CallDataType::Init:
                     {
                         sal_Int32 nElement = callDataIt->getElement();
-                        css::uno::Reference<css::xml::sax::XFastAttributeList> rAttribs
+                        cpo::uno::Reference<css::xml::sax::XFastAttributeList> rAttribs
                             = callDataIt->getAttributes();
                         if (mbIsWriterFrameDetected)
                         {
@@ -2113,7 +2128,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element
                     case CallDataType::ElementAttr:
                     {
                         sal_Int32 nElement = callDataIt->getElement();
-                        css::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
+                        cpo::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
                             = callDataIt->getAttributes();
                         auto xHandler = aLocalHandlers.back();
                         if (xHandler)
@@ -2141,7 +2156,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element
                     {
                         const ::rtl::OUString& rNameSpace = callDataIt->getUnknownNameSpace();
                         const ::rtl::OUString& rElement = callDataIt->getUnknownElement();
-                        css::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
+                        cpo::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
                             = callDataIt->getAttributes();
                         auto xHandler = aLocalHandlers.back();
                         if (xHandler)
@@ -2161,7 +2176,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element
                     case CallDataType::ElementContext:
                     {
                         sal_Int32 nElement = callDataIt->getElement();
-                        css::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
+                        cpo::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
                             = callDataIt->getAttributes();
                         uno::Reference< xml::sax::XFastContextHandler > newContext = aLocalHandlers.back()->createFastChildContext(nElement, rAttrs);
                         if (nElement == Token_t(NMSP_vml | XML_textbox))
@@ -2176,7 +2191,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element
                     {
                         const ::rtl::OUString& rNameSpace = callDataIt->getUnknownNameSpace();
                         const ::rtl::OUString& rElement = callDataIt->getUnknownElement();
-                        css::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
+                        cpo::uno::Reference<css::xml::sax::XFastAttributeList> rAttrs
                             = callDataIt->getAttributes();
                         uno::Reference< xml::sax::XFastContextHandler > newContext = aLocalHandlers.back()->createUnknownChildContext(rNameSpace, rElement, rAttrs);
                         aLocalHandlers.push_back(newContext);
@@ -2188,7 +2203,7 @@ void SAL_CALL OOXMLFastContextHandlerWrapper::endFastElement(::sal_Int32 Element
     }
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
 OOXMLFastContextHandlerWrapper::createUnknownChildContext
 (const OUString & Namespace,
  const OUString & Name,
@@ -2524,7 +2539,7 @@ void OOXMLFastContextHandlerMath::process()
     assert(ref.is());
     if (!ref.is())
         return;
-    uno::Reference< uno::XInterface > component(ref->getComponent(), uno::UNO_QUERY_THROW);
+    uno::Reference< cpo::uno::XInterface > component(ref->getComponent(), uno::UNO_QUERY_THROW);
     if( oox::FormulaImExportBase* import
         = dynamic_cast< oox::FormulaImExportBase* >( component.get()))
         import->readFormulaOoxml( m_buffer );
@@ -2583,6 +2598,48 @@ void OOXMLFastContextHandlerCommentEx::att_done(const OOXMLValue& pValue)
 void OOXMLFastContextHandlerCommentEx::att_paraIdParent(const OOXMLValue& pValue)
 {
     m_sParentId = pValue.getString();
+}
+
+OOXMLFastContextHandlerCommentId::OOXMLFastContextHandlerCommentId(
+    OOXMLFastContextHandler* pContext)
+    : OOXMLFastContextHandler(pContext)
+{
+}
+
+void OOXMLFastContextHandlerCommentId::lcl_endFastElement(Token_t /*Element*/)
+{
+    mpStream->commentDurableId(m_sParaId, m_sDurableId);
+}
+
+void OOXMLFastContextHandlerCommentId::att_paraId(const OOXMLValue& pValue)
+{
+    m_sParaId = pValue.getString();
+}
+
+void OOXMLFastContextHandlerCommentId::att_durableId(const OOXMLValue& pValue)
+{
+    m_sDurableId = pValue.getString();
+}
+
+OOXMLFastContextHandlerCommentExtensible::OOXMLFastContextHandlerCommentExtensible(
+    OOXMLFastContextHandler* pContext)
+    : OOXMLFastContextHandler(pContext)
+{
+}
+
+void OOXMLFastContextHandlerCommentExtensible::lcl_endFastElement(Token_t /*Element*/)
+{
+    mpStream->commentDateUtc(m_sDurableId, m_sDateUtc);
+}
+
+void OOXMLFastContextHandlerCommentExtensible::att_durableId(const OOXMLValue& pValue)
+{
+    m_sDurableId = pValue.getString();
+}
+
+void OOXMLFastContextHandlerCommentExtensible::att_dateUtc(const OOXMLValue& pValue)
+{
+    m_sDateUtc = pValue.getString();
 }
 
 }

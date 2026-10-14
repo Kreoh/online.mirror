@@ -18,6 +18,7 @@
  */
 
 #include <config_features.h>
+#include <config_options.h>
 
 #include <avmedia/mediaplayer.hxx>
 #include <avmedia/mediatoolbox.hxx>
@@ -25,7 +26,6 @@
 #include <unotools/moduleoptions.hxx>
 #include <svx/fmobjfac.hxx>
 #include <svx/objfac3d.hxx>
-#include <vcl/svapp.hxx>
 
 #include <registerinterfaces.hxx>
 #include <sddll.hxx>
@@ -264,18 +264,16 @@ void SdDLL::Init()
 
     // register css::form::component::Form-Object-Factory
     FmFormObjFactory();
-
-    // register your exotic remote controls here
-#ifdef ENABLE_SDREMOTE
-    if (!comphelper::IsFuzzing() && !Application::IsHeadlessModeEnabled())
-        RegisterRemotes();
-#endif
 }
 
 #ifndef DISABLE_DYNLOADING
 
 extern "C" SAL_DLLPUBLIC_EXPORT
+#if ENABLE_UNITEDLIBS
+void kit_preload_hook_sd()
+#else
 void kit_preload_hook()
+#endif
 {
     SdAbstractDialogFactory::Create();
 }

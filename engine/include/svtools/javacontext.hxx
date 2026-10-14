@@ -42,27 +42,27 @@ namespace svt
             particular Request then the message box is shown. Afterwards
             nothing happens.
          */
-        JavaContext( const css::uno::Reference< cpo::uno::XCurrentContext> & ctx );
+        JavaContext( const cpo::uno::Reference< cpo::uno::XCurrentContext> & ctx );
         ~JavaContext();
 
         // XInterface
-        virtual cpo::uno::Any SAL_CALL queryInterface(
+        virtual cpo::uno::Any queryInterface(
             const cpo::uno::Type& aType ) override;
 
-        virtual void SAL_CALL acquire() noexcept override;
+        virtual void acquire() noexcept override;
 
-        virtual void SAL_CALL release() noexcept override;
+        virtual void release() noexcept override;
 
         // XCurrentContext
-        virtual cpo::uno::Any SAL_CALL getValueByName( const OUString& Name ) override;
+        virtual cpo::uno::Any getValueByName( const OUString& Name ) override;
 
     private:
         JavaContext(JavaContext const &) = delete;
         JavaContext& operator = (JavaContext const &) = delete;
 
         oslInterlockedCount                                  m_aRefCount;
-        css::uno::Reference< cpo::uno::XCurrentContext >     m_xNextContext;
-        css::uno::Reference< css::task::XInteractionHandler> m_xHandler;
+        cpo::uno::Reference< cpo::uno::XCurrentContext >     m_xNextContext;
+        cpo::uno::Reference< css::task::XInteractionHandler> m_xHandler;
     };
 }
 

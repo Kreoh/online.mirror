@@ -46,9 +46,22 @@
 	max-width: 380px;
 }
 
+/* Message boxes take their 300px min-width rather than sizing to their text, so
+   a sentence much longer than that wraps even though the 380px cap leaves room.
+   The overwrite warning is two such sentences, so let it size to its content. */
+.jsdialog-window.messagebox:not(.modalpopup)
+.jsdialog-container:not(.snackbar):has(#CheckWarningDialog) {
+	width: max-content;
+	max-width: 560px;
+}
+
+/* A dialog that has a window of its own keeps its natural size in a narrow
+   window, because that window is sized to the dialog. */
 @media (max-width: 480px) {
 
-	.jsdialog-window:not(.modalpopup) .jsdialog-container:not(.snackbar) {
+	body:not(.jsdialog-popout-body)
+	.jsdialog-window:not(.modalpopup)
+	.jsdialog-container:not(.snackbar) {
 		min-width: unset;
 		width: 460px;
 	}
@@ -82,6 +95,69 @@ div.ui-treeview-icon-column {
 	margin: 5px;
 }
 
+/* Select Certificate dialog (xmlsec/ui/selectcertificatedialog.ui). The
+   !important overrides beat the inline styles the builder puts on
+   containers (display: grid with stretched auto columns, which tore the
+   label/field pairs apart, and an inert row-gap on a display: block
+   vertical box). */
+#SelectCertificateDialog #box1 {
+	display: flex !important;
+	flex-direction: column;
+	gap: var(--spacing-m);
+	min-width: 46em;
+}
+#SelectCertificateDialog #searchbox-hbox,
+#SelectCertificateDialog #dialog-hbox1 {
+	display: flex !important;
+	align-items: center;
+	gap: var(--spacing-m) !important;
+}
+#SelectCertificateDialog #searchbox-hbox > label,
+#SelectCertificateDialog #dialog-hbox1 > label {
+	flex: 0 0 auto;
+	width: auto !important;
+	/* shared label column, so the two fields align */
+	min-width: 6em;
+	text-align: start !important;
+}
+#SelectCertificateDialog #searchbox-hbox #searchbox,
+#SelectCertificateDialog #dialog-hbox1 #description.ui-edit-container {
+	flex: 1 1 auto;
+}
+#SelectCertificateDialog #searchbox-hbox input,
+#SelectCertificateDialog #dialog-hbox1 input {
+	width: 100%;
+	box-sizing: border-box;
+}
+/* The certificate list: the cell text has to be fully readable (this is
+   about document signing), so wrap it instead of truncating, and scroll
+   vertically. The minmax() bounds let the fr maxima fill the available
+   width exactly, so nothing overflows horizontally. */
+#SelectCertificateDialog .ui-treeview {
+	grid-template-columns: minmax(8em, 2fr) minmax(8em, 2fr) minmax(3em, auto) minmax(6em, auto)
+		minmax(6em, 1fr) !important;
+	max-width: 60em;
+	max-height: 20em;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+#SelectCertificateDialog .ui-treeview .ui-treeview-entry > div,
+#SelectCertificateDialog .ui-treeview .ui-treeview-headers > div {
+	white-space: normal !important;
+	overflow-wrap: anywhere;
+}
+/* The header cells have a 16px sort-indicator padding on a content-box,
+   which made each header overflow its subgrid track and produced a
+   permanent horizontal scrollbar. */
+#SelectCertificateDialog .ui-treeview-headers > .ui-treeview-header {
+	box-sizing: border-box;
+}
+#SelectCertificateDialog #box1 > .ui-grid-cell:last-child {
+	display: flex !important;
+	justify-content: flex-end;
+	gap: var(--spacing-m) !important;
+}
+
 #AcceptRejectChangesDialog .ui-treeview-headers {
 	grid-template-columns: 120px 120px 150px 130px;
 	position: sticky;
@@ -112,6 +188,29 @@ div.ui-treeview-icon-column {
 
 #AcceptRejectChangesDialog #writerchanges.ui-treeview {
 	max-height: 300px;
+}
+
+/* New Table Style dialog: the online layout does not apply the .ui size hints,
+   so size the region list to show all its rows, widen the picker column so its
+   labels and colour dropdowns are not cut off, and put a gap before that
+   column. */
+#NewTableStyleDialog #regions.ui-treeview {
+	max-height: 300px;
+}
+
+#NewTableStyleDialog #pickergrid {
+	min-width: 380px;
+}
+
+/* The colour dropdowns fill their grid cell but also carry a side margin, which
+   pushes them past the cell (and the dialog) edge and clips them. Drop the
+   margin; the grid column gap still separates them from the labels. */
+#NewTableStyleDialog :is(#backcolor, #fontcolor, #bordercolor) {
+	margin-inline: 0;
+}
+
+#NewTableStyleDialog #editbox {
+	column-gap: 12px;
 }
 
 #writerchanges.ui-treeview .jsdialog.ui-treeview-entry[aria-level='2'] .ui-treeview-expander-column,
@@ -252,7 +351,7 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 }
 
 .jsdialog-container .ui-dialog-content {
-	max-height: calc( 90vh - 34px);
+	max-height: calc(0.9 * var(--dialog-available-height) - 34px);
 	overflow-y: auto !important;
 	background-color: var(--color-background-lighter) !important;
 	font-family: var(--cool-font);
@@ -262,7 +361,7 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 }
 [data-docType='spreadsheet'] .jsdialog-container .ui-dialog-content,
 [data-docType='text'] .jsdialog-container .ui-dialog-content {
-	max-height: calc( 90vh - 98px);
+	max-height: calc(0.9 * var(--dialog-available-height) - 98px);
 }
 #SortKeyWindow {
 	/* As used in .jsdialog-container .ui-dialog-content 90 % of the viewport
@@ -274,16 +373,45 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 		- 38px formulabar
 		- 38px document-header
    */
-	max-height: calc( 90vh - 352px);
+	max-height: calc(0.9 * var(--dialog-available-height) - 352px);
 }
 
 .jsdialog-container .ui-dialog-content > div:not(.ui-scrollwindow) {
 	overflow: hidden; /* don't inherit scrollbar from parent */
 }
 
+/* Security Label dialog: cap the category list so it -- and only it -- scrolls, never
+   the whole dialog. Its container is sized with max-height (not a definite height), so
+   the vexpand grid row cannot resolve and the list would otherwise grow to its full
+   content and push the dialog past its own max-height, producing a second, outer
+   scrollbar. The reserve leaves room for the marking banner above, the
+   policy/classification rows and the (wrapping) warning below; tune it if those
+   grow. */
+#SecurityLabelDialog #categorieswin {
+	max-height: calc(90vh - 28rem);
+	overflow-y: auto;
+}
+
+/* The marking preview is a banner atop the dialog, styled like the one the document
+   gets (#security-label-banner), so it stands out from the form below it. The label
+   renders as a span, hence the display/width; the dialog hides it when there is no
+   marking to show. */
+#SecurityLabelDialog #preview {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 4px 8px;
+	text-align: center;
+	font-weight: bold;
+	background-color: var(--security-banner-background, rgb(var(--doc-type, 3, 105, 163)));
+	color: var(--security-banner-color, var(--color-background-lighter));
+}
+
 @media (max-width: 480px) {
 
-	.jsdialog-container .ui-dialog-content > div:not(.ui-scrollwindow) {
+	body:not(.jsdialog-popout-body)
+	.jsdialog-container
+	.ui-dialog-content > div:not(.ui-scrollwindow) {
 		overflow: unset;
 	}
 }
@@ -303,7 +431,9 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 
 @media (max-width: 480px) {
 
-	.jsdialog-container .lokdialog.ui-dialog-content.ui-widget-content {
+	body:not(.jsdialog-popout-body)
+	.jsdialog-container
+	.lokdialog.ui-dialog-content.ui-widget-content {
 		overflow-x: unset;
 	}
 }
@@ -508,8 +638,11 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 	align-items: stretch;
 }
 
+/* A page that is not the open one keeps the same layout as the open page, so the
+   shared grid cell is as large as the largest page and keeps that size on a tab
+   switch. */
 .ui-tabs-content.jsdialog > .ui-content.hidden {
-	display: inherit !important;
+	display: flex !important;
 	visibility: hidden;
 }
 
@@ -615,33 +748,38 @@ algned to the bottom */
 	outline-offset: -2px;
 }
 
-body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton):not(.form-field-button):not(.notebookbar.ui-tab):not(.ui-expander-btn):not(.arrowbackground):not(.ui-combobox-button):not(.inserttable-grid .col):not(.spinfieldbutton-up):not(.spinfieldbutton-down):hover {
+body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton):not(.form-field-button):not(.notebookbar.ui-tab):not(.ui-expander-btn):not(.arrowbackground):not(.ui-combobox-button):not(.inserttable-grid .col):not(.spinfieldbutton-up):not(.spinfieldbutton-down):not(.slide-import-source-main):not([aria-disabled='true']):not(.snackbar *):hover {
 	color: rgba(var(--doc-type), 1) !important;
 	background-color: var(--color-background-darker) !important;
 }
 
-.ui-tab.jsdialog:not(.selected):hover {
+.ui-tab.jsdialog:not(.selected):not([aria-disabled='true']):hover {
 	cursor: pointer !important;
 }
 
 
 /* Vertical tab rail: used when a dialog has more tabs than comfortably fit a
    horizontal row. The rail sits on the inline-start side and the panel fills
-   the rest. The rail has a fixed width and is taken out of the normal flow, so
-   the panel beside it stays a plain block that sizes to its own content. The
-   dialog measures each tab page from that panel to size itself, the same as in
-   the horizontal layout, and the panel reserves a margin for the rail. */
+   the rest. Rail and panel share one grid row, so the root is as tall as the
+   taller of the two: the rail stays fully visible even when the selected page
+   is empty (e.g. the Area tab with fill "None"), and a tall page stretches the
+   rail to its full height. The dialog measures each tab page from the panel to
+   size itself, the same as in the horizontal layout. */
 
 .ui-tabs-root.vertical {
 	position: relative;
-	--cool-vertical-rail-width: 150px;
+	display: grid;
+	/* An auto column sizes the dialog to the widest page and still stretches
+	   into free space; a fr column would not grow the dialog intrinsically. */
+	grid-template-columns: var(--dialog-tab-rail-width) auto;
 }
 
 .ui-tabs.vertical.jsdialog.ui-widget {
-	position: absolute;
-	inset-block: 0;
-	inset-inline-start: 0;
-	width: var(--cool-vertical-rail-width);
+	grid-row: 1;
+	grid-column: 1;
+	box-sizing: border-box;
+	width: var(--dialog-tab-rail-width);
+	min-height: 0;
 	height: 100%;
 	display: flex;
 	flex-direction: column;
@@ -651,7 +789,8 @@ body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton
 }
 
 .ui-tabs-root.vertical > .ui-tabs-content.jsdialog {
-	margin-inline-start: var(--cool-vertical-rail-width);
+	grid-row: 1;
+	grid-column: 2;
 	padding-left: 16px;
 }
 
@@ -697,6 +836,47 @@ body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton
 	min-width: 0;
 	white-space: normal;
 	overflow-wrap: break-word;
+}
+
+/* Lays the tab and the attribute of its page out, and styles neither. */
+/* Three classes, to beat the display that .ui-tab.jsdialog sets. */
+.ui-tab.jsdialog.hidden {
+	display: none !important;
+}
+
+.ui-tabs[aria-orientation='horizontal'] > .ui-tab:first-child:not(.hidden),
+.ui-tabs[aria-orientation='horizontal'] > .ui-tab.hidden + .ui-tab {
+	padding-inline-start: 0px !important;
+}
+
+.ui-tabs.vertical .ui-tab-row {
+	display: flex;
+	align-items: center;
+}
+
+.ui-tabs.vertical .ui-tab-row > .ui-tab.jsdialog {
+	flex: 1;
+	min-width: 0;
+}
+
+.ui-tabs.vertical .ui-tab-row > input[type='checkbox'] {
+	flex: none;
+	margin: 0 var(--spacing-m) 0 0;
+	cursor: pointer;
+}
+
+.ui-tabs.vertical .ui-tab-row:has(.ui-tab[aria-disabled='true']):hover > input[type='checkbox'] {
+	outline: 2px solid var(--color-primary-dark);
+	outline-offset: 1px;
+}
+
+/* A tab whose page has no fill: only the checkbox beside it is left to use. The shared
+   hover rules leave it alone, so the tab reacts again once its page has a fill. */
+.ui-tabs.vertical .ui-tab.jsdialog[aria-disabled='true'],
+.ui-tabs.vertical .ui-tab.jsdialog[aria-disabled='true']:hover {
+	color: var(--color-text-light) !important;
+	background-color: transparent !important;
+	cursor: default !important;
 }
 
 /* Selected vertical tab: a left-edge accent bar replaces the underline that
@@ -761,7 +941,7 @@ body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton
 	content: 'V';
 	color: transparent;
 	margin-inline-end: 7px;
-	background: transparent url('images/lc_menu_chevron.svg') no-repeat center right;
+	background: transparent url('images/lc_menu_chevron.svg') no-repeat center;
 	filter: brightness(0.5);
 }
 
@@ -774,6 +954,23 @@ body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton
 	transform: rotate(90deg);
 	background: transparent url('images/lc_menu_chevron.svg') no-repeat center;
 	filter: brightness(0.5);
+}
+
+@supports (content: '' / '') {
+	.ui-expander-label::before,
+	.ui-treeview-expandable.collapsed > div > .ui-treeview-expander::before,
+	.ui-treeview div[aria-expanded='false'] > div > .ui-treeview-expander::before,
+	.ui-expander-label.expanded::before,
+	.ui-treeview-expandable:not(.collapsed) > div > .ui-treeview-expander::before,
+	.ui-treeview div[aria-expanded='true'] > div > .ui-treeview-expander::before {
+		content: 'V' / '';
+	}
+}
+
+.ui-expander-label::before,
+.ui-treeview-expandable > div > .ui-treeview-expander::before,
+.ui-treeview div[aria-expanded] > div > .ui-treeview-expander::before {
+	transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 [data-theme='dark'] .ui-expander-label::before,
@@ -831,6 +1028,10 @@ body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton
 
 .ui-expander-content:not(.expanded) {
 	display: none;
+}
+
+.ui-expander-content.expanded.expanding {
+	animation: fade-in var(--duration-fast) var(--ease-out);
 }
 
 .ui-expander:hover {
@@ -1290,6 +1491,30 @@ img.context-menu-icon {
 .ui-treeview-search-input.jsdialog.ui-edit {
 	line-height: var(--default-height);
 }
+
+/* The user agent's own grey is 3.76:1 on this field's background. */
+.ui-treeview-search-input::placeholder {
+	color: var(--color-text-dark);
+	opacity: 1;
+}
+
+/* The placeholder goes as soon as there is text, so the field says what it is
+   with the same glyph the combobox search beside it uses. */
+.ui-treeview-search-input {
+	background-image: url('images/lc_recsearch.svg');
+	background-repeat: no-repeat;
+	background-position: 8px center;
+	background-size: 16px;
+	padding-inline-start: 28px !important;
+}
+
+[data-theme='dark'] .ui-treeview-search-input {
+	background-image: url('images/dark/lc_recsearch.svg');
+}
+
+[dir='rtl'] .ui-treeview-search-input {
+	background-position: right 8px center;
+}
 .autofilter .ui-treeview-search-input.jsdialog.ui-edit,
 .autofilter .ui-treeview-search-input.jsdialog.ui-edit:hover {
 	width: 100%;
@@ -1351,11 +1576,13 @@ img.context-menu-icon {
 	white-space: nowrap;
 }
 
-.jsdialog input[type='radio'][disabled='disabled'] ~ label {
+/* the disabled attribute is set to 'disabled' when the widget is built and
+   to 'true' by the runtime enable / disable actions, so match on presence */
+.jsdialog input[type='radio'][disabled] ~ label {
 	color: var(--color-text-light);
 }
 
-.jsdialog input[type='checkbox'][disabled='disabled'] ~ label {
+.jsdialog input[type='checkbox'][disabled] ~ label {
 	color: var(--color-text-light);
 }
 
@@ -1365,8 +1592,10 @@ img.context-menu-icon {
 	padding-inline-start: 0;
 }
 
-.jsdialog.ui-grid-cell input[type='checkbox'] + label[for^='hidden-part-checkbox'] {
-	vertical-align: super;
+/* The Show Sheets list in the desktop dialog scrolls on its own, so the buttons stay in view. */
+#hidden-parts-container.jsdialog {
+	max-height: 300px;
+	overflow-y: auto;
 }
 
 .jsdialog.ui-text {
@@ -1436,6 +1665,16 @@ img.context-menu-icon {
 	background: transparent;
 	color: inherit;
 	outline: none;
+}
+
+.jsdialog.ui-slider {
+	width: 100%;
+	margin: 0;
+	accent-color: var(--color-primary);
+}
+
+.jsdialog.ui-slider:disabled {
+	opacity: 0.5;
 }
 
 .spinfieldbuttons {
@@ -1542,6 +1781,17 @@ img.ui-combobox-value-preview {
 	width: 100%;
 }
 
+/* The minimum above is meant for the value a box shows. A combobox spends part of its
+   width on the dropdown button, so it carries that minimum on its text field and the
+   button adds its own width on top of it. */
+.jsdialog-window .ui-combobox {
+	min-width: auto;
+}
+
+.jsdialog-window .ui-combobox-content {
+	min-width: 50px;
+}
+
 .jsdialog .ui-combobox {
 	line-height: 22px;
 }
@@ -1580,6 +1830,12 @@ img.ui-combobox-value-preview {
 	   the text. Setting display here breaks the picker. */
 	.ui-listbox {
 		align-items: center;
+		/* Keep the selected value on one line and cut it off at the end padding, so a long
+		   value stays inside the box and clear of the arrow, as the plain control does. The
+		   option list opens in the top layer, outside this box. */
+		white-space: nowrap;
+		overflow: clip;
+		overflow-clip-margin: content-box;
 	}
 
 	/* Make the picker match the combobox dropdown popup, which is a modalpopup dialog. */
@@ -1595,6 +1851,11 @@ img.ui-combobox-value-preview {
 		box-shadow: var(--shadow-subtle);
 		/* the dropdown content padding, from .modalpopup[id$='-dropdown'] .ui-dialog-content */
 		padding: 0;
+		/* the dropdown content scroll box, from .jsdialog-container .ui-dialog-content.
+		   The list scrolls once it grows past this. Stating a height the browser can
+		   resolve as soon as the list is drawn also settles its width there and then,
+		   so the list opens at the width it goes on to keep. */
+		max-height: calc(90vh - 34px);
 	}
 
 	/* Hide the browser marker; the app's own arrow span shows instead. */
@@ -1650,8 +1911,8 @@ img.ui-combobox-value-preview {
 	margin-inline-end: 0;
 }
 
-.ui-listbox[disabled='disabled'] ~ .ui-listbox-arrow,
-.ui-combobox[disabled='disabled'] ~ .ui-listbox-arrow {
+.ui-listbox[disabled] ~ .ui-listbox-arrow,
+.ui-combobox[disabled] ~ .ui-listbox-arrow {
 	opacity: 0.5;
 	cursor: auto;
 }
@@ -1674,6 +1935,10 @@ img.ui-combobox-value-preview {
 	padding-inline: 5px;
 }
 
+.current-font-missing #fontnamecombobox > .ui-combobox-content {
+	background-color: color-mix(in srgb, var(--color-warning) 40%, var(--color-background-lighter));
+}
+
 /* Similar to .arrowbackground, centers the vector dropdown arrow. */
 .ui-combobox-button {
 	box-sizing: border-box;
@@ -1685,6 +1950,10 @@ img.ui-combobox-value-preview {
 	background-color: transparent;
 	padding-inline: 10px;
 	border: none;
+}
+
+.ui-combobox-button[disabled]:hover {
+	background-color: transparent;
 }
 
 .ui-combobox-button:hover {
@@ -1768,10 +2037,64 @@ img.ui-combobox-value-preview {
 	background-color: var(--color-background-hover);
 }
 
+/* Line width dropdown of the Shape tab: draw a preview line as thick as the
+ * entry it labels */
+
+.ui-combobox-entry[class*='ui-linewidth-'] {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 0 4px;
+}
+
+.ui-combobox-entry[class*='ui-linewidth-']::before {
+	content: '';
+	flex: 1 1 auto;
+	min-width: 56px;
+	margin-inline-end: 4px;
+	background-color: currentColor;
+	border-radius: 1px;
+}
+
+.ui-combobox-entry[class*='ui-linewidth-'] > span {
+	flex: 0 0 auto;
+	width: auto;
+	text-align: center;
+	padding: 4px 0;
+	border: none;
+}
+
+.ui-combobox-entry[class*='ui-linewidth-'].selected:not(:hover):not(.checked):not(.notchecked) {
+	background-color: var(--color-background-darker);
+}
+
+.ui-combobox-entry[class*='ui-linewidth-'].selected:not(:hover):not(.checked):not(.notchecked) > span {
+	background-color: transparent;
+}
+
+.ui-combobox-entry.ui-linewidth-18::before { height: 1px; }
+.ui-combobox-entry.ui-linewidth-28::before { height: 2px; }
+.ui-combobox-entry.ui-linewidth-35::before { height: 3px; }
+.ui-combobox-entry.ui-linewidth-53::before { height: 4px; }
+.ui-combobox-entry.ui-linewidth-81::before { height: 6px; }
+.ui-combobox-entry.ui-linewidth-106::before { height: 8px; }
+.ui-combobox-entry.ui-linewidth-159::before { height: 11px; }
+.ui-combobox-entry.ui-linewidth-212::before { height: 14px; }
+
+.ui-combobox-entry.ui-linewidth-lastcustom::before {
+	height: var(--ui-linewidth-preview-height, 0);
+}
+
+.modalpopup[id$='-dropdown']
+.jsdialog.ui-separator.horizontal.ui-linewidth-section-separator {
+	height: 2px;
+	margin: 4px 0;
+	background-color: var(--color-border);
+}
+
 [id^='comment-menu-'][id$='-entries'] .ui-combobox-entry:hover,
-#jsd-context-menu-entries .ui-combobox-entry:hover,
+[id^='jsd-context-menu'][id$='-entries'] .ui-combobox-entry:hover,
 [id^='comment-menu-'][id$='-entries'] .ui-combobox-entry.has-open-submenu,
-#jsd-context-menu-entries .ui-combobox-entry.has-open-submenu {
+[id^='jsd-context-menu'][id$='-entries'] .ui-combobox-entry.has-open-submenu {
 	background-color: var(--color-background-darker) !important;
 	color: var(--color-text-darker) !important;
 }
@@ -1981,14 +2304,17 @@ img.ui-combobox-value-preview {
 	grid-template-columns: 25px 1fr 25px;
 }
 
-/* Arrow/chevron */
+/* Arrow/chevron. Masked rather than drawn, so it takes the text colour: the
+   asset's own #bbb is under 3:1 on white and vanishes on a focused entry. */
 .ui-combobox-entry.ui-has-menu::after {
 	content: '';
 	display: inline-block;
 	width: 9px;
-	background: url('images/lc_menu_chevron.svg') no-repeat;
 	height: 9px;
 	margin-inline-start: -9px;
+	background-color: currentColor;
+	-webkit-mask: url('images/lc_menu_chevron.svg') no-repeat;
+	mask: url('images/lc_menu_chevron.svg') no-repeat;
 }
 
 .ui-combobox-entry.ui-has-menu > span {
@@ -2071,9 +2397,10 @@ img.ui-combobox-value-preview {
 	justify-content: space-between;
 	display: grid;
 	grid-template-columns: 1fr 1fr 1fr;
-	max-height: 40vh;
+	max-height: calc(0.4 * var(--dialog-available-height));
 	gap: var(--spacing-xs);
 	padding: var(--spacing-xs);
+	width: max-content;
 }
 
 .ui-iconview.mobile-wizard {
@@ -2155,7 +2482,10 @@ img.ui-combobox-value-preview {
 }
 
 /* start: layouting has less cost when we have thousands of entries */
-.autofilter.ui-treeview-entry:not(.ui-treeview-tree) {
+/* A row the search box filters out carries the hidden class. Leaving such a row
+   out here lets its display: none win, as both declarations are important and
+   the more specific selector would otherwise take it. */
+.autofilter.ui-treeview-entry:not(.ui-treeview-tree):not(.hidden) {
 	display: table-row !important;
 }
 .autofilter.ui-treeview-entry:not(.ui-treeview-tree) > div,
@@ -2295,6 +2625,23 @@ img.ui-combobox-value-preview {
 	box-sizing: border-box;
 }
 
+/* The menu above the check list has a fixed set of entries; the generic
+ dialog treeview cap (150px) would clip the last one (Clear Filter). */
+.autofilter-popup #menu.ui-treeview {
+	max-height: none;
+}
+
+/* Drop the 1px/3px inline padding .ui-treeview gives itself, so a highlighted row spans the full width of its list. */
+.autofilter-popup .ui-treeview,
+.autofilter-submenu-popup .ui-treeview {
+	padding-inline: 0;
+}
+
+/* A date tree entry is 100% of the list wide, so its borders have to count inside that or the row overflows by 2px. */
+.autofilter-popup #check_tree_box.ui-treeview .ui-treeview-entry {
+	box-sizing: border-box;
+}
+
 /* Once the user drags the resize handle the browser writes an inline height on
    .ui-dialog-content; drop the cap so the listbox fills the enlarged dialog. */
 .autofilter-popup .jsdialog.lokdialog.ui-dialog-content[style*='height'] #check_list_box.ui-treeview,
@@ -2384,6 +2731,11 @@ img.ui-combobox-value-preview {
 }
 #FontworkGalleryDialog #label1 {
 	display: none;
+}
+
+/* In the FormatCellsDialog. */
+#CellProtectionPage #label1 {
+	max-width: 52ch; /* wraps the long note instead of widening the page */
 }
 
 /* Macros dialog */
@@ -2500,6 +2852,32 @@ img.ui-combobox-value-preview {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
+
+/* A menu button that asks for its content at one end shows it there, the way a
+ * list box shows its text. The arrow stays at the far end of the button. */
+.jsdialog.menubutton.content-start {
+	justify-content: flex-start;
+}
+
+.jsdialog.menubutton.content-start .arrow {
+	margin-inline-start: auto;
+}
+
+.jsdialog.menubutton.content-end {
+	justify-content: flex-end;
+}
+
+/* The generic secondary button rule in btns.css hands every button a 5px side
+ * margin and a width that follows its content. In a grid that pushes a menu
+ * button out of its column, so it no longer lines up with the list boxes and
+ * spin fields in the rows around it. A cell takes its width from the column,
+ * so both are undone here. The rule in btns.css names a long list of classes
+ * at once, so these need !important to win against it. A hidden menu button
+ * keeps the zero width that every hidden grid child has. */
+.ui-grid > button.jsdialog.menubutton:not(.hidden) {
+	margin-inline: 0 !important;
+	width: auto !important;
 }
 
 .jsdialog.menubutton img {
@@ -2829,6 +3207,55 @@ button.has-img img {
 	opacity: 0.5;
 }
 
+/* progressdots: one dot per step, and the dot of the current step stretches
+   into a pill in the colour of the document type. The colours are declared on
+   the widget root, because --doc-type is declared on the body and a var() in a
+   custom property is resolved where that property is declared. */
+.ui-progressdots {
+	--progressdots-current: rgb(var(--doc-type, 3, 105, 163));
+	--progressdots-idle: var(--color-text-light);
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-s);
+}
+
+/* The dark theme reads --color-text-light as white, which would make the idle
+   dots brighter than the current one. */
+[data-theme='dark'] .ui-progressdots {
+	--progressdots-idle: var(--color-border-darker);
+}
+
+.ui-progressdots-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: var(--border-radius-pill);
+	background-color: var(--progressdots-idle);
+}
+
+.ui-progressdots-dot.ui-progressdots-current {
+	width: 16px;
+	background-color: var(--progressdots-current);
+	animation: ui-progressdots-grow 0.2s ease-out;
+}
+
+/* The dots are built again for every change, so the current dot grows from
+   the size of the others when it is shown. */
+@keyframes ui-progressdots-grow {
+	from {
+		width: 6px;
+	}
+
+	to {
+		width: 16px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ui-progressdots-dot.ui-progressdots-current {
+		animation: none;
+	}
+}
+
 /* busy popup */
 
 #busypopup.jsdialog-container {
@@ -2996,6 +3423,7 @@ button.has-img img {
 	border: none !important;
 	margin: 0 !important;
 	justify-content: center;
+	cursor: pointer;
 }
 
 .snackbar.jsdialog-container [id$='button'].ui-pushbutton.jsdialog {
@@ -3018,14 +3446,26 @@ button.has-img img {
 
 #mobile-wizard.popup.snackbar [id$='button'],
 .snackbar.jsdialog-container [id$='button'] {
-	color: #469cff !important;
+	color: var(--color-primary-lighter) !important;
 	font-weight: 600;
 	font-size: var(--header-font-size) !important;
 	display: flex;
 	align-items: center;
 }
-.snackbar.jsdialog-container [id$='button']:hover {
+.snackbar.jsdialog-container [id$='button'].ui-pushbutton.jsdialog:hover {
 	background-color: #ffffff15 !important;
+}
+
+.snackbar.jsdialog-container #snackbar-dismiss-button .ui-pushbutton.has-img {
+	border-radius: 50% !important;
+	min-width: var(--btn-size);
+	min-height: var(--btn-size);
+}
+
+.snackbar.jsdialog-container #snackbar-dismiss-button .ui-pushbutton.has-img img {
+	width: 16px;
+	height: 16px;
+	filter: brightness(0) invert(1);
 }
 
 /* toolbuttons */
@@ -3078,21 +3518,14 @@ button.has-img img {
 }
 
 /* dialog/popup fade animation */
-@media (prefers-reduced-motion: no-preference) {
-	.fadeout {
-		animation: fade 0.7s;
-	}
-	.fadein {
-		animation: fade reverse var(--duration-fast);
-	}
-	.fsdialog-overlay {
-		animation: fade reverse var(--duration-slow);
-	}
+.fadein {
+	animation: fade-in var(--duration-fast) var(--ease-out);
 }
-
-@keyframes fade {
-	from { opacity: 1 }
-	to { opacity: 0 }
+.fsdialog-overlay {
+	animation: fade-in var(--duration-slow) var(--ease-out);
+}
+.fadeout {
+	animation: fade-out var(--duration-fast) var(--ease-in) forwards;
 }
 
 /* images */
@@ -3103,6 +3536,12 @@ button.has-img img {
 
 .ui-drawing-area-container {
 	margin: auto;
+}
+
+.ui-drawing-area:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 2px;
+	border-radius: var(--border-radius);
 }
 
 /* Writer - Insert - Page Number - page preview image */
@@ -3164,6 +3603,10 @@ button.has-img img {
 
 .ui-custom-textarea.focused {
 	border: 1px solid var(--color-primary) !important;
+	/* currentColor is the only ring a brand cannot drop below 3:1: the text
+	   it takes is already held to 4.5:1 against this background. */
+	outline: 2px solid currentColor;
+	outline-offset: -2px;
 }
 
 .ui-custom-textarea,
@@ -3184,7 +3627,6 @@ button.has-img img {
 	grid-column: 1;
 	grid-row: 1;
 	white-space: pre-wrap;
-	white-space: wrap;
 }
 
 .ui-custom-textarea-cursor-layer {
@@ -3204,10 +3646,6 @@ button.has-img img {
 .ui-custom-textarea-cursor-layer span.selection:not(.hidden) {
 	background-color: var(--color-primary-darker);
 	color: var(--color-primary-text);
-}
-
-#sc_input_window.formulabar:focus {
-	outline-offset: -1px;
 }
 
 #sc_input_window.formulabar.expanded {
@@ -3290,7 +3728,7 @@ button.has-img img {
 }
 
 #zoterolist.jsdialog {
-	width: calc(min(800px, 80vw));
+	width: min(800px, calc(0.8 * var(--dialog-available-width)));
 }
 
 .jsdialog[id^='zotero'][id$='-label'] {
@@ -3768,6 +4206,75 @@ kbd,
 	border-radius: 2px;
 }
 
+/* Editor over an engine-side EditEngine (Widget.EditEngine.ts) */
+.ui-editengine {
+	width: 100%;
+	height: 100%;
+	overflow: auto;
+	padding: 6px 8px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	line-height: 1.4;
+	cursor: text;
+	outline: none;
+	/* The notespanel styles make this a flex box, so stack the paragraphs in a column. */
+	flex-direction: column;
+}
+
+.ui-editengine:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: -2px;
+}
+
+/* The fill the canvas draws for a text selection in the slide. */
+.ui-editengine::selection,
+.ui-editengine *::selection {
+	background: rgba(var(--doc-type), 0.25);
+}
+
+.ui-editengine .ui-editengine-paragraph {
+	min-height: 1.4em;
+	/* Each paragraph keeps the height of its text when the text is taller than the editor, and the
+	   editor scrolls. */
+	flex-shrink: 0;
+}
+
+.ui-editengine .ui-editengine-paragraph[data-bullet]::before {
+	content: attr(data-bullet);
+	user-select: none;
+	opacity: 0.7;
+	margin-inline-end: 0.25em;
+	/* Render the bullet in the app font, which has the glyph, not the paragraph's document font. */
+	font-family: var(--cool-font);
+}
+
+/* Another user edits the text, so this view only shows it. The name comes first, marked with the
+   color of that user. */
+.ui-editengine[data-locked-by] {
+	cursor: default;
+}
+
+.ui-editengine[data-locked-by]::before {
+	content: attr(data-locked-by);
+	display: block;
+	margin-bottom: 4px;
+	padding-inline-start: 6px;
+	border-inline-start: 3px solid var(--editengine-locked-color, var(--color-primary));
+	color: var(--color-main-text);
+	font-family: var(--cool-font);
+	font-style: italic;
+	user-select: none;
+}
+
+.ui-editengine .ui-editengine-spell-error {
+	text-decoration-line: underline;
+	text-decoration-style: wavy;
+	text-decoration-color: var(--color-error);
+	text-decoration-skip-ink: none;
+}
+
 /* clipboard warning dialog */
 #modal-dialog-copy_paste_download_progress .ui-dialog-content {
 	width: 450px;
@@ -3874,7 +4381,7 @@ kbd,
 }
 
 #ServerAuditDialog #ServerAuditDialog-mainbox {
-	min-width: calc(min(600px, 80vw));
+	min-width: min(600px, calc(0.8 * var(--dialog-available-width)));
 }
 
 #ServerAuditDialog .ui-treeview {
@@ -3987,7 +4494,7 @@ kbd,
 
 [id^='ColorPage'].jsdialog [id^='iconview_colors'].ui-iconview,
 [id^='colorwindow_iv_colors'].ui-iconview {
-	max-height: 25vh;
+	max-height: calc(0.25 * var(--dialog-available-height));
 }
 
 [id^='ColorPage'].jsdialog :is([id^='iconview_colors'], [id^='iconview_recent_colors']).ui-iconview .ui-iconview-entry :is(img, span),
@@ -4147,8 +4654,9 @@ kbd,
 
 /* Listbox UI grid */
 /* exclude text/bg color-picker: it's not a scolling list */
-.jsdialog.ui-grid[role='listbox']:not(:has(> .ui-iconview)):not(:has(> .ui-color-picker)) {
-	max-height: min(470px, 45vh);
+/* and exclude the context menu and its submenus, whose placement keeps them inside the window: */
+.jsdialog.ui-grid[role='listbox']:not(:has(> .ui-iconview)):not(:has(> .ui-color-picker)):not([id^='jsd-context-menu-entries']) {
+	max-height: min(470px, calc(0.45 * var(--dialog-available-height)));
 }
 
 .jsdialog.ui-grid[role='listbox'] {
@@ -4176,6 +4684,13 @@ kbd,
 	font-size: var(--default-font-size);
 	line-height: var(--default-height);
 	padding-left: inherit;
+}
+
+/* SPIF/STANAG security-label dialog: validation warning on its own line, in red */
+#seclabelwarning.static-label {
+	display: block;
+	margin-top: 6px;
+	color: #cc0000;
 }
 
 #sheets-buttons-toolbox #sheetlist.menubutton:hover {
@@ -4266,7 +4781,11 @@ div [id^='themeview'].ui-iconview-entry, div [id^='themeview1col'].ui-iconview-e
 
 #ChartDataDialog #datagrid.ui-treeview {
 	overflow-x: auto;
-	grid-auto-columns: minmax(80px, auto);
+	/* An intrinsic minimum lets a column grow to fit its title (bold
+	   "Categories" at 125% zoom is wider than 80px); a fixed minimum would
+	   let the title overflow under the next header. The 80px floor moves to
+	   the header cell below. */
+	grid-auto-columns: minmax(min-content, auto);
 }
 
 /* Align header text (e.g. "Categories") to bottom, matching columns with series names */
@@ -4274,6 +4793,8 @@ div [id^='themeview'].ui-iconview-entry, div [id^='themeview1col'].ui-iconview-e
 	display: flex;
 	flex-direction: column;
 	background-color: var(--color-background-dark);
+	min-width: 80px;
+	box-sizing: border-box;
 }
 
 #ChartDataDialog .ui-treeview-header .ui-treeview-header-text,
@@ -4295,6 +4816,10 @@ div [id^='themeview'].ui-iconview-entry, div [id^='themeview1col'].ui-iconview-e
 	font-size: var(--default-font-size);
 	background: var(--color-background-lighter);
 	box-sizing: border-box;
+	min-width: 0;
+	/* Fixed height so the header row does not jump while editing */
+	height: 1.6em;
+	flex: 0 0 auto;
 }
 /* Inline cell editing input */
 #ChartDataDialog .ui-treeview-inline-edit {
@@ -4483,4 +5008,109 @@ img#collab-choice-avatar {
 .ui-treeview.ui-treeview-tree .ui-treeview-entry:focus-visible {
 	outline: 2px solid var(--color-primary);
 	outline-offset: -2px;
+}
+
+/* The shell draws the frame, title and close button, so the in-page titlebar
+   and position margins fall away. */
+.jsdialog-popout {
+	margin: 0 !important;
+}
+
+.jsdialog-window.jsdialog-popout {
+	inset: 0;
+}
+
+/* The window is opened at the size of the dialog's content and is the larger of
+   the two from then on, so a window the user drags out is covered by the dialog
+   rather than by a blank field. */
+.jsdialog-window.jsdialog-popout > .jsdialog-container.lokdialog_container {
+	inset: 0;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+}
+
+/* The measuring class is on for as long as it takes to read the size the dialog
+   would like, and turns off the rules below, so the answer is the size of the
+   dialog's own content rather than of the longest list in it. */
+.jsdialog-window.jsdialog-popout.jsdialog-popout-measuring > .jsdialog-container.lokdialog_container {
+	width: max-content;
+	max-width: var(--dialog-available-width);
+	height: max-content;
+}
+
+.jsdialog-window.jsdialog-popout:not(.jsdialog-popout-measuring) > .jsdialog-container.lokdialog_container {
+	width: 100%;
+	height: 100%;
+}
+
+/* The height comes from the window, not from the fraction of the browser window
+   an in-page dialog is held to. */
+.jsdialog-popout:not(.jsdialog-popout-measuring) .ui-dialog-content {
+	max-height: none;
+}
+
+/* Core marks the widgets a dialog hands its spare height to. Each of them takes
+   that height, and so does every container between one and the dialog itself. */
+.jsdialog-popout:not(.jsdialog-popout-measuring) .jsdialog-vexpand,
+.jsdialog-popout:not(.jsdialog-popout-measuring)
+.jsdialog:has(.jsdialog-vexpand) {
+	flex: 1 1 auto;
+	align-self: stretch;
+	min-height: 0;
+}
+
+/* A plain container hands its height on as a column of children. A grid does it
+   through its 1fr row and a tab panel through its own height below. */
+.jsdialog-popout:not(.jsdialog-popout-measuring)
+.jsdialog:has(.jsdialog-vexpand):not(.ui-grid):not(.ui-content):not(
+	.ui-tabs-content
+):not(.ui-tabs-root) {
+	display: flex;
+	flex-direction: column;
+}
+
+/* The tab rail is positioned against the whole tab control, so the panel
+   beside it follows the control's height instead of being a flex child. */
+.jsdialog-popout:not(.jsdialog-popout-measuring)
+.ui-tabs-root > .ui-tabs-content {
+	height: 100%;
+	min-height: 0;
+}
+
+/* The grid is as tall as the window it fills, so the marked row takes the height
+   the other rows do not need. */
+.jsdialog-popout:not(.jsdialog-popout-measuring)
+.ui-grid:has(> .jsdialog-vexpand) {
+	grid-template-rows: var(--jsdialog-filled-rows) !important;
+}
+
+/* A single-child grid has an empty cell ahead of the widget, which leaves the
+   widget outside the rows the grid describes. A row hands the height straight on. */
+.jsdialog-popout:not(.jsdialog-popout-measuring)
+.single-child-grid:has(> .jsdialog-vexpand) {
+	display: flex;
+}
+
+/* The widget takes what the dialog's own window gives it, not the fraction of
+   the browser window that keeps an in-page dialog smaller than the document. */
+.jsdialog-popout:not(.jsdialog-popout-measuring) .jsdialog-vexpand {
+	max-height: none;
+}
+
+/* Entries keep their own height and start at the top, so a gallery given more
+   room than its entries need shows a plain gap under the last row. */
+.jsdialog-popout:not(.jsdialog-popout-measuring)
+.ui-iconview.jsdialog-vexpand {
+	align-content: start;
+	overflow-y: auto;
+}
+
+.jsdialog-popout .ui-dialog-titlebar {
+	display: none;
+}
+
+.jsdialog-popout-body {
+	margin: 0;
+	overflow: hidden;
 }

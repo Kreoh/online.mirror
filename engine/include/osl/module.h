@@ -20,20 +20,17 @@
 #ifndef INCLUDED_OSL_MODULE_H
 #define INCLUDED_OSL_MODULE_H
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <config_options.h>
 
-#include "rtl/ustring.h"
-#include "sal/saldllapi.h"
+#include <rtl/ustring.h>
+#include <sal/saldllapi.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifdef SAL_DLLPREFIX
 #define SAL_MODULENAME(name) SAL_DLLPREFIX name SAL_DLLEXTENSION
-#else
-#define SAL_MODULENAME(name) name SAL_DLLEXTENSION
-#endif
 
 #if defined(_WIN32)
 #define SAL_MODULENAME_WITH_VERSION(name, version) name version SAL_DLLEXTENSION
@@ -210,6 +207,20 @@ SAL_DLLPUBLIC bool osl_getModuleURLFromAddress(
 */
 SAL_DLLPUBLIC bool osl_getModuleURLFromFunctionAddress(
         oslGenericFunction pf, rtl_uString **pustrFunctionURL );
+
+#if ENABLE_UNITEDLIBS
+
+/**
+    Tell the dynamic loading code that we are running inside --enable-unitedlibs mode
+    where dynamic loading needs to be done a little differently.
+*/
+SAL_DLLPUBLIC void osl_setUnitedLibsActive();
+/*
+  return true if we compiled with --enable-unitedlibs and that mode is active
+ */
+SAL_DLLPUBLIC bool osl_isUnitedLibActive();
+
+#endif
 
 #ifdef __cplusplus
 }

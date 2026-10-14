@@ -19,24 +19,25 @@
 #include "vbaprogressbar.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 // uno servicename com.sun.star.awt.UnoControlProgressBarMode
 constexpr OUString SVALUE( u"ProgressValue"_ustr );
 
-ScVbaProgressBar::ScVbaProgressBar( const uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+ScVbaProgressBar::ScVbaProgressBar( const uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
     : ProgressBarImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaProgressBar::getValue()
 {
     return m_xProps->getPropertyValue( SVALUE );
 }
 
-void SAL_CALL
+void
 ScVbaProgressBar::setValue( const cpo::uno::Any& _value )
 {
     m_xProps->setPropertyValue( SVALUE,  _value );

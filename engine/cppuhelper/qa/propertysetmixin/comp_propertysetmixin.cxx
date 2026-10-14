@@ -37,12 +37,12 @@
 #include <cppuhelper/weak.hxx>
 #include <cpo/uno/Any.hxx>
 #include <cpo/uno/Exception.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Sequence.hxx>
 #include <cpo/uno/Type.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <osl/mutex.hxx>
 #include <rtl/ustring.h>
 #include <rtl/ustring.hxx>
@@ -60,31 +60,31 @@ class Empty1:
 {
 public:
     explicit Empty1(
-        css::uno::Reference< css::uno::XComponentContext > const & context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context):
         cppu::PropertySetMixin< css::lang::XComponent >(
             context, static_cast< Implements >(0),
             cpo::uno::Sequence< OUString >())
     {}
 
     virtual cpo::uno::Any queryInterface(cpo::uno::Type const & type)
-        throw (css::uno::RuntimeException);
+        throw (cpo::uno::RuntimeException);
 
     virtual void acquire() throw () { OWeakObject::acquire(); }
 
     virtual void release() throw () { OWeakObject::release(); }
 
-    virtual void dispose() throw (css::uno::RuntimeException) {
+    virtual void dispose() throw (cpo::uno::RuntimeException) {
         cppu::PropertySetMixin< css::lang::XComponent >::dispose();
     }
 
     virtual void addEventListener(
-        css::uno::Reference< css::lang::XEventListener > const &)
-        throw (css::uno::RuntimeException)
+        cpo::uno::Reference< css::lang::XEventListener > const &)
+        throw (cpo::uno::RuntimeException)
     {}
 
     virtual void removeEventListener(
-        css::uno::Reference< css::lang::XEventListener > const &)
-        throw (css::uno::RuntimeException)
+        cpo::uno::Reference< css::lang::XEventListener > const &)
+        throw (cpo::uno::RuntimeException)
     {}
 
 private:
@@ -95,7 +95,7 @@ private:
 };
 
 cpo::uno::Any Empty1::queryInterface(cpo::uno::Type const & type)
-    throw (css::uno::RuntimeException)
+    throw (cpo::uno::RuntimeException)
 {
     cpo::uno::Any a(OWeakObject::queryInterface(type));
     if (a.hasValue()) {
@@ -115,7 +115,7 @@ class Empty2:
 {
 public:
     explicit Empty2(
-        css::uno::Reference< css::uno::XComponentContext > const & context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context):
         cppu::PropertySetMixin< css::lang::XComponent >(
             context,
             static_cast< Implements >(
@@ -125,24 +125,24 @@ public:
     {}
 
     virtual cpo::uno::Any queryInterface(cpo::uno::Type const & type)
-        throw (css::uno::RuntimeException);
+        throw (cpo::uno::RuntimeException);
 
     virtual void acquire() throw () { OWeakObject::acquire(); }
 
     virtual void release() throw () { OWeakObject::release(); }
 
-    virtual void dispose() throw (css::uno::RuntimeException) {
+    virtual void dispose() throw (cpo::uno::RuntimeException) {
         cppu::PropertySetMixin< css::lang::XComponent >::dispose();
     }
 
     virtual void addEventListener(
-        css::uno::Reference< css::lang::XEventListener > const &)
-        throw (css::uno::RuntimeException)
+        cpo::uno::Reference< css::lang::XEventListener > const &)
+        throw (cpo::uno::RuntimeException)
     {}
 
     virtual void removeEventListener(
-        css::uno::Reference< css::lang::XEventListener > const &)
-        throw (css::uno::RuntimeException)
+        cpo::uno::Reference< css::lang::XEventListener > const &)
+        throw (cpo::uno::RuntimeException)
     {}
 
 private:
@@ -153,7 +153,7 @@ private:
 };
 
 cpo::uno::Any Empty2::queryInterface(cpo::uno::Type const & type)
-    throw (css::uno::RuntimeException)
+    throw (cpo::uno::RuntimeException)
 {
     cpo::uno::Any a(OWeakObject::queryInterface(type));
     if (a.hasValue()) {
@@ -179,7 +179,7 @@ class Full:
 {
 public:
     explicit Full(
-        css::uno::Reference< css::uno::XComponentContext > const & context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context):
         cppu::PropertySetMixin<
         test::cppuhelper::propertysetmixin::XTest3 >(
             context,
@@ -195,23 +195,23 @@ public:
     {}
 
     virtual cpo::uno::Any queryInterface(cpo::uno::Type const & type)
-        throw (css::uno::RuntimeException);
+        throw (cpo::uno::RuntimeException);
 
     virtual void acquire() throw () { OWeakObject::acquire(); }
 
     virtual void release() throw () { OWeakObject::release(); }
 
-    virtual sal_Int32 getFirst() throw (css::uno::RuntimeException);
+    virtual sal_Int32 getFirst() throw (cpo::uno::RuntimeException);
 
     virtual void setFirst(sal_Int32 value)
-        throw (css::uno::RuntimeException);
+        throw (cpo::uno::RuntimeException);
 
     virtual
     css::beans::Ambiguous<
         css::beans::Defaulted< css::beans::Optional< sal_Int32 > > >
     getSecond()
         throw (
-            css::beans::UnknownPropertyException, css::uno::RuntimeException);
+            css::beans::UnknownPropertyException, cpo::uno::RuntimeException);
 
     virtual void setSecond(
         css::beans::Ambiguous<
@@ -219,23 +219,23 @@ public:
         value)
         throw (
             css::beans::PropertyVetoException,
-            css::beans::UnknownPropertyException, css::uno::RuntimeException);
+            css::beans::UnknownPropertyException, cpo::uno::RuntimeException);
 
     virtual sal_Int32 getThird()
         throw (
-            css::beans::UnknownPropertyException, css::uno::RuntimeException);
+            css::beans::UnknownPropertyException, cpo::uno::RuntimeException);
 
     virtual void setThird(sal_Int32 value)
         throw (
-            css::beans::UnknownPropertyException, css::uno::RuntimeException);
+            css::beans::UnknownPropertyException, cpo::uno::RuntimeException);
 
     virtual sal_Int32 getFourth()
         throw (
-            css::beans::UnknownPropertyException, css::uno::RuntimeException);
+            css::beans::UnknownPropertyException, cpo::uno::RuntimeException);
 
     virtual void setFourth(sal_Int32 value)
         throw (
-            css::beans::UnknownPropertyException, css::uno::RuntimeException);
+            css::beans::UnknownPropertyException, cpo::uno::RuntimeException);
 
 private:
     Full(Full &); // not defined
@@ -250,7 +250,7 @@ private:
 };
 
 cpo::uno::Any Full::queryInterface(cpo::uno::Type const & type)
-    throw (css::uno::RuntimeException)
+    throw (cpo::uno::RuntimeException)
 {
     cpo::uno::Any a(OWeakObject::queryInterface(type));
     if (a.hasValue()) {
@@ -266,12 +266,12 @@ cpo::uno::Any Full::queryInterface(cpo::uno::Type const & type)
                type));
 }
 
-sal_Int32 Full::getFirst() throw (css::uno::RuntimeException) {
+sal_Int32 Full::getFirst() throw (cpo::uno::RuntimeException) {
     osl::MutexGuard g(m_mutex);
     return m_a1;
 }
 
-void Full::setFirst(sal_Int32 value) throw (css::uno::RuntimeException) {
+void Full::setFirst(sal_Int32 value) throw (cpo::uno::RuntimeException) {
     prepareSet(
         OUString("First"), cpo::uno::Any(),
         cpo::uno::Any(), 0);
@@ -282,7 +282,7 @@ void Full::setFirst(sal_Int32 value) throw (css::uno::RuntimeException) {
 css::beans::Ambiguous<
     css::beans::Defaulted< css::beans::Optional< sal_Int32 > > >
 Full::getSecond()
-    throw (css::beans::UnknownPropertyException, css::uno::RuntimeException)
+    throw (css::beans::UnknownPropertyException, cpo::uno::RuntimeException)
 {
     osl::MutexGuard g(m_mutex);
     return m_a2;
@@ -294,7 +294,7 @@ void Full::setSecond(
     value)
     throw (
         css::beans::PropertyVetoException, css::beans::UnknownPropertyException,
-        css::uno::RuntimeException)
+        cpo::uno::RuntimeException)
 {
     cpo::uno::Any v;
     if (value.Value.Value.IsPresent) {
@@ -312,7 +312,7 @@ void Full::setSecond(
 }
 
 sal_Int32 Full::getThird()
-    throw (css::beans::UnknownPropertyException, css::uno::RuntimeException)
+    throw (css::beans::UnknownPropertyException, cpo::uno::RuntimeException)
 {
     throw css::beans::UnknownPropertyException(
         OUString("Third"),
@@ -320,7 +320,7 @@ sal_Int32 Full::getThird()
 }
 
 void Full::setThird(sal_Int32)
-    throw (css::beans::UnknownPropertyException, css::uno::RuntimeException)
+    throw (css::beans::UnknownPropertyException, cpo::uno::RuntimeException)
 {
     throw css::beans::UnknownPropertyException(
         OUString("Third"),
@@ -328,7 +328,7 @@ void Full::setThird(sal_Int32)
 }
 
 sal_Int32 Full::getFourth()
-    throw (css::beans::UnknownPropertyException, css::uno::RuntimeException)
+    throw (css::beans::UnknownPropertyException, cpo::uno::RuntimeException)
 {
     throw css::beans::UnknownPropertyException(
         OUString("Fourth"),
@@ -336,7 +336,7 @@ sal_Int32 Full::getFourth()
 }
 
 void Full::setFourth(sal_Int32)
-    throw (css::beans::UnknownPropertyException, css::uno::RuntimeException)
+    throw (css::beans::UnknownPropertyException, cpo::uno::RuntimeException)
 {
     throw css::beans::UnknownPropertyException(
         OUString("Fourth"),
@@ -349,19 +349,19 @@ class Supplier:
 {
 public:
     explicit Supplier(
-        css::uno::Reference< css::uno::XComponentContext > const & context):
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context):
         m_context(context) {}
 
-    virtual css::uno::Reference< css::lang::XComponent > getEmpty1()
-        throw (css::uno::RuntimeException)
+    virtual cpo::uno::Reference< css::lang::XComponent > getEmpty1()
+        throw (cpo::uno::RuntimeException)
     { return new Empty1(m_context); }
 
-    virtual css::uno::Reference< css::lang::XComponent > getEmpty2()
-        throw (css::uno::RuntimeException)
+    virtual cpo::uno::Reference< css::lang::XComponent > getEmpty2()
+        throw (cpo::uno::RuntimeException)
     { return new Empty2(m_context); }
 
-    virtual css::uno::Reference< test::cppuhelper::propertysetmixin::XTest3 >
-    getFull() throw (css::uno::RuntimeException)
+    virtual cpo::uno::Reference< test::cppuhelper::propertysetmixin::XTest3 >
+    getFull() throw (cpo::uno::RuntimeException)
     { return new Full(m_context); }
 
 private:
@@ -370,11 +370,11 @@ private:
 
     virtual ~Supplier() {}
 
-    css::uno::Reference< css::uno::XComponentContext > m_context;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_context;
 };
 
-css::uno::Reference< css::uno::XInterface > create(
-    css::uno::Reference< css::uno::XComponentContext > const & context)
+cpo::uno::Reference< cpo::uno::XInterface > create(
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & context)
 {
     return static_cast< cppu::OWeakObject * >(new Supplier(context));
 }

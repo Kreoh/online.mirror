@@ -21,6 +21,7 @@
 #include <emfreader.hxx>
 
 #include <cstdlib>
+#include <iomanip>
 #include <memory>
 #include <optional>
 #include <comphelper/configuration.hxx>
@@ -41,6 +42,7 @@
 #include <vcl/BitmapWriteAccess.hxx>
 #include <vcl/BitmapTools.hxx>
 #include <osl/thread.h>
+#include <iomanip>
 
 namespace
 {
@@ -334,7 +336,8 @@ namespace emfio
         aBR.AdjustY( -1 );
         if (aTL.X() > aBR.X() || aTL.Y() > aBR.Y())
         {
-            SAL_WARN("emfio", "broken rectangle");
+            // A file may give the two corners in either order, so put them the way round the
+            // rest of the code expects.
             return tools::Rectangle::Normalize(aTL, aBR);
         }
         return tools::Rectangle( aTL, aBR );
@@ -345,6 +348,17 @@ namespace emfio
         short nW=0, nH=0;
         mpInputStream->ReadInt16( nH ).ReadInt16( nW );
         return Size( nW, nH );
+    }
+
+    // The number of points that fit in a record of nRecordSize words. A record starts with
+    // three words of header followed by nParameterWords of other parameters, and each point
+    // takes two words.
+    static sal_uInt32 MaxPointsInRecord(sal_uInt32 nRecordSize, sal_uInt32 nParameterWords)
+    {
+        const sal_uInt32 nUsedWords = 3 + nParameterWords;
+        if (nRecordSize <= nUsedWords)
+            return 0;
+        return (nRecordSize - nUsedWords) / 2;
     }
 
     void WmfReader::ReadRecordParams( sal_uInt32 nRecordSize, sal_uInt16 nFunc )
@@ -574,7 +588,7 @@ namespace emfio
                 sal_uInt16 nPoints(0);
                 mpInputStream->ReadUInt16(nPoints);
 
-                if (nPoints > mpInputStream->remainingSize() / (2 * sizeof(sal_uInt16)))
+                if (nPoints > MaxPointsInRecord(nRecordSize, 1))
                 {
                     bRecordOk = false;
                 }
@@ -599,7 +613,9 @@ namespace emfio
                 mpInputStream->ReadUInt16( nPolyCount );
                 if (nPolyCount && mpInputStream->good())
                 {
-                    if (nPolyCount > mpInputStream->remainingSize() / sizeof(sal_uInt16))
+                    // One word per polygon holds its point count, and those words sit between
+                    // the polygon count and the points themselves.
+                    if (nRecordSize < 4 || nPolyCount > nRecordSize - 4)
                         break;
 
                     // Number of points of each polygon. Determine total number of points
@@ -621,6 +637,12 @@ namespace emfio
                     }
 
                     SAL_WARN_IF(!bRecordOk, "emfio", "polypolygon record has more polygons than we can handle");
+
+                    if (nPoints > MaxPointsInRecord(nRecordSize, 1 + nPolyCount))
+                    {
+                        SAL_WARN("emfio", "polypolygon record has more points than it can hold");
+                        bRecordOk = false;
+                    }
 
                     bRecordOk &= mpInputStream->good();
 
@@ -664,7 +686,7 @@ namespace emfio
                 sal_uInt16 nPoints(0);
                 mpInputStream->ReadUInt16(nPoints);
 
-                if (nPoints > mpInputStream->remainingSize() / (2 * sizeof(sal_uInt16)))
+                if (nPoints > MaxPointsInRecord(nRecordSize, 1))
                 {
                     bRecordOk = false;
                 }

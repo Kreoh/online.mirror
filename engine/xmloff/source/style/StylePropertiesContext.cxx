@@ -9,16 +9,16 @@
 
 #include "StylePropertiesContext.hxx"
 
-#include <xmloff/xmlnamespace.hxx>
 #include <xmloff/xmlimp.hxx>
+#include <xmloff/xmlimppr.hxx>
+#include <xmloff/xmlprmap.hxx>
+#include <xmloff/txtprmap.hxx>
 
 #include <xmloff/XMLComplexColorContext.hxx>
 
-using namespace xmloff::token;
-
 StylePropertiesContext::StylePropertiesContext(
     SvXMLImport& rImport, sal_Int32 nElement,
-    const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList, sal_uInt32 nFamily,
+    const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList, sal_uInt32 nFamily,
     std::vector<XMLPropertyState>& rProps, SvXMLImportPropertyMapper* pMap)
     : SvXMLPropertySetContext(rImport, nElement, xAttrList, nFamily, rProps, pMap)
 {
@@ -26,12 +26,13 @@ StylePropertiesContext::StylePropertiesContext(
 
 StylePropertiesContext::~StylePropertiesContext() {}
 
-css::uno::Reference<css::xml::sax::XFastContextHandler>
+cpo::uno::Reference<css::xml::sax::XFastContextHandler>
 StylePropertiesContext::createFastChildContext(
-    sal_Int32 nElement, const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList,
+    sal_Int32 nElement, const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList,
     std::vector<XMLPropertyState>& rProperties, const XMLPropertyState& rProperty)
 {
-    if (nElement == XML_ELEMENT(LO_EXT, XML_CHAR_COMPLEX_COLOR))
+    // Character, fill and stroke complex colors all share this context id.
+    if (mpMapper->getPropertySetMapper()->GetEntryContextId(rProperty.mnIndex) == CTF_COMPLEX_COLOR)
     {
         return new XMLPropertyComplexColorContext(GetImport(), nElement, xAttrList, rProperty,
                                                   rProperties);

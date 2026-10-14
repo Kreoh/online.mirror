@@ -46,10 +46,11 @@
 #include <vector>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace {
 
-typedef ::std::vector< css::uno::Reference< css::frame::XModel > > TModelList;
+typedef ::std::vector< cpo::uno::Reference< css::frame::XModel > > TModelList;
 
 
 //TODO: remove support of obsolete document::XEventBroadcaster/Listener
@@ -62,76 +63,76 @@ class SfxGlobalEvents_Impl : public ::cppu::WeakImplHelper< css::lang::XServiceI
 {
     std::mutex m_aLock;
     rtl::Reference< GlobalEventConfig > m_xEvents;
-    css::uno::Reference< css::document::XEventListener > m_xJobExecutorListener;
+    cpo::uno::Reference< css::document::XEventListener > m_xJobExecutorListener;
     ::comphelper::OInterfaceContainerHelper4<document::XEventListener> m_aLegacyListeners;
     ::comphelper::OInterfaceContainerHelper4<document::XDocumentEventListener> m_aDocumentListeners;
-    std::multiset<css::uno::Reference<css::lang::XEventListener>> m_disposeListeners;
+    std::multiset<cpo::uno::Reference<css::lang::XEventListener>> m_disposeListeners;
     TModelList m_lModels;
     bool m_disposed;
 
 public:
-    explicit SfxGlobalEvents_Impl(const css::uno::Reference < css::uno::XComponentContext >& rxContext);
+    explicit SfxGlobalEvents_Impl(const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext);
 
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.comp.sfx2.GlobalEventBroadcaster"_ustr;
     }
 
-    virtual bool SAL_CALL supportsService(OUString const & ServiceName) override
+    virtual bool supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         cpo::uno::Sequence< OUString > aSeq { u"com.sun.star.frame.GlobalEventBroadcaster"_ustr };
         return aSeq;
     }
 
     // css.document.XEventBroadcaster
-    virtual css::uno::Reference< css::container::XNameReplace > SAL_CALL getEvents() override;
+    virtual cpo::uno::Reference< css::container::XNameReplace > getEvents() override;
 
-    virtual void SAL_CALL addEventListener(const css::uno::Reference< css::document::XEventListener >& xListener) override;
+    virtual void addEventListener(const cpo::uno::Reference< css::document::XEventListener >& xListener) override;
 
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::document::XEventListener >& xListener) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::document::XEventListener >& xListener) override;
 
     // css.document.XDocumentEventBroadcaster
-    virtual void SAL_CALL addDocumentEventListener( const css::uno::Reference< css::document::XDocumentEventListener >& Listener ) override;
-    virtual void SAL_CALL removeDocumentEventListener( const css::uno::Reference< css::document::XDocumentEventListener >& Listener ) override;
-    virtual void SAL_CALL notifyDocumentEvent( const OUString& EventName, const css::uno::Reference< css::frame::XController2 >& ViewController, const cpo::uno::Any& Supplement ) override;
+    virtual void addDocumentEventListener( const cpo::uno::Reference< css::document::XDocumentEventListener >& Listener ) override;
+    virtual void removeDocumentEventListener( const cpo::uno::Reference< css::document::XDocumentEventListener >& Listener ) override;
+    virtual void notifyDocumentEvent( const OUString& EventName, const cpo::uno::Reference< css::frame::XController2 >& ViewController, const cpo::uno::Any& Supplement ) override;
 
     // css.document.XEventListener
-    virtual void SAL_CALL notifyEvent(const css::document::EventObject& aEvent) override;
+    virtual void notifyEvent(const css::document::EventObject& aEvent) override;
 
     // css.document.XDocumentEventListener
-    virtual void SAL_CALL documentEventOccured( const css::document::DocumentEvent& Event ) override;
+    virtual void documentEventOccured( const css::document::DocumentEvent& Event ) override;
 
     // css.container.XSet
-    virtual bool SAL_CALL has(const cpo::uno::Any& aElement) override;
+    virtual bool has(const cpo::uno::Any& aElement) override;
 
-    virtual void SAL_CALL insert(const cpo::uno::Any& aElement) override;
+    virtual void insert(const cpo::uno::Any& aElement) override;
 
-    virtual void SAL_CALL remove(const cpo::uno::Any& aElement) override;
+    virtual void remove(const cpo::uno::Any& aElement) override;
 
     // css.container.XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // css.container.XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
+    virtual cpo::uno::Type getElementType() override;
 
-    virtual bool SAL_CALL hasElements() override;
+    virtual bool hasElements() override;
 
     // css.lang.XEventListener
-    virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent) override;
+    virtual void disposing(const css::lang::EventObject& aEvent) override;
 
     // css.lang.XComponent
-    void SAL_CALL dispose() override;
+    void dispose() override;
 
-    void SAL_CALL addEventListener(css::uno::Reference<css::lang::XEventListener> const & xListener)
+    void addEventListener(cpo::uno::Reference<css::lang::XEventListener> const & xListener)
         override;
 
-    void SAL_CALL removeEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & aListener) override;
+    void removeEventListener(
+        cpo::uno::Reference<css::lang::XEventListener> const & aListener) override;
 
 private:
 
@@ -141,10 +142,10 @@ private:
     void implts_notifyListener(const css::document::DocumentEvent& aEvent);
 
     // not threadsafe
-    TModelList::iterator impl_searchDoc(const css::uno::Reference< css::frame::XModel >& xModel);
+    TModelList::iterator impl_searchDoc(const cpo::uno::Reference< css::frame::XModel >& xModel);
 };
 
-SfxGlobalEvents_Impl::SfxGlobalEvents_Impl( const uno::Reference < uno::XComponentContext >& rxContext)
+SfxGlobalEvents_Impl::SfxGlobalEvents_Impl( const uno::Reference < cpo::uno::XComponentContext >& rxContext)
     : m_xJobExecutorListener( task::theJobExecutor::get( rxContext ), uno::UNO_QUERY_THROW )
     , m_disposed(false)
 {
@@ -154,7 +155,7 @@ SfxGlobalEvents_Impl::SfxGlobalEvents_Impl( const uno::Reference < uno::XCompone
     osl_atomic_decrement(&m_refCount);
 }
 
-uno::Reference< container::XNameReplace > SAL_CALL SfxGlobalEvents_Impl::getEvents()
+uno::Reference< container::XNameReplace > SfxGlobalEvents_Impl::getEvents()
 {
     // SAFE ->
     std::scoped_lock aLock(m_aLock);
@@ -166,7 +167,7 @@ uno::Reference< container::XNameReplace > SAL_CALL SfxGlobalEvents_Impl::getEven
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::addEventListener(const uno::Reference< document::XEventListener >& xListener)
+void SfxGlobalEvents_Impl::addEventListener(const uno::Reference< document::XEventListener >& xListener)
 {
     std::unique_lock g(m_aLock);
     if (m_disposed)
@@ -175,7 +176,7 @@ void SAL_CALL SfxGlobalEvents_Impl::addEventListener(const uno::Reference< docum
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::removeEventListener(const uno::Reference< document::XEventListener >& xListener)
+void SfxGlobalEvents_Impl::removeEventListener(const uno::Reference< document::XEventListener >& xListener)
 {
     std::unique_lock g(m_aLock);
     // The below removeInterface will silently do nothing when m_disposed
@@ -183,7 +184,7 @@ void SAL_CALL SfxGlobalEvents_Impl::removeEventListener(const uno::Reference< do
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::addDocumentEventListener( const uno::Reference< document::XDocumentEventListener >& Listener )
+void SfxGlobalEvents_Impl::addDocumentEventListener( const uno::Reference< document::XDocumentEventListener >& Listener )
 {
     std::unique_lock g(m_aLock);
     if (m_disposed)
@@ -192,7 +193,7 @@ void SAL_CALL SfxGlobalEvents_Impl::addDocumentEventListener( const uno::Referen
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::removeDocumentEventListener( const uno::Reference< document::XDocumentEventListener >& Listener )
+void SfxGlobalEvents_Impl::removeDocumentEventListener( const uno::Reference< document::XDocumentEventListener >& Listener )
 {
     std::unique_lock g(m_aLock);
     // The below removeInterface will silently do nothing when m_disposed:
@@ -200,7 +201,7 @@ void SAL_CALL SfxGlobalEvents_Impl::removeDocumentEventListener( const uno::Refe
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::notifyDocumentEvent( const OUString& /*_EventName*/,
+void SfxGlobalEvents_Impl::notifyDocumentEvent( const OUString& /*_EventName*/,
         const uno::Reference< frame::XController2 >& /*_ViewController*/, const cpo::uno::Any& /*_Supplement*/ )
 {
     // we're a multiplexer only, no chance to generate artificial events here
@@ -208,7 +209,7 @@ void SAL_CALL SfxGlobalEvents_Impl::notifyDocumentEvent( const OUString& /*_Even
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::notifyEvent(const document::EventObject& aEvent)
+void SfxGlobalEvents_Impl::notifyEvent(const document::EventObject& aEvent)
 {
     // The below implts_* will silently do nothing when m_disposed:
     document::DocumentEvent aDocEvent(aEvent.Source, aEvent.EventName, nullptr, cpo::uno::Any());
@@ -218,7 +219,7 @@ void SAL_CALL SfxGlobalEvents_Impl::notifyEvent(const document::EventObject& aEv
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::documentEventOccured( const document::DocumentEvent& Event )
+void SfxGlobalEvents_Impl::documentEventOccured( const document::DocumentEvent& Event )
 {
     // The below implts_* will silently do nothing when m_disposed:
     implts_notifyJobExecution(document::EventObject(Event.Source, Event.EventName));
@@ -227,7 +228,7 @@ void SAL_CALL SfxGlobalEvents_Impl::documentEventOccured( const document::Docume
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::disposing(const lang::EventObject& aEvent)
+void SfxGlobalEvents_Impl::disposing(const lang::EventObject& aEvent)
 {
     uno::Reference< frame::XModel > xDoc(aEvent.Source, uno::UNO_QUERY);
 
@@ -240,7 +241,7 @@ void SAL_CALL SfxGlobalEvents_Impl::disposing(const lang::EventObject& aEvent)
 }
 
 void SfxGlobalEvents_Impl::dispose() {
-    std::multiset<css::uno::Reference<css::lang::XEventListener>> listeners;
+    std::multiset<cpo::uno::Reference<css::lang::XEventListener>> listeners;
     {
         std::unique_lock g(m_aLock);
         if (m_disposed)
@@ -267,10 +268,10 @@ void SfxGlobalEvents_Impl::dispose() {
 }
 
 void SfxGlobalEvents_Impl::addEventListener(
-    css::uno::Reference<css::lang::XEventListener> const & xListener)
+    cpo::uno::Reference<css::lang::XEventListener> const & xListener)
 {
     if (!xListener.is()) {
-        throw css::uno::RuntimeException(u"null listener"_ustr);
+        throw cpo::uno::RuntimeException(u"null listener"_ustr);
     }
     {
         std::scoped_lock g(m_aLock);
@@ -285,7 +286,7 @@ void SfxGlobalEvents_Impl::addEventListener(
 }
 
 void SfxGlobalEvents_Impl::removeEventListener(
-    css::uno::Reference<css::lang::XEventListener> const & aListener)
+    cpo::uno::Reference<css::lang::XEventListener> const & aListener)
 {
     std::scoped_lock g(m_aLock);
     auto const i = m_disposeListeners.find(aListener);
@@ -294,7 +295,7 @@ void SfxGlobalEvents_Impl::removeEventListener(
     }
 }
 
-bool SAL_CALL SfxGlobalEvents_Impl::has(const cpo::uno::Any& aElement)
+bool SfxGlobalEvents_Impl::has(const cpo::uno::Any& aElement)
 {
     uno::Reference< frame::XModel > xDoc;
     aElement >>= xDoc;
@@ -315,7 +316,7 @@ bool SAL_CALL SfxGlobalEvents_Impl::has(const cpo::uno::Any& aElement)
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::insert( const cpo::uno::Any& aElement )
+void SfxGlobalEvents_Impl::insert( const cpo::uno::Any& aElement )
 {
     uno::Reference< frame::XModel > xDoc;
     aElement >>= xDoc;
@@ -353,7 +354,7 @@ void SAL_CALL SfxGlobalEvents_Impl::insert( const cpo::uno::Any& aElement )
 }
 
 
-void SAL_CALL SfxGlobalEvents_Impl::remove( const cpo::uno::Any& aElement )
+void SfxGlobalEvents_Impl::remove( const cpo::uno::Any& aElement )
 {
     uno::Reference< frame::XModel > xDoc;
     aElement >>= xDoc;
@@ -388,7 +389,7 @@ void SAL_CALL SfxGlobalEvents_Impl::remove( const cpo::uno::Any& aElement )
 }
 
 
-uno::Reference< container::XEnumeration > SAL_CALL SfxGlobalEvents_Impl::createEnumeration()
+uno::Reference< container::XEnumeration > SfxGlobalEvents_Impl::createEnumeration()
 {
     // SAFE ->
     std::scoped_lock g(m_aLock);
@@ -408,13 +409,13 @@ uno::Reference< container::XEnumeration > SAL_CALL SfxGlobalEvents_Impl::createE
 }
 
 
-cpo::uno::Type SAL_CALL SfxGlobalEvents_Impl::getElementType()
+cpo::uno::Type SfxGlobalEvents_Impl::getElementType()
 {
     return cppu::UnoType<frame::XModel>::get();
 }
 
 
-bool SAL_CALL SfxGlobalEvents_Impl::hasElements()
+bool SfxGlobalEvents_Impl::hasElements()
 {
     // SAFE ->
     std::scoped_lock g(m_aLock);
@@ -428,7 +429,7 @@ bool SAL_CALL SfxGlobalEvents_Impl::hasElements()
 
 void SfxGlobalEvents_Impl::implts_notifyJobExecution(const document::EventObject& aEvent)
 {
-    css::uno::Reference<css::document::XEventListener> listener;
+    cpo::uno::Reference<css::document::XEventListener> listener;
     {
         std::scoped_lock g(m_aLock);
         listener = m_xJobExecutorListener;
@@ -440,7 +441,7 @@ void SfxGlobalEvents_Impl::implts_notifyJobExecution(const document::EventObject
     {
         listener->notifyEvent(aEvent);
     }
-    catch(const uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
         { throw; }
     catch(const cpo::uno::Exception&)
         {}
@@ -465,7 +466,7 @@ void SfxGlobalEvents_Impl::implts_checkAndExecuteEventBindings(const document::D
             SfxEvents_Impl::Execute(aAny, aEvent, nullptr);
         }
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -504,9 +505,9 @@ TModelList::iterator SfxGlobalEvents_Impl::impl_searchDoc(const uno::Reference< 
 
 } // namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_sfx2_GlobalEventBroadcaster_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SfxGlobalEvents_Impl(context));

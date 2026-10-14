@@ -50,8 +50,9 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace chart
@@ -882,7 +883,7 @@ std::vector<std::shared_ptr<VButton>> lcl_createButtons(
 
 VLegend::VLegend(
     rtl::Reference< Legend > xLegend,
-    const Reference< uno::XComponentContext > & xContext,
+    const Reference< cpo::uno::XComponentContext > & xContext,
     std::vector< LegendEntryProvider* >&& rLegendEntryProviderList,
     rtl::Reference<SvxShapeGroupAnyD> xTargetPage,
     ChartModel& rModel )

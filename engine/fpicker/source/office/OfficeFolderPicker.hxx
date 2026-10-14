@@ -19,14 +19,14 @@
 #pragma once
 
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <com/sun/star/ui/dialogs/XFolderPicker.hpp>
 #include <com/sun/star/ui/dialogs/XAsynchronousExecutableDialog.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include "commonpicker.hxx"
 
 typedef
     cppu::ImplInheritanceHelper<
-        svt::OCommonPicker, css::ui::dialogs::XFolderPicker2,
+        svt::OCommonPicker, css::ui::dialogs::XFolderPicker,
         css::ui::dialogs::XAsynchronousExecutableDialog,
         css::lang::XServiceInfo >
     SvtFolderPicker_Base;
@@ -34,7 +34,7 @@ typedef
 class SvtFolderPicker: public SvtFolderPicker_Base
 {
 private:
-    css::uno::Reference< css::ui::dialogs::XDialogClosedListener >
+    cpo::uno::Reference< css::ui::dialogs::XDialogClosedListener >
                             m_xListener;
 
     void                            prepareExecute();
@@ -45,7 +45,7 @@ public:
     virtual                        ~SvtFolderPicker() override;
 
 
-    // XFolderPicker2 functions
+    // XFolderPicker functions
 
     virtual void           setDisplayDirectory( const OUString& aDirectory ) override;
     virtual OUString       getDisplayDirectory() override;
@@ -64,7 +64,7 @@ public:
     // XAsynchronousExecutableDialog functions
 
     virtual void       setDialogTitle( const OUString& _rTitle ) override;
-    virtual void       startExecuteModal( const css::uno::Reference< css::ui::dialogs::XDialogClosedListener >& xListener ) override;
+    virtual void       startExecuteModal( const cpo::uno::Reference< css::ui::dialogs::XDialogClosedListener >& xListener ) override;
 
 
     // XServiceInfo functions

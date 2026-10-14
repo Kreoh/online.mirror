@@ -107,6 +107,12 @@
 #include <ndole.hxx>
 #include <swwait.hxx>
 #include <viewopt.hxx>
+#include <pagefrm.hxx>
+#include <cntfrm.hxx>
+#include <fmtanchr.hxx>
+#include <frmfmt.hxx>
+#include <sortedobjs.hxx>
+#include <anchoredobject.hxx>
 #include <SwCapObjType.hxx>
 #include <cmdid.h>
 #include <strings.hrc>
@@ -141,6 +147,8 @@
 
 #include <memory>
 
+using namespace ::cpo;
+
 /* default (A4 format) width of 210mm - 2 * border size (border on both sides) */
 constexpr tools::Long constOleWidthInMm = 210 - 2 * lMinBorderInMm;
 
@@ -162,7 +170,7 @@ constexpr sal_uInt32 SWTRANSFER_OBJECTTYPE_MARKDOWN  = 0x00000080;
 
 using namespace ::svx;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::datatransfer;
 namespace {
@@ -343,13 +351,13 @@ void SwTransferable::AddSupportedFormats()
     }
 }
 
-void SwTransferable::InitOle( SfxObjectShell* pDoc )
+void SwTransferable::InitOle(SfxObjectShell* pDoc, const tools::Rectangle& rVisArea)
 {
     //set OleVisArea. Upper left corner of the page and size of
     //RealSize in Twips.
     const Size aSz(constOleSizeTwip);
     SwRect aVis( Point( DOCUMENTBORDER, DOCUMENTBORDER ), aSz );
-    pDoc->SetVisArea( aVis.SVRect() );
+    pDoc->SetVisArea(rVisArea.IsEmpty() ? aVis.SVRect() : rVisArea);
 }
 
 uno::Reference < embed::XEmbeddedObject > SwTransferable::FindOLEObj( sal_Int64& nAspect ) const
@@ -423,6 +431,74 @@ namespace
         rDest.GetMetaFieldManager().copyDocumentProperties(rSrc);
     }
 
+    /// The area in twips that the selected lines and anchored frames take up, placed on the body
+    /// text of the first page and at most one page body high. Empty if nothing is laid out.
+    tools::Rectangle lclGetSelectionContentArea(SwWrtShell& rShell)
+    {
+        const SwRootFrame* pLayout = rShell.GetLayout();
+        const SwPageFrame* pFirstPage = nullptr;
+        SwTwips nTop = std::numeric_limits<SwTwips>::max();
+        SwTwips nBottom = std::numeric_limits<SwTwips>::min();
+        std::vector<std::pair<SwNodeOffset, SwNodeOffset>> aSelectedNodes;
+        for (SwPaM& rPaM : rShell.GetCursor()->GetRingContainer())
+        {
+            if (!rPaM.HasMark())
+                continue;
+            const SwPosition* pStart = rPaM.Start();
+            const SwPosition* pEnd = rPaM.End();
+            const SwContentNode* pStartNode = pStart->GetNode().GetContentNode();
+            const SwContentNode* pEndNode = pEnd->GetNode().GetContentNode();
+            if (!pStartNode || !pEndNode)
+                continue;
+            const SwContentFrame* pStartFrame = pStartNode->getLayoutFrame(pLayout, pStart);
+            const SwContentFrame* pEndFrame = pEndNode->getLayoutFrame(pLayout, pEnd);
+            SwRect aStartLine;
+            SwRect aEndLine;
+            if (!pStartFrame || !pEndFrame || !pStartFrame->GetCharRect(aStartLine, *pStart)
+                || !pEndFrame->GetCharRect(aEndLine, *pEnd))
+                continue;
+
+            if (aStartLine.Top() < nTop)
+            {
+                nTop = aStartLine.Top();
+                pFirstPage = pStartFrame->FindPageFrame();
+            }
+            nBottom = std::max(nBottom, aEndLine.Bottom());
+            aSelectedNodes.emplace_back(pStart->GetNodeIndex(), pEnd->GetNodeIndex());
+        }
+        const SwLayoutFrame* pBody = pFirstPage ? pFirstPage->FindBodyCont() : nullptr;
+        if (!pBody)
+            return {};
+
+        for (const SwFrame* pFrame = pFirstPage; pFrame && pFrame->getFrameArea().Top() <= nBottom;
+             pFrame = pFrame->GetNext())
+        {
+            const SwSortedObjs* pObjects = static_cast<const SwPageFrame*>(pFrame)->GetSortedObjs();
+            if (!pObjects)
+                continue;
+            for (const SwAnchoredObject* pObject : *pObjects)
+            {
+                const SwNode* pAnchorNode = pObject->GetFrameFormat()->GetAnchor().GetAnchorNode();
+                if (!pAnchorNode)
+                    continue;
+                const SwNodeOffset nAnchor = pAnchorNode->GetIndex();
+                if (std::any_of(aSelectedNodes.begin(), aSelectedNodes.end(),
+                                [nAnchor](const auto& rRange)
+                                { return rRange.first <= nAnchor && nAnchor <= rRange.second; }))
+                    nBottom = std::max(nBottom, pObject->GetObjRectWithSpaces().Bottom());
+            }
+        }
+
+        const SwRect& rPage = pFirstPage->getFrameArea();
+        const Point aBodyPos = pBody->getFrameArea().Pos() + pBody->getFramePrintArea().Pos();
+        const SwTwips nHeight = std::min(nBottom - nTop, pBody->getFramePrintArea().Height());
+        if (nHeight <= 0)
+            return {};
+        return tools::Rectangle(Point(DOCUMENTBORDER + aBodyPos.X() - rPage.Left(),
+                                      DOCUMENTBORDER + aBodyPos.Y() - rPage.Top()),
+                                Size(pBody->getFramePrintArea().Width(), nHeight));
+    }
+
     void lclCheckAndPerformRotation(Graphic& aGraphic)
     {
         GraphicNativeMetadata aMetadata;
@@ -438,7 +514,7 @@ namespace
     }
 }
 
-bool SAL_CALL SwTransferable::isComplex()
+bool SwTransferable::isComplex()
 {
     sal_Int32 nTextLength = 0;
     SwNodes& aNodes = m_pWrtShell->GetDoc()->GetNodes();
@@ -691,7 +767,7 @@ bool SwTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
                 SwDoc& rDoc = lcl_GetDoc(*m_pClpDocFac);
                 m_aDocShellRef = new SwDocShell(rDoc, SfxObjectCreateMode::EMBEDDED);
                 m_aDocShellRef->DoInitNew();
-                SwTransferable::InitOle( m_aDocShellRef );
+                SwTransferable::InitOle(m_aDocShellRef, m_aOleVisArea);
             }
             bOK = SetObject( &m_aDocShellRef, SWTRANSFER_OBJECTTYPE_SWOLE,
                             rFlavor );
@@ -800,8 +876,9 @@ bool SwTransferable::WriteObject( SvStream& rOStream,
 
     case SWTRANSFER_OBJECTTYPE_HTML:
     {
-        // COKit is interested in getting images embedded for copy/paste support.
-        GetHTMLWriter( comphelper::COKit::isActive() ? u"EmbedImages;NoPrettyPrint"_ustr : OUString(), OUString(), xWrt );
+        GetHTMLWriter(comphelper::COKit::isActive() ? u"EmbedImages;NoPrettyPrint"_ustr
+                                                    : u"EmbedImages"_ustr,
+                      OUString(), xWrt);
         break;
     }
 
@@ -1086,10 +1163,12 @@ int SwTransferable::PrepareForCopy( bool bIsCut, bool bDeleteRedlines )
 
         DeleteDDEAndReminderMarks(rTmpDoc);
 
+        m_aOleVisArea = lclGetSelectionContentArea(*m_pWrtShell);
+
         // a new one was created in CORE (OLE objects copied!)
         m_aDocShellRef = rTmpDoc.GetTmpDocShell();
         if( m_aDocShellRef.Is() )
-            SwTransferable::InitOle( m_aDocShellRef );
+            SwTransferable::InitOle(m_aDocShellRef, m_aOleVisArea);
         rTmpDoc.SetTmpDocShell( nullptr );
 
         if( m_pWrtShell->GetSelectedObjCount() )
@@ -1184,7 +1263,10 @@ int SwTransferable::PrepareForCopy( bool bIsCut, bool bDeleteRedlines )
         //ObjectDescriptor was already filly from the old DocShell.
         //Now adjust it. Thus in GetData the first query can still
         //be answered with delayed rendering.
-        m_aObjDesc.maSize = constOleSize100mm;
+        m_aObjDesc.maSize
+            = m_aOleVisArea.IsEmpty()
+                  ? constOleSize100mm
+                  : o3tl::convert(m_aOleVisArea.GetSize(), o3tl::Length::twip, o3tl::Length::mm100);
 
         PrepareOLE( m_aObjDesc );
 #if HAVE_FEATURE_DESKTOP
@@ -1935,6 +2017,7 @@ bool SwTransferable::PasteData( const TransferableDataHelper& rData,
             case SotClipboardFormatId::BITMAP:
             case SotClipboardFormatId::PNG:
             case SotClipboardFormatId::GDIMETAFILE:
+            case SotClipboardFormatId::SVG:
                 bRet = SwTransferable::PasteGrf( rData, rSh, nFormat,
                                                 SwPasteSdr::Insert,pPt,
                         nActionFlags, nDropAction, bNeedToSelectBeforePaste,
@@ -2057,6 +2140,7 @@ bool SwTransferable::PasteData( const TransferableDataHelper& rData,
             case SotClipboardFormatId::GDIMETAFILE:
             case SotClipboardFormatId::BITMAP:
             case SotClipboardFormatId::PNG:
+            case SotClipboardFormatId::SVG:
             case SotClipboardFormatId::NETSCAPE_BOOKMARK:
             case SotClipboardFormatId::SIMPLE_FILE:
             case SotClipboardFormatId::FILEGRPDESCRIPTOR:
@@ -2914,6 +2998,7 @@ bool SwTransferable::PasteGrf( const TransferableDataHelper& rData, SwWrtShell& 
     case SotClipboardFormatId::BITMAP:
     case SotClipboardFormatId::PNG:
     case SotClipboardFormatId::GDIMETAFILE:
+    case SotClipboardFormatId::SVG:
         bRet = rData.GetGraphic( nFormat, aGraphic );
         break;
 
@@ -4194,7 +4279,12 @@ bool SwTransferable::PrivateDrop( SwWrtShell& rSh, const Point& rDragPt,
 
             // restore cursor position
             if (bNeedTrack && pMark != nullptr)
+            {
                 rSh.GotoMark( pMark );
+                // The walk below moves the cursor through the pasted rows by their position
+                // on the page, and they have no layout yet.
+                rSh.CalcLayout();
+            }
 
             if ( !bNeedTrack && !bPasteIntoTable )
             {

@@ -54,7 +54,7 @@ struct TextBodyProperties
     OUString                                        msPrst;
     /// Normal autofit: font scale (default: 100%).
     sal_Int32 mnFontScale = 100000;
-    sal_Int32 mnSpacingScale = 100000;
+    sal_Int32 mnSpacingReduction = 0;
     OUString msHorzOverflow;
     std::optional< sal_Int32 > moVertOverflow{};
 
@@ -63,7 +63,7 @@ struct TextBodyProperties
     explicit TextBodyProperties();
 
     void pushTextDistances(Size const& rShapeSize);
-    void readjustTextDistances(css::uno::Reference<css::drawing::XShape> const& xShape);
+    void readjustTextDistances(cpo::uno::Reference<css::drawing::XShape> const& xShape);
     void pushVertSimulation();
 
 };

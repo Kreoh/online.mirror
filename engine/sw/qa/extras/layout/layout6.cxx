@@ -10,6 +10,7 @@
 #include <sal/config.h>
 
 #include <limits>
+#include <string_view>
 
 #include <swmodeltestbase.hxx>
 #include <comphelper/propertysequence.hxx>
@@ -53,7 +54,8 @@
 #include <officecfg/Office/Common.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -179,16 +181,16 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf126154)
                 u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[13]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[14]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(
         pXmlDoc, "/root/page[1]/body/txt[15]/SwParaPortion/SwLineLayout[1]", "portion",
         u",,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti bu");
-    assertXPath(
-        pXmlDoc, "/root/page[1]/body/txt[16]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti ");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[16]/SwParaPortion/SwLineLayout[1]", "portion",
+                u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                u"Vesti bu");
 
     // minimum, desired and maximum word spacing: 80%, 100%, 133%
     // no hyphenation in the same text: hyphenation of all the short words were limited
@@ -206,16 +208,16 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf126154)
                 u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[21]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[22]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(
         pXmlDoc, "/root/page[1]/body/txt[23]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti ");
-    assertXPath(
-        pXmlDoc, "/root/page[1]/body/txt[24]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti ");
+        u",,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti bu");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[24]/SwParaPortion/SwLineLayout[1]", "portion",
+                u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                u"Vesti bu");
 }
 
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf106234)
@@ -284,9 +286,9 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf126154_minimum_shrinking)
     // also minimum word space: 80%, 100%, 100%
     // only a single line was hyphenated from the previous ones
     // TODO: fix possible interoperability issues, allow optional limitation of hyphenation again
-    assertXPath(
-        pXmlDoc, "/root/page[1]/body/txt[10]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti bulum ");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[10]/SwParaPortion/SwLineLayout[1]", "portion",
+                u",, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti "
+                u"bulum c ");
     assertXPath(
         pXmlDoc, "/root/page[1]/body/txt[11]/SwParaPortion/SwLineLayout[1]", "portion",
         u",,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti bulum ");
@@ -295,16 +297,16 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf126154_minimum_shrinking)
                 u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[13]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[14]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(
         pXmlDoc, "/root/page[1]/body/txt[15]/SwParaPortion/SwLineLayout[1]", "portion",
         u",,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti bu");
-    assertXPath(
-        pXmlDoc, "/root/page[1]/body/txt[16]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti ");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[16]/SwParaPortion/SwLineLayout[1]", "portion",
+                u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                u"Vesti bu");
 
     // minimum, desired and maximum word spacing: 80%, 100%, 133%
     // no hyphenation in the same text: hyphenation of all the short words were limited
@@ -321,16 +323,16 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf126154_minimum_shrinking)
                 u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[21]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(pXmlDoc, "/root/page[1]/body/txt[22]/SwParaPortion/SwLineLayout[1]", "portion",
                 u",,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                u"Vesti bu");
+                u"Vesti bulum ");
     assertXPath(
         pXmlDoc, "/root/page[1]/body/txt[23]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti ");
-    assertXPath(
-        pXmlDoc, "/root/page[1]/body/txt[24]/SwParaPortion/SwLineLayout[1]", "portion",
-        u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti ");
+        u",,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vesti bu");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[24]/SwParaPortion/SwLineLayout[1]", "portion",
+                u",,,,,,,, , , , , , , , Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                u"Vesti bu");
 }
 
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf126154_portion)
@@ -923,6 +925,49 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf123898)
     assertXPath(pXmlDoc,
                 "/root/page/body/txt/anchored/fly/txt/SwParaPortion/SwLineLayout[1]/child::*[1]",
                 "type", u"PortionType::Text");
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testWrapLargestCentered)
+{
+    // An image centred in the text area, wrapping on its largest side. The two sides are the
+    // same width, and a DOCX file has the text on the right of such an image.
+    createSwDoc("wrap-largest-centered.docx");
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    // The image sits in the middle of the 8306 twips wide text area, 3358 twips of room
+    // on either side of it.
+    assertXPath(pXmlDoc, "/root/page[1]/body/infos/prtBounds", "width", u"8306");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/anchored/fly/infos/bounds", "left", u"5442");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/anchored/fly/infos/bounds", "right", u"7031");
+
+    // So the line starts with a fly portion covering the image and everything left of it,
+    // and the text follows on the right. Without the fix the tie went the other way: the
+    // line had no fly portion at all and the text stood to the left of the image.
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/SwParaPortion/SwLineLayout/SwFixPortion",
+                "type", u"PortionType::Fly");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/SwParaPortion/SwLineLayout/SwFixPortion",
+                "width", u"4948");
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testWrapLargestCenteredOddWidth)
+{
+    // The same centred image, one twip narrower. Centring divides the leftover room in two and
+    // rounds down, so an odd image width leaves one twip more on the left than on the right. The
+    // text still belongs on the right, as it does for a width that divides evenly.
+    createSwDoc("wrap-largest-centered-odd.docx");
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    // The 1589 twips wide image leaves 3359 twips of room on its left and 3358 on its right.
+    assertXPath(pXmlDoc, "/root/page[1]/body/infos/prtBounds", "width", u"8306");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/anchored/fly/infos/bounds", "left", u"5443");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/anchored/fly/infos/bounds", "right", u"7031");
+
+    // The line starts with a fly portion covering the image and everything left of it, and the
+    // text follows on the right.
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/SwParaPortion/SwLineLayout/SwFixPortion",
+                "type", u"PortionType::Fly");
+    assertXPath(pXmlDoc, "/root/page[1]/body/txt[1]/SwParaPortion/SwLineLayout/SwFixPortion",
+                "width", u"4948");
 }
 
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf123651)
@@ -2663,6 +2708,144 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testCool16076_contentOutsideCellAndFrame)
     CPPUNIT_ASSERT_DOUBLES_EQUAL(113.40, lcl_getClipWidth(*pPage, u"L001"), 0.5);
     // the text frame, 2258 twips
     CPPUNIT_ASSERT_DOUBLES_EQUAL(112.85, lcl_getClipWidth(*pPage, u"f001"), 0.5);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testShapeAnchoredInFollow)
+{
+    // the layout formats a shape whose anchor paragraph is split over two pages of a
+    // columned section: the anchor character sits in the follow on page 2 while
+    // CalcContent formats the master on page 1; loading used to abort in
+    // SwObjectFormatterTextFrame::DoFormatObj comparing the pages of the two frames
+    //
+    // The document is derived from the crashtesting bugdoc novell592907-1.docx, adjusted
+    // to change the fonts to ones that pass under SAL_NON_APPLICATION_FONT_USE, and tweaked
+    // to make the problem reproducible on a simple load
+    createSwDoc("shape-anchored-in-follow.docx");
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    assertXPath(pXmlDoc, "/root/page", 3);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testCool15691_headerTextWrapsAroundImage)
+{
+    // Two header paragraphs, with a picture anchored in the first one. It is tall enough to
+    // reach into the second paragraph. The first file wraps the picture on both sides, the
+    // second one on its largest side only, which arrives as WrapTextMode_DYNAMIC and only
+    // settles on a side once the line is laid out.
+    for (const auto* pFileName : { "Cool15691_headerTextWrapsAroundImage.docx",
+                                   "Cool15691_headerTextWrapsAroundImageLargest.docx" })
+    {
+        createSwDoc(pFileName);
+        xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+        CPPUNIT_ASSERT(pXmlDoc);
+
+        assertXPath(pXmlDoc, "/root/page/header/txt", 2);
+        assertXPath(pXmlDoc, "/root/page/header/txt[1]/anchored/fly", 1);
+
+        // Without the fix the header text kept the whole line for itself and ran over the
+        // picture: neither paragraph had a fly portion to step over it. The picture is 4cm
+        // wide, so the gap it leaves in a line is at least that.
+        for (int i = 1; i <= 2; ++i)
+        {
+            const OString aLine = "/root/page/header/txt[" + OString::number(i)
+                                  + "]/SwParaPortion/SwLineLayout[1]/"
+                                    "SwFixPortion[@type='PortionType::Fly']";
+            const sal_Int32 nGap = getXPath(pXmlDoc, aLine, "width").toInt32();
+            CPPUNIT_ASSERT_MESSAGE(OString(OString::Concat(pFileName) + ", paragraph "
+                                           + OString::number(i) + ", gap "
+                                           + OString::number(nGap))
+                                       .getStr(),
+                                   nGap >= 2268);
+        }
+    }
+}
+
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTableStyleContextualSpacingRows)
+{
+    // Given a table whose style turns on contextual spacing, with one paragraph per cell and the
+    // same paragraph style in every cell, while that style sets 18pt of space below a paragraph:
+    createSwDoc("table-style-contextual-spacing-rows.docx");
+
+    // Then make sure a row is no taller than its single line of text:
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    const sal_Int32 nParaSpacing = 360;
+    const sal_Int32 nRowHeight
+        = getXPath(pXmlDoc, "/root/page/body/tab/row[1]/infos/bounds", "height").toInt32();
+    // Without the fix in place, this test would have failed, because the paragraph that ends a
+    // cell kept its space below, so every row was at least the 18pt of that spacing taller.
+    CPPUNIT_ASSERT_LESS(nParaSpacing, nRowHeight);
+}
+
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTableStyleContextualSpacingRowsBefore)
+{
+    // Given the same table, with the paragraph style setting 18pt of space above a paragraph
+    // instead of below it:
+    createSwDoc("table-style-contextual-spacing-rows-before.docx");
+
+    // Then make sure a row is no taller than its single line of text:
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    const sal_Int32 nParaSpacing = 360;
+    const sal_Int32 nRowHeight
+        = getXPath(pXmlDoc, "/root/page/body/tab/row[2]/infos/bounds", "height").toInt32();
+    // Without the fix in place, this test would have failed, because the paragraph that starts a
+    // cell kept its space above, so every row was at least the 18pt of that spacing taller.
+    CPPUNIT_ASSERT_LESS(nParaSpacing, nRowHeight);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testCool16232_tabTrailingBlanks)
+{
+    // A tab lines its text up by the last character that shows, so the blanks behind the text
+    // do not move it, however the line happens to end.
+    createSwDoc("tabTrailingBlanks.fodt");
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    auto aGetTabWidth = [&](int nParagraph, std::string_view aType) {
+        const OString aXPath = OString::Concat("/root/page/body/txt[")
+                               + OString::number(nParagraph)
+                               + "]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::"
+                               + aType + "']";
+        return getXPath(pXmlDoc, aXPath, "width").toInt32();
+    };
+
+    // These four pair the same spaces around "10,00 m" behind the same tab stop, and only the
+    // first of each pair ends in a tab. The trailing spaces counted towards the width the tab
+    // aligned whenever a tab closed the line, which put the centered tab at 3003 and the
+    // right tab at 2910.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3423), aGetTabWidth(1, "TabCenter"));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3423), aGetTabWidth(2, "TabCenter"));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3750), aGetTabWidth(4, "TabRight"));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3750), aGetTabWidth(5, "TabRight"));
+
+    // A line break closes a line too, and the blanks in front of it do not count there either.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4143), aGetTabWidth(6, "TabCenter"));
+
+    // The blanks count in their own font, not in that of the tab closing them: 24pt blanks
+    // before a 12pt tab, then 12pt blanks before a 24pt tab. Measured in the font of the tab
+    // they put the tab at 2910 and at 4536, the latter aligning nothing at all.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3750), aGetTabWidth(7, "TabRight"));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3750), aGetTabWidth(8, "TabRight"));
+
+    // A blank a line gives up where it wraps is not one of the blanks that end the text, so
+    // a tab whose text carries on to the next line keeps the width it had.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(72), aGetTabWidth(3, "TabCenter"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter6, testTdf173897)
+{
+    // A user field with a multi-line value, in a paragraph with widow control, split across a
+    // page break. Without the fix, the layout never finished, adding pages one by one.
+    createSwDoc("multiline-field-widows.fodt");
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    assertXPath(pXmlDoc, "/root/page", 2);
+    assertXPath(
+        pXmlDoc,
+        "/root/page[1]/body/section/txt[14]/SwParaPortion/SwLineLayout[1]/SwFieldPortion[1]",
+        "expand", u"01.2026");
+    // The second part continues after the first one, past two empty lines
+    assertXPath(pXmlDoc,
+                "/root/page[2]/body/section/txt[1]/SwParaPortion/SwLineLayout[3]/SwFieldPortion[1]",
+                "expand", u"06.2026");
 }
 
 } // end of anonymous namespace

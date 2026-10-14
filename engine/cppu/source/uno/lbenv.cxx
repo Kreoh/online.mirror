@@ -192,7 +192,7 @@ InterfaceEntry * ObjectEntry::find(
     // shortcut common case:
     OUString const & type_name =
         OUString::unacquired( &pTypeDescr_->aBase.pTypeName );
-    if ( type_name == "com.sun.star.uno.XInterface" )
+    if ( type_name == "cpo.uno.XInterface" )
     {
         return aInterfaces.data();
     }
@@ -1024,7 +1024,7 @@ bool loadEnv(OUString const  & cLibStem,
 
 
     uno_initEnvironmentFunc fpInit = reinterpret_cast<uno_initEnvironmentFunc>(aMod.getSymbol(u"" UNO_INIT_ENVIRONMENT ""_ustr));
-
+    SAL_WARN_IF(!fpInit, "cppu", "dynamic lookup of symbol " UNO_INIT_ENVIRONMENT " failed");
     if (!fpInit)
         return false;
 

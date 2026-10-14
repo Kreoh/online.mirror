@@ -45,7 +45,7 @@
 #include <unordered_map>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 namespace sd::framework {
@@ -87,7 +87,7 @@ public:
 
     virtual void disposing(std::unique_lock<std::mutex>&) override;
     // XEventListener
-    virtual void SAL_CALL disposing (const lang::EventObject& rEvent) override;
+    virtual void disposing (const lang::EventObject& rEvent) override;
     // ConfigurationChangeListener
     virtual void notifyConfigurationChange (const sd::framework::ConfigurationChangeEvent& rEvent) override;
 
@@ -127,7 +127,7 @@ public:
         is being destroyed.
     */
     using WeakComponentImplHelperBase::disposing;
-    virtual void SAL_CALL disposing (const lang::EventObject& rEvent) override;
+    virtual void disposing (const lang::EventObject& rEvent) override;
 
     /** This method is called when the ViewShellBase is being destroyed.
     */
@@ -261,7 +261,7 @@ public:
 
     virtual void disposing(std::unique_lock<std::mutex>&) override;
 
-    virtual void SAL_CALL disposing (const lang::EventObject& rEventObject) override;
+    virtual void disposing (const lang::EventObject& rEventObject) override;
 
 private:
     ::std::shared_ptr<FrameworkHelper> mpHelper;
@@ -387,7 +387,7 @@ rtl::Reference<AbstractView> FrameworkHelper::GetView (const rtl::Reference<Reso
     {
         Dispose();
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
     }
 
@@ -418,7 +418,7 @@ rtl::Reference<ResourceId> FrameworkHelper::RequestView (
         Dispose();
         xViewId = nullptr;
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         xViewId = nullptr;
     }
@@ -508,7 +508,7 @@ void FrameworkHelper::HandleModeChangeSlot (
     try
     {
         if ( ! mxConfigurationController.is())
-            throw RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         rtl::Reference<ResourceId> xPaneId (
             new ::sd::framework::ResourceId(framework::FrameworkHelper::msCenterPaneURL));
@@ -566,7 +566,7 @@ void FrameworkHelper::HandleModeChangeSlot (
             updateEditMode(xView, eEMode, false);
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }
@@ -678,7 +678,7 @@ void FrameworkHelper::UpdateConfiguration()
     {
         Dispose();
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }
@@ -720,7 +720,7 @@ void FrameworkHelper::DisposeListener::disposing(std::unique_lock<std::mutex>&)
     mpHelper.reset();
 }
 
-void SAL_CALL FrameworkHelper::DisposeListener::disposing (const lang::EventObject& rEventObject)
+void FrameworkHelper::DisposeListener::disposing (const lang::EventObject& rEventObject)
 {
     if (mpHelper != nullptr)
         mpHelper->disposing(rEventObject);
@@ -768,7 +768,7 @@ CallbackCaller::CallbackCaller (
             }
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }
@@ -785,13 +785,13 @@ void CallbackCaller::disposing(std::unique_lock<std::mutex>&)
             xCC->removeConfigurationChangeListener(this);
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         DBG_UNHANDLED_EXCEPTION("sd");
     }
 }
 
-void SAL_CALL CallbackCaller::disposing (const lang::EventObject& rEvent)
+void CallbackCaller::disposing (const lang::EventObject& rEvent)
 {
     if (rEvent.Source == cppu::getXWeak(mxConfigurationController.get()))
     {
@@ -857,7 +857,7 @@ LifetimeController::~LifetimeController()
     OSL_ASSERT(!mbListeningToController && !mbListeningToViewShellBase);
 }
 
-void SAL_CALL LifetimeController::disposing (const lang::EventObject&)
+void LifetimeController::disposing (const lang::EventObject&)
 {
     mbListeningToController = false;
     Update();

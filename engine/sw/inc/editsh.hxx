@@ -199,10 +199,6 @@ public:
     /// Set all numbering start points to a fixed value - mailmerge support.
     void SetNumberingRestart();
 
-    /// Embeds all local links (ranges/graphics).
-    SW_DLLPUBLIC sal_uInt16 GetLinkUpdMode() const;
-    SW_DLLPUBLIC void SetLinkUpdMode( sal_uInt16 nMode );
-
     /// Copy content of all ranges at current position of cursor to given Shell.
     bool Copy( SwEditShell& rDestShell );
 
@@ -439,9 +435,6 @@ public:
     SW_DLLPUBLIC void LockExpFields();
     SW_DLLPUBLIC void UnlockExpFields();
     bool IsExpFieldsLocked() const;
-
-    SW_DLLPUBLIC SwFieldUpdateFlags GetFieldUpdateFlags() const;
-    SW_DLLPUBLIC void SetFieldUpdateFlags( SwFieldUpdateFlags eFlags );
 
     /// For evaluation of DB fields (new DB-manager).
     SW_DLLPUBLIC SwDBManager* GetDBManager() const;
@@ -732,7 +725,7 @@ public:
 
     /// restore selections.
     void HyphEnd();
-    css::uno::Reference< css::uno::XInterface>
+    cpo::uno::Reference< cpo::uno::XInterface>
                 HyphContinue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt );
 
     void HyphIgnore();
@@ -822,7 +815,7 @@ public:
     void HandleCorrectionError(const OUString& aText, SwPosition aPos, sal_Int32 nBegin,
                                sal_Int32 nLen, const Point* pPt,
                                SwRect& rSelectRect);
-    css::uno::Reference< css::linguistic2::XSpellAlternatives >
+    cpo::uno::Reference< css::linguistic2::XSpellAlternatives >
             GetCorrection( const Point* pPt, SwRect& rSelectRect );
 
     bool GetGrammarCorrection( css::linguistic2::ProofreadingResult /*out*/ &rResult,
@@ -974,9 +967,6 @@ public:
     /// Set comment to Redline at position.
     bool SetRedlineComment( const OUString& rS );
     const SwRangeRedline* GetCurrRedline() const;
-
-    /// Redline attributes have been changed. Updated views.
-    SW_DLLPUBLIC void UpdateRedlineAttr();
 
     /// Compare two documents.
     tools::Long CompareDoc( const SwDoc& rDoc );

@@ -24,7 +24,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/task/XInteractionHandler2.hpp>
 #include <com/sun/star/task/XPasswordContainer2.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace com {
     namespace sun {
@@ -43,7 +43,7 @@ class PasswordContainerHelper
 {
 public:
     explicit PasswordContainerHelper(
-        css::uno::Reference< css::uno::XComponentContext > const & xContext );
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xContext );
 
 
     /** This member function tries to handle an authentication interaction
@@ -77,9 +77,9 @@ public:
      */
     bool handleAuthenticationRequest(
         css::ucb::AuthenticationRequest const & rRequest,
-        css::uno::Reference< css::ucb::XInteractionSupplyAuthentication > const & xSupplyAuthentication,
+        cpo::uno::Reference< css::ucb::XInteractionSupplyAuthentication > const & xSupplyAuthentication,
         OUString const & rURL,
-        css::uno::Reference< css::task::XInteractionHandler2 > const & xIH );
+        cpo::uno::Reference< css::task::XInteractionHandler2 > const & xIH );
 
     /** This member function adds credentials for the given URL to the password
         container.
@@ -111,12 +111,12 @@ public:
     bool addRecord( OUString const & rURL,
                     OUString const & rUsername,
                     cpo::uno::Sequence< OUString > const & rPasswords,
-                    css::uno::Reference< css::task::XInteractionHandler2 > const & xIH,
+                    cpo::uno::Reference< css::task::XInteractionHandler2 > const & xIH,
                     bool bPersist );
 
 
 private:
-    css::uno::Reference< css::task::XPasswordContainer2 > m_xPasswordContainer;
+    cpo::uno::Reference< css::task::XPasswordContainer2 > m_xPasswordContainer;
 };
 
 
@@ -126,24 +126,24 @@ class PasswordContainerInteractionHandler :
 {
 public:
     explicit PasswordContainerInteractionHandler(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext );
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
     virtual ~PasswordContainerInteractionHandler() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL
+    virtual bool
     supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
     // XInteractionHandler2
-    virtual void SAL_CALL
-    handle( const css::uno::Reference< css::task::XInteractionRequest >& Request ) override;
+    virtual void
+    handle( const cpo::uno::Reference< css::task::XInteractionRequest >& Request ) override;
 
-    virtual bool SAL_CALL
-    handleInteractionRequest( const css::uno::Reference< css::task::XInteractionRequest >& Request ) override;
+    virtual bool
+    handleInteractionRequest( const cpo::uno::Reference< css::task::XInteractionRequest >& Request ) override;
 
 private:
     PasswordContainerHelper m_aPwContainerHelper;

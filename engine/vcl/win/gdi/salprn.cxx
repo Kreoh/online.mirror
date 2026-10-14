@@ -85,7 +85,7 @@
     }
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::ui::dialogs;
 
@@ -1489,8 +1489,8 @@ bool WinSalPrinter::StartJob( const OUString* pFileName,
     if( mpInfoPrinter->maPortName.equalsIgnoreAsciiCase( "FILE:" ) && (!pFileName || pFileName->isEmpty()) )
     {
 
-        uno::Reference< uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
-        uno::Reference< XFilePicker3 > xFilePicker = FilePicker::createWithMode(xContext, TemplateDescription::FILESAVE_SIMPLE);
+        cpo::uno::Reference< cpo::uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
+        cpo::uno::Reference< XFilePicker > xFilePicker = FilePicker::createWithMode(xContext, TemplateDescription::FILESAVE_SIMPLE);
 
         if( xFilePicker->execute() == ExecutableDialogResults::OK )
         {

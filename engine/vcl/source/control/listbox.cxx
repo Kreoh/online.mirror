@@ -85,7 +85,7 @@ void ListBox::ImplInit( vcl::Window* pParent, WinBits nStyle )
 
     Control::ImplInit( pParent, nStyle, nullptr );
 
-    css::uno::Reference< css::datatransfer::dnd::XDropTargetListener> xDrop = new DNDEventDispatcher(this);
+    cpo::uno::Reference< css::datatransfer::dnd::XDropTargetListener> xDrop = new DNDEventDispatcher(this);
 
     if( nStyle & WB_DROPDOWN )
     {
@@ -535,11 +535,7 @@ void ListBox::SetDropDownLineCount( sal_uInt16 nLines )
 void ListBox::AdaptDropDownLineCountToMaximum()
 {
     // Adapt to maximum allowed number.
-    // Limit for COKit as we can't render outside of the dialog canvas.
-    if (comphelper::COKit::isActive())
-        SetDropDownLineCount(11);
-    else
-        SetDropDownLineCount(GetSettings().GetStyleSettings().GetListBoxMaximumLineCount());
+    SetDropDownLineCount(GetSettings().GetStyleSettings().GetListBoxMaximumLineCount());
 }
 
 sal_uInt16 ListBox::GetDropDownLineCount() const

@@ -63,6 +63,21 @@ class ShapeHandlesSection extends CanvasSectionObject {
 	documentObject: boolean = true;
 	showSection: boolean = false;
 
+	/// How wide and how high a handle is drawn, in core pixels.
+	public static handleSize(): number {
+		return HandleLook.widthOf('framing');
+	}
+
+	/// How wide a point that a connector can be tied to is drawn, in core pixels.
+	public static gluePointSize(): number {
+		return HandleLook.widthOf('tiePoint');
+	}
+
+	/// What every handle of the selection is, in the order they are drawn.
+	public handleInfos(): any[] {
+		return this.sectionProperties.handles.map((handle: any) => handle.info);
+	}
+
 	constructor (info: any) {
 		super(app.CSections.ShapeHandlesSection.name);
 
@@ -70,20 +85,21 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		this.sectionProperties.handles = [];
 		this.sectionProperties.subSections = [];
 		this.sectionProperties.activeHandleIndex = null;
-		this.sectionProperties.handleWidth = 12 * app.dpiScale;
-		this.sectionProperties.handleHeight = 12 * app.dpiScale;
+		this.sectionProperties.handleWidth = ShapeHandlesSection.handleSize();
+		this.sectionProperties.handleHeight = ShapeHandlesSection.handleSize();
 		this.sectionProperties.anchorWidth = 20 * app.dpiScale;
 		this.sectionProperties.anchorHeight = 20 * app.dpiScale;
 		this.sectionProperties.rotationHandleWidth = 15 * app.dpiScale;
 		this.sectionProperties.rotationHandleHeight = 15 * app.dpiScale;
-		this.sectionProperties.gluePointRadius = 10 * app.dpiScale;
+		this.sectionProperties.gluePointRadius = ShapeHandlesSection.gluePointSize();
 		this.sectionProperties.subSectionPrefix = 'shape-handle-';
 		this.sectionProperties.svg = null; // This is for preview of modifications.
 		this.sectionProperties.hasVideo = false; // Don't hide svg when there is video content.
 		this.sectionProperties.shapeRectangleProperties = null; // Not null when there are scaling handles.
+		this.sectionProperties.inPlaceResizeRectangle = null;
 		this.sectionProperties.lastDragDistance = [0, 0];
-		this.sectionProperties.snapOffsetX = 0; // Distance from the dragged shape's left edge to the point that snapped.
-		this.sectionProperties.snapOffsetY = 0; // Distance from the dragged shape's top edge to the point that snapped.
+		// What the drag could line up with on the page, and the lines that mark it.
+		this.sectionProperties.snap = new SelectionSnap();
 		this.sectionProperties.mathObjectBorderColor = 'red'; // Border color for Math objects.
 		this.sectionProperties.lastTapTime = 0;
 		this.sectionProperties.clickTimer = null;
@@ -98,22 +114,9 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		this.sectionProperties.queuedShapeDragPreview = null;
 
 		// These are for snapping the objects to the same level with others' boundaries.
-		this.sectionProperties.closestX = null;
-		this.sectionProperties.closestY = null;
 
-		// When the snap is a center-to-center match, these hold the [x, y] center
-		// (in pixels) of the other object so we can mark it with a red dot.
-		this.sectionProperties.centerSnapX = null;
-		this.sectionProperties.centerSnapY = null;
 
-		// True when the active object's own center is what snapped to another
-		// object's center on that axis (true center-to-center alignment).
-		this.sectionProperties.centerToCenterX = false;
-		this.sectionProperties.centerToCenterY = false;
 
-		// [x, y] center (in pixels) of the active (dragged or scaled) object,
-		// set when a center-to-center match happens so we can mark it too.
-		this.sectionProperties.draggedCenter = null;
 
 		this.refreshInfo(info);
 
@@ -147,16 +150,17 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		const kinds = this.sectionProperties.info?.handles?.kinds;
 		if (!kinds) return;
 
+		if (this.sectionProperties.info.handlesInTileTwips) return;
+		this.sectionProperties.info.handlesInTileTwips = true;
+
 		// Core can send handle X coordinates as negative print twips in RTL
-		// (its internal sign convention). Normalize to positive so the
-		// downstream print->tile conversion and doc->view mapping work.
+		// (its internal sign convention), so normalize to positive first.
+		// Handles arrive coincident with the selection rectangle sent next to
+		// them, so they take the same translation the rectangle got.
+		const offset = GraphicSelection.tileTwipsOffset;
 		const normalize = (entry: any): void => {
-			const rawX = parseInt(entry.point.x);
-			const rawY = parseInt(entry.point.y);
-			const point = new cool.SimplePoint(Math.abs(rawX), rawY);
-			app.map._docLayer.sheetGeometry.convertToTileTwips(point);
-			entry.point.x = point.x;
-			entry.point.y = point.y;
+			entry.point.x = Math.abs(parseInt(entry.point.x)) + offset[0];
+			entry.point.y = parseInt(entry.point.y) + offset[1];
 		};
 
 		// Core groups handles into rectangle / poly / custom / anchor / others
@@ -169,10 +173,8 @@ class ShapeHandlesSection extends CanvasSectionObject {
 			for (const handles of Object.values(group)) {
 				if (!Array.isArray(handles)) continue;
 				for (const handle of handles) {
-					const point = new cool.SimplePoint(Math.abs(parseInt(handle.point.x)), parseInt(handle.point.y));
-					app.map._docLayer.sheetGeometry.convertToTileTwips(point);
-					handle.point.x = point.x;
-					handle.point.y = point.y;
+					handle.point.x = Math.abs(parseInt(handle.point.x)) + offset[0];
+					handle.point.y = parseInt(handle.point.y) + offset[1];
 				}
 			}
 		}
@@ -505,7 +507,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 			this.sectionProperties.svg.remove();
 	}
 
-	addVideoSupportHandlers(videos: any) {
+	static addVideoSupportHandlers(videos: any) {
 		if (!videos)
 			return;
 
@@ -517,24 +519,24 @@ class ShapeHandlesSection extends CanvasSectionObject {
 			video.addEventListener('playing', function() {
 				window.setTimeout(function() {
 					if (video.webkitDecodedFrameCount === 0 && video.webkitAudioDecodedByteCount === 0) {
-						this.showUnsupportedMediaWarning();
+						ShapeHandlesSection.showUnsupportedMediaWarning();
 					}
-				}.bind(this), 1000);
-			}.bind(this));
+				}, 1000);
+			});
 
 			video.addEventListener('error', function() {
-				this.showUnsupportedMediaWarning();
-			}.bind(this));
+				ShapeHandlesSection.showUnsupportedMediaWarning();
+			});
 
 			if (sources.length) {
 				sources[0].addEventListener('error', function(error: string) {
-					this.showUnsupportedMediaWarning();
-				}.bind(this));
+					ShapeHandlesSection.showUnsupportedMediaWarning();
+				});
 			}
 		}
 	}
 
-	showUnsupportedMediaWarning() {
+	static showUnsupportedMediaWarning() {
 		var videoWarning = _('Document contains unsupported media');
 		window.L.Map.THIS.uiManager.showSnackbar(videoWarning);
 	}
@@ -568,7 +570,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		var source = this.sectionProperties.svg.getElementsByTagName('source');
 		source[0].src = decodeURIComponent(source[0].src);
 
-		this.addVideoSupportHandlers(videos);
+		ShapeHandlesSection.addVideoSupportHandlers(videos);
 	}
 
 	removeTagFromHTML(data: string, startString: string, endString: string): string {
@@ -608,6 +610,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		this.sectionProperties.svg.style.pointerEvents = 'none';
 		document.getElementById('canvas-container').appendChild(this.sectionProperties.svg);
 
+		// eslint-disable-next-line no-restricted-syntax -- sanitized SVG markup
 		this.sectionProperties.svg.innerHTML = app.LOUtil.sanitize(data, 'svg');
 		this.sectionProperties.svg.style.position = 'absolute';
 		this.sectionProperties.svg.children[0].style.width = this.sectionProperties.svg.children[0].style.height = 'auto';
@@ -618,6 +621,10 @@ class ShapeHandlesSection extends CanvasSectionObject {
 	}
 
 	showSVG() {
+		// A view that draws from objects shows what a drag would do by drawing the objects
+		// themselves, so the picture the engine renders stays away.
+		if (RenderManager.isVectorRendering()) return;
+
 		if (this.sectionProperties.svg)
 			this.sectionProperties.svg.style.display = '';
 	}
@@ -796,8 +803,25 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		}
 	}
 
+	/*
+		Whether a handle of that kind gets a section of its own. A view that draws from objects
+		draws the handles that frame and shape the selection in one section of its own, which
+		knows them as a list, and draws the band round a group or a diagram there as well, so only
+		the anchor is left here. Cropping an image is done with the whole set of handles here, so
+		while it runs they are all made as they always were.
+	*/
+	private handleGetsItsOwnSection(kind: string): boolean {
+		if (!RenderManager.isVectorRendering()) return true;
+		if (GraphicSelection.extraInfo?.isCropMode) return true;
+
+		return kind === '16';
+	}
+
 	addSubSections() {
 		for (let i = 0; i < this.sectionProperties.handles.length; i++) {
+			if (!this.handleGetsItsOwnSection(this.sectionProperties.handles[i].info.kind))
+				continue;
+
 			let newSubSection: any = null;
 			if (this.sectionProperties.handles[i].info.kind === '16')
 				newSubSection = this.checkAnchorSubSection(this.sectionProperties.handles[i]);
@@ -807,7 +831,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 				newSubSection = this.checkRotationSubSection(this.sectionProperties.handles[i]);
 			else if (this.sectionProperties.handles[i].info.kind === 'DiagramHandle')
 				newSubSection = this.checkDiagramSubSection(this.sectionProperties.handles[i]);
-			else if (this.sectionProperties.handles[i].info.kind === '22')
+			else if (['11', '22'].includes(this.sectionProperties.handles[i].info.kind))
 				newSubSection = this.checkCustomSubSection(this.sectionProperties.handles[i]);
 			else if (this.sectionProperties.handles[i].info.kind === '9')
 				newSubSection = this.checkPolySubSection(this.sectionProperties.handles[i]);
@@ -826,46 +850,73 @@ class ShapeHandlesSection extends CanvasSectionObject {
 			GraphicSelection.extraInfo?.isDraggable === false ? 'not-allowed' : 'move';
 	}
 
+	/// Where the upper left corner of the selection lands, in core pixels, on the axis given.
 	adjustSnapTransformCoordinate(x: number, y: number) {
-		// Transform command accepts the difference from top left corner.
-		// closestX / closestY are the snapped position of the matched point
-		// (left edge, center or right edge), so subtract that point's offset
-		// from the top left corner to get the new top left position.
-
-		if (x !== null) x -= this.sectionProperties.snapOffsetX;
-		if (y !== null) y -= this.sectionProperties.snapOffsetY;
-
-		return x !== null ? x: y;
+		const corner = this.sectionProperties.snap.corner(x, y);
+		return x !== null ? corner[0] : corner[1];
 	}
 
 	sendTransformCommand(point: cool.SimplePoint) {
-		let x = this.sectionProperties.closestX;
-		if (!x) x = this.sectionProperties.lastDragDistance[0] + this.position[0];
-		else x = this.adjustSnapTransformCoordinate(x, null);
+		const corner = this.sectionProperties.snap.corner(
+			this.sectionProperties.lastDragDistance[0] + this.position[0],
+			this.sectionProperties.lastDragDistance[1] + this.position[1],
+		);
 
-		let y = this.sectionProperties.closestY;
-		if (!y) y = this.sectionProperties.lastDragDistance[1] + this.position[1];
-		else y = this.adjustSnapTransformCoordinate(null, y);
+		let x = corner[0];
+		const y = corner[1];
 
-		let yTwips = y * app.pixelsToTwips;
+		if (GraphicSelection.inPlaceActive) {
+			GraphicSelection.sendInPlaceArea(
+				cool.SimpleRectangle.fromCorePixels([
+					x,
+					y,
+					this.size[0],
+					this.size[1],
+				]),
+				true,
+			);
+			app.map._docLayer.requestNewFiledBasedViewTiles();
+			this.sectionProperties.lastDragDistance = [0, 0];
+			return;
+		}
+
 		const docLayer = app.map._docLayer;
+
+		if (docLayer.isCalcRTL())
+			x = -this.size[0] + this.sectionProperties.lastDragDistance[0] - this.position[0];
+
+		let xTwips = Math.round(x * app.pixelsToTwips);
+		let yTwips = Math.round(y * app.pixelsToTwips);
+
 		const verticalOffset = docLayer.getFiledBasedViewVerticalOffset();
 		if (verticalOffset) {
 			// Transform from canvas twips to core twips.
 			yTwips -= verticalOffset;
 		}
 
-		if (app.map._docLayer.isCalcRTL())
-			x = -this.size[0] + this.sectionProperties.lastDragDistance[0] - this.position[0];
+		if (docLayer._docType === 'spreadsheet' && GraphicSelection.inPlaceArea) {
+			// what is inside an open object is shown where the object is
+			const sign = xTwips < 0 ? -1 : 1;
+			xTwips = sign * (Math.abs(xTwips) - GraphicSelection.inPlaceTileOffset[0]);
+			yTwips -= GraphicSelection.inPlaceTileOffset[1];
+		}
+		else if (docLayer._docType === 'spreadsheet' && docLayer.sheetGeometry) {
+			// we keep the shape in tile twips, core reads these as print twips
+			const sign = xTwips < 0 ? -1 : 1;
+			const printTwips = docLayer.sheetGeometry.getPrintTwipsPointFromTile(
+				new cool.Point(Math.abs(xTwips), yTwips));
+			xTwips = sign * Math.round(printTwips.x);
+			yTwips = Math.round(printTwips.y);
+		}
 
 		const parameters = {
 			'TransformPosX': {
 				'type': 'long',
-				'value': Math.round(x * app.pixelsToTwips)
+				'value': xTwips
 			},
 			'TransformPosY': {
 				'type': 'long',
-				'value': Math.round(yTwips)
+				'value': yTwips
 			}
 		};
 
@@ -882,22 +933,36 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		shapedragpreview message. At most one request is in flight, newer
 		positions replace the queued one until the answer arrives.
 	*/
-	public requestShapeDragPreview(handleId: any, point: cool.SimplePoint) {
+	public requestShapeDragPreview(handleInfo: any, point: cool.SimplePoint) {
 		const requestTime = this.sectionProperties.shapeDragPreviewRequestTime;
 		if (requestTime !== null && Date.now() - requestTime < 250) {
-			this.sectionProperties.queuedShapeDragPreview = { handleId: handleId, point: point };
+			this.sectionProperties.queuedShapeDragPreview = {
+				handleInfo: handleInfo,
+				point: point,
+			};
 			return;
 		}
 
-		this.sendShapeDragPreviewRequest(handleId, point);
+		this.sendShapeDragPreviewRequest(handleInfo, point);
 	}
 
-	private sendShapeDragPreviewRequest(handleId: any, point: cool.SimplePoint) {
+	/*
+		How a handle is named to the engine: by what it is, where the client worked the handles out
+		for itself, and otherwise by the place the engine gave it in its own list.
+	*/
+	public static handleParameters(handleInfo: any): any {
+		if (handleInfo?.name)
+			return { HandleName: { type: 'string', value: String(handleInfo.name) } };
+
+		return { HandleNum: { type: 'long', value: handleInfo?.id } };
+	}
+
+	private sendShapeDragPreviewRequest(handleInfo: any, point: cool.SimplePoint) {
 		this.sectionProperties.shapeDragPreviewRequestTime = Date.now();
 		this.sectionProperties.queuedShapeDragPreview = null;
 
 		const parameters = {
-			HandleNum: { type: 'long', value: handleId },
+			...ShapeHandlesSection.handleParameters(handleInfo),
 			NewPosX: { type: 'long', value: Math.round(point.x) },
 			NewPosY: { type: 'long', value: Math.round(point.y) },
 			Preview: { type: 'boolean', value: true }
@@ -935,7 +1000,30 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		this.containerObject.requestReDraw();
 
 		const queued = this.sectionProperties.queuedShapeDragPreview;
-		if (queued) this.sendShapeDragPreviewRequest(queued.handleId, queued.point);
+		if (queued) this.sendShapeDragPreviewRequest(queued.handleInfo, queued.point);
+	}
+
+	/*
+		The drag is off, so what was shown of it goes: the copy of the shape that followed the
+		mouse, the outline the engine answered with, and the lines it was snapping to. The shape
+		itself never moved, the engine breaks its own drag on the same key.
+	*/
+	/// Forgets what the last look for a snap found, so the lines that marked it are gone.
+	public forgetTheSnap(): void {
+		this.sectionProperties.snap.forget();
+	}
+
+	/// Where the last look for a snap landed, in core pixels, null on an axis that found none.
+	public snappedAt(): (number | null)[] {
+		return this.sectionProperties.snap.at();
+	}
+
+	onDragCancel(): void {
+		this.sectionProperties.lastDragDistance = [0, 0];
+		this.forgetTheSnap();
+
+		this.hideSVG();
+		this.clearShapeDragPreview();
 	}
 
 	public clearShapeDragPreview() {
@@ -984,233 +1072,23 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		if (this.containerObject.isDraggingSomething()) {
 			app.map.fire('scrollvelocity', { vx: 0, vy: 0 });
 
+			// A view that draws from objects carries the selection in the section that draws the
+			// handles, which works the move out itself. Cropping an image still runs here.
+			if (
+				RenderManager.isVectorRendering() &&
+				GraphicSelection.extraInfo?.isCropMode !== true
+			)
+				return;
+
 			point.x += app.activeDocument.activeLayout.viewedRectangle.x1 - this.sectionProperties.viewedRectangleOnMouseDown.x1;
 			point.y += app.activeDocument.activeLayout.viewedRectangle.y1 - this.sectionProperties.viewedRectangleOnMouseDown.y1;
 			this.sendTransformCommand(point);
 		}
 	}
 
-	// xList holds the dragged shape's [left edge, center, right edge].
-	// We look for the closest left/center/right ordinate of any other object.
-	findClosestX(xList: number[]) {
-		let closest = 1000;
-		let pickX = null;
-		let snapOffset = 0;
-		let centerSnap = null;
-		let centerToCenter = false;
-		if (GraphicSelection.extraInfo.ObjectRectangles) {
-			const ordNum = GraphicSelection.extraInfo.OrdNum;
-			const rectangles = GraphicSelection.extraInfo.ObjectRectangles;
-
-			for (let i = 0; i < rectangles.length; i++) {
-				if (rectangles[i][4] === ordNum) continue; // Don't compare it with itself.
-
-				// Candidate snap ordinates of the other object: left edge, center, right edge.
-				const targets = [
-					rectangles[i][0],
-					rectangles[i][0] + rectangles[i][2] / 2,
-					rectangles[i][0] + rectangles[i][2],
-				];
-
-				for (let j = 0; j < xList.length; j++) {
-					for (let k = 0; k < targets.length; k++) {
-						const distance = Math.abs(targets[k] - xList[j]);
-						if (distance < closest) {
-							closest = distance;
-							pickX = targets[k];
-							snapOffset = xList[j] - xList[0]; // 0, half width or full width.
-							// k === 1 means the other object's center was the snap target.
-							centerSnap = k === 1 ? [targets[1], rectangles[i][1] + rectangles[i][3] / 2] : null;
-							// Both centers meet when the matched point is the active object's center too.
-							centerToCenter = k === 1 && xList[j] === xList[1];
-						}
-					}
-				}
-			}
-		}
-
-		if (closest < 10 * app.dpiScale) {
-			this.sectionProperties.closestX = pickX;
-			this.sectionProperties.snapOffsetX = snapOffset;
-			this.sectionProperties.centerSnapX = centerSnap;
-			this.sectionProperties.centerToCenterX = centerToCenter;
-		}
-		else {
-			this.sectionProperties.closestX = null;
-			this.sectionProperties.centerSnapX = null;
-			this.sectionProperties.centerToCenterX = false;
-		}
-	}
-
-	// yList holds the dragged shape's [top edge, center, bottom edge].
-	// We look for the closest top/center/bottom ordinate of any other object.
-	findClosestY(yList: number[]) {
-		let closest = 1000;
-		let pickY = null;
-		let snapOffset = 0;
-		let centerSnap = null;
-		let centerToCenter = false;
-		if (GraphicSelection.extraInfo.ObjectRectangles) {
-			const ordNum = GraphicSelection.extraInfo.OrdNum;
-			const rectangles = GraphicSelection.extraInfo.ObjectRectangles;
-
-			for (let i = 0; i < rectangles.length; i++) {
-				if (rectangles[i][4] === ordNum) continue; // Don't compare it with itself.
-
-				// Candidate snap ordinates of the other object: top edge, center, bottom edge.
-				const targets = [
-					rectangles[i][1],
-					rectangles[i][1] + rectangles[i][3] / 2,
-					rectangles[i][1] + rectangles[i][3],
-				];
-
-				for (let j = 0; j < yList.length; j++) {
-					for (let k = 0; k < targets.length; k++) {
-						const distance = Math.abs(targets[k] - yList[j]);
-						if (distance < closest) {
-							closest = distance;
-							pickY = targets[k];
-							snapOffset = yList[j] - yList[0]; // 0, half height or full height.
-							// k === 1 means the other object's center was the snap target.
-							centerSnap = k === 1 ? [rectangles[i][0] + rectangles[i][2] / 2, targets[1]] : null;
-							// Both centers meet when the matched point is the active object's center too.
-							centerToCenter = k === 1 && yList[j] === yList[1];
-						}
-					}
-				}
-			}
-		}
-
-		if (closest < 10 * app.dpiScale) {
-			this.sectionProperties.closestY = pickY;
-			this.sectionProperties.snapOffsetY = snapOffset;
-			this.sectionProperties.centerSnapY = centerSnap;
-			this.sectionProperties.centerToCenterY = centerToCenter;
-		}
-		else {
-			this.sectionProperties.closestY = null;
-			this.sectionProperties.centerSnapY = null;
-			this.sectionProperties.centerToCenterY = false;
-		}
-	}
-
-	private cloneSelectedPartInfoForGridSnap() {
-		const selectedPart = Object.assign({}, app.impress.partList[app.map._docLayer._selectedPart]);
-		selectedPart.leftBorder *= app.impress.twipsCorrection;
-		selectedPart.upperBorder *= app.impress.twipsCorrection;
-		selectedPart.rightBorder *= app.impress.twipsCorrection;
-		selectedPart.lowerBorder *= app.impress.twipsCorrection;
-		selectedPart.gridCoarseWidth *= app.impress.twipsCorrection;
-		selectedPart.gridCoarseHeight *= app.impress.twipsCorrection;
-
-		return selectedPart;
-	}
-
-	private getInnerRecrangleForGridSnap(selectedPart: any) {
-		return new cool.SimpleRectangle(
-			selectedPart.leftBorder,
-			selectedPart.upperBorder,
-			(selectedPart.width - selectedPart.leftBorder - selectedPart.rightBorder),
-			(selectedPart.height - selectedPart.upperBorder - selectedPart.lowerBorder)
-		);
-	}
-
-	private getCornerPointsForGridSnap(size: number[], position: number[], dragDistance: number[]) {
-		return [
-			new cool.SimplePoint((position[0] + dragDistance[0]) * app.pixelsToTwips, (position[1] + dragDistance[1]) * app.pixelsToTwips),
-			new cool.SimplePoint((size[0] + position[0] + dragDistance[0]) * app.pixelsToTwips, (position[1] + dragDistance[1]) * app.pixelsToTwips),
-			new cool.SimplePoint((position[0] + dragDistance[0]) * app.pixelsToTwips, (size[1] + position[1] + dragDistance[1]) * app.pixelsToTwips),
-			new cool.SimplePoint((size[0] + position[0] + dragDistance[0]) * app.pixelsToTwips, (size[1] + position[1] + dragDistance[1]) * app.pixelsToTwips),
-		];
-	}
-
-	private findClosestGridPoint(size: number[], position: number[], dragDistance: number[]) {
-		// First rule of snap-to-grid: If you enable snap-to-grid, you have to snap.
-
-		const selectedPart = this.cloneSelectedPartInfoForGridSnap();
-
-		// The 4 corners of selected object's rectangle.
-		const checkList = this.getCornerPointsForGridSnap(size, position, dragDistance);
-
-		// The rectangle that is shaped by the page margins.
-		const innerRectangle = this.getInnerRecrangleForGridSnap(selectedPart);
-
-		const gapX = selectedPart.gridCoarseWidth / (selectedPart.innerSpacesX > 0 ? selectedPart.innerSpacesX : 1);
-		const gapY = selectedPart.gridCoarseHeight / (selectedPart.innerSpacesY > 0 ? selectedPart.innerSpacesY : 1);
-
-		let minX = 100000;
-		let minY = 100000;
-		for (let i = 0; i < 1; i++) {
-			if (innerRectangle.containsPoint(checkList[i].toArray())) {
-
-				const countX = Math.round((checkList[i].x - innerRectangle.x1) / gapX);
-				const countY = Math.round((checkList[i].y - innerRectangle.y1) / gapY);
-
-				const diffX = Math.abs(checkList[i].x - innerRectangle.x1 - gapX * countX);
-				const diffY = Math.abs(checkList[i].y - innerRectangle.y1 - gapY * countY);
-
-				if (diffX < minX) {
-					minX = diffX;
-					this.sectionProperties.closestX = innerRectangle.x1 + (countX * gapX);
-					this.sectionProperties.snapOffsetX = [1, 3].includes(i) ? size[0] : 0; // Subtract width when a right corner snapped.
-				}
-				if (diffY < minY) {
-					minY = diffY;
-					this.sectionProperties.closestY = innerRectangle.y1 + (countY * gapY);
-					this.sectionProperties.snapOffsetY = [2, 3].includes(i) ? size[1] : 0; // Subtract height when a bottom corner snapped.
-				}
-			}
-		}
-
-		this.sectionProperties.closestX *= app.twipsToPixels;
-		this.sectionProperties.closestY *= app.twipsToPixels;
-	}
-
-	public checkObjectsBoundaries(xListToCheck: number[], yListToCheck: number[]) {
-		if (app.map._docLayer._docType === 'presentation') {
-			this.findClosestX(xListToCheck);
-			this.findClosestY(yListToCheck);
-
-			// On a center-to-center match, also mark the active object's own center.
-			// The object is not snapped until mouse up, so on a matched axis use the
-			// snapped ordinate (closestX / closestY) to place the dot on the helper
-			// line instead of the still-offset live position (xList[1] / yList[1]).
-			if (this.sectionProperties.centerToCenterX || this.sectionProperties.centerToCenterY) {
-				this.sectionProperties.draggedCenter = [
-					this.sectionProperties.centerToCenterX ? this.sectionProperties.closestX : xListToCheck[1],
-					this.sectionProperties.centerToCenterY ? this.sectionProperties.closestY : yListToCheck[1],
-				];
-			}
-			else
-				this.sectionProperties.draggedCenter = null;
-		}
-	}
-
+	/// Looks for what the drag could line up with, and marks it.
 	public checkHelperLinesAndSnapPoints(size: number[], position: number[], dragDistance: number[]) {
-		/*
-			We will first check if grid-snap is enabled and if we are close to a grid point.
-			If there is a grid point to snap to, then we'll ignore helper lines.
-			Because core side doesn't know about our helper lines, and it'll ignore them if it can snap to a grid point.
-		*/
-
-		this.sectionProperties.closestX = null;
-		this.sectionProperties.closestY = null;
-		this.sectionProperties.centerSnapX = null;
-		this.sectionProperties.centerSnapY = null;
-		this.sectionProperties.draggedCenter = null;
-
-		if (app.map.stateChangeHandler.getItemValue('.uno:GridUse') === 'true') {
-			this.findClosestGridPoint(size, position, dragDistance)
-		}
-		else {
-			const left = position[0] + dragDistance[0];
-			const top = position[1] + dragDistance[1];
-			this.checkObjectsBoundaries(
-				[left, left + size[0] / 2, left + size[0]],
-				[top, top + size[1] / 2, top + size[1]]
-			);
-		}
-
+		this.sectionProperties.snap.look(size, position, dragDistance);
 		this.containerObject.requestReDraw();
 	}
 
@@ -1263,7 +1141,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 	}
 
 	onMouseMove(position: cool.SimplePoint, dragDistance: number[]) {
-		let canDrag = !app.file.textCursor.visible && GraphicSelection.extraInfo?.isDraggable !== false;
+		let canDrag = (GraphicSelection.inPlaceActive || !app.file.textCursor.visible) && GraphicSelection.extraInfo?.isDraggable !== false;
 
 		if (canDrag && app.map.getDocType() === 'presentation') {
 			// Tables get selected when multiple cells are selected. In this case, we check if DeleteRows is disabled.
@@ -1271,6 +1149,15 @@ class ShapeHandlesSection extends CanvasSectionObject {
 			const deleteRowsState = app.map.stateChangeHandler.getItemValue('.uno:DeleteRows');
 			canDrag = deleteRowsState ? deleteRowsState === 'disabled': true;
 		}
+
+		// A view that draws from objects carries the selection in the section that draws the
+		// handles, so a drag that lands here does nothing at all. Cropping an image still runs
+		// here, and so does everything while the document is drawn from tiles.
+		if (
+			RenderManager.isVectorRendering() &&
+			GraphicSelection.extraInfo?.isCropMode !== true
+		)
+			return;
 
 		if (this.containerObject.isDraggingSomething() && canDrag) {
 			this.constrainDragToSheetArea(dragDistance);
@@ -1355,11 +1242,8 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		const left = GraphicSelection.rectangle.v1X;
 		const top = GraphicSelection.rectangle.v1Y;
 
-		const leftAddition = this.containerObject.getDocumentAnchor()[0];
-		const topAddition = this.containerObject.getDocumentAnchor()[1];
-
-		this.sectionProperties.svg.style.left = Math.round((left + leftAddition) / app.dpiScale) + 'px';
-		this.sectionProperties.svg.style.top = Math.round((top + topAddition) / app.dpiScale) + 'px';
+		this.sectionProperties.svg.style.left = Math.round(left / app.dpiScale) + 'px';
+		this.sectionProperties.svg.style.top = Math.round(top / app.dpiScale) + 'px';
 		this.sectionProperties.svgPosition = [left, top];
 	}
 
@@ -1367,109 +1251,6 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		if (this.sectionProperties.svgPosition) {
 			this.updateSVGPosition();
 		}
-	}
-
-	drawXAxis(x: number) {
-		this.context.moveTo(x, 0);
-		this.context.lineTo(x, this.context.canvas.height);
-		this.context.stroke();
-	}
-
-	drawYAxis(y: number) {
-		this.context.moveTo(0, y);
-		this.context.lineTo(this.context.canvas.width, y);
-		this.context.stroke();
-	}
-
-	// Marks the center of the other object we are aligning to with a small red dot.
-	// centerPoint is the [x, y] center of that object in pixels.
-	drawCenterSnapDot(centerPoint: number[]) {
-		const x = this.containerObject.getDocumentAnchor()[0] + centerPoint[0] - app.activeDocument.activeLayout.viewedRectangle.pX1;
-		const y = this.containerObject.getDocumentAnchor()[1] + centerPoint[1] - app.activeDocument.activeLayout.viewedRectangle.pY1;
-
-		this.context.beginPath();
-		this.context.fillStyle = 'red';
-		this.context.arc(x, y, 3 * app.dpiScale, 0, 2 * Math.PI);
-		this.context.fill();
-		this.context.closePath();
-	}
-
-	drawShapeAlignmentHelperLines() {
-		this.context.save();
-
-		this.context.setLineDash([4, 3]);
-		this.context.strokeStyle = HelperLineStyles.smartGuidesStyle;
-		this.context.translate(-this.myTopLeft[0], -this.myTopLeft[1]);
-
-		this.context.beginPath();
-
-		if (this.sectionProperties.closestX !== null)
-			this.drawXAxis(this.containerObject.getDocumentAnchor()[0] + this.sectionProperties.closestX - app.activeDocument.activeLayout.viewedRectangle.pX1);
-
-		if (this.sectionProperties.closestY !== null)
-			this.drawYAxis(this.containerObject.getDocumentAnchor()[1] + this.sectionProperties.closestY - app.activeDocument.activeLayout.viewedRectangle.pY1);
-
-		this.context.closePath();
-
-		// When snapping to another object's center, mark that center with a red dot.
-		if (this.sectionProperties.centerSnapX !== null)
-			this.drawCenterSnapDot(this.sectionProperties.centerSnapX);
-
-		if (this.sectionProperties.centerSnapY !== null)
-			this.drawCenterSnapDot(this.sectionProperties.centerSnapY);
-
-		// On a center-to-center match, also mark the active object's own center.
-		if (this.sectionProperties.draggedCenter !== null)
-			this.drawCenterSnapDot(this.sectionProperties.draggedCenter);
-
-		this.context.restore();
-	}
-
-	drawGridHelperLines() {
-		this.context.save();
-
-		this.context.translate(-this.myTopLeft[0], -this.myTopLeft[1]);
-
-		this.context.beginPath();
-
-		if (this.sectionProperties.closestX !== null) {
-			this.context.strokeStyle = HelperLineStyles.gridSolidStyle;
-			this.context.setLineDash([]);
-
-			const x = this.containerObject.getDocumentAnchor()[0] + this.sectionProperties.closestX - app.activeDocument.activeLayout.viewedRectangle.pX1;
-
-			this.drawXAxis(x);
-
-			// Draw a second line on top of solid white-ish line.
-			this.context.setLineDash([4, 3]);
-			this.context.strokeStyle = HelperLineStyles.gridDashedStyle;
-
-			this.drawXAxis(x);
-		}
-
-		if (this.sectionProperties.closestY !== null) {
-			this.context.strokeStyle = HelperLineStyles.gridSolidStyle;
-			this.context.setLineDash([]);
-
-			const y = this.containerObject.getDocumentAnchor()[1] + this.sectionProperties.closestY - app.activeDocument.activeLayout.viewedRectangle.pY1;
-
-			this.drawYAxis(y);
-
-			// Draw a second line on top of solid white-ish line.
-			this.context.setLineDash([4, 3]);
-			this.context.strokeStyle = HelperLineStyles.gridDashedStyle;
-
-			this.drawYAxis(y);
-		}
-
-		this.context.closePath();
-
-		this.context.restore();
-	}
-
-	private anythingToDraw(): boolean {
-		return 	this.sectionProperties.closestX !== null ||
-				this.sectionProperties.closestY !== null;
 	}
 
 	private drawSelectionFrame() {
@@ -1486,6 +1267,8 @@ class ShapeHandlesSection extends CanvasSectionObject {
 			rectangle.pY1 += this.sectionProperties.lastDragDistance[1];
 			this.drawViewRectangle(rectangle);
 		}
+		else if (this.containerObject.isDraggingSomething() && this.sectionProperties.inPlaceResizeRectangle)
+			this.drawViewRectangle(this.sectionProperties.inPlaceResizeRectangle);
 		else
 			this.drawViewRectangle(this.boundingRectangle);
 
@@ -1496,16 +1279,38 @@ class ShapeHandlesSection extends CanvasSectionObject {
 	}
 
 	public onDraw() {
-		this.drawSelectionFrame();
+		// A view that draws from objects draws the line around the selection in the section that
+		// draws its handles, where it follows everything that is done to the selection.
+		if (!RenderManager.isVectorRendering()) this.drawSelectionFrame();
 		this.drawShapeDragPreview();
 		if (!this.showSection || !this.isVisible)
 			this.hideSVG();
-		else if (this.anythingToDraw()) {
-			if (app.map.stateChangeHandler.getItemValue('.uno:GridUse') === 'true')
-				this.drawGridHelperLines();
-			else
-				this.drawShapeAlignmentHelperLines();
+		else this.sectionProperties.snap.draw(this);
+	}
+
+	/*
+		Shows what a scaling drag would do to the shape, by taking the picture of it to the size
+		and the place the drag leads to. Does nothing while there is no picture to take.
+	*/
+	public scalePreviewTo(shapeRecProps: any): void {
+		const svg = this.sectionProperties.svg;
+		if (!svg) return;
+
+		const shape = this.sectionProperties.shapeRectangleProperties;
+		let scaleX = shapeRecProps.width / shape.width;
+		let scaleY = shapeRecProps.height / shape.height;
+
+		if (GraphicSelection.extraInfo?.typeString === 'ole2') {
+			scaleX = Math.abs(scaleX);
+			scaleY = Math.abs(scaleY);
 		}
+
+		const diffX = (shapeRecProps.center.pX - shape.center.pX) / app.dpiScale;
+		const diffY = (shapeRecProps.center.pY - shape.center.pY) / app.dpiScale;
+
+		svg.children[0].style.transform = 'translate(' + Math.round(diffX) + 'px, ' + Math.round(diffY) + 'px)' + 'rotate(' + -shapeRecProps.angleRadian + 'rad) scale(' + scaleX + ', ' + scaleY + ') rotate(' + shapeRecProps.angleRadian + 'rad)';
+
+		this.showSVG();
 	}
 
 	removeSubSections(): void {
@@ -1516,12 +1321,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 	}
 
 	onContextMenu(point: cool.SimplePoint, e: MouseEvent): void {
-		const viewed = app.activeDocument.activeLayout.viewedRectangle;
-		const anchor = this.containerObject.getDocumentAnchor();
-		point.pX = this.myTopLeft[0] + point.pX + viewed.pX1 - anchor[0];
-		point.pY = this.myTopLeft[1] + point.pY + viewed.pY1 - anchor[1];
-		app.activeDocument.mouseControl.setMousePosition(point);
-		app.activeDocument.mouseControl.onContextMenu(point, e);
+		MouseControl.contextMenuFrom(this, point, e);
 	}
 
 	private hideSubSections() {

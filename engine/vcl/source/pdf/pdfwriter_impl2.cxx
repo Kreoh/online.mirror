@@ -16,6 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
+#include <pdf/COSWriter.hxx>
 #include <pdf/pdfwriter_impl.hxx>
 #include <pdf/EncryptionHashTransporter.hxx>
 
@@ -54,9 +55,9 @@
 using namespace vcl;
 using namespace vcl::pdf;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace com::sun::star::beans;
+using namespace ::cpo;
 using namespace ::cpo::uno;
+using namespace com::sun::star::beans;
 
 static bool lcl_canUsePDFAxialShading(const Gradient& rGradient);
 
@@ -220,7 +221,7 @@ void PDFWriterImpl::implWriteBitmapEx( const Point& i_rPoint, const Size& i_rSiz
         {
             uno::Reference < io::XStream > xStream = new utl::OStreamWrapper( *pStrm );
             uno::Reference< io::XSeekable > xSeekable( xStream, UNO_QUERY_THROW );
-            const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+            const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
             uno::Reference< graphic::XGraphicProvider > xGraphicProvider( graphic::GraphicProvider::create(xContext) );
             uno::Reference< graphic::XGraphic > xGraphic( aGraphic.GetXGraphic() );
             uno::Reference < io::XOutputStream > xOut( xStream->getOutputStream() );
@@ -1029,6 +1030,13 @@ void PDFWriterImpl::playMetafile( const GDIMetaFile& i_rMtf, vcl::PDFExtOutDevDa
 }
 
 // Encryption methods
+
+void PDFWriterImpl::appendStringObject(OStringBuffer& rLine, std::string_view aBytes,
+                                       sal_Int32 nObject)
+{
+    COSWriter aWriter(rLine, m_aContext.Encryption.getParams(), m_pPDFEncryptor);
+    aWriter.writeLiteralEncrypt(aBytes, nObject);
+}
 
 void PDFWriterImpl::checkAndEnableStreamEncryption(sal_Int32 nObject)
 {

@@ -14,48 +14,94 @@
 #include <unordered_map>
 #include <comphelper/kit.hxx>
 #include <comphelper/sequence.hxx>
-#include <tools/json_writer.hxx>
 #include <tools/lazydelete.hxx>
+#include <vcl/remoteclipboard.hxx>
 #include <vcl/svapp.hxx>
 #include <sfx2/kit/helper.hxx>
 #include <COKit/COKit.hxx>
 #include <sal/log.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <desktop/kitclipboard.hxx>
 
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /* static */ osl::Mutex KitClipboardFactory::gMutex;
 /* static */ bool KitClipboardFactory::gHasGlobalProvider = false;
-static tools::DeleteOnDeinit<std::unordered_map<int, rtl::Reference<KitClipboard>>>& getClipboards()
+namespace
 {
-    static tools::DeleteOnDeinit<std::unordered_map<int, rtl::Reference<KitClipboard>>>
-        gClipboards{};
-    return gClipboards;
+using KitClipboardMap = std::unordered_map<int, rtl::Reference<KitClipboard>>;
+
+// The registry is reached through a pointer with static storage duration and
+// no destructor of its own, because it is asked for a clipboard while the
+// process is exiting: SwDLL::~SwDLL runs from an exit handler and creates the
+// system clipboard to drop its contents, see sw/source/uibase/app/swdll.cxx.
+// An object that destroys itself would already be gone by then, and reading
+// it would be undefined. The map is emptied on VCL deinit and can be freed
+// explicitly; nothing recreates it during exit, so that late caller still
+// finds the answer it expects.
+tools::DeleteOnDeinit<KitClipboardMap>* gpClipboards = nullptr;
+}
+
+/* static */ KitClipboardMap* KitClipboardFactory::getClipboards()
+{
+    // gMutex is recursive, so callers that hold it already are fine.
+    osl::MutexGuard aGuard(gMutex);
+
+    if (!gpClipboards)
+        gpClipboards = new tools::DeleteOnDeinit<KitClipboardMap>;
+
+    // DeleteOnDeinit empties the map on VCL deinit and answers nullptr from
+    // then on, which is what a caller during shutdown gets.
+    return gpClipboards->get();
+}
+
+/* static */ void KitClipboardFactory::freeClipboards()
+{
+    osl::MutexGuard aGuard(gMutex);
+
+    delete gpClipboards;
+    gpClipboards = nullptr;
+}
+
+/* static */ void KitClipboardFactory::clearAllContentsAndFree()
+{
+    osl::MutexGuard aGuard(gMutex);
+
+    // Deliberately does not build a registry only to free it again.
+    if (gpClipboards)
+    {
+        if (KitClipboardMap* pClipboards = gpClipboards->get())
+        {
+            for (const auto& rPair : *pClipboards)
+                rPair.second->setContents(nullptr, nullptr);
+        }
+        freeClipboards();
+    }
 }
 
 rtl::Reference<KitClipboard> KitClipboardFactory::getClipboardForCurView()
 {
-    // VCL deinit takes the registry away while shutdown is still asking for a clipboard, to drop
-    // what it holds. Answer with nothing, which creating the service turns into the
-    // DeploymentException that such a caller already expects from a UNO on its way out.
-    if (!getClipboards().get())
-        return {};
-
     {
         osl::MutexGuard aGuard(gMutex);
+
+        // The registry is gone once the kit has been destroyed, and empty once VCL has been
+        // deinitialised. Answer with nothing, which creating the service turns into the
+        // DeploymentException that such a caller already expects from a UNO on its way out.
+        KitClipboardMap* pClipboards = getClipboards();
+        if (!pClipboards)
+            return {};
+
         if (gHasGlobalProvider)
         {
             // One clipboard for every view and document (the desktop app).
-            auto& gClipboards = getClipboards();
-            auto it = gClipboards.get()->find(SHARED_VIEW_KEY);
-            if (it != gClipboards.get()->end())
+            auto it = pClipboards->find(SHARED_VIEW_KEY);
+            if (it != pClipboards->end())
                 return it->second;
             rtl::Reference<KitClipboard> xClip(new KitClipboard());
-            (*gClipboards.get())[SHARED_VIEW_KEY] = xClip;
+            (*pClipboards)[SHARED_VIEW_KEY] = xClip;
             SAL_INFO("kit", "Created shared clipboard " << xClip.get());
             return xClip;
         }
@@ -65,17 +111,19 @@ rtl::Reference<KitClipboard> KitClipboardFactory::getClipboardForCurView()
 
     osl::MutexGuard aGuard(gMutex);
 
-    auto& gClipboards = getClipboards();
-    auto it = gClipboards.get()->find(nViewId);
-    if (it != gClipboards.get()->end())
+    KitClipboardMap* pClipboards = getClipboards();
+    if (!pClipboards)
+        return {};
+
+    auto it = pClipboards->find(nViewId);
+    if (it != pClipboards->end())
     {
         SAL_INFO("kit", "Got clip: " << it->second.get() << " from " << nViewId);
         return it->second;
     }
     rtl::Reference<KitClipboard> xClip(new KitClipboard());
-    xClip->setViewId(nViewId);
     xClip->setDocId(KitHelper::getDocumentIdOfView(nViewId));
-    (*gClipboards.get())[nViewId] = xClip;
+    (*pClipboards)[nViewId] = xClip;
     SAL_INFO("kit", "Created clip: " << xClip.get() << " for viewId " << nViewId);
     return xClip;
 }
@@ -84,7 +132,7 @@ rtl::Reference<KitClipboard> KitClipboardFactory::getExistingClipboardForView(in
 {
     osl::MutexGuard aGuard(gMutex);
 
-    auto* pClipboards = getClipboards().get();
+    KitClipboardMap* pClipboards = getClipboards();
     if (!pClipboards)
         return {};
     auto it = pClipboards->find(nViewId);
@@ -100,7 +148,7 @@ void KitClipboardFactory::releaseClipboardForView(int nViewId)
     if (gHasGlobalProvider)
         return; // the shared clipboard is process-global, not per-view
 
-    auto* pClipboards = getClipboards().get();
+    KitClipboardMap* pClipboards = getClipboards();
     if (!pClipboards)
         return;
 
@@ -119,7 +167,7 @@ void KitClipboardFactory::releaseClipboardsForDocument(int nDocId)
     if (gHasGlobalProvider)
         return; // the shared clipboard is process-global, not per-document
 
-    auto* pClipboards = getClipboards().get();
+    KitClipboardMap* pClipboards = getClipboards();
     if (!pClipboards)
         return;
 
@@ -132,11 +180,14 @@ void KitClipboardFactory::installGlobalProvider(const COKitClipboardProvider* pP
 {
     osl::MutexGuard aGuard(gMutex);
 
-    auto& gClipboards = getClipboards();
+    KitClipboardMap* pClipboards = getClipboards();
+    if (!pClipboards)
+        return;
+
     if (pProvider)
     {
         gHasGlobalProvider = true;
-        auto& xShared = (*gClipboards.get())[SHARED_VIEW_KEY];
+        auto& xShared = (*pClipboards)[SHARED_VIEW_KEY];
         if (!xShared.is())
             xShared = new KitClipboard();
         xShared->setProvider(pProvider);
@@ -144,7 +195,7 @@ void KitClipboardFactory::installGlobalProvider(const COKitClipboardProvider* pP
     }
     else
     {
-        if (auto* pClipboards = gClipboards.get())
+        if (pClipboards)
         {
             auto it = pClipboards->find(SHARED_VIEW_KEY);
             if (it != pClipboards->end())
@@ -165,7 +216,7 @@ void KitClipboardFactory::flushSharedClipboard()
         osl::MutexGuard aGuard(gMutex);
         if (!gHasGlobalProvider)
             return;
-        if (auto* pClipboards = getClipboards().get())
+        if (KitClipboardMap* pClipboards = getClipboards())
         {
             auto it = pClipboards->find(SHARED_VIEW_KEY);
             if (it != pClipboards->end())
@@ -176,7 +227,7 @@ void KitClipboardFactory::flushSharedClipboard()
         xShared->flushContents();
 }
 
-uno::Reference<uno::XInterface>
+uno::Reference<cpo::uno::XInterface>
     KitClipboardFactory::createInstanceWithArguments(const Sequence<Any>& /* rArgs */)
 {
     return { static_cast<cppu::OWeakObject*>(getClipboardForCurView().get()) };
@@ -184,8 +235,9 @@ uno::Reference<uno::XInterface>
 
 void clearAllKitClipboardsContents()
 {
-    for (const auto & pair : *getClipboards().get())
-        pair.second->setContents(nullptr, nullptr);
+    // Drops the references the clipboards hold and then the registry itself, so
+    // that a test leaves nothing behind. A later request builds a new one.
+    KitClipboardFactory::clearAllContentsAndFree();
 }
 
 KitClipboard::KitClipboard()
@@ -300,14 +352,11 @@ void KitClipboard::setContents(
         listener->changedContents(aEv);
     }
 
-    // Emit here rather than from SfxClipboardChangeListener: the listener can
-    // attach to the pre-Kit default clipboard before the per-view Kit clipboard
-    // lands on the window frame, and then miss every real copy.
-    // A real copy needs either a view to notify (the collaborative server) or a
-    // provider to advertise to (the desktop app); the shared clipboard used by
-    // the desktop app has no single view of its own.
-    const bool bHasProvider = m_oProvider && m_oProvider->advertiseToPlatform;
-    if (!xTrans.is() || !comphelper::COKit::isActive() || (m_nViewId < 0 && !bHasProvider))
+    // Advertise here rather than from SfxClipboardChangeListener: the listener
+    // can attach to the pre-Kit default clipboard before the per-view Kit
+    // clipboard lands on the window frame, and then miss every real copy.
+    if (!xTrans.is() || !comphelper::COKit::isActive() || !m_oProvider
+        || !m_oProvider->advertiseToPlatform)
         return;
 
     std::vector<OString> aMimeTypes;
@@ -332,27 +381,12 @@ void KitClipboard::setContents(
     if (aMimeTypes.empty())
         return;
 
-    // With a provider, advertise straight onto the platform clipboard; otherwise
-    // tell the view's client (the browser) which formats are now available.
-    if (m_oProvider && m_oProvider->advertiseToPlatform)
-    {
-        std::vector<const char*> aPtrs;
-        aPtrs.reserve(aMimeTypes.size() + 1);
-        for (const auto& rMime : aMimeTypes)
-            aPtrs.push_back(rMime.getStr());
-        aPtrs.push_back(nullptr);
-        m_oProvider->advertiseToPlatform(aPtrs.data());
-        return;
-    }
-
-    tools::JsonWriter aWriter;
-    {
-        auto aArr = aWriter.startArray("mimeTypes");
-        for (const auto& rMime : aMimeTypes)
-            aWriter.putSimpleValue(OUString::fromUtf8(rMime));
-    }
-    KitHelper::notifyView(m_nViewId, COKitCallbackType::CLIPBOARD_MIMETYPES,
-                          aWriter.finishAndGetAsOString());
+    std::vector<const char*> aPtrs;
+    aPtrs.reserve(aMimeTypes.size() + 1);
+    for (const auto& rMime : aMimeTypes)
+        aPtrs.push_back(rMime.getStr());
+    aPtrs.push_back(nullptr);
+    m_oProvider->advertiseToPlatform(aPtrs.data());
 }
 
 void KitClipboard::addClipboardListener(
@@ -397,28 +431,10 @@ KitTransferable::KitTransferable()
     m_aContent.push_back(aContent);
 }
 
-// cf. sot/source/base/exchange.cxx for these two exceptional types.
 void KitTransferable::initFlavourFromMime(css::datatransfer::DataFlavor& rFlavor,
                                           OUString aMimeType)
 {
-    if (aMimeType.startsWith("text/plain"))
-    {
-        aMimeType = u"text/plain;charset=utf-16"_ustr;
-        rFlavor.DataType = cppu::UnoType<OUString>::get();
-    }
-    else if (aMimeType.startsWith("text/markdown"))
-    {
-        aMimeType = u"text/markdown"_ustr;
-        rFlavor.DataType = cppu::UnoType<OUString>::get();
-    }
-    else if (aMimeType == "application/x-libreoffice-markdown-annotated")
-        rFlavor.DataType = cppu::UnoType<OUString>::get();
-    else if (aMimeType == "application/x-libreoffice-tsvc")
-        rFlavor.DataType = cppu::UnoType<OUString>::get();
-    else
-        rFlavor.DataType = cppu::UnoType<cpo::uno::Sequence<sal_Int8>>::get();
-    rFlavor.MimeType = aMimeType;
-    rFlavor.HumanPresentableName = aMimeType;
+    vcl::remoteclipboard::initFlavourFromMime(rFlavor, std::move(aMimeType));
 }
 
 KitTransferable::KitTransferable(const size_t nInCount, const char** pInMimeTypes,
@@ -568,8 +584,8 @@ KitProviderTransferable::isDataFlavorSupported(const datatransfer::DataFlavor& r
                        { return i.MimeType == rFlavor.MimeType && i.DataType == rFlavor.DataType; });
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-desktop_KitClipboard_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+desktop_KitClipboard_get_implementation(cpo::uno::XComponentContext*,
                                         cpo::uno::Sequence<cpo::uno::Any> const& /*args*/)
 {
     SolarMutexGuard aGuard;

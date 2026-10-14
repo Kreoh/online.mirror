@@ -71,6 +71,7 @@
 #include <COKit/COKit.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScTabViewShell::ConnectObject( const SdrOle2Obj* pObj )
 {
@@ -122,7 +123,7 @@ public:
     {}
 
     // XCallback
-    virtual void SAL_CALL notify(const cpo::uno::Any& aData) override
+    virtual void notify(const cpo::uno::Any& aData) override
     {
         cpo::uno::Sequence<beans::PropertyValue> aProperties;
         if (!(aData >>= aProperties))
@@ -155,6 +156,9 @@ public:
 
 void ScTabViewShell::ActivateObject(SdrOle2Obj* pObj, sal_Int32 nVerb)
 {
+    if (IsKitReadOnlyView())
+        return;
+
     // Do not leave the hint message box on top of the object
     RemoveHintWindow();
 
@@ -219,10 +223,7 @@ void ScTabViewShell::ActivateObject(SdrOle2Obj* pObj, sal_Int32 nVerb)
             // visible section is only changed inplace!
             // the object area must be set after the scaling since it triggers the resizing
             aRect.SetSize( aOleSize ); // in print mm100 units.
-            basegfx::B2DVector aGridOffset(0, 0);
-            GetScDrawView()->calculateGridOffsetForSdrObject(*pObj, aGridOffset);
-            // This is needed when painting the chart onto the tiles.
-            pClient->SetGridOffset(Point(aGridOffset.getX(), aGridOffset.getY()));
+            SetInPlaceClientGridOffset(*pClient, *pObj);
             pClient->SetObjArea( aRect );
 
             nErr = pClient->DoVerb( nVerb );
@@ -305,6 +306,25 @@ ErrCode ScTabViewShell::DoVerb(sal_Int32 nVerb)
     }
 
     return ERRCODE_NONE;
+}
+
+void ScTabViewShell::SetInPlaceClientGridOffset(SfxInPlaceClient& rClient, SdrObject& rObject)
+{
+    basegfx::B2DVector aGridOffset(0, 0);
+    GetScDrawView()->calculateGridOffsetForSdrObject(rObject, aGridOffset);
+    rClient.SetGridOffset(Point(aGridOffset.getX(), aGridOffset.getY()));
+}
+
+// Recomputes the grid offset of the active in-place client for the current zoom.
+void ScTabViewShell::UpdateInPlaceClientGridOffset()
+{
+    ScClient* pClient = static_cast<ScClient*>(GetIPClient());
+    if (!pClient || !pClient->IsObjectInPlaceActive())
+        return;
+
+    SdrOle2Obj* pObject = pClient->GetDrawObj();
+    if (pObject)
+        SetInPlaceClientGridOffset(*pClient, *pObject);
 }
 
 void ScTabViewShell::DeactivateOle()

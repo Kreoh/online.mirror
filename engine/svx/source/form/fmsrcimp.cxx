@@ -54,7 +54,7 @@
 
 #define IFACECAST(c)          static_cast<const Reference< XInterface >&>(c)
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
@@ -110,7 +110,7 @@ void FmRecordCountListener::DisConnect()
 }
 
 
-void SAL_CALL FmRecordCountListener::disposing(const css::lang::EventObject& /*Source*/)
+void FmRecordCountListener::disposing(const css::lang::EventObject& /*Source*/)
 {
     DBG_ASSERT(m_xListening.is(), "FmRecordCountListener::disposing should never have been called without a propset !");
     DisConnect();

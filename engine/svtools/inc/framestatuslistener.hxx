@@ -28,7 +28,7 @@
 
 namespace com::sun::star::frame { class XDispatch; }
 namespace com::sun::star::frame { class XFrame; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace svt
 {
@@ -39,8 +39,8 @@ class FrameStatusListener : public css::frame::XStatusListener,
                             public ::cppu::OWeakObject
 {
     public:
-        FrameStatusListener( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-                             const css::uno::Reference< css::frame::XFrame >& xFrame );
+        FrameStatusListener( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+                             const cpo::uno::Reference< css::frame::XFrame >& xFrame );
         virtual ~FrameStatusListener() override;
 
         // methods to support status forwarder, known by the old sfx2 toolbox controller implementation
@@ -48,40 +48,40 @@ class FrameStatusListener : public css::frame::XStatusListener,
         void bindListener();
 
         // XInterface
-        virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& aType ) override;
-        virtual void SAL_CALL acquire() noexcept override;
-        virtual void SAL_CALL release() noexcept override;
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
 
         // XComponent
-        virtual void SAL_CALL dispose() override;
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+        virtual void dispose() override;
+        virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
 
         // XStatusListener
-        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override = 0;
+        virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override = 0;
 
         // XFrameActionListener
-        virtual void SAL_CALL frameAction( const css::frame::FrameActionEvent& Action ) override;
+        virtual void frameAction( const css::frame::FrameActionEvent& Action ) override;
 
     private:
         struct Listener
         {
-            Listener( css::util::URL _aURL, css::uno::Reference< css::frame::XDispatch > _xDispatch ) :
+            Listener( css::util::URL _aURL, cpo::uno::Reference< css::frame::XDispatch > _xDispatch ) :
                 aURL(std::move( _aURL )), xDispatch(std::move( _xDispatch )) {}
 
             css::util::URL aURL;
-            css::uno::Reference< css::frame::XDispatch > xDispatch;
+            cpo::uno::Reference< css::frame::XDispatch > xDispatch;
         };
 
         typedef std::unordered_map< OUString,
-                                    css::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
+                                    cpo::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
 
         bool                                                      m_bDisposed : 1;
-        css::uno::Reference< css::frame::XFrame >                 m_xFrame;
-        css::uno::Reference< css::uno::XComponentContext >        m_xContext;
+        cpo::uno::Reference< css::frame::XFrame >                 m_xFrame;
+        cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
         URLToDispatchMap                                          m_aListenerMap;
 };
 

@@ -34,7 +34,8 @@ namespace chart
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 
 namespace {
 
@@ -180,7 +181,7 @@ rtl::Reference< Title > TitleHelper::createOrShowTitle(
       TitleHelper::eTitleType eTitleType
     , const OUString& rTitleText
     , const rtl::Reference<ChartModel>& xModel
-    , const uno::Reference< uno::XComponentContext > & xContext )
+    , const uno::Reference< cpo::uno::XComponentContext > & xContext )
 {
     rtl::Reference< Title > xTitled( TitleHelper::getTitle( eTitleType, xModel ) );
     if( xTitled.is())
@@ -198,7 +199,7 @@ rtl::Reference< Title > TitleHelper::createTitle(
       TitleHelper::eTitleType eTitleType
     , const OUString& rTitleText
     , const rtl::Reference<ChartModel>& xModel
-    , const uno::Reference< uno::XComponentContext > & xContext
+    , const uno::Reference< cpo::uno::XComponentContext > & xContext
     , ReferenceSizeProvider * pRefSizeProvider )
 {
     rtl::Reference< ::chart::Title > xTitle;
@@ -330,7 +331,7 @@ OUString TitleHelper::getUnstackedStr(const OUString& rNewText)
 }
 
 void TitleHelper::setFormattedString( const rtl::Reference< Title >& xTitle,
-    const cpo::uno::Sequence< css::uno::Reference< css::chart2::XFormattedString > >& aNewFormattedTitle )
+    const cpo::uno::Sequence< cpo::uno::Reference< css::chart2::XFormattedString > >& aNewFormattedTitle )
 {
     if (!xTitle.is() || !aNewFormattedTitle.hasElements())
         return;
@@ -351,7 +352,7 @@ void TitleHelper::setFormattedString( const rtl::Reference< Title >& xTitle,
 
 void TitleHelper::setCompleteString( const OUString& rNewText
                     , const rtl::Reference< Title >& xTitle
-                    , const uno::Reference< uno::XComponentContext > & xContext
+                    , const uno::Reference< cpo::uno::XComponentContext > & xContext
                     , const float * pDefaultCharHeight /* = 0 */
                     , bool bDialogTitle /*= false*/ )
 {
@@ -391,7 +392,7 @@ void TitleHelper::setCompleteString( const OUString& rNewText
     }
     else
     {
-        uno::Reference< chart2::XFormattedString2 > xFormattedString =
+        uno::Reference< chart2::XFormattedString > xFormattedString =
             chart2::FormattedString::create( xContext );
 
         xFormattedString->setString( aNewText );

@@ -28,7 +28,8 @@
 #include <svtools/toolbarmenu.hxx>
 
 using namespace ::com::sun::star;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace css::lang;
 
 
@@ -151,7 +152,7 @@ IMPL_LINK( PopupWindowControllerImpl, WindowEventListener, VclWindowEvent&, rWin
 
 
 
-PopupWindowController::PopupWindowController( const Reference< uno::XComponentContext >& rxContext,
+PopupWindowController::PopupWindowController( const Reference< cpo::uno::XComponentContext >& rxContext,
                                               const Reference< frame::XFrame >& xFrame,
                                               const OUString& aCommandURL )
 : PopupWindowController_Base( rxContext, xFrame, aCommandURL )
@@ -164,7 +165,7 @@ PopupWindowController::~PopupWindowController()
 }
 
 // XServiceInfo
-bool SAL_CALL PopupWindowController::supportsService( const OUString& ServiceName )
+bool PopupWindowController::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -182,7 +183,7 @@ void PopupWindowController::disposing(std::unique_lock<std::mutex>& rGuard)
 }
 
 // XStatusListener
-void SAL_CALL PopupWindowController::statusChanged( const frame::FeatureStateEvent& rEvent )
+void PopupWindowController::statusChanged( const frame::FeatureStateEvent& rEvent )
 {
     SolarMutexGuard aSolarLock;
 
@@ -210,7 +211,7 @@ VclPtr<vcl::Window> PopupWindowController::createVclPopupWindow(vcl::Window* /*p
     return nullptr;
 }
 
-Reference< awt::XWindow > SAL_CALL PopupWindowController::createPopupWindow()
+Reference< awt::XWindow > PopupWindowController::createPopupWindow()
 {
     if (m_pToolbar)
     {
@@ -258,7 +259,7 @@ Reference< awt::XWindow > SAL_CALL PopupWindowController::createPopupWindow()
     return Reference< awt::XWindow >();
 }
 
-void SAL_CALL PopupWindowController::click()
+void PopupWindowController::click()
 {
     if (m_pToolbar)
     {

@@ -35,9 +35,9 @@ class SfxBasicManagerHolder final
 {
 private:
     BasicManager*   mpBasicManager;
-    css::uno::Reference< css::script::XStorageBasedLibraryContainer >
+    cpo::uno::Reference< css::script::XStorageBasedLibraryContainer >
                     mxBasicContainer;
-    css::uno::Reference< css::script::XStorageBasedLibraryContainer >
+    cpo::uno::Reference< css::script::XStorageBasedLibraryContainer >
                     mxDialogContainer;
 
 public:
@@ -72,20 +72,8 @@ public:
     /** calls the setStorage at all our XStorageBasedLibraryContainer.
     */
     void    setStorage(
-                const css::uno::Reference< css::embed::XStorage >& _rxStorage
+                const cpo::uno::Reference< css::embed::XStorage >& _rxStorage
             );
-
-    /** calls the storeLibrariesToStorage at all our XStorageBasedLibraryContainer.
-    */
-    void    storeLibrariesToStorage(
-                const css::uno::Reference< css::embed::XStorage >& _rxStorage
-            );
-
-
-    /** checks if any modules in the SfxLibraryContainer exceed the binary
-        limits.
-    */
-    bool ImgVersion12PsswdBinaryLimitExceeded( std::vector< OUString >& sModules );
 
     virtual void Notify(SfxBroadcaster& rBC, SfxHint const& rHint) override;
 

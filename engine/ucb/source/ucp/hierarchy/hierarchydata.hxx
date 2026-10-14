@@ -21,7 +21,7 @@
 
 #include <rtl/ustring.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <mutex>
 
 namespace com::sun::star {
@@ -78,21 +78,21 @@ class HierarchyEntry
     OUString m_aName;
     OUString m_aPath;
     std::mutex m_aMutex;
-    css::uno::Reference< css::uno::XComponentContext >     m_xContext;
-    css::uno::Reference< css::lang::XMultiServiceFactory > m_xConfigProvider;
-    css::uno::Reference< css::container::XHierarchicalNameAccess >
+    cpo::uno::Reference< cpo::uno::XComponentContext >     m_xContext;
+    cpo::uno::Reference< css::lang::XMultiServiceFactory > m_xConfigProvider;
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess >
                                                            m_xRootReadAccess;
-    css::uno::Reference< css::util::XOfficeInstallationDirectories >
+    cpo::uno::Reference< css::util::XOfficeInstallationDirectories >
                                                            m_xOfficeInstDirs;
     bool m_bTriedToGetRootReadAccess;
 
 private:
     static OUString createPathFromHierarchyURL( const HierarchyUri & rURI );
-    css::uno::Reference< css::container::XHierarchicalNameAccess >
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess >
     getRootReadAccess();
 
 public:
-    HierarchyEntry( css::uno::Reference< css::uno::XComponentContext > xContext,
+    HierarchyEntry( cpo::uno::Reference< cpo::uno::XComponentContext > xContext,
                     HierarchyContentProvider* pProvider,
                     const OUString& rURL );
 
@@ -119,8 +119,8 @@ public:
         const HierarchyEntryData& operator*();
     private:
         HierarchyEntryData                                     entry;
-        css::uno::Reference< css::container::XHierarchicalNameAccess >   dir;
-        css::uno::Reference< css::util::XOfficeInstallationDirectories > officeDirs;
+        cpo::uno::Reference< css::container::XHierarchicalNameAccess >   dir;
+        cpo::uno::Reference< css::util::XOfficeInstallationDirectories > officeDirs;
         cpo::uno::Sequence< OUString>                          names;
         sal_Int32                                              pos;
     };

@@ -38,7 +38,7 @@ constexpr OUString SERVICE_NAME_A = u"com.sun.star.lang.MacroExpander"_ustr;
 constexpr OUString SERVICE_NAME_B = u"com.sun.star.lang.BootstrapMacroExpander"_ustr;
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::cpo::uno;
 
 using rtl::Bootstrap;
@@ -142,10 +142,10 @@ Reference< lang::XSingleComponentFactory > create_bootstrap_macro_expander_facto
                                                         s_impl_name(),
                                                         s_get_service_names() ));
 
-    uno::Environment curr_env(Environment::getCurrent());
-    uno::Environment target_env(CPPU_CURRENT_LANGUAGE_BINDING_NAME);
+    cpo::uno::Environment curr_env(Environment::getCurrent());
+    cpo::uno::Environment target_env(u"" CPPU_CURRENT_LANGUAGE_BINDING_NAME ""_ustr);
 
-    uno::Mapping target2curr(target_env, curr_env);
+    cpo::uno::Mapping target2curr(target_env, curr_env);
 
     return Reference<lang::XSingleComponentFactory>(
         static_cast<lang::XSingleComponentFactory *>(

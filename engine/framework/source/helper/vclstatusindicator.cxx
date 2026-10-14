@@ -25,14 +25,14 @@
 
 namespace framework {
 
-VCLStatusIndicator::VCLStatusIndicator(css::uno::Reference< css::awt::XWindow >                xParentWindow)
+VCLStatusIndicator::VCLStatusIndicator(cpo::uno::Reference< css::awt::XWindow >                xParentWindow)
     : m_xParentWindow    (std::move(xParentWindow                ))
     , m_pStatusBar       (nullptr                            )
     , m_nRange           (0                            )
     , m_nValue           (0                            )
 {
     if (!m_xParentWindow.is())
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
                 u"Can't work without a parent window!"_ustr,
                 static_cast< css::task::XStatusIndicator* >(this));
 }

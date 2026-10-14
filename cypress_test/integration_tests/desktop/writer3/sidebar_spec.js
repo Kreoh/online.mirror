@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require */
+/* global describe it cy beforeEach require expect */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
@@ -80,18 +80,22 @@ describe(['tagdesktop'], 'Sidebar tests', function() {
 		cy.cGet('#Insert-tab-label').click();
 		cy.cGet('#Insert .unoInsertObjectStarMath').click();
 
-		cy.cGet('.MathElementsPanel').should('be.visible');
+		cy.cGet('#Formula-tab-label').should('have.class', 'selected');
+		cy.cGet('#Formula-container #categorylist').should('be.visible');
+		cy.cGet('#Formula-container #elements_group0 .ui-iconview-entry').should('be.visible');
+		cy.cGet('.MathElementsPanel').should('not.exist');
 	}
 
-	it('Show formula Elements sidebar when closed', function() {
-		// close sidebar first, expect it to auto-open
+	it('Show formula Elements in the Formula tab with the sidebar closed', function() {
 		desktopHelper.sidebarToggle();
 		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
 
 		checkMathElementsVisibility();
+
+		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
 	});
 
-	it('Show formula Elements sidebar', function() {
+	it('Show formula Elements in the Formula tab', function() {
 		checkMathElementsVisibility();
 	});
 
@@ -119,10 +123,8 @@ describe(['tagdesktop'], 'Sidebar tests', function() {
 		cy.cGet('#sidebar-panel').should('be.visible');
 		cy.cGet('#sidebar-panel').should('not.be.empty');
 
-		cy.wait(1000);
-
-		cy.cGet('#sidebar-dock-wrapper.visible').then(function(sidebar) {
-			helper.containsFocusElement(sidebar[0], true)
+		cy.cGet('#sidebar-dock-wrapper.visible').should(function(sidebar) {
+			expect(sidebar[0].contains(sidebar[0].ownerDocument.activeElement)).to.equal(true);
 		});
 	});
 });

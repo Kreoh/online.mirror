@@ -30,7 +30,6 @@
 #include <preparedstatement.hxx>
 #include <callablestatement.hxx>
 #include <SingleSelectQueryComposer.hxx>
-#include <querycomposer.hxx>
 
 #include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
@@ -45,11 +44,10 @@
 #include <comphelper/types.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sdb;
-using namespace ::com::sun::star::sdb::application;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::beans;
@@ -61,9 +59,7 @@ using namespace ::comphelper;
 using namespace ::cppu;
 using namespace ::dbtools;
 
-using ::com::sun::star::sdb::tools::XTableName;
 using ::com::sun::star::sdb::tools::XObjectNames;
-using ::com::sun::star::sdb::tools::XDataSourceMetaData;
 
 namespace dbaccess
 {
@@ -281,8 +277,6 @@ OConnection::OConnection(ODatabaseSource& _rDB
         DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 
-    m_xTableUIProvider.set(m_xMasterConnection, css::uno::UNO_QUERY);
-
     try
     {
         m_xQueries = OQueryContainer::create(Reference< XNameContainer >(_rDB.getQueryDefinitions(), UNO_QUERY), this, _rxORB, &m_aWarnings).get();
@@ -411,7 +405,7 @@ Sequence< Type > OConnection::getTypes()
     return comphelper::containerToSequence(aNormalizedTypes);
 }
 
-// css::uno::XInterface
+// cpo::uno::XInterface
 Any OConnection::queryInterface( const Type & rType )
 {
     if ( !m_bSupportsViews && rType.equals( cppu::UnoType<XViewsSupplier>::get() ) )
@@ -475,18 +469,6 @@ Reference< XInterface >  OConnection::getParent()
 void OConnection::setParent(const Reference< XInterface > & /*Parent*/)
 {
     throw NoSupportException();
-}
-
-// XSQLQueryComposerFactory
-Reference< XSQLQueryComposer >  OConnection::createQueryComposer()
-{
-    MutexGuard aGuard(m_aMutex);
-    checkDisposed();
-
-    //  Reference< XNumberFormatsSupplier >  xSupplier = pParent->getNumberFormatsSupplier();
-    Reference< XSQLQueryComposer >  xComposer( new OQueryComposer( this ) );
-    m_aComposers.emplace_back(xComposer);
-    return xComposer;
 }
 
 void OConnection::impl_fillTableFilter()
@@ -563,38 +545,6 @@ Reference< XNameAccess >  OConnection::getQueries()
     checkDisposed();
 
     return m_xQueries;
-}
-
-// css::sdb::XCommandPreparation
-Reference< XPreparedStatement >  OConnection::prepareCommand( const OUString& command, sal_Int32 commandType )
-{
-    MutexGuard aGuard(m_aMutex);
-    checkDisposed();
-
-    OUString aStatement;
-    switch (commandType)
-    {
-        case CommandType::TABLE:
-            {
-                aStatement = u"SELECT * FROM "_ustr;
-
-                OUString sCatalog, sSchema, sTable;
-                ::dbtools::qualifiedNameComponents( getMetaData(), command, sCatalog, sSchema, sTable, ::dbtools::EComposeRule::InDataManipulation );
-                aStatement += ::dbtools::composeTableNameForSelect( this, sCatalog, sSchema, sTable );
-            }
-            break;
-        case CommandType::QUERY:
-            if ( m_xQueries->hasByName(command) )
-            {
-                Reference< XPropertySet > xQuery(m_xQueries->getByName(command),UNO_QUERY);
-                xQuery->getPropertyValue(PROPERTY_COMMAND) >>= aStatement;
-            }
-            break;
-        default:
-            aStatement = command;
-    }
-    // TODO EscapeProcessing
-    return prepareStatement(aStatement);
 }
 
 Reference< XInterface > OConnection::createInstance( const OUString& _sServiceSpecifier )
@@ -678,15 +628,6 @@ void OConnection::impl_loadConnectionTools_throw()
     m_xConnectionTools = css::sdb::tools::ConnectionTools::createWithConnection( m_aContext, this );
 }
 
-Reference< XTableName > OConnection::createTableName(  )
-{
-    MutexGuard aGuard(m_aMutex);
-    checkDisposed();
-    impl_loadConnectionTools_throw();
-
-    return m_xConnectionTools->createTableName();
-}
-
 Reference< XObjectNames > OConnection::getObjectNames(  )
 {
     MutexGuard aGuard(m_aMutex);
@@ -696,31 +637,13 @@ Reference< XObjectNames > OConnection::getObjectNames(  )
     return m_xConnectionTools->getObjectNames();
 }
 
-Reference< XDataSourceMetaData > OConnection::getDataSourceMetaData(  )
-{
-    MutexGuard aGuard(m_aMutex);
-    checkDisposed();
-    impl_loadConnectionTools_throw();
-
-    return m_xConnectionTools->getDataSourceMetaData();
-}
-
-Reference< css::container::XNameAccess > OConnection::getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, css::uno::Reference< css::lang::XComponent >& keepFieldsAlive )
+Reference< css::container::XNameAccess > OConnection::getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, cpo::uno::Reference< css::lang::XComponent >& keepFieldsAlive )
 {
     MutexGuard aGuard(m_aMutex);
     checkDisposed();
     impl_loadConnectionTools_throw();
 
     return m_xConnectionTools->getFieldsByCommandDescriptor(commandType,command,keepFieldsAlive);
-}
-
-Reference< XSingleSelectQueryComposer > OConnection::getComposer( ::sal_Int32 commandType, const OUString& command )
-{
-    MutexGuard aGuard(m_aMutex);
-    checkDisposed();
-    impl_loadConnectionTools_throw();
-
-    return m_xConnectionTools->getComposer(commandType,command);
 }
 
 void OConnection::impl_checkTableQueryNames_nothrow()
@@ -752,38 +675,6 @@ void OConnection::impl_checkTableQueryNames_nothrow()
     {
         DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
-}
-
-Reference< XGraphic > OConnection::getTableIcon( const OUString& TableName, ::sal_Int32 ColorMode )
-{
-    Reference< XGraphic > xReturn;
-
-    // ask our aggregate
-    if ( m_xTableUIProvider.is() )
-        xReturn = m_xTableUIProvider->getTableIcon( TableName, ColorMode );
-
-    // ask ourself
-    // well, we don't have own functionality here ...
-    // In the future, we might decide to delegate the complete handling to this interface.
-    // In this case, we would need to load the icon here.
-
-    return xReturn;
-}
-
-Reference< XInterface > OConnection::getTableEditor( const Reference< XDatabaseDocumentUI >& DocumentUI, const OUString& TableName )
-{
-    Reference< XInterface > xReturn;
-
-    // ask our aggregate
-    if ( m_xTableUIProvider.is() )
-        xReturn = m_xTableUIProvider->getTableEditor( DocumentUI, TableName );
-
-    // ask ourself
-    // well, we don't have own functionality here ...
-    // In the future, we might decide to delegate the complete handling to this interface.
-    // In this case, we would need to instantiate a css.sdb.TableDesign here.
-
-    return xReturn;
 }
 
 }   // namespace dbaccess

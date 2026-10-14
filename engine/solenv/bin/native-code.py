@@ -364,6 +364,7 @@ core_constructor_list = [
     "Math_XMLOasisSettingsImporter_get_implementation",
     "Math_XMLSettingsExporter_get_implementation",
     "com_sun_star_comp_Math_MathTypeFilter_get_implementation",
+    "com_sun_star_comp_starmath_NotebookbarElementsController_get_implementation",
 # svl/source/fsstor/fsstorage.component
     "svl_FSStorageFactory_get_implementation",
 # vcl/vcl.android.component
@@ -392,6 +393,7 @@ core_constructor_list = [
     "com_sun_star_comp_svx_FrameToolBoxControl_get_implementation",
     "com_sun_star_comp_svx_LineEndToolBoxControl_get_implementation",
     "com_sun_star_comp_svx_LineStyleToolBoxControl_get_implementation",
+    "com_sun_star_comp_svx_NotebookbarLineController_get_implementation",
     "com_sun_star_comp_svx_StyleToolBoxControl_get_implementation",
     "com_sun_star_comp_svx_StylesPreviewToolBoxControl_get_implementation",
     "com_sun_star_drawing_EnhancedCustomShapeEngine_get_implementation",
@@ -626,12 +628,11 @@ calc_constructor_list = [
     "Calc_XMLOasisSettingsImporter_get_implementation",
     "Calc_XMLOasisStylesImporter_get_implementation",
     "Calc_ScSpreadsheetSettings_get_implementation",
+    "com_sun_star_comp_oox_xls_ExcelFilter_get_implementation",
+    "com_sun_star_comp_oox_xls_FormulaParser_get_implementation",
 # sc/util/scd.component
     "com_sun_star_comp_calc_ExcelBiffFormatDetector_get_implementation",
     "com_sun_star_comp_calc_FormatDetector_get_implementation",
-# sc/util/scfilt.component
-    "com_sun_star_comp_oox_xls_ExcelFilter_get_implementation",
-    "com_sun_star_comp_oox_xls_FormulaParser_get_implementation",
 # sc/util/vbaobj.component
     ("Calc_ScVbaApplication_get_implementation", "#if HAVE_FEATURE_SCRIPTING"),
     ("ScVbaEventsHelper_get_implementation", "#if HAVE_FEATURE_SCRIPTING"),
@@ -674,17 +675,6 @@ draw_constructor_list = [
     "com_sun_star_animations_ParallelTimeContainer_get_implementation",
     "com_sun_star_animations_SequenceTimeContainer_get_implementation",
     "com_sun_star_animations_TransitionFilter_get_implementation",
-# desktop/source/deployment/deployment.component
-    "com_sun_star_comp_deployment_ExtensionManager_get_implementation",
-    "com_sun_star_comp_deployment_PackageInformationProvider_get_implementation",
-    "com_sun_star_comp_deployment_PackageManagerFactory_get_implementation",
-    "com_sun_star_comp_deployment_ProgressLog_get_implementation",
-    "com_sun_star_comp_deployment_component_PackageRegistryBackend_get_implementation",
-    "com_sun_star_comp_deployment_configuration_PackageRegistryBackend_get_implementation",
-    "com_sun_star_comp_deployment_executable_PackageRegistryBackend_get_implementation",
-    "com_sun_star_comp_deployment_help_PackageRegistryBackend_get_implementation",
-    "com_sun_star_comp_deployment_script_PackageRegistryBackend_get_implementation",
-    "com_sun_star_comp_deployment_sfwk_PackageRegistryBackend_get_implementation",
 # embedded/source/msole/emboleobj.windows.component
     "embeddedobj_OleEmbeddedObjectFactory_get_implementation",
 # filter/source/svg/svgfilter.component
@@ -727,11 +717,10 @@ writer_constructor_list = [
     "com_sun_star_comp_Writer_XMLOasisSettingsImporter_get_implementation",
     "com_sun_star_comp_Writer_XMLOasisStylesImporter_get_implementation",
     "com_sun_star_util_comp_FinalThreadManager_get_implementation",
-# sw/util/swd.component
-    "com_sun_star_comp_writer_FormatDetector_get_implementation",
-# sw/util/msword.component
     "com_sun_star_comp_Writer_RtfExport_get_implementation",
     "com_sun_star_comp_Writer_DocxExport_get_implementation",
+# sw/util/swd.component
+    "com_sun_star_comp_writer_FormatDetector_get_implementation",
 # sw/util/sw_writerfilter.component
     "com_sun_star_comp_Writer_RtfFilter_get_implementation",
     "com_sun_star_comp_Writer_WriterFilter_get_implementation",
@@ -760,7 +749,6 @@ constructor_map = {
     }
 
 custom_widgets = [
-    'NotebookbarTabControl',
     'NotebookbarToolBox',
     ]
 
@@ -930,9 +918,6 @@ if options.java:
     print ("""
     extern void Java_org_libreoffice_kit_COKit_initializeNative();
     volatile void *p = (void *) Java_org_libreoffice_kit_COKit_initializeNative;
-
-    extern void Java_org_libreoffice_kit_Office_getError();
-    p = (void *) Java_org_libreoffice_kit_Office_getError;
 
     """)
 

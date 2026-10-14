@@ -32,7 +32,7 @@
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/Time.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <connectivity/dbconversion.hxx>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
@@ -48,8 +48,8 @@
 namespace pcr{
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace {
 
@@ -60,7 +60,7 @@ class StringRepresentation:
         lang::XInitialization>
 {
 public:
-    explicit StringRepresentation(uno::Reference< uno::XComponentContext > context);
+    explicit StringRepresentation(uno::Reference< cpo::uno::XComponentContext > context);
     StringRepresentation (const StringRepresentation&) = delete;
     StringRepresentation& operator=(const StringRepresentation&) = delete;
 
@@ -120,7 +120,7 @@ private:
     */
     cpo::uno::Any convertStringToSimple( const OUString& _rValue,const cpo::uno::TypeClass& _ePropertyType );
 
-    uno::Reference< uno::XComponentContext >                                m_xContext;
+    uno::Reference< cpo::uno::XComponentContext >                           m_xContext;
     uno::Reference< script::XTypeConverter >                                m_xTypeConverter;
     uno::Reference< reflection::XConstantsTypeDescription >                 m_xTypeDescription;
     cpo::uno::Sequence< OUString >                                        m_aValues;
@@ -130,7 +130,7 @@ private:
 
 }
 
-StringRepresentation::StringRepresentation(uno::Reference< uno::XComponentContext > context) :
+StringRepresentation::StringRepresentation(uno::Reference< cpo::uno::XComponentContext > context) :
     m_xContext(std::move(context))
 {}
 
@@ -219,9 +219,9 @@ namespace {
 // unequal values that are all of UNO SHORT or LONG type:
 struct CompareConstants {
     bool operator ()(
-        css::uno::Reference< css::reflection::XConstantTypeDescription > const &
+        cpo::uno::Reference< css::reflection::XConstantTypeDescription > const &
             c1,
-        css::uno::Reference< css::reflection::XConstantTypeDescription > const &
+        cpo::uno::Reference< css::reflection::XConstantTypeDescription > const &
             c2) const
     {
         return c1->getConstantValue().get<sal_Int32>()
@@ -589,9 +589,9 @@ bool StringRepresentation::convertStringToGenericValue( const OUString& _rString
 } // pcr
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_StringRepresentation_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::StringRepresentation(context));
 }

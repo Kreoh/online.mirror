@@ -80,7 +80,9 @@ const MenuCommands: MenuCommandsInterface = {
 
 		spreadsheet: ['MergeCells', 'SplitCell', 'InsertCell', 'DeleteCell',
 				  'RecalcPivotTable', 'DataDataPilotRun', 'DeletePivotTable', 'CalculatedFieldRun',
-				  'InsertCalcTable', 'RemoveCalcTable',
+				  'InsertCalcTable', 'RemoveCalcTable', 'TableTotalRow',
+				  'ResizeCalcTable', 'RenameCalcTable', 'SummarizeWithPivot',
+				  'ConvertCalcTableToRange', 'HandleDuplicateRecords', 'RemoveDuplicates',
 				  'DatabaseSettings', 'FormatCellDialog', 'DeleteNote', 'SetAnchorToCell', 'SetAnchorToCellResize',
 				  'FormatSparklineMenu', 'InsertSparkline', 'DeleteSparkline', 'DeleteSparklineGroup',
 				  'EditSparklineGroup', 'EditSparkline', 'GroupSparklines', 'UngroupSparklines', 'AutoFill'],
@@ -121,7 +123,8 @@ const MenuCommands: MenuCommandsInterface = {
 		// text
 		'SpellingAndGrammarDialog', 'FontDialog', 'FontDialogForParagraph',
 		// spreadsheet
-		'FormatCellDialog', 'DataDataPilotRun', 'CalculatedFieldRun', 'InsertCalcTable',
+		'FormatCellDialog', 'CalculatedFieldRun', 'InsertCalcTable',
+		'SummarizeWithPivot',
 		'GroupSparklines', 'UngroupSparklines', 'AutoFill'
 	],
 };

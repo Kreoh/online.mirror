@@ -30,6 +30,8 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		this._controlHandlers['tabcontrol'] = this._overriddenTabsControlHandler;
 		this._controlHandlers['iconviewlist'] = JSDialog.notebookbarIconViewList;
 		this._controlHandlers['tabpage'] = this._overriddenTabPageHandler;
+		this._controlHandlers['linetransparency'] = this._lineTransparencyControl;
+		this._controlHandlers['linewidth'] = JSDialog.LineWidthField;
 
 		this._toolitemHandlers['.uno:XLineColor'] = JSDialog.colorPickerButton;
 		this._toolitemHandlers['.uno:FontColor'] = JSDialog.colorPickerButton;
@@ -120,13 +122,46 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		/*Graphic Tab*/
 		this._toolitemHandlers['.uno:GraphicFilterToolbox'] = function() {};
 		this._toolitemHandlers['.uno:SaveGraphic'] = function() {};
-		this._toolitemHandlers['.uno:InsertCaptionDialog'] = function() {};
 		this._toolitemHandlers['.uno:CompressGraphic'] = function() {};
 		this._toolitemHandlers['.uno:GraphicDialog'] = function() {};
 		this._toolitemHandlers['.uno:BorderDialog'] = function() {};
 		this._toolitemHandlers['.uno:FormatArea'] = function() {};
 
 		this._toolitemHandlers['vnd.sun.star.findbar:FocusToFindbar'] = function() {};
+	},
+
+	// Line transparency spinfield
+	_lineTransparencyControl: function(parentContainer, data, builder) {
+		var command = '.uno:LineTransparence';
+		var sent = null;
+		var callback = function(objectType, eventType, object, value) {
+			var percent = parseInt(value, 10);
+			if (isNaN(percent))
+				percent = 0;
+			builder.map.sendUnoCommand(command + '?LineTransparence:short=' + percent);
+			if (sent)
+				sent(percent);
+		};
+		var result = JSDialog.spinfieldControl(parentContainer, data, builder, callback);
+
+		// Show the transparency of whatever is selected
+		var container = parentContainer.querySelector('#' + data.id);
+		var spinfield = container ? container.querySelector('input') : null;
+		if (!spinfield)
+			return result;
+
+		var setValueFromState = function(state) {
+			var percent = parseInt(state, 10);
+			if (isNaN(percent))
+				return;
+			JSDialog._setSpinFieldValue(spinfield,
+				JSDialog._formatSpinFieldValue(percent, container._unit), percent);
+		};
+
+		setValueFromState(builder.map.stateChangeHandler.getItemValue(command));
+		sent = JSDialog.followCommandState(builder, container, command, setValueFromState);
+
+		return result;
 	},
 
 	_bigtoolitemHandler: function(parentContainer, data, builder) {
@@ -146,14 +181,17 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 
 		if (commandName === '.uno:CharFontName') {
 			if (window.ThisIsTheiOSApp) {
-				if (state === '')
-					$('#fontnamecomboboxios').html(_('Font Name'));
-				else
-					$('#fontnamecomboboxios').html(state);
+				const fontNameCombobox = document.getElementById('fontnamecomboboxios');
+				if (fontNameCombobox)
+					fontNameCombobox.textContent = state === '' ? _('Font Name') : state;
 				window.LastSetiOSFontNameButtonFont = state;
 			}
 		} else if (commandName === '.uno:StyleApply') {
-			$('#applystyle').val(state).trigger('change');
+			const applyStyle = document.getElementById('applystyle');
+			if (applyStyle) {
+				applyStyle.value = state;
+				applyStyle.dispatchEvent(new Event('change'));
+			}
 		}
 		else if (commandName === '.uno:ModifiedStatus') {
 			const saveEle = document.querySelector('[id^="save"].unotoolbutton');
@@ -316,14 +354,6 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 	},
 
 	_exportMenuButton: function(parentContainer, data, builder) {
-		if (data.id && data.id.startsWith('downloadas-')) {
-			var format = data.id.substring('downloadas-'.length);
-			app.registerExportFormat(data.text, format);
-
-			if (builder.map['wopi'].HideExportOption)
-				return false;
-		}
-
 		var separatorPos = data.id.indexOf(':');
 		var menuId = data.id.substr(separatorPos + 1);
 		var submenu = builder._getSubmenuOpts(builder.options.map._docLayer._docType, menuId, builder);
@@ -331,185 +361,44 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		JSDialog.MenuDefinitions.set(menuId, submenu);
 		JSDialog.menubuttonControl(parentContainer, data, builder);
 
-		for (var i in submenu) {
-			var action = submenu[i].action;
-			var text = submenu[i].action;
-
-			if (action.startsWith('export')) {
-				var format = action.substring('export'.length);
-				app.registerExportFormat(text, format);
-			}
-			else if (action.startsWith('downloadas-')) {
-				var format = action.substring('downloadas-'.length);
-				app.registerExportFormat(text, format);
-			}
-		}
-
 		return false;
 	},
 
 	_getSubmenuOpts: function(docType, id, builder) {
 		switch (id) {
 		case 'DownloadAsMenu':
-			return builder._getDownloadAsSubmenuOpts(docType);
+			return builder._getDownloadAsSubmenuOpts();
 		case 'SaveAsMenu':
 			return builder._getSaveAsSubmenuOpts(docType);
 		case 'ExportAsMenu':
-			return builder._getExportAsSubmenuOpts(docType);
+			return builder._getExportAsSubmenuOpts();
 		case 'PrintOptions':
 			return builder._getPrintSubmenuOpts(docType);
 		}
 		return [];
 	},
 
-	_getDownloadAsSubmenuOpts: function(docType) {
+	_getDownloadAsSubmenuOpts: function() {
 		var submenuOpts = [];
 
-		if (docType === 'text') {
-			submenuOpts = [
-				{
-					'action': 'downloadas-odt',
-					'text': _('ODF text document (.odt)')
-				},
-				{
-					'action': 'downloadas-rtf',
-					'text': _('Rich Text (.rtf)')
-				},
-				{
-					'action': 'downloadas-docx',
-					'text': _('Word Document (.docx)')
-				},
-				{
-					'action': 'downloadas-doc',
-					'text': _('Word 2003 Document (.doc)')
-				},
-				{
-					'action': !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub',
-					'text': _('EPUB (.epub)'),
-					'command': !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub'
-				},
-				{
-					'action': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
-					'text': _('PDF Document (.pdf)'),
-					'command': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf'
-				},
-				{
-					'action': 'exportpdf' ,
-					'text': _('PDF Document (.pdf) with options'),
-					'command': 'exportpdf'
-				},
-				{
-					'action': 'downloadas-html',
-					'text': _('HTML File (.html)')
-				},
-				{
-					'action': 'downloadas-md',
-					'text': _('Markdown (.md)')
-				}
-			];
-		} else if (docType === 'spreadsheet') {
-			submenuOpts = [
-				{
-					'action': 'downloadas-ods',
-					'text': _('ODF spreadsheet (.ods)')
-				},
-				{
-					'action': 'downloadas-xlsx',
-					'text': _('Excel Spreadsheet (.xlsx)')
-				},
-				{
-					'action': 'downloadas-xls',
-					'text': _('Excel 2003 Spreadsheet (.xls)')
-				},
-				{
-					'action': 'downloadas-csv',
-					'text': _('CSV File (.csv)')
-				},
-				{
-					'action': 'downloadas-html',
-					'text': _('HTML File (.html)')
-				},
-				{
-					'action': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
-					'text': _('PDF Document (.pdf)'),
-					'command': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf'
-				},
-				{
-					'action': 'exportpdf' ,
-					'text': _('PDF Document (.pdf) with options'),
-					'command': 'exportpdf'
-				}
-			];
-		} else if (docType === 'presentation') {
-			submenuOpts = [
-				{
-					'action': 'downloadas-odp',
-					'text': _('ODF presentation (.odp)')
-				},
-				{
-					'action': 'downloadas-odg',
-					'text': _('ODF Drawing (.odg)')
-				},
-				{
-					'action': 'downloadas-pptx',
-					'text': _('PowerPoint Presentation (.pptx)')
-				},
-				{
-					'action': 'downloadas-ppt',
-					'text': _('PowerPoint 2003 Presentation (.ppt)')
-				},
-				{
-					'action': 'downloadas-html',
-					'text': _('HTML Document (.html)')
-				},
-				{
-					'action': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
-					'text': _('PDF Document (.pdf)'),
-					'command': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
-				},
-				{
+		app.exportFormats.forEach(function (entry) {
+			if (!entry.visible)
+				return;
+
+			var item = { 'action': entry.downloadId, 'text': entry.label };
+			// only the export entries carry a command of their own
+			if (!entry.downloadId.startsWith('downloadas-'))
+				item.command = entry.downloadId;
+			submenuOpts.push(item);
+
+			// the dialog offering the PDF export options follows the direct export
+			if (entry.format === 'pdf')
+				submenuOpts.push({
 					'action': 'exportpdf',
 					'text': _('PDF Document (.pdf) with options'),
 					'command': 'exportpdf'
-				}
-			];
-			if (window.extraExportFormats.includes('impress_svg'))
-				submenuOpts.push({
-					'action': 'downloadas-svg',
-					'text': _('Scalable Vector Graphics (.svg)')
 				});
-			if (window.extraExportFormats.includes('impress_bmp'))
-				submenuOpts.push({
-					'action': 'downloadas-bmp',
-					'text': _('Current slide as Bitmap (.bmp)')
-				});
-			if (window.extraExportFormats.includes('impress_gif'))
-				submenuOpts.push({
-					'action': 'downloadas-gif',
-					'text': _('Current slide as Graphics Interchange Format (.gif)')
-				});
-			if (window.extraExportFormats.includes('impress_png'))
-				submenuOpts.push({
-					'action': 'downloadas-png',
-					'text': _('Current slide as Portable Network Graphics (.png)')
-				});
-			if (window.extraExportFormats.includes('impress_tiff'))
-				submenuOpts.push({
-					'action': 'downloadas-tiff',
-					'text': _('Current slide as Tag Image File Format (.tiff)')
-				});
-		} else if (docType === 'drawing') {
-			submenuOpts = [
-				{
-					'action': 'downloadas-odg',
-					'text': _('ODF Drawing (.odg)')
-				},
-				{
-					'action': 'downloadas-png',
-					'text': _('Image (.png)')
-				}
-			];
-		}
+		});
 
 		submenuOpts.forEach(function mapIconToItem(menuItem) {
 			menuItem.icon = menuItem.action + '-submenu-icon';
@@ -579,46 +468,16 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		return submenuOpts;
 	},
 
-	_getExportAsSubmenuOpts: function(docType) {
+	_getExportAsSubmenuOpts: function() {
 		var submenuOpts = [];
 
-		if (docType === 'text') {
-			submenuOpts = [
-				{
-					'action': 'exportas-pdf',
-					'text': _('PDF Document (.pdf)')
-				},
-				{
-					'action': 'exportas-epub',
-					'text': _('EPUB (.epub)')
-				},
-				{
-					'action': 'exportas-md',
-					'text': _('Markdown (.md)')
-				}
-			];
-		} else if (docType === 'spreadsheet') {
-			submenuOpts = [
-				{
-					'action': 'exportas-pdf',
-					'text': _('PDF Document (.pdf)')
-				}
-			];
-		} else if (docType === 'presentation') {
-			submenuOpts = [
-				{
-					'action': 'exportas-pdf',
-					'text': _('PDF Document (.pdf)')
-				}
-			];
-		} else if (docType === 'drawing') {
-			submenuOpts = [
-				{
-					'action': 'exportas-pdf',
-					'text': _('PDF Document (.pdf)')
-				}
-			];
-		}
+		app.exportFormats.forEach(function (entry) {
+			if (entry.storage && entry.visible)
+				submenuOpts.push({
+					'action': 'exportas-' + entry.format,
+					'text': entry.label
+				});
+		});
 
 		submenuOpts.forEach(function mapIconToItem(menuItem) {
 			menuItem.icon = menuItem.action + '-submenu-icon';
@@ -694,7 +553,7 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		$(control.button).unbind('click');
 		$(control.label).unbind('click');
 		$(control.container).click(function () {
-			window.L.DomUtil.get('selectbackground').click();
+			app.LOUtil.openFilePicker('selectbackground');
 		});
 		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
@@ -706,7 +565,7 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		$(control.button).unbind('click');
 		$(control.label).unbind('click');
 		$(control.container).click(function () {
-			window.L.DomUtil.get('comparedocuments').click();
+			app.LOUtil.openFilePicker('comparedocuments');
 		});
 		builder._preventDocumentLosingFocusOnClick(control.container);
 	},
@@ -735,6 +594,8 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 			tooltip.id = 'save-status';
 			tooltip.className = 'tooltip-label visuallyhidden';
 			tooltip.setAttribute('role', 'tooltip');
+			// Text that changes length ahead of the document shifts NVDA's say all by a character.
+			tooltip.setAttribute('aria-hidden', 'true');
 			control.label = tooltip;
 
 			control.button.parentElement.appendChild(tooltip);
@@ -745,6 +606,7 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 					tooltip.textContent = isModified
 						? _('Unsaved changes.') + ' ' + e.lastSaved
 						: e.lastSaved;
+					control.button.setAttribute('aria-description', tooltip.textContent);
 					control.button.setAttribute('aria-label', isModified ? _('Unsaved changes. Save') : _('Save'));
 				}
 			});

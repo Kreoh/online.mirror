@@ -28,12 +28,12 @@
 
 #include <sal/config.h>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace {
 
@@ -46,23 +46,23 @@ private:
     Map certTrustMap;
 
     static bool searchMap(const OUString& url, std::u16string_view certificate_name, Map& _certMap);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool isTemporaryCertificate(const OUString& url, std::u16string_view certificate_name);
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool isCertificateTrust(const OUString& url, std::u16string_view certificate_name);
 
 public:
-    explicit CertificateContainer(const uno::Reference<uno::XComponentContext>&) {}
-    virtual bool SAL_CALL addCertificate(const OUString& url, const OUString& certificate_name,
+    explicit CertificateContainer(const uno::Reference<cpo::uno::XComponentContext>&) {}
+    virtual bool addCertificate(const OUString& url, const OUString& certificate_name,
                                              bool trust) override;
-    virtual css::security::CertificateContainerStatus SAL_CALL
+    virtual css::security::CertificateContainerStatus
     hasCertificate(const OUString& url, const OUString& certificate_name) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
 
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
 }
@@ -124,27 +124,27 @@ CertificateContainer::hasCertificate( const OUString & url, const OUString & cer
     }
 }
 
-OUString SAL_CALL
+OUString
 CertificateContainer::getImplementationName( )
 {
     return u"com.sun.star.security.CertificateContainer"_ustr;
 }
 
-bool SAL_CALL
+bool
 CertificateContainer::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL
+Sequence< OUString >
 CertificateContainer::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.security.CertificateContainer"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_security_CertificateContainer_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     static rtl::Reference<CertificateContainer> gContainer = new CertificateContainer(context);
     return cppu::acquire(gContainer.get());

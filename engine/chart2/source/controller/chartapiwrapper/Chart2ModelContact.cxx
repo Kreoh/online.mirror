@@ -35,14 +35,15 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace chart::wrapper
 {
 
 Chart2ModelContact::Chart2ModelContact(
-    const Reference< uno::XComponentContext > & xContext ) :
+    const Reference< cpo::uno::XComponentContext > & xContext ) :
         m_xContext( xContext ),
         m_xChartModel( nullptr )
 {
@@ -167,24 +168,6 @@ awt::Rectangle Chart2ModelContact::SubstractAxisTitleSizes( const awt::Rectangle
     }
     awt::Rectangle aRect = ChartView::AddSubtractAxisTitleSizes(
         *xChartModel, getChartView().get(), rPositionRect, true );
-    return aRect;
-}
-
-awt::Rectangle Chart2ModelContact::GetDiagramRectangleIncludingTitle() const
-{
-    rtl::Reference<ChartModel> xChartModel( m_xChartModel );
-    if( !xChartModel )
-    {
-        SAL_WARN("chart2", "Chart2ModelContact: ChartModel expired");
-        return awt::Rectangle(0,0,0,0);
-    }
-
-    awt::Rectangle aRect( GetDiagramRectangleIncludingAxes() );
-
-    //add axis title sizes to the diagram size
-    aRect = ChartView::AddSubtractAxisTitleSizes(
-        *xChartModel, getChartView().get(), aRect, false );
-
     return aRect;
 }
 

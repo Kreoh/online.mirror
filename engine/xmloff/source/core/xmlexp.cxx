@@ -108,8 +108,8 @@
 #include <boost/property_tree/json_parser.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
@@ -162,7 +162,7 @@ public:
 
     virtual void    Characters( const OUString& i_rCharacters ) override;
 
-    virtual css::uno::Reference< css::uno::XComponentContext >
+    virtual cpo::uno::Reference< cpo::uno::XComponentContext >
                     GetComponentContext() const override;
 private:
     SvXMLExport&                    m_rExport;
@@ -217,7 +217,7 @@ public:
     explicit SvXMLExportEventListener(SvXMLExport* pExport);
 
                             // XEventListener
-    virtual void SAL_CALL disposing(const lang::EventObject& rEventObject) override;
+    virtual void disposing(const lang::EventObject& rEventObject) override;
 };
 
 }
@@ -228,7 +228,7 @@ SvXMLExportEventListener::SvXMLExportEventListener(SvXMLExport* pTempExport)
 }
 
 // XEventListener
-void SAL_CALL SvXMLExportEventListener::disposing( const lang::EventObject& )
+void SvXMLExportEventListener::disposing( const lang::EventObject& )
 {
     if (pExport)
     {
@@ -420,7 +420,7 @@ void SvXMLExport::DetermineModelType_()
 }
 
 SvXMLExport::SvXMLExport(
-    const uno::Reference< uno::XComponentContext >& xContext,
+    const uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString implementationName,
     sal_Int16 const eDefaultMeasureUnit /*css::util::MeasureUnit*/,
     const enum XMLTokenEnum eClass, SvXMLExportFlags nExportFlags )
@@ -442,7 +442,7 @@ SvXMLExport::SvXMLExport(
 }
 
 SvXMLExport::SvXMLExport(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString implementationName,
     OUString fileName,
     sal_Int16 const eDefaultMeasureUnit /*css::util::MeasureUnit*/,
@@ -472,7 +472,7 @@ SvXMLExport::SvXMLExport(
 }
 
 SvXMLExport::SvXMLExport(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString implementationName,
     OUString fileName,
     const uno::Reference< xml::sax::XDocumentHandler > & rHandler,
@@ -556,7 +556,7 @@ SvXMLExport::~SvXMLExport()
 }
 
 // XExporter
-void SAL_CALL SvXMLExport::setSourceDocument( const uno::Reference< lang::XComponent >& xDoc )
+void SvXMLExport::setSourceDocument( const uno::Reference< lang::XComponent >& xDoc )
 {
     mxModel.set( xDoc, UNO_QUERY );
     if( !mxModel.is() )
@@ -569,7 +569,7 @@ void SAL_CALL SvXMLExport::setSourceDocument( const uno::Reference< lang::XCompo
 
     if(!mxNumberFormatsSupplier.is() )
     {
-        mxNumberFormatsSupplier.set(mxModel, css::uno::UNO_QUERY);
+        mxNumberFormatsSupplier.set(mxModel, cpo::uno::UNO_QUERY);
         if(mxNumberFormatsSupplier.is() && mxHandler.is())
             mpNumExport.reset( new SvXMLNumFmtExport(*this, mxNumberFormatsSupplier) );
     }
@@ -635,7 +635,7 @@ void SAL_CALL SvXMLExport::setSourceDocument( const uno::Reference< lang::XCompo
 }
 
 // XInitialize
-void SAL_CALL SvXMLExport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void SvXMLExport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     // #93186# we need to queryInterface every single Any with any expected outcome. This variable hold the queryInterface results.
 
@@ -739,7 +739,7 @@ void SAL_CALL SvXMLExport::initialize( const cpo::uno::Sequence< cpo::uno::Any >
 }
 
 // XFilter
-bool SAL_CALL SvXMLExport::filter( const cpo::uno::Sequence< beans::PropertyValue >& aDescriptor )
+bool SvXMLExport::filter( const cpo::uno::Sequence< beans::PropertyValue >& aDescriptor )
 {
     // check for xHandler first... should have been supplied in initialize
     if( !mxHandler.is() )
@@ -837,35 +837,35 @@ bool SAL_CALL SvXMLExport::filter( const cpo::uno::Sequence< beans::PropertyValu
     return (mnErrorFlags & (SvXMLErrorFlags::DO_NOTHING|SvXMLErrorFlags::ERROR_OCCURRED)) == SvXMLErrorFlags::NO;
 }
 
-void SAL_CALL SvXMLExport::cancel()
+void SvXMLExport::cancel()
 {
     // stop export
     Sequence<OUString> aEmptySeq;
     SetError(XMLERROR_CANCEL|XMLERROR_FLAG_SEVERE, aEmptySeq);
 }
 
-OUString SAL_CALL SvXMLExport::getName(  )
+OUString SvXMLExport::getName(  )
 {
     return msFilterName;
 }
 
-void SAL_CALL SvXMLExport::setName( const OUString& )
+void SvXMLExport::setName( const OUString& )
 {
     // do nothing, because it is not possible to set the FilterName
 }
 
 // XServiceInfo
-OUString SAL_CALL SvXMLExport::getImplementationName(  )
+OUString SvXMLExport::getImplementationName(  )
 {
     return m_implementationName;
 }
 
-bool SAL_CALL SvXMLExport::supportsService( const OUString& rServiceName )
+bool SvXMLExport::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvXMLExport::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SvXMLExport::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.document.ExportFilter"_ustr, u"com.sun.star.xml.XMLExportFilter"_ustr };
 }
@@ -2378,7 +2378,7 @@ SvXMLExport::AddAttributeIdLegacy(
 }
 
 void
-SvXMLExport::AddAttributeXmlId(uno::Reference<uno::XInterface> const & i_xIfc)
+SvXMLExport::AddAttributeXmlId(uno::Reference<cpo::uno::XInterface> const & i_xIfc)
 {
     // check version >= 1.2
     switch (getSaneDefaultVersion()) {

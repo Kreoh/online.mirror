@@ -34,7 +34,7 @@ using namespace comphelper;
 namespace frm
 {
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::form;
@@ -159,7 +159,7 @@ using namespace cpo::uno;
     IMPLEMENT_FORWARD_XTYPEPROVIDER2( ONavigationBarModel, OControlModel, ONavigationBarModel_BASE )
 
 
-    css::uno::Reference< css::util::XCloneable > ONavigationBarModel::createClone()
+    cpo::uno::Reference< css::util::XCloneable > ONavigationBarModel::createClone()
 {
     rtl::Reference<ONavigationBarModel> pClone = new ONavigationBarModel(this, getContext());
     pClone->clonedFrom(this);
@@ -476,8 +476,8 @@ using namespace cpo::uno;
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_form_ONavigationBarModel_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_form_ONavigationBarModel_get_implementation(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ONavigationBarModel(context));

@@ -38,6 +38,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 bool SwAccessibleFrameBase::IsSelected()
 {
@@ -47,9 +48,12 @@ bool SwAccessibleFrameBase::IsSelected()
     const SwViewShell& rVSh = GetMap()->GetShell();
     if (auto pFESh = dynamic_cast<const SwFEShell*>(&rVSh))
     {
-        const SwFrame *pFlyFrame = pFESh->GetSelectedFlyFrame();
-        if( pFlyFrame == GetFrame() )
-            bRet = true;
+        // Any number of fly frames may be selected together.
+        for (const SwFlyFrame* pFlyFrame : pFESh->GetSelectedFlyFrames())
+        {
+            if( pFlyFrame == GetFrame() )
+                bRet = true;
+        }
     }
 
     return bRet;
@@ -286,9 +290,8 @@ bool SwAccessibleFrameBase::GetSelectedState( )
                 if( pCursor->HasMark() )
                 {
                     // check whether nHere is 'inside' pCursor
-                    SwPosition* pStart = pCursor->Start();
+                    auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
                     SwNodeOffset nStartIndex = pStart->GetNodeIndex();
-                    SwPosition* pEnd = pCursor->End();
                     SwNodeOffset nEndIndex = pEnd->GetNodeIndex();
                     if( ( nHere >= nStartIndex ) && (nHere <= nEndIndex)  )
                     {

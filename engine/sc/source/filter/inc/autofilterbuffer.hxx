@@ -200,6 +200,7 @@ public:
         settings of this column. */
     ApiFilterSettings   finalizeImport();
     bool                isButtonHidden();
+    bool                getHiddenButton() const { return mbHiddenButton; }
     sal_Int32           getColumnId() const { return mnColId; }
 
 private:
@@ -247,10 +248,12 @@ public:
     void setRange(const ScRange& rRange);
 
     /** Applies the filter to the passed filter descriptor. */
-    void                finalizeImport( const css::uno::Reference< css::sheet::XDatabaseRange >& rxDatabaseRange,
+    void                finalizeImport( const cpo::uno::Reference< css::sheet::XDatabaseRange >& rxDatabaseRange,
                                         sal_Int16 nSheet );
 
-    css::uno::Reference< css::sheet::XDatabaseRange > createDatabaseObject(sal_Int16 nSheet);
+    bool                areAllButtonsHidden() const;
+
+    cpo::uno::Reference< css::sheet::XDatabaseRange > createDatabaseObject(sal_Int16 nSheet);
 
 private:
     typedef RefVector< FilterColumn > FilterColumnVector;
@@ -277,8 +280,11 @@ public:
 
     /** Applies the filters to the passed database range object.
         @return  True = this buffer contains valid auto filter settings. */
-    bool                finalizeImport( const css::uno::Reference< css::sheet::XDatabaseRange >& rxDatabaseRange,
+    bool                finalizeImport( const cpo::uno::Reference< css::sheet::XDatabaseRange >& rxDatabaseRange,
                                         sal_Int16 nSheet );
+
+    /** Returns true, if an auto filter was imported. */
+    bool                hasAutoFilter() const { return !maAutoFilters.empty(); }
 
 private:
     /** Returns the auto filter object used to perform auto filtering. */

@@ -52,7 +52,7 @@
 #include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 
@@ -198,7 +198,7 @@ void FontWorkGalleryDialog::insertSelectedFontwork()
             bUseSpecialCalcMode ? *mpDestModel : mrSdrView.getSdrModelFromSdrView()));
 
     const Reference<XComponentContext>& xContext = comphelper::getProcessComponentContext();
-    css::uno::Reference<css::frame::XModuleManager> xModuleManager =
+    cpo::uno::Reference<css::frame::XModuleManager> xModuleManager =
             css::frame::ModuleManager::create(xContext);
     OUString aModuleIdentifier = xModuleManager->identify(mxFrame);
 
@@ -407,17 +407,17 @@ namespace {
 class FontworkAlignmentControl : public svt::PopupWindowController
 {
 public:
-    explicit FontworkAlignmentControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit FontworkAlignmentControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 }
@@ -443,7 +443,7 @@ VclPtr<vcl::Window> FontworkAlignmentControl::createVclPopupWindow( vcl::Window*
 }
 
 // XInitialization
-void SAL_CALL FontworkAlignmentControl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void FontworkAlignmentControl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     svt::PopupWindowController::initialize( aArguments );
 
@@ -474,9 +474,9 @@ Sequence< OUString > FontworkAlignmentControl::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_svx_FontworkAlignmentControl_get_implementation(
-    css::uno::XComponentContext* xContext,
+    cpo::uno::XComponentContext* xContext,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new FontworkAlignmentControl(xContext));
@@ -727,17 +727,17 @@ namespace {
 class FontworkCharacterSpacingControl : public svt::PopupWindowController
 {
 public:
-    explicit FontworkCharacterSpacingControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit FontworkCharacterSpacingControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 }
@@ -763,7 +763,7 @@ VclPtr<vcl::Window> FontworkCharacterSpacingControl::createVclPopupWindow( vcl::
 }
 
 // XInitialization
-void SAL_CALL FontworkCharacterSpacingControl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void FontworkCharacterSpacingControl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     svt::PopupWindowController::initialize( aArguments );
 
@@ -795,9 +795,9 @@ Sequence< OUString > FontworkCharacterSpacingControl::getSupportedServiceNames()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_svx_FontworkCharacterSpacingControl_get_implementation(
-    css::uno::XComponentContext* xContext,
+    cpo::uno::XComponentContext* xContext,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new FontworkCharacterSpacingControl(xContext));

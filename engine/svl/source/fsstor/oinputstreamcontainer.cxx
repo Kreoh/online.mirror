@@ -23,6 +23,7 @@
 #include <cppuhelper/queryinterface.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 OFSInputStreamContainer::OFSInputStreamContainer( const uno::Reference< io::XInputStream >& xStream )
 : m_xInputStream( xStream )
@@ -37,7 +38,7 @@ OFSInputStreamContainer::~OFSInputStreamContainer()
 {
 }
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL OFSInputStreamContainer::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > OFSInputStreamContainer::getTypes()
 {
     if (m_bSeekable)
     {
@@ -56,7 +57,7 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL OFSInputStreamContainer::getTypes(
     }
 }
 
-cpo::uno::Any SAL_CALL OFSInputStreamContainer::queryInterface( const cpo::uno::Type& rType )
+cpo::uno::Any OFSInputStreamContainer::queryInterface( const cpo::uno::Type& rType )
 {
     // Attention:
     //  Don't use mutex or guard in this method!!! Is a method of XInterface.
@@ -78,19 +79,19 @@ cpo::uno::Any SAL_CALL OFSInputStreamContainer::queryInterface( const cpo::uno::
     return ::cppu::OWeakObject::queryInterface( rType ) ;
 }
 
-void SAL_CALL OFSInputStreamContainer::acquire()
+void OFSInputStreamContainer::acquire()
         noexcept
 {
     ::cppu::OWeakObject::acquire();
 }
 
-void SAL_CALL OFSInputStreamContainer::release()
+void OFSInputStreamContainer::release()
         noexcept
 {
     ::cppu::OWeakObject::release();
 }
 
-sal_Int32 SAL_CALL OFSInputStreamContainer::readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
+sal_Int32 OFSInputStreamContainer::readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -98,12 +99,12 @@ sal_Int32 SAL_CALL OFSInputStreamContainer::readBytes( cpo::uno::Sequence< sal_I
         throw lang::DisposedException();
 
     if ( !m_xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_xInputStream->readBytes( aData, nBytesToRead );
 }
 
-sal_Int32 SAL_CALL OFSInputStreamContainer::readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
+sal_Int32 OFSInputStreamContainer::readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -111,12 +112,12 @@ sal_Int32 SAL_CALL OFSInputStreamContainer::readSomeBytes( cpo::uno::Sequence< s
         throw lang::DisposedException();
 
     if ( !m_xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_xInputStream->readSomeBytes( aData, nMaxBytesToRead );
 }
 
-void SAL_CALL OFSInputStreamContainer::skipBytes( sal_Int32 nBytesToSkip )
+void OFSInputStreamContainer::skipBytes( sal_Int32 nBytesToSkip )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -124,12 +125,12 @@ void SAL_CALL OFSInputStreamContainer::skipBytes( sal_Int32 nBytesToSkip )
         throw lang::DisposedException();
 
     if ( !m_xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_xInputStream->skipBytes( nBytesToSkip );
 }
 
-sal_Int32 SAL_CALL OFSInputStreamContainer::available(  )
+sal_Int32 OFSInputStreamContainer::available(  )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -137,12 +138,12 @@ sal_Int32 SAL_CALL OFSInputStreamContainer::available(  )
         throw lang::DisposedException();
 
     if ( !m_xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_xInputStream->available();
 }
 
-void SAL_CALL OFSInputStreamContainer::closeInput(  )
+void OFSInputStreamContainer::closeInput(  )
 {
     {
         std::scoped_lock aGuard( m_aMutex );
@@ -151,12 +152,12 @@ void SAL_CALL OFSInputStreamContainer::closeInput(  )
             throw lang::DisposedException();
 
         if ( !m_xInputStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
     }
     dispose();
 }
 
-uno::Reference< io::XInputStream > SAL_CALL OFSInputStreamContainer::getInputStream()
+uno::Reference< io::XInputStream > OFSInputStreamContainer::getInputStream()
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -169,7 +170,7 @@ uno::Reference< io::XInputStream > SAL_CALL OFSInputStreamContainer::getInputStr
     return this;
 }
 
-uno::Reference< io::XOutputStream > SAL_CALL OFSInputStreamContainer::getOutputStream()
+uno::Reference< io::XOutputStream > OFSInputStreamContainer::getOutputStream()
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -179,7 +180,7 @@ uno::Reference< io::XOutputStream > SAL_CALL OFSInputStreamContainer::getOutputS
     return uno::Reference< io::XOutputStream >();
 }
 
-void SAL_CALL OFSInputStreamContainer::seek( sal_Int64 location )
+void OFSInputStreamContainer::seek( sal_Int64 location )
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -187,12 +188,12 @@ void SAL_CALL OFSInputStreamContainer::seek( sal_Int64 location )
         throw lang::DisposedException();
 
     if ( !m_xSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_xSeekable->seek( location );
 }
 
-sal_Int64 SAL_CALL OFSInputStreamContainer::getPosition()
+sal_Int64 OFSInputStreamContainer::getPosition()
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -200,12 +201,12 @@ sal_Int64 SAL_CALL OFSInputStreamContainer::getPosition()
         throw lang::DisposedException();
 
     if ( !m_xSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_xSeekable->getPosition();
 }
 
-sal_Int64 SAL_CALL OFSInputStreamContainer::getLength()
+sal_Int64 OFSInputStreamContainer::getLength()
 {
     std::scoped_lock aGuard( m_aMutex );
 
@@ -213,12 +214,12 @@ sal_Int64 SAL_CALL OFSInputStreamContainer::getLength()
         throw lang::DisposedException();
 
     if ( !m_xSeekable.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return m_xSeekable->getLength();
 }
 
-void SAL_CALL OFSInputStreamContainer::dispose(  )
+void OFSInputStreamContainer::dispose(  )
 {
     std::unique_lock aGuard( m_aMutex );
 
@@ -226,7 +227,7 @@ void SAL_CALL OFSInputStreamContainer::dispose(  )
         return;
 
     if ( !m_xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_xInputStream->closeInput();
 
@@ -236,7 +237,7 @@ void SAL_CALL OFSInputStreamContainer::dispose(  )
     m_bDisposed = true;
 }
 
-void SAL_CALL OFSInputStreamContainer::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
+void OFSInputStreamContainer::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
 
@@ -246,7 +247,7 @@ void SAL_CALL OFSInputStreamContainer::addEventListener( const uno::Reference< l
     m_aListenersContainer.addInterface( aGuard, xListener );
 }
 
-void SAL_CALL OFSInputStreamContainer::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
+void OFSInputStreamContainer::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     std::unique_lock aGuard( m_aMutex );
 

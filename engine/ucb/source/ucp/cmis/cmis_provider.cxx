@@ -19,10 +19,11 @@
 #include "cmis_repo_content.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace cmis
 {
-uno::Reference< css::ucb::XContent > SAL_CALL
+uno::Reference< css::ucb::XContent >
 ContentProvider::queryContent(
             const uno::Reference< css::ucb::XContentIdentifier >& Identifier )
 {
@@ -74,7 +75,7 @@ void ContentProvider::registerSession( const OUString& sBindingUrl, const OUStri
 }
 
 ContentProvider::ContentProvider(
-    const uno::Reference< uno::XComponentContext >& rxContext )
+    const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 : ::ucbhelper::ContentProviderImplHelper( rxContext )
 {
 }
@@ -84,19 +85,19 @@ ContentProvider::~ContentProvider()
 }
 
 //XInterface
-void SAL_CALL ContentProvider::acquire()
+void ContentProvider::acquire()
     noexcept
 {
     OWeakObject::acquire();
 }
 
-void SAL_CALL ContentProvider::release()
+void ContentProvider::release()
     noexcept
 {
     OWeakObject::release();
 }
 
-cpo::uno::Any SAL_CALL ContentProvider::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any ContentProvider::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = cppu::queryInterface( rType,
                                                static_cast< lang::XTypeProvider* >(this),
@@ -126,9 +127,9 @@ cpo::uno::Sequence< OUString > ContentProvider::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_cmis_ContentProvider_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new cmis::ContentProvider(context));
 }

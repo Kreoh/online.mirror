@@ -92,7 +92,6 @@ SW_DLLPUBLIC FieldUnit  GetDfltMetric(bool bWeb);
 void        SetDfltMetric(FieldUnit eMetric, bool bWeb);
 
 bool HasCharUnit( bool bWeb );
-void SetApplyCharUnit(bool bApplyChar, bool bWeb);
 
 // fill ListBox with all char style templates, except the standard ones
 SW_DLLPUBLIC void FillCharStyleListBox(weld::ComboBox& rToFill, SwDocShell* pDocSh, bool bSorted = false, bool bWithDefault = false);
@@ -108,7 +107,7 @@ OUString GetAppLangDateTimeString( const DateTime& );
 
 // search for a command string within the menu structure and execute it
 // at the dispatcher if there is one, if executed return true
-bool ExecuteMenuCommand(const css::uno::Reference<css::awt::XPopupMenu>& rMenu, const SfxViewFrame& rViewFrame, sal_uInt16 nId);
+bool ExecuteMenuCommand(const cpo::uno::Reference<css::awt::XPopupMenu>& rMenu, const SfxViewFrame& rViewFrame, sal_uInt16 nId);
 
 #endif // INCLUDED_SW_SOURCE_UIBASE_INC_UITOOL_HXX
 

@@ -39,7 +39,7 @@ import com.sun.star.uno.Any;
 import com.sun.star.uno.AnyConverter;
 import cpo.uno.Type;
 import com.sun.star.uno.UnoRuntime;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -87,8 +87,7 @@ public class ParcelBrowseNode extends PropertySet implements
                                       xFac.createInstanceWithContext(
                                           "com.sun.star.ucb.SimpleFileAccess",
                                           xCtx));
-            if ( xSFA != null && ( xSFA.isReadOnly( parcelDirUrl ) ||
-                 container.isUnoPkg() ) )
+            if ( xSFA != null && xSFA.isReadOnly( parcelDirUrl ) )
             {
                 deletable = false;
                 editable  = false;

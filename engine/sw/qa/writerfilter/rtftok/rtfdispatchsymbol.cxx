@@ -15,6 +15,7 @@
 #include <com/sun/star/qa/XDumper.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -74,7 +75,7 @@ CPPUNIT_TEST_FIXTURE(Test, testFloattableThenSectBreak)
 
     // Then make sure that the floating table is on the first page:
     uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
-    css::uno::Reference<qa::XDumper> xDumper(xModel->getCurrentController(), uno::UNO_QUERY);
+    cpo::uno::Reference<qa::XDumper> xDumper(xModel->getCurrentController(), uno::UNO_QUERY);
     OString aDump = xDumper->dump(u"layout"_ustr).toUtf8();
     auto pCharBuffer = reinterpret_cast<const xmlChar*>(aDump.getStr());
     xmlDocUniquePtr pXmlDoc(xmlParseDoc(pCharBuffer));
@@ -83,6 +84,23 @@ CPPUNIT_TEST_FIXTURE(Test, testFloattableThenSectBreak)
     // - Actual  : 0
     // i.e. the floating table was on the 2nd page, not on the 1st page.
     assertXPath(pXmlDoc, "/root/page[1]/sorted_objs/fly", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCellThenIntbl)
+{
+    // Given a document where the \intbl comes after the \cell:
+    // When loading that file:
+    loadFromFile(u"cell-then-intbl.rtf");
+
+    // Then make sure that the text after the cell end is in the document:
+    uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess> xText(xTextDocument->getText(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xParagraphs = xText->createEnumeration();
+    uno::Reference<text::XTextRange> xParagraph(xParagraphs->nextElement(), uno::UNO_QUERY);
+    // Without the accompanying fix in place, this test would have failed, the import replayed
+    // the buffered cell end with no properties to put it in.
+    CPPUNIT_ASSERT_EQUAL(u"x"_ustr, xParagraph->getString());
+    CPPUNIT_ASSERT(!xParagraphs->hasMoreElements());
 }
 }
 

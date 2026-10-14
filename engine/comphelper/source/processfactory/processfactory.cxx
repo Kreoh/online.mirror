@@ -22,11 +22,12 @@
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/DeploymentException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 using namespace ::com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::lang;
 
 namespace comphelper
@@ -73,15 +74,15 @@ Reference< XMultiServiceFactory > getProcessServiceFactory()
     Reference< XMultiServiceFactory> xReturn = localProcessFactory.get();
     if ( !xReturn.is() )
     {
-        throw DeploymentException( u"null process service factory"_ustr );
+        throw cpo::uno::DeploymentException( u"null process service factory"_ustr );
     }
     return xReturn;
 }
 
-Reference< XComponentContext > getComponentContext(
+Reference< cpo::uno::XComponentContext > getComponentContext(
     Reference< XMultiServiceFactory > const & factory)
 {
-    Reference< XComponentContext > xRet;
+    Reference< cpo::uno::XComponentContext > xRet;
     uno::Reference<beans::XPropertySet> const xProps( factory, uno::UNO_QUERY );
     if (xProps.is()) {
         try {
@@ -89,23 +90,23 @@ Reference< XComponentContext > getComponentContext(
                       uno::UNO_QUERY );
         }
         catch (beans::UnknownPropertyException & e) {
-            throw DeploymentException(
+            throw cpo::uno::DeploymentException(
                 "unknown service factory DefaultContext property: " + e.Message,
-                Reference<XInterface>(factory, UNO_QUERY) );
+                Reference<cpo::uno::XInterface>(factory, UNO_QUERY) );
         }
     }
     if ( !xRet.is() )
     {
-        throw DeploymentException(
+        throw cpo::uno::DeploymentException(
             u"no service factory DefaultContext"_ustr,
-            Reference<XInterface>(factory, UNO_QUERY) );
+            Reference<cpo::uno::XInterface>(factory, UNO_QUERY) );
     }
     return xRet;
 }
 
-const Reference< XComponentContext > & getProcessComponentContext()
+const Reference< cpo::uno::XComponentContext > & getProcessComponentContext()
 {
-    static const uno::Reference<XComponentContext> processComponentContext = getComponentContext( getProcessServiceFactory() );
+    static const uno::Reference<cpo::uno::XComponentContext> processComponentContext = getComponentContext( getProcessServiceFactory() );
     return processComponentContext;
 }
 

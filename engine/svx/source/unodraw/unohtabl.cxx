@@ -27,6 +27,7 @@
 #include <svx/unofill.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::cppu;
 
 namespace {
@@ -39,11 +40,11 @@ public:
     virtual NameOrIndex* createItem() const override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual cpo::uno::Sequence<  OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual cpo::uno::Sequence<  OUString > getSupportedServiceNames(  ) override;
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override;
+    virtual cpo::uno::Type getElementType(  ) override;
 };
 
 }
@@ -53,12 +54,12 @@ SvxUnoHatchTable::SvxUnoHatchTable( SdrModel* pModel ) noexcept
 {
 }
 
-OUString SAL_CALL SvxUnoHatchTable::getImplementationName()
+OUString SvxUnoHatchTable::getImplementationName()
 {
     return u"SvxUnoHatchTable"_ustr;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxUnoHatchTable::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SvxUnoHatchTable::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.drawing.HatchTable"_ustr };
 }
@@ -69,7 +70,7 @@ NameOrIndex* SvxUnoHatchTable::createItem() const
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SvxUnoHatchTable::getElementType(  )
+cpo::uno::Type SvxUnoHatchTable::getElementType(  )
 {
     return cppu::UnoType<drawing::Hatch>::get();
 }
@@ -77,7 +78,7 @@ cpo::uno::Type SAL_CALL SvxUnoHatchTable::getElementType(  )
 /**
  * Create a hatchtable
  */
-uno::Reference< uno::XInterface > SvxUnoHatchTable_createInstance( SdrModel* pModel )
+uno::Reference< cpo::uno::XInterface > SvxUnoHatchTable_createInstance( SdrModel* pModel )
 {
     return *new SvxUnoHatchTable(pModel);
 }

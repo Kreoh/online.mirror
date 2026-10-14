@@ -46,100 +46,6 @@ sub debian_rewrite($)
     return $dep;
 }
 
-############################################################################
-# Reading the package map to find Solaris package names for
-# the corresponding abbreviations
-############################################################################
-
-sub read_packagemap
-{
-    my ($allvariables, $includepatharrayref, $languagesarrayref) = @_;
-
-    my $packagemapname = "";
-    if ( $allvariables->{'PACKAGEMAP'} ) { $packagemapname = $allvariables->{'PACKAGEMAP'}; }
-    if ( $packagemapname eq "" ) { installer::exiter::exit_program("ERROR: Property PACKAGEMAP must be defined!", "read_packagemap"); }
-
-    my $infoline = "\n\nCollected abbreviations and package names:\n";
-    push(@installer::globals::logfileinfo, $infoline);
-
-    # Can be a comma separated list. All files have to be found in include paths
-    my $allpackagemapnames = installer::converter::convert_stringlist_into_hash(\$packagemapname, ",");
-    foreach my $onepackagemapname ( keys %{$allpackagemapnames} )
-    {
-        my $packagemapref = installer::scriptitems::get_sourcepath_from_filename_and_includepath(\$onepackagemapname, $includepatharrayref, 0);
-
-        if ( $$packagemapref eq "" ) { installer::exiter::exit_program("ERROR: Could not find package map file \"$onepackagemapname\" (property PACKAGEMAP)!", "read_packagemap"); }
-
-        my $packagemapcontent = installer::files::read_file($$packagemapref);
-
-        for ( my $i = 0; $i <= $#{$packagemapcontent}; $i++ )
-        {
-            my $line = ${$packagemapcontent}[$i];
-
-            if ( $line =~ /^\s*\#/ ) { next; }  # comment line
-            if ( $line =~ /^\s*$/ ) { next; }  # empty line
-
-            if ( $line =~ /^\s*(.*?)\t(.*?)\s*$/ )
-            {
-                my $abbreviation = $1;
-                my $packagename = $2;
-                installer::packagelist::resolve_packagevariables(\$abbreviation, $allvariables, 0);
-                installer::packagelist::resolve_packagevariables(\$packagename, $allvariables, 0);
-
-                # Special handling for language strings %LANGUAGESTRING
-
-                if (( $abbreviation =~ /\%LANGUAGESTRING/ ) || ( $packagename =~ /\%LANGUAGESTRING/ ))
-                {
-                    foreach my $onelang ( @{$languagesarrayref} )
-                    {
-                        my $local_abbreviation = $abbreviation;
-                        my $local_packagename = $packagename;
-                        $local_abbreviation =~ s/\%LANGUAGESTRING/$onelang/g;
-                        $local_packagename =~ s/\%LANGUAGESTRING/$onelang/g;
-
-                        # Logging all abbreviations and packagenames
-                        $infoline = "$onelang : $local_abbreviation : $local_packagename\n";
-                        push(@installer::globals::logfileinfo, $infoline);
-
-                        if ( exists($installer::globals::dependfilenames{$local_abbreviation}) )
-                        {
-                            installer::exiter::exit_program("ERROR: Packagename for  Solaris package $local_abbreviation already defined ($installer::globals::dependfilenames{$local_abbreviation})!", "read_packagemap");
-                        }
-                        else
-                        {
-                            $installer::globals::dependfilenames{$local_abbreviation} = $local_packagename;
-                        }
-                    }
-                }
-                else
-                {
-                    # Logging all abbreviations and packagenames
-                    $infoline = "$abbreviation : $packagename\n";
-                    push(@installer::globals::logfileinfo, $infoline);
-
-                    if ( exists($installer::globals::dependfilenames{$abbreviation}) )
-                    {
-                        installer::exiter::exit_program("ERROR: Packagename for  Solaris package $abbreviation already defined ($installer::globals::dependfilenames{$abbreviation})!", "read_packagemap");
-                    }
-                    else
-                    {
-                        $installer::globals::dependfilenames{$abbreviation} = $packagename;
-                    }
-                }
-            }
-            else
-            {
-                my $errorline = $i + 1;
-                installer::exiter::exit_program("ERROR: Wrong syntax in file \"$onepackagemapname\" (line $errorline)!", "read_packagemap");
-            }
-        }
-    }
-
-    $infoline = "\n\n";
-    push(@installer::globals::logfileinfo, $infoline);
-
-}
-
 ##########################################################
 # Filling the epm file with directories, files and links
 ##########################################################
@@ -191,7 +97,6 @@ sub put_files_into_epmfile
 
         my $group = "bin";
         if ( $installer::globals::islinuxbuild ) { $group = "root"; }
-        if (( $installer::globals::issolarisbuild ) && ( $onefile->{'SolarisGroup'} )) { $group = $onefile->{'SolarisGroup'}; }
 
         my $line = "$filetype $unixrights root $group $destination $sourcepath\n";
 
@@ -319,7 +224,8 @@ sub create_epm_header
     if ( ! $onepackage->{'packageversion'} ) { installer::exiter::exit_program("ERROR: No packageversion defined for package: $onepackage->{'module'}!", "create_epm_header"); }
     $installer::globals::packageversion = $onepackage->{'packageversion'};
     installer::packagelist::resolve_packagevariables(\$installer::globals::packageversion, $variableshashref, 0);
-    if ( $variableshashref->{'PACKAGEREVISION'} ) { $installer::globals::packagerevision = $variableshashref->{'PACKAGEREVISION'}; }
+    # PACKAGEREVISION is the fourth component of the version number and can be 0
+    if ( defined($variableshashref->{'PACKAGEREVISION'}) && $variableshashref->{'PACKAGEREVISION'} ne '' ) { $installer::globals::packagerevision = $variableshashref->{'PACKAGEREVISION'}; }
 
     $line = "%version" . " " . $installer::globals::packageversion . "\n";
     push(@epmheader, $line);
@@ -352,15 +258,6 @@ sub create_epm_header
 
     my $license_in_package_defined = 0;
 
-    if ( $installer::globals::issolarisbuild )
-    {
-        if ( $onepackage->{'solariscopyright'} )
-        {
-            $licensefilename = $onepackage->{'solariscopyright'};
-            $license_in_package_defined = 1;
-        }
-    }
-
     # Process for Linux packages, in which only a very basic license file is
     # included into the package.
 
@@ -380,31 +277,6 @@ sub create_epm_header
         my $fileref = installer::scriptitems::get_sourcepath_from_filename_and_includepath(\$licensefilename, "" , 0);
 
         if ( $$fileref eq "" ) { installer::exiter::exit_program("ERROR: Could not find license file $licensefilename (A)!", "create_epm_header"); }
-
-        # Special handling to add the content of the file "license_en-US" to the solaris copyrightfile. But not for all products
-
-        if (( $installer::globals::issolarispkgbuild ) && ( ! $variableshashref->{'NO_LICENSE_INTO_COPYRIGHT'} ))
-        {
-            if ( ! $installer::globals::englishlicenseset ) { _set_english_license($variableshashref) }
-
-            # The location for the new file
-            my $languagestring = "";
-            for ( my $i = 0; $i <= $#{$languagesref}; $i++ ) { $languagestring = $languagestring . "_" . ${$languagesref}[$i]; }
-            $languagestring =~ s/^\s*_//;
-
-            my $copyrightdir = installer::systemactions::create_directories("copyright", \$languagestring);
-
-            my $copyrightfile = installer::files::read_file($$fileref);
-
-            # Adding license content to copyright file
-            push(@{$copyrightfile}, "\n");
-            for ( my $i = 0; $i <= $#{$installer::globals::englishlicense}; $i++ ) { push(@{$copyrightfile}, ${$installer::globals::englishlicense}[$i]); }
-
-            # New destination for $$fileref
-            $$fileref = $copyrightdir . $installer::globals::separator . "solariscopyrightfile_" . $onepackage->{'module'};
-            if ( -f $$fileref ) { unlink $$fileref; }
-            installer::files::save_file($$fileref, $copyrightfile);
-        }
 
         $infoline = "Using license file: \"$$fileref\"!\n";
         push(@installer::globals::logfileinfo, $infoline);
@@ -456,11 +328,7 @@ sub create_epm_header
 
     my $replaces = "";
 
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        $replaces = "solarisreplaces";   # the name in the packagelist
-    }
-    elsif ( $installer::globals::islinuxbuild )
+    if ( $installer::globals::islinuxbuild )
     {
         $replaces = "linuxreplaces";    # the name in the packagelist
     }
@@ -489,11 +357,7 @@ sub create_epm_header
 
     my $incompat = "";
 
-    if (( $installer::globals::issolarispkgbuild ) && ( ! $installer::globals::patch ))
-    {
-        $incompat = "solarisincompat";   # the name in the packagelist
-    }
-    elsif (( $installer::globals::islinuxbuild ) && ( ! $installer::globals::patch ))
+    if (( $installer::globals::islinuxbuild ) && ( ! $installer::globals::patch ))
     {
         $incompat = "linuxincompat";    # the name in the packagelist
     }
@@ -520,27 +384,11 @@ sub create_epm_header
 
     # including the directives for %requires and %provides
 
-    my $provides = "";
-    my $requires = "";
+    my $provides = "provides";         # the name in the packagelist
+    my $requires = "requires";         # the name in the packagelist
 
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        $provides = "solarisprovides";   # the name in the packagelist
-        $requires = "solarisrequires";   # the name in the packagelist
-    }
-    elsif ( $installer::globals::isfreebsdpkgbuild )
-    {
-        $provides = "freebsdprovides";   # the name in the packagelist
-        $requires = "freebsdrequires";   # the name in the packagelist
-    }
-    else
-    {
-        $provides = "provides";         # the name in the packagelist
-        $requires = "requires";         # the name in the packagelist
-    }
-
-        my $isdict = 0;
-        if ( $onepackage->{'packagename'} =~ /-dict-/ ) { $isdict = 1;  }
+    my $isdict = 0;
+    if ( $onepackage->{'packagename'} =~ /-dict-/ ) { $isdict = 1;  }
 
     if ( $onepackage->{$provides} )
     {
@@ -563,9 +411,8 @@ sub create_epm_header
     {
         my $requiresstring = $onepackage->{$requires};
 
-        # The requires string can contain the separator "," in the names (descriptions) of the packages
-        # (that are required for Solaris depend files). Therefore "," inside such a description has to
-        # masked with a backslash.
+        # The requires string can contain the separator "," in the names (descriptions) of the packages.
+        # Therefore "," inside such a description has to be masked with a backslash.
         # This masked separator need to be found and replaced, before the stringlist is converted into an array.
         # This replacement has to be turned back after the array is created.
 
@@ -740,9 +587,9 @@ sub set_patch_state
         push( @installer::globals::logfileinfo, $infoline);
     }
 
-    if ( ( $installer::globals::is_special_epm ) && (($installer::globals::isrpmbuild) || ($installer::globals::issolarispkgbuild)) )
+    if ( ( $installer::globals::is_special_epm ) && ( $installer::globals::isrpmbuild ) )
     {
-        # Special postprocess handling only for Linux RPM and Solaris packages
+        # Special postprocess handling only for Linux RPM packages
         $installer::globals::postprocess_specialepm = 1;
         $installer::globals::postprocess_standardepm = 0;
     }
@@ -829,18 +676,13 @@ sub call_epm
 }
 
 #####################################################################
-# Adding the new line for relocatables into pkginfo file (Solaris)
-# or spec file (Linux) created by epm
+# Adding the new line for relocatables into the spec file (Linux)
+# created by epm
 #####################################################################
 
 sub add_one_line_into_file
 {
     my ($file, $insertline, $filename) = @_;
-
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        push(@{$file}, $insertline);        # simply adding at the end of pkginfo file
-    }
 
     if ( $installer::globals::isrpmbuild )
     {
@@ -864,185 +706,6 @@ sub add_one_line_into_file
     $insertline =~ s/\s*$//;    # removing line end for correct logging
     my $infoline = "Success: Added line $insertline into file $filename!\n";
     push( @installer::globals::logfileinfo, $infoline);
-}
-
-#####################################################################
-# Setting the revision VERSION=1.9,REV=66  .
-# Also adding the new line: "AutoReqProv: no"
-#####################################################################
-
-sub set_revision_in_pkginfo
-{
-    my ($file, $filename, $variables, $packagename) = @_;
-
-    my $revisionstring = "\,REV\=" . $installer::globals::packagerevision;
-
-    # Adding also a time string to the revision. Syntax: VERSION=8.0.0,REV=66.2005.01.24
-
-    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
-
-    $mday = $mday;
-    $mon = $mon + 1;
-    $year = $year + 1900;
-
-    if ( $mday < 10 ) { $mday = "0" . $mday; }
-    if ( $mon < 10 ) { $mon = "0" . $mon; }
-    my $datestring = $year . "." . $mon . "." . $mday;
-    $revisionstring = $revisionstring . "." . $datestring;
-
-    for ( my $i = 0; $i <= $#{$file}; $i++ )
-    {
-        if ( ${$file}[$i] =~ /^\s*(VERSION\=.*?)\s*$/ )
-        {
-            my $oldstring = $1;
-            my $newstring = $oldstring . $revisionstring;   # also adding the date string
-            ${$file}[$i] =~ s/$oldstring/$newstring/;
-            my $infoline = "Info: Changed in $filename file: \"$oldstring\" to \"$newstring\"!\n";
-            push( @installer::globals::logfileinfo, $infoline);
-            last;
-        }
-    }
-
-    # For Update and Patch reasons, this string can also be kept constant
-
-    my $pkgversion = "SOLSPARCPKGVERSION";
-    if ( $installer::globals::issolarisx86build ) { $pkgversion = "SOLIAPKGVERSION"; }
-
-    if (( $variables->{$pkgversion} ) && ( $variables->{$pkgversion} ne "" ))
-    {
-        if ( $variables->{$pkgversion} ne "FINALVERSION" )
-        {
-            # In OOo 3.x timeframe, this string is no longer unique for all packages, because of the three layer.
-            # In the string: "3.0.0,REV=9.2008.09.30" only the part "REV=9.2008.09.30" can be unique for all packages
-            # and therefore be set as $pkgversion.
-            # The first part "3.0.0" has to be derived from the
-
-            my $version = $installer::globals::packageversion;
-            if ( $version =~ /^\s*(\d+)\.(\d+)\.(\d+)\s*$/ )
-            {
-                my $major = $1;
-                my $minor = $2;
-                my $micro = $3;
-
-                my $finalmajor = $major;
-                my $finalminor = $minor;
-                my $finalmicro = 0;
-
-                $version = "$finalmajor.$finalminor.$finalmicro";
-            }
-
-            my $datestring = $variables->{$pkgversion};
-
-            # Allowing some packages to have another date of creation.
-            # They can be defined in product definition using a key like "SOLSPARCPKGVERSION_$packagename"
-
-            my $additionalkey = $pkgversion . "_" . $packagename;
-            if (( $variables->{$additionalkey} ) && ( $variables->{$additionalkey} ne "" )) { $datestring = $variables->{$additionalkey}; }
-
-            my $versionstring = "$version,$datestring";
-
-            for ( my $i = 0; $i <= $#{$file}; $i++ )
-            {
-                if ( ${$file}[$i] =~ /^\s*(VERSION\=).*?\s*$/ )
-                {
-                    my $start = $1;
-                    my $newstring = $start . $versionstring . "\n"; # setting the complete new string
-                    my $oldstring = ${$file}[$i];
-                    ${$file}[$i] = $newstring;
-                    $oldstring =~ s/\s*$//;
-                    $newstring =~ s/\s*$//;
-                    my $infoline = "Info: Changed in $filename file: \"$oldstring\" to \"$newstring\"!\n";
-                    push( @installer::globals::logfileinfo, $infoline);
-                    last;
-                }
-            }
-        }
-    }
-}
-
-########################################################
-# Setting MAXINST=1000 into the pkginfo file.
-########################################################
-
-sub set_maxinst_in_pkginfo
-{
-    my ($changefile, $filename) = @_;
-
-    my $newline = "MAXINST\=1000\n";
-
-    add_one_line_into_file($changefile, $newline, $filename);
-}
-
-#############################################################
-# Setting several Solaris variables into the pkginfo file.
-#############################################################
-
-sub set_solaris_parameter_in_pkginfo
-{
-    my ($changefile, $filename, $allvariables) = @_;
-
-    my $newline = "";
-
-    # SUNW_PRODNAME
-    # SUNW_PRODVERS
-    # SUNW_PKGVERS
-    # Not: SUNW_PKGTYPE
-    # HOTLINE
-    # EMAIL
-
-    my $productname = $allvariables->{'PRODUCTNAME'};
-    $newline = "SUNW_PRODNAME=$productname\n";
-    add_one_line_into_file($changefile, $newline, $filename);
-
-    my $productversion = "";
-    if ( $allvariables->{'PRODUCTVERSION'} )
-    {
-        $productversion = $allvariables->{'PRODUCTVERSION'};
-        if ( $allvariables->{'PRODUCTEXTENSION'} ) { $productversion = $productversion . "/" . $allvariables->{'PRODUCTEXTENSION'}; }
-    }
-    $newline = "SUNW_PRODVERS=$productversion\n";
-    add_one_line_into_file($changefile, $newline, $filename);
-
-    $newline = "SUNW_PKGVERS=1\.0\n";
-    add_one_line_into_file($changefile, $newline, $filename);
-
-    if ( $allvariables->{'SUNW_PKGTYPE'} )
-    {
-        $newline = "SUNW_PKGTYPE=$allvariables->{'SUNW_PKGTYPE'}\n";
-        add_one_line_into_file($changefile, $newline, $filename);
-    }
-    else
-    {
-        $newline = "SUNW_PKGTYPE=\n";
-        add_one_line_into_file($changefile, $newline, $filename);
-    }
-
-    $newline = "HOTLINE=Please contact your local service provider\n";
-    add_one_line_into_file($changefile, $newline, $filename);
-
-    $newline = "EMAIL=\n";
-    add_one_line_into_file($changefile, $newline, $filename);
-
-}
-
-#####################################################################
-# epm uses as architecture for Solaris x86 "i86pc". This has to be
-# changed to "i386".
-#####################################################################
-
-sub fix_architecture_setting
-{
-    my ($changefile) = @_;
-
-    for ( my $i = 0; $i <= $#{$changefile}; $i++ )
-    {
-        if ( ${$changefile}[$i] =~ /^\s*ARCH=i86pc\s*$/ )
-        {
-            ${$changefile}[$i] =~ s/i86pc/i386/;
-            last;
-        }
-
-    }
 }
 
 #####################################################################
@@ -1118,29 +781,6 @@ sub set_packager_in_specfile
 }
 
 #####################################################################
-# Setting the requirements in the spec file (i81494)
-# Syntax: PreReq: "requirements" (only for shared extensions)
-#####################################################################
-
-sub set_prereq_in_specfile
-{
-    my ($changefile) = @_;
-
-    my $prereq = "PreReq:";
-
-    for ( my $i = 0; $i <= $#{$changefile}; $i++ )
-    {
-        if ( ${$changefile}[$i] =~ /^\s*Requires:\s*(.+?)\s*$/ )
-        {
-            my $oldstring = ${$changefile}[$i];
-            ${$changefile}[$i] =~ s/Requires:/$prereq/;
-            my $infoline = "Info: Changed requirements in spec file from $oldstring to ${$changefile}[$i]!\n";
-            push( @installer::globals::logfileinfo, $infoline);
-        }
-    }
-}
-
-#####################################################################
 # Setting the Auto[Req]Prov line and __find_requires
 #####################################################################
 
@@ -1199,62 +839,9 @@ sub set_license_in_specfile
     }
 }
 
-#########################################################
-# Building relocatable Solaris packages means:
-# 1. Add "BASEDIR=/opt" into pkginfo
-# 2. Remove "/opt/" from all objects in prototype file
-# For step2 this function exists
-# Sample: d none /opt/openofficeorg20/help 0755 root other
-# -> d none openofficeorg20/help 0755 root other
-#########################################################
-
-sub make_prototypefile_relocatable
-{
-    my ($prototypefile, $relocatablepath) = @_;
-
-    for ( my $i = 0; $i <= $#{$prototypefile}; $i++ )
-    {
-        if ( ${$prototypefile}[$i] =~ /^\s*\w\s+\w+\s+\/\w+/ )  # this is an object line
-        {
-            ${$prototypefile}[$i] =~ s/$relocatablepath//;  # Important: $relocatablepath has a "/" at the end. Example "/opt/"
-        }
-    }
-
-    # If the $relocatablepath is "/opt/openoffice20/" the line "d none /opt/openoffice20" was not changed.
-    # This line has to be removed now
-
-    if ( $relocatablepath ne "/" ) { $relocatablepath =~ s/\/\s*$//; }      # removing the ending slash
-
-    for ( my $i = 0; $i <= $#{$prototypefile}; $i++ )
-    {
-        if ( ${$prototypefile}[$i] =~ /^\s*d\s+\w+\s+\Q$relocatablepath\E/ )
-        {
-            my $line = ${$prototypefile}[$i];
-            splice(@{$prototypefile},$i,1); # removing the line
-            $line =~ s/\s*$//;
-            my $infoline = "Info: Removed line \"$line\" from prototype file!\n";
-            push( @installer::globals::logfileinfo, $infoline);
-            last;
-        }
-    }
-
-    # Making "\$" to "$" in prototype file. "\$" was created by epm.
-
-    for ( my $i = 0; $i <= $#{$prototypefile}; $i++ )
-    {
-        if ( ${$prototypefile}[$i] =~ /\\\$/ )
-        {
-            ${$prototypefile}[$i] =~ s/\\\$/\$/g;
-            my $infoline2 = "Info: Changed line in prototype file: ${$prototypefile}[$i] !\n";
-            push( @installer::globals::logfileinfo, $infoline2);
-        }
-    }
-}
-
 #########################################################################
 # Replacing the variables in the shell scripts or in the epm list file
 # Linux: spec file
-# Solaris: preinstall, postinstall, preremove, postremove
 # If epm is used in the original version (not relocatable)
 # the variables have to be exchanged in the list file,
 # created for epm.
@@ -1289,7 +876,7 @@ sub replace_variables_in_shellscripts
 
 ############################################################
 # Determining the directory created by epm, in which the
-# RPMS or Solaris packages are created.
+# RPMS are created.
 ############################################################
 
 sub determine_installdir_ooo
@@ -1318,47 +905,6 @@ sub determine_installdir_ooo
 sub set_tab_into_datafile
 {
     my ($changefile, $filesref) = @_;
-
-    my @newclasses = ();
-    my $newclassesstring = "";
-
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        for ( my $i = 0; $i <= $#{$filesref}; $i++ )
-        {
-            my $onefile = ${$filesref}[$i];
-
-            if ( $onefile->{'SolarisClass'} )
-            {
-                my $sourcepath = $onefile->{'sourcepath'};
-
-                for ( my $j = 0; $j <= $#{$changefile}; $j++ )
-                {
-                    if (( ${$changefile}[$j] =~ /^\s*f\s+none\s+/ ) && ( ${$changefile}[$j] =~ /\=\Q$sourcepath\E\s+/ ))
-                    {
-                        my $oldline = ${$changefile}[$j];
-                        ${$changefile}[$j] =~ s/f\s+none/e $onefile->{'SolarisClass'}/;
-                        my $newline = ${$changefile}[$j];
-                        $oldline =~ s/\s*$//;
-                        $newline =~ s/\s*$//;
-
-                        my $infoline = "TAB: Changing content from \"$oldline\" to \"$newline\" .\n";
-                        push(@installer::globals::logfileinfo, $infoline);
-
-                        # collecting all new classes
-                        if (! grep {$_ eq $onefile->{'SolarisClass'}} @newclasses)
-                        {
-                            push(@newclasses, $onefile->{'SolarisClass'});
-                        }
-
-                        last;
-                    }
-                }
-            }
-        }
-
-        $newclassesstring = installer::converter::convert_array_to_space_separated_string(\@newclasses);
-    }
 
     if ( $installer::globals::isrpmbuild )
     {
@@ -1394,195 +940,11 @@ sub set_tab_into_datafile
         }
     }
 
-    return $newclassesstring;
 }
 
 ############################################################
-# Including additional classes into the pkginfo file
-############################################################
-
-sub include_classes_into_pkginfo
-{
-    my ($changefile, $classesstring) = @_;
-
-    for ( my $i = 0; $i <= $#{$changefile}; $i++ )
-    {
-        if ( ${$changefile}[$i] =~ /^\s*CLASSES\=none/ )
-        {
-            ${$changefile}[$i] =~ s/\s*$//;
-            my $oldline = ${$changefile}[$i];
-            ${$changefile}[$i] = ${$changefile}[$i] . " " . $classesstring . "\n";
-            my $newline = ${$changefile}[$i];
-            $newline =~ s/\s*$//;
-
-            my $infoline = "pkginfo file: Changing content from \"$oldline\" to \"$newline\" .\n";
-            push(@installer::globals::logfileinfo, $infoline);
-        }
-    }
-}
-
-##########################################################################################
-# Checking, if an extension is included into the package (Linux).
-# All extension files have to be installed into directory
-# share/extension/install
-# %attr(0444,root,root) "/opt/staroffice8/share/extension/install/SunSearchToolbar.oxt"
-##########################################################################################
-
-sub is_extension_package
-{
-    my ($specfile) = @_;
-
-    my $is_extension_package = 0;
-
-    for ( my $i = 0; $i <= $#{$specfile}; $i++ )
-    {
-        my $line = ${$specfile}[$i];
-        if ( $line =~ /share\/extension\/install\/.*?\.oxt\"\s*$/ )
-        {
-            $is_extension_package = 1;
-            last;
-        }
-    }
-
-    return $is_extension_package;
-}
-
-######################################################################
-# Checking, if an extension is included into the package (Solaris).
-# All extension files have to be installed into directory
-# share/extension/install
-######################################################################
-
-sub contains_extension_dir
-{
-    my ($prototypefile) = @_;
-
-    my $contains_extension_dir = 0;
-
-    # d none opt/libreoffice/share/extensions/
-
-    for ( my $i = 0; $i <= $#{$prototypefile}; $i++ )
-    {
-        my $line = ${$prototypefile}[$i];
-        if ( $line =~ /^\s*d\s+none\s.*\/share\/extensions\// )
-        {
-            $contains_extension_dir = 1;
-            last;
-        }
-    }
-
-    return $contains_extension_dir;
-}
-
-############################################################
-# Setting the correct Solaris locales
-############################################################
-
-sub get_solaris_language_for_langpack
-{
-    my ( $onelanguage ) = @_;
-
-    my $sollanguage = $onelanguage;
-    $sollanguage =~ s/\-/\_/;
-
-    if ( $sollanguage eq "de" ) { $sollanguage = "de"; }
-    elsif ( $sollanguage eq "en_US" ) { $sollanguage = "en_AU,en_CA,en_GB,en_IE,en_MT,en_NZ,en_US,en_US.UTF-8"; }
-    elsif ( $sollanguage eq "es" ) { $sollanguage = "es"; }
-    elsif ( $sollanguage eq "fr" ) { $sollanguage = "fr"; }
-    elsif ( $sollanguage eq "hu" ) { $sollanguage = "hu_HU"; }
-    elsif ( $sollanguage eq "it" ) { $sollanguage = "it"; }
-    elsif ( $sollanguage eq "nl" ) { $sollanguage = "nl_BE,nl_NL"; }
-    elsif ( $sollanguage eq "pl" ) { $sollanguage = "pl_PL"; }
-    elsif ( $sollanguage eq "sv" ) { $sollanguage = "sv"; }
-    elsif ( $sollanguage eq "pt" ) { $sollanguage = "pt_PT"; }
-    elsif ( $sollanguage eq "pt_BR" ) { $sollanguage = "pt_BR"; }
-    elsif ( $sollanguage eq "ru" ) { $sollanguage = "ru_RU"; }
-    elsif ( $sollanguage eq "ja" ) { $sollanguage = "ja,ja_JP,ja_JP.PCK,ja_JP.UTF-8"; }
-    elsif ( $sollanguage eq "ko" ) { $sollanguage = "ko,ko.UTF-8"; }
-    elsif ( $sollanguage eq "zh_CN" ) { $sollanguage = "zh,zh.GBK,zh_CN.GB18030,zh.UTF-8"; }
-    elsif ( $sollanguage eq "zh_TW" ) { $sollanguage = "zh_TW,zh_TW.BIG5,zh_TW.UTF-8,zh_HK.BIG5HK,zh_HK.UTF-8"; }
-
-    return $sollanguage;
-}
-
-############################################################
-# Adding language infos in pkginfo file
-############################################################
-
-sub include_languageinfos_into_pkginfo
-{
-    my ( $changefile, $filename, $languagestringref, $onepackage, $variableshashref ) = @_;
-
-    # SUNWPKG_LIST=core01
-    # SUNW_LOC=de
-
-    my $locallang = $onepackage->{'language'};
-    my $solarislanguage = get_solaris_language_for_langpack($locallang);
-
-    my $newline = "SUNW_LOC=" . $solarislanguage . "\n";
-    add_one_line_into_file($changefile, $newline, $filename);
-
-    # SUNW_PKGLIST is required, if SUNW_LOC is defined.
-    if ( $onepackage->{'pkg_list_entry'} )
-    {
-        my $packagelistentry = $onepackage->{'pkg_list_entry'};
-        installer::packagelist::resolve_packagevariables(\$packagelistentry, $variableshashref, 1);
-        $newline = "SUNW_PKGLIST=" . $packagelistentry . "\n";
-        add_one_line_into_file($changefile, $newline, $filename);
-    }
-    else
-    {
-        # Using default package ooobasis30-core01.
-        my $packagelistentry = "%BASISPACKAGEPREFIX%WITHOUTDOTPRODUCTVERSION-core01";
-        installer::packagelist::resolve_packagevariables(\$packagelistentry, $variableshashref, 1);
-        $newline = "SUNW_PKGLIST=" . $packagelistentry . "\n";
-        add_one_line_into_file($changefile, $newline, $filename);
-    }
-}
-
-############################################################
-# Including package names into the depend files.
-# The package names have to be included into
-# packagelist. They are already saved in
-# %installer::globals::dependfilenames.
-############################################################
-
-sub put_packagenames_into_dependfile
-{
-    my ( $file ) = @_;
-
-    for ( my $i = 0; $i <= $#{$file}; $i++ )
-    {
-        my $line = ${$file}[$i];
-        if ( $line =~ /^\s*\w\s+(.*?)\s*$/ )
-        {
-            my $abbreviation = $1;
-
-            if ( $abbreviation =~ /\%/ ) { installer::exiter::exit_program("ERROR: Could not resolve all properties in Solaris package abbreviation \"$abbreviation\"!", "read_packagemap"); }
-
-            if ( exists($installer::globals::dependfilenames{$abbreviation}) )
-            {
-                my $packagename = $installer::globals::dependfilenames{$abbreviation};
-                if ( $packagename =~ /\%/ ) { installer::exiter::exit_program("ERROR: Could not resolve all properties in Solaris package name \"$packagename\"!", "read_packagemap"); }
-
-                $line =~ s/\s*$//;
-                ${$file}[$i] = $line . "\t" . $packagename . "\n";
-            }
-            else
-            {
-                installer::exiter::exit_program("ERROR: Missing packagename for Solaris package \"$abbreviation\"!", "put_packagenames_into_dependfile");
-            }
-        }
-    }
-}
-
-############################################################
-# Including the relocatable directory into
-# spec file and pkginfo file
-# Linux: set topdir in specfile
-# Solaris: remove $relocatablepath (/opt/)
-# for all objects in prototype file
-# and changing "topdir" for Linux
+# Including the relocatable directory into the
+# spec file and setting "topdir" for Linux
 ############################################################
 
 sub prepare_packages
@@ -1595,12 +957,6 @@ sub prepare_packages
 
     my $localrelocatablepath = $relocatablepath;
     if ( $localrelocatablepath ne "/" ) { $localrelocatablepath =~ s/\/\s*$//; }
-
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        $filename = $packagename . ".pkginfo";
-        $newline = "BASEDIR\=" . $localrelocatablepath . "\n";
-    }
 
     if ( $installer::globals::isrpmbuild )
     {
@@ -1625,47 +981,9 @@ sub prepare_packages
         set_topdir_in_specfile($changefile, $filename, $newepmdir);
         set_autoprovreq_in_specfile($changefile, $onepackage->{'findrequires'}, "$installer::globals::workpath" . "/bin");
         set_packager_in_specfile($changefile);
-        if ( is_extension_package($changefile) ) { set_prereq_in_specfile($changefile); }
         set_license_in_specfile($changefile, $variableshashref);
         set_tab_into_datafile($changefile, $filesref);
         installer::files::save_file($completefilename, $changefile);
-    }
-
-    # removing the relocatable path in prototype file
-
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        set_revision_in_pkginfo($changefile, $filename, $variableshashref, $packagename);
-        set_maxinst_in_pkginfo($changefile, $filename);
-        set_solaris_parameter_in_pkginfo($changefile, $filename, $variableshashref);
-        if ( $installer::globals::issolarisx86build ) { fix_architecture_setting($changefile); }
-        if (( $onepackage->{'language'} ) && ( $onepackage->{'language'} ne "" ) && ( $onepackage->{'language'} ne "en-US" )) { include_languageinfos_into_pkginfo($changefile, $filename, $languagestringref, $onepackage, $variableshashref); }
-        installer::files::save_file($completefilename, $changefile);
-
-        my $prototypefilename = $packagename . ".prototype";
-        $prototypefilename = $newepmdir . $prototypefilename;
-        if (! -f $prototypefilename) { installer::exiter::exit_program("ERROR: Did not find prototype file: $prototypefilename", "prepare_packages"); }
-
-        my $prototypefile = installer::files::read_file($prototypefilename);
-        make_prototypefile_relocatable($prototypefile, $relocatablepath);
-        my $classesstring = set_tab_into_datafile($prototypefile, $filesref);
-        if ($classesstring)
-        {
-            include_classes_into_pkginfo($changefile, $classesstring);
-            installer::files::save_file($completefilename, $changefile);
-        }
-
-        installer::files::save_file($prototypefilename, $prototypefile);
-
-        # Adding package names into depend files for Solaris (not supported by epm)
-        my $dependfilename = $packagename . ".depend";
-        $dependfilename = $newepmdir . $dependfilename;
-        if ( -f $dependfilename)
-        {
-            my $dependfile = installer::files::read_file($dependfilename);
-            put_packagenames_into_dependfile($dependfile);
-            installer::files::save_file($dependfilename, $dependfile);
-        }
     }
 
     return $newepmdir;
@@ -1802,173 +1120,6 @@ sub log_rpm_info
 sub create_packages_without_epm
 {
     my ($epmdir, $packagename, $includepatharrayref, $allvariables, $languagestringref) = @_;
-
-    # Solaris: pkgmk -o -f solaris-2.8-sparc/SUNWso8m34.prototype -d solaris-2.8-sparc
-    # Solaris: pkgtrans solaris-2.8-sparc SUNWso8m34.pkg SUNWso8m34
-    # Solaris: tar -cf - SUNWso8m34 | $installer::globals::packertool > SUNWso8m34.tar.gz
-
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        my $prototypefile = $epmdir . $packagename . ".prototype";
-        if (! -f $prototypefile) { installer::exiter::exit_program("ERROR: Did not find file: $prototypefile", "create_packages_without_epm"); }
-
-        my $destinationdir = $prototypefile;
-        installer::pathanalyzer::get_path_from_fullqualifiedname(\$destinationdir);
-        $destinationdir =~ s/\/\s*$//;  # removing ending slashes
-
-        my $systemcall = "pkgmk -l 1073741824 -o -f $prototypefile -d $destinationdir 2\>\&1 |";
-        installer::logger::print_message( "... $systemcall ...\n" );
-
-        my $maxpkgmkcalls = 3;
-
-        for ( my $i = 1; $i <= $maxpkgmkcalls; $i++ )
-        {
-            my @pkgmkoutput = ();
-
-            open (PKGMK, "$systemcall");
-            while (<PKGMK>) {push(@pkgmkoutput, $_); }
-            close (PKGMK);
-
-            my $returnvalue = $?;   # $? contains the return value of the systemcall
-
-            my $infoline = "Systemcall (Try $i): $systemcall\n";
-            push( @installer::globals::logfileinfo, $infoline);
-
-            for ( my $j = 0; $j <= $#pkgmkoutput; $j++ )
-            {
-                if ( $i < $maxpkgmkcalls ) { $pkgmkoutput[$j] =~ s/\bERROR\b/PROBLEM/ig; }
-                push( @installer::globals::logfileinfo, "$pkgmkoutput[$j]");
-            }
-
-            if ($returnvalue)
-            {
-                $infoline = "Try $i : Could not execute \"$systemcall\"!\n";
-                push( @installer::globals::logfileinfo, $infoline);
-                if ( $i == $maxpkgmkcalls ) { installer::exiter::exit_program("ERROR: \"$systemcall\"!", "create_packages_without_epm"); }
-            }
-            else
-            {
-                installer::logger::print_message( "Success (Try $i): \"$systemcall\"\n" );
-                $infoline = "Success: Executed \"$systemcall\" successfully!\n";
-                push( @installer::globals::logfileinfo, $infoline);
-                last;
-            }
-        }
-
-        # It might be necessary to save uncompressed Solaris packages
-
-        # compressing packages
-
-        if ( ! $installer::globals::solarisdontcompress )
-        {
-            my $faspac = "faspac-so.sh";
-
-            my $compressorref = installer::scriptitems::get_sourcepath_from_filename_and_includepath(\$faspac, $includepatharrayref, 0);
-            if ($$compressorref ne "")
-            {
-                # Saving original pkginfo, to set time stamp later
-                my $pkginfoorig = "$destinationdir/$packagename/pkginfo";
-                my $pkginfotmp = "$destinationdir/$packagename" . ".pkginfo.tmp";
-                $systemcall = "cp -p $pkginfoorig $pkginfotmp";
-                installer::systemactions::make_systemcall($systemcall);
-
-                $faspac = $$compressorref;
-                my $infoline = "Found compressor: $faspac\n";
-                push( @installer::globals::logfileinfo, $infoline);
-
-                installer::logger::print_message( "... $faspac ...\n" );
-                installer::logger::include_timestamp_into_logfile("Starting $faspac");
-
-                $systemcall = "/bin/sh $faspac -a -q -d $destinationdir $packagename";  # $faspac has to be the absolute path!
-                installer::systemactions::make_systemcall($systemcall);
-
-                # Setting time stamp for pkginfo, because faspac-so.sh
-                # changed the pkginfo file, updated the size and
-                # checksum, but not the time stamp.
-                $systemcall = "touch -r $pkginfotmp $pkginfoorig";
-                installer::systemactions::make_systemcall($systemcall);
-                if ( -f $pkginfotmp ) { unlink($pkginfotmp); }
-
-                installer::logger::include_timestamp_into_logfile("End of $faspac");
-            }
-            else
-            {
-                my $infoline = "Not found: $faspac\n";
-                push( @installer::globals::logfileinfo, $infoline);
-            }
-        }
-
-        # Setting unix rights to "775" for all created directories inside the package
-
-        $systemcall = "cd $destinationdir; find $packagename -type d | xargs -i chmod 775 \{\} \;";
-        installer::logger::print_message( "... $systemcall ...\n" );
-
-        my $returnvalue = system($systemcall);
-
-        my $infoline = "Systemcall: $systemcall\n";
-        push( @installer::globals::logfileinfo, $infoline);
-
-        if ($returnvalue)
-        {
-            $infoline = "ERROR: Could not execute \"$systemcall\"!\n";
-            push( @installer::globals::logfileinfo, $infoline);
-        }
-        else
-        {
-            $infoline = "Success: Executed \"$systemcall\" successfully!\n";
-            push( @installer::globals::logfileinfo, $infoline);
-        }
-
-
-        ######################
-        # making pkg files
-        ######################
-
-        # my $streamname = $packagename . ".pkg";
-        # $systemcall = "pkgtrans $destinationdir $streamname $packagename";
-        # print "... $systemcall ...\n";
-
-        # $returnvalue = system($systemcall);
-
-        # $infoline = "Systemcall: $systemcall\n";
-        # push( @installer::globals::logfileinfo, $infoline);
-
-        # if ($returnvalue)
-        # {
-        # $infoline = "ERROR: Could not execute \"$systemcall\"!\n";
-        # push( @installer::globals::logfileinfo, $infoline);
-        # }
-        # else
-        # {
-        # $infoline = "Success: Executed \"$systemcall\" successfully!\n";
-        # push( @installer::globals::logfileinfo, $infoline);
-        # }
-
-        #########################
-        # making tar.gz files
-        #########################
-
-        # my $targzname = $packagename . ".tar.gz";
-        # $systemcall = "cd $destinationdir; tar -cf - $packagename | $installer::globals::packertool > $targzname";
-        # print "... $systemcall ...\n";
-
-        # $returnvalue = system($systemcall);
-
-        # $infoline = "Systemcall: $systemcall\n";
-        # push( @installer::globals::logfileinfo, $infoline);
-
-        # if ($returnvalue)
-        # {
-        # $infoline = "ERROR: Could not execute \"$systemcall\"!\n";
-        # push( @installer::globals::logfileinfo, $infoline);
-        # }
-        # else
-        # {
-        # $infoline = "Success: Executed \"$systemcall\" successfully!\n";
-        # push( @installer::globals::logfileinfo, $infoline);
-        # }
-
-    }
 
     # Linux: rpm -bb so8m35.spec    ( -> dependency check abklemmen? )
 
@@ -2109,31 +1260,6 @@ sub remove_temporary_epm_files
 
     # saving the files into the loggingdir
 
-    if ( $installer::globals::issolarispkgbuild )
-    {
-        my @extensions = ();
-        push(@extensions, ".pkginfo");
-        push(@extensions, ".prototype");
-        push(@extensions, ".postinstall");
-        push(@extensions, ".postremove");
-        push(@extensions, ".preinstall");
-        push(@extensions, ".preremove");
-        push(@extensions, ".depend");
-
-        for ( my $i = 0; $i <= $#extensions; $i++ )
-        {
-            my $removefile = $epmdir . $packagename . $extensions[$i];
-            my $destfile = $loggingdir . $packagename . $extensions[$i] . ".log";
-
-            if (! -f $removefile) { next; }
-
-            my $systemcall = "mv -f $removefile $destfile";
-            system($systemcall);     # ignoring the return value
-            my $infoline = "Systemcall: $systemcall\n";
-            push( @installer::globals::logfileinfo, $infoline);
-        }
-    }
-
     if ( $installer::globals::isrpmbuild )
     {
         my $removefile = $epmdir . $packagename . ".spec";
@@ -2244,155 +1370,6 @@ sub create_new_directory_structure
 }
 
 ######################################################
-# Collect modules with product specific styles.
-######################################################
-
-sub collect_modules_with_style
-{
-    my ($style, $modulesarrayref) = @_;
-
-    my @allmodules = ();
-
-    for ( my $i = 0; $i <= $#{$modulesarrayref}; $i++ )
-    {
-        my $onemodule = ${$modulesarrayref}[$i];
-        my $styles = "";
-        if ( $onemodule->{'Styles'} ) { $styles = $onemodule->{'Styles'}; }
-        if ( $styles =~ /\b\Q$style\E\b/ )
-        {
-            push(@allmodules, $onemodule);
-        }
-    }
-
-    return \@allmodules;
-}
-
-######################################################
-# Remove modules without packagecontent.
-######################################################
-
-sub remove_modules_without_package
-{
-    my ($allmodules) = @_;
-
-    my @allmodules = ();
-
-    for ( my $i = 0; $i <= $#{$allmodules}; $i++ )
-    {
-        my $onemodule = ${$allmodules}[$i];
-        my $packagename = "";
-        if ( $onemodule->{'PackageName'} ) { $packagename = $onemodule->{'PackageName'}; }
-        if ( $packagename ne "" )
-        {
-            push(@allmodules, $onemodule);
-        }
-    }
-
-    return \@allmodules;
-}
-
-######################################################
-# Copying files for system integration.
-######################################################
-
-sub copy_and_unpack_tar_gz_files
-{
-    my ($sourcefile, $destdir) = @_;
-
-    my $systemcall = "cd $destdir; cat $sourcefile | gunzip | tar -xf -";
-    installer::systemactions::make_systemcall($systemcall);
-}
-
-######################################################
-# Checking whether the new content is a directory and
-# not a package. If it is a directory, the complete
-# content of the directory has to be added to the
-# array newcontent.
-######################################################
-
-sub control_subdirectories
-{
-    my ($content, $subdir) = @_;
-
-    my @newcontent = ();
-
-    for ( my $i = 0; $i <= $#{$content}; $i++ )
-    {
-        if ( -d ${$content}[$i] )
-        {
-            $subdir = ${$content}[$i];
-            installer::pathanalyzer::make_absolute_filename_to_relative_filename(\$subdir);
-            my $allpackages = installer::systemactions::read_directory(${$content}[$i]);
-            for ( my $j = 0; $j <= $#{$allpackages}; $j++ )
-            {
-                # Currently only Linux rpm is supported, debian packages cannot be installed via xpd installer
-                if (( $installer::globals::islinuxbuild ) && ( ! ( ${$allpackages}[$j] =~ /\.rpm\s*$/ ))) { next; }
-                push(@newcontent, ${$allpackages}[$j]);
-            }
-        }
-        else
-        {
-            push(@newcontent, ${$content}[$i]);
-        }
-    }
-
-    return (\@newcontent, $subdir);
-}
-
-######################################################
-# Including the system integration files into the
-# installation sets.
-######################################################
-
-sub put_systemintegration_into_installset
-{
-    my ($newdir, $includepatharrayref, $allvariables, $modulesarrayref) = @_;
-
-    my $destdir = $newdir;
-
-    # adding System integration files
-
-    my $sourcefile = "";
-
-    # Finding the modules defined in scp (with flag SYSTEMMODULE)
-    # Getting name of package from scp-Module
-    # Search package in list of all include files
-    # Copy file into installation set and unpack it (always tar.gz)
-    # tar.gz can contain a different number of packages -> automatically create hidden sub modules
-
-    # Collect all modules with flag "SYSTEMMODULE"
-    my $allmodules = collect_modules_with_style("SYSTEMMODULE", $modulesarrayref);
-    $allmodules = remove_modules_without_package($allmodules);
-
-    for ( my $i = 0; $i <= $#{$allmodules}; $i++ )
-    {
-        my $onemodule = ${$allmodules}[$i];
-        my $packagetarfilename = $onemodule->{'PackageName'};
-
-        my $infoline = "Including into installation set: $packagetarfilename\n";
-        push( @installer::globals::logfileinfo, $infoline);
-
-        my $sourcepathref = installer::scriptitems::get_sourcepath_from_filename_and_includepath(\$packagetarfilename, $includepatharrayref, 1);
-        if ( $$sourcepathref eq "" ) { installer::exiter::exit_program("ERROR: Source path not found for $packagetarfilename!", "copy_systemintegration_files"); }
-
-        # Collecting all packages in directory "packages" or "RPMS"
-        my $oldcontent = installer::systemactions::read_directory($destdir);
-
-        copy_and_unpack_tar_gz_files($$sourcepathref, $destdir);
-
-        # Finding new content -> that is the package name
-        my ($newcontent, $allcontent ) = installer::systemactions::find_new_content_in_directory($destdir, $oldcontent);
-
-        # special handling, if new content is a directory
-        my $subdir = "";
-        if ( ! $installer::globals::issolarispkgbuild ) { ($newcontent, $subdir) = control_subdirectories($newcontent); }
-
-        # Adding license content into Solaris packages
-        if (( $installer::globals::issolarispkgbuild ) && ( $installer::globals::englishlicenseset ) && ( ! $allvariables->{'NO_LICENSE_INTO_COPYRIGHT'} )) { _add_license_into_systemintegrationpackages($destdir, $newcontent); }
-    }
-}
-
-######################################################
 # Analyzing the Unix installation path.
 # From the installation path /opt/openofficeorg20
 # is the part /opt relocatable and the part
@@ -2427,202 +1404,6 @@ sub analyze_rootpath
         # $$staticpathref is already "/opt/libreoffice", no additional $rootpath required.
     }
 
-}
-
-################################################
-# Defining the English license text to add
-# it into Solaris packages.
-################################################
-
-sub _set_english_license
-{
-    my ($variableshashref) = @_;
-
-    my $additional_license_name = $installer::globals::englishsolarislicensename;   # always the English file
-    my $licensefileref = installer::scriptitems::get_sourcepath_from_filename_and_includepath(\$additional_license_name, "" , 0);
-    if ( $$licensefileref eq "" ) { installer::exiter::exit_program("ERROR: Could not find license file $additional_license_name!", "set_english_license"); }
-    $installer::globals::englishlicenseset = 1;
-    $installer::globals::englishlicense = installer::files::read_file($$licensefileref);
-    installer::scpzipfiles::replace_all_ziplistvariables_in_file($installer::globals::englishlicense, $variableshashref);
-}
-
-################################################
-# Adding the content of the English license
-# file into the system integration packages.
-################################################
-
-sub _add_license_into_systemintegrationpackages
-{
-    my ($destdir, $packages) = @_;
-
-    for ( my $i = 0; $i <= $#{$packages}; $i++ )
-    {
-        my $copyrightfilename = ${$packages}[$i] . $installer::globals::separator . "install" . $installer::globals::separator . "copyright";
-        if ( ! -f $copyrightfilename ) { installer::exiter::exit_program("ERROR: Could not find license file in system integration package: $copyrightfilename!", "add_license_into_systemintegrationpackages"); }
-        my $copyrightfile = installer::files::read_file($copyrightfilename);
-
-        # Saving time stamp of old copyrightfile
-        my $savcopyrightfilename = $copyrightfilename . ".sav";
-        installer::systemactions::copy_one_file($copyrightfilename, $savcopyrightfilename);
-        _set_time_stamp_for_file($copyrightfilename, $savcopyrightfilename); # now $savcopyrightfile has the time stamp of $copyrightfile
-
-        # Adding license content to copyright file
-        push(@{$copyrightfile}, "\n");
-        for ( my $i = 0; $i <= $#{$installer::globals::englishlicense}; $i++ ) { push(@{$copyrightfile}, ${$installer::globals::englishlicense}[$i]); }
-        installer::files::save_file($copyrightfilename, $copyrightfile);
-
-        # Setting the old time stamp saved with $savcopyrightfilename
-        _set_time_stamp_for_file($savcopyrightfilename, $copyrightfilename); # now $copyrightfile has the time stamp of $savcopyrightfile
-        unlink($savcopyrightfilename);
-
-        # Changing content of copyright file in pkgmap
-        my $pkgmapfilename = ${$packages}[$i] . $installer::globals::separator . "pkgmap";
-        if ( ! -f $pkgmapfilename ) { installer::exiter::exit_program("ERROR: Could not find pkgmap in system integration package: $pkgmapfilename!", "add_license_into_systemintegrationpackages"); }
-        my $pkgmap = installer::files::read_file($pkgmapfilename);
-        _change_onefile_in_pkgmap($pkgmap, $copyrightfilename, "copyright");
-        installer::files::save_file($pkgmapfilename, $pkgmap);
-    }
-}
-
-##############################################
-# Setting time stamp of copied files to avoid
-# errors from pkgchk.
-##############################################
-
-sub _set_time_stamp_for_file
-{
-    my ($sourcefile, $destfile) = @_;
-
-    my $systemcall = "touch -r $sourcefile $destfile";
-
-    my $returnvalue = system($systemcall);
-
-    my $infoline = "Systemcall: $systemcall\n";
-    push( @installer::globals::logfileinfo, $infoline);
-
-    if ($returnvalue)
-    {
-        $infoline = "ERROR: \"$systemcall\" failed!\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
-    else
-    {
-        $infoline = "Success: \"$systemcall\" !\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
-}
-
-##############################################
-# Setting checksum and wordcount for changed
-# pkginfo file into pkgmap.
-##############################################
-
-sub _change_onefile_in_pkgmap
-{
-    my ($pkgmapfile, $fullfilename, $shortfilename) = @_;
-
-    # 1 i pkginfo 442 34577 1166716297
-    # ->
-    # 1 i pkginfo 443 34737 1166716297
-    #
-    # wc -c pkginfo | cut -f6 -d' '  -> 442  (variable)
-    # sum pkginfo | cut -f1 -d' '  -> 34577  (variable)
-    # grep 'pkginfo' pkgmap | cut -f6 -d' '  -> 1166716297  (fix)
-
-    my $checksum = _call_sum($fullfilename);
-    if ( $checksum =~ /^\s*(\d+)\s+.*$/ ) { $checksum = $1; }
-
-    my $wordcount = _call_wc($fullfilename);
-    if ( $wordcount =~ /^\s*(\d+)\s+.*$/ ) { $wordcount = $1; }
-
-    for ( my $i = 0; $i <= $#{$pkgmapfile}; $i++ )
-    {
-        if ( ${$pkgmapfile}[$i] =~ /(^.*\b\Q$shortfilename\E\b\s+)(\d+)(\s+)(\d+)(\s+)(\d+)(\s*$)/ )
-        {
-            my $newline = $1 . $wordcount . $3 . $checksum . $5 . $6 . $7;
-            ${$pkgmapfile}[$i] = $newline;
-            last;
-        }
-    }
-}
-
-#########################################################
-# Calling sum
-#########################################################
-
-sub _call_sum
-{
-    my ($filename) = @_;
-
-    my $sumfile = "/usr/bin/sum";
-
-    if ( ! -f $sumfile ) { installer::exiter::exit_program("ERROR: No file /usr/bin/sum", "call_sum"); }
-
-    my $systemcall = "$sumfile $filename |";
-
-    my $sumoutput = "";
-
-    open (SUM, "$systemcall");
-    $sumoutput = <SUM>;
-    close (SUM);
-
-    my $returnvalue = $?;   # $? contains the return value of the systemcall
-
-    my $infoline = "Systemcall: $systemcall\n";
-    push( @installer::globals::logfileinfo, $infoline);
-
-    if ($returnvalue)
-    {
-        $infoline = "ERROR: Could not execute \"$systemcall\"!\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
-    else
-    {
-        $infoline = "Success: Executed \"$systemcall\" successfully!\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
-
-    return $sumoutput;
-}
-
-#########################################################
-# Calling wc
-# wc -c pkginfo | cut -f6 -d' '
-#########################################################
-
-sub _call_wc
-{
-    my ($filename) = @_;
-
-    my $wcfile = "/usr/bin/wc";
-
-    if ( ! -f $wcfile ) { installer::exiter::exit_program("ERROR: No file /usr/bin/wc", "call_wc"); }
-
-    my $systemcall = "$wcfile -c $filename |";
-
-    my $wcoutput = "";
-
-    open (WC, "$systemcall");
-    $wcoutput = <WC>;
-    close (WC);
-
-    my $returnvalue = $?;   # $? contains the return value of the systemcall
-
-    my $infoline = "Systemcall: $systemcall\n";
-    push( @installer::globals::logfileinfo, $infoline);
-
-    if ($returnvalue)
-    {
-        $infoline = "ERROR: Could not execute \"$systemcall\"!\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
-    else
-    {
-        $infoline = "Success: Executed \"$systemcall\" successfully!\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
-
-    return $wcoutput;
 }
 
 1;

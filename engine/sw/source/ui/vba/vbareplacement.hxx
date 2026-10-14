@@ -28,19 +28,19 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XReplacement > SwVbaRe
 class SwVbaReplacement : public SwVbaReplacement_BASE
 {
 private:
-    css::uno::Reference< css::util::XPropertyReplace> mxPropertyReplace;
+    cpo::uno::Reference< css::util::XPropertyReplace> mxPropertyReplace;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaReplacement( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext, css::uno::Reference< css::util::XPropertyReplace >  xPropertyReplace );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaReplacement( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< css::util::XPropertyReplace >  xPropertyReplace );
     virtual ~SwVbaReplacement() override;
 
     // Attributes
-    virtual OUString SAL_CALL getText() override;
-    virtual void SAL_CALL setText( const OUString& _text ) override;
+    virtual OUString getText() override;
+    virtual void setText( const OUString& _text ) override;
 
     //Methods
-    virtual void SAL_CALL ClearFormatting() override;
+    virtual void ClearFormatting() override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

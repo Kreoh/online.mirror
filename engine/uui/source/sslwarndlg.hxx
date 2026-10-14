@@ -20,7 +20,7 @@
 
 #include <vcl/weld.hxx>
 #include <com/sun/star/security/XCertificate.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 //= Https_WarnDialog
 
@@ -28,15 +28,15 @@ class SSLWarnDialog : public weld::MessageDialogController
 {
 private:
     std::unique_ptr<weld::Button> m_xView;
-    const css::uno::Reference<css::uno::XComponentContext>& m_xContext;
-    const css::uno::Reference<css::security::XCertificate>& m_rXCert;
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& m_xContext;
+    const cpo::uno::Reference<css::security::XCertificate>& m_rXCert;
 
     DECL_LINK(ViewCertHdl, weld::Button&, void);
 
 public:
     SSLWarnDialog(weld::Window* pParent,
-                  const css::uno::Reference<css::security::XCertificate>& rXCert,
-                  const css::uno::Reference<css::uno::XComponentContext>& xContext);
+                  const cpo::uno::Reference<css::security::XCertificate>& rXCert,
+                  const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext);
 
     void setDescription1Text(const OUString& rText) { m_xDialog->set_primary_text(rText); }
 };

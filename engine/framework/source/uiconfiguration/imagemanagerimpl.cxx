@@ -48,9 +48,9 @@
 #include <unordered_set>
 
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::XInterface;
-using ::com::sun::star::uno::RuntimeException;
-using ::com::sun::star::uno::UNO_QUERY;
+using ::cpo::uno::XInterface;
+using ::cpo::uno::RuntimeException;
+using ::cpo::uno::UNO_QUERY;
 using ::cpo::uno::Any;
 using ::com::sun::star::graphic::XGraphic;
 using namespace ::com::sun::star;
@@ -61,6 +61,7 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::ui;
 using namespace ::cppu;
+using namespace ::cpo;
 
 constexpr OUString IMAGE_FOLDER = u"images"_ustr;
 constexpr OUString BITMAPS_FOLDER = u"Bitmaps"_ustr;
@@ -94,7 +95,7 @@ static std::mutex& getGlobalImageListMutex()
     return mutex;
 }
 
-static GlobalImageList* getGlobalImageList( const uno::Reference< uno::XComponentContext >& rxContext )
+static GlobalImageList* getGlobalImageList( const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     std::unique_lock guard( getGlobalImageListMutex() );
 
@@ -104,7 +105,7 @@ static GlobalImageList* getGlobalImageList( const uno::Reference< uno::XComponen
     return pGlobalImageList;
 }
 
-CmdImageList::CmdImageList( uno::Reference< uno::XComponentContext >  rxContext, OUString aModuleIdentifier ) :
+CmdImageList::CmdImageList( uno::Reference< cpo::uno::XComponentContext >  rxContext, OUString aModuleIdentifier ) :
     m_bInitialized(false),
     m_aModuleIdentifier(std::move( aModuleIdentifier )),
     m_xContext(std::move( rxContext ))
@@ -181,7 +182,7 @@ std::vector<OUString>& CmdImageList::getImageCommandNames()
     return m_aResolver.getCommandNames();
 }
 
-GlobalImageList::GlobalImageList( const uno::Reference< uno::XComponentContext >& rxContext ) :
+GlobalImageList::GlobalImageList( const uno::Reference< cpo::uno::XComponentContext >& rxContext ) :
     CmdImageList( rxContext, OUString() )
 {
 }
@@ -505,7 +506,7 @@ CmdImageList* ImageManagerImpl::implts_getDefaultImageList()
     return m_pDefaultImageList.get();
 }
 
-ImageManagerImpl::ImageManagerImpl( uno::Reference< uno::XComponentContext > xContext, ::cppu::OWeakObject* pOwner, bool _bUseGlobal ) :
+ImageManagerImpl::ImageManagerImpl( uno::Reference< cpo::uno::XComponentContext > xContext, ::cppu::OWeakObject* pOwner, bool _bUseGlobal ) :
     m_xContext(std::move( xContext ))
     , m_pOwner(pOwner)
     , m_aResourceString( u"private:resource/images/moduleimages"_ustr )
@@ -530,7 +531,7 @@ ImageManagerImpl::~ImageManagerImpl()
 
 void ImageManagerImpl::dispose()
 {
-    uno::Reference< uno::XInterface > xOwner(m_pOwner);
+    uno::Reference< cpo::uno::XInterface > xOwner(m_pOwner);
     css::lang::EventObject aEvent( xOwner );
     {
         std::unique_lock aGuard(m_mutex);
@@ -728,7 +729,7 @@ bool ImageManagerImpl::hasImage( ::sal_Int16 nImageType, const OUString& aComman
 
 namespace
 {
-    css::uno::Reference< css::graphic::XGraphic > GetXGraphic(const Image &rImage)
+    cpo::uno::Reference< css::graphic::XGraphic > GetXGraphic(const Image &rImage)
     {
         return Graphic(rImage).GetXGraphic();
     }
@@ -843,7 +844,7 @@ void ImageManagerImpl::replaceImages(
         }
     }
 
-    uno::Reference< uno::XInterface > xOwner(m_pOwner);
+    uno::Reference< cpo::uno::XInterface > xOwner(m_pOwner);
     // Notify listeners
     if ( pInsertedImages != nullptr )
     {
@@ -944,7 +945,7 @@ void ImageManagerImpl::removeImages( ::sal_Int16 nImageType, const Sequence< OUS
     }
 
     // Notify listeners
-    uno::Reference< uno::XInterface > xOwner(m_pOwner);
+    uno::Reference< cpo::uno::XInterface > xOwner(m_pOwner);
     if ( pRemovedImages != nullptr )
     {
         ConfigurationEvent aRemoveEvent;
@@ -1081,7 +1082,7 @@ void ImageManagerImpl::reload()
             aGuard.clear();
 
             // Now notify our listeners. Unlock mutex to prevent deadlocks
-            uno::Reference< uno::XInterface > xOwner(m_pOwner);
+            uno::Reference< cpo::uno::XInterface > xOwner(m_pOwner);
             if ( pInsertedImages != nullptr )
             {
                 ConfigurationEvent aInsertEvent;
@@ -1280,7 +1281,7 @@ void ImageManagerImpl::implts_notifyContainerListener( const ConfigurationEvent&
                     break;
             }
         }
-        catch( const css::uno::RuntimeException& )
+        catch( const cpo::uno::RuntimeException& )
         {
             aGuard.lock();
             pIterator.remove(aGuard);

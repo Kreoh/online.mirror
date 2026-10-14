@@ -39,6 +39,7 @@
 #include <cppuhelper/implbase.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 namespace {
@@ -81,7 +82,7 @@ public:
     /// @throws uno::RuntimeException
     explicit ScVbaObjectContainer(
         uno::Reference< XHelperInterface > xParent,
-        uno::Reference< uno::XComponentContext > xContext,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         const cpo::uno::Type& rVbaType );
@@ -89,7 +90,7 @@ public:
     /** Returns the VBA helper interface of the VBA collection object. */
     const uno::Reference< XHelperInterface >& getParent() const { return mxParent; }
     /** Returns the component context of the VBA collection object. */
-    const uno::Reference< uno::XComponentContext >& getContext() const { return mxContext; }
+    const uno::Reference< cpo::uno::XComponentContext >& getContext() const { return mxContext; }
     /** Returns the VBA type information of the objects in this container. */
     const cpo::uno::Type& getVbaType() const { return maVbaType; }
 
@@ -126,12 +127,12 @@ public:
     cpo::uno::Any getItemByStringIndex( const OUString& rIndex );
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 nIndex ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 nIndex ) override;
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
 protected:
     /** Derived classes return true, if the passed shape is supported by the instance. */
@@ -157,7 +158,7 @@ protected:
 
 protected:
     uno::Reference< XHelperInterface > mxParent;
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     uno::Reference< frame::XModel > mxModel;
     uno::Reference< lang::XMultiServiceFactory > mxFactory;
     uno::Reference< drawing::XShapes > mxShapes;
@@ -170,7 +171,7 @@ private:
 
 ScVbaObjectContainer::ScVbaObjectContainer(
         uno::Reference< XHelperInterface > xParent,
-        uno::Reference< uno::XComponentContext > xContext,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         const cpo::uno::Type& rVbaType ) :
@@ -230,17 +231,17 @@ cpo::uno::Any ScVbaObjectContainer::getItemByStringIndex( const OUString& rIndex
         [&rIndex, this](const ShapeVector::value_type& rxShape) { return rIndex == implGetShapeName( rxShape ); });
     if (aIt != maShapes.end())
         return createCollectionObject( cpo::uno::Any( *aIt ) );
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 // XIndexAccess
 
-sal_Int32 SAL_CALL ScVbaObjectContainer::getCount()
+sal_Int32 ScVbaObjectContainer::getCount()
 {
     return static_cast< sal_Int32 >( maShapes.size() );
 }
 
-cpo::uno::Any SAL_CALL ScVbaObjectContainer::getByIndex( sal_Int32 nIndex )
+cpo::uno::Any ScVbaObjectContainer::getByIndex( sal_Int32 nIndex )
 {
     if( (0 <= nIndex) && (nIndex < getCount()) )
         return cpo::uno::Any( maShapes[ static_cast< size_t >( nIndex ) ] );
@@ -249,12 +250,12 @@ cpo::uno::Any SAL_CALL ScVbaObjectContainer::getByIndex( sal_Int32 nIndex )
 
 // XElementAccess
 
-cpo::uno::Type SAL_CALL ScVbaObjectContainer::getElementType()
+cpo::uno::Type ScVbaObjectContainer::getElementType()
 {
     return cppu::UnoType<drawing::XShape>::get();
 }
 
-bool SAL_CALL ScVbaObjectContainer::hasElements()
+bool ScVbaObjectContainer::hasElements()
 {
     return !maShapes.empty();
 }
@@ -314,14 +315,14 @@ void ScVbaSheetObjectsBase::collectShapes()
 
 // XEnumerationAccess
 
-uno::Reference< container::XEnumeration > SAL_CALL ScVbaSheetObjectsBase::createEnumeration()
+uno::Reference< container::XEnumeration > ScVbaSheetObjectsBase::createEnumeration()
 {
     return new ScVbaObjectEnumeration( mxContainer );
 }
 
 // XElementAccess
 
-cpo::uno::Type SAL_CALL ScVbaSheetObjectsBase::getElementType()
+cpo::uno::Type ScVbaSheetObjectsBase::getElementType()
 {
     return mxContainer->getVbaType();
 }
@@ -347,7 +348,7 @@ ScVbaGraphicObjectsBase::ScVbaGraphicObjectsBase( const ScVbaObjectContainerRef&
 
 // XGraphicObjects
 
-cpo::uno::Any SAL_CALL ScVbaGraphicObjectsBase::Add( const cpo::uno::Any& rLeft, const cpo::uno::Any& rTop, const cpo::uno::Any& rWidth, const cpo::uno::Any& rHeight )
+cpo::uno::Any ScVbaGraphicObjectsBase::Add( const cpo::uno::Any& rLeft, const cpo::uno::Any& rTop, const cpo::uno::Any& rWidth, const cpo::uno::Any& rHeight )
 {
     /*  Extract double values from passed Anys (the lclPointsToHmm() helper
         function will throw a RuntimeException on any error), and convert from
@@ -356,7 +357,7 @@ cpo::uno::Any SAL_CALL ScVbaGraphicObjectsBase::Add( const cpo::uno::Any& rLeft,
     awt::Size aSize( lclPointsToHmm( rWidth ), lclPointsToHmm( rHeight ) );
     // TODO: translate coordinates for RTL sheets
     if( (aPos.X < 0) || (aPos.Y < 0) || (aSize.Width <= 0) || (aSize.Height <= 0) )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // create the UNO shape
     uno::Reference< drawing::XShape > xShape( mxContainer->createShape( aPos, aSize ), uno::UNO_SET_THROW );
@@ -378,7 +379,7 @@ public:
     /// @throws uno::RuntimeException
     explicit ScVbaControlContainer(
         const uno::Reference< XHelperInterface >& rxParent,
-        const uno::Reference< uno::XComponentContext >& rxContext,
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         const cpo::uno::Type& rVbaType,
@@ -405,7 +406,7 @@ protected:
 
 ScVbaControlContainer::ScVbaControlContainer(
         const uno::Reference< XHelperInterface >& rxParent,
-        const uno::Reference< uno::XComponentContext >& rxContext,
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         const cpo::uno::Type& rVbaType,
@@ -496,7 +497,7 @@ public:
     /// @throws uno::RuntimeException
     explicit ScVbaButtonContainer(
         const uno::Reference< XHelperInterface >& rxParent,
-        const uno::Reference< uno::XComponentContext >& rxContext,
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         bool bOptionButtons);
@@ -510,7 +511,7 @@ protected:
 
 ScVbaButtonContainer::ScVbaButtonContainer(
         const uno::Reference< XHelperInterface >& rxParent,
-        const uno::Reference< uno::XComponentContext >& rxContext,
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         bool bOptionButtons ) :
@@ -545,7 +546,7 @@ bool ScVbaButtonContainer::implCheckProperties( const uno::Reference< beans::XPr
 
 ScVbaButtons::ScVbaButtons(
         const uno::Reference< XHelperInterface >& rxParent,
-        const uno::Reference< uno::XComponentContext >& rxContext,
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const uno::Reference< frame::XModel >& rxModel,
         const uno::Reference< sheet::XSpreadsheet >& rxSheet,
         bool bOptionButtons) :

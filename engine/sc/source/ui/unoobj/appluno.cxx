@@ -40,6 +40,7 @@
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 //  Special value for zoom
 //! somewhere central
@@ -96,9 +97,9 @@ ScSpreadsheetSettings::~ScSpreadsheetSettings()
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_ScSpreadsheetSettings_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     SolarMutexGuard aGuard;
     ScDLL::Init();
@@ -124,7 +125,7 @@ sal_Int16 ScSpreadsheetSettings::getPropertyInt16(const OUString& aPropertyName)
 
 // XPropertySet
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL ScSpreadsheetSettings::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> ScSpreadsheetSettings::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -132,7 +133,7 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScSpreadsheetSettings::getPrope
     return aRef;
 }
 
-void SAL_CALL ScSpreadsheetSettings::setPropertyValue(
+void ScSpreadsheetSettings::setPropertyValue(
                         const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     SolarMutexGuard aGuard;
@@ -175,7 +176,7 @@ void SAL_CALL ScSpreadsheetSettings::setPropertyValue(
             throw css::lang::IllegalArgumentException(
                 (u"LinkUpdateMode property value must be a SHORT with a value in the range of 0--2"
                  " as documented for css::sheet::XGlobalSheetSettings attribute LinkUpdateMode"_ustr),
-                css::uno::Reference<css::uno::XInterface>(), -1);
+                cpo::uno::Reference<cpo::uno::XInterface>(), -1);
         }
         aAppOpt.SetLinkMode( static_cast<ScLkUpdMode>(n) );
         bSaveApp = true;
@@ -283,7 +284,7 @@ void SAL_CALL ScSpreadsheetSettings::setPropertyValue(
         pScMod->SetInputOptions( aInpOpt );
 }
 
-cpo::uno::Any SAL_CALL ScSpreadsheetSettings::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any ScSpreadsheetSettings::getPropertyValue( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
     cpo::uno::Any aRet;
@@ -351,8 +352,8 @@ ScRecentFunctionsObj::~ScRecentFunctionsObj()
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-ScRecentFunctionsObj_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ScRecentFunctionsObj_get_implementation(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SolarMutexGuard aGuard;
     ScDLL::Init();
@@ -361,7 +362,7 @@ ScRecentFunctionsObj_get_implementation(css::uno::XComponentContext*, cpo::uno::
 
 // XRecentFunctions
 
-cpo::uno::Sequence<sal_Int32> SAL_CALL ScRecentFunctionsObj::getRecentFunctionIds()
+cpo::uno::Sequence<sal_Int32> ScRecentFunctionsObj::getRecentFunctionIds()
 {
     SolarMutexGuard aGuard;
     const ScAppOptions& rOpt = ScModule::get()->GetAppOptions();
@@ -378,7 +379,7 @@ cpo::uno::Sequence<sal_Int32> SAL_CALL ScRecentFunctionsObj::getRecentFunctionId
     return {};
 }
 
-void SAL_CALL ScRecentFunctionsObj::setRecentFunctionIds(
+void ScRecentFunctionsObj::setRecentFunctionIds(
                     const cpo::uno::Sequence<sal_Int32>& aRecentFunctionIds )
 {
     SolarMutexGuard aGuard;
@@ -395,7 +396,7 @@ void SAL_CALL ScRecentFunctionsObj::setRecentFunctionIds(
     pScMod->SetAppOptions(aNewOpts);
 }
 
-sal_Int32 SAL_CALL ScRecentFunctionsObj::getMaxRecentFunctions()
+sal_Int32 ScRecentFunctionsObj::getMaxRecentFunctions()
 {
     return LRU_MAX;
 }
@@ -408,8 +409,8 @@ ScFunctionListObj::~ScFunctionListObj()
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-ScFunctionListObj_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ScFunctionListObj_get_implementation(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SolarMutexGuard aGuard;
     ScDLL::Init();
@@ -471,12 +472,12 @@ static void lcl_FillSequence( cpo::uno::Sequence<beans::PropertyValue>& rSequenc
 
 // XFunctionDescriptions
 
-cpo::uno::Sequence<beans::PropertyValue> SAL_CALL ScFunctionListObj::getById( sal_Int32 nId )
+cpo::uno::Sequence<beans::PropertyValue> ScFunctionListObj::getById( sal_Int32 nId )
 {
     SolarMutexGuard aGuard;
     const ScFunctionList* pFuncList = ScGlobal::GetStarCalcFunctionList();
     if ( !pFuncList )
-        throw uno::RuntimeException();                  // should not happen
+        throw cpo::uno::RuntimeException();                  // should not happen
 
     sal_uInt16 nCount = static_cast<sal_uInt16>(pFuncList->GetCount());
     for (sal_uInt16 nIndex=0; nIndex<nCount; nIndex++)
@@ -495,12 +496,12 @@ cpo::uno::Sequence<beans::PropertyValue> SAL_CALL ScFunctionListObj::getById( sa
 
 // XNameAccess
 
-cpo::uno::Any SAL_CALL ScFunctionListObj::getByName( const OUString& aName )
+cpo::uno::Any ScFunctionListObj::getByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
     const ScFunctionList* pFuncList = ScGlobal::GetStarCalcFunctionList();
     if ( !pFuncList )
-        throw uno::RuntimeException();                  // should not happen
+        throw cpo::uno::RuntimeException();                  // should not happen
 
     sal_uInt16 nCount = static_cast<sal_uInt16>(pFuncList->GetCount());
     for (sal_uInt16 nIndex=0; nIndex<nCount; nIndex++)
@@ -520,7 +521,7 @@ cpo::uno::Any SAL_CALL ScFunctionListObj::getByName( const OUString& aName )
 
 // XIndexAccess
 
-sal_Int32 SAL_CALL ScFunctionListObj::getCount()
+sal_Int32 ScFunctionListObj::getCount()
 {
     SolarMutexGuard aGuard;
     sal_Int32 nCount = 0;
@@ -530,12 +531,12 @@ sal_Int32 SAL_CALL ScFunctionListObj::getCount()
     return nCount;
 }
 
-cpo::uno::Any SAL_CALL ScFunctionListObj::getByIndex( sal_Int32 nIndex )
+cpo::uno::Any ScFunctionListObj::getByIndex( sal_Int32 nIndex )
 {
     SolarMutexGuard aGuard;
     const ScFunctionList* pFuncList = ScGlobal::GetStarCalcFunctionList();
     if ( !pFuncList )
-        throw uno::RuntimeException();                  // should not happen
+        throw cpo::uno::RuntimeException();                  // should not happen
 
     if ( nIndex >= 0 && o3tl::make_unsigned(nIndex) < pFuncList->GetCount() )
     {
@@ -553,7 +554,7 @@ cpo::uno::Any SAL_CALL ScFunctionListObj::getByIndex( sal_Int32 nIndex )
 
 // XEnumerationAccess
 
-uno::Reference<container::XEnumeration> SAL_CALL ScFunctionListObj::createEnumeration()
+uno::Reference<container::XEnumeration> ScFunctionListObj::createEnumeration()
 {
     SolarMutexGuard aGuard;
     return new ScIndexEnumeration(this, u"com.sun.star.sheet.FunctionDescriptionEnumeration"_ustr);
@@ -561,18 +562,18 @@ uno::Reference<container::XEnumeration> SAL_CALL ScFunctionListObj::createEnumer
 
 // XElementAccess
 
-cpo::uno::Type SAL_CALL ScFunctionListObj::getElementType()
+cpo::uno::Type ScFunctionListObj::getElementType()
 {
     return cppu::UnoType<cpo::uno::Sequence<beans::PropertyValue>>::get();
 }
 
-bool SAL_CALL ScFunctionListObj::hasElements()
+bool ScFunctionListObj::hasElements()
 {
     SolarMutexGuard aGuard;
     return ( getCount() > 0 );
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL ScFunctionListObj::getElementNames()
+cpo::uno::Sequence<OUString> ScFunctionListObj::getElementNames()
 {
     SolarMutexGuard aGuard;
     const ScFunctionList* pFuncList = ScGlobal::GetStarCalcFunctionList();
@@ -592,7 +593,7 @@ cpo::uno::Sequence<OUString> SAL_CALL ScFunctionListObj::getElementNames()
     return {};
 }
 
-bool SAL_CALL ScFunctionListObj::hasByName( const OUString& aName )
+bool ScFunctionListObj::hasByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
     const ScFunctionList* pFuncList = ScGlobal::GetStarCalcFunctionList();

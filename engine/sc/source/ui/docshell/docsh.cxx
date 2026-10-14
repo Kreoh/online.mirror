@@ -27,6 +27,7 @@
 #include <vcl/errinf.hxx>
 #include <editeng/justifyitem.hxx>
 #include <comphelper/fileformat.h>
+#include <comphelper/scopeguard.hxx>
 #include <comphelper/classids.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -82,7 +83,6 @@
 
 #include <scabstdlg.hxx>
 #include <sot/formats.hxx>
-#include <svx/compatflags.hxx>
 #include <svx/dialogs.hrc>
 #include <svx/svdpagv.hxx>
 #include <svx/svdpage.hxx>
@@ -163,7 +163,8 @@
 #include <vcl/tabs.hrc>
 
 using namespace com::sun::star;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 using ::com::sun::star::lang::XMultiServiceFactory;
 
 #define ShellClass_ScDocShell
@@ -474,7 +475,7 @@ public:
     }
 
     // XVBAScriptListener
-    virtual void SAL_CALL notifyVBAScriptEvent( const ::css::script::vba::VBAScriptEvent& aEvent ) override
+    virtual void notifyVBAScriptEvent( const ::css::script::vba::VBAScriptEvent& aEvent ) override
     {
         if (aEvent.Identifier == script::vba::VBAScriptEventId::SCRIPT_STOPPED &&
             m_pDocSh->GetClipData().is())
@@ -484,7 +485,7 @@ public:
     }
 
     // XEventListener
-    virtual void SAL_CALL disposing( const ::css::lang::EventObject& /*Source*/ ) override
+    virtual void disposing( const ::css::lang::EventObject& /*Source*/ ) override
     {
     }
 };
@@ -550,13 +551,13 @@ bool ScDocShell::GetRecalcRowHeightsMode()
 }
 
 bool ScDocShell::ImportFrom(SfxMedium& rMedium,
-                            const css::uno::Reference<css::text::XTextRange>& xInsertPosition)
+                            const cpo::uno::Reference<css::text::XTextRange>& xInsertPosition)
 {
     LoadMediumGuard aLoadGuard(m_pDocument.get());
     return SfxObjectShell::ImportFrom(rMedium, xInsertPosition);
 }
 
-bool ScDocShell::LoadXML( SfxMedium* pLoadMedium, const css::uno::Reference< css::embed::XStorage >& xStor )
+bool ScDocShell::LoadXML( SfxMedium* pLoadMedium, const cpo::uno::Reference< css::embed::XStorage >& xStor )
 {
     LoadMediumGuard aLoadGuard(m_pDocument.get());
 
@@ -640,7 +641,7 @@ bool ScDocShell::LoadXML( SfxMedium* pLoadMedium, const css::uno::Reference< css
     return bRet;
 }
 
-bool ScDocShell::SaveXML( SfxMedium* pSaveMedium, const css::uno::Reference< css::embed::XStorage >& xStor )
+bool ScDocShell::SaveXML( SfxMedium* pSaveMedium, const cpo::uno::Reference< css::embed::XStorage >& xStor )
 {
     m_pDocument->EnableIdle(false);
 
@@ -665,19 +666,6 @@ bool ScDocShell::Load( SfxMedium& rMedium )
     //  -> initialize the others from options (before loading)
     InitOptions(true);
 
-    // If this is an ODF file being loaded, then by default, use legacy processing
-    // (if required, it will be overridden in *::ReadUserDataSequence())
-    if (IsOwnStorageFormat(rMedium))
-    {
-        if (ScDrawLayer* pDrawLayer = m_pDocument->GetDrawLayer())
-        {
-            pDrawLayer->SetCompatibilityFlag(SdrCompatibilityFlag::AnchoredTextOverflowLegacy,
-                                             true); // for tdf#99729
-            pDrawLayer->SetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork,
-                                             true); // for tdf#148000
-        }
-    }
-
     GetUndoManager()->Clear();
 
     bool bRet = SfxObjectShell::Load(rMedium);
@@ -698,11 +686,12 @@ bool ScDocShell::Load( SfxMedium& rMedium )
             rtl::Bootstrap::expandMacros(aURL);
 
             OUString aPath;
-            osl::FileBase::getSystemPathFromFileURL(aURL, aPath);
+            const bool bHavePath
+                = osl::FileBase::E_None == osl::FileBase::getSystemPathFromFileURL(aURL, aPath);
 
             ScOrcusFilters* pOrcus = ScFormatFilter::Get().GetOrcusFilters();
 
-            if (pOrcus)
+            if (pOrcus && bHavePath)
             {
                 pOrcus->importODS_Styles(*m_pDocument, aPath);
                 m_pDocument->GetStyleSheetPool()->setAllParaStandard();
@@ -777,7 +766,10 @@ void ScDocShell::Notify( SfxBroadcaster&, const SfxHint& rHint )
                 {
 #if HAVE_FEATURE_MULTIUSER_ENVIRONMENT
                     // the readonly documents should not be opened in shared mode
-                    if ( HasSharedXMLFlagSet() && !ScModule::get()->IsInSharedDocLoading() && !IsReadOnly() )
+                    // shared mode needs a sharing control file and a temp file that outlive the
+                    // jail a document is edited in, so it stays off here
+                    if ( HasSharedXMLFlagSet() && !ScModule::get()->IsInSharedDocLoading() && !IsReadOnly()
+                         && !comphelper::COKit::isActive() )
                     {
                         if ( SwitchToShared( true, false ) )
                         {
@@ -843,7 +835,7 @@ void ScDocShell::Notify( SfxBroadcaster&, const SfxHint& rHint )
 
                     try
                     {
-                        const uno::Reference< uno::XComponentContext >& xContext(
+                        const uno::Reference< cpo::uno::XComponentContext >& xContext(
                             comphelper::getProcessComponentContext() );
                         uno::Reference< lang::XMultiServiceFactory > xServiceManager(
                             xContext->getServiceManager(),
@@ -2863,13 +2855,11 @@ bool ScDocShell::ConvertTo( SfxMedium &rMed )
                 AsciiSave(*pStream, aOptions, GetSaveTab());
                 bRet = true;
 
-                if (m_pDocument->GetTableCount() > 1)
+                if (!rMed.GetErrorIgnoreWarning()
+                    && WillWarnOnlyActiveSheetSaved(SC_TEXT_CSV_FILTER_NAME))
                 {
-                    if (!rMed.GetErrorIgnoreWarning() && ScModule::get()->GetInputOptions().GetWarnActiveSheet())
-                    {
-                        if (ScTabViewShell* pViewShell = GetBestViewShell())
-                            pViewShell->ExecuteOnlyActiveSheetSavedDlg();
-                    }
+                    if (ScTabViewShell* pViewShell = GetBestViewShell())
+                        pViewShell->ExecuteOnlyActiveSheetSavedDlg();
                 }
             }
         }
@@ -3121,6 +3111,13 @@ bool ScDocShell::PrepareClose( bool bUI )
     return bRet;
 }
 
+bool ScDocShell::WillWarnOnlyActiveSheetSaved( std::u16string_view rFilter ) const
+{
+    return rFilter == SC_TEXT_CSV_FILTER_NAME
+        && m_pDocument->GetTableCount() > 1
+        && ScModule::get()->GetInputOptions().GetWarnActiveSheet();
+}
+
 bool ScDocShell::HasAutomaticTableName( std::u16string_view rFilter )
 {
     //  true for those filters that keep the default table name
@@ -3182,6 +3179,11 @@ ScDocShell::ScDocShell( const SfxModelFlags i_nSfxCreationFlags, const std::shar
         LINK( this, ScDocShell, RefreshDBDataHdl ) );
 
     // InitItems and CalcOutputFactor are called now in Load/ConvertFrom/InitNew
+}
+
+ScModelObj* ScDocShell::GetModel() const
+{
+    return static_cast<ScModelObj*>(SfxObjectShell::GetModel().get());
 }
 
 ScDocShell::~ScDocShell()
@@ -3293,8 +3295,14 @@ void ScDocShell::SetDocumentModified()
         m_pDocument->RefreshDirtyTableColumnNames();
         ProcessPendingTableExpansions();
 
-        if (!aHeaderDirtyTables.empty())
+        // A repair puts back the names of every column of every table it collected above. Putting a
+        // name into a header cell marks the document modified, which starts another repair, and the
+        // repair already running finishes the remaining columns itself.
+        if (!aHeaderDirtyTables.empty() && !m_bRestoringHeaderColumnNames)
         {
+            m_bRestoringHeaderColumnNames = true;
+            comphelper::ScopeGuard aRepairGuard(
+                [this] { m_bRestoringHeaderColumnNames = false; });
             ScDBDocFunc aDBFunc(*this);
             for (auto& [pData, aPrevNames] : aHeaderDirtyTables)
                 aDBFunc.RestoreHeaderColumnNames(*pData, aPrevNames);
@@ -3560,7 +3568,7 @@ void ScDocShell::ResetKeyBindings( ScOptionsUtil::KeyBindingType eType )
 {
     using namespace ::com::sun::star::ui;
 
-    const Reference<uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
+    const Reference<cpo::uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
     if (!xContext.is())
         return;
 
@@ -3824,7 +3832,7 @@ bool ScDocShell::GetProtectionHash( /*out*/ cpo::uno::Sequence< sal_Int8 > &rPas
     return bRes;
 }
 
-void ScDocShell::RegisterAutomationWorkbookObject(css::uno::Reference< ooo::vba::excel::XWorkbook > const& xWorkbook)
+void ScDocShell::RegisterAutomationWorkbookObject(cpo::uno::Reference< ooo::vba::excel::XWorkbook > const& xWorkbook)
 {
     mxAutomationWorkbookObject = xWorkbook;
 }

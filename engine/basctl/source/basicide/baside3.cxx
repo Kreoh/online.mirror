@@ -35,12 +35,12 @@
 #include <managelang.hxx>
 #include <com/sun/star/io/XInputStreamProvider.hpp>
 #include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
-#include <com/sun/star/script/XLibraryContainer2.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/resource/StringResourceWithLocation.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <basctl/basctldllpublic.hxx>
 #include <comphelper/processfactory.hxx>
@@ -65,7 +65,7 @@ namespace basctl
 {
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::io;
@@ -80,7 +80,7 @@ constexpr OUString FilterMask_All = u"*"_ustr;
 
 DialogWindow::DialogWindow(DialogWindowLayout* pParent, ScriptDocument const& rDocument,
                            const OUString& aLibName, const OUString& aName,
-                           css::uno::Reference<css::container::XNameContainer> const& xDialogModel)
+                           cpo::uno::Reference<css::container::XNameContainer> const& xDialogModel)
     : BaseWindow(pParent, rDocument, aLibName, aName)
     ,m_rLayout(*pParent)
     ,m_pEditor(new DlgEditor(*this, m_rLayout, rDocument.isDocument()
@@ -98,7 +98,7 @@ DialogWindow::DialogWindow(DialogWindowLayout* pParent, ScriptDocument const& rD
     SetHelpId( HID_BASICIDE_DIALOGWINDOW );
 
     // set readonly mode for readonly libraries
-    Reference< script::XLibraryContainer2 > xDlgLibContainer( GetDocument().getLibraryContainer( E_DIALOGS ) );
+    Reference< script::XLibraryContainer > xDlgLibContainer( GetDocument().getLibraryContainer( E_DIALOGS ) );
     if ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) && xDlgLibContainer->isLibraryReadOnly( aLibName ) )
         SetReadOnly(true);
 
@@ -607,9 +607,9 @@ void DialogWindow::SaveDialog()
     sfx2::FileDialogHelper aDlg(ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION,
                                 FileDialogFlags::NONE, this->GetFrameWeld());
     aDlg.SetContext(sfx2::FileDialogHelper::BasicExportDialog);
-    Reference<XFilePicker3> xFP = aDlg.GetFilePicker();
+    Reference<XFilePicker> xFP = aDlg.GetFilePicker();
 
-    xFP.queryThrow<XFilePickerControlAccess>()->setValue(ExtendedFilePickerElementIds::CHECKBOX_AUTOEXTENSION, 0, Any(true));
+    xFP->setValue(ExtendedFilePickerElementIds::CHECKBOX_AUTOEXTENSION, 0, Any(true));
     xFP->setDefaultName( GetName() );
 
     OUString aDialogStr(IDEResId(RID_STR_STDDIALOGNAME));
@@ -622,8 +622,8 @@ void DialogWindow::SaveDialog()
 
     OUString aSelectedFileURL = xFP->getSelectedFiles()[0];
 
-    const Reference<uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
-    Reference< XSimpleFileAccess3 > xSFI( SimpleFileAccess::create(xContext) );
+    const Reference<cpo::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
+    Reference< XSimpleFileAccess > xSFI( SimpleFileAccess::create(xContext) );
 
     Reference< XOutputStream > xOutput;
     try
@@ -788,11 +788,11 @@ bool implImportDialog(weld::Window* pWin, const ScriptDocument& rDocument, const
 {
     bool bDone = false;
 
-    const Reference<uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
+    const Reference<cpo::uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
     sfx2::FileDialogHelper aDlg(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
                                 FileDialogFlags::NONE, pWin);
     aDlg.SetContext(sfx2::FileDialogHelper::BasicImportDialog);
-    Reference<XFilePicker3> xFP = aDlg.GetFilePicker();
+    Reference<XFilePicker> xFP = aDlg.GetFilePicker();
 
     OUString aDialogStr(IDEResId(RID_STR_STDDIALOGNAME));
     xFP->appendFilter( aDialogStr, u"*.xdl"_ustr );
@@ -816,7 +816,7 @@ bool implImportDialog(weld::Window* pWin, const ScriptDocument& rDocument, const
                 xContext->getServiceManager()->createInstanceWithContext(u"com.sun.star.awt.UnoControlDialogModel"_ustr, xContext),
                 UNO_QUERY_THROW );
 
-            Reference< XSimpleFileAccess3 > xSFI( SimpleFileAccess::create(xContext) );
+            Reference< XSimpleFileAccess > xSFI( SimpleFileAccess::create(xContext) );
 
             Reference< XInputStream > xInput;
             if( xSFI->exists( rOUCurPath ) )

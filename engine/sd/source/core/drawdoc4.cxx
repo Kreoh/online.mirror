@@ -24,7 +24,7 @@
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/form/XReset.hpp>
 #include <com/sun/star/document/XImporter.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/xml/sax/XFastParser.hpp>
 #include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
@@ -125,7 +125,7 @@
 namespace com::sun::star::linguistic2 { class XHyphenator; }
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::style;
@@ -666,7 +666,7 @@ void SdDrawDocument::CreateDefaultCellStyles()
     if (comphelper::IsFuzzing())
         return;
 
-    const Reference<css::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
+    const Reference<cpo::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
     Reference<css::document::XImporter> xImporter(xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
         u"com.sun.star.comp.Draw.XMLOasisStylesImporter"_ustr,
         { Any(comphelper::makePropertyValue(u"OrganizerMode"_ustr, true)) }, xContext), UNO_QUERY);
@@ -978,44 +978,6 @@ IMPL_LINK(SdDrawDocument, OnlineSpellEventHdl, EditStatus&, rEditStat, void)
     mbHasOnlineSpellErrors = bool(nStat & EditStatusFlags::WRONGWORDCHANGED);
 }
 
-// Callback for ExecuteSpellPopup()
-
-// removed link and replaced with Imp method
-void SdDrawDocument::ImpOnlineSpellCallback(SpellCallbackInfo const * pInfo, SdrObject* pObj, SdrOutliner const * pOutl)
-{
-    mpOnlineSearchItem.reset();
-
-    SpellCallbackCommand nCommand = pInfo->nCommand;
-
-    if (nCommand == SpellCallbackCommand::IGNOREWORD
-        // restart when add to dictionary takes place, too.
-        || nCommand == SpellCallbackCommand::ADDTODICTIONARY)
-    {
-        if(pOutl)
-            if (auto pTextObj = DynCastSdrTextObj( pObj ))
-            {
-                bool bModified(IsChanged());
-                pTextObj->SetOutlinerParaObject(pOutl->CreateParaObject());
-                SetChanged(bModified);
-                pObj->BroadcastObjectChange();
-            }
-
-        mpOnlineSearchItem.reset(new SvxSearchItem( SID_SEARCH_ITEM ) );
-        mpOnlineSearchItem->SetSearchString(pInfo->aWord);
-        StartOnlineSpelling();
-    }
-    else if (nCommand == SpellCallbackCommand::STARTSPELLDLG)
-    {
-        if (SfxViewFrame* pViewFrame = SfxViewFrame::Current())
-            pViewFrame->GetDispatcher()->Execute( SID_SPELL_DIALOG, SfxCallMode::ASYNCHRON );
-    }
-    else if (nCommand == SpellCallbackCommand::AUTOCORRECT_OPTIONS)
-    {
-        if (SfxViewFrame* pViewFrame = SfxViewFrame::Current())
-            pViewFrame->GetDispatcher()->Execute( SID_AUTO_CORRECT_DLG, SfxCallMode::ASYNCHRON );
-    }
-}
-
 // Return formatted page number (1, I, i, a, etc.)
 OUString SdDrawDocument::CreatePageNumValue(sal_uInt16 nNum) const
 {
@@ -1051,7 +1013,11 @@ OUString SdDrawDocument::CreatePageNumValue(sal_uInt16 nNum) const
 // (including ~LT~). This is unlike rNewName.
 void SdDrawDocument::RenameLayoutTemplate(const OUString& rOldLayoutName, const OUString& rNewName)
 {
-    OUString aOldName(rOldLayoutName);
+    // rOldLayoutName may be the layout name of a page this function renames, so the pages are
+    // matched against a copy of it. Every page of the layout then keeps matching, the notes
+    // master and the notes pages included.
+    const OUString aOldLayoutName(rOldLayoutName);
+    OUString aOldName(aOldLayoutName);
     sal_Int32 nPos = aOldName.indexOf( SD_LT_SEPARATOR );
 
     // erase everything after '~LT~'
@@ -1097,7 +1063,7 @@ void SdDrawDocument::RenameLayoutTemplate(const OUString& rOldLayoutName, const 
         SdPage* pPage = static_cast<SdPage*>(GetPage(nPage));
         OUString aTemp(pPage->GetLayoutName());
 
-        if (aTemp == rOldLayoutName)
+        if (aTemp == aOldLayoutName)
         {
             pPage->SetLayoutName(aPageLayoutName);
 
@@ -1136,7 +1102,7 @@ void SdDrawDocument::RenameLayoutTemplate(const OUString& rOldLayoutName, const 
         SdPage* pPage = static_cast<SdPage*>( GetMasterPage(nPage) );
         OUString aTemp(pPage->GetLayoutName());
 
-        if (aTemp == rOldLayoutName)
+        if (aTemp == aOldLayoutName)
         {
             pPage->SetLayoutName(aPageLayoutName);
             pPage->SetName(rNewName);

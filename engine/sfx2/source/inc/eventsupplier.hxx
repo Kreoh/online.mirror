@@ -26,7 +26,7 @@
 #include <com/sun/star/container/XNameReplace.hpp>
 #include <com/sun/star/document/XDocumentEventListener.hpp>
 #include <com/sun/star/document/XDocumentEventBroadcaster.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Type.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <mutex>
@@ -45,32 +45,32 @@ class SfxEvents_Impl final : public ::cppu::WeakImplHelper< css::container::XNam
 {
     cpo::uno::Sequence< OUString >     maEventNames;
     std::vector< cpo::uno::Sequence < css::beans::PropertyValue > >  maEventData;
-    css::uno::Reference< css::document::XDocumentEventBroadcaster >  mxBroadcaster;
+    cpo::uno::Reference< css::document::XDocumentEventBroadcaster >  mxBroadcaster;
     std::mutex                     maMutex;
     SfxObjectShell                 *mpObjShell;
 
 public:
                                 SfxEvents_Impl( SfxObjectShell* pShell,
-                                                css::uno::Reference< css::document::XDocumentEventBroadcaster > const & xBroadcaster );
+                                                cpo::uno::Reference< css::document::XDocumentEventBroadcaster > const & xBroadcaster );
                                virtual ~SfxEvents_Impl() override;
 
     //  --- XNameReplace ---
-    virtual void SAL_CALL       replaceByName( const OUString & aName, const cpo::uno::Any & aElement ) override;
+    virtual void       replaceByName( const OUString & aName, const cpo::uno::Any & aElement ) override;
 
     //  --- XNameAccess ( parent of XNameReplace ) ---
-    virtual cpo::uno::Any SAL_CALL        getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override;
-    virtual bool SAL_CALL   hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Any        getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool   hasByName( const OUString& aName ) override;
 
     //  --- XElementAccess ( parent of XNameAccess ) ---
-    virtual cpo::uno::Type SAL_CALL    getElementType() override;
-    virtual bool SAL_CALL   hasElements() override;
+    virtual cpo::uno::Type    getElementType() override;
+    virtual bool   hasElements() override;
 
     // --- ::document::XDocumentEventListener ---
-    virtual void SAL_CALL documentEventOccured(const css::document::DocumentEvent& aEvent) override;
+    virtual void documentEventOccured(const css::document::DocumentEvent& aEvent) override;
 
     // --- ::lang::XEventListener ---
-    virtual void SAL_CALL       disposing( const css::lang::EventObject& Source ) override;
+    virtual void       disposing( const css::lang::EventObject& Source ) override;
 
     // convert and normalize
     static std::unique_ptr<SvxMacro>  ConvertToMacro( const cpo::uno::Any& rElement, SfxObjectShell* pDoc );
@@ -80,10 +80,6 @@ public:
                                     ::comphelper::NamedValueCollection& o_normalizedDescriptor,
                                     SfxObjectShell* i_document );
     static void Execute( cpo::uno::Sequence < css::beans::PropertyValue > const & aEventData, const css::document::DocumentEvent& aTrigger, SfxObjectShell* pDoc );
-
-private:
-    /// Check if script URL whitelist exists, and if so, if current script url is part of it
-    static bool isScriptURLAllowed(const OUString& aScriptURL);
 };
 
 #endif

@@ -87,6 +87,7 @@ using namespace ::editeng;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::table::BorderLineStyle;
+using namespace ::cpo;
 
 
 SfxPoolItem* SvxPaperBinItem::CreateDefault() { return new  SvxPaperBinItem(0);}
@@ -3272,9 +3273,9 @@ bool SvxBoxItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         {
             if (mpBottomBorderLine)
                 return mpBottomBorderLine->setComplexColorFromAny(rVal);
-            else
+            else if (rVal.hasValue())
             {
-                css::uno::Reference<css::util::XComplexColor> xComplexColor;
+                cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
                 if (!(rVal >>= xComplexColor))
                     return false;
 
@@ -3287,9 +3288,9 @@ bool SvxBoxItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         {
             if (mpLeftBorderLine)
                 return mpLeftBorderLine->setComplexColorFromAny(rVal);
-            else
+            else if (rVal.hasValue())
             {
-                css::uno::Reference<css::util::XComplexColor> xComplexColor;
+                cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
                 if (!(rVal >>= xComplexColor))
                     return false;
 
@@ -3302,9 +3303,9 @@ bool SvxBoxItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         {
             if (mpRightBorderLine)
                 return mpRightBorderLine->setComplexColorFromAny(rVal);
-            else
+            else if (rVal.hasValue())
             {
-                css::uno::Reference<css::util::XComplexColor> xComplexColor;
+                cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
                 if (!(rVal >>= xComplexColor))
                     return false;
 
@@ -3317,9 +3318,9 @@ bool SvxBoxItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         {
             if (mpTopBorderLine)
                 return mpTopBorderLine->setComplexColorFromAny(rVal);
-            else
+            else if (rVal.hasValue())
             {
-                css::uno::Reference<css::util::XComplexColor> xComplexColor;
+                cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
                 if (!(rVal >>= xComplexColor))
                     return false;
 
@@ -3615,6 +3616,16 @@ void SvxBoxItem::SetLine( const SvxBorderLine* pNew, SvxBoxItemLine nLine )
             break;
         default:
             OSL_FAIL( "wrong line" );
+    }
+}
+
+void SvxBoxItem::FillUnsetLines( const SvxBoxItem& rOther )
+{
+    for (SvxBoxItemLine eLine : { SvxBoxItemLine::TOP, SvxBoxItemLine::BOTTOM,
+                                  SvxBoxItemLine::LEFT, SvxBoxItemLine::RIGHT })
+    {
+        if (!GetLine(eLine))
+            SetLine(rOther.GetLine(eLine), eLine);
     }
 }
 
@@ -4659,15 +4670,8 @@ bool SvxBrushItem::QueryValue( cpo::uno::Any& rVal, sal_uInt8 nMemberId ) const
         case MID_GRAPHIC:
         {
             uno::Reference<graphic::XGraphic> xGraphic;
-            if (!maStrLink.isEmpty())
-            {
-                Graphic aGraphic(vcl::graphic::loadFromURL(maStrLink));
-                xGraphic = aGraphic.GetXGraphic();
-            }
-            else if (mxGraphicObject)
-            {
-                xGraphic = mxGraphicObject->GetGraphic().GetXGraphic();
-            }
+            if (const GraphicObject* pGraphicObject = GetGraphicObject())
+                xGraphic = pGraphicObject->GetGraphic().GetXGraphic();
             rVal <<= xGraphic;
         }
         break;
@@ -4725,7 +4729,7 @@ bool SvxBrushItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
 
         case MID_BACKGROUND_COMPLEX_COLOR:
         {
-            css::uno::Reference<css::util::XComplexColor> xComplexColor;
+            cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
             if (!(rVal >>= xComplexColor))
                 return false;
 

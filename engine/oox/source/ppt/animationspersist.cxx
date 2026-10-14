@@ -34,7 +34,7 @@
 #include <oox/token/namespaces.hxx>
 #include <oox/token/tokens.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::presentation;
 using namespace ::com::sun::star::animations;
@@ -143,12 +143,15 @@ namespace oox::ppt {
                 sShapeName = maShapeTarget.msSubShapeId;
 
             ::oox::drawingml::ShapePtr pShape = pSlide->getShape( sShapeName );
-            SAL_WARN_IF( !pShape, "oox.ppt", "failed to locate Shape" );
 
             if( !pShape && maShapeTarget.mnType == XML_dgm )
             {
+                // A shape of a diagram is known under the name of the diagram when the fallback
+                // drawing is what the file holds.
                 pShape = pSlide->getShape( msValue );
             }
+
+            SAL_WARN_IF( !pShape, "oox.ppt", "failed to locate Shape" );
 
             if( pShape )
             {
@@ -186,7 +189,7 @@ namespace oox::ppt {
         {
             OUString sId;
             aEvent.Source >>= sId;
-            css::uno::Reference<XAnimationNode> xNode = pSlide->getAnimationNode(sId);
+            cpo::uno::Reference<XAnimationNode> xNode = pSlide->getAnimationNode(sId);
             if (xNode.is())
             {
                 aEvent.Source <<= xNode;

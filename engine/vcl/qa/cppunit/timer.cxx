@@ -14,6 +14,7 @@
 
 #include <osl/thread.hxx>
 #include <chrono>
+#include <iomanip>
 
 #include <vcl/timer.hxx>
 #include <vcl/idle.hxx>
@@ -21,6 +22,7 @@
 #include <vcl/scheduler.hxx>
 #include <svdata.hxx>
 #include <salinst.hxx>
+#include <iomanip>
 
 // #define TEST_WATCHDOG
 
@@ -40,7 +42,7 @@ public:
     {
         create();
     }
-    virtual void SAL_CALL run() override
+    virtual void run() override
     {
         osl::Thread::wait( std::chrono::seconds(mnSeconds) );
         fprintf(stderr, "ERROR: WatchDog timer thread expired, failing the test!\n");

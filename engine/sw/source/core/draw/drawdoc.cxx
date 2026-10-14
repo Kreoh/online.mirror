@@ -31,6 +31,7 @@
 #include <DocumentSettingManager.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 // Constructor
 SwDrawModel::SwDrawModel(SwDoc& rDoc)
@@ -138,7 +139,7 @@ uno::Reference< frame::XModel > SwDrawModel::createUnoModel()
             xModel = pShell->GetModel();
         }
     }
-    catch( uno::RuntimeException& )
+    catch( cpo::uno::RuntimeException& )
     {
         OSL_FAIL( "<SwDrawModel::createUnoModel()> - could *not* retrieve model at <SwDocShell>" );
     }

@@ -20,11 +20,11 @@
 #pragma once
 
 #include "TokenContext.hxx"
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 namespace com::sun::star {
     namespace beans { class XPropertySet; }
-    namespace xforms { class XModel2; }
+    namespace xforms { class XModel; }
 }
 
 class SvXMLImport;
@@ -32,11 +32,11 @@ class SvXMLImport;
 /** import the xforms:submission element */
 class XFormsSubmissionContext : public TokenContext
 {
-    css::uno::Reference<css::beans::XPropertySet> mxSubmission;
+    cpo::uno::Reference<css::beans::XPropertySet> mxSubmission;
 
 public:
     XFormsSubmissionContext( SvXMLImport& rImport,
-                             const css::uno::Reference<css::xforms::XModel2>& xModel );
+                             const cpo::uno::Reference<css::xforms::XModel>& xModel );
 
     // implement TokenContext methods:
 
@@ -45,7 +45,7 @@ protected:
 
     virtual SvXMLImportContext* HandleChild(
         sal_Int32 nElementToken,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 
 };
 

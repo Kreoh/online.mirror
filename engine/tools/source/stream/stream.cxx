@@ -431,28 +431,24 @@ bool SvStream::ReadLine( OStringBuffer& aBuf, sal_Int32 nMaxBytesToRead )
                 break;
         }
 
-        sal_uInt16 j, n;
-        for( j = n = 0; j < nLen ; ++j )
+        sal_uInt16 j;
+        for( j = 0; j < nLen ; ++j )
         {
+            if (nTotalLen + j >= o3tl::make_unsigned(nMaxBytesToRead))
+            {
+                bEnd = true;
+                break;
+            }
             c = buf[j];
             if ( c == '\n' || c == '\r' )
             {
                 bEnd = true;
                 break;
             }
-            if ( n < j )
-                buf[n] = c;
-            ++n;
         }
         nTotalLen += j;
-        if (nTotalLen > o3tl::make_unsigned(nMaxBytesToRead))
-        {
-            n -= nTotalLen - nMaxBytesToRead;
-            nTotalLen = nMaxBytesToRead;
-            bEnd = true;
-        }
-        if ( n )
-            aBuf.append(buf, n);
+        if ( j )
+            aBuf.append(buf, j);
     }
 
     if ( !bEnd && !GetError() && !aBuf.isEmpty() )
@@ -507,37 +503,26 @@ bool SvStream::ReadUniStringLine( OUString& rStr, sal_Int32 nMaxCodepointsToRead
                 break;
         }
 
-        sal_uInt16 j, n;
-        for( j = n = 0; j < nLen ; ++j )
+        sal_uInt16 j;
+        for( j = 0; j < nLen ; ++j )
         {
+            if (nTotalLen + j >= o3tl::make_unsigned(nMaxCodepointsToRead))
+            {
+                bEnd = true;
+                break;
+            }
             if (m_isSwap)
-                SwapNumber( buf[n] );
+                SwapNumber( buf[j] );
             c = buf[j];
             if ( c == '\n' || c == '\r' )
             {
                 bEnd = true;
                 break;
             }
-            // erAck 26.02.01: Old behavior was no special treatment of '\0'
-            // character here, but a following rStr+=c did ignore it. Is this
-            // really intended? Or should a '\0' better terminate a line?
-            // The nOldFilePos stuff wasn't correct then anyways.
-            if ( c )
-            {
-                if ( n < j )
-                    buf[n] = c;
-                ++n;
-            }
         }
         nTotalLen += j;
-        if (nTotalLen > o3tl::make_unsigned(nMaxCodepointsToRead))
-        {
-            n -= nTotalLen - nMaxCodepointsToRead;
-            nTotalLen = nMaxCodepointsToRead;
-            bEnd = true;
-        }
-        if ( n )
-            aBuf.append( buf, n );
+        if ( j )
+            aBuf.append( buf, j );
     }
 
     if ( !bEnd && !GetError() && !aBuf.isEmpty() )

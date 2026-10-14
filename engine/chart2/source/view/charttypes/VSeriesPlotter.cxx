@@ -97,8 +97,9 @@ namespace chart {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 using namespace ::chart::DataSeriesProperties;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 VDataSeriesGroup::CachedYValues::CachedYValues()
@@ -2382,7 +2383,7 @@ std::vector< ViewLegendEntry > VSeriesPlotter::createLegendEntries(
             , LegendPosition eLegendPosition
             , const Reference< beans::XPropertySet >& xTextProperties
             , const rtl::Reference<SvxShapeGroupAnyD>& xTarget
-            , const Reference< uno::XComponentContext >& xContext
+            , const Reference< cpo::uno::XComponentContext >& xContext
             , ChartModel& rModel
             )
 {
@@ -2465,7 +2466,7 @@ std::vector< ViewLegendEntry > VSeriesPlotter::createLegendEntries(
 
 std::vector<ViewLegendSymbol> VSeriesPlotter::createSymbols(const awt::Size& rEntryKeyAspectRatio
             , const rtl::Reference<SvxShapeGroupAnyD>& xTarget
-            , const Reference<uno::XComponentContext>& xContext)
+            , const Reference<cpo::uno::XComponentContext>& xContext)
 {
     std::vector<ViewLegendSymbol> aResult;
 
@@ -2677,7 +2678,7 @@ std::vector< ViewLegendEntry > VSeriesPlotter::createLegendEntriesForSeries(
             , const VDataSeries& rSeries
             , const Reference< beans::XPropertySet >& xTextProperties
             , const rtl::Reference<SvxShapeGroupAnyD>& xTarget
-            , const Reference< uno::XComponentContext >& xContext
+            , const Reference< cpo::uno::XComponentContext >& xContext
             )
 {
     std::vector< ViewLegendEntry > aResult;
@@ -2841,7 +2842,7 @@ std::vector<ViewLegendSymbol> VSeriesPlotter::createSymbolsForSeries(
               const awt::Size& rEntryKeyAspectRatio
             , const VDataSeries& rSeries
             , const rtl::Reference<SvxShapeGroupAnyD>& xTarget
-            , const Reference<uno::XComponentContext>& xContext)
+            , const Reference<cpo::uno::XComponentContext>& xContext)
 {
     std::vector<ViewLegendSymbol> aResult;
 

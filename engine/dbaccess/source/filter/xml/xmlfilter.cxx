@@ -63,15 +63,16 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::cpo::uno;
 using namespace xmloff::token;
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_sdb_DBFilter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ::dbaxml::ODBFilter(context));
 }
@@ -470,7 +471,7 @@ public:
 }
 
 SvXMLImportContext* ODBFilter::CreateFastContext(sal_Int32 nElement,
-        const ::css::uno::Reference< ::css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
+        const ::cpo::uno::Reference< ::css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     SvXMLImportContext *pContext = nullptr;
 
@@ -595,7 +596,12 @@ void ODBFilter::setPropertyInfo()
     Sequence<PropertyValue> aInfo;
     if ( !m_aInfoSequence.empty() )
         aInfo = comphelper::containerToSequence(m_aInfoSequence);
-    aDataSourceSettings.merge( ::comphelper::NamedValueCollection( aInfo ), true );
+    ::comphelper::NamedValueCollection aDocumentSettings( aInfo );
+    // The Java class path of a driver and the Java system properties come from the driver
+    // configuration, not the document.
+    aDocumentSettings.remove( u"JavaDriverClassPath"_ustr );
+    aDocumentSettings.remove( u"SystemProperties"_ustr );
+    aDataSourceSettings.merge( aDocumentSettings, true );
 
     aDataSourceSettings >>= aInfo;
     if ( aInfo.hasElements() )

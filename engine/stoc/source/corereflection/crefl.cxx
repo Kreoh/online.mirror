@@ -24,14 +24,14 @@
 
 #include <com/sun/star/reflection/XConstantTypeDescription.hpp>
 #include <com/sun/star/reflection/XTypeDescription.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <o3tl/any.hxx>
 #include <uno/lbnames.h>
 #include "base.hxx"
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::lang;
 using namespace css::reflection;
@@ -178,7 +178,7 @@ Any IdlReflectionServiceImpl::getByHierarchicalName( const OUString & rName )
             OSL_ASSERT( (*o3tl::forceAccess<Reference<XInterface>>(aRet))->queryInterface(
                 cppu::UnoType<XTypeDescription>::get()).hasValue() );
 
-            css::uno::Reference< css::reflection::XConstantTypeDescription >
+            cpo::uno::Reference< css::reflection::XConstantTypeDescription >
                 ctd;
             if (aRet >>= ctd)
             {
@@ -321,9 +321,9 @@ uno_Interface * IdlReflectionServiceImpl::mapToUno(
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_stoc_CoreReflection_get_implementation(
-    css::uno::XComponentContext * context,
+    cpo::uno::XComponentContext * context,
     cpo::uno::Sequence<cpo::uno::Any> const & arguments)
 {
     SAL_WARN_IF(

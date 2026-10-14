@@ -63,7 +63,6 @@ class SFX2_DLLPUBLIC SfxViewFrame final : public SfxShell, public SfxListener
     SAL_DLLPRIVATE virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
     DECL_DLLPRIVATE_LINK(MacroButtonHandler, weld::Button&, void);
     DECL_DLLPRIVATE_LINK(SecurityButtonHandler, weld::Button&, void);
-    DECL_DLLPRIVATE_LINK(EventButtonHandler, weld::Button&, void);
     DECL_DLLPRIVATE_LINK(ViewSignaturesButtonHandler, weld::Button&, void);
     DECL_DLLPRIVATE_LINK(SwitchReadOnlyHandler, weld::Button&, void);
     DECL_DLLPRIVATE_LINK(SignDocumentHandler, weld::Button&, void);
@@ -91,14 +90,14 @@ public:
     static SfxViewFrame*    LoadHiddenDocument( SfxObjectShell const & i_rDoc, SfxInterfaceId i_nViewId );
     static SfxViewFrame*    LoadDocument( SfxObjectShell const & i_rDoc, SfxInterfaceId i_nViewId );
     static SfxViewFrame*    LoadDocumentIntoFrame( SfxObjectShell const & i_rDoc, const SfxFrameItem* i_pFrameItem, SfxInterfaceId i_nViewId );
-    static SfxViewFrame*    LoadDocumentIntoFrame( SfxObjectShell const & i_rDoc, const css::uno::Reference< css::frame::XFrame >& i_rFrameItem );
+    static SfxViewFrame*    LoadDocumentIntoFrame( SfxObjectShell const & i_rDoc, const cpo::uno::Reference< css::frame::XFrame >& i_rFrameItem );
     static SfxViewFrame*    DisplayNewDocument( SfxObjectShell const & i_rDoc, const SfxRequest& i_rCreateDocRequest );
 
     SAL_RET_MAYBENULL static SfxViewFrame* Current();
     SAL_RET_MAYBENULL static SfxViewFrame* GetFirst( const SfxObjectShell* pDoc = nullptr, bool bOnlyVisible = true );
     SAL_RET_MAYBENULL static SfxViewFrame* GetNext( const SfxViewFrame& rPrev, const SfxObjectShell* pDoc = nullptr, bool bOnlyVisible = true );
 
-    SAL_RET_MAYBENULL SAL_DLLPRIVATE static SfxViewFrame* Get( const css::uno::Reference< css::frame::XController>& i_rController, const SfxObjectShell* i_pDoc );
+    SAL_RET_MAYBENULL SAL_DLLPRIVATE static SfxViewFrame* Get( const cpo::uno::Reference< css::frame::XController>& i_rController, const SfxObjectShell* i_pDoc );
 
     SAL_DLLPRIVATE void     DoActivate(bool bMDI);
     SAL_DLLPRIVATE void     DoDeactivate(bool bMDI, SfxViewFrame const *pOld);
@@ -196,7 +195,6 @@ public:
     SAL_DLLPRIVATE void MiscExec_Impl(SfxRequest &);
     SAL_DLLPRIVATE void MiscState_Impl(SfxItemSet &);
     SAL_DLLPRIVATE SfxWorkWindow* GetWorkWindow_Impl();
-    SAL_DLLPRIVATE void AddDispatchMacroToBasic_Impl(const OUString& sMacro);
 
     SAL_DLLPRIVATE void Exec_Impl(SfxRequest &);
     SAL_DLLPRIVATE void INetExecute_Impl(SfxRequest &);
@@ -228,7 +226,7 @@ private:
     */
     SAL_DLLPRIVATE static SfxViewShell* LoadViewIntoFrame_Impl(
                             const SfxObjectShell& i_rDoc,
-                            const css::uno::Reference< css::frame::XFrame >& i_rFrame,
+                            const cpo::uno::Reference< css::frame::XFrame >& i_rFrame,
                             const cpo::uno::Sequence< css::beans::PropertyValue >& i_rLoadArgs,
                             const SfxInterfaceId i_nViewId,
                             const bool i_bHidden
@@ -251,7 +249,7 @@ private:
     */
     SAL_DLLPRIVATE static SfxViewFrame* LoadViewIntoFrame_Impl_NoThrow(
                             const SfxObjectShell& i_rDoc,
-                            const css::uno::Reference< css::frame::XFrame >& i_rFrame,
+                            const cpo::uno::Reference< css::frame::XFrame >& i_rFrame,
                             const SfxInterfaceId i_nViewId,
                             const bool i_bHidden
                         );

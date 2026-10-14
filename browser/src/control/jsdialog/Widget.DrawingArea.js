@@ -36,11 +36,29 @@ function _drawingAreaControl (parentContainer, data, builder) {
 			return container;
 		}
 	};
+
+	container.onFocus = function () {
+		var focusable = container.querySelector('[tabindex]');
+		if (focusable)
+			focusable.focus();
+	};
+
 	if (!data.image)
 		return;
 
 	var isTextbox = data.aria && data.aria.role === 'textbox';
 	var imageId = data.id + '-img';
+
+	var hadFocus = document.getElementById(imageId) === document.activeElement;
+	if (hadFocus) {
+		app.layoutingService.appendLayoutingTask(function () {
+			if (document.activeElement && document.activeElement !== document.body)
+				return;
+			var current = document.getElementById(imageId);
+			if (current)
+				current.focus();
+		});
+	}
 
 	if (isTextbox) {
 		// Editable drawing areas (e.g. spell check sentence box) use a
@@ -122,6 +140,22 @@ function _drawingAreaControl (parentContainer, data, builder) {
 			_setDescription(wrapper, data, imageId);
 		}
 
+		// Rebuilding the widget moves the focus, and the element the events
+		// carry is gone by the time they arrive. There is nothing to tell the
+		// engine about then.
+		var sendFocusEvent = function (eventType) {
+			var current = container.getCurrent();
+			if (current)
+				builder.callback('drawingarea', eventType, current, '', builder);
+		};
+
+		wrapper.addEventListener('focus', function() {
+			sendFocusEvent('focus_in');
+		});
+		wrapper.addEventListener('blur', function() {
+			sendFocusEvent('focus_out');
+		});
+
 		var activeBorderId = null;
 		for (var i = 0; i < data.borders.length; i++) {
 			var border = data.borders[i];
@@ -150,6 +184,7 @@ function _drawingAreaControl (parentContainer, data, builder) {
 		const isFocusableImg = data.enabled && data.canFocus;
 		if (isFocusableImg) {
 			image.tabIndex = 0;
+			image.addEventListener('mousedown', function () { image.focus(); });
 			JSDialog.AddAltAttrOnFocusableImg(image, data, builder);
 			if (data.aria && data.aria.role) {
 				image.setAttribute('role', data.aria.role);
@@ -171,9 +206,11 @@ function _drawingAreaControl (parentContainer, data, builder) {
 			}
 		}
 
-		// Line width dialog is affected from delay on image render.
-		// So If the image render is delayed, use width and height of the data
-		if (JSDialog.isWidgetInModalPopup(data) && image.width == 0 && image.height == 0) {
+		// The picture arrives with the widget but is decoded later, so it has no
+		// size of its own yet. Take the size from the data, so the drawing area
+		// takes up the room the picture needs from the moment it is built, and
+		// a dialog measured right away comes out large enough for it.
+		if (image.width == 0 && image.height == 0) {
 			image.width = data.imagewidth;
 			image.height = data.imageheight;
 		}
@@ -230,11 +267,12 @@ function _createDrawingAreaWrapper(container, data, builder, imageId, isDecorati
 
 function _setupDrawingAreaMouseEvents (imageElement, container, builder) {
 	var getCoordinatesFromEvent = function (e) {
-		var boundingBox = imageElement.getBoundingClientRect();
+		var currentElement = container.getCurrent().querySelector('img') || imageElement;
+		var boundingBox = currentElement.getBoundingClientRect();
 		var ret = [e.x - boundingBox.left, e.y - boundingBox.top];
 
-		ret[0] = ret[0] / imageElement.offsetWidth;
-		ret[1] = ret[1] / imageElement.offsetHeight;
+		ret[0] = ret[0] / currentElement.offsetWidth;
+		ret[1] = ret[1] / currentElement.offsetHeight;
 
 		return ret;
 	};
@@ -341,7 +379,7 @@ function _setupDrawingAreaKeyboardEvents (focusElement, container, builder) {
 		} else if (event.key === 'Delete') {
 			builder.callback('drawingarea', 'keypress', container.getCurrent(), UNOKey.DELETE | modifier, builder);
 			event.preventDefault();
-		} else if (event.key === 'Space') {
+		} else if (event.key === ' ' || event.code === 'Space') {
 			builder.callback('drawingarea', 'keypress', container.getCurrent(), UNOKey.SPACE | modifier, builder);
 			event.preventDefault();
 		} else if (event.key === 'Tab') {
@@ -387,7 +425,8 @@ function _setupDrawingAreaKeyboardEvents (focusElement, container, builder) {
 			event.key === 'End' ||
 			event.key === 'Backspace' ||
 			event.key === 'Delete' ||
-			event.key === 'Space' ||
+			event.key === ' ' ||
+			event.code === 'Space' ||
 			event.key === 'Tab') {
 			// skip
 		} else {

@@ -37,6 +37,7 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -381,19 +382,19 @@ cpo::uno::Any ErrorBar::getPropertyDefault( const OUString& )
     return cpo::uno::Any();
 }
 
-void ErrorBar::addPropertyChangeListener( const OUString&, const css::uno::Reference< css::beans::XPropertyChangeListener >& )
+void ErrorBar::addPropertyChangeListener( const OUString&, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& )
 {
 }
 
-void ErrorBar::removePropertyChangeListener( const OUString&, const css::uno::Reference< css::beans::XPropertyChangeListener >& )
+void ErrorBar::removePropertyChangeListener( const OUString&, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& )
 {
 }
 
-void ErrorBar::addVetoableChangeListener( const OUString&, const css::uno::Reference< css::beans::XVetoableChangeListener >& )
+void ErrorBar::addVetoableChangeListener( const OUString&, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& )
 {
 }
 
-void ErrorBar::removeVetoableChangeListener( const OUString&, const css::uno::Reference< css::beans::XVetoableChangeListener >& )
+void ErrorBar::removeVetoableChangeListener( const OUString&, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& )
 {
 }
 
@@ -459,8 +460,8 @@ using impl::ErrorBar_Base;
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_ErrorBar_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_ErrorBar_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::ErrorBar);

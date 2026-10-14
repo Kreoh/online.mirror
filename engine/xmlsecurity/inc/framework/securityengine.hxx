@@ -51,7 +51,7 @@ protected:
      * operation needs. The m_xSAXEventKeeper member is used to release
      * those resources when the security operation finishes.
      */
-    css::uno::Reference< css::xml::crypto::sax::XSAXEventKeeper > m_xSAXEventKeeper;
+    cpo::uno::Reference< css::xml::crypto::sax::XSAXEventKeeper > m_xSAXEventKeeper;
 
     /*
      * the id of ElementCollector of the template element.
@@ -93,7 +93,7 @@ protected:
     /*
      * the result listener, which will receives the security operation result.
      */
-    css::uno::Reference< css::uno::XInterface > m_xResultListener;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xResultListener;
 
 protected:
     explicit SecurityEngine();
@@ -104,7 +104,7 @@ protected:
      * Any derived class will implement this method respectively.
      */
     /// @throws cpo::uno::Exception
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void tryToPerform( ){};
 
     /*
@@ -122,19 +122,19 @@ protected:
      * Any derived class will implement this method respectively.
          */
     /// @throws cpo::uno::Exception
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void notifyResultListener() const
         {};
 
 public:
     /* XReferenceResolvedListener */
-    virtual void SAL_CALL referenceResolved( sal_Int32 referenceId ) override;
+    virtual void referenceResolved( sal_Int32 referenceId ) override;
 
     /* XKeyCollector */
-    virtual void SAL_CALL setKeyId( sal_Int32 id ) override;
+    virtual void setKeyId( sal_Int32 id ) override;
 
         /* XMissionTaker */
-        virtual bool SAL_CALL endMission(  ) override;
+        virtual bool endMission(  ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -30,7 +30,7 @@
 #include <svtools/acceleratorexecute.hxx>
 
 #include <com/sun/star/datatransfer/dnd/XDropTargetListener.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 
@@ -40,12 +40,12 @@ class BrandImage;
 
 class BackingWindow : public InterimItemWindow
 {
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
-    css::uno::Reference<css::frame::XDispatchProvider> mxDesktopDispatchProvider;
-    css::uno::Reference<css::frame::XFrame> mxFrame;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::frame::XDispatchProvider> mxDesktopDispatchProvider;
+    cpo::uno::Reference<css::frame::XFrame> mxFrame;
 
     /** helper for drag&drop. */
-    css::uno::Reference<css::datatransfer::dnd::XDropTargetListener> mxDropTargetListener;
+    cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener> mxDropTargetListener;
 
     std::unique_ptr<weld::Button> mxOpenButton;
     std::unique_ptr<weld::ToggleButton> mxRecentButton;
@@ -66,7 +66,6 @@ class BackingWindow : public InterimItemWindow
     std::unique_ptr<weld::CustomWeld> mxBrandImageWeld;
 
     std::unique_ptr<weld::Button> mxHelpButton;
-    std::unique_ptr<weld::Button> mxExtensionsButton;
 
     std::unique_ptr<weld::Container> mxAllButtonsBox;
     std::unique_ptr<weld::Container> mxButtonsBox;
@@ -78,14 +77,14 @@ class BackingWindow : public InterimItemWindow
     std::unique_ptr<weld::CustomWeld> mxLocalViewWin;
     bool mbLocalViewInitialized;
 
-    css::uno::Reference<css::datatransfer::dnd::XDropTarget> mxDropTarget;
+    cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> mxDropTarget;
 
     bool mbInitControls;
     std::unique_ptr<svt::AcceleratorExecute> mpAccExec;
 
     void dispatchURL(const OUString& i_rURL, const OUString& i_rTarget = u"_default"_ustr,
-                     const css::uno::Reference<css::frame::XDispatchProvider>& i_xProv
-                     = css::uno::Reference<css::frame::XDispatchProvider>(),
+                     const cpo::uno::Reference<css::frame::XDispatchProvider>& i_xProv
+                     = cpo::uno::Reference<css::frame::XDispatchProvider>(),
                      const cpo::uno::Sequence<css::beans::PropertyValue>& = cpo::uno::Sequence<
                          css::beans::PropertyValue>());
 
@@ -94,7 +93,6 @@ class BackingWindow : public InterimItemWindow
     DECL_LINK(ClickHdl, weld::Button&, void);
     DECL_LINK(ClickHelpHdl, weld::Button&, void);
     DECL_LINK(MenuSelectHdl, const OUString&, void);
-    DECL_STATIC_LINK(BackingWindow, ExtLinkClickHdl, weld::Button&, void);
     DECL_LINK(CreateContextMenuHdl, ThumbnailViewItem*, void);
     DECL_LINK(OpenTemplateHdl, ThumbnailViewItem*, void);
     DECL_LINK(EditTemplateHdl, ThumbnailViewItem*, void);
@@ -121,7 +119,7 @@ public:
     virtual bool PreNotify(NotifyEvent& rNEvt) override;
     virtual void GetFocus() override;
 
-    void setOwningFrame(const css::uno::Reference<css::frame::XFrame>& xFrame);
+    void setOwningFrame(const cpo::uno::Reference<css::frame::XFrame>& xFrame);
 
     void clearRecentFileList();
 };

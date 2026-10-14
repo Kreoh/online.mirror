@@ -26,7 +26,7 @@ module star
 module chart2
 {
 
-interface XRegressionCurveContainer : com::sun::star::uno::XInterface
+interface XRegressionCurveContainer : cpo::uno::XInterface
 {
     /** add a regression curve to the container
 
@@ -45,11 +45,6 @@ interface XRegressionCurveContainer : com::sun::star::uno::XInterface
     /** retrieve all regression curves
      */
     sequence< XRegressionCurve > getRegressionCurves();
-
-    /** set all regression curves
-     */
-    void setRegressionCurves( [in] sequence< XRegressionCurve > aRegressionCurves )
-        raises( com::sun::star::lang::IllegalArgumentException );
 };
 
 } ; // chart2

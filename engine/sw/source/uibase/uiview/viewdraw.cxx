@@ -67,6 +67,7 @@
 #include <COKit/COKit.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // Execute Drawing-Ids
 
@@ -751,15 +752,6 @@ bool SwView::HasOnlyObj(SdrObject const *pSdrObj, SdrInventor eObjInventor) cons
     return bRet;
 }
 
-//#i87414# mod
-IMPL_LINK(SwView, OnlineSpellCallback, SpellCallbackInfo&, rInfo, void)
-{
-    if (rInfo.nCommand == SpellCallbackCommand::STARTSPELLDLG)
-        GetViewFrame().GetDispatcher()->Execute( FN_SPELL_GRAMMAR_DIALOG, SfxCallMode::ASYNCHRON);
-    else if (rInfo.nCommand == SpellCallbackCommand::AUTOCORRECT_OPTIONS)
-        GetViewFrame().GetDispatcher()->Execute( SID_AUTO_CORRECT_DLG, SfxCallMode::ASYNCHRON );
-}
-
 bool SwView::ExecDrwTextSpellPopup(const Point& rPt)
 {
     bool bRet = false;
@@ -769,8 +761,7 @@ bool SwView::ExecDrwTextSpellPopup(const Point& rPt)
 
     if (pOLV->IsWrongSpelledWordAtPos( aPos ))
     {
-        Link<SpellCallbackInfo&,void> aLink = LINK(this, SwView, OnlineSpellCallback);
-        bRet = pOLV->ExecuteSpellPopup(aPos, aLink);
+        bRet = pOLV->ExecuteSpellPopup(aPos);
     }
     return bRet;
 }

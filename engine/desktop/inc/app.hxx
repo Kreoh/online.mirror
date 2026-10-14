@@ -24,15 +24,15 @@
 #include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
 #include <unotools/bootstrap.hxx>
-#include <com/sun/star/frame/XDesktop2.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 #include <memory>
 #include <string_view>
 #include <thread>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace desktop
 {
@@ -82,7 +82,7 @@ class Desktop final : public Application
 
         static void             OpenClients();
         static void             OpenDefault();
-        static void             CheckOpenCLCompute(const css::uno::Reference<css::frame::XDesktop2> &);
+        static void             CheckOpenCLCompute(const cpo::uno::Reference<css::frame::XDesktop> &);
 
         DECL_STATIC_LINK( Desktop, EnableAcceptors_Impl, void*, void);
 
@@ -112,10 +112,7 @@ class Desktop final : public Application
         }
 
         // first-start (ever) related methods
-        static bool             CheckExtensionDependencies();
 
-        static void             SynchronizeExtensionRepositories(bool bCleanedExtensionCache, Desktop* pDesktop = nullptr);
-        void                    SetSplashScreenText( const OUString& rText );
         void                    SetSplashScreenProgress( sal_Int32 );
 
         // Bootstrap methods
@@ -140,7 +137,7 @@ class Desktop final : public Application
         static OUString         CreateErrorMsgString( utl::Bootstrap::FailureCode nFailureCode,
                                                       const OUString& aFileURL );
 
-        css::uno::Reference<css::task::XStatusIndicator> m_rSplashScreen;
+        cpo::uno::Reference<css::task::XStatusIndicator> m_rSplashScreen;
         void                    OpenSplashScreen();
         void                    CloseSplashScreen();
 
@@ -158,7 +155,6 @@ class Desktop final : public Application
         static void             createAcceptor(const OUString& aDescription);
         static void             destroyAcceptor(const OUString& aDescription);
 
-        bool                    m_bCleanedExtensionCache;
         bool                    m_bServicesRegistered;
         BootstrapError          m_aBootstrapError;
         OUString                m_aBootstrapErrorMessage;

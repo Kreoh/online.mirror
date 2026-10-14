@@ -44,6 +44,7 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
 namespace {
 void lcl_appendSubType(weld::IconView& rIV, const OUString& rId, const OUString& rText,
@@ -615,29 +616,29 @@ OUString BarChartDialogController::getChartName( sal_Int32 nId ) const
 }
 
 //=========
-// HistogramChartDialogController
+// StatisticalChartDialogController
 //=========
 
-HistogramChartDialogController::HistogramChartDialogController()
+StatisticalChartDialogController::StatisticalChartDialogController()
 {
     bSupports3D = false;
 }
 
-HistogramChartDialogController::~HistogramChartDialogController()
+StatisticalChartDialogController::~StatisticalChartDialogController()
 {
 }
 
-OUString HistogramChartDialogController::getName()
+OUString StatisticalChartDialogController::getName()
 {
-    return SchResId(STR_TYPE_HISTOGRAM);
+    return SchResId(STR_TYPE_STATISTICAL);
 }
 
-OUString HistogramChartDialogController::getImage()
+OUString StatisticalChartDialogController::getImage()
 {
-    return BMP_TYPE_HISTOGRAM;
+    return BMP_TYPE_STATISTICAL;
 }
 
-const tTemplateServiceChartTypeParameterMap& HistogramChartDialogController::getTemplateMap() const
+const tTemplateServiceChartTypeParameterMap& StatisticalChartDialogController::getTemplateMap() const
 {
     static const tTemplateServiceChartTypeParameterMap s_aTemplateMap{
         {u"com.sun.star.chart2.template.Histogram"_ustr , ChartTypeParameter(1, false, false, GlobalStackMode_NONE)}
@@ -645,16 +646,27 @@ const tTemplateServiceChartTypeParameterMap& HistogramChartDialogController::get
     return s_aTemplateMap;
 }
 
-void HistogramChartDialogController::fillSubTypeList(weld::IconView& rSubTypeList,
-                                                     const ChartTypeParameter& /*rParameter*/)
+void StatisticalChartDialogController::fillSubTypeList(weld::IconView& rSubTypeList,
+                                                       const ChartTypeParameter& /*rParameter*/)
 {
     rSubTypeList.clear();
     lcl_appendSubType(rSubTypeList, u"1"_ustr, SchResId(STR_HISTOGRAM),
-                      Bitmap(BMP_HISTOGRAM));
+                      getPreviewBitmap(Image(StockImage::Yes, BMP_HISTOGRAM)));
 }
 
+OUString StatisticalChartDialogController::getChartName( sal_Int32 nId ) const
+{
+    switch (nId)
+    {
+        case 1:
+            return SchResId( STR_HISTOGRAM );
+        default:
+            break;
+    }
+    return OUString();
+}
 
-void HistogramChartDialogController::adjustParameterToSubType(ChartTypeParameter& rParameter)
+void StatisticalChartDialogController::adjustParameterToSubType(ChartTypeParameter& rParameter)
 {
     rParameter.b3DLook = false;
     rParameter.eStackMode = GlobalStackMode_NONE;
@@ -697,7 +709,7 @@ void FunnelChartDialogController::fillSubTypeList(weld::IconView& rSubTypeList,
 {
     rSubTypeList.clear();
     lcl_appendSubType(rSubTypeList, u"1"_ustr, SchResId(STR_FUNNEL),
-                      Bitmap(BMP_FUNNEL));
+                      getPreviewBitmap(Image(StockImage::Yes, BMP_FUNNEL)));
 }
 
 void FunnelChartDialogController::adjustParameterToSubType(ChartTypeParameter& rParameter)

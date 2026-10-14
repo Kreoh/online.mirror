@@ -35,7 +35,7 @@
 #include <com/sun/star/io/XStream.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/fileformat.h>
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -53,6 +53,7 @@
 #include <vcl/TypeSerializer.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -73,7 +74,7 @@ Bitmap BitmapFromDIB(const cpo::uno::Sequence<sal_Int8>& dib)
 
 namespace vcl
 {
-Bitmap GetBitmap(const css::uno::Reference<css::awt::XBitmap>& xBitmap)
+Bitmap GetBitmap(const cpo::uno::Reference<css::awt::XBitmap>& xBitmap)
 {
     if (!xBitmap)
         return {};
@@ -93,7 +94,7 @@ Bitmap GetBitmap(const css::uno::Reference<css::awt::XBitmap>& xBitmap)
     return aBmp;
 }
 
-css::uno::Reference<css::graphic::XGraphic> GetGraphic(const cpo::uno::Any& any)
+cpo::uno::Reference<css::graphic::XGraphic> GetGraphic(const cpo::uno::Any& any)
 {
     if (auto xRet = any.query<css::graphic::XGraphic>())
         return xRet;
@@ -119,49 +120,49 @@ public:
 protected:
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XTypeProvider
-    virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes(  ) override;
-    virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
 
     // XGraphicProvider
-    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL queryGraphicDescriptor( const cpo::uno::Sequence< css::beans::PropertyValue >& MediaProperties ) override;
-    virtual css::uno::Reference< css::graphic::XGraphic > SAL_CALL queryGraphic( const cpo::uno::Sequence< css::beans::PropertyValue >& MediaProperties ) override;
-    virtual void SAL_CALL storeGraphic( const css::uno::Reference< css::graphic::XGraphic >& Graphic, const cpo::uno::Sequence< css::beans::PropertyValue >& MediaProperties ) override;
+    virtual cpo::uno::Reference< css::beans::XPropertySet > queryGraphicDescriptor( const cpo::uno::Sequence< css::beans::PropertyValue >& MediaProperties ) override;
+    virtual cpo::uno::Reference< css::graphic::XGraphic > queryGraphic( const cpo::uno::Sequence< css::beans::PropertyValue >& MediaProperties ) override;
+    virtual void storeGraphic( const cpo::uno::Reference< css::graphic::XGraphic >& Graphic, const cpo::uno::Sequence< css::beans::PropertyValue >& MediaProperties ) override;
 
     // XGraphicProvider2
-    cpo::uno::Sequence< uno::Reference<graphic::XGraphic> > SAL_CALL queryGraphics(const cpo::uno::Sequence< cpo::uno::Sequence<beans::PropertyValue> >& MediaPropertiesSeq ) override;
+    cpo::uno::Sequence< uno::Reference<graphic::XGraphic> > queryGraphics(const cpo::uno::Sequence< cpo::uno::Sequence<beans::PropertyValue> >& MediaPropertiesSeq ) override;
 
 private:
 
-    static css::uno::Reference< css::graphic::XGraphic > implLoadMemory( std::u16string_view rResourceURL );
-    static css::uno::Reference< css::graphic::XGraphic > implLoadRepositoryImage( std::u16string_view rResourceURL );
-    static css::uno::Reference< css::graphic::XGraphic > implLoadStandardImage( std::u16string_view rResourceURL );
+    static cpo::uno::Reference< css::graphic::XGraphic > implLoadMemory( std::u16string_view rResourceURL );
+    static cpo::uno::Reference< css::graphic::XGraphic > implLoadRepositoryImage( std::u16string_view rResourceURL );
+    static cpo::uno::Reference< css::graphic::XGraphic > implLoadStandardImage( std::u16string_view rResourceURL );
 };
 
 GraphicProvider::GraphicProvider()
 {
 }
 
-OUString SAL_CALL GraphicProvider::getImplementationName()
+OUString GraphicProvider::getImplementationName()
 {
     return u"com.sun.star.comp.graphic.GraphicProvider"_ustr;
 }
 
-bool SAL_CALL GraphicProvider::supportsService( const OUString& ServiceName )
+bool GraphicProvider::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL GraphicProvider::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > GraphicProvider::getSupportedServiceNames()
 {
     return { u"com.sun.star.graphic.GraphicProvider"_ustr };
 }
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL GraphicProvider::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > GraphicProvider::getTypes()
 {
     static const cpo::uno::Sequence< cpo::uno::Type > aTypes {
         cppu::UnoType<lang::XServiceInfo>::get(),
@@ -171,7 +172,7 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL GraphicProvider::getTypes()
     return aTypes;
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL GraphicProvider::getImplementationId()
+cpo::uno::Sequence< sal_Int8 > GraphicProvider::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -236,7 +237,7 @@ uno::Reference< ::graphic::XGraphic > GraphicProvider::implLoadStandardImage( st
 }
 
 
-uno::Reference< beans::XPropertySet > SAL_CALL GraphicProvider::queryGraphicDescriptor( const cpo::uno::Sequence< beans::PropertyValue >& rMediaProperties )
+uno::Reference< beans::XPropertySet > GraphicProvider::queryGraphicDescriptor( const cpo::uno::Sequence< beans::PropertyValue >& rMediaProperties )
 {
     OUString aURL;
     uno::Reference< io::XInputStream > xIStm;
@@ -300,7 +301,7 @@ uno::Reference< beans::XPropertySet > SAL_CALL GraphicProvider::queryGraphicDesc
 }
 
 
-uno::Reference< ::graphic::XGraphic > SAL_CALL GraphicProvider::queryGraphic( const cpo::uno::Sequence< ::beans::PropertyValue >& rMediaProperties )
+uno::Reference< ::graphic::XGraphic > GraphicProvider::queryGraphic( const cpo::uno::Sequence< ::beans::PropertyValue >& rMediaProperties )
 {
     OUString                                aPath;
 
@@ -415,7 +416,7 @@ uno::Reference< ::graphic::XGraphic > SAL_CALL GraphicProvider::queryGraphic( co
     return xRet;
 }
 
-cpo::uno::Sequence< uno::Reference<graphic::XGraphic> > SAL_CALL GraphicProvider::queryGraphics(const cpo::uno::Sequence< cpo::uno::Sequence<beans::PropertyValue> >& rMediaPropertiesSeq)
+cpo::uno::Sequence< uno::Reference<graphic::XGraphic> > GraphicProvider::queryGraphics(const cpo::uno::Sequence< cpo::uno::Sequence<beans::PropertyValue> >& rMediaPropertiesSeq)
 {
     // Turn properties into streams.
     std::vector< std::unique_ptr<SvStream> > aStreams;
@@ -663,7 +664,7 @@ void ImplApplyFilterData( ::Graphic& rGraphic, const cpo::uno::Sequence< beans::
 }
 
 
-void SAL_CALL GraphicProvider::storeGraphic( const uno::Reference< ::graphic::XGraphic >& rxGraphic, const cpo::uno::Sequence< beans::PropertyValue >& rMediaProperties )
+void GraphicProvider::storeGraphic( const uno::Reference< ::graphic::XGraphic >& rxGraphic, const cpo::uno::Sequence< beans::PropertyValue >& rMediaProperties )
 {
     std::unique_ptr<SvStream> pOStm;
     OUString    aPath;
@@ -792,9 +793,9 @@ void SAL_CALL GraphicProvider::storeGraphic( const uno::Reference< ::graphic::XG
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_graphic_GraphicProvider_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new GraphicProvider);

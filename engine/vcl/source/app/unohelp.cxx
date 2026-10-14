@@ -31,10 +31,11 @@
 #include <com/sun/star/awt/XExtendedToolkit.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 uno::Reference < i18n::XBreakIterator > vcl::unohelper::CreateBreakIterator()
 {
-    const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+    const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
     return i18n::BreakIterator::create(xContext);
 }
 

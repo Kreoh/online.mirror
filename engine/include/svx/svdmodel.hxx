@@ -21,6 +21,9 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
+#include <span>
+#include <string_view>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/frame/XModel.hpp>
 #include <editeng/forbiddencharacterstable.hxx>
@@ -60,6 +63,7 @@ class SdrUndoFactory;
 class TextChain;
 enum class CharCompressType;
 enum class SdrCompatibilityFlag;
+struct SdrCompatibilityFlagName;
 namespace comphelper
 {
     class IEmbeddedHelper;
@@ -249,7 +253,7 @@ public:
 
 protected:
     void implDtorClearModel();
-    virtual css::uno::Reference< css::frame::XModel > createUnoModel();
+    virtual cpo::uno::Reference< css::frame::XModel > createUnoModel();
 
 private:
     SdrModel(const SdrModel& rSrcModel) = delete;
@@ -263,12 +267,13 @@ private:
     SVX_DLLPRIVATE void ImpCreateTables(bool bDisablePropertyFiles);
 
     // this is a weak reference to a possible living api wrapper for this model
-    css::uno::Reference< css::frame::XModel > mxUnoModel;
+    cpo::uno::Reference< css::frame::XModel > mxUnoModel;
 
     // used to disable unique name checking during page move
     bool mbMakePageObjectsNamesUnique = true;
     bool m_bIsImpress = false;
     bool m_bShowMargin = true;
+    bool m_bDrawnFromModel = false;
 
 public:
     SVX_DLLPRIVATE virtual bool IsCreatingDataObj() const { return false; }
@@ -279,6 +284,10 @@ public:
     void     SetImpress(bool bIsImpress) { m_bIsImpress = bIsImpress; };
     bool     IsShowMargin() const { return m_bShowMargin; }
     void     SetShowMargin(bool bShowMargin) { m_bShowMargin = bShowMargin; }
+    /// True when something draws from the model, not the view object contacts,
+    /// so it only sees a change the model broadcasts.
+    bool IsDrawnFromModel() const { return m_bDrawnFromModel; }
+    void SetDrawnFromModel(bool bDrawnFromModel) { m_bDrawnFromModel = bDrawnFromModel; }
     void     SetPasteResize(bool bOn) { m_bPasteResize=bOn; }
     // If a custom Pool is put here, the class will call methods
     // on it (Put(), Remove()). On disposal of SdrModel the pool
@@ -306,9 +315,9 @@ public:
     // swapping.
     // The stream from which the model was loaded or in which is was saved last
     // needs to be delivered
-    virtual css::uno::Reference<
+    virtual cpo::uno::Reference<
                 css::embed::XStorage> GetDocumentStorage() const;
-    css::uno::Reference<
+    cpo::uno::Reference<
             css::io::XInputStream >
         GetDocumentStream(OUString const& rURL,
                 ::comphelper::LifecycleProxy const & rProxy) const;
@@ -561,8 +570,8 @@ public:
     bool GetDisableTextEditUsesCommonUndoManager() const { return mbDisableTextEditUsesCommonUndoManager; }
     void SetDisableTextEditUsesCommonUndoManager(bool bNew) { mbDisableTextEditUsesCommonUndoManager = bNew; }
 
-    css::uno::Reference< css::frame::XModel > const & getUnoModel();
-    void setUnoModel( const css::uno::Reference< css::frame::XModel >& xModel );
+    cpo::uno::Reference< css::frame::XModel > const & getUnoModel();
+    void setUnoModel( const cpo::uno::Reference< css::frame::XModel >& xModel );
 
     // these functions are used by the api to disable repaints during a
     // set of api calls.
@@ -584,6 +593,10 @@ public:
     void SetCompatibilityFlag(SdrCompatibilityFlag eFlag, bool bEnabled);
     /// @returns state of the SdrCompatibilityFlag
     bool GetCompatibilityFlag(SdrCompatibilityFlag eFlag) const;
+    /// @returns every SdrCompatibilityFlag with the name it is stored under
+    static std::span<const SdrCompatibilityFlagName> GetCompatibilityFlagNames();
+    /// @returns the SdrCompatibilityFlag stored under aName, if there is one
+    static std::optional<SdrCompatibilityFlag> GetCompatibilityFlagByName(std::u16string_view aName);
 
     void ReformatAllTextObjects();
 

@@ -45,15 +45,16 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::frame;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 
 namespace chart
 {
 
-DrawCommandDispatch::DrawCommandDispatch( const Reference< uno::XComponentContext >& rxContext,
+DrawCommandDispatch::DrawCommandDispatch( const Reference< cpo::uno::XComponentContext >& rxContext,
     ChartController* pController )
     :FeatureCommandDispatchBase( rxContext )
     ,m_pChartController( pController )

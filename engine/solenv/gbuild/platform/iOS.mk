@@ -220,14 +220,8 @@ endef
 
 gb_InstallScript_EXT := .ins
 
-# CliAssemblyTarget class
-
-gb_CliAssemblyTarget_POLICYEXT :=
-gb_CliAssemblyTarget_get_dll :=
-
 # Extension class
 
-gb_Extension_LICENSEFILE_DEFAULT := $(INSTROOT)/LICENSE
 
 # UnpackedTarget class
 

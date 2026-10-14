@@ -337,8 +337,6 @@ void UseUniquePtr::CheckDeleteLocalVar(const FunctionDecl* functionDecl, const C
         return;
     if (loplugin::hasPathnamePrefix(fn, SRCDIR "/sfx2/qa/"))
         return;
-    if (loplugin::hasPathnamePrefix(fn, SRCDIR "/smoketest/"))
-        return;
     if (loplugin::hasPathnamePrefix(fn, WORKDIR))
         return;
     // linked lists
@@ -377,9 +375,6 @@ void UseUniquePtr::CheckDeleteLocalVar(const FunctionDecl* functionDecl, const C
         return;
     // linked list
     if (fn == SRCDIR "/filter/source/graphicfilter/ios2met/ios2met.cxx")
-        return;
-    // no idea what this is trying to do
-    if (fn == SRCDIR "/cui/source/customize/SvxMenuConfigPage.cxx")
         return;
     // I cannot follow the ownership of OSQLParseNode's
     if (fn == SRCDIR "/dbaccess/source/core/api/SingleSelectQueryComposer.cxx")
@@ -568,7 +563,7 @@ void UseUniquePtr::CheckDeleteLocalVar(const FunctionDecl* functionDecl, const C
             "UCBStorage::CopyStorageElement_Impl", "X11SalGraphicsImpl::drawAlphaBitmap",
             "MasterPagesSelector::ClearPageSet", "View::IsPresObjSelected",
             "SdDrawPagesAccess::remove", "SdMasterPagesAccess::remove", "View::InsertData",
-            "RemoteServer::execute", "Implementation::ReleaseOutlinerView",
+            "Implementation::ReleaseOutlinerView",
             "SwFormat::CopyAttrs", "FinitCore", "SwCursorShell::MoveFieldType", "SwExtraPainter::PaintExtra",
             "SwMarginPortion::AdjustRight", "SwPaintQueue::Repaint", "SwTOXMgr::UpdateOrInsertTOX",
             "SwBaseShell::Execute", "WW8Export::WriteSdrTextObj"))

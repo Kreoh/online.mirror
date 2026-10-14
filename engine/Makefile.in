@@ -9,7 +9,7 @@
 
 gb_Top_MODULE_CHECK_TARGETS := slowcheck unitcheck subsequentcheck perfcheck uicheck screenshot
 
-.PHONY : check-if-root check-makefile-version bootstrap gbuild build build-non-l10n-only build-l10n-only check clean clean-build clean-host test-install distclean distro-pack-install docs download etags fetch fetch-repos id install install-gdb-printers install-strip tags debugrun help showmodules translations packageinfo coverage internal.clean $(gb_Top_MODULE_CHECK_TARGETS)
+.PHONY : check-if-root check-makefile-version bootstrap gbuild build build-non-l10n-only build-l10n-only check clean clean-build clean-host clean-host-except-workdir stage-clean test-install distclean distro-pack-install docs download etags fetch fetch-repos id install install-gdb-printers install-strip tags debugrun help showmodules translations packageinfo coverage internal.clean $(gb_Top_MODULE_CHECK_TARGETS)
 
 DISABLE_GUI := @DISABLE_GUI@
 
@@ -43,10 +43,11 @@ Makefile $(BUILDDIR)/Makefile: $(BUILDDIR)/config_host.mk $(BUILDDIR)/config_hos
 # run configure in an environment not polluted by config_host.mk
 ifneq ($(MSYSTEM),)
 WSL:=@WSL@
-# wsl needs unix-style path into windows realm, use long form to avoid confusing autogen.sh wrt
-# builddir != srcdir when in actually it is just srcdir-in-shortform vs srcdir-in-longform
-# for the same reason cd to the longform of BUILDDIR
-$(BUILDDIR)/config_host.mk : SRCDIR:=/$(shell $(WSL) wslpath -u $(shell cygpath -ml $(SRCDIR)))
+UNIX_HELPER:=@UNIX_HELPER@
+ifneq ($(WSL),)
+# wsl needs a unix-style path into the windows realm
+$(BUILDDIR)/config_host.mk : SRCDIR:=/$(shell $(WSL) wslpath -u $(shell cygpath -m $(SRCDIR)))
+endif
 endif
 $(BUILDDIR)/config_host.mk : $(wildcard \
 		$(SRCDIR)/autogen.sh \
@@ -64,7 +65,7 @@ $(BUILDDIR)/config_host.mk : $(wildcard \
 		$(BUILDDIR)/autogen.lastrun \
 		) \
 		$(shell if test -n '$(JAVA_HOME)' -a ! -d '$(JAVA_HOME)'; then echo force-restart; fi)
-	sh -c "$(if $(MSYSTEM),cd $(shell cygpath -ml $(BUILDDIR)); $(WSL) )$(SRCDIR)/autogen.sh"
+	sh -c "$(if $(MSYSTEM),cd $(shell cygpath -m $(BUILDDIR)); $(UNIX_HELPER) )$(SRCDIR)/autogen.sh"
 
 else # MAKE_RESTARTS
 
@@ -96,7 +97,7 @@ include $(BUILDDIR)/config_$(gb_Side).mk
 
 export GMAKE_OPTIONS?=-r$(if $(verbose),,s)$(value $(MAKEFLAGS))
 
-PARALLELISM_OPTION := $(if $(filter-out 0,$(PARALLELISM)),-j $(PARALLELISM),)$(if $(LOADLIMIT), -l $(LOADLIMIT),)
+export PARALLELISM_OPTION := $(if $(filter-out 0,$(PARALLELISM)),-j $(PARALLELISM),)$(if $(LOADLIMIT), -l $(LOADLIMIT),)
 
 # When make runs under mintty, the parallel build's writes to the terminal are
 # not serialized: the announce lines (printed via $(info)) and the child process
@@ -160,9 +161,6 @@ gbuild_TARGETS := AllLangHelp \
 	AllLangMoTarget \
 	AllLangPackage \
 	AutoInstall \
-	CliLibrary \
-	CliNativeLibrary \
-	CliUnoApi \
 	CompilerTest \
     ComponentTarget \
 	Configuration \
@@ -188,7 +186,6 @@ gbuild_TARGETS := AllLangHelp \
 	Module \
 	Package \
 	PackageSet \
-	Pagein \
 	Postprocess \
 	Pyuno \
 	PythonTest \
@@ -214,11 +211,22 @@ $(gbuild_TARGETS):
 #
 clean: clean-host clean-build
 
-clean-host:
+clean-host: clean-host-except-workdir
+	rm -fr $(WORKDIR)
+
+clean-host-except-workdir:
 	rm -fr $(TESTINSTALLDIR)
 	rm -fr $(INSTDIR)
-	rm -fr $(WORKDIR)
 	rm -fr $(SRCDIR)/rust_uno/src/generated $(SRCDIR)/rust_uno/target
+
+# Deleting the build directory takes about a minute on Windows where renaming it takes no time.
+# stage-clean does the rest of a clean and moves the workdir aside, and the build then deletes it as
+# one of its parallel jobs, so "make stage-clean check" overlaps the delete with the compile. The
+# rename needs every file under the workdir closed, where a delete in place copes with one left open
+# by an interrupted build, so fall back to deleting in place.
+stage-clean: clean-host-except-workdir clean-build
+	rm -fr $(WORKDIR).deleting
+	if test -d $(WORKDIR); then mv $(WORKDIR) $(WORKDIR).deleting || rm -fr $(WORKDIR); fi
 
 clean-build:
 ifneq ($(CROSS_COMPILING),)
@@ -227,10 +235,6 @@ ifneq ($(CROSS_COMPILING),)
 ifeq ($(OS),ANDROID)
 	rm -fr $(BUILDDIR)/android/obj
 	rm -fr $(BUILDDIR)/android/jniLibs
-	rm -fr $(SRCDIR)/android/source/build
-	rm -fr $(SRCDIR)/android/source/assets
-	rm -fr $(SRCDIR)/android/source/assets_strippedUI
-	rm -fr $(SRCDIR)/android/source/res_generated
 endif
 endif
 
@@ -314,7 +318,7 @@ bootstrap: check-if-root check-makefile-version compilerplugins
 #       with some translations like "check"->"unitcheck subsequentcheck uicheck" for historic reasons
 #
 build: bootstrap fetch $(if $(CROSS_COMPILING),cross-toolset,install-gdb-printers)
-	$(gb_Top_PIPEFAIL) $(KEEP_AWAKE_CMD) $(MAKE) $(PARALLELISM_OPTION) $(IWYU_OPTION) $(GMAKE_OPTIONS) -f $(SRCDIR)/Makefile.gbuild $(build_goal) $(gb_Top_PIPE)
+	$(gb_Top_PIPEFAIL) $(KEEP_AWAKE_CMD) $(MAKE) $(PARALLELISM_OPTION) $(IWYU_OPTION) $(GMAKE_OPTIONS) -f $(SRCDIR)/Makefile.gbuild finish-staged-clean $(build_goal) $(gb_Top_PIPE)
 ifeq ($(OS),iOS)
 	$(KEEP_AWAKE_CMD) $(MAKE) $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) ios
 endif
@@ -410,7 +414,6 @@ ifneq ($(ENABLE_MACOSX_SANDBOX),)
 # no 3rd-party code that would be interested in them would look there
 # anyway.
 	rm $(TESTINSTALLDIR)/$(PRODUCTNAME_WITHOUT_SPACES).app/Contents/MacOS/gengal
-	rm $(TESTINSTALLDIR)/$(PRODUCTNAME_WITHOUT_SPACES).app/Contents/MacOS/unopkg
 	rm $(TESTINSTALLDIR)/$(PRODUCTNAME_WITHOUT_SPACES).app/Contents/MacOS/unoinfo
 endif
 ifneq ($(MACOSX_PROVISIONING_PROFILE),)
@@ -476,7 +479,6 @@ endif
 
 distro-pack-install: install
 	WITH_LANG_LIST="$(WITH_LANG_LIST)" WITH_POOR_HELP_LOCALIZATIONS="$(WITH_POOR_HELP_LOCALIZATIONS)" $(SRCDIR)/bin/distro-install-clean-up
-	$(SRCDIR)/bin/distro-install-desktop-integration
 	WITH_LANG_LIST="$(WITH_LANG_LIST)" $(SRCDIR)/bin/distro-install-file-lists
 
 install-package-%:

@@ -14,9 +14,9 @@
 #include <vcl/commandevent.hxx>
 #include <comphelper/string.hxx>
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <sfx2/devtools/ObjectInspectorWidgets.hxx>
 
@@ -39,7 +39,7 @@ private:
     std::deque<cpo::uno::Any> maInspectionStack;
 
     // just the current context
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
 
     // treeview sort and compare
     comphelper::string::NaturalStringSorter mxSorter;
@@ -54,12 +54,12 @@ private:
                                 weld::TreeIter const& rParent);
     static void clearAll(std::unique_ptr<weld::TreeView>& pTreeView);
 
-    void appendInterfaces(css::uno::Reference<css::uno::XInterface> const& xInterface);
-    void appendServices(css::uno::Reference<css::uno::XInterface> const& xInterface);
-    void appendProperties(css::uno::Reference<css::uno::XInterface> const& xInterface);
-    void appendMethods(css::uno::Reference<css::uno::XInterface> const& xInterface);
+    void appendInterfaces(cpo::uno::Reference<cpo::uno::XInterface> const& xInterface);
+    void appendServices(cpo::uno::Reference<cpo::uno::XInterface> const& xInterface);
+    void appendProperties(cpo::uno::Reference<cpo::uno::XInterface> const& xInterface);
+    void appendMethods(cpo::uno::Reference<cpo::uno::XInterface> const& xInterface);
 
-    void inspectObject(css::uno::Reference<css::uno::XInterface> const& xInterface);
+    void inspectObject(cpo::uno::Reference<cpo::uno::XInterface> const& xInterface);
 
     // Object stack handling
     void clearStack();
@@ -93,7 +93,7 @@ public:
 
     DECL_LINK(HeaderBarClick, int, void);
 
-    void introspect(css::uno::Reference<css::uno::XInterface> const& xInterface);
+    void introspect(cpo::uno::Reference<cpo::uno::XInterface> const& xInterface);
 
     void dispose();
 };

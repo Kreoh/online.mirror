@@ -59,6 +59,7 @@
 #include <workctrl.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 void SwView::GetState(SfxItemSet &rSet)
 {
@@ -262,11 +263,15 @@ void SwView::GetState(SfxItemSet &rSet)
                 if( !m_pShell )
                     SelectShell();
 
-                const SfxPoolItemHolder aResult(m_pShell->GetSlotState(SID_UNDO));
-                if(aResult)
-                    rSet.Put(*aResult.getItem());
-                else
-                    rSet.DisableItem(nWhich);
+                if (m_pShell) // a view being deleted selects no shell
+                {
+                    if (const SfxPoolItemHolder aResult = m_pShell->GetSlotState(SID_UNDO))
+                    {
+                        rSet.Put(*aResult.getItem());
+                        break;
+                    }
+                }
+                rSet.DisableItem(nWhich);
             }
             break;
             case FN_INSERT_OBJ_CTRL:
@@ -406,8 +411,9 @@ void SwView::GetState(SfxItemSet &rSet)
                     // If the selection does not contain redlines, disable accepting/rejecting changes.
                     SwRedlineTable::size_type index = 0;
                     const SwRedlineTable& table = pDoc->getIDocumentRedlineAccess().GetRedlineTable();
-                    const SwRangeRedline* redline = table.FindAtPosition( *pCursor->Start(), index );
-                    if( redline != nullptr && *redline->Start() == *pCursor->End())
+                    auto [pCursorStart, pCursorEnd] = pCursor->StartEnd(); // SwPosition*
+                    const SwRangeRedline* redline = table.FindAtPosition(*pCursorStart, index);
+                    if (redline != nullptr && *redline->Start() == *pCursorEnd)
                         redline = nullptr;
                     if( redline == nullptr )
                     {
@@ -426,7 +432,7 @@ void SwView::GetState(SfxItemSet &rSet)
                             oSelectionEnd.emplace(*pEndNode);
                         }
                         else
-                            oSelectionEnd.emplace(*pCursor->End());
+                            oSelectionEnd.emplace(*pCursorEnd);
 
                         for(; index < table.size(); ++index )
                         {

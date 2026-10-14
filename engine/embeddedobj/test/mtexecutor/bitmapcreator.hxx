@@ -33,24 +33,24 @@ class VCLBitmapCreator : public ::cppu::WeakImplHelper<
 {
 public:
     explicit VCLBitmapCreator(
-        const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory )
+        const cpo::uno::Reference< css::lang::XMultiServiceFactory >& xFactory )
     {}
 
     static cpo::uno::Sequence< OUString > impl_staticGetSupportedServiceNames();
 
     static OUString impl_staticGetImplementationName();
 
-    static css::uno::Reference< css::uno::XInterface > impl_staticCreateSelfInstance(
-            const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+    static cpo::uno::Reference< cpo::uno::XInterface > impl_staticCreateSelfInstance(
+            const cpo::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
     // XSingleServiceFactory
-    virtual css::uno::Reference< css::uno::XInterface > createInstance(  ) throw (cpo::uno::Exception, css::uno::RuntimeException);
-    virtual css::uno::Reference< css::uno::XInterface > createInstanceWithArguments( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) throw (cpo::uno::Exception, css::uno::RuntimeException);
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance(  ) throw (cpo::uno::Exception, cpo::uno::RuntimeException);
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) throw (cpo::uno::Exception, cpo::uno::RuntimeException);
 
     // XServiceInfo
-    virtual OUString getImplementationName() throw (css::uno::RuntimeException);
-    virtual bool supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException);
-    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() throw (css::uno::RuntimeException);
+    virtual OUString getImplementationName() throw (cpo::uno::RuntimeException);
+    virtual bool supportsService( const OUString& ServiceName ) throw (cpo::uno::RuntimeException);
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() throw (cpo::uno::RuntimeException);
 
 };
 

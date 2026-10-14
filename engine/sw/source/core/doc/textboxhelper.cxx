@@ -65,6 +65,7 @@
 #include <unotxdoc.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void SwTextBoxHelper::create(SwFrameFormat* pShape, SdrObject* pObject, bool bCopyText)
 {
@@ -156,7 +157,7 @@ void SwTextBoxHelper::create(SwFrameFormat* pShape, SdrObject* pObject, bool bCo
     xTextFrame->setPropertyValue(UNO_NAME_LEFT_BORDER, aEmptyBorder);
     xTextFrame->setPropertyValue(UNO_NAME_RIGHT_BORDER, aEmptyBorder);
 
-    xTextFrame->setPropertyValue(UNO_NAME_FILL_TRANSPARENCE, cpo::uno::Any(sal_Int32(100)));
+    xTextFrame->setPropertyValue(UNO_NAME_FILL_TRANSPARENCE, cpo::uno::Any(sal_Int16(100)));
 
     xTextFrame->setPropertyValue(UNO_NAME_SIZE_TYPE, cpo::uno::Any(text::SizeType::FIX));
 
@@ -266,7 +267,7 @@ void SwTextBoxHelper::set(SwFrameFormat* pShapeFormat, SdrObject* pObj,
     xPropertySet->setPropertyValue(UNO_NAME_BOTTOM_BORDER, aEmptyBorder);
     xPropertySet->setPropertyValue(UNO_NAME_LEFT_BORDER, aEmptyBorder);
     xPropertySet->setPropertyValue(UNO_NAME_RIGHT_BORDER, aEmptyBorder);
-    xPropertySet->setPropertyValue(UNO_NAME_FILL_TRANSPARENCE, cpo::uno::Any(sal_Int32(100)));
+    xPropertySet->setPropertyValue(UNO_NAME_FILL_TRANSPARENCE, cpo::uno::Any(sal_Int16(100)));
     xPropertySet->setPropertyValue(UNO_NAME_SIZE_TYPE, cpo::uno::Any(text::SizeType::FIX));
     xPropertySet->setPropertyValue(UNO_NAME_SURROUND, cpo::uno::Any(text::WrapTextMode_THROUGH));
     // Add a new name to it
@@ -278,6 +279,8 @@ void SwTextBoxHelper::set(SwFrameFormat* pShapeFormat, SdrObject* pObj,
     syncProperty(pShapeFormat, RES_FRM_SIZE, MID_FRMSIZE_SIZE, cpo::uno::Any(xShape->getSize()),
                  pObj);
     uno::Reference<beans::XPropertySet> xShapePropertySet(xShape, uno::UNO_QUERY);
+    syncProperty(pShapeFormat, RES_FOLLOW_TEXT_FLOW, MID_FOLLOW_TEXT_FLOW,
+                 xShapePropertySet->getPropertyValue(UNO_NAME_IS_FOLLOWING_TEXT_FLOW), pObj);
     syncProperty(pShapeFormat, RES_ANCHOR, MID_ANCHOR_ANCHORTYPE,
                  xShapePropertySet->getPropertyValue(UNO_NAME_ANCHOR_TYPE), pObj);
     syncProperty(pShapeFormat, RES_HORI_ORIENT, MID_HORIORIENT_ORIENT,
@@ -599,6 +602,10 @@ void SwTextBoxHelper::syncProperty(SwFrameFormat* pShape, std::u16string_view rP
                     UNO_NAME_PARA_ADJUST,
                     cpo::uno::Any(style::ParagraphAdjust::ParagraphAdjust_RIGHT)); //1
                 break;
+            case drawing::TextHorizontalAdjust::TextHorizontalAdjust_BLOCK:
+                // Centered and justified shape text both arrive as block, so this says nothing
+                // about how a paragraph is aligned. Leave the paragraphs their own alignment.
+                break;
             default:
                 SAL_WARN("sw.core",
                          "SwTextBoxHelper::syncProperty: unhandled TextHorizontalAdjust: "
@@ -650,6 +657,9 @@ void SwTextBoxHelper::syncProperty(SwFrameFormat* pShape, std::u16string_view rP
             sal_Int16 nDirection = 0;
             switch (nAngle)
             {
+                case 0:
+                    // The text is not turned, which is what a frame does anyway.
+                    break;
                 case -90:
                     nDirection = text::WritingMode2::TB_RL90;
                     break;
@@ -797,6 +807,10 @@ void SwTextBoxHelper::syncProperty(SwFrameFormat* pShape, sal_uInt16 nWID, sal_u
                     aPropertyName = UNO_NAME_HORI_ORIENT_POSITION;
                     bAdjustX = true;
                     break;
+                case MID_HORIORIENT_PAGETOGGLE:
+                    // syncFlyFrameAttr() copies the whole orientation item over, so the text box
+                    // already mirrors on even pages together with its shape.
+                    break;
                 default:
                     SAL_WARN("sw.core", "SwTextBoxHelper::syncProperty: unhandled member-id: "
                                             << o3tl::narrowing<sal_uInt16>(nMemberID)
@@ -939,6 +953,9 @@ void SwTextBoxHelper::syncProperty(SwFrameFormat* pShape, sal_uInt16 nWID, sal_u
         case RES_OPAQUE:
             aPropertyName = UNO_NAME_OPAQUE;
             break;
+        case RES_FOLLOW_TEXT_FLOW:
+            aPropertyName = UNO_NAME_IS_FOLLOWING_TEXT_FLOW;
+            break;
         case RES_FRAMEDIR:
             aPropertyName = UNO_NAME_WRITING_MODE;
             break;
@@ -956,7 +973,10 @@ void SwTextBoxHelper::syncProperty(SwFrameFormat* pShape, sal_uInt16 nWID, sal_u
             }
             break;
         default:
-            SAL_WARN("sw.core", "SwTextBoxHelper::syncProperty: unhandled which-id: "
+            // Only the items a text box has to follow are listed above. A shape carries many
+            // more, from its wrap to the property that made it a text box in the first place,
+            // and those simply have nothing to copy.
+            SAL_INFO("sw.core", "SwTextBoxHelper::syncProperty: unhandled which-id: "
                                     << nWID << " (member-id: "
                                     << o3tl::narrowing<sal_uInt16>(nMemberID) << ")");
             break;
@@ -1084,13 +1104,13 @@ void SwTextBoxHelper::syncFlyFrameAttr(SwFrameFormat& rShape, SfxItemSet const& 
                 syncProperty(&rShape, RES_ANCHOR, MID_ANCHOR_ANCHORTYPE,
                              cpo::uno::Any(aNewAnchorType), pObj);
                 if (bInlineAnchored || bLayoutInCell)
-                    return;
+                    break;
                 SwFormatVertOrient aOrient(pItem->StaticWhichCast(RES_VERT_ORIENT));
 
                 tools::Rectangle aRect
                     = getRelativeTextRectangle(pObj ? pObj : rShape.FindRealSdrObject());
                 if (!aRect.IsEmpty())
-                    aOrient.SetPos(aOrient.GetPos() + aRect.Top());
+                    aOrient.adjustPosition(gfx::Length::twip(aRect.Top()));
 
                 if (rShape.GetAnchor().GetAnchorId() == RndStdIds::FLY_AT_PAGE
                     && rShape.GetAnchor().GetPageNum() != 0)
@@ -1114,13 +1134,13 @@ void SwTextBoxHelper::syncFlyFrameAttr(SwFrameFormat& rShape, SfxItemSet const& 
                 syncProperty(&rShape, RES_ANCHOR, MID_ANCHOR_ANCHORTYPE,
                              cpo::uno::Any(aNewAnchorType), pObj);
                 if (bInlineAnchored || bLayoutInCell)
-                    return;
+                    break;
                 SwFormatHoriOrient aOrient(pItem->StaticWhichCast(RES_HORI_ORIENT));
 
                 tools::Rectangle aRect
                     = getRelativeTextRectangle(pObj ? pObj : rShape.FindRealSdrObject());
                 if (!aRect.IsEmpty())
-                    aOrient.SetPos(aOrient.GetPos() + aRect.Left());
+                    aOrient.adjustPosition(gfx::Length::twip(aRect.Left()));
 
                 if (rShape.GetAnchor().GetAnchorId() == RndStdIds::FLY_AT_PAGE
                     && rShape.GetAnchor().GetPageNum() != 0)
@@ -1144,12 +1164,18 @@ void SwTextBoxHelper::syncFlyFrameAttr(SwFrameFormat& rShape, SfxItemSet const& 
                 {
                     if (!bInlineAnchored)
                     {
-                        aVertOrient.SetPos(
-                            (pObj ? pObj->GetRelativePos().getX() : aVertOrient.GetPos())
-                            + aRect.Top());
-                        aHoriOrient.SetPos(
-                            (pObj ? pObj->GetRelativePos().getY() : aHoriOrient.GetPos())
-                            + aRect.Left());
+                        if (pObj)
+                        {
+                            aVertOrient.setPosition(
+                                gfx::Length::twip(pObj->GetRelativePos().getY() + aRect.Top()));
+                            aHoriOrient.setPosition(
+                                gfx::Length::twip(pObj->GetRelativePos().getX() + aRect.Left()));
+                        }
+                        else
+                        {
+                            aVertOrient.adjustPosition(gfx::Length::twip(aRect.Top()));
+                            aHoriOrient.adjustPosition(gfx::Length::twip(aRect.Left()));
+                        }
 
                         aTextBoxSet.Put(aVertOrient);
                         aTextBoxSet.Put(aHoriOrient);
@@ -1178,6 +1204,11 @@ void SwTextBoxHelper::syncFlyFrameAttr(SwFrameFormat& rShape, SfxItemSet const& 
                 }
             }
             break;
+            case RES_FOLLOW_TEXT_FLOW:
+                // The text frame is positioned against the same area as its shape: the cell that
+                // holds the shape when the flag is set, the page otherwise.
+                aTextBoxSet.Put(*pItem);
+                break;
             default:
                 SAL_WARN("sw.core", "SwTextBoxHelper::syncFlyFrameAttr: unhandled which-id: "
                                         << pItem->Which());
@@ -1377,20 +1408,22 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                 const bool bMSOLayout = rIDSA.get(DocumentSettingId::DO_NOT_MIRROR_RTL_DRAW_OBJS);
                 if (bMSOLayout)
                 {
-                    aNewHOri.SetPos(-aRect.Right() + nRightSpace
-                                    + (bIsGroupObj ? pObj->GetRelativePos().getX() : 0));
+                    aNewHOri.setPosition(gfx::Length::twip(
+                        -aRect.Right() + nRightSpace
+                        + (bIsGroupObj ? pObj->GetRelativePos().getX() : 0)));
                 }
                 else
                 {
-                    aNewHOri.SetPos(aRect.Right() + nRightSpace
-                                    + (bIsGroupObj ? pObj->GetRelativePos().getX() : 0));
+                    aNewHOri.setPosition(gfx::Length::twip(
+                        aRect.Right() + nRightSpace
+                        + (bIsGroupObj ? pObj->GetRelativePos().getX() : 0)));
                 }
             }
             else
             {
                 auto nLeftSpace = pShape->GetLRSpace().ResolveLeft({});
-                aNewHOri.SetPos(aRect.Left() + nLeftSpace
-                                + (bIsGroupObj ? pObj->GetRelativePos().getX() : 0));
+                aNewHOri.setPosition(gfx::Length::twip(
+                    aRect.Left() + nLeftSpace + (bIsGroupObj ? pObj->GetRelativePos().getX() : 0)));
             }
 
             SwFormatVertOrient aNewVOri(pFormat->GetVertOrient());
@@ -1402,15 +1435,16 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                 // case 1: The textbox should be in that position where the shape is.
                 // case 2: The shape has negative offset so that have to be subtracted
                 // case 3: The shape and its parent shape also has negative offset, so subtract
-                aNewVOri.SetPos(
-                    ((pObj->GetRelativePos().getY()) > 0
-                         ? (pShape->GetVertOrient().GetPos() > 0
-                                ? pObj->GetRelativePos().getY()
-                                : pObj->GetRelativePos().getY() - pShape->GetVertOrient().GetPos())
-                         : (pShape->GetVertOrient().GetPos() > 0
-                                ? 0 // Is this can be a variation?
-                                : pObj->GetRelativePos().getY() - pShape->GetVertOrient().GetPos()))
-                    + aRect.Top());
+                gfx::Length nShapePosition = pShape->GetVertOrient().getPosition();
+                gfx::Length nObjectRelativeY = gfx::Length::twip(pObj->GetRelativePos().getY());
+
+                gfx::Length nBasePosition;
+                if (nShapePosition > 0_emu)
+                    nBasePosition = nObjectRelativeY > 0_emu ? nObjectRelativeY : 0_emu;
+                else
+                    nBasePosition = nObjectRelativeY - nShapePosition;
+
+                aNewVOri.setPosition(nBasePosition + gfx::Length::twip(aRect.Top()));
             }
             else
             {
@@ -1432,13 +1466,15 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                         }
                     }
                 }
-                aNewVOri.SetPos(aSnapRect.Top() + aRect.Top() - nPrintAreaAbsTop);
+                aNewVOri.setPosition(
+                    gfx::Length::twip(aSnapRect.Top() + aRect.Top() - nPrintAreaAbsTop));
             }
 
             // Special cases when the shape is aligned to the line
             if (pShape->GetVertOrient().GetVertOrient() != text::VertOrientation::NONE)
             {
                 aNewVOri.SetVertOrient(text::VertOrientation::NONE);
+                gfx::Length nShapeHeight = gfx::Length::twip(pShape->GetFrameSize().GetHeight());
                 switch (pShape->GetVertOrient().GetVertOrient())
                 {
                     // Top aligned shape
@@ -1446,7 +1482,7 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                     case text::VertOrientation::CHAR_TOP:
                     case text::VertOrientation::LINE_TOP:
                     {
-                        aNewVOri.SetPos(aNewVOri.GetPos() - pShape->GetFrameSize().GetHeight());
+                        aNewVOri.adjustPosition(-nShapeHeight);
                         break;
                     }
                     // Bottom aligned shape
@@ -1454,7 +1490,7 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                     case text::VertOrientation::CHAR_BOTTOM:
                     case text::VertOrientation::LINE_BOTTOM:
                     {
-                        aNewVOri.SetPos(aNewVOri.GetPos() + pShape->GetFrameSize().GetHeight());
+                        aNewVOri.adjustPosition(nShapeHeight);
                         break;
                     }
                     // Center aligned shape
@@ -1462,8 +1498,10 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                     case text::VertOrientation::CHAR_CENTER:
                     case text::VertOrientation::LINE_CENTER:
                     {
-                        aNewVOri.SetPos(aNewVOri.GetPos()
-                                        + std::lroundf(pShape->GetFrameSize().GetHeight() / 2));
+                        // The shape height is a whole number of twips, so halve it there
+                        // to keep the offset on the same grid.
+                        aNewVOri.adjustPosition(
+                            gfx::Length::twip(pShape->GetFrameSize().GetHeight() / 2));
                         break;
                     }
                     default:
@@ -1486,13 +1524,19 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
             if (bIsGroupObj && aNewHOri.GetHoriOrient() != text::HoriOrientation::NONE)
                 aNewHOri.SetHoriOrient(text::HoriOrientation::NONE);
 
-            aNewHOri.SetPos(
-                (bIsGroupObj && pObj ? pObj->GetRelativePos().getX() : aNewHOri.GetPos())
-                + aRect.Left());
             SwFormatVertOrient aNewVOri(pShape->GetVertOrient());
-            aNewVOri.SetPos(
-                (bIsGroupObj && pObj ? pObj->GetRelativePos().getY() : aNewVOri.GetPos())
-                + aRect.Top());
+            if (bIsGroupObj && pObj)
+            {
+                aNewHOri.setPosition(
+                    gfx::Length::twip(pObj->GetRelativePos().getX() + aRect.Left()));
+                aNewVOri.setPosition(
+                    gfx::Length::twip(pObj->GetRelativePos().getY() + aRect.Top()));
+            }
+            else
+            {
+                aNewHOri.adjustPosition(gfx::Length::twip(aRect.Left()));
+                aNewVOri.adjustPosition(gfx::Length::twip(aRect.Top()));
+            }
 
             // Get the distance of the child shape inside its parent
             const auto nInshapePos
@@ -1504,16 +1548,16 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                 && pShape->GetAnchor().GetAnchorId() != RndStdIds::FLY_AT_PAGE)
             {
                 aNewHOri.SetRelationOrient(text::RelOrientation::PAGE_FRAME);
-                aNewHOri.SetPos(pShape->GetHoriOrient().GetPos() + nInshapePos.getX()
-                                + aRect.Left());
+                aNewHOri.setPosition(pShape->GetHoriOrient().getPosition()
+                                     + gfx::Length::twip(nInshapePos.getX() + aRect.Left()));
             }
 
             if (pShape->GetVertOrient().GetRelationOrient() == text::RelOrientation::PAGE_FRAME
                 && pShape->GetAnchor().GetAnchorId() != RndStdIds::FLY_AT_PAGE)
             {
                 aNewVOri.SetRelationOrient(text::RelOrientation::PAGE_FRAME);
-                aNewVOri.SetPos(pShape->GetVertOrient().GetPos() + nInshapePos.getY()
-                                + aRect.Top());
+                aNewVOri.setPosition(pShape->GetVertOrient().getPosition()
+                                     + gfx::Length::twip(nInshapePos.getY() + aRect.Top()));
             }
 
             // Other special case: shape is inside a table or floating table following the text flow
@@ -1528,26 +1572,35 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                 const bool bMSOLayout = rIDSA.get(DocumentSettingId::TAB_OVER_MARGIN) // <= MSO 2010
                                         || rIDSA.get(DocumentSettingId::TAB_OVER_SPACING); // <=2013
 
-                // Table position
+                // Table position. The offset moves a text frame that is positioned against the
+                // page to the table. A text frame that follows the text flow is positioned
+                // inside the cell already, so it keeps the cell relative position of the shape.
                 Point nTableOffset;
-                // Floating table
-                if (auto pFly
-                    = pShape->GetAnchor().GetAnchorNode()->FindTableNode()->FindFlyStartNode())
+                if (!pFormat->GetFollowTextFlow().GetValue())
                 {
-                    if (auto pFlyFormat = pFly->GetFlyFormat())
+                    // Floating table
+                    if (auto pFly
+                        = pShape->GetAnchor().GetAnchorNode()->FindTableNode()->FindFlyStartNode())
                     {
-                        nTableOffset.setX(pFlyFormat->GetHoriOrient().GetPos());
-                        nTableOffset.setY(pFlyFormat->GetVertOrient().GetPos());
+                        if (auto pFlyFormat = pFly->GetFlyFormat())
+                        {
+                            nTableOffset.setX(
+                                pFlyFormat->GetHoriOrient().getPosition().as_twip<tools::Long>());
+                            nTableOffset.setY(
+                                pFlyFormat->GetVertOrient().getPosition().as_twip<tools::Long>());
+                        }
                     }
-                }
-                else
-                // Normal table
-                {
-                    auto pTableNode = pShape->GetAnchor().GetAnchorNode()->FindTableNode();
-                    if (auto pTableFormat = pTableNode->GetTable().GetFrameFormat())
+                    else
+                    // Normal table
                     {
-                        nTableOffset.setX(pTableFormat->GetHoriOrient().GetPos());
-                        nTableOffset.setY(pTableFormat->GetVertOrient().GetPos());
+                        auto pTableNode = pShape->GetAnchor().GetAnchorNode()->FindTableNode();
+                        if (auto pTableFormat = pTableNode->GetTable().GetFrameFormat())
+                        {
+                            nTableOffset.setX(
+                                pTableFormat->GetHoriOrient().getPosition().as_twip<tools::Long>());
+                            nTableOffset.setY(
+                                pTableFormat->GetVertOrient().getPosition().as_twip<tools::Long>());
+                        }
                     }
                 }
 
@@ -1555,20 +1608,20 @@ bool SwTextBoxHelper::doTextBoxPositioning(SwFrameFormat* pShape, SdrObject* pOb
                 // unless this is based on a Microsoft layout which has a through-wrap exception.
                 bool bWrapThrough = false;
                 getShapeWrapThrough(pShape, bWrapThrough);
-                sal_Int32 nPos = aNewHOri.GetPos();
-                if (nPos < 0 && (!bMSOLayout || !bWrapThrough))
-                    nPos = 0;
+                gfx::Length nPosition = aNewHOri.getPosition();
+                if (nPosition < 0_emu && (!bMSOLayout || !bWrapThrough))
+                    nPosition = 0_emu;
                 // Add the table positions to the textbox
-                aNewHOri.SetPos(nPos + nTableOffset.getX());
+                aNewHOri.setPosition(nPosition + gfx::Length::twip(nTableOffset.getX()));
 
                 if (pShape->GetVertOrient().GetRelationOrient() == text::RelOrientation::PAGE_FRAME
                     || pShape->GetVertOrient().GetRelationOrient()
                            == text::RelOrientation::PAGE_PRINT_AREA)
                 {
-                    nPos = aNewVOri.GetPos();
-                    if (nPos < 0 && (!bMSOLayout || !bWrapThrough))
-                        nPos = 0;
-                    aNewVOri.SetPos(nPos + nTableOffset.getY());
+                    nPosition = aNewVOri.getPosition();
+                    if (nPosition < 0_emu && (!bMSOLayout || !bWrapThrough))
+                        nPosition = 0_emu;
+                    aNewVOri.setPosition(nPosition + gfx::Length::twip(nTableOffset.getY()));
                 }
             }
 
@@ -1914,7 +1967,9 @@ SwFrameFormat* SwTextBoxNode::GetTextBox(const SdrObject* pDrawObject) const
                 return it->m_pTextBoxFormat;
             }
         }
-        SAL_WARN("sw.core", "SwTextBoxNode::GetTextBox(): Not found!");
+        // A caller asking whether a draw object has a text box gets its answer from the
+        // return value, so finding none here is ordinary.
+        SAL_INFO("sw.core", "SwTextBoxNode::GetTextBox(): Not found!");
     }
 
     return nullptr;

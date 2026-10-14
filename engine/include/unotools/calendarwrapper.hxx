@@ -21,24 +21,24 @@
 #define INCLUDED_UNOTOOLS_CALENDARWRAPPER_HXX
 
 #include <tools/datetime.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/i18n/Calendar2.hpp>
 #include <unotools/unotoolsdllapi.h>
 
-namespace com::sun::star::uno { class XComponentContext; }
-namespace com::sun::star::i18n { class XCalendar4; }
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::i18n { class XCalendar; }
 namespace com::sun::star::lang { struct Locale; }
 
 class UNOTOOLS_DLLPUBLIC CalendarWrapper
 {
-    css::uno::Reference< css::i18n::XCalendar4 >   xC;
+    cpo::uno::Reference< css::i18n::XCalendar >   xC;
 
     const DateTime aEpochStart;        // 1Jan1970
 
 public:
                                 CalendarWrapper(
-                                    const css::uno::Reference< css::uno::XComponentContext > & rxContext
+                                    const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext
                                     );
                                 ~CalendarWrapper();
 
@@ -75,9 +75,6 @@ public:
     /// get UTC date/time
     double getDateTime() const;
 
-    // For local setDateTime() and getDateTime() see further down at wrapper
-    // implementations of XCalendar4.
-
     // wrapper implementations of XCalendar
 
     void setValue( sal_Int16 nFieldIndex, sal_Int16 nValue );
@@ -87,21 +84,12 @@ public:
     sal_Int16 getNumberOfMonthsInYear() const;
     sal_Int16 getNumberOfDaysInWeek() const;
     OUString getDisplayName( sal_Int16 nCalendarDisplayIndex, sal_Int16 nIdx, sal_Int16 nNameType ) const;
-
-    // wrapper implementations of XExtendedCalendar
-
     OUString getDisplayString( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode ) const;
-
-    // wrapper implementations of XCalendar3
-
     css::i18n::Calendar2 getLoadedCalendar() const;
     cpo::uno::Sequence< css::i18n::CalendarItem2 > getDays() const;
     cpo::uno::Sequence< css::i18n::CalendarItem2 > getMonths() const;
     cpo::uno::Sequence< css::i18n::CalendarItem2 > getGenitiveMonths() const;
     cpo::uno::Sequence< css::i18n::CalendarItem2 > getPartitiveMonths() const;
-
-    // wrapper implementations of XCalendar4
-
     /// set local date/time
     void setLocalDateTime( double fTimeInDays );
     /// get local date/time

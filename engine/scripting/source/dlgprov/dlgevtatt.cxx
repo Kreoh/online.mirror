@@ -31,7 +31,6 @@
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <com/sun/star/awt/XDialogEventHandler.hpp>
-#include <com/sun/star/awt/XContainerWindowEventHandler.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/script/ScriptEventDescriptor.hpp>
 #include <com/sun/star/script/XScriptEventsSupplier.hpp>
@@ -51,8 +50,8 @@ using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::script;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::reflection;
 
 
@@ -82,7 +81,6 @@ namespace dlgprov
     Reference< awt::XControl > m_xControl;
         Reference< XInterface > m_xHandler;
     Reference< beans::XIntrospectionAccess > m_xIntrospectionAccess;
-    bool m_bDialogProviderMode;
 
         virtual void firing_impl( const script::ScriptEvent& aScriptEvent, cpo::uno::Any* pRet ) override;
 
@@ -91,9 +89,7 @@ namespace dlgprov
             const Reference< frame::XModel >& rxModel,
             const Reference< awt::XControl >& rxControl,
             const Reference< XInterface >& rxHandler,
-            const Reference< beans::XIntrospectionAccess >& rxIntrospectionAccess,
-            bool bDialogProviderMode );     // false: ContainerWindowProvider mode
-
+            const Reference< beans::XIntrospectionAccess >& rxIntrospectionAccess );
     };
 
   class DialogVBAScriptListenerImpl : public DialogScriptListenerImpl
@@ -156,7 +152,7 @@ namespace dlgprov
     // DialogEventsAttacherImpl
 
 
-    DialogEventsAttacherImpl::DialogEventsAttacherImpl( const Reference< XComponentContext >& rxContext, const Reference< frame::XModel >& rxModel, const Reference< awt::XControl >& rxControl, const Reference< XInterface >& rxHandler, const Reference< beans::XIntrospectionAccess >& rxIntrospect, bool bProviderMode, const Reference< script::XScriptListener >& rxRTLListener, const OUString& sDialogLibName )
+    DialogEventsAttacherImpl::DialogEventsAttacherImpl( const Reference< XComponentContext >& rxContext, const Reference< frame::XModel >& rxModel, const Reference< awt::XControl >& rxControl, const Reference< XInterface >& rxHandler, const Reference< beans::XIntrospectionAccess >& rxIntrospect, const Reference< script::XScriptListener >& rxRTLListener, const OUString& sDialogLibName )
         :mbUseFakeVBAEvents( false ), m_xContext( rxContext )
     {
         // key listeners by protocol when ScriptType = 'Script'
@@ -166,7 +162,7 @@ namespace dlgprov
         else
             listenersForTypes[ u"StarBasic"_ustr ] = new DialogLegacyScriptListenerImpl( rxContext, rxModel );
         // handler for Script & OUString("vnd.sun.star.UNO:")
-        listenersForTypes[ u"vnd.sun.star.UNO"_ustr ] = new DialogUnoScriptListenerImpl( rxContext, rxModel, rxControl, rxHandler, rxIntrospect, bProviderMode );
+        listenersForTypes[ u"vnd.sun.star.UNO"_ustr ] = new DialogUnoScriptListenerImpl( rxContext, rxModel, rxControl, rxHandler, rxIntrospect );
         listenersForTypes[ u"vnd.sun.star.script"_ustr ] = new DialogSFScriptListenerImpl( rxContext, rxModel );
 
         // determine the VBA compatibility mode from the Basic library container
@@ -287,7 +283,7 @@ namespace dlgprov
     }
 
     void DialogEventsAttacherImpl::nestedAttachEvents(
-        const css::uno::Reference<css::awt::XControl>& xControl, const cpo::uno::Any& Helper,
+        const cpo::uno::Reference<css::awt::XControl>& xControl, const cpo::uno::Any& Helper,
         OUString& sDialogCodeName)
     {
         if (!xControl.is())
@@ -316,8 +312,8 @@ namespace dlgprov
     // XScriptEventsAttacher
 
 
-    void SAL_CALL DialogEventsAttacherImpl::attachEvents( const Sequence< Reference< XInterface > >& Objects,
-        const css::uno::Reference<css::script::XScriptListener>&,
+    void DialogEventsAttacherImpl::attachEvents( const Sequence< Reference< XInterface > >& Objects,
+        const cpo::uno::Reference<css::script::XScriptListener>&,
         const Any& Helper )
     {
         // get EventAttacher
@@ -427,14 +423,12 @@ namespace dlgprov
     DialogUnoScriptListenerImpl::DialogUnoScriptListenerImpl( const Reference< XComponentContext >& rxContext,
             const Reference< css::frame::XModel >& rxModel,
             const Reference< css::awt::XControl >& rxControl,
-            const Reference< css::uno::XInterface >& rxHandler,
-            const Reference< css::beans::XIntrospectionAccess >& rxIntrospectionAccess,
-            bool bDialogProviderMode )
+            const Reference< cpo::uno::XInterface >& rxHandler,
+            const Reference< css::beans::XIntrospectionAccess >& rxIntrospectionAccess )
         : DialogSFScriptListenerImpl( rxContext, rxModel )
         ,m_xControl( rxControl )
         ,m_xHandler( rxHandler )
         ,m_xIntrospectionAccess( rxIntrospectionAccess )
-        ,m_bDialogProviderMode( bDialogProviderMode )
     {
     }
 
@@ -529,23 +523,11 @@ namespace dlgprov
         bool bHandled = false;
         if( m_xHandler.is() )
         {
-            if( m_bDialogProviderMode )
+            Reference< XDialogEventHandler > xDialogEventHandler( m_xHandler, UNO_QUERY );
+            if( xDialogEventHandler.is() )
             {
-                Reference< XDialogEventHandler > xDialogEventHandler( m_xHandler, UNO_QUERY );
-                if( xDialogEventHandler.is() )
-                {
-                    Reference< XDialog > xDialog( m_xControl, UNO_QUERY );
-                    bHandled = xDialogEventHandler->callHandlerMethod( xDialog, aEventObject, aMethodName );
-                }
-            }
-            else
-            {
-                Reference< XContainerWindowEventHandler > xContainerWindowEventHandler( m_xHandler, UNO_QUERY );
-                if( xContainerWindowEventHandler.is() )
-                {
-                    Reference< XWindow > xWindow( m_xControl, UNO_QUERY );
-                    bHandled = xContainerWindowEventHandler->callHandlerMethod( xWindow, aEventObject, aMethodName );
-                }
+                Reference< XDialog > xDialog( m_xControl, UNO_QUERY );
+                bHandled = xDialogEventHandler->callHandlerMethod( xDialog, aEventObject, aMethodName );
             }
         }
 
@@ -575,16 +557,8 @@ namespace dlgprov
                     // Signature check automatically done by reflection
                     Sequence<Any> Args(2);
                     Any* pArgs = Args.getArray();
-                    if( m_bDialogProviderMode )
-                    {
-                        Reference< XDialog > xDialog( m_xControl, UNO_QUERY );
-                        pArgs[0] <<= xDialog;
-                    }
-                    else
-                    {
-                        Reference< XWindow > xWindow( m_xControl, UNO_QUERY );
-                        pArgs[0] <<= xWindow;
-                    }
+                    Reference< XDialog > xDialog( m_xControl, UNO_QUERY );
+                    pArgs[0] <<= xDialog;
                     pArgs[1] = std::move(aEventObject);
                     aRet = xMethod->invoke( aHandlerObject, Args );
                     bHandled = true;

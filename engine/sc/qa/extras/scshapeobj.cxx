@@ -23,11 +23,12 @@
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc_apitest
 {
@@ -41,8 +42,8 @@ class ScShapeObj : public UnoApiTest,
 public:
     ScShapeObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
-    virtual uno::Reference<uno::XInterface> getXSheetDocument() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> getXSheetDocument() override;
     virtual void triggerDesktopTerminate() override{};
     virtual void setUp() override;
 
@@ -76,7 +77,7 @@ ScShapeObj::ScShapeObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScShapeObj::init()
+uno::Reference<cpo::uno::XInterface> ScShapeObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 
@@ -102,7 +103,7 @@ uno::Reference<uno::XInterface> ScShapeObj::init()
     return xShape;
 }
 
-uno::Reference<uno::XInterface> ScShapeObj::getXSheetDocument()
+uno::Reference<cpo::uno::XInterface> ScShapeObj::getXSheetDocument()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     return xDoc;

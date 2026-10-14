@@ -47,6 +47,7 @@
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
 #include <sfx2/ipclient.hxx>
+#include <sot/exchange.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/bindings.hxx>
@@ -157,6 +158,7 @@
 
 using namespace sw::mark;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 constexpr int SCROLL_TIMER_RETARD_LIMIT = 5;
 
@@ -1222,7 +1224,7 @@ void SwEditWin::ChangeFly( sal_uInt8 nDir, bool bWeb )
         }
         else
         {
-            aVert.SetPos( aDiff );
+            aVert.setPosition(gfx::Length::twip(aDiff));
             eNew = text::VertOrientation::NONE;
         }
         aVert.SetVertOrient( eNew );
@@ -1358,11 +1360,17 @@ void SwEditWin::ChangeDrawing( sal_uInt8 nDir )
                 bool bDummy1, bDummy2;
                 const bool bVertAnchor = rSh.IsFrameVertical( true, bDummy1, bDummy2 );
                 bool bHoriMove = !bVertAnchor == !( nDir % 2 );
-                bool bMoveAllowed =
-                    !bHoriMove || (rSh.GetAnchorId() != RndStdIds::FLY_AS_CHAR);
+                // The draw view also refuses the move when the selection holds an object
+                // anchored as character beside other objects.
+                bool bMoveAllowed = pSdrView->IsMoveAllowed() &&
+                    (!bHoriMove || (rSh.GetAnchorId() != RndStdIds::FLY_AS_CHAR));
                 if ( bMoveAllowed )
                 {
+                    // Moving a fly frame switches drawing layer undo off, so it goes back to
+                    // what it was.
+                    const bool bDrawUndo = rSh.GetDoc()->GetIDocumentUndoRedo().DoesDrawUndo();
                     pSdrView->MoveAllMarked(Size(nX, nY));
+                    rSh.GetDoc()->GetIDocumentUndoRedo().DoDrawUndo(bDrawUndo);
                     rSh.SetModified();
                 }
             }
@@ -2907,7 +2915,9 @@ KEYINPUT_CHECKTABLE_INSDEL:
             {
                 SdrView *pSdrView = rSh.GetDrawView();
                 const SdrHdlList& rHdlList = pSdrView->GetHdlList();
-                if(rHdlList.GetFocusHdl())
+                // Several selected fly frames move together through the draw view, the way
+                // draw objects do.
+                if(rHdlList.GetFocusHdl() || rSh.IsMultipleFlyFramesSelected())
                     ChangeDrawing( nDir );
                 else
                     ChangeFly( nDir, dynamic_cast<const SwWebView*>( &m_rView) !=  nullptr );
@@ -3205,7 +3215,10 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
         s_pQuickHlpData->Stop( rSh );
     s_pQuickHlpData->m_bAppendSpace = false;
 
-    if( rSh.FinishOLEObj() )
+    const bool bLeavingFormula = comphelper::COKit::isActive() && bIsOleActive
+                                 && pIPClient->GetObject().is()
+                                 && SotExchange::IsMath(pIPClient->GetObject()->getClassID());
+    if( rSh.FinishOLEObj() && !bLeavingFormula )
         return; // end InPlace and the click doesn't count anymore
 
     CurrShell aCurr( &rSh );
@@ -3363,14 +3376,17 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                         bool bHitHandle = pHdl && pHdl->GetKind() != SdrHdlKind::Anchor &&
                                                   pHdl->GetKind() != SdrHdlKind::Anchor_TR;
 
-                        if ((rSh.IsInsideSelectedObj(aDocPos) || bHitHandle)
-                            && (aMEvt.GetModifier() != KEY_SHIFT || bHitHandle))
+                        if ((rSh.IsInsideSelectedObj(aDocPos)
+                                 && !rSh.IsTextOverBgObjectAt(aDocPos, rSh.GetObjAt(aDocPos))
+                                 && aMEvt.GetModifier() != KEY_SHIFT) || bHitHandle)
                         {
                             rSh.EnterSelFrameMode( &aDocPos );
                             if ( !m_pApplyTempl )
                             {
-                                // only if no position to size was hit.
-                                if (!bHitHandle)
+                                // only if no position to size was hit. Several selected fly
+                                // frames move by the frame drag alone, as the drag and drop
+                                // copy handles one fly frame.
+                                if (!bHitHandle && !rSh.IsMultipleFlyFramesSelected())
                                 {
                                     StartDDTimer();
                                     s_aDDStartPos = aDocPos;
@@ -3488,8 +3504,8 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                             bOnlyText = KEY_MOD1 != aMEvt.GetModifier();
                     }
                     else if ( rSh.IsSelFrameMode() &&
-                              (m_aActHitType == SdrHitKind::NONE ||
-                               !rSh.IsInsideSelectedObj( aDocPos )))
+                              (m_aActHitType == SdrHitKind::NONE || !rSh.IsInsideSelectedObj(aDocPos)
+                                 || rSh.IsTextOverBgObjectAt(aDocPos, rSh.GetObjAt(aDocPos))) )
                     {
                         m_rView.NoRotate();
                         SdrHdl *pHdl;
@@ -3510,6 +3526,11 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                             if (aMEvt.IsMod1())
                                 nFlag = nFlag | SW_ENTER_GROUP;
 
+                            // UnSelectFrame() might affect result, calculate here to agree
+                            // with previous IsInsideSelectedObj()
+                            const bool bTextOverBgObject
+                                = rSh.IsTextOverBgObjectAt(aDocPos, rSh.GetObjAt(aDocPos));
+
                             if ( rSh.IsSelFrameMode() )
                             {
                                 rSh.UnSelectFrame();
@@ -3517,7 +3538,17 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                                 m_rView.AttrChangedNotify(nullptr);
                             }
 
-                            bool bSelObj = rSh.SelectObj( aDocPos, nFlag );
+                            bool bSelObj = false;
+                            if ( !bTextOverBgObject )
+                            {
+                                bSelObj = rSh.SelectObj(aDocPos, nFlag);
+                            }
+                            else
+                            {
+                                // to show caret
+                                bOnlyText = true;
+                            }
+
                             if( bUnLockView )
                                 rSh.LockView( false );
 
@@ -3863,8 +3894,9 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                         if (nNumberOfClicks == 2)
                         {
                             // Left mouse button, shift, double-click: see if we have a graphic and
-                            // dispatch its dialog in this case.
-                            if (rSh.GetSelectionType() == SelectionType::Graphic)
+                            // dispatch its dialog in this case. The dialog is for one image.
+                            if (rSh.GetSelectionType() == SelectionType::Graphic &&
+                                !rSh.IsMultipleFlyFramesSelected())
                             {
                                 GetView().GetViewFrame().GetBindings().Execute(
                                     FN_FORMAT_GRAFIC_DLG, nullptr,
@@ -3873,7 +3905,12 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                             }
                         }
 
-                        if ( !m_bInsDraw && IsDrawObjSelectable( rSh, aDocPos ) )
+                        // Shift-click adds a draw object to the selection, and also an image
+                        // when only images are selected. A shift-click on the only selected
+                        // image still arms a drag of it further down.
+                        const bool bAddGraphic = rSh.CanAddGraphicToSelection( aDocPos ) &&
+                            ( rSh.IsMultipleFlyFramesSelected() || !rSh.IsInsideSelectedObj( aDocPos ) );
+                        if ( !m_bInsDraw && ( IsDrawObjSelectable( rSh, aDocPos ) || bAddGraphic ) )
                         {
                             m_rView.NoRotate();
                             rSh.HideCursor();
@@ -4857,7 +4894,7 @@ void SwEditWin::MouseButtonUp(const MouseEvent& rMEvt)
             SdrObject* pObj = pSdrView ? pSdrView->PickObj(aDocPos, pSdrView->getHitTolLog(), pPV, SdrSearchOptions::ALSOONMASTER) : nullptr;
             if (pObj)
             {
-                if (SwDrawContact* pContact = static_cast<SwDrawContact*>(GetUserCall(pObj)))
+                if (SwContact* pContact = GetUserCall(pObj))
                 {
                     SwFrameFormat* pFormat = pContact->GetFormat();
                     SwFrameFormat* pShapeFormat
@@ -5859,7 +5896,7 @@ void SwEditWin::Command( const CommandEvent& rCEvt )
                         {
                             if (xMenu.is())
                             {
-                                css::uno::Reference<css::awt::XWindowPeer> xParent(aEvent.SourceWindow, css::uno::UNO_QUERY);
+                                cpo::uno::Reference<css::awt::XWindowPeer> xParent(aEvent.SourceWindow, cpo::uno::UNO_QUERY);
                                 sal_uInt16 nExecId = xMenu->execute(xParent, css::awt::Rectangle(aPixPos.X(), aPixPos.Y(), 1, 1),
                                                                     css::awt::PopupMenuDirection::EXECUTE_DOWN);
                                 if (!::ExecuteMenuCommand(xMenu, m_rView.GetViewFrame(), nExecId))
@@ -6167,8 +6204,9 @@ void SwEditWin::Command( const CommandEvent& rCEvt )
             SwExtTextInput* pInput = pDoc->GetExtTextInput( rPos.GetNode(), rPos.GetContentIndex() );
             if ( pInput )
             {
-                const SwPosition& rStart = *pInput->Start();
-                const SwPosition& rEnd = *pInput->End();
+                auto [pStart, pEnd] = pInput->StartEnd(); // SwPosition*
+                const SwPosition& rStart = *pStart;
+                const SwPosition& rEnd = *pEnd;
                 sal_Int32 nSize = rEnd.GetContentIndex() - rStart.GetContentIndex();
                 vcl::Window& rWin = rSh.GetView().GetEditWin();
                 if ( nSize == 0 )

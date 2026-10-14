@@ -38,9 +38,11 @@
 #include <svx/svdview.hxx>
 #include <svx/sdangitm.hxx>
 #include <vcl/commandinfoprovider.hxx>
+#include <vcl/graph.hxx>
 #include <sal/log.hxx>
 
 #include <doc.hxx>
+#include <IDocumentUndoRedo.hxx>
 #include <drawdoc.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentDrawModelAccess.hxx>
@@ -70,6 +72,8 @@
 
 #include <docsh.hxx>
 #include <svx/drawitem.hxx>
+#include <svx/drawstyleutils.hxx>
+#include <algorithm>
 #include <memory>
 
 #define ShellClass_SwFrameShell
@@ -81,8 +85,8 @@
 
 using ::editeng::SvxBorderLine;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 // Prototypes
 static void lcl_FrameGetMaxLineWidth(const SvxBorderLine* pBorderLine, SvxBorderLine& rBorderLine);
@@ -122,6 +126,59 @@ void SwFrameShell::ExecField(const SfxRequest& rReq)
     }
 }
 
+// The layout sizes a frame from its percentage when it has one, so a changed width or height also
+// updates that percentage, measured against the same reference area as the layout uses. A
+// percentage synced to the other side by the size ratio follows the new size as it is. The width
+// percentage stays as it is when bUpdateWidth is false.
+static void lcl_UpdateSizePercent(SwWrtShell& rSh, SwFlyFrameAttrMgr& rMgr, const Size& rOldSize,
+                                  bool bUpdateWidth)
+{
+    SwFormatFrameSize aFrameSize(rMgr.GetFrameSize());
+    const bool bRelativeWidth = bUpdateWidth && aFrameSize.GetWidthPercent()
+                                && aFrameSize.GetWidthPercent() != SwFormatFrameSize::SYNCED
+                                && rOldSize.Width() != aFrameSize.GetWidth();
+    const bool bRelativeHeight = aFrameSize.GetHeightPercent()
+                                 && aFrameSize.GetHeightPercent() != SwFormatFrameSize::SYNCED
+                                 && rOldSize.Height() != aFrameSize.GetHeight();
+    if (!bRelativeWidth && !bRelativeHeight)
+        return;
+
+    const Size aPercentReference = rSh.GetFlyPercentReference(aFrameSize);
+    if (bRelativeWidth && aPercentReference.Width() > 0)
+    {
+        const double fPercent = aFrameSize.GetWidth() * 100.0 / aPercentReference.Width() + 0.5;
+        aFrameSize.SetWidthPercent(sal_uInt8(std::clamp(fPercent, 1.0, 254.0)));
+    }
+    if (bRelativeHeight && aPercentReference.Height() > 0)
+    {
+        const double fPercent = aFrameSize.GetHeight() * 100.0 / aPercentReference.Height() + 0.5;
+        aFrameSize.SetHeightPercent(sal_uInt8(std::clamp(fPercent, 1.0, 254.0)));
+    }
+    rMgr.GetAttrSet().Put(aFrameSize);
+}
+
+// Moves and resizes every selected fly frame together through the draw view, the way a set of
+// shapes is moved and resized. The requested position and size describe the rectangle around
+// the whole selection. The draw view's protection against moving or resizing holds. A request
+// that carries a rotation is left alone, as a set of images cannot be rotated.
+static void lcl_TransformSelectedFlyFrames(SwWrtShell& rSh, const SfxItemSet* pArgs)
+{
+    if (!pArgs || pArgs->HasItem(SID_ATTR_TRANSFORM_ANGLE)
+        || pArgs->HasItem(SID_ATTR_TRANSFORM_DELTA_ANGLE))
+        return;
+
+    // Moving a fly frame switches drawing layer undo off, so it goes back to what it was.
+    IDocumentUndoRedo& rUndoRedo = rSh.GetDoc()->GetIDocumentUndoRedo();
+    const bool bDrawUndo = rUndoRedo.DoesDrawUndo();
+    rSh.StartAllAction();
+    rSh.StartUndo();
+    rSh.GetDrawView()->SetGeoAttrToMarked(*pArgs);
+    rSh.EndUndo();
+    rSh.EndAllAction();
+    rUndoRedo.DoDrawUndo(bDrawUndo);
+    rSh.SetModified();
+}
+
 void SwFrameShell::Execute(SfxRequest &rReq)
 {
     //First those who do not need FrameMgr.
@@ -130,6 +187,14 @@ void SwFrameShell::Execute(SfxRequest &rReq)
     const SfxItemSet* pArgs = rReq.GetArgs();
     const SfxPoolItem* pItem;
     sal_uInt16 nSlot = rReq.GetSlot();
+
+    // Only the transform slot acts on several selected fly frames at once. The other frame
+    // commands are written for a single fly frame, so with several selected they do nothing.
+    if (rSh.IsMultipleFlyFramesSelected() && nSlot != SID_ATTR_TRANSFORM)
+    {
+        rReq.Ignore();
+        return;
+    }
 
     switch ( nSlot )
     {
@@ -359,6 +424,13 @@ void SwFrameShell::Execute(SfxRequest &rReq)
 
         case SID_ATTR_TRANSFORM:
         {
+            if (rSh.IsMultipleFlyFramesSelected())
+            {
+                lcl_TransformSelectedFlyFrames(rSh, pArgs);
+                bUpdateMgr = false;
+                break;
+            }
+
             bool bApplyNewPos = false;
             bool bApplyNewSize = false;
 
@@ -424,7 +496,27 @@ void SwFrameShell::Execute(SfxRequest &rReq)
             }
             if ( bApplyNewSize )
             {
+                const Size aOldSize = aMgr.GetSize();
                 aMgr.SetSize( aNewSize );
+
+                // An image with a caption is a percentage of its caption frame wide, so the caption
+                // frame is resized to give the image the new size, and the image keeps its width
+                // percentage, both in one undo step.
+                rSh.StartAllAction();
+                rSh.StartUndo();
+                bool bUpdateHeightPercent = false;
+                if (rSh.SetCaptionFlySize(aMgr.GetSize(), aOldSize, bUpdateHeightPercent))
+                {
+                    if (bUpdateHeightPercent)
+                        lcl_UpdateSizePercent(rSh, aMgr, aOldSize, /*bUpdateWidth=*/false);
+                    aMgr.UpdateFlyFrame();
+                    bUpdateMgr = false;
+                }
+                rSh.EndUndo();
+                rSh.EndAllAction();
+
+                if (bUpdateMgr)
+                    lcl_UpdateSizePercent(rSh, aMgr, aOldSize, /*bUpdateWidth=*/true);
             }
             if (!bApplyNewPos && !bApplyNewSize)
             {
@@ -743,6 +835,13 @@ void SwFrameShell::GetState(SfxItemSet& rSet)
     bool bHtmlMode = 0 != ::GetHtmlMode(rSh.GetView().GetDocShell());
     if (!rSh.IsFrameSelected())
         return;
+
+    // The frame commands act on one fly frame, so with several selected they are all disabled.
+    if (rSh.IsMultipleFlyFramesSelected())
+    {
+        StateDisableItems(rSet);
+        return;
+    }
 
     SfxItemSetFixed<
             RES_LR_SPACE, RES_UL_SPACE,
@@ -1371,6 +1470,20 @@ void SwFrameShell::GetDrawAttrStateTextFrame(SfxItemSet &rSet)
     if(rSh.IsFrameSelected())
     {
         rSh.GetFlyFrameAttr(rSet);
+
+        if (rSh.GetSelectionType() & SelectionType::Graphic)
+        {
+            const sal_uInt16 nFillColorWhich(
+                rSh.GetAttrPool().GetWhichIDFromSlotID(SID_ATTR_FILL_COLOR));
+
+            if (SfxItemState::UNKNOWN != rSet.GetItemState(nFillColorWhich, false))
+            {
+                const Graphic* pGraphic = rSh.GetGraphic(false);
+
+                if (pGraphic && !pGraphic->HasTransparentPixels())
+                    rSet.DisableItem(nFillColorWhich);
+            }
+        }
     }
     else
     {
@@ -1392,7 +1505,9 @@ void SwFrameShell::ExecDrawAttrArgsTextFrame(SfxRequest const & rReq)
     {
         if(rSh.IsFrameSelected())
         {
-            rSh.SetFlyFrameAttr(const_cast< SfxItemSet& >(*pArgs));
+            std::unique_ptr<SfxItemSet> pNewArgs = pArgs->Clone();
+            svx::convertDrawStyleArguments(*pNewArgs);
+            rSh.SetFlyFrameAttr(*pNewArgs);
         }
         else
         {

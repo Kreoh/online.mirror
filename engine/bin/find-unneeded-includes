@@ -65,7 +65,7 @@ def ignoreRemoval(include, toAdd, absFileName, moduleRules, noexclude):
     # Avoid .hxx to .h proposals in basic css/uno/* and basic URE API
     unoapi = {
         "cpo/uno/Any.hxx": "cpo/uno/Any.h",
-        "com/sun/star/uno/Reference.hxx": "com/sun/star/uno/Reference.h",
+        "cpo/uno/Reference.hxx": "cpo/uno/Reference.h",
         "cpo/uno/Sequence.hxx": "cpo/uno/Sequence.h",
         "cpo/uno/Type.hxx": "cpo/uno/Type.h",
         "rtl/bootstrap.hxx": "rtl/bootstrap.h",
@@ -360,7 +360,7 @@ def processIWYUOutput(iwyuOutput, moduleRules, fileName, noexclude, checknamespa
                                     'cpp|java|' # for codemaker::
                                     'cppu|'
                                     'dbaccess|dbaui|dbtools|'
-                                    'desktop|dp_misc|'
+                                    'desktop|'
                                     'drawinglayer|attribute|geometry|primitive2d|processor2d|'
                                     'editeng|'
                                     'emscripten|'
@@ -406,7 +406,6 @@ def processIWYUOutput(iwyuOutput, moduleRules, fileName, noexclude, checknamespa
                                     'toolkit|'
                                     'treeview|'
                                     'ucbhelper|'
-                                    'unopkg|'
                                     'util|db|qe|' # for xmlsearch::
                                     'utl|'
                                     'vcl|psp|x11|'
@@ -477,8 +476,7 @@ def isInUnoIncludeFile(path):
 # useful for automatically checking headers
 def isNonLinuxPath(path):
     return path.startswith("avmedia/source/win/") \
-        or path.startswith("avmedia/source/macavf/") \
-        or path.startswith("include/apple_remote/")
+        or path.startswith("avmedia/source/macavf/")
 
 def isNonLinuxFile(path):
     NonLinuxFiles = (
@@ -486,7 +484,6 @@ def isNonLinuxFile(path):
         "include/comphelper/windowsdebugoutput.hxx",
         "include/comphelper/windowsStart.hxx",
         "include/drawinglayer/processor2d/d2dpixelprocessor2d.hxx",
-        "include/static/unoembindhelpers/PrimaryBindings.hxx",
         "include/version.hrc",
         "include/vcl/winscheduler.hxx",
     )

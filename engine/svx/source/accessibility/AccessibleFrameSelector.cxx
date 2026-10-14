@@ -32,8 +32,8 @@
 namespace svx::a11y {
 
 using ::com::sun::star::lang::IndexOutOfBoundsException;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::RuntimeException;
+using ::cpo::uno::Reference;
+using ::cpo::uno::RuntimeException;
 
 using namespace ::com::sun::star::accessibility;
 

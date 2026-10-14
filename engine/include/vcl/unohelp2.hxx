@@ -43,20 +43,20 @@ namespace vcl::unohelper {
                         TextDataObject( OUString aText );
         SAL_DLLPRIVATE virtual ~TextDataObject() override;
 
-        // css::uno::XInterface
-        SAL_DLLPRIVATE cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type & rType ) override;
-        void          SAL_CALL acquire() noexcept override  { OWeakObject::acquire(); }
-        void          SAL_CALL release() noexcept override  { OWeakObject::release(); }
+        // cpo::uno::XInterface
+        SAL_DLLPRIVATE cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        void          acquire() noexcept override  { OWeakObject::acquire(); }
+        void          release() noexcept override  { OWeakObject::release(); }
 
         // css::datatransfer::XTransferable
-        SAL_DLLPRIVATE cpo::uno::Any SAL_CALL getTransferData( const css::datatransfer::DataFlavor& aFlavor ) override;
-        SAL_DLLPRIVATE cpo::uno::Sequence< css::datatransfer::DataFlavor > SAL_CALL getTransferDataFlavors(  ) override;
-        SAL_DLLPRIVATE bool SAL_CALL isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) override;
+        SAL_DLLPRIVATE cpo::uno::Any getTransferData( const css::datatransfer::DataFlavor& aFlavor ) override;
+        SAL_DLLPRIVATE cpo::uno::Sequence< css::datatransfer::DataFlavor > getTransferDataFlavors(  ) override;
+        SAL_DLLPRIVATE bool isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) override;
 
         /// copies a given string to a given clipboard
         static  void    CopyStringTo(
             const OUString& rContent,
-            const css::uno::Reference< css::datatransfer::clipboard::XClipboard >& rxClipboard,
+            const cpo::uno::Reference< css::datatransfer::clipboard::XClipboard >& rxClipboard,
             const vcl::ICOKitNotifier* pNotifier = nullptr
         );
     };

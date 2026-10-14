@@ -69,7 +69,7 @@ using namespace ::svxform;
 using namespace ::svt;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
@@ -99,10 +99,10 @@ public:
 
 private:
     // XEventListener
-    virtual void SAL_CALL disposing(const css::lang::EventObject& /*i_aEvt*/) override
+    virtual void disposing(const css::lang::EventObject& /*i_aEvt*/) override
     {
     }
-    virtual void SAL_CALL rowsChanged(const css::sdb::RowsChangeEvent& i_aEvt) override
+    virtual void rowsChanged(const css::sdb::RowsChangeEvent& i_aEvt) override
     {
         if ( i_aEvt.Action != RowChangeAction::UPDATE )
             return;
@@ -633,7 +633,7 @@ DbGridRow::DbGridRow(CursorWrapper* pCur, bool bPaintCursor)
         for (sal_Int32 i = 0; i < xColumns->getCount(); ++i)
         {
             Reference< XPropertySet > xColSet(
-                xColumns->getByIndex(i), css::uno::UNO_QUERY);
+                xColumns->getByIndex(i), cpo::uno::UNO_QUERY);
             m_aVariants.emplace_back( new DataColumn(xColSet) );
         }
 

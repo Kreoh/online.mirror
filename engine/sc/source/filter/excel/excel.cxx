@@ -28,7 +28,7 @@
 #include <com/sun/star/document/UpdateDocMode.hpp>
 #include <com/sun/star/packages/XPackageEncryption.hpp>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <unotools/streamwrap.hxx>
 #include <unotools/defaultencoding.hxx>
 #include <unotools/wincodepage.hxx>
@@ -51,6 +51,7 @@
 #include <memory>
 
 using namespace css;
+using namespace ::cpo;
 
 static void lcl_getListOfStreams(SotStorage * pStorage, comphelper::SequenceAsHashMap& aStreamsData, std::u16string_view sPrefix)
 {
@@ -87,7 +88,7 @@ static rtl::Reference<SotStorage> lcl_DRMDecrypt(const SfxMedium& rMedium, const
 
     // We have DRM encrypted storage. We should try to decrypt it first, if we can
     cpo::uno::Sequence< cpo::uno::Any > aArguments;
-    const uno::Reference<uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
     uno::Reference< packages::XPackageEncryption > xPackageEncryption(
         xComponentContext->getServiceManager()->createInstanceWithArgumentsAndContext(
             u"com.sun.star.comp.oox.crypto.DRMDataSpace"_ustr, aArguments, xComponentContext), uno::UNO_QUERY);
@@ -276,7 +277,7 @@ static ErrCode lcl_ExportExcelBiff( SfxMedium& rMedium, ScDocument *pDocument,
 
         if (sCryptoType.getLength())
         {
-            const uno::Reference<uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
+            const uno::Reference<cpo::uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
             cpo::uno::Sequence<cpo::uno::Any> aArguments{
                 cpo::uno::Any(beans::NamedValue(u"Binary"_ustr, cpo::uno::Any(true))) };
             xPackageEncryption.set(
@@ -456,7 +457,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportXLS(SvStream& rStream)
 {
     ScDLL::Init();
     SfxMedium aMedium;
-    css::uno::Reference<css::io::XInputStream> xStm(new utl::OInputStreamWrapper(rStream));
+    cpo::uno::Reference<css::io::XInputStream> xStm(new utl::OInputStreamWrapper(rStream));
     aMedium.GetItemSet().Put(SfxUnoAnyItem(SID_INPUTSTREAM, cpo::uno::Any(xStm)));
     aMedium.GetItemSet().Put(SfxUInt16Item(SID_UPDATEDOCMODE, css::document::UpdateDocMode::NO_UPDATE));
 

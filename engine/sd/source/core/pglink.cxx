@@ -19,6 +19,7 @@
 
 #include <sfx2/linkmgr.hxx>
 
+#include <SlideLink.hxx>
 #include <pglink.hxx>
 #include <sdpage.hxx>
 #include <drawdoc.hxx>
@@ -74,23 +75,51 @@ SdPageLink::~SdPageLink()
         pPage->SetFileName(aFileName);
         pPage->SetBookmarkName(aBookmarkName);
 
-        SdDrawDocument* pBookmarkDoc = pDoc->OpenBookmarkDoc(aFileName);
+        // A page is read from the file that holds the slides of its source document. A source that
+        // nothing reads leaves the page the content it holds.
+        const OUString aSourceFile = sd::SlideLink::GetSourceFile(*pDoc, aFileName);
+        if (aSourceFile.isEmpty())
+            return SUCCESS;
+
+        const bool bStaged = aSourceFile != aFileName;
+        SdDrawDocument* pBookmarkDoc = pDoc->OpenBookmarkDoc(aSourceFile, /*bNoDialogs=*/bStaged);
 
         if (pBookmarkDoc)
         {
             /******************************************************************
             * the linked page is replaced in the model
             ******************************************************************/
-            if (aBookmarkName.isEmpty())
+            const bool bNamedSource = !sd::SlideLink::GetSourceName(aFileName).isEmpty();
+            if (bNamedSource)
+            {
+                const OUString aSourceSlide
+                    = sd::SlideLink::GetSourceSlideName(*pBookmarkDoc, *pPage);
+                if (aSourceSlide.isEmpty())
+                {
+                    if (!SdDrawDocument::s_pDocLockedInsertingLinks)
+                        pDoc->CloseBookmarkDoc();
+                    return SUCCESS;
+                }
+
+                aBookmarkName = aSourceSlide;
+            }
+            else if (aBookmarkName.isEmpty())
             {
                 // no page name specified: we assume it is the first page
                 aBookmarkName = pBookmarkDoc->GetSdPage(0, PageKind::Standard)->GetName();
                 pPage->SetBookmarkName(aBookmarkName);
             }
 
+            // The page read for this one records the slide it came from, as this page does: the
+            // page read from a file records nothing of its own. The resolution below puts the page
+            // read in place of this one, so what it records is taken while this page is still here.
+            const OUString aKeptName = sd::SlideLink::GetRefreshedSlideName(*pPage, aBookmarkName);
+            const OUString aRecordedGuid = pPage->GetSourcePageGuid();
+
             std::vector<OUString> aBookmarkList { aBookmarkName };
             sal_uInt16 nInsertPos = pPage->GetPageNum();
-            bool bNoDialogs = false;
+            // A file staged for one refresh was chosen for it, so reading it asks nothing.
+            bool bNoDialogs = bStaged;
             bool bCopy = false;
 
             if (SdDrawDocument::s_pDocLockedInsertingLinks)
@@ -100,7 +129,18 @@ SdPageLink::~SdPageLink()
                 bCopy = true;
             }
 
-            pDoc->ResolvePageLinks(aBookmarkList, nInsertPos, bNoDialogs, bCopy);
+            // The page keeps the source it records, so it stays linked to that source whichever
+            // file its slides were read from.
+            pDoc->ResolvePageLinks(aBookmarkList, nInsertPos, bNoDialogs, bCopy, aFileName);
+
+            // The standard page of slide S sits at page position 2*S+1, and the slide read for
+            // this one took its position.
+            SdPage* pReadPage = pDoc->GetSdPage((nInsertPos - 1) >> 1, PageKind::Standard);
+            if (bNamedSource && pReadPage)
+            {
+                pReadPage->SetBookmarkName(aKeptName);
+                pReadPage->SetSourcePageGuid(aRecordedGuid);
+            }
 
             if (!SdDrawDocument::s_pDocLockedInsertingLinks)
                 pDoc->CloseBookmarkDoc();

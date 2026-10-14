@@ -28,6 +28,7 @@
 #include <editeng/editview.hxx>
 #include <unotools/weakref.hxx>
 #include <memory>
+#include <optional>
 
 class SdrOutliner;
 class OutlinerView;
@@ -38,6 +39,8 @@ class SdrUndoManager;
 class TextChainCursorManager;
 
 namespace cpo::uno { class Any; }
+
+namespace drawinglayer::primitive2d { class Primitive2DContainer; }
 
 namespace sdr {
     class SelectionController;
@@ -67,8 +70,8 @@ class SVXCORE_DLLPUBLIC SdrObjEditView : public SdrGlueEditView, public EditView
     virtual void EditViewSelectionChange() override;
     virtual OutputDevice& EditViewOutputDevice() const override;
     virtual Point EditViewPointerPosPixel() const override;
-    virtual css::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const override;
-    virtual css::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget() override;
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const override;
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> GetDropTarget() override;
     virtual void EditViewInputContext(const InputContext& rInputContext) override;
     virtual void EditViewCursorRect(const tools::Rectangle& rRect, int nExtTextInputWidth) override;
 
@@ -98,6 +101,11 @@ protected:
 
     tools::Rectangle            m_aTextEditArea;
     tools::Rectangle            m_aMinTextEditArea;
+    // The size of the object being edited when the editing began, measured from one edge to the
+    // other. A text frame that grows to fit its text changes size on every keystroke, so this is
+    // the size it had before any of the current text was typed. It is empty while no object is
+    // being edited.
+    std::optional<Size>         m_oSizeBeforeTextEdit;
     Link<EditFieldInfo*,void>   m_aOldCalcFieldValueLink; // for call the old handler
     Point                       m_aMacroDownPos;
 
@@ -269,6 +277,13 @@ public:
     {
         return mpTextEditOutlinerView;
     }
+
+    /** The text of the running text edit, as the drawing layer paints it.
+
+        This is what has been typed so far, laid out and placed where the edit shows it, in the
+        logic coordinates a shape's primitives use. It is empty while no text edit runs.
+     */
+    drawinglayer::primitive2d::Primitive2DContainer getTextEditPrimitives() const;
 
     virtual bool KeyInput(const KeyEvent& rKEvt, vcl::Window* pWin) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt, OutputDevice* pWin) override;

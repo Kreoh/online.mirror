@@ -23,6 +23,7 @@
 
 #include <common/Anonymizer.hpp>
 #include <common/JsonUtil.hpp>
+#include <common/SaveResult.hpp>
 #include <common/Seccomp.hpp>
 #include <common/SigUtil.hpp>
 #include <common/TraceEvent.hpp>
@@ -131,7 +132,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
     }
     else if (!Util::isFuzzing() && tokens.equals(0, "exit"))
     {
-        if constexpr (!Util::isMobileApp())
+        if (!Util::isMobileApp())
         {
             LOG_INF("Terminating immediately due to parent 'exit' command.");
             flushTraceEventRecordings();
@@ -139,13 +140,18 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
             if (_document)
                 _document->joinThreads();
             _document.reset();
-            if constexpr (!Util::isKitInProcess())
+            if (!Util::isKitInProcess())
                 Util::forcedExit(EX_OK);
             else
                 SigUtil::setTerminationFlag();
         }
         else
         {
+            // The document is finished with, so the view held open for a session that was
+            // coming back goes now and the engine disposes of the document.
+            if (_document)
+                _document->destroyKeptView();
+
 #if DOCS_SHARE_PROCESS
             LOG_INF("Setting our KitSocketPoll's termination flag due to 'exit' command.");
             std::unique_lock<std::mutex> lock(_ksPoll->termination->mutex);
@@ -161,6 +167,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
     else if (tokens.equals(0, "tile") || tokens.equals(0, "tilecombine") ||
              tokens.equals(0, "getslide") ||
              tokens.equals(0, "paintwindow") || tokens.equals(0, "resizewindow") ||
+             tokens.equals(0, "remotedocevent") ||
              COOLProtocol::getFirstToken(tokens[0], '-') == "child")
     {
         if (_document)
@@ -174,7 +181,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
     }
     else if (!Util::isFuzzing() && tokens.size() == 3 && tokens.equals(0, "setconfig"))
     {
-#if !MOBILEAPP && !defined(BUILDING_TESTS)
+#if !MOBILEAPP
         // Currently only rlimit entries are supported.
         if (!Rlimit::handleSetrlimitCommand(tokens))
         {
@@ -219,7 +226,7 @@ void KitWebSocketHandler::onDisconnect()
         return;
     }
 
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
     {
         //FIXME: We could try to recover.
         LOG_ERR("Kit for DocBroker ["
@@ -268,13 +275,14 @@ BgSaveChildWebSocketHandler::~BgSaveChildWebSocketHandler()
 
 BgSaveParentWebSocketHandler::BgSaveParentWebSocketHandler(
     const std::string& socketName, const pid_t childPid, std::shared_ptr<Document> document,
-    const std::shared_ptr<ChildSession>& session)
+    const std::shared_ptr<ChildSession>& session, BackgroundForkPurpose purpose)
     : WebSocketHandler(/* isClient = */ false, /* isMasking */ false)
     , _childPid(childPid)
     , _saveCompleted(false)
     , _socketName(socketName)
     , _document(std::move(document))
     , _session(session)
+    , _purpose(purpose)
 {
     _document->bgSaveStarted();
 }
@@ -289,7 +297,45 @@ void BgSaveParentWebSocketHandler::terminateSave(const std::string &reason)
     sendTextMessage("exit");
     shutdown(true, "unexpected jsdialog");
 
+    reportFailure(reason);
+}
+
+void BgSaveParentWebSocketHandler::terminateExportForForeground(const std::string& reason)
+{
+    LOG_TRC("Taking the export back from the forked process: " << reason);
+
+    // Hard terminate the child: the copy it wrote is of no use now.
+    sendTextMessage("exit");
+    shutdown(true, "export needs a dialog");
+
+    // Nothing more is expected of the child, so its going is not a failure.
+    _saveCompleted = true;
+
+    if (_session)
+        _session->downloadAsInForeground();
+}
+
+void BgSaveParentWebSocketHandler::reportFailure(const std::string &reason)
+{
+    if (_purpose == BackgroundForkPurpose::Export)
+    {
+        LOG_WRN("Background export failed " << reason);
+        if (_session)
+            _session->sendBackgroundDownloadAsResult(false);
+        _saveCompleted = true;
+        return;
+    }
+
     reportFailedSave(reason);
+}
+
+std::string BgSaveParentWebSocketHandler::buildFailedSaveResult(const std::string& reason)
+{
+    // wsd reads the result text of a failed save and passes it on to the client in the save
+    // error, so the reason ends up in the client's log.
+    return "{ \"commandName\": \".uno:Save\", \"success\": false, \"background\": true, "
+           "\"result\": { \"type\": \"string\", \"value\": \"" +
+           JsonUtil::escapeJSONValue(reason) + "\" } }";
 }
 
 void BgSaveParentWebSocketHandler::reportFailedSave(const std::string &reason)
@@ -300,10 +346,8 @@ void BgSaveParentWebSocketHandler::reportFailedSave(const std::string &reason)
     // Synthesize a failed save result
     // FIXME: could this allow another new manual save to race against the ongoing bgsave ?
     // either way - that's better than hanging and blocking if we get interactive dialogs on save.
-    const std::string saveFailed =
-        "client-" + _session->getId() +
-        " unocommandresult: { \"commandName\": \".uno:Save\", \"success\": false, "
-        "\"background\": true }";
+    const std::string saveFailed = "client-" + _session->getId() +
+                                   " unocommandresult: " + buildFailedSaveResult(reason);
     _document->sendFrame(saveFailed, WSOpCode::Text);
 
     _document->updateModifiedOnFailedBgSave();
@@ -316,29 +360,19 @@ bool BgSaveParentWebSocketHandler::isBenignBgSaveJSDialog(const std::string& jsd
     if (!JsonUtil::parseJSON(jsdialogPayload, object))
         return false;
 
-    const std::string jsontype = object->get("jsontype").toString();
+    std::string jsontype;
+    if (!JsonUtil::findJSONValue(object, "jsontype", jsontype))
+        return false;
 
-    std::string action;
-    const bool bClosing =
-        (jsontype == "dialog" || jsontype == "navigator") &&
-        JsonUtil::findJSONValue(object, "action", action) && action == "close";
-
-    bool bDismissedMenu = false;
-    if (jsontype == "popup")
+    // Every other type is a bar, a panel, a picker or a context menu, which the engine only
+    // builds when somebody clicks one.
+    if (jsontype == "dialog")
     {
-        Poco::JSON::Object::Ptr dataObject = object->getObject("data");
-        std::string actionType, position;
-        bDismissedMenu = dataObject &&
-            JsonUtil::findJSONValue(dataObject, "action_type", actionType) &&
-            actionType == "select" &&
-            JsonUtil::findJSONValue(dataObject, "position", position) &&
-            position == "-1";
+        std::string action;
+        return JsonUtil::findJSONValue(object, "action", action) && action == "close";
     }
 
-    // allow-list of jsdialog messages in bgsave
-    return jsontype == "notebookbar" || jsontype == "sidebar" ||
-           jsontype == "formulabar" || jsontype == "quickfind" ||
-           bClosing || bDismissedMenu;
+    return jsontype != "unknown";
 }
 
 void BgSaveParentWebSocketHandler::handleMessage(const std::vector<char>& data)
@@ -351,6 +385,7 @@ void BgSaveParentWebSocketHandler::handleMessage(const std::vector<char>& data)
         tokens[1] != "progress:" &&
         tokens[1] != "traceevent:" &&
         tokens[1] != "forcedtraceevent:" &&
+        tokens[1] != "downloadresult:" &&
         tokens[1] != "unocommandresult:")
     {
         LOG_TRC("Ignore un-wanted message from bg child: " <<
@@ -361,6 +396,19 @@ void BgSaveParentWebSocketHandler::handleMessage(const std::vector<char>& data)
     LOG_DBG(_socketName << ": recv from bg child [" <<
             COOLProtocol::getAbbreviatedMessage(data));
 
+    if (tokens[1] == "downloadresult:")
+    {
+        // The reply the client waits for names a jail path only the parent kept,
+        // so the parent sends it rather than forwarding this on.
+        std::string success;
+        if (tokens.size() > 2)
+            COOLProtocol::getTokenString(tokens[2], "success", success);
+        _saveCompleted = true;
+        if (_session)
+            _session->sendBackgroundDownloadAsResult(success == "true");
+        return;
+    }
+
     if (tokens[1] == "jsdialog:")
     {
         if (isBenignBgSaveJSDialog(tokens.cat(' ', 2)))
@@ -370,12 +418,23 @@ void BgSaveParentWebSocketHandler::handleMessage(const std::vector<char>& data)
             return;
         }
 
+        // The forked process has no client of its own to answer a question, so the work
+        // moves to where one is. A download is waiting on this export, so run it here
+        // rather than give up on it as a save does.
+        if (_purpose == BackgroundForkPurpose::Export)
+        {
+            terminateExportForForeground("Export needs an answer only the Kit can get: " +
+                                         COOLProtocol::getAbbreviatedMessage(data));
+            return;
+        }
+
         terminateSave("Unexpected jsdialog message: " +
                       COOLProtocol::getAbbreviatedMessage(data));
         return;
     }
 
-    if (tokens[1] == "error:")
+    // An export that goes wrong says nothing about whether saving still works.
+    if (tokens[1] == "error:" && _purpose == BackgroundForkPurpose::Save)
         _document->disableBgSave("on save error");
 
     // Status update messages are stuck in the bgsave's Idle CallbackFlushHandler
@@ -417,16 +476,24 @@ void BgSaveParentWebSocketHandler::handleBgSaveResult(Poco::JSON::Object::Ptr& o
 
     _document->sendFrame(newMsg, WSOpCode::Text);
 
-    if (object->get("success").toString() == "true")
+    const SaveResult::Result saveResult = SaveResult::parse(object);
+    switch (saveResult.outcome)
     {
-        _document->notifySyntheticUnmodifiedState();
-        _session->saveLogUiBackground();
-    }
-    else
-    {
-        _document->updateModifiedOnFailedBgSave();
-        LOG_DBG("Failed to save, not synthesizing modified state");
-        _document->disableBgSave("on failed save");
+        case SaveResult::Outcome::Saved:
+            _document->notifySyntheticUnmodifiedState();
+            _session->saveLogUiBackground();
+            break;
+
+        case SaveResult::Outcome::Unmodified:
+            LOG_DBG("Background save wrote nothing, the document is unmodified");
+            _document->notifySyntheticUnmodifiedState();
+            break;
+
+        case SaveResult::Outcome::Failed:
+            _document->updateModifiedOnFailedBgSave();
+            LOG_DBG("Failed to save, not synthesizing modified state");
+            _document->disableBgSave("on failed save");
+            break;
     }
     _saveCompleted = true;
 }
@@ -435,18 +502,18 @@ void BgSaveParentWebSocketHandler::onDisconnect()
 {
     LOG_TRC("Disconnected background web socket to child " << _childPid);
 
-    if constexpr (!Util::isMobileApp())
+    if constexpr (!Util::isMobileAppBuild())
     {
         // reap and de-zombify children.
         const auto [ret, sig] = SigUtil::reapZombieChild(_childPid, /*sighandler=*/false);
         if (sig)
-            reportFailedSave(std::string("crashed with status ") + SigUtil::signalName(sig));
+            reportFailure(std::string("crashed with status ") + SigUtil::signalName(sig));
         else if (ret <= 0)
             LOG_WRN("Background save process disconnected but not terminated " << _childPid);
     }
 
     if (!_saveCompleted)
-        reportFailedSave("terminated without saving");
+        reportFailure("terminated without saving");
 
     WebSocketHandler::onDisconnect(); // Invoke the default handler.
 }

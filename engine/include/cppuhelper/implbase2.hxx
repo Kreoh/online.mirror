@@ -20,11 +20,13 @@
 #ifndef INCLUDED_CPPUHELPER_IMPLBASE2_HXX
 #define INCLUDED_CPPUHELPER_IMPLBASE2_HXX
 
-#include "cppuhelper/implbase_ex.hxx"
-#include "rtl/instance.hxx"
-#include "cppuhelper/weak.hxx"
-#include "cppuhelper/weakagg.hxx"
-#include "com/sun/star/lang/XTypeProvider.hpp"
+#include <atomic>
+
+#include <cppuhelper/implbase_ex.hxx>
+#include <rtl/instance.hxx>
+#include <cppuhelper/weak.hxx>
+#include <cppuhelper/weakagg.hxx>
+#include <com/sun/star/lang/XTypeProvider.hpp>
 
 namespace cppu
 {
@@ -33,9 +35,7 @@ namespace cppu
     struct class_data2
     {
         sal_Int16 m_nTypes;
-        bool m_storedTypeRefs;
-        bool m_storedId;
-        sal_Int8 m_id[ 16 ];
+        std::atomic<bool> m_storedTypeRefs;
         type_entry m_typeEntries[ 2 + 1 ];
     };
 
@@ -45,8 +45,7 @@ namespace cppu
         {
             static class_data2 s_cd =
             {
-                2 +1, false, false,
-                { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+                2 +1, false,
                 {
                     CPPUHELPER_DETAIL_TYPEENTRY(Ifc1),
                     CPPUHELPER_DETAIL_TYPEENTRY(Ifc2),
@@ -80,20 +79,20 @@ namespace cppu
         ImplHelper2 & operator =(ImplHelper2 const &) = default;
         ImplHelper2 & operator =(ImplHelper2 &&) = default;
 
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return ImplHelper_query( rType, cd::get(), this ); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return ImplHelper_getTypes( cd::get() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
 
 #if !defined _MSC_VER // public -> protected changes mangled names there
     protected:
 #endif
-        ~ImplHelper2() SAL_NOEXCEPT {}
+        ~ImplHelper2() noexcept {}
     };
     /** Implementation helper implementing interfaces css::lang::XTypeProvider and
-        css::uno::XInterface which supports weak mechanism to be held weakly
+        cpo::uno::XInterface which supports weak mechanism to be held weakly
         (supporting cpo::uno::XWeak through ::cppu::OWeakObject).
 
         @derive
@@ -108,19 +107,19 @@ namespace cppu
     {
         struct cd : public rtl::StaticAggregate< class_data, ImplClassData2 < Ifc1, Ifc2, WeakImplHelper2<Ifc1, Ifc2> > > {};
     public:
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return WeakImplHelper_query( rType, cd::get(), this, static_cast<OWeakObject *>(this) ); }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { OWeakObject::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { OWeakObject::release(); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return WeakImplHelper_getTypes( cd::get() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
     /** Implementation helper implementing interfaces css::lang::XTypeProvider and
-        css::uno::XInterface which supports weak mechanism to be held weakly
+        cpo::uno::XInterface which supports weak mechanism to be held weakly
         (supporting cpo::uno::XWeak through ::cppu::OWeakAggObject).
         In addition, it supports also aggregation meaning object of this class can be aggregated
         (cpo::uno::XAggregation through ::cppu::OWeakAggObject).
@@ -140,27 +139,27 @@ namespace cppu
     {
         struct cd : public rtl::StaticAggregate< class_data, ImplClassData2 < Ifc1, Ifc2, WeakAggImplHelper2<Ifc1, Ifc2> > > {};
     public:
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return OWeakAggObject::queryInterface( rType ); }
-        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override
             { return WeakAggImplHelper_queryAgg( rType, cd::get(), this, static_cast<OWeakAggObject *>(this) ); }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { OWeakAggObject::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { OWeakAggObject::release(); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return WeakAggImplHelper_getTypes( cd::get() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
     /** Implementation helper implementing interfaces css::lang::XTypeProvider and
-        css::uno::XInterface inheriting from a BaseClass.
+        cpo::uno::XInterface inheriting from a BaseClass.
         All acquire() and release() calls are delegated to the BaseClass. Upon queryInterface(),
         if a demanded interface is not supported by this class directly, the request is
         delegated to the BaseClass.
 
         @attention
-        The BaseClass has to be complete in a sense, that css::uno::XInterface
+        The BaseClass has to be complete in a sense, that cpo::uno::XInterface
         and css::lang::XTypeProvider are implemented properly.  The
         BaseClass must have at least one ctor that can be called with six or
         fewer arguments, of which none is of non-const reference type.
@@ -204,30 +203,30 @@ namespace cppu
             BaseClass(arg1, arg2, arg3, arg4, arg5, arg6) {}
     public:
         ImplInheritanceHelper2() {}
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             {
                 cpo::uno::Any aRet( ImplHelper_queryNoXInterface( rType, cd::get(), this ) );
                 if (aRet.hasValue())
                     return aRet;
                 return BaseClass::queryInterface( rType );
             }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { BaseClass::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { BaseClass::release(); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return ImplInhHelper_getTypes( cd::get(), BaseClass::getTypes() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
     /** Implementation helper implementing interfaces css::lang::XTypeProvider and
-        css::uno::XInterface inheriting from a BaseClass.
+        cpo::uno::XInterface inheriting from a BaseClass.
         All acquire(),  release() and queryInterface() calls are delegated to the BaseClass.
         Upon queryAggregation(), if a demanded interface is not supported by this class directly,
         the request is delegated to the BaseClass.
 
         @attention
-        The BaseClass has to be complete in a sense, that css::uno::XInterface,
+        The BaseClass has to be complete in a sense, that cpo::uno::XInterface,
         cpo::uno::XAggregation and css::lang::XTypeProvider
         are implemented properly.  The BaseClass must have at least one ctor
         that can be called with six or fewer arguments, of which none is of
@@ -272,22 +271,22 @@ namespace cppu
             BaseClass(arg1, arg2, arg3, arg4, arg5, arg6) {}
     public:
         AggImplInheritanceHelper2() {}
-        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
             { return BaseClass::queryInterface( rType ); }
-        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) SAL_OVERRIDE
+        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override
             {
                 cpo::uno::Any aRet( ImplHelper_queryNoXInterface( rType, cd::get(), this ) );
                 if (aRet.hasValue())
                     return aRet;
                 return BaseClass::queryAggregation( rType );
             }
-        virtual void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void acquire() noexcept override
             { BaseClass::acquire(); }
-        virtual void release() SAL_NOEXCEPT SAL_OVERRIDE
+        virtual void release() noexcept override
             { BaseClass::release(); }
-        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
             { return ImplInhHelper_getTypes( cd::get(), BaseClass::getTypes() ); }
-        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() SAL_OVERRIDE
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
             { return ImplHelper_getImplementationId( cd::get() ); }
     };
 }

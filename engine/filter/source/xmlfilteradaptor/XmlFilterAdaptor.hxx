@@ -25,7 +25,7 @@
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <utility>
 
@@ -49,23 +49,23 @@ class XmlFilterAdaptor final : public cppu::WeakImplHelper
     css::lang::XServiceInfo
 >
 {
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-    css::uno::Reference< css::lang::XComponent > mxDoc;
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
+    cpo::uno::Reference< css::lang::XComponent > mxDoc;
     OUString msFilterName;
     cpo::uno::Sequence< OUString > msUserData;
     OUString msTemplateName;
     FilterType meType;
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool exportImpl( const cpo::uno::Sequence< css::beans::PropertyValue >& aDescriptor );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool importImpl( const cpo::uno::Sequence< css::beans::PropertyValue >& aDescriptor );
 
 
 public:
 
-    explicit XmlFilterAdaptor( css::uno::Reference< css::uno::XComponentContext > xContext)
+    explicit XmlFilterAdaptor( cpo::uno::Reference< cpo::uno::XComponentContext > xContext)
         : mxContext(std::move(xContext))
         , meType(FILTER_IMPORT)
     {
@@ -80,12 +80,12 @@ public:
 
     // XExporter
 
-    virtual void setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
+    virtual void setSourceDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
 
     // XImporter
 
-    virtual void setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
+    virtual void setTargetDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
 
     // XInitialization

@@ -13,6 +13,7 @@
 #include <cppunit/TestFixture.h>
 
 #include <algorithm>
+#include <iomanip>
 #include <tools/stream.hxx>
 #include <unotools/streamwrap.hxx>
 
@@ -26,6 +27,7 @@
 #endif
 
 using namespace css;
+using namespace ::cpo;
 
 class CryptoTest : public CppUnit::TestFixture
 {

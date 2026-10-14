@@ -17,7 +17,7 @@
 #include <vector>
 
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace
@@ -104,17 +104,17 @@ namespace shell::sessioninstall
 #endif
     }
 
-Sequence< OUString > SAL_CALL SyncDbusSessionHelper::getSupportedServiceNames()
+Sequence< OUString > SyncDbusSessionHelper::getSupportedServiceNames()
 {
     return { u"org.freedesktop.PackageKit.SyncDbusSessionHelper"_ustr };
 }
 
-OUString SAL_CALL SyncDbusSessionHelper::getImplementationName()
+OUString SyncDbusSessionHelper::getImplementationName()
 {
     return u"org.libreoffice.comp.shell.sessioninstall.SyncDbusSessionHelper"_ustr;
 }
 
-bool SAL_CALL SyncDbusSessionHelper::supportsService(const OUString& aServiceName)
+bool SyncDbusSessionHelper::supportsService(const OUString& aServiceName)
 {
     return cppu::supportsService(this, aServiceName);
 }
@@ -182,7 +182,7 @@ void SyncDbusSessionHelper::InstallPrinterDrivers(
     request("InstallPrinterDrivers", files, interaction);
 }
 
-void SAL_CALL SyncDbusSessionHelper::IsInstalled( const OUString& sPackagename, const OUString& sInteraction, bool& o_isInstalled )
+void SyncDbusSessionHelper::IsInstalled( const OUString& sPackagename, const OUString& sInteraction, bool& o_isInstalled )
 {
     const OString sPackagenameAscii = OUStringToOString(sPackagename, RTL_TEXTENCODING_ASCII_US);
     const OString sInteractionAscii = OUStringToOString(sInteraction, RTL_TEXTENCODING_ASCII_US);
@@ -201,9 +201,9 @@ void SAL_CALL SyncDbusSessionHelper::IsInstalled( const OUString& sPackagename, 
         o_isInstalled = bool(g_variant_get_boolean(g_variant_get_child_value(result.get(),0)));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_sessioninstall_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SyncDbusSessionHelper(context));
 }

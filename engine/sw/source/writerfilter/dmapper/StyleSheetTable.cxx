@@ -63,6 +63,7 @@
 #include <SwXTextDefaults.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace writerfilter::dmapper
 {
@@ -563,6 +564,21 @@ void StyleSheetTable::lcl_sprm(Sprm & rSprm)
         }
         break;
         case NS_ooxml::LN_CT_Style_trPr:
+        {
+            writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
+            if( pProperties && m_pCurrentEntry->m_nStyleTypeCode == StyleType::Table)
+            {
+                auto pTblStylePrHandler = std::make_shared<TblStylePrHandler>(m_rDMapper);
+                pProperties->resolve(*pTblStylePrHandler);
+                StyleSheetEntry* pEntry = m_pCurrentEntry.get();
+                TableStyleSheetEntry& rTableEntry = dynamic_cast<TableStyleSheetEntry&>(*pEntry);
+                rTableEntry.AppendInteropGrabBag(pTblStylePrHandler->getInteropGrabBag(u"trPr"_ustr));
+
+                // This is a <w:trPr> directly under <w:style>, so it affects the whole table.
+                // Word spells a table's own alignment either way, in w:tblPr or in w:trPr.
+                rTableEntry.m_pProperties->InsertProps(pTblStylePrHandler->getProperties());
+            }
+        }
         break;
         case NS_ooxml::LN_CT_Style_aliases:
             // Alternate style name. Kept in the style model as a dedicated
@@ -1032,7 +1048,7 @@ void StyleSheetTable::ApplyClonedTOCStyles()
     // ignore header / footer, irrelevant for ToX
     // text frames
     if (!m_xTextDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     rtl::Reference<SwXTextFrames> const xFrames(m_xTextDocument->getSwTextFrames());
     uno::Reference<container::XEnumeration> const xFramesEnum(xFrames->createEnumeration());
     while (xFramesEnum->hasMoreElements())
@@ -1173,7 +1189,7 @@ void StyleSheetTable::ApplyStyleSheetsImpl(const FontTablePtr& rFontTable, std::
                                     xStyle->setParentStyle( sParentStyleName );
                             }
                         }
-                        catch( const uno::RuntimeException& )
+                        catch( const cpo::uno::RuntimeException& )
                         {
                             OSL_FAIL( "Styles parent could not be set");
                         }
@@ -2215,7 +2231,7 @@ OUString StyleSheetTable::getOrCreateCharStyle( const PropertyValueVector_t& rCh
     const rtl::Reference< SwXStyleFamily >& xCharStyles = m_rDMapper.GetCharacterStyles();
     OUString sListLabel = m_rDMapper.GetUnusedCharacterStyleName();
     if (!m_xTextDocument)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     try
     {
         rtl::Reference< SwXStyle > xStyle = m_xTextDocument->createCharacterStyle();

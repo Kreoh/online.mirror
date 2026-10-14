@@ -6,15 +6,21 @@
 
 #include <config.h>
 
+#include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <regex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -22,6 +28,7 @@
 
 #include <Windows.h>
 #include <appmodel.h>
+#include <dwmapi.h>
 #include <ole2.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -38,12 +45,21 @@
 #include <wrl.h>
 #include <wil/com.h>
 
+#include <Poco/AutoPtr.h>
+#include <Poco/DOM/DOMParser.h>
+#include <Poco/DOM/Document.h>
+#include <Poco/DOM/Element.h>
+#include <Poco/DOM/NodeList.h>
+#include <Poco/File.h>
+#include <Poco/FileStream.h>
+#include <Poco/JSON/Array.h>
 #include <Poco/MemoryStream.h>
-
-#include "litecask.h"
+#include <Poco/Path.h>
+#include <Poco/SAX/InputSource.h>
 
 #include <common/AIHttpTransport.hpp>
 #include <common/Clipboard.hpp>
+#include <common/ConfigUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <common/LangUtil.hpp>
 #include <common/Protocol.hpp>
@@ -54,6 +70,7 @@
 #include <common/StringVector.hpp>
 #include <common/Uri.hpp>
 #include <net/FakeSocket.hpp>
+#include <wsd/Extensions.hpp>
 #include <wsd/COOLWSD.hpp>
 #include <wsd/DocumentBroker.hpp>
 #include <wsd/RequestDetails.hpp>
@@ -74,6 +91,7 @@ enum class DocumentType
     TEXT,
     SPREADSHEET,
     PRESENTATION,
+    DRAWING,
 };
 
 enum class DocumentMode { EDIT, NEW, WELCOME, STARTER };
@@ -87,12 +105,53 @@ struct FilenameAndUri
     std::string uri;
 };
 
-// Various document window specific data
-struct WindowData
+// One open document, shown as a tab of the tabbed window. The starter
+// backstage, the welcome slideshow and the presenter console are each the only
+// document of a window of their own.
+struct DocumentTab
 {
-    HWND hWnd;
+    int tabId = 0;
+    // The window this document is shown in. A document can move to another window, and the
+    // thread that forwards the engine's messages to the page reads this too.
+    std::atomic<HWND> hWnd{ nullptr };
+    // The presenter console this document opened, while it is presenting.
     HWND hConsoleWnd = 0;
-    HWND hParentWnd = 0;
+    // For a presenter console, the document that opened it.
+    int presentingTabId = 0;
+    bool isConsole = false;
+    int fakeClientFd = -1;
+    int closeNotificationPipeForForwardingThread[2] = { -1, -1 };
+    FilenameAndUri filenameAndUri;
+    DocumentMode mode = DocumentMode::EDIT;
+    int appDocId = 0;
+    // The document kind the tab strip keys its icon and colour off: "writer",
+    // "calc", "impress", "draw", "starter", "welcome" or "other".
+    std::string docType = "other";
+    // The document holds changes that have not reached the file yet.
+    bool isModified = false;
+    // The page has parsed its document and its stylesheets, so the WebView2 has something
+    // styled to put on the screen. It stays hidden until then.
+    bool hasContent = false;
+    wil::com_ptr<ICoreWebView2Controller> webViewController;
+    wil::com_ptr<ICoreWebView2> webView;
+    std::thread app2js;
+};
+
+// One top-level window. It holds its documents in the order the tab strip shows
+// them, and the window-wide state that belongs to none of them in particular.
+struct WindowState
+{
+    HWND hWnd = 0;
+    // The window shows documents as tabs, rather than being the welcome slideshow, the starter
+    // backstage or a presenter console.
+    bool isTabbed = false;
+    std::vector<int> tabIds;
+    int activeTabId = 0;
+    // The tab strip. It is created with the window and shown at two documents.
+    wil::com_ptr<ICoreWebView2Controller> stripController;
+    wil::com_ptr<ICoreWebView2> stripWebView;
+    bool stripIsVisible = false;
+    bool stripHasContent = false;
     // The transparent window raised over the web view for the duration of a drag from the desktop,
     // and the drop target registered for it. Both are created when the first such drag arrives.
     HWND hOverlayWnd = 0;
@@ -100,27 +159,36 @@ struct WindowData
     int numMonitors = 0;
     RECT originalRect;
     LONG originalStyle;
-    POINT previousSize; // After a WM_SIZE
     bool isFullScreen = false;
     bool isPresFullScreen = false;
-    bool isConsole = false;
-    int fakeClientFd;
-    int closeNotificationPipeForForwardingThread[2];
-    FilenameAndUri filenameAndUri;
-    DocumentMode mode;
-    int appDocId;
-    wil::com_ptr<ICoreWebView2Controller> webViewController;
-    wil::com_ptr<ICoreWebView2> webView;
-    std::thread app2js;
 };
 
-struct PersistedDocumentWindowSize
+// Both keep their entries at a fixed address: the WebView2 completion handlers
+// capture an entry by reference and run long after the container has grown.
+static std::map<int, DocumentTab> documentTabs;
+static std::map<HWND, WindowState> windows;
+
+// The window that shows documents as tabs and that a newly opened document goes to. There can
+// be several such windows once a tab has been moved out into a window of its own, and this is the
+// one that was active last.
+static HWND tabbedWindow = 0;
+
+static DocumentTab* findTab(int tabId)
 {
-    POINT size;
-    WPARAM resizeType;
-};
+    const auto it = documentTabs.find(tabId);
+    return it == documentTabs.end() ? nullptr : &it->second;
+}
 
-static std::map<HWND, WindowData> windowData;
+static WindowState* findWindow(HWND hWnd)
+{
+    const auto it = windows.find(hWnd);
+    return it == windows.end() ? nullptr : &it->second;
+}
+
+static DocumentTab* activeTabOf(const WindowState& window)
+{
+    return findTab(window.activeTabId);
+}
 
 static bool enableWebDriver = false;
 
@@ -163,14 +231,39 @@ static const wchar_t hiddenOwnerWindowClass[] = L"CODAHiddenOwnerWindow";
 // The handle of that dummy window.
 static HWND hiddenOwnerWindow;
 
+// The tab whose web view the script or web message is meant for travels in the lParam of
+// CODA_WM_EXECUTESCRIPT and CODA_WM_POSTWEBMESSAGE, as several documents share one window.
 static const int CODA_WM_EXECUTESCRIPT = WM_APP + 1;
 static const int CODA_WM_LOADNEXTDOCUMENT = WM_APP + 2;
 static const int CODA_WM_POSTWEBMESSAGE = WM_APP + 3;
+static const int CODA_WM_SHOWFILEPICKER = WM_APP + 4;
+// Closes the tab named in the wParam. Posted rather than called, so a web view
+// is never torn down from inside one of its own callbacks.
+static const int CODA_WM_CLOSETAB = WM_APP + 5;
+// Brings the next document of the window to the front, or the previous one when the wParam is -1
+// rather than 1. Posted for the same reason the close above is.
+static const int CODA_WM_ACTIVATEADJACENTTAB = WM_APP + 6;
+// Pops up the menu for the tab named in the wParam, at the point of the window's client area in
+// the lParam. Posted, so the menu's modal loop does not run inside a callback of the strip.
+static const int CODA_WM_SHOWTABMENU = WM_APP + 7;
+// Moves the tab named in the wParam into a new window of its own, placed at the point of the screen
+// in the lParam. Posted, so the web views change windows outside a callback of the strip.
+static const int CODA_WM_MOVETABTONEWWINDOW = WM_APP + 8;
+// Moves the tab named in the wParam from another window into this one, to the position in the
+// tab order given in the lParam, or to the end when that is -1. Posted for the same reason.
+static const int CODA_WM_MOVETABTOWINDOW = WM_APP + 9;
+
+// One file pick the engine asked for, posted as CODA_WM_SHOWFILEPICKER to the hidden owner
+// window; the wide strings own the dialog's title and filter text.
+struct FilePickerRequest
+{
+    std::wstring title;
+    std::vector<std::pair<std::wstring, std::wstring>> filters;
+    void (*pfnPicked)(void* pContext, const char* pUrl);
+    void* pContext;
+};
 
 static HMONITOR primaryMonitor;
-
-static litecask::Datastore persistentWindowSizeStore;
-static bool persistentWindowSizeStoreOK;
 
 static RecentFiles recentFiles;
 
@@ -184,11 +277,15 @@ static HANDLE copyEngineClipboardData(UINT format, const std::string& mimeType);
 
 static std::string MIME_type_for_clipboard_format(UINT format);
 
+static void applyTitleBarTheme(HWND hWnd);
+
+static void applyTitleBarThemeToAllWindows();
+
 static std::set<std::string> currentlyOpenDocumens()
 {
     std::set<std::string> result;
 
-    for (const auto& i : windowData)
+    for (const auto& i : documentTabs)
         result.insert(i.second.filenameAndUri.uri);
 
     return result;
@@ -196,31 +293,119 @@ static std::set<std::string> currentlyOpenDocumens()
 
 // Vector of documents to open passed on the command line, or multiple documents to open selected in
 // a file open dialog. We open the next one only as soon as the previous one has finished loading.
+// Only the UI thread uses it.
 static std::deque<FilenameAndUri> filenamesAndUrisToOpen;
 
+// Open the next document waiting in filenamesAndUrisToOpen, if there is one. This can be called on
+// any thread, so it only posts a message, to the hidden window that is there for the whole run of
+// the app. The UI thread then takes the document from the queue and opens its window.
 void load_next_document()
 {
-    if (filenamesAndUrisToOpen.size() > 0)
+    PostMessageW(hiddenOwnerWindow, CODA_WM_LOADNEXTDOCUMENT, 0, 0);
+}
+
+// The strings that CODA-W shows itself, in the user interface language, by context and source
+// text. They come from the coda_*.ts catalogs that CODA-Q uses too, in the Qt Linguist XML format.
+static std::map<std::pair<std::string, std::string>, std::wstring> translations;
+
+// Read the catalog for the user interface language. The catalogs are named with an underscore, as
+// coda_pt_BR.ts, and a region that has no catalog of its own falls back to the one for its
+// language, so de-AT gets coda_de.ts. English is the source language and has no catalog.
+static void loadTranslations()
+{
+    // A LANG environment variable can name a character set too, as in de_DE.UTF-8.
+    std::string language = uiLanguage.substr(0, uiLanguage.find('.'));
+    std::replace(language.begin(), language.end(), '-', '_');
+
+    std::string path;
+    for (const std::string& name : { language, language.substr(0, language.find('_')) })
     {
-        // Open the next document (from the command line or selected in the file open dialog), if
-        // any.
-        if (windowData.size() > 0)
+        const std::string candidate = app_installation_path + "translations\\coda_" + name + ".ts";
+        if (Poco::File(candidate).exists())
         {
-            // Post a message to one randomly selected window that can be a starter backstage window
-            // or a document window, it doesn't matter, they use the same window procedure.
-            PostMessageW(windowData.begin()->second.hWnd, CODA_WM_LOADNEXTDOCUMENT, 0, 0);
+            path = candidate;
+            break;
         }
-        else
+    }
+    if (path.empty())
+        return;
+
+    try
+    {
+        // The parser gets the file as a stream, as it would take a path name for a URI.
+        Poco::FileInputStream stream(path);
+        Poco::XML::InputSource input(stream);
+        Poco::XML::DOMParser parser;
+        Poco::AutoPtr<Poco::XML::Document> document = parser.parse(&input);
+        Poco::AutoPtr<Poco::XML::NodeList> contexts = document->getElementsByTagName("context");
+        for (unsigned long i = 0; i < contexts->length(); ++i)
         {
-            // We have no window open, so we can just call openCOOLWindow() directly.
-            auto nextDocument = filenamesAndUrisToOpen.front();
-            filenamesAndUrisToOpen.pop_front();
-            openCOOLWindow(nextDocument, DocumentMode::EDIT);
+            auto context = static_cast<Poco::XML::Element*>(contexts->item(i));
+            Poco::XML::Element* contextName = context->getChildElement("name");
+            if (!contextName)
+                continue;
+
+            Poco::AutoPtr<Poco::XML::NodeList> messages = context->getElementsByTagName("message");
+            for (unsigned long j = 0; j < messages->length(); ++j)
+            {
+                auto message = static_cast<Poco::XML::Element*>(messages->item(j));
+                // A string with plural forms has a translation for each, and CODA-W has none.
+                if (message->getAttribute("numerus") == "yes")
+                    continue;
+
+                Poco::XML::Element* source = message->getChildElement("source");
+                Poco::XML::Element* translation = message->getChildElement("translation");
+                if (!source || !translation || translation->innerText().empty())
+                    continue;
+
+                // As in a catalog that lrelease compiles for CODA-Q, a translation that is still
+                // marked unfinished is used too, and one for a string that is gone is not.
+                const std::string type = translation->getAttribute("type");
+                if (type == "vanished" || type == "obsolete")
+                    continue;
+
+                translations[{ contextName->innerText(), source->innerText() }] =
+                    Util::string_to_wide_string(translation->innerText());
+            }
         }
+    }
+    catch (const Poco::Exception& exception)
+    {
+        LOG_ERR("Could not read the translations in '" << path << "': " << exception.displayText());
     }
 }
 
-static void processMessage(WindowData& data, wil::unique_cotaskmem_string& message);
+// The text of a string that CODA-W shows, in the user interface language, or in English when the
+// catalog has no translation for it. The call has the form that lupdate looks for, with both
+// arguments as string literals, so update-translations finds the string. A string that CODA-Q
+// shows too uses the context that it has there, so that it is translated once.
+static std::wstring translate(const char* context, const char* source)
+{
+    const auto it = translations.find({ context, source });
+    if (it != translations.end())
+        return it->second;
+    return Util::string_to_wide_string(source);
+}
+
+static void processMessage(DocumentTab& tab, wil::unique_cotaskmem_string& message);
+
+static void closeTab(WindowState& window, int tabId);
+
+static void activateAdjacentTab(WindowState& window, int direction);
+
+static void showTabContextMenu(HWND hWnd, int tabId, POINT point);
+
+static void moveTabToNewWindow(HWND hWnd, int tabId, const POINT* dropPoint = nullptr);
+
+static void moveTabToWindow(int tabId, WindowState& target, int insertAt);
+
+static void layoutTabs(WindowState& window);
+
+static RECT documentArea(const WindowState& window);
+
+static void updateStripVisibility(WindowState& window);
+
+static void pushTabsToStrip(WindowState& window);
 
 [[noreturn]] static void fatal(const std::string& message)
 {
@@ -282,6 +467,10 @@ static std::wstring new_document(DocumentType type,
                 templateBasename = L"Presentation";
                 templateExtension = L"odp";
                 break;
+            case DocumentType::DRAWING:
+                templateBasename = L"Drawing";
+                templateExtension = L"odg";
+                break;
             default:
                 fatal("Unexpected case in new_document()");
         }
@@ -336,7 +525,7 @@ static int generate_new_app_doc_id()
     return id++;
 }
 
-static void send2JS(const HWND hWnd, const char* buffer, int length)
+static void send2JS(const DocumentTab& tab, const char* buffer, int length)
 {
     const bool binaryMessage = COOLProtocol::isBinaryMessage(buffer, static_cast<size_t>(length));
     std::string pretext{ binaryMessage
@@ -364,7 +553,7 @@ static void send2JS(const HWND hWnd, const char* buffer, int length)
 
     char* wparam = _strdup((pretext + std::string(base64.data()) + posttext).c_str());
 
-    PostMessageW(hWnd, CODA_WM_EXECUTESCRIPT, (WPARAM)wparam, 0);
+    PostMessageW(tab.hWnd, CODA_WM_EXECUTESCRIPT, (WPARAM)wparam, (LPARAM)tab.tabId);
 }
 
 // Convert a file: URI to a native Windows path. A UNC location arrives as
@@ -459,7 +648,7 @@ static void stopServer()
     coolwsdThread.join();
 }
 
-static void createAndStartMessagePumpThread(WindowData& data)
+static void createAndStartMessagePumpThread(DocumentTab& data)
 {
     // Create a socket pair to notify the below thread when the document has been closed
     fakeSocketPipe2(data.closeNotificationPipeForForwardingThread);
@@ -502,7 +691,7 @@ static void createAndStartMessagePumpThread(WindowData& data)
                             return;
                         std::vector<char> buf(n);
                         n = fakeSocketRead(data.fakeClientFd, buf.data(), n);
-                        send2JS(data.hWnd, buf.data(), n);
+                        send2JS(data, buf.data(), n);
                     }
                 }
                 else
@@ -514,7 +703,7 @@ static void createAndStartMessagePumpThread(WindowData& data)
         });
 }
 
-static void do_hullo_handling_things(WindowData& data)
+static void do_hullo_handling_things(DocumentTab& data)
 {
     // Now we know that the JS has started completely
 
@@ -536,8 +725,16 @@ static void do_hullo_handling_things(WindowData& data)
     fakeSocketWriteQueue(data.fakeClientFd, message.c_str(), message.size());
 }
 
-static void do_welcome_handling_things(WindowData& data)
+static void do_welcome_handling_things(DocumentTab& data)
 {
+#if ENABLE_DEBUG
+    // A debug build bundles the placeholder slideshow, shown only when the configuration turns
+    // the welcome screen on. A release build carries a slideshow only when the app branding
+    // provides one.
+    if (!ConfigUtil::getBool("welcome.enable", false))
+        return;
+#endif
+
     const auto welcomeSlideshow = Poco::Path(app_installation_path + "..\\cool\\welcome\\welcome-slideshow.odp");
 
     if (!Poco::File(welcomeSlideshow).exists())
@@ -546,7 +743,7 @@ static void do_welcome_handling_things(WindowData& data)
     openCOOLWindow({ welcomeSlideshow.getFileName(), Poco::URI(welcomeSlideshow).toString() }, DocumentMode::WELCOME);
 }
 
-static void enter_full_screen(WindowData& data, HMONITOR monitor, bool saveRestoreInfo)
+static void enter_full_screen(WindowState& data, HMONITOR monitor, bool saveRestoreInfo)
 {
     if (data.isFullScreen)
         return;
@@ -573,9 +770,12 @@ static void enter_full_screen(WindowData& data, HMONITOR monitor, bool saveResto
                  monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
                  SWP_NOZORDER | SWP_FRAMECHANGED);
     data.isFullScreen = true;
+
+    // The presentation has the monitor to itself, tab strip included.
+    updateStripVisibility(data);
 }
 
-static void leave_full_screen(WindowData& data)
+static void leave_full_screen(WindowState& data)
 {
     if (!data.isFullScreen)
         return;
@@ -598,9 +798,11 @@ static void leave_full_screen(WindowData& data)
                  SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOMOVE);
 
     data.isFullScreen = false;
+
+    updateStripVisibility(data);
 }
 
-static void do_bye_handling_things(const WindowData& data)
+static void do_bye_handling_things(const DocumentTab& data)
 {
     LOG_TRC_NOFILE(
         "Document window terminating on JavaScript side. Closing our end of the socket.");
@@ -635,7 +837,7 @@ static void do_print(int appDocId)
         LOG_ERR("CreateProcess failed: " << GetLastError());
 }
 
-static void do_other_message_handling_things(const WindowData& data, const char* message)
+static void do_other_message_handling_things(const DocumentTab& data, const char* message)
 {
     LOG_TRC_NOFILE("Handling other message:'" << message << "'");
 
@@ -653,20 +855,20 @@ namespace
 // etc. never get interpolated into a JS string literal. This mirrors how the
 // macOS (WKScriptMessageHandlerWithReply) and Qt (QWebChannel) apps return
 // values; JSON encoding takes care of all escaping.
-void postReplyToCall(HWND hWnd, int id, const Poco::Dynamic::Var& reply)
+void postReplyToCall(HWND hWnd, int tabId, int id, const Poco::Dynamic::Var& reply)
 {
     Poco::JSON::Object::Ptr envelope = new Poco::JSON::Object();
     envelope->set("id", id);
     envelope->set("reply", reply);
     std::ostringstream oss;
     envelope->stringify(oss);
-    PostMessageW(hWnd, CODA_WM_POSTWEBMESSAGE, (WPARAM)_strdup(oss.str().c_str()), 0);
+    PostMessageW(hWnd, CODA_WM_POSTWEBMESSAGE, (WPARAM)_strdup(oss.str().c_str()), (LPARAM)tabId);
 }
 } // namespace
 
-static void do_getrecentdocs(const WindowData& data, int id)
+static void do_getrecentdocs(const DocumentTab& data, int id)
 {
-    postReplyToCall(data.hWnd, id, recentFiles.serialiseFiltered(currentlyOpenDocumens()));
+    postReplyToCall(data.hWnd, data.tabId, id, recentFiles.serialiseFiltered(currentlyOpenDocumens()));
 }
 
 // It happens that some other process opens the clipboard for a short time, and if we happen to try
@@ -978,11 +1180,16 @@ Monitors getMonitors()
     return monitors;
 }
 
-static void exchangeMonitors(WindowData& data)
+static void exchangeMonitors(DocumentTab& data)
 {
     Monitors monitors(getMonitors());
     if (monitors.size() < 2)
         return;
+
+    WindowState* presentationWindow = findWindow(data.hWnd);
+    if (!presentationWindow)
+        return;
+    WindowState* consoleWindow = data.hConsoleWnd ? findWindow(data.hConsoleWnd) : nullptr;
 
     HMONITOR hConsoleMonitor = data.hConsoleWnd ? MonitorFromWindow(data.hConsoleWnd, MONITOR_DEFAULTTONEAREST) : 0;
     HMONITOR hPresentationMonitor = MonitorFromWindow(data.hWnd, MONITOR_DEFAULTTONEAREST);
@@ -997,26 +1204,26 @@ static void exchangeMonitors(WindowData& data)
             origPresentationMonitor = i;
     }
 
-    leave_full_screen(data);
+    leave_full_screen(*presentationWindow);
 
     size_t newPresentationMonitor = origPresentationMonitor;
 
-    if (data.hConsoleWnd)
+    if (consoleWindow)
     {
-        leave_full_screen(windowData[data.hConsoleWnd]);
+        leave_full_screen(*consoleWindow);
 
         size_t newConsoleMonitor = (origConsoleMonitor + 1) % monitors.size();
         if (newConsoleMonitor == newPresentationMonitor)
             newPresentationMonitor = (newPresentationMonitor + 1) % monitors.size();
 
-        enter_full_screen(windowData[data.hConsoleWnd], monitors[newConsoleMonitor].hMonitor, false);
+        enter_full_screen(*consoleWindow, monitors[newConsoleMonitor].hMonitor, false);
     }
     else
     {
         newPresentationMonitor = (newPresentationMonitor + 1) % monitors.size();
     }
 
-    enter_full_screen(data, monitors[newPresentationMonitor].hMonitor, false);
+    enter_full_screen(*presentationWindow, monitors[newPresentationMonitor].hMonitor, false);
 }
 
 static std::string pathToURI(const Poco::Path& path)
@@ -1030,7 +1237,9 @@ static std::string pathToURI(const Poco::Path& path)
     return uri.toString();
 }
 
-static std::vector<FilenameAndUri> fileOpenDialog()
+static std::vector<FilenameAndUri> fileOpenDialog(const std::wstring& title,
+                                                  const std::vector<COMDLG_FILTERSPEC>& filters,
+                                                  bool multiSelect)
 {
     IFileOpenDialog* dialog;
 
@@ -1038,19 +1247,18 @@ static std::vector<FilenameAndUri> fileOpenDialog()
                                     IID_IFileOpenDialog, reinterpret_cast<void**>(&dialog))))
         fatal("CoCreateInstance(CLSID_FileOpenDialog) failed");
 
-    COMDLG_FILTERSPEC filter[] = {
-        { L"",
-          L"*.odt;*.docx;*.doc;*.rtf;*.txt;*.md;*.ods;*.xlsx;*.xls;*.odp;*.pptx;*.ppt" },
-        { L"", L"*.*" }
-    };
+    if (!title.empty())
+        dialog->SetTitle(title.c_str());
 
-    if (!SUCCEEDED(dialog->SetFileTypes(sizeof(filter) / sizeof(filter[0]), &filter[0])))
-        fatal("dialog->SetFileTypes() failed");
+    if (!filters.empty())
+        if (!SUCCEEDED(dialog->SetFileTypes(filters.size(), filters.data())))
+            fatal("dialog->SetFileTypes() failed");
 
     FILEOPENDIALOGOPTIONS options;
     if (SUCCEEDED(dialog->GetOptions(&options)))
     {
-        options |= FOS_ALLOWMULTISELECT;
+        if (multiSelect)
+            options |= FOS_ALLOWMULTISELECT;
         options &= ~FOS_DONTADDTORECENT;
         dialog->SetOptions(options);
     }
@@ -1185,10 +1393,15 @@ static FilenameAndUri fileSaveDialog(const std::string& name,
     return { path.getFileName(), pathToURI(path) };
 }
 
-static void arrangePresentationWindows(WindowData& data)
+static void arrangePresentationWindows(DocumentTab& data)
 {
+    WindowState* presentationWindow = findWindow(data.hWnd);
+    if (!presentationWindow)
+        return;
+    WindowState* consoleWindow = data.hConsoleWnd ? findWindow(data.hConsoleWnd) : nullptr;
+
     Monitors monitors(getMonitors());
-    data.numMonitors = monitors.size();
+    presentationWindow->numMonitors = monitors.size();
 
     HMONITOR laptopMonitor = 0;
     HMONITOR externalMonitor = 0;
@@ -1221,18 +1434,18 @@ static void arrangePresentationWindows(WindowData& data)
         }
     }
 
-    leave_full_screen(data);
-    if (data.hConsoleWnd)
-        leave_full_screen(windowData[data.hConsoleWnd]);
+    leave_full_screen(*presentationWindow);
+    if (consoleWindow)
+        leave_full_screen(*consoleWindow);
 
     HMONITOR presenterMonitor = externalMonitor ? externalMonitor : laptopMonitor;
 
-    enter_full_screen(data, presenterMonitor, true);
+    enter_full_screen(*presentationWindow, presenterMonitor, true);
 
-    if (data.hConsoleWnd)
+    if (consoleWindow)
     {
         if (externalMonitor)
-            enter_full_screen(windowData[data.hConsoleWnd], laptopMonitor, true);
+            enter_full_screen(*consoleWindow, laptopMonitor, true);
         else
             BringWindowToTop(data.hConsoleWnd);
     }
@@ -1273,8 +1486,8 @@ static bool isInsertableIntoDocument(const std::string& mimeType)
 // web message, because the bridge to the JavaScript carries strings only. The drop point travels
 // with them, in physical pixels relative to the window client area, so that the insert can happen
 // where the user aimed.
-static void insertDroppedFile(HWND hWnd, const std::string& path, const std::string& mimeType,
-                              const POINT& point)
+static void insertDroppedFile(HWND hWnd, int tabId, const std::string& path,
+                              const std::string& mimeType, const POINT& point)
 {
     const std::string filename = Poco::Path(path).getFileName();
 
@@ -1324,10 +1537,10 @@ static void insertDroppedFile(HWND hWnd, const std::string& path, const std::str
     std::ostringstream oss;
     message->stringify(oss);
 
-    PostMessageW(hWnd, CODA_WM_POSTWEBMESSAGE, (WPARAM)_strdup(oss.str().c_str()), 0);
+    PostMessageW(hWnd, CODA_WM_POSTWEBMESSAGE, (WPARAM)_strdup(oss.str().c_str()), (LPARAM)tabId);
 }
 
-static void hideDropOverlay(WindowData& data);
+static void hideDropOverlay(WindowState& data);
 
 // The timer that watches for a drag that goes away without the overlay hearing about it.
 static const int TIMER_ID_DROP_OVERLAY = 1;
@@ -1341,9 +1554,22 @@ static const int TIMER_ID_DROP_OVERLAY = 1;
 static void handleDroppedFiles(HWND hWnd, HDROP drop, const POINT& dropPoint)
 {
     // The starter backstage window, the welcome slideshow and the presenter console show no
-    // document to insert into, so everything dropped on them opens as a document.
-    const WindowData& data = windowData[hWnd];
-    const bool canInsert = data.mode == DocumentMode::EDIT && !data.isConsole;
+    // document to insert into, so everything dropped on them opens as a document. In the tabbed
+    // window the drop goes to the document on show.
+    WindowState* window = findWindow(hWnd);
+    DocumentTab* tab = window ? activeTabOf(*window) : nullptr;
+    const bool canInsert = tab && tab->mode == DocumentMode::EDIT && !tab->isConsole;
+
+    // The document view starts below the tab strip, and the page places the insert relative to
+    // its own top left corner. A drop on the window frame arrives negative and stays that way,
+    // which puts the insert at the cursor instead.
+    POINT documentPoint = dropPoint;
+    if (window && documentPoint.x >= 0 && documentPoint.y >= 0)
+    {
+        const RECT area = documentArea(*window);
+        documentPoint.x -= area.left;
+        documentPoint.y -= area.top;
+    }
 
     bool anyDocumentToOpen = false;
     const UINT numFiles = DragQueryFileW(drop, 0xFFFFFFFF, NULL, 0);
@@ -1365,7 +1591,7 @@ static void handleDroppedFiles(HWND hWnd, HDROP drop, const POINT& dropPoint)
 
         if (canInsert && isInsertableIntoDocument(mimeType))
         {
-            insertDroppedFile(hWnd, path.toString(), mimeType, dropPoint);
+            insertDroppedFile(hWnd, tab->tabId, path.toString(), mimeType, documentPoint);
             continue;
         }
 
@@ -1425,7 +1651,8 @@ public:
 
     HRESULT STDMETHODCALLTYPE DragLeave() override
     {
-        hideDropOverlay(windowData[m_hWnd]);
+        if (WindowState* window = findWindow(m_hWnd))
+            hideDropOverlay(*window);
         return S_OK;
     }
 
@@ -1433,7 +1660,8 @@ public:
                                    DWORD* effect) override
     {
         *effect = DROPEFFECT_NONE;
-        hideDropOverlay(windowData[m_hWnd]);
+        if (WindowState* window = findWindow(m_hWnd))
+            hideDropOverlay(*window);
 
         FORMATETC format = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
         STGMEDIUM medium;
@@ -1469,14 +1697,16 @@ private:
 // long as the drag lasts is what brings the drop to the app, with the paths of the dropped files.
 // The web view reports the arriving drag, as it still sees the drag events until the overlay covers
 // it.
-static void showDropOverlay(WindowData& data)
+static void showDropOverlay(WindowState& data)
 {
-    // Where the client area of the document window is on the screen. The overlay is a window of its
-    // own rather than a child window, because only a top-level window can be made transparent with
-    // a layer, and it is owned by the document window, which keeps it above that window and takes
-    // it away when the document window goes.
-    RECT bounds;
-    GetClientRect(data.hWnd, &bounds);
+    // Where the document view of the window is on the screen. The overlay is a window of its own
+    // rather than a child window, because only a top-level window can be made transparent with a
+    // layer, and it is owned by the document window, which keeps it above that window and takes it
+    // away when the document window goes. It stops short of the tab strip, which takes its own
+    // drags.
+    const RECT bounds = documentArea(data);
+    const int width = bounds.right - bounds.left;
+    const int height = bounds.bottom - bounds.top;
     POINT topLeft = { bounds.left, bounds.top };
     ClientToScreen(data.hWnd, &topLeft);
 
@@ -1484,7 +1714,7 @@ static void showDropOverlay(WindowData& data)
     {
         data.hOverlayWnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                                            overlayWindowClass, L"", WS_POPUP, topLeft.x, topLeft.y,
-                                           bounds.right, bounds.bottom, data.hWnd, NULL,
+                                           width, height, data.hWnd, NULL,
                                            appInstance, NULL);
         if (!data.hOverlayWnd)
         {
@@ -1492,8 +1722,8 @@ static void showDropOverlay(WindowData& data)
             LOG_ERR("CreateWindowExW() for the drop overlay failed: " << error
                                                                       << ", owner window "
                                                                       << data.hWnd << ", size "
-                                                                      << bounds.right << "x"
-                                                                      << bounds.bottom);
+                                                                      << width << "x"
+                                                                      << height);
             return;
         }
 
@@ -1518,13 +1748,13 @@ static void showDropOverlay(WindowData& data)
         }
     }
 
-    SetWindowPos(data.hOverlayWnd, HWND_TOP, topLeft.x, topLeft.y, bounds.right, bounds.bottom,
+    SetWindowPos(data.hOverlayWnd, HWND_TOP, topLeft.x, topLeft.y, width, height,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
     SetTimer(data.hWnd, TIMER_ID_DROP_OVERLAY, 500, NULL);
 }
 
-static void hideDropOverlay(WindowData& data)
+static void hideDropOverlay(WindowState& data)
 {
     if (!data.hOverlayWnd)
         return;
@@ -1538,7 +1768,7 @@ static void hideDropOverlay(WindowData& data)
 // nothing else would ever take it away, and it would sit in front of the document and swallow the
 // input meant for it. A drag holds a mouse button down, so the button coming up says the drag is
 // over, whether the overlay saw any of it or not.
-static void checkDropOverlayStillNeeded(WindowData& data)
+static void checkDropOverlayStillNeeded(WindowState& data)
 {
     const bool buttonIsDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
         (GetAsyncKeyState(VK_RBUTTON) & 0x8000);
@@ -1547,7 +1777,7 @@ static void checkDropOverlayStillNeeded(WindowData& data)
         hideDropOverlay(data);
 }
 
-static void destroyDropOverlay(WindowData& data)
+static void destroyDropOverlay(WindowState& data)
 {
     if (!data.hOverlayWnd)
         return;
@@ -1566,7 +1796,7 @@ static const int HOTKEY_ID_DEVTOOLS = 0x00DA;
 // Window procedure for a hidden window used as clipboard owner. It lives for the whole app run, so
 // its delayed-render promise only has to be materialized (WM_RENDERALLFORMATS) once, when the app
 // exits, not when an individual document window closes. Also used as parent window for the file
-// open and save dialogs.
+// open and save dialogs, and to open the documents waiting in filenamesAndUrisToOpen one at a time.
 static LRESULT CALLBACK HiddenOwnerWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -1594,6 +1824,35 @@ static LRESULT CALLBACK HiddenOwnerWndProc(HWND hWnd, UINT message, WPARAM wPara
         case WM_DESTROYCLIPBOARD:
             weOwnTheClipboard = false;
             return 0;
+
+        case CODA_WM_SHOWFILEPICKER:
+        {
+            // The engine asked for a file (see filePickerProviderPick). Show the open
+            // dialog here on the UI thread and answer the engine's completion; the
+            // engine's main loop keeps running while the dialog is open.
+            std::unique_ptr<FilePickerRequest> request(
+                reinterpret_cast<FilePickerRequest*>(wParam));
+
+            std::vector<COMDLG_FILTERSPEC> filterSpecs;
+            for (auto const& f : request->filters)
+                filterSpecs.push_back({ f.first.c_str(), f.second.c_str() });
+
+            auto openResult = fileOpenDialog(request->title, filterSpecs, false);
+            if (!openResult.empty())
+                request->pfnPicked(request->pContext, openResult[0].uri.c_str());
+            else
+                request->pfnPicked(request->pContext, nullptr);
+            return 0;
+        }
+
+        case CODA_WM_LOADNEXTDOCUMENT:
+            if (filenamesAndUrisToOpen.size() > 0)
+            {
+                auto nextDocument = filenamesAndUrisToOpen.front();
+                filenamesAndUrisToOpen.pop_front();
+                openCOOLWindow(nextDocument, DocumentMode::EDIT);
+            }
+            return 0;
     }
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
@@ -1606,6 +1865,10 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             {
                 // Accept files dragged from Explorer onto the window, which arrive as WM_DROPFILES.
                 DragAcceptFiles(hWnd, TRUE);
+
+                // Set the title bar before the window is shown, so it is never drawn in the wrong
+                // theme first.
+                applyTitleBarTheme(hWnd);
 
                 // Contrary to documentation, when you use CW_USEDEFAULT for the x and y parameters
                 // in the CreateWindowW() call, Windows will occasionally place the window so that
@@ -1742,38 +2005,17 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return TRUE;
 
         case WM_SIZE:
-            if (windowData[hWnd].webViewController != nullptr)
-            {
-                RECT bounds;
-                GetClientRect(hWnd, &bounds);
-                windowData[hWnd].webViewController->put_Bounds(bounds);
-
-                if (!windowData[hWnd].isFullScreen &&
-                    persistentWindowSizeStoreOK &&
-                    (wParam == SIZE_MAXIMIZED || wParam == SIZE_RESTORED))
-                {
-                    std::vector<uint8_t> value(sizeof(PersistedDocumentWindowSize));
-                    PersistedDocumentWindowSize* p = reinterpret_cast<PersistedDocumentWindowSize*>(value.data());
-                    if (wParam == SIZE_RESTORED)
-                    {
-                        p->size.x = LOWORD(lParam);
-                        p->size.y = HIWORD(lParam);
-                        windowData[hWnd].previousSize = p->size;
-                    }
-                    else
-                    {
-                        p->size = windowData[hWnd].previousSize;
-                    }
-                    p->resizeType = wParam;
-                    persistentWindowSizeStore.put(windowData[hWnd].filenameAndUri.uri.c_str(), value);
-                }
-            };
+            if (WindowState* window = findWindow(hWnd))
+                layoutTabs(*window);
             break;
 
         case WM_SETFOCUS:
-            if (windowData.count(hWnd) && windowData[hWnd].webViewController)
-                windowData[hWnd].webViewController->MoveFocus(
-                    COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+            if (WindowState* window = findWindow(hWnd))
+            {
+                DocumentTab* tab = activeTabOf(*window);
+                if (tab && tab->webViewController)
+                    tab->webViewController->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+            }
             break;
 
         case WM_DPICHANGED:
@@ -1786,101 +2028,149 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         case WM_DISPLAYCHANGE:
         {
-            auto& data = windowData[hWnd];
-            if (data.hConsoleWnd || data.isPresFullScreen)
+            WindowState* window = findWindow(hWnd);
+            DocumentTab* tab = window ? activeTabOf(*window) : nullptr;
+            if (tab && (tab->hConsoleWnd || window->isPresFullScreen))
             {
                 int numMonitors = getMonitors().size();
-                if (data.numMonitors != numMonitors)
-                    arrangePresentationWindows(data);
+                if (window->numMonitors != numMonitors)
+                    arrangePresentationWindows(*tab);
             }
         }
         break;
 
-        case WM_CLOSE:
-            if (windowData[hWnd].mode == DocumentMode::STARTER)
-                ; // Nothing
-            else if (!windowData[hWnd].isConsole)
-            {
-                do_bye_handling_things(windowData[hWnd]);
+        case WM_SETTINGCHANGE:
+            // Take into account the systme theme changes and use that for the titlebar in
+            // case the in-app theme preference is not set. `applyTitleBarThemeToAllWindows`
+            // need not be called since each window receives this message.
+            if (lParam && wcscmp((const wchar_t*)lParam, L"ImmersiveColorSet") == 0)
+                applyTitleBarTheme(hWnd);
+        break;
 
-                DocumentData::deallocate(windowData[hWnd].appDocId);
-            }
-            else
+        case WM_CLOSE:
+        {
+            WindowState* window = findWindow(hWnd);
+            if (window)
             {
-                auto& parent = windowData[windowData[hWnd].hParentWnd];
-                leave_full_screen(parent);
-                parent.hConsoleWnd = 0;
+                // Each document gets the goodbye it would get if it were the only one here. The
+                // list shrinks as they go, so always take the one at the front.
+                while (!window->tabIds.empty())
+                    closeTab(*window, window->tabIds.front());
             }
             DestroyWindow(hWnd);
             break;
+        }
 
         case WM_DESTROY:
-            destroyDropOverlay(windowData[hWnd]);
-            if (windowData[hWnd].app2js.joinable())
-                windowData[hWnd].app2js.join();
+            if (WindowState* window = findWindow(hWnd))
+                destroyDropOverlay(*window);
             if (DocumentData::count() == 0)
-            {
-                if (persistentWindowSizeStoreOK)
-                {
-                    persistentWindowSizeStoreOK = false;
-                    persistentWindowSizeStore.close();
-                }
                 stopServer();
-            }
             break;
 
         case WM_NCDESTROY:
         {
-            auto it = windowData.find(hWnd);
-            if (it != windowData.end())
+            WindowState* window = findWindow(hWnd);
+            if (window)
             {
-                if (it->second.isConsole)
+                if (window->stripController)
                 {
-                    auto& data = it->second;
-                    if (data.webViewController)
-                    {
-                        data.webViewController->Close();
-                        data.webViewController = nullptr;
-                    }
-                    data.webView = nullptr;
+                    window->stripController->Close();
+                    window->stripController = nullptr;
                 }
-                windowData.erase(hWnd);
+                window->stripWebView = nullptr;
+                windows.erase(hWnd);
+                // New documents go to another tabbed window, if there is one left.
+                if (tabbedWindow == hWnd)
+                {
+                    tabbedWindow = 0;
+                    for (const auto& i : windows)
+                    {
+                        if (i.second.isTabbed)
+                        {
+                            tabbedWindow = i.first;
+                            break;
+                        }
+                    }
+                }
             }
             break;
         }
 
-
         case CODA_WM_EXECUTESCRIPT:
-            windowData[hWnd].webView->ExecuteScript(
-                Util::string_to_wide_string(std::string((char*)wParam)).c_str(),
-                Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
-                    [](HRESULT errorCode, LPCWSTR resultObjectAsJson) -> HRESULT
-                    {
-                        // LOG_TRC(Util::wide_string_to_string(resultObjectAsJson));
-                        return S_OK;
-                    })
-                    .Get());
+        {
+            DocumentTab* tab = findTab((int)lParam);
+            if (tab && tab->webView)
+                tab->webView->ExecuteScript(
+                    Util::string_to_wide_string(std::string((char*)wParam)).c_str(),
+                    Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+                        [](HRESULT errorCode, LPCWSTR resultObjectAsJson) -> HRESULT
+                        {
+                            // LOG_TRC(Util::wide_string_to_string(resultObjectAsJson));
+                            return S_OK;
+                        })
+                        .Get());
             std::free((char*)wParam);
             break;
+        }
 
         case CODA_WM_POSTWEBMESSAGE:
-            windowData[hWnd].webView->PostWebMessageAsJson(
-                Util::string_to_wide_string(std::string((char*)wParam)).c_str());
+        {
+            DocumentTab* tab = findTab((int)lParam);
+            if (tab && tab->webView)
+                tab->webView->PostWebMessageAsJson(
+                    Util::string_to_wide_string(std::string((char*)wParam)).c_str());
             std::free((char*)wParam);
             break;
+        }
 
-        case CODA_WM_LOADNEXTDOCUMENT:
-            if (filenamesAndUrisToOpen.size() > 0)
-            {
-                auto nextDocument = filenamesAndUrisToOpen.front();
-                filenamesAndUrisToOpen.pop_front();
-                openCOOLWindow(nextDocument, DocumentMode::EDIT);
-            }
+        case CODA_WM_CLOSETAB:
+        {
+            // The document can have moved to another window since the close was posted.
+            DocumentTab* tab = findTab((int)wParam);
+            WindowState* window = tab ? findWindow(tab->hWnd) : nullptr;
+            if (!window)
+                break;
+            const HWND tabWindow = window->hWnd;
+            closeTab(*window, (int)wParam);
+            // The window is what is left of the last document, so it goes too.
+            if (window->tabIds.empty())
+                DestroyWindow(tabWindow);
             break;
+        }
+
+        case CODA_WM_ACTIVATEADJACENTTAB:
+        {
+            if (WindowState* window = findWindow(hWnd))
+                activateAdjacentTab(*window, (int)wParam);
+            break;
+        }
+
+        case CODA_WM_SHOWTABMENU:
+            showTabContextMenu(hWnd, (int)wParam,
+                               { (short)LOWORD(lParam), (short)HIWORD(lParam) });
+            break;
+
+        case CODA_WM_MOVETABTONEWWINDOW:
+        {
+            const POINT point = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+            moveTabToNewWindow(hWnd, (int)wParam, &point);
+            break;
+        }
+
+        case CODA_WM_MOVETABTOWINDOW:
+        {
+            if (WindowState* window = findWindow(hWnd))
+                moveTabToWindow((int)wParam, *window, (int)lParam);
+            break;
+        }
 
         case WM_TIMER:
             if (wParam == TIMER_ID_DROP_OVERLAY)
-                checkDropOverlayStillNeeded(windowData[hWnd]);
+            {
+                if (WindowState* window = findWindow(hWnd))
+                    checkDropOverlayStillNeeded(*window);
+            }
             else
                 return DefWindowProc(hWnd, message, wParam, lParam);
             break;
@@ -1903,20 +2193,27 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_ACTIVATE:
             // Hold the developer-tools hotkey only while this window is the
             // active one, so the key is not taken from other applications and
-            // each document window opens its own developer tools.
+            // each window opens the developer tools of the document it shows.
             if (LOWORD(wParam) == WA_INACTIVE)
                 UnregisterHotKey(hWnd, HOTKEY_ID_DEVTOOLS);
             else
+            {
                 RegisterHotKey(hWnd, HOTKEY_ID_DEVTOOLS,
                                MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'I');
+                // The tabbed window the user worked in last takes the next document opened.
+                const WindowState* window = findWindow(hWnd);
+                if (window && window->isTabbed)
+                    tabbedWindow = hWnd;
+            }
             break;
 
         case WM_HOTKEY:
             if (wParam == HOTKEY_ID_DEVTOOLS)
             {
-                auto it = windowData.find(hWnd);
-                if (it != windowData.end() && it->second.webView)
-                    it->second.webView->OpenDevToolsWindow();
+                WindowState* window = findWindow(hWnd);
+                DocumentTab* tab = window ? activeTabOf(*window) : nullptr;
+                if (tab && tab->webView)
+                    tab->webView->OpenDevToolsWindow();
             }
             break;
 
@@ -1947,6 +2244,41 @@ static bool isLightTheme()
         return true;
 
     return value == 1;
+}
+
+static bool darkModeEnabled() { return Desktop::getDarkMode().value_or(!isLightTheme()); }
+
+// This might not be defined for older Windows versions
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
+// Make the native (DWM-drawn) title bar of a window match the effective dark mode. The document UI
+// inside the web view follows the same state through the darkTheme parameter of the cool.html URL.
+static void applyTitleBarTheme(HWND hWnd)
+{
+    const BOOL darkMode = darkModeEnabled() ? TRUE : FALSE;
+    HRESULT hr =
+        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
+    if (!SUCCEEDED(hr))
+    {
+        LOG_DBG("DwmSetWindowAttribute() for a dark title bar failed: " << hr);
+        return;
+    }
+
+    // A window that is already on screen does not necessarily repaint its frame by itself, so ask
+    // for that. Harmless for a window that is not visible yet (during WM_CREATE, say).
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+}
+
+// Used when the dark mode changes for the whole application (the web UI asked for it with
+// SETDARKMODE), as opposed to a platform theme change, which each window is told about separately
+// with its own WM_SETTINGCHANGE.
+static void applyTitleBarThemeToAllWindows()
+{
+    for (const auto& i : windows)
+        applyTitleBarTheme(i.second.hWnd);
 }
 
 static HRESULT GetStreamForIFStream(std::ifstream& file, IStream** outStream)
@@ -2319,143 +2651,28 @@ static void registerOdfShellExtensions()
     DeleteFileW(regFilePath.c_str());
 }
 
-static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mode)
+// The one WebView2 environment every web view in the app is created from, and
+// the callbacks that asked for it while it was still being made.
+static wil::com_ptr<ICoreWebView2Environment> webViewEnvironment;
+static std::vector<std::function<void(ICoreWebView2Environment*)>> webViewEnvironmentWaiters;
+static bool webViewEnvironmentUnderway = false;
+
+// Hand the shared environment to the callback, creating it on the first call.
+// Creation is asynchronous, so callers that arrive in the meantime wait and are
+// served in order once it is there.
+static void withWebView2Environment(std::function<void(ICoreWebView2Environment*)> callback)
 {
-    bool havePersistedSize = false;
-
-    int width, height;
-    int welcomeX = CW_USEDEFAULT, welcomeY = CW_USEDEFAULT;
-    bool maximize = false;
-
-    if (mode != DocumentMode::WELCOME && mode != DocumentMode::STARTER && persistentWindowSizeStoreOK)
+    if (webViewEnvironment)
     {
-        std::vector<uint8_t> value;
-        if (persistentWindowSizeStore.get(filenameAndUri.uri.c_str(), value) == litecask::Status::Ok)
-        {
-            if (value.size() == sizeof(POINT))
-            {
-                // We used to store just the size
-                const POINT* p = reinterpret_cast<POINT*>(value.data());
-                width = p->x;
-                height = p->y;
-                havePersistedSize = true;
-            }
-            else if (value.size() == sizeof(PersistedDocumentWindowSize))
-            {
-                // Currently we also store the last wParam in the WM_SIZE message
-                const PersistedDocumentWindowSize* p = reinterpret_cast<PersistedDocumentWindowSize*>(value.data());
-                width = p->size.x;
-                height = p->size.y;
-                if (p->resizeType == SIZE_MAXIMIZED)
-                    maximize = true;
-                havePersistedSize = true;
-            }
-        }
+        callback(webViewEnvironment.get());
+        return;
     }
 
-    if (!havePersistedSize)
-    {
-        // Set size of document window to be 90% of monitor width and height. For the welcome
-        // slideshow always set width:height to 16:9 because we know it is that aspect ratio.
+    webViewEnvironmentWaiters.push_back(std::move(callback));
 
-        // The welcome slideshow is displayed without decorations.
-
-        // FIXME: Should we actually, at least for text documents, ideally peek into the document and
-        // check what its page size is, and in the common case of a portrait orientation text document,
-        // make the document window also (if the monitor is large enough) higher than wider? On small
-        // monitors (1280x768 or less?) we should probably default to making the document window
-        // full-screen?
-
-        // FIXME: My initial assumption that the COOL window would open up on the monitor where the
-        // file section dialog was is incorrect.
-
-        MONITORINFO monitorInfo;
-
-        monitorInfo.cbSize = sizeof(monitorInfo);
-        if (GetMonitorInfoW(primaryMonitor, &monitorInfo))
-        {
-            if (mode == DocumentMode::WELCOME)
-            {
-                double aspectRatio =
-                    (double)(monitorInfo.rcWork.right - monitorInfo.rcWork.left) / (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
-                if (aspectRatio < 16.0/9.0)
-                {
-                    width = 0.9 * (monitorInfo.rcWork.right - monitorInfo.rcWork.left);
-                    welcomeX = monitorInfo.rcWork.left + 0.05 * (monitorInfo.rcWork.right - monitorInfo.rcWork.left);
-                    height = width / (16.0/9.0);
-                    welcomeY = monitorInfo.rcWork.top + ((monitorInfo.rcWork.bottom - monitorInfo.rcWork.top) - height) / 2;
-                }
-                else
-                {
-                    height = 0.9 * (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
-                    welcomeY = monitorInfo.rcWork.top + 0.05 * (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
-                    width = (16.0/9.0) * height;
-                    welcomeX = monitorInfo.rcWork.left + ((monitorInfo.rcWork.right - monitorInfo.rcWork.left) - width) / 2;
-                }
-            }
-            else
-            {
-                width = 0.9 * (monitorInfo.rcWork.right - monitorInfo.rcWork.left);
-                height = 0.9 * (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
-            }
-        }
-        else
-        {
-            if (mode == DocumentMode::WELCOME)
-            {
-                width = 1280;
-                height = 720;
-            }
-            else
-            {
-                width = 1200;
-                height = 900;
-            }
-        }
-    }
-
-    HWND hWnd;
-    if (mode == DocumentMode::WELCOME)
-        hWnd = CreateWindowW(
-            windowClass, Util::string_to_wide_string(APP_NAME).c_str(),
-            WS_POPUP, welcomeX, welcomeY, width, height, NULL, NULL, appInstance,
-            NULL);
-    else if (mode == DocumentMode::STARTER)
-        hWnd = CreateWindowW(
-            windowClass, Util::string_to_wide_string(APP_NAME).c_str(),
-            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, width, height, NULL, NULL, appInstance,
-            NULL);
-    else
-        hWnd = CreateWindowW(
-            windowClass, Util::string_to_wide_string(filenameAndUri.filename + " - " APP_NAME).c_str(),
-            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, width, height, NULL, NULL, appInstance,
-            NULL);
-
-    auto& data = windowData[hWnd];
-    data.hWnd = hWnd;
-    data.previousSize.x = width;
-    data.previousSize.y = height;
-    data.isFullScreen = false;
-    if (mode == DocumentMode::STARTER)
-    {
-        data.fakeClientFd = -1;
-        data.appDocId = 0;
-    }
-    else
-    {
-        data.fakeClientFd = fakeSocketSocket();
-        data.appDocId = generate_new_app_doc_id();
-    }
-    data.filenameAndUri = filenameAndUri;
-    data.mode = mode;
-
-    if (maximize)
-        ShowWindow(hWnd, SW_MAXIMIZE);
-    else
-        ShowWindow(hWnd, appShowMode);
-    UpdateWindow(hWnd);
-
-    AddClipboardFormatListener(hWnd);
+    if (webViewEnvironmentUnderway)
+        return;
+    webViewEnvironmentUnderway = true;
 
     // Configure the "cool" custom scheme registration
     auto schemeRegistration =
@@ -2494,229 +2711,1239 @@ static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mo
         (Util::string_to_wide_string(localAppData) + L"\\UDF").c_str(),
         options.Get(),
         Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-            [&data](HRESULT result, ICoreWebView2Environment* env) -> HRESULT
+            [](HRESULT result, ICoreWebView2Environment* env) -> HRESULT
             {
-                // Create a CoreWebView2Controller and get the associated CoreWebView2 whose parent is the main window hWnd
-                env->CreateCoreWebView2Controller(
-                    data.hWnd,
-                    Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-                        [&data, env](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
-                        {
-                            if (!controller)
-                                return E_FAIL;
+                if (!env)
+                    fatal("CreateCoreWebView2EnvironmentWithOptions() gave us no environment");
 
-                            ICoreWebView2* webView;
-                            controller->get_CoreWebView2(&webView);
-                            data.webView = wil::com_ptr<ICoreWebView2>(webView);
-                            data.webViewController = controller;
+                webViewEnvironment = env;
 
-                            wil::com_ptr<ICoreWebView2_22> webView22 = data.webView.try_query<ICoreWebView2_22>();
-                            if (!webView22)
-                                fatal("Could not get webView22");
+                const auto waiters = std::move(webViewEnvironmentWaiters);
+                webViewEnvironmentWaiters.clear();
+                for (const auto& waiter : waiters)
+                    waiter(env);
 
-                            // Add a few settings for the webview
-                            // The demo step is redundant since the values are the default settings
-                            wil::com_ptr<ICoreWebView2Settings> settings;
-                            webView->get_Settings(&settings);
-                            settings->put_IsScriptEnabled(TRUE);
-                            settings->put_AreDefaultScriptDialogsEnabled(TRUE);
-                            settings->put_IsWebMessageEnabled(TRUE);
-                            // Stop browser shortcut keys (such as F12 for the
-                            // developer tools and F5 for reload) from being
-                            // handled by the WebView, so the keys reach the
-                            // document instead. F12 then toggles the numbered
-                            // list rather than opening the developer tools.
-                            wil::com_ptr<ICoreWebView2Settings4> settings4
-                                = settings.try_query<ICoreWebView2Settings4>();
-                            if (settings4)
-                                settings4->put_AreBrowserAcceleratorKeysEnabled(FALSE);
-
-                            // Resize WebView to fit the bounds of the parent window
-                            RECT bounds;
-                            GetClientRect(data.hWnd, &bounds);
-                            data.webViewController->put_Bounds(bounds);
-
-                            EventRegistrationToken token;
-                            HRESULT hr;
-
-                            hr = (webView22->AddWebResourceRequestedFilterWithRequestSourceKinds(
-                                      L"cool://*",
-                                      COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
-                                      COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL));
-                            if (!SUCCEEDED(hr))
-                            {
-                                LOG_ERR_S("AddWebResourceRequestedFilterWithRequestSourceKinds() failed");
-                                return hr;
-                            }
-
-                            hr = webView->add_WebResourceRequested(
-                                Microsoft::WRL::Callback<ICoreWebView2WebResourceRequestedEventHandler>(
-                                    [env](ICoreWebView2* sender,
-                                          ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT
-                                    {
-                                        return webResourceRequestedHandler(env, sender, args);
-                                    }).Get(), &token);
-
-                            if (!SUCCEEDED(hr))
-                            {
-                                LOG_ERR_S("add_WebResourceRequested() failed");
-                                return hr;
-                            }
-
-                            // Communication between host and web content
-                            // Set an event handler for the host to return received message back to the web content
-                            webView->add_WebMessageReceived(
-                                Microsoft::WRL::Callback<
-                                    ICoreWebView2WebMessageReceivedEventHandler>(
-                                    [&data](
-                                        ICoreWebView2* webView,
-                                        ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
-                                    {
-                                        wil::unique_cotaskmem_string message;
-                                        args->TryGetWebMessageAsString(&message);
-                                        processMessage(data, message);
-                                        return S_OK;
-                                    })
-                                    .Get(),
-                                &token);
-
-                            webView->add_ContainsFullScreenElementChanged(
-                                Microsoft::WRL::Callback<ICoreWebView2ContainsFullScreenElementChangedEventHandler>(
-                                    [&data](ICoreWebView2* sender, IUnknown* args) -> HRESULT
-                                    {
-                                        BOOL containsFullscreenElement;
-                                        sender->get_ContainsFullScreenElement(&containsFullscreenElement);
-                                        if (containsFullscreenElement)
-                                        {
-                                            HMONITOR monitor = MonitorFromWindow(data.hWnd, MONITOR_DEFAULTTONEAREST);
-                                            enter_full_screen(data, monitor, true);
-                                        }
-                                        else
-                                            leave_full_screen(data);
-                                        return S_OK;
-                                    })
-                                    .Get(),
-                                nullptr);
-
-                            // New windows appear to need to reuse the original env of the parent, a good explanation
-                            // of use at: https://github.com/MicrosoftEdge/WebView2Feedback/discussions/4501#discussioncomment-9215801
-                            webView->add_NewWindowRequested(
-                                Microsoft::WRL::Callback<ICoreWebView2NewWindowRequestedEventHandler>(
-                                    [env, &data](ICoreWebView2* sender, ICoreWebView2NewWindowRequestedEventArgs* args)
-                                    {
-                                        wil::com_ptr<ICoreWebView2Deferral> deferral;
-                                        args->GetDeferral(&deferral);
-
-                                        HMONITOR hMonitor = MonitorFromWindow(data.hWnd, MONITOR_DEFAULTTONEAREST);
-                                        MONITORINFO monitorInfo = { sizeof(monitorInfo) };
-                                        GetMonitorInfo(hMonitor, &monitorInfo);
-                                        const RECT& area = monitorInfo.rcWork;
-                                        int areaWidth = area.right - area.left;
-                                        int areaHeight = area.bottom - area.top;
-                                        int width = areaWidth * 17 / 20;
-                                        int height = areaHeight * 17 / 20;
-                                        int x = area.left + (areaWidth - width) / 2;
-                                        int y = area.top + (areaHeight - height) / 2;
-
-                                        data.hConsoleWnd = CreateWindowW(windowClass,
-                                                Util::string_to_wide_string(APP_NAME).c_str(),
-                                                WS_OVERLAPPEDWINDOW,
-                                                x, y, width, height,
-                                                NULL, NULL, appInstance, NULL);
-
-                                        auto& consoleData = windowData[data.hConsoleWnd];
-                                        consoleData.hWnd = data.hConsoleWnd;
-                                        consoleData.hParentWnd = data.hWnd;
-                                        consoleData.isConsole = true;
-                                        consoleData.previousSize.x = width;
-                                        consoleData.previousSize.y = height;
-
-                                        ShowWindow(data.hConsoleWnd, appShowMode);
-
-                                        env->CreateCoreWebView2Controller(
-                                            data.hConsoleWnd,
-                                            Microsoft::WRL::Callback<
-                                                ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-                                                [&consoleData, &data, args, deferral](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
-                                                {
-                                                    if (!controller)
-                                                        return E_FAIL;
-
-                                                    ICoreWebView2* webView;
-                                                    controller->get_CoreWebView2(&webView);
-                                                    consoleData.webView = wil::com_ptr<ICoreWebView2>(webView);
-
-                                                    webView->add_WindowCloseRequested(
-                                                        Microsoft::WRL::Callback<ICoreWebView2WindowCloseRequestedEventHandler>(
-                                                            [&consoleData](ICoreWebView2* sender, IUnknown* args)
-                                                            {
-                                                                PostMessageW(consoleData.hWnd, WM_CLOSE, 0, 0);
-                                                                return S_OK;
-                                                            })
-                                                            .Get(),
-                                                        nullptr);
-
-                                                    controller->put_IsVisible(TRUE);
-
-                                                    consoleData.webViewController = controller;
-
-                                                    // Resize WebView to fit the bounds of the parent window
-                                                    RECT bounds;
-                                                    GetClientRect(consoleData.hWnd, &bounds);
-                                                    controller->put_Bounds(bounds);
-
-                                                    args->put_NewWindow(consoleData.webView.get());
-                                                    args->put_Handled(TRUE);
-                                                    deferral->Complete();
-
-                                                    arrangePresentationWindows(data);
-
-                                                    return S_OK;
-                                                })
-                                                .Get());
-                                            return S_OK;
-
-                                        return S_OK;
-                                    })
-                                    .Get(),
-                                nullptr);
-
-                            std::string coolURL =
-                                app_installation_uri + "../cool/cool.html?";
-                            if (data.mode == DocumentMode::STARTER)
-                                coolURL += "starterMode=true";
-                            else
-                            {
-                                if (data.mode != DocumentMode::WELCOME)
-                                    recentFiles.add(data.filenameAndUri.uri);
-                                coolURL +=
-                                    "file_path=" + data.filenameAndUri.uri +
-                                    std::string("&permission=edit") +
-                                    std::string("&appdocid=") + std::to_string(data.appDocId) +
-                                    std::string("&userinterfacemode=notebookbar");
-                            }
-
-                            coolURL += "&lang=" + uiLanguage;
-                            coolURL += "&dir=" + std::string(LangUtil::isRtlLanguage(uiLanguage) ? "rtl" : "");
-
-                            // Saved choice wins, otherwise follow the system theme.
-                            const bool darkMode = Desktop::getDarkMode().value_or(!isLightTheme());
-                            coolURL += darkMode ? "&darkTheme=true" : "&darkTheme=false";
-
-                            if (data.mode != DocumentMode::STARTER)
-                                coolURL +=
-                                    std::string((data.mode != DocumentMode::NEW ? "&startreadonly=true" : "")) +
-                                    std::string((data.mode == DocumentMode::WELCOME ? "&welcome=true" : ""));
-
-                            webView->Navigate(Util::string_to_wide_string(coolURL).c_str());
-                            controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
-
-                            return S_OK;
-                        })
-                        .Get());
                 return S_OK;
             })
             .Get());
+}
+
+// The document kind the tab strip keys its icon and colour off. The engine
+// decides what a file really is when it opens it; the strip needs a name for it
+// before that, and the extension is what there is to go on.
+static std::string docTypeFromFilename(const std::string& filename)
+{
+    const auto lastPeriod = filename.find_last_of('.');
+    if (lastPeriod == std::string::npos)
+        return "other";
+
+    std::string extension = filename.substr(lastPeriod + 1);
+    for (char& c : extension)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    static const std::set<std::string> writer = { "odt", "doc", "docx", "docm", "rtf", "txt", "fodt" };
+    static const std::set<std::string> calc = { "ods", "xls", "xlsx", "xlsm", "csv", "fods" };
+    static const std::set<std::string> impress = { "odp", "ppt", "pptx", "pptm", "ppsx", "fodp" };
+    static const std::set<std::string> draw = { "odg", "fodg" };
+
+    if (writer.count(extension))
+        return "writer";
+    if (calc.count(extension))
+        return "calc";
+    if (impress.count(extension))
+        return "impress";
+    if (draw.count(extension))
+        return "draw";
+    return "other";
+}
+
+// The window takes its title from the document it shows.
+static std::wstring windowTitleForTab(const DocumentTab& tab)
+{
+    if (tab.filenameAndUri.filename.empty())
+        return Util::string_to_wide_string(APP_NAME);
+    return Util::string_to_wide_string(tab.filenameAndUri.filename + " - " APP_NAME);
+}
+
+// Give the window one more document, at the end of its tab order. The caller
+// connects it to the server and gives it a document id, which the backstage and
+// the presenter console, showing no document of their own, do without.
+static DocumentTab& createTab(WindowState& window, const FilenameAndUri& filenameAndUri,
+                              DocumentMode mode)
+{
+    static int nextTabId = 1;
+
+    const int tabId = nextTabId++;
+
+    DocumentTab& tab = documentTabs[tabId];
+    tab.tabId = tabId;
+    tab.hWnd = window.hWnd;
+    tab.filenameAndUri = filenameAndUri;
+    tab.mode = mode;
+    if (mode == DocumentMode::STARTER)
+        tab.docType = "starter";
+    else if (mode == DocumentMode::WELCOME)
+        tab.docType = "welcome";
+    else
+        tab.docType = docTypeFromFilename(filenameAndUri.filename);
+
+    window.tabIds.push_back(tabId);
+
+    return tab;
+}
+
+// How tall the tab strip is at the standard resolution, in the same units the
+// strip page lays itself out in.
+static const int TAB_STRIP_HEIGHT = 36;
+
+static int stripHeight(const WindowState& window)
+{
+    if (!window.stripIsVisible)
+        return 0;
+    return MulDiv(TAB_STRIP_HEIGHT, GetDpiForWindow(window.hWnd), USER_DEFAULT_SCREEN_DPI);
+}
+
+// A minimized window has no client area at all, so both of these keep the
+// bottom edge at or below the top one: a web view rejects a rectangle that is
+// the wrong way round.
+static RECT stripBounds(const WindowState& window)
+{
+    RECT bounds;
+    GetClientRect(window.hWnd, &bounds);
+    bounds.bottom = std::min(bounds.bottom, bounds.top + stripHeight(window));
+    return bounds;
+}
+
+static RECT documentArea(const WindowState& window)
+{
+    RECT bounds;
+    GetClientRect(window.hWnd, &bounds);
+    bounds.top = std::min(bounds.bottom, bounds.top + stripHeight(window));
+    return bounds;
+}
+
+static void layoutTabs(WindowState& window)
+{
+    if (window.stripController)
+        window.stripController->put_Bounds(stripBounds(window));
+
+    // Every document keeps the right size, not just the one on show, so a
+    // switch between tabs never lands on a stale layout.
+    const RECT bounds = documentArea(window);
+    for (int tabId : window.tabIds)
+    {
+        DocumentTab* tab = findTab(tabId);
+        if (tab && tab->webViewController)
+            tab->webViewController->put_Bounds(bounds);
+    }
+}
+
+// Fresh strips start in the saved dark mode choice, or in the system theme.
+static std::string currentStripTheme()
+{
+    return darkModeEnabled() ? "dark" : "light";
+}
+
+// The state the tab strip draws, one entry per document in tab order.
+static std::string currentTabsJson(const WindowState& window)
+{
+    Poco::JSON::Array tabs;
+    for (int tabId : window.tabIds)
+    {
+        const DocumentTab* tab = findTab(tabId);
+        if (!tab)
+            continue;
+
+        Poco::JSON::Object::Ptr entry = new Poco::JSON::Object();
+        entry->set("id", tab->tabId);
+        entry->set("title", tab->filenameAndUri.filename);
+        entry->set("docType", tab->docType);
+        entry->set("modified", tab->isModified);
+        entry->set("active", tab->tabId == window.activeTabId);
+        tabs.add(entry);
+    }
+
+    std::ostringstream oss;
+    tabs.stringify(oss);
+    return oss.str();
+}
+
+// The strip page reads a notification as {signal, args}, the mirror image of the
+// {call, args} it posts back.
+static void notifyStrip(WindowState& window, const std::string& signal,
+                        const std::string& argument)
+{
+    if (!window.stripWebView)
+        return;
+
+    Poco::JSON::Array::Ptr args = new Poco::JSON::Array();
+    args->add(argument);
+
+    Poco::JSON::Object::Ptr envelope = new Poco::JSON::Object();
+    envelope->set("signal", signal);
+    envelope->set("args", args);
+
+    std::ostringstream oss;
+    envelope->stringify(oss);
+
+    window.stripWebView->PostWebMessageAsJson(
+        Util::string_to_wide_string(oss.str()).c_str());
+}
+
+static void updateStripVisibility(WindowState& window)
+{
+    // A single document needs no strip to pick from, and a presentation wants
+    // the whole monitor.
+    const bool visible = window.tabIds.size() > 1 && !window.isFullScreen;
+    if (visible == window.stripIsVisible)
+        return;
+
+    window.stripIsVisible = visible;
+    if (window.stripController)
+        window.stripController->put_IsVisible(visible && window.stripHasContent);
+    layoutTabs(window);
+}
+
+static void pushTabsToStrip(WindowState& window)
+{
+    updateStripVisibility(window);
+    notifyStrip(window, "tabsChanged", currentTabsJson(window));
+}
+
+// The strip page handles no keys, so the keyboard belongs to the document even
+// when the click that got us here landed on a tab.
+static void focusActiveDocument(const WindowState& window)
+{
+    DocumentTab* tab = activeTabOf(window);
+    if (tab && tab->webViewController && tab->hasContent)
+        tab->webViewController->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+}
+
+// Bring one document of the window to the front and leave the rest behind it.
+static void activateTab(WindowState& window, int tabId)
+{
+    DocumentTab* tab = findTab(tabId);
+    if (!tab)
+        return;
+
+    window.activeTabId = tabId;
+
+    for (int otherId : window.tabIds)
+    {
+        DocumentTab* other = findTab(otherId);
+        if (other && other->webViewController)
+            other->webViewController->put_IsVisible(otherId == tabId && other->hasContent);
+    }
+
+    focusActiveDocument(window);
+
+    SetWindowTextW(window.hWnd, windowTitleForTab(*tab).c_str());
+
+    pushTabsToStrip(window);
+}
+
+static void removeTabFromWindow(WindowState& window, int tabId);
+
+static void closeTab(WindowState& window, int tabId)
+{
+    DocumentTab* tab = findTab(tabId);
+    if (!tab)
+        return;
+
+    if (tab->isConsole)
+    {
+        // The presentation ends with its console: the document comes out of
+        // full screen and forgets the window it was driving.
+        DocumentTab* presenting = findTab(tab->presentingTabId);
+        if (presenting)
+        {
+            WindowState* presentingWindow = findWindow(presenting->hWnd);
+            if (presentingWindow)
+                leave_full_screen(*presentingWindow);
+            presenting->hConsoleWnd = 0;
+        }
+    }
+    else if (tab->mode != DocumentMode::STARTER)
+    {
+        // A presentation ends with the document driving it: the console window
+        // goes, and the window this document was playing in comes back out of
+        // full screen with its tab strip.
+        if (tab->hConsoleWnd)
+        {
+            PostMessageW(tab->hConsoleWnd, WM_CLOSE, 0, 0);
+            tab->hConsoleWnd = 0;
+        }
+        if (window.isPresFullScreen)
+        {
+            window.isPresFullScreen = false;
+            leave_full_screen(window);
+        }
+
+        // A document whose page never said hello has no forwarding thread to
+        // wake and no socket of its own to close yet.
+        if (tab->app2js.joinable())
+        {
+            do_bye_handling_things(*tab);
+
+            // The goodbye closed the thread's end of the socket, so the thread
+            // is on its way out and joins straight away.
+            tab->app2js.join();
+        }
+
+        DocumentData::deallocate(tab->appDocId);
+    }
+
+    if (tab->webViewController)
+    {
+        tab->webViewController->Close();
+        tab->webViewController = nullptr;
+    }
+    tab->webView = nullptr;
+
+    documentTabs.erase(tabId);
+
+    removeTabFromWindow(window, tabId);
+}
+
+// Take a document out of the tab order of its window. If it was the one on show, the one that
+// moves up into its place, or the last one, comes to the front instead.
+static void removeTabFromWindow(WindowState& window, int tabId)
+{
+    const auto position = std::find(window.tabIds.begin(), window.tabIds.end(), tabId);
+    size_t index = 0;
+    if (position != window.tabIds.end())
+    {
+        index = static_cast<size_t>(std::distance(window.tabIds.begin(), position));
+        window.tabIds.erase(position);
+    }
+
+    if (window.tabIds.empty())
+    {
+        window.activeTabId = 0;
+        return;
+    }
+
+    if (window.activeTabId == tabId)
+    {
+        activateTab(window, window.tabIds[std::min(index, window.tabIds.size() - 1)]);
+    }
+    else
+    {
+        pushTabsToStrip(window);
+        focusActiveDocument(window);
+    }
+}
+
+static void reorderTab(WindowState& window, int fromIndex, int toIndex)
+{
+    const int count = static_cast<int>(window.tabIds.size());
+    if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count ||
+        fromIndex == toIndex)
+        return;
+
+    const int tabId = window.tabIds[fromIndex];
+    window.tabIds.erase(window.tabIds.begin() + fromIndex);
+    window.tabIds.insert(window.tabIds.begin() + toIndex, tabId);
+
+    pushTabsToStrip(window);
+    focusActiveDocument(window);
+}
+
+// Walk the tab order by one, wrapping at either end, and bring that document to the front.
+static void activateAdjacentTab(WindowState& window, int direction)
+{
+    const int count = static_cast<int>(window.tabIds.size());
+    if (count < 2)
+        return;
+
+    const auto position =
+        std::find(window.tabIds.begin(), window.tabIds.end(), window.activeTabId);
+    if (position == window.tabIds.end())
+        return;
+
+    const int index = static_cast<int>(std::distance(window.tabIds.begin(), position));
+    activateTab(window, window.tabIds[((index + direction) % count + count) % count]);
+}
+
+// The menu a right click on a tab brings up.
+static void showTabContextMenu(HWND hWnd, int tabId, POINT point)
+{
+    if (!findWindow(hWnd) || !findTab(tabId))
+        return;
+
+    enum
+    {
+        CLOSE = 1,
+        CLOSE_OTHERS,
+        MOVE_TO_NEW_WINDOW
+    };
+
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING, CLOSE, translate("TabManager", "Close").c_str());
+    AppendMenuW(menu, MF_STRING, CLOSE_OTHERS, translate("TabManager", "Close Others").c_str());
+    AppendMenuW(menu, MF_STRING, MOVE_TO_NEW_WINDOW,
+                translate("TabManager", "Move Tab to New Window").c_str());
+
+    ClientToScreen(hWnd, &point);
+    const int command = static_cast<int>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, 0, hWnd, nullptr));
+    DestroyMenu(menu);
+
+    // The menu runs a message loop of its own, which can have taken the window or the tab away.
+    WindowState* window = findWindow(hWnd);
+    if (!window || !findTab(tabId))
+        return;
+
+    // Each close is posted, as from a tab's close button, so the window goes with its last
+    // document.
+    if (command == CLOSE)
+    {
+        PostMessageW(hWnd, CODA_WM_CLOSETAB, (WPARAM)tabId, 0);
+    }
+    else if (command == CLOSE_OTHERS)
+    {
+        for (int otherId : window->tabIds)
+        {
+            if (otherId != tabId)
+                PostMessageW(hWnd, CODA_WM_CLOSETAB, (WPARAM)otherId, 0);
+        }
+    }
+    else if (command == MOVE_TO_NEW_WINDOW)
+    {
+        moveTabToNewWindow(hWnd, tabId);
+    }
+}
+
+// Ctrl+Tab and Ctrl+Shift+Tab move between the documents of a window. The app takes those keys
+// rather than leaving them to the page, because a document knows nothing about the other tabs.
+static void installTabSwitchAccelerator(ICoreWebView2Controller* controller)
+{
+    EventRegistrationToken token;
+    controller->add_AcceleratorKeyPressed(
+        Microsoft::WRL::Callback<ICoreWebView2AcceleratorKeyPressedEventHandler>(
+            [](ICoreWebView2Controller* sender,
+               ICoreWebView2AcceleratorKeyPressedEventArgs* args) -> HRESULT
+            {
+                COREWEBVIEW2_KEY_EVENT_KIND kind;
+                UINT key;
+                if (FAILED(args->get_KeyEventKind(&kind)) ||
+                    FAILED(args->get_VirtualKey(&key)))
+                    return S_OK;
+
+                if (kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN &&
+                    kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN)
+                    return S_OK;
+
+                if (key != VK_TAB || !(GetKeyState(VK_CONTROL) & 0x8000))
+                    return S_OK;
+
+                // The window the WebView2 is in now, as a document can move to another one.
+                HWND hWnd;
+                if (FAILED(sender->get_ParentWindow(&hWnd)))
+                    return S_OK;
+
+                const WindowState* window = findWindow(hWnd);
+                if (!window)
+                    return S_OK;
+
+                // A full-screen presentation hides the tab strip, and the key does nothing there.
+                if (window->isFullScreen)
+                {
+                    args->put_Handled(TRUE);
+                    return S_OK;
+                }
+
+                // A window showing a single document has no other tab to move to, so the
+                // key belongs to the document.
+                if (window->tabIds.size() < 2)
+                    return S_OK;
+
+                const int direction = (GetKeyState(VK_SHIFT) & 0x8000) ? -1 : 1;
+                PostMessageW(hWnd, CODA_WM_ACTIVATEADJACENTTAB, (WPARAM)direction, 0);
+
+                args->put_Handled(TRUE);
+                return S_OK;
+            })
+            .Get(),
+        &token);
+}
+
+static void openStarterWindow();
+
+// What the tab strip page asks of the app, as {call, args}.
+static void processStripMessage(WindowState& window, const std::string& message)
+{
+    Poco::JSON::Object::Ptr object;
+    if (!JsonUtil::parseJSON(message, object))
+    {
+        LOG_ERR("Unparseable message from the tab strip: '" << message << "'");
+        return;
+    }
+
+    const std::string call = object->optValue<std::string>("call", std::string());
+    Poco::JSON::Array::Ptr args = object->getArray("args");
+    const std::size_t argCount = args ? args->size() : 0;
+
+    if (call == "requestSync")
+    {
+        // The page has its handlers in place and wants the state it missed.
+        notifyStrip(window, "themeChanged", currentStripTheme());
+        pushTabsToStrip(window);
+    }
+    else if (call == "tabActivated" && argCount >= 1)
+    {
+        activateTab(window, args->getElement<int>(0));
+    }
+    else if (call == "tabCloseRequested" && argCount >= 1)
+    {
+        PostMessageW(window.hWnd, CODA_WM_CLOSETAB, (WPARAM)args->getElement<int>(0), 0);
+    }
+    else if (call == "tabContextMenuRequested" && argCount >= 3)
+    {
+        // The page gives the click in its own CSS pixels from the top left of the strip, which is
+        // that of the window's client area. The strip does not zoom, so the window's DPI is all
+        // that tells the two units apart.
+        const UINT dpi = GetDpiForWindow(window.hWnd);
+        const int x = MulDiv(static_cast<int>(std::lround(args->getElement<double>(1))), dpi,
+                             USER_DEFAULT_SCREEN_DPI);
+        const int y = MulDiv(static_cast<int>(std::lround(args->getElement<double>(2))), dpi,
+                             USER_DEFAULT_SCREEN_DPI);
+        PostMessageW(window.hWnd, CODA_WM_SHOWTABMENU, (WPARAM)args->getElement<int>(0),
+                     MAKELPARAM(x, y));
+    }
+    else if (call == "tabReordered" && argCount >= 2)
+    {
+        reorderTab(window, args->getElement<int>(0), args->getElement<int>(1));
+    }
+    else if (call == "newTabRequested")
+    {
+        openStarterWindow();
+    }
+    else if (call == "debug" && argCount >= 1)
+    {
+        LOG_DBG("From the tab strip: " << args->getElement<std::string>(0));
+    }
+    else if (call == "tabDragEnded" && argCount >= 2)
+    {
+        // A drop on the strip has already reordered the tabs. The page sees no difference between
+        // a drag cancelled with Escape and a drop that nothing took, so the key is checked here.
+        if (args->getElement<bool>(1) || (GetAsyncKeyState(VK_ESCAPE) & 0x8000))
+            return;
+
+        // A tab released over the desktop, or over another application, moves out into a window
+        // of its own, as with the context menu. The drop overlay belongs to the document window
+        // that owns it.
+        const int tabId = args->getElement<int>(0);
+        POINT point;
+        if (!GetCursorPos(&point))
+            return;
+        const HWND root = GetAncestor(WindowFromPoint(point), GA_ROOT);
+        WindowState* target = root ? findWindow(root) : nullptr;
+        if (!target && root)
+            target = findWindow(GetWindow(root, GW_OWNER));
+        if (!target)
+        {
+            PostMessageW(window.hWnd, CODA_WM_MOVETABTONEWWINDOW, (WPARAM)tabId,
+                         MAKELPARAM(point.x, point.y));
+            return;
+        }
+
+        // Released over the document of another tabbed window, the tab joins that window at the
+        // end. A drop on the strip of that window arrives from its page as
+        // tabAdoptFromOtherWindow instead, with the position in the tab order.
+        if (target == &window || !target->isTabbed)
+            return;
+        RECT strip = stripBounds(*target);
+        MapWindowPoints(target->hWnd, HWND_DESKTOP, reinterpret_cast<POINT*>(&strip), 2);
+        if (PtInRect(&strip, point))
+            return;
+        PostMessageW(target->hWnd, CODA_WM_MOVETABTOWINDOW, (WPARAM)tabId, (LPARAM)-1);
+    }
+    else if (call == "tabAdoptFromOtherWindow" && argCount >= 2)
+    {
+        PostMessageW(window.hWnd, CODA_WM_MOVETABTOWINDOW, (WPARAM)args->getElement<int>(0),
+                     (LPARAM)args->getElement<int>(1));
+    }
+    else if (call == "tabDragStarted" || call == "targetDragOver")
+    {
+        // The app learns where a tab drag ended from tabDragEnded, and from the drop calls of the
+        // strip it ended on, so it does not follow the drag as it goes.
+    }
+    else
+    {
+        LOG_ERR("Unhandled message from the tab strip: '" << message << "'");
+    }
+}
+
+// The tab strip is the same page CODA-Q draws, in a web view of its own along the top of the
+// window.
+static void createTabStrip(WindowState& window)
+{
+    const HWND hWnd = window.hWnd;
+
+    withWebView2Environment(
+        [hWnd](ICoreWebView2Environment* env)
+        {
+            env->CreateCoreWebView2Controller(
+                hWnd,
+                Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                    [hWnd](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
+                    {
+                        WindowState* window = findWindow(hWnd);
+                        if (!controller || !window)
+                            return E_FAIL;
+
+                        ICoreWebView2* webView;
+                        controller->get_CoreWebView2(&webView);
+                        window->stripWebView = wil::com_ptr<ICoreWebView2>(webView);
+                        window->stripController = controller;
+
+                        wil::com_ptr<ICoreWebView2Settings> settings;
+                        webView->get_Settings(&settings);
+                        settings->put_IsScriptEnabled(TRUE);
+                        settings->put_IsWebMessageEnabled(TRUE);
+                        settings->put_AreDefaultContextMenusEnabled(FALSE);
+                        // The strip is part of the window frame rather than content, so it stays at
+                        // one scale. Ctrl with the wheel and the keyboard shortcuts go through
+                        // IsZoomControlEnabled, and a touch pinch has its own setting on
+                        // ICoreWebView2Settings5.
+                        settings->put_IsZoomControlEnabled(FALSE);
+                        wil::com_ptr<ICoreWebView2Settings5> settings5
+                            = settings.try_query<ICoreWebView2Settings5>();
+                        if (settings5)
+                            settings5->put_IsPinchZoomEnabled(FALSE);
+                        // The strip stays on the one page it loaded, so a horizontal swipe across
+                        // it does not navigate.
+                        wil::com_ptr<ICoreWebView2Settings6> settings6
+                            = settings.try_query<ICoreWebView2Settings6>();
+                        if (settings6)
+                            settings6->put_IsSwipeNavigationEnabled(FALSE);
+
+                        EventRegistrationToken token;
+                        webView->add_WebMessageReceived(
+                            Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(
+                                [hWnd](ICoreWebView2* sender,
+                                       ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
+                                {
+                                    WindowState* window = findWindow(hWnd);
+                                    if (!window)
+                                        return S_OK;
+
+                                    // The page posts an object, so the message
+                                    // arrives as JSON rather than as a string.
+                                    wil::unique_cotaskmem_string json;
+                                    if (SUCCEEDED(args->get_WebMessageAsJson(&json)))
+                                        processStripMessage(
+                                            *window, Util::wide_string_to_string(json.get()));
+                                    return S_OK;
+                                })
+                                .Get(),
+                            &token);
+
+                        installTabSwitchAccelerator(controller);
+
+                        controller->put_IsVisible(FALSE);
+                        controller->put_Bounds(stripBounds(*window));
+
+                        // As for a document, the strip appears only once it has something styled
+                        // to show, so the window frame covers the gap instead of a white page.
+                        EventRegistrationToken readyToken;
+                        if (auto stripWebView2 = window->stripWebView.try_query<ICoreWebView2_2>())
+                            stripWebView2->add_DOMContentLoaded(
+                                Microsoft::WRL::Callback<ICoreWebView2DOMContentLoadedEventHandler>(
+                                    [hWnd](ICoreWebView2* sender,
+                                           ICoreWebView2DOMContentLoadedEventArgs* args) -> HRESULT
+                                    {
+                                        WindowState* stripWindow = findWindow(hWnd);
+                                        if (stripWindow && !stripWindow->stripHasContent)
+                                        {
+                                            stripWindow->stripHasContent = true;
+                                            if (stripWindow->stripController)
+                                                stripWindow->stripController->put_IsVisible(
+                                                    stripWindow->stripIsVisible);
+                                        }
+                                        return S_OK;
+                                    })
+                                    .Get(),
+                                &readyToken);
+
+                        // The page reads the theme out of the query string, so
+                        // it is in the right colours from its first paint.
+                        const std::string stripURL =
+                            app_installation_uri + "../cool/qtapp-tabstrip.html?darkTheme=" +
+                            (currentStripTheme() == "dark" ? "true" : "false");
+                        webView->Navigate(Util::string_to_wide_string(stripURL).c_str());
+
+                        return S_OK;
+                    })
+                    .Get());
+        });
+}
+
+// The web view of one document, in the window its tab belongs to. The document
+// itself is loaded once the page reports back with HULLO.
+static void createDocumentView(int tabId)
+{
+    withWebView2Environment(
+        [tabId](ICoreWebView2Environment* env)
+        {
+            DocumentTab* tab = findTab(tabId);
+            if (!tab)
+                return;
+
+            // Create a CoreWebView2Controller and get the associated CoreWebView2 whose parent is
+            // the window the document is shown in
+            env->CreateCoreWebView2Controller(
+                tab->hWnd,
+                Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                    [tabId, env](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
+                    {
+                        DocumentTab* data = findTab(tabId);
+                        if (!controller || !data)
+                            return E_FAIL;
+
+                        ICoreWebView2* webView;
+                        controller->get_CoreWebView2(&webView);
+                        data->webView = wil::com_ptr<ICoreWebView2>(webView);
+                        data->webViewController = controller;
+
+                        wil::com_ptr<ICoreWebView2_22> webView22 = data->webView.try_query<ICoreWebView2_22>();
+                        if (!webView22)
+                            fatal("Could not get webView22");
+
+                        // Add a few settings for the webview
+                        // The demo step is redundant since the values are the default settings
+                        wil::com_ptr<ICoreWebView2Settings> settings;
+                        webView->get_Settings(&settings);
+                        settings->put_IsScriptEnabled(TRUE);
+                        settings->put_AreDefaultScriptDialogsEnabled(TRUE);
+                        settings->put_IsWebMessageEnabled(TRUE);
+                        // Stop browser shortcut keys (such as F12 for the
+                        // developer tools and F5 for reload) from being
+                        // handled by the WebView, so the keys reach the
+                        // document instead. F12 then toggles the numbered
+                        // list rather than opening the developer tools.
+                        wil::com_ptr<ICoreWebView2Settings4> settings4
+                            = settings.try_query<ICoreWebView2Settings4>();
+                        if (settings4)
+                            settings4->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+
+                        // The document can have moved to another window while its WebView2 was
+                        // being made.
+                        controller->put_ParentWindow(data->hWnd);
+
+                        installTabSwitchAccelerator(controller);
+
+                        // Fit the WebView to the part of the window below the tab strip. It stays
+                        // hidden until its page has something styled to show, so what fills the
+                        // window until then is the frame, in the colour of the theme.
+                        WindowState* window = findWindow(data->hWnd);
+                        if (window)
+                        {
+                            controller->put_Bounds(documentArea(*window));
+                            controller->put_IsVisible(FALSE);
+                        }
+
+                        // The page has parsed its document and the stylesheets that block its
+                        // first paint. A navigation that fails reaches the second of these and
+                        // not the first, and an empty document view is still better than one
+                        // that never appears.
+                        EventRegistrationToken readyToken;
+                        auto showWhenReady = [tabId]()
+                        {
+                            DocumentTab* tab = findTab(tabId);
+                            WindowState* tabWindow = tab ? findWindow(tab->hWnd) : nullptr;
+                            if (!tab || !tabWindow || tab->hasContent)
+                                return;
+
+                            tab->hasContent = true;
+                            if (tabWindow->activeTabId != tabId || !tab->webViewController)
+                                return;
+
+                            tab->webViewController->put_IsVisible(TRUE);
+                            tab->webViewController->MoveFocus(
+                                COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+                        };
+
+                        if (auto webView2 = data->webView.try_query<ICoreWebView2_2>())
+                            webView2->add_DOMContentLoaded(
+                                Microsoft::WRL::Callback<ICoreWebView2DOMContentLoadedEventHandler>(
+                                    [showWhenReady](ICoreWebView2* sender,
+                                                    ICoreWebView2DOMContentLoadedEventArgs* args)
+                                        -> HRESULT
+                                    {
+                                        showWhenReady();
+                                        return S_OK;
+                                    })
+                                    .Get(),
+                                &readyToken);
+
+                        webView->add_NavigationCompleted(
+                            Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
+                                [showWhenReady](ICoreWebView2* sender,
+                                                ICoreWebView2NavigationCompletedEventArgs* args)
+                                    -> HRESULT
+                                {
+                                    showWhenReady();
+                                    return S_OK;
+                                })
+                                .Get(),
+                            &readyToken);
+
+                        EventRegistrationToken token;
+                        HRESULT hr;
+
+                        hr = (webView22->AddWebResourceRequestedFilterWithRequestSourceKinds(
+                                  L"cool://*",
+                                  COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+                                  COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL));
+                        if (!SUCCEEDED(hr))
+                        {
+                            LOG_ERR_S("AddWebResourceRequestedFilterWithRequestSourceKinds() failed");
+                            return hr;
+                        }
+
+                        hr = webView->add_WebResourceRequested(
+                            Microsoft::WRL::Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+                                [env](ICoreWebView2* sender,
+                                      ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT
+                                {
+                                    return webResourceRequestedHandler(env, sender, args);
+                                }).Get(), &token);
+
+                        if (!SUCCEEDED(hr))
+                        {
+                            LOG_ERR_S("add_WebResourceRequested() failed");
+                            return hr;
+                        }
+
+                        // Communication between host and web content
+                        // Set an event handler for the host to return received message back to the web content
+                        webView->add_WebMessageReceived(
+                            Microsoft::WRL::Callback<
+                                ICoreWebView2WebMessageReceivedEventHandler>(
+                                [tabId](
+                                    ICoreWebView2* webView,
+                                    ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
+                                {
+                                    DocumentTab* tab = findTab(tabId);
+                                    if (!tab)
+                                        return S_OK;
+
+                                    wil::unique_cotaskmem_string message;
+                                    args->TryGetWebMessageAsString(&message);
+                                    processMessage(*tab, message);
+                                    return S_OK;
+                                })
+                                .Get(),
+                            &token);
+
+                        webView->add_ContainsFullScreenElementChanged(
+                            Microsoft::WRL::Callback<ICoreWebView2ContainsFullScreenElementChangedEventHandler>(
+                                [tabId](ICoreWebView2* sender, IUnknown* args) -> HRESULT
+                                {
+                                    DocumentTab* tab = findTab(tabId);
+                                    WindowState* window = tab ? findWindow(tab->hWnd) : nullptr;
+                                    if (!window)
+                                        return S_OK;
+
+                                    BOOL containsFullscreenElement;
+                                    sender->get_ContainsFullScreenElement(&containsFullscreenElement);
+                                    if (containsFullscreenElement)
+                                    {
+                                        HMONITOR monitor = MonitorFromWindow(tab->hWnd, MONITOR_DEFAULTTONEAREST);
+                                        enter_full_screen(*window, monitor, true);
+                                    }
+                                    else
+                                        leave_full_screen(*window);
+                                    return S_OK;
+                                })
+                                .Get(),
+                            nullptr);
+
+                        // New windows appear to need to reuse the original env of the parent, a good explanation
+                        // of use at: https://github.com/MicrosoftEdge/WebView2Feedback/discussions/4501#discussioncomment-9215801
+                        webView->add_NewWindowRequested(
+                            Microsoft::WRL::Callback<ICoreWebView2NewWindowRequestedEventHandler>(
+                                [env, tabId](ICoreWebView2* sender, ICoreWebView2NewWindowRequestedEventArgs* args)
+                                {
+                                    DocumentTab* data = findTab(tabId);
+                                    if (!data)
+                                        return S_OK;
+
+                                    wil::com_ptr<ICoreWebView2Deferral> deferral;
+                                    args->GetDeferral(&deferral);
+
+                                    HMONITOR hMonitor = MonitorFromWindow(data->hWnd, MONITOR_DEFAULTTONEAREST);
+                                    MONITORINFO monitorInfo = { sizeof(monitorInfo) };
+                                    GetMonitorInfo(hMonitor, &monitorInfo);
+                                    const RECT& area = monitorInfo.rcWork;
+                                    int areaWidth = area.right - area.left;
+                                    int areaHeight = area.bottom - area.top;
+                                    int width = areaWidth * 17 / 20;
+                                    int height = areaHeight * 17 / 20;
+                                    int x = area.left + (areaWidth - width) / 2;
+                                    int y = area.top + (areaHeight - height) / 2;
+
+                                    // The presenter console is a window of its own rather than a
+                                    // tab: it plays full screen on the monitor the presentation
+                                    // does not use.
+                                    data->hConsoleWnd = CreateWindowW(windowClass,
+                                            Util::string_to_wide_string(APP_NAME).c_str(),
+                                            WS_OVERLAPPEDWINDOW,
+                                            x, y, width, height,
+                                            NULL, NULL, appInstance, NULL);
+
+                                    WindowState& consoleWindow = windows[data->hConsoleWnd];
+                                    consoleWindow.hWnd = data->hConsoleWnd;
+
+                                    DocumentTab& consoleTab = createTab(consoleWindow, {},
+                                                                        DocumentMode::EDIT);
+                                    consoleTab.isConsole = true;
+                                    consoleTab.presentingTabId = tabId;
+                                    consoleWindow.activeTabId = consoleTab.tabId;
+                                    const int consoleTabId = consoleTab.tabId;
+
+                                    ShowWindow(data->hConsoleWnd, appShowMode);
+
+                                    env->CreateCoreWebView2Controller(
+                                        data->hConsoleWnd,
+                                        Microsoft::WRL::Callback<
+                                            ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                                            [consoleTabId, tabId, args, deferral](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
+                                            {
+                                                DocumentTab* consoleData = findTab(consoleTabId);
+                                                DocumentTab* presenting = findTab(tabId);
+                                                if (!controller || !consoleData || !presenting)
+                                                    return E_FAIL;
+
+                                                ICoreWebView2* webView;
+                                                controller->get_CoreWebView2(&webView);
+                                                consoleData->webView = wil::com_ptr<ICoreWebView2>(webView);
+
+                                                webView->add_WindowCloseRequested(
+                                                    Microsoft::WRL::Callback<ICoreWebView2WindowCloseRequestedEventHandler>(
+                                                        [consoleTabId](ICoreWebView2* sender, IUnknown* args)
+                                                        {
+                                                            DocumentTab* consoleData = findTab(consoleTabId);
+                                                            if (consoleData)
+                                                                PostMessageW(consoleData->hWnd, WM_CLOSE, 0, 0);
+                                                            return S_OK;
+                                                        })
+                                                        .Get(),
+                                                    nullptr);
+
+                                                controller->put_IsVisible(TRUE);
+
+                                                consoleData->webViewController = controller;
+
+                                                // Resize WebView to fit the bounds of the parent window
+                                                RECT bounds;
+                                                GetClientRect(consoleData->hWnd, &bounds);
+                                                controller->put_Bounds(bounds);
+
+                                                args->put_NewWindow(consoleData->webView.get());
+                                                args->put_Handled(TRUE);
+                                                deferral->Complete();
+
+                                                arrangePresentationWindows(*presenting);
+
+                                                return S_OK;
+                                            })
+                                            .Get());
+
+                                    return S_OK;
+                                })
+                                .Get(),
+                            nullptr);
+
+                        std::string coolURL =
+                            app_installation_uri + "../cool/cool.html?";
+                        if (data->mode == DocumentMode::STARTER)
+                            coolURL += "starterMode=true";
+                        else
+                        {
+                            if (data->mode != DocumentMode::WELCOME)
+                                recentFiles.add(data->filenameAndUri.uri);
+                            coolURL +=
+                                "file_path=" + data->filenameAndUri.uri +
+                                std::string("&permission=edit") +
+                                std::string("&appdocid=") + std::to_string(data->appDocId) +
+                                std::string("&userinterfacemode=notebookbar");
+                        }
+
+                        coolURL += "&lang=" + uiLanguage;
+                        coolURL += "&dir=" + std::string(LangUtil::isRtlLanguage(uiLanguage) ? "rtl" : "");
+
+                        // Saved choice wins, otherwise follow the system theme.
+                        coolURL += darkModeEnabled() ? "&darkTheme=true" : "&darkTheme=false";
+
+                        if (data->mode != DocumentMode::STARTER)
+                            coolURL +=
+                                std::string((data->mode != DocumentMode::NEW ? "&startreadonly=true" : "")) +
+                                std::string((data->mode == DocumentMode::WELCOME ? "&welcome=true" : ""));
+
+                        webView->Navigate(Util::string_to_wide_string(coolURL).c_str());
+
+                        return S_OK;
+                    })
+                    .Get());
+        });
+}
+
+// Set up a top-level window of the app's own class, ready to take documents.
+static WindowState& createAppWindow(const std::wstring& title, DWORD style, int x, int y,
+                                    int width, int height)
+{
+    const HWND hWnd = CreateWindowW(windowClass, title.c_str(), style, x, y, width, height,
+                                    NULL, NULL, appInstance, NULL);
+
+    WindowState& window = windows[hWnd];
+    window.hWnd = hWnd;
+
+    ShowWindow(hWnd, appShowMode);
+    UpdateWindow(hWnd);
+
+    AddClipboardFormatListener(hWnd);
+
+    return window;
+}
+
+// Set size of document window to be 90% of monitor width and height.
+//
+// FIXME: Should we actually, at least for text documents, ideally peek into the document and
+// check what its page size is, and in the common case of a portrait orientation text document,
+// make the document window also (if the monitor is large enough) higher than wider? On small
+// monitors (1280x768 or less?) we should probably default to making the document window
+// full-screen?
+//
+// FIXME: My initial assumption that the COOL window would open up on the monitor where the
+// file section dialog was is incorrect.
+static void defaultWindowSize(int& width, int& height)
+{
+    MONITORINFO monitorInfo;
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (GetMonitorInfoW(primaryMonitor, &monitorInfo))
+    {
+        width = 0.9 * (monitorInfo.rcWork.right - monitorInfo.rcWork.left);
+        height = 0.9 * (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
+    }
+    else
+    {
+        width = 1200;
+        height = 900;
+    }
+}
+
+// A new window that shows documents as tabs. It goes once its last tab closes. Given a point of the
+// screen, the window comes up with that point on its title bar, and inside the work area of the
+// monitor the point is on.
+static WindowState& createTabbedWindow(const POINT* titleBarPoint = nullptr)
+{
+    int width, height;
+    defaultWindowSize(width, height);
+
+    int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
+    if (titleBarPoint)
+    {
+        x = titleBarPoint->x - width / 2;
+        y = titleBarPoint->y - GetSystemMetrics(SM_CYSIZEFRAME) -
+            GetSystemMetrics(SM_CXPADDEDBORDER) - GetSystemMetrics(SM_CYCAPTION) / 2;
+
+        // The default size is taken from the primary monitor, which can be larger than this one.
+        MONITORINFO monitorInfo;
+        monitorInfo.cbSize = sizeof(monitorInfo);
+        if (GetMonitorInfoW(MonitorFromPoint(*titleBarPoint, MONITOR_DEFAULTTONEAREST),
+                            &monitorInfo))
+        {
+            const RECT& work = monitorInfo.rcWork;
+            width = std::min(width, static_cast<int>(work.right - work.left));
+            height = std::min(height, static_cast<int>(work.bottom - work.top));
+            x = std::clamp(x, static_cast<int>(work.left), static_cast<int>(work.right) - width);
+            y = std::clamp(y, static_cast<int>(work.top), static_cast<int>(work.bottom) - height);
+        }
+    }
+
+    WindowState& window = createAppWindow(Util::string_to_wide_string(APP_NAME),
+                                          WS_OVERLAPPEDWINDOW, x, y, width, height);
+    window.isTabbed = true;
+    tabbedWindow = window.hWnd;
+
+    createTabStrip(window);
+
+    return window;
+}
+
+// The tabbed window that a newly opened document goes to, made with the first document.
+static WindowState& getOrCreateTabbedWindow()
+{
+    WindowState* existing = findWindow(tabbedWindow);
+    if (existing)
+        return *existing;
+
+    return createTabbedWindow();
+}
+
+// Take a document out of its window, and show it in another tabbed window, at the position
+// insertAt in the tab order of that window, or at the end when insertAt is -1. The WebView2 moves
+// with it, so the document stays loaded as it is. The window it leaves goes if it has no other
+// document.
+static void moveTabToWindow(int tabId, WindowState& target, int insertAt)
+{
+    DocumentTab* tab = findTab(tabId);
+    WindowState* source = tab ? findWindow(tab->hWnd) : nullptr;
+    if (!source || source == &target || !source->isTabbed || !target.isTabbed ||
+        target.isFullScreen)
+        return;
+
+    removeTabFromWindow(*source, tabId);
+
+    tab->hWnd = target.hWnd;
+    const int count = static_cast<int>(target.tabIds.size());
+    target.tabIds.insert(target.tabIds.begin() +
+                             (insertAt < 0 || insertAt > count ? count : insertAt),
+                         tabId);
+    if (tab->webViewController)
+    {
+        tab->webViewController->put_ParentWindow(target.hWnd);
+        tab->webViewController->put_Bounds(documentArea(target));
+    }
+
+    activateTab(target, tabId);
+    SetForegroundWindow(target.hWnd);
+
+    // The WebView2 has a new parent by now, so it lives on when the window it left goes.
+    if (source->tabIds.empty())
+        DestroyWindow(source->hWnd);
+}
+
+// Take a document out of its window, and show it in a new tabbed window of its own, with the title
+// bar at the drop point when there is one.
+static void moveTabToNewWindow(HWND hWnd, int tabId, const POINT* dropPoint)
+{
+    WindowState* source = findWindow(hWnd);
+    DocumentTab* tab = findTab(tabId);
+    if (!source || !tab || tab->hWnd != hWnd || source->tabIds.size() < 2)
+        return;
+
+    moveTabToWindow(tabId, createTabbedWindow(dropPoint), -1);
+}
+
+// The window the welcome slideshow plays in. It is displayed without
+// decorations, and at 16:9 because we know it is that aspect ratio.
+static WindowState& createWelcomeWindow()
+{
+    int width, height;
+    int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
+
+    MONITORINFO monitorInfo;
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (GetMonitorInfoW(primaryMonitor, &monitorInfo))
+    {
+        double aspectRatio =
+            (double)(monitorInfo.rcWork.right - monitorInfo.rcWork.left) / (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
+        if (aspectRatio < 16.0/9.0)
+        {
+            width = 0.9 * (monitorInfo.rcWork.right - monitorInfo.rcWork.left);
+            x = monitorInfo.rcWork.left + 0.05 * (monitorInfo.rcWork.right - monitorInfo.rcWork.left);
+            height = width / (16.0/9.0);
+            y = monitorInfo.rcWork.top + ((monitorInfo.rcWork.bottom - monitorInfo.rcWork.top) - height) / 2;
+        }
+        else
+        {
+            height = 0.9 * (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
+            y = monitorInfo.rcWork.top + 0.05 * (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top);
+            width = (16.0/9.0) * height;
+            x = monitorInfo.rcWork.left + ((monitorInfo.rcWork.right - monitorInfo.rcWork.left) - width) / 2;
+        }
+    }
+    else
+    {
+        width = 1280;
+        height = 720;
+    }
+
+    return createAppWindow(Util::string_to_wide_string(APP_NAME), WS_POPUP, x, y, width, height);
+}
+
+// Find out whether the document is already open, and return its tab if it is.
+static DocumentTab* findOpenDocumentTab(const std::string& uri)
+{
+    if (uri.empty())
+        return nullptr;
+
+    const std::string path = Poco::URI(uri).getPath();
+    for (auto& i : documentTabs)
+    {
+        if (Poco::URI(i.second.filenameAndUri.uri).getPath() == path)
+            return &i.second;
+    }
+    return nullptr;
+}
+
+static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mode)
+{
+    // Don't open an already open document in a new tab, switch to its tab instead.
+    if (mode == DocumentMode::EDIT)
+    {
+        if (DocumentTab* openTab = findOpenDocumentTab(filenameAndUri.uri))
+        {
+            if (WindowState* openWindow = findWindow(openTab->hWnd))
+            {
+                SetForegroundWindow(openWindow->hWnd);
+                activateTab(*openWindow, openTab->tabId);
+            }
+            // Go on with the rest when several documents are opened at once.
+            load_next_document();
+            return;
+        }
+    }
+
+    // The welcome slideshow and the starter backstage each get a window to
+    // themselves: neither is a document the user works in alongside others.
+    WindowState* window = nullptr;
+    if (mode == DocumentMode::WELCOME)
+    {
+        window = &createWelcomeWindow();
+    }
+    else if (mode == DocumentMode::STARTER)
+    {
+        int width, height;
+        defaultWindowSize(width, height);
+        window = &createAppWindow(Util::string_to_wide_string(APP_NAME), WS_OVERLAPPEDWINDOW,
+                                  CW_USEDEFAULT, CW_USEDEFAULT, width, height);
+    }
+    else
+    {
+        window = &getOrCreateTabbedWindow();
+        // The document the user just asked for comes to the front.
+        SetForegroundWindow(window->hWnd);
+    }
+
+    DocumentTab& tab = createTab(*window, filenameAndUri, mode);
+    if (mode != DocumentMode::STARTER)
+    {
+        tab.fakeClientFd = fakeSocketSocket();
+        tab.appDocId = generate_new_app_doc_id();
+    }
+
+    activateTab(*window, tab.tabId);
+    createDocumentView(tab.tabId);
+}
+
+static void openStarterWindow()
+{
+    // One backstage is enough: a second ask brings the open one forward.
+    for (const auto& i : documentTabs)
+    {
+        if (i.second.mode == DocumentMode::STARTER)
+        {
+            SetForegroundWindow(i.second.hWnd);
+            return;
+        }
+    }
+
+    openCOOLWindow({}, DocumentMode::STARTER);
 }
 
 namespace
@@ -2910,17 +4137,8 @@ static HANDLE copyEngineClipboardData(UINT format, const std::string& mimeType)
 {
     // The clipboard is process-global (one shared clipboard for the desktop app), so read it
     // straight from the engine; no document is involved.
-    if (!office)
-        return 0;
-
-    const char *filter[] = { mimeType.c_str(), nullptr };
-    std::vector<std::string> outMimeTypes;
-    std::vector<std::vector<char>> outStreams;
-    if (!office->getGlobalClipboard(filter, outMimeTypes, outStreams) ||
-        outStreams.size() == 0)
-        return 0;
-
-    if (outStreams[0].empty())
+    std::vector<char> bytes;
+    if (!office || !office->getGlobalClipboardData(mimeType.c_str(), bytes))
         return 0;
 
     HGLOBAL hMem;
@@ -2930,20 +4148,20 @@ static HANDLE copyEngineClipboardData(UINT format, const std::string& mimeType)
     std::string temp;
     if (format == CF_UNICODETEXT && mimeType == "text/plain;charset=utf-8")
     {
-        wtemp = Util::string_to_wide_string(std::string_view(outStreams[0].data(), outStreams[0].size()));
+        wtemp = Util::string_to_wide_string(std::string_view(bytes.data(), bytes.size()));
         src = wtemp.c_str();
         size = (wtemp.length() + 1) * 2;
     }
     else if (format == RegisterClipboardFormatW(L"HTML Format") && mimeType == "text/html")
     {
-        temp = generate_html_format(std::string(outStreams[0].data(), outStreams[0].size()));
+        temp = generate_html_format(std::string(bytes.data(), bytes.size()));
         src = temp.c_str();
         size = temp.length();
     }
     else
     {
-        src = outStreams[0].data();
-        size = outStreams[0].size();
+        src = bytes.data();
+        size = bytes.size();
     }
     hMem = GlobalAlloc(GMEM_MOVEABLE, size);
     if (hMem == NULL)
@@ -3182,6 +4400,34 @@ void install_clipboard_provider(COKit& kitOffice)
     kitOffice.installClipboardProvider(&provider);
 }
 
+// The engine asks the user for a file. Copy the details, hand them to the hidden owner
+// window's thread, and let CODA_WM_SHOWFILEPICKER show the dialog there; the completion
+// answers from the dialog result.
+static void filePickerProviderPick(const char* pTitle, const COKitFilePickerFilter* pFilters,
+                                   size_t nFilters,
+                                   void (*pfnPicked)(void* pContext, const char* pUrl),
+                                   void* pContext)
+{
+    auto request = std::make_unique<FilePickerRequest>();
+    if (pTitle)
+        request->title = Util::string_to_wide_string(pTitle);
+    for (size_t i = 0; i < nFilters; ++i)
+        request->filters.push_back({ Util::string_to_wide_string(pFilters[i].pName),
+                                     Util::string_to_wide_string(pFilters[i].pWildcards) });
+    request->pfnPicked = pfnPicked;
+    request->pContext = pContext;
+
+    PostMessageW(hiddenOwnerWindow, CODA_WM_SHOWFILEPICKER,
+                 reinterpret_cast<WPARAM>(request.release()), 0);
+}
+
+void install_filepicker_provider(COKit& kitOffice)
+{
+    static COKitFilePickerProvider provider{};
+    provider.pick = filePickerProviderPick;
+    kitOffice.installFilePickerProvider(&provider);
+}
+
 void materialize_clipboard_formats()
 {
     static bool beenHere = false;
@@ -3216,7 +4462,7 @@ void materialize_clipboard_formats()
     }
 }
 
-static void processMessage(WindowData& data, wil::unique_cotaskmem_string& message)
+static void processMessage(DocumentTab& data, wil::unique_cotaskmem_string& message)
 {
     std::wstring s(message.get());
     LOG_TRC(Util::wide_string_to_string(s));
@@ -3240,7 +4486,8 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
             // A drag carrying files has arrived over the web view. Take the drop away from the web
             // view, so that the app gets to see what was dropped. Repeats while the drag is still
             // in the part of the window the web view has, and stop once the overlay is up.
-            showDropOverlay(data);
+            if (WindowState* window = findWindow(data.hWnd))
+                showDropOverlay(*window);
         }
         else if (s == L"BYE")
         {
@@ -3284,25 +4531,54 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
         }
         else if (s.starts_with(L"FULLSCREENPRESENTATION "))
         {
-            data.isPresFullScreen = s.substr(23) == L"true";
-            if (data.isPresFullScreen)
+            WindowState* window = findWindow(data.hWnd);
+            if (!window)
+                return;
+
+            window->isPresFullScreen = s.substr(23) == L"true";
+            if (window->isPresFullScreen)
                 arrangePresentationWindows(data);
             else
-                leave_full_screen(data);
+                leave_full_screen(*window);
         }
         else if (s == L"SYNCSETTINGS")
         {
             Desktop::syncSettings([&data](const std::vector<char>& buf) {
-                send2JS(data.hWnd, buf.data(), buf.size());
+                send2JS(data, buf.data(), buf.size());
             });
         }
         else if (s.starts_with(L"UPLOADSETTINGS "))
         {
-            Desktop::uploadSettings(Util::wide_string_to_string(s.substr(strlen("UPLOADSETTINGS "))));
+            uploadAndApplySettings(Util::wide_string_to_string(s.substr(strlen("UPLOADSETTINGS "))));
         }
         else if (s.starts_with(L"SETDARKMODE "))
         {
             Desktop::setDarkMode(s.substr(strlen("SETDARKMODE ")) == L"true");
+            applyTitleBarThemeToAllWindows();
+
+            // The tab strip is a page of its own and follows along.
+            for (auto& i : windows)
+                notifyStrip(i.second, "themeChanged", currentStripTheme());
+        }
+        else if (s.starts_with(L"COMMANDSTATECHANGED "))
+        {
+            Poco::JSON::Object::Ptr object;
+            if (!JsonUtil::parseJSON(Util::wide_string_to_string(s), object))
+                return;
+
+            if (object->optValue<std::string>("commandName", std::string()) !=
+                ".uno:ModifiedStatus")
+                return;
+
+            const bool modified =
+                object->optValue<std::string>("state", std::string()) == "true";
+            if (modified == data.isModified)
+                return;
+
+            // The tab shows a document with unwritten changes differently.
+            data.isModified = modified;
+            if (WindowState* window = findWindow(data.hWnd))
+                pushTabsToStrip(*window);
         }
         else if (s.starts_with(L"downloadas "))
         {
@@ -3385,6 +4661,64 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
                     LOG_INF("exportfile: saved image to " << destPath);
             }
         }
+        else if (s.starts_with(L"extensionsavefile "))
+        {
+            // A JS extension (see browser Control.Extension.ts) generated a file
+            // - e.g. LibreLogo's PICTURE "x.svg" export - and asked to save it.
+            // The bytes travel base64 in the message; decode them and write to
+            // the user's chosen path, reusing the exportfile save dialog.
+            auto const ns = Util::wide_string_to_string(s);
+            auto const tokens = StringVector::tokenize(ns);
+            std::string encodedName, base64;
+            COOLProtocol::getTokenString(tokens, "name", encodedName);
+            if (!COOLProtocol::getTokenString(tokens, "data", base64))
+            {
+                LOG_ERR("extensionsavefile: no data= in message '" << ns << "'");
+                return;
+            }
+            std::string name;
+            Poco::URI::decode(encodedName, name);
+            if (name.empty())
+                name = "file";
+
+            // Decode the base64 payload.
+            DWORD cbBinary = 0;
+            if (!CryptStringToBinaryA(base64.c_str(), static_cast<DWORD>(base64.size()),
+                                      CRYPT_STRING_BASE64, nullptr, &cbBinary, nullptr, nullptr))
+            {
+                LOG_ERR("extensionsavefile: base64 decode sizing failed: " << GetLastError());
+                return;
+            }
+            std::vector<BYTE> bytes(cbBinary);
+            if (!CryptStringToBinaryA(base64.c_str(), static_cast<DWORD>(base64.size()),
+                                      CRYPT_STRING_BASE64, bytes.data(), &cbBinary, nullptr, nullptr))
+            {
+                LOG_ERR("extensionsavefile: base64 decode failed: " << GetLastError());
+                return;
+            }
+
+            auto const extension = Poco::Path(name).getExtension();
+            auto filenameAndUri = fileSaveDialog(
+                Poco::Path(name).getFileName(), "",
+                extension.empty()
+                    ? std::vector<COMDLG_FILTERSPEC>{}
+                    : std::vector<COMDLG_FILTERSPEC>{
+                          { Util::string_to_wide_string(extension).c_str(),
+                            Util::string_to_wide_string("*." + extension).c_str() } });
+
+            if (filenameAndUri.filename != "")
+            {
+                auto destPath = Poco::URI(filenameAndUri.uri).getPath();
+                // The usual hack to strip the leading slash before the drive letter.
+                if (destPath.length() > 4 && destPath[0] == '/' && destPath[2] == ':' && destPath[3] == '/')
+                    destPath = destPath.substr(1);
+                std::ofstream out(destPath, std::ios::binary | std::ios::trunc);
+                if (!out || !out.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()))
+                    LOG_ERR("extensionsavefile: failed to write '" << destPath << "'");
+                else
+                    LOG_INF("extensionsavefile: saved " << destPath);
+            }
+        }
         else if (s.starts_with(L"loaddocument "))
         {
             // "loaddocument url=file:///path/to/file.ext"
@@ -3415,7 +4749,18 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
             auto path = Poco::URI(url).getPath();
             auto lastSlash = path.find_last_of('/');
             auto filename = path.substr(lastSlash + 1);
+            const std::string previousUri = data.filenameAndUri.uri;
             data.filenameAndUri = { filename, Poco::URI(url).toString() } ;
+            // The app picked the name of a new document, so only the name the user saved it as
+            // belongs in the recent list.
+            if (data.mode == DocumentMode::NEW)
+            {
+                recentFiles.remove(previousUri);
+                data.mode = DocumentMode::EDIT;
+            }
+            recentFiles.add(data.filenameAndUri.uri);
+            data.docType = docTypeFromFilename(filename);
+            data.isModified = false;
 
             // Connect to COOLWSD
             int rc = fakeSocketConnect(data.fakeClientFd, coolwsd_server_socket_fd);
@@ -3431,12 +4776,22 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
             std::string message(data.filenameAndUri.uri + " " + std::to_string(data.appDocId));
             fakeSocketWriteQueue(data.fakeClientFd, message.c_str(), message.size());
 
-            // Update window title with new filename
-            SetWindowTextW(data.hWnd, Util::string_to_wide_string(data.filenameAndUri.filename + " - " APP_NAME).c_str());
+            // Update window title and tab with new filename
+            if (WindowState* window = findWindow(data.hWnd))
+            {
+                if (window->activeTabId == data.tabId)
+                    SetWindowTextW(data.hWnd, windowTitleForTab(data).c_str());
+                pushTabsToStrip(*window);
+            }
         }
         else if (s == L"uno .uno:Open")
         {
-            auto openResult = fileOpenDialog();
+            auto openResult = fileOpenDialog(
+                L"",
+                { { L"",
+                    L"*.odt;*.fodt;*.docx;*.docm;*.doc;*.rtf;*.txt;*.md;*.ods;*.fods;*.xlsx;*.xlsm;*.xls;*.odp;*.fodp;*.pptx;*.pptm;*.ppsx;*.ppt" },
+                  { L"", L"*.*" } },
+                true);
             if (openResult.size() > 0)
             {
                 for (const auto& i: openResult)
@@ -3444,16 +4799,16 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
 
                 load_next_document();
 
-                // The picked document opens in its own window; return the
-                // originating window to its document view.
+                // The picked document opens in a tab of its own; return the
+                // originating document to its document view.
                 if (data.mode != DocumentMode::STARTER)
                     PostMessageW(data.hWnd, CODA_WM_EXECUTESCRIPT,
                                  (WPARAM)_strdup("window.app?.map?.backstageView?.returnToDocumentView()"),
-                                 0);
+                                 (LPARAM)data.tabId);
             }
             // Close the starter window
             if (data.mode == DocumentMode::STARTER)
-                PostMessage(data.hWnd, WM_CLOSE, 0, 0);
+                PostMessageW(data.hWnd, CODA_WM_CLOSETAB, (WPARAM)data.tabId, 0);
         }
         else if (s == L"uno .uno:SaveAs")
         {
@@ -3479,7 +4834,15 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
         }
         else if (s == L"uno .uno:CloseWin")
         {
-            PostMessageW(data.hWnd, WM_CLOSE, 0, 0);
+            PostMessageW(data.hWnd, CODA_WM_CLOSETAB, (WPARAM)data.tabId, 0);
+        }
+        else if (s == L"uno .uno:Quit")
+        {
+            // Ask each window to close, the same way the window's own close button does. The
+            // messages are queued, so the windows are all still up when this returns. The
+            // application exits when the last one has gone.
+            for (const auto& entry : windows)
+                PostMessageW(entry.first, WM_CLOSE, 0, 0);
         }
         else if (s.starts_with(L"newdoc "))
         {
@@ -3503,6 +4866,8 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
                 type = DocumentType::SPREADSHEET;
             else if (typeToken == "impress")
                 type = DocumentType::PRESENTATION;
+            else if (typeToken == "draw")
+                type = DocumentType::DRAWING;
             else
                 fatal("Unexpected type in newdoc message");
 
@@ -3516,7 +4881,7 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
                 openCOOLWindow({ path.getFileName(), Poco::URI(path).toString() }, DocumentMode::NEW);
             }
             if (data.mode == DocumentMode::STARTER)
-                PostMessage(data.hWnd, WM_CLOSE, 0, 0);
+                PostMessageW(data.hWnd, CODA_WM_CLOSETAB, (WPARAM)data.tabId, 0);
         }
         else if (s.starts_with(L"opendoc "))
         {
@@ -3548,7 +4913,7 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
             load_next_document();
             // Close the starter window
             if (data.mode == DocumentMode::STARTER)
-                PostMessage(data.hWnd, WM_CLOSE, 0, 0);
+                PostMessageW(data.hWnd, CODA_WM_CLOSETAB, (WPARAM)data.tabId, 0);
         }
         else
         {
@@ -3577,12 +4942,12 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
                 reply->set("fileName", result.fileName);
                 reply->set("mimeType", result.mimeType);
                 reply->set("content", result.content);
-                postReplyToCall(data.hWnd, id, reply);
+                postReplyToCall(data.hWnd, data.tabId, id, reply);
             }
         }
         else if (s == L"FETCHSETTINGSCONFIG")
         {
-            postReplyToCall(data.hWnd, id, Desktop::fetchSettingsConfig());
+            postReplyToCall(data.hWnd, data.tabId, id, Desktop::fetchSettingsConfig());
         }
         else if (s.starts_with(L"FETCHAIMODELS "))
         {
@@ -3592,12 +4957,13 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
             const std::string payload =
                 Util::wide_string_to_string(s.substr(strlen("FETCHAIMODELS ")));
             const HWND hWnd = data.hWnd;
+            const int tabId = data.tabId;
             std::thread(
-                [payload, hWnd, id]()
+                [payload, hWnd, tabId, id]()
                 {
                     ProcUtil::setThreadName("aimodels");
                     const std::string result = fetchAIModels(payload);
-                    postReplyToCall(hWnd, id, result);
+                    postReplyToCall(hWnd, tabId, id, result);
                 })
                 .detach();
         }
@@ -3681,6 +5047,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
     app_installation_path.resize(app_installation_path.find_last_of(L'\\') + 1);
     app_installation_uri = Poco::URI(Poco::Path(app_installation_path)).toString();
 
+#if ENABLE_DEBUG
+    // cool/ next to the install root is the vcxproj's robocopy of browser/dist/:
+    Extensions::synthesizeBuiltinExtensionsIndex(app_installation_path + "..\\cool\\extensions");
+#endif
+
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     appName = Util::string_to_wide_string(APP_NAME);
@@ -3742,10 +5113,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
     Log::initialize("CODA", loglevel);
     ProcUtil::setThreadName("main");
 
-    persistentWindowSizeStoreOK =
-        (persistentWindowSizeStore.open
-         (Util::string_to_wide_string(localAppData +
-                                      "\\persistentWindowSizes")) == litecask::Status::Ok);
+    loadTranslations();
 
     recentFiles.load(localAppData + "\\recentFiles.txt", 10);
 
@@ -3834,10 +5202,14 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
         wcex.hInstance = hInstance;
         wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_CODA));
         wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-        if (isLightTheme())
-            wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        else
+        // The window frame shows through until a WebView2 covers it, so it follows the dark mode
+        // the app will use, which is the saved choice where there is one and the system theme
+        // otherwise. The class keeps the brush it is registered with, so a later change of theme
+        // reaches the frame only on the next run.
+        if (darkModeEnabled())
             wcex.hbrBackground = CreateSolidBrush(RGB(0x12, 0x12, 0x12));
+        else
+            wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
         wcex.lpszMenuName = NULL;
         wcex.lpszClassName = windowClass;
         wcex.hIconSm = NULL;

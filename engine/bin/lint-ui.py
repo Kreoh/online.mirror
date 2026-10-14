@@ -154,21 +154,13 @@ def check_title_labels(root):
             if len(word) and word[0].islower() and (word not in IGNORED_WORDS) and not first:
                 context = title.attrib['context']
                 # exclude a couple of whole sentences
-                if sys.argv[1] == "cui/uiconfig/ui/optpathspage.ui" and context == "optpathspage|label1":
-                    pass
-                elif sys.argv[1] == "dbaccess/uiconfig/ui/password.ui" and context == "password|label1":
+                if sys.argv[1] == "dbaccess/uiconfig/ui/password.ui" and context == "password|label1":
                     pass
                 elif sys.argv[1] == "sc/uiconfig/scalc/ui/datastreams.ui" and context == "datastreams|label4":
-                    pass
-                elif sys.argv[1] == "sc/uiconfig/scalc/ui/scgeneralpage.ui" and context == "scgeneralpage|label6":
                     pass
                 elif sys.argv[1] == "sfx2/uiconfig/ui/documentfontspage.ui" and context == "documentfontspage|fontScriptFrameLabel":
                     pass
                 elif sys.argv[1] == "sw/uiconfig/swriter/ui/testmailsettings.ui" and context == "testmailsettings|label8":
-                    pass
-                elif sys.argv[1] == "sw/uiconfig/swriter/ui/optcomparison.ui" and context == "optcomparison|setting":
-                    pass
-                elif sys.argv[1] == "sw/uiconfig/swriter/ui/optcompatpage.ui" and context == "optcompatpage|label11":
                     pass
                 elif sys.argv[1] == "sw/uiconfig/swriter/ui/optcaptionpage.ui" and context == "optcaptionpage|label1":
                     pass

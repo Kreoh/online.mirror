@@ -232,6 +232,10 @@ class ViewLayoutFileBased extends ViewLayoutBase {
 		return part;
 	}
 
+	protected override buildsViewedRectangleFromPages(): boolean {
+		return true;
+	}
+
 	protected refreshVisibleAreaRectangle(): void {
 		this.refreshVisibleAreaRectangleImpl(
 			this.documentRectangles,
@@ -264,9 +268,9 @@ class ViewLayoutFileBased extends ViewLayoutBase {
 			const rowCount = Math.ceil((localY2 - startY) / tileSize);
 
 			// The rectangles sit at part indexes, while tiles are keyed by
-			// part number.
+			// part identifier.
 			const part = app.map._docLayer.getPartFromIndex(i);
-			if (part < 0) continue;
+			if (!part) continue;
 
 			this.pushTileGrid(
 				startX,

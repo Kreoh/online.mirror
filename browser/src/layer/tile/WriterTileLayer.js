@@ -54,7 +54,7 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 			return;
 		}
 
-		if (values.comments) {
+		if (values.comments && !window.mode.isInteractivePreview()) {
 			values.comments.forEach(function(comment) {
 				comment.id = comment.id.toString();
 				comment.parent = comment.parentId.toString();
@@ -107,9 +107,22 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 		}
 	},
 
+	// The engine sends new sizes often while a document loads, and
+	// each one set the scrollable width back to the page width until
+	// the next comment layout. Keep the extra width beside the page:
+	// the comment column and the empty strip left of a centred page.
 	_setNewSize: function (/*cool.SimplePoint*/ size) {
+		const layout = app.activeDocument.activeLayout;
+		const oldSize = app.activeDocument.fileSize;
+		const extraWidth = oldSize ? Math.max(0, layout.viewSize.x - oldSize.x) : 0;
+
 		app.activeDocument.fileSize = size;
-		app.activeDocument.activeLayout.viewSize = size.clone();
+		layout.viewSize = new cool.SimplePoint(size.x + extraWidth, size.y);
+
+		const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+		if (commentSection && !commentSection.commentsHiddenOrNotPresent())
+			commentSection.layoutOnNextDraw();
+
 		this._updateScrollLimits();
 	},
 
@@ -166,7 +179,7 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 			app.activeDocument.setActiveViewID(this._viewId);
 		}
 
-		if (statusJSON.partHasComments !== undefined &&  statusJSON.partHasComments !== app.activeDocument.partHasComments) {
+		if (statusJSON.partHasComments !== undefined && statusJSON.partHasComments !== app.activeDocument.partHasComments && !window.mode.isSmallScreenDevice()) {
 			const hadValue = app.activeDocument.partHasComments !== undefined;
 			app.activeDocument.partHasComments = statusJSON.partHasComments;
 			// Only re-fit zoom when comment presence genuinely
@@ -195,7 +208,7 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 
 		this._parts = 1;
 		if (!this._shouldIgnoreServerPageSync()) {
-			this._currentPage = statusJSON.selectedpart;
+			this._currentPage = parseInt(statusJSON.selectedpart);
 		}
 		this._pages = statusJSON.partscount;
 		app.file.writer.pageRectangleList = statusJSON.pagerectangles.slice(); // Copy the array.

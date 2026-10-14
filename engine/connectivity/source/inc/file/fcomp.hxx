@@ -35,7 +35,7 @@ namespace connectivity
             friend class OSQLAnalyzer;
 
             OCodeList                               m_aCodeList;
-            css::uno::Reference< css::container::XNameAccess> m_orgColumns; // in filecurs this are the filecolumns
+            cpo::uno::Reference< css::container::XNameAccess> m_orgColumns; // in filecurs this are the filecolumns
             OSQLAnalyzer*                           m_pAnalyzer;
             sal_Int32                               m_nParamCounter;
         public:
@@ -51,29 +51,29 @@ namespace connectivity
             void Clean();
             bool isClean() const {return m_aCodeList.empty();}
             bool hasCode() const {return !isClean();}
-            void  setOrigColumns(const css::uno::Reference< css::container::XNameAccess>& rCols) { m_orgColumns = rCols; }
-            const css::uno::Reference< css::container::XNameAccess>& getOrigColumns() const { return m_orgColumns; }
+            void  setOrigColumns(const cpo::uno::Reference< css::container::XNameAccess>& rCols) { m_orgColumns = rCols; }
+            const cpo::uno::Reference< css::container::XNameAccess>& getOrigColumns() const { return m_orgColumns; }
         private:
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             void execute_COMPARE(connectivity::OSQLParseNode const * pPredicateNode);
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             void execute_LIKE(connectivity::OSQLParseNode const * pPredicateNode);
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             void execute_BETWEEN(connectivity::OSQLParseNode const * pPredicateNode);
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             void execute_ISNULL(connectivity::OSQLParseNode const * pPredicateNode);
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             OOperand* execute_Operand(connectivity::OSQLParseNode const * pPredicateNode);
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             void execute_Fold(OSQLParseNode const * pPredicateNode);
             /// @throws css::sdbc::SQLException
-            /// @throws css::uno::RuntimeException
+            /// @throws cpo::uno::RuntimeException
             void executeFunction(OSQLParseNode const * pPredicateNode);
         };
 

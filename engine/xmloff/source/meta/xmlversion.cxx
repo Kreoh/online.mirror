@@ -38,14 +38,14 @@
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::com::sun::star::xml::sax;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 
 constexpr OUString XMLN_VERSIONSLIST = u"VersionList.xml"_ustr;
 
 XMLVersionListExport::XMLVersionListExport(
-    const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
     const cpo::uno::Sequence < css::util::RevisionTag >& rVersions,
     const OUString &rFileName,
     Reference< XDocumentHandler > const &rHandler )
@@ -103,7 +103,7 @@ ErrCode XMLVersionListExport::exportDoc( enum ::xmloff::token::XMLTokenEnum )
 }
 
 XMLVersionListImport::XMLVersionListImport(
-    const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
     cpo::uno::Sequence < css::util::RevisionTag >& rVersions )
 :   SvXMLImport(rContext, u""_ustr),
     maVersions( rVersions )
@@ -114,7 +114,7 @@ XMLVersionListImport::~XMLVersionListImport() noexcept
 {}
 
 SvXMLImportContext *XMLVersionListImport::CreateFastContext( sal_Int32 nElement,
-        const ::css::uno::Reference< ::css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
+        const ::cpo::uno::Reference< ::css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     SvXMLImportContext *pContext = nullptr;
 
@@ -134,9 +134,9 @@ XMLVersionListContext::XMLVersionListContext( XMLVersionListImport& rImport)
 XMLVersionListContext::~XMLVersionListContext()
 {}
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+cpo::uno::Reference< css::xml::sax::XFastContextHandler >
 XMLVersionListContext::createFastChildContext(sal_Int32 nElement,
-            const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList)
+            const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList)
 {
     SvXMLImportContext *pContext = nullptr;
 
@@ -301,14 +301,14 @@ bool XMLVersionContext::ParseISODateTimeString(
     return bSuccess;
 }
 
-void SAL_CALL XMLVersionListPersistence::store( const uno::Reference< embed::XStorage >& xRoot, const cpo::uno::Sequence< util::RevisionTag >& rVersions )
+void XMLVersionListPersistence::store( const uno::Reference< embed::XStorage >& xRoot, const cpo::uno::Sequence< util::RevisionTag >& rVersions )
 {
     // no storage, no version list!
     if ( !xRoot.is() )
         return;
 
     // get the services needed for writing the xml data
-    const Reference< uno::XComponentContext >& xContext =
+    const Reference< cpo::uno::XComponentContext >& xContext =
             comphelper::getProcessComponentContext();
 
     Reference< XWriter > xWriter = Writer::create(xContext);
@@ -323,11 +323,11 @@ void SAL_CALL XMLVersionListPersistence::store( const uno::Reference< embed::XSt
                                         sVerName,
                                         embed::ElementModes::READWRITE | embed::ElementModes::TRUNCATE );
         if ( !xVerStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         Reference< io::XOutputStream > xOut = xVerStream->getOutputStream();
         if ( !xOut.is() )
-            throw uno::RuntimeException(u"The stream was successfully opened for writing already!"_ustr);
+            throw cpo::uno::RuntimeException(u"The stream was successfully opened for writing already!"_ustr);
 
         xWriter->setOutputStream(xOut);
 
@@ -343,7 +343,7 @@ void SAL_CALL XMLVersionListPersistence::store( const uno::Reference< embed::XSt
     }
 }
 
-cpo::uno::Sequence< util::RevisionTag > SAL_CALL XMLVersionListPersistence::load( const uno::Reference< embed::XStorage >& xRoot )
+cpo::uno::Sequence< util::RevisionTag > XMLVersionListPersistence::load( const uno::Reference< embed::XStorage >& xRoot )
 {
     cpo::uno::Sequence < css::util::RevisionTag > aVersions;
 
@@ -352,7 +352,7 @@ cpo::uno::Sequence< util::RevisionTag > SAL_CALL XMLVersionListPersistence::load
     try {
         if ( xRoot.is() && xRoot->hasByName( sDocName ) && xRoot->isStreamElement( sDocName ) )
         {
-            const Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+            const Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
 
             InputSource aParserInput;
 
@@ -371,13 +371,13 @@ cpo::uno::Sequence< util::RevisionTag > SAL_CALL XMLVersionListPersistence::load
                                                             sDocName,
                                                             embed::ElementModes::READ );
             if ( !xDocStream.is() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
 
             aParserInput.aInputStream = xDocStream->getInputStream();
             OSL_ENSURE( aParserInput.aInputStream.is(),
                         "The stream was successfully opened for reading, the input part must be accessible!" );
             if ( !aParserInput.aInputStream.is() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
 
             // get filter
             rtl::Reference< XMLVersionListImport > xImport = new XMLVersionListImport( xContext, aVersions );
@@ -418,9 +418,9 @@ XMLVersionListPersistence::getSupportedServiceNames()
         u"com.sun.star.document.DocumentRevisionListPersistence"_ustr};
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 XMLVersionListPersistence_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new XMLVersionListPersistence);

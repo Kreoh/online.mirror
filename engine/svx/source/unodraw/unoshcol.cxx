@@ -19,7 +19,7 @@
 
 #include <com/sun/star/document/EventObject.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/diagnose.h>
@@ -27,8 +27,8 @@
 #include <shapecollection.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 SvxShapeCollection::SvxShapeCollection() noexcept
 {
@@ -37,14 +37,14 @@ SvxShapeCollection::SvxShapeCollection() noexcept
 // XInterface
 void SvxShapeCollection::release() noexcept
 {
-    uno::Reference< uno::XInterface > x( xDelegator );
+    uno::Reference< cpo::uno::XInterface > x( xDelegator );
     if (! x.is())
     {
         if (osl_atomic_decrement( &m_refCount ) == 0)
         {
             if (! bDisposed)
             {
-                uno::Reference< uno::XInterface > xHoldAlive( getXWeak() );
+                uno::Reference< cpo::uno::XInterface > xHoldAlive( getXWeak() );
                 // First dispose
                 try
                 {
@@ -90,7 +90,7 @@ void SvxShapeCollection::dispose()
     try
     {
         document::EventObject aEvt;
-        aEvt.Source = uno::Reference< uno::XInterface >::query( static_cast<lang::XComponent *>(this) );
+        aEvt.Source = uno::Reference< cpo::uno::XInterface >::query( static_cast<lang::XComponent *>(this) );
         // inform all listeners to release this object
         // The listener container are automatically cleared
         std::unique_lock g(m_aMutex);
@@ -113,14 +113,14 @@ void SvxShapeCollection::dispose()
 }
 
 // XComponent
-void SAL_CALL SvxShapeCollection::addEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener )
+void SvxShapeCollection::addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener )
 {
     std::unique_lock g(m_aMutex);
     maEventListeners.addInterface( g, aListener );
 }
 
 // XComponent
-void SAL_CALL SvxShapeCollection::removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener )
+void SvxShapeCollection::removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener )
 {
     std::unique_lock g(m_aMutex);
     maEventListeners.removeInterface( g, aListener );
@@ -128,27 +128,27 @@ void SAL_CALL SvxShapeCollection::removeEventListener( const css::uno::Reference
 
 // XShapes
 
-void SAL_CALL SvxShapeCollection::add( const Reference< drawing::XShape >& xShape )
+void SvxShapeCollection::add( const Reference< drawing::XShape >& xShape )
 {
     std::unique_lock g(m_aMutex);
     maShapeContainer.push_back( xShape );
 }
 
 
-void SAL_CALL SvxShapeCollection::remove( const uno::Reference< drawing::XShape >& xShape )
+void SvxShapeCollection::remove( const uno::Reference< drawing::XShape >& xShape )
 {
     std::unique_lock g(m_aMutex);
     std::erase(maShapeContainer, xShape);
 }
 
 
-sal_Int32 SAL_CALL SvxShapeCollection::getCount()
+sal_Int32 SvxShapeCollection::getCount()
 {
     std::unique_lock g(m_aMutex);
     return maShapeContainer.size();
 }
 
-cpo::uno::Any SAL_CALL SvxShapeCollection::getByIndex( sal_Int32 Index )
+cpo::uno::Any SvxShapeCollection::getByIndex( sal_Int32 Index )
 {
     if( Index < 0 || Index >= getCount() )
         throw lang::IndexOutOfBoundsException();
@@ -158,42 +158,42 @@ cpo::uno::Any SAL_CALL SvxShapeCollection::getByIndex( sal_Int32 Index )
     return cpo::uno::Any( xShape );
 }
 
-std::vector<css::uno::Reference<css::drawing::XShape>> SvxShapeCollection::getAllShapes() const
+std::vector<cpo::uno::Reference<css::drawing::XShape>> SvxShapeCollection::getAllShapes() const
 {
     std::unique_lock g(m_aMutex);
     return maShapeContainer;
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SvxShapeCollection::getElementType()
+cpo::uno::Type SvxShapeCollection::getElementType()
 {
     return cppu::UnoType<drawing::XShape>::get();
 }
 
-bool SAL_CALL SvxShapeCollection::hasElements()
+bool SvxShapeCollection::hasElements()
 {
     return getCount() != 0;
 }
 
 // XServiceInfo
-OUString SAL_CALL SvxShapeCollection::getImplementationName()
+OUString SvxShapeCollection::getImplementationName()
 {
     return u"com.sun.star.drawing.SvxShapeCollection"_ustr;
 }
 
-bool SAL_CALL SvxShapeCollection::supportsService( const OUString& ServiceName )
+bool SvxShapeCollection::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxShapeCollection::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > SvxShapeCollection::getSupportedServiceNames()
 {
     return { u"com.sun.star.drawing.Shapes"_ustr, u"com.sun.star.drawing.ShapeCollection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_drawing_SvxShapeCollection_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SvxShapeCollection);

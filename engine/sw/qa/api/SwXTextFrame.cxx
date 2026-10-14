@@ -19,6 +19,7 @@
 #include <com/sun/star/text/XTextFrame.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace
 {
@@ -36,7 +37,7 @@ public:
     {
     }
 
-    uno::Reference<uno::XInterface> init() override
+    uno::Reference<cpo::uno::XInterface> init() override
     {
         loadFromURL(u"private:factory/swriter"_ustr);
         uno::Reference<lang::XMultiServiceFactory> xMSF(mxComponent, uno::UNO_QUERY_THROW);

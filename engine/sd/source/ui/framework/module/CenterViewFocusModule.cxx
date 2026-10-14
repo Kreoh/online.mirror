@@ -30,7 +30,7 @@
 #include <comphelper/servicehelper.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 using ::sd::framework::FrameworkHelper;
@@ -130,7 +130,7 @@ void CenterViewFocusModule::HandleNewView (
     }
 }
 
-void SAL_CALL CenterViewFocusModule::disposing (
+void CenterViewFocusModule::disposing (
     const lang::EventObject& rEvent)
 {
     if (mxConfigurationController.is())

@@ -27,17 +27,19 @@
 #include <vcl/graph.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/weld.hxx>
+#include <sfx2/cokitfilepicker.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/media/XPlayer.hpp>
 #include <com/sun/star/media/XPlayerNotifier.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertysequence.hxx>
+#include <comphelper/propertyvalue.hxx>
 #include <memory>
 #include <sal/log.hxx>
 #include <o3tl/string_view.hxx>
@@ -45,6 +47,7 @@
 constexpr double AVMEDIA_FRAMEGRABBER_DEFAULTFRAME_MEDIATIME = 3.0;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace avmedia {
 
@@ -188,22 +191,17 @@ const FilterNameVector & MediaWindow::getMediaFilters()
             {"AU Audio", "au"},
             {"AC3 Audio", "ac3"},
             {"AVI", "avi"},
-            {"CD Audio", "cda"},
             {"Digital Video", "dv"},
             {"FLAC Audio", "flac"},
-            {"Flash Video", "flv"},
             {"Matroska Media", "mkv"},
             {"MIDI Audio", "mid;midi"},
             {"MPEG Audio", "mp2;mp3;mpa;m4a"},
             {"MPEG Video", "mpg;mpeg;mpv;mp4;m4v"},
             {"Ogg Audio", "ogg;oga;opus"},
             {"Ogg Video", "ogv;ogx"},
-            {"Real Audio", "ra"},
-            {"Real Media", "rm"},
             {"RMI MIDI Audio", "rmi"},
             {"SND (SouND) Audio", "snd"},
             {"Quicktime Video", "mov"},
-            {"Vivo Video", "viv"},
             {"WAVE Audio", "wav"},
             {"WebM Video", "webm"},
             {"Windows Media Audio", "wma"},
@@ -214,6 +212,37 @@ const FilterNameVector & MediaWindow::getMediaFilters()
 
 bool MediaWindow::executeMediaURLDialog(weld::Window* pParent, OUString& rURL, bool *const o_pbLink)
 {
+    // In a COKit app the picker for the insert variant runs natively, and the picked file
+    // arrives as a new dispatch of .uno:InsertAVMedia carrying the URL. The media is embedded
+    // in the document, so the slideshow plays it from the extracted copy and the document
+    // keeps it when it moves to another machine.
+    if (o_pbLink != nullptr && sfx2::COKitFilePicker::isAvailable())
+    {
+        std::vector<sfx2::COKitFilePicker::Filter> aPickerFilters;
+        OUStringBuffer aWildcards;
+        for (const auto& rFilter : getMediaFilters())
+        {
+            for (sal_Int32 nIndex = 0; nIndex >= 0;)
+            {
+                if (!aWildcards.isEmpty())
+                    aWildcards.append(';');
+                aWildcards.append(OUString::Concat(u"*.")
+                                  + o3tl::getToken(rFilter.second, 0, ';', nIndex));
+            }
+        }
+
+        // FIXME: We should use a translation of "Media files" here and not an empty string.
+        if (!aWildcards.isEmpty())
+            aPickerFilters.push_back({ u""_ustr, aWildcards.makeStringAndClear() });
+
+        if (sfx2::COKitFilePicker::requestAndRedispatch(u".uno:InsertAVMedia"_ustr, u"URL"_ustr,
+                                                        aPickerFilters,
+                                                        AvmResId(AVMEDIA_STR_INSERTMEDIA_DLG),
+                                                        { comphelper::makePropertyValue(
+                                                            u"IsLink"_ustr, false) }))
+            return false;
+    }
+
     ::sfx2::FileDialogHelper        aDlg(o_pbLink != nullptr
             ? ui::dialogs::TemplateDescription::FILEOPEN_LINK_PREVIEW
             : ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
@@ -260,7 +289,7 @@ bool MediaWindow::executeMediaURLDialog(weld::Window* pParent, OUString& rURL, b
     // add filter for all types
     aDlg.AddFilter( AvmResId( AVMEDIA_STR_ALL_FILES ), u"*.*"_ustr );
 
-    uno::Reference<ui::dialogs::XFilePicker3> const xFP(aDlg.GetFilePicker());
+    uno::Reference<ui::dialogs::XFilePicker> const xFP(aDlg.GetFilePicker());
     uno::Reference<ui::dialogs::XFilePickerControlAccess> const xCtrlAcc(xFP,
             uno::UNO_QUERY_THROW);
     if (o_pbLink != nullptr)
@@ -323,7 +352,7 @@ bool MediaWindow::isMediaURL(std::u16string_view rURL, const OUString& rReferer,
             {
                 if (xPreferredPixelSizeListener)
                 {
-                    uno::Reference<media::XPlayerNotifier> xPlayerNotifier(xPlayer, css::uno::UNO_QUERY);
+                    uno::Reference<media::XPlayerNotifier> xPlayerNotifier(xPlayer, cpo::uno::UNO_QUERY);
                     if (xPlayerNotifier)
                     {
                         // wait until it's possible to query this to get a sensible answer
@@ -423,7 +452,7 @@ uno::Reference< graphic::XGraphic > MediaWindow::grabFrame(const OUString& rURL,
 
     if (xPreferredPixelSizeListener)
     {
-        uno::Reference<media::XPlayerNotifier> xPlayerNotifier(xPlayer, css::uno::UNO_QUERY);
+        uno::Reference<media::XPlayerNotifier> xPlayerNotifier(xPlayer, cpo::uno::UNO_QUERY);
         if (xPlayerNotifier)
         {
             // set a callback to call when a more sensible result is available, which
@@ -442,16 +471,16 @@ uno::Reference< graphic::XGraphic > MediaWindow::grabFrame(const OUString& rURL,
     return grabFrame(xPlayer);
 }
 
-void MediaWindow::dispatchInsertAVMedia(const css::uno::Reference<css::frame::XDispatchProvider>& rDispatchProvider,
+void MediaWindow::dispatchInsertAVMedia(const cpo::uno::Reference<css::frame::XDispatchProvider>& rDispatchProvider,
                                         const css::awt::Size& rSize, const OUString& rURL, bool bLink)
 {
     util::URL aDispatchURL;
     aDispatchURL.Complete = u".uno:InsertAVMedia"_ustr;
 
-    css::uno::Reference<css::util::XURLTransformer> xTrans(css::util::URLTransformer::create(::comphelper::getProcessComponentContext()));
+    cpo::uno::Reference<css::util::XURLTransformer> xTrans(css::util::URLTransformer::create(::comphelper::getProcessComponentContext()));
     xTrans->parseStrict(aDispatchURL);
 
-    css::uno::Reference<css::frame::XDispatch> xDispatch = rDispatchProvider->queryDispatch(aDispatchURL, u""_ustr, 0);
+    cpo::uno::Reference<css::frame::XDispatch> xDispatch = rDispatchProvider->queryDispatch(aDispatchURL, u""_ustr, 0);
     cpo::uno::Sequence<css::beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
         { "URL", cpo::uno::Any(rURL) },
         { "Size.Width", cpo::uno::Any(rSize.Width)},
@@ -461,7 +490,7 @@ void MediaWindow::dispatchInsertAVMedia(const css::uno::Reference<css::frame::XD
     xDispatch->dispatch(aDispatchURL, aArgs);
 }
 
-PlayerListener::PlayerListener(std::function<void(const css::uno::Reference<css::media::XPlayer>&)> fn)
+PlayerListener::PlayerListener(std::function<void(const cpo::uno::Reference<css::media::XPlayer>&)> fn)
     : m_aFn(std::move(fn))
 {
 }
@@ -472,7 +501,7 @@ void PlayerListener::disposing(std::unique_lock<std::mutex>& rGuard)
     WeakComponentImplHelperBase::disposing(rGuard);
 }
 
-void PlayerListener::startListening(const css::uno::Reference<media::XPlayerNotifier>& rNotifier)
+void PlayerListener::startListening(const cpo::uno::Reference<media::XPlayerNotifier>& rNotifier)
 {
     std::unique_lock aGuard(m_aMutex);
 
@@ -492,7 +521,7 @@ void PlayerListener::preferredPlayerWindowSizeAvailable(const css::lang::EventOb
 {
     std::unique_lock aGuard(m_aMutex);
 
-    css::uno::Reference<media::XPlayer> xPlayer(m_xNotifier, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<media::XPlayer> xPlayer(m_xNotifier, cpo::uno::UNO_QUERY_THROW);
     aGuard.unlock();
     callPlayerWindowSizeAvailable(xPlayer);
     aGuard.lock();

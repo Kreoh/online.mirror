@@ -1778,7 +1778,7 @@ public:
 
     void operator() (size_t nRow, const EditTextObject* p)
     {
-        miNewCellsPos = maNewCells.set(miNewCellsPos, nRow-mnRowOffset, p->Clone().release());
+        miNewCellsPos = maNewCells.set(miNewCellsPos, nRow-mnRowOffset, new EditTextObject(*p));
     }
 
     void operator() (size_t nRow, const ScFormulaCell* p)
@@ -1894,7 +1894,7 @@ public:
                 {
                     EditTextObject* pObj = sc::edittext_block::at(*aPos.first->data, aPos.second);
                     miNewCellsPos = maNewCells.set(
-                            miNewCellsPos, nDestRow-mnRowOffset, pObj->Clone().release());
+                            miNewCellsPos, nDestRow-mnRowOffset, new EditTextObject(*pObj));
                 }
                 break;
                 case sc::element_type_formula:
@@ -2358,6 +2358,11 @@ bool ScColumn::SetString( SCROW nRow, SCTAB nTabP, const OUString& rString,
     return bNumFmtSet;
 }
 
+void ScColumn::SetEditText( SCROW nRow, EditTextObject aEditText )
+{
+    SetEditText(nRow, std::make_unique<EditTextObject>(std::move(aEditText)));
+}
+
 void ScColumn::SetEditText( SCROW nRow, std::unique_ptr<EditTextObject> pEditText )
 {
     if (!pEditText)
@@ -2397,7 +2402,7 @@ void ScColumn::SetEditText( sc::ColumnBlockPosition& rBlockPos, SCROW nRow, cons
 {
     if (GetDoc().GetEditEnginePool() == rEditText.GetPool())
     {
-        SetEditText(rBlockPos, nRow, rEditText.Clone());
+        SetEditText(rBlockPos, nRow, std::make_unique<EditTextObject>(rEditText));
         return;
     }
 
@@ -2409,11 +2414,27 @@ void ScColumn::SetEditText( sc::ColumnBlockPosition& rBlockPos, SCROW nRow, cons
     SetEditText(rBlockPos, nRow, rEngine.CreateTextObject());
 }
 
+void ScColumn::SetEditText( sc::ColumnBlockPosition& rBlockPos, SCROW nRow, EditTextObject&& rEditText )
+{
+    if (GetDoc().GetEditEnginePool() == rEditText.GetPool())
+    {
+        SetEditText(rBlockPos, nRow, std::make_unique<EditTextObject>(std::move(rEditText)));
+        return;
+    }
+
+    // rats, yet another "spool"
+    // Sadly there is no other way to change the Pool than to
+    // "spool" the Object through a corresponding Engine
+    EditEngine& rEngine = GetDoc().GetEditEngine();
+    rEngine.SetText(std::move(rEditText));
+    SetEditText(rBlockPos, nRow, rEngine.CreateTextObject());
+}
+
 void ScColumn::SetEditText( SCROW nRow, const EditTextObject& rEditText, const SfxItemPool* pEditPool )
 {
     if (pEditPool && GetDoc().GetEditEnginePool() == pEditPool)
     {
-        SetEditText(nRow, rEditText.Clone());
+        SetEditText(nRow, std::make_unique<EditTextObject>(rEditText));
         return;
     }
 

@@ -33,13 +33,14 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
-uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstance()
+uno::Reference< cpo::uno::XInterface > FSStorageFactory::createInstance()
 {
     OUString aTempURL = ::utl::CreateTempURL( nullptr, true );
     if ( aTempURL.isEmpty() )
-        throw uno::RuntimeException(u"Cannot create tempfile."_ustr);
+        throw cpo::uno::RuntimeException(u"Cannot create tempfile."_ustr);
 
     ::ucbhelper::Content aResultContent(
         aTempURL, uno::Reference< ucb::XCommandEnvironment >(),
@@ -57,7 +58,7 @@ uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstance()
  * The second value is a mode the storage should be open in.
  * The third value is a media descriptor.
  */
-uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstanceWithArguments(
+uno::Reference< cpo::uno::XInterface > FSStorageFactory::createInstanceWithArguments(
             const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     sal_Int32 nArgNum = aArguments.getLength();
@@ -127,17 +128,17 @@ uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstanceWithA
                                                     m_xContext ) );
 }
 
-OUString SAL_CALL FSStorageFactory::getImplementationName()
+OUString FSStorageFactory::getImplementationName()
 {
     return u"com.sun.star.comp.embed.FileSystemStorageFactory"_ustr;
 }
 
-bool SAL_CALL FSStorageFactory::supportsService( const OUString& ServiceName )
+bool FSStorageFactory::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL FSStorageFactory::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > FSStorageFactory::getSupportedServiceNames()
 {
     return { u"com.sun.star.embed.FileSystemStorageFactory"_ustr,
                 u"com.sun.star.comp.embed.FileSystemStorageFactory"_ustr };
@@ -145,9 +146,9 @@ cpo::uno::Sequence< OUString > SAL_CALL FSStorageFactory::getSupportedServiceNam
 
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 svl_FSStorageFactory_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new FSStorageFactory(context));
 }

@@ -55,6 +55,7 @@
 #include <IDocumentLayoutAccess.hxx>
 #include <fmtftn.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <pagedesc.hxx>
 #include <docstyle.hxx>
 #include <ndtxt.hxx>
@@ -97,8 +98,8 @@
 #include <istyleaccess.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::table;
@@ -114,7 +115,7 @@ static void lcl_createPamCopy(std::optional<SwPaM>& o_rpPam, const SwPaM& rPam)
     ::sw::DeepCopyPaM(rPam, *o_rpPam);
 }
 
-void GetSelectableFromAny(uno::Reference<uno::XInterface> const& xIfc,
+void GetSelectableFromAny(uno::Reference<cpo::uno::XInterface> const& xIfc,
         SwDoc & rTargetDoc,
         std::optional<SwPaM>& o_rpPaM, std::pair<UIName, FlyCntType> & o_rFrame,
         UIName & o_rTableName, SwUnoTableCursor const*& o_rpTableCursor,
@@ -1032,13 +1033,13 @@ void InsertFile(SwUnoCursor* pUnoCursor, const OUString& rURL,
         if (pTextNode->GetTextAttrAt(pUnoCursor->GetPoint()->GetContentIndex(),
                 RES_TXTATR_INPUTFIELD, ::sw::GetTextAttrMode::Parent))
         {
-            throw uno::RuntimeException(u"cannot insert file inside input field"_ustr);
+            throw cpo::uno::RuntimeException(u"cannot insert file inside input field"_ustr);
         }
 
         if (pTextNode->GetTextAttrAt(pUnoCursor->GetPoint()->GetContentIndex(),
                 RES_TXTATR_CONTENTCONTROL, ::sw::GetTextAttrMode::Parent))
         {
-            throw uno::RuntimeException(u"cannot insert file inside content controls"_ustr);
+            throw cpo::uno::RuntimeException(u"cannot insert file inside content controls"_ustr);
         }
     }
 

@@ -20,17 +20,17 @@
 #ifndef INCLUDED_CPPUHELPER_COMPBASE_HXX
 #define INCLUDED_CPPUHELPER_COMPBASE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "com/sun/star/lang/XTypeProvider.hpp"
-#include "cpo/uno/Any.h"
-#include "com/sun/star/uno/Reference.h"
-#include "cpo/uno/Sequence.h"
-#include "cpo/uno/Type.h"
-#include "cppuhelper/compbase_ex.hxx"
-#include "cppuhelper/implbase.hxx"
-#include "rtl/instance.hxx"
-#include "sal/types.h"
+#include <com/sun/star/lang/XTypeProvider.hpp>
+#include <cpo/uno/Any.h>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/Sequence.h>
+#include <cpo/uno/Type.h>
+#include <cppuhelper/compbase_ex.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <rtl/instance.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star { namespace lang {
     class XEventListener;
@@ -44,7 +44,7 @@ namespace osl { class Mutex; }
 namespace cppu {
 
 /** Implementation helper implementing interfaces
-    css::uno::XInterface, css::lang::XTypeProvider, and
+    cpo::uno::XInterface, css::lang::XTypeProvider, and
     css::lang::XComponent.
 
     Like WeakComponentImplHelper, but does not define
@@ -71,31 +71,31 @@ class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE PartialWeakComponentImplHelper:
     {};
 
 public:
-    PartialWeakComponentImplHelper(osl::Mutex & mutex) SAL_NOEXCEPT:
+    PartialWeakComponentImplHelper(osl::Mutex & mutex) noexcept:
         WeakComponentImplHelperBase(mutex) {}
 
-    cpo::uno::Any queryInterface(cpo::uno::Type const & aType) SAL_OVERRIDE
+    cpo::uno::Any queryInterface(cpo::uno::Type const & aType) override
     { return WeakComponentImplHelper_query(aType, cd::get(), this, this); }
 
-    void acquire() SAL_NOEXCEPT SAL_OVERRIDE
+    void acquire() noexcept override
     { WeakComponentImplHelperBase::acquire(); }
 
-    void release() SAL_NOEXCEPT SAL_OVERRIDE
+    void release() noexcept override
     { WeakComponentImplHelperBase::release(); }
 
     void dispose()
-        SAL_OVERRIDE
+        override
     { WeakComponentImplHelperBase::dispose(); }
 
-    cpo::uno::Sequence<cpo::uno::Type> getTypes() SAL_OVERRIDE
+    cpo::uno::Sequence<cpo::uno::Type> getTypes() override
     { return WeakComponentImplHelper_getTypes(cd::get()); }
 
-    cpo::uno::Sequence<sal_Int8> getImplementationId() SAL_OVERRIDE
+    cpo::uno::Sequence<sal_Int8> getImplementationId() override
     { return cpo::uno::Sequence<sal_Int8>(); }
 };
 
 /** Implementation helper implementing interfaces
-    css::uno::XInterface, css::lang::XTypeProvider, and
+    cpo::uno::XInterface, css::lang::XTypeProvider, and
     css::lang::XComponent.
 
     Upon disposing objects of this class, sub-classes receive a disposing()
@@ -110,15 +110,15 @@ class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE WeakComponentImplHelper:
     public PartialWeakComponentImplHelper<Ifc...>
 {
 public:
-    WeakComponentImplHelper(osl::Mutex & mutex) SAL_NOEXCEPT:
+    WeakComponentImplHelper(osl::Mutex & mutex) noexcept:
         PartialWeakComponentImplHelper<Ifc...>(mutex) {}
 
     void addEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & xListener) SAL_OVERRIDE
+        cpo::uno::Reference<css::lang::XEventListener> const & xListener) override
     { WeakComponentImplHelperBase::addEventListener(xListener); }
 
     void removeEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & aListener) SAL_OVERRIDE
+        cpo::uno::Reference<css::lang::XEventListener> const & aListener) override
     { WeakComponentImplHelperBase::removeEventListener(aListener); }
 };
 

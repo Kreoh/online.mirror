@@ -33,7 +33,6 @@ $(eval $(call gb_UIConfig_add_uifiles,sfx,\
 	sfx2/uiconfig/ui/editdurationdialog \
 	sfx2/uiconfig/ui/extrabutton \
 	sfx2/uiconfig/ui/errorfindemaildialog \
-	sfx2/uiconfig/ui/floatingrecord \
 	sfx2/uiconfig/ui/helpbookmarkpage \
 	sfx2/uiconfig/ui/helpcontrol \
 	sfx2/uiconfig/ui/helpcontentpage \
@@ -50,11 +49,8 @@ $(eval $(call gb_UIConfig_add_uifiles,sfx,\
 	sfx2/uiconfig/ui/managestylepage \
 	sfx2/uiconfig/ui/navigator \
 	sfx2/uiconfig/ui/newstyle \
-	sfx2/uiconfig/ui/notebookbar \
-	sfx2/uiconfig/ui/optprintpage \
 	sfx2/uiconfig/ui/panel \
 	sfx2/uiconfig/ui/password \
-	sfx2/uiconfig/ui/notebookbarpopup \
 	sfx2/uiconfig/ui/printeroptionsdialog \
 	sfx2/uiconfig/ui/querysavedialog \
 	sfx2/uiconfig/ui/quickfind \

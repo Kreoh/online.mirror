@@ -23,23 +23,23 @@
 #include <cppuhelper/implbase.hxx>
 
 namespace ooo::vba { class XHelperInterface; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 typedef cppu::ImplInheritanceHelper< VbaDialogsBase, ov::excel::XDialogs > ScVbaDialogs_BASE;
 
 class ScVbaDialogs : public ScVbaDialogs_BASE
 {
 public:
-    ScVbaDialogs( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > &xContext, const css::uno::Reference< css::frame::XModel >& xModel ): ScVbaDialogs_BASE( xParent, xContext ), m_xModel(xModel) {}
+    ScVbaDialogs( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > &xContext, const cpo::uno::Reference< css::frame::XModel >& xModel ): ScVbaDialogs_BASE( xParent, xContext ), m_xModel(xModel) {}
 
     // XCollection
-    virtual cpo::uno::Any SAL_CALL Item( const cpo::uno::Any& Index ) override;
+    virtual cpo::uno::Any Item( const cpo::uno::Any& Index ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
 private:
-    css::uno::Reference< css::frame::XModel > m_xModel;
+    cpo::uno::Reference< css::frame::XModel > m_xModel;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

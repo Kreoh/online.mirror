@@ -21,7 +21,6 @@
 #include <com/sun/star/datatransfer/clipboard/XClipboardManager.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
-#include <com/sun/star/datatransfer/clipboard/XClipboardEx.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 
 #include <cppuhelper/servicefactory.hxx>
@@ -52,7 +51,7 @@ using namespace ::cppu;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::datatransfer;
 using namespace ::com::sun::star::datatransfer::clipboard;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
@@ -75,7 +74,7 @@ public:
 
     // XClipboardOwner
 
-    virtual void SAL_CALL lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans ) throw(RuntimeException);
+    virtual void lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans ) throw(RuntimeException);
 
     sal_uInt32 receivedLostOwnerships() { return m_nReceivedLostOwnerships; };
     Reference< XClipboard >    lostOwnershipClipboardValue() { return m_xClipboard; }
@@ -91,7 +90,7 @@ ClipboardOwner::ClipboardOwner():
 
 //  lostOwnership
 
-void SAL_CALL ClipboardOwner::lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans )
+void ClipboardOwner::lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans )
     throw(RuntimeException)
 {
     m_nReceivedLostOwnerships++;
@@ -113,11 +112,11 @@ public:
 
     // XClipboardOwner
 
-    virtual void SAL_CALL changedContents( const ClipboardEvent& event ) throw(RuntimeException);
+    virtual void changedContents( const ClipboardEvent& event ) throw(RuntimeException);
 
     // XEventListener
 
-    virtual void SAL_CALL disposing( const EventObject& event ) throw(RuntimeException);
+    virtual void disposing( const EventObject& event ) throw(RuntimeException);
 
     sal_uInt32 receivedChangedContentsEvents() { return m_nReceivedChangedContentsEvents; };
     Reference< XClipboard >    changedContentsEventClipboardValue() { return m_xClipboard; }
@@ -133,7 +132,7 @@ ClipboardListener::ClipboardListener():
 
 //  changedContents
 
-void SAL_CALL ClipboardListener::changedContents( const ClipboardEvent& event )
+void ClipboardListener::changedContents( const ClipboardEvent& event )
     throw(RuntimeException)
 {
     m_nReceivedChangedContentsEvents++;
@@ -143,7 +142,7 @@ void SAL_CALL ClipboardListener::changedContents( const ClipboardEvent& event )
 
 //  disposing
 
-void SAL_CALL ClipboardListener::disposing( const EventObject& event )
+void ClipboardListener::disposing( const EventObject& event )
     throw(RuntimeException)
 {
 }
@@ -157,13 +156,13 @@ public:
 
     // XTransferable
 
-    virtual Any SAL_CALL getTransferData( const DataFlavor& aFlavor ) throw(UnsupportedFlavorException, IOException, RuntimeException);
-    virtual Sequence< DataFlavor > SAL_CALL getTransferDataFlavors(  ) throw(RuntimeException);
-    virtual bool SAL_CALL isDataFlavorSupported( const DataFlavor& aFlavor ) throw(RuntimeException);
+    virtual Any getTransferData( const DataFlavor& aFlavor ) throw(UnsupportedFlavorException, IOException, RuntimeException);
+    virtual Sequence< DataFlavor > getTransferDataFlavors(  ) throw(RuntimeException);
+    virtual bool isDataFlavorSupported( const DataFlavor& aFlavor ) throw(RuntimeException);
 
     // XClipboardOwner
 
-    virtual void SAL_CALL lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans ) throw(RuntimeException);
+    virtual void lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans ) throw(RuntimeException);
 
     bool receivedLostOwnership() { return m_receivedLostOwnership; };
     void clearReceivedLostOwnership() { m_receivedLostOwnership = false; };
@@ -199,7 +198,7 @@ StringTransferable::StringTransferable( ) :
 
 //  getTransferData
 
-Any SAL_CALL StringTransferable::getTransferData( const DataFlavor& aFlavor )
+Any StringTransferable::getTransferData( const DataFlavor& aFlavor )
     throw(UnsupportedFlavorException, IOException, RuntimeException)
 {
     Any anyData;
@@ -214,7 +213,7 @@ Any SAL_CALL StringTransferable::getTransferData( const DataFlavor& aFlavor )
 
 //  getTransferDataFlavors
 
-Sequence< DataFlavor > SAL_CALL StringTransferable::getTransferDataFlavors(  )
+Sequence< DataFlavor > StringTransferable::getTransferDataFlavors(  )
     throw(RuntimeException)
 {
     return m_seqDFlv;
@@ -222,7 +221,7 @@ Sequence< DataFlavor > SAL_CALL StringTransferable::getTransferDataFlavors(  )
 
 //  isDataFlavorSupported
 
-bool SAL_CALL StringTransferable::isDataFlavorSupported( const DataFlavor& aFlavor )
+bool StringTransferable::isDataFlavorSupported( const DataFlavor& aFlavor )
     throw(RuntimeException)
 {
     sal_Int32 nLength = m_seqDFlv.getLength( );
@@ -242,7 +241,7 @@ bool SAL_CALL StringTransferable::isDataFlavorSupported( const DataFlavor& aFlav
 
 //  lostOwnership
 
-void SAL_CALL StringTransferable::lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans )
+void StringTransferable::lostOwnership( const Reference< XClipboard >& xClipboard, const Reference< XTransferable >& xTrans )
     throw(RuntimeException)
 {
     m_receivedLostOwnership = true;
@@ -250,7 +249,7 @@ void SAL_CALL StringTransferable::lostOwnership( const Reference< XClipboard >& 
 
 //  main
 
-int SAL_CALL main( int argc, const char* argv[] )
+int main( int argc, const char* argv[] )
 {
     OUString aRegistry;
 

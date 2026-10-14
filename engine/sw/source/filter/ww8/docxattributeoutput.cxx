@@ -185,6 +185,7 @@ using namespace sax_fastparser;
 using namespace sw::util;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::drawing;
+using namespace ::cpo;
 
 namespace {
 
@@ -435,6 +436,22 @@ void lclAddThemeColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList
     lclAddThemeValuesToCustomAttributes(pAttrList, rComplexColor, XML_themeColor, XML_themeTint, XML_themeShade);
 }
 
+} // end anonymous namespace
+
+void DocxAttributeOutput::AddThemeColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                                  model::ComplexColor const& rComplexColor)
+{
+    lclAddThemeColorAttributes(pAttrList, rComplexColor);
+}
+
+void DocxAttributeOutput::AddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                                      model::ComplexColor const& rComplexColor)
+{
+    lclAddThemeFillColorAttributes(pAttrList, rComplexColor);
+}
+
+namespace {
+
 bool lclHasSolidFillTransformations(const model::ComplexColor& aComplexColor)
 {
     const std::vector<model::Transformation>& transformations = aComplexColor.getTransformations();
@@ -459,31 +476,25 @@ bool lcl_hasParaSdtEndBefore(const SwNode& rNode)
     return rMap.contains(u"ParaSdtEndBefore"_ustr);
 }
 
-bool lcl_HasTblHeaderFromStyle(const SwFrameFormat* pTableFormat,
-                               const DocxTableStyleExport& rTableStyleExport)
+bool lcl_HasTblHeaderFromStyle(const SwTable* pTable, const DocxTableStyleExport& rTableStyleExport)
 {
-    // does the table actually apply a table style, and does it use the firstRow style?
-    const std::map<OUString, cpo::uno::Any>& rGrabBag
-        = pTableFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
-    bool bIsUsingFirstRow = false;
+    // does the table actually apply a table style, and does its current, live setting
+    // use the firstRow style?
+    if (!pTable->GetTableStyleSettings().m_bUseFirstRowStyle)
+        return false;
+
+    const std::map<OUString, cpo::uno::Any>& rGrabBag = pTable->GetFrameFormat()
+        ->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
     OUString sStyleId;
     for (const auto& rElement : rGrabBag)
     {
         if (rElement.first == "TableStyleName")
-            sStyleId = rElement.second.get<OUString>();
-        else if (rElement.first == "TableStyleLook")
         {
-            for (const auto& rTblLook : rElement.second.get<cpo::uno::Sequence<beans::PropertyValue>>())
-            {
-                if (rTblLook.Name == "val")
-                {
-                    bIsUsingFirstRow = rTblLook.Value.get<sal_Int32>() & 0x020;
-                    break;
-                }
-            }
+            sStyleId = rElement.second.get<OUString>();
+            break;
         }
     }
-    if (!bIsUsingFirstRow || sStyleId.isEmpty())
+    if (sStyleId.isEmpty())
         return false;
 
     return rTableStyleExport.FirstRowHasTblHeader(sStyleId);
@@ -1123,7 +1134,8 @@ void DocxAttributeOutput::PopulateFrameProperties(const SwFrameFormat* pFrameFor
 
     const SwFormatHoriOrient& rHoriOrient = pFrameFormat->GetHoriOrient();
     const SwFormatVertOrient& rVertOrient = pFrameFormat->GetVertOrient();
-    awt::Point aPos(rHoriOrient.GetPos(), rVertOrient.GetPos());
+    awt::Point aPos(rHoriOrient.getPosition().as_twip<sal_Int32>(),
+                    rVertOrient.getPosition().as_twip<sal_Int32>());
 
     // A few assumptions need to be made here, because framePr is a confused mixture
     // of (multiple) paragraph's border properties being transferred to/from a frame.
@@ -2275,6 +2287,20 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
     DoWriteBookmarksStart(m_rFinalBookmarksStart);
     DoWriteBookmarksEnd(m_rFinalBookmarksEnd); // Write all final bookmarks
     DoWriteBookmarkEndIfExist(nPos);
+
+    // The run that just ended is the initial of a drop cap: give it its own paragraph.
+    if (m_oDropCap)
+    {
+        // A hyperlink or a structured document tag that is still open here wraps the runs
+        // of both paragraphs, so the end of the first paragraph would land inside it and
+        // the file would not open at all. What can be seen from the document is already
+        // left out in FormatDrop(), and a structured document tag that was kept in a grab
+        // bag in WriteCollectedRunProperties(), so this is only a backstop.
+        if (m_nHyperLinkCount.back() > 0 || m_aRunSdt.m_bStartedSdt)
+            m_oDropCap.reset();
+        else
+            SplitParagraphAtDropCap();
+    }
 }
 
 void DocxAttributeOutput::DoWriteBookmarkTagStart(const OUString& bookmarkName)
@@ -2672,7 +2698,7 @@ void DocxAttributeOutput::WriteSdtPlainText(const OUString & sValue, const cpo::
         }
 
         // Store databindings data for later writing to corresponding XMLs
-        OUString sPrefixMapping, sXpath;
+        OUString sPrefixMapping, sXpath, sStoreItemID;
         for (const auto& rProp : aGrabBagSdt)
         {
             if (rProp.Name == "ooxml:CT_SdtPr_dataBinding")
@@ -2685,6 +2711,8 @@ void DocxAttributeOutput::WriteSdtPlainText(const OUString & sValue, const cpo::
                         sPrefixMapping = rDBProp.Value.get<OUString>();
                     else if (rDBProp.Name == "ooxml:CT_DataBinding_xpath")
                         sXpath = rDBProp.Value.get<OUString>();
+                    else if (rDBProp.Name == "ooxml:CT_DataBinding_storeItemID")
+                        sStoreItemID = rDBProp.Value.get<OUString>();
                 }
             }
         }
@@ -2692,7 +2720,7 @@ void DocxAttributeOutput::WriteSdtPlainText(const OUString & sValue, const cpo::
         if (sXpath.getLength())
         {
             // Given xpath is sufficient
-            m_rExport.AddSdtData(sPrefixMapping, sXpath, sValue);
+            m_rExport.AddSdtData(sPrefixMapping, sXpath, sStoreItemID, sValue);
         }
     }
 
@@ -2912,7 +2940,8 @@ void DocxAttributeOutput::WriteContentControlStart()
                 0
             };
             aSnippet = comphelper::string::removeAny(aSnippet, aForbidden);
-            m_rExport.AddSdtData(rPrefixMapping, rXpath, aSnippet);
+            m_rExport.AddSdtData(rPrefixMapping, rXpath,
+                                 m_pContentControl->GetDataBindingStoreItemID(), aSnippet);
         }
     }
 
@@ -3426,6 +3455,8 @@ void DocxAttributeOutput::InitCollectedRunProperties()
     m_pCharLangAttrList = nullptr;
     m_oFontSize.reset();
     m_bCharPostureWritten = false;
+    m_bCharPositionWritten = false;
+    m_bCharStyleWritten = false;
 
     // Write the elements in the spec order
     static const sal_Int32 aOrder[] =
@@ -3682,6 +3713,32 @@ void DocxAttributeOutput::WriteCollectedRunProperties()
     if ( m_pFontsAttrList.is() )
     {
         m_pSerializer->singleElementNS( XML_w, XML_rFonts, detachFrom( m_pFontsAttrList ) );
+    }
+
+    if (m_oDropCap && !m_oDropCap->bSizeWritten)
+    {
+        if (m_aRunSdt.m_oSdtPrToken.has_value())
+        {
+            // A structured document tag begins on this run, and it wraps the runs of both
+            // paragraphs, so EndRun() will not be able to split the paragraph. Give up the
+            // drop cap here, while the size can still be left out: an initial written large
+            // without a frame around it reads as a stray letter in the middle of a
+            // sentence, which is worse to look at than a paragraph that lost its drop cap.
+            m_oDropCap.reset();
+        }
+        else
+        {
+            // This run is the initial of a drop cap, which Word only renders large if the
+            // size and the offset of the baseline are spelled out for it.
+            m_oFontSize = m_oDropCap->nFontSize;
+            if (!m_bCharPositionWritten)
+                m_pSerializer->singleElementNS(XML_w, XML_position, FSNS(XML_w, XML_val),
+                                               OString::number(m_oDropCap->nPosition));
+            if (!m_bCharStyleWritten && !m_oDropCap->aCharStyleId.isEmpty())
+                m_pSerializer->singleElementNS(XML_w, XML_rStyle, FSNS(XML_w, XML_val),
+                                               m_oDropCap->aCharStyleId);
+            m_oDropCap->bSizeWritten = true;
+        }
     }
 
     if ( m_oFontSize )
@@ -4620,9 +4677,130 @@ void DocxAttributeOutput::EndRedline(const SwRedlineData* pRedlineData, bool bPa
         EndRedline(pRedlineData->Next());
 }
 
-void DocxAttributeOutput::FormatDrop( const SwTextNode& /*rNode*/, const SwFormatDrop& /*rSwFormatDrop*/, sal_uInt16 /*nStyle*/, ww8::WW8TableNodeInfo::Pointer_t /*pTextNodeInfo*/, ww8::WW8TableNodeInfoInner::Pointer_t )
+void DocxAttributeOutput::FormatDrop( const SwTextNode& rNode, const SwFormatDrop& rSwFormatDrop, sal_uInt16 nStyle, ww8::WW8TableNodeInfo::Pointer_t /*pTextNodeInfo*/, ww8::WW8TableNodeInfoInner::Pointer_t )
 {
-    SAL_INFO("sw.ww8", "TODO DocxAttributeOutput::FormatDrop( const SwTextNode& rNode, const SwFormatDrop& rSwFormatDrop, sal_uInt16 nStyle )" );
+    // Word frames the initial in a paragraph of its own, followed by a paragraph with
+    // the rest of the text, so remember what it takes to write that frame. The split
+    // itself has to wait until the initial's run is closed, in EndRun().
+    const sal_Int32 nDropLen
+        = rSwFormatDrop.GetWholeWord() ? rNode.GetDropLen(0) : rSwFormatDrop.GetChars();
+    if (nDropLen <= 0 || nDropLen >= rNode.GetText().getLength())
+    {
+        // Nothing would be left for the second paragraph, and reading such a file back
+        // would take the following paragraph's text into the frame instead.
+        return;
+    }
+
+    // A hyperlink, a content control or a ruby that begins in the initial and reaches past
+    // it wraps runs of both paragraphs, so the end of the first paragraph would land inside
+    // it and the file would not open at all. Leave the drop cap out in that case.
+    if (const SwpHints* pHints = rNode.GetpSwpHints())
+    {
+        for (size_t i = 0; i < pHints->Count(); ++i)
+        {
+            const SwTextAttr* pHint = pHints->Get(i);
+            if (pHint->Which() != RES_TXTATR_INETFMT
+                && pHint->Which() != RES_TXTATR_CONTENTCONTROL
+                && pHint->Which() != RES_TXTATR_CJK_RUBY)
+                continue;
+            const sal_Int32* pEnd = pHint->End();
+            if (pHint->GetStart() < nDropLen && pEnd && *pEnd > nDropLen)
+                return;
+        }
+    }
+
+    // Word does not enlarge the initial on its own, it expects the sizes that the
+    // layout came up with.
+    int nFontHeight = 0;
+    int nDropHeight = 0;
+    int nDropDescent = 0;
+    rNode.GetDropSize(nFontHeight, nDropHeight, nDropDescent);
+    if (nDropHeight <= 0)
+    {
+        // GetDropSize guesses the same sizes itself when the layout has not measured an
+        // initial, but it can still hand back a height of zero, and a line height of
+        // zero together with the line rule "exact" would make the line collapse.
+        nFontHeight = rNode.GetSwAttrSet().Get(RES_CHRATR_FONTSIZE).GetHeight();
+        nDropHeight = rSwFormatDrop.GetLines() * nFontHeight;
+        nDropDescent = nFontHeight / 5;
+    }
+
+    DropCapInfo aDropCap;
+    aDropCap.aStyleId = m_rExport.m_pStyles->GetStyleId(nStyle);
+    // The frame paragraph carries the paragraph style, so a list that comes with the
+    // style would put a number in front of the initial as well as in front of the text.
+    const SwTextFormatColl* pTextColl = rNode.GetTextColl();
+    aDropCap.bStyleIsNumbered = pTextColl && !pTextColl->GetNumRule().GetValue().isEmpty();
+    if (const SwCharFormat* pCharFormat = rSwFormatDrop.GetCharFormat())
+        aDropCap.aCharStyleId = m_rExport.m_pStyles->GetStyleId(m_rExport.GetId(pCharFormat));
+    aDropCap.nLines = rSwFormatDrop.GetLines();
+    aDropCap.nDistance = rSwFormatDrop.GetDistance();
+    aDropCap.nLineHeight = nDropHeight;
+    aDropCap.nFontSize = nFontHeight / 10;
+    aDropCap.nPosition = -((aDropCap.nLines - 1) * nDropDescent) / 10;
+    m_oDropCap = aDropCap;
+}
+
+void DocxAttributeOutput::SplitParagraphAtDropCap()
+{
+    const DropCapInfo& rDropCap = *m_oDropCap;
+
+    // The initial's run is in this mark already, so the properties of the paragraph
+    // framing it have to be prepended.
+    m_pSerializer->mark(Tag_DropCapParagraphProperties);
+    m_pSerializer->startElementNS(XML_w, XML_pPr);
+    if (!rDropCap.aStyleId.isEmpty())
+        m_pSerializer->singleElementNS(XML_w, XML_pStyle, FSNS(XML_w, XML_val), rDropCap.aStyleId);
+
+    rtl::Reference<sax_fastparser::FastAttributeList> pFramePrAttrList
+        = sax_fastparser::FastSerializerHelper::createAttrList();
+    pFramePrAttrList->add(FSNS(XML_w, XML_dropCap), "drop");
+    pFramePrAttrList->add(FSNS(XML_w, XML_lines), OString::number(rDropCap.nLines));
+    if (rDropCap.nDistance)
+        pFramePrAttrList->add(FSNS(XML_w, XML_hSpace), OString::number(rDropCap.nDistance));
+    pFramePrAttrList->add(FSNS(XML_w, XML_wrap), "around");
+    pFramePrAttrList->add(FSNS(XML_w, XML_vAnchor), "text");
+    pFramePrAttrList->add(FSNS(XML_w, XML_hAnchor), "text");
+    m_pSerializer->singleElementNS(XML_w, XML_framePr, pFramePrAttrList);
+
+    if (rDropCap.bStyleIsNumbered)
+    {
+        // Take the frame paragraph out of the list again: the number belongs in front of
+        // the text, which is in the paragraph that follows. A numbering id of zero is how
+        // OOXML says that a paragraph is in no list at all.
+        m_pSerializer->startElementNS(XML_w, XML_numPr);
+        m_pSerializer->singleElementNS(XML_w, XML_ilvl, FSNS(XML_w, XML_val), "0");
+        m_pSerializer->singleElementNS(XML_w, XML_numId, FSNS(XML_w, XML_val), "0");
+        m_pSerializer->endElementNS(XML_w, XML_numPr);
+    }
+
+    m_pSerializer->singleElementNS(XML_w, XML_spacing,
+                                   FSNS(XML_w, XML_line), OString::number(rDropCap.nLineHeight),
+                                   FSNS(XML_w, XML_lineRule), "exact");
+
+    m_pSerializer->startElementNS(XML_w, XML_rPr);
+    if (!rDropCap.aCharStyleId.isEmpty())
+        m_pSerializer->singleElementNS(XML_w, XML_rStyle, FSNS(XML_w, XML_val),
+                                       rDropCap.aCharStyleId);
+    m_pSerializer->singleElementNS(XML_w, XML_position, FSNS(XML_w, XML_val),
+                                   OString::number(rDropCap.nPosition));
+    m_pSerializer->singleElementNS(XML_w, XML_sz, FSNS(XML_w, XML_val),
+                                   OString::number(rDropCap.nFontSize));
+    m_pSerializer->endElementNS(XML_w, XML_rPr);
+
+    m_pSerializer->endElementNS(XML_w, XML_pPr);
+    m_pSerializer->mergeTopMarks(Tag_DropCapParagraphProperties,
+                                 sax_fastparser::MergeMarks::PREPEND);
+
+    // Close the initial's paragraph and open the one that takes the rest of the text.
+    // The paragraph properties are written at the end of the text node and prepended,
+    // so they land in this second paragraph, where they belong.
+    m_pSerializer->endElementNS(XML_w, XML_p);
+    m_pSerializer->mergeTopMarks(Tag_StartParagraph_2);
+    m_pSerializer->startElementNS(XML_w, XML_p);
+    m_pSerializer->mark(Tag_StartParagraph_2);
+
+    m_oDropCap.reset();
 }
 
 void DocxAttributeOutput::ParagraphStyle( sal_uInt16 nStyle )
@@ -5107,7 +5285,7 @@ void DocxAttributeOutput::StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t c
         // and perhaps our tblLook uses that firstRow style
         // and perhaps the firstRow style defines a tblHeader
         // then in that case we need to write an explicit false to dis-inherit.
-        if (lcl_HasTblHeaderFromStyle(pTable->GetFrameFormat(), *m_pTableStyleExport))
+        if (lcl_HasTblHeaderFromStyle(pTable, *m_pTableStyleExport))
             m_pSerializer->singleElementNS(XML_w, XML_tblHeader, FSNS(XML_w, XML_val), "false");
     }
 
@@ -5497,7 +5675,7 @@ void DocxAttributeOutput::DefaultStyle()
 *  NOTE : Tested on images of type JPEG,EMF/WMF,BMP, PNG and GIF.
 */
 void DocxAttributeOutput::WriteSrcRect(
-    const css::uno::Reference<css::beans::XPropertySet>& xShapePropSet,
+    const cpo::uno::Reference<css::beans::XPropertySet>& xShapePropSet,
     const SwFrameFormat* pFrameFormat)
 {
     uno::Reference<graphic::XGraphic> xGraphic;
@@ -5549,7 +5727,7 @@ void DocxAttributeOutput::WriteSrcRect(
 }
 
 uno::Reference<css::text::XTextFrame> DocxAttributeOutput::GetUnoTextFrame(
-    css::uno::Reference<css::drawing::XShape> xShape)
+    cpo::uno::Reference<css::drawing::XShape> xShape)
 {
     return SwTextBoxHelper::getUnoTextFrame(xShape);
 }
@@ -5665,12 +5843,12 @@ void DocxAttributeOutput::FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size
         }
     }
 
-    css::uno::Reference<css::beans::XPropertySet> xShapePropSet;
+    cpo::uno::Reference<css::beans::XPropertySet> xShapePropSet;
     if (pSdrObj)
     {
-        css::uno::Reference<css::drawing::XShape> xShape(
-            const_cast<SdrObject*>(pSdrObj)->getUnoShape(), css::uno::UNO_QUERY);
-        xShapePropSet.set(xShape, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::drawing::XShape> xShape(
+            const_cast<SdrObject*>(pSdrObj)->getUnoShape(), cpo::uno::UNO_QUERY);
+        xShapePropSet.set(xShape, cpo::uno::UNO_QUERY);
         assert(xShapePropSet);
     }
 
@@ -5997,7 +6175,7 @@ void DocxAttributeOutput::WritePostponedMath(const SwOLENode* pPostponedMath, sa
         {
         }
     }
-    uno::Reference< uno::XInterface > xInterface( xObj->getComponent(), uno::UNO_QUERY );
+    uno::Reference< cpo::uno::XInterface > xInterface( xObj->getComponent(), uno::UNO_QUERY );
     if( oox::FormulaImExportBase* formulaexport = dynamic_cast< oox::FormulaImExportBase* >( xInterface.get()))
         formulaexport->writeFormulaOoxml( m_pSerializer, GetExport().GetFilter().getVersion(),
                 oox::drawingml::DOCUMENT_DOCX, nAlign);
@@ -6548,8 +6726,10 @@ OString DocxAttributeOutput::GetOLEStyle(const SwFlyFrameFormat& rFormat, const 
             bInsideFrame = pAnchorNode->FindFlyStartNode() != nullptr;
 
         aPos = (bInsideFrame ? OString() : "position:absolute;"_ostr) + "margin-left:"
-               + OString::number(double(rFormat.GetHoriOrient().GetPos()) / 20) + "pt;margin-top:"
-               + OString::number(double(rFormat.GetVertOrient().GetPos()) / 20) + "pt;";
+               + OString::number(rFormat.GetHoriOrient().getPosition().as_twip<sal_Int32>() / 20.0)
+               + "pt;margin-top:"
+               + OString::number(rFormat.GetVertOrient().getPosition().as_twip<sal_Int32>() / 20.0)
+               + "pt;";
     }
 
     OString sShapeStyle = "width:" + OString::number( double( rSize.Width() ) / 20 ) +
@@ -6896,10 +7076,10 @@ void DocxAttributeOutput::OutputFlyFrame_Impl(const ww8::Frame& rFrame, const Po
         {
             if (auto pParentFly = rFrame.GetContentNode()->GetFlyFormat())
             {
-                auto aHori(rFrame.GetFrameFormat().GetHoriOrient());
-                aHori.SetPos(aHori.GetPos() + pParentFly->GetHoriOrient().GetPos());
-                auto aVori(rFrame.GetFrameFormat().GetVertOrient());
-                aVori.SetPos(aVori.GetPos() + pParentFly->GetVertOrient().GetPos());
+                SwFormatHoriOrient aHori(rFrame.GetFrameFormat().GetHoriOrient());
+                aHori.adjustPosition(pParentFly->GetHoriOrient().getPosition());
+                SwFormatVertOrient aVori(rFrame.GetFrameFormat().GetVertOrient());
+                aVori.adjustPosition(pParentFly->GetVertOrient().getPosition());
 
                 const_cast<SwFrameFormat&>(rFrame.GetFrameFormat()).SetFormatAttr(aHori);
                 const_cast<SwFrameFormat&>(rFrame.GetFrameFormat()).SetFormatAttr(aVori);
@@ -8393,6 +8573,7 @@ void DocxAttributeOutput::CharEscapement( const SvxEscapementItem& rEscapement )
     float fHeight = rItem.GetHeight();
     OString sPos = OString::number( round(( fHeight * nEsc ) / 1000) );
     m_pSerializer->singleElementNS(XML_w, XML_position, FSNS(XML_w, XML_val), sPos);
+    m_bCharPositionWritten = true;
 
     if( ( 100 != nProp || sIss.match( "baseline" ) ) && !m_oFontSize )
     {
@@ -8558,22 +8739,143 @@ void DocxAttributeOutput::CharAnimatedText( const SvxBlinkItem& rBlink )
         m_pSerializer->singleElementNS(XML_w, XML_effect, FSNS(XML_w, XML_val), "none");
 }
 
+namespace
+{
+/// One MS Office character shading: the value of w:shd, and the share of the shading color, in
+/// per mille, that it paints over the fill color. Keep this the inverse of the shading the
+/// import reads in CellColorHandler.
+struct ShadingPatternValue
+{
+    sal_Int32 nShadingPattern;
+    std::u16string_view aValue;
+    sal_Int32 nShadingShare;
+};
+
+constexpr ShadingPatternValue aShadingPatternValues[] = {
+    { ShadingPattern::SOLID, u"solid", 1000 },
+    { ShadingPattern::PCT5, u"pct5", 50 },
+    { ShadingPattern::PCT10, u"pct10", 100 },
+    { ShadingPattern::PCT20, u"pct20", 200 },
+    { ShadingPattern::PCT25, u"pct25", 250 },
+    { ShadingPattern::PCT30, u"pct30", 300 },
+    { ShadingPattern::PCT40, u"pct40", 400 },
+    { ShadingPattern::PCT50, u"pct50", 500 },
+    { ShadingPattern::PCT60, u"pct60", 600 },
+    { ShadingPattern::PCT70, u"pct70", 700 },
+    { ShadingPattern::PCT75, u"pct75", 750 },
+    { ShadingPattern::PCT80, u"pct80", 800 },
+    { ShadingPattern::PCT90, u"pct90", 900 },
+    { ShadingPattern::HORZ_STRIPE, u"horzStripe", 333 },
+    { ShadingPattern::VERT_STRIPE, u"vertStripe", 333 },
+    { ShadingPattern::REVERSE_DIAG_STRIPE, u"reverseDiagStripe", 333 },
+    { ShadingPattern::DIAG_STRIPE, u"diagStripe", 333 },
+    { ShadingPattern::HORZ_CROSS, u"horzCross", 333 },
+    { ShadingPattern::DIAG_CROSS, u"diagCross", 333 },
+    { ShadingPattern::THIN_HORZ_STRIPE, u"thinHorzStripe", 333 },
+    { ShadingPattern::THIN_VERT_STRIPE, u"thinVertStripe", 333 },
+    { ShadingPattern::THIN_REVERSE_DIAG_STRIPE, u"thinReverseDiagStripe", 333 },
+    { ShadingPattern::THIN_DIAG_STRIPE, u"thinDiagStripe", 333 },
+    { ShadingPattern::THIN_HORZ_CROSS, u"thinHorzCross", 333 },
+    { ShadingPattern::THIN_DIAG_CROSS, u"thinDiagCross", 333 },
+    { ShadingPattern::PCT12, u"pct12", 125 },
+    { ShadingPattern::PCT15, u"pct15", 150 },
+    { ShadingPattern::PCT35, u"pct35", 350 },
+    { ShadingPattern::PCT37, u"pct37", 375 },
+    { ShadingPattern::PCT45, u"pct45", 450 },
+    { ShadingPattern::PCT55, u"pct55", 550 },
+    { ShadingPattern::PCT62, u"pct62", 625 },
+    { ShadingPattern::PCT65, u"pct65", 650 },
+    { ShadingPattern::PCT85, u"pct85", 850 },
+    { ShadingPattern::PCT87, u"pct87", 875 },
+    { ShadingPattern::PCT95, u"pct95", 950 },
+};
+
+const ShadingPatternValue* lcl_GetShadingPatternValue(sal_Int32 nShadingPattern)
+{
+    auto pFound = std::find_if(std::begin(aShadingPatternValues), std::end(aShadingPatternValues),
+                               [nShadingPattern](const ShadingPatternValue& rValue) {
+                                   return rValue.nShadingPattern == nShadingPattern;
+                               });
+
+    return pFound == std::end(aShadingPatternValues) ? nullptr : pFound;
+}
+
+/// Return the fill color that blends into rBlended under a shading that paints nShadingShare
+/// per mille of black over it, or nothing when no fill color does.
+std::optional<Color> lcl_GetFillOfShading(const Color& rBlended, sal_Int32 nShadingShare)
+{
+    // A shading that covers the whole fill leaves nothing of it in the blended color, so the
+    // fill cannot be worked out from that color.
+    const sal_Int32 nFillShare = 1000 - nShadingShare;
+    if (nFillShare <= 0)
+        return {};
+
+    const sal_uInt8 aBlended[3] = { rBlended.GetRed(), rBlended.GetGreen(), rBlended.GetBlue() };
+    sal_uInt8 aFill[3] = {};
+    for (size_t i = 0; i < 3; ++i)
+    {
+        // The import rounds the blend down, so take the smallest fill value that reaches this
+        // blended value, and drop the whole color when even white stays below it.
+        const sal_Int32 nFill = (sal_Int32(aBlended[i]) * 1000 + nFillShare - 1) / nFillShare;
+        if (nFill > 255 || nFill * nFillShare / 1000 != aBlended[i])
+            return {};
+
+        // Several fill values can round to the same blended value. Where white is one of them,
+        // take white, so that a channel that was saturated comes back as it was.
+        aFill[i] = (255 * nFillShare / 1000 == aBlended[i]) ? 255 : static_cast<sal_uInt8>(nFill);
+    }
+
+    return Color(aFill[0], aFill[1], aFill[2]);
+}
+}
+
 void DocxAttributeOutput::CharBackground( const SvxBrushItem& rBrush )
 {
-    // Check if the brush shading pattern is 'PCT15'. If so - write it back to the DOCX
-    if (rBrush.GetShadingValue() == ShadingPattern::PCT15)
+    rtl::Reference<sax_fastparser::FastAttributeList> pAttrList
+        = FastSerializerHelper::createAttrList();
+
+    // A shading is written back as a shading, so that a file that came in that way keeps it.
+    // The brush item holds only the color that the shading and the fill blend into, so the fill
+    // color has to be worked back out of it.
+    const ShadingPatternValue* pShading = lcl_GetShadingPatternValue(rBrush.GetShadingValue());
+    if (pShading && pShading->nShadingShare == 1000)
     {
-        m_pSerializer->singleElementNS( XML_w, XML_shd,
-            FSNS( XML_w, XML_val ), u"pct15"_ustr,
-            FSNS( XML_w, XML_color ), u"auto"_ustr,
-            FSNS( XML_w, XML_fill ), u"FFFFFF"_ustr );
+        // The shading covers the fill color, so the color the item holds is the shading one.
+        pAttrList->add(FSNS(XML_w, XML_val), pShading->aValue);
+        pAttrList->add(FSNS(XML_w, XML_color), msfilter::util::ConvertColor(rBrush.GetColor()));
+        pAttrList->add(FSNS(XML_w, XML_fill), "auto");
+        m_pSerializer->singleElementNS(XML_w, XML_shd, detachFrom(pAttrList));
+        return;
+    }
+
+    // The shading color is written as automatic, which is black, so the fill color is what the
+    // rest of the blend came from.
+    std::optional<Color> oFill;
+    if (pShading)
+        oFill = lcl_GetFillOfShading(rBrush.GetColor(), pShading->nShadingShare);
+
+    if (oFill)
+    {
+        pAttrList->add(FSNS(XML_w, XML_val), pShading->aValue);
+        pAttrList->add(FSNS(XML_w, XML_color), "auto");
+        pAttrList->add(FSNS(XML_w, XML_fill), msfilter::util::ConvertColor(*oFill));
     }
     else
     {
-        m_pSerializer->singleElementNS( XML_w, XML_shd,
-            FSNS( XML_w, XML_fill ), msfilter::util::ConvertColor(rBrush.GetColor()),
-            FSNS( XML_w, XML_val ), "clear" );
+        // No shading, or no fill color that the shading blends into the color the item holds:
+        // write that color as a plain fill.
+        pAttrList->add(FSNS(XML_w, XML_fill), msfilter::util::ConvertColor(rBrush.GetColor()));
+        pAttrList->add(FSNS(XML_w, XML_val), "clear");
     }
+
+    // The fill can be a theme color, which the file names next to the color it resolves to.
+    // That only holds where the color written is the fill itself. Where the pattern could not
+    // be worked back to a fill, the color written is the one the two blend into, and a reader
+    // that resolves the theme would paint the fill over it.
+    if (!pShading || oFill)
+        lclAddThemeFillColorAttributes(pAttrList, rBrush.getComplexColor());
+
+    m_pSerializer->singleElementNS(XML_w, XML_shd, detachFrom(pAttrList));
 }
 
 void DocxAttributeOutput::CharFontCJK( const SvxFontItem& rFont )
@@ -8800,7 +9102,10 @@ void DocxAttributeOutput::TextINetFormat( const SwFormatINetFormat& rLink )
     {
         OString aStyleId(m_rExport.m_pStyles->GetStyleId(m_rExport.GetId(pFormat)));
         if (!aStyleId.equalsIgnoreAsciiCase("DefaultStyle"))
+        {
             m_pSerializer->singleElementNS(XML_w, XML_rStyle, FSNS(XML_w, XML_val), aStyleId);
+            m_bCharStyleWritten = true;
+        }
     }
 }
 
@@ -8809,6 +9114,7 @@ void DocxAttributeOutput::TextCharFormat( const SwFormatCharFormat& rCharFormat 
     OString aStyleId(m_rExport.m_pStyles->GetStyleId(m_rExport.GetId(rCharFormat.GetCharFormat())));
 
     m_pSerializer->singleElementNS(XML_w, XML_rStyle, FSNS(XML_w, XML_val), aStyleId);
+    m_bCharStyleWritten = true;
 }
 
 void DocxAttributeOutput::RefField( const SwField&  rField, const OUString& rRef )
@@ -8912,9 +9218,13 @@ DocxAttributeOutput::hasProperties DocxAttributeOutput::WritePostitFields()
         m_pSerializer->startElementNS( XML_w, XML_comment, pAttributeList );
 
         // Make sure to give parent/child fields a paraId
-        const bool bNeedParaId = f->GetResolved() || data.parentStatus != ParentStatus::None;
-        if (bNeedParaId)
+        const bool bNeedParaIdForExtended
+            = f->GetResolved() || data.parentStatus != ParentStatus::None;
+        if (bNeedParaIdForExtended)
             eResult = hasProperties::yes;
+        // The part carrying the moment the comment was written refers to it by paragraph id as
+        // well, so a comment with a moment needs one even when it is neither resolved nor a reply.
+        const bool bNeedParaId = bNeedParaIdForExtended || f->GetDateTimeUTC().has_value();
 
         if (f->GetTextObject() != nullptr)
         {
@@ -8975,6 +9285,41 @@ void DocxAttributeOutput::WritePostItFieldsResolved()
             FSNS(XML_w15, XML_paraId), idstr,
             FSNS(XML_w15, XML_done), sDone,
             FSNS(XML_w15, XML_paraIdParent), sParentId);
+    }
+}
+
+bool DocxAttributeOutput::HasPostitFieldsWithDateUTC() const
+{
+    return std::any_of(m_postitFields.begin(), m_postitFields.end(),
+                       [](const auto& rPair) { return bool(rPair.first->GetDateTimeUTC()); });
+}
+
+void DocxAttributeOutput::WritePostItFieldsIds()
+{
+    for (auto& [f, data] : m_postitFields)
+    {
+        if (!f->GetDateTimeUTC())
+            continue;
+        // The paragraph id is already unique per comment, so it serves as the durable id too.
+        // The two parts only have to agree with each other.
+        OUString idstr = NumberToHexBinary(data.lastParaId);
+        m_pSerializer->singleElementNS(XML_w16cid, XML_commentId,
+            FSNS(XML_w16cid, XML_paraId), idstr,
+            FSNS(XML_w16cid, XML_durableId), idstr);
+    }
+}
+
+void DocxAttributeOutput::WritePostItFieldsExtensible()
+{
+    for (auto& [f, data] : m_postitFields)
+    {
+        const std::optional<DateTime>& oDateTimeUTC = f->GetDateTimeUTC();
+        if (!oDateTimeUTC)
+            continue;
+        // The value is already in UTC, which is what DateTimeToOString marks it as.
+        m_pSerializer->singleElementNS(XML_w16cex, XML_commentExtensible,
+            FSNS(XML_w16cex, XML_durableId), NumberToHexBinary(data.lastParaId),
+            FSNS(XML_w16cex, XML_dateUtc), DateTimeToOString(*oDateTimeUTC));
     }
 }
 
@@ -9439,7 +9784,9 @@ void DocxAttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
             switch ( rAdjust.GetPropWordSpacingMinimum() )
             {
                 case 133:
-                    if ( rAdjust.GetPropWordSpacingMaximum() == 133 )
+                case 150:
+                    if ( rAdjust.GetPropWordSpacingMaximum() == 133 ||
+                            rAdjust.GetPropWordSpacingMaximum() == 150 )
                         pAdjustString = "lowKashida";
                     break;
                 case 200:
@@ -10201,7 +10548,9 @@ void DocxAttributeOutput::FormatVertOrientation( const SwFormatVertOrient& rFlyV
 
     if (m_rExport.SdrExporter().getTextFrameSyntax())
     {
-        m_rExport.SdrExporter().getTextFrameStyle().append(";margin-top:" + OString::number(double(rFlyVert.GetPos()) / 20) + "pt");
+        m_rExport.SdrExporter().getTextFrameStyle().append(
+            ";margin-top:" + OString::number(rFlyVert.getPosition().as_twip<sal_Int32>() / 20.0)
+            + "pt");
         if ( !sAlign.isEmpty() )
             m_rExport.SdrExporter().getTextFrameStyle().append(";mso-position-vertical:" + sAlign);
         m_rExport.SdrExporter().getTextFrameStyle().append(";mso-position-vertical-relative:" + sVAnchor);
@@ -10215,7 +10564,7 @@ void DocxAttributeOutput::FormatVertOrientation( const SwFormatVertOrient& rFlyV
             AddToAttrList( m_rExport.SdrExporter().getFlyAttrList(), FSNS( XML_w, XML_yAlign ), sAlign );
         else
             AddToAttrList( m_rExport.SdrExporter().getFlyAttrList(), FSNS( XML_w, XML_y ),
-                OString::number( rFlyVert.GetPos() ) );
+                OString::number(rFlyVert.getPosition().as_twip<sal_Int32>()));
         AddToAttrList( m_rExport.SdrExporter().getFlyAttrList(), FSNS( XML_w, XML_vAnchor ), sVAnchor );
     }
 }
@@ -10227,7 +10576,9 @@ void DocxAttributeOutput::FormatHorizOrientation( const SwFormatHoriOrient& rFly
 
     if (m_rExport.SdrExporter().getTextFrameSyntax())
     {
-        m_rExport.SdrExporter().getTextFrameStyle().append(";margin-left:" + OString::number(double(rFlyHori.GetPos()) / 20) + "pt");
+        m_rExport.SdrExporter().getTextFrameStyle().append(
+            ";margin-left:" + OString::number(rFlyHori.getPosition().as_twip<sal_Int32>() / 20.0)
+            + "pt");
         if ( !sAlign.isEmpty() )
             m_rExport.SdrExporter().getTextFrameStyle().append(";mso-position-horizontal:" + sAlign);
         m_rExport.SdrExporter().getTextFrameStyle().append(";mso-position-horizontal-relative:" + sHAnchor);
@@ -10241,7 +10592,7 @@ void DocxAttributeOutput::FormatHorizOrientation( const SwFormatHoriOrient& rFly
             AddToAttrList( m_rExport.SdrExporter().getFlyAttrList(), FSNS( XML_w, XML_xAlign ), sAlign );
         else
             AddToAttrList( m_rExport.SdrExporter().getFlyAttrList(), FSNS( XML_w, XML_x ),
-                OString::number( rFlyHori.GetPos() ) );
+                OString::number(rFlyHori.getPosition().as_twip<sal_Int32>()));
         AddToAttrList( m_rExport.SdrExporter().getFlyAttrList(), FSNS( XML_w, XML_hAnchor ), sHAnchor );
     }
 }
@@ -10936,6 +11287,8 @@ DocxAttributeOutput::DocxAttributeOutput( DocxExport &rExport, const FSHelperPtr
       m_pSerializer( pSerializer ),
       m_rDrawingML( *pDrawingML ),
       m_bCharPostureWritten(false),
+      m_bCharPositionWritten(false),
+      m_bCharStyleWritten(false),
       m_bEndCharSdt(false),
       m_endPageRef( false ),
       m_pFootnotesList( new ::docx::FootnotesList() ),
@@ -10970,7 +11323,9 @@ DocxAttributeOutput::DocxAttributeOutput( DocxExport &rExport, const FSHelperPtr
       m_postitFieldsMaxId( 0 ),
       m_nextFontId( 1 ),
       m_bIgnoreNextFill(false),
-      m_pTableStyleExport(std::make_shared<DocxTableStyleExport>(rExport.m_rDoc, pSerializer)),
+      m_pTableStyleExport(std::make_shared<DocxTableStyleExport>(
+          rExport.m_rDoc, pSerializer,
+          rExport.GetFilter().getVersion() == oox::core::ECMA_376_1ST_EDITION)),
       m_bParaBeforeAutoSpacing(false),
       m_bParaAfterAutoSpacing(false),
       m_nParaBeforeSpacing(0),

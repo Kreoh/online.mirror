@@ -17,12 +17,12 @@
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star;
 
 namespace sc_apitest
@@ -32,7 +32,7 @@ class ScHeaderFooterContentObj : public UnoApiTest, public apitest::XHeaderFoote
 public:
     ScHeaderFooterContentObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScHeaderFooterContentObj);
@@ -50,7 +50,7 @@ ScHeaderFooterContentObj::ScHeaderFooterContentObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScHeaderFooterContentObj::init()
+uno::Reference<cpo::uno::XInterface> ScHeaderFooterContentObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
 

@@ -47,9 +47,9 @@
 #include <xsecctl.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace css::xml::sax;
+using namespace ::cpo;
 using namespace ::cpo::uno;
+using namespace css::xml::sax;
 
 namespace
 {
@@ -110,7 +110,7 @@ static void ImplFillElementList(
                 rName, rtl_UriCharClassRelSegment,
                 rtl_UriEncodeStrict, RTL_TEXTENCODING_UTF8);
             if (sEncName.isEmpty() && !rName.isEmpty())
-                throw css::uno::RuntimeException(u"Failed to encode element name of XStorage"_ustr, nullptr);
+                throw cpo::uno::RuntimeException(u"Failed to encode element name of XStorage"_ustr, nullptr);
 
             if ( rxStore->isStreamElement( rName ) )
             {

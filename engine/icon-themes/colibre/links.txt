@@ -1733,18 +1733,15 @@ cmd/sc_toolsmacroedit.png cmd/sc_basicideappear.png
 # Help
 cmd/32/donation.png cmd/32/currencyfield.png
 cmd/32/helperdialog.png cmd/32/helpindex.png
-cmd/32/questionanswers.png cmd/32/browseview.png
 cmd/32/sendfeedback.png cmd/32/insertenvelope.png
 
 cmd/lc_donation.png cmd/lc_currencyfield.png
 cmd/lc_helperdialog.png cmd/lc_helpindex.png
-cmd/lc_questionanswers.png cmd/lc_browseview.png
 cmd/lc_sendfeedback.png cmd/lc_insertenvelope.png
 
 cmd/sc_about.png res/mainapp_16_8.png
 cmd/sc_donation.png cmd/sc_currencyfield.png
 cmd/sc_helperdialog.png cmd/sc_helpindex.png
-cmd/sc_questionanswers.png cmd/sc_browseview.png
 cmd/sc_sendfeedback.png cmd/sc_insertenvelope.png
 
 # Math
@@ -2593,7 +2590,6 @@ cmd/sc_dropdownformfield.png cmd/sc_combobox.png
 cmd/sc_datepickerformfield.png cmd/sc_datefield.png
 
 # menubar icons
-cmd/32/com.sun.star.deployment.ui.packagemanagerdialog.png cmd/32/insertplugin.png
 cmd/32/focustofindbar.png cmd/32/recsearch.png
 cmd/32/macroorganizer%3ftabid%3ashort=1.png cmd/32/open.png
 cmd/32/numberingmenu.png cmd/32/outlinebullet.png
@@ -2604,7 +2600,6 @@ cmd/32/textattributes.png cmd/32/fontdialog.png
 cmd/32/tracechangemode.png cmd/32/trackchanges.png
 cmd/32/viewtrackchanges.png cmd/32/showtrackedchanges.png
 
-cmd/lc_com.sun.star.deployment.ui.packagemanagerdialog.png cmd/lc_insertplugin.png
 cmd/lc_focustofindbar.png cmd/lc_recsearch.png
 cmd/lc_macroorganizer%3ftabid%3ashort=1.png cmd/lc_open.png
 cmd/lc_numberingmenu.png cmd/lc_outlinebullet.png
@@ -2615,7 +2610,6 @@ cmd/lc_textattributes.png cmd/lc_fontdialog.png
 cmd/lc_tracechangemode.png cmd/lc_trackchanges.png
 cmd/lc_viewtrackchanges.png cmd/lc_showtrackedchanges.png
 
-cmd/sc_com.sun.star.deployment.ui.packagemanagerdialog.png cmd/sc_insertplugin.png
 cmd/sc_focustofindbar.png cmd/sc_recsearch.png
 cmd/sc_macroorganizer%3ftabid%3ashort=1.png cmd/sc_open.png
 cmd/sc_numberingmenu.png cmd/sc_outlinebullet.png

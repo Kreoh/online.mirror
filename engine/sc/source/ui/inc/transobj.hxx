@@ -71,7 +71,7 @@ public:
     virtual bool        WriteObject( SvStream& rOStm, void* pUserObject, sal_uInt32 nUserObjectId,
                                         const css::datatransfer::DataFlavor& rFlavor ) override;
     virtual void        DragFinished( sal_Int8 nDropAction ) override;
-    virtual bool SAL_CALL isComplex() override;
+    virtual bool isComplex() override;
 
     ScDocument*         GetDocument() const     { return m_pDoc.get(); }        // owned by ScTransferObj
     const ScRange&      GetRange() const        { return m_aBlock; }
@@ -103,7 +103,7 @@ public:
     // assistant can resolve cell addresses.
     static OUString GetMarkdownFromRange(ScDocument& rDoc, const ScRange& rRange, bool bAnnotated);
 
-    static  SC_DLLPUBLIC ScTransferObj* GetOwnClipboard(const css::uno::Reference<css::datatransfer::XTransferable2>&);
+    static  SC_DLLPUBLIC ScTransferObj* GetOwnClipboard(const cpo::uno::Reference<css::datatransfer::XTransferable2>&);
 
     static SfxObjectShell* SetDrawClipDoc(bool bAnyOle, const std::shared_ptr<ScDocument>& = {} );     // update ScGlobal::xDrawClipDocShellRef
 };

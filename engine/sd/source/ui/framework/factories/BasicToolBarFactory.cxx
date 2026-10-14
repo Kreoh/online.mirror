@@ -31,7 +31,7 @@
 #include <com/sun/star/frame/XController.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::drawing::framework;
 
@@ -66,7 +66,7 @@ BasicToolBarFactory::BasicToolBarFactory(const rtl::Reference<::sd::DrawControll
             mxConfigurationController = nullptr;
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         Shutdown();
         throw;
@@ -95,7 +95,7 @@ void BasicToolBarFactory::Shutdown()
 
 //----- lang::XEventListener --------------------------------------------------
 
-void SAL_CALL BasicToolBarFactory::disposing (
+void BasicToolBarFactory::disposing (
     const lang::EventObject& rEventObject)
 {
     if (rEventObject.Source == cppu::getXWeak(mxConfigurationController.get()))

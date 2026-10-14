@@ -32,7 +32,7 @@ namespace basctl
 {
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 Renderable::Renderable (BaseWindow* pWin)
@@ -173,7 +173,7 @@ Sequence<beans::PropertyValue> Renderable::getRenderer (
         aSize.Width  = aPageSize.Width();
         aSize.Height = aPageSize.Height();
         aVals = ::comphelper::InitPropertySequence({
-            { "PageSize", Any(aSize) }
+            { u"PageSize"_ustr, Any(aSize) }
         });
     }
 

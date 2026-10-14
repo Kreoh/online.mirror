@@ -32,11 +32,11 @@ public:
     ScVbaEventsHelper( const cpo::uno::Sequence< cpo::uno::Any >& rArgs );
     virtual ~ScVbaEventsHelper() override;
 
-    virtual void SAL_CALL notifyEvent( const css::document::EventObject& rEvent ) override;
+    virtual void notifyEvent( const css::document::EventObject& rEvent ) override;
 
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 protected:
     virtual bool implPrepareEvent( EventQueue& rEventQueue, const EventHandlerInfo& rInfo, const cpo::uno::Sequence< cpo::uno::Any >& rArgs ) override;
@@ -48,28 +48,28 @@ private:
     /** Checks if selection has been changed compared to selection of last call.
         @return true, if the selection has been changed.
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     bool isSelectionChanged( const cpo::uno::Sequence< cpo::uno::Any >& rArgs, sal_Int32 nIndex );
 
     /** Creates a VBA Worksheet object (the argument must contain a sheet index).
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     cpo::uno::Any createWorksheet( const cpo::uno::Sequence< cpo::uno::Any >& rArgs, sal_Int32 nIndex ) const;
     /** Creates a VBA Range object (the argument must contain a UNO range or UNO range list).
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     cpo::uno::Any createRange( const cpo::uno::Sequence< cpo::uno::Any >& rArgs, sal_Int32 nIndex ) const;
     /** Creates a VBA Hyperlink object (the argument must contain a UNO cell).
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     cpo::uno::Any createHyperlink( const cpo::uno::Sequence< cpo::uno::Any >& rArgs, sal_Int32 nIndex ) const;
     /** Creates a VBA Window object (the argument must contain a model controller).
         @throws css::lang::IllegalArgumentException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     cpo::uno::Any createWindow( const cpo::uno::Sequence< cpo::uno::Any >& rArgs, sal_Int32 nIndex ) const;
 

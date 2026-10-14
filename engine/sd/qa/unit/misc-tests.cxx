@@ -11,7 +11,7 @@
 
 #include "sdmodeltestbase.hxx"
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <com/sun/star/awt/Gradient.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
@@ -24,11 +24,15 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/table/XTable.hpp>
 #include <com/sun/star/table/XMergeableCellRange.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 
+#include <set>
+
 #include <comphelper/sequence.hxx>
 #include <comphelper/propertysequence.hxx>
+#include <svl/style.hxx>
 #include <DrawDocShell.hxx>
 #include <drawdoc.hxx>
 #include <vcl/scheduler.hxx>
@@ -45,6 +49,8 @@
 #include <undo/undomanager.hxx>
 #include <GraphicViewShell.hxx>
 #include <sdpage.hxx>
+#include <glob.hxx>
+#include <strings.hxx>
 #include <app.hrc>
 #include <DrawViewShell.hxx>
 #include <LayerTabBar.hxx>
@@ -56,6 +62,7 @@
 #include <svx/scene3d.hxx>
 #include <svx/sdmetitm.hxx>
 #include <svx/xfillit0.hxx>
+#include <svx/xflclit.hxx>
 #include <svx/xbtmpit.hxx>
 #include <test/commontesttools.hxx>
 #include <unomodel.hxx>
@@ -63,8 +70,10 @@
 #include <editeng/editview.hxx>
 #include <editeng/outliner.hxx>
 #include <svx/svdotext.hxx>
+#include <unotools/tempfile.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// Impress miscellaneous tests.
 class SdMiscTest : public SdModelTestBase
@@ -104,6 +113,29 @@ public:
     void testCanvasSlideExportODP();
     void testDuplicateAndMove();
     void testEmptyPresObjSetOnObjectWithoutText();
+    void testPageGuids();
+    void testPageGuidCutPaste();
+    void testPageGuidMergedMasters();
+    void testInsertFileAsPageKeepsMasterBackground();
+    void testInsertFileAsPageAdoptDesign();
+    void testInsertFileAsPageAdoptDesignAtStart();
+    void testInsertFileAsPageKeepDesign();
+    void testInsertFileAsPageKeepDesignSameMasterName();
+    void testInsertFileAsPageKeepDesignSameMasterNameAndDesign();
+    void testSlideImportRoundTripKeepsMasterBackground();
+    void testInsertFileAsPageKeepDesignTwiceSharesMaster();
+    void testInsertFileAsPageKeepDesignRenamedKeepsNotesMaster();
+    void testInsertFileAsPageKeepDesignTwoDesignsOfOneName();
+    void testInsertFileAsPageLinkRecordsSource();
+    void testInsertFileAsPageLinkWithoutSourceRecordsMedium();
+    void testInsertWholeFileAsPagesLinkRecordsSource();
+    void testSlideLinkKeepsOnlyAReadableSourceGuid();
+    void testSlideLinkKeepsOnlyAReadableSourceTime();
+
+private:
+    SdDrawDocument* loadSlideImportDocs();
+
+public:
 
     CPPUNIT_TEST_SUITE(SdMiscTest);
     CPPUNIT_TEST(testTdf99396);
@@ -135,6 +167,24 @@ public:
     CPPUNIT_TEST(testCanvasSlideExportODP);
     CPPUNIT_TEST(testDuplicateAndMove);
     CPPUNIT_TEST(testEmptyPresObjSetOnObjectWithoutText);
+    CPPUNIT_TEST(testPageGuids);
+    CPPUNIT_TEST(testPageGuidCutPaste);
+    CPPUNIT_TEST(testPageGuidMergedMasters);
+    CPPUNIT_TEST(testInsertFileAsPageKeepsMasterBackground);
+    CPPUNIT_TEST(testInsertFileAsPageAdoptDesign);
+    CPPUNIT_TEST(testInsertFileAsPageAdoptDesignAtStart);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesign);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignSameMasterName);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignSameMasterNameAndDesign);
+    CPPUNIT_TEST(testSlideImportRoundTripKeepsMasterBackground);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignTwiceSharesMaster);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignRenamedKeepsNotesMaster);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignTwoDesignsOfOneName);
+    CPPUNIT_TEST(testInsertFileAsPageLinkRecordsSource);
+    CPPUNIT_TEST(testInsertFileAsPageLinkWithoutSourceRecordsMedium);
+    CPPUNIT_TEST(testInsertWholeFileAsPagesLinkRecordsSource);
+    CPPUNIT_TEST(testSlideLinkKeepsOnlyAReadableSourceGuid);
+    CPPUNIT_TEST(testSlideLinkKeepsOnlyAReadableSourceTime);
     CPPUNIT_TEST_SUITE_END();
 };
 
@@ -1340,6 +1390,681 @@ void SdMiscTest::testEmptyPresObjSetOnObjectWithoutText()
 
     CPPUNIT_ASSERT(xShape->getPropertyValue(u"IsEmptyPresentationObject"_ustr) >>= bEmpty);
     CPPUNIT_ASSERT(bEmpty);
+}
+
+void SdMiscTest::testPageGuids()
+{
+    // Every page of a document holds a globally unique identifier, and a page copied next to
+    // its source gets one of its own.
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // The file stores no identifier, so loading it generated a distinct one for every page and
+    // every master page, and each of them can be looked up by it.
+    std::set<OUString> aSeenGuids;
+    for (sal_uInt16 nPage = 0; nPage < pDoc->GetPageCount(); ++nPage)
+    {
+        SdPage* pPage = static_cast<SdPage*>(pDoc->GetPage(nPage));
+        CPPUNIT_ASSERT(!pPage->GetGuid().isEmpty());
+        CPPUNIT_ASSERT(aSeenGuids.insert(pPage->GetGuid().getOUString()).second);
+        CPPUNIT_ASSERT_EQUAL(pPage, pDoc->GetPageByGuid(pPage->GetGuid()));
+    }
+    for (sal_uInt16 nPage = 0; nPage < pDoc->GetMasterPageCount(); ++nPage)
+    {
+        SdPage* pPage = static_cast<SdPage*>(pDoc->GetMasterPage(nPage));
+        CPPUNIT_ASSERT(!pPage->GetGuid().isEmpty());
+        CPPUNIT_ASSERT(aSeenGuids.insert(pPage->GetGuid().getOUString()).second);
+        CPPUNIT_ASSERT_EQUAL(pPage, pDoc->GetPageByGuid(pPage->GetGuid()));
+    }
+
+    // A duplicated slide keeps the content of its source but gets an identifier of its own.
+    SdPage* pFirstPage = pDoc->GetSdPage(0, PageKind::Standard);
+    const OUString sFirstGuid = pFirstPage->GetGuid().getOUString();
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    SdPage* pSecondPage = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sFirstGuid, pFirstPage->GetGuid().getOUString());
+    CPPUNIT_ASSERT(!pSecondPage->GetGuid().isEmpty());
+    CPPUNIT_ASSERT(pSecondPage->GetGuid() != pFirstPage->GetGuid());
+
+    // The identifier is readable over the page's property set.
+    uno::Reference<beans::XPropertySet> xSecondPage(getPage(1), uno::UNO_QUERY_THROW);
+    OUString sSecondGuid;
+    CPPUNIT_ASSERT(xSecondPage->getPropertyValue(u"Guid"_ustr) >>= sSecondGuid);
+    CPPUNIT_ASSERT_EQUAL(pSecondPage->GetGuid().getOUString(), sSecondGuid);
+
+    // Writing an identifier another page of the document holds leaves the page as it is.
+    xSecondPage->setPropertyValue(u"Guid"_ustr, cpo::uno::Any(sFirstGuid));
+    CPPUNIT_ASSERT_EQUAL(sSecondGuid, pSecondPage->GetGuid().getOUString());
+
+    // A value that is not a GUID is refused.
+    bool bCaught = false;
+    try
+    {
+        xSecondPage->setPropertyValue(u"Guid"_ustr, cpo::uno::Any(u"not-a-guid"_ustr));
+    }
+    catch (const lang::IllegalArgumentException&)
+    {
+        bCaught = true;
+    }
+    CPPUNIT_ASSERT(bCaught);
+    CPPUNIT_ASSERT_EQUAL(sSecondGuid, pSecondPage->GetGuid().getOUString());
+
+    // A fresh valid value is taken over.
+    tools::Guid aFreshGuid(tools::Guid::Generate);
+    xSecondPage->setPropertyValue(u"Guid"_ustr, cpo::uno::Any(aFreshGuid.getOUString()));
+    CPPUNIT_ASSERT_EQUAL(aFreshGuid.getOUString(), pSecondPage->GetGuid().getOUString());
+}
+
+void SdMiscTest::testPageGuidCutPaste()
+{
+    // A slide moved through the clipboard keeps its identifier: the copy is taken while the
+    // page is still in the document, and it is inserted only after the page was deleted.
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // A second slide, so the document keeps a slide while the moved one is out of it.
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    SdPage* pSecondPage = pDoc->GetSdPage(1, PageKind::Standard);
+    const OUString sGuid = pSecondPage->GetGuid().getOUString();
+    const sal_uInt16 nPagePosition = pSecondPage->GetPageNum();
+
+    SdrPage& rSecondPage = *pSecondPage;
+    rtl::Reference<SdrPage> xClipboardPage = rSecondPage.CloneSdrPage(*pDoc);
+    CPPUNIT_ASSERT_EQUAL(sGuid,
+                         static_cast<SdPage*>(xClipboardPage.get())->GetGuid().getOUString());
+
+    SdrModel& rModel = *pDoc;
+    rtl::Reference<SdrPage> xRemovedPage = rModel.RemovePage(nPagePosition);
+    rModel.InsertPage(xClipboardPage.get(), nPagePosition);
+
+    SdPage* pPastedPage = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sGuid, pPastedPage->GetGuid().getOUString());
+    CPPUNIT_ASSERT_EQUAL(pPastedPage, pDoc->GetPageByGuid(pPastedPage->GetGuid()));
+}
+
+void SdMiscTest::testPageGuidMergedMasters()
+{
+    // Master pages arrive through a model merge without passing the insert methods, and a
+    // merged master holding the identifier of an existing master gets one of its own.
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+    const OUString sMasterGuid
+        = pDoc->GetMasterSdPage(0, PageKind::Standard)->GetGuid().getOUString();
+
+    // A saved copy of the document holds the same identifiers the document does.
+    save(TestFilter::ODP);
+    uno::Reference<lang::XComponent> xSourceComponent = loadFromDesktop(maTempFile.GetURL());
+    auto* pSourceXImpressDocument = dynamic_cast<SdXImpressDocument*>(xSourceComponent.get());
+    CPPUNIT_ASSERT(pSourceXImpressDocument);
+    SdDrawDocument* pSourceDoc = pSourceXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pSourceDoc);
+    CPPUNIT_ASSERT_EQUAL(
+        sMasterGuid, pSourceDoc->GetMasterSdPage(0, PageKind::Standard)->GetGuid().getOUString());
+
+    // Merge the master pages of the copy, and none of the pages.
+    const sal_uInt16 nMastersBefore = pDoc->GetMasterPageCount();
+    SdrModel& rModel = *pDoc;
+    rModel.Merge(*pSourceDoc, SDRPAGE_NOTFOUND, SDRPAGE_NOTFOUND, pDoc->GetPageCount(),
+                 /*bMergeMasterPages=*/true, /*bAllMasterPages=*/true,
+                 /*bUndo=*/false, /*bTreadSourceAsConst=*/true);
+    CPPUNIT_ASSERT(pDoc->GetMasterPageCount() > nMastersBefore);
+
+    // Every master of the document holds an identifier of its own, and the document's own
+    // master kept the one it had.
+    std::set<OUString> aSeenGuids;
+    for (sal_uInt16 nPage = 0; nPage < pDoc->GetMasterPageCount(); ++nPage)
+    {
+        SdPage* pPage = static_cast<SdPage*>(pDoc->GetMasterPage(nPage));
+        CPPUNIT_ASSERT(aSeenGuids.insert(pPage->GetGuid().getOUString()).second);
+    }
+    CPPUNIT_ASSERT_EQUAL(sMasterGuid,
+                         pDoc->GetMasterSdPage(0, PageKind::Standard)->GetGuid().getOUString());
+
+    xSourceComponent->dispose();
+}
+
+// Loads the slide-import target document and opens the source presentation
+// as its bookmark document, the same way the insert-pages-from-file flow
+// does when the user has picked a file.
+SdDrawDocument* SdMiscTest::loadSlideImportDocs()
+{
+    createSdImpressDoc("slide-import-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdDrawDocument* pBookmarkDoc
+        = pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-source.odp"));
+    CPPUNIT_ASSERT(pBookmarkDoc);
+
+    return pDoc;
+}
+
+void SdMiscTest::testInsertFileAsPageKeepsMasterBackground()
+{
+    // Inserting pages from another presentation brings their master pages
+    // along; the master background fill must arrive with them.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr, /*bLink=*/false, 3, nullptr,
+                                          /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_GREATER(nMasterCountBefore, pDoc->GetMasterPageCount());
+
+    // The imported master serves its background fill from the background
+    // style copied into this document's pool.
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    SdPage& rNewMaster = static_cast<SdPage&>(pInserted->TRG_GetMasterPage());
+    SfxStyleSheet* pBackgroundSheet = rNewMaster.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pBackgroundSheet);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pBackgroundSheet->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pBackgroundSheet->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageAdoptDesign()
+{
+    // Pages inserted from another presentation are bound to the design of the
+    // destination document when the options ask for it.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    // The source page named TargetOne collides with an existing page name.
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr, u"TargetOne"_ustr };
+    // Insert between the two slides of the destination document.
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/false),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+    // The source design stayed behind: no new master pages and no source
+    // layout styles in the destination pool.
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+    CPPUNIT_ASSERT(
+        !pDoc->GetStyleSheetPool()->Find(u"SourceDesign" + SD_LT_SEPARATOR + STR_LAYOUT_TITLE, SfxStyleFamily::Page));
+
+    for (sal_uInt16 nSdPage = 1; nSdPage <= 2; ++nSdPage)
+    {
+        SdPage* pInserted = pDoc->GetSdPage(nSdPage, PageKind::Standard);
+        CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                             SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+        CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+        CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                             SdDrawDocument::GetBaseLayoutName(
+                                 static_cast<SdPage&>(pInserted->TRG_GetMasterPage())
+                                     .GetLayoutName()));
+    }
+
+    // The colliding page name was replaced with a generated one.
+    CPPUNIT_ASSERT(pDoc->GetSdPage(2, PageKind::Standard)->GetName() != "TargetOne");
+
+
+    // The whole insertion is one undo step.
+    pDoc->GetDocSh()->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+    pDoc->GetDocSh()->GetUndoManager()->Redo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+}
+
+void SdMiscTest::testInsertFileAsPageAdoptDesignAtStart()
+{
+    // An insert in front of the first slide also binds the inserted pages to
+    // the destination design, taken from the page that follows them.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    // Position 0 is the handout page slot; the insert lands before slide 1.
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/false),
+                                          0, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+
+    SdPage* pInserted = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pInserted->GetName());
+    CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(
+                             static_cast<SdPage&>(pInserted->TRG_GetMasterPage())
+                                 .GetLayoutName()));
+}
+
+
+// Checks that the master pages of rDoc come as the handout master followed by pairs of a slide
+// master and a notes master, and that the two pages of each pair carry the same layout name.
+static void assertMasterPagesPaired(SdDrawDocument& rDoc)
+{
+    const sal_uInt16 nMasterCount = rDoc.GetMasterPageCount();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), static_cast<sal_uInt16>(nMasterCount % 2));
+    CPPUNIT_ASSERT_EQUAL(PageKind::Handout,
+                         static_cast<SdPage*>(rDoc.GetMasterPage(0))->GetPageKind());
+
+    for (sal_uInt16 nMaster = 1; nMaster < nMasterCount; nMaster += 2)
+    {
+        SdPage* pSlideMaster = static_cast<SdPage*>(rDoc.GetMasterPage(nMaster));
+        SdPage* pNotesMaster = static_cast<SdPage*>(rDoc.GetMasterPage(nMaster + 1));
+        CPPUNIT_ASSERT_EQUAL(PageKind::Standard, pSlideMaster->GetPageKind());
+        CPPUNIT_ASSERT_EQUAL(PageKind::Notes, pNotesMaster->GetPageKind());
+        CPPUNIT_ASSERT_EQUAL(pSlideMaster->GetLayoutName(), pNotesMaster->GetLayoutName());
+    }
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignRenamedKeepsNotesMaster()
+{
+    // Both presentations name their master page "Default" and the designs differ, so the
+    // inserted design arrives under a new name. Its notes master arrives under that name too,
+    // and the notes page of the inserted slide uses it. The second insert from the same
+    // presentation finds the design the first one brought and keeps the same pairing.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+    for (sal_uInt16 nRun = 0; nRun < 2; ++nRun)
+    {
+        CPPUNIT_ASSERT(
+            pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+        CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                              InsertBookmarkOptions::ForSlideImport(
+                                                  /*bKeepDesign=*/true),
+                                              3, nullptr, /*oScaleObjects=*/true));
+        pDoc->CloseBookmarkDoc();
+
+        assertMasterPagesPaired(*pDoc);
+
+        SdPage* pSlide = pDoc->GetSdPage(1, PageKind::Standard);
+        SdPage* pNotes = pDoc->GetSdPage(1, PageKind::Notes);
+        CPPUNIT_ASSERT(pNotes->TRG_HasMasterPage());
+        SdPage& rNotesMaster = static_cast<SdPage&>(pNotes->TRG_GetMasterPage());
+        CPPUNIT_ASSERT_EQUAL(PageKind::Notes, rNotesMaster.GetPageKind());
+        CPPUNIT_ASSERT_EQUAL(pSlide->GetLayoutName(), rNotesMaster.GetLayoutName());
+    }
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignTwoDesignsOfOneName()
+{
+    // Three presentations name their master page "Default", each with a design of its own:
+    // green here, red and blue in the two the slides come from. A slide from each keeps its
+    // design, and every design arrives with its notes master, so the n-th slide master is
+    // still the master page at position 2n+1 after both inserts.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    for (const char16_t* pSource : { u"slide-import-same-master-name-source.odp",
+                                     u"slide-import-same-master-name-source-blue.odp" })
+    {
+        CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+            createFileURL(pSource), "{\"slides\":[0],\"at\":1,\"keepDesign\":true}"_ostr));
+
+        assertMasterPagesPaired(*pDoc);
+        const sal_uInt16 nSlideMasters = pDoc->GetMasterSdPageCount(PageKind::Standard);
+        for (sal_uInt16 nMaster = 0; nMaster < nSlideMasters; ++nMaster)
+            CPPUNIT_ASSERT_EQUAL(
+                static_cast<sal_uInt16>(2 * nMaster + 1),
+                pDoc->GetMasterSdPage(nMaster, PageKind::Standard)->GetPageNum());
+    }
+
+    // The target design and the two that arrived.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesign()
+{
+    // Pages inserted from another presentation keep their own design when the
+    // options ask for it: the source master pages come along.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+    // The source design arrived with the page.
+    CPPUNIT_ASSERT_GREATER(nMasterCountBefore, pDoc->GetMasterPageCount());
+    CPPUNIT_ASSERT(
+        pDoc->GetStyleSheetPool()->Find(u"SourceDesign" + SD_LT_SEPARATOR + STR_LAYOUT_TITLE, SfxStyleFamily::Page));
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"SourceDesign"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+
+
+
+    // Undo removes the page together with the imported master pages.
+    pDoc->GetDocSh()->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignSameMasterName()
+{
+    // Both presentations name their master page "Default", and the two designs differ. A page
+    // that keeps its own design shows the background of the presentation it came from.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(
+        pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    SdPage& rInsertedMaster = static_cast<SdPage&>(pInserted->TRG_GetMasterPage());
+    SdPage& rOwnMaster
+        = static_cast<SdPage&>(pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage());
+    CPPUNIT_ASSERT(&rInsertedMaster != &rOwnMaster);
+
+    SfxStyleSheet* pInsertedBackground = rInsertedMaster.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pInsertedBackground);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pInsertedBackground->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pInsertedBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+
+    // The presentation's own slide keeps the background it had.
+    SfxStyleSheet* pOwnBackground = rOwnMaster.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pOwnBackground);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pOwnBackground->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0x00ff00),
+                         pOwnBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignSameMasterNameAndDesign()
+{
+    // The two presentations carry the same design under the same name, so the inserted page
+    // shares the master page that is already there and no second one is added.
+    createSdImpressDoc("slide-import-same-master-name-source.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(
+        pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    CPPUNIT_ASSERT_EQUAL(u"Default"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+}
+
+void SdMiscTest::testSlideImportRoundTripKeepsMasterBackground()
+{
+    // A slide travels to another presentation in a file written out of its own deck. Its
+    // background comes from the master page, and it shows the same background at the far end,
+    // although both presentations name their master page "Default".
+    createSdImpressDoc("slide-import-same-master-name-source.odp");
+    SdXImpressDocument* pSource = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pSource);
+    SdDrawDocument* pSourceDoc = pSource->GetDoc();
+
+    utl::TempFileNamed aStaged(u"", true, u".odp");
+    aStaged.EnableKillingFile();
+    CPPUNIT_ASSERT(pSource->exportPages({ 0 }, aStaged.GetURL()));
+
+    // Writing the file leaves the presentation the slide came from as it was.
+    CPPUNIT_ASSERT_EQUAL(u"Default"_ustr,
+                         pSourceDoc->GetMasterSdPage(0, PageKind::Standard)->GetName());
+
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pDestination = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pDestination);
+    SdDrawDocument* pDoc = pDestination->GetDoc();
+    CPPUNIT_ASSERT(pDestination->insertPagesFromFile(
+        aStaged.GetURL(),
+        "{\"slides\":[0],\"at\":1,\"keepDesign\":true,\"link\":true,"
+        "\"source\":\"deck.odp\"}"_ostr));
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    SfxStyleSheet* pBackground
+        = pInserted->TRG_GetMasterPage().getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pBackground);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pBackground->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+
+    // The presentation's own slide keeps the background it had.
+    SfxStyleSheet* pOwnBackground = pDoc->GetSdPage(0, PageKind::Standard)
+                                        ->TRG_GetMasterPage()
+                                        .getSdrPageProperties()
+                                        .GetStyleSheet();
+    CPPUNIT_ASSERT(pOwnBackground);
+    CPPUNIT_ASSERT_EQUAL(Color(0x00ff00),
+                         pOwnBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignTwiceSharesMaster()
+{
+    // Inserting from the same presentation a second time uses the design that the first insert
+    // brought over, so the two pages share one master page.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+
+    for (int nRun = 0; nRun < 2; ++nRun)
+    {
+        CPPUNIT_ASSERT(
+            pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+        CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                              InsertBookmarkOptions::ForSlideImport(
+                                                  /*bKeepDesign=*/true),
+                                              3, nullptr, /*oScaleObjects=*/true));
+        pDoc->CloseBookmarkDoc();
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+
+    // One design arrived as a slide master and a notes master, and the second insert added no
+    // master page of its own.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(nMasterCountBefore + 2),
+                         pDoc->GetMasterPageCount());
+
+    SdPage& rFirst = static_cast<SdPage&>(
+        pDoc->GetSdPage(1, PageKind::Standard)->TRG_GetMasterPage());
+    SdPage& rSecond = static_cast<SdPage&>(
+        pDoc->GetSdPage(2, PageKind::Standard)->TRG_GetMasterPage());
+    CPPUNIT_ASSERT_EQUAL(&rFirst, &rSecond);
+
+    SfxStyleSheet* pBackground = rFirst.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pBackground);
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageLinkRecordsSource()
+{
+    // A page inserted as a link records the source document the caller named,
+    // rather than the file the pages were read from. The name a caller passes
+    // is one that still finds the source document the next time the document
+    // is opened, which the file a copy was read from need not be.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const OUString aSource = u"vnd.collabora.slide-source:Sales%20deck.odp"_ustr;
+    InsertBookmarkOptions aOptions = InsertBookmarkOptions::ForFileInsert(/*bLinkPages=*/true);
+    aOptions.aLinkSourceUrl = aSource;
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr, aOptions, 3, nullptr,
+                                          /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(aSource, pInserted->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pInserted->GetBookmarkName());
+
+    // Saving keeps the link on the page, as a reference to the source slide.
+    save(TestFilter::ODP);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'content.xml'", pXmlDoc);
+    CPPUNIT_ASSERT_EQUAL(
+        OUString(aSource + u"#SourceA"),
+        getXPath(pXmlDoc,
+                 "/office:document-content/office:body/office:presentation/draw:page[2]"_ostr,
+                 "href"));
+
+    // The saved reference names the same source document and page after the
+    // document is opened again, which is what a page keeps a link for.
+    loadFromURL(maTempFile.GetURL());
+    SdXImpressDocument* pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdPage* pLinked = pReloaded->GetDoc()->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(aSource, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+}
+
+void SdMiscTest::testInsertFileAsPageLinkWithoutSourceRecordsMedium()
+{
+    // An insertion that names no source keeps the older behaviour: the pages
+    // record the file they were read from.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForFileInsert(
+                                              /*bLinkPages=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(createFileURL(u"slide-import-source.odp"), pInserted->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pInserted->GetBookmarkName());
+}
+
+void SdMiscTest::testInsertWholeFileAsPagesLinkRecordsSource()
+{
+    // Inserting a whole file, rather than pages picked from it, records the
+    // named source on every page it brings in.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const OUString aSource = u"vnd.collabora.slide-source:Sales%20deck.odp"_ustr;
+    InsertBookmarkOptions aOptions = InsertBookmarkOptions::ForFileInsert(/*bLinkPages=*/true);
+    aOptions.aLinkSourceUrl = aSource;
+
+    // An empty list of page names asks for the whole file.
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage({}, nullptr, aOptions, 5, nullptr,
+                                          /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+    for (sal_uInt16 nSdPage = 2; nSdPage <= 3; ++nSdPage)
+    {
+        SdPage* pInserted = pDoc->GetSdPage(nSdPage, PageKind::Standard);
+        CPPUNIT_ASSERT_EQUAL(aSource, pInserted->GetFileName());
+        CPPUNIT_ASSERT(!pInserted->GetBookmarkName().isEmpty());
+    }
+}
+
+void SdMiscTest::testSlideLinkKeepsOnlyAReadableSourceGuid()
+{
+    // A file names the slide a linked page came from by the identifier of that slide. The file
+    // read here names one slide by an identifier and the next by a value of another shape, which
+    // names no slide: the page is left with none and the presentation opens as any other does.
+    createSdImpressDoc("slide-link-bad-guid.fodp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pRead = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pRead->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"{11111111-1111-1111-1111-111111111111}"_ustr,
+                         pRead->GetSourcePageGuid());
+
+    // The source document the page came from and the time it was last modified are what the file
+    // holds, so the page keeps them whatever the identifier beside them came to.
+    SdPage* pUnread = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pUnread->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"2021-01-01T00:00:00Z"_ustr, pUnread->GetSourceModifiedTime());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pUnread->GetSourcePageGuid());
+
+    // An identifier is kept in the form a page writes its own (uppercase)
+    SdPage* pLowercase = pDoc->GetSdPage(2, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"{ABCDEF01-2345-6789-ABCD-EF0123456789}"_ustr,
+                         pLowercase->GetSourcePageGuid());
+}
+
+void SdMiscTest::testSlideLinkKeepsOnlyAReadableSourceTime()
+{
+    // The fourth page of the file records a time the source was last modified that is far
+    // longer than any time stamp: the page is left with no time, and keeps the rest of what
+    // it records.
+    createSdImpressDoc("slide-link-bad-guid.fodp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pPage = pDoc->GetSdPage(3, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pPage->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"{22222222-2222-2222-2222-222222222222}"_ustr,
+                         pPage->GetSourcePageGuid());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pPage->GetSourceModifiedTime());
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(SdMiscTest);

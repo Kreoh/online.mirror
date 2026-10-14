@@ -27,42 +27,42 @@
 namespace com::sun::star::container { class XEnumerationAccess; }
 namespace com::sun::star::sheet { class XSpreadsheetDocument; }
 namespace com::sun::star::sheet { class XSpreadsheets; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 typedef CollTestImplHelper< ov::excel::XWorksheets > ScVbaWorksheets_BASE;
 
 class ScVbaWorksheets : public ScVbaWorksheets_BASE
 {
-    css::uno::Reference< css::frame::XModel > mxModel;
-    css::uno::Reference< css::sheet::XSpreadsheets > m_xSheets;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::sheet::XSpreadsheets > m_xSheets;
 public:
-    ScVbaWorksheets( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, const css::uno::Reference< css::container::XIndexAccess >& xSheets, css::uno::Reference< css::frame::XModel > xModel );
-    ScVbaWorksheets( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, const css::uno::Reference< css::container::XEnumerationAccess >& xEnum,  css::uno::Reference< css::frame::XModel > xModel );
+    ScVbaWorksheets( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, const cpo::uno::Reference< css::container::XIndexAccess >& xSheets, cpo::uno::Reference< css::frame::XModel > xModel );
+    ScVbaWorksheets( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, const cpo::uno::Reference< css::container::XEnumerationAccess >& xEnum,  cpo::uno::Reference< css::frame::XModel > xModel );
 
     bool isSelectedSheets() const;
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // XWorksheets
-    virtual cpo::uno::Any SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( const cpo::uno::Any& _visible ) override;
-    virtual cpo::uno::Any SAL_CALL Add( const cpo::uno::Any& Before, const cpo::uno::Any& After, const cpo::uno::Any& Count, const cpo::uno::Any& Type ) override;
-    virtual void SAL_CALL Delete(  ) override;
-    virtual void SAL_CALL PrintOut( const cpo::uno::Any& From, const cpo::uno::Any& To, const cpo::uno::Any& Copies, const cpo::uno::Any& Preview, const cpo::uno::Any& ActivePrinter, const cpo::uno::Any& PrintToFile, const cpo::uno::Any& Collate, const cpo::uno::Any& PrToFileName ) override;
+    virtual cpo::uno::Any getVisible() override;
+    virtual void setVisible( const cpo::uno::Any& _visible ) override;
+    virtual cpo::uno::Any Add( const cpo::uno::Any& Before, const cpo::uno::Any& After, const cpo::uno::Any& Count, const cpo::uno::Any& Type ) override;
+    virtual void Delete(  ) override;
+    virtual void PrintOut( const cpo::uno::Any& From, const cpo::uno::Any& To, const cpo::uno::Any& Copies, const cpo::uno::Any& Preview, const cpo::uno::Any& ActivePrinter, const cpo::uno::Any& PrintToFile, const cpo::uno::Any& Collate, const cpo::uno::Any& PrToFileName ) override;
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
-    virtual void SAL_CALL Select( const cpo::uno::Any& Replace ) override;
-    virtual void SAL_CALL Copy ( const cpo::uno::Any& Before, const cpo::uno::Any& After) override;
-    virtual void SAL_CALL PrintPreview( const cpo::uno::Any& EnableChanges ) override;
+    virtual void Select( const cpo::uno::Any& Replace ) override;
+    virtual void Copy ( const cpo::uno::Any& Before, const cpo::uno::Any& After) override;
+    virtual void PrintPreview( const cpo::uno::Any& EnableChanges ) override;
     // ScVbaWorksheets_BASE
-    virtual cpo::uno::Any SAL_CALL Item( const cpo::uno::Any& Index1, const cpo::uno::Any& Index2 ) override;
+    virtual cpo::uno::Any Item( const cpo::uno::Any& Index1, const cpo::uno::Any& Index2 ) override;
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
 
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
-    static bool nameExists( const css::uno::Reference <css::sheet::XSpreadsheetDocument>& xSpreadDoc, std::u16string_view name, SCTAB& nTab );
+    /// @throws cpo::uno::RuntimeException
+    static bool nameExists( const cpo::uno::Reference <css::sheet::XSpreadsheetDocument>& xSpreadDoc, std::u16string_view name, SCTAB& nTab );
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -919,7 +919,9 @@ ExcAutoFilterRecs::ExcAutoFilterRecs( const XclExpRoot& rRoot, SCTAB nTab, const
     if (pData)
     {
         bAdvanced = pData->GetAdvancedQuerySource( aAdvRange );
-        bFound = (pData->HasQueryParam() || pData->HasAutoFilter() || bAdvanced);
+        // A table keeps its autoFilter element with the buttons switched off,
+        // its columns then carry hiddenButton="1".
+        bFound = (pDefinedData || pData->HasQueryParam() || pData->HasAutoFilter() || bAdvanced);
     }
     if( !bFound )
         return;
@@ -933,6 +935,12 @@ ExcAutoFilterRecs::ExcAutoFilterRecs( const XclExpRoot& rRoot, SCTAB nTab, const
     SCCOL nColCnt = aRange.aEnd.Col() - aRange.aStart.Col() + 1;
 
     maRef = aRange;
+
+    // A table's totals row is not part of the filtered area: ECMA-376 requires
+    // the <autoFilter> ref to span the header and data rows only, otherwise
+    // Excel treats the file as corrupt.
+    if (pDefinedData && pDefinedData->HasTotals() && maRef.aEnd.Row() > maRef.aStart.Row())
+        maRef.aEnd.IncRow(-1);
 
     // #i2394# built-in defined names must be sorted by containing sheet name
     if (!pDefinedData)
@@ -1022,8 +1030,9 @@ ExcAutoFilterRecs::ExcAutoFilterRecs( const XclExpRoot& rRoot, SCTAB nTab, const
                 bool bFilterFound = false;
                 for( size_t nPos = 0, nSize = maFilterList.GetSize(); nPos < nSize; ++nPos )
                 {
+                    // the filters above are keyed by colId, not by sheet column
                     xFilter = maFilterList.GetRecord( nPos );
-                    if( xFilter->GetCol() == static_cast<sal_uInt16>(nCol) )
+                    if( xFilter->GetCol() == nColId )
                     {
                         bFilterFound = true;
                         break;

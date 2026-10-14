@@ -38,6 +38,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace svgio::svgreader
 {
@@ -48,34 +49,34 @@ namespace svgio::svgreader
         private:
             std::shared_ptr<SvgDrawVisitor> mpVisitor;
 
-            uno::Reference< uno::XComponentContext > context_;
+            uno::Reference< cpo::uno::XComponentContext > context_;
             bool parseSvgXML(uno::Reference<io::XInputStream> const & xSVGStream,
                              uno::Reference<xml::sax::XDocumentHandler> const & xSvgDocHdl);
         public:
             explicit XSvgParser(
-                uno::Reference< uno::XComponentContext > context);
+                uno::Reference< cpo::uno::XComponentContext > context);
             XSvgParser(const XSvgParser&) = delete;
             XSvgParser& operator=(const XSvgParser&) = delete;
 
             // XSvgParser
-            virtual cpo::uno::Sequence< uno::Reference< ::graphic::XPrimitive2D > > SAL_CALL getDecomposition(
+            virtual cpo::uno::Sequence< uno::Reference< ::graphic::XPrimitive2D > > getDecomposition(
                 const uno::Reference< ::io::XInputStream >& xSVGStream,
                 const OUString& aAbsolutePath) override;
 
-            virtual cpo::uno::Any SAL_CALL getDrawCommands(
+            virtual cpo::uno::Any getDrawCommands(
                 uno::Reference<io::XInputStream> const & xSvgStream,
                 const OUString& aAbsolutePath) override;
 
             // XServiceInfo
-            virtual OUString SAL_CALL getImplementationName() override;
-            virtual bool SAL_CALL supportsService(const OUString&) override;
-            virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+            virtual OUString getImplementationName() override;
+            virtual bool supportsService(const OUString&) override;
+            virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
         };
 
         }
 
         XSvgParser::XSvgParser(
-            uno::Reference< uno::XComponentContext > context):
+            uno::Reference< cpo::uno::XComponentContext > context):
             context_(std::move(context))
         {
         }
@@ -147,7 +148,7 @@ namespace svgio::svgreader
             return aRetval.toSequence();
         }
 
-        cpo::uno::Any SAL_CALL XSvgParser::getDrawCommands(
+        cpo::uno::Any XSvgParser::getDrawCommands(
                 uno::Reference<io::XInputStream> const & xSvgStream,
                 const OUString& aAbsolutePath)
         {
@@ -175,33 +176,33 @@ namespace svgio::svgreader
             return aAnyResult;
         }
 
-        OUString SAL_CALL XSvgParser::getImplementationName()
+        OUString XSvgParser::getImplementationName()
         {
             return u"svgio::svgreader::XSvgParser"_ustr;
         }
 
-        bool SAL_CALL XSvgParser::supportsService(const OUString& rServiceName)
+        bool XSvgParser::supportsService(const OUString& rServiceName)
         {
             return cppu::supportsService(this, rServiceName);
         }
 
-        cpo::uno::Sequence< OUString > SAL_CALL XSvgParser::getSupportedServiceNames()
+        cpo::uno::Sequence< OUString > XSvgParser::getSupportedServiceNames()
         {
             return { u"com.sun.star.graphic.SvgTools"_ustr };
         }
 
 } // end of namespace svgio::svgreader
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 svgio_XSvgParser_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new svgio::svgreader::XSvgParser(context));
 }
 
 extern "C" bool TestImportSVG(SvStream& rStream)
 {
-    css::uno::Reference<css::io::XInputStream> xStream(new utl::OInputStreamWrapper(rStream));
+    cpo::uno::Reference<css::io::XInputStream> xStream(new utl::OInputStreamWrapper(rStream));
     rtl::Reference<svgio::svgreader::XSvgParser> xSvgParser(new svgio::svgreader::XSvgParser(comphelper::getProcessComponentContext()));
     return xSvgParser->getDecomposition(xStream, OUString()).getLength() != 0;
 }

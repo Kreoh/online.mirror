@@ -32,27 +32,27 @@ class SwVbaBookmark : public SwVbaBookmark_BASE
 {
 private:
     rtl::Reference<SwXTextDocument> mxModel;
-    css::uno::Reference<css::text::XTextContent> mxBookmark;
+    cpo::uno::Reference<css::text::XTextContent> mxBookmark;
     OUString maBookmarkName;
     bool mbValid;
 
 private:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void checkVality();
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaBookmark(const css::uno::Reference<ooo::vba::XHelperInterface>& rParent,
-                  const css::uno::Reference<css::uno::XComponentContext>& rContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaBookmark(const cpo::uno::Reference<ooo::vba::XHelperInterface>& rParent,
+                  const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
                   rtl::Reference<SwXTextDocument> xModel, OUString aName);
     virtual ~SwVbaBookmark() override;
 
     // Methods
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL setName(const OUString&) override;
-    virtual void SAL_CALL Delete() override;
-    virtual void SAL_CALL Select() override;
-    virtual cpo::uno::Any SAL_CALL Range() override;
+    virtual OUString getName() override;
+    virtual void setName(const OUString&) override;
+    virtual void Delete() override;
+    virtual void Select() override;
+    virtual cpo::uno::Any Range() override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

@@ -22,8 +22,9 @@
 #include <unotools/configitem.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace
@@ -36,7 +37,7 @@ constexpr OUString aSeriesPropName = u"Series"_ustr;
 namespace chart
 {
 
-uno::Reference< chart2::XColorScheme > createConfigColorScheme( const uno::Reference< uno::XComponentContext > & xContext )
+uno::Reference< chart2::XColorScheme > createConfigColorScheme( const uno::Reference< cpo::uno::XComponentContext > & xContext )
 {
     return new ConfigColorScheme( xContext );
 }
@@ -91,7 +92,7 @@ cpo::uno::Any ChartConfigItem::getProperty( const OUString & aPropertyName )
 
 // explicit
 ConfigColorScheme::ConfigColorScheme(
-    const Reference< uno::XComponentContext > & xContext ) :
+    const Reference< cpo::uno::XComponentContext > & xContext ) :
         BaseColorScheme(),
         m_xContext( xContext  ),
         m_bNeedsUpdate( true )
@@ -155,8 +156,8 @@ OUString ConfigColorScheme::getImplementationName()
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_ConfigDefaultColorScheme_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_ConfigDefaultColorScheme_get_implementation(cpo::uno::XComponentContext *context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::ConfigColorScheme(context));

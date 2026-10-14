@@ -23,7 +23,7 @@
 #include <utility>
 
 using namespace ::osl;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::connection;
@@ -209,14 +209,14 @@ namespace stoc_connector {
 
 
     // XConnectionBroadcaster
-    void SAL_CALL SocketConnection::addStreamListener(const Reference<XStreamListener> & aListener)
+    void SocketConnection::addStreamListener(const Reference<XStreamListener> & aListener)
     {
         std::unique_lock guard(_mutex);
 
         _listeners.insert(aListener);
     }
 
-    void SAL_CALL SocketConnection::removeStreamListener(const Reference<XStreamListener> & aListener)
+    void SocketConnection::removeStreamListener(const Reference<XStreamListener> & aListener)
     {
         std::unique_lock guard(_mutex);
 

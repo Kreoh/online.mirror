@@ -29,6 +29,8 @@ class CalcTableTab implements NotebookbarTab {
 			if (eventType === 'activate') {
 				const stylePos = data as number;
 				app.tableStyles.applyStyle(stylePos);
+			} else if (eventType === 'contextmenu') {
+				app.tableStyles.showSetDefaultMenu(data as IconViewContextMenuData);
 			}
 
 			return true;
@@ -55,15 +57,131 @@ class CalcTableTab implements NotebookbarTab {
 	public getContent(): NotebookbarTabContent {
 		const content = [
 			{
-				id: 'insert-remove-calc-table',
-				type: 'bigtoolitem',
-				text: _UNO('.uno:RemoveCalcTable', 'spreadsheet'),
-				command: '.uno:RemoveCalcTable',
-				accessibility: { focusBack: true, combination: 'DT' },
+				type: 'overflowgroup',
+				id: 'table-properties',
+				name: _('Properties'),
+				accessibility: { focusBack: true, combination: 'PR' },
+				children: [
+					{
+						type: 'container',
+						children: [
+							{
+								type: 'toolbox',
+								children: [
+									{
+										id: 'rename-calc-table',
+										type: 'toolitem',
+										text: _UNO('.uno:RenameCalcTable', 'spreadsheet'),
+										command: '.uno:RenameCalcTable',
+										accessibility: { focusBack: true, combination: 'RN' },
+									},
+								],
+							},
+							{
+								type: 'toolbox',
+								children: [
+									{
+										id: 'resize-calc-table',
+										type: 'toolitem',
+										text: _UNO('.uno:ResizeCalcTable', 'spreadsheet'),
+										command: '.uno:ResizeCalcTable',
+										accessibility: { focusBack: true, combination: 'RS' },
+									},
+								],
+							},
+						],
+						vertical: 'true',
+					},
+				],
 			},
 			{
 				type: 'separator',
-				id: 'table-deletecalctable-break',
+				id: 'resize-calc-table-break',
+				orientation: 'vertical',
+			},
+			{
+				type: 'overflowgroup',
+				id: 'table-tools',
+				name: _('Tools'),
+				accessibility: { focusBack: true, combination: 'TL' },
+				children: [
+					{
+						type: 'container',
+						children: [
+							{
+								type: 'toolbox',
+								children: [
+									{
+										id: 'summarize-with-pivottable',
+										type: 'toolitem',
+										text: _UNO('.uno:SummarizeWithPivot', 'spreadsheet'),
+										command: '.uno:SummarizeWithPivot',
+										accessibility: {
+											focusBack: true,
+											combination: 'SP',
+										},
+									},
+								],
+							},
+							{
+								type: 'toolbox',
+								children: [
+									{
+										id: 'handle-duplicates',
+										type: 'toolitem',
+										text: _UNO('.uno:RemoveDuplicates', 'spreadsheet'),
+										command: '.uno:RemoveDuplicates',
+										accessibility: {
+											focusBack: true,
+											combination: 'RD',
+										},
+									},
+								],
+							},
+						],
+						vertical: 'true',
+					},
+					{
+						type: 'container',
+						children: [
+							{
+								type: 'toolbox',
+								children: [
+									{
+										id: 'convert-calc-table-to-range',
+										type: 'toolitem',
+										text: _UNO('.uno:ConvertCalcTableToRange', 'spreadsheet'),
+										command: '.uno:ConvertCalcTableToRange',
+										accessibility: {
+											focusBack: true,
+											combination: 'CR',
+										},
+									},
+								],
+							},
+							{
+								type: 'toolbox',
+								children: [
+									{
+										id: 'insert-remove-calc-table',
+										type: 'toolitem',
+										text: _UNO('.uno:RemoveCalcTable', 'spreadsheet'),
+										command: '.uno:RemoveCalcTable',
+										accessibility: {
+											focusBack: true,
+											combination: 'DT',
+										},
+									},
+								],
+							},
+						],
+						vertical: 'true',
+					},
+				],
+			},
+			{
+				type: 'separator',
+				id: 'table-tools-break',
 				orientation: 'vertical',
 			},
 			{

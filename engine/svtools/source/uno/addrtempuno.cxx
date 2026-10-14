@@ -33,7 +33,7 @@ namespace {
 
 #define UNODIALOG_PROPERTY_ID_ALIASES       100
 
-    using namespace css::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace css::util;
     using namespace css::beans;
@@ -53,24 +53,24 @@ using namespace cpo::uno;
         explicit OAddressBookSourceDialogUno(const Reference< XComponentContext >& _rxORB);
 
         // XTypeProvider
-        virtual Sequence<sal_Int8> SAL_CALL getImplementationId(  ) override;
+        virtual Sequence<sal_Int8> getImplementationId(  ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+        virtual OUString getImplementationName() override;
+        virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
         // XPropertySet
-        virtual Reference< XPropertySetInfo>  SAL_CALL getPropertySetInfo() override;
-        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+        virtual Reference< XPropertySetInfo>  getPropertySetInfo() override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
         // OPropertyArrayUsageHelper
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
 
-        virtual void SAL_CALL initialize(const Sequence< Any >& aArguments) override;
+        virtual void initialize(const Sequence< Any >& aArguments) override;
 
     protected:
     // OGenericUnoDialog overridables
-        virtual std::unique_ptr<weld::DialogController> createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+        virtual std::unique_ptr<weld::DialogController> createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
 
         virtual void implInitialize(const cpo::uno::Any& _rValue) override;
 
@@ -86,25 +86,25 @@ using namespace cpo::uno;
     }
 
 
-    Sequence<sal_Int8> SAL_CALL OAddressBookSourceDialogUno::getImplementationId(  )
+    Sequence<sal_Int8> OAddressBookSourceDialogUno::getImplementationId(  )
     {
         return cpo::uno::Sequence<sal_Int8>();
     }
 
 
-    OUString SAL_CALL OAddressBookSourceDialogUno::getImplementationName()
+    OUString OAddressBookSourceDialogUno::getImplementationName()
     {
         return u"com.sun.star.comp.svtools.OAddressBookSourceDialogUno"_ustr;
     }
 
 
-    cpo::uno::Sequence<OUString> SAL_CALL OAddressBookSourceDialogUno::getSupportedServiceNames()
+    cpo::uno::Sequence<OUString> OAddressBookSourceDialogUno::getSupportedServiceNames()
     {
         return { u"com.sun.star.ui.AddressBookSourceDialog"_ustr };
     }
 
 
-    Reference<XPropertySetInfo>  SAL_CALL OAddressBookSourceDialogUno::getPropertySetInfo()
+    Reference<XPropertySetInfo>  OAddressBookSourceDialogUno::getPropertySetInfo()
     {
         Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
@@ -130,7 +130,7 @@ using namespace cpo::uno;
             static_cast<AddressBookSourceDialog*>(m_xDialog.get())->getFieldMapping(m_aAliases);
     }
 
-    void SAL_CALL OAddressBookSourceDialogUno::initialize(const Sequence< Any >& rArguments)
+    void OAddressBookSourceDialogUno::initialize(const Sequence< Any >& rArguments)
     {
         if( rArguments.getLength() == 5 )
         {
@@ -149,11 +149,11 @@ using namespace cpo::uno;
                 // convert the parameters for creating the dialog to PropertyValues
                 Sequence<Any> aArguments(comphelper::InitAnyPropertySequence(
                 {
-                    {"ParentWindow", Any(xParentWindow)},
-                    {"DataSource", Any(xDataSource)},
-                    {"DataSourceName", Any(sDataSourceName)},
-                    {"Command", Any(sCommand)}, // the table to use
-                    {"Title", Any(sTitle)}
+                    {u"ParentWindow"_ustr, Any(xParentWindow)},
+                    {u"DataSource"_ustr, Any(xDataSource)},
+                    {u"DataSourceName"_ustr, Any(sDataSourceName)},
+                    {u"Command"_ustr, Any(sCommand)}, // the table to use
+                    {u"Title"_ustr, Any(sTitle)}
                 }));
                 OGenericUnoDialog::initialize(aArguments);
                 return;
@@ -192,7 +192,7 @@ using namespace cpo::uno;
         OGenericUnoDialog::implInitialize( _rValue );
     }
 
-    std::unique_ptr<weld::DialogController> OAddressBookSourceDialogUno::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+    std::unique_ptr<weld::DialogController> OAddressBookSourceDialogUno::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
     {
         weld::Window* pParent = Application::GetFrameWeld(rParent);
         if ( m_xDataSource.is() && !m_sTable.isEmpty() )
@@ -201,9 +201,9 @@ using namespace cpo::uno;
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svtools_OAddressBookSourceDialogUno_get_implementation(
-    css::uno::XComponentContext * context,
+    cpo::uno::XComponentContext * context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new OAddressBookSourceDialogUno(context));

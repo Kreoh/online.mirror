@@ -23,6 +23,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -32,12 +33,12 @@ class ListGalleriesEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 m_nIndex;
 public:
     explicit ListGalleriesEnumWrapper( SwVbaListGalleries* pGalleries ) : m_pListGalleries( pGalleries ), m_nIndex( 1 ) {}
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( m_nIndex <= m_pListGalleries->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( m_nIndex <= m_pListGalleries->getCount() )
             return m_pListGalleries->Item( cpo::uno::Any( m_nIndex++ ), cpo::uno::Any() );
@@ -47,17 +48,17 @@ public:
 
 }
 
-SwVbaListGalleries::SwVbaListGalleries( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, uno::Reference< text::XTextDocument >  xTextDoc ) : SwVbaListGalleries_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >() ),  mxTextDocument(std::move( xTextDoc ))
+SwVbaListGalleries::SwVbaListGalleries( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, uno::Reference< text::XTextDocument >  xTextDoc ) : SwVbaListGalleries_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >() ),  mxTextDocument(std::move( xTextDoc ))
 {
 }
 
-::sal_Int32 SAL_CALL SwVbaListGalleries::getCount()
+::sal_Int32 SwVbaListGalleries::getCount()
 {
     // 3 types of list( bullet, numbered and outline )
     return 3;
 }
 
-cpo::uno::Any SAL_CALL SwVbaListGalleries::Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ )
+cpo::uno::Any SwVbaListGalleries::Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ )
 {
     sal_Int32 nIndex = 0;
     if( Index1 >>= nIndex )
@@ -67,7 +68,7 @@ cpo::uno::Any SAL_CALL SwVbaListGalleries::Item( const cpo::uno::Any& Index1, co
             || nIndex == word::WdListGalleryType::wdOutlineNumberGallery )
             return cpo::uno::Any( uno::Reference< word::XListGallery >( new SwVbaListGallery( this, mxContext, mxTextDocument, nIndex ) ) );
     }
-    throw  uno::RuntimeException(u"Index out of bounds"_ustr );
+    throw  cpo::uno::RuntimeException(u"Index out of bounds"_ustr );
 }
 
 // XEnumerationAccess

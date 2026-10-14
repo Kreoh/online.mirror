@@ -20,27 +20,28 @@
 #include "vbascrollbar.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaScrollBar::ScVbaScrollBar(  const css::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<AbstractGeometryAttributes> pGeomHelper )
+ScVbaScrollBar::ScVbaScrollBar(  const cpo::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<AbstractGeometryAttributes> pGeomHelper )
     : ScrollBarImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaScrollBar::getValue()
 {
     return  m_xProps->getPropertyValue( u"ScrollValue"_ustr );
 }
 
-void SAL_CALL
+void
 ScVbaScrollBar::setValue( const cpo::uno::Any& _value )
 {
     m_xProps->setPropertyValue( u"ScrollValue"_ustr, _value );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaScrollBar::getMax()
 {
     sal_Int32 nMax = 0;
@@ -48,13 +49,13 @@ ScVbaScrollBar::getMax()
     return nMax;
 }
 
-void SAL_CALL
+void
 ScVbaScrollBar::setMax( sal_Int32 nVal )
 {
     m_xProps->setPropertyValue( u"ScrollValueMax"_ustr, cpo::uno::Any( nVal ) );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaScrollBar::getMin()
 {
     sal_Int32 nVal = 0;
@@ -62,19 +63,19 @@ ScVbaScrollBar::getMin()
     return nVal;
 }
 
-void SAL_CALL
+void
 ScVbaScrollBar::setMin( sal_Int32 nVal )
 {
     m_xProps->setPropertyValue( u"ScrollValueMin"_ustr, cpo::uno::Any( nVal ) );
 }
 
-void SAL_CALL
+void
 ScVbaScrollBar::setLargeChange( ::sal_Int32 _largechange )
 {
     m_xProps->setPropertyValue( u"BlockIncrement"_ustr, cpo::uno::Any( _largechange ) );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaScrollBar::getLargeChange()
 {
     sal_Int32 nVal = 0;
@@ -82,7 +83,7 @@ ScVbaScrollBar::getLargeChange()
     return nVal;
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaScrollBar::getSmallChange()
 {
     sal_Int32 nSmallChange = 0;
@@ -90,7 +91,7 @@ ScVbaScrollBar::getSmallChange()
     return nSmallChange;
 }
 
-void SAL_CALL
+void
 ScVbaScrollBar::setSmallChange( ::sal_Int32 _smallchange )
 {
     m_xProps->setPropertyValue( u"LineIncrement"_ustr, cpo::uno::Any( _smallchange ) );

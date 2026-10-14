@@ -77,6 +77,7 @@
 #include <unotxdoc.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace sw {
 
@@ -320,8 +321,9 @@ void SwUnoCursorHelper::GetCursorAttr(SwPaM & rPam,
     SfxItemSet *pSet = &rSet;
     for(SwPaM& rCurrent : rPam.GetRingContainer())
     {
-        SwPosition const & rStart( *rCurrent.Start() );
-        SwPosition const & rEnd( *rCurrent.End() );
+        auto [pStart, pEnd] = rCurrent.StartEnd(); // SwPosition*
+        SwPosition const& rStart(*pStart);
+        SwPosition const& rEnd(*pEnd);
         const SwNodeOffset nSttNd = rStart.GetNodeIndex();
         const SwNodeOffset nEndNd = rEnd  .GetNodeIndex();
 
@@ -430,23 +432,23 @@ struct SwXParagraphEnumerationImpl final : public SwXParagraphEnumeration
 
     virtual ~SwXParagraphEnumerationImpl() override
         { m_pCursor.reset(nullptr); }
-    virtual void SAL_CALL release() noexcept override
+    virtual void release() noexcept override
     {
         SolarMutexGuard g;
         OWeakObject::release();
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
         { return u"SwXParagraphEnumeration"_ustr; }
-    virtual bool SAL_CALL supportsService( const OUString& rServiceName) override
+    virtual bool supportsService( const OUString& rServiceName) override
         { return cppu::supportsService(this, rServiceName); };
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override
         { return {u"com.sun.star.text.ParagraphEnumeration"_ustr}; };
 
     // XEnumeration
-    virtual bool SAL_CALL hasMoreElements() override;
-    virtual cpo::uno::Any SAL_CALL nextElement() override;
+    virtual bool hasMoreElements() override;
+    virtual cpo::uno::Any nextElement() override;
 
     SwUnoCursor& GetCursor()
         { return *m_pCursor; }
@@ -495,7 +497,7 @@ rtl::Reference<SwXParagraphEnumeration> SwXParagraphEnumeration::Create(
     return new SwXParagraphEnumerationImpl(xParent, pCursor, eType, pStartNode, pTable);
 }
 
-bool SAL_CALL
+bool
 SwXParagraphEnumerationImpl::hasMoreElements()
 {
     SolarMutexGuard aGuard;
@@ -530,8 +532,9 @@ lcl_CursorIsInSection(
     if (pUnoCursor && pOwnStartNode)
     {
         const SwEndNode * pOwnEndNode = pOwnStartNode->EndOfSectionNode();
-        bRes = pOwnStartNode->GetIndex() <= pUnoCursor->Start()->GetNodeIndex() &&
-               pUnoCursor->End()->GetNodeIndex() <= pOwnEndNode->GetIndex();
+        auto [pStart, pEnd] = pUnoCursor->StartEnd(); // SwPosition*
+        bRes = pOwnStartNode->GetIndex() <= pStart->GetNodeIndex()
+               && pEnd->GetNodeIndex() <= pOwnEndNode->GetIndex();
     }
     return bRes;
 }
@@ -659,7 +662,7 @@ SwXParagraphEnumerationImpl::NextElement_Impl()
     return xRef;
 }
 
-cpo::uno::Any SAL_CALL SwXParagraphEnumerationImpl::nextElement()
+cpo::uno::Any SwXParagraphEnumerationImpl::nextElement()
 {
     SolarMutexGuard aGuard;
     if (m_bFirstParagraph)
@@ -795,7 +798,7 @@ void SwXTextRange::DeleteAndInsert(
     if (RANGE_IS_TABLE == m_eRangePosition)
     {
         // setString on table not allowed
-        throw uno::RuntimeException(u"not possible for table"_ustr);
+        throw cpo::uno::RuntimeException(u"not possible for table"_ustr);
     }
 
     const SwPosition aPos(GetDoc().GetNodes().GetEndOfContent());
@@ -810,7 +813,7 @@ void SwXTextRange::DeleteAndInsert(
             nullptr;
         if (!pSectionNode)
         {
-            throw uno::RuntimeException(u"disposed?"_ustr);
+            throw cpo::uno::RuntimeException(u"disposed?"_ustr);
         }
         m_rDoc.GetIDocumentUndoRedo().StartUndo(SwUndoId::INSERT, nullptr);
         SwNodeIndex const start(*pSectionNode);
@@ -893,18 +896,18 @@ void SwXTextRange::DeleteAndInsert(
     m_rDoc.GetIDocumentUndoRedo().EndUndo(SwUndoId::INSERT, nullptr);
 }
 
-OUString SAL_CALL
+OUString
 SwXTextRange::getImplementationName()
 {
     return u"SwXTextRange"_ustr;
 }
 
-bool SAL_CALL SwXTextRange::supportsService(const OUString& rServiceName)
+bool SwXTextRange::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 SwXTextRange::getSupportedServiceNames()
 {
     return {
@@ -918,7 +921,7 @@ SwXTextRange::getSupportedServiceNames()
     };
 }
 
-uno::Reference< text::XText > SAL_CALL
+uno::Reference< text::XText >
 SwXTextRange::getText()
 {
     SolarMutexGuard aGuard;
@@ -944,7 +947,7 @@ SwXTextRange::getText()
     return m_xParentText;
 }
 
-uno::Reference< text::XTextRange > SAL_CALL
+uno::Reference< text::XTextRange >
 SwXTextRange::getStart()
 {
     SolarMutexGuard aGuard;
@@ -976,12 +979,12 @@ SwXTextRange::getStart()
     }
     else
     {
-        throw uno::RuntimeException(u"disposed?"_ustr);
+        throw cpo::uno::RuntimeException(u"disposed?"_ustr);
     }
     return xRet;
 }
 
-uno::Reference< text::XTextRange > SAL_CALL
+uno::Reference< text::XTextRange >
 SwXTextRange::getEnd()
 {
     SolarMutexGuard aGuard;
@@ -1013,12 +1016,12 @@ SwXTextRange::getEnd()
     }
     else
     {
-        throw uno::RuntimeException(u"disposed?"_ustr);
+        throw cpo::uno::RuntimeException(u"disposed?"_ustr);
     }
     return xRet;
 }
 
-OUString SAL_CALL SwXTextRange::getString()
+OUString SwXTextRange::getString()
 {
     SolarMutexGuard aGuard;
 
@@ -1033,7 +1036,7 @@ OUString SAL_CALL SwXTextRange::getString()
     return sRet;
 }
 
-void SAL_CALL SwXTextRange::setString(const OUString& rString)
+void SwXTextRange::setString(const OUString& rString)
 {
     SolarMutexGuard aGuard;
 
@@ -1153,7 +1156,7 @@ void SwXTextRange::GetStartPaM(std::optional<SwPaM>& roPaM)
     }
     else
     {
-        throw uno::RuntimeException(u"disposed?"_ustr);
+        throw cpo::uno::RuntimeException(u"disposed?"_ustr);
     }
 }
 
@@ -1298,10 +1301,10 @@ SwXTextRange::CreateXTextRange(
 
 namespace sw {
 
-css::uno::Reference< SwXText >
+cpo::uno::Reference< SwXText >
 CreateParentXText(SwDoc & rDoc, const SwPosition& rPos)
 {
-    css::uno::Reference< SwXText > xParentText;
+    cpo::uno::Reference< SwXText > xParentText;
     SwStartNode* pSttNode = rPos.GetNode().StartOfSectionNode();
     while(pSttNode && pSttNode->IsSectionNode())
     {
@@ -1404,44 +1407,44 @@ CreateParentXText(SwDoc & rDoc, const SwPosition& rPos)
 
 } // namespace sw
 
-uno::Reference< container::XEnumeration > SAL_CALL
+uno::Reference< container::XEnumeration >
 SwXTextRange::createContentEnumeration(const OUString& rServiceName)
 {
     SolarMutexGuard g;
 
     if ( rServiceName != "com.sun.star.text.TextContent" )
     {
-        throw uno::RuntimeException(u"unsupported service"_ustr);
+        throw cpo::uno::RuntimeException(u"unsupported service"_ustr);
     }
 
     if (!m_pMark)
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     const SwPosition aPos(GetDoc().GetNodes().GetEndOfContent());
     const auto pNewCursor(m_rDoc.CreateUnoCursor(aPos));
     if (!GetPositions(*pNewCursor))
     {
-        throw uno::RuntimeException(u"range has no positions"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no positions"_ustr);
     }
 
     return SwXParaFrameEnumeration::Create(*pNewCursor, PARAFRAME_PORTION_TEXTRANGE);
 }
 
-uno::Reference< container::XEnumeration > SAL_CALL
+uno::Reference< container::XEnumeration >
 SwXTextRange::createEnumeration()
 {
     SolarMutexGuard g;
 
     if (!m_pMark)
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     const SwPosition aPos(GetDoc().GetNodes().GetEndOfContent());
     auto pNewCursor(m_rDoc.CreateUnoCursor(aPos));
     if (!GetPositions(*pNewCursor))
     {
-        throw uno::RuntimeException(u"range has no positions"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no positions"_ustr);
     }
     if (!m_xParentText.is())
     {
@@ -1453,24 +1456,24 @@ SwXTextRange::createEnumeration()
     return SwXParagraphEnumeration::Create(m_xParentText, pNewCursor, eSetType);
 }
 
-cpo::uno::Type SAL_CALL SwXTextRange::getElementType()
+cpo::uno::Type SwXTextRange::getElementType()
 {
     return cppu::UnoType<text::XTextRange>::get();
 }
 
-bool SAL_CALL SwXTextRange::hasElements()
+bool SwXTextRange::hasElements()
 {
     return true;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 SwXTextRange::getAvailableServiceNames()
 {
     cpo::uno::Sequence<OUString> aRet { u"com.sun.star.text.TextContent"_ustr };
     return aRet;
 }
 
-uno::Reference< beans::XPropertySetInfo > SAL_CALL
+uno::Reference< beans::XPropertySetInfo >
 SwXTextRange::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
@@ -1480,7 +1483,7 @@ SwXTextRange::getPropertySetInfo()
     return xRef;
 }
 
-void SAL_CALL
+void
 SwXTextRange::setPropertyValue(
         const OUString& rPropertyName, const cpo::uno::Any& rValue)
 {
@@ -1488,7 +1491,7 @@ SwXTextRange::setPropertyValue(
 
     if (!m_pMark && (m_eRangePosition != RANGE_IS_SECTION || !m_pTableOrSectionFormat))
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     GetPositions(aPaM, ::sw::TextRangeMode::AllowNonTextNode);
@@ -1496,14 +1499,14 @@ SwXTextRange::setPropertyValue(
             rPropertyName, rValue);
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwXTextRange::getPropertyValue(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
 
     if (!m_pMark && (m_eRangePosition != RANGE_IS_SECTION || !m_pTableOrSectionFormat))
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     GetPositions(aPaM, ::sw::TextRangeMode::AllowNonTextNode);
@@ -1511,7 +1514,7 @@ SwXTextRange::getPropertyValue(const OUString& rPropertyName)
             rPropertyName);
 }
 
-void SAL_CALL
+void
 SwXTextRange::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
@@ -1519,7 +1522,7 @@ SwXTextRange::addPropertyChangeListener(
     OSL_FAIL("SwXTextRange::addPropertyChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextRange::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
@@ -1527,7 +1530,7 @@ SwXTextRange::removePropertyChangeListener(
     OSL_FAIL("SwXTextRange::removePropertyChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextRange::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
@@ -1535,7 +1538,7 @@ SwXTextRange::addVetoableChangeListener(
     OSL_FAIL("SwXTextRange::addVetoableChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextRange::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
@@ -1543,14 +1546,14 @@ SwXTextRange::removeVetoableChangeListener(
     OSL_FAIL("SwXTextRange::removeVetoableChangeListener(): not implemented");
 }
 
-beans::PropertyState SAL_CALL
+beans::PropertyState
 SwXTextRange::getPropertyState(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
 
     if (!m_pMark && (m_eRangePosition != RANGE_IS_SECTION || !m_pTableOrSectionFormat))
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     GetPositions(aPaM, ::sw::TextRangeMode::AllowNonTextNode);
@@ -1558,14 +1561,14 @@ SwXTextRange::getPropertyState(const OUString& rPropertyName)
             rPropertyName);
 }
 
-cpo::uno::Sequence< beans::PropertyState > SAL_CALL
+cpo::uno::Sequence< beans::PropertyState >
 SwXTextRange::getPropertyStates(const cpo::uno::Sequence< OUString >& rPropertyName)
 {
     SolarMutexGuard g;
 
     if (!m_pMark && (m_eRangePosition != RANGE_IS_SECTION || !m_pTableOrSectionFormat))
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     GetPositions(aPaM, ::sw::TextRangeMode::AllowNonTextNode);
@@ -1573,13 +1576,13 @@ SwXTextRange::getPropertyStates(const cpo::uno::Sequence< OUString >& rPropertyN
             rPropertyName);
 }
 
-void SAL_CALL SwXTextRange::setPropertyToDefault(const OUString& rPropertyName)
+void SwXTextRange::setPropertyToDefault(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
 
     if (!m_pMark && (m_eRangePosition != RANGE_IS_SECTION || !m_pTableOrSectionFormat))
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     GetPositions(aPaM, ::sw::TextRangeMode::AllowNonTextNode);
@@ -1587,14 +1590,14 @@ void SAL_CALL SwXTextRange::setPropertyToDefault(const OUString& rPropertyName)
             rPropertyName);
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwXTextRange::getPropertyDefault(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
 
     if (!m_pMark && (m_eRangePosition != RANGE_IS_SECTION || !m_pTableOrSectionFormat))
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     GetPositions(aPaM, ::sw::TextRangeMode::AllowNonTextNode);
@@ -1602,7 +1605,7 @@ SwXTextRange::getPropertyDefault(const OUString& rPropertyName)
             rPropertyName);
 }
 
-void SAL_CALL
+void
 SwXTextRange::makeRedline(
     const OUString& rRedlineType,
     const cpo::uno::Sequence< beans::PropertyValue >& rRedlineProperties )
@@ -1611,7 +1614,7 @@ SwXTextRange::makeRedline(
 
     if (!m_pMark)
     {
-        throw uno::RuntimeException(u"range has no mark (table?)"_ustr);
+        throw cpo::uno::RuntimeException(u"range has no mark (table?)"_ustr);
     }
     SwPaM aPaM(GetDoc().GetNodes());
     SwXTextRange::GetPositions(aPaM);
@@ -1624,21 +1627,21 @@ struct SwXTextRangesImpl final : public SwXTextRanges
 {
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
         { return u"SwXTextRanges"_ustr; };
-    virtual bool SAL_CALL supportsService( const OUString& rServiceName) override
+    virtual bool supportsService( const OUString& rServiceName) override
         { return cppu::supportsService(this, rServiceName); };
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override
         { return { u"com.sun.star.text.TextRanges"_ustr }; };
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
         { return cppu::UnoType<text::XTextRange>::get(); };
-    virtual bool SAL_CALL hasElements() override
+    virtual bool hasElements() override
         { return getCount() > 0; };
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex(sal_Int32 nIndex) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex(sal_Int32 nIndex) override;
 
     explicit SwXTextRangesImpl(SwPaM *const pPaM)
     {
@@ -1649,7 +1652,7 @@ struct SwXTextRangesImpl final : public SwXTextRanges
         }
         MakeRanges();
     }
-    virtual void SAL_CALL release() noexcept override
+    virtual void release() noexcept override
     {
         SolarMutexGuard g;
         OWeakObject::release();
@@ -1690,13 +1693,13 @@ rtl::Reference<SwXTextRanges> SwXTextRanges::Create(SwPaM *const pPaM)
  * Afterwards, an array with uno::Reference<XTextPosition> will be created.
  */
 
-sal_Int32 SAL_CALL SwXTextRangesImpl::getCount()
+sal_Int32 SwXTextRangesImpl::getCount()
 {
     SolarMutexGuard aGuard;
     return static_cast<sal_Int32>(m_Ranges.size());
 }
 
-cpo::uno::Any SAL_CALL SwXTextRangesImpl::getByIndex(sal_Int32 nIndex)
+cpo::uno::Any SwXTextRangesImpl::getByIndex(sal_Int32 nIndex)
 {
     SolarMutexGuard aGuard;
     if ((nIndex < 0) || (o3tl::make_unsigned(nIndex) >= m_Ranges.size()))
@@ -1731,19 +1734,19 @@ namespace {
 struct SwXParaFrameEnumerationImpl final : public SwXParaFrameEnumeration
 {
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
         { return u"SwXParaFrameEnumeration"_ustr; };
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override
+    virtual bool supportsService(const OUString& rServiceName) override
         { return cppu::supportsService(this, rServiceName); };
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override
         { return {u"com.sun.star.util.ContentEnumeration"_ustr}; };
 
     // XEnumeration
-    virtual bool SAL_CALL hasMoreElements() override;
-    virtual cpo::uno::Any SAL_CALL nextElement() override;
+    virtual bool hasMoreElements() override;
+    virtual cpo::uno::Any nextElement() override;
 
     SwXParaFrameEnumerationImpl(const SwPaM& rPaM, const enum ParaFrameMode eParaFrameMode, SwFrameFormat* const pFormat);
-    virtual void SAL_CALL release() noexcept override
+    virtual void release() noexcept override
     {
         SolarMutexGuard g;
         OWeakObject::release();
@@ -1882,7 +1885,7 @@ uno::Reference<text::XTextContent> FrameClientToXTextContent(sw::FrameClient* pC
     return xRet;
 }
 
-bool SAL_CALL
+bool
 SwXParaFrameEnumerationImpl::hasMoreElements()
 {
     SolarMutexGuard aGuard;
@@ -1890,7 +1893,7 @@ SwXParaFrameEnumerationImpl::hasMoreElements()
     return m_xNextObject.is() || CreateNextObject();
 }
 
-cpo::uno::Any SAL_CALL SwXParaFrameEnumerationImpl::nextElement()
+cpo::uno::Any SwXParaFrameEnumerationImpl::nextElement()
 {
     SolarMutexGuard aGuard;
     PurgeFrameClients();

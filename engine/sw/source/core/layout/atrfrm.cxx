@@ -104,6 +104,7 @@
 #include <names.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace sw {
 
@@ -1146,8 +1147,8 @@ bool SwFormatCol::QueryValue( cpo::uno::Any& rVal, sal_uInt8 nMemberId ) const
     else
     {
         uno::Reference<text::XTextColumns> xCols(SvxXTextColumns_createInstance(),
-                                                 css::uno::UNO_QUERY_THROW);
-        uno::Reference<beans::XPropertySet> xProps(xCols, css::uno::UNO_QUERY_THROW);
+                                                 cpo::uno::UNO_QUERY_THROW);
+        uno::Reference<beans::XPropertySet> xProps(xCols, cpo::uno::UNO_QUERY_THROW);
 
         if (GetNumCols() > 0)
         {
@@ -1264,7 +1265,7 @@ bool SwFormatCol::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
             m_nWidth = nWidthSum;
             m_bOrtho = false;
 
-            if (uno::Reference<beans::XPropertySet> xProps{ xCols, css::uno::UNO_QUERY })
+            if (uno::Reference<beans::XPropertySet> xProps{ xCols, cpo::uno::UNO_QUERY })
             {
                 xProps->getPropertyValue(UNO_NAME_IS_AUTOMATIC) >>= m_bOrtho;
                 xProps->getPropertyValue(UNO_NAME_SEPARATOR_LINE_WIDTH) >>= m_nLineWidth;
@@ -1435,7 +1436,7 @@ size_t SwFormatVertOrient::hashCode() const
 {
     std::size_t seed(0);
     o3tl::hash_combine(seed, Which());
-    o3tl::hash_combine(seed, GetPos());
+    o3tl::hash_combine(seed, getPosition().data());
     o3tl::hash_combine(seed, GetVertOrient());
     o3tl::hash_combine(seed, GetRelationOrient());
     return seed;
@@ -1553,7 +1554,7 @@ size_t SwFormatHoriOrient::hashCode() const
 {
     std::size_t seed(0);
     o3tl::hash_combine(seed, Which());
-    o3tl::hash_combine(seed, GetPos());
+    o3tl::hash_combine(seed, getPosition().data());
     o3tl::hash_combine(seed, GetHoriOrient());
     o3tl::hash_combine(seed, GetRelationOrient());
     o3tl::hash_combine(seed, IsPosToggle());
@@ -2014,7 +2015,7 @@ bool SwFormatURL::QueryValue( cpo::uno::Any& rVal, sal_uInt8 nMemberId ) const
             break;
         case MID_URL_CLIENTMAP:
         {
-            uno::Reference< uno::XInterface > xInt;
+            uno::Reference< cpo::uno::XInterface > xInt;
             if(m_pMap)
             {
                 xInt = SvUnoImageMap_createInstance( *m_pMap, sw_GetSupportedMacroItems() );

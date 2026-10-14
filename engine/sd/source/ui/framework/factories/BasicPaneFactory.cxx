@@ -38,7 +38,8 @@
 #include <ResourceId.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::drawing::framework;
 
@@ -132,7 +133,7 @@ BasicPaneFactory::BasicPaneFactory(
                 ConfigurationChangeEventType::ConfigurationUpdateEnd);
         }
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         rtl::Reference<ConfigurationController> xCC (mxConfigurationControllerWeak);
         if (xCC.is())
@@ -292,7 +293,7 @@ void BasicPaneFactory::Listener::notifyConfigurationChange (
 
 //===== lang::XEventListener ==================================================
 
-void SAL_CALL BasicPaneFactory::Listener::disposing (
+void BasicPaneFactory::Listener::disposing (
     const lang::EventObject& rEventObject)
 {
     if (uno::Reference<XInterface>(cppu::getXWeak(mrParent.mxConfigurationControllerWeak.get().get())) == rEventObject.Source)

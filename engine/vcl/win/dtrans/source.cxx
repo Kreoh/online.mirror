@@ -43,7 +43,7 @@ using namespace osl;
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::datatransfer::dnd;
 using namespace com::sun::star::datatransfer::dnd::DNDConstants;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::awt::MouseButton;
 using namespace com::sun::star::awt;
@@ -130,7 +130,7 @@ void DragSource::StartDragImpl(
 
 // XInitialization
 /** aArguments contains a machine id */
-void SAL_CALL DragSource::initialize( const Sequence< Any >& aArguments )
+void DragSource::initialize( const Sequence< Any >& aArguments )
 {
     if( aArguments.getLength() >=2)
         m_hAppWindow= reinterpret_cast<HWND>(static_cast<sal_uIntPtr>(*o3tl::doAccess<sal_uInt64>(aArguments[1])));
@@ -138,19 +138,19 @@ void SAL_CALL DragSource::initialize( const Sequence< Any >& aArguments )
 }
 
 /** XDragSource */
-bool SAL_CALL DragSource::isDragImageSupported(  )
+bool DragSource::isDragImageSupported(  )
 {
     return false;
 }
 
-sal_Int32 SAL_CALL DragSource::getDefaultCursor( sal_Int8 /*dragAction*/ )
+sal_Int32 DragSource::getDefaultCursor( sal_Int8 /*dragAction*/ )
 {
     return 0;
 }
 
 /** Notifies the XDragSourceListener by
      calling dragDropEnd */
-void SAL_CALL DragSource::startDrag(
+void DragSource::startDrag(
     const DragGestureEvent& trigger,
     sal_Int8 sourceActions,
     sal_Int32 cursor,
@@ -278,24 +278,24 @@ dwEffect
 }
 
 // XServiceInfo
-OUString SAL_CALL DragSource::getImplementationName(  )
+OUString DragSource::getImplementationName(  )
 {
     return "com.sun.star.comp.datatransfer.dnd.OleDragSource_V1";
 }
 // XServiceInfo
-bool SAL_CALL DragSource::supportsService( const OUString& ServiceName )
+bool DragSource::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL DragSource::getSupportedServiceNames(  )
+Sequence< OUString > DragSource::getSupportedServiceNames(  )
 {
     return { "com.sun.star.datatransfer.dnd.OleDragSource" };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 dtrans_DragSource_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new DragSource(context));
 }

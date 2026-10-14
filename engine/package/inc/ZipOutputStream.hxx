@@ -19,7 +19,7 @@
 #ifndef INCLUDED_PACKAGE_INC_ZIPOUTPUTSTREAM_HXX
 #define INCLUDED_PACKAGE_INC_ZIPOUTPUTSTREAM_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/io/XOutputStream.hpp>
 
 #include "ByteChucker.hxx"
@@ -34,7 +34,7 @@ class ZipOutputEntryInThread;
 
 class ZipOutputStream
 {
-    css::uno::Reference< css::io::XOutputStream > m_xStream;
+    cpo::uno::Reference< css::io::XOutputStream > m_xStream;
     std::vector<std::unique_ptr<ZipEntry>> m_aZipList;
     std::shared_ptr<comphelper::ThreadTaskTag> mpThreadTaskTag;
 
@@ -45,38 +45,38 @@ class ZipOutputStream
 
 public:
     ZipOutputStream(
-        const css::uno::Reference< css::io::XOutputStream > &xOStream );
+        const cpo::uno::Reference< css::io::XOutputStream > &xOStream );
     ~ZipOutputStream();
 
     void addDeflatingThreadTask( ZipOutputEntryInThread *pEntry, std::unique_ptr<comphelper::ThreadTask> pThreadTask );
 
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void writeLOC(std::unique_ptr<ZipEntry>&& pEntry, bool bEncrypt = false);
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void rawWrite( const cpo::uno::Sequence< sal_Int8 >& rBuffer );
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void rawCloseEntry( bool bEncrypt = false );
 
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void finish();
-    const css::uno::Reference< css::io::XOutputStream >& getStream() const;
+    const cpo::uno::Reference< css::io::XOutputStream >& getStream() const;
 
     static sal_uInt32 getCurrentDosTime();
     static void setEntry(ZipEntry& rEntry);
 
 private:
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void writeEND(sal_uInt32 nOffset, sal_uInt32 nLength);
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void writeCEN( const ZipEntry &rEntry );
     /// @throws css::io::IOException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void writeDataDescriptor( const ZipEntry &rEntry );
     void writeExtraFields(const ZipEntry& rEntry, bool isLOCWithDD);
 

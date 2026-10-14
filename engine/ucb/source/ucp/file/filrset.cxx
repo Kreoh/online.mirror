@@ -30,7 +30,7 @@
 #include "filrset.hxx"
 #include <com/sun/star/ucb/OpenMode.hpp>
 #include "prov.hxx"
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/ucb/ListActionType.hpp>
@@ -40,6 +40,7 @@
 
 using namespace fileaccess;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 XResultSet_impl::XResultSet_impl( TaskManager* pMyShell,
                                   const OUString& aUnqPath,
@@ -79,14 +80,14 @@ XResultSet_impl::~XResultSet_impl()
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::disposing( const lang::EventObject& )
 {
     // To do, but what
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::addEventListener(
     const uno::Reference< lang::XEventListener >& Listener )
 {
@@ -96,7 +97,7 @@ XResultSet_impl::addEventListener(
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::removeEventListener(
     const uno::Reference< lang::XEventListener >& Listener )
 {
@@ -106,7 +107,7 @@ XResultSet_impl::removeEventListener(
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::dispose()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -216,13 +217,13 @@ XResultSet_impl::OneMore(std::unique_lock<std::mutex>& rGuard)
         }
         else  // error fetching anything
         {
-            throw sdbc::SQLException( u""_ustr, uno::Reference< uno::XInterface >(), OUString(), 0, cpo::uno::Any() );
+            throw sdbc::SQLException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), OUString(), 0, cpo::uno::Any() );
         }
     }
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::next()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -234,28 +235,28 @@ XResultSet_impl::next()
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::isBeforeFirst()
 {
     return m_nRow == -1;
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::isAfterLast()
 {
     return m_nRow >= sal::static_int_cast<sal_Int32>(m_aItems.size());   // Cannot happen, if m_aFolder.isOpen()
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::isFirst()
 {
     return m_nRow == 0;
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::isLast()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -266,14 +267,14 @@ XResultSet_impl::isLast()
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::beforeFirst()
 {
     m_nRow = -1;
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::afterLast()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -283,7 +284,7 @@ XResultSet_impl::afterLast()
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::first()
 {
     m_nRow = -1;
@@ -291,7 +292,7 @@ XResultSet_impl::first()
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::last()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -302,7 +303,7 @@ XResultSet_impl::last()
 }
 
 
-sal_Int32 SAL_CALL
+sal_Int32
 XResultSet_impl::getRow()
 {
     // Test, whether behind last row
@@ -313,7 +314,7 @@ XResultSet_impl::getRow()
 }
 
 
-bool SAL_CALL XResultSet_impl::absolute( sal_Int32 row )
+bool XResultSet_impl::absolute( sal_Int32 row )
 {
     std::unique_lock aGuard( m_aMutex );
     if( row >= 0 )
@@ -335,11 +336,11 @@ bool SAL_CALL XResultSet_impl::absolute( sal_Int32 row )
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::relative( sal_Int32 row )
 {
     if( isAfterLast() || isBeforeFirst() )
-        throw sdbc::SQLException( u""_ustr, uno::Reference< uno::XInterface >(), OUString(), 0, cpo::uno::Any() );
+        throw sdbc::SQLException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), OUString(), 0, cpo::uno::Any() );
     if( row > 0 )
         while( row-- ) next();
     else if( row < 0 )
@@ -349,7 +350,7 @@ XResultSet_impl::relative( sal_Int32 row )
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::previous()
 {
     if( m_nRow > sal::static_int_cast<sal_Int32>(m_aItems.size()) )
@@ -360,42 +361,42 @@ XResultSet_impl::previous()
 }
 
 
-void SAL_CALL
+void
 XResultSet_impl::refreshRow()
 {
     // get the row from the filesystem
 }
 
 
-bool SAL_CALL
+bool
 XResultSet_impl::rowUpdated()
 {
     return false;
 }
 
-bool SAL_CALL
+bool
 XResultSet_impl::rowInserted()
 {
     return false;
 }
 
-bool SAL_CALL
+bool
 XResultSet_impl::rowDeleted()
 {
     return false;
 }
 
 
-uno::Reference< uno::XInterface > SAL_CALL
+uno::Reference< cpo::uno::XInterface >
 XResultSet_impl::getStatement()
 {
-    return uno::Reference< uno::XInterface >();
+    return uno::Reference< cpo::uno::XInterface >();
 }
 
 
 // XCloseable
 
-void SAL_CALL
+void
 XResultSet_impl::close()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -408,7 +409,7 @@ XResultSet_impl::close()
 }
 
 
-OUString SAL_CALL
+OUString
 XResultSet_impl::queryContentIdentifierString()
 {
     uno::Reference< ucb::XContentIdentifier > xContentId
@@ -421,7 +422,7 @@ XResultSet_impl::queryContentIdentifierString()
 }
 
 
-uno::Reference< ucb::XContentIdentifier > SAL_CALL
+uno::Reference< ucb::XContentIdentifier >
 XResultSet_impl::queryContentIdentifier()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -437,7 +438,7 @@ XResultSet_impl::queryContentIdentifier()
 }
 
 
-uno::Reference< ucb::XContent > SAL_CALL
+uno::Reference< ucb::XContent >
 XResultSet_impl::queryContent()
 {
     if( 0 <= m_nRow && m_nRow < sal::static_int_cast<sal_Int32>(m_aItems.size()) )
@@ -451,7 +452,7 @@ XResultSet_impl::queryContent()
 
 
 // virtual
-uno::Reference< sdbc::XResultSet > SAL_CALL
+uno::Reference< sdbc::XResultSet >
 XResultSet_impl::getStaticResultSet()
 {
     std::unique_lock aGuard( m_aMutex );
@@ -464,7 +465,7 @@ XResultSet_impl::getStaticResultSet()
 
 
 // virtual
-void SAL_CALL
+void
 XResultSet_impl::setListener(
     const uno::Reference< ucb::XDynamicResultSetListener >& Listener )
 {
@@ -502,7 +503,7 @@ XResultSet_impl::setListener(
 
 
 // virtual
-void SAL_CALL
+void
 XResultSet_impl::connectToCache(
     const uno::Reference< ucb::XDynamicResultSet > & xCache )
 {
@@ -538,7 +539,7 @@ XResultSet_impl::connectToCache(
 
 
 // virtual
-sal_Int16 SAL_CALL
+sal_Int16
 XResultSet_impl::getCapabilities()
 {
     // Never set ucb::ContentResultSetCapability::SORTED
@@ -547,7 +548,7 @@ XResultSet_impl::getCapabilities()
 }
 
 // XResultSetMetaDataSupplier
-uno::Reference< sdbc::XResultSetMetaData > SAL_CALL
+uno::Reference< sdbc::XResultSetMetaData >
 XResultSet_impl::getMetaData()
 {
     auto pProp = std::find_if(std::cbegin(m_sProperty), std::cend(m_sProperty),
@@ -571,7 +572,7 @@ XResultSet_impl::getMetaData()
 
 
 // XPropertySet
-uno::Reference< beans::XPropertySetInfo > SAL_CALL
+uno::Reference< beans::XPropertySetInfo >
 XResultSet_impl::getPropertySetInfo()
 {
 
@@ -585,7 +586,7 @@ XResultSet_impl::getPropertySetInfo()
 }
 
 
-void SAL_CALL XResultSet_impl::setPropertyValue(
+void XResultSet_impl::setPropertyValue(
     const OUString& aPropertyName, const cpo::uno::Any& )
 {
     if( aPropertyName == "IsRowCountFinal" ||
@@ -595,7 +596,7 @@ void SAL_CALL XResultSet_impl::setPropertyValue(
 }
 
 
-cpo::uno::Any SAL_CALL XResultSet_impl::getPropertyValue(
+cpo::uno::Any XResultSet_impl::getPropertyValue(
     const OUString& PropertyName )
 {
     std::unique_lock aGuard( m_aMutex );
@@ -613,7 +614,7 @@ cpo::uno::Any SAL_CALL XResultSet_impl::getPropertyValue(
 }
 
 
-void SAL_CALL XResultSet_impl::addPropertyChangeListener(
+void XResultSet_impl::addPropertyChangeListener(
     const OUString& aPropertyName,
     const uno::Reference< beans::XPropertyChangeListener >& xListener )
 {
@@ -634,7 +635,7 @@ void SAL_CALL XResultSet_impl::addPropertyChangeListener(
 }
 
 
-void SAL_CALL XResultSet_impl::removePropertyChangeListener(
+void XResultSet_impl::removePropertyChangeListener(
     const OUString& aPropertyName,
     const uno::Reference< beans::XPropertyChangeListener >& aListener )
 {
@@ -654,14 +655,14 @@ void SAL_CALL XResultSet_impl::removePropertyChangeListener(
         throw beans::UnknownPropertyException( aPropertyName );
 }
 
-void SAL_CALL XResultSet_impl::addVetoableChangeListener(
+void XResultSet_impl::addVetoableChangeListener(
     const OUString&,
     const uno::Reference< beans::XVetoableChangeListener >& )
 {
 }
 
 
-void SAL_CALL XResultSet_impl::removeVetoableChangeListener(
+void XResultSet_impl::removeVetoableChangeListener(
     const OUString&,
     const uno::Reference< beans::XVetoableChangeListener >& )
 {

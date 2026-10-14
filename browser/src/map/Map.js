@@ -3,7 +3,7 @@
  * window.L.Map is the central class of the API - it is used to create a map.
  */
 
-/* global app _ Cursor JSDialog RenderManager cool InternPointUtil */
+/* global app _ Cursor JSDialog RenderManager cool InternPointUtil SecurityLabelBanner */
 
 window.L.Map = window.L.Evented.extend({
 
@@ -191,11 +191,20 @@ window.L.Map = window.L.Evented.extend({
 				this._fireInitComplete('CharFontName');
 			}
 		});
+		this.on('commandstatechanged', function(e) {
+			if (e.commandName === '.uno:CharFontName')
+				this._updateMissingFontMark(e.state);
+		});
+		this.on('updatetoolbarcommandvalues', function(e) {
+			if (e.commandName === '.uno:CharFontName')
+				this._updateMissingFontMark(this._getCurrentFontName());
+		});
 		if (window.ThisIsTheAndroidApp) {
 			this.on('readonlymode', function() {
 				this.setPermission('readonly');
 			});
 			this.on('editmode', function() {
+				app.setPermission('edit');
 				this._switchToEditMode();
 			});
 			this.on('hardwarekeyboardattached', function() {
@@ -223,6 +232,7 @@ window.L.Map = window.L.Evented.extend({
 		this.on('changefocuswidget', this._onChangeFocusWidget, this);
 
 		this.on('searchstart', this._onSearchStart, this);
+		this.on('searchend', this._onSearchEnd, this);
 
 		// View info (user names and view ids)
 		this._viewInfo = {};
@@ -331,7 +341,78 @@ window.L.Map = window.L.Evented.extend({
 				});
 				this.fire('languagesupdated');
 			}
+			else if (e.commandName === '.uno:SecurityLabel') {
+				// Initial value on load (getCommandValues).
+				this._updateSecurityLabelBanner(e.commandValues && e.commandValues.marking);
+				// Show the Security Label button only when the document's format can
+				// carry a label (OOXML). The engine reports this from the actual loading
+				// filter, which is reliable where the file extension is not. The button
+				// lives in the Writer, Calc and Impress UIs (not Draw), so gate to those.
+				var dt = this.getDocType();
+				if (this.uiManager && e.commandValues &&
+				    (dt === 'text' || dt === 'spreadsheet' || dt === 'presentation')) {
+					// The host can lock the marking per file/user (UserCanChangeSecurityLabel):
+					// then the command is hidden like an unsupported format -- the banner still
+					// shows the classification. wsd also drops the command, so this is only UX.
+					var canChange = !this['wopi'] || this['wopi'].UserCanChangeSecurityLabel;
+					var supported = !!e.commandValues.supported && canChange;
+					// What the notebookbar was last built with: its builders read
+					// _securityLabelSupported, so this is the layout on screen.
+					var wasSupported = this._securityLabelSupported === true;
+					this._securityLabelSupported = supported;
+					// Record it in the shared command-visibility map the menubar and
+					// notebookbar builders consult, so later rebuilds stay correct.
+					// isCommandVisible() tests for the *presence* of the key, not its
+					// value (and showCommand() deletes it to reveal a command), so a
+					// supported command has to remove the entry: storing false here
+					// still reads back as hidden and cleanOpts drops the toolitem.
+					if (supported)
+						delete this.uiManager.hiddenCommands['.uno:SecurityLabel'];
+					else
+						this.uiManager.hiddenCommands['.uno:SecurityLabel'] = true;
+					// Toggle the classic File-menu entry live (present in classic mode).
+					if (this.menubar) {
+						if (supported)
+							this.menubar.showUnoItem('.uno:SecurityLabel');
+						else
+							this.menubar.hideUnoItem('.uno:SecurityLabel');
+					}
+					// The notebookbar builds before this flag arrives (defaulting to
+					// Properties alone). Rebuild it so the stacked Properties + Security
+					// label layout appears when supported, and Properties reclaims the
+					// column when not. Use the impl's refresh(), which re-runs the tab
+					// builders (getFullJSON); refreshNotebookbar() only re-renders the
+					// snapshot built at construction, so it would not pick up the flag.
+					// Only when the layout actually changes.
+					if (this.uiManager.notebookbar && this.uiManager.notebookbar.impl &&
+					    wasSupported !== supported) {
+						this.uiManager.notebookbar.impl.refresh();
+					}
+				}
+			}
 		});
+
+		this.on('commandstatechanged', function(e) {
+			// Live label apply/change/remove, broadcast by wsd to every session (see
+			// the .uno:SecurityLabel handling in ClientSession). Update this client's
+			// banner and notify the host integration.
+			if (e.commandName !== '.uno:SecurityLabel')
+				return;
+			var state = e.state || {};
+			this._updateSecurityLabelBanner(state.marking);
+			// The postMessage carries the whole lifecycle event (a different shape from
+			// the wire message); only the action-bearing state changes fire it, not the
+			// on-load commandvalues that seed the banner.
+			if (state.action) {
+				this.fire('postMessage', {msgId: 'Security_Label_Changed', args: {
+					action: state.action,
+					classification: state.classification || '',
+					marking: state.marking || '',
+					oldClassification: state.oldClassification || '',
+					oldMarking: state.oldMarking || '',
+				}});
+			}
+		}, this);
 
 		this.on('docloaded', function(e) {
 			if (this.options.debug && !this._debug.debugOn)
@@ -352,6 +433,9 @@ window.L.Map = window.L.Evented.extend({
 
 				app.activeDocument.activeLayout.sendClientVisibleArea(true);
 				app.serverConnectionService.onDocumentLoaded();
+
+				// Show the security classification banner if the document is labeled.
+				app.socket.sendMessage('commandvalues command=.uno:SecurityLabel');
 			} else if (this._docLayer && app.sectionContainer) {
 				// remove the comments and changes
 				var commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
@@ -374,6 +458,15 @@ window.L.Map = window.L.Evented.extend({
 				Status: 'Initialized',
 			}
 		});
+	},
+
+	// Show/update the security classification banner from a marking string
+	// (empty hides it). Fed by both the initial getCommandValues and live
+	// .uno:SecurityLabel state changes.
+	_updateSecurityLabelBanner: function(marking) {
+		if (!this._securityLabelBanner)
+			this._securityLabelBanner = new SecurityLabelBanner();
+		this._securityLabelBanner.update(marking || '');
 	},
 
 	// A11y
@@ -456,23 +549,48 @@ window.L.Map = window.L.Evented.extend({
 		return -1;
 	},
 
+	// True when the integration sent an avatar for the user of this view.
+	_hasAvatar: function (viewInfo) {
+		return viewInfo.userextrainfo !== undefined && viewInfo.userextrainfo.avatar !== undefined;
+	},
+
+	// A view of the given user that carries an avatar, or undefined when the
+	// user has none left.
+	_getViewInfoWithAvatar: function (username) {
+		for (var idx in this._viewInfo) {
+			var viewInfo = this._viewInfo[idx];
+			if (viewInfo.username === username && this._hasAvatar(viewInfo)) {
+				return viewInfo;
+			}
+		}
+		return undefined;
+	},
+
 	addView: function(viewInfo) {
 		this._viewInfo[viewInfo.id] = viewInfo;
-		if (viewInfo.userextrainfo !== undefined && viewInfo.userextrainfo.avatar !== undefined) {
+		if (this._hasAvatar(viewInfo)) {
 			this._viewInfoByUserName[viewInfo.username] = viewInfo;
 		}
 		this.fire('postMessage', {msgId: 'View_Added', args: {Deprecated: true, ViewId: viewInfo.id, UserId: viewInfo.userid, UserName: viewInfo.username, UserExtraInfo: viewInfo.userextrainfo, Color: app.LOUtil.rgbToHex(viewInfo.color), ReadOnly: viewInfo.readonly}});
 
 		// Fire last, otherwise not all events are handled correctly.
-		this.fire('addview', {viewId: viewInfo.id, username: viewInfo.username, extraInfo: viewInfo.userextrainfo, readonly: this.isViewReadOnly(viewInfo.id)});
+		this.fire('addview', {viewId: viewInfo.id, userId: viewInfo.userid, username: viewInfo.username, extraInfo: viewInfo.userextrainfo, readonly: this.isViewReadOnly(viewInfo.id)});
 
 		this.updateAvatars();
 	},
 
 	removeView: function(viewid) {
 		var username = this._viewInfo[viewid].username;
-		delete this._viewInfoByUserName[this._viewInfo[viewid].username];
 		delete this._viewInfo[viewid];
+
+		// The entry stands for the user, so it moves to another view of the same
+		// user and goes away with the last of them.
+		var remainingViewInfo = this._getViewInfoWithAvatar(username);
+		if (remainingViewInfo !== undefined)
+			this._viewInfoByUserName[username] = remainingViewInfo;
+		else
+			delete this._viewInfoByUserName[username];
+
 		this.fire('postMessage', {msgId: 'View_Removed', args: {Deprecated: true, ViewId: viewid}});
 
 		// Fire last, otherwise not all events are handled correctly.
@@ -535,8 +653,6 @@ window.L.Map = window.L.Evented.extend({
 				this._modTimeout = setTimeout(window.L.bind(this.updateModificationIndicator, this, -1), timeout);
 			}
 		}
-		if (this.lastModIndicator !== null && this.lastModIndicator !== undefined)
-			this.lastModIndicator.innerHTML = dateValue;
 		this.setLastModDateValue(dateValue);
 		this._modTimeout = setTimeout(window.L.bind(this.updateModificationIndicator, this, -1), timeout);
 	},
@@ -885,6 +1001,9 @@ window.L.Map = window.L.Evented.extend({
 
 		window.L.DomEvent[onOff](window, 'blur', this._onLostFocus, this);
 		window.L.DomEvent[onOff](window, 'focus', this._onGotFocus, this);
+		// A reload, a link followed or a tab closed takes the page away without a
+		// blur. pagehide is the signal all of those fire.
+		window.L.DomEvent[onOff](window, 'pagehide', this._onPageHide, this);
 	},
 
 
@@ -914,6 +1033,13 @@ window.L.Map = window.L.Evented.extend({
 			this.focus(acceptInput);
 			this._textInput.hideCursor(); // The cursor is in the dialog.
 		}
+	},
+
+	// The page is going away. A preference changed moments ago is still sitting in
+	// the batch that would have been sent a few seconds from now, so send it while
+	// the connection is up.
+	_onPageHide: function () {
+		window.prefs.sendPendingBrowserSettingsUpdate();
 	},
 
 	// Our browser tab lost focus.
@@ -961,6 +1087,10 @@ window.L.Map = window.L.Evented.extend({
 
 	_onSearchStart: function () {
 		this._isSearching = true;
+	},
+
+	_onSearchEnd: function () {
+		this._isSearching = false;
 	},
 
 	_onUpdateProgress: function (e) {

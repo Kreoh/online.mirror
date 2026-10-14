@@ -47,6 +47,9 @@
 /* Absolute path to the top-level source directory */
 #undef DEBUG_ABSSRCDIR
 
+/* Whether to disable Landlock containment */
+#undef DISABLE_LANDLOCK
+
 /* Whether to disable SECCOMP */
 #undef DISABLE_SECCOMP
 
@@ -123,6 +126,9 @@
 /* Define to 1 if this is a mobileapp (eg. Android) build. */
 #undef MOBILEAPP
 
+/* Define to 1 if the PAM header security/pam_appl.h is available. */
+#undef HAVE_SECURITY_PAM_APPL_H
+
 /* Define to 1 when we should use systemplate and jails (eg. normal coolwsd server), otherwise 0 (eg. CODA). */
 #undef ENABLE_CHILDROOTS
 
@@ -160,6 +166,26 @@
 
 #define EXTERNC /**/
 #define EXPORT /**/
+
+/* The combined server-plus-qt build leaves these undefined above so the coda-qt
+   target can set them on its own command line. Everything else gets the server values. */
+#ifndef MOBILEAPP
+#define MOBILEAPP 0
+#endif
+#ifndef ENABLE_CHILDROOTS
+#define ENABLE_CHILDROOTS 1
+#endif
+
+/* The configure check for the PAM header runs only for server builds. */
+#ifndef HAVE_SECURITY_PAM_APPL_H
+#define HAVE_SECURITY_PAM_APPL_H 0
+#endif
+
+/* True when this binary links the WOPI storage backend, the server sources
+   under wsd/wopi/.  The app builds open local files only. */
+#ifndef ENABLE_WOPI
+#define ENABLE_WOPI (!MOBILEAPP)
+#endif
 
 /* Controls whether or not we allow loading documents from the local filesystem. */
 #ifndef ENABLE_LOCAL_FILESYSTEM

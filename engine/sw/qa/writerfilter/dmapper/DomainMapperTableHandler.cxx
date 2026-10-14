@@ -21,6 +21,7 @@
 #include <com/sun/star/text/XPageCursor.hpp>
 #include <com/sun/star/qa/XDumper.hpp>
 
+#include <frameformats.hxx>
 #include <frmatr.hxx>
 #include <swtable.hxx>
 #include <IDocumentLayoutAccess.hxx>
@@ -29,6 +30,7 @@
 #include <sortedobjs.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -215,7 +217,7 @@ CPPUNIT_TEST_FIXTURE(Test, testDOCXFloatingTableHeaderBodyOverlap)
 
     // Then make sure the fly bottom is less than the top of the body text:
     uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
-    css::uno::Reference<qa::XDumper> xDumper(xModel->getCurrentController(), uno::UNO_QUERY);
+    cpo::uno::Reference<qa::XDumper> xDumper(xModel->getCurrentController(), uno::UNO_QUERY);
     OString aDump = xDumper->dump(u"layout"_ustr).toUtf8();
     auto pCharBuffer = reinterpret_cast<const xmlChar*>(aDump.getStr());
     xmlDocUniquePtr pXmlDoc(xmlParseDoc(pCharBuffer));
@@ -268,7 +270,7 @@ CPPUNIT_TEST_FIXTURE(Test, testDOCXFloatingTableNestedLayout)
 
     // Then make sure the inner table stays inside the outer table:
     uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
-    css::uno::Reference<qa::XDumper> xDumper(xModel->getCurrentController(), uno::UNO_QUERY);
+    cpo::uno::Reference<qa::XDumper> xDumper(xModel->getCurrentController(), uno::UNO_QUERY);
     OString aDump = xDumper->dump(u"layout"_ustr).toUtf8();
     auto pCharBuffer = reinterpret_cast<const xmlChar*>(aDump.getStr());
     xmlDocUniquePtr pXmlDoc(xmlParseDoc(pCharBuffer));
@@ -332,6 +334,29 @@ CPPUNIT_TEST_FIXTURE(Test, testDOCXFloatingTableHidemark)
     const SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage2Objs.size());
     CPPUNIT_ASSERT(!pPage2->GetNext());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTableStyleContextualSpacing)
+{
+    // Given a document with a table style that turns on contextual spacing, while the default
+    // paragraph style sets a spacing below the paragraph:
+    // When loading that document:
+    loadFromFile(u"table-style-contextual-spacing.docx");
+
+    // Then make sure the in-table paragraph gets the contextual spacing of the table style:
+    uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess> xText(xTextDocument->getText(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xParaEnum = xText->createEnumeration();
+    uno::Reference<text::XTextTable> xTable(xParaEnum->nextElement(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess> xCell(xTable->getCellByName(u"A1"_ustr),
+                                                        uno::UNO_QUERY);
+    xParaEnum = xCell->createEnumeration();
+    uno::Reference<beans::XPropertySet> xParaProps(xParaEnum->nextElement(), uno::UNO_QUERY);
+    bool bContextMargin{};
+    xParaProps->getPropertyValue(u"ParaContextMargin"_ustr) >>= bContextMargin;
+    // Without the accompanying fix in place, this test would have failed, because the contextual
+    // spacing of the table style never reached the paragraphs of the cells.
+    CPPUNIT_ASSERT(bContextMargin);
 }
 }
 

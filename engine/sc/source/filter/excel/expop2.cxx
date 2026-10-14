@@ -19,6 +19,7 @@
 
 #include <osl/diagnose.h>
 #include <sfx2/objsh.hxx>
+#include <docuno.hxx>
 #include <sfx2/docinf.hxx>
 #include <filter/msfilter/svxmsbas.hxx>
 #include <docsh.hxx>
@@ -39,6 +40,7 @@
 #include <com/sun/star/frame/XModel.hpp>
 
 namespace com::sun::star::document { class XDocumentProperties; }
+using namespace ::cpo;
 
 namespace {
 

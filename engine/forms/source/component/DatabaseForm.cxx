@@ -31,6 +31,8 @@
 #include <services.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/guarding.hxx>
+#include <comphelper/embeddedobjectcontainer.hxx>
+#include <sfx2/objsh.hxx>
 
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <com/sun/star/awt/XTextComponent.hpp>
@@ -84,7 +86,7 @@
 
 using namespace ::dbtools;
 using namespace ::comphelper;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -1640,7 +1642,7 @@ void ODatabaseForm::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const A
 
         case PROPERTY_ID_DATASOURCE:
         {
-            css::uno::Reference<XInterface> xParent = getParent();
+            cpo::uno::Reference<XInterface> xParent = getParent();
             {
                 // prevent ABBA deadlock between this mutex and the SolarMutex
                 comphelper::MutexRelease aReleaser(m_aMutex);
@@ -1712,7 +1714,7 @@ void ODatabaseForm::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const A
         {
             bool bIsEmbeddedInDatabase;
             Reference< XConnection > xOuterConnection;
-            css::uno::Reference<XInterface> xParent = getParent();
+            cpo::uno::Reference<XInterface> xParent = getParent();
             {
                 // prevent ABBA deadlock between this mutex and the SolarMutex
                 comphelper::MutexRelease aReleaser(m_aMutex);
@@ -2383,7 +2385,7 @@ void ODatabaseForm::_propertyChanged(const PropertyChangeEvent& evt)
 
 // smartXChild
 
-void ODatabaseForm::setParent(const css::uno::Reference<css::uno::XInterface>& Parent)
+void ODatabaseForm::setParent(const cpo::uno::Reference<cpo::uno::XInterface>& Parent)
 {
     // SYNCHRONIZED ----->
     osl::ClearableMutexGuard aGuard(m_aMutex);
@@ -2484,7 +2486,7 @@ void ODatabaseForm::setControlModels(const Sequence<Reference<XControlModel> >& 
             for (sal_Int32 j = 0; j < nCount; ++j)
             {
                 Reference<XFormComponent> xElement(
-                    getByIndex(j), css::uno::UNO_QUERY);
+                    getByIndex(j), cpo::uno::UNO_QUERY);
                 if (xComp == xElement)
                 {
                     Reference<XPropertySet>  xSet(xComp, UNO_QUERY);
@@ -2516,7 +2518,7 @@ void ODatabaseForm::setGroup( const Sequence<Reference<XControlModel> >& _rGroup
 
     for( auto const& rControl : _rGroup )
     {
-        xSet.set(rControl, css::uno::UNO_QUERY);
+        xSet.set(rControl, cpo::uno::UNO_QUERY);
         if ( !xSet.is() )
         {
             // can't throw an exception other than a RuntimeException (which would not be appropriate),
@@ -2853,6 +2855,20 @@ bool ODatabaseForm::implEnsureConnection()
             }
         }
 
+        // A form whose database is outside the user's configuration connects once its document
+        // allows link updates.
+        if (SfxObjectShell* pShell
+            = SfxObjectShell::GetShellFromComponent(getXModel(static_cast<XWeak*>(this))))
+        {
+            Reference<XPropertySet> xThis(this);
+            if (!pShell->getEmbeddedObjectContainer().getUserAllowsLinkUpdate()
+                && SfxObjectShell::IsExternalDatabaseForm(xThis))
+            {
+                pShell->AddDeferredDatabaseForm(Reference<XLoadable>(xThis, UNO_QUERY));
+                return false;
+            }
+        }
+
         if (m_xAggregateSet.is())
         {
             //Dig out a suitable parent for any warning dialogs
@@ -3129,7 +3145,7 @@ bool ODatabaseForm::impl_approveRowChange_throw( const EventObject& _rEvent, con
 bool ODatabaseForm::approveCursorMove(const EventObject& event)
 {
     // is our aggregate calling?
-    if (event.Source == css::uno::Reference<css::uno::XInterface>(static_cast<XWeak*>(this)))
+    if (event.Source == cpo::uno::Reference<cpo::uno::XInterface>(static_cast<XWeak*>(this)))
     {
         // Our aggregate doesn't have any ApproveRowSetListeners (expect ourself), as we re-routed the queryInterface
         // for XRowSetApproveBroadcaster-interface.
@@ -3175,7 +3191,7 @@ bool ODatabaseForm::approveCursorMove(const EventObject& event)
 bool ODatabaseForm::approveRowChange(const RowChangeEvent& event)
 {
     // is our aggregate calling?
-    if (event.Source != css::uno::Reference<css::uno::XInterface>(static_cast<XWeak*>(this)))
+    if (event.Source != cpo::uno::Reference<cpo::uno::XInterface>(static_cast<XWeak*>(this)))
         return true;
 
     // Our aggregate doesn't have any ApproveRowSetListeners (expect ourself), as we re-routed the queryInterface
@@ -3210,7 +3226,7 @@ bool ODatabaseForm::approveRowChange(const RowChangeEvent& event)
 
 bool ODatabaseForm::approveRowSetChange(const EventObject& event)
 {
-    if (event.Source == css::uno::Reference<css::uno::XInterface>(static_cast<XWeak*>(this))) // ignore our aggregate as we handle this approve ourself
+    if (event.Source == cpo::uno::Reference<cpo::uno::XInterface>(static_cast<XWeak*>(this))) // ignore our aggregate as we handle this approve ourself
     {
         ::osl::ClearableMutexGuard aGuard( m_aMutex );
         bool bWasLoaded = isLoaded();
@@ -3463,7 +3479,7 @@ bool ODatabaseForm::rowDeleted()
 }
 
 
-css::uno::Reference<css::uno::XInterface> ODatabaseForm::getStatement()
+cpo::uno::Reference<cpo::uno::XInterface> ODatabaseForm::getStatement()
 {
     return m_xAggregateAsRowSet->getStatement();
 }
@@ -4047,7 +4063,7 @@ void ODatabaseForm::implInserted( const ElementDescription* _pElement )
 }
 
 
-void ODatabaseForm::implRemoved(const css::uno::Reference<css::uno::XInterface>& _rxObject)
+void ODatabaseForm::implRemoved(const cpo::uno::Reference<cpo::uno::XInterface>& _rxObject)
 {
     OFormComponents::implRemoved( _rxObject );
 
@@ -4093,8 +4109,8 @@ void ODatabaseForm::setName(const OUString& aName)
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_forms_ODatabaseForm_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_forms_ODatabaseForm_get_implementation(cpo::uno::XComponentContext* context,
                                                          cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ODatabaseForm(context));

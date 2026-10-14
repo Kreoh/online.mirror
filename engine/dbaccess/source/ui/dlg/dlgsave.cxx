@@ -31,7 +31,7 @@
 using namespace dbaui;
 using namespace dbtools;
 using namespace ::com::sun::star::container;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
@@ -46,7 +46,7 @@ IMPL_LINK(OSaveAsDlg, TextFilterHdl, OUString&, rTest, bool)
 }
 
 OSaveAsDlg::OSaveAsDlg(weld::Window * pParent,
-                       const Reference< XComponentContext >& _rxContext,
+                       const Reference< cpo::uno::XComponentContext >& _rxContext,
                        const OUString& rDefault,
                        const OUString& _sLabel,
                        const IObjectNameCheck& _rObjectNameCheck,

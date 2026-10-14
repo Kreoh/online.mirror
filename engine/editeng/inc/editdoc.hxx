@@ -57,23 +57,6 @@ bool IsScriptItemValid( sal_uInt16 nItemId, short nScriptType );
 
 EditCharAttrib* MakeCharAttrib( SfxItemPool& rPool, const SfxPoolItem& rAttr, sal_Int32 nS, sal_Int32 nE );
 
-class ContentAttribsInfo
-{
-private:
-    typedef std::vector<std::unique_ptr<EditCharAttrib> > CharAttribsType;
-
-    SfxItemSet          aPrevParaAttribs;
-    CharAttribsType     aPrevCharAttribs;
-
-public:
-                        ContentAttribsInfo( SfxItemSet aParaAttribs );
-
-    const SfxItemSet&       GetPrevParaAttribs() const  { return aPrevParaAttribs; }
-    const CharAttribsType&  GetPrevCharAttribs() const  { return aPrevCharAttribs; }
-
-    void AppendCharAttrib(EditCharAttrib* pNew);
-};
-
 typedef std::vector<Color> SvxColorList;
 
 enum class DeleteMode {
@@ -224,8 +207,8 @@ public:
     static void     FindAttribs( ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nEndPos, SfxItemSet& rCurSet );
 
     sal_Int32 GetPos(const ContentNode* pNode) const;
-    const ContentNode* GetObject(sal_Int32 nPos) const;
-    ContentNode* GetObject(sal_Int32 nPos);
+    const ContentNode& GetObject(sal_Int32 nPos) const;
+    ContentNode& GetObject(sal_Int32 nPos);
     sal_Int32 Count() const;
     void Insert(sal_Int32 nPos, std::unique_ptr<ContentNode> p);
     /// deletes

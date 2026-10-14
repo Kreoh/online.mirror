@@ -35,7 +35,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::comphelper;
@@ -200,7 +200,7 @@ namespace basprov
 
         if ( m_xContext.is() )
         {
-            Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( m_xContext );
+            Reference< frame::XDesktop > xDesktop = frame::Desktop::create( m_xContext );
 
             Reference < frame::XDispatchProvider > xProv( xDesktop->getCurrentFrame(), UNO_QUERY );
 

@@ -31,14 +31,14 @@
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/io/XInputStreamProvider.hpp>
 #include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace basctl
 {
 
 using namespace comphelper;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::io;
 
 VclPtr<DialogWindow> Shell::CreateDlgWin( const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rDlgName )
@@ -74,7 +74,7 @@ VclPtr<DialogWindow> Shell::CreateDlgWin( const ScriptDocument& rDocument, const
             if ( xISP.is() )
             {
                 // create dialog model
-                const Reference< XComponentContext >& xContext = comphelper::getProcessComponentContext();
+                const Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
                 Reference< container::XNameContainer > xDialogModel( xContext->getServiceManager()->createInstanceWithContext
                     ( u"com.sun.star.awt.UnoControlDialogModel"_ustr, xContext ), UNO_QUERY );
                 Reference< XInputStream > xInput( xISP->createInputStream() );

@@ -9,43 +9,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "helper/qahelper.hxx"
+#include "helper/FunctionTestBase.hxx"
 
 #include <address.hxx>
 #include <document.hxx>
-#include <rtl/string.hxx>
 
-class DynamicArrayTest : public ScModelTestBase
+class DynamicArrayTest : public FunctionTestBase
 {
-public:
-    DynamicArrayTest()
-        : ScModelTestBase(u"sc/qa/unit/data"_ustr)
-    {
-    }
 };
-
-namespace
-{
-// Walk column C from row 5 down to nLastRow on the given sheet.
-// Every non-empty C cell is a per-row equality comparison that the
-// fixture expects to evaluate to 1. A failure reports the row that
-// disagreed so the offending scenario is easy to spot.
-void assertRowChecks(ScDocument& rDocument, SCTAB nTab, SCROW nLastRow)
-{
-    for (SCROW nRow = 4; nRow <= nLastRow; ++nRow)
-    {
-        ScAddress aPosition(2, nRow, nTab);
-        if (rDocument.GetCellType(aPosition) == CELLTYPE_NONE)
-            continue;
-        const double fValue = rDocument.GetValue(aPosition);
-        if (fValue == 1.0)
-            continue;
-        const OString aLabel = "Sheet" + OString::number(nTab + 1) + " C"
-                               + OString::number(nRow + 1) + " verdict cell did not evaluate to TRUE";
-        CPPUNIT_ASSERT_EQUAL_MESSAGE(aLabel.getStr(), 1.0, fValue);
-    }
-}
-}
 
 CPPUNIT_TEST_FIXTURE(DynamicArrayTest, testDynamicArrayXlsxRoundTrip)
 {
@@ -69,6 +40,26 @@ CPPUNIT_TEST_FIXTURE(DynamicArrayTest, testDynamicArrayXlsxRoundTrip)
     checkVerdicts();
     saveAndReload(TestFilter::XLSX);
     checkVerdicts();
+}
+
+CPPUNIT_TEST_FIXTURE(DynamicArrayTest, testUnionSpillIntersectionOperatorXlsxRoundTrip)
+{
+    createScDoc("functions/dynamic_array/xlsx/UnionSpillIntersectionOperatorTest.xlsx");
+
+    auto checkVerdicts = [this](const char* pStage) {
+        ScDocument* pDocument = getScDoc();
+        assertRowChecks(*pDocument, 0, 200, pStage);
+    };
+
+    // The workbook is another application's, so the first check is against its stored
+    // results and each later one against ours, with the save and reload covering the export.
+    checkVerdicts("on import");
+    getScDoc()->CalcAll();
+    checkVerdicts("after a recalculation");
+    saveAndReload(TestFilter::XLSX);
+    checkVerdicts("after a save and reload");
+    getScDoc()->CalcAll();
+    checkVerdicts("after a recalculation of the reloaded document");
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

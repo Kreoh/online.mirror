@@ -49,7 +49,7 @@ void WeakComponentImplHelperBase::disposeOnDestruct()
 void WeakComponentImplHelperBase::disposing(std::unique_lock<std::mutex>&) {}
 
 void WeakComponentImplHelperBase::addEventListener(
-    css::uno::Reference<css::lang::XEventListener> const& rxListener)
+    cpo::uno::Reference<css::lang::XEventListener> const& rxListener)
 {
     std::unique_lock aGuard(m_aMutex);
     if (m_bDisposed)
@@ -58,7 +58,7 @@ void WeakComponentImplHelperBase::addEventListener(
 }
 
 void WeakComponentImplHelperBase::removeEventListener(
-    css::uno::Reference<css::lang::XEventListener> const& rxListener)
+    cpo::uno::Reference<css::lang::XEventListener> const& rxListener)
 {
     std::unique_lock aGuard(m_aMutex);
     maEventListeners.removeInterface(aGuard, rxListener);
@@ -79,13 +79,13 @@ static void checkInterface(cpo::uno::Type const& rType)
     {
         OUString msg("querying for interface \"" + rType.getTypeName() + "\": no interface type!");
         SAL_WARN("cppuhelper", msg);
-        throw css::uno::RuntimeException(msg);
+        throw cpo::uno::RuntimeException(msg);
     }
 }
 
 static bool isXInterface(typelib_TypeDescriptionReference const* pTypeLibType)
 {
-    return OUString::unacquired(&pTypeLibType->pTypeName) == "com.sun.star.uno.XInterface";
+    return OUString::unacquired(&pTypeLibType->pTypeName) == "cpo.uno.XInterface";
 }
 
 static bool td_equals(typelib_TypeDescriptionReference const* pTDR1,
@@ -118,18 +118,13 @@ static cppu::type_entry* getTypeEntries(cppu::class_data* cd)
                 {
                     OUString msg("type \"" + rType.getTypeName() + "\" is no interface type!");
                     SAL_WARN("cppuhelper", msg);
-                    throw css::uno::RuntimeException(msg);
+                    throw cpo::uno::RuntimeException(msg);
                 }
                 // ref is statically held by getCppuType()
                 pEntry->m_type.typeRef = rType.getTypeLibType();
             }
-            OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
             cd->m_storedTypeRefs = true;
         }
-    }
-    else
-    {
-        OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
     }
     return pEntries;
 }
@@ -222,7 +217,7 @@ static void* queryDeepNoXInterface(typelib_TypeDescriptionReference const* pDema
             OUString msg("cannot get type description for type \""
                          + OUString::unacquired(&pEntries[n].m_type.typeRef->pTypeName) + "\"!");
             SAL_WARN("cppuhelper", msg);
-            throw css::uno::RuntimeException(msg);
+            throw cpo::uno::RuntimeException(msg);
         }
     }
     return nullptr;

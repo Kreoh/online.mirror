@@ -49,90 +49,90 @@ class UniversalContentBroker :
                     css::util::XChangesListener>
 {
 public:
-    explicit UniversalContentBroker( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit UniversalContentBroker( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
     virtual ~UniversalContentBroker() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XComponent
-    virtual void SAL_CALL
+    virtual void
     dispose() override;
-    virtual void SAL_CALL
-    addEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
-    virtual void SAL_CALL
-    removeEventListener( const css::uno::Reference<
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    removeEventListener( const cpo::uno::Reference<
                             css::lang::XEventListener >& Listener ) override;
 
     // XInitialization
-    virtual void SAL_CALL
+    virtual void
     initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XContentProviderManager
-    virtual css::uno::Reference< css::ucb::XContentProvider > SAL_CALL
-    registerContentProvider( const css::uno::Reference< css::ucb::XContentProvider >&  Provider,
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
+    registerContentProvider( const cpo::uno::Reference< css::ucb::XContentProvider >&  Provider,
                              const OUString& Scheme,
                              bool ReplaceExisting ) override;
-    virtual void SAL_CALL
-    deregisterContentProvider( const css::uno::Reference< css::ucb::XContentProvider >&  Provider,
+    virtual void
+    deregisterContentProvider( const cpo::uno::Reference< css::ucb::XContentProvider >&  Provider,
                                const OUString& Scheme ) override;
-    virtual cpo::uno::Sequence< css::ucb::ContentProviderInfo > SAL_CALL
+    virtual cpo::uno::Sequence< css::ucb::ContentProviderInfo >
     queryContentProviders() override;
-    virtual css::uno::Reference< css::ucb::XContentProvider > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
     queryContentProvider( const OUString& Identifier ) override;
 
     // XContentProvider
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
-    virtual sal_Int32 SAL_CALL
-    compareContentIds( const css::uno::Reference< css::ucb::XContentIdentifier >& Id1,
-                       const css::uno::Reference< css::ucb::XContentIdentifier >& Id2 ) override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    queryContent( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
+    virtual sal_Int32
+    compareContentIds( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Id1,
+                       const cpo::uno::Reference< css::ucb::XContentIdentifier >& Id2 ) override;
 
     // XContentIdentifierFactory
-    virtual css::uno::Reference< css::ucb::XContentIdentifier > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
     createContentIdentifier( const OUString& ContentId ) override;
 
     // XCommandProcessor
-    virtual sal_Int32 SAL_CALL
+    virtual sal_Int32
     createCommandIdentifier() override;
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
     execute( const css::ucb::Command& aCommand,
              sal_Int32 CommandId,
-             const css::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
-    virtual void SAL_CALL
+             const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+    virtual void
     abort( sal_Int32 CommandId ) override;
 
     // XCommandProcessor2
-    virtual void SAL_CALL releaseCommandIdentifier(sal_Int32 aCommandId) override;
+    virtual void releaseCommandIdentifier(sal_Int32 aCommandId) override;
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred( const css::util::ChangesEvent& Event ) override;
+    virtual void changesOccurred( const css::util::ChangesEvent& Event ) override;
 
      // XEventListener ( base of XChangesLisetenr )
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
 private:
-    css::uno::Reference< css::ucb::XContentProvider >
+    cpo::uno::Reference< css::ucb::XContentProvider >
     queryContentProvider( const OUString& Identifier,
                           bool bResolved );
 
-    static css::uno::Reference< css::ucb::XCommandInfo >
+    static cpo::uno::Reference< css::ucb::XCommandInfo >
     getCommandInfo();
 
     /// @throws cpo::uno::Exception
     void
     globalTransfer(
             const css::ucb::GlobalTransferCommandArgument2 & rArg,
-            const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
 
     /// @throws cpo::uno::Exception
     cpo::uno::Any checkIn( const css::ucb::CheckinArgument& rArg,
-            const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
 
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void configureUcb();
 
     bool getContentProviderData(
@@ -142,10 +142,10 @@ private:
 
     void prepareAndRegister( const ucbhelper::ContentProviderDataList& rData);
 
-    css::uno::Reference<
-        css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference<
+        cpo::uno::XComponentContext > m_xContext;
 
-    css::uno::Reference<
+    cpo::uno::Reference<
         css::util::XChangesNotifier > m_xNotifier;
 
     cpo::uno::Sequence< cpo::uno::Any > m_aArguments;

@@ -24,7 +24,7 @@
 #include <framework/factories/BasicToolBarFactory.hxx>
 #include <DrawController.hxx>
 #include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 
 #include <tools/ConfigurationAccess.hxx>
@@ -35,7 +35,7 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace sd::framework {
 
@@ -73,7 +73,7 @@ ModuleController::ModuleController(const rtl::Reference<::sd::DrawController>& r
 
         InstantiateStartupServices();
     }
-    catch (RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {}
 }
 
@@ -143,7 +143,7 @@ void ModuleController::requestResource (const OUString& rsResourceURL)
     else if (iFactory->second == ResourceFactoryId::BasicToolBarFactory)
         xFactory = new BasicToolBarFactory(mxController);
     else
-        throw RuntimeException(u"unknown factory"_ustr);
+        throw cpo::uno::RuntimeException(u"unknown factory"_ustr);
 
     // Remember that this factory has been instanced.
     maLoadedFactories[iFactory->second] = xFactory.get();

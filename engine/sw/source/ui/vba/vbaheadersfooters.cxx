@@ -24,6 +24,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -32,14 +33,14 @@ class HeadersFootersIndexAccess : public ::cppu::WeakImplHelper<container::XInde
 {
 private:
     uno::Reference< XHelperInterface > mxParent;
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     rtl::Reference< SwXTextDocument > mxModel;
     uno::Reference< beans::XPropertySet > mxPageStyleProps;
     bool mbHeader;
 
 public:
     HeadersFootersIndexAccess( uno::Reference< XHelperInterface > xParent,
-                               uno::Reference< uno::XComponentContext > xContext,
+                               uno::Reference< cpo::uno::XComponentContext > xContext,
                                rtl::Reference< SwXTextDocument > xModel,
                                uno::Reference< beans::XPropertySet > xPageStyleProps,
                                bool bHeader )
@@ -50,22 +51,22 @@ public:
       mbHeader( bHeader ) {}
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount(  ) override
+    virtual sal_Int32 getCount(  ) override
     {
         // first page, even pages and primary page
         return 3;
     }
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override
     {
         if( Index < 1 || Index > 3 )
             throw lang::IndexOutOfBoundsException();
         return cpo::uno::Any( uno::Reference< word::XHeaderFooter >( new SwVbaHeaderFooter( mxParent,  mxContext, mxModel, mxPageStyleProps, mbHeader, Index ) ) );
     }
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override
+    virtual cpo::uno::Type getElementType(  ) override
     {
         return cppu::UnoType<word::XHeaderFooter>::get();
     }
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual bool hasElements(  ) override
     {
         return true;
     }
@@ -77,12 +78,12 @@ class HeadersFootersEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 m_nIndex;
 public:
     explicit HeadersFootersEnumWrapper( SwVbaHeadersFooters* _pHeadersFooters ) : m_pHeadersFooters( _pHeadersFooters ), m_nIndex( 0 ) {}
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( m_nIndex < m_pHeadersFooters->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( m_nIndex < m_pHeadersFooters->getCount() )
             return m_pHeadersFooters->Item( cpo::uno::Any( ++m_nIndex ), cpo::uno::Any() );
@@ -93,7 +94,7 @@ public:
 }
 
 SwVbaHeadersFooters::SwVbaHeadersFooters( const uno::Reference< XHelperInterface >& xParent,
-                                          const uno::Reference< uno::XComponentContext > & xContext,
+                                          const uno::Reference< cpo::uno::XComponentContext > & xContext,
                                           const rtl::Reference< SwXTextDocument >& xModel,
                                           const uno::Reference< beans::XPropertySet >& xPageStyleProps,
                                           bool isHeader )
@@ -102,13 +103,13 @@ SwVbaHeadersFooters::SwVbaHeadersFooters( const uno::Reference< XHelperInterface
 {
 }
 
-::sal_Int32 SAL_CALL SwVbaHeadersFooters::getCount()
+::sal_Int32 SwVbaHeadersFooters::getCount()
 {
     // wdHeaderFooterFirstPage, wdHeaderFooterPrimary and wdHeaderFooterEvenPages
     return 3;
 }
 
-cpo::uno::Any SAL_CALL SwVbaHeadersFooters::Item( const cpo::uno::Any& Index1, const cpo::uno::Any& )
+cpo::uno::Any SwVbaHeadersFooters::Item( const cpo::uno::Any& Index1, const cpo::uno::Any& )
 {
     sal_Int32 nIndex = 0;
     Index1 >>= nIndex;

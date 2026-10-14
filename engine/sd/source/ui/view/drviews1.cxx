@@ -70,6 +70,7 @@
 #include <controller/SlsPageSelector.hxx>
 
 #include <comphelper/kit.hxx>
+#include <tools/json_writer.hxx>
 #include <COKit/COKit.hxx>
 #include <vcl/uitest/logger.hxx>
 #include <vcl/uitest/eventdescription.hxx>
@@ -163,19 +164,7 @@ void DrawViewShell::SelectionHasChanged()
 {
     Invalidate();
 
-    // Auto-switch to individual handles when a multi-selection is first
-    // formed (like F8 / Toggle Point Edit Mode). Only do this the moment
-    // the selection changes between one shape and many. This method runs
-    // on every selection change. If it switched every time, it would
-    // undo the Point Edit Mode setting the user chose while the same
-    // shapes stay selected.
-    const bool bMultiSelection
-        = mpDrawView->GetMarkedObjectList().GetMarkCount() > 1;
-    if (bMultiSelection != mbWasMultiSelection)
-    {
-        mpDrawView->SetFrameDragSingles(!bMultiSelection);
-        mbWasMultiSelection = bMultiSelection;
-    }
+    mpDrawView->AdjustFrameHandlesToMarkCount();
 
     //Update3DWindow(); // 3D-Controller
     SfxBoolItem aItem( SID_3D_STATE, true );
@@ -421,6 +410,12 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
                 nActualPageId = pPage->getPageId();
             }
         }
+
+        // The identifier read at the start of this function names a tab of the list the view is
+        // leaving, so the list just built holds no tab under it. The page this view sits on is the
+        // one to come back to, and every view keeps its own.
+        if (maTabControl->GetPagePos(nActualPageId) == TabBar::PAGE_NOT_FOUND && mpActualPage)
+            nActualPageId = mpActualPage->getPageId();
 
         maTabControl->SetCurPageId(nActualPageId);
 
@@ -780,8 +775,10 @@ bool DrawViewShell::ActivateObject(SdrOle2Obj* pObj, sal_Int32 nVerb)
 /**
  * Mark the desired page as selected (1), deselected (0), toggle (2).
  * nPage refers to the page in question.
+ * With bUpdateCurrentPage false the current page stays where it is instead
+ * of moving to the first slide of the new selection.
  */
-bool DrawViewShell::SelectPage(sal_uInt16 nPage, sal_uInt16 nSelect)
+bool DrawViewShell::SelectPage(sal_uInt16 nPage, sal_uInt16 nSelect, bool bUpdateCurrentPage)
 {
     SdPage* pPage = GetDoc()->GetSdPage(nPage, PageKind::Standard);
     if (!pPage)
@@ -795,13 +792,15 @@ bool DrawViewShell::SelectPage(sal_uInt16 nPage, sal_uInt16 nSelect)
     {
         GetDoc()->SetSelected(pPage, true); // Select.
         if (pSlideSorterVS)
-            pSlideSorterVS->GetSlideSorter().GetController().GetPageSelector().SelectPage(nPage);
+            pSlideSorterVS->GetSlideSorter().GetController().GetPageSelector().SelectPage(
+                nPage, bUpdateCurrentPage);
     }
     else
     {
         GetDoc()->SetSelected(pPage, false); // Deselect.
         if (pSlideSorterVS)
-            pSlideSorterVS->GetSlideSorter().GetController().GetPageSelector().DeselectPage(nPage);
+            pSlideSorterVS->GetSlideSorter().GetController().GetPageSelector().DeselectPage(
+                nPage, bUpdateCurrentPage);
     }
 
     return true;
@@ -964,6 +963,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
         if (bAllowChangeFocus && !KitHelper::isSettingView())
             mpDrawView->SdrEndTextEdit();
 
+        SdPage* pPreviousPage = mpActualPage;
         mpActualPage = nullptr;
 
         if (meEditMode == EditMode::Page)
@@ -973,10 +973,26 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
         else
         {
             SdPage* pMaster = GetDoc()->GetMasterSdPage(nSelectedPage, mePageKind);
+            sal_uInt16 nPageCount = GetDoc()->GetSdPageCount(mePageKind);
+
+            // Under COOL the selection is a property of the document that every view writes, so
+            // the page this view was on comes first when it fits to the masterpage.
+            if (comphelper::COKit::isActive())
+            {
+                for (sal_uInt16 i = 0; i < nPageCount; i++)
+                {
+                    SdPage* pPage = GetDoc()->GetSdPage(i, mePageKind);
+                    if (pPage && pPage == pPreviousPage
+                        && pMaster == &(pPage->TRG_GetMasterPage()))
+                    {
+                        mpActualPage = pPage;
+                        break;
+                    }
+                }
+            }
 
             // does the selected page fit to the masterpage?
-            sal_uInt16 nPageCount = GetDoc()->GetSdPageCount(mePageKind);
-            for (sal_uInt16 i = 0; i < nPageCount; i++)
+            for (sal_uInt16 i = 0; !mpActualPage && i < nPageCount; i++)
             {
                 SdPage* pPage = GetDoc()->GetSdPage(i, mePageKind);
                 if(pPage && pPage->IsSelected() && pMaster == &(pPage->TRG_GetMasterPage()))
@@ -1060,7 +1076,14 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
             SdrPageView* pPV = mpDrawView->GetSdrPageView();
             SdPage* pCurrentPage = pPV ? dynamic_cast<SdPage*>(pPV->GetPage()) : nullptr;
 
-            bool bChangeZoom = false;
+            SdPage* pSelectedPage = GetDoc()->GetSdPage(nSelectedPage, mePageKind);
+
+            // The canvas page and a normal slide are each viewed at their own zoom level, so a
+            // switch between the two kinds of page carries a new zoom. The kind of page being
+            // left is taken from the page this view last showed, which still answers after a
+            // removal has taken that page out of the view.
+            const bool bChangeZoom
+                = mbShowedCanvasPage || (pSelectedPage && pSelectedPage->IsCanvasPage());
 
             if (pCurrentPage)
             {
@@ -1068,12 +1091,9 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
                 const ::tools::Long nCurrentWidth = aCurrentPageSize.Width();
                 const ::tools::Long nCurrentHeight = aCurrentPageSize.Height();
 
-                SdPage* pSelectedPage = GetDoc()->GetSdPage(nSelectedPage, mePageKind);
                 Size aNewPageSize = pSelectedPage->GetSize();
                 const ::tools::Long nNewWidth = aNewPageSize.Width();
                 const ::tools::Long nNewHeight = aNewPageSize.Height();
-
-                bChangeZoom = pCurrentPage->IsCanvasPage() || pSelectedPage->IsCanvasPage();
 
                 if ((nCurrentWidth != nNewWidth || nCurrentHeight != nNewHeight) && bAllowChangeFocus)
                 {
@@ -1133,6 +1153,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
             mpDrawView->HideSdrPage();
             maTabControl->SetCurPageId(maTabControl->GetPageId(nSelectedPage));
             mpDrawView->ShowSdrPage(mpActualPage);
+            mbShowedCanvasPage = mpActualPage->IsCanvasPage();
             if (bAllowChangeFocus)
                 GetViewShellBase().GetDrawController()->FireSwitchCurrentPage(mpActualPage);
 
@@ -1249,6 +1270,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
 
             sal_uInt16 nNum = pMaster->GetPageNum();
             mpDrawView->ShowSdrPage(mpDrawView->GetModel().GetMasterPage(nNum));
+            mbShowedCanvasPage = false;
 
             if (bAllowChangeFocus)
                 GetViewShellBase().GetDrawController()->FireSwitchCurrentPage(pMaster);
@@ -1348,8 +1370,39 @@ bool DrawViewShell::IsSwitchPageAllowed() const
  * Select new refreshed page, in case of a page order change (eg. by undo)
  */
 
+/// Tells this view which layers it hides, as a state change carrying their ids. A view drawn
+/// from the model rather than from tiles has no other way to know, since the layer set lives in
+/// the page view and the payload it draws from is shared by every view of the page.
+void DrawViewShell::NotifyHiddenLayers()
+{
+    if (!comphelper::COKit::isActive() || !mpDrawView)
+        return;
+
+    SdrPageView* pPageView = mpDrawView->GetSdrPageView();
+    if (!pPageView)
+        return;
+
+    ::tools::JsonWriter aWriter;
+    aWriter.put("commandName", ".uno:LayerVisibility");
+    {
+        auto aHidden = aWriter.startArray("state");
+        const SdrLayerAdmin& rLayerAdmin = GetDoc()->GetLayerAdmin();
+        const SdrLayerIDSet& rVisible = pPageView->GetVisibleLayers();
+        for (sal_uInt16 nLayerPos = 0; nLayerPos < rLayerAdmin.GetLayerCount(); ++nLayerPos)
+        {
+            const SdrLayerID nId = rLayerAdmin.GetLayer(nLayerPos)->GetID();
+            if (!rVisible.IsSet(nId))
+                aWriter.putSimpleValue(sal_Int64(nId.get()));
+        }
+    }
+    GetViewShellBase().viewCallback(COKitCallbackType::STATE_CHANGED,
+                                    aWriter.finishAndGetAsOString());
+}
+
 void DrawViewShell::ResetActualLayer()
 {
+    NotifyHiddenLayers();
+
     LayerTabBar* pLayerBar = GetLayerTabControl();
     if (pLayerBar == nullptr)
         return;

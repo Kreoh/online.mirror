@@ -266,11 +266,6 @@ public:
         */
     const SfxPoolItemHolder& ExecuteSlot( SfxRequest &rReq, const SfxInterface *pIF = nullptr );
 
-    /**
-        Asynchronous ExecuteSlot for the RELOAD
-        */
-    void                        ExecuteSlot( SfxRequest &rReq, bool bAsync );
-
     inline SfxItemPool&         GetPool() const;
     inline void                 SetPool( SfxItemPool *pNewPool ) ;
 
@@ -431,16 +426,11 @@ public:
     // TODO/CLEANUP: still needed?!
     void SetVerbs(const cpo::uno::Sequence < css::embed::VerbDescriptor >& aVerbs);
     const cpo::uno::Sequence < css::embed::VerbDescriptor >& GetVerbs() const;
-    void                        VerbExec (SfxRequest&);
-    static void                 VerbState (SfxItemSet&);
-    SAL_DLLPRIVATE const SfxSlot* GetVerbSlot_Impl(sal_uInt16 nId) const;
 
     virtual SfxObjectShell*     GetObjectShell();
     void                        SetDisableFlags( SfxDisableFlags nFlags );
     SfxDisableFlags             GetDisableFlags() const;
 
-    virtual std::optional<SfxItemSet> CreateItemSet( sal_uInt16 nId );
-    virtual void                ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet );
 
     /** Set the name of the sidebar context that is broadcast on calls
         to Activation().

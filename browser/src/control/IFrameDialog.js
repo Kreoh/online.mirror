@@ -18,7 +18,10 @@ window.L.IFrameDialog = window.L.Class.extend({
 
 	options: {
 		prefix: 'iframe-none',
-		method: 'get'
+		method: 'get',
+		// Called instead of remove when the user closes the dialog with Escape or the close
+		// button of its title bar. It is then in charge of removing the dialog.
+		onUserClose: null
 	},
 
 	initialize: function (url, params, element, options) {
@@ -36,7 +39,7 @@ window.L.IFrameDialog = window.L.Class.extend({
 			title.innerText = this.options.title || _('Options');
 			const closeButton = window.L.DomUtil.create('button', 'ui-button ui-corner-all ui-widget ui-button-icon-only ui-dialog-titlebar-close', titlebar);
 			window.L.DomUtil.create('span', 'ui-button-icon ui-icon ui-icon-closethick', closeButton);
-			window.L.DomEvent.on(closeButton, 'click', () => this.remove(this._container));
+			window.L.DomEvent.on(closeButton, 'click', () => this._closeByUser());
 			this._draggable = new window.L.Draggable(this._container, titlebar);
 			this._draggable.enable();
 		}
@@ -52,6 +55,9 @@ window.L.IFrameDialog = window.L.Class.extend({
 		}
 
 		this._iframe = window.L.DomUtil.create('iframe', this.options.prefix + '-modal', content);
+		if (this.options.sandbox !== undefined) {
+			this._iframe.setAttribute('sandbox', this.options.sandbox);
+		}
 		if (form) {
 			this._iframe.name = form.target;
 		}
@@ -132,13 +138,16 @@ window.L.IFrameDialog = window.L.Class.extend({
 			this.addStyleSheets(this.options.stylesheets);
 		}
 
-		// Listen for Escape inside the iframe for when the iframe has focus.
+		// Listen for Escape inside the iframe for when the iframe has focus, unless the
+		// iframe has an origin of its own and handles Escape itself:
 		var self = this;
-		this._iframe.contentDocument.addEventListener('keydown', function(e) {
-			if (e.key === 'Escape') {
-				self.remove();
-			}
-		});
+		if (this._iframe.contentDocument) {
+			this._iframe.contentDocument.addEventListener('keydown', function(e) {
+				if (e.key === 'Escape') {
+					self._closeByUser();
+				}
+			});
+		}
 	},
 
 	addStyleSheet: function (href) {
@@ -176,6 +185,13 @@ window.L.IFrameDialog = window.L.Class.extend({
 		}
 	},
 
+	_closeByUser: function () {
+		if (this.options.onUserClose)
+			this.options.onUserClose();
+		else
+			this.remove();
+	},
+
 	remove: function () {
 		if (this._draggable) {
 			this._draggable.disable();
@@ -194,6 +210,11 @@ window.L.IFrameDialog = window.L.Class.extend({
 
 	queryContainer: function () {
 		return document.body.querySelector('.' + this.options.prefix + '-wrap');
+	},
+
+	// Whether source is the window of this dialog's iframe:
+	isFrameWindow: function (source) {
+		return !!this._iframe && source === this._iframe.contentWindow;
 	},
 
 	postMessage: function (msg) {

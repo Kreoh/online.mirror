@@ -357,6 +357,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/loader,\
 	XImplementationLoader \
 ))
 $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/reflection,\
+	Annotation \
 	FieldAccessMode \
 	InvalidTypeNameException \
 	InvocationTargetException \
@@ -365,6 +366,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/reflection,\
 	ParamInfo \
 	ParamMode \
 	TypeDescriptionSearchDepth \
+	XAnnotations \
 	XArrayTypeDescription \
 	XCompoundTypeDescription \
 	XConstantTypeDescription \
@@ -440,7 +442,6 @@ $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/script,\
 	XInvocation \
 	XInvocation2 \
 	XInvocationAdapterFactory \
-	XInvocationAdapterFactory2 \
 	XScriptEventsAttacher \
 	XScriptEventsSupplier \
 	XScriptListener \
@@ -462,17 +463,13 @@ $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/task,\
 	XInteractionRetry \
 ))
 $(eval $(call gb_UnoApi_add_idlfiles,udkapi,cpo/uno,\
+	DeploymentException \
+	RuntimeException \
+	SecurityException \
 	TypeClass \
 	XAdapter \
 	XNamingService \
 	XUnloadingPreference \
-))
-$(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/uno,\
-	DeploymentException \
-	RuntimeException \
-	SecurityException \
-	XComponentContext \
-	XInterface \
 ))
 $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/uri,\
 	RelativeUriExcessParentSegments \
@@ -493,7 +490,9 @@ $(eval $(call gb_UnoApi_add_idlfiles,udkapi,com/sun/star/util,\
 $(eval $(call gb_UnoApi_add_idlfiles,udkapi,cpo/uno,\
 	Exception \
 	XAggregation \
+	XComponentContext \
 	XCurrentContext \
+	XInterface \
 	XReference \
 	XWeak \
 ))

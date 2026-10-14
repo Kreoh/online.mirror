@@ -130,7 +130,6 @@ namespace chelp {
 
         OUString get_jar();
 
-        const OUString& get_ExtensionRegistryPath() const { return m_aExtensionRegistryPath; }
 
         const OUString& get_module() const { return m_aModule; }
 
@@ -156,9 +155,9 @@ namespace chelp {
 
         OString getByName( const char* par );
 
-        void open( const css::uno::Reference< css::io::XActiveDataSink >& xDataSink );
+        void open( const cpo::uno::Reference< css::io::XActiveDataSink >& xDataSink );
 
-        void open( const css::uno::Reference< css::io::XOutputStream >& xDataSink );
+        void open( const cpo::uno::Reference< css::io::XOutputStream >& xDataSink );
 
     private:
 
@@ -175,7 +174,6 @@ namespace chelp {
         OUString  m_aModule;
         OUString  m_aTitle;
         OUString  m_aJar;
-        OUString  m_aExtensionRegistryPath;
         OUString  m_aEid;
         OUString  m_aDbPar;
 

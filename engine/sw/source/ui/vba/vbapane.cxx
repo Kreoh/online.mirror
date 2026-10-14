@@ -24,9 +24,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaPane::SwVbaPane( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                      const uno::Reference< uno::XComponentContext >& rContext,
+                      const uno::Reference< cpo::uno::XComponentContext >& rContext,
                       rtl::Reference< SwXTextDocument > xModel )
 : SwVbaPane_BASE( rParent, rContext ),
   mxModel(std::move( xModel ))
@@ -37,13 +38,13 @@ SwVbaPane::~SwVbaPane()
 {
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaPane::View()
 {
     return cpo::uno::Any( uno::Reference< word::XView >( new SwVbaView( this,  mxContext, mxModel ) ) );
 }
 
-void SAL_CALL
+void
 SwVbaPane::Close( )
 {
     dispatchRequests( static_cast<SfxBaseModel*>(mxModel.get()), u".uno:CloseWin"_ustr );

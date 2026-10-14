@@ -1,4 +1,4 @@
-/* global describe it cy beforeEach require */
+/* global describe it cy beforeEach expect require */
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
@@ -26,9 +26,8 @@ describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
 	});
 
 	it('Navigator visual test', function() {
-		cy.wait(500); // wait to make fully rendered
 		cy.cGet('#navigator-dock-wrapper').scrollTo(0,0,{ ensureScrollable: false });
-		cy.wait(500); // wait for animations
+		helper.processToIdle(this.win);
 		cy.cGet('#navigator-dock-wrapper').compareSnapshot('navigator_writer', 0.065);
 	});
 
@@ -39,11 +38,11 @@ describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
 		expandSection('Frames');
 		expandSection('Images');
 
-		cy.wait(500);
+		helper.processToIdle(this.win);
 
 		//Scroll back to Top
 		cy.cGet('#navigator-dock-wrapper').scrollTo(0,0, { ensureScrollable: false });
-		cy.wait(500);
+		helper.processToIdle(this.win);
 
 		// Doubleclick several items, and check if the document is scrolled to the right page
 		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Feedback').dblclick();
@@ -90,6 +89,8 @@ describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
 		// Type into whatever currently has focus (not directly into the input)
 		// so that focus being stolen mid-typing is detectable.
 		cy.cGet('body').type('Feedback');
+		// Give a delayed focus steal, if any, time to happen: the regression fired
+		// once the Outline tree processed the typed text, not on the first keystroke.
 		cy.wait(1000);
 
 		// Focus must remain in the search input and the whole word present.
@@ -112,6 +113,49 @@ describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
 		cy.cGet('#contenttree .ui-treeview-entry.highlighted').should('not.exist');
 	});
 
+	it('The close button hides the navigator, and the floating icon shows it again', function() {
+		cy.cGet('#navigation-sidebar').should('have.class', 'visible');
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+
+		desktopHelper.closeNavigatorSidebar();
+		helper.processToIdle(this.win);
+		cy.cGet('#navigation-sidebar').should('not.have.class', 'visible');
+		// The content tree is gone once core has closed its navigator.
+		cy.cGet('#contenttree').should('not.exist');
+		cy.getFrameWindow().should(function(win) {
+			expect(win.app.showNavigator).to.be.false;
+		});
+
+		cy.cGet('#navigator-floating-icon').click();
+		helper.processToIdle(this.win);
+		cy.cGet('#navigation-sidebar').should('have.class', 'visible');
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+	});
+
+	it('Saved settings open and close the navigator to match them', function() {
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+		cy.getFrameWindow().should(function(win) {
+			expect(win.app.showNavigator).to.be.true;
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.settings.applyBrowserSettings({ 'text.ShowNavigator': 'false' });
+			return helper.processToIdle(win);
+		});
+		cy.cGet('#navigation-sidebar').should('not.have.class', 'visible');
+		cy.cGet('#contenttree').should('not.exist');
+		cy.getFrameWindow().should(function(win) {
+			expect(win.app.showNavigator).to.be.false;
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.settings.applyBrowserSettings({ 'text.ShowNavigator': 'true' });
+			return helper.processToIdle(win);
+		});
+		cy.cGet('#navigation-sidebar').should('have.class', 'visible');
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+	});
+
 	it('Jump to element even when cursor not visible', function() {
 		// Expand Tables, Frames, Images
 		// Note click()/dblclick() scrolls the contenttree even if it would be not needed to click
@@ -130,7 +174,6 @@ describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
 
 		// Scroll document to the top so cursor is no longer visible, that turns following off
 		desktopHelper.scrollWriterDocumentToTop();
-		desktopHelper.updateFollowingUsers();
 
 		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Text').dblclick();
 		desktopHelper.assertVisiblePage(5, 6, 8);
@@ -160,7 +203,6 @@ describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
 
 		// Scroll document to the top so the text cursor is no longer visible.
 		desktopHelper.scrollWriterDocumentToTop();
-		desktopHelper.updateFollowingUsers();
 		desktopHelper.assertScrollbarPosition('vertical', 0, 10);
 
 		// Double-click an image on a different page (graphics10 is on page 5).

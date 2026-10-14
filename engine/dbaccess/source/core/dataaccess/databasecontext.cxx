@@ -65,7 +65,7 @@
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::frame;
@@ -91,7 +91,7 @@ namespace dbaccess
         class DatabaseDocumentLoader : public DatabaseDocumentLoader_Base
         {
         private:
-            Reference< XDesktop2 >               m_xDesktop;
+            Reference< XDesktop >               m_xDesktop;
             std::vector< const ODatabaseModelImpl* >  m_aDatabaseDocuments;
 
         public:
@@ -138,7 +138,7 @@ namespace dbaccess
                 {
                     const rtl::Reference< ODatabaseDocument > xMod( pCopy->getModel_noCreate() );
                     if (!xMod)
-                        throw uno::RuntimeException();
+                        throw cpo::uno::RuntimeException();
                     if( !xMod->getControllers()->hasMoreElements() )
                         xMod->close( false );
                 }
@@ -722,9 +722,9 @@ void ODatabaseContext::onBasicManagerCreated( const Reference< XModel >& _rxForD
 }   // namespace dbaccess
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_dba_ODatabaseContext_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new dbaccess::ODatabaseContext(context));
 }

@@ -96,7 +96,7 @@
 
 #include <memory>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::sdb;
@@ -121,9 +121,9 @@ using namespace ::comphelper;
 using namespace ::svx;
 
 // SbaTableQueryBrowser
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_openoffice_comp_dbu_ODatasourceBrowser_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     SolarMutexGuard aGuard;
     return cppu::acquire(new ::dbaui::SbaTableQueryBrowser(context));
@@ -539,7 +539,7 @@ void SbaTableQueryBrowser::InitializeGridModel(const Reference< css::form::XForm
 
         Reference< XLoadable > xFormAsLoadable;
         if (xGrid.is())
-            xFormAsLoadable.set(xGrid->getParent(), css::uno::UNO_QUERY);
+            xFormAsLoadable.set(xGrid->getParent(), cpo::uno::UNO_QUERY);
         if (xFormAsLoadable.is() && xFormAsLoadable->isLoaded())
         {
             // set the formats from the table
@@ -641,13 +641,13 @@ void SbaTableQueryBrowser::InitializeGridModel(const Reference< css::form::XForm
                     case DataType::BOOLEAN:
                     {
                         aCurrentModelType = u"CheckBox"_ustr;
-                        aInitialValues.emplace_back( "VisualEffect", Any( VisualEffect::FLAT ) );
+                        aInitialValues.emplace_back( u"VisualEffect"_ustr, Any( VisualEffect::FLAT ) );
                         sDefaultProperty = PROPERTY_DEFAULTSTATE;
 
                         sal_Int32 nNullable = ColumnValue::NULLABLE_UNKNOWN;
                         OSL_VERIFY( xColumn->getPropertyValue( PROPERTY_ISNULLABLE ) >>= nNullable );
                         aInitialValues.emplace_back(
-                            "TriState",
+                            u"TriState"_ustr,
                             Any( ColumnValue::NO_NULLS != nNullable )
                         );
                         if ( ColumnValue::NO_NULLS == nNullable )
@@ -657,7 +657,7 @@ void SbaTableQueryBrowser::InitializeGridModel(const Reference< css::form::XForm
 
                     case DataType::LONGVARCHAR:
                     case DataType::CLOB:
-                        aInitialValues.emplace_back( "MultiLine", Any( true ) );
+                        aInitialValues.emplace_back( u"MultiLine"_ustr, Any( true ) );
                         [[fallthrough]];
                     case DataType::BINARY:
                     case DataType::VARBINARY:
@@ -675,8 +675,8 @@ void SbaTableQueryBrowser::InitializeGridModel(const Reference< css::form::XForm
                         sDefaultProperty = PROPERTY_EFFECTIVEDEFAULT;
 
                         if ( xSupplier.is() )
-                            aInitialValues.emplace_back( "FormatsSupplier", Any( xSupplier ) );
-                        aInitialValues.emplace_back( "TreatAsNumber", Any( bFormattedIsNumeric ) );
+                            aInitialValues.emplace_back( u"FormatsSupplier"_ustr, Any( xSupplier ) );
+                        aInitialValues.emplace_back( u"TreatAsNumber"_ustr, Any( bFormattedIsNumeric ) );
                         aCopyProperties.emplace_back(PROPERTY_FORMATKEY );
                         break;
                 }
@@ -1476,7 +1476,7 @@ void SbaTableQueryBrowser::attachFrame(const Reference< css::frame::XFrame > & _
                 Reference< XUIElement > xUI(
                     xLayouter->getElement( u"private:resource/toolbar/toolbar"_ustr ),
                     UNO_SET_THROW );
-                m_xMainToolbar.set(xUI->getRealInterface(), css::uno::UNO_QUERY);
+                m_xMainToolbar.set(xUI->getRealInterface(), cpo::uno::UNO_QUERY);
                 OSL_ENSURE( m_xMainToolbar.is(), "SbaTableQueryBrowser::attachFrame: where's my toolbox?" );
             }
         }
@@ -2610,7 +2610,7 @@ bool SbaTableQueryBrowser::implSelect(const weld::TreeIter* pEntry)
                     Reference<XInterface> xObject;
                     if(xNameAccess->getByName(sSimpleName) >>= xObject) // remember the table or query object
                     {
-                        pData->xObjectProperties.set(xObject, css::uno::UNO_QUERY);
+                        pData->xObjectProperties.set(xObject, cpo::uno::UNO_QUERY);
                         // if the query contains a parameterized statement and preview is enabled we won't get any data.
                         if ( nCommandType == CommandType::QUERY && xObject.is() )
                         {
@@ -3186,7 +3186,7 @@ void SbaTableQueryBrowser::impl_initialize(const ::comphelper::NamedValueCollect
                 Reference< XChild > xChild( xConnection, UNO_QUERY );
                 Reference< XPropertySet > xDataSourceProperties;
                 if ( xChild.is() )
-                    xDataSourceProperties.set(xChild->getParent(), css::uno::UNO_QUERY);
+                    xDataSourceProperties.set(xChild->getParent(), cpo::uno::UNO_QUERY);
                 if ( xDataSourceProperties.is() )
                 {
                     try
@@ -3346,7 +3346,7 @@ bool SbaTableQueryBrowser::ensureConnection(const weld::TreeIter* pDSEntry, void
 
             // connect
             rConnection.reset(
-                connect(getDataSourceAccessor(*pDSEntry), sConnectingContext, nullptr),
+                connect(getDataSourceAccessor(*pDSEntry), sConnectingContext),
                 SharedConnection::TakeOwnership);
 
             // remember the connection
@@ -3482,10 +3482,6 @@ Any SbaTableQueryBrowser::getCurrentSelection(weld::TreeView& rControl) const
 vcl::Window* SbaTableQueryBrowser::getMenuParent() const
 {
     return m_pTreeView;
-}
-
-void SbaTableQueryBrowser::adjustMenuPosition(const weld::TreeView&, ::Point&) const
-{
 }
 
 bool SbaTableQueryBrowser::implGetQuerySignature( OUString& _rCommand, bool& _bEscapeProcessing )

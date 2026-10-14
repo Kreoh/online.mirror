@@ -444,7 +444,11 @@ def runtime_paths(rootfs: Path) -> list[Path]:
     paths: list[Path] = []
     for directory in roots:
         if directory.exists():
-            paths.extend(directory.rglob("*"))
+            # SBOM identities and references are provenance, not product copy.
+            paths.extend(
+                path for path in directory.rglob("*")
+                if not path.name.endswith("-sbom.spdx.json")
+            )
     return paths
 
 
@@ -485,6 +489,20 @@ def apply_rootfs(rootfs: Path, source_root: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(neutral_favicon, target)
 
+    # Change only the document display name; retain package identities and provenance.
+    sbom_path = rootfs / "usr/share/coolwsd/online-office-sbom.spdx.json"
+    sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
+    if sbom.get("@context") != "https://spdx.org/rdf/3.0.1/spdx-context.jsonld":
+        raise RuntimeError("expected an SPDX 3.0.1 Online Office SBOM")
+    graph = sbom.get("@graph")
+    if not isinstance(graph, list) or not all(isinstance(item, dict) for item in graph):
+        raise RuntimeError("SBOM graph is absent or malformed")
+    documents = [item for item in graph if item.get("type") == "SpdxDocument"]
+    if len(documents) != 1:
+        raise RuntimeError("SBOM must contain exactly one SPDX document")
+    documents[0]["name"] = PRODUCT_NAME
+    sbom_path.write_text(json.dumps(sbom, indent=2) + "\n", encoding="utf-8")
+
     scan_rootfs(rootfs, neutral_favicon)
 
 
@@ -512,12 +530,16 @@ def assert_runtime_identity(rootfs: Path, neutral_favicon: Path) -> None:
     if "UserInstallation=$SYSUSERCONFIG/onlineoffice/4" not in bootstrap:
         raise RuntimeError("engine user profile is not the neutral onlineoffice/4 path")
 
-    sboms = list(rootfs.rglob("*-sbom.spdx.json"))
-    if len(sboms) != 1 or sboms[0].name != "online-office-sbom.spdx.json":
-        raise RuntimeError(f"expected one neutral SBOM filename, found: {sboms}")
-    sbom = json.loads(sboms[0].read_text(encoding="utf-8"))
-    if sbom.get("name") != PRODUCT_NAME:
-        raise RuntimeError("SBOM document name is not Online Office")
+    sbom_path = rootfs / "usr/share/coolwsd/online-office-sbom.spdx.json"
+    sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
+    if sbom.get("@context") != "https://spdx.org/rdf/3.0.1/spdx-context.jsonld":
+        raise RuntimeError("expected an SPDX 3.0.1 Online Office SBOM")
+    graph = sbom.get("@graph")
+    if not isinstance(graph, list) or not all(isinstance(item, dict) for item in graph):
+        raise RuntimeError("SBOM graph is absent or malformed")
+    documents = [item for item in graph if item.get("type") == "SpdxDocument"]
+    if len(documents) != 1 or documents[0].get("name") != PRODUCT_NAME:
+        raise RuntimeError("SBOM must contain one neutral Online Office document")
 
     expected_hash = hashlib.sha256(neutral_favicon.read_bytes()).hexdigest()
     favicon = rootfs / "usr/share/coolwsd/browser/dist/images/favicon.ico"

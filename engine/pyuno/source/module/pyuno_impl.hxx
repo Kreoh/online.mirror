@@ -59,7 +59,7 @@ namespace com::sun::star::reflection { class XIdlReflection; }
 namespace com::sun::star::reflection { class XServiceConstructorDescription; }
 namespace com::sun::star::reflection { class XServiceTypeDescription2; }
 namespace com::sun::star::script { class XInvocation2; }
-namespace com::sun::star::script { class XInvocationAdapterFactory2; }
+namespace com::sun::star::script { class XInvocationAdapterFactory; }
 namespace com::sun::star::script { class XTypeConverter; }
 
 namespace pyuno
@@ -122,15 +122,15 @@ int PyUNOStruct_initType();
 
 PyRef PyUNO_new (
     const cpo::uno::Any & targetInterface,
-    const css::uno::Reference<css::lang::XSingleServiceFactory> & ssf );
+    const cpo::uno::Reference<css::lang::XSingleServiceFactory> & ssf );
 
 PyRef PyUNOStruct_new (
     const cpo::uno::Any &targetInterface,
-    const  css::uno::Reference<css::lang::XSingleServiceFactory> &ssf );
+    const  cpo::uno::Reference<css::lang::XSingleServiceFactory> &ssf );
 
 struct PyUNOInternals
 {
-    css::uno::Reference <css::script::XInvocation2> xInvocation;
+    cpo::uno::Reference <css::script::XInvocation2> xInvocation;
     cpo::uno::Any wrappedObject;
 };
 
@@ -141,11 +141,11 @@ typedef struct
 } PyUNO;
 
 PyObject* PyUNO_iterator_new (
-    const css::uno::Reference<css::container::XEnumeration>& xEnumeration);
+    const cpo::uno::Reference<css::container::XEnumeration>& xEnumeration);
 
 struct PyUNO_iterator_Internals
 {
-    css::uno::Reference <css::container::XEnumeration> xEnumeration;
+    cpo::uno::Reference <css::container::XEnumeration> xEnumeration;
 };
 
 typedef struct
@@ -155,11 +155,11 @@ typedef struct
 } PyUNO_iterator;
 
 PyObject* PyUNO_list_iterator_new (
-    const css::uno::Reference<css::container::XIndexAccess> &xIndexAccess);
+    const cpo::uno::Reference<css::container::XIndexAccess> &xIndexAccess);
 
 struct PyUNO_list_iterator_Internals
 {
-    css::uno::Reference <css::container::XIndexAccess> xIndexAccess;
+    cpo::uno::Reference <css::container::XIndexAccess> xIndexAccess;
     int index;
 };
 
@@ -174,16 +174,16 @@ PyRef ustring2PyString( std::u16string_view source );
 OUString pyString2ustring( PyObject *str );
 
 /// @throws css::reflection::InvocationTargetException
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 void raiseInvocationTargetExceptionWhenNeeded( const Runtime &runtime );
 
 PyRef PyUNO_callable_new (
-    const css::uno::Reference<css::script::XInvocation2> &xInv,
+    const cpo::uno::Reference<css::script::XInvocation2> &xInv,
     const OUString &methodName );
 
 PyRef PyUNO_service_constructor_new(
-    const css::uno::Reference<css::reflection::XServiceTypeDescription2>& xService,
-    const css::uno::Reference<css::reflection::XServiceConstructorDescription>& xConstructor);
+    const cpo::uno::Reference<css::reflection::XServiceTypeDescription2>& xService,
+    const cpo::uno::Reference<css::reflection::XServiceConstructorDescription>& xConstructor);
 
 PyObject* PyUNO_Type_new (const char *typeName , cpo::uno::TypeClass t , const Runtime &r );
 PyObject* PyUNO_Enum_new( const char *enumBase, const char *enumValue, const Runtime &r );
@@ -200,17 +200,17 @@ PyRef getClass( const OUString & name , const Runtime & runtime );
 PyRef getAnyClass( const Runtime &);
 PyObject *PyUNO_invoke( PyObject *object, const char *name , PyObject *args );
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 cpo::uno::Any PyEnum2Enum( PyObject *obj );
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 sal_Unicode PyChar2Unicode( PyObject *o );
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 cpo::uno::Type PyType2Type( PyObject * o );
 
 void raisePyExceptionWithAny( const cpo::uno::Any &a );
 const char *typeClassToString( cpo::uno::TypeClass t );
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 PyRef getObjectFromUnoModule( const Runtime &runtime, const char * object );
 
 bool isInterfaceClass( const Runtime &, PyObject *obj );
@@ -218,13 +218,13 @@ bool isInstanceOfStructOrException( PyObject *obj);
 
 struct RuntimeCargo
 {
-    css::uno::Reference< css::lang::XSingleServiceFactory > xInvocation;
-    css::uno::Reference< css::script::XTypeConverter> xTypeConverter;
-    css::uno::Reference< css::uno::XComponentContext > xContext;
-    css::uno::Reference< css::reflection::XIdlReflection > xCoreReflection;
-    css::uno::Reference< css::container::XHierarchicalNameAccess > xTdMgr;
-    css::uno::Reference< css::script::XInvocationAdapterFactory2 > xAdapterFactory;
-    css::uno::Reference< css::beans::XIntrospection > xIntrospection;
+    cpo::uno::Reference< css::lang::XSingleServiceFactory > xInvocation;
+    cpo::uno::Reference< css::script::XTypeConverter> xTypeConverter;
+    cpo::uno::Reference< cpo::uno::XComponentContext > xContext;
+    cpo::uno::Reference< css::reflection::XIdlReflection > xCoreReflection;
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess > xTdMgr;
+    cpo::uno::Reference< css::script::XInvocationAdapterFactory > xAdapterFactory;
+    cpo::uno::Reference< css::beans::XIntrospection > xIntrospection;
     PyRef dictUnoModule;
     osl::Module testModule;
     osl::Module unoTestModule;
@@ -245,9 +245,9 @@ struct stRuntimeImpl
 public:
     static void del( PyObject *self );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static PyRef create(
-        const css::uno::Reference< css::uno::XComponentContext > & xContext );
+        const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext );
 };
 
 
@@ -273,24 +273,24 @@ public:
     virtual ~Adapter() override;
 
     // XInvocation
-    virtual css::uno::Reference< css::beans::XIntrospectionAccess >
-           SAL_CALL getIntrospection(  ) override;
-    virtual cpo::uno::Any SAL_CALL invoke(
+    virtual cpo::uno::Reference< css::beans::XIntrospectionAccess >
+           getIntrospection(  ) override;
+    virtual cpo::uno::Any invoke(
         const OUString& aFunctionName,
         const cpo::uno::Sequence< cpo::uno::Any >& aParams,
         cpo::uno::Sequence< sal_Int16 >& aOutParamIndex,
         cpo::uno::Sequence< cpo::uno::Any >& aOutParam ) override;
 
-    virtual void SAL_CALL setValue(
+    virtual void setValue(
         const OUString& aPropertyName,
         const cpo::uno::Any& aValue ) override;
 
-    virtual cpo::uno::Any SAL_CALL getValue( const OUString& aPropertyName ) override;
-    virtual bool SAL_CALL hasMethod( const OUString& aName ) override;
-    virtual bool SAL_CALL hasProperty( const OUString& aName ) override;
+    virtual cpo::uno::Any getValue( const OUString& aPropertyName ) override;
+    virtual bool hasMethod( const OUString& aName ) override;
+    virtual bool hasProperty( const OUString& aName ) override;
 
     // XUnoTunnel
-    virtual sal_Int64 SAL_CALL getSomething(
+    virtual sal_Int64 getSomething(
         const cpo::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 };
 

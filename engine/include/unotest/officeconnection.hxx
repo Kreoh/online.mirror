@@ -22,13 +22,11 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <osl/process.h>
 #include <unotest/detail/unotestdllapi.hxx>
 
-namespace com::sun::star::uno {
-    class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace test {
 
@@ -46,7 +44,7 @@ public:
 
     void tearDown();
 
-    const css::uno::Reference< css::uno::XComponentContext >&
+    const cpo::uno::Reference< cpo::uno::XComponentContext >&
     getComponentContext() const { return context_;}
 
     // Must not be called before setUp or after tearDown:
@@ -54,7 +52,7 @@ public:
 
 private:
     oslProcess process_;
-    css::uno::Reference< css::uno::XComponentContext >
+    cpo::uno::Reference< cpo::uno::XComponentContext >
         context_;
 };
 

@@ -19,6 +19,7 @@
 
 #include <i18nlangtag/lang.h>
 #include <officecfg/Office/Calc.hxx>
+#include <drwlayer.hxx>
 #include <com/sun/star/embed/XEmbedObjectClipboardCreator.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/embed/MSOLEObjectSystemCreator.hpp>
@@ -76,6 +77,7 @@
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScViewFunc::PasteFromExcelClip(ScDocument& rClipDoc, SCTAB nSrcTab, SCCOL nPosX, SCROW nPosY,
                                     const Point* pLogicPos, bool bAllowDialogs)
@@ -298,7 +300,7 @@ bool ScViewFunc::PasteDataFormat( SotClipboardFormatId nFormatId,
 
             xStm->Seek(0);
 
-            css::uno::Reference< css::io::XInputStream > xInputStream( new utl::OInputStreamWrapper( *xStm ) );
+            cpo::uno::Reference< css::io::XInputStream > xInputStream( new utl::OInputStreamWrapper( *xStm ) );
             SvxDrawingLayerImport( pModel, xInputStream );
 
             // set everything to right layer:
@@ -655,16 +657,6 @@ bool ScViewFunc::PasteDataFormatSource( SotClipboardFormatId nFormatId,
                 // try to get the replacement image from the clipboard
                 Graphic aGraphic;
                 SotClipboardFormatId nGrFormat = SotClipboardFormatId::NONE;
-
-// (for Selection Manager in Trusted Solaris)
-#ifndef __sun
-                if( rDataHelper.GetGraphic( SotClipboardFormatId::SVXB, aGraphic ) )
-                    nGrFormat = SotClipboardFormatId::SVXB;
-                else if( rDataHelper.GetGraphic( SotClipboardFormatId::GDIMETAFILE, aGraphic ) )
-                    nGrFormat = SotClipboardFormatId::GDIMETAFILE;
-                else if( rDataHelper.GetGraphic( SotClipboardFormatId::BITMAP, aGraphic ) )
-                    nGrFormat = SotClipboardFormatId::BITMAP;
-#endif
 
                 // insert replacement image ( if there is one ) into the object helper
                 if ( nGrFormat != SotClipboardFormatId::NONE )

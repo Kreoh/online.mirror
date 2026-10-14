@@ -58,8 +58,8 @@
 using namespace com::sun::star;
 using namespace com::sun::star::container;
 using namespace com::sun::star::document;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::awt;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::xml::sax;
@@ -142,7 +142,7 @@ public:
 }
 
 SvxXMLXTableExportComponent::SvxXMLXTableExportComponent(
-    const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
     const uno::Reference<xml::sax::XDocumentHandler> & rHandler,
     const uno::Reference<container::XNameContainer >& xTable,
     uno::Reference<document::XGraphicStorageHandler> const & xGraphicStorageHandler)
@@ -164,7 +164,7 @@ SvxXMLXTableExportComponent::~SvxXMLXTableExportComponent()
 {
 }
 
-static void initializeStreamMetadata( const uno::Reference< uno::XInterface > &xOut )
+static void initializeStreamMetadata( const uno::Reference< cpo::uno::XInterface > &xOut )
 {
     uno::Reference< beans::XPropertySet > xProps( xOut, uno::UNO_QUERY );
     if( !xProps.is() )
@@ -200,8 +200,7 @@ static void createStorageStream( uno::Reference < io::XOutputStream > *xOut,
 bool SvxXMLXTableExportComponent::save(
         const OUString& rURL,
         const uno::Reference<container::XNameContainer >& xTable,
-        const uno::Reference<embed::XStorage >& xStorage,
-        OUString *pOptName )
+        const uno::Reference<embed::XStorage >& xStorage )
 {
     bool bRet = false;
     std::unique_ptr<SfxMedium> pMedium;
@@ -211,12 +210,9 @@ bool SvxXMLXTableExportComponent::save(
     bool bToStorage = aURLObj.GetProtocol() == INetProtocol::NotValid; // a relative path
     bool bSaveAsStorage = xTable->getElementType() == cppu::UnoType<awt::XBitmap>::get();
 
-    if( pOptName )
-        *pOptName = rURL;
-
     try
     {
-        const uno::Reference< uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+        const uno::Reference< cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
 
         uno::Reference< xml::sax::XWriter > xWriter = xml::sax::Writer::create( xContext );
 
@@ -276,8 +272,6 @@ bool SvxXMLXTableExportComponent::save(
                     OSL_FAIL( "no output stream!" );
                     return false;
                 }
-                if( pOptName )
-                    *pOptName = aPath;
             }
         }
 

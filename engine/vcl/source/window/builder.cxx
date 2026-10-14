@@ -39,8 +39,8 @@
 #include <vcl/toolkit/fmtfield.hxx>
 #include <vcl/toolkit/fixed.hxx>
 #include <vcl/toolkit/fixedhyper.hxx>
+#include <vcl/toolkit/floatwin.hxx>
 #include <vcl/headbar.hxx>
-#include <vcl/notebookbar/NotebookBarAddonsMerger.hxx>
 #include <vcl/toolkit/ivctrl.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/customwidget.hxx>
@@ -66,13 +66,7 @@
 #include <iconview.hxx>
 #include <svdata.hxx>
 #include <bitmaps.hlst>
-#include <managedmenubutton.hxx>
 #include <messagedialog.hxx>
-#include <ContextVBox.hxx>
-#include <DropdownBox.hxx>
-#include <OptionalBox.hxx>
-#include <PriorityMergedHBox.hxx>
-#include <PriorityHBox.hxx>
 #include <window.h>
 #include <xmlreader/xmlreader.hxx>
 #include <calendar.hxx>
@@ -168,7 +162,7 @@ SymbolType VclBuilder::mapStockToSymbol(std::u16string_view sType)
 
 namespace
 {
-    void setupFromActionName(Button *pButton, VclBuilder::stringmap &rMap, const css::uno::Reference<css::frame::XFrame>& rFrame);
+    void setupFromActionName(Button *pButton, VclBuilder::stringmap &rMap, const cpo::uno::Reference<css::frame::XFrame>& rFrame);
 
 #if defined SAL_LOG_WARN
     bool isButtonType(WindowType eType)
@@ -227,6 +221,11 @@ void Application::UICoverageReport(tools::JsonWriter& rJson,
             sAppName = "Impress";
             missingAppDialogUIs = jsdialog::completeImpressDialogList(entries);
             missingAppSidebarUIs = jsdialog::completeImpressSidebarList(entries);
+            break;
+        case COKitDocumentType::DRAWING:
+            sAppName = "Draw";
+            missingAppDialogUIs = jsdialog::completeDrawDialogList(entries);
+            // no sidebar list: SidebarList has no modules/sdraw/ entry
             break;
         default:
             sAppName = "Unknown";
@@ -313,13 +312,16 @@ std::unique_ptr<weld::Builder> Application::CreateInterimBuilder(vcl::Window* pP
     {
         // Notebookbar sub controls
         if (jsdialog::isInterimBuilderEnabledForNotebookbar(rUIFile))
-            return JSInstanceBuilder::CreateNotebookbarBuilder(pParent, AllSettings::GetUIRootDir(), rUIFile, css::uno::Reference<css::frame::XFrame>(), nKitWindowId);
+            return JSInstanceBuilder::CreateNotebookbarBuilder(pParent, AllSettings::GetUIRootDir(), rUIFile, cpo::uno::Reference<css::frame::XFrame>(), nKitWindowId);
         else if (jsdialog::isBuilderEnabledForFormulabar(rUIFile))
             return JSInstanceBuilder::CreateFormulabarBuilder(pParent, AllSettings::GetUIRootDir(),
                                                               rUIFile, nKitWindowId);
         else if (jsdialog::isBuilderEnabledForAddressInput(rUIFile))
             return JSInstanceBuilder::CreateAddressInputBuilder(
                 pParent, AllSettings::GetUIRootDir(), rUIFile, nKitWindowId);
+        else if (jsdialog::isBuilderEnabledForNotesPanel(rUIFile))
+            return JSInstanceBuilder::CreateNotesPanelBuilder(pParent, AllSettings::GetUIRootDir(),
+                                                              rUIFile, nKitWindowId);
         else
             SAL_WARN("vcl", "UI file not enabled for JSDialogs: " << rUIFile);
     }
@@ -337,7 +339,7 @@ std::unique_ptr<weld::MessageDialog> Application::CreateMessageDialog(weld::Widg
         return ImplGetSVData()->mpDefInst->CreateMessageDialog(pParent, eMessageType, eButtonType, rPrimaryMessage);
 }
 
-weld::Window* Application::GetFrameWeld(const css::uno::Reference<css::awt::XWindow>& rWindow)
+weld::Window* Application::GetFrameWeld(const cpo::uno::Reference<css::awt::XWindow>& rWindow)
 {
     return ImplGetSVData()->mpDefInst->GetFrameWeld(rWindow);
 }
@@ -612,10 +614,9 @@ OUString BuilderBase::finalizeValue(const OString& rContext, const OString& rVal
 void BuilderBase::resetParserState() { m_pParserState.reset(); }
 
 VclBuilder::VclBuilder(vcl::Window* pParent, std::u16string_view sUIDir, const OUString& sUIFile,
-                       OUString sID, css::uno::Reference<css::frame::XFrame> xFrame,
-                       bool bLegacy, std::unique_ptr<NotebookBarAddonsItem> pNotebookBarAddonsItem)
+                       OUString sID, cpo::uno::Reference<css::frame::XFrame> xFrame,
+                       bool bLegacy)
     : WidgetBuilder(sUIDir, sUIFile, bLegacy)
-    , m_pNotebookBarAddonsItem(std::move(pNotebookBarAddonsItem))
     , m_sID(std::move(sID))
     , m_pParent(pParent)
     , m_bToplevelParentFound(false)
@@ -1106,7 +1107,7 @@ namespace
         return extractBoolEntry(rMap, u"clickable"_ustr, false);
     }
 
-    void setupFromActionName(Button *pButton, VclBuilder::stringmap &rMap, const css::uno::Reference<css::frame::XFrame>& rFrame)
+    void setupFromActionName(Button *pButton, VclBuilder::stringmap &rMap, const cpo::uno::Reference<css::frame::XFrame>& rFrame)
     {
         if (!rFrame.is())
             return;
@@ -1348,9 +1349,8 @@ static ModuleMap g_aModuleMap;
 #if ENABLE_MERGELIBS
 static std::shared_ptr<NoAutoUnloadModule> g_pMergedLib = std::make_shared<NoAutoUnloadModule>();
 #endif
-
-#ifndef SAL_DLLPREFIX
-#  define SAL_DLLPREFIX ""
+#if ENABLE_UNITEDLIBS
+static std::shared_ptr<NoAutoUnloadModule> g_pUnitedLib = std::make_shared<NoAutoUnloadModule>();
 #endif
 
 #endif
@@ -1363,6 +1363,9 @@ void VclBuilderPreload()
 
 #if ENABLE_MERGELIBS
     g_pMergedLib->loadRelative(&thisModule, SVLIBRARY("merged"));
+#elif ENABLE_UNITEDLIBS
+    if (osl_isUnitedLibActive())
+        g_pUnitedLib->loadRelative(&thisModule, SVLIBRARY("united"));
 #else
 // find -name '*ui*' | xargs grep 'class=".*lo-' |
 //     sed 's/.*class="//' | sed 's/-.*$//' | sort | uniq
@@ -1403,11 +1406,9 @@ extern "C" VclBuilder::customMakeWidget lo_get_custom_widget_func(const char* na
 // that. So cheat and duplicate the code from an existing generated
 // native-code.h. It's just a handful of lines anyway.
 
-extern "C" void makeNotebookbarTabControl(VclPtr<vcl::Window> &rRet, const VclPtr<vcl::Window> &pParent, VclBuilder::stringmap &rVec);
 extern "C" void makeNotebookbarToolBox(VclPtr<vcl::Window> &rRet, const VclPtr<vcl::Window> &pParent, VclBuilder::stringmap &rVec);
 
 static struct { const char *name; VclBuilder::customMakeWidget func; } const custom_widgets[] = {
-    { "makeNotebookbarTabControl", makeNotebookbarTabControl },
     { "makeNotebookbarToolBox", makeNotebookbarToolBox },
 };
 
@@ -1446,6 +1447,15 @@ VclBuilder::customMakeWidget GetCustomMakeWidget(const OUString& rName)
             if ((pFunction = reinterpret_cast<VclBuilder::customMakeWidget>(
                      g_pMergedLib->getFunctionSymbol(sFunction))))
                 pModule = g_pMergedLib;
+#elif ENABLE_UNITEDLIBS
+            if (osl_isUnitedLibActive())
+            {
+                if (!g_pUnitedLib->is())
+                    g_pUnitedLib->loadRelative(&thisModule, SVLIBRARY("united"));
+                if ((pFunction = reinterpret_cast<VclBuilder::customMakeWidget>(
+                         g_pUnitedLib->getFunctionSymbol(sFunction))))
+                    pModule = g_pUnitedLib;
+            }
 #endif
             if (!pFunction)
             {
@@ -1748,41 +1758,6 @@ VclPtr<vcl::Window> VclBuilder::makeObject(vcl::Window *pParent, const OUString 
     {
         xWindow = VclPtr<VclCustomWidget>::Create(pParent);
     }
-    else if (name == "VclOptionalBox" || name == "sfxlo-OptionalBox")
-    {
-        // tdf#135495 fallback sfxlo-OptionalBox to VclOptionalBox as a stopgap
-        xWindow = VclPtr<OptionalBox>::Create(pParent);
-    }
-    else if (name == "svtlo-ManagedMenuButton")
-    {
-        // like tdf#135495 keep the name svtlo-ManagedMenuButton even though it's a misnomer
-        // and is not dlsymed from the svt library
-        xWindow = VclPtr<ManagedMenuButton>::Create(pParent, WB_CLIPCHILDREN|WB_CENTER|WB_VCENTER|WB_FLATBUTTON);
-        OUString sMenu = BuilderUtils::extractCustomProperty(rMap);
-        if (!sMenu.isEmpty())
-            m_pVclParserState->m_aButtonMenuMaps.emplace_back(id, sMenu);
-        setupFromActionName(static_cast<Button*>(xWindow.get()), rMap, m_xFrame);
-    }
-    else if (name == "sfxlo-PriorityMergedHBox")
-    {
-        // like tdf#135495 above, keep the sfxlo-PriorityMergedHBox even though its not in sfx anymore
-        xWindow = VclPtr<PriorityMergedHBox>::Create(pParent);
-    }
-    else if (name == "sfxlo-PriorityHBox")
-    {
-        // like tdf#135495 above, keep the sfxlo-PriorityMergedHBox even though its not in sfx anymore
-        xWindow = VclPtr<PriorityHBox>::Create(pParent);
-    }
-    else if (name == "sfxlo-DropdownBox")
-    {
-        // like tdf#135495 above, keep the sfxlo-PriorityMergedHBox even though its not in sfx anymore
-        xWindow = VclPtr<DropdownBox>::Create(pParent);
-    }
-    else if (name == "sfxlo-ContextVBox")
-    {
-        // like tdf#135495 above, keep the sfxlo-PriorityMergedHBox even though its not in sfx anymore
-        xWindow = VclPtr<ContextVBox>::Create(pParent);
-    }
     else if (name == "GtkIconView")
     {
         assert(rMap.contains(u"model"_ustr) && "GtkIconView must have a model");
@@ -2045,13 +2020,6 @@ VclPtr<vcl::Window> VclBuilder::makeObject(vcl::Window *pParent, const OUString 
     else if (name == "GtkToolbar")
     {
         xWindow = VclPtr<ToolBox>::Create(pParent, WB_3DLOOK | WB_TABSTOP);
-    }
-    else if(name == "NotebookBarAddonsToolMergePoint")
-    {
-        customMakeWidget pFunction = GetCustomMakeWidget(u"sfxlo-NotebookbarToolBox"_ustr);
-        if(pFunction != nullptr)
-            NotebookBarAddonsMerger::MergeNotebookBarAddons(pParent, pFunction, m_xFrame, *m_pNotebookBarAddonsItem, rMap);
-        return nullptr;
     }
     else if (isToolbarItemClass(name))
     {
@@ -2492,8 +2460,7 @@ VclPtr<vcl::Window> VclBuilder::insertObject(vcl::Window* pParent, const OUStrin
 }
 
 void VclBuilder::applyTabChildProperties(vcl::Window* pParent, const std::vector<OUString>& rIDs,
-                                         std::vector<vcl::EnumContext::Context>& rContext, stringmap& rProperties,
-                                         stringmap& rAtkProperties)
+                                         stringmap& rProperties, stringmap& rAtkProperties)
 {
     TabControl* pTabControl = isHorizontalTabControl(pParent) ? static_cast<TabControl*>(pParent) : nullptr;
     VerticalTabControl *pVerticalTabControl = pParent->GetType() == WindowType::VERTICALTABCONTROL ?
@@ -2509,11 +2476,6 @@ void VclBuilder::applyTabChildProperties(vcl::Window* pParent, const std::vector
             pTabControl->SetPageText(nPageId, aFind->second);
             pTabControl->SetPageName(nPageId, rIDs.back());
             pTabControl->SetHelpText(nPageId, sTooltip);
-            if (!rContext.empty())
-            {
-                TabPage* pPage = pTabControl->GetTabPage(nPageId);
-                pPage->SetContext(std::move(rContext));
-            }
 
             for (auto const& [ rKey, rValue ] : rAtkProperties)
             {
@@ -2974,21 +2936,6 @@ void VclBuilder::setRadioButtonGroup(const OUString& rRadioButtonId, const OUStr
     }
 }
 
-void VclBuilder::setPriority(vcl::Window* pWindow, int nPriority)
-{
-    vcl::IPrioritable* pPrioritable = dynamic_cast<vcl::IPrioritable*>(pWindow);
-    SAL_WARN_IF(!pPrioritable, "vcl", "priority set for not supported item");
-    if (pPrioritable)
-        pPrioritable->SetPriority(nPriority);
-}
-void VclBuilder::setContext(vcl::Window* pWindow, std::vector<vcl::EnumContext::Context>&& aContext)
-{
-    vcl::IContext* pContextControl = dynamic_cast<vcl::IContext*>(pWindow);
-    SAL_WARN_IF(!pContextControl, "vcl", "context set for not supported item");
-    if (pContextControl)
-        pContextControl->SetContext(std::move(aContext));
-}
-
 bool VclBuilder::isHorizontalTabControl(vcl::Window* pWindow)
 {
     return pWindow && pWindow->GetType() == WindowType::TABCONTROL;
@@ -3172,15 +3119,7 @@ void VclBuilder::insertMenuObject(PopupMenu* pParent, PopupMenu* pSubMenu, const
     sal_uInt16 nOldCount = pParent->GetItemCount();
     sal_uInt16 nNewId = ++m_pVclParserState->m_nLastMenuItemId;
 
-    if(rClass == "NotebookBarAddonsMenuMergePoint")
-    {
-        if (!comphelper::COKit::isActive())
-        {
-            NotebookBarAddonsMerger::MergeNotebookBarMenuAddons(pParent, nNewId, rID, m_xFrame, *m_pNotebookBarAddonsItem);
-        }
-        m_pVclParserState->m_nLastMenuItemId = pParent->GetItemCount();
-    }
-    else if (rClass == "GtkMenuItem")
+    if (rClass == "GtkMenuItem")
     {
         OUString sLabel(BuilderUtils::convertMnemonicMarkup(extractLabel(rProps)));
         OUString aCommand(extractActionName(rProps));
@@ -3441,10 +3380,8 @@ void VclBuilder::applyPackingProperties(vcl::Window* pCurrent, vcl::Window* pPar
     }
 }
 
-std::vector<vcl::EnumContext::Context> BuilderBase::handleStyle(xmlreader::XmlReader &reader, int &nPriority)
+void BuilderBase::handleStyle(xmlreader::XmlReader &reader)
 {
-    std::vector<vcl::EnumContext::Context> aContext;
-
     xmlreader::Span name;
     int nsId;
 
@@ -3464,18 +3401,9 @@ std::vector<vcl::EnumContext::Context> BuilderBase::handleStyle(xmlreader::XmlRe
             if (name == "class")
             {
                 OUString classStyle = getStyleClass(reader);
-                std::u16string_view rest;
 
-                if (classStyle.startsWith("context-", &rest))
-                {
-                    aContext.push_back(vcl::EnumContext::GetContextEnum(OUString(rest)));
-                }
-                else if (classStyle.startsWith("priority-", &rest))
-                {
-                    nPriority = o3tl::toInt32(rest);
-                }
-                else if (classStyle != "small-button" && classStyle != "destructive-action" &&
-                         classStyle != "suggested-action" && classStyle != "novertpad")
+                if (classStyle != "small-button" && classStyle != "destructive-action" &&
+                    classStyle != "suggested-action" && classStyle != "novertpad")
                 {
                     SAL_WARN("vcl.builder", "unknown class: " << classStyle);
                 }
@@ -3490,8 +3418,6 @@ std::vector<vcl::EnumContext::Context> BuilderBase::handleStyle(xmlreader::XmlRe
         if (!nLevel)
             break;
     }
-
-    return aContext;
 }
 
 OUString BuilderBase::getStyleClass(xmlreader::XmlReader &reader)

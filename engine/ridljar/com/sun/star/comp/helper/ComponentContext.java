@@ -20,8 +20,8 @@ package com.sun.star.comp.helper;
 import com.sun.star.uno.UnoRuntime;
 import com.sun.star.uno.Any;
 
-import com.sun.star.uno.DeploymentException;
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.DeploymentException;
+import cpo.uno.XComponentContext;
 import com.sun.star.lang.XMultiComponentFactory;
 import com.sun.star.lang.XSingleComponentFactory;
 import com.sun.star.lang.XComponent;
@@ -289,9 +289,9 @@ public class ComponentContext implements XComponentContext, XComponent
     public void addEventListener( XEventListener xListener )
     {
         if (xListener == null)
-            throw new com.sun.star.uno.RuntimeException( "Listener must not be null" );
+            throw new cpo.uno.RuntimeException( "Listener must not be null" );
           if (m_eventListener.contains( xListener ))
-              throw new com.sun.star.uno.RuntimeException( "Listener already registered." );
+              throw new cpo.uno.RuntimeException( "Listener already registered." );
 
            m_eventListener.add( xListener );
     }
@@ -299,9 +299,9 @@ public class ComponentContext implements XComponentContext, XComponent
     public void removeEventListener( XEventListener xListener )
     {
         if (xListener == null)
-            throw new com.sun.star.uno.RuntimeException( "Listener must not be null" );
+            throw new cpo.uno.RuntimeException( "Listener must not be null" );
           if (! m_eventListener.contains( xListener ))
-              throw new com.sun.star.uno.RuntimeException( "Listener is not registered." );
+              throw new cpo.uno.RuntimeException( "Listener is not registered." );
 
         m_eventListener.remove( xListener );
     }

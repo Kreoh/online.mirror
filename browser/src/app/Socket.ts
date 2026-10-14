@@ -23,6 +23,8 @@ class Socket {
 		TimeZone: '',
 	};
 	private IndirectSocketReconnectCount: number = 0;
+	// Runs while the document is being handed to another server. See beginMigration.
+	private _migrationTimer: TimeoutHdl | undefined;
 	private _initialConnectRetries: number = 0;
 	// Once the compact /cool/ws URL has failed to connect and we have dropped
 	// back to the legacy /cool/<doc>/ws URL, stay on the legacy URL for the
@@ -88,7 +90,7 @@ class Socket {
 
 		if (
 			window.Worker &&
-			(!(window as any).ThisIsAMobileApp || (window as any).mode.isCODesktop())
+			(!window.ThisIsAMobileApp || window.mode.isCODesktop())
 		) {
 			window.app.console.info('Creating TaskWorkers');
 			for (let i = 0; i < 4; ++i) {
@@ -215,6 +217,10 @@ class Socket {
 
 		if (this._map.uiManager && this._map.uiManager.isUIBlocked()) return;
 
+		// The changes of objects and the undos and redos of a view that draws from the objects
+		// go to the engine at its own pace, one at a time. The outbox holds them meanwhile.
+		if (typeof msg === 'string' && ChangeOutbox.take(msg)) return;
+
 		const socketState = this.socket.readyState;
 		if (socketState === 2 || socketState === 3) {
 			this._map.loadDocument();
@@ -292,6 +298,13 @@ class Socket {
 
 	public connect(socket: SockInterface): void {
 		const map = this._map;
+		// Keep the connection that is still opening. It reports itself as not connected
+		// until it settles, so a caller that asks again in that window gets the one that
+		// is already in flight.
+		if (!socket && this.socket && this.socket.readyState === 0) {
+			window.app.console.debug('connect: a connection is already opening');
+			return;
+		}
 		map._docHasPasswordToModify = false;
 		map._modifyPasswordProvided = false;
 		map.options.docParams['permission'] = app.getPermission();
@@ -379,13 +392,23 @@ class Socket {
 		}
 		this.socket.onerror = function () {};
 		this.socket.onclose = function () {};
-		this.socket.onmessage = function () {};
+		// In a mobile app the socket stays open as the link to the native shell, so events like
+		// OS back button still arrive.
+		this.socket.onmessage = window.ThisIsAMobileApp
+			? this._onShellEventWhileClosed.bind(this)
+			: function () {};
 		this.socket.close();
 
 		// Reset wopi's app loaded so that reconnecting again informs outerframe about initialization
 		this._map['wopi'].resetAppLoaded();
 		this._map.fire('docloaded', { status: false });
 		clearTimeout(this._accessTokenExpireTimeout);
+	}
+
+	private _onShellEventWhileClosed(evt: MessageEvent): void {
+		if (typeof evt.data === 'string' && evt.data.startsWith('mobile:')) {
+			this._onMessage({ textMsg: evt.data });
+		}
 	}
 
 	private _doSend(msg: MessageInterface): void {
@@ -451,13 +474,7 @@ class Socket {
 
 		msg += ' timezone=' + Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-		if (this._map.options.renderingOptions) {
-			const options = {
-				rendering: this._map.options.renderingOptions,
-			};
-			msg += ' options=' + JSON.stringify(options);
-		}
-		const spellOnline = window.prefs.get('spellOnline');
+		const spellOnline = window.prefs.spellOnlineForLoad();
 		if (spellOnline) {
 			msg += ' spellOnline=' + spellOnline;
 		}
@@ -477,7 +494,17 @@ class Socket {
 			darkTheme,
 		);
 		msg += ' darkBackground=' + darkBackground;
+		// The server-stored user settings can still be on their way here, and they
+		// win over what these two were worked out from. Keep them so that the
+		// answer they are replaced with can be sent to the engine, which has no
+		// other way of hearing about it (see initDarkModeFromSettings).
+		this._map.uiManager.rememberThemeSentWithLoad(darkTheme, darkBackground);
 		this._map.uiManager.initDarkBackgroundUI(darkBackground);
+
+		const focusRingColor = window.getFocusRingColor();
+		if (focusRingColor) {
+			msg += ' focusRingColor=' + focusRingColor;
+		}
 
 		msg += ' accessibilityState=' + window.getAccessibilityState();
 
@@ -492,20 +519,20 @@ class Socket {
 		app.idleHandler._activate();
 	}
 
-	private _onSocketClose(event: CloseEvent): void {
+	private _onSocketClose(event?: Partial<CloseEvent>): void {
+		const reason = event?.reason ?? '';
 		window.app.console.debug(
 			'_onSocketClose: code=' +
-				event.code +
+				event?.code +
 				' wasClean=' +
-				event.wasClean +
+				event?.wasClean +
 				' reason=' +
-				event.reason,
+				reason,
 		);
 		if (!this._map._docLoadedOnce && this.ReconnectCount === 0) {
 			let errorType: string = '';
 			let errorMsg: string;
 			let errorDetail: string | undefined;
-			const reason = event.reason;
 			if (reason && reason.startsWith('error:')) {
 				var command = this.parseServerCmd(reason);
 				errorDetail = command.errorDetail;
@@ -686,7 +713,7 @@ class Socket {
 		app.idleHandler._activate();
 	}
 
-	private _onSocketError(evt: Event): void {
+	private _onSocketError(evt?: Event): void {
 		window.app.console.warn('_onSocketError:', evt);
 		this._map.hideBusy();
 		// Let onclose (_onSocketClose) report errors.
@@ -729,31 +756,17 @@ class Socket {
 
 	private _sessionExpiredWarning(): void {
 		clearTimeout(this._accessTokenExpireTimeout);
-		let expirymsg = window.errorMessages.sessionexpiry;
-		if (
-			parseInt(this._map.options.docParams.access_token_ttl as string) -
-				Date.now() <=
-			0
-		) {
-			expirymsg = window.errorMessages.sessionexpired;
-		}
-		const dateTime = new Date(
-			parseInt(this._map.options.docParams.access_token_ttl as string),
-		);
-		const dateOptions: Intl.DateTimeFormatOptions = {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit',
-		};
-		const timerepr = dateTime.toLocaleDateString(String.locale, dateOptions);
-		this._map.fire('warn', { msg: expirymsg.replace('{time}', timerepr) });
-
-		// Notify the host so it can refresh the token programmatically.
 		const remainingMs =
 			parseInt(this._map.options.docParams.access_token_ttl as string) -
 			Date.now();
+		const expirymsg =
+			remainingMs <= 0
+				? window.errorMessages.sessionexpired
+				: window.errorMessages.sessionexpiry;
+		const timerepr = Util.humanizeDuration(remainingMs, 1);
+		this._map.fire('warn', { msg: expirymsg.replace('{time}', timerepr) });
+
+		// Notify the host so it can refresh the token programmatically.
 		this._map.fire('postMessage', {
 			msgId: 'App_TokenExpiring',
 			args: {
@@ -1068,6 +1081,7 @@ class Socket {
 			Util.ensureValue(command.type);
 			// initialize and append text input before doc layer
 			this._map.initTextInput(command.type);
+			app.initExportFormats(command.type);
 
 			// Reinitialize the menubar and top toolbar if browser settings are enabled.
 			// During the initial `initializeBasicUI` call, we don't know if compact mode is enabled.
@@ -1118,6 +1132,12 @@ class Socket {
 			// we are reconnecting ...
 			this._map._docLayer._resetClientVisArea();
 			RenderManager.refreshTilesInBackground();
+			// Vector content is pushed, and nothing was pushed here while the
+			// connection was down, so the cache is marked as stale. The requests
+			// sent before the connection dropped get no answer, so they are
+			// forgotten first.
+			RenderManager.forgetRequestsInFlight();
+			RenderManager.revalidateCachedParts();
 			this._map.fire('statusindicator', { statusType: 'reconnected' });
 
 			const darkTheme = window.prefs.getBoolean('darkTheme');
@@ -1131,7 +1151,7 @@ class Socket {
 			// close all the popups otherwise document textArea will not get focus
 			this._map.uiManager.closeAll();
 			this._map.setPermission(app.file.permission);
-			window.migrating = false;
+			this.endMigration();
 			this._map.uiManager.initializeSidebar();
 			this._map.uiManager.refreshTheme();
 		}
@@ -1425,12 +1445,24 @@ class Socket {
 		} else if (textMsg.startsWith('sliderenderingcomplete:')) {
 			this._onSlideRenderingCompleteMsg(textMsg, e);
 			return;
+		} else if (textMsg.startsWith('slideimport:')) {
+			this._onSlideImportMsg(textMsg);
+			return;
+		} else if (textMsg.startsWith('slidelinks:')) {
+			this._map.fire('slidelinks', {
+				message: JSON.parse(textMsg.substring('slidelinks:'.length + 1)),
+			});
+			return;
+		} else if (textMsg.startsWith('slidelink:')) {
+			this._map.fire('slidelink', {
+				message: JSON.parse(textMsg.substring('slidelink:'.length + 1)),
+			});
+			return;
+		} else if (textMsg.startsWith('remotedoccommandresult:')) {
+			this._onRemoteDocCommandResult(textMsg, e as SlurpMessageEvent);
+			return;
 		} else if (
-			!textMsg.startsWith('tile:') &&
-			!textMsg.startsWith('delta:') &&
-			!textMsg.startsWith('slidelayer:') &&
-			!textMsg.startsWith('zstdslidelayer:') &&
-			!textMsg.startsWith('windowpaint:')
+			!Socket.pixelFramePrefixes.some((prefix) => textMsg.startsWith(prefix))
 		) {
 			if (imgBytes !== undefined) {
 				try {
@@ -1475,12 +1507,34 @@ class Socket {
 			this._onHyperlinkClickedMsg(textMsg);
 		} else if (textMsg.startsWith('browsersetting:')) {
 			window.prefs._initializeBrowserSetting(textMsg);
+		} else if (textMsg.startsWith('remotelinks:')) {
+			const links = JSON.parse(textMsg.substring('remotelinks:'.length + 1));
+			app.remoteLinks = links.documents || [];
+			this._map.fire('remotelinks', {
+				documents: app.remoteLinks,
+			});
+		} else if (textMsg.startsWith('linktoken:')) {
+			app.linkToken = textMsg.substring('linktoken:'.length).trim();
+			this._map.fire('linktoken', {
+				token: app.linkToken,
+			});
 		} else if (textMsg.startsWith('presetconfigid:')) {
 			app.presetConfigId = textMsg.substring('presetconfigid:'.length).trim();
 		} else if (textMsg.startsWith('userpresetconfigid:')) {
 			app.userPresetConfigId = textMsg
 				.substring('userpresetconfigid:'.length)
 				.trim();
+		} else if (textMsg.startsWith('userpresetsapplied:')) {
+			app.userPresetsApplied =
+				textMsg.substring('userpresetsapplied:'.length).trim() === 'true';
+			this._map.fire('documentsettingsscope');
+		} else if (textMsg.startsWith('documentsettingslive:')) {
+			app.documentSettingsLive =
+				textMsg.substring('documentsettingslive:'.length).trim() === 'true';
+			// Sent again whenever someone joins or leaves, so a dialog that is
+			// already open is told rather than left on what was true when it
+			// was opened.
+			this._map.fire('documentsettingsscope');
 		} else if (textMsg.startsWith('viewsetting:')) {
 			const settingJSON = JSON.parse(
 				textMsg.substring('viewsetting:'.length + 1),
@@ -1516,6 +1570,84 @@ class Socket {
 		} else {
 			this._map._docLayer._onMessage(textMsg, (e as SlurpMessageEvent).image);
 		}
+	}
+
+	// The message names whose frames carry binary pixels after their header
+	// line. Every other frame is text through to the end.
+	private static readonly pixelFramePrefixes = [
+		'tile:',
+		'delta:',
+		'slidelayer:',
+		'zstdslidelayer:',
+		'windowpaint:',
+	];
+
+	// A reply from a remote document, wrapped as
+	// "remotedoccommandresult: source=<enc>\n<inner frame>". Unwraps the
+	// header, then fires a remotedoccommandresult map event carrying the
+	// persistent link of the remote link and the inner frame as an ordinary
+	// (textMsg, imgBytes, imgIndex) triple, so a consumer reads it the way it
+	// reads any frame.
+	private _onRemoteDocCommandResult(
+		textMsg: string,
+		e: SlurpMessageEvent,
+	): void {
+		const imgBytes: Uint8Array | undefined = e.imgBytes;
+
+		// The header is the first line; it is all of textMsg for a text frame
+		// and just the wrapper line for a binary one.
+		const headerEnd = textMsg.indexOf('\n');
+		const header = headerEnd >= 0 ? textMsg.substring(0, headerEnd) : textMsg;
+
+		let source = '';
+		for (const token of header.split(' ')) {
+			if (token.startsWith('source=')) {
+				source = decodeURIComponent(token.substring('source='.length));
+				break;
+			}
+		}
+
+		let innerText: string;
+		let innerImgIndex = 0;
+		if (imgBytes !== undefined) {
+			// Binary frame. The inner frame starts at imgIndex and is read like
+			// any top-level frame: its first token decides its shape. A reply
+			// that carries pixels (tile:, delta:, ...) is one header line then
+			// the bytes; every other reply is text to the end. A text reply's
+			// own body may contain newlines, so it must be taken whole and not
+			// split at the first one.
+			const start = e.imgIndex ?? 0;
+			const newlineAt = imgBytes.indexOf(10, start);
+			const spaceAt = imgBytes.indexOf(32, start);
+			let tokenEnd = imgBytes.length;
+			if (spaceAt >= 0) tokenEnd = spaceAt;
+			if (newlineAt >= 0 && newlineAt < tokenEnd) tokenEnd = newlineAt;
+			const innerFirstToken = this._utf8ToString(
+				imgBytes.subarray(start, tokenEnd),
+			);
+			if (Socket.pixelFramePrefixes.includes(innerFirstToken)) {
+				const innerHeaderEnd = newlineAt >= 0 ? newlineAt : imgBytes.length;
+				innerText = this._utf8ToString(
+					imgBytes.subarray(start, innerHeaderEnd),
+				);
+				innerImgIndex =
+					innerHeaderEnd < imgBytes.length
+						? innerHeaderEnd + 1
+						: imgBytes.length;
+			} else {
+				innerText = this._utf8ToString(imgBytes.subarray(start));
+				innerImgIndex = imgBytes.length;
+			}
+		} else {
+			innerText = headerEnd >= 0 ? textMsg.substring(headerEnd + 1) : '';
+		}
+
+		this._map.fire('remotedoccommandresult', {
+			source: source,
+			textMsg: innerText,
+			imgBytes: imgBytes,
+			imgIndex: innerImgIndex,
+		});
 	}
 
 	private _extractTextImg(e: SlurpMessageEvent): void {
@@ -1670,6 +1802,18 @@ class Socket {
 		return strBytes;
 	}
 
+	// A data URL for PNG bytes as tiles carry them: the leading 0x89 of the
+	// PNG signature is put back when it was stripped (TileCache::appendBlob
+	// removes it). A content security policy forbids blob URLs for images, so
+	// the bytes travel inline as base64.
+	public pngDataUrl(data: Uint8Array): string {
+		let prefix = '';
+		if (data[0] != 0x89) prefix = String.fromCharCode(0x89);
+		return (
+			'data:image/png;base64,' + window.btoa(this._strFromUint8(prefix, data))
+		);
+	}
+
 	private _extractImage(e: SlurpMessageEvent): string {
 		if (!e.imgBytes) {
 			console.assert(
@@ -1685,11 +1829,7 @@ class Socket {
 		}
 
 		const data = e.imgBytes.subarray(e.imgIndex);
-		let prefix = '';
-		// FIXME: so we prepend the PNG pre-byte here having removed it in TileCache::appendBlob
-		if (data[0] != 0x89) prefix = String.fromCharCode(0x89);
-		const img =
-			'data:image/png;base64,' + window.btoa(this._strFromUint8(prefix, data));
+		const img = this.pngDataUrl(data);
 		if (
 			window.L.Browser.cypressTest &&
 			window.prefs.getBoolean('image_validation_test')
@@ -1785,28 +1925,34 @@ class Socket {
 	}
 
 	private _askForDocumentPassword(passwordType: string, msg: string): void {
+		// Runs when the user dismisses the dialog
+		const giveUp = (): void => {
+			if (passwordType === 'to-modify') {
+				this._map._docPassword = '';
+				this._map.loadDocument();
+			} else if (window.ThisIsAMobileApp && !window.ThisIsTheEmscriptenApp) {
+				window.postMobileMessage('BYE');
+			} else {
+				this._map.fire('postMessage', { msgId: 'UI_Cancel_Password' });
+				this._map.hideBusy();
+			}
+		};
+
 		this._map.uiManager.showInputModal(
 			'password-popup',
 			'',
 			msg,
 			'',
 			_('OK'),
-			function (this: Socket, data: string): void {
-				if (data) {
-					this._map._docPassword = data;
-					if (window.ThisIsAMobileApp) {
-						window.postMobileMessage('loadwithpassword password=' + data);
-					}
-					this._map.loadDocument();
-				} else if (passwordType === 'to-modify') {
-					this._map._docPassword = '';
-					this._map.loadDocument();
-				} else {
-					this._map.fire('postMessage', { msgId: 'UI_Cancel_Password' });
-					this._map.hideBusy();
+			(data: string): void => {
+				this._map._docPassword = data;
+				if (window.ThisIsAMobileApp) {
+					window.postMobileMessage('loadwithpassword password=' + data);
 				}
-			}.bind(this),
+				this._map.loadDocument();
+			},
 			true /* password input */,
+			giveUp,
 		);
 	}
 
@@ -1972,9 +2118,11 @@ class Socket {
 					this.IndirectSocketReconnectCount = 0;
 				} else {
 					this._map.showBusy(_('Wrong server, reconnecting...'), false);
-					this.manualReconnect(3000);
-					// request to indirection server to sanity check the tokens
+					// Ask the controller to check the tokens before
+					// manualReconnect, which closes the socket and
+					// stops outgoing messages.
 					this.sendMessage('routetokensanitycheck');
+					this.manualReconnect(3000);
 					return true;
 				}
 			}
@@ -2026,9 +2174,15 @@ class Socket {
 		// Never make the permission more permissive than it originally was.
 		if (!app.isReadOnly()) app.setPermission(perm);
 
-		if (this._map._docLayer) this._map.setPermission(app.file.permission);
+		this.applyFilePermission();
 
 		app.file.disableSidebar = app.isReadOnly();
+	}
+
+	// Give a loaded view the file permission. A loading view gets it with its status reply.
+	private applyFilePermission(): void {
+		if (this._map._docLayer && this._map._docLoaded)
+			this._map.setPermission(app.file.permission);
 	}
 
 	// 'filemode:' message.
@@ -2040,9 +2194,7 @@ class Socket {
 			app.setPermission('readonly');
 		}
 
-		if (this._map._docLayer) {
-			this._map.setPermission(app.file.permission);
-		}
+		this.applyFilePermission();
 
 		// Store the view mode extensions list from server configuration
 		if (json.viewModeExtensions) {
@@ -2126,13 +2278,49 @@ class Socket {
 		}
 	}
 
+	// The controller is handing the document to another server. window.migrating keeps the
+	// client off the controller for the reconnect that follows, because the new route is
+	// already in hand. Nothing guarantees the rest of the exchange arrives, so after this long
+	// the timer puts the permission back and makes the connection again, which asks the
+	// controller for a fresh route. The server gives the handover
+	// indirection_endpoint.migration_timeout_secs, 180 by default, so this is comfortably
+	// longer.
+	private static readonly MigrationTimeoutMs: number = 240000;
+
+	private beginMigration(): void {
+		this.endMigration();
+		window.migrating = true;
+		this._migrationTimer = setTimeout(() => {
+			window.app.console.warn(
+				'Migration did not complete, asking the controller again',
+			);
+			this.endMigration();
+			this._map.setPermission(app.file.permission);
+			this.manualReconnect(2000);
+		}, Socket.MigrationTimeoutMs);
+	}
+
+	private endMigration(): void {
+		if (this._migrationTimer !== undefined) {
+			clearTimeout(this._migrationTimer);
+			this._migrationTimer = undefined;
+		}
+		window.migrating = false;
+	}
+
 	// 'migrate: ' message.
 	private _onMigrateMsg(textMsg: string): void {
-		const migrate = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
+		let migrate;
+		try {
+			migrate = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
+		} catch {
+			window.app.console.error('Unparseable migrate message: ' + textMsg);
+			return;
+		}
 		const afterSave = migrate.afterSave as boolean;
 		app.idleHandler._serverRecycling = false;
 		if (!afterSave) {
-			window.migrating = true;
+			this.beginMigration();
 			this._map.uiManager.closeAll();
 			if (this._map.isEditMode()) {
 				this._map.setPermission('view');
@@ -2157,7 +2345,7 @@ class Socket {
 			this.manualReconnect(2000);
 		} else {
 			this._map.setPermission(app.file.permission);
-			window.migrating = false;
+			this.endMigration();
 		}
 	}
 
@@ -2348,6 +2536,22 @@ class Socket {
 			this._map.saveState?.showSaveFailedStatus();
 		} else if (
 			textMsg.startsWith('error:') &&
+			command.errorCmd === 'renamefile'
+		) {
+			// A rename the server turns down otherwise falls through to the
+			// generic report, which only names the command and the kind of
+			// error the message carried.
+			this._map.hideBusy();
+			this._map.fire('warn', {
+				msg:
+					command.errorKind === 'invalid'
+						? _('Please enter a valid document name.')
+						: errorMessages.storage.renamefailed,
+			});
+
+			return true; // caller should exit immediately.
+		} else if (
+			textMsg.startsWith('error:') &&
 			command.errorCmd === 'internal'
 		) {
 			this._map.hideBusy();
@@ -2407,8 +2611,12 @@ class Socket {
 				this._map._fatal = true;
 				this._map.fire('error', { msg: errorMessages.docloadtimeout });
 			} else if (errorKind.startsWith('docunloading')) {
-				// The document is unloading. Have to wait a bit.
+				// The document is unloading. Have to wait a bit. User activity is
+				// held off while it unloads, so the timer below is the one thing
+				// that asks for the document again. The hold is dropped when the
+				// next socket opens.
 				app.idleHandler._active = false;
+				app.idleHandler._serverRecycling = true;
 
 				clearTimeout(this.timer);
 				if (this.ReconnectCount++ >= 10) {
@@ -2418,12 +2626,17 @@ class Socket {
 				}
 
 				this.timer = setInterval(
-					function () {
+					() => {
+						if (this.connected()) {
+							// We're connected: cancel timer and dialog.
+							clearTimeout(this.timer);
+							return;
+						}
+
 						try {
-							// Activate and cancel timer and dialogs.
-							app.idleHandler._activate();
+							this._map.loadDocument();
 						} catch (error) {
-							window.app.console.warn('Cannot activate map');
+							window.app.console.warn('Cannot load document.');
 						}
 						// .5, 2, 4.5, 8, 12.5, 18, 24.5, 32, 40.5 seconds
 					},
@@ -2469,6 +2682,31 @@ class Socket {
 						: _('The document could not be made editable.');
 				this._map.uiManager.showInfoModal('cool_alert', '', msg, '', _('OK'));
 			}
+			return true; // caller should exit immediately.
+		} else if (
+			textMsg.startsWith('error:') &&
+			command.errorCmd === 'slideimport'
+		) {
+			this._map.fire('slideimporterror', {
+				kind: command.errorKind ? command.errorKind : '',
+			});
+			return true; // caller should exit immediately.
+		} else if (
+			textMsg.startsWith('error:') &&
+			command.errorCmd === 'slidelink'
+		) {
+			// An answer of an update names the source it was sent for and an
+			// answer of a break names the page it was asked for, so the two
+			// travel on and a reader takes the answers it is waiting for.
+			// A page is named by a part identifier, which is a decimal page index
+			// or a page identifier in braced form, and neither holds a space.
+			const named = textMsg.match(/\bsource=(\S+)/);
+			const page = textMsg.match(/\bpart=(\S+)/);
+			this._map.fire('slidelinkerror', {
+				kind: command.errorKind ? command.errorKind : '',
+				source: named ? decodeURIComponent(named[1]) : '',
+				part: page ? page[1] : '',
+			});
 			return true; // caller should exit immediately.
 		} else if (textMsg.startsWith('error:') && !this._map._docLayer) {
 			textMsg = textMsg.substring(6);
@@ -2631,6 +2869,12 @@ class Socket {
 				imgBytes: event.imgBytes.subarray(event.imgIndex),
 			});
 		else window.app.console.warn('zstdslidelayer with no image');
+	}
+
+	// 'slideimport: ' message: a JSON status reply for the slide import.
+	private _onSlideImportMsg(textMsg: string): void {
+		const content = JSON.parse(textMsg.substring('slideimport:'.length + 1));
+		this._map.fire('slideimport', { message: content });
 	}
 
 	// 'zstdvectorprimitives:' message: a zstd-compressed .uno:VectorPrimitives response.

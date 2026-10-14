@@ -36,7 +36,7 @@
 
 #include <unordered_map>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::container;
@@ -54,7 +54,7 @@ typedef comphelper::WeakComponentImplHelper<
 class ModuleUIConfigurationManagerSupplier : public ModuleUIConfigurationManagerSupplier_BASE
 {
 public:
-    explicit ModuleUIConfigurationManagerSupplier( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit ModuleUIConfigurationManagerSupplier( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     virtual ~ModuleUIConfigurationManagerSupplier() override;
 
     virtual OUString getImplementationName() override
@@ -73,18 +73,18 @@ public:
     }
 
     // XModuleUIConfigurationManagerSupplier
-    virtual css::uno::Reference< css::ui::XUIConfigurationManager > getUIConfigurationManager( const OUString& ModuleIdentifier ) override;
+    virtual cpo::uno::Reference< css::ui::XUIConfigurationManager > getUIConfigurationManager( const OUString& ModuleIdentifier ) override;
 
 private:
     virtual void disposing(std::unique_lock<std::mutex>&) final override;
 
-    typedef std::unordered_map< OUString, css::uno::Reference< css::ui::XModuleUIConfigurationManager2 > > ModuleToModuleCfgMgr;
+    typedef std::unordered_map< OUString, cpo::uno::Reference< css::ui::XModuleUIConfigurationManager2 > > ModuleToModuleCfgMgr;
 
 //TODO_AS            void impl_initStorages();
 
     ModuleToModuleCfgMgr                                                                m_aModuleToModuleUICfgMgrMap;
-    css::uno::Reference< css::frame::XModuleManager2 >          m_xModuleMgr;
-    css::uno::Reference< css::uno::XComponentContext >            m_xContext;
+    cpo::uno::Reference< css::frame::XModuleManager2 >          m_xModuleMgr;
+    cpo::uno::Reference< cpo::uno::XComponentContext >            m_xContext;
 };
 
 ModuleUIConfigurationManagerSupplier::ModuleUIConfigurationManagerSupplier( const Reference< XComponentContext >& xContext ) :
@@ -167,9 +167,9 @@ Reference< XUIConfigurationManager > ModuleUIConfigurationManagerSupplier::getUI
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_ModuleUIConfigurationManagerSupplier_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ModuleUIConfigurationManagerSupplier(context));

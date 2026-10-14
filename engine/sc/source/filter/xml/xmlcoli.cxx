@@ -36,6 +36,7 @@
 #include <comphelper/servicehelper.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLTableColContext::ScXMLTableColContext( ScXMLImport& rImport,
@@ -83,7 +84,7 @@ ScXMLTableColContext::~ScXMLTableColContext()
 {
 }
 
-void SAL_CALL ScXMLTableColContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLTableColContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScXMLImport& rXMLImport = GetScImport();
     ScDocument* pDoc = rXMLImport.GetDocument();
@@ -170,7 +171,7 @@ ScXMLTableColsContext::~ScXMLTableColsContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLTableColsContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLTableColsContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
@@ -199,7 +200,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLTableColsContext::
     return pContext;
 }
 
-void SAL_CALL ScXMLTableColsContext::endFastElement( sal_Int32 /*nElement*/ )
+void ScXMLTableColsContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScXMLImport& rXMLImport = GetScImport();
     if (bHeader)

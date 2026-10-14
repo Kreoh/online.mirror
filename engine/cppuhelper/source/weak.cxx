@@ -32,7 +32,7 @@
 #include <vector>
 #include <mutex>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace cppu
@@ -66,13 +66,13 @@ public:
     void       release() noexcept override;
 
     // XAdapter
-    css::uno::Reference< css::uno::XInterface > queryAdapted() override;
-    void addReference( const css::uno::Reference< cpo::uno::XReference >& xRef ) override;
-    void removeReference( const css::uno::Reference< cpo::uno::XReference >& xRef ) override;
+    cpo::uno::Reference< cpo::uno::XInterface > queryAdapted() override;
+    void addReference( const cpo::uno::Reference< cpo::uno::XReference >& xRef ) override;
+    void removeReference( const cpo::uno::Reference< cpo::uno::XReference >& xRef ) override;
 
     /// Called from the weak object if the reference count goes to zero.
     ///
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void dispose();
 
 private:
@@ -150,19 +150,21 @@ void OWeakConnectionPoint::dispose()
 Reference< XInterface > OWeakConnectionPoint::queryAdapted()
 {
     Reference< XInterface > ret;
+    OWeakObject* pObject;
 
     {
         std::scoped_lock guard(*gpWeakMutex);
 
-        if (!m_pObject)
+        pObject = m_pObject;
+        if (!pObject)
             return ret;
 
-        oslInterlockedCount n = osl_atomic_increment( &m_pObject->m_refCount );
+        oslInterlockedCount n = osl_atomic_increment( &pObject->m_refCount );
 
         if (n <= 1)
         {
             // Another thread wait in the dispose method at the guard
-            osl_atomic_decrement( &m_pObject->m_refCount );
+            osl_atomic_decrement( &pObject->m_refCount );
             return ret;
         }
     }
@@ -171,8 +173,8 @@ Reference< XInterface > OWeakConnectionPoint::queryAdapted()
     // The reference is incremented. The object cannot be destroyed.
     // Release the guard at the earliest point.
     // WeakObject has a (XInterface *) cast operator
-    ret = *m_pObject;
-    osl_atomic_decrement( &m_pObject->m_refCount );
+    ret = *pObject;
+    osl_atomic_decrement( &pObject->m_refCount );
 
     return ret;
 }

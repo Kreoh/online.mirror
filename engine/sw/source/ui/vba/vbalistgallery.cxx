@@ -23,8 +23,9 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SwVbaListGallery::SwVbaListGallery( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< text::XTextDocument >  xTextDoc, sal_Int32 nType ) : SwVbaListGallery_BASE( rParent, rContext ), mxTextDocument(std::move( xTextDoc )), mnType( nType )
+SwVbaListGallery::SwVbaListGallery( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< text::XTextDocument >  xTextDoc, sal_Int32 nType ) : SwVbaListGallery_BASE( rParent, rContext ), mxTextDocument(std::move( xTextDoc )), mnType( nType )
 {
 }
 
@@ -32,7 +33,7 @@ SwVbaListGallery::~SwVbaListGallery()
 {
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaListGallery::ListTemplates( const cpo::uno::Any& index )
 {
     uno::Reference< XCollection > xCol( new SwVbaListTemplates( mxParent, mxContext, mxTextDocument, mnType ) );

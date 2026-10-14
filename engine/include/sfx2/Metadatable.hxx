@@ -115,7 +115,7 @@ public:
         note: if IsInUndo or IsInClipboard return true,
         MakeUnoObject <em>must not</em> be called!
      */
-    virtual css::uno::Reference< css::rdf::XMetadatable > MakeUnoObject() = 0;
+    virtual cpo::uno::Reference< css::rdf::XMetadatable > MakeUnoObject() = 0;
 
 private:
     Metadatable(const Metadatable&) = delete;
@@ -142,23 +142,23 @@ public:
     MetadatableMixin() {};
 
     // css::rdf::XNode:
-    virtual OUString SAL_CALL getStringValue() override;
+    virtual OUString getStringValue() override;
 
     // css::rdf::XURI:
-    virtual OUString SAL_CALL getLocalName() override;
-    virtual OUString SAL_CALL getNamespace() override;
+    virtual OUString getLocalName() override;
+    virtual OUString getNamespace() override;
 
     // css::rdf::XMetadatable:
-    virtual css::beans::StringPair SAL_CALL getMetadataReference() override;
-    virtual void SAL_CALL setMetadataReference(
+    virtual css::beans::StringPair getMetadataReference() override;
+    virtual void setMetadataReference(
         const css::beans::StringPair & i_rReference) override;
-    virtual void SAL_CALL ensureMetadataReference() override;
+    virtual void ensureMetadataReference() override;
 
 protected:
     /// get the core object corresponding to this UNO object.
     virtual Metadatable * GetCoreObject() = 0;
     /// get the XModel for the document
-    virtual css::uno::Reference< css::frame::XModel >
+    virtual cpo::uno::Reference< css::frame::XModel >
         GetModel() = 0;
 
 };

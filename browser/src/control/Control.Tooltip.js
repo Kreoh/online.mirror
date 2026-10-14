@@ -17,19 +17,20 @@
 
 class Tooltip {
 	constructor(options) {
-		this._options = window.L.extend({ timeout: 150 }, options);
+		// hoverGrace: how long the tooltip outlives the pointer leaving the
+		// widget, so the pointer can cross the gap and reach it.
+		this._options = window.L.extend({ timeout: 150, hoverGrace: 600 }, options);
 		let win = this._options.window ? this._options.window : window;
 		this._container = this._options.container
 			? this._options.container
 			: window.L.DomUtil.create('div', 'cooltip-text', win.document.body);
 		this._container.id = 'cooltip';
-		this._container.addEventListener(
-			'mouseenter',
-			window.L.bind(this.mouseEnter, this),
-		);
-		this._container.addEventListener(
-			'mouseleave',
-			window.L.bind(this.mouseLeave, this),
+		// The container does not take pointer events, so whether the pointer is
+		// on it is answered by its rectangle rather than by enter and leave.
+		win.document.addEventListener(
+			'mousemove',
+			window.L.bind(this.pointerMoved, this),
+			{ capture: true, passive: true },
 		);
 
 		win.addEventListener('keydown', window.L.bind(this.keyDown, this), {
@@ -40,24 +41,25 @@ class Tooltip {
 	beginShow(elem) {
 		if (this._cancel || this._disabled) return;
 
-		let win = this._options.window ? this._options.window : window;
-		win.clearTimeout(this._showTimeout);
-		this._showTimeout = win.setTimeout(
+		app.timerRegistry.clearTimeout(this._showTimeout);
+		this._showTimeout = app.timerRegistry.setTimeout(
+			'tooltip',
 			window.L.bind(this.show, this, elem),
 			this._options.timeout,
 		);
 	}
 
-	beginHide(elem) {
+	beginHide() {
 		if (this._cancel || this._disabled || this._locked) return;
 
-		let win = this._options.window ? this._options.window : window;
-		win.clearTimeout(this._showTimeout);
-		win.clearTimeout(this._hideTimeout);
+		app.timerRegistry.clearTimeout(this._showTimeout);
+		app.timerRegistry.clearTimeout(this._hideTimeout);
+		// Armed for what is on screen, not for what the pointer left.
 		if (this._current)
-			this._hideTimeout = win.setTimeout(
-				window.L.bind(this.hide, this, elem),
-				this._options.timeout / 2,
+			this._hideTimeout = app.timerRegistry.setTimeout(
+				'tooltip',
+				window.L.bind(this.hide, this, this._current),
+				this._options.hoverGrace,
 			);
 	}
 
@@ -66,9 +68,8 @@ class Tooltip {
 	// hide and re-runs show() so the icon/label DOM is correct.
 	lock(elem, textContent) {
 		if (this._disabled) return;
-		let win = this._options.window ? this._options.window : window;
-		win.clearTimeout(this._hideTimeout);
-		win.clearTimeout(this._showTimeout);
+		app.timerRegistry.clearTimeout(this._hideTimeout);
+		app.timerRegistry.clearTimeout(this._showTimeout);
 		this._locked = true;
 		this.show(elem, textContent);
 	}
@@ -89,10 +90,9 @@ class Tooltip {
 	// Switch the tooltip subsystem off entirely and hide live tooltip if any.
 	disable() {
 		if (this._disabled) return;
-		let win = this._options.window ? this._options.window : window;
 		this._disabled = true;
-		win.clearTimeout(this._showTimeout);
-		win.clearTimeout(this._hideTimeout);
+		app.timerRegistry.clearTimeout(this._showTimeout);
+		app.timerRegistry.clearTimeout(this._hideTimeout);
 		this._container.style.visibility = 'hidden';
 		this._current = null;
 		this._cancel = false;
@@ -161,6 +161,10 @@ class Tooltip {
 
 	show(elem, textContent) {
 		if (this._disabled) return;
+		if (!elem || !elem.isConnected) {
+			this.hide();
+			return;
+		}
 		// `textContent` adds flexibility, enabling custom messages like document "Saved" instead of the fixed "cool-tooltip."
 		let content = textContent ? textContent : elem.dataset.cooltip,
 			iconUrl = elem.dataset.cooltipIcon,
@@ -175,7 +179,10 @@ class Tooltip {
 		while (this._container.firstChild)
 			this._container.removeChild(this._container.firstChild);
 
-		if (!content && !iconUrl) return;
+		if (!content && !iconUrl) {
+			this.hide();
+			return;
+		}
 
 		this._container.classList.toggle('cooltip-with-icon', !!iconUrl);
 
@@ -206,20 +213,41 @@ class Tooltip {
 		this._current = elem;
 	}
 
-	hide() {
+	hide(elem) {
 		if (this._cancel || this._locked) return;
+		// Stale for another live widget; a rebuilt widget leaves a detached node.
+		if (
+			elem &&
+			elem !== this._current &&
+			this._current &&
+			this._current.isConnected
+		)
+			return;
 
 		this._container.style.visibility = 'hidden';
 		this._current = null;
 	}
 
+	pointerMoved(e) {
+		if (this._disabled || !this._current) return;
+
+		const box = this._container.getBoundingClientRect();
+		const on =
+			e.clientX >= box.left &&
+			e.clientX <= box.right &&
+			e.clientY >= box.top &&
+			e.clientY <= box.bottom;
+
+		if (on) this.mouseEnter();
+		else if (this._cancel) this.mouseLeave();
+	}
+
 	mouseEnter() {
 		if (this._disabled) return;
 		if (this._current) {
-			let win = this._options.window ? this._options.window : window;
 			this._cancel = true;
-			win.clearTimeout(this._hideTimeout);
-			win.clearTimeout(this._showTimeout);
+			app.timerRegistry.clearTimeout(this._hideTimeout);
+			app.timerRegistry.clearTimeout(this._showTimeout);
 		}
 	}
 
@@ -230,18 +258,22 @@ class Tooltip {
 	}
 
 	keyDown(e) {
-		let key = e.key.toUpperCase();
-		if (
-			key === 'ESCAPE' &&
-			this._current &&
-			!this._disabled &&
-			this._container.style.visibility === 'visible'
-		) {
+		if (this._disabled || !this._current) return;
+		if (this._container.style.visibility !== 'visible') return;
+
+		if (e.key.toUpperCase() === 'ESCAPE') {
 			this._cancel = false;
 			this.hide();
 			e.stopPropagation();
 			if (e.cancelable) e.preventDefault();
+			return;
 		}
+
+		// The grace period can leave a tooltip up after the pointer has gone, and
+		// by then the keyboard is elsewhere. Typing is not aimed at it, so drop it
+		// and leave the key to whatever holds the focus.
+		this._cancel = false;
+		this.hide();
 	}
 
 	static attachEventListener(elem, map) {
@@ -253,7 +285,7 @@ class Tooltip {
 			map.tooltip.beginShow(elem);
 		});
 		elem.addEventListener('mouseleave', function () {
-			map.tooltip.beginHide(elem);
+			map.tooltip.beginHide();
 		});
 		elem.addEventListener('click', function () {
 			map.tooltip.mouseLeave();

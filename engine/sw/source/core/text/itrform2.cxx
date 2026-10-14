@@ -19,6 +19,7 @@
 
 #include <hintids.hxx>
 
+#include <algorithm>
 #include <memory>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <editeng/lspcitem.hxx>
@@ -72,6 +73,7 @@
 #include <unotxdoc.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
     //! Calculates and sets optimal repaint offset for the current line
@@ -90,6 +92,18 @@ static void ClearFly( SwTextFormatInfo &rInf )
 {
     delete rInf.GetFly();
     rInf.SetFly(nullptr);
+}
+
+/// Is an as-character portion taller than the text and at least as tall as the line's ascent?
+static bool IsFlyCntOverText(const SwLineLayout& rLine, SwTwips nTextHeight)
+{
+    SwTwips nFlyCntHeight = 0;
+    for (const SwLinePortion* pPor = rLine.GetNextPortion(); pPor; pPor = pPor->GetNextPortion())
+    {
+        if (pPor->IsFlyCntPortion() && nFlyCntHeight < pPor->Height())
+            nFlyCntHeight = pPor->Height();
+    }
+    return nFlyCntHeight > nTextHeight && nFlyCntHeight >= rLine.GetAscent();
 }
 
 void SwTextFormatter::CtorInitTextFormatter( SwTextFrame *pNewFrame, SwTextFormatInfo *pNewInf )
@@ -121,11 +135,7 @@ SwTextFormatter::~SwTextFormatter()
 {
     // Extremely unlikely, but still possible
     // e.g.: field splits up, widows start to matter
-    if( GetInfo().GetRest() )
-    {
-        delete GetInfo().GetRest();
-        GetInfo().SetRest(nullptr);
-    }
+    GetInfo().DiscardRest();
 }
 
 void SwTextFormatter::Insert( SwLineLayout *pLay )
@@ -1297,7 +1307,7 @@ SwTextPortion *SwTextFormatter::WhichTextPor( SwTextFormatInfo &rInf ) const
             if (xRet.is())
             {
                 const SwDoc & rDoc = rInf.GetTextFrame()->GetDoc();
-                static uno::Reference< uno::XComponentContext > xContext(
+                static uno::Reference< cpo::uno::XComponentContext > xContext(
                     ::comphelper::getProcessComponentContext());
 
                 static uno::Reference< rdf::XURI > xODF_SHADING(
@@ -1307,7 +1317,7 @@ SwTextPortion *SwTextFormatter::WhichTextPor( SwTextFormatInfo &rInf ) const
                 {
                     rtl::Reference<SwXTextDocument> xDocumentMetadataAccess(pShell->GetBaseModel());
 
-                    const css::uno::Reference<css::rdf::XResource> xSubject(xRet, uno::UNO_QUERY);
+                    const cpo::uno::Reference<css::rdf::XResource> xSubject(xRet, uno::UNO_QUERY);
                     const uno::Reference<rdf::XRepository> xRepository =
                         xDocumentMetadataAccess->getRDFRepository();
                     const uno::Reference<container::XEnumeration> xEnum(
@@ -1317,7 +1327,7 @@ SwTextPortion *SwTextFormatter::WhichTextPor( SwTextFormatInfo &rInf ) const
                     {
                         rdf::Statement stmt;
                         if (!(xEnum->nextElement() >>= stmt)) {
-                            throw uno::RuntimeException();
+                            throw cpo::uno::RuntimeException();
                         }
                         const uno::Reference<rdf::XLiteral> xObject(stmt.Object, uno::UNO_QUERY);
                         if (!xObject.is()) continue;
@@ -2164,12 +2174,7 @@ TextFrameIndex SwTextFormatter::FormatLine(TextFrameIndex const nStartPos)
                 GetInfo().ResetMaxWidthDiff();
                 GetInfo().SetExtraSpace(0);
 
-                // delete old rest
-                if ( GetInfo().GetRest() )
-                {
-                    delete GetInfo().GetRest();
-                    GetInfo().SetRest( nullptr );
-                }
+                GetInfo().DiscardRest();
 
                 // set original rest portion
                 if ( xSaveField )
@@ -2353,6 +2358,12 @@ void SwTextFormatter::CalcRealHeight( bool bNewLine )
         const SvxLineSpacingItem *pSpace = m_aLineInf.GetLineSpacing();
         if( pSpace )
         {
+            // An as-character object does not take part in the line spacing calculation, so
+            // proportional spacing below 100% cuts into the text height, off the top of the line.
+            const SwTwips nSpacingBaseHeight = m_pCurr->GetLineSpacingBaseHeight()
+                                                   ? m_pCurr->GetLineSpacingBaseHeight()
+                                                   : m_pCurr->Height();
+
             switch( pSpace->GetLineSpaceRule() )
             {
                 case SvxLineSpaceRule::Auto:
@@ -2366,12 +2377,27 @@ void SwTextFormatter::CalcRealHeight( bool bNewLine )
                         if( nTmp < 50 )
                             nTmp = nTmp ? 50 : 100;
                         if (nTmp<100) { // code adapted from fixed line height
-                            nTmp *= nLineHeight;
-                            nTmp /= 100;
-                            if( !nTmp )
-                                ++nTmp;
-                            nLineHeight = nTmp;
-                            SwTwips nAsc = (4 * nLineHeight) / 5; // 80%
+                            SwTwips nAsc;
+                            if (IsFlyCntOverText(*m_pCurr, nSpacingBaseHeight))
+                            {
+                                SwTwips nShrunk = (nTmp * nSpacingBaseHeight) / 100;
+                                if (!nShrunk)
+                                    ++nShrunk;
+                                // the cut cannot exceed the ascent
+                                const SwTwips nCut
+                                    = std::min(nSpacingBaseHeight - nShrunk, m_pCurr->GetAscent());
+                                nLineHeight = std::max(nLineHeight - nCut, SwTwips(1));
+                                nAsc = m_pCurr->GetAscent() - nCut;
+                            }
+                            else
+                            {
+                                nTmp *= nLineHeight;
+                                nTmp /= 100;
+                                if (!nTmp)
+                                    ++nTmp;
+                                nLineHeight = nTmp;
+                                nAsc = (4 * nLineHeight) / 5; // 80%
+                            }
 #if 0
                             // could do clipping here (like Word does)
                             // but at 0.5 its unreadable either way...
@@ -2454,6 +2480,12 @@ void SwTextFormatter::CalcRealHeight( bool bNewLine )
                                 DocumentSettingId::PROP_LINE_SPACING_SHRINKS_FIRST_LINE))
                         {
                             SwTwips nAsc = (4 * nLineHeight) / 5; // 80%
+                            if (IsFlyCntOverText(*m_pCurr, nSpacingBaseHeight))
+                            {
+                                const SwTwips nCut
+                                    = std::max(m_pCurr->Height() - nLineHeight, SwTwips(0));
+                                nAsc = std::max(m_pCurr->GetAscent() - nCut, SwTwips(0));
+                            }
                             m_pCurr->SetAscent(nAsc);
                             m_pCurr->Height(nLineHeight, false);
                             m_pInf->GetParaPortion()->SetFixLineHeight();

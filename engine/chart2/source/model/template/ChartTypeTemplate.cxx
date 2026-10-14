@@ -33,7 +33,7 @@
 #include <BaseCoordinateSystem.hxx>
 #include <unonames.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart2/StackingDirection.hpp>
 #include <com/sun/star/chart2/XColorScheme.hpp>
@@ -46,10 +46,11 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 using namespace ::chart::DataSeriesProperties;
 
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace
 {
@@ -127,7 +128,7 @@ namespace chart
 {
 
 ChartTypeTemplate::ChartTypeTemplate(
-    Reference< uno::XComponentContext > const & xContext,
+    Reference< cpo::uno::XComponentContext > const & xContext,
     OUString aServiceName ) :
         m_xContext( xContext ),
         m_aServiceName(std::move( aServiceName ))
@@ -831,55 +832,16 @@ void ChartTypeTemplate::copyPropertiesFromOldToNewCoordinateSystem(
         comphelper::copyProperties( xSource, xNewChartType );
 }
 
-css::uno::Reference< css::uno::XInterface > ChartTypeTemplate::getDataInterpreter()
-{
-    return static_cast<cppu::OWeakObject*>(getDataInterpreter2().get());
-}
-css::uno::Reference< css::chart2::XDiagram > ChartTypeTemplate::createDiagramByDataSource(
-    const css::uno::Reference< css::chart2::data::XDataSource >& xDataSource,
+cpo::uno::Reference< css::chart2::XDiagram > ChartTypeTemplate::createDiagramByDataSource(
+    const cpo::uno::Reference< css::chart2::data::XDataSource >& xDataSource,
     const cpo::uno::Sequence< css::beans::PropertyValue >& aArguments )
 {
     return createDiagramByDataSource2(xDataSource, aArguments);
 }
 void ChartTypeTemplate::changeDiagram(
-    const css::uno::Reference< css::chart2::XDiagram >& xDiagram )
+    const cpo::uno::Reference< css::chart2::XDiagram >& xDiagram )
 {
     changeDiagram(rtl::Reference<Diagram>(dynamic_cast<Diagram*>(xDiagram.get())));
-}
-void ChartTypeTemplate::changeDiagramData(
-    const css::uno::Reference< css::chart2::XDiagram >& xDiagram,
-    const css::uno::Reference< css::chart2::data::XDataSource >& xDataSource,
-    const cpo::uno::Sequence< css::beans::PropertyValue >& aArguments )
-{
-    changeDiagramData(rtl::Reference<Diagram>(dynamic_cast<Diagram*>(xDiagram.get())), xDataSource, aArguments);
-}
-bool ChartTypeTemplate::matchesTemplate(
-    const css::uno::Reference<css::chart2::XDiagram >& xDiagram,
-    bool bAdaptProperties )
-{
-    return matchesTemplate2(dynamic_cast<Diagram*>(xDiagram.get()), bAdaptProperties);
-}
-css::uno::Reference< ::css::chart2::XChartType > ChartTypeTemplate::getChartTypeForNewSeries(
-    const cpo::uno::Sequence< css::uno::Reference< css::chart2::XChartType > >& aFormerlyUsedChartTypes )
-{
-    std::vector< rtl::Reference< ::chart::ChartType > > aTmp;
-    aTmp.reserve(aFormerlyUsedChartTypes.getLength());
-    for (auto const & rxChartType : aFormerlyUsedChartTypes)
-        aTmp.push_back(dynamic_cast<ChartType*>(rxChartType.get()));
-    return getChartTypeForNewSeries2(aTmp);
-}
-void ChartTypeTemplate::applyStyle(
-    const css::uno::Reference< css::chart2::XDataSeries >& xSeries,
-    ::sal_Int32 nChartTypeIndex,
-    ::sal_Int32 nSeriesIndex,
-    ::sal_Int32 nSeriesCount )
-{
-    applyStyle2(dynamic_cast<DataSeries*>(xSeries.get()), nChartTypeIndex, nSeriesIndex, nSeriesCount);
-}
-void ChartTypeTemplate::resetStyles(
-    const css::uno::Reference< css::chart2::XDiagram >& xDiagram )
-{
-    resetStyles2(dynamic_cast<Diagram*>(xDiagram.get()));
 }
 
 } //  namespace chart

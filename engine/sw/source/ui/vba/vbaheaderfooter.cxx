@@ -30,9 +30,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaHeaderFooter::SwVbaHeaderFooter( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                                      const uno::Reference< uno::XComponentContext >& rContext,
+                                      const uno::Reference< cpo::uno::XComponentContext >& rContext,
                                       rtl::Reference< SwXTextDocument >  xModel,
                                       uno::Reference< beans::XPropertySet > xProps,
                                       bool isHeader, sal_Int32 index )
@@ -44,23 +45,23 @@ SwVbaHeaderFooter::SwVbaHeaderFooter( const uno::Reference< ooo::vba::XHelperInt
 {
 }
 
-bool SAL_CALL SwVbaHeaderFooter::getIsHeader()
+bool SwVbaHeaderFooter::getIsHeader()
 {
     return mbHeader;
 }
 
-bool SAL_CALL SwVbaHeaderFooter::getLinkToPrevious()
+bool SwVbaHeaderFooter::getLinkToPrevious()
 {
     // seems always false
     return false;
 }
 
-void SAL_CALL SwVbaHeaderFooter::setLinkToPrevious( bool /*_linktoprevious*/ )
+void SwVbaHeaderFooter::setLinkToPrevious( bool /*_linktoprevious*/ )
 {
     // not support in Writer
 }
 
-uno::Reference< word::XRange > SAL_CALL SwVbaHeaderFooter::getRange()
+uno::Reference< word::XRange > SwVbaHeaderFooter::getRange()
 {
     OUString sPropsNameText;
     if( mbHeader )
@@ -80,7 +81,7 @@ uno::Reference< word::XRange > SAL_CALL SwVbaHeaderFooter::getRange()
     return uno::Reference< word::XRange >( new SwVbaRange( this, mxContext, mxModel, xText->getStart(), xText->getEnd(), xText ) );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaHeaderFooter::Shapes( const cpo::uno::Any& index )
 {
     // #FIXME: only get the shapes in the current header/footer

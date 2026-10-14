@@ -34,6 +34,7 @@
 #include <gridwin.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 ScClient::ScClient( ScTabViewShell* pViewShell, vcl::Window* pDraw, SdrModel* pSdrModel, const SdrOle2Obj* pObj ) :
     SfxInPlaceClient( pViewShell, pDraw, pObj->GetAspect() ),
@@ -166,6 +167,7 @@ void ScClient::ObjectAreaChanged()
 
     pDrawObj->SetLogicRect( aNewRectangle );
     pDrawObj->setSuppressSetVisAreaSize(false);
+    pViewSh->UpdateInPlaceClientGridOffset();
 
     //  set document modified (SdrModel::SetChanged is not used)
     pViewSh->GetViewData().GetDocShell()->SetDrawModified();

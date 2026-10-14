@@ -4,6 +4,7 @@
  *    License: GPLv3
  */
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
@@ -15,31 +16,39 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 /* On Windows cl lower-cases some paths, so include prefixes are compared
    case-insensitively there. */
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define PATHNCMP _strnicmp
 #else
 #define PATHNCMP strncmp
 #endif
 
-/* True unless SYSTEM_BOOST is "TRUE": when the bundled boost is in use, its
-   many headers are collapsed to a single unpacked target. */
-static bool internal_boost = false;
-
 /* WORKDIR. */
 static std::string work_dir;
 
+/* SRCDIR. The compiler runs there, so relative dep-file paths start from it.
+   Paths inside it are written as $(SRCDIR), so the dep-files stay valid after
+   the tree is moved and configured again. */
+static std::string src_dir;
+
 /* SRCDIR, BUILDDIR and WORKDIR with every backslash turned into a forward
-   slash. cl /sourceDependencies emits forward-slash-normalised include paths,
-   and these copies let a plain prefix compare decide whether an include lives
-   inside the build tree. build_dir_fwd stays empty when BUILDDIR is not set. */
-static std::string src_dir_fwd;
-static std::string build_dir_fwd;
-static std::string work_dir_fwd;
+   slash, each registered in every spelling it can turn up in. cl
+   /sourceDependencies emits forward-slash-normalised include paths, and these
+   copies let a plain prefix compare decide whether an include lives inside the
+   build tree. */
+static std::vector<std::string> build_tree_prefixes;
+
+/* The work directory, the build directory and the source directory, each with a trailing slash
+   and forward slashes, longest first. cl /sourceDependencies reports its include paths in lower
+   case, and make compares target names as they are spelled, so a path that starts with one of
+   these in any case gets it in this spelling, and on Windows the rest of it the spelling on disk.
+   The .done target of an unpacked tarball, which is made from such a path, then has a rule. */
+static std::vector<std::string> tree_spellings;
 
 /* Return a copy of s with every backslash turned into a forward slash. An empty
    string comes back for a null pointer, so an unset environment variable and an
@@ -57,6 +66,27 @@ static std::string dup_forward_slashes(const char* s)
         }
     }
     return result;
+}
+
+/* Add path to build_tree_prefixes unless it is empty or already there. */
+static void add_prefix(const std::string& path)
+{
+    if (path.empty())
+        return;
+    for (const std::string& known : build_tree_prefixes)
+    {
+        if (known.size() == path.size() && PATHNCMP(known.c_str(), path.c_str(), path.size()) == 0)
+            return;
+    }
+    build_tree_prefixes.push_back(path);
+}
+
+/* Register dir as a directory whose includes belong to the build tree. One
+   spelling is enough: configure hands out SRCDIR and BUILDDIR as the
+   filesystem spells them, and the comparison ignores case. */
+static void add_build_tree_prefix(const char* dir)
+{
+    add_prefix(dup_forward_slashes(dir));
 }
 
 /* Load the whole regular file name into out. Returns false when the file is
@@ -118,12 +148,11 @@ static void eat_space(const char** token)
  */
 static int elide_dependency(const char* key, int key_len, const char** unpacked_end)
 {
-    /* boost brings a plague of header files */
     int unpacked = 0;
-    /* walk down path elements */
-    for (int i = 0; i < key_len - 1; i++)
+    /* walk down path elements, including the first one of a relative path */
+    for (int i = -1; i < key_len - 1; i++)
     {
-        if (key[i] == '/')
+        if (i < 0 || key[i] == '/')
         {
             if (0 == unpacked)
             {
@@ -148,25 +177,38 @@ static int elide_dependency(const char* key, int key_len, const char** unpacked_
     return 0;
 }
 
-/*
- * We collapse tens of internal boost headers to the unpacked target, such
- * that you can re-compile / install boost and all is well.
- */
-static void emit_single_boost_header(void)
+static void emit_path(const char* path, size_t len)
 {
-    std::cout << work_dir << "/UnpackedTarball/boost.done ";
+    if (len > src_dir.size() && path[src_dir.size()] == '/'
+        && PATHNCMP(path, src_dir.c_str(), src_dir.size()) == 0)
+    {
+        std::cout << "$(SRCDIR)";
+        path += src_dir.size();
+        len -= src_dir.size();
+    }
+    std::cout.write(path, static_cast<std::streamsize>(len));
 }
 
 static void emit_unpacked_target(const char* token, const char* end)
 {
-    std::cout.write(token, end - token);
+    emit_path(token, static_cast<size_t>(end - token));
     std::cout << ".done ";
+}
+
+/* A lone backslash token is a line continuation, not a path. */
+static bool is_relative_token(const char* token, size_t len)
+{
+    if (len == 0 || token[0] == '/' || token[0] == '$' || token[0] == '\\')
+        return false;
+    return !(len >= 3 && token[1] == ':' && (token[2] == '/' || token[2] == '\\')
+             && isalpha(static_cast<unsigned char>(token[0])));
 }
 
 /* prefix paths to absolute */
 static void print_fullpaths(const char* line)
 {
-    int boost_count = 0;
+    /* The .done targets written for this rule. Every header of a tarball maps to the same one. */
+    std::unordered_set<std::string> unpacked_seen;
     const char* unpacked_end = nullptr; /* end of UnpackedTarget match (if any) */
     /* for UnpackedTarget the target is GenC{,xx}Object, don't mangle! */
     int target_seen = 0;
@@ -184,35 +226,38 @@ static void print_fullpaths(const char* line)
         }
         while (*end && (' ' != *end) && ('\t' != *end) && (':' != *end))
             ++end;
-        const int token_len = static_cast<int>(end - token);
-        if (target_seen && elide_dependency(token, token_len, &unpacked_end))
+        const char* path = token;
+        int path_len = static_cast<int>(end - token);
+        std::string absolute;
+        if (is_relative_token(token, static_cast<size_t>(path_len)))
+        {
+            absolute = src_dir + '/' + std::string(token, static_cast<size_t>(path_len));
+            if (absolute.find("/..") != std::string::npos)
+                absolute = std::filesystem::path(absolute).lexically_normal()
+                    .generic_string<char>();
+            path = absolute.c_str();
+            path_len = static_cast<int>(absolute.size());
+        }
+        if (target_seen && elide_dependency(path, path_len, &unpacked_end))
         {
             if (unpacked_end)
             {
-                if (internal_boost && !PATHNCMP(unpacked_end - 5, "boost", 5))
-                {
-                    ++boost_count;
-                    if (boost_count == 1)
-                        emit_single_boost_header();
-                    else
-                    {
-                        /* don't output, and swallow trailing \\\n if any */
-                        token = end;
-                        eat_space(&token);
-                        if (token[0] == '\\' && token[1] == '\n')
-                            end = token + 2;
-                    }
-                }
+                if (unpacked_seen.emplace(path, unpacked_end).second)
+                    emit_unpacked_target(path, unpacked_end);
                 else
                 {
-                    emit_unpacked_target(token, unpacked_end);
+                    /* don't output, and swallow trailing \\\n if any */
+                    token = end;
+                    eat_space(&token);
+                    if (token[0] == '\\' && token[1] == '\n')
+                        end = token + 2;
                 }
                 unpacked_end = nullptr;
             }
         }
         else
         {
-            std::cout.write(token, token_len);
+            emit_path(path, static_cast<size_t>(path_len));
             if (!std::cout)
                 abort();
             std::cout.put(' ');
@@ -269,6 +314,7 @@ static std::string generate_phony_line(const char* phony_target, const char* ext
     else
         line += '.';
     line += extension;
+    line.replace(0, work_dir.size(), "$(WORKDIR)");
     line += ": $(gb_Helper_PHONY)\n";
     return line;
 }
@@ -307,9 +353,7 @@ static std::string write_phony_dep_file(const char* fn)
         || strncmp(src_relative, "GenObjCxxObject/", 16) == 0
         || strncmp(src_relative, "GenObjCObject/", 14) == 0
         || strncmp(src_relative, "GenAsmObject/", 13) == 0
-        || strncmp(src_relative, "GenNasmObject/", 14) == 0
-        || strncmp(src_relative, "CxxClrObject/", 13) == 0
-        || strncmp(src_relative, "GenCxxClrObject/", 16) == 0)
+        || strncmp(src_relative, "GenNasmObject/", 14) == 0)
     {
         std::string created_line = generate_phony_line(src_relative, "o");
         if (!generate_phony_file(fn, created_line))
@@ -320,18 +364,29 @@ static std::string write_phony_dep_file(const char* fn)
     return std::string();
 }
 
+/* Only ccache writes relative paths here: cl always emits absolute ones, and
+   ccache rewrites them when its base_dir (CCACHE_BASEDIR) is set, so that one
+   cache can serve several build trees. On a cache hit they come back relative,
+   and they point inside this tree, so keep them. */
+static bool path_is_relative(const std::string& path)
+{
+    return !path.empty() && path[0] != '/' && !(path.size() >= 2 && path[1] == ':');
+}
+
 /* Decide whether a forward-slash include path lies inside the source tree, the
    build tree or the work directory. System headers (for instance under Program
    Files) live outside all three and are dropped, matching the allowlist that
    filter-showIncludes.awk applies. On Windows PATHNCMP is case-insensitive, so
-   the lower-cased paths cl emits still match the mixed-case prefixes. */
+   the lower-cased paths cl emits still match the mixed-case prefixes. Relative
+   paths are kept too; see path_is_relative above. */
 static bool include_in_build_tree(const std::string& path)
 {
-    const std::string* prefixes[] = { &src_dir_fwd, &build_dir_fwd, &work_dir_fwd };
-    for (const std::string* prefix : prefixes)
+    if (path_is_relative(path))
+        return true;
+    for (const std::string& prefix : build_tree_prefixes)
     {
-        if (!prefix->empty() && path.size() >= prefix->size()
-            && PATHNCMP(path.c_str(), prefix->c_str(), prefix->size()) == 0)
+        if (path.size() >= prefix.size()
+            && PATHNCMP(path.c_str(), prefix.c_str(), prefix.size()) == 0)
             return true;
     }
     return false;
@@ -428,6 +483,99 @@ static void append_escaped(std::string& w, const std::string& path)
     }
 }
 
+#ifdef _WIN32
+static std::string ascii_lower(std::string_view s)
+{
+    std::string result(s);
+    for (char& c : result)
+        c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    return result;
+}
+
+/* For every directory listed so far, keyed by its path with a trailing slash, the names of its
+   entries as the filesystem spells them, keyed by their lower-case form. */
+static std::unordered_map<std::string, std::unordered_map<std::string, std::string>> dir_entries;
+
+static const std::unordered_map<std::string, std::string>& entries_of(const std::string& dir)
+{
+    auto [it, inserted] = dir_entries.try_emplace(dir);
+    if (inserted)
+    {
+        /* The paths are UTF-8, and a std::string would be read in the ANSI code page. */
+        std::error_code ec;
+        std::filesystem::directory_iterator iter(
+            std::u8string(reinterpret_cast<const char8_t*>(dir.data()), dir.size()), ec);
+        for (; !ec && iter != std::filesystem::directory_iterator(); iter.increment(ec))
+        {
+            const std::u8string name = iter->path().filename().u8string();
+            std::string spelling(reinterpret_cast<const char*>(name.data()), name.size());
+            it->second.emplace(ascii_lower(spelling), std::move(spelling));
+        }
+    }
+    return it->second;
+}
+
+/* Give the components of path from start on, where start follows a slash, the spelling they have
+   on disk. Stops at the first component that is not found, which keeps its spelling and that of
+   the rest, as for a header that does not exist yet. */
+static void respell_from_disk(std::string& path, size_t start)
+{
+    while (start < path.size())
+    {
+        const size_t slash = path.find('/', start);
+        const size_t len = (slash == std::string::npos ? path.size() : slash) - start;
+        const std::string dir = path.substr(0, start);
+        const std::unordered_map<std::string, std::string>& entries = entries_of(dir);
+        const auto found = entries.find(ascii_lower(std::string_view(path).substr(start, len)));
+        if (found == entries.end() || found->second.size() != len)
+            return;
+        path.replace(start, len, found->second);
+        if (slash == std::string::npos)
+            return;
+        start = slash + 1;
+    }
+}
+#endif
+
+/* Give path the spelling of the tree prefix from tree_spellings that it starts with in any case,
+   and on Windows the rest of it the spelling on disk. */
+static void respell_tree_prefix(std::string& path)
+{
+    for (const std::string& prefix : tree_spellings)
+    {
+        if (path.size() >= prefix.size()
+            && PATHNCMP(path.c_str(), prefix.c_str(), prefix.size()) == 0)
+        {
+            path.replace(0, prefix.size(), prefix);
+#ifdef _WIN32
+            respell_from_disk(path, prefix.size());
+#endif
+            return;
+        }
+    }
+}
+
+/* cl /sourceDependencies reports the source in lower case too, and a generated source that is
+   missing cannot be looked up on disk. A missing header only costs a rebuild, since every header
+   also gets a rule of its own, but the source has no rule under a lower-case name, and make
+   stops. The object, workdir/<Class>/<rel>.o, is spelled as its rule has it, and the source is
+   <dir>/<rel>.<ext>, so a tail of source that is /<rel> in any case gets the spelling of the
+   object. */
+static void respell_source_from_object(std::string& source, const std::string& object)
+{
+    const size_t rel_start = object.find('/', work_dir.size() + 1);
+    const size_t dot = object.rfind('.');
+    if (rel_start == std::string::npos || dot == std::string::npos || dot < rel_start)
+        return;
+    const std::string_view rel = std::string_view(object).substr(rel_start, dot - rel_start);
+    const size_t source_dot = source.rfind('.');
+    if (source_dot == std::string::npos || source_dot < rel.size())
+        return;
+    const size_t tail = source_dot - rel.size();
+    if (PATHNCMP(source.c_str() + tail, rel.data(), rel.size()) == 0)
+        source.replace(tail, rel.size(), rel);
+}
+
 /* Walk the "Includes" array in json once. Every header inside the build tree is
    appended to includes, already make-escaped. Returns false when the JSON is
    malformed. */
@@ -455,6 +603,7 @@ static bool collect_includes(const char* json, const char* end, std::vector<std:
             return false;
         if (!path.empty() && include_in_build_tree(path))
         {
+            respell_tree_prefix(path);
             std::string escaped;
             append_escaped(escaped, path);
             includes.push_back(std::move(escaped));
@@ -500,6 +649,8 @@ static bool convert_source_deps_json(const char* json, size_t json_size, const c
                 return false;
             if (!source.empty())
             {
+                respell_tree_prefix(source);
+                respell_source_from_object(source, object);
                 out += ' ';
                 append_escaped(out, source);
                 out += " \\\n";
@@ -691,13 +842,13 @@ static int process(std::unordered_set<std::string>& dep_hash, const char* fn)
             if (!elide_dependency(base, key_len + 1, nullptr)
                 && dep_hash.insert(std::string(base, static_cast<size_t>(key_len))).second)
             {
-                std::cout << base << '\n';
+                print_fullpaths(base);
                 std::cout.put('\n');
             }
         }
         else
         {
-            std::cout << base << '\n';
+            print_fullpaths(base);
             std::cout.put('\n');
         }
     }
@@ -733,16 +884,22 @@ int main(int argc, char** argv)
     if (!workdir)
         return 1;
     work_dir = workdir;
+    src_dir = dup_forward_slashes(srcdir);
 
     /* BUILDDIR is optional here. It only helps keep cl /sourceDependencies deps
-       trimmed to the build tree. The forward-slash copies feed the include
-       allowlist. */
-    build_dir_fwd = dup_forward_slashes(getenv("BUILDDIR"));
-    src_dir_fwd = dup_forward_slashes(srcdir);
-    work_dir_fwd = dup_forward_slashes(workdir);
+       trimmed to the build tree. These prefixes feed the include allowlist. */
+    add_build_tree_prefix(getenv("BUILDDIR"));
+    add_build_tree_prefix(srcdir);
+    add_build_tree_prefix(workdir);
 
-    const char* env_str = getenv("SYSTEM_BOOST");
-    internal_boost = !env_str || strcmp(env_str, "TRUE") != 0;
+    for (const std::string& dir :
+         { dup_forward_slashes(workdir), dup_forward_slashes(getenv("BUILDDIR")), src_dir })
+    {
+        if (!dir.empty())
+            tree_spellings.push_back(dir + '/');
+    }
+    std::stable_sort(tree_spellings.begin(), tree_spellings.end(),
+                     [](const std::string& a, const std::string& b) { return a.size() > b.size(); });
 
     std::string in_list;
     if (!file_load(argv[1], in_list))

@@ -26,12 +26,10 @@
 #include <vector>
 #include <float.h>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -81,12 +79,12 @@ public:
     SLPSolver() {}
 
 private:
-    virtual void SAL_CALL solve() override;
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual void solve() override;
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.comp.Calc.SLPSolver"_ustr;
     }
-    virtual OUString SAL_CALL getComponentDescription() override
+    virtual OUString getComponentDescription() override
     {
         return ScResId(RID_SLP_SOLVER_COMPONENT);
     }
@@ -503,7 +501,7 @@ void SLPSolver::reportSolution(const std::vector<double>& rPoint)
     }
 }
 
-void SAL_CALL SLPSolver::solve()
+void SLPSolver::solve()
 {
     uno::Reference<frame::XModel> xModel(mxDoc, uno::UNO_QUERY_THROW);
 
@@ -646,8 +644,8 @@ void SAL_CALL SLPSolver::solve()
 }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Calc_SLPSolver_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Calc_SLPSolver_get_implementation(cpo::uno::XComponentContext*,
                                                     cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SLPSolver());

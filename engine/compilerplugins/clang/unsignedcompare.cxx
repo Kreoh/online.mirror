@@ -162,10 +162,7 @@ public:
 
     bool preRun() override
     {
-        return compiler.getLangOpts().CPlusPlus
-               && compiler.getPreprocessor()
-                      .getIdentifierInfo("LIBO_INTERNAL_ONLY")
-                      ->hasMacroDefinition();
+        return compiler.getLangOpts().CPlusPlus;
     }
 
     void run() override
@@ -198,20 +195,6 @@ private:
         // Filter out e.g. `size_t(-1)` or `static_cast<uint64_t>(INT_MAX)`:
         if (!e2->isValueDependent() && e2->getIntegerConstantExpr(compiler.getASTContext()))
         {
-            return nullptr;
-        }
-        auto loc = e->getBeginLoc();
-        while (compiler.getSourceManager().isMacroArgExpansion(loc))
-        {
-            loc = compiler.getSourceManager().getImmediateMacroCallerLoc(loc);
-        }
-        // This covers both "plain" code in such include files, as well as expansion of (object-like) macros like
-        //
-        //   #define SAL_MAX_INT8          ((sal_Int8)   0x7F)
-        //
-        // defined in such include files:
-        if (isInUnoIncludeFile(compiler.getSourceManager().getSpellingLoc(loc)))
-        { //TODO: '#ifdef LIBO_INTERNAL_ONLY' within UNO include files
             return nullptr;
         }
         return e;

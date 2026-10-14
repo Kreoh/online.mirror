@@ -18,6 +18,7 @@
  */
 
 #include <svx/svdoole2.hxx>
+#include <docuno.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/graphichelper.hxx>
 
@@ -35,7 +36,7 @@
 #define ShellClass_ScChartShell
 #include <scslots.hxx>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace sfx2::sidebar;
 
 namespace drawing = css::drawing;
@@ -137,7 +138,7 @@ void ScChartShell::ExecuteExportAsGraphic( SfxRequest& )
         if( dynamic_cast<const SdrOle2Obj*>( pObject) )
         {
             vcl::Window* pWin = GetViewData().GetActiveWin();
-            css::uno::Reference<css::lang::XComponent> xComponent;
+            cpo::uno::Reference<css::lang::XComponent> xComponent;
             const SfxObjectShell* pShell = GetObjectShell();
             if (pShell)
             {

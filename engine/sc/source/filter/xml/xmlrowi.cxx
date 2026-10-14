@@ -43,6 +43,7 @@
 #include <osl/diagnose.h>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLTableRowContext::ScXMLTableRowContext( ScXMLImport& rImport,
@@ -102,7 +103,7 @@ ScXMLTableRowContext::~ScXMLTableRowContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
         ScXMLTableRowContext::createFastChildContext( sal_Int32 nElement,
         const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -137,7 +138,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
     return pContext;
 }
 
-void SAL_CALL ScXMLTableRowContext::endFastElement(sal_Int32 /*nElement*/)
+void ScXMLTableRowContext::endFastElement(sal_Int32 /*nElement*/)
 {
     ScXMLImport& rXMLImport(GetScImport());
     ScDocument* pDoc(rXMLImport.GetDocument());
@@ -279,7 +280,7 @@ ScXMLTableRowsContext::~ScXMLTableRowsContext()
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
         ScXMLTableRowsContext::createFastChildContext( sal_Int32 nElement,
         const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -309,7 +310,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
     return pContext;
 }
 
-void SAL_CALL ScXMLTableRowsContext::endFastElement(sal_Int32 /*nElement*/)
+void ScXMLTableRowsContext::endFastElement(sal_Int32 /*nElement*/)
 {
     ScXMLImport& rXMLImport(GetScImport());
     if (bHeader)

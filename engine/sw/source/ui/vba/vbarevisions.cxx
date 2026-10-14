@@ -29,6 +29,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 typedef std::vector< uno::Reference< beans::XPropertySet > > RevisionMap;
 
@@ -40,11 +41,11 @@ class RedlinesEnumeration : public ::cppu::WeakImplHelper< container::XEnumerati
     RevisionMap::iterator mIt;
 public:
     explicit RedlinesEnumeration( RevisionMap&& sMap ) : mRevisionMap( std::move(sMap) ), mIt( mRevisionMap.begin() ) {}
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( mIt != mRevisionMap.end() );
     }
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( !hasMoreElements() )
             throw container::NoSuchElementException();
@@ -58,15 +59,15 @@ class RevisionCollectionHelper : public ::cppu::WeakImplHelper< container::XInde
 {
     RevisionMap mRevisionMap;
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     RevisionCollectionHelper( const rtl::Reference< SwXTextDocument >& xModel, const uno::Reference< text::XTextRange >& xTextRange );
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override { return  cppu::UnoType<beans::XPropertySet>::get(); }
-    virtual bool SAL_CALL hasElements(  ) override { return ( !mRevisionMap.empty() ); }
+    virtual cpo::uno::Type getElementType(  ) override { return  cppu::UnoType<beans::XPropertySet>::get(); }
+    virtual bool hasElements(  ) override { return ( !mRevisionMap.empty() ); }
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) override { return mRevisionMap.size(); }
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual ::sal_Int32 getCount(  ) override { return mRevisionMap.size(); }
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0 || Index >= getCount() )
             throw lang::IndexOutOfBoundsException();
@@ -75,7 +76,7 @@ public:
 
     }
     // XEnumerationAccess
-    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) override
+    virtual uno::Reference< container::XEnumeration > createEnumeration(  ) override
     {
         return new RedlinesEnumeration( std::vector(mRevisionMap) );
     }
@@ -107,13 +108,13 @@ class RevisionsEnumeration : public EnumerationHelperImpl
 public:
     /// @throws uno::RuntimeException
     RevisionsEnumeration( const uno::Reference< XHelperInterface >& xParent,
-                          const uno::Reference< uno::XComponentContext >& xContext,
+                          const uno::Reference< cpo::uno::XComponentContext >& xContext,
                           const uno::Reference< container::XEnumeration >& xEnumeration,
                           rtl::Reference< SwXTextDocument > xModel  )
     : EnumerationHelperImpl( xParent, xContext, xEnumeration ),
       m_xModel(std::move( xModel )) {}
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         uno::Reference< beans::XPropertySet > xRevision( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
         return cpo::uno::Any( uno::Reference< word::XRevision > ( new SwVbaRevision( m_xParent, m_xContext, m_xModel, xRevision ) ) );
@@ -124,7 +125,7 @@ public:
 }
 
 SwVbaRevisions::SwVbaRevisions( const uno::Reference< XHelperInterface >& xParent,
-                                const uno::Reference< uno::XComponentContext > & xContext,
+                                const uno::Reference< cpo::uno::XComponentContext > & xContext,
                                 const rtl::Reference< SwXTextDocument >& xModel,
                                 const uno::Reference< text::XTextRange >& xTextRange )
 : SwVbaRevisions_BASE( xParent, xContext, new RevisionCollectionHelper( xModel, xTextRange ) ),
@@ -133,7 +134,7 @@ SwVbaRevisions::SwVbaRevisions( const uno::Reference< XHelperInterface >& xParen
 }
 
 SwVbaRevisions::SwVbaRevisions( const uno::Reference< XHelperInterface >& xParent,
-                                const uno::Reference< uno::XComponentContext > & xContext,
+                                const uno::Reference< cpo::uno::XComponentContext > & xContext,
                                 rtl::Reference< SwXTextDocument > xModel,
                                 const uno::Reference< container::XIndexAccess >& xIndexAccess )
 : SwVbaRevisions_BASE( xParent, xContext, xIndexAccess ),
@@ -161,7 +162,7 @@ SwVbaRevisions::createCollectionObject( const cpo::uno::Any& aSource )
     return cpo::uno::Any( uno::Reference< word::XRevision > ( new SwVbaRevision( this, mxContext, mxModel, xRevision ) ) );
 }
 
-void SAL_CALL SwVbaRevisions::AcceptAll(  )
+void SwVbaRevisions::AcceptAll(  )
 {
     // First we need to put all the redline into a vector, because if the redline is accepted,
     // it will auto delete in the document.
@@ -177,9 +178,9 @@ void SAL_CALL SwVbaRevisions::AcceptAll(  )
         xRevision->Accept();
 }
 
-void SAL_CALL SwVbaRevisions::RejectAll(  )
+void SwVbaRevisions::RejectAll(  )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 OUString

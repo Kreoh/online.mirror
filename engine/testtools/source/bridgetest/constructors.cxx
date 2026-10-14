@@ -23,11 +23,11 @@
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <cpo/uno/Type.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cppu/unotype.hxx>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -56,7 +56,7 @@ public:
 private:
     virtual ~Impl() override {}
 
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         cpo::uno::Sequence< cpo::uno::Any > const & arguments) override;
 };
 
@@ -101,13 +101,13 @@ void Impl::initialize(cpo::uno::Sequence< cpo::uno::Any > const & arguments)
     cpo::uno::Sequence<
         ::test::testtools::bridgetest::TestPolyStruct< cpo::uno::Any > > arg33;
     bool arg33b;
-    cpo::uno::Sequence< css::uno::Reference< css::uno::XInterface > > arg34;
+    cpo::uno::Sequence< cpo::uno::Reference< cpo::uno::XInterface > > arg34;
     ::test::testtools::bridgetest::TestEnum arg35;
     ::test::testtools::bridgetest::TestStruct arg36;
     ::test::testtools::bridgetest::TestPolyStruct< bool > arg37;
     ::test::testtools::bridgetest::TestPolyStruct< cpo::uno::Any > arg38;
     bool arg38b;
-    css::uno::Reference< css::uno::XInterface > arg39;
+    cpo::uno::Reference< cpo::uno::XInterface > arg39;
     bool ok = (arguments.getLength() == 40
           && (arguments[0] >>= arg0) && arg0
           && (arguments[1] >>= arg1) && arg1 == SAL_MIN_INT8
@@ -188,14 +188,14 @@ public:
 private:
     virtual ~Impl2() override {}
 
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         cpo::uno::Sequence< cpo::uno::Any > const & arguments) override;
 
     //XMultiBase1
-    virtual double SAL_CALL getatt1() override;
-    virtual void SAL_CALL setatt1( double _att1 ) override;
-    virtual ::sal_Int32 SAL_CALL fn11( ::sal_Int32 arg ) override;
-    virtual OUString SAL_CALL fn12( const OUString& arg ) override;
+    virtual double getatt1() override;
+    virtual void setatt1( double _att1 ) override;
+    virtual ::sal_Int32 fn11( ::sal_Int32 arg ) override;
+    virtual OUString fn12( const OUString& arg ) override;
 
 
     double m_attr1;
@@ -215,8 +215,8 @@ void Impl2::initialize(cpo::uno::Sequence< cpo::uno::Any > const & arguments)
     ttb::TestPolyStruct< OUString > arg8;
     ttb::TestPolyStruct< float > arg9;
     ttb::TestPolyStruct< double > arg10;
-    ttb::TestPolyStruct<css::uno::Reference<css::uno::XInterface> > arg11;
-    ttb::TestPolyStruct<css::uno::Reference< css::lang::XComponent> > arg12;
+    ttb::TestPolyStruct<cpo::uno::Reference<cpo::uno::XInterface> > arg11;
+    ttb::TestPolyStruct<cpo::uno::Reference< css::lang::XComponent> > arg12;
     ttb::TestPolyStruct<ttb::TestEnum>  arg13;
     ttb::TestPolyStruct<
           ttb::TestPolyStruct2<sal_Unicode, cpo::uno::Any> > arg14;
@@ -238,8 +238,8 @@ void Impl2::initialize(cpo::uno::Sequence< cpo::uno::Any > const & arguments)
     ttb::TestPolyStruct<cpo::uno::Sequence< OUString > > arg26;
     ttb::TestPolyStruct<cpo::uno::Sequence<float> > arg27;
     ttb::TestPolyStruct<cpo::uno::Sequence<double> > arg28;
-    ttb::TestPolyStruct<cpo::uno::Sequence<css::uno::Reference<css::uno::XInterface> > > arg29;
-    ttb::TestPolyStruct<cpo::uno::Sequence<css::uno::Reference<css::lang::XComponent> > > arg30;
+    ttb::TestPolyStruct<cpo::uno::Sequence<cpo::uno::Reference<cpo::uno::XInterface> > > arg29;
+    ttb::TestPolyStruct<cpo::uno::Sequence<cpo::uno::Reference<css::lang::XComponent> > > arg30;
     ttb::TestPolyStruct<cpo::uno::Sequence<ttb::TestEnum> >  arg31;
     ttb::TestPolyStruct<cpo::uno::Sequence<ttb::TestPolyStruct2<
         ::sal_Unicode, cpo::uno::Sequence<cpo::uno::Any> > > > arg32;
@@ -403,8 +403,8 @@ OUString Impl2::fn12( const OUString& arg )
     return "12" + arg;
 }
 
-css::uno::Reference< css::uno::XInterface > create(
-    SAL_UNUSED_PARAMETER css::uno::Reference< css::uno::XComponentContext >
+cpo::uno::Reference< cpo::uno::XInterface > create(
+    SAL_UNUSED_PARAMETER cpo::uno::Reference< cpo::uno::XComponentContext >
         const &)
 {
     return getXWeak(new Impl);
@@ -419,8 +419,8 @@ cpo::uno::Sequence< OUString > getSupportedServiceNames() {
     return { u"test.testtools.bridgetest.Constructors"_ustr };
 }
 
-css::uno::Reference< css::uno::XInterface > create2(
-    SAL_UNUSED_PARAMETER css::uno::Reference< css::uno::XComponentContext >
+cpo::uno::Reference< cpo::uno::XInterface > create2(
+    SAL_UNUSED_PARAMETER cpo::uno::Reference< cpo::uno::XComponentContext >
         const &)
 {
     return getXWeak(new Impl2);
@@ -436,10 +436,10 @@ cpo::uno::Sequence< OUString > getSupportedServiceNames2() {
 
 ::cppu::ImplementationEntry const entries[] = {
     { &create, &getImplementationName, &getSupportedServiceNames,
-      &::cppu::createSingleComponentFactory, nullptr, 0 },
+      &::cppu::createSingleComponentFactory, 0 },
     { &create2, &getImplementationName2, &getSupportedServiceNames2,
-      &::cppu::createSingleComponentFactory, nullptr, 0 },
-    { nullptr, nullptr, nullptr, nullptr, nullptr, 0 } };
+      &::cppu::createSingleComponentFactory, 0 },
+    { nullptr, nullptr, nullptr, nullptr, 0 } };
 }
 
 extern "C" SAL_DLLPUBLIC_EXPORT void * component_getFactory(

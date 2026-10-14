@@ -22,6 +22,7 @@
 #include <svx/fmmodel.hxx>
 #include <svx/svdundo.hxx>
 #include "global.hxx"
+#include "types.hxx"
 
 class ScDocument;
 class SfxObjectShell;
@@ -84,14 +85,6 @@ public:
 
     virtual void     Undo() override;
     virtual void     Redo() override;
-};
-
-// for ScDrawLayer::SetPageSize
-enum class ScObjectHandling
-{
-    RecalcPosMode, // used for row height or col width changes
-    MoveRTLMode, // used for switch to RTL during import of right-to-left sheet
-    MirrorRTLMode // used for switch between RTL and LTR by .uno:SheetRightToLeft
 };
 
 class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ScDrawLayer final : public FmFormModel
@@ -170,7 +163,7 @@ public:
 
     /** Returns the rectangle for the passed cell address in 1/100 mm.
         @param bMergedCell  True = regards merged cells. False = use single column/row size. */
-    static tools::Rectangle GetCellRect( const ScDocument& rDoc, const ScAddress& rPos, bool bMergedCell );
+    SC_DLLPUBLIC static tools::Rectangle GetCellRect( const ScDocument& rDoc, const ScAddress& rPos, bool bMergedCell );
 
                     //  GetVisibleName: name for navigator etc: GetPersistName or GetName
                     //  (ChartListenerCollection etc. must use GetPersistName directly)
@@ -179,11 +172,13 @@ public:
     SdrObject*      GetNamedObject( std::u16string_view rName, SdrObjKind nId, SCTAB& rFoundTab ) const;
                     // if pnCounter != NULL, the search for a name starts with this index + 1,
                     // and the index really used is returned.
-    OUString        GetNewGraphicName( tools::Long* pnCounter = nullptr ) const;
+    SC_DLLPUBLIC OUString GetNewGraphicName( tools::Long* pnCounter = nullptr ) const;
     void            EnsureGraphicNames();
 
     SC_DLLPUBLIC static bool IsCellAnchored( const SdrObject& rObj );
     SC_DLLPUBLIC static bool IsResizeWithCell( const SdrObject& rObj );
+    /** Returns true when the object is a picture that sits in a cell. */
+    SC_DLLPUBLIC static bool IsInCellImage( const SdrObject& rObj );
     SC_DLLPUBLIC static void SetPageAnchored( SdrObject& );
     static void             SetCellAnchored( SdrObject&, const ScDrawObjData &rAnchor );
     static void             SetNonRotatedAnchor( SdrObject&, const ScDrawObjData &rAnchor );
@@ -212,7 +207,7 @@ public:
     // The sheet information in ScDrawObjData isn't updated when sheets are inserted/deleted.
     // Use this method to get an object with positions on the specified sheet (should be the
     // sheet on which the object is inserted).
-    static ScDrawObjData* GetObjDataTab( SdrObject* pObj, SCTAB nTab );
+    SC_DLLPUBLIC static ScDrawObjData* GetObjDataTab( SdrObject* pObj, SCTAB nTab );
 
     /** Returns true, if the passed object is the caption of a cell note. */
     SC_DLLPUBLIC static bool IsNoteCaption(const ScDrawObjData* pData);
@@ -228,7 +223,7 @@ private:
 public:
     static void     SetGlobalDrawPersist(SfxObjectShell* pPersist);
 private:
-    virtual css::uno::Reference< css::frame::XModel > createUnoModel() override;
+    virtual cpo::uno::Reference< css::frame::XModel > createUnoModel() override;
 };
 
 extern bool bDrawIsInUndo; // somewhere as member!

@@ -24,10 +24,12 @@
 
 class Bitmap;
 class Graphic;
+class GraphicAttr;
 
 namespace basegfx
 {
 class B2DHomMatrix;
+class BColorModifier;
 }
 namespace tools
 {
@@ -48,7 +50,6 @@ class FillHatchAttribute;
 class FillGraphicAttribute;
 class LineAttribute;
 class StrokeAttribute;
-class LineStartEndAttribute;
 }
 
 namespace drawinglayer
@@ -86,11 +87,20 @@ public:
     /// processing are stored here keyed by their checksum.
     void setBitmapCache(std::unordered_map<sal_Int64, Graphic>& rCache);
 
+    /// What a font key resolved to: the id of the face, and whether it falls
+    /// short of the weight or slant asked for.
+    struct ResolvedFace
+    {
+        sal_uInt64 mnFontId = 0;
+        bool mbSyntheticBold = false;
+        bool mbSyntheticItalic = false;
+    };
+
     /// External caches: the font files text portions use, keyed by a
-    /// content hash of the bytes, and the ids already worked out for a
-    /// font key, so each distinct face is read and hashed only once.
+    /// content hash of the bytes, and what each font key resolved to, so a
+    /// face is read, hashed and measured once.
     void setFontCache(std::unordered_map<sal_uInt64, BinaryDataContainer>& rCache,
-                      std::unordered_map<OUString, sal_uInt64>& rIdByKey);
+                      std::unordered_map<OUString, ResolvedFace>& rFaceByKey);
 
 private:
     void processPrimitive(const drawinglayer::primitive2d::BasePrimitive2D& rPrimitive);
@@ -107,13 +117,17 @@ private:
     /// Write path and bounds, scaled
     void writePathScaled(const basegfx::B2DPolyPolygon& rPolyPolygon);
 
-    void writeRangeScaled(std::string_view sName, const basegfx::B2DRange& rRange);
+    void writeRange(std::string_view sName, const basegfx::B2DRange& rRange, double fScale);
+    /// Write the range the primitive covers as "bounds", scaled. An empty range is left out.
+    void writeBoundsScaled(const drawinglayer::primitive2d::BasePrimitive2D& rPrimitive);
     void writeHatchScaled(const drawinglayer::attribute::FillHatchAttribute& rHatch);
-    void writeFillGraphicScaled(const drawinglayer::attribute::FillGraphicAttribute& rFillGraphic);
+    void writeFillGraphic(const drawinglayer::attribute::FillGraphicAttribute& rFillGraphic);
     void writeLineAttributeScaled(const drawinglayer::attribute::LineAttribute& rLineAttribute);
     void writeStrokeAttributeScaled(const drawinglayer::attribute::StrokeAttribute& rStroke);
-    void writeArrowAttributeScaled(std::string_view sName,
-                                   const drawinglayer::attribute::LineStartEndAttribute& rArrow);
+    /// Write the modifier's name and its parameters into the open node.
+    void writeColorModifier(const basegfx::BColorModifier& rModifier);
+    /// Write a graphic's draw mode and adjustments as color modifiers, in order. None if unchanged.
+    void writeGraphicColorModifiers(const GraphicAttr& rAttributes);
     void
     writeTextPortionScaled(const drawinglayer::primitive2d::TextSimplePortionPrimitive2D& rPrim);
 
@@ -126,7 +140,7 @@ private:
     tools::JsonWriter& mrWriter;
     std::unordered_map<sal_Int64, Graphic>* mpBitmapCache = nullptr;
     std::unordered_map<sal_uInt64, BinaryDataContainer>* mpFontCache = nullptr;
-    std::unordered_map<OUString, sal_uInt64>* mpFontIdByKey = nullptr;
+    std::unordered_map<OUString, ResolvedFace>* mpFaceByKey = nullptr;
     double mfScaleFactor = 1.0;
     drawinglayer::geometry::ViewInformation2D maViewInformation2D;
 };

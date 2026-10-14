@@ -34,7 +34,7 @@ class ICoreFrameStyle;
 class SwHyperlinkEventDescriptor final : public SvDetachedEventDescriptor
 {
     //XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
     virtual ~SwHyperlinkEventDescriptor() override;
 
@@ -45,7 +45,7 @@ public:
     void copyMacrosIntoINetFormat(SwFormatINetFormat& aFormat);
 
     void
-    copyMacrosFromNameReplace(css::uno::Reference<css::container::XNameReplace> const& xReplace);
+    copyMacrosFromNameReplace(cpo::uno::Reference<css::container::XNameReplace> const& xReplace);
 };
 
 // SwEventDescriptor for
@@ -64,7 +64,7 @@ public:
 
     virtual ~SwFrameEventDescriptor() override;
 
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
 private:
     virtual void setMacroItem(const SvxMacroItem& rItem) override;
@@ -81,7 +81,7 @@ public:
 
     virtual ~SwFrameStyleEventDescriptor() override;
 
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
 private:
     virtual void setMacroItem(const SvxMacroItem& rItem) override;

@@ -529,11 +529,7 @@ void ComboBox::SetDropDownLineCount( sal_uInt16 nLines )
 void ComboBox::AdaptDropDownLineCountToMaximum()
 {
     // Adapt to maximum allowed number.
-    // Limit for COKit as we can't render outside of the dialog canvas.
-    if (comphelper::COKit::isActive())
-        SetDropDownLineCount(11);
-    else
-        SetDropDownLineCount(GetSettings().GetStyleSettings().GetListBoxMaximumLineCount());
+    SetDropDownLineCount(GetSettings().GetStyleSettings().GetListBoxMaximumLineCount());
 }
 
 sal_uInt16 ComboBox::GetDropDownLineCount() const
@@ -1578,10 +1574,6 @@ bool ComboBox::set_property(const OUString &rKey, const OUString &rValue)
     }
     else if (rKey == "placeholder-text")
         SetPlaceholderText(rValue);
-    else if (rKey == "render-selected-entry")
-        SetRenderSelectedEntry(toBool(rValue));
-    else if (rKey == "whole-width-preview")
-        SetWholeWidthPreview(toBool(rValue));
     else
         return Control::set_property(rKey, rValue);
     return true;

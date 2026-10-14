@@ -76,6 +76,7 @@
 #include <txtftn.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // the default text encoding for the export, if it doesn't fit unicode will
 // be used
@@ -1625,16 +1626,16 @@ SwRTFWriter::SwRTFWriter(std::u16string_view rFilterName, const OUString& rBaseU
 
 ErrCode SwRTFWriter::WriteStream()
 {
-    std::shared_ptr<SwUnoCursor> pCurPam(m_pDoc->CreateUnoCursor(*m_pCurrentPam->End(), false));
+    auto [pStart, pEnd] = m_pCurrentPam->StartEnd(); // SwPosition*
+    std::shared_ptr<SwUnoCursor> pCurPam(m_pDoc->CreateUnoCursor(*pEnd, false));
     pCurPam->SetMark();
-    *pCurPam->GetPoint() = *m_pCurrentPam->Start();
+    *pCurPam->GetPoint() = *pStart;
     RtfExport aExport(nullptr, *m_pDoc, pCurPam, *m_pCurrentPam, this, m_bOutOutlineOnly);
     aExport.ExportDocument(true);
     return ERRCODE_NONE;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void ExportRTF(std::u16string_view rFltName,
-                                               const OUString& rBaseURL, WriterRef& xRet)
+void ExportRTF(std::u16string_view rFltName, const OUString& rBaseURL, WriterRef& xRet)
 {
     xRet = new SwRTFWriter(rFltName, rBaseURL);
 }

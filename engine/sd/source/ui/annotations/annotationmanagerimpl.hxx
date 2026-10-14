@@ -63,8 +63,8 @@ public:
     virtual void disposing (std::unique_lock<std::mutex>&) override;
 
     // XEventListener
-    virtual void SAL_CALL notifyEvent( const css::document::EventObject& Event ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void notifyEvent( const css::document::EventObject& Event ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     void ExecuteAnnotation (SfxRequest const & rRequest);
     void GetAnnotationState (SfxItemSet& rItemSet);
@@ -133,11 +133,14 @@ private:
     rtl::Reference<sdr::annotation::Annotation> GetAnnotationById(sal_uInt32 nAnnotationId);
 };
 
-OUString getAnnotationDateTimeString( const css::uno::Reference< css::office::XAnnotation >& xAnnotation );
+OUString getAnnotationDateTimeString( const cpo::uno::Reference< css::office::XAnnotation >& xAnnotation );
 
 SfxItemPool* GetAnnotationPool();
 
 css::util::DateTime getCurrentDateTime();
+
+/** Stamps the annotation with the wall clock its author reads and the moment that stands for. */
+void stampWithCurrentTime(const cpo::uno::Reference<css::office::XAnnotation>& xAnnotation);
 
 }
 

@@ -27,9 +27,10 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 // special key to return the Application
@@ -38,13 +39,13 @@ constexpr OUString gsApplication( u"Application"_ustr );
 
 VbaGlobalsBase::VbaGlobalsBase(
 const uno::Reference< ov::XHelperInterface >& xParent,
-const uno::Reference< uno::XComponentContext >& xContext, const OUString& sDocCtxName )
+const uno::Reference< cpo::uno::XComponentContext >& xContext, const OUString& sDocCtxName )
     : Globals_BASE( xParent, xContext )
     , msDocCtxName( sDocCtxName )
 {
     // overwrite context with custom one ( that contains the application )
     // wrap the service manager as we don't want the disposing context to tear down the 'normal' ServiceManager ( or at least that's what the code appears like it wants to do )
-    uno::Reference< uno::XInterface > aSrvMgr;
+    uno::Reference< cpo::uno::XInterface > aSrvMgr;
     if ( xContext.is() && xContext->getServiceManager().is() )
     {
         aSrvMgr = xContext->getServiceManager()->createInstanceWithContext( u"com.sun.star.comp.stoc.OServiceManagerWrapper"_ustr , xContext );
@@ -70,7 +71,7 @@ const uno::Reference< uno::XComponentContext >& xContext, const OUString& sDocCt
             aSrvMgr, uno::UNO_QUERY_THROW )->
             setPropertyValue( u"DefaultContext"_ustr, cpo::uno::Any( mxContext ) );
     }
-    catch ( uno::RuntimeException & )
+    catch ( cpo::uno::RuntimeException & )
     {
         throw;
     }
@@ -80,7 +81,7 @@ const uno::Reference< uno::XComponentContext >& xContext, const OUString& sDocCt
         throw lang::WrappedTargetRuntimeException(
             (u"VbaGlobalsBase ctor, setting OServiceManagerWrapper"
              " DefaultContext failed"_ustr),
-            uno::Reference< uno::XInterface >(), e);
+            uno::Reference< cpo::uno::XInterface >(), e);
     }
 }
 
@@ -122,10 +123,10 @@ VbaGlobalsBase::init(  const cpo::uno::Sequence< beans::PropertyValue >& aInitAr
     }
 }
 
-uno::Reference< uno::XInterface > SAL_CALL
+uno::Reference< cpo::uno::XInterface >
 VbaGlobalsBase::createInstance( const OUString& aServiceSpecifier )
 {
-    uno::Reference< uno::XInterface > xReturn;
+    uno::Reference< cpo::uno::XInterface > xReturn;
     if ( aServiceSpecifier == sAppService )
     {
         // try to extract the Application from the context
@@ -137,11 +138,11 @@ VbaGlobalsBase::createInstance( const OUString& aServiceSpecifier )
     return xReturn;
 }
 
-uno::Reference< uno::XInterface > SAL_CALL
+uno::Reference< cpo::uno::XInterface >
 VbaGlobalsBase::createInstanceWithArguments( const OUString& aServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments )
 {
 
-    uno::Reference< uno::XInterface > xReturn;
+    uno::Reference< cpo::uno::XInterface > xReturn;
     if ( aServiceSpecifier == sAppService )
     {
         // try to extract the Application from the context
@@ -153,7 +154,7 @@ VbaGlobalsBase::createInstanceWithArguments( const OUString& aServiceSpecifier, 
     return xReturn;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 VbaGlobalsBase::getAvailableServiceNames(  )
 {
     cpo::uno::Sequence< OUString > serviceNames { u"ooo.vba.msforms.UserForm"_ustr };

@@ -61,20 +61,20 @@ private:
      * the XMLDocumentWrapper component which maintains all buffered SAX
      * in DOM format.
      */
-    css::uno::Reference< css::xml::wrapper::XXMLDocumentWrapper >
+    cpo::uno::Reference< css::xml::wrapper::XXMLDocumentWrapper >
         m_xXMLDocument;
 
     /*
      * the document handler provided by the XMLDocumentWrapper component.
      */
-    css::uno::Reference< css::xml::sax::XDocumentHandler > m_xDocumentHandler;
+    cpo::uno::Reference< css::xml::sax::XDocumentHandler > m_xDocumentHandler;
 
     /*
      * the compressed document handler provided by the XMLDocumentWrapper
      * component, the handler has more efficient method definition that the
      * normal document handler.
      */
-    css::uno::Reference< css::xml::csax::XCompressedDocumentHandler >
+    cpo::uno::Reference< css::xml::csax::XCompressedDocumentHandler >
         m_xCompressedDocumentHandler;
 
     /*
@@ -84,7 +84,7 @@ private:
      * SAXEventKeeper should chain on/chain off the SAX chain, or whether
      * the SAXEventKeeper is useless any long.
      */
-    css::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >
+    cpo::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >
         m_xSAXEventKeeperStatusChangeListener;
 
     /*
@@ -137,7 +137,7 @@ private:
      * the document handler to which all received SAX events will be
      * forwarded.
      */
-    css::uno::Reference< css::xml::sax::XDocumentHandler > m_xNextHandler;
+    cpo::uno::Reference< css::xml::sax::XDocumentHandler > m_xNextHandler;
 
     /*
      * the current BufferNode which prevents the SAX events to be
@@ -186,7 +186,7 @@ private:
     OUString printBufferNode(
         BufferNode const * pBufferNode, sal_Int32 nIndent) const;
 
-    static cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
+    static cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
         collectChildWorkingElement(BufferNode const * pBufferNode);
 
     void smashBufferNode(
@@ -204,7 +204,7 @@ private:
     sal_Int32 createElementCollector(
         css::xml::crypto::sax::ElementMarkPriority nPriority,
         bool bModifyElement,
-        const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener>& xReferenceResolvedListener);
+        const cpo::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener>& xReferenceResolvedListener);
 
     sal_Int32 createBlocker();
 
@@ -216,73 +216,73 @@ public:
     SAXEventKeeperImpl& operator=(const SAXEventKeeperImpl&) = delete;
 
     /* XSAXEventKeeper */
-    virtual sal_Int32 SAL_CALL addElementCollector(  ) override;
-    virtual void SAL_CALL removeElementCollector( sal_Int32 id ) override;
-    virtual sal_Int32 SAL_CALL addBlocker(  ) override;
-    virtual void SAL_CALL removeBlocker( sal_Int32 id ) override;
-    virtual bool SAL_CALL isBlocking(  ) override;
-    virtual css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL
+    virtual sal_Int32 addElementCollector(  ) override;
+    virtual void removeElementCollector( sal_Int32 id ) override;
+    virtual sal_Int32 addBlocker(  ) override;
+    virtual void removeBlocker( sal_Int32 id ) override;
+    virtual bool isBlocking(  ) override;
+    virtual cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >
         getElement( sal_Int32 id ) override;
-    virtual void SAL_CALL setElement(
+    virtual void setElement(
         sal_Int32 id,
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aElement ) override;
-    virtual css::uno::Reference<
-        css::xml::sax::XDocumentHandler > SAL_CALL
-        setNextHandler( const css::uno::Reference<
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aElement ) override;
+    virtual cpo::uno::Reference<
+        css::xml::sax::XDocumentHandler >
+        setNextHandler( const cpo::uno::Reference<
             css::xml::sax::XDocumentHandler >& xNewHandler ) override;
-    virtual OUString SAL_CALL printBufferNodeTree() override;
-    virtual css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL
+    virtual OUString printBufferNodeTree() override;
+    virtual cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >
         getCurrentBlockingNode() override;
 
     /* XSecuritySAXEventKeeper */
-    virtual sal_Int32 SAL_CALL addSecurityElementCollector(
+    virtual sal_Int32 addSecurityElementCollector(
         css::xml::crypto::sax::ElementMarkPriority priority,
         bool modifyElement ) override;
-    virtual void SAL_CALL setSecurityId( sal_Int32 id, sal_Int32 securityId ) override;
+    virtual void setSecurityId( sal_Int32 id, sal_Int32 securityId ) override;
 
     /* XReferenceResolvedBroadcaster */
-    virtual void SAL_CALL addReferenceResolvedListener(
+    virtual void addReferenceResolvedListener(
         sal_Int32 referenceId,
-        const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& listener ) override;
-    virtual void SAL_CALL removeReferenceResolvedListener(
+        const cpo::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& listener ) override;
+    virtual void removeReferenceResolvedListener(
         sal_Int32 referenceId,
-        const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& listener ) override;
+        const cpo::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& listener ) override;
 
     /* XSAXEventKeeperStatusChangeBroadcaster */
-    virtual void SAL_CALL addSAXEventKeeperStatusChangeListener(
-        const css::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >& listener ) override;
-    virtual void SAL_CALL removeSAXEventKeeperStatusChangeListener(
-        const css::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >& listener ) override;
+    virtual void addSAXEventKeeperStatusChangeListener(
+        const cpo::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >& listener ) override;
+    virtual void removeSAXEventKeeperStatusChangeListener(
+        const cpo::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >& listener ) override;
 
     /* XDocumentHandler */
-    virtual void SAL_CALL startDocument(  ) override;
-    virtual void SAL_CALL endDocument(  ) override;
-    virtual void SAL_CALL startElement(
+    virtual void startDocument(  ) override;
+    virtual void endDocument(  ) override;
+    virtual void startElement(
         const OUString& aName,
-        const css::uno::Reference< css::xml::sax::XAttributeList >&
+        const cpo::uno::Reference< css::xml::sax::XAttributeList >&
         xAttribs ) override;
-    virtual void SAL_CALL endElement( const OUString& aName ) override;
-    virtual void SAL_CALL characters( const OUString& aChars ) override;
-    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) override;
-    virtual void SAL_CALL processingInstruction(
+    virtual void endElement( const OUString& aName ) override;
+    virtual void characters( const OUString& aChars ) override;
+    virtual void ignorableWhitespace( const OUString& aWhitespaces ) override;
+    virtual void processingInstruction(
         const OUString& aTarget, const OUString& aData ) override;
-    virtual void SAL_CALL setDocumentLocator(
-        const css::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
+    virtual void setDocumentLocator(
+        const cpo::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
 
     /* XInitialization */
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     /* XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 OUString SAXEventKeeperImpl_getImplementationName();
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 cpo::uno::Sequence< OUString > SAXEventKeeperImpl_getSupportedServiceNames(  );
 
 

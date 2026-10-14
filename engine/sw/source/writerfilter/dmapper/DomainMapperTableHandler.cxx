@@ -60,6 +60,23 @@
 #include <unotbl.hxx>
 #include <unoparagraph.hxx>
 #include <unotextrange.hxx>
+#include <doc.hxx>
+#include <swtable.hxx>
+#include <tblafmt.hxx>
+#include <editeng/boxitem.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
+#include <com/sun/star/util/XComplexColor.hpp>
+#include <editeng/adjustitem.hxx>
+#include <editeng/crossedoutitem.hxx>
+#include <editeng/fhgtitem.hxx>
+#include <editeng/fontitem.hxx>
+#include <editeng/memberids.h>
+#include <editeng/postitem.hxx>
+#include <editeng/udlnitem.hxx>
+#include <editeng/wghtitem.hxx>
+#include <svl/memberid.h>
 
 #ifdef DBG_UTIL
 #include "PropertyMapHelper.hxx"
@@ -70,6 +87,7 @@
 namespace writerfilter::dmapper {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 #define DEF_BORDER_DIST 190  //0,19cm
 #define CNF_FIRST_ROW               0x800
@@ -241,10 +259,17 @@ struct TableInfo
     sal_Int32 nTopBorderDistance;
     sal_Int32 nBottomBorderDistance;
     sal_Int32 nTblLook;
+    /// The table's own w:tblLook value, as imported, before endTable() clears a role's bit
+    /// here because the referenced table style has no conditional formatting for that role.
+    /// Live per-table settings round-tripped through export read this instead of nTblLook,
+    /// since a role the user turned on stays on regardless of what the current style defines.
+    sal_Int32 nOriginalTblLook;
     sal_Int32 nNestLevel;
     PropertyMapPtr pTableDefaults;
     PropertyMapPtr pTableBorders;
     TableStyleSheetEntry* pTableStyle;
+    /// The style id the table's w:tblStyle names, whether or not styles.xml defines it.
+    OUString sTableStyleId;
     css::beans::PropertyValues aTableProperties;
     std::vector< PropertyIds > aTablePropertyIds;
 
@@ -254,6 +279,7 @@ struct TableInfo
     , nTopBorderDistance(0)
     , nBottomBorderDistance(0)
     , nTblLook(0x4a0)
+    , nOriginalTblLook(0x4a0)
     , nNestLevel(0)
     , pTableDefaults(new PropertyMap)
     , pTableBorders(new PropertyMap)
@@ -386,6 +412,7 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
         if(aTblLook)
         {
             aTblLook->second >>= rInfo.nTblLook;
+            rInfo.nOriginalTblLook = rInfo.nTblLook;
             m_aTableProperties->Erase( aTblLook->first );
         }
 
@@ -395,6 +422,7 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
             // Apply table style properties recursively
             OUString sTableStyleName;
             aTableStyleVal->second >>= sTableStyleName;
+            rInfo.sTableStyleId = sTableStyleName;
             StyleSheetTablePtr pStyleSheetTable = m_rDMapper_Impl.GetStyleSheetTable();
             const StyleSheetEntryPtr pStyleSheet = pStyleSheetTable->FindStyleSheetByISTD( sTableStyleName );
             pTableStyle = dynamic_cast<TableStyleSheetEntry*>( pStyleSheet.get( ) );
@@ -428,6 +456,19 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
                 if (lcl_extractTableBorderProperty(pMergedProperties, PROP_RIGHT_BORDER, rStyleInfo, aBorderLine))
                 {
                     aGrabBag[u"TableStyleRightBorder"_ustr] <<= aBorderLine;
+                }
+                // Remember the alignment the style gives, so that the export can tell it
+                // apart from alignment the table itself carries and does not have to write
+                // the style's own value back as direct formatting.
+                if (pMergedProperties)
+                {
+                    if (const std::optional<PropertyMap::Property> oStyleHoriOrient
+                            = pMergedProperties->getProperty(PROP_HORI_ORIENT))
+                    {
+                        sal_Int16 nStyleHoriOrient{};
+                        if (oStyleHoriOrient->second >>= nStyleHoriOrient)
+                            aGrabBag[u"TableStyleHoriOrient"_ustr] <<= nStyleHoriOrient;
+                    }
                 }
 
 #ifdef DBG_UTIL
@@ -677,7 +718,15 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
         }
 
         sal_Int32 nHoriOrient = text::HoriOrientation::LEFT_AND_WIDTH;
-        // Fetch Horizontal Orientation in rFrameProperties if not set in m_aTableProperties
+        // The table style carries the alignment as a plain property.
+        if (const std::optional<PropertyMap::Property> oStyleHoriOrient
+                = m_aTableProperties->getProperty(PROP_HORI_ORIENT))
+        {
+            sal_Int16 nStyleHoriOrient{};
+            if (oStyleHoriOrient->second >>= nStyleHoriOrient)
+                nHoriOrient = nStyleHoriOrient;
+        }
+        // Direct formatting wins over it, then Horizontal Orientation in rFrameProperties.
         if ( !m_aTableProperties->getValue( TablePropertyMap::HORI_ORIENT, nHoriOrient ) )
             lcl_extractHoriOrient( rFrameProperties, nHoriOrient );
         m_aTableProperties->Insert( PROP_HORI_ORIENT, cpo::uno::Any( sal_Int16(nHoriOrient) ) );
@@ -1276,7 +1325,7 @@ void DomainMapperTableHandler::ApplyParagraphPropertiesFromTableStyle(TableParag
                         rtl::Reference<SwXTextCursor> xParagraph = dynamic_cast<SwXTextCursor*>(
                             rParaProp.m_rEndParagraph->getText()->createTextCursorByRange(static_cast<text::XSentenceCursor*>(rParaProp.m_rEndParagraph.get())).get() );
                         if (!xParagraph)
-                            throw uno::RuntimeException();
+                            throw cpo::uno::RuntimeException();
                         // select paragraph
                         xParagraph->gotoStartOfParagraph( true );
                         oParagraphText = xParagraph->getString();
@@ -1517,6 +1566,219 @@ static void lcl_convertFormulaRanges(const rtl::Reference<SwXTextTable> & xTable
     }
 }
 
+namespace {
+
+/// Which combination of a table style's conditional-formatting roles a canonical grid
+/// position stands for, mirroring the per-cell mask built a few hundred lines above (search
+/// nCnfStyleMask) but for a role position rather than a real row/column index.
+sal_Int32 lcl_GetTableStyleCnfMask(sal_uInt8 nRowRole, sal_uInt8 nColRole)
+{
+    sal_Int32 nMask = 0;
+    switch (nRowRole)
+    {
+        case 0: nMask |= CNF_FIRST_ROW; break;
+        case 1: nMask |= CNF_ODD_HBAND; break;
+        case 2: nMask |= CNF_EVEN_HBAND; break;
+        case 3: nMask |= CNF_LAST_ROW; break;
+    }
+    switch (nColRole)
+    {
+        case 0: nMask |= CNF_FIRST_COLUMN; break;
+        case 1: nMask |= CNF_ODD_VBAND; break;
+        case 2: nMask |= CNF_EVEN_VBAND; break;
+        case 3: nMask |= CNF_LAST_COLUMN; break;
+    }
+
+    if (nMask == (CNF_FIRST_ROW | CNF_FIRST_COLUMN))
+        nMask |= CNF_FIRST_ROW_FIRST_COLUMN;
+    else if (nMask == (CNF_LAST_ROW | CNF_FIRST_COLUMN))
+        nMask |= CNF_LAST_ROW_FIRST_COLUMN;
+    else if (nMask == (CNF_FIRST_ROW | CNF_LAST_COLUMN))
+        nMask |= CNF_FIRST_ROW_LAST_COLUMN;
+    else if (nMask == (CNF_LAST_ROW | CNF_LAST_COLUMN))
+        nMask |= CNF_LAST_ROW_LAST_COLUMN;
+
+    return nMask;
+}
+
+/// Put the value of the property eId, when the style has it, into aItem and set that item on
+/// rProps through fnSet, so that it counts as defined by the style.
+template <class ItemT>
+void lcl_PutTextItem(const PropertyMapPtr& pProps, PropertyIds eId, ItemT aItem,
+                     sal_uInt8 nMemberId, SwAutoFormatProps& rProps,
+                     void (AutoFormatBase::*fnSet)(const ItemT&))
+{
+    const std::optional<PropertyMap::Property> oProp = pProps->getProperty(eId);
+    if (oProp && aItem.PutValue(oProp->second, nMemberId))
+        (rProps.*fnSet)(aItem);
+}
+
+/// Fill in the border, background and text formatting a grid position resolves to for a
+/// DOCX table style. Only what the style says is set, so that every other item stays
+/// undefined and the paragraph style shows through for it.
+void lcl_FillBoxAutoFormat(SwBoxAutoFormat& rBoxFormat, const PropertyMapPtr& pProps)
+{
+    if (!pProps)
+        return;
+
+    SwAutoFormatProps& rProps = rBoxFormat.GetProps();
+
+    lcl_PutTextItem(pProps, PROP_CHAR_WEIGHT, SvxWeightItem(WEIGHT_NORMAL, RES_CHRATR_WEIGHT),
+                    MID_WEIGHT, rProps, &AutoFormatBase::SetWeight);
+    lcl_PutTextItem(pProps, PROP_CHAR_WEIGHT_ASIAN,
+                    SvxWeightItem(WEIGHT_NORMAL, RES_CHRATR_CJK_WEIGHT), MID_WEIGHT, rProps,
+                    &AutoFormatBase::SetCJKWeight);
+    lcl_PutTextItem(pProps, PROP_CHAR_WEIGHT_COMPLEX,
+                    SvxWeightItem(WEIGHT_NORMAL, RES_CHRATR_CTL_WEIGHT), MID_WEIGHT, rProps,
+                    &AutoFormatBase::SetCTLWeight);
+    lcl_PutTextItem(pProps, PROP_CHAR_POSTURE, SvxPostureItem(ITALIC_NONE, RES_CHRATR_POSTURE),
+                    MID_POSTURE, rProps, &AutoFormatBase::SetPosture);
+    lcl_PutTextItem(pProps, PROP_CHAR_POSTURE_ASIAN,
+                    SvxPostureItem(ITALIC_NONE, RES_CHRATR_CJK_POSTURE), MID_POSTURE, rProps,
+                    &AutoFormatBase::SetCJKPosture);
+    lcl_PutTextItem(pProps, PROP_CHAR_POSTURE_COMPLEX,
+                    SvxPostureItem(ITALIC_NONE, RES_CHRATR_CTL_POSTURE), MID_POSTURE, rProps,
+                    &AutoFormatBase::SetCTLPosture);
+    lcl_PutTextItem(pProps, PROP_CHAR_HEIGHT, SvxFontHeightItem(240, 100, RES_CHRATR_FONTSIZE),
+                    MID_FONTHEIGHT | CONVERT_TWIPS, rProps, &AutoFormatBase::SetHeight);
+    lcl_PutTextItem(pProps, PROP_CHAR_HEIGHT_ASIAN,
+                    SvxFontHeightItem(240, 100, RES_CHRATR_CJK_FONTSIZE),
+                    MID_FONTHEIGHT | CONVERT_TWIPS, rProps, &AutoFormatBase::SetCJKHeight);
+    lcl_PutTextItem(pProps, PROP_CHAR_HEIGHT_COMPLEX,
+                    SvxFontHeightItem(240, 100, RES_CHRATR_CTL_FONTSIZE),
+                    MID_FONTHEIGHT | CONVERT_TWIPS, rProps, &AutoFormatBase::SetCTLHeight);
+    lcl_PutTextItem(pProps, PROP_CHAR_FONT_NAME, SvxFontItem(RES_CHRATR_FONT),
+                    MID_FONT_FAMILY_NAME, rProps, &AutoFormatBase::SetFont);
+    lcl_PutTextItem(pProps, PROP_CHAR_FONT_NAME_ASIAN, SvxFontItem(RES_CHRATR_CJK_FONT),
+                    MID_FONT_FAMILY_NAME, rProps, &AutoFormatBase::SetCJKFont);
+    lcl_PutTextItem(pProps, PROP_CHAR_FONT_NAME_COMPLEX, SvxFontItem(RES_CHRATR_CTL_FONT),
+                    MID_FONT_FAMILY_NAME, rProps, &AutoFormatBase::SetCTLFont);
+    lcl_PutTextItem(pProps, PROP_CHAR_UNDERLINE,
+                    SvxUnderlineItem(LINESTYLE_NONE, RES_CHRATR_UNDERLINE), MID_TL_STYLE,
+                    rProps, &AutoFormatBase::SetUnderline);
+    lcl_PutTextItem(pProps, PROP_CHAR_STRIKEOUT,
+                    SvxCrossedOutItem(STRIKEOUT_NONE, RES_CHRATR_CROSSEDOUT), MID_CROSS_OUT,
+                    rProps, &AutoFormatBase::SetCrossedOut);
+    lcl_PutTextItem(pProps, PROP_PARA_ADJUST, SvxAdjustItem(SvxAdjust::Left, RES_PARATR_ADJUST),
+                    MID_PARA_ADJUST, rProps, &AutoFormatBase::SetAdjust);
+
+    // A color the style gives as a theme color keeps that reference next to its value, so
+    // the style can follow the document theme.
+    auto aComplexColorOf = [&pProps](PropertyIds eId)
+    {
+        model::ComplexColor aComplexColor;
+        const std::optional<PropertyMap::Property> oProp = pProps->getProperty(eId);
+        uno::Reference<util::XComplexColor> xComplexColor;
+        if (oProp && (oProp->second >>= xComplexColor) && xComplexColor.is())
+            aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        return aComplexColor;
+    };
+
+    SvxBoxItem aBox(RES_BOX);
+    bool bHasBorder = false;
+    static const struct
+    {
+        PropertyIds eId;
+        PropertyIds eComplexColorId;
+        SvxBoxItemLine eLine;
+    } aBorders[] = {
+        { PROP_TOP_BORDER, PROP_BORDER_TOP_COMPLEX_COLOR, SvxBoxItemLine::TOP },
+        { PROP_BOTTOM_BORDER, PROP_BORDER_BOTTOM_COMPLEX_COLOR, SvxBoxItemLine::BOTTOM },
+        { PROP_LEFT_BORDER, PROP_BORDER_LEFT_COMPLEX_COLOR, SvxBoxItemLine::LEFT },
+        { PROP_RIGHT_BORDER, PROP_BORDER_RIGHT_COMPLEX_COLOR, SvxBoxItemLine::RIGHT },
+    };
+    for (const auto& rBorder : aBorders)
+    {
+        const std::optional<PropertyMap::Property> oProp = pProps->getProperty(rBorder.eId);
+        table::BorderLine2 aLine;
+        if (oProp && (oProp->second >>= aLine))
+        {
+            ::editeng::SvxBorderLine aSvxLine;
+            if (SvxBoxItem::LineToSvxLine(aLine, aSvxLine, true))
+            {
+                model::ComplexColor aComplexColor = aComplexColorOf(rBorder.eComplexColorId);
+                if (aComplexColor.getType() != model::ColorType::Unused)
+                    aSvxLine.setComplexColor(aComplexColor);
+                aBox.SetLine(&aSvxLine, rBorder.eLine);
+                bHasBorder = true;
+            }
+        }
+    }
+    if (bHasBorder)
+        rProps.SetBox(aBox);
+
+    const std::optional<PropertyMap::Property> oBackColor = pProps->getProperty(PROP_BACK_COLOR);
+    sal_Int32 nBackColor = 0;
+    if (oBackColor && (oBackColor->second >>= nBackColor))
+    {
+        rProps.SetBackground(SvxBrushItem(Color(ColorTransparency, nBackColor),
+                                          aComplexColorOf(PROP_BACK_COMPLEX_COLOR), RES_BACKGROUND));
+    }
+
+    const std::optional<PropertyMap::Property> oCharColor = pProps->getProperty(PROP_CHAR_COLOR);
+    sal_Int32 nCharColor = 0;
+    if (oCharColor && (oCharColor->second >>= nCharColor))
+    {
+        rProps.SetColor(SvxColorItem(Color(ColorTransparency, nCharColor),
+                                     aComplexColorOf(PROP_CHAR_COMPLEX_COLOR), RES_CHRATR_COLOR));
+    }
+}
+
+/// Convert a DOCX table style into an equivalent named Writer table style, the first time it's
+/// referenced in this document, so live table-style resolution (SwDoc::ApplyTableStyleLive) has
+/// something to resolve against - Writer's own style catalog otherwise shares no names or
+/// definitions with Word's built-in table styles.
+TableStyleName lcl_ImportTableStyle(SwDoc& rDoc, TableStyleSheetEntry& rStyle)
+{
+    OUString sName = !rStyle.m_sConvertedStyleName.isEmpty() ? rStyle.m_sConvertedStyleName
+                                                              : rStyle.m_sStyleName;
+    if (sName.isEmpty())
+        sName = rStyle.m_sStyleIdentifierD;
+    if (sName.isEmpty())
+        return TableStyleName();
+
+    const TableStyleName aStyleName(sName);
+    // Already converted earlier for this document - reuse it rather than building a duplicate.
+    if (rDoc.GetTableStyles().FindAutoFormat(aStyleName))
+        return aStyleName;
+
+    SwTableAutoFormat* pNewFormat = rDoc.MakeTableStyle(aStyleName);
+    if (!pNewFormat)
+        return TableStyleName();
+
+    for (sal_uInt8 nRowRole = 0; nRowRole < SwTableAutoFormat::nRoleCount; ++nRowRole)
+    {
+        for (sal_uInt8 nColRole = 0; nColRole < SwTableAutoFormat::nRoleCount; ++nColRole)
+        {
+            const sal_Int32 nMask = lcl_GetTableStyleCnfMask(nRowRole, nColRole);
+            SwBoxAutoFormat aBoxFormat;
+            lcl_FillBoxAutoFormat(aBoxFormat, rStyle.GetProperties(nMask));
+            const sal_uInt8 nPos
+                = static_cast<sal_uInt8>(nRowRole * SwTableAutoFormat::nRoleCount + nColRole);
+            pNewFormat->SetBoxFormat(aBoxFormat, nPos);
+        }
+    }
+
+    return aStyleName;
+}
+
+/// Find the built-in table style a DOCX style id refers to when the file does not define the
+/// style itself. Word derives these ids from the style names: the spaces dropped, and the
+/// accent color set off with a hyphen, so "Grid Table 4 Accent 1" is "GridTable4-Accent1".
+TableStyleName lcl_FindBuiltInTableStyle(const SwDoc& rDoc, std::u16string_view rStyleId)
+{
+    const SwTableAutoFormatTable& rStyles = rDoc.GetTableStyles();
+    for (size_t i = 0; i < rStyles.size(); ++i)
+    {
+        const TableStyleName& rName = rStyles[i].GetName();
+        if (SwTableAutoFormat::MakeDocxStyleId(rName.toString()).equalsIgnoreAsciiCase(rStyleId))
+            return rName;
+    }
+    return TableStyleName();
+}
+
+}
+
 void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel)
 {
 #ifdef DBG_UTIL
@@ -1637,6 +1899,37 @@ void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel)
 
                 if (xTable.is())
                 {
+                    SwTable* pTable
+                        = xTable->GetFrameFormat() ? SwTable::FindTable(xTable->GetFrameFormat()) : nullptr;
+                    if (pTable && (aTableInfo.pTableStyle || !aTableInfo.sTableStyleId.isEmpty()))
+                    {
+                        SwDoc& rDoc = xTable->GetFrameFormat()->GetDoc();
+                        TableStyleName aStyleName;
+                        if (aTableInfo.pTableStyle)
+                            aStyleName = lcl_ImportTableStyle(rDoc, *aTableInfo.pTableStyle);
+                        else
+                            aStyleName = lcl_FindBuiltInTableStyle(rDoc, aTableInfo.sTableStyleId);
+                        if (!aStyleName.isEmpty())
+                        {
+                            pTable->SetTableStyleName(aStyleName);
+
+                            SwTableStyleSettings aSettings;
+                            aSettings.m_bUseFirstRowStyle = (aTableInfo.nOriginalTblLook & 0x020) != 0;
+                            aSettings.m_bUseLastRowStyle = (aTableInfo.nOriginalTblLook & 0x040) != 0;
+                            aSettings.m_bUseFirstColumnStyle = (aTableInfo.nOriginalTblLook & 0x080) != 0;
+                            aSettings.m_bUseLastColumnStyle = (aTableInfo.nOriginalTblLook & 0x100) != 0;
+                            aSettings.m_bUseRowBandingStyle = !(aTableInfo.nOriginalTblLook & 0x200);
+                            aSettings.m_bUseColumnBandingStyle = !(aTableInfo.nOriginalTblLook & 0x400);
+                            pTable->SetTableStyleSettings(aSettings);
+
+                            // The import above wrote the style's formatting into the cells
+                            // and paragraphs as the file's own. Resolve the style live and
+                            // drop what only repeats it, so a later role change shows.
+                            rDoc.StripBakedTableStyleFormatting(*pTable->GetTableNode(),
+                                                                /*bCompleteStyleBoxes=*/false);
+                        }
+                    }
+
                     if (!aMerges.empty())
                     {
                         static const std::vector<std::u16string_view> aBorderNames
@@ -1872,7 +2165,7 @@ void DomainMapperTableHandler::endRow()
 #endif
 }
 
-void DomainMapperTableHandler::startCell(const css::uno::Reference< css::text::XTextRange > & start,
+void DomainMapperTableHandler::startCell(const cpo::uno::Reference< css::text::XTextRange > & start,
                                          const TablePropertyMapPtr& pProps )
 {
     sal_uInt32 nRow = m_aRowProperties.size();
@@ -1903,7 +2196,7 @@ void DomainMapperTableHandler::startCell(const css::uno::Reference< css::text::X
     m_aCellRange.push_back(xStart);
 }
 
-void DomainMapperTableHandler::endCell(const css::uno::Reference< css::text::XTextRange > & end)
+void DomainMapperTableHandler::endCell(const cpo::uno::Reference< css::text::XTextRange > & end)
 {
 #ifdef DBG_UTIL
     TagLogger::getInstance().startElement("table.cell.end");

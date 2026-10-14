@@ -28,7 +28,7 @@
 
 #include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/beans/StringPair.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -85,6 +85,7 @@
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/interaction.hxx>
 #include <comphelper/sequence.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/simplefileaccessinteraction.hxx>
 #include <comphelper/string.hxx>
 #include <framework/interaction.hxx>
@@ -116,6 +117,7 @@
 #include <sot/storage.hxx>
 #include <svl/documentlockfile.hxx>
 #include <svl/msodocumentlockfile.hxx>
+#include <svl/lockfileliveness.hxx>
 #include <com/sun/star/document/DocumentRevisionListPersistence.hpp>
 
 #include <sfx2/app.hxx>
@@ -145,8 +147,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::graphic;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
@@ -283,11 +285,11 @@ class CheckReadOnlyTaskTerminateListener
 {
 public:
     // XEventListener
-    void SAL_CALL disposing(const css::lang::EventObject& Source) override;
+    void disposing(const css::lang::EventObject& Source) override;
 
     // XTerminateListener
-    void SAL_CALL queryTermination(const css::lang::EventObject& aEvent) override;
-    void SAL_CALL notifyTermination(const css::lang::EventObject& aEvent) override;
+    void queryTermination(const css::lang::EventObject& aEvent) override;
+    void notifyTermination(const css::lang::EventObject& aEvent) override;
 
     bool bIsTerminated = false;
     std::condition_variable mCond;
@@ -337,17 +339,17 @@ CheckReadOnlyTask::~CheckReadOnlyTask()
 
 namespace
 {
-void SAL_CALL
+void
 CheckReadOnlyTaskTerminateListener::disposing(const css::lang::EventObject& /*Source*/)
 {
 }
 
-void SAL_CALL
+void
 CheckReadOnlyTaskTerminateListener::queryTermination(const css::lang::EventObject& /*aEvent*/)
 {
 }
 
-void SAL_CALL
+void
 CheckReadOnlyTaskTerminateListener::notifyTermination(const css::lang::EventObject& /*aEvent*/)
 {
     std::unique_lock<std::mutex> lock(mMutex);
@@ -458,6 +460,7 @@ public:
     uno::Reference<io::XInputStream> xInputStream;
     uno::Reference<io::XStream> xStream;
     uno::Reference<io::XStream> m_xLockingStream;
+    svt::LockFileLivenessHandle m_aLivenessLock;
     uno::Reference<task::XInteractionHandler> xInteraction;
     rtl::Reference< comphelper::UNOMemoryStream > m_xODFDecryptedInnerPackageStream;
     uno::Reference<embed::XStorage> m_xODFEncryptedOuterStorage;
@@ -652,10 +655,10 @@ Reference < XContent > SfxMedium::GetContent() const
 
         // tdf#95144 add a default css::ucb::XCommandEnvironment
         // in order to have the WebDAV UCP provider manage https protocol certificates correctly
-        css:: uno::Reference< task::XInteractionHandler > xIH(
+        cpo::uno::Reference< task::XInteractionHandler > xIH(
                 css::task::InteractionHandler::createWithParent( comphelper::getProcessComponentContext(), nullptr ) );
 
-        css::uno::Reference< css::ucb::XProgressHandler > xProgress;
+        cpo::uno::Reference< css::ucb::XProgressHandler > xProgress;
         rtl::Reference<::ucbhelper::CommandEnvironment> pCommandEnv = new ::ucbhelper::CommandEnvironment( new comphelper::SimpleFileAccessInteraction( xIH ), xProgress );
 
         const SfxUnoAnyItem* pItem = SfxItemSet::GetItem(pImpl->m_pSet.get(), SID_CONTENT, false);
@@ -1134,7 +1137,7 @@ SfxMedium::ShowLockResult SfxMedium::ShowLockedDocumentDialog(const LockFileEntr
             aInfo = aData[LockFileComponent::EDITTIME];
 
             xInteractionRequestImpl = new ::ucbhelper::InteractionRequest( cpo::uno::Any(
-                document::OwnLockOnDocumentRequest( OUString(), uno::Reference< uno::XInterface >(), aDocumentURL, aInfo, !bIsLoading ) ) );
+                document::OwnLockOnDocumentRequest( OUString(), uno::Reference< cpo::uno::XInterface >(), aDocumentURL, aInfo, !bIsLoading ) ) );
         }
         else
         {
@@ -1159,13 +1162,13 @@ SfxMedium::ShowLockResult SfxMedium::ShowLockedDocumentDialog(const LockFileEntr
             if (!bIsLoading) // so, !bHandleSysLocked
             {
                 xInteractionRequestImpl = new ::ucbhelper::InteractionRequest(cpo::uno::Any(
-                    document::LockedOnSavingRequest(OUString(), uno::Reference< uno::XInterface >(), aDocumentURL, aInfo)));
+                    document::LockedOnSavingRequest(OUString(), uno::Reference< cpo::uno::XInterface >(), aDocumentURL, aInfo)));
                 // Currently, only the last "Retry" continuation (meaning ignore the lock and try overwriting) can be returned.
             }
             else /*logically therefore bIsLoading is set */
             {
                 xInteractionRequestImpl = new ::ucbhelper::InteractionRequest( cpo::uno::Any(
-                    document::LockedDocumentRequest( OUString(), uno::Reference< uno::XInterface >(), aDocumentURL, aInfo ) ) );
+                    document::LockedDocumentRequest( OUString(), uno::Reference< cpo::uno::XInterface >(), aDocumentURL, aInfo ) ) );
             }
         }
 
@@ -1332,7 +1335,7 @@ public:
     {
     }
 
-    virtual void SAL_CALL handle(uno::Reference<task::XInteractionRequest> const& xRequest) override
+    virtual void handle(uno::Reference<task::XInteractionRequest> const& xRequest) override
     {
         ucb::InteractiveNetworkWriteException readException;
         ucb::InteractiveNetworkReadException writeException;
@@ -1616,6 +1619,10 @@ SfxMedium::LockFileResult SfxMedium::LockOrigFileOnDemand(bool bLoading, bool bN
                                     bResult = aLockFile.CreateOwnLockFile();
                                     if(pMSOLockFile)
                                         bResult &= pMSOLockFile->CreateOwnLockFile();
+                                    if (bResult
+                                        && GetURLObject().GetProtocol() == INetProtocol::File)
+                                        pImpl->m_aLivenessLock
+                                            = svt::acquireLockFileLiveness(aLockFile.GetURL());
                                 }
                                 catch (const cpo::uno::Exception&)
                                 {
@@ -1686,6 +1693,39 @@ SfxMedium::LockFileResult SfxMedium::LockOrigFileOnDemand(bool bLoading, bool bN
                                     }
                                 }
 
+                                // A leftover lock file on a local path may belong to a dead
+                                // session. This runs even when the identity check above already
+                                // set bResult: a lock still held by a live process of the same
+                                // installation must not be taken silently, and a dead owner's lock
+                                // is rewritten and held by this session so later sessions see us.
+                                if (!bHandleSysLocked && !bIoErr
+                                    && GetURLObject().GetProtocol() == INetProtocol::File)
+                                {
+                                    LockFileEntry aOwnData = svt::LockFileCommon::GenerateOwnEntry();
+                                    svt::StaleLockDecision eDecision = svt::decideStaleLock(
+                                        aData[LockFileComponent::LOCALHOST],
+                                        aOwnData[LockFileComponent::LOCALHOST],
+                                        svt::probeLockFileLiveness(aLockFile.GetURL()));
+
+                                    if (eDecision == svt::StaleLockDecision::TakeOverSilently)
+                                    {
+                                        // no live process holds the lock, so the previous owner
+                                        // died: clear the stale lock and proceed editable
+                                        bResult = aLockFile.OverwriteOwnLockFile();
+                                        if (bResult)
+                                            pImpl->m_aLivenessLock
+                                                = svt::acquireLockFileLiveness(aLockFile.GetURL());
+                                        if (pMSOLockFile)
+                                            pMSOLockFile->OverwriteOwnLockFile();
+                                    }
+                                    else if (eDecision == svt::StaleLockDecision::LiveKeepLock)
+                                    {
+                                        // a live process still holds the lock, so do not take it
+                                        // over silently even when the identity matched
+                                        bResult = false;
+                                    }
+                                }
+
                                 if ( !bResult && !bIoErr)
                                 {
                                     if (!bNoUI)
@@ -1698,6 +1738,10 @@ SfxMedium::LockFileResult SfxMedium::LockOrigFileOnDemand(bool bLoading, bool bN
                                     {
                                         // take the ownership over the lock file
                                         bResult = aLockFile.OverwriteOwnLockFile();
+                                        if (bResult
+                                            && GetURLObject().GetProtocol() == INetProtocol::File)
+                                            pImpl->m_aLivenessLock
+                                                = svt::acquireLockFileLiveness(aLockFile.GetURL());
 
                                         if(pMSOLockFile)
                                             pMSOLockFile->OverwriteOwnLockFile();
@@ -1773,7 +1817,7 @@ SfxMedium::TryEncryptedInnerPackage(uno::Reference<embed::XStorage> const & xSto
         // either this throws due to wrong password or IO error, or returns stream
         assert(xDecryptedInnerPackage.is());
         // need a seekable stream => copy
-        Reference<uno::XComponentContext> const& xContext(::comphelper::getProcessComponentContext());
+        Reference<cpo::uno::XComponentContext> const& xContext(::comphelper::getProcessComponentContext());
         rtl::Reference< comphelper::UNOMemoryStream > xDecryptedInnerPackageStream = new comphelper::UNOMemoryStream();
         comphelper::OStorageHelper::CopyInputToOutput(xDecryptedInnerPackage->getInputStream(), xDecryptedInnerPackageStream->getOutputStream());
         xDecryptedInnerPackageStream->getOutputStream()->closeOutput();
@@ -2932,7 +2976,8 @@ void SfxMedium::GetLockingStream_Impl()
         return;
 
     // open the original document
-    comphelper::SequenceAsHashMap aMedium(TransformItems(SID_OPENDOC, GetItemSet()));
+    comphelper::SequenceAsHashMap aMedium(
+        TransformItems(SID_OPENDOC, GetItemSet()).getAsConstPropertyValueList());
 
     utl::MediaDescriptor::addInputStreamOwnLock(aMedium);
 
@@ -3016,7 +3061,8 @@ void SfxMedium::GetMedium_Impl()
         }
         else
         {
-            comphelper::SequenceAsHashMap aMedium(TransformItems(SID_OPENDOC, GetItemSet()));
+            comphelper::SequenceAsHashMap aMedium(
+                TransformItems(SID_OPENDOC, GetItemSet()).getAsConstPropertyValueList());
 
             if ( pImpl->m_xLockingStream.is() && !bFromTempFile )
             {
@@ -3247,17 +3293,17 @@ void SfxMedium::UseInteractionHandler( bool bUse )
 }
 
 
-css::uno::Reference< css::task::XInteractionHandler >
+cpo::uno::Reference< css::task::XInteractionHandler >
 SfxMedium::GetInteractionHandler( bool bGetAlways )
 {
     // if interaction isn't allowed explicitly ... return empty reference!
     if ( !bGetAlways && !pImpl->bUseInteractionHandler )
-        return css::uno::Reference< css::task::XInteractionHandler >();
+        return cpo::uno::Reference< css::task::XInteractionHandler >();
 
     // search a possible existing handler inside cached item set
     if ( pImpl->m_pSet )
     {
-        css::uno::Reference< css::task::XInteractionHandler > xHandler;
+        cpo::uno::Reference< css::task::XInteractionHandler > xHandler;
         const SfxUnoAnyItem* pHandler = SfxItemSet::GetItem(pImpl->m_pSet.get(), SID_INTERACTIONHANDLER, false);
         if ( pHandler && (pHandler->GetValue() >>= xHandler) && xHandler.is() )
             return xHandler;
@@ -3265,14 +3311,14 @@ SfxMedium::GetInteractionHandler( bool bGetAlways )
 
     // if default interaction isn't allowed explicitly ... return empty reference!
     if ( !bGetAlways && !pImpl->bAllowDefaultIntHdl )
-        return css::uno::Reference< css::task::XInteractionHandler >();
+        return cpo::uno::Reference< css::task::XInteractionHandler >();
 
     // otherwise return cached default handler ... if it exist.
     if ( pImpl->xInteraction.is() )
         return pImpl->xInteraction;
 
     // create default handler and cache it!
-    const Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
     pImpl->xInteraction.set(
         task::InteractionHandler::createWithParent(xContext, nullptr), UNO_QUERY_THROW );
     return pImpl->xInteraction;
@@ -3408,6 +3454,8 @@ void SfxMedium::UnlockFile( bool bReleaseLockStream )
         try
         {
             pImpl->m_bLocked = false;
+            // release our advisory lock before deleting the lock file
+            pImpl->m_aLivenessLock.reset();
             // TODO/LATER: A warning could be shown in case the file is not the own one
             aLockFile.RemoveFile();
         }
@@ -3660,7 +3708,7 @@ SfxMedium::SfxMedium( const cpo::uno::Sequence<beans::PropertyValue>& aArgs ) :
             // that must be copied here
 
             const SfxStringItem* pFileNameItem = SfxItemSet::GetItem(pImpl->m_pSet.get(), SID_FILE_NAME, false);
-            if (!pFileNameItem) throw uno::RuntimeException();
+            if (!pFileNameItem) throw cpo::uno::RuntimeException();
             OUString aNewTempFileURL = SfxMedium::CreateTempCopyWithExt( pFileNameItem->GetValue() );
             if ( !aNewTempFileURL.isEmpty() )
             {
@@ -3681,7 +3729,7 @@ SfxMedium::SfxMedium( const cpo::uno::Sequence<beans::PropertyValue>& aArgs ) :
         pImpl->m_bOriginallyLoadedReadOnly = true;
 
     const SfxStringItem* pFileNameItem = SfxItemSet::GetItem(pImpl->m_pSet.get(), SID_FILE_NAME, false);
-    if (!pFileNameItem) throw uno::RuntimeException();
+    if (!pFileNameItem) throw cpo::uno::RuntimeException();
     pImpl->m_aLogicName = pFileNameItem->GetValue();
     pImpl->m_nStorOpenMode = pImpl->m_bOriginallyLoadedReadOnly
         ? SFX_STREAM_READONLY : SFX_STREAM_READWRITE;
@@ -3805,7 +3853,7 @@ SfxFrame* SfxMedium::GetLoadTargetFrame() const
     return pImpl->wLoadTargetFrame;
 }
 
-void SfxMedium::setStreamToLoadFrom(const css::uno::Reference<css::io::XInputStream>& xInputStream, bool bIsReadOnly )
+void SfxMedium::setStreamToLoadFrom(const cpo::uno::Reference<css::io::XInputStream>& xInputStream, bool bIsReadOnly )
 {
     pImpl->m_xInputStreamToLoadFrom = xInputStream;
     pImpl->m_bInputStreamIsReadOnly = bIsReadOnly;
@@ -3861,7 +3909,7 @@ SvKeyValueIterator* SfxMedium::GetHeaderAttributes_Impl()
     return pImpl->xAttributes.get();
 }
 
-css::uno::Reference< css::io::XInputStream > const &  SfxMedium::GetInputStream()
+cpo::uno::Reference< css::io::XInputStream > const &  SfxMedium::GetInputStream()
 {
     if ( !pImpl->xInputStream.is() )
         GetMedium_Impl();
@@ -4243,7 +4291,7 @@ void SfxMedium::CreateTempFileNoCopy()
 }
 
 bool SfxMedium::SignDocumentContentUsingCertificate(
-    const css::uno::Reference<css::frame::XModel>& xModel, bool bHasValidDocumentSignature,
+    const cpo::uno::Reference<css::frame::XModel>& xModel, bool bHasValidDocumentSignature,
     svl::crypto::SigningContext& rSigningContext)
 {
     bool bChanges = false;
@@ -4275,7 +4323,7 @@ bool SfxMedium::SignDocumentContentUsingCertificate(
     try
     {
         if ( !pImpl->xStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         bool bODF = GetFilter()->IsOwnFormat();
         try
@@ -4291,7 +4339,7 @@ bool SfxMedium::SignDocumentContentUsingCertificate(
         }
 
         if ( !xWriteableZipStor.is() && bODF )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< embed::XStorage > xMetaInf;
         if (xWriteableZipStor.is() && xWriteableZipStor->hasByName(u"META-INF"_ustr))
@@ -4300,7 +4348,7 @@ bool SfxMedium::SignDocumentContentUsingCertificate(
                                             u"META-INF"_ustr,
                                             embed::ElementModes::READWRITE );
             if ( !xMetaInf.is() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
 
         if (xMetaInf.is())
@@ -4413,7 +4461,7 @@ void SfxMedium::SignContents_Impl(weld::Window* pDialogParent,
     try
     {
         if ( !pImpl->xStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         bool bODF = GetFilter()->IsOwnFormat();
         try
@@ -4440,7 +4488,7 @@ void SfxMedium::SignContents_Impl(weld::Window* pDialogParent,
         }
 
         if ( !xWriteableZipStor.is() && bODF )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< embed::XStorage > xMetaInf;
         if (xWriteableZipStor.is() && xWriteableZipStor->hasByName(u"META-INF"_ustr))
@@ -4449,7 +4497,7 @@ void SfxMedium::SignContents_Impl(weld::Window* pDialogParent,
                                             u"META-INF"_ustr,
                                             embed::ElementModes::READWRITE );
             if ( !xMetaInf.is() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
 
         auto xModelSigner = dynamic_cast<sfx2::DigitalSignatures*>(xSigner.get());
@@ -4990,7 +5038,7 @@ IMPL_STATIC_LINK(SfxMedium, ShowReloadEditableDialog, void*, p, void)
             = pMed->GetURLObject().GetLastName(INetURLObject::DecodeMechanism::WithCharset);
         ::rtl::Reference<::ucbhelper::InteractionRequest> xInteractionRequestImpl
             = new ::ucbhelper::InteractionRequest(cpo::uno::Any(document::ReloadEditableRequest(
-                OUString(), uno::Reference<uno::XInterface>(), aDocumentURL)));
+                OUString(), uno::Reference<cpo::uno::XInterface>(), aDocumentURL)));
         if (xInteractionRequestImpl != nullptr)
         {
             cpo::uno::Sequence<uno::Reference<task::XInteractionContinuation>> aContinuations{
@@ -5055,6 +5103,20 @@ bool SfxMedium::CheckCanGetLockfile() const
         {
             // this is own lock from the same installation, it could remain because of crash
             bCanReload = true;
+        }
+
+        // judge a local lock by whether a live process still holds it, rather
+        // than by identity alone
+        if (GetURLObject().GetProtocol() == INetProtocol::File)
+        {
+            svt::StaleLockDecision eDecision = svt::decideStaleLock(
+                aData[LockFileComponent::LOCALHOST],
+                aOwnData[LockFileComponent::LOCALHOST],
+                svt::probeLockFileLiveness(aLockFile.GetURL()));
+            if (eDecision == svt::StaleLockDecision::TakeOverSilently)
+                bCanReload = true;
+            else if (eDecision == svt::StaleLockDecision::LiveKeepLock)
+                bCanReload = false;
         }
     }
     else if (nError1 == osl::FileBase::E_NOENT) // file doesn't exist

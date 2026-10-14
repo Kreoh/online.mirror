@@ -62,7 +62,7 @@
 #include <com/sun/star/table/XMergeableCell.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/drawing/XDrawPages.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/presentation/ClickAction.hpp>
@@ -98,7 +98,7 @@
 
 using namespace ::css;
 using namespace ::css::beans;
-using namespace ::css::uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 using namespace ::css::drawing;
 using namespace ::css::table;
@@ -354,7 +354,7 @@ awt::Size ShapeExport::MapSize( const awt::Size& rSize ) const
     return awt::Size( aRetSize.Width(), aRetSize.Height() );
 }
 
-static bool IsNonEmptySimpleText(const Reference<XInterface>& xIface)
+static bool IsNonEmptySimpleText(const Reference<cpo::uno::XInterface>& xIface)
 {
     if (Reference<XSimpleText> xText{ xIface, UNO_QUERY })
         return xText->getString().getLength();
@@ -362,7 +362,7 @@ static bool IsNonEmptySimpleText(const Reference<XInterface>& xIface)
     return false;
 }
 
-bool ShapeExport::NonEmptyText( const Reference< XInterface >& xIface )
+bool ShapeExport::NonEmptyText( const Reference< cpo::uno::XInterface >& xIface )
 {
     Reference< XPropertySet > xPropSet( xIface, UNO_QUERY );
 
@@ -733,7 +733,7 @@ static sal_Int32 lcl_CircleAngle2CustomShapeEllipseAngleOOX(const sal_Int32 nInt
         return 0;
 }
 
-static OUString lcl_GetTarget(const css::uno::Reference<css::frame::XModel>& xModel,
+static OUString lcl_GetTarget(const cpo::uno::Reference<css::frame::XModel>& xModel,
                               std::u16string_view rURL)
 {
     Reference<drawing::XDrawPagesSupplier> xDPS(xModel, uno::UNO_QUERY_THROW);
@@ -2055,6 +2055,12 @@ ShapeExport& ShapeExport::WriteConnectorShape( const Reference< XShape >& xShape
         WriteOutline( xShapeProps );
     pFS->endElementNS( mnXmlNamespace, XML_spPr );
 
+    // A connector carries the style that names the theme its colors come from, the same way
+    // every other shape does.
+    pFS->startElementNS(mnXmlNamespace, XML_style);
+    WriteShapeStyle( rXPropSet );
+    pFS->endElementNS( mnXmlNamespace, XML_style );
+
     // connector shape (cxnSp) cannot contain text (txBody) (according to schema)
     if( nShapeNode != XML_cxnSp )
     {
@@ -2319,7 +2325,7 @@ ShapeExport& ShapeExport::WriteShape( const Reference< XShape >& xShape )
     return *this;
 }
 
-static bool lcl_isTextBox(const Reference<XInterface>& xIface)
+static bool lcl_isTextBox(const Reference<cpo::uno::XInterface>& xIface)
 {
     uno::Reference<beans::XPropertySet> xPropertySet(xIface, uno::UNO_QUERY);
     if (!xPropertySet.is())
@@ -2333,7 +2339,26 @@ static bool lcl_isTextBox(const Reference<XInterface>& xIface)
     return aTextBox.get<bool>();
 }
 
-ShapeExport& ShapeExport::WriteTextBox( const Reference< XInterface >& xIface, sal_Int32 nXmlNamespace, bool bWritePropertiesAsLstStyles, bool bText )
+namespace
+{
+/// The character size a reader assumes where a DrawingML text body says nothing, which is the
+/// size the import stamps on a shape that states none of its own.
+constexpr float fDefaultCharHeight = 18.0;
+
+/// True when the shape asks for a character size other than the one a text body implies.
+bool lcl_HasOwnCharacterHeight(const Reference<cpo::uno::XInterface>& xIface)
+{
+    Reference<XPropertySet> xPropSet(xIface, UNO_QUERY);
+    if (!xPropSet.is() || !xPropSet->getPropertySetInfo()->hasPropertyByName(u"CharHeight"_ustr))
+        return false;
+
+    float fCharHeight = fDefaultCharHeight;
+    xPropSet->getPropertyValue(u"CharHeight"_ustr) >>= fCharHeight;
+    return fCharHeight != fDefaultCharHeight;
+}
+}
+
+ShapeExport& ShapeExport::WriteTextBox( const Reference< cpo::uno::XInterface >& xIface, sal_Int32 nXmlNamespace, bool bWritePropertiesAsLstStyles, bool bText )
 {
     // In case this shape has an associated textbox, then export that, and we're done.
     if (GetDocumentType() == DOCUMENT_DOCX && !mbUserShapes && GetTextExport())
@@ -2347,7 +2372,13 @@ ShapeExport& ShapeExport::WriteTextBox( const Reference< XInterface >& xIface, s
     }
 
     Reference< XText > xXText( xIface, UNO_QUERY );
-    if( (NonEmptyText( xIface ) || GetDocumentType() == DOCUMENT_PPTX)
+    // A shape with no text still carries the size its text would take, so a presentation always
+    // writes the text body, and a spreadsheet writes it once the shape asks for a size other than
+    // the one a reader assumes.
+    const bool bWriteEmptyText
+        = GetDocumentType() == DOCUMENT_PPTX
+          || (GetDocumentType() == DOCUMENT_XLSX && !mbUserShapes && lcl_HasOwnCharacterHeight(xIface));
+    if( (NonEmptyText( xIface ) || bWriteEmptyText)
         && xXText.is() )
     {
         FSHelperPtr pFS = GetFS();
@@ -2358,7 +2389,7 @@ ShapeExport& ShapeExport::WriteTextBox( const Reference< XInterface >& xIface, s
                   /*nXmlNamespace=*/0, /*bWritePropertiesAsLstStyles=*/bWritePropertiesAsLstStyles);
         if (!bText)
             // A text body holds at least one paragraph, and an empty one says the shape has no text
-            pFS->singleElementNS(XML_a, XML_p);
+            WriteTextlessParagraph(xIface);
         pFS->endElementNS( nXmlNamespace, (GetDocumentType() != DOCUMENT_DOCX || mbUserShapes ? XML_txBody : XML_txbx) );
         if (GetDocumentType() == DOCUMENT_DOCX && !mbUserShapes)
             WriteText( xIface, /*bBodyPr=*/true, /*bText=*/false, /*nXmlNamespace=*/nXmlNamespace );
@@ -2618,7 +2649,9 @@ void ShapeExport::WriteTableCellProperties(const Reference< XPropertySet>& xCell
     mpFS->endElementNS( XML_a, XML_tcPr );
 }
 
-void ShapeExport::WriteBorderLine(const sal_Int32 xml_line_element, const BorderLine2& rBorderLine)
+void ShapeExport::WriteBorderLine(const sal_Int32 xml_line_element, const BorderLine2& rBorderLine,
+                                 const OUString& rComplexColorProperty,
+                                 const Reference<XPropertySet>& xCellPropSet)
 {
 // While importing the table cell border line width, it converts EMU->Hmm then divided result by 2.
 // To get original value of LineWidth need to multiple by 2.
@@ -2631,7 +2664,8 @@ void ShapeExport::WriteBorderLine(const sal_Int32 xml_line_element, const Border
         mpFS->startElementNS(XML_a, xml_line_element, XML_w, OString::number(nBorderWidth));
         if ( rBorderLine.Color == sal_Int32( COL_AUTO ) )
             mpFS->singleElementNS(XML_a, XML_noFill);
-        else
+        // A border color that names a theme color goes out as the theme color it is.
+        else if (!DrawingML::WriteSchemeColor(rComplexColorProperty, xCellPropSet))
         {
             ::Color nColor(ColorTransparency, rBorderLine.Color);
             if (nColor.IsTransparent())
@@ -2684,19 +2718,19 @@ void ShapeExport::WriteTableCellBorders(const Reference< XPropertySet>& xCellPro
 
 // lnL - Left Border Line Properties of table cell
     xCellPropSet->getPropertyValue(u"LeftBorder"_ustr) >>= aBorderLine;
-    WriteBorderLine( XML_lnL, aBorderLine );
+    WriteBorderLine( XML_lnL, aBorderLine, u"LeftBorderComplexColor"_ustr, xCellPropSet );
 
 // lnR - Right Border Line Properties of table cell
     xCellPropSet->getPropertyValue(u"RightBorder"_ustr) >>= aBorderLine;
-    WriteBorderLine( XML_lnR, aBorderLine );
+    WriteBorderLine( XML_lnR, aBorderLine, u"RightBorderComplexColor"_ustr, xCellPropSet );
 
 // lnT - Top Border Line Properties of table cell
     xCellPropSet->getPropertyValue(u"TopBorder"_ustr) >>= aBorderLine;
-    WriteBorderLine( XML_lnT, aBorderLine );
+    WriteBorderLine( XML_lnT, aBorderLine, u"TopBorderComplexColor"_ustr, xCellPropSet );
 
 // lnB - Bottom Border Line Properties of table cell
     xCellPropSet->getPropertyValue(u"BottomBorder"_ustr) >>= aBorderLine;
-    WriteBorderLine( XML_lnB, aBorderLine );
+    WriteBorderLine( XML_lnB, aBorderLine, u"BottomBorderComplexColor"_ustr, xCellPropSet );
 }
 
 ShapeExport& ShapeExport::WriteTableShape( const Reference< XShape >& xShape )

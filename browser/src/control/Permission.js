@@ -38,18 +38,24 @@ window.L.Map.include({
 		// Fall back to the document URL which ends with the file name.
 		var fileName = this['wopi'].BaseFileName || this.options.doc || '';
 		var isPDF = fileName.toLowerCase().endsWith('.pdf');
-		if (!isPDF && (window.mode.isSmallScreenDevice() || window.mode.isTablet())) {
+		const mobileLayout = window.mode.isSmallScreenDevice() || window.mode.isTablet();
+		if (!isPDF && mobileLayout) {
 			button.css('display', 'flex');
 		} else {
 			button.hide();
 		}
 		var that = this;
 		if (perm === 'edit') {
-			// Only apply the opt-in gate when the doc is first opened;
-			// later setPermission calls (reload, save-as, server perm
-			// changes) honor what was asked.
-			var firstOpen = this._permission === undefined;
-			if (firstOpen && (this._shouldStartReadOnly() || window.mode.isSmallScreenDevice() || window.mode.isTablet())) {
+			// The opt-in gate applies when the doc is first opened. Later
+			// calls honor what was asked, except that on a mobile layout a
+			// view in the read-only stage stays there with its edit button.
+			const firstOpen = this._permission === undefined;
+			const stayReadOnly = !firstOpen && this._permission === 'readonly' && mobileLayout;
+			if (this.options.canTryLock) {
+				// This is a success response to an attempt to lock using mobile-edit-button
+				this._switchToEditMode();
+			}
+			else if ((firstOpen && (this._shouldStartReadOnly() || mobileLayout)) || stayReadOnly) {
 				button.on('click', function () {
 					that._switchToEditMode();
 				});
@@ -57,16 +63,21 @@ window.L.Map.include({
 				// temporarily, before the user touches the floating action button
 				this._enterReadOnlyMode('readonly');
 			}
-			else if (this.options.canTryLock) {
-				// This is a success response to an attempt to lock using mobile-edit-button
-				this._switchToEditMode();
-			}
 			else {
+				// Edit mode has no use for the button.
+				button.hide();
 				this._enterEditMode(perm);
 			}
 		}
 		else if (perm === 'view' || perm === 'readonly') {
-			if (this.isLockedReadOnlyUser()) {
+			// View mode during an outage or a migration ends with the
+			// reconnect, which chooses the mode again. The button stays
+			// hidden until then.
+			const reconnectPending = window.migrating || (app.socket && !app.socket.connected());
+			if (perm === 'view' && reconnectPending) {
+				button.hide();
+			}
+			else if (this.isLockedReadOnlyUser()) {
 				button.on('click', function () {
 					that.openUnlockPopup();
 				});
@@ -77,7 +88,7 @@ window.L.Map.include({
 				});
 			} else if (!window.ThisIsAMobileApp && !this['wopi'].UserCanWrite) {
 				$('#mobile-edit-button').hide();
-			} else if (window.mode.isSmallScreenDevice() || window.mode.isTablet()) {
+			} else if (mobileLayout) {
 				// Writeable user stepped back from edit to readonly: keep the FAB
 				// visible so they can re-enter edit mode.
 				button.on('click', function () {
@@ -413,23 +424,21 @@ window.L.Map.include({
 		setTimeout(wire, 0);
 	},
 
-	// The user wants to start editing while other users are
-	// viewing.  Offer the choice between editing locally
-	// (changes sync on save) or starting a collaborative
-	// session (all users edit together in real-time).
-	_showWasmEditChoice: function () {
+	// Offer the choice between editing locally (changes sync on save) or starting a
+	// collaborative session (all users edit together in real-time).
+	_showCollabEditChoiceDialog: function (title, subtitle, onEditLocally, titleAvatar) {
 		var that = this;
 		this._showTwoCardDialog(
 			'wasm-edit-choice-modal',
-			_('How would you like to edit?'),
-			_('Other users are viewing this document. Choose how you\'d like to continue:'),
+			title,
+			subtitle,
 			[
 				{
 					id: 'edit-locally',
 					icon: 'images/coda-collab-local-editing',
 					heading: _('Edit locally'),
 					description: _('Changes sync when you save'),
-					onClick: function () { that._proceedEditMode(); }
+					onClick: onEditLocally
 				},
 				{
 					id: 'start-collaborative',
@@ -438,7 +447,8 @@ window.L.Map.include({
 					description: _('Edit together in real-time'),
 					onClick: function () { that._saveAndSwitchToServerMode(); }
 				}
-			]
+			],
+			titleAvatar
 		);
 	},
 
@@ -546,19 +556,28 @@ window.L.Map.include({
 		}
 	},
 
+	// Save what the user changed, for a native host that is waiting on the
+	// result.  A document with nothing to save is answered at once with
+	// nothingToSaveMessage, so the host hears back either way.  Answers
+	// whether a save was started.
+	_saveForNativeHost: function (nothingToSaveMessage) {
+		if (this._permission !== 'edit' || !this._everModified) {
+			window.postMobileMessage(nothingToSaveMessage);
+			return false;
+		}
+		this.save(true /* dontTerminateEdit */,
+			false /* dontSaveIfUnmodified */);
+		return true;
+	},
+
 	// Save any local-edit changes and then close the window.  Mirrors
 	// _saveAndSwitchToServerMode but the post-save action is window
 	// close, signalled to the native host via a CLOSE_WINDOW message
 	// in main.js's commandresult handler once the save (and, for
 	// remote docs, the subsequent integrator upload) completes.
 	_saveAndClose: function () {
-		if (this._permission === 'edit' && this._everModified) {
+		if (this._saveForNativeHost('CLOSE_WINDOW'))
 			window._closeAfterSave = true;
-			this.save(true /* dontTerminateEdit */,
-				false /* dontSaveIfUnmodified */);
-		} else {
-			window.postMobileMessage('CLOSE_WINDOW');
-		}
 	},
 
 	// Another user wants to start collaborative editing.  Save
@@ -579,21 +598,35 @@ window.L.Map.include({
 			_('Other users are editing this document. Choose how you\'d like to continue:'));
 	},
 
+	// Someone opened the document we are editing locally.
+	_onCollabUserJoined: function (userName, avatar) {
+		if (!this.isEditMode())
+			return;
+		this._showCollabEditChoiceDialog(
+			avatar
+				? { name: userName, rest: _('opened this document') }
+				: _('{0} opened this document').replace('{0}', userName),
+			_('Choose how you\'d like to continue:'),
+			function () {},
+			avatar);
+	},
+
 	// Another user has just started editing while we were
 	// viewing.  Offer to keep viewing locally or join the
 	// collaborative session.
 	_onOtherUserEditingStarted: function (userName, avatar) {
-		// We are editing ourselves: don't offer to switch (and risk
-		// dropping our in-progress local changes); the conflict gets
-		// resolved at next save.  This is reachable via the /cool/ws
-		// bridge in CollabBroker, since plain-COOL's editing_started
-		// can land here while we are mid-edit.
+		var title = avatar
+			? { name: userName, rest: _('started editing') }
+			: _('{0} started editing').replace('{0}', userName);
+		// Joining from edit mode saves the local changes first.
 		if (this.isEditMode())
+		{
+			this._showCollabEditChoiceDialog(
+				title, _('Choose how you\'d like to continue:'), function () {}, avatar);
 			return;
+		}
 		this._showCollabJoinDialog(
-			avatar
-				? { name: userName, rest: _('started editing') }
-				: _('{0} started editing').replace('{0}', userName),
+			title,
 			_('Someone else is now editing this document. Choose how you\'d like to continue:'),
 			avatar);
 	},
@@ -610,7 +643,10 @@ window.L.Map.include({
 		// local and collaborative editing.
 		if ((window.ThisIsTheEmscriptenApp || window.mode.isCODesktop())
 			&& window.collabUsers && window.collabUsers.length > 0) {
-			this._showWasmEditChoice();
+			this._showCollabEditChoiceDialog(
+				_('How would you like to edit?'),
+				_('Other users are viewing this document. Choose how you\'d like to continue:'),
+				this._proceedEditMode.bind(this));
 			return;
 		}
 
@@ -676,7 +712,9 @@ window.L.Map.include({
 	_sendViewReadOnly: function (readOnly) {
 		if (app.isReadOnly())
 			return;
-		if (app.socket)
+		// Only a live view takes the message. The reconnect sets the state
+		// of a reloaded view.
+		if (app.socket && app.socket.connected())
 			app.socket.sendMessage('setviewreadonly value=' + readOnly);
 	},
 
@@ -709,6 +747,13 @@ window.L.Map.include({
 	},
 
 	_enterReadOnlyMode: function (perm) {
+		// The dispatcher refuses an action while a dialog is open,
+		// close the dialogs first so the cell edit below is accepted.
+		this.fire('closealldialogs');
+
+		// Finish an open cell edit while the view is still editable
+		this.acceptPendingCellEdit();
+
 		this._permission = perm;
 
 		// disable all user interaction, will need to add keyboard too
@@ -721,7 +766,6 @@ window.L.Map.include({
 
 		app.events.fire('updatepermission', {perm : perm});
 		this.fire('closemobilewizard');
-		this.fire('closealldialogs');
 
 		// Mark the view read-only in core only after the listeners above
 		// have sent their cleanup commands. The kit accepts sidebar show

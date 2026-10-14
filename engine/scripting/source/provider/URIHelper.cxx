@@ -29,7 +29,7 @@
 namespace func_provider
 {
 
-namespace uno = css::uno;
+namespace uno = cpo::uno;
 namespace ucb = css::ucb;
 namespace lang = css::lang;
 namespace uri = css::uri;
@@ -43,7 +43,7 @@ constexpr OUString USER_URI =
 
 
 ScriptingFrameworkURIHelper::ScriptingFrameworkURIHelper(
-    const uno::Reference< uno::XComponentContext >& xContext)
+    const uno::Reference< cpo::uno::XComponentContext >& xContext)
 {
     try
     {
@@ -69,7 +69,7 @@ ScriptingFrameworkURIHelper::~ScriptingFrameworkURIHelper()
     // currently does nothing
 }
 
-void SAL_CALL
+void
 ScriptingFrameworkURIHelper::initialize(
     const cpo::uno::Sequence < cpo::uno::Any >& args )
 {
@@ -77,19 +77,19 @@ ScriptingFrameworkURIHelper::initialize(
          args[0].getValueType() != ::cppu::UnoType<OUString>::get() ||
          args[1].getValueType() != ::cppu::UnoType<OUString>::get() )
     {
-        throw uno::RuntimeException( u"ScriptingFrameworkURIHelper got invalid argument list"_ustr );
+        throw cpo::uno::RuntimeException( u"ScriptingFrameworkURIHelper got invalid argument list"_ustr );
     }
 
     if ( !(args[0] >>= m_sLanguage) || !(args[1] >>= m_sLocation) )
     {
-        throw uno::RuntimeException( u"ScriptingFrameworkURIHelper error parsing args"_ustr );
+        throw cpo::uno::RuntimeException( u"ScriptingFrameworkURIHelper error parsing args"_ustr );
     }
 
     SCRIPTS_PART = "/Scripts/" + m_sLanguage.toAsciiLowerCase();
 
     if ( !initBaseURI() )
     {
-        throw uno::RuntimeException( u"ScriptingFrameworkURIHelper cannot find script directory"_ustr );
+        throw cpo::uno::RuntimeException( u"ScriptingFrameworkURIHelper cannot find script directory"_ustr );
     }
 }
 
@@ -105,21 +105,11 @@ ScriptingFrameworkURIHelper::initBaseURI()
         uri = USER_URI;
         bAppendScriptsPart = true;
     }
-    else if ( m_sLocation == "user:uno_packages" )
-    {
-        test = u"uno_packages"_ustr;
-        uri = USER_URI + "/user/uno_packages/cache";
-    }
     else if (m_sLocation == SHARE)
     {
         test = SHARE;
         uri = u"vnd.sun.star.expand:$BRAND_BASE_DIR"_ustr;
         bAppendScriptsPart = true;
-    }
-    else if (m_sLocation == "share:uno_packages")
-    {
-        test = u"uno_packages"_ustr;
-        uri = u"vnd.sun.star.expand:$UNO_SHARED_PACKAGES_CACHE"_ustr;
     }
     else if (m_sLocation.startsWith("vnd.sun.star.tdoc"))
     {
@@ -183,7 +173,7 @@ ScriptingFrameworkURIHelper::getLanguagePath(const OUString& rLanguagePart)
     return result;
 }
 
-OUString SAL_CALL
+OUString
 ScriptingFrameworkURIHelper::getScriptURI(const OUString& rStorageURI)
 {
     return
@@ -195,7 +185,7 @@ ScriptingFrameworkURIHelper::getScriptURI(const OUString& rStorageURI)
         m_sLocation;
 }
 
-OUString SAL_CALL
+OUString
 ScriptingFrameworkURIHelper::getStorageURI(const OUString& rScriptURI)
 {
     OUString sLanguagePart;
@@ -209,40 +199,40 @@ ScriptingFrameworkURIHelper::getStorageURI(const OUString& rScriptURI)
     {
         throw lang::IllegalArgumentException(
             u"Script URI not valid"_ustr,
-            uno::Reference< uno::XInterface >(), 1 );
+            uno::Reference< cpo::uno::XInterface >(), 1 );
     }
 
     return m_sBaseURI + "/" + getLanguagePath(sLanguagePart);
 }
 
-OUString SAL_CALL
+OUString
 ScriptingFrameworkURIHelper::getRootStorageURI()
 {
     return m_sBaseURI;
 }
 
-OUString SAL_CALL
+OUString
 ScriptingFrameworkURIHelper::getImplementationName()
 {
     return
         u"com.sun.star.script.provider.ScriptURIHelper"_ustr;
 }
 
-bool SAL_CALL
+bool
 ScriptingFrameworkURIHelper::supportsService( const OUString& serviceName )
 {
     return cppu::supportsService( this, serviceName );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 ScriptingFrameworkURIHelper::getSupportedServiceNames()
 {
     return { u"com.sun.star.script.provider.ScriptURIHelper"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_ScriptingFrameworkURIHelper_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ScriptingFrameworkURIHelper(context));
 }

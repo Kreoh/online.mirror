@@ -21,7 +21,7 @@
 #include "gridcontrol.hxx"
 #include "grideventforwarder.hxx"
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/view/SelectionType.hpp>
 #include <com/sun/star/awt/grid/XGridControl.hpp>
 #include <com/sun/star/awt/grid/XGridDataModel.hpp>
@@ -41,8 +41,8 @@
 #include <helper/unopropertyarrayhelper.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::awt::grid;
 using namespace ::com::sun::star::lang;
@@ -70,7 +70,7 @@ namespace
 }
 
 
-UnoGridModel::UnoGridModel( const css::uno::Reference< css::uno::XComponentContext >& rxContext )
+UnoGridModel::UnoGridModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext )
         :UnoControlModel( rxContext )
 {
     ImplRegisterProperty( BASEPROPERTY_BACKGROUNDCOLOR );
@@ -182,7 +182,7 @@ namespace
 }
 
 
-void SAL_CALL UnoGridModel::dispose(  )
+void UnoGridModel::dispose(  )
 {
     lcl_dispose_nothrow( getFastPropertyValue( BASEPROPERTY_GRID_COLUMNMODEL ) );
     lcl_dispose_nothrow( getFastPropertyValue( BASEPROPERTY_GRID_DATAMODEL ) );
@@ -286,7 +286,7 @@ OUString UnoGridControl::GetComponentServiceName() const
 }
 
 
-void SAL_CALL UnoGridControl::dispose(  )
+void UnoGridControl::dispose(  )
 {
     lang::EventObject aEvt;
     aEvt.Source = getXWeak();
@@ -295,7 +295,7 @@ void SAL_CALL UnoGridControl::dispose(  )
 }
 
 
-void SAL_CALL UnoGridControl::createPeer( const uno::Reference< awt::XToolkit > & rxToolkit, const uno::Reference< awt::XWindowPeer >  & rParentPeer )
+void UnoGridControl::createPeer( const uno::Reference< awt::XToolkit > & rxToolkit, const uno::Reference< awt::XWindowPeer >  & rParentPeer )
 {
     UnoControlBase::createPeer( rxToolkit, rParentPeer );
 
@@ -344,7 +344,7 @@ namespace
 }
 
 
-bool SAL_CALL UnoGridControl::setModel( const Reference< XControlModel >& i_model )
+bool UnoGridControl::setModel( const Reference< XControlModel >& i_model )
 {
     lcl_setEventForwarding( getModel(), m_pEventForwarder, false );
     if ( !UnoGridControl_Base::setModel( i_model ) )
@@ -368,93 +368,93 @@ bool SAL_CALL UnoGridControl::setModel( const Reference< XControlModel >& i_mode
 }
 
 
-::sal_Int32 SAL_CALL UnoGridControl::getCurrentColumn(  )
+::sal_Int32 UnoGridControl::getCurrentColumn(  )
 {
     Reference< XGridControl > const xGrid ( getPeer(), UNO_QUERY_THROW );
     return xGrid->getCurrentColumn();
 }
 
 
-::sal_Int32 SAL_CALL UnoGridControl::getCurrentRow(  )
+::sal_Int32 UnoGridControl::getCurrentRow(  )
 {
     Reference< XGridControl > const xGrid ( getPeer(), UNO_QUERY_THROW );
     return xGrid->getCurrentRow();
 }
 
 
-void SAL_CALL UnoGridControl::goToCell( ::sal_Int32 i_columnIndex, ::sal_Int32 i_rowIndex )
+void UnoGridControl::goToCell( ::sal_Int32 i_columnIndex, ::sal_Int32 i_rowIndex )
 {
     Reference< XGridControl > const xGrid ( getPeer(), UNO_QUERY_THROW );
     xGrid->goToCell( i_columnIndex, i_rowIndex );
 }
 
 
-void SAL_CALL UnoGridControl::selectRow( ::sal_Int32 i_rowIndex )
+void UnoGridControl::selectRow( ::sal_Int32 i_rowIndex )
 {
     Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->selectRow( i_rowIndex );
 }
 
 
-void SAL_CALL UnoGridControl::selectAllRows()
+void UnoGridControl::selectAllRows()
 {
     Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->selectAllRows();
 }
 
 
-void SAL_CALL UnoGridControl::deselectRow( ::sal_Int32 i_rowIndex )
+void UnoGridControl::deselectRow( ::sal_Int32 i_rowIndex )
 {
     Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->deselectRow( i_rowIndex );
 }
 
 
-void SAL_CALL UnoGridControl::deselectAllRows()
+void UnoGridControl::deselectAllRows()
 {
     Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->deselectAllRows();
 }
 
 
-cpo::uno::Sequence< ::sal_Int32 > SAL_CALL UnoGridControl::getSelectedRows()
+cpo::uno::Sequence< ::sal_Int32 > UnoGridControl::getSelectedRows()
 {
     return Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->getSelectedRows();
 }
 
 
-bool SAL_CALL UnoGridControl::hasSelectedRows()
+bool UnoGridControl::hasSelectedRows()
 {
     return Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->hasSelectedRows();
 }
 
 
-bool SAL_CALL UnoGridControl::isRowSelected(::sal_Int32 index)
+bool UnoGridControl::isRowSelected(::sal_Int32 index)
 {
     return Reference< XGridRowSelection >( getPeer(), UNO_QUERY_THROW )->isRowSelected( index );
 }
 
 
-void SAL_CALL UnoGridControl::addSelectionListener(const css::uno::Reference< css::awt::grid::XGridSelectionListener > & listener)
+void UnoGridControl::addSelectionListener(const cpo::uno::Reference< css::awt::grid::XGridSelectionListener > & listener)
 {
     m_aSelectionListeners.addInterface( listener );
 }
 
 
-void SAL_CALL UnoGridControl::removeSelectionListener(const css::uno::Reference< css::awt::grid::XGridSelectionListener > & listener)
+void UnoGridControl::removeSelectionListener(const cpo::uno::Reference< css::awt::grid::XGridSelectionListener > & listener)
 {
     m_aSelectionListeners.removeInterface( listener );
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_GridControl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new toolkit::UnoGridControl());
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 stardiv_Toolkit_GridControlModel_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new toolkit::UnoGridModel(context));

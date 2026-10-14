@@ -11,6 +11,8 @@
 #include <vcl/filter/PDFiumLibrary.hxx>
 
 #include <cassert>
+#include <map>
+#include <mutex>
 
 #include <sal/log.hxx>
 #include <fpdf_doc.h>
@@ -25,6 +27,7 @@
 #include <fpdf_structtree.h>
 
 #include <osl/endian.h>
+#include <vcl/BinaryDataContainer.hxx>
 #include <vcl/bitmap.hxx>
 #include <vcl/embeddedfontsmanager.hxx>
 #include <vcl/font.hxx>
@@ -426,6 +429,7 @@ public:
 
     PDFPageObjectType getType() override;
     OUString getText(std::unique_ptr<PDFiumTextPage> const& pTextPage) override;
+    int getMarkedContentID() override;
 
     int getFormObjectCount() override;
     std::unique_ptr<PDFiumPageObject> getFormObject(int nIndex) override;
@@ -439,12 +443,10 @@ public:
     std::unique_ptr<PDFiumFont> getFont() override;
     PDFTextRenderMode getTextRenderMode() override;
     Color getFillColor() override;
-    std::unique_ptr<PDFiumBitmap> getRenderedFillPattern(PDFiumDocument& rDoc,
-                                                         PDFiumPage& rPage) override;
+    std::unique_ptr<PDFiumBitmap> getRenderedFillPattern(PDFiumDocument& rDoc) override;
     Color getStrokeColor() override;
     double getStrokeWidth() override;
-    std::unique_ptr<PDFiumBitmap> getRenderedStrokePattern(PDFiumDocument& rDoc,
-                                                           PDFiumPage& rPage) override;
+    std::unique_ptr<PDFiumBitmap> getRenderedStrokePattern(PDFiumDocument& rDoc) override;
     // Path
     int getPathSegmentCount() override;
     std::unique_ptr<PDFiumPathSegment> getPathSegment(int index) override;
@@ -1200,6 +1202,11 @@ OUString PDFiumPageObjectImpl::getText(std::unique_ptr<PDFiumTextPage> const& rT
     return pTextPage->getText(mpPageObject);
 }
 
+int PDFiumPageObjectImpl::getMarkedContentID()
+{
+    return FPDFPageObj_GetMarkedContentID(mpPageObject);
+}
+
 PDFPageObjectType PDFiumPageObjectImpl::getType()
 {
     return static_cast<PDFPageObjectType>(FPDFPageObj_GetType(mpPageObject));
@@ -1416,14 +1423,12 @@ std::unique_ptr<PDFiumBitmap> PDFiumPageObjectImpl::getImageBitmap()
     return pPDFiumBitmap;
 }
 
-std::unique_ptr<PDFiumBitmap> PDFiumPageObjectImpl::getRenderedStrokePattern(PDFiumDocument& rDoc,
-                                                                             PDFiumPage& rPage)
+std::unique_ptr<PDFiumBitmap> PDFiumPageObjectImpl::getRenderedStrokePattern(PDFiumDocument& rDoc)
 {
     auto& rDocImpl = static_cast<PDFiumDocumentImpl&>(rDoc);
-    auto& rPageImpl = static_cast<PDFiumPageImpl&>(rPage);
     std::unique_ptr<PDFiumBitmap> pPDFiumBitmap;
-    FPDF_BITMAP pBitmap = FPDFPageObj_GetRenderedStrokePattern(
-        rDocImpl.getPointer(), rPageImpl.getPointer(), mpPageObject);
+    FPDF_BITMAP pBitmap
+        = FPDFPageObj_GetRenderedStrokePattern(rDocImpl.getPointer(), mpPageObject);
     if (pBitmap)
     {
         pPDFiumBitmap = std::make_unique<PDFiumBitmapImpl>(pBitmap);
@@ -1431,14 +1436,11 @@ std::unique_ptr<PDFiumBitmap> PDFiumPageObjectImpl::getRenderedStrokePattern(PDF
     return pPDFiumBitmap;
 }
 
-std::unique_ptr<PDFiumBitmap> PDFiumPageObjectImpl::getRenderedFillPattern(PDFiumDocument& rDoc,
-                                                                           PDFiumPage& rPage)
+std::unique_ptr<PDFiumBitmap> PDFiumPageObjectImpl::getRenderedFillPattern(PDFiumDocument& rDoc)
 {
     auto& rDocImpl = static_cast<PDFiumDocumentImpl&>(rDoc);
-    auto& rPageImpl = static_cast<PDFiumPageImpl&>(rPage);
     std::unique_ptr<PDFiumBitmap> pPDFiumBitmap;
-    FPDF_BITMAP pBitmap = FPDFPageObj_GetRenderedFillPattern(rDocImpl.getPointer(),
-                                                             rPageImpl.getPointer(), mpPageObject);
+    FPDF_BITMAP pBitmap = FPDFPageObj_GetRenderedFillPattern(rDocImpl.getPointer(), mpPageObject);
     if (pBitmap)
     {
         pPDFiumBitmap = std::make_unique<PDFiumBitmapImpl>(pBitmap);
@@ -2164,6 +2166,44 @@ std::shared_ptr<PDFium>& PDFiumLibrary::get()
 {
     static std::shared_ptr<PDFium> pInstance = std::make_shared<PDFiumImpl>();
     return pInstance;
+}
+
+namespace
+{
+std::mutex g_aSharedDocumentsMutex;
+// Documents handed out by openDocumentShared, keyed by the address of the bytes each one was opened on.
+std::map<const void*, std::weak_ptr<PDFiumDocument>> g_aSharedDocuments;
+}
+
+std::shared_ptr<PDFiumDocument>
+PDFiumLibrary::openDocumentShared(const BinaryDataContainer& rDataContainer)
+{
+    std::shared_ptr<PDFium> pPdfium = get();
+    if (!pPdfium)
+        return nullptr;
+
+    std::shared_ptr<const std::vector<sal_uInt8>> pBytes = rDataContainer.getSharedData();
+    if (!pBytes || pBytes->empty())
+        return nullptr;
+
+    std::scoped_lock aGuard(g_aSharedDocumentsMutex);
+
+    std::erase_if(g_aSharedDocuments, [](const auto& rEntry) { return rEntry.second.expired(); });
+
+    auto it = g_aSharedDocuments.find(pBytes->data());
+    if (it != g_aSharedDocuments.end())
+        if (std::shared_ptr<PDFiumDocument> pExisting = it->second.lock())
+            return pExisting;
+
+    std::unique_ptr<PDFiumDocument> pDocument
+        = pPdfium->openDocument(pBytes->data(), pBytes->size(), OString());
+    if (!pDocument)
+        return nullptr;
+
+    std::shared_ptr<PDFiumDocument> pShared(
+        pDocument.release(), [pBytes, pPdfium](PDFiumDocument* pDoc) { delete pDoc; });
+    g_aSharedDocuments[pBytes->data()] = pShared;
+    return pShared;
 }
 
 } // end vcl::pdf

@@ -18,9 +18,11 @@
  */
 
 
+#include <cstdlib>
 #include <utility>
 #include <vcl/svapp.hxx>
 #include <tools/stream.hxx>
+#include <comphelper/configuration.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <basic/codecompletecache.hxx>
@@ -80,8 +82,8 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::reflection;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::script;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 typedef ::cppu::WeakImplHelper< XInvocation > DocObjectWrapper_BASE;
 typedef std::map< sal_Int16, Any > OutParamMap;
@@ -95,9 +97,9 @@ class DocObjectWrapper : public DocObjectWrapper_BASE
     Reference< XTypeProvider > m_xAggregateTypeProv;
     Sequence< Type >           m_Types;
     SbModule*                m_pMod;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SbMethodRef getMethod( const OUString& aName );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     SbPropertyRef getProperty( const OUString& aName );
 
 public:
@@ -1081,6 +1083,9 @@ namespace
 // Run a Basic-subprogram
 void SbModule::Run( SbMethod* pMeth )
 {
+    if (comphelper::IsFuzzing())
+        std::abort();
+
     SAL_INFO("basic","About to run " << pMeth->GetName() << ", vba compatmode is " << mbVBASupport );
 
     static sal_uInt16 nMaxCallLevel = 0;
@@ -1149,10 +1154,6 @@ void SbModule::Run( SbMethod* pMeth )
           // Empiric value, 900 = needed bytes/Basic call level
           // for Linux including 10% safety margin
           nMaxCallLevel = rl.rlim_cur / 900;
-#elif defined __sun
-          // Empiric value, 1650 = needed bytes/Basic call level
-          // for Solaris including 10% safety margin
-          nMaxCallLevel = rl.rlim_cur / 1650;
 #elif defined _WIN32
           nMaxCallLevel = 5800;
 #else
@@ -2169,7 +2170,7 @@ SbObjModule::SetUnoObject( const cpo::uno::Any& aObj )
         return;
     pDocObject = new SbUnoObject( GetName(), aObj );
 
-    css::uno::Reference< css::lang::XServiceInfo > xServiceInfo( aObj, css::uno::UNO_QUERY_THROW );
+    cpo::uno::Reference< css::lang::XServiceInfo > xServiceInfo( aObj, cpo::uno::UNO_QUERY_THROW );
     if( xServiceInfo->supportsService( u"ooo.vba.excel.Worksheet"_ustr ) )
     {
         SetClassName( u"Worksheet"_ustr );
@@ -2605,7 +2606,7 @@ void SbUserFormModule::InitObject()
             Reference< script::vba::XVBACompatibility > xVBACompat( getVBACompatibility( m_xModel ), uno::UNO_SET_THROW );
             xVBACompat->broadcastVBAScriptEvent( script::vba::VBAScriptEventId::INITIALIZE_USERFORM, GetName() );
             uno::Reference< lang::XMultiServiceFactory > xVBAFactory( pGlobs->getUnoAny(), uno::UNO_QUERY_THROW );
-            const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+            const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
             OUString sDialogUrl( u"vnd.sun.star.script:"_ustr  );
             OUString sProjectName( u"Standard"_ustr );
 

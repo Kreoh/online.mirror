@@ -29,6 +29,7 @@
 #include <subtotalparam.hxx>
 
 #include <memory>
+#include <vector>
 
 class ScDocShell;
 class SdrUndoAction;
@@ -229,6 +230,36 @@ private:
     void DoChange(const bool bUndo);
 };
 
+class ScUndoConvertTableToRange : public ScSimpleUndo
+{
+public:
+    ScUndoConvertTableToRange(ScDocShell& rNewDocShell, const ScRange& rRange,
+                              ScDocumentUniquePtr pNewUndoDoc, ScDocumentUniquePtr pNewRedoDoc,
+                              std::unique_ptr<ScDBCollection> pNewUndoColl,
+                              std::unique_ptr<ScDBCollection> pNewRedoColl,
+                              std::vector<ScAddress> aRefCells);
+    virtual ~ScUndoConvertTableToRange() override;
+
+    virtual void Undo() override;
+    virtual void Redo() override;
+    virtual void Repeat(SfxRepeatTarget& rTarget) override;
+    virtual bool CanRepeat(SfxRepeatTarget& rTarget) const override;
+
+    virtual OUString GetComment() const override;
+
+private:
+    ScRange maRange;
+    ScDocumentUniquePtr mpUndoDoc;
+    ScDocumentUniquePtr mpRedoDoc;
+    std::unique_ptr<ScDBCollection> mpUndoColl;
+    std::unique_ptr<ScDBCollection> mpRedoColl;
+    // The formula cells whose structured references were converted to plain ranges; their
+    // contents are captured in the Undo/Redo docs so the round-trip restores the Table[Col] form.
+    std::vector<ScAddress> maRefCells;
+
+    void DoChange(bool bUndo);
+};
+
 class ScUndoTableTotals: public ScDBFuncUndo
 {
 public:
@@ -237,6 +268,7 @@ public:
                       ScDocumentUniquePtr pNewUndoDoc,
                       std::unique_ptr<ScDBCollection> pNewUndoDB,
                       std::unique_ptr<ScDBCollection> pNewRedoDB,
+                      const OUString& rNewName,
                       bool bInPlace = false);
 
     virtual void      Undo() override;
@@ -249,6 +281,7 @@ public:
 private:
     SCTAB           nTab;
     ScSubTotalParam aParam;                         // The original passed parameter
+    OUString        maName;                         // Table name, to re-find it on Redo
     SCROW           nNewEndRow;                     // Size of result
     ScDocumentUniquePtr xUndoDoc;
     std::unique_ptr<ScDBCollection> xUndoDB;
@@ -328,6 +361,30 @@ private:
     std::unique_ptr<ScDBCollection> pRedoColl;
 
     void           DoChange(const bool bUndo);
+};
+
+/// Undo entry for renaming a styled table / named database range. Renames in place (by
+/// name) on undo/redo, so index-based references follow - unlike ScUndoDBData's collection
+/// swap, which recreates objects and would break structured references.
+class ScUndoRenameDBData : public ScSimpleUndo
+{
+public:
+                    ScUndoRenameDBData( ScDocShell& rNewDocShell,
+                            const OUString& rOldName, const OUString& rNewName );
+    virtual         ~ScUndoRenameDBData() override;
+
+    virtual void    Undo() override;
+    virtual void    Redo() override;
+    virtual void    Repeat(SfxRepeatTarget& rTarget) override;
+    virtual bool    CanRepeat(SfxRepeatTarget& rTarget) const override;
+
+    virtual OUString GetComment() const override;
+
+private:
+    OUString  maOldName;
+    OUString  maNewName;
+
+    void DoChange( const OUString& rFrom, const OUString& rTo ) const;
 };
 
 /// Undo entry for the MSO-parity auto-expansion of a styled named DBData

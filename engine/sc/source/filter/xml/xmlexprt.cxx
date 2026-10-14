@@ -33,6 +33,7 @@
 #include "XMLExportDataPilot.hxx"
 #include "XMLExportDatabaseRanges.hxx"
 #include "XMLExportDDELinks.hxx"
+#include "XMLExportSheetViews.hxx"
 #include "XMLColumnRowGroupExport.hxx"
 #include "XMLStylesExportHelper.hxx"
 #include "XMLChangeTrackingExportHelper.hxx"
@@ -128,7 +129,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
-#include <com/sun/star/form/XFormsSupplier2.hpp>
+#include <com/sun/star/form/XFormsSupplier.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/sheet/XUsedAreaCursor.hpp>
@@ -162,7 +163,7 @@
 #include <officecfg/Office/Common.hxx>
 #include <cellsuno.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 
 
@@ -186,8 +187,9 @@ constexpr OUString SC_LAYERID = u"LayerID"_ustr;
 
 using namespace formula;
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
-using ::com::sun::star::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY;
 
 namespace
 {
@@ -242,62 +244,62 @@ OUString lcl_GetFormattedString(ScDocument& rDoc, const ScRefCellValue& rCell, c
 
 } // anonymous namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLExporter"_ustr, SvXMLExportFlags::ALL));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLMetaExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLMetaExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLMetaExporter"_ustr, SvXMLExportFlags::META));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLStylesExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLStylesExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLStylesExporter"_ustr, SvXMLExportFlags::STYLES|SvXMLExportFlags::MASTERSTYLES|SvXMLExportFlags::AUTOSTYLES|SvXMLExportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLContentExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLContentExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLContentExporter"_ustr, SvXMLExportFlags::AUTOSTYLES|SvXMLExportFlags::CONTENT|SvXMLExportFlags::SCRIPTS|SvXMLExportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLSettingsExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLSettingsExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLSettingsExporter"_ustr, SvXMLExportFlags::SETTINGS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLOasisExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLOasisExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLOasisExporter"_ustr, SvXMLExportFlags::ALL|SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLOasisMetaExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLOasisMetaExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLOasisMetaExporter"_ustr, SvXMLExportFlags::META|SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLOasisStylesExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLOasisStylesExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLOasisStylesExporter"_ustr, SvXMLExportFlags::STYLES|SvXMLExportFlags::MASTERSTYLES|SvXMLExportFlags::AUTOSTYLES|SvXMLExportFlags::FONTDECLS|SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLOasisContentExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLOasisContentExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLOasisContentExporter"_ustr, SvXMLExportFlags::AUTOSTYLES|SvXMLExportFlags::CONTENT|SvXMLExportFlags::SCRIPTS|SvXMLExportFlags::FONTDECLS|SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-Calc_XMLOasisSettingsExporter_get_implementation(css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Calc_XMLOasisSettingsExporter_get_implementation(cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ScXMLExport(context, u"com.sun.star.comp.Calc.XMLOasisSettingsExporter"_ustr, SvXMLExportFlags::SETTINGS|SvXMLExportFlags::OASIS));
 }
@@ -333,14 +335,14 @@ void ScXMLShapeExport::onExport( const uno::Reference < drawing::XShape >& xShap
 
 sal_Int16 ScXMLExport::GetMeasureUnit()
 {
-    css::uno::Reference<css::sheet::XGlobalSheetSettings> xProperties =
+    cpo::uno::Reference<css::sheet::XGlobalSheetSettings> xProperties =
                 css::sheet::GlobalSheetSettings::create( comphelper::getProcessComponentContext() );
     const FieldUnit eFieldUnit = static_cast<FieldUnit>(xProperties->getMetric());
     return SvXMLUnitConverter::GetMeasureUnit(eFieldUnit);
 }
 
 ScXMLExport::ScXMLExport(
-    const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
     OUString const & implementationName, SvXMLExportFlags nExportFlag)
 :   SvXMLExport(
         rContext, implementationName, GetMeasureUnit(), XML_SPREADSHEET, nExportFlag ),
@@ -592,7 +594,7 @@ void ScXMLExport::CollectShapesAutoStyles(SCTAB nTableCount)
             if (xDrawPage.is())
             {
                 GetShapeExport()->seekShapes(xDrawPage);
-                uno::Reference< form::XFormsSupplier2 > xFormsSupplier( xDrawPage, uno::UNO_QUERY );
+                uno::Reference< form::XFormsSupplier > xFormsSupplier( xDrawPage, uno::UNO_QUERY );
                 if( xFormsSupplier.is() && xFormsSupplier->hasForms() )
                 {
                     GetFormExport()->examineForms(xDrawPage);
@@ -1960,6 +1962,12 @@ void ScXMLExport::ExportContent_()
     WriteConsolidation(*pDoc);
     ScXMLExportDDELinks aExportDDELinks(*pDoc, *this);
     aExportDDELinks.WriteDDELinks(xSpreadDoc);
+    // Plain ODF has no place for a sheet view, so the coext element only lands in extended ODF.
+    if (getSaneDefaultVersion() & SvtSaveOptions::ODFSVER_EXTENDED)
+    {
+        ScXMLExportSheetViews aExportSheetViews(*this);
+        aExportSheetViews.WriteSheetViews(*pDoc);
+    }
     IncrementProgressBar(true, 0);
     GetProgressBarHelper()->SetValue(GetProgressBarHelper()->GetReference());
 }
@@ -3889,6 +3897,19 @@ void ScXMLExport::WriteAnnotation(ScDocument& rDoc, const ScMyCell& rMyCell)
     if (pNote->IsCaptionShown())
         AddAttribute(XML_NAMESPACE_OFFICE, XML_DISPLAY, XML_TRUE);
 
+    const bool bRemovePersonalInfo
+        = SvtSecurityOptions::IsOptionSet(SvtSecurityOptions::EOption::DocWarnRemovePersonalInfo)
+          && !SvtSecurityOptions::IsOptionSet(
+                 SvtSecurityOptions::EOption::DocWarnKeepNoteAuthorDateInfo);
+
+    // The moment the note was written goes beside the wall clock dc:date carries. Plain ODF has
+    // no place for it, so it only lands in extended ODF.
+    if ((getSaneDefaultVersion() & SvtSaveOptions::ODFSVER_EXTENDED) && !bRemovePersonalInfo
+        && !pNote->GetDateUTC().isEmpty())
+    {
+        AddAttribute(XML_NAMESPACE_CO_EXT, XML_DATE_UTC, pNote->GetDateUTC());
+    }
+
     pCurrentCell = &rMyCell;
 
     SdrCaptionObj* pNoteCaption = pNote->GetOrCreateCaption(rMyCell.maCellAddress);
@@ -5569,7 +5590,7 @@ ErrCode ScXMLExport::exportDoc( enum XMLTokenEnum eClass )
 }
 
 // XExporter
-void SAL_CALL ScXMLExport::setSourceDocument( const uno::Reference<lang::XComponent>& xComponent )
+void ScXMLExport::setSourceDocument( const uno::Reference<lang::XComponent>& xComponent )
 {
     SolarMutexGuard aGuard;
     SvXMLExport::setSourceDocument( xComponent );
@@ -5598,7 +5619,7 @@ void SAL_CALL ScXMLExport::setSourceDocument( const uno::Reference<lang::XCompon
 }
 
 // XFilter
-bool SAL_CALL ScXMLExport::filter( const cpo::uno::Sequence< css::beans::PropertyValue >& aDescriptor )
+bool ScXMLExport::filter( const cpo::uno::Sequence< css::beans::PropertyValue >& aDescriptor )
 {
     SolarMutexGuard aGuard;
     ScDocument* pDoc = GetDocument();
@@ -5610,7 +5631,7 @@ bool SAL_CALL ScXMLExport::filter( const cpo::uno::Sequence< css::beans::Propert
     return bReturn;
 }
 
-void SAL_CALL ScXMLExport::cancel()
+void ScXMLExport::cancel()
 {
     SolarMutexGuard aGuard;
     if (ScDocument* pDoc = GetDocument())
@@ -5619,7 +5640,7 @@ void SAL_CALL ScXMLExport::cancel()
 }
 
 // XInitialization
-void SAL_CALL ScXMLExport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void ScXMLExport::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     SolarMutexGuard aGuard;
     SvXMLExport::initialize(aArguments);

@@ -20,7 +20,7 @@
 #pragma once
 
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <com/sun/star/util/XModifyListener.hpp>
 #include <com/sun/star/util/XChangesListener.hpp>
@@ -32,9 +32,7 @@
 #include <set>
 #include <string_view>
 
-namespace com::sun::star::uno {
-    class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace com::sun::star::smarttags {
     class XSmartTagRecognizer;
@@ -69,9 +67,9 @@ namespace com::sun::star::frame {
  */
 struct ActionReference
 {
-    css::uno::Reference< css::smarttags::XSmartTagAction > mxSmartTagAction;
+    cpo::uno::Reference< css::smarttags::XSmartTagAction > mxSmartTagAction;
     sal_Int32 mnSmartTagIndex;
-    ActionReference( css::uno::Reference< css::smarttags::XSmartTagAction > xSmartTagAction, sal_Int32 nSmartTagIndex )
+    ActionReference( cpo::uno::Reference< css::smarttags::XSmartTagAction > xSmartTagAction, sal_Int32 nSmartTagIndex )
         : mxSmartTagAction(std::move( xSmartTagAction)), mnSmartTagIndex( nSmartTagIndex ) {}
 };
 
@@ -86,13 +84,13 @@ class SVX_DLLPUBLIC SmartTagMgr : public cppu::WeakImplHelper< css::util::XModif
 private:
 
     const OUString maApplicationName;
-    std::vector< css::uno::Reference< css::smarttags::XSmartTagRecognizer > > maRecognizerList;
-    std::vector< css::uno::Reference< css::smarttags::XSmartTagAction > > maActionList;
+    std::vector< cpo::uno::Reference< css::smarttags::XSmartTagRecognizer > > maRecognizerList;
+    std::vector< cpo::uno::Reference< css::smarttags::XSmartTagAction > > maActionList;
     std::set< OUString > maDisabledSmartTagTypes;
     std::multimap < OUString, ActionReference > maSmartTagMap;
-    mutable css::uno::Reference< css::i18n::XBreakIterator > mxBreakIter;
-    css::uno::Reference< css::uno::XComponentContext> mxContext;
-    css::uno::Reference< css::beans::XPropertySet > mxConfigurationSettings;
+    mutable cpo::uno::Reference< css::i18n::XBreakIterator > mxBreakIter;
+    cpo::uno::Reference< cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference< css::beans::XPropertySet > mxConfigurationSettings;
     bool mbLabelTextWithSmartTags;
 
     /** Checks for installed smart tag recognizers/actions and stores them in
@@ -149,14 +147,14 @@ public:
     */
 
     void RecognizeString( const OUString& rText,
-                    const css::uno::Reference< css::text::XTextMarkup >& rMarkup,
-                    const css::uno::Reference< css::frame::XController >& rController,
+                    const cpo::uno::Reference< css::text::XTextMarkup >& rMarkup,
+                    const cpo::uno::Reference< css::frame::XController >& rController,
                     const css::lang::Locale& rLocale,
                     sal_uInt32 nStart, sal_uInt32 nLen ) const;
 
-    void RecognizeTextRange(const css::uno::Reference< css::text::XTextRange>& rRange,
-                    const css::uno::Reference< css::text::XTextMarkup >& rMarkup,
-                    const css::uno::Reference< css::frame::XController >& rController) const;
+    void RecognizeTextRange(const cpo::uno::Reference< css::text::XTextRange>& rRange,
+                    const cpo::uno::Reference< css::text::XTextMarkup >& rMarkup,
+                    const cpo::uno::Reference< css::frame::XController >& rController) const;
 
     /** Returns all action references associated with a given list of smart tag types
 
@@ -170,7 +168,7 @@ public:
             Output parameter
     */
     void GetActionSequences( std::vector< OUString >& rSmartTagTypes,
-                             cpo::uno::Sequence < cpo::uno::Sequence< css::uno::Reference< css::smarttags::XSmartTagAction > > >& rActionComponentsSequence,
+                             cpo::uno::Sequence < cpo::uno::Sequence< cpo::uno::Reference< css::smarttags::XSmartTagAction > > >& rActionComponentsSequence,
                              cpo::uno::Sequence < cpo::uno::Sequence< sal_Int32 > >& rActionIndicesSequence ) const;
 
     /** Returns the caption for a smart tag type.
@@ -197,7 +195,7 @@ public:
 
     /** Returns a recognizer.
     */
-    css::uno::Reference< css::smarttags::XSmartTagRecognizer > const &
+    cpo::uno::Reference< css::smarttags::XSmartTagRecognizer > const &
         GetRecognizer( sal_uInt32 i ) const  { return maRecognizerList[i]; }
 
     /** Is smart tag recognition active?
@@ -215,13 +213,13 @@ public:
     const OUString& GetApplicationName() const { return maApplicationName; }
 
     // css::lang::XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     // css::util::XModifyListener
-    virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) override;
+    virtual void modified( const css::lang::EventObject& aEvent ) override;
 
     // css::util::XChangesListener
-      virtual void SAL_CALL changesOccurred( const css::util::ChangesEvent& Event ) override;
+      virtual void changesOccurred( const css::util::ChangesEvent& Event ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

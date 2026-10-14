@@ -17,10 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifdef __sun
-#include <ctime>
-#endif
-
 #include <unotools/viewoptions.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
@@ -41,7 +37,7 @@
 #include <vector>
 #include <utility>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 #define VERSION 1

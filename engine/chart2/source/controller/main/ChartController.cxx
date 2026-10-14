@@ -112,10 +112,11 @@ namespace chart
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
 using namespace ::com::sun::star::chart2;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
-ChartController::ChartController(uno::Reference<uno::XComponentContext> xContext) :
+ChartController::ChartController(uno::Reference<cpo::uno::XComponentContext> xContext) :
     m_aLifeTimeManager( nullptr ),
     m_bSuspended( false ),
     m_xCC(std::move(xContext)),
@@ -450,9 +451,8 @@ void ChartController::attachFrame(
                     xLayoutManager->unlock();
 
                     // add as listener to get notified when
-                    m_xLayoutManagerEventBroadcaster.set( xLayoutManager, uno::UNO_QUERY );
-                    if( m_xLayoutManagerEventBroadcaster.is())
-                        m_xLayoutManagerEventBroadcaster->addLayoutManagerEventListener( this );
+                    m_xLayoutManagerEventBroadcaster = xLayoutManager;
+                    m_xLayoutManagerEventBroadcaster->addLayoutManagerEventListener( this );
                 }
             }
             catch( const cpo::uno::Exception & )
@@ -695,7 +695,7 @@ bool ChartController::suspend( bool bSuspend )
 
 // css::frame::XController2
 
-css::uno::Reference<css::awt::XWindow> ChartController::getComponentWindow()
+cpo::uno::Reference<css::awt::XWindow> ChartController::getComponentWindow()
 {
     // it is a special characteristic of ChartController
     // that it simultaneously provides the XWindow functionality
@@ -709,7 +709,7 @@ cpo::uno::Sequence<css::beans::PropertyValue> ChartController::getCreationArgume
     return {};
 }
 
-css::uno::Reference<css::ui::XSidebarProvider> ChartController::getSidebar() { return {}; }
+cpo::uno::Reference<css::ui::XSidebarProvider> ChartController::getSidebar() { return {}; }
 
 void ChartController::impl_createDrawViewController()
 {
@@ -935,12 +935,12 @@ void ChartController::notifyClosing(
 }
 
 bool ChartController::impl_releaseThisModel(
-    const uno::Reference< uno::XInterface > & xModel )
+    const uno::Reference< cpo::uno::XInterface > & xModel )
 {
     bool bReleaseModel = false;
     {
         ::osl::Guard< ::osl::Mutex > aGuard( m_aModelMutex );
-        if( m_aModel.is() && uno::Reference< uno::XInterface >(static_cast<cppu::OWeakObject*>(m_aModel->getModel().get())) == xModel )
+        if( m_aModel.is() && uno::Reference< cpo::uno::XInterface >(static_cast<cppu::OWeakObject*>(m_aModel->getModel().get())) == xModel )
         {
             m_aModel = nullptr;
             m_xUndoManager.clear();
@@ -1648,7 +1648,7 @@ void ChartController::executeDispatch_ManageThemes(bool bSelectOnly)
                 }
             });
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         TOOLS_WARN_EXCEPTION("chart2", "");
     }
@@ -1681,7 +1681,7 @@ void ChartController::executeDispatch_SourceData()
     if ( rModel.hasInternalDataProvider() )
     {
         // Check if we will able to create data provider later
-        css::uno::Reference< css::chart2::XDataProviderAccess > xCreatorDoc(
+        cpo::uno::Reference< css::chart2::XDataProviderAccess > xCreatorDoc(
             rModel.getParent(), uno::UNO_QUERY);
         if (!xCreatorDoc.is())
             return;
@@ -2029,8 +2029,7 @@ static void lcl_SetOrGetThemeToOrFromElement(bool bSet, ChartThemeType& aTheme,
                 xProperties.pop_back();
                 for (int i = 0; i < aStrings.getLength(); i++)
                 {
-                    Reference<beans::XPropertySet> xTitlePropSet(aStrings[i], uno::UNO_QUERY);
-                    xProperties.push_back(xTitlePropSet);
+                    xProperties.push_back(aStrings[i]);
                 }
             }
         }

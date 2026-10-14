@@ -324,7 +324,7 @@ OUString SAXEventKeeperImpl::printBufferNode(
     return rc.makeStringAndClear();
 }
 
-cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
+cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
     SAXEventKeeperImpl::collectChildWorkingElement(BufferNode const * pBufferNode)
 /****** SAXEventKeeperImpl/collectChildWorkingElement ************************
  *
@@ -344,7 +344,7 @@ cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >
 {
     std::vector< std::unique_ptr<BufferNode> > const & vChildren = pBufferNode->getChildren();
 
-    cpo::uno::Sequence < css::uno::Reference<
+    cpo::uno::Sequence < cpo::uno::Reference<
         css::xml::wrapper::XXMLElementWrapper > > aChildrenCollection ( vChildren.size());
 
     std::transform(vChildren.begin(), vChildren.end(), aChildrenCollection.getArray(),
@@ -406,7 +406,7 @@ void SAXEventKeeperImpl::smashBufferNode(
          */
         if (bClearRoot)
         {
-            cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
+            cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
                 aChildElements = collectChildWorkingElement(m_pRootBufferNode.get());
 
             /*
@@ -457,7 +457,7 @@ void SAXEventKeeperImpl::smashBufferNode(
          */
         if ( bIsNotBlocking || bIsBlockInside || bIsBlockingAfterward )
         {
-            cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
+            cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >
                 aChildElements = collectChildWorkingElement(pBufferNode);
 
             /*
@@ -729,7 +729,7 @@ void SAXEventKeeperImpl::markElementMarkBuffer(sal_Int32 nId)
 sal_Int32 SAXEventKeeperImpl::createElementCollector(
     css::xml::crypto::sax::ElementMarkPriority nPriority,
     bool bModifyElement,
-    const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& xReferenceResolvedListener)
+    const cpo::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& xReferenceResolvedListener)
 /****** SAXEventKeeperImpl/createElementCollector ****************************
  *
  *   NAME
@@ -803,7 +803,7 @@ sal_Int32 SAXEventKeeperImpl::createBlocker()
 }
 
 /* XSAXEventKeeper */
-sal_Int32 SAL_CALL SAXEventKeeperImpl::addElementCollector(  )
+sal_Int32 SAXEventKeeperImpl::addElementCollector(  )
 {
     return createElementCollector(
         css::xml::crypto::sax::ElementMarkPriority_AFTERMODIFY,
@@ -811,30 +811,30 @@ sal_Int32 SAL_CALL SAXEventKeeperImpl::addElementCollector(  )
         nullptr);
 }
 
-void SAL_CALL SAXEventKeeperImpl::removeElementCollector( sal_Int32 id )
+void SAXEventKeeperImpl::removeElementCollector( sal_Int32 id )
 {
     markElementMarkBuffer(id);
 }
 
-sal_Int32 SAL_CALL SAXEventKeeperImpl::addBlocker(  )
+sal_Int32 SAXEventKeeperImpl::addBlocker(  )
 {
     return createBlocker();
 }
 
-void SAL_CALL SAXEventKeeperImpl::removeBlocker( sal_Int32 id )
+void SAXEventKeeperImpl::removeBlocker( sal_Int32 id )
 {
     markElementMarkBuffer(id);
 }
 
-bool SAL_CALL SAXEventKeeperImpl::isBlocking(  )
+bool SAXEventKeeperImpl::isBlocking(  )
 {
     return (m_pCurrentBlockingBufferNode != nullptr);
 }
 
-css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL
+cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >
     SAXEventKeeperImpl::getElement( sal_Int32 id )
 {
-    css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > rc;
+    cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > rc;
 
     ElementMark* pElementMark = findElementMarkBuffer(id);
     if (pElementMark != nullptr)
@@ -845,9 +845,9 @@ css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL
     return rc;
 }
 
-void SAL_CALL SAXEventKeeperImpl::setElement(
+void SAXEventKeeperImpl::setElement(
     sal_Int32 id,
-    const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aElement )
+    const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aElement )
 {
     if (aElement.is())
     {
@@ -876,16 +876,16 @@ void SAL_CALL SAXEventKeeperImpl::setElement(
     }
 }
 
-css::uno::Reference< css::xml::sax::XDocumentHandler > SAL_CALL SAXEventKeeperImpl::setNextHandler(
-    const css::uno::Reference< css::xml::sax::XDocumentHandler >& xNewHandler )
+cpo::uno::Reference< css::xml::sax::XDocumentHandler > SAXEventKeeperImpl::setNextHandler(
+    const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xNewHandler )
 {
-    css::uno::Reference< css::xml::sax::XDocumentHandler > xOldHandler = m_xNextHandler;
+    cpo::uno::Reference< css::xml::sax::XDocumentHandler > xOldHandler = m_xNextHandler;
 
     m_xNextHandler = xNewHandler;
     return xOldHandler;
 }
 
-OUString SAL_CALL SAXEventKeeperImpl::printBufferNodeTree()
+OUString SAXEventKeeperImpl::printBufferNodeTree()
 {
     OUString rc = "ElementMarkBuffers: size = "
         + OUString::number(m_vElementMarkBuffers.size())
@@ -896,9 +896,9 @@ OUString SAL_CALL SAXEventKeeperImpl::printBufferNodeTree()
     return rc;
 }
 
-css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL SAXEventKeeperImpl::getCurrentBlockingNode()
+cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAXEventKeeperImpl::getCurrentBlockingNode()
 {
-    css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > rc;
+    cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > rc;
 
     if (m_pCurrentBlockingBufferNode != nullptr)
     {
@@ -909,7 +909,7 @@ css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL SAXEventKe
 }
 
 /* XSecuritySAXEventKeeper */
-sal_Int32 SAL_CALL SAXEventKeeperImpl::addSecurityElementCollector(
+sal_Int32 SAXEventKeeperImpl::addSecurityElementCollector(
     css::xml::crypto::sax::ElementMarkPriority priority,
     bool modifyElement )
 {
@@ -919,7 +919,7 @@ sal_Int32 SAL_CALL SAXEventKeeperImpl::addSecurityElementCollector(
         nullptr);
 }
 
-void SAL_CALL SAXEventKeeperImpl::setSecurityId( sal_Int32 id, sal_Int32 securityId )
+void SAXEventKeeperImpl::setSecurityId( sal_Int32 id, sal_Int32 securityId )
 {
     ElementMark* pElementMark = findElementMarkBuffer(id);
     if (pElementMark != nullptr)
@@ -930,9 +930,9 @@ void SAL_CALL SAXEventKeeperImpl::setSecurityId( sal_Int32 id, sal_Int32 securit
 
 
 /* XReferenceResolvedBroadcaster */
-void SAL_CALL SAXEventKeeperImpl::addReferenceResolvedListener(
+void SAXEventKeeperImpl::addReferenceResolvedListener(
     sal_Int32 referenceId,
-    const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& listener )
+    const cpo::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& listener )
 {
     ElementCollector* pElementCollector = static_cast<ElementCollector*>(findElementMarkBuffer(referenceId));
     if (pElementCollector != nullptr)
@@ -941,26 +941,26 @@ void SAL_CALL SAXEventKeeperImpl::addReferenceResolvedListener(
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::removeReferenceResolvedListener(
+void SAXEventKeeperImpl::removeReferenceResolvedListener(
     sal_Int32 /*referenceId*/,
-    const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >&)
+    const cpo::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >&)
 {
 }
 
 /* XSAXEventKeeperStatusChangeBroadcaster */
-void SAL_CALL SAXEventKeeperImpl::addSAXEventKeeperStatusChangeListener(
-    const css::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >& listener )
+void SAXEventKeeperImpl::addSAXEventKeeperStatusChangeListener(
+    const cpo::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >& listener )
 {
     m_xSAXEventKeeperStatusChangeListener = listener;
 }
 
-void SAL_CALL SAXEventKeeperImpl::removeSAXEventKeeperStatusChangeListener(
-    const css::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >&)
+void SAXEventKeeperImpl::removeSAXEventKeeperStatusChangeListener(
+    const cpo::uno::Reference< css::xml::crypto::sax::XSAXEventKeeperStatusChangeListener >&)
 {
 }
 
 /* XDocumentHandler */
-void SAL_CALL SAXEventKeeperImpl::startDocument(  )
+void SAXEventKeeperImpl::startDocument(  )
 {
     if ( m_xNextHandler.is())
     {
@@ -968,7 +968,7 @@ void SAL_CALL SAXEventKeeperImpl::startDocument(  )
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::endDocument(  )
+void SAXEventKeeperImpl::endDocument(  )
 {
     if ( m_xNextHandler.is())
     {
@@ -976,9 +976,9 @@ void SAL_CALL SAXEventKeeperImpl::endDocument(  )
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::startElement(
+void SAXEventKeeperImpl::startElement(
     const OUString& aName,
-    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
+    const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
 {
     /*
      * If there is a following handler and no blocking now, then
@@ -1016,7 +1016,7 @@ void SAL_CALL SAXEventKeeperImpl::startElement(
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::endElement( const OUString& aName )
+void SAXEventKeeperImpl::endElement( const OUString& aName )
 {
     const bool bIsCurrent = m_xXMLDocument->isCurrent(m_pCurrentBufferNode->getXMLElement());
 
@@ -1068,7 +1068,7 @@ void SAL_CALL SAXEventKeeperImpl::endElement( const OUString& aName )
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::characters( const OUString& aChars )
+void SAXEventKeeperImpl::characters( const OUString& aChars )
 {
     if (m_bIsForwarding)
         return;
@@ -1085,12 +1085,12 @@ void SAL_CALL SAXEventKeeperImpl::characters( const OUString& aChars )
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::ignorableWhitespace( const OUString& aWhitespaces )
+void SAXEventKeeperImpl::ignorableWhitespace( const OUString& aWhitespaces )
 {
     characters( aWhitespaces );
 }
 
-void SAL_CALL SAXEventKeeperImpl::processingInstruction(
+void SAXEventKeeperImpl::processingInstruction(
     const OUString& aTarget, const OUString& aData )
 {
     if (m_bIsForwarding)
@@ -1108,18 +1108,18 @@ void SAL_CALL SAXEventKeeperImpl::processingInstruction(
     }
 }
 
-void SAL_CALL SAXEventKeeperImpl::setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >&)
+void SAXEventKeeperImpl::setDocumentLocator( const cpo::uno::Reference< css::xml::sax::XLocator >&)
 {
 }
 
 /* XInitialization */
-void SAL_CALL SAXEventKeeperImpl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void SAXEventKeeperImpl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     OSL_ASSERT(aArguments.getLength() == 1);
 
     aArguments[0] >>= m_xXMLDocument;
-    m_xDocumentHandler.set( m_xXMLDocument, css::uno::UNO_QUERY );
-    m_xCompressedDocumentHandler.set( m_xXMLDocument, css::uno::UNO_QUERY );
+    m_xDocumentHandler.set( m_xXMLDocument, cpo::uno::UNO_QUERY );
+    m_xCompressedDocumentHandler.set( m_xXMLDocument, cpo::uno::UNO_QUERY );
 
     m_pRootBufferNode.reset( new BufferNode(m_xXMLDocument->getCurrentElement()) );
     m_pCurrentBufferNode = m_pRootBufferNode.get();
@@ -1136,17 +1136,17 @@ cpo::uno::Sequence< OUString > SAXEventKeeperImpl_getSupportedServiceNames(  )
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SAXEventKeeperImpl::getImplementationName(  )
+OUString SAXEventKeeperImpl::getImplementationName(  )
 {
     return SAXEventKeeperImpl_getImplementationName();
 }
 
-bool SAL_CALL SAXEventKeeperImpl::supportsService( const OUString& rServiceName )
+bool SAXEventKeeperImpl::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SAXEventKeeperImpl::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SAXEventKeeperImpl::getSupportedServiceNames(  )
 {
     return SAXEventKeeperImpl_getSupportedServiceNames();
 }

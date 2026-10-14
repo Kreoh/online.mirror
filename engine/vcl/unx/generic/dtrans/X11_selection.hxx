@@ -29,7 +29,7 @@
 #include <com/sun/star/datatransfer/dnd/XDragSource.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/XDesktop2.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
 #include <osl/thread.h>
 #include <osl/conditn.hxx>
 #include <rtl/ref.hxx>
@@ -52,10 +52,10 @@ namespace x11 {
     class SelectionAdaptor
     {
     public:
-        virtual css::uno::Reference< css::datatransfer::XTransferable > getTransferable() = 0;
+        virtual cpo::uno::Reference< css::datatransfer::XTransferable > getTransferable() = 0;
         virtual void clearTransferable() = 0;
         virtual void fireContentsChanged() = 0;
-        virtual css::uno::Reference< css::uno::XInterface > getReference() = 0;
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getReference() = 0;
         // returns a reference that will keep the SelectionAdaptor alive until the
         // reference is released
 
@@ -76,10 +76,10 @@ namespace x11 {
         void initialize(::Window aWindow);
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual bool    SAL_CALL supportsService( const OUString& ServiceName ) override;
+        virtual OUString getImplementationName() override;
+        virtual bool    supportsService( const OUString& ServiceName ) override;
         virtual cpo::uno::Sequence< OUString >
-                            SAL_CALL getSupportedServiceNames() override;
+                            getSupportedServiceNames() override;
     };
 
     class SelectionManagerHolder :
@@ -96,21 +96,21 @@ namespace x11 {
         virtual ~SelectionManagerHolder() override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual bool    SAL_CALL supportsService( const OUString& ServiceName ) override;
+        virtual OUString getImplementationName() override;
+        virtual bool    supportsService( const OUString& ServiceName ) override;
         virtual cpo::uno::Sequence< OUString >
-                            SAL_CALL getSupportedServiceNames() override;
+                            getSupportedServiceNames() override;
 
         void initialize();
 
         // XDragSource
-        virtual bool    SAL_CALL isDragImageSupported() override;
-        virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) override;
-        virtual void        SAL_CALL startDrag(
+        virtual bool    isDragImageSupported() override;
+        virtual sal_Int32   getDefaultCursor( sal_Int8 dragAction ) override;
+        virtual void        startDrag(
             const css::datatransfer::dnd::DragGestureEvent& trigger,
             sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
-            const css::uno::Reference< css::datatransfer::XTransferable >& transferable,
-            const css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
+            const cpo::uno::Reference< css::datatransfer::XTransferable >& transferable,
+            const cpo::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
             ) override;
 
     };
@@ -213,7 +213,7 @@ namespace x11 {
         oslThread                   m_aDragExecuteThread;
         ::osl::Condition            m_aDragRunning;
         ::Window                    m_aWindow;
-        css::uno::Reference< css::frame::XDesktop2 > m_xDesktop;
+        cpo::uno::Reference< css::frame::XDesktop > m_xDesktop;
         rtl::Reference<vcl::DisplayConnectionDispatch> m_xDisplayConnection;
         Time                        m_nSelectionTimestamp;
 
@@ -251,9 +251,9 @@ namespace x11 {
         ::Window                    m_aDropProxy;
         ::Window                    m_aDragSourceWindow;
         // XTransferable for Xdnd when we are drag source
-        css::uno::Reference< css::datatransfer::XTransferable >
+        cpo::uno::Reference< css::datatransfer::XTransferable >
                                     m_xDragSourceTransferable;
-        css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >
+        cpo::uno::Reference< css::datatransfer::dnd::XDragSourceListener >
                                     m_xDragSourceListener;
         // root coordinates
         int                         m_nLastDragX, m_nLastDragY;
@@ -352,7 +352,7 @@ namespace x11 {
 
         bool getPasteData( Atom selection, Atom type, cpo::uno::Sequence< sal_Int8 >& rData );
         // returns true if conversion was successful
-        bool convertData( const css::uno::Reference< css::datatransfer::XTransferable >& xTransferable,
+        bool convertData( const cpo::uno::Reference< css::datatransfer::XTransferable >& xTransferable,
                           Atom nType,
                           Atom nSelection,
                           int & rFormat,
@@ -424,27 +424,27 @@ namespace x11 {
         void shutdown() noexcept override;
 
         // XDragSource
-        virtual bool    SAL_CALL isDragImageSupported() override;
-        virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) override;
-        virtual void        SAL_CALL startDrag(
+        virtual bool    isDragImageSupported() override;
+        virtual sal_Int32   getDefaultCursor( sal_Int8 dragAction ) override;
+        virtual void        startDrag(
             const css::datatransfer::dnd::DragGestureEvent& trigger,
             sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
-            const css::uno::Reference< css::datatransfer::XTransferable >& transferable,
-            const css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
+            const cpo::uno::Reference< css::datatransfer::XTransferable >& transferable,
+            const cpo::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
             ) override;
 
         // SelectionAdaptor for XdndSelection Drag (we are drag source)
-        virtual css::uno::Reference< css::datatransfer::XTransferable > getTransferable() noexcept override;
+        virtual cpo::uno::Reference< css::datatransfer::XTransferable > getTransferable() noexcept override;
         virtual void clearTransferable() noexcept override;
         virtual void fireContentsChanged() noexcept override;
-        virtual css::uno::Reference< css::uno::XInterface > getReference() noexcept override;
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getReference() noexcept override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
 
         // XTerminateListener
-        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
-        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
+        virtual void queryTermination( const css::lang::EventObject& aEvent ) override;
+        virtual void notifyTermination( const css::lang::EventObject& aEvent ) override;
     };
 
     cpo::uno::Sequence< OUString > Xdnd_getSupportedServiceNames();

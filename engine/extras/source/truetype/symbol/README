@@ -28,8 +28,27 @@ tables.
 Generate the ttf from updated sfd:
 fontforge -lang=ff -c 'Open($1); Generate($2)' extras/source/truetype/symbol/OpenSymbol.sfd opens___.ttf
 
-Update opens___.ttf on TDF server:
-scp opens___.ttf libreoffice@dev-www.libreoffice.org:/srv/www/dev-www.libreoffice.org/extern/$(sha256sum opens___.ttf | awk '{ print $1 }')-opens___.ttf
+Upload the font to the external repo, under extern/ and named after its own
+checksum, so that a new version is a new file and branches pinning the old one
+keep working:
 
-Update sha256sums in source files like in this example commit:
-https://gerrit.libreoffice.org/#/c/75577/
+cp opens___.ttf extern/$(sha256sum opens___.ttf | awk '{ print $1 }')-opens___.ttf
+
+See the README.md in that repository for how to clone it and push the change
+for review.
+
+Then update the checksum everywhere it is pinned. The name contains the
+checksum, so all three have to move together or the build fetches a file that
+is no longer referenced:
+
+engine/download.lst
+    OPENSYMBOL_SHA256SUM and OPENSYMBOL_TTF
+
+qt/flatpak/com.collaboraoffice.Office.json
+    the url, sha256 and dest-filename of the opens___.ttf source
+
+qt/freebsd/editors/collabora-office/Makefile
+    the DISTFILES entry, then re-run makesum in the port
+
+Everything else refers to the font through those variables or by glob, so it
+needs no change.

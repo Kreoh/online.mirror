@@ -14,6 +14,7 @@
 #include <dpdimsave.hxx>
 #include <dpitemdata.hxx>
 #include <dpobject.hxx>
+#include <dpshttab.hxx>
 #include <dpsave.hxx>
 #include <dputil.hxx>
 #include <document.hxx>
@@ -53,6 +54,7 @@
 
 using namespace oox;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -327,9 +329,20 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
 
     OUString aSheetName;
     GetDoc().GetName(rEntry.maSrcRange.aStart.Tab(), aSheetName);
-    pDefStrm->singleElement(XML_worksheetSource,
-        XML_ref, XclXmlUtils::ToOString(rStrm.GetRoot().GetDoc(), rEntry.maSrcRange),
-        XML_sheet, aSheetName.toUtf8());
+
+    // Emit the source name (named range / table) when the cache is name-based,
+    // so it round-trips as a dynamic source instead of a fixed range.
+    OUString aSourceName;
+    const ScDPCache::ScDPObjectSet& rRefs = rEntry.mpCache->GetAllReferences();
+    if (!rRefs.empty())
+        if (const ScSheetSourceDesc* pDesc = (*rRefs.begin())->GetSheetDesc())
+            aSourceName = pDesc->GetRangeName();
+
+    const OString aRef = XclXmlUtils::ToOString(rStrm.GetRoot().GetDoc(), rEntry.maSrcRange);
+    if (aSourceName.isEmpty())
+        pDefStrm->singleElement(XML_worksheetSource, XML_ref, aRef, XML_sheet, aSheetName.toUtf8());
+    else
+        pDefStrm->singleElement(XML_worksheetSource, XML_name, aSourceName.toUtf8());
 
     pDefStrm->endElement(XML_cacheSource);
 
@@ -802,7 +815,28 @@ void XclExpXmlPivotTableManager::Initialize()
         aCaches.push_back(aEntry); // Cache ID equals position + 1.
     }
 
-    // TODO : Handle name and database caches as well.
+    // Name-based caches (a pivot sourced from a named range or database range),
+    // keyed by name rather than range.
+    ScDPCollection::NameCaches& rNameCaches = pDPColl->GetNameCaches();
+    for (const OUString& rName : rNameCaches.getAllNames())
+    {
+        const ScDPCache* pCache = rNameCaches.getExistingCache(rName);
+        if (!pCache)
+            continue;
+        const ScDPCache::ScDPObjectSet& rRefs = pCache->GetAllReferences();
+        if (rRefs.empty() || !(*rRefs.begin())->GetSheetDesc())
+            continue;
+
+        for (const auto& rRef : rRefs)
+            maCacheIdMap.emplace(rRef, aCaches.size()+1);
+
+        XclExpXmlPivotCaches::Entry aEntry;
+        aEntry.mpCache = pCache;
+        aEntry.maSrcRange = (*rRefs.begin())->GetSheetDesc()->GetSourceRange();
+        aCaches.push_back(aEntry);
+    }
+
+    // TODO : Handle database (external) caches as well.
 
     for (size_t i = 0, n = pDPColl->GetCount(); i < n; ++i)
     {
@@ -1006,7 +1040,7 @@ public:
         return eOrientation == sheet::DataPilotFieldOrientation_HIDDEN;
     }
 
-    void startDimension(sal_Int32 /*nDimensionIndex*/, uno::Reference<uno::XInterface> const& /*xDimension*/, sheet::DataPilotFieldOrientation eOrientation) override
+    void startDimension(sal_Int32 /*nDimensionIndex*/, uno::Reference<cpo::uno::XInterface> const& /*xDimension*/, sheet::DataPilotFieldOrientation eOrientation) override
     {
         meCurrentOrientation = eOrientation;
     }
@@ -1016,7 +1050,7 @@ public:
         meCurrentOrientation = sheet::DataPilotFieldOrientation_HIDDEN;
     }
 
-    void startLevel(sal_Int32 /*nLevelIndex*/, uno::Reference<uno::XInterface> const& /*xLevel*/, OUString const& rLevelName) override
+    void startLevel(sal_Int32 /*nLevelIndex*/, uno::Reference<cpo::uno::XInterface> const& /*xLevel*/, OUString const& rLevelName) override
     {
         maLevelName = rLevelName;
     }
@@ -1603,7 +1637,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
     if (!aDataFields.empty())
     {
-        css::uno::Reference<css::container::XNameAccess> xDimsByName;
+        cpo::uno::Reference<css::container::XNameAccess> xDimsByName;
         if (auto xDimSupplier = const_cast<ScDPObject&>(rDPObj).GetSource())
             xDimsByName = xDimSupplier->getDimensions();
 
@@ -1633,7 +1667,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             {
                 try
                 {
-                    css::uno::Reference<css::beans::XPropertySet> xDimProps(
+                    cpo::uno::Reference<css::beans::XPropertySet> xDimProps(
                         xDimsByName->getByName(rDim.GetName()), uno::UNO_QUERY_THROW);
                     cpo::uno::Any aVal = xDimProps->getPropertyValue(SC_UNONAME_NUMFMT);
                     sal_uInt32 nScNumFmt = aVal.get<sal_uInt32>();

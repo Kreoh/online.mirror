@@ -5,7 +5,8 @@ bin_PROGRAMS = coda-qt
 include_paths = -I${top_srcdir}/common -I${top_srcdir}/net -I${top_srcdir}/kit -I${top_srcdir}/wsd -I${top_srcdir} ${ZSTD_CFLAGS} ${QT6_CFLAGS}
 
 warning_flags = -Wall -Werror -Wno-parentheses -Wno-sign-compare -Wno-unused-variable
-define_flags = -DMOBILEAPP=1
+
+define_flags = -DMOBILEAPP=1 -DENABLE_CHILDROOTS=0
 
 AM_CPPFLAGS = -pthread \
               -DCOOLWSD_DATADIR='"'@COOLWSD_DATADIR@'"' \
@@ -22,62 +23,32 @@ endif
 # liblibpng.a / libzstd.a (system shared libraries in the Flatpak and Snap
 # builds).  The static libpng pulls in zlib symbols, so it must precede
 # $(ZLIB_LIBS) on the link line for the linker to resolve them.
-AM_LDFLAGS = -pthread ${QT6_LIBS} -ldl ${PNG_LIBS} $(ZSTD_LIBS) $(POCO_LIBS) $(ZLIB_LIBS)
+AM_LDFLAGS = -pthread ${QT6_LIBS} -ldl ${PNG_LIBS} $(ZSTD_LIBS) $(ZLIB_LIBS)
 
 # Android's CMakefile list re-worked:
 
 cmake_list= \
-            ../common/AIHttpTransport.cpp \
-            ../common/Authorization.cpp \
-            ../common/ConfigUtil.cpp \
             ../common/SettingsStorage.cpp \
-            ../common/CommandControl.cpp \
             ../common/Crypto-stub.cpp \
-            ../common/FileUtil.cpp \
-            ../common/FileUtil-unix.cpp \
-            ../common/Log-common.cpp \
-            ../common/Log-poco.cpp \
             ../common/MobileApp.cpp \
             ../common/Prefs.cpp \
-            ../common/TraceEvent.cpp \
-            ../common/ProcUtil.cpp \
-            ../common/Protocol.cpp \
-            ../common/RegexUtil.cpp \
-            ../common/Simd.cpp \
-            ../common/StringVector.cpp \
-            ../common/Session.cpp \
             ../common/SigUtil-mobile.cpp \
-            ../common/SpookyV2.cpp \
-            ../common/Unit.cpp \
             ../common/Unit-mobile.cpp \
-            ../common/Util.cpp \
             ../common/Util-mobile.cpp \
-            ../common/Util-unix.cpp \
-            ../common/Uri.cpp \
             ../common/RecentFiles.cpp \
             ../kit/ChildSession.cpp \
             ../kit/DeltaSimd.c \
             ../kit/Kit.cpp \
-            ../kit/KitQueue.cpp \
-            ../kit/LogUI.cpp \
             ../kit/KitWebSocket.cpp \
             ../net/FakeSocket.cpp \
-            ../net/Socket.cpp \
-            ../wsd/AIChatSession.cpp \
-            ../wsd/AIUtil.cpp \
             ../wsd/ClientSession.cpp \
-            ../wsd/DeckSpec.cpp \
             ../wsd/DocumentBroker.cpp \
             ../wsd/COOLWSD.cpp \
             ../wsd/ClientRequestDispatcher.cpp \
-            ../wsd/RequestDetails.cpp \
             ../wsd/RequestVettingStation.cpp \
-            ../wsd/SlideCache.cpp \
             ../wsd/Storage.cpp \
-            ../wsd/TileCache.cpp \
             ../wsd/WSDGlobals.cpp \
-            ../wsd/coolwsd-fork.cpp \
-            ../wsd/dumpWsdState.cpp
+            ../wsd/coolwsd-fork.cpp
 
 
 # Sources that will be created by Qt's MOC
@@ -104,8 +75,29 @@ coda_qt_CXXFLAGS += -mno-direct-extern-access
 endif
 endif
 
-coda_qt_SOURCES = coda-qt.cpp Application.cpp AIHttpTransport.cpp Bridge.cpp CODocumentBroker.cpp CoolUrlSchemeHandler.cpp QtClipboard.cpp DocumentOperations.cpp WebView.cpp DBusService.cpp Document.cpp QtFileManager.cpp IntegratorFilePicker.cpp RemoteOpen.cpp StandaloneWindow.cpp TabbedWindow.cpp TabManager.cpp TabShellBridge.cpp WindowUtils.cpp $(cmake_list)
+# SIMD is on tree-wide in the combined build, so kit/DeltaSimd.c takes the AVX2
+# path and needs the flags libsimd gets. Empty in a pure qtapp build.
+coda_qt_CFLAGS = $(AM_CFLAGS) $(SIMD_CFLAGS)
+
+coda_qt_SOURCES = coda-qt.cpp Application.cpp AIHttpTransport.cpp Bridge.cpp CODocumentBroker.cpp CoolUrlSchemeHandler.cpp CursorFix.cpp QtClipboard.cpp DocumentOperations.cpp WebView.cpp DBusService.cpp Document.cpp QtFileManager.cpp QtFilePicker.cpp IntegratorFilePicker.cpp RemoteOpen.cpp StandaloneWindow.cpp TabbedWindow.cpp TabManager.cpp TabShellBridge.cpp WindowUtils.cpp $(cmake_list)
 nodist_coda_qt_SOURCES = $(BUILT_SOURCES)
+
+GBUILD_SHARED_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libshared.a
+GBUILD_WSD_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libwsd.a
+# The engine archives are C++20 builds, so they carry weak copies of the
+# std::string members that libstdc++ instantiates itself only for C++17 and
+# older. A C++17 static library on the link line (POCO in the snap) references
+# those members from libstdc++, and the linker would otherwise take them from
+# the first archive member that has them, extracting server-only objects that
+# collide with the mobile copies of the same sources built above. Naming
+# libstdc++ first resolves them from the shared runtime instead.
+# The engine's static Poco archives come after the gbuild libraries that reference them.
+coda_qt_LDADD = -lstdc++ $(GBUILD_WSD_LIB) $(GBUILD_SHARED_LIB) $(POCO_LIBS)
+EXTRA_coda_qt_DEPENDENCIES = $(GBUILD_WSD_LIB) $(GBUILD_SHARED_LIB) Makefile
+
+if ENABLE_SSL
+coda_qt_LDADD += $(OPENSSL_LIBS)
+endif
 
 metainfodir = $(datadir)/metainfo
 metainfo_DATA = com.collaboraoffice.Office.metainfo.xml
@@ -129,8 +121,18 @@ EXTRA_DIST = tools/add-release.py
 
 ### --- Qt translations integration begin ---
 
-# List of translation languages
-LANGS = ar ca cs cy da de el es eu fi fr ga gl he hr hu hy id is it ja kk ko nl pl pt pt_BR ro ru sk sl sq sv tr uk zh_CN zh_TW
+# The shipped languages come from engine/distro-configs/Langs.conf, the single
+# curated list - edit that file to add or drop a language. Qt catalog names use
+# the underscore form (pt_BR, zh_CN), and English is the source language, so it
+# has no catalog. In a dist tarball the engine is absent, so fall back to the
+# catalogs we ship.
+LANGS_CONF = $(abs_top_srcdir)/engine/distro-configs/Langs.conf
+CONF_LANGS = $(shell test ! -f "$(LANGS_CONF)" || sed -n 's/^--with-lang=//p' "$(LANGS_CONF)" | tr ' ' '\n' | grep -v '^en-' | tr '-' '_')
+
+# The catalogs we actually have. A language added to Langs.conf ships no Qt
+# translation until "make update-translations" has created its catalog.
+CATALOG_LANGS = $(patsubst $(srcdir)/translations/coda_%.ts,%,$(wildcard $(srcdir)/translations/coda_*.ts))
+LANGS = $(if $(CONF_LANGS),$(filter $(CONF_LANGS),$(CATALOG_LANGS)),$(CATALOG_LANGS))
 
 # Translation source (.ts) and compiled (.qm) files
 TS_FILES = $(addprefix translations/coda_,$(addsuffix .ts,$(LANGS)))
@@ -141,9 +143,17 @@ QM_FILES = $(TS_FILES:.ts=.qm)
 	mkdir -p $(dir $@)
 	@$(LRELEASE) $< -qm $@
 
-# Update .ts files from source code (Qt app only)
+# Update .ts files from source code. Creates a catalog for any language in
+# Langs.conf that has none yet; -no-obsolete drops the entries of strings that
+# are gone from the source instead of keeping them as vanished, and -locations
+# none leaves out the source file and line of each string, which neither
+# lrelease nor CODA-W needs and which would otherwise change in every catalog
+# on every edit of the source. CODA-W takes its strings from the same
+# catalogs, so its source is scanned too. It marks them with
+# translate("Context", "...") calls, which lupdate recognises in a file that
+# does not use Qt; a string that CODA-Q shows too uses the context it has there.
 update-translations:
-	@$(LUPDATE) $(srcdir) -ts $(TS_FILES)
+	@$(LUPDATE) -no-obsolete -locations none $(srcdir) $(top_srcdir)/windows/coda/CODA -ts $(addprefix $(srcdir)/translations/coda_,$(addsuffix .ts,$(CONF_LANGS)))
 
 # Build all translations
 translations: $(QM_FILES)
@@ -157,7 +167,7 @@ translationsdir = $(datadir)/coda-qt/translations
 translations_DATA = $(QM_FILES)
 
 # Distribute sources and clean up generated files
-EXTRA_DIST += $(TS_FILES) run-from-build.in
+EXTRA_DIST += $(addprefix translations/coda_,$(addsuffix .ts,$(CATALOG_LANGS))) run-from-build.in
 CLEANFILES += $(QM_FILES)
 
 ### --- Qt translations integration end ---
@@ -201,10 +211,12 @@ EXTRA_DIST += \
 	$(TEST_DIR)/fixtures/slide_navigation.odp \
 	$(TEST_DIR)/fixtures/empty-presentation.odp \
 	$(TEST_DIR)/fixtures/readonly-source.odp \
+	$(TEST_DIR)/fixtures/popout-dialog.odt \
 	$(TEST_DIR)/specs/harness.spec.ts \
 	$(TEST_DIR)/specs/document-lifecycle.spec.ts \
 	$(TEST_DIR)/specs/open-file.spec.ts \
-	$(TEST_DIR)/specs/slide-copy-paste.spec.ts
+	$(TEST_DIR)/specs/slide-copy-paste.spec.ts \
+	$(TEST_DIR)/specs/popout-dialog.spec.ts
 
 ### --- WebdriverIO test integration end ---
 

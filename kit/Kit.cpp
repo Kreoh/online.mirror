@@ -110,6 +110,7 @@ Util::LoadTimings KitLoadTimings;
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -121,6 +122,7 @@ Util::LoadTimings KitLoadTimings;
 
 #include <Poco/File.h>
 #include <Poco/Exception.h>
+#include <Poco/Path.h>
 #include <Poco/URI.h>
 
 #ifdef QTAPP
@@ -141,7 +143,9 @@ Util::LoadTimings KitLoadTimings;
 #endif
 
 #ifdef QTAPP
+#include <qt/QtClipboard.hpp>
 #include <qt/QtFileManager.hpp>
+#include <qt/QtFilePicker.hpp>
 #endif
 
 using Poco::Exception;
@@ -149,9 +153,7 @@ using Poco::File;
 using Poco::JSON::Object;
 using Poco::JSON::Parser;
 
-#ifndef BUILDING_TESTS
 using Poco::Path;
-#endif
 
 using namespace COOLProtocol;
 using JsonUtil::makePropertyValue;
@@ -255,11 +257,14 @@ BackgroundSaveWatchdog::BackgroundSaveWatchdog(unsigned mobileAppDocId,
                   // It is possible that this process will not exit cleanly after
                   // handling SIGABRT, so instead after some time fall-back to this:
 
-                  // raise(3) will exit the current thread, not the process.
                   // coverity[sleep : SUPPRESS] - don't report sleep with lock held
                   sleep(30); // long enough for a trace ?
                   std::cerr << "BgSave failed to terminate after SIGABRT - will hard self-destroy process " << getpid() << std::endl;
-                  ::kill(0, SIGKILL); // kill(2) is trapped by seccomp.
+
+                  // Exit the whole process, from this thread, without running anything
+                  // that could hang. Not kill(2): seccomp traps it, and without seccomp
+                  // kill(0, ...) would signal the whole process group, our parent included.
+                  std::_Exit(TimeoutExitCode);
               }
           })
 {
@@ -277,7 +282,10 @@ BackgroundSaveWatchdog::~BackgroundSaveWatchdog()
 
 void BackgroundSaveWatchdog::complete()
 {
-    _saveCompleted = true;
+    {
+        std::unique_lock<std::mutex> lock(_watchdogMutex);
+        _saveCompleted = true;
+    }
     _watchdogCV.notify_all();
     if (_watchdogThread.joinable())
         _watchdogThread.join();
@@ -296,6 +304,24 @@ namespace
     // for later consistency checking.
     std::string UserDirPath;
     std::string InstDirPath;
+
+    /// The name the client's per-document-type preferences are keyed by.
+    std::string_view docTypeName(COKitDocumentType type)
+    {
+        switch (type)
+        {
+            case COKitDocumentType::TEXT:
+                return "text";
+            case COKitDocumentType::SPREADSHEET:
+                return "spreadsheet";
+            case COKitDocumentType::PRESENTATION:
+                return "presentation";
+            case COKitDocumentType::DRAWING:
+                return "drawing";
+            default:
+                return std::string_view();
+        }
+    }
 
     std::string pathFromFileURL(const std::string &uri)
     {
@@ -323,7 +349,7 @@ namespace
         consistencyCheckJail();
     }
 
-#if !defined(BUILDING_TESTS) && !MOBILEAPP
+#if !MOBILEAPP
     enum class LinkOrCopyType: std::uint8_t
     {
         All,
@@ -388,7 +414,7 @@ namespace
                    path != std::string_view("sdk") &&
                    path != std::string_view("debugsource") &&
                    path != std::string_view("share/basic") &&
-                   !std::string_view(path).starts_with(std::string_view("share/extensions/dict")) &&
+                   !std::string_view(path).starts_with(std::string_view("share/dictionaries/dict")) &&
                    path != std::string_view("share/Scripts/java") &&
                    path != std::string_view("share/Scripts/javascript") &&
                    path != std::string_view("share/config/wizard") &&
@@ -652,45 +678,35 @@ namespace
         }
     }
 
-    /// Shared configuration presets. A pair of staging directory and engine installation directory.
-    constexpr std::pair<std::string_view, std::string_view> SharedPresetGroups[] = {
-        { "autotext", "share/autotext/common" },
-        { "wordbook", "share/wordbook" },
-        { "template", "share/template/common/presnt" },
+    /// One group of shared configuration presets, for the jails that hold a copy of the engine
+    /// installation: the path of its staging directory below the presets of a configuration, and
+    /// the engine installation directory that holds the same kind of file.
+    struct SharedPresetGroup
+    {
+        std::string_view stagingPath;
+        std::string_view sharePath;
     };
 
-    std::string sharedPresetSource(const std::string& configIdPresets, std::string_view group)
-    {
-        return Poco::Path(configIdPresets, std::string(group)).toString();
-    }
+    constexpr SharedPresetGroup SharedPresetGroups[] = {
+        { "autotext", "share/autotext/common" },
+        { "wordbook", "share/wordbook" },
+        { "template/presnt", "share/template/common/presnt" },
+    };
 
-    bool hasSharedPresets(const std::string& configIdPresets)
-    {
-        for (const auto& group : SharedPresetGroups)
-        {
-            if (!FileUtil::isEmptyDirectory(sharedPresetSource(configIdPresets, group.first)))
-                return true;
-        }
-        return false;
-    }
-
-    std::string sharedPresetDestination(const std::string& loJailDestPath,
-                                        std::string_view sharePath)
-    {
-        return Poco::Path(loJailDestPath, std::string(sharePath)).toString();
-    }
-
+    /// Copies the presets of a configuration into an engine installation.
     void linkOrCopySharedPresets(const std::string& configIdPresets,
                                  const std::string& loJailDestPath,
                                  const std::string& linkablePath)
     {
-        for (const auto& [group, sharePath] : SharedPresetGroups)
+        for (const auto& group : SharedPresetGroups)
         {
-            const std::string source = sharedPresetSource(configIdPresets, group);
+            const std::string source
+                = Poco::Path(configIdPresets, std::string(group.stagingPath)).toString();
             if (FileUtil::isEmptyDirectory(source))
                 continue;
 
-            const std::string destination = sharedPresetDestination(loJailDestPath, sharePath);
+            const std::string destination
+                = Poco::Path(loJailDestPath, std::string(group.sharePath)).toString();
             linkOrCopy(source, destination + "/", linkablePath, LinkOrCopyType::All);
         }
     }
@@ -832,7 +848,7 @@ namespace
         cap_free(caps);
     }
 #endif // __FreeBSD__
-#endif // BUILDING_TESTS
+#endif // !MOBILEAPP
 } // namespace
 
 Document::Document(const std::shared_ptr<COKit>& loKit, const std::string& jailId,
@@ -856,6 +872,7 @@ Document::Document(const std::shared_ptr<COKit>& loKit, const std::string& jailI
     , _docPasswordType(DocumentPasswordType::ToView)
     , _hasPasswordToModify(false)
     , _haveDocPasswordToModify(false)
+    , _keptViewId(-1)
     , _stop(false)
     , _deltaGen(new DeltaGenerator())
     , _editorId(-1)
@@ -940,12 +957,6 @@ bool Document::postMessage(const std::string_view data, const WSOpCode code) con
 bool Document::createSession(const std::string& sessionId, const bool enableWebsocketURP,
                              const int boundAgentViewId)
 {
-#if defined(BUILDING_TESTS)
-    (void)enableWebsocketURP;
-    (void)boundAgentViewId;
-    LOG_ERR("createSession stubbed for tests for " << sessionId);
-    return false;
-#else
     try
     {
         if (_sessions.find(sessionId) != _sessions.end())
@@ -982,7 +993,6 @@ bool Document::createSession(const std::string& sessionId, const bool enableWebs
                 "] on url [" << anonymizeUrl(_url) << "] - '" << ex.what() << "'.");
         return false;
     }
-#endif
 }
 
 std::size_t Document::purgeSessions()
@@ -1122,13 +1132,14 @@ void Document::renderTiles(TileCombined &tileCombined)
     if (tileCombined.getCanonicalViewId() != CanonicalViewId::None)
         _loKitDocument->setView(session->getViewId());
 
-    // In a presentation or drawing document a tile's part is the page's stable
-    // unique id, and the document resolves it to the index the page holds when
-    // it paints. The part number of a gone page paints nothing, so there is
-    // nothing to render or send.
-    if (_loKitDocument->getPartIndex(tileCombined.getPart(), tileCombined.getEditMode()) < 0)
+    // In a presentation or drawing document a tile's part is the page's GUID, and the document
+    // resolves it to the index the page holds when it paints. The identifier of a gone page paints
+    // nothing, so each tile is reported back as gone instead of rendered.
+    if (_loKitDocument->getPartIndex(tileCombined.getPart().c_str(), tileCombined.getEditMode()) < 0)
     {
         LOG_DBG("Skipping the render of the gone part " << tileCombined.getPart());
+        for (const TileDesc& tile : tileCombined.getTiles())
+            sendTextFrame(tile.serialize("tilegone:"));
         return;
     }
 
@@ -1396,22 +1407,32 @@ void Document::trimAfterInactivity()
         return;
     }
 
-    // merge various callback types together if possible
-    if (eType == COKitCallbackType::INVALIDATE_TILES)
+    if (eType == COKitCallbackType::VECTOR_PRIMITIVES_DELTA)
     {
-        // all views have to be in sync; FIXME: calc an issue here ?
-        queue->putCallback(-1, eType, payload);
+        // The delta describes the part and carries no view state, so one frame goes to every
+        // session.
+        if (Document* document = descriptor->getDoc())
+            document->broadcastCallbackToClients(eType, payload);
     }
     else
+    {
+        // The core already delivers this to every view that needs it: either
+        // naturally, since each view's own window reacts to the same document
+        // change and reports its own invalidation, or explicitly, when a change
+        // is not tied to any one view's zoom and the core calls back once per
+        // view on purpose. Broadcasting it to every session here on top of that
+        // duplicated the delivery, and in Calc, where the affected area is in
+        // per-view zoomed screen coordinates, delivered one view's rectangle to
+        // views it did not apply to.
         queue->putCallback(descriptor->getViewId(), eType, payload);
+    }
 
     LOG_TRC("Document::ViewCallback end.");
 }
 
 /// Load a document (or view) and register callbacks.
 bool Document::onLoad(const std::string& sessionId,
-                      const std::string& uriAnonym,
-                      const std::string& renderOpts)
+                      const std::string& uriAnonym)
 {
     LOG_INF("Loading url [" << uriAnonym << "] for session [" << sessionId <<
             "] which has " << (_sessions.size() - 1) << " sessions.");
@@ -1429,7 +1450,7 @@ bool Document::onLoad(const std::string& sessionId,
     std::shared_ptr<ChildSession> session = it->second;
     try
     {
-        if (load(session, renderOpts))
+        if (load(session))
         {
             if (_legacyUnoApiSeen &&
                 !ConfigUtil::getBool("hide_legacy_script_warning", false))
@@ -1446,6 +1467,22 @@ bool Document::onLoad(const std::string& sessionId,
     }
 
     return false;
+}
+
+bool Document::destroyKeptView()
+{
+    if (_keptViewId == -1 || !_loKitDocument)
+        return false;
+
+    const int keptViewId = _keptViewId;
+    _keptViewId = -1;
+
+    LOG_INF("Destroying kept view [" << keptViewId << "] of document [" << anonymizeUrl(_url)
+                                     << ']');
+    _loKitDocument->setView(keptViewId);
+    _loKitDocument->registerCallback(nullptr, nullptr);
+    _loKitDocument->destroyView(keptViewId);
+    return true;
 }
 
 void Document::onUnload(const ChildSession& session)
@@ -1502,7 +1539,19 @@ void Document::onUnload(const ChildSession& session)
     _loKitDocument->registerCallback(nullptr, nullptr);
     if (_loKitDocument->getViewsCount() <= 1)
         _loKit->registerCallback(nullptr, nullptr);
-    _loKitDocument->destroyView(viewId);
+
+    // The engine keeps a document while it has a view, so this last one holds the document
+    // open until the next session arrives.
+    if (DOCS_SHARE_PROCESS && _loKitDocument->getViewsCount() <= 1)
+    {
+        LOG_INF("Keeping view [" << viewId << "] of document [" << anonymizeUrl(_url)
+                                 << "] alive, so the document stays loaded with no session");
+        _keptViewId = viewId;
+    }
+    else
+    {
+        _loKitDocument->destroyView(viewId);
+    }
 
     // Since callback messages are processed on idle-timer,
     // we could receive callbacks after destroying a view.
@@ -1583,48 +1632,60 @@ void Document::handleSaveMessage(const std::string &)
     if (_isBgSaveProcess)
     {
         LOG_TRC("BgSave completed");
-
-        // unregister the view callbacks
-        std::vector<int> viewIds;
-        getLOKitDocument()->getViewIds(viewIds);
-        for (const auto viewId : viewIds)
-        {
-            _loKitDocument->setView(viewId);
-            _loKitDocument->registerCallback(nullptr, nullptr);
-        }
-
-        // cleanup any lingering file-system pieces
-        _loKitDocument.reset();
-
-        // any further messages are not interesting.
-        if (_queue)
-            _queue->clear();
-
-        auto socket = _saveProcessParent.lock();
-        if (socket)
-        {
-            LOG_TRC("Shutting down bgsv child's socket to parent kit post save");
-
-            // We don't want to wait around for the parent's websocket
-            socket->shutdownAfterWriting();
-
-            // This means we don't get to send statechanged: .uno:ModifiedStatus
-            // which is fine - we want to leave that to the Kit process.
-        }
-        else
-            LOG_TRC("Shutting down already shutdown bgsv child's socket to parent kit post save");
-
-        // Next step in the chain is BgSaveChildWebSocketHandler::onDisconnect
+        finishBackgroundForkProcess();
     }
+#endif
+}
+
+void Document::finishBackgroundForkProcess()
+{
+#if !MOBILEAPP
+    if (!_loKitDocument)
+    {
+        LOG_TRC("Background fork process already released its document");
+        return;
+    }
+
+    // unregister the view callbacks
+    const std::vector<int> viewIds = getLOKitDocument()->getViewIds();
+    for (const auto viewId : viewIds)
+    {
+        _loKitDocument->setView(viewId);
+        _loKitDocument->registerCallback(nullptr, nullptr);
+    }
+
+    // cleanup any lingering file-system pieces
+    _loKitDocument.reset();
+
+    // any further messages are not interesting.
+    if (_queue)
+        _queue->clear();
+
+    auto socket = _saveProcessParent.lock();
+    if (socket)
+    {
+        LOG_TRC("Shutting down bgsv child's socket to parent kit post save");
+
+        // We don't want to wait around for the parent's websocket
+        socket->shutdownAfterWriting();
+
+        // This means we don't get to send statechanged: .uno:ModifiedStatus
+        // which is fine - we want to leave that to the Kit process.
+    }
+    else
+        LOG_TRC("Shutting down already shutdown bgsv child's socket to parent kit post save");
+
+    // Next step in the chain is BgSaveChildWebSocketHandler::onDisconnect
 #endif
 }
 
 #if !MOBILEAPP
 
 // need to hold a reference on session in case it exits during async save
-bool Document::forkToSave(const std::function<void()>& childSave, int viewId)
+bool Document::forkToSave(const std::function<void()>& childSave, int viewId,
+                          BackgroundForkPurpose purpose)
 {
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
         return false;
 
     if (_isBgSaveProcess)
@@ -1708,6 +1769,14 @@ bool Document::forkToSave(const std::function<void()>& childSave, int viewId)
 
     const pid_t pid = fork();
 
+    if (pid < 0)
+    {
+        // Both socket ends and the thread guard go out of scope here, so the sockets
+        // close and the engine threads restart.
+        LOG_SYS("Failed to fork the background save process");
+        return false;
+    }
+
     if (!pid) // Child
     {
         Log::postFork();
@@ -1777,6 +1846,11 @@ bool Document::forkToSave(const std::function<void()>& childSave, int viewId)
 
         SigUtil::addActivity("background save process shutdown");
 
+        // An export is already finished when childSave returns, while a save has yet
+        // to report its result asynchronously through handleSaveMessage.
+        if (purpose == BackgroundForkPurpose::Export)
+            finishBackgroundForkProcess();
+
         // Wait now for an async save result from the core,
         // and head to handleSaveMessage
     }
@@ -1787,11 +1861,12 @@ bool Document::forkToSave(const std::function<void()>& childSave, int viewId)
         parentSocket.reset();
         // now we have a socket to the child: childSocket
 
-        forceDocUnmodifiedForBgSave(viewId);
+        if (purpose == BackgroundForkPurpose::Save)
+            forceDocUnmodifiedForBgSave(viewId);
 
         auto bgSaveChild = std::make_shared<BgSaveParentWebSocketHandler>(
             "bgsv_kit_ws", pid, shared_from_this(),
-            findSessionByViewId(viewId));
+            findSessionByViewId(viewId), purpose);
         childSocket->setHandler(bgSaveChild);
         childSocket->setWebSocket(); // avoid http upgrade.
         KitSocketPoll::getMainPoll()->insertNewSocket(childSocket);
@@ -1866,8 +1941,7 @@ void replaceKeysWithPlaceholder(std::string& json, std::initializer_list<std::st
 void Document::notifyViewInfo()
 {
     // Get the list of view ids from the core
-    std::vector<int> viewIds;
-    getLOKitDocument()->getViewIds(viewIds);
+    const std::vector<int> viewIds = getLOKitDocument()->getViewIds();
 
     const std::map<int, UserInfo> viewInfoMap = getViewInfo();
 
@@ -1904,6 +1978,12 @@ void Document::notifyViewInfo()
                 color = it->second;
             }
         }
+
+        // The part the view is on, so a view that joins can place the others.
+        const std::shared_ptr<ChildSession> session = findSessionByViewId(viewId);
+        if (session && !session->getCurrentPartId().empty())
+            oss << "\"part\":\"" << JsonUtil::escapeJSONValue(session->getCurrentPartId())
+                << "\",";
 
         oss << "\"color\":" << color;
 
@@ -1951,6 +2031,21 @@ void Document::notifyViewInfo()
         oss << ']';
 
         it.second->sendTextFrame(oss.str());
+    }
+}
+
+void Document::notifyViewPart(int viewId, const std::string& partId)
+{
+    std::ostringstream oss;
+    oss << "viewpart: {\"viewId\":" << viewId << ",\"part\":\""
+        << JsonUtil::escapeJSONValue(partId) << "\"}";
+    const std::string message = oss.str();
+
+    // The view that moved already knows; it gets "setpart:" of its own.
+    for (const auto& it : _sessions)
+    {
+        if (it.second->getViewId() != viewId)
+            it.second->sendTextFrame(message);
     }
 }
 
@@ -2163,8 +2258,7 @@ std::string removeServerLoadOptions(const std::string& filterOptions,
 }
 }
 
-std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession>& session,
-                                              const std::string& renderOpts)
+std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession>& session)
 {
     const std::string sessionId = session->getId();
 
@@ -2193,7 +2287,7 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
     const std::string& originalDocUrl = session->getOriginalDocUrl();
     const std::string& filterOption = session->getInFilterOption();
 
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
         consistencyCheckFileExists(uri);
 
     // The options string is comma-separated and the value is a URL that may
@@ -2231,7 +2325,7 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
     if (FileUtil::Stat(wopiCertDir).exists())
         ::setenv("LO_CERTIFICATE_AUTHORITY_PATH", wopiCertDir.c_str(), 1);
 
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
     {
         // if ssl client verification was disabled in online for the wopi server,
         // and this is a https connection then also exempt that host from ssl host
@@ -2246,6 +2340,7 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
 
     std::string spellOnline = session->getSpellOnline();
     const std::string formattingMarks = session->getFormattingMarks();
+    const std::string focusRingColor = session->getFocusRingColor();
     if (!_loKitDocument)
     {
         // This is the first time we are loading the document
@@ -2286,6 +2381,19 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
         _docPasswordToModify.clear();
 
         const char* url = loadUri.c_str();
+
+#if defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+        // In-place translation of a document carrying an "l10n" stream
+        // (the intro templates); a no-op for ordinary documents.  With no
+        // language the markers still come off, so the text reads plainly.
+        // Every app build that ships the intro documents needs this: the
+        // stream's keys carry no "_", so the import-time mapper in xmloff
+        // cannot translate them.
+        if (loKitPtr &&
+            loKitPtr->translateDocument(url, url, lang.c_str()) == COKitTranslateResult::FAILED)
+            LOG_WRN("translateDocument failed for " << uriAnonym << "; opening as-is");
+#endif // defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+
         LOG_DBG("Calling lokit::documentLoad(" << anonymizeUrl(url) << ", \"" << options << "\")");
         const auto start = std::chrono::steady_clock::now();
         _loKitDocument.reset(_loKit->documentLoadWithOptions(url, options.c_str()));
@@ -2344,7 +2452,7 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
             // application, so a failed load must not close the connection or
             // terminate. Only the server, with a kit process per document,
             // shuts down here.
-            if constexpr (!Util::isKitInProcess())
+            if (!Util::isKitInProcess())
             {
                 session->shutdownNormal();
                 LOG_FTL("Failed to load the document. Setting TerminationFlag");
@@ -2352,10 +2460,6 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
             }
             return nullptr;
         }
-
-        // Only save the options on opening the document.
-        // No support for changing them after opening a document.
-        _renderOpts = renderOpts;
 
         // Whether the document carries a separate password required to modify it.
         const std::string hasPasswordToModify(
@@ -2408,22 +2512,32 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
             if (!viewRenderState.empty())
             {
                 StringVector tokens(StringVector::tokenize(viewRenderState.data(), viewRenderState.size(), ';'));
-                spellOnline = tokens[0] == "S" ? "true" : "false";
+                // The part before the semicolon spells out the states that are on, in a fixed
+                // order that starts with spell checking, so its letter leads whenever it is on
+                // and the letters of the states after it follow.
+                spellOnline = tokens[0].starts_with('S') ? "true" : "false";
             }
             break;
         }
     }
+
+    // Which document type's spell checking choice applies is only known now that
+    // the document is loaded. A choice already narrowed to the document's own
+    // state above names no document type, so it passes through untouched.
+    spellOnline = Session::spellOnlineForDocType(spellOnline,
+                                                 docTypeName(_loKitDocument->getDocumentType()));
+
     std::string theme = getDefaultTheme(session);
 
     std::string backgroundTheme = getDefaultBackgroundTheme(session);
 
     // Avoid logging userPrivateInfo till it's not anonymized.
     LOG_INF("Initializing for rendering session [" << sessionId << "] on document url [" <<
-            anonymizeUrl(_url) << "] with: [" << makeRenderParams(_renderOpts, userNameAnonym, spellOnline, formattingMarks, theme, backgroundTheme, "") << "].");
+            anonymizeUrl(_url) << "] with: [" << makeRenderParams(userNameAnonym, spellOnline, formattingMarks, theme, backgroundTheme, focusRingColor, "") << "].");
 
     // initializeForRendering() should be called before
     // registerCallback(), as the previous creates a new view in Impress.
-    const std::string renderParams = makeRenderParams(_renderOpts, userName, spellOnline, formattingMarks, theme, backgroundTheme, userPrivateInfo);
+    const std::string renderParams = makeRenderParams(userName, spellOnline, formattingMarks, theme, backgroundTheme, focusRingColor, userPrivateInfo);
 
     _loKitDocument->initializeForRendering(renderParams.c_str());
 
@@ -2434,6 +2548,17 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
         LOG_ERR("Failed to load view into document url [" << anonymizeUrl(_url) << "] for session ["
                                                           << sessionId << ']');
         return nullptr;
+    }
+
+    // The new view is in place before the kept one goes, so the document has a view
+    // throughout.
+    if (_keptViewId != viewId && destroyKeptView())
+    {
+        _loKitDocument->setView(viewId);
+
+        // The process-wide callback carries the progress indicator. It returns with the
+        // session.
+        _loKit->registerCallback(GlobalCallback, this);
     }
 
     _sessionUserInfo[viewId] = UserInfo(session->getViewUserId(), session->getViewUserName(),
@@ -2561,13 +2686,11 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
         }
 
         std::string abbrMessage;
-#ifndef BUILDING_TESTS
         if (Anonymizer::enabled())
         {
             abbrMessage = "...";
         }
         else
-#endif
         {
             abbrMessage = getAbbreviatedMessage(data, size);
         }
@@ -2584,25 +2707,14 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
     return false;
 }
 
-/* static */ std::string Document::makeRenderParams(const std::string& renderOpts, const std::string& userName,
+/* static */ std::string Document::makeRenderParams(const std::string& userName,
                                                     const std::string& spellOnline,
                                                     const std::string& formattingMarks, const std::string& theme,
                                                     const std::string& backgroundTheme,
+                                                    const std::string& focusRingColor,
                                                     const std::string& userPrivateInfo)
 {
-    Object::Ptr renderOptsObj;
-
-    // Fill the object with renderoptions, if any
-    if (!renderOpts.empty())
-    {
-        Parser parser;
-        Poco::Dynamic::Var var = parser.parse(renderOpts);
-        renderOptsObj = var.extract<Object::Ptr>();
-    }
-    else
-    {
-        renderOptsObj = new Object();
-    }
+    Object::Ptr renderOptsObj = new Object();
 
     Object::Ptr userPrivateInfoObj;
     if (!userPrivateInfo.empty())
@@ -2628,6 +2740,11 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
     {
         // userName must be decoded already.
         renderOptsObj->set(".uno:Author", makePropertyValue("string", userName));
+    }
+
+    if (!focusRingColor.empty())
+    {
+        renderOptsObj->set(".uno:FocusRingColor", makePropertyValue("string", focusRingColor));
     }
 
     // Extract settings relevant as view options from userPrivateInfo.
@@ -2656,6 +2773,11 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
 
     if (!backgroundTheme.empty())
         renderOptsObj->set(".uno:InvertBackground", makePropertyValue("string", backgroundTheme));
+
+    // Flat page appearance: no native drop shadow or outline drawn around the
+    // page/slide, consistent across document types.
+    if (!renderOptsObj->has(".uno:ShowBorderShadow"))
+        renderOptsObj->set(".uno:ShowBorderShadow", makePropertyValue("boolean", false));
 
     if (renderOptsObj)
     {
@@ -2737,6 +2859,41 @@ bool Document::processInputEnabled() const
     return enabled;
 }
 
+void Document::deliverVectorDelta(const std::string& payload)
+{
+    // A background save forwards only text messages to the process that forked it, so it
+    // sends no content of its own.
+    if (isBackgroundSaveProcess())
+        return;
+
+    // The payload is the id of the part on the first line, then the delta JSON.
+    const std::size_t newline = payload.find('\n');
+    if (newline == std::string::npos)
+    {
+        LOG_WRN("Vector primitives delta without a part id, dropped");
+        return;
+    }
+    const std::string partId = payload.substr(0, newline);
+    const std::string json = payload.substr(newline + 1);
+
+    // Every session that holds the part reads the same delta, so it is compressed once, for
+    // the first session that takes it, and the frame is handed to each of them. A session that
+    // draws bitmap tiles, or was never served this part, has no use for it. An inactive or
+    // disconnected session is sent no delta.
+    std::optional<std::vector<char>> frame;
+    for (const auto& it : _sessions)
+    {
+        ChildSession& session = *it.second;
+        if (session.isCloseFrame() || session.isDisconnected() || !session.isActive() ||
+            !session.holdsVectorPart(partId))
+            continue;
+        if (!frame)
+            frame = ChildSession::zstdFrame("zstdvectorprimitivesdelta:\n", json.data(),
+                                            json.size());
+        session.sendVectorDelta(*frame, json);
+    }
+}
+
 void Document::drainCallbacks()
 {
     KitQueue::Callback cb;
@@ -2758,6 +2915,12 @@ void Document::drainCallbacks()
 
         const COKitCallbackType eType = cb._type;
         const std::string &payload = cb._payload;
+
+        if (eType == COKitCallbackType::VECTOR_PRIMITIVES_DELTA)
+        {
+            deliverVectorDelta(payload);
+            continue;
+        }
 
         // Forward the callback to the same view, demultiplexing is done by the CollaboraOffice core.
         bool isFound = false;
@@ -2785,7 +2948,9 @@ void Document::drainCallbacks()
                     break;
             }
         }
-        if (!isFound)
+        // A broadcast finds no open session while the document closes, which is normal. A
+        // callback aimed at one view that is gone is still an error.
+        if (!isFound && !broadcast)
             LOG_ERR("Document::ViewCallback. Session [" << viewId <<
                     "] is no longer active to process [" << kitCallbackTypeToString(eType) <<
                     "] [" << COOLProtocol::getAbbreviatedMessage(payload) <<
@@ -2852,6 +3017,18 @@ void Document::drainQueue()
             {
                 assert(Util::isFuzzing() && "callbacks cannot now appear on the incoming queue");
             }
+            else if (tokens.equals(0, "remotedocevent"))
+            {
+                // An event about a subscribed remote document. Forward it to
+                // every view until the engine consumes these events itself.
+                const std::string firstLine =
+                    COOLProtocol::getFirstLine(input.data(), input.size());
+                LOG_INF("Remote document event: " << firstLine);
+                const std::string message =
+                    "remotedocevent:" + firstLine.substr(std::string("remotedocevent").size());
+                for (auto const& [id, session] : _sessions)
+                    session->sendTextFrame(message);
+            }
             else
             {
                 LOG_ERR("Unexpected request: [" << COOLProtocol::getAbbreviatedMessage(input) << "].");
@@ -2892,13 +3069,13 @@ void Document::drainQueue()
     catch (const std::exception& exc)
     {
         LOG_FTL("drainQueue: Exception: " << exc.what());
-        if constexpr (!Util::isMobileApp())
+        if (!Util::isMobileApp())
             flushAndExit(EX_SOFTWARE);
     }
     catch (...)
     {
         LOG_FTL("drainQueue: Unknown exception");
-        if constexpr (!Util::isMobileApp())
+        if (!Util::isMobileApp())
             flushAndExit(EX_SOFTWARE);
     }
 }
@@ -3025,7 +3202,7 @@ void Document::flushAndExit(int code)
 #if !MOBILEAPP
     _deltaPool.stop();
 #endif
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
         Util::forcedExit(code);
     else
         SigUtil::setTerminationFlag();
@@ -3037,7 +3214,7 @@ void Document::dumpState(std::ostream& oss)
            "\n\tpid: " << ProcUtil::getProcessId() << "\n\tstop: " << _stop
         << "\n\tjailId: " << _jailId << "\n\tdocKey: " << _docKey << "\n\tdocId: " << _docId
         << "\n\turl: " << _url << "\n\tobfuscatedFileId: " << _obfuscatedFileId
-        << "\n\tjailedUrl: " << anonymizeUrl(_jailedUrl) << "\n\trenderOpts: " << _renderOpts
+        << "\n\tjailedUrl: " << anonymizeUrl(_jailedUrl)
         << "\n\thaveDocPassword: " << _haveDocPassword // not the pwd itself
         << "\n\tisDocPasswordProtected: " << _isDocPasswordProtected
         << "\n\tdocPasswordType: " << int(_docPasswordType)
@@ -3046,6 +3223,7 @@ void Document::dumpState(std::ostream& oss)
         << "\n\teditorId: " << _editorId
         << "\n\teditorChangeWarning: " << _editorChangeWarning
         << "\n\tmobileAppDocId: " << _mobileAppDocId
+        << "\n\tkeptViewId: " << _keptViewId
         << "\n\tinputProcessingEnabled: " << processInputEnabled()
         << "\n\tduringLoad: " << _duringLoad << "\n\tmodified: " << name(_modified)
         << "\n\tbgSaveProc: " << _isBgSaveProcess << "\n\tbgSaveDisabled: " << _isBgSaveDisabled;
@@ -3107,11 +3285,9 @@ void Document::dumpState(std::ostream& oss)
     }
     oss << '\n';
 
-    char *pState = nullptr;
-    _loKit->dumpState("", &pState);
+    std::string stateStr = _loKit->dumpState("");
     oss << "lok state:\n";
-    if (pState) {
-        std::string stateStr(pState);
+    if (!stateStr.empty()) {
         std::string fileId = Uri::getFilenameFromURL(Uri::decode(_jailedUrl));
         Util::replaceAllSubStr(stateStr, fileId, _obfuscatedFileId);
         oss << stateStr;
@@ -3119,11 +3295,10 @@ void Document::dumpState(std::ostream& oss)
     oss << '\n';
 }
 
-#if !defined BUILDING_TESTS && !MOBILEAPP && !LIBFUZZER
+#if !MOBILEAPP && !LIBFUZZER
 
 // When building the fuzzer we link COOLWSD.cpp into the same executable so the
-// Protected::emitOneRecording() there gets used. When building the unit tests the one in
-// TraceEvent.cpp gets used.
+// Protected::emitOneRecording() there gets used.
 
 static std::mutex traceEventLock;
 static std::vector<std::string> traceEventRecords[2];
@@ -3251,34 +3426,6 @@ void KitSocketPoll::dumpGlobalState(std::ostream& oss) // static
         oss << "KitSocketPoll: none\n";
 }
 
-bool KitSocketPoll::scheduleOnKitThread(unsigned mobileAppDocId, const CallbackFn& fn) // static
-{
-#if DOCS_SHARE_PROCESS
-    // Several documents share this process, each with a poll in KSPolls.
-    // getMainPoll() tracks only the last-built poll and is cleared by any
-    // poll's destructor, so it can be null while live polls remain. Pick the
-    // document's own poll: the kit thread services every poll in the set, so
-    // the callback still runs on it, and it is dropped only if this document
-    // closes rather than an unrelated one.
-    std::unique_lock<std::mutex> lock(KSPollsMutex);
-    for (const auto& weak : KSPolls)
-    {
-        if (auto p = weak.lock())
-        {
-            const std::shared_ptr<Document>& doc = p->getDocument();
-            if (doc && doc->getMobileAppDocId() == mobileAppDocId)
-                // Holding the shared_ptr keeps the poll alive across addCallback.
-                return p->addCallback(fn);
-        }
-    }
-    return false;
-#else
-    // One document per kit process, so its single poll is the one to use.
-    (void)mobileAppDocId;
-    return mainPoll && mainPoll->addCallback(fn);
-#endif
-}
-
 std::shared_ptr<KitSocketPoll> KitSocketPoll::create() // static
 {
     std::shared_ptr<KitSocketPoll> result(new KitSocketPoll());
@@ -3396,7 +3543,7 @@ int KitSocketPoll::kitPoll(int timeoutMicroS)
     if (_document)
         _document->trimAfterInactivity();
 
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
     {
         flushTraceEventRecordings();
 
@@ -3449,8 +3596,6 @@ void documentViewCallback(COKitCallbackType eType, const char* payload, void* da
 {
     Document::ViewCallback(eType, payload, data);
 }
-
-#ifndef BUILDING_TESTS
 
 namespace
 {
@@ -3619,7 +3764,8 @@ void downloadAsFileSaveDialogCallback(const char* suggestedURI, char* result, si
     // No chroot, no jail. Use a tmp dir that the embedding app process can
     // read for the deferred picker step.
     std::error_code ec;
-    const std::string baseDir = std::filesystem::temp_directory_path(ec).string() + "/cool-export/";
+    const std::string baseDir = std::filesystem::temp_directory_path(ec).string<char>()
+        + "/cool-export/";
     std::filesystem::create_directories(baseDir, ec);
     if (ec)
     {
@@ -3712,10 +3858,15 @@ static void startMainLoop(const COKit* kit, const std::shared_ptr<COKit>& loKit,
 #endif
 
     // The desktop apps use one process-shared clipboard, so closing a document
-    // does not have to serialize the clipboard onto the system clipboard. Qt
-    // keeps its own per-view provider for now.
-#if defined(MACOSAPP) || defined(_WIN32)
+    // does not have to serialize the clipboard onto the system clipboard.
+#if defined(MACOSAPP) || defined(_WIN32) || defined(QTAPP)
     install_clipboard_provider(*loKit);
+#endif
+
+    // The desktop apps show a native file picker where the engine would open
+    // its own file dialog.
+#if defined(MACOSAPP) || defined(QTAPP) || defined(_WIN32)
+    install_filepicker_provider(*loKit);
 #endif
 
     LOG_INF("Kit unipoll loop run");
@@ -3828,6 +3979,7 @@ void lokit_main(
                 const std::string& sysTemplate,
                 const std::string& loTemplate,
                 bool noCapabilities,
+                bool requireLandlock,
                 bool noSeccomp,
                 bool useMountNamespaces,
                 bool queryVersion,
@@ -3835,14 +3987,14 @@ void lokit_main(
                 bool sysTemplateIncomplete,
 #else
                 int docBrokerSocket,
-                const std::string& userInterface,
+                [[maybe_unused]] const std::string& userInterface,
 #endif
                 std::size_t numericIdentifier
                 )
 {
 #if !MOBILEAPP
 
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
     {
         // Already set by COOLWSD.cpp
         SigUtil::setFatalSignals("kit startup of " + Util::getCoolVersion() + ' ' +
@@ -3911,6 +4063,10 @@ void lokit_main(
 
     std::string userdir_url;
     std::string instdir_path;
+    // Where this kit finds the shared presets of its configuration once the jail is ready. It
+    // stays empty when the jail holds a copy of the engine installation and the presets went
+    // into it, i.e. when no group is left that has to be read from the presets root.
+    std::string presetsPathInKit;
     int ProcSMapsFile = -1;
 
     // lokit's destroy typically throws from
@@ -3965,6 +4121,12 @@ void lokit_main(
 
             const std::string sharedPresets = Poco::Path(childRoot, JailUtil::CHILDROOT_TMP_SHARED_PRESETS_PATH).toString();
             const std::string configIdPresets = Poco::Path(sharedPresets, Uri::encode(configId)).toString();
+
+            // Where the shared presets of the configuration are readable inside the jail.
+            // Both the mount and the link/copy paths below put them here, so the engine
+            // reads every group from one root.
+            const std::string jailPresets =
+                Poco::Path(jailPath, JailUtil::PRESETS_JAIL_SUBPATH).toString();
 
             const std::string sysTemplateSubDir = Poco::Path(tempRoot, "systemplate-" + jailId).toString();
             const std::string jailEtcDir = Poco::Path(jailPath, "etc").toString();
@@ -4057,67 +4219,23 @@ void lokit_main(
 
                 if (!configId.empty())
                 {
-                    // Overlay the WOPI host's shared presets onto the engine's
-                    // preset dirs. This is best-effort: a preset the host did not
-                    // configure (empty source - the common case, the host merely
-                    // sets a configId), or one whose target dir the engine does
-                    // not ship (e.g. presnt after --without-templates), is
-                    // skipped. It must never fail the whole jail mount: that
-                    // disables bind-mounting for the entire forkit and pushes
-                    // every document onto the slow copy path.
-
-                    // The shared wordbook is overlaid onto the engine's own
-                    // share/wordbook, whose bundled dictionaries a bind mount
-                    // would hide - unlike the copy path, which merges into the
-                    // already-populated dir. Seed the shared wordbook with the
-                    // bundled dictionaries first so the overlay stays additive
-                    // and both jail-setup modes behave the same. A name the
-                    // host already provides is left untouched.
-                    const std::string sharedWordbook =
-                        sharedPresetSource(configIdPresets, "wordbook");
-                    if (!FileUtil::isEmptyDirectory(sharedWordbook))
+                    // Mount the shared presets of this configuration into the jail under one
+                    // name, so the engine reads every group from below it. This is
+                    // best-effort: a failure must never fail the whole jail mount, because
+                    // that disables bind-mounting for the entire forkit and pushes every
+                    // document onto the slow copy path.
+                    if (!FileUtil::Stat(configIdPresets).exists())
+                        LOG_DBG("Configuration [" << configId << "] staged no presets at ["
+                                                  << configIdPresets << "].");
+                    else if (!JailUtil::bind(configIdPresets, jailPresets) ||
+                             !JailUtil::remountReadonly(configIdPresets, jailPresets))
+                        LOG_WRN("Failed to mount shared presets [" << configIdPresets
+                                << "] -> [" << jailPresets << "], skipping.");
+                    else
                     {
-                        const std::string bundledWordbook =
-                            Poco::Path(loTemplate, "share/wordbook").toString();
-                        try
-                        {
-                            std::vector<std::string> names;
-                            Poco::File(bundledWordbook).list(names);
-                            for (const auto& name : names)
-                            {
-                                const std::string src = Poco::Path(bundledWordbook, name).toString();
-                                const std::string dst = Poco::Path(sharedWordbook, name).toString();
-                                if (Poco::File(src).isFile() && !FileUtil::Stat(dst).exists())
-                                    FileUtil::copy(src, dst, /*log=*/false, /*throw_on_error=*/false);
-                            }
-                        }
-                        catch (const Poco::Exception& e)
-                        {
-                            LOG_WRN("Could not seed shared wordbook with bundled "
-                                    "dictionaries: " << e.displayText());
-                        }
-                    }
-
-                    for (const auto& [group, sharePath] : SharedPresetGroups)
-                    {
-                        const std::string presetSrc = sharedPresetSource(configIdPresets, group);
-                        if (FileUtil::isEmptyDirectory(presetSrc))
-                            continue; // nothing configured for this preset
-
-                        const std::string presetDst =
-                            sharedPresetDestination(loJailDestPath, sharePath);
-                        if (!FileUtil::Stat(presetDst).exists())
-                        {
-                            LOG_WRN("Cannot apply shared preset [" << presetSrc
-                                    << "]: target [" << presetDst
-                                    << "] is not provided by the engine.");
-                            continue;
-                        }
-
-                        if (!JailUtil::bind(presetSrc, presetDst) ||
-                            !JailUtil::remountReadonly(presetSrc, presetDst))
-                            LOG_WRN("Failed to mount shared preset [" << presetSrc
-                                    << "] -> [" << presetDst << "], skipping.");
+                        presetsPathInKit = '/' + JailUtil::PRESETS_JAIL_SUBPATH;
+                        allowedPaths.emplace_back(presetsPathInKit,
+                                                  Landlock::Access::ReadOnlyDir);
                     }
                 }
 
@@ -4223,6 +4341,23 @@ void lokit_main(
                     // source would just make the overlayfs probe stat a
                     // not-yet-created target and log spuriously.
                     linkOrCopySharedPresets(configIdPresets, loJailDestPath, linkablePath);
+
+                    // The SPIF security-label policies have no engine share dir to
+                    // overlay: the engine dir-scans the group itself, off the presets
+                    // root. So stage them where the mount path puts the whole tree and
+                    // hand the engine the same root, rather than inventing a second
+                    // location for the one group that needs it.
+                    const std::string sharedSpif = Poco::Path(configIdPresets, "spif").toString();
+                    if (!FileUtil::isEmptyDirectory(sharedSpif))
+                    {
+                        const std::string jailPresetsSpif = Poco::Path(jailPresets, "spif").toString();
+                        Poco::File(jailPresetsSpif).createDirectories();
+                        linkOrCopy(sharedSpif, jailPresetsSpif + "/", linkablePath,
+                                   LinkOrCopyType::All);
+                        presetsPathInKit = '/' + JailUtil::PRESETS_JAIL_SUBPATH;
+                        allowedPaths.emplace_back(presetsPathInKit,
+                                                  Landlock::Access::ReadOnlyDir);
+                    }
                 }
 
 #if CODE_COVERAGE
@@ -4318,56 +4453,26 @@ void lokit_main(
         }
         else // noCapabilities set
         {
-            // The engine reads the shared presets of a configuration from its installation
-            // tree, so a configuration that carries any needs a specially set up jail.
-            // Link it from the template and copy the presets into it. A configuration
-            // with no shared presets reads the template itself, shared by all such jails.
-            const std::string sharedPresets =
-                Poco::Path(childRoot, JailUtil::CHILDROOT_TMP_SHARED_PRESETS_PATH).toString();
-            const std::string configIdPresets =
-                Poco::Path(sharedPresets, Uri::encode(configId)).toString();
-
-            std::string loInstallation = loTemplate;
-            if (!configId.empty() && hasSharedPresets(configIdPresets))
-            {
-                Poco::Path jailLOInstallation(jailPath, JailUtil::LO_JAIL_SUBPATH);
-                jailLOInstallation.makeDirectory();
-                const std::string linkablePath = childRoot + "/linkable";
-
-                // mark copied installation for deletion
-                JailUtil::markJailCopied(jailPathStr);
-
-                linkOrCopy(loTemplate, jailLOInstallation, linkablePath, LinkOrCopyType::LO);
-
-                loInstallation = jailLOInstallation.toString();
-                while (!loInstallation.empty() && loInstallation.back() == '/')
-                    loInstallation.pop_back();
-
-                linkOrCopySharedPresets(configIdPresets, loInstallation, linkablePath);
-
-                LOG_INF("Using installation [" << loInstallation
-                        << "] linked from template [" << loTemplate
-                        << "], carrying the shared presets of configuration ["
-                        << configId << "].");
-            }
-            else
-            {
-                LOG_INF("Using template [" << loTemplate
-                        << "] as install subpath directly, without chroot jail setup.");
-            }
+            LOG_INF("Using template [" << loTemplate
+                    << "] as install subpath directly, without chroot jail setup.");
 
             userdir_url = "file://" + jailPathStr + "tmp/user";
 #ifndef __APPLE__
-            instdir_path = '/' + loInstallation + "/program";
+            instdir_path = '/' + loTemplate + "/program";
 #else
-            instdir_path = '/' + loInstallation + "/Contents/Frameworks";
+            instdir_path = '/' + loTemplate + "/Contents/Frameworks";
 #endif
-            allowedPaths.emplace_back(loInstallation, Landlock::Access::ReadOnlyDir);
-            if (loInstallation != loTemplate)
+            allowedPaths.emplace_back(loTemplate, Landlock::Access::ReadOnlyDir);
+            if (!configId.empty())
             {
-                // Forkit preloaded the engine from the template, and some of the paths it
-                // resolved then are still read by their own name here.
-                allowedPaths.emplace_back(loTemplate, Landlock::Access::ReadOnlyDir);
+                // The engine reads the presets of this configuration from the staging directory
+                // itself. All the kits of the configuration share it.
+                const std::string sharedPresets =
+                    Poco::Path(childRoot, JailUtil::CHILDROOT_TMP_SHARED_PRESETS_PATH).toString();
+                const std::string configIdPresets =
+                    Poco::Path(sharedPresets, Uri::encode(configId)).toString();
+                allowedPaths.emplace_back(configIdPresets, Landlock::Access::ReadOnlyDir);
+                presetsPathInKit = configIdPresets;
             }
             JailRoot = jailPathStr;
 
@@ -4379,20 +4484,49 @@ void lokit_main(
             allowedPaths.emplace_back(tmpPath, Landlock::Access::ReadWriteDir);
             LOG_DBG("Using tmpdir [" << tmpPath << "]");
 
+#if ENABLE_DEBUG
+            // The developer's own font directories, taken while HOME still names the real home.
+            if (const char* pHome = getenv("HOME"))
+            {
+                const std::string home(pHome);
+                allowedPaths.emplace_back(home + "/.fonts", Landlock::Access::ReadOnlyDir);
+                // an XDG variable that is set but empty counts as unset
+                const char* pXdgDataHome = getenv("XDG_DATA_HOME");
+                const std::string xdgDataHome = pXdgDataHome && *pXdgDataHome
+                                                    ? std::string(pXdgDataHome)
+                                                    : home + "/.local/share";
+                allowedPaths.emplace_back(xdgDataHome + "/fonts", Landlock::Access::ReadOnlyDir);
+            }
+#endif
+
             // used by LO Migration::migrateSettingsIfNecessary() in startup code as config dir
             ::setenv("XDG_CONFIG_HOME", (tmpPath + "/.config").c_str(), 1);
             ::setenv("HOME", tmpPath.c_str(), 1);
-            // overwrite coolkitconfig.xcu setting to fit into allowed paths
-            ::setenv("KIT_WORKDIR", ("file://" + tmpPath).c_str(), 1);
 
             // Setup the OSL sandbox
             allowedPaths.emplace_back(pathFromFileURL(userdir_url),
                                       Landlock::Access::ReadOnlyDir);
 
+            // Landlock binds the calling thread and its children, and succeeds either
+            // way, so a sibling thread would stay outside the sandbox unremarked.
+            const int threads = getCurrentThreadCount();
+            if (threads != 1)
+                LOG_ERR("kit has " << threads << " threads as landlock is applied, and only "
+                        "the calling one is restricted");
+
             if (Landlock::lock(allowedPaths))
             {
                 LOG_INF("Landlock jail successfully created.");
                 hasLandlock = true;
+            }
+            else if (requireLandlock)
+            {
+                // Landlock is the only thing confining this document, so the kit stops when the
+                // rules do not apply. An operator who wants it to carry on regardless sets
+                // security.capabilities to false.
+                LOG_FTL("Failed to apply the landlock rules, which are the only document "
+                        "isolation available on this installation.");
+                Util::forcedExit(EX_SOFTWARE);
             }
             else
             {
@@ -4475,6 +4609,14 @@ void lokit_main(
         else
             LOG_SYS("Failed to get RLIMIT_NOFILE");
 
+        if (!presetsPathInKit.empty())
+        {
+            const std::string presetsUrl = Poco::URI(Poco::Path(presetsPathInKit)).toString();
+            LOG_DBG("Shared presets of configuration [" << configId << "] are at [" << presetsUrl
+                                                        << "] for this kit.");
+            coKit->setOption("addsharedpresetpaths", presetsUrl.c_str());
+        }
+
         LOG_INF("Kit process for Jail [" << jailId << "] is ready.");
 
         std::string pathAndQuery(NEW_CHILD_URI);
@@ -4487,19 +4629,7 @@ void lokit_main(
         }
         if (queryVersion)
         {
-            LOKitHelper::ScopedString versionInfo(coKit->getVersionInfo());
-            if (!versionInfo)
-            {
-                // A matching office library always hands back a version string. A null
-                // means the call landed on some other COKit member, i.e. the library
-                // has a different vtable layout than the one we were built against.
-                LOG_FTL("COKit returned no version information. The office library in ["
-                        << instdir_path
-                        << "] does not match the one coolwsd was built against. Exiting.");
-                Util::forcedExit(EX_SOFTWARE);
-            }
-
-            std::string versionString(versionInfo.get());
+            std::string versionString = coKit->getVersionInfo();
             if (displayVersion)
                 std::cout << "office version details: " << versionString << std::endl;
 
@@ -4587,20 +4717,22 @@ void lokit_main(
         // Are we using seccomp ?
         pathAndQuery.append(std::string("&adms_seccomp=") +
                             (hasSeccomp ? "ok" : "none"));
-        // Are we bind mounting ?
+        // How is the jail built ? A landlock jail has no tree of its own, so there is
+        // nothing to copy and nothing to bind-mount, and it is at least as fast as a
+        // bind-mounted one.
         pathAndQuery.append(std::string("&adms_bindmounted=") +
-                            (!JailUtil::isBindMountingConfigured()
+                            (hasLandlock ? "ok_landlock"
+                             : !JailUtil::isBindMountingConfigured()
                                  ? "not_recommended"
                                  : (JailUtil::isBindMountingEnabled() ? "ok" : "slow")));
-        // Are we using a container - either chroot or namespace ?
+        // What contains the document - landlock, namespaces or a capability-built chroot ?
         pathAndQuery.append(std::string("&adms_contained=") +
-                            ((ChildSession::NoCapsForKit && !hasLandlock) ? "uncontained" : "ok"));
+                            (ChildSession::NoCapsForKit
+                                 ? (hasLandlock ? "ok_landlock" : "uncontained")
+                                 : (usingMountNamespace ? "ok_namespaces" : "ok_capabilities")));
         // How slow was the jail setup ?
         pathAndQuery.append(std::string("&adms_info_setup_ms=") +
                             std::to_string(jailSetupTime.count()));
-        // Are we using namespaces (or CAP_SYS_CHROOT etc.)
-        pathAndQuery.append(std::string("&adms_info_namespaces=") +
-                            (useMountNamespaces ? "true" : "false"));
 
 #endif // !MOBILEAPP
 
@@ -4614,7 +4746,7 @@ void lokit_main(
 #endif
 
 #if MOBILEAPP
-#if (defined(__linux__) && !defined(__ANDROID__) && !defined(QTAPP)) || defined(__FreeBSD__)
+#if (defined(__linux__) || defined(__FreeBSD__)) && !defined(__ANDROID__) && !defined(QTAPP)
         Poco::URI userInstallationURI("file", LO_PATH);
         COKit *kit = cok_init_2(LO_PATH "/program", userInstallationURI.toString().c_str());
 #elif defined(IOS) // In the iOS app we call cok_init_2() just once, when the app starts
@@ -4733,7 +4865,7 @@ void lokit_main(
 
     LOG_INF("Kit process for Jail [" << jailId << "] finished.");
     flushTraceEventRecordings();
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
         Util::forcedExit(EX_OK);
 
 #endif
@@ -4771,8 +4903,6 @@ void runKitLoopInAThread()
 }
 
 #endif // IOS
-
-#endif // !BUILDING_TESTS
 
 void consistencyCheckJail()
 {
@@ -4819,11 +4949,7 @@ TileWireId getCurrentWireId(bool increment)
 
 std::string anonymizeUrl(const std::string& url)
 {
-#ifndef BUILDING_TESTS
     return Anonymizer::anonymizeUrl(url);
-#else
-    return url;
-#endif
 }
 
 #if !MOBILEAPP
@@ -5035,6 +5161,20 @@ bool globalPreinit(const std::string &loTemplate)
 #else
     std::string libMerged = loTemplate + "/Contents/Frameworks/libmergedlo.dylib";
 #endif
+#ifndef __APPLE__
+    std::string libUnited = loTemplate + "/program/libunitedlo.so";
+#else
+    std::string libUnited = loTemplate + "/Contents/Frameworks/libunitedlo.dylib";
+#endif
+#ifndef __APPLE__
+    std::string libSofficeapp = loTemplate + "/program/libsofficeapp.so";
+#else
+    std::string libSofficeapp = loTemplate + "/Contents/Frameworks/libsofficeapp.dylib";
+#endif
+
+    assert(!(File(libMerged).exists() && File(libUnited).exists()) && "cannot have both libmerged and libunited, something is wrong");
+
+    // Try the possible library names in sequence
     if (File(libMerged).exists())
     {
         LOG_TRC("dlopen(" << libMerged << ", RTLD_GLOBAL|RTLD_NOW)");
@@ -5046,29 +5186,32 @@ bool globalPreinit(const std::string &loTemplate)
         }
         loadedLibrary = std::move(libMerged);
     }
-    else
+    else if (File(libUnited).exists())
     {
-#ifndef __APPLE__
-        std::string libSofficeapp = loTemplate + "/program/libsofficeapp.so";
-#else
-        std::string libSofficeapp = loTemplate + "/Contents/Frameworks/libsofficeapp.dylib";
-#endif
-        if (File(libSofficeapp).exists())
+        LOG_TRC("dlopen(" << libUnited << ", RTLD_GLOBAL|RTLD_NOW)");
+        handle = dlopen(libUnited.c_str(), RTLD_GLOBAL|RTLD_NOW);
+        if (!handle)
         {
-            LOG_TRC("dlopen(" << libSofficeapp << ", RTLD_GLOBAL|RTLD_NOW)");
-            handle = dlopen(libSofficeapp.c_str(), RTLD_GLOBAL|RTLD_NOW);
-            if (!handle)
-            {
-                LOG_FTL("Failed to load " << libSofficeapp << ": " << dlerror());
-                return false;
-            }
-            loadedLibrary = std::move(libSofficeapp);
-        }
-        else
-        {
-            LOG_FTL("Neither " << libSofficeapp << " or " << libMerged << " exist.");
+            LOG_FTL("Failed to load " << libUnited << ": " << dlerror());
             return false;
         }
+        loadedLibrary = std::move(libUnited);
+    }
+    else if (File(libSofficeapp).exists())
+    {
+        LOG_TRC("dlopen(" << libSofficeapp << ", RTLD_GLOBAL|RTLD_NOW)");
+        handle = dlopen(libSofficeapp.c_str(), RTLD_GLOBAL|RTLD_NOW);
+        if (!handle)
+        {
+            LOG_FTL("Failed to load " << libSofficeapp << ": " << dlerror());
+            return false;
+        }
+        loadedLibrary = std::move(libSofficeapp);
+    }
+    else
+    {
+        LOG_FTL("Neither " << libSofficeapp << " nor " << libMerged << " nor " << libUnited << " exist.");
+        return false;
     }
 
     CokHookPreInit2* preInit = reinterpret_cast<CokHookPreInit2 *>(dlsym(handle, "cok_preinit_2"));
@@ -5123,11 +5266,7 @@ bool globalPreinit(const std::string &loTemplate)
 /// Anonymize usernames.
 std::string anonymizeUsername(const std::string& username)
 {
-#ifndef BUILDING_TESTS
     return Anonymizer::anonymize(username);
-#else
-    return username;
-#endif
 }
 
 #endif // !MOBILEAPP

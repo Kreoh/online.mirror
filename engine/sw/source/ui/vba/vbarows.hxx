@@ -34,45 +34,45 @@ class SwVbaRows : public SwVbaRows_BASE
 {
 private:
     rtl::Reference< SwXTextTable > mxTextTable;
-    css::uno::Reference< css::table::XTableRows > mxTableRows;
+    cpo::uno::Reference< css::table::XTableRows > mxTableRows;
     sal_Int32 mnStartRowIndex;
     sal_Int32 mnEndRowIndex;
 
 private:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setIndentWithAdjustNone( sal_Int32 indent );
-    /// @throws css::uno::RuntimeException
-    void setIndentWithAdjustFirstColumn( const css::uno::Reference< ooo::vba::word::XColumns >& xColumns, sal_Int32 indent );
-    /// @throws css::uno::RuntimeException
-    void setIndentWithAdjustProportional( const css::uno::Reference< ooo::vba::word::XColumns >& xColumns, sal_Int32 indent );
-    /// @throws css::uno::RuntimeException
-    void setIndentWithAdjustSameWidth( const css::uno::Reference< ooo::vba::word::XColumns >& xColumns, sal_Int32 indent );
+    /// @throws cpo::uno::RuntimeException
+    void setIndentWithAdjustFirstColumn( const cpo::uno::Reference< ooo::vba::word::XColumns >& xColumns, sal_Int32 indent );
+    /// @throws cpo::uno::RuntimeException
+    void setIndentWithAdjustProportional( const cpo::uno::Reference< ooo::vba::word::XColumns >& xColumns, sal_Int32 indent );
+    /// @throws cpo::uno::RuntimeException
+    void setIndentWithAdjustSameWidth( const cpo::uno::Reference< ooo::vba::word::XColumns >& xColumns, sal_Int32 indent );
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaRows( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, rtl::Reference< SwXTextTable >  xTextTable, const css::uno::Reference< css::table::XTableRows >& xTableRows );
-    /// @throws css::uno::RuntimeException
-    SwVbaRows( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, rtl::Reference< SwXTextTable >  xTextTable, const css::uno::Reference< css::table::XTableRows >& xTableRows, sal_Int32 nStarIndex, sal_Int32 nEndIndex );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaRows( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, rtl::Reference< SwXTextTable >  xTextTable, const cpo::uno::Reference< css::table::XTableRows >& xTableRows );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaRows( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, rtl::Reference< SwXTextTable >  xTextTable, const cpo::uno::Reference< css::table::XTableRows >& xTableRows, sal_Int32 nStarIndex, sal_Int32 nEndIndex );
 
     // Attributes
-    virtual ::sal_Int32 SAL_CALL getAlignment() override;
-    virtual void SAL_CALL setAlignment( ::sal_Int32 _alignment ) override;
-    virtual cpo::uno::Any SAL_CALL getAllowBreakAcrossPages() override;
-    virtual void SAL_CALL setAllowBreakAcrossPages( const cpo::uno::Any& _allowbreakacrosspages ) override;
-    virtual float SAL_CALL getSpaceBetweenColumns() override;
-    virtual void SAL_CALL setSpaceBetweenColumns( float _spacebetweencolumns ) override;
+    virtual ::sal_Int32 getAlignment() override;
+    virtual void setAlignment( ::sal_Int32 _alignment ) override;
+    virtual cpo::uno::Any getAllowBreakAcrossPages() override;
+    virtual void setAllowBreakAcrossPages( const cpo::uno::Any& _allowbreakacrosspages ) override;
+    virtual float getSpaceBetweenColumns() override;
+    virtual void setSpaceBetweenColumns( float _spacebetweencolumns ) override;
 
     // Methods
-    virtual void SAL_CALL Delete(  ) override;
-    virtual void SAL_CALL SetLeftIndent( float LeftIndent, ::sal_Int32 RulerStyle ) override;
-    virtual void SAL_CALL Select(  ) override;
+    virtual void Delete(  ) override;
+    virtual void SetLeftIndent( float LeftIndent, ::sal_Int32 RulerStyle ) override;
+    virtual void Select(  ) override;
 
     //XCollection
-    virtual ::sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ ) override;
+    virtual ::sal_Int32 getCount() override;
+    virtual cpo::uno::Any Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ ) override;
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // SwVbaRows_BASE
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;

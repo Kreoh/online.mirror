@@ -29,6 +29,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -41,12 +42,12 @@ public:
     explicit TablesOfContentsEnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess ) : mxIndexAccess(std::move( xIndexAccess )), m_nIndex( 0 )
     {
     }
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( m_nIndex < mxIndexAccess->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if( m_nIndex < mxIndexAccess->getCount() )
         {
@@ -61,13 +62,13 @@ class TableOfContentsCollectionHelper : public ::cppu::WeakImplHelper< container
 {
 private:
     uno::Reference< XHelperInterface > mxParent;
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     rtl::Reference< SwXTextDocument > mxTextDocument;
     std::vector< uno::Reference< text::XDocumentIndex > > maToc;
 
 public:
     /// @throws uno::RuntimeException
-    TableOfContentsCollectionHelper( uno::Reference< ov::XHelperInterface > xParent, uno::Reference< uno::XComponentContext > xContext, rtl::Reference< SwXTextDocument >  xDoc )
+    TableOfContentsCollectionHelper( uno::Reference< ov::XHelperInterface > xParent, uno::Reference< cpo::uno::XComponentContext > xContext, rtl::Reference< SwXTextDocument >  xDoc )
         : mxParent(std::move( xParent )), mxContext(std::move( xContext )), mxTextDocument(std::move( xDoc ))
     {
         rtl::Reference< SwXDocumentIndexes > xDocIndexes = mxTextDocument->getSwDocumentIndexes();
@@ -82,11 +83,11 @@ public:
         }
     }
 
-    virtual sal_Int32 SAL_CALL getCount(  ) override
+    virtual sal_Int32 getCount(  ) override
     {
         return maToc.size();
     }
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override
     {
         if ( Index < 0 || Index >= getCount() )
             throw lang::IndexOutOfBoundsException();
@@ -94,16 +95,16 @@ public:
         uno::Reference< text::XDocumentIndex > xToc( maToc[Index], uno::UNO_SET_THROW );
         return cpo::uno::Any( uno::Reference< word::XTableOfContents >( new SwVbaTableOfContents( mxParent, mxContext, mxTextDocument, xToc ) ) );
     }
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override
+    virtual cpo::uno::Type getElementType(  ) override
     {
         return cppu::UnoType<word::XTableOfContents>::get();
     }
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual bool hasElements(  ) override
     {
         return true;
     }
     // XEnumerationAccess
-    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) override
+    virtual uno::Reference< container::XEnumeration > createEnumeration(  ) override
     {
         return new TablesOfContentsEnumWrapper( this );
     }
@@ -111,12 +112,12 @@ public:
 
 }
 
-SwVbaTablesOfContents::SwVbaTablesOfContents( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const rtl::Reference< SwXTextDocument >& xDoc )
+SwVbaTablesOfContents::SwVbaTablesOfContents( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const rtl::Reference< SwXTextDocument >& xDoc )
     : SwVbaTablesOfContents_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( new TableOfContentsCollectionHelper( xParent, xContext, xDoc ) ) ),  mxTextDocument( xDoc )
 {
 }
 
-uno::Reference< word::XTableOfContents > SAL_CALL
+uno::Reference< word::XTableOfContents >
 SwVbaTablesOfContents::Add( const uno::Reference< word::XRange >& Range, const cpo::uno::Any& /*UseHeadingStyles*/, const cpo::uno::Any& /*UpperHeadingLevel*/, const cpo::uno::Any& LowerHeadingLevel, const cpo::uno::Any& UseFields, const cpo::uno::Any& /*TableID*/, const cpo::uno::Any& /*RightAlignPageNumbers*/, const cpo::uno::Any& /*IncludePageNumbers*/, const cpo::uno::Any& /*AddedStyles*/, const cpo::uno::Any& /*UseHyperlinks*/, const cpo::uno::Any& /*HidePageNumbersInWeb*/, const cpo::uno::Any& /*UseOutlineLevels*/ )
 {
     uno::Reference< text::XDocumentIndex > xDocumentIndex( mxTextDocument->createInstance(u"com.sun.star.text.ContentIndex"_ustr), uno::UNO_QUERY_THROW );
@@ -140,7 +141,7 @@ SwVbaTablesOfContents::Add( const uno::Reference< word::XRange >& Range, const c
 
     SwVbaRange* pVbaRange = dynamic_cast<SwVbaRange*>( Range.get() );
     if( !pVbaRange )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< text::XTextRange > xTextRange = pVbaRange->getXTextRange();
     uno::Reference< text::XText > xText = pVbaRange->getXText();

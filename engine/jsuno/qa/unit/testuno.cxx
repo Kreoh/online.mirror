@@ -62,6 +62,8 @@ console.assert(
 console.assert(
     uno.type.interface(uno.idl.com.sun.star.testuno.XTest).toString()
     == 'com.sun.star.testuno.XTest');
+console.assert(uno.idl.com.sun.star.testuno.Enum.E_2.toString() == 'E_2');
+console.assert(uno.idl.com.sun.star.testuno.Enum.E_2.toJSON() == 'E_2');
 console.assert(uno.idl.com.sun.star.testuno.Constants.Boolean === true);
 console.assert(uno.idl.com.sun.star.testuno.Constants.Byte === -12);
 console.assert(uno.idl.com.sun.star.testuno.Constants.Short === -1234);
@@ -84,30 +86,60 @@ const test = uno.idl.com.sun.star.testuno.Test.create(uno.componentContext);
     console.log(v);
     console.assert(v === -12);
     console.assert(test.isByte(-12));
+    try {
+        test.isByte(NaN);
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof RangeError);
+    }
 }
 {
     const v = test.getShort();
     console.log(v);
     console.assert(v === -1234);
     console.assert(test.isShort(-1234));
+    try {
+        test.isShort(NaN);
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof RangeError);
+    }
 }
 {
     const v = test.getUnsignedShort();
     console.log(v);
     console.assert(v === 54321);
     console.assert(test.isUnsignedShort(54321));
+    try {
+        test.isUnsignedShort(NaN);
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof RangeError);
+    }
 }
 {
     const v = test.getLong();
     console.log(v);
     console.assert(v === -123456);
     console.assert(test.isLong(-123456));
+    try {
+        test.isLong(NaN);
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof RangeError);
+    }
 }
 {
     const v = test.getUnsignedLong();
     console.log(v);
     console.assert(v === 3456789012);
     console.assert(test.isUnsignedLong(3456789012));
+    try {
+        test.isUnsignedLong(NaN);
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof RangeError);
+    }
 }
 {
     const v = test.getHyper();
@@ -274,6 +306,7 @@ const test = uno.idl.com.sun.star.testuno.Test.create(uno.componentContext);
     console.log(v);
     console.assert(v === -12);
     console.assert(test.isAnyByte(new uno.Any(uno.type.byte, -12)));
+    console.assert(test.isAnyByte(new uno.Any(uno.type.byte, 244)));
 }
 {
     const v = test.getAnyShort();
@@ -422,18 +455,18 @@ const test = uno.idl.com.sun.star.testuno.Test.create(uno.componentContext);
 {
     const v = test.getAnyException();
     console.log(v);
-    console.assert(v.Message.startsWith('error'));
+    console.assert(v.message.startsWith('error'));
     console.assert(v.Context === null);
     console.assert(v.m1 === -123456);
     console.assert(v.m2 === 100.5);
     console.assert(v.m3 === 'hä');
     console.assert(test.isAnyException(
         new uno.idl.com.sun.star.testuno.Exception(
-            {Message: 'error', m1: -123456, m2: 100.5, m3: 'hä'})));
+            {message: 'error', m1: -123456, m2: 100.5, m3: 'hä'})));
     console.assert(test.isAnyException(
         new uno.Any(
             uno.type.exception(uno.idl.com.sun.star.testuno.Exception),
-            {Message: 'error', Context: null, m1: -123456, m2: 100.5, m3: 'hä'})));
+            {message: 'error', Context: null, m1: -123456, m2: 100.5, m3: 'hä'})));
 }
 {
     const v = test.getAnyInterface();
@@ -459,6 +492,8 @@ const test = uno.idl.com.sun.star.testuno.Test.create(uno.componentContext);
     console.assert(v[1] === 1);
     console.assert(v[2] === 12);
     console.assert(test.isSequenceByte([-12, 1, 12]));
+    console.assert(test.isSequenceByte(new Int8Array([-12, 1, 12])));
+    console.assert(test.isSequenceByte(new Uint8Array([244, 1, 12])));
 }
 {
     const v = test.getSequenceShort();
@@ -783,25 +818,82 @@ const test = uno.idl.com.sun.star.testuno.Test.create(uno.componentContext);
 }
 )"
                        uR"(
+{
+    console.assert(test.getOverloaded() === 'foo');
+    console.assert(test.getOverloaded(-123456) === -123456);
+    console.assert(test.getOverloaded('bar') === 'bar');
+    console.assert(test.getOverloaded([1, 2, 3]) === 3);
+    console.assert(test.getOverloaded(new Uint8Array([1, 2, 3])) === 3);
+    console.assert(test.getOverloaded(true) === 'any');
+    console.assert(test.getOverloadedTwoArgs('x', 5) === 'stringany');
+    console.assert(test.getOverloadedTwoArgs(5, 'y') === 'anystring');
+    try {
+        test.getOverloadedTwoArgs('x', 'y');
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof TypeError);
+        console.assert(e.message.startsWith('overload dispatch: ambiguous call'));
+    }
+    try {
+        test.getOverloaded(true, false);
+        console.assert(false);
+    } catch (e) {
+        console.assert(e instanceof TypeError);
+        console.assert(e.message.startsWith('overload dispatch: no member matches'));
+    }
+}
+console.assert(test.getOptionalString(true) === 'hello');
+console.assert(test.getOptionalString(false) === null);
+console.assert(test.unwrapOptionalString('hi') === 'hi');
+console.assert(test.unwrapOptionalString(null) === 'absent');
+console.assert(
+    test.unwrapOptionalString(
+        new uno.idl.com.sun.star.beans.Optional(
+            [uno.type.string], {IsPresent: true, Value: 'hi'}))
+    === 'hi');
+console.assert(
+    test.unwrapOptionalString(
+        new uno.idl.com.sun.star.beans.Optional(
+            [uno.type.string], {IsPresent: false, Value: ''}))
+    === 'absent');
+console.assert(test.unwrapOptionalString({IsPresent: true, Value: 'hi'}) === 'hi');
+console.assert(test.unwrapOptionalString({IsPresent: false, Value: ''}) === 'absent');
+console.assert(
+    test.unwrapOptionalStructString(
+        new uno.idl.com.sun.star.testuno.StructString({m: 'hi'}))
+    === 'hi');
+console.assert(test.unwrapOptionalStructString({m: 'hi'}) === 'hi');
+console.assert(
+    test.unwrapOptionalStructString(
+        new uno.idl.com.sun.star.beans.Optional(
+            [uno.type.struct(uno.idl.com.sun.star.testuno.StructString)],
+            {IsPresent: true,
+             Value: new uno.idl.com.sun.star.testuno.StructString({m: 'hi'})}))
+    === 'hi');
+console.assert(test.unwrapOptionalStructString(null) === 'absent');
+console.assert(
+    test.unwrapOptionalStructString(
+        new uno.idl.com.sun.star.testuno.StructStringDerived({m: 'hi'}))
+    === 'hi');
 try {
     test.throwRuntimeException();
     console.assert(false);
 } catch (e) {
-    console.assert(e instanceof uno.idl.com.sun.star.uno.RuntimeException);
-    console.assert(e.Message.startsWith('test'));
+    console.assert(e instanceof uno.idl.cpo.uno.RuntimeException);
+    console.assert(e.message.startsWith('test'));
 }
 try {
     throw new uno.idl.com.sun.star.lang.WrappedTargetException(
-        {Message: 'wrapped', Context: test,
-         TargetException: new uno.idl.com.sun.star.uno.RuntimeException({
-             Message: 'test', Context: test})});
+        {message: 'wrapped', Context: test,
+         TargetException: new uno.idl.cpo.uno.RuntimeException({
+             message: 'test', Context: test})});
         console.assert(false);
 } catch (e) {
     console.assert(e instanceof uno.idl.com.sun.star.lang.WrappedTargetException);
-    console.assert(e.Message.startsWith('wrapped'));
+    console.assert(e.message.startsWith('wrapped'));
     console.assert(uno.sameUnoObject(e.Context, test));
-    console.assert(e.TargetException instanceof uno.idl.com.sun.star.uno.RuntimeException);
-    console.assert(e.TargetException.Message.startsWith('test'));
+    console.assert(e.TargetException instanceof uno.idl.cpo.uno.RuntimeException);
+    console.assert(e.TargetException.message.startsWith('test'));
     console.assert(uno.sameUnoObject(e.TargetException.Context, test));
 }
 console.assert(test.StringAttribute === 'hä');
@@ -853,6 +945,10 @@ console.assert(test.StringAttribute === 'foo');
     console.assert(v[2][2] === uno.idl.com.sun.star.testuno.Enum.E_10);
 }
 
+// Backwards-compatibility support for the com.sun.star -> cpo renaming:
+console.assert(
+    uno.idl.com.sun.star.uno.TypeClass.VOID.toString()
+    === uno.idl.cpo.uno.TypeClass.VOID.toString());
 )"_ustr);
     }
 

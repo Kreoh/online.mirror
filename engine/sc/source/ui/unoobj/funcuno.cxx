@@ -49,6 +49,7 @@
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 //  registered as implementation for service FunctionAccess,
 //  also supports service SpreadsheetDocumentSettings (to set null date etc.)
@@ -221,8 +222,8 @@ void ScFunctionAccess::Notify( SfxBroadcaster&, const SfxHint& rHint )
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-ScFunctionAccess_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ScFunctionAccess_get_implementation(cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SolarMutexGuard aGuard;
     ScDLL::Init();
@@ -230,24 +231,24 @@ ScFunctionAccess_get_implementation(css::uno::XComponentContext*, cpo::uno::Sequ
 }
 
 // XServiceInfo
-OUString SAL_CALL ScFunctionAccess::getImplementationName()
+OUString ScFunctionAccess::getImplementationName()
 {
     return u"stardiv.StarCalc.ScFunctionAccess"_ustr;
 }
 
-bool SAL_CALL ScFunctionAccess::supportsService( const OUString& rServiceName )
+bool ScFunctionAccess::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL ScFunctionAccess::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> ScFunctionAccess::getSupportedServiceNames()
 {
     return {SCFUNCTIONACCESS_SERVICE, SCDOCSETTINGS_SERVICE};
 }
 
 // XPropertySet (document settings)
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL ScFunctionAccess::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> ScFunctionAccess::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -255,7 +256,7 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScFunctionAccess::getPropertySe
     return aRef;
 }
 
-void SAL_CALL ScFunctionAccess::setPropertyValue(
+void ScFunctionAccess::setPropertyValue(
                         const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     SolarMutexGuard aGuard;
@@ -283,7 +284,7 @@ void SAL_CALL ScFunctionAccess::setPropertyValue(
     }
 }
 
-cpo::uno::Any SAL_CALL ScFunctionAccess::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any ScFunctionAccess::getPropertyValue( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -485,13 +486,13 @@ static void processSequences( ScDocument* pDoc, const cpo::uno::Any& rArg, ScTok
 
 }
 
-cpo::uno::Any SAL_CALL ScFunctionAccess::callFunction( const OUString& aName,
+cpo::uno::Any ScFunctionAccess::callFunction( const OUString& aName,
                             const cpo::uno::Sequence<cpo::uno::Any>& aArguments )
 {
     SolarMutexGuard aGuard;
 
     if (!mbValid)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // use cached document if not in use, temporary document otherwise
     //  (deleted in ScTempDocSource dtor)
@@ -676,7 +677,7 @@ cpo::uno::Any SAL_CALL ScFunctionAccess::callFunction( const OUString& aName,
     }
 
     if (bOverflow)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if (bArgErr)
         throw lang::IllegalArgumentException();

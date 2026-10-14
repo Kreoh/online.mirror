@@ -24,11 +24,12 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaFrame::SwVbaFrame( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                        const uno::Reference< uno::XComponentContext >& rContext,
+                        const uno::Reference< cpo::uno::XComponentContext >& rContext,
                         rtl::Reference< SwXTextDocument > xModel,
-                        css::uno::Reference< text::XTextFrame >  xTextFrame ) :
+                        cpo::uno::Reference< text::XTextFrame >  xTextFrame ) :
     SwVbaFrame_BASE( rParent, rContext ), mxModel(std::move( xModel )), mxTextFrame(std::move( xTextFrame ))
 {
 }
@@ -37,7 +38,7 @@ SwVbaFrame::~SwVbaFrame()
 {
 }
 
-void SAL_CALL SwVbaFrame::Select()
+void SwVbaFrame::Select()
 {
     uno::Reference< view::XSelectionSupplier > xSelectSupp( mxModel->getCurrentController(), uno::UNO_QUERY_THROW );
     xSelectSupp->select( cpo::uno::Any( mxTextFrame ) );

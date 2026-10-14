@@ -20,6 +20,7 @@
 #include <config_features.h>
 
 #include <excimp8.hxx>
+#include <docuno.hxx>
 
 #include <scitems.hxx>
 #include <comphelper/processfactory.hxx>
@@ -63,6 +64,7 @@
 #include <oox/ole/olestorage.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ::comphelper;
 
 //OleNameOverrideContainer
@@ -77,14 +79,14 @@ private:
     std::mutex m_aMutex;
 public:
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override { return  cppu::UnoType<container::XIndexContainer>::get(); }
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual cpo::uno::Type getElementType(  ) override { return  cppu::UnoType<container::XIndexContainer>::get(); }
+    virtual bool hasElements(  ) override
     {
         std::unique_lock aGuard( m_aMutex );
         return ( !IdToOleNameHash.empty() );
     }
     // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override
+    virtual cpo::uno::Any getByName( const OUString& aName ) override
     {
         std::unique_lock aGuard( m_aMutex );
         auto it = IdToOleNameHash.find( aName );
@@ -92,19 +94,19 @@ public:
             throw container::NoSuchElementException();
         return cpo::uno::Any( it->second );
     }
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override
     {
         std::unique_lock aGuard( m_aMutex );
         return comphelper::mapKeysToSequence( IdToOleNameHash);
     }
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override
+    virtual bool hasByName( const OUString& aName ) override
     {
         std::unique_lock aGuard( m_aMutex );
         return ( IdToOleNameHash.find( aName ) != IdToOleNameHash.end() );
     }
 
     // XNameContainer
-    virtual void SAL_CALL insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override
+    virtual void insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override
     {
         std::unique_lock aGuard( m_aMutex );
         auto it = IdToOleNameHash.find( aName );
@@ -115,13 +117,13 @@ public:
             throw lang::IllegalArgumentException();
         IdToOleNameHash[ aName ] = std::move(xElement);
     }
-    virtual void SAL_CALL removeByName( const OUString& aName ) override
+    virtual void removeByName( const OUString& aName ) override
     {
         std::unique_lock aGuard( m_aMutex );
         if ( IdToOleNameHash.erase( aName ) == 0 )
             throw container::NoSuchElementException();
     }
-    virtual void SAL_CALL replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override
+    virtual void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override
     {
         std::unique_lock aGuard( m_aMutex );
         auto it = IdToOleNameHash.find( aName );
@@ -350,7 +352,7 @@ void ImportExcel8::ReadBasic()
         }
         try
         {
-            const uno::Reference< uno::XComponentContext >& aCtx( ::comphelper::getProcessComponentContext() );
+            const uno::Reference< cpo::uno::XComponentContext >& aCtx( ::comphelper::getProcessComponentContext() );
             SfxMedium& rMedium = GetMedium();
             uno::Reference< io::XInputStream > xIn = rMedium.GetInputStream();
             oox::ole::OleStorage root( aCtx, xIn, false );

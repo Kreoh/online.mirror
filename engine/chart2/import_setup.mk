@@ -98,10 +98,8 @@ $(eval $(call gb_CppunitTest_use_components,chart2_import$(1),\
     sax/source/expatwrap/expwrap \
     sc/util/sc \
     sc/util/scd \
-    sc/util/scfilt \
     sw/util/sw \
     sw/util/swd \
-    sw/util/msword \
     sd/util/sd \
     sd/util/sdd \
     $(call gb_Helper_optional,SCRIPTING, \

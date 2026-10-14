@@ -38,6 +38,7 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlerror.hxx>
 #include <xmloff/ProgressBarHelper.hxx>
+#include <svx/compatflags.hxx>
 #include <svx/svdpage.hxx>
 
 #include <svl/languageoptions.hxx>
@@ -72,6 +73,12 @@
 #include "editattributemap.hxx"
 #include <documentimport.hxx>
 #include "pivotsource.hxx"
+#include "xmldrani.hxx"
+#include <dbdata.hxx>
+#include <globalnames.hxx>
+#include <SheetView.hxx>
+#include <SheetViewManager.hxx>
+#include <sortparam.hxx>
 #include <unonames.hxx>
 #include <numformat.hxx>
 #include <sizedev.hxx>
@@ -106,12 +113,13 @@
 constexpr OUString SC_LOCALE = u"Locale"_ustr;
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 using namespace ::formula;
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_XMLOasisImporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(
         new ScXMLImport(
@@ -121,9 +129,9 @@ Calc_XMLOasisImporter_get_implementation(
             { u"com.sun.star.comp.Calc.XMLOasisImporter"_ustr } ));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_XMLOasisMetaImporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(
         new ScXMLImport(
@@ -133,9 +141,9 @@ Calc_XMLOasisMetaImporter_get_implementation(
             { u"com.sun.star.comp.Calc.XMLOasisMetaImporter"_ustr }  ));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_XMLOasisStylesImporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(
         new ScXMLImport(
@@ -145,9 +153,9 @@ Calc_XMLOasisStylesImporter_get_implementation(
             { u"com.sun.star.comp.Calc.XMLOasisStylesImporter"_ustr } ));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_XMLOasisContentImporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new ScXMLImport(
         context,
@@ -157,9 +165,9 @@ Calc_XMLOasisContentImporter_get_implementation(
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_XMLOasisSettingsImporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(
         new ScXMLImport(
@@ -181,9 +189,9 @@ protected:
 public:
     ScXMLDocContext_Impl( ScXMLImport& rImport );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler >
         createFastChildContext( sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 };
 
 }
@@ -204,9 +212,9 @@ public:
     ScXMLFlatDocContext_Impl( ScXMLImport& i_rImport,
         const uno::Reference<document::XDocumentProperties>& i_xDocProps);
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler >
         createFastChildContext( sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 };
 
 }
@@ -219,7 +227,7 @@ SvXMLMetaDocumentContext(i_rImport, i_xDocProps)
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
     ScXMLFlatDocContext_Impl::createFastChildContext( sal_Int32 nElement,
     const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -236,9 +244,9 @@ class ScXMLBodyContext_Impl : public ScXMLImportContext
 public:
     ScXMLBodyContext_Impl( ScXMLImport& rImport );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler >
         createFastChildContext( sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 };
 
 }
@@ -248,7 +256,7 @@ ScXMLImportContext( rImport )
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
     ScXMLBodyContext_Impl::createFastChildContext( sal_Int32 /*nElement*/,
     const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -257,7 +265,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
     return GetScImport().CreateBodyContext( pAttribList );
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
     ScXMLDocContext_Impl::createFastChildContext( sal_Int32 nElement,
     const uno::Reference< xml::sax::XFastAttributeList > & /*xAttrList*/ )
 {
@@ -345,7 +353,7 @@ SvXMLImportContext *ScXMLImport::CreateFastContext( sal_Int32 nElement,
 }
 
 ScXMLImport::ScXMLImport(
-    const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
     OUString const & implementationName, SvXMLImportFlags nImportFlag,
     const cpo::uno::Sequence< OUString > & sSupportedServiceNames)
 :   SvXMLImport( rContext, implementationName, nImportFlag, sSupportedServiceNames ),
@@ -731,6 +739,20 @@ void ScXMLImport::SetViewSettings(const cpo::uno::Sequence<beans::PropertyValue>
 
 void ScXMLImport::SetConfigurationSettings(const cpo::uno::Sequence<beans::PropertyValue>& aConfigProps)
 {
+    // Documents written after these were introduced store them, in the settings below or in the
+    // view settings, and those values replace these.
+    if (mpDoc)
+    {
+        mpDoc->SetCompatibilityFlag(SdrCompatibilityFlag::AnchoredTextOverflowLegacy,
+                                    true); // for tdf#99729
+        mpDoc->SetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork,
+                                    true); // for tdf#148000
+        mpDoc->SetCompatibilityFlag(SdrCompatibilityFlag::LineSpacingBelowBaselineLegacy,
+                                    true); // for tdf#163590
+        mpDoc->SetCompatibilityFlag(SdrCompatibilityFlag::TextFittingLegacy,
+                                    true); // for tdf#163590
+    }
+
     rtl::Reference<ScModelObj> xMultiServiceFactory(GetScModel());
     if (!xMultiServiceFactory.is())
         return;
@@ -779,7 +801,7 @@ void ScXMLImport::SetConfigurationSettings(const cpo::uno::Sequence<beans::Prope
         }
     }
     aFilteredProps.realloc(nFilteredPropsLen);
-    uno::Reference <uno::XInterface> xInterface = xMultiServiceFactory->createInstance(u"com.sun.star.comp.SpreadsheetSettings"_ustr);
+    uno::Reference <cpo::uno::XInterface> xInterface = xMultiServiceFactory->createInstance(u"com.sun.star.comp.SpreadsheetSettings"_ustr);
     uno::Reference <beans::XPropertySet> xProperties(xInterface, uno::UNO_QUERY);
     if (xProperties.is())
         SvXMLUnitConverter::convertPropertySet(xProperties, aFilteredProps);
@@ -1100,7 +1122,7 @@ void ScXMLImport::SetStylesToRangesFinished()
 }
 
 // XImporter
-void SAL_CALL ScXMLImport::setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
+void ScXMLImport::setTargetDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc )
 {
     ScXMLImport::MutexGuard aGuard(*this);
     SvXMLImport::setTargetDocument( xDoc );
@@ -1123,7 +1145,7 @@ void SAL_CALL ScXMLImport::setTargetDocument( const css::uno::Reference< css::la
 }
 
 // css::xml::sax::XDocumentHandler
-void SAL_CALL ScXMLImport::startDocument()
+void ScXMLImport::startDocument()
 {
     ScXMLImport::MutexGuard aGuard(*this);
     SvXMLImport::startDocument();
@@ -1329,6 +1351,79 @@ void ScXMLImport::SetSheetNamedRanges()
     }
 }
 
+void ScXMLImport::ApplySheetViews()
+{
+    if (!mpDoc || maSheetViews.empty())
+        return;
+
+    bool bRestored = false;
+    for (const ScXMLSheetViewData& rData : maSheetViews)
+    {
+        SCTAB nTab = -1;
+        if (!mpDoc->GetTable(rData.maTableName, nTab) || mpDoc->IsSheetViewHolder(nTab))
+            continue;
+
+        auto [nSheetViewID, nViewTab] = mpDoc->CreateNewSheetView(nTab);
+        if (nSheetViewID == sc::InvalidSheetViewID)
+            continue;
+        bRestored = true;
+
+        if (std::shared_ptr<sc::SheetViewManager> pManager = mpDoc->GetSheetViewManager(nTab))
+        {
+            if (std::shared_ptr<sc::SheetView> pSheetView = pManager->get(nSheetViewID))
+            {
+                pSheetView->SetName(rData.maName);
+                pSheetView->SetGUID(rData.maGUID);
+                pSheetView->SetFilterGUID(rData.maFilterGUID);
+            }
+        }
+
+        // The copy took over the hidden columns of its sheet. A sheet view hides its own set.
+        mpDoc->SetColHidden(0, mpDoc->MaxCol(), nViewTab, false);
+        for (const auto& rHiddenRange : rData.maHiddenColumns)
+            mpDoc->SetColHidden(rHiddenRange.first, rHiddenRange.second, nViewTab, true);
+
+        if (!rData.mbHasFilterRange)
+            continue;
+
+        ScQueryParam aQueryParam(rData.maQueryParam);
+        aQueryParam.nTab = nViewTab;
+        ScRange aRange(aQueryParam.nCol1, aQueryParam.nRow1, nViewTab, aQueryParam.nCol2,
+                       aQueryParam.nRow2, nViewTab);
+
+        ScDBData* pDBData = mpDoc->GetAnonymousDBData(nViewTab);
+        if (!pDBData)
+        {
+            auto pNewData = std::make_unique<ScDBData>(
+                STR_DB_LOCAL_NONAME, nViewTab, aRange.aStart.Col(), aRange.aStart.Row(),
+                aRange.aEnd.Col(), aRange.aEnd.Row(), true, aQueryParam.bHasHeader);
+            pDBData = pNewData.get();
+            mpDoc->SetAnonymousDBData(nViewTab, std::move(pNewData));
+        }
+        pDBData->SetArea(aRange);
+        pDBData->SetAutoFilter(true);
+
+        // Sorting moves the rows, so the filter runs on the rows in their final order.
+        if (rData.mbHasSort)
+        {
+            pDBData->SetSortParam(
+                convertSortSequence(rData.maSortSequence, aQueryParam.bByRow, aRange));
+            ScSortParam aSortParam;
+            pDBData->GetSortParam(aSortParam);
+            mpDoc->Sort(nViewTab, aSortParam, false, false, nullptr, nullptr);
+        }
+
+        mpDoc->PrepareQuery(nViewTab, aQueryParam);
+        pDBData->SetQueryParam(aQueryParam);
+        mpDoc->Query(nViewTab, aQueryParam, false, false);
+    }
+
+    // The stream positions of unchanged sheets are kept by table index. Each holder table that
+    // was made above moved the sheets after it by one, so every sheet is written out afresh.
+    if (bRestored)
+        mpDoc->InvalidateStreamOnSave();
+}
+
 void ScXMLImport::SetStringRefSyntaxIfMissing()
 {
     if (!mpDoc)
@@ -1345,7 +1440,7 @@ void ScXMLImport::SetStringRefSyntaxIfMissing()
     }
 }
 
-void SAL_CALL ScXMLImport::endDocument()
+void ScXMLImport::endDocument()
 {
     ScXMLImport::MutexGuard aGuard(*this);
     if (getImportFlags() & SvXMLImportFlags::CONTENT)
@@ -1466,6 +1561,9 @@ void SAL_CALL ScXMLImport::endDocument()
         }
 
         aTables.FixupOLEs();
+
+        // A sheet view is a copy of its sheet, so it is made once the sheet is complete.
+        ApplySheetViews();
     }
     if (GetScModel())
     {
@@ -1680,7 +1778,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportFODS(SvStream &rStream)
 
     uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
     uno::Reference<io::XInputStream> xStream(new ::utl::OSeekableInputStreamWrapper(rStream));
-    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
+    uno::Reference<cpo::uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
 
     cpo::uno::Sequence<OUString> aUserData
     {
@@ -1734,7 +1832,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestFODSExportXLS(SvStream &rStream)
 
     uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
     uno::Reference<io::XInputStream> xStream(new ::utl::OSeekableInputStreamWrapper(rStream));
-    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
+    uno::Reference<cpo::uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
 
     cpo::uno::Sequence<OUString> aUserData
     {

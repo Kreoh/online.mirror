@@ -30,36 +30,36 @@ typedef InheritedHelperInterfaceWeakImpl< ov::excel::XName > NameImpl_BASE;
 
 class ScVbaName : public NameImpl_BASE
 {
-    css::uno::Reference< css::frame::XModel > mxModel;
-    css::uno::Reference< css::sheet::XNamedRange > mxNamedRange;
-    css::uno::Reference< css::sheet::XNamedRanges > mxNames;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::sheet::XNamedRange > mxNamedRange;
+    cpo::uno::Reference< css::sheet::XNamedRanges > mxNames;
     OUString getContent( const formula::FormulaGrammar::Grammar eGrammar );
     void setContent( const OUString& sContent, const formula::FormulaGrammar::Grammar eGrammar );
 public:
-    ScVbaName( const css::uno::Reference< ov::XHelperInterface >& xParent,  const css::uno::Reference< css::uno::XComponentContext >& xContext, css::uno::Reference< css::sheet::XNamedRange > xName , css::uno::Reference< css::sheet::XNamedRanges > xNames , css::uno::Reference< css::frame::XModel > xModel );
+    ScVbaName( const cpo::uno::Reference< ov::XHelperInterface >& xParent,  const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, cpo::uno::Reference< css::sheet::XNamedRange > xName , cpo::uno::Reference< css::sheet::XNamedRanges > xNames , cpo::uno::Reference< css::frame::XModel > xModel );
     virtual ~ScVbaName() override;
 
     // Attributes
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL setName( const OUString &rName ) override;
-    virtual OUString SAL_CALL getNameLocal() override;
-    virtual void SAL_CALL setNameLocal( const OUString &rName ) override;
-    virtual bool SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( bool bVisible ) override;
-    virtual OUString SAL_CALL getValue() override;
-    virtual void SAL_CALL setValue( const OUString &rValue ) override;
-    virtual OUString SAL_CALL getRefersTo() override;
-    virtual void SAL_CALL setRefersTo( const OUString &rRefersTo ) override;
-    virtual OUString SAL_CALL getRefersToLocal() override;
-    virtual void SAL_CALL setRefersToLocal( const OUString &rRefersTo ) override;
-    virtual OUString SAL_CALL getRefersToR1C1() override;
-    virtual void SAL_CALL setRefersToR1C1( const OUString &rRefersTo ) override;
-    virtual OUString SAL_CALL getRefersToR1C1Local() override;
-    virtual void SAL_CALL setRefersToR1C1Local( const OUString &rRefersTo ) override;
-    virtual css::uno::Reference< ov::excel::XRange > SAL_CALL getRefersToRange() override;
+    virtual OUString getName() override;
+    virtual void setName( const OUString &rName ) override;
+    virtual OUString getNameLocal() override;
+    virtual void setNameLocal( const OUString &rName ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool bVisible ) override;
+    virtual OUString getValue() override;
+    virtual void setValue( const OUString &rValue ) override;
+    virtual OUString getRefersTo() override;
+    virtual void setRefersTo( const OUString &rRefersTo ) override;
+    virtual OUString getRefersToLocal() override;
+    virtual void setRefersToLocal( const OUString &rRefersTo ) override;
+    virtual OUString getRefersToR1C1() override;
+    virtual void setRefersToR1C1( const OUString &rRefersTo ) override;
+    virtual OUString getRefersToR1C1Local() override;
+    virtual void setRefersToR1C1Local( const OUString &rRefersTo ) override;
+    virtual cpo::uno::Reference< ov::excel::XRange > getRefersToRange() override;
 
     // Methods
-    virtual void SAL_CALL Delete() override;
+    virtual void Delete() override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

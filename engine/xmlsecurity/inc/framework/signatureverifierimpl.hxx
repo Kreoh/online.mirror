@@ -48,7 +48,11 @@ class SignatureVerifierImpl final : public SignatureVerifierImpl_Base
  ******************************************************************************/
 {
 private:
-    css::uno::Reference< css::xml::crypto::XXMLSecurityContext > m_xXMLSecurityContext;
+    cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext > m_xXMLSecurityContext;
+    /// Certificate whose key must verify the signature, null to use ds:KeyInfo.
+    cpo::uno::Reference<css::security::XCertificate> m_xSigningCertificate;
+    /// Certificate whose key verified the signature, null if none did.
+    cpo::uno::Reference<css::security::XCertificate> m_xVerifiedCertificate;
 
     virtual void notifyResultListener() const override;
     virtual void startEngine( const rtl::Reference<XMLSignatureTemplateImpl>& xSignatureTemplate) override;
@@ -58,28 +62,37 @@ public:
     virtual ~SignatureVerifierImpl() override;
 
     /* XSignatureVerifyResultBroadcaster */
-    virtual void SAL_CALL addSignatureVerifyResultListener(
-        const css::uno::Reference< css::xml::crypto::sax::XSignatureVerifyResultListener >& listener ) override;
-    virtual void SAL_CALL removeSignatureVerifyResultListener(
-        const css::uno::Reference< css::xml::crypto::sax::XSignatureVerifyResultListener >& listener ) override;
+    virtual void addSignatureVerifyResultListener(
+        const cpo::uno::Reference< css::xml::crypto::sax::XSignatureVerifyResultListener >& listener ) override;
+    virtual void removeSignatureVerifyResultListener(
+        const cpo::uno::Reference< css::xml::crypto::sax::XSignatureVerifyResultListener >& listener ) override;
 
     /* XInitialization */
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     /* XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
-    void updateSignature( const css::uno::Reference< css::xml::crypto::XXMLSignature >& xSignature,
-                          const css::uno::Reference< css::xml::crypto::XXMLSecurityContext >& xContext ) { m_xXMLSignature = xSignature; m_xXMLSecurityContext = xContext; }
+    void SetSigningCertificate(cpo::uno::Reference<css::security::XCertificate> const& xCertificate)
+    {
+        m_xSigningCertificate = xCertificate;
+    }
+    cpo::uno::Reference<css::security::XCertificate> const& GetVerifiedCertificate() const
+    {
+        return m_xVerifiedCertificate;
+    }
+
+    void updateSignature( const cpo::uno::Reference< css::xml::crypto::XXMLSignature >& xSignature,
+                          const cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext >& xContext ) { m_xXMLSignature = xSignature; m_xXMLSecurityContext = xContext; }
 };
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 OUString SignatureVerifierImpl_getImplementationName();
 
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 cpo::uno::Sequence< OUString > SignatureVerifierImpl_getSupportedServiceNames(  );
 
 

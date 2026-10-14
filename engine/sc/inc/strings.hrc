@@ -54,6 +54,7 @@
 #define SCSTR_NAME                                  NC_("SCSTR_NAME", "Name")
 #define SCSTR_APDTABLE                              NC_("SCSTR_APDTABLE", "Append Sheet")
 #define SCSTR_RENAMETAB                             NC_("SCSTR_RENAMETAB", "Rename Sheet")
+#define SCSTR_RENAME_CALCTABLE                      NC_("SCSTR_RENAME_CALCTABLE", "Rename Table")
 #define SCSTR_SET_TAB_BG_COLOR                      NC_("SCSTR_SET_TAB_BG_COLOR", "Tab Color")
 #define SCSTR_NO_TAB_BG_COLOR                       NC_("SCSTR_NO_TAB_BG_COLOR", "Default")
 #define SCSTR_RENAMEOBJECT                          NC_("SCSTR_RENAMEOBJECT", "Name Object")
@@ -122,9 +123,6 @@
 #define SCSTR_DDEDOC_NOT_LOADED                     NC_("SCSTR_DDEDOC_NOT_LOADED", "The following DDE source could not be updated possibly because the source document was not open. Please launch the source document and try again." )
 #define SCSTR_EXTDOC_NOT_LOADED                     NC_("SCSTR_EXTDOC_NOT_LOADED", "The following external file could not be loaded. Data linked from this file did not get updated." )
 #define SCSTR_UPDATE_EXTDOCS                        NC_("SCSTR_UPDATE_EXTDOCS", "Updating external links.")
-#define SCSTR_FORMULA_SYNTAX_CALC_A1                NC_("SCSTR_FORMULA_SYNTAX_CALC_A1", "Calc A1")
-#define SCSTR_FORMULA_SYNTAX_XL_A1                  NC_("SCSTR_FORMULA_SYNTAX_XL_A1", "Excel A1")
-#define SCSTR_FORMULA_SYNTAX_XL_R1C1                NC_("SCSTR_FORMULA_SYNTAX_XL_R1C1", "Excel R1C1")
 #define SCSTR_COL_LABEL                             NC_("SCSTR_COL_LABEL", "Range contains column la~bels" )
 #define SCSTR_ROW_LABEL                             NC_("SCSTR_ROW_LABEL", "Range contains ~row labels" )
 #define SCSTR_NOTES_COL_LABEL                       NC_("SCSTR_INCLUDE_NOTES_COL_LABEL","Include boundary column(s) containing only comments")
@@ -399,7 +397,6 @@
 // in order to change %PRODUCTNAME at runtime is expensive, so limit doing that as much as possible.
 #define STR_A11Y_DESC_SORTUSER                      NC_("sortoptionspage|extended_tip|sortuserlb", "Select the custom sort order that you want to apply. To define a custom sort order, choose Tools - Options - %PRODUCTNAME Calc - Sort Lists.")
 #define STR_A11Y_DESC_USERDEF                       NC_("subtotaloptionspage|extended_tip|lbuserdef", "Uses a custom sorting order that you defined in the Options dialog box at %PRODUCTNAME Calc - Sort Lists.")
-#define STR_A11Y_DESC_ANNOT                         NC_("extended_tip|annot", "Specifies that a small rectangle in the top right corner of the cell indicates that a comment exists. The comment will be shown only when you enable tips under %PRODUCTNAME - General in the Options dialog box.")
 
 // Simple conditional formatting dialog
 #define STR_CONDITION_EQUAL                         NC_("STR_CONDITION_EQUAL", "values equal to")
@@ -445,6 +442,33 @@
 #define STR_TABLE_STYLE_LIGHT                       NC_("STR_TABLE_STYLE_LIGHT", "Table Style Light")
 #define STR_TABLE_STYLE_MEDIUM                      NC_("STR_TABLE_STYLE_MEDIUM", "Table Style Medium")
 #define STR_TABLE_STYLE_DARK                        NC_("STR_TABLE_STYLE_DARK", "Table Style Dark")
+/* Group headings in the table-style gallery */
+#define STR_TABLE_STYLE_GROUP_LIGHT                 NC_("STR_TABLE_STYLE_GROUP_LIGHT", "Light")
+#define STR_TABLE_STYLE_GROUP_MEDIUM                NC_("STR_TABLE_STYLE_GROUP_MEDIUM", "Medium")
+#define STR_TABLE_STYLE_GROUP_DARK                  NC_("STR_TABLE_STYLE_GROUP_DARK", "Dark")
+#define STR_TABLE_STYLE_GROUP_CUSTOM                NC_("STR_TABLE_STYLE_GROUP_CUSTOM", "Custom")
+/* The "clear the table style" entry in the gallery */
+#define STR_TABLE_STYLE_NONE                        NC_("STR_TABLE_STYLE_NONE", "None")
+/* The name given to a style made by copying another one */
+#define STR_TABLE_STYLE_COPY_OF                     NC_("STR_TABLE_STYLE_COPY_OF", "Copy of %1")
+/* A style name that has to be told apart from one already in use: %1 is the name
+   that was asked for and %2 the count that makes it unique */
+#define STR_TABLE_STYLE_NAME_NUMBERED               NC_("STR_TABLE_STYLE_NAME_NUMBERED", "%1 (%2)")
+/* Region names in the New Table Style dialog, one per table-style element */
+#define STR_TABLESTYLE_ELEM_WHOLETABLE              NC_("STR_TABLESTYLE_ELEM_WHOLETABLE", "Whole Table")
+#define STR_TABLESTYLE_ELEM_HEADERROW               NC_("STR_TABLESTYLE_ELEM_HEADERROW", "Header Row")
+#define STR_TABLESTYLE_ELEM_TOTALROW                NC_("STR_TABLESTYLE_ELEM_TOTALROW", "Total Row")
+#define STR_TABLESTYLE_ELEM_FIRSTCOLUMN             NC_("STR_TABLESTYLE_ELEM_FIRSTCOLUMN", "First Column")
+#define STR_TABLESTYLE_ELEM_LASTCOLUMN              NC_("STR_TABLESTYLE_ELEM_LASTCOLUMN", "Last Column")
+#define STR_TABLESTYLE_ELEM_FIRSTROWSTRIPE          NC_("STR_TABLESTYLE_ELEM_FIRSTROWSTRIPE", "First Row Stripe")
+#define STR_TABLESTYLE_ELEM_SECONDROWSTRIPE         NC_("STR_TABLESTYLE_ELEM_SECONDROWSTRIPE", "Second Row Stripe")
+#define STR_TABLESTYLE_ELEM_FIRSTCOLUMNSTRIPE       NC_("STR_TABLESTYLE_ELEM_FIRSTCOLUMNSTRIPE", "First Column Stripe")
+#define STR_TABLESTYLE_ELEM_SECONDCOLUMNSTRIPE      NC_("STR_TABLESTYLE_ELEM_SECONDCOLUMNSTRIPE", "Second Column Stripe")
+#define STR_TABLESTYLE_ELEM_FIRSTHEADERCELL         NC_("STR_TABLESTYLE_ELEM_FIRSTHEADERCELL", "First Header Cell")
+#define STR_TABLESTYLE_ELEM_LASTHEADERCELL          NC_("STR_TABLESTYLE_ELEM_LASTHEADERCELL", "Last Header Cell")
+/* New Table Style dialog: default name and duplicate-name warning */
+#define STR_TABLESTYLE_NEW_DEFAULTNAME              NC_("STR_TABLESTYLE_NEW_DEFAULTNAME", "Custom Table Style")
+#define STR_TABLESTYLE_NAME_EXISTS                  NC_("STR_TABLESTYLE_NAME_EXISTS", "A table style with this name already exists.")
 
 /* Reference Warning Infobar */
 #define STR_REF_ERROR_TITLE                         NC_("STR_REF_ERROR_TITLE", "Broken References")
@@ -454,6 +478,5 @@
 /* Expand References Infobar */
 #define STR_REF_EXPAND_TITLE                        NC_("STR_REF_EXPAND_TITLE", "Formula Range Not Updated")
 #define STR_REF_EXPAND_MSG                          NC_("STR_REF_EXPAND_MSG", "You may automate formula extension in Collabora Office Calc / General settings")
-#define STR_REF_EXPAND_SETTINGS                     NC_("STR_REF_EXPAND_SETTINGS", "Change Settings")
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

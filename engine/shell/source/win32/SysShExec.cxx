@@ -146,7 +146,7 @@ namespace
     #define E_UNKNOWN_EXEC_ERROR -1
 }
 
-CSysShExec::CSysShExec( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
+CSysShExec::CSysShExec( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) :
     WeakComponentImplHelper< css::system::XSystemShellExecute, css::lang::XServiceInfo >( m_aMutex ),
     m_xContext(xContext),
     mnNbCallCoInitializeExForReinit(0)
@@ -297,25 +297,25 @@ OUString checkFile(const OUString& pathname, const OUString& aCommand)
 }
 }
 
-void SAL_CALL CSysShExec::execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags )
+void CSysShExec::execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags )
 {
     // parameter checking
     if (0 == aCommand.getLength())
         throw css::lang::IllegalArgumentException(
-            "Empty command",
+            u"Empty command"_ustr,
             static_cast< css::system::XSystemShellExecute* >( this ),
             1 );
 
     if ((nFlags & ~(NO_SYSTEM_ERROR_MESSAGE | URIS_ONLY)) != 0)
         throw css::lang::IllegalArgumentException(
-            "Invalid Flags specified",
+            u"Invalid Flags specified"_ustr,
             static_cast< css::system::XSystemShellExecute* >( this ),
             3 );
 
     OUString preprocessed_command(aCommand);
     if ((nFlags & URIS_ONLY) != 0)
     {
-        css::uno::Reference< css::uri::XUriReference > uri(
+        cpo::uno::Reference< css::uri::XUriReference > uri(
             css::uri::UriReferenceFactory::create(m_xContext)->parse(aCommand));
         if (!uri.is() || !uri->isAbsolute())
         {
@@ -376,7 +376,7 @@ void SAL_CALL CSysShExec::execute( const OUString& aCommand, const OUString& aPa
             psxErr = MapError(psxErr);
 
         throw css::system::SystemShellExecuteException(
-            "Error executing command",
+            u"Error executing command"_ustr,
             static_cast< css::system::XSystemShellExecute* >(this),
             psxErr);
     }
@@ -398,24 +398,24 @@ void SAL_CALL CSysShExec::execute( const OUString& aCommand, const OUString& aPa
 
 // XServiceInfo
 
-OUString SAL_CALL CSysShExec::getImplementationName(  )
+OUString CSysShExec::getImplementationName(  )
 {
-    return "com.sun.star.sys.shell.SystemShellExecute";
+    return u"com.sun.star.sys.shell.SystemShellExecute"_ustr;
 }
 
-bool SAL_CALL CSysShExec::supportsService( const OUString& ServiceName )
+bool CSysShExec::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL CSysShExec::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > CSysShExec::getSupportedServiceNames(  )
 {
-    return { "com.sun.star.system.SystemShellExecute" };
+    return { u"com.sun.star.system.SystemShellExecute"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_CSysShExec_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new CSysShExec(context));
 }

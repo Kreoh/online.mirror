@@ -87,7 +87,7 @@
 using ::editeng::SvxBorderLine;
 using namespace sdr::table;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
@@ -125,10 +125,10 @@ public:
         : mpController( pController ) {}
 
     // XModifyListener
-    virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) override;
+    virtual void modified( const css::lang::EventObject& aEvent ) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     SvxTableController* mpController;
 };
@@ -136,7 +136,7 @@ public:
 // XModifyListener
 
 
-void SAL_CALL SvxTableControllerModifyListener::modified( const css::lang::EventObject&  )
+void SvxTableControllerModifyListener::modified( const css::lang::EventObject&  )
 {
     if( mpController )
         mpController->onTableModified();
@@ -146,7 +146,7 @@ void SAL_CALL SvxTableControllerModifyListener::modified( const css::lang::Event
 // XEventListener
 
 
-void SAL_CALL SvxTableControllerModifyListener::disposing( const css::lang::EventObject&  )
+void SvxTableControllerModifyListener::disposing( const css::lang::EventObject&  )
 {
     mpController = nullptr;
 }
@@ -337,8 +337,7 @@ bool SvxTableController::onMouseButtonDown(const MouseEvent& rMEvt, vcl::Window*
         {
             if (pOutliner->GetParagraphCount() == 1)
             {
-                if (Paragraph* pParagraph = pOutliner->GetParagraph(0))
-                    bEmptyOutliner = pOutliner->GetText(pParagraph).isEmpty();
+                bEmptyOutliner = pOutliner->GetText(0).isEmpty();
             }
         }
         if (bEmptyOutliner)
@@ -2188,12 +2187,11 @@ void SvxTableController::EditCell(const CellPos& rPos, vcl::Window* pWindow, Tbl
     {
         ::Outliner* pOutl = mrView.GetTextEditOutliner();
         sal_Int32 nParaCnt = pOutl->GetParagraphCount();
-        Paragraph* p1stPara = pOutl->GetParagraph( 0 );
 
-        if(nParaCnt==1 && p1stPara)
+        if(nParaCnt==1)
         {
             // with only one paragraph
-            if (pOutl->GetText(p1stPara).isEmpty())
+            if (pOutl->GetText(0).isEmpty())
             {
                 bEmptyOutliner = true;
             }

@@ -14,8 +14,8 @@
 #include "StarOfficeDrawImportFilter.hxx"
 
 using cpo::uno::Sequence;
-using com::sun::star::uno::XComponentContext;
-using com::sun::star::uno::XInterface;
+using cpo::uno::XComponentContext;
+using cpo::uno::XInterface;
 
 static bool handleEmbeddedSTOFFGraphicObject(const librevenge::RVNGBinaryData& data,
                                              OdfDocumentHandler* pHandler,
@@ -77,25 +77,25 @@ void StarOfficeDrawImportFilter::doRegisterHandlers(OdgGenerator& rGenerator)
 }
 
 // XServiceInfo
-OUString SAL_CALL StarOfficeDrawImportFilter::getImplementationName()
+OUString StarOfficeDrawImportFilter::getImplementationName()
 {
     return u"org.libreoffice.comp.Draw.StarOfficeDrawImportFilter"_ustr;
 }
 
-bool SAL_CALL StarOfficeDrawImportFilter::supportsService(const OUString& rServiceName)
+bool StarOfficeDrawImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence<OUString> SAL_CALL StarOfficeDrawImportFilter::getSupportedServiceNames()
+Sequence<OUString> StarOfficeDrawImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_libreoffice_comp_Draw_StarOfficeDrawImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new StarOfficeDrawImportFilter(context));
 }

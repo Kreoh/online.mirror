@@ -26,6 +26,7 @@
 #include <comphelper/diagnose_ex.hxx>
 #include <comphelper/flagguard.hxx>
 #include <comphelper/processfactory.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -74,6 +75,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 // #112245# definition for maximum allowed point count due to Metafile target.
 // To be on the safe side with the old tools polygon, use slightly less than
@@ -217,6 +219,39 @@ tools::Rectangle getPDFGraphicRect(const basegfx::B2DVector& rTranslate,
     return tools::Rectangle(
         sal_Int32(floor(aCurrentRange.getMinX())), sal_Int32(floor(aCurrentRange.getMinY())),
         sal_Int32(ceil(aCurrentRange.getMaxX())), sal_Int32(ceil(aCurrentRange.getMaxY())));
+}
+
+// the one language a paragraph's text is in, false once its portions disagree
+bool getTextLanguage(const drawinglayer::primitive2d::Primitive2DContainer& rChildren,
+                     LanguageType& rLanguage)
+{
+    for (const auto& rCandidate : rChildren)
+    {
+        if (const auto* pText
+            = dynamic_cast<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*>(
+                rCandidate.get()))
+        {
+            // a bullet, a tab and an empty line carry no locale, and would read as the UI's
+            if (pText->getLocale().Language.isEmpty())
+                continue;
+
+            const LanguageType eLanguage(LanguageTag(pText->getLocale()).getLanguageType());
+            if (eLanguage == LANGUAGE_DONTKNOW)
+                continue;
+            if (rLanguage != LANGUAGE_DONTKNOW && rLanguage != eLanguage)
+                return false;
+            rLanguage = eLanguage;
+        }
+        else if (const auto* pGroup
+                 = dynamic_cast<const drawinglayer::primitive2d::GroupPrimitive2D*>(
+                     rCandidate.get()))
+        {
+            if (!getTextLanguage(pGroup->getChildren(), rLanguage))
+                return false;
+        }
+    }
+
+    return true;
 }
 
 } // end of anonymous namespace
@@ -955,10 +990,8 @@ void VclMetafileProcessor2D::processObjectInfoPrimitive2D(
     // tdf#154982 process content first, so this object overrides any nested one
     process(rObjectInfoPrimitive2D.getChildren());
 
-    // currently StructureTagPrimitive2D is only used for SdrObjects - have to
-    // avoid adding Alt text if the SdrObject is not actually tagged, as it
-    // would then end up on an unrelated structure element.
-    if (mpCurrentStructureTag && mpCurrentStructureTag->isTaggedSdrObject())
+    // alt text belongs to the element this tag opens
+    if (mpCurrentStructureTag && mpCurrentStructureTag->opensStructureElement())
     {
         // Create image alternative description from ObjectInfoPrimitive2D info
         // for PDF export, for the currently active SdrObject's structure element
@@ -1460,7 +1493,11 @@ void VclMetafileProcessor2D::processTextHierarchyFieldPrimitive2D(
                                       static_cast<sal_Int32>(ceil(aViewRange.getMaxX())),
                                       static_cast<sal_Int32>(ceil(aViewRange.getMaxY())));
     vcl::PDFExtOutDevBookmarkEntry aBookmark;
-    OUString const altText(rFieldPrimitive.getValue(u"AltText"_ustr));
+    OUString altText(rFieldPrimitive.getValue(u"AltText"_ustr));
+    if (altText.isEmpty())
+        altText = rFieldPrimitive.getValue(u"Representation"_ustr);
+    if (altText.isEmpty())
+        altText = aURL;
     aBookmark.nLinkId = mpPDFExtOutDevData->CreateLink(aRectLogic, altText);
     aBookmark.aBookmark = aURL;
     std::vector<vcl::PDFExtOutDevBookmarkEntry>& rBookmarks = mpPDFExtOutDevData->GetBookmarks();
@@ -1594,6 +1631,15 @@ void VclMetafileProcessor2D::processTextHierarchyParagraphPrimitive2D(
         mpPDFExtOutDevData->WrapBeginStructureElement(vcl::pdf::StructElement::Paragraph);
     }
 
+    // a run in another language would need an element of its own, so name only one
+    LanguageType eLanguage(LANGUAGE_DONTKNOW);
+    if (getTextLanguage(rParagraphPrimitive.getChildren(), eLanguage)
+        && eLanguage != LANGUAGE_DONTKNOW && eLanguage != LANGUAGE_NONE)
+    {
+        mpPDFExtOutDevData->SetStructureAttributeNumerical(vcl::pdf::PDFWriter::Language,
+                                                           static_cast<sal_uInt16>(eLanguage));
+    }
+
     // Process recursively and add MetaFile comment
     process(rParagraphPrimitive);
     mpMetaFile->AddAction(new MetaCommentAction(aCommentString));
@@ -1654,13 +1700,13 @@ void VclMetafileProcessor2D::processTextSimplePortionPrimitive2D(
             constructed VclMetafileProcessor2D. It's still incarnated on demand,
             but exists for OOo runtime now by purpose.
          */
-        static tools::DeleteOnDeinit<css::uno::Reference<css::i18n::XBreakIterator>>
+        static tools::DeleteOnDeinit<cpo::uno::Reference<css::i18n::XBreakIterator>>
             gxBreakIterator;
 
         // support for TEXT_ MetaFile actions only for decorated texts
         if (!gxBreakIterator.get() || !gxBreakIterator.get()->get())
         {
-            const uno::Reference<uno::XComponentContext>& xContext(
+            const uno::Reference<cpo::uno::XComponentContext>& xContext(
                 ::comphelper::getProcessComponentContext());
             gxBreakIterator.set(i18n::BreakIterator::create(xContext));
         }
@@ -2744,20 +2790,20 @@ void VclMetafileProcessor2D::processStructureTagPrimitive2D(
     ::comphelper::ValueRestorationGuard const g(mpCurrentStructureTag, &rStructureTagCandidate);
 
     // structured tag primitive
-    const vcl::pdf::StructElement& rTagElement(rStructureTagCandidate.getStructureElement());
-    bool bTagUsed((vcl::pdf::StructElement::NonStructElement != rTagElement));
+    const bool bArtifact(
+        rStructureTagCandidate.isDecorative()
+        || (rStructureTagCandidate.isBackground() && rStructureTagCandidate.isImage()));
+    // a plain background object is neither, and goes out untagged
+    const bool bTagUsed(bArtifact || rStructureTagCandidate.opensStructureElement());
     ::std::optional<sal_Int32> oAnchorParent;
-
-    if (!rStructureTagCandidate.isTaggedSdrObject())
-    {
-        bTagUsed = false;
-    }
 
     if (mpPDFExtOutDevData && bTagUsed)
     {
         // foreground object: tag as regular structure element
-        if (!rStructureTagCandidate.isBackground())
+        if (!bArtifact)
         {
+            const vcl::pdf::StructElement& rTagElement(
+                rStructureTagCandidate.getStructureElement());
             if (rStructureTagCandidate.GetAnchorStructureElementKey() != nullptr)
             {
                 sal_Int32 const id = mpPDFExtOutDevData->EnsureStructureElement(
@@ -2766,6 +2812,18 @@ void VclMetafileProcessor2D::processStructureTagPrimitive2D(
                 mpPDFExtOutDevData->SetCurrentStructureElement(id);
             }
             mpPDFExtOutDevData->WrapBeginStructureElement(rTagElement);
+            // a title, a description and text that states no language are the document's
+            if (const css::lang::Locale& rLocale = mpPDFExtOutDevData->GetDocumentLocale();
+                rStructureTagCandidate.GetAnchorStructureElementKey() != nullptr
+                && !rLocale.Language.isEmpty())
+            {
+                const LanguageType eLanguage(LanguageTag(rLocale).getLanguageType());
+                if (eLanguage != LANGUAGE_DONTKNOW && eLanguage != LANGUAGE_NONE)
+                {
+                    mpPDFExtOutDevData->SetStructureAttributeNumerical(
+                        vcl::pdf::PDFWriter::Language, static_cast<sal_uInt16>(eLanguage));
+                }
+            }
             switch (rTagElement)
             {
                 case vcl::pdf::StructElement::H1:
@@ -2824,16 +2882,10 @@ void VclMetafileProcessor2D::processStructureTagPrimitive2D(
                                                           vcl::pdf::PDFWriter::Column);
             }
         }
-        // background object
         else
         {
-            // background image: tag as artifact
-            if (rStructureTagCandidate.isImage())
-                mpPDFExtOutDevData->WrapBeginStructureElement(
-                    vcl::pdf::StructElement::NonStructElement);
-            // any other background object: do not tag
-            else
-                assert(false);
+            mpPDFExtOutDevData->WrapBeginStructureElement(
+                vcl::pdf::StructElement::NonStructElement);
         }
     }
 

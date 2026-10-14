@@ -74,9 +74,10 @@
 #include <refundo.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScViewFunc::PasteRTF( SCCOL nStartCol, SCROW nStartRow,
-                                const css::uno::Reference< css::datatransfer::XTransferable >& rxTransferable )
+                                const cpo::uno::Reference< css::datatransfer::XTransferable >& rxTransferable )
 {
     TransferableDataHelper aDataHelper( rxTransferable );
     if ( aDataHelper.HasFormat( SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT ) )
@@ -127,8 +128,8 @@ void ScViewFunc::PasteRTF( SCCOL nStartCol, SCROW nStartRow,
             rDoc.EnableUndo( false );
             for( sal_Int32 n = 0; n < nParCnt; n++ )
             {
-                std::unique_ptr<EditTextObject> pObject(pEngine->CreateTextObject(n));
-                EnterData(nStartCol, nRow, nTab, *pObject, true);
+                EditTextObject aObject(pEngine->CreateTextObject(n));
+                EnterData(nStartCol, nRow, nTab, aObject, true);
                 if( ++nRow > rDoc.MaxRow() )
                     break;
             }
@@ -405,10 +406,9 @@ void ScViewFunc::DoThesaurus()
         if (aOldText.getType() == CELLTYPE_EDIT)
         {
             // The cell will own the text object instance.
-            std::unique_ptr<EditTextObject> pText = pThesaurusEngine->CreateTextObject();
-            auto tmp = pText.get();
-            if (rDoc.SetEditText(ScAddress(nCol,nRow,nTab), std::move(pText)))
-                aNewText.set(*tmp);
+            EditTextObject* pText = new EditTextObject(pThesaurusEngine->CreateTextObject());
+            if (rDoc.SetEditText(ScAddress(nCol,nRow,nTab), std::unique_ptr<EditTextObject>(pText)))
+                aNewText.set(*pText);
         }
         else
         {
@@ -681,7 +681,7 @@ bool ScViewFunc::PasteFile( const Point& rPos, const OUString& rFile, bool bLink
 }
 
 bool ScViewFunc::PasteBookmark( SotClipboardFormatId nFormatId,
-                                const css::uno::Reference< css::datatransfer::XTransferable >& rxTransferable,
+                                const cpo::uno::Reference< css::datatransfer::XTransferable >& rxTransferable,
                                 SCCOL nPosX, SCROW nPosY )
 {
     INetBookmark aBookmark;
@@ -743,8 +743,8 @@ void ScViewFunc::InsertBookmark( const OUString& rDescription, const OUString& r
         aField.SetTargetFrame(*pTarget);
     aEngine.QuickInsertField( SvxFieldItem( aField, EE_FEATURE_FIELD ), aInsSel );
 
-    std::unique_ptr<EditTextObject> pData(aEngine.CreateTextObject());
-    EnterData(nPosX, nPosY, nTab, *pData);
+    EditTextObject aData(aEngine.CreateTextObject());
+    EnterData(nPosX, nPosY, nTab, aData);
 }
 
 bool ScViewFunc::HasBookmarkAtCursor( SvxHyperlinkItem* pContent )

@@ -22,8 +22,9 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SwVbaReplacement::SwVbaReplacement( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< util::XPropertyReplace >  xPropertyReplace ) :
+SwVbaReplacement::SwVbaReplacement( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< util::XPropertyReplace >  xPropertyReplace ) :
     SwVbaReplacement_BASE( rParent, rContext ), mxPropertyReplace(std::move( xPropertyReplace ))
 {
 }
@@ -32,17 +33,17 @@ SwVbaReplacement::~SwVbaReplacement()
 {
 }
 
-OUString SAL_CALL SwVbaReplacement::getText()
+OUString SwVbaReplacement::getText()
 {
     return mxPropertyReplace->getReplaceString();
 }
 
-void SAL_CALL SwVbaReplacement::setText( const OUString& _text )
+void SwVbaReplacement::setText( const OUString& _text )
 {
     mxPropertyReplace->setReplaceString( _text );
 }
 
-void SAL_CALL SwVbaReplacement::ClearFormatting( )
+void SwVbaReplacement::ClearFormatting( )
 {
     cpo::uno::Sequence< beans::PropertyValue > aPropValues;
     mxPropertyReplace->setReplaceAttributes( aPropValues );

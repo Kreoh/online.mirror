@@ -21,6 +21,7 @@
 
 #include <sal/config.h>
 
+#include <memory>
 #include <span>
 
 #include <rtl/ref.hxx>
@@ -37,7 +38,6 @@ class FontList;
 class SdDrawDocument;
 class SdPage;
 class SfxPrinter;
-struct SpellCallbackInfo;
 class AbstractSvxNameDialog;
 class SfxUndoManager;
 
@@ -46,6 +46,10 @@ namespace sd {
 class FrameView;
 class ViewShell;
 class DrawViewShell;
+
+namespace lint {
+class LintMeasureCache;
+}
 
 // DrawDocShell
 class SAL_DLLPUBLIC_RTTI DrawDocShell : public SfxObjectShell
@@ -79,15 +83,15 @@ public:
     void                    UpdateRefDevice();
     virtual void            Activate( bool bMDI ) override;
     virtual void            Deactivate( bool bMDI ) override;
-    virtual bool            InitNew( const css::uno::Reference< css::embed::XStorage >& xStorage ) override;
+    virtual bool            InitNew( const cpo::uno::Reference< css::embed::XStorage >& xStorage ) override;
     virtual bool            ImportFrom(SfxMedium &rMedium,
-            css::uno::Reference<css::text::XTextRange> const& xInsertPosition)
+            cpo::uno::Reference<css::text::XTextRange> const& xInsertPosition)
         override;
     virtual bool            ConvertFrom( SfxMedium &rMedium ) override;
     virtual bool            Save() override;
     virtual bool            SaveAsOwnFormat( SfxMedium& rMedium ) override;
     virtual bool            ConvertTo( SfxMedium &rMedium ) override;
-    virtual bool            SaveCompleted( const css::uno::Reference< css::embed::XStorage >& xStorage ) override;
+    virtual bool            SaveCompleted( const cpo::uno::Reference< css::embed::XStorage >& xStorage ) override;
 
     virtual bool            Load( SfxMedium &rMedium  ) override;
     virtual bool            LoadFrom( SfxMedium& rMedium ) override;
@@ -199,18 +203,28 @@ public:
 
     DECL_DLLPRIVATE_LINK( RenameSlideHdl, AbstractSvxNameDialog&, bool );
 
-    // ExecuteSpellPopup now handled by DrawDocShell
-    DECL_DLLPRIVATE_LINK( OnlineSpellCallback, SpellCallbackInfo&, void );
-
     void                    ClearUndoBuffer();
 
     std::shared_ptr<model::ColorSet> GetThemeColors() override;
+
+    /** The encodings the presentation cleanup measurements of this document worked out. One cache
+        stands for the whole document, so a bitmap drawn at the same size and measured at the same
+        settings is encoded once however many measurements of the document are under way.
+
+        The shell keeps only a weak reference to the cache. It lives for as long as at least one
+        holder of the returned pointer is left, and goes with the last of them. */
+    SD_DLLPUBLIC std::shared_ptr<lint::LintMeasureCache> getLintMeasureCache();
 
 private:
     static void setEditMode(DrawViewShell* pDrawViewShell, bool isMasterPage);
     void                    Construct(bool bClipboard);
 
     SdDrawDocument*         mpDoc;
+
+    /** Weak reference to the encodings the measurements of this document worked out. It is empty
+        while nothing holds the cache. */
+    std::weak_ptr<lint::LintMeasureCache> mpLintMeasureCache;
+
     std::unique_ptr<SfxUndoManager> mpUndoManager;
     VclPtr<SfxPrinter>      mpPrinter;
     ::sd::ViewShell*        mpViewShell;

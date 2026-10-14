@@ -19,8 +19,6 @@
 #include <vcl/vclptr.hxx>
 #include <vcl/toolboxid.hxx>
 #include <vcl/wintypes.hxx>
-#include <vcl/EnumContext.hxx>
-#include <vcl/notebookbar/NotebookBarAddonsItem.hxx>
 
 #include <memory>
 #include <map>
@@ -53,10 +51,9 @@ public:
 public:
     VclBuilder(vcl::Window* pParent, std::u16string_view sUIRootDir, const OUString& sUIFile,
                OUString sID = {},
-               css::uno::Reference<css::frame::XFrame> xFrame
-               = css::uno::Reference<css::frame::XFrame>(),
-               bool bLegacy = true,
-               std::unique_ptr<NotebookBarAddonsItem> pNotebookBarAddonsItem = nullptr);
+               cpo::uno::Reference<css::frame::XFrame> xFrame
+               = cpo::uno::Reference<css::frame::XFrame>(),
+               bool bLegacy = true);
     virtual ~VclBuilder();
     ///releases references and disposes all children.
     void disposeBuilder();
@@ -90,8 +87,6 @@ private:
     //are collected here and need to be set afterwards, e.g. during
     //Show or Execute
     stringmap      m_aDeferredProperties;
-
-    std::unique_ptr<NotebookBarAddonsItem> m_pNotebookBarAddonsItem;
 
     struct PackingData
     {
@@ -239,7 +234,7 @@ private:
     };
 
     /// XFrame to be able to extract labels and other properties of the UNO commands (like of .uno:Bold).
-    css::uno::Reference<css::frame::XFrame> m_xFrame;
+    cpo::uno::Reference<css::frame::XFrame> m_xFrame;
 
 private:
     // tweak newly inserted child depending on window type
@@ -267,7 +262,7 @@ private:
     void applyPackingProperties(vcl::Window* pCurrent, vcl::Window* pParent,
                                 const stringmap& rPackingProperties) override;
     virtual void applyTabChildProperties(vcl::Window* pParent, const std::vector<OUString>& rIDs,
-                                         std::vector<vcl::EnumContext::Context>& rContext, stringmap& rProperties,
+                                         stringmap& rProperties,
                                          stringmap& rAtkProperties) override;
 
     void insertMenuObject(PopupMenu* pParent, PopupMenu* pSubMenu, const OUString& rClass,
@@ -280,9 +275,6 @@ private:
 
     void setMnemonicWidget(const OUString& rLabelId, const OUString& rMnemonicWidgetId) override;
     void setRadioButtonGroup(const OUString& rRadioButtonId, const OUString& rRadioGroupId) override;
-    void setPriority(vcl::Window* pWindow, int nPriority) override;
-    void setContext(vcl::Window* pWindow,
-                    std::vector<vcl::EnumContext::Context>&& aContext) override;
 
     virtual bool isHorizontalTabControl(vcl::Window* pWindow) override;
 

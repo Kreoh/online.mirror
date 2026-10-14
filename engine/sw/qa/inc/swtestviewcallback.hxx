@@ -32,6 +32,8 @@ public:
     bool m_bOwnCursorAtOrigin;
     tools::Rectangle m_aOwnCursor;
     bool m_bViewCursorInvalidated;
+    /// The view named as having moved the other view's caret, or -1 when none was named.
+    int m_nViewCursorMovedBy;
     tools::Rectangle m_aViewCursor;
     bool m_bOwnSelectionSet;
     bool m_bViewSelectionSet;
@@ -52,6 +54,12 @@ public:
     /// Post-it / annotation payload.
     boost::property_tree::ptree m_aComment;
     int m_nCommentCallbackCount = 0;
+    /// Accessibility focused paragraph payload.
+    boost::property_tree::ptree m_aA11yFocusedParagraph;
+    /// Accessibility focused table cell payload.
+    boost::property_tree::ptree m_aA11yFocusedCell;
+    /// Accessibility selected object payload.
+    boost::property_tree::ptree m_aA11ySelection;
     std::vector<OString> m_aStateChanges;
     TestKitCallbackWrapper m_callbackWrapper;
     OString m_aExportFile;

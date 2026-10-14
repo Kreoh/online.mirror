@@ -42,7 +42,7 @@ class ImageProducer :   public css::awt::XImageProducer,
 {
 private:
 
-    typedef std::vector< css::uno::Reference< css::awt::XImageConsumer > > ConsumerList_t;
+    typedef std::vector< cpo::uno::Reference< css::awt::XImageConsumer > > ConsumerList_t;
 
     OUString        maURL;
     ConsumerList_t  maConsList;
@@ -71,17 +71,17 @@ public:
 
     void            SetDoneHdl( const Link<Graphic*,void>& i_rHdl ) { maDoneHdl = i_rHdl; }
 
-    // css::uno::XInterface
+    // cpo::uno::XInterface
     cpo::uno::Any   queryInterface( const cpo::uno::Type & rType ) override;
     void            acquire() noexcept override  { OWeakObject::acquire(); }
     void            release() noexcept override  { OWeakObject::release(); }
 
     // MT: ???
-    void            setImage( css::uno::Reference< css::io::XInputStream > const & rStmRef );
+    void            setImage( cpo::uno::Reference< css::io::XInputStream > const & rStmRef );
 
     // css::awt::XImageProducer
-    void addConsumer( const css::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) override;
-    void removeConsumer( const css::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) override;
+    void addConsumer( const cpo::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) override;
+    void removeConsumer( const cpo::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) override;
     void startProduction(  ) override;
 
     // css::lang::XInitialization

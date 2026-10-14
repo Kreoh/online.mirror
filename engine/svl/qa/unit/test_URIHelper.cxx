@@ -31,9 +31,9 @@
 #include <com/sun/star/ucb/XContentProvider.hpp>
 #include <cpo/uno/Any.hxx>
 #include <cpo/uno/Exception.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/uri/XUriReference.hpp>
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -65,47 +65,47 @@ class Content:
 {
 public:
     explicit Content(
-        css::uno::Reference< css::ucb::XContentIdentifier > const & identifier);
+        cpo::uno::Reference< css::ucb::XContentIdentifier > const & identifier);
 
-    virtual css::uno::Reference< css::ucb::XContentIdentifier > SAL_CALL
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
     getIdentifier() override {
         return m_identifier;
     }
 
-    virtual OUString SAL_CALL getContentType() override
+    virtual OUString getContentType() override
     {
         return OUString();
     }
 
-    virtual void SAL_CALL addContentEventListener(
-        css::uno::Reference< css::ucb::XContentEventListener > const &) override
+    virtual void addContentEventListener(
+        cpo::uno::Reference< css::ucb::XContentEventListener > const &) override
     {}
 
-    virtual void SAL_CALL removeContentEventListener(
-        css::uno::Reference< css::ucb::XContentEventListener > const &) override
+    virtual void removeContentEventListener(
+        cpo::uno::Reference< css::ucb::XContentEventListener > const &) override
     {}
 
-    virtual sal_Int32 SAL_CALL createCommandIdentifier() override
+    virtual sal_Int32 createCommandIdentifier() override
     {
         return 0;
     }
 
-    virtual cpo::uno::Any SAL_CALL execute(
+    virtual cpo::uno::Any execute(
         css::ucb::Command const & command, sal_Int32 commandId,
-        css::uno::Reference< css::ucb::XCommandEnvironment > const &) override;
+        cpo::uno::Reference< css::ucb::XCommandEnvironment > const &) override;
 
-    virtual void SAL_CALL abort(sal_Int32) override {}
+    virtual void abort(sal_Int32) override {}
 
 private:
     static char const m_prefix[];
 
-    css::uno::Reference< css::ucb::XContentIdentifier > m_identifier;
+    cpo::uno::Reference< css::ucb::XContentIdentifier > m_identifier;
 };
 
 char const Content::m_prefix[] = "test:";
 
 Content::Content(
-    css::uno::Reference< css::ucb::XContentIdentifier > const & identifier):
+    cpo::uno::Reference< css::ucb::XContentIdentifier > const & identifier):
     m_identifier(identifier)
 {
     assert(m_identifier.is());
@@ -119,11 +119,11 @@ Content::Content(
 
 cpo::uno::Any Content::execute(
     css::ucb::Command const & command, sal_Int32,
-    css::uno::Reference< css::ucb::XCommandEnvironment > const &)
+    cpo::uno::Reference< css::ucb::XCommandEnvironment > const &)
 {
     if ( command.Name != "getCasePreservingURL" )
     {
-        throw css::uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
     // If any non-empty segment starts with anything but '0', '1', or '2', fail;
     // otherwise, if the last non-empty segment starts with '1', add a final
@@ -155,15 +155,15 @@ cpo::uno::Any Content::execute(
 
 class Provider: public cppu::WeakImplHelper< css::ucb::XContentProvider > {
 public:
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL queryContent(
-        css::uno::Reference< css::ucb::XContentIdentifier > const & identifier) override
+    virtual cpo::uno::Reference< css::ucb::XContent > queryContent(
+        cpo::uno::Reference< css::ucb::XContentIdentifier > const & identifier) override
     {
         return new Content(identifier);
     }
 
-    virtual sal_Int32 SAL_CALL compareContentIds(
-        css::uno::Reference< css::ucb::XContentIdentifier > const & id1,
-        css::uno::Reference< css::ucb::XContentIdentifier > const & id2) override
+    virtual sal_Int32 compareContentIds(
+        cpo::uno::Reference< css::ucb::XContentIdentifier > const & id1,
+        cpo::uno::Reference< css::ucb::XContentIdentifier > const & id2) override
     {
         assert(id1.is() && id2.is());
         return
@@ -194,7 +194,7 @@ public:
     CPPUNIT_TEST_SUITE_END();
 
 private:
-    static css::uno::Reference< css::uno::XComponentContext > m_context;
+    static cpo::uno::Reference< cpo::uno::XComponentContext > m_context;
 };
 
 void Test::setUp() {
@@ -208,18 +208,18 @@ void Test::setUp() {
 }
 
 void Test::finish() {
-    css::uno::Reference< css::lang::XComponent >(
-        m_context, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::lang::XComponent >(
+        m_context, cpo::uno::UNO_QUERY_THROW)->dispose();
 }
 
 void Test::testNormalizedMakeRelative() {
     auto ucb(css::ucb::UniversalContentBroker::create(m_context));
     ucb->registerContentProvider(new Provider, u"test"_ustr, true);
     ucb->registerContentProvider(
-        css::uno::Reference<css::ucb::XContentProvider>(
+        cpo::uno::Reference<css::ucb::XContentProvider>(
             m_context->getServiceManager()->createInstanceWithContext(
                 u"com.sun.star.comp.ucb.FileProvider"_ustr, m_context),
-            css::uno::UNO_QUERY_THROW),
+            cpo::uno::UNO_QUERY_THROW),
         u"file"_ustr, true);
     struct Data {
         char const * base;
@@ -249,7 +249,7 @@ void Test::testNormalizedMakeRelative() {
     };
     for (auto const[base, absolute, relative] : tests)
     {
-        css::uno::Reference< css::uri::XUriReference > ref(URIHelper::normalizedMakeRelative(
+        cpo::uno::Reference< css::uri::XUriReference > ref(URIHelper::normalizedMakeRelative(
                 m_context, OUString::createFromAscii(base), OUString::createFromAscii(absolute)));
         bool ok = relative == nullptr ? !ref.is()
                                       : ref.is() && ref->getUriReference().equalsAscii(relative);
@@ -342,7 +342,6 @@ void Test::testFindFirstURLInText() {
         { "out:", nullptr, 0, 0 },
         { "pop3:", nullptr, 0, 0 },
         { "private:", nullptr, 0, 0 },
-        { "slot:", nullptr, 0, 0 },
         { "staroffice.component:", nullptr, 0, 0 },
         { "staroffice.db:", nullptr, 0, 0 },
         { "staroffice.factory:", nullptr, 0, 0 },
@@ -353,7 +352,6 @@ void Test::testFindFirstURLInText() {
         { "staroffice.pop3:", nullptr, 0, 0 },
         { "staroffice.private:", nullptr, 0, 0 },
         { "staroffice.searchfolder:", nullptr, 0, 0 },
-        { "staroffice.slot:", nullptr, 0, 0 },
         { "staroffice.trashcan:", nullptr, 0, 0 },
         { "staroffice.uno:", nullptr, 0, 0 },
         { "staroffice.vim:", nullptr, 0, 0 },
@@ -517,7 +515,7 @@ void Test::testResolveIdnaHost() {
         URIHelper::resolveIdnaHost(u"foo://пример.рф:0"_ustr));
 }
 
-css::uno::Reference< css::uno::XComponentContext > Test::m_context;
+cpo::uno::Reference< cpo::uno::XComponentContext > Test::m_context;
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);
 

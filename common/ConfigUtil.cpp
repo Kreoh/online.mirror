@@ -33,12 +33,12 @@
 
 namespace ConfigUtil
 {
-// Set by initialize(). On the apps (MOBILEAPP) COOLWSD is created and run
-// repeatedly in-process, each run owning the config it passes here, so Config
-// is re-pointed at the current run's instead of being asserted to be null; the
-// value accessors below still fall back to their defaults until the first run
-// initializes it, and the "is initialized" asserts there are therefore gated on
-// !MOBILEAPP, where a null Config really is a bug.
+// Set by initialize(). On the apps COOLWSD is created and run repeatedly
+// in-process, each run owning the config it passes here, so Config is re-pointed
+// at the current run's instead of being asserted to be null; the value accessors
+// below still fall back to their defaults until the first run initializes it, so
+// their "is initialized" asserts let a null Config pass on an app, where a null
+// Config really is a bug only on the server.
 static const Poco::Util::AbstractConfiguration* Config = nullptr;
 
 #if ENABLE_SSL
@@ -59,11 +59,6 @@ RuntimeConstant<bool> SslTermination;
 //       except for properties, which are sorted before the value, e.g.
 //       "setting[@name]" before "setting", which is more readable.
 const Util::UnorderedStringMap<std::string> DefAppConfig = {
-#if !MOBILEAPP
-    { "accessibility.enable", "false" },
-#else
-    { "accessibility.enable", "true" },
-#endif
     { "admin_console.enable", "true" },
     { "admin_console.enable_pam", "false" },
     { "admin_console.logging.admin_action", "true" },
@@ -82,6 +77,8 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "ai.image_model", "" },
     { "ai.image_size", "" },
     { "ai.model", "" },
+    { "ai.show_ai_notebookbar", "false" },
+    { "ai.show_ai_sidebar", "false" },
     { "allowed_languages", "de_DE en_GB en_US es_ES fr_FR it nl pt_BR pt_PT ru" },
     { "allow_update_popup", "true" },
     { "browser_logging", "false" },
@@ -122,12 +119,10 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "fetch_update_check", "10" },
     { "fonts_missing.handling", "log" },
     { "file_server_root_path", "browser/.." },
-#if !MOBILEAPP
-    { "help_url", HELP_URL },
-#endif
     { "hexify_embedded_urls", "false" },
     { "hide_legacy_script_warning", "false" },
     { "home_mode.enable", "false" },
+    { "indirection_endpoint.controller_monitor_url", "" },
     { "indirection_endpoint.geolocation_setup.enable", "false" },
     { "indirection_endpoint.geolocation_setup.timezone", "" },
     { "indirection_endpoint.migration_timeout_secs", "180" },
@@ -139,83 +134,24 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "languagetool.rest_protocol", "" },
     { "languagetool.ssl_verification", "true" },
     { "languagetool.user_name", "" },
-#if !MOBILEAPP
-    // { "logging.anonymize.anonymize_user_data", "false" }, // Do not set to fallback on filename/username.
-    { "logging.anonymize.anonymization_salt", "82589933" },
-    { "logging.anonymize.high_strength", "false" },
-    { "logging.color", "true" },
-    { "logging.disable_server_audit", "false" },
-    { "logging.disabled_areas", "Socket,WebSocket,Admin,Pixel" },
-    { "logging.docstats", "false" },
-    { "logging.file.property[@name]", "path" },
-    { "logging.file.property", COOLWSD_LOGFILE },
-    { "logging.file.property[1][@name]", "rotation" },
-    { "logging.file.property[1]", "never" },
-    { "logging.file.property[2][@name]", "archive" },
-    { "logging.file.property[2]", "timestamp" },
-    { "logging.file.property[3][@name]", "compress" },
-    { "logging.file.property[3]", "true" },
-    { "logging.file.property[4][@name]", "purgeAge" },
-    { "logging.file.property[4]", "10 days" },
-    { "logging.file.property[5][@name]", "purgeCount" },
-    { "logging.file.property[5]", "10" },
-    { "logging.file.property[6][@name]", "rotateOnOpen" },
-    { "logging.file.property[6]", "true" },
-    { "logging.file.property[7][@name]", "flush" },
-    { "logging.file.property[7]", "false" },
-    { "logging.file[@enable]", "false" },
-    { "logging.least_verbose_level_settable_from_client", "fatal" },
-    { "logging.level", COOLWSD_LOGLEVEL },
-    { "logging.level_startup", "trace" },
-    { "logging.lokit_sal_log", "-INFO-WARN" },
-    { "logging.most_verbose_level_settable_from_client", "notice" },
-    { "logging.protocol", "false" },
-    { "logging.userstats", "false" },
-    { "logging_ui_cmd.file.property[@name]", "path" },
-    { "logging_ui_cmd.file.property", COOLWSD_LOGFILE_UICMD },
-    { "logging_ui_cmd.file.property[1][@name]", "purgeCount" },
-    { "logging_ui_cmd.file.property[1]", "10" },
-    { "logging_ui_cmd.file.property[2][@name]", "rotateOnOpen" },
-    { "logging_ui_cmd.file.property[2]", "true" },
-    { "logging_ui_cmd.file.property[3][@name]", "flush" },
-    { "logging_ui_cmd.file.property[3]", "false" },
-    { "logging_ui_cmd.file[@enable]", "false" },
-    { "logging_ui_cmd.merge", "true" },
-    { "logging_ui_cmd.merge_display_end_time", "false" },
-#endif
     { "memproportion", "80.0" },
     { "mount_jail_tree", "true" },
+    { "net.client_pong_timeout_secs", "60" },
     { "net.connection_timeout_secs", "30" },
     { "net.content_security_policy", "" },
     { "net.frame_ancestors", "" },
     { "net.listen", "any" },
-    { "net.lok_allow.host", R"(192\.168\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[10]", R"(::ffff:172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[11]", R"(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[12]", R"(::ffff:10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[13]", R"(localhost)" },
-    { "net.lok_allow.host[1]", R"(::ffff:192\.168\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[2]", R"(127\.0\.0\.1)" },
-    { "net.lok_allow.host[3]", R"(::ffff:127\.0\.0\.1)" },
-    { "net.lok_allow.host[4]", R"(::1)" },
-    { "net.lok_allow.host[5]", R"(172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[6]", R"(::ffff:172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[7]", R"(172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[8]", R"(::ffff:172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.lok_allow.host[9]", R"(172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host", R"(192\.168\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[10]", R"(::ffff:172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[11]", R"(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[12]", R"(::ffff:10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[1]", R"(::ffff:192\.168\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[2]", R"(127\.0\.0\.1)" },
-    { "net.post_allow.host[3]", R"(::ffff:127\.0\.0\.1)" },
-    { "net.post_allow.host[4]", R"(::1)" },
-    { "net.post_allow.host[5]", R"(172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[6]", R"(::ffff:172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[7]", R"(172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[8]", R"(::ffff:172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3})" },
-    { "net.post_allow.host[9]", R"(172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3})" },
+    { "net.lok_allow.host", "192.168.0.0/16" },
+    { "net.lok_allow.host[1]", "127.0.0.1/32" },
+    { "net.lok_allow.host[2]", "::1/128" },
+    { "net.lok_allow.host[3]", "172.16.0.0/12" },
+    { "net.lok_allow.host[4]", "10.0.0.0/8" },
+    { "net.lok_allow.host[5]", "localhost" },
+    { "net.post_allow.host", "192.168.0.0/16" },
+    { "net.post_allow.host[1]", "127.0.0.1/32" },
+    { "net.post_allow.host[2]", "::1/128" },
+    { "net.post_allow.host[3]", "172.16.0.0/12" },
+    { "net.post_allow.host[4]", "10.0.0.0/8" },
     { "net.proto", "all" },
     { "net.proxy_prefix", "false" },
     { "net.service_root", "" },
@@ -224,6 +160,7 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "per_document.always_save_on_exit", "false" },
     { "per_document.autosave_duration_secs", "300" },
     { "per_document.background_autosave", "true" },
+    { "per_document.background_downloadas", "true" },
     { "per_document.background_manualsave", "true" },
     { "per_document.batch_priority", "5" },
     { "per_document.bgsave_priority", "5" },
@@ -235,6 +172,7 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "per_document.cleanup.limit_dirty_mem_mb", "3072" },
     { "per_document.cleanup.lost_kit_grace_period_secs", "120" },
     { "per_document.cleanup[@enable]", "true" },
+    { "per_document.ctl_numerals", "arabic" },
     { "per_document.idle_timeout_secs", "3600" },
     { "per_document.idlesave_duration_secs", "30" },
     { "per_document.limit_convert_secs", "100" },
@@ -290,9 +228,6 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "ssl.hpkp[@report_only]", "false" },
     { "ssl.key_file_path", COOLWSD_CONFIGDIR "/key.pem" },
     { "ssl.min_protocol_version", "TLSv1.2" },
-#if !MOBILEAPP
-    { "ssl.ssl_verification", SSL_VERIFY },
-#endif
     { "ssl.sts.enabled", "false" },
     { "ssl.sts.max_age", "31536000" },
     { "ssl.termination", "false" },
@@ -319,13 +254,9 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "trace.path[@compress]", "true" },
     { "trace.path[@snapshot]", "false" },
     { "trace[@enable]", "false" },
-#if !MOBILEAPP
-    { "trace_event.path", COOLWSD_TRACEEVENTFILE },
-    { "trace_event[@enable]", "false" },
-#endif
-    { "user_interface.default_zoom", "" },
+    { "user_interface.default_zoom", "100" },
     { "user_interface.mode", "default" },
-    { "user_interface.smart_zoom", "" },
+    { "user_interface.smart_zoom", "true" },
     { "user_interface.statusbar_save_indicator", "true" },
     { "user_interface.use_integration_theme", "true" },
     { "user_interface.brandProductName", "" },
@@ -338,16 +269,78 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "zotero.enable", "true" },
 };
 
+// The defaults the server adds to the set above.
+const Util::UnorderedStringMap<std::string> DefServerConfig = {
+    { "help_url", HELP_URL },
+    // { "logging.anonymize.anonymize_user_data", "false" }, // Do not set to fallback on filename/username.
+    { "logging.anonymize.anonymization_salt", "82589933" },
+    { "logging.anonymize.high_strength", "false" },
+    { "logging.color", "true" },
+    { "logging.disable_server_audit", "false" },
+    { "logging.disabled_areas", "Socket,WebSocket,Admin,Pixel" },
+    { "logging.docstats", "false" },
+    { "logging.file.property[@name]", "path" },
+    { "logging.file.property", COOLWSD_LOGFILE },
+    { "logging.file.property[1][@name]", "rotation" },
+    { "logging.file.property[1]", "never" },
+    { "logging.file.property[2][@name]", "archive" },
+    { "logging.file.property[2]", "timestamp" },
+    { "logging.file.property[3][@name]", "compress" },
+    { "logging.file.property[3]", "true" },
+    { "logging.file.property[4][@name]", "purgeAge" },
+    { "logging.file.property[4]", "10 days" },
+    { "logging.file.property[5][@name]", "purgeCount" },
+    { "logging.file.property[5]", "10" },
+    { "logging.file.property[6][@name]", "rotateOnOpen" },
+    { "logging.file.property[6]", "true" },
+    { "logging.file.property[7][@name]", "flush" },
+    { "logging.file.property[7]", "false" },
+    { "logging.file[@enable]", "false" },
+    { "logging.least_verbose_level_settable_from_client", "fatal" },
+    { "logging.level", COOLWSD_LOGLEVEL },
+    { "logging.level_startup", "trace" },
+    { "logging.lokit_sal_log", "-INFO-WARN" },
+    { "logging.most_verbose_level_settable_from_client", "notice" },
+    { "logging.protocol", "false" },
+    { "logging.userstats", "false" },
+    { "logging_ui_cmd.file.property[@name]", "path" },
+    { "logging_ui_cmd.file.property", COOLWSD_LOGFILE_UICMD },
+    { "logging_ui_cmd.file.property[1][@name]", "purgeCount" },
+    { "logging_ui_cmd.file.property[1]", "10" },
+    { "logging_ui_cmd.file.property[2][@name]", "rotateOnOpen" },
+    { "logging_ui_cmd.file.property[2]", "true" },
+    { "logging_ui_cmd.file.property[3][@name]", "flush" },
+    { "logging_ui_cmd.file.property[3]", "false" },
+    { "logging_ui_cmd.file[@enable]", "false" },
+    { "logging_ui_cmd.merge", "true" },
+    { "logging_ui_cmd.merge_display_end_time", "false" },
+    { "ssl.ssl_verification", SSL_VERIFY },
+    { "trace_event.path", COOLWSD_TRACEEVENTFILE },
+    { "trace_event[@enable]", "false" },
+};
+
+static Util::UnorderedStringMap<std::string> buildDefaultAppConfig()
+{
+    Util::UnorderedStringMap<std::string> config = DefAppConfig;
+    config.emplace("accessibility.enable", Util::isMobileApp() ? "true" : "false");
+    if (!Util::isMobileApp())
+        config.insert(DefServerConfig.begin(), DefServerConfig.end());
+    else
+    {
+        // The embedded app talks to its own kit over a loopback connection that carries no
+        // certificate, so it serves plain HTTP.
+        config.insert_or_assign("ssl.enable", "false");
+        config.insert_or_assign("ssl.termination", "false");
+    }
+    return config;
+}
+
 void initialize(const Poco::Util::AbstractConfiguration* config)
 {
     assert(config && "Cannot initialize with invalid config instance");
-#if !MOBILEAPP
-    assert(!Config && "Config is already initialized.");
-#else
-    // The apps run a fresh COOLWSD in a loop, each with its own configuration
-    // that dies with it. Adopt the current run's rather than leaving Config
-    // dangling at the previous run's.
-#endif
+    // The apps run a fresh COOLWSD in a loop, each with its own configuration that dies with it.
+    // Adopt the current run's rather than leaving Config dangling at the previous run's.
+    assert((Util::isMobileApp() || !Config) && "Config is already initialized.");
     Config = config;
 
 #if ENABLE_SSL
@@ -366,14 +359,12 @@ void initialize(const std::string& xml)
     initialize(XmlConfig);
 }
 
-#ifdef BUILDING_TESTS
 const Poco::Util::AbstractConfiguration* setConfigForTest(const Poco::Util::AbstractConfiguration* config)
 {
     const Poco::Util::AbstractConfiguration* previous = Config;
     Config = config;
     return previous;
 }
-#endif
 
 void initializeFromFile(const std::string& filename)
 {
@@ -391,7 +382,11 @@ void initializeFromFile(const std::string& filename)
 
 bool isInitialized() { return Config != nullptr; }
 
-const Util::UnorderedStringMap<std::string>& getDefaultAppConfig() { return DefAppConfig; }
+const Util::UnorderedStringMap<std::string>& getDefaultAppConfig()
+{
+    static const Util::UnorderedStringMap<std::string> config = buildDefaultAppConfig();
+    return config;
+}
 
 /// Recursively extract the sub-keys of the given parent key.
 static void extract(const std::string& parentKey, const Poco::Util::AbstractConfiguration& config,
@@ -427,6 +422,14 @@ std::map<std::string, std::string> extractAll(const Poco::Util::AbstractConfigur
     config.keys(keys);
     for (const std::string& key : keys)
     {
+        // extract() only records a key's children, so a top-level leaf with
+        // no children of its own (e.g. server_name) would never be recorded
+        // by the loop below.
+        std::vector<std::string> childKeys;
+        config.keys(key, childKeys);
+        if (childKeys.empty() && config.has(key))
+            map.emplace(key, getConfigValue(config, key, std::string()));
+
         extract(key, config, map);
     }
 
@@ -462,8 +465,9 @@ std::string getLoggableConfig(const Poco::Util::AbstractConfiguration& config)
     std::ostringstream ossConfig;
     for (const auto& pair : allConfigs)
     {
-        const auto it = DefAppConfig.find(pair.first);
-        if (it == DefAppConfig.end() || it->second != pair.second)
+        const auto& defAppConfig = getDefaultAppConfig();
+        const auto it = defAppConfig.find(pair.first);
+        if (it == defAppConfig.end() || it->second != pair.second)
         {
             if (pair.first == "admin_console.username" || pair.first == "admin_console.password" ||
                 pair.first == "admin_console.secure_password" ||
@@ -486,9 +490,7 @@ std::string getLoggableConfig(const Poco::Util::AbstractConfiguration& config)
 
 std::string getString(const std::string& key, const std::string& def)
 {
-#if !MOBILEAPP
-    assert(Config && "Config is not initialized.");
-#endif
+    assert((Util::isMobileApp() || Config) && "Config is not initialized.");
     return (Config != nullptr) ? Config->getString(key, def) : def;
 }
 
@@ -499,33 +501,71 @@ bool getBool(const std::string& key, const bool def)
         return def;
     }
 
-#if !MOBILEAPP
-    assert(Config && "Config is not initialized.");
-#endif
+    assert((Util::isMobileApp() || Config) && "Config is not initialized.");
     return (Config != nullptr) ? Config->getBool(key, def) : def;
 }
 
 int getInt(const std::string& key, const int def)
 {
-#if !MOBILEAPP
-    assert(Config && "Config is not initialized.");
-#endif
+    assert((Util::isMobileApp() || Config) && "Config is not initialized.");
     return (Config != nullptr) ? Config->getInt(key, def) : def;
+}
+
+std::vector<std::string> getIndexedKeys(const Poco::Util::AbstractConfiguration& config,
+                                        const std::string& root, const std::string& element)
+{
+    Poco::Util::AbstractConfiguration::Keys keys;
+    config.keys(root, keys);
+
+    std::vector<std::pair<std::size_t, std::string>> indexed;
+    for (const std::string& key : keys)
+    {
+        std::size_t index = 0;
+        if (key != element)
+        {
+            // element[N]
+            if (key.size() <= element.size() + 2 || key.compare(0, element.size(), element) != 0 ||
+                key[element.size()] != '[' || key.back() != ']')
+                continue;
+
+            const std::string number = key.substr(element.size() + 1, key.size() - element.size() - 2);
+            if (number.empty() ||
+                number.find_first_not_of("0123456789") != std::string::npos)
+                continue;
+
+            index = std::stoul(number);
+        }
+
+        indexed.emplace_back(index, root + '.' + key);
+    }
+
+    std::sort(indexed.begin(), indexed.end());
+
+    std::vector<std::string> paths;
+    paths.reserve(indexed.size());
+    for (std::pair<std::size_t, std::string>& entry : indexed)
+        paths.push_back(std::move(entry.second));
+
+    return paths;
+}
+
+std::vector<std::string> getIndexedKeys(const std::string& root, const std::string& element)
+{
+    if (Config == nullptr)
+        return std::vector<std::string>();
+
+    return getIndexedKeys(*Config, root, element);
 }
 
 bool has(const std::string& key)
 {
-#if !MOBILEAPP
-    assert(Config && "Config is not initialized.");
-#endif
+    assert((Util::isMobileApp() || Config) && "Config is not initialized.");
     return (Config != nullptr) ? Config->has(key) : false;
 }
 
 bool hasProperty(const std::string& key)
 {
-#if !MOBILEAPP
-    assert(Config && "Config is not initialized.");
-#endif
+    assert((Util::isMobileApp() || Config) && "Config is not initialized.");
     return (Config != nullptr) ? Config->hasProperty(key) : false;
 }
 

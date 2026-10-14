@@ -81,7 +81,7 @@ OString lclImageToDataUrl(const Image& rImage)
 // already an SVG, such as a gallery bullet icon, has its original bytes written
 // unchanged; a drawn graphic such as a metafile symbol is exported to SVG.
 // The client renders the result crisply at any size instead of a fixed bitmap.
-OString lclGraphicToSvgDataUrl(const css::uno::Reference<css::graphic::XGraphic>& rGraphic)
+OString lclGraphicToSvgDataUrl(const cpo::uno::Reference<css::graphic::XGraphic>& rGraphic)
 {
     if (!rGraphic.is())
         return OString();
@@ -141,8 +141,6 @@ void MenuButton::ImplInit( vcl::Window* pParent, WinBits nStyle )
 void MenuButton::ExecuteMenu()
 {
     mbStartingMenu = true;
-
-    PrepareExecute();
 
     if (!mpMenu && !mpFloatingWindow)
     {
@@ -325,6 +323,15 @@ void MenuButton::SetCurItemId(){
 void MenuButton::DumpAsPropertyTree(tools::JsonWriter& rJsonWriter)
 {
     PushButton::DumpAsPropertyTree(rJsonWriter);
+
+    // The end of the button that its content sits at, as the .ui file asked for it. Only an
+    // explicit left or right is written out. Content that sits in the middle is the absence
+    // of the property.
+    const WinBits nStyle = GetStyle();
+    if (nStyle & WB_LEFT)
+        rJsonWriter.put("xalign", "left");
+    else if (nStyle & WB_RIGHT)
+        rJsonWriter.put("xalign", "right");
 
     if (mpMenu)
     {

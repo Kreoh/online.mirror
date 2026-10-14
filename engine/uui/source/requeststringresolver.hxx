@@ -21,7 +21,7 @@
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/task/XInteractionRequestStringResolver.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 #include "iahndl.hxx"
 
@@ -32,7 +32,7 @@ class UUIInteractionRequestStringResolver:
 {
 public:
     explicit UUIInteractionRequestStringResolver(
-        css::uno::Reference< css::uno::XComponentContext > const & rxContext);
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & rxContext);
 
 private:
     UUIInteractionHelper m_pImpl;
@@ -42,17 +42,17 @@ private:
 
     virtual ~UUIInteractionRequestStringResolver() override;
 
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL supportsService(OUString const &
+    virtual bool supportsService(OUString const &
                           rServiceName) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
-    virtual css::beans::Optional< OUString > SAL_CALL
+    virtual css::beans::Optional< OUString >
     getStringFromInformationalRequest(
-        const css::uno::Reference< css::task::XInteractionRequest >& Request ) override;
+        const cpo::uno::Reference< css::task::XInteractionRequest >& Request ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

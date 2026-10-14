@@ -58,6 +58,7 @@
 #include <dlfcn.h>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 constexpr const char* PROPERTY_LOCALE = "locale";
 
@@ -756,7 +757,7 @@ atk_object_wrapper_get_type()
 }
 
 static bool
-isOfType( uno::XInterface *pInterface, const cpo::uno::Type & rType )
+isOfType( cpo::uno::XInterface *pInterface, const cpo::uno::Type & rType )
 {
     g_return_val_if_fail( pInterface != nullptr, false );
 
@@ -774,7 +775,7 @@ isOfType( uno::XInterface *pInterface, const cpo::uno::Type & rType )
 // Whether AtkTableCell can be supported for the interface.
 // Returns true if the corresponding XAccessible has role TABLE_CELL
 // and an XAccessibleTable as parent.
-static bool isTableCell(uno::XInterface* pInterface)
+static bool isTableCell(cpo::uno::XInterface* pInterface)
 {
     g_return_val_if_fail(pInterface != nullptr, false);
 
@@ -782,23 +783,23 @@ static bool isTableCell(uno::XInterface* pInterface)
         auto aType = cppu::UnoType<accessibility::XAccessible>::get().getTypeLibType();
         cpo::uno::Any aAcc = pInterface->queryInterface(aType);
 
-        css::uno::Reference<css::accessibility::XAccessible> xAcc;
+        cpo::uno::Reference<css::accessibility::XAccessible> xAcc;
         aAcc >>= xAcc;
         if (!xAcc.is())
             return false;
 
-        css::uno::Reference<css::accessibility::XAccessibleContext> xContext = xAcc->getAccessibleContext();
+        cpo::uno::Reference<css::accessibility::XAccessibleContext> xContext = xAcc->getAccessibleContext();
         if (!xContext.is() || !(xContext->getAccessibleRole() == accessibility::AccessibleRole::TABLE_CELL))
             return false;
 
-        css::uno::Reference<css::accessibility::XAccessible> xParent = xContext->getAccessibleParent();
+        cpo::uno::Reference<css::accessibility::XAccessible> xParent = xContext->getAccessibleParent();
         if (!xParent.is())
             return false;
-        css::uno::Reference<css::accessibility::XAccessibleContext> xParentContext = xParent->getAccessibleContext();
+        cpo::uno::Reference<css::accessibility::XAccessibleContext> xParentContext = xParent->getAccessibleContext();
         if (!xParentContext.is())
             return false;
 
-        css::uno::Reference<css::accessibility::XAccessibleTable> xTable(xParentContext, uno::UNO_QUERY);
+        cpo::uno::Reference<css::accessibility::XAccessibleTable> xTable(xParentContext, uno::UNO_QUERY);
         return xTable.is();
     }
     catch(const cpo::uno::Exception &)
@@ -877,7 +878,7 @@ constexpr struct {
 const int aTypeTableSize = G_N_ELEMENTS( aTypeTable );
 
 static GType
-ensureTypeFor( uno::XInterface *pAccessible )
+ensureTypeFor( cpo::uno::XInterface *pAccessible )
 {
     int i;
     bool bTypes[ aTypeTableSize ] = { false, };
@@ -947,7 +948,7 @@ atk_object_wrapper_ref( const uno::Reference< accessibility::XAccessible > &rxAc
 }
 
 AtkObject *
-atk_object_wrapper_new( const css::uno::Reference< css::accessibility::XAccessible >& rxAccessible,
+atk_object_wrapper_new( const cpo::uno::Reference< css::accessibility::XAccessible >& rxAccessible,
                         AtkObject* parent, AtkObject* orig )
 {
     g_return_val_if_fail( bool(rxAccessible), nullptr );
@@ -1005,8 +1006,8 @@ atk_object_wrapper_new( const css::uno::Reference< css::accessibility::XAccessib
                 OSL_ASSERT( false );
         }
 
-        css::uno::Reference<css::accessibility::XAccessibleContext2> xContext2(xContext,
-                                                                               css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::accessibility::XAccessibleContext2> xContext2(xContext,
+                                                                               cpo::uno::UNO_QUERY);
         if (xContext2.is())
         {
             OString aId = OUStringToOString(xContext2->getAccessibleId(), RTL_TEXTENCODING_UTF8);

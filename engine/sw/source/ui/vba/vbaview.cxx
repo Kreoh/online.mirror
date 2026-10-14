@@ -45,11 +45,12 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 const sal_Int32 DEFAULT_BODY_DISTANCE = 500;
 
 SwVbaView::SwVbaView( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                      const uno::Reference< uno::XComponentContext >& rContext,
+                      const uno::Reference< cpo::uno::XComponentContext >& rContext,
                       rtl::Reference< SwXTextDocument > xModel ) :
     SwVbaView_BASE( rParent, rContext ), mxModel(std::move( xModel ))
 {
@@ -78,7 +79,7 @@ void SwVbaView::setShowAll(bool bSet)
     mxViewSettings->setPropertyValue(u"ShowNonprintingCharacters"_ustr, cpo::uno::Any(bSet));
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 SwVbaView::getSeekView()
 {
     // FIXME: if the view cursor is in table, field, section and frame
@@ -129,7 +130,7 @@ SwVbaView::getSeekView()
     return word::WdSeekView::wdSeekMainDocument;
 }
 
-void SAL_CALL
+void
 SwVbaView::setSeekView( ::sal_Int32 _seekview )
 {
     // FIXME: save the current cursor position, if the cursor is in the main
@@ -189,19 +190,19 @@ SwVbaView::setSeekView( ::sal_Int32 _seekview )
     }
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 SwVbaView::getSplitSpecial()
 {
     return word::WdSpecialPane::wdPaneNone;
 }
 
-void SAL_CALL
+void
 SwVbaView::setSplitSpecial( ::sal_Int32/* _splitspecial */)
 {
     // not support in Writer
 }
 
-bool SAL_CALL
+bool
 SwVbaView::getTableGridLines()
 {
     bool bShowTableGridLine = false;
@@ -209,13 +210,13 @@ SwVbaView::getTableGridLines()
     return bShowTableGridLine;
 }
 
-void SAL_CALL
+void
 SwVbaView::setTableGridLines( bool _tablegridlines )
 {
     mxViewSettings->setPropertyValue(u"ShowTableBoundaries"_ustr, cpo::uno::Any( _tablegridlines ) );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 SwVbaView::getType()
 {
     // FIXME: handle wdPrintPreview type
@@ -224,7 +225,7 @@ SwVbaView::getType()
     return bOnlineLayout ? word::WdViewType::wdWebView : word::WdViewType::wdPrintView;
 }
 
-void SAL_CALL
+void
 SwVbaView::setType( ::sal_Int32 _type )
 {
     // FIXME: handle wdPrintPreview type

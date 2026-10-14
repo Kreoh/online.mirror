@@ -69,9 +69,6 @@ namespace com::sun::star {
         class XVclWindowPeer;
         class XWindow;
     }
-    namespace uno {
-        class XInterface;
-    }
     namespace datatransfer {
         namespace clipboard {
             class XClipboard;
@@ -85,6 +82,7 @@ namespace com::sun::star {
     }
 }
 namespace cpo::uno { class Any; }
+namespace cpo::uno { class XInterface; }
 
 VCL_DLLPUBLIC Size bestmaxFrameSizeForScreenSize(const Size &rScreenSize);
 
@@ -173,13 +171,16 @@ struct ImplFrameData
     sal_Int32           mnTouchPanPositionX;
     sal_Int32           mnTouchPanPositionY;
 
-    css::uno::Reference< css::datatransfer::dnd::XDragSource > mxDragSource;
-    css::uno::Reference< css::datatransfer::dnd::XDropTarget > mxDropTarget;
+    cpo::uno::Reference< css::datatransfer::dnd::XDragSource > mxDragSource;
+    cpo::uno::Reference< css::datatransfer::dnd::XDropTarget > mxDropTarget;
     rtl::Reference< DNDEventDispatcher > mxDropTargetListener; // css::datatransfer::dnd::XDropTargetListener
-    css::uno::Reference< css::datatransfer::clipboard::XClipboard > mxClipboard;
+    cpo::uno::Reference< css::datatransfer::clipboard::XClipboard > mxClipboard;
 
     bool                mbInternalDragGestureRecognizer;
     bool                mbDragging;
+    /// The pointer of the mouse-down window before a kit drag set a drag pointer on it, or empty
+    /// while no kit drag pointer is set.
+    std::optional<PointerStyle> moPointerBeforeKitDrag;
     VclPtr<VirtualDevice> mpBuffer; ///< Buffer for the double-buffering
     bool mbInBufferedPaint; ///< PaintHelper is in the process of painting into this buffer.
     tools::Rectangle maBufferedRect; ///< Rectangle in the buffer that has to be painted to the screen.
@@ -284,7 +285,7 @@ public:
     OUString            maQuickHelpText;
     OUString            maID;
     InputContext        maInputContext;
-    css::uno::Reference< css::awt::XVclWindowPeer > mxWindowPeer;
+    cpo::uno::Reference< css::awt::XVclWindowPeer > mxWindowPeer;
     rtl::Reference<comphelper::OAccessible> mpAccessible;
     std::shared_ptr< VclSizeGroup > m_xSizeGroup;
     std::vector<VclPtr<FixedText>> m_aMnemonicLabels;

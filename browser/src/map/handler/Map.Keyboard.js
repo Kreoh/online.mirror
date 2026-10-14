@@ -7,7 +7,7 @@
  * at TextInput.
  */
 
-/* global app UNOKey RenderManager */
+/* global app UNOKey RenderManager GraphicSelection JSDialog URLPopUpSection */
 
 window.L.Map.mergeOptions({
 	keyboard: true,
@@ -315,12 +315,15 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		window.L.DomEvent.on(this._keyEventContainer, 'keydown keyup keypress', this._onKeyDown, this);
 		window.L.DomEvent.on(window.document, 'keydown', this._globalKeyEvent, this);
 		window.document.addEventListener('keyup', this._globalKeyUp.bind(this), true);
+		this._boundGlobalMouseDown = this._globalMouseDown.bind(this);
+		window.document.addEventListener('mousedown', this._boundGlobalMouseDown, true);
 	},
 
 	removeHooks: function () {
 		window.L.DomEvent.off(this._keyEventContainer, 'keydown keyup keypress', this._onKeyDown, this);
 		window.L.DomEvent.off(window.document, 'keydown', this._globalKeyEvent, this);
 		window.document.removeEventListener('keyup', this._globalKeyUp.bind(this));
+		window.document.removeEventListener('mousedown', this._boundGlobalMouseDown, true);
 	},
 
 	_ignoreKeyEvent: function(ev) {
@@ -377,16 +380,66 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			return false;
 
 		var preview = docLayer._preview;
-		return !!preview && (preview.partsFocused === true || preview.hasSlideFocus());
+		if (!preview)
+			return false;
+
+		// The slide the sorter marks keeps the keys while the focus rests on it, and it keeps
+		// them as well over a preview the sorter builds again, where the focus falls back to
+		// the body. The document takes them back as soon as its own input holds the focus.
+		if (this._map.hasFocus() || JSDialog.IsAnyInputFocused())
+			return false;
+
+		return preview.partsFocused === true || preview.hasSlideFocus();
+	},
+
+	_isNoModifier: function (ev) {
+		return !ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey;
+	},
+
+	_isShiftOnly: function (ev) {
+		return ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey;
+	},
+
+	_isNavigationKey: function (ev) {
+		return [
+			this.keyCodes.UP, this.keyCodes.DOWN,
+			this.keyCodes.LEFT, this.keyCodes.RIGHT,
+			this.keyCodes.PAGEUP, this.keyCodes.PAGEDOWN,
+			this.keyCodes.HOME, this.keyCodes.END
+		].includes(ev.keyCode);
+	},
+
+	_isSlideSorterDeleteKey: function (ev) {
+		return [this.keyCodes.DELETE, this.keyCodes.BACKSPACE].includes(ev.keyCode);
 	},
 
 	_isSlideSorterKey: function (ev) {
-		var codes = this.keyCodes;
-		return ev.keyCode === codes.DOWN || ev.keyCode === codes.UP ||
-		       ev.keyCode === codes.RIGHT || ev.keyCode === codes.LEFT ||
-		       ev.keyCode === codes.PAGEDOWN || ev.keyCode === codes.PAGEUP ||
-		       ev.keyCode === codes.DELETE || ev.keyCode === codes.BACKSPACE ||
-		       ev.keyCode === codes.HOME || ev.keyCode === codes.END;
+		return this._isNavigationKey(ev) || this._isSlideSorterDeleteKey(ev);
+	},
+
+	_isRangeExtendKeystroke: function (ev) {
+		return this._isShiftOnly(ev) && [
+			this.keyCodes.UP, this.keyCodes.DOWN,
+			this.keyCodes.HOME, this.keyCodes.END
+		].includes(ev.keyCode);
+	},
+
+	// _isMasterViewObjectKey - master view swallows keys so that its text
+	// cannot be typed into, but the keys that act on the selected object
+	// itself have to get through. Delete and Backspace remove the selected
+	// shape; they are posted from TextInput's 'beforeinput' handler, so all
+	// they need here is to escape the preventDefault() that would stop the
+	// text area from ever emitting that event.
+	_isMasterViewObjectKey: function (ev) {
+		if (ev.keyCode !== this.keyCodes.DELETE && ev.keyCode !== this.keyCodes.BACKSPACE)
+			return false;
+
+		// With a text cursor up these delete characters instead of the
+		// object, which is the text editing master view keeps out.
+		if (app.file.textCursor.visible)
+			return false;
+
+		return GraphicSelection.hasActiveSelection();
 	},
 
 	// _onKeyDown - called only as a DOM event handler
@@ -396,6 +449,11 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 	// printable characters. Those are handled by TextInput.js.
 	_onKeyDown: function (ev) {
 		if (this._map.uiManager.isUIBlocked() || this._slideSorterFocused())
+			return;
+
+		// the link popup's own controls, not the document
+		if (URLPopUpSection.isOpen()
+			&& URLPopUpSection.getCurrent().getHTMLObject().contains(ev.target))
 			return;
 
 		if (this._map._debug.logKeyboardEvents) {
@@ -428,6 +486,18 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 
 		if (app.UI.compactViewAccessibility) {
 			app.UI.compactViewAccessibility.onDocumentKeyDown(ev);
+		}
+	},
+
+	// _globalMouseDown - lets the accessibility helpers of both user interfaces
+	// record that a mouse button went down. The event itself is left untouched.
+	_globalMouseDown: function() {
+		if (app.UI.notebookbarAccessibility) {
+			app.UI.notebookbarAccessibility.onDocumentMouseDown();
+		}
+
+		if (app.UI.compactViewAccessibility) {
+			app.UI.compactViewAccessibility.onDocumentMouseDown();
 		}
 	},
 
@@ -473,91 +543,131 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		}
 
 		if (this._slideSorterFocused()) {
-			if (ev.shiftKey && !ev.ctrlKey && !ev.altKey
-				&& (ev.keyCode === this.keyCodes.DOWN || ev.keyCode === this.keyCodes.UP || ev.keyCode === this.keyCodes.HOME || ev.keyCode === this.keyCodes.END)
-				&& ev.type === 'keydown') {
-
-				if (ev.keyCode === this.keyCodes.UP)
-					this._map._docLayer._preview._modifySelectedPartRange("UP");
-				else if (ev.keyCode === this.keyCodes.DOWN)
-					this._map._docLayer._preview._modifySelectedPartRange("DOWN");
-				else if (ev.keyCode === this.keyCodes.HOME)
-					this._map._docLayer._preview._selectPartRange(undefined, 0);
-				else if (ev.keyCode === this.keyCodes.END)
-					this._map._docLayer._preview._selectPartRange(undefined, this._map._docLayer._parts - 1);
-
-				ev.preventDefault();
-			}
-
-			// this.modifier belongs to _onKeyDown, which never runs while the
-			// sorter has the focus, so it would hold whatever the document
-			// last saw. Read the modifiers off this event instead.
-			else if (!ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey
-				           && this._isSlideSorterKey(ev)
-				           && ev.type === 'keydown') {
-
-				var deletePart = (ev.keyCode === this.keyCodes.DELETE || ev.keyCode === this.keyCodes.BACKSPACE) ? true : false;
-
-				if (!deletePart) {
-					if (ev.keyCode === this.keyCodes.HOME) {
-						this._map.deselectAll();
-						this._map.setPart(0);
-					} else if (ev.keyCode === this.keyCodes.END) {
-						this._map.deselectAll();
-						this._map.setPart(this._map._docLayer._parts - 1);
-					} else {
-						var partToSelect = (ev.keyCode === this.keyCodes.UP || ev.keyCode === this.keyCodes.LEFT ||
-										ev.keyCode === this.keyCodes.PAGEUP) ? 'prev' : 'next';
-
-						this._map.deselectAll();
-						this._map.setPart(partToSelect);
-					}
-				}
-				else if (this._map.isEditMode() && !app.file.fileBasedView &&
-						this._map.jsdialog &&
-						!this._map.jsdialog.hasDialogOpened()
-				) {
-					this._map.deletePage(this._map._docLayer._selectedPart);
-				}
-				ev.preventDefault();
-			}
-			else if (ev.ctrlKey && !ev.altKey && ev.keyCode === this.keyCodes.HOME)
-				app.map.setPart(0);
-			else if (ev.ctrlKey && !ev.altKey && ev.keyCode === this.keyCodes.END)
-				app.map.setPart(app.map._docLayer._parts - 1);
-			else if (ev.ctrlKey && !ev.altKey && this.keyCodes.C.includes(ev.keyCode)) {
-				app.map._clip.clearSelection();
-				app.map._clip.setTextSelectionType('slide');
-			}
-			else if (this._isCtrlKey(ev) && !ev.altKey
-				&& (ev.keyCode === this.keyCodes.Y || (ev.shiftKey && ev.keyCode === this.keyCodes.Z))) {
-				app.socket.sendMessage('uno .uno:Redo');
-				ev.preventDefault();
-			}
-			else if (this._isCtrlKey(ev) && !ev.altKey && ev.keyCode === this.keyCodes.Z) {
-				app.socket.sendMessage('uno .uno:Undo');
-				ev.preventDefault();
-			}
-			else if (!ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey
-				&& ev.keyCode === this.keyCodes.enter && ev.type === 'keydown') {
-				if (this._map.isEditMode() && !app.file.fileBasedView &&
-					this._map.jsdialog && !this._map.jsdialog.hasDialogOpened()) {
-					this._map.insertPage();
-				}
-				ev.preventDefault();
-			}
-			else if (!ev.ctrlKey && !ev.shiftKey) {
-				if (ev.key === 'Meta' || ev.key === 'Alt' ||
-				    ev.key === 'AltGraph' || ev.key === 'CapsLock' ||
-				    ev.key === 'NumLock')
-					return;
-				if (this._isSlideSorterKey(ev))
-					return;
-				this._map._docLayer._preview.partsFocused = false;
-				app.map._clip.clearSelection();
-				app.map.focus();
-			}
+			this._handleSlideSorterKey(ev);
 		}
+	},
+
+	// _handleSlideSorterKey - acts on the slides the sorter shows: the range of selected
+	// slides, which slide is the current one, inserting a slide and deleting one, undo and
+	// redo, and the keys that hand the focus back to the document.
+	_handleSlideSorterKey: function (ev) {
+		if (this._isRangeExtendKeystroke(ev) && ev.type === 'keydown') {
+			this._extendPartRange(ev);
+		}
+
+		// this.modifier belongs to _onKeyDown, which never runs while the
+		// sorter has the focus, so it would hold whatever the document
+		// last saw. Read the modifiers off this event instead.
+		else if (this._isNoModifier(ev)
+			&& this._isSlideSorterKey(ev)
+			&& ev.type === 'keydown') {
+			this._selectOrDeletePart(ev);
+		}
+		else if (ev.ctrlKey && !ev.altKey && ev.keyCode === this.keyCodes.HOME)
+			app.map.setPart(0);
+		else if (ev.ctrlKey && !ev.altKey && ev.keyCode === this.keyCodes.END)
+			app.map.setPart(app.map._docLayer._parts - 1);
+		else if (ev.ctrlKey && !ev.altKey && this.keyCodes.C.includes(ev.keyCode)) {
+			app.map._clip.clearSelection();
+			app.map._clip.setTextSelectionType('slide');
+		}
+		else if (this._isCtrlKey(ev) && !ev.altKey
+			&& (ev.keyCode === this.keyCodes.Y || (ev.shiftKey && ev.keyCode === this.keyCodes.Z))) {
+			app.socket.sendMessage('uno .uno:Redo');
+			ev.preventDefault();
+		}
+		else if (this._isCtrlKey(ev) && !ev.altKey && ev.keyCode === this.keyCodes.Z) {
+			app.socket.sendMessage('uno .uno:Undo');
+			ev.preventDefault();
+		}
+		else if (this._isNoModifier(ev)
+			&& ev.keyCode === this.keyCodes.enter && ev.type === 'keydown') {
+			this._insertPart(ev);
+		}
+		else if (!ev.ctrlKey && !ev.shiftKey) {
+			this._leaveSlideSorter(ev);
+		}
+	},
+
+	// _extendPartRange - grows the range of selected parts towards the key that was pressed,
+	// or out to the first or the last part.
+	_extendPartRange: function (ev) {
+		if (ev.keyCode === this.keyCodes.UP)
+			this._map._docLayer._preview._modifySelectedPartRange("UP");
+		else if (ev.keyCode === this.keyCodes.DOWN)
+			this._map._docLayer._preview._modifySelectedPartRange("DOWN");
+		else if (ev.keyCode === this.keyCodes.HOME)
+			this._map._docLayer._preview._selectPartRange(undefined, 0);
+		else if (ev.keyCode === this.keyCodes.END)
+			this._map._docLayer._preview._selectPartRange(undefined, this._map._docLayer._parts - 1);
+
+		ev.preventDefault();
+	},
+
+	// _selectOrDeletePart - the key either moves the selection to another part or deletes the
+	// selected one. Either way the key belongs to the sorter and the browser does not see it.
+	_selectOrDeletePart: function (ev) {
+		if (this._isSlideSorterDeleteKey(ev))
+			this._deleteSelectedPart();
+		else
+			this._selectPartForKey(ev);
+
+		ev.preventDefault();
+	},
+
+	// _selectPartForKey - makes another part the selected one: the first for Home, the last
+	// for End, and the one before or after for the arrows and the page keys.
+	_selectPartForKey: function (ev) {
+		if (ev.keyCode === this.keyCodes.HOME) {
+			this._map.deselectAll();
+			this._map.setPart(0);
+		} else if (ev.keyCode === this.keyCodes.END) {
+			this._map.deselectAll();
+			this._map.setPart(this._map._docLayer._parts - 1);
+		} else {
+			var partToSelect = (ev.keyCode === this.keyCodes.UP || ev.keyCode === this.keyCodes.LEFT ||
+							ev.keyCode === this.keyCodes.PAGEUP) ? 'prev' : 'next';
+
+			this._map.deselectAll();
+			this._map.setPart(partToSelect);
+		}
+	},
+
+	// _deleteSelectedPart - removes the selected part, in the cases where that is allowed: the
+	// document is being edited, it is not the view that shows every page at once, and no dialog
+	// is in the way.
+	_deleteSelectedPart: function () {
+		if (this._map.isEditMode() && !app.file.fileBasedView &&
+				this._map.jsdialog &&
+				!this._map.jsdialog.hasDialogOpened()
+		) {
+			app.dispatcher.dispatch('deletepage');
+		}
+	},
+
+	// _insertPart - adds a part after the selected one, in the same cases where deleting one is
+	// allowed.
+	_insertPart: function (ev) {
+		if (this._map.isEditMode() && !app.file.fileBasedView &&
+			this._map.jsdialog && !this._map.jsdialog.hasDialogOpened()) {
+			this._map.insertPage();
+		}
+		ev.preventDefault();
+	},
+
+	// _leaveSlideSorter - hands the focus back to the document. A key that only names a
+	// modifier leaves the focus where it is, because the user is part way through a
+	// combination, and so does a key the sorter acts on itself.
+	_leaveSlideSorter: function (ev) {
+		if (ev.key === 'Meta' || ev.key === 'Alt' ||
+		    ev.key === 'AltGraph' || ev.key === 'CapsLock' ||
+		    ev.key === 'NumLock')
+			return;
+		if (this._isSlideSorterKey(ev))
+			return;
+		this._map._docLayer._preview.partsFocused = false;
+		app.map._clip.clearSelection();
+		app.map.focus();
 	},
 
 	_globalKeyUp: function (ev) {
@@ -596,7 +706,31 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		var docLayer = this._map._docLayer;
 
 		// if any key is pressed, we stop the following other users
-		if (docLayer) this._map.userList.followUser(docLayer._viewId, false);
+		if (docLayer && !window.mode.isInteractivePreview()) this._map.userList.followUser(docLayer._viewId, false);
+
+		// The handles of a selection are traveled and moved with the keyboard, the way the
+		// office does it, while the document is drawn from objects. A key used up there is not
+		// sent on, or the document would travel a handle of its own beside it.
+		if (ev.type === 'keydown' && GraphicSelection.handleKeyboard(ev)) {
+			ev.preventDefault();
+			return;
+		}
+
+		// A drag that is under way is called off by Escape, as it is in the office. The key
+		// travels on to the document, which breaks the drag it runs of its own.
+		if (ev.type === 'keydown' && ev.keyCode === 27 && app.sectionContainer
+			&& app.sectionContainer.isDraggingSomething()) {
+			const mouseControl = app.sectionContainer.getSectionWithName(app.CSections.MouseControl.name);
+			const documentDrags = mouseControl && mouseControl.startedDocumentDrag();
+
+			app.sectionContainer.cancelDragging();
+
+			// The document breaks a drag of its own on this key. Where it has none, because the
+			// client drew the whole drag, the key would drop the selection instead, and a
+			// canceled drag is no reason to lose it.
+			if (!documentDrags)
+				return;
+		}
 
 		if (window.KeyboardShortcuts.processEvent(app.UI.language.fromURL, ev)) {
 			ev.shortCutActivated = true;
@@ -617,6 +751,22 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 					keyEventFn('input', 0, UNOKey.CONTEXTMENU);
 				else if (ev.type === 'keyup')
 					keyEventFn('up', 0, UNOKey.CONTEXTMENU);
+			}
+			ev.preventDefault();
+			return;
+		}
+
+		// On macOS, Cmd+Backspace deletes back to the start of the line. The document
+		// core has no such mode for a plain Backspace with a modifier, but it does have
+		// a dedicated key for deleting back to the start of the paragraph, so send that
+		// instead of Backspace+Ctrl, which would only delete the previous word.
+		if ((window.ThisIsTheiOSApp || window.L.Browser.mac) && !ev.shiftKey && !ev.altKey
+			&& (ev.ctrlKey || ev.metaKey) && ev.keyCode === this.keyCodes.BACKSPACE) {
+			if (keyEventFn) {
+				if (ev.type === 'keydown')
+					keyEventFn('input', 0, UNOKey.DELETE_TO_BEGIN_OF_PARAGRAPH);
+				else if (ev.type === 'keyup')
+					keyEventFn('up', 0, UNOKey.DELETE_TO_BEGIN_OF_PARAGRAPH);
 			}
 			ev.preventDefault();
 			return;
@@ -662,6 +812,15 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		var charCode = ev.charCode;
 		var keyCode = ev.keyCode;
 
+		if ((window.ThisIsTheiOSApp || window.L.Browser.mac) &&
+		    keyCode === this.keyCodes.BACKSPACE && this.modifier === app.UNOModifier.ALT) {
+			// On macOS, Option+Backspace is the system word-delete shortcut. The document
+			// core has no delete binding for Alt+Backspace (that combination is reserved
+			// there as an Undo accelerator this key event never reaches), but Ctrl+Backspace
+			// already deletes the previous word, so send that modifier instead.
+			this.modifier = app.UNOModifier.CTRL;
+		}
+
 		var DEFAULT =0;
 		//var MAC=1; use this when you encounter a MAC value
 
@@ -674,6 +833,11 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		}
 
 		var unoKeyCode = this._toUNOKeyCode(keyCode);
+
+		// A key that types "+" is the ADD key for the document core, as on the desktop. On many
+		// layouts "+" shares a key with "=" and reports the same keyCode, so check the character.
+		if (ev.key === '+')
+			unoKeyCode = UNOKey.ADD;
 
 		if (this.modifier) {
 			unoKeyCode |= this.modifier;
@@ -692,7 +856,8 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		}
 
 		if (this._map.stateChangeHandler._items['.uno:SlideMasterPage'] === 'true') {
-			ev.preventDefault();
+			if (!this._isMasterViewObjectKey(ev))
+				ev.preventDefault();
 			return;
 		}
 
@@ -918,18 +1083,9 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			// Ctrl + Alt
 			if (!e.shiftKey) {
 				switch (e.keyCode) {
-				case this.keyCodes.NUM5[DEFAULT]: // 5
-					app.socket.sendMessage('uno .uno:Strikeout');
-					return true;
-				case this.keyCodes.F: // f but according to value it is F so I guess it is not MAC so safe to Give F
-					app.socket.sendMessage('uno .uno:InsertFootnote');
-					return true;
 				case this.keyCodes.C[DEFAULT]: // c
 				case this.keyCodes.M: // m
 					this._map.insertComment();
-					return true;
-				case this.keyCodes.D: // d
-					app.socket.sendMessage('uno .uno:InsertEndnote');
 					return true;
 				case this.keyCodes.pageUp:
 				case this.keyCodes.pageDown :

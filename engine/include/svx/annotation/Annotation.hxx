@@ -87,6 +87,8 @@ struct SVXCORE_DLLPUBLIC AnnotationData
     OUString m_Author;
     OUString m_Initials;
     css::util::DateTime m_DateTime;
+    /// See Annotation::m_DateTimeUTC.
+    css::util::DateTime m_DateTimeUTC;
     OUString m_Text;
 
     /// Threaded-comment participation. Set by filters that support
@@ -113,7 +115,7 @@ class SVXCORE_DLLPUBLIC Annotation
       public ::cppu::PropertySetMixin<css::office::XAnnotation>
 {
 private:
-    css::uno::Reference<css::text::XText> getTextRangeImpl(const std::unique_lock<std::mutex>& g);
+    cpo::uno::Reference<css::text::XText> getTextRangeImpl(const std::unique_lock<std::mutex>& g);
     OUString GetTextImpl(const std::unique_lock<std::mutex>& g);
     void SetTextImpl(OUString const& rText, const std::unique_lock<std::mutex>& g);
 
@@ -126,6 +128,9 @@ protected:
     OUString m_Author;
     OUString m_Initials;
     css::util::DateTime m_DateTime;
+    /// The same moment in UTC. m_DateTime alone is a wall clock with no zone, so this is what
+    /// pins the annotation to a point in time. A year of zero means none is recorded.
+    css::util::DateTime m_DateTimeUTC;
     rtl::Reference<sdr::annotation::TextApiObject> m_TextRange;
 
     CreationInfo maCreationInfo;
@@ -144,17 +149,17 @@ protected:
     std::unique_ptr<SdrUndoAction> createUndoAnnotation();
 
 public:
-    Annotation(const css::uno::Reference<css::uno::XComponentContext>& context, SdrPage* pPage);
+    Annotation(const cpo::uno::Reference<cpo::uno::XComponentContext>& context, SdrPage* pPage);
     Annotation(const Annotation&) = delete;
     Annotation& operator=(const Annotation&) = delete;
 
     // XInterface:
-    virtual cpo::uno::Any SAL_CALL queryInterface(cpo::uno::Type const& type) override;
-    virtual void SAL_CALL acquire() noexcept override
+    virtual cpo::uno::Any queryInterface(cpo::uno::Type const& type) override;
+    virtual void acquire() noexcept override
     {
         comphelper::WeakComponentImplHelper<css::office::XAnnotation>::acquire();
     }
-    virtual void SAL_CALL release() noexcept override
+    virtual void release() noexcept override
     {
         comphelper::WeakComponentImplHelper<css::office::XAnnotation>::release();
     }
@@ -163,7 +168,7 @@ public:
     void SetPosition(const css::geometry::RealPoint2D& rValue);
     void SetSize(const css::geometry::RealSize2D& rValue);
 
-    virtual css::uno::Reference<css::text::XText> SAL_CALL getTextRange() override;
+    virtual cpo::uno::Reference<css::text::XText> getTextRange() override;
 
     // override WeakComponentImplHelperBase::disposing()
     // This function is called upon disposing the component,

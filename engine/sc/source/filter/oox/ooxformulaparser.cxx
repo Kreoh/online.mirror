@@ -25,14 +25,14 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <formulaparser.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace oox::xls {
 
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sheet;
 using namespace ::com::sun::star::table;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 class OOXMLFormulaParserImpl : private FormulaFinalizer
@@ -108,24 +108,24 @@ OOXMLFormulaParser::~OOXMLFormulaParser()
 }
 
 // com.sun.star.lang.XServiceInfo interface -----------------------------------
-OUString SAL_CALL OOXMLFormulaParser::getImplementationName()
+OUString OOXMLFormulaParser::getImplementationName()
 {
     return u"com.sun.star.comp.oox.xls.FormulaParser"_ustr;
 }
 
-bool SAL_CALL OOXMLFormulaParser::supportsService( const OUString& rService )
+bool OOXMLFormulaParser::supportsService( const OUString& rService )
 {
     return cppu::supportsService(this, rService);
 }
 
-Sequence< OUString > SAL_CALL OOXMLFormulaParser::getSupportedServiceNames()
+Sequence< OUString > OOXMLFormulaParser::getSupportedServiceNames()
 {
     return { u"com.sun.star.sheet.FilterFormulaParser"_ustr };
 }
 
 // com.sun.star.lang.XInitialization interface --------------------------------
 
-void SAL_CALL OOXMLFormulaParser::initialize( const Sequence< Any >& rArgs )
+void OOXMLFormulaParser::initialize( const Sequence< Any >& rArgs )
 {
     OSL_ENSURE( rArgs.hasElements(), "OOXMLFormulaParser::initialize - missing arguments" );
     if( !rArgs.hasElements() )
@@ -135,14 +135,14 @@ void SAL_CALL OOXMLFormulaParser::initialize( const Sequence< Any >& rArgs )
 
 // com.sun.star.sheet.XFilterFormulaParser interface --------------------------
 
-OUString SAL_CALL OOXMLFormulaParser::getSupportedNamespace()
+OUString OOXMLFormulaParser::getSupportedNamespace()
 {
     return u"http://schemas.microsoft.com/office/excel/formula"_ustr;
 }
 
 // com.sun.star.sheet.XFormulaParser interface --------------------------------
 
-Sequence< FormulaToken > SAL_CALL OOXMLFormulaParser::parseFormula(
+Sequence< FormulaToken > OOXMLFormulaParser::parseFormula(
         const OUString& rFormula, const CellAddress& rReferencePos )
 {
     if( !mxParserImpl )
@@ -154,7 +154,7 @@ Sequence< FormulaToken > SAL_CALL OOXMLFormulaParser::parseFormula(
                                        ScAddress(rReferencePos.Column, rReferencePos.Row, rReferencePos.Sheet) );
 }
 
-OUString SAL_CALL OOXMLFormulaParser::printFormula(
+OUString OOXMLFormulaParser::printFormula(
         const Sequence< FormulaToken >& /*rTokens*/, const CellAddress& /*rReferencePos*/ )
 {
     // not implemented
@@ -164,8 +164,8 @@ OUString SAL_CALL OOXMLFormulaParser::printFormula(
 } // namespace oox::xls
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_oox_xls_FormulaParser_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_oox_xls_FormulaParser_get_implementation(cpo::uno::XComponentContext*,
                                                            cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new oox::xls::OOXMLFormulaParser());

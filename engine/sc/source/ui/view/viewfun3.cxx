@@ -75,6 +75,7 @@
 #include <COKit/COKit.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -701,12 +702,28 @@ void ScViewFunc::PasteDraw()
     }
 }
 
+/// Whether the HTML on the clipboard holds an image.
+static bool lcl_HtmlHasImage(const TransferableDataHelper& rDataHelper)
+{
+    std::unique_ptr<SvStream> xStream = rDataHelper.GetSotStorageStream(SotClipboardFormatId::HTML);
+    if (!xStream)
+        return false;
+
+    OStringBuffer aLine;
+    while (xStream->ReadLine(aLine))
+    {
+        if (std::string_view(aLine).find("<img") != std::string_view::npos)
+            return true;
+    }
+    return false;
+}
+
 void ScViewFunc::PasteFromSystem(bool useSavedPrefs)
 {
     UpdateInputLine();
 
     vcl::Window* pWin = GetActiveWin();
-    css::uno::Reference<css::datatransfer::XTransferable2> xTransferable2(ScTabViewShell::GetClipData(pWin));
+    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable2(ScTabViewShell::GetClipData(pWin));
     const ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard(xTransferable2);
     // keep a reference in case the clipboard is changed during PasteFromClip
     const ScDrawTransferObj* pDrawClip = ScDrawTransferObj::GetOwnClipboard(xTransferable2);
@@ -720,7 +737,8 @@ void ScViewFunc::PasteFromSystem(bool useSavedPrefs)
         PasteDraw();
     else
     {
-        TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( pWin ) );
+        TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard(
+            pWin, DownloadRemoteContent::Yes ) );
 
         {
             SotClipboardFormatId nBiff12= SotExchange::RegisterFormatName(u"Biff12"_ustr);
@@ -795,7 +813,11 @@ void ScViewFunc::PasteFromSystem(bool useSavedPrefs)
                                      aObjDesc.maClassName == SvGlobalName( SO3_SWWEB_CLASSID ) )
                                    && ( aDataHelper.HasFormat( SotClipboardFormatId::RTF ) || aDataHelper.HasFormat( SotClipboardFormatId::RICHTEXT ) ) );
                     }
-                    if ( bDoRtf )
+                    // The RTF import skips images, the HTML import inserts them.
+                    if (bDoRtf && aDataHelper.HasFormat(SotClipboardFormatId::HTML)
+                        && lcl_HtmlHasImage(aDataHelper))
+                        PasteFromSystem(SotClipboardFormatId::HTML, false, useSavedPrefs);
+                    else if (bDoRtf)
                         PasteFromSystem( aDataHelper.HasFormat( SotClipboardFormatId::RTF ) ? SotClipboardFormatId::RTF : SotClipboardFormatId::RICHTEXT );
                     else if ( aObjDesc.maClassName == SvGlobalName( 0,0,0,0,0,0,0,0,0,0,0 )
                               && aDataHelper.HasFormat( SotClipboardFormatId::SYLK ))
@@ -825,14 +847,14 @@ void ScViewFunc::PasteFromSystem(bool useSavedPrefs)
                     PasteFromSystem(SotClipboardFormatId::BITMAP);
                 else if (aDataHelper.HasFormat(SotClipboardFormatId::HTML_SIMPLE))
                     PasteFromSystem(SotClipboardFormatId::HTML_SIMPLE);
-                else if (aDataHelper.HasFormat(SotClipboardFormatId::MARKDOWN))
-                    PasteFromSystem(SotClipboardFormatId::MARKDOWN);
                 else if (aDataHelper.HasFormat(SotClipboardFormatId::SYLK))
                     PasteFromSystem(SotClipboardFormatId::SYLK);
                 else if (aDataHelper.HasFormat(SotClipboardFormatId::STRING_TSVC))
                     PasteFromSystem(SotClipboardFormatId::STRING_TSVC);
                 else if (aDataHelper.HasFormat(SotClipboardFormatId::STRING))
                     PasteFromSystem(SotClipboardFormatId::STRING);
+                else if (aDataHelper.HasFormat(SotClipboardFormatId::MARKDOWN))
+                    PasteFromSystem(SotClipboardFormatId::MARKDOWN);
                 // xxx_OLE formats come last, like in SotExchange tables
                 else if (aDataHelper.HasFormat( SotClipboardFormatId::EMBED_SOURCE_OLE ))
                     PasteFromSystem( SotClipboardFormatId::EMBED_SOURCE_OLE );
@@ -953,7 +975,8 @@ bool ScViewFunc::PasteFromSystem( SotClipboardFormatId nFormatId, bool bApi, boo
     }
     else
     {
-        TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( pWin ) );
+        TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard(
+            pWin, DownloadRemoteContent::Yes ) );
         if ( !aDataHelper.GetTransferable().is() )
             return false;
 

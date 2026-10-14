@@ -11,10 +11,11 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SwVbaContentControlListEntry::SwVbaContentControlListEntry(
     const uno::Reference<ooo::vba::XHelperInterface>& rParent,
-    const uno::Reference<uno::XComponentContext>& rContext, std::shared_ptr<SwContentControl> pCC,
+    const uno::Reference<cpo::uno::XComponentContext>& rContext, std::shared_ptr<SwContentControl> pCC,
     size_t nZIndex)
     : SwVbaContentControlListEntry_BASE(rParent, rContext)
     , m_pCC(std::move(pCC))

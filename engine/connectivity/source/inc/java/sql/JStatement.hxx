@@ -56,60 +56,60 @@ namespace connectivity
     {
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getQueryTimeOut();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getMaxFieldSize();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getMaxRows();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getResultSetConcurrency();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getResultSetType();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getFetchDirection();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         sal_Int32 getFetchSize();
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         OUString getCursorName();
 
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setQueryTimeOut(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setMaxFieldSize(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setMaxRows(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setResultSetConcurrency(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setResultSetType(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setFetchDirection(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setFetchSize(sal_Int32 _par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setCursorName(const OUString &_par0);
         /// @throws css::sdbc::SQLException
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setEscapeProcessing(bool _par0);
 
     protected:
-        css::uno::Reference< css::sdbc::XStatement>       m_xGeneratedStatement;
+        cpo::uno::Reference< css::sdbc::XStatement>       m_xGeneratedStatement;
         rtl::Reference<java_sql_Connection>               m_pConnection;
         java::sql::ConnectionLog    m_aLogger;
         OUString             m_sSqlStatement;
@@ -169,12 +169,12 @@ namespace connectivity
         virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
         // XStatement
-        virtual css::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override ;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override ;
         virtual sal_Int32 executeUpdate( const OUString& sql ) override ;
         virtual bool execute( const OUString& sql ) override ;
-        virtual css::uno::Reference< css::sdbc::XConnection > getConnection(  ) override ;
+        virtual cpo::uno::Reference< css::sdbc::XConnection > getConnection(  ) override ;
         // XWarningsSupplier
         virtual cpo::uno::Any getWarnings(  ) override;
         virtual void clearWarnings(  ) override;
@@ -183,11 +183,11 @@ namespace connectivity
         // XCloseable
         virtual void close(  ) override;
         // XMultipleResults
-        virtual css::uno::Reference< css::sdbc::XResultSet > getResultSet(  ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getResultSet(  ) override;
         virtual sal_Int32 getUpdateCount(  ) override;
         virtual bool getMoreResults(  ) override;
         //XGeneratedResultSet
-        virtual css::uno::Reference< css::sdbc::XResultSet > getGeneratedValues(  ) override;
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getGeneratedValues(  ) override;
 
     public:
         using ::cppu::OPropertySetHelper::getFastPropertyValue;

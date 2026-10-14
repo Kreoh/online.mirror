@@ -23,8 +23,8 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/drawing/ColorTable.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Sequence.hxx>
 #include <comphelper/processfactory.hxx>
 #include <rtl/ustring.hxx>
@@ -53,12 +53,12 @@ private:
 ColorNameMap::ColorNameMap()
 {
     cpo::uno::Sequence<OUString> aNames;
-    css::uno::Reference<css::container::XNameAccess> xNA;
+    cpo::uno::Reference<css::container::XNameAccess> xNA;
 
     try
     {
         // Create color table in which to look up the given color.
-        css::uno::Reference<css::container::XNameContainer> xColorTable
+        cpo::uno::Reference<css::container::XNameContainer> xColorTable
             = css::drawing::ColorTable::create(comphelper::getProcessComponentContext());
 
         // Get list of color names in order to iterate over the color table.
@@ -69,7 +69,7 @@ ColorNameMap::ColorNameMap()
         xNA = xColorTable;
         aNames = xColorTable->getElementNames();
     }
-    catch (css::uno::RuntimeException const&)
+    catch (cpo::uno::RuntimeException const&)
     {
         // When an exception occurred then we have an empty name sequence
         // and the loop below is not entered.
@@ -89,7 +89,7 @@ ColorNameMap::ColorNameMap()
             aColor >>= nColor;
             map_[nColor] = rName;
         }
-        catch (css::uno::RuntimeException const&)
+        catch (cpo::uno::RuntimeException const&)
         {
             // Ignore the exception: the color who lead to the exception
             // is not included into the map.

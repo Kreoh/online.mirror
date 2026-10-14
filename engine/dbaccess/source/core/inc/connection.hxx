@@ -31,8 +31,6 @@
 
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/sdb/XSQLQueryComposerFactory.hpp>
-#include <com/sun/star/sdb/XCommandPreparation.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/XViewsSupplier.hpp>
 #include <com/sun/star/sdbcx/XUsersSupplier.hpp>
@@ -40,7 +38,6 @@
 #include <com/sun/star/sdb/XQueriesSupplier.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdb/tools/XConnectionTools.hpp>
-#include <com/sun/star/sdb/application/XTableUIProvider.hpp>
 #include <com/sun/star/sdbc/XWarningsSupplier.hpp>
 
 #include <connectivity/ConnectionWrapper.hxx>
@@ -60,13 +57,10 @@ typedef cppu::ImplInheritanceHelper<    connectivity::OConnectionWrapper
                                     ,   css::sdbc::XConnection
                                     ,   css::sdbc::XWarningsSupplier
                                     ,   css::sdb::XQueriesSupplier
-                                    ,   css::sdb::XSQLQueryComposerFactory
-                                    ,   css::sdb::XCommandPreparation
                                     ,   css::lang::XMultiServiceFactory
                                     ,   css::sdbcx::XUsersSupplier
                                     ,   css::sdbcx::XGroupsSupplier
                                     ,   css::sdb::tools::XConnectionTools
-                                    ,   css::sdb::application::XTableUIProvider
                                     >   OConnection_Base;
 
 class ODatabaseSource;
@@ -75,7 +69,7 @@ class OConnection final     :public OConnection_Base
                             ,public IRefreshListener
 {
     unotools::WeakReference<ODatabaseSource> m_xParent;
-    css::uno::Reference< css::sdbcx::XTablesSupplier >
+    cpo::uno::Reference< css::sdbcx::XTablesSupplier >
                                           m_xMasterTables; // just to avoid the recreation of the catalog
     // contains OStatement and OPreparedStatement
     std::vector<unotools::WeakReference<OStatementBase>>
@@ -86,14 +80,13 @@ class OConnection final     :public OConnection_Base
     // the filter as set on the parent data link at construction of the connection
     cpo::uno::Sequence< OUString >                                    m_aTableFilter;
     cpo::uno::Sequence< OUString >                                    m_aTableTypeFilter;
-    css::uno::Reference< css::uno::XComponentContext >                m_aContext;
-    css::uno::Reference< css::sdbc::XConnection >                     m_xMasterConnection;
-    css::uno::Reference< css::sdb::tools::XConnectionTools >          m_xConnectionTools;
-    css::uno::Reference< css::sdb::application::XTableUIProvider >    m_xTableUIProvider;
+    cpo::uno::Reference< cpo::uno::XComponentContext >                m_aContext;
+    cpo::uno::Reference< css::sdbc::XConnection >                     m_xMasterConnection;
+    cpo::uno::Reference< css::sdb::tools::XConnectionTools >          m_xConnectionTools;
 
     // defines the helper services for example to query the command of a view
     // @ see com.sun.star.sdb.tools.XViewAccess
-    typedef std::map< OUString, css::uno::Reference< css::uno::XInterface> > TSupportServices;
+    typedef std::map< OUString, cpo::uno::Reference< cpo::uno::XInterface> > TSupportServices;
     TSupportServices                m_aSupportServices;
 
     std::unique_ptr<OTableContainer> m_pTables;
@@ -107,35 +100,29 @@ class OConnection final     :public OConnection_Base
     virtual ~OConnection() override;
 public:
     OConnection(ODatabaseSource& _rDB
-                ,css::uno::Reference< css::sdbc::XConnection > const & _rxMaster
-                ,const css::uno::Reference< css::uno::XComponentContext >& _rxORB);
+                ,cpo::uno::Reference< css::sdbc::XConnection > const & _rxMaster
+                ,const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxORB);
 
 // css::lang::XTypeProvider
     virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
 
-// css::uno::XInterface
+// cpo::uno::XInterface
     virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
 
 // OComponentHelper
     virtual void disposing() override;
 
 // css::container::XChild
-    virtual css::uno::Reference< css::uno::XInterface > getParent(  ) override;
-    virtual void setParent( const css::uno::Reference< css::uno::XInterface >& Parent ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getParent(  ) override;
+    virtual void setParent( const cpo::uno::Reference< cpo::uno::XInterface >& Parent ) override;
 
 // css::sdbcx::XTablesSupplier
-    virtual css::uno::Reference< css::container::XNameAccess > getTables(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getTables(  ) override;
 // css::sdbcx::XViewsSupplier
-    virtual css::uno::Reference< css::container::XNameAccess > getViews(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getViews(  ) override;
 
 // css::sdb::XQueriesSupplier
-    virtual css::uno::Reference< css::container::XNameAccess > getQueries(  ) override;
-
-// css::sdb::XSQLQueryComposerFactory
-    virtual css::uno::Reference< css::sdb::XSQLQueryComposer > createQueryComposer(  ) override;
-
-// css::sdb::XCommandPreparation
-    virtual css::uno::Reference< css::sdbc::XPreparedStatement > prepareCommand( const OUString& command, sal_Int32 commandType ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getQueries(  ) override;
 
 // css::sdbc::XWarningsSupplier
     virtual cpo::uno::Any getWarnings(  ) override;
@@ -147,51 +134,44 @@ public:
     virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
 // XConnection
-    virtual css::uno::Reference< css::sdbc::XStatement > createStatement(  ) override;
-    virtual css::uno::Reference< css::sdbc::XPreparedStatement > prepareStatement( const OUString& sql ) override;
-    virtual css::uno::Reference< css::sdbc::XPreparedStatement > prepareCall( const OUString& sql ) override;
+    virtual cpo::uno::Reference< css::sdbc::XStatement > createStatement(  ) override;
+    virtual cpo::uno::Reference< css::sdbc::XPreparedStatement > prepareStatement( const OUString& sql ) override;
+    virtual cpo::uno::Reference< css::sdbc::XPreparedStatement > prepareCall( const OUString& sql ) override;
     virtual OUString nativeSQL( const OUString& sql ) override;
     virtual void setAutoCommit( bool autoCommit ) override;
     virtual bool getAutoCommit(  ) override;
     virtual void commit(  ) override;
     virtual void rollback(  ) override;
     virtual bool isClosed(  ) override;
-    virtual css::uno::Reference< css::sdbc::XDatabaseMetaData > getMetaData(  ) override;
+    virtual cpo::uno::Reference< css::sdbc::XDatabaseMetaData > getMetaData(  ) override;
     virtual void setReadOnly( bool readOnly ) override;
     virtual bool isReadOnly(  ) override;
     virtual void setCatalog( const OUString& catalog ) override;
     virtual OUString getCatalog(  ) override;
     virtual void setTransactionIsolation( sal_Int32 level ) override;
     virtual sal_Int32 getTransactionIsolation(  ) override;
-    virtual css::uno::Reference< css::container::XNameAccess > getTypeMap(  ) override;
-    virtual void setTypeMap( const css::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getTypeMap(  ) override;
+    virtual void setTypeMap( const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
 
 // css::sdbc::XCloseable
     virtual void close(  ) override;
 
     // XMultiServiceFactory
-    virtual css::uno::Reference< css::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
-    virtual css::uno::Reference< css::uno::XInterface > createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
     virtual cpo::uno::Sequence< OUString > getAvailableServiceNames(  ) override;
 
     // XUsersSupplier
-    virtual css::uno::Reference< css::container::XNameAccess > getUsers(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getUsers(  ) override;
     // XGroupsSupplier
-    virtual css::uno::Reference< css::container::XNameAccess > getGroups(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getGroups(  ) override;
 
     // XConnectionTools
-    virtual css::uno::Reference< css::sdb::tools::XTableName > createTableName(  ) override;
-    virtual css::uno::Reference< css::sdb::tools::XObjectNames > getObjectNames(  ) override;
-    virtual css::uno::Reference< css::sdb::tools::XDataSourceMetaData > getDataSourceMetaData(  ) override;
-    virtual css::uno::Reference< css::container::XNameAccess > getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, css::uno::Reference< css::lang::XComponent >& keepFieldsAlive ) override;
-    virtual css::uno::Reference< css::sdb::XSingleSelectQueryComposer > getComposer( ::sal_Int32 commandType, const OUString& command ) override;
-
-    // XTableUIProvider
-    virtual css::uno::Reference< css::graphic::XGraphic > getTableIcon( const OUString& TableName, ::sal_Int32 ColorMode ) override;
-    virtual css::uno::Reference< css::uno::XInterface > getTableEditor( const css::uno::Reference< css::sdb::application::XDatabaseDocumentUI >& DocumentUI, const OUString& TableName ) override;
+    virtual cpo::uno::Reference< css::sdb::tools::XObjectNames > getObjectNames(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, cpo::uno::Reference< css::lang::XComponent >& keepFieldsAlive ) override;
 
     // IRefreshListener
-    virtual void refresh(const css::uno::Reference< css::container::XNameAccess >& _rToBeRefreshed) override;
+    virtual void refresh(const cpo::uno::Reference< css::container::XNameAccess >& _rToBeRefreshed) override;
 
 private:
     /// @throws css::lang::DisposedException
@@ -201,7 +181,7 @@ private:
             throw css::lang::DisposedException();
     }
 
-    css::uno::Reference< css::sdbcx::XTablesSupplier > const & getMasterTables();
+    cpo::uno::Reference< css::sdbcx::XTablesSupplier > const & getMasterTables();
 
     /** checks whether or not there are naming conflicts between tables and queries
     */
@@ -209,7 +189,7 @@ private:
 
     /** loads the XConnectionTools implementation which we forward the respective functionality to
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
             if the implementation cannot be loaded
 
         @postcond

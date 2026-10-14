@@ -14,7 +14,7 @@
 #include <com/sun/star/io/XTruncate.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <com/sun/star/security/CertificateValidity.hpp>
-#include <com/sun/star/uno/SecurityException.hpp>
+#include <cpo/uno/SecurityException.hpp>
 #include <com/sun/star/security/DocumentSignatureInformation.hpp>
 #include <com/sun/star/xml/crypto/XSecurityEnvironment.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
@@ -36,6 +36,7 @@
 #include <sfx2/viewsh.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -98,7 +99,7 @@ void GetSignatureLineShape(const uno::Reference<frame::XModel>& xModel, sal_Int3
     uno::Reference<io::XOutputStream> xStream(new utl::OStreamWrapper(aStream));
     aMediaDescriptor[u"OutputStream"_ustr] <<= xStream;
     cpo::uno::Sequence<beans::PropertyValue> aFilterData(
-        comphelper::InitPropertySequence({ { "Selection", cpo::uno::Any(xShapes) } }));
+        comphelper::InitPropertySequence({ { u"Selection"_ustr, cpo::uno::Any(xShapes) } }));
     aMediaDescriptor[u"FilterData"_ustr] <<= aFilterData;
     xStorable->storeToURL(u"private:stream"_ustr, aMediaDescriptor.getAsConstPropertyValueList());
     xStream->flush();
@@ -130,6 +131,14 @@ void GetByteRangesFromPDF(const std::unique_ptr<vcl::pdf::PDFiumSignature>& pSig
     size_t nByteRangeOffset = 0;
     for (size_t i = 0; i < aByteRange.size(); ++i)
     {
+        // Only offsets and lengths that are zero or more describe a part of the file.
+        if (aByteRange[i] < 0)
+        {
+            SAL_WARN("xmlsecurity.helper", "GetByteRangesFromPDF: negative byte range");
+            rByteRanges.clear();
+            return;
+        }
+
         if (i % 2 == 0)
         {
             nByteRangeOffset = aByteRange[i];
@@ -509,7 +518,7 @@ PDFSignatureHelper::GetDocumentSignatureInformations(
             {
                 rExternal.CertificateStatus = xSecEnv->verifyCertificate(rExternal.Signer, {});
             }
-            catch (const uno::SecurityException&)
+            catch (const cpo::uno::SecurityException&)
             {
                 DBG_UNHANDLED_EXCEPTION("xmlsecurity.helper", "failed to verify certificate");
                 rExternal.CertificateStatus = security::CertificateValidity::INVALID;

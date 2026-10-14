@@ -27,6 +27,7 @@
 #include "contentinfo.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
 // PropertySetInfo Implementation.
@@ -53,7 +54,7 @@ PropertySetInfo::~PropertySetInfo()
 
 
 // virtual
-cpo::uno::Sequence< beans::Property > SAL_CALL PropertySetInfo::getProperties()
+cpo::uno::Sequence< beans::Property > PropertySetInfo::getProperties()
 {
     std::unique_lock aGuard( m_aMutex );
     return getPropertiesImpl();
@@ -70,7 +71,7 @@ const cpo::uno::Sequence< beans::Property > & PropertySetInfo::getPropertiesImpl
     {
         m_xProps = m_pContent->getProperties( m_xEnv );
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -109,7 +110,7 @@ const cpo::uno::Sequence< beans::Property > & PropertySetInfo::getPropertiesImpl
 
 
 // virtual
-beans::Property SAL_CALL PropertySetInfo::getPropertyByName(
+beans::Property PropertySetInfo::getPropertyByName(
         const OUString& aName )
 {
     beans::Property aProp;
@@ -121,7 +122,7 @@ beans::Property SAL_CALL PropertySetInfo::getPropertyByName(
 
 
 // virtual
-bool SAL_CALL PropertySetInfo::hasPropertyByName(
+bool PropertySetInfo::hasPropertyByName(
         const OUString& Name )
 {
     beans::Property aProp;
@@ -184,7 +185,7 @@ CommandProcessorInfo::~CommandProcessorInfo()
 
 
 // virtual
-cpo::uno::Sequence< css::ucb::CommandInfo > SAL_CALL CommandProcessorInfo::getCommands()
+cpo::uno::Sequence< css::ucb::CommandInfo > CommandProcessorInfo::getCommands()
 {
     std::unique_lock aGuard( m_aMutex );
     return getCommandsImpl();
@@ -201,7 +202,7 @@ const cpo::uno::Sequence< css::ucb::CommandInfo > & CommandProcessorInfo::getCom
     {
         m_xCommands = m_pContent->getCommands( m_xEnv );
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -214,7 +215,7 @@ const cpo::uno::Sequence< css::ucb::CommandInfo > & CommandProcessorInfo::getCom
 
 
 // virtual
-css::ucb::CommandInfo SAL_CALL
+css::ucb::CommandInfo
 CommandProcessorInfo::getCommandInfoByName(
         const OUString& Name )
 {
@@ -227,7 +228,7 @@ CommandProcessorInfo::getCommandInfoByName(
 
 
 // virtual
-css::ucb::CommandInfo SAL_CALL
+css::ucb::CommandInfo
 CommandProcessorInfo::getCommandInfoByHandle( sal_Int32 Handle )
 {
     css::ucb::CommandInfo aInfo;
@@ -239,7 +240,7 @@ CommandProcessorInfo::getCommandInfoByHandle( sal_Int32 Handle )
 
 
 // virtual
-bool SAL_CALL CommandProcessorInfo::hasCommandByName(
+bool CommandProcessorInfo::hasCommandByName(
        const OUString& Name )
 {
     css::ucb::CommandInfo aInfo;
@@ -248,7 +249,7 @@ bool SAL_CALL CommandProcessorInfo::hasCommandByName(
 
 
 // virtual
-bool SAL_CALL CommandProcessorInfo::hasCommandByHandle( sal_Int32 Handle )
+bool CommandProcessorInfo::hasCommandByHandle( sal_Int32 Handle )
 {
     css::ucb::CommandInfo aInfo;
     return queryCommand( Handle, aInfo );

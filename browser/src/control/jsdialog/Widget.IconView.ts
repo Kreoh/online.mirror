@@ -24,6 +24,62 @@
  */
 
 declare var JSDialog: any;
+declare var UNOKey: any;
+
+/// Falls back to the engine's render when this build ships no icon for it.
+function _createEntryImageFromCommand(
+	parent: HTMLElement,
+	builder: JSBuilder,
+	entryData: IconViewEntry,
+	command: string,
+	hasText: boolean,
+) {
+	const img = window.L.DomUtil.create(
+		'img',
+		builder.options.cssClass,
+		parent,
+	) as HTMLImageElement;
+
+	img.alt = hasText ? '' : entryData.text || entryData.tooltip || '';
+	_setEntryTooltip(img, builder, entryData);
+	setupSize(entryData, img);
+
+	img.addEventListener(
+		'error',
+		function () {
+			window.L.DomUtil.remove(img);
+			const placeholder = window.L.DomUtil.create(
+				'span',
+				builder.options.cssClass,
+				parent,
+			);
+			setupSize(entryData, placeholder);
+			placeholder.innerText = entryData.text ? entryData.text : '';
+			(parent.parentNode as any).requestRenders(entryData, placeholder, parent);
+		},
+		{ once: true },
+	);
+
+	app.LOUtil.setImage(
+		img,
+		app.LOUtil.getIconNameOfCommand(command),
+		builder.map,
+	);
+}
+
+/// What the pointer shows on an entry. The placeholder carries it while the
+/// image is on its way, and the image has to keep it once it arrives.
+function _setEntryTooltip(
+	element: HTMLElement,
+	builder: JSBuilder,
+	entryData: IconViewEntry,
+) {
+	const text = entryData.tooltip || entryData.text;
+	if (!text) return;
+
+	element.setAttribute('data-cooltip', text);
+	window.L.control.attachTooltipEventListener(element, builder.map);
+}
 
 function _createEntryImage(
 	parent: HTMLElement,
@@ -45,6 +101,8 @@ function _createEntryImage(
 		img.alt = '';
 	}
 
+	_setEntryTooltip(img, builder, entryData);
+
 	// FIXME: not beautiful - would be great to know the dimensions
 	// for all of these up-front and do this nicely @ dpiscale for
 	// all icon views.
@@ -60,10 +118,6 @@ function _createEntryImage(
 			img.style.height = img.naturalHeight / ratio + 'px';
 		});
 	}
-
-	if (entryData.tooltip) img.title = entryData.tooltip;
-	else if (entryData.text) img.title = entryData.text;
-	else img.title = '';
 
 	setupSize(entryData, img);
 }
@@ -139,7 +193,15 @@ function _iconViewEntry(
 		entryContainer.setAttribute('tabindex', '-1');
 	}
 
-	if (entry.ondemand) {
+	if (entry.command) {
+		_createEntryImageFromCommand(
+			entryContainer,
+			builder,
+			entry,
+			entry.command,
+			hasText,
+		);
+	} else if (entry.ondemand) {
 		const placeholder = window.L.DomUtil.create(
 			'span',
 			builder.options.cssClass,
@@ -148,9 +210,7 @@ function _iconViewEntry(
 		setupSize(entry, placeholder);
 
 		placeholder.innerText = entry.text ? entry.text : '';
-		if (entry.tooltip) placeholder.title = entry.tooltip;
-		else if (entry.text) placeholder.title = entry.text;
-		else placeholder.title = '';
+		_setEntryTooltip(placeholder, builder, entry);
 
 		parentContainer.requestRenders(entry, placeholder, entryContainer);
 	} else {
@@ -207,10 +267,15 @@ function _iconViewEntry(
 			entryContainer.classList.add('selected');
 			entryContainer.setAttribute(ariaStateAttr, 'true');
 
+			const contextMenuData: IconViewContextMenuData = {
+				row: entry.row,
+				clientX: (e as MouseEvent).clientX,
+				clientY: (e as MouseEvent).clientY,
+			};
 			parentContainer.builderCallback(
 				'iconview',
 				'contextmenu',
-				entry.row,
+				contextMenuData,
 				builder,
 			);
 			e.preventDefault();
@@ -231,21 +296,23 @@ function _iconViewEntry(
 
 		const isInNotebookbar = builder.options.cssClass === 'notebookbar';
 		entryContainer.addEventListener('keydown', function (e: KeyboardEvent) {
-			if (e.key === ' ' || e.code === 'Space')
+			const isSpace = e.key === ' ' || e.code === 'Space';
+			const isEnter = e.key === 'Enter';
+			if (isSpace || isEnter) {
 				parentContainer.builderCallback(
 					'iconview',
 					'select',
 					entry.row,
 					builder,
 				);
-			else if (e.key === 'Enter') {
 				parentContainer.builderCallback(
 					'iconview',
-					'activate',
-					entry.row,
+					'keypress',
+					isSpace ? UNOKey.SPACE : UNOKey.RETURN,
 					builder,
 				);
-				JSDialog.focusMapUnlessInDialog(builder);
+				if (isEnter) JSDialog.focusMapUnlessInDialog(builder);
+				e.preventDefault();
 			} else if (
 				isInNotebookbar &&
 				['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)
@@ -272,6 +339,30 @@ function _iconViewEntry(
 		});
 	}
 }
+
+JSDialog.UpdateIconViewIndexes = function (iconview: HTMLElement) {
+	if (!iconview) return;
+
+	const entries = Array.from(
+		iconview.querySelectorAll('.ui-iconview-entry'),
+	) as HTMLElement[];
+	if (!entries.length) return;
+
+	const positionIn = (offsets: number[]) => {
+		const distinct = Array.from(new Set(offsets)).sort((a, b) => a - b);
+		return (offset: number) => distinct.indexOf(offset);
+	};
+
+	const rowOf = positionIn(entries.map((entry) => entry.offsetTop));
+	const columnOf = positionIn(entries.map((entry) => entry.offsetLeft));
+
+	entries.forEach((entry) => {
+		entry.setAttribute(
+			'index',
+			rowOf(entry.offsetTop) + ':' + columnOf(entry.offsetLeft),
+		);
+	});
+};
 
 JSDialog.iconView = function (
 	parentContainer: Element,
@@ -327,6 +418,22 @@ JSDialog.iconView = function (
 			? data.labelledBy.join(' ')
 			: data.labelledBy;
 		iconview.setAttribute('aria-labelledby', ids);
+	} else if (data.aria?.label) {
+		JSDialog.AddAriaLabel(iconview, data, builder);
+	} else {
+		// Built detached, so the group is only there to be found once the
+		// layout has run.
+		app.layoutingService.appendLayoutingTask(() => {
+			if (iconview.hasAttribute('aria-labelledby')) return;
+
+			const group = iconview.closest('.ui-overflow-group');
+			const caption = group
+				? (group.querySelector('.ui-overflow-group-label') as HTMLElement)
+				: null;
+
+			if (caption && caption.id && caption.innerText)
+				iconview.setAttribute('aria-labelledby', caption.id);
+		});
 	}
 
 	const disabled = data.enabled === false;
@@ -412,6 +519,7 @@ JSDialog.iconView = function (
 			placeholder,
 			entryContainer,
 			entry.text ? entry.text : entry.tooltip,
+			!entry.command,
 		);
 	};
 
@@ -503,6 +611,8 @@ JSDialog.iconView = function (
 		for (const i in data.entries) {
 			_iconViewEntry(iconview, data, data.entries[i], builder);
 		}
+
+		JSDialog.UpdateIconViewIndexes(iconview);
 
 		// Do not animate on creation - eg. when opening sidebar with icon view it might move the app
 		const firstSelected = $(iconview).children('.selected').get(0);

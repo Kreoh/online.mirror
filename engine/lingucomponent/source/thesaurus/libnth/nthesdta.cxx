@@ -26,7 +26,7 @@
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace ::cpo::uno;
 
@@ -43,13 +43,13 @@ Meaning::~Meaning()
 {
 }
 
-OUString SAL_CALL Meaning::getMeaning()
+OUString Meaning::getMeaning()
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return aTerm;
 }
 
-Sequence< OUString > SAL_CALL Meaning::querySynonyms()
+Sequence< OUString > Meaning::querySynonyms()
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return aSyn;

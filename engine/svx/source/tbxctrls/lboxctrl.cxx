@@ -36,7 +36,7 @@
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
@@ -226,7 +226,7 @@ void SvxUndoRedoControl::Do(sal_Int16 nCount)
     }
 }
 
-SvxUndoRedoControl::SvxUndoRedoControl(const css::uno::Reference<css::uno::XComponentContext>& rContext)
+SvxUndoRedoControl::SvxUndoRedoControl(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext)
     : PopupWindowController(rContext, nullptr, OUString())
 {
 }
@@ -262,7 +262,7 @@ void SvxUndoRedoControl::SetText(const OUString& rText)
 }
 
 // XStatusListener
-void SAL_CALL SvxUndoRedoControl::statusChanged(const css::frame::FeatureStateEvent& rEvent)
+void SvxUndoRedoControl::statusChanged(const css::frame::FeatureStateEvent& rEvent)
 {
     if (rEvent.FeatureURL.Main == ".uno:GetUndoStrings" || rEvent.FeatureURL.Main == ".uno:GetRedoStrings")
     {
@@ -337,9 +337,9 @@ cpo::uno::Sequence<OUString> SvxUndoRedoControl::getSupportedServiceNames()
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_UndoRedoToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire(new SvxUndoRedoControl(rContext));

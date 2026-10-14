@@ -91,9 +91,11 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['overflowmanager'] = JSDialog.OverflowManager;
 		this._controlHandlers['radiobutton'] = JSDialog.RadioButton;
 		this._controlHandlers['progressbar'] = JSDialog.progressbar;
+		this._controlHandlers['slider'] = JSDialog.slider;
 		this._controlHandlers['pagemarginentry'] = JSDialog.PageMarginEntry;
 		this._controlHandlers['newslidelayoutentry'] = JSDialog.slideLayoutEntry;
 		this._controlHandlers['pagesizeentry'] = JSDialog.pageSizeEntry;
+		this._controlHandlers['linewidthcustom'] = JSDialog.LineWidthCustom;
 		this._controlHandlers['checkbox'] = JSDialog.Checkbox;
 		this._controlHandlers['basespinfield'] = JSDialog.baseSpinField;
 		this._controlHandlers['spinfield'] = JSDialog.spinfieldControl;
@@ -160,6 +162,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['colorpicker'] = JSDialog.colorPicker;
 		this._controlHandlers['emojipicker'] = JSDialog.emojiPicker;
 		this._controlHandlers['chip'] = JSDialog.chip;
+		this._controlHandlers['progressdots'] = JSDialog.progressDots;
 		this._controlHandlers['dropdown'] = JSDialog.Dropdown;
 		this._controlHandlers['menu'] = JSDialog.treeView;
 
@@ -186,6 +189,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		this._currentDepth = 0;
 		this._expanderDepth = 0;
+		this._tabControlDepth = 0;
 
 		app.localeService.initializeNumberFormatting();
 	},
@@ -701,11 +705,28 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				var label = window.L.DomUtil.create('span', 'ui-expander-label ' + builder.options.cssClass, expanderBtn);
 				label.innerText = builder._cleanText(data.children[0].text);
 				label.id = prefix + '-label';
+
+				// A heading that says a second thing about what it holds, such as how many rows
+				// there are or what a set of values comes to, carries it beside the name.
+				if (data.secondaryText) {
+					var secondary = window.L.DomUtil.create('span', 'ui-expander-secondary ' + builder.options.cssClass, expanderBtn);
+					secondary.innerText = builder._cleanText(data.secondaryText);
+					secondary.id = prefix + '-secondary';
+				}
 				if (data.children[0].visible === false) {
 					window.L.DomUtil.addClass(label, 'hidden');
 					window.L.DomUtil.addClass(expanderBtn, 'hidden');
 				}
 				builder.postProcess(expanderBtn, data.children[0]);
+
+				// The button is the heading on screen, so the tooltip of the
+				// heading shows beside the name rather than under everything
+				// the section holds.
+				if (data.children[0].tooltip) {
+					expanderBtn.setAttribute('data-cooltip',
+						builder._cleanText(data.children[0].tooltip));
+					window.L.control.attachTooltipEventListener(expanderBtn, builder.map);
+				}
 
 				var state = data.children.length > 1 && expanded;
 				if (state) {
@@ -721,6 +742,17 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 					$(label).toggleClass('expanded');
 					$(expander).siblings().toggleClass('expanded');
+					$(expander).siblings('.ui-expander-content.expanded').each(function () {
+						const content = this;
+						const onFadeEnd = (event) => {
+							if (event.target !== content)
+								return;
+							content.classList.remove('expanding');
+							content.removeEventListener('animationend', onFadeEnd);
+						};
+						content.classList.add('expanding');
+						content.addEventListener('animationend', onFadeEnd);
+					});
 
 					// Toggle aria-expanded attribute
 					const currentState = expanderBtn.getAttribute('aria-expanded') === 'true';
@@ -1044,7 +1076,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 								|| currentElement.closest('.ui-iconview-root');
 							if (useDomOrder) {
 								var allFocusables = Array.from(container[0].querySelectorAll('*'))
-									.filter(function(el) { return el.checkVisibility() && JSDialog.IsFocusable(el); });
+									.filter(function(el) { return JSDialog.IsFocusable(el); });
 								// Only leaf-level focusable elements are navigation targets.
 								var focusables = allFocusables.filter(function(el) {
 									return !allFocusables.some(function(other) { return other !== el && el.contains(other); });
@@ -1094,7 +1126,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 								);
 								
 								var allFocusables = visibleContainer ? Array.from(visibleContainer.querySelectorAll('*'))
-									.filter(function(el) { return el.checkVisibility() && JSDialog.IsFocusable(el); }) : [];
+									.filter(function(el) { return JSDialog.IsFocusable(el); }) : [];
 
 								// Only leaf-level focusable elements are candidates.
 								var focusables = allFocusables.filter(function(el) {
@@ -1228,12 +1260,19 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (data.text)
 			buttonLink.textContent = builder._cleanText(data.text);
 		else if (data.html)
+			// eslint-disable-next-line no-restricted-syntax -- sanitized markup
 			buttonLink.innerHTML = app.LOUtil.sanitize(data.html);
 
 		var accKey = builder._getAccessKeyFromText(data.text);
 		builder._stressAccessKey(buttonLink, accKey);
 
 		buttonLink.id = data.id;
+
+		// Follow the horizontal text alignment the link button asks for, the
+		// same way a fixed text label does.
+		if (data.xalign)
+			buttonLink.style.textAlign = data.xalign;
+
 		if (data.style && data.style.length) {
 			window.L.DomUtil.addClass(buttonLink, data.style);
 		} else {
@@ -1318,6 +1357,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		svgElement.setAttribute('width', '298');
 		svgElement.setAttribute('height', '192');
 		// todo: change svg paths color depending on document type
+		// eslint-disable-next-line no-restricted-syntax -- fixed SVG markup
 		svgElement.innerHTML = '<defs> <linearGradient id="spinner-shadow-bottom-linearGradient" x1="131.73" x2="184.28" y1="124.94" y2="177.49" gradientUnits="userSpaceOnUse"> <stop stop-color="#e6e6e6" offset="0"/> <stop stop-color="#ccc" stop-opacity="0" offset="1"/> </linearGradient> <linearGradient id="spinner-shadow-top-linearGradient" x1="130.72" x2="203.26" y1="151.3" y2="118.61" gradientUnits="userSpaceOnUse"> <stop stop-color="#e6e6e6" offset="0"/> <stop stop-color="#b3b3b3" stop-opacity="0" offset="1"/> </linearGradient> <linearGradient id="spinner-paper-linearGradient" x1="166.04" x2="106.19" y1="71.233" y2="36.679" gradientUnits="userSpaceOnUse"> <stop stop-color="#b3d3e5" offset="0"/> <stop stop-color="#d9e9f2" offset="1"/> </linearGradient> <linearGradient id="spinner-paper-fold-linearGradient" x1="167.16" x2="175.12" y1="46.783" y2="51.379" gradientUnits="userSpaceOnUse"> <stop stop-color="#68a7ca" offset="0"/> <stop stop-color="#4290bd" offset="1"/> </linearGradient> <linearGradient id="spinner-inner-left-linearGradient" x1="114.56" x2="142.35" y1="103.94" y2="103.94" gradientUnits="userSpaceOnUse"> <stop stop-color="#4290bd" offset="0"/> <stop stop-color="#4290bd" stop-opacity="0" offset="1"/> </linearGradient> </defs> <g id="spinner-box-g" transform="translate(9.8904)"> <g id="spinner-shadow-g"> <path id="spinner-shadow-top" d="m196.39 151.18 16.366-9.4488-81.829-47.244-16.366 9.4488z" fill="url(#spinner-shadow-top-linearGradient)"/> <path id="spinner-shadow-bottom" d="m130.93 188.98 65.463-37.795 16.366 9.4488-65.463 37.795z" fill="url(#spinner-shadow-bottom-linearGradient)"/> </g> <path id="spinner-box-back" d="m130.93 56.693-65.463 37.795 65.463 37.795 65.463-37.795z" fill="#b4d3e4" fill-opacity=".97667"/> <g> <path id="spinner-box-f-right-bg" d="m130.93 132.28v56.693l65.463-37.795v-56.693z" fill="white"/> <path id="spinner-box-f-right" d="m130.93 132.28v56.693l65.463-37.795v-56.693z" fill="#8ebdd7"/> <path id="spinner-box-f-left" d="m130.93 132.28v56.693l-65.463-37.795v-56.693z" fill="#d9e9f2"/> <path id="spinner-inner-right-bg" d="m81.829 103.94 49.098-28.346 49.098 28.346-49.098 28.346z" fill="white"/> <path id="spinner-inner-right" d="m81.829 103.94 49.098-28.346 49.098 28.346-49.098 28.346z" fill="#68a7ca"/> <path id="spinner-inner-left-bg" d="m130.93 75.591v56.693l-49.098-28.346z" fill="white"/> <path id="spinner-inner-left" d="m130.93 75.591v56.693l-49.098-28.346z" fill="url(#spinner-inner-left-linearGradient)"/> </g> <path id="spinner-handle" d="m114.56 153.07-6.5463 3.7795-32.732-18.898 6.5463-3.7795" fill="none" stroke="#4290bd" stroke-linecap="round" stroke-width="3"/> </g> <g id="spinner-paper-g" transform="translate(9.8904)"> <path id="spinner-paper-bg" d="m130.93 18.898s-14.524 12.927-49.098 28.346l49.098 28.346c16.428-6.7073 29.159-14.202 37.537-19.8 7.5473-5.0432 6.4305-9.2141 6.4305-9.2141-0.42453-2.5692-4.7288-5.0245-4.7288-5.0245z" fill="white"/> <path id="spinner-paper" d="m130.93 18.898s-14.524 12.927-49.098 28.346l49.098 28.346c16.428-6.7073 29.159-14.202 37.537-19.8 7.5473-5.0432 6.4305-9.2141 6.4305-9.2141-0.42453-2.5692-4.7288-5.0245-4.7288-5.0245z" fill="url(#spinner-paper-linearGradient)"/> <path id="spinner-paper-fold-bg" d="m168.46 55.791c7.5473-5.0432-1.2989-9.0071-1.2989-9.0071-0.42453-2.5692 3.0006-5.2315 3.0006-5.2315 4.4877 2.646 4.7288 5.0245 4.7288 5.0245 1.0076 4.4201-6.4305 9.2141-6.4305 9.2141z" fill="white"/> <path id="spinner-paper-fold" d="m168.46 55.791c7.5473-5.0432-1.2989-9.0071-1.2989-9.0071-0.42453-2.5692 3.0006-5.2315 3.0006-5.2315 4.4877 2.646 4.7288 5.0245 4.7288 5.0245 1.0076 4.4201-6.4305 9.2141-6.4305 9.2141z" fill="url(#spinner-paper-fold-linearGradient)"/> </g>';
 		var spinner = window.L.DomUtil.create('div', builder.options.cssClass + ' spinner-img ', parentContainer);
 		spinner.appendChild(svgElement);
@@ -1481,6 +1521,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				if (isIconURL) {
 					buttonImage = window.L.DomUtil.create('img', '', button);
 					buttonImage.src = data.icon;
+					app.LOUtil.publishIconURL(buttonImage, data.icon);
 				}
 				else if (coreIconName) {
 					buttonImage = window.L.DomUtil.create('img', '', button);
@@ -1754,8 +1795,8 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		// _onDropDown only works for splitbutton or dropdown arrow button
 		// for decorative button we need to manage it via click function and closeDropdown
 		div._onDropDown = function(open) {
-
-			if (JSDialog.IsDropdownButton(id, data.command))
+			// A menu of one entry gets no arrow, so the button itself owns the popup.
+			if (JSDialog.IsDropdownButton(id, data.command) || !arrowbackground)
 				button.setAttribute('aria-expanded', open);
 			else
 				arrowbackground.setAttribute('aria-expanded', open);
@@ -1793,7 +1834,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		};
 
 		const hasLabel = !!controls.label;
-		const hasExplicitTooltip = !!data.tooltip;
+		const hasExplicitTooltip = !!data.tooltip || !!data.disabledTooltip;
 		const hasShortcut = JSDialog.ShortcutsUtil.hasShortcut(data.command);
 		var mouseEnterFunction = window.touch.mouseOnly(function () {
 			if (builder.map.tooltip)
@@ -1802,7 +1843,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		var mouseLeaveFunction = function () {
 			if (builder.map.tooltip)
-				builder.map.tooltip.beginHide(div);
+				builder.map.tooltip.beginHide();
 		};
 
 		$(controls.button).on('click', clickFunction);
@@ -1962,8 +2003,10 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			$(menuEntry).click(() => {
 				if (window.insertionMobileWizard)
 					app.dispatcher.dispatch('insertion_mobile_wizard');
-				else if (window.mobileMenuWizard)
-					$('#main-menu-state').click();
+				else if (window.mobileMenuWizard) {
+					const menuState = document.getElementById('main-menu-state');
+					if (menuState) menuState.click();
+				}
 				else if (window.contextMenuWizard) {
 					window.contextMenuWizard = false;
 					builder.map.fire('closemobilewizard');
@@ -2041,8 +2084,21 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 	},
 
 	// executes actions like changing the selection without rebuilding the widget
+	//
+	// container may be an element, or a function returning one. A caller
+	// whose own container can be replaced before this runs (this is applied
+	// on a deferred layouting task, not immediately) should pass a function,
+	// so the container is read fresh here rather than a snapshot taken when
+	// the action was queued. Applying it to a stale snapshot would silently
+	// update a container already removed from the document, for example
+	// dropping the on-demand render replies that populate a style gallery.
 	executeAction: function(container, data) {
-		app.layoutingService.appendLayoutingTask(() => { this.executeActionImpl(container, data); });
+		app.layoutingService.appendLayoutingTask(() => {
+			const target = typeof container === 'function' ? container() : container;
+			if (!target)
+				return;
+			this.executeActionImpl(target, data);
+		});
 	},
 
 	executeActionImpl: function(container, data) {
@@ -2053,8 +2109,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		// honest when the target widget was destroyed/rebuilt while
 		// the render_entry round-trip was in flight.
 		if (data.action_type === 'rendered_entry' || data.action_type === 'rendered_combobox_entry') {
-			app.pendingOnDemandRenderRequests.delete(data.control_id + ':' + data.pos);
-			if (app.pendingOnDemandRenders > 0) app.pendingOnDemandRenders--;
+			const pendingKey = data.control_id + ':' + data.pos;
+			if (app.pendingOnDemandRenderRequests.delete(pendingKey) && app.pendingOnDemandRenders > 0)
+				app.pendingOnDemandRenders--;
 		}
 
 		let control = this._getItemById(container, this._removeMenuId(data.control_id));
@@ -2074,6 +2131,13 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				control.onFocus();
 			else
 				control.focus();
+			break;
+
+		case 'updateeditengine':
+			if (typeof control.onEditEngineUpdate === 'function')
+				control.onEditEngineUpdate(data);
+			else
+				window.app.console.warn('widget "' + data.control_id + '" doesn\'t support "updateeditengine" action');
 			break;
 		case 'select':
 			if (typeof control.onSelect === 'function')
@@ -2188,7 +2252,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		case 'rename':
 			control.setAttribute('modelId', data.new_id);
-			control.id = JSDialog.MakeIdUnique(data.new_id);
+			// A widget renamed before its first full update already carries the new id.
+			if (control.id !== data.new_id)
+				control.id = JSDialog.MakeIdUnique(data.new_id);
 			break;
 
 		case 'rendered_entry':
@@ -2257,6 +2323,19 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		var focusedElementInDialog = focusedElement ? container.querySelector('[id=\'' + focusedElement.id + '\']') : null;
 		var focusedId = focusedElementInDialog ? focusedElementInDialog.id : null;
 
+		// A text box inside the rebuilt widget that opted in (e.g. the series
+		// name box in the chart Data Table headers) keeps the text typed so
+		// far and its caret when the update races the user's typing.
+		var keepValueInput = focusedElementInDialog
+			&& focusedElementInDialog !== control
+			&& control.contains(focusedElementInDialog)
+			&& focusedElementInDialog.dataset
+			&& focusedElementInDialog.dataset.keepValueOnRebuild !== undefined
+			? focusedElementInDialog : null;
+		var keptValue = keepValueInput ? keepValueInput.value : null;
+		var keptSelectionStart = keepValueInput ? keepValueInput.selectionStart : null;
+		var keptSelectionEnd = keepValueInput ? keepValueInput.selectionEnd : null;
+
 		var temporaryParent = new DocumentFragment();
 
 		// Preserve spinfield unit across rebuilds: if the old element stored
@@ -2301,6 +2380,10 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			var found = container.querySelector('[id=\'' + focusedId + '\']');
 			if (found) {
 				found.focus();
+				if (keepValueInput && found.tagName === 'INPUT' && found.value !== keptValue) {
+					found.value = keptValue;
+					found.setSelectionRange(keptSelectionStart, keptSelectionEnd);
+				}
 			} else {
 				// Iconview builds its entries in a deferred layouting task, so
 				// the element is not present yet here. Retry after those tasks
@@ -2351,8 +2434,13 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			control.style.gridRow = gridRow;
 		}
 
-		if (data.hexpand) {
+		// The mobile wizard sizes widgets through CSS.
+		if (data.hexpand && this.options.cssClass !== 'mobile-wizard') {
 			control.style.width = '100%';
+		}
+
+		if (data.vexpand) {
+			window.L.DomUtil.addClass(control, 'jsdialog-vexpand');
 		}
 
 		if (data.valign) {
@@ -2435,6 +2523,10 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (builder.isHyperlinkTarget(builder, data))
 			return true;
 
+		// Compatibility for older core versions (e.g. 25.04) where showlocation is a linkbutton
+		if (data.id === 'showlocation' && data.type === 'linkbutton')
+			return true;
+
 		return false;
 	},
 
@@ -2445,22 +2537,36 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				builder.callback('combobox', 'change', data, value, builder);
 			};
 
-			return builder._controlHandlers['edit'](parentContainer, data, builder, callback);
+			const result = builder._controlHandlers['edit'](parentContainer, data, builder, callback);
+
+			// Keep what the combobox did on setText: leave the field alone while the user
+			// types in it. The dialog's initial setText can be applied after typing started.
+			const container = parentContainer.querySelector(':scope > [id=\'' + data.id + '\']');
+			const input = container ? container.querySelector('input') : null;
+			if (input) {
+				container.onSetText = function (text) {
+					if (input.ownerDocument.activeElement !== input)
+						input.value = text;
+				};
+			}
+
+			return result;
+		} else if (data.id === 'showlocation' && data.type === 'linkbutton') {
+			data.type = 'fixedtext';
+			return builder._controlHandlers['fixedtext'](parentContainer, data, builder);
 		}
 
 		console.error('It seems widget doesn\'t require overwriting.');
 	},
 
 	// Set equal min-width on all widgets sharing a sizeGroupId (mirrors GTK size groups).
-	// A widget on a currently hidden tab page keeps its layout box (see
-	// .ui-content.hidden in jsdialogs.css), but its width there does not reflect
-	// how it renders once its tab becomes active, so it is left out here and
-	// re-measured through the tab-selection handler once that tab is shown.
+	// A widget on a tab page that is not the open one keeps its layout box (see
+	// .ui-content.hidden in jsdialogs.css) and measures the same there as it does on
+	// the open page, so every page gets its final widths here, and the tab page area
+	// grows to fit the largest of them.
 	equalizeSizeGroups: function(container) {
 		var groups = {};
 		container.querySelectorAll('[data-size-group-id]').forEach(function(el) {
-			if (el.closest('.ui-content.hidden'))
-				return;
 			el.style.minWidth = '';
 			var id = el.dataset.sizeGroupId;
 			if (!groups[id])
@@ -2554,6 +2660,19 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 			var handler = this._controlHandlers[childType];
 
+			const savedTabControlDepth = this._tabControlDepth;
+			if (childType === 'tabcontrol') {
+				if (childData.tabControlDepth === undefined)
+					childData.tabControlDepth = savedTabControlDepth;
+				// Only the first-level tabs choose between a rail and a row, and only a
+				// build that has the pages in hand can tell whether one of them is empty.
+				if (childData.tabControlDepth === 0 && childData.children)
+					childData.hasEmptyTabPage = JSDialog.tabControlHasEmptyPage(childData);
+				if (this.wizard && this.wizard.takeOpenTab)
+					childData.requestedTabIndex = this.wizard.takeOpenTab(this.windowId, childData.id);
+				this._tabControlDepth = childData.tabControlDepth + 1;
+			}
+
 			if (handler) {
 				if (this.requiresOverwriting(this, childData))
 					processChildren = this.overwriteHandler(childObject, childData, this);
@@ -2568,12 +2687,18 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			else if (childData.visible && (childData.visible === false || childData.visible === 'false')) {
 				$('#' + childData.id).addClass('hidden-from-event');
 			}
+
+			this._tabControlDepth = savedTabControlDepth;
 		}
 	}
 });
 
 window.L.Control.JSDialogBuilder.getMenuStructureForMobileWizard = function(menu, mainMenu, itemCommand) {
 	if (itemCommand.indexOf('sep') >= 0)
+		return null;
+
+	// An entry with a visible callback is only offered while that callback returns true.
+	if (typeof menu.visible === 'function' && !menu.visible())
 		return null;
 
 	var itemText = '';

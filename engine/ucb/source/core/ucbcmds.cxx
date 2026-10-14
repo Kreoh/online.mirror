@@ -22,7 +22,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <rtl/ustring.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <com/sun/star/beans/PropertyState.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
@@ -63,6 +63,7 @@
 #include "ucb.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -77,14 +78,14 @@ beans::Property makeProperty(const OUString& n, sal_Int32 h, cpo::uno::Type t = 
 
 struct TransferCommandContext
 {
-    uno::Reference< uno::XComponentContext >     m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     uno::Reference< ucb::XCommandProcessor >     xProcessor;
     uno::Reference< ucb::XCommandEnvironment >   xEnv;
     uno::Reference< ucb::XCommandEnvironment >   xOrigEnv;
     ucb::GlobalTransferCommandArgument2          aArg;
 
     TransferCommandContext(
-        uno::Reference< uno::XComponentContext > xContext,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         uno::Reference< ucb::XCommandProcessor > _xProcessor,
         uno::Reference< ucb::XCommandEnvironment > _xEnv,
         uno::Reference< ucb::XCommandEnvironment > _xOrigEnv,
@@ -107,13 +108,13 @@ public:
     : m_xOrig(std::move( xOrig )) {}
 
     // XInteractionHandler methods.
-    virtual void SAL_CALL handle(
+    virtual void handle(
             const uno::Reference< task::XInteractionRequest >& Request ) override;
 };
 
 
 // virtual
-void SAL_CALL InteractionHandlerProxy::handle(
+void InteractionHandlerProxy::handle(
             const uno::Reference< task::XInteractionRequest >& Request )
 {
     if ( !m_xOrig.is() )
@@ -171,14 +172,14 @@ class ActiveDataSink : public cppu::WeakImplHelper< io::XActiveDataSink >
 
 public:
     // XActiveDataSink methods.
-    virtual void SAL_CALL setInputStream(
+    virtual void setInputStream(
                         const uno::Reference< io::XInputStream >& aStream ) override;
-    virtual uno::Reference< io::XInputStream > SAL_CALL getInputStream() override;
+    virtual uno::Reference< io::XInputStream > getInputStream() override;
 };
 
 
 // virtual
-void SAL_CALL ActiveDataSink::setInputStream(
+void ActiveDataSink::setInputStream(
                         const uno::Reference< io::XInputStream >& aStream )
 {
     m_xStream = aStream;
@@ -186,7 +187,7 @@ void SAL_CALL ActiveDataSink::setInputStream(
 
 
 // virtual
-uno::Reference< io::XInputStream > SAL_CALL ActiveDataSink::getInputStream()
+uno::Reference< io::XInputStream > ActiveDataSink::getInputStream()
 {
     return m_xStream;
 }
@@ -203,13 +204,13 @@ public:
     CommandProcessorInfo();
 
     // XCommandInfo methods
-    virtual cpo::uno::Sequence< ucb::CommandInfo > SAL_CALL getCommands() override;
-    virtual ucb::CommandInfo SAL_CALL
+    virtual cpo::uno::Sequence< ucb::CommandInfo > getCommands() override;
+    virtual ucb::CommandInfo
     getCommandInfoByName( const OUString& Name ) override;
-    virtual ucb::CommandInfo SAL_CALL
+    virtual ucb::CommandInfo
     getCommandInfoByHandle( sal_Int32 Handle ) override;
-    virtual bool SAL_CALL hasCommandByName( const OUString& Name ) override;
-    virtual bool SAL_CALL hasCommandByHandle( sal_Int32 Handle ) override;
+    virtual bool hasCommandByName( const OUString& Name ) override;
+    virtual bool hasCommandByHandle( sal_Int32 Handle ) override;
 };
 
 
@@ -232,7 +233,7 @@ CommandProcessorInfo::CommandProcessorInfo()
 
 
 // virtual
-cpo::uno::Sequence< ucb::CommandInfo > SAL_CALL
+cpo::uno::Sequence< ucb::CommandInfo >
 CommandProcessorInfo::getCommands()
 {
     return m_xInfo;
@@ -240,7 +241,7 @@ CommandProcessorInfo::getCommands()
 
 
 // virtual
-ucb::CommandInfo SAL_CALL
+ucb::CommandInfo
 CommandProcessorInfo::getCommandInfoByName( const OUString& Name )
 {
     auto pInfo = std::find_if(std::cbegin(m_xInfo), std::cend(m_xInfo),
@@ -253,7 +254,7 @@ CommandProcessorInfo::getCommandInfoByName( const OUString& Name )
 
 
 // virtual
-ucb::CommandInfo SAL_CALL
+ucb::CommandInfo
 CommandProcessorInfo::getCommandInfoByHandle( sal_Int32 Handle )
 {
     auto pInfo = std::find_if(std::cbegin(m_xInfo), std::cend(m_xInfo),
@@ -266,7 +267,7 @@ CommandProcessorInfo::getCommandInfoByHandle( sal_Int32 Handle )
 
 
 // virtual
-bool SAL_CALL CommandProcessorInfo::hasCommandByName(
+bool CommandProcessorInfo::hasCommandByName(
                                                 const OUString& Name )
 {
     return std::any_of(std::cbegin(m_xInfo), std::cend(m_xInfo),
@@ -275,7 +276,7 @@ bool SAL_CALL CommandProcessorInfo::hasCommandByName(
 
 
 // virtual
-bool SAL_CALL CommandProcessorInfo::hasCommandByHandle( sal_Int32 Handle )
+bool CommandProcessorInfo::hasCommandByHandle( sal_Int32 Handle )
 {
     return std::any_of(std::cbegin(m_xInfo), std::cend(m_xInfo),
         [&Handle](const ucb::CommandInfo& rInfo) { return rInfo.Handle == Handle; });
@@ -452,7 +453,7 @@ bool setTitle(
             return false;
         }
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -486,7 +487,7 @@ uno::Reference< ucb::XContent > createNew(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Folder", cpo::uno::Any(rContext.aArg.TargetURL)}
+            {u"Folder"_ustr, cpo::uno::Any(rContext.aArg.TargetURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_CREATE,
@@ -533,7 +534,7 @@ uno::Reference< ucb::XContent > createNew(
         {
             cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
             {
-                {"Folder", cpo::uno::Any(rContext.aArg.TargetURL)}
+                {u"Folder"_ustr, cpo::uno::Any(rContext.aArg.TargetURL)}
             }));
             ucbhelper::cancelCommandExecution(
                 ucb::IOErrorCode_CANT_CREATE,
@@ -551,7 +552,7 @@ uno::Reference< ucb::XContent > createNew(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Folder", cpo::uno::Any(rContext.aArg.TargetURL)}
+            {u"Folder"_ustr, cpo::uno::Any(rContext.aArg.TargetURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_CREATE,
@@ -632,7 +633,7 @@ uno::Reference< ucb::XContent > createNew(
         {
             cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
             {
-                {"Folder", cpo::uno::Any(rContext.aArg.TargetURL)}
+                {u"Folder"_ustr, cpo::uno::Any(rContext.aArg.TargetURL)}
             }));
             ucbhelper::cancelCommandExecution(
                 ucb::IOErrorCode_CANT_CREATE,
@@ -666,7 +667,7 @@ void transferProperties(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rContext.aArg.SourceURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rContext.aArg.SourceURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -692,7 +693,7 @@ void transferProperties(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rContext.aArg.SourceURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rContext.aArg.SourceURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -830,7 +831,7 @@ uno::Reference< io::XInputStream > getInputStream(
         xCommandProcessorS->execute( aOpenCommand, 0, rContext.xEnv );
         xInputStream = xSink->getInputStream();
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -865,7 +866,7 @@ uno::Reference< io::XInputStream > getInputStream(
 
             xInputStream.set( xOutputStream, uno::UNO_QUERY );
         }
-        catch ( uno::RuntimeException const & )
+        catch ( cpo::uno::RuntimeException const & )
         {
             throw;
         }
@@ -904,7 +905,7 @@ uno::Reference< sdbc::XResultSet > getResultSet(
         if ( xSet.is() )
             xResultSet = xSet->getStaticResultSet();
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -943,7 +944,7 @@ void handleNameClashRename(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(xNew->getIdentifier()->getContentIdentifier())}
+            {u"Uri"_ustr, cpo::uno::Any(xNew->getIdentifier()->getContentIdentifier())}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1026,7 +1027,7 @@ void handleNameClashRename(
                     {
                         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
                         {
-                            {"Uri", cpo::uno::Any(xNew->getIdentifier()->getContentIdentifier())}
+                            {u"Uri"_ustr, cpo::uno::Any(xNew->getIdentifier()->getContentIdentifier())}
                         }));
                         ucbhelper::cancelCommandExecution(
                             ucb::IOErrorCode_CANT_READ,
@@ -1053,7 +1054,7 @@ void handleNameClashRename(
             // Success!
             bContinue = false;
         }
-        catch ( uno::RuntimeException const & )
+        catch ( cpo::uno::RuntimeException const & )
         {
             throw;
         }
@@ -1124,7 +1125,7 @@ void globalTransfer_(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Folder", cpo::uno::Any(rContext.aArg.TargetURL)}
+            {u"Folder"_ustr, cpo::uno::Any(rContext.aArg.TargetURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_CREATE,
@@ -1167,7 +1168,7 @@ void globalTransfer_(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rContext.aArg.SourceURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rContext.aArg.SourceURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1332,7 +1333,7 @@ void globalTransfer_(
                                 throw ucb::CommandFailedException(
                                     u"abort requested via interaction "
                                     "handler"_ustr,
-                                    uno::Reference< uno::XInterface >(),
+                                    uno::Reference< cpo::uno::XInterface >(),
                                     aExc );
     //                            break;
 
@@ -1362,7 +1363,7 @@ void globalTransfer_(
                                     // error setting title. Abort.
                                     throw ucb::CommandFailedException(
                                         u"error setting Title property!"_ustr,
-                                        uno::Reference< uno::XInterface >(),
+                                        uno::Reference< cpo::uno::XInterface >(),
                                         aExc );
                                 }
                                 break;
@@ -1428,7 +1429,7 @@ void globalTransfer_(
             {
                 cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
                 {
-                    {"Uri", cpo::uno::Any(rContext.aArg.SourceURL)}
+                    {u"Uri"_ustr, cpo::uno::Any(rContext.aArg.SourceURL)}
                 }));
                 ucbhelper::cancelCommandExecution(
                     ucb::IOErrorCode_CANT_READ,
@@ -1564,7 +1565,7 @@ void UniversalContentBroker::globalTransfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rArg.TargetURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rArg.TargetURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1584,7 +1585,7 @@ void UniversalContentBroker::globalTransfer(
         {
             cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
             {
-                {"Uri", cpo::uno::Any(rArg.TargetURL)}
+                {u"Uri"_ustr, cpo::uno::Any(rArg.TargetURL)}
             }));
             ucbhelper::cancelCommandExecution(
                 ucb::IOErrorCode_CANT_READ,
@@ -1693,7 +1694,7 @@ void UniversalContentBroker::globalTransfer(
                                 throw ucb::CommandFailedException(
                                     u"abort requested via interaction "
                                     "handler"_ustr,
-                                    uno::Reference< uno::XInterface >(),
+                                    uno::Reference< cpo::uno::XInterface >(),
                                     aExc );
 //                                break;
 
@@ -1742,7 +1743,7 @@ void UniversalContentBroker::globalTransfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rArg.SourceURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rArg.SourceURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1759,7 +1760,7 @@ void UniversalContentBroker::globalTransfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rArg.SourceURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rArg.SourceURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1789,7 +1790,7 @@ void UniversalContentBroker::globalTransfer(
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rArg.SourceURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rArg.SourceURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1874,7 +1875,7 @@ cpo::uno::Any UniversalContentBroker::checkIn( const ucb::CheckinArgument& rArg,
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rArg.TargetURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rArg.TargetURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,
@@ -1891,7 +1892,7 @@ cpo::uno::Any UniversalContentBroker::checkIn( const ucb::CheckinArgument& rArg,
     {
         cpo::uno::Sequence<cpo::uno::Any> aArgs(comphelper::InitAnyPropertySequence(
         {
-            {"Uri", cpo::uno::Any(rArg.TargetURL)}
+            {u"Uri"_ustr, cpo::uno::Any(rArg.TargetURL)}
         }));
         ucbhelper::cancelCommandExecution(
             ucb::IOErrorCode_CANT_READ,

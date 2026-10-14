@@ -39,6 +39,7 @@
 #include <i18nlangtag/lang.h>
 
 #include <map>
+#include <vector>
 #include <optional>
 #include <utility>
 #include <deque>
@@ -49,10 +50,10 @@
 struct FPEntry
 {
     // flat paragraph iterator
-    css::uno::Reference< css::text::XFlatParagraphIterator > m_xParaIterator;
+    cpo::uno::Reference< css::text::XFlatParagraphIterator > m_xParaIterator;
 
     // flat paragraph
-    css::uno::Reference< css::text::XFlatParagraph > m_xPara;
+    cpo::uno::Reference< css::text::XFlatParagraph > m_xPara;
 
     // document ID to identify different documents
     OUString        m_aDocId;
@@ -100,16 +101,19 @@ class GrammarCheckingIterator:
 
 
     // BCP-47 language tag -> implname mapping
-    typedef std::map< OUString, OUString > GCImplNames_t;
+    // Every service the configuration names for a language, in order. Only
+    // one of them ends up checking it, but which one depends on the locales
+    // each reports, which cannot be known before they are instantiated.
+    typedef std::map< OUString, std::vector< OUString > > GCImplNames_t;
     GCImplNames_t   m_aGCImplNamesByLang;
 
     // implname -> UNO reference mapping
-    typedef std::map< OUString, css::uno::Reference< css::linguistic2::XProofreader > > GCReferences_t;
+    typedef std::map< OUString, cpo::uno::Reference< css::linguistic2::XProofreader > > GCReferences_t;
     GCReferences_t  m_aGCReferencesByService;
 
     // Last GetGrammarChecker result cached
     css::lang::Locale m_aLastGCLocale;
-    css::uno::Reference< css::linguistic2::XProofreader > m_xLastGC;
+    cpo::uno::Reference< css::linguistic2::XProofreader > m_xLastGC;
     std::optional<OUString> m_oLastGCFallback;
 
     OUString m_aCurCheckedDocId;
@@ -123,29 +127,29 @@ class GrammarCheckingIterator:
     comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>  m_aEventListeners;
     comphelper::OInterfaceContainerHelper3<css::linguistic2::XLinguServiceEventListener>  m_aNotifyListeners;
 
-    css::uno::Reference< css::i18n::XBreakIterator > m_xBreakIterator;
-    mutable css::uno::Reference< css::util::XChangesBatch >  m_xUpdateAccess;
+    cpo::uno::Reference< css::i18n::XBreakIterator > m_xBreakIterator;
+    mutable cpo::uno::Reference< css::util::XChangesBatch >  m_xUpdateAccess;
 
     void TerminateThread();
 
     sal_Int32 NextDocId();
-    OUString GetOrCreateDocId( const css::uno::Reference< css::lang::XComponent > &xComp );
+    OUString GetOrCreateDocId( const cpo::uno::Reference< css::lang::XComponent > &xComp );
 
     void AddEntry(
-            const css::uno::Reference< css::text::XFlatParagraphIterator >& xFlatParaIterator,
-            const css::uno::Reference< css::text::XFlatParagraph >& xFlatPara,
+            const cpo::uno::Reference< css::text::XFlatParagraphIterator >& xFlatParaIterator,
+            const cpo::uno::Reference< css::text::XFlatParagraph >& xFlatPara,
             const OUString &rDocId, sal_Int32 nStartIndex, bool bAutomatic );
 
     void ProcessResult( const css::linguistic2::ProofreadingResult &rRes,
-            const css::uno::Reference< css::text::XFlatParagraphIterator > &rxFlatParagraphIterator,
+            const cpo::uno::Reference< css::text::XFlatParagraphIterator > &rxFlatParagraphIterator,
             bool bIsAutomaticChecking );
 
     sal_Int32 GetSuggestedEndOfSentence( const OUString &rText, sal_Int32 nSentenceStartPos, const css::lang::Locale &rLocale );
 
     void GetConfiguredGCSvcs_Impl();
-    css::uno::Reference< css::linguistic2::XProofreader > GetGrammarChecker( css::lang::Locale & rLocale );
+    cpo::uno::Reference< css::linguistic2::XProofreader > GetGrammarChecker( css::lang::Locale & rLocale );
 
-    css::uno::Reference< css::util::XChangesBatch > const & GetUpdateAccess() const;
+    cpo::uno::Reference< css::util::XChangesBatch > const & GetUpdateAccess() const;
 
     GrammarCheckingIterator( const GrammarCheckingIterator & ) = delete;
     GrammarCheckingIterator & operator = ( const GrammarCheckingIterator & ) = delete;
@@ -153,7 +157,7 @@ class GrammarCheckingIterator:
     // Gets the grammar checker service, using fallback locales if necessary,
     // and the BCP-47 tag for the updated locale, if the fallback was used.
     // Precondition: MyMutex() is locked.
-    std::pair<OUString, std::optional<OUString>>
+    std::pair<std::vector<OUString>, std::optional<OUString>>
     getServiceForLocale(const css::lang::Locale& rLocale) const;
 
 public:
@@ -164,22 +168,22 @@ public:
     virtual ~GrammarCheckingIterator() override;
 
     // XProofreadingIterator
-    virtual void startProofreading( const css::uno::Reference< css::uno::XInterface >& xDocument, const css::uno::Reference< css::text::XFlatParagraphIteratorProvider >& xIteratorProvider ) override;
-    virtual css::linguistic2::ProofreadingResult checkSentenceAtPosition( const css::uno::Reference< css::uno::XInterface >& xDocument, const css::uno::Reference< css::text::XFlatParagraph >& xFlatParagraph, const OUString& aText, const css::lang::Locale& aLocale, ::sal_Int32 nStartOfSentencePosition, ::sal_Int32 nSuggestedBehindEndOfSentencePosition, ::sal_Int32 nErrorPositionInParagraph ) override;
+    virtual void startProofreading( const cpo::uno::Reference< cpo::uno::XInterface >& xDocument, const cpo::uno::Reference< css::text::XFlatParagraphIteratorProvider >& xIteratorProvider ) override;
+    virtual css::linguistic2::ProofreadingResult checkSentenceAtPosition( const cpo::uno::Reference< cpo::uno::XInterface >& xDocument, const cpo::uno::Reference< css::text::XFlatParagraph >& xFlatParagraph, const OUString& aText, const css::lang::Locale& aLocale, ::sal_Int32 nStartOfSentencePosition, ::sal_Int32 nSuggestedBehindEndOfSentencePosition, ::sal_Int32 nErrorPositionInParagraph ) override;
     virtual void resetIgnoreRules(  ) override;
-    virtual bool isProofreading( const css::uno::Reference< css::uno::XInterface >& xDocument ) override;
+    virtual bool isProofreading( const cpo::uno::Reference< cpo::uno::XInterface >& xDocument ) override;
 
     // XLinguServiceEventListener
     virtual void processLinguServiceEvent( const css::linguistic2::LinguServiceEvent& aLngSvcEvent ) override;
 
     // XLinguServiceEventBroadcaster
-    virtual bool addLinguServiceEventListener( const css::uno::Reference< css::linguistic2::XLinguServiceEventListener >& xLstnr ) override;
-    virtual bool removeLinguServiceEventListener( const css::uno::Reference< css::linguistic2::XLinguServiceEventListener >& xLstnr ) override;
+    virtual bool addLinguServiceEventListener( const cpo::uno::Reference< css::linguistic2::XLinguServiceEventListener >& xLstnr ) override;
+    virtual bool removeLinguServiceEventListener( const cpo::uno::Reference< css::linguistic2::XLinguServiceEventListener >& xLstnr ) override;
 
     // XComponent
     virtual void dispose(  ) override;
-    virtual void addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-    virtual void removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // XEventListener
     virtual void disposing( const css::lang::EventObject& Source ) override;

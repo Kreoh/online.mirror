@@ -95,6 +95,7 @@
 
 using ::editeng::SvxBorderLine;
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace sw::util;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::drawing::XShape;
@@ -692,7 +693,8 @@ void PlcDrawObj::WritePlc( WW8Export& rWrt ) const
         // and drawing objects.
         if ( bPosConverted )
         {
-            aRect.SetPos( Point( rHOr.GetPos(), rVOr.GetPos() ) );
+            aRect.SetPos(Point(rHOr.getPosition().as_twip<tools::Long>(),
+                               rVOr.getPosition().as_twip<tools::Long>()));
         }
         else
         {
@@ -703,12 +705,12 @@ void PlcDrawObj::WritePlc( WW8Export& rWrt ) const
                 // #i22673#
                 sal_Int16 eOri = rVOr.GetRelationOrient();
                 if (eOri == text::RelOrientation::CHAR || eOri == text::RelOrientation::TEXT_LINE)
-                    aObjPos.setY( -rVOr.GetPos() );
+                    aObjPos.setY(-rVOr.getPosition().as_twip<tools::Long>());
                 else
-                    aObjPos.setY( rVOr.GetPos() );
+                    aObjPos.setY(rVOr.getPosition().as_twip<tools::Long>());
             }
             if (text::HoriOrientation::NONE == rHOr.GetHoriOrient())
-                aObjPos.setX( rHOr.GetPos() );
+                aObjPos.setX(rHOr.getPosition().as_twip<tools::Long>());
             aRect.SetPos( aObjPos );
         }
 
@@ -2551,12 +2553,12 @@ bool WinwordAnchoring::ConvertPosition( SwFormatHoriOrient& _iorHoriOri,
         if (eHoriConv != sw::WW8AnchorConv::NO_CONV)
         {
             lcl_SetRelationOrient(_iorHoriOri, eHoriConv, [&_iorHoriOri]() {_iorHoriOri.SetHoriOrient(text::HoriOrientation::NONE);} );
-            _iorHoriOri.SetPos(aResult.m_aPos.X());
+            _iorHoriOri.setPosition(gfx::Length::twip(aResult.m_aPos.X()));
         }
         if (eVertConv != sw::WW8AnchorConv::NO_CONV)
         {
             lcl_SetRelationOrient(_iorVertOri, eVertConv, [&_iorVertOri]() {_iorVertOri.SetVertOrient(text::VertOrientation::NONE);} );
-            _iorVertOri.SetPos(aResult.m_aPos.Y());
+            _iorVertOri.setPosition(gfx::Length::twip(aResult.m_aPos.Y()));
         }
         return true;
     }
@@ -3017,7 +3019,7 @@ SwMSConvertControls::SwMSConvertControls( SfxObjectShell const *pDSh, SwPaM *pP 
 // in transitioning away old filter for ole/ocx controls, ReadOCXStream has been made pure virtual in
 // filter/source/msocximex.cxx, so... we need an implementation here
 bool  SwMSConvertControls::ReadOCXStream( rtl::Reference<SotStorage> const & rSrc1,
-        css::uno::Reference< css::drawing::XShape > *pShapeRef,
+        cpo::uno::Reference< css::drawing::XShape > *pShapeRef,
         bool bFloatingCtrl )
 {
     uno::Reference< form::XFormComponent > xFComp;

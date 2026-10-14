@@ -21,6 +21,7 @@ pdfium_patches += charcodetoglyphindex.patch.1
 pdfium_patches += getfontdictobjnum.patch.1
 
 pdfium_patches += system-fast_float.diff
+pdfium_patches += system-dragonbox.diff
 
 ifeq ($(OS),WNT)
 pdfium_patches += pdfium-vs2019-arm64_no-__umulh.patch.1
@@ -28,7 +29,7 @@ endif
 
 # TODO, attempt upstream
 pdfium_patches += ofz451333752.patch
-pdfium_patches += extractpatterns.patch
+pdfium_patches += ofz503815636.patch
 pdfium_patches += container-stream-concepts.patch
 
 $(eval $(call gb_UnpackedTarball_UnpackedTarball,pdfium))
@@ -48,7 +49,8 @@ $(eval $(call gb_UnpackedTarball_set_post_action,pdfium,\
     mv third_party/bigint/BigUnsignedInABase.cc third_party/bigint/BigUnsignedInABase.cpp && \
     mv core/fxcrt/debug/alias.cc core/fxcrt/debug/alias.cpp && \
     mv core/fxcrt/win/win_util.cc core/fxcrt/win/win_util.cpp && \
-    mv third_party/libopenjpeg/opj_malloc.cc third_party/libopenjpeg/opj_malloc.cpp \
+    mv third_party/libopenjpeg/opj_malloc.cc third_party/libopenjpeg/opj_malloc.cpp && \
+    mv third_party/abseil-cpp/absl/base/throw_delegate.cc third_party/abseil-cpp/absl/base/throw_delegate.cpp \
 ))
 
 # vim: set noet sw=4 ts=4:

@@ -46,12 +46,13 @@ class BackstageView extends window.L.Class {
 		options: () => this.executeOptions(),
 		about: () => this.executeAbout(),
 		sign: () => this.executeSign(),
+		quit: () => this.executeQuit(),
 	};
 
 	constructor(map: any) {
 		super();
 		this.map = map;
-		this.isStarterMode = (window as any).starterScreen;
+		this.isStarterMode = window.starterScreen;
 		this.container = this.createContainer();
 		document.body.appendChild(this.container);
 		this.map?.on(
@@ -94,6 +95,15 @@ class BackstageView extends window.L.Class {
 		else this.handleActionTab(config);
 	}
 
+	private isPdfOpen(): boolean {
+		// The backstage only exists in the desktop apps, which do not populate
+		// the WOPI CheckFileInfo properties: take the file name from the
+		// document URL. Its directory is obfuscated, but the file name keeps
+		// its real extension.
+		const name: string = String(this.map.options.doc || '').split('?')[0];
+		return name.toLowerCase().endsWith('.pdf');
+	}
+
 	private getTabsConfig(): BackstageTabConfig[] {
 		return [
 			{
@@ -123,6 +133,12 @@ class BackstageView extends window.L.Class {
 				viewType: 'open',
 				icon: 'lc_open.svg',
 				visible: true,
+			},
+			{
+				type: 'separator',
+				id: 'sidebar-common-break',
+				label: '',
+				visible: !this.isStarterMode,
 			},
 			{
 				id: 'share',
@@ -178,13 +194,26 @@ class BackstageView extends window.L.Class {
 				type: 'action',
 				actionType: 'sign',
 				icon: 'lc_signature.svg',
-				visible: !this.isStarterMode && !!window.documentSigningEnabled,
+				// Hidden for PDF: the Sign action dispatches .uno:Signature, which
+				// opens the document signature dialog. That is not the way PDFs are
+				// signed here (use Insert > Signature Line instead).
+				visible:
+					!this.isStarterMode &&
+					!!window.documentSigningEnabled &&
+					!this.isPdfOpen(),
 			},
 			{
 				type: 'separator',
 				id: 'sidebar-horizontal-break',
 				label: '',
 				visible: !this.isStarterMode,
+			},
+			{
+				id: 'quit',
+				label: _('Quit'),
+				type: 'action',
+				actionType: 'quit',
+				visible: !this.isStarterMode && window.mode.isCODesktop(),
 			},
 			{
 				id: 'options',
@@ -229,7 +258,7 @@ class BackstageView extends window.L.Class {
 		const wopi = this.map['wopi'] || {};
 		const featureFlags: Record<string, boolean> = {
 			share: !!wopi.EnableShare,
-			save: !wopi.HideSaveOption,
+			save: !wopi.HideSaveOption && !this.map.isReadOnlyMode(),
 			saveAs:
 				!wopi.UserCanNotWriteRelative ||
 				window.ThisIsTheQtApp ||
@@ -491,8 +520,8 @@ class BackstageView extends window.L.Class {
 				onOpenLocal: () => this.executeOpen(),
 				cloudTiles: this.getRegisteredCloudProviders().map((p) => ({
 					id: p.id,
-					typeName: this.getCloudProviderDisplayName(p.kind),
-					iconName: this.getCloudProviderIcon(p.kind),
+					typeName: BackstageCloudKinds.label(p.kind),
+					kind: p.kind,
 					userName: p.name,
 					onClick: () => this.openCloudProvider(p),
 					onEdit: () => this.showAddCloudDialog(p),
@@ -513,7 +542,7 @@ class BackstageView extends window.L.Class {
 		this.mountDialog((close) =>
 			BackstageTemplates.addCloudDialog({
 				isEdit: !!provider,
-				initialKind: provider?.kind ?? 'nextcloud',
+				initialKind: provider?.kind ?? BackstageCloudKinds.defaultKind(),
 				initialDomain: provider?.url ?? '',
 				initialName: provider?.name ?? '',
 				onCancel: close,
@@ -544,8 +573,8 @@ class BackstageView extends window.L.Class {
 	private showCloudAddedDialog(provider: CloudProvider): void {
 		this.mountDialog((close) =>
 			BackstageTemplates.cloudAddedDialog({
-				typeName: this.getCloudProviderDisplayName(provider.kind),
-				iconName: this.getCloudProviderIcon(provider.kind),
+				typeName: BackstageCloudKinds.label(provider.kind),
+				kind: provider.kind,
 				userName: provider.name,
 				onClose: close,
 				onOpen: () => {
@@ -562,8 +591,8 @@ class BackstageView extends window.L.Class {
 	): void {
 		this.mountDialog((close) =>
 			BackstageTemplates.removeConfirmDialog({
-				typeName: this.getCloudProviderDisplayName(provider.kind),
-				iconName: this.getCloudProviderIcon(provider.kind),
+				typeName: BackstageCloudKinds.label(provider.kind),
+				kind: provider.kind,
 				userName: provider.name,
 				onCancel: close,
 				onConfirm: () => {
@@ -585,19 +614,15 @@ class BackstageView extends window.L.Class {
 			if (!raw) return [];
 			const parsed = JSON.parse(raw);
 			if (!Array.isArray(parsed)) return [];
-			const validKinds: CloudProviderKind[] = [
-				'nextcloud',
-				'opencloud',
-				'seafile',
-				'other',
-			];
+			// An account stored while another branding was in place names a service that is
+			// no longer on offer, and is kept: it reads as Other with the generic icon.
 			return parsed.filter(
 				(p: any): p is CloudProvider =>
 					p &&
 					typeof p.id === 'string' &&
 					typeof p.name === 'string' &&
 					typeof p.url === 'string' &&
-					validKinds.includes(p.kind),
+					BackstageCloudKinds.isValidKind(p.kind),
 			);
 		} catch (e) {
 			console.error('Failed to read cloud providers:', e);
@@ -660,36 +685,15 @@ class BackstageView extends window.L.Class {
 		} catch (e) {
 			console.error('Failed to remove cloud provider:', e);
 		}
-	}
-
-	private getCloudProviderDisplayName(kind: CloudProviderKind): string {
-		switch (kind) {
-			case 'nextcloud':
-				return 'Nextcloud';
-			case 'opencloud':
-				return 'OpenCloud';
-			case 'seafile':
-				return 'Seafile';
-			case 'other':
-				return _('Other');
-		}
-	}
-
-	private getCloudProviderIcon(kind: CloudProviderKind): string {
-		switch (kind) {
-			case 'nextcloud':
-				return 'nextcloud.svg';
-			case 'opencloud':
-				return 'opencloud.svg';
-			case 'seafile':
-				return 'seafile.svg';
-			case 'other':
-				return 'generic.svg';
-		}
+		window.app.console.debug('Backstage: removing account ' + id);
+		window.postMobileMessage('removecloudaccount account=' + id);
 	}
 
 	private openCloudProvider(provider: CloudProvider): void {
-		window.postMobileMessage('openremote ' + provider.url);
+		window.app.console.debug('Backstage: opening account ' + provider.id);
+		window.postMobileMessage(
+			'openremote ' + provider.url + ' account=' + provider.id,
+		);
 	}
 
 	private renderNewView(): void {
@@ -746,6 +750,7 @@ class BackstageView extends window.L.Class {
 			this.getBlankTemplate('writer'),
 			this.getBlankTemplate('calc'),
 			this.getBlankTemplate('impress'),
+			this.getBlankTemplate('draw'),
 		].filter((t): t is TemplateData => t !== null);
 
 		const query = this.templateSearchQuery.trim().toLowerCase();
@@ -766,22 +771,57 @@ class BackstageView extends window.L.Class {
 			const type = this.normalizeTemplateType(entry.type, path);
 			if (!type) return;
 
-			const name = entry.name;
-			if (!name) return;
+			if (!entry.name) return;
 
-			const id = entry.id || this.slugify(name + path);
+			// The manifest marks its strings with N_(), so translate them here,
+			// once the localization table is loaded.
+			const name = _(entry.name);
+			const id = entry.id || this.slugify(entry.name + path);
+			const previews = this.localizedPreviews(entry.preview);
 			docs.push({
 				id,
 				name,
 				type,
 				path,
-				basename: entry.basename || undefined,
-				preview: entry.preview || undefined,
+				basename: entry.basename ? _(entry.basename) : undefined,
+				preview: previews[0],
+				previewFallbacks: previews.slice(1),
 				searchText: [name, type, path].join(' ').toLowerCase(),
 			});
 		});
 
 		return docs;
+	}
+
+	// The build ships the English preview of an intro document as
+	// introdocs/preview/<Doc>.png and a rendering per translated language as
+	// <Doc>-<bcp47>.png (see introdocs/render_previews.py). Lists the files
+	// to try for the UI language, most specific first, ending with the
+	// English one.
+	private localizedPreviews(preview: string | null | undefined): string[] {
+		if (!preview) return [];
+		const match = /^(.*)\.png$/.exec(preview);
+		if (!match) return [preview];
+
+		const candidates: string[] = [];
+		for (const tag of this.previewLanguageTags())
+			candidates.push(match[1] + '-' + tag + '.png');
+		candidates.push(preview);
+		return candidates;
+	}
+
+	// The tags the engine matches the UI language against when it
+	// translates the document, in its order: the full tag, then the
+	// language alone. English is the source language and has no file of
+	// its own.
+	private previewLanguageTags(): string[] {
+		const lang = String((window as any).LANG || '').replace(/_/g, '-');
+		if (!lang || lang === 'en-US') return [];
+
+		const tags = [lang];
+		const language = lang.split('-')[0];
+		if (language !== lang) tags.push(language);
+		return tags;
 	}
 
 	private renderInfoView(): void {
@@ -902,10 +942,12 @@ class BackstageView extends window.L.Class {
 			const type = this.normalizeTemplateType(entry.type, absolutePath);
 			if (!type) return;
 
-			const name = entry.name;
-			if (!name) return;
+			if (!entry.name) return;
 
-			const id = entry.id || this.slugify(name + absolutePath);
+			// The manifest marks its strings with N_(), so translate them here,
+			// once the localization table is loaded.
+			const name = _(entry.name);
+			const id = entry.id || this.slugify(entry.name + absolutePath);
 			const searchComponents = [name, type, absolutePath];
 
 			templates.push({
@@ -913,18 +955,19 @@ class BackstageView extends window.L.Class {
 				name,
 				type,
 				path: absolutePath,
-				basename: entry.basename || undefined,
+				basename: entry.basename ? _(entry.basename) : undefined,
 				preview: entry.preview || undefined,
 				featured: !!entry.featured,
 				searchText: searchComponents.join(' ').toLowerCase(),
 			});
 		});
 
-		// Sort by type first (writer, calc, impress), then alphabetically by name
+		// Sort by type first (writer, calc, impress, draw), then alphabetically by name
 		const typeOrder: Record<TemplateType, number> = {
 			writer: 1,
 			calc: 2,
 			impress: 3,
+			draw: 4,
 		};
 
 		return templates.sort((a, b) => {
@@ -1024,6 +1067,10 @@ class BackstageView extends window.L.Class {
 				name = _('Blank Presentation');
 				previewPath = 'images/templates/preview/blank_presentation.png';
 				break;
+			case 'draw':
+				name = _('Blank Drawing');
+				previewPath = 'images/templates/preview/blank_drawing.png';
+				break;
 			case 'writer':
 			default:
 				name = _('Blank Document');
@@ -1048,6 +1095,7 @@ class BackstageView extends window.L.Class {
 			otm: 'writer',
 			ots: 'calc',
 			otp: 'impress',
+			otg: 'draw',
 		};
 		return map[extension] || null;
 	}
@@ -1060,7 +1108,8 @@ class BackstageView extends window.L.Class {
 		if (
 			normalized === 'writer' ||
 			normalized === 'calc' ||
-			normalized === 'impress'
+			normalized === 'impress' ||
+			normalized === 'draw'
 		)
 			return normalized as TemplateType;
 		return this.detectTypeFromPath(templatePath);
@@ -1081,11 +1130,10 @@ class BackstageView extends window.L.Class {
 	}
 
 	private getExportOptionsFromNotebookbar(): ExportSections {
-		const docType = this.getDocTypeString();
 		const builder = new (window.L.Control.NotebookbarBuilder as any)();
 
 		const downloadAsOpts: ExportOptionItem[] = builder._getDownloadAsSubmenuOpts
-			? builder._getDownloadAsSubmenuOpts(docType) || []
+			? builder._getDownloadAsSubmenuOpts() || []
 			: [];
 
 		return {
@@ -1149,6 +1197,11 @@ class BackstageView extends window.L.Class {
 	private executeSign(): void {
 		this.sendUnoCommand('.uno:Signature');
 		this.hide();
+	}
+
+	private executeQuit(): void {
+		// .uno:Quit is answered by the desktop shell and never reaches the document.
+		this.sendUnoCommand('.uno:Quit');
 	}
 
 	private executeDocumentProperties(): void {
@@ -1276,12 +1329,14 @@ class BackstageView extends window.L.Class {
 	}
 
 	private hideDocumentContainer(): void {
-		$('#document-container').addClass('hidden');
+		const container = document.getElementById('document-container');
+		if (container) container.classList.add('hidden');
 		$('.notebookbar-scroll-wrapper').addClass('hidden');
 	}
 
 	private showDocumentContainer(): void {
-		$('#document-container').removeClass('hidden');
+		const container = document.getElementById('document-container');
+		if (container) container.classList.remove('hidden');
 		$('.notebookbar-scroll-wrapper').removeClass('hidden');
 	}
 
@@ -1298,8 +1353,9 @@ class BackstageView extends window.L.Class {
 			case 'spreadsheet':
 				return 'calc';
 			case 'presentation':
-			case 'drawing':
 				return 'impress';
+			case 'drawing':
+				return 'draw';
 			default:
 				return 'writer';
 		}

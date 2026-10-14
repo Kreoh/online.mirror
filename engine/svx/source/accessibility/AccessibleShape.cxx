@@ -56,9 +56,10 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 using ::com::sun::star::lang::IndexOutOfBoundsException;
-using ::com::sun::star::uno::RuntimeException;
+using ::cpo::uno::RuntimeException;
 
 namespace accessibility {
 
@@ -275,7 +276,7 @@ bool AccessibleShape::GetState (sal_Int64 aState)
 }
 
 // OverWrite the parent's getAccessibleName method
-OUString SAL_CALL AccessibleShape::getAccessibleName()
+OUString AccessibleShape::getAccessibleName()
 {
     ensureAlive();
     if (m_pShape && !m_pShape->GetTitle().isEmpty())
@@ -284,7 +285,7 @@ OUString SAL_CALL AccessibleShape::getAccessibleName()
         return CreateAccessibleName();
 }
 
-OUString SAL_CALL AccessibleShape::getAccessibleDescription()
+OUString AccessibleShape::getAccessibleDescription()
 {
     ensureAlive();
     if( m_pShape && !m_pShape->GetDescription().isEmpty())
@@ -297,7 +298,7 @@ OUString SAL_CALL AccessibleShape::getAccessibleDescription()
 /** The children of this shape come from two sources: The children from
     group or scene shapes and the paragraphs of text.
 */
-sal_Int64 SAL_CALL
+sal_Int64
        AccessibleShape::getAccessibleChildCount ()
 {
     if (!isAlive())
@@ -321,7 +322,7 @@ sal_Int64 SAL_CALL
 /** Forward the request to the shape.  Return the requested shape or throw
     an exception for a wrong index.
 */
-uno::Reference<XAccessible> SAL_CALL
+uno::Reference<XAccessible>
     AccessibleShape::getAccessibleChild (sal_Int64 nIndex)
 {
     ensureAlive();
@@ -350,7 +351,7 @@ uno::Reference<XAccessible> SAL_CALL
     return pChild;
 }
 
-uno::Reference<XAccessibleRelationSet> SAL_CALL
+uno::Reference<XAccessibleRelationSet>
     AccessibleShape::getAccessibleRelationSet()
 {
     ::osl::MutexGuard aGuard (m_aMutex);
@@ -375,7 +376,7 @@ uno::Reference<XAccessibleRelationSet> SAL_CALL
         SHOWING
         VISIBLE
 */
-sal_Int64 SAL_CALL
+sal_Int64
     AccessibleShape::getAccessibleStateSet()
 {
     ::osl::MutexGuard aGuard (m_aMutex);
@@ -395,10 +396,10 @@ sal_Int64 SAL_CALL
             mnStateSet &= ~AccessibleStateType::FOCUSED;
     }
     //Just when the document is not read-only,set states EDITABLE,RESIZABLE,MOVEABLE
-    css::uno::Reference<XAccessible> xTempAcc = getAccessibleParent();
+    cpo::uno::Reference<XAccessible> xTempAcc = getAccessibleParent();
     if( xTempAcc.is() )
     {
-        css::uno::Reference<XAccessibleContext>
+        cpo::uno::Reference<XAccessibleContext>
                                 xTempAccContext = xTempAcc->getAccessibleContext();
         if( xTempAccContext.is() )
         {
@@ -431,7 +432,7 @@ sal_Int64 SAL_CALL
     the already instantiated children and only if no match is found
     instantiate the remaining ones.
 */
-uno::Reference<XAccessible > SAL_CALL
+uno::Reference<XAccessible >
     AccessibleShape::getAccessibleAtPoint (
         const awt::Point& aPoint)
 {
@@ -528,7 +529,7 @@ awt::Rectangle AccessibleShape::implGetBounds()
 
         // Transform coordinates from internal to pixel.
         if (maShapeTreeInfo.GetViewForwarder() == nullptr)
-            throw uno::RuntimeException (
+            throw cpo::uno::RuntimeException (
                 u"AccessibleShape has no valid view forwarder"_ustr,
                 getXWeak());
         ::Size aPixelSize = maShapeTreeInfo.GetViewForwarder()->LogicToPixel (
@@ -570,7 +571,7 @@ awt::Rectangle AccessibleShape::implGetBounds()
     return aBoundingBox;
 }
 
-sal_Int32 SAL_CALL AccessibleShape::getForeground()
+sal_Int32 AccessibleShape::getForeground()
 {
     ensureAlive();
     sal_Int32 nColor (0x0ffffffL);
@@ -593,7 +594,7 @@ sal_Int32 SAL_CALL AccessibleShape::getForeground()
 }
 
 
-sal_Int32 SAL_CALL AccessibleShape::getBackground()
+sal_Int32 AccessibleShape::getBackground()
 {
     ensureAlive();
     Color nColor;
@@ -630,7 +631,7 @@ sal_Int32 SAL_CALL AccessibleShape::getBackground()
 }
 
 // XAccessibleEventBroadcaster
-void SAL_CALL AccessibleShape::addAccessibleEventListener (
+void AccessibleShape::addAccessibleEventListener (
     const Reference<XAccessibleEventListener >& rxListener)
 {
     AccessibleContextBase::addAccessibleEventListener(rxListener);
@@ -644,7 +645,7 @@ void SAL_CALL AccessibleShape::addAccessibleEventListener (
 }
 
 
-void SAL_CALL AccessibleShape::removeAccessibleEventListener (
+void AccessibleShape::removeAccessibleEventListener (
     const Reference<XAccessibleEventListener >& rxListener)
 {
     AccessibleContextBase::removeAccessibleEventListener (rxListener);
@@ -653,7 +654,7 @@ void SAL_CALL AccessibleShape::removeAccessibleEventListener (
 }
 
 // XInterface
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
     AccessibleShape::queryInterface (const cpo::uno::Type & rType)
 {
     cpo::uno::Any aReturn = AccessibleContextBase::queryInterface (rType);
@@ -672,7 +673,7 @@ cpo::uno::Any SAL_CALL
 }
 
 
-void SAL_CALL
+void
     AccessibleShape::acquire()
     noexcept
 {
@@ -680,7 +681,7 @@ void SAL_CALL
 }
 
 
-void SAL_CALL
+void
     AccessibleShape::release()
     noexcept
 {
@@ -688,12 +689,12 @@ void SAL_CALL
 }
 
 // XAccessibleSelection
-void SAL_CALL AccessibleShape::selectAccessibleChild( sal_Int64 )
+void AccessibleShape::selectAccessibleChild( sal_Int64 )
 {
 }
 
 
-bool SAL_CALL AccessibleShape::isAccessibleChildSelected( sal_Int64 nChildIndex )
+bool AccessibleShape::isAccessibleChildSelected( sal_Int64 nChildIndex )
 {
     uno::Reference<XAccessible> xAcc = getAccessibleChild( nChildIndex );
     uno::Reference<XAccessibleContext> xContext;
@@ -725,17 +726,17 @@ bool SAL_CALL AccessibleShape::isAccessibleChildSelected( sal_Int64 nChildIndex 
 }
 
 
-void SAL_CALL AccessibleShape::clearAccessibleSelection(  )
+void AccessibleShape::clearAccessibleSelection(  )
 {
 }
 
 
-void SAL_CALL AccessibleShape::selectAllAccessibleChildren(  )
+void AccessibleShape::selectAllAccessibleChildren(  )
 {
 }
 
 
-sal_Int64 SAL_CALL AccessibleShape::getSelectedAccessibleChildCount()
+sal_Int64 AccessibleShape::getSelectedAccessibleChildCount()
 {
     sal_Int64 nCount = 0;
     sal_Int64 TotalCount = getAccessibleChildCount();
@@ -746,7 +747,7 @@ sal_Int64 SAL_CALL AccessibleShape::getSelectedAccessibleChildCount()
 }
 
 
-Reference<XAccessible> SAL_CALL AccessibleShape::getSelectedAccessibleChild( sal_Int64 nSelectedChildIndex )
+Reference<XAccessible> AccessibleShape::getSelectedAccessibleChild( sal_Int64 nSelectedChildIndex )
 {
     if ( nSelectedChildIndex > getSelectedAccessibleChildCount() )
         throw IndexOutOfBoundsException();
@@ -761,13 +762,13 @@ Reference<XAccessible> SAL_CALL AccessibleShape::getSelectedAccessibleChild( sal
 }
 
 
-void SAL_CALL AccessibleShape::deselectAccessibleChild( sal_Int64 )
+void AccessibleShape::deselectAccessibleChild( sal_Int64 )
 {
 
 }
 
 // XAccessibleExtendedAttributes
-OUString SAL_CALL AccessibleShape::getExtendedAttributes()
+OUString AccessibleShape::getExtendedAttributes()
 {
     if (getAccessibleRole() != AccessibleRole::SHAPE)
         return OUString();
@@ -779,14 +780,14 @@ OUString SAL_CALL AccessibleShape::getExtendedAttributes()
 }
 
 // XServiceInfo
-OUString SAL_CALL
+OUString
     AccessibleShape::getImplementationName()
 {
     return u"AccessibleShape"_ustr;
 }
 
 
-cpo::uno::Sequence<OUString> SAL_CALL
+cpo::uno::Sequence<OUString>
     AccessibleShape::getSupportedServiceNames()
 {
     ensureAlive();
@@ -795,7 +796,7 @@ cpo::uno::Sequence<OUString> SAL_CALL
 }
 
 // XTypeProvider
-cpo::uno::Sequence<cpo::uno::Type> SAL_CALL
+cpo::uno::Sequence<cpo::uno::Type>
     AccessibleShape::getTypes()
 {
     ensureAlive();
@@ -831,7 +832,7 @@ void AccessibleShape::disposing (const lang::EventObject& aEvent)
         }
 
     }
-    catch (uno::RuntimeException const&)
+    catch (cpo::uno::RuntimeException const&)
     {
         TOOLS_WARN_EXCEPTION("svx", "caught exception while disposing");
     }
@@ -842,7 +843,7 @@ void AccessibleShape::disposing (const lang::EventObject& aEvent)
 }
 
 // document::XShapeEventListener
-void SAL_CALL
+void
     AccessibleShape::notifyShapeEvent (const document::EventObject& rEventObject)
 {
     if (rEventObject.EventName != "ShapeModified")
@@ -969,7 +970,7 @@ void AccessibleShape::disposing()
     AccessibleContextBase::disposing();
 }
 
-sal_Int64 SAL_CALL AccessibleShape::getAccessibleIndexInParent()
+sal_Int64 AccessibleShape::getAccessibleIndexInParent()
 {
     ensureAlive();
 
@@ -1006,13 +1007,13 @@ void AccessibleShape::UpdateNameAndDescription()
         if (!sString.isEmpty())
             SetAccessibleDescription(sString, AccessibleContextBase::FromShape);
     }
-    catch (uno::RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
     }
 }
 
 //  Return this object's role.
-sal_Int16 SAL_CALL AccessibleShape::getAccessibleRole()
+sal_Int16 AccessibleShape::getAccessibleRole()
 {
     sal_Int16 nAccessibleRole =  AccessibleRole::SHAPE ;
     switch (ShapeTypeHandler::Instance().GetTypeId (mxShape))
@@ -1051,7 +1052,7 @@ struct XShapePosCompareHelper
 //end of group position
 
 // XAccessibleGroupPosition
-cpo::uno::Sequence< sal_Int32 > SAL_CALL
+cpo::uno::Sequence< sal_Int32 >
 AccessibleShape::getGroupPosition( const cpo::uno::Any& )
 {
     // we will return the:
@@ -1060,7 +1061,7 @@ AccessibleShape::getGroupPosition( const cpo::uno::Any& )
     // [2] the position of the object in the group
     cpo::uno::Sequence< sal_Int32 > aRet{ 0, 0, 0 };
 
-    css::uno::Reference<XAccessible> xParent = getAccessibleParent();
+    cpo::uno::Reference<XAccessible> xParent = getAccessibleParent();
     if (!xParent.is())
     {
         return aRet;
@@ -1082,7 +1083,7 @@ AccessibleShape::getGroupPosition( const cpo::uno::Any& )
         pUper = pUper->getParentSdrObjectFromSdrObject();
     }
 
-    css::uno::Reference<XAccessibleContext> xParentContext = xParent->getAccessibleContext();
+    cpo::uno::Reference<XAccessibleContext> xParentContext = xParent->getAccessibleContext();
     if( xParentContext->getAccessibleRole()  == AccessibleRole::DOCUMENT ||
             xParentContext->getAccessibleRole()  == AccessibleRole::DOCUMENT_PRESENTATION ||
             xParentContext->getAccessibleRole()  == AccessibleRole::DOCUMENT_SPREADSHEET ||
@@ -1163,7 +1164,7 @@ OUString AccessibleShape::getObjectLink( const cpo::uno::Any& )
 }
 
 // XAccessibleHypertext
-sal_Int32 SAL_CALL AccessibleShape::getHyperLinkCount()
+sal_Int32 AccessibleShape::getHyperLinkCount()
 {
     // MT: Introduced with IA2 CWS, but SvxAccessibleHyperlink was redundant to svx::AccessibleHyperlink which we introduced meanwhile.
     // Code need to be adapted...
@@ -1177,7 +1178,7 @@ sal_Int32 SAL_CALL AccessibleShape::getHyperLinkCount()
         return 0;
     */
 }
-uno::Reference< XAccessibleHyperlink > SAL_CALL
+uno::Reference< XAccessibleHyperlink >
     AccessibleShape::getHyperLink( sal_Int32 )
 {
     uno::Reference< XAccessibleHyperlink > xRet;
@@ -1192,48 +1193,48 @@ uno::Reference< XAccessibleHyperlink > SAL_CALL
     */
     return xRet;
 }
-sal_Int32 SAL_CALL AccessibleShape::getHyperLinkIndex( sal_Int32 )
+sal_Int32 AccessibleShape::getHyperLinkIndex( sal_Int32 )
 {
     return 0;
 }
 // XAccessibleText
-sal_Int32 SAL_CALL AccessibleShape::getCaretPosition(  ){return 0;}
-bool SAL_CALL AccessibleShape::setCaretPosition( sal_Int32 ){return false;}
-sal_Unicode SAL_CALL AccessibleShape::getCharacter( sal_Int32 ){return 0;}
-cpo::uno::Sequence< css::beans::PropertyValue > SAL_CALL AccessibleShape::getCharacterAttributes( sal_Int32, const cpo::uno::Sequence< OUString >& )
+sal_Int32 AccessibleShape::getCaretPosition(  ){return 0;}
+bool AccessibleShape::setCaretPosition( sal_Int32 ){return false;}
+sal_Unicode AccessibleShape::getCharacter( sal_Int32 ){return 0;}
+cpo::uno::Sequence< css::beans::PropertyValue > AccessibleShape::getCharacterAttributes( sal_Int32, const cpo::uno::Sequence< OUString >& )
 {
     cpo::uno::Sequence< css::beans::PropertyValue > aValues(0);
     return aValues;
 }
-css::awt::Rectangle SAL_CALL AccessibleShape::getCharacterBounds( sal_Int32 )
+css::awt::Rectangle AccessibleShape::getCharacterBounds( sal_Int32 )
 {
     return css::awt::Rectangle(0, 0, 0, 0 );
 }
-sal_Int32 SAL_CALL AccessibleShape::getCharacterCount(  ){return 0;}
-sal_Int32 SAL_CALL AccessibleShape::getIndexAtPoint( const css::awt::Point& ){return 0;}
-OUString SAL_CALL AccessibleShape::getSelectedText(  ){return OUString();}
-sal_Int32 SAL_CALL AccessibleShape::getSelectionStart(  ){return 0;}
-sal_Int32 SAL_CALL AccessibleShape::getSelectionEnd(  ){return 0;}
-bool SAL_CALL AccessibleShape::setSelection( sal_Int32, sal_Int32 ){return true;}
-OUString SAL_CALL AccessibleShape::getText(  ){return OUString();}
-OUString SAL_CALL AccessibleShape::getTextRange( sal_Int32, sal_Int32 ){return OUString();}
-css::accessibility::TextSegment SAL_CALL AccessibleShape::getTextAtIndex( sal_Int32, sal_Int16 )
+sal_Int32 AccessibleShape::getCharacterCount(  ){return 0;}
+sal_Int32 AccessibleShape::getIndexAtPoint( const css::awt::Point& ){return 0;}
+OUString AccessibleShape::getSelectedText(  ){return OUString();}
+sal_Int32 AccessibleShape::getSelectionStart(  ){return 0;}
+sal_Int32 AccessibleShape::getSelectionEnd(  ){return 0;}
+bool AccessibleShape::setSelection( sal_Int32, sal_Int32 ){return true;}
+OUString AccessibleShape::getText(  ){return OUString();}
+OUString AccessibleShape::getTextRange( sal_Int32, sal_Int32 ){return OUString();}
+css::accessibility::TextSegment AccessibleShape::getTextAtIndex( sal_Int32, sal_Int16 )
 {
     css::accessibility::TextSegment aResult;
     return aResult;
 }
-css::accessibility::TextSegment SAL_CALL AccessibleShape::getTextBeforeIndex( sal_Int32, sal_Int16 )
+css::accessibility::TextSegment AccessibleShape::getTextBeforeIndex( sal_Int32, sal_Int16 )
 {
     css::accessibility::TextSegment aResult;
     return aResult;
 }
-css::accessibility::TextSegment SAL_CALL AccessibleShape::getTextBehindIndex( sal_Int32, sal_Int16 )
+css::accessibility::TextSegment AccessibleShape::getTextBehindIndex( sal_Int32, sal_Int16 )
 {
     css::accessibility::TextSegment aResult;
     return aResult;
 }
-bool SAL_CALL AccessibleShape::copyText( sal_Int32, sal_Int32 ){return true;}
-bool SAL_CALL AccessibleShape::scrollSubstringTo( sal_Int32, sal_Int32, AccessibleScrollType ){return false;}
+bool AccessibleShape::copyText( sal_Int32, sal_Int32 ){return true;}
+bool AccessibleShape::scrollSubstringTo( sal_Int32, sal_Int32, AccessibleScrollType ){return false;}
 
 } // end of namespace accessibility
 

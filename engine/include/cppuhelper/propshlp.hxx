@@ -20,16 +20,16 @@
 #ifndef INCLUDED_CPPUHELPER_PROPSHLP_HXX
 #define INCLUDED_CPPUHELPER_PROPSHLP_HXX
 
-#include "rtl/alloc.h"
+#include <rtl/alloc.h>
 
-#include "cppuhelper/interfacecontainer.h"
+#include <cppuhelper/interfacecontainer.h>
 
-#include "com/sun/star/beans/XPropertySet.hpp"
-#include "com/sun/star/beans/XPropertySetOption.hpp"
-#include "com/sun/star/beans/XMultiPropertySet.hpp"
-#include "com/sun/star/beans/XFastPropertySet.hpp"
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySetOption.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/beans/XFastPropertySet.hpp>
 
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <cppuhelper/cppuhelperdllapi.h>
 
 
 namespace cppu
@@ -142,36 +142,36 @@ public:
        @return True, if the handle exist, otherwise false.
      */
     virtual bool fillPropertyMembersByHandle(
-        ::rtl::OUString * pPropName, sal_Int16 * pAttributes, sal_Int32 nHandle ) SAL_OVERRIDE;
+        ::rtl::OUString * pPropName, sal_Int16 * pAttributes, sal_Int32 nHandle ) override;
     /**
        Return the sequence of properties. The sequence is sorted by name.
      */
-    virtual cpo::uno::Sequence< css::beans::Property > getProperties() SAL_OVERRIDE;
+    virtual cpo::uno::Sequence< css::beans::Property > getProperties() override;
     /**
        Return the property with the name rPropertyName.
        @param rPropertyName the name of the property.
        @exception UnknownPropertyException  thrown if the property name is unknown.
      */
     virtual css::beans::Property getPropertyByName(
-        const ::rtl::OUString& rPropertyName ) SAL_OVERRIDE;
+        const ::rtl::OUString& rPropertyName ) override;
     /**
        Return true if the property with the name rPropertyName exist, otherwise false.
        @param rPropertyName the name of the property.
      */
-    virtual bool hasPropertyByName(const ::rtl::OUString& rPropertyName) SAL_OVERRIDE;
+    virtual bool hasPropertyByName(const ::rtl::OUString& rPropertyName) override;
     /**
        Return the handle of the property with the name rPropertyName.
        If the property does not exist -1 is returned.
        @param rPropertyName the name of the property.
      */
-    virtual sal_Int32 getHandleByName( const ::rtl::OUString & rPropertyName ) SAL_OVERRIDE;
+    virtual sal_Int32 getHandleByName( const ::rtl::OUString & rPropertyName ) override;
     /**
        Fill the array with the handles of the properties.
        @return the handles of the names from the pHandles array. -1
        indicates an unknown property name.
      */
     virtual sal_Int32 fillHandles(
-        /*out*/sal_Int32 * pHandles, const cpo::uno::Sequence< ::rtl::OUString > & rPropNames ) SAL_OVERRIDE;
+        /*out*/sal_Int32 * pHandles, const cpo::uno::Sequence< ::rtl::OUString > & rPropNames ) override;
 
 protected:
     /** reserved for future use. do not use.
@@ -246,7 +246,7 @@ public:
      */
     sal_Int32 addInterface(
         const sal_Int32 & rKey,
-        const css::uno::Reference< css::uno::XInterface > & r );
+        const cpo::uno::Reference< cpo::uno::XInterface > & r );
 
     /**
       Remove an element from the container specified with the key.
@@ -257,7 +257,7 @@ public:
      */
     sal_Int32 removeInterface(
         const sal_Int32 & rKey,
-        const css::uno::Reference< css::uno::XInterface > & rxIFace );
+        const cpo::uno::Reference< cpo::uno::XInterface > & rxIFace );
 
     /**
       Call disposing on all objects in the container that
@@ -274,8 +274,8 @@ private:
     void *          m_pMap;
     ::osl::Mutex &  rMutex;
 
-    OMultiTypeInterfaceContainerHelperInt32( const OMultiTypeInterfaceContainerHelperInt32 & ) SAL_DELETED_FUNCTION;
-    OMultiTypeInterfaceContainerHelperInt32 & operator = ( const OMultiTypeInterfaceContainerHelperInt32 & )SAL_DELETED_FUNCTION;
+    OMultiTypeInterfaceContainerHelperInt32( const OMultiTypeInterfaceContainerHelperInt32 & ) = delete;
+    OMultiTypeInterfaceContainerHelperInt32 & operator = ( const OMultiTypeInterfaceContainerHelperInt32 & )= delete;
 };
 
 
@@ -394,11 +394,11 @@ public:
        Only returns a reference to XMultiPropertySet, XFastPropertySet, XPropertySet and
        XEventListener.
      */
-    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) SAL_OVERRIDE;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
 
     /** eases implementing XTypeProvider::getTypes, returns the types of XMultiPropertySet, XFastPropertySet, XPropertySet
 
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
      */
     cpo::uno::Sequence< cpo::uno::Type > getTypes();
 
@@ -415,31 +415,31 @@ public:
        rPropertyName does not exist or is readonly. Otherwise rPropertyName is changed to its handle
        value and setFastPropertyValue is called.
      */
-    virtual void setPropertyValue( const ::rtl::OUString& rPropertyName, const cpo::uno::Any& aValue ) SAL_OVERRIDE;
+    virtual void setPropertyValue( const ::rtl::OUString& rPropertyName, const cpo::uno::Any& aValue ) override;
     /**
        Throw UnknownPropertyException if the property with the name
        rPropertyName does not exist.
      */
-    virtual cpo::uno::Any getPropertyValue(const ::rtl::OUString& aPropertyName) SAL_OVERRIDE;
+    virtual cpo::uno::Any getPropertyValue(const ::rtl::OUString& aPropertyName) override;
     /** Ignored if the property is not bound. */
     virtual void addPropertyChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener) SAL_OVERRIDE;
+        const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener) override;
 
     /** Ignored if the property is not bound. */
     virtual void removePropertyChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference < css::beans::XPropertyChangeListener >& aListener) SAL_OVERRIDE;
+        const cpo::uno::Reference < css::beans::XPropertyChangeListener >& aListener) override;
 
     /** Ignored if the property is not constrained. */
     virtual void addVetoableChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener) SAL_OVERRIDE;
+        const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener) override;
 
     /** Ignored if the property is not constrained. */
     virtual void removeVetoableChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference< css::beans::XVetoableChangeListener > & aListener ) SAL_OVERRIDE;
+        const cpo::uno::Reference< css::beans::XVetoableChangeListener > & aListener ) override;
 
     /**
        Throw UnknownPropertyException or PropertyVetoException if the property with the name
@@ -448,37 +448,37 @@ public:
        is changed with the setFastPropertyValue_NoBroadcast method and the bound listeners are
        notified.
       */
-    virtual void setFastPropertyValue( sal_Int32 nHandle, const cpo::uno::Any& rValue ) SAL_OVERRIDE;
+    virtual void setFastPropertyValue( sal_Int32 nHandle, const cpo::uno::Any& rValue ) override;
 
     /**
        @exception css::beans::UnknownPropertyException
          if the property with the handle nHandle does not exist.
      */
-    virtual cpo::uno::Any getFastPropertyValue( sal_Int32 nHandle ) SAL_OVERRIDE;
+    virtual cpo::uno::Any getFastPropertyValue( sal_Int32 nHandle ) override;
 
     // XMultiPropertySet
     virtual void setPropertyValues(
         const cpo::uno::Sequence< ::rtl::OUString >& PropertyNames,
-        const cpo::uno::Sequence< cpo::uno::Any >& Values ) SAL_OVERRIDE;
+        const cpo::uno::Sequence< cpo::uno::Any >& Values ) override;
 
     virtual cpo::uno::Sequence< cpo::uno::Any > getPropertyValues(
-        const cpo::uno::Sequence< ::rtl::OUString >& PropertyNames ) SAL_OVERRIDE;
+        const cpo::uno::Sequence< ::rtl::OUString >& PropertyNames ) override;
 
     virtual void addPropertiesChangeListener(
         const cpo::uno::Sequence< ::rtl::OUString >& PropertyNames,
-        const css::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) SAL_OVERRIDE;
+        const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
 
     virtual void removePropertiesChangeListener(
-        const css::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) SAL_OVERRIDE;
+        const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
 
     virtual void firePropertiesChangeEvent(
         const cpo::uno::Sequence< ::rtl::OUString >& PropertyNames,
-        const css::uno::Reference< css::beans::XPropertiesChangeListener > & Listener ) SAL_OVERRIDE;
+        const cpo::uno::Reference< css::beans::XPropertiesChangeListener > & Listener ) override;
 
     /**
        The property sequence is created in the call. The interface isn't used after the call.
      */
-    static css::uno::Reference < css::beans::XPropertySetInfo >
+    static cpo::uno::Reference < css::beans::XPropertySetInfo >
         createPropertySetInfo( IPropertyArrayHelper & rProperties );
 protected:
     /**
@@ -531,7 +531,7 @@ protected:
        @return true if the value converted.
        @throws css::lang::IllegalArgumentException
        @throws css::beans::UnknownPropertyException
-       @throws css::uno::RuntimeException
+       @throws cpo::uno::RuntimeException
      */
     virtual bool convertFastPropertyValue(
         cpo::uno::Any & rConvertedValue,
@@ -550,7 +550,7 @@ protected:
         -- css::beans::PropertyVetoException
         -- css::lang::IllegalArgumentException
         -- css::lang::WrappedTargetException
-        -- css::uno::RuntimeException
+        -- cpo::uno::RuntimeException
 
         @param nHandle
                handle
@@ -611,9 +611,9 @@ protected:
     Impl * const m_pReserved;
 
 private:
-    OPropertySetHelper( const OPropertySetHelper & ) SAL_DELETED_FUNCTION;
+    OPropertySetHelper( const OPropertySetHelper & ) = delete;
     OPropertySetHelper &    operator = ( const OPropertySetHelper & )
-        SAL_DELETED_FUNCTION;
+        = delete;
 
     /** notifies the given changes in property's values, <em>plus</em> all property changes collected during recent
         |setDependentFastPropertyValue| calls.
@@ -657,16 +657,16 @@ public:
         bool bIgnoreRuntimeExceptionsWhileFiring = false);
 
     // XInterface
-    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) SAL_OVERRIDE;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
 
     // XPropertySetOption
-    virtual void enableChangeListenerNotification( bool bEnable ) SAL_OVERRIDE;
+    virtual void enableChangeListenerNotification( bool bEnable ) override;
 
 
 private:
-    OPropertySetHelper2( const OPropertySetHelper2 & ) SAL_DELETED_FUNCTION;
+    OPropertySetHelper2( const OPropertySetHelper2 & ) = delete;
     OPropertySetHelper2 &    operator = ( const OPropertySetHelper2 & )
-        SAL_DELETED_FUNCTION;
+        = delete;
 
 #if defined _MSC_VER // public -> protected changes mangled names there
 public:

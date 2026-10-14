@@ -9,6 +9,9 @@
 
 #include <sal/config.h>
 #include <comphelper/kit.hxx>
+#include <com/sun/star/document/XEmbeddedScripts.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
 #include <test/unoapi_test.hxx>
 #include <osl/file.hxx>
 #include <sal/log.hxx>
@@ -37,6 +40,7 @@
 #include <comphelper/propertysequence.hxx>
 
 using namespace css;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 class VBAMacroTest : public UnoApiTest
@@ -458,7 +462,7 @@ CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf149579)
 {
     loadFromURL(u"private:factory/scalc"_ustr);
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(u"TestModule"_ustr,
@@ -492,7 +496,7 @@ CPPUNIT_TEST_FIXTURE(VBAMacroTest, testVbaRangeSort)
 {
     loadFromURL(u"private:factory/scalc"_ustr);
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(u"TestModule"_ustr,
@@ -711,7 +715,7 @@ CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf126457)
     xDocStorable->storeAsURL(aTempFile.GetURL(), descSaveAs);
 
     // Insert initial library
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(
@@ -773,7 +777,7 @@ CPPUNIT_TEST_FIXTURE(VBAMacroTest, testVbaPDFExport)
     utl::TempFileNamed aTempPdfFile(u"exportedfile", true, u".pdf");
     aTempPdfFile.EnableKillingFile();
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     OUString sMacro = "Option VBASupport 1\n"
@@ -854,7 +858,7 @@ CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf167378)
 {
     loadFromURL(u"private:factory/scalc"_ustr);
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, uno::UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
 

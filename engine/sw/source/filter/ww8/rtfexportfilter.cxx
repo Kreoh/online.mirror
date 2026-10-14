@@ -31,8 +31,9 @@
 #include <unotools/ucbstreamhelper.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-RtfExportFilter::RtfExportFilter(uno::Reference<uno::XComponentContext> xCtx)
+RtfExportFilter::RtfExportFilter(uno::Reference<cpo::uno::XComponentContext> xCtx)
     : m_xCtx(std::move(xCtx))
 {
 }
@@ -48,7 +49,7 @@ bool RtfExportFilter::filter(const cpo::uno::Sequence<beans::PropertyValue>& aDe
     m_aWriter.SetStream(pStream.get());
 
     // get SwDoc*
-    uno::Reference<uno::XInterface> xIfc(m_xSrcDoc, uno::UNO_QUERY);
+    uno::Reference<cpo::uno::XInterface> xIfc(m_xSrcDoc, uno::UNO_QUERY);
     auto pTextDoc = dynamic_cast<SwXTextDocument*>(xIfc.get());
     if (!pTextDoc)
     {
@@ -72,9 +73,10 @@ bool RtfExportFilter::filter(const cpo::uno::Sequence<beans::PropertyValue>& aDe
     aPam.SetMark();
     aPam.Move(fnMoveBackward, GoInDoc);
 
-    std::shared_ptr<SwUnoCursor> pCurPam(pDoc->CreateUnoCursor(*aPam.End(), false));
+    auto [pStart, pEnd] = aPam.StartEnd(); // SwPosition*
+    std::shared_ptr<SwUnoCursor> pCurPam(pDoc->CreateUnoCursor(*pEnd, false));
     pCurPam->SetMark();
-    *pCurPam->GetPoint() = *aPam.Start();
+    *pCurPam->GetPoint() = *pStart;
 
     // export the document
     // (in a separate block so that it's destructed before the commit)
@@ -114,9 +116,9 @@ cpo::uno::Sequence<OUString> RtfExportFilter::getSupportedServiceNames()
 
 // UNO helpers
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_RtfExport_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new RtfExportFilter(pCtx));
 }

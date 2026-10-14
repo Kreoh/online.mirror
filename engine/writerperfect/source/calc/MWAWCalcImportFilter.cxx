@@ -100,25 +100,25 @@ void MWAWCalcImportFilter::doRegisterHandlers(OdsGenerator& rGenerator)
 }
 
 // XServiceInfo
-OUString SAL_CALL MWAWCalcImportFilter::getImplementationName()
+OUString MWAWCalcImportFilter::getImplementationName()
 {
     return u"com.sun.star.comp.Calc.MWAWCalcImportFilter"_ustr;
 }
 
-bool SAL_CALL MWAWCalcImportFilter::supportsService(const OUString& rServiceName)
+bool MWAWCalcImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL MWAWCalcImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> MWAWCalcImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Calc_MWAWCalcImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new MWAWCalcImportFilter(context));
 }

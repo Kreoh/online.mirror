@@ -19,7 +19,7 @@
 #ifndef INCLUDED_VBAHELPER_VBASHAPERANGE_HXX
 #define INCLUDED_VBAHELPER_VBASHAPERANGE_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <ooo/vba/msforms/XShapeRange.hpp>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
@@ -33,8 +33,8 @@ namespace com::sun::star {
     namespace drawing { class XDrawPage; }
     namespace drawing { class XShapes; }
     namespace frame { class XModel; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ooo::vba {
     class XHelperInterface;
@@ -48,48 +48,48 @@ typedef CollTestImplHelper< ov::msforms::XShapeRange > ScVbaShapeRange_BASE;
 class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ScVbaShapeRange final : public ScVbaShapeRange_BASE
 {
 private:
-    css::uno::Reference< css::drawing::XDrawPage > m_xDrawPage;
-    css::uno::Reference< css::drawing::XShapes > m_xShapes;
-    css::uno::Reference< css::frame::XModel > m_xModel;
+    cpo::uno::Reference< css::drawing::XDrawPage > m_xDrawPage;
+    cpo::uno::Reference< css::drawing::XShapes > m_xShapes;
+    cpo::uno::Reference< css::frame::XModel > m_xModel;
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::drawing::XShapes > const & getShapes() ;
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::drawing::XShapes > const & getShapes() ;
 public:
-    VBAHELPER_DLLPUBLIC ScVbaShapeRange( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< css::container::XIndexAccess >& xShapes, css::uno::Reference< css::drawing::XDrawPage> xDrawShape, css::uno::Reference< css::frame::XModel > xModel );
+    VBAHELPER_DLLPUBLIC ScVbaShapeRange( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, const cpo::uno::Reference< css::container::XIndexAccess >& xShapes, cpo::uno::Reference< css::drawing::XDrawPage> xDrawShape, cpo::uno::Reference< css::frame::XModel > xModel );
 
     // Methods
-    virtual void SAL_CALL Select(  ) override;
-    virtual css::uno::Reference< ::ooo::vba::msforms::XShape > SAL_CALL Group() override;
-    virtual void SAL_CALL IncrementRotation( double Increment ) override;
-    virtual void SAL_CALL IncrementLeft( double Increment ) override ;
-    virtual void SAL_CALL IncrementTop( double Increment ) override;
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL setName( const OUString& _name ) override;
-    virtual double SAL_CALL getHeight() override;
-    virtual void SAL_CALL setHeight( double _height ) override;
-    virtual double SAL_CALL getWidth() override;
-    virtual void SAL_CALL setWidth( double _width ) override;
-    virtual double SAL_CALL getLeft() override;
-    virtual void SAL_CALL setLeft( double _left ) override;
-    virtual double SAL_CALL getTop() override;
-    virtual void SAL_CALL setTop( double _top ) override;
-    virtual css::uno::Reference< ov::msforms::XLineFormat > SAL_CALL getLine() override;
-    virtual css::uno::Reference< ov::msforms::XFillFormat > SAL_CALL getFill() override;
-    virtual bool SAL_CALL getLockAspectRatio() override;
-    virtual void SAL_CALL setLockAspectRatio( bool _lockaspectratio ) override;
-    virtual bool SAL_CALL getLockAnchor() override;
-    virtual void SAL_CALL setLockAnchor( bool _lockanchor ) override;
-    virtual ::sal_Int32 SAL_CALL getRelativeHorizontalPosition() override;
-    virtual void SAL_CALL setRelativeHorizontalPosition( ::sal_Int32 _relativehorizontalposition ) override;
-    virtual ::sal_Int32 SAL_CALL getRelativeVerticalPosition() override;
-    virtual void SAL_CALL setRelativeVerticalPosition( ::sal_Int32 _relativeverticalposition ) override;
-    virtual cpo::uno::Any SAL_CALL TextFrame(  ) override;
-    virtual cpo::uno::Any SAL_CALL WrapFormat(  ) override;
-    virtual void SAL_CALL ZOrder( sal_Int32 ZOrderCmd ) override;
+    virtual void Select(  ) override;
+    virtual cpo::uno::Reference< ::ooo::vba::msforms::XShape > Group() override;
+    virtual void IncrementRotation( double Increment ) override;
+    virtual void IncrementLeft( double Increment ) override ;
+    virtual void IncrementTop( double Increment ) override;
+    virtual OUString getName() override;
+    virtual void setName( const OUString& _name ) override;
+    virtual double getHeight() override;
+    virtual void setHeight( double _height ) override;
+    virtual double getWidth() override;
+    virtual void setWidth( double _width ) override;
+    virtual double getLeft() override;
+    virtual void setLeft( double _left ) override;
+    virtual double getTop() override;
+    virtual void setTop( double _top ) override;
+    virtual cpo::uno::Reference< ov::msforms::XLineFormat > getLine() override;
+    virtual cpo::uno::Reference< ov::msforms::XFillFormat > getFill() override;
+    virtual bool getLockAspectRatio() override;
+    virtual void setLockAspectRatio( bool _lockaspectratio ) override;
+    virtual bool getLockAnchor() override;
+    virtual void setLockAnchor( bool _lockanchor ) override;
+    virtual ::sal_Int32 getRelativeHorizontalPosition() override;
+    virtual void setRelativeHorizontalPosition( ::sal_Int32 _relativehorizontalposition ) override;
+    virtual ::sal_Int32 getRelativeVerticalPosition() override;
+    virtual void setRelativeVerticalPosition( ::sal_Int32 _relativeverticalposition ) override;
+    virtual cpo::uno::Any TextFrame(  ) override;
+    virtual cpo::uno::Any WrapFormat(  ) override;
+    virtual void ZOrder( sal_Int32 ZOrderCmd ) override;
     //XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
     // ScVbaCollectionBaseImpl
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
 };

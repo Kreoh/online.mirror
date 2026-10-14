@@ -25,8 +25,9 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-VbaTextFrame::VbaTextFrame( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, uno::Reference< drawing::XShape > xShape ) : VbaTextFrame_BASE( xParent, xContext ), m_xShape(std::move( xShape ))
+VbaTextFrame::VbaTextFrame( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, uno::Reference< drawing::XShape > xShape ) : VbaTextFrame_BASE( xParent, xContext ), m_xShape(std::move( xShape ))
 {
     m_xPropertySet.set( m_xShape, uno::UNO_QUERY_THROW );
 }
@@ -56,7 +57,7 @@ void VbaTextFrame::setMargin( const OUString& sMarginType, float fMargin )
 }
 
 // Attributes
-bool SAL_CALL
+bool
 VbaTextFrame::getAutoSize()
 {
     // I don't know why, but in OOo, TextAutoGrowHeight is the property control autosize. not TextFitToSize.
@@ -68,14 +69,14 @@ VbaTextFrame::getAutoSize()
     return bAutosize;
 }
 
-void SAL_CALL
+void
 VbaTextFrame::setAutoSize( bool _autosize )
 {
     setAsMSObehavior();
     m_xPropertySet->setPropertyValue( u"TextAutoGrowHeight"_ustr, cpo::uno::Any( _autosize ) );
 }
 
-float SAL_CALL
+float
 VbaTextFrame::getMarginBottom()
 {
     sal_Int32 nMargin = getMargin( u"TextLowerDistance"_ustr );
@@ -83,13 +84,13 @@ VbaTextFrame::getMarginBottom()
     return fMargin;
 }
 
-void SAL_CALL
+void
 VbaTextFrame::setMarginBottom( float _marginbottom )
 {
     setMargin( u"TextLowerDistance"_ustr, _marginbottom );
 }
 
-float SAL_CALL
+float
 VbaTextFrame::getMarginTop()
 {
     sal_Int32 nMargin = getMargin( u"TextUpperDistance"_ustr );
@@ -97,13 +98,13 @@ VbaTextFrame::getMarginTop()
     return fMargin;
 }
 
-void SAL_CALL
+void
 VbaTextFrame::setMarginTop( float _margintop )
 {
     setMargin( u"TextUpperDistance"_ustr, _margintop );
 }
 
-float SAL_CALL
+float
 VbaTextFrame::getMarginLeft()
 {
     sal_Int32 nMargin = getMargin( u"TextLeftDistance"_ustr );
@@ -111,13 +112,13 @@ VbaTextFrame::getMarginLeft()
     return fMargin;
 }
 
-void SAL_CALL
+void
 VbaTextFrame::setMarginLeft( float _marginleft )
 {
     setMargin( u"TextLeftDistance"_ustr, _marginleft );
 }
 
-float SAL_CALL
+float
 VbaTextFrame::getMarginRight()
 {
     sal_Int32 nMargin = getMargin( u"TextRightDistance"_ustr );
@@ -125,7 +126,7 @@ VbaTextFrame::getMarginRight()
     return fMargin;
 }
 
-void SAL_CALL
+void
 VbaTextFrame::setMarginRight( float _marginright )
 {
     setMargin( u"TextRightDistance"_ustr , _marginright );
@@ -133,10 +134,10 @@ VbaTextFrame::setMarginRight( float _marginright )
 
 
 // Methods
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaTextFrame::Characters()
 {
-    throw uno::RuntimeException( u"Not implemented"_ustr );
+    throw cpo::uno::RuntimeException( u"Not implemented"_ustr );
 }
 
 OUString

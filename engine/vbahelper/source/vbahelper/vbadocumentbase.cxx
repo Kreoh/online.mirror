@@ -41,16 +41,17 @@
 #include <sal/log.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 VbaDocumentBase::VbaDocumentBase( const uno::Reference< ov::XHelperInterface >& xParent,
-                                  const uno::Reference< uno::XComponentContext >& xContext )
+                                  const uno::Reference< cpo::uno::XComponentContext >& xContext )
 : VbaDocumentBase_BASE( xParent, xContext )
 {
 }
 
 VbaDocumentBase::VbaDocumentBase( cpo::uno::Sequence< cpo::uno::Any> const & args,
-                                  uno::Reference< uno::XComponentContext> const & xContext )
+                                  uno::Reference< cpo::uno::XComponentContext> const & xContext )
 : VbaDocumentBase_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext )
 {
 }
@@ -133,7 +134,7 @@ VbaDocumentBase::Close( const cpo::uno::Any &rSaveArg, const cpo::uno::Any &rFil
     {
         if( xStorable->isReadonly() )
         {
-            throw uno::RuntimeException(u"Unable to save to a read only file "_ustr );
+            throw cpo::uno::RuntimeException(u"Unable to save to a read only file "_ustr );
         }
         if( bFileName )
             xStorable->storeAsURL( aFileName, cpo::uno::Sequence< beans::PropertyValue >(0) );
@@ -228,7 +229,7 @@ VbaDocumentBase::Unprotect( const cpo::uno::Any &aPassword )
     OUString rPassword;
     uno::Reference< util::XProtectable > xProt( getModel(), uno::UNO_QUERY_THROW );
     if( !xProt->isProtected() )
-        throw uno::RuntimeException(u"File is already unprotected"_ustr );
+        throw cpo::uno::RuntimeException(u"File is already unprotected"_ustr );
     if( aPassword >>= rPassword )
         xProt->unprotect( rPassword );
     else
@@ -252,7 +253,7 @@ VbaDocumentBase::setSaved( bool bSave )
         cpo::uno::Any aCaught( ::cppu::getCaughtException() );
         throw lang::WrappedTargetRuntimeException(
                 u"Can't change modified state of model!"_ustr,
-                uno::Reference< uno::XInterface >(),
+                uno::Reference< cpo::uno::XInterface >(),
                 aCaught );
     }
 }
@@ -278,7 +279,7 @@ VbaDocumentBase::Activate()
     xFrame->activate();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 VbaDocumentBase::getVBProject()
 {
     if( !mxVBProject.is() ) try

@@ -181,9 +181,6 @@ void WriteOnlyVars::run()
         // playing paging-in games with volatile
         if (loplugin::isSamePathname(fn, SRCDIR "/sal/osl/unx/file.cxx"))
             return;
-        // playing paging-in games with volatile
-        if (loplugin::isSamePathname(fn, SRCDIR "/desktop/unx/source/file_image_unx.c"))
-            return;
         // false+
         if (loplugin::isSamePathname(fn, SRCDIR "/store/source/storpage.cxx"))
             return;
@@ -336,12 +333,6 @@ void WriteOnlyVars::run()
             return;
         if (loplugin::isSamePathname(fn, SRCDIR "/ucb/source/core/ucbcmds.cxx"))
             return;
-        if (loplugin::isSamePathname(fn,
-                                     SRCDIR "/desktop/source/deployment/manager/dp_manager.cxx"))
-            return;
-        if (loplugin::isSamePathname(fn, SRCDIR
-                                     "/desktop/source/deployment/registry/package/dp_package.cxx"))
-            return;
         if (loplugin::isSamePathname(fn, SRCDIR "/desktop/source/lib/init.cxx"))
             return;
         if (loplugin::isSamePathname(fn, SRCDIR
@@ -403,8 +394,6 @@ void WriteOnlyVars::run()
         if (loplugin::isSamePathname(fn, SRCDIR "/sw/source/filter/ww8/ww8par6.cxx"))
             return;
         if (loplugin::isSamePathname(fn, SRCDIR "/sw/source/ui/dbui/dbinsdlg.cxx"))
-            return;
-        if (loplugin::isSamePathname(fn, SRCDIR "/sdext/source/minimizer/impoptimizer.cxx"))
             return;
         if (loplugin::isSamePathname(fn, SRCDIR "/sdext/source/presenter/PresenterTheme.cxx"))
             return;

@@ -24,7 +24,7 @@
 #include <memory>
 #include <vector>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <oox/core/filterbase.hxx>
 #include <oox/core/xmlfilterbase.hxx>
 #include <oox/drawingml/drawingmltypes.hxx>
@@ -32,9 +32,7 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 
-namespace com::sun::star {
-    namespace uno { class XComponentContext; }
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace oox {
     namespace drawingml::chart { class ChartConverter; }
@@ -46,8 +44,8 @@ namespace oox::ppt {
 class PowerPointImport final : public oox::core::XmlFilterBase
 {
 public:
-    /// @throws css::uno::RuntimeException
-    PowerPointImport( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    /// @throws cpo::uno::RuntimeException
+    PowerPointImport( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     virtual ~PowerPointImport() override;
 
     // from FilterBase
@@ -62,6 +60,14 @@ public:
     const SlidePersistPtr&                                  getActualSlidePersist() const { return mpActualSlidePersist; };
     void                                                    setActualSlidePersist(const SlidePersistPtr& pActualSlidePersist) { mpActualSlidePersist = pActualSlidePersist; };
     std::map< OUString, oox::drawingml::ThemePtr >&         getThemes(){ return maThemes; };
+
+    /** Returns the theme that the given fragment holds.
+
+        A theme is read once and then given out again to everything that names the same
+        fragment, which rbRead tells apart: it is true only for the call that did the reading.
+     */
+    oox::drawingml::ThemePtr importTheme(const OUString& rFragmentPath, bool& rbRead);
+
     std::vector< SlidePersistPtr >&                         getDrawPages(){ return maDrawPages; };
     std::vector< SlidePersistPtr >&                         getMasterPages(){ return maMasterPages; };
     std::vector< SlidePersistPtr >&                         getNotesPages(){ return maNotesPages; };

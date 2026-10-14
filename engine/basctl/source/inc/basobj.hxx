@@ -34,7 +34,7 @@ namespace weld { class Widget; class Window; }
 
 namespace basctl
 {
-    void            Organize(weld::Window* pParent, const css::uno::Reference<css::frame::XFrame>& xDocFrame, sal_Int16 tabId);
+    void            Organize(weld::Window* pParent, const cpo::uno::Reference<css::frame::XFrame>& xDocFrame, sal_Int16 tabId);
 
     // help methods for the general use:
     SbMethod*       CreateMacro( SbModule* pModule, const OUString& rMacroName );
@@ -55,8 +55,8 @@ namespace basctl
     // libraries
 
     cpo::uno::Sequence< OUString > GetMergedLibraryNames(
-        const css::uno::Reference< css::script::XLibraryContainer >& xModLibContainer,
-        const css::uno::Reference< css::script::XLibraryContainer >& xDlgLibContainer );
+        const cpo::uno::Reference< css::script::XLibraryContainer >& xModLibContainer,
+        const cpo::uno::Reference< css::script::XLibraryContainer >& xDlgLibContainer );
 
     /** renames a module
 
@@ -69,13 +69,13 @@ namespace basctl
     // new methods for macros
 
     OUString        ChooseMacro(weld::Window* pParent,
-        const css::uno::Reference< css::frame::XModel >& rxLimitToDocument, const css::uno::Reference< css::frame::XFrame >& xDocFrame,
+        const cpo::uno::Reference< css::frame::XModel >& rxLimitToDocument,
         bool bChooseOnly );
-    inline OUString ChooseMacro(weld::Window* pParent, const css::uno::Reference<css::frame::XModel>& rLimitToDocument)
-    { return ChooseMacro(pParent, rLimitToDocument, css::uno::Reference< css::frame::XFrame >(), false/*bChooseOnly*/); }
+    inline OUString ChooseMacro(weld::Window* pParent, const cpo::uno::Reference<css::frame::XModel>& rLimitToDocument)
+    { return ChooseMacro(pParent, rLimitToDocument, false/*bChooseOnly*/); }
 
     /// @throws css::container::NoSuchElementException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence< OUString > GetMethodNames(
         const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rModName );
 
@@ -90,7 +90,7 @@ namespace basctl
 
         @throws css::container::ElementExistException
         @throws css::container::NoSuchElementException
-        @throws css::uno::RuntimeException
+        @throws cpo::uno::RuntimeException
     */
     bool            RenameDialog(weld::Widget* pErrorParent, const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rOldName, const OUString& rNewName);
 

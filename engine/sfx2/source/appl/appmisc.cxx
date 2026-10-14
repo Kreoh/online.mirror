@@ -24,7 +24,7 @@
 #include <vcl/vectorgraphicdata.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/graphic/Primitive2DTools.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <unotools/configmgr.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <comphelper/processfactory.hxx>
@@ -48,7 +48,8 @@
 #include <sfxslots.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::beans;
 
@@ -168,7 +169,7 @@ bool SfxApplication::loadBrandSvg(std::u16string_view sName, Bitmap &rBitmap, in
 
     // UNO dance to render from drawinglayer
 
-    const uno::Reference< uno::XComponentContext >& xContext(::comphelper::getProcessComponentContext());
+    const uno::Reference< cpo::uno::XComponentContext >& xContext(::comphelper::getProcessComponentContext());
 
     try
     {

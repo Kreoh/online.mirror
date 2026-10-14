@@ -36,7 +36,9 @@
 #include <tools/debug.hxx>
 #include <o3tl/string_view.hxx>
 
+#include <iomanip>
 #include <sstream>
+#include <iomanip>
 
 #define TXTCONV_BUFFER_SIZE 20
 

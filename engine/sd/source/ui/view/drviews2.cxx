@@ -44,9 +44,6 @@
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/ui/dialogs/XSLTFilterDialog.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/util/URLTransformer.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/scanner/XScannerManager2.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -118,6 +115,8 @@
 #include <tools/json_writer.hxx>
 #include <tools/UnitConversion.hxx>
 
+#include <o3tl/string_view.hxx>
+#include <unotools/pathoptions.hxx>
 #include <unotools/useroptions.hxx>
 
 #include <vcl/abstdlg.hxx>
@@ -239,8 +238,8 @@
 
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 #define MIN_ACTIONS_FOR_DIALOG  5000    ///< if there are more meta objects, we show a dialog during the break up
 
@@ -292,15 +291,27 @@ bool lcl_IsValidDesignIntentWord(const OUString& rWord)
 std::vector<std::pair<OUString, OUString>> CollectDesignTemplates()
 {
     // The bundled set lives in a dedicated subdirectory, deliberately NOT the
-    // standard presentation template directory: with an integrator the kit mounts
-    // the per-config preset templates over share/template/common/presnt, which
-    // would hide bundled templates placed there. The preset directory is listed
-    // second so an uploaded template is offered as well, and a bundled template
-    // wins when a preset shares its name.
-    const OUString aSearchDirs[] = {
+    // standard presentation template directory: with an integrator the kit may
+    // mount the per-config preset templates over share/template/common/presnt,
+    // which would hide bundled templates placed there. It comes first, so a
+    // bundled template wins when a preset shares its name.
+    std::vector<OUString> aSearchDirs {
         u"$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/cool-ai-templates/"_ustr,
-        u"$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/template/common/presnt/"_ustr,
     };
+
+    // Every template root keeps its groups as subdirectories, and "presnt" is the
+    // presentation group. A configuration adds its own root, so walking the roots
+    // reaches an uploaded template wherever the root lives.
+    const OUString aTemplateRoots = SvtPathOptions().GetTemplatePath();
+    sal_Int32 nRootIndex = 0;
+    while (nRootIndex >= 0)
+    {
+        OUString aRoot(o3tl::getToken(aTemplateRoots, 0, ';', nRootIndex));
+        while (aRoot.endsWith("/"))
+            aRoot = aRoot.copy(0, aRoot.getLength() - 1);
+        if (!aRoot.isEmpty())
+            aSearchDirs.push_back(aRoot + "/presnt/");
+    }
 
     std::vector<std::pair<OUString, OUString>> aTemplates;
     std::unordered_set<OUString> aSeen;
@@ -595,6 +606,22 @@ std::vector<DesignTemplateMaster> CollectDesignTemplateMasters(SdDrawDocument& r
 
 namespace {
 
+/*
+    The object a name, a title or a description is given to: the marked object, or for a diagram
+    edited one object at a time the object it works on, its sub-selection. The background shape
+    stands for the whole diagram, which is then named itself.
+*/
+SdrObject* objectToName(SdrObject* pMarked)
+{
+    if (nullptr == pMarked || !SdrObject::useAdvancedDiagramFeatures())
+        return pMarked;
+
+    SdrObject* pSubSelection(pMarked->getDiagramSubSelection());
+    if (nullptr == pSubSelection || pSubSelection->isDiagramBackgroundShape())
+        return pMarked;
+    return pSubSelection;
+}
+
 const SvxFieldItem* findField(editeng::Section const & rSection)
 {
     for (SfxPoolItem const * pPool: rSection.maAttributes)
@@ -885,7 +912,7 @@ private:
 
 bool lcl_ReplaceWithImage(SdDrawDocument* pDoc, SdPage* pPage, int nObjId,
                                  const std::string& rImageUrl, const OUString& rAltText,
-                                 SfxViewShell* pViewShell, int nPartId)
+                                 int nPartId)
 {
     OUString aURL = OStringToOUString(rImageUrl, RTL_TEXTENCODING_UTF8);
 
@@ -917,7 +944,10 @@ bool lcl_ReplaceWithImage(SdDrawDocument* pDoc, SdPage* pPage, int nObjId,
 
     pPage->ReplaceObject(pNewGrafObj.get(), pPickObj->GetOrdNum());
 
-    KitHelper::notifyInvalidation(pViewShell, nPartId, nullptr);
+    // Every view showing this page has the replaced image now, not just the
+    // one that made the request.
+    rtl::Reference<SdXImpressDocument> xModel(pDoc->getUnoModel());
+    KitHelper::notifyInvalidationAllViews(xModel.get(), nPartId, nullptr, false);
     return true;
 }
 
@@ -941,7 +971,6 @@ struct SlideCommandContext
     SdDrawDocument* mpDoc;
     DrawView* mpDrawView;
     ::sd::View* mpView;
-    ViewShellBase* mpViewShellBase;
     SfxUndoManager* mpUndoManager;
     bool mbUndo;
     sal_uInt16 mnPageCount = 0;
@@ -1439,7 +1468,7 @@ void handleInsertImage(SlideCommandContext& rCtx, const std::string& rKey,
     {
         std::string aImageUrl = rValue.get_value<std::string>();
         if (lcl_ReplaceWithImage(rCtx.mpDoc, pPageStandard, nObjId, aImageUrl, OUString(),
-                                 rCtx.mpViewShellBase, rCtx.mnActPageId))
+                                 rCtx.mnActPageId))
             rCtx.touch(pPageStandard);
     }
 }
@@ -1503,7 +1532,7 @@ void handleInsertImageAt(SlideCommandContext& rCtx, const std::string& rKey,
     }
 
     if (lcl_ReplaceWithImage(rCtx.mpDoc, pPage, nObjId, aImageUrl, aAltText,
-                             rCtx.mpViewShellBase, nSlideId))
+                             nSlideId))
         rCtx.touch(pPage);
 }
 
@@ -1746,7 +1775,7 @@ protected:
     uno::Reference<beans::XPropertyContainer> m_xPropertyContainer;
     sfx::ClassificationKeyCreator m_aKeyCreator;
 public:
-    ClassificationCommon(sd::DrawViewShell& rDrawViewShell, const css::uno::Reference<css::document::XDocumentProperties>& rDocProps)
+    ClassificationCommon(sd::DrawViewShell& rDrawViewShell, const cpo::uno::Reference<css::document::XDocumentProperties>& rDocProps)
         : m_rDrawViewShell(rDrawViewShell)
         , m_xDocumentProperties(rDocProps)
         , m_xPropertyContainer(m_xDocumentProperties->getUserDefinedProperties())
@@ -1812,7 +1841,7 @@ private:
     }
 
 public:
-    ClassificationCollector(sd::DrawViewShell & rDrawViewShell, const css::uno::Reference<css::document::XDocumentProperties>& rDocProps)
+    ClassificationCollector(sd::DrawViewShell & rDrawViewShell, const cpo::uno::Reference<css::document::XDocumentProperties>& rDocProps)
         : ClassificationCommon(rDrawViewShell, rDocProps)
     {}
 
@@ -1965,7 +1994,7 @@ private:
     }
 
 public:
-    ClassificationInserter(sd::DrawViewShell & rDrawViewShell, const css::uno::Reference<css::document::XDocumentProperties>& rDocProps)
+    ClassificationInserter(sd::DrawViewShell & rDrawViewShell, const cpo::uno::Reference<css::document::XDocumentProperties>& rDocProps)
         : ClassificationCommon(rDrawViewShell, rDocProps)
     {
     }
@@ -2097,8 +2126,7 @@ void DrawViewShell::FuTransformDocumentStructure(SfxRequest& rReq)
 
     // The state the slide-command handlers share, including the design-template
     // URL that is applied after the command loop.
-    SlideCommandContext aCtx{ GetDoc(), mpDrawView.get(), GetView(), &GetViewShellBase(),
-                              pUndoManager, bUndo };
+    SlideCommandContext aCtx{ GetDoc(), mpDrawView.get(), GetView(), pUndoManager, bUndo };
 
     // Iterate through the JSON data loaded into a tree structure
     for (const auto& aItem : aTree)
@@ -2349,7 +2377,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     mpDrawView->BegUndo();
 
                 mpDrawView->SetAttributes(*pNewArgs);
-                svx::applyBareLineColorToMarked(*mpDrawView, *pReqArgs);
+                svx::applyBareLineAttributesToMarked(*mpDrawView, *pReqArgs);
 
                 if (bUndo)
                     mpDrawView->EndUndo();
@@ -2621,6 +2649,9 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     GetDoc()->AddUndo(std::move(pUndo));
                 GetDocSh()->SetModified();
             }
+
+            Cancel();
+            rReq.Done();
         }
         break;
 
@@ -2644,6 +2675,9 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     GetDocSh()->SetModified();
                 }
             }
+
+            Cancel();
+            rReq.Done();
         }
         break;
 
@@ -2670,6 +2704,9 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     ResetActualPage();
                 }
             }
+
+            Cancel();
+            rReq.Done();
         }
         break;
 
@@ -2700,6 +2737,9 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     }
                 }
             }
+
+            Cancel();
+            rReq.Done();
         }
         break;
 
@@ -2731,6 +2771,9 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     GetDocSh()->SetModified();
                 }
             }
+
+            Cancel();
+            rReq.Done();
         }
         break;
 
@@ -2760,6 +2803,9 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     GetDocSh()->SetModified();
                 }
             }
+
+            Cancel();
+            rReq.Done();
         }
         break;
 
@@ -3353,17 +3399,41 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
             if (pArgs && pArgs->Count () >= 3)
             {
                 const SfxUInt32Item* handleNumItem = rReq.GetArg<SfxUInt32Item>(FN_PARAM_1);
-                const SfxUInt32Item* newPosXTwips = rReq.GetArg<SfxUInt32Item>(FN_PARAM_2);
-                const SfxUInt32Item* newPosYTwips = rReq.GetArg<SfxUInt32Item>(FN_PARAM_3);
+                const SfxInt32Item* newPosXTwips = rReq.GetArg<SfxInt32Item>(FN_PARAM_2);
+                const SfxInt32Item* newPosYTwips = rReq.GetArg<SfxInt32Item>(FN_PARAM_3);
                 const SfxInt32Item* OrdNum = rReq.GetArg<SfxInt32Item>(FN_PARAM_4);
                 const SfxBoolItem* pPreview = rReq.GetArg<SfxBoolItem>(FN_PARAM_5);
+                // A caller that works the handles out for itself says which handle it means by
+                // what that handle is, rather than by the place it has in the view's list, and
+                // names the object by the id it keeps rather than by where it sits in the page.
+                const SfxStringItem* pHandleName = rReq.GetArg<SfxStringItem>(FN_PARAM_6);
+                const SfxStringItem* pObjectId = rReq.GetArg<SfxStringItem>(FN_PARAM_7);
 
-                const sal_uInt32 handleNum = handleNumItem->GetValue();
-                const ::tools::Long newPosX = convertTwipToMm100(newPosXTwips->GetValue());
-                const ::tools::Long newPosY = convertTwipToMm100(newPosYTwips->GetValue());
+                if ((handleNumItem || pHandleName) && newPosXTwips && newPosYTwips)
+                {
+                    const Point aNewPosition(convertTwipToMm100(newPosXTwips->GetValue()),
+                                             convertTwipToMm100(newPosYTwips->GetValue()));
+                    sal_Int32 nObjectOrdNum = OrdNum ? OrdNum->GetValue() : -1;
+                    if (pObjectId)
+                    {
+                        const SdrPageView* pPageView = mpDrawView->GetSdrPageView();
+                        const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+                        const SdrObject* pObject
+                            = pPage ? pPage->FindObjectByUniqueID(pObjectId->GetValue().toUInt64())
+                                    : nullptr;
+                        nObjectOrdNum = pObject ? sal_Int32(pObject->GetOrdNum()) : -1;
+                    }
 
-                mpDrawView->MoveShapeHandle(handleNum, Point(newPosX, newPosY), OrdNum ? OrdNum->GetValue() : -1,
-                                            pPreview && pPreview->GetValue());
+                    const bool bPreview = pPreview && pPreview->GetValue();
+
+                    if (pHandleName)
+                        mpDrawView->MoveShapeHandle(pHandleName->GetValue(), aNewPosition,
+                                                    nObjectOrdNum, bPreview);
+                    else
+                        mpDrawView->MoveShapeHandle(handleNumItem->GetValue(), aNewPosition,
+                                                    nObjectOrdNum, bPreview);
+                }
+
                 Cancel();
             }
             break;
@@ -3510,7 +3580,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         {
             if (SfxObjectShell* pObjShell = SfxObjectShell::Current())
             {
-                css::uno::Reference<css::document::XDocumentProperties> xDocProps(pObjShell->getDocProperties());
+                cpo::uno::Reference<css::document::XDocumentProperties> xDocProps(pObjShell->getDocProperties());
                 auto xDialog = std::make_shared<svx::ClassificationDialog>(GetFrameWeld(), xDocProps, false, [](){} );
                 ClassificationCollector aCollector(*this, xDocProps);
                 aCollector.collect();
@@ -4241,8 +4311,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     //there exists a previous numbering level
                     if (nDepth != sal_uInt16(-1) && nDepth > 0)
                     {
-                        Paragraph* pPara = pOL->GetParagraph(aSel.end.nPara);
-                        pOL->Remove(pPara, 1);
+                        pOL->Remove(aSel.end.nPara, 1);
                     }
                 }
             }
@@ -4501,10 +4570,10 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         {
             try
             {
-                css::uno::Reference < css::ui::dialogs::XExecutableDialog > xDialog = css::ui::dialogs::XSLTFilterDialog::create( ::comphelper::getProcessComponentContext() );
+                cpo::uno::Reference < css::ui::dialogs::XExecutableDialog > xDialog = css::ui::dialogs::XSLTFilterDialog::create( ::comphelper::getProcessComponentContext() );
                 xDialog->execute();
             }
-            catch( css::uno::RuntimeException& )
+            catch( cpo::uno::RuntimeException& )
             {
                 DBG_UNHANDLED_EXCEPTION("sd.view");
             }
@@ -4547,7 +4616,8 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
             if(1 == rMarkList.GetMarkCount())
             {
                 // #i68101#
-                rtl::Reference<SdrObject> pSelected = rMarkList.GetMark(0)->GetMarkedSdrObj();
+                rtl::Reference<SdrObject> pSelected
+                    = objectToName(rMarkList.GetMark(0)->GetMarkedSdrObj());
                 OSL_ENSURE(pSelected, "DrawViewShell::FuTemp03: nMarkCount, but no object (!)");
                 OUString aName(pSelected->GetName());
 
@@ -4585,7 +4655,8 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         {
             if(1 == rMarkList.GetMarkCount())
             {
-                rtl::Reference<SdrObject> pSelected = rMarkList.GetMark(0)->GetMarkedSdrObj();
+                rtl::Reference<SdrObject> pSelected
+                    = objectToName(rMarkList.GetMark(0)->GetMarkedSdrObj());
                 OSL_ENSURE(pSelected, "DrawViewShell::FuTemp03: nMarkCount, but no object (!)");
                 OUString aTitle(pSelected->GetTitle());
                 OUString aDescription(pSelected->GetDescription());
@@ -5372,16 +5443,6 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         }
         break;
 
-        case SID_REMOTE_DLG:
-        {
-#ifdef ENABLE_SDREMOTE
-             SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-             ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateRemoteDialog(GetFrameWeld()));
-             pDlg->Execute();
-#endif
-        }
-        break;
-
         case SID_CUSTOMSHOW_DLG:
         {
             SetCurrentFunction( FuCustomShowDlg::Create( *this, GetActiveWindow(), mpDrawView.get(), *GetDoc(), rReq ) );
@@ -5415,27 +5476,6 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         break;
 #endif
 
-        case SID_PRESENTATION_MINIMIZER:
-        {
-            const Reference<XComponentContext>& xContext(::comphelper::getProcessComponentContext());
-            Reference<util::XURLTransformer> xParser(util::URLTransformer::create(xContext));
-            Reference<frame::XDispatchProvider> xProvider(GetViewShellBase().GetController()->getFrame(), UNO_QUERY);
-            if (xProvider.is())
-            {
-                util::URL aURL;
-                aURL.Complete = u"vnd.com.sun.star.comp.PresentationMinimizer:execute"_ustr;
-                xParser->parseStrict(aURL);
-                uno::Reference<frame::XDispatch> xDispatch(xProvider->queryDispatch(aURL, OUString(), 0));
-                if (xDispatch.is())
-                {
-                    xDispatch->dispatch(aURL, cpo::uno::Sequence< beans::PropertyValue >());
-                }
-            }
-            Cancel();
-            rReq.Ignore();
-        }
-        break;
-
         case SID_DISPLAY_MASTER_BACKGROUND:
         case SID_DISPLAY_MASTER_OBJECTS:
         {
@@ -5456,7 +5496,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                 else
                     aLayerId = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
                 aVisibleLayers.Set(aLayerId, !aVisibleLayers.IsSet(aLayerId));
-                pPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
+                pPage->SetMasterPageVisibleLayers(aVisibleLayers);
             }
             Cancel();
             rReq.Done(); // Mark task as done to auto-update the state of each buttons tdf#132816
@@ -5576,6 +5616,13 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         case SID_ATTR_GLOW_TEXT_RADIUS:
         case SID_ATTR_GLOW_TEXT_TRANSPARENCY:
         case SID_ATTR_SOFTEDGE_RADIUS:
+        case SID_ATTR_REFLECTION:
+        case SID_ATTR_REFLECTION_DISTANCE:
+        case SID_ATTR_REFLECTION_BLUR_RADIUS:
+        case SID_ATTR_REFLECTION_START_TRANSPARENCY:
+        case SID_ATTR_REFLECTION_START_POSITION:
+        case SID_ATTR_REFLECTION_END_TRANSPARENCY:
+        case SID_ATTR_REFLECTION_END_POSITION:
         case SID_ATTR_TEXTCOLUMNS_NUMBER:
         case SID_ATTR_TEXTCOLUMNS_SPACING:
         case SID_ATTR_TEXT_AUTOGROWWIDTH:

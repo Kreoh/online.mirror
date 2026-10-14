@@ -39,7 +39,7 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <tools/globname.hxx>
 #include <unotools/streamwrap.hxx>
@@ -55,9 +55,9 @@ using ::com::sun::star::frame::XModel;
 using ::com::sun::star::io::XOutputStream;
 using ::com::sun::star::io::XInputStream;
 using ::com::sun::star::beans::XPropertySet;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::XComponentContext;
+using ::cpo::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::XComponentContext;
 using ::com::sun::star::lang::XServiceInfo;
 
 using namespace ::com::sun::star::form;
@@ -519,7 +519,7 @@ bool MSConvertOCXControls::ReadOCXStorage( rtl::Reference<SotStorage> const & xO
     return  false;
 }
 
-bool MSConvertOCXControls::WriteOCXExcelKludgeStream( const css::uno::Reference< css::frame::XModel >& rxModel, const css::uno::Reference< css::io::XOutputStream >& xOutStrm, const css::uno::Reference< css::awt::XControlModel > &rxControlModel, const css::awt::Size& rSize,OUString &rName )
+bool MSConvertOCXControls::WriteOCXExcelKludgeStream( const cpo::uno::Reference< css::frame::XModel >& rxModel, const cpo::uno::Reference< css::io::XOutputStream >& xOutStrm, const cpo::uno::Reference< css::awt::XControlModel > &rxControlModel, const css::awt::Size& rSize,OUString &rName )
 {
     OleFormCtrlExportHelper exportHelper( comphelper::getProcessComponentContext(), rxModel, rxControlModel );
     if ( !exportHelper.isValid() )

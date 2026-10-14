@@ -26,7 +26,7 @@
 #include <unotools/lingucfg.hxx>
 #include <comphelper/diagnose_ex.hxx>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <comphelper/processfactory.hxx>
 #include <vcl/svapp.hxx>
 #include <dlelstnr.hxx>
@@ -38,13 +38,13 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::linguistic2;
 using namespace ::com::sun::star::linguistic2::LinguServiceEventFlags;
 
 SwLinguServiceEventListener::SwLinguServiceEventListener()
 {
-    const Reference< XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+    const Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
     try
     {
         m_xDesktop = frame::Desktop::create(xContext);
@@ -71,7 +71,7 @@ SwLinguServiceEventListener::~SwLinguServiceEventListener()
 {
 }
 
-void SAL_CALL SwLinguServiceEventListener::processLinguServiceEvent(
+void SwLinguServiceEventListener::processLinguServiceEvent(
             const LinguServiceEvent& rLngSvcEvent )
 {
     SolarMutexGuard aGuard;
@@ -100,7 +100,7 @@ void SAL_CALL SwLinguServiceEventListener::processLinguServiceEvent(
     }
 }
 
-void SAL_CALL SwLinguServiceEventListener::disposing(
+void SwLinguServiceEventListener::disposing(
             const EventObject& rEventObj )
 {
     SolarMutexGuard aGuard;
@@ -111,12 +111,12 @@ void SAL_CALL SwLinguServiceEventListener::disposing(
         m_xGCIterator = nullptr;
 }
 
-void SAL_CALL SwLinguServiceEventListener::queryTermination(
+void SwLinguServiceEventListener::queryTermination(
             const EventObject& /*rEventObj*/ )
 {
 }
 
-void SAL_CALL SwLinguServiceEventListener::notifyTermination(
+void SwLinguServiceEventListener::notifyTermination(
             const EventObject& rEventObj )
 {
     SolarMutexGuard aGuard;

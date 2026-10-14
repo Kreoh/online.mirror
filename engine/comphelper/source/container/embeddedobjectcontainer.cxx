@@ -55,6 +55,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace comphelper {
 
@@ -68,7 +69,7 @@ struct EmbedImpl
     uno::Reference < embed::XStorage > mxStorage;
     std::unique_ptr<EmbeddedObjectContainer> mpTempObjectContainer;
     uno::Reference < embed::XStorage > mxImageStorage;
-    cpo::uno::WeakReference < uno::XInterface > m_xModel;
+    cpo::uno::WeakReference < cpo::uno::XInterface > m_xModel;
 
     bool mbOwnsStorage : 1;
     bool mbUserAllowsLinkUpdate : 1;
@@ -116,7 +117,7 @@ EmbeddedObjectContainer::EmbeddedObjectContainer( const uno::Reference < embed::
     pImpl->mpTempObjectContainer = nullptr;
 }
 
-EmbeddedObjectContainer::EmbeddedObjectContainer( const uno::Reference < embed::XStorage >& rStor, const uno::Reference < uno::XInterface >& xModel )
+EmbeddedObjectContainer::EmbeddedObjectContainer( const uno::Reference < embed::XStorage >& rStor, const uno::Reference < cpo::uno::XInterface >& xModel )
     :     pImpl(new EmbedImpl)
 {
     pImpl->mxStorage = rStor;
@@ -259,7 +260,7 @@ bool EmbeddedObjectContainer::HasInstantiatedEmbeddedObject( const OUString& rNa
     return pImpl->maNameToObjectMap.contains(rName);
 }
 
-OUString EmbeddedObjectContainer::GetEmbeddedObjectName( const css::uno::Reference < css::embed::XEmbeddedObject >& xObj ) const
+OUString EmbeddedObjectContainer::GetEmbeddedObjectName( const cpo::uno::Reference < css::embed::XEmbeddedObject >& xObj ) const
 {
     auto it = pImpl->maObjectToNameMap.find(xObj);
     if (it == pImpl->maObjectToNameMap.end())
@@ -401,7 +402,7 @@ uno::Reference < embed::XEmbeddedObject > EmbeddedObjectContainer::CreateEmbedde
 }
 
 void EmbeddedObjectContainer::AddEmbeddedObject(
-            const css::uno::Reference < css::embed::XEmbeddedObject >& xObj, const OUString& rName )
+            const cpo::uno::Reference < css::embed::XEmbeddedObject >& xObj, const OUString& rName )
 {
 #if OSL_DEBUG_LEVEL > 1
     SAL_WARN_IF( rName.isEmpty(), "comphelper.container", "Added object doesn't have a name!");
@@ -719,7 +720,7 @@ uno::Reference < embed::XEmbeddedObject > EmbeddedObjectContainer::CopyAndGetEmb
                     // this is an OOo link, it has no persistence
                     OUString aURL = xOrigLinkage->getLinkURL();
                     if ( aURL.isEmpty() )
-                        throw uno::RuntimeException(u"URL of the linked object is empty"_ustr);
+                        throw cpo::uno::RuntimeException(u"URL of the linked object is empty"_ustr);
 
                     // create new linked object from the URL the link is based on
                     uno::Reference < embed::XEmbeddedObjectCreator > xCreator =
@@ -767,7 +768,7 @@ uno::Reference < embed::XEmbeddedObject > EmbeddedObjectContainer::CopyAndGetEmb
                     // copy all the properties from xOrigProps to xTargetProps
                     uno::Reference< beans::XPropertySetInfo > xOrigInfo = xOrigProps->getPropertySetInfo();
                     if ( !xOrigInfo.is() )
-                        throw uno::RuntimeException(u"Object has no properties"_ustr);
+                        throw cpo::uno::RuntimeException(u"Object has no properties"_ustr);
 
                     const cpo::uno::Sequence< beans::Property > aPropertiesList = xOrigInfo->getProperties();
                     for ( const auto & p : aPropertiesList )
@@ -974,7 +975,7 @@ bool EmbeddedObjectContainer::RemoveEmbeddedObject(
         pImpl->maNameToObjectMap.erase( aIter );
         uno::Reference < container::XChild > xChild( xObj, uno::UNO_QUERY );
         if ( xChild.is() )
-            xChild->setParent( uno::Reference < uno::XInterface >() );
+            xChild->setParent( uno::Reference < cpo::uno::XInterface >() );
     }
     else
         SAL_WARN( "comphelper.container", "Object not found for removal!" );
@@ -1059,13 +1060,13 @@ uno::Reference < io::XInputStream > EmbeddedObjectContainer::GetGraphicStream( c
     return xStream;
 }
 
-uno::Reference < io::XInputStream > EmbeddedObjectContainer::GetGraphicStream( const css::uno::Reference < css::embed::XEmbeddedObject >& xObj, OUString* pMediaType )
+uno::Reference < io::XInputStream > EmbeddedObjectContainer::GetGraphicStream( const cpo::uno::Reference < css::embed::XEmbeddedObject >& xObj, OUString* pMediaType )
 {
     // try to load it from the container storage
     return GetGraphicStream( GetEmbeddedObjectName( xObj ), pMediaType );
 }
 
-bool EmbeddedObjectContainer::InsertGraphicStream( const css::uno::Reference < css::io::XInputStream >& rStream, const OUString& rObjectName, const OUString& rMediaType )
+bool EmbeddedObjectContainer::InsertGraphicStream( const cpo::uno::Reference < css::io::XInputStream >& rStream, const OUString& rObjectName, const OUString& rMediaType )
 {
     try
     {
@@ -1098,7 +1099,7 @@ bool EmbeddedObjectContainer::InsertGraphicStream( const css::uno::Reference < c
     return true;
 }
 
-bool EmbeddedObjectContainer::InsertGraphicStreamDirectly( const css::uno::Reference < css::io::XInputStream >& rStream, const OUString& rObjectName, const OUString& rMediaType )
+bool EmbeddedObjectContainer::InsertGraphicStreamDirectly( const cpo::uno::Reference < css::io::XInputStream >& rStream, const OUString& rObjectName, const OUString& rMediaType )
 {
     try
     {

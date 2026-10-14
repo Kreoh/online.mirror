@@ -25,8 +25,8 @@
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XFrame2.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <comphelper/OAccessible.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -41,6 +41,7 @@
 #include <test/a11y/AccessibilityTools.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 void test::AccessibleTestBase::setUp()
 {
@@ -584,7 +585,7 @@ test::AccessibleTestBase::awaitDialog(const std::u16string_view name,
 
             // This is not very nice, but it should help fail earlier if we never catch the dialog
             // yet we're in a sub-loop and waitEndDialog() didn't have a chance to run yet.
-            throw new css::uno::RuntimeException(u"Timeout waiting for dialog"_ustr);
+            throw new cpo::uno::RuntimeException(u"Timeout waiting for dialog"_ustr);
         }
 
         class MyTopWindowListener : public ::cppu::WeakImplHelper<awt::XTopWindowListener>
@@ -600,13 +601,13 @@ test::AccessibleTestBase::awaitDialog(const std::u16string_view name,
             }
 
             // XTopWindowListener
-            virtual void SAL_CALL windowOpened(const lang::EventObject&) override {}
-            virtual void SAL_CALL windowClosing(const lang::EventObject&) override {}
-            virtual void SAL_CALL windowClosed(const lang::EventObject&) override {}
-            virtual void SAL_CALL windowMinimized(const lang::EventObject&) override {}
-            virtual void SAL_CALL windowNormalized(const lang::EventObject&) override {}
-            virtual void SAL_CALL windowDeactivated(const lang::EventObject&) override {}
-            virtual void SAL_CALL windowActivated(const lang::EventObject& xEvent) override
+            virtual void windowOpened(const lang::EventObject&) override {}
+            virtual void windowClosing(const lang::EventObject&) override {}
+            virtual void windowClosed(const lang::EventObject&) override {}
+            virtual void windowMinimized(const lang::EventObject&) override {}
+            virtual void windowNormalized(const lang::EventObject&) override {}
+            virtual void windowDeactivated(const lang::EventObject&) override {}
+            virtual void windowActivated(const lang::EventObject& xEvent) override
             {
                 assert(mpHelper->mbWaitingForDialog);
 
@@ -626,7 +627,7 @@ test::AccessibleTestBase::awaitDialog(const std::u16string_view name,
             }
 
             // XEventListener
-            virtual void SAL_CALL disposing(const lang::EventObject&) override {}
+            virtual void disposing(const lang::EventObject&) override {}
         };
 
         // mimic IMPL_LINK inline
@@ -647,7 +648,7 @@ test::AccessibleTestBase::awaitDialog(const std::u16string_view name,
              * that will not run after the current one -- deadlock style) */
             if (msName != mxDialog->getWindow()->GetText())
             {
-                mpException = std::make_exception_ptr(css::uno::RuntimeException(
+                mpException = std::make_exception_ptr(cpo::uno::RuntimeException(
                     "Unexpected dialog '" + mxDialog->getWindow()->GetText()
                     + "' opened instead of the expected '" + msName + "'"));
             }

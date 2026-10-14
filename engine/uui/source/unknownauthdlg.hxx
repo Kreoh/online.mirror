@@ -20,7 +20,7 @@
 
 #include <vcl/weld.hxx>
 #include <com/sun/star/security/XCertificate.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 
 //= Https_UADialog
@@ -32,16 +32,16 @@ private:
     std::unique_ptr<weld::Button> m_xView_Certificate;
     std::unique_ptr<weld::RadioButton> m_xOptionButtonAccept;
 
-    const css::uno::Reference< css::uno::XComponentContext >& m_xContext;
-    const css::uno::Reference< css::security::XCertificate >& m_rXCert;
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& m_xContext;
+    const cpo::uno::Reference< css::security::XCertificate >& m_rXCert;
 
     DECL_LINK(OKHdl_Impl, weld::Button&, void);
     DECL_LINK(ViewCertHdl_Impl, weld::Button&, void);
 
 public:
     UnknownAuthDialog(weld::Window* pParent,
-        const css::uno::Reference< css::security::XCertificate >& rXCert,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext);
+        const cpo::uno::Reference< css::security::XCertificate >& rXCert,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext);
 
     void setDescriptionText(const OUString &rText)
     {

@@ -25,6 +25,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 constexpr OUString DISPLAYNAME = u"DisplayName"_ustr;
 
@@ -32,7 +33,7 @@ uno::Reference< container::XNameAccess >
 ScVbaStyle::getStylesNameContainer( const rtl::Reference<ScModelObj>& xModel )
 {
     if (!xModel)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     uno::Reference< container::XNameAccess > xStylesAccess( xModel->getStyleFamilies()->getByName(u"CellStyles"_ustr), uno::UNO_QUERY_THROW );
     return xStylesAccess;
 }
@@ -62,7 +63,7 @@ void ScVbaStyle::initialise()
 }
 
 ScVbaStyle::ScVbaStyle( const uno::Reference< ov::XHelperInterface >& xParent,
-                        const uno::Reference< uno::XComponentContext > & xContext,
+                        const uno::Reference< cpo::uno::XComponentContext > & xContext,
                         const OUString& sStyleName, const rtl::Reference<ScModelObj>& _xModel )
     :  ScVbaStyle_BASE( xParent, xContext, lcl_getStyleProps( sStyleName, _xModel ), _xModel, false )
 {
@@ -77,7 +78,7 @@ ScVbaStyle::ScVbaStyle( const uno::Reference< ov::XHelperInterface >& xParent,
 }
 
 ScVbaStyle::ScVbaStyle( const uno::Reference< XHelperInterface >& xParent,
-                        const uno::Reference< uno::XComponentContext > & xContext,
+                        const uno::Reference< cpo::uno::XComponentContext > & xContext,
                         const uno::Reference< beans::XPropertySet >& _xPropertySet,
                         const rtl::Reference<ScModelObj>& _xModel )
     : ScVbaStyle_BASE( xParent, xContext, _xPropertySet, _xModel, false )
@@ -92,25 +93,25 @@ ScVbaStyle::ScVbaStyle( const uno::Reference< XHelperInterface >& xParent,
     }
 }
 
-bool SAL_CALL
+bool
 ScVbaStyle::BuiltIn()
 {
     return !mxStyle->isUserDefined();
 
 }
-void SAL_CALL
+void
 ScVbaStyle::setName( const OUString& Name )
 {
     mxStyle->setName(Name);
 }
 
-OUString SAL_CALL
+OUString
 ScVbaStyle::getName()
 {
     return mxStyle->getName();
 }
 
-void SAL_CALL
+void
 ScVbaStyle::setNameLocal( const OUString& NameLocal )
 {
     try
@@ -123,7 +124,7 @@ ScVbaStyle::setNameLocal( const OUString& NameLocal )
     }
 }
 
-OUString SAL_CALL
+OUString
 ScVbaStyle::getNameLocal()
 {
     OUString sName;
@@ -138,7 +139,7 @@ ScVbaStyle::getNameLocal()
     return sName;
 }
 
-void SAL_CALL
+void
 ScVbaStyle::Delete()
 {
     try
@@ -151,13 +152,13 @@ ScVbaStyle::Delete()
     }
 }
 
-void SAL_CALL
+void
 ScVbaStyle::setMergeCells( const cpo::uno::Any& /*MergeCells*/ )
 {
     DebugHelper::basicexception(ERRCODE_BASIC_NOT_IMPLEMENTED, {});
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaStyle::getMergeCells(  )
 {
     DebugHelper::basicexception(ERRCODE_BASIC_NOT_IMPLEMENTED, {});

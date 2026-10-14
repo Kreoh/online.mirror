@@ -27,6 +27,7 @@
 #include <svx/unofill.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::cppu;
 
 namespace
@@ -39,11 +40,11 @@ public:
     virtual NameOrIndex* createItem() const override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
+    virtual cpo::uno::Type getElementType() override;
 };
 }
 
@@ -52,9 +53,9 @@ SvxUnoDashTable::SvxUnoDashTable(SdrModel* pModel) noexcept
 {
 }
 
-OUString SAL_CALL SvxUnoDashTable::getImplementationName() { return u"SvxUnoDashTable"_ustr; }
+OUString SvxUnoDashTable::getImplementationName() { return u"SvxUnoDashTable"_ustr; }
 
-cpo::uno::Sequence<OUString> SAL_CALL SvxUnoDashTable::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> SvxUnoDashTable::getSupportedServiceNames()
 {
     return { u"com.sun.star.drawing.DashTable"_ustr };
 }
@@ -67,7 +68,7 @@ NameOrIndex* SvxUnoDashTable::createItem() const
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SvxUnoDashTable::getElementType()
+cpo::uno::Type SvxUnoDashTable::getElementType()
 {
     return cppu::UnoType<drawing::LineDash>::get();
 }
@@ -75,7 +76,7 @@ cpo::uno::Type SAL_CALL SvxUnoDashTable::getElementType()
 /**
  * Create a gradienttable
  */
-uno::Reference<uno::XInterface> SvxUnoDashTable_createInstance(SdrModel* pModel)
+uno::Reference<cpo::uno::XInterface> SvxUnoDashTable_createInstance(SdrModel* pModel)
 {
     return *new SvxUnoDashTable(pModel);
 }

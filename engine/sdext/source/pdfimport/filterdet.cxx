@@ -43,6 +43,7 @@
 #include <string.h>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace pdfi
 {
@@ -62,7 +63,7 @@ private:
 
 public:
     FileEmitContext( const OUString&                            rOrigFile,
-                     const uno::Reference< uno::XComponentContext >& xContext,
+                     const uno::Reference< cpo::uno::XComponentContext >& xContext,
                      const pdfparse::PDFContainer*                   pTop );
     virtual ~FileEmitContext() override;
 
@@ -77,7 +78,7 @@ public:
 }
 
 FileEmitContext::FileEmitContext( const OUString&                            rOrigFile,
-                                  const uno::Reference< uno::XComponentContext >& xContext,
+                                  const uno::Reference< cpo::uno::XComponentContext >& xContext,
                                   const pdfparse::PDFContainer*                   pTop ) :
     pdfparse::EmitContext( pTop ),
     m_aReadHandle(nullptr),
@@ -185,7 +186,7 @@ unsigned int FileEmitContext::readOrigBytes( unsigned int nOrigOffset, unsigned 
 }
 
 
-PDFDetector::PDFDetector( uno::Reference< uno::XComponentContext > xContext) :
+PDFDetector::PDFDetector( uno::Reference< cpo::uno::XComponentContext > xContext) :
     m_xContext(std::move( xContext ))
 {}
 
@@ -294,7 +295,7 @@ constexpr FilenameMime aFilenameMimeMap[] = {
 uno::Reference<io::XStream> getEmbeddedFile(const OUString& rInPDFFileURL,
                                             OUString& rOutMimetype,
                                             OUString& io_rPwd,
-                                            const uno::Reference<uno::XComponentContext>& xContext,
+                                            const uno::Reference<cpo::uno::XComponentContext>& xContext,
                                             const cpo::uno::Sequence<beans::PropertyValue>& rFilterData,
                                             bool bMayUseUI)
 {
@@ -424,7 +425,7 @@ uno::Reference<io::XStream> getEmbeddedFile(const OUString& rInPDFFileURL,
     return xEmbed;
 }
 // XExtendedFilterDetection
-OUString SAL_CALL PDFDetector::detect( cpo::uno::Sequence< beans::PropertyValue >& rFilterData )
+OUString PDFDetector::detect( cpo::uno::Sequence< beans::PropertyValue >& rFilterData )
 {
     std::unique_lock guard( m_aMutex );
     bool bSuccess = false;
@@ -703,7 +704,7 @@ static bool detectHasAdditionalStreams(const OUString& rSysUPath)
 uno::Reference< io::XStream > getAdditionalStream( const OUString&                          rInPDFFileURL,
                                                    OUString&                                rOutMimetype,
                                                    OUString&                                io_rPwd,
-                                                   const uno::Reference<uno::XComponentContext>& xContext,
+                                                   const uno::Reference<cpo::uno::XComponentContext>& xContext,
                                                    const cpo::uno::Sequence<beans::PropertyValue>&    rFilterData,
                                                    bool                                          bMayUseUI )
 {
@@ -831,9 +832,9 @@ uno::Reference< io::XStream > getAdditionalStream( const OUString&              
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 sdext_PDFDetector_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new PDFDetector(context));
 }

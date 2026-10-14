@@ -183,9 +183,6 @@ public:
 
     bool HandleScrollCommand(const CommandEvent& rCEvt, ::sd::Window* pWin);
 
-    void SetUIUnit(FieldUnit eUnit);
-    void SetDefTabHRuler( sal_uInt16 nDefTab );
-
     const SvxNumBulletItem* GetNumBulletItem(SfxItemSet& aNewAttr, TypedWhichId<SvxNumBulletItem>& nNumItemId);
 
     bool HasRuler() const { return mbHasRulers;}
@@ -286,7 +283,7 @@ public:
     virtual rtl::Reference<comphelper::OAccessible>
     CreateAccessibleDocumentView(::sd::Window* pWindow);
 
-    virtual void SwitchViewFireFocus( const css::uno::Reference< css::accessibility::XAccessible >& xAcc );
+    virtual void SwitchViewFireFocus( const cpo::uno::Reference< css::accessibility::XAccessible >& xAcc );
     void SwitchActiveViewFireFocus( );
     void SetWinViewPos(const Point& rWinPos);
     Point const & GetWinViewPos() const;
@@ -339,7 +336,7 @@ public:
     /** Return a sub controller that implements the view shell specific
         part of the DrawController.
     */
-    virtual css::uno::Reference<css::drawing::XDrawSubController> CreateSubController() = 0;
+    virtual cpo::uno::Reference<css::drawing::XDrawSubController> CreateSubController() = 0;
 
     /** Return the type of the shell.
     */
@@ -415,7 +412,7 @@ public:
     /// Allows adjusting the point or mark of the selection to a document coordinate.
     void SetCursorMm100Position(const Point& rPosition, bool bPoint, bool bClearMark);
     /// Gets the current selection
-    css::uno::Reference<css::datatransfer::XTransferable> GetSelectionTransferable() const;
+    cpo::uno::Reference<css::datatransfer::XTransferable> GetSelectionTransferable() const;
     /// Allows starting or ending a graphic move or resize action.
     void SetGraphicMm100Position(bool bStart, const Point& rPosition);
 
@@ -492,6 +489,11 @@ protected:
 
     // Support methods for centralized UNDO/REDO
     virtual SfxUndoManager* ImpGetUndoManager() const;
+    /** The undo manager of the notes pane while the pane overrides the main view shell,
+        otherwise null. Each view has a notes pane of its own, so every action in it comes
+        from this view, although the actions carry no view shell id.
+    */
+    SfxUndoManager* ImpGetNotesPanelUndoManager() const;
     void ImpGetUndoStrings(SfxItemSet &rSet) const;
     void ImpGetRedoStrings(SfxItemSet &rSet) const;
     void ImpSidUndo(SfxRequest& rReq);

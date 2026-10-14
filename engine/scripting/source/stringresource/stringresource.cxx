@@ -45,8 +45,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::embed;
@@ -58,9 +58,9 @@ namespace stringresource
 
 // StringResourceImpl
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_StringResourcePersistenceImpl_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new StringResourcePersistenceImpl(context));
 }
@@ -609,7 +609,7 @@ void StringResourceImpl::implNotifyListeners(std::unique_lock<std::mutex>& rGuar
     EventObject aEvent;
     aEvent.Source = getXWeak();
     m_aListenerContainer.forEach(rGuard,
-        [&aEvent](const css::uno::Reference<XModifyListener>& xListener)
+        [&aEvent](const cpo::uno::Reference<XModifyListener>& xListener)
         {
             xListener->modified(aEvent);
         }
@@ -928,7 +928,7 @@ void StringResourcePersistenceImpl::storeToURL( const OUString& URL,
 {
     std::unique_lock aGuard( m_aMutex );
 
-    Reference< ucb::XSimpleFileAccess3 > xFileAccess = ucb::SimpleFileAccess::create(m_xContext);
+    Reference< ucb::XSimpleFileAccess > xFileAccess = ucb::SimpleFileAccess::create(m_xContext);
     if( Handler.is() )
         xFileAccess->setInteractionHandler( Handler );
 
@@ -939,7 +939,7 @@ void StringResourcePersistenceImpl::implKillRemovedLocaleFiles
 (
     std::u16string_view Location,
     const OUString& aNameBase,
-    const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& xFileAccess
+    const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& xFileAccess
 )
 {
     // Delete files for deleted locales
@@ -962,7 +962,7 @@ void StringResourcePersistenceImpl::implKillChangedDefaultFiles
 (
     std::u16string_view Location,
     const OUString& aNameBase,
-    const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& xFileAccess
+    const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& xFileAccess
 )
 {
     // Delete files for changed defaults
@@ -983,7 +983,7 @@ void StringResourcePersistenceImpl::implStoreAtLocation
     std::u16string_view Location,
     const OUString& aNameBase,
     const OUString& aComment,
-    const Reference< ucb::XSimpleFileAccess3 >& xFileAccess,
+    const Reference< ucb::XSimpleFileAccess >& xFileAccess,
     bool bUsedForStore,
     bool bStoreAll,
     bool bKillAll
@@ -1987,9 +1987,9 @@ bool StringResourcePersistenceImpl::implWritePropertiesFile( LocaleItem const * 
 
 // StringResourceWithStorageImpl
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_StringResourceWithStorageImpl_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new StringResourceWithStorageImpl(context));
 }
@@ -2261,9 +2261,9 @@ bool StringResourceWithStorageImpl::implLoadLocale(std::unique_lock<std::mutex>&
 // StringResourceWithLocationImpl
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_StringResourceWithLocationImpl_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new StringResourceWithLocationImpl(context));
 }
@@ -2448,7 +2448,7 @@ void StringResourceWithLocationImpl::store()
     if( !m_bModified && !bStoreAll )
         return;
 
-    Reference< ucb::XSimpleFileAccess3 > xFileAccess = getFileAccessImpl();
+    Reference< ucb::XSimpleFileAccess > xFileAccess = getFileAccessImpl();
     implStoreAtLocation(aGuard, m_aLocation, m_aNameBase, m_aComment,
         xFileAccess, true/*bUsedForStore*/, bStoreAll );
     m_bModified = false;
@@ -2520,7 +2520,7 @@ void StringResourceWithLocationImpl::setURL( const OUString& URL )
 // Scan locale properties files
 void StringResourceWithLocationImpl::implScanLocales(std::unique_lock<std::mutex>& /*rGuard*/)
 {
-    const Reference< ucb::XSimpleFileAccess3 > xFileAccess = getFileAccessImpl();
+    const Reference< ucb::XSimpleFileAccess > xFileAccess = getFileAccessImpl();
     if( xFileAccess->isFolder( m_aLocation ) )
     {
         Sequence< OUString > aContentSeq = xFileAccess->getFolderContents( m_aLocation, false );
@@ -2533,7 +2533,7 @@ bool StringResourceWithLocationImpl::implLoadLocale(std::unique_lock<std::mutex>
 {
     bool bSuccess = false;
 
-    const Reference< ucb::XSimpleFileAccess3 > xFileAccess = getFileAccessImpl();
+    const Reference< ucb::XSimpleFileAccess > xFileAccess = getFileAccessImpl();
     OUString aCompleteFileName =
         implGetPathForLocaleItem( pLocaleItem, m_aNameBase, m_aLocation );
 
@@ -2553,7 +2553,7 @@ bool StringResourceWithLocationImpl::implLoadLocale(std::unique_lock<std::mutex>
     return bSuccess;
 }
 
-const Reference< ucb::XSimpleFileAccess3 > & StringResourceWithLocationImpl::getFileAccessImpl()
+const Reference< ucb::XSimpleFileAccess > & StringResourceWithLocationImpl::getFileAccessImpl()
 {
     if( !m_xSFI.is() )
     {

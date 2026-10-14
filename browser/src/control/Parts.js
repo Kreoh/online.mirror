@@ -41,7 +41,7 @@ window.L.Map.include({
 			isTheSamePart =
 				app.calc.partHashes[docLayer._prevSelectedPart] === app.calc.partHashes[part];
 		} else if ((docType === 'presentation' || docType === 'drawing')) {
-			if (docLayer._prevSelectedPart !== undefined && part < app.impress.partList.length && app.impress.partList[docLayer._prevSelectedPart])
+			if (docLayer._prevSelectedPart !== undefined && part >= 0 && part < app.impress.partList.length && app.impress.partList[docLayer._prevSelectedPart])
 				isTheSamePart = app.impress.partList[docLayer._prevSelectedPart].part === app.impress.partList[part].part;
 		} else if (docType === 'text') {
 			isTheSamePart = true;
@@ -58,6 +58,9 @@ window.L.Map.include({
 			// Drop the validity input help of the sheet we are leaving. The engine
 			// sends a fresh one for the new sheet when its active cell has input help.
 			app.definitions.validityInputHelpSection.removeValidityInputHelp();
+			// The cursor rectangle is in document coordinates, so the old one
+			// would land on unrelated cells of the new sheet.
+			docLayer.hideCellCursor();
 		}
 
 		docLayer._clearMsgReplayStore(true /* notOtherMsg*/);
@@ -79,7 +82,6 @@ window.L.Map.include({
 			this._partsDirection = (part >= docLayer._selectedPart) ? 1 : -1;
 			docLayer._selectedPart = part;
 			docLayer._updateReferenceMarks();
-			docLayer._updateSparklineGroupReferences();
 		}
 		else {
 			return;
@@ -89,7 +91,7 @@ window.L.Map.include({
 			// If this wasn't triggered from the server,
 			// then notify the server of the change.
 			if (!external)
-				app.socket.sendMessage('setclientpart part=' + docLayer.getSelectedPart());
+				docLayer._requestPart(docLayer.getSelectedPart());
 		};
 
 		if (app.file.fileBasedView) {
@@ -105,7 +107,7 @@ window.L.Map.include({
 
 		this.fire('scrolltopart');
 
-		if (app.file.textCursor.visible) {
+		if (app.file.textCursor.visible && !external) {
 			// a click outside the slide to clear any selection
 			app.socket.sendMessage('resetselection');
 		}
@@ -129,7 +131,8 @@ window.L.Map.include({
 			docLayer._invalidatePreviews();
 		}
 		if (this._docLayer._docType === 'presentation' || this._docLayer._docType === 'drawing') {
-			this._docLayer._preview.focusCurrentSlide();
+			if (this._docLayer._preview.partsFocused)
+				this._docLayer._preview.focusCurrentSlide();
 		} else {
 			this.focus();
 		}
@@ -184,9 +187,22 @@ window.L.Map.include({
 			// in that case we cannot decrease previewRequestsOnFly counter
 			// we should not wait more than 2 seconds for each 3 requests
 			var now = new Date();
-			if (now - this._timeToEmptyQueue < 2000)
-				// wait until the queue is empty
+			const waited = now - this._timeToEmptyQueue;
+			if (waited < 2000) {
+				// wait until the queue is empty. A request may get no reply,
+				// so the queue is looked at again once the wait is over.
+				if (!this._previewQueueTimer) {
+					this._previewQueueTimer = app.timerRegistry.setTimeout(
+						'previewqueue',
+						() => {
+							this._previewQueueTimer = null;
+							this._processPreviewQueue();
+						},
+						2000 - waited,
+					);
+				}
 				return;
+			}
 			else {
 				this._previewRequestsOnFly = 0;
 				this._timeToEmptyQueue = now;
@@ -211,6 +227,16 @@ window.L.Map.include({
 
 		if (previewParts.length > 0)
 			window.app.console.debug('PREVIEW: request preview parts : ' + previewParts.join());
+	},
+
+	// A preview request under way has its answer, so the next one in the queue can go.
+	_previewRequestAnswered: function() {
+		this._previewRequestsOnFly--;
+		if (this._previewRequestsOnFly < 0) {
+			this._previewRequestsOnFly = 0;
+			this._timeToEmptyQueue = new Date();
+		}
+		this._processPreviewQueue();
 	},
 
 	_addPreviewToQueue: function(part, id, tileMsg) {
@@ -259,14 +285,15 @@ window.L.Map.include({
 			// For Impress/Draw, route thumbnails through the vector renderer.
 			// The slideshow path is using the server rendered bitmaps.
 			if (!isSlideshow && RenderManager.isVectorRendering()) {
-				RenderManager.requestThumbnail(id, part, maxWidth, maxHeight);
+				const vectorMode = app.activeDocument.activeModes[0];
+				RenderManager.requestThumbnail(id, part, vectorMode, maxWidth, maxHeight);
 			} else {
 				var mode = app.activeDocument.activeModes[0];
-				// The request names the part by its part number, so it
+				// The request names the part by its part identifier, so it
 				// follows the page wherever it sits by the time it is
 				// rendered. An index no part holds names nothing to render.
 				const partNumber = docLayer.getPartFromIndex(part);
-				if (partNumber < 0) return {width: maxWidth, height: maxHeight};
+				if (!partNumber) return {width: maxWidth, height: maxHeight};
 				this._addPreviewToQueue(part, id, 'tile ' +
 								'nviewid=0' + ' ' +
 								'part=' + String(partNumber) + ' ' +
@@ -298,10 +325,10 @@ window.L.Map.include({
 			tilePosY: tilePosY, tileWidth: tileWidth, tileHeight: tileHeight, autoUpdate: autoUpdate, invalid: false};
 
 		var mode = app.activeDocument.activeModes[0];
-		// The request names the part by its part number. An index no part
+		// The request names the part by its part identifier. An index no part
 		// holds names nothing to render.
 		const partNumber = this._docLayer.getPartFromIndex(part);
-		if (partNumber < 0) return;
+		if (!partNumber) return;
 		this._addPreviewToQueue(part, id, 'tile ' +
 							'nviewid=0' + ' ' +
 							'part=' + partNumber + ' ' +
@@ -314,6 +341,32 @@ window.L.Map.include({
 							'tileheight=' + tileHeight + ' ' +
 							'id=' + id);
 		this._processPreviewQueue();
+	},
+
+	// Give the desktop app a copy of what a Writer or Calc document shows, for the thumbnail on its
+	// tab. The document canvas is cropped from its centre to the thumbnail's 218 x 170 shape.
+	requestTabThumbnail: function () {
+		const docLayer = this._docLayer;
+		if (!window.ThisIsTheQtApp || !docLayer || !(docLayer.isWriter() || docLayer.isCalc()))
+			return;
+		const source = document.getElementById('document-canvas');
+		if (!source || !source.width || !source.height)
+			return;
+
+		const width = Math.round(218 * window.devicePixelRatio);
+		const height = Math.round(170 * window.devicePixelRatio);
+		const scale = Math.max(width / source.width, height / source.height);
+		const cropWidth = width / scale;
+		const cropHeight = height / scale;
+
+		const thumbnail = document.createElement('canvas');
+		thumbnail.width = width;
+		thumbnail.height = height;
+		const context = thumbnail.getContext('2d');
+		context.imageSmoothingQuality = 'high';
+		context.drawImage(source, (source.width - cropWidth) / 2, (source.height - cropHeight) / 2,
+			cropWidth, cropHeight, 0, 0, width, height);
+		window.postMobileMessage('TABTHUMBNAIL ' + thumbnail.toDataURL('image/png'));
 	},
 
 	_resolveCurrentPage: function (page, currentPage, pageRects) {
@@ -533,69 +586,90 @@ window.L.Map.include({
 	},
 
 	showPage: function () {
-		if (this.getDocType() === 'spreadsheet' && app.calc.isAnyPartHidden()) {
-			const dialogId = 'show-sheets-modal';
-
-			const buttonCallback = function() {
-				var checkboxList = document.querySelectorAll('input[id^="hidden-part-checkbox"]');
-				for (var i = 0; i < checkboxList.length; i++) {
-					if (checkboxList[i].checked === true) {
-						var partName_ = checkboxList[i].id.replace('hidden-part-checkbox-', '');
-						var argument = {aTableName: {type: 'string', value: partName_}};
-						app.socket.sendMessage('uno .uno:Show ' + JSON.stringify(argument));
-					}
-				}
-			};
-
-			this.uiManager.showInfoModal(dialogId, _('Show sheets'), ' ', ' ', _('OK'), buttonCallback, true, dialogId + '-response');
-			this.showPageModalImpl(dialogId);
-		}
-	},
-
-	showPageModalImpl: function(dialogId) {
-		const modal = document.getElementById(dialogId);
-
-		if (!modal) {
-			setTimeout(() => { this.showPageModalImpl(dialogId) }, 10);
+		if (this.getDocType() !== 'spreadsheet' || !app.calc.isAnyPartHidden())
 			return;
-		}
 
-		var hiddenParts = app.calc.getHiddenPartNameArray();
+		const id = 'show-sheets-modal';
+		const dialogId = this.uiManager.generateModalId(id);
+		const responseButtonId = id + '-response';
+		const cancelButtonId = id + '-cancel';
+		const checkboxIdPrefix = 'hidden-part-checkbox-';
 
-		if (app.calc.isAnyPartHidden()) {
-			var container = document.createElement('div');
-			container.style.maxHeight = '300px';
-			container.style.overflowY = 'auto';
-			for (var i = 0; i < hiddenParts.length; i++) {
-				var checkbox = document.createElement('input');
-				checkbox.type = 'checkbox';
-				checkbox.id = 'hidden-part-checkbox-' + hiddenParts[i];
-				var label = document.createElement('label');
-				label.htmlFor = 'hidden-part-checkbox-' + hiddenParts[i];
-				label.innerText = hiddenParts[i];
-				var newLine = document.createElement('br');
-				container.appendChild(checkbox);
-				container.appendChild(label);
-				container.appendChild(newLine);
-			}
-		}
+		const hiddenParts = app.calc.getHiddenPartNameArray();
+		const checkedParts = new Set();
 
-		modal.insertBefore(container, modal.children[0]);
+		// One checkbox widget per hidden sheet. The builder renders them, so
+		// each platform applies its own checkbox layout.
+		const checkboxes = hiddenParts.map((partName, index) => ({
+			id: checkboxIdPrefix + index,
+			type: 'checkbox',
+			text: partName,
+		}));
 
-		JSDialog.enableButtonInModal(dialogId, dialogId + '-response', false);
+		const json = this.uiManager._modalDialogJSON(id, _('Show sheets'), true, [
+			{
+				id: 'info-modal-tile-m',
+				type: 'fixedtext',
+				text: _('Show sheets'),
+				hidden: !window.mode.isSmallScreenDevice(),
+			},
+			{
+				id: 'hidden-parts-container',
+				type: 'container',
+				vertical: true,
+				children: checkboxes,
+			},
+			{
+				id: '',
+				type: 'buttonbox',
+				text: '',
+				enabled: true,
+				children: [
+					{
+						id: cancelButtonId,
+						type: 'pushbutton',
+						text: _('Cancel'),
+					},
+					{
+						id: responseButtonId,
+						type: 'pushbutton',
+						text: _('OK'),
+						has_default: true,
+						// OK stays disabled until at least one sheet is ticked.
+						enabled: false,
+					},
+				],
+				vertical: false,
+				layoutstyle: 'end',
+			},
+		]);
 
-		var checkboxes = document.querySelectorAll('#show-sheets-modal input[type="checkbox"]');
-		checkboxes.forEach(function(checkbox) {
-			checkbox.addEventListener('change', function() {
-				var anyChecked = false;
-				checkboxes.forEach(function(checkbox) {
-					if (checkbox.checked) {
-						anyChecked = true;
-					}
+		const callbacks = hiddenParts.map((partName, index) => ({
+			id: checkboxIdPrefix + index,
+			type: 'change',
+			func: (objectType, eventType, object, checked) => {
+				if (checked) checkedParts.add(partName);
+				else checkedParts.delete(partName);
+				JSDialog.enableButtonInModal(
+					id,
+					responseButtonId,
+					checkedParts.size > 0,
+				);
+			},
+		}));
+
+		callbacks.push({
+			id: responseButtonId,
+			func: () => {
+				checkedParts.forEach((partName) => {
+					const argument = { aTableName: { type: 'string', value: partName } };
+					app.socket.sendMessage('uno .uno:Show ' + JSON.stringify(argument));
 				});
-				JSDialog.enableButtonInModal(dialogId, dialogId + '-response', anyChecked);
-			});
+				this.uiManager.closeModal(dialogId);
+			},
 		});
+
+		this.uiManager.showModal(json, callbacks, cancelButtonId);
 	},
 
 	hidePage: function (tabNumber) {

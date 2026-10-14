@@ -95,7 +95,7 @@ public:
     static constexpr sal_Int32 AIBodyTextMaxChars = 60 * 1024;
 
     /// Gets the short cut accelerators.
-    static std::unordered_map<OUString, css::uno::Reference<css::ui::XAcceleratorConfiguration>>& getAcceleratorConfs();
+    static std::unordered_map<OUString, cpo::uno::Reference<css::ui::XAcceleratorConfiguration>>& getAcceleratorConfs();
     /// Create a new view shell from the current view frame.
     /// This assumes a single document is ever loaded.
     static int createView();
@@ -207,9 +207,11 @@ public:
                                            bool bSkipViewShowingPart = true);
     /// Emits a COKitCallbackType::INVALIDATE_TILES for the given part and rectangle on the
     /// views of the document whose current edit mode is nMode. A null rectangle invalidates
-    /// the whole part.
+    /// the whole part. When bSkipViewShowingPart is true the views currently showing that part
+    /// are left out.
     static void notifyInvalidationViewsInMode(vcl::ITiledRenderable* pDoc, int nPart, int nMode,
-                                              tools::Rectangle const* pRect);
+                                              tools::Rectangle const* pRect,
+                                              bool bSkipViewShowingPart = false);
     /// Emits a COKitCallbackType::INVALIDATE_VISIBLE_CURSOR
     static void notifyCursorInvalidation(SfxViewShell const* pThisView, tools::Rectangle const * pRect, bool bControlEvent, int windowID);
     /// Emits a COKitCallbackType::INVALIDATE_TILES, but tweaks it according to setOptionalFeatures() if needed.
@@ -222,9 +224,6 @@ public:
 
     /// Builds the ".uno:ModifiedStatus=true" or "...=false" state-change payload.
     static OString makeModifiedStatusPayload(bool bModified);
-
-    /// Dispatches a callback to a single view identified by its view id.
-    static void notifyView(int nViewId, COKitCallbackType eType, const OString& rPayload);
 
     /// Notify about the editing context change.
     static void notifyContextChange(const css::ui::ContextChangeEventObject& rEvent);
@@ -248,6 +247,9 @@ public:
     static OString makeVisCursorInvalidation(int nViewId, std::string_view rRectangle,
                                              bool bMispelledWord = false, const OString& rHyperlink = ""_ostr,
                                              int nEditorViewId = -1);
+
+    static OString makeViewCursorInvalidation(const SfxViewShell* pThisView, int nViewId,
+                                              std::string_view rRectangle, int nEditorViewId = -1);
 
     /// Helper for posting async key event
     static void postKeyEventAsync(const VclPtr<vcl::Window> &xWindow,
@@ -286,12 +288,12 @@ public:
     /// Extracts base64 data inside begin/end markers.
     static std::string_view extractCertificate(std::string_view rCert);
     /// Takes a single CA certificate to add them to the list of trusted certificates.
-    static css::uno::Reference<css::security::XCertificate> addCertificate(const css::uno::Reference<css::xml::crypto::XCertificateCreator>& xCertificateCreator, const cpo::uno::Sequence<sal_Int8>& rCert);
+    static cpo::uno::Reference<css::security::XCertificate> addCertificate(const cpo::uno::Reference<css::xml::crypto::XCertificateCreator>& xCertificateCreator, const cpo::uno::Sequence<sal_Int8>& rCert);
     /// Takes a CA chain (multiple certificates in base64 from inside begin/end markers)
     /// to add them to the list of trusted certificates.
     static void addCertificates(std::string_view rCerts);
     /// Parses a private key + certificate pair.
-    static css::uno::Reference<css::security::XCertificate> getSigningCertificate(std::string_view rCert, std::string_view rKey);
+    static cpo::uno::Reference<css::security::XCertificate> getSigningCertificate(std::string_view rCert, std::string_view rKey);
     /// Ensure Author is that of pViewShell for a rCommand that need the current Author name
     static void ensureCommandAuthor(const SfxViewShell* pViewShell, std::u16string_view rCommand,
                                     std::vector<css::beans::PropertyValue>& rArguments);
@@ -334,6 +336,17 @@ class SfxKitLanguageGuard
 public:
     SfxKitLanguageGuard(const SfxViewShell* pNewShell);
     ~SfxKitLanguageGuard();
+};
+
+/// If Kit is active, switch to the timezone of the current view and back to the default one on
+/// delete. Work done inside the guard reads the clock the way the user of that view reads it.
+class SFX2_DLLPUBLIC SfxKitTimezoneGuard
+{
+    bool m_bSetTimezone;
+
+public:
+    SfxKitTimezoneGuard();
+    ~SfxKitTimezoneGuard();
 };
 
 typedef std::list<SfxViewShell*> ViewShellList;

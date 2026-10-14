@@ -24,6 +24,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -36,12 +37,12 @@ public:
     explicit CellsEnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess ) : mxIndexAccess(std::move( xIndexAccess )), mnIndex( 0 )
     {
     }
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( mnIndex < mxIndexAccess->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if( mnIndex < mxIndexAccess->getCount() )
         {
@@ -56,7 +57,7 @@ class CellCollectionHelper : public ::cppu::WeakImplHelper< container::XIndexAcc
 {
 private:
     uno::Reference< XHelperInterface > mxParent;
-    uno::Reference< uno::XComponentContext > mxContext;
+    uno::Reference< cpo::uno::XComponentContext > mxContext;
     uno::Reference< css::text::XTextTable > mxTextTable;
     sal_Int32 mnLeft;
     sal_Int32 mnTop;
@@ -64,16 +65,16 @@ private:
     sal_Int32 mnBottom;
 
 public:
-    /// @throws css::uno::RuntimeException
-    CellCollectionHelper( css::uno::Reference< ov::XHelperInterface > xParent, css::uno::Reference< css::uno::XComponentContext > xContext, css::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom ): mxParent(std::move( xParent )), mxContext(std::move( xContext )), mxTextTable(std::move( xTextTable )), mnLeft( nLeft ), mnTop( nTop ), mnRight( nRight ), mnBottom( nBottom )
+    /// @throws cpo::uno::RuntimeException
+    CellCollectionHelper( cpo::uno::Reference< ov::XHelperInterface > xParent, cpo::uno::Reference< cpo::uno::XComponentContext > xContext, cpo::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom ): mxParent(std::move( xParent )), mxContext(std::move( xContext )), mxTextTable(std::move( xTextTable )), mnLeft( nLeft ), mnTop( nTop ), mnRight( nRight ), mnBottom( nBottom )
     {
     }
 
-    virtual sal_Int32 SAL_CALL getCount(  ) override
+    virtual sal_Int32 getCount(  ) override
     {
         return ( mnRight - mnLeft + 1 ) * ( mnBottom - mnTop + 1 );
     }
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override
     {
         if ( Index < 0 || Index >= getCount() )
             throw css::lang::IndexOutOfBoundsException();
@@ -89,16 +90,16 @@ public:
         throw css::lang::IndexOutOfBoundsException();
 
     }
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override
+    virtual cpo::uno::Type getElementType(  ) override
     {
         return cppu::UnoType<word::XCell>::get();
     }
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual bool hasElements(  ) override
     {
         return true;
     }
     // XEnumerationAccess
-    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) override
+    virtual uno::Reference< container::XEnumeration > createEnumeration(  ) override
     {
         return new CellsEnumWrapper( this );
     }
@@ -106,17 +107,17 @@ public:
 
 }
 
-SwVbaCells::SwVbaCells( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< text::XTextTable >& xTextTable, sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom ) : SwVbaCells_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( new CellCollectionHelper( xParent, xContext, xTextTable, nLeft, nTop, nRight, nBottom ) ) ), mxTextTable( xTextTable ), mnTop( nTop ), mnBottom( nBottom )
+SwVbaCells::SwVbaCells( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< text::XTextTable >& xTextTable, sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom ) : SwVbaCells_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( new CellCollectionHelper( xParent, xContext, xTextTable, nLeft, nTop, nRight, nBottom ) ) ), mxTextTable( xTextTable ), mnTop( nTop ), mnBottom( nBottom )
 {
 }
 
-::sal_Int32 SAL_CALL SwVbaCells::getWidth()
+::sal_Int32 SwVbaCells::getWidth()
 {
     uno::Reference< word::XCell > xCell( m_xIndexAccess->getByIndex( 0 ), uno::UNO_QUERY_THROW );
     return xCell->getWidth();
 }
 
-void SAL_CALL SwVbaCells::setWidth( ::sal_Int32 _width )
+void SwVbaCells::setWidth( ::sal_Int32 _width )
 {
     sal_Int32 nIndex = 0;
     while( nIndex < m_xIndexAccess->getCount() )
@@ -126,13 +127,13 @@ void SAL_CALL SwVbaCells::setWidth( ::sal_Int32 _width )
     }
 }
 
-cpo::uno::Any SAL_CALL SwVbaCells::getHeight()
+cpo::uno::Any SwVbaCells::getHeight()
 {
     uno::Reference< word::XRow > xRow( new SwVbaRow( getParent(), mxContext, mxTextTable, mnTop ) );
     return xRow->getHeight();
 }
 
-void SAL_CALL SwVbaCells::setHeight( const cpo::uno::Any& _height )
+void SwVbaCells::setHeight( const cpo::uno::Any& _height )
 {
     for( sal_Int32 row = mnTop; row <= mnBottom; row++ )
     {
@@ -141,13 +142,13 @@ void SAL_CALL SwVbaCells::setHeight( const cpo::uno::Any& _height )
     }
 }
 
-::sal_Int32 SAL_CALL SwVbaCells::getHeightRule()
+::sal_Int32 SwVbaCells::getHeightRule()
 {
     uno::Reference< word::XRow > xRow( new SwVbaRow( getParent(), mxContext, mxTextTable, mnTop ) );
     return xRow->getHeightRule();
 }
 
-void SAL_CALL SwVbaCells::setHeightRule( ::sal_Int32 _heightrule )
+void SwVbaCells::setHeightRule( ::sal_Int32 _heightrule )
 {
     for( sal_Int32 row = mnTop; row <= mnBottom; row++ )
     {
@@ -156,7 +157,7 @@ void SAL_CALL SwVbaCells::setHeightRule( ::sal_Int32 _heightrule )
     }
 }
 
-void SAL_CALL SwVbaCells::SetWidth( float width, sal_Int32 rulestyle )
+void SwVbaCells::SetWidth( float width, sal_Int32 rulestyle )
 {
     sal_Int32 nIndex = 0;
     while( nIndex < m_xIndexAccess->getCount() )
@@ -166,7 +167,7 @@ void SAL_CALL SwVbaCells::SetWidth( float width, sal_Int32 rulestyle )
     }
 }
 
-void SAL_CALL SwVbaCells::SetHeight( float height, sal_Int32 heightrule )
+void SwVbaCells::SetHeight( float height, sal_Int32 heightrule )
 {
     for( sal_Int32 row = mnTop; row <= mnBottom; row++ )
     {

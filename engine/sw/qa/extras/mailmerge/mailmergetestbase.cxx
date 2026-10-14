@@ -37,7 +37,8 @@
 #include <rootfrm.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /**
  * Maps database URIs to the registered database names for quick lookups
@@ -66,7 +67,7 @@ public:
         }
         if (mxCurResultSet.is())
         {
-            css::uno::Reference<css::lang::XComponent>(mxCurResultSet, css::uno::UNO_QUERY_THROW)
+            cpo::uno::Reference<css::lang::XComponent>(mxCurResultSet, cpo::uno::UNO_QUERY_THROW)
                 ->dispose();
         }
         SwModelTestBase::tearDown();
@@ -123,7 +124,7 @@ public:
                                                         const OUString& aDBName)
     {
         uno::Reference<sdbc::XRowSet> xCurResultSet;
-        uno::Reference<uno::XInterface> xInstance
+        uno::Reference<cpo::uno::XInterface> xInstance
             = getMultiServiceFactory()->createInstance(u"com.sun.star.sdb.RowSet"_ustr);
         uno::Reference<beans::XPropertySet> xRowSetPropSet(xInstance, uno::UNO_QUERY);
         assert(xRowSetPropSet.is() && "failed to get XPropertySet interface from RowSet");

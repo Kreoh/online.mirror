@@ -19,6 +19,8 @@
 
 #include "COOLWSD.hpp"
 
+#if !MOBILEAPP && ENABLE_DEBUG
+
 /* Default host used in the start test URI */
 #define COOLWSD_TEST_HOST "localhost"
 
@@ -30,6 +32,8 @@
 
 /* Page that lists the documents this server can open, and opens the one picked */
 #define COOLWSD_TEST_DOCUMENT_PICKER "/browser/" COOLWSD_VERSION_HASH "/documents.html"
+
+#endif
 
 /* Default ciphers used, when not specified otherwise */
 #define DEFAULT_CIPHER_SET "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH"
@@ -60,6 +64,7 @@
 #include <common/Session.hpp>
 #include <common/SigUtil.hpp>
 #include <common/Unit.hpp>
+#include <common/IpNetwork.hpp>
 #include <common/Util.hpp>
 #include <net/AsyncDNS.hpp>
 #include <net/HttpRequest.hpp>
@@ -71,6 +76,7 @@
 #include <wsd/ClientRequestDispatcher.hpp>
 #include <wsd/CollabBroker.hpp>
 #include <wsd/DocumentBroker.hpp>
+#include <wsd/RemoteDocumentBroker.hpp>
 #include <wsd/PlatformDesktop.hpp>
 #include <wsd/PlatformMobile.hpp>
 #include <wsd/PlatformUnix.hpp>
@@ -78,7 +84,6 @@
 #include <wsd/TraceFile.hpp>
 #include <wsd/wopi/StorageConnectionManager.hpp>
 
-#include <Poco/DirectoryIterator.h>
 #include <Poco/Exception.h>
 #include <Poco/File.h>
 #include <Poco/Path.h>
@@ -197,15 +202,14 @@ extern "C"
     static void forwardSigUsr2();
 }
 
-void COOLWSD::appendAllowedHostsFrom(const LayeredConfiguration& conf, const std::string& root, std::vector<std::string>& allowed)
+void COOLWSD::appendAllowedHostsFrom(const LayeredConfiguration& conf, const std::string& root,
+                                     std::vector<std::string>& allowed, bool onlyAllowed)
 {
-    for (size_t i = 0; ; ++i)
+    for (const std::string& path : ConfigUtil::getIndexedKeys(conf, root, "host"))
     {
-        const std::string path = root + ".host[" + std::to_string(i) + ']';
-        if (!conf.has(path))
-        {
-            break;
-        }
+        if (onlyAllowed && !conf.getBool(path + "[@allow]", false))
+            continue;
+
         std::string host = ConfigUtil::getConfigValue<std::string>(conf, path, "");
         if (!host.empty())
         {
@@ -290,7 +294,7 @@ void COOLWSD::appendAllowedAliasGroups(const LayeredConfiguration& conf, std::ve
 /// connected to any document.
 void COOLWSD::alertAllUsersInternal(const std::string& msg)
 {
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
         return;
     std::lock_guard<std::mutex> docBrokersLock(DocBrokersMutex);
 
@@ -310,7 +314,7 @@ void COOLWSD::alertAllUsersInternal(const std::string& msg)
 #if !MOBILEAPP
 void COOLWSD::syncUsersBrowserSettings(const std::string& userId, const pid_t childPid, const std::string& json)
 {
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
         return;
     std::lock_guard<std::mutex> docBrokersLock(DocBrokersMutex);
 
@@ -329,17 +333,17 @@ void COOLWSD::syncUsersBrowserSettings(const std::string& userId, const pid_t ch
 
 void COOLWSD::alertUserInternal(const std::string& dockey, const std::string& msg)
 {
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
         return;
     std::lock_guard<std::mutex> docBrokersLock(DocBrokersMutex);
 
     LOG_INF("Alerting document users with dockey: [" << dockey << ']' << " msg: [" << msg << ']');
 
-    for (const auto& brokerIt : DocBrokers)
+    const auto brokerIt = DocBrokers.find(dockey);
+    if (brokerIt != DocBrokers.end())
     {
-        std::shared_ptr<DocumentBroker> docBroker = brokerIt.second;
-        if (docBroker->getDocKey() == dockey)
-            docBroker->addCallback([msg, docBroker](){ docBroker->alertAllUsers(msg); });
+        std::shared_ptr<DocumentBroker> docBroker = brokerIt->second;
+        docBroker->addCallback([msg, docBroker]() { docBroker->alertAllUsers(msg); });
     }
 }
 
@@ -418,9 +422,16 @@ void COOLWSD::checkDiskSpaceAndWarnClients(const bool cacheLastCheck)
 #endif
 }
 
+#if !MOBILEAPP
+static void closeSubForKit(const std::string& configId,
+                           const std::shared_ptr<ForKitProcess>& subForKit);
+#endif
+
 namespace {
 
-SubForKitMap::iterator dropSubForKit(SubForKitMap::iterator it)
+/// Forget a subforkit. With askToExit, it and its spare kits are asked to exit. Otherwise it is
+/// killed.
+SubForKitMap::iterator dropSubForKit(SubForKitMap::iterator it, bool askToExit)
 {
     // copy as it will be used after erase()
     std::string configId = it->first;
@@ -429,6 +440,12 @@ SubForKitMap::iterator dropSubForKit(SubForKitMap::iterator it)
     OutstandingForks.erase(configId);
     OutstandingSubForKitSpawns.erase(configId);
     LastSubForKitSpawnRequestTimes.erase(configId);
+#if !MOBILEAPP
+    if (askToExit)
+        closeSubForKit(configId, it->second);
+#else
+    (void)askToExit;
+#endif
     it = SubForKitProcs.erase(it);
     UNITWSD_CALL(killSubForKit(configId));
 
@@ -533,14 +550,14 @@ void COOLWSD::cleanupDocBrokers()
                 LOG_DBG("subforkit " << configId << " is unused, dropping it");
                 auto it = SubForKitProcs.find(configId);
                 assert(it != SubForKitProcs.end());
-                dropSubForKit(it);
+                dropSubForKit(it, /*askToExit=*/true);
             }
             else if (recentlyUsedKept >= MaxRecentlyUsedSubForKits)
             {
                 LOG_DBG("subforkit " << configId << " recently used but excess idle subforkit, dropping it");
                 auto it = SubForKitProcs.find(configId);
                 assert(it != SubForKitProcs.end());
-                dropSubForKit(it);
+                dropSubForKit(it, /*askToExit=*/true);
             }
             else
             {
@@ -564,7 +581,7 @@ void COOLWSD::cleanupDocBrokers()
 /// Forks as many children as requested.
 static void forkChildren(const std::string& configId, const int number)
 {
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return;
 
     LOG_TRC("Request forkit to spawn " << number << " new child(ren)");
@@ -590,7 +607,7 @@ static bool queueMessageToForKit(const std::string& message);
 
 bool COOLWSD::ensureSubForKit(const std::string& configId)
 {
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return false;
 
     LOG_TRC("Request forkit to spawn subForKit " << configId);
@@ -630,7 +647,7 @@ bool COOLWSD::ensureSubForKit(const std::string& configId)
 /// Cleans up dead children.
 static void cleanupChildren()
 {
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return;
 
     Util::assertIsLocked(NewChildrenMutex);
@@ -809,6 +826,9 @@ inline std::string getServiceURI(const std::string &sub, bool asAdmin = false)
 std::atomic<int> COOLWSD::ForKitProcId(-1);
 std::shared_ptr<ForKitProcess> COOLWSD::ForKitProc;
 bool COOLWSD::NoCapsForKit = false;
+bool COOLWSD::RequireLandlock = false;
+bool COOLWSD::LandlockAvailable = false;
+bool COOLWSD::CapabilityJailUnusable = false;
 bool COOLWSD::NoSeccomp = false;
 bool COOLWSD::AdminEnabled = true;
 bool COOLWSD::UnattendedRun = false;
@@ -839,7 +859,6 @@ std::string COOLWSD::ConfigFile =
 #else
     COOLWSD_CONFIGDIR "/coolwsd.xml";
 #endif
-std::string COOLWSD::ConfigDir = COOLWSD_CONFIGDIR "/conf.d";
 bool COOLWSD::EnableTraceEventLogging = false;
 bool COOLWSD::EnableAccessibility = false;
 bool COOLWSD::EnableMountNamespaces = false;
@@ -863,7 +882,6 @@ unsigned COOLWSD::MaxConnections;
 unsigned COOLWSD::MaxDocuments;
 std::string COOLWSD::HardwareResourceWarning = "ok";
 std::string COOLWSD::OverrideWatermark;
-std::set<const Poco::Util::AbstractConfiguration*> COOLWSD::PluginConfigurations;
 std::chrono::steady_clock::time_point COOLWSD::StartTime;
 bool COOLWSD::IsBindMountingEnabled = true;
 bool COOLWSD::IndirectionServerEnabled = false;
@@ -997,7 +1015,7 @@ std::shared_ptr<ChildProcess> getNewChild_Blocks(const std::shared_ptr<SocketPol
     assert(mobileAppDocId > 0 && "Unexpected to have no mobileAppDocId in the mobile build");
 #endif
 
-    std::thread([&]
+    std::thread([mobileAppDocId]
                 {
                     ProcUtil::setThreadName("lokit_main_" + HexUtil::encodeId(mobileAppDocId, 3));
 
@@ -1068,7 +1086,7 @@ std::shared_ptr<ChildProcess> getNewChild_Blocks(const std::shared_ptr<SocketPol
         if (it != SubForKitProcs.end())
         {
             LOG_WRN("subForKit " << configId << " failed to respond, resetting it");
-            dropSubForKit(it);
+            dropSubForKit(it, /*askToExit=*/false);
         }
     }
 
@@ -1262,6 +1280,11 @@ bool queueMessageToForKit(const std::string& message)
     return true;
 }
 
+bool COOLWSD::queueMessageToPrimordialForKit(const std::string& message)
+{
+    return queueMessageToForKit(message);
+}
+
 void COOLWSD::requestTerminateSpareKits()
 {
     // Request existing spare kits to quit, to get replaced with ones that
@@ -1279,10 +1302,48 @@ void COOLWSD::requestTerminateSpareKits()
     }
 }
 
-// Due to the possibility of enterMountingNS failing at an intermediate stage
-// after entering a usernamespace, but unable to enter a useful mounting namespace
-// do a test mount in another separate child whose failure don't affect the parent
-bool COOLWSD::testMountingNSInFork()
+/// Ask the spare kits of a configuration to exit, then its subforkit. The subforkit is still their
+/// parent, so it reaps them and removes their jails before it exits itself.
+static void closeSubForKit(const std::string& configId,
+                           const std::shared_ptr<ForKitProcess>& subForKit)
+{
+    if (!PrisonerPoll)
+        return;
+
+    // The spare kits are taken now, so no document gets one of them, and the kits of a later
+    // subforkit with the same configuration stay.
+    std::vector<std::shared_ptr<ChildProcess>> spareKits;
+    {
+        std::unique_lock<std::mutex> lock(NewChildrenMutex);
+        for (auto it = NewChildren.begin(); it != NewChildren.end();)
+        {
+            if ((*it)->getConfigId() == configId)
+            {
+                spareKits.push_back(*it);
+                it = NewChildren.erase(it);
+            }
+            else
+                ++it;
+        }
+    }
+
+    // The sockets belong to the prisoner poll, so the messages are sent from its thread.
+    PrisonerPoll->addCallback(
+        [spareKits = std::move(spareKits), subForKit]
+        {
+            for (const std::shared_ptr<ChildProcess>& kit : spareKits)
+                kit->close();
+
+            subForKit->close();
+        });
+}
+
+namespace
+{
+
+/// Runs body in a child process that exits as soon as body returns.
+/// Answers with the status that child exited with, or -1 if it did not exit normally.
+int runInThrowawayFork(const char* name, const std::function<int()>& body)
 {
     Log::preFork();
 
@@ -1291,43 +1352,72 @@ bool COOLWSD::testMountingNSInFork()
     {
         // Child
         Log::postFork();
-
-        // setupChildRoot does a test bind mount + umount to see if that fully works
-        // so we have a mount namespace here just for the purposes of that test
-        LOG_DBG("Test moving into user namespace as uid 0 in level 2 child");
-
-        int ret = JailUtil::enterMountingNS(geteuid(), getegid()) ? 1 : 0;
-
-        LOG_DBG("Level 2 child enterMountingNS result is: " << ret);
-
-        _exit(ret);
+        _exit(body());
     }
 
     // Parent
 
     if (pid == -1)
     {
-        LOG_SYS("testMountingNSInFork fork failed");
-        return false;
+        LOG_SYS(name << " fork failed");
+        return -1;
     }
 
     int wstatus;
     const int rc = waitpid(pid, &wstatus, 0);
     if (rc == -1)
     {
-        LOG_SYS("testMountingNSInFork waitpid failed");
-        return false;
+        LOG_SYS(name << " waitpid failed");
+        return -1;
     }
 
     if (!WIFEXITED(wstatus))
     {
-        LOG_SYS("testMountingNSInFork abnormal termination");
-        return false;
+        LOG_SYS(name << " abnormal termination");
+        return -1;
     }
 
     int status = WEXITSTATUS(wstatus);
-    LOG_DBG("testMountingNSInFork status: " << std::hex << status << std::dec);
-    return status == 1;
+    LOG_DBG(name << " status: " << std::hex << status << std::dec);
+    return status;
+}
+
+/// True when the kernel here lets a process apply landlock rules.
+/// Landlock rules cannot be lifted once applied, so this runs in a child.
+bool testLandlock()
+{
+    return Landlock::isSupported() &&
+           runInThrowawayFork("testLandlock",
+                              []
+                              {
+                                  return Landlock::lock(std::vector<Landlock::Permission>()) ? 1
+                                                                                             : 0;
+                              }) == 1;
+}
+
+bool startWithLandlockJail()
+{
+    static const bool start = std::getenv("COOL_FORCE_LANDLOCK") != nullptr;
+    return start;
+}
+
+} // namespace
+
+// Due to the possibility of enterMountingNS failing at an intermediate stage
+// after entering a usernamespace, but unable to enter a useful mounting namespace
+// do a test mount in another separate child whose failure don't affect the parent
+bool COOLWSD::testMountingNSInFork()
+{
+    return runInThrowawayFork("testMountingNSInFork",
+                              []
+                              {
+                                  // setupChildRoot does a test bind mount + umount to see if
+                                  // that fully works so we have a mount namespace here just for
+                                  // the purposes of that test
+                                  LOG_DBG("Test moving into user namespace as uid 0 in level 2 "
+                                          "child");
+                                  return JailUtil::enterMountingNS(geteuid(), getegid()) ? 1 : 0;
+                              }) == 1;
 }
 
 void COOLWSD::setupChildRoot(const bool UseMountNamespaces)
@@ -1336,77 +1426,51 @@ void COOLWSD::setupChildRoot(const bool UseMountNamespaces)
     JailUtil::disableMountNamespaces();
 
 #if ENABLE_CHILDROOTS
-    Log::preFork();
-
-    pid_t pid = fork();
-    if (!pid)
-    {
-        // Child
-        Log::postFork();
-
-        int ret = 0;
-
-        // Do the setup in a fork so we have no other threads running which
-        // disrupt creation of linux namespaces
-
-        if (UseMountNamespaces)
+    // Do the setup in a fork so we have no other threads running which
+    // disrupt creation of linux namespaces
+    const int status = runInThrowawayFork(
+        "setupChildRoot",
+        [UseMountNamespaces]
         {
-            // setupChildRoot does a test bind mount + umount to see if that fully works
-            // so we have a mount namespace here just for the purposes of that test
+            int ret = 0;
 
-            // First see if it works in (another) throw away child so a successful
-            // NEWUSER, but a failed NEWNS, or an unusable one, doesn't affect this
-            // process. So on failure we can skip the enterMountingNS at this level.
-            const bool childMountWorked = COOLWSD::testMountingNSInFork();
-
-            LOG_DBG("Move into user namespace as uid 0");
-            if (childMountWorked && JailUtil::enterMountingNS(geteuid(), getegid()))
-                JailUtil::enableMountNamespaces();
-            else
+            if (UseMountNamespaces)
             {
-                LOG_ERR("creating usernamespace for mount user failed. Jails will be built by "
-                        "the coolforkit-caps helper instead, which starts only when it holds "
-                        "CAP_CHOWN, CAP_FOWNER and CAP_SYS_CHROOT and is allowed to raise "
-                        "privileges as it starts.");
+                // setupChildRoot does a test bind mount + umount to see if that fully works
+                // so we have a mount namespace here just for the purposes of that test
+
+                // First see if it works in (another) throw away child so a successful
+                // NEWUSER, but a failed NEWNS, or an unusable one, doesn't affect this
+                // process. So on failure we can skip the enterMountingNS at this level.
+                const bool childMountWorked = COOLWSD::testMountingNSInFork();
+
+                LOG_DBG("Move into user namespace as uid 0");
+                if (childMountWorked && JailUtil::enterMountingNS(geteuid(), getegid()))
+                    JailUtil::enableMountNamespaces();
+                else
+                {
+                    LOG_ERR("creating usernamespace for mount user failed. Jails will be built by "
+                            "the coolforkit-caps helper instead, which starts only when it holds "
+                            "CAP_CHOWN, CAP_FOWNER and CAP_SYS_CHROOT and is allowed to raise "
+                            "privileges as it starts.");
+                }
             }
-        }
 
-        // Setup the jails.
-        JailUtil::cleanupJails(CleanupChildRoot);
-        JailUtil::setupChildRoot(IsBindMountingEnabled, ChildRoot, SysTemplate);
+            // Setup the jails.
+            JailUtil::cleanupJails(CleanupChildRoot);
+            JailUtil::setupChildRoot(IsBindMountingEnabled, ChildRoot, SysTemplate);
 
-        if (JailUtil::isMountNamespacesEnabled())
-            ret |= (1 << 0);
-        if (JailUtil::isBindMountingEnabled())
-            ret |= (1 << 1);
+            if (JailUtil::isMountNamespacesEnabled())
+                ret |= (1 << 0);
+            if (JailUtil::isBindMountingEnabled())
+                ret |= (1 << 1);
 
-        _exit(ret);
-    }
+            return ret;
+        });
 
-    // Parent
-
-    if (pid == -1)
-    {
-        LOG_SYS("setupChildRoot fork failed");
+    if (status < 0)
         return;
-    }
 
-    int wstatus;
-    const int rc = waitpid(pid, &wstatus, 0);
-    if (rc == -1)
-    {
-        LOG_SYS("setupChildRoot waitpid failed");
-        return;
-    }
-
-    if (!WIFEXITED(wstatus))
-    {
-        LOG_SYS("setupChildRoot abnormal termination");
-        return;
-    }
-
-    int status = WEXITSTATUS(wstatus);
-    LOG_DBG("setupChildRoot status: " << std::hex << status << std::dec);
     IsBindMountingEnabled = (status & (1 << 1));
     LOG_INF("Using Bind Mounting: " << IsBindMountingEnabled);
     EnableMountNamespaces = (status & (1 << 0));
@@ -1423,7 +1487,7 @@ void COOLWSD::setupChildRoot(const bool UseMountNamespaces)
     (void) UseMountNamespaces;
 #endif
 
-    if constexpr (!Util::isMobileApp())
+    if (!Util::isMobileApp())
     {
         // The TMPDIR that coolwsd, forkit and anything they spawn inherit. Library code that
         // honours TMPDIR lands its files here, in the phase before any jail exists. It sits above
@@ -1633,24 +1697,6 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     ConfigUtil::initialize(&config());
 
 #if !MOBILEAPP
-    // Load extra ("plug-in") configuration files, if present
-    Poco::File dir(ConfigDir);
-    if (dir.exists() && dir.isDirectory())
-    {
-        const Poco::DirectoryIterator end;
-        for (Poco::DirectoryIterator configFileIterator(dir); configFileIterator != end;
-             ++configFileIterator)
-        {
-            // Only accept configuration files ending in .xml
-            const std::string configFile = configFileIterator.path().getFileName();
-            if (configFile.length() > 4 && strcasecmp(configFile.substr(configFile.length() - 4).data(), ".xml") == 0)
-            {
-                const std::string fullFileName = dir.path() + "/" + configFile;
-                PluginConfigurations.insert(new Poco::Util::XMLConfiguration(fullFileName));
-            }
-        }
-    }
-
     if (!UnitTestLibrary.empty())
     {
         UnitWSD::defaultConfigure(conf);
@@ -1822,6 +1868,10 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
     LoggableConfigEntries = ossConfig.str();
     LOG_INF(LoggableConfigEntries);
+
+    // Set before the unit-test configure hook, which can then replace it.
+    net::Defaults.pongTimeout = std::chrono::seconds(ConfigUtil::getConfigValue<int>(
+        conf, "net.client_pong_timeout_secs", net::DefaultPongTimeout.count()));
 
     // Initialize the UnitTest subsystem.
     if (!UnitWSD::init(UnitWSD::UnitType::Wsd, UnitTestLibrary))
@@ -2103,7 +2153,9 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     // Setup the jails.
     bool UseMountNamespaces = true;
 
-    NoCapsForKit = Util::isKitInProcess() ||
+    RequireLandlock = startWithLandlockJail();
+
+    NoCapsForKit = startWithLandlockJail() || Util::isKitInProcess() ||
                    !ConfigUtil::getConfigValue<bool>(conf, "security.capabilities", true);
     if (NoCapsForKit && UseMountNamespaces)
     {
@@ -2239,6 +2291,22 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
         LOG_INF("DISABLE_REDLINE set");
     }
 
+    const std::string ctlNumerals =
+        ConfigUtil::getConfigValue<std::string>(conf, "per_document.ctl_numerals", "arabic");
+    if (ctlNumerals != "arabic")
+    {
+        if (ctlNumerals == "hindi" || ctlNumerals == "system" || ctlNumerals == "context")
+        {
+            setenv("COOL_CTL_NUMERALS", ctlNumerals.c_str(), 1);
+            LOG_INF("COOL_CTL_NUMERALS set to [" << ctlNumerals << ']');
+        }
+        else
+        {
+            LOG_ERR("Invalid per_document.ctl_numerals value [" << ctlNumerals
+                    << "], expected one of: arabic, hindi, system, context. Using arabic.");
+        }
+    }
+
     // Otherwise we profile the soft-device at jail creation time.
     setenv("SAL_DISABLE_OPENCL", "true", 1);
     // Disable getting the OS print queue and default printer
@@ -2271,12 +2339,14 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
     LOG_DBG("net::Defaults: Socket[inactivityTimeout " << net::Defaults.inactivityTimeout
                                                        << ", maxExtConnections "
-                                                       << net::Defaults.maxExtConnections << ']');
+                                                       << net::Defaults.maxExtConnections
+                                                       << ", pongTimeout "
+                                                       << net::Defaults.pongTimeout << ']');
 
 #if !MOBILEAPP
     NoSeccomp =
         Util::isKitInProcess() || !ConfigUtil::getConfigValue<bool>(conf, "security.seccomp", true);
-    NoCapsForKit = Util::isKitInProcess() ||
+    NoCapsForKit = startWithLandlockJail() || Util::isKitInProcess() ||
                    !ConfigUtil::getConfigValue<bool>(conf, "security.capabilities", true);
     AdminEnabled = ConfigUtil::getConfigValue<bool>(conf, "admin_console.enable", true);
     IndirectionServerEnabled =
@@ -2285,9 +2355,15 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
         ConfigUtil::getConfigValue("indirection_endpoint.geolocation_setup.enable", false);
 
 #if ENABLE_DEBUG
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         SingleKit = true;
 #endif
+
+    if (!NoCapsForKit && !EnableMountNamespaces)
+    {
+        LandlockAvailable = testLandlock();
+        LOG_INF("Landlock available as a fallback jail: " << LandlockAvailable);
+    }
 #endif
 
     // LanguageTool configuration
@@ -2467,6 +2543,9 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
     LOG_TRC("Initialize Admin");
     Admin::initialize();
+
+    LOG_TRC("Initialize RemoteDocumentBroker");
+    RemoteDocumentBroker::initialize();
 #endif
 
     PrisonerPoll = std::make_unique<PrisonPoll>();
@@ -2543,6 +2622,13 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
 void COOLWSD::setLokitEnvironmentVariables(const Poco::Util::LayeredConfiguration& conf)
 {
+#if MOBILEAPP
+    // The apps run the engine on the user's own machine, as the user, so every host the user
+    // can reach is a legitimate external data source, as in soffice. The allow-list below is
+    // for a shared server, whose kit must not fetch from the server's network on a document's
+    // behalf, so the apps set none and the engine's host filter stays off.
+    (void) conf;
+#else
     // Allowed hosts for being external data source in the documents
     std::vector<std::string> lokAllowedHosts;
     appendAllowedHostsFrom(conf, "net.lok_allow", lokAllowedHosts);
@@ -2554,33 +2640,37 @@ void COOLWSD::setLokitEnvironmentVariables(const Poco::Util::LayeredConfiguratio
     bool wopiAllowed = conf.getBool("storage.wopi[@allow]", false);
     if (wopiAllowed)
     {
-        appendAllowedHostsFrom(conf, "storage.wopi", lokAllowedHosts);
+        appendAllowedHostsFrom(conf, "storage.wopi", lokAllowedHosts, /*onlyAllowed=*/true);
         appendAllowedAliasGroups(conf, lokAllowedHosts);
     }
 
     if (lokAllowedHosts.size())
     {
-        std::string allowedRegex;
-        for (size_t i = 0; i < lokAllowedHosts.size(); i++)
+        // One entry per line; the kit tells CIDR networks and regular
+        // expressions apart itself.
+        std::string allowlist;
+        for (const std::string& host : lokAllowedHosts)
         {
-            if (RegexUtil::isRegexValid(lokAllowedHosts[i]))
-                allowedRegex += (i != 0 ? "|" : "") + lokAllowedHosts[i];
-            else
-                LOG_ERR("Invalid regular expression for allowed host: \"" << lokAllowedHosts[i] << "\"");
+            if (!Util::IpNetwork::parse(host) && !RegexUtil::isRegexValid(host))
+            {
+                LOG_ERR("Invalid regular expression for allowed host: \"" << host << "\"");
+                continue;
+            }
+
+            if (!allowlist.empty())
+                allowlist += '\n';
+            allowlist += host;
         }
 
-        setenv("KIT_HOST_ALLOWLIST", allowedRegex.c_str(), true);
+        setenv("KIT_HOST_ALLOWLIST", allowlist.c_str(), true);
 
-#if !MOBILEAPP
         if (!ConfigUtil::getConfigValue<bool>(conf, "ssl.ssl_verification", true))
         {
             // also disable host verification for allowed hosts
             ::setenv("KIT_HOST_ALLOWLIST_EXEMPT_VERIFY_HOST", "1", true);
         }
-#endif
     }
 
-#if !MOBILEAPP
     setenv("KIT_ALLOWED_EXTREF_PATHS", "", true);
 #endif
 }
@@ -2628,7 +2718,7 @@ void COOLWSD::initializeSSL()
 
 void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
 {
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
         return;
     ServerApplication::defineOptions(optionSet);
 
@@ -2681,11 +2771,6 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                         .argument("xmlpath"));
 
     optionSet.addOption(Option("config-file", "", "Override configuration file path.")
-                        .required(false)
-                        .repeatable(false)
-                        .argument("path"));
-
-    optionSet.addOption(Option("config-dir", "", "Override extra configuration directory path.")
                         .required(false)
                         .repeatable(false)
                         .argument("path"));
@@ -2786,8 +2871,6 @@ void COOLWSD::handleOption(const std::string& optionName,
     }
     else if (optionName == "config-file")
         ConfigFile = value;
-    else if (optionName == "config-dir")
-        ConfigDir = value;
     else if (optionName == "lo-template-path")
         LoTemplate = value;
     else if (optionName == "signal")
@@ -2896,7 +2979,7 @@ bool COOLWSD::checkAndRestoreForKit()
         }
     }
 
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return true;
 
     int status;
@@ -2911,6 +2994,10 @@ bool COOLWSD::checkAndRestoreForKit()
                 {
                     LOG_INF("Forkit process [" << pid << "] exited with code: " <<
                             WEXITSTATUS(status) << '.');
+
+                    // EX_CONFIG is coolforkit-caps saying it holds no capabilities.
+                    if (WEXITSTATUS(status) == EX_CONFIG)
+                        CapabilityJailUnusable = true;
                 }
                 else
                 {
@@ -2924,7 +3011,7 @@ bool COOLWSD::checkAndRestoreForKit()
                 for (auto it = SubForKitProcs.begin(); it != SubForKitProcs.end(); )
                 {
                     LOG_DBG("dropping subforkit " << it->first);
-                    it = dropSubForKit(it);
+                    it = dropSubForKit(it, /*askToExit=*/false);
                 }
                 OutstandingSubForKitSpawns.clear();
                 LastSubForKitSpawnRequestTimes.clear();
@@ -3055,7 +3142,7 @@ void COOLWSD::setLogLevelsOfKits(const std::string& level)
 /// Really do the house-keeping
 void PrisonPoll::wakeupHook()
 {
-    if constexpr (!Util::isMobileApp())
+    if constexpr (!Util::isMobileAppBuild())
     {
         THREAD_UNSAFE_DUMP_BEGIN
         LOG_TRC("PrisonerPoll - wakes up with " << NewChildren.size() << " new children and "
@@ -3148,8 +3235,28 @@ bool COOLWSD::createForKit()
 
     args.push_back("--version");
 
-    if (NoCapsForKit)
+    const bool capabilityJailWasTheChoice = !EnableMountNamespaces && !NoCapsForKit;
+    if (capabilityJailWasTheChoice && CapabilityJailUnusable && LandlockAvailable)
+    {
+        RequireLandlock = true;
+        // The kits run without a chroot from here on, so the paths they are given are the
+        // real ones.
+        NoCapsForKit = true;
+    }
+    const bool usingCapabilityJail = capabilityJailWasTheChoice && !RequireLandlock;
+
+    if (usingCapabilityJail && CapabilityJailUnusable)
+    {
+        LOG_FTL("The chroot built from file capabilities does not work here and landlock is "
+                "unavailable, so a document can be isolated in no way.");
+        return false;
+    }
+
+    if (NoCapsForKit || RequireLandlock)
         args.push_back("--nocaps");
+
+    if (RequireLandlock)
+        args.push_back("--require-landlock");
 
     if (NoSeccomp)
         args.push_back("--noseccomp");
@@ -3173,7 +3280,7 @@ bool COOLWSD::createForKit()
     std::string forKitPath = "/usr/bin/valgrind";
 #else
     std::string forKitPath = std::move(parentPath);
-    if (EnableMountNamespaces || NoCapsForKit)
+    if (!usingCapabilityJail)
     {
         forKitPath += "coolforkit-ns";
         if (EnableMountNamespaces)
@@ -3190,7 +3297,7 @@ bool COOLWSD::createForKit()
     // Always reap first, in case we haven't done so yet.
     if (ForKitProcId != -1)
     {
-        if constexpr (Util::isKitInProcess())
+        if (Util::isKitInProcess())
             return true;
         int status;
         waitpid(ForKitProcId, &status, WUNTRACED | WNOHANG);
@@ -3212,6 +3319,9 @@ bool COOLWSD::createForKit()
 
     LastForkRequestTimes[defaultConfigId] = std::chrono::steady_clock::now();
     int child = createForkit(forKitPath, args);
+    if (child == -1 && usingCapabilityJail)
+        CapabilityJailUnusable = true;
+
     ForKitProcId = child;
 
     LOG_INF("Forkit process launched: " << ForKitProcId);
@@ -3222,6 +3332,14 @@ bool COOLWSD::createForKit()
     const int balance = COOLWSD::NumPreSpawnedChildren - OutstandingForks[defaultConfigId];
     if (balance > 0)
         rebalanceChildren(defaultConfigId, balance);
+
+    // Answering true with no forkit lets the next attempt start coolforkit-ns instead.
+    if (ForKitProcId == -1 && usingCapabilityJail && LandlockAvailable)
+    {
+        LOG_WRN("The coolforkit-caps helper did not start. The next attempt uses a landlock "
+                "jail.");
+        return true;
+    }
 
     return ForKitProcId != -1;
 }
@@ -3504,7 +3622,7 @@ private:
 
             auto child = std::make_shared<ChildProcess>(pid, jailId, configId, socket, request, admsProps);
 
-            if constexpr (!Util::isMobileApp())
+            if (!Util::isMobileApp())
                 UNITWSD_CALL(newChild(child));
 
             _pid = pid;
@@ -3713,7 +3831,7 @@ void COOLWSDServer::dumpState(std::ostream& os) const
        << "\n  ServiceRoot: " << COOLWSD::ServiceRoot
        << "\n  LOKitVersion: " << COOLWSD::LOKitVersion
        << "\n  HostIdentifier: " << Util::getProcessIdentifier()
-       << "\n  ConfigFile: " << COOLWSD::ConfigFile << "\n  ConfigDir: " << COOLWSD::ConfigDir
+       << "\n  ConfigFile: " << COOLWSD::ConfigFile
        << "\n  LogLevel: " << COOLWSD::LogLevel
        << "\n  LogDisabledAreas: " << COOLWSD::LogDisabledAreas
        << "\n  AnonymizeUserData: " << (Anonymizer::enabled() ? "yes" : "no")
@@ -3764,6 +3882,12 @@ void COOLWSDServer::dumpState(std::ostream& os) const
 
     os << '\n';
     COOLWSD::FileRequestHandler->dumpState(os);
+
+    if (RemoteDocumentBroker::isInitialized())
+    {
+        os << '\n';
+        RemoteDocumentBroker::instance().dumpState(os);
+    }
 #endif
 
     {
@@ -3833,9 +3957,9 @@ std::shared_ptr<ServerSocket> COOLWSDServer::findServerPort()
 
     if (ClientPortNumber <= 0)
     {
-        // Avoid using the default port for unit-tests altogether.
-        // This avoids interfering with a running test instance.
-        ClientPortNumber = DEFAULT_CLIENT_PORT_NUMBER + (UnitWSD::isUnitTesting() ? 1 : 0);
+        // A unit test listens on a free port that the kernel picks, so no other process on the
+        // host knows its port.
+        ClientPortNumber = UnitWSD::isUnitTesting() ? 0 : DEFAULT_CLIENT_PORT_NUMBER;
     }
 
 #if ENABLE_SSL
@@ -3851,17 +3975,12 @@ std::shared_ptr<ServerSocket> COOLWSDServer::findServerPort()
 #if !MOBILEAPP
     const int firstPortNumber = ClientPortNumber;
 #endif
-    while (!socket &&
-#ifdef BUILDING_TESTS
-           true
-#else
+    while (!socket && ClientPortNumber > 0 &&
            (UnitWSD::isUnitTesting()
 #if ENABLE_DEBUG
             || COOLWSD::FindFreePort
 #endif
-           )
-#endif
-        )
+           ))
     {
         ++ClientPortNumber;
         LOG_INF("Client port " << (ClientPortNumber - 1) << " is busy, trying "
@@ -3877,6 +3996,9 @@ std::shared_ptr<ServerSocket> COOLWSDServer::findServerPort()
                                                        << ClientPortNumber << "). Exiting");
         Util::forcedExit(EX_SOFTWARE);
     }
+
+    if (ClientPortNumber == 0)
+        ClientPortNumber = net::boundPort(socket->getFD());
 
     LOG_INF('#' << socket->getFD() << " Listening to client connections on port "
                 << ClientPortNumber);
@@ -4035,7 +4157,7 @@ void COOLWSD::innerMain()
 // No need to "have at least one child" beforehand on mobile
 #if !MOBILEAPP
 
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
     {
         // Make sure we have at least one child before moving forward.
         std::unique_lock<std::mutex> lock(NewChildrenMutex);
@@ -4364,7 +4486,7 @@ void COOLWSD::innerMain()
     }
 
 #if !MOBILEAPP
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
     {
         // Terminate child processes
         LOG_INF("Requesting forkit process " << ForKitProcId << " to terminate.");
@@ -4409,7 +4531,7 @@ void COOLWSD::innerMain()
     SigUtil::addActivity("terminated unused children");
 
 #if !MOBILEAPP
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
     {
         SigUtil::addActivity("waiting for forkit to exit");
 
@@ -4425,7 +4547,7 @@ void COOLWSD::innerMain()
     JailUtil::cleanupJails(UnitWSD::isUnitTesting() ? ChildRoot : CleanupChildRoot);
 #endif // !MOBILEAPP
 
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
     {
         LOG_INF("Process [coolwsd] finished with exit status: " << EXIT_OK);
         Util::forcedExit(EXIT_OK);
@@ -4477,6 +4599,8 @@ int COOLWSD::cleanup(int returnValue)
         FileRequestHandler.reset();
         JWTAuth::cleanup();
 
+        RemoteDocumentBroker::uninitialize();
+
         Admin::uninitialize();
 
         Util::forcedExit(returnValue);
@@ -4522,6 +4646,7 @@ int COOLWSD::cleanup(int returnValue)
     return returnValue;
 }
 
+// coverity[root_function] : don't warn about uncaught exceptions
 int COOLWSD::main(const std::vector<std::string>& /*args*/)
 {
     SigUtil::resetTerminationFlags();
@@ -4584,6 +4709,12 @@ std::vector<std::shared_ptr<DocumentBroker>> COOLWSD::getBrokersTestOnly()
     return result;
 }
 
+void COOLWSD::runInPrisonerPollTestOnly(const std::function<void()>& callback)
+{
+    if (PrisonerPoll)
+        PrisonerPoll->addCallback(callback);
+}
+
 std::set<pid_t> COOLWSD::getKitPids()
 {
     std::set<pid_t> pids = getSpareKitPids();
@@ -4623,7 +4754,6 @@ std::set<pid_t> COOLWSD::getDocKitPids()
     return pids;
 }
 
-#if !defined(BUILDING_TESTS)
 namespace Util
 {
 
@@ -4638,7 +4768,6 @@ void alertAllUsers(const std::string& msg)
 }
 
 }
-#endif
 
 static void forwardSignal(int signum);
 
@@ -4689,7 +4818,7 @@ void forwardSigUsr2()
 #if !MOBILEAPP
     LOG_TRC("forwardSigUsr2");
 
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return;
 
     Util::assertIsLocked(DocBrokersMutex);
@@ -4732,68 +4861,6 @@ void forwardSignal(const int signum)
         }
     }
 }
-#endif
-
-// Avoid this in the Util::isFuzzing() case because libfuzzer defines its own main().
-#if !MOBILEAPP && !LIBFUZZER && !defined(STANDALONE_CPPUNIT)
-
-// Split a string into whitespace-separated tokens, matching the unquoted shell
-// word-splitting that the old start script relied on for 'extra_params'.
-static std::vector<std::string> tokenizeOnWhitespace(const std::string& s)
-{
-    std::vector<std::string> tokens;
-    std::istringstream iss(s);
-    for (std::string tok; iss >> tok;)
-        tokens.push_back(tok);
-    return tokens;
-}
-
-int main(int argc, char** argv)
-{
-    SigUtil::setUserSignals();
-    SigUtil::setFatalSignals("wsd " + Util::getCoolVersion() + ' ' + Util::getCoolVersionHash());
-
-    // The container start script used to append the 'extra_params' environment
-    // variable to the coolwsd command line (exec ... ${extra_params}). With the
-    // shell-less, exec-form ENTRYPOINT there is nothing left to expand it, so
-    // honour it here when --use-env-vars is in effect: tokenize it and append
-    // the tokens to argv so they are parsed exactly like command-line options
-    // (--o:ssl.enable=false, --disable-ssl, ...). This keeps the container's
-    // configuration interface unchanged.
-    std::vector<std::string> argStore;
-    std::vector<char*> argPtrs;
-    const char* extraParams = std::getenv("extra_params");
-    const bool useEnvVars =
-        std::any_of(argv, argv + argc,
-                    [](const char* a) { return std::strcmp(a, "--use-env-vars") == 0; });
-    if (useEnvVars && extraParams && *extraParams)
-    {
-        for (int i = 0; i < argc; ++i)
-            argStore.emplace_back(argv[i]);
-        for (auto& tok : tokenizeOnWhitespace(extraParams))
-            argStore.push_back(std::move(tok));
-
-        argPtrs.reserve(argStore.size() + 1);
-        for (auto& a : argStore)
-            argPtrs.push_back(a.data());
-        argPtrs.push_back(nullptr);
-
-        argc = static_cast<int>(argStore.size());
-        argv = argPtrs.data();
-    }
-
-    try
-    {
-        COOLWSD app;
-        return app.run(argc, argv);
-    }
-    catch (Poco::Exception& exc)
-    {
-        std::cerr << exc.displayText() << std::endl;
-        return EX_SOFTWARE;
-    }
-}
-
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

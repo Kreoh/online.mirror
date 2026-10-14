@@ -23,7 +23,7 @@
 #include <com/sun/star/sheet/XSheetAnnotations.hpp>
 #include <com/sun/star/sheet/XSheetAnnotation.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <vbahelper/vbahelperinterface.hxx>
 
@@ -31,39 +31,39 @@ typedef InheritedHelperInterfaceWeakImpl< ov::excel::XComment > ScVbaComment_BAS
 
 class ScVbaComment : public ScVbaComment_BASE
 {
-    css::uno::Reference< css::frame::XModel > mxModel;
-    css::uno::Reference< css::table::XCellRange > mxRange;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::table::XCellRange > mxRange;
 
 private:
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::sheet::XSheetAnnotation > getAnnotation();
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::sheet::XSheetAnnotations > getAnnotations() const;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::sheet::XSheetAnnotation > getAnnotation();
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::sheet::XSheetAnnotations > getAnnotations() const;
+    /// @throws cpo::uno::RuntimeException
     sal_Int32 getAnnotationIndex();
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< ov::excel::XComment > getCommentByIndex( sal_Int32 Index );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< ov::excel::XComment > getCommentByIndex( sal_Int32 Index );
 public:
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     ScVbaComment(
-        const css::uno::Reference< ov::XHelperInterface >& xParent,
-        const css::uno::Reference< css::uno::XComponentContext >& xContext,
-        const css::uno::Reference< css::frame::XModel >& xModel,
-        const css::uno::Reference< css::table::XCellRange >& xRange );
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::frame::XModel >& xModel,
+        const cpo::uno::Reference< css::table::XCellRange >& xRange );
 
     // Attributes
-    virtual OUString SAL_CALL getAuthor() override;
-    virtual void SAL_CALL setAuthor( const OUString& _author ) override;
-    virtual css::uno::Reference< ov::msforms::XShape > SAL_CALL getShape() override;
-    virtual bool SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( bool _visible ) override;
+    virtual OUString getAuthor() override;
+    virtual void setAuthor( const OUString& _author ) override;
+    virtual cpo::uno::Reference< ov::msforms::XShape > getShape() override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
 
     // Methods
-    virtual void SAL_CALL Delete() override;
-    virtual css::uno::Reference< ov::excel::XComment > SAL_CALL Next() override;
-    virtual css::uno::Reference< ov::excel::XComment > SAL_CALL Previous() override;
-    virtual OUString SAL_CALL Text( const cpo::uno::Any& Text, const cpo::uno::Any& Start, const cpo::uno::Any& Overwrite ) override;
+    virtual void Delete() override;
+    virtual cpo::uno::Reference< ov::excel::XComment > Next() override;
+    virtual cpo::uno::Reference< ov::excel::XComment > Previous() override;
+    virtual OUString Text( const cpo::uno::Any& Text, const cpo::uno::Any& Start, const cpo::uno::Any& Overwrite ) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

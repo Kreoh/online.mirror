@@ -38,15 +38,16 @@
 #include <osl/diagnose.h>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-OZipFileAccess::OZipFileAccess( const uno::Reference< uno::XComponentContext >& rxContext )
+OZipFileAccess::OZipFileAccess( const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 : m_aMutexHolder( new comphelper::RefCountedMutex )
 , m_xContext( rxContext )
 , m_bDisposed( false )
 , m_bOwnContent( false )
 {
     if ( !rxContext.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 }
 
 OZipFileAccess::~OZipFileAccess()
@@ -157,7 +158,7 @@ bool OZipFileAccess::StringGoodForPattern_Impl( std::u16string_view aString,
 }
 
 // XInitialization
-void SAL_CALL OZipFileAccess::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void OZipFileAccess::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -165,10 +166,10 @@ void SAL_CALL OZipFileAccess::initialize( const cpo::uno::Sequence< cpo::uno::An
         throw lang::DisposedException();
 
     if ( m_pZipFile )
-        throw uno::RuntimeException(); // initialization is allowed only one time
+        throw cpo::uno::RuntimeException(); // initialization is allowed only one time
 
     if ( !aArguments.hasElements() )
-        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
 
     OSL_ENSURE( aArguments.getLength() == 1, "Too many arguments are provided, only the first one will be used!" );
 
@@ -217,12 +218,12 @@ void SAL_CALL OZipFileAccess::initialize( const cpo::uno::Sequence< cpo::uno::An
         if (aParamURL.isEmpty())
             throw lang::IllegalArgumentException(
                 u"required argument 'URL' is not given or invalid."_ustr,
-                uno::Reference<uno::XInterface>(), 1);
+                uno::Reference<cpo::uno::XInterface>(), 1);
 
         openInputStream();
     }
     else
-        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
 
     if ( !m_xContentStream.is() )
         throw io::IOException();
@@ -242,7 +243,7 @@ void SAL_CALL OZipFileAccess::initialize( const cpo::uno::Sequence< cpo::uno::An
 }
 
 // XNameAccess
-cpo::uno::Any SAL_CALL OZipFileAccess::getByName( const OUString& aName )
+cpo::uno::Any OZipFileAccess::getByName( const OUString& aName )
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -250,7 +251,7 @@ cpo::uno::Any SAL_CALL OZipFileAccess::getByName( const OUString& aName )
         throw lang::DisposedException();
 
     if ( !m_pZipFile )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     EntryHash::iterator aIter = m_pZipFile->GetEntryHash().find( aName );
     if ( aIter == m_pZipFile->GetEntryHash().end() )
@@ -272,7 +273,7 @@ cpo::uno::Any SAL_CALL OZipFileAccess::getByName( const OUString& aName )
     {
         throw;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -284,12 +285,12 @@ cpo::uno::Any SAL_CALL OZipFileAccess::getByName( const OUString& aName )
     }
 
     if ( !xEntryStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return cpo::uno::Any ( xEntryStream );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL OZipFileAccess::getElementNames()
+cpo::uno::Sequence< OUString > OZipFileAccess::getElementNames()
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -297,7 +298,7 @@ cpo::uno::Sequence< OUString > SAL_CALL OZipFileAccess::getElementNames()
         throw lang::DisposedException();
 
     if ( !m_pZipFile )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     cpo::uno::Sequence< OUString > aNames( m_pZipFile->GetEntryHash().size() );
     auto pNames = aNames.getArray();
@@ -324,7 +325,7 @@ cpo::uno::Sequence< OUString > SAL_CALL OZipFileAccess::getElementNames()
     return aNames;
 }
 
-bool SAL_CALL OZipFileAccess::hasByName( const OUString& aName )
+bool OZipFileAccess::hasByName( const OUString& aName )
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -332,14 +333,14 @@ bool SAL_CALL OZipFileAccess::hasByName( const OUString& aName )
         throw lang::DisposedException();
 
     if ( !m_pZipFile )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     EntryHash::iterator aIter = m_pZipFile->GetEntryHash().find( aName );
 
     return ( aIter != m_pZipFile->GetEntryHash().end() );
 }
 
-cpo::uno::Type SAL_CALL OZipFileAccess::getElementType()
+cpo::uno::Type OZipFileAccess::getElementType()
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -347,12 +348,12 @@ cpo::uno::Type SAL_CALL OZipFileAccess::getElementType()
         throw lang::DisposedException();
 
     if ( !m_pZipFile )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return cppu::UnoType<io::XInputStream>::get();
 }
 
-bool SAL_CALL OZipFileAccess::hasElements()
+bool OZipFileAccess::hasElements()
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -360,13 +361,13 @@ bool SAL_CALL OZipFileAccess::hasElements()
         throw lang::DisposedException();
 
     if ( !m_pZipFile )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return ( !m_pZipFile->GetEntryHash().empty() );
 }
 
 // XZipFileAccess
-uno::Reference< io::XInputStream > SAL_CALL OZipFileAccess::getStreamByPattern( const OUString& aPatternString )
+uno::Reference< io::XInputStream > OZipFileAccess::getStreamByPattern( const OUString& aPatternString )
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -389,7 +390,7 @@ uno::Reference< io::XInputStream > SAL_CALL OZipFileAccess::getStreamByPattern( 
                                                                                     m_aMutexHolder ) );
 
         if ( !xEntryStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         return xEntryStream;
     }
 
@@ -397,7 +398,7 @@ uno::Reference< io::XInputStream > SAL_CALL OZipFileAccess::getStreamByPattern( 
 }
 
 // XComponent
-void SAL_CALL OZipFileAccess::dispose()
+void OZipFileAccess::dispose()
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -422,7 +423,7 @@ void SAL_CALL OZipFileAccess::dispose()
     m_bDisposed = true;
 }
 
-void SAL_CALL OZipFileAccess::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
+void OZipFileAccess::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -434,7 +435,7 @@ void SAL_CALL OZipFileAccess::addEventListener( const uno::Reference< lang::XEve
     m_pListenersContainer->addInterface( xListener );
 }
 
-void SAL_CALL OZipFileAccess::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
+void OZipFileAccess::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
@@ -445,26 +446,26 @@ void SAL_CALL OZipFileAccess::removeEventListener( const uno::Reference< lang::X
         m_pListenersContainer->removeInterface( xListener );
 }
 
-OUString SAL_CALL OZipFileAccess::getImplementationName()
+OUString OZipFileAccess::getImplementationName()
 {
     return u"com.sun.star.comp.package.zip.ZipFileAccess"_ustr;
 }
 
-bool SAL_CALL OZipFileAccess::supportsService( const OUString& ServiceName )
+bool OZipFileAccess::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL OZipFileAccess::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > OZipFileAccess::getSupportedServiceNames()
 {
     return { u"com.sun.star.packages.zip.ZipFileAccess"_ustr,
     u"com.sun.star.comp.packages.zip.ZipFileAccess"_ustr };
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 package_OZipFileAccess_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new OZipFileAccess(context));
 }

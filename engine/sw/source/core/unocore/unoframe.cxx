@@ -140,6 +140,7 @@
 #include <names.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 using ::com::sun::star::frame::XModel;
 using ::com::sun::star::container::XNameAccess;
@@ -1240,7 +1241,7 @@ OUString SwXFrame::getName()
     if(pFormat)
         return pFormat->GetName().toString();
     if(!m_bIsDescriptor)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return m_sName.toString();
 }
 
@@ -1253,13 +1254,13 @@ void SwXFrame::setName(const OUString& rName)
         pFormat->GetDoc().SetFlyName(static_cast<SwFlyFrameFormat&>(*pFormat), UIName(rName));
         if(pFormat->GetName() != rName)
         {
-            throw uno::RuntimeException(u"SwXFrame::setName(): Illegal object name. Duplicate name?"_ustr);
+            throw cpo::uno::RuntimeException(u"SwXFrame::setName(): Illegal object name. Duplicate name?"_ustr);
         }
     }
     else if(m_bIsDescriptor)
         m_sName = UIName(rName);
     else
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 }
 
 uno::Reference< beans::XPropertySetInfo >  SwXFrame::getPropertySetInfo()
@@ -1350,7 +1351,7 @@ void SwXFrame::setPropertyValue(const OUString& rPropertyName, const ::cpo::uno:
     SolarMutexGuard aGuard;
     SwFrameFormat* pFormat = GetFrameFormat();
     if (!pFormat && !IsDescriptor())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     // Hack to support hidden property to transfer textDirection
     if(rPropertyName == "FRMDirection")
@@ -1563,7 +1564,7 @@ void SwXFrame::setPropertyValue(const OUString& rPropertyName, const ::cpo::uno:
                 SwGrfNode* pGrfNode = aIdx.GetNode().GetGrfNode();
                 if(!pGrfNode)
                 {
-                    throw uno::RuntimeException();
+                    throw cpo::uno::RuntimeException();
                 }
                 SwPaM aGrfPaM(*pGrfNode);
                 pFormat->GetDoc().getIDocumentContentOperations().ReRead(aGrfPaM, sGrfName, sFltName, nullptr);
@@ -1598,7 +1599,7 @@ void SwXFrame::setPropertyValue(const OUString& rPropertyName, const ::cpo::uno:
                     SwGrfNode* pGrfNode = aIdx.GetNode().GetGrfNode();
                     if (!pGrfNode)
                     {
-                        throw uno::RuntimeException();
+                        throw cpo::uno::RuntimeException();
                     }
                     SwPaM aGrfPaM(*pGrfNode);
                     pFormat->GetDoc().getIDocumentContentOperations().ReRead(aGrfPaM, OUString(), OUString(), &aGraphic);
@@ -1905,7 +1906,7 @@ void SwXFrame::setPropertyValue(const OUString& rPropertyName, const ::cpo::uno:
             catch ( lang::WrappedTargetException const  & )
             {
             }
-            catch ( uno::RuntimeException const & )
+            catch ( cpo::uno::RuntimeException const & )
             {
             }
         }
@@ -2041,7 +2042,7 @@ cpo::uno::Any SwXFrame::getPropertyValue(const OUString& rPropertyName)
                 SwNodeIndex aIdx(*pIdx, 1);
                 SwGrfNode* pGrfNode = aIdx.GetNode().GetGrfNode();
                 if (!pGrfNode)
-                    throw uno::RuntimeException();
+                    throw cpo::uno::RuntimeException();
 
                 const GraphicObject* pGraphicObject = pGrfNode->GetReplacementGrfObj();
 
@@ -2060,7 +2061,7 @@ cpo::uno::Any SwXFrame::getPropertyValue(const OUString& rPropertyName)
         }
         else if( FN_UNO_GRAPHIC_URL == pEntry->nWID )
         {
-            throw uno::RuntimeException(u"Getting from this property is not supported"_ustr);
+            throw cpo::uno::RuntimeException(u"Getting from this property is not supported"_ustr);
         }
         else if( FN_UNO_GRAPHIC == pEntry->nWID )
         {
@@ -2070,7 +2071,7 @@ cpo::uno::Any SwXFrame::getPropertyValue(const OUString& rPropertyName)
                 SwNodeIndex aIdx(*pIdx, 1);
                 SwGrfNode* pGrfNode = aIdx.GetNode().GetGrfNode();
                 if(!pGrfNode)
-                    throw uno::RuntimeException();
+                    throw cpo::uno::RuntimeException();
                 aAny <<= pGrfNode->GetGrf().GetXGraphic();
             }
         }
@@ -2083,7 +2084,7 @@ cpo::uno::Any SwXFrame::getPropertyValue(const OUString& rPropertyName)
                 SwNodeIndex aIdx(*pIdx, 1);
                 SwGrfNode* pGrfNode = aIdx.GetNode().GetGrfNode();
                 if(!pGrfNode)
-                    throw uno::RuntimeException();
+                    throw cpo::uno::RuntimeException();
 
                 SwDoc& rDoc = pFormat->GetDoc();
                 if (const SwEditShell* pEditShell = rDoc.GetEditShell())
@@ -2290,7 +2291,7 @@ cpo::uno::Any SwXFrame::getPropertyValue(const OUString& rPropertyName)
     else if(IsDescriptor())
     {
         if ( ! m_pDoc )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         if(WID_LAYOUT_SIZE != pEntry->nWID)  // there is no LayoutSize in a descriptor
         {
             if (const cpo::uno::Any* pAny = m_pProps->GetProperty(pEntry->nWID, nMemberId))
@@ -2300,7 +2301,7 @@ cpo::uno::Any SwXFrame::getPropertyValue(const OUString& rPropertyName)
         }
     }
     else
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if (pEntry->aType == ::cppu::UnoType<sal_Int16>::get() && pEntry->aType != aAny.getValueType())
     {
@@ -2456,7 +2457,7 @@ cpo::uno::Sequence< beans::PropertyState > SwXFrame::getPropertyStates(
         std::fill(pStates, end, beans::PropertyState_DIRECT_VALUE);
     }
     else
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return aStates;
 }
 
@@ -2470,7 +2471,7 @@ void SwXFrame::setPropertyToDefault( const OUString& rPropertyName )
         if (!pEntry)
             throw beans::UnknownPropertyException( "Unknown property: " + rPropertyName, getXWeak() );
         if ( pEntry->nFlags & beans::PropertyAttribute::READONLY)
-            throw uno::RuntimeException("setPropertyToDefault: property is read-only: " + rPropertyName, getXWeak() );
+            throw cpo::uno::RuntimeException("setPropertyToDefault: property is read-only: " + rPropertyName, getXWeak() );
 
         if(OWN_ATTR_FILLBMP_MODE == pEntry->nWID)
         {
@@ -2547,7 +2548,7 @@ void SwXFrame::setPropertyToDefault( const OUString& rPropertyName )
         }
     }
     else if(!IsDescriptor())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
 }
 
@@ -2571,18 +2572,18 @@ cpo::uno::Any SwXFrame::getPropertyDefault( const OUString& rPropertyName )
 
     }
     else if(!IsDescriptor())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return aRet;
 }
 
-void SAL_CALL SwXFrame::addEventListener(
+void SwXFrame::addEventListener(
         const uno::Reference<lang::XEventListener> & xListener)
 {
     std::unique_lock aGuard(m_Mutex);
     m_EventListeners.addInterface(aGuard, xListener);
 }
 
-void SAL_CALL SwXFrame::removeEventListener(
+void SwXFrame::removeEventListener(
         const uno::Reference<lang::XEventListener> & xListener)
 {
     std::unique_lock aGuard(m_Mutex);
@@ -2654,7 +2655,7 @@ rtl::Reference< SwXTextRange >  SwXFrame::getSwAnchor()
     rtl::Reference<SwXTextRange> aRef;
     SwFrameFormat* pFormat = GetFrameFormat();
     if(!pFormat)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
     // return an anchor for non-page bound frames
@@ -2688,7 +2689,7 @@ void SwXFrame::attachToRange(uno::Reference<text::XTextRange> const& xTextRange,
 {
     SolarMutexGuard aGuard;
     if(!IsDescriptor())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     SwXTextRange* pRange = dynamic_cast<SwXTextRange*>(xTextRange.get());
     OTextCursorHelper* pCursor = dynamic_cast<OTextCursorHelper*>(xTextRange.get());
 
@@ -2886,7 +2887,7 @@ void SwXFrame::attachToRange(uno::Reference<text::XTextRange> const& xTextRange,
         const cpo::uno::Any* pEmbeddedObject = m_pProps->GetProperty(FN_EMBEDDED_OBJECT, 0);
         if (!pCLSID && !pStreamName && !pEmbeddedObject)
         {
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
         if(pCLSID)
         {
@@ -2976,7 +2977,7 @@ void SwXFrame::attachToRange(uno::Reference<text::XTextRange> const& xTextRange,
                 // store main document name to show in the title bar
                 if (SwDocShell* pShell = pDoc->GetDocShell())
                 {
-                    uno::Reference< frame::XTitle > xModelTitle( pShell->GetModel(), css::uno::UNO_QUERY );
+                    uno::Reference< frame::XTitle > xModelTitle( pShell->GetModel(), cpo::uno::UNO_QUERY );
                     if( xModelTitle.is() )
                         xIPObj->setContainerName( xModelTitle->getTitle() );
                 }
@@ -3015,7 +3016,7 @@ void SwXFrame::attachToRange(uno::Reference<text::XTextRange> const& xTextRange,
                 SwDocShell* pShell = pDoc->GetDocShell();
                 if( xObj.is() && pShell )
                 {
-                    uno::Reference< frame::XTitle > xModelTitle( pShell->GetModel(), css::uno::UNO_QUERY );
+                    uno::Reference< frame::XTitle > xModelTitle( pShell->GetModel(), cpo::uno::UNO_QUERY );
                     if( xModelTitle.is() )
                         xObj->setContainerName( xModelTitle->getTitle() );
                 }
@@ -3129,12 +3130,12 @@ void SwXFrame::attach(const uno::Reference< text::XTextRange > & xTextRange)
 
 awt::Point SwXFrame::getPosition()
 {
-    throw uno::RuntimeException(u"position cannot be determined with this method"_ustr);
+    throw cpo::uno::RuntimeException(u"position cannot be determined with this method"_ustr);
 }
 
 void SwXFrame::setPosition(const awt::Point& /*aPosition*/)
 {
-    throw uno::RuntimeException(u"position cannot be changed with this method"_ustr);
+    throw cpo::uno::RuntimeException(u"position cannot be changed with this method"_ustr);
 }
 
 awt::Size SwXFrame::getSize()
@@ -3178,17 +3179,17 @@ SwXTextFrame::CreateXTextFrame(SwDoc & rDoc, SwFrameFormat *const pFrameFormat)
     return CreateXFrame<SwXTextFrame>(rDoc, pFrameFormat);
 }
 
-void SAL_CALL SwXTextFrame::acquire(  )noexcept
+void SwXTextFrame::acquire(  )noexcept
 {
     SwXFrame::acquire();
 }
 
-void SAL_CALL SwXTextFrame::release(  )noexcept
+void SwXTextFrame::release(  )noexcept
 {
     SwXFrame::release();
 }
 
-::cpo::uno::Any SAL_CALL SwXTextFrame::queryInterface( const cpo::uno::Type& aType )
+::cpo::uno::Any SwXTextFrame::queryInterface( const cpo::uno::Type& aType )
 {
     ::cpo::uno::Any aRet = SwXFrame::queryInterface(aType);
     if(aRet.getValueType() == cppu::UnoType<void>::get())
@@ -3198,7 +3199,7 @@ void SAL_CALL SwXTextFrame::release(  )noexcept
     return aRet;
 }
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SwXTextFrame::getTypes(  )
+cpo::uno::Sequence< cpo::uno::Type > SwXTextFrame::getTypes(  )
 {
     return comphelper::concatSequences(
         SwXTextFrameBaseClass::getTypes(),
@@ -3207,7 +3208,7 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SwXTextFrame::getTypes(  )
     );
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SwXTextFrame::getImplementationId(  )
+cpo::uno::Sequence< sal_Int8 > SwXTextFrame::getImplementationId(  )
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -3236,7 +3237,7 @@ rtl::Reference<SwXTextCursor>  SwXTextFrame::createXTextCursor()
 {
     SwFrameFormat* pFormat = GetFrameFormat();
     if(!pFormat)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     //save current start node to be able to check if there is content after the table -
     //otherwise the cursor would be in the body text!
@@ -3257,7 +3258,7 @@ rtl::Reference<SwXTextCursor>  SwXTextFrame::createXTextCursor()
         aPam.GetPointNode().FindStartNodeByType(SwFlyStartNode);
     if(!pNewStartNode || pNewStartNode != pOwnStartNode)
     {
-        throw uno::RuntimeException(u"no text available"_ustr);
+        throw cpo::uno::RuntimeException(u"no text available"_ustr);
     }
 
     return new SwXTextCursor(
@@ -3268,10 +3269,10 @@ rtl::Reference< SwXTextCursor > SwXTextFrame::createXTextCursorByRange(const uno
 {
     SwFrameFormat* pFormat = GetFrameFormat();
     if (!pFormat)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     SwUnoInternalPaM aPam(*GetDoc());
     if (!::sw::XTextRangeToSwPaM(aPam, aTextPosition))
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return createXTextCursorByRangeImpl(*pFormat, aPam);
 }
 
@@ -3363,7 +3364,7 @@ cpo::uno::Sequence< OUString > SwXTextFrame::getSupportedServiceNames()
     return aRet;
 }
 
-uno::Reference<container::XNameReplace > SAL_CALL SwXTextFrame::getEvents()
+uno::Reference<container::XNameReplace > SwXTextFrame::getEvents()
 {
     return new SwFrameEventDescriptor( *this );
 }
@@ -3432,7 +3433,7 @@ cpo::uno::Sequence< OUString > SwXTextGraphicObject::getSupportedServiceNames()
     return aRet;
 }
 
-uno::Reference<container::XNameReplace> SAL_CALL
+uno::Reference<container::XNameReplace>
     SwXTextGraphicObject::getEvents()
 {
     return new SwFrameEventDescriptor( *this );
@@ -3466,7 +3467,7 @@ uno::Reference< lang::XComponent >  SwXTextEmbeddedObject::getEmbeddedObject()
     return xObj.is() ? uno::Reference<lang::XComponent>(xObj->getComponent(), uno::UNO_QUERY) : nullptr;
 }
 
-uno::Reference< embed::XEmbeddedObject > SAL_CALL SwXTextEmbeddedObject::getExtendedControlOverEmbeddedObject()
+uno::Reference< embed::XEmbeddedObject > SwXTextEmbeddedObject::getExtendedControlOverEmbeddedObject()
 {
     uno::Reference< embed::XEmbeddedObject > xResult;
     SwFrameFormat*   pFormat = GetFrameFormat();
@@ -3500,7 +3501,7 @@ uno::Reference< embed::XEmbeddedObject > SAL_CALL SwXTextEmbeddedObject::getExte
     return xResult;
 }
 
-sal_Int64 SAL_CALL SwXTextEmbeddedObject::getAspect()
+sal_Int64 SwXTextEmbeddedObject::getAspect()
 {
     SwFrameFormat*   pFormat = GetFrameFormat();
     if(pFormat)
@@ -3517,7 +3518,7 @@ sal_Int64 SAL_CALL SwXTextEmbeddedObject::getAspect()
     return embed::Aspects::MSOLE_CONTENT; // return the default value
 }
 
-void SAL_CALL SwXTextEmbeddedObject::setAspect( sal_Int64 nAspect )
+void SwXTextEmbeddedObject::setAspect( sal_Int64 nAspect )
 {
     SwFrameFormat*   pFormat = GetFrameFormat();
     if(pFormat)
@@ -3532,7 +3533,7 @@ void SAL_CALL SwXTextEmbeddedObject::setAspect( sal_Int64 nAspect )
     }
 }
 
-uno::Reference< graphic::XGraphic > SAL_CALL SwXTextEmbeddedObject::getReplacementGraphic()
+uno::Reference< graphic::XGraphic > SwXTextEmbeddedObject::getReplacementGraphic()
 {
     SwFrameFormat*   pFormat = GetFrameFormat();
     if(pFormat)
@@ -3570,7 +3571,7 @@ cpo::uno::Sequence< OUString > SwXTextEmbeddedObject::getSupportedServiceNames()
     return aRet;
 }
 
-uno::Reference<container::XNameReplace> SAL_CALL
+uno::Reference<container::XNameReplace>
     SwXTextEmbeddedObject::getEvents()
 {
     return new SwFrameEventDescriptor( *this );
@@ -3605,7 +3606,7 @@ void SwXOLEListener::modified( const lang::EventObject& /*rEvent*/ )
     SolarMutexGuard aGuard;
     const auto pNd = lcl_GetOLENode(m_pOLEFormat);
     if(!pNd)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     const auto xIP = pNd->GetOLEObj().GetOleRef();
     if(xIP.is())
     {

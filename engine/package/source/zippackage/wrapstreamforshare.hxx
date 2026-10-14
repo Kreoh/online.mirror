@@ -32,28 +32,28 @@ class WrapStreamForShare final : public cppu::WeakImplHelper < css::io::XInputSt
                                 public comphelper::ByteReader
 {
     rtl::Reference< comphelper::RefCountedMutex > m_xMutex;
-    css::uno::Reference < css::io::XInputStream > m_xInStream;
+    cpo::uno::Reference < css::io::XInputStream > m_xInStream;
     comphelper::ByteReader* mpByteReader;
-    css::uno::Reference < css::io::XSeekable > m_xSeekable;
+    cpo::uno::Reference < css::io::XSeekable > m_xSeekable;
 
     sal_Int64 m_nCurPos;
 
 public:
-    WrapStreamForShare( css::uno::Reference< css::io::XInputStream > xInStream,
+    WrapStreamForShare( cpo::uno::Reference< css::io::XInputStream > xInStream,
                         rtl::Reference< comphelper::RefCountedMutex > xMutexRef );
     virtual ~WrapStreamForShare() override;
 
     // XInputStream
-    virtual sal_Int32 SAL_CALL readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) override;
-    virtual sal_Int32 SAL_CALL readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead ) override;
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override;
-    virtual sal_Int32 SAL_CALL available(  ) override;
-    virtual void SAL_CALL closeInput(  ) override;
+    virtual sal_Int32 readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) override;
+    virtual sal_Int32 readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead ) override;
+    virtual void skipBytes( sal_Int32 nBytesToSkip ) override;
+    virtual sal_Int32 available(  ) override;
+    virtual void closeInput(  ) override;
 
     //XSeekable
-    virtual void SAL_CALL seek( sal_Int64 location ) override;
-    virtual sal_Int64 SAL_CALL getPosition() override;
-    virtual sal_Int64 SAL_CALL getLength() override;
+    virtual void seek( sal_Int64 location ) override;
+    virtual sal_Int64 getPosition() override;
+    virtual sal_Int64 getLength() override;
 
     // comphelper::ByteReader
     virtual sal_Int32 readSomeBytes(sal_Int8* aData, sal_Int32 nBytesToRead) override;

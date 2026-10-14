@@ -41,6 +41,7 @@
 #include <config_options.h>
 #include <o3tl/safeint.hxx>
 #include <osl/thread.h>
+#include <osl/time.h>
 #include <osl/nlsupport.h>
 #include <rtl/textenc.h>
 #include <sal/log.hxx>
@@ -773,16 +774,6 @@ static void osl_thread_priority_init_Impl()
         return;
     }
 
-#if defined (__sun)
-    if ( policy >= _SCHED_NEXT)
-    {
-        /* mfe: pthread_getschedparam on Solaris has a possible Bug */
-        /*      one gets 959917873 as the policy                    */
-        /*      so set the policy to a default one                  */
-        policy=SCHED_OTHER;
-    }
-#endif /* __sun */
-
     if ((nRet = sched_get_priority_min(policy) ) != -1)
     {
         SAL_INFO(
@@ -867,16 +858,6 @@ void osl_setThreadPriority (
 
     if (pthread_getschedparam(pImpl->m_hThread, &policy, &Param) != 0)
         return; /* ESRCH */
-
-#if defined (__sun)
-    if ( policy >= _SCHED_NEXT)
-    {
-        /* mfe: pthread_getschedparam on Solaris has a possible Bug */
-        /*      one gets 959917873 as the policy                   */
-        /*      so set the policy to a default one                 */
-        policy=SCHED_OTHER;
-    }
-#endif /* __sun */
 
     pthread_once (&(g_thread.m_once), osl_thread_priority_init_Impl);
 

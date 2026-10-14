@@ -37,9 +37,9 @@ class SfxViewShell;
 
 struct CertificateChooserUserData
 {
-    css::uno::Reference<css::security::XCertificate> xCertificate;
-    css::uno::Reference<css::xml::crypto::XXMLSecurityContext> xSecurityContext;
-    css::uno::Reference<css::xml::crypto::XSecurityEnvironment> xSecurityEnvironment;
+    cpo::uno::Reference<css::security::XCertificate> xCertificate;
+    cpo::uno::Reference<css::xml::crypto::XXMLSecurityContext> xSecurityContext;
+    cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment> xSecurityEnvironment;
 };
 
 enum class CertificateChooserUserAction
@@ -52,12 +52,16 @@ enum class CertificateChooserUserAction
 class CertificateChooser final : public weld::GenericDialogController
 {
 private:
-    std::vector< css::uno::Reference< css::xml::crypto::XXMLSecurityContext > > mxSecurityContexts;
+    std::vector< cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext > > mxSecurityContexts;
     std::vector<std::shared_ptr<CertificateChooserUserData>> mvUserData;
 
     bool                    mbInitialized;
     CertificateChooserUserAction const meAction;
     SfxViewShell* m_pViewShell;
+
+    /// The action labels from the .ui, without the appended certificate source info.
+    OUString msSignBaseText;
+    OUString msEncryptBaseText;
 
     std::unique_ptr<weld::Label>    m_xFTSign;
     std::unique_ptr<weld::Label>    m_xFTEncrypt;
@@ -70,8 +74,8 @@ private:
     std::unique_ptr<weld::Entry>    m_xSearchBox;
     std::unique_ptr<weld::Button>   m_xReloadBtn;
 
-    std::unordered_map<css::uno::Reference< css::xml::crypto::XXMLSecurityContext>,
-        cpo::uno::Sequence< css::uno::Reference< css::security::XCertificate > > > xMemCerts;
+    std::unordered_map<cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext>,
+        cpo::uno::Sequence< cpo::uno::Reference< css::security::XCertificate > > > xMemCerts;
 
     DECL_LINK(ReloadButtonHdl, weld::Button&, void);
     DECL_LINK(ViewButtonHdl, weld::Button&, void);
@@ -87,13 +91,13 @@ private:
 public:
     CertificateChooser(weld::Window* pParent,
                        SfxViewShell* pViewShell,
-                       std::vector< css::uno::Reference< css::xml::crypto::XXMLSecurityContext > > && rxSecurityContexts,
+                       std::vector< cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext > > && rxSecurityContexts,
                        CertificateChooserUserAction eAction);
     virtual ~CertificateChooser() override;
 
     static std::shared_ptr<CertificateChooser> getInstance(weld::Window* _pParent,
                         SfxViewShell* pViewShell,
-                        std::vector< css::uno::Reference< css::xml::crypto::XXMLSecurityContext > > && rxSecurityContexts,
+                        std::vector< cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext > > && rxSecurityContexts,
                         CertificateChooserUserAction eAction) {
         // Don't reuse CertificateChooser instances
         // Reusing the same instance will, in the following case, lead to a
@@ -109,8 +113,8 @@ public:
     void BeforeRun();
     short run() override;
 
-    cpo::uno::Sequence<css::uno::Reference< css::security::XCertificate > > GetSelectedCertificates();
-    css::uno::Reference< css::xml::crypto::XXMLSecurityContext > GetSelectedSecurityContext() const;
+    cpo::uno::Sequence<cpo::uno::Reference< css::security::XCertificate > > GetSelectedCertificates();
+    cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext > GetSelectedSecurityContext() const;
     /// Gets the description string provided when selecting the certificate.
     OUString GetDescription() const;
 

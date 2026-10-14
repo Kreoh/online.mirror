@@ -24,23 +24,9 @@ The Jenkins pipeline uses `docker/from-source/Builder.Dockerfile` and
 builds the server against that engine, assembles a Debian runtime root filesystem and applies the
 debranding verification gates before publishing.
 
-For a local source build, provide a full Git revision and use the same builder image and environment
-variables as the Jenkinsfile. The build is deliberately pinned to an exact source revision.
-
-## Development build
-
-For development outside the OCI pipeline:
-
-```sh
-cd engine
-./autogen.sh --with-distro=OnlineLinux-LOKit
-make
-cd ..
-./autogen.sh --enable-developer
-make
-```
-
-Run `make run` from the top-level build tree to start `coolwsd`.
+Native builds and tests run only in Jenkins using this pipeline. Local source inspection and
+checks that do not compile are permitted. Build authorisation does not authorise publication
+or deployment. The build is pinned to an exact source revision.
 
 ## Integration
 
@@ -57,3 +43,17 @@ licences. See [COPYING](COPYING), [browser/LICENSE](browser/LICENSE),
 Upstream provenance is recorded in Git history and the OCI
 `org.opencontainers.image.source` label. Factual upstream names in legal notices, copyright headers
 and compatibility markers are preserved.
+
+## Upstream build and SBOM changes
+
+The merged upstream uses gbuild for native components. See [README-gbuild.md](README-gbuild.md)
+for the build structure and [SBOM.md](SBOM.md) for SPDX 3.0.1 generation, dependency checks and
+vulnerability scan limitations. Build and SBOM targets that compile must run in Jenkins.
+
+This distribution installs the server SBOM as
+`/usr/share/coolwsd/online-office-sbom.spdx.json`. Its document name is Online Office;
+package identities, references and upstream provenance are preserved.
+
+See [wsd/protocol.txt](wsd/protocol.txt) for WebSocket integration and
+[the upstream architecture documentation](https://sdk.collaboraonline.com/docs/architecture.html)
+for the component structure.

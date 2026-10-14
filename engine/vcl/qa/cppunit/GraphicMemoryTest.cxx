@@ -14,11 +14,18 @@
 #include <vcl/alpha.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/graphicfilter.hxx>
+#include <vcl/pdfread.hxx>
+#include <vcl/filter/PDFiumLibrary.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/scopeguard.hxx>
 #include <tools/color.hxx>
 #include <tools/stream.hxx>
 
 #include <impgraph.hxx>
-#include <graphic/MemoryManaged.hxx>
+#include <vcl/graphic/Manager.hxx>
+#include <vcl/graphic/MemoryManaged.hxx>
+
+#include "KitModeScope.hxx"
 
 using namespace css;
 
@@ -245,6 +252,83 @@ CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManager)
     CPPUNIT_ASSERT_EQUAL(sal_Int64(300), rManager.getTotalSize());
 }
 
+// A caller that only wants the checksum reads the encoded data back in. Those bytes have to be
+// counted while they are there and have to be able to leave again.
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testAChecksumCountsTheBytesItReadBack)
+{
+    KitModeScope aKitMode;
+
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic = makeUnloadedGraphic(u"jpg", Size(300, 300));
+    CPPUNIT_ASSERT_EQUAL(true, aGraphic.makeAvailable());
+
+    ImpGraphic* pImpGraphic = aGraphic.ImplGetImpGraphic();
+    vcl::graphic::MemoryManaged* pMemoryManaged = pImpGraphic;
+
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+
+    // Nothing of this graphic is in memory, so there is nothing to reduce.
+    CPPUNIT_ASSERT_EQUAL(false, pMemoryManaged->canReduceMemory());
+
+    // Hashing only reaches bytes that are in memory, so it finds nothing to hash.
+    const BinaryDataContainer& rContainer = aGraphic.GetSharedGfxLink()->getDataContainer();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+
+    CPPUNIT_ASSERT(aGraphic.GetChecksum() != 0);
+
+    // The checksum ran over the encoded data, which is back in memory and counted for.
+    CPPUNIT_ASSERT(rContainer.calculateHash() != 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(rContainer.getSize()), rManager.getTotalSize());
+
+    // The graphic is still swapped out, and those bytes are what a reduction can hand back.
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->isSwappedOut());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->canReduceMemory());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->reduceMemory());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+}
+
+// A caller can ask for the encoded data of a graphic on its own, without going through the
+// checksum. Those bytes are counted while they are in memory and can leave again.
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testEncodedDataBroughtInIsCountedAndCanGoAgain)
+{
+    KitModeScope aKitMode;
+
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic = makeUnloadedGraphic(u"jpg", Size(300, 300));
+    CPPUNIT_ASSERT_EQUAL(true, aGraphic.makeAvailable());
+
+    ImpGraphic* pImpGraphic = aGraphic.ImplGetImpGraphic();
+    vcl::graphic::MemoryManaged* pMemoryManaged = pImpGraphic;
+
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+
+    // Hashing only reaches bytes that are in memory, so it finds nothing to hash.
+    const BinaryDataContainer& rContainer = aGraphic.GetSharedGfxLink()->getDataContainer();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+
+    aGraphic.ensureEncodedDataAvailable();
+
+    // The encoded data is back in memory and the running total counts it.
+    CPPUNIT_ASSERT(rContainer.calculateHash() != 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(rContainer.getSize()), rManager.getTotalSize());
+
+    // The graphic is still swapped out, and those bytes are what a reduction can hand back.
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->isSwappedOut());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->canReduceMemory());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->reduceMemory());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+}
+
 namespace
 {
 class TestManaged : public vcl::graphic::MemoryManaged
@@ -305,6 +389,66 @@ CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManagerX)
     aTestManaged.callUnregister();
     CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
     CPPUNIT_ASSERT_EQUAL(sal_Int64(400), rManager.getTotalSize());
+}
+
+// the file bytes of a PDF stay in memory while another page of the same file still holds them
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testPdfPagesShareBytesAcrossSwapOut)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+
+    test::Directories aDirectories;
+    OUString aFilename
+        = aDirectories.getURLFromSrc(u"/vcl/qa/cppunit/pdfexport/data/") + "SimpleMultiPagePDF.pdf";
+    SvFileStream aFileStream(aFilename, StreamMode::READ);
+    const sal_uLong nFileSize = aFileStream.TellEnd();
+    CPPUNIT_ASSERT(nFileSize > 0);
+
+    std::vector<vcl::PDFGraphicResult> aPages;
+    CPPUNIT_ASSERT_EQUAL(size_t(3), vcl::ImportPDFUnloaded(aFileStream, aPages));
+
+    // the shared bytes are swapped to disk in kit mode only
+    const bool bWasKitActive = comphelper::COKit::isActive();
+    comphelper::COKit::setActive(true);
+    comphelper::ScopeGuard aRestoreKit([bWasKitActive]
+                                       { comphelper::COKit::setActive(bWasKitActive); });
+
+    Graphic aPage0 = aPages[0].GetGraphic();
+    Graphic aPage1 = aPages[1].GetGraphic();
+    Graphic aPage2 = aPages[2].GetGraphic();
+    CPPUNIT_ASSERT(aPage0.makeAvailable());
+    CPPUNIT_ASSERT(aPage1.makeAvailable());
+    CPPUNIT_ASSERT(aPage2.makeAvailable());
+
+    // every copy of the container shares the same bytes, so this copy shows whether the
+    // bytes are in memory without loading anything
+    BinaryDataContainer aSharedBytes = aPage0.GetGfxLink().getDataContainer();
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+
+    // the loaded pages account equal shares of the one copy of the file bytes
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 3, aPage0.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 3, aPage1.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 3, aPage2.GetSizeBytes());
+
+    // swapping out one page leaves the bytes in memory for the pages that still hold them
+    CPPUNIT_ASSERT(aPage0.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(0), aPage0.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 2, aPage1.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 2, aPage2.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+
+    CPPUNIT_ASSERT(aPage1.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(nFileSize, aPage2.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+
+    // once the last page is swapped out the bytes leave memory, and loading a page again
+    // brings them back
+    CPPUNIT_ASSERT(aPage2.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(0), aPage2.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(0), aSharedBytes.getSizeBytes());
+    CPPUNIT_ASSERT(aPage0.makeAvailable());
+    CPPUNIT_ASSERT_EQUAL(nFileSize, aPage0.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

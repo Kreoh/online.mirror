@@ -24,18 +24,18 @@
 class CharmapPopup final : public svt::PopupWindowController
 {
 public:
-    CharmapPopup(const css::uno::Reference<css::uno::XComponentContext>& rContext);
+    CharmapPopup(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext);
     virtual ~CharmapPopup() override;
 
     virtual VclPtr<vcl::Window> createVclPopupWindow(vcl::Window* pParent) override;
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

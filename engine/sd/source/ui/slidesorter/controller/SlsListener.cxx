@@ -47,8 +47,8 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 
 namespace sd::slidesorter::controller {
@@ -73,7 +73,7 @@ Listener::Listener (
         mrSlideSorter.GetModel().GetDocument()->getUnoModel());
     if (xBroadcaster.is())
     {
-        xBroadcaster->addEventListener(css::uno::Reference< css::document::XEventListener >(this));
+        xBroadcaster->addEventListener(cpo::uno::Reference< css::document::XEventListener >(this));
         mbListeningToUNODocument = true;
     }
 
@@ -141,7 +141,7 @@ void Listener::ReleaseListeners()
         rtl::Reference<SdXImpressDocument> xBroadcaster(
             mrSlideSorter.GetModel().GetDocument()->getUnoModel());
         if (xBroadcaster.is())
-            xBroadcaster->removeEventListener(css::uno::Reference< css::document::XEventListener >(this));
+            xBroadcaster->removeEventListener(cpo::uno::Reference< css::document::XEventListener >(this));
 
         // Remove the dispose listener.
         if (xBroadcaster.is())
@@ -380,7 +380,7 @@ IMPL_LINK(Listener, EventMultiplexerCallback, ::sdtools::EventMultiplexerEvent&,
 
 //=====  lang::XEventListener  ================================================
 
-void SAL_CALL Listener::disposing (
+void Listener::disposing (
     const lang::EventObject& rEventObject)
 {
     if ((mbListeningToDocument || mbListeningToUNODocument)
@@ -403,14 +403,14 @@ void SAL_CALL Listener::disposing (
 
 //=====  document::XEventListener  ============================================
 
-void SAL_CALL Listener::notifyEvent (
+void Listener::notifyEvent (
     const document::EventObject& )
 {
 }
 
 //=====  beans::XPropertySetListener  =========================================
 
-void SAL_CALL Listener::propertyChange (
+void Listener::propertyChange (
     const PropertyChangeEvent& rEvent)
 {
     if (m_bDisposed)
@@ -459,7 +459,7 @@ void SAL_CALL Listener::propertyChange (
 
 //===== frame::XFrameActionListener  ==========================================
 
-void SAL_CALL Listener::frameAction (const frame::FrameActionEvent& rEvent)
+void Listener::frameAction (const frame::FrameActionEvent& rEvent)
 {
     switch (rEvent.Action)
     {

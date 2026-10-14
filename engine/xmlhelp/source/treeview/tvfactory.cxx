@@ -30,7 +30,7 @@
 
 using namespace treeview;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -46,18 +46,18 @@ TVFactory::~TVFactory()
 
 // XServiceInfo methods.
 
-OUString SAL_CALL
+OUString
 TVFactory::getImplementationName()
 {
     return u"com.sun.star.help.TreeViewImpl"_ustr;
 }
 
-bool SAL_CALL TVFactory::supportsService( const OUString& ServiceName )
+bool TVFactory::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL
+Sequence< OUString >
 TVFactory::getSupportedServiceNames()
 {
     return { u"com.sun.star.help.TreeView"_ustr, u"com.sun.star.ucb.HiearchyDataSource"_ustr };
@@ -65,7 +65,7 @@ TVFactory::getSupportedServiceNames()
 
 // XMultiServiceFactory
 
-Reference< XInterface > SAL_CALL
+Reference< XInterface >
 TVFactory::createInstance(
     const OUString& aServiceSpecifier )
 {
@@ -77,7 +77,7 @@ TVFactory::createInstance(
     return createInstanceWithArguments( aServiceSpecifier, seq );
 }
 
-Reference< XInterface > SAL_CALL
+Reference< XInterface >
 TVFactory::createInstanceWithArguments(
     const OUString& /*ServiceSpecifier*/,
     const Sequence< Any >& Arguments )
@@ -115,15 +115,15 @@ TVFactory::createInstanceWithArguments(
         return m_xHDS;
 }
 
-Sequence< OUString > SAL_CALL
+Sequence< OUString >
 TVFactory::getAvailableServiceNames( )
 {
     return { u"com.sun.star.ucb.HierarchyDataReadAccess"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_help_TreeViewImpl_get_implementation(
-    css::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new TVFactory);
 }

@@ -42,7 +42,7 @@
 using namespace ::std;
 using namespace ::cppu;
 using namespace ::com::sun::star::datatransfer;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 
@@ -136,7 +136,7 @@ bool processCntTypesAndWriteResultIntoFile( char* fname, vector< string >& vecDa
 
 //  main
 
-int SAL_CALL main( int nArgc, char* argv[] )
+int main( int nArgc, char* argv[] )
 {
     if ( nArgc != 3 )
         printf( "Start with: testcnttype input-file output-file\n" );

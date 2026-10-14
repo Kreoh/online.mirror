@@ -36,7 +36,6 @@
 #include <editeng/outlobj.hxx>
 #include <editeng/editobj.hxx>
 #include <com/sun/star/i18n/TextConversionOption.hpp>
-#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 #include <editeng/editeng.hxx>
 #include <osl/diagnose.h>
 
@@ -285,17 +284,6 @@ void DrawDocShell::Execute( SfxRequest& rReq )
             if (pItem)
                 aNewLangTxt = pItem->GetValue();
 
-            if (aNewLangTxt == "*" )
-            {
-                // open the dialog "Tools/Options/Languages and Locales - General"
-                if (mpViewShell)
-                {
-                    SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-                    ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateVclDialog( mpViewShell->GetFrameWeld(), SID_LANGUAGE_OPTIONS ));
-                    pDlg->Execute();
-                }
-            }
-            else
             {
                 if( mpViewShell )
                 {
@@ -417,22 +405,6 @@ void DrawDocShell::Execute( SfxRequest& rReq )
             {
                 sApplyText = sApplyText.replaceAt(nPos, sSpellingRule.getLength(), u"");
                 rEditView.InsertText( sApplyText );
-            }
-        }
-        break;
-
-        case SID_NOTEBOOKBAR:
-        {
-            const SfxStringItem* pFile = rReq.GetArg( SID_NOTEBOOKBAR );
-
-            if ( mpViewShell )
-            {
-                SfxBindings& rBindings( mpViewShell->GetFrame()->GetBindings() );
-
-                if ( sfx2::SfxNotebookBar::IsActive() )
-                    sfx2::SfxNotebookBar::ExecMethod( rBindings, pFile ? pFile->GetValue() : u""_ustr );
-                else
-                    sfx2::SfxNotebookBar::CloseMethod( rBindings );
             }
         }
         break;

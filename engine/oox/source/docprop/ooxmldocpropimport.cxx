@@ -43,7 +43,7 @@ using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::embed;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 
@@ -203,7 +203,7 @@ Reference < css::io::XInputStream > DocumentPropertiesImport::getExtendedPropert
     return aExtStreams[0].aInputStream;
 }
 
-cpo::uno::Sequence< css::uno::Reference< css::io::XInputStream > > DocumentPropertiesImport::getCustomPropertiesStreams(
+cpo::uno::Sequence< cpo::uno::Reference< css::io::XInputStream > > DocumentPropertiesImport::getCustomPropertiesStreams(
     const Reference< XStorage >& rxSource)
 {
     Sequence <InputSource> aExtStreams = lclGetCustomStreams(rxSource);
@@ -220,9 +220,9 @@ cpo::uno::Sequence< css::uno::Reference< css::io::XInputStream > > DocumentPrope
 
 } // namespace oox::docprop
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_oox_docprop_DocumentPropertiesImporter_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new oox::docprop::DocumentPropertiesImport(pCtx));
 }

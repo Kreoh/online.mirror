@@ -12,13 +12,14 @@
 #include <com/sun/star/table/XCellRange.hpp>
 #include <com/sun/star/table/XTableColumns.hpp>
 #include <com/sun/star/text/XSimpleText.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppunit/TestAssert.h>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace apitest
 {
@@ -78,20 +79,20 @@ void XTableColumns::testInsertByIndex()
 void XTableColumns::testInsertByIndexWithNegativeIndex()
 {
     uno::Reference<table::XTableColumns> xTC(init(), uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_THROW(xTC->insertByIndex(-1, 1), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xTC->insertByIndex(-1, 1), cpo::uno::RuntimeException);
 }
 
 void XTableColumns::testInsertByIndexWithNoColumn()
 {
     uno::Reference<table::XTableColumns> xTC(init(), uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_THROW(xTC->insertByIndex(0, 0), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xTC->insertByIndex(0, 0), cpo::uno::RuntimeException);
 }
 
 void XTableColumns::testInsertByIndexWithOutOfBoundIndex()
 {
     uno::Reference<table::XTableColumns> xTC(init(), uno::UNO_QUERY_THROW);
 
-    CPPUNIT_ASSERT_THROW(xTC->insertByIndex(xTC->getCount(), 1), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xTC->insertByIndex(xTC->getCount(), 1), cpo::uno::RuntimeException);
 }
 
 void XTableColumns::testRemoveByIndex()
@@ -146,20 +147,20 @@ void XTableColumns::testRemoveByIndex()
 void XTableColumns::testRemoveByIndexWithNegativeIndex()
 {
     uno::Reference<table::XTableColumns> xTC(init(), uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_THROW(xTC->removeByIndex(-1, 1), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xTC->removeByIndex(-1, 1), cpo::uno::RuntimeException);
 }
 
 void XTableColumns::testRemoveByIndexWithNoColumn()
 {
     uno::Reference<table::XTableColumns> xTC(init(), uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_THROW(xTC->removeByIndex(0, 0), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xTC->removeByIndex(0, 0), cpo::uno::RuntimeException);
 }
 
 void XTableColumns::testRemoveByIndexWithOutOfBoundIndex()
 {
     uno::Reference<table::XTableColumns> xTC(init(), uno::UNO_QUERY_THROW);
 
-    CPPUNIT_ASSERT_THROW(xTC->removeByIndex(xTC->getCount(), 1), uno::RuntimeException);
+    CPPUNIT_ASSERT_THROW(xTC->removeByIndex(xTC->getCount(), 1), cpo::uno::RuntimeException);
 }
 
 OUString XTableColumns::getCellText(const uno::Reference<table::XCell>& r_xCell)

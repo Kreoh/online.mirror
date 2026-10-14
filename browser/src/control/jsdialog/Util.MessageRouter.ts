@@ -16,6 +16,13 @@
 declare var JSDialog: any;
 
 class JSDialogMessageRouter {
+	// gap between the primary and the secondary line of a message box, in pixels
+	private static readonly messageSpacing = 4;
+
+	private static readonly messageImages: Record<string, string> = {
+		warningbox: 'warningbox.svg',
+	};
+
 	// Per-jsontype queues for messages with target component not yet ready
 	private pendingByJsontype: Map<string, Array<() => void>> = new Map();
 
@@ -23,11 +30,27 @@ class JSDialogMessageRouter {
 	private _preProcessMessageDialog(msgData: WidgetJSON) {
 		if (!msgData.children) return;
 
+		let hasMessage = false;
 		for (var i in msgData.children) {
 			var child = msgData.children[i];
-			if (child.type === 'multilineedit') child.type = 'fixedtext';
-			else if (child.children) this._preProcessMessageDialog(child);
+			if (child.type === 'multilineedit') {
+				child.type = 'fixedtext';
+				hasMessage = true;
+			} else if (child.type === 'image') {
+				const asset = JSDialogMessageRouter.messageImages[child.id];
+				if (asset)
+					(child as ImageWidgetJSON).image = app.LOUtil.getImageURL(asset);
+				else child.id = '';
+			} else if (child.children) this._preProcessMessageDialog(child);
 		}
+
+		// The core spaces the box holding the messages by a whole text height,
+		// which is a lot of air between the bold primary line and the text that
+		// belongs to it - the desktop pairs that spacing with a primary line
+		// scaled up by 1.2, which we don't reproduce here.
+		if (hasMessage)
+			(msgData as ContainerWidgetJSON).spacing =
+				JSDialogMessageRouter.messageSpacing;
 	}
 
 	private isReady(jsontype: string): boolean {
@@ -38,6 +61,7 @@ class JSDialogMessageRouter {
 		if (jsontype === 'addressinputfield')
 			return !!app.socket._map.addressInputField;
 		if (jsontype === 'formulabar') return !!app.socket._map.formulabar;
+		if (jsontype === 'notespanel') return !!app.socket._map.notesPanel;
 		return true;
 	}
 
@@ -144,6 +168,8 @@ class JSDialogMessageRouter {
 			}
 		} else if (msgData.jsontype === 'quickfind') {
 			app.socket._map.fire('quickfind', { data: msgData });
+		} else if (msgData.jsontype === 'notespanel') {
+			app.socket._map.fire('notespanel', { data: msgData });
 		} else {
 			console.warn(
 				'Unhandled jsdialog message: {jsontype: "' +

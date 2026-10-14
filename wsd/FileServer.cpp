@@ -30,8 +30,8 @@
 #include <common/Log.hpp>
 #include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
+#include <common/SettingsSecrets.hpp>
 #include <common/Util.hpp>
-#include <common/ViewSettings.hpp>
 #include <common/base64.hpp>
 #include <net/HttpRequest.hpp>
 #include <net/NetUtil.hpp>
@@ -41,6 +41,7 @@
 #include <wsd/wopi/StorageConnectionManager.hpp>
 #include <wsd/AIUtil.hpp>
 #include <wsd/Auth.hpp>
+#include <wsd/Extensions.hpp>
 #include <wsd/COOLWSD.hpp>
 #include <wsd/HostUtil.hpp>
 #include <wsd/ContentSecurityPolicy.hpp>
@@ -80,16 +81,20 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <string>
 #include <regex>
 #include <vector>
 
 #include <dirent.h>
-#include <dlfcn.h>
 #include <openssl/evp.h>
+#if HAVE_SECURITY_PAM_APPL_H
+#include <dlfcn.h>
 #include <security/pam_appl.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 #include <zlib.h>
@@ -112,6 +117,8 @@ constexpr std::string_view MetaViewPort =
 
 namespace
 {
+
+#if HAVE_SECURITY_PAM_APPL_H
 
 int functionConversation(int /*num_msg*/, const struct pam_message** /*msg*/,
                          struct pam_response **reply, void *appdata_ptr)
@@ -213,6 +220,18 @@ bool isPamAuthOk(const std::string& userProvidedUsr, const std::string& userProv
 
     return true;
 }
+
+#else
+
+/// Check for user / password with PAM. A build without the PAM header has no
+/// PAM support, so this always fails.
+bool isPamAuthOk(const std::string& /*userProvidedUsr*/, const std::string& /*userProvidedPwd*/)
+{
+    LOG_ERR("PAM authentication requested, but this build has no PAM support.");
+    return false;
+}
+
+#endif
 
 /// Check for user / password set in coolwsd.xml.
 bool isConfigAuthOk(const std::string& userProvidedUsr, const std::string& userProvidedPwd)
@@ -321,7 +340,7 @@ void applyZoomConfig(std::string& fileContent, const Poco::Util::LayeredConfigur
 }
 
 /// Returns true if the host is allowed, false otherwise.
-bool isAllowedWopiHost(const Poco::URI& uri)
+[[nodiscard]] bool isAllowedWopiHost(const Poco::URI& uri)
 {
     if (!HostUtil::isWopiEnabled())
         return false;
@@ -352,9 +371,11 @@ FileServerRequestHandler::FileServerRequestHandler(const std::string& root)
     // cool files
     try
     {
+#if ENABLE_DEBUG
+        Extensions::synthesizeBuiltinExtensionsIndex(root + "/browser/dist/extensions");
+#endif
         FileHash.reserve(4096); // We have ~3964 files.
         readDirToHash(root, "/browser/dist");
-        synthesizeBuiltinExtensionsIndex();
         readAdminTemplates(root);
     }
     catch (...)
@@ -457,7 +478,14 @@ bool FileServerRequestHandler::authenticateAdmin(const Poco::Net::HTTPBasicCrede
     cookie.setPath(COOLWSD::ServiceRoot + "/browser/dist/");
     cookie.setSecure(ConfigUtil::isSslEnabled());
     cookie.setHttpOnly(true);
-    response.addCookie(cookie.toString());
+    if (!response.addCookie(cookie.toString()))
+    {
+        // The console session lives in this cookie, so the login only counts once it is on the
+        // response.
+        LOG_ERR("Could not put the Admin Console session cookie on the response.");
+        jwtToken.clear();
+        return false;
+    }
 
     return true;
 }
@@ -625,18 +653,14 @@ bool FileServerRequestHandler::handleRequest(const HTTPRequest& request,
         }
 
         if (endPoint == "cool.html" ||
+            endPoint == "cool-qt.html" ||
+            endPoint == "cool-preview.html" ||
             endPoint == "help-localizations.json" ||
             endPoint == "localizations.json" ||
             endPoint == "uno-localizations.json")
         {
             accessDetails = preprocessFile(request, response, requestDetails, message,
                                            endPoint == "cool.html" /* noCache */, socket);
-            return true;
-        }
-
-        if (endPoint == "TaskWorker.js")
-        {
-            replaceServiceRoot(request, response, requestDetails, socket);
             return true;
         }
 
@@ -822,7 +846,7 @@ void FileServerRequestHandler::sendError(http::StatusCode errorCode,
     {
         const std::string pathSanitized = Uri::encode(requestPath, std::string());
         // Let's keep message as plain text to avoid complications.
-        headers += "Content-Type: text/plain charset=UTF-8\r\n";
+        headers += "Content-Type: text/plain; charset=UTF-8\r\n";
         body = "Error: " + shortMessage + '\n' +
             longMessage + ' ' + pathSanitized + '\n' +
             "Please contact your system administrator.";
@@ -1040,71 +1064,6 @@ const std::string *FileServerRequestHandler::getCompressedFile(const std::string
     return pair.second.empty() ? &pair.first : &pair.second;
 }
 
-// For the dev-only "drop a directory into browser/dist/extensions/" feature, emit
-// /browser/dist/extensions/index.json as a JSON array of the <id>s with a cached
-// <id>/manifest.json.  Called once after readDirToHash.
-void FileServerRequestHandler::synthesizeBuiltinExtensionsIndex()
-{
-#if ENABLE_DEBUG
-    static const std::string prefix = "/browser/dist/extensions/";
-    static const std::string suffix = "/manifest.json";
-    std::vector<std::string> ids;
-    for (const auto& entry : FileHash)
-    {
-        const std::string& key = entry.first;
-        if (!key.starts_with(prefix) || !key.ends_with(suffix))
-            continue;
-        const std::string id =
-            key.substr(prefix.size(), key.size() - prefix.size() - suffix.size());
-        // Skip nested manifest.json files (only direct subdirectories of extensions/
-        // are extension roots):
-        if (id.find('/') != std::string::npos)
-            continue;
-        ids.push_back(id);
-    }
-    std::sort(ids.begin(), ids.end());
-
-    std::string json;
-    json.push_back('[');
-    bool first = true;
-    for (const auto& id : ids)
-    {
-        if (!first) json.push_back(',');
-        first = false;
-        json.push_back('"');
-        json.append(id);
-        json.push_back('"');
-    }
-    json.push_back(']');
-
-    // Pre-compress in step with the rest of readDirToHash so the request handler's
-    // gzip path serves correctly-encoded bytes; getCompressedFile silently falls back
-    // to the uncompressed entry on init/deflate failure here, matching readDirToHash.
-    std::string gzipped;
-    z_stream strm;
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    if (deflateInit2(&strm, Z_BEST_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY) == Z_OK)
-    {
-        const unsigned long bound = deflateBound(&strm, json.size());
-        gzipped.resize(bound);
-        strm.next_in = reinterpret_cast<unsigned char*>(json.data());
-        strm.avail_in = json.size();
-        strm.next_out = reinterpret_cast<unsigned char*>(gzipped.data());
-        strm.avail_out = bound;
-        if (deflate(&strm, Z_FINISH) == Z_STREAM_END)
-            gzipped.resize(bound - strm.avail_out);
-        else
-            gzipped.clear();
-        deflateEnd(&strm);
-    }
-
-    // Replaces any stale build-time index.json so the runtime view always wins:
-    FileHash[prefix + "index.json"] = std::make_pair(std::move(json), std::move(gzipped));
-#endif
-}
-
 namespace {
 // Pick a Content-Type for a preset-extension file by its name extension (the browser refuses to
 // render anything without one because sendFile sets X-Content-Type-Options: nosniff):
@@ -1156,7 +1115,7 @@ bool FileServerRequestHandler::serveBrowserPresetExtensionFile(
         HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
         return true;
     }
-    auto const subPath = rest.size() > extensionsSegment.size()
+    std::string const subPath = rest.size() > extensionsSegment.size()
         ? rest.substr(extensionsSegment.size()) : std::string();
 
     // On-disk root: <ChildRoot>/tmp/sharedpresets/<configId>/extensions/
@@ -1229,6 +1188,39 @@ bool FileServerRequestHandler::serveBrowserPresetExtensionFile(
         || file.find("../") != std::string::npos || file.find("/..") != std::string::npos)
     {
         HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
+        return true;
+    }
+
+    // _cool-gas.json is synthesized on demand from the extension directory contents so the
+    // client-side tryLoadAppsScriptExtension can treat an appsscript.json directory as a JS
+    // extension without any COOL-specific files under it:
+    if (file == "_cool-gas.json") {
+        Poco::Path dirPath(extDir);
+        dirPath.pushDirectory(id);
+        Poco::Path const appsscript(dirPath, "appsscript.json");
+        if (!Poco::File(appsscript).exists()) {
+            HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
+            return true;
+        }
+        std::vector<std::pair<std::string, std::string>> scripts;
+        try {
+            scripts = Extensions::enumerateGasScripts(dirPath);
+        } catch (Poco::Exception const & e) {
+            LOG_WRN(
+                "Failed to synthesize _cool-gas.json for preset extension ["
+                << configId << "/" << id << "]: " << e.displayText());
+            HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
+            return true;
+        }
+        std::string const body = Extensions::synthesizeGasSidecar(scripts);
+        response.setContentType("application/json");
+        response.add("X-Content-Type-Options", "nosniff");
+        response.set("Content-Length", std::to_string(body.size()));
+        if (noCache) {
+            response.set("Cache-Control", "no-cache");
+        }
+        socket->send(response);
+        socket->send(body);
         return true;
     }
 
@@ -1376,6 +1368,7 @@ const std::string UI_THEME = "%UI_THEME%";
 const std::string VERSION = "%VERSION%";
 const std::string WOPI_HOST_ID = "%WOPI_HOST_ID%";
 const std::string EXPERIMENTAL_FEATURES = "%EXPERIMENTAL_FEATURES%";
+const std::string RELAY_ORIGIN = "%RELAY_ORIGIN%";
 
 namespace
 {
@@ -1516,23 +1509,50 @@ std::string boolToString(const bool value)
 {
     return value ? std::string("true"): std::string("false");
 }
+
+/// The frame ancestors the admin has configured, from the obsolete net.frame_ancestors entry
+/// and from any frame-ancestors sources in net.content_security_policy.
+std::string getConfiguredFrameAncestors(const Poco::Util::AbstractConfiguration& config)
+{
+    std::string configFrameAncestor = config.getString("net.frame_ancestors", "");
+    if (!configFrameAncestor.empty())
+    {
+        static bool warned = false;
+        if (!warned)
+        {
+            warned = true;
+            LOG_WRN("The config entry net.frame_ancestors is obsolete and will be removed in the "
+                    "future. Please add 'frame-ancestors "
+                    << configFrameAncestor << ";' in the net.content_security_policy config");
+        }
+    }
+
+    const ContentSecurityPolicy configCSP(config.getString("net.content_security_policy", ""));
+    configFrameAncestor += configCSP.getDirective("frame-ancestors");
+    return configFrameAncestor;
 }
 
-void FileServerRequestHandler::replaceServiceRoot(const HTTPRequest& request,
-                                                  http::Response& httpResponse,
-                                                  const RequestDetails& requestDetails,
-                                                  const std::shared_ptr<StreamSocket>& socket)
+/// Append to a directive only those of the space-separated sources it does not list yet. The
+/// configured frame ancestors reach the policy both through the net.content_security_policy
+/// merge and through the widened list built from them, and would be repeated otherwise.
+void appendMissingSources(ContentSecurityPolicy& csp, const std::string& directive,
+                          const std::string& sources)
 {
-    const ServerURL cnxDetails(requestDetails);
-    const std::string& responseRoot = cnxDetails.getResponseRoot();
-    const std::string relPath = getRequestPathname(request, requestDetails);
-    LOG_DBG("Preprocessing file: " << relPath);
-    std::string preprocess = *getUncompressedFile(relPath);
-    Poco::replaceInPlace(preprocess, std::string("%SERVICE_ROOT%"), responseRoot);
-    Poco::replaceInPlace(preprocess, std::string("%VERSION%"), Util::getCoolVersionHash());
-    httpResponse.setBody(preprocess, "text/javascript");
-    socket->send(httpResponse);
-    LOG_TRC("Sent file: " << relPath << ": " << preprocess);
+    std::string present = ' ' + csp.getDirective(directive) + ' ';
+    std::string missing;
+    const StringVector tokens = StringVector::tokenize(sources, ' ');
+    for (const StringToken& token : tokens)
+    {
+        const std::string source = tokens.getParam(token);
+        if (source.empty() || present.find(' ' + source + ' ') != std::string::npos)
+            continue;
+
+        present += source + ' ';
+        missing += ' ' + source;
+    }
+
+    csp.appendDirective(directive, std::move(missing));
+}
 }
 
 FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::preprocessFile(
@@ -1705,6 +1725,21 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
                                          "/color-palette-dark.css\" />"
                                    : std::string());
 
+    // Also set a property for showing/hiding the close button so it can be
+    // handled fully in the mobile CSS without a flash
+    const std::string closeButtonEnabled = requestDetails.getParam("closebutton");
+    std::string closeButtonEnabledData;
+    // as in global.js:parseBool
+    if (closeButtonEnabled == "1" || closeButtonEnabled == "true" || closeButtonEnabled == "yes" || closeButtonEnabled == "on") {
+        closeButtonEnabledData = "true";
+    } else if (closeButtonEnabled == "0" || closeButtonEnabled == "false" || closeButtonEnabled == "no" || closeButtonEnabled == "off") {
+        closeButtonEnabledData = "false";
+    } else {
+        closeButtonEnabledData = "default";
+    }
+    Poco::replaceInPlace(preprocess, std::string("%CLOSE_BUTTON_ENABLED_ATTR%"),
+                         " data-close-button-enabled=\"" + closeButtonEnabledData + "\"");
+
     std::string enableMacrosExecution = stringifyBoolFromConfig(config, "security.enable_macros_execution", false);
     Poco::replaceInPlace(preprocess, std::string("%ENABLE_MACROS_EXECUTION%"), enableMacrosExecution);
 
@@ -1733,11 +1768,14 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
     Poco::replaceInPlace(preprocess, BUYPRODUCT_URL, urv[BUYPRODUCT_URL]);
 
     Poco::replaceInPlace(preprocess, std::string("%AI_ETHICAL_RATING_MESSAGE%"), boolToString(config.getBool("ai.ethical_rating_message", true)));
+    Poco::replaceInPlace(preprocess, std::string("%SHOW_AI_SIDEBAR%"), boolToString(config.getBool("ai.show_ai_sidebar", false)));
+    Poco::replaceInPlace(preprocess, std::string("%SHOW_AI_NOTEBOOKBAR%"), boolToString(config.getBool("ai.show_ai_notebookbar", false)));
     Poco::replaceInPlace(preprocess, std::string("%DEEPL_ENABLED%"), boolToString(config.getBool("deepl.enabled", false)));
     Poco::replaceInPlace(preprocess, std::string("%ZOTERO_ENABLED%"), boolToString(config.getBool("zotero.enable", true)));
     Poco::replaceInPlace(preprocess, std::string("%DOCUMENT_SIGNING_ENABLED%"), boolToString(config.getBool("document_signing.enable", true)));
     Poco::replaceInPlace(preprocess, std::string("%WASM_ENABLED%"), boolToString(ConfigUtil::getConfigValue<bool>("wasm.enable", false)));
     Poco::replaceInPlace(preprocess, std::string("%CANVAS_SLIDESHOW_ENABLED%"), boolToString(ConfigUtil::getConfigValue<bool>("canvas_slideshow_enabled", true)));
+    Poco::replaceInPlace(preprocess, std::string("%REMOTE_LINKS_ENABLED%"), boolToString(ConfigUtil::getConfigValue<bool>("remote_links.enable", false)));
     Poco::URI indirectionURI(config.getString("indirection_endpoint.url", ""));
     Poco::replaceInPlace(preprocess, std::string("%INDIRECTION_URL%"), indirectionURI.toString());
 
@@ -1756,16 +1794,16 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
         extraExportFormats += " impress_tiff";
     Poco::replaceInPlace(preprocess, std::string("%EXTRA_EXPORT_FORMATS%"), extraExportFormats);
 
-    bool geoLocationSetup = config.getBool("indirection_endpoint.geolocation_setup.enable", false);
-    if (geoLocationSetup)
-        Poco::replaceInPlace(preprocess, std::string("%GEOLOCATION_SETUP%"),
-                             boolToString(geoLocationSetup));
+    Poco::replaceInPlace(preprocess, std::string("%GEOLOCATION_SETUP%"),
+                         boolToString(COOLWSD::GeolocationSetup));
 
     ContentSecurityPolicy csp;
     csp.appendDirective("default-src", "'none'");
     csp.appendDirective("frame-src", "'self'");
     csp.appendDirectiveUrl("frame-src", WELCOME_URL);
-    csp.appendDirectiveUrl("frame-src", FEEDBACK_URL);
+    // The welcome and feedback pages are usually served from the same origin.
+    if (Util::trimURI(FEEDBACK_URL) != Util::trimURI(WELCOME_URL))
+        csp.appendDirectiveUrl("frame-src", FEEDBACK_URL);
     csp.appendDirectiveUrl("frame-src", Uri::decode(urv[BUYPRODUCT_URL]));
     csp.appendDirective("frame-src", "blob:"); // Equivalent to unsafe-eval!
     csp.appendDirective("connect-src", "'self'");
@@ -1793,28 +1831,23 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
     if (commentAvatarUrl.starts_with("http://") || commentAvatarUrl.starts_with("https://"))
         csp.appendDirectiveUrl("img-src", commentAvatarUrl);
 
+    csp.merge(config.getString("net.content_security_policy", ""));
+
     // Frame ancestors: Allow coolwsd host, wopi host and anything configured.
-    // This is deprecated.
-    std::string configFrameAncestor = config.getString("net.frame_ancestors", "");
-    if (!configFrameAncestor.empty())
+    const std::string configFrameAncestor = getConfiguredFrameAncestors(config);
+
+    // The relay_origin field names the page allowed to sit between this page and the WOPI host,
+    // so it is taken only from the administrator's own list of frame ancestors.
+    const std::string requestedRelayOrigin = form.get("relay_origin", "");
+    const std::string relayOrigin = relayOriginFromForm(requestedRelayOrigin, configFrameAncestor);
+    if (relayOrigin.empty() && !requestedRelayOrigin.empty())
     {
-        static bool warned = false;
-        if (!warned)
-        {
-            warned = true;
-            LOG_WRN("The config entry net.frame_ancestors is obsolete and will be removed in the "
-                    "future. Please add 'frame-ancestors "
-                    << configFrameAncestor << ";' in the net.content_security_policy config");
-        }
+        LOG_WRN("Serving the document page with no relay origin, because relay_origin ["
+                << requestedRelayOrigin << "] is not one of the configured frame ancestors ["
+                << configFrameAncestor << ']');
     }
 
-    ContentSecurityPolicy configCSP(config.getString("net.content_security_policy", ""));
-    // Get the frame ancestors out of the configured CSP.
-    auto configCspFrameAncestors = configCSP.getDirective("frame-ancestors");
-    if (!configCspFrameAncestors.empty())
-    {
-        configFrameAncestor += configCspFrameAncestors;
-    }
+    Poco::replaceInPlace(preprocess, RELAY_ORIGIN, Uri::encode(relayOrigin, "'"));
 
     std::string frameAncestors = configFrameAncestor;
     Poco::URI uriHost(cnxDetails.getWebSocketUrl());
@@ -1852,8 +1885,8 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
         // X-Frame-Options supports only one ancestor, ignore that
         //(it's deprecated anyway and CSP works in all major browsers)
         // frame ancestors are also allowed for img-src in order to load the views avatars
-        csp.appendDirective("img-src", frameAncestors);
-        csp.appendDirective("frame-ancestors", frameAncestors);
+        appendMissingSources(csp, "img-src", frameAncestors);
+        appendMissingSources(csp, "frame-ancestors", frameAncestors);
         const std::string escapedFrameAncestors = Uri::encode(frameAncestors, "'");
         Poco::replaceInPlace(preprocess, std::string("%FRAME_ANCESTORS%"), escapedFrameAncestors);
     }
@@ -1901,8 +1934,6 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
         csp.appendDirective("script-src", "'unsafe-eval'");
     }
 #endif // !MOBILEAPP
-
-    csp.merge(configCSP);
 
     // Append CSP to response headers too
     httpResponse.add("Content-Security-Policy", csp.generate());
@@ -2113,6 +2144,15 @@ void FileServerRequestHandler::fetchWopiSettingConfigs(const Poco::Net::HTTPRequ
         }
 
         const std::shared_ptr<const http::Response> httpResponse = wopiSession->response();
+        if (httpResponse->state() != http::Response::State::Complete)
+        {
+            LOG_ERR("Failed to fetch wopi settings config from WopiHost["
+                    << uriAnonym << "]: the transfer did not complete");
+            sendError(http::StatusCode::BadGateway, requestPath, destSocket, shortMessage,
+                      "The transfer did not complete");
+            return;
+        }
+
         const http::StatusLine statusLine = httpResponse->statusLine();
         const http::StatusCode statusCode = statusLine.statusCode();
         if (statusCode != http::StatusCode::OK && statusCode != http::StatusCode::NoContent)
@@ -2120,9 +2160,8 @@ void FileServerRequestHandler::fetchWopiSettingConfigs(const Poco::Net::HTTPRequ
             LOG_ERR("Failed to fetch wopi settings config from WopiHost["
                     << uriAnonym << "] with status[" << statusLine.reasonPhrase() << ']');
 
-            const std::string& body = httpResponse->getBody();
             sendError(statusCode, requestPath, destSocket, shortMessage,
-                      statusLine.reasonPhrase() + ". Response: " + body);
+                      statusLine.reasonPhrase());
             return;
         }
         http::Response clientResponse(http::StatusCode::OK);
@@ -2139,23 +2178,17 @@ void FileServerRequestHandler::fetchWopiSettingConfigs(const Poco::Net::HTTPRequ
     };
 
     LOG_DBG("Fetching wopi setting config from WopiHost[" << uriAnonym << ']');
-    auto httpSession = StorageConnectionManager::getHttpSession(sharedUri);
+    auto httpSession = StorageConnectionManager::getWopiHttpSession(sharedUri);
     httpSession->setFinishedHandler(std::move(finishedCallback));
-    httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll());
+    if (!httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll()))
+        return;
+    httpSession->response()->setBodySizeLimit(MaxHttpFetchSizeBytes);
 }
 
 namespace
 {
-// The largest body fetch-settings-file accepts from the storage server, in bytes. The files it
-// relays are settings JSON, xcu configuration and wordbook dictionaries. The biggest of those in
-// practice is a wordbook, and a whole-language spelling dictionary, the ceiling for one, is about
-// 4.5 MB, so 20 MB leaves generous headroom while bounding what one request can hold in memory
-// on the thread that serves every client.
-constexpr int64_t MaxSettingFileSizeBytes = 20 * 1024 * 1024;
-
 // Return the setting-file name a settings request refers to, taken from the
-// last path segment of the WOPI file URL (query stripped). Used to single out
-// viewsetting.json, the only settings file that carries user secrets.
+// last path segment of the WOPI file URL (query stripped).
 std::string settingFileName(const std::string& fileUrl)
 {
     try
@@ -2170,18 +2203,19 @@ std::string settingFileName(const std::string& fileUrl)
     }
 }
 
-// Replace each stored secret in a viewsetting.json body with an empty value and
-// add a companion "<field>Stored": true flag, so the browser learns that a
-// secret exists without receiving it. A body that is not JSON, or that holds
-// none of these fields with a value, is returned unchanged.
-std::string redactViewSettingSecrets(const std::string& body)
+// Replace each stored secret in a settings body with an empty value and add a
+// companion "<field>Stored": true flag, so the browser learns that a secret
+// exists without receiving it. A body that is not JSON, or that holds none of
+// these fields with a value, is returned unchanged.
+std::string redactSettingSecrets(const std::string& body,
+                                 std::span<const std::string_view> secretFields)
 {
     Poco::JSON::Object::Ptr json;
     if (!JsonUtil::parseJSON(body, json) || !json)
         return body;
 
     bool changed = false;
-    for (const std::string_view& field : ViewSettings::SecretFields)
+    for (const std::string_view& field : secretFields)
     {
         const std::string name(field);
         if (!json->has(name))
@@ -2191,7 +2225,7 @@ std::string redactViewSettingSecrets(const std::string& body)
         if (value.empty())
             continue;
         json->set(name, std::string());
-        json->set(name + std::string(ViewSettings::StoredFlagSuffix), true);
+        json->set(name + std::string(SettingsSecrets::StoredFlagSuffix), true);
         changed = true;
     }
 
@@ -2201,14 +2235,15 @@ std::string redactViewSettingSecrets(const std::string& body)
 // True when the uploaded body asks to keep at least one stored secret, i.e. it
 // carries a "<field>Stored": true flag. Only then must the server read the
 // currently stored file to restore that secret.
-bool bodyKeepsStoredSecret(const std::string& body)
+bool bodyKeepsStoredSecret(const std::string& body, std::span<const std::string_view> secretFields)
 {
     Poco::JSON::Object::Ptr json;
     if (!JsonUtil::parseJSON(body, json) || !json)
         return false;
-    for (const std::string_view& field : ViewSettings::SecretFields)
+    for (const std::string_view& field : secretFields)
     {
-        const std::string flag = std::string(field) + std::string(ViewSettings::StoredFlagSuffix);
+        const std::string flag =
+            std::string(field) + std::string(SettingsSecrets::StoredFlagSuffix);
         bool keep = false;
         if (json->has(flag) && JsonUtil::findJSONValue(json, flag, keep) && keep)
             return true;
@@ -2216,13 +2251,13 @@ bool bodyKeepsStoredSecret(const std::string& body)
     return false;
 }
 
-// Produce the viewsetting.json body to persist. For each secret flagged
+// Produce the settings body to persist. For each secret flagged
 // "<field>Stored": true the value is taken from the currently stored file; a
 // field without that flag keeps the uploaded value (empty clears it, new text
 // replaces it). The transport-only flags are removed. On a parse problem the
 // uploaded body is returned unchanged.
-std::string mergeKeptViewSettingSecrets(const std::string& uploadedBody,
-                                        const std::string& storedBody)
+std::string mergeKeptSettingSecrets(const std::string& uploadedBody, const std::string& storedBody,
+                                    std::span<const std::string_view> secretFields)
 {
     Poco::JSON::Object::Ptr uploaded;
     if (!JsonUtil::parseJSON(uploadedBody, uploaded) || !uploaded)
@@ -2231,10 +2266,10 @@ std::string mergeKeptViewSettingSecrets(const std::string& uploadedBody,
     Poco::JSON::Object::Ptr stored;
     const bool haveStored = JsonUtil::parseJSON(storedBody, stored) && stored;
 
-    for (const std::string_view& field : ViewSettings::SecretFields)
+    for (const std::string_view& field : secretFields)
     {
         const std::string name(field);
-        const std::string flag = name + std::string(ViewSettings::StoredFlagSuffix);
+        const std::string flag = name + std::string(SettingsSecrets::StoredFlagSuffix);
         bool keep = false;
         if (uploaded->has(flag))
         {
@@ -2312,12 +2347,14 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
     std::weak_ptr<StreamSocket> socketWeak(socket);
     const std::string shortMessage = "Failed to fetch setting file";
 
-    // Only viewsetting.json holds user secrets. For it, strip the secrets from
-    // the body before it reaches the browser.
-    const bool redactSecrets = settingFileName(fileUrl) == "viewsetting.json";
+    // Strip the secrets this settings file holds from the body before it
+    // reaches the browser. The span refers to a list with static storage
+    // duration, so it stays valid after this function returns.
+    const std::span<const std::string_view> secretFields =
+        SettingsSecrets::fieldsFor(settingFileName(fileUrl));
 
     http::Session::FinishedCallback finishedCallback =
-        [uriAnonym, socketWeak, requestPath = getRequestPath(request), redactSecrets,
+        [uriAnonym, socketWeak, requestPath = getRequestPath(request), secretFields,
          shortMessage](const std::shared_ptr<http::Session>& wopiSession)
     {
         std::shared_ptr<StreamSocket> destSocket = socketWeak.lock();
@@ -2342,9 +2379,7 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
             LOG_ERR("Failed to fetch setting file from [" << uriAnonym
                     << "] with status [" << httpResponse->statusLine().reasonPhrase() << ']');
             sendError(httpResponse->statusLine().statusCode(), requestPath, destSocket,
-                      shortMessage,
-                      httpResponse->statusLine().reasonPhrase() + ". Response: " +
-                          httpResponse->getBody());
+                      shortMessage, httpResponse->statusLine().reasonPhrase());
             return;
         }
 
@@ -2352,27 +2387,38 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
         clientResponse.set("Content-Type", "text/plain; charset=utf-8");
         clientResponse.set("Cache-Control", "no-cache");
         clientResponse.set("Content-Disposition", "attachment");
-        clientResponse.setBody(redactSecrets ? redactViewSettingSecrets(httpResponse->getBody())
-                                             : httpResponse->getBody());
+        clientResponse.setBody(secretFields.empty()
+                                   ? httpResponse->getBody()
+                                   : redactSettingSecrets(httpResponse->getBody(), secretFields));
         destSocket->sendAndShutdown(clientResponse);
         LOG_DBG("Successfully fetched setting file from [" << uriAnonym << ']');
     };
 
     LOG_DBG("Fetching setting file from [" << uriAnonym << ']');
-    auto httpSession = StorageConnectionManager::getHttpSession(dicUrl);
+    auto httpSession = StorageConnectionManager::getWopiHttpSession(dicUrl);
     httpSession->setFinishedHandler(std::move(finishedCallback));
     if (!httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll()))
         return;
 
     // asyncRequest has created the response object, and no body is read until this function
     // returns, so the limit is in place before the first byte arrives.
-    httpSession->response()->setBodySizeLimit(MaxSettingFileSizeBytes);
+    httpSession->response()->setBodySizeLimit(MaxHttpFetchSizeBytes);
 }
 
 void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request,
                                            std::istream& message,
                                            const std::shared_ptr<StreamSocket>& socket)
 {
+    const std::string shortMessage = "Failed to fetch AI models";
+
+    if (!ConfigUtil::getConfigValue<bool>("ai.enabled", false) ||
+        !ConfigUtil::getConfigValue<bool>("ai.allow_user_settings", true))
+    {
+        sendError(http::StatusCode::Forbidden, getRequestPath(request), socket, shortMessage,
+                  "AI settings are turned off");
+        return;
+    }
+
     Poco::Net::HTMLForm form(request, message);
 
     const std::string provider = form.get("provider", std::string());
@@ -2383,8 +2429,6 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
     const std::string accessToken = form.get("accessToken", std::string());
     const std::string currentFileUrl = form.get("currentFileUrl", std::string());
     const std::string secretField = form.get("secretField", std::string());
-
-    const std::string shortMessage = "Failed to fetch AI models";
 
     // Restrict the field to the two AI keys so a caller cannot read an arbitrary
     // value out of the stored settings.
@@ -2428,14 +2472,20 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
         return;
     }
 
-    baseUrl = AIUtil::normalizeAIBaseUrl(baseUrl);
-    baseUrl += "/v1/models";
+    Poco::URI uri;
+    if (!AIUtil::buildAIEndpointUri(baseUrl, "/v1/models", uri))
+    {
+        LOG_WRN("Rejected fetch-models request: the provider URL is invalid ["
+                << Anonymizer::anonymizeUrl(baseUrl) << ']');
+        sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
+                  "The provider URL is invalid");
+        return;
+    }
 
-    Poco::URI uri(baseUrl);
-
-    // A built-in provider's host is a fixed public endpoint and is always
-    // allowed; only a custom host goes through the net.lok_allow allowlist.
+    // A built-in provider's host and the hosts of the AI endpoints set in coolwsd.xml are
+    // always allowed; any other host goes through the net.lok_allow allowlist.
     if (!AIUtil::isPreCannedAIProviderHost(uri.getHost()) &&
+        !AIUtil::isConfiguredAIProviderHost(uri.getHost()) &&
         HostUtil::isForbiddenKitHost(uri.getHost()))
     {
         LOG_WRN("Rejected fetch-models request to host not in KIT allowlist ["
@@ -2443,7 +2493,8 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
         // Use 421 rather than 403 so the browser can tell this local allowlist
         // refusal apart from a genuine 403 forwarded from the upstream provider.
         sendError(http::StatusCode::MisdirectedRequest, getRequestPath(request), socket,
-                  shortMessage, "Target host is not in the allowed host list");
+                  shortMessage,
+                  "Host \"" + uri.getHost() + "\" is not in the allowed host list");
         return;
     }
 
@@ -2475,14 +2526,27 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
             }
 
             const auto httpResponse = httpSession->response();
+            if (httpResponse->state() != http::Response::State::Complete)
+            {
+                LOG_ERR("Failed to fetch models from [" << uriAnonym
+                        << "]: the transfer did not complete");
+                sendError(http::StatusCode::BadGateway, requestPath, destSocket, shortMessage,
+                          "The transfer did not complete");
+                return;
+            }
+
             if (httpResponse->statusLine().statusCode() != http::StatusCode::OK)
             {
                 LOG_ERR("Failed to fetch models from [" << uriAnonym
                         << "] with status [" << httpResponse->statusLine().reasonPhrase() << ']');
+                // Of the provider's error body only the insufficient_quota marker is passed on,
+                // because on a 429 it separates a used-up quota from a throttle.
+                std::string reason = httpResponse->statusLine().reasonPhrase();
+                if (httpResponse->statusLine().statusCode() == http::StatusCode::TooManyRequests
+                    && httpResponse->getBody().find("insufficient_quota") != std::string::npos)
+                    reason += ". insufficient_quota";
                 sendError(httpResponse->statusLine().statusCode(), requestPath, destSocket,
-                          shortMessage,
-                          httpResponse->statusLine().reasonPhrase() + ". Response: " +
-                              httpResponse->getBody());
+                          shortMessage, reason);
                 return;
             }
 
@@ -2497,7 +2561,9 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
         LOG_DBG("Fetching models from [" << uriAnonym << ']');
         auto httpSession = StorageConnectionManager::getHttpSession(uri);
         httpSession->setFinishedHandler(std::move(finishedCallback));
-        httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll());
+        if (!httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll()))
+            return;
+        httpSession->response()->setBodySizeLimit(MaxHttpFetchSizeBytes);
     };
 
     if (!useStoredKey)
@@ -2557,6 +2623,15 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
         }
 
         const auto httpResponse = wopiSession->response();
+        if (httpResponse->state() != http::Response::State::Complete)
+        {
+            LOG_ERR("Failed to read stored viewsetting.json from [" << storedUriAnonym
+                    << "]: the transfer did not complete");
+            sendError(http::StatusCode::BadGateway, requestPath, destSocket, shortMessage,
+                      "The transfer did not complete");
+            return;
+        }
+
         if (httpResponse->statusLine().statusCode() != http::StatusCode::OK)
         {
             LOG_ERR("Failed to read stored viewsetting.json from [" << storedUriAnonym
@@ -2575,9 +2650,11 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
 
     LOG_DBG("Reading stored viewsetting.json from [" << storedUriAnonym
             << "] to list AI models");
-    auto storedSession = StorageConnectionManager::getHttpSession(storedUri);
+    auto storedSession = StorageConnectionManager::getWopiHttpSession(storedUri);
     storedSession->setFinishedHandler(std::move(storedCallback));
-    storedSession->asyncRequest(storedRequest, COOLWSD::getWebServerPoll());
+    if (!storedSession->asyncRequest(storedRequest, COOLWSD::getWebServerPoll()))
+        return;
+    storedSession->response()->setBodySizeLimit(MaxHttpFetchSizeBytes);
 }
 
 void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPRequest& request,
@@ -2627,7 +2704,7 @@ void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPReq
     LOG_DBG("Sending DELETE request to WopiURI[" << uriAnonym << "] for presetfile with fileId["
                                                  << fileId << ']');
 
-    auto httpSession = StorageConnectionManager::getHttpSession(sharedUri);
+    auto httpSession = StorageConnectionManager::getWopiHttpSession(sharedUri);
 
     std::weak_ptr<StreamSocket> socketWeak(socket);
 
@@ -2644,6 +2721,16 @@ void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPReq
         }
 
         const std::shared_ptr<const http::Response> httpResponse = wopiSession->response();
+        if (httpResponse->state() != http::Response::State::Complete)
+        {
+            LOG_ERR("Failed to delete presetfile with fileId["
+                    << fileId << "] from WopiHost[" << uriAnonym
+                    << "]: the transfer did not complete");
+            sendError(http::StatusCode::BadGateway, requestPath, destSocket, shortMessage,
+                      "The transfer did not complete");
+            return;
+        }
+
         const http::StatusLine statusLine = httpResponse->statusLine();
         const http::StatusCode statusCode = statusLine.statusCode();
         if (statusCode != http::StatusCode::OK && statusCode != http::StatusCode::NoContent)
@@ -2651,9 +2738,8 @@ void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPReq
             LOG_ERR("Failed to delete presetfile from WopiHost["
                     << uriAnonym << "] with status[" << statusLine.reasonPhrase() << ']');
 
-            const std::string& body = httpResponse->getBody();
             sendError(statusCode, requestPath, destSocket, shortMessage,
-                      statusLine.reasonPhrase() + ". Response: " + body);
+                      statusLine.reasonPhrase());
             return;
         }
         http::Response clientResponse(http::StatusCode::OK);
@@ -2669,7 +2755,9 @@ void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPReq
 
     LOG_DBG("Deleting presetfile with fileId[" << fileId << "] from WopiHost[" << uriAnonym << ']');
     httpSession->setFinishedHandler(std::move(finishedCallback));
-    httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll());
+    if (!httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll()))
+        return;
+    httpSession->response()->setBodySizeLimit(MaxHttpFetchSizeBytes);
 }
 
 void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPRequest& request,
@@ -2706,6 +2794,16 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
         return;
     }
 
+    std::string fileId;
+    if (!buildSettingsUploadFileId(filePath, fileName, fileId)) {
+        LOG_WRN("Rejected settings upload to filePath ["
+                << Anonymizer::anonymizeUrl(filePath) << "] with file name ["
+                << Anonymizer::anonymizeUrl(fileName) << ']');
+        sendError(http::StatusCode::Forbidden, getRequestPath(request), socket, shortMessage,
+                  "Invalid filePath or file name");
+        return;
+    }
+
     Poco::URI wopiUri(wopiSettingBaseUrl + "/upload");
 
     if (!isAllowedWopiHost(wopiUri))
@@ -2717,17 +2815,17 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
         return;
     }
 
-    const std::string fileId = filePath + fileName;
-
     auto uploadedFileOwnership = partHandler.getFileOwnership();
 
-    if (fileName == "viewsetting.json")
+    const std::span<const std::string_view> secretFields = SettingsSecrets::fieldsFor(fileName);
+    if (!secretFields.empty())
     {
-        // viewsetting.json carries user secrets. Restore any the browser asked
-        // to keep from the stored file, then write the merged file back.
-        handleViewSettingUpload(wopiSettingBaseUrl, fileId, token,
-                                form.get("currentFileUrl", std::string()), uploadedFilePath,
-                                std::move(uploadedFileOwnership), getRequestPath(request), socket);
+        // This settings file carries a secret. Restore any the browser asked to
+        // keep from the stored file, then write the merged file back.
+        handleSettingsUploadWithSecrets(wopiSettingBaseUrl, fileId, token,
+                                        form.get("currentFileUrl", std::string()), uploadedFilePath,
+                                        std::move(uploadedFileOwnership), secretFields,
+                                        getRequestPath(request), socket);
         return;
     }
 
@@ -2742,7 +2840,7 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
     httpRequest.set("Content-Type", "application/octet-stream");
     httpRequest.setBodyFile(uploadedFilePath);
 
-    auto httpSession = StorageConnectionManager::getHttpSession(wopiUri);
+    auto httpSession = StorageConnectionManager::getWopiHttpSession(wopiUri);
 
     std::weak_ptr<StreamSocket> socketWeak(socket);
 
@@ -2781,10 +2879,11 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
     httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll());
 }
 
-void FileServerRequestHandler::handleViewSettingUpload(
-    const std::string& wopiSettingBaseUrl, const std::string& fileId, const std::string& accessToken,
-    const std::string& currentFileUrl, const std::string& uploadedFilePath,
-    std::shared_ptr<FileUtil::OwnedFile> uploadedFileOwnership, const std::string& requestPath,
+void FileServerRequestHandler::handleSettingsUploadWithSecrets(
+    const std::string& wopiSettingBaseUrl, const std::string& fileId,
+    const std::string& accessToken, const std::string& currentFileUrl,
+    const std::string& uploadedFilePath, std::shared_ptr<FileUtil::OwnedFile> uploadedFileOwnership,
+    std::span<const std::string_view> secretFields, const std::string& requestPath,
     const std::shared_ptr<StreamSocket>& socket)
 {
     const std::string shortMessage = "Failed to upload preset file.";
@@ -2833,8 +2932,7 @@ void FileServerRequestHandler::handleViewSettingUpload(
             std::shared_ptr<StreamSocket> destSocket = socketWeak.lock();
             if (!destSocket)
             {
-                LOG_ERR("Invalid socket while uploading viewsetting.json to wopiHost["
-                        << uriAnonym << ']');
+                LOG_ERR("Invalid socket while uploading settings to wopiHost[" << uriAnonym << ']');
                 return;
             }
 
@@ -2842,7 +2940,7 @@ void FileServerRequestHandler::handleViewSettingUpload(
             const http::StatusLine statusLine = httpResponse->statusLine();
             if (statusLine.statusCode() != http::StatusCode::OK)
             {
-                LOG_ERR("Failed to upload viewsetting.json to wopiHost["
+                LOG_ERR("Failed to upload settings to wopiHost["
                         << uriAnonym << "] with status[" << statusLine.reasonPhrase() << ']');
                 sendError(statusLine.statusCode(), requestPath, destSocket, shortMessage,
                           statusLine.reasonPhrase());
@@ -2852,18 +2950,18 @@ void FileServerRequestHandler::handleViewSettingUpload(
             http::Response httpResponseToClient(http::StatusCode::OK);
             httpResponseToClient.setBody("File uploaded successfully to WopiHost.");
             destSocket->sendAndShutdown(httpResponseToClient);
-            LOG_TRC("Successfully uploaded viewsetting.json to wopiHost[" << uriAnonym << ']');
+            LOG_TRC("Successfully uploaded settings to wopiHost[" << uriAnonym << ']');
         };
 
-        auto httpSession = StorageConnectionManager::getHttpSession(wopiUri);
+        auto httpSession = StorageConnectionManager::getWopiHttpSession(wopiUri);
         httpSession->setFinishedHandler(std::move(finishedCallback));
         httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll());
     };
 
     // Nothing to keep: strip the transport-only flags and write straight back.
-    if (!bodyKeepsStoredSecret(uploadedBody))
+    if (!bodyKeepsStoredSecret(uploadedBody, secretFields))
     {
-        postBody(mergeKeptViewSettingSecrets(uploadedBody, std::string()));
+        postBody(mergeKeptSettingSecrets(uploadedBody, std::string(), secretFields));
         return;
     }
 
@@ -2906,36 +3004,47 @@ void FileServerRequestHandler::handleViewSettingUpload(
 
     http::Session::FinishedCallback storedCallback =
         [uploadedBody = std::move(uploadedBody), postBody = std::move(postBody), storedUriAnonym,
-         requestPath, shortMessage,
+         requestPath, shortMessage, secretFields,
          socketWeak](const std::shared_ptr<http::Session>& wopiSession)
     {
         std::shared_ptr<StreamSocket> destSocket = socketWeak.lock();
         if (!destSocket)
         {
-            LOG_ERR("Invalid socket while reading stored viewsetting.json from ["
-                    << storedUriAnonym << ']');
+            LOG_ERR("Invalid socket reading stored settings from [" << storedUriAnonym << ']');
             return;
         }
 
         const auto httpResponse = wopiSession->response();
+        if (httpResponse->state() != http::Response::State::Complete)
+        {
+            // Do not write back: merging a partial file would drop the secret we
+            // were asked to keep.
+            LOG_ERR("Failed to read stored settings from [" << storedUriAnonym
+                    << "]: the transfer did not complete");
+            sendError(http::StatusCode::BadGateway, requestPath, destSocket, shortMessage,
+                      "The transfer did not complete");
+            return;
+        }
+
         if (httpResponse->statusLine().statusCode() != http::StatusCode::OK)
         {
             // Do not write back: that would drop the secret we were asked to keep.
-            LOG_ERR("Failed to read stored viewsetting.json from [" << storedUriAnonym
+            LOG_ERR("Failed to read stored settings from [" << storedUriAnonym
                     << "] with status [" << httpResponse->statusLine().reasonPhrase() << ']');
             sendError(httpResponse->statusLine().statusCode(), requestPath, destSocket, shortMessage,
                       "Could not read the stored settings needed to keep the saved key");
             return;
         }
 
-        postBody(mergeKeptViewSettingSecrets(uploadedBody, httpResponse->getBody()));
+        postBody(mergeKeptSettingSecrets(uploadedBody, httpResponse->getBody(), secretFields));
     };
 
-    LOG_DBG("Reading stored viewsetting.json from [" << storedUriAnonym
-            << "] to keep a saved secret");
-    auto storedSession = StorageConnectionManager::getHttpSession(storedUri);
+    LOG_DBG("Reading stored settings from [" << storedUriAnonym << "] to keep a saved secret");
+    auto storedSession = StorageConnectionManager::getWopiHttpSession(storedUri);
     storedSession->setFinishedHandler(std::move(storedCallback));
-    storedSession->asyncRequest(storedRequest, COOLWSD::getWebServerPoll());
+    if (!storedSession->asyncRequest(storedRequest, COOLWSD::getWebServerPoll()))
+        return;
+    storedSession->response()->setBodySizeLimit(MaxHttpFetchSizeBytes);
 }
 
 void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& request,
@@ -3019,6 +3128,48 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
 
     csp.merge(config.getString("net.content_security_policy", ""));
 
+    // The integrator embeds this page in an iframe, so a configured frame-ancestors list has to
+    // be widened with coolwsd's own host and the integrator's host, the way preprocessFile()
+    // widens it for the document page. Pinning frame-ancestors to one integrator would
+    // otherwise block the settings iframe of every other one, this host included. Where the
+    // config names no frame ancestor the page carries no frame-ancestors directive at all and
+    // stays framable by any integrator, so there is nothing to widen.
+    std::string frameAncestors = getConfiguredFrameAncestors(config);
+    if (!frameAncestors.empty())
+    {
+        const Poco::URI uriHost(cnxDetails.getWebSocketUrl());
+        const std::string coolwsdHost = uriHost.getHost();
+        if (!coolwsdHost.empty())
+            frameAncestors += ' ' + coolwsdHost + ":*";
+
+        // The integrator posts the base URL of its own settings endpoint, which names the host
+        // the settings iframe is framed from.
+        const std::string settingBaseUrl = form.get("wopi_setting_base_url", "");
+        if (!settingBaseUrl.empty())
+        {
+            try
+            {
+                const Poco::URI uriSettingBase(settingBaseUrl);
+                const std::string integratorHost = uriSettingBase.getHost();
+                if (!integratorHost.empty() && net::isValidHost(integratorHost) &&
+                    integratorHost != coolwsdHost)
+                {
+                    frameAncestors += ' ' + integratorHost + ":*";
+                    LOG_TRC("Picking frame ancestor from wopi_setting_base_url: "
+                            << integratorHost);
+                }
+            }
+            catch (const Poco::SyntaxException&)
+            {
+                LOG_WRN("Not taking a frame ancestor from wopi_setting_base_url ["
+                        << settingBaseUrl << "]: it is not a valid URI");
+            }
+        }
+
+        LOG_TRC("Allowed frame ancestors:" << frameAncestors);
+        appendMissingSources(csp, "frame-ancestors", frameAncestors);
+    }
+
     response.add("Content-Security-Policy", csp.generate());
     response.set("Last-Modified", Util::getHttpTimeNow());
     response.set("Cache-Control", "max-age=11059200");
@@ -3026,6 +3177,8 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
     response.add("X-Content-Type-Options", "nosniff");
     response.add("X-XSS-Protection", "1; mode=block");
     response.add("Referrer-Policy", "no-referrer");
+    response.add("Cross-Origin-Resource-Policy", "cross-origin");
+    response.add("Cross-Origin-Embedder-Policy", "require-corp");
 
     response.setBody(std::move(adminFile));
     socket->send(response);

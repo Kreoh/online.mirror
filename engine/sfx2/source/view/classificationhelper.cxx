@@ -50,6 +50,7 @@
 #include <officecfg/Office/Common.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -137,34 +138,34 @@ public:
 
     SfxClassificationParser();
 
-    void SAL_CALL startDocument() override;
+    void startDocument() override;
 
-    void SAL_CALL endDocument() override;
+    void endDocument() override;
 
-    void SAL_CALL startElement(const OUString& rName, const uno::Reference<xml::sax::XAttributeList>& xAttribs) override;
+    void startElement(const OUString& rName, const uno::Reference<xml::sax::XAttributeList>& xAttribs) override;
 
-    void SAL_CALL endElement(const OUString& rName) override;
+    void endElement(const OUString& rName) override;
 
-    void SAL_CALL characters(const OUString& rChars) override;
+    void characters(const OUString& rChars) override;
 
-    void SAL_CALL ignorableWhitespace(const OUString& rWhitespaces) override;
+    void ignorableWhitespace(const OUString& rWhitespaces) override;
 
-    void SAL_CALL processingInstruction(const OUString& rTarget, const OUString& rData) override;
+    void processingInstruction(const OUString& rTarget, const OUString& rData) override;
 
-    void SAL_CALL setDocumentLocator(const uno::Reference<xml::sax::XLocator>& xLocator) override;
+    void setDocumentLocator(const uno::Reference<xml::sax::XLocator>& xLocator) override;
 };
 
 SfxClassificationParser::SfxClassificationParser() = default;
 
-void SAL_CALL SfxClassificationParser::startDocument()
+void SfxClassificationParser::startDocument()
 {
 }
 
-void SAL_CALL SfxClassificationParser::endDocument()
+void SfxClassificationParser::endDocument()
 {
 }
 
-void SAL_CALL SfxClassificationParser::startElement(const OUString& rName, const uno::Reference<xml::sax::XAttributeList>& xAttribs)
+void SfxClassificationParser::startElement(const OUString& rName, const uno::Reference<xml::sax::XAttributeList>& xAttribs)
 {
     if (rName == "baf:PolicyAuthorityName")
     {
@@ -271,7 +272,7 @@ void SAL_CALL SfxClassificationParser::startElement(const OUString& rName, const
     }
 }
 
-void SAL_CALL SfxClassificationParser::endElement(const OUString& rName)
+void SfxClassificationParser::endElement(const OUString& rName)
 {
     if (rName == "baf:PolicyAuthorityName")
         m_bInPolicyAuthorityName = false;
@@ -317,7 +318,7 @@ void SAL_CALL SfxClassificationParser::endElement(const OUString& rName)
     }
 }
 
-void SAL_CALL SfxClassificationParser::characters(const OUString& rChars)
+void SfxClassificationParser::characters(const OUString& rChars)
 {
     if (m_bInPolicyAuthorityName)
         m_aPolicyAuthorityName += rChars;
@@ -335,15 +336,15 @@ void SAL_CALL SfxClassificationParser::characters(const OUString& rChars)
         m_aValue += rChars;
 }
 
-void SAL_CALL SfxClassificationParser::ignorableWhitespace(const OUString& /*rWhitespace*/)
+void SfxClassificationParser::ignorableWhitespace(const OUString& /*rWhitespace*/)
 {
 }
 
-void SAL_CALL SfxClassificationParser::processingInstruction(const OUString& /*rTarget*/, const OUString& /*rData*/)
+void SfxClassificationParser::processingInstruction(const OUString& /*rTarget*/, const OUString& /*rData*/)
 {
 }
 
-void SAL_CALL SfxClassificationParser::setDocumentLocator(const uno::Reference<xml::sax::XLocator>& /*xLocator*/)
+void SfxClassificationParser::setDocumentLocator(const uno::Reference<xml::sax::XLocator>& /*xLocator*/)
 {
 }
 
@@ -382,7 +383,7 @@ SfxClassificationHelper::Impl::Impl(uno::Reference<document::XDocumentProperties
 
 void SfxClassificationHelper::Impl::parsePolicy()
 {
-    const uno::Reference<uno::XComponentContext>& xComponentContext = comphelper::getProcessComponentContext();
+    const uno::Reference<cpo::uno::XComponentContext>& xComponentContext = comphelper::getProcessComponentContext();
     SvtPathOptions aOptions;
     OUString aPath = aOptions.GetClassificationPath();
 

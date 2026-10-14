@@ -162,6 +162,39 @@ describe(['tagdesktop'], 'JSDialog unit test', { testIsolation: false }, functio
 		cy.cGet('#snackbar').should('not.exist');
 	});
 
+	it('Snackbar without an action is announced through the live region', function() {
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.uiManager.showSnackbar('announced notification', null, null, -1);
+		});
+
+		cy.cGet('#snackbar-live-region')
+			.should('have.attr', 'aria-live', 'polite')
+			.and('have.text', 'announced notification');
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.uiManager.closeSnackbar();
+		});
+		cy.cGet('#snackbar-live-region').should('have.text', '');
+	});
+
+	it('Snackbar with an action leaves the message to its button', function() {
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.uiManager.showSnackbar(
+				'acted notification', 'Do it', function() {}, -1, false, true);
+		});
+
+		cy.cGet('#snackbar-container #button').should('have.text', 'Do it');
+		cy.cGet('#snackbar-live-region').should('have.text', '');
+
+		cy.cGet('#snackbar-dismiss-button-button')
+			.should('have.attr', 'aria-label', 'Dismiss')
+			.and('have.class', 'has-img');
+		cy.cGet('#snackbar-dismiss-button-button img').should('exist');
+
+		cy.cGet('#snackbar-dismiss-button-button').click();
+		cy.cGet('#snackbar').should('not.exist');
+	});
+
 	it('JSDialog check enable edit input', function() {
 		cy.cGet('#File-tab-label').click();
 		cy.cGet('#File-container .unodownloadas button').click();
@@ -220,7 +253,9 @@ describe(['tagdesktop'], 'JSDialog unit test', { testIsolation: false }, functio
 		// FIXME: below button has class with "." inside, best to rework it
 		cy.cGet('#Format [id^="format-style-dialog"]:visible button').click();
 		cy.cGet('#filter-input').select('4');
-		cy.wait(500);
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
 		cy.cGet('#flatview .ui-treeview-entry').eq(6).rightclick();
 		cy.get('@consoleError').should('not.be.called');
 	});

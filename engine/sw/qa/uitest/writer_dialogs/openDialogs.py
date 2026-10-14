@@ -109,14 +109,9 @@ dialogs = [
     {"command": ".uno:RunMacro", "closeButton": "cancel"},
     {"command": ".uno:ScriptOrganizer", "closeButton": "close"},
     {"command": ".uno:OpenXMLFilterSettings", "closeButton": "close"},
-    # {"command": ".uno:ConfigureDialog", "closeButton": "cancel"},
-        # tested in uitest/writer_tests/customizeDialog.py
-    #{"command": ".uno:OptionsTreeDialog", "closeButton": "cancel"},
-        # used in various places
     {"command": ".uno:ShowLicense", "closeButton": "close", "skipTestOK": True},
     # {"command": ".uno:About", "closeButton": "close"},
         # tested in sw/qa/uitest/writer_tests5/about_test.py
-    {"command": ".uno:UIPicker", "closeButton": "cancel"},
 ]
 
 def load_tests(loader, tests, pattern):

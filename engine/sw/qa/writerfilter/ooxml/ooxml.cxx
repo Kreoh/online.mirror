@@ -18,6 +18,7 @@
 #include <fmtcntnt.hxx>
 #include <ndtxt.hxx>
 #include <docsh.hxx>
+#include <frameformats.hxx>
 #include <wrtsh.hxx>
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
@@ -28,6 +29,7 @@
 #include <tabfrm.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {

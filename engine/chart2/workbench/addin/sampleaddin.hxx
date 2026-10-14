@@ -34,9 +34,9 @@
 
 #include <com/sun/star/chart/XChartDocument.hpp>
 
-css::uno::Reference< css::uno::XInterface >
+cpo::uno::Reference< cpo::uno::XInterface >
     SampleAddIn_CreateInstance(
-        const css::uno::Reference< css::lang::XMultiServiceFactory >& );
+        const cpo::uno::Reference< css::lang::XMultiServiceFactory >& );
 
 class SampleAddIn : public cppu::WeakImplHelper<
     css::lang::XInitialization,
@@ -50,11 +50,11 @@ class SampleAddIn : public cppu::WeakImplHelper<
     css::lang::XLocalizable  >
 {
 private:
-    css::uno::Reference< css::chart::XChartDocument > mxChartDoc;
+    cpo::uno::Reference< css::chart::XChartDocument > mxChartDoc;
     css::lang::Locale maLocale;
 
-    css::uno::Reference< css::drawing::XShape > mxMyRedLine;
-    css::uno::Reference< css::drawing::XShape > mxMyText;
+    cpo::uno::Reference< css::drawing::XShape > mxMyRedLine;
+    cpo::uno::Reference< css::drawing::XShape > mxMyText;
 
 public:
     SampleAddIn();
@@ -64,7 +64,7 @@ public:
     static OUString  getImplementationName_Static();
     static cpo::uno::Sequence< OUString > getSupportedServiceNames_Static();
 
-    bool getLogicalPosition( css::uno::Reference< css::drawing::XShape >& xAxis,
+    bool getLogicalPosition( cpo::uno::Reference< css::drawing::XShape >& xAxis,
                                  double fValue,
                                  bool bVertical,
                                  css::awt::Point& aOutPosition );
@@ -72,81 +72,81 @@ public:
     // XInitialization
     virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
         throw( cpo::uno::Exception,
-               css::uno::RuntimeException );
+               cpo::uno::RuntimeException );
 
     // XDiagram
-    virtual OUString getDiagramType() throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getDataRowProperties( sal_Int32 nRow )
+    virtual OUString getDiagramType() throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getDataRowProperties( sal_Int32 nRow )
         throw( css::lang::IndexOutOfBoundsException,
-               css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getDataPointProperties( sal_Int32 nCol, sal_Int32 nRow )
+               cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getDataPointProperties( sal_Int32 nCol, sal_Int32 nRow )
         throw( css::lang::IndexOutOfBoundsException,
-               css::uno::RuntimeException );
+               cpo::uno::RuntimeException );
 
     // XShape ( ::XDiagram )
     virtual css::awt::Size getSize()
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
     virtual void setSize( const css::awt::Size& )
         throw( css::beans::PropertyVetoException,
-               css::uno::RuntimeException );
+               cpo::uno::RuntimeException );
     virtual css::awt::Point getPosition()
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
     virtual void setPosition( const css::awt::Point& )
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
 
     // XShapeDescriptor ( ::XShape ::XDiagram )
-    virtual OUString getShapeType() throw( css::uno::RuntimeException );
+    virtual OUString getShapeType() throw( cpo::uno::RuntimeException );
 
     // XAxisXSupplier
-    virtual css::uno::Reference< css::drawing::XShape > getXAxisTitle()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getXAxis()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getXMainGrid()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getXHelpGrid()
-        throw( css::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::drawing::XShape > getXAxisTitle()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getXAxis()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getXMainGrid()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getXHelpGrid()
+        throw( cpo::uno::RuntimeException );
 
     // XAxisYSupplier
-    virtual css::uno::Reference< css::drawing::XShape > getYAxisTitle()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getYAxis()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getYHelpGrid()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getYMainGrid()
-        throw( css::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::drawing::XShape > getYAxisTitle()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getYAxis()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getYHelpGrid()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getYMainGrid()
+        throw( cpo::uno::RuntimeException );
 
     // XStatisticDisplay
-    virtual css::uno::Reference< css::beans::XPropertySet > getUpBar()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getDownBar()
-        throw( css::uno::RuntimeException );
-    virtual css::uno::Reference< css::beans::XPropertySet > getMinMaxLine()
-        throw( css::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getUpBar()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getDownBar()
+        throw( cpo::uno::RuntimeException );
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getMinMaxLine()
+        throw( cpo::uno::RuntimeException );
 
     // XServiceName
-    virtual OUString getServiceName() throw( css::uno::RuntimeException );
+    virtual OUString getServiceName() throw( cpo::uno::RuntimeException );
 
     // XServiceInfo
-    virtual OUString getImplementationName() throw( css::uno::RuntimeException );
+    virtual OUString getImplementationName() throw( cpo::uno::RuntimeException );
     virtual bool supportsService( const OUString& ServiceName )
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
     virtual cpo::uno::Sequence< OUString > getSupportedServiceNames()
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
 
     // XRefreshable
-    virtual void refresh() throw( css::uno::RuntimeException );
-    virtual void addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l )
-        throw( css::uno::RuntimeException );
-    virtual void removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l )
-        throw( css::uno::RuntimeException );
+    virtual void refresh() throw( cpo::uno::RuntimeException );
+    virtual void addRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l )
+        throw( cpo::uno::RuntimeException );
+    virtual void removeRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l )
+        throw( cpo::uno::RuntimeException );
 
     // XLocalizable
     virtual void setLocale( const css::lang::Locale& eLocale )
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
     virtual css::lang::Locale getLocale()
-        throw( css::uno::RuntimeException );
+        throw( cpo::uno::RuntimeException );
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

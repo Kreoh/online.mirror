@@ -29,7 +29,7 @@
 #include <framework/addonsoptions.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 
 namespace framework
@@ -76,7 +76,7 @@ void FixedImageControl::dispose()
 }
 
 FixedImageToolbarController::FixedImageToolbarController(
-    const Reference<XComponentContext>& rxContext, const Reference<XFrame>& rFrame,
+    const Reference<cpo::uno::XComponentContext>& rxContext, const Reference<XFrame>& rFrame,
     ToolBox* pToolbar, ToolBoxItemId nID, const OUString& rCommand)
     : ComplexToolbarController(rxContext, rFrame, pToolbar, nID, rCommand)
     , m_eSymbolSize(SvtMiscOptions::GetCurrentSymbolsSize())

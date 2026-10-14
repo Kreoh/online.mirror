@@ -193,11 +193,11 @@ class ViewLayoutCalc extends ViewLayoutBase {
 			scrollProps.verticalScrollSize,
 		);
 
-		// Project the current view onto the scrollbar track.
+		// Project the current scroll position onto the scrollbar track.
 		scrollProps.startX =
 			scrollProps.xOffset +
 			ViewLayoutCalc.viewToTrack(
-				this._viewedRectangle.pX1,
+				scrollProps.viewX,
 				this.viewSize.pX,
 				documentAnchor.size[0],
 				scrollProps.horizontalScrollLength,
@@ -206,7 +206,7 @@ class ViewLayoutCalc extends ViewLayoutBase {
 		scrollProps.startY =
 			scrollProps.yOffset +
 			ViewLayoutCalc.viewToTrack(
-				this._viewedRectangle.pY1,
+				scrollProps.viewY,
 				this.viewSize.pY,
 				documentAnchor.size[1],
 				scrollProps.verticalScrollLength,
@@ -245,20 +245,75 @@ class ViewLayoutCalc extends ViewLayoutBase {
 	// scroll (wheel, scrollbar, auto-scroll). In RTL a rightward screen delta
 	// moves the document the other way, so mirror X here - at the screen-input
 	// boundary - and keep the document-space core direction-agnostic.
-	public override scroll(pX: number, pY: number): any {
+	public override scroll(
+		pX: number,
+		pY: number,
+		userIsScrolling: boolean = false,
+	): boolean {
 		if (this.isRTL()) pX = -pX;
-		this.scrollByDocumentDelta(pX, pY);
+		const scrolled = this.scrollByDocumentDelta(pX, pY);
+
+		// Following our own cursor only holds while the cursor is on screen.
+		if (userIsScrolling) app.updateFollowingUsers();
+		return scrolled;
+	}
+
+	// The scroll position is scrollProperties.viewX and viewY, in canvas (core)
+	// pixels. Calc's viewed rectangle is the frame placed at that position, so it
+	// is rebuilt from there whenever the position or the frame size changes.
+	// Assigning through the property rather than the field keeps the section
+	// container refresh and the previous-rectangle bookkeeping.
+	public rebuildViewedRectangle(): void {
+		const frame = this.frameSize;
+
+		// A document container that is hidden or not laid out yet has no frame, so
+		// there is nowhere to place it and the current rectangle stays.
+		if (frame.pX <= 0 || frame.pY <= 0) return;
+
+		this.clampScrollPosition(frame);
+
+		this.viewedRectangle = cool.SimpleRectangle.fromCorePixels([
+			this.scrollProperties.viewX,
+			this.scrollProperties.viewY,
+			frame.pX,
+			frame.pY,
+		]);
+	}
+
+	// Keep the scroll position inside the range the document spans at the current
+	// frame size, [0, view size - frame]. A frame that grows - a larger window, a
+	// sidebar or a ribbon that closes, the on-screen keyboard going down - makes
+	// that range smaller, while the position stays where the last scroll left it.
+	private clampScrollPosition(frame: cool.SimplePoint): void {
+		const maxX = Math.max(0, this.viewSize.pX - frame.pX);
+		const maxY = Math.max(0, this.viewSize.pY - frame.pY);
+
+		this.scrollProperties.viewX = Math.min(
+			maxX,
+			Math.max(0, this.scrollProperties.viewX),
+		);
+		this.scrollProperties.viewY = Math.min(
+			maxY,
+			Math.max(0, this.scrollProperties.viewY),
+		);
+	}
+
+	// Calc has one shape for the viewed rectangle, so both a scroll and a zoom
+	// arrive at it the same way.
+	protected override refreshVisibleAreaRectangle(): void {
+		this.rebuildViewedRectangle();
 	}
 
 	// pX, pY are document-space scroll deltas in canvas (core) pixels (no RTL
-	// mirroring). Clamps to the scrollable range, updates the viewed rectangle
-	// and refreshes headers/cursor/tiles. Both scroll() (screen input) and
-	// scrollTo() (absolute document position) funnel through here.
-	private scrollByDocumentDelta(pX: number, pY: number): void {
+	// mirroring). Clamps to the scrollable range, moves the scroll position and
+	// refreshes headers/cursor/tiles. Both scroll() (screen input) and
+	// scrollTo() (absolute document position) funnel through here. Returns true
+	// when the scroll position changed.
+	private scrollByDocumentDelta(pX: number, pY: number): boolean {
 		const documentAnchor = this.getDocumentAnchorSection();
 
-		const prevX = this._viewedRectangle.pX1;
-		const prevY = this._viewedRectangle.pY1;
+		const prevX = this.scrollProperties.viewX;
+		const prevY = this.scrollProperties.viewY;
 		let newX = prevX;
 		let newY = prevY;
 
@@ -272,17 +327,11 @@ class ViewLayoutCalc extends ViewLayoutBase {
 			newY = Math.max(0, Math.min(maxView, prevY + pY));
 		}
 
-		if (newX === prevX && newY === prevY) return;
+		if (newX === prevX && newY === prevY) return false;
 
-		// Update the viewed rectangle internally; the setter refreshes the
-		// section container and remembers the previous rectangle for pan
-		// direction pre-fetch.
-		this.viewedRectangle = cool.SimpleRectangle.fromCorePixels([
-			newX,
-			newY,
-			this._viewedRectangle.pWidth,
-			this._viewedRectangle.pHeight,
-		]);
+		this.scrollProperties.viewX = newX;
+		this.scrollProperties.viewY = newY;
+		this.rebuildViewedRectangle();
 
 		// Row/column headers recompute their visible entries from the viewed
 		// rectangle. They used to do this off the leaflet map 'move' event;
@@ -299,6 +348,9 @@ class ViewLayoutCalc extends ViewLayoutBase {
 		// Request the tiles that cover the new visible area and mark the
 		// already-loaded ones current.
 		this.refreshTiles();
+
+		this.onViewMoved();
+		return true;
 	}
 
 	// Refresh the visible-tile list from the viewed rectangle and hand it to
@@ -310,12 +362,22 @@ class ViewLayoutCalc extends ViewLayoutBase {
 		RenderManager.requestVisibleTiles(this.currentCoordList);
 	}
 
+	// Calc scrolls by moving the viewed rectangle. It holds the plain scroll
+	// offset in core pixels, with no centring, so it is the viewport.
+	public override getViewportCorePixelBounds(): cool.Bounds {
+		const rect = this._viewedRectangle;
+		return new cool.Bounds(
+			new cool.Point(rect.pX1, rect.pY1),
+			new cool.Point(rect.pX1 + rect.pWidth, rect.pY1 + rect.pHeight),
+		);
+	}
+
 	// pX, pY are absolute view-space positions in canvas (core) pixels. This is
 	// an absolute document-space move, so it bypasses scroll()'s RTL screen
 	// mirroring and applies the delta directly.
 	public override scrollTo(pX: number, pY: number): void {
-		const deltaX = pX - this._viewedRectangle.pX1;
-		const deltaY = pY - this._viewedRectangle.pY1;
+		const deltaX = pX - this.scrollProperties.viewX;
+		const deltaY = pY - this.scrollProperties.viewY;
 		if (deltaX !== 0 || deltaY !== 0)
 			this.scrollByDocumentDelta(deltaX, deltaY);
 	}

@@ -60,8 +60,8 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::xml::sax;
 using namespace ::xmloff::token;
 
@@ -76,7 +76,7 @@ SmMlElement* SmMLImportWrapper::getElementTree()
 ErrCode SmMLImportWrapper::Import(SfxMedium& rMedium)
 {
     // Fetch context
-    const uno::Reference<uno::XComponentContext>& xContext(
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(
         comphelper::getProcessComponentContext());
     if (!xContext.is())
     {
@@ -286,7 +286,7 @@ ErrCode SmMLImportWrapper::Import(SfxMedium& rMedium)
 ErrCode SmMLImportWrapper::Import(std::u16string_view aSource)
 {
     // Fetch context
-    const uno::Reference<uno::XComponentContext>& xContext(
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(
         comphelper::getProcessComponentContext());
     if (!xContext.is())
     {
@@ -348,7 +348,7 @@ ErrCode SmMLImportWrapper::Import(std::u16string_view aSource)
 // read a component from input stream
 ErrCode SmMLImportWrapper::ReadThroughComponentIS(
     const Reference<io::XInputStream>& xInputStream, const Reference<XComponent>& xModelComponent,
-    Reference<uno::XComponentContext> const& rxContext,
+    Reference<cpo::uno::XComponentContext> const& rxContext,
     Reference<beans::XPropertySet> const& rPropSet, const char16_t* pFilterName, bool bEncrypted,
     int_fast16_t nSyntaxVersion)
 {
@@ -385,14 +385,14 @@ ErrCode SmMLImportWrapper::ReadThroughComponentIS(
         Reference<css::xml::sax::XFastDocumentHandler> xFastDocHandler(xFilter, UNO_QUERY);
         if (xFastParser)
         {
-            xFastParser->setCustomEntityNames(starmathdatabase::icustomMathmlHtmlEntities);
+            xFastParser->setCustomEntityNames(starmathdatabase::getCustomMathmlHtmlEntities());
             xFastParser->parseStream(aParserInput);
         }
         else if (xFastDocHandler)
         {
             Reference<css::xml::sax::XFastParser> xParser
                 = css::xml::sax::FastParser::create(rxContext);
-            xParser->setCustomEntityNames(starmathdatabase::icustomMathmlHtmlEntities);
+            xParser->setCustomEntityNames(starmathdatabase::getCustomMathmlHtmlEntities());
             xParser->setFastDocumentHandler(xFastDocHandler);
             xParser->parseStream(aParserInput);
         }
@@ -488,7 +488,7 @@ ErrCode SmMLImportWrapper::ReadThroughComponentIS(
 ErrCode SmMLImportWrapper::ReadThroughComponentS(const uno::Reference<embed::XStorage>& xStorage,
                                                  const Reference<XComponent>& xModelComponent,
                                                  const char16_t* pStreamName,
-                                                 Reference<uno::XComponentContext> const& rxContext,
+                                                 Reference<cpo::uno::XComponentContext> const& rxContext,
                                                  Reference<beans::XPropertySet> const& rPropSet,
                                                  const char16_t* pFilterName,
                                                  int_fast16_t nSyntaxVersion)
@@ -540,9 +540,9 @@ ErrCode SmMLImportWrapper::ReadThroughComponentS(const uno::Reference<embed::XSt
 
 // read a component from text
 ErrCode SmMLImportWrapper::ReadThroughComponentMS(
-    std::u16string_view aText, const css::uno::Reference<css::lang::XComponent>& xModelComponent,
-    css::uno::Reference<css::uno::XComponentContext> const& rxContext,
-    css::uno::Reference<css::beans::XPropertySet> const& rPropSet)
+    std::u16string_view aText, const cpo::uno::Reference<css::lang::XComponent>& xModelComponent,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const& rxContext,
+    cpo::uno::Reference<css::beans::XPropertySet> const& rPropSet)
 {
     // Needs a storage but checked by caller
     // Needs a model but checked by caller
@@ -583,24 +583,24 @@ ErrCode SmMLImportWrapper::ReadThroughComponentMS(
 // SmMLImport technical
 /*************************************************************************************************/
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-Math_MLImporter_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Math_MLImporter_get_implementation(cpo::uno::XComponentContext* pCtx,
                                    cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(
         new SmMLImport(pCtx, u"com.sun.star.comp.Math.XMLImporter"_ustr, SvXMLImportFlags::ALL));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-Math_MLOasisMetaImporter_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Math_MLOasisMetaImporter_get_implementation(cpo::uno::XComponentContext* pCtx,
                                             cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SmMLImport(pCtx, u"com.sun.star.comp.Math.XMLOasisMetaImporter"_ustr,
                                         SvXMLImportFlags::META));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-Math_MLOasisSettingsImporter_get_implementation(uno::XComponentContext* pCtx,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+Math_MLOasisSettingsImporter_get_implementation(cpo::uno::XComponentContext* pCtx,
                                                 cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SmMLImport(
@@ -634,21 +634,21 @@ private:
 public:
     /** Handles characters (text)
      */
-    virtual void SAL_CALL characters(const OUString& aChars) override;
+    virtual void characters(const OUString& aChars) override;
 
     /** Starts the mathml element
      */
-    virtual void SAL_CALL startFastElement(
+    virtual void startFastElement(
         sal_Int32 nElement, const Reference<XFastAttributeList>& aAttributeList) override;
 
     /** Ends the mathml element
      */
-    virtual void SAL_CALL endFastElement(sal_Int32 Element) override;
+    virtual void endFastElement(sal_Int32 Element) override;
 
     /** Creates child element
      */
     virtual uno::Reference<XFastContextHandler>
-        SAL_CALL createFastChildContext(sal_Int32 nElement,
+        createFastChildContext(sal_Int32 nElement,
                                         const uno::Reference<XFastAttributeList>& Attribs) override;
 
     /** Inherits the style from it's parents
@@ -668,7 +668,7 @@ public:
     SmLengthValue handleLengthAttribute(const OUString& aAttribute);
 };
 
-uno::Reference<XFastContextHandler> SAL_CALL
+uno::Reference<XFastContextHandler>
 SmMLImportContext::createFastChildContext(sal_Int32, const uno::Reference<XFastAttributeList>&)
 {
     return new SmMLImportContext(static_cast<SmMLImport&>(GetImport()), &m_pElement);
@@ -1375,7 +1375,7 @@ void SmMLImport::SetConfigurationSettings(const Sequence<PropertyValue>& aConfPr
     }
 }
 
-SmMLImport::SmMLImport(const css::uno::Reference<css::uno::XComponentContext>& rContext,
+SmMLImport::SmMLImport(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
                        OUString const& implementationName, SvXMLImportFlags nImportFlags)
     : SvXMLImport(rContext, implementationName, nImportFlags)
     , m_pElementTree(nullptr)

@@ -43,6 +43,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 using namespace ::ooo::vba::excel::XlChartType;
 using namespace ::ooo::vba::excel::XlRowCol;
@@ -64,7 +65,7 @@ constexpr OUString DIM3D(u"Dim3D"_ustr);
 constexpr OUString HASMAINTITLE(u"HasMainTitle"_ustr);
 constexpr OUString HASLEGEND(u"HasLegend"_ustr);
 
-ScVbaChart::ScVbaChart( const css::uno::Reference< ov::XHelperInterface >& _xParent, const css::uno::Reference< css::uno::XComponentContext >& _xContext, const css::uno::Reference< css::lang::XComponent >& _xChartComponent, css::uno::Reference< css::table::XTableChart >  _xTableChart ) : ChartImpl_BASE( _xParent, _xContext ), mxTableChart(std::move( _xTableChart ))
+ScVbaChart::ScVbaChart( const cpo::uno::Reference< ov::XHelperInterface >& _xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& _xContext, const cpo::uno::Reference< css::lang::XComponent >& _xChartComponent, cpo::uno::Reference< css::table::XTableChart >  _xTableChart ) : ChartImpl_BASE( _xParent, _xContext ), mxTableChart(std::move( _xTableChart ))
 {
     mxChartDocument.set( _xChartComponent, uno::UNO_QUERY_THROW ) ;
     // #TODO is it possible that the XPropertySet interface is not set
@@ -76,7 +77,7 @@ ScVbaChart::ScVbaChart( const css::uno::Reference< ov::XHelperInterface >& _xPar
     mxChartPropertySet.set( _xChartComponent, uno::UNO_QUERY_THROW ) ;
 }
 
-OUString SAL_CALL
+OUString
 ScVbaChart::getName()
 {
     OUString sName;
@@ -91,13 +92,13 @@ ScVbaChart::getName()
     return sName;
 }
 
-cpo::uno::Any  SAL_CALL
+cpo::uno::Any
 ScVbaChart::SeriesCollection(const cpo::uno::Any&)
 {
     return cpo::uno::Any();
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaChart::getChartType()
 {
     sal_Int32 nChartType = -1;
@@ -211,12 +212,12 @@ ScVbaChart::getChartType()
     }
     catch ( const cpo::uno::Exception& )
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
     return nChartType;
 }
 
-void SAL_CALL
+void
 ScVbaChart::setChartType( ::sal_Int32 _nChartType )
 {
     try
@@ -335,7 +336,7 @@ ScVbaChart::setChartType( ::sal_Int32 _nChartType )
             }
             break;
         default:
-            throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_CONVERSION), OUString() );
+            throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_CONVERSION), OUString() );
         }
 
         switch (_nChartType)
@@ -537,11 +538,11 @@ ScVbaChart::setChartType( ::sal_Int32 _nChartType )
     }
     catch ( const cpo::uno::Exception& )
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
-void SAL_CALL
+void
 ScVbaChart::Activate()
 {
     // #TODO how are Chart sheets handled ( I know we don't even consider
@@ -551,14 +552,14 @@ ScVbaChart::Activate()
     uno::Reference< XHelperInterface > xParent( getParent() );
     ScVbaChartObject* pChartObj = static_cast< ScVbaChartObject* >( xParent.get() );
     if ( !pChartObj )
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), u"no ChartObject as parent"_ustr );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), u"no ChartObject as parent"_ustr );
 
     pChartObj->Activate();
 
 }
 
-void SAL_CALL
-ScVbaChart::setSourceData( const css::uno::Reference< ::ooo::vba::excel::XRange >& _xCalcRange, const cpo::uno::Any& _aPlotBy )
+void
+ScVbaChart::setSourceData( const cpo::uno::Reference< ::ooo::vba::excel::XRange >& _xCalcRange, const cpo::uno::Any& _aPlotBy )
 {
     try
     {
@@ -614,7 +615,7 @@ ScVbaChart::setSourceData( const css::uno::Reference< ::ooo::vba::excel::XRange 
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
@@ -649,16 +650,16 @@ ScVbaChart::setPlotBy( ::sal_Int32 _nPlotBy )
                 mxDiagramPropertySet->setPropertyValue( DATAROWSOURCE, cpo::uno::Any( chart::ChartDataRowSource_COLUMNS) );
                 break;
             default:
-                throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+                throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
         }
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaChart::getPlotBy(  )
 {
     try
@@ -676,7 +677,7 @@ ScVbaChart::getPlotBy(  )
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
@@ -692,25 +693,25 @@ ScVbaChart::setDiagram( const OUString& _sDiagramType )
     }
     catch ( const cpo::uno::Exception& )
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
 // #TODO find out why we have Location/getLocation? there is afaik no
 // Location property, just a Location function for the Chart object
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaChart::Location()
 {
     return getLocation();
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaChart::getLocation()
 {
      return -1;
 }
 
-void SAL_CALL
+void
 ScVbaChart::setLocation( ::sal_Int32 /*where*/, const cpo::uno::Any& /*Name*/ )
 {
     // Helper api just stubs out the code <shrug>
@@ -798,7 +799,7 @@ ScVbaChart::setLocation( ::sal_Int32 /*where*/, const cpo::uno::Any& /*Name*/ )
 
 }
 
-bool SAL_CALL
+bool
 ScVbaChart::getHasTitle(  )
 {
     bool bHasTitle = false;
@@ -808,12 +809,12 @@ ScVbaChart::getHasTitle(  )
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
     return bHasTitle;
 }
 
-void SAL_CALL
+void
 ScVbaChart::setHasTitle( bool bTitle )
 {
     try
@@ -822,12 +823,12 @@ ScVbaChart::setHasTitle( bool bTitle )
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 
 }
 
-bool SAL_CALL
+bool
 ScVbaChart::getHasLegend(  )
 {
     bool bHasLegend = false;
@@ -837,12 +838,12 @@ ScVbaChart::getHasLegend(  )
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
     return bHasLegend;
 }
 
-void SAL_CALL
+void
 ScVbaChart::setHasLegend( bool bLegend )
 {
     try
@@ -851,11 +852,11 @@ ScVbaChart::setHasLegend( bool bLegend )
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
-uno::Reference< excel::XChartTitle > SAL_CALL
+uno::Reference< excel::XChartTitle >
 ScVbaChart::getChartTitle(  )
 {
     uno::Reference< drawing::XShape > xTitleShape = mxChartDocument->getTitle();
@@ -863,7 +864,7 @@ ScVbaChart::getChartTitle(  )
     return new ScVbaChartTitle(this, mxContext, xTitleShape);
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaChart::Axes( const cpo::uno::Any& Type, const cpo::uno::Any& AxisGroup )
 {
     // mmm chart probably is the parent, #TODO check parent
@@ -942,7 +943,7 @@ ScVbaChart::getSolidType(sal_Int32 _nDeep, sal_Int32 _nVertiStacked, sal_Int32 _
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
@@ -964,7 +965,7 @@ ScVbaChart::getStockUpDownValue(sal_Int32 _nUpDown, sal_Int32 _nNotUpDown)
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
 }
 
@@ -980,7 +981,7 @@ ScVbaChart::hasMarkers()
     }
     catch (const cpo::uno::Exception&)
     {
-        throw script::BasicErrorException( OUString(), uno::Reference< uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
     }
     return bHasMarkers;
 }

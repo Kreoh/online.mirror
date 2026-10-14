@@ -23,6 +23,10 @@ $(eval $(call gb_Module_add_targets,lingucomponent,\
 	Library_spell \
 	StaticLibrary_ulingu \
 ))
+
+$(eval $(call gb_Module_add_check_targets,lingucomponent,\
+	CppunitTest_lingucomponent_spell \
+))
 endif
 
 ifeq ($(ENABLE_CURL),TRUE)
@@ -35,7 +39,16 @@ endif
 
 $(eval $(call gb_Module_add_targets,lingucomponent,\
 	$(if $(filter iOS MACOSX,$(OS)),Library_MacOSXSpell) \
+	$(if $(filter WNT,$(OS)),Library_WinSpell) \
+	CustomTarget_lightproof \
+	Library_lightproof \
 	Library_numbertext \
+	Package_lightproof \
+))
+
+$(eval $(call gb_Module_add_check_targets,lingucomponent,\
+	CppunitTest_lingucomponent_lightproof \
+	PythonTest_lingucomponent_python \
 ))
 
 # vim: set noet sw=4 ts=4:

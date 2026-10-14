@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <sdr/primitive2d/primitivefactory2d.hxx>
 #include <svx/sdr/contact/viewcontact.hxx>
 #include <svx/svdobj.hxx>
@@ -25,12 +25,13 @@
 #include <svx/unoapi.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
-cpo::uno::Sequence< css::uno::Reference< css::graphic::XPrimitive2D > > SAL_CALL PrimitiveFactory2D::createPrimitivesFromXShape(
+cpo::uno::Sequence< cpo::uno::Reference< css::graphic::XPrimitive2D > > PrimitiveFactory2D::createPrimitivesFromXShape(
     const uno::Reference< drawing::XShape >& xShape,
     const cpo::uno::Sequence< beans::PropertyValue >& /*aParms*/ )
 {
-    cpo::uno::Sequence< css::uno::Reference< css::graphic::XPrimitive2D > > aRetval;
+    cpo::uno::Sequence< cpo::uno::Reference< css::graphic::XPrimitive2D > > aRetval;
 
     if(xShape.is())
     {
@@ -65,11 +66,11 @@ void PrimitiveFactory2D::createPrimitivesFromXShape(
     }
 }
 
-cpo::uno::Sequence< css::uno::Reference< css::graphic::XPrimitive2D > > SAL_CALL PrimitiveFactory2D::createPrimitivesFromXDrawPage(
+cpo::uno::Sequence< cpo::uno::Reference< css::graphic::XPrimitive2D > > PrimitiveFactory2D::createPrimitivesFromXDrawPage(
     const uno::Reference< drawing::XDrawPage >& xDrawPage,
     const cpo::uno::Sequence< beans::PropertyValue >& /*aParms*/ )
 {
-    cpo::uno::Sequence< css::uno::Reference< css::graphic::XPrimitive2D > > aRetval;
+    cpo::uno::Sequence< cpo::uno::Reference< css::graphic::XPrimitive2D > > aRetval;
 
     if(xDrawPage.is())
     {
@@ -87,9 +88,9 @@ cpo::uno::Sequence< css::uno::Reference< css::graphic::XPrimitive2D > > SAL_CALL
     return aRetval;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_graphic_PrimitiveFactory2D_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new PrimitiveFactory2D);

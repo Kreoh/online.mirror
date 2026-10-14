@@ -44,7 +44,7 @@
 #include <com/sun/star/embed/StorageFactory.hpp>
 #include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
 
@@ -66,8 +66,9 @@
 #include <algorithm>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::osl::MutexGuard;
 
@@ -100,7 +101,7 @@ void lcl_addStorageToMediaDescriptor(
 
 Reference< embed::XStorage > lcl_createStorage(
     const OUString & rURL,
-    const Reference< uno::XComponentContext > & xContext,
+    const Reference< cpo::uno::XComponentContext > & xContext,
     const Sequence< beans::PropertyValue > & rMediaDescriptor )
 {
     // create new storage
@@ -737,43 +738,11 @@ void ChartModel::storeToStorage(
 void ChartModel::switchToStorage( const Reference< embed::XStorage >& xStorage )
 {
     m_xStorage = xStorage;
-    impl_notifyStorageChangeListeners();
 }
 
 Reference< embed::XStorage > ChartModel::getDocumentStorage()
 {
     return m_xStorage;
-}
-
-void ChartModel::impl_notifyStorageChangeListeners()
-{
-    std::unique_lock aGuard(m_aLifeTimeManager.m_aAccessMutex);
-    if( m_aLifeTimeManager.m_aStorageChangeListeners.getLength(aGuard) )
-    {
-        m_aLifeTimeManager.m_aStorageChangeListeners.forEach(aGuard,
-            [this](const uno::Reference<document::XStorageChangeListener>& l)
-            {
-                l->notifyStorageChange( static_cast< ::cppu::OWeakObject* >( this ), m_xStorage );
-            });
-    }
-}
-
-void ChartModel::addStorageChangeListener( const Reference< document::XStorageChangeListener >& xListener )
-{
-    if( m_aLifeTimeManager.impl_isDisposedOrClosed() )
-        return; //behave passive if already disposed or closed
-
-    std::unique_lock aGuard(m_aLifeTimeManager.m_aAccessMutex);
-    m_aLifeTimeManager.m_aStorageChangeListeners.addInterface( aGuard, xListener );
-}
-
-void ChartModel::removeStorageChangeListener( const Reference< document::XStorageChangeListener >& xListener )
-{
-    if( m_aLifeTimeManager.impl_isDisposedOrClosed(false) )
-        return; //behave passive if already disposed or closed
-
-    std::unique_lock aGuard(m_aLifeTimeManager.m_aAccessMutex);
-    m_aLifeTimeManager.m_aStorageChangeListeners.removeInterface(aGuard, xListener );
 }
 
 } //  namespace chart

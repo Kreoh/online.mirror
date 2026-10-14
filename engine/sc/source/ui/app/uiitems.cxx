@@ -38,7 +38,7 @@ ScInputStatusItem::ScInputStatusItem(
     aStartPos   ( rStartPos ),
     aEndPos     ( rEndPos ),
     aString     (std::move( _aString )),
-    pEditData   ( pData ? pData->Clone() : nullptr )
+    pEditData   ( pData ? std::make_unique<EditTextObject>(*pData) : nullptr )
 {
 }
 
@@ -48,7 +48,7 @@ ScInputStatusItem::ScInputStatusItem( const ScInputStatusItem& rItem ) :
     aStartPos   ( rItem.aStartPos ),
     aEndPos     ( rItem.aEndPos ),
     aString     ( rItem.aString ),
-    pEditData   ( rItem.pEditData ? rItem.pEditData->Clone() : nullptr ),
+    pEditData   ( rItem.pEditData ? std::make_unique<EditTextObject>(*rItem.pEditData) : nullptr ),
     maMisspellRanges(rItem.maMisspellRanges)
 {
 }
@@ -288,11 +288,6 @@ bool ScUserListItem::operator==( const SfxPoolItem& rItem ) const
 ScUserListItem* ScUserListItem::Clone( SfxItemPool * ) const
 {
     return new ScUserListItem( *this );
-}
-
-void ScUserListItem::SetUserList( const ScUserList& rUserList )
-{
-    pUserList.reset( new ScUserList( rUserList ) );
 }
 
 /**

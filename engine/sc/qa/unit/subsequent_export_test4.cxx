@@ -8,6 +8,7 @@
  */
 
 #include "helper/qahelper.hxx"
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <docsh.hxx>
 #include <scitems.hxx>
@@ -42,12 +43,15 @@
 #include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/drawing/XDrawPages.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/packages/zip/ZipFileAccess.hpp>
 #include <com/sun/star/sheet/GlobalSheetSettings.hpp>
 #include <com/sun/star/style/VerticalAlignment.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class ScExportTest4 : public ScModelTestBase
 {
@@ -106,7 +110,7 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testRotatedImageODS)
 {
     // Error was, that the length values in shapes were not
     // written in the given unit into the file.
-    css::uno::Reference<css::sheet::XGlobalSheetSettings> xGlobalSheetSettings
+    cpo::uno::Reference<css::sheet::XGlobalSheetSettings> xGlobalSheetSettings
         = css::sheet::GlobalSheetSettings::create(comphelper::getProcessComponentContext());
     xGlobalSheetSettings->setMetric(static_cast<sal_Int16>(FieldUnit::MM));
 
@@ -875,6 +879,38 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf87973_externalLinkSkipUnuseds)
     CPPUNIT_ASSERT(aFormula2.indexOf("87973_externalSource.ods") >= 0);
 }
 
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCool14390_ChartExternalRef)
+{
+    createScDoc("xlsx/cool14390_chart_external_ref.xlsx");
+    save(TestFilter::XLSX);
+
+    // The only reference to rows 38-43 of the external workbook's sheet is
+    // the chart's own series formula, not a cell formula. Without the fix,
+    // ProcessExternalRangeRef never caches those cells for export, and the
+    // exported file's external link keeps them out of its cache.
+    xmlDocUniquePtr pExtLink = parseExport(u"xl/externalLinks/externalLink1.xml"_ustr);
+    CPPUNIT_ASSERT(pExtLink);
+    assertXPath(pExtLink, "/x:externalLink/x:externalBook/x:sheetDataSet/x:sheetData[@sheetId='2']/x:row", 6);
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCool14390_ChartExternalRefPath)
+{
+    createScDoc("xlsx/cool14390_chart_external_ref.xlsx");
+    save(TestFilter::XLSX);
+
+    // The linked workbook lives on a disk of its own, in a directory that has nothing above
+    // it in common with the directory this file is written to. The saved link has to name it
+    // by a whole URL, because a relative path would only say how deep this one save went.
+    xmlDocUniquePtr pExtRel
+        = parseExport(u"xl/externalLinks/_rels/externalLink1.xml.rels"_ustr);
+    CPPUNIT_ASSERT(pExtRel);
+    OUString aTarget = getXPath(pExtRel, "/rels:Relationships/rels:Relationship", "Target");
+    CPPUNIT_ASSERT_MESSAGE(OUStringToOString(aTarget, RTL_TEXTENCODING_UTF8).getStr(),
+                           aTarget.startsWith("file:///"));
+    CPPUNIT_ASSERT_MESSAGE(OUStringToOString(aTarget, RTL_TEXTENCODING_UTF8).getStr(),
+                           aTarget.indexOf("/Desktop/") > 0);
+}
+
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf51022_lostPrintRange)
 {
     createScDoc("ods/tdf87973_externalLinkSkipUnuseds.ods");
@@ -1490,7 +1526,7 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testCool15769MinimalDBRanges)
     createScDoc("ods/cool15769_minimal_DB_ranges.ods");
     save(TestFilter::XLSX);
 
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory),
                                                       maTempFile.GetURL());
     // without the fix degenerate tables would have been exported to XLSX
@@ -1500,6 +1536,25 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testCool15769MinimalDBRanges)
     // these tables should exist regardless of the change
     CPPUNIT_ASSERT(xNameAccess->hasByName(u"xl/tables/table2.xml"_ustr));
     CPPUNIT_ASSERT(xNameAccess->hasByName(u"xl/tables/table3.xml"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCool15780TotalsRowNeedsContent)
+{
+    createScDoc("ods/cool15780_totals_row_content.ods");
+    save(TestFilter::XLSX);
+
+    // threewheadertotals has a header row, but its only column's totals row cell
+    // holds a plain value with no aggregate function or label, so without the fix
+    // it exported as a totals row Excel refused to open.
+    xmlDocUniquePtr pTable3 = parseExport(u"xl/tables/table3.xml"_ustr);
+    CPPUNIT_ASSERT(pTable3);
+    assertXPath(pTable3, "/x:table", "totalsRowCount", u"0");
+
+    // twowtotals has a totals row but no header row at all.
+    xmlDocUniquePtr pTable6 = parseExport(u"xl/tables/table6.xml"_ustr);
+    CPPUNIT_ASSERT(pTable6);
+    assertXPath(pTable6, "/x:table", "headerRowCount", u"0");
+    assertXPath(pTable6, "/x:table", "totalsRowCount", u"0");
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testSingleOperatorXlsxRoundTrip)
@@ -1563,14 +1618,17 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testSpilledRangeOperatorXlsxExport)
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testSingleOnSpilledRangeXlsxExport)
 {
-    // In =@A1# the # binds tighter than @, so the XLSX form nests
-    // as _xlfn.SINGLE(_xlfn.ANCHORARRAY(A1)).
+    // OOXML leaves the @ of a plain =@A1# cell out of the text and expresses it by keeping the
+    // cell a non-array formula, so that cell is written as a bare _xlfn.ANCHORARRAY(A1) and the
+    // import puts the @ back. An @ over a wider operand keeps the _xlfn.SINGLE call, which is
+    // what carries the meaning there.
     createScDoc();
     ScDocument* pDoc = getScDoc();
 
     pDoc->SetFormula(ScAddress(0, 0, 0), u"=SEQUENCE(3)"_ustr,
                      formula::FormulaGrammar::GRAM_NATIVE);
     pDoc->SetFormula(ScAddress(1, 0, 0), u"=@A1#"_ustr, formula::FormulaGrammar::GRAM_NATIVE);
+    pDoc->SetFormula(ScAddress(2, 0, 0), u"=@(A1#*2)"_ustr, formula::FormulaGrammar::GRAM_NATIVE);
 
     save(TestFilter::XLSX);
 
@@ -1578,7 +1636,62 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testSingleOnSpilledRangeXlsxExport)
     CPPUNIT_ASSERT(pSheet);
 
     assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[1]/x:c[2]/x:f",
-                       u"_xlfn.SINGLE(_xlfn.ANCHORARRAY(A1))");
+                       u"_xlfn.ANCHORARRAY(A1)");
+    assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[1]/x:c[3]/x:f",
+                       u"_xlfn.SINGLE(_xlfn.ANCHORARRAY(A1)*2)");
+
+    saveAndReload(TestFilter::XLSX);
+    pDoc = getScDoc();
+    CPPUNIT_ASSERT_EQUAL(u"=@A1#"_ustr, pDoc->GetFormula(1, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(u"=@(A1#*2)"_ustr, pDoc->GetFormula(2, 0, 0));
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testParenthesizedSpilledRangeXlsxRoundTrip)
+{
+    // A # on an operand that is already parenthesised keeps those parentheses inside the
+    // wrapper, so _xlfn.ANCHORARRAY((A1)), which is what OOXML uses. The import reads that
+    // back as the postfix (A1)# it came from.
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    pDoc->SetFormula(ScAddress(0, 0, 0), u"=SEQUENCE(3)"_ustr,
+                     formula::FormulaGrammar::GRAM_NATIVE);
+    pDoc->SetFormula(ScAddress(1, 0, 0), u"=(A1)#"_ustr, formula::FormulaGrammar::GRAM_NATIVE);
+
+    save(TestFilter::XLSX);
+
+    xmlDocUniquePtr pSheet = parseExport(u"xl/worksheets/sheet1.xml"_ustr);
+    CPPUNIT_ASSERT(pSheet);
+
+    assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[1]/x:c[2]/x:f",
+                       u"_xlfn.ANCHORARRAY((A1))");
+
+    saveAndReload(TestFilter::XLSX);
+    pDoc = getScDoc();
+    CPPUNIT_ASSERT_EQUAL(u"=(A1)#"_ustr, pDoc->GetFormula(1, 0, 0));
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testIntersectedSpilledRangeXlsxRoundTrip)
+{
+    // OOXML writes the intersection operator as a blank and the # before its operand, so the
+    // two end up next to each other as "A1:A5 _xlfn.ANCHORARRAY(C1)". To read the blank back
+    // as the operator the import has to know that what follows yields a reference.
+    createScDoc();
+    ScDocument* pDocument = getScDoc();
+
+    pDocument->SetFormula(ScAddress(1, 0, 0), u"=A1:A5!C1#"_ustr, formula::FormulaGrammar::GRAM_NATIVE);
+
+    save(TestFilter::XLSX);
+
+    xmlDocUniquePtr pSheet = parseExport(u"xl/worksheets/sheet1.xml"_ustr);
+    CPPUNIT_ASSERT(pSheet);
+
+    assertXPathContent(pSheet, "/x:worksheet/x:sheetData/x:row[1]/x:c[1]/x:f",
+                       u"A1:A5 _xlfn.ANCHORARRAY(C1)");
+
+    saveAndReload(TestFilter::XLSX);
+    pDocument = getScDoc();
+    CPPUNIT_ASSERT_EQUAL(u"=A1:A5!C1#"_ustr, pDocument->GetFormula(1, 0, 0));
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testReferenceUnionXlsxRoundTrip)
@@ -1616,6 +1729,62 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testReferenceUnionXlsxRoundTrip)
     CPPUNIT_ASSERT_EQUAL(5.0, pDoc->GetValue(ScAddress(5, 0, 0)));
     CPPUNIT_ASSERT_EQUAL(2.0, pDoc->GetValue(ScAddress(5, 1, 0)));
     CPPUNIT_ASSERT_EQUAL(10.0, pDoc->GetValue(ScAddress(5, 2, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCompatibilityFlagIsDocumentSetting)
+{
+    // A compatibility flag of the drawing layer is a document setting, so it is saved in the
+    // document part of the settings, which a document without a view writes too.
+    createScDoc();
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT(!xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+
+    xSettings->setPropertyValue(u"AnchoredTextOverflowLegacy"_ustr, uno::Any(true));
+    CPPUNIT_ASSERT(xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+
+    save(TestFilter::ODS);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"settings.xml"_ustr);
+    assertXPathContent(pXmlDoc,
+                       "/office:document-settings/office:settings/"
+                       "config:config-item-set[@config:name='ooo:configuration-settings']/"
+                       "config:config-item[@config:name='AnchoredTextOverflowLegacy']",
+                       u"true");
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCompatibilityFlagsForOldSpreadsheet)
+{
+    // A spreadsheet in our own format saved before the drawing layer compatibility flags existed
+    // keeps the older behaviours, with or without drawings, also after it is saved again.
+    for (const char* pFile : { "ods/document_with_linked_graphic.ods", "ods/print-range.ods" })
+    {
+        createScDoc(pFile);
+        for (int i = 0; i < 2; ++i)
+        {
+            uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+            uno::Reference<beans::XPropertySet> xSettings(
+                xFactory->createInstance(u"com.sun.star.document.Settings"_ustr),
+                uno::UNO_QUERY_THROW);
+            CPPUNIT_ASSERT_MESSAGE(
+                pFile, xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+            CPPUNIT_ASSERT_MESSAGE(
+                pFile, xSettings->getPropertyValue(u"LegacySingleLineFontwork"_ustr).get<bool>());
+            saveAndReload(TestFilter::ODS);
+        }
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCompatibilityFlagsForNewSpreadsheet)
+{
+    // A new spreadsheet saved in our own format keeps the newer behaviours when loaded again.
+    createScDoc();
+    saveAndReload(TestFilter::ODS);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT(!xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+    CPPUNIT_ASSERT(!xSettings->getPropertyValue(u"LegacySingleLineFontwork"_ustr).get<bool>());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

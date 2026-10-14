@@ -24,13 +24,13 @@
 
 #include "type_entries.hxx"
 
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 #include <mutex>
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace cppu
@@ -48,7 +48,7 @@ static void checkInterface( Type const & rType )
 
 static bool isXInterface( rtl_uString * pStr )
 {
-    return OUString::unacquired(&pStr) == "com.sun.star.uno.XInterface";
+    return OUString::unacquired(&pStr) == "cpo.uno.XInterface";
 }
 
 static void * makeInterface( sal_IntPtr nOffset, void * that )
@@ -89,13 +89,8 @@ type_entry * getTypeEntries( class_data * cd )
                 // ref is statically held by getCppuType()
                 pEntry->m_type.typeRef = rType.getTypeLibType();
             }
-            OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
             cd->m_storedTypeRefs = true;
         }
-    }
-    else
-    {
-        OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
     }
     return pEntries;
 }

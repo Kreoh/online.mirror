@@ -36,6 +36,7 @@ namespace chart
 {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 //  diverse methods for class conversions; e.g. ::basegfx::B3DHomMatrix to HomogenMatrix
 
@@ -498,7 +499,8 @@ cpo::uno::Sequence< double > DataSequenceToDoubleSequence(
     const uno::Reference< data::XDataSequence >& xDataSequence )
 {
     cpo::uno::Sequence< double > aResult;
-    OSL_ASSERT( xDataSequence.is());
+    // A series states the values it holds, and one that holds none of the kind asked for hands
+    // over nothing. That stands for a sequence of no numbers.
     if(!xDataSequence.is())
         return aResult;
 

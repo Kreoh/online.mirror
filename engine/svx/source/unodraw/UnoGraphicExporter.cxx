@@ -31,7 +31,7 @@
 #include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/task/XInteractionContinuation.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <boost/property_tree/json_parser/error.hpp>
 #include <tools/debug.hxx>
@@ -77,8 +77,8 @@
 using namespace ::comphelper;
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::drawing;
@@ -93,10 +93,10 @@ namespace {
         OUString maFilterName;
         OUString maMediaType;
         URL maURL;
-        css::uno::Reference< css::io::XOutputStream >         mxOutputStream;
-        css::uno::Reference< css::graphic::XGraphicRenderer > mxGraphicRenderer;
-        css::uno::Reference< css::task::XStatusIndicator >    mxStatusIndicator;
-        css::uno::Reference< css::task::XInteractionHandler > mxInteractionHandler;
+        cpo::uno::Reference< css::io::XOutputStream >         mxOutputStream;
+        cpo::uno::Reference< css::graphic::XGraphicRenderer > mxGraphicRenderer;
+        cpo::uno::Reference< css::task::XStatusIndicator >    mxStatusIndicator;
+        cpo::uno::Reference< css::task::XInteractionHandler > mxInteractionHandler;
 
         sal_Int32 mnWidth;
         sal_Int32 mnHeight;
@@ -137,20 +137,20 @@ namespace {
         GraphicExporter();
 
         // XFilter
-        virtual bool SAL_CALL filter( const Sequence< PropertyValue >& aDescriptor ) override;
-        virtual void SAL_CALL cancel(  ) override;
+        virtual bool filter( const Sequence< PropertyValue >& aDescriptor ) override;
+        virtual void cancel(  ) override;
 
         // XExporter
-        virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) override;
+        virtual void setSourceDocument( const Reference< XComponent >& xDoc ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName(  ) override;
-        virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual Sequence< OUString > getSupportedServiceNames(  ) override;
 
         // XMimeTypeInfo
-        virtual bool SAL_CALL supportsMimeType( const OUString& MimeTypeName ) override;
-        virtual Sequence< OUString > SAL_CALL getSupportedMimeTypeNames(  ) override;
+        virtual bool supportsMimeType( const OUString& MimeTypeName ) override;
+        virtual Sequence< OUString > getSupportedMimeTypeNames(  ) override;
 
         VclPtr<VirtualDevice> CreatePageVDev( SdrPage* pPage, tools::Long nWidthPixel, tools::Long nHeightPixel ) const;
 
@@ -883,6 +883,10 @@ bool GraphicExporter::GetGraphic( ExportSettings const & rSettings, Graphic& aGr
                 }
             }
 
+            // Shapes with no visible content anchor at 0,0
+            if (aBound.isEmpty())
+                aBound.expand(basegfx::B2DTuple(0, 0));
+
             aOut->EnableOutput( false );
             aOut->SetMapMode( aMap );
             if( rSettings.mbUseHighContrast )
@@ -975,7 +979,7 @@ bool GraphicExporter::GetGraphic( ExportSettings const & rSettings, Graphic& aGr
 }
 
 // XFilter
-bool SAL_CALL GraphicExporter::filter( const Sequence< PropertyValue >& aDescriptor )
+bool GraphicExporter::filter( const Sequence< PropertyValue >& aDescriptor )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1070,7 +1074,7 @@ bool SAL_CALL GraphicExporter::filter( const Sequence< PropertyValue >& aDescrip
     if ( aSettings.mxInteractionHandler.is() && ( nStatus != ERRCODE_NONE ) )
     {
         Any aInteraction;
-        Sequence< css::uno::Reference< css::task::XInteractionContinuation > > lContinuations{
+        Sequence< cpo::uno::Reference< css::task::XInteractionContinuation > > lContinuations{
             new ::comphelper::OInteractionApprove()
         };
 
@@ -1082,14 +1086,14 @@ bool SAL_CALL GraphicExporter::filter( const Sequence< PropertyValue >& aDescrip
     return nStatus == ERRCODE_NONE;
 }
 
-void SAL_CALL GraphicExporter::cancel()
+void GraphicExporter::cancel()
 {
 }
 
 // XExporter
 
 /** the source 'document' could be a XDrawPage, a XShape or a generic XShapes */
-void SAL_CALL GraphicExporter::setSourceDocument( const Reference< lang::XComponent >& xComponent )
+void GraphicExporter::setSourceDocument( const Reference< lang::XComponent >& xComponent )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1210,24 +1214,24 @@ void SAL_CALL GraphicExporter::setSourceDocument( const Reference< lang::XCompon
 }
 
 // XServiceInfo
-OUString SAL_CALL GraphicExporter::getImplementationName(  )
+OUString GraphicExporter::getImplementationName(  )
 {
     return u"com.sun.star.comp.Draw.GraphicExporter"_ustr;
 }
 
-bool SAL_CALL GraphicExporter::supportsService( const OUString& ServiceName )
+bool GraphicExporter::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL GraphicExporter::getSupportedServiceNames(  )
+Sequence< OUString > GraphicExporter::getSupportedServiceNames(  )
 {
     Sequence< OUString > aSupportedServiceNames { u"com.sun.star.drawing.GraphicExportFilter"_ustr };
     return aSupportedServiceNames;
 }
 
 // XMimeTypeInfo
-bool SAL_CALL GraphicExporter::supportsMimeType( const OUString& rMimeTypeName )
+bool GraphicExporter::supportsMimeType( const OUString& rMimeTypeName )
 {
     GraphicFilter &rFilter = GraphicFilter::GetGraphicFilter();
     sal_uInt16 nCount = rFilter.GetExportFormatCount();
@@ -1243,7 +1247,7 @@ bool SAL_CALL GraphicExporter::supportsMimeType( const OUString& rMimeTypeName )
     return false;
 }
 
-Sequence< OUString > SAL_CALL GraphicExporter::getSupportedMimeTypeNames(  )
+Sequence< OUString > GraphicExporter::getSupportedMimeTypeNames(  )
 {
     GraphicFilter &rFilter = GraphicFilter::GetGraphicFilter();
     sal_uInt16 nCount = rFilter.GetExportFormatCount();
@@ -1325,9 +1329,9 @@ Graphic SvxGetGraphicForShape( SdrObject& rShape )
     return aGraphic;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_Draw_GraphicExporter_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new GraphicExporter);

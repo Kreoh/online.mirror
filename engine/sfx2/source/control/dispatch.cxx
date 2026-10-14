@@ -33,7 +33,7 @@
 #include <com/sun/star/frame/XDispatchRecorderSupplier.hpp>
 #include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/frame/XPopupMenuController.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ui/ContextMenuExecuteEvent.hpp>
 
 #include <COKit/COKit.hxx>
@@ -54,6 +54,7 @@
 #include <sfx2/module.hxx>
 #include <sfx2/msg.hxx>
 #include <sfx2/msgpool.hxx>
+#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/sfxsids.hrc>
@@ -66,6 +67,8 @@
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/debug.hxx>
 #include <vcl/idle.hxx>
+#include <vcl/image.hxx>
+#include <vcl/kit.hxx>
 #include <vcl/menu.hxx>
 
 #include <sfxtypes.hxx>
@@ -224,15 +227,15 @@ void SfxDispatcher::Call_Impl(SfxShell& rShell, const SfxSlot &rSlot, SfxRequest
     if ( GetFrame() )
     {
         // Recording may start
-        css::uno::Reference< css::beans::XPropertySet > xSet(
+        cpo::uno::Reference< css::beans::XPropertySet > xSet(
                 GetFrame()->GetFrame().GetFrameInterface(),
-                css::uno::UNO_QUERY);
+                cpo::uno::UNO_QUERY);
 
         if ( xSet.is() )
         {
             cpo::uno::Any aProp = xSet->getPropertyValue(u"DispatchRecorderSupplier"_ustr);
-            css::uno::Reference< css::frame::XDispatchRecorderSupplier > xSupplier;
-            css::uno::Reference< css::frame::XDispatchRecorder > xRecorder;
+            cpo::uno::Reference< css::frame::XDispatchRecorderSupplier > xSupplier;
+            cpo::uno::Reference< css::frame::XDispatchRecorder > xRecorder;
             aProp >>= xSupplier;
             if(xSupplier.is())
                 xRecorder = xSupplier->getDispatchRecorder();
@@ -664,10 +667,10 @@ void SfxDispatcher::DoDeactivate_Impl(bool bMDI, SfxViewFrame const * pNew)
     bool bHidePopups = bMDI && xImp->pFrame;
     if ( pNew && xImp->pFrame )
     {
-        css::uno::Reference< css::frame::XFrame > xOldFrame =
+        cpo::uno::Reference< css::frame::XFrame > xOldFrame =
             pNew->GetFrame().GetFrameInterface()->getCreator();
 
-        css::uno::Reference< css::frame::XFrame > xMyFrame =
+        cpo::uno::Reference< css::frame::XFrame > xMyFrame =
             GetFrame()->GetFrame().GetFrameInterface();
 
         if ( xOldFrame == xMyFrame )
@@ -1018,10 +1021,10 @@ void SfxDispatcher::SetMenu_Impl()
     if ( !rFrame.IsMenuBarOn_Impl() )
         return;
 
-    css::uno::Reference < css::beans::XPropertySet > xPropSet( rFrame.GetFrameInterface(), css::uno::UNO_QUERY );
+    cpo::uno::Reference < css::beans::XPropertySet > xPropSet( rFrame.GetFrameInterface(), cpo::uno::UNO_QUERY );
     if ( xPropSet.is() )
     {
-        css::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
+        cpo::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
         cpo::uno::Any aValue = xPropSet->getPropertyValue(u"LayoutManager"_ustr);
         aValue >>= xLayoutManager;
         if ( xLayoutManager.is() )
@@ -1066,15 +1069,15 @@ void SfxDispatcher::Update_Impl( bool bForce )
         // keep own tools internally for collecting
         GetBindings()->GetDispatcher()->xImp->bUpdated = false;
 
-    css::uno::Reference< css::frame::XFrame > xFrame;
+    cpo::uno::Reference< css::frame::XFrame > xFrame;
     SfxBindings* pBindings = GetBindings();
     if (pBindings)
     {
         pBindings->DENTERREGISTRATIONS();
         xFrame = pBindings->GetActiveFrame();
     }
-    css::uno::Reference< css::beans::XPropertySet > xPropSet( xFrame, css::uno::UNO_QUERY );
-    css::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
+    cpo::uno::Reference< css::beans::XPropertySet > xPropSet( xFrame, cpo::uno::UNO_QUERY );
+    cpo::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
     if ( xPropSet.is() )
     {
         try
@@ -1123,12 +1126,10 @@ void SfxDispatcher::Update_Impl( bool bForce )
     if ( xLayoutManager.is() )
         xLayoutManager->unlock();
 
-    const SfxViewShell* pViewShell = SfxViewShell::Current();
+    // create or update the online notebookbar for the current view
+    SfxViewShell* pViewShell = SfxViewShell::Current();
     if (pViewShell && pViewShell->GetDispatcher())
-    {
-        SfxPoolItemHolder aItem;
-        pViewShell->GetDispatcher()->QueryState(SID_NOTEBOOKBAR, aItem);
-    }
+        sfx2::SfxNotebookBar::StateMethod(pViewShell->GetViewFrame().GetBindings());
 }
 
 void SfxDispatcher::Update_Impl_( bool bUIActive, bool bIsMDIApp, bool bIsIPOwner, SfxWorkWindow *pTaskWin )
@@ -1410,6 +1411,12 @@ void SfxDispatcher::FlushImpl()
     {
         if (i->bDelete && !i->bDeleted)
         {
+            // a shell can hold several slots, and each of them got an entry of its own
+            for (auto & subelem : aToDoCopy)
+            {
+                if (subelem.pCluster == i->pCluster)
+                    subelem.bDeleted = true;
+            }
             if (!xImp->aToDoCopyStack.empty())
             {
                 //fdo#70703 if there is an outer FlushImpl then inform it that
@@ -1600,27 +1607,6 @@ bool SfxDispatcher::FindServer_(sal_uInt16 nSlot, SfxSlotServer& rServer)
     // Count the number of Shells in the linked dispatchers.
     Flush();
     sal_uInt16 nTotCount = xImp->aStack.size();
-
-    // Verb-Slot?
-    if (nSlot >= SID_VERB_START && nSlot <= SID_VERB_END)
-    {
-        for ( sal_uInt16 nShell = 0;; ++nShell )
-        {
-            SfxShell *pSh = GetShell(nShell);
-            if ( pSh == nullptr )
-                return false;
-            if ( dynamic_cast< const SfxViewShell *>( pSh ) !=  nullptr )
-            {
-                const SfxSlot* pSlot = pSh->GetVerbSlot_Impl(nSlot);
-                if ( pSlot )
-                {
-                    rServer.SetShellLevel(nShell);
-                    rServer.SetSlot( pSlot );
-                    return true;
-                }
-            }
-        }
-    }
 
     // SID check against set filter
     SfxSlotFilterState nSlotEnableMode = SfxSlotFilterState::DISABLED;
@@ -1866,6 +1852,13 @@ boost::property_tree::ptree fillPopupMenu(Menu* pMenu)
             if (!aItemText.isEmpty())
                 aItemTree.put("text", aItemText.toUtf8().getStr());
 
+            // An item image from the icon theme is sent by name, so the client
+            // shows its own icon for it, e.g. the sentence checker's icon on
+            // the message of a grammar error.
+            const OUString aIconName = vcl::kit::svgIconName(pMenu->GetItemImage(nItemId).GetStock());
+            if (!aIconName.isEmpty())
+                aItemTree.put("icon", aIconName.toUtf8().getStr());
+
             if (pPopupSubmenu)
             {
                 boost::property_tree::ptree aSubmenu = ::fillPopupMenu(pPopupSubmenu);
@@ -1932,10 +1925,10 @@ void SfxDispatcher::ExecutePopup( const OUString& rResName, vcl::Window* pWin, c
         cpo::uno::Any(comphelper::makePropertyValue( u"IsContextMenu"_ustr, true ))
     };
 
-    const css::uno::Reference< css::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
-    css::uno::Reference< css::frame::XPopupMenuController > xPopupController(
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+    cpo::uno::Reference< css::frame::XPopupMenuController > xPopupController(
         xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
-        u"com.sun.star.comp.framework.ResourceMenuController"_ustr, aArgs, xContext ), css::uno::UNO_QUERY );
+        u"com.sun.star.comp.framework.ResourceMenuController"_ustr, aArgs, xContext ), cpo::uno::UNO_QUERY );
     rtl::Reference< VCLXPopupMenu > xPopupMenu = new VCLXPopupMenu();
 
     if ( !xPopupController.is() || !xPopupMenu.is() )
@@ -1967,12 +1960,12 @@ void SfxDispatcher::ExecutePopup( const OUString& rResName, vcl::Window* pWin, c
         OUString aMenuURL = "private:resource/popupmenu/" + rResName;
         if (GetFrame()->GetViewShell()->TryContextMenuInterception(xPopupMenu, aMenuURL, aEvent))
         {
-            css::uno::Reference<css::awt::XWindowPeer> xParent(aEvent.SourceWindow, css::uno::UNO_QUERY);
+            cpo::uno::Reference<css::awt::XWindowPeer> xParent(aEvent.SourceWindow, cpo::uno::UNO_QUERY);
             xPopupMenu->execute(xParent, css::awt::Rectangle(aPos.X(), aPos.Y(), 1, 1), css::awt::PopupMenuDirection::EXECUTE_DOWN);
         }
     }
 
-    css::uno::Reference< css::lang::XComponent > xComponent( xPopupController, css::uno::UNO_QUERY );
+    cpo::uno::Reference< css::lang::XComponent > xComponent( xPopupController, cpo::uno::UNO_QUERY );
     if ( xComponent.is() )
         xComponent->dispose();
 }
@@ -2018,10 +2011,10 @@ void SfxDispatcher::HideUI( bool bHide )
             SfxFrame& rFrame = pTop->GetFrame();
             if ( rFrame.IsMenuBarOn_Impl() )
             {
-                css::uno::Reference < css::beans::XPropertySet > xPropSet( rFrame.GetFrameInterface(), css::uno::UNO_QUERY );
+                cpo::uno::Reference < css::beans::XPropertySet > xPropSet( rFrame.GetFrameInterface(), cpo::uno::UNO_QUERY );
                 if ( xPropSet.is() )
                 {
-                    css::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
+                    cpo::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
                     cpo::uno::Any aValue = xPropSet->getPropertyValue(u"LayoutManager"_ustr);
                     aValue >>= xLayoutManager;
                     if ( xLayoutManager.is() )

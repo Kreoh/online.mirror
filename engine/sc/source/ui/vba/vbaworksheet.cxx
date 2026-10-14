@@ -83,12 +83,13 @@
 #define STANDARDHEIGHT 427
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 static void getNewSpreadsheetName (OUString &aNewName, std::u16string_view aOldName, const uno::Reference <sheet::XSpreadsheetDocument>& xSpreadDoc )
 {
     if (!xSpreadDoc.is())
-        throw lang::IllegalArgumentException( u"getNewSpreadsheetName() xSpreadDoc is null"_ustr, uno::Reference< uno::XInterface  >(), 1 );
+        throw lang::IllegalArgumentException( u"getNewSpreadsheetName() xSpreadDoc is null"_ustr, uno::Reference< cpo::uno::XInterface  >(), 1 );
     static const char aUnderScore[] =  "_";
     int currentNum =2;
     aNewName = OUString::Concat(aOldName) + aUnderScore + OUString::number(currentNum) ;
@@ -102,7 +103,7 @@ static void getNewSpreadsheetName (OUString &aNewName, std::u16string_view aOldN
 static void removeAllSheets( const uno::Reference <sheet::XSpreadsheetDocument>& xSpreadDoc, const OUString& aSheetName)
 {
     if (!xSpreadDoc.is())
-        throw lang::IllegalArgumentException( u"removeAllSheets() xSpreadDoc is null"_ustr, uno::Reference< uno::XInterface  >(), 1 );
+        throw lang::IllegalArgumentException( u"removeAllSheets() xSpreadDoc is null"_ustr, uno::Reference< cpo::uno::XInterface  >(), 1 );
     uno::Reference<sheet::XSpreadsheets> xSheets = xSpreadDoc->getSheets();
     uno::Reference <container::XIndexAccess> xIndex( xSheets, uno::UNO_QUERY );
 
@@ -128,10 +129,10 @@ openNewDoc(const OUString& aSheetName )
     uno::Reference<frame::XModel> xModel;
     try
     {
-        const uno::Reference< uno::XComponentContext >& xContext(
+        const uno::Reference< cpo::uno::XComponentContext >& xContext(
             comphelper::getProcessComponentContext() );
 
-        uno::Reference <frame::XDesktop2 > xComponentLoader = frame::Desktop::create(xContext);
+        uno::Reference <frame::XDesktop > xComponentLoader = frame::Desktop::create(xContext);
 
         uno::Reference<lang::XComponent > xComponent( xComponentLoader->loadComponentFromURL(
                 u"private:factory/scalc"_ustr,
@@ -147,14 +148,14 @@ openNewDoc(const OUString& aSheetName )
     return xModel;
 }
 
-ScVbaWorksheet::ScVbaWorksheet(const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext,
+ScVbaWorksheet::ScVbaWorksheet(const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext,
         uno::Reference< sheet::XSpreadsheet > xSheet,
         uno::Reference< frame::XModel > xModel ) : WorksheetImpl_BASE( xParent, xContext ), mxSheet(std::move( xSheet )), mxModel(std::move(xModel)), mbVeryHidden( false )
 {
 }
 
 ScVbaWorksheet::ScVbaWorksheet( cpo::uno::Sequence< cpo::uno::Any> const & args,
-    uno::Reference< uno::XComponentContext> const & xContext ) :  WorksheetImpl_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext ), mxModel( getXSomethingFromArgs< frame::XModel >( args, 1 ) ), mbVeryHidden( false )
+    uno::Reference< cpo::uno::XComponentContext> const & xContext ) :  WorksheetImpl_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext ), mxModel( getXSomethingFromArgs< frame::XModel >( args, 1 ) ), mbVeryHidden( false )
 {
     if ( args.getLength() < 3 )
         throw lang::IllegalArgumentException();
@@ -204,7 +205,7 @@ ScVbaWorksheet::createSheetCopyInNewDoc(const OUString& aCurrSheetName)
     return uno::Reference< excel::XWorksheet >( getUnoDocModule( aCodeName, pShell ), uno::UNO_QUERY_THROW );
 }
 
-css::uno::Reference< ov::excel::XWorksheet >
+cpo::uno::Reference< ov::excel::XWorksheet >
 ScVbaWorksheet::createSheetCopy(uno::Reference<excel::XWorksheet> const & xSheet, bool bAfter)
 {
     OUString aCurrSheetName = getName();
@@ -290,7 +291,7 @@ ScVbaWorksheet::setVisible( sal_Int32 nVisible )
             mbVeryHidden = true;
         break;
         default:
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
     }
     uno::Reference< beans::XPropertySet > xProps( getSheet(), uno::UNO_QUERY_THROW );
     xProps->setPropertyValue( u"IsVisible"_ustr, cpo::uno::Any( bVisible ) );
@@ -308,7 +309,7 @@ ScVbaWorksheet::getEnableSelection()
     uno::Reference <sheet::XSpreadsheetDocument> xSpreadDoc( getModel(), uno::UNO_QUERY_THROW );
     SCTAB nTab = 0;
     if ( !ScVbaWorksheets::nameExists(xSpreadDoc, getName(), nTab) )
-        throw uno::RuntimeException(u"Sheet Name does not exist."_ustr );
+        throw cpo::uno::RuntimeException(u"Sheet Name does not exist."_ustr );
 
     if ( ScDocShell* pShell = excel::getDocShell( getModel() ))
     {
@@ -343,7 +344,7 @@ ScVbaWorksheet::setEnableSelection( sal_Int32 nSelection )
     uno::Reference <sheet::XSpreadsheetDocument> xSpreadDoc( getModel(), uno::UNO_QUERY_THROW );
     SCTAB nTab = 0;
     if ( !ScVbaWorksheets::nameExists(xSpreadDoc, getName(), nTab) )
-        throw uno::RuntimeException(u"Sheet Name does not exist."_ustr );
+        throw cpo::uno::RuntimeException(u"Sheet Name does not exist."_ustr );
 
     if ( ScDocShell* pShell = excel::getDocShell( getModel() ))
     {
@@ -371,7 +372,7 @@ ScVbaWorksheet::setEnableSelection( sal_Int32 nSelection )
     }
 }
 
-bool SAL_CALL ScVbaWorksheet::getAutoFilterMode()
+bool ScVbaWorksheet::getAutoFilterMode()
 {
     if ( ScDocShell* pShell = excel::getDocShell( getModel() ))
     {
@@ -383,7 +384,7 @@ bool SAL_CALL ScVbaWorksheet::getAutoFilterMode()
     return false;
 }
 
-void SAL_CALL ScVbaWorksheet::setAutoFilterMode( bool bAutoFilterMode )
+void ScVbaWorksheet::setAutoFilterMode( bool bAutoFilterMode )
 {
     ScDocShell* pDocShell = excel::getDocShell( getModel() );
     if (!pDocShell)
@@ -683,7 +684,7 @@ ScVbaWorksheet::Cells( const ::cpo::uno::Any &nRow, const ::cpo::uno::Any &nCol 
     uno::Reference< frame::XModel > xModel( getModel(), uno::UNO_SET_THROW );
     if(ScDocShell* pShell = excel::getDocShell( xModel ))
         return ScVbaRange::CellsHelper(pShell->GetDocument(), this, mxContext, xRange, nRow, nCol );
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 uno::Reference< excel::XRange >
@@ -698,7 +699,7 @@ ScVbaWorksheet::Columns( const cpo::uno::Any& aIndex )
     return getSheetRange()->Columns( aIndex );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::ChartObjects( const cpo::uno::Any& Index )
 {
     if ( !mxCharts.is() )
@@ -718,7 +719,7 @@ ScVbaWorksheet::ChartObjects( const cpo::uno::Any& Index )
 
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::PivotTables( const cpo::uno::Any& Index )
 {
     uno::Reference< css::sheet::XSpreadsheet > xSheet = getSheet();
@@ -731,7 +732,7 @@ ScVbaWorksheet::PivotTables( const cpo::uno::Any& Index )
     return cpo::uno::Any( xColl );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Comments( const cpo::uno::Any& Index )
 {
     uno::Reference< css::sheet::XSpreadsheet > xSheet = getSheet();
@@ -744,7 +745,7 @@ ScVbaWorksheet::Comments( const cpo::uno::Any& Index )
     return cpo::uno::Any( xColl );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Hyperlinks( const cpo::uno::Any& aIndex )
 {
     /*  The worksheet always returns the same Hyperlinks object.
@@ -756,10 +757,10 @@ ScVbaWorksheet::Hyperlinks( const cpo::uno::Any& aIndex )
     return cpo::uno::Any( mxHlinks );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Names( const cpo::uno::Any& aIndex )
 {
-    css::uno::Reference<css::beans::XPropertySet> xProps(getSheet(), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::beans::XPropertySet> xProps(getSheet(), cpo::uno::UNO_QUERY_THROW);
     uno::Reference< sheet::XNamedRanges > xNamedRanges(  xProps->getPropertyValue(u"NamedRanges"_ustr), uno::UNO_QUERY_THROW );
     uno::Reference< XCollection > xNames( new ScVbaNames( this, mxContext, xNamedRanges, mxModel ) );
     if ( aIndex.hasValue() )
@@ -767,7 +768,7 @@ ScVbaWorksheet::Names( const cpo::uno::Any& aIndex )
     return cpo::uno::Any( xNames );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::OLEObjects( const cpo::uno::Any& Index )
 {
     uno::Reference< sheet::XSpreadsheet > xSpreadsheet( getSheet(), uno::UNO_SET_THROW );
@@ -781,7 +782,7 @@ ScVbaWorksheet::OLEObjects( const cpo::uno::Any& Index )
     return cpo::uno::Any( xOleObjects );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Shapes( const cpo::uno::Any& aIndex )
 {
     uno::Reference< sheet::XSpreadsheet > xSpreadsheet( getSheet(), uno::UNO_SET_THROW );
@@ -809,61 +810,61 @@ ScVbaWorksheet::getButtons( const cpo::uno::Any &rIndex, bool bOptionButtons )
     return cpo::uno::Any( uno::Reference< XCollection >( rxButtons ) );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Buttons( const cpo::uno::Any& rIndex )
 {
     return getButtons( rIndex, false );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::CheckBoxes( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::DropDowns( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::GroupBoxes( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Labels( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::ListBoxes( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::OptionButtons( const cpo::uno::Any& rIndex )
 {
     return getButtons( rIndex, true );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::ScrollBars( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Spinners( const cpo::uno::Any& /*rIndex*/ )
 {
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-void SAL_CALL
+void
 ScVbaWorksheet::ShowDataForm( )
 {
     uno::Reference< frame::XModel > xModel( getModel(), uno::UNO_SET_THROW );
@@ -876,7 +877,7 @@ ScVbaWorksheet::ShowDataForm( )
     }
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::Evaluate( const OUString& Name )
 {
     // #TODO Evaluate allows other things to be evaluated, e.g. functions
@@ -886,24 +887,24 @@ ScVbaWorksheet::Evaluate( const OUString& Name )
     return cpo::uno::Any( Range( cpo::uno::Any( Name ), aVoid ) );
 }
 
-uno::Reference< beans::XIntrospectionAccess > SAL_CALL
+uno::Reference< beans::XIntrospectionAccess >
 ScVbaWorksheet::getIntrospection(  )
 {
     return uno::Reference< beans::XIntrospectionAccess >();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::invoke( const OUString& /*aFunctionName*/, const cpo::uno::Sequence< cpo::uno::Any >& /*aParams*/, cpo::uno::Sequence< ::sal_Int16 >& /*aOutParamIndex*/, cpo::uno::Sequence< cpo::uno::Any >& /*aOutParam*/ )
 {
-    throw uno::RuntimeException(u"Unsupported"_ustr); // unsupported operation
+    throw cpo::uno::RuntimeException(u"Unsupported"_ustr); // unsupported operation
 }
 
-void SAL_CALL
+void
 ScVbaWorksheet::setValue( const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     setDefaultPropByIntrospection( getValue( aPropertyName ), aValue );
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorksheet::getValue( const OUString& aPropertyName )
 {
     uno::Reference< drawing::XControlShape > xControlShape( getControlShape( aPropertyName ), uno::UNO_QUERY_THROW );
@@ -914,7 +915,7 @@ ScVbaWorksheet::getValue( const OUString& aPropertyName )
     return cpo::uno::Any( xControl );
 }
 
-bool SAL_CALL
+bool
 ScVbaWorksheet::hasMethod( const OUString& /*aName*/ )
 {
     return false;
@@ -943,7 +944,7 @@ ScVbaWorksheet::getFormControls() const
     return xFormControls;
 
                 }
-bool SAL_CALL
+bool
 ScVbaWorksheet::hasProperty( const OUString& aName )
 {
     uno::Reference< container::XNameAccess > xFormControls( getFormControls() );
@@ -991,13 +992,13 @@ ScVbaWorksheet::getServiceImplName()
     return u"ScVbaWorksheet"_ustr;
 }
 
-void SAL_CALL
+void
 ScVbaWorksheet::setEnableCalculation( bool bEnableCalculation )
 {
     uno::Reference <sheet::XCalculatable> xCalculatable(getModel(), uno::UNO_QUERY_THROW);
     xCalculatable->enableAutomaticCalculation( bEnableCalculation);
 }
-bool SAL_CALL
+bool
 ScVbaWorksheet::getEnableCalculation(  )
 {
     uno::Reference <sheet::XCalculatable> xCalculatable(getModel(), uno::UNO_QUERY_THROW);
@@ -1014,7 +1015,7 @@ ScVbaWorksheet::getServiceNames()
     return aServiceNames;
 }
 
-OUString SAL_CALL
+OUString
 ScVbaWorksheet::getCodeName()
 {
     uno::Reference< beans::XPropertySet > xSheetProp( mxSheet, uno::UNO_QUERY_THROW );
@@ -1028,7 +1029,7 @@ ScVbaWorksheet::getSheetID() const
     return xAddressable->getRangeAddress().Sheet;
 }
 
-void SAL_CALL
+void
 ScVbaWorksheet::PrintOut( const cpo::uno::Any& From, const cpo::uno::Any& To, const cpo::uno::Any& Copies, const cpo::uno::Any& Preview, const cpo::uno::Any& ActivePrinter, const cpo::uno::Any& PrintToFile, const cpo::uno::Any& Collate, const cpo::uno::Any& PrToFileName, const cpo::uno::Any& )
 {
     sal_Int32 nTo = 0;
@@ -1044,7 +1045,7 @@ ScVbaWorksheet::PrintOut( const cpo::uno::Any& From, const cpo::uno::Any& To, co
     PrintOutHelper( excel::getBestViewShell( xModel ), From, To, Copies, Preview, ActivePrinter, PrintToFile, Collate, PrToFileName, bSelection );
 }
 
-void SAL_CALL
+void
 ScVbaWorksheet::ExportAsFixedFormat(const cpo::uno::Any& Type, const cpo::uno::Any& FileName, const cpo::uno::Any& Quality,
     const cpo::uno::Any& IncludeDocProperties, const cpo::uno::Any& /*IgnorePrintAreas*/, const cpo::uno::Any& From,
     const cpo::uno::Any& To, const cpo::uno::Any& OpenAfterPublish, const cpo::uno::Any& /*FixedFormatExtClassPtr*/)
@@ -1056,15 +1057,15 @@ ScVbaWorksheet::ExportAsFixedFormat(const cpo::uno::Any& Type, const cpo::uno::A
         IncludeDocProperties, From, To, OpenAfterPublish);
 }
 
-sal_Int64 SAL_CALL
+sal_Int64
 ScVbaWorksheet::getSomething(const cpo::uno::Sequence<sal_Int8 > & rId)
 {
     return comphelper::getSomethingImpl(rId, this);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_ScVbaWorksheet_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new ScVbaWorksheet(args, context));
 }

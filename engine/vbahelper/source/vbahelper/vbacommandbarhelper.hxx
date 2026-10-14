@@ -20,7 +20,7 @@
 #define INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBACOMMANDBARHELPER_HXX
 
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ui/XUIConfigurationManager.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
@@ -49,43 +49,43 @@ typedef std::shared_ptr< VbaCommandBarHelper > VbaCommandBarHelperRef;
 class VbaCommandBarHelper
 {
 private:
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-    css::uno::Reference< css::frame::XModel > mxModel;
-    css::uno::Reference< css::ui::XUIConfigurationManager > m_xDocCfgMgr; // current document
-    css::uno::Reference< css::ui::XUIConfigurationManager > m_xAppCfgMgr;
-    css::uno::Reference< css::container::XNameAccess > m_xWindowState;
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::ui::XUIConfigurationManager > m_xDocCfgMgr; // current document
+    cpo::uno::Reference< css::ui::XUIConfigurationManager > m_xAppCfgMgr;
+    cpo::uno::Reference< css::container::XNameAccess > m_xWindowState;
     OUString maModuleId;
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void Init();
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool hasToolbar( const OUString& sResourceUrl, std::u16string_view sName );
 public:
-    /// @throws css::uno::RuntimeException
-    VbaCommandBarHelper( css::uno::Reference< css::uno::XComponentContext > xContext, css::uno::Reference< css::frame::XModel > xModel );
+    /// @throws cpo::uno::RuntimeException
+    VbaCommandBarHelper( cpo::uno::Reference< cpo::uno::XComponentContext > xContext, cpo::uno::Reference< css::frame::XModel > xModel );
 
-    const css::uno::Reference< css::frame::XModel >& getModel() const { return mxModel; }
+    const cpo::uno::Reference< css::frame::XModel >& getModel() const { return mxModel; }
 
-    /// @throws css::uno::RuntimeException
-    const css::uno::Reference< css::container::XNameAccess >& getPersistentWindowState() const
+    /// @throws cpo::uno::RuntimeException
+    const cpo::uno::Reference< css::container::XNameAccess >& getPersistentWindowState() const
     {
         return m_xWindowState;
     }
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::container::XIndexAccess > getSettings( const OUString& sResourceUrl );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::container::XIndexAccess > getSettings( const OUString& sResourceUrl );
+    /// @throws cpo::uno::RuntimeException
     void removeSettings( const OUString& sResourceUrl );
-    /// @throws css::uno::RuntimeException
-    void ApplyTempChange( const OUString& sResourceUrl, const css::uno::Reference< css::container::XIndexAccess >& xSettings);
+    /// @throws cpo::uno::RuntimeException
+    void ApplyTempChange( const OUString& sResourceUrl, const cpo::uno::Reference< css::container::XIndexAccess >& xSettings);
 
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::frame::XLayoutManager > getLayoutManager() const;
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::frame::XLayoutManager > getLayoutManager() const;
 
     const OUString& getModuleId() const { return maModuleId; }
-    /// @throws css::uno::RuntimeException
-    OUString findToolbarByName( const css::uno::Reference< css::container::XNameAccess >& xNameAccess, const OUString& sName );
-    /// @throws css::uno::RuntimeException
-    static sal_Int32 findControlByName( const css::uno::Reference< css::container::XIndexAccess >& xIndexAccess, std::u16string_view sName, bool bMenu );
+    /// @throws cpo::uno::RuntimeException
+    OUString findToolbarByName( const cpo::uno::Reference< css::container::XNameAccess >& xNameAccess, const OUString& sName );
+    /// @throws cpo::uno::RuntimeException
+    static sal_Int32 findControlByName( const cpo::uno::Reference< css::container::XIndexAccess >& xIndexAccess, std::u16string_view sName, bool bMenu );
     static OUString generateCustomURL();
 };
 

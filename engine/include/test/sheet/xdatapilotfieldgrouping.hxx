@@ -10,8 +10,8 @@
 #ifndef INCLUDED_TEST_SHEET_XDATAPILOTFIELDGROUPING_HXX
 #define INCLUDED_TEST_SHEET_XDATAPILOTFIELDGROUPING_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 #include <test/testdllapi.hxx>
 
 namespace apitest {
@@ -22,7 +22,7 @@ public:
     void testCreateNameGroup();
     void testCreateDateGroup();
 
-    virtual css::uno::Reference< css::uno::XInterface > init() = 0;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > init() = 0;
 
 protected:
     ~XDataPilotFieldGrouping() {}

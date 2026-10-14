@@ -100,7 +100,7 @@ public:
                 the new count of elements in the container
     */
     inline sal_Int32 addInterface(::std::unique_lock<::std::mutex>& rGuard, const key& rKey,
-                                  const css::uno::Reference<listener>& rListener)
+                                  const cpo::uno::Reference<listener>& rListener)
     {
         auto iter = find(rGuard, rKey);
         if (iter == m_aMap.end())
@@ -122,7 +122,7 @@ public:
                 the new count of elements in the container
     */
     inline sal_Int32 removeInterface(::std::unique_lock<::std::mutex>& rGuard, const key& rKey,
-                                     const css::uno::Reference<listener>& rListener)
+                                     const cpo::uno::Reference<listener>& rListener)
     {
         // search container with id nUik
         auto iter = find(rGuard, rKey);
@@ -164,7 +164,7 @@ public:
                 {
                     aIt.next()->disposing(rEvt);
                 }
-                catch (css::uno::RuntimeException&)
+                catch (cpo::uno::RuntimeException&)
                 {
                     // be robust, if e.g. a remote bridge has disposed already.
                     // there is no way to delegate the error to the caller :o(.

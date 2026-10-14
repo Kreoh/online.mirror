@@ -21,8 +21,24 @@
 #include <rtl/math.hxx>
 #include <sal/log.hxx>
 #include <compare>
+#include <iostream>
 
 #include <systemdatetime.hxx>
+
+DateTime DateTime::CreateSystemUTC()
+{
+    DateTime aDateTime(DateTime::EMPTY);
+    sal_Int32 nDate = 0;
+    sal_Int64 nTime = 0;
+    if (GetSystemDateTimeUTC(&nDate, &nTime))
+    {
+        aDateTime.Date::operator=(Date(nDate));
+        aDateTime.SetTime(nTime);
+    }
+    else
+        aDateTime.Date::operator=(Date(1, 1, 1900));
+    return aDateTime;
+}
 
 DateTime::DateTime(DateTimeInitSystem)
     : Date( Date::EMPTY )
@@ -264,5 +280,25 @@ DateTime DateTime::CreateFromUnixTime(const double fSecondsSinceEpoch)
                 static_cast<sal_uInt32>((nNanos / tools::Time::nanoSecPerSec)    % sal_uInt64( 60 )),
                 static_cast<sal_uInt64>( nNanos % tools::Time::nanoSecPerSec)));
 }
+
+TOOLS_DLLPUBLIC std::ostream & operator <<(
+    std::ostream & stream, const DateTime& datetime)
+{
+    stream << datetime.GetYear() << '-';
+    stream.fill('0');
+    stream.width(2);
+    stream << datetime.GetMonth() << '-';
+    stream.width(2);
+    stream << datetime.GetDay() << ' ';
+    stream.width(2);
+    stream << datetime.GetHour() << ':';
+    stream.width(2);
+    stream << datetime.GetMin() << ':';
+    stream.width(2);
+    stream << datetime.GetSec() << ".";
+    stream.width(9);
+    return stream << datetime.GetNanoSec();
+}
+
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

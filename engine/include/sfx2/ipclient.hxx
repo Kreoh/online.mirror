@@ -30,7 +30,7 @@
 #include <vcl/vclptr.hxx>
 
 namespace com::sun::star::embed { class XEmbeddedObject; }
-namespace com::sun::star::uno { template <typename > class Reference; }
+namespace cpo::uno { template <typename > class Reference; }
 namespace vcl { class Window; }
 
 class SfxInPlaceClient_Impl;
@@ -63,8 +63,8 @@ public:
 
     SfxViewShell*       GetViewShell() const { return m_pViewSh; }
     vcl::Window*        GetEditWin() const { return m_pEditWin; }
-    const css::uno::Reference < css::embed::XEmbeddedObject >& GetObject() const;
-    void                SetObject( const css::uno::Reference < css::embed::XEmbeddedObject >& rObject );
+    const cpo::uno::Reference < css::embed::XEmbeddedObject >& GetObject() const;
+    void                SetObject( const cpo::uno::Reference < css::embed::XEmbeddedObject >& rObject );
     void                SetObjectState( sal_Int32 );
     bool                IsObjectUIActive() const;
     bool                IsObjectInPlaceActive() const;
@@ -74,10 +74,20 @@ public:
     tools::Rectangle           GetScaledObjArea() const;
     void                SetSizeScale( const double fScaleWidth, const double fScaleHeight );
     void                SetObjAreaAndScale( const tools::Rectangle&, const double, const double );
+
+    /** Moves and resizes the object that is active for in-place editing.
+
+        The area arrives in the twips a COKit client works in, the unit the "INPLACE"
+        graphic selection reports, so a client can hand back the rectangle it was given.
+        The container is free to narrow the request, for an object protected against
+        moving or resizing or one pushed past the edge of the page, and the area finally
+        taken goes back to the client as a fresh "INPLACE" selection.
+     */
+    void                RequestCOKitObjectArea( const tools::Rectangle& );
     double              GetScaleWidth() const;
     double              GetScaleHeight() const;
     void                Invalidate();
-    static SfxInPlaceClient* GetClient( SfxObjectShell const * pDoc, const css::uno::Reference < css::embed::XEmbeddedObject >& xObject );
+    static SfxInPlaceClient* GetClient( SfxObjectShell const * pDoc, const cpo::uno::Reference < css::embed::XEmbeddedObject >& xObject );
     sal_Int64           GetAspect() const;
     sal_Int64           GetObjectMiscStatus() const;
     ErrCodeMsg          DoVerb(sal_Int32 nVerb);

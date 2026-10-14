@@ -84,6 +84,7 @@
 #include <com/sun/star/chart2/XAnyDescriptionAccess.hpp>
 #include <com/sun/star/chart2/AxisType.hpp>
 
+#include <com/sun/star/beans/XPropertyState.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
@@ -113,6 +114,8 @@
 
 #include <svl/numformat.hxx>
 #include <svl/numuno.hxx>
+#include <svx/xdef.hxx>
+#include <svx/xhatch.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <sal/log.hxx>
 
@@ -136,8 +139,8 @@
 #include <sax/fastattribs.hxx>
 
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace css::drawing;
 using namespace ::oox::core;
 using css::beans::PropertyValue;
@@ -234,133 +237,6 @@ std::vector<Sequence<Reference<chart2::XDataSeries> > > splitDataSeriesByAxis(co
     }
 
     return aSplitSeries;
-}
-
-bool lclGetAutoHistogramBinning(const css::uno::Reference<css::chart2::XDataSeries>& xSeries,
-                                double& rfBinWidth, sal_Int32& rnBinCount)
-{
-    rfBinWidth = 0.0;
-    rnBinCount = 0;
-
-    css::uno::Reference<css::chart2::data::XDataSource> xSource(xSeries, css::uno::UNO_QUERY);
-    if (!xSource.is())
-    {
-        return false;
-    }
-
-    cpo::uno::Sequence<css::uno::Reference<css::chart2::data::XLabeledDataSequence>> aSeqs
-        = xSource->getDataSequences();
-
-    css::uno::Reference<css::chart2::data::XDataSequence> xValuesY;
-    for (const auto& xLabeledSeq : aSeqs)
-    {
-        if (!xLabeledSeq.is())
-        {
-            continue;
-        }
-
-        css::uno::Reference<css::chart2::data::XDataSequence> xValues = xLabeledSeq->getValues();
-        if (!xValues.is())
-        {
-            continue;
-        }
-
-        css::uno::Reference<css::beans::XPropertySet> xSeqProp(xValues, css::uno::UNO_QUERY);
-        if (!xSeqProp.is())
-        {
-            continue;
-        }
-
-        OUString aRole;
-        xSeqProp->getPropertyValue(u"Role"_ustr) >>= aRole;
-        if (aRole == "values-y")
-        {
-            xValuesY = xValues;
-            break;
-        }
-    }
-
-    if (!xValuesY.is())
-    {
-        return false;
-    }
-
-    std::vector<double> aRawData;
-    cpo::uno::Sequence<cpo::uno::Any> aValues = xValuesY->getData();
-    aRawData.reserve(aValues.getLength());
-
-    for (const auto& rAny : aValues)
-    {
-        double fValue = 0.0;
-        if (rAny >>= fValue)
-            aRawData.push_back(fValue);
-    }
-
-    if (aRawData.empty())
-    {
-        return false;
-    }
-
-    double fSum = 0.0;
-    double fSquareSum = 0.0;
-    double fMinValue = aRawData[0];
-    double fMaxValue = aRawData[0];
-    sal_Int32 nValidCount = 0;
-
-    for (double fValue : aRawData)
-    {
-        if (std::isfinite(fValue))
-        {
-            fSum += fValue;
-            fSquareSum += fValue * fValue;
-            fMinValue = std::min(fMinValue, fValue);
-            fMaxValue = std::max(fMaxValue, fValue);
-            ++nValidCount;
-        }
-    }
-
-    if (nValidCount == 0)
-    {
-        return false;
-    }
-
-    if (nValidCount < 2 || fMinValue == fMaxValue)
-    {
-        rfBinWidth = 1.0;
-        rnBinCount = 1;
-        return true;
-    }
-
-    const double fMean = fSum / nValidCount;
-    const double fVariance = (fSquareSum - fSum * fMean) / (nValidCount - 1);
-    const double fStdDev = std::sqrt(fVariance);
-
-    if (!std::isfinite(fStdDev) || fStdDev <= 0.0)
-    {
-        rfBinWidth = 1.0;
-        rnBinCount = 1;
-        return true;
-    }
-
-    rfBinWidth = (3.5 * fStdDev) / std::cbrt(static_cast<double>(nValidCount));
-    if (!std::isfinite(rfBinWidth) || rfBinWidth <= 0.0)
-    {
-        rfBinWidth = 1.0;
-        rnBinCount = 1;
-        return true;
-    }
-
-    rfBinWidth = std::round(rfBinWidth * 100.0) / 100.0;
-    if (rfBinWidth <= 0.0)
-    {
-        rfBinWidth = 1.0;
-        rnBinCount = 1;
-        return true;
-    }
-    rnBinCount = static_cast<sal_Int32>(std::ceil((fMaxValue - fMinValue) / rfBinWidth));
-    rnBinCount = std::max<sal_Int32>(rnBinCount, 1);
-
-    return true;
 }
 
 }   // unnamed namespace
@@ -873,7 +749,7 @@ Sequence< Sequence< OUString > > ChartExport::getSplitCategoriesList( const OUSt
             {
                 try
                 {
-                    css::uno::Reference< css::chart2::XAnyDescriptionAccess > xDataAccess(xChartDoc->getDataProvider(), uno::UNO_QUERY);
+                    cpo::uno::Reference< css::chart2::XAnyDescriptionAccess > xDataAccess(xChartDoc->getDataProvider(), uno::UNO_QUERY);
                     const Sequence< Sequence< cpo::uno::Any > >aAnyCategories(bSeriesUsesColumns ? xDataAccess->getAnyRowDescriptions() : xDataAccess->getAnyColumnDescriptions());
                     auto pMax = std::max_element(aAnyCategories.begin(), aAnyCategories.end(),
                         [](const Sequence<cpo::uno::Any>& a, const Sequence<cpo::uno::Any>& b) {
@@ -960,7 +836,10 @@ OUString ChartExport::parseFormula( const OUString& rRange )
         }
     }
 
-    SAL_WARN_IF(!xParser.is(), "oox", "creating formula parser failed");
+    // The formula parser is a spreadsheet service, so a chart in a text or a presentation
+    // document has none and takes the simple conversion below.
+    SAL_WARN_IF(!xParser.is() && GetDocumentType() == DOCUMENT_XLSX, "oox",
+                "creating formula parser failed");
 
     if( xParser.is() )
     {
@@ -2240,7 +2119,7 @@ void ChartExport::exportAdditionalShapes( const Reference< css::chart::XChartDoc
     if (!xDocPropSet.is())
         return;
 
-    css::uno::Reference< css::drawing::XShapes > mxAdditionalShapes;
+    cpo::uno::Reference< css::drawing::XShapes > mxAdditionalShapes;
     // get a sequence of non-chart shapes
     try
     {
@@ -2775,12 +2654,11 @@ void ChartExport::exportTitle( const Reference< XShape >& xShape, bool bIsCharte
     for (const uno::Reference<chart2::XFormattedString>& rxFS : xFormattedTitle)
     {
         pFS->startElement(FSNS(XML_a, XML_r));
-        Reference< beans::XPropertySet > xRunPropSet(rxFS, uno::UNO_QUERY);
         {
             WriteRunInput aInput;
             aInput.bCheckDirect = true;
             aInput.bUseTextSchemeColors = true;
-            WriteRunProperties(xRunPropSet, XML_rPr, aInput);
+            WriteRunProperties(rxFS, XML_rPr, aInput);
         }
         pFS->startElement(FSNS(XML_a, XML_t));
 
@@ -3246,24 +3124,24 @@ void ChartExport::exportFill( const Reference< XPropertySet >& xPropSet )
             aFillStyle = FillStyle_NONE;
     }
 
+    // A part of a chart that carries no colour of a theme of its own hands back the one its
+    // series holds, so a part given a flat colour would be written as the theme colour beneath
+    // it. Only a colour the part states for itself is taken.
     model::ComplexColor aComplexColor;
-    if (GetProperty(xPropSet, u"FillComplexColor"_ustr)) {
+    uno::Reference<beans::XPropertyState> xPropState(xPropSet, uno::UNO_QUERY);
+    if (GetDirectProperty(xPropSet, xPropState, u"FillComplexColor"_ustr)) {
         uno::Reference<util::XComplexColor> xCC;
         mAny >>= xCC;
         aComplexColor = model::color::getFromXComplexColor(xCC);
     }
 
-    // The following restriction to solidFill is not correct. Any color that's
-    // the default scheme color (e.g., as a gradient fill stop) shouldn't be
-    // exported. However, we lose transforms on gradient fills (and maybe other
-    // color usage), so we can't tell what should be equivalent to the default
-    // scheme color in that context. See FillProperties::pushToPropMap(). So
-    // play it safe and don't try to handle that here. TODO
-    if (aFillStyle == FillStyle_SOLID &&
-            aComplexColor.getType() == model::ColorType::Theme &&
-            aComplexColor.getTransformations().empty()) {
-        // If we're dealing with a theme color, then we don't want to export the
-        // explicit value. We want it to remain implicit, as a theme.
+    // A chart carries nothing behind its own parts that a colour could fall back on, so a colour
+    // that names a slot of the theme is written as that slot, and the flat colour it resolves to
+    // is left out. Only a solid fill is handled: a gradient loses the shades a stop applies, so
+    // there is no telling which of its colours the theme would give back.
+    if (aFillStyle == FillStyle_SOLID && aComplexColor.getType() == model::ColorType::Theme
+        && WriteSchemeColor(u"FillComplexColor"_ustr, xPropSet))
+    {
         return;
     }
 
@@ -3351,18 +3229,41 @@ void ChartExport::exportHatch( const Reference< XPropertySet >& xPropSet )
     if (!xPropSet.is())
         return;
 
-    if (GetProperty(xPropSet, u"FillHatchName"_ustr))
+    css::drawing::Hatch aHatch;
+    bool bHatchFound = false;
+
+    if (OUString aHatchName; GetProperty(xPropSet, u"FillHatchName"_ustr) && (mAny >>= aHatchName)
+                             && !aHatchName.isEmpty())
     {
-        OUString aHatchName;
-        mAny >>= aHatchName;
         uno::Reference< lang::XMultiServiceFactory > xFact( getModel(), uno::UNO_QUERY );
         uno::Reference< container::XNameAccess > xHatchTable( xFact->createInstance(u"com.sun.star.drawing.HatchTable"_ustr), uno::UNO_QUERY );
-        cpo::uno::Any rValue = xHatchTable->getByName(aHatchName);
-        css::drawing::Hatch aHatch;
-        rValue >>= aHatch;
-        WritePattFill(xPropSet, aHatch);
+        if (xHatchTable.is() && xHatchTable->hasByName(aHatchName))
+            bHatchFound = (xHatchTable->getByName(aHatchName) >>= aHatch);
     }
 
+    // tdf#116148: the fill style is a hatch, but there is no hatch to name: the
+    // drawing layer paints such a series with the item pool's default hatch.
+    // OOXML has no matching default - leaving the fill out makes PowerPoint
+    // apply its own, which is solid - so the effective hatch has to be written
+    // out explicitly.
+    if (!bHatchFound && GetProperty(xPropSet, u"FillHatch"_ustr))
+    {
+        // A property set that resolves the hatch itself knows better than the
+        // default below. chart2 does not expose the struct today, see the
+        // commented out PROP_FILL_HATCH in chart2/source/inc/FillProperties.hxx.
+        bHatchFound = (mAny >>= aHatch);
+    }
+
+    if (!bHatchFound)
+    {
+        // Same default the item pool hands out, see SdrItemPool in svx/source/svdraw/svdattr.cxx.
+        const XHatch aDefaultHatch{ COL_DEFAULT_SHAPE_STROKE };
+        aHatch.Style = aDefaultHatch.GetHatchStyle();
+        aHatch.Color = sal_Int32(aDefaultHatch.GetColor());
+        aHatch.Distance = aDefaultHatch.GetDistance();
+        aHatch.Angle = aDefaultHatch.GetAngle().get();
+    }
+    WritePattFill(xPropSet, aHatch);
 }
 
 void ChartExport::exportBitmapFill( const Reference< XPropertySet >& xPropSet )
@@ -3845,7 +3746,7 @@ void ChartExport::exportRadarChart( const Reference< chart2::XChartType >& xChar
 }
 
 void ChartExport::exportScatterChartSeries( const Reference< chart2::XChartType >& xChartType,
-        const cpo::uno::Sequence<css::uno::Reference<chart2::XDataSeries>>* pSeries)
+        const cpo::uno::Sequence<cpo::uno::Reference<chart2::XDataSeries>>* pSeries)
 {
     FSHelperPtr pFS = GetFS();
     pFS->startElement(FSNS(XML_c, XML_scatterChart));
@@ -4478,18 +4379,6 @@ void ChartExport::exportSeries_chartex( const Reference<chart2::XChartType>& xCh
                         {
                             pFS->singleElement(FSNS(XML_cx, XML_binCount), XML_val,
                                                OString::number(nBinCount));
-                        }
-                        else if (nFrequencyType == 0)
-                        {
-                            double fAutoBinWidth = 0.0;
-                            sal_Int32 nAutoBinCount = 0;
-
-                            if (lclGetAutoHistogramBinning(rSeries, fAutoBinWidth, nAutoBinCount)
-                                && fAutoBinWidth > 0.0)
-                            {
-                                pFS->singleElement(FSNS(XML_cx, XML_binSize), XML_val,
-                                                   OString::number(fAutoBinWidth));
-                            }
                         }
 
                         pFS->endElement(FSNS(XML_cx, XML_binning));

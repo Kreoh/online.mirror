@@ -43,10 +43,12 @@
 #include <unotools/charclass.hxx>
 #include <unotools/securityoptions.hxx>
 #include <osl/diagnose.h>
+#include <rtl/character.hxx>
 
 #include <i18nlangtag/mslangid.hxx>
 #include <comphelper/doublecheckedinit.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/scripturl.hxx>
 #include <comphelper/string.hxx>
 #include <unotools/calendarwrapper.hxx>
 #include <unotools/collatorwrapper.hxx>
@@ -89,7 +91,7 @@ std::atomic<CollatorWrapper*> ScGlobal::pCollator(nullptr);
 std::atomic<CollatorWrapper*> ScGlobal::pCaseCollator(nullptr);
 std::atomic<::utl::TransliterationWrapper*> ScGlobal::pTransliteration(nullptr);
 std::atomic<::utl::TransliterationWrapper*> ScGlobal::pCaseTransliteration(nullptr);
-css::uno::Reference< css::i18n::XOrdinalSuffix> ScGlobal::xOrdinalSuffix;
+cpo::uno::Reference< css::i18n::XOrdinalSuffix> ScGlobal::xOrdinalSuffix;
 OUString        ScGlobal::aStrClipDocName;
 
 std::unique_ptr<SvxBrushItem> ScGlobal::xEmptyBrushItem;
@@ -576,7 +578,6 @@ void ScGlobal::Clear()
     xStarCalcFunctionList.clear(); // Destroy before ResMgr!
     xStarCalcFunctionMgr.clear();
     maInputHandlerFunctionNames.clear();
-    ScParameterClassification::Exit();
     ScCompiler::DeInit();
 
     xEmptyBrushItem.reset();
@@ -797,6 +798,24 @@ void ScGlobal::EraseQuotes( OUString& rString, sal_Unicode cQuote, bool bUnescap
     }
 }
 
+sal_Int32 ScGlobal::GetAutoSumArgStart( const OUString& rFormula, bool bSubTotal )
+{
+    const sal_Int32 nPar = rFormula.indexOf('(');
+    if (nPar == -1)
+        return -1;
+
+    sal_Int32 nArgStart = nPar + 1;
+    if (bSubTotal)
+    {
+        const sal_Int32 nLen = rFormula.getLength();
+        while (nArgStart < nLen && rtl::isAsciiDigit(rFormula[nArgStart]))
+            ++nArgStart;
+        if (nArgStart < nLen)
+            ++nArgStart;    // the separator after the number
+    }
+    return nArgStart;
+}
+
 sal_Int32 ScGlobal::FindUnquoted( const OUString& rString, sal_Unicode cChar, sal_Int32 nStart )
 {
     assert(nStart >= 0);
@@ -888,9 +907,7 @@ void ScGlobal::OpenURL(const OUString& rURL, const OUString& rTarget, bool bIgno
     // Also don't mess around with a vnd.sun.star.script or service or other
     // internal "URI".
     if (!aUrlName.startsWith("#")
-            && !aUrlName.startsWithIgnoreAsciiCase("vnd.sun.star.script:")
-            && !aUrlName.startsWithIgnoreAsciiCase("macro:")
-            && !aUrlName.startsWithIgnoreAsciiCase("slot:")
+            && !comphelper::isScriptURL(aUrlName)
             && !aUrlName.startsWithIgnoreAsciiCase("service:")
             && !aUrlName.startsWithIgnoreAsciiCase(".uno:"))
     {

@@ -29,7 +29,13 @@ class ContextToolbar extends JSDialogComponent {
 		this.createBuilder();
 		this.setupContainer(undefined);
 		this.registerMessageHandlers();
+		app.events.on('updatepermission', this.onUpdatePermission);
 	}
+
+	onUpdatePermission = (): void => {
+		if (!this.initialized) return;
+		this._forceRebuild();
+	};
 
 	protected createBuilder() {
 		this.builder = new window.L.control.notebookbarBuilder({
@@ -47,17 +53,10 @@ class ContextToolbar extends JSDialogComponent {
 			'context-toolbar',
 			document.body,
 		);
-		window.L.DomUtil.addClass(this.container, 'notebookbar horizontal');
+		window.L.DomUtil.addClass(this.container, 'notebookbar horizontal hidden');
 	}
 
 	showContextToolbar(): void {
-		const map = this.map;
-		if (
-			map.isReadOnlyMode() ||
-			!window.mode.isDesktop() ||
-			map.getDocType() === 'spreadsheet'
-		)
-			return;
 		if (this.lastIinputEvent.input === 'mouse') this.pendingShow = true;
 		if (this.lastIinputEvent.type !== 'buttonup') return;
 
@@ -67,6 +66,11 @@ class ContextToolbar extends JSDialogComponent {
 	showContextToolbarImpl(): void {
 		this.pendingShow = false;
 
+		const map = this.map;
+		if (!window.mode.isDesktop() || map.getDocType() === 'spreadsheet') return;
+		if (map.isReadOnlyMode() && map.getDocType() !== 'text') return;
+		if (map.isReadOnlyMode() && app.isReadOnly()) return;
+
 		if (this.pendingTask)
 			app.layoutingService.cancelLayoutingTask(this.pendingTask);
 
@@ -74,16 +78,20 @@ class ContextToolbar extends JSDialogComponent {
 			this.pendingTask = null;
 
 			if (!this.initialized) {
-				const contextToolbarItems = this.getWriterTextContext();
+				if (this.map.isReadOnlyMode()) {
+					this.builder?.build(this.container, this.getViewModeContext(), false);
+				} else {
+					const contextToolbarItems = this.getWriterTextContext();
 
-				for (const i in this.additionalContextButtons) {
-					const item = this.additionalContextButtons[i];
-					contextToolbarItems.push(item);
+					for (const i in this.additionalContextButtons) {
+						const item = this.additionalContextButtons[i];
+						contextToolbarItems.push(item);
+					}
+
+					this.builder?.build(this.container, contextToolbarItems, false);
+
+					this.map.uiManager.initializeNotebookbarInCore();
 				}
-
-				this.builder?.build(this.container, contextToolbarItems, false);
-
-				this.map.uiManager.initializeNotebookbarInCore();
 
 				this.initialized = true;
 			}
@@ -113,9 +121,8 @@ class ContextToolbar extends JSDialogComponent {
 		}
 
 		URLPopUpSection.closeURLPopUp();
-		const statRect = app.file.textCursor.rectangle;
-		if (!TextSelections || !TextSelections.getStartRectangle() || !statRect)
-			return;
+		const statRect = TextSelections.getStartRectangle();
+		if (!statRect) return;
 
 		Util.ensureValue(app.activeDocument);
 
@@ -136,6 +143,18 @@ class ContextToolbar extends JSDialogComponent {
 			this.container.style.top = pos.y + 'px';
 			this.container.style.left = pos.x + 'px';
 		});
+	}
+
+	getViewModeContext(): ToolItemWidgetJSON[] {
+		return [
+			{
+				id: 'context-switchtoedit',
+				type: 'customtoolitem',
+				inlineLabel: true,
+				text: _('Switch to Editing'),
+				command: 'switchtoedit',
+			} as ToolItemWidgetJSON,
+		];
 	}
 
 	getWriterTextContext(): ToolItemWidgetJSON[] {
@@ -343,6 +362,7 @@ class ContextToolbar extends JSDialogComponent {
 	// current additionalContextButtons, since showContextToolbarImpl only ever
 	// reads that list once, the first time the toolbar is shown.
 	private _forceRebuild(): void {
+		document.removeEventListener('pointermove', this.pointerMove);
 		document.getElementById('context-toolbar')?.remove();
 		this.setupContainer(undefined);
 		this.initialized = false;

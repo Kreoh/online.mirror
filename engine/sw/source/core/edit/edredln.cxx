@@ -127,9 +127,10 @@ void SwEditShell::ReinstatePaM(const SwRangeRedline& rRedline, SwPaM& rPaM)
         KillPams();
         assert(!GetTableCursor() && "coverity#1645529");
         SwShellCursor* pCursor = getShellCursor(/*bBlock=*/true);
-        *pCursor->GetPoint() = *rPaM.End();
+        const auto [pStart, pEnd] = rPaM.StartEnd();
+        *pCursor->GetPoint() = *pEnd;
         SetMark();
-        *pCursor->GetMark() = *rPaM.Start();
+        *pCursor->GetMark() = *pStart;
         rtl::Reference<SwTransferable> pTransfer(new SwTransferable(*pWrtShell));
         // Copy rich text, but don't strip out text inside delete redlines.
         pTransfer->Copy(/*bIsCut=*/false, /*bDeleteRedlines=*/false);
@@ -253,8 +254,9 @@ void SwEditShell::ReinstateRedlinesInSelection()
         SetRedlineFlags(nMode | RedlineFlags::On, SfxRedlineRecordingMode::ThisView);
     }
 
-    SwPosition aCursorStart(*GetCursor()->Start());
-    SwPosition aCursorEnd(*GetCursor()->End());
+    auto [pCursorStart, pCursorEnd] = GetCursor()->StartEnd(); // SwPosition*
+    SwPosition aCursorStart(*pCursorStart);
+    SwPosition aCursorEnd(*pCursorEnd);
     SwRedlineTable& rTable = GetDoc()->getIDocumentRedlineAccess().GetRedlineTable();
 
     // Work on a copy, since reinstate will modify the table, and reinstate of just inserted
@@ -275,25 +277,24 @@ void SwEditShell::ReinstateRedlinesInSelection()
             continue;
         }
 
-        if (*rRedline.End() < aCursorStart)
+        auto [pStart, pEnd] = rRedline.StartEnd(); // SwPosition*
+        if (*pEnd < aCursorStart)
         {
             // Ends before the selection, skip to the next redline.
             continue;
         }
 
-        if (*rRedline.Start() > aCursorEnd)
+        if (*pStart > aCursorEnd)
         {
             // Starts after the selection, can stop.
             break;
         }
 
         // Check if the redline is only partially selected.
-        const SwPosition* pStart = rRedline.Start();
         if (*pStart < aCursorStart)
         {
             pStart = &aCursorStart;
         }
-        const SwPosition* pEnd = rRedline.End();
         if (*pEnd > aCursorEnd)
         {
             pEnd = &aCursorEnd;
@@ -340,19 +341,6 @@ const SwRangeRedline* SwEditShell::GetCurrRedline() const
         return pRed;
     // check the other side of the selection to handle completely selected changes, where the Point is at the end
     return GetDoc()->getIDocumentRedlineAccess().GetRedline( *GetCursor()->GetMark(), nullptr );
-}
-
-void SwEditShell::UpdateRedlineAttr()
-{
-    if( IDocumentRedlineAccess::IsShowChanges(GetDoc()->getIDocumentRedlineAccess().GetRedlineFlags()) )
-    {
-        CurrShell aCurr( this );
-        StartAllAction();
-
-        GetDoc()->getIDocumentRedlineAccess().UpdateRedlineAttr();
-
-        EndAllAction();
-    }
 }
 
 /** Search the Redline of the data given

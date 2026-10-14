@@ -27,8 +27,8 @@ public:
     SchXMLLegendContext( SchXMLImportHelper& rImpHelper, SvXMLImport& rImport );
     virtual ~SchXMLLegendContext() override;
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
 private:
     SchXMLImportHelper& mrImportHelper;

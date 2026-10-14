@@ -44,6 +44,7 @@
 #include <fmtfsize.hxx>
 #include <frmatr.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <docary.hxx>
 #include <osl/diagnose.h>
 
@@ -711,8 +712,24 @@ void SwCSS1Parser::StyleParsed( const CSS1Selector *pSelector,
         return;
     }
 
-    // An id or class rule only fills a map inside this parser. Everything below changes the
-    // document's own styles, so it runs only when this HTML is the whole document.
+    if( CSS1_SELTYPE_ELEM_CLASS==eSelType && !pNext && !m_bIsNewDoc )
+    {
+        OUString aElement;
+        OUString aClass;
+        Css1ScriptFlags nScript;
+        if( CSS1_SELTYPE_ELEM_CLASS == GetTokenAndClass( pSelector, aElement, aClass, nScript ) )
+        {
+            SfxItemSet aItemSet( rItemSet );
+            if( Css1ScriptFlags::AllMask != nScript )
+                RemoveScriptItems( aItemSet, nScript );
+            InsertTag( aElement + "." + aClass, aItemSet, rPropInfo );
+        }
+        return;
+    }
+
+    // An id or class rule, and an element and class rule when inserting, only fills a map inside
+    // this parser. Everything below changes the document's own styles, so it runs only when this
+    // HTML is the whole document.
     if( !m_bIsNewDoc )
         return;
 
@@ -1606,6 +1623,9 @@ HTMLAttr **SwHTMLParser::GetAttrTabEntry( sal_uInt16 nWhich )
     case RES_CHRATR_OPTICAL_SIZING:
         ppAttr = &m_xAttrTab->pOpticalSizing;
         break;
+    case RES_CHRATR_HIDDEN:
+        ppAttr = &m_xAttrTab->pCharHidden;
+        break;
     case RES_CHRATR_BOX:
         ppAttr = &m_xAttrTab->pCharBox;
         break;
@@ -1865,7 +1885,8 @@ bool SwHTMLParser::ParseStyleOptions( const OUString &rStyle,
                                           SfxItemSet &rItemSet,
                                           SvxCSS1PropertyInfo &rPropInfo,
                                           const OUString *pLang,
-                                          const OUString *pDir )
+                                          const OUString *pDir,
+                                          std::u16string_view rElement )
 {
     bool bRet = false;
 
@@ -1879,6 +1900,18 @@ bool SwHTMLParser::ParseStyleOptions( const OUString &rStyle,
             SvxCSS1Parser::MergeStyles( pClass->GetItemSet(),
                                       pClass->GetPropertyInfo(),
                                       rItemSet, rPropInfo, false );
+            bRet = true;
+        }
+
+        // A rule for the element and the class is stronger than a rule for the class alone.
+        const SvxCSS1MapEntry* pElementClass
+            = rElement.empty() ? nullptr
+                               : m_pCSS1Parser->GetTag(OUString::Concat(rElement) + "." + aClass);
+        if( pElementClass )
+        {
+            SvxCSS1Parser::MergeStyles( pElementClass->GetItemSet(),
+                                      pElementClass->GetPropertyInfo(),
+                                      rItemSet, rPropInfo, bRet );
             bRet = true;
         }
     }

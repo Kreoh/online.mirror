@@ -23,8 +23,9 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SwVbaVariable::SwVbaVariable( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext,
+SwVbaVariable::SwVbaVariable( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext,
     uno::Reference< beans::XPropertyAccess > xUserDefined, OUString aVariableName ) :
     SwVbaVariable_BASE( rParent, rContext ), mxUserDefined(std::move( xUserDefined )), maVariableName(std::move( aVariableName ))
 {
@@ -34,26 +35,26 @@ SwVbaVariable::~SwVbaVariable()
 {
 }
 
-OUString SAL_CALL
+OUString
 SwVbaVariable::getName()
 {
     return maVariableName;
 }
 
-void SAL_CALL
+void
 SwVbaVariable::setName( const OUString& )
 {
-    throw uno::RuntimeException(u" Fail to set name"_ustr );
+    throw cpo::uno::RuntimeException(u" Fail to set name"_ustr );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaVariable::getValue()
 {
     uno::Reference< beans::XPropertySet > xProp( mxUserDefined, uno::UNO_QUERY_THROW );
     return xProp->getPropertyValue( maVariableName );
 }
 
-void SAL_CALL
+void
 SwVbaVariable::setValue( const cpo::uno::Any& rValue )
 {
     // FIXME: fail to set the value if the new type of value is different from the original one.
@@ -61,7 +62,7 @@ SwVbaVariable::setValue( const cpo::uno::Any& rValue )
     xProp->setPropertyValue( maVariableName, rValue );
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 SwVbaVariable::getIndex()
 {
     const cpo::uno::Sequence< beans::PropertyValue > props = mxUserDefined->getPropertyValues();

@@ -258,6 +258,9 @@ const ScParameterClassification::RawData ScParameterClassification::pRawData[] =
     { ocSmall,           {{ Reference, Value                                     }, 0, Value }},
     { ocSort,            {{ ReferenceOrRefArray, ForceArray, ForceArray, Value   }, 0, ForceArrayReturn }},
     { ocSortBy,          {{ ReferenceOrRefArray, ReferenceOrRefArray, Value,     }, 2, ForceArrayReturn }},
+    // The # refers to the master cell before it, so the operand is taken as one whole
+    // reference, in an array formula too.
+    { ocSpill,           {{ Reference                                            }, 0, Reference }},
     { ocStDev,           {{ Reference                                            }, 1, Value }},
     { ocStDevA,          {{ Reference                                            }, 1, Value }},
     { ocStDevP,          {{ Reference                                            }, 1, Value }},
@@ -285,6 +288,7 @@ const ScParameterClassification::RawData ScParameterClassification::pRawData[] =
     { ocTrend,           {{ Reference, Reference, Reference, Value               }, 0, Value }},
     { ocTrimMean,        {{ Reference, Value                                     }, 0, Value }},
     { ocTrue,            {{ Bounds                                               }, 0, Value }},
+    { ocType,            {{ Array                                                }, 0, Value }},
     { ocUnion,           {{ Reference, Reference                                 }, 0, Reference }},
     { ocUnique,          {{ ReferenceOrRefArray, Value, Value,                   }, 0, ForceArrayReturn } },
     { ocVLookup,         {{ Value, ReferenceOrForceArray, Value, Value           }, 0, Value }},
@@ -317,14 +321,15 @@ const ScParameterClassification::RawData ScParameterClassification::pRawData[] =
     { ocNone, {{ Bounds }, 0, Value }}
 };
 
-ScParameterClassification::RunData * ScParameterClassification::pData = nullptr;
+bool ScParameterClassification::gbDataInitialised { false };
+ScParameterClassification::RunData ScParameterClassification::gData[ocLastOpcodeId + 1];
 
 void ScParameterClassification::Init()
 {
-    if ( pData )
+    if ( gbDataInitialised )
         return;
-    pData = new RunData[ ocLastOpcodeId + 1 ];
-    memset( pData, 0, sizeof(RunData) * (ocLastOpcodeId + 1));
+    gbDataInitialised = true;
+    memset( gData, 0, sizeof(RunData) * (ocLastOpcodeId + 1));
 
     // init from specified static data above
     for (const auto & i : pRawData)
@@ -336,7 +341,7 @@ void ScParameterClassification::Init()
         }
         else
         {
-            RunData* pRun = &pData[ pRaw->eOp ];
+            RunData* pRun = &gData[ pRaw->eOp ];
             SAL_WARN_IF(pRun->aData.nParam[0] != Unknown,  "sc.core", "already assigned: " << static_cast<int>(pRaw->eOp));
             memcpy( &(pRun->aData), &(pRaw->aData), sizeof(CommonData));
             // fill 0-initialized fields with real values
@@ -390,12 +395,6 @@ void ScParameterClassification::Init()
 #endif
 }
 
-void ScParameterClassification::Exit()
-{
-    delete [] pData;
-    pData = nullptr;
-}
-
 formula::ParamClass ScParameterClassification::GetParameterType(
         const formula::FormulaToken* pToken, sal_uInt16 nParameter)
 {
@@ -417,18 +416,18 @@ formula::ParamClass ScParameterClassification::GetParameterType(
         sal_uInt8 nRepeat;
         formula::ParamClass eType;
         if (nParameter == SAL_MAX_UINT16)
-            eType = pData[eOp].aData.eReturn;
+            eType = gData[eOp].aData.eReturn;
         else if ( nParameter < CommonData::nMaxParams )
-            eType = pData[eOp].aData.nParam[nParameter];
-        else if ( (nRepeat = pData[eOp].aData.nRepeatLast) > 0 )
+            eType = gData[eOp].aData.nParam[nParameter];
+        else if ( (nRepeat = gData[eOp].aData.nRepeatLast) > 0 )
         {
             // The usual case is 1 repeated parameter, we don't need to
             // calculate that on each call.
             sal_uInt16 nParam = (nRepeat > 1 ?
-                    (pData[eOp].nMinParams -
-                     ((nParameter - pData[eOp].nMinParams) % nRepeat)) :
-                    pData[eOp].nMinParams);
-            return pData[eOp].aData.nParam[nParam];
+                    (gData[eOp].nMinParams -
+                     ((nParameter - gData[eOp].nMinParams) % nRepeat)) :
+                    gData[eOp].nMinParams);
+            return gData[eOp].aData.nParam[nParam];
         }
         else
             eType = Bounds;

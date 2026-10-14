@@ -20,6 +20,7 @@
 #include <config_features.h>
 
 #include <interpre.hxx>
+#include <interpreterrandom.hxx>
 
 #include <optional>
 #include <scitems.hxx>
@@ -70,6 +71,7 @@
 #include <compare.hxx>
 #include <callable.hxx>
 #include <cellsuno.hxx>
+#include <comphelper/flagguard.hxx>
 #include <comphelper/kit.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
@@ -81,7 +83,7 @@
 #include <basic/sbx.hxx>
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/sheet/XSheetCellRange.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <vbahelper/vbaaccesshelper.hxx>
 #include <macromgr.hxx>
 
@@ -94,6 +96,7 @@
 #include <algorithm>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace formula;
 
 const sal_uInt64 n2power48 = SAL_CONST_UINT64( 281474976710656); // 2^48
@@ -1566,12 +1569,10 @@ void ScInterpreter::ScSingleValue()
     // a single value. For a bare range, pick the slot row-aligned
     // (or column-aligned) with the formula cell, and push #VALUE!
     // when no slot matches. For a computed matrix, pick the
-    // upper-left value.
+    // upper-left value, whether or not it knows where its values sit.
     nFuncFmtType = nCurFmtType;
     StackVar eType = GetStackType();
-    if (eType == svDoubleRef
-        || (eType == svMatrix && sp > 0
-            && static_cast<const ScMatrixToken*>(pStack[sp - 1])->IsMatrixRangeToken()))
+    if (eType == svDoubleRef || IsTopMatrixReference())
     {
         ScRange aRange;
         if (eType == svDoubleRef)
@@ -1605,6 +1606,9 @@ void ScInterpreter::ScSingleValue()
             PushDouble(GetCellValue(aAdr, aCell));
         return;
     }
+    // Same intersection as for a sheet local range above.
+    if (eType == svExternalDoubleRef && PopExternalDoubleRefPushSingleRef())
+        return;
     if (eType == svMatrix)
     {
         ScMatrixRef pMat = GetMatrix();
@@ -1643,6 +1647,18 @@ void ScInterpreter::ScSpilledRange()
     // value. An empty cell, a number, a string, or a non-master
     // spill slot yields #REF!, since none of them is a dynamic-array
     // master.
+    //
+    // The operator refers to a single cell, so an operand wider than
+    // that has no master. A range, a reference list and a computed
+    // matrix all give #REF!.
+    const StackVar eOperandType = GetStackType();
+    if (eOperandType != svSingleRef && eOperandType != svError)
+    {
+        Pop();
+        PushError(FormulaError::NoRef);
+        return;
+    }
+
     ScAddress aAddress;
     PopSingleRef(aAddress);
     if (nGlobalError != FormulaError::NONE)
@@ -1899,7 +1915,7 @@ void ScInterpreter::ScRandom()
     auto RandomFunc = [this]( double, double )
     {
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        return dist(mrContext.aRNG);
+        return dist(mrContext.mxRandomEngine->maEngine);
     };
     ScRandomImpl( RandomFunc, 0.0, 0.0 );
 }
@@ -1955,9 +1971,9 @@ void ScInterpreter::ScRandArray()
         {
             std::uniform_real_distribution<double> dist(fFirst, fLast);
             if (bWholeNum)
-                return floor(dist(mrContext.aRNG));
+                return floor(dist(mrContext.mxRandomEngine->maEngine));
             else
-                return dist(mrContext.aRNG);
+                return dist(mrContext.mxRandomEngine->maEngine);
         };
 
     if (nCols == 1 && nRows == 1)
@@ -2001,7 +2017,7 @@ void ScInterpreter::ScRandbetween()
     auto RandomFunc = [this]( double fFirst, double fLast )
     {
         std::uniform_real_distribution<double> dist(fFirst, fLast);
-        return floor(dist(mrContext.aRNG));
+        return floor(dist(mrContext.mxRandomEngine->maEngine));
     };
     ScRandomImpl( RandomFunc, fMin, fMax);
 }
@@ -2862,8 +2878,7 @@ void ScInterpreter::ScIsRef()
             // A spilled-range reference travels as a matrix that
             // carries its source range. It answers as a reference,
             // while a plain computed matrix does not.
-            bRes = sp > 0
-                && static_cast<const ScMatrixToken*>(pStack[sp - 1])->IsMatrixRangeToken();
+            bRes = IsTopMatrixReference();
             Pop();
         }
         break;
@@ -3012,8 +3027,7 @@ void ScInterpreter::ScIsFormula()
             // reports ISFORMULA per cell of that range, the same as a
             // plain range. A plain computed matrix is not a reference
             // and reports false.
-            if (sp == 0
-                || !static_cast<const ScMatrixToken*>(pStack[sp - 1])->IsMatrixRangeToken())
+            if (!IsTopMatrixReference())
             {
                 Pop();
                 break;
@@ -5027,8 +5041,8 @@ sal_Int32 lcl_CompareMatrix2Query( SCSIZE i, const VectorMatrixAccessor& rMat, c
 {
     if (rMat.IsEmpty(i))
     {
-        /* TODO: in case we introduced query for real empty this would have to
-         * be changed! */
+        if (rEntry.IsQueryByEmpty())
+            return 0;   // empty is what we look for
         if (bEmptyIsLess)
             return -1;  // empty always less than anything else
         else
@@ -5445,7 +5459,13 @@ void ScInterpreter::ScXMatch()
                     return;
                 }
                 ScRefCellValue aCell(mrDoc, aAdr);
-                if (aCell.hasNumeric())
+                if (aCell.isEmpty())
+                {
+                    // An empty cell looks for an empty cell, not for "".
+                    vsa.isEmptySearch = true;
+                    vsa.isStringSearch = false;
+                }
+                else if (aCell.hasNumeric())
                 {
                     vsa.isStringSearch = false;
                     vsa.fSearchVal = GetCellValue(aAdr, aCell);
@@ -5476,6 +5496,11 @@ void ScInterpreter::ScXMatch()
                     vsa.isStringSearch = true;
                     vsa.sSearchStr = static_cast<FormulaStringToken*>(pToken.get())->GetString();
                 }
+                else if (pToken->GetType() == svEmptyCell)
+                {
+                    vsa.isEmptySearch = true;
+                    vsa.isStringSearch = false;
+                }
                 else
                 {
                     vsa.isStringSearch = true;
@@ -5487,7 +5512,13 @@ void ScInterpreter::ScXMatch()
             {
                 ScMatValType nType = GetDoubleOrStringFromMatrix(
                     vsa.fSearchVal, vsa.sSearchStr);
-                vsa.isStringSearch = ScMatrix::IsNonValueType(nType);
+                if (ScMatrix::IsEmptyType(nType))
+                {
+                    vsa.isEmptySearch = true;
+                    vsa.isStringSearch = false;
+                }
+                else
+                    vsa.isStringSearch = ScMatrix::IsNonValueType(nType);
             }
             break;
             default:
@@ -8290,7 +8321,13 @@ void ScInterpreter::ScXLookup()
                     return ;
                 }
                 ScRefCellValue aCell(mrDoc, aAdr);
-                if (aCell.hasNumeric())
+                if (aCell.isEmpty())
+                {
+                    // An empty cell looks for an empty cell, not for "".
+                    vsa.isEmptySearch = true;
+                    vsa.isStringSearch = false;
+                }
+                else if (aCell.hasNumeric())
                 {
                     vsa.isStringSearch = false;
                     vsa.fSearchVal = GetCellValue(aAdr, aCell);
@@ -8322,6 +8359,11 @@ void ScInterpreter::ScXLookup()
                     vsa.isStringSearch = true;
                     vsa.sSearchStr = static_cast<FormulaStringToken*>(pToken.get())->GetString();
                 }
+                else if (pToken->GetType() == svEmptyCell)
+                {
+                    vsa.isEmptySearch = true;
+                    vsa.isStringSearch = false;
+                }
                 else
                 {
                     vsa.isStringSearch = true;
@@ -8334,7 +8376,13 @@ void ScInterpreter::ScXLookup()
             {
                 ScMatValType nType = GetDoubleOrStringFromMatrix(
                         vsa.fSearchVal, vsa.sSearchStr);
-                vsa.isStringSearch = ScMatrix::IsNonValueType(nType);
+                if (ScMatrix::IsEmptyType(nType))
+                {
+                    vsa.isEmptySearch = true;
+                    vsa.isStringSearch = false;
+                }
+                else
+                    vsa.isStringSearch = ScMatrix::IsNonValueType(nType);
             }
             break;
 
@@ -10502,8 +10550,8 @@ void ScInterpreter::ScCall( FormulaCallableRef rCallable, sal_uInt8 nArgCount )
     // and the stack is set up with the relevant args
     // we just need to dispatch the OpCode
     FormulaTokenRef pTempToken = new FormulaByteToken(eOpCode, nArgCount);
-    pCur = pTempToken.get();
-    cPar = nArgCount;
+    comphelper::ValueRestorationGuard const curGuard(pCur, pTempToken.get());
+    comphelper::ValueRestorationGuard const parGuard(cPar, nArgCount);
     DispatchOpCode( eOpCode );
 }
 
@@ -10603,7 +10651,7 @@ static cpo::uno::Any lcl_getSheetModule( const uno::Reference<table::XCellRange>
     // create the special document module objects if they don't exist.
     BasicManager* pBasMgr = pDok->GetDocumentShell()->GetBasicManager();
 
-    uno::Reference< uno::XInterface > xIf;
+    uno::Reference< cpo::uno::XInterface > xIf;
     if ( pBasMgr && !pBasMgr->GetName().isEmpty() )
     {
         OUString sProj( u"Standard"_ustr );
@@ -10629,7 +10677,7 @@ static bool lcl_setVBARange( const ScRange& aRange, const ScDocument& rDok, SbxV
     bool bOk = false;
     try
     {
-        uno::Reference< uno::XInterface > xVBARange;
+        uno::Reference< cpo::uno::XInterface > xVBARange;
         uno::Reference<table::XCellRange> xCellRange = ScCellRangeObj::CreateRangeFromDoc( rDok, aRange );
         cpo::uno::Sequence< cpo::uno::Any > aArgs{ lcl_getSheetModule( xCellRange, &rDok ),
             cpo::uno::Any(xCellRange) };

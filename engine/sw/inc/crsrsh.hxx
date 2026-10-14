@@ -43,6 +43,7 @@
 #include "fldbas.hxx"
 #include "IDocumentMarkAccess.hxx"
 #include <optional>
+#include <vector>
 
 class SfxItemSet;
 class SfxPoolItem;
@@ -114,6 +115,8 @@ struct SwContentAtPos
     int nDist;
     OUString sStr;
     const SwTextAttr* pFndTextAttr;
+    /// Other tracked changes on the comment anchors next to the found position, in text order.
+    std::vector<const SwRangeRedline*> aCommentAnchorRedlines;
 
     SwContentAtPos( IsAttrAtPos eGetAtPos )
         : eContentAtPos( eGetAtPos )
@@ -271,6 +274,10 @@ private:
 
     Idle m_aLayoutIdle; // An idle to schedule another SwViewShell::LayoutIdle call
 
+    // The view that instigated the pending layout change, sent to the client as
+    // editorViewId. It is -1 before any change records it.
+    int m_nInstigatingViewId;
+
     void MoveCursorToNum();
 
     void ParkPams( SwPaM* pDelRg, SwShellCursor** ppDelRing );
@@ -339,6 +346,9 @@ protected:
 
     virtual void OnSpellWrongStatePending() override { m_bNeedLayoutOnCursorUpdate = true; }
 
+    virtual void SetInstigatingViewId(int nViewId) override
+    { m_nInstigatingViewId = nViewId; }
+
 public:
     SwCursorShell( SwDoc& rDoc, vcl::Window *pWin, const SwViewOption *pOpt );
     // disguised copy constructor
@@ -353,7 +363,7 @@ public:
     ///< delete the current cursor and make the following into the current
     SW_DLLPUBLIC void DestroyCursor();
     ///< transform TableCursor to normal cursor, nullify Tablemode
-    void TableCursorToCursor();
+    SW_DLLPUBLIC void TableCursorToCursor();
     ///< enter block mode, change normal cursor into block cursor
     void CursorToBlockCursor();
     ///< leave block mode, change block cursor into normal cursor
@@ -664,7 +674,7 @@ public:
     // select a table row, column or box (based on the current cursor)
     bool SelTableRow() { return SelTableRowOrCol( true  ); }
     bool SelTableCol() { return SelTableRowOrCol( false ); }
-    bool SelTableBox();
+    SW_DLLPUBLIC bool SelTableBox();
 
     SW_DLLPUBLIC bool SelTable();
 
@@ -850,8 +860,8 @@ public:
 
     // get smart tags at current cursor position
     void GetSmartTagTerm( std::vector< OUString >& rSmartTagTypes,
-                          cpo::uno::Sequence< css::uno::Reference< css::container::XStringKeyMap > >& rStringKeyMaps,
-                          css::uno::Reference<css::text::XTextRange>& rRange ) const;
+                          cpo::uno::Sequence< cpo::uno::Reference< css::container::XStringKeyMap > >& rStringKeyMaps,
+                          cpo::uno::Reference<css::text::XTextRange>& rRange ) const;
 
     bool IsPageAtPos( const Point &rPt ) const;
 
@@ -869,7 +879,7 @@ public:
     bool CheckTableBoxContent( const SwPosition* pPos = nullptr );
     void SaveTableBoxContent( const SwPosition* pPos = nullptr );
     void ClearTableBoxContent();
-    bool EndAllTableBoxEdit();
+    SW_DLLPUBLIC bool EndAllTableBoxEdit();
 
     void SetSelTableCells( bool bFlag )           { m_bSelTableCells = bFlag; }
     bool IsSelTableCells() const                  { return m_bSelTableCells; }

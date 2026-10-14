@@ -30,7 +30,8 @@
 #include <docsh.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -57,7 +58,7 @@ public:
     int getRequestCount() const { return mnRequestCount; }
     const OUString& getRequestedFontName() const { return maRequestedFontName; }
 
-    virtual void SAL_CALL handle(uno::Reference<task::XInteractionRequest> const& rRequest) override
+    virtual void handle(uno::Reference<task::XInteractionRequest> const& rRequest) override
     {
         const auto aContinuations = rRequest->getContinuations();
 

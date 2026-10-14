@@ -94,19 +94,8 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
 endif
 
 $(eval $(call gb_Library_add_exception_objects,cui,\
-    cui/source/customize/acccfg \
-    cui/source/customize/cfg \
     cui/source/customize/cfgutil \
-    cui/source/customize/CommandCategoryListBox \
-    cui/source/customize/eventdlg \
     cui/source/customize/macropg \
-    cui/source/customize/SvxConfigPageHelper \
-    cui/source/customize/SvxMenuConfigPage \
-    cui/source/customize/SvxToolbarConfigPage \
-    cui/source/customize/SvxNotebookbarConfigPage \
-    cui/source/customize/CustomNotebookbarGenerator \
-    $(call gb_Helper_optional,EXTENSIONS, \
-        cui/source/dialogs/AdditionsDialog) \
     cui/source/dialogs/cuifmsearch \
     cui/source/dialogs/cuigaldlg \
     cui/source/dialogs/cuigrfflt \
@@ -135,8 +124,6 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/dialogs/postdlg \
     cui/source/dialogs/querydialog \
     cui/source/dialogs/QrCodeGenDialog \
-    cui/source/dialogs/GraphicTestsDialog \
-    cui/source/dialogs/ImageViewerDialog \
     cui/source/dialogs/scriptdlg \
     $(call gb_Helper_optional,SCRIPTING, \
         cui/source/dialogs/MacroManagerDialog) \
@@ -149,52 +136,21 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/dialogs/splitcelldlg \
     cui/source/dialogs/srchxtra \
     cui/source/dialogs/thesdlg \
-    cui/source/dialogs/uipickerdlg \
-    cui/source/dialogs/uitabpage \
-    cui/source/dialogs/toolbartabpage \
     cui/source/dialogs/zoom \
     cui/source/factory/cuiexp \
     cui/source/factory/cuiresmgr \
     cui/source/factory/dlgfact \
     cui/source/factory/init \
-    cui/source/options/certpath \
-    cui/source/options/cfgchart \
-    cui/source/options/connpoolconfig \
-    cui/source/options/connpooloptions \
-    cui/source/options/connpoolsettings \
     cui/source/options/cuisrchdlg \
     cui/source/options/dbregister \
     cui/source/options/dbregisterednamesconfig \
     cui/source/options/dbregistersettings \
     cui/source/options/doclinkdialog \
-    cui/source/options/fontsubs \
-	cui/source/options/optaboutconfig \
-    cui/source/options/optaccessibility \
-    cui/source/options/optasian \
-    $(call gb_Helper_optional,SCRIPTING, \
-        cui/source/options/optbasic) \
-    cui/source/options/optchart \
-    cui/source/options/optctl \
     cui/source/options/optdict \
-    cui/source/options/optfltr \
-    cui/source/options/optgdlg \
     cui/source/options/optgenrl \
-    cui/source/options/opthtml \
-    cui/source/options/optlanguagetool \
-    cui/source/options/optdeepl \
-    cui/source/options/optinet2 \
-    cui/source/options/optjava \
     cui/source/options/optjsearch \
     cui/source/options/optlingu \
-    cui/source/options/optpath \
-    cui/source/options/optsave \
-    cui/source/options/appearance \
-    cui/source/options/sdbcdriverenum \
     cui/source/options/securityoptions \
-    cui/source/options/treeopt \
-    cui/source/options/treeopthelper \
-    cui/source/options/tsaurls \
-    cui/source/options/webconninfo \
     cui/source/tabpages/align \
     cui/source/tabpages/autocdlg \
     cui/source/tabpages/backgrnd \

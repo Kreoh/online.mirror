@@ -13,7 +13,7 @@
 #include <dmapper/resourcemodel.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <rtl/ref.hxx>
 
 class SwXTextDocument;
@@ -35,8 +35,8 @@ class DomainMapperFactory
 {
 public:
     static Stream::Pointer_t
-    createMapper(css::uno::Reference<css::uno::XComponentContext> const& xContext,
-                 css::uno::Reference<css::io::XInputStream> const& xInputStream,
+    createMapper(cpo::uno::Reference<cpo::uno::XComponentContext> const& xContext,
+                 cpo::uno::Reference<css::io::XInputStream> const& xInputStream,
                  rtl::Reference<SwXTextDocument> const& xModel, bool bRepairStorage,
                  SourceDocumentType eDocumentType, comphelper::SequenceAsHashMap const& rMediaDesc);
 };

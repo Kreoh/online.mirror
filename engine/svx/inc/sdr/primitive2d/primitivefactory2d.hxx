@@ -35,31 +35,31 @@ public:
     PrimitiveFactory2D() {}
 
     // Methods from XPrimitiveFactory2D
-    virtual cpo::uno::Sequence<css::uno::Reference<css::graphic::XPrimitive2D>>
-        SAL_CALL createPrimitivesFromXShape(
-            const css::uno::Reference<css::drawing::XShape>& xShape,
+    virtual cpo::uno::Sequence<cpo::uno::Reference<css::graphic::XPrimitive2D>>
+        createPrimitivesFromXShape(
+            const cpo::uno::Reference<css::drawing::XShape>& xShape,
             const cpo::uno::Sequence<css::beans::PropertyValue>& aParms) override;
-    virtual cpo::uno::Sequence<css::uno::Reference<css::graphic::XPrimitive2D>>
-        SAL_CALL createPrimitivesFromXDrawPage(
-            const css::uno::Reference<css::drawing::XDrawPage>& xDrawPage,
+    virtual cpo::uno::Sequence<cpo::uno::Reference<css::graphic::XPrimitive2D>>
+        createPrimitivesFromXDrawPage(
+            const cpo::uno::Reference<css::drawing::XDrawPage>& xDrawPage,
             const cpo::uno::Sequence<css::beans::PropertyValue>& aParms) override;
 
     static void createPrimitivesFromXShape(
-        const css::uno::Reference<css::drawing::XShape>& xShape,
+        const cpo::uno::Reference<css::drawing::XShape>& xShape,
         const cpo::uno::Sequence<css::beans::PropertyValue>& /*aParms*/,
         drawinglayer::primitive2d::Primitive2DDecompositionVisitor& rVisitor);
 
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     {
         return u"com.sun.star.comp.graphic.PrimitiveFactory2D"_ustr;
     }
 
-    bool SAL_CALL supportsService(OUString const& ServiceName) override
+    bool supportsService(OUString const& ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.graphic.PrimitiveFactory2D"_ustr };
     }

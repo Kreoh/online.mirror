@@ -62,7 +62,7 @@
 
 #include <cmdid.h>
 #include <strings.hrc>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <sfx2/filedlghelper.hxx>
 #define ShellClass_SwSrcView
 #include <swslots.hxx>
@@ -73,7 +73,8 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ui::dialogs;
 using namespace ::sfx2;
 
@@ -270,7 +271,7 @@ void SwSrcView::Execute(SfxRequest& rReq)
             FileDialogHelper aDlgHelper(
                 TemplateDescription::FILESAVE_AUTOEXTENSION,
                 FileDialogFlags::NONE, m_aEditWin->GetFrameWeld());
-            uno::Reference < XFilePicker3 > xFP = aDlgHelper.GetFilePicker();
+            uno::Reference < XFilePicker > xFP = aDlgHelper.GetFilePicker();
 
             // search for an html filter for export
             SfxFilterContainer* pFilterCont = GetObjectShell()->GetFactory().GetFilterContainer();

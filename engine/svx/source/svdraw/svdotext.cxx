@@ -24,6 +24,7 @@
 #include <svx/svdotext.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdoutl.hxx>
+#include <svx/compatflags.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/dialmgr.hxx>
 #include <svx/strings.hrc>
@@ -184,7 +185,7 @@ void SdrTextObj::NbcSetText(const OUString& rStr)
 {
     SdrOutliner& rOutliner=ImpGetDrawOutliner();
     rOutliner.SetStyleSheet( 0, GetStyleSheet());
-    rOutliner.SetText(rStr,rOutliner.GetParagraph( 0 ));
+    rOutliner.SetText(rStr, 0);
     std::optional<OutlinerParaObject> pNewText=rOutliner.CreateParaObject();
     NbcSetOutlinerParaObject(std::move(pNewText));
     mbTextSizeDirty=true;
@@ -412,15 +413,15 @@ bool SdrTextObj::HasTextImpl( SdrOutliner const * pOutliner )
     bool bRet=false;
     if(pOutliner)
     {
-        Paragraph* p1stPara=pOutliner->GetParagraph( 0 );
+        sal_Int32 n1stPara=0;
         sal_Int32 nParaCount=pOutliner->GetParagraphCount();
-        if(p1stPara==nullptr)
+        if(n1stPara>=nParaCount)
             nParaCount=0;
 
         if(nParaCount==1)
         {
             // if it is only one paragraph, check if that paragraph is empty
-            if( pOutliner->GetText(p1stPara).isEmpty() )
+            if( pOutliner->GetText(n1stPara).isEmpty() )
                 nParaCount = 0;
         }
 
@@ -1141,6 +1142,8 @@ void SdrTextObj::ImpInitDrawOutliner( SdrOutliner& rOutl ) const
     rOutl.Init( nOutlinerMode );
 
     rOutl.resetScalingParameters();
+    rOutl.setLineSpacingBelowBaseline(getSdrModelFromSdrObject().GetCompatibilityFlag(
+        SdrCompatibilityFlag::LineSpacingBelowBaselineLegacy));
 
     EEControlBits nStat=rOutl.GetControlWord();
     nStat &= ~EEControlBits(EEControlBits::STRETCHING|EEControlBits::AUTOPAGESIZE);
@@ -1228,7 +1231,17 @@ void SdrTextObj::setupAutoFitText(SdrOutliner& rOutliner) const
 void SdrTextObj::setupAutoFitText(SdrOutliner& rOutliner, const Size& rTextBoxSize) const
 {
     rOutliner.setRoundFontSizeToPt(true); // We need to round the font size nearest integer pt size
-    rOutliner.SetMaxAutoPaperSize(rTextBoxSize);
+    if (getSdrModelFromSdrObject().GetCompatibilityFlag(SdrCompatibilityFlag::TextFittingLegacy))
+        rOutliner.setTextFitting(EETextFitting::Legacy);
+    else if (GetTextKind() == SdrObjKind::TitleText)
+        rOutliner.setTextFitting(EETextFitting::Title);
+    else
+        rOutliner.setTextFitting(EETextFitting::Body);
+    rOutliner.setTextFittingHeight(rTextBoxSize.Height());
+    // While the text is edited, its paper keeps the maximum size of text edit, so text that
+    // overflows the box stays visible and reachable by the cursor.
+    if (!mbInEditMode)
+        rOutliner.SetMaxAutoPaperSize(rTextBoxSize);
     rOutliner.SetPaperSize(rTextBoxSize);
 
     const SdrTextFitToSizeTypeItem& rItem = GetObjectItem(SDRATTR_TEXT_FITTOSIZE);
@@ -1826,10 +1839,10 @@ void SdrTextObj::onEditOutlinerStatusEvent( EditStatus* pEditStatus )
     const EditStatusFlags nStat = pEditStatus->GetStatusWord();
     const bool bGrowX = bool(nStat & EditStatusFlags::TEXTWIDTHCHANGED);
     const bool bGrowY = bool(nStat & EditStatusFlags::TextHeightChanged);
-    if(!(mbTextFrame && (bGrowX || bGrowY)))
+    if(!(bGrowX || bGrowY))
         return;
 
-    if ((bGrowX && IsAutoGrowWidth()) || (bGrowY && IsAutoGrowHeight()))
+    if (mbTextFrame && ((bGrowX && IsAutoGrowWidth()) || (bGrowY && IsAutoGrowHeight())))
     {
         AdjustTextFrameWidthAndHeight();
     }
@@ -2008,9 +2021,10 @@ rtl::Reference<SdrObject> SdrTextObj::getFullDragClone() const
 
 /* End chaining code */
 
-std::optional<Color> SdrTextObj::GetActiveTextBackgroundColor(const SdrText* /*pSdrText*/) const
+std::optional<Color> SdrTextObj::GetActiveTextBackgroundColor(const SdrText* /*pSdrText*/,
+                                                              std::optional<Color> oBehind) const
 {
-    return GetDraftFillColor(GetMergedItemSet());
+    return GetDraftFillColor(GetMergedItemSet(), oBehind);
 }
 
 /** returns the currently active text. */

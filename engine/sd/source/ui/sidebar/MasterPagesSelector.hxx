@@ -68,7 +68,7 @@ public:
     // Sidebar
     MasterPagesSelector(weld::Widget* pParent, SdDrawDocument& rDocument, ViewShellBase& rBase,
                         std::shared_ptr<MasterPageContainer> pContainer,
-                        css::uno::Reference<css::ui::XSidebar> xSidebar,
+                        cpo::uno::Reference<css::ui::XSidebar> xSidebar,
                         const OUString& rUIFileName, const OUString& rIconViewId);
 
     // Notebookbar
@@ -172,7 +172,7 @@ protected:
     virtual void ExecuteCommand(const OUString& rIdent);
 
 private:
-    css::uno::Reference<css::ui::XSidebar> mxSidebar;
+    cpo::uno::Reference<css::ui::XSidebar> mxSidebar;
     UpdateTask maUpdateTask;
 
     /** The offset between ValueSet index and MasterPageContainer::Token
@@ -193,6 +193,13 @@ private:
     void RemoveTokenToIndexEntry (
         sal_uInt16 nIndex,
         MasterPageContainer::Token aToken);
+
+    /** Bring the token to index map back in step with the icon view after the row with the given
+        index has been taken out of it.  The token that the removed row showed is left with the -1
+        of a token that has no row, and every index below the removed row moves up by one.
+    */
+    void UpdateTokenToIndexEntriesForRemovedRow (
+        sal_uInt16 nIndex);
 
     static ScopedVclPtr<VirtualDevice> GetVirtualDevice(const Image& rPreview);
 };

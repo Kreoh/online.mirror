@@ -85,6 +85,14 @@ COMPHELPER_DLLPUBLIC bool isUserSettingsPersistenceAvailable();
 COMPHELPER_DLLPUBLIC void setUserConfigDir(const OUString& rUrl);
 COMPHELPER_DLLPUBLIC OUString getUserConfigDir();
 
+/// Directory URL (file://...) of the read-only, admin-provisioned shared presets
+/// tree; empty when the client did not provide one. Recorded from
+/// "addsharedpresetpaths", whose groups the paths above are registered from, for
+/// the consumers that dir-scan their own group at <sharedPresetsDir>/<group>/
+/// instead of going through a configured path.
+COMPHELPER_DLLPUBLIC void setSharedPresetsDir(const OUString& rUrl);
+COMPHELPER_DLLPUBLIC OUString getSharedPresetsDir();
+
 /// Used by SlideshowLayerRenderer for signaling that a slide rendering is occurring.
 COMPHELPER_DLLPUBLIC void setSlideshowRendering(bool bSlideshowRendering);
 COMPHELPER_DLLPUBLIC bool isSlideshowRendering();
@@ -115,6 +123,30 @@ public:
 
     TiledPaintingGuard(const TiledPaintingGuard&) = delete;
     TiledPaintingGuard& operator=(const TiledPaintingGuard&) = delete;
+};
+
+/// Whether the document's dialogs are suppressed, because there is nobody to answer them. True
+/// for a document marked below and for the one loading now. Pass NoDocId for a dialog that
+/// belongs to no document, which answers for the load in progress.
+COMPHELPER_DLLPUBLIC bool areDialogsSuppressed(ViewShellDocId nDocId);
+/// Suppresses the document's dialogs for as long as it is open.
+COMPHELPER_DLLPUBLIC void setDialogsSuppressed(ViewShellDocId nDocId);
+/// Stops suppressing them, for a document that is going away.
+COMPHELPER_DLLPUBLIC void clearDialogsSuppressed(ViewShellDocId nDocId);
+
+/// Suppresses the dialogs of the document that is loading, and puts back the document that was
+/// suppressed before. A document has no view while it loads, so the dialogs raised then are
+/// answered for through this rather than through the document's own marking.
+class COMPHELPER_DLLPUBLIC SuppressDialogsLoadGuard
+{
+    const ViewShellDocId m_nPrevDocId;
+
+public:
+    explicit SuppressDialogsLoadGuard(ViewShellDocId nDocId);
+    ~SuppressDialogsLoadGuard();
+
+    SuppressDialogsLoadGuard(const SuppressDialogsLoadGuard&) = delete;
+    SuppressDialogsLoadGuard& operator=(const SuppressDialogsLoadGuard&) = delete;
 };
 
 /// Set if we are doing idle layout.

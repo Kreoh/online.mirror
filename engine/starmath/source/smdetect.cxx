@@ -21,7 +21,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <sfx2/docfile.hxx>
 #include <unotools/mediadescriptor.hxx>
 #include <sot/storage.hxx>
@@ -31,8 +31,8 @@
 #include "eqnolefilehdr.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::beans;
@@ -46,7 +46,7 @@ SmFilterDetect::~SmFilterDetect()
 {
 }
 
-OUString SAL_CALL SmFilterDetect::detect( Sequence< PropertyValue >& lDescriptor )
+OUString SmFilterDetect::detect( Sequence< PropertyValue >& lDescriptor )
 {
     comphelper::SequenceAsHashMap aMediaDesc(lDescriptor);
     uno::Reference< io::XInputStream > xInStream ( aMediaDesc[utl::MediaDescriptor::PROP_INPUTSTREAM], uno::UNO_QUERY );
@@ -122,25 +122,25 @@ OUString SAL_CALL SmFilterDetect::detect( Sequence< PropertyValue >& lDescriptor
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SmFilterDetect::getImplementationName()
+OUString SmFilterDetect::getImplementationName()
 {
     return u"com.sun.star.comp.math.FormatDetector"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL SmFilterDetect::supportsService( const OUString& sServiceName )
+bool SmFilterDetect::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL SmFilterDetect::getSupportedServiceNames()
+Sequence< OUString > SmFilterDetect::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-math_FormatDetector_get_implementation(uno::XComponentContext* /*pCtx*/,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+math_FormatDetector_get_implementation(cpo::uno::XComponentContext* /*pCtx*/,
                                        cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SmFilterDetect);

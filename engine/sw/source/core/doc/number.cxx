@@ -28,6 +28,7 @@
 #include <fmtornt.hxx>
 #include <doc.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <poolfmt.hxx>
 #include <ndtxt.hxx>
 #include <docary.hxx>
@@ -35,6 +36,7 @@
 
 // Needed to load default bullet list configuration
 #include <comphelper/configuration.hxx>
+#include <officecfg/Office/Common.hxx>
 #include <unotools/configitem.hxx>
 
 #include <numrule.hxx>
@@ -208,6 +210,19 @@ sal_uInt16 SwNumRule::GetBullIndent( sal_uInt8 nLvl )
 {
     OSL_ENSURE( MAXLEVEL > nLvl, "NumLevel is out of range" );
     return saDefNumIndents[ nLvl ];
+}
+
+void SwNumRule::ApplyDefaultLabelAlignmentIndents(SvxNumberFormat& rFormat, sal_uInt8 nLvl)
+{
+    // first-line indent of general numbering: -0.25 inch
+    constexpr tools::Long cFirstLineIndent = o3tl::toTwips(-0.25, o3tl::Length::in);
+    // indent-at starts at 0.50 inch for level 0 and grows by 0.25 inch per level
+    const tools::Long nIndentAt = o3tl::toTwips(50 + 25 * nLvl, o3tl::Length::in100);
+    rFormat.SetPositionAndSpaceMode(SvxNumberFormat::LABEL_ALIGNMENT);
+    rFormat.SetLabelFollowedBy(SvxNumberFormat::LISTTAB);
+    rFormat.SetListtabPos(nIndentAt);
+    rFormat.SetFirstLineIndent(cFirstLineIndent);
+    rFormat.SetIndentAt(nIndentAt);
 }
 
 static void lcl_SetRuleChgd( SwTextNode& rNd, sal_uInt8 nLevel )
@@ -416,6 +431,7 @@ SwNumRule::SwNumRule( UIName aNm,
                       const SvxNumberFormat::SvxNumPositionAndSpaceMode eDefaultNumberFormatPositionAndSpaceMode,
                       SwNumRuleType eType )
   : mpNumRuleMap(nullptr),
+    mpDoc(nullptr),
     msName( std::move(aNm) ),
     meRuleType( eType ),
     mnPoolFormatId( SwPoolFormatId::UNKNOWN ),
@@ -449,31 +465,12 @@ SwNumRule::SwNumRule( UIName aNm,
             SwNumRule::saBaseFormats[ NUM_RULE ][ n ] = pFormat;
         }
         // position-and-space mode LABEL_ALIGNMENT
-        // first line indent of general numbering in inch: -0,25 inch
-        const tools::Long cFirstLineIndent = o3tl::toTwips(-0.25, o3tl::Length::in);
-        // indent values of general numbering in inch:
-        const tools::Long cIndentAt[ MAXLEVEL ] = {
-            o3tl::toTwips(50, o3tl::Length::in100),
-            o3tl::toTwips(75, o3tl::Length::in100),
-            o3tl::toTwips(100, o3tl::Length::in100),
-            o3tl::toTwips(125, o3tl::Length::in100),
-            o3tl::toTwips(150, o3tl::Length::in100),
-            o3tl::toTwips(175, o3tl::Length::in100),
-            o3tl::toTwips(200, o3tl::Length::in100),
-            o3tl::toTwips(225, o3tl::Length::in100),
-            o3tl::toTwips(250, o3tl::Length::in100),
-            o3tl::toTwips(275, o3tl::Length::in100),
-        };
         for( n = 0; n < MAXLEVEL; ++n )
         {
             pFormat = new SwNumFormat;
             pFormat->SetIncludeUpperLevels( 1 );
             pFormat->SetStart( 1 );
-            pFormat->SetPositionAndSpaceMode( SvxNumberFormat::LABEL_ALIGNMENT );
-            pFormat->SetLabelFollowedBy( SvxNumberFormat::LISTTAB );
-            pFormat->SetListtabPos( cIndentAt[ n ] );
-            pFormat->SetFirstLineIndent( cFirstLineIndent );
-            pFormat->SetIndentAt( cIndentAt[ n ] );
+            SwNumRule::ApplyDefaultLabelAlignmentIndents( *pFormat, n );
             pFormat->SetListFormat( "%" + OUString::number(n + 1) + "%.");
             pFormat->SetBulletChar( numfunc::GetBulletChar(n));
             SwNumRule::saLabelAlignmentBaseFormats[ NUM_RULE ][ n ] = pFormat;
@@ -511,6 +508,7 @@ SwNumRule::SwNumRule( UIName aNm,
 
 SwNumRule::SwNumRule( const SwNumRule& rNumRule )
     : mpNumRuleMap(nullptr),
+      mpDoc(nullptr),
       msName( rNumRule.msName ),
       meRuleType( rNumRule.meRuleType ),
       mnPoolFormatId( rNumRule.GetPoolFormatId() ),
@@ -778,9 +776,29 @@ void SwNumRule::Set( sal_uInt16 i, const SwNumFormat& rNumFormat )
     OSL_ENSURE( i < MAXLEVEL, "Serious defect" );
     if( i < MAXLEVEL )
     {
-        if( !maFormats[ i ] || (rNumFormat != Get( i )) )
+        SwNumFormat aFiltered;
+        if (mpDoc && mpDoc->IsInMergedPaste())
         {
-            maFormats[ i ].reset(new SwNumFormat( rNumFormat ));
+            // Merged paste: only selected list properties are used from the source.
+            aFiltered.SetNumberingType(rNumFormat.GetNumberingType());
+            aFiltered.SetCharFormat(rNumFormat.GetCharFormat());
+            if (aFiltered.GetNumberingType() == SVX_NUM_CHAR_SPECIAL)
+                numfunc::SetDefaultListBullet(aFiltered, i);
+            else
+            {
+                aFiltered.SetStart(rNumFormat.GetStart());
+                aFiltered.SetListFormat(rNumFormat.GetListFormat());
+            }
+            SwNumRule::ApplyDefaultLabelAlignmentIndents(aFiltered, i);
+        }
+        else
+        {
+            aFiltered = rNumFormat;
+        }
+
+        if( !maFormats[ i ] || (aFiltered != Get( i )) )
+        {
+            maFormats[ i ].reset(new SwNumFormat( aFiltered ));
             mbInvalidRuleFlag = true;
         }
     }
@@ -1636,6 +1654,32 @@ namespace numfunc
     sal_Unicode GetBulletChar( sal_uInt8 nLevel )
     {
         return SwDefBulletConfig::getInstance().GetChar( nLevel );
+    }
+
+    void SetDefaultListBullet(SwNumFormat& rFormat, sal_uInt16 nLevel)
+    {
+        static constexpr OUString sDefaultBulletSymbol = u"•"_ustr;
+        static constexpr OUString sDefaultBulletSymbolFont = u"OpenSymbol"_ustr;
+        cpo::uno::Sequence<OUString> aBulletSymbols(
+            officecfg::Office::Common::BulletsNumbering::DefaultListBullets::get());
+        const cpo::uno::Sequence<OUString> aBulletSymbolsFonts(
+            officecfg::Office::Common::BulletsNumbering::DefaultListBulletsFonts::get());
+        if (!aBulletSymbols.hasElements())
+        {
+            SAL_WARN("sw", "empty DefaultListBullets config, adding a default single bullet");
+            // Add a single element even if user cleared the list in the config
+            aBulletSymbols.realloc(1);
+            aBulletSymbols.getArray()[0] = sDefaultBulletSymbol;
+        }
+        const sal_Int32 nBulletSymbolIndex = nLevel % aBulletSymbols.getLength();
+        rFormat.SetBulletChar(aBulletSymbols[nBulletSymbolIndex].toChar());
+        vcl::Font aFont;
+        // Symbol and font correspond to each other, use same index
+        if (nBulletSymbolIndex < aBulletSymbolsFonts.getLength())
+            aFont.SetFamilyName(aBulletSymbolsFonts[nBulletSymbolIndex]);
+        else
+            aFont.SetFamilyName(sDefaultBulletSymbolFont);
+        rFormat.SetBulletFont(&aFont);
     }
 
     namespace {

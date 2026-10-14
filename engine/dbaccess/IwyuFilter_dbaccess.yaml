@@ -40,9 +40,6 @@ excludelist:
     dbaccess/source/core/dataaccess/dataaccessdescriptor.cxx:
     # Actually used
     - com/sun/star/lang/XServiceInfo.hpp
-    dbaccess/source/core/misc/DatabaseDataProvider.cxx:
-    # Needed for UnoType macro to work
-    - com/sun/star/task/XInteractionHandler.hpp
     dbaccess/source/filter/xml/xmlDatabase.cxx:
     # Needed for template
     - com/sun/star/frame/XModel.hpp
@@ -108,7 +105,7 @@ excludelist:
     dbaccess/source/ui/misc/DExport.cxx:
     # Actually used
     - com/sun/star/awt/FontDescriptor.hpp
-    - com/sun/star/uno/XComponentContext.hpp
+    - cpo/uno/XComponentContext.hpp
     dbaccess/source/ui/misc/UITools.cxx:
     # Actually used
     - com/sun/star/container/XHierarchicalNameContainer.hpp

@@ -85,35 +85,35 @@ public:
   // Overrides WeakComponentImplHelper::disposing which is called by
   // WeakComponentImplHelper::dispose
   // Must be called.
-  virtual void SAL_CALL disposing() override;
+  virtual void disposing() override;
 
   // XInitialization
-  virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+  virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
   // XDropTarget
-  virtual void SAL_CALL addDropTargetListener( const css::uno::Reference< css::datatransfer::dnd::XDropTargetListener >& dtl ) override;
+  virtual void addDropTargetListener( const cpo::uno::Reference< css::datatransfer::dnd::XDropTargetListener >& dtl ) override;
 
-  virtual void SAL_CALL removeDropTargetListener( const css::uno::Reference<  css::datatransfer::dnd::XDropTargetListener >& dtl ) override;
+  virtual void removeDropTargetListener( const cpo::uno::Reference<  css::datatransfer::dnd::XDropTargetListener >& dtl ) override;
 
   // Default is not active
-  virtual bool SAL_CALL isActive() override;
-  virtual void SAL_CALL setActive(bool isActive) override;
-  virtual sal_Int8 SAL_CALL getDefaultActions() override;
-  virtual void SAL_CALL setDefaultActions(sal_Int8 actions) override;
+  virtual bool isActive() override;
+  virtual void setActive(bool isActive) override;
+  virtual sal_Int8 getDefaultActions() override;
+  virtual void setDefaultActions(sal_Int8 actions) override;
 
   // XDropTargetDragContext
-  virtual void SAL_CALL acceptDrag(sal_Int8 dragOperation) override;
-  virtual void SAL_CALL rejectDrag() override;
+  virtual void acceptDrag(sal_Int8 dragOperation) override;
+  virtual void rejectDrag() override;
 
   // XDropTargetDragContext
-  virtual void SAL_CALL acceptDrop(sal_Int8 dropOperation) override;
-  virtual void SAL_CALL rejectDrop() override;
-  virtual void SAL_CALL dropComplete(bool success) override;
+  virtual void acceptDrop(sal_Int8 dropOperation) override;
+  virtual void rejectDrop() override;
+  virtual void dropComplete(bool success) override;
 
   // XServiceInfo
-  virtual OUString SAL_CALL getImplementationName() override;
-  virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-  virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+  virtual OUString getImplementationName() override;
+  virtual bool supportsService(const OUString& ServiceName) override;
+  virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
   // NSDraggingDestination protocol functions
   NSDragOperation draggingEntered(id sender);
@@ -138,9 +138,9 @@ private:
   void fire_dropActionChanged(const css::datatransfer::dnd::DropTargetDragEvent& dtde);
 
 private:
-  css::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext > mXCurrentDragContext;
-  css::uno::Reference< css::datatransfer::dnd::XDropTargetDropContext > mXCurrentDropContext;
-  css::uno::Reference< css::datatransfer::clipboard::XClipboard > mXCurrentDragClipboard;
+  cpo::uno::Reference< css::datatransfer::dnd::XDropTargetDragContext > mXCurrentDragContext;
+  cpo::uno::Reference< css::datatransfer::dnd::XDropTargetDropContext > mXCurrentDropContext;
+  cpo::uno::Reference< css::datatransfer::clipboard::XClipboard > mXCurrentDragClipboard;
   DataFlavorMapperPtr_t mDataFlavorMapper;
   id  mView;
   AquaSalFrame* mpFrame;

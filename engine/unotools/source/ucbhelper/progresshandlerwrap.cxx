@@ -24,12 +24,12 @@
 namespace utl
 {
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::ucb;
 
-ProgressHandlerWrap::ProgressHandlerWrap( css::uno::Reference< css::task::XStatusIndicator > xSI )
+ProgressHandlerWrap::ProgressHandlerWrap( cpo::uno::Reference< css::task::XStatusIndicator > xSI )
 : m_xStatusIndicator(std::move( xSI ))
 {
 }
@@ -51,7 +51,7 @@ static bool getStatusFromAny_Impl( const Any& aAny, OUString& aText, sal_Int32& 
     return bNumIsSet;
 }
 
-void SAL_CALL ProgressHandlerWrap::push( const Any& Status )
+void ProgressHandlerWrap::push( const Any& Status )
 {
     if( !m_xStatusIndicator.is() )
         return;
@@ -63,7 +63,7 @@ void SAL_CALL ProgressHandlerWrap::push( const Any& Status )
         m_xStatusIndicator->start( aText, nRange );
 }
 
-void SAL_CALL ProgressHandlerWrap::update( const Any& Status )
+void ProgressHandlerWrap::update( const Any& Status )
 {
     if( !m_xStatusIndicator.is() )
         return;
@@ -78,7 +78,7 @@ void SAL_CALL ProgressHandlerWrap::update( const Any& Status )
     }
 }
 
-void SAL_CALL ProgressHandlerWrap::pop()
+void ProgressHandlerWrap::pop()
 {
     if( m_xStatusIndicator.is() )
         m_xStatusIndicator->end();

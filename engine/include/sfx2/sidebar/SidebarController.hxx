@@ -76,29 +76,29 @@ public:
             XFrame then <NULL/> is returned.
     */
     static SidebarController* GetSidebarControllerForFrame (
-        const css::uno::Reference<css::frame::XFrame>& rxFrame);
+        const cpo::uno::Reference<css::frame::XFrame>& rxFrame);
 
-    void registerSidebarForFrame(const css::uno::Reference<css::frame::XController>& xFrame);
+    void registerSidebarForFrame(const cpo::uno::Reference<css::frame::XController>& xFrame);
 
-    void unregisterSidebarForFrame(const css::uno::Reference<css::frame::XController>& xFrame);
+    void unregisterSidebarForFrame(const cpo::uno::Reference<css::frame::XController>& xFrame);
 
     // ui::XContextChangeEventListener
-    virtual void SAL_CALL notifyContextChangeEvent (const css::ui::ContextChangeEventObject& rEvent) override;
+    virtual void notifyContextChangeEvent (const css::ui::ContextChangeEventObject& rEvent) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing (const css::lang::EventObject& rEventObject) override;
+    virtual void disposing (const css::lang::EventObject& rEventObject) override;
 
     // beans::XPropertyChangeListener
-    virtual void SAL_CALL propertyChange (const css::beans::PropertyChangeEvent& rEvent) override;
+    virtual void propertyChange (const css::beans::PropertyChangeEvent& rEvent) override;
 
     // frame::XStatusListener
-    virtual void SAL_CALL statusChanged (const css::frame::FeatureStateEvent& rEvent) override;
+    virtual void statusChanged (const css::frame::FeatureStateEvent& rEvent) override;
 
     // frame::XFrameActionListener
-    virtual void SAL_CALL frameAction (const css::frame::FrameActionEvent& rEvent) override;
+    virtual void frameAction (const css::frame::FrameActionEvent& rEvent) override;
 
     // ui::XSidebar
-    virtual void SAL_CALL requestLayout() override;
+    virtual void requestLayout() override;
 
     void NotifyResize();
 
@@ -113,7 +113,6 @@ public:
     const static sal_Int32 SwitchFlag_ForceNewDeck = 0x02;
     const static sal_Int32 SwitchFlag_ForceNewPanels = 0x02;
 
-    bool IsDocked() const;
 
     void OpenThenSwitchToDeck(std::u16string_view rsDeckId);
     void OpenThenToggleDeck(const OUString& rsDeckId);
@@ -154,7 +153,7 @@ public:
 
     void notifyDeckTitle(std::u16string_view targetDeckId);
 
-    void updateModel(const css::uno::Reference<css::frame::XModel>& xModel);
+    void updateModel(const cpo::uno::Reference<css::frame::XModel>& xModel);
 
     void disposeDecks();
 
@@ -163,7 +162,7 @@ public:
 
     tools::Rectangle GetDeckDragArea() const;
 
-    css::uno::Reference<css::frame::XFrame> const & getXFrame() const {return mxFrame;}
+    cpo::uno::Reference<css::frame::XFrame> const & getXFrame() const {return mxFrame;}
 
     sal_Int32 getMaximumWidth() const { return mnMaximumSidebarWidth; }
     void setMaximumWidth(sal_Int32 nMaximumWidth) { mnMaximumSidebarWidth = nMaximumWidth; }
@@ -183,11 +182,11 @@ private:
     VclPtr<Deck> mpCurrentDeck;
     VclPtr<SidebarDockingWindow> mpParentWindow;
     const SfxViewFrame* mpViewFrame;
-    css::uno::Reference<css::frame::XFrame> mxFrame;
+    cpo::uno::Reference<css::frame::XFrame> mxFrame;
     VclPtr<TabBar> mpTabBar;
     Context maCurrentContext;
     Context maRequestedContext;
-    css::uno::Reference<css::frame::XController> mxCurrentController;
+    cpo::uno::Reference<css::frame::XController> mxCurrentController;
     /// Use a combination of SwitchFlag_* as value.
     sal_Int32 mnRequestedForceFlags;
     sal_Int32 mnMaximumSidebarWidth;
@@ -195,7 +194,7 @@ private:
     OUString msCurrentDeckId;
     AsynchronousCall maPropertyChangeForwarder;
     AsynchronousCall maContextChangeUpdate;
-    css::uno::Reference<css::beans::XPropertySet> mxThemePropertySet;
+    cpo::uno::Reference<css::beans::XPropertySet> mxThemePropertySet;
 
     /** Two flags control whether the deck is displayed or if only the
         tab bar remains visible.
@@ -215,7 +214,7 @@ private:
     */
     sal_Int32 mnSavedSidebarWidth;
     FocusManager maFocusManager;
-    css::uno::Reference<css::frame::XDispatch> mxReadOnlyModeDispatch;
+    cpo::uno::Reference<css::frame::XDispatch> mxReadOnlyModeDispatch;
     bool mbIsDocumentReadOnly;
     VclPtr<SfxSplitWindow> mpSplitWindow;
     /** When the user moves the splitter then we remember the
@@ -233,8 +232,8 @@ private:
     */
     void UpdateConfigurations();
 
-    css::uno::Reference<css::ui::XUIElement> CreateUIElement (
-        const css::uno::Reference<css::awt::XWindow>& rxWindow,
+    cpo::uno::Reference<css::ui::XUIElement> CreateUIElement (
+        const cpo::uno::Reference<css::awt::XWindow>& rxWindow,
         const OUString& rsImplementationURL,
         const Context& rContext);
 

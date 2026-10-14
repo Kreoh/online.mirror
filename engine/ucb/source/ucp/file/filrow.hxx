@@ -34,67 +34,67 @@ namespace fileaccess {
         XRow_impl( TaskManager* pShell,const cpo::uno::Sequence< cpo::uno::Any >& aValueMap );
         virtual ~XRow_impl() override;
 
-        virtual bool SAL_CALL
+        virtual bool
         wasNull() override;
 
-        virtual OUString SAL_CALL
+        virtual OUString
         getString( sal_Int32 columnIndex ) override;
 
-        virtual bool SAL_CALL
+        virtual bool
         getBoolean( sal_Int32 columnIndex ) override;
 
-        virtual sal_Int8 SAL_CALL
+        virtual sal_Int8
         getByte( sal_Int32 columnIndex ) override;
 
-        virtual sal_Int16 SAL_CALL
+        virtual sal_Int16
         getShort( sal_Int32 columnIndex ) override;
 
-        virtual sal_Int32 SAL_CALL
+        virtual sal_Int32
         getInt( sal_Int32 columnIndex ) override;
 
-        virtual sal_Int64 SAL_CALL
+        virtual sal_Int64
         getLong( sal_Int32 columnIndex ) override;
 
-        virtual float SAL_CALL
+        virtual float
         getFloat( sal_Int32 columnIndex ) override;
 
-        virtual double SAL_CALL
+        virtual double
         getDouble(
             sal_Int32 columnIndex ) override;
 
-        virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL
+        virtual cpo::uno::Sequence< sal_Int8 >
         getBytes( sal_Int32 columnIndex ) override;
 
-        virtual css::util::Date SAL_CALL
+        virtual css::util::Date
         getDate( sal_Int32 columnIndex ) override;
 
-        virtual css::util::Time SAL_CALL
+        virtual css::util::Time
         getTime( sal_Int32 columnIndex ) override;
 
-        virtual css::util::DateTime SAL_CALL
+        virtual css::util::DateTime
         getTimestamp( sal_Int32 columnIndex ) override;
 
-        virtual css::uno::Reference< css::io::XInputStream > SAL_CALL
+        virtual cpo::uno::Reference< css::io::XInputStream >
         getBinaryStream( sal_Int32 columnIndex ) override;
 
-        virtual css::uno::Reference< css::io::XInputStream > SAL_CALL
+        virtual cpo::uno::Reference< css::io::XInputStream >
         getCharacterStream( sal_Int32 columnIndex ) override;
 
-        virtual cpo::uno::Any SAL_CALL
+        virtual cpo::uno::Any
         getObject(
             sal_Int32 columnIndex,
-            const css::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+            const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
 
-        virtual css::uno::Reference< css::sdbc::XRef > SAL_CALL
+        virtual cpo::uno::Reference< css::sdbc::XRef >
         getRef( sal_Int32 columnIndex ) override;
 
-        virtual css::uno::Reference< css::sdbc::XBlob > SAL_CALL
+        virtual cpo::uno::Reference< css::sdbc::XBlob >
         getBlob( sal_Int32 columnIndex ) override;
 
-        virtual css::uno::Reference< css::sdbc::XClob > SAL_CALL
+        virtual cpo::uno::Reference< css::sdbc::XClob >
         getClob( sal_Int32 columnIndex ) override;
 
-        virtual css::uno::Reference< css::sdbc::XArray > SAL_CALL
+        virtual cpo::uno::Reference< css::sdbc::XArray >
         getArray( sal_Int32 columnIndex ) override;
 
     private:
@@ -102,7 +102,7 @@ namespace fileaccess {
         cpo::uno::Sequence< cpo::uno::Any >                m_aValueMap;
         bool                                               m_nWasNull;
         TaskManager*                                       m_pMyShell;
-        css::uno::Reference< css::script::XTypeConverter > m_xTypeConverter;
+        cpo::uno::Reference< css::script::XTypeConverter > m_xTypeConverter;
 
         bool isIndexOutOfBounds( sal_Int32 nIndex ) const;
         template<typename T>

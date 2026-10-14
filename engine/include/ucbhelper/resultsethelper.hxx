@@ -28,7 +28,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <ucbhelper/ucbhelperdllapi.h>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace ucbhelper {
 
@@ -57,13 +57,13 @@ class UCBHELPER_DLLPUBLIC ResultSetImplHelper :
 protected:
     std::mutex                                                 m_aMutex;
     css::ucb::OpenCommandArgument2                             m_aCommand;
-    css::uno::Reference< css::uno::XComponentContext >         m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >         m_xContext;
     // Resultset #1
-    css::uno::Reference< css::sdbc::XResultSet >               m_xResultSet1;
+    cpo::uno::Reference< css::sdbc::XResultSet >               m_xResultSet1;
     // Resultset #2
-    css::uno::Reference< css::sdbc::XResultSet >               m_xResultSet2;
+    cpo::uno::Reference< css::sdbc::XResultSet >               m_xResultSet2;
     // Resultset changes listener.
-    css::uno::Reference< css::ucb::XDynamicResultSetListener > m_xListener;
+    cpo::uno::Reference< css::ucb::XDynamicResultSetListener > m_xListener;
 
 private:
     UCBHELPER_DLLPRIVATE void init( bool bStatic );
@@ -113,8 +113,8 @@ public:
       *        this resultset.
       */
     ResultSetImplHelper(
-            css::uno::Reference<
-                css::uno::XComponentContext > xContext,
+            cpo::uno::Reference<
+                cpo::uno::XComponentContext > xContext,
             css::ucb::OpenCommandArgument2 aCommand );
 
     /**
@@ -123,31 +123,31 @@ public:
     virtual ~ResultSetImplHelper() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XComponent ( base class of XDynamicResultSet )
-    virtual void SAL_CALL
+    virtual void
     dispose() override;
-    virtual void SAL_CALL
-    addEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
-    virtual void SAL_CALL
-    removeEventListener( const css::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
 
     // XDynamicResultSet
-    virtual css::uno::Reference< css::sdbc::XResultSet > SAL_CALL
+    virtual cpo::uno::Reference< css::sdbc::XResultSet >
     getStaticResultSet() override;
-    virtual void SAL_CALL
-    setListener( const css::uno::Reference< css::ucb::XDynamicResultSetListener >& Listener ) override;
-    virtual void SAL_CALL
-    connectToCache( const css::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
+    virtual void
+    setListener( const cpo::uno::Reference< css::ucb::XDynamicResultSetListener >& Listener ) override;
+    virtual void
+    connectToCache( const cpo::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
 
     /**
       * The implementation of this method always returns 0. Override this
       * method, if necessary.
       */
-    virtual sal_Int16 SAL_CALL
+    virtual sal_Int16
     getCapabilities() override;
 
 };

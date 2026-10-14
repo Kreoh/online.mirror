@@ -9,6 +9,7 @@
 
 #include <sctiledrenderingtest.hxx>
 
+#include <com/sun/star/awt/Key.hpp>
 #include <com/sun/star/datatransfer/XTransferable2.hpp>
 #include <com/sun/star/document/UpdateDocMode.hpp>
 
@@ -24,10 +25,13 @@
 #include <COKit/COKit.hxx>
 
 #include <sctestviewcallback.hxx>
+#include <conditio.hxx>
 #include <docsh.hxx>
 #include <document.hxx>
 #include <docuno.hxx>
+#include <globstr.hrc>
 #include <scmod.hxx>
+#include <scresid.hxx>
 #include <tabprotection.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/linkmgr.hxx>
@@ -40,6 +44,8 @@
 #include <editeng/editview.hxx>
 #include <comphelper/scopeguard.hxx>
 #include <editeng/editeng.hxx>
+#include <editeng/eeitem.hxx>
+#include <svl/itemset.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svdoutl.hxx>
@@ -56,6 +62,7 @@
 #include <drawview.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSidebarLocale)
 {
@@ -763,6 +770,120 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testHyperlinkOverSelectionSavedToOOXM
                          lcl_getCellTextWithLinks(*pReloadedDoc, aA1));
 }
 
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testEditingHyperlinkCellAllowsCursorInTheMiddle)
+{
+    // A cell whose whole content is a hyperlink holds that content as one field, and a
+    // field takes up a single character, with no positions between its start and its end.
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    const ScAddress aA1(0, 0, 0);
+    typeCharsInCell("foo@example.com", aA1.Col(), aA1.Row(), pView, pModelObj, /*bInEdit*/ false,
+                    /*bCommit*/ true);
+    pView->SetCursor(aA1.Col(), aA1.Row());
+
+    lcl_selectInCell(pView, 0, 15);
+    dispatchCommand(mxComponent, u".uno:SetHyperlink"_ustr,
+                    lcl_hyperlinkArgs(u"foo@example.com"_ustr, u"mailto:foo@example.com"_ustr));
+    ScModule::get()->InputEnterHandler();
+
+    CPPUNIT_ASSERT_EQUAL(u"[foo@example.com](mailto:foo@example.com)"_ustr,
+                         lcl_getCellTextWithLinks(*pDoc, aA1));
+
+    // When editing that cell again:
+    lcl_selectInCell(pView, 0, 0);
+
+    // Then its text is plain again, one character per letter of the address, so the cursor
+    // can be placed anywhere in it, not just before or after one field character.
+    // Without the fix in place, this test would have failed with:
+    // - Expected: 15
+    // - Actual  : 1
+    ScViewData& rViewData = pView->GetViewData();
+    EditView* pEditView = rViewData.GetEditView(rViewData.GetEditActivePart());
+    CPPUNIT_ASSERT(pEditView);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(15), pEditView->getEditEngine().GetTextLen(0));
+
+    const SfxItemSet aAttribs = pEditView->getEditEngine().GetAttribs(ESelection::All());
+    CPPUNIT_ASSERT_EQUAL(SfxItemState::DEFAULT, aAttribs.GetItemState(EE_FEATURE_FIELD, false));
+
+    // Committing unchanged re-creates the field, the same way committing a freshly typed
+    // address already does.
+    ScModule::get()->InputEnterHandler();
+    CPPUNIT_ASSERT_EQUAL(u"[foo@example.com](mailto:foo@example.com)"_ustr,
+                         lcl_getCellTextWithLinks(*pDoc, aA1));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testHyperlinkCellKeepsLinkWhenTextIsTypedBeforeIt)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    const ScAddress aA1(0, 0, 0);
+    typeCharsInCell("https://www.example.com/", aA1.Col(), aA1.Row(), pView, pModelObj,
+                    /*bInEdit*/ false, /*bCommit*/ true);
+    pView->SetCursor(aA1.Col(), aA1.Row());
+
+    lcl_selectInCell(pView, 0, 24);
+    dispatchCommand(mxComponent, u".uno:SetHyperlink"_ustr,
+                    lcl_hyperlinkArgs(u"https://www.example.com/"_ustr,
+                                      u"https://www.example.com/"_ustr));
+    ScModule::get()->InputEnterHandler();
+
+    CPPUNIT_ASSERT_EQUAL(u"[https://www.example.com/](https://www.example.com/)"_ustr,
+                         lcl_getCellTextWithLinks(*pDoc, aA1));
+
+    // A word is typed in front of the address, which leaves the cursor before the address when
+    // the edit is committed.
+    lcl_selectInCell(pView, 0, 0);
+    typeCharsInCell("Visit ", aA1.Col(), aA1.Row(), pView, pModelObj, /*bInEdit*/ true,
+                    /*bCommit*/ false);
+    ScModule::get()->InputEnterHandler();
+
+    // Without the fix in place, this test would have failed with:
+    // - Expected: Visit [https://www.example.com/](https://www.example.com/)
+    // - Actual  : Visit https://www.example.com/
+    CPPUNIT_ASSERT_EQUAL(u"Visit [https://www.example.com/](https://www.example.com/)"_ustr,
+                         lcl_getCellTextWithLinks(*pDoc, aA1));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testHyperlinkCellEditedInsideAddressBecomesPlainText)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    const ScAddress aA1(0, 0, 0);
+    typeCharsInCell("https://www.example.com/", aA1.Col(), aA1.Row(), pView, pModelObj,
+                    /*bInEdit*/ false, /*bCommit*/ true);
+    pView->SetCursor(aA1.Col(), aA1.Row());
+
+    lcl_selectInCell(pView, 0, 24);
+    dispatchCommand(mxComponent, u".uno:SetHyperlink"_ustr,
+                    lcl_hyperlinkArgs(u"https://www.example.com/"_ustr,
+                                      u"https://www.example.com/"_ustr));
+    ScModule::get()->InputEnterHandler();
+
+    CPPUNIT_ASSERT_EQUAL(u"[https://www.example.com/](https://www.example.com/)"_ustr,
+                         lcl_getCellTextWithLinks(*pDoc, aA1));
+
+    // The "a" of "example" is deleted, which leaves the cursor in the middle of the address when
+    // the edit is committed. The word at the cursor then ends at the dot before "com".
+    lcl_selectInCell(pView, 15, 15);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::BACKSPACE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::BACKSPACE);
+    Scheduler::ProcessEventsToIdle();
+    ScModule::get()->InputEnterHandler();
+
+    // Without the fix in place, the part of the address in front of the cursor became a link of
+    // its own, with a target read from that part of the text.
+    CPPUNIT_ASSERT_EQUAL(u"https://www.exmple.com/"_ustr, lcl_getCellTextWithLinks(*pDoc, aA1));
+}
+
 // The automatic font color of a shape being edited has to be resolved against the fill of
 // that shape, not against the page background
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testShapeTextEditAutoColorOnDarkPage)
@@ -1088,6 +1209,168 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSetCellFormulaRespectsProtection)
     Scheduler::ProcessEventsToIdle();
 
     CPPUNIT_ASSERT_EQUAL(CELLTYPE_NONE, rDoc.GetCellType(ScAddress(3, 3, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testExportKeepsCondFormatTilesValid)
+{
+    // Downloading a copy of a sheet must leave the other collaborators' tiles alone.
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+
+    // A condition comparing against a plain number holds no formula cell and no
+    // relative reference, so a recalculation has nothing to redo for it.
+    const ScRange aCondFormatRange(0, 0, 0, 3, 20, 0);
+    auto pFormat = std::make_unique<ScConditionalFormat>(1, *pDoc);
+    pFormat->SetRange(ScRangeList(aCondFormatRange));
+    pFormat->AddEntry(new ScCondFormatEntry(ScConditionMode::Greater, u"5"_ustr, u""_ustr, *pDoc,
+                                            ScAddress(0, 0, 0), ScResId(STR_STYLENAME_RESULT)));
+    const sal_uInt32 nKey = pDoc->AddCondFormat(std::move(pFormat), 0);
+    pDoc->AddCondFormatData(ScRangeList(aCondFormatRange), 0, nKey);
+    Scheduler::ProcessEventsToIdle();
+
+    ScTestViewCallback aView;
+    aView.ClearAllInvalids();
+
+    // The xlsx filter forces a calculation pass per sheet, which walks the
+    // conditional formats. This is the "Download as xlsx" path.
+    save(TestFilter::XLSX);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Exporting a copy must not invalidate tiles", size_t(0),
+                                 aView.m_aInvalidations.size());
+    CPPUNIT_ASSERT_MESSAGE("Exporting a copy must not flag a full-tile invalidation",
+                           !aView.m_bFullInvalidateTiles);
+    CPPUNIT_ASSERT_MESSAGE("Exporting a copy must not raise the tile-invalidate flag",
+                           !aView.m_bInvalidateTiles);
+}
+
+// Puts the cell cursor on rAddress and returns the centre of that cell.
+static Point lcl_cellCenter(const cpo::uno::Reference<css::lang::XComponent>& xComponent,
+                            const ScTestViewCallback& rView, const OUString& rAddress)
+{
+    unotest::MacrosTest::dispatchCommand(
+        xComponent, u".uno:GoToCell"_ustr,
+        { comphelper::makePropertyValue(u"ToPoint"_ustr, rAddress) });
+    return rView.m_aCellCursorBounds.Center();
+}
+
+static void lcl_select(const cpo::uno::Reference<css::lang::XComponent>& xComponent,
+                       const OUString& rRange)
+{
+    unotest::MacrosTest::dispatchCommand(
+        xComponent, u".uno:GoToCell"_ustr,
+        { comphelper::makePropertyValue(u"ToPoint"_ustr, rRange) });
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testDragDropInsertWholeColumn)
+{
+    // Given a document where row 1 holds A to F, each letter in the column of that name:
+    ScModelObj* pModelObj = createDoc("column_drag.fods");
+    ScTestViewCallback aView;
+    Point aFrom = lcl_cellCenter(mxComponent, aView, u"$B$1"_ustr);
+    Point aTo = lcl_cellCenter(mxComponent, aView, u"$E$1"_ustr);
+    lcl_select(mxComponent, u"$B:$B"_ustr);
+
+    // When Alt-dragging the whole column B from the middle of B1 to the middle of E1, so the
+    // first move already leaves column B:
+    lcl_drag(pModelObj, aFrom, aTo, KEY_MOD2);
+
+    // Then column B moves in front of column E:
+    // Without the fix in place, this test would have failed with:
+    // - Expected: ACDBEF
+    // - Actual  : ABCDEF
+    ScDocument* pDoc = pModelObj->GetDocument();
+    OUString aRow;
+    for (SCCOL nCol = 0; nCol < 6; ++nCol)
+        aRow += pDoc->GetString(ScAddress(nCol, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(u"ACDBEF"_ustr, aRow);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testDragDropCopyCommand)
+{
+    // Given a document with A1=A and D1=E:
+    ScModelObj* pModelObj = createDoc("cell_drag.fods");
+    ScTestViewCallback aView;
+    Point aFrom = lcl_cellCenter(mxComponent, aView, u"$A$1"_ustr);
+    Point aTo = lcl_cellCenter(mxComponent, aView, u"$D$1"_ustr);
+    lcl_select(mxComponent, u"$A$1:$B$2"_ustr);
+
+    // When dragging A1:B2 to D1 with the macOS Command key, which a kit client sends as KEY_MOD3:
+    lcl_drag(pModelObj, aFrom, aTo, KEY_MOD3);
+
+    // Then A1:B2 is copied, the same as with Ctrl:
+    // Without the fix in place, this test would have failed with:
+    // - Expected: A
+    // - Actual  :
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, pDoc->GetString(ScAddress(3, 0, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testDragDropCopyPointer)
+{
+    // Given a document with A1:B2 filled and selected:
+    ScModelObj* pModelObj = createDoc("cell_drag.fods");
+    ScTestViewCallback aView;
+    Point aFrom = lcl_cellCenter(mxComponent, aView, u"$A$1"_ustr);
+    Point aTo = lcl_cellCenter(mxComponent, aView, u"$D$1"_ustr);
+    lcl_select(mxComponent, u"$A$1:$B$2"_ustr);
+    ScTabViewShell* pViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pViewShell);
+    vcl::Window* pGridWindow = pViewShell->GetViewData().GetActiveWin();
+    const PointerStyle ePointerBefore = pGridWindow->GetPointer();
+    aView.m_aMousePointers.clear();
+
+    // When Ctrl-dragging the selection to D1:
+    lcl_drag(pModelObj, aFrom, aTo, KEY_MOD1);
+
+    // Then the pointer shows a copy while dragging, and is back as it was after the drop.
+    // Without the fix in place, this test would have failed, as the pointer did not change.
+    CPPUNIT_ASSERT(std::find(aView.m_aMousePointers.begin(), aView.m_aMousePointers.end(), "copy")
+                   != aView.m_aMousePointers.end());
+    CPPUNIT_ASSERT_EQUAL(ePointerBefore, pGridWindow->GetPointer());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testDragDropRefusedPointer)
+{
+    // Given a document with A1:B1 filled and selected:
+    ScModelObj* pModelObj = createDoc("cell_drag.fods");
+    ScTestViewCallback aView;
+    Point aFrom = lcl_cellCenter(mxComponent, aView, u"$A$1"_ustr);
+    Point aTo = lcl_cellCenter(mxComponent, aView, u"$B$1"_ustr);
+    lcl_select(mxComponent, u"$A$1:$B$1"_ustr);
+    aView.m_aMousePointers.clear();
+
+    // When Alt-dragging it onto B1, an insert that overlaps its own source, which Calc refuses:
+    lcl_drag(pModelObj, aFrom, aTo, KEY_MOD2);
+
+    // Then the pointer shows that the drop is not allowed.
+    // Without the fix in place, this test would have failed, as the pointer did not change.
+    CPPUNIT_ASSERT(
+        std::find(aView.m_aMousePointers.begin(), aView.m_aMousePointers.end(), "not-allowed")
+        != aView.m_aMousePointers.end());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testDragDropMovePointer)
+{
+    // Given a document with A1:B2 filled and selected:
+    ScModelObj* pModelObj = createDoc("cell_drag.fods");
+    ScTestViewCallback aView;
+    Point aFrom = lcl_cellCenter(mxComponent, aView, u"$A$1"_ustr);
+    Point aTo = lcl_cellCenter(mxComponent, aView, u"$D$1"_ustr);
+    lcl_select(mxComponent, u"$A$1:$B$2"_ustr);
+    aView.m_aMousePointers.clear();
+
+    // When dragging the selection to D1 without a modifier:
+    lcl_drag(pModelObj, aFrom, aTo, 0);
+
+    // Then the pointer shows a move while dragging.
+    // Without the fix in place, this test would have failed, as the client got the default pointer.
+    CPPUNIT_ASSERT(std::find(aView.m_aMousePointers.begin(), aView.m_aMousePointers.end(), "move")
+                   != aView.m_aMousePointers.end());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

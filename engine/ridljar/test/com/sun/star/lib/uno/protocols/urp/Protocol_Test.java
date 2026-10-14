@@ -25,7 +25,7 @@ import com.sun.star.lib.uno.typedesc.TypeDescription;
 import com.sun.star.uno.Any;
 import com.sun.star.uno.IBridge;
 import cpo.uno.Type;
-import com.sun.star.uno.XInterface;
+import cpo.uno.XInterface;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -165,12 +165,12 @@ public final class Protocol_Test {
         // send an exception as reply
         iReceiver.writeReply(
             true, new ThreadId(new byte[] { 0, 1 }),
-            new com.sun.star.uno.RuntimeException("test the exception"));
+            new cpo.uno.RuntimeException("test the exception"));
         Message iMessage = iSender.readMessage();
 
         Object result = iMessage.getResult();
 
-        assertTrue(result instanceof com.sun.star.uno.RuntimeException);
+        assertTrue(result instanceof cpo.uno.RuntimeException);
     }
 
     public void testCallWithIn_Out_InOut_Paramters_and_result(

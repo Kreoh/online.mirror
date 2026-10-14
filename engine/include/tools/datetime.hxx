@@ -24,7 +24,7 @@
 #include <tools/time.hxx>
 #include <com/sun/star/util/DateTime.hpp>
 
-#include <iomanip>
+#include <iosfwd>
 
 namespace tools
 {
@@ -123,6 +123,13 @@ public:
     /// Creates DateTime given a unix time, which is the number of seconds
     /// elapsed since Jan 1st, 1970.
     static DateTime CreateFromUnixTime( const double fSecondsSinceEpoch );
+
+    /** Creates a DateTime holding the current time in UTC.
+
+        The reading does not go through the timezone the process is set to, so it is unaffected by
+        a timezone switch and by any offset cached from an earlier one.
+     */
+    static DateTime CreateSystemUTC();
 };
 
 inline DateTime& DateTime::operator =( const DateTime& rDateTime )
@@ -132,18 +139,7 @@ inline DateTime& DateTime::operator =( const DateTime& rDateTime )
     return *this;
 }
 
-template< typename charT, typename traits >
-inline std::basic_ostream<charT, traits> & operator <<(
-    std::basic_ostream<charT, traits> & stream, const DateTime& datetime)
-{
-    return stream << datetime.GetYear() << '-' <<
-        std::setw(2) << std::setfill('0') << datetime.GetMonth() << '-' <<
-        std::setw(2) << std::setfill('0') << datetime.GetDay() << ' ' <<
-        std::setw(2) << std::setfill('0') << datetime.GetHour() << ':' <<
-        std::setw(2) << std::setfill('0') << datetime.GetMin() << ':' <<
-        std::setw(2) << std::setfill('0') << datetime.GetSec() << "." <<
-        std::setw(9) << std::setfill('0') << datetime.GetNanoSec();
-}
+TOOLS_DLLPUBLIC std::ostream& operator<<(std::ostream& s, const DateTime&);
 
 #endif
 

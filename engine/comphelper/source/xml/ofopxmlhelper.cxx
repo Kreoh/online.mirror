@@ -37,6 +37,7 @@
 #define FORMAT_MAX_ID CONTENTTYPE_FORMAT
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace comphelper {
 
@@ -60,12 +61,12 @@ public:
     // XDocumentHandler
     virtual void startDocument() override;
     virtual void endDocument() override;
-    virtual void startElement( const OUString& aName, const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
+    virtual void startElement( const OUString& aName, const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
     virtual void endElement( const OUString& aName ) override;
     virtual void characters( const OUString& aChars ) override;
     virtual void ignorableWhitespace( const OUString& aWhitespaces ) override;
     virtual void processingInstruction( const OUString& aTarget, const OUString& aData ) override;
-    virtual void setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
+    virtual void setDocumentLocator( const cpo::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
 };
 
 }
@@ -76,12 +77,12 @@ namespace OFOPXMLHelper {
 static cpo::uno::Sequence<cpo::uno::Sequence< beans::StringPair>> ReadSequence_Impl(
     const uno::Reference<io::XInputStream>& xInStream,
     const OUString& aStringID, sal_uInt16 nFormat,
-    const uno::Reference<uno::XComponentContext>& xContext);
+    const uno::Reference<cpo::uno::XComponentContext>& xContext);
 
 cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > > ReadRelationsInfoSequence(
         const uno::Reference< io::XInputStream >& xInStream,
         std::u16string_view aStreamName,
-        const uno::Reference< uno::XComponentContext >& rContext )
+        const uno::Reference< cpo::uno::XComponentContext >& rContext )
 {
     OUString aStringID = OUString::Concat("_rels/") + aStreamName;
     return ReadSequence_Impl( xInStream, aStringID, RELATIONINFO_FORMAT, rContext );
@@ -90,7 +91,7 @@ cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > > ReadRelationsInfoS
 
 cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > > ReadContentTypeSequence(
         const uno::Reference< io::XInputStream >& xInStream,
-        const uno::Reference< uno::XComponentContext >& rContext )
+        const uno::Reference< cpo::uno::XComponentContext >& rContext )
 {
     return ReadSequence_Impl( xInStream, u"[Content_Types].xml"_ustr, CONTENTTYPE_FORMAT, rContext );
 }
@@ -131,10 +132,10 @@ OUString GetContentTypeByName(
 void WriteRelationsInfoSequence(
         const uno::Reference< io::XOutputStream >& xOutStream,
         const cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > >& aSequence,
-        const uno::Reference< uno::XComponentContext >& rContext )
+        const uno::Reference< cpo::uno::XComponentContext >& rContext )
 {
     if ( !xOutStream.is() )
-        throw uno::RuntimeException(u"Invalid output stream"_ustr);
+        throw cpo::uno::RuntimeException(u"Invalid output stream"_ustr);
 
     uno::Reference< css::xml::sax::XWriter > xWriter = css::xml::sax::Writer::create(rContext);
 
@@ -184,10 +185,10 @@ void WriteContentSequence(
         const uno::Reference< io::XOutputStream >& xOutStream,
         const cpo::uno::Sequence< beans::StringPair >& aDefaultsSequence,
         const cpo::uno::Sequence< beans::StringPair >& aOverridesSequence,
-        const uno::Reference< uno::XComponentContext >& rContext )
+        const uno::Reference< cpo::uno::XComponentContext >& rContext )
 {
     if ( !xOutStream.is() )
-        throw uno::RuntimeException(u"Invalid output stream"_ustr);
+        throw cpo::uno::RuntimeException(u"Invalid output stream"_ustr);
 
     uno::Reference< css::xml::sax::XWriter > xWriter = css::xml::sax::Writer::create(rContext);
 
@@ -239,10 +240,10 @@ void WriteContentSequence(
 cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > > ReadSequence_Impl(
         const uno::Reference< io::XInputStream >& xInStream,
         const OUString& aStringID, sal_uInt16 nFormat,
-        const uno::Reference< uno::XComponentContext >& rContext )
+        const uno::Reference< cpo::uno::XComponentContext >& rContext )
 {
     if ( !rContext.is() || !xInStream.is() || nFormat > FORMAT_MAX_ID )
-        throw uno::RuntimeException(u"Invalid input stream or context"_ustr);
+        throw cpo::uno::RuntimeException(u"Invalid input stream or context"_ustr);
 
 
     uno::Reference< css::xml::sax::XParser > xParser = css::xml::sax::Parser::create( rContext );
@@ -277,7 +278,7 @@ OFOPXMLHelper_Impl::OFOPXMLHelper_Impl( sal_uInt16 nFormat )
 cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > > const & OFOPXMLHelper_Impl::GetParsingResult() const
 {
     if ( !m_aElementsSeq.empty() )
-        throw uno::RuntimeException(); // the parsing has still not finished!
+        throw cpo::uno::RuntimeException(); // the parsing has still not finished!
 
     return m_aResultSeq;
 }
@@ -385,7 +386,7 @@ void OFOPXMLHelper_Impl::startElement( const OUString& aName, const uno::Referen
                 m_aResultSeq.realloc( 2 );
 
             if ( m_aResultSeq.getLength() != 2 )
-                throw uno::RuntimeException(u"m_aResultSeq already has elements and is not reallocated to 2."_ustr);
+                throw cpo::uno::RuntimeException(u"m_aResultSeq already has elements and is not reallocated to 2."_ustr);
 
             auto pResultSeq = m_aResultSeq.getArray();
 
@@ -416,7 +417,7 @@ void OFOPXMLHelper_Impl::startElement( const OUString& aName, const uno::Referen
                 m_aResultSeq.realloc( 2 );
 
             if ( m_aResultSeq.getLength() != 2 )
-                throw uno::RuntimeException(u"m_aResultSeq already has elements and is not reallocated to 2."_ustr);
+                throw cpo::uno::RuntimeException(u"m_aResultSeq already has elements and is not reallocated to 2."_ustr);
 
             auto pResultSeq = m_aResultSeq.getArray();
 

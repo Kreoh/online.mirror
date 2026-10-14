@@ -21,6 +21,7 @@
 #include <com/sun/star/document/XDocumentProperties.hpp>
 
 #include <scitems.hxx>
+#include <docuno.hxx>
 #include <rangelst.hxx>
 #include <editeng/flstitem.hxx>
 #include <editeng/paperinf.hxx>
@@ -36,6 +37,7 @@
 #include <svx/pageitem.hxx>
 #include <svx/postattr.hxx>
 #include <svx/svxids.hrc>
+#include <tools/gen.hxx>
 #include <unotools/configmgr.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/virdev.hxx>
@@ -57,6 +59,7 @@
 #include <pntlock.hxx>
 #include <chgtrack.hxx>
 #include <docfunc.hxx>
+#include <docfuncutil.hxx>
 #include <formulacell.hxx>
 #include <chgviset.hxx>
 #include <progress.hxx>
@@ -73,6 +76,8 @@
 
 #include <comphelper/kit.hxx>
 #include <sfx2/kit/helper.hxx>
+
+using namespace ::cpo;
 
 //          Redraw - Notifications
 
@@ -202,6 +207,19 @@ void ScDocShell::PostPaint( const ScRangeList& rRanges, PaintPartFlags nPart, sa
         ScModelObj* pModel = GetModel();
         for (auto nTab : aTabsInvalidated)
             KitHelper::notifyPartSizeChangedAllViews(pModel, nTab);
+    }
+
+    // COKit: ScTabViewShell::Notify only repaints a tab a view is currently showing, so a
+    // grid change on a tab no view has open would otherwise never reach any client's tile
+    // cache. The view already showing the tab is skipped, since it already got its
+    // invalidation through the normal paint path above.
+    if ((nPart & PaintPartFlags::Grid) && comphelper::COKit::isActive())
+    {
+        ScModelObj* pModel = GetModel();
+        tools::Rectangle aWholePart = sc::DocFuncUtil::wholePartInvalidationRectangle();
+        for (auto nTab : aTabsInvalidated)
+            KitHelper::notifyInvalidationAllViews(pModel, nTab, &aWholePart,
+                                                  /*bSkipViewShowingPart=*/true);
     }
 }
 

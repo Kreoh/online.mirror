@@ -22,15 +22,15 @@
 #include <com/sun/star/table/XCell.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppunit/TestAssert.h>
 
 #include <iostream>
 
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
@@ -75,7 +75,7 @@ void XNamedRanges::testAddNewByName()
     // tdf#119457 - check for a valid range name
     OUString aName6(u"type_INVALID_BAD_STRING.+:"_ustr);
     CPPUNIT_ASSERT_THROW(xNamedRanges->addNewByName(aName6, u"D6"_ustr, aBaseAddress, 0),
-                         uno::RuntimeException);
+                         cpo::uno::RuntimeException);
     CPPUNIT_ASSERT_MESSAGE("Created Namedrange with invalid name",
                            !xNamedRanges->hasByName(aName6));
 }

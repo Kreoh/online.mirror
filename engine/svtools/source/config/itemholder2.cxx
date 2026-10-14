@@ -37,13 +37,13 @@ ItemHolder2::ItemHolder2()
 {
     try
     {
-        const css::uno::Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
-        css::uno::Reference< css::lang::XComponent > xCfg(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+        cpo::uno::Reference< css::lang::XComponent > xCfg(
             css::configuration::theDefaultProvider::get( xContext ),
-            css::uno::UNO_QUERY_THROW );
+            cpo::uno::UNO_QUERY_THROW );
         xCfg->addEventListener(static_cast< css::lang::XEventListener* >(this));
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -76,7 +76,7 @@ void ItemHolder2::holdConfigItem(EItem eItem)
 }
 
 
-void SAL_CALL ItemHolder2::disposing(const css::lang::EventObject&)
+void ItemHolder2::disposing(const css::lang::EventObject&)
 {
     impl_releaseAllItems();
 }

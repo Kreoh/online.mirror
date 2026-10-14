@@ -35,8 +35,8 @@
 
 using namespace utl;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 
 /** An autocorrection file dropped into such directory may create a language
@@ -109,6 +109,35 @@ static void scanAutoCorrectDirForLanguageTags( const OUString& rURL )
     }
 }
 
+namespace
+{
+    /** Split the autocorrect path into its share and user halves and append the acor name to
+        each. The user half is created if it is missing. */
+    void lcl_getAutoCorrectFileNames(OUString& rSharePath, OUString& rUserPath)
+    {
+        SvtPathOptions aPathOpt;
+        OUString const & sAutoPath( aPathOpt.GetAutoCorrectPath() );
+
+        rSharePath = sAutoPath.getToken(0, ';');
+        rUserPath = sAutoPath.getToken(1, ';');
+
+        //fdo#67743 ensure the userdir exists so that any later attempt to copy the
+        //shared autocorrect file into the user dir will succeed
+        ::ucbhelper::Content aContent;
+        Reference < ucb::XCommandEnvironment > xEnv;
+        ::utl::UCBContentHelper::ensureFolder(comphelper::getProcessComponentContext(), xEnv,
+                                             rUserPath, aContent);
+
+        for( OUString* pS : { &rSharePath, &rUserPath } )
+        {
+            INetURLObject aPath( *pS );
+            scanAutoCorrectDirForLanguageTags( aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri));
+            aPath.insertName(u"acor");
+            *pS = aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
+        }
+    }
+}
+
 SvxAutoCorrCfg::SvxAutoCorrCfg() :
     aBaseConfig(*this),
     aSwConfig(*this),
@@ -119,26 +148,8 @@ SvxAutoCorrCfg::SvxAutoCorrCfg() :
     bAutoFmtByInput(true),
     bSearchInAllCategories(false)
 {
-    SvtPathOptions aPathOpt;
     OUString sSharePath, sUserPath;
-    OUString const & sAutoPath( aPathOpt.GetAutoCorrectPath() );
-
-    sSharePath = sAutoPath.getToken(0, ';');
-    sUserPath = sAutoPath.getToken(1, ';');
-
-    //fdo#67743 ensure the userdir exists so that any later attempt to copy the
-    //shared autocorrect file into the user dir will succeed
-    ::ucbhelper::Content aContent;
-    Reference < ucb::XCommandEnvironment > xEnv;
-    ::utl::UCBContentHelper::ensureFolder(comphelper::getProcessComponentContext(), xEnv, sUserPath, aContent);
-
-    for( OUString* pS : { &sSharePath, &sUserPath } )
-    {
-        INetURLObject aPath( *pS );
-        scanAutoCorrectDirForLanguageTags( aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri));
-        aPath.insertName(u"acor");
-        *pS = aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
-    }
+    lcl_getAutoCorrectFileNames(sSharePath, sUserPath);
     pAutoCorrect.reset( new SvxAutoCorrect( sSharePath, sUserPath ) );
 
     aBaseConfig.Load(true);
@@ -147,6 +158,15 @@ SvxAutoCorrCfg::SvxAutoCorrCfg() :
 
 SvxAutoCorrCfg::~SvxAutoCorrCfg()
 {
+}
+
+void SvxAutoCorrCfg::ReloadPaths()
+{
+    if (!pAutoCorrect)
+        return;
+    OUString sSharePath, sUserPath;
+    lcl_getAutoCorrectFileNames(sSharePath, sUserPath);
+    pAutoCorrect->SetAutoCorrFileNames(sSharePath, sUserPath);
 }
 
 void SvxAutoCorrCfg::SetAutoCorrect(SvxAutoCorrect *const pNew)

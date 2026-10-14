@@ -23,6 +23,7 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/sizeitem.hxx>
 #include <svx/svdpagv.hxx>
+#include <svx/drawstyleutils.hxx>
 #include <svx/xdef.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -58,6 +59,7 @@
 #include <sfx2/ipclient.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
 ScDrawShell::ScDrawShell( ScViewData& rData ) :
@@ -341,19 +343,19 @@ static void setupFillColorForChart(const SfxViewShell* pShell, SfxItemSet& rSet)
     if (!pIPClient)
         return;
 
-    const css::uno::Reference<::css::embed::XEmbeddedObject>& xEmbObj = pIPClient->GetObject();
+    const cpo::uno::Reference<::css::embed::XEmbeddedObject>& xEmbObj = pIPClient->GetObject();
     if( !xEmbObj.is() )
         return;
 
-    ::css::uno::Reference<::css::chart2::XChartDocument> xChart( xEmbObj->getComponent(), uno::UNO_QUERY );
+    ::cpo::uno::Reference<::css::chart2::XChartDocument> xChart( xEmbObj->getComponent(), uno::UNO_QUERY );
     if( !xChart.is() )
         return;
 
-    css::uno::Reference<css::beans::XPropertySet> xPropSet = xChart->getPageBackground();
+    cpo::uno::Reference<css::beans::XPropertySet> xPropSet = xChart->getPageBackground();
     if (!xPropSet.is())
         return;
 
-    css::uno::Reference<css::beans::XPropertySetInfo> xInfo(xPropSet->getPropertySetInfo());
+    cpo::uno::Reference<css::beans::XPropertySetInfo> xInfo(xPropSet->getPropertySetInfo());
     if (!xInfo.is())
         return;
 
@@ -376,17 +378,17 @@ static void setupFillColorForChart(const SfxViewShell* pShell, SfxItemSet& rSet)
     OUString aGradientName;
     xPropSet->getPropertyValue(u"FillGradientName"_ustr) >>= aGradientName;
 
-    ::css::uno::Reference< ::css::frame::XController > xChartController = xChart->getCurrentController();
+    ::cpo::uno::Reference< ::css::frame::XController > xChartController = xChart->getCurrentController();
     if( !xChartController.is() )
         return;
 
-    css::uno::Reference<css::lang::XMultiServiceFactory> xFact(xChartController->getModel(), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xFact(xChartController->getModel(), cpo::uno::UNO_QUERY);
 
     if (!xFact.is())
         return;
 
-    css::uno::Reference<css::container::XNameAccess> xNameAccess(
-        xFact->createInstance(u"com.sun.star.drawing.GradientTable"_ustr), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::container::XNameAccess> xNameAccess(
+        xFact->createInstance(u"com.sun.star.drawing.GradientTable"_ustr), cpo::uno::UNO_QUERY);
 
     if (xNameAccess.is() && xNameAccess->hasByName(aGradientName))
     {
@@ -427,6 +429,13 @@ void ScDrawShell::GetDrawAttrState( SfxItemSet& rSet )
             aSet.Put(pItem->CloneSetWhich(SID_ATTR_TEXTCOLUMNS_SPACING));
         }
         rSet.Put(aSet, false);
+
+        if (SfxItemState::UNKNOWN != rSet.GetItemState(XATTR_FILLCOLOR, false)
+            && !svx::canFillColorShowThroughMarked(rMarkList))
+        {
+            rSet.ClearItem(XATTR_FILLCOLOR);
+            rSet.DisableItem(XATTR_FILLCOLOR);
+        }
     }
     else
     {

@@ -662,6 +662,8 @@ public:
 
     /** Returns true, if the XF is a cell XF, and false, if it is a style XF. */
     bool         isCellXf() const { return maModel.mbCellXf; }
+    /** Returns true, if the XF applies its font (applyFont). */
+    bool         isFontUsed() const { return maModel.mbFontUsed; }
 
     /** Returns the referred font object. */
     FontRef             getFont() const;
@@ -886,6 +888,9 @@ public:
 
     TableStyleRef createTableStyle();
 
+    /** Reads the tableStyles element attributes (the document default table style name). */
+    void                importTableStylesAttribs( const AttributeList& rAttribs );
+
     /** Appends a new color to the color palette. */
     void                importPaletteColor( const AttributeList& rAttribs );
     /** Inserts a new number format code. */
@@ -965,6 +970,7 @@ private:
     DxfVector           maExtDxfs;          /// List of differential extlst cell styles.
     mutable DxfStyleMap maDxfStyles;        /// Maps DXF identifiers to Calc style sheet names.
     TableStyleVector    maTableStyles;
+    OUString            maDefaultTableStyleName;  /// Document default table style name from the tableStyles element.
     mutable std::unordered_set<sal_Int32> maExtConditionalStyles;  /// DXF identifiers for ExtCondition which have been mapped to styles.
 };
 

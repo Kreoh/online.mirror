@@ -26,9 +26,7 @@
 #include <comphelper/uno3.hxx>
 #include <cppuhelper/compbase_ex.hxx>
 
-namespace com::sun::star::uno {
-    class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 namespace cpo::uno { class XAggregation; }
 namespace com::sun::star::lang { class XComponent; }
 
@@ -81,32 +79,32 @@ namespace accessibility
     class OProxyAggregation
     {
     private:
-        css::uno::Reference< cpo::uno::XAggregation >             m_xProxyAggregate;
-        css::uno::Reference< css::lang::XTypeProvider >           m_xProxyTypeAccess;
-        css::uno::Reference< css::uno::XComponentContext >        m_xContext;
+        cpo::uno::Reference< cpo::uno::XAggregation >             m_xProxyAggregate;
+        cpo::uno::Reference< css::lang::XTypeProvider >           m_xProxyTypeAccess;
+        cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
 
     protected:
-        const css::uno::Reference< css::uno::XComponentContext >& getComponentContext() const
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& getComponentContext() const
         {
             return m_xContext;
         }
 
     protected:
-        OProxyAggregation( const css::uno::Reference< css::uno::XComponentContext >& _rxContext );
+        OProxyAggregation( const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext );
         ~OProxyAggregation();
 
         /// to be called from within your ctor
         void baseAggregateProxyFor(
-            const css::uno::Reference< css::uno::XInterface >& _rxComponent,
+            const cpo::uno::Reference< cpo::uno::XInterface >& _rxComponent,
             oslInterlockedCount& _rRefCount,
             ::cppu::OWeakObject& _rDelegator
         );
 
         // XInterface and XTypeProvider
-        /// @throws css::uno::RuntimeException
-        cpo::uno::Any SAL_CALL queryAggregation( const cpo::uno::Type& _rType );
-        /// @throws css::uno::RuntimeException
-        cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes(  );
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Any queryAggregation( const cpo::uno::Type& _rType );
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Sequence< cpo::uno::Type > getTypes(  );
 
     private:
         OProxyAggregation( const OProxyAggregation& ) = delete;
@@ -133,7 +131,7 @@ namespace accessibility
                                     >   BASE;   // prevents some MSVC problems
 
     protected:
-        css::uno::Reference< css::lang::XComponent >
+        cpo::uno::Reference< css::lang::XComponent >
                                             m_xInner;
         ::cppu::OBroadcastHelper&           m_rBHelper;
 
@@ -142,31 +140,31 @@ namespace accessibility
         using OProxyAggregation::getComponentContext;
 
         // XInterface
-        cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& _rType ) override;
+        cpo::uno::Any queryInterface( const cpo::uno::Type& _rType ) override;
 
         // XTypeProvider
         DECLARE_XTYPEPROVIDER( )
 
     protected:
         OComponentProxyAggregationHelper(
-            const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext,
             ::cppu::OBroadcastHelper& _rBHelper
         );
         virtual ~OComponentProxyAggregationHelper( );
 
         /// to be called from within your ctor
         void componentAggregateProxyFor(
-            const css::uno::Reference< css::lang::XComponent >& _rxComponent,
+            const cpo::uno::Reference< css::lang::XComponent >& _rxComponent,
             oslInterlockedCount& _rRefCount,
             ::cppu::OWeakObject& _rDelegator
         );
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
 
         // XComponent
-        /// @throws css::uno::RuntimeException
-        virtual void SAL_CALL dispose() = 0;
+        /// @throws cpo::uno::RuntimeException
+        virtual void dispose() = 0;
 
     private:
         OComponentProxyAggregationHelper( const OComponentProxyAggregationHelper& ) = delete;
@@ -182,8 +180,8 @@ namespace accessibility
     {
     protected:
         OComponentProxyAggregation(
-            const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-            const css::uno::Reference< css::lang::XComponent >& _rxComponent
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext,
+            const cpo::uno::Reference< css::lang::XComponent >& _rxComponent
         );
 
         virtual ~OComponentProxyAggregation() override;
@@ -194,13 +192,13 @@ namespace accessibility
         DECLARE_XTYPEPROVIDER()
 
         // OComponentHelper
-        virtual void SAL_CALL disposing() override;
+        virtual void disposing() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& _rSource ) override;
+        virtual void disposing( const css::lang::EventObject& _rSource ) override;
 
         // XComponent/OComponentProxyAggregationHelper
-        virtual void SAL_CALL dispose() override;
+        virtual void dispose() override;
 
     private:
         OComponentProxyAggregation( const OComponentProxyAggregation& ) = delete;

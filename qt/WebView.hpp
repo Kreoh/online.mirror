@@ -15,8 +15,12 @@
 
 #include <Poco/URI.h>
 
+#include <QElapsedTimer>
+#include <QImage>
+#include <QList>
 #include <QMainWindow>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QWebEngineView>
 
@@ -85,6 +89,9 @@ public:
     // console windows (no-op otherwise).
     void endPresentation();
 
+    // True while this view is running a presentation.
+    bool isPresenting() const { return _presentationView != nullptr; }
+
 protected:
     // Intercept files dropped onto the window from the OS
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -113,6 +120,9 @@ private:
     // restore.
     WebView* _presentationView;
     WebView* _presenterConsole;
+    // Dialog windows popped out of this document's page. Each window deletes
+    // itself on close, which clears its QPointer entry here.
+    QList<QPointer<QMainWindow>> _dialogWindows;
     QMetaObject::Connection _screenAdded;
     QMetaObject::Connection _screenRemoved;
 
@@ -128,6 +138,9 @@ class WebView : public QObject
 public:
     using CloseRequestFn = std::function<void()>;
     using TitleChangeFn = std::function<void(const QString&)>;
+    using UnmodifiedFn = std::function<void()>;
+    using ModifiedStatusChangeFn = std::function<void(bool)>;
+    using ThumbnailChangeFn = std::function<void(bool isFirstThumbnail)>;
 
     explicit WebView(QWebEngineProfile* profile, bool isWelcome = false);
     ~WebView() override;
@@ -146,8 +159,20 @@ public:
     // The owner installs these; Bridge calls requestClose()/updateTitle().
     void setOnCloseRequest(CloseRequestFn cb) { _onCloseRequest = std::move(cb); }
     void setOnTitleChange(TitleChangeFn cb) { _onTitleChange = std::move(cb); }
+    // Runs each time the document stops holding a change that is not on disk.
+    void setOnUnmodified(UnmodifiedFn cb) { _onUnmodified = std::move(cb); }
+    void setOnModifiedStatusChange(ModifiedStatusChangeFn cb) { _onModifiedStatusChange = std::move(cb); }
+    // Runs each time the image of the document's current view changes.
+    void setOnThumbnailChange(ThumbnailChangeFn cb) { _onThumbnailChange = std::move(cb); }
     void requestClose();
     void updateTitle(const QString& title);
+    /// The document reported that it holds no change that is not on disk.
+    void onDocumentUnmodified();
+    void onDocumentModifiedStatusChanged(bool modified);
+    /// Takes the current view as a "data:image/png;base64," URL. Anything else is ignored.
+    void updateThumbnail(const std::string& dataUrl);
+    // The document's current view, or a null image until the page has sent one.
+    const QImage& thumbnail() const { return _thumbnail; }
     QString composedWindowTitle() const;
 
     QString documentTitle() const { return _docTitle; }
@@ -208,21 +233,63 @@ public:
     void saveAndClose();
     // Called when this document's window gains or loses the active state.
     void onWindowActiveChanged(bool active);
+
+    /// Destroy this document's webview, and with it the web engine process that renders it.
+    /// The document stays loaded in the engine with any unsaved change.
+    void discardView();
+
+    /// Build a webview again and rejoin the document left loaded under this view's appDocId.
+    void restoreDiscardedView();
+
+    bool isViewDiscarded() const { return _viewDiscarded; }
+
+    /// True when this view shows a local document that has a file on disk. This does not
+    /// change while the document is open.
+    bool mayDiscardView() const;
+
+    /// True when the document holds no change that is not on disk yet.
+    bool isReadyToDiscardView() const;
+
+    /// Milliseconds this view still has to stay live before it may be discarded, or 0 when
+    /// it has had its time. A few seconds is long enough to load a page and rejoin it.
+    int millisecondsUntilViewSettled() const;
+
+    /// Ask the page to save the document, and run the callback when the save result comes
+    /// back, whether the save succeeded or not. Returns false when no save was asked for.
+    bool requestSave(std::function<void()> onComplete);
+
     bool isDocumentModified() const;
     void endPresentation();
     bool isStarterScreen() const { return _docType == QStringLiteral("starter"); }
     bool isWelcome() const { return _isWelcome; }
 
+    /// Apply the stored user interface zoom to this window's web view. An
+    /// explicit zoom percentage becomes the web view's zoom factor; with no
+    /// explicit zoom the system text scaling is queried and applied instead.
+    void applyUIZoom();
+    /// Apply the stored user interface zoom to every open window.
+    static void applyUIZoomToAll();
+
 private:
     // query gnome font scaling factor and apply it to the web view
     void queryGnomeFontScalingUpdateZoom();
 
+    // Make the webview and its page, and wire up the page signals.
+    void createWebEngineView();
+
     QMainWindow* _mainWindow;
+    QWebEngineProfile* _profile;
     std::unique_ptr<CODAWebEngineView> _webView;
     coda::DocumentData _document;
+    // The cool.html URL, with its query, that this document was loaded from.
+    QString _loadedUrl;
+    bool _viewDiscarded;
+    // Runs from the moment this view's webview was built.
+    QElapsedTimer _viewLiveSince;
     QString _docTitle;
     QString _docType;
     bool _isWelcome;
+    QImage _thumbnail;
     Bridge* _bridge;
     // Holds the temporary copy of a template while it is open as a new document,
     // so the copy is removed when the window closes.
@@ -230,6 +297,9 @@ private:
 
     CloseRequestFn _onCloseRequest;
     TitleChangeFn _onTitleChange;
+    UnmodifiedFn _onUnmodified;
+    ModifiedStatusChangeFn _onModifiedStatusChange;
+    ThumbnailChangeFn _onThumbnailChange;
 
     static std::vector<WebView*> s_instances;
 };

@@ -18,6 +18,7 @@
  */
 
 #include <stlpool.hxx>
+#include <drawview.hxx>
 #include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 #include <framework/windowstatehelper.hxx>
@@ -77,6 +78,7 @@
 #include <COKit/COKit.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 #define SC_GROWY_SMALL_EXTRA    100
 #define SC_GROWY_BIG_EXTRA      200
@@ -1915,11 +1917,16 @@ void ScViewData::SetEditEngine( ScSplitPos eWhich,
         rNewEngine.InsertView(pEditView[eWhich].get());
 
     //      background color of the cell
-    Color aBackCol = pPattern->GetItem(ATTR_BACKGROUND).GetColor();
+    Color aBackCol = mrDoc.GetCellBackgroundColor(nNewX, nNewY, CurrentTabForData());
 
     if ( aBackCol.IsTransparent() )
     {
-        aBackCol = pScMod->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
+        // A cell with no background of its own sits on the document background of the view that is
+        // being edited, so an automatic text color is picked against the background this user sees
+        // rather than the one another view left behind.
+        aBackCol = GetViewShell()
+                       ? GetViewShell()->GetColorConfigColor(svtools::DOCCOLOR)
+                       : pScMod->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
     }
     pEditView[eWhich]->SetBackgroundColor( aBackCol );
 
@@ -2718,6 +2725,25 @@ Point ScViewData::GetPrintTwipsPosFromTileTwips(const Point& rTileTwipsPos) cons
     const Point aTileTwipsCellPos(aPixCellPos.X() / nPPTX, aPixCellPos.Y() / nPPTY);
     const Point aPrintTwipsCellPos = GetPrintTwipsPos(nCol, nRow);
     return aPrintTwipsCellPos + (rTileTwipsPos - aTileTwipsCellPos);
+}
+
+ScAddress ScViewData::GetKitVisibleTopLeftCell() const
+{
+    SCCOL nPosX = 0;
+    SCROW nPosY = 0;
+    if (!maKitVisibleArea.IsEmpty())
+    {
+        // The client states its visible area in tile twips, so the pixel factors take it to the
+        // same pixel grid the tiles are drawn on.
+        const tools::Long nPixelX = static_cast<tools::Long>(maKitVisibleArea.Left() * nPPTX);
+        const tools::Long nPixelY = static_cast<tools::Long>(maKitVisibleArea.Top() * nPPTY);
+
+        // The following call (with bTestMerge = false) will not modify any members.
+        const_cast<ScViewData*>(this)->GetPosFromPixel(nPixelX, nPixelY, SC_SPLIT_TOPLEFT, nPosX,
+                                                       nPosY, false /* bTestMerge */);
+    }
+
+    return ScAddress(nPosX, nPosY, CurrentTabForData());
 }
 
 OString ScViewData::describeCellCursorAt(SCCOL nX, SCROW nY, bool bPixelAligned) const
@@ -3883,7 +3909,7 @@ void ScViewData::WriteUserDataSequence(cpo::uno::Sequence <beans::PropertyValue>
             {
                 OSL_FAIL("seems there are two tables with the same name");
             }
-            catch ( uno::RuntimeException& )
+            catch ( cpo::uno::RuntimeException& )
             {
                 OSL_FAIL("something went wrong");
             }
@@ -4290,7 +4316,7 @@ void ScViewData::UpdateOutlinerFlags( Outliner& rOutl ) const
 
     if ( bOnlineSpell )
     {
-        css::uno::Reference<css::linguistic2::XSpellChecker> xXSpellChecker1( LinguMgr::GetSpellChecker() );
+        cpo::uno::Reference<css::linguistic2::XSpellChecker> xXSpellChecker1( LinguMgr::GetSpellChecker() );
         rOutl.SetSpeller( xXSpellChecker1 );
     }
 

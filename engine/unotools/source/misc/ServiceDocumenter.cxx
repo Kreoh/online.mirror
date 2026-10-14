@@ -9,10 +9,11 @@
 #include "ServiceDocumenter.hxx"
 #include <com/sun/star/system/SystemShellExecuteFlags.hpp>
 #include <com/sun/star/system/XSystemShellExecute.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using uno::Reference;
 using lang::XServiceInfo;
 using lang::XTypeProvider;
@@ -81,9 +82,9 @@ cpo::uno::Sequence< OUString > unotools::misc::ServiceDocumenter::getSupportedSe
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 unotools_ServiceDocument_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new unotools::misc::ServiceDocumenter(context));
 }

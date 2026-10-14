@@ -49,9 +49,9 @@ struct SfxObjectShell_Impl final : public ::sfx2::IMacroDocumentAccess
     std::unique_ptr<::comphelper::EmbeddedObjectContainer> mxObjectContainer;
     SfxBasicManagerHolder aBasicManager;
     SfxObjectShell&     rDocShell;
-    css::uno::Reference< css::script::XStorageBasedLibraryContainer >
+    cpo::uno::Reference< css::script::XStorageBasedLibraryContainer >
                         xBasicLibraries;
-    css::uno::Reference< css::script::XStorageBasedLibraryContainer >
+    cpo::uno::Reference< css::script::XStorageBasedLibraryContainer >
                         xDialogLibraries;
     ::sfx2::DocumentMacroMode
                         aMacroMode;
@@ -77,6 +77,7 @@ struct SfxObjectShell_Impl final : public ::sfx2::IMacroDocumentAccess
                         bPreserveVersions:1,
                         m_bMacroSignBroken:1, // whether the macro signature was explicitly broken
                         m_bNoBasicCapabilities:1,
+                        m_bMacroCallsAllowed:1, // the macro decision allows the document's own UI configuration to call macros
                         m_bDocRecoverySupport:1,
                         bQueryLoadTemplate:1,
                         bLoadReadonly:1,
@@ -114,7 +115,7 @@ struct SfxObjectShell_Impl final : public ::sfx2::IMacroDocumentAccess
     MapUnit             m_nMapUnit;
 
     bool                m_bCreateTempStor;
-    css::uno::Reference< css::embed::XStorage > m_xDocStorage;
+    cpo::uno::Reference< css::embed::XStorage > m_xDocStorage;
 
     bool                m_bIsInit;
 
@@ -128,7 +129,6 @@ struct SfxObjectShell_Impl final : public ::sfx2::IMacroDocumentAccess
     bool                m_bModifyPasswordEntered;
     /// If true, then this is not a real save, just the signatures change.
     bool m_bSavingForSigning;
-    bool m_bAllowModifiedBackAfterSigning;
 
     /// Holds Infobars until View is fully loaded
     std::vector<InfobarData> m_aPendingInfobars;
@@ -148,11 +148,11 @@ struct SfxObjectShell_Impl final : public ::sfx2::IMacroDocumentAccess
     virtual OUString getDocumentLocation() const override;
     virtual bool documentStorageHasMacros() const override;
     virtual bool macroCallsSeenWhileLoading() const override;
-    virtual css::uno::Reference< css::document::XEmbeddedScripts > getEmbeddedDocumentScripts() const override;
+    virtual cpo::uno::Reference< css::document::XEmbeddedScripts > getEmbeddedDocumentScripts() const override;
     virtual SignatureState getScriptingSignatureState() override;
 
     virtual bool hasTrustedScriptingSignature(
-        const css::uno::Reference<css::task::XInteractionHandler>& _rxInteraction) override;
+        const cpo::uno::Reference<css::task::XInteractionHandler>& _rxInteraction) override;
 };
 
 #endif

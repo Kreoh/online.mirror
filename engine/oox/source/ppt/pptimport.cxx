@@ -24,9 +24,11 @@
 
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/document/XUndoManager.hpp>
 #include <com/sun/star/document/XUndoManagerSupplier.hpp>
+#include <com/sun/star/xml/dom/XDocument.hpp>
+#include <com/sun/star/xml/sax/XFastSAXSerializable.hpp>
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/scopeguard.hxx>
 #include <vcl/svapp.hxx>
@@ -39,6 +41,7 @@
 #include <oox/ppt/pptimport.hxx>
 #include <oox/drawingml/chart/chartconverter.hxx>
 #include <oox/drawingml/theme.hxx>
+#include <oox/drawingml/themefragmenthandler.hxx>
 #include <oox/dump/pptxdumper.hxx>
 #include <drawingml/table/tablestylelistfragmenthandler.hxx>
 #include <oox/helper/graphichelper.hxx>
@@ -48,8 +51,8 @@
 #include <oox/token/tokens.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace oox::core;
 
@@ -201,6 +204,31 @@ void PowerPointImport::getSchemeColorToken(sal_Int32& nToken) const
     return nColor;
 }
 
+::oox::drawingml::ThemePtr PowerPointImport::importTheme(const OUString& rFragmentPath,
+                                                        bool& rbRead)
+{
+    std::map<OUString, ::oox::drawingml::ThemePtr>::iterator aIter(maThemes.find(rFragmentPath));
+    if (aIter != maThemes.end())
+    {
+        rbRead = false;
+        return aIter->second;
+    }
+
+    ::oox::drawingml::ThemePtr pOoxTheme = std::make_shared<::oox::drawingml::Theme>();
+    auto pTheme = std::make_shared<model::Theme>();
+    pOoxTheme->setTheme(pTheme);
+
+    Reference<xml::dom::XDocument> xDoc = importFragment(rFragmentPath);
+    importFragment(
+        new ::oox::drawingml::ThemeFragmentHandler(*this, rFragmentPath, *pOoxTheme, *pTheme),
+        Reference<xml::sax::XFastSAXSerializable>(xDoc, UNO_QUERY_THROW));
+    pOoxTheme->setFragment(xDoc);
+    maThemes[rFragmentPath] = pOoxTheme;
+
+    rbRead = true;
+    return pOoxTheme;
+}
+
 const ::oox::drawingml::Theme* PowerPointImport::getCurrentTheme() const
 {
     return mpActualSlidePersist ? mpActualSlidePersist->getTheme().get() : nullptr;
@@ -330,9 +358,9 @@ OUString PowerPointImport::getImplementationName()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_oox_ppt_PowerPointImport_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new oox::ppt::PowerPointImport(pCtx));
 }

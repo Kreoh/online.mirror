@@ -44,6 +44,8 @@
 #include <comphelper/sequence.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/string.hxx>
+#include <doc.hxx>
+#include <docsh.hxx>
 #include <unotxdoc.hxx>
 #include <unoxstyle.hxx>
 #include <unostyle.hxx>
@@ -51,6 +53,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace writerfilter::dmapper {
 
@@ -429,11 +432,21 @@ const OUString & ListDef::GetStyleName(sal_Int32 const nId,
     {
         OUString sStyleName = "WWNum" + OUString::number( nId );
 
+        bool bMergedPaste = false;
+        if (SwXTextDocument* pTextDoc = rDMapper.GetTextDocument().get())
+        {
+            if (SwDocShell* pShell = pTextDoc->GetDocShell())
+            {
+                bMergedPaste = pShell->GetDoc()->IsInMergedPaste();
+            }
+        }
+
         while (xStyles->hasByName(sStyleName)) // unique
         {
-            if (!rDMapper.IsNewDoc())
+            if (!rDMapper.IsNewDoc() && !bMergedPaste)
             {
                 // When pasting, don't rename our style, just use the existing one.
+                // Merged paste creates direct formatting, so use a nominally unique "style name".
                 break;
             }
 
@@ -649,7 +662,7 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
         TOOLS_WARN_EXCEPTION( "writerfilter", "" );
         assert( !"Incorrect argument to UNO call" );
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
         TOOLS_WARN_EXCEPTION( "writerfilter", "" );
         assert( !"Incorrect argument to UNO call" );

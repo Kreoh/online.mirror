@@ -83,7 +83,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 
@@ -179,6 +179,7 @@ std::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetCharStyleP
         { UNO_NAME_CHAR_AUTO_KERNING, RES_CHRATR_AUTOKERN  ,  cppu::UnoType<bool>::get()  ,       PROPERTY_NONE,     0},
         { UNO_NAME_CHAR_BACK_TRANSPARENT, RES_CHRATR_BACKGROUND,  cppu::UnoType<bool>::get(),         PROPERTY_NONE ,MID_GRAPHIC_TRANSPARENT       },
         { UNO_NAME_CHAR_BACK_COLOR, RES_CHRATR_BACKGROUND,    cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE ,MID_BACK_COLOR        },
+        { UNO_NAME_CHAR_SHADING_VALUE, RES_CHRATR_BACKGROUND,     cppu::UnoType<sal_Int32>::get(),    PROPERTY_NONE, MID_SHADING_VALUE },
         { UNO_NAME_CHAR_BACKGROUND_COMPLEX_COLOR, RES_CHRATR_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE ,MID_BACKGROUND_COMPLEX_COLOR },
         { UNO_NAME_CHAR_HIGHLIGHT, RES_CHRATR_HIGHLIGHT, cppu::UnoType<sal_Int32>::get(), PROPERTY_NONE, MID_BACK_COLOR },
         { UNO_NAME_CHAR_CASE_MAP, RES_CHRATR_CASEMAP,     cppu::UnoType<sal_Int16>::get(),           PROPERTY_NONE, 0},
@@ -724,7 +725,7 @@ std::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetRangePrope
         COMMON_CRSR_PARA_PROPERTIES_WITHOUT_FN_01
         TABSTOPS_MAP_ENTRY
         { UNO_NAME_BACK_COLOR, FN_UNO_TABLE_CELL_BACKGROUND, cppu::UnoType<sal_Int32>::get(), PropertyAttribute::MAYBEVOID, MID_BACK_COLOR  },
-        { UNO_NAME_BACKGROUND_COMPLEX_COLOR, FN_UNO_TABLE_CELL_BACKGROUND, cppu::UnoType<sal_Int32>::get(), PropertyAttribute::MAYBEVOID, MID_BACKGROUND_COMPLEX_COLOR  },
+        { UNO_NAME_BACKGROUND_COMPLEX_COLOR, FN_UNO_TABLE_CELL_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), PropertyAttribute::MAYBEVOID, MID_BACKGROUND_COMPLEX_COLOR  },
         { UNO_NAME_BACK_GRAPHIC_URL, RES_BACKGROUND,      cppu::UnoType<OUString>::get(), PropertyAttribute::MAYBEVOID ,MID_GRAPHIC_URL    },
         { UNO_NAME_BACK_GRAPHIC, RES_BACKGROUND, cppu::UnoType<graphic::XGraphic>::get(), PROPERTY_NONE, MID_GRAPHIC },
         { UNO_NAME_BACK_GRAPHIC_FILTER, RES_BACKGROUND,       cppu::UnoType<OUString>::get(), PropertyAttribute::MAYBEVOID ,MID_GRAPHIC_FILTER    },
@@ -1082,8 +1083,8 @@ std::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetRedlinePro
     {
         REDLINE_PROPERTIES(PropertyAttribute::READONLY)
         REDLINE_NODE_PROPERTIES
-        {UNO_NAME_REDLINE_START, 0, cppu::UnoType<css::uno::XInterface>::get(),  PropertyAttribute::READONLY,    0},
-        {UNO_NAME_REDLINE_END, 0, cppu::UnoType<css::uno::XInterface>::get(),    PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},
+        {UNO_NAME_REDLINE_START, 0, cppu::UnoType<cpo::uno::XInterface>::get(),  PropertyAttribute::READONLY,    0},
+        {UNO_NAME_REDLINE_END, 0, cppu::UnoType<cpo::uno::XInterface>::get(),    PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},
     };
 
     return aRedlineMap_Impl;

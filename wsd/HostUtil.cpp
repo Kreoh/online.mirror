@@ -23,14 +23,17 @@
 
 #include <common/CommandControl.hpp>
 #include <common/ConfigUtil.hpp>
+#include <common/IpNetwork.hpp>
 #include <common/Log.hpp>
 #include <common/RegexUtil.hpp>
+#include <common/Util.hpp>
 
 #include <map>
 #include <optional>
 #include <regex>
 #include <set>
 #include <string>
+#include <vector>
 
 RegexUtil::RegexListMatcher HostUtil::WopiHosts;
 std::map<std::string, std::string> HostUtil::AliasHosts;
@@ -46,14 +49,8 @@ void HostUtil::parseWopiHost()
     WopiEnabled = ConfigUtil::getBool("storage.wopi[@allow]", false);
     if (WopiEnabled)
     {
-        for (size_t i = 0;; ++i)
+        for (const std::string& path : ConfigUtil::getIndexedKeys("storage.wopi", "host"))
         {
-            const std::string path = "storage.wopi.host[" + std::to_string(i) + ']';
-            if (!ConfigUtil::has(path))
-            {
-                break;
-            }
-
             HostUtil::addWopiHost(ConfigUtil::getString(path, ""),
                                   ConfigUtil::getBool(path + "[@allow]", false));
         }
@@ -80,6 +77,11 @@ void HostUtil::addWopiHost(const std::string& host, bool allow)
 bool HostUtil::allowedWopiHost(const std::string& host)
 {
     return WopiEnabled && WopiHosts.match(host);
+}
+
+bool HostUtil::allowedWopiHostWithoutCache(const std::string& host)
+{
+    return WopiEnabled && WopiHosts.matchWithoutCache(host);
 }
 
 std::string HostUtil::parseAlias(const std::string& aliasPattern)
@@ -323,7 +325,8 @@ void HostUtil::setFirstHost(const Poco::URI& uri)
         if (FirstHost.empty())
         {
             FirstHost = uri.getAuthority();
-            addWopiHost(uri.getHost(), true);
+            // The host comes from a request, so it is matched as that name only.
+            addWopiHost(RegexUtil::escapeRegex(uri.getHost()), true);
         }
     }
     else if(!FirstHost.empty() && FirstHost != uri.getAuthority())
@@ -366,11 +369,34 @@ bool HostUtil::isWopiHostsEmpty()
 
 bool HostUtil::isForbiddenKitHost(const std::string& host)
 {
-    static const char* allowlist = std::getenv("KIT_HOST_ALLOWLIST");
+    // The same list that setLokitEnvironmentVariables hands to the kit: one
+    // entry per line, each either a CIDR network or a regular expression.
+    // Parsed on each call so that it follows the value the remote
+    // configuration poll writes.
+    const char* allowlist = std::getenv("KIT_HOST_ALLOWLIST");
     if (!allowlist || allowlist[0] == '\0')
         return false;
 
-    static const std::regex allowedRegex(allowlist);
+    std::string regex;
+    for (const std::string& entry : Util::splitStringToVector(allowlist, '\n'))
+    {
+        if (std::optional<Util::IpNetwork> network = Util::IpNetwork::parse(entry))
+        {
+            if (network->contains(host))
+                return false;
+        }
+        else
+        {
+            if (!regex.empty())
+                regex += '|';
+            regex += entry;
+        }
+    }
+
+    if (regex.empty())
+        return true;
+
+    const std::regex allowedRegex(regex);
     return !std::regex_match(host, allowedRegex);
 }
 

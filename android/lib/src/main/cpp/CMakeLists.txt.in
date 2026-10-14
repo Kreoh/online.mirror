@@ -1,6 +1,8 @@
 
 cmake_minimum_required(VERSION 3.4.1)
 
+project(androidapp C CXX)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a")
 
 add_library(androidapp SHARED
@@ -23,12 +25,14 @@ add_library(androidapp SHARED
             ../../../../../common/Session.cpp
             ../../../../../common/SigUtil-mobile.cpp
             ../../../../../common/SpookyV2.cpp
+            ../../../../../common/Syscall.cpp
             ../../../../../common/Unit.cpp
             ../../../../../common/Unit-mobile.cpp
             ../../../../../common/Util.cpp
             ../../../../../common/Util-mobile.cpp
             ../../../../../common/Util-unix.cpp
             ../../../../../common/Uri.cpp
+            ../../../../../common/Watchdog-unix.cpp
             ../../../../../kit/ChildSession.cpp
             ../../../../../kit/DeltaSimd.c
             ../../../../../kit/Kit.cpp
@@ -37,6 +41,8 @@ add_library(androidapp SHARED
             ../../../../../kit/KitWebSocket.cpp
             ../../../../../net/FakeSocket.cpp
             ../../../../../net/HttpRequest.cpp
+            ../../../../../net/NetUtil.cpp
+            ../../../../../net/Socket-unix.cpp
             ../../../../../net/Socket.cpp
             ../../../../../wsd/ClientSession.cpp
             ../../../../../wsd/DocumentBroker.cpp

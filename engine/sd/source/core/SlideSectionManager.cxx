@@ -163,6 +163,29 @@ const SlideSection& SlideSectionManager::GetSection(sal_Int32 nIndex) const
     return maSections[nIndex];
 }
 
+void SlideSectionManager::WriteSectionsJson(::tools::JsonWriter& rJsonWriter,
+                                            std::string_view aArrayName) const
+{
+    const sal_uInt16 nPageCount = mrDoc.GetSdPageCount(PageKind::Standard);
+    const sal_Int32 nSectionCount = static_cast<sal_Int32>(maSections.size());
+    auto aArray = rJsonWriter.startArray(aArrayName);
+    for (sal_Int32 i = 0; i < nSectionCount; ++i)
+    {
+        const SlideSection& rSection = maSections[i];
+        // A section spans up to the next section's first slide, and the last
+        // section spans up to the end of the deck.
+        const sal_Int32 nSectionSlideCount
+            = (i + 1 < nSectionCount) ? maSections[i + 1].mnStartIndex - rSection.mnStartIndex
+                                      : nPageCount - rSection.mnStartIndex;
+        auto aNode = rJsonWriter.startStruct();
+        rJsonWriter.put("name", rSection.maName);
+        if (!rSection.maId.isEmpty())
+            rJsonWriter.put("id", rSection.maId);
+        rJsonWriter.put("startIndex", rSection.mnStartIndex);
+        rJsonWriter.put("slideCount", nSectionSlideCount);
+    }
+}
+
 sal_Int32 SlideSectionManager::GetSectionIndexForSlide(sal_Int32 nSlideIndex) const
 {
     // Sections are sorted by start index; find the last section whose start <= nSlideIndex
@@ -245,8 +268,8 @@ void SlideSectionManager::RemoveSectionSlides(sal_Int32 nSectionIndex)
         if (!xModel.is())
             return;
 
-        css::uno::Reference<css::drawing::XDrawPages> xPages(xModel->getDrawPages(),
-                                                             css::uno::UNO_SET_THROW);
+        cpo::uno::Reference<css::drawing::XDrawPages> xPages(xModel->getDrawPages(),
+                                                             cpo::uno::UNO_SET_THROW);
 
         // Iterate in reverse so that each remove() does not shift the
         // indices of the slides we still have to delete.  OnSlideRemoved
@@ -258,8 +281,8 @@ void SlideSectionManager::RemoveSectionSlides(sal_Int32 nSectionIndex)
             if (xPages->getCount() <= 1)
                 break;
 
-            css::uno::Reference<css::drawing::XDrawPage> xPage(xPages->getByIndex(i),
-                                                               css::uno::UNO_QUERY_THROW);
+            cpo::uno::Reference<css::drawing::XDrawPage> xPage(xPages->getByIndex(i),
+                                                               cpo::uno::UNO_QUERY_THROW);
             xPages->remove(xPage);
         }
     }
@@ -488,25 +511,7 @@ void SlideSectionManager::NotifySectionsChanged()
 
     ::tools::JsonWriter aWriter;
     aWriter.put("commandName", ".uno:SlideSections");
-    const sal_uInt16 nPageCount = mrDoc.GetSdPageCount(PageKind::Standard);
-    const sal_Int32 nSectionCount = static_cast<sal_Int32>(maSections.size());
-    {
-        auto aArr = aWriter.startArray("state");
-        for (sal_Int32 i = 0; i < nSectionCount; ++i)
-        {
-            const SlideSection& rSec = maSections[i];
-            const sal_Int32 nSectionSlideCount
-                = (i + 1 < nSectionCount)
-                      ? maSections[i + 1].mnStartIndex - rSec.mnStartIndex
-                      : nPageCount - rSec.mnStartIndex;
-            auto aNode = aWriter.startStruct();
-            aWriter.put("name", rSec.maName);
-            if (!rSec.maId.isEmpty())
-                aWriter.put("id", rSec.maId);
-            aWriter.put("startIndex", rSec.mnStartIndex);
-            aWriter.put("slideCount", nSectionSlideCount);
-        }
-    }
+    WriteSectionsJson(aWriter, "state");
     const OString aPayload = aWriter.finishAndGetAsOString();
 
     // Deliver the same simple payload to every view in this document so all

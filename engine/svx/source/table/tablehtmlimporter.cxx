@@ -42,7 +42,7 @@
 #include <svtools/htmltokn.h>
 #include <svtools/parhtml.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::container;
@@ -179,7 +179,7 @@ SdrTableHTMLParser::SdrTableHTMLParser(SdrTableObj& rTableObj)
 
 void SdrTableHTMLParser::Read(SvStream& rStream)
 {
-    EditEngine& rEdit = const_cast<EditEngine&>(mpOutliner->GetEditEngine());
+    EditEngine& rEdit = mpOutliner->GetEditEngine();
 
     Link<HtmlImportInfo&, void> aOldLink(rEdit.GetHtmlImportHdl());
     rEdit.SetHtmlImportHdl(LINK(this, SdrTableHTMLParser, HTMLImportHdl));

@@ -18,7 +18,7 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XTextInputStream2.hpp>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppunit/TestAssert.h>
 #include <cppunit/extensions/HelperMacros.h>
@@ -41,11 +41,11 @@ public:
 private:
     virtual ~Input() override {}
 
-    sal_Int32 SAL_CALL readBytes(cpo::uno::Sequence<sal_Int8> &, sal_Int32)
+    sal_Int32 readBytes(cpo::uno::Sequence<sal_Int8> &, sal_Int32)
         override
     { CPPUNIT_FAIL("readLine is supposed to call readSomeBytes instead"); }
 
-    sal_Int32 SAL_CALL readSomeBytes(
+    sal_Int32 readSomeBytes(
         cpo::uno::Sequence<sal_Int8 > & aData, sal_Int32 nMaxBytesToRead) override
     {
         assert(nMaxBytesToRead >= 0);
@@ -62,7 +62,7 @@ private:
         return n;
     }
 
-    void SAL_CALL skipBytes(sal_Int32 nBytesToSkip) override
+    void skipBytes(sal_Int32 nBytesToSkip) override
     {
         assert(nBytesToSkip >= 0);
         osl::MutexGuard g(mutex_);
@@ -72,7 +72,7 @@ private:
         assert(index_ >= 0 && index_ <= size);
     }
 
-    sal_Int32 SAL_CALL available() override
+    sal_Int32 available() override
     {
         osl::MutexGuard g(mutex_);
         checkClosed();
@@ -80,7 +80,7 @@ private:
         return size - index_;
     }
 
-    void SAL_CALL closeInput() override
+    void closeInput() override
     {
         osl::MutexGuard g(mutex_);
         checkClosed();
@@ -117,7 +117,7 @@ private:
 };
 
 OUString Test::readFirstLine(char *inputData, int inputSize) {
-    css::uno::Reference<css::io::XTextInputStream2> s(
+    cpo::uno::Reference<css::io::XTextInputStream2> s(
         css::io::TextInputStream::create(getComponentContext()));
     s->setInputStream(new Input(inputData, inputSize));
     return s->readLine();
@@ -150,7 +150,7 @@ void Test::testReadLineEndChars() {
     l = readFirstLine(inputData.data(), inputData.size());
     CPPUNIT_ASSERT_EQUAL(u"abc"_ustr, l);
 
-    css::uno::Reference<css::io::XTextInputStream2> s(
+    cpo::uno::Reference<css::io::XTextInputStream2> s(
         css::io::TextInputStream::create(getComponentContext()));
     inputData = {'a', 'b', 'c', '\r', '\n', 'd', 'e', 'f'};
     s->setInputStream(new Input(inputData.data(), inputData.size()));

@@ -18,13 +18,13 @@
  */
 
 #include <Scaling.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 #include <cmath>
 #include <limits>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace
 {
@@ -40,6 +40,7 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::cpo;
 
 LogarithmicScaling::LogarithmicScaling() :
         m_fBase( 10.0 ),
@@ -160,7 +161,7 @@ uno::Reference< XScaling >
 {
     // ToDo: ApproxEqual ?
     if( m_fSlope == 0 )
-        throw uno::RuntimeException(u"Divide by zero exception"_ustr);
+        throw cpo::uno::RuntimeException(u"Divide by zero exception"_ustr);
 
     return new LinearScaling( 1.0 / m_fSlope, m_fOffset / m_fSlope );
 }
@@ -208,7 +209,7 @@ uno::Reference< XScaling >
 {
     // ToDo: ApproxEqual ?
     if( m_fExponent == 0 )
-        throw uno::RuntimeException(u"Divide by zero exception"_ustr);
+        throw cpo::uno::RuntimeException(u"Divide by zero exception"_ustr);
 
     return new PowerScaling( 1.0 / m_fExponent );
 }
@@ -236,29 +237,29 @@ cpo::uno::Sequence< OUString > PowerScaling::getSupportedServiceNames()
 
 } //namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_chart2_LinearScaling_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_chart2_LinearScaling_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::LinearScaling );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_chart2_ExponentialScaling_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_chart2_ExponentialScaling_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::ExponentialScaling );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_chart2_LogarithmicScaling_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_chart2_LogarithmicScaling_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::LogarithmicScaling );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_chart2_PowerScaling_get_implementation(css::uno::XComponentContext *,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_chart2_PowerScaling_get_implementation(cpo::uno::XComponentContext *,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::PowerScaling );

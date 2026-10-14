@@ -36,7 +36,7 @@
 #include <mutex>
 
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 
 namespace utl
@@ -93,7 +93,7 @@ namespace
     {
         std::mutex mutex;
         i18nutil::SearchOptions2 Options;
-        css::uno::Reference< css::util::XTextSearch2 > xTextSearch;
+        cpo::uno::Reference< css::util::XTextSearch2 > xTextSearch;
     };
 }
 
@@ -106,7 +106,7 @@ Reference<XTextSearch2> TextSearch::getXTextSearch( const i18nutil::SearchOption
     if ( lcl_Equals(theCachedTextSearch.Options, rPara) )
         return theCachedTextSearch.xTextSearch;
 
-    const Reference< XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
     theCachedTextSearch.xTextSearch.set( ::TextSearch2::create(xContext) );
     theCachedTextSearch.xTextSearch->setOptions2( rPara.toUnoSearchOptions2() );
     theCachedTextSearch.Options = rPara;

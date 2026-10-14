@@ -9,8 +9,14 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <editeng/boxitem.hxx>
+
 #include <com/sun/star/awt/FontSlant.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/style/VerticalAlignment.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/text/ColumnSeparatorStyle.hpp>
@@ -23,6 +29,7 @@
 #include <com/sun/star/text/XTextSectionsSupplier.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 #include <com/sun/star/text/XTextTablesSupplier.hpp>
+#include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/XRefreshable.hpp>
 #include <unotools/localedatawrapper.hxx>
 #include <comphelper/configuration.hxx>
@@ -30,6 +37,16 @@
 #include <wrtsh.hxx>
 #include <rootfrm.hxx>
 #include <docsh.hxx>
+#include <ndtxt.hxx>
+#include <swtable.hxx>
+#include <tblafmt.hxx>
+#include <docmodel/theme/ColorSet.hxx>
+#include <ThemeColorChanger.hxx>
+#include <docmodel/color/ComplexColor.hxx>
+#include <itabenum.hxx>
+#include <frameformats.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
 #include <IDocumentFieldsAccess.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentLinksAdministration.hxx>
@@ -38,7 +55,8 @@
 #include <test/commontesttools.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace
 {
@@ -596,7 +614,7 @@ DECLARE_ODFEXPORT_TEST(testSectionColumnSeparator, "section-columns-separator.fo
     // tdf#150235: due to wrong types used in column export, 'style:height' and 'style:style'
     // attributes were exported incorrectly for 'style:column-sep' element
     auto xSection
-        = getProperty<uno::Reference<uno::XInterface>>(getParagraph(1), u"TextSection"_ustr);
+        = getProperty<uno::Reference<cpo::uno::XInterface>>(getParagraph(1), u"TextSection"_ustr);
     auto xColumns = getProperty<uno::Reference<text::XTextColumns>>(xSection, u"TextColumns"_ustr);
     CPPUNIT_ASSERT(xColumns);
     CPPUNIT_ASSERT_EQUAL(sal_Int16(2), xColumns->getColumnCount());
@@ -1262,7 +1280,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf121119)
     SwDoc* pDoc = getSwDoc();
     CPPUNIT_ASSERT_EQUAL(
         size_t(2), pDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks().size());
-    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                             u""_ustr);
 
     uno::Reference<text::XTextGraphicObjectsSupplier> xTextGraphicObjectsSupplier(mxComponent,
@@ -1277,7 +1295,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf121119)
 
     CPPUNIT_ASSERT_EQUAL(
         size_t(2), pDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks().size());
-    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                             u""_ustr);
 
     uno::Reference<text::XTextGraphicObjectsSupplier> xTextGraphicObjectsSupplier2(mxComponent,
@@ -1295,10 +1313,10 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf121119_runtime_update)
     SwDoc* pDoc = getSwDoc();
     CPPUNIT_ASSERT_EQUAL(
         size_t(2), pDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks().size());
-    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                             u""_ustr);
     // double update of the links
-    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false, nullptr,
+    pDoc->getIDocumentLinksAdministration().GetLinkManager().UpdateAllLinks(false,
                                                                             u""_ustr);
 
     uno::Reference<text::XTextGraphicObjectsSupplier> xTextGraphicObjectsSupplier(mxComponent,
@@ -1759,6 +1777,181 @@ CPPUNIT_TEST_FIXTURE(Test, testFlyInDeleteRedline)
     auto pXmlDoc = parseExport(u"content.xml"_ustr);
     assertXPath(pXmlDoc, "//draw:frame", 1);
     CPPUNIT_ASSERT_EQUAL(1, getShapes());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testParagraphFormatRedline)
+{
+    // The document records changes to the formatting of whole paragraphs.
+    createSwDoc("paragraph-format-redline.docx");
+    saveAndReload(TestFilter::ODT);
+
+    // Those changes were written under a name that ODF does not have, and were lost on reload.
+    auto pXmlDoc = parseExport(u"content.xml"_ustr);
+    assertXPath(pXmlDoc, "//text:changed-region/text:format-change", 5);
+    assertXPath(pXmlDoc, "//text:changed-region/text:UnknownChange", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCommentDateUTC)
+{
+    // A comment records the moment it was written beside the author's wall clock, and that
+    // moment survives a save and reload.
+    createSwDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr, {});
+
+    uno::Reference<text::XTextFieldsSupplier> xTextFieldsSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xFields(
+        xTextFieldsSupplier->getTextFields()->createEnumeration());
+    uno::Reference<beans::XPropertySet> xField(xFields->nextElement(), uno::UNO_QUERY);
+
+    // Inserting a comment records a moment, so the year is a real one rather than the zero that
+    // stands for "nothing recorded".
+    CPPUNIT_ASSERT(getProperty<util::DateTime>(xField, u"DateTimeUTC"_ustr).Year != 0);
+
+    // A known moment, so the exported attribute can be compared against it.
+    util::DateTime aDateTimeUTC(0, 3, 2, 1, 15, 6, 2026, true);
+    xField->setPropertyValue(u"DateTimeUTC"_ustr, cpo::uno::Any(aDateTimeUTC));
+
+    save(TestFilter::ODT);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    // Without the accompanying fix in place, this test would have failed: nothing carried the
+    // moment, so ODF kept only the wall clock and the zone it was read in was lost.
+    assertXPath(pXmlDoc, "//office:annotation", "date-utc", u"2026-06-15T01:02:03Z");
+
+    saveAndReload(TestFilter::ODT);
+    uno::Reference<text::XTextFieldsSupplier> xReloadedSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xReloadedFields(
+        xReloadedSupplier->getTextFields()->createEnumeration());
+    uno::Reference<beans::XPropertySet> xReloadedField(xReloadedFields->nextElement(),
+                                                      uno::UNO_QUERY);
+    util::DateTime aReloaded = getProperty<util::DateTime>(xReloadedField, u"DateTimeUTC"_ustr);
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2026), aReloaded.Year);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(6), aReloaded.Month);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(15), aReloaded.Day);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), aReloaded.Hours);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), aReloaded.Minutes);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), aReloaded.Seconds);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testCompatibilityFlagIsDocumentSetting)
+{
+    // A compatibility flag of the drawing layer is a document setting, so it is saved in the
+    // document part of the settings, which a document without a view writes too.
+    createSwDoc();
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT(!xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+
+    xSettings->setPropertyValue(u"AnchoredTextOverflowLegacy"_ustr, uno::Any(true));
+    CPPUNIT_ASSERT(xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+
+    save(TestFilter::ODT);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"settings.xml"_ustr);
+    assertXPathContent(pXmlDoc,
+                       "/office:document-settings/office:settings/"
+                       "config:config-item-set[@config:name='ooo:configuration-settings']/"
+                       "config:config-item[@config:name='AnchoredTextOverflowLegacy']",
+                       u"true");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTableStyleLiveRoundTrip)
+{
+    // A table whose header row takes white text and a blue fill from a live table style
+    // (the built-in "Grid Table 4 Accent 1"), with nothing written into the cells or
+    // paragraphs themselves.
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    const TableStyleName aStyleName(u"Grid Table 4 Accent 1"_ustr);
+    CPPUNIT_ASSERT(pDoc->GetTableStyles().FindAutoFormat(aStyleName));
+    SwInsertTableOptions aOptions(SwInsertTableFlags::DefaultBorder, 0);
+    const SwTable& rTable = pWrtShell->InsertTable(aOptions, /*nRows=*/2, /*nCols=*/2);
+    SwTable& rMutableTable = rTable.GetTableNode()->GetTable();
+    SwTableStyleSettings aSettings;
+    aSettings.m_bUseFirstRowStyle = true;
+    rMutableTable.SetTableStyleName(aStyleName);
+    rMutableTable.SetTableStyleSettings(aSettings);
+    pDoc->ApplyTableStyleLive(*rTable.GetTableNode(), /*bResetCellFormatting=*/true);
+    pWrtShell->GotoTable(rMutableTable.GetFrameFormat()->GetName());
+    pWrtShell->Insert(u"header"_ustr);
+
+    // To everything but the ODF export, the color the style gives the header text is
+    // inherited formatting, not the paragraph's own.
+    {
+        uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+        uno::Reference<container::XIndexAccess> xTables(xTablesSupplier->getTextTables(),
+                                                        uno::UNO_QUERY);
+        uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
+        uno::Reference<container::XEnumerationAccess> xHeaderCell(
+            xTable->getCellByName(u"A1"_ustr), uno::UNO_QUERY);
+        uno::Reference<beans::XPropertyState> xHeaderState(
+            xHeaderCell->createEnumeration()->nextElement(), uno::UNO_QUERY_THROW);
+        CPPUNIT_ASSERT_EQUAL(beans::PropertyState_DEFAULT_VALUE,
+                             xHeaderState->getPropertyState(u"CharColor"_ustr));
+    }
+    // The fill is the document theme's accent 1, the value the style's theme color resolves to.
+    const Color aAccent1 = sw::GetDocumentThemeColors(*pDoc).getColor(model::ThemeColorType::Accent1);
+    const OUString aAccent1Hex = "#" + aAccent1.AsRGBHexString().toAsciiLowerCase();
+
+    saveAndReload(TestFilter::ODT);
+
+    // A reader without table styles sees the header as designed: the paragraph's automatic
+    // style carries the text color and the cell's automatic style the fill.
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    OUString aParaStyle = getXPath(
+        pXmlDoc, "//table:table/table:table-row[1]/table:table-cell[1]/text:p", "style-name");
+    assertXPath(pXmlDoc,
+                OUStringToOString(Concat2View("//office:automatic-styles/style:style[@style:name='"
+                                              + aParaStyle + "']/style:text-properties"),
+                                  RTL_TEXTENCODING_UTF8),
+                "color", u"#ffffff");
+    OUString aCellStyle
+        = getXPath(pXmlDoc, "//table:table/table:table-row[1]/table:table-cell[1]", "style-name");
+    assertXPath(pXmlDoc,
+                OUStringToOString(Concat2View("//office:automatic-styles/style:style[@style:name='"
+                                              + aCellStyle + "']/style:table-cell-properties"),
+                                  RTL_TEXTENCODING_UTF8),
+                "background-color", aAccent1Hex);
+
+    // Loaded back, the table follows its style live again: the color and the fill still
+    // apply, but neither sits on the paragraph or the cell itself.
+    pDoc = getSwDoc();
+    const SwTable* pLoadedTable = SwTable::FindTable((*pDoc->GetTableFrameFormats())[0]);
+    CPPUNIT_ASSERT(pLoadedTable);
+
+    // The style the file carries keeps the theme colors behind its values: the header fill
+    // is the theme's accent 1 and the header text its first light color, so the table can
+    // follow a theme change after the round trip as well.
+    const SwTableAutoFormat* pLoadedStyle = pDoc->GetTableStyles().FindAutoFormat(aStyleName);
+    CPPUNIT_ASSERT(pLoadedStyle);
+    const sal_uInt8 nHeaderCorner
+        = static_cast<sal_uInt8>(SwTableAutoFormat::RowColRole::First) * SwTableAutoFormat::nRoleCount
+          + static_cast<sal_uInt8>(SwTableAutoFormat::RowColRole::First);
+    const SwAutoFormatProps& rLoadedHeader = pLoadedStyle->GetBoxFormat(nHeaderCorner).GetProps();
+    CPPUNIT_ASSERT_EQUAL(int(model::ThemeColorType::Accent1),
+                         int(rLoadedHeader.GetBackground().getComplexColor().getThemeColorType()));
+    CPPUNIT_ASSERT_EQUAL(int(model::ThemeColorType::Light1),
+                         int(rLoadedHeader.GetColor().getComplexColor().getThemeColorType()));
+    const editeng::SvxBorderLine* pLoadedTop = rLoadedHeader.GetBox().GetTop();
+    CPPUNIT_ASSERT(pLoadedTop);
+    CPPUNIT_ASSERT_EQUAL(int(model::ThemeColorType::Accent1),
+                         int(pLoadedTop->getComplexColor().getThemeColorType()));
+    CPPUNIT_ASSERT(pLoadedTable->GetTableStyleSettings().m_bUseFirstRowStyle);
+    CPPUNIT_ASSERT(!pLoadedTable->GetTableStyleSettings().m_bUseLastRowStyle);
+    const SwTableBox* pHeaderBox = pLoadedTable->GetTabLines()[0]->GetTabBoxes()[0];
+    const SwTextNode* pHeaderNode = pDoc->GetNodes()[pHeaderBox->GetSttIdx() + 1]->GetTextNode();
+    CPPUNIT_ASSERT(pHeaderNode);
+    CPPUNIT_ASSERT_EQUAL(u"header"_ustr, pHeaderNode->GetText());
+    CPPUNIT_ASSERT(!pHeaderNode->GetpSwAttrSet()
+                   || SfxItemState::SET
+                          != pHeaderNode->GetpSwAttrSet()->GetItemState(RES_CHRATR_COLOR, false));
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pHeaderNode->GetSwAttrSet().Get(RES_CHRATR_COLOR).GetValue());
+    // The cell's automatic style keeps no theme reference for its fill, and its value is the
+    // one the style gives, so the load dropped the fill.
+    const SwFrameFormat* pHeaderFormat = pHeaderBox->GetFrameFormat();
+    CPPUNIT_ASSERT(SfxItemState::SET
+                   != pHeaderFormat->GetAttrSet().GetItemState(RES_BACKGROUND, false));
+    CPPUNIT_ASSERT_EQUAL(aAccent1, pHeaderFormat->GetAttrSet().Get(RES_BACKGROUND).GetColor());
 }
 
 } // end of anonymous namespace

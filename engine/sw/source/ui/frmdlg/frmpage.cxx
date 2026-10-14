@@ -68,7 +68,7 @@
 #include <svx/graphichelper.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 #include <vcl/graphicfilter.hxx>
@@ -77,6 +77,7 @@
 #include <memory>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::sfx2;
 
 #define SwFPos SvxSwFramePosString
@@ -660,11 +661,11 @@ SwFramePage::SwFramePage(weld::Container* pPage, weld::DialogController* pContro
     , m_xImgRatioTop(new weld::CustomWeld(*m_xBuilder, u"daRatioTop"_ustr, m_aRatioTop))
     , m_xImgRatioBottom(new weld::CustomWeld(*m_xBuilder, u"daRatioBottom"_ustr, m_aRatioBottom))
     , m_xRealSizeBT(m_xBuilder->weld_button(u"origsize"_ustr))
-    , m_xProtectFrame(m_xBuilder->weld_widget(u"protect"_ustr))
+    , m_xProtectFrame(m_xBuilder->weld_frame(u"protect"_ustr))
     , m_xProtectContentCB(m_xBuilder->weld_check_button(u"protectcontent"_ustr))
     , m_xProtectFrameCB(m_xBuilder->weld_check_button(u"protectframe"_ustr))
     , m_xProtectSizeCB(m_xBuilder->weld_check_button(u"protectsize"_ustr))
-    , m_xAnchorFrame(m_xBuilder->weld_widget(u"anchorframe"_ustr))
+    , m_xAnchorFrame(m_xBuilder->weld_frame(u"anchorframe"_ustr))
     , m_xAnchorAtPageRB(m_xBuilder->weld_radio_button(u"topage"_ustr))
     , m_xAnchorAtParaRB(m_xBuilder->weld_radio_button(u"topara"_ustr))
     , m_xAnchorAtCharRB(m_xBuilder->weld_radio_button(u"tochar"_ustr))
@@ -1200,7 +1201,7 @@ bool SwFramePage::FillItemSet(SfxItemSet *rSet)
              (m_bNew || (m_bAtHorzPosModified || bMod) || m_nOldH != eHOri ) )
         {
             SwTwips nX = static_cast< SwTwips >(m_xAtHorzPosED->denormalize(m_xAtHorzPosED->get_value(FieldUnit::TWIP)));
-            aHoriOrient.SetPos( nX );
+            aHoriOrient.setPosition(gfx::Length::twip(nX));
         }
 
         pOldItem = GetOldItem(*rSet, FN_HORI_ORIENT);
@@ -1239,7 +1240,7 @@ bool SwFramePage::FillItemSet(SfxItemSet *rSet)
             {
                 nY *= -1;
             }
-            aVertOrient.SetPos( nY );
+            aVertOrient.setPosition(gfx::Length::twip(nY));
         }
         pOldItem = GetOldItem(*rSet, FN_VERT_ORIENT);
         bool bSame = false;
@@ -1248,7 +1249,8 @@ bool SwFramePage::FillItemSet(SfxItemSet *rSet)
              bSame = m_bFormat ?
                       aVertOrient.GetVertOrient() == static_cast<const SwFormatVertOrient*>(pOldItem)->GetVertOrient() &&
                       aVertOrient.GetRelationOrient() == static_cast<const SwFormatVertOrient*>(pOldItem)->GetRelationOrient() &&
-                      aVertOrient.GetPos() == static_cast<const SwFormatVertOrient*>(pOldItem)->GetPos()
+                      aVertOrient.getPosition()
+                          == static_cast<const SwFormatVertOrient*>(pOldItem)->getPosition()
                     : aVertOrient == static_cast<const SwFormatVertOrient&>(*pOldItem);
         }
         if( ( m_bNew && !m_bFormat ) || ((m_bAtVertPosModified || bMod) && !bSame ))
@@ -2423,8 +2425,8 @@ void SwFramePage::Init(const SfxItemSet& rSet)
                 m_nOldHRel,
                 m_nOldV,
                 m_nOldVRel,
-                rHori.GetPos(),
-                rVert.GetPos());
+                rHori.getPosition().as_twip<tools::Long>(),
+                rVert.getPosition().as_twip<tools::Long>());
     }
 
     // transparent for example
@@ -2497,7 +2499,7 @@ void SwFramePage::EnableVerticalPositioning( bool bEnable )
 SwGrfExtPage::SwGrfExtPage(weld::Container* pPage, weld::DialogController* pController, const SfxItemSet &rSet)
     : SfxTabPage(pPage, pController, u"modules/swriter/ui/picturepage.ui"_ustr, u"PicturePage"_ustr, &rSet)
     , m_bHtmlMode(false)
-    , m_xMirror(m_xBuilder->weld_widget(u"flipframe"_ustr))
+    , m_xMirror(m_xBuilder->weld_frame(u"flipframe"_ustr))
     , m_xMirrorVertBox(m_xBuilder->weld_check_button(u"vert"_ustr))
     , m_xMirrorHorzBox(m_xBuilder->weld_check_button(u"hori"_ustr))
     , m_xAllPagesRB(m_xBuilder->weld_radio_button(u"allpages"_ustr))
@@ -2719,9 +2721,8 @@ IMPL_LINK_NOARG(SwGrfExtPage, BrowseHdl, weld::Button&, void)
         m_xGrfDlg->SetTitle(m_xLinkFrame->get_label());
     }
     m_xGrfDlg->SetDisplayDirectory(m_xConnectED->get_text());
-    uno::Reference < ui::dialogs::XFilePicker3 > xFP = m_xGrfDlg->GetFilePicker();
-    uno::Reference < ui::dialogs::XFilePickerControlAccess > xCtrlAcc(xFP, uno::UNO_QUERY);
-    xCtrlAcc->setValue( ui::dialogs::ExtendedFilePickerElementIds::CHECKBOX_LINK, 0, cpo::uno::Any(true) );
+    uno::Reference < ui::dialogs::XFilePicker > xFP = m_xGrfDlg->GetFilePicker();
+    xFP->setValue( ui::dialogs::ExtendedFilePickerElementIds::CHECKBOX_LINK, 0, cpo::uno::Any(true) );
 
     if ( m_xGrfDlg->Execute() != ERRCODE_NONE )
         return;
@@ -2966,7 +2967,7 @@ IMPL_LINK_NOARG(SwFrameURLPage, InsertFileHdl, weld::Button&, void)
 {
     FileDialogHelper aDlgHelper(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
                                 FileDialogFlags::NONE, GetFrameWeld());
-    uno::Reference < ui::dialogs::XFilePicker3 > xFP = aDlgHelper.GetFilePicker();
+    uno::Reference < ui::dialogs::XFilePicker > xFP = aDlgHelper.GetFilePicker();
 
     try
     {
@@ -2987,7 +2988,7 @@ SwFrameAddPage::SwFrameAddPage(weld::Container* pPage, weld::DialogController* p
     , m_bHtmlMode(false)
     , m_bFormat(false)
     , m_bNew(false)
-    , m_xNameFrame(m_xBuilder->weld_widget(u"nameframe"_ustr))
+    , m_xNameFrame(m_xBuilder->weld_frame(u"nameframe"_ustr))
     , m_xNameFT(m_xBuilder->weld_label(u"frm_add_name_label"_ustr))
     , m_xNameED(m_xBuilder->weld_entry(u"name"_ustr))
     , m_xAltNameFT(m_xBuilder->weld_label(u"altname_label"_ustr))
@@ -2995,12 +2996,12 @@ SwFrameAddPage::SwFrameAddPage(weld::Container* pPage, weld::DialogController* p
     , m_xDescriptionFT(m_xBuilder->weld_label(u"description_label"_ustr))
     , m_xDescriptionED(m_xBuilder->weld_text_view(u"description"_ustr))
     , m_xDecorativeCB(m_xBuilder->weld_check_button(u"decorative"_ustr))
-    , m_xSequenceFrame(m_xBuilder->weld_widget(u"frmSequence"_ustr))
+    , m_xSequenceFrame(m_xBuilder->weld_frame(u"frmSequence"_ustr))
     , m_xPrevLB(m_xBuilder->weld_combo_box(u"prev"_ustr))
     , m_xNextLB(m_xBuilder->weld_combo_box(u"next"_ustr))
-    , m_xContentAlignFrame(m_xBuilder->weld_widget(u"contentalign"_ustr))
+    , m_xContentAlignFrame(m_xBuilder->weld_frame(u"contentalign"_ustr))
     , m_xVertAlignLB(m_xBuilder->weld_combo_box(u"vertalign"_ustr))
-    , m_xPropertiesFrame(m_xBuilder->weld_widget(u"properties"_ustr))
+    , m_xPropertiesFrame(m_xBuilder->weld_frame(u"properties"_ustr))
     , m_xEditInReadonlyCB(m_xBuilder->weld_check_button(u"editinreadonly"_ustr))
     , m_xPrintFrameCB(m_xBuilder->weld_check_button(u"printframe"_ustr))
     , m_xTextFlowFT(m_xBuilder->weld_label(u"textflow_label"_ustr))

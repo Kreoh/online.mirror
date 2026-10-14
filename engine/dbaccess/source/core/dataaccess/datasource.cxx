@@ -55,6 +55,7 @@
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
 #include <tools/urlobj.hxx>
+#include <unotools/securityoptions.hxx>
 #include <unotools/sharedunocomponent.hxx>
 
 #include <algorithm>
@@ -65,7 +66,7 @@ using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::embed;
@@ -329,7 +330,7 @@ void OSharedConnectionManager::addEventListener(const Reference<XConnection>& _r
 namespace
 {
     Sequence< PropertyValue > lcl_filterDriverProperties( const Reference< XDriver >& _xDriver, const OUString& _sUrl,
-        const Sequence< PropertyValue >& _rDataSourceSettings )
+        const Sequence< PropertyValue >& _rDataSourceSettings, bool bTrustedLocation )
     {
         if ( _xDriver.is() )
         {
@@ -339,6 +340,9 @@ namespace
 
             for (auto& dataSourceSetting : _rDataSourceSettings)
             {
+                // Additional driver options follow the same rule as updating links.
+                if (!bTrustedLocation && dataSourceSetting.Name == INFO_ADDITIONALOPTIONS)
+                    continue;
                 auto knownSettings = dbaccess::ODatabaseModelImpl::getDefaultDataSourceSettings();
                 bool isSettingKnown = std::any_of(knownSettings.begin(), knownSettings.end(),
                                                   [name = dataSourceSetting.Name](auto& setting)
@@ -392,7 +396,6 @@ ODatabaseSource::ODatabaseSource(const ::rtl::Reference<ODatabaseModelImpl>& _pI
             :ModelDependentComponent( _pImpl )
             ,ODatabaseSource_Base( getMutex() )
             ,OPropertySetHelper( ODatabaseSource_Base::rBHelper )
-            , m_Bookmarks(*this, getMutex())
             ,m_aFlushListeners( getMutex() )
 {
     // some kind of default
@@ -436,7 +439,7 @@ Sequence< sal_Int8 > ODatabaseSource::getImplementationId()
     return cpo::uno::Sequence<sal_Int8>();
 }
 
-// css::uno::XInterface
+// cpo::uno::XInterface
 Any ODatabaseSource::queryInterface( const Type & rType )
 {
     Any aIface = ODatabaseSource_Base::queryInterface( rType );
@@ -516,6 +519,8 @@ Reference< XConnection > ODatabaseSource::buildLowLevelConnection(const OUString
     }
 
     TranslateId pExceptionMessageId = RID_STR_COULDNOTCONNECT_UNSPECIFIED;
+    const bool bTrustedLocation
+        = SvtSecurityOptions::isTrustedLocationUriForUpdatingLinks(m_pImpl->getDocFileLocation());
     if (xManager.is())
     {
         sal_Int32 nAdditionalArgs(0);
@@ -556,12 +561,18 @@ Reference< XConnection > ODatabaseSource::buildLowLevelConnection(const OUString
             // but acceptance is decided at runtime.
             pExceptionMessageId = RID_STR_COULDNOTCONNECT_NODRIVER;
         }
+        // ADO connections follow the same rule as additional driver options.
+        else if (!bTrustedLocation && m_pImpl->m_sConnectURL.startsWithIgnoreAsciiCase("sdbc:ado:"))
+        {
+            pExceptionMessageId = RID_STR_COULDNOTCONNECT_UNTRUSTED;
+        }
         else
         {
             Sequence< PropertyValue > aDriverInfo = lcl_filterDriverProperties(
                 xDriver,
                 m_pImpl->m_sConnectURL,
-                m_pImpl->m_xSettings->getPropertyValues()
+                m_pImpl->m_xSettings->getPropertyValues(),
+                bTrustedLocation
             );
 
             if ( m_pImpl->isEmbeddedDatabase() )
@@ -919,32 +930,22 @@ sal_Int32 ODatabaseSource::getLoginTimeout()
 // XCompletedConnection
 Reference< XConnection > ODatabaseSource::connectWithCompletion( const Reference< XInteractionHandler >& _rxHandler )
 {
-    return connectWithCompletion(_rxHandler,false);
+    return connectWithCompletionImpl(_rxHandler);
 }
 
 Reference< XConnection > ODatabaseSource::getConnection(const OUString& user, const OUString& password)
 {
-    return getConnection(user,password,false);
+    return getConnectionImpl(user,password);
 }
 
-Reference< XConnection > ODatabaseSource::getIsolatedConnection( const OUString& user, const OUString& password )
-{
-    return getConnection(user,password,true);
-}
-
-Reference< XConnection > ODatabaseSource::getIsolatedConnectionWithCompletion( const Reference< XInteractionHandler >& _rxHandler )
-{
-    return connectWithCompletion(_rxHandler,true);
-}
-
-Reference< XConnection > ODatabaseSource::connectWithCompletion( const Reference< XInteractionHandler >& _rxHandler,bool _bIsolated )
+Reference< XConnection > ODatabaseSource::connectWithCompletionImpl( const Reference< XInteractionHandler >& _rxHandler)
 {
     ModelMethodGuard aGuard( *this );
 
     if (!_rxHandler.is())
     {
         SAL_WARN("dbaccess","ODatabaseSource::connectWithCompletion: invalid interaction handler!");
-        return getConnection(m_pImpl->m_sUser, m_pImpl->m_aPassword,_bIsolated);
+        return getConnectionImpl(m_pImpl->m_sUser, m_pImpl->m_aPassword);
     }
 
     OUString sUser(m_pImpl->m_sUser), sPassword(m_pImpl->m_aPassword);
@@ -1010,7 +1011,7 @@ Reference< XConnection > ODatabaseSource::connectWithCompletion( const Reference
 
     try
     {
-        return getConnection(sUser, sPassword,_bIsolated);
+        return getConnectionImpl(sUser, sPassword);
     }
     catch(Exception&)
     {
@@ -1038,24 +1039,18 @@ rtl::Reference< OConnection > ODatabaseSource::buildIsolatedConnection(const OUS
     return new OConnection(*this, xSdbcConn, m_pImpl->m_aContext);
 }
 
-Reference< XConnection > ODatabaseSource::getConnection(const OUString& user, const OUString& password,bool _bIsolated)
+Reference< XConnection > ODatabaseSource::getConnectionImpl(const OUString& user, const OUString& password)
 {
     ModelMethodGuard aGuard( *this );
 
     Reference< XConnection > xConn;
-    if ( _bIsolated )
+    // create a new proxy for the connection
+    if ( !m_pImpl->m_xSharedConnectionManager.is() )
     {
-        xConn = buildIsolatedConnection(user,password);
+        m_pImpl->m_xSharedConnectionManager = new OSharedConnectionManager( m_pImpl->m_aContext );
     }
-    else
-    { // create a new proxy for the connection
-        if ( !m_pImpl->m_xSharedConnectionManager.is() )
-        {
-            m_pImpl->m_xSharedConnectionManager = new OSharedConnectionManager( m_pImpl->m_aContext );
-        }
-        xConn = m_pImpl->m_xSharedConnectionManager->getConnection(
-            m_pImpl->m_sConnectURL, user, password, m_pImpl->m_xSettings->getPropertyValues(), this );
-    }
+    xConn = m_pImpl->m_xSharedConnectionManager->getConnection(
+        m_pImpl->m_sConnectURL, user, password, m_pImpl->m_xSettings->getPropertyValues(), this );
 
     if ( xConn.is() )
     {
@@ -1068,13 +1063,6 @@ Reference< XConnection > ODatabaseSource::getConnection(const OUString& user, co
     return xConn;
 }
 
-Reference< XNameAccess > ODatabaseSource::getBookmarks(  )
-{
-    ModelMethodGuard aGuard( *this );
-    // tdf#114596 this may look nutty but see OBookmarkContainer::acquire()
-    return static_cast<XNameContainer*>(&m_Bookmarks);
-}
-
 Reference< XNameAccess > ODatabaseSource::getQueryDefinitions( )
 {
     ModelMethodGuard aGuard( *this );
@@ -1083,7 +1071,7 @@ Reference< XNameAccess > ODatabaseSource::getQueryDefinitions( )
     if ( !xContainer.is() )
     {
         Any aValue;
-        css::uno::Reference< css::uno::XInterface > xMy(*this);
+        cpo::uno::Reference< cpo::uno::XInterface > xMy(*this);
         if (dbtools::getDataSourceSetting(xMy, u"CommandDefinitions"_ustr, aValue))
         {
             OUString sSupportService;
@@ -1233,11 +1221,11 @@ Reference< XInterface > ODatabaseSource::getThis() const
 
 }   // namespace dbaccess
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_dba_ODatabaseSource(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_dba_ODatabaseSource(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
-    css::uno::Reference<XInterface> inst(
+    cpo::uno::Reference<XInterface> inst(
         DatabaseContext::create(context)->createInstance());
     inst->acquire();
     return inst.get();

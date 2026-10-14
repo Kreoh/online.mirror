@@ -24,7 +24,7 @@
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/lang/EventObject.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/util/XModeChangeListener.hpp>
 #include <comphelper/uno3.hxx>
 #include <cppuhelper/implbase4.hxx>
@@ -71,21 +71,21 @@ public:
         const AccessibleShapeTreeInfo& rShapeTreeInfo);
     virtual ~AccessibleControlShape( ) override;
 
-    const css::uno::Reference< css::beans::XPropertySet >&  GetControlModel( ) const { return m_xControlModel;}
+    const cpo::uno::Reference< css::beans::XPropertySet >&  GetControlModel( ) const { return m_xControlModel;}
     AccessibleControlShape* GetLabeledByControlShape();
 
 private:
     //---  XAccessibleComponent  -------------------------------
     /// forward the focus to the contained control(in alive mode)
-    virtual void SAL_CALL grabFocus( ) override;
+    virtual void grabFocus( ) override;
 
     //---  XAccessibleContext  ---------------------------------
-    virtual sal_Int64 SAL_CALL getAccessibleChildCount( ) override;
-    virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleChild( sal_Int64 i ) override;
-    virtual css::uno::Reference< css::accessibility::XAccessibleRelationSet > SAL_CALL getAccessibleRelationSet(  ) override;
+    virtual sal_Int64 getAccessibleChildCount( ) override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleChild( sal_Int64 i ) override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleRelationSet > getAccessibleRelationSet(  ) override;
 
     //---  XServiceInfo  ---------------------------------------
-    virtual OUString SAL_CALL getImplementationName( ) override;
+    virtual OUString getImplementationName( ) override;
 
     //---  XInterface  -----------------------------------------
     DECLARE_XINTERFACE( )
@@ -94,24 +94,24 @@ private:
     DECLARE_XTYPEPROVIDER( )
 
     //---  XPropertyChangeListener  ----------------------------
-    virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& _rEvent ) override;
+    virtual void propertyChange( const css::beans::PropertyChangeEvent& _rEvent ) override;
 
     //---  XComponent  -----------------------------------------
-    virtual void SAL_CALL disposing( ) override;
+    virtual void disposing( ) override;
 
     //---  XEventListener  -------------------------------------
-    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
+    virtual void disposing(const css::lang::EventObject& Source) override;
 
     //---  XModeChangeListener  --------------------------------
-    virtual void SAL_CALL modeChanged( const css::util::ModeChangeEvent& _rSource ) override;
+    virtual void modeChanged( const css::util::ModeChangeEvent& _rSource ) override;
 
     //---  XAccessibleEventListener ----------------------------
-    virtual void SAL_CALL notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) override;
+    virtual void notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) override;
 
     // XVclContainerListener
-    virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
-    virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
-    virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
+    virtual void elementInserted( const css::container::ContainerEvent& Event ) override;
+    virtual void elementRemoved( const css::container::ContainerEvent& Event ) override;
+    virtual void elementReplaced( const css::container::ContainerEvent& Event ) override;
 
     /** Initialize a new shape.  See the documentation of the base' constructor
         for the reason of this method's existence.
@@ -171,20 +171,20 @@ private:
     AccessibleControlShape(const AccessibleControlShape&) = delete;
     AccessibleControlShape& operator= (const AccessibleControlShape&) = delete;
 
-    css::uno::Reference< css::beans::XPropertySet >
+    cpo::uno::Reference< css::beans::XPropertySet >
                     m_xControlModel;
-    css::uno::Reference< css::beans::XPropertySetInfo >
+    cpo::uno::Reference< css::beans::XPropertySetInfo >
                     m_xModelPropsMeta;          // cache this for performance reasons
-    css::uno::Reference< css::awt::XControl >
+    cpo::uno::Reference< css::awt::XControl >
                     m_xUnoControl;              // our UNO control
 
     cpo::uno::WeakReference< css::accessibility::XAccessibleContext >
                     m_aControlContext;      // the AccessibleContext of the control
-    css::uno::Reference< cpo::uno::XAggregation >
+    cpo::uno::Reference< cpo::uno::XAggregation >
                     m_xControlContextProxy; // the proxy for "aggregating" the AccessibleContext of the control
-    css::uno::Reference< css::lang::XTypeProvider >
+    cpo::uno::Reference< css::lang::XTypeProvider >
                     m_xControlContextTypeAccess;    // cached interface of our aggregate
-    css::uno::Reference< css::lang::XComponent >
+    cpo::uno::Reference< css::lang::XComponent >
                     m_xControlContextComponent;     // cached interface of our aggregate
 
     rtl::Reference<::accessibility::OWrappedAccessibleChildrenManager>

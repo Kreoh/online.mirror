@@ -2,6 +2,7 @@
 
 var helper = require('../../common/helper');
 var desktopHelper = require('../../common/desktop_helper');
+var calcHelper = require('../../common/calc_helper');
 
 describe(['tagmultiuser'], 'Joining a document should not trigger an invalidation', function() {
 
@@ -9,7 +10,7 @@ describe(['tagmultiuser'], 'Joining a document should not trigger an invalidatio
 		// Turn off SpellChecking by default because grammar checking,
 		// when available, currently adds an extra empty update when
 		// grammar checking kicks in at server-side idle after a change.
-		localStorage.setItem('spellOnline', false);
+		localStorage.setItem('spreadsheet.spellOnline', false);
 		helper.setupAndLoadDocument('calc/invalidations.ods',true);
 		desktopHelper.switchUIToNotebookbar();
 	});
@@ -21,6 +22,10 @@ describe(['tagmultiuser'], 'Joining a document should not trigger an invalidatio
 			this.win1 = win;
 		}).then(() => {
 			helper.processToIdle(this.win1);
+		}).then(() => {
+			// The editable area listens for keys only while it has focus, and the
+			// load of the second frame takes the focus away. The click gives it back.
+			calcHelper.clickOnFirstCell();
 		}).then(() => {
 			helper.typeIntoDocument('X');
 			helper.typeIntoDocument('{enter}');
@@ -38,13 +43,7 @@ describe(['tagmultiuser'], 'Joining a document should not trigger an invalidatio
 
 			// joining triggered some theme related invalidations
 
-			// Reload page
-			cy.cSetActiveFrame('#iframe2');
-			cy.get('#form2').submit();
-			// Wait for page to unload
-			cy.wait(1000);
-			// Wait for page to finish loading
-			helper.documentChecks(true);
+			helper.reloadFrameAndWaitForNewPage('#iframe2', '#form2');
 
 			cy.cSetActiveFrame('#iframe1');
 			helper.typeIntoDocument('{rightarrow}');

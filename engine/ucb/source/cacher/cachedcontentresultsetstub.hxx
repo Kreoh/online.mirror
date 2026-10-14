@@ -47,38 +47,38 @@ private:
     const OUString     m_aPropertyNameForFetchDirection;
 
     /// @throws css::sdbc::SQLException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void
     impl_getCurrentRowContent(
         std::unique_lock<std::mutex>& rGuard,
         cpo::uno::Any& rRowContent,
-        const css::uno::Reference< css::sdbc::XRow >& xRow );
+        const cpo::uno::Reference< css::sdbc::XRow >& xRow );
 
     sal_Int32
     impl_getColumnCount(std::unique_lock<std::mutex>&);
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static void
     impl_getCurrentContentIdentifierString(
             std::unique_lock<std::mutex>& rGuard,
             cpo::uno::Any& rAny
-            , const css::uno::Reference< css::ucb::XContentAccess >& xContentAccess );
+            , const cpo::uno::Reference< css::ucb::XContentAccess >& xContentAccess );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static void
     impl_getCurrentContentIdentifier(
             std::unique_lock<std::mutex>& rGuard,
             cpo::uno::Any& rAny
-            , const css::uno::Reference< css::ucb::XContentAccess >& xContentAccess );
+            , const cpo::uno::Reference< css::ucb::XContentAccess >& xContentAccess );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static void
     impl_getCurrentContent(
             std::unique_lock<std::mutex>& rGuard,
             cpo::uno::Any& rAny
-            , const css::uno::Reference< css::ucb::XContentAccess >& xContentAccess );
+            , const cpo::uno::Reference< css::ucb::XContentAccess >& xContentAccess );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void
     impl_propagateFetchSizeAndDirection( std::unique_lock<std::mutex>& rGuard, sal_Int32 nFetchSize, bool bFetchDirection );
 
@@ -88,16 +88,16 @@ private:
         std::function<void(std::unique_lock<std::mutex>&, cpo::uno::Any& rRowContent)> impl_loadRow);
 
 public:
-    CachedContentResultSetStub( css::uno::Reference< css::sdbc::XResultSet > const & xOrigin );
+    CachedContentResultSetStub( cpo::uno::Reference< css::sdbc::XResultSet > const & xOrigin );
 
     virtual ~CachedContentResultSetStub() override;
 
 
     // XInterface
-    virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type & rType ) override;
-    virtual void SAL_CALL acquire()
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
         noexcept override;
-    virtual void SAL_CALL release()
+    virtual void release()
         noexcept override;
 
     // own inherited
@@ -110,33 +110,33 @@ public:
 
     // XTypeProvider
 
-    virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
-    virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes() override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XFetchProvider
 
 
-    virtual css::ucb::FetchResult SAL_CALL
+    virtual css::ucb::FetchResult
     fetch( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, bool bDirection ) override;
 
 
     // XFetchProviderForContentAccess
 
-    virtual css::ucb::FetchResult SAL_CALL
+    virtual css::ucb::FetchResult
          fetchContentIdentifierStrings( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, bool bDirection ) override;
 
-    virtual css::ucb::FetchResult SAL_CALL
+    virtual css::ucb::FetchResult
          fetchContentIdentifiers( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, bool bDirection ) override;
 
-    virtual css::ucb::FetchResult SAL_CALL
+    virtual css::ucb::FetchResult
          fetchContents( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, bool bDirection ) override;
 };
@@ -154,15 +154,15 @@ public:
     virtual ~CachedContentResultSetStubFactory() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XCachedContentResultSetStubFactory
 
-    virtual css::uno::Reference< css::sdbc::XResultSet > SAL_CALL
+    virtual cpo::uno::Reference< css::sdbc::XResultSet >
     createCachedContentResultSetStub(
-                const css::uno::Reference< css::sdbc::XResultSet > & xSource ) override;
+                const cpo::uno::Reference< css::sdbc::XResultSet > & xSource ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,13 +20,13 @@
 
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/ui/dialogs/CommonFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <o3tl/any.hxx>
 #include <vcl/stdtext.hxx>
 #include <vcl/graphicfilter.hxx>
@@ -43,8 +43,8 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::ui::dialogs;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 struct SvxOpenGrf_Impl
 {
@@ -63,8 +63,8 @@ SvxOpenGrf_Impl::SvxOpenGrf_Impl(weld::Window* pPreferredParent,
     : aFileDlg(nDialogType, FileDialogFlags::Graphic, pPreferredParent)
     , pDialogParent(pPreferredParent)
 {
-    uno::Reference < XFilePicker3 > xFP = aFileDlg.GetFilePicker();
-    xCtrlAcc.set(xFP, UNO_QUERY);
+    uno::Reference < XFilePicker > xFP = aFileDlg.GetFilePicker();
+    xCtrlAcc = xFP;
 }
 
 

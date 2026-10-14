@@ -82,7 +82,7 @@ public:
         m_bStarted( false )
         {}
 
-    void setInputStream( css::uno::Reference< css::io::XInputStream > const &r ) { m_in = r; }
+    void setInputStream( cpo::uno::Reference< css::io::XInputStream > const &r ) { m_in = r; }
     void setEncoding( const OString &s ) { m_sEncoding = s; }
 
 
@@ -91,7 +91,7 @@ public:
     /// @throws css::io::IOException
     /// @throws css::io::NotConnectedException
     /// @throws css::io::BufferSizeExceededException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int32 readAndConvert( cpo::uno::Sequence<sal_Int8> &seq , sal_Int32 nMaxToRead );
 
 private:
@@ -113,7 +113,7 @@ private:
     // Initializes decoding depending on m_sEncoding setting
     void initializeDecoding();
 private:
-    css::uno::Reference< css::io::XInputStream >  m_in;
+    cpo::uno::Reference< css::io::XInputStream >  m_in;
 
     bool m_bStarted;
     OString m_sEncoding;

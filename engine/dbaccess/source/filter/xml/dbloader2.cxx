@@ -52,7 +52,7 @@
 
 using namespace ::ucbhelper;
 using namespace ::com::sun::star::task;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::io;
@@ -173,9 +173,9 @@ Sequence< OUString > DBTypeDetection::getSupportedServiceNames()
 
 } // namespace dbaxml
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_openoffice_comp_dbflt_DBTypeDetection_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new ::dbaxml::DBTypeDetection(context));
 }
@@ -403,9 +403,9 @@ void DBContentLoader::cancel()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_openoffice_comp_dbflt_DBContentLoader2_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new ::dbaxml::DBContentLoader(context));
 }

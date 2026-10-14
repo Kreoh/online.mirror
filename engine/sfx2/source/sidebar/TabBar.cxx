@@ -38,7 +38,7 @@
 #include "uiobject.hxx"
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 
 static int gDefaultWidth;
 
@@ -238,7 +238,7 @@ void TabBar::CreateTabItem(weld::Toolbar& rItem, const DeckDescriptor& rDeckDesc
     rItem.set_item_tooltip_text(u"toggle"_ustr, rDeckDescriptor.msHelpText + sShortcut);
 }
 
-css::uno::Reference<css::graphic::XGraphic> TabBar::GetItemImage(const DeckDescriptor& rDeckDescriptor) const
+cpo::uno::Reference<css::graphic::XGraphic> TabBar::GetItemImage(const DeckDescriptor& rDeckDescriptor) const
 {
     return Tools::GetImage(
         rDeckDescriptor.msIconURL,
@@ -278,14 +278,14 @@ IMPL_LINK_NOARG(TabBar::Item, HandleClick, const OUString&, void)
 OUString const & TabBar::GetDeckIdForIndex (const sal_Int32 nIndex) const
 {
     if (nIndex<0 || o3tl::make_unsigned(nIndex)>=maItems.size())
-        throw RuntimeException();
+        throw cpo::uno::RuntimeException();
     return maItems[nIndex]->msDeckId;
 }
 
 void TabBar::ToggleHideFlag (const sal_Int32 nIndex)
 {
     if (nIndex<0 || o3tl::make_unsigned(nIndex) >= maItems.size())
-        throw RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     maItems[nIndex]->mbIsHidden = ! maItems[nIndex]->mbIsHidden;
 
@@ -373,20 +373,6 @@ void TabBar::UpdateMenus()
 
         ++nIndex;
     }
-
-    bool bHideLock = true;
-    bool bHideUnLock = true;
-    // COKit doesn't support docked/undocked; Sidebar is floating but rendered docked in browser.
-    if (!comphelper::COKit::isActive())
-    {
-        // Add entry for docking or un-docking the tool panel.
-        if (!mrParentSidebarController.IsDocked())
-            bHideLock = false;
-        else
-            bHideUnLock = false;
-    }
-    mxMainMenu->set_visible(u"locktaskpanel"_ustr, !bHideLock);
-    mxMainMenu->set_visible(u"unlocktaskpanel"_ustr, !bHideUnLock);
 
     // No Restore or Customize options for LoKit.
     mxMainMenu->set_visible(u"customization"_ustr, !comphelper::COKit::isActive());

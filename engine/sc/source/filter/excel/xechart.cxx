@@ -69,11 +69,11 @@
 #include <memory>
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
-using ::com::sun::star::uno::UNO_SET_THROW;
+using ::cpo::uno::UNO_QUERY;
+using ::cpo::uno::UNO_QUERY_THROW;
+using ::cpo::uno::UNO_SET_THROW;
 using ::cpo::uno::Exception;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::i18n::XBreakIterator;
@@ -325,7 +325,7 @@ const XclChFormatInfo& XclExpChRoot::GetFormatInfo( XclChObjectType eObjType ) c
     return mxChData->mxFmtInfoProv->GetFormatInfo( eObjType );
 }
 
-void XclExpChRoot::InitConversion( css::uno::Reference< css::chart2::XChartDocument > const & xChartDoc, const tools::Rectangle& rChartRect ) const
+void XclExpChRoot::InitConversion( cpo::uno::Reference< css::chart2::XChartDocument > const & xChartDoc, const tools::Rectangle& rChartRect ) const
 {
     mxChData->InitConversion( GetRoot(), xChartDoc, rChartRect );
 }
@@ -1961,7 +1961,7 @@ bool XclExpChSeries::ConvertDataSeries(
     return bOk;
 }
 
-bool XclExpChSeries::ConvertStockSeries( css::uno::Reference< css::chart2::XDataSeries > const & xDataSeries,
+bool XclExpChSeries::ConvertStockSeries( cpo::uno::Reference< css::chart2::XDataSeries > const & xDataSeries,
         std::u16string_view rValueRole, sal_uInt16 nGroupIdx, sal_uInt16 nFormatIdx, bool bCloseSymbol )
 {
     bool bOk = false;
@@ -2068,7 +2068,7 @@ void XclExpChSeries::InitFromParent( const XclExpChSeries& rParent )
     maData.mnValueCount = rParent.maData.mnValueCount;
 }
 
-void XclExpChSeries::CreateTrendLines( css::uno::Reference< css::chart2::XDataSeries > const & xDataSeries )
+void XclExpChSeries::CreateTrendLines( cpo::uno::Reference< css::chart2::XDataSeries > const & xDataSeries )
 {
     Reference< XRegressionCurveContainer > xRegCurveCont( xDataSeries, UNO_QUERY );
     if( xRegCurveCont.is() )
@@ -2625,10 +2625,13 @@ void XclExpChLabelRange::Convert( const ScaleData& rScaleData, const ScfProperty
         bool bAutoBase = !rScaleData.TimeIncrement.TimeResolution.has< cssc::TimeIncrement >();
         ::set_flag( maDateData.mnFlags, EXC_CHDATERANGE_AUTOBASE, bAutoBase );
 
-        // ...but get the current base time unit from the property of the old chart API
+        // ...but get the current base time unit from the property of the old chart API. An
+        // axis that works its own base unit out states none, which is what the automatic flag
+        // above says, and days stand in for it.
         sal_Int32 nApiTimeUnit = 0;
         bool bValidBaseUnit = aTimeIncrement.TimeResolution >>= nApiTimeUnit;
-        OSL_ENSURE( bValidBaseUnit, "XclExpChLabelRange::Convert - cannot get base time unit" );
+        OSL_ENSURE( bValidBaseUnit || bAutoBase,
+                    "XclExpChLabelRange::Convert - cannot get base time unit" );
         maDateData.mnBaseUnit = bValidBaseUnit ? lclGetTimeUnit( nApiTimeUnit ) : EXC_CHDATERANGE_DAYS;
 
         /*  Min/max values depend on base time unit, they specify the number of
@@ -3023,7 +3026,7 @@ void XclExpChAxis::Convert( Reference< XAxis > const & xAxis, Reference< XAxis >
     }
 }
 
-void XclExpChAxis::ConvertWall( css::uno::Reference< css::chart2::XDiagram > const & xDiagram )
+void XclExpChAxis::ConvertWall( cpo::uno::Reference< css::chart2::XDiagram > const & xDiagram )
 {
     if( !xDiagram.is() )
         return;

@@ -35,10 +35,10 @@
 #include <sal/macros.h>
 #include <o3tl/string_view.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 using namespace com::sun::star::i18n;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star;
@@ -51,19 +51,10 @@ typedef OUString const * (* MyFunc_FormatCode)( sal_Int16&, sal_Unicode const *&
 
 #ifndef DISABLE_DYNLOADING
 
-#ifdef SAL_DLLPREFIX
-// mostly "lib*.so"
 constexpr const char* lcl_DATA_EN = SAL_DLLPREFIX "localedata_en" SAL_DLLEXTENSION;
 constexpr const char* lcl_DATA_ES = SAL_DLLPREFIX "localedata_es" SAL_DLLEXTENSION;
 constexpr const char* lcl_DATA_EURO = SAL_DLLPREFIX "localedata_euro" SAL_DLLEXTENSION;
 constexpr const char* lcl_DATA_OTHERS = SAL_DLLPREFIX "localedata_others" SAL_DLLEXTENSION;
-#else
-// mostly "*.dll"
-constexpr const char* lcl_DATA_EN = "localedata_en" SAL_DLLEXTENSION;
-constexpr const char* lcl_DATA_ES = "localedata_es" SAL_DLLEXTENSION;
-constexpr const char* lcl_DATA_EURO = "localedata_euro" SAL_DLLEXTENSION;
-constexpr const char* lcl_DATA_OTHERS = "localedata_others" SAL_DLLEXTENSION;
-#endif
 
 static const char* getLibraryName(DataLocaleLibrary aLib) {
     switch(aLib) {
@@ -583,7 +574,16 @@ oslGenericFunction lcl_LookupTableHelper::getFunctionSymbolByName(
             }
             // Library not loaded, load it and add it to the list.
             std::unique_ptr<osl::Module> module(new osl::Module());
-            if ( module->loadRelative(&thisModule, getLibraryName(i.pLib)) )
+            bool bLoadSucceeded;
+#if ENABLE_UNITEDLIBS
+            if (osl_isUnitedLibActive())
+                bLoadSucceeded = module->loadRelative(&thisModule, SAL_MODULENAME("unitedlo"));
+            else
+                bLoadSucceeded = module->loadRelative(&thisModule, getLibraryName(i.pLib));
+#else
+            bLoadSucceeded = module->loadRelative(&thisModule, getLibraryName(i.pLib));
+#endif
+            if ( bLoadSucceeded )
             {
                 std::unique_lock aGuard( maMutex );
                 auto pTmpModule = module.get();
@@ -1559,8 +1559,7 @@ Sequence< OUString >
 LocaleDataImpl::getSupportedServiceNames()
 {
     Sequence< OUString > aRet {
-        u"com.sun.star.i18n.LocaleData"_ustr,
-        u"com.sun.star.i18n.LocaleData2"_ustr
+        u"com.sun.star.i18n.LocaleData"_ustr
     };
     return aRet;
 }
@@ -1598,9 +1597,9 @@ OUString LocaleDataImpl::getFirstLocaleServiceName( const css::lang::Locale & rL
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_i18n_LocaleDataImpl_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new i18npool::LocaleDataImpl());

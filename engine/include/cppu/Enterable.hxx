@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CPPU_ENTERABLE_HXX
 #define INCLUDED_CPPU_ENTERABLE_HXX
 
-#include "uno/Enterable.h"
-#include "rtl/ustring.hxx"
+#include <uno/Enterable.h>
+#include <rtl/ustring.hxx>
 
 namespace cppu
 {
@@ -58,8 +58,8 @@ public:
     int  isValid (rtl::OUString * pReason) {return m_isValid(this, &pReason->pData);}
 
 private:
-    Enterable(Enterable const &) SAL_DELETED_FUNCTION;
-    Enterable & operator = (Enterable const &) SAL_DELETED_FUNCTION;
+    Enterable(Enterable const &) = delete;
+    Enterable & operator = (Enterable const &) = delete;
 };
 
 extern "C" inline void Enterable_call_enter (void * context) { static_cast<Enterable *>(context)->v_enter(); }

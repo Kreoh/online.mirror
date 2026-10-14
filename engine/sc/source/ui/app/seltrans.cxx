@@ -38,6 +38,7 @@
 #include <markdata.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 static bool lcl_IsURLButton( SdrObject* pObject )
 {
@@ -413,7 +414,7 @@ void ScSelectionTransferObj::ObjectReleased()
     TransferableHelper::ObjectReleased();
 }
 
-bool SAL_CALL ScSelectionTransferObj::isComplex()
+bool ScSelectionTransferObj::isComplex()
 {
     switch (eMode)
     {

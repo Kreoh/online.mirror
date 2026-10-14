@@ -22,10 +22,13 @@
 
 #include "XMLSymbolImageContext.hxx"
 #include "XMLLabelSeparatorContext.hxx"
+#include <xmloff/XMLComplexColorContext.hxx>
+#include <xmloff/txtprmap.hxx>
 #include <xmloff/xmlimppr.hxx>
 #include <xmloff/xmlprmap.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 XMLChartPropertyContext::XMLChartPropertyContext(
     SvXMLImport& rImport,
@@ -41,9 +44,9 @@ XMLChartPropertyContext::XMLChartPropertyContext(
 XMLChartPropertyContext::~XMLChartPropertyContext()
 {}
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLChartPropertyContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLChartPropertyContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList,
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList,
     ::std::vector< XMLPropertyState > &rProperties,
     const XMLPropertyState& rProp )
 {
@@ -53,6 +56,10 @@ css::uno::Reference< css::xml::sax::XFastContextHandler > XMLChartPropertyContex
             return new XMLSymbolImageContext( GetImport(), nElement, rProp, rProperties );
         case XML_SCH_CONTEXT_SPECIAL_LABEL_SEPARATOR:
             return new XMLLabelSeparatorContext( GetImport(), nElement, rProp, rProperties );
+        // a chart reaches the shape and text properties through the mappers it chains, so a
+        // colour of a theme reaches it the same way and is read here the way they read it
+        case CTF_COMPLEX_COLOR:
+            return new XMLPropertyComplexColorContext( GetImport(), nElement, xAttrList, rProp, rProperties );
     }
 
     // default / no context yet: create child context by base class

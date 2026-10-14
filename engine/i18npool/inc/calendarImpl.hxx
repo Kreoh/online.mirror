@@ -18,13 +18,13 @@
  */
 #pragma once
 
-#include <com/sun/star/i18n/XCalendar4.hpp>
+#include <com/sun/star/i18n/XCalendar.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <utility>
 #include <vector>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 
 
@@ -32,7 +32,7 @@ namespace i18npool {
 
 class CalendarImpl : public cppu::WeakImplHelper
 <
-    css::i18n::XCalendar4,
+    css::i18n::XCalendar,
     css::lang::XServiceInfo
 >
 {
@@ -40,7 +40,7 @@ public:
 
     // Constructors
     CalendarImpl();
-    CalendarImpl(const css::uno::Reference < css::uno::XComponentContext >& rxContext);
+    CalendarImpl(const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext);
 
     /**
     * Destructor
@@ -69,18 +69,12 @@ public:
     virtual cpo::uno::Sequence < css::i18n::CalendarItem > getMonths() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem > getDays() override;
     virtual OUString getDisplayName(sal_Int16 nCalendarDisplayIndex, sal_Int16 nIdx, sal_Int16 nNameType) override;
-
-    // Methods in XExtendedCalendar
     virtual OUString getDisplayString( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode ) override;
-
-    // XCalendar3
     virtual css::i18n::Calendar2 getLoadedCalendar2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getDays2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getMonths2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getGenitiveMonths2() override;
     virtual cpo::uno::Sequence < css::i18n::CalendarItem2 > getPartitiveMonths2() override;
-
-    // XCalendar4
     virtual void setLocalDateTime(double TimeInDays) override;
     virtual double getLocalDateTime() override;
     virtual void loadDefaultCalendarTZ(const css::lang::Locale& rLocale, const OUString& rTimeZone) override;
@@ -93,14 +87,14 @@ public:
 
 private:
     struct lookupTableItem {
-        lookupTableItem(OUString aCacheID, css::uno::Reference < css::i18n::XCalendar4 > _xCalendar)
+        lookupTableItem(OUString aCacheID, cpo::uno::Reference < css::i18n::XCalendar > _xCalendar)
             : m_aCacheID(std::move(aCacheID)), xCalendar(std::move(_xCalendar)) {}
         OUString                                      m_aCacheID;
-        css::uno::Reference < css::i18n::XCalendar4 > xCalendar;
+        cpo::uno::Reference < css::i18n::XCalendar >  xCalendar;
     };
     std::vector<lookupTableItem>                        lookupTable;
-    css::uno::Reference < css::uno::XComponentContext > m_xContext;
-    css::uno::Reference < css::i18n::XCalendar4 >       xCalendar;
+    cpo::uno::Reference < cpo::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference < css::i18n::XCalendar >        xCalendar;
 };
 
 }

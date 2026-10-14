@@ -58,7 +58,6 @@ class ScNoteOverlay;
 class SdrHdlList;
 class ScTransferObj;
 class ScInvertMerger;
-struct SpellCallbackInfo;
 class ScKitRTLContext;
 
         //  mouse status (nMouseStatus)
@@ -124,7 +123,7 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ScGridWindow : public vcl::DocWindow,
     std::unique_ptr<sdr::overlay::OverlayObjectList> mpOODatabase;
 
     std::optional<tools::Rectangle> mpAutoFillRect;
-    std::optional<tools::Rectangle> mpDBExpandRect;
+    std::vector<std::pair<tools::Rectangle, ScAddress>> maDBExpandHandles;
     ScRange maDBRange;
 
     /// COKit needs a persistent FmFormView for tiled rendering,
@@ -239,13 +238,13 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ScGridWindow : public vcl::DocWindow,
     bool                    bInitialPageBreaks:1;
 
     DECL_DLLPRIVATE_LINK( PopupModeEndHdl, weld::Popover&, void );
-    DECL_DLLPRIVATE_LINK( PopupSpellingHdl, SpellCallbackInfo&, void );
 
     bool            TestMouse( const MouseEvent& rMEvt, bool bAction );
 
     bool            DoPageFieldSelection( SCCOL nCol, SCROW nRow );
     bool            DoAutoFilterButton( SCCOL nCol, SCROW nRow, const MouseEvent& rMEvt );
-    void            SendAutofilterPopupPosition(SCCOL nCol, SCROW nRow);
+    void            SendAutofilterPopupPosition(SCCOL nCol, SCROW nRow, sal_uInt64 nPopupID);
+    void            SendPivotTableFilterPopupPosition(const ScAddress& rAddress, sal_uInt64 nPopupID);
     void            SendAutofilterChange();
     void DoPushPivotButton( SCCOL nCol, SCROW nRow, const MouseEvent& rMEvt, bool bButton, bool bPopup, bool bMultiField );
     void DoPushPivotToggle( SCCOL nCol, SCROW nRow, const MouseEvent& rMEvt );
@@ -347,7 +346,10 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ScGridWindow : public vcl::DocWindow,
     void            UpdateFormulaRange(SCCOL nX1, SCROW nY1, SCCOL nX2, SCROW nY2);
 
     std::unique_ptr<sdr::overlay::OverlayObject> DrawOverlay(const std::vector<tools::Rectangle>& rRects, const Color& rColor, bool bBorder, bool bContrastOutline, sdr::overlay::OverlayType eOverlayType);
-    std::unique_ptr<sdr::overlay::OverlayObjectList> DrawFillMarker(SCCOL nCol, SCROW nRow, std::optional<tools::Rectangle>& rRect, bool bIsTableArea);
+    /// The fill/handle marker rectangle in pixels; bIsTableArea tucks it inside
+    /// the cell corner, otherwise it is centred on the corner (AutoFill).
+    tools::Rectangle ComputeFillHandleRect(SCCOL nCol, SCROW nRow, bool bIsTableArea);
+    std::unique_ptr<sdr::overlay::OverlayObjectList> DrawFillMarker(SCCOL nCol, SCROW nRow, std::optional<tools::Rectangle>& rRect);
 
 protected:
     virtual void    PrePaint(vcl::RenderContext& rRenderContext) override;
@@ -410,8 +412,9 @@ public:
     bool InvalidateByForeignEditView(EditView* pEditView) override;
 
     // The logic-coordinate (1/100 mm) area this view must repaint to show a
-    // foreign edit view's in-progress text, already widened to the text. Empty
-    // when the edit view or its cursor cell is not available in this view.
+    // foreign edit view's in-progress text. It holds every cell the edit covers,
+    // widened to the text. Empty when the edit view or the cell range it covers
+    // is not available in this view.
     std::optional<tools::Rectangle> GetForeignEditInvalidateRect(EditView* pEditView);
 
     // Compute the OutputArea (in painter pixels) for a foreign EditView when the
@@ -476,7 +479,8 @@ public:
 
     void DPLaunchFieldPopupMenu(const Point& rScrPos, const Size& rScrSize,
                                 tools::Long nDimIndex, ScDPObject* pDPObj,
-                                bool bBottomLeftAnchor = false);
+                                bool bBottomLeftAnchor = false,
+                                const ScAddress* pFilterCell = nullptr);
 
     void DrawButtons(SCCOL nX1, SCCOL nX2, const ScTableInfo& rTabInfo, OutputDevice* pContentDev,
                      const ScKitRTLContext* pKitRTLContext);
@@ -527,6 +531,7 @@ public:
 
     void UpdateSparklineGroupOverlay();
     void DeleteSparklineGroupOverlay();
+    void NotifyDynamicArrayBorder();
     void            DeleteCopySourceOverlay();
     void            UpdateCopySourceOverlay();
     void            DeleteCursorOverlay();

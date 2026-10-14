@@ -29,40 +29,59 @@ def select_text(ui_object, from_pos, to):
 def get_url_for_data_file(file_name):
     return pathlib.Path(org.libreoffice.unotest.makeCopyFromTDOC(file_name)).as_uri()
 
+# FieldUnit, see include/tools/fldunit.hxx
+MEASUREMENT_UNITS = {
+    'Millimeter': 1,
+    'Centimeter': 2,
+    'Point': 6,
+    'Pica': 7,
+    'Inch': 8,
+}
+
+# Writer keeps a single value; the others keep a metric and a non metric one and
+# choose between them by locale, so both are set. The configuration items are
+# notified of the change, so the running module picks it up.
+MEASUREMENT_UNIT_PATHS = (
+    '/org.openoffice.Office.Writer/Layout/Other/MeasureUnit',
+    '/org.openoffice.Office.WriterWeb/Layout/Other/MeasureUnit',
+    '/org.openoffice.Office.Calc/Layout/Other/MeasureUnit/Metric',
+    '/org.openoffice.Office.Calc/Layout/Other/MeasureUnit/NonMetric',
+    '/org.openoffice.Office.Impress/Layout/Other/MeasureUnit/Metric',
+    '/org.openoffice.Office.Impress/Layout/Other/MeasureUnit/NonMetric',
+    '/org.openoffice.Office.Draw/Layout/Other/MeasureUnit/Metric',
+    '/org.openoffice.Office.Draw/Layout/Other/MeasureUnit/NonMetric',
+)
+
+# Impress and Draw do not follow the configuration, the unit reaches their
+# module item pool only through a dispatch, see SdModule::Execute. The value to
+# dispatch is the one of the Impress item.
+IMPRESS_MEASUREMENT_UNIT_PATH = '/org.openoffice.Office.Impress/Layout/Other/MeasureUnit/Metric'
+
+def set_measurement_unit(UITestCase, values):
+    # Dispatch first: the applications that do follow the configuration are
+    # notified afterwards and so have the last word on their own item.
+    UITestCase.xUITest.executeCommandWithParameters(
+        ".uno:MetricUnit",
+        mkPropertyValues({"MetricUnit": values[IMPRESS_MEASUREMENT_UNIT_PATH]}))
+    for path, value in values.items():
+        UITestCase.ui_test.set_config_value(path, value)
+
+# Sets the measurement unit and puts the old values back afterwards.
 @contextmanager
 def change_measurement_unit(UITestCase, unit):
+    old_values = {}
+    for path in MEASUREMENT_UNIT_PATHS:
+        value = UITestCase.ui_test.get_config(path)
+        # Writer keeps no default, and an item without a value leaves the last
+        # one in place, so go back to the inch SfxModule::GetFieldUnit falls
+        # back to.
+        old_values[path] = MEASUREMENT_UNITS['Inch'] if value is None else value
+
+    set_measurement_unit(
+        UITestCase, dict.fromkeys(MEASUREMENT_UNIT_PATHS, MEASUREMENT_UNITS[unit]))
     try:
-        launch_option_dialog(UITestCase, unit)
         yield
     finally:
-        # change to default value
-        launch_option_dialog(UITestCase, 'Inch')
-
-def launch_option_dialog(UITestCase, unit):
-    with UITestCase.ui_test.execute_dialog_through_command(".uno:OptionsTreeDialog") as xDialogOpt:
-        xPages = xDialogOpt.getChild("pages")
-        xAppEntry = xPages.getChild('3')
-        xAppEntry.executeAction("EXPAND", tuple())
-        xGeneralEntry = xAppEntry.getChild('0')
-        xGeneralEntry.executeAction("SELECT", tuple())
-
-        # Calc
-        if 'unitlb' in xDialogOpt.getChildren():
-            xUnit = xDialogOpt.getChild("unitlb")
-
-        # Writer
-        elif 'metric' in xDialogOpt.getChildren():
-            xUnit = xDialogOpt.getChild("metric")
-
-        # Impress
-        elif 'units' in xDialogOpt.getChildren():
-            xUnit = xDialogOpt.getChild("units")
-
-        select_by_text(xUnit, unit)
-
-        # tdf#137930: Check apply button doesn't reset the value
-        xApplyBtn = xDialogOpt.getChild("apply")
-        xApplyBtn.executeAction("CLICK", tuple())
-        UITestCase.assertEqual(unit, get_state_as_dict(xUnit)['SelectEntryText'])
+        set_measurement_unit(UITestCase, old_values)
 
 # vim: set shiftwidth=4 softtabstop=4 expandtab:

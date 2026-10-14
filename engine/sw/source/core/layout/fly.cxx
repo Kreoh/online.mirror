@@ -78,6 +78,9 @@
 #include <bodyfrm.hxx>
 #include <FrameControlsManager.hxx>
 #include <ndtxt.hxx>
+#include <fldbas.hxx>
+#include <fmtfld.hxx>
+#include <txatbase.hxx>
 #include <formatflysplit.hxx>
 
 using namespace ::com::sun::star;
@@ -162,7 +165,7 @@ SwTwips GetFlyAnchorBottom(const SwFlyFrame& rFly, const SwFrame& rAnchor)
 }
 }
 
-static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame );
+static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame, SwTwips nBorderAndPadding );
 
 SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch, bool bFollow ) :
     SwLayoutFrame( pFormat, pSib ),
@@ -504,28 +507,36 @@ void SwFlyFrame::FinitDrawObj()
         if(p1St)
         {
             for(SwViewShell& rCurrentShell : p1St->GetRingContainer())
-            {   // At the moment the Drawing can do just do an Unmark on everything,
-                // as the Object was already removed
-                if (rCurrentShell.HasDrawView() &&
-                    rCurrentShell.Imp()->GetDrawView()->GetMarkedObjectList().GetMarkCount())
+            {
+                if (!rCurrentShell.HasDrawView())
+                    continue;
+                SwDrawView* pDrawView = rCurrentShell.Imp()->GetDrawView();
+                if (!pDrawView->IsObjMarked(GetVirtDrawObj()))
+                    continue;
+
+                // The first marked object is the one that holds the text cursor. When that is
+                // this fly frame the whole selection goes and the cursor moves to the anchor.
+                // Any other fly frame only leaves the mark list, and the rest stay selected.
+                const SdrMarkList& rMarkList = pDrawView->GetMarkedObjectList();
+                const bool bHoldsCursor = rMarkList.GetMark(0)->GetMarkedSdrObj() == GetVirtDrawObj();
+                if (bHoldsCursor)
                 {
-                    SwFlyFrame const*const pOldSelFly = ::GetFlyFromMarked(nullptr, &rCurrentShell);
-                    if (pOldSelFly == this)
-                    {
-                        assert(rCurrentShell.Imp()->GetDrawView()->GetMarkedObjectList().GetMarkCount() == 1);
-                        if (SwFEShell *const pFEShell = dynamic_cast<SwFEShell*>(&rCurrentShell))
-                        {   // tdf#131679 move any cursor out of fly
-                            rCurrentShell.Imp()->GetDrawView()->UnmarkAll();
-                            SwPaM const temp(ResolveFlyAnchor(*pOldSelFly->GetFormat()));
-                            pFEShell->SetSelection(temp);
-                            // could also call SetCursor() like SwFEShell::SelectObj()
-                            // does, but that would access layout a bit much...
-                        }
-                        else
-                        {
-                            rCurrentShell.Imp()->GetDrawView()->UnmarkAll();
-                        }
+                    pDrawView->UnmarkAll();
+                    if (SwFEShell *const pFEShell = dynamic_cast<SwFEShell*>(&rCurrentShell))
+                    {   // tdf#131679 move any cursor out of fly
+                        SwPaM const temp(ResolveFlyAnchor(*GetFormat()));
+                        pFEShell->SetSelection(temp);
+                        // could also call SetCursor() like SwFEShell::SelectObj()
+                        // does, but that would access layout a bit much...
                     }
+                }
+                else
+                {
+                    pDrawView->MarkObj(GetVirtDrawObj(), rCurrentShell.Imp()->GetPageView(), true);
+                    // An object that cannot be marked cannot be unmarked one at a time either,
+                    // so the whole list goes in that case.
+                    if (pDrawView->IsObjMarked(GetVirtDrawObj()))
+                        pDrawView->UnmarkAll();
                 }
             }
         }
@@ -1442,7 +1453,7 @@ void SwFlyFrame::ChgRelPos( const Point &rNewPos )
             aVert.SetRelationOrient( text::RelOrientation::FRAME );
         }
     }
-    aVert.SetPos( nTmpY );
+    aVert.setPosition(gfx::Length::twip(nTmpY));
     aSet.Put( aVert );
 
     // For Flys in the Cnt, the horizontal orientation is of no interest,
@@ -1490,10 +1501,11 @@ void SwFlyFrame::ChgRelPos( const Point &rNewPos )
                 aHori.SetRelationOrient( text::RelOrientation::FRAME );
             aHori.SetPosToggle( false );
         }
-        aHori.SetPos( nTmpX );
+        aHori.setPosition(gfx::Length::twip(nTmpX));
         aSet.Put( aHori );
     }
-    SetCurrRelPos( rNewPos );
+    if ( !IsFlyInContentFrame() )
+        SetCurrRelPos( rNewPos );
     pFormat->GetDoc().SetAttr( aSet, *pFormat );
 
 }
@@ -1667,7 +1679,7 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
             if ( rFrameSz.GetWidthSizeType() != SwFrameSize::Fixed )
             {
                 // #i9046# Autowidth for fly frames
-                const SwTwips nAutoWidth = lcl_CalcAutoWidth( *this );
+                const SwTwips nAutoWidth = lcl_CalcAutoWidth( *this, nLR );
                 if ( nAutoWidth )
                 {
                     if( SwFrameSize::Minimum == rFrameSz.GetWidthSizeType() )
@@ -2686,7 +2698,7 @@ bool SwFlyFrame::IsResizeValid(const SwBorderAttrs *pAttrs, Size aTargetSize)
     if (bAutosizeWidth)
     {
         const SwTwips nLR = pAttrs->CalcLeftLine() + pAttrs->CalcRightLine();
-        const SwTwips nAutoWidth = lcl_CalcAutoWidth( *this );
+        const SwTwips nAutoWidth = lcl_CalcAutoWidth( *this, nLR );
         nMinFrameWidth = nAutoWidth + nLR;
 
         if (aTargetSize.Width() < nMinFrameWidth)
@@ -2759,6 +2771,117 @@ bool SwFlyFrame::IsLowerOf( const SwLayoutFrame* pUpperFrame ) const
                : pFrame->GetUpper();
     } while ( pFrame );
     return false;
+}
+
+SwFlyFrame* SwFlyFrame::FindCaptionFly() const
+{
+    if (!GetFormat()->GetFrameSize().GetWidthPercent())
+        return nullptr;
+
+    const SwFrame* pAnchor = GetAnchorFrame();
+    if (!pAnchor || !pAnchor->IsTextFrame() || pAnchor->GetNext() || pAnchor->GetPrev()
+        || !pAnchor->GetUpper()->IsFlyFrame())
+        return nullptr;
+
+    sw::MergedAttrIter aIter(*static_cast<SwTextFrame const*>(pAnchor));
+    for (SwTextAttr const* pHint = aIter.NextAttr(); pHint; pHint = aIter.NextAttr())
+    {
+        const SfxPoolItem* pItem = &pHint->GetAttr();
+        if (RES_TXTATR_FIELD == pItem->Which()
+            && SwFieldTypesEnum::Sequence
+                   == static_cast<const SwFormatField*>(pItem)->GetField()->GetTypeId())
+        {
+            return const_cast<SwFlyFrame*>(static_cast<const SwFlyFrame*>(pAnchor->GetUpper()));
+        }
+    }
+    return nullptr;
+}
+
+/// Returns the smallest whole of which nPercent percent, rounded to the nearest as the layout does,
+/// is at least nPart. Up to 100 percent, that percentage of it is exactly nPart.
+static tools::Long lcl_WholeForPercent(tools::Long nPart, sal_uInt8 nPercent)
+{
+    // The smallest whole for which whole * nPercent / 100 >= nPart - 0.5, in integers.
+    return (nPart * 200 - 100 + 2 * nPercent - 1) / (2 * nPercent);
+}
+
+bool SwFlyFrame::ChgCaptionFlySize(const Size& rNewSize, const Size& rOldSize,
+                                   bool& rUpdateHeightPercent)
+{
+    rUpdateHeightPercent = false;
+    SwFlyFrame* pCaptionFly = FindCaptionFly();
+    if (!pCaptionFly)
+        return false;
+
+    // A caption frame with a relative width is sized by the layout, and a width relative to the
+    // page does not follow the caption frame. In both cases this frame keeps resizing itself
+    // through its own percentage.
+    const SwFormatFrameSize& rFrameSize = GetFormat()->GetFrameSize();
+    SwFrameFormat* pCaptionFormat = pCaptionFly->GetFormat();
+    SwFormatFrameSize aCaptionFrameSize(pCaptionFormat->GetFrameSize());
+    const sal_uInt8 nWidthPercent = rFrameSize.GetWidthPercent();
+    if (aCaptionFrameSize.GetWidthPercent()
+        || (nWidthPercent != SwFormatFrameSize::SYNCED
+            && rFrameSize.GetWidthPercentRelation() == text::RelOrientation::PAGE_FRAME))
+        return false;
+
+    // A percentage of this frame is relative to the print area of the caption frame, so that print
+    // area is sized from the percentage, and the caption frame keeps its borders and padding around
+    // it. The layout takes a percentage of at most the print area of the page, so the print area of
+    // the caption frame is not made larger than that. A size synced to the other side by the size
+    // ratio does not follow the caption frame, so the caption frame keeps the space it has around
+    // this frame.
+    const SwPageFrame* pPage = pCaptionFly->FindPageFrame();
+    const Size aPageSize = pPage ? pPage->getFramePrintArea().SSize() : Size(LONG_MAX, LONG_MAX);
+    bool bCaptionChanged = false;
+    if (rNewSize.Width() != rOldSize.Width())
+    {
+        if (nWidthPercent != SwFormatFrameSize::SYNCED)
+            aCaptionFrameSize.SetWidth(
+                std::min(lcl_WholeForPercent(rNewSize.Width(), nWidthPercent), aPageSize.Width())
+                + pCaptionFly->getFrameArea().Width() - pCaptionFly->getFramePrintArea().Width());
+        else
+            aCaptionFrameSize.SetWidth(rNewSize.Width() + pCaptionFly->getFrameArea().Width()
+                                       - getFrameArea().Width());
+        bCaptionChanged = true;
+    }
+
+    // A caption frame with a minimum height grows with its content, and one with a relative height
+    // is sized by the layout, so only a fixed absolute height is set here. Below this frame, the
+    // caption frame also holds the caption text. A relative height of this frame that the caption
+    // frame does not take stays with this frame.
+    if (rNewSize.Height() != rOldSize.Height())
+    {
+        const sal_uInt8 nHeightPercent = rFrameSize.GetHeightPercent();
+        const bool bRelativeHeight = nHeightPercent && nHeightPercent != SwFormatFrameSize::SYNCED;
+        const bool bFixedCaptionHeight
+            = aCaptionFrameSize.GetHeightSizeType() != SwFrameSize::Minimum
+              && !aCaptionFrameSize.GetHeightPercent();
+        if (bFixedCaptionHeight && !bRelativeHeight)
+        {
+            aCaptionFrameSize.SetHeight(rNewSize.Height() + pCaptionFly->getFrameArea().Height()
+                                        - getFrameArea().Height());
+            bCaptionChanged = true;
+        }
+        else if (bFixedCaptionHeight
+                 && rFrameSize.GetHeightPercentRelation() != text::RelOrientation::PAGE_FRAME)
+        {
+            aCaptionFrameSize.SetHeight(
+                std::min(lcl_WholeForPercent(rNewSize.Height(), nHeightPercent),
+                         aPageSize.Height())
+                + pCaptionFly->getFrameArea().Height() - pCaptionFly->getFramePrintArea().Height());
+            bCaptionChanged = true;
+        }
+        else
+            rUpdateHeightPercent = bRelativeHeight;
+    }
+
+    if (bCaptionChanged)
+    {
+        // go via the Doc for UNDO
+        pCaptionFormat->GetDoc().SetAttr(aCaptionFrameSize, *pCaptionFormat);
+    }
+    return true;
 }
 
 void SwFlyFrame::Cut()
@@ -3106,6 +3229,59 @@ void SwFlyFrame::NotifyDrawObj()
     }
 }
 
+Size SwFlyFrame::GetPercentReference(const SwFormatFrameSize& rSz) const
+{
+    const SwFrame *pRel = IsFlyLayFrame() ? GetAnchorFrame() : GetAnchorFrame()->GetUpper();
+    if( !pRel ) // LAYER_IMPL
+        return Size();
+
+    tools::Long nRelWidth = LONG_MAX, nRelHeight = LONG_MAX;
+    const SwViewShell *pSh = getRootFrame()->GetCurrShell();
+    if ( ( pRel->IsBodyFrame() || pRel->IsPageFrame() ) &&
+         pSh && pSh->GetViewOptions()->getBrowseMode() &&
+         pSh->VisArea().HasArea() )
+    {
+        nRelWidth  = pSh->GetBrowseWidth();
+        nRelHeight = pSh->VisArea().Height();
+        Size aBorder = pSh->GetOut()->PixelToLogic( pSh->GetBrowseBorder() );
+        nRelWidth  = std::min( nRelWidth,  pRel->getFramePrintArea().Width() );
+        nRelHeight -= 2*aBorder.Height();
+        nRelHeight = std::min( nRelHeight, pRel->getFramePrintArea().Height() );
+    }
+
+    // At the moment only the "== PAGE_FRAME" and "!= PAGE_FRAME" cases are handled.
+    // When size is a relative to page size, ignore size of SwBodyFrame.
+    if (rSz.GetWidthPercentRelation() != text::RelOrientation::PAGE_FRAME)
+        nRelWidth  = std::min( nRelWidth,  pRel->getFramePrintArea().Width() );
+    else if ( pRel->IsPageFrame() )
+        nRelWidth  = std::min( nRelWidth,  pRel->getFrameArea().Width() );
+
+    if (rSz.GetHeightPercentRelation() != text::RelOrientation::PAGE_FRAME)
+        nRelHeight = std::min( nRelHeight, pRel->getFramePrintArea().Height() );
+    else if ( pRel->IsPageFrame() )
+        nRelHeight = std::min( nRelHeight, pRel->getFrameArea().Height() );
+
+    if( !pRel->IsPageFrame() )
+    {
+        const SwPageFrame* pPage = FindPageFrame();
+        if( pPage )
+        {
+            if (rSz.GetWidthPercentRelation() == text::RelOrientation::PAGE_FRAME)
+                // Ignore margins of pPage.
+                nRelWidth  = std::min( nRelWidth,  pPage->getFrameArea().Width() );
+            else
+                nRelWidth  = std::min( nRelWidth,  pPage->getFramePrintArea().Width() );
+            if (rSz.GetHeightPercentRelation() == text::RelOrientation::PAGE_FRAME)
+                // Ignore margins of pPage.
+                nRelHeight = std::min( nRelHeight, pPage->getFrameArea().Height() );
+            else
+                nRelHeight = std::min( nRelHeight, pPage->getFramePrintArea().Height() );
+        }
+    }
+
+    return Size(nRelWidth, nRelHeight);
+}
+
 Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
 {
     Size aRet( rSz.GetSize() );
@@ -3113,49 +3289,9 @@ Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
     const SwFrame *pRel = IsFlyLayFrame() ? GetAnchorFrame() : GetAnchorFrame()->GetUpper();
     if( pRel ) // LAYER_IMPL
     {
-        tools::Long nRelWidth = LONG_MAX, nRelHeight = LONG_MAX;
-        const SwViewShell *pSh = getRootFrame()->GetCurrShell();
-        if ( ( pRel->IsBodyFrame() || pRel->IsPageFrame() ) &&
-             pSh && pSh->GetViewOptions()->getBrowseMode() &&
-             pSh->VisArea().HasArea() )
-        {
-            nRelWidth  = pSh->GetBrowseWidth();
-            nRelHeight = pSh->VisArea().Height();
-            Size aBorder = pSh->GetOut()->PixelToLogic( pSh->GetBrowseBorder() );
-            nRelWidth  = std::min( nRelWidth,  pRel->getFramePrintArea().Width() );
-            nRelHeight -= 2*aBorder.Height();
-            nRelHeight = std::min( nRelHeight, pRel->getFramePrintArea().Height() );
-        }
-
-        // At the moment only the "== PAGE_FRAME" and "!= PAGE_FRAME" cases are handled.
-        // When size is a relative to page size, ignore size of SwBodyFrame.
-        if (rSz.GetWidthPercentRelation() != text::RelOrientation::PAGE_FRAME)
-            nRelWidth  = std::min( nRelWidth,  pRel->getFramePrintArea().Width() );
-        else if ( pRel->IsPageFrame() )
-            nRelWidth  = std::min( nRelWidth,  pRel->getFrameArea().Width() );
-
-        if (rSz.GetHeightPercentRelation() != text::RelOrientation::PAGE_FRAME)
-            nRelHeight = std::min( nRelHeight, pRel->getFramePrintArea().Height() );
-        else if ( pRel->IsPageFrame() )
-            nRelHeight = std::min( nRelHeight, pRel->getFrameArea().Height() );
-
-        if( !pRel->IsPageFrame() )
-        {
-            const SwPageFrame* pPage = FindPageFrame();
-            if( pPage )
-            {
-                if (rSz.GetWidthPercentRelation() == text::RelOrientation::PAGE_FRAME)
-                    // Ignore margins of pPage.
-                    nRelWidth  = std::min( nRelWidth,  pPage->getFrameArea().Width() );
-                else
-                    nRelWidth  = std::min( nRelWidth,  pPage->getFramePrintArea().Width() );
-                if (rSz.GetHeightPercentRelation() == text::RelOrientation::PAGE_FRAME)
-                    // Ignore margins of pPage.
-                    nRelHeight = std::min( nRelHeight, pPage->getFrameArea().Height() );
-                else
-                    nRelHeight = std::min( nRelHeight, pPage->getFramePrintArea().Height() );
-            }
-        }
+        const Size aReference = GetPercentReference(rSz);
+        const tools::Long nRelWidth = aReference.Width();
+        const tools::Long nRelHeight = aReference.Height();
 
         if ( rSz.GetWidthPercent() && rSz.GetWidthPercent() != SwFormatFrameSize::SYNCED )
             aRet.setWidth(rtl::math::round(double(nRelWidth) * rSz.GetWidthPercent() / 100));
@@ -3176,7 +3312,7 @@ Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
     return aRet;
 }
 
-static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
+static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame, SwTwips nBorderAndPadding )
 {
     SwTwips nRet = 0;
     SwTwips nMin = 0;
@@ -3191,7 +3327,7 @@ static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
     {
         if ( pFrame->IsSctFrame() )
         {
-            nMin = lcl_CalcAutoWidth( *static_cast<const SwSectionFrame*>(pFrame) );
+            nMin = lcl_CalcAutoWidth( *static_cast<const SwSectionFrame*>(pFrame), 0 );
         }
         if ( pFrame->IsTextFrame() )
         {
@@ -3241,8 +3377,33 @@ static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
     if (rFrame.GetFormat()->getIDocumentSettingAccess().get(DocumentSettingId::FRAME_AUTOWIDTH_WITH_MORE_PARA))
     {
         const SwFrame* pFrameRect = nullptr;
+        // The width that is taken off the parent width when the frame is kept inside a table
+        // cell. It covers the border and padding of the frame itself, so that the whole frame
+        // fits the cell text area, and a margin of the same size between the frame and the
+        // edge of the cell text area on the side away from the alignment.
+        SwTwips nReserved = 0;
         if (rFrame.IsFlyFrame())
-            pFrameRect = static_cast<const SwFlyFrame*>(&rFrame)->GetAnchorFrame();
+        {
+            const SwFlyFrame* pFly = static_cast<const SwFlyFrame*>(&rFrame);
+            pFrameRect = pFly->GetAnchorFrame();
+            // A frame that follows the text flow inside a table cell is kept inside the cell
+            // text area. The anchor frame is the anchor paragraph, whose print area leaves out
+            // the paragraph indents, so the enclosing cell frame provides the width instead.
+            if (pFrameRect && pFrameRect->IsInTab()
+                && pFly->GetFormat()->GetFollowTextFlow().GetValue())
+            {
+                const SwFrame* pCellFrame = pFrameRect->GetUpper();
+                while (pCellFrame && !pCellFrame->IsCellFrame())
+                    pCellFrame = pCellFrame->GetUpper();
+                if (pCellFrame)
+                {
+                    pFrameRect = pCellFrame;
+                    // One copy is the frame's own border and padding, the other is the margin
+                    // that the frame keeps inside the cell text area.
+                    nReserved = 2 * nBorderAndPadding;
+                }
+            }
+        }
         else
         {
             if (const SwFrame* pLower = rFrame.Lower())
@@ -3251,6 +3412,10 @@ static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
         if (pFrameRect)
         {
             SwTwips nParentWidth = rFrame.IsVertical() ? pFrameRect->getFramePrintArea().Height() : pFrameRect->getFramePrintArea().Width();
+            // Inside a cell the reserve is taken off the cell width. A width of zero outside a
+            // cell stays zero and means that there is no automatic width.
+            if (nReserved > 0)
+                nParentWidth = std::max<SwTwips>(nParentWidth - nReserved, MINFLY);
             if (nParagraphCount > 1 || nRet > nParentWidth)
             {
                 return nParentWidth;

@@ -29,6 +29,7 @@
 
 using namespace fileaccess;
 using namespace com::sun::star;
+using namespace ::cpo;
 
 XInputStream_impl::XInputStream_impl( const OUString& aUncPath, bool bLock )
     : m_aFile( aUncPath ),
@@ -63,13 +64,13 @@ XInputStream_impl::~XInputStream_impl()
     {
         OSL_FAIL("unexpected situation");
     }
-    catch (uno::RuntimeException const &)
+    catch (cpo::uno::RuntimeException const &)
     {
         OSL_FAIL("unexpected situation");
     }
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 XInputStream_impl::readBytes(
                  cpo::uno::Sequence< sal_Int8 >& aData,
                  sal_Int32 nBytesToRead )
@@ -111,7 +112,7 @@ XInputStream_impl::readSomeBytes(
     return static_cast<sal_Int32>(nrc);
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 XInputStream_impl::readSomeBytes(
     cpo::uno::Sequence< sal_Int8 >& aData,
     sal_Int32 nMaxBytesToRead )
@@ -120,14 +121,14 @@ XInputStream_impl::readSomeBytes(
 }
 
 
-void SAL_CALL
+void
 XInputStream_impl::skipBytes( sal_Int32 nBytesToSkip )
 {
     m_aFile.setPos( osl_Pos_Current, sal_uInt64( nBytesToSkip ) );
 }
 
 
-sal_Int32 SAL_CALL
+sal_Int32
 XInputStream_impl::available()
 {
     sal_Int64 avail = getLength() - getPosition();
@@ -135,7 +136,7 @@ XInputStream_impl::available()
 }
 
 
-void SAL_CALL
+void
 XInputStream_impl::closeInput()
 {
     if( m_nIsOpen )
@@ -148,17 +149,17 @@ XInputStream_impl::closeInput()
 }
 
 
-void SAL_CALL
+void
 XInputStream_impl::seek( sal_Int64 location )
 {
     if( location < 0 )
-        throw lang::IllegalArgumentException( u""_ustr, uno::Reference< uno::XInterface >(), 0 );
+        throw lang::IllegalArgumentException( u""_ustr, uno::Reference< cpo::uno::XInterface >(), 0 );
     if( osl::FileBase::E_None != m_aFile.setPos( osl_Pos_Absolut, sal_uInt64( location ) ) )
         throw io::IOException();
 }
 
 
-sal_Int64 SAL_CALL
+sal_Int64
 XInputStream_impl::getPosition()
 {
     sal_uInt64 uPos;
@@ -167,7 +168,7 @@ XInputStream_impl::getPosition()
     return sal_Int64( uPos );
 }
 
-sal_Int64 SAL_CALL
+sal_Int64
 XInputStream_impl::getLength()
 {
     sal_uInt64 uEndPos;

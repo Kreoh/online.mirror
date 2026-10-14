@@ -27,7 +27,7 @@
 namespace frm
 {
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -71,7 +71,7 @@ OGroupBoxModel::~OGroupBoxModel()
 }
 
 
-css::uno::Reference< css::util::XCloneable > OGroupBoxModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OGroupBoxModel::createClone()
 {
     rtl::Reference<OGroupBoxModel> pClone = new OGroupBoxModel(this, getContext());
     pClone->clonedFrom(this);
@@ -142,16 +142,16 @@ cpo::uno::Sequence<OUString> OGroupBoxControl::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OGroupBoxModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OGroupBoxModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OGroupBoxModel(component));
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OGroupBoxControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OGroupBoxControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OGroupBoxControl(component));

@@ -32,7 +32,7 @@
 
 #include "MimeAttrib.hxx"
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::container;
@@ -111,7 +111,7 @@ bool CFormatEtcContainer::skipFormatEtc( sal_uInt32 aNum )
     return ( m_EnumIterator != m_FormatMap.end( ) );
 }
 
-CFormatRegistrar::CFormatRegistrar( const Reference< XComponentContext >& rxContext,
+CFormatRegistrar::CFormatRegistrar( const Reference< cpo::uno::XComponentContext >& rxContext,
                                     const CDataFormatTranslator& aDataFormatTranslator ) :
     m_DataFormatTranslator( aDataFormatTranslator ),
     m_bHasSynthesizedLocale( false ),

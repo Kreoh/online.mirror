@@ -111,9 +111,8 @@ class SvxZoomItem;
 // free                                     (SID_SFX_START + 407)
 
 // free                                     (SID_SFX_START + 410)
-#define SID_SEND_FEEDBACK                   (SID_SFX_START + 421)
-#define SID_Q_AND_A                         (SID_SFX_START + 422)
-#define SID_DOCUMENTATION                   (SID_SFX_START + 423)
+// free                                     (SID_SFX_START + 422)
+// free                                     (SID_SFX_START + 423)
 // free                                     (SID_SFX_START + 424)
 // free                                     (SID_SFX_START + 425)
 // free                                     (SID_SFX_START + 426)
@@ -228,7 +227,6 @@ class SvxZoomItem;
 #define SID_OUTPUTSTREAM                    TypedWhichId<SfxUnoAnyItem>(SID_SFX_START + 1666)
 #define SID_IMAGE_ORIENTATION               TypedWhichId<SfxImageItem>(SID_SFX_START + 1667)
 
-#define SID_STOP_RECORDING                  (SID_SFX_START + 1671)
 #define SID_INTERACTIONHANDLER              TypedWhichId<SfxUnoAnyItem>(SID_SFX_START + 1675)
 #define SID_OPENHYPERLINK                   (SID_SFX_START + 1676)
 #define SID_CONTENT                         TypedWhichId<SfxUnoAnyItem>(SID_SFX_START + 1679)
@@ -260,7 +258,6 @@ class SvxZoomItem;
 #define SID_NOAUTOSAVE                      TypedWhichId<SfxBoolItem>(SID_SFX_START + 1711)
 #define SID_PRINT_SELECTEDSHEET             TypedWhichId<SfxBoolItem>(SID_SFX_START + 1712)
 #define SID_OPTIONS_PAGEURL                 TypedWhichId<SfxStringItem>(SID_SFX_START + 1713)
-#define SID_MORE_DICTIONARIES               (SID_SFX_START + 1714)
 #define SID_ACTIVATE_STYLE_APPLY            (SID_SFX_START + 1715)
 #define SID_FONT_NAME                       TypedWhichId<SfxStringItem>(SID_SFX_START + 1716)
 #define SID_DEFAULTFILENAME                 (SID_SFX_START + 1717)
@@ -289,9 +286,6 @@ class SvxZoomItem;
 #define SID_LOCK_SAVE                       TypedWhichId<SfxBoolItem>(SID_SFX_START + 1737)
 #define SID_LOCK_EDITDOC                    TypedWhichId<SfxBoolItem>(SID_SFX_START + 1738)
 #define SID_REPLACEABLE                     TypedWhichId<SfxBoolItem>(SID_SFX_START + 1739)
-#define SID_ADDITIONS_DIALOG                (SID_SFX_START + 1740)
-#define FN_PARAM_ADDITIONS_TAG              TypedWhichId<SfxStringItem>(SID_SFX_START + 1741)
-#define SID_UI_PICKER                       (SID_SFX_START + 1742)
 #define SID_TOOLBAR_LOCK                    TypedWhichId<SfxBoolItem>(SID_SFX_START + 1743)
 #define SID_WIDGET_TEST_DIALOG              (SID_SFX_START + 1744)
 #define FN_CHANGE_THEME                     (SID_SFX_START + 1745)
@@ -463,10 +457,6 @@ class SvxZoomItem;
 #define SID_CURSOREND                       (SID_SFX_START + 746)
 #define SID_UNICODE_NOTATION_TOGGLE         (SID_SFX_START + 792)
 
-// default-ids for macros
-#define SID_RECORDING_FLOATWINDOW           (SID_SFX_START + 800)
-#define SID_RECORDMACRO                     TypedWhichId<SfxBoolItem>(SID_SFX_START + 1669)
-
 // Paste Special
 #define SID_PASTE_ONLY_TEXT                 (SID_SFX_START + 802)
 #define SID_PASTE_ONLY_FORMULA              (SID_SFX_START + 803)
@@ -486,15 +476,7 @@ class SvxZoomItem;
 #define SID_APPLY_THEME                     (SID_SFX_START + 818)
 
 // default-ids for configuration
-#define SID_CONFIG                          TypedWhichId<SfxStringItem>(SID_SFX_START + 904)
-#define SID_TOOLBOXOPTIONS                  (SID_SFX_START + 907)
-#define SID_MACROINFO                       TypedWhichId<SfxMacroInfoItem>(SID_SFX_START + 919)
 #define SID_TOGGLESTATUSBAR                 TypedWhichId<SfxBoolItem>(SID_SFX_START + 920)
-#define SID_CONFIGSTATUSBAR                 (SID_SFX_START + 921)
-#define SID_CONFIGMENU                      (SID_SFX_START + 924)
-#define SID_CONFIGACCEL                     (SID_SFX_START + 925)
-#define SID_CONFIGEVENT                     (SID_SFX_START + 926)
-#define SID_CFGFILE                         (SID_SFX_START + 927)
 #define SID_SHOWPOPUPS                      (SID_SFX_START + 929)
 
 // Item-Id for the assigned event Tabpage.
@@ -523,8 +505,6 @@ class SvxZoomItem;
 #define SID_OBJECTRESIZE                    TypedWhichId<SfxRectangleItem>(SID_SFX_START + 1000)
 
 #define SID_EVENTCONFIG                     TypedWhichId<SfxEventNamesItem>(SID_SFX_START + 1101)
-#define SID_VERB_START                      (SID_SFX_START + 1100)
-#define SID_VERB_END                        (SID_SFX_START + 1121)
 
 #define SID_SIGNATURE                       TypedWhichId<SfxUInt16Item>(SID_SFX_START + 1643)
 
@@ -589,7 +569,6 @@ class SvxZoomItem;
 #define SID_SEARCH_ITEM                     TypedWhichId<SvxSearchItem>(SID_SVX_START + 291)
 #define SID_SEARCH_USE_ATTR_ITEM_LIST       TypedWhichId<SfxBoolItem>(SID_SFX_START + 292)
 #define SID_SIDEBAR                         TypedWhichId<SfxBoolItem>(SID_SVX_START + 336)
-#define SID_NOTEBOOKBAR                     TypedWhichId<SfxStringItem>(SID_SVX_START + 338)
 #define SID_MENUBAR                         TypedWhichId<SfxBoolItem>(SID_SVX_START + 339)
 #define SID_HYPERLINK_GETLINK               TypedWhichId<SvxHyperlinkItem>(SID_SVX_START + 361)
 #define SID_HYPERLINK_SETLINK               TypedWhichId<SvxHyperlinkItem>(SID_SVX_START + 362)
@@ -598,7 +577,6 @@ class SvxZoomItem;
 #define SID_QUICKFIND                       (SID_SVX_START + 367)
 #define SID_ZOOM_NEXT                       (SID_SVX_START + 402)
 #define SID_ZOOM_PREV                       (SID_SVX_START + 403)
-#define SID_INET_DLG                        (SID_SVX_START + 416)
 #define SID_AUTO_CORRECT_DLG                (SID_SVX_START + 424)
 #define SID_ATTR_CHAR_COLOR_EXT             (SID_SVX_START + 488)
 #define SID_ATTR_CHAR_COLOR_BACKGROUND      (SID_SVX_START + 489)

@@ -28,7 +28,7 @@
 #include <com/sun/star/frame/XModel3.hpp>
 #include <com/sun/star/frame/XModuleManager2.hpp>
 #include <com/sun/star/frame/XGlobalEventBroadcaster.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/XCloseListener.hpp>
 
@@ -44,16 +44,16 @@ namespace tdoc_ucp {
     struct StorageInfo
     {
         OUString aTitle;
-        css::uno::Reference< css::embed::XStorage > xStorage;
-        css::uno::Reference< css::frame::XModel >   xModel;
+        cpo::uno::Reference< css::embed::XStorage > xStorage;
+        cpo::uno::Reference< css::frame::XModel >   xModel;
         std::unordered_map<OUString, css::util::DateTime> streamDateModified;
 
         StorageInfo() {}; // needed for STL map only.
 
         StorageInfo(
             OUString _aTitle,
-            css::uno::Reference< css::embed::XStorage > _xStorage,
-            css::uno::Reference< css::frame::XModel > _xModel )
+            cpo::uno::Reference< css::embed::XStorage > _xStorage,
+            cpo::uno::Reference< css::frame::XModel > _xModel )
         : aTitle(std::move( _aTitle )), xStorage(std::move( _xStorage )), xModel(std::move( _xModel )) {}
     };
 
@@ -73,15 +73,15 @@ namespace tdoc_ucp {
                 : m_pManager( pMgr ) {}
 
             // util::XCloseListener
-            virtual void SAL_CALL queryClosing(
+            virtual void queryClosing(
                     const css::lang::EventObject& Source,
                     bool GetsOwnership ) override;
 
-            virtual void SAL_CALL notifyClosing(
+            virtual void notifyClosing(
                     const css::lang::EventObject& Source ) override;
 
             // lang::XEventListener (base of util::XCloseListener)
-            virtual void SAL_CALL disposing(
+            virtual void disposing(
                     const css::lang::EventObject & Source ) override;
 
             void Dispose() { m_pManager = nullptr; }
@@ -92,28 +92,28 @@ namespace tdoc_ucp {
 
     public:
         OfficeDocumentsManager(
-            const css::uno::Reference< css::uno::XComponentContext > & rxContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext,
             ContentProvider * pDocEventListener );
         virtual ~OfficeDocumentsManager() override;
 
         void destroy();
 
         // document::XDocumentEventListener
-        virtual void SAL_CALL documentEventOccured(
+        virtual void documentEventOccured(
                 const css::document::DocumentEvent & Event ) override;
 
         // lang::XEventListener (base of document::XDocumentEventListener)
-        virtual void SAL_CALL disposing(
+        virtual void disposing(
                 const css::lang::EventObject & Source ) override;
 
         // Non-interface
-        css::uno::Reference< css::embed::XStorage >
+        cpo::uno::Reference< css::embed::XStorage >
         queryStorage( const OUString & rDocId );
 
         static OUString queryDocumentId(
-            const css::uno::Reference< css::frame::XModel > & xModel );
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
 
-        css::uno::Reference< css::frame::XModel >
+        cpo::uno::Reference< css::frame::XModel >
         queryDocumentModel( const OUString & rDocId );
 
         cpo::uno::Sequence< OUString >
@@ -130,25 +130,25 @@ namespace tdoc_ucp {
         void buildDocumentsList();
 
         bool isOfficeDocument(
-            const css::uno::Reference< css::uno::XInterface > & xDoc );
+            const cpo::uno::Reference< cpo::uno::XInterface > & xDoc );
 
         static bool isDocumentPreview(
-            const css::uno::Reference< css::frame::XModel3 > & xModel );
+            const cpo::uno::Reference< css::frame::XModel3 > & xModel );
 
         static bool isWithoutOrInTopLevelFrame(
-            const css::uno::Reference< css::frame::XModel > & xModel );
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
 
         bool
         isBasicIDE(
-            const css::uno::Reference< css::frame::XModel > & xModel );
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
 
         static bool isHelpDocument(
-            const css::uno::Reference< css::frame::XModel > & xModel );
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
 
         std::mutex                                          m_aMtx;
-        css::uno::Reference< css::uno::XComponentContext >         m_xContext;
-        css::uno::Reference< css::frame::XGlobalEventBroadcaster > m_xDocEvtNotifier;
-        css::uno::Reference< css::frame::XModuleManager2 >         m_xModuleMgr;
+        cpo::uno::Reference< cpo::uno::XComponentContext >         m_xContext;
+        cpo::uno::Reference< css::frame::XGlobalEventBroadcaster > m_xDocEvtNotifier;
+        cpo::uno::Reference< css::frame::XModuleManager2 >         m_xModuleMgr;
         DocumentList                                        m_aDocs;
         ContentProvider * const                             m_pDocEventListener;
         ::rtl::Reference<OfficeDocumentsCloseListener> const m_xDocCloseListener;

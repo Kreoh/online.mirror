@@ -26,6 +26,7 @@
 #include <xmlscript/xmldlg_imexp.hxx>
 
 using namespace ::rtl;
+using namespace ::cpo;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::frame;
 
@@ -46,7 +47,7 @@ public:
     }
 
     // XInputStreamProvider
-    virtual uno::Reference< io::XInputStream > SAL_CALL createInputStream() override;
+    virtual uno::Reference< io::XInputStream > createInputStream() override;
 };
 
 }
@@ -58,7 +59,7 @@ uno::Reference< io::XInputStream > InputStreamProvider::createInputStream()
 
 uno::Reference< io::XInputStreamProvider > exportDialogModel(
     uno::Reference< container::XNameContainer > const & xDialogModel,
-    uno::Reference< uno::XComponentContext > const & xContext,
+    uno::Reference< cpo::uno::XComponentContext > const & xContext,
     uno::Reference< XModel > const & xDocument )
 {
     uno::Reference< xml::sax::XWriter > xWriter = xml::sax::Writer::create(xContext);
@@ -75,7 +76,7 @@ uno::Reference< io::XInputStreamProvider > exportDialogModel(
 void importDialogModel(
     uno::Reference< io::XInputStream > const & xInput,
     uno::Reference< container::XNameContainer > const & xDialogModel,
-    uno::Reference< uno::XComponentContext > const & xContext,
+    uno::Reference< cpo::uno::XComponentContext > const & xContext,
     uno::Reference< XModel > const & xDocument )
 {
     uno::Reference< xml::sax::XParser > xParser = xml::sax::Parser::create( xContext );

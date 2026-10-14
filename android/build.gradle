@@ -9,7 +9,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.9.2'
+        classpath 'com.android.tools.build:gradle:9.3.0'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -20,6 +20,20 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        exclusiveContent {
+            forRepository {
+                ivy {
+                    url 'https://storage.googleapis.com/r8-releases'
+
+                    patternLayout {
+                        artifact '/raw/[revision]/[module].[ext]'
+                    }
+
+                    metadataSources { artifact() }
+                }
+            }
+            filter { includeGroup("r8") }
+        }
     }
 }
 

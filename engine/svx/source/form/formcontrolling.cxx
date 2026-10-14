@@ -44,7 +44,7 @@ namespace svx
 {
 
 
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::form::runtime::XFormController;
     using ::com::sun::star::form::runtime::FormOperations;
     using ::cpo::uno::Exception;
@@ -54,7 +54,7 @@ namespace svx
     using ::cpo::uno::Sequence;
     using ::com::sun::star::beans::NamedValue;
     using ::com::sun::star::beans::XPropertySet;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::com::sun::star::sdbc::SQLException;
     using ::com::sun::star::sdb::SQLErrorEvent;
     using ::com::sun::star::lang::EventObject;
@@ -371,7 +371,7 @@ namespace svx
     }
 
 
-    void SAL_CALL FormControllerHelper::invalidateFeatures( const Sequence< ::sal_Int16 >& Features )
+    void FormControllerHelper::invalidateFeatures( const Sequence< ::sal_Int16 >& Features )
     {
         if ( !m_pInvalidationCallback )
             // nobody's interested in ...
@@ -389,7 +389,7 @@ namespace svx
     }
 
 
-    void SAL_CALL FormControllerHelper::invalidateAllFeatures()
+    void FormControllerHelper::invalidateAllFeatures()
     {
         if ( !m_pInvalidationCallback )
             // nobody's interested in ...
@@ -432,14 +432,14 @@ namespace svx
     }
 
 
-    void SAL_CALL FormControllerHelper::errorOccured( const SQLErrorEvent& Event )
+    void FormControllerHelper::errorOccured( const SQLErrorEvent& Event )
     {
         OSL_ENSURE( !m_aOperationError.hasValue(), "FormControllerHelper::errorOccurred: two errors during one operation?" );
         m_aOperationError = Event.Reason;
     }
 
 
-    void SAL_CALL FormControllerHelper::disposing( const EventObject& /*_Source*/ )
+    void FormControllerHelper::disposing( const EventObject& /*_Source*/ )
     {
         // not interested in
     }

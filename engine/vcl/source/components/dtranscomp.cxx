@@ -46,7 +46,7 @@
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 
@@ -74,9 +74,9 @@ public:
      * XServiceInfo
      */
 
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     static Sequence< OUString > getSupportedServiceNames_static();
 
@@ -84,27 +84,21 @@ public:
      * XClipboard
      */
 
-    virtual Reference< css::datatransfer::XTransferable > SAL_CALL getContents() override;
+    virtual Reference< css::datatransfer::XTransferable > getContents() override;
 
-    virtual void SAL_CALL setContents(
+    virtual void setContents(
         const Reference< css::datatransfer::XTransferable >& xTrans,
         const Reference< css::datatransfer::clipboard::XClipboardOwner >& xClipboardOwner ) override;
 
-    virtual OUString SAL_CALL getName() override;
-
-    /*
-     * XClipboardEx
-     */
-
-    virtual sal_Int8 SAL_CALL getRenderingCapabilities() override;
+    virtual OUString getName() override;
 
     /*
      * XClipboardNotifier
      */
-    virtual void SAL_CALL addClipboardListener(
+    virtual void addClipboardListener(
         const Reference< css::datatransfer::clipboard::XClipboardListener >& listener ) override;
 
-    virtual void SAL_CALL removeClipboardListener(
+    virtual void removeClipboardListener(
         const Reference< css::datatransfer::clipboard::XClipboardListener >& listener ) override;
 };
 
@@ -166,11 +160,6 @@ OUString GenericClipboard::getName()
     return u"CLIPBOARD"_ustr;
 }
 
-sal_Int8 GenericClipboard::getRenderingCapabilities()
-{
-    return 0;
-}
-
 void GenericClipboard::addClipboardListener( const Reference< datatransfer::clipboard::XClipboardListener >& listener )
 {
     std::unique_lock aGuard(m_aMutex);
@@ -187,9 +176,9 @@ void GenericClipboard::removeClipboardListener( const Reference< datatransfer::c
 
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 vcl_SystemClipboard_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     SolarMutexGuard aGuard;
     auto xClipboard = ImplGetSVData()->mpDefInst->CreateClipboard( args );
@@ -209,14 +198,14 @@ class GenericDragSource : public ::comphelper::WeakComponentImplHelper<
             css::lang::XServiceInfo
             >
 {
-    css::uno::Reference<css::datatransfer::XTransferable> m_xTrans;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_xTrans;
 public:
     GenericDragSource() {}
 
     // XDragSource
-    virtual bool    SAL_CALL isDragImageSupported() override;
-    virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) override;
-    virtual void        SAL_CALL startDrag(
+    virtual bool    isDragImageSupported() override;
+    virtual sal_Int32   getDefaultCursor( sal_Int8 dragAction ) override;
+    virtual void        startDrag(
                                      const datatransfer::dnd::DragGestureEvent& trigger,
                                      sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
                                      const Reference< datatransfer::XTransferable >& transferable,
@@ -224,15 +213,15 @@ public:
                                      ) override;
 
     // XInitialization
-    virtual void        SAL_CALL initialize( const Sequence< Any >& arguments ) override;
+    virtual void        initialize( const Sequence< Any >& arguments ) override;
 
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     { return u"com.sun.star.datatransfer.dnd.VclGenericDragSource"_ustr; }
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override
+    bool supportsService(OUString const & ServiceName) override
     { return cppu::supportsService(this, ServiceName); }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     { return getSupportedServiceNames_static(); }
 
     static Sequence< OUString > getSupportedServiceNames_static()
@@ -290,23 +279,23 @@ public:
     GenericDropTarget() {}
 
     // XInitialization
-    virtual void        SAL_CALL initialize( const Sequence< Any >& args ) override;
+    virtual void        initialize( const Sequence< Any >& args ) override;
 
     // XDropTarget
-    virtual void        SAL_CALL addDropTargetListener( const Reference< css::datatransfer::dnd::XDropTargetListener >& ) override;
-    virtual void        SAL_CALL removeDropTargetListener( const Reference< css::datatransfer::dnd::XDropTargetListener >& ) override;
-    virtual bool    SAL_CALL isActive() override;
-    virtual void        SAL_CALL setActive( bool active ) override;
-    virtual sal_Int8    SAL_CALL getDefaultActions() override;
-    virtual void        SAL_CALL setDefaultActions( sal_Int8 actions ) override;
+    virtual void        addDropTargetListener( const Reference< css::datatransfer::dnd::XDropTargetListener >& ) override;
+    virtual void        removeDropTargetListener( const Reference< css::datatransfer::dnd::XDropTargetListener >& ) override;
+    virtual bool    isActive() override;
+    virtual void        setActive( bool active ) override;
+    virtual sal_Int8    getDefaultActions() override;
+    virtual void        setDefaultActions( sal_Int8 actions ) override;
 
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     { return u"com.sun.star.datatransfer.dnd.VclGenericDropTarget"_ustr; }
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override
+    bool supportsService(OUString const & ServiceName) override
     { return cppu::supportsService(this, ServiceName); }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     { return getSupportedServiceNames_static(); }
 
     static Sequence< OUString > getSupportedServiceNames_static()
@@ -367,7 +356,7 @@ SalInstance::CreateClipboard(const Sequence<Any>& arguments)
         // in non-COKit below we keep handing out one single instance; see also
         // <https://lists.freedesktop.org/archives/libreoffice/2020-April/084824.html> "Re: Linux
         // SAL_USE_VCLPLUGIN=svp and the clipboard"):
-        css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
+        cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
             css::datatransfer::clipboard::KitClipboard::create(
                 comphelper::getProcessComponentContext());
         return xClipboard;
@@ -380,13 +369,13 @@ SalInstance::CreateClipboard(const Sequence<Any>& arguments)
     return m_clipboard;
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDragSource>
+cpo::uno::Reference<css::datatransfer::dnd::XDragSource>
 SalInstance::ImplCreateDragSource(const SystemEnvData&)
 {
     return nullptr;
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDragSource>
+cpo::uno::Reference<css::datatransfer::dnd::XDragSource>
 SalInstance::CreateDragSource(const SystemEnvData& rSysEnv)
 {
     // We run unit tests in parallel, which is a problem when touching a shared resource
@@ -396,13 +385,13 @@ SalInstance::CreateDragSource(const SystemEnvData& rSysEnv)
     return ImplCreateDragSource(rSysEnv);
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget>
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget>
 SalInstance::ImplCreateDropTarget(const SystemEnvData&)
 {
     return nullptr;
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget>
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget>
 SalInstance::CreateDropTarget(const SystemEnvData& rSysEnv)
 {
     // see SalInstance::CreateDragSource

@@ -31,6 +31,7 @@ interface CtxtCommandEntry {
 	icon?: string;
 	command?: string;
 	items?: Record<string, CtxtValueType>;
+	callback?: () => void;
 }
 
 type CtxtValueType = CtxtCommandEntry | string;
@@ -141,6 +142,9 @@ class ContextMenuControl extends JSControl {
 
 		if (window.mode.isSmallScreenDevice()) {
 			window.contextMenuWizard = true;
+			const insertCommentEntry = contextMenu['.uno:InsertAnnotation'];
+			if (insertCommentEntry && typeof insertCommentEntry !== 'string')
+				insertCommentEntry.callback = () => app.map.insertComment();
 			const menuData =
 				window.L.Control.JSDialogBuilder.getMenuStructureForMobileWizard(
 					contextMenu,
@@ -197,11 +201,7 @@ class ContextMenuControl extends JSControl {
 			}
 
 			if (key === 'saveimagetowopi') {
-				var ext =
-					GraphicSelection.extraInfo &&
-					GraphicSelection.extraInfo.graphicExtension
-						? GraphicSelection.extraInfo.graphicExtension
-						: 'png';
+				const ext = GraphicSelection.graphicExtension() ?? 'png';
 				map._saveImageToWopi = true;
 				map.openSaveAs(ext);
 				return false;
@@ -550,6 +550,10 @@ class ContextMenuControl extends JSControl {
 					name: _(itemName),
 					isHtmlName: true,
 				};
+
+				// The engine names the icon of an item that has one, e.g. the
+				// sentence checker's icon on the message of a grammar error.
+				if (item.icon) contextMenu[item.command].icon = item.icon;
 
 				if (item.checktype === 'checkmark') {
 					if (item.checked === 'true') {

@@ -17,22 +17,23 @@
 #pragma once
 
 #include <common/Authorization.hpp>
+#include <common/Common.hpp>
 #include <common/Log.hpp>
 #include <common/Protocol.hpp>
+#include <common/Rectangle.hpp>
 #include <common/Session.hpp>
 #include <common/SigUtil.hpp>
 #include <common/Util.hpp>
 #include <net/Socket.hpp>
 #include <wsd/QuarantineUtil.hpp>
+#include <wsd/RemoteLinks.hpp>
 #include <wsd/ServerAuditUtil.hpp>
 #include <wsd/SlideCache.hpp>
 #include <wsd/Storage.hpp>
-#include <wsd/TileCache.hpp>
 #include <wsd/TileDesc.hpp>
 
 #if !MOBILEAPP
 #include <wsd/wopi/WopiStorage.hpp>
-#include <wsd/Admin.hpp>
 #else // MOBILEAPP
 #include <common/MobileApp.hpp>
 #endif // MOBILEAPP
@@ -41,7 +42,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
@@ -49,6 +49,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -57,6 +58,7 @@
 #include <Poco/URI.h>
 
 // Forwards.
+class Admin;
 class PrisonerRequestDispatcher;
 class CheckFileInfo;
 class DocumentBroker;
@@ -296,11 +298,63 @@ protected:
     {
     }
 
+public:
     /// The app-side numeric identifier of this document in a mobile-style
     /// build; 0 in the server build.
     unsigned getMobileAppDocId() const { return _mobileAppDocId; }
 
-public:
+    /// True while this document has no client sessions on purpose, because the app dropped
+    /// its views and means to open one again later. False at all other times.
+    bool isDetached() const { return _detached; }
+
+    /// Read and written from the app's own thread as well as the polling thread.
+    void setDetached(bool detached) { _detached = detached; }
+
+    /// Where a view was looking when it went away. An empty part, a zoom of zero and an
+    /// empty visible area each mean that value was never recorded.
+    struct ViewPosition
+    {
+        /// The identifier of the part, as the protocol spells it.
+        std::string part;
+        int zoomPercent = 0;
+        /// True when the view was in editing mode rather than viewing mode.
+        bool editMode = false;
+        /// The area the client had in view, in document twips.
+        Util::Rectangle visibleArea;
+        /// Where the text cursor was, in document twips.
+        Util::Rectangle cursor;
+        /// The two ends of the text selection, in document twips.
+        Util::Rectangle selectionStart;
+        Util::Rectangle selectionEnd;
+        /// The cell the cursor was on, such as "D24". Empty in a document with no cells.
+        std::string cellAddress;
+
+        bool hasPart() const { return !part.empty(); }
+        bool hasZoom() const { return zoomPercent > 0; }
+        bool hasVisibleArea() const { return visibleArea.hasSurface(); }
+        bool hasCursor() const { return cursor.isValid() && cursor.getHeight() > 0; }
+        bool hasSelection() const
+        {
+            return selectionStart.isValid() && selectionEnd.isValid() &&
+                   selectionStart.getHeight() > 0 && selectionEnd.getHeight() > 0;
+        }
+        bool hasCellAddress() const { return !cellAddress.empty(); }
+    };
+
+    /// What the last view of this document was looking at, kept for the view that opens
+    /// next. Empty until a view departs from a document that is staying loaded.
+    const ViewPosition& getLastViewPosition() const { return _lastViewPosition; }
+
+    /// Keep where this session was looking, so the next view of the document opens there.
+    /// A value the session never reported keeps what the session before it reported.
+    void rememberViewPosition(const ClientSession& session);
+
+#if APP_HAS_SETTINGS_STORE
+    /// Reads the user's own configuration and asks this document's kit to apply it.
+    /// Returns whether there was any. Runs on the polling thread.
+    bool installUserPresets();
+#endif
+
     virtual ~DocumentBroker();
 
     /// Called when removed from the DocBrokers list
@@ -352,6 +406,11 @@ public:
     bool attemptLock(ClientSession& session, std::string& failReason);
 
     bool isDocumentChangedInStorage() const { return _documentChangedInStorage; }
+
+    /// Called when document conflict is detected (i.e. it changed in storage).
+    /// @param details optional un-translated technical fault analysis (differing
+    /// timestamps and the storage response) shown in the conflict dialog.
+    void handleDocumentConflict(std::string details = std::string());
 
     /// Invoked by the client to rename the document filename.
     /// Returns an error message in case of failure, otherwise an empty string.
@@ -435,7 +494,7 @@ public:
 
     /// Loads and adds a new session. Returns the new number of sessions.
     std::size_t addSession(const std::shared_ptr<ClientSession>& session,
-                           std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo = nullptr);
+                           std::unique_ptr<WOPIFileInfo> wopiFileInfo = nullptr);
 
     /// Removes a session by ID. Returns the new number of sessions.
     std::size_t removeSession(const std::shared_ptr<ClientSession>& session);
@@ -445,6 +504,90 @@ public:
 
     /// Add a callback to be invoked in our polling thread.
     void addCallback(const SocketPoll::CallbackFn& fn);
+
+    /// Sends a raw text frame to the kit child process, without a view prefix.
+    bool sendTextFrameToKit(const std::string& message);
+
+    /// Returns true when the given access token belongs to a live session of
+    /// this document.
+    bool isKnownAccessToken(const std::string& accessToken) const;
+
+#if !MOBILEAPP
+    /// Records the public part of a remote link, the same for every view
+    void setRemoteDocumentSource(const std::string& wopiSrc, const std::string& name,
+                                 const std::string& lastModifiedTime,
+                                 const std::string& persistentLink);
+
+    /// Records the source documents this document's own content names, the whole of what it
+    /// names, so that a source the storage listed no remote link for is still reported.
+    void setRemoteDocumentNamedSources(std::vector<std::string> names);
+
+    /// Records the access token one view holds for a remote link. Private.
+    void setRemoteDocumentViewToken(const std::string& tag, const std::string& wopiSrc,
+                                    const std::string& accessToken);
+
+    /// Records that one view's storage answers link access requests and asks it for the
+    /// sources this document names that no remote link stands for. Private to that view.
+    void enableRemoteDocumentLinkAccess(const std::string& tag);
+
+    /// Takes the storage's answer to one view's link access request for one source.
+    void completeRemoteDocumentLinkAccess(const std::string& tag, const std::string& persistentLink,
+                                          unsigned statusCode, const std::string& body);
+
+    /// Asks one view's storage again for the document behind one source this document names.
+    void resolveRemoteDocumentSource(const std::string& tag, const std::string& persistentLink);
+
+    /// Records a remote link and gives its access token to the view that
+    /// holds the given one-time token, coming from POST /cool/links.
+    bool registerRemoteDocumentToken(const std::string& oneTimeToken, const std::string& wopiSrc,
+                                     const std::string& accessToken, const std::string& name,
+                                     const std::string& lastModifiedTime,
+                                     const std::string& persistentLink);
+
+    /// Drops the remote link bound to the given persistent link, at the request of a view. The
+    /// link is dropped for every view, since the list of remote links is the same for all of
+    /// them. Reports whether one was bound to it.
+    bool removeRemoteDocumentSource(const std::string& persistentLink);
+
+    /// Opens or drops one view's subscription to the remote document bound to the given
+    /// persistent link. The view is named by its tag.
+    void handleRemoteDocumentSubscribe(const std::string& tag,
+                                       const std::string& persistentLink, bool subscribe);
+
+    /// Returns the live session with the given id, or null when there is none.
+    std::shared_ptr<ClientSession> findSession(const std::string& id) const;
+
+    /// Removes the record of one view's remote document subscription that was
+    /// not accepted. The view is named by its tag.
+    void removeRemoteSubscription(const std::string& tag, const std::string& wopiSrc);
+
+    /// Drops everything one view held for remote links when it leaves.
+    void removeRemoteDocumentView(const std::string& tag);
+
+    /// Handles a remote document event addressed to one view, named by its
+    /// tag: updates that view's connection state, or passes a content event on
+    /// to the kit.
+    void sendRemoteDocumentEvent(const std::string& tag, const std::string& encodedWopiSrc,
+                                 const std::string& eventArguments);
+
+    /// Routes a read-only client command from one view to the remote document bound to the
+    /// given persistent link. The view is named by its tag.
+    void sendRemoteDocumentCommand(const std::string& tag, const std::string& persistentLink,
+                                   const std::string& command);
+
+    /// Delivers a wrapped remote document reply to the view that asked for it,
+    /// named by its tag, if that view is still connected.
+    void sendRemoteDocumentCommandResult(const std::string& tag,
+                                         const std::string& encodedWopiSrc,
+                                         const std::vector<char>& payload);
+
+    /// Records the docKeys from a comma-separated chain as linked to this
+    /// document through headless sessions.
+    void addToIncomingDocKeyChain(const std::string& docKeyChain);
+#endif
+
+    /// The ids of the document's live sessions.
+    std::vector<std::string> getSessionIds() const;
 
     /// Transfer this socket into our polling thread / loop.
     void addSocketToPoll(const std::shared_ptr<StreamSocket>& socket);
@@ -479,14 +622,7 @@ public:
 
     void clearCaches();
 
-    void invalidateTiles(const std::string& tiles, CanonicalViewId canonicalViewId)
-    {
-        // Remove from cache.
-        _tileCache->invalidateTiles(tiles, canonicalViewId);
-        //Tiles invalidate also mean slidelayers are also invalid now
-        // slides modified so need to rerender on request
-        invalidateSlideLayerCache();
-    }
+    void invalidateTiles(const std::string& tiles, CanonicalViewId canonicalViewId);
 
     void invalidateSlideLayerCache()
     {
@@ -494,6 +630,11 @@ public:
         // Currently can't detect which slide was modified and
         // based on our key choice can't remove just cache for particular slide
         _slideLayerCache.erase_all();
+
+        // A rendering that the kit is working on drew the document as it was before the
+        // change, so its layers are out of date as soon as they arrive.
+        for (auto& pending : _pendingSlideRenders)
+            pending.second.outdated = true;
     }
 
     void handleTileRequest(const StringVector &tokens, bool forceKeyframe,
@@ -677,12 +818,28 @@ public:
     // time since construction
     void timeoutNotLoaded(std::chrono::steady_clock::time_point now);
 
+    /// Tells every session whether a document settings change it makes now would
+    /// be felt in this document. It depends on who else is here, so it is sent
+    /// again as people come and go.
+    void sendDocumentSettingsLive();
+
+    bool isDocumentSettingsLive(const std::shared_ptr<ClientSession>& session) const;
+
 #if !MOBILEAPP
+    /// Reads this user's settings into the jail again and has the kit apply them,
+    /// so a change made in the dialog takes hold without reopening the document.
+    /// Only while they are the one session: see the body.
+    void reinstallUserPresets(const std::shared_ptr<ClientSession>& session);
+
+    /// Fetches this user's configuration from the host into the jail and asks
+    /// the kit to read it. With onlyWhileAlone the result is dropped unless the
+    /// document still has the one session it had when the fetch began.
     void asyncInstallPresets(const std::shared_ptr<ClientSession>& session,
                              const std::string& configId,
                              const std::string& userSettingsUri,
                              const std::string& presetsPath,
-                             std::map<std::string, std::string> groupOverridePath);
+                             std::map<std::string, std::string> groupOverridePath,
+                             bool onlyWhileAlone = false);
 
     static void getBrowserSettingSync(const std::shared_ptr<ClientSession>& session,
                                       const std::string& userSettingsUri);
@@ -701,6 +858,7 @@ public:
                                     const std::string& userSettingsUri,
                                     const std::string& presetsPath,
                                     std::map<std::string, std::string> groupOverridePath,
+                                    bool sharedPresets,
                                     const std::shared_ptr<ClientSession>& session,
                                     const std::function<void(bool)>& finishedCB);
 
@@ -717,6 +875,8 @@ public:
 
     static std::shared_ptr<const http::Response> sendHttpSyncRequest(const std::string& url,
                                                                      const std::string& logContext);
+
+    bool forwardPasteToChild(const std::string& viewId, const std::string& message, bool binary);
 #endif // !MOBILEAPP
 
     /// Update the stored last-modified timestamp to match a collab
@@ -750,7 +910,7 @@ private:
     bool download(const std::shared_ptr<ClientSession>& session, const std::string& jailId,
                   const Poco::URI& uriPublic,
                   const AdditionalFilePocoUris& additionalFileUrisPublic,
-                  std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo);
+                  std::unique_ptr<WOPIFileInfo> wopiFileInfo);
 
     /// Actual document download and post-download processing.
     /// Must be called only when creating the storage for the first time.
@@ -763,13 +923,20 @@ private:
     /// Returns the templateSource, if any.
     std::string updateSessionWithWopiInfo(const std::shared_ptr<ClientSession>& session,
                                           WopiStorage* wopiStorage,
-                                          std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo);
-
-    /// Process the configured plugins, if any, after downloading the document file.
-    bool processPlugins(std::string& localPath);
+                                          std::unique_ptr<WOPIFileInfo> wopiFileInfo);
 
     /// Start an asynchronous CheckFileInfo request.
     void checkFileInfo(const std::shared_ptr<ClientSession>& uri, int redirectLimit);
+
+    /// The path in the staging area of this document's jail that a file staged under
+    /// the given name sits at. Empty when the jail cannot be reached.
+    std::string jailStagingPath(const std::string& name) const;
+
+    /// Writes the presentation a source document wrote into the staging area of this
+    /// document's jail. answer is the reply past its message name: a header line and then the
+    /// file. Returns the name it was staged under, which is empty when the file could not be
+    /// staged.
+    std::string stageExportedSlides(std::string_view answer);
 #endif // !MOBILEAPP
 
     bool isLoaded() const { return _docState.hadLoaded(); }
@@ -779,9 +946,13 @@ private:
     void lockIfEditing(const std::shared_ptr<ClientSession>& session);
 
     /// Updates the document's lock in storage to either locked or unlocked.
+    /// @timeout overrides the default connection timeout; zero to use it.
     /// Returns true iff the operation was successful.
     bool updateStorageLockState(ClientSession& session, StorageBase::LockState lock,
-                                std::string& error);
+                                std::string& error,
+                                std::chrono::seconds timeout = std::chrono::seconds::zero(),
+                                SocketPoll* poller = nullptr,
+                                StorageBase::LockUpdateResult::Status* status = nullptr);
 
     /// Updates the document's lock in storage asynchronously to either locked or unlocked.
     /// Returns false if an error prevented issuing the asynchronous request.
@@ -802,8 +973,17 @@ private:
     void handleTileResponse(const std::shared_ptr<Message>& message);
     void handleDialogPaintResponse(const std::vector<char>& payload, bool child);
     void handleTileCombinedResponse(const std::shared_ptr<Message>& message);
+    void handleTileGoneResponse(const std::shared_ptr<Message>& message);
     void handleSlideLayerResponse(const std::shared_ptr<Message>& message);
+
+    /// Gives the views that waited for a finished slide rendering what the kit produced for
+    /// it, either the cached layers, the message that reports the failure, or a fresh
+    /// rendering when the document changed while this one ran.
+    void finishPendingSlideRender(const std::string& cacheKey,
+                                  const std::shared_ptr<Message>& completion, bool cached);
+
     void handleDialogRequest(const std::string& dialogCmd);
+
 
     /// Invoked to issue a save before renaming the document filename.
     void startRenameFileCommand();
@@ -1522,7 +1702,6 @@ private:
     public:
         StorageManager(std::chrono::milliseconds minTimeBetweenUploads)
             : _request(minTimeBetweenUploads)
-            , _sizeOnServer(0)
             , _sizeAsUploaded(0)
         {
             if (Log::traceEnabled())
@@ -1605,18 +1784,11 @@ private:
                              time) != _earlierModifiedServerTimeStrings.end();
         }
 
-        /// Set size of the document as we've downloaded it, or after a successful upload.
-        void setSizeOnServer(std::size_t size) { _sizeOnServer = size; }
-
-        /// Get size of the document as we've downloaded it, or after a successful upload.
-        std::size_t getSizeOnServer() const { return _sizeOnServer; }
-
         /// Set size of the document as we've uploaded.
-        /// Used to resynchronize after an upload failure that break reliance on the LastModifiedTime.
         void setSizeAsUploaded(std::size_t size) { _sizeAsUploaded = size; }
 
-        /// Get size of the document as we've set in our PutFile header.
-        /// Used to resynchronize after an upload failure that break reliance on the LastModifiedTime.
+        /// Get size of the document as we've set in our PutFile header. Used to
+        /// guess whether an upload that got no response nevertheless landed.
         std::size_t getSizeAsUploaded() const { return _sizeAsUploaded; }
 
         /// Returns how long the last upload took.
@@ -1658,7 +1830,6 @@ private:
                << Util::getTimeForLog(now, _lastUploadedFileModifiedLocalTime);
             os << indent << "last upload was successful: " << lastUploadSuccessful();
             os << indent << "upload failure count: " << uploadFailureCount();
-            os << indent << "size on server: " << _sizeOnServer;
             os << indent << "last upload size: " << _sizeAsUploaded;
         }
 
@@ -1679,13 +1850,7 @@ private:
         /// Recent earlier modified times, oldest first.
         std::vector<std::string> _earlierModifiedServerTimeStrings;
 
-        /// The size of the document, as we downloaded from the server,
-        /// and after successfully uploading.
-        /// Used to help resynchronize the LastModifiedTime after an upload failure.
-        std::size_t _sizeOnServer;
-
         /// The size of the document as we uploaded to the server.
-        /// Used to help resynchronize the LastModifiedTime after an upload failure.
         std::size_t _sizeAsUploaded;
     };
 
@@ -1913,11 +2078,6 @@ private:
     /// Performs aggregated work after servicing all client sessions
     void processBatchUpdates();
 
-    /// Called when document conflict is detected (i.e. it changed in storage).
-    /// @param details optional un-translated technical fault analysis (differing
-    /// timestamps and the storage response) shown in the conflict dialog.
-    void handleDocumentConflict(std::string details = std::string());
-
     std::string applyBrowserAccessibility(const std::string& message,
                                        const std::string& viewId);
 
@@ -1956,12 +2116,18 @@ private:
     // Maps download id -> URL
     std::map<std::string, std::string> _registeredDownloadLinks;
 
+#if !MOBILEAPP
+    /// The remote links this document may subscribe to, with their
+    /// subscriptions and the client-facing view of them.
+    RemoteLinks _remoteLinks;
+#endif
+
     /// Embedded media map [id, json].
     std::map<std::string, std::string> _embeddedMedia;
 
 #if !MOBILEAPP
     /// stores timestamps of preset files when they get installed to compare later to check if they are modified
-    std::map<std::string, std::filesystem::file_time_type> _presetTimestamp;
+    std::map<std::string, std::chrono::file_clock::time_point> _presetTimestamp;
 #endif
 
     /// If we set the user-requested initial (on load) settings to be forced.
@@ -2004,6 +2170,8 @@ private:
     // configId for the user-level preset stream; empty when no integrator userSettingsUri is in
     // play:
     std::string _userConfigId;
+    /// Where this document's configuration was read from, so it can be read again.
+    std::string _userSettingsUri;
 
     std::shared_ptr<ChildProcess> _childProcess;
 
@@ -2031,6 +2199,23 @@ private:
 
     /// Cached slide layer for slideshow
     SlideLayerCacheMap _slideLayerCache;
+
+    /// One slide rendering that the kit was asked for and has not finished yet.
+    struct PendingSlideRender
+    {
+        /// The getslide request that asked for this rendering.
+        std::string request;
+
+        /// The views that asked for the same rendering while the kit was working on it.
+        std::vector<std::weak_ptr<ClientSession>> waiters;
+
+        /// True once the document changed while the kit was working on this rendering, which
+        /// leaves its layers showing the document as it was before the change.
+        bool outdated = false;
+    };
+
+    /// The slide renderings the kit is working on, under the cache key of each rendering.
+    Util::UnorderedStringMap<PendingSlideRender> _pendingSlideRenders;
 
     std::unique_ptr<LockContext> _lockCtx;
 
@@ -2068,6 +2253,13 @@ private:
     // Relevant only in the mobile apps
     const unsigned _mobileAppDocId;
 
+    /// True while the document has no client sessions on purpose. The app sets it from
+    /// its own thread before it drops the last view, so it is read atomically.
+    std::atomic<bool> _detached;
+
+    /// Where the last view to leave this document was looking.
+    ViewPosition _lastViewPosition;
+
     ChildType _type;
 
     /// The main state of the document.
@@ -2083,6 +2275,28 @@ private:
     /// for user's command to act.
     bool _documentChangedInStorage;
 
+    /// Whether we know that our last upload did not reach storage. When we do,
+    /// any change in storage is somebody else's. When we don't, our own upload
+    /// may have landed and we have to work out which version storage holds.
+    bool _lastUploadDefinitelyFailed;
+
+    /// True while the upload in flight, or the last one, uses an access token that has expired or
+    /// that the host has rejected.
+    bool _lastResortUpload;
+
+    /// True when the last upload used an expired or rejected access token and failed.
+    bool _lastResortUploadFailed;
+
+    /// Base64 SHA-256 of the bytes of our last upload, taken only when its fate
+    /// is unknown and we may have to recognise them in storage. Empty otherwise.
+    std::string _lastUploadedFileHash;
+
+    /// Earliest time at which we may ask storage what it holds after an upload
+    /// failure. Set ahead of now only when the upload got no response, to give
+    /// a host that is still writing our bytes time to finish. Default-constructed
+    /// (the clock's epoch) when there is nothing to wait for.
+    std::chrono::steady_clock::time_point _checkFileInfoNotBefore;
+
     /// True for file that COOLWSD::IsViewFileExtension return true.
     /// These files, such as PDF, don't have a reliable ModifiedStatus.
     bool _isViewFileExtension;
@@ -2097,8 +2311,26 @@ private:
 
     const bool _backgroundManualSave : 1;
 
+    /// True once any save of this document has failed, whether or not a later save succeeded.
+    bool _anySaveEverFailed : 1;
+
     /// Unique DocBroker ID for tracing and debugging.
     static std::atomic<unsigned> DocBrokerId;
 };
+
+#if MOBILEAPP
+/// The broker of the open in-process document with this app-side identifier, or a null
+/// pointer when no open document has it.
+std::shared_ptr<DocumentBroker> findBrokerByMobileAppDocId(unsigned mobileAppDocId);
+
+/// End a document that was left loaded with no views of its own. Does nothing when the
+/// document is not in that state, because closing its last session ends it instead.
+void closeDetachedDocument(unsigned mobileAppDocId);
+
+/// Stores one settings file the Options dialog has uploaded, and, when the engine is the
+/// one that reads it, applies it to every open document, so a setting saved now takes
+/// effect without reopening them. Called from the app's own thread.
+void uploadAndApplySettings(const std::string& payload);
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

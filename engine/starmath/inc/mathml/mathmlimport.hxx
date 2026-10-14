@@ -57,18 +57,18 @@ public:
     void useHTMLMLEntities(bool bUseHTMLMLEntities) { m_bUseHTMLMLEntities = bUseHTMLMLEntities; }
 
     static ErrCode
-    ReadThroughComponent(const css::uno::Reference<css::io::XInputStream>& xInputStream,
-                         const css::uno::Reference<css::lang::XComponent>& xModelComponent,
-                         css::uno::Reference<css::uno::XComponentContext> const& rxContext,
-                         css::uno::Reference<css::beans::XPropertySet> const& rPropSet,
+    ReadThroughComponent(const cpo::uno::Reference<css::io::XInputStream>& xInputStream,
+                         const cpo::uno::Reference<css::lang::XComponent>& xModelComponent,
+                         cpo::uno::Reference<cpo::uno::XComponentContext> const& rxContext,
+                         cpo::uno::Reference<css::beans::XPropertySet> const& rPropSet,
                          const char* pFilterName, bool bEncrypted, bool bUseHTMLMLEntities);
 
     static ErrCode
-    ReadThroughComponent(const css::uno::Reference<css::embed::XStorage>& xStorage,
-                         const css::uno::Reference<css::lang::XComponent>& xModelComponent,
+    ReadThroughComponent(const cpo::uno::Reference<css::embed::XStorage>& xStorage,
+                         const cpo::uno::Reference<css::lang::XComponent>& xModelComponent,
                          const char* pStreamName,
-                         css::uno::Reference<css::uno::XComponentContext> const& rxContext,
-                         css::uno::Reference<css::beans::XPropertySet> const& rPropSet,
+                         cpo::uno::Reference<cpo::uno::XComponentContext> const& rxContext,
+                         cpo::uno::Reference<css::beans::XPropertySet> const& rPropSet,
                          const char* pFilterName, bool bUseHTMLMLEntities);
 };
 
@@ -81,15 +81,15 @@ class SmXMLImport final : public SvXMLImport
     sal_Int16 mnSmSyntaxVersion;
 
 public:
-    SmXMLImport(const css::uno::Reference<css::uno::XComponentContext>& rContext,
+    SmXMLImport(const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
                 OUString const& implementationName, SvXMLImportFlags nImportFlags);
     virtual ~SmXMLImport() noexcept override;
 
-    void SAL_CALL endDocument() override;
+    void endDocument() override;
 
     SvXMLImportContext* CreateFastContext(
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override;
 
     SmNodeStack& GetNodeStack() { return aNodeStack; }
 

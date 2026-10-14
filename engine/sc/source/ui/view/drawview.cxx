@@ -66,6 +66,7 @@
 #include <sc.hrc>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 #define SC_HANDLESIZE_BIG       9
 
@@ -343,6 +344,8 @@ void ScDrawView::DoConnect(SdrOle2Obj* pOleObj)
 
 void ScDrawView::MarkListHasChanged()
 {
+    AdjustFrameHandlesToMarkCount();
+
     FmFormView::MarkListHasChanged();
 
     ScTabViewShell* pViewSh = rViewData.GetViewShell();

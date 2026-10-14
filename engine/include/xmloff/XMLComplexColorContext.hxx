@@ -23,10 +23,10 @@ private:
 
 public:
     XMLComplexColorImport(model::ComplexColor& rComplexColor);
-    void fillAttributes(const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
+    void fillAttributes(const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
     bool
     handleTransformContext(sal_Int32 nElement,
-                           const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
+                           const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
 };
 
 class XMLOFF_DLLPUBLIC XMLPropertyComplexColorContext final : public XMLElementPropertyContext
@@ -40,14 +40,14 @@ private:
 public:
     XMLPropertyComplexColorContext(
         SvXMLImport& rImport, sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList,
         const XMLPropertyState& rProp, std::vector<XMLPropertyState>& rProps);
 
-    css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& AttrList) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& AttrList) override;
 
-    void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    void endFastElement(sal_Int32 nElement) override;
 
     const model::ComplexColor& getComplexColor() { return maComplexColor; }
 };
@@ -59,11 +59,11 @@ private:
 
 public:
     XMLComplexColorContext(SvXMLImport& rImport, model::ComplexColor& rComplexColor,
-                           const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
+                           const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList);
 
-    css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    cpo::uno::Reference<css::xml::sax::XFastContextHandler> createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& AttrList) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& AttrList) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

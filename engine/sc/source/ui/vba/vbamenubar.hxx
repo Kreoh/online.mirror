@@ -17,13 +17,13 @@ typedef InheritedHelperInterfaceWeakImpl< ov::excel::XMenuBar > MenuBar_BASE;
 class ScVbaMenuBar : public MenuBar_BASE
 {
 private:
-    css::uno::Reference< ov::XCommandBar > m_xCommandBar;
+    cpo::uno::Reference< ov::XCommandBar > m_xCommandBar;
 
 public:
-    /// @throws css::uno::RuntimeException
-    ScVbaMenuBar( const css::uno::Reference< ov::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext, css::uno::Reference< ov::XCommandBar > xCommandBar );
+    /// @throws cpo::uno::RuntimeException
+    ScVbaMenuBar( const cpo::uno::Reference< ov::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< ov::XCommandBar > xCommandBar );
 
-    virtual cpo::uno::Any SAL_CALL Menus( const cpo::uno::Any& aIndex ) override;
+    virtual cpo::uno::Any Menus( const cpo::uno::Any& aIndex ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

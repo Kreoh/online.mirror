@@ -68,9 +68,9 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::beans;
-using namespace cpo::uno;
 
 
 // static
@@ -287,14 +287,14 @@ void EditView::SetSelection( const ESelection& rESel )
     if ( !pPortion->IsVisible() )
     {
         pPortion = getEditEngine().GetPrevVisPortion( pPortion );
-        ContentNode* pNode = pPortion ? pPortion->GetNode() : getEditEngine().GetEditDoc().GetObject( 0 );
+        ContentNode* pNode = pPortion ? &pPortion->GetNode() : &getEditEngine().GetEditDoc().GetObject( 0 );
         aNewSelection.Min() = EditPaM( pNode, pNode->Len() );
     }
     pPortion = getEditEngine().FindParaPortion( aNewSelection.Max().GetNode() );
     if ( !pPortion->IsVisible() )
     {
         pPortion = getEditEngine().GetPrevVisPortion( pPortion );
-        ContentNode* pNode = pPortion ? pPortion->GetNode() : getEditEngine().GetEditDoc().GetObject( 0 );
+        ContentNode* pNode = pPortion ? &pPortion->GetNode() : &getEditEngine().GetEditDoc().GetObject( 0 );
         aNewSelection.Max() = EditPaM( pNode, pNode->Len() );
     }
 
@@ -760,7 +760,7 @@ Reference<css::datatransfer::clipboard::XClipboard> EditView::GetClipboard() con
     return getImpl().GetClipboard();
 }
 
-css::uno::Reference< css::datatransfer::XTransferable > EditView::GetTransferable() const
+cpo::uno::Reference< css::datatransfer::XTransferable > EditView::GetTransferable() const
 {
     uno::Reference< datatransfer::XTransferable > xData = getEditEngine().CreateTransferable( getImpl().GetEditSelection() );
     return xData;
@@ -850,7 +850,7 @@ EVControlBits EditView::GetControlWord() const
     return getImpl().mnControl;
 }
 
-std::unique_ptr<EditTextObject> EditView::CreateTextObject()
+EditTextObject EditView::CreateTextObject()
 {
     return getImpEditEngine().CreateTextObject( getImpl().GetEditSelection() );
 }
@@ -869,7 +869,7 @@ void EditView::InsertText( const EditTextObject& rTextObject )
         getEditEngine().FormatAndLayout( this );
 }
 
-void EditView::InsertText( css::uno::Reference< css::datatransfer::XTransferable > const & xDataObj, const OUString& rBaseURL, bool bUseSpecial )
+void EditView::InsertText( cpo::uno::Reference< css::datatransfer::XTransferable > const & xDataObj, const OUString& rBaseURL, bool bUseSpecial )
 {
     getEditEngine().UndoActionStart( EDITUNDO_INSERT );
     getImpl().DeleteSelected();
@@ -1080,7 +1080,6 @@ static void KitSendSpellPopupMenu(const weld::Menu& rMenu, LanguageType nGuessLa
 }
 
 bool EditView::ExecuteSpellPopup(const Point& rPosPixel,
-                                 const Link<SpellCallbackInfo&, void>& /*rCallBack*/,
                                  bool /*bAddOtherOption*/)
 {
     if (IsSelectionAtPoint(rPosPixel))
@@ -1243,7 +1242,6 @@ bool EditView::ExecuteSpellPopup(const Point& rPosPixel,
                     xVirDev->DrawImage(Point(0, 0), aImage);
                     xInsertMenu->append(OUString::number(MN_DICTSTART + i), xDicTmp->getName(), *xVirDev);
                 }
-                getImpl().maDicNameSingle = xDicTmp->getName();
             }
         }
     }

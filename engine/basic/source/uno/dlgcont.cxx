@@ -51,15 +51,15 @@ namespace basic
 using namespace com::sun::star::document;
 using namespace com::sun::star::container;
 using namespace com::sun::star::io;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::ucb;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::xml::sax;
 using namespace com::sun::star;
 using namespace cppu;
 
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 
 
 // Implementation class SfxDialogLibraryContainer
@@ -385,12 +385,12 @@ Reference< css::resource::XStringResourcePersistence >
             xLibrariesStor = mxStorage->openStorageElement( maLibrariesDir, embed::ElementModes::READ );
                 // TODO: Should be READWRITE with new storage concept using store() instead of storeTo()
             if ( !xLibrariesStor.is() )
-                throw uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
+                throw cpo::uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
 
             xLibraryStor = xLibrariesStor->openStorageElement( aLibName, embed::ElementModes::READ );
                 // TODO: Should be READWRITE with new storage concept using store() instead of storeTo()
             if ( !xLibraryStor.is() )
-                throw uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
+                throw cpo::uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
         }
         catch(const cpo::uno::Exception& )
         {
@@ -433,12 +433,12 @@ void SfxDialogLibraryContainer::onNewRootStorage()
             try {
                 xLibrariesStor = mxStorage->openStorageElement( maLibrariesDir, embed::ElementModes::READWRITE );
                 if ( !xLibrariesStor.is() )
-                    throw uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
+                    throw cpo::uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
 
                 OUString aLibName = pDialogLibrary->getName();
                 xLibraryStor = xLibrariesStor->openStorageElement( aLibName, embed::ElementModes::READWRITE );
                 if ( !xLibraryStor.is() )
-                    throw uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
+                    throw cpo::uno::RuntimeException(u"null returned from openStorageElement"_ustr,getXWeak());
 
                 Reference< resource::XStringResourceWithStorage >
                     xStringResourceWithStorage( xStringResourcePersistence, UNO_QUERY );
@@ -477,7 +477,7 @@ Sequence< OUString > SfxDialogLibraryContainer::getSupportedServiceNames( )
 // Ctor
 SfxDialogLibrary::SfxDialogLibrary( ModifiableHelper& _rModifiable,
                                     OUString aName,
-                                    const Reference< XSimpleFileAccess3 >& xSFI,
+                                    const Reference< XSimpleFileAccess >& xSFI,
                                     SfxDialogLibraryContainer* pParent )
     : SfxDialogLibrary_BASE(_rModifiable, cppu::UnoType<XInputStreamProvider>::get(), xSFI)
     , m_pParent( pParent )
@@ -487,7 +487,7 @@ SfxDialogLibrary::SfxDialogLibrary( ModifiableHelper& _rModifiable,
 
 SfxDialogLibrary::SfxDialogLibrary( ModifiableHelper& _rModifiable,
                                     OUString aName,
-                                    const Reference< XSimpleFileAccess3 >& xSFI,
+                                    const Reference< XSimpleFileAccess >& xSFI,
                                     const OUString& aLibInfoFileURL,
                                     const OUString& aStorageURL,
                                     bool ReadOnly,
@@ -547,7 +547,7 @@ void SfxDialogLibrary::storeResourcesToURL( const OUString& URL,
     }
 }
 
-void SfxDialogLibrary::storeResourcesToStorage( const css::uno::Reference< css::embed::XStorage >& xStorage )
+void SfxDialogLibrary::storeResourcesToStorage( const cpo::uno::Reference< css::embed::XStorage >& xStorage )
 {
     OUString aComment = aResourceFileCommentBase + m_aName;
 
@@ -583,8 +583,8 @@ bool SfxDialogLibrary::isLibraryElementValid(const cpo::uno::Any& rElement) cons
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_sfx2_DialogLibraryContainer_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_sfx2_DialogLibraryContainer_get_implementation(cpo::uno::XComponentContext*,
                                                            cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new basic::SfxDialogLibraryContainer());

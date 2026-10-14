@@ -32,12 +32,11 @@
 #include <vcl/graph.hxx>
 #include <vcl/graphic/BitmapHelper.hxx>
 #include <vcl/svapp.hxx>
-#include <o3tl/string_view.hxx>
 
 const sal_uInt16 START_ITEMID = 1000;
 
 using namespace com::sun::star::awt;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -98,7 +97,6 @@ static void InsertSubMenuItems(const Reference<XPopupMenu>& rSubMenu, sal_uInt16
         return;
 
     AddonsOptions aAddonOptions;
-    OUString aSlotURL( u"slot:"_ustr );
 
     for ( sal_Int32 i = 0; i < xActionTriggerContainer->getCount(); i++ )
     {
@@ -125,22 +123,8 @@ static void InsertSubMenuItems(const Reference<XPopupMenu>& rSubMenu, sal_uInt16
                     GetMenuItemAttributes( xPropSet, aLabel, aCommandURL, aHelpURL, xGraphic, xSubContainer );
 
                     {
-                        // insert new menu item
-                        sal_Int32 nIndex = aCommandURL.indexOf( aSlotURL );
-                        if ( nIndex >= 0 )
-                        {
-                            // Special code for our menu implementation: some menu items don't have a
-                            // command url but uses the item id as a unique identifier. These entries
-                            // got a special url during conversion from menu=>actiontriggercontainer.
-                            // Now we have to extract this special url and set the correct item id!!!
-                            nNewItemId = static_cast<sal_uInt16>(o3tl::toInt32(aCommandURL.subView( nIndex+aSlotURL.getLength() )));
-                            rSubMenu->insertItem(nNewItemId, aLabel, 0, i);
-                        }
-                        else
-                        {
-                            rSubMenu->insertItem(nNewItemId, aLabel, 0, i);
-                            rSubMenu->setCommand(nNewItemId, aCommandURL);
-                        }
+                        rSubMenu->insertItem(nNewItemId, aLabel, 0, i);
+                        rSubMenu->setCommand(nNewItemId, aCommandURL);
 
                         // handle bitmap
                         if (xGraphic)
@@ -204,12 +188,6 @@ static Reference< XPropertySet > CreateActionTrigger(sal_uInt16 nItemId,
             xPropSet->setPropertyValue(u"Text"_ustr, Any(aLabel));
 
             OUString aCommandURL = rMenu->getCommand(nItemId);
-
-            if ( aCommandURL.isEmpty() )
-            {
-                aCommandURL = "slot:" + OUString::number( nItemId );
-            }
-
             xPropSet->setPropertyValue(u"CommandURL"_ustr, Any(aCommandURL));
 
             Reference<XBitmap> xBitmap(rMenu->getItemImage(nItemId), UNO_QUERY);
@@ -276,7 +254,7 @@ static void FillActionTriggerContainerWithMenu(const Reference<XPopupMenu>& rMen
 
                 rActionTriggerContainer->insertByIndex(nPos, Any(xPropSet));
 
-                css::uno::Reference<XPopupMenu> xPopupMenu = rMenu->getPopupMenu(nItemId);
+                cpo::uno::Reference<XPopupMenu> xPopupMenu = rMenu->getPopupMenu(nItemId);
                 if (xPopupMenu.is())
                 {
                     // recursive call to build next sub menu
@@ -305,13 +283,13 @@ void ActionTriggerHelper::CreateMenuFromActionTriggerContainer(
 
 void ActionTriggerHelper::FillActionTriggerContainerFromMenu(
     Reference< XIndexContainer > const & xActionTriggerContainer,
-    const css::uno::Reference<XPopupMenu>& rMenu)
+    const cpo::uno::Reference<XPopupMenu>& rMenu)
 {
     FillActionTriggerContainerWithMenu(rMenu, xActionTriggerContainer);
 }
 
 Reference< XIndexContainer > ActionTriggerHelper::CreateActionTriggerContainerFromMenu(
-    const css::uno::Reference<XPopupMenu>& rMenu,
+    const cpo::uno::Reference<XPopupMenu>& rMenu,
     const OUString* pMenuIdentifier )
 {
     return new RootActionTriggerContainer(rMenu, pMenuIdentifier);

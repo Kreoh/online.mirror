@@ -73,24 +73,24 @@
 namespace basctl
 {
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::script::XLibraryContainer;
     using ::com::sun::star::script::XStorageBasedLibraryContainer;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using ::cpo::uno::Exception;
     using ::com::sun::star::container::XNameContainer;
     using ::com::sun::star::container::NoSuchElementException;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY;
     using ::com::sun::star::task::XStatusIndicator;
     using ::cpo::uno::Any;
-    using ::com::sun::star::script::XLibraryContainer2;
+    using ::com::sun::star::script::XLibraryContainer;
     using ::com::sun::star::uri::UriReferenceFactory;
     using ::com::sun::star::uri::XUriReferenceFactory;
     using ::com::sun::star::uri::XUriReference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::util::XMacroExpander;
     using ::com::sun::star::util::theMacroExpander;
     using ::com::sun::star::io::XInputStreamProvider;
@@ -807,7 +807,7 @@ namespace basctl
         if ( _rxStatusIndicator.is() )
         {
             aArgs = ::comphelper::InitPropertySequence({
-                { "StatusIndicator", Any(_rxStatusIndicator) }
+                { u"StatusIndicator"_ustr, Any(_rxStatusIndicator) }
             });
         }
 
@@ -912,7 +912,7 @@ namespace basctl
         bool bIsShared = false;
         try
         {
-            Reference< XLibraryContainer2 > xLibContainer( getLibraryContainer( _eType ), UNO_QUERY_THROW );
+            Reference< XLibraryContainer > xLibContainer( getLibraryContainer( _eType ), UNO_QUERY_THROW );
 
             if ( !xLibContainer->hasByName( _rLibName ) || !xLibContainer->isLibraryLink( _rLibName ) )
                 return false;

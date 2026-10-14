@@ -20,7 +20,7 @@
 #ifndef INCLUDED_DBACCESS_ICONTROLLER_HXX
 #define INCLUDED_DBACCESS_ICONTROLLER_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <dbaccess/dbaccessdllapi.h>
 #include <rtl/ustring.hxx>
@@ -52,25 +52,15 @@ namespace dbaui
         */
         virtual void executeChecked(const css::util::URL& _rCommand, const cpo::uno::Sequence< css::beans::PropertyValue>& aArgs) = 0;
 
-        /** checks if the selected data source is read only
-            @return
-                <TRUE/> if read only, otherwise <FALSE/>
-        */
-        virtual bool isDataSourceReadOnly() const = 0;
-
         /** provides access to the model of the controller
 
             This must be the same model as returned by XController::getModel, and might be <NULL/> when
             the controller does not have an own model.
 
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
         */
-        virtual css::uno::Reference< css::frame::XController >
+        virtual cpo::uno::Reference< css::frame::XController >
                 getXController() = 0;
-
-        /** allows interception of user input, aka mouse clicks and key events
-        */
-        virtual bool interceptUserInput( const NotifyEvent& _rEvent ) = 0;
 
         virtual void acquire(  ) noexcept = 0;
         virtual void release(  ) noexcept = 0;

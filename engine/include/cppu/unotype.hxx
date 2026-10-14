@@ -20,23 +20,17 @@
 #ifndef INCLUDED_CPPU_UNOTYPE_HXX
 #define INCLUDED_CPPU_UNOTYPE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
-
-#if defined LIBO_INTERNAL_ONLY
 #include <type_traits>
-#endif
 
-#include "sal/types.h"
-#include "typelib/typeclass.h"
-#include "typelib/typedescription.h"
+#include <sal/types.h>
+#include <typelib/typeclass.h>
+#include <typelib/typedescription.h>
 
-namespace com { namespace sun { namespace star { namespace uno {
-    template< typename > class Reference;
-    class XInterface;
-} } } }
-namespace cpo::uno { class Any; class Exception; class Type; }
+namespace cpo::uno { template< typename > class Reference; }
+namespace cpo::uno { class Any; class Exception; class Type; class XInterface; }
 namespace cpo::uno { template< typename > class Sequence; }
 namespace rtl { class OUString; }
 
@@ -134,13 +128,11 @@ cppu_detail_getUnoType(
         ::typelib_TypeClass_UNSIGNED_SHORT);
 }
 
-#if defined LIBO_INTERNAL_ONLY
     // cf. sal/types.h sal_Unicode
 inline cpo::uno::Type const &
 cppu_detail_getUnoType(SAL_UNUSED_PARAMETER sal_uInt16 const *) {
     return cppu::detail::getTypeFromTypeClass(typelib_TypeClass_UNSIGNED_SHORT);
 }
-#endif
 
 inline cpo::uno::Type const &
 cppu_detail_getUnoType(SAL_UNUSED_PARAMETER ::sal_Int32 const *) {
@@ -179,13 +171,11 @@ cppu_detail_getUnoType(SAL_UNUSED_PARAMETER ::cppu::UnoCharType const *) {
     return ::cppu::detail::getTypeFromTypeClass(::typelib_TypeClass_CHAR);
 }
 
-#if defined LIBO_INTERNAL_ONLY
     // cf. sal/types.h sal_Unicode
 inline cpo::uno::Type const &
 cppu_detail_getUnoType(SAL_UNUSED_PARAMETER sal_Unicode const *) {
     return cppu::detail::getTypeFromTypeClass(typelib_TypeClass_CHAR);
 }
-#endif
 
 inline cpo::uno::Type const &
 cppu_detail_getUnoType(SAL_UNUSED_PARAMETER ::rtl::OUString const *) {
@@ -232,14 +222,14 @@ inline cpo::uno::Type const & cppu_detail_getUnoType(
 }
 
 inline cpo::uno::Type const & cppu_detail_getUnoType(
-    SAL_UNUSED_PARAMETER css::uno::XInterface const *)
+    SAL_UNUSED_PARAMETER cpo::uno::XInterface const *)
 {
     return ::cppu::detail::getTypeFromTypeClass(::typelib_TypeClass_INTERFACE);
 }
 
 template< typename T > inline cpo::uno::Type const &
 cppu_detail_getUnoType(
-    SAL_UNUSED_PARAMETER css::uno::Reference< T > const *)
+    SAL_UNUSED_PARAMETER cpo::uno::Reference< T > const *)
 {
     return ::cppu::UnoType< T >::get();
 }
@@ -264,25 +254,21 @@ namespace cppu {
    cppu::UnoUnsignedShortType, cppu::UnoCharType, cppu::UnoSequenceType with any
    appropriate template argument (the latter three to unambiguously specify UNO
    types, as the UNO types UNSIGNED SHORT and CHAR map to the same C++ type),
-   and css::uno::Reference with any appropriate template argument.
+   and cpo::uno::Reference with any appropriate template argument.
 */
 template< typename T > class UnoType {
 public:
     static cpo::uno::Type const & get() {
         using namespace ::cppu::detail;
-#if defined LIBO_INTERNAL_ONLY
         typedef typename std::remove_reference<T>::type T1;
             // for certain uses of UnoType<decltype(x)>
-#else
-        typedef T T1;
-#endif
         return cppu_detail_getUnoType(static_cast< T1 * >(NULL));
     }
 
 private:
-    UnoType(UnoType &) SAL_DELETED_FUNCTION;
-    ~UnoType() SAL_DELETED_FUNCTION;
-    void operator =(UnoType &) SAL_DELETED_FUNCTION;
+    UnoType(UnoType &) = delete;
+    ~UnoType() = delete;
+    void operator =(UnoType &) = delete;
 };
 
 template<> cpo::uno::Type inline const & UnoType<void>::get() {

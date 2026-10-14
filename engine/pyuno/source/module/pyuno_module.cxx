@@ -49,7 +49,7 @@
 #include <com/sun/star/reflection/XIdlClass.hpp>
 #include <com/sun/star/registry/InvalidRegistryException.hpp>
 #include <com/sun/star/script/CannotConvertException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/script/XInvocation2.hpp>
 #include <com/sun/star/reflection/XIdlReflection.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
@@ -58,11 +58,11 @@ using osl::Module;
 
 
 using cpo::uno::Sequence;
-using com::sun::star::uno::Reference;
+using cpo::uno::Reference;
 using cpo::uno::Any;
-using com::sun::star::uno::RuntimeException;
-using com::sun::star::uno::TypeDescription;
-using com::sun::star::uno::XComponentContext;
+using cpo::uno::RuntimeException;
+using cpo::uno::TypeDescription;
+using cpo::uno::XComponentContext;
 using com::sun::star::container::NoSuchElementException;
 using com::sun::star::reflection::XIdlClass;
 using com::sun::star::script::XInvocation2;
@@ -70,6 +70,39 @@ using com::sun::star::script::XInvocation2;
 using namespace pyuno;
 
 namespace {
+
+OUString getOrigin() {
+    auto frame = PyEval_GetFrame();
+    if (frame == nullptr) {
+        return u"<no frame>"_ustr;
+    }
+    // Bump the topmost frame to keep the PyFrame_GetBack chain balanced with the Py_DECREF loop:
+    Py_INCREF(frame);
+    OUStringBuffer buf;
+    while (frame != nullptr) {
+        OUString filename;
+        if (auto const code = PyFrame_GetCode(frame)) {
+            auto const name
+                = PyObject_GetAttrString(reinterpret_cast<PyObject *>(code), "co_filename");
+            if (name != nullptr && PyUnicode_Check(name)) {
+                if (auto const utf8 = PyUnicode_AsUTF8(name)) {
+                    filename = OUString::fromUtf8(utf8);
+                }
+            }
+            Py_XDECREF(name);
+            Py_DECREF(code);
+        }
+        if (!buf.isEmpty()) {
+            buf.append(u" <- ");
+        }
+        buf.append((filename.isEmpty() ? u"<unknown>"_ustr : filename) + ":"
+            + OUString::number(PyFrame_GetLineNumber(frame)));
+        auto const back = PyFrame_GetBack(frame);
+        Py_DECREF(frame);
+        frame = back;
+    }
+    return buf.makeStringAndClear();
+}
 
 /**
    @ index of the next to be used member in the initializer list !
@@ -299,7 +332,7 @@ static PyObject* getComponentContext(
     {
         raisePySystemException( "CannotConvertException", e.Message );
     }
-    catch (const css::uno::RuntimeException & e)
+    catch (const cpo::uno::RuntimeException & e)
     {
         raisePySystemException( "RuntimeException", e.Message );
     }
@@ -338,7 +371,7 @@ static PyObject* initTestEnvironment(
         using css::lang::XMultiServiceFactory;
         Reference<XMultiServiceFactory> const xMSF(
             xContext->getServiceManager(),
-            css::uno::UNO_QUERY_THROW);
+            cpo::uno::UNO_QUERY_THROW);
         char *const testlib = getenv("TEST_LIB");
         if (!testlib) { abort(); }
 #ifdef _WIN32
@@ -355,7 +388,7 @@ static PyObject* initTestEnvironment(
         oslGenericFunction const pFunc(
                 mod.getFunctionSymbol("test_init"));
         if (!pFunc) { abort(); }
-        reinterpret_cast<void (SAL_CALL *)(XMultiServiceFactory*)>(pFunc)(xMSF.get());
+        reinterpret_cast<void (*)(XMultiServiceFactory*)>(pFunc)(xMSF.get());
         testModule = &mod;
     }
     catch (const cpo::uno::Exception &)
@@ -375,7 +408,7 @@ static PyObject* deinitTestEnvironment(
             oslGenericFunction const pFunc(
                     testModule->getFunctionSymbol("test_deinit"));
             if (!pFunc) { abort(); }
-            reinterpret_cast<void (SAL_CALL *)()>(pFunc)();
+            reinterpret_cast<void (*)()>(pFunc)();
         }
         catch (const cpo::uno::Exception &)
         {
@@ -422,7 +455,11 @@ static PyObject *createUnoStructHelper(
                 if( PyTuple_Check( initializer ) && PyDict_Check ( keywordArgs ) )
                 {
                     OUString typeName( OUString::createFromAscii(PyUnicode_AsUTF8(structName)));
-                    comphelper::notifyLegacyUnoApiUse(typeName);
+                    if (comphelper::notifyLegacyUnoApiUse(typeName)) {
+                        SAL_INFO(
+                            "pyuno.legacyapi",
+                            "legacy UNO API " << typeName << " at " << getOrigin());
+                    }
                     RuntimeCargo *c = runtime.getImpl()->cargo;
                     Reference<XIdlClass> idl_class = c->xCoreReflection->forName (typeName);
                     if (idl_class.is ())
@@ -472,7 +509,7 @@ static PyObject *createUnoStructHelper(
             PyErr_SetString (PyExc_AttributeError, "pyuno._createUnoStructHelper: expects exactly two non-keyword arguments:\n\tStructure Name\n\tinitialiser tuple; may be the empty tuple");
         }
     }
-    catch( const css::uno::RuntimeException & e )
+    catch( const cpo::uno::RuntimeException & e )
     {
         raisePyExceptionWithAny( Any( e ) );
     }
@@ -499,7 +536,9 @@ static PyObject *getTypeByName(
         if (PyArg_ParseTuple (args, "s", &name))
         {
             OUString typeName ( OUString::createFromAscii( name ) );
-            comphelper::notifyLegacyUnoApiUse(typeName);
+            if (comphelper::notifyLegacyUnoApiUse(typeName)) {
+                SAL_INFO("pyuno.legacyapi", "legacy UNO API " << typeName << " at " << getOrigin());
+            }
             TypeDescription typeDesc( typeName );
             if( typeDesc.is() )
             {
@@ -532,9 +571,11 @@ static PyObject *getConstantByName(
         if (PyArg_ParseTuple (args, "s", &name))
         {
             OUString typeName ( OUString::createFromAscii( name ) );
-            comphelper::notifyLegacyUnoApiUse(typeName);
+            if (comphelper::notifyLegacyUnoApiUse(typeName)) {
+                SAL_INFO("pyuno.legacyapi", "legacy UNO API " << typeName << " at " << getOrigin());
+            }
             Runtime runtime;
-            css::uno::Reference< css::reflection::XConstantTypeDescription > td;
+            cpo::uno::Reference< css::reflection::XConstantTypeDescription > td;
             if (!(runtime.getImpl()->cargo->xTdMgr->getByHierarchicalName(
                       typeName)
                   >>= td))
@@ -623,7 +664,9 @@ static PyObject *getClass( SAL_UNUSED_PARAMETER PyObject *, PyObject *args )
     {
         Runtime runtime;
         OUString className = pyString2ustring(obj);
-        comphelper::notifyLegacyUnoApiUse(className);
+        if (comphelper::notifyLegacyUnoApiUse(className)) {
+            SAL_INFO("pyuno.legacyapi", "legacy UNO API " << className << " at " << getOrigin());
+        }
         PyRef ret = getClass(className, runtime);
         Py_XINCREF( ret.get() );
         return ret.get();

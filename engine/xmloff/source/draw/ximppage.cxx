@@ -46,8 +46,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::util;
@@ -66,9 +66,9 @@ class DrawAnnotationContext : public SvXMLImportContext
 public:
     DrawAnnotationContext( SvXMLImport& rImport, const Reference< xml::sax::XFastAttributeList>& xAttrList, const Reference< XAnnotationAccess >& xAnnotationAccess );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
 private:
     Reference< XAnnotation > mxAnnotation;
@@ -131,6 +131,15 @@ DrawAnnotationContext::DrawAnnotationContext( SvXMLImport& rImport, const Refere
                 aSize.Height = static_cast<double>(h) / 100.0;
             }
             break;
+            case XML_ELEMENT(CO_EXT, XML_DATE_UTC):
+            {
+                // The moment the annotation was written. dc:date below carries the author's wall
+                // clock with no zone, which is all a file without this attribute holds.
+                css::util::DateTime aDateUTC;
+                if (::sax::Converter::parseDateTime(aDateUTC, aIter.toView()))
+                    mxAnnotation->setDateTimeUTC(aDateUTC);
+            }
+            break;
             default:
                 XMLOFF_WARN_UNKNOWN("xmloff", aIter);
         }
@@ -140,9 +149,9 @@ DrawAnnotationContext::DrawAnnotationContext( SvXMLImport& rImport, const Refere
     mxAnnotation->setSize( aSize );
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > DrawAnnotationContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > DrawAnnotationContext::createFastChildContext(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if( mxAnnotation.is() )
     {
@@ -222,10 +231,14 @@ SdXMLGenericPageContext::SdXMLGenericPageContext(
 {
     for (auto &aIter : sax_fastparser::castToFastAttributeList( xAttrList ))
     {
-        if( aIter.getToken() == XML_ELEMENT(DRAW, XML_NAV_ORDER) )
+        switch( aIter.getToken() )
         {
-            msNavOrder = aIter.toString();
-            break;
+            case XML_ELEMENT(DRAW, XML_NAV_ORDER):
+                msNavOrder = aIter.toString();
+                break;
+            case XML_ELEMENT(CO_EXT, XML_GUID):
+                msGuid = aIter.toString();
+                break;
         }
     }
 }
@@ -233,16 +246,8 @@ SdXMLGenericPageContext::SdXMLGenericPageContext(
 SdXMLGenericPageContext::SdXMLGenericPageContext(
     SvXMLImport& rImport,
     const Reference< xml::sax::XFastAttributeList>& xAttrList)
-: SvXMLImportContext( rImport )
+: SdXMLGenericPageContext( rImport, xAttrList, Reference< drawing::XShapes >() )
 {
-    for (auto &aIter : sax_fastparser::castToFastAttributeList( xAttrList ))
-    {
-        if( aIter.getToken() == XML_ELEMENT(DRAW, XML_NAV_ORDER) )
-        {
-            msNavOrder = aIter.toString();
-            break;
-        }
-    }
 }
 
 void SdXMLGenericPageContext::SetShapes(Reference< drawing::XShapes > const & rShapes)
@@ -263,7 +268,7 @@ void SdXMLGenericPageContext::startFastElement( sal_Int32 /*nElement*/, const Re
         GetImport().GetFormImport()->startPage( Reference< drawing::XDrawPage >::query( mxShapes ) );
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLGenericPageContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLGenericPageContext::createFastChildContext(
     sal_Int32 nElement,
     const Reference< xml::sax::XFastAttributeList>& xAttrList )
 {
@@ -366,6 +371,7 @@ void SdXMLGenericPageContext::endFastElement(sal_Int32 )
     }
 
     SetNavigationOrder();
+    SetGuid();
 }
 
 void SdXMLGenericPageContext::SetStyle( OUString const & rStyleName )
@@ -534,12 +540,12 @@ public:
     explicit XoNavigationOrderAccess( std::vector< Reference< XShape > >& rShapes );
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount(  ) override;
-    virtual Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount(  ) override;
+    virtual Any getByIndex( sal_Int32 Index ) override;
 
     // XElementAccess
-    virtual Type SAL_CALL getElementType(  ) override;
-    virtual bool SAL_CALL hasElements(  ) override;
+    virtual Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
 
 private:
     std::vector< Reference< XShape > > maShapes;
@@ -553,12 +559,12 @@ XoNavigationOrderAccess::XoNavigationOrderAccess( std::vector< Reference< XShape
 }
 
 // XIndexAccess
-sal_Int32 SAL_CALL XoNavigationOrderAccess::getCount(  )
+sal_Int32 XoNavigationOrderAccess::getCount(  )
 {
     return static_cast< sal_Int32 >( maShapes.size() );
 }
 
-Any SAL_CALL XoNavigationOrderAccess::getByIndex( sal_Int32 Index )
+Any XoNavigationOrderAccess::getByIndex( sal_Int32 Index )
 {
     if( (Index < 0) || (Index > getCount()) )
         throw IndexOutOfBoundsException();
@@ -567,12 +573,12 @@ Any SAL_CALL XoNavigationOrderAccess::getByIndex( sal_Int32 Index )
 }
 
 // XElementAccess
-Type SAL_CALL XoNavigationOrderAccess::getElementType(  )
+Type XoNavigationOrderAccess::getElementType(  )
 {
     return cppu::UnoType<XShape>::get();
 }
 
-bool SAL_CALL XoNavigationOrderAccess::hasElements(  )
+bool XoNavigationOrderAccess::hasElements(  )
 {
     return !maShapes.empty();
 }
@@ -616,6 +622,28 @@ void SdXMLGenericPageContext::SetNavigationOrder()
     {
         TOOLS_WARN_EXCEPTION("xmloff.draw",
                              "unexpected exception caught while importing shape navigation order!");
+    }
+}
+
+void SdXMLGenericPageContext::SetGuid()
+{
+    if( msGuid.isEmpty() )
+        return;
+
+    try
+    {
+        Reference< beans::XPropertySet > xSet( mxShapes, UNO_QUERY );
+        if( !xSet.is() )
+            return;
+
+        static constexpr OUString aGuidProp( u"Guid"_ustr );
+        Reference< beans::XPropertySetInfo > xInfo( xSet->getPropertySetInfo() );
+        if( xInfo.is() && xInfo->hasPropertyByName( aGuidProp ) )
+            xSet->setPropertyValue( aGuidProp, Any( msGuid ) );
+    }
+    catch(const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("xmloff.draw", "while importing the globally unique identifier of the page");
     }
 }
 

@@ -48,7 +48,7 @@ using namespace comphelper;
 
 namespace frm
 {
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -145,7 +145,7 @@ OComboBoxModel::~OComboBoxModel()
 
 // XCloneable
 
-css::uno::Reference< css::util::XCloneable > OComboBoxModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OComboBoxModel::createClone()
 {
     rtl::Reference<OComboBoxModel> pClone = new OComboBoxModel(this, getContext());
     pClone->clonedFrom(this);
@@ -872,15 +872,15 @@ cpo::uno::Sequence<OUString> OComboBoxControl::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OComboBoxModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OComboBoxModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OComboBoxModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OComboBoxControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OComboBoxControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OComboBoxControl(component));

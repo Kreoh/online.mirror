@@ -38,7 +38,7 @@
 #include <sfx2/sidebar/SidebarPanelBase.hxx>
 #include <vcl/weldutils.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/compbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -46,7 +46,7 @@
 
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace {
@@ -65,17 +65,17 @@ public:
     SwPanelFactory();
 
     // XUIElementFactory
-    css::uno::Reference<css::ui::XUIElement> SAL_CALL createUIElement(
+    cpo::uno::Reference<css::ui::XUIElement> createUIElement(
         const OUString& rsResourceURL,
         const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) override;
 
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     { return u"org.apache.openoffice.comp.sw.sidebar.SwPanelFactory"_ustr; }
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override
+    bool supportsService(OUString const & ServiceName) override
     { return cppu::supportsService(this, ServiceName); }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     { return {u"com.sun.star.ui.UIElementFactory"_ustr}; }
 };
 
@@ -83,7 +83,7 @@ SwPanelFactory::SwPanelFactory()
 {
 }
 
-Reference<ui::XUIElement> SAL_CALL SwPanelFactory::createUIElement (
+Reference<ui::XUIElement> SwPanelFactory::createUIElement (
     const OUString& rsResourceURL,
     const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments)
 {
@@ -231,9 +231,9 @@ Reference<ui::XUIElement> SAL_CALL SwPanelFactory::createUIElement (
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 org_apache_openoffice_comp_sw_sidebar_SwPanelFactory_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwPanelFactory());

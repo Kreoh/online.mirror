@@ -26,7 +26,7 @@
 
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/text/WritingMode.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/util/XModifyListener.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <sal/types.h>
@@ -46,7 +46,7 @@ public:
     std::unique_ptr<TableLayouter> mpLayouter;
     CellPos maEditPos;
     TableStyleSettings maTableStyle;
-    css::uno::Reference< css::container::XIndexAccess > mxTableStyle;
+    cpo::uno::Reference< css::container::XIndexAccess > mxTableStyle;
     std::vector<std::unique_ptr<SdrUndoAction>> maUndos;
     bool mbSkipChangeLayout;
 
@@ -54,6 +54,8 @@ public:
 
     CellRef getCell( const CellPos& rPos ) const;
     void LayoutTable( tools::Rectangle& rArea, bool bFitWidth, bool bFitHeight );
+    /// Make the next LayoutTable call compute the layout again, even when its inputs are unchanged.
+    static void InvalidateLayout();
 
     void ApplyCellStyles();
     void UpdateCells( tools::Rectangle const & rArea );
@@ -74,10 +76,10 @@ public:
     SdrTableObjImpl& operator=( const SdrTableObjImpl& rSource );
 
     // XModifyListener
-    virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) override;
+    virtual void modified( const css::lang::EventObject& aEvent ) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     void update();
 

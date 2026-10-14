@@ -41,58 +41,71 @@ function isAnyInputFocused(): boolean {
 	);
 }
 
+const enabled = function (selector: string): string {
+	return selector + ':not([disabled]):not(.hidden)';
+};
+
+// What the browser walks with Tab, in document order.
+const tabbableSelector = [
+	'a[href]',
+	'button',
+	'input',
+	'select',
+	'textarea',
+	'[tabindex]:not([tabindex="-1"])',
+	'[contenteditable="true"]',
+]
+	.map(enabled)
+	.join(', ');
+
+// Widgets that take the focus without being tabbable of their own, because
+// their container hands it to them.
+const focusableSelector = [
+	tabbableSelector,
+	enabled('[role="radiogroup"] [role="radio"]'),
+	enabled('[role="listbox"] [role="option"]'),
+].join(', ');
+
+function isVisibleWidget(elem: HTMLElement): boolean {
+	if (
+		elem.classList.contains('jsdialog-begin-marker') ||
+		elem.classList.contains('jsdialog-end-marker')
+	)
+		return false;
+
+	return elem.checkVisibility({
+		visibilityProperty: true,
+		contentVisibilityAuto: true,
+	});
+}
+
+function isTabbable(elem: HTMLElement): boolean {
+	const tabIndex = elem.getAttribute('tabindex');
+	if (tabIndex !== null && parseInt(tabIndex, 10) < 0) return false;
+
+	return isVisibleWidget(elem);
+}
+
 function getFocusableElements(
 	container: Element | null,
 ): Array<HTMLElement> | null {
 	if (!container) return null;
 
-	let ret = container.querySelectorAll<HTMLElement>(
-		'[tabIndex="0"]:not(.jsdialog-begin-marker, .jsdialog-end-marker):not([disabled]):not(.hidden)',
-	);
-	if (!ret.length)
-		ret = container.querySelectorAll<HTMLElement>(
-			'input:not([disabled]):not(.hidden)',
-		);
-	if (!ret.length)
-		ret = container.querySelectorAll<HTMLElement>(
-			'textarea:not([disabled]):not(.hidden)',
-		);
-	if (!ret.length)
-		ret = container.querySelectorAll<HTMLElement>(
-			'select:not([disabled]):not(.hidden)',
-		);
-	if (!ret.length)
-		ret = container.querySelectorAll<HTMLElement>(
-			'button:not([disabled]):not(.hidden)',
-		);
+	const candidates = container.querySelectorAll<HTMLElement>(tabbableSelector);
 
-	return Array.from(ret).filter(function (elem) {
-		return elem.checkVisibility();
-	});
+	return Array.from(candidates).filter(isTabbable);
 }
 
-// Utility function to check if an element is focusable
-// This function different from getFocusableElements. This only checks, if the current element is focusable or not.
+// Whether this one element can take the focus, which is a wider question than
+// whether Tab stops on it: a radio or a listbox option carries a negative
+// tabindex and still takes the focus when its container hands it over.
 function isFocusable(element: Element | null): boolean {
 	if (!element) return false;
 
-	// Check if element is focusable (e.g. input, button, link etc.)
-	const focusableElements = [
-		'a[href]:not([disabled]):not(.hidden)',
-		'button:not([disabled]):not(.hidden)',
-		'textarea:not([disabled]):not(.hidden)',
-		'input[type="text"]:not([disabled]):not(.hidden)',
-		'input[type="search"]:not([disabled]):not(.hidden)',
-		'input:not([type]):not([disabled]):not(.hidden)', // no explicit type defaults to text but the above doesn't catch it
-		'input[type="radio"]:not([disabled]):not(.hidden)',
-		'input[type="checkbox"]:not([disabled]):not(.hidden)',
-		'select:not([disabled]):not(.hidden)',
-		'[tabindex]:not([tabindex="-1"]):not(.jsdialog-begin-marker):not(.jsdialog-end-marker):not([disabled]):not(.hidden)',
-		'[role="radiogroup"] [role="radio"]:not([disabled]):not(.hidden)',
-		'[role="listbox"] [role="option"]:not([disabled]):not(.hidden)',
-	];
-
-	return focusableElements.some((selector) => element.matches(selector));
+	return (
+		element.matches(focusableSelector) &&
+		isVisibleWidget(element as HTMLElement)
+	);
 }
 
 /// close tab focus switching in cycle inside container
@@ -159,11 +172,13 @@ function findFocusableElement(
 function findFocusableWithin(
 	element: Element,
 	direction: string,
-): Element | undefined {
+): Element | null {
 	const focusableElements = Array.from(element.querySelectorAll('*'));
-	return direction === 'next'
-		? focusableElements.find(isFocusable)
-		: focusableElements.reverse().find(isFocusable);
+	const found =
+		direction === 'next'
+			? focusableElements.find(isFocusable)
+			: focusableElements.reverse().find(isFocusable);
+	return found ?? null;
 }
 
 function findNextFocusableSiblingElement(
@@ -339,6 +354,7 @@ function findNextElementInContainer(
 }
 
 JSDialog.IsAnyInputFocused = isAnyInputFocused;
+JSDialog.FocusableSelector = focusableSelector;
 JSDialog.GetFocusableElements = getFocusableElements;
 JSDialog.MakeFocusCycle = makeFocusCycle;
 JSDialog.FindFocusableElement = findFocusableElement;

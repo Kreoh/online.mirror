@@ -28,7 +28,7 @@
 #include <cppuhelper/implbase.hxx>
 
 
-namespace uno = css::uno ;
+namespace uno = cpo::uno ;
 namespace lang = css::lang ;
 
 class LocaleBackend final : public ::cppu::WeakImplHelper <
@@ -39,44 +39,44 @@ class LocaleBackend final : public ::cppu::WeakImplHelper <
     public:
 
         // XServiceInfo
-        virtual OUString SAL_CALL
+        virtual OUString
             getImplementationName(  ) override ;
 
-        virtual bool SAL_CALL
+        virtual bool
             supportsService( const OUString& aServiceName ) override ;
 
-        virtual cpo::uno::Sequence<OUString> SAL_CALL
+        virtual cpo::uno::Sequence<OUString>
             getSupportedServiceNames(  ) override ;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
         getPropertySetInfo() override
-        { return css::uno::Reference< css::beans::XPropertySetInfo >(); }
+        { return cpo::uno::Reference< css::beans::XPropertySetInfo >(); }
 
-        virtual void SAL_CALL setPropertyValue(
+        virtual void setPropertyValue(
             OUString const &, cpo::uno::Any const &) override;
 
-        virtual cpo::uno::Any SAL_CALL getPropertyValue(
+        virtual cpo::uno::Any getPropertyValue(
             OUString const & PropertyName) override;
 
-        virtual void SAL_CALL addPropertyChangeListener(
+        virtual void addPropertyChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XPropertyChangeListener > const &) override
+            cpo::uno::Reference< css::beans::XPropertyChangeListener > const &) override
         {}
 
-        virtual void SAL_CALL removePropertyChangeListener(
+        virtual void removePropertyChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XPropertyChangeListener > const &) override
+            cpo::uno::Reference< css::beans::XPropertyChangeListener > const &) override
         {}
 
-        virtual void SAL_CALL addVetoableChangeListener(
+        virtual void addVetoableChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XVetoableChangeListener > const &) override
+            cpo::uno::Reference< css::beans::XVetoableChangeListener > const &) override
         {}
 
-        virtual void SAL_CALL removeVetoableChangeListener(
+        virtual void removeVetoableChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XVetoableChangeListener > const &) override
+            cpo::uno::Reference< css::beans::XVetoableChangeListener > const &) override
         {}
 
         /**

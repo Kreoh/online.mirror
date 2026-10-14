@@ -36,8 +36,8 @@
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/reflection/XServiceTypeDescription.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include "mergekeys.hxx"
 
@@ -47,7 +47,7 @@
 
 
 using namespace com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::loader;
 using namespace css::beans;
@@ -1040,35 +1040,35 @@ public:
     explicit ImplementationRegistration( const Reference < XComponentContext > & rSMgr );
 
     // XServiceInfo
-    OUString                        SAL_CALL getImplementationName() override;
-    bool                        SAL_CALL supportsService(const OUString& ServiceName) override;
-    Sequence< OUString >            SAL_CALL getSupportedServiceNames() override;
+    OUString                        getImplementationName() override;
+    bool                        supportsService(const OUString& ServiceName) override;
+    Sequence< OUString >            getSupportedServiceNames() override;
 
     // XImplementationRegistration
-    virtual void SAL_CALL registerImplementation(
+    virtual void registerImplementation(
         const OUString& implementationLoader,
         const OUString& location,
         const Reference < XSimpleRegistry > & xReg) override;
 
-    virtual bool SAL_CALL revokeImplementation(
+    virtual bool revokeImplementation(
         const OUString& location,
         const Reference < XSimpleRegistry >& xReg) override;
 
-    virtual Sequence< OUString > SAL_CALL getImplementations(
+    virtual Sequence< OUString > getImplementations(
         const OUString& implementationLoader,
         const OUString& location) override;
-    virtual Sequence< OUString > SAL_CALL checkInstantiation(
+    virtual Sequence< OUString > checkInstantiation(
         const OUString& implementationName) override;
 
     // XImplementationRegistration2
-    virtual void SAL_CALL registerImplementationWithLocation(
+    virtual void registerImplementationWithLocation(
         const OUString& implementationLoader,
         const OUString& location,
         const OUString& registeredLocation,
         const Reference < XSimpleRegistry > & xReg) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
 private: // helper methods
@@ -1565,9 +1565,9 @@ Reference< XSimpleRegistry > ImplementationRegistration::createTemporarySimpleRe
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_stoc_ImplementationRegistration_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new ImplementationRegistration(context));

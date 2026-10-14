@@ -42,6 +42,7 @@
 #include <svx/svdopage.hxx>
 #include <editeng/pbinitem.hxx>
 #include <svx/svdundo.hxx>
+#include <svx/svdmodel.hxx>
 #include <svl/hint.hxx>
 #include <editeng/adjustitem.hxx>
 #include <editeng/editobj.hxx>
@@ -49,6 +50,7 @@
 #include <editeng/flditem.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
 #include <svx/svditer.hxx>
+#include <svx/svdogrp.hxx>
 #include <svx/svdlayer.hxx>
 #include <svx/sdtmfitm.hxx>
 #include <svx/sdtagitm.hxx>
@@ -94,9 +96,10 @@
 
 using namespace ::sd;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::xml::dom;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 
 sal_uInt16 SdPage::mnLastPageId = 1;
@@ -129,7 +132,7 @@ SdPage::SdPage(SdDrawDocument& rNewDoc, bool bMasterPage)
 ,   mnTransitionSubtype(0)
 ,   mbTransitionDirection(true)
 ,   mnTransitionFadeColor(0)
-,   mfTransitionDuration(2.0)
+,   mfTransitionDuration(DEFAULT_TRANSITION_DURATION)
 ,   mbIsPrecious(true)
 ,   mnPageId(mnLastPageId++)
 {
@@ -144,21 +147,21 @@ SdPage::SdPage(SdDrawDocument& rNewDoc, bool bMasterPage)
 
 namespace
 {
-    void clearChildNodes(css::uno::Reference<css::animations::XAnimationNode> const & rAnimationNode)
+    void clearChildNodes(cpo::uno::Reference<css::animations::XAnimationNode> const & rAnimationNode)
     {
-        css::uno::Reference<css::container::XEnumerationAccess > xEnumerationAccess(rAnimationNode, UNO_QUERY);
+        cpo::uno::Reference<css::container::XEnumerationAccess > xEnumerationAccess(rAnimationNode, UNO_QUERY);
         if (!xEnumerationAccess.is())
             return;
-        css::uno::Reference<css::container::XEnumeration> xEnumeration = xEnumerationAccess->createEnumeration();
+        cpo::uno::Reference<css::container::XEnumeration> xEnumeration = xEnumerationAccess->createEnumeration();
         if (!xEnumeration.is())
             return;
         while (xEnumeration->hasMoreElements())
         {
-            css::uno::Reference<css::animations::XAnimationNode> xChildNode(xEnumeration->nextElement(), UNO_QUERY);
+            cpo::uno::Reference<css::animations::XAnimationNode> xChildNode(xEnumeration->nextElement(), UNO_QUERY);
             if (!xChildNode.is())
                 continue;
             clearChildNodes(xChildNode);
-            css::uno::Reference<css::animations::XTimeContainer> xAnimationNode(rAnimationNode, UNO_QUERY);
+            cpo::uno::Reference<css::animations::XTimeContainer> xAnimationNode(rAnimationNode, UNO_QUERY);
             if (!xAnimationNode.is())
             {
                 SAL_WARN("sd.core", "can't remove node child, possible leak");
@@ -166,6 +169,51 @@ namespace
             }
             xAnimationNode->removeChild(xChildNode);
         }
+    }
+
+    /// Fits the room a shape keeps between the text it shows and its own edges to the scale the
+    /// shape itself took. The text is laid out within what is left over, so this comes before the
+    /// text is scaled.
+    void scaleTextDistances(SdrObject& rObj, double fScaleX, double fScaleY)
+    {
+        const SfxItemSet& rSet(rObj.GetMergedItemSet());
+        SfxItemSet aScaled(*rSet.GetPool(), rSet.GetRanges());
+
+        auto aScaleDistance = [&rSet, &aScaled](TypedWhichId<SdrMetricItem> nWhich, double fScale)
+        {
+            if (SfxItemState::SET != rSet.GetItemState(nWhich, false))
+                return;
+
+            aScaled.Put(SdrMetricItem(nWhich, std::lround(rSet.Get(nWhich).GetValue() * fScale)));
+        };
+
+        aScaleDistance(SDRATTR_TEXT_LEFTDIST, fScaleX);
+        aScaleDistance(SDRATTR_TEXT_RIGHTDIST, fScaleX);
+        aScaleDistance(SDRATTR_TEXT_UPPERDIST, fScaleY);
+        aScaleDistance(SDRATTR_TEXT_LOWERDIST, fScaleY);
+
+        if (aScaled.Count())
+            rObj.SetMergedItemSet(aScaled);
+    }
+
+    /// The shapes that show text of their own within rObj, which is rObj itself for an ordinary
+    /// shape and the shapes it holds for a group.
+    std::vector<SdrObject*> collectTextShapes(SdrObject& rObj)
+    {
+        std::vector<SdrObject*> aShapes;
+        SdrObjGroup* pGroup = dynamic_cast<SdrObjGroup*>(&rObj);
+
+        if (!pGroup)
+        {
+            aShapes.push_back(&rObj);
+            return aShapes;
+        }
+
+        SdrObjListIter aIter(pGroup->GetSubList(), SdrIterMode::DeepNoGroups);
+        while (aIter.IsMore())
+            aShapes.push_back(aIter.Next());
+
+        return aShapes;
     }
 }
 
@@ -1728,6 +1776,18 @@ static void findAutoLayoutShapesImpl( SdPage& rPage, const LayoutDescriptor& rDe
     }
 }
 
+void SdPage::SetMasterPageVisibleLayers(const SdrLayerIDSet& rVisibleLayers)
+{
+    if (!TRG_HasMasterPage() || !(TRG_GetMasterPageVisibleLayers() != rVisibleLayers))
+        return;
+
+    TRG_SetMasterPageVisibleLayers(rVisibleLayers);
+
+    // What the page shows of its master is part of the page, the same as its background.
+    if (IsInserted())
+        getSdrModelFromSdrPage().Broadcast(SdrHint(SdrHintKind::PageOrderChange, this));
+}
+
 void SdPage::SetAutoLayout(AutoLayout eLayout, bool bInit, bool bCreate )
 {
     sd::ScopeLockGuard aGuard( maLockAutoLayoutArrangement );
@@ -1878,9 +1938,9 @@ void SdPage::GetPageInfo(::tools::JsonWriter& jsonWriter)
     jsonWriter.put("upperBorder", GetUpperBorder());
     jsonWriter.put("lowerBorder", GetLowerBorder());
     jsonWriter.put("name", GetName());
-    // The page's part number: its stable unique id, the number every
-    // part-carrying message names this page by.
-    jsonWriter.put("part", GetUniqueID());
+    // The page's part identifier: its GUID, the value every part-carrying
+    // message names this page by.
+    jsonWriter.put("part", GetGuid().getString());
 }
 
 void SdPage::NotifyPagePropertyChanges()
@@ -1905,6 +1965,10 @@ void SdPage::SetSize(const Size& aSize)
     if (aSize != aOldSize)
     {
         FmFormPage::SetSize(aSize);
+
+        // The size is a property of the page like its background, so it is announced with the
+        // same hint the page properties send when they change.
+        getSdrModelFromSdrPage().Broadcast(SdrHint(SdrHintKind::PageOrderChange, this));
 
         if (comphelper::COKit::isActive() && SfxViewShell::Current())
             NotifyPagePropertyChanges();
@@ -2054,8 +2118,6 @@ void SdPage::ScaleObjects(const Size& rNewPageSize, const ::tools::Rectangle& rN
 
                 if (mbScaleObjects)
                 {
-                    SdrObjKind eObjKind = pObj->GetObjIdentifier();
-
                     if (bIsPresObjOnMaster)
                     {
                         /**********************************************************
@@ -2172,26 +2234,58 @@ void SdPage::ScaleObjects(const Size& rNewPageSize, const ::tools::Rectangle& rN
                             }
                         }
                     }
-                    else if (eObjKind != SdrObjKind::TitleText
-                             && eObjKind != SdrObjKind::OutlineText && mePageKind != PageKind::Notes
-                             && DynCastSdrTextObj(pObj.get()) != nullptr
-                             && pObj->GetOutlinerParaObject())
+                    else if (mePageKind != PageKind::Notes)
                     {
                         /******************************************************
                         * normal text object: adjust text height
                         ******************************************************/
-                        SvtScriptType nScriptType = pObj->GetOutlinerParaObject()->GetTextObject().GetScriptType();
-                        sal_uInt16 nWhich = EE_CHAR_FONTHEIGHT;
-                        if ( nScriptType == SvtScriptType::ASIAN )
-                            nWhich = EE_CHAR_FONTHEIGHT_CJK;
-                        else if ( nScriptType == SvtScriptType::COMPLEX )
-                            nWhich = EE_CHAR_FONTHEIGHT_CTL;
+                        // A group shows the text of the shapes it holds rather than text of its
+                        // own, so those shapes are reached through it.
+                        for (SdrObject* pTextShape : collectTextShapes(*pObj))
+                        {
+                            if (!pTextShape || DynCastSdrTextObj(pTextShape) == nullptr
+                                || !pTextShape->GetOutlinerParaObject()
+                                || pTextShape->IsEmptyPresObj())
+                                continue;
 
-                        // use more modern method to scale the text height
-                        sal_uInt32 nFontHeight = static_cast<const SvxFontHeightItem&>(pObj->GetMergedItem(nWhich)).GetHeight();
-                        sal_uInt32 nNewFontHeight = sal_uInt32(static_cast<double>(nFontHeight) * aFractY);
+                            // The room the shape keeps around its text is fitted first, so that
+                            // the text below is laid out within what is left over.
+                            scaleTextDistances(*pTextShape, aFractX, aFractY);
 
-                        pObj->SetMergedItem(SvxFontHeightItem(nNewFontHeight, 100, nWhich));
+                            // A letter size set on a run of the text belongs to that run alone,
+                            // and the runs keep the size they hold whatever the shape says, so
+                            // every run is scaled where it stands.
+                            pTextShape->scaleText(aFractX, aFractY, false);
+
+                            // A title or an outline shape reads the size it shows from the
+                            // presentation style of its master page, which is scaled along with
+                            // that page, so it goes on reading it. The size any other shape holds
+                            // stands for the runs that carry none of their own, and is scaled
+                            // here when the run scaling above left it alone, which is when the
+                            // shape itself sets no size and reads one from further out.
+                            const SdrObjKind eTextKind(pTextShape->GetObjIdentifier());
+                            if (SdrObjKind::TitleText == eTextKind
+                                || SdrObjKind::OutlineText == eTextKind)
+                                continue;
+
+                            const SvtScriptType nScriptType
+                                = pTextShape->GetOutlinerParaObject()->GetTextObject().GetScriptType();
+                            sal_uInt16 nWhich = EE_CHAR_FONTHEIGHT;
+                            if ( nScriptType == SvtScriptType::ASIAN )
+                                nWhich = EE_CHAR_FONTHEIGHT_CJK;
+                            else if ( nScriptType == SvtScriptType::COMPLEX )
+                                nWhich = EE_CHAR_FONTHEIGHT_CTL;
+
+                            if (SfxItemState::SET
+                                == pTextShape->GetMergedItemSet().GetItemState(nWhich, false))
+                                continue;
+
+                            // use more modern method to scale the text height
+                            sal_uInt32 nFontHeight = static_cast<const SvxFontHeightItem&>(pTextShape->GetMergedItem(nWhich)).GetHeight();
+                            sal_uInt32 nNewFontHeight = sal_uInt32(static_cast<double>(nFontHeight) * aFractY);
+
+                            pTextShape->SetMergedItem(SvxFontHeightItem(nNewFontHeight, 100, nWhich));
+                        }
                     }
                 }
             }
@@ -2773,7 +2867,7 @@ void SdPage::SetObjText(SdrTextObj* pObj, SdrOutliner* pOutliner, PresObjKind eO
     pOutl->SetPaperSize( pObj->GetLogicRect().GetSize() );
 
     if( !aString.isEmpty() )
-        pOutl->SetText( aString, pOutl->GetParagraph( 0 ) );
+        pOutl->SetText( aString, 0 );
 
     pObj->SetOutlinerParaObject( pOutl->CreateParaObject() );
 
@@ -3005,7 +3099,7 @@ rtl::Reference< SvxDrawPage > SdPage::createUnoPage()
 }
 
 /** returns the SdPage implementation for the given XDrawPage or 0 if not available */
-SdPage* SdPage::getImplementation( const css::uno::Reference< css::drawing::XDrawPage >& xPage )
+SdPage* SdPage::getImplementation( const cpo::uno::Reference< css::drawing::XDrawPage >& xPage )
 {
     try
     {

@@ -54,7 +54,6 @@ $(eval $(call gb_Module_add_moduledirs,libreoffice,\
     $(if $(ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS),, \
 	animations \
     ) \
-	apple_remote \
 	avmedia \
 	$(if $(ENABLE_WASM_STRIP_CALC),, \
 	basctl \
@@ -64,7 +63,6 @@ $(eval $(call gb_Module_add_moduledirs,libreoffice,\
 	bean \
 	binaryurp \
 	bridges \
-	cli_ure \
     codemaker \
 	$(call gb_Helper_optional,COFFICEOTRON,cofficeotron) \
 	comphelper \
@@ -142,7 +140,6 @@ $(eval $(call gb_Module_add_moduledirs,libreoffice,\
 	$(call gb_Helper_optional,DESKTOP,setup_native) \
 	sfx2 \
 	shell \
-	smoketest \
 	solenv \
 	soltools \
 	sot \
@@ -216,9 +213,8 @@ endef
 # the default goal is build (see Module.mk)
 ifeq (,$(filter-out build check unitcheck slowcheck screenshot subsequentcheck uicheck coverage,$(MAKECMDGOALS)))
 $(eval $(call repositorymodule_serialize,\
-	scfilt \
 	$(call gb_Helper_optional,SCRIPTING,vbaobj) \
-	sc msword \
+	sc \
 	$(call gb_Helper_optional,DESKTOP,swui) \
 	sw \
 	$(if $(MERGELIBS), merged, \

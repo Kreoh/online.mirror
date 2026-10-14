@@ -14,7 +14,8 @@
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -25,7 +26,7 @@ public:
 
     virtual void setUp() override;
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
 
     CPPUNIT_TEST_SUITE(ScOutlineObj);
 
@@ -46,7 +47,7 @@ ScOutlineObj::ScOutlineObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScOutlineObj::init()
+uno::Reference<cpo::uno::XInterface> ScOutlineObj::init()
 {
     // get the first sheet
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);

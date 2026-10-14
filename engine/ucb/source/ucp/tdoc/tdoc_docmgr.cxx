@@ -42,6 +42,7 @@
 #include "tdoc_provider.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace tdoc_ucp;
 
 // OfficeDocumentsCloseListener Implementation.
@@ -51,13 +52,13 @@ using namespace tdoc_ucp;
 
 
 // virtual
-void SAL_CALL OfficeDocumentsManager::OfficeDocumentsCloseListener::queryClosing(
+void OfficeDocumentsManager::OfficeDocumentsCloseListener::queryClosing(
          const lang::EventObject& /*Source*/, bool /*GetsOwnership*/ )
 {
 }
 
 
-void SAL_CALL OfficeDocumentsManager::OfficeDocumentsCloseListener::notifyClosing(
+void OfficeDocumentsManager::OfficeDocumentsCloseListener::notifyClosing(
          const lang::EventObject& Source )
 {
     if (!m_pManager) return; // disposed?
@@ -73,7 +74,7 @@ void SAL_CALL OfficeDocumentsManager::OfficeDocumentsCloseListener::notifyClosin
 
 
 // virtual
-void SAL_CALL OfficeDocumentsManager::OfficeDocumentsCloseListener::disposing(
+void OfficeDocumentsManager::OfficeDocumentsCloseListener::disposing(
         const lang::EventObject& /*Source*/ )
 {
 }
@@ -83,7 +84,7 @@ void SAL_CALL OfficeDocumentsManager::OfficeDocumentsCloseListener::disposing(
 
 
 OfficeDocumentsManager::OfficeDocumentsManager(
-            const uno::Reference< uno::XComponentContext > & rxContext,
+            const uno::Reference< cpo::uno::XComponentContext > & rxContext,
             ContentProvider * pDocEventListener )
 : m_xContext( rxContext ),
   m_xDocEvtNotifier( frame::theGlobalEventBroadcaster::get( rxContext ) ),
@@ -117,7 +118,7 @@ void OfficeDocumentsManager::destroy()
 
 
 static OUString
-getDocumentId( const uno::Reference< uno::XInterface > & xDoc )
+getDocumentId( const uno::Reference< cpo::uno::XInterface > & xDoc )
 {
     OUString aId;
 
@@ -146,7 +147,7 @@ getDocumentId( const uno::Reference< uno::XInterface > & xDoc )
         // normalize the interface pointer first. Else, calls with different
         // interfaces to the same object (say, XFoo and XBar) will produce
         // different IDs
-        uno::Reference< uno::XInterface > xNormalizedIFace( xDoc, uno::UNO_QUERY );
+        uno::Reference< cpo::uno::XInterface > xNormalizedIFace( xDoc, uno::UNO_QUERY );
         sal_Int64 nId = reinterpret_cast< sal_Int64 >( xNormalizedIFace.get() );
         aId = OUString::number( nId );
     }
@@ -160,7 +161,7 @@ getDocumentId( const uno::Reference< uno::XInterface > & xDoc )
 
 
 // virtual
-void SAL_CALL OfficeDocumentsManager::documentEventOccured(
+void OfficeDocumentsManager::documentEventOccured(
         const document::DocumentEvent & Event )
 {
 /*
@@ -396,7 +397,7 @@ void SAL_CALL OfficeDocumentsManager::documentEventOccured(
 // lang::XDocumentEventListener (base of document::XDocumentEventListener)
 
 // virtual
-void SAL_CALL OfficeDocumentsManager::disposing(
+void OfficeDocumentsManager::disposing(
         const lang::EventObject& /*Source*/ )
 {
 }
@@ -664,7 +665,7 @@ bool OfficeDocumentsManager::isBasicIDE(
 
 
 bool OfficeDocumentsManager::isOfficeDocument(
-        const uno::Reference< uno::XInterface > & xDoc )
+        const uno::Reference< cpo::uno::XInterface > & xDoc )
 {
     uno::Reference< frame::XModel > xModel( xDoc, uno::UNO_QUERY );
     uno::Reference< document::XStorageBasedDocument >

@@ -55,7 +55,7 @@ const auto s_baseTypes = frozen::make_unordered_map<std::string_view, OString>(
       { "type", "System.Type"_ostr },
       { "any", "com.sun.star.uno.Any"_ostr },
       { "cpo.uno.Exception", "com.sun.star.uno.UnoException"_ostr },
-      { "com.sun.star.uno.XInterface", "com.sun.star.uno.IQueryInterface"_ostr } });
+      { "cpo.uno.XInterface", "com.sun.star.uno.IQueryInterface"_ostr } });
 
 std::tuple<bool, std::string_view, std::string_view> splitName(std::string_view name)
 {
@@ -935,7 +935,7 @@ void NetProducer::produceService(
                 file.beginLine().append("[System.Obsolete]").endLine();
 
         std::vector<OUString> exceptions(ctor.exceptions);
-        exceptions.emplace(exceptions.begin(), "com.sun.star.uno.DeploymentException");
+        exceptions.emplace(exceptions.begin(), "cpo.uno.DeploymentException");
 
         file.beginLine().append("[com.sun.star.uno.Raises(");
         separatedForeach(exceptions, [&file]() { file.append(", "); },
@@ -951,7 +951,7 @@ void NetProducer::produceService(
             file.beginLine()
                 .append("public static ")
                 .append(returnType)
-                .append(" create(com.sun.star.uno.XComponentContext ctx)")
+                .append(" create(cpo.uno.XComponentContext ctx)")
                 .endLine()
                 .beginBlock();
 
@@ -996,7 +996,7 @@ void NetProducer::produceService(
                 .endLine()
                 .beginBlock()
                 .beginLine()
-                .append("throw new com.sun.star.uno.DeploymentException(")
+                .append("throw new cpo.uno.DeploymentException(")
                 .append("\"Could not create service ")
                 .append(name)
                 .append(" from given XComponentContext\", ctx);")
@@ -1017,7 +1017,7 @@ void NetProducer::produceService(
                 .append(returnType)
                 .append(" ")
                 .append(getSafeIdentifier(ctor.name))
-                .append("(com.sun.star.uno.XComponentContext ctx");
+                .append("(cpo.uno.XComponentContext ctx");
             if (!ctor.parameters.empty())
                 file.append(", ");
             separatedForeach(ctor.parameters, [&file]() { file.append(", "); },
@@ -1090,7 +1090,7 @@ void NetProducer::produceService(
                 .endLine()
                 .beginBlock()
                 .beginLine()
-                .append("throw new com.sun.star.uno.DeploymentException(")
+                .append("throw new cpo.uno.DeploymentException(")
                 .append("\"Could not create service ")
                 .append(name)
                 .append(" from given XComponentContext\", ctx);")
@@ -1134,12 +1134,12 @@ void NetProducer::produceSingleton(
         .beginBlock();
 
     file.beginLine()
-        .append("[com.sun.star.uno.Raises(typeof(com.sun.star.uno.DeploymentException))]")
+        .append("[com.sun.star.uno.Raises(typeof(cpo.uno.DeploymentException))]")
         .endLine();
     file.beginLine()
         .append("public static ")
         .append(getNetName(entity->getBase()))
-        .append(" get(com.sun.star.uno.XComponentContext ctx)")
+        .append(" get(cpo.uno.XComponentContext ctx)")
         .endLine()
         .beginBlock();
 
@@ -1164,7 +1164,7 @@ void NetProducer::produceSingleton(
         .endLine()
         .beginBlock()
         .beginLine()
-        .append("throw new com.sun.star.uno.DeploymentException(\"Could not get singleton ")
+        .append("throw new cpo.uno.DeploymentException(\"Could not get singleton ")
         .append(name)
         .append(" from given XComponentContext\", ctx);")
         .endLine()

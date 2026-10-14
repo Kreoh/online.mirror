@@ -45,7 +45,7 @@ if (window.enableDebug) {
 var filePath = global.coolParams.get('file_path');
 
 app.localeService = new LocaleService();
-app.setPermission(global.coolParams.get('permission') || 'edit');
+app.setPermission(global.coolParams.get('permission') || (window.mode.isInteractivePreview() ? 'readonly' : 'edit'));
 app.serverConnectionService = new ServerConnectionService();
 app.layoutingService = new LayoutingService();
 app.pendingOnDemandRenders = 0;
@@ -94,7 +94,7 @@ app.map = map;
 
 map.uiManager = new UIManager();
 map.addControl(map.uiManager);
-if (!window.L.Browser.cypressTest)
+if (!window.L.Browser.cypressTest || global.coolParams.get('tooltips') === 'true')
 	map.tooltip = window.L.control.tooltip();
 
 app.idleHandler.map = map;
@@ -192,6 +192,8 @@ var _codaWireCollabNotifications = function() {
 			map._onEditorSavedAndSwitching();
 		} else if (msg.type === 'user_left') {
 			map._onCollabUserLeft();
+		} else if (msg.type === 'user_joined' && msg.user) {
+			map._onCollabUserJoined(msg.user.name || msg.user.id, msg.user.avatar);
 		}
 	});
 };
@@ -381,6 +383,9 @@ window.addEventListener('beforeunload', function () {
 	if (map && app.socket) {
 		if (app.map)
 			app.map.acceptPendingCellEdit();
+		// A preference changed in the last few seconds is still waiting in the
+		// batch, so send it before the socket closes below.
+		window.prefs.sendPendingBrowserSettingsUpdate();
 		if (app.socket.setUnloading)
 			app.socket.setUnloading();
 		app.socket.close();

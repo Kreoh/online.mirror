@@ -45,6 +45,7 @@
 #include <textcontentcontrol.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 bool SwWrtShell::MoveBookMark( BookMarkMove eFuncId, const ::sw::mark::MarkBase* const pMark)
 {
@@ -253,6 +254,19 @@ void SwWrtShell::DrawSelChanged( )
         */
         0
     };
+
+    // The view keeps its own copy of this mode, and Toggle Point Edit Mode reads that copy. A
+    // selection can change the mode without changing the handles on screen, so compare the two
+    // and copy when they differ.
+    if (SdrView* pDrawView = GetDrawView())
+    {
+        pDrawView->AdjustFrameHandlesToMarkCount();
+        if (GetView().IsDrawSelMode() != pDrawView->IsFrameDragSingles())
+        {
+            GetView().SetDrawSelMode(pDrawView->IsFrameDragSingles());
+            GetView().GetViewFrame().GetBindings().Invalidate(SID_BEZIER_EDIT);
+        }
+    }
 
     GetView().GetViewFrame().GetBindings().Invalidate(aInval);
 

@@ -22,11 +22,12 @@
 #include"vbaassistant.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 using namespace ooo::vba::office::MsoAnimationType;
 
-ScVbaAssistant::ScVbaAssistant( const uno::Reference< XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext ): ScVbaAssistantImpl_BASE(rParent, rContext)
+ScVbaAssistant::ScVbaAssistant( const uno::Reference< XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext ): ScVbaAssistantImpl_BASE(rParent, rContext)
 {
     m_bIsVisible = false;
     m_nPointsLeft = 795;
@@ -38,58 +39,58 @@ ScVbaAssistant::~ScVbaAssistant()
 {
 }
 
-bool SAL_CALL ScVbaAssistant::getVisible()
+bool ScVbaAssistant::getVisible()
 {
     return m_bIsVisible;
 }
 
-void SAL_CALL ScVbaAssistant::setVisible( bool bVisible )
+void ScVbaAssistant::setVisible( bool bVisible )
 {
     m_bIsVisible = bVisible;
 }
 
-bool SAL_CALL ScVbaAssistant::getOn()
+bool ScVbaAssistant::getOn()
 {
     return false;
 }
 
-void SAL_CALL ScVbaAssistant::setOn( bool bOn )
+void ScVbaAssistant::setOn( bool bOn )
 {
     setVisible( bOn );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaAssistant::getTop()
 {
     return m_nPointsTop;
 }
-void SAL_CALL
+void
 ScVbaAssistant::setTop( ::sal_Int32 _top )
 {
     m_nPointsTop = _top;
 }
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaAssistant::getLeft()
 {
     return m_nPointsLeft;
 }
-void SAL_CALL
+void
 ScVbaAssistant::setLeft( ::sal_Int32 _left )
 {
     m_nPointsLeft = _left;
 }
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaAssistant::getAnimation()
 {
     return m_nAnimation;
 }
-void SAL_CALL
+void
 ScVbaAssistant::setAnimation( ::sal_Int32 _animation )
 {
     m_nAnimation = _animation;
 }
 
-OUString SAL_CALL
+OUString
 ScVbaAssistant::Name(  )
 {
     return u"Clippit"_ustr;

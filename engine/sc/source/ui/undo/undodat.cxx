@@ -44,6 +44,8 @@
 #include <chgtrack.hxx>
 #include <refundo.hxx>
 #include <markdata.hxx>
+
+#include <algorithm>
 #include <utility>
 
 // Show or hide outline groups
@@ -792,6 +794,102 @@ bool ScUndoDBTable::CanRepeat(SfxRepeatTarget& /* rTarget */) const
     return false;    // is not possible
 }
 
+ScUndoConvertTableToRange::ScUndoConvertTableToRange(
+    ScDocShell& rNewDocShell, const ScRange& rRange, ScDocumentUniquePtr pNewUndoDoc,
+    ScDocumentUniquePtr pNewRedoDoc, std::unique_ptr<ScDBCollection> pNewUndoColl,
+    std::unique_ptr<ScDBCollection> pNewRedoColl, std::vector<ScAddress> aRefCells)
+    : ScSimpleUndo(rNewDocShell)
+    , maRange(rRange)
+    , mpUndoDoc(std::move(pNewUndoDoc))
+    , mpRedoDoc(std::move(pNewRedoDoc))
+    , mpUndoColl(std::move(pNewUndoColl))
+    , mpRedoColl(std::move(pNewRedoColl))
+    , maRefCells(std::move(aRefCells))
+{
+}
+
+ScUndoConvertTableToRange::~ScUndoConvertTableToRange()
+{
+}
+
+OUString ScUndoConvertTableToRange::GetComment() const
+{
+    return ScResId(STR_UNDO_CONVERT_CALCTABLE_TO_RANGE);
+}
+
+void ScUndoConvertTableToRange::DoChange(bool bUndo)
+{
+    ScDocument& rDoc = rDocShell.GetDocument();
+    ScDocument* pSrc = bUndo ? mpUndoDoc.get() : mpRedoDoc.get();
+    ScDBCollection* pColl = bUndo ? mpUndoColl.get() : mpRedoColl.get();
+
+    bool bOldAutoCalc = rDoc.GetAutoCalc();
+    rDoc.SetAutoCalc(false);
+
+    // Swap the database-range collection first (re-adds the Table on Undo, drops it on Redo).
+    // This must precede restoring the referencing formulas below: cloning a Table[Col] formula
+    // whose database range is absent makes adjustDBRange() recreate the range mid-copy, which
+    // asserts under the delayed formula grouping that CopyToDocument enables.
+    rDoc.PreprocessDBDataUpdate();
+    rDoc.SetDBCollection(std::unique_ptr<ScDBCollection>(new ScDBCollection(*pColl)), true);
+
+    // Restore the flattened formula cells (the structured Table[Col] form on Undo, the resolved
+    // range on Redo), then recompile so the restored references resolve against the collection.
+    // (Named expressions are handled by a sibling ScUndoAllRangeNames in the same undo list.)
+    for (const ScAddress& rPos : maRefCells)
+    {
+        const ScRange aCell(rPos);
+        rDoc.DeleteAreaTab(aCell, InsertDeleteFlags::CONTENTS);
+        pSrc->CopyToDocument(aCell, InsertDeleteFlags::CONTENTS, false, rDoc);
+    }
+
+    rDoc.CompileHybridFormula();
+    rDoc.SetAutoCalc(bOldAutoCalc);
+
+    // Restore the attribute snapshot last, so it wins over any header-flag change SetDBCollection
+    // made above.
+    rDoc.DeleteAreaTab(maRange, InsertDeleteFlags::ATTRIB);
+    pSrc->CopyToDocument(maRange, InsertDeleteFlags::ATTRIB, false, rDoc);
+
+    if (ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell())
+    {
+        const SCTAB nTab = maRange.aStart.Tab();
+        if (pViewShell->GetViewData().GetTabNumber() != nTab)
+            pViewShell->SetTabNo(nTab);
+    }
+
+    rDocShell.PostPaint(maRange, PaintPartFlags::Grid | PaintPartFlags::Left | PaintPartFlags::Top
+                                     | PaintPartFlags::Size);
+    for (const ScAddress& rPos : maRefCells)
+        rDocShell.PostPaint(ScRange(rPos), PaintPartFlags::Grid);
+    rDocShell.PostDataChanged();
+}
+
+void ScUndoConvertTableToRange::Undo()
+{
+    BeginUndo();
+    DoChange(true);
+    SfxGetpApp()->Broadcast(SfxHint(SfxHintId::ScDbAreasChanged));
+    EndUndo();
+}
+
+void ScUndoConvertTableToRange::Redo()
+{
+    BeginRedo();
+    DoChange(false);
+    SfxGetpApp()->Broadcast(SfxHint(SfxHintId::ScDbAreasChanged));
+    EndRedo();
+}
+
+void ScUndoConvertTableToRange::Repeat(SfxRepeatTarget& /* rTarget */)
+{
+}
+
+bool ScUndoConvertTableToRange::CanRepeat(SfxRepeatTarget& /* rTarget */) const
+{
+    return false;
+}
+
 void ScUndoDBTable::DoChange(const bool bUndo)
 {
     ScDBCollection* pWorkRefData = bUndo ? pUndoColl.get() : pRedoColl.get();
@@ -840,11 +938,13 @@ ScUndoTableTotals::ScUndoTableTotals(ScDocShell& rNewDocShell, SCTAB nNewTab,
                                      ScDocumentUniquePtr pNewUndoDoc,
                                      std::unique_ptr<ScDBCollection> pNewUndoDB,
                                      std::unique_ptr<ScDBCollection> pNewRedoDB,
+                                     const OUString& rNewName,
                                      bool bInPlace)
     : ScDBFuncUndo(rNewDocShell, ScRange(rNewParam.nCol1, rNewParam.nRow1, nNewTab,
                                          rNewParam.nCol2, rNewParam.nRow2, nNewTab))
     , nTab(nNewTab)
     , aParam(rNewParam)
+    , maName(rNewName)
     , nNewEndRow(nNewEndY)
     , xUndoDoc(std::move(pNewUndoDoc))
     , xUndoDB(std::move(pNewUndoDB))
@@ -868,8 +968,7 @@ void ScUndoTableTotals::Undo()
 
     ScDocument& rDoc = rDocShell.GetDocument();
 
-    // A resize is net-0 rows, so Undo must NOT shift rows (that would corrupt content below).
-    // Only the toggle (net +-1, never in-place) shifts here.
+    // A resize is net zero rows, so Undo has no shift to reverse.
     const bool bResize = aParam.bReplace && !aParam.bRemoveOnly;
     if (!mbInPlace && !bResize)
     {
@@ -883,6 +982,9 @@ void ScUndoTableTotals::Undo()
         }
     }
 
+    // Same band as the snapshot in ScDBDocFunc::DoTableSubTotals.
+    const SCROW nBandStartRow = std::min(aParam.nRow2, nNewEndRow);
+
     // Restore down to the lower of the two bottoms (so absorbed content returns). For an
     // in-place ON, the clear extends past the restore range to wipe the total cells Do wrote
     // (empty before, nothing to restore).
@@ -891,15 +993,16 @@ void ScUndoTableTotals::Undo()
     const SCROW nClearEndRow
         = bResize ? nRestoreEndRow
                   : ((mbInPlace && nNewEndRow > aParam.nRow2) ? nNewEndRow : aParam.nRow2);
-    rDoc.DeleteAreaTab( aParam.nCol1, aParam.nRow1+1, aParam.nCol2, nClearEndRow, nTab, InsertDeleteFlags::ALL );
-
-    xUndoDoc->CopyToDocument(aParam.nCol1, aParam.nRow1 + 1, nTab, aParam.nCol2, nRestoreEndRow, nTab,
-                                                            InsertDeleteFlags::NONE, false, rDoc);
-    xUndoDoc->UndoToDocument(aParam.nCol1, aParam.nRow1 + 1, nTab, aParam.nCol2, nRestoreEndRow, nTab,
-                                                            InsertDeleteFlags::ALL, false, rDoc);
-
     if (xUndoDB)
         rDoc.SetDBCollection(std::unique_ptr<ScDBCollection>(new ScDBCollection(*xUndoDB)), true);
+
+    rDoc.DeleteAreaTab(aParam.nCol1, nBandStartRow, aParam.nCol2, nClearEndRow, nTab,
+                       InsertDeleteFlags::ALL);
+
+    xUndoDoc->CopyToDocument(aParam.nCol1, nBandStartRow, nTab, aParam.nCol2, nRestoreEndRow, nTab,
+                             InsertDeleteFlags::NONE, false, rDoc);
+    xUndoDoc->UndoToDocument(aParam.nCol1, nBandStartRow, nTab, aParam.nCol2, nRestoreEndRow, nTab,
+                             InsertDeleteFlags::ALL, false, rDoc);
 
     SCTAB nVisTab = pViewShell->GetViewData().GetTabNumber();
     if ( nVisTab != nTab )
@@ -923,16 +1026,12 @@ void ScUndoTableTotals::Redo()
     if ( nVisTab != nTab )
         pViewShell->SetTabNo( nTab );
 
-    // Find the post-Do DBData by its stored bottom (GetDBAtArea matches exactly): a resize
-    // stored nNewEndRow, a toggle kept aParam.nRow2. Replay with bRecord=false so Redo
-    // re-runs the same tear/overlap checks as Do.
+    // Find the post-Do DBData by its (unchanged) name, not by area: a resize that changed
+    // columns or moved the top-left would miss an area/cursor match made with the old
+    // geometry. Replay with bRecord=false so Redo re-runs the same tear/overlap checks as Do.
     const ScDBData* pDBData = nullptr;
     if (xRedoDB)
-    {
-        const bool bResize = aParam.bReplace && !aParam.bRemoveOnly;
-        const SCROW nLookupRow = bResize ? nNewEndRow : aParam.nRow2;
-        pDBData = xRedoDB->GetDBAtArea(nTab, aParam.nCol1, aParam.nRow1, aParam.nCol2, nLookupRow);
-    }
+        pDBData = xRedoDB->getNamedDBs().findByName(maName);
     if (pDBData)
     {
         // Route through the recording controller (with bRecord=false) so Redo also
@@ -1213,6 +1312,60 @@ void ScUndoAutoFilter::Repeat(SfxRepeatTarget& /* rTarget */)
 }
 
 bool ScUndoAutoFilter::CanRepeat(SfxRepeatTarget& /* rTarget */) const
+{
+    return false;
+}
+
+ScUndoRenameDBData::ScUndoRenameDBData( ScDocShell& rNewDocShell,
+                                        const OUString& rOldName, const OUString& rNewName ) :
+    ScSimpleUndo( rNewDocShell ),
+    maOldName( rOldName ),
+    maNewName( rNewName )
+{
+}
+
+ScUndoRenameDBData::~ScUndoRenameDBData()
+{
+}
+
+OUString ScUndoRenameDBData::GetComment() const
+{
+    return ScResId( STR_UNDO_RENAME_CALCTABLE );
+}
+
+void ScUndoRenameDBData::DoChange( const OUString& rFrom, const OUString& rTo ) const
+{
+    ScDocument& rDoc = rDocShell.GetDocument();
+    rDoc.GetDBCollection()->getNamedDBs().rename( rFrom, rTo );
+
+    SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScDbAreasChanged ) );   // Name Box etc.
+    rDocShell.PostPaintGridAll();
+    rDocShell.PostDataChanged();
+
+    // The table name may appear in formulas.
+    if (ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell())
+        pViewShell->UpdateInputHandler();
+}
+
+void ScUndoRenameDBData::Undo()
+{
+    BeginUndo();
+    DoChange( maNewName, maOldName );
+    EndUndo();
+}
+
+void ScUndoRenameDBData::Redo()
+{
+    BeginRedo();
+    DoChange( maOldName, maNewName );
+    EndRedo();
+}
+
+void ScUndoRenameDBData::Repeat(SfxRepeatTarget& /* rTarget */)
+{
+}
+
+bool ScUndoRenameDBData::CanRepeat(SfxRepeatTarget& /* rTarget */) const
 {
     return false;
 }

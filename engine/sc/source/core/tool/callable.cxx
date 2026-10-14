@@ -62,8 +62,13 @@ ScMacroFunction::ScMacroFunction(const ScInterpreter& rInterpreter, const OUStri
         return;
     }
 
-    // The macro security prompt is not raised here. CallBasic checks it when
-    // the macro actually runs.
+    // The macro mode is decided before the document's Basic is loaded.
+    if (!mpDocShell->AdjustMacroMode())
+    {
+        mbInvalid = true;
+        mnError = FormulaError::NoMacro;
+        return;
+    }
 
     // Find the Basic method by name, then keep the library and macro name
     // strings that CallBasic needs to invoke it.
@@ -208,8 +213,10 @@ static std::forward_list<short> lcl_FindReplacementPositions(std::u16string_view
                                 for (short nJump = 2; nJump < nJumpCount - 1; nJump += 2)
                                 {
                                     aStartPoints.push(pJump[nJump + 1]);
+                                    // The name token of a binding sits one position after
+                                    // the end of the previous subformula.
                                     pSubToken = formula::GetStringNameToken(
-                                        rTokens.GetCode()[pJump[nJump]]);
+                                        rTokens.GetCode()[pJump[nJump] + 1]);
                                     if (pSubToken
                                         && pSubToken->GetString().getString().equalsIgnoreAsciiCase(
                                                aStrName))
@@ -229,8 +236,10 @@ static std::forward_list<short> lcl_FindReplacementPositions(std::u16string_view
                             bool bFound = false;
                             for (short nJump = 1; nJump < nJumpCount - 1; ++nJump)
                             {
-                                auto pSubToken
-                                    = formula::GetStringNameToken(rTokens.GetCode()[pJump[nJump]]);
+                                // The parameter name token sits one position after the
+                                // jump target.
+                                auto pSubToken = formula::GetStringNameToken(
+                                    rTokens.GetCode()[pJump[nJump] + 1]);
                                 if (pSubToken
                                     && pSubToken->GetString().getString().equalsIgnoreAsciiCase(
                                            aStrName))

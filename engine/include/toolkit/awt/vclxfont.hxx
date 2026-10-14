@@ -22,7 +22,7 @@
 #include <config_options.h>
 #include <memory>
 #include <toolkit/dllapi.h>
-#include <com/sun/star/awt/XFont2.hpp>
+#include <com/sun/star/awt/XFont.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <mutex>
 #include <vcl/font.hxx>
@@ -36,10 +36,10 @@ class FontMetric;
 
 class UNLESS_MERGELIBS(TOOLKIT_DLLPUBLIC) VCLXFont final :
                         public cppu::WeakImplHelper<
-                            css::awt::XFont2>
+                            css::awt::XFont>
 {
     std::mutex    maMutex;
-    css::uno::Reference< css::awt::XDevice> mxDevice;
+    cpo::uno::Reference< css::awt::XDevice> mxDevice;
     vcl::Font       maFont;
     std::unique_ptr<FontMetric>
                     mpFontMetric;
@@ -53,16 +53,13 @@ public:
     const vcl::Font&     GetFont() const { return maFont; }
 
     // css::lang::XFont
-    css::awt::FontDescriptor           SAL_CALL getFontDescriptor(  ) override;
-    css::awt::SimpleFontMetric         SAL_CALL getFontMetric(  ) override;
-    sal_Int16                                       SAL_CALL getCharWidth( sal_Unicode c ) override;
-    cpo::uno::Sequence< sal_Int16 >    SAL_CALL getCharWidths( sal_Unicode nFirst, sal_Unicode nLast ) override;
-    sal_Int32                                       SAL_CALL getStringWidth( const OUString& str ) override;
-    sal_Int32                                       SAL_CALL getStringWidthArray( const OUString& str, cpo::uno::Sequence< sal_Int32 >& rDXArray ) override;
-    void                                            SAL_CALL getKernPairs( cpo::uno::Sequence< sal_Unicode >& rnChars1, cpo::uno::Sequence< sal_Unicode >& rnChars2, cpo::uno::Sequence< sal_Int16 >& rnKerns ) override;
-
-    // css::lang::XFont2
-    bool                                        SAL_CALL hasGlyphs( const OUString& aText ) override;
+    css::awt::FontDescriptor           getFontDescriptor(  ) override;
+    css::awt::SimpleFontMetric         getFontMetric(  ) override;
+    sal_Int16                                       getCharWidth( sal_Unicode c ) override;
+    cpo::uno::Sequence< sal_Int16 >    getCharWidths( sal_Unicode nFirst, sal_Unicode nLast ) override;
+    sal_Int32                                       getStringWidth( const OUString& str ) override;
+    sal_Int32                                       getStringWidthArray( const OUString& str, cpo::uno::Sequence< sal_Int32 >& rDXArray ) override;
+    bool                               hasGlyphs( const OUString& aText ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

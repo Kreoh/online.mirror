@@ -46,11 +46,11 @@
 
 #include <com/sun/star/datatransfer/dnd/XDragSource.hpp>
 #include <com/sun/star/datatransfer/dnd/XDropTarget.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <comphelper/processfactory.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace vcl {
 
@@ -684,7 +684,7 @@ rtl::Reference<DNDListenerContainer> Window::GetDropTarget()
                             mpWindowImpl->mpFrameData->mbInternalDragGestureRecognizer = true;
 
                     }
-                    catch (const RuntimeException&)
+                    catch (const cpo::uno::RuntimeException&)
                     {
                         // release all instances
                         mpWindowImpl->mpFrameData->mxDropTarget.clear();

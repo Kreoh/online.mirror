@@ -13,7 +13,7 @@
 #include <cppuhelper/bootstrap.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
 
@@ -52,8 +52,8 @@ SAL_IMPLEMENT_MAIN()
         TheApplication aApp;
 
         auto xContext = cppu::defaultBootstrap_InitialComponentContext();
-        css::uno::Reference<css::lang::XMultiServiceFactory> xServiceManager(
-            xContext->getServiceManager(), css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::lang::XMultiServiceFactory> xServiceManager(
+            xContext->getServiceManager(), cpo::uno::UNO_QUERY);
         comphelper::setProcessServiceFactory(xServiceManager);
         LanguageTag::setConfiguredSystemLanguage(MsLangId::getSystemLanguage());
         InitVCL();

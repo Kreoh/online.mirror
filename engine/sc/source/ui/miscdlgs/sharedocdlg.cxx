@@ -18,6 +18,7 @@
  */
 
 #include <o3tl/safeint.hxx>
+#include <docuno.hxx>
 #include <osl/security.hxx>
 #include <osl/diagnose.h>
 #include <sfx2/dialoghelper.hxx>
@@ -36,6 +37,7 @@
 #include <viewdata.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 IMPL_LINK(ScShareDocumentDlg, SizeAllocated, const Size&, rSize, void)
 {

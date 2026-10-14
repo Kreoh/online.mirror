@@ -38,8 +38,8 @@
 #include <svx/unopage.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 using namespace ::sd::slidesorter::model;
 
@@ -271,6 +271,10 @@ IMPL_LINK_NOARG(CurrentSlideManager, SwitchPageCallback, Timer *, void)
         // too.
         SetCurrentSlideAtViewShellBase(mpCurrentSlide);
         SetCurrentSlideAtXController(mpCurrentSlide);
+
+        PageSelector& rSelector = mrSlideSorter.GetController().GetPageSelector();
+        if (rSelector.GetSelectedPageCount() > 1)
+            rSelector.SetCoreSelection();
     }
 }
 

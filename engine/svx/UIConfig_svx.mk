@@ -87,19 +87,16 @@ $(eval $(call gb_UIConfig_add_uifiles,svx,\
 	svx/uiconfig/ui/linkwarndialog \
 	svx/uiconfig/ui/measurewidthbar \
 	svx/uiconfig/ui/medialine \
-	svx/uiconfig/ui/mediaplayback \
 	svx/uiconfig/ui/mediawindow \
 	svx/uiconfig/ui/metricfieldbox \
 	svx/uiconfig/ui/namespacedialog \
 	svx/uiconfig/ui/navigationbar \
 	svx/uiconfig/ui/numberingwindow \
-	svx/uiconfig/ui/optgridpage \
 	svx/uiconfig/ui/paralinespacingcontrol \
 	svx/uiconfig/ui/paralrspacing \
 	svx/uiconfig/ui/paraulspacing \
 	svx/uiconfig/ui/passwd \
 	svx/uiconfig/ui/presetmenu \
-	svx/uiconfig/ui/fileexporteddialog \
 	svx/uiconfig/ui/querydeletecontourdialog \
 	svx/uiconfig/ui/querydeleteobjectdialog \
 	svx/uiconfig/ui/querydeletethemedialog \
@@ -114,6 +111,7 @@ $(eval $(call gb_UIConfig_add_uifiles,svx,\
 	svx/uiconfig/ui/rowsmenu \
 	svx/uiconfig/ui/rulermenu \
 	svx/uiconfig/ui/savemodifieddialog \
+	svx/uiconfig/ui/seclabeldialog \
 	svx/uiconfig/ui/selectionmenu \
 	svx/uiconfig/ui/sidebararea \
 	svx/uiconfig/ui/sidebarempty \
@@ -122,6 +120,8 @@ $(eval $(call gb_UIConfig_add_uifiles,svx,\
 	svx/uiconfig/ui/sidebarfontwork \
 	svx/uiconfig/ui/sidebarshadow \
 	svx/uiconfig/ui/sidebargallery \
+	svx/uiconfig/ui/notebookbarshapeline \
+	svx/uiconfig/ui/notebookbarpictureline \
 	svx/uiconfig/ui/sidebargraphic \
 	svx/uiconfig/ui/sidebarline \
 	svx/uiconfig/ui/sidebarparagraph \

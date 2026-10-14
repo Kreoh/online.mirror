@@ -82,16 +82,7 @@ modules/scalc/ui/scenariodialog.ui
 modules/scalc/ui/searchresults.ui
 modules/scalc/ui/definename.ui
 modules/scalc/ui/insertname.ui
-modules/scalc/ui/tpviewpage.ui
-modules/scalc/ui/scgeneralpage.ui
-modules/scalc/ui/optformula.ui
-modules/scalc/ui/formulacalculationoptions.ui
 modules/scalc/ui/optdlg.ui
-modules/scalc/ui/optcompatibilitypage.ui
-modules/scalc/ui/optchangespage.ui
-modules/scalc/ui/optdefaultpage.ui
-modules/scalc/ui/optsortlists.ui
-modules/scalc/ui/optcalculatepage.ui
 modules/scalc/ui/movingaveragedialog.ui
 modules/scalc/ui/analysisofvariancedialog.ui
 modules/scalc/ui/covariancedialog.ui
@@ -129,7 +120,6 @@ modules/scalc/ui/validationcriteriapage.ui
 modules/scalc/ui/validationhelptabpage.ui
 modules/scalc/ui/erroralerttabpage.ui
 modules/scalc/ui/conflictsdialog.ui
-modules/scalc/ui/colorrowdialog.ui
 modules/scalc/ui/filldlg.ui
 modules/scalc/ui/ungroupdialog.ui
 modules/scalc/ui/groupdialog.ui

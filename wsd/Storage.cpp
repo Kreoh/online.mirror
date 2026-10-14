@@ -45,6 +45,7 @@
 #include <wsd/Exceptions.hpp>
 
 #include <Poco/Exception.h>
+#include <Poco/File.h>
 #include <Poco/Path.h>
 #include <Poco/StreamCopier.h>
 #include <Poco/URI.h>
@@ -295,7 +296,7 @@ std::atomic<unsigned> LocalStorage::LastLocalStorageId;
 
 std::unique_ptr<LocalStorage::LocalFileInfo> LocalStorage::getLocalFileInfo()
 {
-    const Poco::Path path = getUri().getPath();
+    const Poco::Path path = FileUtil::fixPocoURIgetPathReturnValue(getUri().getPath());
     LOG_DBG("Getting info for local uri [" << Anonymizer::anonymizeUrl(getUri().toString())
                                            << "], path ["
                                            << Anonymizer::anonymizeUrl(path.toString()) << "].");
@@ -443,7 +444,7 @@ std::string LocalStorage::downloadStorageFileToLocal(const Authorization& /*auth
 #else // MOBILEAPP
 
     // In the mobile app we use no jail
-    setRootFilePath(getUri().getPath());
+    setRootFilePath(FileUtil::fixPocoURIgetPathReturnValue(getUri().getPath()));
     // Mark the document as downloaded
     setDownloaded(true);
 
@@ -497,7 +498,7 @@ std::size_t LocalStorage::uploadLocalFileToStorageAsync(
 
 void LockContext::initSupportsLocks()
 {
-    if constexpr (Util::isMobileApp())
+    if (Util::isMobileApp())
         _supportsLocks = false;
     else
     {
@@ -512,8 +513,15 @@ void LockContext::initSupportsLocks()
 
 bool LockContext::needsRefresh(const std::chrono::steady_clock::time_point now) const
 {
-    return _supportsLocks && isLocked() && _refreshSeconds > std::chrono::seconds::zero() &&
-           (now - _lastLockTime) >= _refreshSeconds;
+    if (!_supportsLocks || !isLocked() || _refreshSeconds <= std::chrono::seconds::zero())
+        return false;
+
+    // A deferred retry replaces the refresh period rather than adding to it:
+    // the lease we hold is running down while we wait to be let back in.
+    if (_retryNotBefore != std::chrono::steady_clock::time_point())
+        return now >= _retryNotBefore;
+
+    return (now - _lastLockTime) >= _refreshSeconds;
 }
 
 void LockContext::dumpState(std::ostream& os) const
@@ -528,6 +536,12 @@ void LockContext::dumpState(std::ostream& os) const
     os << "\n    locked: " << isLocked();
     os << "\n    token: " << _lockToken;
     os << "\n    last locked: " << Util::getSteadyClockAsString(_lastLockTime);
+    os << "\n    transient failures: " << _transientFailures;
+    os << "\n    retry not before: ";
+    if (_retryNotBefore == std::chrono::steady_clock::time_point())
+        os << "<not deferred>";
+    else
+        os << Util::getSteadyClockAsString(_retryNotBefore);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

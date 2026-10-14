@@ -11,30 +11,28 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include "servicemanager.hxx"
 
 namespace com::sun::star {
     namespace lang { class XMultiServiceFactory; }
-    namespace uno {
-        class Environment;
-        class XInterface;
-    }
 }
+namespace cpo::uno { class Environment; }
+namespace cpo::uno { class XInterface; }
 
 namespace cppuhelper::detail {
 
-css::uno::Environment getEnvironment(
+cpo::uno::Environment getEnvironment(
     OUString const & name, std::u16string_view implementation);
 
 void loadSharedLibComponentFactory(
     OUString const & uri, OUString const & environment,
     OUString const & prefix, OUString const & implementation,
     OUString const & constructor,
-    css::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager,
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager,
     WrapperConstructorFn * constructorFunction,
-    css::uno::Reference<css::uno::XInterface> * factory);
+    cpo::uno::Reference<cpo::uno::XInterface> * factory);
 
 }
 

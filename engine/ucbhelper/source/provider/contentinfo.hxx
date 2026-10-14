@@ -44,7 +44,7 @@ class ContentImplHelper;
 class PropertySetInfo :
                 public cppu::WeakImplHelper<css::beans::XPropertySetInfo>
 {
-    css::uno::Reference< css::ucb::XCommandEnvironment >
+    cpo::uno::Reference< css::ucb::XCommandEnvironment >
                                 m_xEnv;
     std::optional<cpo::uno::Sequence< css::beans::Property >>
                                 m_xProps;
@@ -57,14 +57,14 @@ private:
     const cpo::uno::Sequence< css::beans::Property > & getPropertiesImpl();
 
 public:
-    PropertySetInfo( css::uno::Reference< css::ucb::XCommandEnvironment > xEnv,
+    PropertySetInfo( cpo::uno::Reference< css::ucb::XCommandEnvironment > xEnv,
                      ContentImplHelper* pContent );
     virtual ~PropertySetInfo() override;
 
     // XPropertySetInfo
-    virtual cpo::uno::Sequence< css::beans::Property > SAL_CALL getProperties() override;
-    virtual css::beans::Property SAL_CALL getPropertyByName( const OUString& aName ) override;
-    virtual bool SAL_CALL hasPropertyByName( const OUString& Name ) override;
+    virtual cpo::uno::Sequence< css::beans::Property > getProperties() override;
+    virtual css::beans::Property getPropertyByName( const OUString& aName ) override;
+    virtual bool hasPropertyByName( const OUString& Name ) override;
 
     // Non-Interface methods.
     void reset();
@@ -81,7 +81,7 @@ public:
 class CommandProcessorInfo :
                 public cppu::WeakImplHelper<css::ucb::XCommandInfo>
 {
-    css::uno::Reference< css::ucb::XCommandEnvironment >
+    cpo::uno::Reference< css::ucb::XCommandEnvironment >
                                 m_xEnv;
     std::optional<cpo::uno::Sequence< css::ucb::CommandInfo >>
                                 m_xCommands;
@@ -96,16 +96,16 @@ private:
     const cpo::uno::Sequence< css::ucb::CommandInfo > & getCommandsImpl();
 
 public:
-    CommandProcessorInfo( css::uno::Reference< css::ucb::XCommandEnvironment > xEnv,
+    CommandProcessorInfo( cpo::uno::Reference< css::ucb::XCommandEnvironment > xEnv,
                          ContentImplHelper* pContent );
     virtual ~CommandProcessorInfo() override;
 
     // XCommandInfo
-    virtual cpo::uno::Sequence< css::ucb::CommandInfo > SAL_CALL getCommands() override;
-    virtual css::ucb::CommandInfo SAL_CALL getCommandInfoByName( const OUString& Name ) override;
-    virtual css::ucb::CommandInfo SAL_CALL getCommandInfoByHandle( sal_Int32 Handle ) override;
-    virtual bool SAL_CALL hasCommandByName( const OUString& Name ) override;
-    virtual bool SAL_CALL hasCommandByHandle( sal_Int32 Handle ) override;
+    virtual cpo::uno::Sequence< css::ucb::CommandInfo > getCommands() override;
+    virtual css::ucb::CommandInfo getCommandInfoByName( const OUString& Name ) override;
+    virtual css::ucb::CommandInfo getCommandInfoByHandle( sal_Int32 Handle ) override;
+    virtual bool hasCommandByName( const OUString& Name ) override;
+    virtual bool hasCommandByHandle( sal_Int32 Handle ) override;
 
     // Non-Interface methods.
     void reset();

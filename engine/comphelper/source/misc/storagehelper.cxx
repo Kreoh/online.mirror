@@ -52,28 +52,29 @@
 #include <o3tl/string_view.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace comphelper {
 
 
 uno::Reference< lang::XSingleServiceFactory > OStorageHelper::GetStorageFactory(
-                            const uno::Reference< uno::XComponentContext >& rxContext )
+                            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
-    uno::Reference< uno::XComponentContext> xContext = rxContext.is() ? rxContext : ::comphelper::getProcessComponentContext();
+    uno::Reference< cpo::uno::XComponentContext> xContext = rxContext.is() ? rxContext : ::comphelper::getProcessComponentContext();
 
     return embed::StorageFactory::create( xContext );
 }
 
 
 uno::Reference< lang::XSingleServiceFactory > OStorageHelper::GetFileSystemStorageFactory(
-                            const uno::Reference< uno::XComponentContext >& rxContext )
+                            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     return embed::FileSystemStorageFactory::create(rxContext);
 }
 
 
 uno::Reference< embed::XStorage > OStorageHelper::GetTemporaryStorage(
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstance(),
                                                     uno::UNO_QUERY_THROW );
@@ -84,7 +85,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetTemporaryStorage(
 uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL(
             const OUString& aURL,
             sal_Int32 nStorageMode,
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(aURL), cpo::uno::Any(nStorageMode) };
     uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
@@ -96,7 +97,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL(
 uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL2(
             const OUString& aURL,
             sal_Int32 nStorageMode,
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(aURL), cpo::uno::Any(nStorageMode) };
 
@@ -121,7 +122,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL2(
         if (anyEx.hasValue())
             throw css::lang::WrappedTargetRuntimeException( u""_ustr, nullptr, anyEx );
         else
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
     }
 
     uno::Reference< embed::XStorage > xTempStorage(
@@ -132,7 +133,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL2(
 
 uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromInputStream(
             const uno::Reference < io::XInputStream >& xStream,
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xStream), cpo::uno::Any(embed::ElementModes::READ) };
     uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
@@ -144,7 +145,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromInputStream(
 uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromStream(
             const uno::Reference < io::XStream >& xStream,
             sal_Int32 nStorageMode,
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xStream), cpo::uno::Any(nStorageMode) };
     uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
@@ -190,11 +191,11 @@ void OStorageHelper::CopyInputToOutput(
 
 uno::Reference< io::XInputStream > OStorageHelper::GetInputStreamFromURL(
             const OUString& aURL,
-            const uno::Reference< uno::XComponentContext >& context )
+            const uno::Reference< cpo::uno::XComponentContext >& context )
 {
     uno::Reference< io::XInputStream > xInputStream = ucb::SimpleFileAccess::create(context)->openFileRead( aURL );
     if ( !xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     return xInputStream;
 }
@@ -273,7 +274,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromURL(
             const OUString& aFormat,
             const OUString& aURL,
             sal_Int32 nStorageMode,
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     cpo::uno::Sequence< beans::PropertyValue > aProps{ comphelper::makePropertyValue(u"StorageFormat"_ustr,
                                                                                 aFormat) };
@@ -288,7 +289,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromURL(
 uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromInputStream(
             const OUString& aFormat,
             const uno::Reference < io::XInputStream >& xStream,
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             bool bRepairStorage )
 {
     cpo::uno::Sequence< beans::PropertyValue > aProps( bRepairStorage ? 2 : 1 );
@@ -312,7 +313,7 @@ uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromStream(
             const OUString& aFormat,
             const uno::Reference < io::XStream >& xStream,
             sal_Int32 nStorageMode,
-            const uno::Reference< uno::XComponentContext >& rxContext,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
             bool bRepairStorage )
 {
     cpo::uno::Sequence< beans::PropertyValue > aProps( bRepairStorage ? 2 : 1 );

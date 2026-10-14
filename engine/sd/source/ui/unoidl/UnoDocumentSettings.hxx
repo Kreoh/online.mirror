@@ -19,9 +19,9 @@
 
 #pragma once
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
-namespace com::sun::star::uno
+namespace cpo::uno
 {
 class XInterface;
 }
@@ -30,7 +30,7 @@ class SdXImpressDocument;
 
 namespace sd
 {
-css::uno::Reference<css::uno::XInterface>
+cpo::uno::Reference<cpo::uno::XInterface>
 DocumentSettings_createInstance(SdXImpressDocument* pDoc) noexcept;
 }
 

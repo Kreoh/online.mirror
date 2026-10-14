@@ -34,6 +34,7 @@
 #include <svx/gallery1.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -161,7 +162,7 @@ void GalApp::Init()
             osl_setEnvironment(envVar.pData, installPrefix.pData);
         }
 
-        uno::Reference<uno::XComponentContext> xComponentContext
+        uno::Reference<cpo::uno::XComponentContext> xComponentContext
             = ::cppu::defaultBootstrap_InitialComponentContext();
         xMSF.set( xComponentContext->getServiceManager(), uno::UNO_QUERY );
         if( !xMSF.is() )

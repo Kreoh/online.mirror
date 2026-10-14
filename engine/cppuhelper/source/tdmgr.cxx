@@ -35,6 +35,7 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/reflection/XAnnotations.hpp>
 #include <com/sun/star/reflection/XTypeDescription.hpp>
 #include <com/sun/star/reflection/XEnumTypeDescription.hpp>
 #include <com/sun/star/reflection/XIndirectTypeDescription.hpp>
@@ -49,7 +50,7 @@
 #include <memory>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::reflection;
 using namespace ::cpo::uno;
 
@@ -547,6 +548,20 @@ static typelib_TypeDescription * createCTD(
         }
     }
 
+    if (pRet != nullptr) {
+        if (auto const ann = Reference<reflection::XAnnotations>(xType, UNO_QUERY)) {
+            auto const anns = ann->getAnnotations();
+            std::vector<OUString> owners;
+            owners.reserve(anns.getLength()); // for guaranteed-stable ptrs
+            std::vector<rtl_uString *> ptrs;
+            for (auto const & a: anns) {
+                owners.emplace_back(a.Value.IsPresent ? a.Name + "=" + a.Value.Value : a.Name);
+                ptrs.push_back(owners.back().pData);
+            }
+            typelib_typedescription_setAnnotations(pRet, ptrs.size(), ptrs.data());
+        }
+    }
+
     return pRet;
 }
 
@@ -623,10 +638,10 @@ void EventListenerImpl::disposing( lang::EventObject const & rEvt )
 bool installTypeDescriptionManager(
     Reference< container::XHierarchicalNameAccess > const & xTDMgr_c )
 {
-    uno::Environment curr_env(Environment::getCurrent());
-    uno::Environment target_env(CPPU_CURRENT_LANGUAGE_BINDING_NAME);
+    cpo::uno::Environment curr_env(Environment::getCurrent());
+    cpo::uno::Environment target_env(u"" CPPU_CURRENT_LANGUAGE_BINDING_NAME ""_ustr);
 
-    uno::Mapping curr2target(curr_env, target_env);
+    cpo::uno::Mapping curr2target(curr_env, target_env);
 
 
     Reference<container::XHierarchicalNameAccess> xTDMgr(

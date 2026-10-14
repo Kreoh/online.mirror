@@ -48,6 +48,8 @@
 #include <svx/xbtmpit.hxx>
 #include <svx/xdef.hxx>
 #include <svx/xfillit0.hxx>
+#include <svx/xfilluseslidebackgrounditem.hxx>
+#include <svx/svdoashp.hxx>
 
 #include <sdr/contact/viewcontactofsdrpage.hxx>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
@@ -60,11 +62,11 @@
 #include <rtl/strbuf.hxx>
 #include <libxml/xmlwriter.h>
 #include <docmodel/theme/Theme.hxx>
-#include <comphelper/kit.hxx>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -130,6 +132,27 @@ SdrPage* SdrObjList::getSdrPageFromSdrObjList() const
 SdrObject* SdrObjList::getSdrObjectFromSdrObjList() const
 {
     // default is no SdrObject (SdrObjGroup)
+    return nullptr;
+}
+
+SdrObject* SdrObjList::FindObjectByUniqueID(sal_uInt64 nUniqueID) const
+{
+    for (size_t nObject = 0; nObject < GetObjCount(); ++nObject)
+    {
+        SdrObject* pObject = GetObj(nObject);
+        if (!pObject)
+            continue;
+
+        if (pObject->GetUniqueID() == nUniqueID)
+            return pObject;
+
+        if (const SdrObjList* pChildren = pObject->GetSubList())
+        {
+            if (SdrObject* pFound = pChildren->FindObjectByUniqueID(nUniqueID))
+                return pFound;
+        }
+    }
+
     return nullptr;
 }
 
@@ -1012,7 +1035,7 @@ void SdrObjList::SetNavigationOrder (const uno::Reference<container::XIndexAcces
 
         for (sal_Int32 nIndex=0; nIndex<nCount; ++nIndex)
         {
-            uno::Reference<uno::XInterface> xShape (rxOrder->getByIndex(nIndex), uno::UNO_QUERY);
+            uno::Reference<cpo::uno::XInterface> xShape (rxOrder->getByIndex(nIndex), uno::UNO_QUERY);
             SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
             if (pObject == nullptr)
                 break;
@@ -1203,8 +1226,45 @@ void SdrPageProperties::ImpAddStyleSheet(SfxStyleSheet& rNewStyleSheet)
 namespace
 {
 
+// A custom shape that uses the slide background keeps its rendering, and for a 3D shape that
+// rendering holds a copy of the page fill. The rendering is dropped, so it is built again from
+// the current page fill.
+void ImpInvalidateSlideBackgroundShapes(const SdrPage& rSdrPage)
+{
+    SdrObjListIter aIter(&rSdrPage, SdrIterMode::DeepNoGroups);
+
+    while (aIter.IsMore())
+    {
+        SdrObjCustomShape* pCustomShape = dynamic_cast<SdrObjCustomShape*>(aIter.Next());
+
+        if (pCustomShape
+            && pCustomShape->GetMergedItem(XATTR_FILLSTYLE).GetValue() == drawing::FillStyle_NONE
+            && pCustomShape->GetMergedItem(XATTR_FILLUSESLIDEBACKGROUND).GetValue())
+        {
+            pCustomShape->InvalidateRenderGeometry();
+            pCustomShape->ActionChanged();
+        }
+    }
+}
+
 void ImpPageChange(SdrPage& rSdrPage)
 {
+    ImpInvalidateSlideBackgroundShapes(rSdrPage);
+
+    // The pages that use a master page show its fill when they have none of their own.
+    if (rSdrPage.IsMasterPage())
+    {
+        const SdrModel& rModel(rSdrPage.getSdrModelFromSdrPage());
+
+        for (sal_uInt16 nPage(0); nPage < rModel.GetPageCount(); ++nPage)
+        {
+            const SdrPage* pPage(rModel.GetPage(nPage));
+
+            if (pPage->TRG_HasMasterPage() && &pPage->TRG_GetMasterPage() == &rSdrPage)
+                ImpInvalidateSlideBackgroundShapes(*pPage);
+        }
+    }
+
     rSdrPage.ActionChanged();
     rSdrPage.getSdrModelFromSdrPage().SetChanged();
     SdrHint aHint(SdrHintKind::PageOrderChange, &rSdrPage);
@@ -1361,6 +1421,7 @@ SdrPage::SdrPage(SdrModel& rModel, bool bMasterPage)
     mnBorderUpper(0),
     mnBorderRight(0),
     mnBorderLower(0),
+    maGuid(tools::Guid::Generate),
     mpLayerAdmin(new SdrLayerAdmin(&rModel.GetLayerAdmin())),
     m_nPageNum(0),
     mbMaster(bMasterPage),
@@ -1422,6 +1483,8 @@ void SdrPage::lateInit(const SdrPage& rSrcPage)
     mnBorderLower = rSrcPage.mnBorderLower;
     mbBackgroundFullSize = rSrcPage.mbBackgroundFullSize;
     m_nPageNum = rSrcPage.m_nPageNum;
+    // A copy of a page starts out holding the identifier of its source page.
+    maGuid = rSrcPage.maGuid;
 
     if(rSrcPage.TRG_HasMasterPage())
     {
@@ -1839,40 +1902,21 @@ Color SdrPage::GetPageBackgroundColor( SdrPageView const * pView, bool bScreenDi
         aColor = pView->GetApplicationDocumentColor();
     }
 
-    const SfxItemSet* pBackgroundFill = &getSdrPageProperties().GetItemSet();
+    return GetPageBackgroundColor(aColor);
+}
 
-    if(!IsMasterPage() && TRG_HasMasterPage())
-    {
-        if(drawing::FillStyle_NONE == pBackgroundFill->Get(XATTR_FILLSTYLE).GetValue())
-        {
-            // See unomodel.cxx: "It is guaranteed, that after a standard page the corresponding notes page follows."
-            bool notesPage = GetPageNum() % 2 == 0;
-
-            if (!comphelper::COKit::isActive() || !notesPage || !getSdrModelFromSdrPage().IsImpress())
-                pBackgroundFill = &TRG_GetMasterPage().getSdrPageProperties().GetItemSet();
-            else
-            {
-                /*
-                    See sdrmasterpagedescriptor.cxx: e.g. the Notes MasterPage has no StyleSheet set (and there maybe others).
-                */
-
-                // This is a notes page. Try to get itemset from standard page's master.
-                if (getSdrModelFromSdrPage().GetPage(GetPageNum() - 1))
-                    pBackgroundFill = &getSdrModelFromSdrPage().GetPage(GetPageNum() - 1)->TRG_GetMasterPage().getSdrPageProperties().GetItemSet();
-                else
-                    pBackgroundFill = &TRG_GetMasterPage().getSdrPageProperties().GetItemSet();
-            }
-        }
-    }
+Color SdrPage::GetPageBackgroundColor(const Color& rBehind) const
+{
+    const SdrPageProperties* pPageProperties = getCorrectSdrPageProperties();
+    if (!pPageProperties)
+        return rBehind;
 
     // A page fill that is not fully opaque is mixed with the color behind the page, which is the
     // document background this page is painted on.
-    const Color aBehindPage(aColor);
+    if (auto oColor = GetDraftFillColor(pPageProperties->GetItemSet(), rBehind))
+        return *oColor;
 
-    if (auto oColor = GetDraftFillColor(*pBackgroundFill, aBehindPage))
-        aColor = *oColor;
-
-    return aColor;
+    return rBehind;
 }
 
 /** *deprecated, use GetBackgroundColor with SdrPageView */
@@ -1899,6 +1943,8 @@ bool SdrPage::checkVisibility(
 void SdrPage::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
     (void)xmlTextWriterStartElement(pWriter, BAD_CAST("SdrPage"));
+    (void)xmlTextWriterWriteAttribute(pWriter, BAD_CAST("maGuid"),
+                                      BAD_CAST(maGuid.getString().getStr()));
     SdrObjList::dumpAsXml(pWriter);
 
     (void)xmlTextWriterStartElement(pWriter, BAD_CAST("width"));

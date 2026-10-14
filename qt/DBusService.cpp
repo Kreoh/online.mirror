@@ -29,7 +29,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMessageBox>
+#ifdef __linux__
 #include <sys/xattr.h>
+#endif
 
 constexpr const char* SERVICE_NAME = "com.collaboraoffice.Office";
 constexpr const char* OBJECT_PATH = "/com/collaboraoffice/Office";
@@ -38,6 +40,7 @@ namespace coda
 {
     std::string hostDisplayUriForPath(const QString& path)
     {
+#ifdef __linux__
         // The xdg-document-portal FUSE filesystem exposes the real host location
         // of an exported file through this extended attribute.
         constexpr const char* HOST_PATH_XATTR = "user.document-portal.host-path";
@@ -59,6 +62,12 @@ namespace coda
             return {};
 
         return Poco::URI(Poco::Path(hostPath.toStdString())).toString();
+#else
+        // The document portal is a Linux desktop facility, so elsewhere the
+        // path the caller has is already the host path.
+        (void)path;
+        return {};
+#endif
     }
 
     void openFiles(const QStringList& files, const QStringList& displayUris)
@@ -119,10 +128,17 @@ namespace coda
         if (path.isEmpty())
         {
             LOG_ERR("Failed to create new " << templateType << " document");
+            QMessageBox::warning(nullptr, QObject::tr("New Document Error"),
+                                 QObject::tr("Could not create a new document."));
             return false;
         }
-        TabbedWindow* tw = TabbedWindow::getOrCreate(Application::getProfile());
         Poco::URI newDocumentURI(Poco::Path(path.toStdString()));
+        if (WebView* existingDocument = WebView::findOpenDocument(newDocumentURI))
+        {
+            existingDocument->activateWindow();
+            return true;
+        }
+        TabbedWindow* tw = TabbedWindow::getOrCreate(Application::getProfile());
         tw->manager()->addDocumentTab(newDocumentURI, /*newFile*/ true);
         Application::getRecentFiles().add(newDocumentURI.toString());
         return true;

@@ -35,13 +35,12 @@ OPENSSL_PLATFORM := \
       )\
     )\
   ,\
-    $(if $(filter SOLARIS,$(OS)),\
-      $(if $(filter INTEL,$(CPUNAME)),solaris-x86-cc,\
-        $(if $(filter X86_64,$(CPUNAME)),solaris64-x86_64-cc,solaris-sparcv9-cc)\
-      )\
-    ,\
       $(if $(filter iOS,$(OS)),\
-        ios-aarch64\
+        $(if $(filter TRUE,$(ENABLE_IOS_SIMULATOR)),\
+          $(if $(filter X86_64,$(CPUNAME)),iossimulator-x86_64-xcrun,iossimulator-arm64-xcrun)\
+        ,\
+          ios64-xcrun\
+        )\
       ,\
         $(if $(filter WNT,$(OS)),\
           $(if $(filter INTEL,$(CPUNAME)),VC-WIN32)\
@@ -56,7 +55,6 @@ OPENSSL_PLATFORM := \
           )\
         )\
       )\
-    )\
   )
 
 ifeq ($(COM),MSC)
@@ -70,7 +68,7 @@ $(call gb_ExternalProject_get_state_target,openssl,build):
 	$(call gb_ExternalProject_run,build,\
 		CONFIGURE_INSIST=1 $(PERL) Configure $(OPENSSL_PLATFORM) no-tests no-multilib \
 		&& $(if $(JOM),$(JOM) $(wordlist 1,2,$(PARALLELISM_OPTION)),nmake) -f makefile \
-			$(if $(call gb_Module__symbols_enabled,openssl),DEBUG_FLAGS_VALUE="$(gb_DEBUGINFO_FLAGS)") \
+			$(if $(call gb_Module__symbols_enabled,openssl),DEBUG_FLAGS_VALUE="$(gb_DEBUGINFO_FLAGS)$(if $(JOM),-Z7)") \
 	)
 	$(call gb_Trace_EndRange,openssl,EXTERNAL)
 
@@ -79,7 +77,7 @@ $(call gb_ExternalProject_get_state_target,openssl,build):
 	$(call gb_Trace_StartRange,openssl,EXTERNAL)
 	$(call gb_ExternalProject_run,build,\
 		unset MAKEFLAGS && \
-		$(if $(filter LINUX MACOSX FREEBSD ANDROID SOLARIS iOS,$(OS)), \
+		$(if $(filter LINUX MACOSX FREEBSD ANDROID iOS,$(OS)), \
 			./Configure, \
 		$(if $(filter WNT,$(OS)), \
 			$(PERL) Configure, \

@@ -12,11 +12,12 @@
 #include <com/sun/star/container/XNameReplace.hpp>
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <cppunit/TestAssert.h>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace apitest
 {
@@ -28,7 +29,7 @@ void XNameReplace::testReplaceByName()
     cpo::uno::Any aAny = xNameReplace->getByName(m_aReplacementName);
 
     // we deliberately avoid uno::UNO_QUERY_THROW, so a test on .is() can be made
-    uno::Reference<uno::XInterface> xElement(aAny, uno::UNO_QUERY);
+    uno::Reference<cpo::uno::XInterface> xElement(aAny, uno::UNO_QUERY);
     CPPUNIT_ASSERT(xElement.is());
 }
 

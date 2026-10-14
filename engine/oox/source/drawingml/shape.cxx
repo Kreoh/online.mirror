@@ -51,6 +51,7 @@
 #include <oox/vml/vmlshape.hxx>
 #include <oox/vml/vmlshapecontainer.hxx>
 #include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
 #include <oox/helper/graphichelper.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/helper/modelobjecthelper.hxx>
@@ -135,8 +136,8 @@
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::text;
@@ -284,7 +285,7 @@ void Shape::propagateDiagramHelper()
     {
         if (mxShape)
         {
-            mpDiagramHelper->doAnchor(mxShape);
+            mpDiagramHelper->doAnchor(mxShape, maPosition, maSize);
             mpDiagramHelper = nullptr;
         }
     }
@@ -296,6 +297,21 @@ void Shape::propagateDiagramHelper()
     {
         delete mpDiagramHelper;
         mpDiagramHelper = nullptr;
+    }
+
+    // evtl. make DiagramNodes use FitSize in edit mode
+    if (FRAMETYPE_DIAGRAM == meFrameType && mxShape)
+    {
+        SdrObject* pRootObject(SdrObject::getSdrObjectFromXShape(mxShape));
+
+        if (nullptr != pRootObject)
+        {
+            DiagramHelper_oox* pHelper(
+                dynamic_cast<DiagramHelper_oox*>(pRootObject->getDiagramHelper().get()));
+
+            if (nullptr != pHelper)
+                pHelper->applyTextFitToSizeToDiagramNodes(mxShape, /*bKeepFontScale*/true);
+        }
     }
 }
 
@@ -331,6 +347,18 @@ table::TablePropertiesPtr const & Shape::getTableProperties()
     if ( !mpTablePropertiesPtr )
         mpTablePropertiesPtr = std::make_shared<table::TableProperties>();
     return mpTablePropertiesPtr;
+}
+
+void Shape::setNonVisualProperties( const AttributeList& rAttribs )
+{
+    // A shape that already carries an identifier keeps the one it has.
+    if (msId.isEmpty())
+        msId = rAttribs.getStringDefaulted(XML_id);
+
+    mbHidden = rAttribs.getBool(XML_hidden, false);
+    msName = rAttribs.getStringDefaulted(XML_name);
+    msDescription = rAttribs.getStringDefaulted(XML_descr);
+    msTitle = rAttribs.getStringDefaulted(XML_title);
 }
 
 void Shape::setDefaults(bool bHeight)
@@ -418,6 +446,26 @@ void Shape::addShape(
             Reference< XShapes > xShapes( xShape, UNO_QUERY );
             if ( xShapes.is() )
                 addChildren( rFilterBase, *this, pTheme, xShapes, pShapeMap, aMatrix );
+            // A Diagram layout node that draws a shape of its own may hold layout nodes below
+            // it, the text of a callout below the callout's hidden frame; the children hang off
+            // a shape that is no group, and are made beside it, in the group it stands in, with
+            // that group's transformation and each moved by this shape's place, which their
+            // places are relative to. The shape's own transformation would scale them to its
+            // size and turn them as it is turned. A child the layout gave no size, the text of
+            // a connector whose text the connector itself carries, makes no shape.
+            else if (!maChildren.empty() && !msInternalName.isEmpty())
+            {
+                for (auto const& child : maChildren)
+                {
+                    if (child->getSize().Width <= 0 || child->getSize().Height <= 0)
+                        continue;
+                    const awt::Point aHeld(child->getPosition());
+                    child->setPosition(awt::Point(aHeld.X + maPosition.X, aHeld.Y + maPosition.Y));
+                    child->setMasterTextListStyle( mpMasterTextListStyle );
+                    child->addShape( rFilterBase, pTheme, rxShapes, aTransformation, rShapeOrParentShapeFillProps, pShapeMap, pParentGroupShape );
+                    child->setPosition(aHeld);
+                }
+            }
 
             if (mbWordprocessingCanvas && !mbWPGChild)
             {
@@ -1163,13 +1211,20 @@ void PushMasterTextListStyleToMasterShapeParagraphs(TextListStyle& rMasterTextLi
         xParagraph->setPropertyValue(u"NumberingRules"_ustr, cpo::uno::Any(xNumberingRules));
     }
 }
+
+// DrawingML has 1/1000 of a percent, the shape property has whole percent from 0 to 100.
+sal_Int16 toWholePercent(sal_Int32 nThousandthsOfPercent)
+{
+    return static_cast<sal_Int16>(
+        std::clamp<double>(std::round(nThousandthsOfPercent / 1000.0), 0, 100));
+}
 }
 
 Reference< XShape > const & Shape::createAndInsert(
         ::oox::core::XmlFilterBase& rFilterBase,
         const OUString& rServiceName,
         const Theme* pTheme,
-        const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+        const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
         bool bClearText,
         const oox::drawingml::ShapePtr& pPlaceholder,
         basegfx::B2DHomMatrix& aParentTransformation,
@@ -1680,7 +1735,7 @@ Reference< XShape > const & Shape::createAndInsert(
                 xSet->getPropertyValue(u"EmbeddedObject"_ustr), uno::UNO_QUERY);
             if (xObj.is())
             {
-                uno::Reference<uno::XInterface> const xMathModel(xObj->getComponent());
+                uno::Reference<cpo::uno::XInterface> const xMathModel(xObj->getComponent());
                 oox::FormulaImExportBase *const pMagic(
                         dynamic_cast<oox::FormulaImExportBase*>(xMathModel.get()));
                 assert(pMagic);
@@ -1694,6 +1749,7 @@ Reference< XShape > const & Shape::createAndInsert(
         ::Color nFillPhClr(ColorTransparency, 0xffffffff);
         sal_Int16 nFillPhClrTheme = -1;
         sal_Int16 nLinePhClrTheme = -1;
+        model::ComplexColor aLinePhClrComplex;
         // TODO: use ph color when applying effect properties
         //sal_Int32 nEffectPhClr = -1;
 
@@ -1711,6 +1767,9 @@ Reference< XShape > const & Shape::createAndInsert(
                     aLineProperties.assignUsed( *pLineProps );
                 nLinePhClr = pLineRef->maPhClr.getColor( rGraphicHelper );
                 nLinePhClrTheme = pLineRef->maPhClr.getSchemeColorIndex();
+                // What the reference asks for, with the transformations that reach its colour
+                aLinePhClrComplex
+                    = pLineRef->maPhClr.createComplexColor( rGraphicHelper, nLinePhClrTheme );
 
                 // Store style-related properties to InteropGrabBag to be able to export them back
                 cpo::uno::Sequence<beans::PropertyValue> aProperties = comphelper::InitPropertySequence(
@@ -1761,6 +1820,19 @@ Reference< XShape > const & Shape::createAndInsert(
                     {u"Transformations"_ustr, cpo::uno::Any(pEffectRef->maPhClr.getTransformations())}
                 });
                 putPropertyToGrabBag( u"StyleEffectRef"_ustr, Any( aProperties ) );
+            }
+            if( const ShapeStyleRef* pFontRef = getShapeStyleRef( XML_fontRef ) )
+            {
+                // The font reference names one of the two fonts of the theme, major or minor,
+                // and the theme color the text of the shape takes.
+                cpo::uno::Sequence<beans::PropertyValue> aProperties = comphelper::InitPropertySequence(
+                {
+                    {u"SchemeClr"_ustr, cpo::uno::Any(pFontRef->maPhClr.getSchemeColorName())},
+                    {u"Idx"_ustr, cpo::uno::Any(pFontRef->mnThemedIdx == XML_major
+                                                    ? u"major"_ustr : u"minor"_ustr)},
+                    {u"Transformations"_ustr, cpo::uno::Any(pFontRef->maPhClr.getTransformations())}
+                });
+                putPropertyToGrabBag( u"StyleFontRef"_ustr, Any( aProperties ) );
             }
         }
         ShapePropertyMap aShapeProps( rFilterBase.getModelObjectHelper() );
@@ -1890,7 +1962,8 @@ Reference< XShape > const & Shape::createAndInsert(
                                           nFillPhClrTheme, mbFlipH, mbFlipV, bIsCustomShape);
 
         LineProperties aLineProperties = getActualLineProperties(pTheme);
-        aLineProperties.pushToPropMap( aShapeProps, rGraphicHelper, nLinePhClr, nLinePhClrTheme);
+        aLineProperties.pushToPropMap( aShapeProps, rGraphicHelper, nLinePhClr, nLinePhClrTheme,
+                                       &aLinePhClrComplex );
         EffectProperties aEffectProperties = getActualEffectProperties(pTheme);
         // TODO: use ph color when applying effect properties
         aEffectProperties.pushToPropMap( aShapeProps, rGraphicHelper );
@@ -2350,7 +2423,9 @@ Reference< XShape > const & Shape::createAndInsert(
                 mpCustomShapePropertiesPtr->setTextCameraZRotateAngle( nTextCameraZRotation / 60000 );
 
                 // TextPreRotateAngle. Text rotates inside the text area. Might be used for diagram layout 'upr' and 'grav'.
-                sal_Int32 nTextPreRotateAngle = static_cast< sal_Int32 >( getTextBody()->getTextProperties().moTextPreRotation.value_or( 0 ) );
+                // A Diagram laid out again has the turn on the shape, its text comes back from the shape it replaces.
+                sal_Int32 nTextPreRotateAngle = static_cast< sal_Int32 >( getTextBody()->getTextProperties().moTextPreRotation.value_or(
+                    moDiagramTextPreRotation.value_or( 0 ) ) );
 
                 nTextPreRotateAngle -= mnDiagramRotation; // Use of mnDiagramRotation is unclear. It seems to be always 0 here.
 
@@ -2385,6 +2460,8 @@ Reference< XShape > const & Shape::createAndInsert(
                 if (XML_ellipsis == getTextBody()->getTextProperties().moVertOverflow)
                     putPropertyToGrabBag(u"vertOverflow"_ustr, cpo::uno::Any(u"ellipsis"_ustr));
             }
+            else if (moDiagramTextPreRotation)
+                mpCustomShapePropertiesPtr->setTextPreRotateAngle(-*moDiagramTextPreRotation / 60000);
 
             // Note that the script oox/source/drawingml/customshapes/generatePresetsData.pl looks
             // for these ==cscode== and ==csdata== markers, so don't "clean up" these SAL_INFOs
@@ -2521,6 +2598,30 @@ Reference< XShape > const & Shape::createAndInsert(
             propertySet->setPropertyValue(u"GlowEffectRadius"_ustr, Any(convertEmuToHmm(aEffectProperties.maGlow.moGlowRad.value())));
             propertySet->setPropertyValue(u"GlowEffectColor"_ustr, Any(aEffectProperties.maGlow.moGlowColor.getColor(rGraphicHelper)));
             propertySet->setPropertyValue(u"GlowEffectTransparency"_ustr, Any(aEffectProperties.maGlow.moGlowColor.getTransparency()));
+        }
+
+        // Set reflection effect properties
+        if (aEffectProperties.maReflection.isUsed()
+            && aServiceName != "com.sun.star.drawing.GroupShape")
+        {
+            const EffectReflectionProperties& rReflection = aEffectProperties.maReflection;
+
+            uno::Reference<beans::XPropertySet> propertySet(mxShape, uno::UNO_QUERY);
+            propertySet->setPropertyValue(u"ReflectionEffect"_ustr, Any(true));
+            propertySet->setPropertyValue(u"ReflectionEffectDistance"_ustr,
+                                          Any(rReflection.moDistance->as_hmm<sal_Int32>()));
+            propertySet->setPropertyValue(u"ReflectionEffectBlurRadius"_ustr,
+                                          Any(rReflection.moBlurRadius->as_hmm<sal_Int32>()));
+            propertySet->setPropertyValue(
+                u"ReflectionEffectStartTransparency"_ustr,
+                Any(sal_Int16(100 - toWholePercent(*rReflection.moStartAlpha))));
+            propertySet->setPropertyValue(u"ReflectionEffectStartPosition"_ustr,
+                                          Any(toWholePercent(*rReflection.moStartPosition)));
+            propertySet->setPropertyValue(
+                u"ReflectionEffectEndTransparency"_ustr,
+                Any(sal_Int16(100 - toWholePercent(*rReflection.moEndAlpha))));
+            propertySet->setPropertyValue(u"ReflectionEffectEndPosition"_ustr,
+                                          Any(toWholePercent(*rReflection.moEndPosition)));
         }
 
         // Set soft edge effect properties

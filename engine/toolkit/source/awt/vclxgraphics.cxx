@@ -19,6 +19,7 @@
 
 
 #include <memory>
+#include <com/sun/star/awt/XBitmap.hpp>
 #include <awt/vclxgraphics.hxx>
 #include <toolkit/awt/vclxdevice.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
@@ -33,6 +34,7 @@
 #include <tools/debug.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 
 

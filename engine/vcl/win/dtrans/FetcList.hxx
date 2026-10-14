@@ -21,7 +21,7 @@
 
 #include <sal/types.h>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include "Fetc.hxx"
 
 #if !defined WIN32_LEAN_AND_MEAN
@@ -93,10 +93,10 @@ class CDataFormatTranslator;
 class CFormatRegistrar
 {
 public:
-    CFormatRegistrar( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+    CFormatRegistrar( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
                       const CDataFormatTranslator& aDataFormatTranslator );
 
-    void RegisterFormats( const css::uno::Reference< css::datatransfer::XTransferable >& aXTransferable,
+    void RegisterFormats( const cpo::uno::Reference< css::datatransfer::XTransferable >& aXTransferable,
                                    CFormatEtcContainer& aFormatEtcContainer );
 
     bool hasSynthesizedLocale( ) const;
@@ -111,7 +111,7 @@ private:
     OUString getCharsetFromDataFlavor( const css::datatransfer::DataFlavor& aFlavor );
 
     bool hasUnicodeFlavor(
-        const css::uno::Reference< css::datatransfer::XTransferable >& aXTransferable ) const;
+        const cpo::uno::Reference< css::datatransfer::XTransferable >& aXTransferable ) const;
 
     static bool findLocaleForTextCodePage( );
 
@@ -126,7 +126,7 @@ private:
     bool                                     m_bHasSynthesizedLocale;
     css::datatransfer::DataFlavor            m_RegisteredTextFlavor;
 
-    const css::uno::Reference< css::uno::XComponentContext >  m_xContext;
+    const cpo::uno::Reference< cpo::uno::XComponentContext >  m_xContext;
 
     static LCID       m_TxtLocale;
     static sal_uInt32 m_TxtCodePage;

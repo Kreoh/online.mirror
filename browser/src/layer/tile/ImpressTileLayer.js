@@ -12,7 +12,7 @@
  * Impress tile layer is used to display a presentation document
  */
 
-/* global app $ cool RenderManager ViewLayoutImpress ViewLayoutFileBased */
+/* global app $ cool RenderManager ViewLayoutVector ViewLayoutFileBased */
 
 // Single source of truth for Impress view modes. Keyed by the core
 // 'contextchange' context. 'mode' is the persisted string, 'uno' enters the
@@ -20,15 +20,17 @@
 // Master activeMode (1) is applied from the .uno:SlideMasterPage state change
 // in Map.StateChanges.js, not here.
 const IMPRESS_VIEW_MODES = {
-	DrawPage:   { mode: 'normal', uno: '.uno:NormalMultiPaneGUI', activeMode: 0 },
-	NotesPage:  { mode: 'notes',  uno: '.uno:NotesMode',          activeMode: 2 },
-	MasterPage: { mode: 'master', uno: '.uno:SlideMasterPage',    activeMode: 1 },
+	DrawPage: { mode: 'normal', uno: '.uno:NormalMultiPaneGUI', activeMode: 0 },
+	NotesPage: { mode: 'notes', uno: '.uno:NotesMode', activeMode: 2 },
+	MasterPage: { mode: 'master', uno: '.uno:SlideMasterPage', activeMode: 1 },
 };
 
 window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
-
 	initialize: function (options) {
 		window.L.CanvasTileLayer.prototype.initialize.call(this, options);
+		// The identifiers of the slides this view asked the server to switch to, oldest
+		// first, until the server confirms them.
+		this._pendingPartPicks = [];
 		// If this is mobile view, we we'll change the layout position of 'presentation-controls-wrapper'.
 		if (window.mode.isSmallScreenDevice()) {
 			this._putPCWOutsideFlex();
@@ -36,16 +38,17 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 
 		this._preview = window.L.control.partsPreview();
 
-
 		if (window.mode.isSmallScreenDevice()) {
 			this._addButton = window.L.control.mobileSlide();
-			window.L.DomUtil.addClass(window.L.DomUtil.get('mobile-edit-button'), 'impress');
+			window.L.DomUtil.addClass(
+				window.L.DomUtil.get('mobile-edit-button'),
+				'impress',
+			);
 		}
 		this._spaceBetweenParts = 300; // In twips. This is used when all parts of an Impress or Draw document is shown in one view (like a Writer file). This mode is used when document is read only.
 
 		// app.file variable should exist, this is a precaution.
-		if (!app.file)
-			app.file = {};
+		if (!app.file) app.file = {};
 
 		// Before this instance is created, app.file.readOnly and app.file.editComments variables are set.
 		// If document is on read only mode, we will draw all parts at once.
@@ -68,6 +71,10 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		this._restoringViewMode = false;
 		this._lastReportedViewMode = null;
 
+		// The context last seen that named a view mode, so that a context naming a selection
+		// instead does not lose which mode the view is in.
+		this._lastViewModeContext = null;
+
 		app.events.on('contextchange', this._onContextChange.bind(this));
 	},
 
@@ -80,14 +87,22 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		*/
 
 		const newContext = e.detail.context;
-		const oldContext = e.detail.oldContext;
 		const viewMode = IMPRESS_VIEW_MODES[newContext];
-		const isDrawOrNotesPage = newContext === 'DrawPage' || newContext === 'NotesPage';
+		const isDrawOrNotesPage =
+			newContext === 'DrawPage' || newContext === 'NotesPage';
 
-		if (isDrawOrNotesPage)
+		if (isDrawOrNotesPage) {
 			app.impress.notesMode = newContext === 'NotesPage';
+			// The handout page just turned on or off, so the View Notes menu and
+			// the status bar Notes button need their active state refreshed.
+			if (app.map.notesPanel)
+				app.map.notesPanel.refreshState();
+		}
 
-		if (app.map.uiManager.getCurrentMode() === 'notebookbar' && isDrawOrNotesPage) {
+		if (
+			app.map.uiManager.getCurrentMode() === 'notebookbar' &&
+			isDrawOrNotesPage
+		) {
 			const targetElement = document.getElementById('notesmode');
 			// Guard rather than return: a missing button must not skip the
 			// activeModes update, master handling or view-mode persistence below.
@@ -101,23 +116,37 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			RenderManager.update();
 		}
 
-		if (newContext === 'MasterPage' || oldContext === 'MasterPage') {
-			app.socket.sendMessage('status');
-			this.invalidatePreviewsUponContextChange = true;
+		/*
+			The master view shows a different page list than the other views, so the parts have to
+			be asked for again when the view goes in or out of it. The context is what tells us,
+			but it names what is selected as well as the view mode: selecting a shape in the master
+			view moves it to TextObject, and from there on no context names the master view any
+			more, so leaving it went unnoticed and the parts of the master view stayed. Only the
+			contexts that name a view mode are looked at, and the last of them is what the view is
+			in.
+		*/
+		if (viewMode) {
+			const wasMasterView = this._lastViewModeContext === 'MasterPage';
+			const isMasterView = newContext === 'MasterPage';
+			this._lastViewModeContext = newContext;
+
+			if (wasMasterView !== isMasterView) {
+				app.socket.sendMessage('status');
+				this.invalidatePreviewsUponContextChange = true;
+			}
 		}
 
 		// Persist/restore the view mode for all three view contexts. Master
 		// view's activeModes=[1] is set from the .uno:SlideMasterPage state
 		// change (Map.StateChanges.js), so we don't touch activeModes here.
-		if (viewMode)
-			this._handleViewModeState(viewMode.mode);
+		if (viewMode) this._handleViewModeState(viewMode.mode);
 	},
 
 	// Restore the remembered view mode on first load, then report later user
 	// switches so they are persisted per user per document. We key off the
 	// first authoritative view context change ('normal'|'notes'|'master'),
 	// which means the view is live and a UNO mode command will take effect.
-	_handleViewModeState: function(mode) {
+	_handleViewModeState: function (mode) {
 		if (!this._viewModeRestored) {
 			this._viewModeRestored = true;
 			this._lastReportedViewMode = mode;
@@ -128,7 +157,9 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			// read-only documents - the UNO command would no-op, no echo would
 			// arrive, and the restore guard would stay stuck.
 			const canRestore = saved !== 'master' || !app.file.readOnly;
-			const target = Object.values(IMPRESS_VIEW_MODES).find((v) => v.mode === saved);
+			const target = Object.values(IMPRESS_VIEW_MODES).find(
+				(v) => v.mode === saved,
+			);
 			if (target && saved !== mode && canRestore) {
 				// Apply once; the resulting context change is our own echo and
 				// must not be reported back as a user action.
@@ -154,7 +185,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		}
 	},
 
-	_selectionContextChanged: function(newContext) {
+	_selectionContextChanged: function (newContext) {
 		if (newContext === 'Mark objects')
 			app.activeDocument.selectionMiddleware.activate();
 		else if (newContext === '')
@@ -162,15 +193,17 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 	},
 
 	_isPCWInsideFlex: function () {
-		var PCW = document.getElementById('main-document-content').querySelector('#presentation-controls-wrapper');
-		return PCW ? true: false;
+		var PCW = document
+			.getElementById('main-document-content')
+			.querySelector('#presentation-controls-wrapper');
+		return PCW ? true : false;
 	},
 
 	_putPCWOutsideFlex: function () {
 		if (this._isPCWInsideFlex()) {
 			var pcw = document.getElementById('presentation-controls-wrapper');
 			if (pcw && pcw.parentNode) {
-				pcw.parentNode.removeChild(pcw);  // Remove from its actual parent
+				pcw.parentNode.removeChild(pcw); // Remove from its actual parent
 				var frc = document.getElementById('main-document-content');
 				frc.parentNode.insertBefore(pcw, frc.nextSibling);
 			}
@@ -180,11 +213,10 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 	_putPCWInsideFlex: function () {
 		if (!this._isPCWInsideFlex()) {
 			var pcw = document.getElementById('presentation-controls-wrapper');
-			if (pcw) {
+			if (pcw && pcw.parentNode) {
 				var frc = document.getElementById('main-document-content');
-				document.body.removeChild(pcw);
-
-				document.getElementById('document-container').parentNode.insertBefore(pcw, frc.children[0]);
+				pcw.parentNode.removeChild(pcw);
+				frc.insertBefore(pcw, frc.firstElementChild);
 			}
 		}
 	},
@@ -210,10 +242,19 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		commentData.part = app.impress.partList[this._selectedPart].part;
 
 		const name = cool.Comment.makeName(commentData);
-		const comment = new cool.Comment(name, commentData, {}, app.sectionContainer.getSectionWithName(app.CSections.CommentList.name));
+		const comment = new cool.Comment(
+			name,
+			commentData,
+			{},
+			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name),
+		);
 
-		var annotation = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).add(comment);
-		app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).modify(annotation);
+		var annotation = app.sectionContainer
+			.getSectionWithName(app.CSections.CommentList.name)
+			.add(comment);
+		app.sectionContainer
+			.getSectionWithName(app.CSections.CommentList.name)
+			.modify(annotation);
 	},
 
 	beforeAdd: function (map) {
@@ -223,8 +264,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		map.on('commandstatechanged', this._onSlideSectionsCommandState, this);
 		app.events.on('updatepermission', this.onUpdatePermission.bind(this));
 
-		if (!map._docPreviews)
-			map._docPreviews = {};
+		if (!map._docPreviews) map._docPreviews = {};
 
 		map.uiManager.initializeSpecializedUI(this._docType);
 	},
@@ -232,8 +272,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 	// Sections arrive as a .uno:SlideSections state-change pushed by core, so
 	// the panel stays consistent with the async UNO dispatch.
 	_onSlideSectionsCommandState: function (e) {
-		if (!e || e.commandName !== '.uno:SlideSections')
-			return;
+		if (!e || e.commandName !== '.uno:SlideSections') return;
 
 		var sections = e.state;
 		if (typeof sections === 'string') {
@@ -244,54 +283,66 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 				sections = [];
 			}
 		}
-		if (!Array.isArray(sections))
-			sections = [];
+		if (!Array.isArray(sections)) sections = [];
 
 		app.impress.sections = sections;
 		this._map.fire('updatesections', { sections: sections });
 	},
 
 	onResizeImpress: function () {
-		window.L.DomUtil.updateElementsOrientation(['presentation-controls-wrapper', 'document-container', 'slide-sorter']);
+		window.L.DomUtil.updateElementsOrientation([
+			'presentation-controls-wrapper',
+			'document-container',
+			'slide-sorter',
+		]);
 
 		var mobileEditButton = document.getElementById('mobile-edit-button');
 
 		if (window.mode.isSmallScreenDevice()) {
 			if (window.L.DomUtil.isPortrait()) {
 				this._putPCWOutsideFlex();
-				if (mobileEditButton)
-					mobileEditButton.classList.add('portrait');
-			}
-			else {
+				if (mobileEditButton) mobileEditButton.classList.add('portrait');
+			} else {
 				this._putPCWInsideFlex();
-				if (mobileEditButton)
-					mobileEditButton.classList.remove('portrait');
+				if (mobileEditButton) mobileEditButton.classList.remove('portrait');
 			}
-		}
-		else {
-			var container = window.L.DomUtil.get('main-document-content');// consider height of document area to calculate estimated height for slide-sorter
+		} else {
+			var container = window.L.DomUtil.get('main-document-content'); // consider height of document area to calculate estimated height for slide-sorter
 			var slideSorter = window.L.DomUtil.get('slide-sorter');
-			var navigationOptions = window.L.DomUtil.get('navigation-options-wrapper');
+			var navigationOptions = window.L.DomUtil.get(
+				'navigation-options-wrapper',
+			);
 			if (container && slideSorter && toolbar) {
-				$(slideSorter).height($(container).height() - $(navigationOptions).height());
+				$(slideSorter).height(
+					$(container).height() - $(navigationOptions).height(),
+				);
 			}
 		}
 	},
 
 	onRemove: function () {
 		clearTimeout(this._previewInvalidator);
-		this._map.off('commandstatechanged', this._onSlideSectionsCommandState, this);
+		this._map.off(
+			'commandstatechanged',
+			this._onSlideSectionsCommandState,
+			this,
+		);
 	},
 
-	_openMobileWizard: function(data) {
+	_openMobileWizard: function (data) {
 		window.L.CanvasTileLayer.prototype._openMobileWizard.call(this, data);
 	},
 
 	onUpdateParts: function () {
-		if (this._map.uiManager.isAnyDialogOpen()) // Need this check else dialog loses focus
+		if (this._map.uiManager.isAnyDialogOpen())
+			// Need this check else dialog loses focus
 			return;
 
-		app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).onPartChange();
+		let commentSection =  app.sectionContainer
+			.getSectionWithName(app.CSections.CommentList.name);
+		if (commentSection) {
+			commentSection.onPartChange();
+		}
 	},
 
 	onUpdatePermission: function (e) {
@@ -328,7 +379,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			this._partWidthTwips,
 			this._partHeightTwips,
 		);
-		app.activeDocument.swapLayout(new ViewLayoutImpress());
+		app.activeDocument.swapLayout(ViewLayoutVector.forAPresentation());
 		app.activeDocument.activeLayout.viewSize =
 			app.activeDocument.fileSize.clone();
 		this._updateScrollLimits(true);
@@ -354,8 +405,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			this._fbCachedFileSize = new cool.SimplePoint(maxWidth, totalHeight);
 			return this._fbCachedFileSize.clone();
 		}
-		if (this._fbCachedFileSize)
-			return this._fbCachedFileSize.clone();
+		if (this._fbCachedFileSize) return this._fbCachedFileSize.clone();
 		// First message before partdimensions from statusMsg ever arrives.
 		return new cool.SimplePoint(
 			this._partWidthTwips,
@@ -408,30 +458,50 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			return;
 		}
 
-		if (values.comments) {
+		if (values.comments && !window.mode.isInteractivePreview()) {
 			var comments = Array.isArray(values.comments)
 				? values.comments
 				: Object.values(values.comments);
-			comments.forEach(function(comment) {
+			comments.forEach(function (comment) {
 				comment.id = String(comment.id);
 				if (comment.parentId !== undefined)
 					comment.parentId = String(comment.parentId);
 			});
-			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).importComments(comments);
+			app.sectionContainer
+				.getSectionWithName(app.CSections.CommentList.name)
+				.importComments(comments);
 		} else {
-			window.L.CanvasTileLayer.prototype._onCommandValuesMsg.call(this, textMsg);
+			window.L.CanvasTileLayer.prototype._onCommandValuesMsg.call(
+				this,
+				textMsg,
+			);
 		}
 	},
 
 	_onSetPartMsg: function (textMsg) {
-		// The server names the slide by its part number. Find the index of
-		// the slide carrying that part. A part this view does not know yet
+		// The server names the slide by its part identifier. Find the index
+		// of the slide carrying that part. A part this view does not know yet
 		// selects nothing. The status that follows carries the selection.
-		const part = parseInt(textMsg.match(/\d+/g)[0]);
+		const part = app.socket.parseServerCmd(textMsg).part || '';
 		const partIndex = this.getIndexFromPart(part);
-		if (partIndex >= 0 && partIndex !== this._selectedPart) {
-			this._map.deselectAll(); // Deselect all first. This is a single selection.
-			this._map.setPart(partIndex, true);
+		// A confirmation of a part this view picked leaves the view where it is. The view
+		// has already shown that part, and may have moved on to a later pick since. The
+		// server can merge several confirmations into the one for the latest part, so the
+		// picks before it are dropped as well. A part picked more than once is matched to
+		// its oldest pick, because the confirmations of the later picks can still come.
+		const pickedIndex = this._pendingPartPicks.indexOf(part);
+		if (pickedIndex >= 0) {
+			this._pendingPartPicks.splice(0, pickedIndex + 1);
+		} else {
+			// The server moved the view on its own. The server gives no confirmation
+			// for a pick of the part it already shows, so the picks still waiting are
+			// dropped, and the confirmations that come for them later move the view
+			// like this one.
+			this._pendingPartPicks = [];
+			if (partIndex >= 0 && partIndex !== this._selectedPart) {
+				this._map.deselectAll(); // Deselect all first. This is a single selection.
+				this._map.setPart(partIndex, true);
+			}
 		}
 		// Fire 'setpart' even when the local _selectedPart was already updated
 		// synchronously by Parts.js setPart (fileBasedView path), so listeners
@@ -439,22 +509,28 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		this._map.fire('setpart', {
 			selectedPart: this._selectedPart,
 			parts: this._parts,
-			docType: this._docType
+			docType: this._docType,
 		});
 	},
 
-	// The part number of a presentation or drawing page is the page's stable
-	// unique id, carried by each part list entry, so the tile keys survive
-	// when slides are moved, inserted or deleted.
-	getPartFromIndex: function (index) {
-		const list = app.impress.partList;
-		if (list && index >= 0 && index < list.length)
-			return list[index].part;
-		return -1;
+	// The part waits in _pendingPartPicks until the server confirms it.
+	_requestPart: function (part) {
+		this._pendingPartPicks.push(part);
+		window.L.CanvasTileLayer.prototype._requestPart.call(this, part);
 	},
 
-	// The map from each slide's part number to the index the slide holds in
-	// the given part list. The part list is replaced as a whole when the
+	// The part identifier of a presentation or drawing page is the page's
+	// GUID, carried by each part list entry, so the tile keys survive when
+	// slides are moved, inserted or deleted. An empty string means no page
+	// holds the given index.
+	getPartFromIndex: function (index) {
+		const list = app.impress.partList;
+		if (list && index >= 0 && index < list.length) return list[index].part;
+		return '';
+	},
+
+	// The map from each slide's part identifier to the index the slide holds
+	// in the given part list. The part list is replaced as a whole when the
 	// parts change, so the map stays valid as long as the list it was built
 	// from is the current one, and is rebuilt when another list arrives.
 	_slideIndexByPart: function (list) {
@@ -471,34 +547,49 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 
 	getIndexFromPart: function (part, partsInfo) {
 		const list = Array.isArray(partsInfo) ? partsInfo : app.impress.partList;
-		if (!list)
-			return -1;
+		if (!list) return -1;
 		const index = this._slideIndexByPart(list).get(part);
 		return index === undefined ? -1 : index;
 	},
 
 	_onStatusMsg: function (textMsg) {
-		const statusJSON = JSON.parse(textMsg.replace('partstatus:', '').replace('status:', '').replace('statusupdate:', ''));
+		const statusJSON = JSON.parse(
+			textMsg
+				.replace('partstatus:', '')
+				.replace('status:', '')
+				.replace('statusupdate:', ''),
+		);
 		const isOwnStatus = textMsg.startsWith('status:');
 
 		// Since we have three status commands, remove them so we store and compare payloads only.
 		textMsg = textMsg.replace('partstatus: ', '');
 		textMsg = textMsg.replace('status: ', '');
 		textMsg = textMsg.replace('statusupdate: ', '');
-		if (statusJSON.width && statusJSON.height && this._documentInfo !== textMsg) {
+		if (
+			statusJSON.width &&
+			statusJSON.height &&
+			this._documentInfo !== textMsg
+		) {
 			let dimensionsChanged = false;
 			if (statusJSON.partdimensions) {
 				const oldDims = this._partDimensions;
 				this._partDimensions = [];
 				for (let i = 0; i < statusJSON.partdimensions.length; i++) {
-					this._partDimensions.push(new cool.SimplePoint(statusJSON.partdimensions[i].width, statusJSON.partdimensions[i].height));
+					this._partDimensions.push(
+						new cool.SimplePoint(
+							statusJSON.partdimensions[i].width,
+							statusJSON.partdimensions[i].height,
+						),
+					);
 				}
 				if (!oldDims || oldDims.length !== this._partDimensions.length) {
 					dimensionsChanged = true;
 				} else {
 					for (let i = 0; i < oldDims.length; i++) {
-						if (oldDims[i].x !== this._partDimensions[i].x ||
-							oldDims[i].y !== this._partDimensions[i].y) {
+						if (
+							oldDims[i].x !== this._partDimensions[i].x ||
+							oldDims[i].y !== this._partDimensions[i].y
+						) {
 							dimensionsChanged = true;
 							break;
 						}
@@ -509,11 +600,17 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			if (statusJSON.readonly && !this._documentInfo)
 				this._map.setPermission('readonly');
 
-			app.activeDocument.fileSize = new cool.SimplePoint(statusJSON.width, statusJSON.height);
+			app.activeDocument.fileSize = new cool.SimplePoint(
+				statusJSON.width,
+				statusJSON.height,
+			);
 
 			this._docType = statusJSON.type;
 			if (this._docType === 'drawing') {
-				window.L.DomUtil.addClass(window.L.DomUtil.get('presentation-controls-wrapper'), 'drawing');
+				window.L.DomUtil.addClass(
+					window.L.DomUtil.get('presentation-controls-wrapper'),
+					'drawing',
+				);
 			}
 			this._parts = statusJSON.partscount;
 			this._partHeightTwips = app.activeDocument.fileSize.y;
@@ -527,7 +624,8 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 				app.activeDocument.fileSize = this._computeFileBasedFileSize();
 			}
 
-			app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
+			app.activeDocument.activeLayout.viewSize =
+				app.activeDocument.fileSize.clone();
 
 			// Rebuild the per-part rectangles in the filebased layout whenever
 			// part dimensions arrive (or any status update reshapes the parts).
@@ -545,17 +643,28 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			if (isOwnStatus || statusJSON.viewid === this._viewId) {
 				this._viewId = statusJSON.viewid;
 				app.activeDocument.setActiveViewID(this._viewId);
-				app.console.assert(this._viewId >= 0, 'Incorrect viewId received: ' + this._viewId);
+				app.console.assert(
+					this._viewId >= 0,
+					'Incorrect viewId received: ' + this._viewId,
+				);
 				if (app.socket._reconnecting) {
-					app.socket.sendMessage('setclientpart part=' + this.getSelectedPart());
+					// The new session confirms none of the earlier picks.
+					this._pendingPartPicks = [];
+					// Before the first status arrives there is no part list, so
+					// there is no identifier to restore the selection with.
+					const selectedPart = this.getSelectedPart();
+					if (selectedPart)
+						app.socket.sendMessage('setclientpart part=' + selectedPart);
 				} else {
-					// The status names the selected slide by its part number.
-					// Find the index of the slide carrying that part. The
+					// The status names the selected slide by its part
+					// identifier. Find the index of the slide carrying it. The
 					// part info of this status is the authority. A partstatus
 					// carries no part info, so fall back to the current list.
-					const selectedIndex = this.getIndexFromPart(statusJSON.selectedpart, statusJSON.parts);
-					if (selectedIndex >= 0)
-						this._selectedPart = selectedIndex;
+					const selectedIndex = this.getIndexFromPart(
+						statusJSON.selectedpart,
+						statusJSON.parts,
+					);
+					if (selectedIndex >= 0) this._selectedPart = selectedIndex;
 				}
 			}
 
@@ -566,27 +675,47 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			if (allPagesResized) {
 				if (statusJSON.gridSnapEnabled === true)
 					app.map.stateChangeHandler.setItemValue('.uno:GridUse', 'true');
-				else if (statusJSON.parts.length > 0 && statusJSON.parts[0].gridSnapEnabled === true)
+				else if (
+					statusJSON.parts.length > 0 &&
+					statusJSON.parts[0].gridSnapEnabled === true
+				)
 					app.map.stateChangeHandler.setItemValue('.uno:GridUse', 'true');
 
 				if (statusJSON.gridVisible === true)
 					app.map.stateChangeHandler.setItemValue('.uno:GridVisible', 'true');
-				else if (statusJSON.parts.length > 0 && statusJSON.parts[0].gridVisible === true)
+				else if (
+					statusJSON.parts.length > 0 &&
+					statusJSON.parts[0].gridVisible === true
+				)
 					app.map.stateChangeHandler.setItemValue('.uno:GridVisible', 'true');
 
 				app.impress.partList = Object.assign([], statusJSON.parts);
+				// A pick of a slide that is gone gets no confirmation, so it is dropped.
+				this._pendingPartPicks = this._pendingPartPicks.filter(
+					(part) => this.getIndexFromPart(part, statusJSON.parts) >= 0);
 				var refreshAnnotation = this._documentInfo !== textMsg;
 
 				this._documentInfo = textMsg;
 
-				const mode = (statusJSON.mode !== undefined) ? statusJSON.mode : (statusJSON.parts.length > 0 && statusJSON.parts[0].mode !== undefined ? statusJSON.parts[0].mode : 0);
+				const mode =
+					statusJSON.mode !== undefined
+						? statusJSON.mode
+						: statusJSON.parts.length > 0 &&
+							  statusJSON.parts[0].mode !== undefined
+							? statusJSON.parts[0].mode
+							: 0;
 				app.activeDocument.activeModes = [mode];
-				this._map.fire('impressmodechanged', {mode: mode});
+				this._map.fire('impressmodechanged', { mode: mode });
+
+				// The status replaces the page list, and the selected part
+				// indexes the new one. A vector view asked against the old
+				// list, so let it ask again for what it now wants.
+				RenderManager.partListChanged();
 
 				this._map.fire('updateparts', {
 					selectedPart: this._selectedPart,
 					parts: this._parts,
-					docType: this._docType
+					docType: this._docType,
 				});
 
 				if (refreshAnnotation)
@@ -603,8 +732,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			}
 		}
 
-		if (app.file.fileBasedView)
-			RenderManager.updateFileBasedView();
+		if (app.file.fileBasedView) RenderManager.updateFileBasedView();
 
 		if (this.invalidatePreviewsUponContextChange === true) {
 			this._invalidateAllPreviews();
@@ -612,21 +740,20 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		}
 	},
 
-	getPartDimensions: function(partIndex) {
+	getPartDimensions: function (partIndex) {
 		if (this._partDimensions && this._partDimensions[partIndex]) {
 			return this._partDimensions[partIndex];
-		}
-		else {
+		} else {
 			return app.activeDocument.fileSize;
 		}
 	},
 
-	getPartWidth: function(partIndex) {
+	getPartWidth: function (partIndex) {
 		const dimensions = this.getPartDimensions(partIndex);
 		return dimensions.x;
 	},
 
-	getPartHeight: function(partIndex) {
+	getPartHeight: function (partIndex) {
 		const dimensions = this.getPartDimensions(partIndex);
 		return dimensions.y;
 	},
@@ -634,5 +761,5 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 	_invalidateAllPreviews: function () {
 		window.L.CanvasTileLayer.prototype._invalidateAllPreviews.call(this);
 		this._map.fire('invalidateparts');
-	}
+	},
 });

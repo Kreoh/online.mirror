@@ -36,7 +36,7 @@
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::cppu;
@@ -82,7 +82,7 @@ Sequence< Type > OStatementBase::getTypes()
     return aTypes.getTypes();
 }
 
-// css::uno::XInterface
+// cpo::uno::XInterface
 Any OStatementBase::queryInterface( const Type & rType )
 {
     Any aIface = ::cppu::WeakComponentImplHelper<>::queryInterface( rType );

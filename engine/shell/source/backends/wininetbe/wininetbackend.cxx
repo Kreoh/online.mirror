@@ -23,7 +23,7 @@
 #include <string_view>
 
 #include <cppuhelper/supportsservice.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <o3tl/string_view.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
@@ -281,7 +281,7 @@ void WinInetBackend::setPropertyValue(
     OUString const &, cpo::uno::Any const &)
 {
     throw css::lang::IllegalArgumentException(
-        "setPropertyValue not supported",
+        u"setPropertyValue not supported"_ustr,
         getXWeak(), -1);
 }
 
@@ -312,24 +312,24 @@ cpo::uno::Any WinInetBackend::getPropertyValue(
     }
 }
 
-OUString SAL_CALL WinInetBackend::getImplementationName()
+OUString WinInetBackend::getImplementationName()
 {
-    return "com.sun.star.comp.configuration.backend.WinInetBackend" ;
+    return u"com.sun.star.comp.configuration.backend.WinInetBackend"_ustr ;
 }
 
-bool SAL_CALL WinInetBackend::supportsService(const OUString& aServiceName)
+bool WinInetBackend::supportsService(const OUString& aServiceName)
 {
     return cppu::supportsService(this, aServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL WinInetBackend::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> WinInetBackend::getSupportedServiceNames()
 {
-    return { "com.sun.star.configuration.backend.WinInetBackend" };
+    return { u"com.sun.star.configuration.backend.WinInetBackend"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_WinInetBackend_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new WinInetBackend);
 }

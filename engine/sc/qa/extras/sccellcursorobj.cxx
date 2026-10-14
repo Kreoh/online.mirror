@@ -35,7 +35,8 @@
 #include <com/sun/star/table/XCellCursor.hpp>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest {
 
@@ -65,9 +66,9 @@ public:
     ScCellCursorObj();
 
     virtual void setUp() override;
-    virtual uno::Reference< uno::XInterface > init() override;
-    virtual uno::Reference< uno::XInterface > getXCellRangeData() override;
-    virtual uno::Reference< uno::XInterface > getXSpreadsheet() override;
+    virtual uno::Reference< cpo::uno::XInterface > init() override;
+    virtual uno::Reference< cpo::uno::XInterface > getXCellRangeData() override;
+    virtual uno::Reference< cpo::uno::XInterface > getXSpreadsheet() override;
 
     CPPUNIT_TEST_SUITE(ScCellCursorObj);
 
@@ -162,7 +163,7 @@ ScCellCursorObj::ScCellCursorObj():
 {
 }
 
-uno::Reference< uno::XInterface > ScCellCursorObj::init()
+uno::Reference< cpo::uno::XInterface > ScCellCursorObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
 
@@ -181,12 +182,12 @@ uno::Reference< uno::XInterface > ScCellCursorObj::init()
     return xCellCursor;
 }
 
-uno::Reference< uno::XInterface > ScCellCursorObj::getXCellRangeData()
+uno::Reference< cpo::uno::XInterface > ScCellCursorObj::getXCellRangeData()
 {
     return init();
 }
 
-uno::Reference< uno::XInterface > ScCellCursorObj::getXSpreadsheet()
+uno::Reference< cpo::uno::XInterface > ScCellCursorObj::getXSpreadsheet()
 {
     uno::Reference< sheet::XSpreadsheetDocument > xDoc(mxComponent, UNO_QUERY_THROW);
 

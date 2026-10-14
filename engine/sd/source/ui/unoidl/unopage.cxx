@@ -37,6 +37,7 @@
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <rtl/uri.hxx>
 #include <vcl/bitmap.hxx>
 #include <vcl/filter/SvmWriter.hxx>
 #include <vcl/metaact.hxx>
@@ -88,8 +89,8 @@ using ::com::sun::star::animations::XAnimationNode;
 using ::com::sun::star::animations::XAnimationNodeSupplier;
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::drawing;
@@ -110,7 +111,7 @@ enum WID_PAGE
     WID_PAGE_DATETIMETEXT, WID_PAGE_DATETIMEFORMAT, WID_TRANSITION_TYPE, WID_TRANSITION_SUBTYPE,
     WID_TRANSITION_DIRECTION, WID_TRANSITION_FADE_COLOR, WID_TRANSITION_DURATION, WID_LOOP_SOUND,
     WID_NAVORDER, WID_PAGE_PREVIEWMETAFILE, WID_PAGE_THEME, WID_PAGE_THEME_UNO_REPRESENTATION,
-    WID_PAGE_SLIDE_LAYOUT
+    WID_PAGE_SLIDE_LAYOUT, WID_PAGE_GUID, WID_PAGE_SOURCE_MODIFIED_TIME, WID_PAGE_SOURCE_PAGE_GUID
 };
 
 }
@@ -147,6 +148,8 @@ static const SvxItemPropertySet* ImplGetDrawPagePropertySet( bool bImpress, Page
         { sUNO_Prop_IsBackgroundObjectsVisible,   WID_PAGE_BACKOBJVIS,    cppu::UnoType<bool>::get(),                        0, 0},
         { sUNO_Prop_UserDefinedAttributes,WID_PAGE_USERATTRIBS, cppu::UnoType<css::container::XNameContainer>::get(),         0,     0},
         { sUNO_Prop_BookmarkURL,          WID_PAGE_BOOKMARK,  ::cppu::UnoType<OUString>::get(),             0,  0},
+        { sUNO_Prop_SourceModifiedTime,   WID_PAGE_SOURCE_MODIFIED_TIME, ::cppu::UnoType<OUString>::get(),  0,  0},
+        { sUNO_Prop_SourcePageGuid,       WID_PAGE_SOURCE_PAGE_GUID, ::cppu::UnoType<OUString>::get(),      0,  0},
         { u"HighResDuration"_ustr,              WID_PAGE_HIGHRESDURATION,  ::cppu::UnoType<double>::get(),            0,  0},
         { u"IsBackgroundDark"_ustr ,            WID_PAGE_ISDARK,    cppu::UnoType<bool>::get(),                        beans::PropertyAttribute::READONLY, 0},
         { u"IsFooterVisible"_ustr,              WID_PAGE_FOOTERVISIBLE, cppu::UnoType<bool>::get(),                    0, 0},
@@ -163,6 +166,7 @@ static const SvxItemPropertySet* ImplGetDrawPagePropertySet( bool bImpress, Page
         { u"" UNO_NAME_PAGE_TRANSITION_DURATION ""_ustr, WID_TRANSITION_DURATION, ::cppu::UnoType<double>::get(),          0,  0},
         { u"LoopSound"_ustr,                    WID_LOOP_SOUND, cppu::UnoType<bool>::get(),                    0, 0},
         { u"NavigationOrder"_ustr,              WID_NAVORDER, cppu::UnoType<css::container::XIndexAccess>::get(),0,  0},
+        { u"Guid"_ustr,                         WID_PAGE_GUID, ::cppu::UnoType<OUString>::get(),             0,  0},
     };
 
 #define DRAW_PAGE_NOTES_PROPERTIES \
@@ -188,7 +192,8 @@ static const SvxItemPropertySet* ImplGetDrawPagePropertySet( bool bImpress, Page
         { u"IsDateTimeFixed"_ustr,         WID_PAGE_DATETIMEFIXED, cppu::UnoType<bool>::get(),                    0, 0},                                                                 \
         { u"DateTimeText"_ustr,            WID_PAGE_DATETIMETEXT, ::cppu::UnoType<OUString>::get(),              0,  0},                                                            \
         { u"DateTimeFormat"_ustr,          WID_PAGE_DATETIMEFORMAT, ::cppu::UnoType<sal_Int32>::get(),           0,  0},                                                            \
-        { u"NavigationOrder"_ustr,         WID_NAVORDER, cppu::UnoType<css::container::XIndexAccess>::get(),0,  0}
+        { u"NavigationOrder"_ustr,         WID_NAVORDER, cppu::UnoType<css::container::XIndexAccess>::get(),0,  0},                                                            \
+        { u"Guid"_ustr,                    WID_PAGE_GUID, ::cppu::UnoType<OUString>::get(),             0,  0}
 
     static const SfxItemPropertyMapEntry aDrawPageNotesHandoutPropertyMap_Impl[] =
     {
@@ -217,8 +222,11 @@ static const SvxItemPropertySet* ImplGetDrawPagePropertySet( bool bImpress, Page
         { u"" UNO_NAME_PAGE_PREVIEWMETAFILE ""_ustr, WID_PAGE_PREVIEWMETAFILE, cppu::UnoType<cpo::uno::Sequence<sal_Int8>>::get(), css::beans::PropertyAttribute::READONLY, 0},\
         { sUNO_Prop_UserDefinedAttributes,WID_PAGE_USERATTRIBS, cppu::UnoType<css::container::XNameContainer>::get(),         0,     0},                          \
         { sUNO_Prop_BookmarkURL,          WID_PAGE_BOOKMARK,  ::cppu::UnoType<OUString>::get(),             0,  0},                                                                             \
+        { sUNO_Prop_SourceModifiedTime,   WID_PAGE_SOURCE_MODIFIED_TIME, ::cppu::UnoType<OUString>::get(),  0,  0},                                                                             \
+        { sUNO_Prop_SourcePageGuid,       WID_PAGE_SOURCE_PAGE_GUID, ::cppu::UnoType<OUString>::get(),      0,  0},                                                                             \
         { u"IsBackgroundDark"_ustr,        WID_PAGE_ISDARK,    cppu::UnoType<bool>::get(),                        beans::PropertyAttribute::READONLY, 0},                                             \
-        { u"NavigationOrder"_ustr,         WID_NAVORDER, cppu::UnoType<css::container::XIndexAccess>::get(),0,  0}
+        { u"NavigationOrder"_ustr,         WID_NAVORDER, cppu::UnoType<css::container::XIndexAccess>::get(),0,  0},                                             \
+        { u"Guid"_ustr,                    WID_PAGE_GUID, ::cppu::UnoType<OUString>::get(),             0,  0}
 
     static const SfxItemPropertyMapEntry aGraphicPagePropertyMap_Impl[] =
     {
@@ -292,7 +300,8 @@ static const SvxItemPropertySet* ImplGetMasterPagePropertySet( PageKind ePageKin
         { sUNO_Prop_Theme, WID_PAGE_THEME, cppu::UnoType<util::XTheme>::get(), 0,  0},
         // backwards compatible view of the theme for use in tests
         { u"ThemeUnoRepresentation"_ustr, WID_PAGE_THEME_UNO_REPRESENTATION, cppu::UnoType<cpo::uno::Sequence<beans::PropertyValue>>::get(), 0,  0},
-        { u"SlideLayout"_ustr,            WID_PAGE_SLIDE_LAYOUT,    ::cppu::UnoType<sal_Int16>::get(),            0,  0}
+        { u"SlideLayout"_ustr,            WID_PAGE_SLIDE_LAYOUT,    ::cppu::UnoType<sal_Int16>::get(),            0,  0},
+        { u"Guid"_ustr,                   WID_PAGE_GUID,      ::cppu::UnoType<OUString>::get(),             0,  0}
     };
 
     static const SfxItemPropertyMapEntry aHandoutMasterPagePropertyMap_Impl[] =
@@ -316,7 +325,8 @@ static const SvxItemPropertySet* ImplGetMasterPagePropertySet( PageKind ePageKin
         { u"IsDateTimeVisible"_ustr,            WID_PAGE_DATETIMEVISIBLE, cppu::UnoType<bool>::get(),                  0, 0},
         { u"IsDateTimeFixed"_ustr,              WID_PAGE_DATETIMEFIXED, cppu::UnoType<bool>::get(),                    0, 0},
         { u"DateTimeText"_ustr,                 WID_PAGE_DATETIMETEXT, ::cppu::UnoType<OUString>::get(),              0,  0},
-        { u"DateTimeFormat"_ustr,               WID_PAGE_DATETIMEFORMAT, ::cppu::UnoType<sal_Int32>::get(),           0,  0}
+        { u"DateTimeFormat"_ustr,               WID_PAGE_DATETIMEFORMAT, ::cppu::UnoType<sal_Int32>::get(),           0,  0},
+        { u"Guid"_ustr,                         WID_PAGE_GUID,      ::cppu::UnoType<OUString>::get(),             0,  0}
     };
 
     const SvxItemPropertySet* pRet = nullptr;
@@ -339,7 +349,7 @@ const cpo::uno::Sequence< sal_Int8 > & SdGenericDrawPage::getUnoTunnelId() noexc
     return theSdGenericDrawPageUnoTunnelId.getSeq();
 }
 
-sal_Int64 SAL_CALL SdGenericDrawPage::getSomething( const cpo::uno::Sequence< sal_Int8 >& rId )
+sal_Int64 SdGenericDrawPage::getSomething( const cpo::uno::Sequence< sal_Int8 >& rId )
 {
     return comphelper::getSomethingImpl(rId, this,
                                         comphelper::FallbackToGetSomethingOf<SvxDrawPage>{});
@@ -390,7 +400,7 @@ void SdGenericDrawPage::UpdateModel()
     mpSdrModel = SvxDrawPage::mpModel;
     if( mpSdrModel )
     {
-        uno::Reference< uno::XInterface > xModel( SvxDrawPage::mpModel->getUnoModel() );
+        uno::Reference< cpo::uno::XInterface > xModel( SvxDrawPage::mpModel->getUnoModel() );
         mpDocModel = comphelper::getFromUnoTunnel<SdXImpressDocument>( xModel );
     }
     else
@@ -553,14 +563,6 @@ Any SdGenericDrawPage::queryInterface(const cpo::uno::Type & rType)
     {
         aAny <<= Reference<document::XLinkTargetSupplier>(this);
     }
-    else if (rType == cppu::UnoType<drawing::XShapeCombiner>::get())
-    {
-        aAny <<= Reference<drawing::XShapeCombiner>(this);
-    }
-    else if (rType == cppu::UnoType<drawing::XShapeBinder>::get())
-    {
-        aAny <<= Reference<drawing::XShapeBinder>(this);
-    }
     else if (rType == cppu::UnoType<beans::XMultiPropertySet>::get())
     {
         aAny <<= Reference<beans::XMultiPropertySet>(this);
@@ -583,14 +585,14 @@ Any SdGenericDrawPage::queryInterface(const cpo::uno::Type & rType)
 }
 
 // XPropertySet
-Reference< beans::XPropertySetInfo > SAL_CALL SdGenericDrawPage::getPropertySetInfo()
+Reference< beans::XPropertySetInfo > SdGenericDrawPage::getPropertySetInfo()
 {
     ::SolarMutexGuard aGuard;
     throwIfDisposed();
     return mpPropSet->getPropertySetInfo();
 }
 
-void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
+void SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     ::SolarMutexGuard aGuard;
 
@@ -734,7 +736,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
         case WID_PAGE_SOUNDFILE :
         {
             OUString aURL;
-            css::uno::Reference<css::presentation::XSoundReference> xSound;
+            cpo::uno::Reference<css::presentation::XSoundReference> xSound;
             if( aValue >>= xSound )
             {
                 if( xSound.is() )
@@ -778,7 +780,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
             if( ! ( aValue >>= bVisible ) )
                 throw lang::IllegalArgumentException();
 
-            SdrPage* pPage = GetPage();
+            SdPage* pPage = GetPage();
             if( pPage )
             {
                 SdDrawDocument& rDoc(static_cast< SdDrawDocument& >(pPage->getSdrModelFromSdrPage()));
@@ -787,7 +789,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
                     SdrLayerAdmin& rLayerAdmin = rDoc.GetLayerAdmin();
                     SdrLayerIDSet aVisibleLayers = pPage->TRG_GetMasterPageVisibleLayers();
                     aVisibleLayers.Set(rLayerAdmin.GetLayerID(sUNO_LayerName_background), bVisible);
-                    pPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
+                    pPage->SetMasterPageVisibleLayers(aVisibleLayers);
                 }
             }
             break;
@@ -798,7 +800,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
             if( ! ( aValue >>= bVisible ) )
                 throw lang::IllegalArgumentException();
 
-            SdrPage* pPage = GetPage();
+            SdPage* pPage = GetPage();
             if( pPage )
             {
                 SdDrawDocument& rDoc(static_cast< SdDrawDocument& >(pPage->getSdrModelFromSdrPage()));
@@ -807,7 +809,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
                     SdrLayerAdmin& rLayerAdmin = rDoc.GetLayerAdmin();
                     SdrLayerIDSet aVisibleLayers = pPage->TRG_GetMasterPageVisibleLayers();
                     aVisibleLayers.Set(rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects), bVisible);
-                    pPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
+                    pPage->SetMasterPageVisibleLayers(aVisibleLayers);
                 }
             }
 
@@ -826,6 +828,43 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
                 throw lang::IllegalArgumentException();
 
             setBookmarkURL( aBookmarkURL );
+            break;
+        }
+        case WID_PAGE_SOURCE_MODIFIED_TIME:
+        {
+            OUString aSourceModifiedTime;
+            if( ! ( aValue >>= aSourceModifiedTime ) )
+                throw lang::IllegalArgumentException();
+
+            constexpr sal_Int32 nMaxSourceModifiedTimeLength = 128;
+            if (aSourceModifiedTime.getLength() > nMaxSourceModifiedTimeLength)
+                throw lang::IllegalArgumentException();
+
+            for (sal_Int32 nChar = 0; nChar < aSourceModifiedTime.getLength(); ++nChar)
+                if (aSourceModifiedTime[nChar] < 0x20)
+                    throw lang::IllegalArgumentException();
+
+            setSourceModifiedTime( aSourceModifiedTime );
+            break;
+        }
+        case WID_PAGE_SOURCE_PAGE_GUID:
+        {
+            OUString aSourcePageGuid;
+            if( ! ( aValue >>= aSourcePageGuid ) )
+                throw lang::IllegalArgumentException();
+
+            // The value names a slide of the source document, in the braced form a page keeps
+            // its own identifier in, so a value of another shape names no slide at all.
+            if (!aSourcePageGuid.isEmpty())
+            {
+                const tools::Guid aGuid(
+                    OUStringToOString(aSourcePageGuid, RTL_TEXTENCODING_ASCII_US));
+                if (aGuid.isEmpty())
+                    throw lang::IllegalArgumentException();
+                aSourcePageGuid = aGuid.getOUString();
+            }
+
+            setSourcePageGuid( aSourcePageGuid );
             break;
         }
 
@@ -1022,6 +1061,31 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
             GetPage()->getSdrPageProperties().setTheme(model::Theme::FromAny(aValue));
             break;
 
+        case WID_PAGE_GUID:
+        {
+            OUString sGuid;
+            if (!(aValue >>= sGuid))
+                throw lang::IllegalArgumentException();
+
+            tools::Guid aGuid(OUStringToOString(sGuid, RTL_TEXTENCODING_ASCII_US));
+            if (aGuid.isEmpty())
+                throw lang::IllegalArgumentException();
+
+            // A value another page of the document already holds leaves this page's own
+            // identifier standing, so the identifiers of a document stay unique even when a
+            // file carries the same one twice.
+            SdDrawDocument& rDoc
+                = static_cast<SdDrawDocument&>(GetPage()->getSdrModelFromSdrPage());
+            SdPage* pHolder = rDoc.GetPageByGuid(aGuid);
+            if (!pHolder)
+                GetPage()->SetGuid(aGuid);
+            else if (pHolder != GetPage())
+                SAL_INFO("sd", "page identifier " << sGuid
+                                                  << " not taken over: another page of the "
+                                                     "document holds it");
+            break;
+        }
+
         default:
             throw beans::UnknownPropertyException( aPropertyName, static_cast<cppu::OWeakObject*>(this));
     }
@@ -1029,7 +1093,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
     GetModel()->SetModified();
 }
 
-Any SAL_CALL SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
+Any SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1208,7 +1272,7 @@ Any SAL_CALL SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
         else if( GetPage()->IsSoundOn() && !GetPage()->GetSoundFile().isEmpty() )
         {
             const SdSoundLink& rSound = GetPage()->GetSoundLink();
-            aAny <<= css::uno::Reference<css::presentation::XSoundReference>(
+            aAny <<= cpo::uno::Reference<css::presentation::XSoundReference>(
                 new xmloff::SoundReference(rSound.getURL(), rSound.isAllowed()));
         }
         else
@@ -1274,9 +1338,24 @@ Any SAL_CALL SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
         aAny <<= getBookmarkURL();
         break;
     }
+    case WID_PAGE_SOURCE_MODIFIED_TIME:
+    {
+        aAny <<= getSourceModifiedTime();
+        break;
+    }
+    case WID_PAGE_SOURCE_PAGE_GUID:
+    {
+        aAny <<= getSourcePageGuid();
+        break;
+    }
     case WID_PAGE_ISDARK:
     {
         aAny <<= GetPage()->GetPageBackgroundColor().IsDark();
+        break;
+    }
+    case WID_PAGE_GUID:
+    {
+        aAny <<= GetPage()->GetGuid().getOUString();
         break;
     }
     case WID_PAGE_HEADERVISIBLE:
@@ -1356,13 +1435,13 @@ Any SAL_CALL SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
     return aAny;
 }
 
-void SAL_CALL SdGenericDrawPage::addPropertyChangeListener( const OUString& , const Reference< beans::XPropertyChangeListener >&  ) {}
-void SAL_CALL SdGenericDrawPage::removePropertyChangeListener( const OUString& , const Reference< beans::XPropertyChangeListener >&  ) {}
-void SAL_CALL SdGenericDrawPage::addVetoableChangeListener( const OUString& , const Reference< beans::XVetoableChangeListener >&  ) {}
-void SAL_CALL SdGenericDrawPage::removeVetoableChangeListener( const OUString& , const Reference< beans::XVetoableChangeListener >&  ) {}
+void SdGenericDrawPage::addPropertyChangeListener( const OUString& , const Reference< beans::XPropertyChangeListener >&  ) {}
+void SdGenericDrawPage::removePropertyChangeListener( const OUString& , const Reference< beans::XPropertyChangeListener >&  ) {}
+void SdGenericDrawPage::addVetoableChangeListener( const OUString& , const Reference< beans::XVetoableChangeListener >&  ) {}
+void SdGenericDrawPage::removeVetoableChangeListener( const OUString& , const Reference< beans::XVetoableChangeListener >&  ) {}
 
 // XMultiPropertySet
-void SAL_CALL SdGenericDrawPage::setPropertyValues( const Sequence< OUString >& aPropertyNames, const Sequence< Any >& aValues )
+void SdGenericDrawPage::setPropertyValues( const Sequence< OUString >& aPropertyNames, const Sequence< Any >& aValues )
 {
     if( aPropertyNames.getLength() != aValues.getLength() )
         throw lang::IllegalArgumentException();
@@ -1384,7 +1463,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValues( const Sequence< OUString >& 
     }
 }
 
-Sequence< Any > SAL_CALL SdGenericDrawPage::getPropertyValues( const Sequence< OUString >& aPropertyNames )
+Sequence< Any > SdGenericDrawPage::getPropertyValues( const Sequence< OUString >& aPropertyNames )
 {
     sal_Int32 nCount = aPropertyNames.getLength();
     Sequence< Any > aValues( nCount );
@@ -1405,15 +1484,15 @@ Sequence< Any > SAL_CALL SdGenericDrawPage::getPropertyValues( const Sequence< O
     return aValues;
 }
 
-void SAL_CALL SdGenericDrawPage::addPropertiesChangeListener( const Sequence< OUString >& , const Reference< beans::XPropertiesChangeListener >&  )
+void SdGenericDrawPage::addPropertiesChangeListener( const Sequence< OUString >& , const Reference< beans::XPropertiesChangeListener >&  )
 {
 }
 
-void SAL_CALL SdGenericDrawPage::removePropertiesChangeListener( const Reference< beans::XPropertiesChangeListener >&  )
+void SdGenericDrawPage::removePropertiesChangeListener( const Reference< beans::XPropertiesChangeListener >&  )
 {
 }
 
-void SAL_CALL SdGenericDrawPage::firePropertiesChangeEvent( const Sequence< OUString >& , const Reference< beans::XPropertiesChangeListener >&  )
+void SdGenericDrawPage::firePropertiesChangeEvent( const Sequence< OUString >& , const Reference< beans::XPropertiesChangeListener >&  )
 {
 }
 
@@ -1558,7 +1637,7 @@ Reference< drawing::XShape >  SdGenericDrawPage::CreateShape(SdrObject *pObj) co
 }
 
 // XServiceInfo
-Sequence< OUString > SAL_CALL SdGenericDrawPage::getSupportedServiceNames()
+Sequence< OUString > SdGenericDrawPage::getSupportedServiceNames()
 {
     return comphelper::concatSequences(
         SvxDrawPage::getSupportedServiceNames(),
@@ -1568,7 +1647,7 @@ Sequence< OUString > SAL_CALL SdGenericDrawPage::getSupportedServiceNames()
 }
 
 // XLinkTargetSupplier
-Reference< container::XNameAccess > SAL_CALL SdGenericDrawPage::getLinks(  )
+Reference< container::XNameAccess > SdGenericDrawPage::getLinks(  )
 {
     return new SdPageLinkTargets( this );
 }
@@ -1592,7 +1671,9 @@ OUString SdGenericDrawPage::getBookmarkURL() const
         if( !aFileName.isEmpty() )
         {
             const OUString aBookmarkName( SdDrawPage::getPageApiNameFromUiName( static_cast<SdPage*>(SvxDrawPage::mpPage)->GetBookmarkName() ) );
-            aRet = aFileName + "#" + aBookmarkName;
+            // The name is the fragment of the URL after the last '#'.
+            aRet = aFileName + "#"
+                   + aBookmarkName.replaceAll( "%", "%25" ).replaceAll( "#", "%23" );
         }
     }
 
@@ -1609,9 +1690,13 @@ void SdGenericDrawPage::setBookmarkURL( std::u16string_view rURL )
         return;
 
     const OUString aFileName( rURL.substr( 0, nIndex ) );
-    const OUString aBookmarkName( SdDrawPage::getUiNameFromPageApiName( OUString(rURL.substr( nIndex+1 ))  ) );
+    const OUString aBookmarkName( SdDrawPage::getUiNameFromPageApiName(
+        rtl::Uri::decode( OUString( rURL.substr( nIndex+1 ) ), rtl_UriDecodeWithCharset,
+                          RTL_TEXTENCODING_UTF8 ) ) );
 
-    if( !aFileName.isEmpty() && !aBookmarkName.isEmpty() )
+    // A page tracked by the identifier of the slide it came from names no slide, so the reference
+    // it records is the whole of what it holds.
+    if( !aFileName.isEmpty() )
     {
         static_cast<SdPage*>(SvxDrawPage::mpPage)->DisconnectLink();
         static_cast<SdPage*>(SvxDrawPage::mpPage)->SetFileName( aFileName );
@@ -1620,105 +1705,32 @@ void SdGenericDrawPage::setBookmarkURL( std::u16string_view rURL )
     }
 }
 
-Reference< drawing::XShape > SAL_CALL SdGenericDrawPage::combine( const Reference< drawing::XShapes >& xShapes )
+OUString SdGenericDrawPage::getSourceModifiedTime() const
 {
-    ::SolarMutexGuard aGuard;
+    if( SvxDrawPage::mpPage )
+        return static_cast<SdPage*>(SvxDrawPage::mpPage)->GetSourceModifiedTime();
 
-    throwIfDisposed();
-
-    DBG_ASSERT(SvxDrawPage::mpPage,"SdrPage is NULL! [CL]");
-    DBG_ASSERT(mpView, "SdrView is NULL! [CL]");
-
-    Reference< drawing::XShape > xShape;
-    if(mpView==nullptr||!xShapes.is()||GetPage()==nullptr)
-        return xShape;
-
-    SdrPageView* pPageView = mpView->ShowSdrPage( GetPage() );
-
-    SelectObjectsInView( xShapes, pPageView );
-
-    mpView->CombineMarkedObjects( false );
-
-    mpView->AdjustMarkHdl();
-    const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
-    if( rMarkList.GetMarkCount() == 1 )
-    {
-        SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
-        if( pObj )
-            xShape.set( pObj->getUnoShape(), UNO_QUERY );
-    }
-
-    mpView->HideSdrPage();
-
-    GetModel()->SetModified();
-
-    return xShape;
+    return OUString();
 }
 
-void SAL_CALL SdGenericDrawPage::split( const Reference< drawing::XShape >& xGroup )
+void SdGenericDrawPage::setSourceModifiedTime( const OUString& rTime )
 {
-    ::SolarMutexGuard aGuard;
-
-    throwIfDisposed();
-
-    if(mpView==nullptr||!xGroup.is()||GetPage()==nullptr)
-        return;
-
-    SdrPageView* pPageView = mpView->ShowSdrPage( GetPage() );
-    SelectObjectInView( xGroup, pPageView );
-    mpView->DismantleMarkedObjects();
-    mpView->HideSdrPage();
-
-    GetModel()->SetModified();
+    if( SvxDrawPage::mpPage )
+        static_cast<SdPage*>(SvxDrawPage::mpPage)->SetSourceModifiedTime( rTime );
 }
 
-Reference< drawing::XShape > SAL_CALL SdGenericDrawPage::bind( const Reference< drawing::XShapes >& xShapes )
+OUString SdGenericDrawPage::getSourcePageGuid() const
 {
-    ::SolarMutexGuard aGuard;
+    if( SvxDrawPage::mpPage )
+        return static_cast<SdPage*>(SvxDrawPage::mpPage)->GetSourcePageGuid();
 
-    throwIfDisposed();
-
-    uno::Reference< drawing::XShape > xShape;
-    if(mpView==nullptr||!xShapes.is()||GetPage()==nullptr)
-        return xShape;
-
-    SdrPageView* pPageView = mpView->ShowSdrPage( GetPage() );
-
-    SelectObjectsInView( xShapes, pPageView );
-
-    mpView->CombineMarkedObjects();
-
-    mpView->AdjustMarkHdl();
-    const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
-    if( rMarkList.GetMarkCount() == 1 )
-    {
-        SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
-        if( pObj )
-            xShape.set( pObj->getUnoShape(), UNO_QUERY );
-    }
-
-    mpView->HideSdrPage();
-
-    GetModel()->SetModified();
-
-    return xShape;
+    return OUString();
 }
 
-void SAL_CALL SdGenericDrawPage::unbind( const Reference< drawing::XShape >& xShape )
+void SdGenericDrawPage::setSourcePageGuid( const OUString& rGuid )
 {
-    ::SolarMutexGuard aGuard;
-
-    throwIfDisposed();
-
-    if(mpView==nullptr||!xShape.is()||GetPage()==nullptr)
-        return;
-
-    SdrPageView* pPageView = mpView->ShowSdrPage( GetPage() );
-    SelectObjectInView( xShape, pPageView );
-    mpView->DismantleMarkedObjects( true );
-    mpView->HideSdrPage();
-
-    GetModel()->SetModified();
+    if( SvxDrawPage::mpPage )
+        static_cast<SdPage*>(SvxDrawPage::mpPage)->SetSourcePageGuid( rGuid );
 }
 
 void SdGenericDrawPage::SetLeftBorder( sal_Int32 nValue )
@@ -1917,7 +1929,7 @@ void SdGenericDrawPage::disposing() noexcept
 }
 
 // XAnimationNodeSupplier
-Reference< XAnimationNode > SAL_CALL SdGenericDrawPage::getAnimationNode()
+Reference< XAnimationNode > SdGenericDrawPage::getAnimationNode()
 {
     ::SolarMutexGuard aGuard;
 
@@ -1939,12 +1951,12 @@ SdPageLinkTargets::~SdPageLinkTargets() noexcept
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SdPageLinkTargets::getElementType()
+cpo::uno::Type SdPageLinkTargets::getElementType()
 {
     return cppu::UnoType<beans::XPropertySet>::get();
 }
 
-bool SAL_CALL SdPageLinkTargets::hasElements()
+bool SdPageLinkTargets::hasElements()
 {
     ::SolarMutexGuard aGuard;
 
@@ -1971,7 +1983,7 @@ bool SAL_CALL SdPageLinkTargets::hasElements()
 // container::XNameAccess
 
 // XNameAccess
-Any SAL_CALL SdPageLinkTargets::getByName( const OUString& aName )
+Any SdPageLinkTargets::getByName( const OUString& aName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1989,7 +2001,7 @@ Any SAL_CALL SdPageLinkTargets::getByName( const OUString& aName )
     throw container::NoSuchElementException();
 }
 
-Sequence< OUString > SAL_CALL SdPageLinkTargets::getElementNames()
+Sequence< OUString > SdPageLinkTargets::getElementNames()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2032,7 +2044,7 @@ Sequence< OUString > SAL_CALL SdPageLinkTargets::getElementNames()
     return aSeq;
 }
 
-bool SAL_CALL SdPageLinkTargets::hasByName( const OUString& aName )
+bool SdPageLinkTargets::hasByName( const OUString& aName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -2062,17 +2074,17 @@ SdrObject* SdPageLinkTargets::FindObject( std::u16string_view rName ) const noex
 }
 
 // XServiceInfo
-OUString SAL_CALL SdPageLinkTargets::getImplementationName()
+OUString SdPageLinkTargets::getImplementationName()
 {
     return u"SdPageLinkTargets"_ustr;
 }
 
-bool SAL_CALL SdPageLinkTargets::supportsService( const OUString& ServiceName )
+bool SdPageLinkTargets::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL SdPageLinkTargets::getSupportedServiceNames()
+Sequence< OUString > SdPageLinkTargets::getSupportedServiceNames()
 {
   return { u"com.sun.star.document.LinkTargets"_ustr };
 }
@@ -2088,7 +2100,7 @@ SdDrawPage::~SdDrawPage() noexcept
 }
 
 // XInterface
-Any SAL_CALL SdDrawPage::queryInterface( const cpo::uno::Type & rType )
+Any SdDrawPage::queryInterface( const cpo::uno::Type & rType )
 {
     if( rType == cppu::UnoType<drawing::XMasterPageTarget>::get() )
     {
@@ -2107,12 +2119,12 @@ Any SAL_CALL SdDrawPage::queryInterface( const cpo::uno::Type & rType )
     return SdGenericDrawPage::queryInterface( rType );
 }
 
-void SAL_CALL SdDrawPage::acquire() noexcept
+void SdDrawPage::acquire() noexcept
 {
     SvxDrawPage::acquire();
 }
 
-void SAL_CALL SdDrawPage::release() noexcept
+void SdDrawPage::release() noexcept
 {
     SvxDrawPage::release();
 }
@@ -2120,7 +2132,7 @@ void SAL_CALL SdDrawPage::release() noexcept
 UNO3_GETIMPLEMENTATION2_IMPL( SdDrawPage, SdGenericDrawPage );
 
 // XTypeProvider
-Sequence< cpo::uno::Type > SAL_CALL SdDrawPage::getTypes()
+Sequence< cpo::uno::Type > SdDrawPage::getTypes()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2141,8 +2153,6 @@ Sequence< cpo::uno::Type > SAL_CALL SdDrawPage::getTypes()
         aTypes.push_back(cppu::UnoType<lang::XServiceInfo>::get());
         aTypes.push_back(cppu::UnoType<util::XReplaceable>::get());
         aTypes.push_back(cppu::UnoType<document::XLinkTargetSupplier>::get());
-        aTypes.push_back(cppu::UnoType<drawing::XShapeCombiner>::get());
-        aTypes.push_back(cppu::UnoType<drawing::XShapeBinder>::get());
         aTypes.push_back(cppu::UnoType<office::XAnnotationAccess>::get());
         aTypes.push_back(cppu::UnoType<beans::XMultiPropertySet>::get());
         if( bPresPage )
@@ -2160,7 +2170,7 @@ Sequence< cpo::uno::Type > SAL_CALL SdDrawPage::getTypes()
     return maTypeSequence;
 }
 
-Sequence< sal_Int8 > SAL_CALL SdDrawPage::getImplementationId()
+Sequence< sal_Int8 > SdDrawPage::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -2250,12 +2260,12 @@ OUString SdDrawPage::getUiNameFromPageApiName( const OUString& rApiName )
 }
 
 // XServiceInfo
-OUString SAL_CALL SdDrawPage::getImplementationName()
+OUString SdDrawPage::getImplementationName()
 {
     return u"SdDrawPage"_ustr;
 }
 
-Sequence< OUString > SAL_CALL SdDrawPage::getSupportedServiceNames()
+Sequence< OUString > SdDrawPage::getSupportedServiceNames()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2269,13 +2279,13 @@ Sequence< OUString > SAL_CALL SdDrawPage::getSupportedServiceNames()
     return comphelper::concatSequences(SdGenericDrawPage::getSupportedServiceNames(), aAdd);
 }
 
-bool SAL_CALL SdDrawPage::supportsService( const OUString& ServiceName )
+bool SdDrawPage::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 // XNamed
-void SAL_CALL SdDrawPage::setName( const OUString& rName )
+void SdDrawPage::setName( const OUString& rName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -2350,7 +2360,7 @@ void SAL_CALL SdDrawPage::setName( const OUString& rName )
     GetModel()->SetModified();
 }
 
-OUString SAL_CALL SdDrawPage::getName()
+OUString SdDrawPage::getName()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2360,7 +2370,7 @@ OUString SAL_CALL SdDrawPage::getName()
 }
 
 // XMasterPageTarget
-Reference< drawing::XDrawPage > SAL_CALL SdDrawPage::getMasterPage(  )
+Reference< drawing::XDrawPage > SdDrawPage::getMasterPage(  )
 {
     return static_cast<SdGenericDrawPage*>(getSdMasterPage());
 }
@@ -2382,7 +2392,7 @@ SdMasterPage* SdDrawPage::getSdMasterPage()
     return nullptr;
 }
 
-void SAL_CALL SdDrawPage::setMasterPage( const Reference< drawing::XDrawPage >& xMasterPage )
+void SdDrawPage::setMasterPage( const Reference< drawing::XDrawPage >& xMasterPage )
 {
     ::SolarMutexGuard aGuard;
     comphelper::ProfileZone aZone("setMasterPage");
@@ -2396,10 +2406,8 @@ void SAL_CALL SdDrawPage::setMasterPage( const Reference< drawing::XDrawPage >& 
     if( !(pMasterPage && pMasterPage->isValid()) )
         return;
 
-    SvxDrawPage::mpPage->TRG_ClearMasterPage();
-
     SdPage* pSdPage = static_cast<SdPage*>(pMasterPage->GetSdrPage());
-    SvxDrawPage::mpPage->TRG_SetMasterPage(*pSdPage);
+    static_cast<SdPage*>(SvxDrawPage::mpPage)->ChangeMasterPage(*pSdPage);
 
     SvxDrawPage::mpPage->SetBorder(pSdPage->GetLeftBorder(),pSdPage->GetUpperBorder(),
                       pSdPage->GetRightBorder(),pSdPage->GetLowerBorder() );
@@ -2422,7 +2430,7 @@ void SAL_CALL SdDrawPage::setMasterPage( const Reference< drawing::XDrawPage >& 
 }
 
 // XPresentationPage
-Reference< drawing::XDrawPage > SAL_CALL SdDrawPage::getNotesPage()
+Reference< drawing::XDrawPage > SdDrawPage::getNotesPage()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2441,34 +2449,34 @@ Reference< drawing::XDrawPage > SAL_CALL SdDrawPage::getNotesPage()
 }
 
 // XIndexAccess
-sal_Int32 SAL_CALL SdDrawPage::getCount()
+sal_Int32 SdDrawPage::getCount()
 {
     return SdGenericDrawPage::getCount();
 }
 
-Any SAL_CALL SdDrawPage::getByIndex( sal_Int32 Index )
+Any SdDrawPage::getByIndex( sal_Int32 Index )
 {
     return SdGenericDrawPage::getByIndex( Index );
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SdDrawPage::getElementType()
+cpo::uno::Type SdDrawPage::getElementType()
 {
     return SdGenericDrawPage::getElementType();
 }
 
-bool SAL_CALL SdDrawPage::hasElements()
+bool SdDrawPage::hasElements()
 {
     return SdGenericDrawPage::hasElements();
 }
 
 // XShapes
-void SAL_CALL SdDrawPage::add( const Reference< drawing::XShape >& xShape )
+void SdDrawPage::add( const Reference< drawing::XShape >& xShape )
 {
     SdGenericDrawPage::add( xShape );
 }
 
-void SAL_CALL SdDrawPage::remove( const Reference< drawing::XShape >& xShape )
+void SdDrawPage::remove( const Reference< drawing::XShape >& xShape )
 {
     ::SolarMutexGuard aGuard;
 
@@ -2544,7 +2552,7 @@ void SdDrawPage::setBackground( const Any& rValue )
 }
 
 // XAnnotationAccess:
-Reference< XAnnotation > SAL_CALL SdGenericDrawPage::createAndInsertAnnotation()
+Reference< XAnnotation > SdGenericDrawPage::createAndInsertAnnotation()
 {
     if( !GetPage() )
         throw DisposedException();
@@ -2554,14 +2562,14 @@ Reference< XAnnotation > SAL_CALL SdGenericDrawPage::createAndInsertAnnotation()
     return xAnnotation;
 }
 
-void SAL_CALL SdGenericDrawPage::removeAnnotation(const Reference< XAnnotation > & annotation)
+void SdGenericDrawPage::removeAnnotation(const Reference< XAnnotation > & annotation)
 {
     rtl::Reference<sd::Annotation> xSdAnnotation = dynamic_cast<sd::Annotation*>(annotation.get());
     assert(bool(annotation) == bool(xSdAnnotation) && "must be of concrete type sd::Annotation");
     GetPage()->removeAnnotation(xSdAnnotation);
 }
 
-Reference< XAnnotationEnumeration > SAL_CALL SdGenericDrawPage::createAnnotationEnumeration()
+Reference< XAnnotationEnumeration > SdGenericDrawPage::createAnnotationEnumeration()
 {
     return sdr::annotation::createAnnotationEnumeration(std::vector(GetPage()->getAnnotations()));
 }
@@ -2614,12 +2622,12 @@ public:
     explicit SdNavigationOrderAccess(SdrPage const * pPage);
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount(  ) override;
-    virtual Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount(  ) override;
+    virtual Any getByIndex( sal_Int32 Index ) override;
 
     // XElementAccess
-    virtual Type SAL_CALL getElementType(  ) override;
-    virtual bool SAL_CALL hasElements(  ) override;
+    virtual Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
 
 private:
     std::vector< Reference< XShape > > maShapes;
@@ -2642,12 +2650,12 @@ SdNavigationOrderAccess::SdNavigationOrderAccess( SdrPage const * pPage )
 }
 
 // XIndexAccess
-sal_Int32 SAL_CALL SdNavigationOrderAccess::getCount(  )
+sal_Int32 SdNavigationOrderAccess::getCount(  )
 {
     return static_cast< sal_Int32 >( maShapes.size() );
 }
 
-Any SAL_CALL SdNavigationOrderAccess::getByIndex( sal_Int32 Index )
+Any SdNavigationOrderAccess::getByIndex( sal_Int32 Index )
 {
     if( (Index < 0) || (Index > getCount()) )
         throw IndexOutOfBoundsException();
@@ -2656,12 +2664,12 @@ Any SAL_CALL SdNavigationOrderAccess::getByIndex( sal_Int32 Index )
 }
 
 // XElementAccess
-Type SAL_CALL SdNavigationOrderAccess::getElementType(  )
+Type SdNavigationOrderAccess::getElementType(  )
 {
     return cppu::UnoType<XShape>::get();
 }
 
-bool SAL_CALL SdNavigationOrderAccess::hasElements(  )
+bool SdNavigationOrderAccess::hasElements(  )
 {
     return !maShapes.empty();
 }
@@ -2688,7 +2696,7 @@ SdMasterPage::~SdMasterPage() noexcept
 }
 
 // XInterface
-Any SAL_CALL SdMasterPage::queryInterface( const cpo::uno::Type & rType )
+Any SdMasterPage::queryInterface( const cpo::uno::Type & rType )
 {
     ::SolarMutexGuard aGuard;
 
@@ -2712,12 +2720,12 @@ Any SAL_CALL SdMasterPage::queryInterface( const cpo::uno::Type & rType )
     return aAny;
 }
 
-void SAL_CALL SdMasterPage::acquire() noexcept
+void SdMasterPage::acquire() noexcept
 {
     SvxDrawPage::acquire();
 }
 
-void SAL_CALL SdMasterPage::release() noexcept
+void SdMasterPage::release() noexcept
 {
     SvxDrawPage::release();
 }
@@ -2725,7 +2733,7 @@ void SAL_CALL SdMasterPage::release() noexcept
 UNO3_GETIMPLEMENTATION2_IMPL( SdMasterPage, SdGenericDrawPage );
 
 // XTypeProvider
-Sequence< cpo::uno::Type > SAL_CALL SdMasterPage::getTypes()
+Sequence< cpo::uno::Type > SdMasterPage::getTypes()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2745,8 +2753,6 @@ Sequence< cpo::uno::Type > SAL_CALL SdMasterPage::getTypes()
         aTypes.push_back(cppu::UnoType<lang::XServiceInfo>::get());
         aTypes.push_back(cppu::UnoType<util::XReplaceable>::get());
         aTypes.push_back(cppu::UnoType<document::XLinkTargetSupplier>::get());
-        aTypes.push_back(cppu::UnoType<drawing::XShapeCombiner>::get());
-        aTypes.push_back(cppu::UnoType<drawing::XShapeBinder>::get());
         aTypes.push_back(cppu::UnoType<office::XAnnotationAccess>::get());
         aTypes.push_back(cppu::UnoType<beans::XMultiPropertySet>::get());
         if( bPresPage )
@@ -2764,18 +2770,18 @@ Sequence< cpo::uno::Type > SAL_CALL SdMasterPage::getTypes()
     return maTypeSequence;
 }
 
-Sequence< sal_Int8 > SAL_CALL SdMasterPage::getImplementationId()
+Sequence< sal_Int8 > SdMasterPage::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
 
 // XServiceInfo
-OUString SAL_CALL SdMasterPage::getImplementationName()
+OUString SdMasterPage::getImplementationName()
 {
     return u"SdMasterPage"_ustr;
 }
 
-Sequence< OUString > SAL_CALL SdMasterPage::getSupportedServiceNames()
+Sequence< OUString > SdMasterPage::getSupportedServiceNames()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2789,13 +2795,13 @@ Sequence< OUString > SAL_CALL SdMasterPage::getSupportedServiceNames()
     return comphelper::concatSequences(SdGenericDrawPage::getSupportedServiceNames(), aAdd);
 }
 
-bool SAL_CALL SdMasterPage::supportsService( const OUString& ServiceName )
+bool SdMasterPage::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 // XElementAccess
-bool SAL_CALL SdMasterPage::hasElements()
+bool SdMasterPage::hasElements()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2807,13 +2813,13 @@ bool SAL_CALL SdMasterPage::hasElements()
     return SvxDrawPage::mpPage->GetObjCount() > 0;
 }
 
-cpo::uno::Type SAL_CALL SdMasterPage::getElementType()
+cpo::uno::Type SdMasterPage::getElementType()
 {
     return SdGenericDrawPage::getElementType();
 }
 
 // XIndexAccess
-sal_Int32 SAL_CALL SdMasterPage::getCount()
+sal_Int32 SdMasterPage::getCount()
 {
     ::SolarMutexGuard aGuard;
 
@@ -2822,7 +2828,7 @@ sal_Int32 SAL_CALL SdMasterPage::getCount()
     return SdGenericDrawPage::getCount();
 }
 
-Any SAL_CALL SdMasterPage::getByIndex( sal_Int32 Index )
+Any SdMasterPage::getByIndex( sal_Int32 Index )
 {
     ::SolarMutexGuard aGuard;
 
@@ -2984,7 +2990,7 @@ void SdMasterPage::getBackground( Any& rValue )
 }
 
 // XNamed
-void SAL_CALL SdMasterPage::setName( const OUString& rName )
+void SdMasterPage::setName( const OUString& rName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -3028,7 +3034,7 @@ void SAL_CALL SdMasterPage::setName( const OUString& rName )
     GetModel()->SetModified();
 }
 
-OUString SAL_CALL SdMasterPage::getName(  )
+OUString SdMasterPage::getName(  )
 {
     ::SolarMutexGuard aGuard;
 
@@ -3044,7 +3050,7 @@ OUString SAL_CALL SdMasterPage::getName(  )
 }
 
 // XPresentationPage
-Reference< drawing::XDrawPage > SAL_CALL SdMasterPage::getNotesPage()
+Reference< drawing::XDrawPage > SdMasterPage::getNotesPage()
 {
     ::SolarMutexGuard aGuard;
 
@@ -3063,12 +3069,12 @@ Reference< drawing::XDrawPage > SAL_CALL SdMasterPage::getNotesPage()
 }
 
 // XShapes
-void SAL_CALL SdMasterPage::add( const Reference< drawing::XShape >& xShape )
+void SdMasterPage::add( const Reference< drawing::XShape >& xShape )
 {
     SdGenericDrawPage::add( xShape );
 }
 
-void SAL_CALL SdMasterPage::remove( const Reference< drawing::XShape >& xShape )
+void SdMasterPage::remove( const Reference< drawing::XShape >& xShape )
 {
     ::SolarMutexGuard aGuard;
 

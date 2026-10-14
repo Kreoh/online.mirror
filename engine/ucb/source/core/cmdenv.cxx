@@ -31,6 +31,7 @@
 
  *************************************************************************/
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ucb_cmdenv;
 
 // UcbCommandEnvironment Implementation.
@@ -50,7 +51,7 @@ UcbCommandEnvironment::~UcbCommandEnvironment()
 
 
 // virtual
-void SAL_CALL UcbCommandEnvironment::initialize(
+void UcbCommandEnvironment::initialize(
         const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     if ( ( aArguments.getLength() < 2 ) ||
@@ -64,14 +65,14 @@ void SAL_CALL UcbCommandEnvironment::initialize(
 
 
 // virtual
-OUString SAL_CALL UcbCommandEnvironment::getImplementationName()
+OUString UcbCommandEnvironment::getImplementationName()
 {
     return u"com.sun.star.comp.ucb.CommandEnvironment"_ustr;
 }
 
 
 // virtual
-bool SAL_CALL
+bool
 UcbCommandEnvironment::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
@@ -79,7 +80,7 @@ UcbCommandEnvironment::supportsService( const OUString& ServiceName )
 
 
 // virtual
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 UcbCommandEnvironment::getSupportedServiceNames()
 {
     return { u"com.sun.star.ucb.CommandEnvironment"_ustr };
@@ -90,7 +91,7 @@ UcbCommandEnvironment::getSupportedServiceNames()
 
 
 // virtual
-uno::Reference< task::XInteractionHandler > SAL_CALL
+uno::Reference< task::XInteractionHandler >
 UcbCommandEnvironment::getInteractionHandler()
 {
     return m_xIH;
@@ -98,7 +99,7 @@ UcbCommandEnvironment::getInteractionHandler()
 
 
 // virtual
-uno::Reference< ucb::XProgressHandler > SAL_CALL
+uno::Reference< ucb::XProgressHandler >
 UcbCommandEnvironment::getProgressHandler()
 {
     return m_xPH;
@@ -107,9 +108,9 @@ UcbCommandEnvironment::getProgressHandler()
 
 // Service factory implementation.
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_UcbCommandEnvironment_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new UcbCommandEnvironment());
 }

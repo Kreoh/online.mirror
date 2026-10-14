@@ -31,7 +31,7 @@
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <comphelper/diagnose_ex.hxx>
 
@@ -45,7 +45,7 @@ using osl::FileBase;
 
 using namespace cppu;
 using namespace com::sun::star::system::SimpleMailClientFlags;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::configuration;
@@ -57,14 +57,14 @@ CmdMailSuppl::CmdMailSuppl( const Reference< XComponentContext >& xContext )
 
 // XSimpleMailClientSupplier
 
-Reference< XSimpleMailClient > SAL_CALL CmdMailSuppl::querySimpleMailClient(  )
+Reference< XSimpleMailClient > CmdMailSuppl::querySimpleMailClient(  )
 {
     return static_cast < XSimpleMailClient * > (this);
 }
 
 // XSimpleMailClient
 
-Reference< XSimpleMailMessage > SAL_CALL CmdMailSuppl::createSimpleMailMessage(  )
+Reference< XSimpleMailMessage > CmdMailSuppl::createSimpleMailMessage(  )
 {
     return Reference< XSimpleMailMessage >( new CmdMailMsg(  ) );
 }
@@ -84,7 +84,7 @@ void appendShellWord(OStringBuffer & buffer, OUString const & word, bool strict)
         throw cpo::uno::Exception(
             ("Could not convert \"" + word + "\" to encoding #"
              + OUString::number(osl_getThreadTextEncoding())),
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     buffer.append('\'');
     for (sal_Int32 i = 0; i != sys.getLength(); ++i) {
@@ -94,7 +94,7 @@ void appendShellWord(OStringBuffer & buffer, OUString const & word, bool strict)
             if (strict) {
                 throw cpo::uno::Exception(
                     "Could not convert word containing NUL, \"" + word + "\"",
-                    css::uno::Reference<css::uno::XInterface>());
+                    cpo::uno::Reference<cpo::uno::XInterface>());
             }
             break;
         case '\'':
@@ -110,7 +110,7 @@ void appendShellWord(OStringBuffer & buffer, OUString const & word, bool strict)
 
 }
 
-void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailMessage >& xSimpleMailMessage, sal_Int32 /*aFlag*/ )
+void CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailMessage >& xSimpleMailMessage, sal_Int32 /*aFlag*/ )
 {
     if ( ! xSimpleMailMessage.is() )
     {
@@ -263,24 +263,24 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
 
 // XServiceInfo
 
-OUString SAL_CALL CmdMailSuppl::getImplementationName(  )
+OUString CmdMailSuppl::getImplementationName(  )
 {
     return u"com.sun.star.comp.system.SimpleCommandMail"_ustr;
 }
 
-bool SAL_CALL CmdMailSuppl::supportsService( const OUString& ServiceName )
+bool CmdMailSuppl::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL CmdMailSuppl::getSupportedServiceNames(    )
+Sequence< OUString > CmdMailSuppl::getSupportedServiceNames(    )
 {
     return { u"com.sun.star.system.SimpleCommandMail"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_CmdMailSuppl_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new CmdMailSuppl(context));
 }

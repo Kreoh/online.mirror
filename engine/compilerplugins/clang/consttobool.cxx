@@ -17,6 +17,7 @@
 #include "clang/Basic/Builtins.h"
 
 #include "check.hxx"
+#include "compat.hxx"
 #include "plugin.hxx"
 
 // Find implicit conversions from non-'bool' constants to 'bool'.
@@ -116,6 +117,23 @@ public:
         return ret;
     }
 
+    bool TraverseCXXFunctionalCastExpr(CXXFunctionalCastExpr * expr) {
+        // The C++ definition of assert in glibc 2.44 checks that its argument is a single
+        // expression with `1 ? 1 : bool (__VA_ARGS__)`, which re-evaluates the whole argument in a
+        // branch that is never taken; do not descend into that dead branch to avoid duplicate
+        // warnings:
+        if (expr->getType()->isBooleanType()) {
+            auto const loc = expr->getBeginLoc();
+            if (compiler.getSourceManager().isMacroBodyExpansion(loc)
+                && Lexer::getImmediateMacroName(
+                    loc, compiler.getSourceManager(), compiler.getLangOpts()) == "assert")
+            {
+                return true;
+            }
+        }
+        return FilteringPlugin::TraverseCXXFunctionalCastExpr(expr);
+    }
+
     bool VisitImplicitCastExpr(ImplicitCastExpr const* expr)
     {
         if (ignoreLocation(expr))
@@ -137,7 +155,7 @@ public:
             return true;
         }
         APValue res;
-        if (!sub->isCXX11ConstantExpr(compiler.getASTContext(), &res))
+        if (!compat::isCXX11ConstantExpr(sub, compiler.getASTContext(), res))
         {
             return true;
         }

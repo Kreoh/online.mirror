@@ -53,8 +53,8 @@
 #include <DrawController.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::graphic;
@@ -66,24 +66,24 @@ namespace {
 
 class SdGRFFilter_ImplInteractionHdl : public ::cppu::WeakImplHelper< css::task::XInteractionHandler >
 {
-    css::uno::Reference< css::task::XInteractionHandler > m_xInter;
+    cpo::uno::Reference< css::task::XInteractionHandler > m_xInter;
     ErrCode nFilterError;
 
     public:
 
-    explicit SdGRFFilter_ImplInteractionHdl( css::uno::Reference< css::task::XInteractionHandler > xInteraction ) :
+    explicit SdGRFFilter_ImplInteractionHdl( cpo::uno::Reference< css::task::XInteractionHandler > xInteraction ) :
         m_xInter(std::move( xInteraction )),
         nFilterError( ERRCODE_NONE )
         {}
 
     ErrCode const & GetErrorCode() const { return nFilterError; };
 
-    virtual void SAL_CALL   handle( const css::uno::Reference< css::task::XInteractionRequest >& ) override;
+    virtual void   handle( const cpo::uno::Reference< css::task::XInteractionRequest >& ) override;
 };
 
 }
 
-void SdGRFFilter_ImplInteractionHdl::handle( const css::uno::Reference< css::task::XInteractionRequest >& xRequest )
+void SdGRFFilter_ImplInteractionHdl::handle( const cpo::uno::Reference< css::task::XInteractionRequest >& xRequest )
 {
     if( !m_xInter.is() )
         return;
@@ -229,7 +229,7 @@ bool SdGRFFilter::Export()
     // SJ: todo: error handling, the GraphicExportFilter does not support proper errorhandling
     bool bRet = false;
 
-    const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
     uno::Reference< drawing::XGraphicExportFilter > xExporter = drawing::GraphicExportFilter::create( xContext );
 
     SdPage* pPage = nullptr;
@@ -264,7 +264,7 @@ bool SdGRFFilter::Export()
                 {
                     rtl::Reference< SdGRFFilter_ImplInteractionHdl > xInteractionHandler;
 
-                    comphelper::SequenceAsHashMap aArgs = TransformItems(SID_SAVEASDOC, rSet);
+                    SfxUnoArguments aArgs = TransformItems(SID_SAVEASDOC, rSet);
 
                     static constexpr OUString sFilterName( u"FilterName"_ustr );
                     OUString sShortName( rGraphicFilter.GetExportFormatShortName( nFilter ) );

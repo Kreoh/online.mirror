@@ -18,7 +18,7 @@
 
 #if defined(__linux__) || defined (__FreeBSD__) ||\
     defined(_WIN32) || defined(__APPLE__) || defined (__NetBSD__) ||\
-    defined (__sun) || defined(__OpenBSD__) || defined(__EMSCRIPTEN__)
+    defined(__OpenBSD__) || defined(__EMSCRIPTEN__)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +35,7 @@
         #include <TargetConditionals.h>
         #define SOFFICEAPP_LIB "libsofficeapp.dylib"
         #define MERGED_LIB "libmergedlo.dylib"
+        #define UNITED_LIB "libunitedlo.dylib"
 
         #if (!defined TARGET_OS_IPHONE || TARGET_OS_IPHONE == 0) && (!defined TARGET_OS_OSX || TARGET_OS_OSX == 0)
             #error COKit is not supported on tvOS, visionOS or watchOS
@@ -42,6 +43,7 @@
     #else
         #define SOFFICEAPP_LIB "libsofficeapp.so"
         #define MERGED_LIB "libmergedlo.so"
+        #define UNITED_LIB "libunitedlo.so"
     #endif
     #define SEPARATOR         '/'
 
@@ -53,6 +55,7 @@
     #include <windows.h>
     #define SOFFICEAPP_LIB "sofficeapp.dll"
     #define MERGED_LIB "mergedlo.dll"
+    #define UNITED_LIB "unitedlo.dll"
     #define SEPARATOR '\\'
 
     #undef DELETE
@@ -69,8 +72,16 @@ extern "C"
 #if !defined(IOS)
         static void *cok_loadlib(const char *pFN)
     {
+        // FreeBSD's C++ runtime, libcxxrt, matches a thrown exception against
+        // a catch clause by comparing type_info object addresses, not type
+        // names. The office libraries each carry their own weak copy of the
+        // UNO exception RTTI, so they must all resolve it to one copy, which
+        // needs the library loaded here to be in the global symbol scope like
+        // the component libraries that cppuhelper loads later. Otherwise a
+        // catch (uno::Exception&) in one library misses an exception thrown
+        // by another, and for instance loading a Writer document fails.
         return dlopen(pFN, RTLD_LAZY
-#if defined KIT_LOADLIB_GLOBAL
+#if defined KIT_LOADLIB_GLOBAL || defined __FreeBSD__
                       | RTLD_GLOBAL
 #endif
                       );
@@ -248,7 +259,7 @@ static void *cok_dlopen( const char *install_path, char ** _imp_lib )
 
     // allocate large enough buffer
     partial_length = strlen(install_path);
-    imp_lib_size = partial_length + sizeof(SOFFICEAPP_LIB) + sizeof(MERGED_LIB) + 2;
+    imp_lib_size = partial_length + sizeof(SOFFICEAPP_LIB) + sizeof(MERGED_LIB) + sizeof(UNITED_LIB) + 2;
     imp_lib = (char *) malloc(imp_lib_size);
     if (!imp_lib)
     {
@@ -259,11 +270,60 @@ static void *cok_dlopen( const char *install_path, char ** _imp_lib )
     memcpy(imp_lib, install_path, partial_length);
 
     imp_lib[partial_length++] = SEPARATOR;
-    strncpy(imp_lib + partial_length, SOFFICEAPP_LIB, imp_lib_size - partial_length);
+
+#ifndef NDEBUG
+    {
+        strncpy(imp_lib + partial_length, MERGED_LIB, imp_lib_size - partial_length);
+        struct stat st1;
+        bool b1 = cok_stat(imp_lib, &st1) == 0 && st1.st_size > 0;
+        strncpy(imp_lib + partial_length, UNITED_LIB, imp_lib_size - partial_length);
+        struct stat st2;
+        bool b2 = cok_stat(imp_lib, &st2) == 0 && st2.st_size > 0;
+        strncpy(imp_lib + partial_length, UNITED_LIB, imp_lib_size - partial_length);
+        if (b1 && b2)
+            assert(false && ("found both " MERGED_LIB " and " UNITED_LIB " which is clearly broken"));
+    }
+#endif
 
     struct stat st;
+
+    strncpy(imp_lib + partial_length, MERGED_LIB, imp_lib_size - partial_length);
+    if (cok_stat(imp_lib, &st) == 0 && st.st_size > 0)
+    {
+        dlhandle = cok_loadlib(imp_lib);
+        if (!dlhandle)
+        {
+            char *pErrMessage = cok_dlerror();
+            fprintf(stderr, "failed to open library '%s': %s\n",
+                    imp_lib, pErrMessage);
+            cok_dlerror_free(pErrMessage);
+            free(imp_lib);
+            return NULL;
+        }
+        *_imp_lib = imp_lib;
+        return dlhandle;
+    }
+
+    strncpy(imp_lib + partial_length, UNITED_LIB, imp_lib_size - partial_length);
+    if (cok_stat(imp_lib, &st) == 0 && st.st_size > 0)
+    {
+        dlhandle = cok_loadlib(imp_lib);
+        if (!dlhandle)
+        {
+            char *pErrMessage = cok_dlerror();
+            fprintf(stderr, "failed to open library '%s': %s\n",
+                    imp_lib, pErrMessage);
+            cok_dlerror_free(pErrMessage);
+            free(imp_lib);
+            return NULL;
+        }
+        *_imp_lib = imp_lib;
+        return dlhandle;
+    }
+
     // If SOFFICEAPP_LIB exists but is ridiculously small, it is the
     // one-line text stub as in the --enable-mergedlib case.
+    strncpy(imp_lib + partial_length, SOFFICEAPP_LIB, imp_lib_size - partial_length);
     if (cok_stat(imp_lib, &st) == 0 && st.st_size > 1000)
     {
         dlhandle = cok_loadlib(imp_lib);
@@ -276,24 +336,11 @@ static void *cok_dlopen( const char *install_path, char ** _imp_lib )
             free(imp_lib);
             return NULL;
         }
+        *_imp_lib = imp_lib;
+        return dlhandle;
     }
-    else
-    {
-        strncpy(imp_lib + partial_length, MERGED_LIB, imp_lib_size - partial_length);
 
-        dlhandle = cok_loadlib(imp_lib);
-        if (!dlhandle)
-        {
-            char *pErrMessage = cok_dlerror();
-            fprintf(stderr, "failed to open library '%s': %s\n",
-                    imp_lib, pErrMessage);
-            cok_dlerror_free(pErrMessage);
-            free(imp_lib);
-            return NULL;
-        }
-    }
-    *_imp_lib = imp_lib;
-    return dlhandle;
+    return NULL;
 }
 #endif
 

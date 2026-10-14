@@ -41,6 +41,10 @@ class Document: NSDocument {
     /// The webview that contains the document.
     var webView: WKWebView!
 
+    /// True from the moment the connection to the in-process server is released until a
+    /// new one is established. The document stays loaded in the engine throughout.
+    var isDetached = false
+
     /// The URL of the temporary directory where the document's working files are stored.
     private var tempDirectoryURL: URL?
 
@@ -103,7 +107,12 @@ class Document: NSDocument {
             }
             // modified -> non-modified: Clear the mark unless there is an ongoing saving operation
             else if oldValue && !newValue && pendingSave == nil {
-                changeUpdate = { self.updateChangeCount(.changeCleared) }
+                changeUpdate = {
+                    self.updateChangeCount(.changeCleared)
+                    // The content is on disk, so this document's view can be dropped now
+                    // rather than waiting for the next window to become main.
+                    LiveViewLimit.shared.schedule()
+                }
             }
 
             modifiedLock.unlock()
@@ -113,6 +122,13 @@ class Document: NSDocument {
                 DispatchQueue.main.async(execute: changeUpdate)
             }
         }
+    }
+
+    /// True while a save this document asked the engine for has not come back yet.
+    var isSaveInFlight: Bool {
+        modifiedLock.lock()
+        defer { modifiedLock.unlock() }
+        return pendingSave != nil
     }
 
     /**
@@ -229,6 +245,9 @@ class Document: NSDocument {
         if let viewController = windowController.contentViewController as? ViewController {
             viewController.loadDocument(self)
         }
+
+        // One more document view holds a renderer, so the limit has something new to weigh.
+        LiveViewLimit.shared.noteDocumentOpened()
 
         // Ensure the window exists so we can apply a default if no saved frame yet
         windowController.loadWindow()
@@ -520,6 +539,14 @@ class Document: NSDocument {
         isClosing = true
 
         NSLog("CollaboraOffice: Closing document")
+
+        // The webview goes with the document, so stop offering it to the
+        // WebDriver clients now. Waiting for it to be deallocated would keep it
+        // on offer for as long as anything still holds the document.
+        if let webView {
+            WebDriverManager.shared.unregister(webView: webView)
+        }
+
         COWrapper.bye(self)
         super.close()
         if let tempDir = self.tempDirectoryURL {
@@ -542,13 +569,35 @@ class Document: NSDocument {
     }
 
     /**
+     * Release the connection to the in-process server after the view that used it died.
+     * The appDocId and the temporary file stay, so the document is still there under them.
+     */
+    func detachFromView() {
+        if isDetached {
+            return
+        }
+        isDetached = true
+
+        webView = nil
+        COWrapper.detach(self)
+    }
+
+    /**
      * Initiate loading of cool.html, which also triggers loading of the document via lokit.
      */
     func loadDocumentInWebView(webView: WKWebView, permission: String, isWelcome: Bool) {
         self.webView = webView
 
-        self.appDocId = COWrapper.generateNewAppDocId()
+        // The appDocId names the document to the in-process server for as long as the
+        // document is open. A second call re-establishes the connection to the document
+        // already loaded under this appDocId, so only the socket is fresh.
+        if self.appDocId == -1 {
+            self.appDocId = COWrapper.generateNewAppDocId()
+        }
         self.fakeClientFd = COWrapper.fakeSocketSocket()
+        self.isDetached = false
+
+        NSLog("CollaboraOffice: load into webview with appDocId \(self.appDocId), client fd \(self.fakeClientFd), temp file \(self.tempFileURL?.absoluteString ?? "<none>")")
 
         guard let url = Bundle.main.url(forResource: "cool", withExtension: "html") else {
             fatalError("Resource 'cool.html' not found in the main bundle.")
@@ -597,6 +646,10 @@ class Document: NSDocument {
         return msgStr.prefix(100) + (msgStr.count > 100 ? "..." : "")
     }
 
+    /// The prefixes of the engine messages the save handling reads for itself.
+    private static let stateChangedPrefix = "statechanged: "
+    private static let unoCommandResultPrefix = "unocommandresult:"
+
     /// Whether the message in the buffer starts with the given prefix.
     private func message(_ buffer: UnsafePointer<CChar>, length: Int,
                          hasPrefix prefix: String) -> Bool {
@@ -604,20 +657,30 @@ class Document: NSDocument {
         return length > prefixLength && strncmp(buffer, prefix, prefixLength) == 0
     }
 
-    /**
-     * Reads a statechanged message. The engine sends the state as "<command>=<value>".
-     * A JSON form carrying the same members is in use elsewhere, so accept that too.
-     */
-    private func stateChange(from message: String) -> CommandStateChange? {
-        let prefix = "statechanged: "
-        guard message.hasPrefix(prefix) else {
-            return nil
-        }
-        let payload = message.dropFirst(prefix.count)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    /// The message in the buffer as a string.
+    private func message(_ buffer: UnsafePointer<CChar>, length: Int) -> String {
+        return String(
+            decoding: UnsafeRawBufferPointer(start: UnsafeRawPointer(buffer), count: length),
+            as: UTF8.self)
+    }
 
-        if payload.hasPrefix("{") {
-            return try? JSONDecoder().decode(CommandStateChange.self, from: Data(payload.utf8))
+    /**
+     * Reads a statechanged message's payload, that is, the message with its prefix
+     * dropped. The engine sends the state as "<command>=<value>", and as a JSON
+     * object carrying the same members for the commands whose state does not fit
+     * that form.
+     *
+     * The page reads the same payload in _onStateChangedMsg(), and this follows it:
+     * the whitespace trimming only decides whether to read the payload as JSON and
+     * is not carried into the state, and a payload that looks like JSON but does not
+     * decode still gets split on the "=".
+     */
+    private func stateChange(fromPayload payload: String) -> CommandStateChange? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("{"), trimmed.hasSuffix("}"),
+           let change = try? JSONDecoder().decode(CommandStateChange.self,
+                                                  from: Data(trimmed.utf8)) {
+            return change
         }
         guard let equals = payload.firstIndex(of: "=") else {
             return nil
@@ -641,10 +704,9 @@ class Document: NSDocument {
      * state of menu items.
      */
     private func handleStateChanged(buffer: UnsafePointer<CChar>, length: Int) {
-        let message = String(
-            decoding: UnsafeRawBufferPointer(start: UnsafeRawPointer(buffer), count: length),
-            as: UTF8.self)
-        guard let change = stateChange(from: message) else {
+        let payload = String(message(buffer, length: length)
+            .dropFirst(Document.stateChangedPrefix.count))
+        guard let change = stateChange(fromPayload: payload) else {
             return
         }
 
@@ -665,12 +727,10 @@ class Document: NSDocument {
      * then. Only the .uno:Save result is handled so far.
      */
     private func handleUnoCommandResult(buffer: UnsafePointer<CChar>, length: Int) {
-        let message = String(
-            decoding: UnsafeRawBufferPointer(start: UnsafeRawPointer(buffer), count: length),
-            as: UTF8.self)
-        guard let brace = message.firstIndex(of: "{"),
+        let text = message(buffer, length: length)
+        guard let brace = text.firstIndex(of: "{"),
               let result = try? JSONDecoder().decode(
-                  CommandResult.self, from: Data(message[brace...].utf8)) else {
+                  CommandResult.self, from: Data(text[brace...].utf8)) else {
             return
         }
 
@@ -699,10 +759,10 @@ class Document: NSDocument {
         // order the engine sent them, which is what lets the state a save result is
         // judged against be the state that came with it.
         if !binaryMessage {
-            if message(buffer, length: length, hasPrefix: "unocommandresult:") {
+            if message(buffer, length: length, hasPrefix: Document.unoCommandResultPrefix) {
                 handleUnoCommandResult(buffer: buffer, length: length)
             }
-            else if message(buffer, length: length, hasPrefix: "statechanged:") {
+            else if message(buffer, length: length, hasPrefix: Document.stateChangedPrefix) {
                 handleStateChanged(buffer: buffer, length: length)
             }
         }
@@ -725,7 +785,13 @@ class Document: NSDocument {
 
         // Evaluate on main queue
         DispatchQueue.main.async {
-            self.webView.evaluateJavaScript(js) { (obj, error) in
+            // A document whose view was dropped, or whose renderer died, has no page to
+            // hand this to.
+            guard let webView = self.webView else {
+                COWrapper.LOG_TRC("No view for appDocId \(self.appDocId), dropping: \(truncatedJS)")
+                return
+            }
+            webView.evaluateJavaScript(js) { (obj, error) in
                 if let error = error as NSError? {
                     COWrapper.LOG_ERR("Error after \(truncatedJS): \(error.localizedDescription)")
                     if let jsException = error.userInfo["WKJavaScriptExceptionMessage"] as? String {

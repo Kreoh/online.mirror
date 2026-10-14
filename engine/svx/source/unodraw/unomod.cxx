@@ -23,7 +23,7 @@
 #include <com/sun/star/lang/ServiceNotRegisteredException.hpp>
 #include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <vcl/svapp.hxx>
 #include <svl/itempool.hxx>
 #include <svtools/unoevent.hxx>
@@ -57,6 +57,7 @@
 //-
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 //-
 
@@ -75,21 +76,21 @@ public:
     explicit SvxUnoDrawPagesAccess( SvxUnoDrawingModel& rMyModel ) noexcept;
 
     // XDrawPages
-    virtual css::uno::Reference< css::drawing::XDrawPage > SAL_CALL insertNewByIndex( sal_Int32 nIndex ) override;
-    virtual void SAL_CALL remove( const css::uno::Reference< css::drawing::XDrawPage >& xPage ) override;
+    virtual cpo::uno::Reference< css::drawing::XDrawPage > insertNewByIndex( sal_Int32 nIndex ) override;
+    virtual void remove( const cpo::uno::Reference< css::drawing::XDrawPage >& xPage ) override;
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override ;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount() override ;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 //-
 
@@ -163,7 +164,7 @@ bool SvxUnoDrawMSFactory::createEvent( const SdrModel* pDoc, const SdrHint* pSdr
 
 namespace {
 
-css::uno::Reference<css::uno::XInterface> create(
+cpo::uno::Reference<cpo::uno::XInterface> create(
     OUString const & rServiceSpecifier, OUString const & referer)
 {
     if( rServiceSpecifier.startsWith("com.sun.star.drawing.") )
@@ -178,7 +179,7 @@ css::uno::Reference<css::uno::XInterface> create(
     }
     else if (rServiceSpecifier == "com.sun.star.document.ImportGraphicStorageHandler")
     {
-        const uno::Reference<uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
+        const uno::Reference<cpo::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
         // The one empty argument makes the helper build itself without a storage, so it resolves
         // the graphics handed to it and reads nothing from a package of its own.
         cpo::uno::Sequence<cpo::uno::Any> aArguments{ cpo::uno::Any() };
@@ -190,7 +191,7 @@ css::uno::Reference<css::uno::XInterface> create(
         return SvxXTextColumns_createInstance();
     }
 
-    uno::Reference< uno::XInterface > xRet( SvxUnoDrawMSFactory::createTextField( rServiceSpecifier ) );
+    uno::Reference< cpo::uno::XInterface > xRet( SvxUnoDrawMSFactory::createTextField( rServiceSpecifier ) );
     if( !xRet.is() )
         throw lang::ServiceNotRegisteredException("unknown service: " + rServiceSpecifier);
 
@@ -199,17 +200,17 @@ css::uno::Reference<css::uno::XInterface> create(
 
 }
 
-uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawMSFactory::createInstance( const OUString& rServiceSpecifier )
+uno::Reference< cpo::uno::XInterface > SvxUnoDrawMSFactory::createInstance( const OUString& rServiceSpecifier )
 {
     return create(rServiceSpecifier, u""_ustr);
 }
 
-uno::Reference< uno::XInterface > SvxUnoDrawMSFactory::createTextField( std::u16string_view ServiceSpecifier )
+uno::Reference< cpo::uno::XInterface > SvxUnoDrawMSFactory::createTextField( std::u16string_view ServiceSpecifier )
 {
     return SvxUnoTextCreateTextField( ServiceSpecifier );
 }
 
-uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawMSFactory::createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments )
+uno::Reference< cpo::uno::XInterface > SvxUnoDrawMSFactory::createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments )
 {
     OUString arg;
     if ((ServiceSpecifier == "com.sun.star.drawing.GraphicObjectShape"
@@ -223,7 +224,7 @@ uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawMSFactory::createInstanceWi
     throw lang::NoSupportException();
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxUnoDrawMSFactory::getAvailableServiceNames()
+cpo::uno::Sequence< OUString > SvxUnoDrawMSFactory::getAvailableServiceNames()
 {
     return UHashMap::getServiceNames();
 }
@@ -244,7 +245,7 @@ SvxUnoDrawingModel::~SvxUnoDrawingModel() noexcept
 {
 }
 
-cpo::uno::Any SAL_CALL SvxUnoDrawingModel::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any SvxUnoDrawingModel::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aAny;
 
@@ -259,7 +260,7 @@ cpo::uno::Any SAL_CALL SvxUnoDrawingModel::queryInterface( const cpo::uno::Type 
 }
 
 // XTypeProvider
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SvxUnoDrawingModel::getTypes(  )
+cpo::uno::Sequence< cpo::uno::Type > SvxUnoDrawingModel::getTypes(  )
 {
     if( !maTypeSequence.hasElements() )
     {
@@ -273,18 +274,18 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SvxUnoDrawingModel::getTypes(  )
     return maTypeSequence;
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxUnoDrawingModel::getImplementationId(  )
+cpo::uno::Sequence< sal_Int8 > SvxUnoDrawingModel::getImplementationId(  )
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
 
-void SAL_CALL SvxUnoDrawingModel::lockControllers(  )
+void SvxUnoDrawingModel::lockControllers(  )
 {
     if( mpDoc )
         mpDoc->setLock(true);
 }
 
-void SAL_CALL SvxUnoDrawingModel::unlockControllers(  )
+void SvxUnoDrawingModel::unlockControllers(  )
 {
     if( mpDoc && mpDoc->isLocked() )
     {
@@ -292,13 +293,13 @@ void SAL_CALL SvxUnoDrawingModel::unlockControllers(  )
     }
 }
 
-bool SAL_CALL SvxUnoDrawingModel::hasControllersLocked(  )
+bool SvxUnoDrawingModel::hasControllersLocked(  )
 {
     return mpDoc && mpDoc->isLocked();
 }
 
 // XDrawPagesSupplier
-uno::Reference< drawing::XDrawPages > SAL_CALL SvxUnoDrawingModel::getDrawPages()
+uno::Reference< drawing::XDrawPages > SvxUnoDrawingModel::getDrawPages()
 {
     ::SolarMutexGuard aGuard;
 
@@ -314,7 +315,7 @@ uno::Reference< drawing::XDrawPages > SAL_CALL SvxUnoDrawingModel::getDrawPages(
 }
 
 // XMultiServiceFactory ( SvxFmMSFactory )
-uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawingModel::createInstance( const OUString& aServiceSpecifier )
+uno::Reference< cpo::uno::XInterface > SvxUnoDrawingModel::createInstance( const OUString& aServiceSpecifier )
 {
     ::SolarMutexGuard aGuard;
 
@@ -356,7 +357,7 @@ uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawingModel::createInstance( c
     }
     if( aServiceSpecifier == "com.sun.star.text.NumberingRules" )
     {
-        return uno::Reference< uno::XInterface >( SvxCreateNumRule( mpDoc ), uno::UNO_QUERY );
+        return uno::Reference< cpo::uno::XInterface >( SvxCreateNumRule( mpDoc ), uno::UNO_QUERY );
     }
 
     if ( aServiceSpecifier == "com.sun.star.image.ImageMapRectangleObject" )
@@ -379,7 +380,7 @@ uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawingModel::createInstance( c
         return cppu::getXWeak(new SvxUnoTextField(text::textfield::Type::DATE));
     }
 
-    uno::Reference< uno::XInterface > xRet;
+    uno::Reference< cpo::uno::XInterface > xRet;
 
     static constexpr OUString aPackagePrefix( u"com.sun.star.presentation."_ustr );
     if( aServiceSpecifier.startsWith( aPackagePrefix ) )
@@ -472,7 +473,7 @@ uno::Reference< uno::XInterface > SAL_CALL SvxUnoDrawingModel::createInstance( c
     return xRet;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxUnoDrawingModel::getAvailableServiceNames()
+cpo::uno::Sequence< OUString > SvxUnoDrawingModel::getAvailableServiceNames()
 {
     const cpo::uno::Sequence< OUString > aSNS_ORG( SvxFmMSFactory::getAvailableServiceNames() );
 
@@ -505,23 +506,23 @@ cpo::uno::Sequence< OUString > SAL_CALL SvxUnoDrawingModel::getAvailableServiceN
 }
 
 // lang::XServiceInfo
-OUString SAL_CALL SvxUnoDrawingModel::getImplementationName()
+OUString SvxUnoDrawingModel::getImplementationName()
 {
     return u"SvxUnoDrawingModel"_ustr;
 }
 
-bool SAL_CALL SvxUnoDrawingModel::supportsService( const OUString& ServiceName )
+bool SvxUnoDrawingModel::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxUnoDrawingModel::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > SvxUnoDrawingModel::getSupportedServiceNames()
 {
     return { u"com.sun.star.drawing.DrawingDocument"_ustr };
 }
 
 // XAnyCompareFactory
-uno::Reference< css::ucb::XAnyCompare > SAL_CALL SvxUnoDrawingModel::createAnyCompareByName( const OUString& )
+uno::Reference< css::ucb::XAnyCompare > SvxUnoDrawingModel::createAnyCompareByName( const OUString& )
 {
     return SvxCreateNumRuleCompare();
 }
@@ -532,7 +533,7 @@ SvxUnoDrawPagesAccess::SvxUnoDrawPagesAccess( SvxUnoDrawingModel& rMyModel )  no
 }
 
 // XIndexAccess
-sal_Int32 SAL_CALL SvxUnoDrawPagesAccess::getCount()
+sal_Int32 SvxUnoDrawPagesAccess::getCount()
 {
     ::SolarMutexGuard aGuard;
 
@@ -544,7 +545,7 @@ sal_Int32 SAL_CALL SvxUnoDrawPagesAccess::getCount()
     return nCount;
 }
 
-cpo::uno::Any SAL_CALL SvxUnoDrawPagesAccess::getByIndex( sal_Int32 Index )
+cpo::uno::Any SvxUnoDrawPagesAccess::getByIndex( sal_Int32 Index )
 {
     ::SolarMutexGuard aGuard;
 
@@ -566,19 +567,19 @@ cpo::uno::Any SAL_CALL SvxUnoDrawPagesAccess::getByIndex( sal_Int32 Index )
                 pPage->mxUnoPage = xPage;
             }
 
-            aAny <<= uno::Reference< uno::XInterface >(cppu::getXWeak(xPage.get()));
+            aAny <<= uno::Reference< cpo::uno::XInterface >(cppu::getXWeak(xPage.get()));
         }
     }
     return aAny;
 }
 
 // XElementAccess
-cpo::uno::Type SAL_CALL SvxUnoDrawPagesAccess::getElementType()
+cpo::uno::Type SvxUnoDrawPagesAccess::getElementType()
 {
     return cppu::UnoType<drawing::XDrawPage>::get();
 }
 
-bool SAL_CALL SvxUnoDrawPagesAccess::hasElements()
+bool SvxUnoDrawPagesAccess::hasElements()
 {
     return getCount() > 0;
 }
@@ -587,7 +588,7 @@ bool SAL_CALL SvxUnoDrawPagesAccess::hasElements()
 
 // create a new page with model at given position
 // and return corresponding SdDrawPage
-uno::Reference< drawing::XDrawPage > SAL_CALL SvxUnoDrawPagesAccess::insertNewByIndex( sal_Int32 nIndex )
+uno::Reference< drawing::XDrawPage > SvxUnoDrawPagesAccess::insertNewByIndex( sal_Int32 nIndex )
 {
     ::SolarMutexGuard aGuard;
 
@@ -609,7 +610,7 @@ uno::Reference< drawing::XDrawPage > SAL_CALL SvxUnoDrawPagesAccess::insertNewBy
     return xDrawPage;
 }
 
-void SAL_CALL SvxUnoDrawPagesAccess::remove( const uno::Reference< drawing::XDrawPage >& xPage )
+void SvxUnoDrawPagesAccess::remove( const uno::Reference< drawing::XDrawPage >& xPage )
 {
     ::SolarMutexGuard aGuard;
 
@@ -632,22 +633,22 @@ void SAL_CALL SvxUnoDrawPagesAccess::remove( const uno::Reference< drawing::XDra
 
 // XServiceInfo
 
-OUString SAL_CALL SvxUnoDrawPagesAccess::getImplementationName(  )
+OUString SvxUnoDrawPagesAccess::getImplementationName(  )
 {
     return u"SvxUnoDrawPagesAccess"_ustr;
 }
 
-bool SAL_CALL SvxUnoDrawPagesAccess::supportsService( const OUString& ServiceName )
+bool SvxUnoDrawPagesAccess::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxUnoDrawPagesAccess::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SvxUnoDrawPagesAccess::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.drawing.DrawPages"_ustr };
 }
 
-css::uno::Reference< css::container::XIndexReplace > SvxCreateNumRule(SdrModel* pModel)
+cpo::uno::Reference< css::container::XIndexReplace > SvxCreateNumRule(SdrModel* pModel)
 {
     const SvxNumRule* pDefaultRule = nullptr;
     if( pModel )

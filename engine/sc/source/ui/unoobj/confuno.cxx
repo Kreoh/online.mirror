@@ -19,7 +19,9 @@
 
 #include <sal/config.h>
 
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include <config_features.h>
 
@@ -31,6 +33,7 @@
 #include <appoptio.hxx>
 #include <viewopti.hxx>
 #include <docpool.hxx>
+#include <drwlayer.hxx>
 #include <sc.hrc>
 #include <scmod.hxx>
 
@@ -40,10 +43,12 @@
 #include <formula/grammar.hxx>
 #include <sfx2/printer.hxx>
 #include <svl/itemset.hxx>
+#include <svx/compatflags.hxx>
 #include <vcl/svapp.hxx>
 #include <tools/stream.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 constexpr OUString SCSAVEVERSION = u"SaveVersionOnClose"_ustr;
 
@@ -94,8 +99,17 @@ static std::span<const SfxItemPropertyMapEntry> lcl_GetConfigPropertyMap()
         { SC_UNO_IMAGE_PREFERRED_DPI,       0,  cppu::UnoType<sal_Int32>::get(), 0, 0},
         { SC_UNO_SYNTAXSTRINGREF, 0,  cppu::UnoType<sal_Int16>::get(),     0, 0},
     };
-    return aConfigPropertyMap_Impl;
+    static const std::vector<SfxItemPropertyMapEntry> aConfigPropertyMap = []
+    {
+        std::vector<SfxItemPropertyMapEntry> aEntries(std::begin(aConfigPropertyMap_Impl),
+                                                      std::end(aConfigPropertyMap_Impl));
+        for (const SdrCompatibilityFlagName& rName : SdrModel::GetCompatibilityFlagNames())
+            aEntries.emplace_back(rName.maName, 0, cppu::UnoType<bool>::get(), 0, 0);
+        return aEntries;
+    }();
+    return aConfigPropertyMap;
 }
+
 
 ScDocumentConfiguration::ScDocumentConfiguration(ScDocShell* pDocSh)
     : pDocShell(pDocSh) ,
@@ -124,7 +138,7 @@ void ScDocumentConfiguration::Notify( SfxBroadcaster&, const SfxHint& rHint )
 
 // XPropertySet
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDocumentConfiguration::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> ScDocumentConfiguration::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -132,13 +146,13 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDocumentConfiguration::getPro
     return aRef;
 }
 
-void SAL_CALL ScDocumentConfiguration::setPropertyValue(
+void ScDocumentConfiguration::setPropertyValue(
                         const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     SolarMutexGuard aGuard;
 
     if(!pDocShell)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     ScDocument& rDoc = pDocShell->GetDocument();
     bool bUpdateHeights = false;
@@ -180,7 +194,7 @@ void SAL_CALL ScDocumentConfiguration::setPropertyValue(
             throw css::lang::IllegalArgumentException(
                 (u"LinkUpdateMode property value must be a SHORT with a value in"
                  " the range of the css::document::LinkUpdateModes constants"_ustr),
-                css::uno::Reference<css::uno::XInterface>(), -1);
+                cpo::uno::Reference<cpo::uno::XInterface>(), -1);
         }
         ScLkUpdMode eMode;
         switch (n)
@@ -220,7 +234,7 @@ void SAL_CALL ScDocumentConfiguration::setPropertyValue(
         {
             SfxPrinter* pPrinter = pDocShell->GetPrinter();
             if (!pPrinter)
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
 
             if (pPrinter->GetName() != sPrinterName)
             {
@@ -337,7 +351,7 @@ void SAL_CALL ScDocumentConfiguration::setPropertyValue(
         if ( !( aValue >>= aInfo ) )
             throw lang::IllegalArgumentException(
                 u"Value of type Sequence<PropertyValue> expected!"_ustr,
-                uno::Reference< uno::XInterface >(),
+                uno::Reference< cpo::uno::XInterface >(),
                 2 );
 
         if ( !pDocShell->SetModifyPasswordInfo( aInfo ) )
@@ -349,7 +363,7 @@ void SAL_CALL ScDocumentConfiguration::setPropertyValue(
         sal_Int32 nHash;
         if (!(aValue >>= nHash))
             throw lang::IllegalArgumentException(u"Value of type sal_Int32 expected!"_ustr,
-                                                 uno::Reference<uno::XInterface>(), 2);
+                                                 uno::Reference<cpo::uno::XInterface>(), 2);
 
         if (!pDocShell->SetModifyPasswordHash(nHash))
             throw beans::PropertyVetoException(u"The hash is not allowed to be changed now!"_ustr);
@@ -409,6 +423,11 @@ void SAL_CALL ScDocumentConfiguration::setPropertyValue(
             rDoc.SetImagePreferredDPI(aValue.get<sal_Int32>());
         }
     }
+    else if (std::optional<SdrCompatibilityFlag> oFlag
+             = SdrModel::GetCompatibilityFlagByName(aPropertyName))
+    {
+        rDoc.SetCompatibilityFlag(*oFlag, ScUnoHelpFunctions::GetBoolFromAny(aValue));
+    }
     else
     {
         ScGridOptions aGridOpt(aViewOpt.GetGridOptions());
@@ -444,13 +463,13 @@ void SAL_CALL ScDocumentConfiguration::setPropertyValue(
 
 }
 
-cpo::uno::Any SAL_CALL ScDocumentConfiguration::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any ScDocumentConfiguration::getPropertyValue( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
     cpo::uno::Any aRet;
 
     if(!pDocShell)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     ScDocument& rDoc = pDocShell->GetDocument();
     const ScViewOptions& aViewOpt = rDoc.GetViewOptions();
@@ -619,6 +638,11 @@ cpo::uno::Any SAL_CALL ScDocumentConfiguration::getPropertyValue( const OUString
     {
         aRet <<= rDoc.GetImagePreferredDPI();
     }
+    else if (std::optional<SdrCompatibilityFlag> oFlag
+             = SdrModel::GetCompatibilityFlagByName(aPropertyName))
+    {
+        aRet <<= rDoc.GetCompatibilityFlag(*oFlag);
+    }
     else
     {
         const ScGridOptions& aGridOpt = aViewOpt.GetGridOptions();
@@ -647,17 +671,17 @@ cpo::uno::Any SAL_CALL ScDocumentConfiguration::getPropertyValue( const OUString
 SC_IMPL_DUMMY_PROPERTY_LISTENER( ScDocumentConfiguration )
 
 // XServiceInfo
-OUString SAL_CALL ScDocumentConfiguration::getImplementationName()
+OUString ScDocumentConfiguration::getImplementationName()
 {
     return u"ScDocumentConfiguration"_ustr;
 }
 
-bool SAL_CALL ScDocumentConfiguration::supportsService( const OUString& rServiceName )
+bool ScDocumentConfiguration::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL ScDocumentConfiguration::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> ScDocumentConfiguration::getSupportedServiceNames()
 {
     return {u"com.sun.star.comp.SpreadsheetSettings"_ustr,
             u"com.sun.star.document.Settings"_ustr};

@@ -58,8 +58,8 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::drawing;
@@ -117,7 +117,7 @@ void SvxDrawPage::dispose()
 
     // Create an event with this as sender
     css::document::EventObject aEvt;
-    aEvt.Source.set(uno::Reference<uno::XInterface>::query( static_cast<lang::XComponent *>(this) ));
+    aEvt.Source.set(uno::Reference<cpo::uno::XInterface>::query( static_cast<lang::XComponent *>(this) ));
     // inform all listeners to release this object
     // The listener container are automatically cleared
     {
@@ -128,7 +128,7 @@ void SvxDrawPage::dispose()
     disposing();
 }
 
-void SAL_CALL SvxDrawPage::addEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener )
+void SvxDrawPage::addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener )
 {
     std::unique_lock aGuard( m_aMutex );
 
@@ -138,7 +138,7 @@ void SAL_CALL SvxDrawPage::addEventListener( const css::uno::Reference< css::lan
     maEventListeners.addInterface( aGuard, aListener );
 }
 
-void SAL_CALL SvxDrawPage::removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener )
+void SvxDrawPage::removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener )
 {
     std::unique_lock aGuard( m_aMutex );
 
@@ -148,7 +148,7 @@ void SAL_CALL SvxDrawPage::removeEventListener( const css::uno::Reference< css::
     maEventListeners.removeInterface( aGuard, aListener );
 }
 
-void SAL_CALL SvxDrawPage::add( const uno::Reference< drawing::XShape >& xShape )
+void SvxDrawPage::add( const uno::Reference< drawing::XShape >& xShape )
 {
     SolarMutexGuard aGuard;
 
@@ -216,12 +216,12 @@ void SAL_CALL SvxDrawPage::add( const uno::Reference< drawing::XShape >& xShape 
     mpModel->SetChanged();
 }
 
-void SAL_CALL SvxDrawPage::addTop( const uno::Reference< drawing::XShape >& xShape )
+void SvxDrawPage::addTop( const uno::Reference< drawing::XShape >& xShape )
 {
     add(xShape);
 }
 
-void SAL_CALL SvxDrawPage::addBottom( const uno::Reference< drawing::XShape >& xShape )
+void SvxDrawPage::addBottom( const uno::Reference< drawing::XShape >& xShape )
 {
     SolarMutexGuard aGuard;
 
@@ -259,7 +259,7 @@ void SAL_CALL SvxDrawPage::addBottom( const uno::Reference< drawing::XShape >& x
     mpModel->SetChanged();
 }
 
-void SAL_CALL SvxDrawPage::remove( const Reference< drawing::XShape >& xShape )
+void SvxDrawPage::remove( const Reference< drawing::XShape >& xShape )
 {
     SolarMutexGuard aGuard;
 
@@ -310,7 +310,7 @@ void SvxDrawPage::sort( const cpo::uno::Sequence< sal_Int32 >& sortOrder )
 }
 
 // css::container::XIndexAccess
-sal_Int32 SAL_CALL SvxDrawPage::getCount()
+sal_Int32 SvxDrawPage::getCount()
 {
     SolarMutexGuard aGuard;
 
@@ -320,7 +320,7 @@ sal_Int32 SAL_CALL SvxDrawPage::getCount()
     return static_cast<sal_Int32>( mpPage->GetObjCount() );
 }
 
-cpo::uno::Any SAL_CALL SvxDrawPage::getByIndex( sal_Int32 Index )
+cpo::uno::Any SvxDrawPage::getByIndex( sal_Int32 Index )
 {
     SolarMutexGuard aGuard;
 
@@ -334,7 +334,7 @@ cpo::uno::Any SAL_CALL SvxDrawPage::getByIndex( sal_Int32 Index )
 
     SdrObject* pObj = mpPage->GetObj( Index );
     if( pObj == nullptr )
-        throw uno::RuntimeException("Runtime exception thrown while getting a ref to the SdrObject at index: "
+        throw cpo::uno::RuntimeException("Runtime exception thrown while getting a ref to the SdrObject at index: "
                                     + OUString::number(Index));
 
 
@@ -342,12 +342,12 @@ cpo::uno::Any SAL_CALL SvxDrawPage::getByIndex( sal_Int32 Index )
 }
 
 // css::container::XElementAccess
-cpo::uno::Type SAL_CALL SvxDrawPage::getElementType()
+cpo::uno::Type SvxDrawPage::getElementType()
 {
     return cppu::UnoType<drawing::XShape>::get();
 }
 
-bool SAL_CALL SvxDrawPage::hasElements()
+bool SvxDrawPage::hasElements()
 {
     SolarMutexGuard aGuard;
 
@@ -405,7 +405,7 @@ void SvxDrawPage::SelectObjectInView( const Reference< drawing::XShape > & xShap
     }
 }
 
-Reference< drawing::XShapeGroup > SAL_CALL SvxDrawPage::group( const Reference< drawing::XShapes >& xShapes )
+Reference< drawing::XShapeGroup > SvxDrawPage::group( const Reference< drawing::XShapes >& xShapes )
 {
     SolarMutexGuard aGuard;
 
@@ -442,7 +442,7 @@ Reference< drawing::XShapeGroup > SAL_CALL SvxDrawPage::group( const Reference< 
     return xShapeGroup;
 }
 
-void SAL_CALL SvxDrawPage::ungroup( const Reference< drawing::XShapeGroup >& aGroup )
+void SvxDrawPage::ungroup( const Reference< drawing::XShapeGroup >& aGroup )
 {
     SolarMutexGuard aGuard;
 
@@ -811,17 +811,17 @@ rtl::Reference<SdrObject> SvxDrawPage::CreateSdrObject( const Reference< drawing
 }
 
 // css::lang::XServiceInfo
-OUString SAL_CALL SvxDrawPage::getImplementationName()
+OUString SvxDrawPage::getImplementationName()
 {
     return u"SvxDrawPage"_ustr;
 }
 
-bool SAL_CALL SvxDrawPage::supportsService( const OUString& ServiceName )
+bool SvxDrawPage::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SvxDrawPage::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > SvxDrawPage::getSupportedServiceNames()
 {
     cpo::uno::Sequence<OUString> aSeq { u"com.sun.star.drawing.ShapeCollection"_ustr };
     return aSeq;
@@ -833,7 +833,7 @@ rtl::Reference<SvxShape> CreateSvxShapeByTypeAndInventor(SdrObjKind nType, SdrIn
 }
 
 /** returns a StarOffice API wrapper for the given SdrPage */
-css::uno::Reference< XDrawPage > GetXDrawPageForSdrPage( SdrPage* pPage ) noexcept
+cpo::uno::Reference< XDrawPage > GetXDrawPageForSdrPage( SdrPage* pPage ) noexcept
 {
     if(pPage)
     {
@@ -863,21 +863,21 @@ SdrPage* GetSdrPageFromXDrawPage( const uno::Reference< drawing::XDrawPage >& xD
 }
 
 // XFormsSupplier
-css::uno::Reference< css::container::XNameContainer > SAL_CALL SvxDrawPage::getForms()
+cpo::uno::Reference< css::container::XNameContainer > SvxDrawPage::getForms()
 {
     SolarMutexGuard g;
 
-    css::uno::Reference< css::container::XNameContainer >  xForms;
+    cpo::uno::Reference< css::container::XNameContainer >  xForms;
 
     FmFormPage *pFmPage = dynamic_cast<FmFormPage*>( GetSdrPage()  );
     if( pFmPage )
-        xForms.set( pFmPage->GetForms(), css::uno::UNO_QUERY_THROW );
+        xForms.set( pFmPage->GetForms(), cpo::uno::UNO_QUERY_THROW );
 
     return xForms;
 }
 
-// XFormsSupplier2
-bool SAL_CALL SvxDrawPage::hasForms()
+// XFormsSupplier
+bool SvxDrawPage::hasForms()
 {
     SolarMutexGuard g;
 

@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
 
 #include "text/TextPropertyPanel.hxx"
 #include "styles/StylesPropertyPanel.hxx"
@@ -33,9 +32,6 @@
 #include "possize/PosSizePropertyPanel.hxx"
 #include "textcolumns/TextColumnsPropertyPanel.hxx"
 #include <DefaultShapesPanel.hxx>
-#if HAVE_FEATURE_AVMEDIA
-#include "media/MediaPlaybackPanel.hxx"
-#endif
 #include <GalleryControl.hxx>
 #include "EmptyPanel.hxx"
 #include <sfx2/sidebar/SidebarPanelBase.hxx>
@@ -47,10 +43,10 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/ui/XSidebar.hpp>
 #include <com/sun/star/ui/XUIElementFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace svx::sidebar;
 
@@ -74,17 +70,17 @@ public:
     PanelFactory& operator=(const PanelFactory&) = delete;
 
     // XUIElementFactory
-    css::uno::Reference<css::ui::XUIElement> SAL_CALL createUIElement (
+    cpo::uno::Reference<css::ui::XUIElement> createUIElement (
         const OUString& rsResourceURL,
         const ::cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) override;
 
-    OUString SAL_CALL getImplementationName() override
+    OUString getImplementationName() override
     { return u"org.apache.openoffice.comp.svx.sidebar.PanelFactory"_ustr; }
 
-    bool SAL_CALL supportsService(OUString const & ServiceName) override
+    bool supportsService(OUString const & ServiceName) override
     { return cppu::supportsService(this, ServiceName); }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     { return {u"com.sun.star.ui.UIElementFactory"_ustr}; }
 };
 
@@ -92,7 +88,7 @@ PanelFactory::PanelFactory()
 {
 }
 
-Reference<ui::XUIElement> SAL_CALL PanelFactory::createUIElement (
+Reference<ui::XUIElement> PanelFactory::createUIElement (
     const OUString& rsResourceURL,
     const ::cpo::uno::Sequence<css::beans::PropertyValue>& rArguments)
 {
@@ -175,12 +171,6 @@ Reference<ui::XUIElement> SAL_CALL PanelFactory::createUIElement (
     {
         xControl = DefaultShapesPanel::Create(pParent, xFrame);
     }
-#if HAVE_FEATURE_AVMEDIA
-    else if (rsResourceURL.endsWith("/MediaPlaybackPanel"))
-    {
-        xControl = MediaPlaybackPanel::Create(pParent, pBindings);
-    }
-#endif
     else if (rsResourceURL.endsWith("/GalleryPanel"))
     {
         xControl = std::make_unique<GalleryControl>(pParent);
@@ -215,9 +205,9 @@ Reference<ui::XUIElement> SAL_CALL PanelFactory::createUIElement (
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 org_apache_openoffice_comp_svx_sidebar_PanelFactory_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new PanelFactory);

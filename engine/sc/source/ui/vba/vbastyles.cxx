@@ -28,9 +28,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 static cpo::uno::Any
-lcl_createAPIStyleToVBAObject( const cpo::uno::Any& aObject, const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const rtl::Reference<ScModelObj>& xModel )
+lcl_createAPIStyleToVBAObject( const cpo::uno::Any& aObject, const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const rtl::Reference<ScModelObj>& xModel )
 {
     uno::Reference< beans::XPropertySet > xStyleProps( aObject, uno::UNO_QUERY_THROW );
     uno::Reference< excel::XStyle > xStyle( new ScVbaStyle( xParent, xContext, xStyleProps, xModel ) );
@@ -38,7 +39,7 @@ lcl_createAPIStyleToVBAObject( const cpo::uno::Any& aObject, const uno::Referenc
 }
 
 ScVbaStyles::ScVbaStyles( const uno::Reference< XHelperInterface >& xParent,
-                          const uno::Reference< css::uno::XComponentContext > & xContext,
+                          const uno::Reference< cpo::uno::XComponentContext > & xContext,
                           ScModelObj* pModel )
 : ScVbaStyles_BASE( xParent,
                     xContext,
@@ -68,7 +69,7 @@ ScVbaStyles::createCollectionObject(const cpo::uno::Any& aObject)
     return lcl_createAPIStyleToVBAObject( aObject, mxParent, mxContext, mxModel );
 }
 
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaStyles::getElementType()
 {
     return cppu::UnoType<excel::XStyle>::get();
@@ -80,17 +81,17 @@ class EnumWrapper : public EnumerationHelper_BASE
 {
         uno::Reference<container::XIndexAccess > m_xIndexAccess;
         uno::Reference<XHelperInterface > m_xParent;
-        uno::Reference<uno::XComponentContext > m_xContext;
+        uno::Reference<cpo::uno::XComponentContext > m_xContext;
         rtl::Reference<ScModelObj > m_xModel;
 
         sal_Int32 nIndex;
 public:
-        EnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess, uno::Reference<XHelperInterface > xParent, uno::Reference<uno::XComponentContext > xContext, rtl::Reference<ScModelObj > xModel ) : m_xIndexAccess(std::move( xIndexAccess )), m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xModel(std::move( xModel )), nIndex( 0 ) {}
-        virtual bool SAL_CALL hasMoreElements(  ) override
+        EnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess, uno::Reference<XHelperInterface > xParent, uno::Reference<cpo::uno::XComponentContext > xContext, rtl::Reference<ScModelObj > xModel ) : m_xIndexAccess(std::move( xIndexAccess )), m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xModel(std::move( xModel )), nIndex( 0 ) {}
+        virtual bool hasMoreElements(  ) override
         {
                 return ( nIndex < m_xIndexAccess->getCount() );
         }
-        virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+        virtual cpo::uno::Any nextElement(  ) override
         {
             try
             {
@@ -105,7 +106,7 @@ public:
             {
                 throw;
             }
-            catch (const uno::RuntimeException&)
+            catch (const cpo::uno::RuntimeException&)
             {
                 throw;
             }
@@ -114,7 +115,7 @@ public:
                 cpo::uno::Any a(cppu::getCaughtException());
                 throw css::lang::WrappedTargetException(
                     "wrapped Exception " + e.Message,
-                    css::uno::Reference<css::uno::XInterface>(), a);
+                    cpo::uno::Reference<cpo::uno::XInterface>(), a);
             }
             throw container::NoSuchElementException();
         }
@@ -122,13 +123,13 @@ public:
 
 }
 
-uno::Reference< container::XEnumeration > SAL_CALL
+uno::Reference< container::XEnumeration >
 ScVbaStyles::createEnumeration()
 {
     return new EnumWrapper( m_xIndexAccess, mxParent, mxContext, mxModel );
 }
 
-uno::Reference< excel::XStyle > SAL_CALL
+uno::Reference< excel::XStyle >
 ScVbaStyles::Add( const OUString& _sName, const cpo::uno::Any& _aBasedOn )
 {
     uno::Reference< excel::XStyle > aRet;

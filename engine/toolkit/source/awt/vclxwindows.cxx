@@ -65,8 +65,8 @@
 #include <svl/numformat.hxx>
 
 using ::cpo::uno::Any;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::RuntimeException;
+using ::cpo::uno::Reference;
+using ::cpo::uno::RuntimeException;
 using ::com::sun::star::lang::EventObject;
 using ::com::sun::star::awt::ItemListEvent;
 using ::com::sun::star::awt::XItemList;
@@ -76,6 +76,7 @@ using ::com::sun::star::graphic::XGraphicProvider;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::awt::VisualEffect;
 namespace ImageScaleMode = ::com::sun::star::awt::ImageScaleMode;
+using namespace ::cpo;
 
 static double ImplCalcLongValue( double nValue, sal_uInt16 nDigits )
 {
@@ -391,25 +392,25 @@ void VCLXButton::dispose()
     VCLXGraphicControl::dispose();
 }
 
-void VCLXButton::addActionListener( const css::uno::Reference< css::awt::XActionListener > & l  )
+void VCLXButton::addActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l  )
 {
     SolarMutexGuard aGuard;
     maActionListeners.addInterface( l );
 }
 
-void VCLXButton::removeActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXButton::removeActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.removeInterface( l );
 }
 
-void VCLXButton::addItemListener( const css::uno::Reference< css::awt::XItemListener > & l  )
+void VCLXButton::addItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l  )
 {
     SolarMutexGuard aGuard;
     maItemListeners.addInterface( l );
 }
 
-void VCLXButton::removeItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXButton::removeItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.removeInterface( l );
@@ -570,7 +571,7 @@ void VCLXButton::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
     {
         case VclEventId::ButtonClick:
         {
-            css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+            cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
                 // since we call listeners below, there is a potential that we will be destroyed
                 // during the listener call. To prevent the resulting crashes, we keep us
                 // alive as long as we're here
@@ -593,7 +594,7 @@ void VCLXButton::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
         {
             PushButton& rButton = dynamic_cast< PushButton& >( *rVclWindowEvent.GetWindow() );
 
-            css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+            cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
             if ( maItemListeners.getLength() )
             {
                 css::awt::ItemEvent aEvent;
@@ -786,25 +787,25 @@ void VCLXCheckBox::dispose()
     VCLXGraphicControl::dispose();
 }
 
-void VCLXCheckBox::addItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXCheckBox::addItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.addInterface( l );
 }
 
-void VCLXCheckBox::removeItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXCheckBox::removeItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.removeInterface( l );
 }
 
-void VCLXCheckBox::addActionListener( const css::uno::Reference< css::awt::XActionListener > & l  )
+void VCLXCheckBox::addActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l  )
 {
     SolarMutexGuard aGuard;
     maActionListeners.addInterface( l );
 }
 
-void VCLXCheckBox::removeActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXCheckBox::removeActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.removeInterface( l );
@@ -986,7 +987,7 @@ void VCLXCheckBox::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
     {
         case VclEventId::CheckboxToggle:
         {
-            css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+            cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
                 // since we call listeners below, there is a potential that we will be destroyed
                 // in during the listener call. To prevent the resulting crashes, we keep us
                 // alive as long as we're here
@@ -1136,25 +1137,25 @@ cpo::uno::Any VCLXRadioButton::getProperty( const OUString& PropertyName )
     return aProp;
 }
 
-void VCLXRadioButton::addItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXRadioButton::addItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.addInterface( l );
 }
 
-void VCLXRadioButton::removeItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXRadioButton::removeItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.removeInterface( l );
 }
 
-void VCLXRadioButton::addActionListener( const css::uno::Reference< css::awt::XActionListener > & l  )
+void VCLXRadioButton::addActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l  )
 {
     SolarMutexGuard aGuard;
     maActionListeners.addInterface( l );
 }
 
-void VCLXRadioButton::removeActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXRadioButton::removeActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.removeInterface( l );
@@ -1237,7 +1238,7 @@ css::awt::Size VCLXRadioButton::calcAdjustedSize( const css::awt::Size& rNewSize
 
 void VCLXRadioButton::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
 {
-    css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+    cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
         // since we call listeners below, there is a potential that we will be destroyed
         // in during the listener call. To prevent the resulting crashes, we keep us
         // alive as long as we're here
@@ -1294,13 +1295,13 @@ VCLXSpinField::VCLXSpinField() : maSpinListeners( *this )
 {
 }
 
-void VCLXSpinField::addSpinListener( const css::uno::Reference< css::awt::XSpinListener > & l )
+void VCLXSpinField::addSpinListener( const cpo::uno::Reference< css::awt::XSpinListener > & l )
 {
     SolarMutexGuard aGuard;
     maSpinListeners.addInterface( l );
 }
 
-void VCLXSpinField::removeSpinListener( const css::uno::Reference< css::awt::XSpinListener > & l )
+void VCLXSpinField::removeSpinListener( const cpo::uno::Reference< css::awt::XSpinListener > & l )
 {
     SolarMutexGuard aGuard;
     maSpinListeners.removeInterface( l );
@@ -1367,7 +1368,7 @@ void VCLXSpinField::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
         case VclEventId::SpinfieldFirst:
         case VclEventId::SpinfieldLast:
         {
-            css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+            cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
                 // since we call listeners below, there is a potential that we will be destroyed
                 // in during the listener call. To prevent the resulting crashes, we keep us
                 // alive as long as we're here
@@ -1453,25 +1454,25 @@ void VCLXListBox::dispose()
     VCLXWindow::dispose();
 }
 
-void VCLXListBox::addItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXListBox::addItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.addInterface( l );
 }
 
-void VCLXListBox::removeItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXListBox::removeItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.removeInterface( l );
 }
 
-void VCLXListBox::addActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXListBox::addActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.addInterface( l );
 }
 
-void VCLXListBox::removeActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXListBox::removeActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.removeInterface( l );
@@ -1729,7 +1730,7 @@ void VCLXListBox::makeVisible( sal_Int16 nEntry )
 
 void VCLXListBox::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
 {
-    css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+    cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
         // since we call listeners below, there is a potential that we will be destroyed
         // in during the listener call. To prevent the resulting crashes, we keep us
         // alive as long as we're here
@@ -2018,7 +2019,7 @@ namespace
 
         try
         {
-             const Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+             const Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
              Reference< XGraphicProvider > xProvider(graphic::GraphicProvider::create(xContext));
              ::comphelper::NamedValueCollection aMediaProperties;
              aMediaProperties.put( u"URL"_ustr, i_rImageURL );
@@ -2032,7 +2033,7 @@ namespace
         return Image();
      }
 }
-void SAL_CALL VCLXListBox::listItemInserted( const ItemListEvent& i_rEvent )
+void VCLXListBox::listItemInserted( const ItemListEvent& i_rEvent )
 {
     SolarMutexGuard aGuard;
     VclPtr< ListBox > pListBox = GetAs< ListBox >();
@@ -2046,7 +2047,7 @@ void SAL_CALL VCLXListBox::listItemInserted( const ItemListEvent& i_rEvent )
         i_rEvent.ItemPosition );
 }
 
-void SAL_CALL VCLXListBox::listItemRemoved( const ItemListEvent& i_rEvent )
+void VCLXListBox::listItemRemoved( const ItemListEvent& i_rEvent )
 {
     SolarMutexGuard aGuard;
     VclPtr< ListBox > pListBox = GetAs< ListBox >();
@@ -2058,7 +2059,7 @@ void SAL_CALL VCLXListBox::listItemRemoved( const ItemListEvent& i_rEvent )
     pListBox->RemoveEntry( i_rEvent.ItemPosition );
 }
 
-void SAL_CALL VCLXListBox::listItemModified( const ItemListEvent& i_rEvent )
+void VCLXListBox::listItemModified( const ItemListEvent& i_rEvent )
 {
     SolarMutexGuard aGuard;
     VclPtr< ListBox > pListBox = GetAs< ListBox >();
@@ -2076,7 +2077,7 @@ void SAL_CALL VCLXListBox::listItemModified( const ItemListEvent& i_rEvent )
     pListBox->InsertEntry( sNewText, aNewImage, i_rEvent.ItemPosition );
 }
 
-void SAL_CALL VCLXListBox::allItemsRemoved( const EventObject& )
+void VCLXListBox::allItemsRemoved( const EventObject& )
 {
     SolarMutexGuard aGuard;
 
@@ -2086,7 +2087,7 @@ void SAL_CALL VCLXListBox::allItemsRemoved( const EventObject& )
     pListBox->Clear();
 }
 
-void SAL_CALL VCLXListBox::itemListChanged( const EventObject& i_rEvent )
+void VCLXListBox::itemListChanged( const EventObject& i_rEvent )
 {
     SolarMutexGuard aGuard;
 
@@ -2120,7 +2121,7 @@ void SAL_CALL VCLXListBox::itemListChanged( const EventObject& i_rEvent )
     }
 }
 
-void SAL_CALL VCLXListBox::disposing(const EventObject&)
+void VCLXListBox::disposing(const EventObject&)
 {
 }
 
@@ -2183,7 +2184,7 @@ sal_Int16 VCLXMessageBox::execute()
     return pBox ? pBox->Execute() : 0;
 }
 
-css::awt::Size SAL_CALL VCLXMessageBox::getMinimumSize()
+css::awt::Size VCLXMessageBox::getMinimumSize()
 {
     return css::awt::Size( 250, 100 );
 }
@@ -2205,7 +2206,7 @@ VCLXDialog::~VCLXDialog()
     SAL_INFO("toolkit", __FUNCTION__);
 }
 
-void SAL_CALL VCLXDialog::endDialog( ::sal_Int32 i_result )
+void VCLXDialog::endDialog( ::sal_Int32 i_result )
 {
     SolarMutexGuard aGuard;
     VclPtr<Dialog> pDialog = GetAsDynamic< Dialog >();
@@ -2213,7 +2214,7 @@ void SAL_CALL VCLXDialog::endDialog( ::sal_Int32 i_result )
         pDialog->EndDialog( i_result );
 }
 
-void SAL_CALL VCLXDialog::setHelpId( const OUString& rId )
+void VCLXDialog::setHelpId( const OUString& rId )
 {
     SolarMutexGuard aGuard;
     VclPtr< vcl::Window > pWindow = GetWindow();
@@ -2277,7 +2278,7 @@ void VCLXDialog::endExecute()
     endDialog(0);
 }
 
-void SAL_CALL VCLXDialog::draw( sal_Int32 nX, sal_Int32 nY )
+void VCLXDialog::draw( sal_Int32 nX, sal_Int32 nY )
 {
     SolarMutexGuard aGuard;
     VclPtr< vcl::Window > pWindow = GetWindow();
@@ -2304,7 +2305,7 @@ css::awt::DeviceInfo VCLXDialog::getInfo()
     return aInfo;
 }
 
-void SAL_CALL VCLXDialog::setProperty(
+void VCLXDialog::setProperty(
     const OUString& PropertyName,
     const cpo::uno::Any& Value )
 {
@@ -2380,7 +2381,7 @@ void VCLXMultiPage::ImplGetPropertyIds( std::vector< sal_uInt16 > &rIds )
 VCLXMultiPage::~VCLXMultiPage()
 {
 }
-void SAL_CALL VCLXMultiPage::dispose()
+void VCLXMultiPage::dispose()
 {
     SolarMutexGuard aGuard;
 
@@ -2390,7 +2391,7 @@ void SAL_CALL VCLXMultiPage::dispose()
     VCLXContainer::dispose();
 }
 // css::awt::XView
-void SAL_CALL VCLXMultiPage::draw( sal_Int32 nX, sal_Int32 nY )
+void VCLXMultiPage::draw( sal_Int32 nX, sal_Int32 nY )
 {
     SolarMutexGuard aGuard;
     VclPtr< vcl::Window > pWindow = GetWindow();
@@ -2406,7 +2407,7 @@ void SAL_CALL VCLXMultiPage::draw( sal_Int32 nX, sal_Int32 nY )
     }
 }
 
-cpo::uno::Any SAL_CALL VCLXMultiPage::getProperty( const OUString& PropertyName )
+cpo::uno::Any VCLXMultiPage::getProperty( const OUString& PropertyName )
 {
     SAL_INFO("toolkit", " **** VCLXMultiPage::getProperty " << PropertyName );
     SolarMutexGuard aGuard;
@@ -2426,7 +2427,7 @@ cpo::uno::Any SAL_CALL VCLXMultiPage::getProperty( const OUString& PropertyName 
     return aProp;
 }
 
-void SAL_CALL VCLXMultiPage::setProperty(
+void VCLXMultiPage::setProperty(
     const OUString& PropertyName,
     const cpo::uno::Any& Value )
 {
@@ -2488,9 +2489,9 @@ TabControl *VCLXMultiPage::getTabControl() const
     VclPtr<TabControl> pTabControl = GetAsDynamic< TabControl >();
     if ( pTabControl )
         return pTabControl;
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
-sal_Int32 SAL_CALL VCLXMultiPage::insertTab()
+sal_Int32 VCLXMultiPage::insertTab()
 {
     TabControl *pTabControl = getTabControl();
     VclPtrInstance<TabPage> pTab( pTabControl );
@@ -2506,7 +2507,7 @@ sal_uInt16 VCLXMultiPage::insertTab( TabPage* pPage, OUString const & sTitle )
     return id;
 }
 
-void SAL_CALL VCLXMultiPage::removeTab( sal_Int32 ID )
+void VCLXMultiPage::removeTab( sal_Int32 ID )
 {
     TabControl *pTabControl = getTabControl();
     if ( pTabControl->GetTabPage( sal::static_int_cast< sal_uInt16 >( ID ) ) == nullptr )
@@ -2514,7 +2515,7 @@ void SAL_CALL VCLXMultiPage::removeTab( sal_Int32 ID )
     pTabControl->RemovePage( sal::static_int_cast< sal_uInt16 >( ID ) );
 }
 
-void SAL_CALL VCLXMultiPage::activateTab( sal_Int32 ID )
+void VCLXMultiPage::activateTab( sal_Int32 ID )
 {
     TabControl *pTabControl = getTabControl();
     SAL_INFO(
@@ -2526,24 +2527,24 @@ void SAL_CALL VCLXMultiPage::activateTab( sal_Int32 ID )
     pTabControl->SelectTabPage( sal::static_int_cast< sal_uInt16 >( ID ) );
 }
 
-sal_Int32 SAL_CALL VCLXMultiPage::getActiveTabID()
+sal_Int32 VCLXMultiPage::getActiveTabID()
 {
     return getTabControl()->GetCurPageId( );
 }
 
-void SAL_CALL VCLXMultiPage::addTabListener( const uno::Reference< awt::XTabListener >& xListener )
+void VCLXMultiPage::addTabListener( const uno::Reference< awt::XTabListener >& xListener )
 {
     SolarMutexGuard aGuard;
     maTabListeners.addInterface( xListener );
 }
 
-void SAL_CALL VCLXMultiPage::removeTabListener( const uno::Reference< awt::XTabListener >& xListener )
+void VCLXMultiPage::removeTabListener( const uno::Reference< awt::XTabListener >& xListener )
 {
     SolarMutexGuard aGuard;
     maTabListeners.removeInterface( xListener );
 }
 
-void SAL_CALL VCLXMultiPage::setTabProps( sal_Int32 ID, const cpo::uno::Sequence< beans::NamedValue >& Properties )
+void VCLXMultiPage::setTabProps( sal_Int32 ID, const cpo::uno::Sequence< beans::NamedValue >& Properties )
 {
     SolarMutexGuard aGuard;
     TabControl *pTabControl = getTabControl();
@@ -2563,7 +2564,7 @@ void SAL_CALL VCLXMultiPage::setTabProps( sal_Int32 ID, const cpo::uno::Sequence
     }
 }
 
-cpo::uno::Sequence< beans::NamedValue > SAL_CALL VCLXMultiPage::getTabProps( sal_Int32 ID )
+cpo::uno::Sequence< beans::NamedValue > VCLXMultiPage::getTabProps( sal_Int32 ID )
 {
     SolarMutexGuard aGuard;
     TabControl *pTabControl = getTabControl();
@@ -2579,7 +2580,7 @@ cpo::uno::Sequence< beans::NamedValue > SAL_CALL VCLXMultiPage::getTabProps( sal
 }
 void VCLXMultiPage::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
 {
-    css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+    cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
     switch ( rVclWindowEvent.GetId() )
     {
         case VclEventId::TabpageDeactivate:
@@ -2633,7 +2634,7 @@ VCLXTabPage::~VCLXTabPage()
 }
 
 // css::awt::XView
-void SAL_CALL VCLXTabPage::draw( sal_Int32 nX, sal_Int32 nY )
+void VCLXTabPage::draw( sal_Int32 nX, sal_Int32 nY )
 {
     SolarMutexGuard aGuard;
     VclPtr< vcl::Window > pWindow = GetWindow();
@@ -2649,7 +2650,7 @@ void SAL_CALL VCLXTabPage::draw( sal_Int32 nX, sal_Int32 nY )
     }
 }
 
-void SAL_CALL VCLXTabPage::setProperty(
+void VCLXTabPage::setProperty(
     const OUString& PropertyName,
     const cpo::uno::Any& Value )
 {
@@ -2707,7 +2708,7 @@ TabPage *VCLXTabPage::getTabPage() const
     VclPtr< TabPage > pTabPage = GetAsDynamic< TabPage >();
     if ( pTabPage )
         return pTabPage;
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 
@@ -2832,13 +2833,13 @@ sal_Int16 VCLXFixedHyperlink::getAlignment()
     return nAlign;
 }
 
-void VCLXFixedHyperlink::addActionListener( const css::uno::Reference< css::awt::XActionListener > & l  )
+void VCLXFixedHyperlink::addActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l  )
 {
         SolarMutexGuard aGuard;
         maActionListeners.addInterface( l );
 }
 
-void VCLXFixedHyperlink::removeActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXFixedHyperlink::removeActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
         SolarMutexGuard aGuard;
         maActionListeners.removeInterface( l );
@@ -3134,13 +3135,13 @@ void VCLXScrollBar::dispose()
 }
 
 // css::awt::XScrollbar
-void VCLXScrollBar::addAdjustmentListener( const css::uno::Reference< css::awt::XAdjustmentListener > & l )
+void VCLXScrollBar::addAdjustmentListener( const cpo::uno::Reference< css::awt::XAdjustmentListener > & l )
 {
     SolarMutexGuard aGuard;
     maAdjustmentListeners.addInterface( l );
 }
 
-void VCLXScrollBar::removeAdjustmentListener( const css::uno::Reference< css::awt::XAdjustmentListener > & l )
+void VCLXScrollBar::removeAdjustmentListener( const cpo::uno::Reference< css::awt::XAdjustmentListener > & l )
 {
     SolarMutexGuard aGuard;
     maAdjustmentListeners.removeInterface( l );
@@ -3489,7 +3490,7 @@ void VCLXScrollBar::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
     {
         case VclEventId::ScrollbarScroll:
         {
-            css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+            cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
                 // since we call listeners below, there is a potential that we will be destroyed
                 // in during the listener call. To prevent the resulting crashes, we keep us
                 // alive as long as we're here
@@ -3537,7 +3538,7 @@ css::awt::Size VCLXScrollBar::implGetMinimumSize( vcl::Window const * p )
     return css::awt::Size( n, n );
 }
 
-css::awt::Size SAL_CALL VCLXScrollBar::getMinimumSize()
+css::awt::Size VCLXScrollBar::getMinimumSize()
 {
     SolarMutexGuard aGuard;
     return implGetMinimumSize( GetWindow() );
@@ -3597,13 +3598,13 @@ void VCLXEdit::dispose()
     VCLXWindow::dispose();
 }
 
-void VCLXEdit::addTextListener( const css::uno::Reference< css::awt::XTextListener > & l )
+void VCLXEdit::addTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l )
 {
     SolarMutexGuard aGuard;
     GetTextListeners().addInterface( l );
 }
 
-void VCLXEdit::removeTextListener( const css::uno::Reference< css::awt::XTextListener > & l )
+void VCLXEdit::removeTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l )
 {
     SolarMutexGuard aGuard;
     GetTextListeners().removeInterface( l );
@@ -3878,7 +3879,7 @@ void VCLXEdit::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
     {
         case VclEventId::EditModify:
         {
-            css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+            cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
                 // since we call listeners below, there is a potential that we will be destroyed
                 // during the listener call. To prevent the resulting crashes, we keep us
                 // alive as long as we're here
@@ -3960,25 +3961,25 @@ void VCLXComboBox::dispose()
 }
 
 
-void VCLXComboBox::addItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXComboBox::addItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.addInterface( l );
 }
 
-void VCLXComboBox::removeItemListener( const css::uno::Reference< css::awt::XItemListener > & l )
+void VCLXComboBox::removeItemListener( const cpo::uno::Reference< css::awt::XItemListener > & l )
 {
     SolarMutexGuard aGuard;
     maItemListeners.removeInterface( l );
 }
 
-void VCLXComboBox::addActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXComboBox::addActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.addInterface( l );
 }
 
-void VCLXComboBox::removeActionListener( const css::uno::Reference< css::awt::XActionListener > & l )
+void VCLXComboBox::removeActionListener( const cpo::uno::Reference< css::awt::XActionListener > & l )
 {
     SolarMutexGuard aGuard;
     maActionListeners.removeInterface( l );
@@ -4214,7 +4215,7 @@ cpo::uno::Any VCLXComboBox::getProperty( const OUString& PropertyName )
 
 void VCLXComboBox::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
 {
-    css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+    cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
         // since we call listeners below, there is a potential that we will be destroyed
         // during the listener call. To prevent the resulting crashes, we keep us
         // alive as long as we're here
@@ -4320,7 +4321,7 @@ void VCLXComboBox::getColumnsAndLines( sal_Int16& nCols, sal_Int16& nLines )
         nLines = nL;
     }
 }
-void SAL_CALL VCLXComboBox::listItemInserted( const ItemListEvent& i_rEvent )
+void VCLXComboBox::listItemInserted( const ItemListEvent& i_rEvent )
 {
     SolarMutexGuard aGuard;
 
@@ -4335,7 +4336,7 @@ void SAL_CALL VCLXComboBox::listItemInserted( const ItemListEvent& i_rEvent )
         i_rEvent.ItemPosition );
 }
 
-void SAL_CALL VCLXComboBox::listItemRemoved( const ItemListEvent& i_rEvent )
+void VCLXComboBox::listItemRemoved( const ItemListEvent& i_rEvent )
 {
     SolarMutexGuard aGuard;
 
@@ -4348,7 +4349,7 @@ void SAL_CALL VCLXComboBox::listItemRemoved( const ItemListEvent& i_rEvent )
     pComboBox->RemoveEntryAt( i_rEvent.ItemPosition );
 }
 
-void SAL_CALL VCLXComboBox::listItemModified( const ItemListEvent& i_rEvent )
+void VCLXComboBox::listItemModified( const ItemListEvent& i_rEvent )
 {
     SolarMutexGuard aGuard;
 
@@ -4367,7 +4368,7 @@ void SAL_CALL VCLXComboBox::listItemModified( const ItemListEvent& i_rEvent )
     pComboBox->InsertEntryWithImage(sNewText, aNewImage, i_rEvent.ItemPosition);
 }
 
-void SAL_CALL VCLXComboBox::allItemsRemoved( const EventObject& )
+void VCLXComboBox::allItemsRemoved( const EventObject& )
 {
     SolarMutexGuard aGuard;
 
@@ -4377,7 +4378,7 @@ void SAL_CALL VCLXComboBox::allItemsRemoved( const EventObject& )
     pComboBox->Clear();
 }
 
-void SAL_CALL VCLXComboBox::itemListChanged( const EventObject& i_rEvent )
+void VCLXComboBox::itemListChanged( const EventObject& i_rEvent )
 {
     SolarMutexGuard aGuard;
 
@@ -4412,7 +4413,7 @@ void SAL_CALL VCLXComboBox::itemListChanged( const EventObject& i_rEvent )
                 lcl_getImageFromURL(rItem.Second));
     }
 }
-void SAL_CALL VCLXComboBox::disposing(const EventObject&)
+void VCLXComboBox::disposing(const EventObject&)
 {
 }
 
@@ -5516,7 +5517,7 @@ MetricFormatter *VCLXMetricField::GetMetricFormatter()
 {
     MetricFormatter *pFormatter = static_cast<MetricFormatter *>(GetFormatter());
     if (!pFormatter)
-        throw css::uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return pFormatter;
 }
 
@@ -5524,7 +5525,7 @@ MetricField *VCLXMetricField::GetMetricField()
 {
     VclPtr< MetricField > pField = GetAs< MetricField >();
     if (!pField)
-        throw css::uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return pField;
 }
 
@@ -5891,7 +5892,7 @@ VCLXFrame::~VCLXFrame()
 }
 
 // css::awt::XView
-void SAL_CALL VCLXFrame::draw( sal_Int32 nX, sal_Int32 nY )
+void VCLXFrame::draw( sal_Int32 nX, sal_Int32 nY )
 {
     SolarMutexGuard aGuard;
     VclPtr< vcl::Window > pWindow = GetWindow();
@@ -5907,7 +5908,7 @@ void SAL_CALL VCLXFrame::draw( sal_Int32 nX, sal_Int32 nY )
     }
 }
 
-void SAL_CALL VCLXFrame::setProperty(
+void VCLXFrame::setProperty(
     const OUString& PropertyName,
     const cpo::uno::Any& Value )
 {
@@ -5918,7 +5919,7 @@ void SAL_CALL VCLXFrame::setProperty(
 
 void VCLXFrame::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
 {
-    css::uno::Reference< css::awt::XWindow > xKeepAlive( this );
+    cpo::uno::Reference< css::awt::XWindow > xKeepAlive( this );
     VCLXContainer::ProcessWindowEvent( rVclWindowEvent );
 }
 
@@ -6170,7 +6171,7 @@ namespace
     }
 }
 
-void SAL_CALL VCLXFileControl::setProperty( const OUString& PropertyName, const cpo::uno::Any& Value)
+void VCLXFileControl::setProperty( const OUString& PropertyName, const cpo::uno::Any& Value)
 {
     SolarMutexGuard aGuard;
 
@@ -6210,12 +6211,12 @@ void VCLXFileControl::SetWindow( const VclPtr< vcl::Window > &pWindow )
     VCLXWindow::SetWindow( pWindow );
 }
 
-void VCLXFileControl::addTextListener( const css::uno::Reference< css::awt::XTextListener > & l )
+void VCLXFileControl::addTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l )
 {
     maTextListeners.addInterface( l );
 }
 
-void VCLXFileControl::removeTextListener( const css::uno::Reference< css::awt::XTextListener > & l )
+void VCLXFileControl::removeTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l )
 {
     maTextListeners.removeInterface( l );
 }
@@ -6471,10 +6472,10 @@ void SVTXFormattedField::setProperty( const OUString& PropertyName, const cpo::u
 
             case BASEPROPERTY_FORMATSSUPPLIER:
                 if (!Value.hasValue())
-                    setFormatsSupplier(css::uno::Reference< css::util::XNumberFormatsSupplier > (nullptr));
+                    setFormatsSupplier(cpo::uno::Reference< css::util::XNumberFormatsSupplier > (nullptr));
                 else
                 {
-                    css::uno::Reference< css::util::XNumberFormatsSupplier > xNFS;
+                    cpo::uno::Reference< css::util::XNumberFormatsSupplier > xNFS;
                     if ( Value >>= xNFS )
                         setFormatsSupplier(xNFS);
                 }
@@ -6601,7 +6602,7 @@ cpo::uno::Any SVTXFormattedField::getProperty( const OUString& PropertyName )
             {
                 if (!bIsStandardSupplier)
                 {   // otherwise void
-                    aReturn <<= css::uno::Reference< css::util::XNumberFormatsSupplier >(m_xCurrentSupplier);
+                    aReturn <<= cpo::uno::Reference< css::util::XNumberFormatsSupplier >(m_xCurrentSupplier);
                 }
             }
             break;
@@ -6885,7 +6886,7 @@ void SVTXFormattedField::SetValue(const cpo::uno::Any& rValue)
 //  NotifyTextListeners();
 }
 
-void SVTXFormattedField::setFormatsSupplier(const css::uno::Reference< css::util::XNumberFormatsSupplier > & xSupplier)
+void SVTXFormattedField::setFormatsSupplier(const cpo::uno::Reference< css::util::XNumberFormatsSupplier > & xSupplier)
 {
     VclPtr<FormattedField> pField = GetAs< FormattedField >();
 
@@ -7387,7 +7388,7 @@ SVTXDateField::~SVTXDateField()
 {
 }
 
-void SAL_CALL SVTXDateField::setProperty( const OUString& PropertyName, const cpo::uno::Any& Value )
+void SVTXDateField::setProperty( const OUString& PropertyName, const cpo::uno::Any& Value )
 {
     VCLXDateField::setProperty( PropertyName, Value );
 
@@ -7430,12 +7431,12 @@ VCLXMultiLineEdit::~VCLXMultiLineEdit()
 {
 }
 
-void VCLXMultiLineEdit::addTextListener( const css::uno::Reference< css::awt::XTextListener > & l )
+void VCLXMultiLineEdit::addTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l )
 {
     maTextListeners.addInterface( l );
 }
 
-void VCLXMultiLineEdit::removeTextListener( const css::uno::Reference< css::awt::XTextListener > & l )
+void VCLXMultiLineEdit::removeTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l )
 {
     maTextListeners.removeInterface( l );
 }
@@ -7738,7 +7739,7 @@ cpo::uno::Any VCLXMultiLineEdit::getProperty( const OUString& PropertyName )
     return aProp;
 }
 
-void SAL_CALL VCLXMultiLineEdit::setFocus(  )
+void VCLXMultiLineEdit::setFocus(  )
 {
     SolarMutexGuard aGuard;
 

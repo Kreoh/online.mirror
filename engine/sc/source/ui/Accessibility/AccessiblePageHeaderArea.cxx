@@ -39,6 +39,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 ScAccessiblePageHeaderArea::ScAccessiblePageHeaderArea(
         const uno::Reference<XAccessible>& rxParent,
@@ -46,7 +47,7 @@ ScAccessiblePageHeaderArea::ScAccessiblePageHeaderArea(
         const EditTextObject* pEditObj,
         SvxAdjust eAdjust)
         : ScAccessibleContextBase(rxParent, AccessibleRole::TEXT),
-        mpEditObj(pEditObj->Clone()),
+        mpEditObj(std::make_unique<EditTextObject>(*pEditObj)),
         mpViewShell(pViewShell),
         meAdjust(eAdjust)
 {
@@ -64,7 +65,7 @@ ScAccessiblePageHeaderArea::~ScAccessiblePageHeaderArea()
     }
 }
 
-void SAL_CALL ScAccessiblePageHeaderArea::disposing()
+void ScAccessiblePageHeaderArea::disposing()
 {
     SolarMutexGuard aGuard;
     if (mpViewShell)
@@ -93,7 +94,7 @@ void ScAccessiblePageHeaderArea::Notify( SfxBroadcaster& rBC, const SfxHint& rHi
 }
     //=====  XAccessibleComponent  ============================================
 
-uno::Reference< XAccessible > SAL_CALL ScAccessiblePageHeaderArea::getAccessibleAtPoint(
+uno::Reference< XAccessible > ScAccessiblePageHeaderArea::getAccessibleAtPoint(
         const awt::Point& rPoint )
 {
     rtl::Reference<comphelper::OAccessible> pRet;
@@ -113,7 +114,7 @@ uno::Reference< XAccessible > SAL_CALL ScAccessiblePageHeaderArea::getAccessible
 
     //=====  XAccessibleContext  ==============================================
 
-sal_Int64 SAL_CALL
+sal_Int64
     ScAccessiblePageHeaderArea::getAccessibleChildCount()
 {
     SolarMutexGuard aGuard;
@@ -123,7 +124,7 @@ sal_Int64 SAL_CALL
     return mpTextHelper->GetChildCount();
 }
 
-uno::Reference< XAccessible > SAL_CALL
+uno::Reference< XAccessible >
     ScAccessiblePageHeaderArea::getAccessibleChild(sal_Int64 nIndex)
 {
     SolarMutexGuard aGuard;
@@ -133,7 +134,7 @@ uno::Reference< XAccessible > SAL_CALL
     return mpTextHelper->GetChild(nIndex);
 }
 
-sal_Int64 SAL_CALL ScAccessiblePageHeaderArea::getAccessibleStateSet()
+sal_Int64 ScAccessiblePageHeaderArea::getAccessibleStateSet()
 {
     SolarMutexGuard aGuard;
     sal_Int64 nStateSet = 0;

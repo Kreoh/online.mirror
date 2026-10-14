@@ -2,7 +2,7 @@
 
 # download additional dependencies used for the build to C:/Users/Public/Downloads (unfortunately
 # xRemoteFile doesn't accept $env:PUBLIC or similar, so using hardcoded paths for now),
-# & make sure wsl is installed
+# & install MSYS2 (the Unix toolchain for the configure steps) and Node.js
 # (this configuration needs to be applied with administrator privileges, as otherwise even
 # downloading files e.g. would fail with:
 # Access to the path 'C:\ProgramData\Microsoft\Windows\PowerShell\Configuration\BuiltinProvCache\DSC_xRemoteFile' is denied.
@@ -26,9 +26,9 @@ properties:
         securityContext: elevated
       settings:
         DestinationPath: C:/Users/Public/Downloads
-        Uri: https://dev-www.libreoffice.org/bin/cygwin/make-4.2.1-msvc.exe
+        Uri: https://gerrit.collaboraoffice.com/extern/make-4.4.1-msvc.exe
         ChecksumType: SHA256
-        Checksum: 146d6f2b0ea57647b11b506a95048a7be73232e1feeeccbc1013651f992423d8
+        Checksum: 3cbf585a213001fbdedc5269621a3617d5067aba8f9dc8947054b76f30035e3d
     - resource: xPSDesiredStateConfiguration/xRemoteFile
       id: clang-format
       directives:
@@ -36,7 +36,7 @@ properties:
         securityContext: elevated
       settings:
         DestinationPath: C:/Users/Public/Downloads
-        Uri: https://dev-www.libreoffice.org/bin/clang-format-5.0.0-win.exe
+        Uri: https://gerrit.collaboraoffice.com/extern/clang-format-5.0.0-win.exe
         ChecksumType: SHA256
         Checksum: a25d5c4b451ec4fba466807e9239d0bcbafcfeb7f35834f2db87448968a73ccb
     - resource: xPSDesiredStateConfiguration/xRemoteFile
@@ -46,7 +46,7 @@ properties:
         securityContext: elevated
       settings:
         DestinationPath: C:/Users/Public/Downloads
-        Uri: https://dev-www.libreoffice.org/extern/pkgconf-2.4.3.exe
+        Uri: https://gerrit.collaboraoffice.com/extern/pkgconf-2.4.3.exe
         ChecksumType: SHA256
         Checksum: 791cd6dbc56f7268fbf9c4652d6634b0f5c59687ab4e504565e58245952edd41
     - resource: xPSDesiredStateConfiguration/xRemoteFile
@@ -59,16 +59,22 @@ properties:
         Uri: https://github.com/StrawberryPerl/Perl-Dist-Strawberry/releases/download/SP_54001_64bit_UCRT/strawberry-perl-5.40.0.1-64bit-portable.zip
         ChecksumType: SHA256
         Checksum: 754f3e2a8e473dc68d1540c7802fb166a025f35ef18960c4564a31f8b5933907
-    - resource: xPSDesiredStateConfiguration/xScript
-      id: wsl
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      id: msys2
       directives:
-        description: make sure that wsl utility is available/working - i.e. that wsl is installed
+        description: install MSYS2 (to C:\msys64) - it provides the Unix toolchain (autotools, flex, bison, gperf, nasm, zip, gettext, python) for the engine and online configure steps; the user step installs the packages
         securityContext: elevated
       settings:
-        # no idea why the whole test fails when not redirecting stderr
-        TestScript: wsl.exe --status 2>$null; return ![bool]$LASTEXITCODE
-        GetScript:  wsl.exe --status 2>$null; return ![bool]$LASTEXITCODE
-        SetScript: wsl.exe --install --no-distribution
+        id: MSYS2.MSYS2
+        source: winget
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      id: nodejs
+      directives:
+        description: install Node.js LTS (Collabora Online needs node >= 20 with npm >= 9 to build the browser bundle)
+        securityContext: elevated
+      settings:
+        id: OpenJS.NodeJS.LTS
+        source: winget
     - resource: xPSDesiredStateConfiguration/xScript
       id: developer-mode
       directives:

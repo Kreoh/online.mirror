@@ -35,7 +35,7 @@
 
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::cppu;
@@ -77,7 +77,7 @@ Sequence< sal_Int8 > OPreparedStatement::getImplementationId()
     return cpo::uno::Sequence<sal_Int8>();
 }
 
-// css::uno::XInterface
+// cpo::uno::XInterface
 Any OPreparedStatement::queryInterface( const Type & rType )
 {
     Any aIface = OStatementBase::queryInterface( rType );

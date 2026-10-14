@@ -157,24 +157,24 @@ class LayoutManagerListener final : public ::cppu::WeakImplHelper<
         LayoutManagerListener( SfxWorkWindow* pWrkWin );
         virtual ~LayoutManagerListener() override;
 
-        void setFrame( const css::uno::Reference< css::frame::XFrame >& rFrame );
+        void setFrame( const cpo::uno::Reference< css::frame::XFrame >& rFrame );
 
 
         //  XComponent
 
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
-        virtual void SAL_CALL dispose() override;
+        virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+        virtual void dispose() override;
 
 
         //  XEventListener
 
-        virtual void SAL_CALL disposing( const css::lang::EventObject& aEvent ) override;
+        virtual void disposing( const css::lang::EventObject& aEvent ) override;
 
 
         // XLayoutManagerEventListener
 
-        virtual void SAL_CALL layoutEvent( const css::lang::EventObject& aSource, ::sal_Int16 eLayoutEvent, const cpo::uno::Any& aInfo ) override;
+        virtual void layoutEvent( const css::lang::EventObject& aSource, ::sal_Int16 eLayoutEvent, const cpo::uno::Any& aInfo ) override;
 
     private:
         bool                                             m_bHasFrame;
@@ -291,8 +291,8 @@ public:
     void                    ResetStatusBar_Impl();
     void                    SetStatusBar_Impl(StatusBarId eResId);
     void                    UpdateStatusBar_Impl();
-    css::uno::Reference< css::task::XStatusIndicator > GetStatusIndicator();
-    css::uno::Reference< css::frame::XFrame > GetFrameInterface();
+    cpo::uno::Reference< css::task::XStatusIndicator > GetStatusIndicator();
+    cpo::uno::Reference< css::frame::XFrame > GetFrameInterface();
 };
 
 #endif

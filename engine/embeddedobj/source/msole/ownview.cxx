@@ -43,6 +43,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::comphelper;
 
 namespace {
@@ -65,14 +66,14 @@ void DummyHandler_Impl::handle( const uno::Reference< task::XInteractionRequest 
 // Object viewer
 
 
-OwnView_Impl::OwnView_Impl( const uno::Reference< uno::XComponentContext >& xContext,
+OwnView_Impl::OwnView_Impl( const uno::Reference< cpo::uno::XComponentContext >& xContext,
                             const uno::Reference< io::XInputStream >& xInputStream )
 : m_xContext( xContext )
 , m_bBusy( false )
 , m_bUseNative( false )
 {
     if ( !xContext.is() || !xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     m_aTempFileURL = GetNewFilledTempFile_Impl( xInputStream, m_xContext );
 }
@@ -98,7 +99,7 @@ bool OwnView_Impl::CreateModelFromURL( const OUString& aFileURL )
     if ( !aFileURL.isEmpty() )
     {
         try {
-            uno::Reference < frame::XDesktop2 > xDocumentLoader = frame::Desktop::create(m_xContext);
+            uno::Reference < frame::XDesktop > xDocumentLoader = frame::Desktop::create(m_xContext);
 
             cpo::uno::Sequence< beans::PropertyValue > aArgs( m_aFilterName.isEmpty() ? 4 : 5 );
             auto pArgs = aArgs.getArray();
@@ -171,12 +172,12 @@ bool OwnView_Impl::CreateModel( bool bUseNative )
 
 
 OUString OwnView_Impl::GetFilterNameFromExtentionAndInStream(
-                                                    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+                                                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
                                                     std::u16string_view aNameWithExtention,
                                                     const uno::Reference< io::XInputStream >& xInputStream )
 {
     if ( !xInputStream.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< document::XTypeDetection > xTypeDetection(
             xContext->getServiceManager()->createInstanceWithContext(u"com.sun.star.document.TypeDetection"_ustr, xContext),
@@ -246,7 +247,7 @@ bool OwnView_Impl::ReadContentsAndGenerateTempFile( const uno::Reference< io::XI
     uno::Reference < io::XOutputStream > xNativeOutTemp = xNativeTempFile->getOutputStream();
     uno::Reference < io::XInputStream > xNativeInTemp = xNativeTempFile->getInputStream();
     if ( !xNativeOutTemp.is() || !xNativeInTemp.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     try {
         xNativeTempFile->setRemoveFile( false );
@@ -385,12 +386,12 @@ void OwnView_Impl::CreateNative()
 
     try
     {
-        uno::Reference < ucb::XSimpleFileAccess3 > xAccess(
+        uno::Reference < ucb::XSimpleFileAccess > xAccess(
                 ucb::SimpleFileAccess::create( m_xContext ) );
 
         uno::Reference< io::XInputStream > xInStream = xAccess->openFileRead( m_aTempFileURL );
         if ( !xInStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xInStream) };
         uno::Reference< container::XNameAccess > xNameAccess(

@@ -34,6 +34,7 @@
 #include <unoprnms.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 /// The inner part SwXLineBreak, which is deleted with a locked SolarMutex.
 class SwXLineBreak::Impl : public SvtListener
@@ -72,7 +73,7 @@ const SwFormatLineBreak& SwXLineBreak::Impl::GetLineBreakFormatOrThrow() const
     const SwFormatLineBreak* pLineBreak(GetLineBreakFormat());
     if (!pLineBreak)
     {
-        throw uno::RuntimeException(u"SwXLineBreak: disposed or invalid"_ustr, nullptr);
+        throw cpo::uno::RuntimeException(u"SwXLineBreak: disposed or invalid"_ustr, nullptr);
     }
 
     return *pLineBreak;
@@ -124,24 +125,24 @@ rtl::Reference<SwXLineBreak> SwXLineBreak::CreateXLineBreak(SwFormatLineBreak* p
     return xLineBreak;
 }
 
-OUString SAL_CALL SwXLineBreak::getImplementationName() { return u"SwXLineBreak"_ustr; }
+OUString SwXLineBreak::getImplementationName() { return u"SwXLineBreak"_ustr; }
 
-bool SAL_CALL SwXLineBreak::supportsService(const OUString& rServiceName)
+bool SwXLineBreak::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL SwXLineBreak::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> SwXLineBreak::getSupportedServiceNames()
 {
     return { u"com.sun.star.text.LineBreak"_ustr };
 }
 
-void SAL_CALL SwXLineBreak::attach(const uno::Reference<text::XTextRange>& xTextRange)
+void SwXLineBreak::attach(const uno::Reference<text::XTextRange>& xTextRange)
 {
     SolarMutexGuard aGuard;
     if (!m_pImpl->m_bIsDescriptor)
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     auto pRange = dynamic_cast<SwXTextRange*>(xTextRange.get());
@@ -170,29 +171,29 @@ void SAL_CALL SwXLineBreak::attach(const uno::Reference<text::XTextRange>& xText
     m_pImpl->m_bIsDescriptor = false;
 }
 
-uno::Reference<text::XTextRange> SAL_CALL SwXLineBreak::getAnchor()
+uno::Reference<text::XTextRange> SwXLineBreak::getAnchor()
 {
     SolarMutexGuard aGuard;
 
     return m_pImpl->GetLineBreakFormatOrThrow().GetAnchor();
 }
 
-void SAL_CALL SwXLineBreak::dispose()
+void SwXLineBreak::dispose()
 {
     SAL_WARN("sw.uno", "SwXLineBreak::dispose: not implemented");
 }
 
-void SAL_CALL
+void
 SwXLineBreak::addEventListener(const uno::Reference<lang::XEventListener>& /*xListener*/)
 {
 }
 
-void SAL_CALL
+void
 SwXLineBreak::removeEventListener(const uno::Reference<lang::XEventListener>& /*xListener*/)
 {
 }
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL SwXLineBreak::getPropertySetInfo()
+uno::Reference<beans::XPropertySetInfo> SwXLineBreak::getPropertySetInfo()
 {
     SolarMutexGuard aGuard;
 
@@ -201,7 +202,7 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL SwXLineBreak::getPropertySetInf
     return xRet;
 }
 
-void SAL_CALL SwXLineBreak::setPropertyValue(const OUString& rPropertyName,
+void SwXLineBreak::setPropertyValue(const OUString& rPropertyName,
                                              const cpo::uno::Any& rValue)
 {
     SolarMutexGuard aGuard;
@@ -225,7 +226,7 @@ void SAL_CALL SwXLineBreak::setPropertyValue(const OUString& rPropertyName,
     }
 }
 
-cpo::uno::Any SAL_CALL SwXLineBreak::getPropertyValue(const OUString& rPropertyName)
+cpo::uno::Any SwXLineBreak::getPropertyValue(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
 
@@ -252,28 +253,28 @@ cpo::uno::Any SAL_CALL SwXLineBreak::getPropertyValue(const OUString& rPropertyN
     return aRet;
 }
 
-void SAL_CALL SwXLineBreak::addPropertyChangeListener(
+void SwXLineBreak::addPropertyChangeListener(
     const OUString& /*rPropertyName*/,
     const uno::Reference<beans::XPropertyChangeListener>& /*xListener*/)
 {
     SAL_WARN("sw.uno", "SwXLineBreak::addPropertyChangeListener: not implemented");
 }
 
-void SAL_CALL SwXLineBreak::removePropertyChangeListener(
+void SwXLineBreak::removePropertyChangeListener(
     const OUString& /*rPropertyName*/,
     const uno::Reference<beans::XPropertyChangeListener>& /*xListener*/)
 {
     SAL_WARN("sw.uno", "SwXLineBreak::removePropertyChangeListener: not implemented");
 }
 
-void SAL_CALL SwXLineBreak::addVetoableChangeListener(
+void SwXLineBreak::addVetoableChangeListener(
     const OUString& /*rPropertyName*/,
     const uno::Reference<beans::XVetoableChangeListener>& /*xListener*/)
 {
     SAL_WARN("sw.uno", "SwXLineBreak::addVetoableChangeListener: not implemented");
 }
 
-void SAL_CALL SwXLineBreak::removeVetoableChangeListener(
+void SwXLineBreak::removeVetoableChangeListener(
     const OUString& /*rPropertyName*/,
     const uno::Reference<beans::XVetoableChangeListener>& /*xListener*/)
 {

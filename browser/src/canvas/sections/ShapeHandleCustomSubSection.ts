@@ -21,11 +21,19 @@ class ShapeHandleCustomSubSection extends ShapeHandleSubSection {
 	}
 
 	onDraw(frameCount?: number, elapsedTime?: number): void {
+		// Larger while the handle the keyboard works on is at the larger half of its blink. It
+		// stays on the page throughout and changes only its size.
+		const active = GraphicSelection.travel()?.showsAsActive(
+			this.sectionProperties.ownInfo?.name,
+		);
+
 		const rtlShift = app.map._docLayer.isCalcRTL() ? this.size[0] : 0;
 		this.context.fillStyle = 'yellow';
 		this.context.strokeStyle = 'black';
 		this.context.beginPath();
-		this.context.arc(this.size[0] * 0.5 - rtlShift, this.size[1] * 0.5, this.size[0] * 0.5, 0, Math.PI * 2);
+		// The handle the keyboard works on is drawn a third larger.
+		const radius = this.size[0] * (active ? 0.5 * 1.33 : 0.5);
+		this.context.arc(this.size[0] * 0.5 - rtlShift, this.size[1] * 0.5, radius, 0, Math.PI * 2);
 		this.context.closePath();
 		this.context.fill();
 		this.context.stroke();
@@ -40,7 +48,7 @@ class ShapeHandleCustomSubSection extends ShapeHandleSubSection {
 			const isRTL = app.map._docLayer.isCalcRTL();
 			const docX = isRTL ? this.position[0] - point.pX : this.position[0] + point.pX;
 			const parameters = {
-				HandleNum: { type: 'long', value: this.sectionProperties.ownInfo.id },
+				...ShapeHandlesSection.handleParameters(this.sectionProperties.ownInfo),
 				NewPosX: { type: 'long', value: Math.round(docX * app.pixelsToTwips) },
 				NewPosY: { type: 'long', value: Math.round((point.pY + this.position[1]) * app.pixelsToTwips) }
 			};

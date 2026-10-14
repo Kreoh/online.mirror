@@ -53,9 +53,10 @@ constexpr OUString OOXML_SIGNATURE_SIGNATURE = u"http://schemas.openxmlformats.o
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::graphic;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
-XMLSignatureHelper::XMLSignatureHelper( const uno::Reference< uno::XComponentContext >& rxCtx)
+XMLSignatureHelper::XMLSignatureHelper( const uno::Reference< cpo::uno::XComponentContext >& rxCtx)
     : mxCtx(rxCtx), mbODFPre1_2(false)
 {
     mpXSecController = new XSecController(rxCtx);
@@ -69,7 +70,7 @@ XMLSignatureHelper::~XMLSignatureHelper()
 void XMLSignatureHelper::SetStorage(
     const Reference < css::embed::XStorage >& rxStorage,
     std::u16string_view sODFVersion,
-    const css::uno::Reference<css::io::XStream>& xScriptStream)
+    const cpo::uno::Reference<css::io::XStream>& xScriptStream)
 {
     SAL_WARN_IF( mxUriBinding.is(), "xmlsecurity.helper", "SetStorage - UriBinding already set!" );
     mxUriBinding = new UriBindingHelper( rxStorage, xScriptStream );
@@ -124,18 +125,6 @@ void XMLSignatureHelper::AddEncapsulatedX509Certificate(const OUString& ouEncaps
     mpXSecController->addEncapsulatedX509Certificate(ouEncapsulatedX509Certificate);
 }
 
-void XMLSignatureHelper::SetGpgCertificate(sal_Int32 nSecurityId,
-                                           const OUString& ouGpgCertDigest,
-                                           const OUString& ouGpgCert,
-                                           const OUString& ouGpgOwner)
-{
-    mpXSecController->setGpgCertificate(
-        nSecurityId,
-        ouGpgCertDigest,
-        ouGpgCert,
-        ouGpgOwner);
-}
-
 void XMLSignatureHelper::SetDateTime( sal_Int32 nSecurityId, const ::DateTime& rDateTime )
 {
     css::util::DateTime stDateTime = rDateTime.GetUNODateTime();
@@ -153,13 +142,13 @@ void XMLSignatureHelper::SetSignatureLineId(sal_Int32 nSecurityId, const OUStrin
 }
 
 void XMLSignatureHelper::SetSignatureLineValidGraphic(
-    sal_Int32 nSecurityId, const css::uno::Reference<XGraphic>& xValidGraphic)
+    sal_Int32 nSecurityId, const cpo::uno::Reference<XGraphic>& xValidGraphic)
 {
     mpXSecController->setSignatureLineValidGraphic(nSecurityId, xValidGraphic);
 }
 
 void XMLSignatureHelper::SetSignatureLineInvalidGraphic(
-    sal_Int32 nSecurityId, const css::uno::Reference<XGraphic>& xInvalidGraphic)
+    sal_Int32 nSecurityId, const cpo::uno::Reference<XGraphic>& xInvalidGraphic)
 {
     mpXSecController->setSignatureLineInvalidGraphic(nSecurityId, xInvalidGraphic);
 }
@@ -171,7 +160,7 @@ void XMLSignatureHelper::AddForSigning( sal_Int32 nSecurityId, const OUString& u
 
 
 uno::Reference<xml::sax::XWriter> XMLSignatureHelper::CreateDocumentHandlerWithHeader(
-    const css::uno::Reference< css::io::XOutputStream >& xOutputStream )
+    const cpo::uno::Reference< css::io::XOutputStream >& xOutputStream )
 {
     /*
      * get SAX writer component
@@ -248,7 +237,7 @@ void XMLSignatureHelper::CreateAndWriteSignature( const uno::Reference< xml::sax
     }
 }
 
-bool XMLSignatureHelper::ReadAndVerifySignature( const css::uno::Reference< css::io::XInputStream >& xInputStream )
+bool XMLSignatureHelper::ReadAndVerifySignature( const cpo::uno::Reference< css::io::XInputStream >& xInputStream )
 {
     mbError = false;
 
@@ -379,7 +368,7 @@ bool XMLSignatureHelper::ReadAndVerifySignatureStorage(const uno::Reference<embe
     return true;
 }
 
-bool XMLSignatureHelper::ReadAndVerifySignatureStorageStream(const css::uno::Reference<css::io::XInputStream>& xInputStream)
+bool XMLSignatureHelper::ReadAndVerifySignatureStorageStream(const cpo::uno::Reference<css::io::XInputStream>& xInputStream)
 {
     mbError = false;
 
@@ -413,7 +402,7 @@ bool XMLSignatureHelper::ReadAndVerifySignatureStorageStream(const css::uno::Ref
     return !mbError;
 }
 
-void XMLSignatureHelper::EnsureSignaturesRelation(const css::uno::Reference<css::embed::XStorage>& xStorage, bool bAdd)
+void XMLSignatureHelper::EnsureSignaturesRelation(const cpo::uno::Reference<css::embed::XStorage>& xStorage, bool bAdd)
 {
     sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
     uno::Reference<embed::XStorage> xSubStorage = xStorage->openStorageElement(u"_rels"_ustr, nOpenMode);
@@ -438,9 +427,9 @@ void XMLSignatureHelper::EnsureSignaturesRelation(const css::uno::Reference<css:
     {
         // No, and have to add one.
         std::vector<beans::StringPair> aRelation;
-        aRelation.emplace_back("Id", "rId" + OUString::number(++nCount));
-        aRelation.emplace_back("Type", OOXML_SIGNATURE_ORIGIN);
-        aRelation.emplace_back("Target", "_xmlsignatures/origin.sigs");
+        aRelation.emplace_back(u"Id"_ustr, "rId" + OUString::number(++nCount));
+        aRelation.emplace_back(u"Type"_ustr, OOXML_SIGNATURE_ORIGIN);
+        aRelation.emplace_back(u"Target"_ustr, u"_xmlsignatures/origin.sigs"_ustr);
         aRelationsInfo.push_back(comphelper::containerToSequence(aRelation));
     }
     else if (bHaveRelation && !bAdd)
@@ -469,7 +458,7 @@ void XMLSignatureHelper::EnsureSignaturesRelation(const css::uno::Reference<css:
     xTransact->commit();
 }
 
-void XMLSignatureHelper::ExportSignatureRelations(const css::uno::Reference<css::embed::XStorage>& xStorage, int nSignatureCount)
+void XMLSignatureHelper::ExportSignatureRelations(const cpo::uno::Reference<css::embed::XStorage>& xStorage, int nSignatureCount)
 {
     // Write the empty file, its relations will be the signatures.
     sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
@@ -485,9 +474,9 @@ void XMLSignatureHelper::ExportSignatureRelations(const css::uno::Reference<css:
     for (int i = 0; i < nSignatureCount; ++i)
     {
         std::vector<beans::StringPair> aRelation;
-        aRelation.emplace_back("Id", "rId" + OUString::number(i + 1));
-        aRelation.emplace_back("Type", OOXML_SIGNATURE_SIGNATURE);
-        aRelation.emplace_back("Target", "sig" + OUString::number(i + 1) + ".xml");
+        aRelation.emplace_back(u"Id"_ustr, "rId" + OUString::number(i + 1));
+        aRelation.emplace_back(u"Type"_ustr, OOXML_SIGNATURE_SIGNATURE);
+        aRelation.emplace_back(u"Target"_ustr, "sig" + OUString::number(i + 1) + ".xml");
         aRelations.push_back(comphelper::containerToSequence(aRelation));
     }
     comphelper::OFOPXMLHelper::WriteRelationsInfoSequence(xRelStream, comphelper::containerToSequence(aRelations), mxCtx);
@@ -495,7 +484,7 @@ void XMLSignatureHelper::ExportSignatureRelations(const css::uno::Reference<css:
     xTransact->commit();
 }
 
-void XMLSignatureHelper::ExportSignatureContentTypes(const css::uno::Reference<css::embed::XStorage>& xStorage, int nSignatureCount)
+void XMLSignatureHelper::ExportSignatureContentTypes(const cpo::uno::Reference<css::embed::XStorage>& xStorage, int nSignatureCount)
 {
     uno::Reference<io::XStream> xStream = xStorage->openStreamElement(u"[Content_Types].xml"_ustr, embed::ElementModes::READWRITE);
     uno::Reference<io::XInputStream> xInputStream = xStream->getInputStream();
@@ -511,10 +500,10 @@ void XMLSignatureHelper::ExportSignatureContentTypes(const css::uno::Reference<c
     cpo::uno::Sequence<beans::StringPair>& rDefaults = pContentTypeInfo[0];
     auto aDefaults = comphelper::sequenceToContainer< std::vector<beans::StringPair> >(rDefaults);
     if (std::none_of(std::cbegin(rDefaults), std::cend(rDefaults), [](const beans::StringPair& rPair) { return rPair.First == "rels"; }))
-        aDefaults.emplace_back("rels", "application/vnd.openxmlformats-package.relationships+xml");
+        aDefaults.emplace_back(u"rels"_ustr, u"application/vnd.openxmlformats-package.relationships+xml"_ustr);
 
     if (std::none_of(std::cbegin(rDefaults), std::cend(rDefaults), [](const beans::StringPair& rPair) { return rPair.First == "sigs"; }))
-        aDefaults.emplace_back("sigs", "application/vnd.openxmlformats-package.digital-signature-origin");
+        aDefaults.emplace_back(u"sigs"_ustr, u"application/vnd.openxmlformats-package.digital-signature-origin"_ustr);
     rDefaults = comphelper::containerToSequence(aDefaults);
 
     // Remove existing signature overrides.
@@ -527,7 +516,7 @@ void XMLSignatureHelper::ExportSignatureContentTypes(const css::uno::Reference<c
 
     // Add our signature overrides.
     for (int i = 1; i <= nSignatureCount; ++i)
-        aOverrides.emplace_back("/_xmlsignatures/sig" + OUString::number(i) + ".xml", "application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml");
+        aOverrides.emplace_back("/_xmlsignatures/sig" + OUString::number(i) + ".xml", u"application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml"_ustr);
 
     rOverrides = comphelper::containerToSequence(aOverrides);
     uno::Reference<io::XOutputStream> xOutputStream = xStream->getOutputStream();
@@ -551,13 +540,15 @@ void XMLSignatureHelper::CreateAndWriteOOXMLSignature(const uno::Reference<embed
     xSaxWriter->endDocument();
 }
 
+namespace xmlsecurity
+{
 /** check this constraint from xmldsig-core 4.5.4:
 
   All certificates appearing in an X509Data element MUST relate to the
   validation key by either containing it or being part of a certification
   chain that terminates in a certificate containing the validation key.
  */
-static auto CheckX509Data(
+auto CheckX509Data(
     uno::Reference<xml::crypto::XSecurityEnvironment> const& xSecEnv,
     std::vector<SignatureInformation::X509CertInfo> const& rX509CertInfos,
     std::vector<uno::Reference<security::XCertificate>> & rCerts,
@@ -606,7 +597,7 @@ static auto CheckX509Data(
                 start = i; // issuer isn't in the list
                 break;
             }
-            if (xmlsecurity::EqualDistinguishedNames(certs[i]->getIssuerName(), certs[j]->getSubjectName(), xmlsecurity::NOCOMPAT))
+            if (xmlsecurity::IsIssuerOf(certs[j], certs[i]))
             {
                 if (i == j) // self signed
                 {
@@ -638,8 +629,7 @@ static auto CheckX509Data(
         {
             if (chain[i] != j)
             {
-                if (xmlsecurity::EqualDistinguishedNames(
-                        certs[chain[i]]->getSubjectName(), certs[j]->getIssuerName(), xmlsecurity::NOCOMPAT))
+                if (xmlsecurity::IsIssuerOf(certs[chain[i]], certs[j]))
                 {
                     if (chain.size() != i + 1) // already found issue?
                     {
@@ -674,6 +664,7 @@ static auto CheckX509Data(
     }
     return true;
 }
+} // namespace xmlsecurity
 
 std::vector<uno::Reference<security::XCertificate>>
 XMLSignatureHelper::CheckAndUpdateSignatureInformation(
@@ -699,7 +690,7 @@ XMLSignatureHelper::CheckAndUpdateSignatureInformation(
             temp.emplace_back(it);
         }
     }
-    if (CheckX509Data(xSecEnv, temp, certs, tempResult))
+    if (xmlsecurity::CheckX509Data(xSecEnv, temp, certs, tempResult))
     {
         if (rInfo.maEncapsulatedX509Certificates.empty()) // optional, XAdES
         {
@@ -720,7 +711,7 @@ XMLSignatureHelper::CheckAndUpdateSignatureInformation(
             }
             std::vector<uno::Reference<security::XCertificate>> encapsulatedCerts;
             SignatureInformation::X509Data encapsulatedResult;
-            if (CheckX509Data(xSecEnv, encapsulatedCertInfos, encapsulatedCerts, encapsulatedResult))
+            if (xmlsecurity::CheckX509Data(xSecEnv, encapsulatedCertInfos, encapsulatedCerts, encapsulatedResult))
             {
                 auto const pXCertificate(dynamic_cast<xmlsecurity::Certificate*>(certs.back().get()));
                 auto const pECertificate(dynamic_cast<xmlsecurity::Certificate*>(encapsulatedCerts.back().get()));
@@ -767,6 +758,16 @@ XMLSignatureHelper::CheckAndUpdateSignatureInformation(
                 }
             }
         }
+    }
+
+    // The certificate at the end of the chain is the signing certificate, so it
+    // must be the certificate whose public key verified the signature value.
+    if (rInfo.nStatus == css::xml::crypto::SecurityOperationStatus_OPERATION_SUCCEEDED
+        && (certs.empty() || certs.back()->getEncoded() != rInfo.xVerifiedCertificate->getEncoded()))
+    {
+        SAL_WARN("xmlsecurity.comp", "CheckX509Data did not guess the same certificate that verified the signature");
+        datas.clear();
+        certs.clear();
     }
 
     // rInfo is a copy, update the original

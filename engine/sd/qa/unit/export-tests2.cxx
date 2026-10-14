@@ -23,6 +23,8 @@
 #include <com/sun/star/animations/XAudio.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/table/XTable.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
 #include <sfx2/linkmgr.hxx>
 #include <sfx2/lnkbase.hxx>
 #include <sdtiledrenderingtest.hxx>
@@ -69,6 +71,7 @@
 
 using namespace css;
 using namespace css::animations;
+using namespace ::cpo;
 
 class SdExportTest2 : public SdModelTestBase
 {
@@ -582,9 +585,8 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testExplodedPdfTextPos)
     CPPUNIT_ASSERT_DOUBLES_EQUAL(1985, x, 0);
 #endif
     sal_Int32 y = getXPath(pXml, "//textarray[1]", "y").toInt32();
-    // was 3092 originally, then 3057; now 3073 with font-independent
-    // line spacing set during PDF decomposition
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(3073, y, 0);
+    // font-independent line spacing set during PDF decomposition
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(3041, y, 0);
 
     // Before fix, on reimport this was split over two lines when it
     // should have remained as one line.
@@ -1039,34 +1041,34 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testAnimationSoundRemoteNotFetchedOOXML)
     saveAndReload(TestFilter::PPTX);
 }
 
-static css::uno::Reference<css::animations::XAnimationNode>
-lcl_getPageAnimationNode(const css::uno::Reference<css::lang::XComponent>& xComponent,
+static cpo::uno::Reference<css::animations::XAnimationNode>
+lcl_getPageAnimationNode(const cpo::uno::Reference<css::lang::XComponent>& xComponent,
                          sal_Int32 nPage)
 {
-    css::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(xComponent,
-                                                                    css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::drawing::XDrawPage> xPage(xSupplier->getDrawPages()->getByIndex(nPage),
-                                                       css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::animations::XAnimationNodeSupplier> xNodeSupplier(
-        xPage, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::drawing::XDrawPagesSupplier> xSupplier(xComponent,
+                                                                    cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::drawing::XDrawPage> xPage(xSupplier->getDrawPages()->getByIndex(nPage),
+                                                       cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::animations::XAnimationNodeSupplier> xNodeSupplier(
+        xPage, cpo::uno::UNO_QUERY_THROW);
     return xNodeSupplier->getAnimationNode();
 }
 
-static css::uno::Reference<css::animations::XAnimationNode>
-lcl_findAudioNode(const css::uno::Reference<css::animations::XAnimationNode>& xNode)
+static cpo::uno::Reference<css::animations::XAnimationNode>
+lcl_findAudioNode(const cpo::uno::Reference<css::animations::XAnimationNode>& xNode)
 {
     if (!xNode.is())
         return nullptr;
     if (xNode->getType() == css::animations::AnimationNodeType::AUDIO)
         return xNode;
-    css::uno::Reference<css::container::XEnumerationAccess> xEnumAccess(xNode, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::container::XEnumerationAccess> xEnumAccess(xNode, cpo::uno::UNO_QUERY);
     if (xEnumAccess.is())
     {
-        css::uno::Reference<css::container::XEnumeration> xEnum = xEnumAccess->createEnumeration();
+        cpo::uno::Reference<css::container::XEnumeration> xEnum = xEnumAccess->createEnumeration();
         while (xEnum.is() && xEnum->hasMoreElements())
         {
-            css::uno::Reference<css::animations::XAnimationNode> xChild(xEnum->nextElement(),
-                                                                        css::uno::UNO_QUERY);
+            cpo::uno::Reference<css::animations::XAnimationNode> xChild(xEnum->nextElement(),
+                                                                        cpo::uno::UNO_QUERY);
             if (auto xFound = lcl_findAudioNode(xChild))
                 return xFound;
         }
@@ -1081,8 +1083,8 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testAnimationSoundAllowedForPlayback)
     // allowed.
     createSdImpressDoc("odp/animation-sound-remote.fodp");
     SdDrawDocument* pDoc = getSdDocShell()->GetDoc();
-    css::uno::Reference<css::animations::XAudio> xAudio(
-        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::animations::XAudio> xAudio(
+        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), cpo::uno::UNO_QUERY);
     CPPUNIT_ASSERT(xAudio.is());
 
     // the external animation sound is registered as a link that can be allowed
@@ -1108,16 +1110,16 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testAllowedSoundNotPersisted)
     CPPUNIT_ASSERT_EQUAL(size_t(1), pLinkMgr->GetLinks().size());
     pLinkMgr->GetLinks()[0]->Update();
     {
-        css::uno::Reference<css::animations::XAudio> xAudio(
-            lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::animations::XAudio> xAudio(
+            lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), cpo::uno::UNO_QUERY);
         CPPUNIT_ASSERT(xAudio.is());
         CPPUNIT_ASSERT(xmloff::getSoundAllowed(xAudio->getSource()));
     }
 
     saveAndReload(TestFilter::ODP);
 
-    css::uno::Reference<css::animations::XAudio> xAudio(
-        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::animations::XAudio> xAudio(
+        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), cpo::uno::UNO_QUERY);
     CPPUNIT_ASSERT(xAudio.is());
     CPPUNIT_ASSERT(!xmloff::getSoundAllowed(xAudio->getSource()));
     CPPUNIT_ASSERT(lcl_hasSoundLink(*getSdDocShell()->GetDoc()));
@@ -1129,8 +1131,8 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testAnimationSoundInPackageAllowed)
     // audio node plays without the user acting and it is not a link.
     createSdImpressDoc("odp/animation-sound-package.fodp");
     SdDrawDocument* pDoc = getSdDocShell()->GetDoc();
-    css::uno::Reference<css::animations::XAudio> xAudio(
-        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::animations::XAudio> xAudio(
+        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), cpo::uno::UNO_QUERY);
     CPPUNIT_ASSERT(xAudio.is());
 
     CPPUNIT_ASSERT(xmloff::getSoundAllowed(xAudio->getSource()));
@@ -1147,8 +1149,8 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testAnimationSoundExternalImportPPTX)
     // fetch attempt would hang this test.
     createSdImpressDoc("pptx/animation-sound-external.pptx");
     SdDrawDocument* pDoc = getSdDocShell()->GetDoc();
-    css::uno::Reference<css::animations::XAudio> xAudio(
-        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::animations::XAudio> xAudio(
+        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), cpo::uno::UNO_QUERY);
     CPPUNIT_ASSERT(xAudio.is());
 
     sfx2::LinkManager* pLinkMgr = pDoc->GetLinkManager();
@@ -1169,8 +1171,8 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testAnimationSoundEmbeddedImportPPTX)
     // so it needs no allowing and is not a link.
     createSdImpressDoc("pptx/animation-sound-embedded.pptx");
     SdDrawDocument* pDoc = getSdDocShell()->GetDoc();
-    css::uno::Reference<css::animations::XAudio> xAudio(
-        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::animations::XAudio> xAudio(
+        lcl_findAudioNode(lcl_getPageAnimationNode(mxComponent, 0)), cpo::uno::UNO_QUERY);
     CPPUNIT_ASSERT(xAudio.is());
 
     CPPUNIT_ASSERT(xmloff::getSoundAllowed(xAudio->getSource()));
@@ -1221,6 +1223,55 @@ CPPUNIT_TEST_FIXTURE(SdExportTest2, testLegacyAnimationSoundNotFetched)
     CPPUNIT_ASSERT(!xmloff::getSoundAllowed(xAudio->getSource()));
 
     saveAndReload(TestFilter::PPT);
+}
+
+CPPUNIT_TEST_FIXTURE(SdExportTest2, testTableShapeService)
+{
+    createSdImpressDoc("pptx/tdf100926_ODP.pptx");
+    uno::Reference<lang::XServiceInfo> xTable(getShapeFromPage(0, 0), uno::UNO_QUERY_THROW);
+    // A table says what it is, the way every other shape does.
+    CPPUNIT_ASSERT(xTable->supportsService(u"com.sun.star.drawing.TableShape"_ustr));
+    CPPUNIT_ASSERT(xTable->supportsService(u"com.sun.star.drawing.Shape"_ustr));
+}
+
+CPPUNIT_TEST_FIXTURE(SdExportTest2, testHiddenTableShape)
+{
+    createSdImpressDoc("pptx/tdf100926_ODP.pptx");
+    uno::Reference<beans::XPropertySet> xTable(getShapeFromPage(0, 0));
+    // The first shape is a table, which carries its own set of properties.
+    CPPUNIT_ASSERT(
+        uno::Reference<table::XTable>(xTable->getPropertyValue(u"Model"_ustr), uno::UNO_QUERY)
+            .is());
+    xTable->setPropertyValue(u"Visible"_ustr, cpo::uno::Any(false));
+
+    saveAndReload(TestFilter::ODP);
+
+    // A table the user hid stays hidden after a save.
+    bool bVisible = true;
+    getShapeFromPage(0, 0)->getPropertyValue(u"Visible"_ustr) >>= bVisible;
+    CPPUNIT_ASSERT_EQUAL(false, bVisible);
+}
+
+CPPUNIT_TEST_FIXTURE(SdExportTest2, testCompatibilityFlagIsDocumentSetting)
+{
+    // A compatibility flag of the drawing layer is a document setting, so it is saved in the
+    // document part of the settings, which a document without a view writes too.
+    createSdImpressDoc();
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xFactory->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT(!xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+
+    xSettings->setPropertyValue(u"AnchoredTextOverflowLegacy"_ustr, uno::Any(true));
+    CPPUNIT_ASSERT(xSettings->getPropertyValue(u"AnchoredTextOverflowLegacy"_ustr).get<bool>());
+
+    save(TestFilter::ODP);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"settings.xml"_ustr);
+    assertXPathContent(pXmlDoc,
+                       "/office:document-settings/office:settings/"
+                       "config:config-item-set[@config:name='ooo:configuration-settings']/"
+                       "config:config-item[@config:name='AnchoredTextOverflowLegacy']",
+                       u"true");
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

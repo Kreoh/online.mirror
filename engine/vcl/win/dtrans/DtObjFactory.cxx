@@ -20,12 +20,12 @@
 #include "DtObjFactory.hxx"
 #include "XTDataObject.hxx"
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::lang;
 
 sal::systools::COMReference<IDataObject>
-CDTransObjFactory::createDataObjFromTransferable(const Reference<XComponentContext>& rxContext,
+CDTransObjFactory::createDataObjFromTransferable(const Reference<cpo::uno::XComponentContext>& rxContext,
                                                  const Reference<XTransferable>& refXTransferable)
 {
     return { new CXTDataObject(rxContext, refXTransferable) };

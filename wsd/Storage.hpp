@@ -21,10 +21,12 @@
 #include <common/Uri.hpp>
 #include <wsd/COOLWSD.hpp>
 
+#include <Poco/Path.h>
 #include <Poco/URI.h>
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -241,11 +243,33 @@ public:
 
         const std::string& getReason() const { return _reason; }
 
+        /// Records that we know the host did not write the file: it answered
+        /// with an error, or we never managed to send the request. Left false
+        /// when we cannot tell, as when the request times out in flight and the
+        /// host may have written the file before we gave up on it.
+        void setDefiniteFailure(bool definite) { _definiteFailure = definite; }
+
+        bool isDefiniteFailure() const { return _definiteFailure; }
+
+        /// Records how long the host asked us to wait before coming back, when
+        /// it said so in Retry-After. Empty when it didn't, leaving the caller
+        /// to fall back on its own pacing.
+        void setRetryAfter(std::optional<std::chrono::seconds> retryAfter)
+        {
+            _retryAfter = retryAfter;
+        }
+
+        std::optional<std::chrono::seconds> getRetryAfter() const { return _retryAfter; }
+
     private:
         std::string _saveAsName;
         std::string _saveAsUrl;
         std::string _reason;
         Result _result;
+        /// How long the host asked us to wait, if it asked at all.
+        std::optional<std::chrono::seconds> _retryAfter;
+        /// Whether we know for certain that the upload did not reach storage.
+        bool _definiteFailure = false;
     };
 
     /// The state of an asynchronous request.
@@ -295,6 +319,7 @@ public:
                    UNSUPPORTED, ///< Locking is not supported on this host.
                    OK, ///< Succeeded to either lock or unlock (see LockContext).
                    UNAUTHORIZED, ///< 401, 403, 404.
+                   TRANSIENT, ///< 429, 500, 502, 503, 504: ask again shortly.
                    FAILED ///< Other failures.
         );
 
@@ -322,8 +347,18 @@ public:
 
         LockState requestedLockState() const { return _requestedLockState; }
 
+        /// Records how long the host asked us to wait before trying again, when
+        /// it said so in Retry-After. Empty when it didn't.
+        void setRetryAfter(std::optional<std::chrono::seconds> retryAfter)
+        {
+            _retryAfter = retryAfter;
+        }
+
+        std::optional<std::chrono::seconds> getRetryAfter() const { return _retryAfter; }
+
     private:
         std::string _reason;
+        std::optional<std::chrono::seconds> _retryAfter;
         Status _status;
         LockState _requestedLockState;
     };
@@ -413,8 +448,15 @@ public:
     std::string getFileExtension() const { return Poco::Path(_fileInfo.getFilename()).getExtension(); }
 
     /// Update the locking state (check-in/out) of the associated file synchronously.
+    /// @timeout overrides the default connection timeout; zero to use it.
+    /// @poller, when given, is what the wait polls on, so that the caller's own
+    /// sockets keep being served while the request is outstanding. Must belong
+    /// to the calling thread. A private poll is used when it is null, which
+    /// leaves every other socket unattended until the request returns.
     virtual LockUpdateResult updateLockState(const Authorization& auth, LockContext& lockCtx,
-                                             LockState lock, const Attributes& attribs) = 0;
+                                             LockState lock, const Attributes& attribs,
+                                             std::chrono::seconds timeout,
+                                             SocketPoll* poller) = 0;
 
     /// The asynchronous upload completion callback function.
     using AsyncLockStateCallback = std::function<void(const AsyncLockUpdate&)>;
@@ -481,7 +523,7 @@ public:
 #endif
 
     /// Validates the given URI.
-    static StorageType validate(const Poco::URI& uri, bool takeOwnership);
+    [[nodiscard]] static StorageType validate(const Poco::URI& uri, bool takeOwnership);
 
     /// Storage object creation factory.
     /// @takeOwnership is for local files that are temporary,
@@ -608,8 +650,8 @@ public:
     std::unique_ptr<LocalFileInfo> getLocalFileInfo();
 
     LockUpdateResult updateLockState(const Authorization&, LockContext&,
-                                     StorageBase::LockState requestedLockState,
-                                     const Attributes&) override
+                                     StorageBase::LockState requestedLockState, const Attributes&,
+                                     std::chrono::seconds, SocketPoll*) override
     {
         return LockUpdateResult(LockUpdateResult::Status::OK, requestedLockState);
     }
@@ -661,12 +703,19 @@ class LockContext final
     bool _supportsLocks;
     /// Do we own the (leased) lock currently
     StorageBase::LockState _lockState;
+    /// Consecutive transient failures to refresh the lock we hold.
+    std::size_t _transientFailures;
+    /// Earliest time of the next refresh attempt. Set while riding out a
+    /// transient failure, when waiting a whole refresh period would be far too
+    /// long: the lease we hold expires long before that.
+    std::chrono::steady_clock::time_point _retryNotBefore;
 
 public:
     LockContext()
         : _refreshSeconds(ConfigUtil::getConfigValue<int>("storage.wopi.locking.refresh", 900))
         , _supportsLocks(false)
         , _lockState(StorageBase::LockState::UNLOCK)
+        , _transientFailures(0)
     {
         LOG_DBG("Lock will refresh every " << _refreshSeconds);
     }
@@ -691,11 +740,49 @@ public:
     void setState(StorageBase::LockState state)
     {
         _lockState = state;
+        _transientFailures = 0;
+        _retryNotBefore = std::chrono::steady_clock::time_point();
         bumpTimer();
     }
 
     /// wait another refresh cycle
     void bumpTimer() { _lastLockTime = std::chrono::steady_clock::now(); }
+
+    /// Records a transient failure and asks for another attempt after @delay,
+    /// rather than at the end of the refresh period. Returns how many
+    /// consecutive transient failures we have now had.
+    std::size_t deferRetry(std::chrono::seconds delay)
+    {
+        _retryNotBefore = std::chrono::steady_clock::now() + delay;
+        return ++_transientFailures;
+    }
+
+    /// How many consecutive transient failures we have ridden out.
+    std::size_t transientFailures() const { return _transientFailures; }
+
+    /// When the next refresh is due, so the poll can wake for it rather than
+    /// sleeping out its own timeout and rounding a short retry up to it.
+    std::chrono::steady_clock::time_point nextRefresh() const
+    {
+        if (!_supportsLocks || !isLocked() || _refreshSeconds <= std::chrono::seconds::zero())
+            return std::chrono::steady_clock::time_point();
+
+        if (_retryNotBefore != std::chrono::steady_clock::time_point())
+            return _retryNotBefore;
+
+        return _lastLockTime + _refreshSeconds;
+    }
+
+    /// Forgets a deferred retry, so that refreshing goes back to its period.
+    /// Must be called on every outcome that isn't a deferral: while a retry is
+    /// pending, needsRefresh() answers from it alone and never consults the
+    /// period again, so a deferral left behind by a failure we gave up on asks
+    /// for a refresh on every pass of the poll for the life of the document.
+    void clearRetry()
+    {
+        _retryNotBefore = std::chrono::steady_clock::time_point();
+        _transientFailures = 0;
+    }
 
     /// do we need to refresh our lock ?
     bool needsRefresh(std::chrono::steady_clock::time_point now) const;

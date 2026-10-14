@@ -44,7 +44,7 @@ namespace calc
 #define PROP_HANDLE_BOUND_CELL  1
 
     namespace lang = css::lang;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::table;
@@ -114,7 +114,7 @@ using namespace cpo::uno;
             _rValue <<= xCellAddress->getCellAddress( );
     }
 
-    Sequence< Type > SAL_CALL OCellValueBinding::getSupportedValueTypes(  )
+    Sequence< Type > OCellValueBinding::getSupportedValueTypes(  )
     {
         std::unique_lock<std::mutex> aGuard(m_aMutex);
         throwIfDisposed(aGuard);
@@ -151,7 +151,7 @@ using namespace cpo::uno;
         return aTypes;
     }
 
-    bool SAL_CALL OCellValueBinding::supportsType( const Type& aType )
+    bool OCellValueBinding::supportsType( const Type& aType )
     {
         std::unique_lock<std::mutex> aGuard(m_aMutex);
         throwIfDisposed(aGuard);
@@ -166,7 +166,7 @@ using namespace cpo::uno;
         return std::find(aSupportedTypes.begin(), aSupportedTypes.end(), aType) != aSupportedTypes.end();
     }
 
-    Any SAL_CALL OCellValueBinding::getValue( const Type& aType )
+    Any OCellValueBinding::getValue( const Type& aType )
     {
         std::unique_lock<std::mutex> aGuard(m_aMutex);
         throwIfDisposed(aGuard);
@@ -253,7 +253,7 @@ using namespace cpo::uno;
         return aReturn;
     }
 
-    void SAL_CALL OCellValueBinding::setValue( const Any& aValue )
+    void OCellValueBinding::setValue( const Any& aValue )
     {
         std::unique_lock<std::mutex> aGuard(m_aMutex);
         throwIfDisposed(aGuard);
@@ -426,17 +426,17 @@ using namespace cpo::uno;
         }
     }
 
-    OUString SAL_CALL OCellValueBinding::getImplementationName(  )
+    OUString OCellValueBinding::getImplementationName(  )
     {
         return u"com.sun.star.comp.sheet.OCellValueBinding"_ustr;
     }
 
-    bool SAL_CALL OCellValueBinding::supportsService( const OUString& _rServiceName )
+    bool OCellValueBinding::supportsService( const OUString& _rServiceName )
     {
         return cppu::supportsService(this, _rServiceName);
     }
 
-    Sequence< OUString > SAL_CALL OCellValueBinding::getSupportedServiceNames(  )
+    Sequence< OUString > OCellValueBinding::getSupportedServiceNames(  )
     {
         Sequence< OUString > aServices( m_bListPos ? 3 : 2 );
         auto pServices = aServices.getArray();
@@ -447,7 +447,7 @@ using namespace cpo::uno;
         return aServices;
     }
 
-    void SAL_CALL OCellValueBinding::addModifyListener( const Reference< XModifyListener >& _rxListener )
+    void OCellValueBinding::addModifyListener( const Reference< XModifyListener >& _rxListener )
     {
        if ( _rxListener.is() )
        {
@@ -456,7 +456,7 @@ using namespace cpo::uno;
        }
     }
 
-    void SAL_CALL OCellValueBinding::removeModifyListener( const Reference< XModifyListener >& _rxListener )
+    void OCellValueBinding::removeModifyListener( const Reference< XModifyListener >& _rxListener )
     {
        if ( _rxListener.is() )
        {
@@ -472,7 +472,7 @@ using namespace cpo::uno;
 
         std::unique_lock<std::mutex> aGuard(m_aMutex);
         m_aModifyListeners.forEach(aGuard,
-            [&aEvent] (const css::uno::Reference<css::util::XModifyListener> & l)
+            [&aEvent] (const cpo::uno::Reference<css::util::XModifyListener> & l)
             {
                 try
                 {
@@ -489,12 +489,12 @@ using namespace cpo::uno;
             });
     }
 
-    void SAL_CALL OCellValueBinding::modified( const EventObject& /* aEvent */ )
+    void OCellValueBinding::modified( const EventObject& /* aEvent */ )
     {
         notifyModified();
     }
 
-    void SAL_CALL OCellValueBinding::disposing( const EventObject& aEvent )
+    void OCellValueBinding::disposing( const EventObject& aEvent )
     {
         Reference<XInterface> xCellInt( m_xCell, UNO_QUERY );
         if ( xCellInt == aEvent.Source )
@@ -505,7 +505,7 @@ using namespace cpo::uno;
         }
     }
 
-    void SAL_CALL OCellValueBinding::initialize( const Sequence< Any >& _rArguments )
+    void OCellValueBinding::initialize( const Sequence< Any >& _rArguments )
     {
         if ( m_bInitialized )
             throw RuntimeException(u"CellValueBinding is already initialized"_ustr, getXWeak());
@@ -539,7 +539,7 @@ using namespace cpo::uno;
             // first the sheets collection
             Reference< XIndexAccess > xSheets;
             if ( m_xDocument.is() )
-                xSheets.set(m_xDocument->getSheets( ), css::uno::UNO_QUERY);
+                xSheets.set(m_xDocument->getSheets( ), cpo::uno::UNO_QUERY);
             OSL_ENSURE( xSheets.is(), "OCellValueBinding::initialize: could not retrieve the sheets!" );
 
             if ( xSheets.is() )
@@ -565,7 +565,7 @@ using namespace cpo::uno;
         if ( !m_xCell.is() )
             throw RuntimeException(u"Failed to retrieve cell object"_ustr, getXWeak());
 
-        m_xCellText.set(m_xCell, css::uno::UNO_QUERY);
+        m_xCellText.set(m_xCell, cpo::uno::UNO_QUERY);
 
         Reference<XModifyBroadcaster> xBroadcaster( m_xCell, UNO_QUERY );
         if ( xBroadcaster.is() )

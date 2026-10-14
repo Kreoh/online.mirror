@@ -18,6 +18,7 @@
  */
 
 #include <macromgr.hxx>
+#include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
 #include <document.hxx>
 #include <docsh.hxx>
 #include <basic/basmgr.hxx>
@@ -30,7 +31,8 @@
 #include <com/sun/star/script/XLibraryContainer.hpp>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 
 /**
  * A simple container to keep track of cells that depend on basic modules
@@ -106,18 +108,18 @@ class VBAProjectListener : public ContainerListenerHelper
 public:
     explicit VBAProjectListener( ScMacroManager* pMacroMgr ) : mpMacroMgr( pMacroMgr ) {}
     // XEventListener
-    virtual void SAL_CALL disposing( const lang::EventObject& /*Source*/ ) override {}
+    virtual void disposing( const lang::EventObject& /*Source*/ ) override {}
 
     // XContainerListener
-    virtual void SAL_CALL elementInserted( const container::ContainerEvent& /*Event*/ ) override {}
-    virtual void SAL_CALL elementReplaced( const container::ContainerEvent& Event ) override
+    virtual void elementInserted( const container::ContainerEvent& /*Event*/ ) override {}
+    virtual void elementReplaced( const container::ContainerEvent& Event ) override
     {
         OUString sModuleName;
         Event.Accessor >>= sModuleName;
         mpMacroMgr->InitUserFuncData();
         mpMacroMgr->BroadcastModuleUpdate(sModuleName);
     }
-    virtual void SAL_CALL elementRemoved( const container::ContainerEvent& /*Event*/ ) override {}
+    virtual void elementRemoved( const container::ContainerEvent& /*Event*/ ) override {}
 
 };
 

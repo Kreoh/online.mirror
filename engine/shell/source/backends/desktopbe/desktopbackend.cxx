@@ -31,10 +31,10 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <cpo/uno/Any.hxx>
 #include <cpo/uno/Exception.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cpo/uno/XCurrentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/weak.hxx>
@@ -45,6 +45,7 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 #include <comphelper/diagnose_ex.hxx>
+#include <comphelper/kit.hxx>
 #include <uno/current_context.hxx>
 #include <vcl/svapp.hxx>
 
@@ -62,44 +63,44 @@ public:
 private:
     virtual ~Default() override {}
 
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     { return u"com.sun.star.comp.configuration.backend.DesktopBackend"_ustr; }
 
-    virtual bool SAL_CALL supportsService(OUString const & ServiceName) override
+    virtual bool supportsService(OUString const & ServiceName) override
     { return ServiceName == getSupportedServiceNames()[0]; }
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override
     { return { u"com.sun.star.configuration.backend.DesktopBackend"_ustr }; }
 
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
     getPropertySetInfo() override
-    { return css::uno::Reference< css::beans::XPropertySetInfo >(); }
+    { return cpo::uno::Reference< css::beans::XPropertySetInfo >(); }
 
-    virtual void SAL_CALL setPropertyValue(
+    virtual void setPropertyValue(
         OUString const &, cpo::uno::Any const &) override;
 
-    virtual cpo::uno::Any SAL_CALL getPropertyValue(
+    virtual cpo::uno::Any getPropertyValue(
         OUString const & PropertyName) override;
 
-    virtual void SAL_CALL addPropertyChangeListener(
+    virtual void addPropertyChangeListener(
         OUString const &,
-        css::uno::Reference< css::beans::XPropertyChangeListener > const &) override
+        cpo::uno::Reference< css::beans::XPropertyChangeListener > const &) override
     {}
 
-    virtual void SAL_CALL removePropertyChangeListener(
+    virtual void removePropertyChangeListener(
         OUString const &,
-        css::uno::Reference< css::beans::XPropertyChangeListener > const &) override
+        cpo::uno::Reference< css::beans::XPropertyChangeListener > const &) override
     {}
 
-    virtual void SAL_CALL addVetoableChangeListener(
+    virtual void addVetoableChangeListener(
         OUString const &,
-        css::uno::Reference< css::beans::XVetoableChangeListener > const &) override
+        cpo::uno::Reference< css::beans::XVetoableChangeListener > const &) override
     {}
 
-    virtual void SAL_CALL removeVetoableChangeListener(
+    virtual void removeVetoableChangeListener(
         OUString const &,
-        css::uno::Reference< css::beans::XVetoableChangeListener > const &) override
+        cpo::uno::Reference< css::beans::XVetoableChangeListener > const &) override
     {}
 };
 
@@ -225,6 +226,10 @@ cpo::uno::Any Default::getPropertyValue(OUString const & PropertyName)
 {
     if (PropertyName == "TemplatePathVariable")
     {
+        // In kit-mode the templates stay in the template directory of the user profile.
+        if (comphelper::COKit::isActive())
+            return cpo::uno::Any(css::beans::Optional<cpo::uno::Any>());
+
         // Never pick up the HOME directory as the default location of user's templates
         return xdgDirectoryIfExists("Templates", false);
     }
@@ -253,30 +258,30 @@ cpo::uno::Any Default::getPropertyValue(OUString const & PropertyName)
         PropertyName, getXWeak());
 }
 
-css::uno::Reference< css::uno::XInterface > createBackend(
-    css::uno::Reference< css::uno::XComponentContext > const & context,
+cpo::uno::Reference< cpo::uno::XInterface > createBackend(
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
     OUString const & name)
 {
     try {
-        return css::uno::Reference< css::lang::XMultiComponentFactory >(
-            context->getServiceManager(), css::uno::UNO_SET_THROW)->
+        return cpo::uno::Reference< css::lang::XMultiComponentFactory >(
+            context->getServiceManager(), cpo::uno::UNO_SET_THROW)->
             createInstanceWithContext(name, context);
-    } catch (css::uno::RuntimeException &) {
+    } catch (cpo::uno::RuntimeException &) {
         // Assuming these exceptions are real errors:
         throw;
     } catch (const cpo::uno::Exception &) {
         // Assuming these exceptions indicate that the service is not installed:
         TOOLS_WARN_EXCEPTION("shell", "createInstance(" << name << ") failed");
-        return css::uno::Reference< css::uno::XInterface >();
+        return cpo::uno::Reference< cpo::uno::XInterface >();
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_DesktopBackend_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     // Fall back to the default if the specific backend is not available:
-    css::uno::Reference< css::uno::XInterface > backend;
+    cpo::uno::Reference< cpo::uno::XInterface > backend;
     if (Application::GetDesktopEnvironment() == u"PLASMA5")
         backend = createBackend(context,
             u"com.sun.star.configuration.backend.KF5Backend"_ustr);

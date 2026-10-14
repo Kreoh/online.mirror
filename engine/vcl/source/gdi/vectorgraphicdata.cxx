@@ -36,7 +36,6 @@
 #include <comphelper/sequence.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/propertyvalue.hxx>
-#include <rtl/crc.h>
 #include <vcl/svapp.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/wmfexternal.hxx>
@@ -44,9 +43,10 @@
 #include <graphic/UnoBinaryDataContainer.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 Bitmap convertPrimitive2DSequenceToBitmap(
-    const std::deque< css::uno::Reference< css::graphic::XPrimitive2D > >& rSequence,
+    const std::deque< cpo::uno::Reference< css::graphic::XPrimitive2D > >& rSequence,
     const basegfx::B2DRange& rTargetRange,
     const sal_uInt32 nMaximumQuadraticPixels,
     const o3tl::Length eTargetUnit,
@@ -60,7 +60,7 @@ Bitmap convertPrimitive2DSequenceToBitmap(
         // create XPrimitive2DRenderer
         try
         {
-            const uno::Reference< uno::XComponentContext >& xContext(::comphelper::getProcessComponentContext());
+            const uno::Reference< cpo::uno::XComponentContext >& xContext(::comphelper::getProcessComponentContext());
             const uno::Reference< graphic::XPrimitive2DRenderer > xPrimitive2DRenderer = graphic::Primitive2DTools::create(xContext);
 
             cpo::uno::Sequence< beans::PropertyValue > aViewParameters = {
@@ -173,7 +173,7 @@ void VectorGraphicData::ensureSequenceAndRange()
     maRange.reset();
 
     // create Vector Graphic Data interpreter
-    const uno::Reference<uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
 
     switch (getType())
     {
@@ -184,7 +184,7 @@ void VectorGraphicData::ensureSequenceAndRange()
             const uno::Reference< graphic::XSvgParser > xSvgParser = graphic::SvgTools::create(xContext);
 
             if (xInputStream.is())
-                maSequence = comphelper::sequenceToContainer<std::deque<css::uno::Reference< css::graphic::XPrimitive2D >>>(xSvgParser->getDecomposition(xInputStream, OUString()));
+                maSequence = comphelper::sequenceToContainer<std::deque<cpo::uno::Reference< css::graphic::XPrimitive2D >>>(xSvgParser->getDecomposition(xInputStream, OUString()));
 
             break;
         }
@@ -210,7 +210,7 @@ void VectorGraphicData::ensureSequenceAndRange()
                     aPropertySequence = { comphelper::makePropertyValue(u"EMFPlusEnable"_ustr, cpo::uno::Any(false)) };
                 }
 
-                maSequence = comphelper::sequenceToContainer<std::deque<css::uno::Reference< css::graphic::XPrimitive2D >>>(xEmfParser->getDecomposition(xInputStream, OUString(), aPropertySequence));
+                maSequence = comphelper::sequenceToContainer<std::deque<cpo::uno::Reference< css::graphic::XPrimitive2D >>>(xEmfParser->getDecomposition(xInputStream, OUString(), aPropertySequence));
             }
 
             break;
@@ -219,7 +219,7 @@ void VectorGraphicData::ensureSequenceAndRange()
         {
             const uno::Reference<graphic::XPdfDecomposer> xPdfDecomposer = graphic::PdfTools::create(xContext);
             cpo::uno::Sequence<beans::PropertyValue> aDecompositionParameters = comphelper::InitPropertySequence({
-                {"PageIndex", cpo::uno::Any(sal_Int32(mnPageIndex))},
+                {u"PageIndex"_ustr, cpo::uno::Any(sal_Int32(mnPageIndex))},
             });
 
             rtl::Reference<UnoBinaryDataContainer> xDataContainer = new UnoBinaryDataContainer(getBinaryDataContainer());
@@ -240,7 +240,7 @@ void VectorGraphicData::ensureSequenceAndRange()
         for(sal_Int32 a(0); a < nCount; a++)
         {
             // get reference
-            const css::uno::Reference< css::graphic::XPrimitive2D > xReference(maSequence[a]);
+            const cpo::uno::Reference< css::graphic::XPrimitive2D > xReference(maSequence[a]);
 
             if(xReference.is())
             {
@@ -261,6 +261,17 @@ void VectorGraphicData::ensureSequenceAndRange()
 
 std::pair<VectorGraphicData::State, size_t> VectorGraphicData::getSizeBytes() const
 {
+    if (meType == VectorGraphicDataType::Pdf)
+    {
+        // Every page of one PDF holds the same bytes and is registered as a size holder, so
+        // each page reports an equal share and together the pages count the file once.
+        const size_t nHolderCount = std::max<size_t>(1, maDataContainer.getSizeHolderCount());
+        const size_t nContainerSize = maDataContainer.getSizeBytes() / nHolderCount;
+        const State eState = maSequence.empty() ? State::UNPARSED : State::PARSED;
+
+        return std::make_pair(eState, nContainerSize);
+    }
+
     if (!maSequence.empty() && !maDataContainer.isEmpty())
     {
         return std::make_pair(State::PARSED, maDataContainer.getSize() + mNestedBitmapSize);
@@ -278,10 +289,14 @@ VectorGraphicData::VectorGraphicData(BinaryDataContainer aDataContainer, VectorG
     meType(eVectorDataType),
     mnPageIndex(nPageIndex)
 {
+    if (meType == VectorGraphicDataType::Pdf)
+        maDataContainer.addSizeHolder();
 }
 
 VectorGraphicData::~VectorGraphicData()
 {
+    if (meType == VectorGraphicDataType::Pdf)
+        maDataContainer.removeSizeHolder();
 }
 
 const basegfx::B2DRange& VectorGraphicData::getRange() const
@@ -291,7 +306,7 @@ const basegfx::B2DRange& VectorGraphicData::getRange() const
     return maRange;
 }
 
-const std::deque< css::uno::Reference< css::graphic::XPrimitive2D > >& VectorGraphicData::getPrimitive2DSequence() const
+const std::deque< cpo::uno::Reference< css::graphic::XPrimitive2D > >& VectorGraphicData::getPrimitive2DSequence() const
 {
     const_cast< VectorGraphicData* >(this)->ensureSequenceAndRange();
 
@@ -307,7 +322,7 @@ const Bitmap& VectorGraphicData::getReplacement() const
 
 BitmapChecksum VectorGraphicData::GetChecksum() const
 {
-    return rtl_crc32(0, maDataContainer.getData(), maDataContainer.getSize());
+    return maDataContainer.getChecksum();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

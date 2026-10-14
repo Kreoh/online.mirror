@@ -17,7 +17,9 @@ $(eval $(call gb_Module_add_targets,scriptinterop,\
 ))
 
 $(eval $(call gb_Module_add_check_targets,scriptinterop,\
+    $(call gb_Helper_optional,QUICKJS,CppunitTest_scriptinterop_gas) \
     CppunitTest_scriptinterop_presentation \
+    CppunitTest_scriptinterop_spreadsheet \
 ))
 
 # vim: set noet sw=4 ts=4:

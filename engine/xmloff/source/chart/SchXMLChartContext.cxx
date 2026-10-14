@@ -64,7 +64,8 @@
 
 using namespace com::sun::star;
 using namespace ::xmloff::token;
-using com::sun::star::uno::Reference;
+using namespace ::cpo;
+using cpo::uno::Reference;
 using namespace ::SchXMLTools;
 
 namespace
@@ -342,7 +343,7 @@ void setDataProvider(uno::Reference<chart2::XChartDocument> const & xChartDoc, O
 }
 
 void SchXMLChartContext::startFastElement( sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     // parse attributes
 
@@ -518,14 +519,14 @@ namespace
 
 struct NewDonutSeries
 {
-    css::uno::Reference< css::chart2::XDataSeries > m_xSeries;
+    cpo::uno::Reference< css::chart2::XDataSeries > m_xSeries;
     OUString msStyleName;
     sal_Int32 mnAttachedAxis;
 
     ::std::vector< OUString > m_aSeriesStyles;
     ::std::vector< OUString > m_aPointStyles;
 
-    NewDonutSeries( css::uno::Reference< css::chart2::XDataSeries > xSeries, sal_Int32 nPointCount )
+    NewDonutSeries( cpo::uno::Reference< css::chart2::XDataSeries > xSeries, sal_Int32 nPointCount )
                     : m_xSeries(std::move( xSeries ))
                     , mnAttachedAxis( 1 )
     {
@@ -574,7 +575,7 @@ struct NewDonutSeries
 };
 
 void lcl_swapPointAndSeriesStylesForDonutCharts( ::std::vector< DataRowPointStyle >& rStyleVector
-        , ::std::map< css::uno::Reference< css::chart2::XDataSeries> , sal_Int32 >&& aSeriesMap )
+        , ::std::map< cpo::uno::Reference< css::chart2::XDataSeries> , sal_Int32 >&& aSeriesMap )
 {
     //detect old series count
     //and add old series to aSeriesMap
@@ -934,7 +935,9 @@ void SchXMLChartContext::endFastElement(sal_Int32 )
     }
     else
     {
-        SAL_WARN("xmloff.chart", "Must not get here" );
+        // The data stays in the document that holds the chart, and every series names the
+        // range it reads from. Neither merging series nor reading one rectangular range
+        // applies to a chart of that kind, so its data is already where it belongs.
     }
 
     if (maChartTypeServiceName == "com.sun.star.chart2.HistogramChartType")
@@ -1093,9 +1096,9 @@ void SchXMLChartContext::MergeSeriesForStockChart()
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLChartContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLChartContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext* pContext = nullptr;
     uno::Reference< chart::XChartDocument > xDoc = mrImportHelper.GetChartDocument();
@@ -1244,7 +1247,7 @@ SchXMLTitleContext::~SchXMLTitleContext()
 {}
 
 void SchXMLTitleContext::startFastElement( sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     css::awt::Point aPosition;
     bool bHasXPosition=false;
@@ -1288,9 +1291,9 @@ void SchXMLTitleContext::startFastElement( sal_Int32 /*nElement*/,
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLTitleContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLTitleContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     SvXMLImportContext* pContext = nullptr;
 

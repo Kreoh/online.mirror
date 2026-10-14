@@ -59,7 +59,7 @@ struct TileDescCacheHasher final
 {
     size_t operator()(const TileDesc& t) const
     {
-        size_t hash = t.getPart();
+        size_t hash = std::hash<std::string>{}(t.getPart());
 
         hash = (hash << 5) + hash + t.getEditMode();
         hash = (hash << 5) + hash + t.getWidth();
@@ -263,6 +263,10 @@ public:
 
     void saveTileAndNotify(const TileDesc& tile, const char* data, size_t size);
 
+    /// The kit found no page for this tile, so no pixels come for it. Stop waiting for the render,
+    /// and tell the sessions that asked for a preview that it is gone.
+    void forgetGoneTile(const TileDesc& tile);
+
     enum StreamType : std::uint8_t
     {
         Style,
@@ -289,7 +293,7 @@ public:
     bool invalidateTiles(const std::string& tiles, CanonicalViewId canonicalViewId);
 
     /// Parse invalidateTiles message to rectangle and associated attributes of the invalidated area
-    static Util::Rectangle parseInvalidateMsg(const std::string& tiles, int &part, int &mode, TileWireId &wid);
+    static Util::Rectangle parseInvalidateMsg(const std::string& tiles, std::string &part, int &mode, TileWireId &wid);
 
     /// Forget the tile being rendered if it is the latest version we expect.
     void forgetTileBeingRendered(const TileDesc& descForKitReply,
@@ -321,7 +325,6 @@ public:
     void setThreadOwner(const ProcUtil::ThreadId id) { _owner = id; }
     void assertCacheSize();
 
-#ifdef BUILDING_TESTS
     /// Test-only: register a tile as being rendered with the given start
     /// time, bypassing the need for a real ClientSession subscriber.
     /// Used to simulate scenarios where the kit has stalled or hung.
@@ -332,7 +335,6 @@ public:
         const TileDesc& tile,
         std::chrono::steady_clock::time_point startTime,
         const std::shared_ptr<ClientSession>& subscriber = {});
-#endif
 
 private:
     void ensureCacheSize();
@@ -340,18 +342,15 @@ private:
 
     /// Removes the invalid tiles from the cache
     /// returns true if cache wasn't empty
-    bool invalidateTiles(int part, int mode, int x, int y, int width, int height, CanonicalViewId canonicalViewId);
+    bool invalidateTiles(const std::string& part, int mode, int x, int y, int width, int height, CanonicalViewId canonicalViewId);
 
     /// Lookup tile in our cache.
     Tile findTile(const TileDesc &desc);
 
     static std::string cacheFileName(const TileDesc& tileDesc);
-    static bool parseCacheFileName(const std::string& fileName, int& part, int& mode,
-                                   int& width, int& height, int& tilePosX, int& tilePosY,
-                                   int& tileWidth, int& tileHeight, int& nviewid);
 
     /// Extract location from fileName, and check if it intersects with [x, y, width, height].
-    static bool intersectsTile(const TileDesc &tileDesc, int part, int mode, int x, int y,
+    static bool intersectsTile(const TileDesc &tileDesc, const std::string& part, int mode, int x, int y,
                                int width, int height, CanonicalViewId canonicalViewId);
 
     Tile saveDataToCache(const TileDesc& desc, const char* data, size_t size);

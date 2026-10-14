@@ -110,15 +110,15 @@ public:
     virtual void hideExtraControls() const;
     virtual void
     fillExtraControls(const rtl::Reference<::chart::ChartModel>& xChartModel,
-                      const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const;
-    /// @throws css::uno::RuntimeException
+                      const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const;
+    /// @throws cpo::uno::RuntimeException
     virtual void setTemplateProperties(
-        const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const;
+        const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const;
 
     bool isSubType(const OUString& rServiceName);
     ChartTypeParameter getChartTypeParameterForService(
         const OUString& rServiceName,
-        const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps);
+        const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps);
     virtual void adjustSubTypeAndEnableControls(
         ChartTypeParameter&
             rParameter); //if you have different counts of subtypes you may need to adjust the index
@@ -128,7 +128,7 @@ public:
     void
     commitToModel(const ChartTypeParameter& rParameter,
                   const rtl::Reference<::chart::ChartModel>& xChartModel,
-                  const css::uno::Reference<com::sun::star::beans::XPropertySet>& xTemplateProps);
+                  const cpo::uno::Reference<com::sun::star::beans::XPropertySet>& xTemplateProps);
     rtl::Reference<::chart::ChartTypeTemplate>
     getCurrentTemplate(const ChartTypeParameter& rParameter,
                        const rtl::Reference<::chart::ChartTypeManager>& xTemplateManager) const;
@@ -179,17 +179,18 @@ public:
     virtual OUString getChartName(sal_Int32 nId) const override;
 };
 
-class HistogramChartDialogController final : public ChartTypeDialogController
+class StatisticalChartDialogController final : public ChartTypeDialogController
 {
 public:
-    HistogramChartDialogController();
-    virtual ~HistogramChartDialogController() override;
+    StatisticalChartDialogController();
+    virtual ~StatisticalChartDialogController() override;
 
     virtual OUString getName() override;
     virtual OUString getImage() override;
     virtual const tTemplateServiceChartTypeParameterMap& getTemplateMap() const override;
     virtual void fillSubTypeList(weld::IconView& rSubTypeList,
                                  const ChartTypeParameter& rParameter) override;
+    virtual OUString getChartName(sal_Int32 nId) const override;
     virtual void adjustParameterToSubType(ChartTypeParameter& rParameter) override;
 };
 
@@ -244,10 +245,10 @@ public:
     virtual void hideExtraControls() const override;
     virtual void fillExtraControls(
         const rtl::Reference<::chart::ChartModel>& xChartModel,
-        const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
+        const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
 
     virtual void setTemplateProperties(
-        const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
+        const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
 
 private:
     DECL_LINK(ChangeCompositeSizeHdl, weld::SpinButton&, void);
@@ -364,10 +365,10 @@ public:
     virtual void hideExtraControls() const override;
     virtual void fillExtraControls(
         const rtl::Reference<::chart::ChartModel>& xChartModel,
-        const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
+        const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
 
     virtual void setTemplateProperties(
-        const css::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
+        const cpo::uno::Reference<css::beans::XPropertySet>& xTemplateProps) const override;
 
 private:
     DECL_LINK(ChangeLineCountHdl, weld::SpinButton&, void);

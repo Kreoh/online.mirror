@@ -34,6 +34,50 @@ using namespace ::oox::core;
 
 namespace oox::drawingml {
 
+namespace
+{
+// Reads the shape of a layout node, the adjustment list of that shape included. A Diagram states
+// each adjustment as a part of one, where a shape of its own states them in 100/1000th.
+class DiagramShapeContext final : public ShapeContext
+{
+public:
+    DiagramShapeContext(::oox::core::ContextHandler2Helper const& rParent,
+                        const ShapePtr& rShapePtr)
+        : ShapeContext(rParent, ShapePtr(), rShapePtr)
+        , mpShape(rShapePtr)
+    {
+    }
+
+    ::oox::core::ContextHandlerRef onCreateContext(sal_Int32 nElement,
+                                                   const AttributeList& rAttribs) override
+    {
+        switch (nElement)
+        {
+            case DGM_TOKEN(adjLst):
+                return this;
+            case DGM_TOKEN(adj):
+            {
+                const sal_Int32 nIndex(rAttribs.getInteger(XML_idx, 1));
+                const double fValue(rAttribs.getDouble(XML_val, 0.0));
+                const sal_Int32 nScaled(static_cast<sal_Int32>(fValue * 100000.0));
+                mpShape->getCustomShapeProperties()->getAdjustmentGuideList().push_back(
+                    { "adj" + OUString::number(nIndex),
+                                      OUString::number(nScaled) });
+                return nullptr;
+            }
+            default:
+                break;
+        }
+
+        return ShapeContext::onCreateContext(nElement, rAttribs);
+    }
+
+private:
+    ShapePtr mpShape;
+};
+}
+
+
 namespace {
 
 class IfContext
@@ -74,11 +118,20 @@ public:
                         case XML_ar:
                             mpNode->setAspectRatio(rAttribs.getDouble(XML_val, 0));
                             break;
-                        default:
-                            const sal_Int32 nValTok = rAttribs.getToken(XML_val, 0);
-                            mpNode->addParam(nType, nValTok > 0 ? nValTok
-                                                                : rAttribs.getInteger(XML_val, 0));
+                        case XML_srcNode:
+                        case XML_dstNode:
+                            mpNode->addNamedParam(nType, rAttribs.getStringDefaulted(XML_val));
                             break;
+                        default:
+                        {
+                            // The value is a token where it is one, 1D is the token numbered 0,
+                            // and a number otherwise.
+                            const sal_Int32 nValTok = rAttribs.getToken(XML_val, XML_TOKEN_INVALID);
+                            mpNode->addParam(nType, nValTok != XML_TOKEN_INVALID
+                                                        ? nValTok
+                                                        : rAttribs.getInteger(XML_val, 0));
+                            break;
+                        }
                     }
                     break;
                 }
@@ -248,7 +301,7 @@ LayoutNodeContext::onCreateContext( ::sal_Int32 aElement,
 
         ShapeAtomPtr pAtom = std::make_shared<ShapeAtom>(mpNode->getLayoutNode(), pShape);
         LayoutAtom::connect(mpNode, pAtom);
-        return new ShapeContext( *this, ShapePtr(), std::move(pShape) );
+        return new DiagramShapeContext( *this, pShape );
     }
     case DGM_TOKEN( extLst ):
         return nullptr;
@@ -278,10 +331,17 @@ LayoutNodeContext::onCreateContext( ::sal_Int32 aElement,
         return new ConstraintListContext( *this, mpNode );
     case DGM_TOKEN( presOf ):
     {
-        // CT_PresentationOf
-        // TODO
+        // CT_PresentationOf: defines the data Points that the shape of this layout node represents. The
+        // point type says whether those are nodes or one of the two transition Points, so a
+        // layout node that carries it represents a data Point and one that does not is a container
         IteratorAttr aIterator;
         aIterator.loadFromXAttr(rAttribs.getFastAttributeList());
+
+        LayoutNodePtr pNode(std::dynamic_pointer_cast<LayoutNode>(mpNode));
+
+        if (pNode)
+            pNode->setPresentationOf(aIterator);
+
         break;
     }
     case DGM_TOKEN( ruleLst ):

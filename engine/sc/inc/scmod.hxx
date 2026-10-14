@@ -28,7 +28,7 @@
 #include "global.hxx"
 #include "shellids.hxx"
 #include <unotools/options.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 #include <vector>
 #include <map>
@@ -105,7 +105,7 @@ class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ScModule final : public SfxModule, pu
     // a way to find existing Dialogs for a given parent Window of the slot type
     std::map<sal_uInt16, std::vector<std::pair<std::shared_ptr<SfxDialogController>, weld::Window*>>> m_mapRefController;
 
-    css::uno::Reference< ooo::vba::XSinkCaller > mxAutomationApplicationEventsCaller;
+    cpo::uno::Reference< ooo::vba::XSinkCaller > mxAutomationApplicationEventsCaller;
 
 public:
                     SFX_DECL_INTERFACE(SCID_APP)
@@ -164,7 +164,6 @@ public:
     SC_DLLPUBLIC const ScFormulaOptions&    GetFormulaOptions ();
     SC_DLLPUBLIC const ScInputOptions&      GetInputOptions ();
     SC_DLLPUBLIC const ScPrintOptions&      GetPrintOptions ();
-    void                SetViewOptions  ( const ScViewOptions& rOpt );
     SC_DLLPUBLIC void   SetDocOptions   ( const ScDocOptions& rOpt );
     SC_DLLPUBLIC void   SetAppOptions   ( const ScAppOptions& rOpt );
     SC_DLLPUBLIC void   SetDefaultsOptions ( const ScDefaultsOptions& rOpt );
@@ -175,8 +174,8 @@ public:
     void                InsertOrEraseFavouritesListEntry(sal_uInt16 nFIndex, bool bInsert);
 
     static void         GetSpellSettings( LanguageType& rDefLang, LanguageType& rCjkLang, LanguageType& rCtlLang );
-    static void         SetAutoSpellProperty( bool bSet );
-    static bool         GetAutoSpellProperty();
+    SC_DLLPUBLIC static void SetAutoSpellProperty( bool bSet );
+    SC_DLLPUBLIC static bool GetAutoSpellProperty();
     static bool         HasThesaurusLanguage( LanguageType nLang );
 
     static LanguageType GetOptDigitLanguage();      // from CTL options
@@ -226,9 +225,6 @@ public:
     sal_uInt16          GetCurRefDlgId() const                  { return m_nCurRefDlgId; }
 
     // virtual methods for the options dialog
-    virtual std::optional<SfxItemSet> CreateItemSet( sal_uInt16 nId ) override;
-    virtual void         ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet ) override;
-    virtual std::unique_ptr<SfxTabPage> CreateTabPage( sal_uInt16 nId, weld::Container* pPage, weld::DialogController* pController, const SfxItemSet& rSet ) override;
     virtual SfxStyleFamilies CreateStyleFamilies() override;
 
     void                SetInSharedDocLoading( bool bNew )  { m_bIsInSharedDocLoading = bNew; }
@@ -240,7 +236,7 @@ public:
     SC_DLLPUBLIC void   UnregisterRefController(sal_uInt16 nSlotId, const std::shared_ptr<SfxDialogController>& rWnd);
     SC_DLLPUBLIC std::shared_ptr<SfxDialogController> Find1RefWindow(sal_uInt16 nSlotId, const weld::Window *pWndAncestor);
 
-    SC_DLLPUBLIC void RegisterAutomationApplicationEventsCaller(css::uno::Reference< ooo::vba::XSinkCaller > const& xCaller);
+    SC_DLLPUBLIC void RegisterAutomationApplicationEventsCaller(cpo::uno::Reference< ooo::vba::XSinkCaller > const& xCaller);
     SC_DLLPUBLIC void CallAutomationApplicationEventSinks(const OUString& Method, cpo::uno::Sequence< cpo::uno::Any >& Arguments);
 
     static auto get() { return static_cast<ScModule*>(SfxApplication::GetModule(SfxToolsModule::Calc)); }

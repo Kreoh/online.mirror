@@ -33,10 +33,8 @@
 #include <editeng/numitem.hxx>
 #include "tox.hxx"
 #include "frmfmt.hxx"
-#include "frameformats.hxx"
 #include "charfmt.hxx"
 #include "docary.hxx"
-#include "charformats.hxx"
 #include "pagedesc.hxx"
 #include "tblenum.hxx"
 #include "ndarr.hxx"
@@ -64,6 +62,7 @@ class SvxMacro;
 class SwAutoCompleteWord;
 class SwAutoCorrExceptWord;
 class SwCellFrame;
+class SwCharFormats;
 class SwCellStyleTable;
 class SwCursorShell;
 class SwCursor;
@@ -97,6 +96,7 @@ class SwTableBoxFormat;
 class SwTableFormat;
 class SwTableLineFormat;
 class SwTableNode;
+class SwUndoTableStyleLive;
 class SwTextBlocks;
 class SwURLStateChanged;
 class SwUnoCursor;
@@ -145,6 +145,8 @@ namespace sw {
     enum class RedlineMode;
     enum class FieldmarkMode;
     enum class ParagraphBreakMode;
+    template<class T> class FrameFormats;
+    typedef FrameFormats<::SwTableFormat*> TableFrameFormats;
     class MetaFieldManager;
     class UndoManager;
     class IShellCursorSupplier;
@@ -213,9 +215,9 @@ class SwDoc final
     SwDBData    maDBData;                //< database descriptor
     OUString    msTOIAutoMarkURL;        //< URL of table of index AutoMark file
     std::vector<OUString> m_PatternNames; //< Array for names of document-templates
-    css::uno::Reference<css::container::XNameContainer>
+    cpo::uno::Reference<css::container::XNameContainer>
         mxXForms;                        //< container with XForms models
-    mutable css::uno::Reference< css::linguistic2::XProofreadingIterator > m_xGCIterator;
+    mutable cpo::uno::Reference< css::linguistic2::XProofreadingIterator > m_xGCIterator;
 
     const std::unique_ptr< ::sw::mark::MarkManager> mpMarkManager;
     const std::unique_ptr< ::sw::MetaFieldManager > m_pMetaFieldManager;
@@ -293,9 +295,9 @@ class SwDoc final
     std::unique_ptr<sw::GrammarContact> mpGrammarContact; //< for grammar checking in paragraphs during editing
     std::unique_ptr<sw::OnlineAccessibilityCheck> mpOnlineAccessibilityCheck;
 
-    css::uno::Reference< css::script::vba::XVBAEventProcessor > mxVbaEvents;
-    css::uno::Reference< ooo::vba::word::XFind > mxVbaFind;
-    css::uno::Reference<css::container::XNameContainer> m_xTemplateToProjectCache;
+    cpo::uno::Reference< css::script::vba::XVBAEventProcessor > mxVbaEvents;
+    cpo::uno::Reference< ooo::vba::word::XFind > mxVbaFind;
+    cpo::uno::Reference<css::container::XNameContainer> m_xTemplateToProjectCache;
 
     /// Table styles (autoformats that are applied with table changes).
     std::unique_ptr<SwTableAutoFormatTable> m_pTableStyles;
@@ -338,6 +340,8 @@ private:
     bool mbColumnSelection       : 1;    //< TRUE: this content has been created by a column selection (clipboard docs only)
     bool mbIsPrepareSelAll       : 1;
     bool mbDontCorrectBookmarks = false;
+    /// Is in the process of receiving a merged paste.
+    bool mbInMergedPaste = false;
 
     enum MissingDictionary { False = -1, Undefined = 0, True = 1 };
     MissingDictionary meDictionaryMissing;
@@ -675,12 +679,12 @@ public:
         spell-checking/hyphenating/word-counting
     */
     cpo::uno::Any
-            Spell( SwPaM&, css::uno::Reference< css::linguistic2::XSpellChecker > const &,
+            Spell( SwPaM&, cpo::uno::Reference< css::linguistic2::XSpellChecker > const &,
                    sal_uInt16* pPageCnt, sal_uInt16* pPageSt, bool bGrammarCheck,
                    SwRootFrame const* pLayout, // for grammar-check
                    SwConversionArgs *pConvArgs = nullptr ) const;
 
-    css::uno::Reference< css::linguistic2::XHyphenatedWord >
+    cpo::uno::Reference< css::linguistic2::XHyphenatedWord >
             Hyphenate( SwPaM *pPam, const Point &rCursorPos,
                          sal_uInt16* pPageCnt, sal_uInt16* pPageSt );
 
@@ -801,8 +805,7 @@ public:
     SW_DLLPUBLIC SwCharFormat *MakeCharFormat(const UIName &rFormatName, SwCharFormat *pDerivedFrom);
     void       DelCharFormat(size_t nFormat, bool bBroadcast = false);
     void       DelCharFormat(SwCharFormat const * pFormat, bool bBroadcast = false);
-    SwCharFormat* FindCharFormatByName( const UIName& rName ) const
-        {   return mpCharFormatTable->FindFormatByName(rName); }
+    SW_DLLPUBLIC SwCharFormat* FindCharFormatByName( const UIName& rName ) const;
 
     // Formatcollections (styles)
     // TXT
@@ -814,8 +817,12 @@ public:
                                   SwTextFormatColl *pDerivedFrom);
     SwConditionTextFormatColl* MakeCondTextFormatColl( const UIName &rFormatName,
                                                SwTextFormatColl *pDerivedFrom);
+    /// Create a paragraph collection that carries a table style role's text formatting on
+    /// top of rBase. It is not in the collection list and belongs to the table that asked
+    /// for it.
+    SwTextFormatColl* MakeTableStyleRoleColl(SwTextFormatColl& rBase);
     void DelTextFormatColl(size_t nFormat, bool bBroadcast = false);
-    void DelTextFormatColl( SwTextFormatColl const * pColl, bool bBroadcast = false );
+    SW_DLLPUBLIC void DelTextFormatColl( SwTextFormatColl const * pColl, bool bBroadcast = false );
     /** Add 4th optional parameter <bResetListAttrs>.
      'side effect' of <SetTextFormatColl> with <bReset = true> is that the hard
      attributes of the affected text nodes are cleared, except the break
@@ -875,7 +882,7 @@ public:
     /** Replace all user defined document properties with xSourceDocProps.
         Convenience function used by ReplaceDocumentProperties to skip some UNO calls.
      */
-    void ReplaceUserDefinedDocumentProperties( const css::uno::Reference< css::document::XDocumentProperties >& xSourceDocProps );
+    void ReplaceUserDefinedDocumentProperties( const cpo::uno::Reference< css::document::XDocumentProperties >& xSourceDocProps );
 
     /** Replace document properties with those from rSource.
 
@@ -987,6 +994,9 @@ public:
 
     bool IsInReading() const                    { return mbInReading; }
     void SetInReading( bool bNew )              { mbInReading = bNew; }
+
+    bool IsInMergedPaste() const { return mbInMergedPaste; }
+    void SetInMergedPaste(bool bNew) { mbInMergedPaste = bNew; }
 
     bool IsInWriting() const { return mbInWriting; }
     void SetInWriting(bool bNew) { mbInWriting = bNew; }
@@ -1275,9 +1285,44 @@ public:
 
     void SetRowsToRepeat( SwTable &rTable, sal_uInt16 nSet );
 
-    /// AutoFormat for table/table selection.
-    /// @param bResetDirect Reset direct formatting that might be applied to the cells.
-    bool SetTableAutoFormat(const SwSelBoxes& rBoxes, const SwTableAutoFormat& rNew, bool bResetDirect = false, TableStyleName const* pStyleNameToSet = nullptr);
+    /// Resolve the whole table's current table style name and settings (SwTable::
+    /// GetTableStyleName/GetTableStyleSettings) live: every cell derives its border and
+    /// background from a shared per-role frame format, and every paragraph gets the role
+    /// collection of its cell (see GetTableStyleRoleColl), so a later settings or style
+    /// change takes effect without touching cell content. A cell's own border and background
+    /// stay in place unless bResetCellFormatting asks for the style's to replace them. The
+    /// shared role formats and collections are rebuilt when the style name or settings differ
+    /// from those they were built for, or when bStyleDefinitionChanged says the style itself
+    /// was edited; otherwise only cells and paragraphs whose role moved are touched.
+    /// Returns false if the table has no style set.
+    SW_DLLPUBLIC bool ApplyTableStyleLive(SwTableNode& rTableNode, bool bResetCellFormatting = false,
+                                          bool bStyleDefinitionChanged = false);
+
+    /// Applies the table's style as one undo step. The undo action given, if any, stands for
+    /// the whole application, so the attribute changes made on the way record nothing of their
+    /// own. With bApplyTableProperties the style's own table properties, the repeated heading
+    /// rows among them, are put on the table first.
+    SW_DLLPUBLIC bool ApplyTableStyleLiveWithUndo(SwTableNode& rTableNode,
+                                                  std::unique_ptr<SwUndoTableStyleLive> pUndo,
+                                                  bool bResetCellFormatting,
+                                                  bool bApplyTableProperties);
+
+    /// Resolve the table's style live and then drop from its cells and paragraphs every own
+    /// item that only repeats what their style role provides. Documents written before the
+    /// style was resolved live carry the style's values as direct formatting, which would
+    /// otherwise win over a role change for good.
+    /// bCompleteStyleBoxes says the file was written by code that wrote a style box's
+    /// complete item set, defaults included; otherwise only the items the style defines
+    /// count as repeating it.
+    SW_DLLPUBLIC void StripBakedTableStyleFormatting(SwTableNode& rTableNode,
+                                                     bool bCompleteStyleBoxes);
+
+    /// The paragraph collection carrying the table style text formatting for paragraphs
+    /// with the paragraph style rBase in the cell whose section starts at rBoxStart, or
+    /// nullptr if the table has no live style or the style defines no text formatting for
+    /// that cell's role.
+    SwTextFormatColl* GetTableStyleRoleColl(SwTable& rTable, const SwStartNode& rBoxStart,
+                                            SwTextFormatColl& rBase);
 
     // Query attributes.
     bool GetTableAutoFormat( const SwSelBoxes& rBoxes, SwTableAutoFormat& rGet );
@@ -1418,8 +1463,11 @@ public:
         no file name. */
     SW_DLLPUBLIC OUString GetLinkReferer() const;
 
+    /** Whether a link in this document may be followed to the location it names. */
+    SW_DLLPUBLIC bool AllowAccessLink() const;
+
     // Pointer to storage of SfxDocShells. Can be 0!!!
-    SW_DLLPUBLIC css::uno::Reference< css::embed::XStorage > GetDocStorage();
+    SW_DLLPUBLIC cpo::uno::Reference< css::embed::XStorage > GetDocStorage();
 
     // Query / set flag indicating if document is loaded asynchronously at this moment.
     bool IsInLoadAsynchron() const             { return mbInLoadAsynchron; }
@@ -1722,10 +1770,10 @@ public:
     // access methods for XForms model(s)
 
     // access container for XForms model; will be NULL if !isXForms()
-    const css::uno::Reference<css::container::XNameContainer>&
+    const cpo::uno::Reference<css::container::XNameContainer>&
         getXForms() const { return mxXForms;}
 
-    css::uno::Reference< css::linguistic2::XProofreadingIterator > const & GetGCIterator() const;
+    cpo::uno::Reference< css::linguistic2::XProofreadingIterator > const & GetGCIterator() const;
 
     // #i31958# is this an XForms document?
     bool isXForms() const;
@@ -1740,12 +1788,12 @@ public:
     SW_DLLPUBLIC void SetDefaultPageMode(bool bSquaredPageMode);
     SW_DLLPUBLIC bool IsSquaredPageMode() const;
 
-    const css::uno::Reference< ooo::vba::word::XFind >& getVbaFind() const { return mxVbaFind; }
-    void setVbaFind( const css::uno::Reference< ooo::vba::word::XFind > &xFind) { mxVbaFind = xFind; }
-    css::uno::Reference< css::script::vba::XVBAEventProcessor > const & GetVbaEventProcessor();
+    const cpo::uno::Reference< ooo::vba::word::XFind >& getVbaFind() const { return mxVbaFind; }
+    void setVbaFind( const cpo::uno::Reference< ooo::vba::word::XFind > &xFind) { mxVbaFind = xFind; }
+    cpo::uno::Reference< css::script::vba::XVBAEventProcessor > const & GetVbaEventProcessor();
     SW_DLLPUBLIC void SetVbaEventProcessor();
-    void SetVBATemplateToProjectCache( css::uno::Reference< css::container::XNameContainer > const & xCache ) { m_xTemplateToProjectCache = xCache; };
-    const css::uno::Reference< css::container::XNameContainer >& GetVBATemplateToProjectCache() const { return m_xTemplateToProjectCache; };
+    void SetVBATemplateToProjectCache( cpo::uno::Reference< css::container::XNameContainer > const & xCache ) { m_xTemplateToProjectCache = xCache; };
+    const cpo::uno::Reference< css::container::XNameContainer >& GetVBATemplateToProjectCache() const { return m_xTemplateToProjectCache; };
     ::sfx2::IXmlIdRegistry& GetXmlIdRegistry();
     SW_DLLPUBLIC ::sw::MetaFieldManager & GetMetaFieldManager();
     SW_DLLPUBLIC ::SwContentControlManager& GetContentControlManager();

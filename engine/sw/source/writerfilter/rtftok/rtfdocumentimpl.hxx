@@ -258,6 +258,10 @@ public:
 
     css::text::WrapTextMode getWrap() const { return m_nWrap; }
 
+    void setWrapSide(sal_uInt32 nWrapSide) { m_nWrapSide = nWrapSide; }
+
+    sal_uInt32 getWrapSide() const { return m_nWrapSide; }
+
     void setInBackground(bool bInBackground) { m_bInBackground = bInBackground; }
 
     bool getInBackground() const { return m_bInBackground; }
@@ -283,6 +287,9 @@ private:
     sal_uInt32 m_nHoriOrientRelationToken = 0; ///< Horizontal dmapper token for Writer pictures.
     sal_uInt32 m_nVertOrientRelationToken = 0; ///< Vertical dmapper token for Writer pictures.
     css::text::WrapTextMode m_nWrap = css::text::WrapTextMode::WrapTextMode_MAKE_FIXED_SIZE;
+    /// Which side of the shape the text runs down, as an ST_WrapText token. Zero when the file
+    /// does not say, which leaves the text on both sides.
+    sal_uInt32 m_nWrapSide = 0;
     /// If shape is below text (true) or text is below shape (false).
     bool m_bInBackground = false;
     /// Wrap polygon, written by RTFSdrImport::resolve(), read by RTFDocumentImpl::resolvePict().
@@ -299,13 +306,13 @@ class RTFDrawingObject : public RTFShape
 public:
     RTFDrawingObject();
 
-    void setShape(const css::uno::Reference<css::drawing::XShape>& xShape) { m_xShape = xShape; }
-    const css::uno::Reference<css::drawing::XShape>& getShape() const { return m_xShape; }
-    void setPropertySet(const css::uno::Reference<css::beans::XPropertySet>& xPropertySet)
+    void setShape(const cpo::uno::Reference<css::drawing::XShape>& xShape) { m_xShape = xShape; }
+    const cpo::uno::Reference<css::drawing::XShape>& getShape() const { return m_xShape; }
+    void setPropertySet(const cpo::uno::Reference<css::beans::XPropertySet>& xPropertySet)
     {
         m_xPropertySet = xPropertySet;
     }
-    const css::uno::Reference<css::beans::XPropertySet>& getPropertySet() const
+    const cpo::uno::Reference<css::beans::XPropertySet>& getPropertySet() const
     {
         return m_xPropertySet;
     }
@@ -337,8 +344,8 @@ public:
     bool getHadShapeText() const { return m_bHadShapeText; }
 
 private:
-    css::uno::Reference<css::drawing::XShape> m_xShape;
-    css::uno::Reference<css::beans::XPropertySet> m_xPropertySet;
+    cpo::uno::Reference<css::drawing::XShape> m_xShape;
+    cpo::uno::Reference<css::beans::XPropertySet> m_xPropertySet;
     std::vector<css::beans::PropertyValue> m_aPendingProperties;
     sal_uInt8 m_nLineColorR = 0;
     sal_uInt8 m_nLineColorG = 0;
@@ -690,7 +697,7 @@ RTFValue::Pointer_t getNestedSprm(RTFSprms& rSprms, Id nParent, Id nId);
 /// Checks if rName is contained at least once in rProperties as a key.
 bool findPropertyName(const std::vector<css::beans::PropertyValue>& rProperties,
                       const OUString& rName);
-RTFSprms& getLastAttributes(RTFSprms& rSprms, Id nId);
+RTFSprms* getLastAttributes(RTFSprms& rSprms, Id nId);
 OUString DTTM22OUString(tools::Long nDTTM);
 
 /// Implementation of the RTFDocument interface.
@@ -698,11 +705,11 @@ class RTFDocumentImpl : public RTFDocument, public RTFListener
 {
 public:
     using Pointer_t = tools::SvRef<RTFDocumentImpl>;
-    RTFDocumentImpl(css::uno::Reference<css::uno::XComponentContext> const& xContext,
-                    css::uno::Reference<css::io::XInputStream> const& xInputStream,
+    RTFDocumentImpl(cpo::uno::Reference<cpo::uno::XComponentContext> const& xContext,
+                    cpo::uno::Reference<css::io::XInputStream> const& xInputStream,
                     rtl::Reference<SwXTextDocument> const& xDstDoc,
-                    css::uno::Reference<css::frame::XFrame> const& xFrame,
-                    css::uno::Reference<css::task::XStatusIndicator> const& xStatusIndicator,
+                    cpo::uno::Reference<css::frame::XFrame> const& xFrame,
+                    cpo::uno::Reference<css::task::XStatusIndicator> const& xStatusIndicator,
                     const comphelper::SequenceAsHashMap& rMediaDescriptor);
     ~RTFDocumentImpl() override;
 
@@ -744,14 +751,14 @@ public:
     bool isInBackground();
     void setDestinationText(std::u16string_view rString);
     /// Resolve a picture: If not inline, then anchored.
-    void resolvePict(bool bInline, css::uno::Reference<css::drawing::XShape> const& rShape);
+    void resolvePict(bool bInline, cpo::uno::Reference<css::drawing::XShape> const& rShape);
     /** tdf#167713 defer inserting a built shape into the text, if content is being buffered
 
         Inside a table the cells only come into existence when the row buffer is replayed, so the
         shape has to wait for the cell it belongs to. Returns false when nothing is being buffered
         and the caller should insert the shape itself.
     */
-    bool bufferShapeInsertion(css::uno::Reference<css::drawing::XShape> const& rShape, bool bClose);
+    bool bufferShapeInsertion(cpo::uno::Reference<css::drawing::XShape> const& rShape, bool bClose);
 
     /// If this is the first run of the document, starts the initial paragraph.
     void checkFirstRun();
@@ -821,6 +828,11 @@ private:
     void replayRowBuffer(RTFBuffer_t& rBuffer, ::std::deque<RTFSprms>& rCellsSprms,
                          ::std::deque<RTFSprms>& rCellsAttributes, int nCells);
     void replayBuffer(RTFBuffer_t& rBuffer, RTFSprms* pSprms, RTFSprms const* pAttributes);
+    /// Sends one buffer entry to the dmapper.
+    void sendBufferEntry(Buf_t aTuple);
+    /// Appends the entry to the current buffer, or sends it to the dmapper when there is none.
+    void bufferOrSend(RTFBufferTypes eType,
+                      RTFValue::Pointer_t const& pValue = RTFValue::Pointer_t());
     /// If we have some unicode or hex characters to send.
     void checkUnicode(bool bUnicode, bool bHex);
     /// If we need a final section break at the end of the document.
@@ -833,12 +845,12 @@ private:
     /// Turns the destination text into an input stream of the current OLE attributes.
     RTFError handleEmbeddedObject();
 
-    css::uno::Reference<css::uno::XComponentContext> const& m_xContext;
-    css::uno::Reference<css::io::XInputStream> const& m_xInputStream;
+    cpo::uno::Reference<cpo::uno::XComponentContext> const& m_xContext;
+    cpo::uno::Reference<css::io::XInputStream> const& m_xInputStream;
     rtl::Reference<SwXTextDocument> const& m_xDstDoc;
-    css::uno::Reference<css::frame::XFrame> const& m_xFrame;
-    css::uno::Reference<css::task::XStatusIndicator> const& m_xStatusIndicator;
-    css::uno::Reference<css::document::XDocumentProperties> m_xDocumentProperties;
+    cpo::uno::Reference<css::frame::XFrame> const& m_xFrame;
+    cpo::uno::Reference<css::task::XStatusIndicator> const& m_xStatusIndicator;
+    cpo::uno::Reference<css::document::XDocumentProperties> m_xDocumentProperties;
     std::unique_ptr<SvStream> m_pInStream;
     Stream* m_pMapperStream;
     tools::SvRef<RTFSdrImport> m_pSdrImport;

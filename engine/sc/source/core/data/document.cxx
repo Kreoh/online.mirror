@@ -109,6 +109,7 @@
 
 using ::editeng::SvxBorderLine;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace WritingMode2 = ::com::sun::star::text::WritingMode2;
 using ::cpo::uno::Sequence;
@@ -1163,10 +1164,50 @@ SCROW ScDocument::GetLastDataRow( SCTAB nTab, SCCOL nCol1, SCCOL nCol2, SCROW nL
 // connected area
 
 void ScDocument::GetDataArea( SCTAB nTab, SCCOL& rStartCol, SCROW& rStartRow,
-                              SCCOL& rEndCol, SCROW& rEndRow, bool bIncludeOld, bool bOnlyDown ) const
+                              SCCOL& rEndCol, SCROW& rEndRow, bool bIncludeOld, bool bOnlyDown,
+                              bool bExcludeDBRange ) const
 {
-    if (const ScTable* pTable = FetchTable(nTab))
-        pTable->GetDataArea( rStartCol, rStartRow, rEndCol, rEndRow, bIncludeOld, bOnlyDown );
+    const ScTable* pTable = FetchTable(nTab);
+    if (!pTable)
+        return;
+
+    // Anchor = the input cell, before the area grows around it.
+    const ScAddress aAnchor(rStartCol, rStartRow, nTab);
+
+    pTable->GetDataArea( rStartCol, rStartRow, rEndCol, rEndRow, bIncludeOld, bOnlyDown );
+
+    if (!bExcludeDBRange)
+        return;
+
+    // Treat any named database range as a boundary: subtract each foreign range from the
+    // grown area, keep the piece holding the anchor, then re-shrink to its own data.
+    const ScRange aGrown(rStartCol, rStartRow, nTab, rEndCol, rEndRow, nTab);
+    ScRangeList aPieces(aGrown);
+    for (const ScDBData* pDB : GetAllNamedDBsInArea(aGrown))
+    {
+        ScRange aArea;
+        pDB->GetArea(aArea);
+        // Keep the range the anchor itself sits in; only carve out foreign ones.
+        if (!aArea.Contains(aAnchor))
+            aPieces.DeleteArea(aArea.aStart.Col(), aArea.aStart.Row(), nTab,
+                               aArea.aEnd.Col(), aArea.aEnd.Row(), nTab);
+    }
+    for (size_t i = 0; i < aPieces.size(); ++i)
+    {
+        if (aPieces[i].Contains(aAnchor))
+        {
+            // Trim the surviving piece to its own data: carving out the neighbour can leave
+            // the empty rows/cols it had padded the grown area with. A sheet-wide shrink
+            // misses them (the neighbour still holds that extent), so shrink per-range.
+            ScRange aPiece(aPieces[i]);
+            GetDataAreaSubrange(aPiece);
+            rStartCol = aPiece.aStart.Col();
+            rStartRow = aPiece.aStart.Row();
+            rEndCol   = aPiece.aEnd.Col();
+            rEndRow   = aPiece.aEnd.Row();
+            break;
+        }
+    }
 }
 
 bool ScDocument::GetDataAreaSubrange(ScRange& rRange) const
@@ -2631,11 +2672,6 @@ void ScDocument::CopyDBsFromClip(const ScRange& rDestRange, const ScRange& rClip
         if (!rClipRange.Contains(aSrcArea))
             continue;
 
-        // Destination already owns a table of this name (same-document paste):
-        // leave it, and any references resolving to it, alone.
-        if (rDest.findByUpperName(rxClip->GetUpperName()))
-            continue;
-
         const SCCOL nNewCol1 = aSrcArea.aStart.Col() + nDx;
         const SCROW nNewRow1 = aSrcArea.aStart.Row() + nDy;
         const SCCOL nNewCol2 = aSrcArea.aEnd.Col() + nDx;
@@ -2643,8 +2679,29 @@ void ScDocument::CopyDBsFromClip(const ScRange& rDestRange, const ScRange& rClip
         if (!ValidColRowTab(nNewCol1, nNewRow1, nDestTab) || !ValidColRowTab(nNewCol2, nNewRow2, nDestTab))
             continue;
 
+        // Tables never sit on another structure: where the pasted area covers
+        // part of one the destination already has, the cell content still pastes
+        // but no table is planted. Merged cells do not block, the paste replaces
+        // them.
+        const ScRange aDestArea(nNewCol1, nNewRow1, nDestTab, nNewCol2, nNewRow2, nDestTab);
+        if (RangeReachesDBStructure(aDestArea))
+            continue;
+
+        // The name is taken - always, for a same-document paste. A styled table is
+        // recreated under a fresh name there. A plain database range keeps the
+        // destination's.
+        OUString aFreshName;
+        if (rDest.findByUpperName(rxClip->GetUpperName()))
+        {
+            if (!rxClip->GetTableStyleInfo())
+                continue;
+            aFreshName = rDest.getFreshTableName(rxClip->GetName());
+        }
+
         auto pClone = std::make_unique<ScDBData>(*rxClip);
         pClone->SetIndex(0); // let the destination assign a fresh, collision-free index
+        if (!aFreshName.isEmpty())
+            pClone->SetName(aFreshName);
 
         // Changing the area resets the table column names, because the header
         // range moves. Keep the names the clip carried so a structured
@@ -2655,7 +2712,11 @@ void ScDocument::CopyDBsFromClip(const ScRange& rDestRange, const ScRange& rClip
         if (!aColumnNames.empty())
             pClone->SetTableColumnNames(std::move(aColumnNames));
 
-        rDest.insert(std::move(pClone));
+        // Note which table of ours this became, so the structured references the paste
+        // carries can be pointed at it. pPlanted is only safe once the insert took it.
+        ScDBData* pPlanted = pClone.get();
+        if (rDest.insert(std::move(pClone)))
+            pDBCollection->addPasteRebind(rxClip->GetIndex(), pPlanted->GetIndex());
     }
 }
 
@@ -3273,6 +3334,12 @@ void ScDocument::CopyFromClip(
 
     bInsertingFromOtherDoc = false;
 
+    // The table renames end with the paste that made them. adjustDBRange consults them for
+    // every formula cell it clones, so a note left behind would re-point a later reference
+    // at a table it has nothing to do with.
+    if (pDBCollection)
+        pDBCollection->clearPasteRebinds();
+
     // Put back the destination's own direct protection that the paste above
     // overwrote (see the note where aKeptProtection is filled).
     for (const KeptProtection& rKept : aKeptProtection)
@@ -3700,6 +3767,11 @@ bool ScDocument::SetString(
     return SetString(rPos.Col(), rPos.Row(), rPos.Tab(), rString, pParam);
 }
 
+bool ScDocument::SetEditText( const ScAddress& rPos, EditTextObject aEditText )
+{
+    return SetEditText(rPos, std::make_unique<EditTextObject>(std::move(aEditText)));
+}
+
 bool ScDocument::SetEditText( const ScAddress& rPos, std::unique_ptr<EditTextObject> pEditText )
 {
     if (ScTable* pTable = FetchTable(rPos.Tab()))
@@ -3719,7 +3791,7 @@ void ScDocument::SetEditText( const ScAddress& rPos, const OUString& rStr )
     {
         ScFieldEditEngine& rEngine = GetEditEngine();
         rEngine.SetTextCurrentDefaults(rStr);
-        pTable->SetEditText(rPos.Col(), rPos.Row(), rEngine.CreateTextObject());
+        pTable->SetEditText(rPos.Col(), rPos.Row(), std::make_unique<EditTextObject>(rEngine.CreateTextObject()));
     }
 }
 
@@ -3740,7 +3812,7 @@ void ScDocument::SetTextCell(const ScAddress& rPos, const OUString& rStr,
         {
             ScFieldEditEngine& rEngine = GetEditEngine();
             rEngine.SetTextCurrentDefaults(rStr);
-            pTable->SetEditText(rPos.Col(), rPos.Row(), rEngine.CreateTextObject());
+            pTable->SetEditText(rPos.Col(), rPos.Row(), std::make_unique<EditTextObject>(rEngine.CreateTextObject()));
         }
         else
         {
@@ -4292,19 +4364,6 @@ void ScDocument::CompileXML()
     TrackFormulas();
 
     SetAutoCalc( bOldAutoCalc );
-}
-
-bool ScDocument::CompileErrorCells(FormulaError nErrCode)
-{
-    bool bCompiled = false;
-    sc::CompileFormulaContext aCxt(*this);
-    for (const auto& pTab : maTabs)
-    {
-        if (pTab && pTab->CompileErrorCells(aCxt, nErrCode))
-            bCompiled = true;
-    }
-
-    return bCompiled;
 }
 
 void ScDocument::CalcAfterLoad( bool bStartListening )

@@ -24,7 +24,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <unotools/weakref.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace com::sun::star::util { class XURLTransformer; }
 
 namespace dbaccess
@@ -38,7 +38,7 @@ namespace dbaccess
     {
     public:
         DocumentEventExecutor(
-            const css::uno::Reference< css::uno::XComponentContext >& _rContext,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rContext,
             const rtl::Reference< ODatabaseDocument >& _rxDocument );
 
     protected:
@@ -51,7 +51,7 @@ namespace dbaccess
 
     private:
         unotools::WeakReference< ODatabaseDocument > mxDocument;
-        css::uno::Reference< css::util::XURLTransformer > mxURLTransformer;
+        cpo::uno::Reference< css::util::XURLTransformer > mxURLTransformer;
     };
 
 } // namespace dbaccess

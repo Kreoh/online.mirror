@@ -68,6 +68,7 @@
 #include <Window.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -123,7 +124,7 @@ bool SdPageObjsTLV::SdPageObjsTransferable::GetData( const css::datatransfer::Da
     }
 }
 
-SdPageObjsTLV::SdPageObjsTransferable* SdPageObjsTLV::SdPageObjsTransferable::getImplementation( const css::uno::Reference< css::uno::XInterface >& rxData )
+SdPageObjsTLV::SdPageObjsTransferable* SdPageObjsTLV::SdPageObjsTransferable::getImplementation( const cpo::uno::Reference< cpo::uno::XInterface >& rxData )
     noexcept
 {
     return dynamic_cast<SdPageObjsTLV::SdPageObjsTransferable*>(rxData.get());
@@ -224,6 +225,12 @@ bool SdPageObjsTLV::IsEqualToShapeList(std::unique_ptr<weld::TreeIter>& rEntry, 
             aName = m_xTreeView->get_text(*rEntry);
 
             if (aObjectName != aName)
+                return false;
+
+            // The entry stands for one object, its id is the object's address. A group whose
+            // children were made anew, a Diagram laid out again, has objects of the same names
+            // at new addresses, so the name alone does not tell the tree is current.
+            if (weld::fromId<SdrObject*>(m_xTreeView->get_id(*rEntry)) != pObj)
                 return false;
 
             if (pObj->IsGroupObject())
@@ -712,9 +719,9 @@ void SdPageObjsTLV::AddShapeToTransferable (
     try
     {
         // Get a component enumeration from the desktop and search it for documents.
-        const uno::Reference<uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext());
+        const uno::Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext());
 
-        uno::Reference<frame::XDesktop2> xDesktop = frame::Desktop::create(xContext);
+        uno::Reference<frame::XDesktop> xDesktop = frame::Desktop::create(xContext);
 
         if ( ! xDesktop.is())
             return nullptr;
@@ -1001,42 +1008,19 @@ std::vector<OUString> SdPageObjsTLV::GetSelectedEntryIds() const
  * Checks if it is a draw file and opens the BookmarkDoc depending of
  * the provided Docs
  */
-SdDrawDocument* SdPageObjsTLV::GetBookmarkDoc(SfxMedium* pMed)
+SdDrawDocument* SdPageObjsTLV::GetBookmarkDoc()
 {
-    if (
-       !m_pBookmarkDoc ||
-         (pMed && (!m_pOwnMedium || m_pOwnMedium->GetName() != pMed->GetName()))
-      )
+    if (!m_pBookmarkDoc)
     {
-        // create a new BookmarkDoc if now one exists or if a new Medium is provided
-        if (m_pOwnMedium != pMed)
+        // create a new BookmarkDoc if now one exists
+        if (m_pOwnMedium != nullptr)
         {
             CloseBookmarkDoc();
         }
 
-        if (pMed)
-        {
-            // it looks that it is undefined if a Medium was set by Fill() already
-            DBG_ASSERT( !m_pMedium, "SfxMedium confusion!" );
-            delete m_pMedium;
-            m_pMedium = nullptr;
+        DBG_ASSERT( m_pMedium, "No SfxMedium provided!" );
 
-            // take over this Medium (currently used only be Navigator)
-            m_pOwnMedium = pMed;
-        }
-
-        DBG_ASSERT( m_pMedium || pMed, "No SfxMedium provided!" );
-
-        if( pMed )
-        {
-            // in this mode the document is also owned and controlled by this instance
-            m_xBookmarkDocShRef = new ::sd::DrawDocShell(SfxObjectCreateMode::STANDARD, true, DocumentType::Impress);
-            if (m_xBookmarkDocShRef->DoLoad(pMed))
-                m_pBookmarkDoc = m_xBookmarkDocShRef->GetDoc();
-            else
-                m_pBookmarkDoc = nullptr;
-        }
-        else if ( m_pMedium )
+        if ( m_pMedium )
             // in this mode the document is owned and controlled by the SdDrawDocument
             // it can be released by calling the corresponding CloseBookmarkDoc method
             // successful creation of a document makes this the owner of the medium
@@ -1145,7 +1129,7 @@ void SdPageObjsTLV::SetViewFrame(const SfxViewFrame* pViewFrame)
 {
     if (sd::ViewShellBase* pBase = sd::ViewShellBase::GetViewShellBase(pViewFrame))
     {
-        css::uno::Reference< css::frame::XFrame > xFrame;
+        cpo::uno::Reference< css::frame::XFrame > xFrame;
         if (std::shared_ptr<sd::ViewShell> xViewShell = pBase->GetMainViewShell())
         {
             if (SfxViewFrame* pFrame = xViewShell->GetViewFrame())

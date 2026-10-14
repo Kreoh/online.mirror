@@ -47,7 +47,7 @@
 #include <osl/detail/component-mapping.h>
 #endif
 
-css::uno::Environment cppuhelper::detail::getEnvironment(
+cpo::uno::Environment cppuhelper::detail::getEnvironment(
     OUString const & name, std::u16string_view implementation)
 {
     OUString n(name);
@@ -64,19 +64,19 @@ css::uno::Environment cppuhelper::detail::getEnvironment(
             }
         }
     }
-    return css::uno::Environment(n);
+    return cpo::uno::Environment(n);
 }
 
 namespace {
 
 #if !defined DISABLE_DYNLOADING
 
-css::uno::Environment getEnvironmentFromModule(
-    osl::Module const & module, css::uno::Environment const & target,
+cpo::uno::Environment getEnvironmentFromModule(
+    osl::Module const & module, cpo::uno::Environment const & target,
     std::u16string_view implementation, OUString const & prefix)
 {
     char const * name = nullptr;
-    css::uno::Environment env;
+    cpo::uno::Environment env;
     OUString fullPrefix(prefix);
     if (!fullPrefix.isEmpty()) {
         fullPrefix += "_";
@@ -117,31 +117,31 @@ extern "C" void getFactory(va_list * args) {
     *factory = (*fn)(implementation->getStr(), smgr, nullptr);
 }
 
-css::uno::Reference<css::uno::XInterface> invokeComponentFactory(
-    css::uno::Environment const & source, css::uno::Environment const & target,
+cpo::uno::Reference<cpo::uno::XInterface> invokeComponentFactory(
+    cpo::uno::Environment const & source, cpo::uno::Environment const & target,
     component_getFactoryFunc function, std::u16string_view uri,
     std::u16string_view implementation,
-    css::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager)
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager)
 {
     if (!(source.is() && target.is())) {
         throw css::loader::CannotActivateFactoryException(
             u"cannot get environments"_ustr,
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     OString impl(
         OUStringToOString(implementation, RTL_TEXTENCODING_ASCII_US));
     if (source.get() == target.get()) {
-        return css::uno::Reference<css::uno::XInterface>(
-            static_cast<css::uno::XInterface *>(
+        return cpo::uno::Reference<cpo::uno::XInterface>(
+            static_cast<cpo::uno::XInterface *>(
                 (*function)(impl.getStr(), serviceManager.get(), nullptr)),
             SAL_NO_ACQUIRE);
     }
-    css::uno::Mapping mapTo(source, target);
-    css::uno::Mapping mapFrom(target, source);
+    cpo::uno::Mapping mapTo(source, target);
+    cpo::uno::Mapping mapFrom(target, source);
     if (!(mapTo.is() && mapFrom.is())) {
         throw css::loader::CannotActivateFactoryException(
             u"cannot get mappings"_ustr,
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     void * smgr = mapTo.mapInterface(
         serviceManager.get(),
@@ -156,12 +156,12 @@ css::uno::Reference<css::uno::XInterface> invokeComponentFactory(
         throw css::loader::CannotActivateFactoryException(
             (OUString::Concat("calling factory function for \"") + implementation + "\" in <"
              + uri + "> returned null"),
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
-    css::uno::Reference<css::uno::XInterface> res;
+    cpo::uno::Reference<cpo::uno::XInterface> res;
     mapFrom.mapInterface(
         reinterpret_cast<void **>(&res), factory,
-        cppu::UnoType<css::uno::XInterface>::get());
+        cppu::UnoType<cpo::uno::XInterface>::get());
     (*target.get()->pExtEnv->releaseInterface)(
         target.get()->pExtEnv, factory);
     return res;
@@ -178,18 +178,18 @@ extern "C" void getInstance(va_list * args) {
     void ** instance = va_arg(*args, void **);
     assert(instance);
     assert(*instance == nullptr);
-    *instance = (*fn)(static_cast<css::uno::XComponentContext*>(ctxt),
+    *instance = (*fn)(static_cast<cpo::uno::XComponentContext*>(ctxt),
             *static_cast<cpo::uno::Sequence<cpo::uno::Any> const*>(argseq));
 }
 
 cppuhelper::WrapperConstructorFn mapConstructorFn(
-    css::uno::Environment const & source, css::uno::Environment const & target,
+    cpo::uno::Environment const & source, cpo::uno::Environment const & target,
     cppuhelper::ImplementationConstructorFn *const constructorFunction)
 {
     if (!(source.is() && target.is())) {
         throw css::loader::CannotActivateFactoryException(
             u"cannot get environments"_ustr,
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     if (source.get() == target.get()) {
         return cppuhelper::WrapperConstructorFn(constructorFunction);
@@ -197,19 +197,19 @@ cppuhelper::WrapperConstructorFn mapConstructorFn(
     // note: it should be valid to capture these mappings because they are
     // ref-counted, and the returned closure will always be invoked in the
     // "source" environment
-    css::uno::Mapping mapTo(source, target);
-    css::uno::Mapping mapFrom(target, source);
+    cpo::uno::Mapping mapTo(source, target);
+    cpo::uno::Mapping mapFrom(target, source);
     if (!(mapTo.is() && mapFrom.is())) {
         throw css::loader::CannotActivateFactoryException(
             u"cannot get mappings"_ustr,
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     return [mapFrom=std::move(mapFrom), mapTo=std::move(mapTo), target, constructorFunction]
-        (css::uno::XComponentContext *const context, cpo::uno::Sequence<cpo::uno::Any> const& args)
+        (cpo::uno::XComponentContext *const context, cpo::uno::Sequence<cpo::uno::Any> const& args)
         {
             void *const ctxt = mapTo.mapInterface(
                 context,
-                cppu::UnoType<css::uno::XComponentContext>::get());
+                cppu::UnoType<cpo::uno::XComponentContext>::get());
             if (args.hasElements()) {
                 std::abort(); // TODO map args
             }
@@ -219,13 +219,13 @@ cppuhelper::WrapperConstructorFn mapConstructorFn(
                 (*target.get()->pExtEnv->releaseInterface)(
                     target.get()->pExtEnv, ctxt);
             }
-            css::uno::XInterface * res = nullptr;
+            cpo::uno::XInterface * res = nullptr;
             if (instance == nullptr) {
                 return res;
             }
             mapFrom.mapInterface(
                 reinterpret_cast<void **>(&res), instance,
-                cppu::UnoType<css::uno::XInterface>::get());
+                cppu::UnoType<cpo::uno::XInterface>::get());
             (*target.get()->pExtEnv->releaseInterface)(
                 target.get()->pExtEnv, instance);
             return res;
@@ -240,9 +240,9 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
     OUString const & uri, OUString const & environment,
     OUString const & prefix, OUString const & implementation,
     OUString const & constructor,
-    css::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager,
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager,
     WrapperConstructorFn * constructorFunction,
-    css::uno::Reference<css::uno::XInterface> * factory)
+    cpo::uno::Reference<cpo::uno::XInterface> * factory)
 {
     assert(constructor.isEmpty() || !environment.isEmpty());
     assert(
@@ -252,12 +252,12 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
 #if defined DISABLE_DYNLOADING
     assert(!environment.isEmpty());
     if (constructor.isEmpty()) {
-        css::uno::Environment curEnv(css::uno::Environment::getCurrent());
-        css::uno::Environment env(getEnvironment(environment, implementation));
+        cpo::uno::Environment curEnv(cpo::uno::Environment::getCurrent());
+        cpo::uno::Environment env(getEnvironment(environment, implementation));
         if (!(curEnv.is() && env.is())) {
             throw css::loader::CannotActivateFactoryException(
-                "cannot get environments",
-                css::uno::Reference<css::uno::XInterface>());
+                u"cannot get environments"_ustr,
+                cpo::uno::Reference<cpo::uno::XInterface>());
         }
         if (curEnv.get() != env.get()) {
             std::abort();//TODO
@@ -278,10 +278,10 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
 #endif
             throw css::loader::CannotActivateFactoryException(
                 "unknown factory name \"" + uri + "\"",
-                css::uno::Reference<css::uno::XInterface>());
+                cpo::uno::Reference<cpo::uno::XInterface>());
         }
         *factory = invokeComponentFactory(
-            css::uno::Environment::getCurrent(),
+            cpo::uno::Environment::getCurrent(),
             getEnvironment(environment, implementation), fp, uri,
             implementation, serviceManager);
     } else {
@@ -301,14 +301,19 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
 #endif
         throw css::loader::CannotActivateFactoryException(
             "unknown constructor name \"" + constructor + "\"",
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
 #else
-    osl::Module mod(uri, SAL_LOADMODULE_LAZY | SAL_LOADMODULE_GLOBAL);
+    OUString dllName = uri;
+#if ENABLE_UNITEDLIBS
+    if (osl_isUnitedLibActive())
+        dllName = u"" SAL_MODULENAME("unitedlo") ""_ustr;
+#endif
+    osl::Module mod(dllName, SAL_LOADMODULE_LAZY | SAL_LOADMODULE_GLOBAL);
     if (!mod.is()) {
         throw css::loader::CannotActivateFactoryException(
-            "loading component library <" + uri + "> failed",
-            css::uno::Reference<css::uno::XInterface>());
+            "loading component library <" + dllName + "> failed",
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     if (constructor.isEmpty()) {
         OUString sym;
@@ -323,9 +328,9 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
             throw css::loader::CannotActivateFactoryException(
                 ("no factory symbol \"" + sym + "\" in component library <"
                  + uri + ">"),
-                css::uno::Reference<css::uno::XInterface>());
+                cpo::uno::Reference<cpo::uno::XInterface>());
         }
-        css::uno::Environment curEnv(css::uno::Environment::getCurrent());
+        cpo::uno::Environment curEnv(cpo::uno::Environment::getCurrent());
         *factory = invokeComponentFactory(
             curEnv,
             (environment.isEmpty()
@@ -340,9 +345,9 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
             throw css::loader::CannotActivateFactoryException(
                 ("no constructor symbol \"" + constructor
                  + "\" in component library <" + uri + ">"),
-                css::uno::Reference<css::uno::XInterface>());
+                cpo::uno::Reference<cpo::uno::XInterface>());
         }
-        css::uno::Environment curEnv(css::uno::Environment::getCurrent());
+        cpo::uno::Environment curEnv(cpo::uno::Environment::getCurrent());
         *constructorFunction = mapConstructorFn(
             curEnv,
             (environment.isEmpty()
@@ -354,12 +359,12 @@ void cppuhelper::detail::loadSharedLibComponentFactory(
 #endif
 }
 
-css::uno::Reference<css::uno::XInterface> cppu::loadSharedLibComponentFactory(
+cpo::uno::Reference<cpo::uno::XInterface> cppu::loadSharedLibComponentFactory(
     OUString const & uri,
     OUString const & rImplName,
-    css::uno::Reference<css::lang::XMultiServiceFactory> const & xMgr)
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> const & xMgr)
 {
-    css::uno::Reference<css::uno::XInterface> fac;
+    cpo::uno::Reference<cpo::uno::XInterface> fac;
     cppuhelper::detail::loadSharedLibComponentFactory(
         uri, u""_ustr, u""_ustr, rImplName, u""_ustr, xMgr, nullptr, &fac);
     return fac;
@@ -381,33 +386,33 @@ extern "C" void writeInfo(va_list * args) {
 
 void cppu::writeSharedLibComponentInfo(
     OUString const & uri,
-    css::uno::Reference<css::lang::XMultiServiceFactory> const & xMgr,
-    css::uno::Reference<css::registry::XRegistryKey> const & xKey)
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> const & xMgr,
+    cpo::uno::Reference<css::registry::XRegistryKey> const & xKey)
 {
     osl::Module mod(uri, SAL_LOADMODULE_LAZY | SAL_LOADMODULE_GLOBAL);
     if (!mod.is()) {
         throw css::registry::CannotRegisterImplementationException(
             "loading component library <" + uri + "> failed",
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
     oslGenericFunction fp = mod.getFunctionSymbol(COMPONENT_WRITEINFO);
     if (fp == nullptr) {
         throw css::registry::CannotRegisterImplementationException(
             ("no symbol \"" COMPONENT_WRITEINFO "\" in component library <"
              + uri + ">"),
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
-    css::uno::Environment curEnv(css::uno::Environment::getCurrent());
-    css::uno::Environment env(getEnvironmentFromModule(mod, curEnv, u"", u""_ustr));
+    cpo::uno::Environment curEnv(cpo::uno::Environment::getCurrent());
+    cpo::uno::Environment env(getEnvironmentFromModule(mod, curEnv, u"", u""_ustr));
     if (!(curEnv.is() && env.is())) {
         throw css::registry::CannotRegisterImplementationException(
             u"cannot get environments"_ustr,
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
-    css::uno::Mapping map(curEnv, env);
+    cpo::uno::Mapping map(curEnv, env);
     if (!map.is()) {
         throw css::registry::CannotRegisterImplementationException(
-            u"cannot get mapping"_ustr, css::uno::Reference<css::uno::XInterface>());
+            u"cannot get mapping"_ustr, cpo::uno::Reference<cpo::uno::XInterface>());
     }
     void * smgr = map.mapInterface(
         xMgr.get(), cppu::UnoType<css::lang::XMultiServiceFactory>::get());
@@ -423,7 +428,7 @@ void cppu::writeSharedLibComponentInfo(
         throw css::registry::CannotRegisterImplementationException(
             ("calling \"" COMPONENT_WRITEINFO "\" in component library <" + uri
              + "> returned false"),
-            css::uno::Reference<css::uno::XInterface>());
+            cpo::uno::Reference<cpo::uno::XInterface>());
     }
 }
 

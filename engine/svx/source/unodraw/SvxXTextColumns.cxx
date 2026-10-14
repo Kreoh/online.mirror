@@ -76,36 +76,36 @@ public:
     SvxXTextColumns() = default;
 
     // XTextColumns
-    virtual sal_Int32 SAL_CALL getReferenceValue() override;
-    virtual sal_Int16 SAL_CALL getColumnCount() override;
-    virtual void SAL_CALL setColumnCount(sal_Int16 nColumns) override;
-    virtual cpo::uno::Sequence<css::text::TextColumn> SAL_CALL getColumns() override;
-    virtual void SAL_CALL
+    virtual sal_Int32 getReferenceValue() override;
+    virtual sal_Int16 getColumnCount() override;
+    virtual void setColumnCount(sal_Int16 nColumns) override;
+    virtual cpo::uno::Sequence<css::text::TextColumn> getColumns() override;
+    virtual void
     setColumns(const cpo::uno::Sequence<css::text::TextColumn>& Columns) override;
 
     // XPropertySet
-    virtual css::uno::Reference<css::beans::XPropertySetInfo>
-        SAL_CALL getPropertySetInfo() override;
-    virtual void SAL_CALL setPropertyValue(const OUString& aPropertyName,
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo>
+        getPropertySetInfo() override;
+    virtual void setPropertyValue(const OUString& aPropertyName,
                                            const cpo::uno::Any& aValue) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue(const OUString& PropertyName) override;
-    virtual void SAL_CALL addPropertyChangeListener(
+    virtual cpo::uno::Any getPropertyValue(const OUString& PropertyName) override;
+    virtual void addPropertyChangeListener(
         const OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XPropertyChangeListener>& xListener) override;
-    virtual void SAL_CALL removePropertyChangeListener(
+        const cpo::uno::Reference<css::beans::XPropertyChangeListener>& xListener) override;
+    virtual void removePropertyChangeListener(
         const OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
-    virtual void SAL_CALL addVetoableChangeListener(
+        const cpo::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
+    virtual void addVetoableChangeListener(
         const OUString& PropertyName,
-        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
-    virtual void SAL_CALL removeVetoableChangeListener(
+        const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+    virtual void removeVetoableChangeListener(
         const OUString& PropertyName,
-        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+        const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 private:
     sal_Int32 m_nReference = USHRT_MAX;
@@ -155,7 +155,7 @@ void SvxXTextColumns::setColumnCount(sal_Int16 nColumns)
 {
     SolarMutexGuard aGuard;
     if (nColumns <= 0)
-        throw css::uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     m_bIsAutomaticWidth = true;
     m_aTextColumns.realloc(nColumns);
     css::text::TextColumn* pCols = m_aTextColumns.getArray();
@@ -189,7 +189,7 @@ void SvxXTextColumns::setColumns(const cpo::uno::Sequence<css::text::TextColumn>
     m_aTextColumns = rColumns;
 }
 
-css::uno::Reference<css::beans::XPropertySetInfo> SvxXTextColumns::getPropertySetInfo()
+cpo::uno::Reference<css::beans::XPropertySetInfo> SvxXTextColumns::getPropertySetInfo()
 {
     return m_aPropSet.getPropertySetInfo();
 }
@@ -301,36 +301,36 @@ cpo::uno::Any SvxXTextColumns::getPropertyValue(const OUString& rPropertyName)
 
 void SvxXTextColumns::addPropertyChangeListener(
     const OUString& /*rPropertyName*/,
-    const css::uno::Reference<css::beans::XPropertyChangeListener>& /*xListener*/)
+    const cpo::uno::Reference<css::beans::XPropertyChangeListener>& /*xListener*/)
 {
 }
 
 void SvxXTextColumns::removePropertyChangeListener(
     const OUString& /*rPropertyName*/,
-    const css::uno::Reference<css::beans::XPropertyChangeListener>& /*xListener*/)
+    const cpo::uno::Reference<css::beans::XPropertyChangeListener>& /*xListener*/)
 {
 }
 
 void SvxXTextColumns::addVetoableChangeListener(
     const OUString& /*rPropertyName*/,
-    const css::uno::Reference<css::beans::XVetoableChangeListener>& /*xListener*/)
+    const cpo::uno::Reference<css::beans::XVetoableChangeListener>& /*xListener*/)
 {
 }
 
 void SvxXTextColumns::removeVetoableChangeListener(
     const OUString& /*rPropertyName*/,
-    const css::uno::Reference<css::beans::XVetoableChangeListener>& /*xListener*/)
+    const cpo::uno::Reference<css::beans::XVetoableChangeListener>& /*xListener*/)
 {
 }
 }
 
-css::uno::Reference<css::uno::XInterface> SvxXTextColumns_createInstance() noexcept
+cpo::uno::Reference<cpo::uno::XInterface> SvxXTextColumns_createInstance() noexcept
 {
     return getXWeak(new SvxXTextColumns);
 }
 
-extern "C" SVXCORE_DLLPUBLIC css::uno::XInterface*
-com_sun_star_comp_svx_TextColumns_get_implementation(css::uno::XComponentContext*,
+extern "C" SVXCORE_DLLPUBLIC cpo::uno::XInterface*
+com_sun_star_comp_svx_TextColumns_get_implementation(cpo::uno::XComponentContext*,
                                                      cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SvxXTextColumns);

@@ -17,19 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <com/sun/star/linguistic2/SpellFailure.hpp>
 #include <com/sun/star/linguistic2/XLinguProperties.hpp>
-#include <comphelper/kit.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <tools/debug.hxx>
 #include <osl/mutex.hxx>
 #include <osl/thread.h>
-#include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 
 #include <lingutil.hxx>
 #include <hunspell.hxx>
@@ -57,8 +54,8 @@ using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::linguistic2;
 using namespace linguistic;
 
@@ -78,11 +75,34 @@ SpellChecker::SpellChecker() :
 {
 }
 
-SpellChecker::DictItem::DictItem(OUString i_DName, Locale i_DLoc, rtl_TextEncoding i_DEnc)
-    : m_aDName(std::move(i_DName))
-    , m_aDLoc(std::move(i_DLoc))
-    , m_aDEnc(i_DEnc)
+
+void SpellChecker::DictInstance::Load()
 {
+    OUString dicpath = m_aDName + ".dic";
+    OUString affpath = m_aDName + ".aff";
+    OUString dict;
+    OUString aff;
+    osl::FileBase::getSystemPathFromFileURL(dicpath, dict);
+    osl::FileBase::getSystemPathFromFileURL(affpath, aff);
+#if defined(_WIN32)
+    // workaround for Windows specific problem that the
+    // path length in calls to 'fopen' is limited to somewhat
+    // about 120+ characters which will usually be exceed when
+    // using dictionaries as extensions. (Hunspell waits UTF-8 encoded
+    // path with \\?\ long path prefix.)
+    OString aTmpaff = Win_AddLongPathPrefix(OUStringToOString(aff, RTL_TEXTENCODING_UTF8));
+    OString aTmpdict = Win_AddLongPathPrefix(OUStringToOString(dict, RTL_TEXTENCODING_UTF8));
+#else
+    OString aTmpaff(OU2ENC(aff,osl_getThreadTextEncoding()));
+    OString aTmpdict(OU2ENC(dict,osl_getThreadTextEncoding()));
+#endif
+
+    m_pDict = std::make_unique<Hunspell>(aTmpaff.getStr(),aTmpdict.getStr());
+#if defined(H_DEPRECATED)
+    m_aDEnc = getTextEncodingFromCharset(m_pDict->get_dict_encoding().c_str());
+#else
+    m_aDEnc = getTextEncodingFromCharset(m_pDict->get_dic_encoding());
+#endif
 }
 
 SpellChecker::~SpellChecker()
@@ -105,7 +125,7 @@ PropertyHelper_Spelling & SpellChecker::GetPropHelper_Impl()
     return *m_pPropHelper;
 }
 
-Sequence< Locale > SAL_CALL SpellChecker::getLocales()
+Sequence< Locale > SpellChecker::getLocales()
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -113,66 +133,12 @@ Sequence< Locale > SAL_CALL SpellChecker::getLocales()
     // dictionaries.
     if (m_DictItems.empty())
     {
-        SvtLinguConfig aLinguCfg;
-
-        // get list of extension dictionaries-to-use
-        // (or better speaking: the list of dictionaries using the
-        // new configuration entries).
-        std::vector< SvtLinguConfigDictionaryEntry > aDics;
-        cpo::uno::Sequence< OUString > aFormatList;
-        aLinguCfg.GetSupportedDictionaryFormatsFor( u"SpellCheckers"_ustr,
-                u"org.openoffice.lingu.MySpellSpellChecker"_ustr, aFormatList );
-        for (auto const& format : aFormatList)
-        {
-            std::vector< SvtLinguConfigDictionaryEntry > aTmpDic(
-                    aLinguCfg.GetActiveDictionariesByFormat(format) );
-            aDics.insert( aDics.end(), aTmpDic.begin(), aTmpDic.end() );
-        }
-
-        //!! for compatibility with old dictionaries (the ones not using extensions
-        //!! or new configuration entries, but still using the dictionary.lst file)
-        //!! Get the list of old style spell checking dictionaries to use...
-        std::vector< SvtLinguConfigDictionaryEntry > aOldStyleDics(
-                GetOldStyleDics( "DICT" ) );
-
-        // to prefer dictionaries with configuration entries we will only
-        // use those old style dictionaries that add a language that
-        // is not yet supported by the list of new style dictionaries
-        MergeNewStyleDicsAndOldStyleDics( aDics, aOldStyleDics );
+        std::vector< SvtLinguConfigDictionaryEntry > aDics( GetSpellDics() );
 
         if (!aDics.empty())
         {
-            uno::Reference< lang::XMultiServiceFactory > xServiceFactory(comphelper::getProcessServiceFactory());
-            uno::Reference< ucb::XSimpleFileAccess > xAccess(xServiceFactory->createInstance(u"com.sun.star.ucb.SimpleFileAccess"_ustr), uno::UNO_QUERY);
             // get supported locales from the dictionaries-to-use...
-            std::set<OUString> aLocaleNamesSet;
-            for (auto const& dict : aDics)
-            {
-                const cpo::uno::Sequence< OUString > aLocaleNames( dict.aLocaleNames );
-                cpo::uno::Sequence< OUString > aLocations( dict.aLocations );
-                SAL_WARN_IF(
-                    aLocaleNames.hasElements() && !aLocations.hasElements(),
-                    "lingucomponent", "no locations");
-                if (aLocations.hasElements())
-                {
-                    if (xAccess.is() && xAccess->exists(aLocations[0]))
-                    {
-                        for (auto const& locale : aLocaleNames)
-                        {
-                            if (!comphelper::COKit::isAllowlistedLanguage(locale))
-                                continue;
-
-                            aLocaleNamesSet.insert(locale);
-                        }
-                    }
-                    else
-                    {
-                        SAL_WARN(
-                            "lingucomponent",
-                            "missing <" << aLocations[0] << ">");
-                    }
-                }
-            }
+            std::set<OUString> aLocaleNamesSet( GetSpellDicLocaleNames( aDics ) );
             // ... and add them to the resulting sequence
             m_aSuppLocales.realloc( aLocaleNamesSet.size() );
             std::transform(
@@ -197,19 +163,21 @@ Sequence< Locale > SAL_CALL SpellChecker::getLocales()
                 {
                     const cpo::uno::Sequence< OUString > aLocaleNames( dict.aLocaleNames );
 
+                    // also both files have to be in the same directory and the
+                    // file names must only differ in the extension (.aff/.dic).
+                    // Thus we use the first location only and strip the extension part.
+                    OUString aLocation = dict.aLocations[0];
+                    sal_Int32 nPosition = aLocation.lastIndexOf('.');
+                    aLocation = aLocation.copy(0, nPosition);
+
                     // currently only one language per dictionary is supported in the actual implementation...
                     // Thus here we work-around this by adding the same dictionary several times.
-                    // Once for each of its supported locales.
+                    // Once for each of its supported locales. The entries share one instance, so
+                    // the word list behind them is loaded only once.
+                    auto pInstance = std::make_shared<DictInstance>(aLocation);
                     for (auto const& localeName : aLocaleNames)
                     {
-                        // also both files have to be in the same directory and the
-                        // file names must only differ in the extension (.aff/.dic).
-                        // Thus we use the first location only and strip the extension part.
-                        OUString aLocation = dict.aLocations[0];
-                        sal_Int32 nPos = aLocation.lastIndexOf( '.' );
-                        aLocation = aLocation.copy( 0, nPos );
-
-                        m_DictItems.emplace_back(aLocation, LanguageTag::convertToLocale(localeName), RTL_TEXTENCODING_DONTKNOW);
+                        m_DictItems.emplace_back(LanguageTag::convertToLocale(localeName), pInstance);
                     }
                 }
             }
@@ -225,7 +193,7 @@ Sequence< Locale > SAL_CALL SpellChecker::getLocales()
     return m_aSuppLocales;
 }
 
-bool SAL_CALL SpellChecker::hasLocale(const Locale& rLocale)
+bool SpellChecker::hasLocale(const Locale& rLocale)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -294,36 +262,13 @@ sal_Int16 SpellChecker::GetSpellFailure(const OUString &rWord, const Locale &rLo
 
             if (rLocale == currDict.m_aDLoc)
             {
-                if (!currDict.m_pDict)
-                {
-                    OUString dicpath = currDict.m_aDName + ".dic";
-                    OUString affpath = currDict.m_aDName + ".aff";
-                    OUString dict;
-                    OUString aff;
-                    osl::FileBase::getSystemPathFromFileURL(dicpath,dict);
-                    osl::FileBase::getSystemPathFromFileURL(affpath,aff);
-#if defined(_WIN32)
-                    // workaround for Windows specific problem that the
-                    // path length in calls to 'fopen' is limited to somewhat
-                    // about 120+ characters which will usually be exceed when
-                    // using dictionaries as extensions. (Hunspell waits UTF-8 encoded
-                    // path with \\?\ long path prefix.)
-                    OString aTmpaff = Win_AddLongPathPrefix(OUStringToOString(aff, RTL_TEXTENCODING_UTF8));
-                    OString aTmpdict = Win_AddLongPathPrefix(OUStringToOString(dict, RTL_TEXTENCODING_UTF8));
-#else
-                    OString aTmpaff(OU2ENC(aff,osl_getThreadTextEncoding()));
-                    OString aTmpdict(OU2ENC(dict,osl_getThreadTextEncoding()));
-#endif
-
-                    currDict.m_pDict = std::make_unique<Hunspell>(aTmpaff.getStr(),aTmpdict.getStr());
-#if defined(H_DEPRECATED)
-                    currDict.m_aDEnc = getTextEncodingFromCharset(currDict.m_pDict->get_dict_encoding().c_str());
-#else
-                    currDict.m_aDEnc = getTextEncodingFromCharset(currDict.m_pDict->get_dic_encoding());
-#endif
-                }
-                pMS  = currDict.m_pDict.get();
-                eEnc = currDict.m_aDEnc;
+                // The instance is shared with the entries for the dictionary's other locales,
+                // so loading it here loads it for them as well.
+                DictInstance& rInstance = *currDict.m_pInstance;
+                if (!rInstance.m_pDict)
+                    rInstance.Load();
+                pMS  = rInstance.m_pDict.get();
+                eEnc = rInstance.m_aDEnc;
             }
 
             if (pMS)
@@ -383,7 +328,7 @@ sal_Int16 SpellChecker::GetSpellFailure(const OUString &rWord, const Locale &rLo
     return nRes;
 }
 
-bool SAL_CALL SpellChecker::isValid( const OUString& rWord, const Locale& rLocale,
+bool SpellChecker::isValid( const OUString& rWord, const Locale& rLocale,
             const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -471,16 +416,30 @@ Reference< XSpellAlternatives >
         LanguageType nLang = LinguLocaleToLanguage( rLocale );
         int numsug = 0;
 
+        // A SPELLML add query inserts a word into the Hunspell instance it runs against, and
+        // that word belongs to the locale of the query alone.
+        const bool bAddQuery = nWord.match(SPELL_XML, 0)
+            && (nWord.indexOf("type='add'") >= 0 || nWord.indexOf("type=\"add\"") >= 0);
+
         Sequence< OUString > aStr( 0 );
-        for (const auto& currDict : m_DictItems)
+        for (auto& currDict : m_DictItems)
         {
             pMS = nullptr;
             eEnc = RTL_TEXTENCODING_DONTKNOW;
 
             if (rLocale == currDict.m_aDLoc)
             {
-                pMS  = currDict.m_pDict.get();
-                eEnc = currDict.m_aDEnc;
+                if (bAddQuery && currDict.m_pInstance->m_pDict && currDict.m_pInstance.use_count() > 1)
+                {
+                    // Run the add query against a freshly loaded instance owned by this entry
+                    // alone, so the inserted word stays scoped to this locale and the instance
+                    // the sibling locale entries point to keeps the plain file content.
+                    auto pOwnInstance = std::make_shared<DictInstance>(currDict.m_pInstance->m_aDName);
+                    pOwnInstance->Load();
+                    currDict.m_pInstance = std::move(pOwnInstance);
+                }
+                pMS  = currDict.m_pInstance->m_pDict.get();
+                eEnc = currDict.m_pInstance->m_aDEnc;
             }
 
             if (pMS)
@@ -524,7 +483,7 @@ Reference< XSpellAlternatives >
     return xRes;
 }
 
-Reference< XSpellAlternatives > SAL_CALL SpellChecker::spell(
+Reference< XSpellAlternatives > SpellChecker::spell(
         const OUString& rWord, const Locale& rLocale,
         const cpo::uno::Sequence< css::beans::PropertyValue >& rProperties )
 {
@@ -544,7 +503,7 @@ Reference< XSpellAlternatives > SAL_CALL SpellChecker::spell(
     return xAlt;
 }
 
-bool SAL_CALL SpellChecker::addLinguServiceEventListener(
+bool SpellChecker::addLinguServiceEventListener(
         const Reference< XLinguServiceEventListener >& rxLstnr )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -557,7 +516,7 @@ bool SAL_CALL SpellChecker::addLinguServiceEventListener(
     return bRes;
 }
 
-bool SAL_CALL SpellChecker::removeLinguServiceEventListener(
+bool SpellChecker::removeLinguServiceEventListener(
         const Reference< XLinguServiceEventListener >& rxLstnr )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -570,13 +529,13 @@ bool SAL_CALL SpellChecker::removeLinguServiceEventListener(
     return bRes;
 }
 
-OUString SAL_CALL SpellChecker::getServiceDisplayName(const Locale& rLocale)
+OUString SpellChecker::getServiceDisplayName(const Locale& rLocale)
 {
     std::locale loc(Translate::Create("svt", LanguageTag(rLocale)));
     return Translate::get(STR_DESCRIPTION_HUNSPELL, loc);
 }
 
-void SAL_CALL SpellChecker::initialize( const Sequence< Any >& rArguments )
+void SpellChecker::initialize( const Sequence< Any >& rArguments )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -602,7 +561,7 @@ void SAL_CALL SpellChecker::initialize( const Sequence< Any >& rArguments )
     }
 }
 
-void SAL_CALL SpellChecker::dispose()
+void SpellChecker::dispose()
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -619,7 +578,7 @@ void SAL_CALL SpellChecker::dispose()
     }
 }
 
-void SAL_CALL SpellChecker::addEventListener( const Reference< XEventListener >& rxListener )
+void SpellChecker::addEventListener( const Reference< XEventListener >& rxListener )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -627,7 +586,7 @@ void SAL_CALL SpellChecker::addEventListener( const Reference< XEventListener >&
         m_aEvtListeners.addInterface( rxListener );
 }
 
-void SAL_CALL SpellChecker::removeEventListener( const Reference< XEventListener >& rxListener )
+void SpellChecker::removeEventListener( const Reference< XEventListener >& rxListener )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -636,24 +595,24 @@ void SAL_CALL SpellChecker::removeEventListener( const Reference< XEventListener
 }
 
 // Service specific part
-OUString SAL_CALL SpellChecker::getImplementationName()
+OUString SpellChecker::getImplementationName()
 {
     return u"org.openoffice.lingu.MySpellSpellChecker"_ustr;
 }
 
-bool SAL_CALL SpellChecker::supportsService( const OUString& ServiceName )
+bool SpellChecker::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL SpellChecker::getSupportedServiceNames()
+Sequence< OUString > SpellChecker::getSupportedServiceNames()
 {
     return { SN_SPELLCHECKER };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 lingucomponent_SpellChecker_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new SpellChecker());
 }

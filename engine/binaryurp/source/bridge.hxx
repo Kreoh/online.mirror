@@ -28,7 +28,7 @@
 
 #include <com/sun/star/bridge/XBridge.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <osl/conditn.hxx>
 #include <rtl/ref.hxx>
@@ -52,10 +52,10 @@ namespace com::sun::star {
     namespace bridge { class XInstanceProvider; }
     namespace connection { class XConnection; }
     namespace lang { class XEventListener; }
-    namespace uno {
-        class Any;
-        class UnoInterfaceReference;
-    }
+}
+namespace cpo::uno {
+    class Any;
+    class UnoInterfaceReference;
 }
 
 namespace binaryurp {
@@ -68,8 +68,8 @@ public:
     Bridge(
         rtl::Reference< BridgeFactory > const & factory,
         OUString name,
-        css::uno::Reference< css::connection::XConnection > const & connection,
-        css::uno::Reference< css::bridge::XInstanceProvider > provider);
+        cpo::uno::Reference< css::connection::XConnection > const & connection,
+        cpo::uno::Reference< css::bridge::XInstanceProvider > provider);
 
     void start();
 
@@ -80,13 +80,13 @@ public:
     // thread:
     void terminate(bool final);
 
-    const css::uno::Reference< css::connection::XConnection >&
+    const cpo::uno::Reference< css::connection::XConnection >&
     getConnection() const { return connection_;}
 
-    const css::uno::Reference< css::bridge::XInstanceProvider >&
+    const cpo::uno::Reference< css::bridge::XInstanceProvider >&
     getProvider() const { return provider_;}
 
-    css::uno::Mapping & getCppToBinaryMapping() { return cppToBinaryMapping_;}
+    cpo::uno::Mapping & getCppToBinaryMapping() { return cppToBinaryMapping_;}
 
     BinaryAny mapCppToBinaryAny(cpo::uno::Any const & cppAny);
 
@@ -94,21 +94,21 @@ public:
 
     rtl::Reference< Writer > getWriter();
 
-    css::uno::UnoInterfaceReference registerIncomingInterface(
+    cpo::uno::UnoInterfaceReference registerIncomingInterface(
         OUString const & oid,
-        css::uno::TypeDescription const & type);
+        cpo::uno::TypeDescription const & type);
 
     OUString registerOutgoingInterface(
-        css::uno::UnoInterfaceReference const & object,
-        css::uno::TypeDescription const & type);
+        cpo::uno::UnoInterfaceReference const & object,
+        cpo::uno::TypeDescription const & type);
 
-    css::uno::UnoInterfaceReference findStub(
+    cpo::uno::UnoInterfaceReference findStub(
         OUString const & oid,
-        css::uno::TypeDescription const & type);
+        cpo::uno::TypeDescription const & type);
 
     void releaseStub(
         OUString const & oid,
-        css::uno::TypeDescription const & type);
+        cpo::uno::TypeDescription const & type);
 
     void resurrectProxy(Proxy & proxy);
 
@@ -126,7 +126,7 @@ public:
 
     bool makeCall(
         OUString const & oid,
-        css::uno::TypeDescription const & member, bool setter,
+        cpo::uno::TypeDescription const & member, bool setter,
         std::vector< BinaryAny >&& inArguments, BinaryAny * returnValue,
         std::vector< BinaryAny > * outArguments);
 
@@ -154,7 +154,7 @@ public:
 
     bool isProtocolPropertiesRequest(
         std::u16string_view oid,
-        css::uno::TypeDescription const & type) const;
+        cpo::uno::TypeDescription const & type) const;
 
     void setCurrentContextMode();
 
@@ -166,7 +166,7 @@ private:
 
     virtual ~Bridge() override;
 
-    virtual css::uno::Reference< css::uno::XInterface >
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
     getInstance(OUString const & sInstanceName) override;
 
     virtual OUString getName() override;
@@ -176,11 +176,11 @@ private:
     virtual void dispose() override;
 
     virtual void addEventListener(
-        css::uno::Reference< css::lang::XEventListener >
+        cpo::uno::Reference< css::lang::XEventListener >
             const & xListener) override;
 
     virtual void removeEventListener(
-        css::uno::Reference< css::lang::XEventListener >
+        cpo::uno::Reference< css::lang::XEventListener >
             const & aListener) override;
 
     // Only called from reader_ thread:
@@ -193,12 +193,12 @@ private:
 
     void makeReleaseCall(
         OUString const & oid,
-        css::uno::TypeDescription const & type);
+        cpo::uno::TypeDescription const & type);
 
     void sendRequest(
         rtl::ByteSequence const & tid, OUString const & oid,
-        css::uno::TypeDescription const & type,
-        css::uno::TypeDescription const & member,
+        cpo::uno::TypeDescription const & type,
+        cpo::uno::TypeDescription const & member,
         std::vector< BinaryAny >&& inArguments);
 
     void throwException(bool exception, BinaryAny const & value);
@@ -214,13 +214,13 @@ private:
 
     typedef
         std::vector<
-            css::uno::Reference<
+            cpo::uno::Reference<
                 css::lang::XEventListener > >
         Listeners;
 
     struct SubStub;
 
-    typedef std::map< css::uno::TypeDescription, SubStub > Stub;
+    typedef std::map< cpo::uno::TypeDescription, SubStub > Stub;
 
     typedef std::map< OUString, Stub > Stubs;
 
@@ -232,18 +232,18 @@ private:
 
     rtl::Reference< BridgeFactory > factory_;
     OUString name_;
-    css::uno::Reference< css::connection::XConnection >
+    cpo::uno::Reference< css::connection::XConnection >
         connection_;
-    css::uno::Reference< css::bridge::XInstanceProvider >
+    cpo::uno::Reference< css::bridge::XInstanceProvider >
         provider_;
-    css::uno::Environment binaryUno_;
-    css::uno::Mapping cppToBinaryMapping_;
-    css::uno::Mapping binaryToCppMapping_;
+    cpo::uno::Environment binaryUno_;
+    cpo::uno::Mapping cppToBinaryMapping_;
+    cpo::uno::Mapping binaryToCppMapping_;
     rtl::ByteSequence protPropTid_;
     OUString protPropOid_;
-    css::uno::TypeDescription protPropType_;
-    css::uno::TypeDescription protPropRequest_;
-    css::uno::TypeDescription protPropCommit_;
+    cpo::uno::TypeDescription protPropType_;
+    cpo::uno::TypeDescription protPropRequest_;
+    cpo::uno::TypeDescription protPropCommit_;
     OutgoingRequests outgoingRequests_;
     osl::Condition passive_;
         // to guarantee that passive_ is eventually set (to avoid deadlock, see

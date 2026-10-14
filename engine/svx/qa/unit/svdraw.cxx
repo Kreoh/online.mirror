@@ -10,6 +10,8 @@
 #include <config_pdfimport.h>
 #include <test/unoapixml_test.hxx>
 
+#include <com/sun/star/document/XUndoManagerSupplier.hpp>
+#include <com/sun/star/drawing/TextVerticalAdjust.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
@@ -51,6 +53,7 @@
 #include <tools/XPath.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -385,6 +388,88 @@ CPPUNIT_TEST_FIXTURE(SvdrawTest, testRectangleObject)
     CPPUNIT_ASSERT_EQUAL(0, aPath.create(aStrokePath, "/stroke")->count());
 
     pPage->RemoveObject(0);
+}
+
+CPPUNIT_TEST_FIXTURE(SvdrawTest, testUndoOfTypingGivesTheFrameItsSizeBack)
+{
+    // Undoing the typing in a text frame puts the frame back at the size it had before that text
+    // was there. A frame that grows to fit its text is made taller while the text is being typed,
+    // and handing the earlier text back does not on its own take that height off again.
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XShape> xFrame(
+        xFactory->createInstance(u"com.sun.star.drawing.TextShape"_ustr), uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    xDrawPage->add(xFrame);
+    uno::Reference<beans::XPropertySet> xFrameProperties(xFrame, uno::UNO_QUERY);
+    xFrameProperties->setPropertyValue(u"TextAutoGrowHeight"_ustr, uno::Any(true));
+    xFrameProperties->setPropertyValue(u"TextAutoGrowWidth"_ustr, uno::Any(false));
+    xFrame->setPosition(awt::Point(1000, 1000));
+    xFrame->setSize(awt::Size(6000, 1000));
+    const sal_Int32 nHeightBeforeTyping = xFrame->getSize().Height;
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    CPPUNIT_ASSERT(pViewShell);
+    SdrView* pSdrView = pViewShell->GetDrawView();
+    SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xFrame);
+    pSdrView->SdrBeginTextEdit(pObject);
+    pSdrView->GetTextEditOutlinerView()->GetEditView().InsertText(
+        u"one\ntwo\nthree\nfour\nfive\nsix"_ustr);
+    pSdrView->SdrEndTextEdit();
+
+    const sal_Int32 nHeightAfterTyping = xFrame->getSize().Height;
+    CPPUNIT_ASSERT_GREATER(nHeightBeforeTyping, nHeightAfterTyping);
+
+    uno::Reference<document::XUndoManagerSupplier> xUndoManagerSupplier(mxComponent,
+                                                                        uno::UNO_QUERY);
+    xUndoManagerSupplier->getUndoManager()->undo();
+
+    // Without the fix the frame kept the height it had grown to while the text was being typed.
+    CPPUNIT_ASSERT_EQUAL(nHeightBeforeTyping, xFrame->getSize().Height);
+}
+
+CPPUNIT_TEST_FIXTURE(SvdrawTest, testUndoOfTypingKeepsAMoveMadeMeanwhile)
+{
+    // Undoing the typing in an empty text frame gives the frame back its earlier size where it
+    // stands now. A move made after the typing, for example by another user, stays in place.
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XShape> xFrame(
+        xFactory->createInstance(u"com.sun.star.drawing.TextShape"_ustr), uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    xDrawPage->add(xFrame);
+    uno::Reference<beans::XPropertySet> xFrameProperties(xFrame, uno::UNO_QUERY);
+    xFrameProperties->setPropertyValue(u"TextAutoGrowHeight"_ustr, uno::Any(true));
+    xFrameProperties->setPropertyValue(u"TextAutoGrowWidth"_ustr, uno::Any(false));
+    xFrameProperties->setPropertyValue(u"TextVerticalAdjust"_ustr,
+                                       uno::Any(drawing::TextVerticalAdjust_TOP));
+    xFrame->setPosition(awt::Point(1000, 1000));
+    xFrame->setSize(awt::Size(6000, 1000));
+    const awt::Size aSizeBeforeTyping = xFrame->getSize();
+
+    SdrView* pSdrView = SfxViewShell::Current()->GetDrawView();
+    pSdrView->SdrBeginTextEdit(SdrObject::getSdrObjectFromXShape(xFrame));
+    pSdrView->GetTextEditOutlinerView()->GetEditView().InsertText(
+        u"one\ntwo\nthree\nfour\nfive\nsix"_ustr);
+    pSdrView->SdrEndTextEdit();
+    CPPUNIT_ASSERT_GREATER(aSizeBeforeTyping.Height, xFrame->getSize().Height);
+
+    // The frame is moved without an undo step of its own.
+    xFrame->setPosition(awt::Point(2000, 3000));
+
+    uno::Reference<document::XUndoManagerSupplier> xUndoManagerSupplier(mxComponent,
+                                                                        uno::UNO_QUERY);
+    xUndoManagerSupplier->getUndoManager()->undo();
+
+    // Without the fix the frame either kept the height it had grown to, or went back to where it
+    // stood before the typing.
+    CPPUNIT_ASSERT_EQUAL(aSizeBeforeTyping.Height, xFrame->getSize().Height);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2000), xFrame->getPosition().X);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3000), xFrame->getPosition().Y);
 }
 
 CPPUNIT_TEST_FIXTURE(SvdrawTest, testAutoHeightMultiColShape)
@@ -862,26 +947,26 @@ CPPUNIT_TEST_FIXTURE(SvdrawTest, testClipVerticalTextOverflow)
     assertXPathContent(pDocument, "count((//sdrblocktext)[4]//textsimpleportion)", u"6");
 
     // make sure text is aligned correctly after the overflowing text is clipped
-    assertXPath(pDocument, "((//sdrblocktext)[4]//textsimpleportion)[1]", "y", u"3749");
-    assertXPath(pDocument, "((//sdrblocktext)[4]//textsimpleportion)[6]", "y", u"7559");
+    assertXPath(pDocument, "((//sdrblocktext)[4]//textsimpleportion)[1]", "y", u"3710");
+    assertXPath(pDocument, "((//sdrblocktext)[4]//textsimpleportion)[6]", "y", u"7520");
 
     // make sure the text that isn't overflowing is still aligned properly
     assertXPathContent(pDocument, "count((//sdrblocktext)[5]//textsimpleportion)", u"3");
-    assertXPathDoubleValue(pDocument, "((//sdrblocktext)[5]//textsimpleportion)[1]", "y", 5073.5,
+    assertXPathDoubleValue(pDocument, "((//sdrblocktext)[5]//textsimpleportion)[1]", "y", 5034.5,
                            0.001);
-    assertXPathDoubleValue(pDocument, "((//sdrblocktext)[5]//textsimpleportion)[3]", "y", 6597.5,
+    assertXPathDoubleValue(pDocument, "((//sdrblocktext)[5]//textsimpleportion)[3]", "y", 6558.5,
                            0.001);
 
     // Test vertically overflowing text, with vertical text direction
     assertXPathContent(pDocument, "count((//sdrblocktext)[6]//textsimpleportion)", u"12");
     // make sure text is aligned correctly after the overflowing text is clipped
-    assertXPath(pDocument, "((//sdrblocktext)[6]//textsimpleportion)[1]", "x", u"12964");
-    assertXPath(pDocument, "((//sdrblocktext)[6]//textsimpleportion)[12]", "x", u"4582");
+    assertXPath(pDocument, "((//sdrblocktext)[6]//textsimpleportion)[1]", "x", u"13003");
+    assertXPath(pDocument, "((//sdrblocktext)[6]//textsimpleportion)[12]", "x", u"4621");
 
     // make sure the text that isn't overflowing is still aligned properly
     assertXPathContent(pDocument, "count((//sdrblocktext)[7]//textsimpleportion)", u"3");
-    assertXPath(pDocument, "((//sdrblocktext)[7]//textsimpleportion)[1]", "x", u"25417");
-    assertXPath(pDocument, "((//sdrblocktext)[7]//textsimpleportion)[3]", "x", u"23893");
+    assertXPath(pDocument, "((//sdrblocktext)[7]//textsimpleportion)[1]", "x", u"25456");
+    assertXPath(pDocument, "((//sdrblocktext)[7]//textsimpleportion)[3]", "x", u"23932");
 }
 
 CPPUNIT_TEST_FIXTURE(SvdrawTest, testContourText)
@@ -1104,6 +1189,39 @@ CPPUNIT_TEST_FIXTURE(SvdrawTest, testGraphicClipPolyPolygonODFRoundTrip)
     CPPUNIT_ASSERT_EQUAL(sal_Int32(4000), aReloaded.Coordinates[1][2].X);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(3000), aReloaded.Coordinates[1][2].Y);
 }
+
+CPPUNIT_TEST_FIXTURE(SvdrawTest, testValidOrganizationChartExport)
+{
+    // The document contains a smartart diagram based on template "Horizontal Organization Chart".
+    // When the document was saved with our own version of data.xml, the exported file was invalid
+    // in regard to OOXML.
+
+    // load document
+    loadFromFile(u"cool16158_Horizontal_Organization_Chart.pptx");
+
+    // We need to make a change to the diagram to force creating an own data.xml file instead of
+    // using the GrabBag. When the implementation is changed to always write our own data.xml,
+    // this part can be removed from the test.
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<drawing::XShapes> xSmartArt(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    // Get the 1st text shape. There is a BGShape in indices before.
+    uno::Reference<drawing::XShape> xShape(xSmartArt->getByIndex(1), uno::UNO_QUERY);
+    // TextEdit: Insert a char at the start
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    CPPUNIT_ASSERT(pViewShell);
+    SdrView* pSdrView = pViewShell->GetDrawView();
+    SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
+    pSdrView->SdrBeginTextEdit(pObject);
+    EditView& rEditView = pSdrView->GetTextEditOutlinerView()->GetEditView();
+    rEditView.InsertText(u"A"_ustr);
+    pSdrView->SdrEndTextEdit();
+
+    // Save the file. That will run validate(). Without fix validation failed.
+    save(TestFilter::PPTX);
+}
+
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

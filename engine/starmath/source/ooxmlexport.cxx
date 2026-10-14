@@ -13,15 +13,20 @@
 #include <rtl/ustring.hxx>
 #include <sal/log.hxx>
 #include <oox/mathml/imexport.hxx>
+#include <filter/msfilter/util.hxx>
+#include <tools/color.hxx>
+#include <unicode/uchar.h>
+#include <utility.hxx>
 
 using namespace oox;
 using namespace oox::core;
 
 SmOoxmlExport::SmOoxmlExport(const SmNode *const pIn, OoxmlVersion const v,
-        drawingml::DocumentType const documentType)
+        drawingml::DocumentType const documentType, sal_Int32 const nFontSizeInHalfPoints)
 : SmWordExportBase( pIn )
 , version( v )
 , m_DocumentType(documentType)
+, m_nFontSizeInHalfPoints(nFontSizeInHalfPoints)
 {
 }
 
@@ -79,9 +84,86 @@ void SmOoxmlExport::ConvertFromStarMath( const ::sax_fastparser::FSHelperPtr& se
 // NOTE: This is still work in progress and unfinished, but it already covers a good
 // part of the ooxml math stuff.
 
+// The w prefix is bound in a DOCX and nowhere else. A formula in a presentation or a
+// spreadsheet goes out inside a slide or a sheet, which never declare it, so run
+// properties there would leave the prefix unbound.
+bool SmOoxmlExport::WritesRunProperties() const
+{
+    return drawingml::DOCUMENT_DOCX == m_DocumentType;
+}
+
+// Only a color command around a node sets a color on it.
+bool SmOoxmlExport::HasOwnColor( const SmNode* pNode )
+{
+    return pNode->GetFont().GetColor() != COL_AUTO;
+}
+
+// The size belongs on every run and on every control property of the formula, which is
+// where the markup carries it.
+void SmOoxmlExport::WriteFontSize()
+{
+    const OString sFontSize( OString::number( m_nFontSizeInHalfPoints ));
+    m_pSerializer->singleElementNS( XML_w, XML_sz, FSNS( XML_w, XML_val ), sFontSize );
+    m_pSerializer->singleElementNS( XML_w, XML_szCs, FSNS( XML_w, XML_val ), sFontSize );
+}
+
+// A construct such as a fraction or a pair of brackets draws part of itself, and the
+// format of that part travels in the m:ctrlPr of the construct's property element.
+void SmOoxmlExport::WriteCtrlPr( const SmNode* pNode )
+{
+    if( !WritesRunProperties())
+        return;
+    m_pSerializer->startElementNS( XML_m, XML_ctrlPr );
+    m_pSerializer->startElementNS( XML_w, XML_rPr );
+    if( pNode->Attributes() & FontAttribute::Bold )
+        m_pSerializer->singleElementNS( XML_w, XML_b );
+    if( pNode->Attributes() & FontAttribute::Italic )
+        m_pSerializer->singleElementNS( XML_w, XML_i );
+    if( HasOwnColor( pNode ))
+        m_pSerializer->singleElementNS( XML_w, XML_color, FSNS( XML_w, XML_val ),
+            msfilter::util::ConvertColorOU( pNode->GetFont().GetColor()));
+    WriteFontSize();
+    m_pSerializer->endElementNS( XML_w, XML_rPr );
+    m_pSerializer->endElementNS( XML_m, XML_ctrlPr );
+}
+
+// A property element that a construct carries only to hold its control properties.
+void SmOoxmlExport::WritePropertiesElement( sal_Int32 nElement, const SmNode* pNode )
+{
+    if( !WritesRunProperties())
+        return;
+    m_pSerializer->startElementNS( XML_m, nElement );
+    WriteCtrlPr( pNode );
+    m_pSerializer->endElementNS( XML_m, nElement );
+}
+
+static bool lcl_HasLetter( const OUString& rText )
+{
+    for( sal_Int32 nIndex = 0; nIndex < rText.getLength(); )
+        if( u_isalpha( rText.iterateCodePoints( &nIndex )))
+            return true;
+    return false;
+}
+
+// The m:sty that makes Word draw the run the way StarMath does. Without one Word draws
+// letters italic and digits upright, as StarMath does. A function name is read back as
+// upright unless it says otherwise.
+static const char* lcl_GetOoxmlStyle( bool bBold, bool bItalic, const OUString& rText,
+    bool bFunctionName )
+{
+    if( bBold )
+        return bItalic ? "bi" : "b";
+    if( bItalic )
+        return bFunctionName ? "i" : nullptr;
+    if( lcl_HasLetter( rText ))
+        return "p";
+    return nullptr;
+}
+
 void SmOoxmlExport::HandleVerticalStack( const SmNode* pNode, int nLevel )
 {
     m_pSerializer->startElementNS(XML_m, XML_eqArr);
+    WritePropertiesElement( XML_eqArrPr, pNode );
     int size = pNode->GetNumSubNodes();
     for( int i = 0;
          i < size;
@@ -98,22 +180,47 @@ void SmOoxmlExport::HandleText( const SmNode* pNode, int /*nLevel*/)
 {
     m_pSerializer->startElementNS(XML_m, XML_r);
 
-    if( pNode->GetToken().eType == TTEXT ) // literal text (in quotes)
+    const SmTextNode* pTemp = static_cast<const SmTextNode* >(pNode);
+    const bool bBold = IsBold( pNode->GetFont());
+    const bool bItalic = IsItalic( pNode->GetFont());
+    const bool bLiteral = pNode->GetToken().eType == TTEXT;
+    if( bLiteral ) // literal text (in quotes)
     {
         m_pSerializer->startElementNS(XML_m, XML_rPr);
         m_pSerializer->singleElementNS(XML_m, XML_lit);
         m_pSerializer->singleElementNS(XML_m, XML_nor);
         m_pSerializer->endElementNS( XML_m, XML_rPr );
     }
-    if (drawingml::DOCUMENT_DOCX == m_DocumentType && ECMA_376_1ST_EDITION == version)
-    { // HACK: MSOffice2007 does not import characters properly unless this font is explicitly given
+    // m:nor and m:sty exclude each other, so normal text keeps its bold and italic in
+    // the w:rPr
+    else if( const char* pStyle = lcl_GetOoxmlStyle( bBold, bItalic, pTemp->GetText(),
+                 pTemp->GetFontDesc() == FNT_FUNCTION ))
+    {
+        m_pSerializer->startElementNS(XML_m, XML_rPr);
+        m_pSerializer->singleElementNS(XML_m, XML_sty, FSNS(XML_m, XML_val), pStyle);
+        m_pSerializer->endElementNS( XML_m, XML_rPr );
+    }
+    if( WritesRunProperties())
+    {
         m_pSerializer->startElementNS(XML_w, XML_rPr);
-        m_pSerializer->singleElementNS( XML_w, XML_rFonts, FSNS( XML_w, XML_ascii ), "Cambria Math",
-            FSNS( XML_w, XML_hAnsi ), "Cambria Math" );
+        if( ECMA_376_1ST_EDITION == version )
+            // Readers of the first OOXML edition get the characters wrong unless the font
+            // is named here.
+            m_pSerializer->singleElementNS( XML_w, XML_rFonts,
+                FSNS( XML_w, XML_ascii ), "Cambria Math",
+                FSNS( XML_w, XML_hAnsi ), "Cambria Math" );
+        // A surrounding color, bold or italic command has already reached this node.
+        if( bLiteral && bBold )
+            m_pSerializer->singleElementNS( XML_w, XML_b );
+        if( bLiteral && bItalic )
+            m_pSerializer->singleElementNS( XML_w, XML_i );
+        if( HasOwnColor( pNode ))
+            m_pSerializer->singleElementNS( XML_w, XML_color, FSNS( XML_w, XML_val ),
+                msfilter::util::ConvertColorOU( pNode->GetFont().GetColor()));
+        WriteFontSize();
         m_pSerializer->endElementNS( XML_w, XML_rPr );
     }
     m_pSerializer->startElementNS(XML_m, XML_t, FSNS(XML_xml, XML_space), "preserve");
-    const SmTextNode* pTemp = static_cast<const SmTextNode* >(pNode);
     SAL_INFO( "starmath.ooxml", "Text:" << pTemp->GetText());
     OUStringBuffer buf(pTemp->GetText());
     for(sal_Int32 i=0;i<pTemp->GetText().getLength();i++)
@@ -174,10 +281,12 @@ void SmOoxmlExport::HandleText( const SmNode* pNode, int /*nLevel*/)
 void SmOoxmlExport::HandleFractions( const SmNode* pNode, int nLevel, const char* type )
 {
     m_pSerializer->startElementNS(XML_m, XML_f);
-    if( type != nullptr )
+    if( type != nullptr || WritesRunProperties())
     {
         m_pSerializer->startElementNS(XML_m, XML_fPr);
-        m_pSerializer->singleElementNS(XML_m, XML_type, FSNS(XML_m, XML_val), type);
+        if( type != nullptr )
+            m_pSerializer->singleElementNS(XML_m, XML_type, FSNS(XML_m, XML_val), type);
+        WriteCtrlPr( pNode );
         m_pSerializer->endElementNS( XML_m, XML_fPr );
     }
     assert( pNode->GetNumSubNodes() == 3 );
@@ -215,6 +324,7 @@ void SmOoxmlExport::HandleAttribute( const SmAttributeNode* pNode, int nLevel )
             m_pSerializer->startElementNS(XML_m, XML_accPr);
             OString value = OUStringToOString(pNode->Attribute()->GetToken().cMathChar, RTL_TEXTENCODING_UTF8 );
             m_pSerializer->singleElementNS(XML_m, XML_chr, FSNS(XML_m, XML_val), value);
+            WriteCtrlPr( pNode );
             m_pSerializer->endElementNS( XML_m, XML_accPr );
             m_pSerializer->startElementNS(XML_m, XML_e);
             HandleNode( pNode->Body(), nLevel + 1 );
@@ -228,6 +338,7 @@ void SmOoxmlExport::HandleAttribute( const SmAttributeNode* pNode, int nLevel )
             m_pSerializer->startElementNS(XML_m, XML_barPr);
             m_pSerializer->singleElementNS( XML_m, XML_pos, FSNS( XML_m, XML_val ),
                 ( pNode->Attribute()->GetToken().eType == TUNDERLINE ) ? "bot" : "top" );
+            WriteCtrlPr( pNode );
             m_pSerializer->endElementNS( XML_m, XML_barPr );
             m_pSerializer->startElementNS(XML_m, XML_e);
             HandleNode( pNode->Body(), nLevel + 1 );
@@ -242,6 +353,7 @@ void SmOoxmlExport::HandleAttribute( const SmAttributeNode* pNode, int nLevel )
             m_pSerializer->singleElementNS(XML_m, XML_hideLeft, FSNS(XML_m, XML_val), "1");
             m_pSerializer->singleElementNS(XML_m, XML_hideRight, FSNS(XML_m, XML_val), "1");
             m_pSerializer->singleElementNS(XML_m, XML_strikeH, FSNS(XML_m, XML_val), "1");
+            WriteCtrlPr( pNode );
             m_pSerializer->endElementNS( XML_m, XML_borderBoxPr );
             m_pSerializer->startElementNS(XML_m, XML_e);
             HandleNode( pNode->Body(), nLevel + 1 );
@@ -256,20 +368,24 @@ void SmOoxmlExport::HandleAttribute( const SmAttributeNode* pNode, int nLevel )
 
 void SmOoxmlExport::HandleRoot( const SmRootNode* pNode, int nLevel )
 {
+    const SmNode* pArgument = pNode->Argument();
     m_pSerializer->startElementNS(XML_m, XML_rad);
-    if( const SmNode* argument = pNode->Argument())
+    if( pArgument == nullptr || WritesRunProperties())
+    {
+        m_pSerializer->startElementNS(XML_m, XML_radPr);
+        if( pArgument == nullptr )
+            m_pSerializer->singleElementNS(XML_m, XML_degHide, FSNS(XML_m, XML_val), "1");
+        WriteCtrlPr( pNode );
+        m_pSerializer->endElementNS( XML_m, XML_radPr );
+    }
+    if( pArgument != nullptr )
     {
         m_pSerializer->startElementNS(XML_m, XML_deg);
-        HandleNode( argument, nLevel + 1 );
+        HandleNode( pArgument, nLevel + 1 );
         m_pSerializer->endElementNS( XML_m, XML_deg );
     }
     else
-    {
-        m_pSerializer->startElementNS(XML_m, XML_radPr);
-        m_pSerializer->singleElementNS(XML_m, XML_degHide, FSNS(XML_m, XML_val), "1");
-        m_pSerializer->endElementNS( XML_m, XML_radPr );
         m_pSerializer->singleElementNS(XML_m, XML_deg); // empty but present
-    }
     m_pSerializer->startElementNS(XML_m, XML_e);
     HandleNode( pNode->Body(), nLevel + 1 );
     m_pSerializer->endElementNS( XML_m, XML_e );
@@ -312,6 +428,7 @@ void SmOoxmlExport::HandleOperator( const SmOperNode* pNode, int nLevel )
                 m_pSerializer->singleElementNS(XML_m, XML_subHide, FSNS(XML_m, XML_val), "1");
             if( subsup == nullptr || subsup->GetSubSup( CSUP ) == nullptr )
                 m_pSerializer->singleElementNS(XML_m, XML_supHide, FSNS(XML_m, XML_val), "1");
+            WriteCtrlPr( pNode );
             m_pSerializer->endElementNS( XML_m, XML_naryPr );
             if( subsup == nullptr || subsup->GetSubSup( CSUB ) == nullptr )
                 m_pSerializer->singleElementNS(XML_m, XML_sub);
@@ -337,8 +454,10 @@ void SmOoxmlExport::HandleOperator( const SmOperNode* pNode, int nLevel )
         }
         case TLIM:
             m_pSerializer->startElementNS(XML_m, XML_func);
+            WritePropertiesElement( XML_funcPr, pNode );
             m_pSerializer->startElementNS(XML_m, XML_fName);
             m_pSerializer->startElementNS(XML_m, XML_limLow);
+            WritePropertiesElement( XML_limLowPr, pNode );
             m_pSerializer->startElementNS(XML_m, XML_e);
             HandleNode( pNode->GetSymbol(), nLevel + 1 );
             m_pSerializer->endElementNS( XML_m, XML_e );
@@ -373,6 +492,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
     if(( flags & ( 1 << RSUP | 1 << RSUB )) == ( 1 << RSUP | 1 << RSUB ))
     { // m:sSubSup
         m_pSerializer->startElementNS(XML_m, XML_sSubSup);
+        WritePropertiesElement( XML_sSubSupPr, pNode );
         m_pSerializer->startElementNS(XML_m, XML_e);
         flags &= ~( 1 << RSUP | 1 << RSUB );
         if( flags == 0 )
@@ -391,6 +511,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
     else if(( flags & ( 1 << RSUB )) == 1 << RSUB )
     { // m:sSub
         m_pSerializer->startElementNS(XML_m, XML_sSub);
+        WritePropertiesElement( XML_sSubPr, pNode );
         m_pSerializer->startElementNS(XML_m, XML_e);
         flags &= ~( 1 << RSUB );
         if( flags == 0 )
@@ -406,6 +527,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
     else if(( flags & ( 1 << RSUP )) == 1 << RSUP )
     { // m:sSup
         m_pSerializer->startElementNS(XML_m, XML_sSup);
+        WritePropertiesElement( XML_sSupPr, pNode );
         m_pSerializer->startElementNS(XML_m, XML_e);
         flags &= ~( 1 << RSUP );
         if( flags == 0 )
@@ -421,6 +543,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
     else if(( flags & ( 1 << LSUP | 1 << LSUB )) == ( 1 << LSUP | 1 << LSUB ))
     { // m:sPre
         m_pSerializer->startElementNS(XML_m, XML_sPre);
+        WritePropertiesElement( XML_sPrePr, pNode );
         m_pSerializer->startElementNS(XML_m, XML_sub);
         HandleNode( pNode->GetSubSup( LSUB ), nLevel + 1 );
         m_pSerializer->endElementNS( XML_m, XML_sub );
@@ -439,6 +562,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
     else if(( flags & ( 1 << CSUB )) == ( 1 << CSUB ))
     { // m:limLow looks like a good element for central superscript
         m_pSerializer->startElementNS(XML_m, XML_limLow);
+        WritePropertiesElement( XML_limLowPr, pNode );
         m_pSerializer->startElementNS(XML_m, XML_e);
         flags &= ~( 1 << CSUB );
         if( flags == 0 )
@@ -454,6 +578,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
     else if(( flags & ( 1 << CSUP )) == ( 1 << CSUP ))
     { // m:limUpp looks like a good element for central superscript
         m_pSerializer->startElementNS(XML_m, XML_limUpp);
+        WritePropertiesElement( XML_limUppPr, pNode );
         m_pSerializer->startElementNS(XML_m, XML_e);
         flags &= ~( 1 << CSUP );
         if( flags == 0 )
@@ -477,6 +602,7 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
 void SmOoxmlExport::HandleMatrix( const SmMatrixNode* pNode, int nLevel )
 {
     m_pSerializer->startElementNS(XML_m, XML_m);
+    WritePropertiesElement( XML_mPr, pNode );
     for (size_t row = 0; row < pNode->GetNumRows(); ++row)
     {
         m_pSerializer->startElementNS(XML_m, XML_mr);
@@ -535,6 +661,7 @@ void SmOoxmlExport::HandleBrace( const SmBraceNode* pNode, int nLevel )
         m_pSerializer->singleElementNS( XML_m, XML_endChr,
             FSNS( XML_m, XML_val ), mathSymbolToString(pNode->ClosingBrace()) );
 
+    WriteCtrlPr( pNode );
     m_pSerializer->endElementNS( XML_m, XML_dPr );
     if (subnodes.empty())
     {
@@ -563,6 +690,7 @@ void SmOoxmlExport::HandleVerticalBrace( const SmVerticalBraceNode* pNode, int n
         {
             bool top = ( pNode->GetToken().eType == TOVERBRACE );
             m_pSerializer->startElementNS(XML_m, top ? XML_limUpp : XML_limLow);
+            WritePropertiesElement( top ? XML_limUppPr : XML_limLowPr, pNode );
             m_pSerializer->startElementNS(XML_m, XML_e);
             m_pSerializer->startElementNS(XML_m, XML_groupChr);
             m_pSerializer->startElementNS(XML_m, XML_groupChrPr);
@@ -573,6 +701,7 @@ void SmOoxmlExport::HandleVerticalBrace( const SmVerticalBraceNode* pNode, int n
                 FSNS( XML_m, XML_val ), top ? "top" : "bot" );
             m_pSerializer->singleElementNS(XML_m, XML_vertJc, FSNS(XML_m, XML_val),
                                            top ? "bot" : "top");
+            WriteCtrlPr( pNode );
             m_pSerializer->endElementNS( XML_m, XML_groupChrPr );
             m_pSerializer->startElementNS(XML_m, XML_e);
             HandleNode( pNode->Body(), nLevel + 1 );
@@ -595,6 +724,13 @@ void SmOoxmlExport::HandleVerticalBrace( const SmVerticalBraceNode* pNode, int n
 void SmOoxmlExport::HandleBlank()
 {
     m_pSerializer->startElementNS(XML_m, XML_r);
+    // A blank draws no glyph, so the size is all it carries.
+    if( WritesRunProperties())
+    {
+        m_pSerializer->startElementNS( XML_w, XML_rPr );
+        WriteFontSize();
+        m_pSerializer->endElementNS( XML_w, XML_rPr );
+    }
     m_pSerializer->startElementNS(XML_m, XML_t, FSNS(XML_xml, XML_space), "preserve");
     m_pSerializer->write( " " );
     m_pSerializer->endElementNS( XML_m, XML_t );

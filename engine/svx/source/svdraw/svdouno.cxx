@@ -22,7 +22,7 @@
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/processfactory.hxx>
@@ -41,6 +41,7 @@
 #include <o3tl/sorted_vector.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace sdr::contact;
 
 
@@ -55,14 +56,14 @@ public:
     {}
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual void disposing( const css::lang::EventObject& Source ) override;
 
     void StopListening(const uno::Reference< lang::XComponent >& xComp);
     void StartListening(const uno::Reference< lang::XComponent >& xComp);
 };
 
 // XEventListener
-void SAL_CALL SdrControlEventListenerImpl::disposing( const css::lang::EventObject& /*Source*/)
+void SdrControlEventListenerImpl::disposing( const css::lang::EventObject& /*Source*/)
 {
     if (pObj)
     {
@@ -371,7 +372,7 @@ void SdrUnoObj::CreateUnoControlModel(const OUString& rModelName)
     m_aUnoControlModelTypeName = rModelName;
 
     uno::Reference< awt::XControlModel >   xModel;
-    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     if (!m_aUnoControlModelTypeName.isEmpty() )
     {
         xModel.set(xContext->getServiceManager()->createInstanceWithContext(
@@ -467,7 +468,7 @@ uno::Reference< awt::XControl > SdrUnoObj::GetUnoControl(const SdrView& _rView, 
 
 
 uno::Reference< awt::XControl > SdrUnoObj::GetTemporaryControlForWindow(
-    const vcl::Window& _rWindow, uno::Reference< awt::XControlContainer >& _inout_ControlContainer ) const
+    const vcl::Window& _rWindow, rtl::Reference< UnoControlContainer >& _inout_ControlContainer ) const
 {
     uno::Reference< awt::XControl > xControl;
 

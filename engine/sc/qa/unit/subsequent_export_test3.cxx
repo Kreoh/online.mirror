@@ -8,6 +8,8 @@
  */
 
 #include "helper/qahelper.hxx"
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 
 #include <formulacell.hxx>
 #include <userdat.hxx>
@@ -19,6 +21,9 @@
 #include <svx/svdpage.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdomeas.hxx>
+#include <svx/seclabel/SpifPolicy.hxx>
+#include <svx/seclabel/StanagLabel.hxx>
+#include <svx/seclabel/SecLabelStore.hxx>
 #include <svl/zformat.hxx>
 #include <svl/numformat.hxx>
 #include <tabprotection.hxx>
@@ -28,14 +33,18 @@
 #include <sfx2/docfile.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <tools/datetime.hxx>
+#include <tools/stream.hxx>
 #include <tools/UnitConversion.hxx>
 
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/graphic/GraphicType.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class ScExportTest3 : public ScModelTestBase
 {
@@ -1035,6 +1044,15 @@ CPPUNIT_TEST_FIXTURE(ScExportTest3, testCustomXml)
     assertXPath(pRelsDoc, "/rels:Relationships/rels:Relationship[@Id='rId1']", "Target",
                 u"itemProps1.xml");
 
+    // The customXml relationship must be written exactly once into workbook.xml.rels
+    // (the generic grab-bag path); the retired Calc-specific path used to duplicate it.
+    xmlDocUniquePtr pWbRelsDoc = parseExport(u"xl/_rels/workbook.xml.rels"_ustr);
+    CPPUNIT_ASSERT(pWbRelsDoc);
+    assertXPath(pWbRelsDoc,
+                "/rels:Relationships/rels:Relationship[@Type='http://schemas.openxmlformats.org/"
+                "officeDocument/2006/relationships/customXml']",
+                1);
+
     std::unique_ptr<SvStream> pStream
         = parseExportStream(maTempFile.GetURL(), u"ddp/ddpfile.xen"_ustr);
     CPPUNIT_ASSERT(pStream);
@@ -1042,6 +1060,76 @@ CPPUNIT_TEST_FIXTURE(ScExportTest3, testCustomXml)
     // tdf#161453: ensure E1's wrap text attribute was round-tripped
     ScDocument* pDoc = getScDoc();
     CPPUNIT_ASSERT(pDoc->GetAttr(4, 0, 0, ATTR_LINEBREAK).GetValue());
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest3, testSecurityLabel)
+{
+    // Apply a STANAG label to an empty spreadsheet and round-trip through XLSX: the
+    // customXml binding part must survive and read back (the generic grab-bag path).
+    createScDoc();
+
+    static const OString aSpif(
+        R"xml(<?xml version="1.0" encoding="utf-8"?>
+<spif:SPIF xmlns:spif="http://www.xmlspif.org/spif" schemaVersion="1.0" version="1">
+  <spif:securityPolicyId name="SPIF Collabora" id="1.2.826.0.1310.1.2.0" />
+  <spif:securityClassifications>
+    <spif:securityClassification name="SECRET" color="red" lacv="4" hierarchy="4" />
+  </spif:securityClassifications>
+  <spif:securityCategoryTagSets>
+    <spif:securityCategoryTagSet name="Release Categories" id="1.2.826.0.1310.1.2.0.0">
+      <spif:securityCategoryTag name="Releasable To" tagType="enumerated" enumType="permissive">
+        <spif:tagCategory name="CANADA" lacv="4407630" obsolete="false" />
+        <spif:tagCategory name="UNITED KINGDOM" lacv="5591873" obsolete="false" />
+      </spif:securityCategoryTag>
+    </spif:securityCategoryTagSet>
+  </spif:securityCategoryTagSets>
+</spif:SPIF>)xml"_ostr);
+    SvMemoryStream aPolicyStream(const_cast<char*>(aSpif.getStr()), aSpif.getLength(),
+                                 StreamMode::READ);
+    svx::seclabel::SpifPolicy aPolicy;
+    CPPUNIT_ASSERT(aPolicy.parse(aPolicyStream));
+
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    const std::vector<bool> aSelected{ true, true };
+    const svx::seclabel::StanagLabel aLabel = aPolicy.buildLabel(
+        u"SECRET"_ustr, aSelected, u"2026-06-21T10:00:00Z"_ustr, u"2027-06-21T10:00:00Z"_ustr);
+    // Applying the label must flag the document modified (so it prompts to save).
+    uno::Reference<util::XModifiable> xModifiable(xModel, uno::UNO_QUERY_THROW);
+    xModifiable->setModified(false);
+    svx::seclabel::storeLabelPart(
+        xModel, aLabel.toBindingXml(),
+        svx::seclabel::buildItemProps(u"{B6E4D8A1-1A35-4F0E-9B7A-71F4C0F5E0D3}"_ustr,
+                                      svx::seclabel::STANAG_BINDING_SCHEMA));
+    CPPUNIT_ASSERT(xModifiable->isModified());
+
+    saveAndReload(TestFilter::XLSX);
+
+    // The exported customXml part carries a spec-conformant 4774 label (generic
+    // exportCustomFragments path). local-name() XPath sidesteps the STANAG default
+    // namespaces.
+    xmlDocUniquePtr pXml = parseExport(u"customXml/item1.xml"_ustr);
+    CPPUNIT_ASSERT(pXml);
+    assertXPath(pXml, "//*[local-name()='PolicyIdentifier']", "URI",
+                u"urn:oid:1.2.826.0.1310.1.2.0");
+    assertXPathContent(pXml, "//*[local-name()='PolicyIdentifier']", u"SPIF Collabora");
+    assertXPathContent(pXml, "//*[local-name()='Classification']", u"SECRET");
+    assertXPath(pXml, "//*[local-name()='Category']", "TagName", u"Releasable To");
+    assertXPath(pXml, "//*[local-name()='Category']", "Type", u"PERMISSIVE");
+    assertXPathContent(pXml, "(//*[local-name()='GenericValue'])[1]", u"CANADA");
+    assertXPathContent(pXml, "(//*[local-name()='GenericValue'])[2]", u"UNITED KINGDOM");
+    assertXPathContent(pXml, "//*[local-name()='CreationDateTime']", u"2026-06-21T10:00:00Z");
+    assertXPath(pXml, "//*[local-name()='OriginatorConfidentialityLabel']", "ReviewDateTime",
+                u"2027-06-21T10:00:00Z");
+
+    // Read the label back out of the reloaded document.
+    uno::Reference<frame::XModel> xReloaded(mxComponent, uno::UNO_QUERY);
+    svx::seclabel::StanagLabel aReadBack;
+    CPPUNIT_ASSERT(svx::seclabel::readLabel(xReloaded, aReadBack));
+    CPPUNIT_ASSERT_EQUAL(u"SECRET"_ustr, aReadBack.aClassification);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aReadBack.aCategories.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aReadBack.aCategories[0].aValues.size());
+    CPPUNIT_ASSERT_EQUAL(u"CANADA"_ustr, aReadBack.aCategories[0].aValues[0]);
+    CPPUNIT_ASSERT_EQUAL(u"UNITED KINGDOM"_ustr, aReadBack.aCategories[0].aValues[1]);
 }
 
 #ifdef _WIN32
@@ -1207,7 +1295,7 @@ CPPUNIT_TEST_FIXTURE(ScExportTest3, testLinkedGraphicRT)
         // linked graphic fetch is deferred during loading, allow link
         // updates and trigger the fetch before export
         getScDocShell()->getEmbeddedObjectContainer().setUserAllowsLinkUpdate(true);
-        getScDoc()->GetLinkManager()->UpdateAllLinks(false, nullptr, u""_ustr);
+        getScDoc()->GetLinkManager()->UpdateAllLinks(false, u""_ustr);
 
         // Export the document and import again for a check
         saveAndReload(aFilterNames[i]);

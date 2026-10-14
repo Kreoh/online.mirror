@@ -48,8 +48,6 @@ gb_MERGE_LIBRARY_LIST := \
 		dbu) \
 	$(call gb_Helper_optional,SCRIPTING,dlgprov) \
 	dbtools \
-	deployment \
-	deploymentmisc \
 	$(if $(filter-out MACOSX WNT,$(OS)),desktopbe1) \
 	docmodel \
 	drawinglayercore \
@@ -99,6 +97,7 @@ gb_MERGE_LIBRARY_LIST := \
 		macab1 \
 	) \
 	$(if $(filter iOS MACOSX,$(OS)),MacOSXSpell) \
+	$(if $(filter WNT,$(OS)),WinSpell) \
 	$(call gb_Helper_optional,DBCONNECTIVITY,mozbootstrap) \
 	$(call gb_Helper_optional,SCRIPTING,msforms) \
 	msfilter \
@@ -151,7 +150,6 @@ gb_MERGE_LIBRARY_LIST := \
 	$(if $(WITH_WEBDAV),ucpdav1) \
 	ucppkg1 \
 	ucpexpand1 \
-	ucpext \
 	ucphier1 \
 	ucpimage \
 	ucpfile1 \

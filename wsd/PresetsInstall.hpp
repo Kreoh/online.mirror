@@ -17,6 +17,7 @@
 #pragma once
 
 #include <net/Socket.hpp>
+#include <wsd/CacheUtil.hpp>
 
 #include <Poco/Timestamp.h>
 
@@ -25,19 +26,32 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
-struct CacheQuery;
 class ClientSession;
 
 class PresetsInstallTask : public std::enable_shared_from_this<PresetsInstallTask>
 {
 private:
+    // At most this many preset fetches run at once; the rest wait in _queuedPresets. Opening one
+    // connection per preset in a single burst can exceed a host's or proxy's per-client connection
+    // limit, turning one dropped connection into a document that never finishes loading. A user
+    // report (cool#16075) put that limit somewhere between 8 and 9 simultaneous connections on
+    // their setup; 4 stays comfortably under limits of that order while still fetching several
+    // presets in parallel rather than falling back to one at a time.
+    static constexpr std::size_t MaxConcurrentFetches = 4;
+
     std::set<std::string> _installingPresets;
+    std::vector<CacheQuery> _queuedPresets;
+    std::shared_ptr<ClientSession> _session;
     std::string _configId;
     std::string _presetsPath;
     // Per-group destination override; a group listed here goes under <override>/<group>/ instead of
     // the default <_presetsPath>/<group>/:
     std::map<std::string, std::string> _groupOverridePath;
+    // True for the presets of a whole configuration, which every user of that configuration
+    // shares. False for the presets of one individual user:
+    bool _sharedPresets;
     // Extension ids the integrator advertised for this round; anything present on disk under
     // <extensions>/ but not in this set after the install completes is a leftover from a prior
     // round (the integrator dropped that entry) and gets swept on completion:
@@ -56,6 +70,9 @@ private:
                       const std::string& fileName,
                       const std::shared_ptr<ClientSession>& session);
 
+    // Starts the next queued preset fetch, if any and if a fetch slot is free.
+    void launchNextPreset();
+
     void installPresetStarted(const std::string& id);
 
     void installPresetFinished(const std::string& id, bool presetResult);
@@ -72,7 +89,7 @@ private:
 public:
     PresetsInstallTask(const std::shared_ptr<SocketPoll>& poll, const std::string& configId,
                        const std::string& presetsPath,
-                       std::map<std::string, std::string> groupOverridePath,
+                       std::map<std::string, std::string> groupOverridePath, bool sharedPresets,
                        const std::function<void(bool)>& installFinishedCB);
 
     bool empty() const

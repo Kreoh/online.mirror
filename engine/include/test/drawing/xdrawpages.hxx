@@ -10,9 +10,9 @@
 #ifndef INCLUDED_TEST_DRAWING_XDRAWPAGES_HXX
 #define INCLUDED_TEST_DRAWING_XDRAWPAGES_HXX
 
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 #include <test/testdllapi.hxx>
 
@@ -21,7 +21,7 @@ namespace apitest
 class OOO_DLLPUBLIC_TEST XDrawPages
 {
 public:
-    virtual css::uno::Reference<css::uno::XInterface> init() = 0;
+    virtual cpo::uno::Reference<cpo::uno::XInterface> init() = 0;
 
     virtual void testInsertNewByIndex();
     virtual void testRemove();

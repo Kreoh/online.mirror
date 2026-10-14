@@ -48,6 +48,7 @@
 #include <ftninfo.hxx>
 #include <fmtftn.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <ndtxt.hxx>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
@@ -88,6 +89,7 @@
 #include <fmtpdsc.hxx>
 #include <svx/sdr/attribute/sdrallfillattributeshelper.hxx>
 #include <svl/itemiter.hxx>
+#include <svl/whiter.hxx>
 #include <undobj.hxx>
 #include <formatflysplit.hxx>
 #include <fmtcntnt.hxx>
@@ -95,6 +97,7 @@
 #include <names.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 typedef std::vector<SwTextAttr*> SwpHts;
 
@@ -244,6 +247,10 @@ SwTextNode::SwTextNode( const SwNode& rWhere, SwTextFormatColl *pTextColl, const
         // call method <UpdateOutlineNode(..)> only for the document nodes array
         if (GetNodes().IsDocNodes())
             GetNodes().UpdateOutlineNode(*this);
+
+        // A paragraph created inside a cell of a table with a live table style starts out
+        // with that cell's role collection.
+        ChkTableStyleRoleColl();
     }
 
     m_bContainsHiddenChars = m_bHiddenCharsHidePara = false;
@@ -1303,8 +1310,32 @@ void SwTextNode::NewAttrSet( SwAttrPool& rPool )
     aNewAttrSet.Put( aAnyFormatColl );
     aNewAttrSet.Put( aFormatColl );
 
-    aNewAttrSet.SetParent( &pAnyFormatColl->GetAttrSet() );
+    // The names above identify the paragraph style; the formatting comes from the layout
+    // collection, which adds the table style role's text formatting when there is one.
+    aNewAttrSet.SetParent( &GetLayoutFormatColl().GetAttrSet() );
     mpAttrSet = GetDoc().GetIStyleAccess().getAutomaticStyle( aNewAttrSet, IStyleAccess::AUTO_STYLE_PARA, &sVal );
+}
+
+std::optional<SwAttrSet> SwTextNode::GetOwnAttrsWithTableStyleRole() const
+{
+    const SwTextFormatColl* pRoleColl = GetTableStyleRoleColl();
+    if (!pRoleColl)
+        return {};
+
+    // A paragraph without attributes of its own shows exactly the role's items.
+    if (!GetpSwAttrSet())
+        return pRoleColl->GetAttrSet();
+
+    std::optional<SwAttrSet> oSet(*GetpSwAttrSet());
+
+    // The paragraph's own value wins over the role's, as it does in the layout.
+    SfxItemIter aIter(pRoleColl->GetAttrSet());
+    for (const SfxPoolItem* pItem = aIter.GetCurItem(); pItem; pItem = aIter.NextItem())
+    {
+        if (SfxItemState::SET != oSet->GetItemState(pItem->Which(), false))
+            oSet->Put(*pItem);
+    }
+    return oSet;
 }
 
 namespace
@@ -1701,10 +1732,11 @@ void SwTextNode::Update(
         SwRangeRedline* pRedln = rTable[nRedlnPos];
         if (pRedln->HasMark())
         {
-            if (*this == pRedln->End()->GetNode() && *pRedln->GetPoint() != *pRedln->GetMark())
+            if (auto [pStart, pEnd] = pRedln->StartEnd();
+                *this == pEnd->GetNode() && *pRedln->GetPoint() != *pRedln->GetMark())
             {
                 // Redline is changed only when some change occurs before it
-                if (nChangePos <= pRedln->Start()->GetContentIndex())
+                if (nChangePos <= pStart->GetContentIndex())
                 {
                     SwRedlineTable::KitRedlineNotification(RedlineNotification::Modify, pRedln);
                 }
@@ -3685,9 +3717,9 @@ OUString SwTextNode::GetExpandText(SwRootFrame const*const pLayout,
     OUStringBuffer aText(aExpandText.subView(nExpandBegin, nExpandEnd-nExpandBegin));
 
     // remove dummy characters of Input Fields
-    comphelper::string::remove(aText, CH_TXT_ATR_INPUTFIELDSTART);
-    comphelper::string::remove(aText, CH_TXT_ATR_INPUTFIELDEND);
-    comphelper::string::remove(aText, CH_TXTATR_BREAKWORD);
+    aText.remove(CH_TXT_ATR_INPUTFIELDSTART);
+    aText.remove(CH_TXT_ATR_INPUTFIELDEND);
+    aText.remove(CH_TXTATR_BREAKWORD);
 
     if( bWithNum )
     {
@@ -3745,8 +3777,8 @@ bool SwTextNode::CopyExpandText(SwTextNode& rDestNd, const SwContentIndex* pDest
     }
     // remove dummy characters of Input Fields
     {
-        comphelper::string::remove(buf, CH_TXT_ATR_INPUTFIELDSTART);
-        comphelper::string::remove(buf, CH_TXT_ATR_INPUTFIELDEND);
+        buf.remove(CH_TXT_ATR_INPUTFIELDSTART);
+        buf.remove(CH_TXT_ATR_INPUTFIELDEND);
     }
     rDestNd.InsertText(buf.makeStringAndClear(), aDestIdx);
     nLen = aDestIdx.GetIndex() - nDestStt;
@@ -3902,7 +3934,7 @@ OUString SwTextNode::GetRedlineText() const
             const SwRangeRedline* pTmp = rDoc.getIDocumentRedlineAccess().GetRedlineTable()[ nRedlPos ];
             if( RedlineType::Delete == pTmp->GetType() )
             {
-                const SwPosition *pRStt = pTmp->Start(), *pREnd = pTmp->End();
+                auto [pRStt, pREnd] = pTmp->StartEnd();
                 if( pRStt->GetNodeIndex() < nNdIdx )
                 {
                     if( pREnd->GetNodeIndex() > nNdIdx )
@@ -5298,6 +5330,12 @@ namespace {
 
 bool SwTextNode::SetAttr( const SfxPoolItem& pItem )
 {
+    if (GetDoc().IsInMergedPaste() && !SwTextNode::IsParaItemKeptInMergedPaste(pItem.Which()))
+    {
+        // Merged paste and the paragraph property is to be ignored.
+        return false;
+    }
+
     const bool bOldIsSetOrResetAttr( mbInSetOrResetAttr );
     mbInSetOrResetAttr = true;
 
@@ -5310,14 +5348,76 @@ bool SwTextNode::SetAttr( const SfxPoolItem& pItem )
     return bRet;
 }
 
+bool SwTextNode::IsCharItemKeptInMergedPaste(sal_uInt16 nWhich)
+{
+    switch (nWhich)
+    {
+        // Bold
+        case sal_uInt16(RES_CHRATR_WEIGHT):
+        case sal_uInt16(RES_CHRATR_CJK_WEIGHT):
+        case sal_uInt16(RES_CHRATR_CTL_WEIGHT):
+        // Italic
+        case sal_uInt16(RES_CHRATR_POSTURE):
+        case sal_uInt16(RES_CHRATR_CJK_POSTURE):
+        case sal_uInt16(RES_CHRATR_CTL_POSTURE):
+        // Underline
+        case sal_uInt16(RES_CHRATR_UNDERLINE):
+        // Superscript / subscript
+        case sal_uInt16(RES_CHRATR_ESCAPEMENT):
+        // Hidden text
+        case sal_uInt16(RES_CHRATR_HIDDEN):
+        // Proofing language
+        case sal_uInt16(RES_CHRATR_LANGUAGE):
+        case sal_uInt16(RES_CHRATR_CJK_LANGUAGE):
+        case sal_uInt16(RES_CHRATR_CTL_LANGUAGE):
+            return true;
+    }
+    return false;
+}
+
+bool SwTextNode::IsParaItemKeptInMergedPaste(sal_uInt16 nWhich)
+{
+    switch (nWhich)
+    {
+        // List membership, level, number format, start value
+        case sal_uInt16(RES_PARATR_LIST_ISCOUNTED):
+        case sal_uInt16(RES_PARATR_LIST_LEVEL):
+        case sal_uInt16(RES_PARATR_NUMRULE):
+        case sal_uInt16(RES_PARATR_LIST_ISRESTART):
+        case sal_uInt16(RES_PARATR_LIST_RESTARTVALUE):
+            return true;
+    }
+    // A character property set on the full paragraph.
+    return IsCharItemKeptInMergedPaste(nWhich);
+}
+
 bool SwTextNode::SetAttr( const SfxItemSet& rSet )
+{
+    return SetAttr(rSet, std::nullopt);
+}
+
+bool SwTextNode::SetAttr( const SfxItemSet& rSet, std::optional<bool> oInMergedPaste )
 {
     const bool bOldIsSetOrResetAttr( mbInSetOrResetAttr );
     mbInSetOrResetAttr = true;
 
-    HandleSetAttrAtTextNode aHandleSetAttr( *this, rSet );
+    SfxItemSet aFiltered(rSet);
+    if (oInMergedPaste.value_or(GetDoc().IsInMergedPaste()))
+    {
+        // Merged paste: only use selected paragraph properties from the source.
+        SfxWhichIter aIter(aFiltered);
+        for (sal_uInt16 nWhich = aIter.FirstWhich(); nWhich; nWhich = aIter.NextWhich())
+        {
+            if (!SwTextNode::IsParaItemKeptInMergedPaste(nWhich))
+            {
+                aFiltered.ClearItem(nWhich);
+            }
+        }
+    }
 
-    bool bRet = SwContentNode::SetAttr( rSet );
+    HandleSetAttrAtTextNode aHandleSetAttr( *this, aFiltered );
+
+    bool bRet = SwContentNode::SetAttr( aFiltered );
 
     mbInSetOrResetAttr = bOldIsSetOrResetAttr;
 

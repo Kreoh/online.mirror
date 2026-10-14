@@ -26,7 +26,8 @@
 #include "typedescriptionref.hxx"
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::TypeDescription;
+using namespace ::cpo;
+using ::cpo::uno::TypeDescription;
 using ::comphelper::detail::TypeDescriptionRef;
 
 namespace comphelper {
@@ -82,7 +83,7 @@ void appendValue( OUStringBuffer & buf,
         buf.append( reinterpret_cast< sal_Int64 >(
                         *static_cast< void * const * >(val) ), 16 );
         uno::Reference< lang::XServiceInfo > xServiceInfo(
-            *static_cast< uno::XInterface * const * >(val),
+            *static_cast< cpo::uno::XInterface * const * >(val),
             uno::UNO_QUERY );
         if (xServiceInfo.is()) {
             buf.append( " (ImplementationName = \"" );

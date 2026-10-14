@@ -32,6 +32,7 @@
 #include <tools/datetimeutils.hxx>
 
 #include <fmtfsize.hxx>
+#include <swtable.hxx>
 #include <unocoll.hxx>
 #include <formatflysplit.hxx>
 #include <IDocumentSettingAccess.hxx>
@@ -60,6 +61,49 @@ OString lcl_padStartToLength(OString const& aString, sal_Int32 nLen, char cFill)
     }
     else
         return aString;
+}
+
+/// The w:val a table's horizontal orientation is written as.
+std::string_view lcl_TableJcValue(sal_Int16 nHoriOrient, bool bEcma)
+{
+    switch (nHoriOrient)
+    {
+        case text::HoriOrientation::CENTER:
+            return "center";
+        case text::HoriOrientation::RIGHT:
+            return bEcma ? "right" : "end";
+        default:
+            return bEcma ? "left" : "start";
+    }
+}
+
+/// Writes w:tblLook from a table's current live style settings.
+void lcl_WriteTblLook(const FSHelperPtr& pSerializer, const SwTableStyleSettings& rSettings)
+{
+    sal_Int32 nVal = 0;
+    if (rSettings.m_bUseFirstRowStyle)
+        nVal |= 0x020;
+    if (rSettings.m_bUseLastRowStyle)
+        nVal |= 0x040;
+    if (rSettings.m_bUseFirstColumnStyle)
+        nVal |= 0x080;
+    if (rSettings.m_bUseLastColumnStyle)
+        nVal |= 0x100;
+    if (!rSettings.m_bUseRowBandingStyle)
+        nVal |= 0x200;
+    if (!rSettings.m_bUseColumnBandingStyle)
+        nVal |= 0x400;
+
+    rtl::Reference<FastAttributeList> pAttributeList = FastSerializerHelper::createAttrList();
+    pAttributeList->add(FSNS(XML_w, XML_val), lcl_padStartToLength(OString::number(nVal, 16), 4, '0'));
+    pAttributeList->add(FSNS(XML_w, XML_firstRow), rSettings.m_bUseFirstRowStyle ? "1" : "0");
+    pAttributeList->add(FSNS(XML_w, XML_lastRow), rSettings.m_bUseLastRowStyle ? "1" : "0");
+    pAttributeList->add(FSNS(XML_w, XML_firstColumn), rSettings.m_bUseFirstColumnStyle ? "1" : "0");
+    pAttributeList->add(FSNS(XML_w, XML_lastColumn), rSettings.m_bUseLastColumnStyle ? "1" : "0");
+    pAttributeList->add(FSNS(XML_w, XML_noHBand), !rSettings.m_bUseRowBandingStyle ? "1" : "0");
+    pAttributeList->add(FSNS(XML_w, XML_noVBand), !rSettings.m_bUseColumnBandingStyle ? "1" : "0");
+
+    pSerializer->singleElementNS(XML_w, XML_tblLook, pAttributeList);
 }
 
 void CollectFloatingTableAttributes(DocxExport& rExport, const ww8::Frame& rFrame,
@@ -109,7 +153,7 @@ void CollectFloatingTableAttributes(DocxExport& rExport, const ww8::Frame& rFram
 
     if (sTblpXSpec.isEmpty()) // do not write tblpX if tblpXSpec is present
     {
-        nValue = rFrame.GetFrameFormat().GetHoriOrient().GetPos();
+        nValue = rFrame.GetFrameFormat().GetHoriOrient().getPosition().as_twip<sal_Int32>();
         // we need to revert the additional shift introduced by
         // lcl_DecrementHoriOrientPosition() in writerfilter
         // 1st: left distance of the table
@@ -136,7 +180,7 @@ void CollectFloatingTableAttributes(DocxExport& rExport, const ww8::Frame& rFram
 
     if (sTblpYSpec.isEmpty()) // do not write tblpY if tblpYSpec is present
     {
-        nValue = rFrame.GetFrameFormat().GetVertOrient().GetPos();
+        nValue = rFrame.GetFrameFormat().GetVertOrient().getPosition().as_twip<sal_Int32>();
         pAttributes->add(FSNS(XML_w, XML_tblpY), OString::number(nValue));
     }
 }
@@ -271,14 +315,36 @@ void DocxAttributeOutput::TableDefinition(
         }
     }
 
+    // The table's style is the one it has now, which need not be the one it was loaded with.
+    const OUString sLiveStyleName = pTable->GetTableStyleName().toString();
+    if (!sLiveStyleName.isEmpty())
+    {
+        const OString sStyleId = OUStringToOString(
+            m_pTableStyleExport->GetDocxStyleId(sLiveStyleName), RTL_TEXTENCODING_UTF8);
+        m_pSerializer->singleElementNS(XML_w, XML_tblStyle, FSNS(XML_w, XML_val), sStyleId);
+    }
+
     // Extract properties from grab bag
+    bool bHasGrabBagStyleLook = false;
+    std::optional<sal_Int16> oStyleHoriOrient;
     for (const auto& rGrabBagElement : rGrabBag)
     {
+        if (rGrabBagElement.first == "TableStyleHoriOrient")
+        {
+            oStyleHoriOrient = rGrabBagElement.second.get<sal_Int16>();
+            continue;
+        }
         if (rGrabBagElement.first == "TableStyleName")
         {
-            OString sStyleName
-                = OUStringToOString(rGrabBagElement.second.get<OUString>(), RTL_TEXTENCODING_UTF8);
-            m_pSerializer->singleElementNS(XML_w, XML_tblStyle, FSNS(XML_w, XML_val), sStyleName);
+            // A style the import could not resolve into a live one is still referred to by
+            // the id the file gave it.
+            if (sLiveStyleName.isEmpty())
+            {
+                OString sStyleName = OUStringToOString(rGrabBagElement.second.get<OUString>(),
+                                                       RTL_TEXTENCODING_UTF8);
+                m_pSerializer->singleElementNS(XML_w, XML_tblStyle, FSNS(XML_w, XML_val),
+                                               sStyleName);
+            }
         }
         else if (rGrabBagElement.first == "TableStyleTopBorder")
             rTableStyleConf[SvxBoxItemLine::TOP] = rGrabBagElement.second.get<table::BorderLine2>();
@@ -292,38 +358,13 @@ void DocxAttributeOutput::TableDefinition(
             rTableStyleConf[SvxBoxItemLine::RIGHT]
                 = rGrabBagElement.second.get<table::BorderLine2>();
         else if (rGrabBagElement.first == "TableStyleLook")
-        {
-            rtl::Reference<FastAttributeList> pAttributeList
-                = FastSerializerHelper::createAttrList();
-            const cpo::uno::Sequence<beans::PropertyValue> aAttributeList
-                = rGrabBagElement.second.get<cpo::uno::Sequence<beans::PropertyValue>>();
-
-            for (const auto& rAttribute : aAttributeList)
-            {
-                if (rAttribute.Name == "val")
-                    pAttributeList->add(
-                        FSNS(XML_w, XML_val),
-                        lcl_padStartToLength(OString::number(rAttribute.Value.get<sal_Int32>(), 16),
-                                             4, '0'));
-                else
-                {
-                    static DocxStringTokenMap const aTokens[]
-                        = { { "firstRow", XML_firstRow },
-                            { "lastRow", XML_lastRow },
-                            { "firstColumn", XML_firstColumn },
-                            { "lastColumn", XML_lastColumn },
-                            { "noHBand", XML_noHBand },
-                            { "noVBand", XML_noVBand },
-                            { nullptr, 0 } };
-
-                    if (sal_Int32 nToken = DocxStringGetToken(aTokens, rAttribute.Name))
-                        pAttributeList->add(FSNS(XML_w, nToken),
-                                            (rAttribute.Value.get<sal_Int32>() ? "1" : "0"));
-                }
-            }
-
-            m_pSerializer->singleElementNS(XML_w, XML_tblLook, pAttributeList);
-        }
+            // Grab bag presence alone marks that w:tblLook needs writing; the six flags
+            // themselves come from the table's current live settings a few lines down,
+            // not from replaying the grab bag's own copy, since those settings may have
+            // changed since import (e.g. a banding toggle switched in the notebookbar),
+            // and the grab bag would otherwise silently re-export the stale, original
+            // state.
+            bHasGrabBagStyleLook = true;
         else if (rGrabBagElement.first == "TablePosition" &&
                  // skip empty table position (tables in footnotes converted to
                  // floating tables temporarily, don't export this)
@@ -416,6 +457,13 @@ void DocxAttributeOutput::TableDefinition(
                                    << rGrabBagElement.first);
     }
 
+    // Write w:tblLook exactly once: whenever the table had one on import, or whenever it now
+    // has a live style to describe, whether or not that style is the same as on import (the
+    // two conditions can both hold at once, e.g. a DOCX table style applied through the UI
+    // after an import that only had w:tblLook and no w:tblStyle of its own).
+    if (bHasGrabBagStyleLook || !sLiveStyleName.isEmpty())
+        lcl_WriteTblLook(m_pSerializer, pTable->GetTableStyleSettings());
+
     // Output the table alignment
     const char* pJcVal;
     sal_Int32 nIndent = 0;
@@ -463,7 +511,15 @@ void DocxAttributeOutput::TableDefinition(
             break;
         }
     }
-    m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), pJcVal);
+    // The alignment a table style sets is applied to the table on import, so it is
+    // indistinguishable here from alignment of the table's own. Writing it back
+    // unconditionally would turn the style's alignment into direct formatting, and a later
+    // edit of the style would no longer move the table; skip it when the style already
+    // gives this very value.
+    const bool bStyleGivesJc
+        = oStyleHoriOrient && lcl_TableJcValue(*oStyleHoriOrient, bEcma) == std::string_view(pJcVal);
+    if (!bStyleGivesJc)
+        m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), pJcVal);
 
     // Output the table background color (although cell value still needs to be specified)
     const SvxBrushItem* pColorProp

@@ -3,7 +3,6 @@
 
 "Template list URL" = "URL списку шаблонів";
 "Settings" = "Налаштування";
-"Core git hash" = "Хеш ядра git";
-"Online git hash" = "Онлайн-хеш git";
 "Version information" = "Інформація про версію";
 "Version" = "Версія";
+"Git hash" = "Хеш Git";

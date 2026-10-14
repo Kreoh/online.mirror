@@ -38,6 +38,7 @@
 #include <com/sun/star/text/XTextTable.hpp>
 #include <editeng/borderline.hxx>
 #include <editeng/boxitem.hxx>
+#include <svx/fmshell.hxx>
 
 #include <cmdid.h>
 #include <unotxdoc.hxx>
@@ -46,10 +47,13 @@
 #include <wrtsh.hxx>
 #include <swmodule.hxx>
 #include <view.hxx>
+#include <pview.hxx>
+#include <textsh.hxx>
 #include <IDocumentRedlineAccess.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Covers sw/source/uibase/uiview/ fixes.
 class SwUibaseUiviewTest : public SwModelTestBase
@@ -84,7 +88,7 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUiviewTest, testUpdateAllObjectReplacements)
     uno::Reference<lang::XMultiServiceFactory> xFactory(comphelper::getProcessServiceFactory());
 
     // Load the copy
-    uno::Reference<uno::XInterface> xInterface
+    uno::Reference<cpo::uno::XInterface> xInterface
         = xFactory->createInstance(u"com.sun.star.frame.Desktop"_ustr);
     uno::Reference<frame::XComponentLoader> xComponentLoader(xInterface, uno::UNO_QUERY);
     cpo::uno::Sequence<beans::PropertyValue> aLoadArgs{ comphelper::makePropertyValue(u"Hidden"_ustr,
@@ -105,7 +109,7 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUiviewTest, testUpdateAllObjectReplacements)
     xStorable->storeSelf(aNoArgs);
 
     // Check the contents of the updated copy and verify that ObjectReplacements are there
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(xFactory),
                                                       maTempFile.GetURL());
 
@@ -126,8 +130,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUiviewTest, testUpdateReplacementNosetting)
     xStorable->storeSelf({});
 
     // Check the contents of the updated copy.
-    uno::Reference<uno::XComponentContext> xContext = comphelper::getProcessComponentContext();
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess
+    uno::Reference<cpo::uno::XComponentContext> xContext = comphelper::getProcessComponentContext();
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess
         = packages::zip::ZipFileAccess::createWithURL(xContext, maTempFile.GetURL());
 
     // Without the accompanying fix in place, this test would have failed, because the embedded
@@ -173,18 +177,18 @@ public:
     ImageInterceptor(const uno::Reference<lang::XComponent>& xComponent);
 
     // XDispatchProviderInterceptor
-    uno::Reference<frame::XDispatchProvider> SAL_CALL getMasterDispatchProvider() override;
-    uno::Reference<frame::XDispatchProvider> SAL_CALL getSlaveDispatchProvider() override;
-    void SAL_CALL setMasterDispatchProvider(
+    uno::Reference<frame::XDispatchProvider> getMasterDispatchProvider() override;
+    uno::Reference<frame::XDispatchProvider> getSlaveDispatchProvider() override;
+    void setMasterDispatchProvider(
         const uno::Reference<frame::XDispatchProvider>& xNewSupplier) override;
-    void SAL_CALL
+    void
     setSlaveDispatchProvider(const uno::Reference<frame::XDispatchProvider>& xNewSupplier) override;
 
     // XDispatchProvider
-    uno::Reference<frame::XDispatch> SAL_CALL queryDispatch(const util::URL& rURL,
+    uno::Reference<frame::XDispatch> queryDispatch(const util::URL& rURL,
                                                             const OUString& rTargetFrameName,
                                                             sal_Int32 SearchFlags) override;
-    cpo::uno::Sequence<uno::Reference<frame::XDispatch>> SAL_CALL
+    cpo::uno::Sequence<uno::Reference<frame::XDispatch>>
     queryDispatches(const cpo::uno::Sequence<frame::DispatchDescriptor>& rRequests) override;
 };
 }
@@ -651,6 +655,47 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUiviewTest, testRedlineRenderModeInvalidate)
 
     // Tear down COKit:
     pWrtShell->GetSfxViewShell()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseUiviewTest, testPrintPreviewPopsViewShells)
+{
+    createSwDoc();
+    SwView* pView = getSwDocShell()->GetView();
+    pView->StopShellTimer();
+    SfxDispatcher* pDispatcher = pView->GetViewFrame().GetDispatcher();
+    auto hasTextShell = [pDispatcher] {
+        for (sal_uInt16 i = 0; SfxShell* pShell = pDispatcher->GetShell(i); ++i)
+        {
+            if (dynamic_cast<SwTextShell*>(pShell))
+                return true;
+        }
+        return false;
+    };
+    CPPUNIT_ASSERT(hasTextShell());
+
+    // Build the stack a document loaded over the UNO bridge leaves: the view shell above the shells
+    // it pushed, with its cached form shell in a slot on either side of it:
+    FmFormShell* pFormShell = pView->GetFormShell();
+    CPPUNIT_ASSERT(pFormShell);
+    pDispatcher->Pop(*pView);
+    pDispatcher->Pop(*pFormShell);
+    pDispatcher->Flush();
+    pDispatcher->Push(*pFormShell);
+    pDispatcher->Flush();
+    pDispatcher->Push(*pView);
+    pDispatcher->Push(*pFormShell);
+    pDispatcher->Flush();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(0), pDispatcher->GetShellLevel(*pFormShell));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), pDispatcher->GetShellLevel(*pView));
+
+    // When switching that view to the print preview (what .uno:PrintPreview dispatches):
+    pDispatcher->Execute(SID_VIEWSHELL1, SfxCallMode::SYNCHRON);
+    CPPUNIT_ASSERT(dynamic_cast<SwPagePreview*>(pDispatcher->GetShell(0)));
+
+    // Then make sure the replaced view left no shell of its own behind: without the fix, its
+    // SwTextShell stayed and a state query read a reset SwWrtShell
+    CPPUNIT_ASSERT(!hasTextShell());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), pDispatcher->GetShellLevel(*getSwDocShell()));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

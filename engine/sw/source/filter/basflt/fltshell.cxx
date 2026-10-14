@@ -25,6 +25,7 @@
 #include <cstddef>
 
 #include <hintids.hxx>
+#include <svx/xdef.hxx>
 #include <hints.hxx>
 
 #include <svl/cintitem.hxx>
@@ -148,8 +149,8 @@ bool SwFltStackEntry::MakeRegion(SwPaM& rRegion, RegionMode const eCheck,
     bool bRet = true;
     if (eCheck & RegionMode::CheckNodes)
     {
-        bRet &= CheckNodesRange(rRegion.Start()->GetNode(),
-                                rRegion.End()->GetNode(), true);
+        auto [pStart, pEnd] = rRegion.StartEnd(); // SwPosition*
+        bRet &= CheckNodesRange(pStart->GetNode(), pEnd->GetNode(), true);
     }
     if (eCheck & RegionMode::CheckFieldmark)
     {
@@ -334,9 +335,11 @@ SwFltStackEntry* SwFltControlStack::SetAttr(const SwPosition& rPos,
 
     SwFltPosition aFltPos(rPos);
 
+    // The background of a paragraph is a fill attribute, which sits in a range of its own.
     OSL_ENSURE(!nAttrId ||
         (POOLATTR_BEGIN <= nAttrId && POOLATTR_END > nAttrId) ||
-        (RES_FLTRATTR_BEGIN <= nAttrId && RES_FLTRATTR_END > nAttrId),
+        (RES_FLTRATTR_BEGIN <= nAttrId && RES_FLTRATTR_END > nAttrId) ||
+        (XATTR_FILL_FIRST <= nAttrId && XATTR_FILL_LAST >= nAttrId),
         "Wrong id for attribute");
 
     auto aI = m_Entries.begin();

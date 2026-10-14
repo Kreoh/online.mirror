@@ -33,15 +33,15 @@ private:
     rtl::Reference<SwXTextDocument> mxModel;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaPane(const css::uno::Reference<ooo::vba::XHelperInterface>& rParent,
-              const css::uno::Reference<css::uno::XComponentContext>& rContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaPane(const cpo::uno::Reference<ooo::vba::XHelperInterface>& rParent,
+              const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
               rtl::Reference<SwXTextDocument> xModel);
     virtual ~SwVbaPane() override;
 
     // Methods
-    virtual cpo::uno::Any SAL_CALL View() override;
-    virtual void SAL_CALL Close() override;
+    virtual cpo::uno::Any View() override;
+    virtual void Close() override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

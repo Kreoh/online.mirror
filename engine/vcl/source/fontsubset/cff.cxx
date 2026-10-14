@@ -1267,6 +1267,8 @@ bool CffContext::convertOneTypeOp()
         U8 nMaskByte = 0;
         for( i = 0; i < mnHintSize; i+=2, nMaskBit>>=1) {
             if( !nMaskBit) {
+                if( mpReadPtr >= mpReadEnd)
+                    return false;
                 nMaskByte = *(mpReadPtr++);
                 nMaskBit = 0x80;
             }
@@ -1291,6 +1293,8 @@ bool CffContext::convertOneTypeOp()
         int const MASK_BITS = 8*sizeof(nHintMask);
         for( i = 0; i < mnHintSize; i+=2, nMaskBit>>=1) {
             if( !nMaskBit) {
+                if( mpReadPtr >= mpReadEnd)
+                    return false;
                 nMaskByte = *(mpReadPtr++);
                 nMaskBit = 0x80;
             }
@@ -2083,16 +2087,18 @@ bool CffContext::initialCffRead()
         // get the PrivateDict index
         // (we got mnPrivDictSize and mnPrivDictBase from TOPDICT or FDArray)
         if( mpCffLocal->mnPrivDictSize != 0) {
-            if ( mpCffLocal->mnPrivDictSize <= 0)
+            if (mpCffLocal->mnPrivDictBase < 0 || mpCffLocal->mnPrivDictSize < 0
+                || sal_Int64(mpCffLocal->mnPrivDictBase) + mpCffLocal->mnPrivDictSize
+                       > mpBaseEnd - mpBasePtr)
                 return false;
             // get the PrivDict data
             mpReadPtr = mpBasePtr + mpCffLocal->mnPrivDictBase;
             mpReadEnd = mpReadPtr + mpCffLocal->mnPrivDictSize;
-            if ( mpReadEnd > mpBaseEnd)
-                return false;
             // read PrivDict details
             while( mpReadPtr < mpReadEnd)
                 readDictOp();
+            if (mpReadPtr != mpReadEnd)
+                return false;
         }
 
         // prepare access to the LocalSubrs (we got mnLocalSubrOffs from PRIVDICT)

@@ -24,12 +24,21 @@
 
 #include <dbdata.hxx>
 #include "importcontext.hxx"
+#include "xmlsorti.hxx"
 
 #include <memory>
 
 namespace sax_fastparser { class FastAttributeList; }
 
 struct ScQueryParam;
+struct ScSortParam;
+
+/** Builds the sort parameters a table:sort element describes for a range. The field numbers in
+ *  the sequence are relative to the range, and come back as absolute columns (or rows for a
+ *  sort by columns).
+ */
+ScSortParam convertSortSequence(const cpo::uno::Sequence<css::beans::PropertyValue>& rSortSequence,
+                                bool bByRow, const ScRange& rRange);
 
 class ScXMLDatabaseRangesContext : public ScXMLImportContext
 {
@@ -39,9 +48,9 @@ public:
 
     virtual ~ScXMLDatabaseRangesContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
                         sal_Int32 nElement,
-                        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+                        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 struct ScSubTotalRule
@@ -50,7 +59,7 @@ struct ScSubTotalRule
     cpo::uno::Sequence <css::sheet::SubTotalColumn> aSubTotalColumns;
 };
 
-class ScXMLDatabaseRangeContext : public ScXMLImportContext
+class ScXMLDatabaseRangeContext : public ScXMLImportContext, public ScXMLSortSequenceReceiver
 {
     std::unique_ptr<ScQueryParam> mpQueryParam;
     ScRange         maRange;
@@ -95,10 +104,10 @@ public:
 
     virtual ~ScXMLDatabaseRangeContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void endFastElement( sal_Int32 nElement ) override;
 
     void SetDatabaseName(const OUString& sTempDatabaseName) { sDatabaseName = sTempDatabaseName; }
     void SetConnectionResource(const OUString& sTempConRes) { sConnectionResource = sTempConRes; }
@@ -114,7 +123,7 @@ public:
     void SetSubTotalsAscending(const bool bTemp) { bSubTotalsAscending = bTemp; }
     void SetSubTotalsSortGroups(const bool bTemp) { bSubTotalsSortGroups = bTemp; }
     void AddSubTotalRule(const ScSubTotalRule& rRule) { aSubTotalRules.push_back(rRule); }
-    void SetSortSequence(const cpo::uno::Sequence <css::beans::PropertyValue>& aTempSortSequence) { aSortSequence = aTempSortSequence; }
+    virtual void SetSortSequence(const cpo::uno::Sequence <css::beans::PropertyValue>& aTempSortSequence) override { aSortSequence = aTempSortSequence; }
     void SetFilterConditionSourceRangeAddress(const ScRange& aRange) { aFilterConditionSourceRangeAddress = aRange;
                                                                        bFilterConditionSourceRange = true; }
 };
@@ -132,10 +141,10 @@ public:
 
     virtual ~ScXMLSourceSQLContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void endFastElement( sal_Int32 nElement ) override;
 };
 
 class ScXMLSourceTableContext : public ScXMLImportContext
@@ -151,10 +160,10 @@ public:
 
     virtual ~ScXMLSourceTableContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void endFastElement( sal_Int32 nElement ) override;
 };
 
 class ScXMLSourceQueryContext : public ScXMLImportContext
@@ -170,10 +179,10 @@ public:
 
     virtual ~ScXMLSourceQueryContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void endFastElement( sal_Int32 nElement ) override;
 };
 
 class ScXMLConResContext : public ScXMLImportContext
@@ -199,8 +208,8 @@ public:
 
     virtual ~ScXMLSubTotalRulesContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 class ScXMLSortGroupsContext : public ScXMLImportContext
@@ -227,10 +236,10 @@ public:
 
     virtual ~ScXMLSubTotalRuleContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void endFastElement( sal_Int32 nElement ) override;
 
     void AddSubTotalColumn(const css::sheet::SubTotalColumn& rSubTotalColumn)
     {
@@ -253,7 +262,7 @@ public:
 
     virtual ~ScXMLSubTotalFieldContext() override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void endFastElement( sal_Int32 nElement ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

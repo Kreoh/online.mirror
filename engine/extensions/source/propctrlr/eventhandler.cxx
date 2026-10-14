@@ -70,8 +70,8 @@
 namespace pcr
 {
 
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XComponentContext;
     using ::cpo::uno::Any;
     using ::cpo::uno::TypeClass_STRING;
     using ::cpo::uno::Type;
@@ -88,9 +88,9 @@ namespace pcr
     using ::com::sun::star::container::XChild;
     using ::com::sun::star::container::XIndexAccess;
     using ::com::sun::star::script::XEventAttacherManager;
-    using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::XInterface;
     using ::com::sun::star::beans::XIntrospection;
     using ::com::sun::star::beans::XIntrospectionAccess;
     using ::com::sun::star::container::XNameContainer;
@@ -113,7 +113,7 @@ namespace pcr
     using ::com::sun::star::frame::XFrame;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::frame::XController;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using com::sun::star::uri::UriReferenceFactory;
     using com::sun::star::uri::XUriReferenceFactory;
     using com::sun::star::uri::XVndSunStarScriptUrlReference;
@@ -1096,9 +1096,9 @@ namespace pcr
 
 } // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_EventHandler_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::EventHandler(context));
 }

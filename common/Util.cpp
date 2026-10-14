@@ -28,6 +28,8 @@
 #include <common/Util.hpp>
 #include <common/base64.hpp>
 
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Path.h>
 #include <Poco/URI.h>
 #include <Poco/Util/Application.h>
 
@@ -53,9 +55,7 @@
 #define COOLWSD_BUILDCONFIG
 #endif
 
-#if !MOBILEAPP
 #include <common/SigHandlerTrap.hpp>
-#endif
 
 #if defined(__GLIBC__)
 #  include <execinfo.h>
@@ -502,9 +502,6 @@ namespace Util
         return oss.str();
     }
 
-#if !MOBILEAPP
-    // These are used in test/WhiteBoxTests.cpp and thus not needed in a mobile app.
-
     std::string time_point_to_iso8601(std::chrono::system_clock::time_point tp)
     {
         const std::time_t tt = std::chrono::system_clock::to_time_t(tp);
@@ -524,69 +521,6 @@ namespace Util
 
         return oss.str();
     }
-
-    bool isIso8601(const std::string& iso8601Time)
-    {
-        if (iso8601Time.empty())
-            return false;
-
-        std::tm tm;
-        const char* trailing = strptime(iso8601Time.c_str(), "%Y-%m-%dT%H:%M:%S", &tm);
-        if (!trailing)
-            return false;
-
-        // Accept what iso8601ToTimestamp can read: the bare second-precision
-        // form, and the fractional-second form which requires at least one
-        // digit after the dot.
-        if (trailing[0] == '\0')
-            return true;
-
-        return trailing[0] == '.' && std::isdigit(static_cast<unsigned char>(trailing[1]));
-    }
-
-    std::chrono::system_clock::time_point iso8601ToTimestamp(const std::string& iso8601Time,
-                                                             const std::string& logName)
-    {
-        std::chrono::system_clock::time_point timestamp;
-        std::tm tm;
-        const char* cstr = iso8601Time.c_str();
-        const char* trailing;
-        if (!(trailing = strptime(cstr, "%Y-%m-%dT%H:%M:%S", &tm)))
-        {
-            LOG_WRN(logName << " [" << iso8601Time << "] is in invalid format."
-                               "Returning " << timestamp.time_since_epoch().count());
-            return timestamp;
-        }
-
-        timestamp += std::chrono::seconds(timegm(&tm));
-        if (trailing[0] == '\0')
-            return timestamp;
-
-        if (trailing[0] != '.')
-        {
-            LOG_WRN(logName << " [" << iso8601Time << "] is in invalid format."
-                               ". Returning " << timestamp.time_since_epoch().count());
-            return timestamp;
-        }
-
-        char* end = nullptr;
-        const std::size_t us = strtoul(trailing + 1, &end, 10); // Skip the '.' and read as integer.
-
-        std::size_t denominator = 1;
-        for (const char* i = trailing + 1; i != end; i++)
-        {
-            denominator *= 10;
-        }
-
-        const std::size_t seconds_us = us * std::chrono::system_clock::period::den
-                                       / std::chrono::system_clock::period::num / denominator;
-
-        timestamp += std::chrono::system_clock::duration(seconds_us);
-
-        return timestamp;
-    }
-
-#endif // !MOBILEAPP
 
     /// Returns the given system_clock time_point as string in GMT.
     /// Format: Thu Jan 27 03:45:27.123 2022
@@ -655,11 +589,9 @@ namespace Util
         materialize_clipboard_formats();
 #endif
 
-#if !MOBILEAPP
         /// Wait for the signal handler, if any,
         /// and prevent _Exit while collecting backtrace.
         SigUtil::SigHandlerTrap::wait();
-#endif
 
         Log::shutdown();
 
@@ -811,10 +743,17 @@ namespace Util
 
 } // namespace Util
 
-#if !MOBILEAPP
 namespace SigUtil {
     std::atomic<int> SigHandlerTrap::SigHandling;
 } // end namespace SigUtil
-#endif
+
+std::ostream& operator<<(std::ostream& os, const Poco::Net::HTTPRequest& request)
+{
+    os << request.getMethod() << ' ' << request.getVersion() << ' ' << request.getURI()
+       << ", content-length: " << request.getContentLength64()
+       << ", chunked: " << request.getChunkedTransferEncoding() << ", ";
+    Util::joinPair(os, request, " / ");
+    return os;
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

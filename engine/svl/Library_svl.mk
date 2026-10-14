@@ -21,7 +21,7 @@ $(eval $(call gb_Library_Library,svl))
 
 $(eval $(call gb_Library_use_externals,svl,\
     boost_headers \
-    $(if $(filter LINUX MACOSX ANDROID iOS %BSD SOLARIS HAIKU,$(OS)), \
+    $(if $(filter LINUX MACOSX ANDROID iOS %BSD HAIKU,$(OS)), \
         curl) \
     fast_float \
     icu_headers \
@@ -103,6 +103,17 @@ ifneq (,$(filter CRYPTO_NSS,$(BUILD_TYPE)))
 $(eval $(call gb_Library_use_externals,svl,\
     nss3 \
     plc4 \
+))
+endif
+
+ifeq ($(OS),MACOSX)
+$(eval $(call gb_Library_use_system_darwin_frameworks,svl,\
+    CoreFoundation \
+    Security \
+))
+
+$(eval $(call gb_Library_add_exception_objects,svl,\
+    svl/source/crypto/applekeychain \
 ))
 endif
 

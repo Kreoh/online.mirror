@@ -23,7 +23,7 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/ScrollBarOrientation.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/processfactory.hxx>
 #include <utility>
 
@@ -31,9 +31,10 @@ namespace basctl
 {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
-DlgEdFactory::DlgEdFactory( css::uno::Reference< css::frame::XModel > xModel ) : mxModel(std::move( xModel ))
+DlgEdFactory::DlgEdFactory( cpo::uno::Reference< css::frame::XModel > xModel ) : mxModel(std::move( xModel ))
 {
     SdrObjFactory::InsertMakeObjectHdl( LINK(this, DlgEdFactory, MakeObject) );
 }
@@ -52,7 +53,7 @@ IMPL_LINK( DlgEdFactory, MakeObject, SdrObjCreatorParams, aParams, rtl::Referenc
 {
     static const uno::Reference<lang::XMultiServiceFactory> xDialogSFact = [] {
         uno::Reference<lang::XMultiServiceFactory> xFact;
-        const uno::Reference< uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
         uno::Reference< container::XNameContainer > xC( xContext->getServiceManager()->createInstanceWithContext( u"com.sun.star.awt.UnoControlDialogModel"_ustr, xContext ), uno::UNO_QUERY );
         if (xC.is())
             xFact.set(xC, uno::UNO_QUERY);

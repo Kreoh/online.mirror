@@ -20,6 +20,7 @@
 #include <config_feature_desktop.h>
 #include <config_wasm_strip.h>
 
+#include <chrono>
 #include <ctime>
 #include <rootfrm.hxx>
 #include <rowfrm.hxx>
@@ -1854,12 +1855,20 @@ bool SwLayAction::FormatContent(SwPageFrame *const pPage)
             // it's the format for this interrupt
             // pass correct page frame
             // to the object formatter.
+            SfxDeleteListener aContentDeleteListener(*const_cast<SwContentFrame*>(pContent));
             if ( !IsAgain() &&
                  ( !IsInterrupt() || mbFormatContentOnInterrupt ) &&
                  pContent->IsTextFrame() &&
                  !SwObjectFormatter::FormatObjsAtFrame( *const_cast<SwContentFrame*>(pContent),
                                                       *(pContent->FindPageFrame()), this ) )
             {
+                return false;
+            }
+
+            // Formatting an anchored object can join this frame into its master and destroy it.
+            if (aContentDeleteListener.WasDeleted())
+            {
+                SAL_WARN("sw", "Content was deleted");
                 return false;
             }
 
@@ -2176,6 +2185,15 @@ bool SwLayIdle::DoIdleJob_( const SwContentFrame *pCnt, IdleJobType eJob, IdleJo
                 {
                     // Idle spellcheck for the non-visible area: interrupt on user input.
                     bInterrupt = comphelper::COKit::anyInput();
+                    // Only consider the COKit anyInput callback result when COKit is active.
+                    if (comphelper::COKit::isActive() && !bInterrupt)
+                        // comphelper::COKit::anyInput() never reports pending input in a
+                        // forked kit child, so a spell checker whose per-word cost
+                        // occasionally spikes (a compounding dictionary backtracking
+                        // through a near-valid word split, for example) would otherwise
+                        // run this sweep to completion in one call instead of yielding
+                        // and picking up where it left off later.
+                        bInterrupt = std::chrono::steady_clock::now() >= m_aJobDeadline;
                 }
                 if (bInterrupt)
                 {
@@ -2206,7 +2224,7 @@ bool SwLayIdle::DoIdleJob_( const SwContentFrame *pCnt, IdleJobType eJob, IdleJo
                     m_bPageValid = m_bPageValid && !pTextNode->IsSmartTagDirty();
                     if ( aRepaint.HasArea() )
                         m_pImp->GetShell().InvalidateWindows( aRepaint );
-                } catch( const css::uno::RuntimeException&) {
+                } catch( const cpo::uno::RuntimeException&) {
                     // handle smarttag problems gracefully and provide diagnostics
                     TOOLS_WARN_EXCEPTION( "sw.core", "SMART_TAGS");
                 }
@@ -2300,6 +2318,7 @@ bool SwLayIdle::DoIdleJob(IdleJobType eJob, IdleJobArea eJobArea)
 
     m_pContentNode = nullptr;
     m_nTextPos = COMPLETE_STRING;
+    m_aJobDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
 
     while ( pPage )
     {

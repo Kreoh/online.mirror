@@ -28,12 +28,16 @@
 #include <drwlayer.hxx>
 #include <externalrefmgr.hxx>
 #include <docsh.hxx>
+#include <dpobject.hxx>
+#include <dpsdbtab.hxx>
 #include <tabvwsh.hxx>
 #include <bcaslot.hxx>
 #include <broadcast.hxx>
 #include <SheetViewManager.hxx>
 #include <SheetView.hxx>
 #include <dbdata.hxx>
+#include <formulacell.hxx>
+#include <rangenam.hxx>
 #include <queryparam.hxx>
 #include <sortparam.hxx>
 #include <editeng/brushitem.hxx>
@@ -343,6 +347,87 @@ void ScDocument::CompileHybridFormula()
     {
         ScTable* p = rxTab.get();
         p->CompileHybridFormula(aStartListenCxt, aCompileCxt);
+    }
+}
+
+void ScDocument::CollectTableRefFormulas( sal_uInt16 nIndex, std::vector<ScAddress>& rCells )
+{
+    for (const auto& rxTab : maTabs)
+    {
+        ScTable* p = rxTab.get();
+        p->CollectTableRefFormulas(nIndex, rCells);
+    }
+}
+
+bool ScDocument::HasTableRefInNames( sal_uInt16 nIndex ) const
+{
+    auto lclScopeHasRef = [nIndex]( const ScRangeName* pNames )
+    {
+        if (!pNames)
+            return false;
+        for (const auto& rEntry : *pNames)
+        {
+            const ScRangeData* pData = rEntry.second.get();
+            const ScTokenArray* pCode = pData ? pData->GetCode() : nullptr;
+            if (pCode && pCode->HasTableRef(nIndex))
+                return true;
+        }
+        return false;
+    };
+
+    if (lclScopeHasRef(&GetRangeName()))
+        return true;
+    for (SCTAB nTab = 0; nTab < GetTableCount(); ++nTab)
+        if (lclScopeHasRef(GetRangeName(nTab)))
+            return true;
+    return false;
+}
+
+bool ScDocument::ConvertTableRefsToRangeInNames( sal_uInt16 nIndex,
+                                                 std::map<OUString, ScRangeName>& rFlatNames )
+{
+    bool bChanged = false;
+    std::map<OUString, ScRangeName*> aAllNames;
+    GetRangeNameMap(aAllNames);
+    for (const auto& rScope : aAllNames)
+    {
+        if (!rScope.second)
+            continue;
+        ScRangeName aFlat(*rScope.second);
+        for (const auto& rEntry : aFlat)
+        {
+            ScRangeData* pData = rEntry.second.get();
+            const ScTokenArray* pCode = pData ? pData->GetCode() : nullptr;
+            if (!pCode)
+                continue;
+            std::unique_ptr<ScTokenArray> pNew = pCode->ConvertTableRefsToRange(nIndex, pData->GetPos());
+            if (pNew)
+            {
+                pData->SetCode(*pNew);
+                bChanged = true;
+            }
+        }
+        rFlatNames.emplace(rScope.first, std::move(aFlat));
+    }
+    return bChanged;
+}
+
+void ScDocument::ConvertTableRefsToRange( sal_uInt16 nIndex, const std::vector<ScAddress>& rCells )
+{
+    for (const ScAddress& rPos : rCells)
+    {
+        ScFormulaCell* pFC = GetFormulaCell(rPos);
+        const ScTokenArray* pCode = pFC ? pFC->GetCode() : nullptr;
+        if (!pCode)
+            continue;
+        std::unique_ptr<ScTokenArray> pNew = pCode->ConvertTableRefsToRange(nIndex, rPos);
+        if (!pNew)
+            continue;
+
+        // Preserve the cell's matrix mode so an array formula stays an array (a default-NONE
+        // rebuild would collapse it).
+        SetFormulaCell(rPos, new ScFormulaCell(*this, rPos, std::move(pNew), GetGrammar(),
+                                               pFC->GetMatrixFlag()));
     }
 }
 
@@ -1057,6 +1142,54 @@ bool ScDocument::HasDataProviderMappings() const
     return mpDataMapper && !mpDataMapper->getDataSources().empty();
 }
 
+namespace
+{
+bool isRefreshingImport(const ScDBData* pData)
+{
+    return pData && pData->HasImportParam() && pData->GetRefreshDelaySeconds() > 0;
+}
+}
+
+bool ScDocument::HasRefreshingDBImport() const
+{
+    if (isRefreshingImport(mpAnonymousDBData.get()))
+        return true;
+
+    if (pDBCollection)
+    {
+        for (const auto& rxData : pDBCollection->getNamedDBs())
+            if (isRefreshingImport(rxData.get()))
+                return true;
+        for (const auto& rxData : pDBCollection->getAnonDBs())
+            if (isRefreshingImport(rxData.get()))
+                return true;
+    }
+
+    SCTAB nTabCount = GetTableCount();
+    for (SCTAB nTab = 0; nTab < nTabCount; ++nTab)
+    {
+        const ScTable* pTable = FetchTable(nTab);
+        if (pTable && isRefreshingImport(pTable->GetAnonymousDBData()))
+            return true;
+    }
+
+    return false;
+}
+
+bool ScDocument::HasDataPilotDatabaseLink() const
+{
+    if (!pDPCollection)
+        return false;
+
+    for (size_t i = 0, nCount = pDPCollection->GetCount(); i < nCount; ++i)
+    {
+        const ScImportSourceDesc* pDesc = (*pDPCollection)[i].GetImportSourceDesc();
+        if (pDesc && !ScDPCollection::IsRegisteredDatabase(pDesc->aDBName))
+            return true;
+    }
+    return false;
+}
+
 bool ScDocument::HasExternalLinks() const
 {
     if (ScExternalRefManager* pRefMgr = GetExternalRefManager(); pRefMgr && pRefMgr->hasExternalData())
@@ -1068,8 +1201,8 @@ bool ScDocument::HasExternalLinks() const
         if (IsLinked(nTab))
             return true;
 
-    if (HasLinkFormulaNeedingCheck() || HasDataProviderMappings()
-        || GetDocLinkManager().hasUpdatableLinks())
+    if (HasLinkFormulaNeedingCheck() || HasDataProviderMappings() || HasRefreshingDBImport()
+        || HasDataPilotDatabaseLink() || GetDocLinkManager().hasUpdatableLinks())
         return true;
 
     const ScDrawLayer* pDrawLayer = GetDrawLayer();

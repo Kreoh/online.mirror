@@ -60,6 +60,7 @@
 #include <SwRewriter.hxx>
 #include <tools/color.hxx>
 #include <unotools/datetime.hxx>
+#include <tools/datetimeutils.hxx>
 
 #include <swmodule.hxx>
 #include <strings.hrc>
@@ -74,9 +75,11 @@
 #include <svl/languageoptions.hxx>
 #include <svl/hint.hxx>
 
+#include <svx/ruler.hxx>
 #include <svx/svdview.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/langitem.hxx>
+#include <editeng/editeng.hxx>
 #include <editeng/outliner.hxx>
 #include <editeng/outlobj.hxx>
 
@@ -188,6 +191,10 @@ namespace {
             aAnnotation.put("html", pWin->GetSimpleHtml());
             aAnnotation.put("resolved", pField->GetResolved() ? "true" : "false");
             aAnnotation.put("dateTime", utl::toISO8601(pField->GetDateTime().GetUNODateTime()));
+            // The moment the comment was written, when it is known. dateTime beside it is the
+            // author's wall clock with no zone; this one is the same moment in UTC.
+            if (const std::optional<DateTime>& oDateTimeUTC = pField->GetDateTimeUTC())
+                aAnnotation.put("dateTimeUtc", DateTimeToOString(*oDateTimeUTC).getStr());
             aAnnotation.put("anchorPos", aSVRect.toString());
             aAnnotation.put("textRange", sRects.getStr());
             aAnnotation.put("layoutStatus", pItem->mLayoutStatus);
@@ -199,6 +206,34 @@ namespace {
                                   + OString::number(aSel.end.nPara) + ","
                                   + OString::number(aSel.end.nIndex);
                 aAnnotation.put("searchSelection", sSelStr);
+
+                // The client finds the match by its text and by how many times that text starts
+                // earlier in the paragraph, because the text it shows writes each link out and
+                // can shorten the links that it finds in plain text.
+                aSel.Adjust();
+                if (aSel.start.nPara == aSel.end.nPara)
+                {
+                    const EditEngine& rEditEngine = pWin->GetOutliner()->GetEditEngine();
+                    const OUString sMatch = rEditEngine.GetText(aSel);
+                    if (!sMatch.isEmpty())
+                    {
+                        const sal_Int32 nMatchStart
+                            = rEditEngine
+                                  .GetText(ESelection(aSel.start.nPara, 0, aSel.start.nPara,
+                                                      aSel.start.nIndex))
+                                  .getLength();
+                        const OUString sParaText = rEditEngine.GetText(aSel.start.nPara);
+                        sal_Int32 nOccurrence = 0;
+                        sal_Int32 nFound = sParaText.indexOf(sMatch);
+                        while (nFound >= 0 && nFound < nMatchStart)
+                        {
+                            ++nOccurrence;
+                            nFound = sParaText.indexOf(sMatch, nFound + 1);
+                        }
+                        aAnnotation.put("searchText", sMatch.toUtf8().getStr());
+                        aAnnotation.put("searchOccurrence", nOccurrence);
+                    }
+                }
             }
         }
         if (nType == CommentNotificationType::Remove && comphelper::COKit::isActive())
@@ -2714,13 +2749,21 @@ sal_uInt16 SwPostItMgr::SearchReplace(const SwFormatField &pField, const i18nuti
         if (!aResult)
             pWin->GetOutlinerView()->SetSelection(aOldSelection);
         else
-        {
-            SetActiveSidebarWin(pWin);
-            MakeVisible(pWin);
-            lcl_CommentNotification(mpView, CommentNotificationType::SearchHighlight, &pWin->GetSidebarItem(), 0);
-        }
+            ShowSearchFindInComment(*pWin);
     }
     return aResult;
+}
+
+void SwPostItMgr::ShowSearchFindInComment(SwAnnotationWin& rWin)
+{
+    SetActiveSidebarWin(&rWin);
+    MakeVisible(&rWin);
+    NotifySearchFindInComment(rWin);
+}
+
+void SwPostItMgr::NotifySearchFindInComment(SwAnnotationWin& rWin)
+{
+    lcl_CommentNotification(mpView, CommentNotificationType::SearchHighlight, &rWin.GetSidebarItem(), 0);
 }
 
 void SwPostItMgr::AssureStdModeAtShell()

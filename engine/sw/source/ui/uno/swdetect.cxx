@@ -22,15 +22,15 @@
 #include <comphelper/sequenceashashmap.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <sfx2/docfile.hxx>
 #include <sot/storage.hxx>
 #include <tools/urlobj.hxx>
 #include <unotools/mediadescriptor.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::beans;
@@ -44,7 +44,7 @@ SwFilterDetect::~SwFilterDetect()
 {
 }
 
-OUString SAL_CALL SwFilterDetect::detect( Sequence< PropertyValue >& lDescriptor )
+OUString SwFilterDetect::detect( Sequence< PropertyValue >& lDescriptor )
 {
     comphelper::SequenceAsHashMap aMediaDesc(lDescriptor);
     OUString aTypeName = aMediaDesc.getUnpackedValueOrDefault( utl::MediaDescriptor::PROP_TYPENAME, OUString() );
@@ -145,25 +145,25 @@ OUString SAL_CALL SwFilterDetect::detect( Sequence< PropertyValue >& lDescriptor
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SwFilterDetect::getImplementationName()
+OUString SwFilterDetect::getImplementationName()
 {
     return u"com.sun.star.comp.writer.FormatDetector"_ustr;
 }
 
 /* XServiceInfo */
-bool SAL_CALL SwFilterDetect::supportsService( const OUString& sServiceName )
+bool SwFilterDetect::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL SwFilterDetect::getSupportedServiceNames()
+Sequence< OUString > SwFilterDetect::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ExtendedTypeDetection"_ustr, u"com.sun.star.text.FormatDetector"_ustr, u"com.sun.star.text.W4WFormatDetector"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_writer_FormatDetector_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_writer_FormatDetector_get_implementation(cpo::uno::XComponentContext*,
                                                            cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwFilterDetect());

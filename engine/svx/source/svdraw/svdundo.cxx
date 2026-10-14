@@ -21,6 +21,8 @@
 
 #include <svx/svdundo.hxx>
 #include <svx/svdotext.hxx>
+#include <svx/sdtfsitm.hxx>
+#include <svx/svddef.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdlayer.hxx>
@@ -39,6 +41,7 @@
 #include <svx/e3dsceneupdater.hxx>
 #include <svx/svdviter.hxx>
 #include <svx/svdotable.hxx> // #i124389#
+#include <textframeedges.hxx>
 #include <utility>
 #include <sfx2/viewsh.hxx>
 #include <svx/svdoashp.hxx>
@@ -49,6 +52,22 @@
 #include <svx/svditer.hxx>
 #include <tools/debug.hxx>
 #include <comphelper/dispatchcommand.hxx>
+
+static std::pair<double, double> ImplGetFitScales(const SdrObject& rObj)
+{
+    const SdrTextFitToSizeTypeItem& rItem = rObj.GetMergedItem(SDRATTR_TEXT_FITTOSIZE);
+    return { rItem.getFontScale(), rItem.getSpacingScale() };
+}
+
+static void ImplSetFitScales(SdrObject& rObj, const std::pair<double, double>& rScales)
+{
+    if (ImplGetFitScales(rObj) == rScales)
+        return;
+    SdrTextFitToSizeTypeItem aItem(rObj.GetMergedItem(SDRATTR_TEXT_FITTOSIZE));
+    aItem.setFontScale(rScales.first);
+    aItem.setSpacingScale(rScales.second);
+    rObj.SetMergedItem(aItem);
+}
 
 // iterates over all views and unmarks this SdrObject if it is marked
 static void ImplUnmarkObject( SdrObject* pObj )
@@ -1098,6 +1117,7 @@ SdrUndoObjSetText::SdrUndoObjSetText(SdrObject& rNewObj, sal_Int32 nText)
         m_pOldText = *pText->GetOutlinerParaObject();
 
     m_bEmptyPresObj = rNewObj.IsEmptyPresObj();
+    m_aOldFitScales = ImplGetFitScales(rNewObj);
 }
 
 SdrUndoObjSetText::~SdrUndoObjSetText()
@@ -1120,6 +1140,7 @@ void SdrUndoObjSetText::AfterSetText()
         SdrText* pText = static_cast< SdrTextObj*>( mxObj.get() )->getText(mnText);
         if( pText && pText->GetOutlinerParaObject() )
             m_pNewText = *pText->GetOutlinerParaObject();
+        m_aNewFitScales = ImplGetFitScales(*mxObj);
         m_bNewTextAvailable=true;
     }
 }
@@ -1150,6 +1171,21 @@ void SdrUndoObjSetText::Undo()
         // copy text for Undo, because the original now belongs to SetOutlinerParaObject()
         pTarget->NbcSetOutlinerParaObjectForText(m_pOldText, pText);
     }
+    ImplSetFitScales(*pTarget, m_aOldFitScales);
+
+    // A text frame that grows to fit its text was made larger while the text was being typed.
+    // Earlier text is measured again when it is put back, but no text at all is not measured, so
+    // the frame is given back the size it had before the typing, in the directions it grows in.
+    // Its edges move the way they move when it grows, so the frame keeps any move made to it in
+    // the meantime. A table takes its size from its cells in the relayout further down.
+    if (!m_pOldText && m_oOldSize && pTarget->IsTextFrame()
+        && !dynamic_cast<sdr::table::SdrTableObj*>(pTarget))
+    {
+        tools::Rectangle aRectangle(pTarget->GetLogicRect());
+        if (svx::MoveTextFrameEdges(*pTarget, aRectangle, m_oOldSize->Width(), m_oOldSize->Height(),
+                                    pTarget->IsAutoGrowWidth(), pTarget->IsAutoGrowHeight()))
+            pTarget->NbcSetLogicRect(aRectangle, false);
+    }
 
     pTarget->SetEmptyPresObj(m_bEmptyPresObj);
     pTarget->ActionChanged();
@@ -1157,7 +1193,7 @@ void SdrUndoObjSetText::Undo()
     // #i124389# if it's a table, also need to relayout TextFrame
     if(dynamic_cast< sdr::table::SdrTableObj* >(pTarget) !=  nullptr)
     {
-        pTarget->NbcAdjustTextFrameWidthAndHeight();
+        pTarget->NbcReformatText();
     }
 
     // #i122410# SetOutlinerParaObject at SdrText does not trigger a
@@ -1183,13 +1219,14 @@ void SdrUndoObjSetText::Redo()
         // copy text for Undo, because the original now belongs to SetOutlinerParaObject()
         pTarget->NbcSetOutlinerParaObjectForText( m_pNewText, pText );
     }
+    ImplSetFitScales(*pTarget, m_aNewFitScales);
 
     pTarget->ActionChanged();
 
     // #i124389# if it's a table, also need to relayout TextFrame
     if(dynamic_cast< sdr::table::SdrTableObj* >(pTarget) !=  nullptr)
     {
-        pTarget->NbcAdjustTextFrameWidthAndHeight();
+        pTarget->NbcReformatText();
     }
 
     // #i122410# NbcSetOutlinerParaObjectForText at SdrTextObj does not trigger a

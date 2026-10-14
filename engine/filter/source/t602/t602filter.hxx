@@ -28,7 +28,7 @@
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/attributelist.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ref.hxx>
@@ -113,10 +113,10 @@ class T602ImportFilter : public cppu::WeakImplHelper <
 >
 {
 private:
-    css::uno::Reference<css::xml::sax::XDocumentHandler> mxHandler;
-    css::uno::Reference< css::uno::XComponentContext >   mxContext;
-    css::uno::Reference< css::lang::XComponent >         mxDoc;
-    css::uno::Reference < css::io::XInputStream >        mxInputStream;
+    cpo::uno::Reference<css::xml::sax::XDocumentHandler> mxHandler;
+    cpo::uno::Reference< cpo::uno::XComponentContext >   mxContext;
+    cpo::uno::Reference< css::lang::XComponent >         mxDoc;
+    cpo::uno::Reference < css::io::XInputStream >        mxInputStream;
 
     rtl::Reference<comphelper::AttributeList> mpAttrList;
 
@@ -209,12 +209,12 @@ private:
     void setfnt(fonts fnt,bool mustwrite);
     void wrtfnt();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     bool importImpl( const cpo::uno::Sequence< css::beans::PropertyValue >& aDescriptor );
 
     public:
-        explicit T602ImportFilter(css::uno::Reference<css::uno::XComponentContext > x );
-        explicit T602ImportFilter(css::uno::Reference<css::io::XInputStream> xInputStream);
+        explicit T602ImportFilter(cpo::uno::Reference<cpo::uno::XComponentContext > x );
+        explicit T602ImportFilter(cpo::uno::Reference<css::io::XInputStream> xInputStream);
         virtual ~T602ImportFilter() override;
 
     // XFilter
@@ -222,7 +222,7 @@ private:
         virtual void cancel(  ) override {};
 
     // XImporter
-        virtual void setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
+        virtual void setTargetDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
     // XExtendedTypeDetection
         virtual OUString detect(

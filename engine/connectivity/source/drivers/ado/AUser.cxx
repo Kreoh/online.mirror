@@ -27,7 +27,7 @@
 #include <ado/Awrapado.hxx>
 
 using namespace connectivity::ado;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -125,52 +125,5 @@ cppu::IPropertyArrayHelper & OUserExtend::getInfoHelper()
 {
     return *OUserExtend_PROP::getArrayHelper();
 }
-
-sal_Int32 OAdoUser::getPrivileges( const OUString& objName, sal_Int32 objType )
-{
-    ::osl::MutexGuard aGuard(m_aMutex);
-    checkDisposed(OUser_BASE_TYPEDEF::rBHelper.bDisposed);
-
-    return ADOS::mapAdoRights2Sdbc(m_aUser.GetPermissions(objName, ADOS::mapObjectType2Ado(objType)));
-}
-
-sal_Int32 OAdoUser::getGrantablePrivileges( const OUString& objName, sal_Int32 objType )
-{
-    ::osl::MutexGuard aGuard(m_aMutex);
-    checkDisposed(OUser_BASE_TYPEDEF::rBHelper.bDisposed);
-
-    sal_Int32 nRights = 0;
-    RightsEnum eRights = m_aUser.GetPermissions(objName, ADOS::mapObjectType2Ado(objType));
-    if((eRights & adRightWithGrant) == adRightWithGrant)
-        nRights = ADOS::mapAdoRights2Sdbc(eRights);
-    ADOS::ThrowException(m_pCatalog->getConnection()->getConnection(),*this);
-    return nRights;
-}
-
-void OAdoUser::grantPrivileges( const OUString& objName, sal_Int32 objType, sal_Int32 objPrivileges )
-{
-    ::osl::MutexGuard aGuard(m_aMutex);
-    checkDisposed(OUser_BASE_TYPEDEF::rBHelper.bDisposed);
-    m_aUser.SetPermissions(objName,ADOS::mapObjectType2Ado(objType),adAccessGrant,RightsEnum(ADOS::mapRights2Ado(objPrivileges)));
-    ADOS::ThrowException(m_pCatalog->getConnection()->getConnection(),*this);
-}
-
-void OAdoUser::revokePrivileges( const OUString& objName, sal_Int32 objType, sal_Int32 objPrivileges )
-{
-    ::osl::MutexGuard aGuard(m_aMutex);
-    checkDisposed(OUser_BASE_TYPEDEF::rBHelper.bDisposed);
-    m_aUser.SetPermissions(objName,ADOS::mapObjectType2Ado(objType),adAccessRevoke,RightsEnum(ADOS::mapRights2Ado(objPrivileges)));
-    ADOS::ThrowException(m_pCatalog->getConnection()->getConnection(),*this);
-}
-
-// XUser
-void OAdoUser::changePassword( const OUString& objPassword, const OUString& newPassword )
-{
-    ::osl::MutexGuard aGuard(m_aMutex);
-    checkDisposed(OUser_BASE_TYPEDEF::rBHelper.bDisposed);
-    m_aUser.ChangePassword(objPassword,newPassword);
-    ADOS::ThrowException(m_pCatalog->getConnection()->getConnection(),*this);
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

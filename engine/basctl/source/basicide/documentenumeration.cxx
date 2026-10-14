@@ -32,24 +32,24 @@
 namespace basctl::docs {
 
     using ::cpo::uno::Exception;
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
-    using ::com::sun::star::uno::UNO_SET_THROW;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_SET_THROW;
     using ::com::sun::star::frame::Desktop;
-    using ::com::sun::star::frame::XDesktop2;
+    using ::com::sun::star::frame::XDesktop;
     using ::com::sun::star::container::XEnumeration;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::frame::XFrames;
     using ::com::sun::star::frame::XController;
     using ::com::sun::star::frame::XModel2;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY;
     using ::cpo::uno::Sequence;
     using ::com::sun::star::frame::XFrame;
 
     namespace FrameSearchFlag = ::com::sun::star::frame::FrameSearchFlag;
 
     // DocumentEnumeration
-    DocumentEnumeration::DocumentEnumeration( Reference< css::uno::XComponentContext > const & _rContext, const IDocumentDescriptorFilter* _pFilter )
+    DocumentEnumeration::DocumentEnumeration( Reference< cpo::uno::XComponentContext > const & _rContext, const IDocumentDescriptorFilter* _pFilter )
         : m_xContext( _rContext )
         , m_pFilter( _pFilter )
     {
@@ -140,7 +140,7 @@ namespace basctl::docs {
 
         try
         {
-            const Reference< XDesktop2 > xDesktop = Desktop::create( m_xContext );
+            const Reference< XDesktop > xDesktop = Desktop::create( m_xContext );
             const Reference< XFrames > xFrames( xDesktop->getFrames(), UNO_SET_THROW );
             const Sequence< Reference< XFrame > > aFrames( xFrames->queryFrames( FrameSearchFlag::ALL ) );
 

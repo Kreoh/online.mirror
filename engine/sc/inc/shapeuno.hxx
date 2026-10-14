@@ -61,11 +61,11 @@ class ScShapeObj final : public ScShapeObj_Base
 {
 private:
     friend ScMacroInfo* ScShapeObj_getShapeHyperMacroInfo( const ScShapeObj* pShape, bool bCreate );
-    css::uno::Reference< cpo::uno::XAggregation >              mxShapeAgg;
+    cpo::uno::Reference< cpo::uno::XAggregation >              mxShapeAgg;
     // cached pointers to avoid repeated queryAggregation calls:
     css::beans::XPropertySet*                                  pShapePropertySet;
     css::beans::XPropertyState*                                pShapePropertyState;
-    css::uno::Reference< css::beans::XPropertySetInfo >        mxPropSetInfo;
+    cpo::uno::Reference< css::beans::XPropertySetInfo >        mxPropSetInfo;
     bool                                                       bIsTextShape;
     bool                                                       bIsNoteCaption;
 
@@ -80,90 +80,90 @@ public:
     static const SvEventDescription* GetSupportedMacroItems();
 
                             // ctor modifies xShape parameter
-                            ScShapeObj( css::uno::Reference<
+                            ScShapeObj( cpo::uno::Reference<
                                             css::drawing::XShape > & xShape );
     virtual                 ~ScShapeObj() override;
 
                             // XInterface
-    virtual cpo::uno::Any SAL_CALL queryInterface(
+    virtual cpo::uno::Any queryInterface(
                                 const cpo::uno::Type & rType ) override;
-    virtual void SAL_CALL   acquire() noexcept override;
-    virtual void SAL_CALL   release() noexcept override;
+    virtual void   acquire() noexcept override;
+    virtual void   release() noexcept override;
 
                             // XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo >
-                            SAL_CALL getPropertySetInfo() override;
-    virtual void SAL_CALL   setPropertyValue( const OUString& aPropertyName,
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+                            getPropertySetInfo() override;
+    virtual void   setPropertyValue( const OUString& aPropertyName,
                                     const cpo::uno::Any& aValue ) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue(
+    virtual cpo::uno::Any getPropertyValue(
                                     const OUString& PropertyName ) override;
-    virtual void SAL_CALL   addPropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
-    virtual void SAL_CALL   removePropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
-    virtual void SAL_CALL   addVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
-    virtual void SAL_CALL   removeVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void   addPropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void   removePropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void   addVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void   removeVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
 
                             // XPropertyState
-    virtual css::beans::PropertyState SAL_CALL getPropertyState( const OUString& PropertyName ) override;
-    virtual cpo::uno::Sequence< css::beans::PropertyState > SAL_CALL
+    virtual css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyState >
                             getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override;
-    virtual void SAL_CALL   setPropertyToDefault( const OUString& PropertyName ) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyDefault( const OUString& aPropertyName ) override;
+    virtual void   setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
 
                             // XTextContent
-    virtual void SAL_CALL   attach(const css::uno::Reference< css::text::XTextRange > & xTextRange) override;
-    virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
+    virtual void   attach(const cpo::uno::Reference< css::text::XTextRange > & xTextRange) override;
+    virtual cpo::uno::Reference< css::text::XTextRange >
                             getAnchor() override;
 
                             // XComponent
-    virtual void SAL_CALL   dispose() override;
-    virtual void SAL_CALL   addEventListener(const css::uno::Reference< css::lang::XEventListener > & aListener) override;
-    virtual void SAL_CALL   removeEventListener(const css::uno::Reference< css::lang::XEventListener > & aListener) override;
+    virtual void   dispose() override;
+    virtual void   addEventListener(const cpo::uno::Reference< css::lang::XEventListener > & aListener) override;
+    virtual void   removeEventListener(const cpo::uno::Reference< css::lang::XEventListener > & aListener) override;
 
                             // XText
-    virtual void SAL_CALL   insertTextContent( const css::uno::Reference< css::text::XTextRange >& xRange,
-                                const css::uno::Reference< css::text::XTextContent >& xContent,
+    virtual void   insertTextContent( const cpo::uno::Reference< css::text::XTextRange >& xRange,
+                                const cpo::uno::Reference< css::text::XTextContent >& xContent,
                                 bool bAbsorb ) override;
-    virtual void SAL_CALL   removeTextContent( const css::uno::Reference< css::text::XTextContent >& xContent ) override;
+    virtual void   removeTextContent( const cpo::uno::Reference< css::text::XTextContent >& xContent ) override;
 
                             // XSimpleText
-    virtual css::uno::Reference< css::text::XTextCursor > SAL_CALL
+    virtual cpo::uno::Reference< css::text::XTextCursor >
                             createTextCursor() override;
-    virtual css::uno::Reference< css::text::XTextCursor > SAL_CALL
-                            createTextCursorByRange( const css::uno::Reference< css::text::XTextRange >& aTextPosition ) override;
-    virtual void SAL_CALL   insertString( const css::uno::Reference< css::text::XTextRange >& xRange,
+    virtual cpo::uno::Reference< css::text::XTextCursor >
+                            createTextCursorByRange( const cpo::uno::Reference< css::text::XTextRange >& aTextPosition ) override;
+    virtual void   insertString( const cpo::uno::Reference< css::text::XTextRange >& xRange,
                                         const OUString& aString, bool bAbsorb ) override;
-    virtual void SAL_CALL   insertControlCharacter( const css::uno::Reference< css::text::XTextRange >& xRange,
+    virtual void   insertControlCharacter( const cpo::uno::Reference< css::text::XTextRange >& xRange,
                                         sal_Int16 nControlCharacter, bool bAbsorb ) override;
 
                             // XTextRange
-    virtual css::uno::Reference< css::text::XText > SAL_CALL
+    virtual cpo::uno::Reference< css::text::XText >
                             getText() override;
-    virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
+    virtual cpo::uno::Reference< css::text::XTextRange >
                             getStart() override;
-    virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
+    virtual cpo::uno::Reference< css::text::XTextRange >
                             getEnd() override;
-    virtual OUString SAL_CALL getString() override;
-    virtual void SAL_CALL   setString( const OUString& aString ) override;
+    virtual OUString getString() override;
+    virtual void   setString( const OUString& aString ) override;
 
     // XChild
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getParent() override;
-    virtual void SAL_CALL setParent( const css::uno::Reference< css::uno::XInterface >& xParent ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getParent() override;
+    virtual void setParent( const cpo::uno::Reference< cpo::uno::XInterface >& xParent ) override;
 
                             // XTypeProvider
-    virtual cpo::uno::Sequence< cpo::uno::Type > SAL_CALL getTypes() override;
-    virtual cpo::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
 
                             // XEventsSupplier
-    virtual css::uno::Reference< css::container::XNameReplace > SAL_CALL getEvents() override;
+    virtual cpo::uno::Reference< css::container::XNameReplace > getEvents() override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) override ;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual OUString getImplementationName(  ) override ;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

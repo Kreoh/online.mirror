@@ -110,15 +110,10 @@ bool UnnecessaryLocking::VisitCompoundStmt(const CompoundStmt* compoundStmt)
             && !loplugin::isSamePathname(
                    fn, SRCDIR "/chart2/source/controller/accessibility/AccessibleChartView.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/desktop/source/offacc/acceptor.cxx")
-            && !loplugin::isSamePathname(
-                   fn, SRCDIR "/desktop/source/deployment/registry/component/dp_component.cxx")
-            && !loplugin::isSamePathname(fn,
-                                         SRCDIR "/desktop/source/deployment/gui/dp_gui_dialog2.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/desktop/source/lib/init.cxx")
 
             // needs to lock around access to methods in vcl
             && !loplugin::isSamePathname(fn, SRCDIR "/basctl/source/basicide/unomodel.cxx")
-            && !loplugin::isSamePathname(fn, SRCDIR "/cui/source/dialogs/AdditionsDialog.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/cui/source/dialogs/cuigaldlg.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/dbaccess/source/ui/browser/unodatbr.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/dbaccess/source/ui/uno/dbinteraction.cxx")
@@ -145,7 +140,6 @@ bool UnnecessaryLocking::VisitCompoundStmt(const CompoundStmt* compoundStmt)
             && !loplugin::isSamePathname(fn, SRCDIR "/sc/source/ui/vba/vbaapplication.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/sd/source/ui/unoidl/unodoc.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/sd/source/ui/unoidl/unomodule.cxx")
-            && !loplugin::isSamePathname(fn, SRCDIR "/sd/source/ui/remotecontrol/Receiver.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR
                                          "/sd/source/ui/slidesorter/controller/SlsClipboard.cxx")
             && !loplugin::isSamePathname(fn, SRCDIR "/sfx2/source/appl/fwkhelper.cxx")

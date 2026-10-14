@@ -18,13 +18,18 @@
 #include <string>
 
 #include <common/Clipboard.hpp>
+#include <common/FileUtil.hpp>
 #include <net/HttpRequest.hpp>
+#include <net/HttpServer.hpp>
 
+#include <test/MockStreamSocket.hpp>
 #include <test/lokassert.hpp>
 
 #include <cppunit/extensions/HelperMacros.h>
 
 #include <cstdint>
+#include <fstream>
+#include <memory>
 #include <string>
 
 /// HTTP WhiteBox unit-tests.
@@ -38,6 +43,8 @@ class HttpWhiteBoxTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testStatusLineSerialize);
 
     CPPUNIT_TEST(testHeader);
+    CPPUNIT_TEST(testHeaderFieldWithControlCharacter);
+    CPPUNIT_TEST(testRequestLineWithControlCharacter);
     CPPUNIT_TEST(testCookies);
 
     CPPUNIT_TEST(testRequestParserValidComplete);
@@ -50,6 +57,8 @@ class HttpWhiteBoxTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testInsertFile);
     CPPUNIT_TEST(testGetFavicon);
     CPPUNIT_TEST(testPostWopi);
+    CPPUNIT_TEST(testServedFileClosesConnection);
+    CPPUNIT_TEST(testServedRangeClosesConnection);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -58,6 +67,8 @@ class HttpWhiteBoxTests : public CPPUNIT_NS::TestFixture
     void testStatusLineParserValidIncomplete();
     void testStatusLineSerialize();
     void testHeader();
+    void testHeaderFieldWithControlCharacter();
+    void testRequestLineWithControlCharacter();
     void testCookies();
     void testRequestParserValidComplete();
     void testRequestParserValidIncomplete();
@@ -69,6 +80,8 @@ class HttpWhiteBoxTests : public CPPUNIT_NS::TestFixture
     void testInsertFile();
     void testGetFavicon();
     void testPostWopi();
+    void testServedFileClosesConnection();
+    void testServedRangeClosesConnection();
 };
 
 void HttpWhiteBoxTests::testStatusLineParserValidComplete()
@@ -181,6 +194,102 @@ void HttpWhiteBoxTests::testHeader()
     const std::string data = "\r\na=\r\n\r\n";
     LOK_ASSERT_EQUAL(static_cast<std::int64_t>(8), header.parse(data.c_str(), data.size()));
     LOK_ASSERT_EQUAL(0UL, header.size());
+}
+
+void HttpWhiteBoxTests::testHeaderFieldWithControlCharacter()
+{
+    constexpr std::string_view testname = __func__;
+
+    // A value that carries a carriage return and a newline does not become a second header,
+    // and the caller is told the field was not set.
+    http::Header header;
+    LOK_ASSERT(!header.set("X-Sample", "one\r\nRange: bytes=0-1"));
+    LOK_ASSERT(!header.has("X-Sample"));
+    LOK_ASSERT(!header.has("Range"));
+    LOK_ASSERT_EQUAL(0UL, header.size());
+
+    // The same holds for a name, and for a lone newline.
+    LOK_ASSERT(!header.add("X-Custom\r\nRange", "bytes=0-1"));
+    LOK_ASSERT(!header.add("X-Custom", "value\nRange: bytes=0-1"));
+    LOK_ASSERT_EQUAL(0UL, header.size());
+
+    // A refused value takes the earlier one with it, so the field holds what the caller
+    // passed or nothing at all.
+    LOK_ASSERT(header.set("X-Replaced", "first"));
+    LOK_ASSERT_EQUAL_STR("first", header.get("X-Replaced"));
+    LOK_ASSERT(!header.set("X-Replaced", "second\r\nRange: bytes=0-1"));
+    LOK_ASSERT(!header.has("X-Replaced"));
+    LOK_ASSERT_EQUAL(0UL, header.size());
+
+    // The other bytes RFC 9110 section 5.5 keeps out of a field value are refused too: NUL,
+    // DEL, and the last control character below the printable range.
+    LOK_ASSERT(!header.set("X-Nul", std::string("one\0two", 7)));
+    LOK_ASSERT(!header.set("X-Del", "one\x7f" "two"));
+    LOK_ASSERT(!header.set("X-UnitSeparator", "one\x1f" "two"));
+    LOK_ASSERT_EQUAL(0UL, header.size());
+
+    // The bytes at the edges of the allowed range are kept: HTAB, SP, 0x7e and 0x80.
+    LOK_ASSERT(header.set("X-Tabbed", "one\ttwo"));
+    LOK_ASSERT(header.set("X-Spaced", "one two"));
+    LOK_ASSERT(header.set("X-Tilde", "one~two"));
+    LOK_ASSERT(header.set("X-High", "one\x80" "two"));
+    LOK_ASSERT(header.set("X-Accented", "caf\xc3\xa9"));
+    LOK_ASSERT_EQUAL(5UL, header.size());
+    LOK_ASSERT_EQUAL_STR("one\ttwo", header.get("X-Tabbed"));
+    LOK_ASSERT_EQUAL_STR("one two", header.get("X-Spaced"));
+    LOK_ASSERT_EQUAL_STR("one~two", header.get("X-Tilde"));
+    LOK_ASSERT_EQUAL_STR("one\x80" "two", header.get("X-High"));
+    LOK_ASSERT_EQUAL_STR("caf\xc3\xa9", header.get("X-Accented"));
+
+    // A received field whose sender put in a byte a field cannot carry is skipped, and the
+    // rest of the reply is kept.
+    http::Header parsed;
+    const std::string reply = "Host: localhost\r\nX-Bad: one\x01" "two\r\nX-Good: two\r\n\r\n";
+    LOK_ASSERT(parsed.parse(reply.c_str(), reply.size()) > 0);
+    LOK_ASSERT(!parsed.has("X-Bad"));
+    LOK_ASSERT_EQUAL_STR("localhost", parsed.get("Host"));
+    LOK_ASSERT_EQUAL_STR("two", parsed.get("X-Good"));
+
+    // The request that goes out on the wire carries no injected field.
+    http::Request request;
+    LOK_ASSERT(!request.set("X-Sample", "one\r\nIf-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"));
+    Buffer out;
+    request.writeData(out, INT_MAX);
+    const std::string wire(out.data(), out.size());
+    LOK_ASSERT(wire.find("If-Modified-Since") == std::string::npos);
+    LOK_ASSERT(wire.find("X-Sample") == std::string::npos);
+}
+
+void HttpWhiteBoxTests::testRequestLineWithControlCharacter()
+{
+    constexpr std::string_view testname = __func__;
+
+    // A target carrying a carriage return and a newline sends nothing at all, so the bytes that
+    // follow them cannot arrive as a request line of their own.
+    http::Request split("/one.svg?a=1\r\nGET /two.svg HTTP/1.1\r\nHost: example\r\n\r\n");
+    Buffer splitOut;
+    LOK_ASSERT(!split.writeData(splitOut, INT_MAX));
+    LOK_ASSERT_EQUAL(0UL, splitOut.size());
+
+    // The request line separates its three fields with a space, so a target holding one is
+    // refused as well.
+    http::Request spaced("/one.svg HTTP/1.1");
+    Buffer spacedOut;
+    LOK_ASSERT(!spaced.writeData(spacedOut, INT_MAX));
+    LOK_ASSERT_EQUAL(0UL, spacedOut.size());
+
+    // The verb and the version get the same test as the target.
+    http::Request verbed("/one.svg", "GET\r\nX-Injected: yes");
+    Buffer verbedOut;
+    LOK_ASSERT(!verbed.writeData(verbedOut, INT_MAX));
+    LOK_ASSERT_EQUAL(0UL, verbedOut.size());
+
+    // A target of the ordinary shape still goes out.
+    http::Request plain("/one.svg?a=1&b=2");
+    Buffer plainOut;
+    LOK_ASSERT(plain.writeData(plainOut, INT_MAX));
+    const std::string wire(plainOut.data(), plainOut.size());
+    LOK_ASSERT(wire.starts_with("GET /one.svg?a=1&b=2 HTTP/1.1\r\n"));
 }
 
 void HttpWhiteBoxTests::testCookies()
@@ -815,6 +924,78 @@ void HttpWhiteBoxTests::testPostWopi()
     LOK_ASSERT_EQUAL_STR("application/octet-stream", req.get("Content-Type"));
     LOK_ASSERT_EQUAL_STR("17", req.get("Content-Length"));
     LOK_ASSERT_EQUAL(false, req.isKeepAlive());
+}
+
+namespace
+{
+/// Serve the file at path through an http::ServerSession on a mock socket, for a few rounds of
+/// the socket being writable. The range is the value of a Range header, or empty for the whole
+/// file.
+std::shared_ptr<MockStreamSocket> serveFile(const std::string& path, const std::string& range)
+{
+    auto session = std::make_shared<http::ServerSession>();
+    http::ServerSession::ResponseHeaders headers;
+    headers.emplace_back("Content-Type", "image/gif");
+    if (range.empty())
+        session->asyncUpload(path, std::move(headers));
+    else
+        session->asyncUpload(path, std::move(headers), range);
+
+    auto socket = std::make_shared<MockStreamSocket>();
+    socket->setHandler(session);
+
+    // performWrites is a private override, so it is called through the base class.
+    std::shared_ptr<ProtocolHandlerInterface> base = session;
+    for (int round = 0; round < 3; ++round)
+        base->performWrites(16384);
+
+    return socket;
+}
+
+/// Write content to a new file in dir and return its path.
+std::string writeTempFile(const std::string& dir, const std::string& content)
+{
+    const std::string path = dir + "/served.gif";
+    std::ofstream(path) << content;
+    return path;
+}
+} // namespace
+
+void HttpWhiteBoxTests::testServedFileClosesConnection()
+{
+    constexpr std::string_view testname = __func__;
+
+    const std::string dir = FileUtil::createRandomTmpDir();
+    FileUtil::OwnedFile dirCleanup(dir, /*recursive=*/true);
+    const std::string path = writeTempFile(dir, "0123456789");
+
+    const std::shared_ptr<MockStreamSocket> socket = serveFile(path, std::string());
+
+    const std::string output = socket->getOutput();
+    LOK_ASSERT(output.starts_with("HTTP/1.1 200"));
+    LOK_ASSERT(output.ends_with("\r\n\r\n0123456789"));
+
+    // The whole file is sent, so the session asks the socket to shut down.
+    LOK_ASSERT(socket->isShutdownSignalled());
+}
+
+void HttpWhiteBoxTests::testServedRangeClosesConnection()
+{
+    constexpr std::string_view testname = __func__;
+
+    const std::string dir = FileUtil::createRandomTmpDir();
+    FileUtil::OwnedFile dirCleanup(dir, /*recursive=*/true);
+    const std::string path = writeTempFile(dir, "0123456789");
+
+    // A range that ends before the end of the file.
+    const std::shared_ptr<MockStreamSocket> socket = serveFile(path, "bytes=2-5");
+
+    const std::string output = socket->getOutput();
+    LOK_ASSERT(output.starts_with("HTTP/1.1 206"));
+    LOK_ASSERT(output.find("Content-Range: bytes 2-5/10") != std::string::npos);
+    LOK_ASSERT(output.ends_with("\r\n\r\n2345"));
+
+    LOK_ASSERT(socket->isShutdownSignalled());
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(HttpWhiteBoxTests);

@@ -50,6 +50,7 @@
 #include <comphelper/sequence.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 void SwXTextPortion::init(const SwUnoCursor* pPortionCursor)
 {
@@ -175,9 +176,10 @@ OUString SwXTextPortion::getString()
     SwTextNode* pTextNd = rUnoCursor.GetPointNode().GetTextNode();
     if ( pTextNd )
     {
-        const sal_Int32 nStt = rUnoCursor.Start()->GetContentIndex();
+        auto [pStart, pEnd] = rUnoCursor.StartEnd(); // SwPosition*
+        const sal_Int32 nStt = pStart->GetContentIndex();
         aText = pTextNd->GetExpandText(nullptr, nStt,
-                rUnoCursor.End()->GetContentIndex() - nStt,
+                pEnd->GetContentIndex() - nStt,
                 false, false, false, ExpandMode::ExpandFootnote);
     }
     return aText;
@@ -504,7 +506,7 @@ cpo::uno::Sequence< cpo::uno::Any > SwXTextPortion::getPropertyValues(
 }
 
 /* disabled for #i46921# */
-cpo::uno::Sequence< beans::SetPropertyTolerantFailed > SAL_CALL SwXTextPortion::setPropertyValuesTolerant(
+cpo::uno::Sequence< beans::SetPropertyTolerantFailed > SwXTextPortion::setPropertyValuesTolerant(
         const cpo::uno::Sequence< OUString >& rPropertyNames,
         const cpo::uno::Sequence< cpo::uno::Any >& rValues )
 {
@@ -572,7 +574,7 @@ cpo::uno::Sequence< beans::SetPropertyTolerantFailed > SAL_CALL SwXTextPortion::
     return aFailed;
 }
 
-cpo::uno::Sequence< beans::GetPropertyTolerantResult > SAL_CALL SwXTextPortion::getPropertyValuesTolerant(
+cpo::uno::Sequence< beans::GetPropertyTolerantResult > SwXTextPortion::getPropertyValuesTolerant(
         const cpo::uno::Sequence< OUString >& rPropertyNames )
 {
     SolarMutexGuard aGuard;
@@ -587,7 +589,7 @@ cpo::uno::Sequence< beans::GetPropertyTolerantResult > SAL_CALL SwXTextPortion::
     return aRes;
 }
 
-cpo::uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion::getDirectPropertyValuesTolerant(
+cpo::uno::Sequence< beans::GetDirectPropertyTolerantResult > SwXTextPortion::getDirectPropertyValuesTolerant(
         const cpo::uno::Sequence< OUString >& rPropertyNames )
 {
     SolarMutexGuard aGuard;
@@ -697,7 +699,7 @@ cpo::uno::Sequence< beans::GetDirectPropertyTolerantResult > SwXTextPortion::Get
             }
         }
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -706,7 +708,7 @@ cpo::uno::Sequence< beans::GetDirectPropertyTolerantResult > SwXTextPortion::Get
         cpo::uno::Any a(cppu::getCaughtException());
         throw css::lang::WrappedTargetRuntimeException(
             "wrapped Exception " + e.Message,
-            css::uno::Reference<css::uno::XInterface>(), a);
+            cpo::uno::Reference<cpo::uno::XInterface>(), a);
     }
 
     return comphelper::containerToSequence(aResultVector);

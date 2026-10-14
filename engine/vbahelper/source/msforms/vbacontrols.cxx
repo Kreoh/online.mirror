@@ -37,6 +37,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 
@@ -90,7 +91,7 @@ public:
     static OUString getControlName( const uno::Reference< awt::XControl >& xCtrl )
     {
         if ( !xCtrl.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< beans::XPropertySet > xProp( xCtrl->getModel(), uno::UNO_QUERY_THROW );
         OUString sName;
@@ -100,42 +101,42 @@ public:
 
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override
+    virtual cpo::uno::Type getElementType(  ) override
     {
         return cppu::UnoType<awt::XControl>::get();
     }
 
-    virtual bool SAL_CALL hasElements(  ) override
+    virtual bool hasElements(  ) override
     {
         return ( !mControls.empty() );
     }
 
     // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override
+    virtual cpo::uno::Any getByName( const OUString& aName ) override
     {
         if ( !hasByName( aName ) )
             throw container::NoSuchElementException();
         return getByIndex( mIndices[ aName ] );
     }
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override
     {
         return msNames;
     }
 
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override
+    virtual bool hasByName( const OUString& aName ) override
     {
         ControlIndexMap::iterator it = mIndices.find( aName );
         return it != mIndices.end();
     }
 
     // XElementAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) override
+    virtual ::sal_Int32 getCount(  ) override
     {
         return mControls.size();
     }
 
-    virtual cpo::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0 || o3tl::make_unsigned(Index) >= mControls.size() )
             throw lang::IndexOutOfBoundsException();
@@ -146,7 +147,7 @@ public:
 
 class ControlsEnumWrapper : public EnumerationHelper_BASE
 {
-    uno::Reference<uno::XComponentContext > m_xContext;
+    uno::Reference<cpo::uno::XComponentContext > m_xContext;
     uno::Reference<container::XIndexAccess > m_xIndexAccess;
     uno::Reference<awt::XControl > m_xDlg;
     uno::Reference< frame::XModel > m_xModel;
@@ -157,7 +158,7 @@ class ControlsEnumWrapper : public EnumerationHelper_BASE
 public:
 
     ControlsEnumWrapper(
-        uno::Reference< uno::XComponentContext > xContext,
+        uno::Reference< cpo::uno::XComponentContext > xContext,
         uno::Reference< container::XIndexAccess > xIndexAccess,
         uno::Reference< awt::XControl > xDlg,
         uno::Reference< frame::XModel > xModel,
@@ -170,12 +171,12 @@ public:
     mfOffsetY( fOffsetY ),
     nIndex( 0 ) {}
 
-    virtual bool SAL_CALL hasMoreElements(  ) override
+    virtual bool hasMoreElements(  ) override
     {
         return ( nIndex < m_xIndexAccess->getCount() );
     }
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         if ( nIndex < m_xIndexAccess->getCount() )
         {
@@ -202,8 +203,8 @@ lcl_controlsWrapper( const uno::Reference< awt::XControl >& xDlg )
 
 ScVbaControls::ScVbaControls(
         const uno::Reference< XHelperInterface >& xParent,
-        const uno::Reference< uno::XComponentContext >& xContext,
-        const css::uno::Reference< awt::XControl >& xDialog,
+        const uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< awt::XControl >& xDialog,
         uno::Reference< frame::XModel > xModel,
         double fOffsetX, double fOffsetY ) :
     ControlsImpl_BASE( xParent, xContext, lcl_controlsWrapper( xDialog  ) ),
@@ -219,7 +220,7 @@ ScVbaControls::createEnumeration()
 {
     uno::Reference< container::XEnumeration > xEnum( new ControlsEnumWrapper( mxContext, m_xIndexAccess, mxDialog, mxModel, mfOffsetX, mfOffsetY ) );
     if ( !xEnum.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return xEnum;
 }
 
@@ -232,7 +233,7 @@ ScVbaControls::createCollectionObject( const cpo::uno::Any& aSource )
     return cpo::uno::Any( xVBAControl );
 }
 
-void SAL_CALL
+void
 ScVbaControls::Move( double cx, double cy )
 {
     uno::Reference< container::XEnumeration > xEnum( createEnumeration() );
@@ -244,7 +245,7 @@ ScVbaControls::Move( double cx, double cy )
     }
 }
 
-cpo::uno::Any SAL_CALL ScVbaControls::Add( const cpo::uno::Any& Object, const cpo::uno::Any& StringKey, const cpo::uno::Any& /*Before*/, const cpo::uno::Any& /*After*/ )
+cpo::uno::Any ScVbaControls::Add( const cpo::uno::Any& Object, const cpo::uno::Any& StringKey, const cpo::uno::Any& /*Before*/, const cpo::uno::Any& /*After*/ )
 {
     cpo::uno::Any aResult;
     OUString aComServiceName;
@@ -252,7 +253,7 @@ cpo::uno::Any SAL_CALL ScVbaControls::Add( const cpo::uno::Any& Object, const cp
     try
     {
         if ( !mxDialog.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< awt::XControl > xNewControl;
         uno::Reference< lang::XMultiServiceFactory > xModelFactory( mxDialog->getModel(), uno::UNO_QUERY_THROW );
@@ -397,7 +398,7 @@ cpo::uno::Any SAL_CALL ScVbaControls::Add( const cpo::uno::Any& Object, const cp
         }
 
         if ( !xNewControl.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         UpdateCollectionIndex( lcl_controlsWrapper( mxDialog  ) );
         aResult <<= xNewControl;
@@ -408,7 +409,7 @@ cpo::uno::Any SAL_CALL ScVbaControls::Add( const cpo::uno::Any& Object, const cp
         if( fDefHeight > 0.0 )
             xVBAControl->setHeight( fDefHeight );
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         throw;
     }
@@ -416,21 +417,21 @@ cpo::uno::Any SAL_CALL ScVbaControls::Add( const cpo::uno::Any& Object, const cp
     {
         cpo::uno::Any anyEx = cppu::getCaughtException();
         throw lang::WrappedTargetRuntimeException( u"Can not create AXControl!"_ustr,
-                uno::Reference< uno::XInterface >(),
+                uno::Reference< cpo::uno::XInterface >(),
                 anyEx );
     }
 
     return aResult;
 }
 
-void SAL_CALL ScVbaControls::Remove( const cpo::uno::Any& StringKeyOrIndex )
+void ScVbaControls::Remove( const cpo::uno::Any& StringKeyOrIndex )
 {
     try
     {
         OUString aControlName;
         sal_Int32 nIndex = -1;
         if ( !mxDialog.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< lang::XMultiServiceFactory > xModelFactory( mxDialog->getModel(), uno::UNO_QUERY_THROW );
         uno::Reference< container::XNameContainer > xDialogContainer( xModelFactory, uno::UNO_QUERY_THROW );
@@ -438,15 +439,15 @@ void SAL_CALL ScVbaControls::Remove( const cpo::uno::Any& StringKeyOrIndex )
         if ( StringKeyOrIndex >>= aControlName )
         {
             if ( aControlName.isEmpty() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
         else if ( StringKeyOrIndex >>= nIndex )
         {
             if (nIndex >= 0 && nIndex < m_xIndexAccess->getCount() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
         }
         else
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< awt::XControl > xControl;
         if ( !aControlName.isEmpty() )
@@ -460,7 +461,7 @@ void SAL_CALL ScVbaControls::Remove( const cpo::uno::Any& StringKeyOrIndex )
         }
 
         if ( !xControl.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         if ( aControlName.isEmpty() )
             aControlName = ControlArrayWrapper::getControlName( xControl );
@@ -468,7 +469,7 @@ void SAL_CALL ScVbaControls::Remove( const cpo::uno::Any& StringKeyOrIndex )
         xDialogContainer->removeByName( aControlName );
         xControl->dispose();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         // the exceptions are not rethrown, impossibility to find or remove the control is currently not reported
         // since in most cases it means just that the controls is already not there, the VBA seems to do it in the same way

@@ -103,7 +103,7 @@ private:
     /** IStoreHandle query() template function specialization.
      */
     friend OStorePageManager*
-    SAL_CALL query<> (OStoreObject *pHandle, OStorePageManager*);
+    query<> (OStoreObject *pHandle, OStorePageManager*);
 
     /** Representation.
     */
@@ -140,7 +140,7 @@ inline bool OStorePageManager::isValid() const
 }
 
 template<> inline OStorePageManager*
-SAL_CALL query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStorePageManager*)
+query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStorePageManager*)
 {
     if (pHandle && pHandle->isKindOf (OStorePageManager::m_nTypeId))
     {

@@ -21,15 +21,16 @@
 #include "vbanewfont.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaCheckbox::ScVbaCheckbox( const uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+ScVbaCheckbox::ScVbaCheckbox( const uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
     : CheckBoxImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
-OUString SAL_CALL
+OUString
 ScVbaCheckbox::getCaption()
 {
     OUString Label;
@@ -37,13 +38,13 @@ ScVbaCheckbox::getCaption()
     return Label;
 }
 
-void SAL_CALL
+void
 ScVbaCheckbox::setCaption( const OUString& _caption )
 {
     m_xProps->setPropertyValue( u"Label"_ustr, cpo::uno::Any( _caption ) );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaCheckbox::getValue()
 {
     sal_Int16 nValue = -1;
@@ -56,7 +57,7 @@ ScVbaCheckbox::getValue()
     return cpo::uno::Any( nValue == -1 );
 }
 
-void SAL_CALL
+void
 ScVbaCheckbox::setValue( const cpo::uno::Any& _value )
 {
     sal_Int16 nValue = 0;
@@ -77,7 +78,7 @@ ScVbaCheckbox::setValue( const cpo::uno::Any& _value )
         fireClickEvent();
 }
 
-uno::Reference< msforms::XNewFont > SAL_CALL ScVbaCheckbox::getFont()
+uno::Reference< msforms::XNewFont > ScVbaCheckbox::getFont()
 {
     return new VbaNewFont( m_xProps );
 }
@@ -98,32 +99,32 @@ ScVbaCheckbox::getServiceNames()
     return aServiceNames;
 }
 
-sal_Int32 SAL_CALL ScVbaCheckbox::getBackColor()
+sal_Int32 ScVbaCheckbox::getBackColor()
 {
     return ScVbaControl::getBackColor();
 }
 
-void SAL_CALL ScVbaCheckbox::setBackColor( sal_Int32 nBackColor )
+void ScVbaCheckbox::setBackColor( sal_Int32 nBackColor )
 {
     ScVbaControl::setBackColor( nBackColor );
 }
 
-bool SAL_CALL ScVbaCheckbox::getAutoSize()
+bool ScVbaCheckbox::getAutoSize()
 {
     return ScVbaControl::getAutoSize();
 }
 
-void SAL_CALL ScVbaCheckbox::setAutoSize( bool bAutoSize )
+void ScVbaCheckbox::setAutoSize( bool bAutoSize )
 {
     ScVbaControl::setAutoSize( bAutoSize );
 }
 
-bool SAL_CALL ScVbaCheckbox::getLocked()
+bool ScVbaCheckbox::getLocked()
 {
     return ScVbaControl::getLocked();
 }
 
-void SAL_CALL ScVbaCheckbox::setLocked( bool bLocked )
+void ScVbaCheckbox::setLocked( bool bLocked )
 {
     ScVbaControl::setLocked( bLocked );
 }

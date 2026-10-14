@@ -81,7 +81,7 @@
 
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
@@ -99,10 +99,10 @@ const char ITEM_DESCRIPTOR_VISIBLE[]    = "IsVisible";
 
 const sal_uInt16 STARTID_CUSTOMIZE_POPUPMENU = 1000;
 
-static css::uno::Reference< css::frame::XLayoutManager > getLayoutManagerFromFrame(
-    css::uno::Reference< css::frame::XFrame > const & rFrame )
+static cpo::uno::Reference< css::frame::XLayoutManager > getLayoutManagerFromFrame(
+    cpo::uno::Reference< css::frame::XFrame > const & rFrame )
 {
-    css::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
+    cpo::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
 
     Reference< XPropertySet > xPropSet( rFrame, UNO_QUERY );
     if ( xPropSet.is() )
@@ -198,7 +198,7 @@ public:
         m_pToolBar.disposeAndClear();
     }
 
-    virtual css::uno::Reference<css::awt::XWindow> GetInterface() override
+    virtual cpo::uno::Reference<css::awt::XWindow> GetInterface() override
     {
         return VCLUnoHelper::GetInterface(m_pToolBar);
     }
@@ -402,7 +402,7 @@ public:
 
     virtual void Destroy() override {}
 
-    virtual css::uno::Reference<css::awt::XWindow> GetInterface() override
+    virtual cpo::uno::Reference<css::awt::XWindow> GetInterface() override
     {
         return new weld::TransportAsXWindow(m_pWeldedToolBar, m_pBuilder);
     }
@@ -737,7 +737,7 @@ void ToolBarManager::UpdateControllers()
 }
 
 //for update toolbar controller via Support Visible
-void ToolBarManager::UpdateController( const css::uno::Reference< css::frame::XToolbarController >& xController)
+void ToolBarManager::UpdateController( const cpo::uno::Reference< css::frame::XToolbarController >& xController)
 {
 
     if ( !m_bUpdateControllers )
@@ -1820,27 +1820,15 @@ void ToolBarManager::AddCustomizeMenuItems(ToolBox const * pToolBar)
     if (!m_pToolBar)
         return;
 
-    // No config menu entries if command ".uno:ConfigureDialog" is not enabled
-    Reference< XDispatch > xDisp;
-    css::util::URL aURL;
-    if ( m_xFrame.is() )
-    {
-        Reference< XDispatchProvider > xProv( m_xFrame, UNO_QUERY );
-        aURL.Complete = u".uno:ConfigureDialog"_ustr;
-        m_xURLTransformer->parseStrict( aURL );
-        if ( xProv.is() )
-            xDisp = xProv->queryDispatch( aURL, OUString(), 0 );
-
-        if ( !xDisp.is() || IsPluginMode() )
-            return;
-    }
+    if ( m_xFrame.is() && IsPluginMode() )
+        return;
 
     // popup menu for quick customization
     bool bHideDisabledEntries = !officecfg::Office::Common::View::Menu::DontHideDisabledEntry::get();
 
     ::PopupMenu *pMenu = pToolBar->GetMenu();
 
-    // copy all menu items 'Visible buttons, Customize toolbar, Dock toolbar,
+    // copy all menu items 'Visible buttons, Dock toolbar,
     // Dock all Toolbars) from the loaded resource into the toolbar menu
     sal_uInt16 nGroupLen = pMenu->GetItemCount();
     if (nGroupLen)
@@ -1854,11 +1842,6 @@ void ToolBarManager::AddCustomizeMenuItems(ToolBox const * pToolBar)
         xVisibleItemsPopupMenu = VclPtr<PopupMenu>::Create();
         pMenu->SetPopupMenu(MENUITEM_TOOLBAR_VISIBLEBUTTON, xVisibleItemsPopupMenu);
 
-        if (m_pToolBar->IsCustomize())
-        {
-            pMenu->InsertItem(MENUITEM_TOOLBAR_CUSTOMIZETOOLBAR, FwkResId(STR_TOOLBAR_CUSTOMIZE_TOOLBAR));
-            pMenu->SetItemCommand(MENUITEM_TOOLBAR_CUSTOMIZETOOLBAR, u".uno:ConfigureToolboxVisible"_ustr);
-        }
         pMenu->InsertSeparator();
     }
 
@@ -1899,7 +1882,6 @@ void ToolBarManager::AddCustomizeMenuItems(ToolBox const * pToolBar)
         if (officecfg::Office::Common::Misc::DisableUICustomization::get())
         {
             pMenu->EnableItem(MENUITEM_TOOLBAR_VISIBLEBUTTON, false);
-            pMenu->EnableItem(MENUITEM_TOOLBAR_CUSTOMIZETOOLBAR, false);
             pMenu->EnableItem(MENUITEM_TOOLBAR_LOCKTOOLBARPOSITION, false);
         }
 
@@ -2093,29 +2075,6 @@ IMPL_LINK( ToolBarManager, MenuSelect, Menu*, pMenu, bool )
 
         switch ( pMenu->GetCurItemId() )
         {
-            case MENUITEM_TOOLBAR_CUSTOMIZETOOLBAR:
-            {
-                Reference< XDispatch > xDisp;
-                css::util::URL aURL;
-                if ( m_xFrame.is() )
-                {
-                    Reference< XDispatchProvider > xProv( m_xFrame, UNO_QUERY );
-                    aURL.Complete = u".uno:ConfigureDialog"_ustr;
-                    m_xURLTransformer->parseStrict( aURL );
-                    if ( xProv.is() )
-                        xDisp = xProv->queryDispatch( aURL, OUString(), 0 );
-                }
-
-                if ( xDisp.is() )
-                {
-                    Sequence< PropertyValue > aPropSeq{ comphelper::makePropertyValue(
-                        u"ResourceURL"_ustr, m_aResourceName) };
-
-                    xDisp->dispatch( aURL, aPropSeq );
-                }
-                break;
-            }
-
             case MENUITEM_TOOLBAR_UNDOCKTOOLBAR:
             {
                 ExecuteInfo* pExecuteInfo = new ExecuteInfo;

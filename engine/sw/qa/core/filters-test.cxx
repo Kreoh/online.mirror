@@ -27,6 +27,7 @@
 typedef rtl::Reference<SwDocShell> SwDocShellRef;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /* Implementation of Filters test */
 
@@ -55,7 +56,7 @@ private:
     bool filter( const OUString &rFilter, const OUString &rURL,
         const OUString &rUserData, SfxFilterFlags nFilterFlags,
         SotClipboardFormatId nClipboardID, unsigned int nFilterVersion, bool bExport);
-    uno::Reference<uno::XInterface> m_xWriterComponent;
+    uno::Reference<cpo::uno::XInterface> m_xWriterComponent;
 };
 
 bool SwFiltersTest::load(const OUString &rFilter, const OUString &rURL,

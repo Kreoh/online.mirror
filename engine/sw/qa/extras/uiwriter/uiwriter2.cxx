@@ -46,7 +46,8 @@
 #include <rootfrm.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Second set of tests asserting the behavior of Writer user interface shells.
 class SwUiWriterTest2 : public SwModelTestBase
@@ -141,6 +142,24 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testTdfChangeNumberingListAutoFormat)
         pXmlDoc,
         "/root/page/body/tab/row/cell/txt[3]/SwParaPortion/SwLineLayout/SwFieldPortion/SwFont",
         "height", u"260");
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testGrowFontSizeStyledParagraph)
+{
+    // The paragraph gets its font size from a paragraph style, and the Western size the style
+    // sets differs from the Asian and Complex sizes coming from the document defaults.
+    createSwDoc("grow-font-size-styled-paragraph.fodt");
+
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:Grow"_ustr, {});
+
+    // Without the accompanying fix the size stayed at 11pt, because the paragraph carries no
+    // direct formatting of its own to read a starting size from.
+    CPPUNIT_ASSERT_EQUAL(13.0f, getProperty<float>(getRun(getParagraph(1), 1), u"CharHeight"_ustr));
+
+    dispatchCommand(mxComponent, u".uno:Shrink"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(11.0f, getProperty<float>(getRun(getParagraph(1), 1), u"CharHeight"_ustr));
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testTdf101534)

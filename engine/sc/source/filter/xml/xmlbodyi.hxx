@@ -44,13 +44,13 @@ public:
 
     virtual ~ScXMLBodyContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler >
         createFastChildContext( sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual void SAL_CALL characters(const OUString & aChars) override;
+    virtual void characters(const OUString & aChars) override;
 };
 
 class ScXMLPersonsContext : public ScXMLImportContext
@@ -58,9 +58,9 @@ class ScXMLPersonsContext : public ScXMLImportContext
 public:
     ScXMLPersonsContext(ScXMLImport& rImport);
 
-    virtual css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL
+    virtual cpo::uno::Reference<css::xml::sax::XFastContextHandler>
         createFastChildContext(sal_Int32 nElement,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

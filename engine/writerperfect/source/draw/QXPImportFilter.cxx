@@ -14,8 +14,8 @@
 #include "QXPImportFilter.hxx"
 
 using cpo::uno::Sequence;
-using com::sun::star::uno::XComponentContext;
-using com::sun::star::uno::XInterface;
+using cpo::uno::XComponentContext;
+using cpo::uno::XInterface;
 
 bool QXPImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
                                        OdgGenerator& rGenerator, comphelper::SequenceAsHashMap&)
@@ -35,25 +35,25 @@ bool QXPImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUStri
 }
 
 // XServiceInfo
-OUString SAL_CALL QXPImportFilter::getImplementationName()
+OUString QXPImportFilter::getImplementationName()
 {
     return u"org.libreoffice.comp.Draw.QXPImportFilter"_ustr;
 }
 
-bool SAL_CALL QXPImportFilter::supportsService(const OUString& rServiceName)
+bool QXPImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence<OUString> SAL_CALL QXPImportFilter::getSupportedServiceNames()
+Sequence<OUString> QXPImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_libreoffice_comp_Draw_QXPImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new QXPImportFilter(context));
 }

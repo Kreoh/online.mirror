@@ -22,6 +22,7 @@
 #include <sfx2/bindings.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <sfx2/viewfrm.hxx>
+#include <svl/eitem.hxx>
 #include <svl/grabbagitem.hxx>
 #include <svl/undo.hxx>
 #include <tools/debug.hxx>
@@ -48,7 +49,6 @@
 #include <svx/SpellDialogChildWindow.hxx>
 #include <SpellDialog.hxx>
 #include <optlingu.hxx>
-#include <treeopt.hxx>
 #include <svtools/colorcfg.hxx>
 #include <svtools/langtab.hxx>
 #include <sal/log.hxx>
@@ -63,8 +63,8 @@
 #include <sstream>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::linguistic2;
 using namespace linguistic;
@@ -509,8 +509,21 @@ IMPL_LINK_NOARG(SpellDialog, CheckGrammarHdl, weld::Toggleable&, void)
 void SpellDialog::StartSpellOptDlg_Impl()
 {
     auto xSet = std::make_shared<SfxItemSetFixed<SID_AUTOSPELL_CHECK,SID_AUTOSPELL_CHECK>>( SfxGetpApp()->GetPool() );
+
+    // Automatic spell checking is a setting each application keeps for itself, so
+    // ask the one this document belongs to rather than let the page fall back to
+    // the shared linguistic option, which no application writes any more.
+    if (SfxViewFrame* pViewFrame = SfxViewFrame::Current())
+    {
+        std::unique_ptr<SfxPoolItem> pItem;
+        if (pViewFrame->GetBindings().QueryState(SID_AUTOSPELL_CHECK, pItem)
+                >= SfxItemState::DEFAULT
+            && pItem)
+            xSet->Put(SfxBoolItem(SID_AUTOSPELL_CHECK,
+                                  static_cast<const SfxBoolItem&>(*pItem).GetValue()));
+    }
     m_xOptionsDlg = std::make_shared<SfxSingleTabDialogController>(
-        m_xDialog.get(), xSet.get(), "content", "cui/ui/spelloptionsdialog.ui", "SpellOptionsDialog");
+        m_xDialog.get(), xSet.get(), u"content"_ustr, u"cui/ui/spelloptionsdialog.ui"_ustr, u"SpellOptionsDialog"_ustr);
 
     std::unique_ptr<SfxTabPage> xPage = SvxLinguTabPage::Create(m_xOptionsDlg->get_content_area(), m_xOptionsDlg.get(), xSet.get());
     static_cast<SvxLinguTabPage*>(xPage.get())->HideModulesGroup();
@@ -521,7 +534,7 @@ void SpellDialog::StartSpellOptDlg_Impl()
             InitUserDicts();
             const SfxItemSet* pOutSet = m_xOptionsDlg->GetOutputItemSet();
             if(pOutSet)
-                OfaTreeOptionsDialog::ApplyLanguageOptions(*pOutSet);
+                SvxLinguTabPage::ApplyLanguageOptions(*pOutSet);
         }
     });
 }
@@ -1712,7 +1725,7 @@ IMPL_LINK(SentenceEditWindow_Impl, ToolbarHdl, const OUString&, rCurItemId, void
     }
 }
 
-bool SentenceEditWindow_Impl::MarkNextError( bool bIgnoreCurrentError, const css::uno::Reference<css::linguistic2::XSpellChecker>& xSpell )
+bool SentenceEditWindow_Impl::MarkNextError( bool bIgnoreCurrentError, const cpo::uno::Reference<css::linguistic2::XSpellChecker>& xSpell )
 {
     if (bIgnoreCurrentError)
         m_aIgnoreErrorsAt.insert( m_nErrorStart );

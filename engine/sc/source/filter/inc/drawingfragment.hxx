@@ -20,6 +20,8 @@
 #pragma once
 
 #include <memory>
+#include <utility>
+#include <vector>
 #include <oox/drawingml/shapegroupcontext.hxx>
 #include <oox/drawingml/color.hxx>
 #include <oox/ole/axcontrol.hxx>
@@ -43,13 +45,13 @@ class ShapeMacroAttacher final : public ::oox::ole::VbaMacroAttacherBase
 {
 public:
     explicit            ShapeMacroAttacher( const OUString& rMacroName,
-                            const css::uno::Reference< css::drawing::XShape >& rxShape );
+                            const cpo::uno::Reference< css::drawing::XShape >& rxShape );
 
 private:
     virtual void        attachMacro( const OUString& rMacroUrl ) override;
 
 private:
-    css::uno::Reference< css::drawing::XShape > mxShape;
+    cpo::uno::Reference< css::drawing::XShape > mxShape;
 };
 
 class Shape final : public ::oox::drawingml::Shape, public WorksheetHelper
@@ -63,7 +65,7 @@ public:
 private:
     virtual void        finalizeXShape(
                             ::oox::core::XmlFilterBase& rFilter,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes ) override;
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes ) override;
 
     OUString     maMacroName;
 };
@@ -106,13 +108,17 @@ private:
     virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
     virtual void        onCharacters( const OUString& rChars ) override;
     virtual void        onEndElement() override;
+    virtual void        finalizeImport() override;
 
     typedef ::std::unique_ptr< ShapeAnchor > ShapeAnchorRef;
 
-    css::uno::Reference< css::drawing::XShapes >
+    cpo::uno::Reference< css::drawing::XShapes >
                         mxDrawPage;             /// Drawing page of this sheet.
     ::oox::drawingml::ShapePtr mxShape;         /// Current top-level shape.
     ShapeAnchorRef      mxAnchor;               /// Current anchor of top-level shape.
+    ::oox::drawingml::ShapeIdMap maShapeMap;    /// All inserted shapes, by their id.
+    /// Top-level connectors anchored to cells, each with whether it resizes with its cells.
+    ::std::vector< ::std::pair< ::oox::drawingml::ShapePtr, bool > > maCellAnchoredConnectors;
     // for SmartArt. Apply the colors in rFontRefColor (from clrScheme) to all shapes in pShape,
     // the group object which represents the SmartArt.
     void applyFontRefColor(const oox::drawingml::ShapePtr& pShape,
@@ -125,14 +131,14 @@ class VmlControlMacroAttacher final : public ::oox::ole::VbaMacroAttacherBase
 {
 public:
     explicit            VmlControlMacroAttacher( const OUString& rMacroName,
-                            const css::uno::Reference< css::container::XIndexContainer >& rxCtrlFormIC,
+                            const cpo::uno::Reference< css::container::XIndexContainer >& rxCtrlFormIC,
                             sal_Int32 nCtrlIndex, sal_Int32 nCtrlType, sal_Int32 nDropStyle );
 
 private:
     virtual void        attachMacro( const OUString& rMacroUrl ) override;
 
 private:
-    css::uno::Reference< css::container::XIndexContainer > mxCtrlFormIC;
+    cpo::uno::Reference< css::container::XIndexContainer > mxCtrlFormIC;
     sal_Int32           mnCtrlIndex;
     sal_Int32           mnCtrlType;
     sal_Int32           mnDropStyle;
@@ -166,15 +172,15 @@ public:
                             const OUString& rShapeAnchor ) const override;
 
     /** Creates a UNO control shape for legacy drawing controls. */
-    virtual css::uno::Reference< css::drawing::XShape >
+    virtual cpo::uno::Reference< css::drawing::XShape >
                         createAndInsertClientXShape(
                             const ::oox::vml::ShapeBase& rShape,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+                            const cpo::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
 
     /** Updates the bounding box covering all shapes of this drawing. */
     virtual void        notifyXShapeInserted(
-                            const css::uno::Reference< css::drawing::XShape >& rxShape,
+                            const cpo::uno::Reference< css::drawing::XShape >& rxShape,
                             const css::awt::Rectangle& rShapeRect,
                             const ::oox::vml::ShapeBase& rShape, bool bGroupChild ) override;
 

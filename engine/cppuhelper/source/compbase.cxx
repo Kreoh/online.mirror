@@ -27,7 +27,10 @@ void WeakComponentImplHelperBase2::dispose()
     m_bDisposed = true;
     disposing(aGuard);
     if (!aGuard.owns_lock())
+    {
+        // coverity[double_lock : FALSE] - owns_lock decides whether to relock
         aGuard.lock();
+    }
     css::lang::EventObject aEvt(static_cast<OWeakObject*>(this));
     maEventListeners.disposeAndClear(aGuard, aEvt);
 }
@@ -35,7 +38,7 @@ void WeakComponentImplHelperBase2::dispose()
 void WeakComponentImplHelperBase2::disposing(std::unique_lock<std::mutex>&) {}
 
 void WeakComponentImplHelperBase2::addEventListener(
-    css::uno::Reference<css::lang::XEventListener> const& rxListener)
+    cpo::uno::Reference<css::lang::XEventListener> const& rxListener)
 {
     std::unique_lock aGuard(m_aMutex);
     if (m_bDisposed)
@@ -44,7 +47,7 @@ void WeakComponentImplHelperBase2::addEventListener(
 }
 
 void WeakComponentImplHelperBase2::removeEventListener(
-    css::uno::Reference<css::lang::XEventListener> const& rxListener)
+    cpo::uno::Reference<css::lang::XEventListener> const& rxListener)
 {
     std::unique_lock aGuard(m_aMutex);
     maEventListeners.removeInterface(aGuard, rxListener);
@@ -65,13 +68,13 @@ static void checkInterface(cpo::uno::Type const& rType)
     {
         OUString msg("querying for interface \"" + rType.getTypeName() + "\": no interface type!");
         SAL_WARN("cppuhelper", msg);
-        throw css::uno::RuntimeException(msg);
+        throw cpo::uno::RuntimeException(msg);
     }
 }
 
 static bool isXInterface(rtl_uString* pStr)
 {
-    return OUString::unacquired(&pStr) == "com.sun.star.uno.XInterface";
+    return OUString::unacquired(&pStr) == "cpo.uno.XInterface";
 }
 
 static bool td_equals(typelib_TypeDescriptionReference const* pTDR1,
@@ -166,7 +169,7 @@ static void* queryDeepNoXInterface(typelib_TypeDescriptionReference const* pDema
             OUString msg("cannot get type description for type \""
                          + OUString::unacquired(&pEntries[n].m_type.typeRef->pTypeName) + "\"!");
             SAL_WARN("cppuhelper", msg);
-            throw css::uno::RuntimeException(msg);
+            throw cpo::uno::RuntimeException(msg);
         }
     }
     return nullptr;

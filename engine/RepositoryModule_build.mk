@@ -14,7 +14,6 @@ $(eval $(call gb_Module_add_moduledirs,cross_toolset,\
 	binaryurp \
 	bridges \
 	chart2 \
-	cli_ure \
 	codemaker \
 	comphelper \
 	cppu \
@@ -91,8 +90,8 @@ $(eval $(call gb_Module_add_moduledirs,cross_toolset,\
 		xmlscript \
 	) \
     $(call gb_Helper_optionals_or,HELPTOOLS XMLHELP,helpcompiler) \
-    $(call gb_Helper_optional,XMLHELP,xmlhelp) \
 	$(call gb_Helper_optional,QADEVOOO,qadevOOo) \
+	$(call gb_Helper_optional,XMLHELP,xmlhelp) \
 ))
 
 # vim: set shiftwidth=4 tabstop=4 noexpandtab:

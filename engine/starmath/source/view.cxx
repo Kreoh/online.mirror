@@ -91,6 +91,7 @@
 #include "accessibility.hxx"
 #include <svl/hint.hxx>
 #include <ElementsDockingWindow.hxx>
+#include <NotebookbarElements.hxx>
 #include <helpids.h>
 
 // space around the edit window, in pixels
@@ -104,8 +105,8 @@
 
 using namespace css;
 using namespace css::accessibility;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 static OUString GetScrollUIName(const SmViewShell& rShell)
 {
@@ -1083,7 +1084,7 @@ IMPL_LINK_NOARG( SmCmdBoxWindow, InitialFocusTimerHdl, Timer *, void )
 
     try
     {
-        uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( comphelper::getProcessComponentContext() );
+        uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( comphelper::getProcessComponentContext() );
 
         m_xEdit->GrabFocus();
 
@@ -1863,11 +1864,15 @@ void SmViewShell::Execute(SfxRequest& rReq)
                 if (SmEditWindow* pEditWin = GetEditWindow())
                     SmModule::get()->GetConfig()->SaveUserDefinedFormula(aName, pEditWin->GetText());
 
-                // Show the Elements sidebar with the "User-defined" entry selected
-                GetViewFrame().ShowChildWindow(SID_SIDEBAR);
-                sfx2::sidebar::Sidebar::ShowPanel(u"MathElementsPanel",
-                                                  GetViewFrame().GetFrame().GetFrameInterface());
-                GetViewFrame().GetBindings().Invalidate( SID_ELEMENTSDOCKINGWINDOW );
+                // Show the Elements tab with the "User-defined" entry selected
+                const cpo::uno::Reference<css::frame::XFrame>& xFrame
+                    = GetViewFrame().GetFrame().GetFrameInterface();
+                if (!sm::notebookbar::HostsElements(sm::notebookbar::GetHostView(xFrame)))
+                {
+                    GetViewFrame().ShowChildWindow(SID_SIDEBAR);
+                    sfx2::sidebar::Sidebar::ShowPanel(u"MathElementsPanel", xFrame);
+                    GetViewFrame().GetBindings().Invalidate( SID_ELEMENTSDOCKINGWINDOW );
+                }
                 Broadcast(SfxHint(SfxHintId::SmNewUserFormula));
                 rReq.Ignore ();
             }
@@ -1993,20 +1998,20 @@ void SmViewShell::GetState(SfxItemSet &rSet)
 
 namespace
 {
-css::uno::Reference<css::ui::XSidebar>
-getSidebarFromModel(const css::uno::Reference<css::frame::XModel>& xModel)
+cpo::uno::Reference<css::ui::XSidebar>
+getSidebarFromModel(const cpo::uno::Reference<css::frame::XModel>& xModel)
 {
-    css::uno::Reference<css::container::XChild> xChild(xModel, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::container::XChild> xChild(xModel, cpo::uno::UNO_QUERY);
     if (!xChild.is())
         return nullptr;
-    css::uno::Reference<css::frame::XModel> xParent(xChild->getParent(), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::frame::XModel> xParent(xChild->getParent(), cpo::uno::UNO_QUERY);
     if (!xParent.is())
         return nullptr;
-    css::uno::Reference<css::frame::XController2> xController(xParent->getCurrentController(),
-                                                              css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::frame::XController2> xController(xParent->getCurrentController(),
+                                                              cpo::uno::UNO_QUERY);
     if (!xController.is())
         return nullptr;
-    css::uno::Reference<css::ui::XSidebarProvider> xSidebarProvider = xController->getSidebar();
+    cpo::uno::Reference<css::ui::XSidebarProvider> xSidebarProvider = xController->getSidebar();
     if (!xSidebarProvider.is())
         return nullptr;
     return xSidebarProvider->getSidebar();
@@ -2025,7 +2030,7 @@ public:
     // ~SmController() { mpSelectionChangeHandler->Disconnect(); }
 
     // css::frame::XController
-    void SAL_CALL attachFrame(const css::uno::Reference<css::frame::XFrame>& xFrame) override
+    void attachFrame(const cpo::uno::Reference<css::frame::XFrame>& xFrame) override
     {
         SfxBaseController::attachFrame(xFrame);
 
@@ -2035,12 +2040,15 @@ public:
             // In COKit mode, DocumentHolder::ShowUI is not called on OLE in-place activation,
             // because respective code is skipped in OCommonEmbeddedObject::SwitchStateTo_Impl,
             // so sidebar controller does not get registered properly; do it here
-            if (auto xSidebar = getSidebarFromModel(getModel()))
+            if (!sm::notebookbar::HostsElements(sm::notebookbar::GetHostView(xFrame)))
             {
-                auto pSidebar = dynamic_cast<sfx2::sidebar::SidebarController*>(xSidebar.get());
-                assert(pSidebar);
-                pSidebar->registerSidebarForFrame(this);
-                pSidebar->updateModel(getModel());
+                if (auto xSidebar = getSidebarFromModel(getModel()))
+                {
+                    auto pSidebar = dynamic_cast<sfx2::sidebar::SidebarController*>(xSidebar.get());
+                    assert(pSidebar);
+                    pSidebar->registerSidebarForFrame(this);
+                    pSidebar->updateModel(getModel());
+                }
             }
         }
 
@@ -2048,7 +2056,7 @@ public:
         mpSelectionChangeHandler->selectionChanged({}); // Installs the correct context
     }
 
-    virtual void SAL_CALL dispose() override
+    virtual void dispose() override
     {
         if (comphelper::COKit::isActive())
             if (auto pViewShell = GetViewShell_Impl())
@@ -2210,6 +2218,16 @@ void SmViewShell::ZoomByItemSet(const SfxItemSet *pSet)
     }
 }
 
+namespace
+{
+// Offset from the coordinates of a Math view to those of the document
+Point GetInPlaceOffset(const SmViewShell& rViewShell, const SmGraphicWidget& rWidget)
+{
+    KitStarMathHelper aHelper(KitStarMathHelper::FindContainerViewShell(&rViewShell));
+    return rWidget.GetFormulaDrawPos() + aHelper.GetBoundingBox().TopLeft();
+}
+}
+
 std::optional<OString> SmViewShell::getKitPayload(COKitCallbackType eType, int nViewId) const
 {
     switch (eType)
@@ -2222,11 +2240,8 @@ std::optional<OString> SmViewShell::getKitPayload(COKitCallbackType eType, int n
                 SmCursor& rCursor = GetDoc()->GetCursor();
                 OutputDevice& rOutDev = const_cast<SmGraphicWidget&>(widget).GetOutputDevice();
                 tools::Rectangle aCaret = rCursor.GetCaretRectangle(rOutDev);
-                Point aFormulaDrawPos = widget.GetFormulaDrawPos();
-                aCaret.Move(aFormulaDrawPos.X(), aFormulaDrawPos.Y());
-                KitStarMathHelper helper(SfxViewShell::Current());
-                tools::Rectangle aBounds = helper.GetBoundingBox();
-                aCaret.Move(aBounds.Left(), aBounds.Top());
+                const Point aOffset = GetInPlaceOffset(*this, widget);
+                aCaret.Move(aOffset.X(), aOffset.Y());
                 sRectangle = aCaret.toString();
             }
             return KitHelper::makeVisCursorInvalidation(nViewId, sRectangle, false, {});
@@ -2241,12 +2256,8 @@ std::optional<OString> SmViewShell::getKitPayload(COKitCallbackType eType, int n
                 tools::Rectangle aSelection = rCursor.GetSelectionRectangle(rOutDev);
                 if (!aSelection.IsEmpty())
                 {
-                    Point aFormulaDrawPos = widget.GetFormulaDrawPos();
-                    aSelection.Move(aFormulaDrawPos.X(), aFormulaDrawPos.Y());
-                    KitStarMathHelper helper(SfxViewShell::Current());
-                    tools::Rectangle aBounds = helper.GetBoundingBox();
-
-                    aSelection.Move(aBounds.Left(), aBounds.Top());
+                    const Point aOffset = GetInPlaceOffset(*this, widget);
+                    aSelection.Move(aOffset.X(), aOffset.Y());
                     sRectangle = aSelection.toString();
                 }
             }
@@ -2266,16 +2277,7 @@ std::optional<OString> SmViewShell::getKitPayload(COKitCallbackType eType, int n
 
 void SmViewShell::SendCaretToKit() const
 {
-    const int nViewId = sal_Int32(GetViewShellId());
-    if (const auto payload = getKitPayload(COKitCallbackType::INVALIDATE_VISIBLE_CURSOR, nViewId))
-    {
-        viewCallbackWithViewId(COKitCallbackType::INVALIDATE_VISIBLE_CURSOR,
-                                             *payload, nViewId);
-    }
-    if (const auto payload = getKitPayload(COKitCallbackType::TEXT_SELECTION, nViewId))
-    {
-        viewCallback(COKitCallbackType::TEXT_SELECTION, *payload);
-    }
+    KitStarMathHelper::SendCaret(*this);
 }
 
 void SmViewShell::InvalidateSlots()

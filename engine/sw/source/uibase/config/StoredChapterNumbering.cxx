@@ -38,6 +38,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 namespace sw {
@@ -72,7 +73,7 @@ public:
     }
 
     // XNamed
-    virtual OUString SAL_CALL getName() override
+    virtual OUString getName() override
     {
         SolarMutexGuard g;
         SwNumRulesWithName const* pRules(m_rNumRules.GetRules(m_nIndex));
@@ -83,7 +84,7 @@ public:
         return pRules->GetName().toString();
     }
 
-    virtual void SAL_CALL setName(OUString const& rName) override
+    virtual void setName(OUString const& rName) override
     {
         SolarMutexGuard g;
         SwNumRulesWithName *const pRules(GetOrCreateRules());
@@ -91,23 +92,23 @@ public:
     }
 
     // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override
+    virtual cpo::uno::Type getElementType() override
     {
         return ::cppu::UnoType<cpo::uno::Sequence<beans::PropertyValue>>::get();
     }
 
-    virtual bool SAL_CALL hasElements() override
+    virtual bool hasElements() override
     {
         return true;
     }
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override
+    virtual sal_Int32 getCount() override
     {
         return MAXLEVEL;
     }
 
-    virtual cpo::uno::Any SAL_CALL getByIndex(sal_Int32 nIndex) override
+    virtual cpo::uno::Any getByIndex(sal_Int32 nIndex) override
     {
         if (nIndex < 0 || MAXLEVEL <= nIndex)
             throw lang::IndexOutOfBoundsException();
@@ -134,7 +135,7 @@ public:
     }
 
     // XIndexReplace
-    virtual void SAL_CALL replaceByIndex(
+    virtual void replaceByIndex(
             sal_Int32 nIndex, cpo::uno::Any const& rElement) override
     {
         if (nIndex < 0 || MAXLEVEL <= nIndex)
@@ -164,7 +165,7 @@ class StoredChapterNumberingExport
 {
 public:
     StoredChapterNumberingExport(
-            uno::Reference<uno::XComponentContext> const& xContext,
+            uno::Reference<cpo::uno::XComponentContext> const& xContext,
             OUString const& rFileName,
             uno::Reference<xml::sax::XDocumentHandler> const& xHandler)
         : SvXMLExport(xContext, u"sw::StoredChapterNumberingExport"_ustr, rFileName,
@@ -314,7 +315,7 @@ public:
     {
     }
 
-    virtual void SAL_CALL endFastElement(sal_Int32 /*Element*/) override
+    virtual void endFastElement(sal_Int32 /*Element*/) override
     {
         assert(m_Contexts.size() <= SwChapterNumRules::nMaxRules);
         for (auto iter = m_Contexts.begin(); iter != m_Contexts.end(); ++iter)
@@ -329,9 +330,9 @@ public:
         }
     }
 
-    virtual css::uno::Reference<XFastContextHandler> SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference<XFastContextHandler> createFastChildContext(
                 sal_Int32 Element,
-                const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override
+                const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override
     {
         if (Element == XML_ELEMENT(STYLE, XML_STYLE))
         {
@@ -361,7 +362,7 @@ private:
 
 public:
     StoredChapterNumberingImport(
-            uno::Reference<uno::XComponentContext> const& xContext,
+            uno::Reference<cpo::uno::XComponentContext> const& xContext,
             SwChapterNumRules & rNumRules)
         : SvXMLImport(xContext, u"sw::StoredChapterNumberingImport"_ustr, SvXMLImportFlags::ALL)
         , m_rNumRules(rNumRules)
@@ -369,7 +370,7 @@ public:
     }
 
     virtual SvXMLImportContext *CreateFastContext( sal_Int32 Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & /*xAttrList*/ ) override
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & /*xAttrList*/ ) override
     {
         if (Element == XML_ELEMENT(OFFICE, XML_STYLES))
             return new StoredChapterNumberingRootContext(m_rNumRules, *this);
@@ -382,7 +383,7 @@ public:
 void ExportStoredChapterNumberingRules(SwChapterNumRules & rRules,
         SvStream & rStream, OUString const& rFileName)
 {
-    uno::Reference<uno::XComponentContext> const& xContext(
+    uno::Reference<cpo::uno::XComponentContext> const& xContext(
             ::comphelper::getProcessComponentContext());
 
     uno::Reference<io::XOutputStream> const xOutStream(
@@ -430,7 +431,7 @@ void ExportStoredChapterNumberingRules(SwChapterNumRules & rRules,
 void ImportStoredChapterNumberingRules(SwChapterNumRules & rRules,
         SvStream & rStream, OUString const& rFileName)
 {
-    uno::Reference<uno::XComponentContext> const& xContext(
+    uno::Reference<cpo::uno::XComponentContext> const& xContext(
             ::comphelper::getProcessComponentContext());
 
     uno::Reference<io::XInputStream> const xInStream(

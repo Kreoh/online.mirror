@@ -1,0 +1,927 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <config.h>
+
+#include "RemoteDocumentBroker.hpp"
+
+#include <common/Anonymizer.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/Log.hpp>
+#include <common/Protocol.hpp>
+#include <common/SigUtil.hpp>
+#include <common/StringVector.hpp>
+#include <common/Uri.hpp>
+#include <common/Util.hpp>
+#include <net/HttpRequest.hpp>
+#include <net/Uri.hpp>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <wsd/RequestDetails.hpp>
+
+#include <algorithm>
+#include <iterator>
+#include <sstream>
+
+std::unique_ptr<RemoteDocumentBroker> RemoteDocumentBroker::Instance;
+
+namespace
+{
+/// Joins the given docKeys with commas. docKeys are URI-encoded strings, so
+/// they contain neither commas nor spaces.
+std::string joinDocKeyChain(const std::vector<std::string>& docKeyChain)
+{
+    std::string result;
+    for (const std::string& docKey : docKeyChain)
+    {
+        if (!result.empty())
+            result += ',';
+        result += docKey;
+    }
+
+    return result;
+}
+
+/// The two parts of the read-only trust boundary between the parent document
+/// and a remote document.
+///
+/// allowedRequests lists the commands a view may send to a remote document
+/// allowedResults lists the reply frames the remote document may send back
+const std::vector<std::string> allowedRequests = {
+    "status", "commandvalues ", "setclientpart ", "selectclientpart ",
+    "clientvisiblearea ", "clientzoom ", "ping",
+    "getslidesections", "getpresentationinfo", "getthumbnail ", "tile ", "tilecombine ",
+    "exportslides"
+};
+
+const std::vector<std::string> allowedResults = {
+    "presentationinfo:", "slidesections:", "tile:", "exportslides:"
+};
+}
+
+HeadlessClientSession::HeadlessClientSession(const std::weak_ptr<RemoteDocument>& remoteDocument,
+                                             const std::string& loadUrl,
+                                             const std::string& docKeyChain)
+    : WebSocketHandler(/*isClient=*/true, /*isMasking=*/true)
+    , _remoteDocument(remoteDocument)
+    , _loadUrl(loadUrl)
+    , _docKeyChain(docKeyChain)
+    , _state(State::Connecting)
+{
+}
+
+bool HeadlessClientSession::connect(const std::string& uri, SocketPoll& poll)
+{
+    std::string scheme;
+    std::string host;
+    std::string port;
+    std::string pathAndQuery;
+    if (!net::parseUri(uri, scheme, host, port, pathAndQuery))
+    {
+        // The URI carries the access token of the source, so it is not logged.
+        LOG_ERR("RemoteDoc: cannot parse the remote document URI");
+        return false;
+    }
+
+    const bool secure = scheme == "wss://" || scheme == "https://";
+    if (port.empty())
+        port = secure ? "443" : "80";
+
+    LOG_DBG("RemoteDoc: connecting to " << host << ':' << port);
+
+    http::Request request(std::move(pathAndQuery));
+
+    // The secret marks as a connection only RemoteDocumentBroker could made
+    request.add(std::string(RemoteDocumentBroker::ChainSecretHeader),
+                RemoteDocumentBroker::getChainSecret());
+
+    return wsRequest(request, host, port, secure, poll);
+}
+
+void HeadlessClientSession::shutdownSession()
+{
+    if (_state != State::Closed)
+    {
+        _state = State::Closed;
+        shutdown(true, "Unsubscribed");
+    }
+}
+
+void HeadlessClientSession::handleIncomingMessage(SocketDisposition& disposition)
+{
+    WebSocketHandler::handleIncomingMessage(disposition);
+
+    if (_state == State::Connecting)
+    {
+        const std::shared_ptr<StreamSocket> socket = getSocket().lock();
+        if (socket && socket->isWebSocket())
+        {
+            _state = State::Loading;
+            sendHandshake();
+        }
+    }
+}
+
+void HeadlessClientSession::sendHandshake()
+{
+    LOG_DBG("RemoteDoc: WebSocket upgraded, sending the handshake");
+    sendTextMessage("coolclient " + COOLProtocol::GetProtocolVersion());
+
+    // The chain travels in the load message: a URL query value would be
+    // decoded once per RequestDetails::sanitizeURI pass and the docKeys'
+    // own encoding would not survive that.
+    std::string loadMessage = "load url=" + _loadUrl;
+    if (!_docKeyChain.empty())
+        loadMessage += " remotechain=" + _docKeyChain;
+    sendTextMessage(loadMessage);
+}
+
+bool HeadlessClientSession::sendCommand(const std::string& command)
+{
+    bool allowed = false;
+    for (const std::string& prefix : allowedRequests)
+    {
+        if (command.starts_with(prefix))
+        {
+            allowed = true;
+            break;
+        }
+    }
+
+    if (!allowed)
+    {
+        LOG_WRN("RemoteDoc: refusing to send the command ["
+                << COOLProtocol::getAbbreviatedMessage(command)
+                << "] to the remote document: not read-only");
+        return false;
+    }
+
+    if (_state != State::Live)
+    {
+        LOG_DBG("RemoteDoc: not sending [" << command << "]: the session is not live");
+        return false;
+    }
+
+    sendTextMessage(command);
+    return true;
+}
+
+void HeadlessClientSession::handleMessage(const std::vector<char>& data)
+{
+    const std::shared_ptr<RemoteDocument> remoteDocument = _remoteDocument.lock();
+    if (!remoteDocument || _state == State::Closed)
+        return;
+
+    const std::string firstLine = COOLProtocol::getFirstLine(data.data(), data.size());
+    const StringVector tokens = StringVector::tokenize(firstLine);
+    if (tokens.empty())
+        return;
+
+    if (tokens.equals(0, "status:") || tokens.equals(0, "statusupdate:"))
+    {
+        if (_state != State::Live)
+        {
+            _state = State::Live;
+            remoteDocument->onLive();
+        }
+        else
+        {
+            remoteDocument->onStructureChanged();
+        }
+    }
+    else if (tokens.equals(0, "statechanged:") && tokens.size() > 1)
+    {
+        static const std::string modifiedPrefix = ".uno:ModifiedStatus=";
+        const std::string payload = tokens[1];
+        if (payload.starts_with(modifiedPrefix))
+            remoteDocument->onModified(payload.substr(modifiedPrefix.size()) == "true");
+    }
+    else if (tokens.equals(0, "invalidatetiles:"))
+    {
+        // Either "part=<p> mode=<m> x=..." or "EMPTY, <p>[, <m>]".
+        int part = -1;
+        if (tokens.size() > 1 && !COOLProtocol::getTokenInteger(tokens[1], "part", part) &&
+            tokens.equals(1, "EMPTY,") && tokens.size() > 2)
+        {
+            std::string partToken = tokens[2];
+            if (!partToken.empty() && partToken.back() == ',')
+                partToken.pop_back();
+            part = std::atoi(partToken.c_str());
+        }
+
+        remoteDocument->onInvalidated(part);
+    }
+    else if (tokens.equals(0, "perm:") && tokens.size() > 1 && !tokens.equals(1, "readonly"))
+    {
+        // The URL and load options requested read-only; the command filter in
+        // sendCommand stays the guarantee if the remote node grants more.
+        LOG_WRN("RemoteDoc: the remote session has permission [" << tokens[1]
+                                                                 << "] instead of readonly");
+    }
+    else if (tokens.equals(0, "error:"))
+    {
+        std::string cmd;
+        std::string kind;
+        COOLProtocol::getTokenStringFromMessage(firstLine, "cmd", cmd);
+        COOLProtocol::getTokenStringFromMessage(firstLine, "kind", kind);
+        if (cmd == "load" || cmd == "internal" || _state != State::Live)
+        {
+            LOG_ERR("RemoteDoc: the remote document failed to load: cmd=" << cmd
+                                                                          << " kind=" << kind);
+            _state = State::Closed;
+            remoteDocument->onLoadFailed(kind.empty() ? std::string("faileddocloading") : kind);
+            shutdown(true, "Load failed");
+        }
+        else
+        {
+            LOG_WRN("RemoteDoc: error from the remote document: " << firstLine);
+        }
+    }
+    else if (tokens.equals(0, "lastmodtime:") && tokens.size() > 1)
+    {
+        // The remote uploaded a new file to storage. The value is the storage's
+        // own last-modified time for the source's new content.
+        remoteDocument->onSaved(firstLine.substr(firstLine.find(' ') + 1));
+    }
+
+    bool forwardable = false;
+    for (const std::string& prefix : allowedResults)
+    {
+        if (tokens.equals(0, prefix))
+        {
+            forwardable = true;
+            break;
+        }
+    }
+
+    // We drop all unexpected (not requested) or not needed messages send to us
+    if (forwardable)
+        remoteDocument->forwardCommandResult(data);
+    else
+        LOG_TRC("RemoteDoc: ignoring the remote frame ["
+                << COOLProtocol::getAbbreviatedMessage(firstLine) << ']');
+}
+
+void HeadlessClientSession::onDisconnect()
+{
+    WebSocketHandler::onDisconnect();
+
+    if (_state == State::Closed)
+        return;
+
+    _state = State::Closed;
+    if (const std::shared_ptr<RemoteDocument> remoteDocument = _remoteDocument.lock())
+        remoteDocument->onSessionClosed();
+}
+
+RemoteDocument::RemoteDocument(std::string docKey, std::string wopiSrc, std::string accessToken,
+                               std::string serverUrl, RemoteDocumentBroker& broker)
+    : _docKey(std::move(docKey))
+    , _wopiSrc(std::move(wopiSrc))
+    , _accessToken(std::move(accessToken))
+    , _serverUrl(std::move(serverUrl))
+    , _broker(broker)
+    , _lastInvalidationFlush(std::chrono::steady_clock::now())
+    , _reconnectAttempts(0)
+    , _modified(false)
+    , _everConnected(false)
+    , _failed(false)
+{
+}
+
+void RemoteDocument::addConsumer(const std::string& localDocKey, Consumer consumer)
+{
+    LOG_INF("RemoteDoc: adding consumer [" << localDocKey << "] tag=" << consumer.tag
+                                           << " to the remote document [" << _docKey << "], have "
+                                           << _consumers.size());
+
+    // A live session serves the new consumer right away.
+    if (_session && _session->state() == HeadlessClientSession::State::Live)
+        sendEvent(consumer, _wopiSrc, "event=connected");
+
+    const std::string tag = consumer.tag;
+    _consumers[std::make_pair(localDocKey, tag)] = std::move(consumer);
+}
+
+bool RemoteDocument::removeConsumer(const std::string& localDocKey, const std::string& tag)
+{
+    LOG_INF("RemoteDoc: removing consumer [" << localDocKey << "] tag=" << tag
+                                             << " from the remote document [" << _docKey
+                                             << "], have " << _consumers.size());
+
+    bool removedAny = false;
+    for (auto it = _consumers.begin(); it != _consumers.end();)
+    {
+        if (it->first.first == localDocKey && (tag == "0" || it->first.second == tag))
+        {
+            sendEvent(it->second, _wopiSrc, "event=unsubscribed");
+            it = _consumers.erase(it);
+            removedAny = true;
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    // When the document has no more links to this remote, its views stop
+    // driving commands too.
+    if (removedAny)
+    {
+        const bool docKeyRemains =
+            std::any_of(_consumers.begin(), _consumers.end(),
+                        [&](const auto& it) { return it.first.first == localDocKey; });
+        if (!docKeyRemains)
+        {
+            for (auto it = _commandSubscribers.begin(); it != _commandSubscribers.end();)
+                it = (it->first == localDocKey) ? _commandSubscribers.erase(it) : std::next(it);
+        }
+    }
+
+    return _consumers.empty();
+}
+
+std::vector<std::string> RemoteDocument::getDocKeyChains() const
+{
+    std::vector<std::string> result;
+    for (const auto& it : _consumers)
+    {
+        for (const std::string& docKey : it.second.docKeyChain)
+        {
+            if (std::find(result.begin(), result.end(), docKey) == result.end())
+                result.push_back(docKey);
+        }
+
+        if (std::find(result.begin(), result.end(), it.first.first) == result.end())
+            result.push_back(it.first.first);
+    }
+
+    return result;
+}
+
+bool RemoteDocument::connect()
+{
+    const char separator = _wopiSrc.find('?') == std::string::npos ? '?' : '&';
+    const std::string documentUri = _wopiSrc + separator + "access_token=" +
+                                    Uri::encode(_accessToken) + "&permission=readonly";
+
+    const std::string encodedDocumentUri = Uri::encode(documentUri);
+    const std::string target =
+        _serverUrl + "/cool/" + encodedDocumentUri + "/ws?WOPISrc=" + Uri::encode(_wopiSrc);
+
+    // The target carries the access token of the source, which anonymizing a URL leaves in
+    // the query it keeps, so the server dialed is named instead.
+    LOG_INF("RemoteDoc: opening a headless session to ["
+            << Anonymizer::anonymizeUrl(_wopiSrc) << "] through [" << _serverUrl << ']');
+
+    _session = std::make_shared<HeadlessClientSession>(weak_from_this(), encodedDocumentUri,
+                                                       joinDocKeyChain(getDocKeyChains()));
+    if (!_session->connect(target, _broker))
+    {
+        _session.reset();
+        return false;
+    }
+
+    return true;
+}
+
+void RemoteDocument::shutdown()
+{
+    _reconnectTime = std::chrono::steady_clock::time_point();
+    if (_session)
+    {
+        _session->shutdownSession();
+        _session.reset();
+    }
+}
+
+void RemoteDocument::checkTimers(const std::chrono::steady_clock::time_point now)
+{
+    if (!_pendingInvalidatedParts.empty() &&
+        now - _lastInvalidationFlush >= RemoteDocumentBroker::InvalidationCoalescePeriod)
+    {
+        for (const int part : _pendingInvalidatedParts)
+            broadcastEvent("event=invalidated part=" + std::to_string(part));
+
+        _pendingInvalidatedParts.clear();
+        _lastInvalidationFlush = now;
+    }
+
+    if (_reconnectTime != std::chrono::steady_clock::time_point() && now >= _reconnectTime)
+    {
+        _reconnectTime = std::chrono::steady_clock::time_point();
+        LOG_INF("RemoteDoc: reconnecting to [" << _docKey << "], attempt " << _reconnectAttempts);
+        if (!connect())
+            onSessionClosed();
+    }
+}
+
+void RemoteDocument::onLive()
+{
+    LOG_INF("RemoteDoc: the remote document [" << _docKey << "] is live");
+    _reconnectAttempts = 0;
+    _everConnected = true;
+    broadcastEvent("event=connected");
+}
+
+void RemoteDocument::onStructureChanged() { broadcastEvent("event=structure"); }
+
+void RemoteDocument::onModified(const bool modified)
+{
+    if (modified == _modified)
+        return;
+
+    _modified = modified;
+    broadcastEvent(std::string("event=modified value=") + (modified ? "true" : "false"));
+}
+
+void RemoteDocument::onSaved(const std::string& lastModifiedTime)
+{
+    if (lastModifiedTime.empty() || lastModifiedTime == _lastModifiedTime)
+        return;
+
+    // The first report is the time the source already had on connect. A later,
+    // different time means the source was saved again while we were connected.
+    const bool hadTime = !_lastModifiedTime.empty();
+    _lastModifiedTime = lastModifiedTime;
+    if (hadTime)
+        broadcastEvent("event=saved time=" + Uri::encode(lastModifiedTime));
+}
+
+void RemoteDocument::onInvalidated(const int part)
+{
+    if (_pendingInvalidatedParts.empty())
+        _lastInvalidationFlush = std::chrono::steady_clock::now() -
+                                 RemoteDocumentBroker::InvalidationCoalescePeriod;
+
+    _pendingInvalidatedParts.insert(part);
+}
+
+void RemoteDocument::onLoadFailed(const std::string& kind)
+{
+    LOG_ERR("RemoteDoc: loading the remote document [" << _docKey << "] failed: " << kind);
+    broadcastEvent("event=missing kind=" + kind);
+    shutdown();
+    _failed = true;
+}
+
+void RemoteDocument::onSessionClosed()
+{
+    _session.reset();
+
+    if (_consumers.empty())
+        return;
+
+    ++_reconnectAttempts;
+    if (_reconnectAttempts > _broker.getReconnectAttemptLimit())
+    {
+        LOG_ERR("RemoteDoc: giving up on the remote document ["
+                << _docKey << "] after " << (_reconnectAttempts - 1) << " reconnect attempts");
+        broadcastEvent("event=failed kind=disconnected");
+        _failed = true;
+        return;
+    }
+
+    broadcastEvent("event=disconnected");
+
+    std::chrono::seconds delay = RemoteDocumentBroker::ReconnectBaseDelay * (1 << (_reconnectAttempts - 1));
+    delay = std::min(delay, std::chrono::duration_cast<std::chrono::seconds>(
+                                RemoteDocumentBroker::ReconnectMaxDelay));
+    _reconnectTime = std::chrono::steady_clock::now() + delay;
+    LOG_INF("RemoteDoc: lost the connection to [" << _docKey << "], reconnecting in " << delay);
+}
+
+void RemoteDocument::broadcastEvent(const std::string& eventArguments)
+{
+    for (const auto& it : _consumers)
+        sendEvent(it.second, _wopiSrc, eventArguments);
+}
+
+void RemoteDocument::sendEvent(const Consumer& consumer, const std::string& wopiSrc,
+                               const std::string& eventArguments)
+{
+    const std::shared_ptr<DocumentBroker> docBroker = consumer.docBroker.lock();
+    if (!docBroker)
+        return;
+
+    // The callback holds a weak reference, so a consumer that stops while the callback is still
+    // queued on its poll is freed together with that poll.
+    docBroker->addCallback(
+        [weakDocBroker = consumer.docBroker, tag = consumer.tag,
+         encodedWopiSrc = Uri::encode(wopiSrc), eventArguments]()
+        {
+            if (const std::shared_ptr<DocumentBroker> broker = weakDocBroker.lock())
+                broker->sendRemoteDocumentEvent(tag, encodedWopiSrc, eventArguments);
+        });
+}
+
+void RemoteDocument::sendCommand(const std::string& localDocKey, const std::string& tag,
+                                 const std::string& command)
+{
+    // Remember the requesting view so the remote's replies reach it.
+    _commandSubscribers.emplace(localDocKey, tag);
+
+    if (!_session || !_session->sendCommand(command))
+        LOG_DBG("RemoteDoc: command [" << COOLProtocol::getAbbreviatedMessage(command)
+                                       << "] to [" << _docKey << "] was not sent");
+}
+
+void RemoteDocument::forwardCommandResult(const std::vector<char>& data)
+{
+    if (_commandSubscribers.empty())
+        return;
+
+    const std::string encodedWopiSrc = Uri::encode(_wopiSrc);
+    // One copy of the frame, shared by every view it is delivered to.
+    const auto payload = std::make_shared<const std::vector<char>>(data);
+    for (const auto& subscriber : _commandSubscribers)
+    {
+        // Reach the requesting view's DocumentBroker through any consumer
+        // entry that shares its docKey; all its links point at one broker.
+        std::shared_ptr<DocumentBroker> docBroker;
+        for (const auto& it : _consumers)
+        {
+            if (it.first.first == subscriber.first)
+            {
+                docBroker = it.second.docBroker.lock();
+                break;
+            }
+        }
+
+        if (!docBroker)
+            continue;
+
+        docBroker->addCallback(
+            [weakDocBroker = std::weak_ptr<DocumentBroker>(docBroker), tag = subscriber.second,
+             encodedWopiSrc, payload]()
+            {
+                if (const std::shared_ptr<DocumentBroker> broker = weakDocBroker.lock())
+                    broker->sendRemoteDocumentCommandResult(tag, encodedWopiSrc, *payload);
+            });
+    }
+}
+
+void RemoteDocument::dumpState(std::ostream& os) const
+{
+    os << "\n    docKey: " << _docKey
+       << "\n    state: "
+       << (_session ? HeadlessClientSession::name(_session->state()) : "no session")
+       << "\n    consumers: " << _consumers.size();
+    for (const auto& it : _consumers)
+        os << "\n      " << it.first.first << " tag: " << it.first.second;
+    os << "\n    commandSubscribers: " << _commandSubscribers.size();
+    for (const auto& it : _commandSubscribers)
+        os << "\n      " << it.first << " session: " << it.second;
+    os << "\n    everConnected: " << _everConnected
+       << "\n    failed: " << _failed
+       << "\n    reconnectAttempts: " << _reconnectAttempts
+       << "\n    modified: " << _modified
+       << "\n    lastModifiedTime: " << _lastModifiedTime
+       << "\n    pendingInvalidatedParts: " << _pendingInvalidatedParts.size() << '\n';
+}
+
+RemoteDocumentBroker::RemoteDocumentBroker()
+    : SocketPoll("remotedocbroker")
+    , _maxChainDepth(ConfigUtil::getConfigValue<int>("remote_links.max_chain_depth", 3))
+    , _reconnectAttemptLimit(
+          ConfigUtil::getConfigValue<int>("remote_links.reconnect_attempts", 5))
+    , _threadStarted(false)
+{
+}
+
+bool RemoteDocumentBroker::isEnabled()
+{
+    static const bool enabled =
+        ConfigUtil::getConfigValue<bool>("remote_links.enable", false);
+    return enabled;
+}
+
+std::string RemoteDocumentBroker::getServerUrl()
+{
+    static const std::string serverUrl = []() -> std::string
+    {
+        const bool secure = ConfigUtil::isSslEnabled();
+
+        std::string url =
+            ConfigUtil::getConfigValue<std::string>("remote_links.server_url", "");
+        if (url.empty())
+        {
+            std::string authority = COOLWSD::ServerName;
+            if (authority.empty() && COOLWSD::getClientPortNumber() > 0)
+            {
+                // Dial this server itself; the setup has no cluster proxy.
+                authority = "127.0.0.1:" + std::to_string(COOLWSD::getClientPortNumber());
+            }
+
+            if (authority.empty())
+                return std::string();
+
+            url = (secure ? "wss://" : "ws://") + authority + COOLWSD::ServiceRoot;
+        }
+        else if (url.starts_with("http://"))
+        {
+            url.replace(0, 4, "ws");
+        }
+        else if (url.starts_with("https://"))
+        {
+            url.replace(0, 5, "wss");
+        }
+        else if (!url.starts_with("ws://") && !url.starts_with("wss://"))
+        {
+            url = (secure ? "wss://" : "ws://") + url;
+        }
+
+        while (!url.empty() && url.back() == '/')
+            url.pop_back();
+
+        LOG_INF("RemoteDoc: remote documents are dialed through [" << url << ']');
+        return url;
+    }();
+
+    return serverUrl;
+}
+
+const std::string& RemoteDocumentBroker::getChainSecret()
+{
+    constexpr std::size_t GeneratedSecretLengthBytes = 32;
+
+    static const std::string secret = []() -> std::string
+    {
+        std::string configured =
+            ConfigUtil::getConfigValue<std::string>("remote_links.chain_secret", "");
+        if (!configured.empty())
+            return configured;
+
+        LOG_WRN("RemoteDoc: no remote_links.chain_secret is configured, so a connection "
+                "chain is accepted only from this process. Set one, the same on every node, to "
+                "let the nodes of a cluster refuse the connection cycles they form together");
+        return Util::rng::getHexString(GeneratedSecretLengthBytes);
+    }();
+
+    return secret;
+}
+
+void RemoteDocumentBroker::subscribeAsync(RemoteDocumentRequest request)
+{
+    if (!_threadStarted.exchange(true))
+        startThread();
+
+    addCallback([this, request = std::move(request)]() { subscribe(request); });
+}
+
+void RemoteDocumentBroker::unsubscribeAsync(std::string wopiSrc, std::string accessToken,
+                                            std::string localDocKey, std::string tag)
+{
+    if (!_threadStarted)
+        return;
+
+    addCallback([this, wopiSrc = std::move(wopiSrc), accessToken = std::move(accessToken),
+                 localDocKey = std::move(localDocKey), tag = std::move(tag)]()
+                { unsubscribe(wopiSrc, accessToken, localDocKey, tag); });
+}
+
+void RemoteDocumentBroker::sendCommandAsync(std::string wopiSrc, std::string accessToken,
+                                            std::string localDocKey, std::string tag,
+                                            std::string command)
+{
+    if (!_threadStarted)
+        return;
+
+    addCallback([this, wopiSrc = std::move(wopiSrc), accessToken = std::move(accessToken),
+                 localDocKey = std::move(localDocKey), tag = std::move(tag),
+                 command = std::move(command)]()
+                { sendCommand(wopiSrc, accessToken, localDocKey, tag, command); });
+}
+
+void RemoteDocumentBroker::pollingThread()
+{
+    LOG_INF("RemoteDoc: the RemoteDocumentBroker poll started");
+
+    while (continuePolling() && !SigUtil::getShutdownRequestFlag())
+    {
+        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+
+        // A short deadline drives the invalidation coalescing and reconnects.
+        const auto timeout = _remoteDocuments.empty()
+                                 ? std::chrono::milliseconds(std::chrono::seconds(5))
+                                 : std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       InvalidationCoalescePeriod / 2);
+        pollUntilDeadline(now + timeout);
+
+        now = std::chrono::steady_clock::now();
+        for (const auto& it : _remoteDocuments)
+            it.second->checkTimers(now);
+
+        dropFailedRemoteDocuments();
+    }
+
+    LOG_INF("RemoteDoc: the RemoteDocumentBroker poll finished");
+}
+
+void RemoteDocumentBroker::dropFailedRemoteDocuments()
+{
+    ASSERT_CORRECT_THREAD();
+
+    for (auto it = _remoteDocuments.begin(); it != _remoteDocuments.end();)
+    {
+        if (!it->second->hasFailed())
+        {
+            ++it;
+            continue;
+        }
+
+        LOG_INF("RemoteDoc: dropping the connection to the remote document ["
+                << it->second->getDocKey() << "], which is done for");
+        it = _remoteDocuments.erase(it);
+    }
+}
+
+bool RemoteDocumentBroker::formsSubscriptionCycle(const std::string& targetDocKey,
+                                                  const std::string& consumerDocKey) const
+{
+    ASSERT_CORRECT_THREAD();
+
+    // Walk the subscription edges of the registry: a remote document is
+    // subscribed to by its consumers and by the docKeys on their chains.
+    // A path from the new target back to the new consumer means the new
+    // link would close a loop.
+    std::vector<std::string> pending{ targetDocKey };
+    std::set<std::string> visited;
+    while (!pending.empty())
+    {
+        const std::string current = std::move(pending.back());
+        pending.pop_back();
+
+        if (current == consumerDocKey)
+            return true;
+
+        if (!visited.insert(current).second)
+            continue;
+
+        for (const auto& it : _remoteDocuments)
+        {
+            const std::vector<std::string> subscribers = it.second->getDocKeyChains();
+            if (std::find(subscribers.begin(), subscribers.end(), current) != subscribers.end())
+                pending.push_back(it.second->getDocKey());
+        }
+    }
+
+    return false;
+}
+
+void RemoteDocumentBroker::subscribe(const RemoteDocumentRequest& request)
+{
+    ASSERT_CORRECT_THREAD();
+
+    const std::string docKey = RequestDetails::getDocKey(request.wopiSrc);
+
+    LOG_INF("RemoteDoc: subscribing [" << request.localDocKey << "] to [" << docKey << ']');
+
+    if (docKey == request.localDocKey ||
+        std::find(request.docKeyChain.begin(), request.docKeyChain.end(), docKey) !=
+            request.docKeyChain.end())
+    {
+        LOG_WRN("RemoteDoc: rejecting the subscription of [" << request.localDocKey << "] to ["
+                                                             << docKey << "]: a connection cycle");
+        reject(request, "cycledetected");
+        return;
+    }
+
+    if (request.docKeyChain.size() + 1 > _maxChainDepth)
+    {
+        LOG_WRN("RemoteDoc: rejecting the subscription of ["
+                << request.localDocKey << "] to [" << docKey << "]: chain depth "
+                << request.docKeyChain.size() + 1 << " over the limit " << _maxChainDepth);
+        reject(request, "chaindepth");
+        return;
+    }
+
+    // The registry serializes subscriptions on this thread, so a subscription
+    // whose target already reaches the subscriber through registered links is
+    // caught here even when two documents subscribe to each other at the same
+    // moment, before either connection chain has traveled.
+    if (formsSubscriptionCycle(docKey, request.localDocKey))
+    {
+        LOG_WRN("RemoteDoc: rejecting the subscription of ["
+                << request.localDocKey << "] to [" << docKey
+                << "]: the target already subscribes to the subscriber");
+        reject(request, "cycledetected");
+        return;
+    }
+
+    dropFailedRemoteDocuments();
+
+    const Key key = makeKey(docKey, request.accessToken, request.localDocKey, request.tag);
+    auto it = _remoteDocuments.find(key);
+    if (it == _remoteDocuments.end())
+    {
+        // 0 means no limit.
+        const size_t maxRemoteDocuments =
+            ConfigUtil::getConfigValue<unsigned int>("remote_links.max_remote_docs", 0);
+        if (maxRemoteDocuments > 0 && _remoteDocuments.size() >= maxRemoteDocuments)
+        {
+            LOG_WRN("RemoteDoc: rejecting the subscription of ["
+                    << request.localDocKey << "] to [" << docKey << "]: already have "
+                    << _remoteDocuments.size() << " remote documents");
+            reject(request, "limitreached");
+            return;
+        }
+
+        auto remoteDocument = std::make_shared<RemoteDocument>(
+            docKey, request.wopiSrc, request.accessToken, request.serverUrl, *this);
+        remoteDocument->addConsumer(
+            request.localDocKey,
+            RemoteDocument::Consumer{ request.consumer, request.tag, request.docKeyChain });
+
+        if (!remoteDocument->connect())
+        {
+            LOG_ERR("RemoteDoc: failed to connect to [" << docKey << ']');
+            reject(request, "connectfailed");
+            return;
+        }
+
+        _remoteDocuments.emplace(key, std::move(remoteDocument));
+    }
+    else
+    {
+        it->second->addConsumer(
+            request.localDocKey,
+            RemoteDocument::Consumer{ request.consumer, request.tag, request.docKeyChain });
+    }
+}
+
+void RemoteDocumentBroker::unsubscribe(const std::string& wopiSrc, const std::string& accessToken,
+                                       const std::string& localDocKey, const std::string& tag)
+{
+    ASSERT_CORRECT_THREAD();
+
+    const std::string docKey = RequestDetails::getDocKey(wopiSrc);
+    const auto it = _remoteDocuments.find(makeKey(docKey, accessToken, localDocKey, tag));
+    if (it == _remoteDocuments.end())
+    {
+        LOG_DBG("RemoteDoc: no remote document [" << docKey << "] to unsubscribe ["
+                                                  << localDocKey << "] from");
+        return;
+    }
+
+    if (it->second->removeConsumer(localDocKey, tag))
+    {
+        LOG_INF("RemoteDoc: the last consumer of [" << docKey << "] left, disconnecting");
+        it->second->shutdown();
+        _remoteDocuments.erase(it);
+    }
+}
+
+void RemoteDocumentBroker::sendCommand(const std::string& wopiSrc, const std::string& accessToken,
+                                       const std::string& localDocKey,
+                                       const std::string& tag, const std::string& command)
+{
+    ASSERT_CORRECT_THREAD();
+
+    const std::string docKey = RequestDetails::getDocKey(wopiSrc);
+    const auto it = _remoteDocuments.find(makeKey(docKey, accessToken, localDocKey, tag));
+    if (it == _remoteDocuments.end())
+    {
+        LOG_DBG("RemoteDoc: no remote document [" << docKey << "] to send a command to");
+        return;
+    }
+
+    it->second->sendCommand(localDocKey, tag, command);
+}
+
+void RemoteDocumentBroker::reject(const RemoteDocumentRequest& request, const std::string& kind)
+{
+    RemoteDocument::Consumer consumer{ request.consumer, request.tag, {} };
+    RemoteDocument::sendEvent(consumer, request.wopiSrc, "event=error kind=" + kind);
+
+    // The consumer recorded the subscription when sending it; a rejection
+    // removes that record again.
+    if (std::shared_ptr<DocumentBroker> docBroker = request.consumer.lock())
+    {
+        docBroker->addCallback(
+            [weakDocBroker = request.consumer, wopiSrc = request.wopiSrc, tag = request.tag]()
+            {
+                if (const std::shared_ptr<DocumentBroker> broker = weakDocBroker.lock())
+                    broker->removeRemoteSubscription(tag, wopiSrc);
+            });
+    }
+}
+
+void RemoteDocumentBroker::dumpState(std::ostream& os) const
+{
+    os << "RemoteDocumentBroker: " << _remoteDocuments.size() << " remote documents:\n";
+    for (const auto& it : _remoteDocuments)
+        it.second->dumpState(os);
+
+    SocketPoll::dumpState(os);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -45,6 +45,7 @@
 #include <osl/diagnose.h>
 #include <o3tl/any.hxx>
 #include <svl/eitem.hxx>
+#include <svl/itempool.hxx>
 #include <svx/chrtitem.hxx>
 #include <svx/sdangitm.hxx>
 #include <svl/intitem.hxx>
@@ -52,7 +53,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::chart::TimeInterval;
 using ::com::sun::star::chart::TimeIncrement;
 
@@ -72,6 +73,29 @@ const ItemPropertyMapType & lcl_GetAxisPropertyMap()
         {SCHATTR_AXIS_LABEL_OVERLAP, {u"TextOverlap"_ustr,      0}}};
     return aAxisPropertyMap;
 };
+
+OUString lcl_getHistogramPropertyName(sal_uInt16 nWhichId)
+{
+    switch (nWhichId)
+    {
+        case SCHATTR_HISTOGRAM_FREQUENCY_TYPE:
+            return u"FrequencyType"_ustr;
+        case SCHATTR_HISTOGRAM_BIN_WIDTH:
+            return u"BinWidth"_ustr;
+        case SCHATTR_HISTOGRAM_BIN_COUNT:
+            return u"BinCount"_ustr;
+        case SCHATTR_HISTOGRAM_USE_UNDERFLOW_BIN:
+            return u"UseUnderflowBin"_ustr;
+        case SCHATTR_HISTOGRAM_UNDERFLOW_BIN_VALUE:
+            return u"UnderflowBinValue"_ustr;
+        case SCHATTR_HISTOGRAM_USE_OVERFLOW_BIN:
+            return u"UseOverflowBin"_ustr;
+        case SCHATTR_HISTOGRAM_OVERFLOW_BIN_VALUE:
+            return u"OverflowBinValue"_ustr;
+        default:
+            return OUString();
+    }
+}
 
 } // anonymous namespace
 
@@ -158,6 +182,30 @@ void AxisItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutI
 {
     if( !m_xAxis.is() )
         return;
+
+    const OUString aHistogramProperty = lcl_getHistogramPropertyName(nWhichId);
+
+    if (!aHistogramProperty.isEmpty())
+    {
+        rtl::Reference<::chart::ChartType> xHistogramType
+            = AxisHelper::getHistogramChartTypeOfAxis(m_xAxis, m_xChartDoc);
+
+        if (!xHistogramType.is())
+        {
+            return;
+        }
+
+        std::unique_ptr<SfxPoolItem> pItem(
+            GetItemPool().GetUserOrPoolDefaultItem(nWhichId).Clone());
+
+        if (pItem
+            && pItem->PutValue(xHistogramType->getPropertyValue(aHistogramProperty), 0))
+        {
+            pItem->SetWhich(nWhichId);
+            rOutItemSet.Put(std::move(pItem));
+        }
+        return;
+    }
 
     const chart2::ScaleData      aScale( m_xAxis->getScaleData() );
     const chart2::IncrementData& rIncrement( aScale.IncrementData );
@@ -464,6 +512,32 @@ bool AxisItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet 
 {
     if( !m_xAxis.is() )
         return false;
+
+    const OUString aHistogramProperty = lcl_getHistogramPropertyName(nWhichId);
+
+    if (!aHistogramProperty.isEmpty())
+    {
+        rtl::Reference<::chart::ChartType> xHistogramType
+            = AxisHelper::getHistogramChartTypeOfAxis(m_xAxis, m_xChartDoc);
+
+        if (!xHistogramType.is())
+        {
+            return false;
+        }
+
+        cpo::uno::Any aNewValue;
+        rItemSet.Get(nWhichId).QueryValue(aNewValue);
+
+        if (xHistogramType->getPropertyValue(aHistogramProperty)
+            == aNewValue)
+        {
+            return false;
+        }
+
+        xHistogramType->setPropertyValue(
+            aHistogramProperty, aNewValue);
+        return true;
+    }
 
     chart2::ScaleData     aScale( m_xAxis->getScaleData() );
 

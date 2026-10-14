@@ -37,49 +37,49 @@ typedef ::cppu::AggImplInheritanceHelper1   <   UnoControlModel
 class UnoControlTabPageContainerModel final : public UnoControlTabPageContainerModel_Base
 {
 private:
-    std::vector< css::uno::Reference< css::awt::tab::XTabPageModel > > m_aTabPageVector;
+    std::vector< cpo::uno::Reference< css::awt::tab::XTabPageModel > > m_aTabPageVector;
     ContainerListenerMultiplexer        maContainerListeners;
 
     cpo::uno::Any      ImplGetDefaultValue( sal_uInt16 nPropId ) const override;
     ::cppu::IPropertyArrayHelper& getInfoHelper() override;
     // css::beans::XMultiPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
 
 public:
-    UnoControlTabPageContainerModel( const css::uno::Reference< css::uno::XComponentContext >& i_factory );
+    UnoControlTabPageContainerModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_factory );
     UnoControlTabPageContainerModel( const UnoControlTabPageContainerModel& rModel ) : UnoControlTabPageContainerModel_Base( rModel ),maContainerListeners( *this ) {}
 
     rtl::Reference<UnoControlModel> Clone() const override { return new UnoControlTabPageContainerModel( *this ); }
 
     // css::io::XPersistObject
-    OUString SAL_CALL getServiceName() override;
+    OUString getServiceName() override;
 
     // css::lang::XServiceInfo
     DECLIMPL_SERVICEINFO_DERIVED( UnoControlTabPageContainerModel, UnoControlModel, u"com.sun.star.awt.tab.UnoControlTabPageContainerModel"_ustr )
 
     // XTabPageContainerModel
-    virtual css::uno::Reference< css::awt::tab::XTabPageModel > SAL_CALL createTabPage( ::sal_Int16 TabPageID ) override;
-    virtual css::uno::Reference< css::awt::tab::XTabPageModel > SAL_CALL loadTabPage( ::sal_Int16 TabPageID, const OUString& ResourceURL ) override;
+    virtual cpo::uno::Reference< css::awt::tab::XTabPageModel > createTabPage( ::sal_Int16 TabPageID ) override;
+    virtual cpo::uno::Reference< css::awt::tab::XTabPageModel > loadTabPage( ::sal_Int16 TabPageID, const OUString& ResourceURL ) override;
 
     // XIndexContainer
-    virtual void SAL_CALL insertByIndex( sal_Int32 Index, const cpo::uno::Any& Element ) override;
-    virtual void SAL_CALL removeByIndex( sal_Int32 Index ) override;
+    virtual void insertByIndex( sal_Int32 Index, const cpo::uno::Any& Element ) override;
+    virtual void removeByIndex( sal_Int32 Index ) override;
 
     // XIndexReplace
-     virtual void SAL_CALL replaceByIndex( sal_Int32 Index, const cpo::uno::Any& Element ) override;
+     virtual void replaceByIndex( sal_Int32 Index, const cpo::uno::Any& Element ) override;
 
      // XIndexAccess
-     virtual sal_Int32 SAL_CALL getCount() override;
+     virtual sal_Int32 getCount() override;
 
-     virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+     virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
      // XElementAccess
-     virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+     virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
     // css::container::XContainer
-    void SAL_CALL addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
-    void SAL_CALL removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
 };
 
 // = UnoControlTabPageContainer
@@ -90,29 +90,29 @@ typedef ::cppu::AggImplInheritanceHelper1   <   ControlContainerBase
 class UnoControlTabPageContainer final : public UnoControlTabPageContainer_Base
 {
 public:
-    UnoControlTabPageContainer( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    UnoControlTabPageContainer( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     OUString             GetComponentServiceName() const override;
 
     // css::lang::XComponent
-    void SAL_CALL dispose(  ) override;
+    void dispose(  ) override;
 
     // css::awt::XControl
-    void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& Toolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
+    void createPeer( const cpo::uno::Reference< css::awt::XToolkit >& Toolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
 
     // css::awt::tab::XTabPageContainer
-    virtual ::sal_Int16 SAL_CALL getActiveTabPageID() override;
-    virtual void SAL_CALL setActiveTabPageID( ::sal_Int16 _activetabpageid ) override;
-    virtual ::sal_Int16 SAL_CALL getTabPageCount(  ) override;
-    virtual bool SAL_CALL isTabPageActive( ::sal_Int16 tabPageIndex ) override;
-    virtual css::uno::Reference< css::awt::tab::XTabPage > SAL_CALL getTabPage( ::sal_Int16 tabPageIndex ) override;
-    virtual css::uno::Reference< css::awt::tab::XTabPage > SAL_CALL getTabPageByID( ::sal_Int16 tabPageID ) override;
-    virtual void SAL_CALL addTabPageContainerListener( const css::uno::Reference< css::awt::tab::XTabPageContainerListener >& listener ) override;
-    virtual void SAL_CALL removeTabPageContainerListener( const css::uno::Reference< css::awt::tab::XTabPageContainerListener >& listener ) override;
+    virtual ::sal_Int16 getActiveTabPageID() override;
+    virtual void setActiveTabPageID( ::sal_Int16 _activetabpageid ) override;
+    virtual ::sal_Int16 getTabPageCount(  ) override;
+    virtual bool isTabPageActive( ::sal_Int16 tabPageIndex ) override;
+    virtual cpo::uno::Reference< css::awt::tab::XTabPage > getTabPage( ::sal_Int16 tabPageIndex ) override;
+    virtual cpo::uno::Reference< css::awt::tab::XTabPage > getTabPageByID( ::sal_Int16 tabPageID ) override;
+    virtual void addTabPageContainerListener( const cpo::uno::Reference< css::awt::tab::XTabPageContainerListener >& listener ) override;
+    virtual void removeTabPageContainerListener( const cpo::uno::Reference< css::awt::tab::XTabPageContainerListener >& listener ) override;
 
     // css::beans::XPropertiesChangeListener
-    virtual void SAL_CALL propertiesChange( const ::cpo::uno::Sequence< ::css::beans::PropertyChangeEvent >& aEvent ) override;
+    virtual void propertiesChange( const ::cpo::uno::Sequence< ::css::beans::PropertyChangeEvent >& aEvent ) override;
 
-    virtual void SAL_CALL addControl( const OUString& Name, const css::uno::Reference< css::awt::XControl >& Control ) override;
+    virtual void addControl( const OUString& Name, const cpo::uno::Reference< css::awt::XControl >& Control ) override;
     // css::lang::XServiceInfo
     DECLIMPL_SERVICEINFO_DERIVED( UnoControlTabPageContainer, UnoControlBase, u"com.sun.star.awt.tab.UnoControlTabPageContainer"_ustr )
 

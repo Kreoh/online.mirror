@@ -24,18 +24,19 @@
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
 #include <unonames.hxx>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 
 #include <comphelper/propertyvalue.hxx>
 #include <cppu/unotype.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star;
 
 namespace sc_apitest
@@ -51,7 +52,7 @@ class ScTableConditionalFormat : public UnoApiTest,
 public:
     ScTableConditionalFormat();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual cpo::uno::Sequence<beans::PropertyValue> createCondition(const sal_Int32 nr) override;
     virtual void setUp() override;
 
@@ -96,7 +97,7 @@ ScTableConditionalFormat::ScTableConditionalFormat()
 {
 }
 
-uno::Reference<uno::XInterface> ScTableConditionalFormat::init()
+uno::Reference<cpo::uno::XInterface> ScTableConditionalFormat::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 

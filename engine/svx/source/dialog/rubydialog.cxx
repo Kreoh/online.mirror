@@ -49,7 +49,7 @@
 #include <rtl/ustrbuf.hxx>
 #include <svl/itemset.hxx>
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::frame;
 using namespace css::text;
@@ -124,8 +124,8 @@ public:
     Sequence<PropertyValues>& GetRubyValues() { return aRubyValues; }
     void AssertOneEntry();
 
-    virtual void SAL_CALL selectionChanged(const css::lang::EventObject& aEvent) override;
-    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
+    virtual void selectionChanged(const css::lang::EventObject& aEvent) override;
+    virtual void disposing(const css::lang::EventObject& Source) override;
 
     bool IsSelectionGrouped()
     {
@@ -453,7 +453,7 @@ SvxRubyDialog::SvxRubyDialog(SfxBindings* pBind, SfxChildWindow* pCW, weld::Wind
     , m_xApplyPB(m_xBuilder->weld_button(u"ok"_ustr))
     , m_xClosePB(m_xBuilder->weld_button(u"close"_ustr))
     , m_xContentArea(m_xDialog->weld_content_area())
-    , m_xGrid(m_xBuilder->weld_widget(u"grid"_ustr))
+    , m_xGrid(m_xBuilder->weld_container(u"grid"_ustr))
     , m_xPreviewWin(new RubyPreview)
     , m_xPreview(new weld::CustomWeld(*m_xBuilder, u"preview"_ustr, *m_xPreviewWin))
 {

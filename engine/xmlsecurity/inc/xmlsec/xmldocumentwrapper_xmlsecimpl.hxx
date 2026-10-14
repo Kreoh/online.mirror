@@ -75,7 +75,7 @@ private:
      */
     xmlNodePtr m_pStopAtNode;
     xmlNodePtr m_pCurrentReservedNode;
-    cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > m_aReservedNodes;
+    cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > m_aReservedNodes;
     sal_Int32 m_nReservedNodeIndex;
 
 private:
@@ -83,20 +83,20 @@ private:
 
     /// @throws css::xml::sax::SAXException
     static void sendStartElement(
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler,
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler2,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler2,
         const xmlNodePtr pNode);
 
     /// @throws css::xml::sax::SAXException
     static void sendEndElement(
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler,
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler2,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler2,
         const xmlNodePtr pNode);
 
     /// @throws css::xml::sax::SAXException
     static void sendNode(
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler,
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler2,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xHandler2,
         const xmlNodePtr pNode);
 
     static OString getNodeQName(const xmlNodePtr pNode);
@@ -108,7 +108,7 @@ private:
     void removeNode( const xmlNodePtr pNode) const;
 
     static xmlNodePtr checkElement(
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& xXMLElement);
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& xXMLElement);
 
     void buildIDAttr( xmlNodePtr pNode ) const;
     void rebuildIDLink( xmlNodePtr pNode ) const;
@@ -118,89 +118,89 @@ public:
     virtual ~XMLDocumentWrapper_XmlSecImpl() override;
 
     /* css::xml::wrapper::XXMLDocumentWrapper */
-    virtual css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > SAL_CALL getCurrentElement(  ) override;
+    virtual cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > getCurrentElement(  ) override;
 
-    virtual void SAL_CALL setCurrentElement( const css::uno::Reference<
+    virtual void setCurrentElement( const cpo::uno::Reference<
         css::xml::wrapper::XXMLElementWrapper >& element ) override;
 
-    virtual void SAL_CALL removeCurrentElement(  ) override;
+    virtual void removeCurrentElement(  ) override;
 
-    virtual bool SAL_CALL isCurrent( const css::uno::Reference<
+    virtual bool isCurrent( const cpo::uno::Reference<
         css::xml::wrapper::XXMLElementWrapper >& node ) override;
 
-    virtual bool SAL_CALL isCurrentElementEmpty(  ) override;
+    virtual bool isCurrentElementEmpty(  ) override;
 
-    virtual OUString SAL_CALL getNodeName( const css::uno::Reference<
+    virtual OUString getNodeName( const cpo::uno::Reference<
         css::xml::wrapper::XXMLElementWrapper >& node ) override;
 
-    virtual void SAL_CALL clearUselessData(
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& node,
-        const cpo::uno::Sequence< css::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >& reservedDescendants,
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& stopAtNode ) override;
+    virtual void clearUselessData(
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& node,
+        const cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > >& reservedDescendants,
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& stopAtNode ) override;
 
-    virtual void SAL_CALL collapse( const css::uno::Reference<
+    virtual void collapse( const cpo::uno::Reference<
         css::xml::wrapper::XXMLElementWrapper >& node ) override;
 
-    virtual void SAL_CALL generateSAXEvents(
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& handler,
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& xEventKeeperHandler,
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& startNode,
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& endNode ) override;
+    virtual void generateSAXEvents(
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& handler,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& xEventKeeperHandler,
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& startNode,
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& endNode ) override;
 
-    virtual void SAL_CALL getTree(
-        const css::uno::Reference< css::xml::sax::XDocumentHandler >& handler ) override;
+    virtual void getTree(
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& handler ) override;
 
-    virtual void SAL_CALL rebuildIDLink(
-        const css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& node ) override;
+    virtual void rebuildIDLink(
+        const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& node ) override;
 
     /* css::xml::sax::XDocumentHandler */
-    virtual void SAL_CALL startDocument(  ) override;
+    virtual void startDocument(  ) override;
 
-    virtual void SAL_CALL endDocument(  ) override;
+    virtual void endDocument(  ) override;
 
-    virtual void SAL_CALL startElement(
+    virtual void startElement(
         const OUString& aName,
-        const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
+        const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
 
-    virtual void SAL_CALL endElement( const OUString& aName ) override;
+    virtual void endElement( const OUString& aName ) override;
 
-    virtual void SAL_CALL characters( const OUString& aChars ) override;
+    virtual void characters( const OUString& aChars ) override;
 
-    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) override;
+    virtual void ignorableWhitespace( const OUString& aWhitespaces ) override;
 
-    virtual void SAL_CALL processingInstruction( const OUString& aTarget, const OUString& aData ) override;
+    virtual void processingInstruction( const OUString& aTarget, const OUString& aData ) override;
 
-    virtual void SAL_CALL setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
+    virtual void setDocumentLocator( const cpo::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
 
     /* css::xml::csax::XCompressedDocumentHandler */
-    virtual void SAL_CALL compressedStartDocument(  ) override;
+    virtual void compressedStartDocument(  ) override;
 
-    virtual void SAL_CALL compressedEndDocument(  ) override;
+    virtual void compressedEndDocument(  ) override;
 
-    virtual void SAL_CALL compressedStartElement(
+    virtual void compressedStartElement(
         const OUString& aName,
         const cpo::uno::Sequence< css::xml::csax::XMLAttribute >& aAttributes ) override;
 
-    virtual void SAL_CALL compressedEndElement( const OUString& aName ) override;
+    virtual void compressedEndElement( const OUString& aName ) override;
 
-    virtual void SAL_CALL compressedCharacters( const OUString& aChars ) override;
+    virtual void compressedCharacters( const OUString& aChars ) override;
 
-    virtual void SAL_CALL compressedIgnorableWhitespace( const OUString& aWhitespaces ) override;
+    virtual void compressedIgnorableWhitespace( const OUString& aWhitespaces ) override;
 
-    virtual void SAL_CALL compressedProcessingInstruction( const OUString& aTarget, const OUString& aData ) override;
+    virtual void compressedProcessingInstruction( const OUString& aTarget, const OUString& aData ) override;
 
-    virtual void SAL_CALL compressedSetDocumentLocator(
+    virtual void compressedSetDocumentLocator(
         sal_Int32 columnNumber,
         sal_Int32 lineNumber,
         const OUString& publicId,
         const OUString& systemId ) override;
 
     /* css::lang::XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual OUString getImplementationName(  ) override;
 
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

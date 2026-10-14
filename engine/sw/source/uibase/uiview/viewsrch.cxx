@@ -36,6 +36,7 @@
 #include <sfx2/request.hxx>
 #include <sfx2/kit/helper.hxx>
 #include <svx/srchdlg.hxx>
+#include <pamtyp.hxx>
 #include <swmodule.hxx>
 #include <swwait.hxx>
 #include <workctrl.hxx>
@@ -43,6 +44,7 @@
 #include <wrtsh.hxx>
 #include <swundo.hxx>
 #include <uitool.hxx>
+#include <wview.hxx>
 #include <cmdid.h>
 #include <docsh.hxx>
 #include <COKit/COKit.hxx>
@@ -57,6 +59,7 @@
 
 using namespace com::sun::star;
 using namespace ::com::sun::star::lang;
+using namespace ::cpo;
 
 //Search Parameter
 
@@ -130,6 +133,14 @@ static void lcl_emitSearchResultCallbacks(SvxSearchItem const * pSearchItem, SwW
     }
 }
 
+static bool lcl_IsNotTextSearch(const SvxSearchItem* pSearchItem)
+{
+    if (!pSearchItem || pSearchItem->GetSearchString().isEmpty())
+        return true;
+
+    return pSearchItem->GetPattern(); // paragraph style search
+}
+
 void SwView::ExecSearch(SfxRequest& rReq)
 {
     GetWrtShell().addCurrentPosition();
@@ -166,9 +177,16 @@ void SwView::ExecSearch(SfxRequest& rReq)
     break;
 
     case FID_SEARCH_ON:
+    {
         s_bJustOpened = true;
         GetViewFrame().GetBindings().Invalidate(SID_SEARCH_ITEM);
-        break;
+
+        // ensure SvxSearchDialog's Format dialog uses the preferred measurement unit
+        const bool bIsHtmlMode = dynamic_cast<SwWebView*>(this);
+        auto nMetric = static_cast<sal_uInt16>(GetDfltMetric(bIsHtmlMode));
+        SwModule::get()->PutItem(SfxUInt16Item(SID_ATTR_METRIC, nMetric));
+    }
+    break;
 
     case FID_SEARCH_OFF:
         if(pArgs)
@@ -318,9 +336,9 @@ void SwView::ExecSearch(SfxRequest& rReq)
                     if (bBack)
                         m_pWrtShell->Push();
                     OUString aReplace( s_pSrchItem->GetReplaceString() );
-                    i18nutil::SearchOptions2 aTmp( s_pSrchItem->GetSearchOptions() );
-                    std::optional<OUString> xBackRef = sw::ReplaceBackReferences(aTmp,
-                        m_pWrtShell->GetCursor(), m_pWrtShell->GetLayout());
+                    std::optional<OUString> xBackRef = sw::ReplaceBackReferences(
+                        s_pSrchItem->GetSearchOptions(), m_pWrtShell->GetCursor(),
+                        m_pWrtShell->GetLayout());
                     if( xBackRef )
                         s_pSrchItem->SetReplaceString( *xBackRef );
                     Replace();
@@ -427,19 +445,20 @@ void SwView::ExecSearch(SfxRequest& rReq)
         case FID_SEARCH_REPLACESET:
         {
             static const WhichRangesContainer aNormalAttr(svl::Items<
-/* 0 */         RES_CHRATR_CASEMAP,     RES_CHRATR_CASEMAP,
-/* 2 */         RES_CHRATR_COLOR,       RES_CHRATR_POSTURE,
-/* 4 */         RES_CHRATR_SHADOWED,    RES_CHRATR_WORDLINEMODE,
-/* 6 */         RES_CHRATR_BLINK,       RES_CHRATR_BLINK,
-/* 8 */         RES_CHRATR_BACKGROUND,  RES_CHRATR_BACKGROUND,
-/*10 */         RES_CHRATR_ROTATE,      RES_CHRATR_ROTATE,
-/*12 */         RES_CHRATR_SCALEW,      RES_CHRATR_RELIEF,
-/*14 */         RES_CHRATR_OVERLINE,    RES_CHRATR_OVERLINE,
-/*16 */         RES_PARATR_LINESPACING, RES_PARATR_HYPHENZONE,
-/*18 */         RES_PARATR_REGISTER,    RES_PARATR_REGISTER,
-/*20 */         RES_PARATR_VERTALIGN,   RES_PARATR_VERTALIGN,
+                RES_CHRATR_CASEMAP,     RES_CHRATR_CASEMAP,
+                RES_CHRATR_COLOR,       RES_CHRATR_POSTURE,
+                RES_CHRATR_SHADOWED,    RES_CHRATR_WORDLINEMODE,
+                RES_CHRATR_BLINK,       RES_CHRATR_BLINK,
+                RES_CHRATR_BACKGROUND,  RES_CHRATR_BACKGROUND,
+                RES_CHRATR_ROTATE,      RES_CHRATR_ROTATE,
+                RES_CHRATR_SCALEW,      RES_CHRATR_OVERLINE,
+                RES_PARATR_LINESPACING, RES_PARATR_HYPHENZONE,
+                RES_PARATR_REGISTER,    RES_PARATR_REGISTER,
+                RES_PARATR_VERTALIGN,   RES_PARATR_VERTALIGN,
                 RES_MARGIN_FIRSTLINE,   RES_MARGIN_RIGHT,
                 RES_UL_SPACE,           RES_UL_SPACE,
+                SID_ATTR_PARA_PAGEBREAK, SID_ATTR_PARA_PAGEBREAK,
+                SID_ATTR_PARA_MODEL,    SID_ATTR_PARA_MODEL,
                 SID_ATTR_PARA_KEEP,     SID_ATTR_PARA_KEEP
             >);
 
@@ -510,6 +529,19 @@ IMPL_LINK(SwView, SearchDialogHdl, SfxRequest&, rReq, void)
 
 bool SwView::SearchAndWrap(bool bApi)
 {
+    // tdf#124442 moved m_pWrtShell->GetCursor()->Normalize to before SwSearchOptions aOpts is
+    // constructed to fix search key not found when a forward search (Find Next) results in a
+    // unique find selection to the end of the document followed by a backward search (Find
+    // Previous) or when a backward search results in a unique find selection to the start of the
+    // document followed by a forward search search. Unique find selection meaning the document
+    // contains only one match of the search key.
+
+    // fdo#65014 : Ensure that the point of the cursor is at the extremity of the
+    // selection closest to the end being searched to as to exclude the selected
+    // region from the search. (This doesn't work in the case of multiple
+    // selected regions as the cursor doesn't mark the selection in that case.)
+    m_pWrtShell->GetCursor()->Normalize( s_pSrchItem->GetBackward() );
+
     SwSearchOptions aOpts( m_pWrtShell.get(), s_pSrchItem->GetBackward() );
 
         // Remember starting position of the search for wraparound
@@ -528,25 +560,47 @@ bool SwView::SearchAndWrap(bool bApi)
             m_pWrtShell->StartOfSection();
     }
 
-    // fdo#65014 : Ensure that the point of the cursor is at the extremity of the
-    // selection closest to the end being searched to as to exclude the selected
-    // region from the search. (This doesn't work in the case of multiple
-    // selected regions as the cursor doesn't mark the selection in that case.)
-    m_pWrtShell->GetCursor()->Normalize( s_pSrchItem->GetBackward() );
-
-    if (!m_pWrtShell->HasSelection() && (s_pSrchItem->HasStartPoint()))
-    {
-        // No selection -> but we have a start point (top left corner of the
-        // current view), start searching from there, not from the current
-        // cursor position.
-        SwEditShell& rShell = GetWrtShell();
-        Point aPosition(s_pSrchItem->GetStartPointX(), s_pSrchItem->GetStartPointY());
-        rShell.SetCursor(aPosition);
-    }
-
-        // If you want to search in selected areas, they must not be unselected.
     if (!s_pSrchItem->GetSelection())
+    {
+        // If you want to search in selected areas, they must not be unselected.
         m_pWrtShell->KillSelection(nullptr, false);
+
+        if (s_pSrchItem->HasStartPoint())
+        {
+            // No selection -> but we have a start point (top left corner of the
+            // current view), start searching from there, not from the current
+            // cursor position.
+            SwEditShell& rShell = GetWrtShell();
+            Point aPosition(s_pSrchItem->GetStartPointX(), s_pSrchItem->GetStartPointY());
+            rShell.SetCursor(aPosition);
+        }
+        else if (m_pWrtShell->GetCursor()->GetPointContentNode()
+                 && lcl_IsNotTextSearch(s_pSrchItem))
+        {
+            // if already at the end then start at the next paragraph
+            SwCursor* pCursor = m_pWrtShell->GetCursor();
+            const sal_Int32 nIndex = pCursor->GetPoint()->GetContentIndex();
+            const bool bToNextPara
+                = s_pSrchItem->GetBackward()
+                    ? !nIndex
+                    : nIndex == pCursor->GetPointContentNode()->Len();
+            if (bToNextPara)
+            {
+                SwMoveFnCollection const & fnMove
+                    = s_pSrchItem->GetBackward() ? fnMoveBackward : fnMoveForward;
+                if (!(*fnMove.fnPos)(pCursor->GetPoint(), false))
+                {
+                    if (s_pSrchItem->GetBackward())
+                        m_pWrtShell->EndOfSection();
+                    else
+                        m_pWrtShell->StartOfSection();
+                }
+                else
+                    pCursor->GetPoint()->SetContent(
+                        s_pSrchItem->GetBackward() ? pCursor->GetPointContentNode()->Len() : 0);
+            }
+        }
+    }
 
     std::optional<SwWait> oWait( std::in_place, *GetDocShell(), true );
     if( FUNC_Search( aOpts ) )
@@ -554,8 +608,10 @@ bool SwView::SearchAndWrap(bool bApi)
         s_bFound = true;
         if(m_pWrtShell->IsSelFrameMode())
         {
+            m_pWrtShell->Push(); // push the 'found' cursor to the stack
             m_pWrtShell->UnSelectFrame();
             m_pWrtShell->LeaveSelFrameMode();
+            m_pWrtShell->Pop(SwCursorShell::PopMode::DeleteCurrent); // restore stack cursor
         }
         m_pWrtShell->Pop();
         m_pWrtShell->EndAllAction();
@@ -682,75 +738,76 @@ void SwView::Replace()
     SwWait aWait( *GetDocShell(), true );
 
     m_pWrtShell->StartAllAction();
+    const bool bReplaceParagraphStyle = s_pSrchItem->GetPattern();
 
-    if( s_pSrchItem->GetPattern() ) // Templates?
+    if (!bReplaceParagraphStyle && GetPostItMgr()->HasActiveSidebarWin())
+        GetPostItMgr()->Replace(s_pSrchItem);
+
+    bool bReqReplace = true;
+
+    if (m_pWrtShell->HasSelection())
     {
-        SwRewriter aRewriter;
-        aRewriter.AddRule(UndoArg1, s_pSrchItem->GetSearchString());
-        aRewriter.AddRule(UndoArg2, SwResId(STR_YIELDS));
-        aRewriter.AddRule(UndoArg3, s_pSrchItem->GetReplaceString());
+        /* check that the selection match the search string */
+        //save state
+        auto [pStart, pEnd] = m_pWrtShell->GetCursor()->StartEnd(); // SwPosition*
+        SwPosition aStartPos = *pStart;
+        SwPosition aEndPos = *pEnd;
+        const bool bHasSelection = s_pSrchItem->GetSelection();
+        const SvxSearchCmd nOldCmd = s_pSrchItem->GetCommand();
 
-        m_pWrtShell->StartUndo(SwUndoId::UI_REPLACE_STYLE, &aRewriter);
+        //set state for checking if current selection has a match
+        s_pSrchItem->SetCommand(SvxSearchCmd::FIND);
+        s_pSrchItem->SetSelection(true);
 
-        m_pWrtShell->SetTextFormatColl( m_pWrtShell->GetParaStyle(
-                            UIName(s_pSrchItem->GetReplaceString()),
-                            SwWrtShell::GETSTYLE_CREATESOME ));
-
-        m_pWrtShell->EndUndo();
-    }
-    else
-    {
-        if (GetPostItMgr()->HasActiveSidebarWin())
-            GetPostItMgr()->Replace(s_pSrchItem);
-
-        bool bReqReplace = true;
-
-        if(m_pWrtShell->HasSelection())
+        //check if it matches
+        SwSearchOptions aOpts(m_pWrtShell.get(), s_pSrchItem->GetBackward());
+        if (!FUNC_Search(aOpts))
         {
-            /* check that the selection match the search string*/
-            //save state
-            SwPosition aStartPos = * m_pWrtShell->GetCursor()->Start();
-            SwPosition aEndPos = * m_pWrtShell->GetCursor()->End();
-            bool   bHasSelection = s_pSrchItem->GetSelection();
-            SvxSearchCmd nOldCmd = s_pSrchItem->GetCommand();
+            // no matching therefore should not replace selection
+            // => remove selection
 
-            //set state for checking if current selection has a match
-            s_pSrchItem->SetCommand( SvxSearchCmd::FIND );
-            s_pSrchItem->SetSelection(true);
-
-            //check if it matches
-            SwSearchOptions aOpts( m_pWrtShell.get(), s_pSrchItem->GetBackward() );
-            if( ! FUNC_Search(aOpts) )
+            auto [pCurStart, pCurEnd] = m_pWrtShell->GetCursor()->StartEnd(); // SwPosition*
+            if (!s_pSrchItem->GetBackward())
             {
-
-                //no matching therefore should not replace selection
-                // => remove selection
-
-                if(! s_pSrchItem->GetBackward() )
-                {
-                    (* m_pWrtShell->GetCursor()->Start()) = std::move(aStartPos);
-                    (* m_pWrtShell->GetCursor()->End()) = std::move(aEndPos);
-                }
-                else
-                {
-                    (* m_pWrtShell->GetCursor()->Start()) = std::move(aEndPos);
-                    (* m_pWrtShell->GetCursor()->End()) = std::move(aStartPos);
-                }
-                bReqReplace = false;
+                *pCurStart = std::move(aStartPos);
+                *pCurEnd = std::move(aEndPos);
             }
-
-            //set back old search state
-            s_pSrchItem->SetCommand( nOldCmd );
-            s_pSrchItem->SetSelection(bHasSelection);
+            else
+            {
+                *pCurStart = std::move(aEndPos);
+                *pCurEnd = std::move(aStartPos);
+            }
+            bReqReplace = false;
         }
-        /*
-         * remove current selection
-         * otherwise it is always replaced
-         * no matter if the search string exists or not in the selection
-         * Now the selection is removed and the next matching string is selected
-         */
 
-        if( bReqReplace )
+        // set back old search state
+        s_pSrchItem->SetCommand(nOldCmd);
+        s_pSrchItem->SetSelection(bHasSelection);
+    }
+    /*
+        * remove current selection
+        * otherwise it is always replaced
+        * no matter if the search string exists or not in the selection
+        * Now the selection is removed and the next matching string is selected
+        */
+
+    if (bReqReplace)
+    {
+        if (bReplaceParagraphStyle)
+        {
+            SwRewriter aRewriter;
+            aRewriter.AddRule(UndoArg1, s_pSrchItem->GetSearchString());
+            aRewriter.AddRule(UndoArg2, SwResId(STR_YIELDS));
+            aRewriter.AddRule(UndoArg3, s_pSrchItem->GetReplaceString());
+
+            m_pWrtShell->StartUndo(SwUndoId::UI_REPLACE_STYLE, &aRewriter);
+
+            m_pWrtShell->SetTextFormatColl(m_pWrtShell->GetParaStyle(
+                UIName(s_pSrchItem->GetReplaceString()), SwWrtShell::GETSTYLE_CREATESOME));
+
+            m_pWrtShell->EndUndo();
+        }
+        else
         {
             bool bReplaced = true;
             // Replace selection (Not if only attributes should be replaced)
@@ -810,12 +867,19 @@ sal_Int32 SwView::FUNC_Search(const SwSearchOptions& rOptions)
         RES_CHRATR_BEGIN, RES_CHRATR_END-1,
         RES_PARATR_BEGIN, RES_PARATR_END-1,
         RES_FRMATR_BEGIN, RES_FRMATR_END-1,
+        SID_ATTR_PARA_PAGEBREAK, SID_ATTR_PARA_PAGEBREAK,
+        SID_ATTR_PARA_MODEL, SID_ATTR_PARA_MODEL, // page style
         SID_ATTR_PARA_KEEP, SID_ATTR_PARA_KEEP
         >);
 
     SfxItemSet aSrchSet( m_pWrtShell->GetAttrPool(), aSearchAttrRange);
     if( s_xSearchList && s_xSearchList->Count() )
+    {
         s_xSearchList->Get( aSrchSet );
+
+        // create Sw Page Style from Sfx Page Style
+        ::SfxToSwPageDescAttr(*m_pWrtShell, aSrchSet);
+    }
 
     std::optional<SfxItemSet> xReplSet;
     if( bDoReplace && s_xReplaceList && s_xReplaceList->Count() )
@@ -920,6 +984,7 @@ void SwView::StateSearch(SfxItemSet &rSet)
                     {
                         s_pSrchItem->SetSearchString( aText );
                         s_pSrchItem->SetSelection( false );
+                        s_pSrchItem->SetReplaceString(u""_ustr);
                     }
                     else
                         s_pSrchItem->SetSelection( true );

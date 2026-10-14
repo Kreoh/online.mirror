@@ -72,9 +72,6 @@ $(call gb_UnpackedTarget_get_target,%).tgz :
 $(call gb_UnpackedTarget_get_target,%).zip :
 	$(call gb_UnpackedTarget__command,unzip,$@,$*)
 
-$(call gb_UnpackedTarget_get_target,%).oxt :
-	$(call gb_UnpackedTarget__command,unzip,$@,$*)
-
 .PHONY : $(call gb_UnpackedTarget_get_clean_target,%)
 $(call gb_UnpackedTarget_get_clean_target,%) :
 	$(call gb_Output_announce,$*,$(false),UPK,1)
@@ -214,6 +211,7 @@ $(call gb_UnpackedTarball_get_preparation_target,$(1)) : $(gb_Module_CURRENTMAKE
 $(call gb_UnpackedTarball_get_version_target,$(1)) :| $(dir $(call gb_UnpackedTarball_get_target,$(1))).dir
 $(call gb_UnpackedTarball_get_preparation_target,$(1)) :| $(dir $(call gb_UnpackedTarball_get_target,$(1))).dir
 $(call gb_UnpackedTarball_get_target,$(1)) :| $(dir $(call gb_UnpackedTarball_get_target,$(1))).dir
+$(call gb_UnpackedTarball_get_final_target,$(1)) :| $(dir $(call gb_UnpackedTarball_get_target,$(1))).dir
 $(call gb_UnpackedTarball_get_final_target,$(1)) : $(call gb_UnpackedTarball_get_target,$(1))
 
 private gb_UnpackedTarball_PATTERN_RULES_$(1) :=

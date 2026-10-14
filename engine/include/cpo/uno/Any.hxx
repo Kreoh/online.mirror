@@ -18,24 +18,23 @@
  */
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <iomanip>
 #include <ostream>
 #include <utility>
 
-#include "cpo/uno/Any.h"
-#include "uno/data.h"
-#include "uno/sequence2.h"
-#include "cpo/uno/Type.hxx"
-#include "com/sun/star/uno/Reference.h"
-#include "cpo/uno/genfunc.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "cppu/cppudllapi.h"
-#include "cppu/unotype.hxx"
+#include <cpo/uno/Any.h>
+#include <uno/data.h>
+#include <uno/sequence2.h>
+#include <cpo/uno/Type.hxx>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/genfunc.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cppu/cppudllapi.h>
+#include <cppu/unotype.hxx>
 
 extern "C" CPPU_DLLPUBLIC rtl_uString * cppu_Any_extraction_failure_msg(
     uno_Any const * pAny, typelib_TypeDescriptionReference * pType )
@@ -53,9 +52,9 @@ inline Any::Any()
 
 template <typename T>
     // Disallow things like
-    // Reference<css::uno::XInterface> x(...);
+    // Reference<cpo::uno::XInterface> x(...);
     // Any a(*x);
-    requires(!std::is_base_of_v<css::uno::XInterface, T>)
+    requires(!std::is_base_of_v<cpo::uno::XInterface, T>)
 inline Any::Any( T const & value )
 {
     ::uno_type_any_construct(
@@ -547,11 +546,11 @@ template<> bool operator >>=(Any const &, Any &) = delete;
 // interface
 
 template<>
-inline bool operator == ( const Any & rAny, const css::uno::BaseReference & value )
+inline bool operator == ( const Any & rAny, const cpo::uno::BaseReference & value )
 {
     if (typelib_TypeClass_INTERFACE == rAny.pType->eTypeClass)
     {
-        return static_cast< const css::uno::BaseReference * >( rAny.pData )->operator == ( value );
+        return static_cast< const cpo::uno::BaseReference * >( rAny.pData )->operator == ( value );
     }
     return false;
 }
@@ -580,7 +579,7 @@ T Any::get() const
 {
     T value = T();
     if (! (*this >>= value)) {
-        throw css::uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             ::rtl::OUString(
                 cppu_Any_extraction_failure_msg(
                     this,
@@ -624,8 +623,9 @@ inline std::basic_ostream<charT, traits> &operator<<(std::basic_ostream<charT, t
             std::ios_base::fmtflags flgs = o.setf(
                 std::ios_base::hex, std::ios_base::basefield);
             charT fill = o.fill('0');
-            o << " U+" << std::setw(4)
-              << unsigned(*static_cast<sal_Unicode const *>(any.getValue()));
+            o << " U+";
+            o.width(4);
+            o << unsigned(*static_cast<sal_Unicode const *>(any.getValue()));
             o.setf(flgs);
             o.fill(fill);
             break;

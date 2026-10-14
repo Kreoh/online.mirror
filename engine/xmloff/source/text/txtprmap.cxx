@@ -96,6 +96,7 @@ XMLPropertyMapEntry constexpr aXMLParaPropMap[] =
     // for TextPropMap::SHAPE_PARA to not have these double for Shapes (which already have these)
     GMAP( PROP_FillStyle,                      XML_NAMESPACE_DRAW, XML_FILL,                   XML_SW_TYPE_FILLSTYLE, 0 ),
     GMAP( PROP_FillColor,                      XML_NAMESPACE_DRAW, XML_FILL_COLOR,             XML_TYPE_COLOR, 0 ),
+    MAP_EXT( PROP_FillComplexColor,            XML_NAMESPACE_LO_EXT, XML_FILL_COMPLEX_COLOR,   XML_TYPE_COMPLEX_COLOR|XML_TYPE_PROP_GRAPHIC|MID_FLAG_ELEMENT_ITEM, CTF_COMPLEX_COLOR ),
     GMAP( PROP_FillColor2,                     XML_NAMESPACE_DRAW, XML_SECONDARY_FILL_COLOR,   XML_TYPE_COLOR, 0 ),
     GMAP( PROP_FillGradientName,               XML_NAMESPACE_DRAW, XML_FILL_GRADIENT_NAME,     XML_TYPE_STYLENAME|MID_FLAG_NO_PROPERTY_IMPORT, CTF_FILLGRADIENTNAME ),
     GMAP( PROP_FillGradientStepCount,          XML_NAMESPACE_DRAW, XML_GRADIENT_STEP_COUNT,    XML_TYPE_NUMBER16, 0 ),
@@ -1067,6 +1068,12 @@ XMLPropertyMapEntry constexpr aXMLCellPropMap[] =
     MC_E( PROP_RightBorderDistance,  XML_NAMESPACE_FO,    XML_PADDING_RIGHT,    XML_TYPE_MEASURE|MID_FLAG_MULTI_PROPERTY,          0 ),
     MC_E( PROP_TopBorderDistance,    XML_NAMESPACE_FO,    XML_PADDING_TOP,      XML_TYPE_MEASURE|MID_FLAG_MULTI_PROPERTY,          0 ),
     MC_E( PROP_BottomBorderDistance, XML_NAMESPACE_FO,    XML_PADDING_BOTTOM,   XML_TYPE_MEASURE|MID_FLAG_MULTI_PROPERTY,          0 ),
+    // A theme color behind the fill or a border, written as a child element next to the value
+    MAP_EXT( PROP_BackgroundComplexColor,   XML_NAMESPACE_LO_EXT, XML_BACKGROUND_COMPLEX_COLOR,    XML_TYPE_COMPLEX_COLOR|XML_TYPE_PROP_TABLE_CELL|MID_FLAG_ELEMENT_ITEM, CTF_COMPLEX_COLOR ),
+    MAP_EXT( PROP_BottomBorderComplexColor, XML_NAMESPACE_LO_EXT, XML_BORDER_BOTTOM_COMPLEX_COLOR, XML_TYPE_COMPLEX_COLOR|XML_TYPE_PROP_TABLE_CELL|MID_FLAG_ELEMENT_ITEM, CTF_COMPLEX_COLOR ),
+    MAP_EXT( PROP_TopBorderComplexColor,    XML_NAMESPACE_LO_EXT, XML_BORDER_TOP_COMPLEX_COLOR,    XML_TYPE_COMPLEX_COLOR|XML_TYPE_PROP_TABLE_CELL|MID_FLAG_ELEMENT_ITEM, CTF_COMPLEX_COLOR ),
+    MAP_EXT( PROP_LeftBorderComplexColor,   XML_NAMESPACE_LO_EXT, XML_BORDER_LEFT_COMPLEX_COLOR,   XML_TYPE_COMPLEX_COLOR|XML_TYPE_PROP_TABLE_CELL|MID_FLAG_ELEMENT_ITEM, CTF_COMPLEX_COLOR ),
+    MAP_EXT( PROP_RightBorderComplexColor,  XML_NAMESPACE_LO_EXT, XML_BORDER_RIGHT_COMPLEX_COLOR,  XML_TYPE_COMPLEX_COLOR|XML_TYPE_PROP_TABLE_CELL|MID_FLAG_ELEMENT_ITEM, CTF_COMPLEX_COLOR ),
     MC_E( PROP_VertOrient,           XML_NAMESPACE_STYLE, XML_VERTICAL_ALIGN,   XML_TYPE_TEXT_VERTICAL_POS,                        0 ),
     MC_E( PROP_WritingMode,          XML_NAMESPACE_STYLE, XML_WRITING_MODE,     XML_TYPE_TEXT_WRITING_MODE_WITH_DEFAULT,           0 ),
     MC_E( PROP_NumberFormat,         XML_NAMESPACE_STYLE, XML_DATA_STYLE_NAME,  XML_TYPE_NUMBER|MID_FLAG_SPECIAL_ITEM_EXPORT,      0 ),
@@ -1133,11 +1140,11 @@ static XMLPropertyMapEntry const *lcl_txtprmap_getMap( TextPropMap nType )
         pMap = aXMLTextPropMap;
         break;
     case TextPropMap::SHAPE_PARA:
-        // #i125045# use [21] instead of [1] for text props for Shapes, indices
-        // [1..20] contain the DrawingLayer FillStyle attributes corresponding to
+        // #i125045# use [22] instead of [1] for text props for Shapes, indices
+        // [1..21] contain the DrawingLayer FillStyle attributes corresponding to
         // [XATTR_FILL_FIRST .. XATTR_FILL_LAST] and would be double since Shapes
         // already contain these (usually in aXMLSDProperties)
-        pMap = &(aXMLParaPropMap[21]);
+        pMap = &(aXMLParaPropMap[22]);
         assert( pMap->meXMLName == XML_MARGIN && " shape para map changed" );
         break;
     case TextPropMap::PARA:

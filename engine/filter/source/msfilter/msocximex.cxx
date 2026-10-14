@@ -31,6 +31,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 constexpr OUString sWW8_form( u"WW-Standard"_ustr );
 
@@ -113,7 +114,7 @@ const uno::Reference< container::XIndexContainer >&
             if( !rServiceFactory.is() )
                 return xFormComps;
 
-            uno::Reference< uno::XInterface >  xCreate =
+            uno::Reference< cpo::uno::XInterface >  xCreate =
                 rServiceFactory->createInstance(
                     u"com.sun.star.form.component.Form"_ustr );
             if( xCreate.is() )

@@ -24,6 +24,7 @@
 #include <xmlxtimp.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -50,12 +51,12 @@ public:
     {
     }
 
-    virtual bool SAL_CALL filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor) override;
-    virtual void SAL_CALL cancel() override {}
+    virtual bool filter(const cpo::uno::Sequence<beans::PropertyValue>& rDescriptor) override;
+    virtual void cancel() override {}
 
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& rServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
 private:
     XPropertyTableFilterMode meMode;
@@ -77,9 +78,9 @@ bool XPropertyTableFilter::filter(const cpo::uno::Sequence<beans::PropertyValue>
     if (meMode == XPropertyTableFilterMode::Import)
         return SvxXMLXTableImport::load(aURL,
                                         aDescriptor.getOrDefault(u"Referer"_ustr, OUString()),
-                                        xStorage, xTable, nullptr);
+                                        xStorage, xTable);
 
-    return SvxXMLXTableExportComponent::save(aURL, xTable, xStorage, nullptr);
+    return SvxXMLXTableExportComponent::save(aURL, xTable, xStorage);
 }
 
 OUString XPropertyTableFilter::getImplementationName()
@@ -101,16 +102,16 @@ cpo::uno::Sequence<OUString> XPropertyTableFilter::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Svx_XPropertyTableImporter_get_implementation(
-    css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XPropertyTableFilter(XPropertyTableFilterMode::Import));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Svx_XPropertyTableExporter_get_implementation(
-    css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XPropertyTableFilter(XPropertyTableFilterMode::Export));
 }

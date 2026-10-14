@@ -39,7 +39,7 @@
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <vcl/errinf.hxx>
 #include <vcl/print.hxx>
@@ -127,6 +127,7 @@
 #include <comphelper/propertysequence.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace sw;
 
 namespace {
@@ -213,7 +214,7 @@ class SwDBManager::ConnectionDisposedListener_Impl
 private:
     SwDBManager * m_pDBManager;
 
-    virtual void SAL_CALL disposing( const lang::EventObject& Source ) override;
+    virtual void disposing( const lang::EventObject& Source ) override;
 
 public:
     explicit ConnectionDisposedListener_Impl(SwDBManager& rMgr);
@@ -233,10 +234,10 @@ class SwDataSourceRemovedListener : public cppu::WeakImplHelper<sdb::XDatabaseRe
 public:
     explicit SwDataSourceRemovedListener(SwDBManager& rDBManager);
     virtual ~SwDataSourceRemovedListener() override;
-    virtual void SAL_CALL registeredDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent) override;
-    virtual void SAL_CALL revokedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent) override;
-    virtual void SAL_CALL changedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent) override;
-    virtual void SAL_CALL disposing(const lang::EventObject& rObject) override;
+    virtual void registeredDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent) override;
+    virtual void revokedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent) override;
+    virtual void changedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent) override;
+    virtual void disposing(const lang::EventObject& rObject) override;
     void Dispose();
 };
 
@@ -245,7 +246,7 @@ public:
 SwDataSourceRemovedListener::SwDataSourceRemovedListener(SwDBManager& rDBManager)
     : m_pDBManager(&rDBManager)
 {
-    const uno::Reference<uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
     m_xDatabaseContext = sdb::DatabaseContext::create(xComponentContext);
     m_xDatabaseContext->addDatabaseRegistrationsListener(this);
 }
@@ -256,11 +257,11 @@ SwDataSourceRemovedListener::~SwDataSourceRemovedListener()
         m_xDatabaseContext->removeDatabaseRegistrationsListener(this);
 }
 
-void SAL_CALL SwDataSourceRemovedListener::registeredDatabaseLocation(const sdb::DatabaseRegistrationEvent& /*rEvent*/)
+void SwDataSourceRemovedListener::registeredDatabaseLocation(const sdb::DatabaseRegistrationEvent& /*rEvent*/)
 {
 }
 
-void SAL_CALL SwDataSourceRemovedListener::revokedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent)
+void SwDataSourceRemovedListener::revokedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent)
 {
     if (!m_pDBManager || m_pDBManager->getEmbeddedName().isEmpty())
         return;
@@ -287,7 +288,7 @@ void SAL_CALL SwDataSourceRemovedListener::revokedDatabaseLocation(const sdb::Da
     m_pDBManager->setEmbeddedName(OUString(), *pDocShell);
 }
 
-void SAL_CALL SwDataSourceRemovedListener::changedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent)
+void SwDataSourceRemovedListener::changedDatabaseLocation(const sdb::DatabaseRegistrationEvent& rEvent)
 {
     if (rEvent.OldLocation != rEvent.NewLocation)
         revokedDatabaseLocation(rEvent);
@@ -326,7 +327,7 @@ struct SwDBManager::SwDBManager_Impl
 
 static void lcl_InitNumberFormatter(SwDSParam& rParam, uno::Reference<sdbc::XDataSource> const & xSource)
 {
-    const uno::Reference<uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
+    const uno::Reference<cpo::uno::XComponentContext>& xContext = ::comphelper::getProcessComponentContext();
     rParam.xFormatter = util::NumberFormatter::create(xContext);
     uno::Reference<beans::XPropertySet> xSourceProps(
         (xSource.is()
@@ -739,7 +740,7 @@ void SwDBManager::ImplDestroy()
             if(xComp.is())
                 xComp->dispose();
         }
-        catch(const uno::RuntimeException&)
+        catch(const cpo::uno::RuntimeException&)
         {
             //may be disposed already since multiple entries may have used the same connection
         }
@@ -1700,7 +1701,7 @@ sal_uInt32 SwDBManager::GetColumnFormat( const OUString& rDBName,
             xConnection = m_pImpl->pMergeData->xConnection;
             xSource = SwDBManager::getDataSourceAsParent(xConnection,rDBName);
             bUseMergeData = true;
-            xColsSupp.set(m_pImpl->pMergeData->xResultSet, css::uno::UNO_QUERY);
+            xColsSupp.set(m_pImpl->pMergeData->xResultSet, cpo::uno::UNO_QUERY);
         }
         if(!xConnection.is())
         {
@@ -1712,7 +1713,7 @@ sal_uInt32 SwDBManager::GetColumnFormat( const OUString& rDBName,
             if(pParam && pParam->xConnection.is())
             {
                 xConnection = pParam->xConnection;
-                xColsSupp.set(pParam->xResultSet, css::uno::UNO_QUERY);
+                xColsSupp.set(pParam->xResultSet, cpo::uno::UNO_QUERY);
             }
             else
             {
@@ -1891,7 +1892,7 @@ uno::Reference< sdbc::XConnection> SwDBManager::GetConnection(const OUString& rD
                                                               uno::Reference<sdbc::XDataSource>& rxSource, const SwView *pView)
 {
     uno::Reference< sdbc::XConnection> xConnection;
-    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     try
     {
         uno::Reference<sdb::XCompletedConnection> xComplConnection(dbtools::getDataSource(rDataSource, xContext), uno::UNO_QUERY);
@@ -2545,7 +2546,7 @@ const SwDBData& SwDBManager::GetAddressDBName()
 
 cpo::uno::Sequence<OUString> SwDBManager::GetExistingDatabaseNames()
 {
-    const uno::Reference<uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
     uno::Reference<sdb::XDatabaseContext> xDBContext = sdb::DatabaseContext::create(xContext);
     return xDBContext->getElementNames();
 }
@@ -2704,7 +2705,7 @@ OUString LoadAndRegisterDataSource_Impl(DBConnURIType type, const uno::Reference
 
     try
     {
-        const uno::Reference<uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
+        const uno::Reference<cpo::uno::XComponentContext>& xContext(::comphelper::getProcessComponentContext());
         uno::Reference<sdb::XDatabaseContext> xDBContext = sdb::DatabaseContext::create(xContext);
 
         OUString sNewName = rURL.getName(
@@ -2718,7 +2719,7 @@ OUString LoadAndRegisterDataSource_Impl(DBConnURIType type, const uno::Reference
         while (xDBContext->hasByName(sFind))
             sFind = sNewName + OUString::number(++nIndex);
 
-        uno::Reference<uno::XInterface> xNewInstance;
+        uno::Reference<cpo::uno::XInterface> xNewInstance;
         if (!bStore)
         {
             //odb-file
@@ -2788,7 +2789,7 @@ OUString SwDBManager::LoadAndRegisterDataSource(weld::Window* pParent, SwDocShel
 {
     sfx2::FileDialogHelper aDlgHelper(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, FileDialogFlags::NONE, pParent);
     aDlgHelper.SetContext(sfx2::FileDialogHelper::WriterRegisterDataSource);
-    uno::Reference < ui::dialogs::XFilePicker3 > xFP = aDlgHelper.GetFilePicker();
+    uno::Reference < ui::dialogs::XFilePicker > xFP = aDlgHelper.GetFilePicker();
 
     OUString sFilterAll(SwResId(STR_FILTER_ALL));
     OUString sFilterAllData(SwResId(STR_FILTER_ALL_DATA));
@@ -2833,7 +2834,7 @@ OUString SwDBManager::LoadAndRegisterDataSource(weld::Window* pParent, SwDocShel
 
         if( DBConnURIType::FLAT == type )
         {
-            const uno::Reference<uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+            const uno::Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
             uno::Reference < sdb::XTextConnectionSettings > xSettingsDlg = sdb::TextConnectionSettings::create(xContext);
             if( xSettingsDlg->execute() )
                 aSettings.set( uno::Reference < beans::XPropertySet >( xSettingsDlg, uno::UNO_QUERY_THROW ) );
@@ -2914,7 +2915,7 @@ void SwDBManager::LoadAndRegisterEmbeddedDataSource(const SwDBData& rData, const
         rURLObject.GetMainURL(INetURLObject::DecodeMechanism::NONE),
         m_sEmbeddedName);
 
-    uno::Reference<uno::XInterface> xDataSource(xDatabaseContext->getByName(aURL), uno::UNO_QUERY);
+    uno::Reference<cpo::uno::XInterface> xDataSource(xDatabaseContext->getByName(aURL), uno::UNO_QUERY);
     xDatabaseContext->registerObject( sDataSource, xDataSource );
 
     // temp file - don't remember connection
@@ -3012,7 +3013,7 @@ void SwDBManager::ExecuteFormLetter( SwWrtShell& rSh,
                     if(xComp.is())
                         xComp->dispose();
                 }
-                catch(const uno::RuntimeException&)
+                catch(const cpo::uno::RuntimeException&)
                 {
                     //may be disposed already since multiple entries may have used the same connection
                 }
@@ -3053,7 +3054,7 @@ void SwDBManager::InsertText(SwWrtShell& rSh,
         OSL_FAIL("PropertyValues missing or unset");
         return;
     }
-    const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
     uno::Reference<sdbc::XDataSource> xSource;
     uno::Reference<container::XChild> xChild(xConnection, uno::UNO_QUERY);
     if(xChild.is())
@@ -3125,7 +3126,7 @@ uno::Reference<sdbc::XResultSet> SwDBManager::createCursor(const OUString& _sDat
         uno::Reference< lang::XMultiServiceFactory > xMgr( ::comphelper::getProcessServiceFactory() );
         if( xMgr.is() )
         {
-            uno::Reference<uno::XInterface> xInstance = xMgr->createInstance(u"com.sun.star.sdb.RowSet"_ustr);
+            uno::Reference<cpo::uno::XInterface> xInstance = xMgr->createInstance(u"com.sun.star.sdb.RowSet"_ustr);
             uno::Reference<beans::XPropertySet> xRowSetPropSet(xInstance, uno::UNO_QUERY);
             if(xRowSetPropSet.is())
             {

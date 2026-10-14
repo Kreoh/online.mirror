@@ -24,14 +24,14 @@
 #include <utility>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 
 namespace chart
 {
 
 DataEditor::DataEditor(weld::Window* pParent,
     rtl::Reference<::chart::ChartModel> xChartDoc,
-    const Reference< uno::XComponentContext > & xContext)
+    const Reference< cpo::uno::XComponentContext > & xContext)
     : GenericDialogController(pParent, u"modules/schart/ui/chartdatadialog.ui"_ustr, u"ChartDataDialog"_ustr)
     , m_bReadOnly(false)
     , m_xChartDoc(std::move(xChartDoc))

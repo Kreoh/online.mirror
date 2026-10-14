@@ -61,6 +61,18 @@ function ensureSidebarHidden() {
 	cy.log('<< ensureSidebarHidden - end');
 }
 
+// Ensure the sidebar dock is shown, regardless of starting state.
+function ensureSidebarVisible() {
+	cy.log('>> ensureSidebarVisible');
+	cy.cGet('#sidebar-dock-wrapper').then(function($dock) {
+		if (!$dock.is(':visible')) {
+			cy.cGet('#optionscontainer [id^="SidebarDeck.PropertyDeck"] button').click();
+		}
+	});
+	cy.cGet('#sidebar-dock-wrapper').should('be.visible').should('not.be.empty');
+	cy.log('<< ensureSidebarVisible - end');
+}
+
 // Wait for the sidebar to reshow and grab focus to its first focusable
 // element via the 'sidebarstealfocus' timer scheduled in
 // Control.Sidebar.ts.
@@ -139,8 +151,7 @@ function selectFromJSDialogListbox(item, isImage) {
 
 	cy.cGet('[id$="-dropdown"].modalpopup').should('be.visible');
 	if (isImage) {
-		cy.wait(1000); // We need some time to render custom entries
-		cy.cGet('[id$="-dropdown"].modalpopup img[alt="' + item + '"]').click();
+		cy.cGet('[id$="-dropdown"].modalpopup img[alt="' + item + '"]').should('be.visible').click();
 	} else
 		cy.cGet('[id$="-dropdown"].modalpopup').contains('span', item).click();
 
@@ -211,9 +222,6 @@ function doZoom(zoomIn) {
 	} else {
 		cy.cGet('#toolbar-down #zoomout').click();
 	}
-
-	// Wait for animation to complete
-	cy.wait(500);
 
 	cy.cGet('#toolbar-down #zoom .unolabel')
 		.should(function(zoomLevel) {
@@ -390,10 +398,31 @@ function insertComment(text = 'some text0', save = true) {
 function toggleComments(resolved = false) {
 	cy.log('>> toggleComments - start');
 
+	// Both comments buttons decide which way to toggle from the engine's answer
+	// to the previous toggle, so the click is made once the engine has answered
+	// everything so far.
+	cy.getFrameWindow().then(function(win) {
+		return helper.processToIdle(win);
+	});
+
 	var mode = Cypress.env('USER_INTERFACE');
 	if (mode === 'notebookbar') {
 		cy.cGet('#Review-tab-label').click();
-		if (resolved) getNbIcon('ShowResolvedAnnotations', 'Review').click();
+		if (resolved) {
+			// A click is acted on only while the item holding the icon carries no
+			// disabled attribute, and the engine takes that attribute away again
+			// once it is done with the document. Wait for that, so the click is
+			// not dropped without a trace.
+			getNbItem('ShowResolvedAnnotations', 'Review').should('not.have.attr', 'disabled');
+			// The engine's answer to this click sets the selected class, so the class
+			// changing shows that the toggle was applied.
+			getNbItem('ShowResolvedAnnotations', 'Review').then(function($item) {
+				var wasSelected = $item.hasClass('selected');
+				getNbIcon('ShowResolvedAnnotations', 'Review').click();
+				getNbItem('ShowResolvedAnnotations', 'Review')
+					.should(wasSelected ? 'not.have.class' : 'have.class', 'selected');
+			});
+		}
 		else cy.cGet('#showannotations').click();
 		// to avoid notebookbar collapse in subsequent calls to toggleComments.
 		cy.cGet('#Home-tab-label').click();
@@ -409,13 +438,17 @@ function toggleComments(resolved = false) {
 function switchUIToNotebookbar() {
 	cy.log('>> switchUIToNotebookbar - start');
 
+	// Helpers read this flag while the test body is still queueing commands, to
+	// pick the classic or the notebookbar path. The switch below runs before any
+	// of those queued commands, so notebookbar is the right value for them now.
+	Cypress.env('USER_INTERFACE', 'notebookbar');
+
 	cy.window().then(win => {
 		var userInterfaceMode = win['0'].userInterfaceMode;
 		if (userInterfaceMode !== 'notebookbar') {
 			cy.cGet('#menu-view').click();
 			cy.cGet('#menu-toggleuimode').click();
 		}
-		Cypress.env('USER_INTERFACE', 'notebookbar');
 	});
 
 	cy.log('<< switchUIToNotebookbar - end');
@@ -431,6 +464,11 @@ function switchUIToCompact() {
 			getNbIcon('toggleuimode', 'View').click();
 			// Wait for the compact toolbar to load
 			cy.cGet('#toolbar-up').should('be.visible');
+			// Core resends the status bar state after the switch. Wait for
+			// that to settle before the caller uses the classic UI.
+			cy.getFrameWindow().then(function(frameWindow) {
+				return helper.processToIdle(frameWindow);
+			});
 		}
 	});
 
@@ -567,33 +605,28 @@ function setAccessibilityState(enable) {
 	cy.log('<< setAccessibilityState - end');
 }
 
-// best way to simulate scrolling using mouse wheel I found -> no click performed
+// Scroll through the scroll section, the path a wheel and a scrollbar drag take,
+// so a test scroll gets the same view bookkeeping a real one does.
+function scrollVerticalAsUser(win, offset) {
+	win.app.sectionContainer
+		.getSectionWithName(win.app.CSections.Scroll.name)
+		.scrollVerticalWithOffset(offset);
+}
+
 function scrollWriterDocumentToTop() {
-	// map.panTo was removed with the leaflet scroll path. Scroll the layout up
-	// to the top (large negative view-space delta clamps to 0); the horizontal
+	// A large negative view-space delta clamps to the top; the horizontal
 	// position (page centering) is preserved.
 	cy.getFrameWindow()
 		.then(function(win) {
-			win.app.activeDocument.activeLayout.scroll(0, -100000);
+			scrollVerticalAsUser(win, -100000);
 		});
 	assertScrollbarPosition('vertical', 0, 10);
 }
 
 function scrollViewDown(win) {
 	cy.then(function() {
-		// map.panBy was removed with the leaflet scroll path; scroll the layout
-		// directly (view-space core-pixel delta).
-		win.app.activeDocument.activeLayout.scroll(0, 4000);
-		win.app.updateFollowingUsers();
+		scrollVerticalAsUser(win, 4000);
 	});
-}
-
-function updateFollowingUsers() {
-	cy.getFrameWindow()
-		.its('app')
-		.then(function(app) {
-			app.updateFollowingUsers();
-		});
 }
 
 function assertVisiblePage(min, max, allPages) {
@@ -663,6 +696,80 @@ function getNbIconArrow(unoCommand, tabName) {
 /// get gropdown element for menu with given id
 function getDropdown(dropdownId) {
 	return cy.cGet('[id^="' + dropdownId + '"].modalpopup');
+}
+
+/// the entries of the menu popup that is open, in the order it shows them
+function getOpenMenuEntries() {
+	return cy.cGet('.modalpopup [role="listbox"] [role="option"]:visible');
+}
+
+/// a widget is addressed by the id it was declared with, kept in modelId; its
+/// DOM id carries a counter over the whole notebookbar
+function widgetButtonSelector(modelId) {
+	return '[modelId="' + modelId + '"] button';
+}
+
+/// get the button of the widget declared with the given id
+function getWidgetButton(modelId) {
+	return cy.cGet(widgetButtonSelector(modelId));
+}
+
+/// whether that button is on screen - a folded overflow group hides its own
+function isWidgetButtonShown(win, modelId) {
+	const button = win.document.querySelector(widgetButtonSelector(modelId));
+	return !!button && button.checkVisibility();
+}
+
+// A menu button of a notebookbar tab whose menu has several entries and no
+// state on any of them, so its popup opens with nothing to focus by id.
+// Returns { id, overflow } or null, read from the model the client built.
+function findStatelessMenuButton(win, tabName) {
+	const definitions = win.JSDialog.MenuDefinitions;
+	// The wrapper exposes getFullJSON; getTabsJSON sits on the impl it holds.
+	const model = win.app.map.uiManager.notebookbar.getFullJSON();
+
+	function findPage(node) {
+		if (!node) return null;
+		if (node.type === 'tabpage')
+			return node.name === tabName ? node : null;
+
+		let page = null;
+		(node.children || []).forEach(function (child) {
+			page = page || findPage(child);
+		});
+		return page;
+	}
+
+	function isStateless(entries) {
+		return !!entries && entries.length > 1 && entries.every(function (entry) {
+			return entry.type === undefined && entry.items === undefined &&
+				entry.checked === undefined && entry.selected === undefined &&
+				entry.statusCommand === undefined;
+		});
+	}
+
+	let found = null;
+
+	function walk(node, overflow) {
+		if (!node || found) return;
+
+		if (node.type === 'overflowgroup') overflow = 'overflow-button-' + node.id;
+
+		// A menu button declares itself as '<widget id>:<menu id>'.
+		if (node.type === 'menubutton' && typeof node.id === 'string' &&
+			node.id.indexOf(':') > 0) {
+			const parts = node.id.split(':');
+			if (isStateless(definitions.get(parts[1])))
+				found = { id: parts[0], overflow: overflow };
+		}
+
+		(node.children || []).forEach(function (child) {
+			walk(child, overflow);
+		});
+	}
+
+	walk(findPage(model), null);
+	return found;
 }
 
 // Ask core for the current undo depth with a commandvalues round-trip,
@@ -864,11 +971,11 @@ module.exports.checkAccessibilityEnabledToBe = checkAccessibilityEnabledToBe;
 module.exports.setAccessibilityState = setAccessibilityState;
 module.exports.scrollWriterDocumentToTop = scrollWriterDocumentToTop;
 module.exports.scrollViewDown = scrollViewDown;
-module.exports.updateFollowingUsers = updateFollowingUsers;
 module.exports.assertVisiblePage = assertVisiblePage;
 module.exports.closeNavigatorSidebar = closeNavigatorSidebar;
 module.exports.sidebarToggle = sidebarToggle;
 module.exports.ensureSidebarHidden = ensureSidebarHidden;
+module.exports.ensureSidebarVisible = ensureSidebarVisible;
 module.exports.assertSidebarStealsFocus = assertSidebarStealsFocus;
 module.exports.getCompactIcon = getCompactIcon;
 module.exports.getNbIcon = getNbIcon;
@@ -877,6 +984,10 @@ module.exports.selectNotebookbarTab = selectNotebookbarTab;
 module.exports.getCompactIconArrow = getCompactIconArrow;
 module.exports.getNbIconArrow = getNbIconArrow;
 module.exports.getDropdown = getDropdown;
+module.exports.getOpenMenuEntries = getOpenMenuEntries;
+module.exports.getWidgetButton = getWidgetButton;
+module.exports.isWidgetButtonShown = isWidgetButtonShown;
+module.exports.findStatelessMenuButton = findStatelessMenuButton;
 module.exports.getUndoCount = getUndoCount;
 module.exports.undoAll = undoAll;
 module.exports.closeAnyOpenDialogs = closeAnyOpenDialogs;

@@ -103,8 +103,7 @@ static oslSecurityImpl * growSecurityImpl(
         }
         p = static_cast<oslSecurityImpl *>(realloc(impl, n));
         if (p != nullptr) {
-            // coverity[overrun-buffer-arg] - theoretically massive n is not due to
-            // a negative parameter being interpreted as unsigned
+            // coverity[overrun-buffer-arg : FALSE] - n is the size just passed to realloc
             memset (p, 0, n);
         }
     }
@@ -334,25 +333,7 @@ static bool osl_psz_getHomeDir(oslSecurity Security, OString* pszDirectory)
     /* if current user, check also environment for HOME */
     if (getuid() == pSecImpl->m_pPasswd.pw_uid)
     {
-        char *pStr = nullptr;
-#ifdef __sun
-        char    buffer[8192];
-
-        struct passwd pwd;
-        struct passwd *ppwd;
-
-#ifdef _POSIX_PTHREAD_SEMANTICS
-        if ( 0 != getpwuid_r(getuid(), &pwd, buffer, sizeof(buffer), &ppwd ) )
-            ppwd = NULL;
-#else
-        ppwd = getpwuid_r(getuid(), &pwd, buffer, sizeof(buffer) );
-#endif
-
-        if ( ppwd )
-            pStr = ppwd->pw_dir;
-#else
-        pStr = getenv("HOME");
-#endif
+        char *pStr = getenv("HOME");
 
         if (pStr != nullptr && pStr[0] != '\0' && access(pStr, 0) == 0)
         {

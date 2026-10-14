@@ -181,11 +181,28 @@ struct FormatterFontMetric
 {
     sal_uInt16 nMaxAscent = 0;
     sal_uInt16 nMaxDescent = 0;
+    // With fixed cell height: the font's own share of the line below the baseline, its descent
+    // over its ascent plus descent, at most a quarter of the line.
+    sal_uInt16 nMaxShareDescent = 0;
 
     sal_uInt16 GetHeight() const
     {
         return nMaxAscent + nMaxDescent;
     }
+};
+
+// The rows that a field wrapped onto several sublines fills on the line that
+// carries it. The line's own row holds the field's first subline, so
+// nRowsBelow counts the rows under that one, and is zero for a line with no
+// wrapped field. The other members are paragraph-relative X coordinates: a
+// row starts at nLeft, every row but the bottom one ends at nRight, and the
+// bottom row ends with the field text at nBottomRowRight.
+struct WrappedFieldRows
+{
+    sal_Int32 nRowsBelow = 0;
+    tools::Long nLeft = 0;
+    tools::Long nRight = 0;
+    tools::Long nBottomRowRight = 0;
 };
 
 class IdleFormattter : public Idle
@@ -275,8 +292,6 @@ private:
 
     rtl::Reference<vcl::unohelper::DragAndDropWrapper> mxDnDListener;
 
-    OUString maDicNameSingle;
-
     tools::Long mnInvalidateMore;
     EVControlBits mnControl;
     sal_uInt32 mnTravelXPos;
@@ -328,7 +343,7 @@ private:
 
     void InvalidateAtWindow(const tools::Rectangle& rRect);
 
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const;
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> GetClipboard() const;
 
     void SetBroadcastKitViewCursor(bool bSet)
     {
@@ -348,7 +363,8 @@ protected:
     void ShowDDCursor( const tools::Rectangle& rRect );
     void HideDDCursor();
 
-    void ImplDrawHighlightRect(OutputDevice& rTarget, const Point& rDocPosTopLeft, const Point& rDocPosBottomRight, tools::PolyPolygon* pPolyPoly, bool bLOKCalcRTL);
+    void ImplDrawHighlightRect(OutputDevice& rTarget, const Point& rDocPosTopLeft, const Point& rDocPosBottomRight, tools::PolyPolygon& rPolyPoly, bool bLOKCalcRTL);
+    static void ImplInvertSelection(OutputDevice& rTarget, const vcl::Region& rRegion);
     tools::Rectangle ImplGetEditCursor(EditPaM const& rPaM, CursorFlags aShowCursorFlags, sal_Int32& nTextPortionStart, ParaPortion const& rParaPortion) const;
 
 public:
@@ -386,8 +402,8 @@ public:
     bool            MouseMove( const MouseEvent& rMouseEvent );
     bool            Command(const CommandEvent& rCEvt);
 
-    void            CutCopy( css::uno::Reference< css::datatransfer::clipboard::XClipboard > const & rxClipboard, bool bCut );
-    void            Paste( css::uno::Reference< css::datatransfer::clipboard::XClipboard > const & rxClipboard, bool bUseSpecial = false, SotClipboardFormatId format = SotClipboardFormatId::NONE);
+    void            CutCopy( cpo::uno::Reference< css::datatransfer::clipboard::XClipboard > const & rxClipboard, bool bCut );
+    void            Paste( cpo::uno::Reference< css::datatransfer::clipboard::XClipboard > const & rxClipboard, bool bUseSpecial = false, SotClipboardFormatId format = SotClipboardFormatId::NONE);
 
     void SetVisDocStartPos(const Point& rPos) { maVisDocStartPos = rPos; }
 
@@ -581,17 +597,21 @@ private:
     ScalingParameters maCustomScalingParameters;
     ScalingParameters maScalingParameters;
     bool mbRoundToNearestPt;
+    bool mbLineSpacingBelowBaseline;
+    EETextFitting meTextFitting;
+    // The height that text fitting fits the text into. 0 means the maximum paper height.
+    tools::Long mnTextFittingHeight;
 
     CharCompressType mnAsianCompressionMode;
 
     EEHorizontalTextDirection meDefaultHorizontalTextDirection;
 
     sal_Int32 mnBigTextObjectStart;
-    css::uno::Reference<css::linguistic2::XSpellChecker>  mxSpeller;
-    css::uno::Reference<css::linguistic2::XHyphenator>    mxHyphenator;
+    cpo::uno::Reference<css::linguistic2::XSpellChecker>  mxSpeller;
+    cpo::uno::Reference<css::linguistic2::XHyphenator>    mxHyphenator;
     std::unique_ptr<SpellInfo> mpSpellInfo;
-    mutable css::uno::Reference <css::i18n::XBreakIterator> mxBI;
-    mutable css::uno::Reference <css::i18n::XExtendedInputSequenceChecker> mxISC;
+    mutable cpo::uno::Reference <css::i18n::XBreakIterator> mxBI;
+    mutable cpo::uno::Reference <css::i18n::XExtendedInputSequenceChecker> mxISC;
 
     std::unique_ptr<ConvInfo> mpConvInfo;
 
@@ -626,6 +646,9 @@ private:
     Timer maStatusTimer;
     Size maKitSpecialPaperSize;
 
+    // only valid when used from an Outliner
+    Outliner* mpOwner;
+
     Link<EditStatus&,void>         maStatusHdlLink;
     Link<EENotify&,void>           maNotifyHdl;
     Link<HtmlImportInfo&,void>     maHtmlImportHdl;
@@ -650,12 +673,12 @@ private:
     bool mbUseAutoColor : 1;
     bool mbForceAutoColor : 1;
     bool mbCallParaInsertedOrDeleted : 1;
-    bool mbFirstWordCapitalization : 1;   // specifies if auto-correction should capitalize the first word or not
+    bool mbCapitalizeSentenceStart : 1;
     bool mbLastTryMerge : 1;
     bool mbReplaceLeadingSingleQuotationMark : 1;
     bool mbSkipOutsideFormat : 1;
     bool mbFuzzing : 1;
-
+    bool mbIgnoreBreakAfterMultilineField : 1;
     bool mbNbspRunNext;  // can't be a bitfield as it is passed as bool&
 
     // Methods...
@@ -672,7 +695,7 @@ private:
 
     std::unique_ptr<EditUndoSetAttribs> CreateAttribUndo( EditSelection aSel, const SfxItemSet& rSet );
 
-    std::unique_ptr<EditTextObject> GetEmptyTextObject();
+    EditTextObject GetEmptyTextObject();
 
     std::tuple<const ParaPortion*, const EditLine*, tools::Long> GetPortionAndLine(Point aDocPos);
     EditPaM             GetPaM( Point aDocPos, bool bSmart = true );
@@ -687,10 +710,9 @@ private:
     void                ParaAttribsToCharAttribs( ContentNode* pNode );
     void                GetCharAttribs( sal_Int32 nPara, std::vector<EECharAttrib>& rLst ) const;
 
-    std::unique_ptr<EditTextObject>
-                        CreateTextObject(EditSelection aSelection, SfxItemPool*, bool bAllowBigObjects = false, sal_Int32 nBigObjStart = 0);
+    EditTextObject      CreateTextObject(EditSelection aSelection, SfxItemPool*, bool bAllowBigObjects = false, sal_Int32 nBigObjStart = 0);
     EditSelection       InsertTextObject( const EditTextObject&, EditPaM aPaM );
-    EditSelection       PasteText( css::uno::Reference< css::datatransfer::XTransferable > const & rxDataObj, const OUString& rBaseURL, const EditPaM& rPaM, bool bUseSpecial, SotClipboardFormatId format = SotClipboardFormatId::NONE);
+    EditSelection       PasteText( cpo::uno::Reference< css::datatransfer::XTransferable > const & rxDataObj, const OUString& rBaseURL, const EditPaM& rPaM, bool bUseSpecial, SotClipboardFormatId format = SotClipboardFormatId::NONE);
 
     void                CheckPageOverflow();
 
@@ -729,7 +751,7 @@ private:
 
     bool                ImplHasText() const;
 
-    void ImpFindKashidas(ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEnd,
+    void ImpFindKashidas(ContentNode& rNode, sal_Int32 nStart, sal_Int32 nEnd,
                          std::vector<sal_Int32>& rArray, sal_Int32 nRemainingSpace);
 
     void                InsertContent(std::unique_ptr<ContentNode> pNode, sal_Int32 nPos);
@@ -766,7 +788,7 @@ private:
     bool                IsScriptChange( const EditPaM& rPaM ) const;
     bool                HasScriptType( sal_Int32 nPara, sal_uInt16 nType ) const;
 
-    bool                ImplCalcAsianCompression( ContentNode* pNode, TextPortion* pTextPortion, sal_Int32 nStartPos,
+    bool                ImplCalcAsianCompression( ContentNode& rNode, TextPortion* pTextPortion, sal_Int32 nStartPos,
                                                 double* pDXArray, sal_uInt16 n100thPercentFromMax, bool bManipulateDXArray );
     void                ImplExpandCompressedPortions(EditLine& rLine, ParaPortion& rParaPortion, tools::Long nRemainingWidth);
 
@@ -796,12 +818,39 @@ private:
         return double(nXValue) * maScalingParameters.fSpacingX;
     }
 
-    double scaleYSpacingValue(sal_uInt16 nYValue) const
+    double scaleYLineSpacingValue(sal_uInt16 nYValue) const
     {
         if (!maStatus.DoStretch() || maScalingParameters.fSpacingY == 1.0)
             return nYValue;
 
         return double(nYValue) * maScalingParameters.fSpacingY;
+    }
+
+    double scaleYParagraphSpacingValue(sal_uInt16 nYValue) const
+    {
+        if (meTextFitting != EETextFitting::Legacy)
+            return nYValue;
+
+        return scaleYLineSpacingValue(nYValue);
+    }
+
+    double scaleYExactLineSpacingValue(sal_uInt16 nYValue) const
+    {
+        if (meTextFitting != EETextFitting::Legacy)
+            return nYValue;
+
+        return scaleYLineSpacingValue(nYValue);
+    }
+
+    double scaleProportionalLineSpacing(double fProportionalScale) const
+    {
+        const double fSpacingY = maScalingParameters.fSpacingY;
+        const double fReduced = fProportionalScale - (1.0 - fSpacingY);
+        // A reduction as large as the spacing itself multiplies instead, so a line keeps some
+        // height.
+        if (meTextFitting == EETextFitting::Legacy || fReduced <= 0.0)
+            return fProportionalScale * fSpacingY;
+        return fReduced;
     }
 
     double scaleXFontValue(tools::Long nXValue) const
@@ -821,6 +870,10 @@ private:
     }
 
     void setRoundToNearestPt(bool bRound) { mbRoundToNearestPt = bRound; }
+    void setLineSpacingBelowBaseline(bool bBelow) { mbLineSpacingBelowBaseline = bBelow; }
+    bool isLineSpacingBelowBaseline() const { return mbLineSpacingBelowBaseline; }
+    void setTextFitting(EETextFitting eFitting) { meTextFitting = eFitting; }
+    void setTextFittingHeight(tools::Long nHeight) { mnTextFittingHeight = nHeight; }
     double roundToNearestPt(double fInput) const;
 
     ContentNode*        GetPrevVisNode( ContentNode const * pCurNode );
@@ -882,10 +935,10 @@ private:
         return GetParaPortions().SafeGetObject(nPos);
     }
 
-    css::uno::Reference< css::datatransfer::XTransferable > CreateTransferable( const EditSelection& rSelection );
+    cpo::uno::Reference< css::datatransfer::XTransferable > CreateTransferable( const EditSelection& rSelection );
 
-    css::uno::Reference < css::i18n::XBreakIterator > const & ImplGetBreakIterator() const;
-    css::uno::Reference < css::i18n::XExtendedInputSequenceChecker > const & ImplGetInputSequenceChecker() const;
+    cpo::uno::Reference < css::i18n::XBreakIterator > const & ImplGetBreakIterator() const;
+    cpo::uno::Reference < css::i18n::XExtendedInputSequenceChecker > const & ImplGetInputSequenceChecker() const;
 
     void ImplUpdateOverflowingParaNum(tools::Long);
     void ImplUpdateOverflowingLineNum(tools::Long, sal_uInt32, tools::Long);
@@ -894,7 +947,7 @@ private:
     /// Obtains a view shell ID from the active EditView.
     ViewShellId CreateViewShellId();
 
-    ImpEditEngine(EditEngine* pEditEngine, SfxItemPool* pPool);
+    ImpEditEngine(EditEngine* pEditEngine, SfxItemPool* pPool, Outliner* pEngOwner = nullptr);
     void InitDoc(bool bKeepParaAttribs);
     EditDoc&                GetEditDoc()            { return maEditDoc; }
     const EditDoc&          GetEditDoc() const      { return maEditDoc; }
@@ -918,6 +971,9 @@ public:
     bool IsAtMultiLineFieldEnd(const EditPaM& rPaM);
     static tools::Long GetWrappedFieldExtraHeight(const EditLine& rLine,
                                                   const ExtraPortionInfo* pExtraInfo);
+    static tools::Long GetMultiLineFieldRowLeft(EditLine const& rLine);
+    WrappedFieldRows GetWrappedFieldRows(ParaPortion const& rParaPortion, EditLine const& rLine,
+                                         sal_Int32 nStartIndex, sal_Int32 nEndIndex) const;
 
     EditUndoManager& GetUndoManager()
     {
@@ -1000,6 +1056,7 @@ public:
 
     // Returns the height of the text, excluding empty lines in the end
     tools::Long FormatParagraphs(o3tl::sorted_vector<sal_Int32>& rRepaintParagraphs, bool bIsScaling);
+    tools::Long GetUncountedSpaceBelowLastLine(bool bLeaveOutEmptyAtEnd);
     void ScaleContentToFitWindow(o3tl::sorted_vector<sal_Int32>& rRepaintParagraphs);
     void FormatDoc();
     void FormatFullDoc();
@@ -1062,9 +1119,9 @@ public:
     OString         GetSimpleMarkdown();
     EditPaM         ReadMarkdown(SvStream& rInput, EditSelection aSel);
 
-    std::unique_ptr<EditTextObject> CreateTextObject(sal_Int32 nPara, sal_Int32 nParas);
-    std::unique_ptr<EditTextObject> CreateTextObject();
-    std::unique_ptr<EditTextObject> CreateTextObject(const EditSelection& rSel);
+    EditTextObject CreateTextObject(sal_Int32 nPara, sal_Int32 nParas);
+    EditTextObject CreateTextObject();
+    EditTextObject CreateTextObject(const EditSelection& rSel);
     void            SetText( const EditTextObject& rTextObject );
     EditSelection   InsertText( const EditTextObject& rTextObject, EditSelection aSel );
 
@@ -1149,7 +1206,7 @@ public:
     EditPaM CreateEditPaM( const EPaM& rEPaM )
     {
         DBG_ASSERT( rEPaM.nPara < maEditDoc.Count(), "CreateEditPaM: invalid paragraph" );
-        DBG_ASSERT(maEditDoc.GetObject(rEPaM.nPara)->Len() >= rEPaM.nIndex, "CreateEditPaM: invalid Index");
+        DBG_ASSERT(maEditDoc.GetObject(rEPaM.nPara).Len() >= rEPaM.nIndex, "CreateEditPaM: invalid Index");
         return EditPaM(maEditDoc.GetObject(rEPaM.nPara), rEPaM.nIndex);
     }
 
@@ -1208,13 +1265,13 @@ public:
     EditView*           GetActiveView() const   { return mpActiveView; }
     void                SetActiveView( EditView* pView );
 
-    css::uno::Reference< css::linguistic2::XSpellChecker > const &
+    cpo::uno::Reference< css::linguistic2::XSpellChecker > const &
                         GetSpeller();
-    void                SetSpeller( css::uno::Reference< css::linguistic2::XSpellChecker > const &xSpl )
+    void                SetSpeller( cpo::uno::Reference< css::linguistic2::XSpellChecker > const &xSpl )
                             { mxSpeller = xSpl; }
-    const css::uno::Reference< css::linguistic2::XHyphenator >&
+    const cpo::uno::Reference< css::linguistic2::XHyphenator >&
                         GetHyphenator() const { return mxHyphenator; }
-    void                SetHyphenator( css::uno::Reference< css::linguistic2::XHyphenator > const &xHyph )
+    void                SetHyphenator( cpo::uno::Reference< css::linguistic2::XHyphenator > const &xHyph )
                             { mxHyphenator = xHyph; }
 
     void GetAllMisspellRanges( std::vector<editeng::MisspellRanges>& rRanges ) const;
@@ -1234,9 +1291,9 @@ public:
     EESpellState        HasSpellErrors();
     void                ClearSpellErrors();
     /// Bring the WrongList of the input content node up to date synchronously, skipping view invalidation.
-    void EnsureWrongListForPaint(ContentNode* pNode);
+    void EnsureWrongListForPaint(ContentNode& rNode);
     EESpellState        StartThesaurus(EditView* pEditView, weld::Widget* pDialogParent);
-    css::uno::Reference< css::linguistic2::XSpellAlternatives >
+    cpo::uno::Reference< css::linguistic2::XSpellAlternatives >
                         ImpSpell( EditView* pEditView );
 
     // text conversion functions
@@ -1253,7 +1310,7 @@ public:
     bool                IsInputSequenceCheckingRequired( sal_Unicode nChar, const EditSelection& rCurSel ) const;
 
     //find the next error within the given selection - forward only!
-    css::uno::Reference< css::linguistic2::XSpellAlternatives >
+    cpo::uno::Reference< css::linguistic2::XSpellAlternatives >
                         ImpFindNextError(EditSelection& rSelection);
     //spell and return a sentence
     bool                SpellSentence(EditView const & rView, svx::SpellPortions& rToFill );
@@ -1265,12 +1322,12 @@ public:
     void                AddPortionIterated(
                           EditView const & rEditView,
                           const EditSelection &rSel,
-                          const css::uno::Reference< css::linguistic2::XSpellAlternatives >& xAlt,
+                          const cpo::uno::Reference< css::linguistic2::XSpellAlternatives >& xAlt,
                           svx::SpellPortions& rToFill);
     //adds one portion to the SpellPortions
     void                AddPortion(
                             const EditSelection &rSel,
-                            const css::uno::Reference< css::linguistic2::XSpellAlternatives >& xAlt,
+                            const cpo::uno::Reference< css::linguistic2::XSpellAlternatives >& xAlt,
                             svx::SpellPortions& rToFill,
                             bool bIsField );
 
@@ -1280,13 +1337,13 @@ public:
     bool                    HasText( const SvxSearchItem& rSearchItem );
 
     const SvxNumberFormat * GetNumberFormat( const ContentNode* pNode ) const;
-    sal_Int32               GetSpaceBeforeAndMinLabelWidth( const ContentNode *pNode, sal_Int32 *pnSpaceBefore = nullptr, sal_Int32 *pnMinLabelWidth = nullptr ) const;
+    sal_Int32               GetSpaceBeforeAndMinLabelWidth( const ContentNode& rpNode, sal_Int32 *pnSpaceBefore = nullptr, sal_Int32 *pnMinLabelWidth = nullptr ) const;
 
-    const SvxLRSpaceItem&   GetLRSpaceItem( ContentNode* pNode );
+    const SvxLRSpaceItem&   GetLRSpaceItem( ContentNode& rNode );
     SvxAdjust               GetJustification( sal_Int32 nPara ) const;
     SvxCellJustifyMethod    GetJustifyMethod( sal_Int32 nPara ) const;
     SvxCellVerJustify       GetVerJustification( sal_Int32 nPara ) const;
-    SvxFontUnitMetrics GetFontUnitMetrics(ContentNode* pNode);
+    SvxFontUnitMetrics      GetFontUnitMetrics(ContentNode& rNode);
 
     void setScalingParameters(ScalingParameters const& rScalingParameters);
 
@@ -1334,8 +1391,8 @@ public:
     const Link<EditView*,void>&  GetEndDropHdl() const { return maEndDropHdl; }
 
     /// specifies if auto-correction should capitalize the first word or not (default is on)
-    void SetFirstWordCapitalization( bool bCapitalize ) { mbFirstWordCapitalization = bCapitalize; }
-    bool IsFirstWordCapitalization() const { return mbFirstWordCapitalization; }
+    void SetCapitalizeSentenceStart( bool bCapitalize ) { mbCapitalizeSentenceStart = bCapitalize; }
+    bool IsCapitalizeSentenceStart() const { return mbCapitalizeSentenceStart; }
 
     /** specifies if auto-correction should replace a leading single quotation
         mark (apostrophe) or not (default is on) */
@@ -1394,10 +1451,13 @@ public:
     Size getTopLeftDocOffset(const tools::Rectangle& rect) const;
 
     void SetDefTab( sal_uInt16 nDefTab );
+    void SetIgnoreBreakAfterMultilineField(bool b) { mbIgnoreBreakAfterMultilineField = b; }
 
     bool PostKeyEvent( const KeyEvent& rKeyEvent, EditView* pEditView, vcl::Window const * pFrameWin );
     static bool IsSimpleCharInput( const KeyEvent& rKeyEvent );
     void RemoveParagraph( sal_Int32 nPara );
+
+    Outliner* GetOwner() { return mpOwner; }
 
 #ifdef DBG_UTIL
     void DumpData(bool bInfoBox);

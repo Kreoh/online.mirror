@@ -53,11 +53,11 @@ namespace svxform
                 if <arg>_rxManager</arg> is <NULL/>
             @throws css::lang::DisposedException
                 if the instance is already disposed
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if attaching as script listener to the manager fails with a RuntimeException itself
         */
         void registerEventAttacherManager(
-            const css::uno::Reference< css::script::XEventAttacherManager >& _rxManager );
+            const cpo::uno::Reference< css::script::XEventAttacherManager >& _rxManager );
 
         /** registers an XEventAttacherManager whose events should not be monitored and handled anymore
 
@@ -68,11 +68,11 @@ namespace svxform
                 if <arg>_rxManager</arg> is <NULL/>
             @throws css::lang::DisposedException
                 if the instance is already disposed
-            @throws css::uno::RuntimeException
+            @throws cpo::uno::RuntimeException
                 if removing as script listener from the manager fails with a RuntimeException itself
         */
         void revokeEventAttacherManager(
-            const css::uno::Reference< css::script::XEventAttacherManager >& _rxManager );
+            const cpo::uno::Reference< css::script::XEventAttacherManager >& _rxManager );
 
         /** disposes the scripting environment instance
         */
@@ -84,7 +84,7 @@ namespace svxform
         FmFormModel&            m_rFormModel;
         bool                    m_bDisposed;
 
-        void impl_registerOrRevoke_throw( const css::uno::Reference< css::script::XEventAttacherManager >& _rxManager, bool _bRegister );
+        void impl_registerOrRevoke_throw( const cpo::uno::Reference< css::script::XEventAttacherManager >& _rxManager, bool _bRegister );
         // callback for FormScriptListener
         void doFireScriptEvent( const css::script::ScriptEvent& _rEvent, cpo::uno::Any* _pSynchronousResult );
 

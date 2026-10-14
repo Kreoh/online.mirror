@@ -23,6 +23,7 @@
 #include <editeng/boxitem.hxx>
 #include <sfx2/app.hxx>
 #include <comphelper/kit.hxx>
+#include <o3tl/sorted_vector.hxx>
 #include <osl/diagnose.h>
 
 #include <undoblk.hxx>
@@ -65,17 +66,33 @@
 
 namespace
 {
-/** Refresh the header row to update ScMF::Auto flags. */
-void refreshAutoFilterForColumnChange(ScDocument& rDocument, SCTAB nTab)
+/** Note the header row of a range that carries AutoFilter buttons. */
+void collectAutoFilterHeaderRow(const ScDBData* pDBData, SCTAB nTab,
+                                o3tl::sorted_vector<SCROW>& rHeaderRows)
 {
-    ScDBData* pDBData = rDocument.GetAnonymousDBData(nTab);
     if (!pDBData || !pDBData->HasAutoFilter())
         return;
 
     ScRange aRange;
     pDBData->GetArea(aRange);
+    if (aRange.aStart.Tab() == nTab)
+        rHeaderRows.insert(aRange.aStart.Row());
+}
+
+/** Refresh the header rows to update ScMF::Auto flags. */
+void refreshAutoFilterForColumnChange(ScDocument& rDocument, SCTAB nTab)
+{
+    o3tl::sorted_vector<SCROW> aHeaderRows;
+    collectAutoFilterHeaderRow(rDocument.GetAnonymousDBData(nTab), nTab, aHeaderRows);
+    if (const ScDBCollection* pDBs = rDocument.GetDBCollection())
+    {
+        for (const auto& rxDB : pDBs->getNamedDBs())
+            collectAutoFilterHeaderRow(rxDB.get(), nTab, aHeaderRows);
+    }
+
     // Scan the full header row as stale flags may be outside the range.
-    rDocument.RefreshAutoFilter(0, aRange.aStart.Row(),  rDocument.MaxCol(), aRange.aStart.Row(), nTab);
+    for (const SCROW nHeaderRow : aHeaderRows)
+        rDocument.RefreshAutoFilter(0, nHeaderRow, rDocument.MaxCol(), nHeaderRow, nTab);
 }
 } // end anonymous namespace
 
@@ -608,13 +625,14 @@ void ScUndoDeleteCells::Undo()
 
     // Now that DBData have been restored in ScMoveUndo::EndUndo() via its
     // pRefUndoDoc we can apply the AutoFilter buttons.
-    // Add one row for cases undoing deletion right above a cut AutoFilter
-    // range so the buttons are removed.
-    SCROW nRefreshEndRow = std::min<SCROW>( aEffRange.aEnd.Row() + 1, rDoc.MaxRow());
+    // The re-inserted cells push every database range below the deletion down - its
+    // header (carrying the AutoFilter buttons) rides along - so reconcile the buttons
+    // over the full column height, not just the deleted band, otherwise the buttons of
+    // a range further below are left shifted down instead of back on its header.
     for (SCTAB i=0; i < nCount; ++i)
     {
         rDoc.RefreshAutoFilter( aEffRange.aStart.Col(), aEffRange.aStart.Row(),
-                aEffRange.aEnd.Col(), nRefreshEndRow, pTabs[i]);
+                aEffRange.aEnd.Col(), rDoc.MaxRow(), pTabs[i]);
     }
 
     SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScAreaLinksChanged ) );
@@ -648,7 +666,7 @@ void ScUndoDeleteCells::Redo()
     for (SCTAB i=0; i < nCount; ++i)
     {
         rDoc.RefreshAutoFilter( aEffRange.aStart.Col(), aEffRange.aStart.Row(),
-                aEffRange.aEnd.Col(), aEffRange.aEnd.Row(), pTabs[i]);
+                aEffRange.aEnd.Col(), rDoc.MaxRow(), pTabs[i]);
     }
 
     SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScAreaLinksChanged ) );

@@ -44,7 +44,7 @@ class NavigatorPanel extends SidebarBase {
 		this.map.on('focussearch', this.focusSearch, this);
 		this.map.on('editorgotfocus', this.markSearchResultsStale, this);
 		this.navigationPanel = document.getElementById(`navigation-sidebar`);
-		this.navigationPanel.setAttribute('aria-label', _('Navigation Panel'));
+		this.navigationPanel.setAttribute('aria-label', _('Navigator'));
 		this.navigationPanel.setAttribute('tabindex', '-1');
 
 		this.floatingNavIcon = document.getElementById(`navigator-floating-icon`);
@@ -57,11 +57,7 @@ class NavigatorPanel extends SidebarBase {
 		this.quickFindWrapper = this.navigationPanel.querySelector(
 			'#quickfind-dock-wrapper',
 		);
-		this.map.on(
-			'zoomend',
-			this.handleFloatingButtonVisibilityOnZoomChange,
-			this,
-		);
+		this.map.on('zoomend', this.updateFloatingButtonVisibility, this);
 	}
 
 	onRemove() {
@@ -160,7 +156,7 @@ class NavigatorPanel extends SidebarBase {
 		const clickFunction = function () {
 			this.closeNavigation();
 			if (app.showNavigator) {
-				app.map.sendUnoCommand('.uno:Navigator');
+				app.map.sendUnoCommand('.uno:Navigator?Navigator:bool=false');
 			}
 			app.map.focus();
 		}.bind(this);
@@ -314,16 +310,12 @@ class NavigatorPanel extends SidebarBase {
 		this.expandButton = button;
 		const expanded =
 			this.map.paneExpander && this.map.paneExpander.getMode() === 'expanded';
-		const expandText = _('Maximize to grid');
-		button.setAttribute('aria-label', expandText);
-		button.setAttribute('aria-pressed', expanded ? 'true' : 'false');
-		button.setAttribute('data-cooltip', expandText);
 		button.setAttribute('tabindex', '0');
 		window.L.control.attachTooltipEventListener(button, this.map);
 
 		const img = window.L.DomUtil.create('img', '', button);
 		img.alt = '';
-		PaneExpander.setToggleIcon(button, expanded);
+		PaneExpander.setToggleState(button, expanded);
 
 		button.addEventListener('click', () => {
 			if (this.map.paneExpander) this.map.paneExpander.toggle();
@@ -371,7 +363,7 @@ class NavigatorPanel extends SidebarBase {
 						this.focusNavigationItem();
 					});
 				} else {
-					app.map.sendUnoCommand('.uno:Navigator');
+					app.map.sendUnoCommand('.uno:Navigator?Navigator:bool=true');
 					this.focusSearch();
 				}
 			}.bind(this),
@@ -388,7 +380,7 @@ class NavigatorPanel extends SidebarBase {
 		}
 
 		this.builder.setWindowId(windowId);
-		this.container.innerHTML = '';
+		this.container.replaceChildren();
 
 		if (navigatorData.action === 'close') {
 			this.closeSidebar();
@@ -493,23 +485,30 @@ class NavigatorPanel extends SidebarBase {
 			this.navigatorDockWrapper.style.display = 'none';
 			this.quickFindWrapper.style.display = 'none';
 		} else if (tabId === 'tab-navigator') {
-			if (!app.showNavigator) app.map.sendUnoCommand('.uno:Navigator');
+			if (!app.showNavigator)
+				app.map.sendUnoCommand('.uno:Navigator?Navigator:bool=true');
 			this.presentationControlsWrapper.style.display = 'none';
 			this.navigatorDockWrapper.style.display = 'block';
 			this.quickFindWrapper.style.display = 'none';
 		} else if (tabId === 'tab-quick-find') {
-			if (!app.showQuickFind) app.map.sendUnoCommand('.uno:QuickFind'); // todo add showQuickFind to other areas of app
+			if (!app.showQuickFind)
+				app.map.sendUnoCommand('.uno:QuickFind?QuickFind:bool=true'); // todo add showQuickFind to other areas of app
 			this.presentationControlsWrapper.style.display = 'none';
 			this.navigatorDockWrapper.style.display = 'none';
 			this.quickFindWrapper.style.display = 'block';
 		}
 	}
 
-	handleFloatingButtonVisibilityOnZoomChange() {
+	updateFloatingButtonVisibility() {
+		// While the panes are maximized they cover the document, so the button shows at
+		// any zoom.
+		const documentCovered =
+			this.map.paneExpander && this.map.paneExpander.getMode() === 'expanded';
 		// Handle special case for impress as the view there is landscape so better to hide Floating Nav ICON on lower zoom compare to other app
 		if (
-			this.map.getZoom() > 14 ||
-			(this.map.getZoom() >= 13 && this.map.getDocType() === 'presentation')
+			!documentCovered &&
+			(this.map.getZoom() > 14 ||
+				(this.map.getZoom() >= 13 && this.map.getDocType() === 'presentation'))
 		) {
 			this.floatingNavIcon.classList.remove('visible');
 		} else if (!this.navigationPanel.classList.contains('visible')) {
@@ -536,7 +535,7 @@ class NavigatorPanel extends SidebarBase {
 	}
 
 	requestShow() {
-		app.socket.sendMessage('uno .uno:Navigator');
+		app.socket.sendMessage('uno .uno:Navigator?Navigator:bool=true');
 	}
 
 	showNavigationPanel(setFocus: boolean) {
@@ -605,7 +604,7 @@ class NavigatorPanel extends SidebarBase {
 		app.layoutingService.appendLayoutingTask(() => {
 			this.navigationPanel.classList.remove('visible');
 			this.floatingNavIcon.classList.add('visible');
-			this.handleFloatingButtonVisibilityOnZoomChange(); // on close panel we should check if we can display nav icon or not based on zoom level
+			this.updateFloatingButtonVisibility(); // on close panel we should check if we can display nav icon or not based on zoom level
 		});
 	}
 

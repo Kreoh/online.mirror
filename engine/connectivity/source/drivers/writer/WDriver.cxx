@@ -26,13 +26,14 @@
 
 using namespace connectivity::file;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace connectivity::writer
 {
 OUString ODriver::getImplementationName() { return u"com.sun.star.comp.sdbc.writer.ODriver"_ustr; }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-connectivity_writer_ODriver(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+connectivity_writer_ODriver(cpo::uno::XComponentContext* context,
                             cpo::uno::Sequence<cpo::uno::Any> const& /*rArguments*/)
 {
     try

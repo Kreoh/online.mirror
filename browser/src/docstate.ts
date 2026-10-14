@@ -55,8 +55,7 @@
 		otherCellCursors: {},
 		splitCoordinate: null, // SimplePoint.
 		partHashes: null, // hashes used to distinguish parts (we use sheet name)
-		autoFilterCell: null, // The cell of the current autofilter popup.
-		pivotTableFilterCell: null, // The cell of the current pivot table filter popup.
+		filterPopupCell: null, // The cell a filter popup belongs to: { popupId, column, row }.
 		partWithActiveSheetView: -1, // Default part index with an active sheet view, or -1 if none.
 	},
 	impress: {
@@ -92,7 +91,7 @@
 	accessibilityState: false, // If accessibility was enabled by user
 	UI: {
 		language: {
-			fromURL: (window as any).langParam, // This is set in global.js.
+			fromURL: window.langParam, // This is set in global.js.
 			fromBrowser: window.L.Browser.lang, // Again in global.js.
 			notebookbarAccessibility: null,
 		},
@@ -102,6 +101,7 @@
 	file: {
 		editComment: false,
 		allowManageRedlines: false,
+		reviewMode: false, // Review mode: editing with change recording on.
 		readOnly: true,
 		permission: 'readonly',
 		modified: false, // Whether the document currently has unsaved changes.
@@ -121,7 +121,6 @@
 		writer: {
 			pageRectangleList: [], // Array of arrays: [x, y, w, h] (as usual) // twips only. Pixels will be calculated on the fly. Corresponding pixels may change too often.
 		},
-		exportFormats: [], // possible output formats
 		viewModeExtensions: '',
 	},
 	following: {
@@ -132,7 +131,8 @@
 	tile: {
 		size: null, // SimplePoint.
 	},
-	socket: (window as any).app.socket,
+	exportFormats: [], // formats the document can be exported to, see ExportFormats.ts
+	socket: window.app.socket,
 	console: window.app.console,
 
 	// Below 2 are related to document. I guess we can move these into "file" property.
@@ -301,7 +301,8 @@
 		DocumentColors: { name: _('Document colors'), colors: [] },
 	},
 	tableStyles: null, // TableStylesService
-	impressTableStyles: null, // ImpressTableStylesService
+	tableStyleGallery: null, // TableStyleGalleryService
+	onboardingTour: null, // OnboardingTourController, the tour that introduces the screen
 	colorLastSelection: {}, // last used colors for uno commands
 
 	serverAudit: null, // contains list of warnings / errors detected on the server instance
@@ -357,5 +358,5 @@ if (activateValidation) {
 	window.app.file = new Proxy(window.app.file, validator);
 }
 
-(window as any).JSDialog = { verbose: false }; // initialize jsdialog module
-(window as any).SlideShow = {}; // initialize slideshow module
+window.JSDialog = { verbose: false }; // initialize jsdialog module
+window.SlideShow = {}; // initialize slideshow module

@@ -85,6 +85,7 @@
 #include <unotxdoc.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace i18n::ScriptType;
 
 // This is (meant to be) functionally equivalent to 'delete m_pNext' where
@@ -923,7 +924,7 @@ static Color getBookmarkColor(const SwTextNode& rNode, sw::mark::Bookmark* pBook
         {
             rtl::Reference<SwXTextDocument> xModel = pShell->GetBaseModel();
 
-            static uno::Reference< uno::XComponentContext > xContext(
+            static uno::Reference< cpo::uno::XComponentContext > xContext(
                 ::comphelper::getProcessComponentContext());
 
             static uno::Reference< rdf::XURI > xODF_SHADING(
@@ -932,7 +933,7 @@ static Color getBookmarkColor(const SwTextNode& rNode, sw::mark::Bookmark* pBook
             const uno::Reference<rdf::XRepository> xRepository =
                 xModel->getRDFRepository();
             const uno::Reference<container::XEnumeration> xEnum(
-                xRepository->getStatements(css::uno::Reference<css::rdf::XResource>(xRef), xODF_SHADING, nullptr), uno::UNO_SET_THROW);
+                xRepository->getStatements(cpo::uno::Reference<css::rdf::XResource>(xRef), xODF_SHADING, nullptr), uno::UNO_SET_THROW);
 
             rdf::Statement stmt;
             if ( xEnum->hasMoreElements() && (xEnum->nextElement() >>= stmt) )
@@ -961,7 +962,7 @@ static OUString getBookmarkType(const SwTextNode& rNode, sw::mark::Bookmark* pBo
         const rtl::Reference< SwXBookmark > xRef = SwXBookmark::CreateXBookmark(rDoc, pBookmark);
         if (const SwDocShell* pShell = rDoc.GetDocShell())
         {
-            static uno::Reference< uno::XComponentContext > xContext(
+            static uno::Reference< cpo::uno::XComponentContext > xContext(
                 ::comphelper::getProcessComponentContext());
 
             static uno::Reference< rdf::XURI > xODF_PREFIX(
@@ -972,7 +973,7 @@ static OUString getBookmarkType(const SwTextNode& rNode, sw::mark::Bookmark* pBo
             const uno::Reference<rdf::XRepository> xRepository =
                 xDocumentMetadataAccess->getRDFRepository();
             const uno::Reference<container::XEnumeration> xEnum(
-                xRepository->getStatements(css::uno::Reference<css::rdf::XResource>(xRef), xODF_PREFIX, nullptr), uno::UNO_SET_THROW);
+                xRepository->getStatements(cpo::uno::Reference<css::rdf::XResource>(xRef), xODF_PREFIX, nullptr), uno::UNO_SET_THROW);
 
             rdf::Statement stmt;
             if ( xEnum->hasMoreElements() && (xEnum->nextElement() >>= stmt) )

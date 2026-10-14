@@ -38,19 +38,19 @@ class ProgressBarWrapper final : public UIElementWrapperBase
         virtual ~ProgressBarWrapper() override;
 
         // public interfaces
-        void setStatusBar( const css::uno::Reference< css::awt::XWindow >& rStatusBar, bool bOwnsInstance = false );
-        css::uno::Reference< css::awt::XWindow > getStatusBar() const;
+        void setStatusBar( const cpo::uno::Reference< css::awt::XWindow >& rStatusBar, bool bOwnsInstance = false );
+        cpo::uno::Reference< css::awt::XWindow > getStatusBar() const;
 
         // wrapped methods of css::task::XStatusIndicator
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void start( const OUString& Text, ::sal_Int32 Range );
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void end();
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setText( const OUString& Text );
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setValue( ::sal_Int32 Value );
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void reset();
 
         // UNO interfaces
@@ -64,13 +64,13 @@ class ProgressBarWrapper final : public UIElementWrapperBase
         virtual void update() override;
 
         // XUIElement
-        virtual css::uno::Reference< css::uno::XInterface > getRealInterface() override;
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getRealInterface() override;
 
     //  variables
     //  (should be private everyway!)
 
     private:
-        css::uno::Reference< css::awt::XWindow >         m_xStatusBar;    // Reference to our status bar XWindow
+        cpo::uno::Reference< css::awt::XWindow >         m_xStatusBar;    // Reference to our status bar XWindow
         unotools::WeakReference< StatusIndicatorInterfaceWrapper >  m_xProgressBarIfacWrapper;
         bool                                             m_bOwnsInstance; // Indicator that we are owner of the XWindow
         sal_Int32                                        m_nRange;

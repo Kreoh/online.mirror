@@ -18,13 +18,14 @@
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace sc_apitest
 {
@@ -33,7 +34,7 @@ class ScIndexEnumeration_ScenariosEnumeration : public UnoApiTest, public apites
 public:
     ScIndexEnumeration_ScenariosEnumeration();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScIndexEnumeration_ScenariosEnumeration);
@@ -50,7 +51,7 @@ ScIndexEnumeration_ScenariosEnumeration::ScIndexEnumeration_ScenariosEnumeration
 {
 }
 
-uno::Reference<uno::XInterface> ScIndexEnumeration_ScenariosEnumeration::init()
+uno::Reference<cpo::uno::XInterface> ScIndexEnumeration_ScenariosEnumeration::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_MESSAGE("no calc document", xDoc.is());

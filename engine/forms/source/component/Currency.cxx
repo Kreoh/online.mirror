@@ -32,7 +32,7 @@
 namespace frm
 {
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -130,7 +130,7 @@ OCurrencyModel::~OCurrencyModel()
 
 // XCloneable
 
-css::uno::Reference< css::util::XCloneable > OCurrencyModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OCurrencyModel::createClone()
 {
     rtl::Reference<OCurrencyModel> pClone = new OCurrencyModel(this, getContext());
     pClone->clonedFrom(this);
@@ -234,15 +234,15 @@ void OCurrencyModel::resetNoBroadcast()
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OCurrencyModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OCurrencyModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OCurrencyModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OCurrencyControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OCurrencyControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OCurrencyControl(component));

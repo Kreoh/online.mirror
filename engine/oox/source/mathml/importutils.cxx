@@ -24,6 +24,7 @@
 #define CLOSING( token ) XML_STREAM_CLOSING( token )
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace oox::formulaimport
 {
@@ -310,6 +311,23 @@ void XmlStream::handleUnexpectedTag()
         return;
     }
     skipElementInternal( currentToken(), false ); // otherwise skip the entire element
+}
+
+std::vector<OUString> XmlStream::tagAttributesWithin( int nEnclosingToken, int nTagToken,
+    int nAttributeToken ) const
+{
+    std::vector<OUString> aValues;
+    int nDepth = 0;
+    for( const Tag& rTag : tags )
+    {
+        if( rTag.token == OPENING( nEnclosingToken ))
+            ++nDepth;
+        else if( rTag.token == CLOSING( nEnclosingToken ))
+            --nDepth;
+        else if( nDepth > 0 && rTag.token == OPENING( nTagToken ))
+            aValues.push_back( rTag.attribute( nAttributeToken ));
+    }
+    return aValues;
 }
 
 void XmlStreamBuilder::appendOpeningTag( int token, const uno::Reference< xml::sax::XFastAttributeList >& attrs )

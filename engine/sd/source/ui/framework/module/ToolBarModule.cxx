@@ -34,7 +34,7 @@
 #include <comphelper/processfactory.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 using ::sd::framework::FrameworkHelper;
@@ -232,7 +232,7 @@ void ToolBarModule::UpdateToolbars(const ViewShell* pViewShell)
     }
 }
 
-void SAL_CALL ToolBarModule::disposing (const lang::EventObject& rEvent)
+void ToolBarModule::disposing (const lang::EventObject& rEvent)
 {
     if (mxConfigurationController.is()
         && rEvent.Source == cppu::getXWeak(mxConfigurationController.get()))

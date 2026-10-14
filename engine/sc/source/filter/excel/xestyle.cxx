@@ -37,6 +37,7 @@
 #include <editeng/fontitem.hxx>
 #include <editeng/justifyitem.hxx>
 #include <editeng/langitem.hxx>
+#include <svx/pageitem.hxx>
 #include <document.hxx>
 #include <stlpool.hxx>
 #include <stlsheet.hxx>
@@ -49,6 +50,7 @@
 #include <conditio.hxx>
 #include <dbdata.hxx>
 #include <tablestyle.hxx>
+#include <ftools.hxx>
 #include <filterentries.hxx>
 #include <export/ExportTools.hxx>
 #include <dpobject.hxx>
@@ -2174,6 +2176,21 @@ void XclExpXF::Init( const SfxItemSet& rItemSet, sal_Int16 nScript,
         mbFontUsed = true;
     }
 
+    // A style that does not apply a font still defines one, which decides whether a table style
+    // may paint over the font of its cells, see ScPatternAttr::CanApplyTableItemToCell. The font
+    // that such a style inherits does not count as its own then.
+    if (IsStyleXF())
+    {
+        const SvxSetItem* pExcludedFont = rItemSet.GetItemIfSet(ATTR_EXCLUDED_FONT, false);
+        if (pExcludedFont && !XclExpFontHelper::CheckItems(GetRoot(), rItemSet, nScript, false))
+        {
+            SfxItemSet aExcludedFont(pExcludedFont->GetItemSet());
+            aExcludedFont.SetParent(&rItemSet);
+            mnXclFont = GetFontBuffer().Insert(aExcludedFont, nScript, EXC_COLOR_CELLTEXT, false);
+            mbFontUsed = false;
+        }
+    }
+
     // number format
     if (nForceScNumFmt != NUMBERFORMAT_ENTRY_NOT_FOUND)
         mnScNumFmt = nForceScNumFmt;
@@ -3397,15 +3414,20 @@ XclExpXmlTableStyle::XclExpXmlTableStyle(const XclExpRoot& rRoot, const ScTableS
     }
 }
 
-const std::map<ScTableStyleElement, const char*> aTableStyleElementToOOXML = { {ScTableStyleElement::WholeTable, "wholeTable"}, {ScTableStyleElement::FirstColumnStripe, "firstColumnStripe"}, {ScTableStyleElement::SecondColumnStripe, "secondColumnStripe"}, {ScTableStyleElement::FirstRowStripe, "firstRowStripe"}, {ScTableStyleElement::SecondRowStripe, "secondRowStripe"}, {ScTableStyleElement::LastColumn, "lastColumn"}, {ScTableStyleElement::FirstColumn, "firstColumn"}, {ScTableStyleElement::HeaderRow, "headerRow"}, {ScTableStyleElement::TotalRow, "totalRow"}, {ScTableStyleElement::FirstHeaderCell, "firstHeaderCell"}, {ScTableStyleElement::LastHeaderCell, "lastHeaderCell"} };
-
 void XclExpXmlTableStyle::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& rStyleSheet = rStrm.GetCurrentStream();
     rStyleSheet->startElement( XML_tableStyle, XML_count, OString::number(maTableElements.size()), XML_name, maStyleName.toUtf8());
     for (auto& rTableStyleElement : maTableElements)
     {
-        rStyleSheet->singleElement( XML_tableStyleElement, XML_dxfId, OString::number(rTableStyleElement.second), XML_type, aTableStyleElementToOOXML.find(rTableStyleElement.first)->second);
+        const char* pElementType = ScfTools::GetTableStyleElementOOXMLName(rTableStyleElement.first);
+        if (!pElementType)
+        {
+            SAL_WARN("sc", "XclExpXmlTableStyle::SaveXml - unknown Table Style Element");
+            continue;
+        }
+
+        rStyleSheet->singleElement( XML_tableStyleElement, XML_dxfId, OString::number(rTableStyleElement.second), XML_type, pElementType);
     }
     rStyleSheet->endElement(XML_tableStyle);
 }
@@ -3430,6 +3452,15 @@ XclExpXmlTableStyles::XclExpXmlTableStyles( const XclExpRoot& rRoot):
         }
     }
 
+    // The built-in styles are recreated from code on load, so only their name
+    // needs to survive; custom styles carry their own definition, so write every
+    // custom style even when no table currently uses it.
+    for (const ScTableStyle* pTableStyle : pTableStyles->GetSortedTableStyles())
+    {
+        if (!pTableStyle->IsOOXMLDefault())
+            aTableStyleNames.insert(pTableStyle->GetName());
+    }
+
     for (const OUString& aTableStyleName : aTableStyleNames)
     {
         const ScTableStyle* pTableStyle = pTableStyles->GetTableStyle(aTableStyleName);
@@ -3440,10 +3471,27 @@ XclExpXmlTableStyles::XclExpXmlTableStyles( const XclExpRoot& rRoot):
 void XclExpXmlTableStyles::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& rStyleSheet = rStrm.GetCurrentStream();
-    if (maTableStyles.empty())
+
+    OUString aDefaultStyle;
+    if (const ScTableStyles* pTableStyles = GetDoc().GetTableStyles())
+        aDefaultStyle = pTableStyles->GetDefaultStyleName();
+
+    // Record the document default so it survives a round-trip and applies to
+    // tables inserted after reload. When no table uses a style and the default
+    // is still the built-in one, write nothing, matching the previous output.
+    const bool bNonBuiltInDefault
+        = !aDefaultStyle.isEmpty() && aDefaultStyle != u"TableStyleMedium2";
+    if (maTableStyles.empty() && !bNonBuiltInDefault)
         return;
 
-    rStyleSheet->startElement( XML_tableStyles, XML_count, OString::number(maTableStyles.size()) );
+    // Only emit the attribute for a changed default, so the built-in case keeps
+    // the previous output byte for byte.
+    std::optional<OString> aDefaultAttr
+        = bNonBuiltInDefault ? std::optional<OString>(aDefaultStyle.toUtf8()) : std::nullopt;
+
+    rStyleSheet->startElement( XML_tableStyles,
+                               XML_count, OString::number(maTableStyles.size()),
+                               XML_defaultTableStyle, aDefaultAttr );
     for (auto& rTableStyleElement : maTableStyles)
     {
         rTableStyleElement->SaveXml(rStrm);

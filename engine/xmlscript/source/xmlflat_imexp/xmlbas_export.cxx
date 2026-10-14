@@ -24,10 +24,9 @@
 #include <xmlscript/xmlns.h>
 #include <xmlscript/xml_helper.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/script/XLibraryContainer2.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/xml/sax/SAXException.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -35,7 +34,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace xmlscript
@@ -132,7 +131,7 @@ bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /*aDe
                 m_xHandler->ignorableWhitespace( OUString() );
                 m_xHandler->startElement( aLibContElementName, pLibContElement );
 
-                Reference< script::XLibraryContainer2 > xLibContainer;
+                Reference< script::XLibraryContainer > xLibContainer;
 
                 // try the XEmbeddedScripts interface
                 Reference< document::XEmbeddedScripts > xDocumentScripts( m_xModel, UNO_QUERY );
@@ -207,8 +206,7 @@ bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /*aDe
                                 }
 
                                 // TODO: password protected libraries
-                                Reference< script::XLibraryContainerPassword > xPasswd( xLibContainer, UNO_QUERY );
-                                if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( rLibName ) )
+                                if ( xLibContainer->isLibraryPasswordProtected( rLibName ) )
                                     continue;
 
                                 // <ooo/script:library-embedded...
@@ -358,17 +356,17 @@ bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /*aDe
 
 }   // namespace xmlscript
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_xmlscript_XMLBasicExporter(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new xmlscript::XMLBasicExporter());
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_xmlscript_XMLOasisBasicExporter(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
 

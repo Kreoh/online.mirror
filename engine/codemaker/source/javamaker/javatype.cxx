@@ -230,7 +230,7 @@ SpecialType translateUnoTypeToDescriptor(
             return simpleTypeSpecials[static_cast<int>(sort)];
         }
     case codemaker::UnoType::Sort::Interface:
-        if (nucleus == "com.sun.star.uno.XInterface") {
+        if (nucleus == "cpo.uno.XInterface") {
             if (descriptor != nullptr) {
                 descriptor->append("Ljava/lang/Object;");
             }
@@ -1209,7 +1209,7 @@ sal_uInt16 addLoadLocal(
                 size = 1;
                 break;
             case codemaker::UnoType::Sort::Interface:
-                if (any && nucleus != "com.sun.star.uno.XInterface") {
+                if (any && nucleus != "cpo.uno.XInterface") {
                     code->instrNew("com/sun/star/uno/Any"_ostr);
                     code->instrDup();
                     code->instrNew("cpo/uno/Type"_ostr);
@@ -1570,7 +1570,7 @@ void handleExceptionType(
     if (className == "cpo/uno/Exception") {
         baseException = true;
         superClass = "java/lang/Exception"_ostr;
-    } else if (className == "com/sun/star/uno/RuntimeException") {
+    } else if (className == "cpo/uno/RuntimeException") {
         baseRuntimeException = true;
         superClass = "java/lang/RuntimeException"_ostr;
     } else {
@@ -1592,7 +1592,7 @@ void handleExceptionType(
     if (baseRuntimeException) {
         addField(
             manager, dependencies, cf.get(), &typeInfo, -1,
-            u"com.sun.star.uno.XInterface"_ustr, u"Context"_ustr, index++);
+            u"cpo.uno.XInterface"_ustr, u"Context"_ustr, index++);
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1615,7 +1615,7 @@ void handleExceptionType(
             stack,
             addFieldInit(
                 manager, className, u"Context"_ustr, false,
-                u"com.sun.star.uno.XInterface", dependencies, code.get()));
+                u"cpo.uno.XInterface", dependencies, code.get()));
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1647,7 +1647,7 @@ void handleExceptionType(
             stack,
             addFieldInit(
                 manager, className, u"Context"_ustr, false,
-                u"com.sun.star.uno.XInterface", dependencies, code.get()));
+                u"cpo.uno.XInterface", dependencies, code.get()));
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1685,7 +1685,7 @@ void handleExceptionType(
             stack,
             addFieldInit(
                 manager, className, u"Context"_ustr, false,
-                u"com.sun.star.uno.XInterface", dependencies, code.get()));
+                u"cpo.uno.XInterface", dependencies, code.get()));
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1716,7 +1716,7 @@ void handleExceptionType(
             stack,
             addFieldInit(
                 manager, className, u"Context"_ustr, false,
-                u"com.sun.star.uno.XInterface", dependencies, code.get()));
+                u"cpo.uno.XInterface", dependencies, code.get()));
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1756,7 +1756,7 @@ void handleExceptionType(
             maxSize,
             addDirectArgument(
                 manager, dependencies, &desc1, code.get(), &index2, className,
-                "Context"_ostr, false, u"com.sun.star.uno.XInterface"_ustr));
+                "Context"_ostr, false, u"cpo.uno.XInterface"_ustr));
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1803,7 +1803,7 @@ void handleExceptionType(
             maxSize2,
             addDirectArgument(
                 manager, dependencies, &desc2, code.get(), &index3, className,
-                "Context"_ostr, false, u"com.sun.star.uno.XInterface"_ustr));
+                "Context"_ostr, false, u"cpo.uno.XInterface"_ustr));
     }
     for (std::vector< unoidl::ExceptionTypeEntity::Member >::const_iterator i(
              entity->getDirectMembers().begin());
@@ -1873,7 +1873,7 @@ void handleInterfaceType(
         cf->addInterface("java/util/EventListener"_ostr);
     }
     std::vector< TypeInfo > typeInfo;
-    if (className != "com/sun/star/uno/XInterface") {
+    if (className != "cpo/uno/XInterface") {
         sal_Int32 index = 0;
         for (const unoidl::InterfaceTypeEntity::Attribute& attr : entity->getDirectAttributes())
         {
@@ -2092,12 +2092,12 @@ void addConstructor(
     assert(dependencies != nullptr);
     assert(classFile != nullptr);
     MethodDescriptor desc(manager, dependencies, returnType, nullptr, nullptr);
-    desc.addParameter(u"com.sun.star.uno.XComponentContext", false, false, nullptr);
+    desc.addParameter(u"cpo.uno.XComponentContext", false, false, nullptr);
     std::unique_ptr< ClassFile::Code > code(classFile->newCode());
     code->loadLocalReference(0);
     // stack: context
     code->instrInvokeinterface(
-        "com/sun/star/uno/XComponentContext"_ostr, "getServiceManager"_ostr,
+        "cpo/uno/XComponentContext"_ostr, "getServiceManager"_ostr,
         "()Lcom/sun/star/lang/XMultiComponentFactory;"_ostr, 1);
     // stack: factory
     code->loadStringConstant(unoName);
@@ -2117,7 +2117,7 @@ void addConstructor(
         code->instrInvokeinterface(
             "com/sun/star/lang/XMultiComponentFactory"_ostr,
             "createInstanceWithContext"_ostr,
-            ("(Ljava/lang/String;Lcom/sun/star/uno/XComponentContext;)"
+            ("(Ljava/lang/String;Lcpo/uno/XComponentContext;)"
              "Ljava/lang/Object;"_ostr),
             3);
         tryEnd = code->getPosition();
@@ -2166,7 +2166,7 @@ void addConstructor(
             "com/sun/star/lang/XMultiComponentFactory"_ostr,
             "createInstanceWithArgumentsAndContext"_ostr,
             ("(Ljava/lang/String;[Ljava/lang/Object;"
-             "Lcom/sun/star/uno/XComponentContext;)Ljava/lang/Object;"_ostr),
+             "Lcpo/uno/XComponentContext;)Ljava/lang/Object;"_ostr),
             4);
         tryEnd = code->getPosition();
         // stack: instance
@@ -2177,7 +2177,7 @@ void addConstructor(
     // stack: instance context
     code->instrInvokestatic(
         className, "$castInstance"_ostr,
-        ("(Ljava/lang/Object;Lcom/sun/star/uno/XComponentContext;)"
+        ("(Ljava/lang/Object;Lcpo/uno/XComponentContext;)"
          "Ljava/lang/Object;"_ostr));
     // stack: instance
     code->instrCheckcast(
@@ -2193,7 +2193,7 @@ void addConstructor(
         localIndex = std::max< sal_uInt16 >(localIndex, 2);
         code->storeLocalReference(1);
         // stack: -
-        code->instrNew("com/sun/star/uno/DeploymentException"_ostr);
+        code->instrNew("cpo/uno/DeploymentException"_ostr);
         // stack: ex
         code->instrDup();
         // stack: ex ex
@@ -2210,7 +2210,7 @@ void addConstructor(
         code->loadLocalReference(0);
         // stack: ex ex "..." context
         code->instrInvokespecial(
-            "com/sun/star/uno/DeploymentException"_ostr, "<init>"_ostr,
+            "cpo/uno/DeploymentException"_ostr, "<init>"_ostr,
             "(Ljava/lang/String;Ljava/lang/Object;)V"_ostr);
         // stack: ex
         ClassFile::Code::Position pos2 = code->getPosition();
@@ -2254,9 +2254,9 @@ void handleService(
             codemaker::convertString(entity->getBase()));
         dependencies->insert(entity->getBase());
         dependencies->insert(u"com.sun.star.lang.XMultiComponentFactory"_ustr);
-        dependencies->insert(u"com.sun.star.uno.DeploymentException"_ustr);
+        dependencies->insert(u"cpo.uno.DeploymentException"_ustr);
         dependencies->insert(u"cpo.uno.TypeClass"_ustr);
-        dependencies->insert(u"com.sun.star.uno.XComponentContext"_ustr);
+        dependencies->insert(u"cpo.uno.XComponentContext"_ustr);
         for (const unoidl::SingleInterfaceBasedServiceEntity::Constructor& cons :
                  entity->getConstructors())
         {
@@ -2296,7 +2296,7 @@ void handleService(
             code->branchHere(branch);
             code->instrPop();
             // stack: -
-            code->instrNew("com/sun/star/uno/DeploymentException"_ostr);
+            code->instrNew("cpo/uno/DeploymentException"_ostr);
             // stack: ex
             code->instrDup();
             // stack: ex ex
@@ -2307,7 +2307,7 @@ void handleService(
             code->loadLocalReference(1);
             // stack: ex ex "..." context
             code->instrInvokespecial(
-                "com/sun/star/uno/DeploymentException"_ostr, "<init>"_ostr,
+                "cpo/uno/DeploymentException"_ostr, "<init>"_ostr,
                 "(Ljava/lang/String;Ljava/lang/Object;)V"_ostr);
             // stack: ex
             code->instrAthrow();
@@ -2317,7 +2317,7 @@ void handleService(
                     ClassFile::ACC_PRIVATE | ClassFile::ACC_STATIC
                     | ClassFile::ACC_SYNTHETIC),
                 "$castInstance"_ostr,
-                ("(Ljava/lang/Object;Lcom/sun/star/uno/XComponentContext;)"
+                ("(Ljava/lang/Object;Lcpo/uno/XComponentContext;)"
                  "Ljava/lang/Object;"_ostr),
                 code.get(), std::vector< OString >(), ""_ostr);
         }
@@ -2339,9 +2339,9 @@ void handleSingleton(
     OString unoName(codemaker::convertString(name));
     OString className(
         translateUnoidlEntityNameToJavaFullyQualifiedName(name, "singleton"));
-    dependencies->insert(u"com.sun.star.uno.DeploymentException"_ustr);
+    dependencies->insert(u"cpo.uno.DeploymentException"_ustr);
     dependencies->insert(u"cpo.uno.TypeClass"_ustr);
-    dependencies->insert(u"com.sun.star.uno.XComponentContext"_ustr);
+    dependencies->insert(u"cpo.uno.XComponentContext"_ustr);
     std::unique_ptr< ClassFile > cf(
         new ClassFile(
             static_cast< ClassFile::AccessFlags >(
@@ -2349,14 +2349,14 @@ void handleSingleton(
                 | ClassFile::ACC_SUPER),
             className, "java/lang/Object"_ostr, ""_ostr));
     MethodDescriptor desc(manager, dependencies, entity->getBase(), nullptr, nullptr);
-    desc.addParameter(u"com.sun.star.uno.XComponentContext", false, false, nullptr);
+    desc.addParameter(u"cpo.uno.XComponentContext", false, false, nullptr);
     std::unique_ptr< ClassFile::Code > code(cf->newCode());
     code->loadLocalReference(0);
     // stack: context
     code->loadStringConstant("/singletons/" + unoName);
     // stack: context "..."
     code->instrInvokeinterface(
-        "com/sun/star/uno/XComponentContext"_ostr, "getValueByName"_ostr,
+        "cpo/uno/XComponentContext"_ostr, "getValueByName"_ostr,
         "(Ljava/lang/String;)Ljava/lang/Object;"_ostr, 2);
     // stack: value
     code->instrDup();
@@ -2417,7 +2417,7 @@ void handleSingleton(
     code->branchHere(branch3);
     code->instrPop();
     // stack: -
-    code->instrNew("com/sun/star/uno/DeploymentException"_ostr);
+    code->instrNew("cpo/uno/DeploymentException"_ostr);
     // stack: ex
     code->instrDup();
     // stack: ex ex
@@ -2428,7 +2428,7 @@ void handleSingleton(
     code->loadLocalReference(0);
     // stack: ex ex "..." context
     code->instrInvokespecial(
-        "com/sun/star/uno/DeploymentException"_ostr, "<init>"_ostr,
+        "cpo/uno/DeploymentException"_ostr, "<init>"_ostr,
         "(Ljava/lang/String;Ljava/lang/Object;)V"_ostr);
     // stack: ex
     code->instrAthrow();

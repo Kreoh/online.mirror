@@ -31,24 +31,24 @@ class SwVbaSection : public SwVbaSection_BASE
 {
 private:
     rtl::Reference< SwXTextDocument > mxModel;
-    css::uno::Reference< css::beans::XPropertySet > mxPageProps;
+    cpo::uno::Reference< css::beans::XPropertySet > mxPageProps;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaSection( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                  const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaSection( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                  const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
                   rtl::Reference< SwXTextDocument > xModel,
-                  css::uno::Reference< css::beans::XPropertySet > xProps );
+                  cpo::uno::Reference< css::beans::XPropertySet > xProps );
     virtual ~SwVbaSection() override;
 
     // Attributes
-    virtual bool SAL_CALL getProtectedForForms() override;
-    virtual void SAL_CALL setProtectedForForms( bool _protectedforforms ) override;
+    virtual bool getProtectedForForms() override;
+    virtual void setProtectedForForms( bool _protectedforforms ) override;
 
     // Methods
-    virtual cpo::uno::Any SAL_CALL Headers( const cpo::uno::Any& index ) override;
-    virtual cpo::uno::Any SAL_CALL Footers( const cpo::uno::Any& index ) override;
-    virtual cpo::uno::Any SAL_CALL PageSetup(  ) override;
+    virtual cpo::uno::Any Headers( const cpo::uno::Any& index ) override;
+    virtual cpo::uno::Any Footers( const cpo::uno::Any& index ) override;
+    virtual cpo::uno::Any PageSetup(  ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

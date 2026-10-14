@@ -27,28 +27,28 @@ class SfxUnoDeck final : public cppu::WeakImplHelper<css::ui::XDeck>
 
 public:
 
-    SfxUnoDeck(css::uno::Reference<css::frame::XFrame>, OUString );
+    SfxUnoDeck(cpo::uno::Reference<css::frame::XFrame>, OUString );
 
-    virtual OUString SAL_CALL getId() override;
+    virtual OUString getId() override;
 
-    virtual OUString SAL_CALL  getTitle() override;
-    virtual void SAL_CALL setTitle( const OUString& newTitle ) override;
+    virtual OUString  getTitle() override;
+    virtual void setTitle( const OUString& newTitle ) override;
 
-    virtual bool SAL_CALL isActive() override;
-    virtual void SAL_CALL activate( const bool bActivate ) override;
+    virtual bool isActive() override;
+    virtual void activate( const bool bActivate ) override;
 
-    virtual css::uno::Reference<css::ui::XPanels> SAL_CALL getPanels() override;
+    virtual cpo::uno::Reference<css::ui::XPanels> getPanels() override;
 
-    virtual sal_Int32 SAL_CALL getOrderIndex() override;
-    virtual void SAL_CALL setOrderIndex( const sal_Int32 newOrderIndex ) override;
-    virtual void SAL_CALL moveFirst() override;
-    virtual void SAL_CALL moveLast() override;
-    virtual void SAL_CALL moveUp() override;
-    virtual void SAL_CALL moveDown() override;
+    virtual sal_Int32 getOrderIndex() override;
+    virtual void setOrderIndex( const sal_Int32 newOrderIndex ) override;
+    virtual void moveFirst() override;
+    virtual void moveLast() override;
+    virtual void moveUp() override;
+    virtual void moveDown() override;
 
 private:
 
-    const css::uno::Reference<css::frame::XFrame> xFrame;
+    const cpo::uno::Reference<css::frame::XFrame> xFrame;
     sfx2::sidebar::SidebarController* getSidebarController();
 
     const OUString mDeckId;

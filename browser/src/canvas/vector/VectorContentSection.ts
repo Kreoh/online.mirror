@@ -39,9 +39,12 @@ namespace cool {
 		private _offscreen: HTMLCanvasElement = null;
 		private _offscreenCtx: CanvasRenderingContext2D = null;
 		private _lastRenderKey: string = '';
-		// Part whose pixels are in the offscreen canvas, so a blit reuses
-		// them only for that same part.
-		private _offscreenPart: number = -1;
+		// Id of the page whose pixels are in the offscreen canvas, so a blit
+		// reuses them only for that same page.
+		private _offscreenPart = '';
+		// Part the last draw reported, so the report comes once per page
+		// rather than once per frame.
+		private _reportedPartId = '';
 
 		constructor() {
 			super(app.CSections.VectorContent.name);
@@ -83,12 +86,37 @@ namespace cool {
 			}
 
 			const part = this._docLayer._selectedPart;
-			const cached = RenderManager.requestPart(part);
+			// The mode says which page list the selected part indexes, so a
+			// switch to master view draws the master page at that index.
+			const mode = app.activeDocument.activeModes[0];
+			// The key names the page on screen by where it sits, which is what
+			// the view asks by, so a switch of part or mode reads as a new page.
+			const partId = cool.vectorIndexKey(part, mode);
+			// A page is drawn only once the master it names has arrived too.
+			const cached = RenderManager.isPartDrawable(part, mode)
+				? RenderManager.requestPart(part, mode)
+				: undefined;
+			if (partId !== this._reportedPartId) {
+				this._reportedPartId = partId;
+				window.app.console.log(
+					'vector view: part=' +
+						part +
+						' mode=' +
+						mode +
+						' ' +
+						(cached ? 'objects=' + cached.objects.size : 'not ready'),
+				);
+			}
 			if (!cached) {
 				// Data not ready. Blit the prior frame only when it holds
-				// the part we want, so the view keeps the current part
-				// until its fresh data arrives.
-				if (this._offscreen && this._offscreenPart === part) {
+				// the page now at this index, so the view keeps the current
+				// page until its fresh data arrives.
+				const pageId = RenderManager.partIdAt(part, mode);
+				if (
+					this._offscreen &&
+					pageId !== undefined &&
+					this._offscreenPart === pageId
+				) {
 					this.context.drawImage(this._offscreen, 0, 0);
 				}
 				return;
@@ -106,17 +134,35 @@ namespace cool {
 			const h = this.context.canvas.height;
 			this._ensureOffscreen(w, h);
 
+			// The objects drawn elsewhere are left out of the page, so the drawing is made again
+			// when they change.
 			const renderKey =
-				part + ':' + scale + ':' + offsetX + ':' + offsetY + ':' + w + ':' + h;
+				RenderManager.drawnElsewhereVersion() +
+				':' +
+				cached.partId +
+				':' +
+				scale +
+				':' +
+				offsetX +
+				':' +
+				offsetY +
+				':' +
+				w +
+				':' +
+				h;
 			if (renderKey !== this._lastRenderKey) {
 				this._offscreenCtx.clearRect(0, 0, w, h);
 				this._offscreenCtx.save();
 				this._offscreenCtx.translate(offsetX, offsetY);
 				this._offscreenCtx.scale(scale, scale);
-				RenderManager.renderInto(this._offscreenCtx, cached);
+				RenderManager.renderInto(this._offscreenCtx, cached, {
+					editView: true,
+				});
+				// The view edits the page, so it marks out the placeholders.
+				RenderManager.renderPlaceholderAids(this._offscreenCtx, cached);
 				this._offscreenCtx.restore();
 				this._lastRenderKey = renderKey;
-				this._offscreenPart = part;
+				this._offscreenPart = cached.partId;
 			}
 			this.context.drawImage(this._offscreen, 0, 0);
 		}
@@ -141,7 +187,14 @@ namespace cool {
 			const offsetX = -viewedRectangle.pX1;
 
 			for (let part = topVisible; part <= bottomVisible; part++) {
-				const cached = RenderManager.requestPart(part);
+				// The file-based view scrolls the slides, never a master page. A slide is
+				// drawn once the master it names has arrived too.
+				const cached = RenderManager.isPartDrawable(
+					part,
+					cool.VectorMode.Slides,
+				)
+					? RenderManager.requestPart(part, cool.VectorMode.Slides)
+					: undefined;
 				if (!cached) continue;
 
 				const offsetY = -viewedRectangle.pY1 + part * partHeightPixels;
@@ -149,6 +202,8 @@ namespace cool {
 				this.context.save();
 				this.context.translate(offsetX, offsetY);
 				this.context.scale(scale, scale);
+				// Nobody edits a page in this view, so it draws the page without the
+				// content an editing view adds and without the placeholder outlines.
 				RenderManager.renderInto(this.context, cached);
 				this.context.restore();
 			}

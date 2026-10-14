@@ -25,6 +25,7 @@
 #include <xmloff/xmltoken.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLNamedExpressionsContext::GlobalInserter::GlobalInserter(ScXMLImport& rImport) : mrImport(rImport) {}
@@ -56,7 +57,7 @@ ScXMLNamedExpressionsContext::~ScXMLNamedExpressionsContext()
     GetScImport().UnlockSolarMutex();
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLNamedExpressionsContext::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > ScXMLNamedExpressionsContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);

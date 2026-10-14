@@ -56,20 +56,20 @@ protected:
     std::shared_ptr<T> m_xAsyncDialog;
 
 protected:
-    OGenericUnoAsyncDialog(const css::uno::Reference<css::uno::XComponentContext>& _rxContext)
+    OGenericUnoAsyncDialog(const cpo::uno::Reference<cpo::uno::XComponentContext>& _rxContext)
         : OGenericUnoAsyncDialogBase(_rxContext)
     {
     }
 
 public:
     // XAsynchronousExecutableDialog
-    void SAL_CALL setDialogTitle(const OUString& aTitle) override
+    void setDialogTitle(const OUString& aTitle) override
     {
         OGenericUnoDialog::setTitle(aTitle);
     }
 
-    virtual void SAL_CALL startExecuteModal(
-        const css::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener) override
+    virtual void startExecuteModal(
+        const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener) override
     {
         SolarMutexGuard aSolarGuard;
 
@@ -77,7 +77,7 @@ public:
             UnoAsyncDialogEntryGuard aGuard(*this);
 
             if (m_bExecuting)
-                throw css::uno::RuntimeException("already executing the dialog (recursive call)", *this);
+                throw cpo::uno::RuntimeException("already executing the dialog (recursive call)", *this);
 
             if (!m_xAsyncDialog)
             {
@@ -100,7 +100,7 @@ public:
 
 protected:
     virtual std::shared_ptr<T>
-    createAsyncDialog(const css::uno::Reference<css::awt::XWindow>& /*rParent*/)
+    createAsyncDialog(const cpo::uno::Reference<css::awt::XWindow>& /*rParent*/)
     {
         return nullptr;
     }
@@ -113,7 +113,7 @@ protected:
     }
 
     virtual void
-    runAsync(const css::uno::Reference<css::ui::dialogs::XDialogClosedListener>& /*xListener*/)
+    runAsync(const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& /*xListener*/)
     {
     }
 

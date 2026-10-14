@@ -27,7 +27,7 @@
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/XContentAccess.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/util/theOfficeInstallationDirectories.hpp>
 #include <ucbhelper/content.hxx>
 #include <osl/diagnose.h>
@@ -55,7 +55,7 @@ namespace svt
     using namespace ::com::sun::star;
     using namespace ::com::sun::star::sdbc;
     using namespace ::com::sun::star::ucb;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo;
     using namespace ::cpo::uno;
 
 
@@ -763,7 +763,7 @@ namespace svt
             std::lock_guard aGuard( m_aMutex );
             if ( !m_xOfficeInstDirs.is() )
             {
-                const uno::Reference< uno::XComponentContext >& xCtx(
+                const uno::Reference< cpo::uno::XComponentContext >& xCtx(
                     comphelper::getProcessComponentContext() );
                 m_xOfficeInstDirs = util::theOfficeInstallationDirectories::get(xCtx);
             }

@@ -27,7 +27,7 @@
 
 namespace frm
 {
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -78,7 +78,7 @@ OCheckBoxModel::~OCheckBoxModel()
 }
 
 
-css::uno::Reference< css::util::XCloneable > OCheckBoxModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OCheckBoxModel::createClone()
 {
     rtl::Reference<OCheckBoxModel> pClone = new OCheckBoxModel(this, getContext());
     pClone->clonedFrom(this);
@@ -130,7 +130,7 @@ OUString OCheckBoxModel::getServiceName()
 }
 
 
-void OCheckBoxModel::write(const css::uno::Reference<css::io::XObjectOutputStream>& _rxOutStream)
+void OCheckBoxModel::write(const cpo::uno::Reference<css::io::XObjectOutputStream>& _rxOutStream)
 {
     OReferenceValueComponent::write(_rxOutStream);
 
@@ -274,15 +274,15 @@ bool OCheckBoxModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OCheckBoxModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OCheckBoxModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OCheckBoxModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OCheckBoxControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OCheckBoxControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OCheckBoxControl(component));

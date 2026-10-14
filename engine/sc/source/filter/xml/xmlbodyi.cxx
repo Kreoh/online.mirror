@@ -31,6 +31,7 @@
 #include "xmlcvali.hxx"
 #include "xmllabri.hxx"
 #include "xmlmappingi.hxx"
+#include "xmlsheetviewi.hxx"
 #include "XMLConsolidationContext.hxx"
 #include "XMLDDELinksContext.hxx"
 #include "XMLCalculationSettingsContext.hxx"
@@ -55,6 +56,7 @@
 #include <memory>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace xmloff::token;
 
 ScXMLBodyContext::ScXMLBodyContext( ScXMLImport& rImport,
@@ -123,7 +125,7 @@ ScXMLPersonsContext::ScXMLPersonsContext(ScXMLImport& rImport)
 {
 }
 
-uno::Reference<xml::sax::XFastContextHandler> SAL_CALL
+uno::Reference<xml::sax::XFastContextHandler>
 ScXMLPersonsContext::createFastChildContext(sal_Int32 nElement,
     const uno::Reference<xml::sax::XFastAttributeList>& xAttrList)
 {
@@ -154,7 +156,7 @@ ScXMLPersonsContext::createFastChildContext(sal_Int32 nElement,
     return nullptr;
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+uno::Reference< xml::sax::XFastContextHandler >
         ScXMLBodyContext::createFastChildContext( sal_Int32 nElement,
         const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
@@ -228,12 +230,15 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
     case XML_ELEMENT( CALC_EXT, XML_DATA_STREAM_SOURCE ):
         pContext = new ScXMLDataStreamContext(GetScImport(), pAttribList);
         break;
+    case XML_ELEMENT( CO_EXT, XML_SHEET_VIEWS ):
+        pContext = new ScXMLSheetViewsContext(GetScImport());
+        break;
     }
 
     return pContext;
 }
 
-void SAL_CALL ScXMLBodyContext::characters(const OUString &)
+void ScXMLBodyContext::characters(const OUString &)
 {
     ScSheetSaveData* pSheetData = GetScImport().GetScModel()->GetSheetSaveData();
     if ( pSheetData && pSheetData->HasStartPos() )
@@ -245,7 +250,7 @@ void SAL_CALL ScXMLBodyContext::characters(const OUString &)
     // otherwise ignore
 }
 
-void SAL_CALL ScXMLBodyContext::endFastElement(sal_Int32 nElement)
+void ScXMLBodyContext::endFastElement(sal_Int32 nElement)
 {
     ScSheetSaveData* pSheetData = GetScImport().GetScModel()->GetSheetSaveData();
     if ( pSheetData && pSheetData->HasStartPos() )

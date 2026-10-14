@@ -31,7 +31,7 @@
 #include <sfx2/evntconf.hxx>
 #include <headertablistbox.hxx>
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::frame::XFrame;
 
 class SfxMacroTabPage_Impl
@@ -43,7 +43,7 @@ public:
     std::unique_ptr<weld::Button>          m_xAssignPB;
     std::unique_ptr<weld::Button>          m_xDeletePB;
     std::unique_ptr<MacroEventListBox>     m_xEventLB;
-    std::unique_ptr<weld::Widget>          m_xGroupFrame;
+    std::unique_ptr<weld::Frame>           m_xGroupFrame;
     std::unique_ptr<CuiConfigGroupListBox> m_xGroupLB;
     std::unique_ptr<weld::Frame>           m_xMacroFrame;
     std::unique_ptr<CuiConfigFunctionListBox> m_xMacroLB;
@@ -110,7 +110,7 @@ SfxMacroTabPage::SfxMacroTabPage(weld::Container* pPage, weld::DialogController*
     mpImpl->m_xEventLB.reset(new MacroEventListBox(m_xBuilder->weld_tree_view(u"assignments"_ustr)));
     mpImpl->m_xAssignPB = m_xBuilder->weld_button(u"assign"_ustr);
     mpImpl->m_xDeletePB = m_xBuilder->weld_button(u"delete"_ustr);
-    mpImpl->m_xGroupFrame = m_xBuilder->weld_widget(u"groupframe"_ustr);
+    mpImpl->m_xGroupFrame = m_xBuilder->weld_frame(u"groupframe"_ustr);
     mpImpl->m_xGroupLB.reset(new CuiConfigGroupListBox(m_xBuilder->weld_tree_view(u"libraries"_ustr)));
     mpImpl->m_xMacroFrame = m_xBuilder->weld_frame(u"macroframe"_ustr);
     mpImpl->m_aStaticMacroLBLabel = mpImpl->m_xMacroFrame->get_label();
@@ -319,8 +319,7 @@ IMPL_LINK( SfxMacroTabPage, TimeOut_Impl, Timer*,, void )
     // perhaps the tabpage is part of a SingleTabDialog then pDialog == nullptr
     std::unique_ptr<weld::WaitObject> xWait(pDialog ? new weld::WaitObject(pDialog) : nullptr);
     // fill macro list
-    mpImpl->m_xGroupLB->Init(comphelper::getProcessComponentContext(), GetFrame(),
-                             OUString(), false);
+    mpImpl->m_xGroupLB->Init(comphelper::getProcessComponentContext(), GetFrame());
 }
 
 void SfxMacroTabPage::InitAndSetHandler()

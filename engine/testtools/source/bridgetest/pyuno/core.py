@@ -247,7 +247,7 @@ class TestCase( unittest.TestCase):
       def testInterface(self):
           clazz = uno.getClass( "com.sun.star.lang.XComponent" )
           self.assertTrue( "com.sun.star.lang.XComponent" == clazz.__pyunointerface__ )
-          self.assertTrue( issubclass( clazz, uno.getClass( "com.sun.star.uno.XInterface" ) ) )
+          self.assertTrue( issubclass( clazz, uno.getClass( "cpo.uno.XInterface" ) ) )
           self.tobj.Interface = None
            
 
@@ -313,7 +313,7 @@ class TestCase( unittest.TestCase):
           self.assertTrue( wasHere, "wrong attribute test" )
 
           IllegalArgumentException = uno.getClass("com.sun.star.lang.IllegalArgumentException" )
-          RuntimeException = uno.getClass("com.sun.star.uno.RuntimeException" )
+          RuntimeException = uno.getClass("cpo.uno.RuntimeException" )
 
 # TODO: Remove this once it is done
 # wrong number of arguments bug !?
@@ -324,7 +324,7 @@ class TestCase( unittest.TestCase):
 
           self.assertRaises( RuntimeException, uno.Enum,  "a" , "b" )
           self.assertRaises( RuntimeException, uno.Enum, "cpo.uno.TypeClass" , "b" )
-          self.assertRaises( RuntimeException, uno.Enum, "com.sun.star.uno.XInterface" , "b" )
+          self.assertRaises( RuntimeException, uno.Enum, "cpo.uno.XInterface" , "b" )
 
           tcInterface =uno.Enum( "cpo.uno.TypeClass" , "INTERFACE" )
           self.assertRaises( RuntimeException, uno.Type, "a", tcInterface )
@@ -333,7 +333,7 @@ class TestCase( unittest.TestCase):
           self.assertRaises( (RuntimeException,exceptions.RuntimeError), uno.getTypeByName, "a" )
 
           self.assertRaises( (RuntimeException), uno.getConstantByName, "a" )
-          self.assertRaises( (RuntimeException), uno.getConstantByName, "com.sun.star.uno.XInterface" )
+          self.assertRaises( (RuntimeException), uno.getConstantByName, "cpo.uno.XInterface" )
 
       def testByteSequence( self ):
           s = uno.ByteSequence( b"ab" )

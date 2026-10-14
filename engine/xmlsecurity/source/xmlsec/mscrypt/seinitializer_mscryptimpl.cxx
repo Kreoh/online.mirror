@@ -31,11 +31,12 @@
 #include <svl/cryptosign.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 namespace cssl = com::sun::star::lang;
 namespace cssxc = com::sun::star::xml::crypto;
 
 SEInitializer_MSCryptImpl::SEInitializer_MSCryptImpl(
-    const uno::Reference< uno::XComponentContext > &rxContext)
+    const uno::Reference< cpo::uno::XComponentContext > &rxContext)
     :mxContext( rxContext )
 {
 }
@@ -45,7 +46,7 @@ SEInitializer_MSCryptImpl::~SEInitializer_MSCryptImpl()
 }
 
 /* XSEInitializer */
-uno::Reference< cssxc::XXMLSecurityContext > SAL_CALL
+uno::Reference< cssxc::XXMLSecurityContext >
     SEInitializer_MSCryptImpl::createSecurityContext(
     const OUString& sCertDB )
 {
@@ -117,7 +118,7 @@ uno::Reference< cssxc::XXMLSecurityContext > SAL_CALL
     }
 }
 
-void SAL_CALL SEInitializer_MSCryptImpl::freeSecurityContext( const uno::Reference< cssxc::XXMLSecurityContext >&)
+void SEInitializer_MSCryptImpl::freeSecurityContext( const uno::Reference< cssxc::XXMLSecurityContext >&)
 {
     /*
     uno::Reference< cssxc::XSecurityEnvironment > xSecEnv
@@ -146,24 +147,24 @@ void SAL_CALL SEInitializer_MSCryptImpl::freeSecurityContext( const uno::Referen
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SEInitializer_MSCryptImpl::getImplementationName()
+OUString SEInitializer_MSCryptImpl::getImplementationName()
 {
-    return "com.sun.star.xml.crypto.SEInitializer";
+    return u"com.sun.star.xml.crypto.SEInitializer"_ustr;
 }
 
-bool SAL_CALL SEInitializer_MSCryptImpl::supportsService( const OUString& rServiceName )
+bool SEInitializer_MSCryptImpl::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService( this, rServiceName );
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SEInitializer_MSCryptImpl::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > SEInitializer_MSCryptImpl::getSupportedServiceNames()
 {
-    return { "com.sun.star.xml.crypto.SEInitializer" };
+    return { u"com.sun.star.xml.crypto.SEInitializer"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_xml_crypto_SEInitializer_get_implementation(
-    uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+    cpo::uno::XComponentContext* pCtx, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
 {
     return cppu::acquire(new SEInitializer_MSCryptImpl(pCtx));
 }

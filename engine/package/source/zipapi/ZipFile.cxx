@@ -66,11 +66,11 @@
 
 using namespace com::sun::star;
 using namespace com::sun::star::io;
-using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::packages;
 using namespace com::sun::star::packages::zip;
 using namespace com::sun::star::packages::zip::ZipConstants;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 using ZipUtils::Inflater;
@@ -117,14 +117,14 @@ void ZipFile::setInputStream ( const uno::Reference < XInputStream >& xNewStream
     aGrabber.setInputStream ( xStream );
 }
 
-uno::Reference< xml::crypto::XDigestContext > ZipFile::StaticGetDigestContextForChecksum( const uno::Reference< uno::XComponentContext >& xArgContext, const ::rtl::Reference< EncryptionData >& xEncryptionData )
+uno::Reference< xml::crypto::XDigestContext > ZipFile::StaticGetDigestContextForChecksum( const uno::Reference< cpo::uno::XComponentContext >& xArgContext, const ::rtl::Reference< EncryptionData >& xEncryptionData )
 {
     assert(xEncryptionData->m_oCheckAlg); // callers checked it already
 
     uno::Reference< xml::crypto::XDigestContext > xDigestContext;
     if (*xEncryptionData->m_oCheckAlg == xml::crypto::DigestID::SHA256_1K)
     {
-        uno::Reference< uno::XComponentContext > xContext = xArgContext;
+        uno::Reference< cpo::uno::XComponentContext > xContext = xArgContext;
         if ( !xContext.is() )
             xContext = comphelper::getProcessComponentContext();
 
@@ -149,7 +149,7 @@ uno::Reference< xml::crypto::XDigestContext > ZipFile::StaticGetDigestContextFor
     return xDigestContext;
 }
 
-uno::Reference< xml::crypto::XCipherContext > ZipFile::StaticGetCipher( const uno::Reference< uno::XComponentContext >& xArgContext, const ::rtl::Reference< EncryptionData >& xEncryptionData, bool bEncrypt )
+uno::Reference< xml::crypto::XCipherContext > ZipFile::StaticGetCipher( const uno::Reference< cpo::uno::XComponentContext >& xArgContext, const ::rtl::Reference< EncryptionData >& xEncryptionData, bool bEncrypt )
 {
     uno::Reference< xml::crypto::XCipherContext > xResult;
 
@@ -212,7 +212,7 @@ uno::Reference< xml::crypto::XCipherContext > ZipFile::StaticGetCipher( const un
     if (xEncryptionData->m_nEncAlg == xml::crypto::CipherID::AES_CBC_W3C_PADDING
         || xEncryptionData->m_nEncAlg == xml::crypto::CipherID::AES_GCM_W3C)
     {
-        uno::Reference< uno::XComponentContext > xContext = xArgContext;
+        uno::Reference< cpo::uno::XComponentContext > xContext = xArgContext;
         if ( !xContext.is() )
             xContext = comphelper::getProcessComponentContext();
 
@@ -480,7 +480,7 @@ void CheckSequence( const cpo::uno::Sequence< sal_Int8 >& aSequence )
 }
 #endif
 
-bool ZipFile::StaticHasValidPassword( const uno::Reference< uno::XComponentContext >& rxContext, const Sequence< sal_Int8 > &aReadBuffer, const ::rtl::Reference< EncryptionData > &rData )
+bool ZipFile::StaticHasValidPassword( const uno::Reference< cpo::uno::XComponentContext >& rxContext, const Sequence< sal_Int8 > &aReadBuffer, const ::rtl::Reference< EncryptionData > &rData )
 {
     assert(rData->m_nEncAlg != xml::crypto::CipherID::AES_GCM_W3C); // should not be called for AEAD
 
@@ -562,7 +562,7 @@ uno::Reference<io::XInputStream> ZipFile::checkValidPassword(
     {
         ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
 
-        css::uno::Reference < css::io::XSeekable > xSeek(xStream, UNO_QUERY_THROW);
+        cpo::uno::Reference < css::io::XSeekable > xSeek(xStream, UNO_QUERY_THROW);
         xSeek->seek( rEntry.nOffset );
         sal_Int64 nSize = rEntry.nMethod == DEFLATED ? rEntry.nCompressedSize : rEntry.nSize;
 
@@ -635,7 +635,7 @@ public:
         }
     }
 
-    virtual sal_Int32 SAL_CALL readBytes( cpo::uno::Sequence<sal_Int8>& rData, sal_Int32 nBytesToRead ) override
+    virtual sal_Int32 readBytes( cpo::uno::Sequence<sal_Int8>& rData, sal_Int32 nBytesToRead ) override
     {
         if (!hasBytes())
             return 0;
@@ -669,12 +669,12 @@ public:
         return nReadSize;
     }
 
-    virtual sal_Int32 SAL_CALL readSomeBytes( ::cpo::uno::Sequence<sal_Int8>& rData, sal_Int32 nMaxBytesToRead ) override
+    virtual sal_Int32 readSomeBytes( ::cpo::uno::Sequence<sal_Int8>& rData, sal_Int32 nMaxBytesToRead ) override
     {
         return readBytes(rData, nMaxBytesToRead);
     }
 
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override
+    virtual void skipBytes( sal_Int32 nBytesToSkip ) override
     {
         if (!hasBytes())
             return;
@@ -682,7 +682,7 @@ public:
         mnPos += nBytesToSkip;
     }
 
-    virtual sal_Int32 SAL_CALL available() override
+    virtual sal_Int32 available() override
     {
         if (!hasBytes())
             return 0;
@@ -690,21 +690,21 @@ public:
         return remainingSize();
     }
 
-    virtual void SAL_CALL closeInput() override
+    virtual void closeInput() override
     {
     }
     // XSeekable
-    virtual void SAL_CALL seek( sal_Int64 location ) override
+    virtual void seek( sal_Int64 location ) override
     {
         if ( location < 0 || o3tl::make_unsigned(location) > maBytes.size() )
-            throw IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+            throw IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
         mnPos = location;
     }
-    virtual sal_Int64 SAL_CALL getPosition() override
+    virtual sal_Int64 getPosition() override
     {
         return mnPos;
     }
-    virtual sal_Int64 SAL_CALL getLength() override
+    virtual sal_Int64 getLength() override
     {
         return maBytes.size();
     }
@@ -752,7 +752,7 @@ uno::Reference< XInputStream > ZipFile::createStreamForZipEntry(
 
 uno::Reference< XInputStream > ZipFile::StaticGetDataFromRawStream(
         const rtl::Reference<comphelper::RefCountedMutex>& rMutexHolder,
-        const uno::Reference<uno::XComponentContext>& rxContext,
+        const uno::Reference<cpo::uno::XComponentContext>& rxContext,
         const uno::Reference<XInputStream>& xStream,
         const ::rtl::Reference<EncryptionData> &rData)
 {
@@ -945,7 +945,7 @@ sal_uInt64 ZipFile::readLOC_Impl(ZipEntry &rEntry, std::vector<sal_Int8>& rNameB
     aGrabber.seek(nPos);
     std::array<sal_Int8, 30> aHeader;
     if (aGrabber.readBytes(aHeader.data(), 30) != 30)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     MemoryByteGrabber headerMemGrabber(aHeader.data(), 30);
 
     sal_Int32 nTestSig = headerMemGrabber.ReadInt32();
@@ -1211,7 +1211,7 @@ std::tuple<sal_Int64, sal_Int64, sal_Int64> ZipFile::findCentralDirectory()
             aGrabber.seek(nEndPos - 20);
             std::array<sal_Int8, 20> aZip64EndLocator;
             if (20 != aGrabber.readBytes(aZip64EndLocator.data(), 20))
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             MemoryByteGrabber loc64Grabber(aZip64EndLocator.data(), 20);
             if (loc64Grabber.ReadUInt8() == 'P'
                 && loc64Grabber.ReadUInt8() == 'K'

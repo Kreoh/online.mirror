@@ -441,7 +441,16 @@ static ItemInfoPackage& getItemInfoPackageSdr()
 
             { SDRATTR_WRITINGMODE2, new SvxFrameDirectionItem(SvxFrameDirection::Horizontal_LR_TB, SDRATTR_WRITINGMODE2), 0, SFX_ITEMINFOFLAG_NONE },
 
-            { SDRATTR_EDGEOOXMLCURVE, new SfxBoolItem(SDRATTR_EDGEOOXMLCURVE, false), 0, SFX_ITEMINFOFLAG_NONE }
+            { SDRATTR_EDGEOOXMLCURVE, new SfxBoolItem(SDRATTR_EDGEOOXMLCURVE, false), 0, SFX_ITEMINFOFLAG_NONE },
+
+            // The defaults of the reflection are those of the reflection element of DrawingML.
+            { SDRATTR_REFLECTION, new SdrOnOffItem(SDRATTR_REFLECTION, false), SID_ATTR_REFLECTION, SFX_ITEMINFOFLAG_NONE },
+            { SDRATTR_REFLECTION_DISTANCE, new SdrMetricItem(SDRATTR_REFLECTION_DISTANCE, 0), SID_ATTR_REFLECTION_DISTANCE, SFX_ITEMINFOFLAG_NONE },
+            { SDRATTR_REFLECTION_BLUR_RADIUS, new SdrMetricItem(SDRATTR_REFLECTION_BLUR_RADIUS, 0), SID_ATTR_REFLECTION_BLUR_RADIUS, SFX_ITEMINFOFLAG_NONE },
+            { SDRATTR_REFLECTION_START_TRANSPARENCY, new SdrPercentItem(SDRATTR_REFLECTION_START_TRANSPARENCY, 0), SID_ATTR_REFLECTION_START_TRANSPARENCY, SFX_ITEMINFOFLAG_NONE },
+            { SDRATTR_REFLECTION_START_POSITION, new SdrPercentItem(SDRATTR_REFLECTION_START_POSITION, 0), SID_ATTR_REFLECTION_START_POSITION, SFX_ITEMINFOFLAG_NONE },
+            { SDRATTR_REFLECTION_END_TRANSPARENCY, new SdrPercentItem(SDRATTR_REFLECTION_END_TRANSPARENCY, 100), SID_ATTR_REFLECTION_END_TRANSPARENCY, SFX_ITEMINFOFLAG_NONE },
+            { SDRATTR_REFLECTION_END_POSITION, new SdrPercentItem(SDRATTR_REFLECTION_END_POSITION, 100), SID_ATTR_REFLECTION_END_POSITION, SFX_ITEMINFOFLAG_NONE }
         }};
 
         virtual const ItemInfoStatic& getItemInfoStatic(size_t nIndex) const override { return maItemInfos[nIndex]; }
@@ -606,6 +615,14 @@ OUString SdrItemPool::GetItemName(sal_uInt16 nWhich)
         case SDRATTR_GLOW_TEXT_TRANSPARENCY : pResId = SIP_SA_GLOW_TEXT_TRANSPARENCY; break;
 
         case SDRATTR_SOFTEDGE_RADIUS   : pResId = SIP_SA_SOFTEDGE_RADIUS; break;
+
+        case SDRATTR_REFLECTION                    : pResId = SIP_SA_REFLECTION; break;
+        case SDRATTR_REFLECTION_DISTANCE           : pResId = SIP_SA_REFLECTION_DISTANCE; break;
+        case SDRATTR_REFLECTION_BLUR_RADIUS        : pResId = SIP_SA_REFLECTION_BLUR_RADIUS; break;
+        case SDRATTR_REFLECTION_START_TRANSPARENCY : pResId = SIP_SA_REFLECTION_START_TRANSPARENCY; break;
+        case SDRATTR_REFLECTION_START_POSITION     : pResId = SIP_SA_REFLECTION_START_POSITION; break;
+        case SDRATTR_REFLECTION_END_TRANSPARENCY   : pResId = SIP_SA_REFLECTION_END_TRANSPARENCY; break;
+        case SDRATTR_REFLECTION_END_POSITION       : pResId = SIP_SA_REFLECTION_END_POSITION; break;
 
         case SDRATTR_CAPTIONTYPE      : pResId = SIP_SA_CAPTIONTYPE;break;
         case SDRATTR_CAPTIONFIXEDANGLE: pResId = SIP_SA_CAPTIONFIXEDANGLE;break;
@@ -827,6 +844,10 @@ SdrScaleItem* SdrScaleItem::Clone(SfxItemPool * /*pPool*/) const
 // OnOffItem
 
 
+SfxPoolItem * SdrOnOffItem::CreateDefault() {
+    return new SdrOnOffItem(TypedWhichId<SdrOnOffItem>(0), false);
+}
+
 SdrOnOffItem* SdrOnOffItem::Clone(SfxItemPool* /*pPool*/) const
 {
     return new SdrOnOffItem(TypedWhichId<SdrOnOffItem>(Which()),GetValue());
@@ -882,6 +903,10 @@ bool SdrYesNoItem::GetPresentation(SfxItemPresentation ePres,
         rText = SdrItemPool::GetItemName(Which()) + " " + rText;
     }
     return true;
+}
+
+SfxPoolItem * SdrPercentItem::CreateDefault() {
+    return new SdrPercentItem(TypedWhichId<SdrPercentItem>(0), 0);
 }
 
 SdrPercentItem* SdrPercentItem::Clone(SfxItemPool* /*pPool*/) const
@@ -985,6 +1010,10 @@ bool SdrAngleItem::GetPresentation(
 
     rText = aText.makeStringAndClear();
     return true;
+}
+
+SfxPoolItem * SdrMetricItem::CreateDefault() {
+    return new SdrMetricItem(TypedWhichId<SdrMetricItem>(0), 0);
 }
 
 SdrMetricItem* SdrMetricItem::Clone(SfxItemPool* /*pPool*/) const

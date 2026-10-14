@@ -22,8 +22,8 @@
 #include <cppunit/plugin/TestPlugIn.h>
 
 #include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <cpo/uno/XAdapter.hpp>
 #include <cpo/uno/XReference.hpp>
 #include <cpo/uno/XWeak.hpp>
@@ -55,7 +55,7 @@ private:
 class RuntimeExceptionReference: public Reference {
 protected:
     void handleDispose() override {
-        throw css::uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 };
 
@@ -76,8 +76,8 @@ public:
 };
 
 void Test::testReferenceDispose() {
-    css::uno::Reference< cpo::uno::XWeak > w(new ::cppu::OWeakObject);
-    css::uno::Reference< cpo::uno::XAdapter > a(w->queryAdapter());
+    cpo::uno::Reference< cpo::uno::XWeak > w(new ::cppu::OWeakObject);
+    cpo::uno::Reference< cpo::uno::XAdapter > a(w->queryAdapter());
     ::rtl::Reference< Reference > r1(new RuntimeExceptionReference);
     ::rtl::Reference< Reference > r2(new Reference);
     ::rtl::Reference< Reference > r3(new DisposedExceptionReference);

@@ -29,7 +29,7 @@
 #include <ucbhelper/content.hxx>
 #include <vector>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::ucb;
 
 namespace utl
@@ -79,11 +79,6 @@ cpo::uno::Sequence < OUString > LocalFileHelper::GetFolderContents( const OUStri
     }
 
     return comphelper::containerToSequence(vFiles);
-}
-
-void removeTree(OUString const & url) {
-    const bool bError = comphelper::DirectoryHelper::deleteDirRecursively(url);
-    SAL_WARN_IF(bError, "desktop.app", "error removing directory " << url);
 }
 
 }

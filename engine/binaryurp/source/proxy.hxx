@@ -32,7 +32,7 @@
 #include <uno/dispatcher.h>
 
 namespace binaryurp { class Bridge; }
-namespace com::sun::star::uno { class UnoInterfaceReference; }
+namespace cpo::uno { class UnoInterfaceReference; }
 
 namespace binaryurp {
 
@@ -40,11 +40,11 @@ class Proxy: public uno_Interface {
 public:
     Proxy(
         rtl::Reference< Bridge > const & bridge, OUString oid,
-        css::uno::TypeDescription type);
+        cpo::uno::TypeDescription type);
 
     const OUString& getOid() const { return oid_;}
 
-    const css::uno::TypeDescription& getType() const { return type_;}
+    const cpo::uno::TypeDescription& getType() const { return type_;}
 
     void do_acquire();
 
@@ -58,7 +58,7 @@ public:
 
     static bool isProxy(
         rtl::Reference< Bridge > const & bridge,
-        css::uno::UnoInterfaceReference const & object,
+        cpo::uno::UnoInterfaceReference const & object,
         OUString * oid);
 
 private:
@@ -76,7 +76,7 @@ private:
 
     rtl::Reference< Bridge > bridge_;
     OUString oid_;
-    css::uno::TypeDescription type_;
+    cpo::uno::TypeDescription type_;
     std::atomic<std::size_t> references_;
 };
 

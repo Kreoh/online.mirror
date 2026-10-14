@@ -1286,20 +1286,6 @@ desktop/source/app/officeipcthread.hxx:85
     enum desktop::RequestHandler::State Starting
 desktop/source/app/userinstall.hxx:32
     enum desktop::userinstall::Status ERROR_OTHER
-desktop/source/deployment/gui/dp_gui_extensioncmdqueue.cxx:238
-    enum dp_gui::ExtensionCmdQueue::Thread::Input START
-desktop/source/deployment/inc/dp_update.hxx:47
-    enum dp_misc::UPDATE_SOURCE UPDATE_SOURCE_ONLINE
-desktop/source/deployment/registry/component/dp_component.cxx:112
-    enum dp_registry::backend::component::(anonymous namespace)::BackendImpl::ComponentPackageImpl::Reg NotRegistered
-desktop/source/deployment/registry/component/dp_component.cxx:244
-    enum dp_registry::backend::component::(anonymous namespace)::BackendImpl::RcItem RCITEM_COMPONENTS
-desktop/source/deployment/registry/inc/dp_backend.h:216
-    enum dp_registry::backend::PackageRegistryBackend::Context Document
-desktop/source/deployment/registry/inc/dp_backend.h:216
-    enum dp_registry::backend::PackageRegistryBackend::Context Tmp
-desktop/source/deployment/registry/inc/dp_backend.h:216
-    enum dp_registry::backend::PackageRegistryBackend::Context Unknown
 desktop/source/lib/init.cxx:6436
     enum (anonymous namespace)::UndoOrRedo REDO
 desktop/source/lib/init.cxx:8046
@@ -5296,70 +5282,6 @@ sd/source/ui/slidesorter/inc/view/SlsTheme.hxx:107
     enum sd::slidesorter::view::Theme::IconType Icon_FocusBorder
 sd/source/ui/slidesorter/inc/view/SlsTheme.hxx:108
     enum sd::slidesorter::view::Theme::IconType IconType_Size_
-sdext/source/minimizer/pppoptimizertoken.hxx:27
-    enum PPPOptimizerTokenEnum TK_btnNavFinish
-sdext/source/minimizer/pppoptimizertoken.hxx:30
-    enum PPPOptimizerTokenEnum TK_FileSizeDestination
-sdext/source/minimizer/pppoptimizertoken.hxx:31
-    enum PPPOptimizerTokenEnum TK_FileSizeSource
-sdext/source/minimizer/pppoptimizertoken.hxx:37
-    enum PPPOptimizerTokenEnum TK_Progress
-sdext/source/minimizer/pppoptimizertoken.hxx:59
-    enum PPPOptimizerTokenEnum TK_Status
-sdext/source/minimizer/pppoptimizertoken.hxx:60
-    enum PPPOptimizerTokenEnum TK_Pages
-sdext/source/minimizer/pppoptimizertoken.hxx:62
-    enum PPPOptimizerTokenEnum STR_SUN_OPTIMIZATION_WIZARD2
-sdext/source/minimizer/pppoptimizertoken.hxx:63
-    enum PPPOptimizerTokenEnum STR_INTRODUCTION
-sdext/source/minimizer/pppoptimizertoken.hxx:64
-    enum PPPOptimizerTokenEnum STR_IMAGE_OPTIMIZATION
-sdext/source/minimizer/pppoptimizertoken.hxx:65
-    enum PPPOptimizerTokenEnum STR_OLE_OBJECTS
-sdext/source/minimizer/pppoptimizertoken.hxx:66
-    enum PPPOptimizerTokenEnum STR_OLE_OBJECTS_DESC
-sdext/source/minimizer/pppoptimizertoken.hxx:67
-    enum PPPOptimizerTokenEnum STR_NO_OLE_OBJECTS_DESC
-sdext/source/minimizer/pppoptimizertoken.hxx:68
-    enum PPPOptimizerTokenEnum STR_SLIDES
-sdext/source/minimizer/pppoptimizertoken.hxx:69
-    enum PPPOptimizerTokenEnum STR_SUMMARY
-sdext/source/minimizer/pppoptimizertoken.hxx:70
-    enum PPPOptimizerTokenEnum STR_DELETE_SLIDES
-sdext/source/minimizer/pppoptimizertoken.hxx:71
-    enum PPPOptimizerTokenEnum STR_OPTIMIZE_IMAGES
-sdext/source/minimizer/pppoptimizertoken.hxx:72
-    enum PPPOptimizerTokenEnum STR_CREATE_REPLACEMENT
-sdext/source/minimizer/pppoptimizertoken.hxx:73
-    enum PPPOptimizerTokenEnum STR_MY_SETTINGS
-sdext/source/minimizer/pppoptimizertoken.hxx:74
-    enum PPPOptimizerTokenEnum STR_OK
-sdext/source/minimizer/pppoptimizertoken.hxx:75
-    enum PPPOptimizerTokenEnum STR_INFO_PRIMARY
-sdext/source/minimizer/pppoptimizertoken.hxx:76
-    enum PPPOptimizerTokenEnum STR_INFO_SECONDARY_1
-sdext/source/minimizer/pppoptimizertoken.hxx:77
-    enum PPPOptimizerTokenEnum STR_INFO_SECONDARY_2
-sdext/source/minimizer/pppoptimizertoken.hxx:78
-    enum PPPOptimizerTokenEnum STR_INFO_SECONDARY_3
-sdext/source/minimizer/pppoptimizertoken.hxx:79
-    enum PPPOptimizerTokenEnum STR_INFO_SECONDARY_4
-sdext/source/minimizer/pppoptimizertoken.hxx:80
-    enum PPPOptimizerTokenEnum STR_DUPLICATING_PRESENTATION
-sdext/source/minimizer/pppoptimizertoken.hxx:81
-    enum PPPOptimizerTokenEnum STR_DELETING_SLIDES
-sdext/source/minimizer/pppoptimizertoken.hxx:82
-    enum PPPOptimizerTokenEnum STR_OPTIMIZING_GRAPHICS
-sdext/source/minimizer/pppoptimizertoken.hxx:83
-    enum PPPOptimizerTokenEnum STR_CREATING_OLE_REPLACEMENTS
-sdext/source/minimizer/pppoptimizertoken.hxx:84
-    enum PPPOptimizerTokenEnum STR_FILESIZESEPARATOR
-sdext/source/minimizer/pppoptimizertoken.hxx:85
-    enum PPPOptimizerTokenEnum STR_FILENAME_SUFFIX
-sdext/source/minimizer/pppoptimizertoken.hxx:86
-    enum PPPOptimizerTokenEnum STR_WARN_UNSAVED_PRESENTATION
-sdext/source/minimizer/pppoptimizertoken.hxx:87
-    enum PPPOptimizerTokenEnum TK_NotFound
 sdext/source/pdfimport/inc/genericelements.hxx:206
     enum pdfi::ParagraphElement::ParagraphType Normal
 sdext/source/pdfimport/tree/drawtreevisiting.hxx:96
@@ -7456,8 +7378,6 @@ tools/source/fsys/urlobj.cxx:486
     enum (anonymous namespace)::(unnamed at /home/noel/libo-plugin/tools/source/fsys/urlobj.cxx:469:1) PR
 tools/source/fsys/urlobj.cxx:1725
     enum State STATE_DONE
-ucb/source/ucp/ext/ucpext_content.hxx:42
-    enum ucb::ucp::ext::ExtensionContentType E_UNKNOWN
 ucb/source/ucp/hierarchy/hierarchycontent.hxx:102
     enum hierarchy_ucp::HierarchyContent::ContentState DEAD
 ucb/source/ucp/package/pkgcontent.hxx:92

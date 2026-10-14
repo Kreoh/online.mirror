@@ -64,32 +64,32 @@ public:
             the uno control. This must be an XControl from which an XControlModel can be retrieved.
         */
     static rtl::Reference<OAccessibleControlContext>
-    create(const css::uno::Reference<css::awt::XControl>& rxControl);
+    create(const cpo::uno::Reference<css::awt::XControl>& rxControl);
 
 private:
     // XAccessibleContext
-    virtual sal_Int64 SAL_CALL getAccessibleChildCount() override;
-    virtual css::uno::Reference<css::accessibility::XAccessible>
-        SAL_CALL getAccessibleChild(sal_Int64 i) override;
-    virtual css::uno::Reference<css::accessibility::XAccessible>
-        SAL_CALL getAccessibleParent() override;
-    virtual sal_Int16 SAL_CALL getAccessibleRole() override;
-    virtual OUString SAL_CALL getAccessibleDescription() override;
-    virtual OUString SAL_CALL getAccessibleName() override;
-    virtual css::uno::Reference<css::accessibility::XAccessibleRelationSet>
-        SAL_CALL getAccessibleRelationSet() override;
-    virtual sal_Int64 SAL_CALL getAccessibleStateSet() override;
+    virtual sal_Int64 getAccessibleChildCount() override;
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
+        getAccessibleChild(sal_Int64 i) override;
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
+        getAccessibleParent() override;
+    virtual sal_Int16 getAccessibleRole() override;
+    virtual OUString getAccessibleDescription() override;
+    virtual OUString getAccessibleName() override;
+    virtual cpo::uno::Reference<css::accessibility::XAccessibleRelationSet>
+        getAccessibleRelationSet() override;
+    virtual sal_Int64 getAccessibleStateSet() override;
 
     // XAccessibleComponent
-    virtual css::uno::Reference<css::accessibility::XAccessible>
-        SAL_CALL getAccessibleAtPoint(const css::awt::Point& aPoint) override;
-    virtual void SAL_CALL grabFocus() override;
-    virtual sal_Int32 SAL_CALL getForeground() override;
-    virtual sal_Int32 SAL_CALL getBackground() override;
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
+        getAccessibleAtPoint(const css::awt::Point& aPoint) override;
+    virtual void grabFocus() override;
+    virtual sal_Int32 getForeground() override;
+    virtual sal_Int32 getBackground() override;
 
     // XEventListener
     using comphelper::OAccessible::disposing;
-    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
+    virtual void disposing(const css::lang::EventObject& Source) override;
 
     // retrieves the value of a string property from the model, if the property is present
     OUString getModelStringProperty(const OUString& _pPropertyName);
@@ -99,18 +99,18 @@ private:
     // stops listening at the control model
     void stopModelListening();
 
-    vcl::Window* implGetWindow(css::uno::Reference<css::awt::XWindow>* _pxUNOWindow
+    vcl::Window* implGetWindow(cpo::uno::Reference<css::awt::XWindow>* _pxUNOWindow
                                = nullptr) const;
 
-    OAccessibleControlContext(const css::uno::Reference<css::awt::XControl>& rxControl);
+    OAccessibleControlContext(const cpo::uno::Reference<css::awt::XControl>& rxControl);
     virtual ~OAccessibleControlContext() override;
 
     // OAccessible overridables
     virtual css::awt::Rectangle implGetBounds() override;
 
-    css::uno::Reference<css::beans::XPropertySet>
+    cpo::uno::Reference<css::beans::XPropertySet>
         m_xControlModel; // the model of the control which's context we implement
-    css::uno::Reference<css::beans::XPropertySetInfo>
+    cpo::uno::Reference<css::beans::XPropertySetInfo>
         m_xModelPropsInfo; // the cached property set info of the model
     // the XControl whose XAccessibleContext this OAccessibleControlContext is
     cpo::uno::WeakReference<css::awt::XControl> m_aControl;

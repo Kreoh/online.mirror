@@ -10,7 +10,7 @@
 #ifndef INCLUDED_SHELL_SOURCE_SESSIONINSTALL_SYNCDBUSSESSIONHELPER_HXX
 #define INCLUDED_SHELL_SOURCE_SESSIONINSTALL_SYNCDBUSSESSIONHELPER_HXX
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <org/freedesktop/PackageKit/SyncDbusSessionHelper.hpp>
 #include <cppuhelper/implbase.hxx>
@@ -20,40 +20,40 @@ namespace shell::sessioninstall
     class SyncDbusSessionHelper : public ::cppu::WeakImplHelper< ::org::freedesktop::PackageKit::XSyncDbusSessionHelper, css::lang::XServiceInfo >
     {
         public:
-            SyncDbusSessionHelper(css::uno::Reference< css::uno::XComponentContext> const&);
+            SyncDbusSessionHelper(cpo::uno::Reference< cpo::uno::XComponentContext> const&);
 
             // XServiceInfo
-            virtual OUString SAL_CALL getImplementationName() override;
-            virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-            virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames () override;
+            virtual OUString getImplementationName() override;
+            virtual bool supportsService(const OUString& ServiceName) override;
+            virtual cpo::uno::Sequence< OUString > getSupportedServiceNames () override;
 
             // XModify Methods
-            virtual void SAL_CALL InstallPackageFiles( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
+            virtual void InstallPackageFiles( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallProvideFiles( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
+            virtual void InstallProvideFiles( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallCatalogs( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
+            virtual void InstallCatalogs( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallPackageNames( const cpo::uno::Sequence< OUString >& packages, const OUString& interaction ) override;
+            virtual void InstallPackageNames( const cpo::uno::Sequence< OUString >& packages, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallMimeTypes( const cpo::uno::Sequence< OUString >& mimeTypes, const OUString& interaction ) override;
+            virtual void InstallMimeTypes( const cpo::uno::Sequence< OUString >& mimeTypes, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallFontconfigResources( const cpo::uno::Sequence< OUString >& resources, const OUString& interaction ) override;
+            virtual void InstallFontconfigResources( const cpo::uno::Sequence< OUString >& resources, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallGStreamerResources( const cpo::uno::Sequence< OUString >& resources, const OUString& interaction ) override;
+            virtual void InstallGStreamerResources( const cpo::uno::Sequence< OUString >& resources, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallResources( const cpo::uno::Sequence< OUString >& /* types */, const cpo::uno::Sequence< OUString >& /* resources */, const OUString& /* interaction */ ) override
-                { throw css::uno::RuntimeException(u"InstallResources is not implemented"_ustr); } // not implemented
+            virtual void InstallResources( const cpo::uno::Sequence< OUString >& /* types */, const cpo::uno::Sequence< OUString >& /* resources */, const OUString& /* interaction */ ) override
+                { throw cpo::uno::RuntimeException(u"InstallResources is not implemented"_ustr); } // not implemented
 
-            virtual void SAL_CALL RemovePackageByFiles( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
+            virtual void RemovePackageByFiles( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
 
-            virtual void SAL_CALL InstallPrinterDrivers( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
+            virtual void InstallPrinterDrivers( const cpo::uno::Sequence< OUString >& files, const OUString& interaction ) override;
 
             // XQuery Methods
-            virtual void SAL_CALL IsInstalled( const OUString& /* package_name */, const OUString& /* interaction */, bool& /* installed */ ) override;
+            virtual void IsInstalled( const OUString& /* package_name */, const OUString& /* interaction */, bool& /* installed */ ) override;
 
-            virtual void SAL_CALL SearchFile( const OUString& /* file_name */, const OUString& /* interaction */, bool& /* installed */, OUString& /* package_name */ ) override
-                { throw css::uno::RuntimeException(u"SearchFile is not implemented"_ustr); } // not implemented
+            virtual void SearchFile( const OUString& /* file_name */, const OUString& /* interaction */, bool& /* installed */, OUString& /* package_name */ ) override
+                { throw cpo::uno::RuntimeException(u"SearchFile is not implemented"_ustr); } // not implemented
 
         private:
             SyncDbusSessionHelper( const SyncDbusSessionHelper& ) = delete;

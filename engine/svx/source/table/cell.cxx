@@ -23,6 +23,7 @@
 #include <com/sun/star/text/WritingMode.hpp>
 #include <com/sun/star/table/TableBorder.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/lang/Locale.hpp>
 
 #include <comphelper/sequence.hxx>
@@ -66,7 +67,7 @@
 
 
 using ::editeng::SvxBorderLine;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
@@ -99,6 +100,10 @@ static const SvxItemPropertySet* ImplGetSvxCellPropertySet()
         { u"BottomBorder"_ustr,                 SDRATTR_TABLE_BORDER,           cppu::UnoType<BorderLine>::get(), 0, BOTTOM_BORDER },
         { u"LeftBorder"_ustr,                   SDRATTR_TABLE_BORDER,           cppu::UnoType<BorderLine>::get(), 0, LEFT_BORDER },
         { u"RightBorder"_ustr,                  SDRATTR_TABLE_BORDER,           cppu::UnoType<BorderLine>::get(), 0, RIGHT_BORDER },
+        { u"TopBorderComplexColor"_ustr,        SDRATTR_TABLE_BORDER,           cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_BORDER_TOP_COLOR },
+        { u"BottomBorderComplexColor"_ustr,     SDRATTR_TABLE_BORDER,           cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_BORDER_BOTTOM_COLOR },
+        { u"LeftBorderComplexColor"_ustr,       SDRATTR_TABLE_BORDER,           cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_BORDER_LEFT_COLOR },
+        { u"RightBorderComplexColor"_ustr,      SDRATTR_TABLE_BORDER,           cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_BORDER_RIGHT_COLOR },
         { u"RotateAngle"_ustr,                  SDRATTR_TABLE_TEXT_ROTATION,    cppu::UnoType<sal_Int32>::get(), 0, 0 },
         { u"CellInteropGrabBag"_ustr,           SDRATTR_TABLE_CELL_GRABBAG,     cppu::UnoType<cpo::uno::Sequence<css::beans::PropertyValue>>::get(), 0, 0 },
 
@@ -672,7 +677,7 @@ sal_Int32 Cell::calcPreferredWidth( const Size aSize )
     if( GetOutlinerParaObject() )
         rOutliner.SetText(*GetOutlinerParaObject());
 
-    sal_Int32 nPreferredWidth = const_cast<EditEngine&>(rOutliner.GetEditEngine()).CalcTextWidth();
+    sal_Int32 nPreferredWidth = rOutliner.GetEditEngine().CalcTextWidth();
     rOutliner.Clear();
 
     return GetTextLeftDistance() + GetTextRightDistance() + nPreferredWidth;
@@ -803,7 +808,7 @@ sdr::properties::CellProperties* Cell::CloneProperties( SdrObject& rNewObj, Cell
 // XInterface
 
 
-Any SAL_CALL Cell::queryInterface( const Type & rType )
+Any Cell::queryInterface( const Type & rType )
 {
     if( rType == cppu::UnoType<XMergeableCell>::get() )
         return Any( Reference< XMergeableCell >( this ) );
@@ -825,13 +830,13 @@ Any SAL_CALL Cell::queryInterface( const Type & rType )
 }
 
 
-void SAL_CALL Cell::acquire() noexcept
+void Cell::acquire() noexcept
 {
     SdrText::acquire();
 }
 
 
-void SAL_CALL Cell::release() noexcept
+void Cell::release() noexcept
 {
     SdrText::release();
 }
@@ -840,7 +845,7 @@ void SAL_CALL Cell::release() noexcept
 // XTypeProvider
 
 
-Sequence< Type > SAL_CALL Cell::getTypes(  )
+Sequence< Type > Cell::getTypes(  )
 {
     return comphelper::concatSequences( SvxUnoTextBase::getTypes(),
         std::initializer_list<Type>{
@@ -849,25 +854,25 @@ Sequence< Type > SAL_CALL Cell::getTypes(  )
 }
 
 
-Sequence< sal_Int8 > SAL_CALL Cell::getImplementationId(  )
+Sequence< sal_Int8 > Cell::getImplementationId(  )
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
 
 // XLayoutConstrains
-css::awt::Size SAL_CALL Cell::getMinimumSize()
+css::awt::Size Cell::getMinimumSize()
 {
     return css::awt::Size( getMinimumWidth(),  getMinimumHeight() );
 }
 
 
-css::awt::Size SAL_CALL Cell::getPreferredSize()
+css::awt::Size Cell::getPreferredSize()
 {
     return getMinimumSize();
 }
 
 
-css::awt::Size SAL_CALL Cell::calcAdjustedSize( const css::awt::Size& aNewSize )
+css::awt::Size Cell::calcAdjustedSize( const css::awt::Size& aNewSize )
 {
     return aNewSize;
 }
@@ -876,19 +881,19 @@ css::awt::Size SAL_CALL Cell::calcAdjustedSize( const css::awt::Size& aNewSize )
 // XMergeableCell
 
 
-sal_Int32 SAL_CALL Cell::getRowSpan()
+sal_Int32 Cell::getRowSpan()
 {
     return mnRowSpan;
 }
 
 
-sal_Int32 SAL_CALL Cell::getColumnSpan()
+sal_Int32 Cell::getColumnSpan()
 {
     return mnColSpan;
 }
 
 
-bool SAL_CALL Cell::isMerged()
+bool Cell::isMerged()
 {
     return mbMerged;
 }
@@ -897,13 +902,13 @@ bool SAL_CALL Cell::isMerged()
 // XCell
 
 
-OUString SAL_CALL Cell::getFormula(  )
+OUString Cell::getFormula(  )
 {
     return msFormula;
 }
 
 
-void SAL_CALL Cell::setFormula( const OUString& aFormula )
+void Cell::setFormula( const OUString& aFormula )
 {
     if( msFormula != aFormula )
     {
@@ -912,13 +917,13 @@ void SAL_CALL Cell::setFormula( const OUString& aFormula )
 }
 
 
-double SAL_CALL Cell::getValue(  )
+double Cell::getValue(  )
 {
     return mfValue;
 }
 
 
-void SAL_CALL Cell::setValue( double nValue )
+void Cell::setValue( double nValue )
 {
     if( mfValue != nValue )
     {
@@ -928,13 +933,13 @@ void SAL_CALL Cell::setValue( double nValue )
 }
 
 
-CellContentType SAL_CALL Cell::getType()
+CellContentType Cell::getType()
 {
     return mnCellContentType;
 }
 
 
-sal_Int32 SAL_CALL Cell::getError(  )
+sal_Int32 Cell::getError(  )
 {
     return mnError;
 }
@@ -947,7 +952,7 @@ Any Cell::GetAnyForItem( SfxItemSet const & aSet, const SfxItemPropertyMapEntry*
 {
     Any aAny( SvxItemPropertySet_getPropertyValue( pMap, aSet ) );
 
-    if( pMap->aType != aAny.getValueType() )
+    if( aAny.hasValue() && pMap->aType != aAny.getValueType() )
     {
         // since the sfx uint16 item now exports a sal_Int32, we may have to fix this here
         if( ( pMap->aType == ::cppu::UnoType<sal_Int16>::get()) && aAny.getValueType() == ::cppu::UnoType<sal_Int32>::get() )
@@ -959,6 +964,9 @@ Any Cell::GetAnyForItem( SfxItemSet const & aSet, const SfxItemPropertyMapEntry*
         else if( pMap->aType == ::cppu::UnoType<css::table::BorderLine>::get()
                  && aAny.getValueType() == ::cppu::UnoType<css::table::BorderLine2>::get() )
             ; // do not warn for valid case
+        else if( pMap->aType == ::cppu::UnoType<css::awt::Gradient>::get()
+                 && aAny.getValueType() == ::cppu::UnoType<css::awt::Gradient2>::get() )
+            ; // a gradient that carries its own color stops is the richer form of the same thing
         else
             SAL_WARN("svx", "GetAnyForItem() Return value has wrong type for property " << pMap->aName
                         << ", expected " << pMap->aType << " but have " << aAny.getValueType());
@@ -967,13 +975,13 @@ Any Cell::GetAnyForItem( SfxItemSet const & aSet, const SfxItemPropertyMapEntry*
     return aAny;
 }
 
-Reference< XPropertySetInfo > SAL_CALL Cell::getPropertySetInfo()
+Reference< XPropertySetInfo > Cell::getPropertySetInfo()
 {
     return mpPropSet->getPropertySetInfo();
 }
 
 
-void SAL_CALL Cell::setPropertyValue( const OUString& rPropertyName, const Any& rValue )
+void Cell::setPropertyValue( const OUString& rPropertyName, const Any& rValue )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1129,7 +1137,7 @@ void Cell::setPropertyValueImpl( const OUString& rPropertyName, const Any& rValu
 }
 
 
-Any SAL_CALL Cell::getPropertyValue( const OUString& PropertyName )
+Any Cell::getPropertyValue( const OUString& PropertyName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1217,22 +1225,22 @@ Any SAL_CALL Cell::getPropertyValue( const OUString& PropertyName )
 }
 
 
-void SAL_CALL Cell::addPropertyChangeListener( const OUString& /*aPropertyName*/, const Reference< XPropertyChangeListener >& /*xListener*/ )
+void Cell::addPropertyChangeListener( const OUString& /*aPropertyName*/, const Reference< XPropertyChangeListener >& /*xListener*/ )
 {
 }
 
 
-void SAL_CALL Cell::removePropertyChangeListener( const OUString& /*aPropertyName*/, const Reference< XPropertyChangeListener >& /*aListener*/ )
+void Cell::removePropertyChangeListener( const OUString& /*aPropertyName*/, const Reference< XPropertyChangeListener >& /*aListener*/ )
 {
 }
 
 
-void SAL_CALL Cell::addVetoableChangeListener( const OUString& /*PropertyName*/, const Reference< XVetoableChangeListener >& /*aListener*/ )
+void Cell::addVetoableChangeListener( const OUString& /*PropertyName*/, const Reference< XVetoableChangeListener >& /*aListener*/ )
 {
 }
 
 
-void SAL_CALL Cell::removeVetoableChangeListener( const OUString& /*PropertyName*/, const Reference< XVetoableChangeListener >& /*aListener*/ )
+void Cell::removeVetoableChangeListener( const OUString& /*PropertyName*/, const Reference< XVetoableChangeListener >& /*aListener*/ )
 {
 }
 
@@ -1240,7 +1248,7 @@ void SAL_CALL Cell::removeVetoableChangeListener( const OUString& /*PropertyName
 // XMultiPropertySet
 
 
-void SAL_CALL Cell::setPropertyValues( const Sequence< OUString >& aPropertyNames, const Sequence< Any >& aValues )
+void Cell::setPropertyValues( const Sequence< OUString >& aPropertyNames, const Sequence< Any >& aValues )
 {
     ::SolarMutexGuard aSolarGuard;
 
@@ -1277,7 +1285,7 @@ void SAL_CALL Cell::setPropertyValues( const Sequence< OUString >& aPropertyName
 }
 
 
-Sequence< Any > SAL_CALL Cell::getPropertyValues( const Sequence< OUString >& aPropertyNames )
+Sequence< Any > Cell::getPropertyValues( const Sequence< OUString >& aPropertyNames )
 {
     ::SolarMutexGuard aSolarGuard;
 
@@ -1309,17 +1317,17 @@ Sequence< Any > SAL_CALL Cell::getPropertyValues( const Sequence< OUString >& aP
 }
 
 
-void SAL_CALL Cell::addPropertiesChangeListener( const Sequence< OUString >& /*aPropertyNames*/, const Reference< XPropertiesChangeListener >& /*xListener*/ )
+void Cell::addPropertiesChangeListener( const Sequence< OUString >& /*aPropertyNames*/, const Reference< XPropertiesChangeListener >& /*xListener*/ )
 {
 }
 
 
-void SAL_CALL Cell::removePropertiesChangeListener( const Reference< XPropertiesChangeListener >& /*xListener*/ )
+void Cell::removePropertiesChangeListener( const Reference< XPropertiesChangeListener >& /*xListener*/ )
 {
 }
 
 
-void SAL_CALL Cell::firePropertiesChangeEvent( const Sequence< OUString >& /*aPropertyNames*/, const Reference< XPropertiesChangeListener >& /*xListener*/ )
+void Cell::firePropertiesChangeEvent( const Sequence< OUString >& /*aPropertyNames*/, const Reference< XPropertiesChangeListener >& /*xListener*/ )
 {
 }
 
@@ -1327,7 +1335,7 @@ void SAL_CALL Cell::firePropertiesChangeEvent( const Sequence< OUString >& /*aPr
 // XPropertyState
 
 
-PropertyState SAL_CALL Cell::getPropertyState( const OUString& PropertyName )
+PropertyState Cell::getPropertyState( const OUString& PropertyName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1485,7 +1493,7 @@ PropertyState SAL_CALL Cell::getPropertyState( const OUString& PropertyName )
 }
 
 
-Sequence< PropertyState > SAL_CALL Cell::getPropertyStates( const Sequence< OUString >& aPropertyName )
+Sequence< PropertyState > Cell::getPropertyStates( const Sequence< OUString >& aPropertyName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1511,7 +1519,7 @@ Sequence< PropertyState > SAL_CALL Cell::getPropertyStates( const Sequence< OUSt
 }
 
 
-void SAL_CALL Cell::setPropertyToDefault( const OUString& PropertyName )
+void Cell::setPropertyToDefault( const OUString& PropertyName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1552,7 +1560,7 @@ void SAL_CALL Cell::setPropertyToDefault( const OUString& PropertyName )
 }
 
 
-Any SAL_CALL Cell::getPropertyDefault( const OUString& aPropertyName )
+Any Cell::getPropertyDefault( const OUString& aPropertyName )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1597,7 +1605,7 @@ Any SAL_CALL Cell::getPropertyDefault( const OUString& aPropertyName )
 // XMultiPropertyStates
 
 
-void SAL_CALL Cell::setAllPropertiesToDefault()
+void Cell::setAllPropertiesToDefault()
 {
     mpProperties.reset(new sdr::properties::CellProperties( static_cast< SdrTableObj& >( GetObject() ), this ));
 
@@ -1623,14 +1631,14 @@ void SAL_CALL Cell::setAllPropertiesToDefault()
 }
 
 
-void SAL_CALL Cell::setPropertiesToDefault( const Sequence< OUString >& aPropertyNames )
+void Cell::setPropertiesToDefault( const Sequence< OUString >& aPropertyNames )
 {
     for(const OUString& rName : aPropertyNames)
         setPropertyToDefault( rName );
 }
 
 
-Sequence< Any > SAL_CALL Cell::getPropertyDefaults( const Sequence< OUString >& aPropertyNames )
+Sequence< Any > Cell::getPropertyDefaults( const Sequence< OUString >& aPropertyNames )
 {
     sal_Int32 nCount = aPropertyNames.getLength();
     Sequence< Any > aDefaults( nCount );
@@ -1645,14 +1653,14 @@ Sequence< Any > SAL_CALL Cell::getPropertyDefaults( const Sequence< OUString >& 
 // XText
 
 
-void SAL_CALL Cell::insertTextContent( const Reference< XTextRange >& xRange, const Reference< XTextContent >& xContent, bool bAbsorb )
+void Cell::insertTextContent( const Reference< XTextRange >& xRange, const Reference< XTextContent >& xContent, bool bAbsorb )
 {
     SvxUnoTextBase::insertTextContent( xRange, xContent, bAbsorb );
     notifyModified();
 }
 
 
-void SAL_CALL Cell::removeTextContent( const Reference< XTextContent >& xContent )
+void Cell::removeTextContent( const Reference< XTextContent >& xContent )
 {
     SvxUnoTextBase::removeTextContent( xContent );
     notifyModified();
@@ -1662,14 +1670,14 @@ void SAL_CALL Cell::removeTextContent( const Reference< XTextContent >& xContent
 // XSimpleText
 
 
-void SAL_CALL Cell::insertString( const Reference< XTextRange >& xRange, const OUString& aString, bool bAbsorb )
+void Cell::insertString( const Reference< XTextRange >& xRange, const OUString& aString, bool bAbsorb )
 {
     SvxUnoTextBase::insertString( xRange, aString, bAbsorb );
     notifyModified();
 }
 
 
-void SAL_CALL Cell::insertControlCharacter( const Reference< XTextRange >& xRange, sal_Int16 nControlCharacter, bool bAbsorb )
+void Cell::insertControlCharacter( const Reference< XTextRange >& xRange, sal_Int16 nControlCharacter, bool bAbsorb )
 {
     SvxUnoTextBase::insertControlCharacter( xRange, nControlCharacter, bAbsorb );
     notifyModified();
@@ -1679,21 +1687,21 @@ void SAL_CALL Cell::insertControlCharacter( const Reference< XTextRange >& xRang
 // XTextRange
 
 
-OUString SAL_CALL Cell::getString(  )
+OUString Cell::getString(  )
 {
     maSelection.start.nPara = EE_PARA_MAX;
     return SvxUnoTextBase::getString();
 }
 
 
-void SAL_CALL Cell::setString( const OUString& aString )
+void Cell::setString( const OUString& aString )
 {
     SvxUnoTextBase::setString( aString );
     notifyModified();
 }
 
 // XEventListener
-void SAL_CALL Cell::disposing( const EventObject& /*Source*/ )
+void Cell::disposing( const EventObject& /*Source*/ )
 {
     mxTable.clear();
     dispose();

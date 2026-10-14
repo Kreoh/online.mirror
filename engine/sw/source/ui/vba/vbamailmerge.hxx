@@ -21,21 +21,21 @@ class SwVbaMailMerge : public SwVbaMailMerge_BASE
 {
     sal_Int32 m_nMainDocType;
 
-    SwVbaMailMerge(const css::uno::Reference<ooo::vba::XHelperInterface>& xParent,
-                   const css::uno::Reference<css::uno::XComponentContext>& xContext);
+    SwVbaMailMerge(const cpo::uno::Reference<ooo::vba::XHelperInterface>& xParent,
+                   const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext);
 
 public:
     virtual ~SwVbaMailMerge() override;
 
     static rtl::Reference<SwVbaMailMerge> const&
-    get(const css::uno::Reference<ooo::vba::XHelperInterface>& xParent,
-        const css::uno::Reference<css::uno::XComponentContext>& xContext);
+    get(const cpo::uno::Reference<ooo::vba::XHelperInterface>& xParent,
+        const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext);
 
     // XMailMerge
-    virtual sal_Int32 SAL_CALL getMainDocumentType() override;
-    virtual void SAL_CALL setMainDocumentType(sal_Int32 _maindocumenttype) override;
+    virtual sal_Int32 getMainDocumentType() override;
+    virtual void setMainDocumentType(sal_Int32 _maindocumenttype) override;
 
-    virtual void SAL_CALL
+    virtual void
     OpenDataSource(const OUString& Name, const cpo::uno::Any& Format,
                    const cpo::uno::Any& ConfirmConversions, const cpo::uno::Any& ReadOnly,
                    const cpo::uno::Any& LinkToSource, const cpo::uno::Any& AddToRecentFiles,

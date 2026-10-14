@@ -60,7 +60,7 @@ struct SdExtPropertySetInfoCacheCompare
 };
 typedef std::map<
             std::span<SfxItemPropertyMapEntry const>,
-            css::uno::Reference<css::beans::XPropertySetInfo>,
+            cpo::uno::Reference<css::beans::XPropertySetInfo>,
             SdExtPropertySetInfoCacheCompare > SdExtPropertySetInfoCache;
 typedef std::map< SdrObjKind, cpo::uno::Sequence< cpo::uno::Type> > SdTypesCache;
 
@@ -99,6 +99,10 @@ public:
 
     SdOptions*              GetSdOptions(DocumentType eDocType);
 
+    /// The automatic spell checking setting Impress and Draw each keep separately.
+    SD_DLLPUBLIC static bool GetAutoSpellProperty(DocumentType eDocType);
+    SD_DLLPUBLIC static void SetAutoSpellProperty(bool bSet, DocumentType eDocType);
+
     bool                    GetWaterCan() const { return bWaterCan; }
     void                    SetWaterCan( bool bWC ) { bWaterCan = bWC; }
 
@@ -116,9 +120,6 @@ public:
     SD_DLLPUBLIC SvNumberFormatter*     GetNumberFormatter();
 
     // virtual methods for the option dialog
-    virtual std::optional<SfxItemSet> CreateItemSet( sal_uInt16 nId ) override;
-    virtual void         ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet ) override;
-    virtual std::unique_ptr<SfxTabPage> CreateTabPage( sal_uInt16 nId, weld::Container* pPage, weld::DialogController* pController, const SfxItemSet& rSet ) override;
     virtual SfxStyleFamilies CreateStyleFamilies() override;
 
     SdExtPropertySetInfoCache gImplImpressPropertySetInfoCache;
@@ -147,9 +148,9 @@ private:
 
     SfxFrame* ExecuteNewDocument( SfxRequest const & rReq );
 
-    static SfxFrame* CreateEmptyDocument( const css::uno::Reference< css::frame::XFrame >& i_rFrame );
+    static SfxFrame* CreateEmptyDocument( const cpo::uno::Reference< css::frame::XFrame >& i_rFrame );
     static SfxFrame* CreateFromTemplate(const OUString& rTemplatePath,
-                                        const css::uno::Reference<css::frame::XFrame>& i_rFrame,
+                                        const cpo::uno::Reference<css::frame::XFrame>& i_rFrame,
                                         const bool bReplaceable);
 
     bool mbEventListenerAdded;

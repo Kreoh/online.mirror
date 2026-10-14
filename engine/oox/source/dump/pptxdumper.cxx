@@ -32,7 +32,7 @@ namespace oox::dump::pptx {
 
 using namespace ::com::sun::star::io;
 //using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 using ::oox::core::FilterBase;
 
@@ -109,7 +109,7 @@ Dumper::Dumper( const FilterBase& rFilter )
     DumperBase::construct( xCfg );
 }
 
-Dumper::Dumper( const Reference< XComponentContext >& rxContext, const Reference< XInputStream >& rxInStrm, const OUString& rSysFileName )
+Dumper::Dumper( const Reference< cpo::uno::XComponentContext >& rxContext, const Reference< XInputStream >& rxInStrm, const OUString& rSysFileName )
 {
     if( rxContext.is() && rxInStrm.is() )
     {

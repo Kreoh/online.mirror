@@ -118,8 +118,8 @@
 // namespaces
 using namespace ::editeng;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
@@ -292,19 +292,19 @@ public:
     SvxFontNameToolBoxControl();
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+    virtual void statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
     // XToolbarController
-    virtual css::uno::Reference<css::awt::XWindow> SAL_CALL createItemWindow(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+    virtual cpo::uno::Reference<css::awt::XWindow> createItemWindow(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
 
     // WeakComponentImplHelperBase
     using SvxFontNameToolBoxControl_Base::disposing;
     virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& rServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& rServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
 private:
     VclPtr<SvxFontNameBox_Impl> m_xVclBox;
@@ -503,16 +503,16 @@ public:
 class SvxFrameToolBoxControl : public svt::PopupWindowController
 {
 public:
-    explicit SvxFrameToolBoxControl( const css::uno::Reference< css::uno::XComponentContext >& rContext );
+    explicit SvxFrameToolBoxControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext );
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
-    virtual void SAL_CALL execute(sal_Int16 nKeyModifier) override;
+    virtual void execute(sal_Int16 nKeyModifier) override;
 private:
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
@@ -3287,7 +3287,7 @@ SvxStyleToolBoxControl::~SvxStyleToolBoxControl()
 {
 }
 
-void SAL_CALL SvxStyleToolBoxControl::initialize(const Sequence<Any>& rArguments)
+void SvxStyleToolBoxControl::initialize(const Sequence<Any>& rArguments)
 {
     svt::ToolboxController::initialize(rArguments);
 
@@ -3361,15 +3361,15 @@ cpo::uno::Sequence< OUString > SvxStyleToolBoxControl::getSupportedServiceNames(
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_StyleToolBoxControl_get_implementation(
-    css::uno::XComponentContext*,
+    cpo::uno::XComponentContext*,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire( new SvxStyleToolBoxControl() );
 }
 
-void SAL_CALL SvxStyleToolBoxControl::update()
+void SvxStyleToolBoxControl::update()
 {
     for (rtl::Reference<SfxStyleControllerItem_Impl>& pBoundItem : m_xBoundItems)
         pBoundItem->ReBind();
@@ -3568,7 +3568,7 @@ void SvxStyleToolBoxControl::statusChanged( const css::frame::FeatureStateEvent&
         Update();
 }
 
-css::uno::Reference<css::awt::XWindow> SvxStyleToolBoxControl::createItemWindow(const css::uno::Reference< css::awt::XWindow>& rParent)
+cpo::uno::Reference<css::awt::XWindow> SvxStyleToolBoxControl::createItemWindow(const cpo::uno::Reference< css::awt::XWindow>& rParent)
 {
     uno::Reference< awt::XWindow > xItemWindow;
 
@@ -3578,7 +3578,7 @@ css::uno::Reference<css::awt::XWindow> SvxStyleToolBoxControl::createItemWindow(
 
         std::unique_ptr<weld::ComboBox> xWidget(m_pBuilder->weld_combo_box(u"applystyle"_ustr));
 
-        xItemWindow = css::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
+        xItemWindow = cpo::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
 
         m_pImpl->m_xWeldBox.reset(new SvxStyleBox_Base(std::move(xWidget),
                                                      u".uno:StyleApply"_ustr,
@@ -3597,7 +3597,7 @@ css::uno::Reference<css::awt::XWindow> SvxStyleToolBoxControl::createItemWindow(
             SolarMutexGuard aSolarMutexGuard;
 
             m_pImpl->m_xVclBox = VclPtr<SvxStyleBox_Impl>::Create(pParent,
-                                                                ".uno:StyleApply",
+                                                                u".uno:StyleApply"_ustr,
                                                                 SfxStyleFamily::Para,
                                                                 m_xFrame,
                                                                 m_pImpl->aClearForm,
@@ -3659,7 +3659,7 @@ void SvxFontNameToolBoxControl::statusChanged( const css::frame::FeatureStateEve
     }
 }
 
-css::uno::Reference<css::awt::XWindow> SvxFontNameToolBoxControl::createItemWindow(const css::uno::Reference<css::awt::XWindow>& rParent)
+cpo::uno::Reference<css::awt::XWindow> SvxFontNameToolBoxControl::createItemWindow(const cpo::uno::Reference<css::awt::XWindow>& rParent)
 {
     uno::Reference< awt::XWindow > xItemWindow;
 
@@ -3669,7 +3669,7 @@ css::uno::Reference<css::awt::XWindow> SvxFontNameToolBoxControl::createItemWind
 
         std::unique_ptr<weld::ComboBox> xWidget(m_pBuilder->weld_combo_box(u"fontnamecombobox"_ustr));
 
-        xItemWindow = css::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
+        xItemWindow = cpo::uno::Reference<css::awt::XWindow>(new weld::TransportAsXWindow(xWidget.get()));
 
         m_xWeldBox.reset(new SvxFontNameBox_Base(std::move(xWidget), m_xFrame, *this));
         m_pBox = m_xWeldBox.get();
@@ -3714,15 +3714,15 @@ cpo::uno::Sequence< OUString > SvxFontNameToolBoxControl::getSupportedServiceNam
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_FontNameToolBoxControl_get_implementation(
-    css::uno::XComponentContext*,
+    cpo::uno::XComponentContext*,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire( new SvxFontNameToolBoxControl() );
 }
 
-SvxColorToolBoxControl::SvxColorToolBoxControl( const css::uno::Reference<css::uno::XComponentContext>& rContext ) :
+SvxColorToolBoxControl::SvxColorToolBoxControl( const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext ) :
     ImplInheritanceHelper( rContext, nullptr, OUString() ),
     m_bSplitButton(true),
     m_nSlotId(0),
@@ -3840,7 +3840,7 @@ void SvxColorToolBoxControl::setColorSelectFunction(const ColorSelectFunction& a
 
 weld::Window* SvxColorToolBoxControl::GetParentFrame() const
 {
-    const css::uno::Reference<css::awt::XWindow> xParent = m_xFrame->getContainerWindow();
+    const cpo::uno::Reference<css::awt::XWindow> xParent = m_xFrame->getContainerWindow();
     return Application::GetFrameWeld(xParent);
 }
 
@@ -3992,20 +3992,20 @@ cpo::uno::Sequence<OUString> SvxColorToolBoxControl::getSupportedServiceNames()
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_ColorToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire( new SvxColorToolBoxControl( rContext ) );
 }
 
-SvxFrameToolBoxControl::SvxFrameToolBoxControl( const css::uno::Reference< css::uno::XComponentContext >& rContext )
+SvxFrameToolBoxControl::SvxFrameToolBoxControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext )
     : svt::PopupWindowController( rContext, nullptr, OUString() )
 {
 }
 
-void SAL_CALL SvxFrameToolBoxControl::execute(sal_Int16 /*KeyModifier*/)
+void SvxFrameToolBoxControl::execute(sal_Int16 /*KeyModifier*/)
 {
     if (m_pToolbar)
     {
@@ -4076,15 +4076,15 @@ cpo::uno::Sequence< OUString > SvxFrameToolBoxControl::getSupportedServiceNames(
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_FrameToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire( new SvxFrameToolBoxControl( rContext ) );
 }
 
-SvxCurrencyToolBoxControl::SvxCurrencyToolBoxControl( const css::uno::Reference<css::uno::XComponentContext>& rContext ) :
+SvxCurrencyToolBoxControl::SvxCurrencyToolBoxControl( const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext ) :
     PopupWindowController( rContext, nullptr, OUString() ),
     m_eLanguage( Application::GetSettings().GetLanguageTag().getLanguageType() ),
     m_nFormatKey( NUMBERFORMAT_ENTRY_NOT_FOUND )
@@ -4300,9 +4300,9 @@ cpo::uno::Sequence<OUString> SvxCurrencyToolBoxControl::getSupportedServiceNames
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svx_CurrencyToolBoxControl_get_implementation(
-    css::uno::XComponentContext* rContext,
+    cpo::uno::XComponentContext* rContext,
     cpo::uno::Sequence<cpo::uno::Any> const & )
 {
     return cppu::acquire( new SvxCurrencyToolBoxControl( rContext ) );
@@ -4488,7 +4488,7 @@ void ColorListBox::createColorWindow()
 {
     const SfxViewFrame* pViewFrame = SfxViewFrame::Current();
     const SfxFrame* pFrame = pViewFrame ? &pViewFrame->GetFrame() : nullptr;
-    css::uno::Reference<css::frame::XFrame> xFrame(pFrame ? pFrame->GetFrameInterface() : uno::Reference<css::frame::XFrame>());
+    cpo::uno::Reference<css::frame::XFrame> xFrame(pFrame ? pFrame->GetFrameInterface() : uno::Reference<css::frame::XFrame>());
 
     EnsurePaletteManager();
 

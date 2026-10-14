@@ -25,7 +25,9 @@
 
 #include <Poco/Net/PartHandler.h>
 
+#include <span>
 #include <string>
+#include <string_view>
 
 class RequestDetails;
 
@@ -152,25 +154,30 @@ private:
                                std::istream& message,
                                const std::shared_ptr<StreamSocket>& socket);
 
-    void replaceServiceRoot(const Poco::Net::HTTPRequest& request, http::Response& httpResponse,
-                            const RequestDetails& requestDetails,
-                            const std::shared_ptr<StreamSocket>& socket);
-
     static void uploadFileToIntegrator(const Poco::Net::HTTPRequest& request,
                                        std::istream& message,
                                        const std::shared_ptr<StreamSocket>& socket);
 
-    /// Persist a viewsetting.json upload. Secrets the browser asked to keep are
-    /// restored from the currently stored file (fetched from currentFileUrl)
-    /// before the merged body is written back, so the browser never has to hold
-    /// them. Reports the outcome on the socket.
-    static void handleViewSettingUpload(const std::string& wopiSettingBaseUrl,
-                                        const std::string& fileId, const std::string& accessToken,
-                                        const std::string& currentFileUrl,
-                                        const std::string& uploadedFilePath,
-                                        std::shared_ptr<FileUtil::OwnedFile> uploadedFileOwnership,
-                                        const std::string& requestPath,
-                                        const std::shared_ptr<StreamSocket>& socket);
+    /// Validate the target filePath of a settings-upload forward and, when valid, build the
+    /// fileId (filePath + fileName) posted on to the host. Rejects a path that is not absolute,
+    /// tries to traverse ("/./" or "/../", or a trailing "/." or "/.."), or targets the disabled
+    /// per-user extensions directory (duplicate slashes are collapsed first). Returns false and
+    /// leaves fileId untouched when the path is rejected.
+    static bool buildSettingsUploadFileId(const std::string& filePath, const std::string& fileName,
+                                          std::string& fileId);
+
+    /// Persist an upload of a settings file that carries a secret in one of
+    /// secretFields. Secrets the browser asked to keep are restored from the
+    /// currently stored file (fetched from currentFileUrl) before the merged
+    /// body is written back, so the browser never has to hold them. Reports the
+    /// outcome on the socket.
+    static void handleSettingsUploadWithSecrets(
+        const std::string& wopiSettingBaseUrl, const std::string& fileId,
+        const std::string& accessToken, const std::string& currentFileUrl,
+        const std::string& uploadedFilePath,
+        std::shared_ptr<FileUtil::OwnedFile> uploadedFileOwnership,
+        std::span<const std::string_view> secretFields, const std::string& requestPath,
+        const std::shared_ptr<StreamSocket>& socket);
 
     static void fetchWopiSettingConfigs(const Poco::Net::HTTPRequest& request,
                                         std::istream& message,
@@ -219,6 +226,14 @@ private:
 
     static std::string checkFileInfoToJSON(const std::string& checkfileFileInfo);
 
+    /// The origin of the relay page that sits between the document page and the WOPI host.
+    /// value is the "relay_origin" field of the document page request, and
+    /// configuredFrameAncestors is the space-separated list of sources the administrator wrote in
+    /// the configuration. Returns value when that list holds it exactly, and an empty string
+    /// otherwise.
+    static std::string relayOriginFromForm(const std::string& value,
+                                           const std::string& configuredFrameAncestors);
+
     static std::string cssVarsToStyle(const std::string& cssVars);
 
 public:
@@ -246,8 +261,6 @@ public:
     void readAdminTemplates(const std::string& basePath);
 
     const std::string& getAdminTemplate(const std::string& name);
-
-    void synthesizeBuiltinExtensionsIndex();
 
     const std::string *getCompressedFile(const std::string &path);
 

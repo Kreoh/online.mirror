@@ -63,10 +63,15 @@
 #include <oox/ppt/presentationfragmenthandler.hxx>
 #include <oox/ppt/slidefragmenthandler.hxx>
 #include <oox/ppt/layoutfragmenthandler.hxx>
+#include <oox/ppt/moderncommentsfragmenthandler.hxx>
 #include <oox/ppt/pptimport.hxx>
 #include <oox/token/namespaces.hxx>
+#include <oox/token/relationship.hxx>
 #include <oox/token/tokens.hxx>
 #include <sax/fastattribs.hxx>
+#include <sax/tools/converter.hxx>
+#include <svx/annotation/Annotation.hxx>
+#include <o3tl/safeint.hxx>
 
 #include <com/sun/star/office/XAnnotation.hpp>
 #include <com/sun/star/office/XAnnotationAccess.hpp>
@@ -78,8 +83,8 @@
 using namespace ::com::sun::star;
 using namespace ::oox::core;
 using namespace ::oox::drawingml;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::presentation;
@@ -179,6 +184,56 @@ std::vector<OUString> getLayoutFragmentPaths(XmlFilterBase& rFilter,
     }
 
     return aPaths;
+}
+
+/** Turns the threaded comments of one slide into annotations on that slide.
+
+    Each entry becomes one annotation, and a reply is linked to the root it
+    hangs off. The time an entry carries is stored as the file has it.
+ */
+void lcl_insertModernComments(const std::vector<ModernComment>& rComments,
+                              const ModernCommentAuthorList& rAuthors,
+                              const uno::Reference<drawing::XDrawPage>& xSlide)
+{
+    uno::Reference<office::XAnnotationAccess> xAnnotationAccess(xSlide, uno::UNO_QUERY);
+    if (!xAnnotationAccess.is())
+        return;
+
+    std::vector<rtl::Reference<sdr::annotation::Annotation>> aInserted;
+    aInserted.reserve(rComments.size());
+    for (auto const& rComment : rComments)
+    {
+        uno::Reference<office::XAnnotation> xAnnotation(
+            xAnnotationAccess->createAndInsertAnnotation());
+        xAnnotation->setAuthor(rAuthors.getName(rComment.maAuthorId));
+        xAnnotation->setInitials(rAuthors.getInitials(rComment.maAuthorId));
+        util::DateTime aDateTime;
+        if (::sax::Converter::parseDateTime(aDateTime, rComment.maCreated))
+        {
+            // The value is a moment in UTC, so it goes in both slots: as the moment, and as the
+            // wall clock, which is the best the entry can offer for one since the file records
+            // no zone for its author.
+            xAnnotation->setDateTime(aDateTime);
+            xAnnotation->setDateTimeUTC(aDateTime);
+        }
+        uno::Reference<text::XText> xText(xAnnotation->getTextRange());
+        xText->setString(rComment.maText);
+
+        rtl::Reference<sdr::annotation::Annotation> xInserted(
+            dynamic_cast<sdr::annotation::Annotation*>(xAnnotation.get()));
+        if (xInserted.is())
+        {
+            // Every one of these comments can be replied to and resolved.
+            xInserted->SetThreaded(true);
+            if (rComment.mnParentIndex >= 0
+                && o3tl::make_unsigned(rComment.mnParentIndex) < aInserted.size()
+                && aInserted[rComment.mnParentIndex].is())
+            {
+                xInserted->SetParentId(aInserted[rComment.mnParentIndex]->GetId());
+            }
+        }
+        aInserted.push_back(xInserted);
+    }
 }
 } // end anonymous ns
 
@@ -317,31 +372,11 @@ void PresentationFragmentHandler::importMasterSlide(const Reference<frame::XMode
         OUString aThemeFragmentPath = xMasterFragmentHandler->getFragmentPathFromFirstTypeFromOfficeDoc( u"theme" );
         if( !aThemeFragmentPath.isEmpty() )
         {
-            std::map< OUString, oox::drawingml::ThemePtr >& rThemes( rFilter.getThemes() );
-            std::map< OUString, oox::drawingml::ThemePtr >::iterator aIter2( rThemes.find( aThemeFragmentPath ) );
-            if( aIter2 == rThemes.end() )
-            {
-                oox::drawingml::ThemePtr pThemePtr = std::make_shared<oox::drawingml::Theme>();
-                pMasterPersistPtr->setTheme( pThemePtr );
-                Reference<xml::dom::XDocument> xDoc=
-                    rFilter.importFragment(aThemeFragmentPath);
-
-                auto pTheme = std::make_shared<model::Theme>();
-                pThemePtr->setTheme(pTheme);
-
-                rFilter.importFragment(
-                    new ThemeFragmentHandler(rFilter, aThemeFragmentPath, *pThemePtr, *pTheme),
-                    Reference<xml::sax::XFastSAXSerializable>(
-                        xDoc,
-                        UNO_QUERY_THROW));
-                rThemes[ aThemeFragmentPath ] = pThemePtr;
-                pThemePtr->setFragment(xDoc);
+            bool bRead = false;
+            oox::drawingml::ThemePtr pThemePtr = rFilter.importTheme(aThemeFragmentPath, bRead);
+            pMasterPersistPtr->setTheme(pThemePtr);
+            if (bRead)
                 saveThemeToGrabBag(pThemePtr, nIndex + 1);
-            }
-            else
-            {
-                pMasterPersistPtr->setTheme( (*aIter2).second );
-            }
         }
         importSlide( xMasterFragmentHandler, pMasterPersistPtr );
 
@@ -714,6 +749,37 @@ void PresentationFragmentHandler::importSlide(sal_uInt32 nSlide, sal_Int32 nPage
                             pNotesPersistPtr->releaseShapes();
                         }
                     }
+                }
+            }
+
+            OUString aModernCommentPath = xSlideFragmentHandler->getFragmentPathFromFirstType(
+                getRelationship(Relationship::MODERNCOMMENTS));
+            // A file can carry both parts, so that a reader which predates the newer one still
+            // finds the comments. The newer one is the fuller record, so when it yields any
+            // comments it wins and the older one is left alone rather than adding every comment
+            // a second time. When it yields none, the older part is the only record there is.
+            if (!aModernCommentPath.isEmpty())
+            {
+                if (!mbModernCommentAuthorsRead)
+                {
+                    mbModernCommentAuthorsRead = true;
+                    OUString aAuthorsPath = getFragmentPathFromFirstType(
+                        getRelationship(Relationship::MODERNCOMMENTAUTHORS));
+                    if (!aAuthorsPath.isEmpty())
+                    {
+                        getFilter().importFragment(new ModernCommentAuthorsFragmentHandler(
+                            getFilter(), aAuthorsPath, maModernAuthorList));
+                    }
+                }
+
+                rtl::Reference<ModernCommentsFragmentHandler> xModernCommentsHandler(
+                    new ModernCommentsFragmentHandler(getFilter(), aModernCommentPath));
+                if (getFilter().importFragment(xModernCommentsHandler)
+                    && !xModernCommentsHandler->getComments().empty())
+                {
+                    lcl_insertModernComments(xModernCommentsHandler->getComments(),
+                                             maModernAuthorList, xSlide);
+                    aCommentFragmentPath.clear();
                 }
             }
 

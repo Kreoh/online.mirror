@@ -32,14 +32,12 @@ namespace com::sun::star {
     namespace document {
         class XScriptInvocationContext;
     }
-    namespace uno {
-        class XComponentContext;
-    }
     namespace frame {
         class XFrame;
         class XNotifyingDispatch;
     }
 }
+namespace cpo::uno { class XComponentContext; }
 
 namespace scripting_protocolhandler
 {
@@ -50,48 +48,48 @@ public ::cppu::WeakImplHelper< css::frame::XDispatchProvider,
 {
 private:
     bool m_bInitialised;
-    css::uno::Reference < css::uno::XComponentContext >             m_xContext;
-    css::uno::Reference < css::frame::XFrame >                      m_xFrame;
-    css::uno::Reference < css::script::provider::XScriptProvider >  m_xScriptProvider;
-    css::uno::Reference< css::document::XScriptInvocationContext >  m_xScriptInvocation;
+    cpo::uno::Reference < cpo::uno::XComponentContext >             m_xContext;
+    cpo::uno::Reference < css::frame::XFrame >                      m_xFrame;
+    cpo::uno::Reference < css::script::provider::XScriptProvider >  m_xScriptProvider;
+    cpo::uno::Reference< css::document::XScriptInvocationContext >  m_xScriptInvocation;
 
     void createScriptProvider();
     bool getScriptInvocation();
 
 public:
-    explicit ScriptProtocolHandler( const css::uno::Reference < css::uno::XComponentContext >& xContext );
+    explicit ScriptProtocolHandler( const cpo::uno::Reference < cpo::uno::XComponentContext >& xContext );
     virtual ~ScriptProtocolHandler() override;
 
     /* XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& sServiceName ) override;
-    virtual cpo::uno::Sequence < OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& sServiceName ) override;
+    virtual cpo::uno::Sequence < OUString > getSupportedServiceNames() override;
 
     /* Implementation for XDispatchProvider */
-    virtual css::uno::Reference < css::frame::XDispatch > SAL_CALL
+    virtual cpo::uno::Reference < css::frame::XDispatch >
     queryDispatch( const css::util::URL& aURL, const OUString& sTargetFrameName,
                    sal_Int32 eSearchFlags ) override ;
-    virtual cpo::uno::Sequence< css::uno::Reference < css::frame::XDispatch > > SAL_CALL
+    virtual cpo::uno::Sequence< cpo::uno::Reference < css::frame::XDispatch > >
     queryDispatches(
         const cpo::uno::Sequence < css::frame::DispatchDescriptor >& seqDescriptor ) override;
 
     /* Implementation for X(Notifying)Dispatch */
-    virtual void SAL_CALL dispatchWithNotification(
+    virtual void dispatchWithNotification(
         const css::util::URL& aURL,
         const cpo::uno::Sequence< css::beans::PropertyValue >& lArgs,
-        const css::uno::Reference< css::frame::XDispatchResultListener >& Listener ) override;
-    virtual void SAL_CALL dispatch(
+        const cpo::uno::Reference< css::frame::XDispatchResultListener >& Listener ) override;
+    virtual void dispatch(
         const css::util::URL& aURL,
         const cpo::uno::Sequence< css::beans::PropertyValue >& lArgs ) override;
-    virtual void SAL_CALL addStatusListener(
-        const css::uno::Reference< css::frame::XStatusListener >& xControl,
+    virtual void addStatusListener(
+        const cpo::uno::Reference< css::frame::XStatusListener >& xControl,
         const css::util::URL& aURL ) override;
-    virtual void SAL_CALL removeStatusListener(
-        const css::uno::Reference< css::frame::XStatusListener >& xControl,
+    virtual void removeStatusListener(
+        const cpo::uno::Reference< css::frame::XStatusListener >& xControl,
         const css::util::URL& aURL ) override;
 
     /* Implementation for XInitialization */
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         const cpo::uno::Sequence < cpo::uno::Any >& aArguments ) override;
 };
 

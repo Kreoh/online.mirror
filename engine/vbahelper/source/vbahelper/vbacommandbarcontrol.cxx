@@ -24,9 +24,10 @@
 #include <sal/log.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaCommandBarControl::ScVbaCommandBarControl( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, css::uno::Reference< css::container::XIndexAccess >  xSettings, VbaCommandBarHelperRef  pHelper, css::uno::Reference< css::container::XIndexAccess >  xBarSettings, OUString  sResourceUrl ) : CommandBarControl_BASE( xParent, xContext ), pCBarHelper(std::move( pHelper )), m_sResourceUrl(std::move( sResourceUrl )), m_xCurrentSettings(std::move( xSettings )), m_xBarSettings(std::move( xBarSettings )), m_nPosition( 0 )
+ScVbaCommandBarControl::ScVbaCommandBarControl( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, cpo::uno::Reference< css::container::XIndexAccess >  xSettings, VbaCommandBarHelperRef  pHelper, cpo::uno::Reference< css::container::XIndexAccess >  xBarSettings, OUString  sResourceUrl ) : CommandBarControl_BASE( xParent, xContext ), pCBarHelper(std::move( pHelper )), m_sResourceUrl(std::move( sResourceUrl )), m_xCurrentSettings(std::move( xSettings )), m_xBarSettings(std::move( xBarSettings )), m_nPosition( 0 )
 {
 }
 
@@ -37,7 +38,7 @@ void ScVbaCommandBarControl::ApplyChange()
     pCBarHelper->ApplyTempChange( m_sResourceUrl, m_xBarSettings );
 }
 
-OUString SAL_CALL
+OUString
 ScVbaCommandBarControl::getCaption()
 {
     // "Label" always empty
@@ -46,7 +47,7 @@ ScVbaCommandBarControl::getCaption()
     return sCaption;
 }
 
-void SAL_CALL
+void
 ScVbaCommandBarControl::setCaption( const OUString& _caption )
 {
     OUString sCaption = _caption.replace('&','~');
@@ -54,7 +55,7 @@ ScVbaCommandBarControl::setCaption( const OUString& _caption )
     ApplyChange();
 }
 
-OUString SAL_CALL
+OUString
 ScVbaCommandBarControl::getOnAction()
 {
     OUString sCommandURL;
@@ -62,7 +63,7 @@ ScVbaCommandBarControl::getOnAction()
     return sCommandURL;
 }
 
-void SAL_CALL
+void
 ScVbaCommandBarControl::setOnAction( const OUString& _onaction )
 {
     // get the current model
@@ -77,7 +78,7 @@ ScVbaCommandBarControl::setOnAction( const OUString& _onaction )
     }
 }
 
-bool SAL_CALL
+bool
 ScVbaCommandBarControl::getVisible()
 {
     bool bVisible = true;
@@ -86,7 +87,7 @@ ScVbaCommandBarControl::getVisible()
         aValue >>= bVisible;
     return bVisible;
 }
-void SAL_CALL
+void
 ScVbaCommandBarControl::setVisible( bool _visible )
 {
     cpo::uno::Any aValue = getPropertyValue( m_aPropertyValues, ITEM_DESCRIPTOR_ISVISIBLE );
@@ -97,7 +98,7 @@ ScVbaCommandBarControl::setVisible( bool _visible )
     }
 }
 
-bool SAL_CALL
+bool
 ScVbaCommandBarControl::getEnabled()
 {
     bool bEnabled = true;
@@ -115,7 +116,7 @@ ScVbaCommandBarControl::getEnabled()
     return bEnabled;
 }
 
-void SAL_CALL
+void
 ScVbaCommandBarControl::setEnabled( bool _enabled )
 {
     cpo::uno::Any aValue = getPropertyValue( m_aPropertyValues, ITEM_DESCRIPTOR_ENABLED );
@@ -131,7 +132,7 @@ ScVbaCommandBarControl::setEnabled( bool _enabled )
     }
 }
 
-bool SAL_CALL
+bool
 ScVbaCommandBarControl::getBeginGroup()
 {
     // TODO: need to check if the item before this item is of type 'separator'
@@ -139,7 +140,7 @@ ScVbaCommandBarControl::getBeginGroup()
     return false;
 }
 
-void SAL_CALL
+void
 ScVbaCommandBarControl::setBeginGroup( bool _begin )
 {
     if( getBeginGroup() != _begin )
@@ -148,7 +149,7 @@ ScVbaCommandBarControl::setBeginGroup( bool _begin )
     }
 }
 
-void SAL_CALL
+void
 ScVbaCommandBarControl::Delete(  )
 {
     if( m_xCurrentSettings.is() )
@@ -160,14 +161,14 @@ ScVbaCommandBarControl::Delete(  )
     }
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaCommandBarControl::Controls( const cpo::uno::Any& aIndex )
 {
     // only Popup Menu has controls
     uno::Reference< container::XIndexAccess > xSubMenu;
     getPropertyValue( m_aPropertyValues, ITEM_DESCRIPTOR_CONTAINER ) >>= xSubMenu;
     if( !xSubMenu.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     uno::Reference< XCommandBarControls > xCommandBarControls( new ScVbaCommandBarControls( this, mxContext, xSubMenu, pCBarHelper, m_xBarSettings, m_sResourceUrl ) );
     if( aIndex.hasValue() )
@@ -194,11 +195,11 @@ ScVbaCommandBarControl::getServiceNames()
 }
 
 // ScVbaCommandBarPopup
-ScVbaCommandBarPopup::ScVbaCommandBarPopup( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                                            const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                                            const css::uno::Reference< css::container::XIndexAccess >& xSettings,
+ScVbaCommandBarPopup::ScVbaCommandBarPopup( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                                            const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                                            const cpo::uno::Reference< css::container::XIndexAccess >& xSettings,
                                             const VbaCommandBarHelperRef& pHelper,
-                                            const css::uno::Reference< css::container::XIndexAccess >& xBarSettings,
+                                            const cpo::uno::Reference< css::container::XIndexAccess >& xBarSettings,
                                             const OUString& sResourceUrl,
                                             sal_Int32 nPosition )
     : CommandBarPopup_BASE( xParent, xContext, xSettings, pHelper, xBarSettings, sResourceUrl )
@@ -224,11 +225,11 @@ ScVbaCommandBarPopup::getServiceNames()
 }
 
 // ScVbaCommandBarButton
-ScVbaCommandBarButton::ScVbaCommandBarButton( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                                              const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                                              const css::uno::Reference< css::container::XIndexAccess >& xSettings,
+ScVbaCommandBarButton::ScVbaCommandBarButton( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                                              const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                                              const cpo::uno::Reference< css::container::XIndexAccess >& xSettings,
                                               const VbaCommandBarHelperRef& pHelper,
-                                              const css::uno::Reference< css::container::XIndexAccess >& xBarSettings,
+                                              const cpo::uno::Reference< css::container::XIndexAccess >& xBarSettings,
                                               const OUString& sResourceUrl,
                                               sal_Int32 nPosition )
     : CommandBarButton_BASE( xParent, xContext, xSettings, pHelper, xBarSettings, sResourceUrl )

@@ -30,6 +30,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace comphelper
 {
@@ -60,7 +61,7 @@ static void copyInputToOutput_Impl( const uno::Reference< io::XInputStream >& xI
 
 OSeekableInputWrapper::OSeekableInputWrapper(
             uno::Reference< io::XInputStream > xInStream,
-            uno::Reference< uno::XComponentContext > xContext )
+            uno::Reference< cpo::uno::XComponentContext > xContext )
 : m_xContext(std::move( xContext ))
 , m_xOriginalStream(std::move( xInStream ))
 {
@@ -76,7 +77,7 @@ OSeekableInputWrapper::~OSeekableInputWrapper()
 
 uno::Reference< io::XInputStream > OSeekableInputWrapper::CheckSeekableCanWrap(
                             const uno::Reference< io::XInputStream >& xInStream,
-                            const uno::Reference< uno::XComponentContext >& rxContext )
+                            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 {
     // check that the stream is seekable and just wrap it if it is not
     uno::Reference< io::XSeekable > xSeek( xInStream, uno::UNO_QUERY );
@@ -92,7 +93,7 @@ void OSeekableInputWrapper::PrepareCopy_Impl()
     if ( !m_xCopyInput.is() )
     {
         if ( !m_xContext.is() )
-            throw uno::RuntimeException(u"no component context"_ustr);
+            throw cpo::uno::RuntimeException(u"no component context"_ustr);
 
         uno::Reference< io::XOutputStream > xTempOut(
                 io::TempFile::create(m_xContext),

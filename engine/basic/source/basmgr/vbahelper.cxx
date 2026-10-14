@@ -32,6 +32,7 @@
 namespace basic::vba {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 namespace {
@@ -40,7 +41,7 @@ namespace {
  */
 uno::Reference< frame::XModuleManager2 > lclCreateModuleManager()
 {
-    uno::Reference< uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext(), uno::UNO_SET_THROW );
+    uno::Reference< cpo::uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext(), uno::UNO_SET_THROW );
     return frame::ModuleManager::create(xContext);
 }
 
@@ -54,7 +55,7 @@ ModelVector CreateDocumentsEnumeration(
     {
         uno::Reference< frame::XModuleManager2 > xModuleManager( lclCreateModuleManager() );
         OUString aIdentifier = xModuleManager->identify( rxModel );
-        uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+        uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create( ::comphelper::getProcessComponentContext() );
         uno::Reference< container::XEnumerationAccess > xComponentsEA( xDesktop->getComponents(), uno::UNO_SET_THROW );
         uno::Reference< container::XEnumeration > xEnumeration( xComponentsEA->createEnumeration(), uno::UNO_SET_THROW );
         while( xEnumeration->hasMoreElements() )

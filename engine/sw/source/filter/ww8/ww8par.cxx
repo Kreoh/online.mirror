@@ -94,6 +94,7 @@
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentMarkAccess.hxx>
 #include <IDocumentStylePoolAccess.hxx>
+#include <istyleaccess.hxx>
 #include <IDocumentExternalData.hxx>
 #include <DocumentRedlineManager.hxx>
 #include <docufld.hxx>
@@ -160,6 +161,7 @@
 #include <unotxdoc.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace sw::util;
 using namespace sw::types;
 using namespace nsHdFtFlags;
@@ -370,7 +372,7 @@ namespace {
 class BasicProjImportHelper
 {
     SwDocShell& mrDocShell;
-    uno::Reference< uno::XComponentContext > mxCtx;
+    uno::Reference< cpo::uno::XComponentContext > mxCtx;
 public:
     explicit BasicProjImportHelper( SwDocShell& rShell ) : mrDocShell( rShell ),
       mxCtx(comphelper::getProcessComponentContext())
@@ -540,7 +542,7 @@ rtl::Reference<SdrObject> SwMSDffManager::ImportOLE( sal_uInt32 nOLEId,
     {
         rtl::Reference<SotStorage> xSrc = xSrcStg->OpenSotStorage(sStorageName);
         OSL_ENSURE(m_rReader.m_xFormImpl, "No Form Implementation!");
-        css::uno::Reference< css::drawing::XShape > xShape;
+        cpo::uno::Reference< css::drawing::XShape > xShape;
         if ( (!(m_rReader.m_bIsHeader || m_rReader.m_bIsFooter)) &&
             m_rReader.m_xFormImpl->ReadOCXStream(xSrc,&xShape,true))
         {
@@ -1425,8 +1427,9 @@ void SwWW8FltControlStack::SetAttrInDoc(const SwPosition& rTmpPos,
                         SvxTextLeftMarginItem const leftMarginEntry(*static_cast<SvxTextLeftMarginItem*>(rEntry.m_pAttr.get()));
                         leftMarginNew.SetTextLeft(leftMarginEntry.GetTextLeft(), leftMarginEntry.GetPropLeft());
                     }
-                    SwNodeOffset nStart = aRegion.Start()->GetNodeIndex();
-                    SwNodeOffset nEnd   = aRegion.End()->GetNodeIndex();
+                    auto [pStart, pEnd] = aRegion.StartEnd(); // SwPosition*
+                    SwNodeOffset nStart = pStart->GetNodeIndex();
+                    SwNodeOffset nEnd = pEnd->GetNodeIndex();
                     for(; nStart <= nEnd; ++nStart)
                     {
                         SwNode* pNode = m_rDoc.GetNodes()[ nStart ];
@@ -1920,6 +1923,8 @@ void SwWW8ImplReader::ImportDop()
         DocumentSettingId::APPLY_PARAGRAPH_MARK_FORMAT_TO_NUMBERING, true);
     m_rDoc.getIDocumentSettingAccess().set(
         DocumentSettingId::MS_WORD_COMP_TRAILING_BLANKS, true);
+    m_rDoc.getIDocumentSettingAccess().set(
+        DocumentSettingId::MS_WORD_COMP_MIN_TEXT_WRAP_GAP, true);
     // tdf#128195
     m_rDoc.getIDocumentSettingAccess().set(
         DocumentSettingId::HEADER_SPACING_BELOW_LAST_PARA, true);
@@ -1938,9 +1943,7 @@ void SwWW8ImplReader::ImportDop()
         !m_xWDop->fDontAdjustLineHeightInTable);
 
     // Import Default Tabs
-    tools::Long nDefTabSiz = m_xWDop->dxaTab;
-    if( nDefTabSiz < 56 )
-        nDefTabSiz = 709;
+    tools::Long nDefTabSiz = std::max<tools::Long>(1, m_xWDop->dxaTab);
 
     // We want exactly one DefaultTab
     SvxTabStopItem aNewTab( 1, sal_uInt16(nDefTabSiz), SvxTabAdjust::Default, RES_PARATR_TABSTOP );
@@ -2587,7 +2590,8 @@ void SwWW8ImplReader::FinalizeTextNode(SwPosition& rPos, bool bAddNew)
                 items.Put(*pItem);
         }
         SwFormatAutoFormat item(RES_PARATR_LIST_AUTOFMT);
-        item.SetStyleHandle(std::make_shared<SfxItemSet>(items));
+        item.SetStyleHandle(
+            m_rDoc.GetIStyleAccess().getAutomaticStyle(items, IStyleAccess::AUTO_STYLE_CHAR));
         pText->SetAttr(item);
     }
 
@@ -4506,8 +4510,9 @@ void wwSectionManager::InsertSegments()
                 SwFormatPageDesc aDesc(SetSwFormatPageDesc(aIter, aStart, true));
                 if (aDesc.GetPageDesc())
                 {
-                    SwNodeOffset nStart = aSectPaM.Start()->GetNodeIndex();
-                    SwNodeOffset nEnd   = aSectPaM.End()->GetNodeIndex();
+                    auto [pStart, pEnd] = aSectPaM.StartEnd(); // SwPosition*
+                    SwNodeOffset nStart = pStart->GetNodeIndex();
+                    SwNodeOffset nEnd = pEnd->GetNodeIndex();
                     for(; nStart <= nEnd; ++nStart)
                     {
                         SwNode* pNode = mrReader.m_rDoc.GetNodes()[nStart];
@@ -4835,7 +4840,7 @@ void SwWW8ImplReader::ReadGlobalTemplateSettings( std::u16string_view sCreatedFr
     cpo::uno::Sequence< OUString > sGlobalTemplates;
 
     // first get the autoload addins in the directory STARTUP
-    uno::Reference<ucb::XSimpleFileAccess3> xSFA(ucb::SimpleFileAccess::create(::comphelper::getProcessComponentContext()));
+    uno::Reference<ucb::XSimpleFileAccess> xSFA(ucb::SimpleFileAccess::create(::comphelper::getProcessComponentContext()));
 
     if( xSFA->isFolder( aAddinPath ) )
         sGlobalTemplates = xSFA->getFolderContents( aAddinPath, false );
@@ -4884,7 +4889,7 @@ ErrCode SwWW8ImplReader::CoreLoad(WW8Glossary const *pGloss)
         try
         {
             rtl::Reference<SwXTextDocument> const xModel(m_rDoc.GetDocShell()->GetBaseModel());
-            const uno::Reference<uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
+            const uno::Reference<cpo::uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
             uno::Reference<embed::XStorage> xStorage = comphelper::OStorageHelper::GetTemporaryStorage();
             const uno::Reference<rdf::XURI> xBaseURI(sfx2::createBaseURI(xComponentContext, static_cast<SfxBaseModel*>(xModel.get()), m_sBaseURL));
             uno::Reference<task::XInteractionHandler> xHandler;
@@ -6154,7 +6159,7 @@ ErrCode SwWW8ImplReader::LoadDoc(WW8Glossary *pGloss)
     return nErrRet;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT Reader* ImportDOC()
+Reader* ImportDOC()
 {
     return new WW8Reader;
 }
@@ -6264,7 +6269,7 @@ ErrCode WW8Reader::DecryptDRMPackage()
 {
     // We have DRM encrypted storage. We should try to decrypt it first, if we can
     cpo::uno::Sequence< cpo::uno::Any > aArguments;
-    const uno::Reference<uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
     uno::Reference< packages::XPackageEncryption > xPackageEncryption(
         xComponentContext->getServiceManager()->createInstanceWithArgumentsAndContext(
             u"com.sun.star.comp.oox.crypto.DRMDataSpace"_ustr, aArguments, xComponentContext), uno::UNO_QUERY);

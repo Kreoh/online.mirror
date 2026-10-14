@@ -34,7 +34,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/svapp.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::frame;
@@ -48,7 +48,7 @@ class AddonsToolBarFactory :  public ::cppu::WeakImplHelper< css::lang::XService
                                                               css::ui::XUIElementFactory >
 {
 public:
-    explicit AddonsToolBarFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+    explicit AddonsToolBarFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual OUString getImplementationName() override
     {
@@ -66,18 +66,18 @@ public:
     }
 
     // XUIElementFactory
-    virtual css::uno::Reference< css::ui::XUIElement > createUIElement( const OUString& ResourceURL, const cpo::uno::Sequence< css::beans::PropertyValue >& Args ) override;
+    virtual cpo::uno::Reference< css::ui::XUIElement > createUIElement( const OUString& ResourceURL, const cpo::uno::Sequence< css::beans::PropertyValue >& Args ) override;
 
     bool hasButtonsInContext( const cpo::uno::Sequence< cpo::uno::Sequence< css::beans::PropertyValue > >& rPropSeq,
-                                  const css::uno::Reference< css::frame::XFrame >& rFrame );
+                                  const cpo::uno::Reference< css::frame::XFrame >& rFrame );
 
 private:
-    css::uno::Reference< css::uno::XComponentContext >     m_xContext;
-    css::uno::Reference< css::frame::XModuleManager2 >     m_xModuleManager;
+    cpo::uno::Reference< cpo::uno::XComponentContext >     m_xContext;
+    cpo::uno::Reference< css::frame::XModuleManager2 >     m_xModuleManager;
 };
 
 AddonsToolBarFactory::AddonsToolBarFactory(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) :
     m_xContext( xContext )
     , m_xModuleManager( ModuleManager::create( xContext ) )
 {
@@ -195,9 +195,9 @@ Reference< XUIElement > AddonsToolBarFactory::createUIElement(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_AddonsToolBarFactory_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new AddonsToolBarFactory(context));

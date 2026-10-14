@@ -29,7 +29,7 @@
 #include <typelib/typedescription.h>
 #include <cppuhelper/supportsservice.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace framework{
@@ -97,7 +97,7 @@ static Sequence< Any > make_seq_out_of_struct(
     return Sequence< Any >( vec.data(), vec.size() );
 }
 
-DispatchRecorder::DispatchRecorder( const css::uno::Reference< css::uno::XComponentContext >& xContext )
+DispatchRecorder::DispatchRecorder( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext )
     : m_nRecordingID(0)
     , m_xConverter(css::script::Converter::create(xContext))
 {
@@ -108,7 +108,7 @@ DispatchRecorder::~DispatchRecorder()
 }
 
 // generate header
-void DispatchRecorder::startRecording( const css::uno::Reference< css::frame::XFrame >& )
+void DispatchRecorder::startRecording( const cpo::uno::Reference< css::frame::XFrame >& )
 {
     /* SAFE{ */
     /* } */
@@ -422,9 +422,9 @@ void DispatchRecorder::replaceByIndex(sal_Int32 idx, const cpo::uno::Any& elemen
 } // namespace framework
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_DispatchRecorder_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::DispatchRecorder(context));
 }

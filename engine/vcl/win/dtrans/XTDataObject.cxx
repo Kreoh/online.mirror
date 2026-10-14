@@ -27,7 +27,6 @@
 #include "DTransHelper.hxx"
 #include "TxtCnvtHlp.hxx"
 #include <com/sun/star/datatransfer/UnsupportedFlavorException.hpp>
-#include <com/sun/star/datatransfer/clipboard/XClipboardEx.hpp>
 #include <com/sun/star/awt/AsyncCallback.hpp>
 #include <com/sun/star/awt/XCallback.hpp>
 #include "FmtFilter.hxx"
@@ -41,7 +40,7 @@
 
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::datatransfer::clipboard;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 
@@ -88,11 +87,11 @@ class AsyncDereference : public cppu::WeakImplHelper<css::awt::XCallback>
     Reference<XTransferable> maTransferable;
 
 public:
-    AsyncDereference(css::uno::Reference<css::datatransfer::XTransferable> const & rTransferable)
+    AsyncDereference(cpo::uno::Reference<css::datatransfer::XTransferable> const & rTransferable)
         : maTransferable(rTransferable)
     {}
 
-    virtual void SAL_CALL notify(cpo::uno::Any const &) override
+    virtual void notify(cpo::uno::Any const &) override
     {
         maTransferable.clear();
     }

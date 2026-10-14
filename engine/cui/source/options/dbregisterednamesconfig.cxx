@@ -30,7 +30,7 @@ namespace svx
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::sdb;
 
     void DbRegisteredNamesConfig::GetOptions( SfxItemSet& _rFillItems )
@@ -39,7 +39,7 @@ namespace svx
 
         try
         {
-            const Reference<XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+            const Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
             Reference< XDatabaseContext > xRegistrations(
                 DatabaseContext::create(xContext) );
 

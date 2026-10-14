@@ -32,6 +32,8 @@
 #include <svx/sdtfchim.hxx>
 #include <svx/selectioncontroller.hxx>
 #include <svx/svdedxv.hxx>
+#include <svx/diagram/DiagramHelper_svx.hxx>
+#include <svx/svdogrp.hxx>
 #include <svx/svdetc.hxx>
 #include <svx/svdotable.hxx>
 #include <svx/svdotext.hxx>
@@ -120,6 +122,15 @@ IMPL_LINK_NOARG(SdrObjEditView, ImpModifyHdl, LinkParamNone*, void)
     // reset & restart the timer
     maTextEditUpdateTimer.SetTimeout(EDIT_UPDATEDATA_TIMEOUT);
     maTextEditUpdateTimer.Start();
+
+    // A reader that draws the text of the edit from the model wants it as it is typed. The
+    // timer above waits for a pause before it moves the model, which is the cadence the shapes
+    // want and far too slow for the text itself.
+    if (mxWeakTextEditObj.get()->getSdrModelFromSdrObject().IsDrawnFromModel())
+    {
+        if (SfxViewShell* pViewShell = GetSfxViewShell())
+            pViewShell->textEditContentChanged();
+    }
 }
 
 IMPL_LINK_NOARG(SdrObjEditView, TextEditUpdate, Timer*, void)
@@ -141,8 +152,9 @@ IMPL_LINK_NOARG(SdrObjEditView, TextEditUpdate, Timer*, void)
     // to get this broadcasted. We do not risk to set the model
     // unwantedly to changed, we had a text edit going on already.
     // This is needed for SlideShow since it is not (yet) using the
-    // standard schema with VC/VOC/OC
-    if (isInteractiveSlideShow())
+    // standard schema with VC/VOC/OC, and for a reader that draws from the model
+    if (isInteractiveSlideShow()
+        || mxWeakTextEditObj.get()->getSdrModelFromSdrObject().IsDrawnFromModel())
         mxWeakTextEditObj.get()->BroadcastObjectChange();
 
     // force repaint for objects with changed text in all views
@@ -487,6 +499,69 @@ namespace
 class TextEditFrameOverlayObject;
 class TextEditHighContrastOverlaySelection;
 
+/// The text of a running text edit, laid out and placed where the edit shows it.
+drawinglayer::primitive2d::Primitive2DContainer
+createTextEditTextPrimitives(const OutlinerView& rOutlinerView)
+{
+    drawinglayer::primitive2d::Primitive2DContainer aTextPrimitives;
+    SdrOutliner* pSdrOutliner = dynamic_cast<SdrOutliner*>(&rOutlinerView.GetOutliner());
+
+    if (!pSdrOutliner)
+        return aTextPrimitives;
+
+    basegfx::B2DHomMatrix aNewTransformA;
+    basegfx::B2DHomMatrix aNewTransformB;
+    basegfx::B2DRange aClipRange;
+
+    // active Outliner is always in unified oriented coordinate system (currently)
+    // so just translate to TopLeft of visible Range. Keep in mind that top-left
+    // depends on vertical text and top-to-bottom text attributes
+    const tools::Rectangle aOutArea(rOutlinerView.GetOutputArea());
+    const tools::Rectangle aVisArea(rOutlinerView.GetVisArea());
+    const bool bVerticalWriting(pSdrOutliner->IsVertical());
+    const bool bTopToBottom(pSdrOutliner->IsTopToBottom());
+    const double fStartInX(bVerticalWriting && bTopToBottom ? aOutArea.Right() - aVisArea.Left()
+                                                            : aOutArea.Left() - aVisArea.Left());
+    const double fStartInY(bVerticalWriting && !bTopToBottom ? aOutArea.Bottom() - aVisArea.Top()
+                                                             : aOutArea.Top() - aVisArea.Top());
+
+    aNewTransformB.translate(fStartInX, fStartInY);
+
+    // get the current TextPrimitives. This is the most expensive part
+    // of this mechanism, it *may* be possible to buffer layouted
+    // primitives per ParaPortion with/in/dependent on the EditEngine
+    // content if needed. For now, get and compare
+    TextHierarchyBreakupBlockText aBreakup(*pSdrOutliner, aNewTransformA, aNewTransformB,
+                                           aClipRange);
+    pSdrOutliner->StripPortions(aBreakup);
+    aTextPrimitives.append(aBreakup.getTextPortionPrimitives());
+
+    return aTextPrimitives;
+}
+
+/** What a running text edit has selected, as ranges in logic coordinates.
+ *
+ * Each range is grown by rGrowBy, which a view sets to what one of its pixels measures so that the
+ * selection covers the edges of the glyphs it contains.
+ */
+std::vector<basegfx::B2DRange> createTextEditSelectionRanges(const OutlinerView& rOutlinerView,
+                                                             const Size& rGrowBy)
+{
+    std::vector<tools::Rectangle> aLogicRects;
+    rOutlinerView.GetSelectionRectangles(aLogicRects);
+
+    std::vector<basegfx::B2DRange> aLogicRanges;
+    aLogicRanges.reserve(aLogicRects.size());
+    for (const auto& aRect : aLogicRects)
+    {
+        aLogicRanges.emplace_back(aRect.Left() - rGrowBy.Width(), aRect.Top() - rGrowBy.Height(),
+                                  aRect.Right() + rGrowBy.Width(),
+                                  aRect.Bottom() + rGrowBy.Height());
+    }
+
+    return aLogicRanges;
+}
+
 /**
         Helper class to visualize the content of an active EditView as an
         OverlayObject. These objects work with Primitives and are handled
@@ -769,45 +844,13 @@ void TextEditOverlayObject::checkDataChange(const basegfx::B2DRange& rMinTextEdi
     }
 
     // check if text primitives did change
-    SdrOutliner* pSdrOutliner = dynamic_cast<SdrOutliner*>(&getOutlinerView().GetOutliner());
+    drawinglayer::primitive2d::Primitive2DContainer aNewTextPrimitives(
+        createTextEditTextPrimitives(mrOutlinerView));
 
-    if (pSdrOutliner)
+    if (aNewTextPrimitives != maTextPrimitives)
     {
-        // get TextPrimitives directly from active Outliner
-        basegfx::B2DHomMatrix aNewTransformA;
-        basegfx::B2DHomMatrix aNewTransformB;
-        basegfx::B2DRange aClipRange;
-        drawinglayer::primitive2d::Primitive2DContainer aNewTextPrimitives;
-
-        // active Outliner is always in unified oriented coordinate system (currently)
-        // so just translate to TopLeft of visible Range. Keep in mind that top-left
-        // depends on vertical text and top-to-bottom text attributes
-        const tools::Rectangle aVisArea(mrOutlinerView.GetVisArea());
-        const bool bVerticalWriting(pSdrOutliner->IsVertical());
-        const bool bTopToBottom(pSdrOutliner->IsTopToBottom());
-        const double fStartInX(bVerticalWriting && bTopToBottom
-                                   ? aOutArea.Right() - aVisArea.Left()
-                                   : aOutArea.Left() - aVisArea.Left());
-        const double fStartInY(bVerticalWriting && !bTopToBottom
-                                   ? aOutArea.Bottom() - aVisArea.Top()
-                                   : aOutArea.Top() - aVisArea.Top());
-
-        aNewTransformB.translate(fStartInX, fStartInY);
-
-        // get the current TextPrimitives. This is the most expensive part
-        // of this mechanism, it *may* be possible to buffer layouted
-        // primitives per ParaPortion with/in/dependent on the EditEngine
-        // content if needed. For now, get and compare
-        TextHierarchyBreakupBlockText aBreakup(*pSdrOutliner, aNewTransformA, aNewTransformB,
-                                               aClipRange);
-        pSdrOutliner->StripPortions(aBreakup);
-        aNewTextPrimitives.append(aBreakup.getTextPortionPrimitives());
-
-        if (aNewTextPrimitives != maTextPrimitives)
-        {
-            maTextPrimitives = std::move(aNewTextPrimitives);
-            bObjectChange = true;
-        }
+        maTextPrimitives = std::move(aNewTextPrimitives);
+        bObjectChange = true;
     }
 
     if (bObjectChange)
@@ -830,22 +873,9 @@ void TextEditOverlayObject::checkSelectionChange()
     if (!(getOverlaySelection() && getOverlayManager()))
         return;
 
-    std::vector<tools::Rectangle> aLogicRects;
-    std::vector<basegfx::B2DRange> aLogicRanges;
     const Size aLogicPixel(getOverlayManager()->getOutputDevice().PixelToLogic(Size(1, 1)));
-
-    // get logic selection
-    getOutlinerView().GetSelectionRectangles(aLogicRects);
-
-    aLogicRanges.reserve(aLogicRects.size());
-    for (const auto& aRect : aLogicRects)
-    {
-        // convert from logic Rectangles to logic Ranges, do not forget to add
-        // one Unit (in this case logical units for one pixel, pre-calculated)
-        aLogicRanges.emplace_back(
-            aRect.Left() - aLogicPixel.Width(), aRect.Top() - aLogicPixel.Height(),
-            aRect.Right() + aLogicPixel.Width(), aRect.Bottom() + aLogicPixel.Height());
-    }
+    std::vector<basegfx::B2DRange> aLogicRanges(
+        createTextEditSelectionRanges(mrOutlinerView, aLogicPixel));
 
     if (mxOverlayTransparentSelection)
         mxOverlayTransparentSelection->setRanges(std::move(aLogicRanges));
@@ -900,6 +930,16 @@ void SdrObjEditView::EditViewSelectionChange()
     }
 }
 
+drawinglayer::primitive2d::Primitive2DContainer SdrObjEditView::getTextEditPrimitives() const
+{
+    const OutlinerView* pOutlinerView = GetTextEditOutlinerView();
+
+    if (!IsTextEdit() || !pOutlinerView)
+        return drawinglayer::primitive2d::Primitive2DContainer();
+
+    return createTextEditTextPrimitives(*pOutlinerView);
+}
+
 OutputDevice& SdrObjEditView::EditViewOutputDevice() const { return *mpTextEditWin->GetOutDev(); }
 
 Point SdrObjEditView::EditViewPointerPosPixel() const
@@ -907,14 +947,14 @@ Point SdrObjEditView::EditViewPointerPosPixel() const
     return mpTextEditWin->GetPointerPosPixel();
 }
 
-css::uno::Reference<css::datatransfer::clipboard::XClipboard> SdrObjEditView::GetClipboard() const
+cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> SdrObjEditView::GetClipboard() const
 {
     if (!mpTextEditWin)
         return nullptr;
     return mpTextEditWin->GetClipboard();
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget> SdrObjEditView::GetDropTarget()
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> SdrObjEditView::GetDropTarget()
 {
     if (!mpTextEditWin)
         return nullptr;
@@ -979,7 +1019,7 @@ void SdrObjEditView::TextEditDrawing(SdrPaintWindow& rPaintWindow,
     if (pTextObj)
     {
         std::optional<Color> oFillColor
-            = pTextObj->GetActiveTextBackgroundColor(pTextObj->getActiveText());
+            = pTextObj->GetActiveTextBackgroundColor(pTextObj->getActiveText(), aBackground);
         if (!oFillColor)
             oFillColor = pTextObj->getSuitableOutlinerBgColor(aBackground);
         if (oFillColor)
@@ -1340,6 +1380,22 @@ bool SdrObjEditView::SdrBeginTextEdit(SdrObject* pObj_, SdrPageView* pPV, vcl::W
     if (!pObj)
         return false; // currently only possible with text objects
 
+    // An object of a diagram that is edited one object at a time becomes the diagram's
+    // sub-selection when its text is edited, as what is done to the diagram next goes by that.
+    if (SdrObject::useAdvancedDiagramFeatures())
+    {
+        for (SdrObject* pAbove = pObj->getParentSdrObjectFromSdrObject(); pAbove;
+             pAbove = pAbove->getParentSdrObjectFromSdrObject())
+        {
+            auto pDiagram = dynamic_cast<SdrObjGroup*>(pAbove);
+            if (pDiagram && pDiagram->isDiagram() && pDiagram->getDiagramHelper())
+            {
+                pDiagram->getDiagramHelper()->markDirectDiagramSubSelection(*pObj);
+                break;
+            }
+        }
+    }
+
     if (bGrabFocus && pWin)
     {
         // attention, this call may cause an EndTextEdit() call to this view
@@ -1400,6 +1456,8 @@ bool SdrObjEditView::SdrBeginTextEdit(SdrObject* pObj_, SdrPageView* pPV, vcl::W
         mpTextEditWin = pWin;
         mpTextEditPV = pPV;
         mxWeakTextEditObj = pObj;
+        m_oSizeBeforeTextEdit
+            = Size(pObj->GetLogicRect().getOpenWidth(), pObj->GetLogicRect().getOpenHeight());
         if (pGivenOutliner)
         {
             mpTextEditOutliner.reset(pGivenOutliner);
@@ -1593,9 +1651,12 @@ bool SdrObjEditView::SdrBeginTextEdit(SdrObject* pObj_, SdrPageView* pPV, vcl::W
             mpTextEditOutliner->SetStatusEventHdl(
                 LINK(this, SdrObjEditView, ImpOutlinerStatusEventHdl));
 
-            // IASS: start listening to ModelChanges of TextEdit
+            // IASS: start listening to ModelChanges of TextEdit. A reader that
+            // draws from the model needs the same listening, its broadcast comes
+            // from the update timer this handler starts.
             if (isInteractiveSlideShow()
-                || pTextObj->GetViewContact().hasMultipleViewObjectContacts())
+                || pTextObj->GetViewContact().hasMultipleViewObjectContacts()
+                || pTextObj->getSdrModelFromSdrObject().IsDrawnFromModel())
                 mpTextEditOutliner->SetModifyHdl(LINK(this, SdrObjEditView, ImpModifyHdl));
 
             if (pTextObj->IsChainable())
@@ -1674,6 +1735,7 @@ bool SdrObjEditView::SdrBeginTextEdit(SdrObject* pObj_, SdrPageView* pPV, vcl::W
 
     mpTextEditOutlinerView = nullptr;
     mxWeakTextEditObj.clear();
+    m_oSizeBeforeTextEdit.reset();
     mpTextEditPV = nullptr;
     mpTextEditWin = nullptr;
     maHdlList.SetMoveOutside(false);
@@ -1691,6 +1753,7 @@ SdrEndTextEditKind SdrObjEditView::SdrEndTextEdit(bool bDontDeleteReally)
     VclPtr<vcl::Window> pTEWin = mpTextEditWin;
     OutlinerView* pTEOutlinerView = mpTextEditOutlinerView;
     vcl::Cursor* pTECursorBuffer = m_pTextEditCursorBuffer;
+    std::optional<Size> oTESizeBeforeEdit = m_oSizeBeforeTextEdit;
     SdrUndoManager* pUndoEditUndoManager = nullptr;
     bool bNeedToUndoSavedRedoTextEdit(false);
 
@@ -1765,6 +1828,7 @@ SdrEndTextEditKind SdrObjEditView::SdrEndTextEdit(bool bDontDeleteReally)
     }
 
     mxWeakTextEditObj.clear();
+    m_oSizeBeforeTextEdit.reset();
     mpTextEditPV = nullptr;
     mpTextEditWin = nullptr;
     mpTextEditOutlinerView = nullptr;
@@ -1796,6 +1860,8 @@ SdrEndTextEditKind SdrObjEditView::SdrEndTextEdit(bool bDontDeleteReally)
                                                          .GetSdrUndoFactory()
                                                          .CreateUndoObjectSetText(*pTEObj, nText)
                                                          .release()));
+                if (pTxtUndo && oTESizeBeforeEdit)
+                    pTxtUndo->SetOldSize(*oTESizeBeforeEdit);
             }
             DBG_ASSERT(!bModified || pTxtUndo,
                        "svx::SdrObjEditView::EndTextEdit(), could not create undo action!");
@@ -2317,21 +2383,20 @@ bool SdrObjEditView::ImpIsTextEditAllSelected() const
         if (SdrTextObj::HasTextImpl(mpTextEditOutliner.get()))
         {
             const sal_Int32 nParaCnt = mpTextEditOutliner->GetParagraphCount();
-            Paragraph* pLastPara
-                = mpTextEditOutliner->GetParagraph(nParaCnt > 1 ? nParaCnt - 1 : 0);
+            sal_Int32 nLastPara = nParaCnt > 1 ? nParaCnt - 1 : 0;
 
             ESelection aESel(mpTextEditOutlinerView->GetSelection());
             if (aESel.start.nPara == 0 && aESel.start.nIndex == 0
                 && aESel.end.nPara == (nParaCnt - 1))
             {
-                if (mpTextEditOutliner->GetText(pLastPara).getLength() == aESel.end.nIndex)
+                if (mpTextEditOutliner->GetText(nLastPara).getLength() == aESel.end.nIndex)
                     bRet = true;
             }
             // in case the selection was done backwards
             if (!bRet && aESel.end.nPara == 0 && aESel.end.nIndex == 0
                 && aESel.start.nPara == (nParaCnt - 1))
             {
-                if (mpTextEditOutliner->GetText(pLastPara).getLength() == aESel.start.nIndex)
+                if (mpTextEditOutliner->GetText(nLastPara).getLength() == aESel.start.nIndex)
                     bRet = true;
             }
         }
@@ -2780,7 +2845,7 @@ void SdrObjEditView::getTextSelection(cpo::uno::Any& rSelection)
     if (!pObj)
         return;
 
-    css::uno::Reference<css::text::XText> xText(pObj->getUnoShape(), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::text::XText> xText(pObj->getUnoShape(), cpo::uno::UNO_QUERY);
     if (xText.is())
     {
         SvxUnoTextBase* pRange = comphelper::getFromUnoTunnel<SvxUnoTextBase>(xText);
@@ -2944,7 +3009,8 @@ static const WhichRangesContainer& GetFormatRangeImpl(bool bTextOnly, bool withP
                    SDRATTR_GRAF_FIRST, SDRATTR_GRAF_LAST, SDRATTR_TABLE_FIRST, SDRATTR_TABLE_LAST,
                    SDRATTR_GLOW_FIRST, SDRATTR_GLOW_LAST, SDRATTR_SOFTEDGE_FIRST,
                    SDRATTR_SOFTEDGE_LAST, SDRATTR_GLOW_TEXT_FIRST, SDRATTR_GLOW_TEXT_LAST,
-                   EE_PARA_START, EE_PARA_END, EE_CHAR_START, EE_CHAR_END>);
+                   SDRATTR_REFLECTION_FIRST, SDRATTR_REFLECTION_LAST, EE_PARA_START, EE_PARA_END,
+                   EE_CHAR_START, EE_CHAR_END>);
 
     static const WhichRangesContainer gTextOnly(
         svl::Items<SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST, EE_CHAR_START, EE_CHAR_END>);
@@ -3052,9 +3118,8 @@ void SdrObjEditView::ApplyFormatPaintBrushToText(SfxItemSet const& rFormatSet, S
         aSet.Put(CreatePaintSet(GetFormatRangeImpl(true), *aSet.GetPool(), rFormatSet, aSet,
                                 bNoCharacterFormats, bNoParagraphFormats));
         rOutliner.SetParaAttribs(nPara, aSet);
-        Paragraph* pParagraph = rOutliner.GetParagraph(nPara);
         if (nDepth > -2)
-            rOutliner.SetDepth(pParagraph, nDepth);
+            rOutliner.SetDepth(nPara, nDepth);
     }
 
     std::optional<OutlinerParaObject> pTemp = rOutliner.CreateParaObject(0, nParaCount);

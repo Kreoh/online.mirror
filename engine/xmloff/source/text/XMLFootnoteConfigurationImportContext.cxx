@@ -42,7 +42,7 @@
 
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::style;
 using namespace ::com::sun::star::xml::sax;
@@ -67,9 +67,9 @@ public:
         XMLFootnoteConfigurationImportContext& rConfigImport,
         bool bBegin);
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
-    virtual void SAL_CALL characters( const OUString& rChars ) override;
+    virtual void characters( const OUString& rChars ) override;
 };
 
 }
@@ -198,11 +198,11 @@ void XMLFootnoteConfigurationImportContext::SetAttribute( sal_Int32 nElement,
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLFootnoteConfigurationImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLFootnoteConfigurationImportContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >&  )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >&  )
 {
-    css::uno::Reference< css::xml::sax::XFastContextHandler > xContext;
+    cpo::uno::Reference< css::xml::sax::XFastContextHandler > xContext;
 
     if (bIsEndnote)
         return nullptr;

@@ -66,11 +66,6 @@ class SvxZoomSliderItem;
 #define SID_SC_INPUT_LEGACY_CELL_SELECTION TypedWhichId<SfxBoolItem>(SC_VIEW_START + 15)
 #define SID_SC_OPT_SORT_REF_UPDATE         TypedWhichId<SfxBoolItem>(SC_VIEW_START + 16)
 
-// Format options
-#define SID_SCFORMULAOPTIONS    TypedWhichId<ScTpFormulaItem>(SC_VIEW_START + 20)
-#define SID_SCDEFAULTSOPTIONS   TypedWhichId<ScTpDefaultsItem>(SC_VIEW_START + 21)
-
-
 #define SID_DATA_PROVIDER       (SC_VIEW_START + 31)
 #define SID_DATA_PROVIDER_REFRESH (SC_VIEW_START + 32)
 #define SID_DATA_STREAMS_PLAY   (SC_VIEW_START + 33)
@@ -83,8 +78,8 @@ class SvxZoomSliderItem;
 // other slot-IDs:
 #define SID_SCUSERLISTS         (SC_VIEW_START + 37)    // user defined lists
     // free
-#define SID_SCVIEWOPTIONS       TypedWhichId<ScTpViewItem>(SC_VIEW_START + 39)
-#define SID_SCDOCOPTIONS        TypedWhichId<ScTpCalcItem>(SC_VIEW_START + 40)
+    // free
+    // free
 
 // cursor movements as properties:
 #define SID_CURRENTCELL         TypedWhichId<SfxStringItem>(SC_VIEW_START + 41)
@@ -359,8 +354,9 @@ class SvxZoomSliderItem;
 
 #define FID_HARD_RECALC         (EXTRA_MENU_START + 18)
 #define FID_AUTOCOMPLETE        (EXTRA_MENU_START + 19)
+#define FID_CALCULATE_SHEET     (EXTRA_MENU_START + 20)
 
-#define EXTRA_MENU_END          (EXTRA_MENU_START + 20)
+#define EXTRA_MENU_END          (EXTRA_MENU_START + 21)
 
 #define DATA_MENU_START         (EXTRA_MENU_END)
 #define SID_DEFINE_DBNAME       (DATA_MENU_START)
@@ -647,6 +643,17 @@ static_assert(SID_PREVIEW_END < SID_KEYFUNC_START, "calc slots ids trampling inf
 #define SID_TABLE_STYLES            (SID_NEW_SLOTS+122)
 #define SID_TABLE_TOTALROW          (SID_NEW_SLOTS+123)
 #define SID_SET_CELL_FORMULA        TypedWhichId<SfxStringItem>(SID_NEW_SLOTS+124)
+#define SID_RESIZE_CALCTABLE        (SID_NEW_SLOTS+133)
+#define SID_RENAME_CALCTABLE        (SID_NEW_SLOTS+125)
+#define SID_CONVERT_CALCTABLE_TO_RANGE (SID_NEW_SLOTS+126)
+#define SID_SET_DEFAULT_TABLE_STYLE (SID_NEW_SLOTS+127)
+#define SID_NEW_TABLE_STYLE         (SID_NEW_SLOTS+128)
+#define SID_CLEAR_TABLE_STYLE       (SID_NEW_SLOTS+129)
+#define SID_SUMMARIZE_WITH_PIVOT    (SID_NEW_SLOTS+130)
+#define SID_REMOVE_DUPLICATES       (SID_NEW_SLOTS+131)
+#define SID_DUPLICATE_TABLE_STYLE   (SID_NEW_SLOTS+132)
+#define SID_SECURITY_LABEL          (SID_NEW_SLOTS+134) /* SPIF/STANAG security label */
+#define SID_SET_CALC_TABLE_RANGE    TypedWhichId<SfxStringItem>(SID_NEW_SLOTS+135)
 
 // idl parameter
 

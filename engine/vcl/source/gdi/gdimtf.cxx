@@ -48,6 +48,7 @@
 #include <comphelper/processfactory.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -393,7 +394,7 @@ bool GDIMetaFile::ImplPlayWithRenderer(OutputDevice& rOut, const Point& rPos, Si
 
     try
     {
-        const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
         uno::Reference< rendering::XMtfRenderer > xMtfRenderer = rendering::MtfRenderer::create( xContext );
         std::unique_ptr<Bitmap> pBitmap(reinterpret_cast<Bitmap*>(
             xMtfRenderer->draw( reinterpret_cast<sal_Int64>(win->GetOutDev()), reinterpret_cast<sal_Int64>( this ), rDestSize.Width(), rDestSize.Height() )));
@@ -407,7 +408,7 @@ bool GDIMetaFile::ImplPlayWithRenderer(OutputDevice& rOut, const Point& rPos, Si
             return true;
         }
     }
-    catch (const uno::RuntimeException& )
+    catch (const cpo::uno::RuntimeException& )
     {
         throw; // runtime errors are fatal
     }

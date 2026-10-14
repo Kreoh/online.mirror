@@ -29,7 +29,7 @@ namespace dlgprov {
 
 using namespace ::com::sun::star;
 using namespace lang;
-using namespace uno;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 using namespace beans;
 
@@ -39,7 +39,7 @@ DialogModelProvider::DialogModelProvider(Reference< XComponentContext > const & 
 {}
 
 // lang::XInitialization:
-void SAL_CALL DialogModelProvider::initialize(const cpo::uno::Sequence< cpo::uno::Any > & aArguments)
+void DialogModelProvider::initialize(const cpo::uno::Sequence< cpo::uno::Any > & aArguments)
 {
     if ( aArguments.getLength() != 1 )
         return;
@@ -48,7 +48,7 @@ void SAL_CALL DialogModelProvider::initialize(const cpo::uno::Sequence< cpo::uno
     if ( !( aArguments[ 0 ] >>= sURL ))
         throw css::lang::IllegalArgumentException();
      // Try any other URL with SimpleFileAccess
-    Reference< ucb::XSimpleFileAccess3 > xSFI = ucb::SimpleFileAccess::create(m_xContext);
+    Reference< ucb::XSimpleFileAccess > xSFI = ucb::SimpleFileAccess::create(m_xContext);
 
     try
     {
@@ -71,93 +71,93 @@ void SAL_CALL DialogModelProvider::initialize(const cpo::uno::Sequence< cpo::uno
 }
 
 // container::XElementAccess:
-cpo::uno::Type SAL_CALL DialogModelProvider::getElementType()
+cpo::uno::Type DialogModelProvider::getElementType()
 {
     return m_xDialogModel->getElementType();
 }
 
-bool SAL_CALL DialogModelProvider::hasElements()
+bool DialogModelProvider::hasElements()
 {
     return m_xDialogModel->hasElements();
 }
 
 // container::XNameAccess:
-cpo::uno::Any SAL_CALL DialogModelProvider::getByName(const OUString & aName)
+cpo::uno::Any DialogModelProvider::getByName(const OUString & aName)
 {
     return m_xDialogModel->getByName(aName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL DialogModelProvider::getElementNames()
+cpo::uno::Sequence< OUString > DialogModelProvider::getElementNames()
 {
     return m_xDialogModel->getElementNames();
 }
 
-bool SAL_CALL DialogModelProvider::hasByName(const OUString & aName)
+bool DialogModelProvider::hasByName(const OUString & aName)
 {
     return m_xDialogModel->hasByName(aName);
 }
 
 // container::XNameReplace:
-void SAL_CALL DialogModelProvider::replaceByName(const OUString & aName, const cpo::uno::Any & aElement)
+void DialogModelProvider::replaceByName(const OUString & aName, const cpo::uno::Any & aElement)
 {
     m_xDialogModel->replaceByName(aName,aElement);
 }
 
 // container::XNameContainer:
-void SAL_CALL DialogModelProvider::insertByName(const OUString & aName, const cpo::uno::Any & aElement)
+void DialogModelProvider::insertByName(const OUString & aName, const cpo::uno::Any & aElement)
 {
     m_xDialogModel->insertByName(aName,aElement);
 }
 
-void SAL_CALL DialogModelProvider::removeByName(const OUString & aName)
+void DialogModelProvider::removeByName(const OUString & aName)
 {
     m_xDialogModel->removeByName(aName);
 }
-uno::Reference< beans::XPropertySetInfo > SAL_CALL DialogModelProvider::getPropertySetInfo(  )
+uno::Reference< beans::XPropertySetInfo > DialogModelProvider::getPropertySetInfo(  )
 {
     return m_xDialogModelProp->getPropertySetInfo();
 }
-void SAL_CALL DialogModelProvider::setPropertyValue( const OUString&, const cpo::uno::Any& )
+void DialogModelProvider::setPropertyValue( const OUString&, const cpo::uno::Any& )
 {
 }
-cpo::uno::Any SAL_CALL DialogModelProvider::getPropertyValue( const OUString& PropertyName )
+cpo::uno::Any DialogModelProvider::getPropertyValue( const OUString& PropertyName )
 {
     return m_xDialogModelProp->getPropertyValue(PropertyName);
 }
-void SAL_CALL DialogModelProvider::addPropertyChangeListener( const OUString& , const uno::Reference< beans::XPropertyChangeListener >& )
+void DialogModelProvider::addPropertyChangeListener( const OUString& , const uno::Reference< beans::XPropertyChangeListener >& )
 {
 }
-void SAL_CALL DialogModelProvider::removePropertyChangeListener( const OUString& , const uno::Reference< beans::XPropertyChangeListener >& )
+void DialogModelProvider::removePropertyChangeListener( const OUString& , const uno::Reference< beans::XPropertyChangeListener >& )
 {
 }
-void SAL_CALL DialogModelProvider::addVetoableChangeListener( const OUString& , const uno::Reference< beans::XVetoableChangeListener >& )
+void DialogModelProvider::addVetoableChangeListener( const OUString& , const uno::Reference< beans::XVetoableChangeListener >& )
 {
 }
-void SAL_CALL DialogModelProvider::removeVetoableChangeListener( const OUString& ,const uno::Reference< beans::XVetoableChangeListener >& )
+void DialogModelProvider::removeVetoableChangeListener( const OUString& ,const uno::Reference< beans::XVetoableChangeListener >& )
 {
 }
 
 // com.sun.star.uno.XServiceInfo:
-OUString SAL_CALL DialogModelProvider::getImplementationName()
+OUString DialogModelProvider::getImplementationName()
 {
     return u"com.sun.star.comp.scripting.DialogModelProvider"_ustr;
 }
 
-bool SAL_CALL DialogModelProvider::supportsService(OUString const & serviceName)
+bool DialogModelProvider::supportsService(OUString const & serviceName)
 {
     return cppu::supportsService(this, serviceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL DialogModelProvider::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > DialogModelProvider::getSupportedServiceNames()
 {
     return { u"com.sun.star.awt.UnoControlDialogModelProvider"_ustr };
 }
 
 } // closing anonymous implementation namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 scripting_DialogModelProvider_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new dlgprov::DialogModelProvider(context));
 }

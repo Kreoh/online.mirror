@@ -68,6 +68,7 @@ const char16_t TOOLBARCONTROLLER_FIXEDTEXT[] = u"FixedText";
 const char   TOOLBOXITEM_SEPARATOR_STR[]   = "private:separator";
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /**
  Check whether a module identifier is part of a context
@@ -587,7 +588,7 @@ void ToolBarMerger::RemoveItems(
      false.
 */
 rtl::Reference<::cppu::OWeakObject> ToolBarMerger::CreateController(
-    const uno::Reference< uno::XComponentContext >& rxContext,
+    const uno::Reference< cpo::uno::XComponentContext >& rxContext,
     const uno::Reference< frame::XFrame > & xFrame,
     ToolBox*               pToolbar,
     const OUString& rCommandURL,

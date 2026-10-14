@@ -31,10 +31,7 @@
 
 #include <oleidl.h>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 // The client
 // has to call XComponent::dispose. The thread that calls initialize
@@ -73,7 +70,7 @@ private:
     // this class.
     IDropTarget* m_pDropTarget;
 
-    css::uno::Reference<css::uno::XComponentContext> m_xContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_xContext;
     // If m_bActive == true then events are fired to XDropTargetListener s,
     // none otherwise. The default value is true.
     bool m_bActive;
@@ -86,17 +83,17 @@ private:
     // This value is manipulated by the XDropTargetListener
     sal_Int8 m_nLastDropAction;
 
-    css::uno::Reference<css::datatransfer::XTransferable> m_currentData;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_currentData;
     // The current action is used to determine if the USER
     // action has changed (dropActionChanged)
     //  sal_Int8 m_userAction;
     // Set by listeners when they call XDropTargetDropContext::dropComplete
     bool m_bDropComplete;
-    css::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext> m_currentDragContext;
-    css::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext> m_currentDropContext;
+    cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext> m_currentDragContext;
+    cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext> m_currentDropContext;
 
 public:
-    explicit DropTarget(const css::uno::Reference<css::uno::XComponentContext>& rxContext);
+    explicit DropTarget(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext);
     virtual ~DropTarget() override;
     DropTarget(DropTarget const&) = delete;
     DropTarget& operator=(DropTarget const&) = delete;
@@ -104,25 +101,25 @@ public:
     // Overrides WeakComponentImplHelper::disposing which is called by
     // WeakComponentImplHelper::dispose
     // Must be called.
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
     // XInitialization
-    virtual void SAL_CALL initialize(const cpo::uno::Sequence<cpo::uno::Any>& aArguments) override;
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& aArguments) override;
 
     // XDropTarget
-    virtual void SAL_CALL addDropTargetListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& dtl) override;
-    virtual void SAL_CALL removeDropTargetListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& dtl) override;
+    virtual void addDropTargetListener(
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& dtl) override;
+    virtual void removeDropTargetListener(
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetListener>& dtl) override;
     // Default is not active
-    virtual bool SAL_CALL isActive() override;
-    virtual void SAL_CALL setActive(bool isActive) override;
-    virtual sal_Int8 SAL_CALL getDefaultActions() override;
-    virtual void SAL_CALL setDefaultActions(sal_Int8 actions) override;
+    virtual bool isActive() override;
+    virtual void setActive(bool isActive) override;
+    virtual sal_Int8 getDefaultActions() override;
+    virtual void setDefaultActions(sal_Int8 actions) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-    virtual cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     // Functions called from the IDropTarget implementation ( m_pDropTarget)
     virtual HRESULT DragEnter(
@@ -149,19 +146,19 @@ public:
 
     void
     _acceptDrop(sal_Int8 dropOperation,
-                const css::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext>& context);
+                const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext>& context);
     void
-    _rejectDrop(const css::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext>& context);
+    _rejectDrop(const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext>& context);
     void _dropComplete(
         bool success,
-        const css::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext>& context);
+        const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext>& context);
 
     // XDropTargetDragContext delegated from DragContext
     void
     _acceptDrag(sal_Int8 dragOperation,
-                const css::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext>& context);
+                const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext>& context);
     void
-    _rejectDrag(const css::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext>& context);
+    _rejectDrag(const cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext>& context);
 
 protected:
     // Gets the current action dependent on the pressed modifiers, the effects

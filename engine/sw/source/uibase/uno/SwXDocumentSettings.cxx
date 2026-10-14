@@ -23,7 +23,9 @@
 #include <sal/config.h>
 #include <sal/log.hxx>
 
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include <o3tl/any.hxx>
 #include "SwXDocumentSettings.hxx"
@@ -35,6 +37,9 @@
 #include <com/sun/star/document/PrinterIndependentLayout.hpp>
 #include <doc.hxx>
 #include <IDocumentSettingAccess.hxx>
+#include <IDocumentDrawModelAccess.hxx>
+#include <drawdoc.hxx>
+#include <svx/compatflags.hxx>
 #include <IDocumentDeviceAccess.hxx>
 #include <IDocumentRedlineAccess.hxx>
 #include <docsh.hxx>
@@ -54,8 +59,8 @@
 
 using namespace comphelper;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::i18n;
@@ -115,6 +120,7 @@ enum SwDocumentSettingsPropertyHandles
     HANDLE_USE_OLD_PRINTER_METRICS,
     HANDLE_PROTECT_FORM,
     HANDLE_MS_WORD_COMP_TRAILING_BLANKS,
+    HANDLE_MS_WORD_COMP_MIN_TEXT_WRAP_GAP,
     HANDLE_MS_WORD_COMP_MIN_LINE_HEIGHT_BY_FLY,
     HANDLE_TABS_RELATIVE_TO_INDENT,
     HANDLE_RSID,
@@ -175,6 +181,8 @@ enum SwDocumentSettingsPropertyHandles
     HANDLE_FORCE_TOP_ALIGNMENT_IN_CELL_WITH_FLOATING_ANCHOR,
     HANDLE_ADJUST_TABLE_LINE_HEIGHTS_TO_GRID_HEIGHT,
     HANDLE_ASSIGN_CONSECUTIVE_LEFT_RIGHT_PAGES,
+    // Every SdrCompatibilityFlag, told apart by the property name
+    HANDLE_COMPATIBILITY_FLAG,
 };
 
 }
@@ -238,6 +246,7 @@ static rtl::Reference<MasterPropertySetInfo> lcl_createSettingsInfo()
         { u"RsidRoot"_ustr, HANDLE_RSID_ROOT, cppu::UnoType<sal_Int32>::get(), 0},
         { u"ProtectForm"_ustr, HANDLE_PROTECT_FORM, cppu::UnoType<bool>::get(), 0},
         { u"MsWordCompTrailingBlanks"_ustr, HANDLE_MS_WORD_COMP_TRAILING_BLANKS, cppu::UnoType<bool>::get(), 0 },
+        { u"MsWordCompMinTextWrapGap"_ustr, HANDLE_MS_WORD_COMP_MIN_TEXT_WRAP_GAP, cppu::UnoType<bool>::get(), 0 },
         { u"MsWordCompMinLineHeightByFly"_ustr, HANDLE_MS_WORD_COMP_MIN_LINE_HEIGHT_BY_FLY, cppu::UnoType<bool>::get(), 0 },
         { u"TabAtLeftIndentForParagraphsInList"_ustr, HANDLE_TAB_AT_LEFT_INDENT_FOR_PARA_IN_LIST, cppu::UnoType<bool>::get(), 0},
         { u"ModifyPasswordInfo"_ustr, HANDLE_MODIFYPASSWORDINFO, cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(), 0},
@@ -322,7 +331,19 @@ static rtl::Reference<MasterPropertySetInfo> lcl_createSettingsInfo()
 */
         { OUString(), 0, cpo::uno::Type(), 0}
     };
-    return new MasterPropertySetInfo ( aWriterSettingsInfoMap );
+    static const std::vector<PropertyInfo> aSettingsInfoMap = []
+    {
+        std::vector<PropertyInfo> aEntries(std::begin(aWriterSettingsInfoMap),
+                                           std::prev(std::end(aWriterSettingsInfoMap)));
+        for (const SdrCompatibilityFlagName& rName : SdrModel::GetCompatibilityFlagNames())
+        {
+            aEntries.emplace_back(rName.maName, HANDLE_COMPATIBILITY_FLAG,
+                                  cppu::UnoType<bool>::get(), 0);
+        }
+        aEntries.push_back(aWriterSettingsInfoMap[std::size(aWriterSettingsInfoMap) - 1]);
+        return aEntries;
+    }();
+    return new MasterPropertySetInfo ( aSettingsInfoMap.data() );
 }
 
 SwXDocumentSettings::SwXDocumentSettings ( SwXTextDocument * pModel )
@@ -342,7 +363,7 @@ SwXDocumentSettings::~SwXDocumentSettings()
 {
 }
 
-Any SAL_CALL SwXDocumentSettings::queryInterface( const Type& rType )
+Any SwXDocumentSettings::queryInterface( const Type& rType )
 {
         return ::cppu::queryInterface(rType,
                                       // OWeakObject interfaces
@@ -366,7 +387,7 @@ void SwXDocumentSettings::release ()
     OWeakObject::release();
 }
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SwXDocumentSettings::getTypes(  )
+cpo::uno::Sequence< cpo::uno::Type > SwXDocumentSettings::getTypes(  )
 {
     static const cpo::uno::Sequence< cpo::uno::Type > aTypes {
         // from MasterPropertySet
@@ -379,7 +400,7 @@ cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SwXDocumentSettings::getTypes(  )
     return aTypes;
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SwXDocumentSettings::getImplementationId(  )
+cpo::uno::Sequence< sal_Int8 > SwXDocumentSettings::getImplementationId(  )
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -826,6 +847,12 @@ void SwXDocumentSettings::_setSingleValue( const comphelper::PropertyInfo & rInf
             mpDoc->getIDocumentSettingAccess().set(DocumentSettingId::MS_WORD_COMP_TRAILING_BLANKS, bTmp);
         }
         break;
+        case HANDLE_MS_WORD_COMP_MIN_TEXT_WRAP_GAP:
+        {
+            bool bTmp = *o3tl::doAccess<bool>(rValue);
+            mpDoc->getIDocumentSettingAccess().set(DocumentSettingId::MS_WORD_COMP_MIN_TEXT_WRAP_GAP, bTmp);
+        }
+        break;
         case HANDLE_MS_WORD_COMP_MIN_LINE_HEIGHT_BY_FLY:
         {
             bool bTmp = *o3tl::doAccess<bool>(rValue);
@@ -844,13 +871,13 @@ void SwXDocumentSettings::_setSingleValue( const comphelper::PropertyInfo & rInf
             if ( !( rValue >>= aInfo ) )
                 throw lang::IllegalArgumentException(
                     u"Value of type Sequence<PropertyValue> expected!"_ustr,
-                    uno::Reference< uno::XInterface >(),
+                    uno::Reference< cpo::uno::XInterface >(),
                     2 );
 
             if ( !mpDocSh->SetModifyPasswordInfo( aInfo ) )
                 throw beans::PropertyVetoException(
                     u"The hash is not allowed to be changed now!"_ustr,
-                    uno::Reference< uno::XInterface >() );
+                    uno::Reference< cpo::uno::XInterface >() );
         }
         break;
         case HANDLE_MATH_BASELINE_ALIGNMENT:
@@ -1280,6 +1307,23 @@ void SwXDocumentSettings::_setSingleValue( const comphelper::PropertyInfo & rInf
                     DocumentSettingId::ASSIGN_CONSECUTIVE_LEFT_RIGHT_PAGES, bTmp);
             }
             break;
+        case HANDLE_COMPATIBILITY_FLAG:
+        {
+            std::optional<SdrCompatibilityFlag> oFlag
+                = SdrModel::GetCompatibilityFlagByName(rInfo.maName);
+            if (bool bTmp; oFlag && (rValue >>= bTmp))
+            {
+                // The draw model is made on demand and starts with every flag off, so only a
+                // flag that is on needs one to hold it.
+                IDocumentDrawModelAccess& rDrawModelAccess = mpDoc->getIDocumentDrawModelAccess();
+                SwDrawModel* pDrawModel = rDrawModelAccess.GetDrawModel();
+                if (!pDrawModel && bTmp)
+                    pDrawModel = &rDrawModelAccess.GetOrCreateDrawModel();
+                if (pDrawModel)
+                    pDrawModel->SetCompatibilityFlag(*oFlag, bTmp);
+            }
+        }
+        break;
         default:
             throw UnknownPropertyException(OUString::number(rInfo.mnHandle));
     }
@@ -1619,6 +1663,11 @@ void SwXDocumentSettings::_getSingleValue( const comphelper::PropertyInfo & rInf
             rValue <<= mpDoc->getIDocumentSettingAccess().get(DocumentSettingId::MS_WORD_COMP_TRAILING_BLANKS);
         }
         break;
+        case HANDLE_MS_WORD_COMP_MIN_TEXT_WRAP_GAP:
+        {
+            rValue <<= mpDoc->getIDocumentSettingAccess().get(DocumentSettingId::MS_WORD_COMP_MIN_TEXT_WRAP_GAP);
+        }
+        break;
         case HANDLE_MS_WORD_COMP_MIN_LINE_HEIGHT_BY_FLY:
         {
             rValue <<= mpDoc->getIDocumentSettingAccess().get(DocumentSettingId::MS_WORD_COMP_MIN_LINE_HEIGHT_BY_FLY);
@@ -1934,6 +1983,15 @@ void SwXDocumentSettings::_getSingleValue( const comphelper::PropertyInfo & rInf
         }
         break;
 
+        case HANDLE_COMPATIBILITY_FLAG:
+        {
+            std::optional<SdrCompatibilityFlag> oFlag
+                = SdrModel::GetCompatibilityFlagByName(rInfo.maName);
+            const SwDrawModel* pDrawModel = mpDoc->getIDocumentDrawModelAccess().GetDrawModel();
+            rValue <<= oFlag && pDrawModel && pDrawModel->GetCompatibilityFlag(*oFlag);
+        }
+        break;
+
         default:
             throw UnknownPropertyException(OUString::number(rInfo.mnHandle));
     }
@@ -1946,17 +2004,17 @@ void SwXDocumentSettings::_postGetValues ()
 }
 
 // XServiceInfo
-OUString SAL_CALL SwXDocumentSettings::getImplementationName(  )
+OUString SwXDocumentSettings::getImplementationName(  )
 {
     return u"SwXDocumentSettings"_ustr;
 }
 
-bool SAL_CALL SwXDocumentSettings::supportsService( const OUString& ServiceName )
+bool SwXDocumentSettings::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL SwXDocumentSettings::getSupportedServiceNames(  )
+Sequence< OUString > SwXDocumentSettings::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.document.Settings"_ustr, u"com.sun.star.text.DocumentSettings"_ustr, u"com.sun.star.text.PrintSettings"_ustr };
 }

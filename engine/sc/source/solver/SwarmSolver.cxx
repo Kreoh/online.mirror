@@ -20,7 +20,7 @@
 #include <com/sun/star/table/CellContentType.hpp>
 #include <com/sun/star/table/XCell.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 #include <rtl/math.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -52,10 +52,8 @@
 
 #include "strings.hrc"
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
+using namespace ::cpo;
 
 using namespace css;
 
@@ -216,11 +214,11 @@ public:
     }
 
     // XSolver
-    virtual uno::Reference<sheet::XSpreadsheetDocument> SAL_CALL getDocument() override
+    virtual uno::Reference<sheet::XSpreadsheetDocument> getDocument() override
     {
         return mxDocument;
     }
-    virtual void SAL_CALL
+    virtual void
     setDocument(const uno::Reference<sheet::XSpreadsheetDocument>& rDocument) override
     {
         mxDocument = rDocument;
@@ -229,51 +227,51 @@ public:
             mpDocument = pModel->GetDocument();
     }
 
-    virtual table::CellAddress SAL_CALL getObjective() override { return maObjective; }
-    virtual void SAL_CALL setObjective(const table::CellAddress& rObjective) override
+    virtual table::CellAddress getObjective() override { return maObjective; }
+    virtual void setObjective(const table::CellAddress& rObjective) override
     {
         maObjective = rObjective;
     }
 
-    virtual cpo::uno::Sequence<table::CellAddress> SAL_CALL getVariables() override
+    virtual cpo::uno::Sequence<table::CellAddress> getVariables() override
     {
         return maVariables;
     }
-    virtual void SAL_CALL
+    virtual void
     setVariables(const cpo::uno::Sequence<table::CellAddress>& rVariables) override
     {
         maVariables = rVariables;
     }
 
-    virtual cpo::uno::Sequence<sheet::SolverConstraint> SAL_CALL getConstraints() override
+    virtual cpo::uno::Sequence<sheet::SolverConstraint> getConstraints() override
     {
         return maConstraints;
     }
-    virtual void SAL_CALL
+    virtual void
     setConstraints(const cpo::uno::Sequence<sheet::SolverConstraint>& rConstraints) override
     {
         maConstraints = rConstraints;
     }
 
-    virtual bool SAL_CALL getMaximize() override { return mbMaximize; }
-    virtual void SAL_CALL setMaximize(bool bMaximize) override { mbMaximize = bMaximize; }
+    virtual bool getMaximize() override { return mbMaximize; }
+    virtual void setMaximize(bool bMaximize) override { mbMaximize = bMaximize; }
 
-    virtual bool SAL_CALL getSuccess() override { return mbSuccess; }
-    virtual double SAL_CALL getResultValue() override { return mfResultValue; }
+    virtual bool getSuccess() override { return mbSuccess; }
+    virtual double getResultValue() override { return mfResultValue; }
 
-    virtual cpo::uno::Sequence<double> SAL_CALL getSolution() override { return maSolution; }
+    virtual cpo::uno::Sequence<double> getSolution() override { return maSolution; }
 
-    virtual void SAL_CALL solve() override;
+    virtual void solve() override;
 
     // XSolverDescription
-    virtual OUString SAL_CALL getComponentDescription() override
+    virtual OUString getComponentDescription() override
     {
         return ScResId(RID_SWARM_SOLVER_COMPONENT);
     }
 
-    virtual OUString SAL_CALL getStatusDescription() override { return maStatus; }
+    virtual OUString getStatusDescription() override { return maStatus; }
 
-    virtual OUString SAL_CALL getPropertyDescription(const OUString& rPropertyName) override
+    virtual OUString getPropertyDescription(const OUString& rPropertyName) override
     {
         TranslateId pResId;
         switch (getInfoHelper().getHandleByName(rPropertyName))
@@ -300,17 +298,17 @@ public:
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override
+    virtual OUString getImplementationName() override
     {
         return u"com.sun.star.comp.Calc.SwarmSolver"_ustr;
     }
 
-    bool SAL_CALL supportsService(const OUString& rServiceName) override
+    bool supportsService(const OUString& rServiceName) override
     {
         return cppu::supportsService(this, rServiceName);
     }
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
     {
         return { u"com.sun.star.sheet.Solver"_ustr };
     }
@@ -353,7 +351,7 @@ uno::Reference<table::XCell> SwarmSolver::getCell(const table::CellAddress& rPos
 ScAddress lcl_cellAddress(const ScDocument& rDocument, const table::CellAddress& rPosition)
 {
     if (rPosition.Sheet < 0 || rPosition.Sheet >= rDocument.GetTableCount())
-        throw uno::RuntimeException(u"solver: cell address is outside the document"_ustr);
+        throw cpo::uno::RuntimeException(u"solver: cell address is outside the document"_ustr);
     return ScAddress(static_cast<SCCOL>(rPosition.Column), static_cast<SCROW>(rPosition.Row),
                      static_cast<SCTAB>(rPosition.Sheet));
 }
@@ -707,7 +705,7 @@ public:
     }
 };
 
-void SAL_CALL SwarmSolver::solve()
+void SwarmSolver::solve()
 {
     uno::Reference<frame::XModel> xModel(mxDocument, uno::UNO_QUERY_THROW);
 
@@ -854,8 +852,8 @@ void SAL_CALL SwarmSolver::solve()
 
 } // namespace sc
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
-com_sun_star_comp_Calc_SwarmSolver_get_implementation(uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Calc_SwarmSolver_get_implementation(cpo::uno::XComponentContext*,
                                                       cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new sc::SwarmSolver());

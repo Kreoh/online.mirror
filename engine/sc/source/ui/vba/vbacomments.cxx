@@ -26,8 +26,9 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-static cpo::uno::Any AnnotationToComment( const cpo::uno::Any& aSource, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< frame::XModel >& xModel )
+static cpo::uno::Any AnnotationToComment( const cpo::uno::Any& aSource, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< frame::XModel >& xModel )
 {
     uno::Reference< sheet::XSheetAnnotation > xAnno( aSource, uno::UNO_QUERY_THROW );
     uno::Reference< container::XChild > xChild( xAnno, uno::UNO_QUERY_THROW );
@@ -42,19 +43,19 @@ namespace {
 
 class CommentEnumeration : public EnumerationHelperImpl
 {
-    css::uno::Reference< css::frame::XModel > mxModel;
+    cpo::uno::Reference< css::frame::XModel > mxModel;
 public:
     /// @throws uno::RuntimeException
     CommentEnumeration(
             const uno::Reference< XHelperInterface >& xParent,
-            const uno::Reference< uno::XComponentContext >& xContext,
+            const uno::Reference< cpo::uno::XComponentContext >& xContext,
             const uno::Reference< container::XEnumeration >& xEnumeration,
             const uno::Reference< frame::XModel >& xModel ) :
         EnumerationHelperImpl( xParent, xContext, xEnumeration ),
         mxModel( xModel, uno::UNO_SET_THROW )
     {}
 
-    virtual cpo::uno::Any SAL_CALL nextElement() override
+    virtual cpo::uno::Any nextElement() override
     {
         return AnnotationToComment( m_xEnumeration->nextElement(), m_xContext, mxModel );
     }
@@ -65,7 +66,7 @@ public:
 
 ScVbaComments::ScVbaComments(
         const uno::Reference< XHelperInterface >& xParent,
-        const uno::Reference< uno::XComponentContext > & xContext,
+        const uno::Reference< cpo::uno::XComponentContext > & xContext,
         const uno::Reference< frame::XModel >& xModel,
         const uno::Reference< container::XIndexAccess >& xIndexAccess  ) :
     ScVbaComments_BASE( xParent, xContext, xIndexAccess ),

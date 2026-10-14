@@ -21,25 +21,22 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <oox/crypto/CryptoEngine.hxx>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 namespace oox::crypto
 {
 class StrongEncryptionDataSpace final
     : public cppu::WeakImplHelper<css::lang::XServiceInfo, css::packages::XPackageEncryption>
 {
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
     std::unique_ptr<CryptoEngine> mCryptoEngine;
 
-    css::uno::Reference<css::io::XInputStream>
+    cpo::uno::Reference<css::io::XInputStream>
     getStream(const cpo::uno::Sequence<css::beans::NamedValue>& rStreams,
               std::u16string_view sStreamName);
 
 public:
-    StrongEncryptionDataSpace(const css::uno::Reference<css::uno::XComponentContext>& rxContext);
+    StrongEncryptionDataSpace(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext);
 
     // Decryption
 
@@ -47,15 +44,15 @@ public:
     virtual bool
     readEncryptionInfo(const cpo::uno::Sequence<css::beans::NamedValue>& aStreams) override;
     virtual bool
-    decrypt(const css::uno::Reference<css::io::XInputStream>& rxInputStream,
-            css::uno::Reference<css::io::XOutputStream>& rxOutputStream) override;
+    decrypt(const cpo::uno::Reference<css::io::XInputStream>& rxInputStream,
+            cpo::uno::Reference<css::io::XOutputStream>& rxOutputStream) override;
 
     virtual bool checkDataIntegrity() override;
 
     // Encryption
 
     virtual cpo::uno::Sequence<css::beans::NamedValue>
-        encrypt(const css::uno::Reference<css::io::XInputStream>& rxInputStream) override;
+        encrypt(const cpo::uno::Reference<css::io::XInputStream>& rxInputStream) override;
 
     virtual bool
     setupEncryption(const cpo::uno::Sequence<css::beans::NamedValue>& rMediaEncData) override;

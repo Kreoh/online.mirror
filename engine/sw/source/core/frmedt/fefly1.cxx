@@ -18,6 +18,7 @@
  */
 
 #include <hintids.hxx>
+#include <algorithm>
 #include <o3tl/any.hxx>
 #include <svl/itemiter.hxx>
 #include <vcl/imapobj.hxx>
@@ -60,6 +61,7 @@
 #include <swtable.hxx>
 #include <ndgrf.hxx>
 #include <flyfrms.hxx>
+#include <frmtool.hxx>
 #include <fldbas.hxx>
 #include <fmtfld.hxx>
 #include <swundo.hxx>
@@ -70,6 +72,7 @@
 #include <frmatr.hxx>
 #include <fmtsrnd.hxx>
 #include <ndole.hxx>
+#include <comphelper/kit.hxx>
 #include <fefly.hxx>
 #include <fmtcnct.hxx>
 #include <frameformats.hxx>
@@ -77,6 +80,7 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // Based on the request, changes to the specific layouts will be made, to
 // fit to the format
@@ -337,17 +341,48 @@ SwFlyFrame* SwFEShell::GetSelectedFlyFrame() const
     if ( Imp()->HasDrawView() )
     {
         // A Fly is only accessible if it is selected
-        const SdrMarkList &rMrkList = Imp()->GetDrawView()->GetMarkedObjectList();
-        if( rMrkList.GetMarkCount() != 1 )
-            return nullptr;
-
-        SdrObject *pO = rMrkList.GetMark( 0 )->GetMarkedSdrObj();
-
-        SwVirtFlyDrawObj *pFlyObj = DynCastSwVirtFlyDrawObj(pO);
-
-        return pFlyObj ? pFlyObj->GetFlyFrame() : nullptr;
+        return ::GetFlyFromMarked( &Imp()->GetDrawView()->GetMarkedObjectList(),
+                                   const_cast<SwFEShell*>(this) );
     }
     return nullptr;
+}
+
+std::vector<SwFlyFrame*> SwFEShell::GetSelectedFlyFrames() const
+{
+    std::vector<SwFlyFrame*> aFlyFrames;
+    if ( !Imp()->HasDrawView() )
+        return aFlyFrames;
+
+    const SdrMarkList &rMarkList = Imp()->GetDrawView()->GetMarkedObjectList();
+    const size_t nCount = rMarkList.GetMarkCount();
+    aFlyFrames.reserve( nCount );
+    for ( size_t i = 0; i < nCount; ++i )
+    {
+        SwVirtFlyDrawObj *pFlyObject = DynCastSwVirtFlyDrawObj( rMarkList.GetMark( i )->GetMarkedSdrObj() );
+        if ( !pFlyObject )
+        {
+            aFlyFrames.clear();
+            break;
+        }
+        aFlyFrames.push_back( pFlyObject->GetFlyFrame() );
+    }
+    return aFlyFrames;
+}
+
+bool SwFEShell::CanAddGraphicToSelection( const Point& rPt ) const
+{
+    if ( !Imp()->HasDrawView() || !::IsGraphicFlyMarkList( Imp()->GetDrawView()->GetMarkedObjectList() ) )
+        return false;
+    SdrObject* pObject = nullptr;
+    return GetObjCntType( rPt, pObject ) == OBJCNT_GRF;
+}
+
+bool SwFEShell::IsMultipleFlyFramesSelected() const
+{
+    // The list is only built once the mark count alone cannot answer.
+    if ( !Imp()->HasDrawView() || Imp()->GetDrawView()->GetMarkedObjectList().GetMarkCount() < 2 )
+        return false;
+    return GetSelectedFlyFrames().size() > 1;
 }
 
 // Get current fly in which the cursor is positioned
@@ -1421,6 +1456,20 @@ void SwFEShell::SetObjRect( const SwRect& rRect )
     }
 }
 
+Size SwFEShell::GetFlyPercentReference(const SwFormatFrameSize& rSize) const
+{
+    const SwFlyFrame* pFly = GetSelectedFlyFrame();
+    return pFly ? pFly->GetPercentReference(rSize) : Size();
+}
+
+bool SwFEShell::SetCaptionFlySize(const Size& rSize, const Size& rOldSize,
+                                  bool& rUpdateHeightPercent)
+{
+    rUpdateHeightPercent = false;
+    SwFlyFrame* pFly = GetSelectedFlyFrame();
+    return pFly && pFly->ChgCaptionFlySize(rSize, rOldSize, rUpdateHeightPercent);
+}
+
 Size SwFEShell::RequestObjectResize( const SwRect &rRect, const uno::Reference < embed::XEmbeddedObject >& xObj )
 {
     Size aResult;
@@ -1450,44 +1499,27 @@ Size SwFEShell::RequestObjectResize( const SwRect &rRect, const uno::Reference <
 
         //JP 28.02.2001: Task 74707 - ask for fly in fly with automatic size
 
-        const SwFrame* pAnchor;
-        const SwFormatFrameSize& rFrameSz = pFly->GetFormat()->GetFrameSize();
-        if (m_bCheckForOLEInCaption &&
-            0 != rFrameSz.GetWidthPercent() &&
-            nullptr != (pAnchor = pFly->GetAnchorFrame()) &&
-            pAnchor->IsTextFrame() &&
-            !pAnchor->GetNext() && !pAnchor->GetPrev() &&
-            pAnchor->GetUpper()->IsFlyFrame())
+        if (m_bCheckForOLEInCaption)
         {
-            // search for a sequence field:
-            sw::MergedAttrIter iter(*static_cast<SwTextFrame const*>(pAnchor));
-            for (SwTextAttr const* pHint = iter.NextAttr(); pHint; pHint = iter.NextAttr())
+            if (SwFlyFrame* pChgFly = pFly->FindCaptionFly())
             {
-                const SfxPoolItem* pItem = &pHint->GetAttr();
-                if( RES_TXTATR_FIELD == pItem->Which()
-                    && SwFieldTypesEnum::Sequence == static_cast<const SwFormatField*>(pItem)->GetField()->GetTypeId() )
-                {
-                    // sequence field found
-                    SwFlyFrame* pChgFly = const_cast<SwFlyFrame*>(static_cast<const SwFlyFrame*>(pAnchor->GetUpper()));
-                    // calculate the changed size:
-                    // width must change, height can change
-                    Size aNewSz( aSz.Width() + pChgFly->getFrameArea().Width() -
-                                   pFly->getFramePrintArea().Width(), aSz.Height() );
+                // calculate the changed size:
+                // width must change, height can change
+                Size aNewSz( aSz.Width() + pChgFly->getFrameArea().Width() -
+                               pFly->getFramePrintArea().Width(), aSz.Height() );
 
-                    SwFrameFormat *pFormat = pChgFly->GetFormat();
-                    SwFormatFrameSize aFrameSz( pFormat->GetFrameSize() );
-                    aFrameSz.SetWidth( aNewSz.Width() );
-                    if( SwFrameSize::Minimum != aFrameSz.GetHeightSizeType() )
-                    {
-                        aNewSz.AdjustHeight(pChgFly->getFrameArea().Height() -
-                                               pFly->getFramePrintArea().Height() );
-                        if( std::abs( aNewSz.Height() - pChgFly->getFrameArea().Height()) > 1 )
-                            aFrameSz.SetHeight( aNewSz.Height() );
-                    }
-                    // via Doc for the Undo!
-                    pFormat->GetDoc().SetAttr( aFrameSz, *pFormat );
-                    break;
+                SwFrameFormat *pFormat = pChgFly->GetFormat();
+                SwFormatFrameSize aFrameSz( pFormat->GetFrameSize() );
+                aFrameSz.SetWidth( aNewSz.Width() );
+                if( SwFrameSize::Minimum != aFrameSz.GetHeightSizeType() )
+                {
+                    aNewSz.AdjustHeight(pChgFly->getFrameArea().Height() -
+                                           pFly->getFramePrintArea().Height() );
+                    if( std::abs( aNewSz.Height() - pChgFly->getFrameArea().Height()) > 1 )
+                        aFrameSz.SetHeight( aNewSz.Height() );
                 }
+                // via Doc for the Undo!
+                pFormat->GetDoc().SetAttr( aFrameSz, *pFormat );
             }
         }
 
@@ -1530,8 +1562,8 @@ Size SwFEShell::RequestObjectResize( const SwRect &rRect, const uno::Reference <
             const SwFormatHoriOrient &rHori = pFormat->GetHoriOrient();
             const tools::Long lXDiff = aPt.getX() - pFly->getFrameArea().Left();
             const tools::Long lYDiff = aPt.getY() - pFly->getFrameArea().Top();
-            const Point aTmp( rHori.GetPos() + lXDiff,
-                              rVert.GetPos() + lYDiff );
+            const Point aTmp(rHori.getPosition().as_twip<SwTwips>() + lXDiff,
+                             rVert.getPosition().as_twip<SwTwips>() + lYDiff);
             pFly->ChgRelPos( aTmp );
         }
     }
@@ -1876,30 +1908,56 @@ ObjCntType SwFEShell::GetObjCntType( const Point &rPt, SdrObject *&rpObj ) const
     return eType;
 }
 
+// The content type shared by every object of a mark list, OBJCNT_DONTCARE when they differ.
+static ObjCntType lcl_GetObjCntTypeOfMarkList( const SdrMarkList& rMarkList )
+{
+    ObjCntType eType = OBJCNT_NONE;
+    for( size_t i = 0, nE = rMarkList.GetMarkCount(); i < nE; ++i )
+    {
+        SdrObject* pObject = rMarkList.GetMark( i )->GetMarkedSdrObj();
+        if( !pObject )
+            continue;
+        ObjCntType eTmp = SwFEShell::GetObjCntType( *pObject );
+        if( !i )
+        {
+            eType = eTmp;
+        }
+        else if( eTmp != eType )
+        {
+            eType = OBJCNT_DONTCARE;
+            // once DontCare, always DontCare!
+            break;
+        }
+    }
+    return eType;
+}
+
+bool IsGraphicFlyMarkList( const SdrMarkList& rList )
+{
+    if( lcl_GetObjCntTypeOfMarkList( rList ) != OBJCNT_GRF )
+        return false;
+
+    // A format that is shown on several pages, as a header image is, has one fly frame per
+    // page. Such a list holds a format twice and does not count as a list of distinct images.
+    std::vector<const SwFrameFormat*> aFormats;
+    for( size_t i = 0, nE = rList.GetMarkCount(); i < nE; ++i )
+    {
+        const SwVirtFlyDrawObj* pFlyObject = DynCastSwVirtFlyDrawObj( rList.GetMark( i )->GetMarkedSdrObj() );
+        const SwFrameFormat* pFormat = pFlyObject ? pFlyObject->GetFlyFrame()->GetFormat() : nullptr;
+        if( std::find( aFormats.begin(), aFormats.end(), pFormat ) != aFormats.end() )
+            return false;
+        aFormats.push_back( pFormat );
+    }
+    return true;
+}
+
 ObjCntType SwFEShell::GetObjCntTypeOfSelection() const
 {
     ObjCntType eType = OBJCNT_NONE;
 
     if( Imp()->HasDrawView() )
     {
-        const SdrMarkList &rMrkList = Imp()->GetDrawView()->GetMarkedObjectList();
-        for( size_t i = 0, nE = rMrkList.GetMarkCount(); i < nE; ++i )
-        {
-            SdrObject* pObj = rMrkList.GetMark( i )->GetMarkedSdrObj();
-            if( !pObj )
-                continue;
-            ObjCntType eTmp = GetObjCntType( *pObj );
-            if( !i )
-            {
-                eType = eTmp;
-            }
-            else if( eTmp != eType )
-            {
-                eType = OBJCNT_DONTCARE;
-                // once DontCare, always DontCare!
-                break;
-            }
-        }
+        eType = lcl_GetObjCntTypeOfMarkList( Imp()->GetDrawView()->GetMarkedObjectList() );
     }
     return eType;
 }
@@ -2245,7 +2303,20 @@ void SwFEShell::AlignFormulaToBaseline( const uno::Reference < embed::XEmbeddedO
 
     const SwFormatVertOrient &rVert = pFrameFormat->GetVertOrient();
     SwFormatVertOrient aVert( rVert );
-    aVert.SetPos( -nBaseline );
+
+    // keep move made while formula is being edited
+    SwTwips nPosition = -nBaseline;
+    SwFrame* pLower = pFly->Lower();
+    SwOLENode* pOLENode = pLower && pLower->IsNoTextFrame()
+        ? static_cast<SwNoTextFrame*>(pLower)->GetNode()->GetOLENode() : nullptr;
+    if ( comphelper::COKit::isActive() && pOLENode )
+    {
+        const std::optional<SwTwips>& oLastPos = pOLENode->GetFormulaBaselinePos();
+        if ( oLastPos && rVert.GetVertOrient() == css::text::VertOrientation::NONE )
+            nPosition += rVert.getPosition().as_twip<SwTwips>() - *oLastPos;
+        pOLENode->SetFormulaBaselinePos( -nBaseline );
+    }
+    aVert.setPosition( gfx::Length::twip(nPosition) );
     aVert.SetVertOrient( css::text::VertOrientation::NONE );
 
     pFrameFormat->LockModify();
@@ -2253,33 +2324,6 @@ void SwFEShell::AlignFormulaToBaseline( const uno::Reference < embed::XEmbeddedO
     pFrameFormat->UnlockModify();
     pFly->InvalidatePos();
 
-}
-
-void SwFEShell::AlignAllFormulasToBaseline()
-{
-    StartAllAction();
-
-    SwStartNode *pStNd;
-    SwNodeIndex aIdx( *GetNodes().GetEndOfAutotext().StartOfSectionNode(), 1 );
-    while ( nullptr != (pStNd = aIdx.GetNode().GetStartNode()) )
-    {
-        ++aIdx;
-        SwOLENode *pOleNode = aIdx.GetNode().GetOLENode();
-        if ( pOleNode )
-        {
-            const uno::Reference < embed::XEmbeddedObject > & xObj( pOleNode->GetOLEObj().GetOleRef() );
-            if (xObj.is())
-            {
-                SvGlobalName aCLSID( xObj->getClassID() );
-                if ( SotExchange::IsMath( aCLSID ) )
-                    AlignFormulaToBaseline( xObj );
-            }
-        }
-
-        aIdx.Assign( *pStNd->EndOfSectionNode(), + 1 );
-    }
-
-    EndAllAction();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

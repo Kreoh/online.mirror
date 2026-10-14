@@ -19,16 +19,23 @@
 #include <jsuno/jsuno.hxx>
 #include <rtl/ustring.hxx>
 
-OUString testexec(OUString const & script) {
-    return jsuno::execute(
+struct Result {
+    OUString result;
+    bool usedLegacyUnoApi;
+};
+
+Result testexec(OUString const & script) {
+    bool usedLegacyUnoApi;
+    auto const res = jsuno::execute(
         script, u"<input>"_ustr, 1,
         [](OUString const & level, OUString const & message) {
-            std::cout << "console." << level << ": " << message << '\n';
+            std::cout << "console." << level << ": " << message << std::endl;
             if (level == u"assert") {
                 std::abort();
             }
         },
-        {}, nullptr);
+        {}, &usedLegacyUnoApi);
+    return {res, usedLegacyUnoApi};
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

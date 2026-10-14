@@ -33,8 +33,6 @@ $(eval $(call gb_Configuration_add_datas,registry,officecfg/registry/data,\
 	org/openoffice/Office/Calc.xcu \
 	org/openoffice/Office/BasicIDE.xcu \
 	org/openoffice/Office/Compatibility.xcu \
-	org/openoffice/Office/ExtensionDependencies.xcu \
-	org/openoffice/Office/ExtensionManager.xcu \
 	org/openoffice/Office/Impress.xcu \
 	org/openoffice/Office/Jobs.xcu \
 	org/openoffice/Office/Logging.xcu \
@@ -84,9 +82,6 @@ $(eval $(call gb_Configuration_add_spool_modules,registry,officecfg/registry/dat
 	org/openoffice/Office/Common-32bit.xcu \
 	org/openoffice/Office/Jobs-impress.xcu \
 	org/openoffice/Office/ProtocolHandler-impress.xcu \
-	org/openoffice/Office/Common-cjk.xcu \
-	org/openoffice/Office/Common-ctl.xcu \
-	org/openoffice/Office/Common-ctlseqcheck.xcu \
 	org/openoffice/Office/DataAccess-evoab2.xcu \
 	org/openoffice/Office/Paths-macosx.xcu \
 	org/openoffice/Office/Paths-unxwnt.xcu \
@@ -95,7 +90,6 @@ $(eval $(call gb_Configuration_add_spool_modules,registry,officecfg/registry/dat
 	org/openoffice/Office/Paths-externallibexttextcatdata.xcu \
 	org/openoffice/Office/Paths-internallibnumbertextdata.xcu \
 	org/openoffice/Office/Paths-externallibnumbertextdata.xcu \
-	org/openoffice/Office/Writer-cjk.xcu \
 	org/openoffice/Office/Embedding-calc.xcu \
 	org/openoffice/Office/Embedding-chart.xcu \
 	org/openoffice/Office/Embedding-draw.xcu \
@@ -131,8 +125,6 @@ $(eval $(call gb_Configuration_add_localized_datas,registry,officecfg/registry/d
 	) \
 	org/openoffice/Office/Common.xcu \
 	org/openoffice/Office/DataAccess.xcu \
-	$(if $(ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS),, \
-	    org/openoffice/Office/PresentationMinimizer.xcu) \
 	org/openoffice/Office/UI.xcu \
 	org/openoffice/Office/Embedding.xcu \
 	org/openoffice/Office/Writer.xcu \

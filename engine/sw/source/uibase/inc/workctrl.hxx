@@ -98,7 +98,7 @@ class NavElementBox_Base
 {
 public:
     NavElementBox_Base(std::unique_ptr<weld::ComboBox> xComboBox,
-                       css::uno::Reference<css::frame::XFrame> xFrame);
+                       cpo::uno::Reference<css::frame::XFrame> xFrame);
 
     virtual ~NavElementBox_Base() {}
 
@@ -111,7 +111,7 @@ public:
 
 protected:
     std::unique_ptr<weld::ComboBox> m_xComboBox;
-    css::uno::Reference< css::frame::XFrame > m_xFrame;
+    cpo::uno::Reference< css::frame::XFrame > m_xFrame;
 
     virtual bool DoKeyInput(const KeyEvent& /*rKEvt*/);
 
@@ -125,7 +125,7 @@ class NavElementBox_Impl final : public InterimItemWindow, public NavElementBox_
 {
 public:
     NavElementBox_Impl(vcl::Window* pParent,
-                       const css::uno::Reference<css::frame::XFrame>& xFrame);
+                       const cpo::uno::Reference<css::frame::XFrame>& xFrame);
 
     virtual void dispose() override
     {
@@ -153,26 +153,26 @@ class NavElementToolBoxControl final : public NavElementToolBoxControl_Base
 {
 public:
     explicit NavElementToolBoxControl(
-        const css::uno::Reference< css::uno::XComponentContext >& rServiceManager );
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rServiceManager );
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // WeakComponentImplHelperBase
     using NavElementToolBoxControl_Base::disposing;
     virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+    virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
     // XToolbarController
-    virtual void SAL_CALL execute( sal_Int16 KeyModifier ) override;
-    virtual void SAL_CALL click() override;
-    virtual void SAL_CALL doubleClick() override;
-    virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() override;
-    virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createItemWindow( const css::uno::Reference< css::awt::XWindow >& Parent ) override;
+    virtual void execute( sal_Int16 KeyModifier ) override;
+    virtual void click() override;
+    virtual void doubleClick() override;
+    virtual cpo::uno::Reference< css::awt::XWindow > createPopupWindow() override;
+    virtual cpo::uno::Reference< css::awt::XWindow > createItemWindow( const cpo::uno::Reference< css::awt::XWindow >& Parent ) override;
 
     weld::ComboBox* GetComboBox() {return m_pBox->GetComboBox();}
 

@@ -32,7 +32,7 @@
 #include <com/sun/star/form/FormComponentType.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
-#include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/awt/MouseButton.hpp>
@@ -64,7 +64,7 @@ namespace frm
 {
 using namespace comphelper;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -180,7 +180,7 @@ OImageControlModel::~OImageControlModel()
 
 // XCloneable
 
-css::uno::Reference< css::util::XCloneable > OImageControlModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > OImageControlModel::createClone()
 {
     rtl::Reference<OImageControlModel> pClone = new OImageControlModel(this, getContext());
     pClone->clonedFrom(this);
@@ -927,7 +927,7 @@ void OImageControlControl::mousePressed(const css::awt::MouseEvent& e)
             if (hasProperty(PROPERTY_BOUNDFIELD, xSet))
                 xBoundField.set(
                     xSet->getPropertyValue(PROPERTY_BOUNDFIELD),
-                    css::uno::UNO_QUERY);
+                    cpo::uno::UNO_QUERY);
             if (!xBoundField.is())
             {
                 // but only if our IMAGE_URL property is handled as if it is transient, which is equivalent to
@@ -970,15 +970,15 @@ void OImageControlControl::mouseExited(const awt::MouseEvent& /*e*/)
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OImageControlModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OImageControlModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OImageControlModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_OImageControlControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_OImageControlControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::OImageControlControl(component));

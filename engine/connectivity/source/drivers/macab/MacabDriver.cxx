@@ -29,7 +29,7 @@
 #include <strings.hrc>
 #include <cppuhelper/supportsservice.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
@@ -177,7 +177,7 @@ void MacabImplModule::shutdown()
 // = MacabDriver
 
 MacabDriver::MacabDriver(
-    const Reference< css::uno::XComponentContext >& _rxContext)
+    const Reference< cpo::uno::XComponentContext >& _rxContext)
     : MacabDriver_BASE(m_aMutex),
       m_xContext(_rxContext),
       m_aImplModule()
@@ -188,7 +188,7 @@ MacabDriver::MacabDriver(
     osl_atomic_increment( &m_refCount );
     try
     {
-        Reference< XDesktop2 > xDesktop = Desktop::create( m_xContext );
+        Reference< XDesktop > xDesktop = Desktop::create( m_xContext );
         xDesktop->addTerminateListener( this );
     }
     catch( const Exception& )
@@ -301,9 +301,9 @@ OUString MacabDriver::impl_getConfigurationSettingsPath()
     return u"/org.openoffice.Office.DataAccess/DriverSettings/com.sun.star.comp.sdbc.macab.Driver"_ustr;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 connectivity_MacabDriver_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new MacabDriver(context));
 }

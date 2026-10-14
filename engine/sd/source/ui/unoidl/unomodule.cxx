@@ -29,14 +29,15 @@
 #include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
     // XNotifyingDispatch
-void SAL_CALL SdUnoModule::dispatchWithNotification( const util::URL& aURL, const cpo::uno::Sequence< beans::PropertyValue >& aArgs, const uno::Reference< frame::XDispatchResultListener >& xListener )
+void SdUnoModule::dispatchWithNotification( const util::URL& aURL, const cpo::uno::Sequence< beans::PropertyValue >& aArgs, const uno::Reference< frame::XDispatchResultListener >& xListener )
 {
     // there is no guarantee, that we are held alive during this method!
     // May the outside dispatch container will be updated by a CONTEXT_CHANGED
     // asynchronous ...
-    uno::Reference< uno::XInterface > xThis(static_cast< frame::XNotifyingDispatch* >(this));
+    uno::Reference< cpo::uno::XInterface > xThis(static_cast< frame::XNotifyingDispatch* >(this));
 
     SolarMutexGuard aGuard;
     SdDLL::Init();
@@ -64,20 +65,20 @@ void SAL_CALL SdUnoModule::dispatchWithNotification( const util::URL& aURL, cons
     }
 }
     // XDispatch
-void SAL_CALL SdUnoModule::dispatch( const util::URL& aURL, const cpo::uno::Sequence< beans::PropertyValue >& aArgs )
+void SdUnoModule::dispatch( const util::URL& aURL, const cpo::uno::Sequence< beans::PropertyValue >& aArgs )
 {
     dispatchWithNotification(aURL, aArgs, uno::Reference< frame::XDispatchResultListener >());
 }
 
-void SAL_CALL SdUnoModule::addStatusListener(const uno::Reference< frame::XStatusListener > &, const util::URL&)
+void SdUnoModule::addStatusListener(const uno::Reference< frame::XStatusListener > &, const util::URL&)
 {
 }
 
-void SAL_CALL SdUnoModule::removeStatusListener(const uno::Reference< frame::XStatusListener > &, const util::URL&)
+void SdUnoModule::removeStatusListener(const uno::Reference< frame::XStatusListener > &, const util::URL&)
 {
 }
 
-cpo::uno::Sequence< uno::Reference< frame::XDispatch > > SAL_CALL SdUnoModule::queryDispatches( const cpo::uno::Sequence< frame::DispatchDescriptor >& seqDescripts )
+cpo::uno::Sequence< uno::Reference< frame::XDispatch > > SdUnoModule::queryDispatches( const cpo::uno::Sequence< frame::DispatchDescriptor >& seqDescripts )
 {
     sal_Int32 nCount = seqDescripts.getLength();
     cpo::uno::Sequence< uno::Reference< frame::XDispatch > > lDispatcher( nCount );
@@ -90,7 +91,7 @@ cpo::uno::Sequence< uno::Reference< frame::XDispatch > > SAL_CALL SdUnoModule::q
 }
 
 // XDispatchProvider
-uno::Reference< frame::XDispatch > SAL_CALL SdUnoModule::queryDispatch( const util::URL& aURL, const OUString&, sal_Int32 )
+uno::Reference< frame::XDispatch > SdUnoModule::queryDispatch( const util::URL& aURL, const OUString&, sal_Int32 )
 {
     SolarMutexGuard aGuard;
     SdDLL::Init();
@@ -104,24 +105,24 @@ uno::Reference< frame::XDispatch > SAL_CALL SdUnoModule::queryDispatch( const ut
 }
 
 // XServiceInfo
-OUString SAL_CALL SdUnoModule::getImplementationName(  )
+OUString SdUnoModule::getImplementationName(  )
 {
     return u"com.sun.star.comp.Draw.DrawingModule"_ustr;
 }
 
-bool SAL_CALL SdUnoModule::supportsService( const OUString& sServiceName )
+bool SdUnoModule::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL SdUnoModule::getSupportedServiceNames(  )
+cpo::uno::Sequence< OUString > SdUnoModule::getSupportedServiceNames(  )
 {
     return { u"com.sun.star.drawing.ModuleDispatcher"_ustr };
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Draw_DrawingModule_get_implementation(css::uno::XComponentContext* ,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Draw_DrawingModule_get_implementation(cpo::uno::XComponentContext* ,
                                                         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     SolarMutexGuard aGuard;

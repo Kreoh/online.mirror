@@ -48,16 +48,16 @@
 
 #include <vector>
 
-using com::sun::star::uno::Reference;
-using com::sun::star::uno::XInterface;
+using cpo::uno::Reference;
+using cpo::uno::XInterface;
 using cpo::uno::Any;
-using com::sun::star::uno::TypeDescription;
+using cpo::uno::TypeDescription;
 using cpo::uno::Sequence;
 using cpo::uno::Type;
-using com::sun::star::uno::UNO_QUERY;
+using cpo::uno::UNO_QUERY;
 using cpo::uno::Exception;
-using com::sun::star::uno::RuntimeException;
-using com::sun::star::uno::XComponentContext;
+using cpo::uno::RuntimeException;
+using cpo::uno::XComponentContext;
 using com::sun::star::lang::WrappedTargetRuntimeException;
 using com::sun::star::lang::XSingleServiceFactory;
 using com::sun::star::lang::XUnoTunnel;
@@ -152,7 +152,7 @@ static PyTypeObject RuntimeImpl_Type =
 /*----------------------------------------------------------------------
   Runtime implementation
  -----------------------------------------------------------------------*/
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 static void getRuntimeImpl( PyRef & globalDict, PyRef &runtimeImpl )
 {
     PyThreadState * state = PyThreadState_Get();
@@ -292,7 +292,7 @@ PyRef stRuntimeImpl::create( const Reference< XComponentContext > &ctx )
         ctx->getServiceManager()->createInstanceWithContext(
             u"com.sun.star.script.Invocation"_ustr,
             ctx ),
-        css::uno::UNO_QUERY_THROW );
+        cpo::uno::UNO_QUERY_THROW );
 
     c->xTypeConverter = Converter::create(ctx);
     if( ! c->xTypeConverter.is() )
@@ -788,7 +788,7 @@ Any Runtime::pyObject2Any(const PyRef & source) const
         else if( PyObject_IsInstance( o, getPyUnoStructClass().get() ) )
         {
             PyUNO* o_pi = reinterpret_cast<PyUNO*>(o);
-            Reference<XMaterialHolder> my_mh (o_pi->members->xInvocation, css::uno::UNO_QUERY_THROW);
+            Reference<XMaterialHolder> my_mh (o_pi->members->xInvocation, cpo::uno::UNO_QUERY_THROW);
             a = my_mh->getMaterial();
         }
         else if( PyObject_IsInstance( o, getCharClass( runtime ).get() ) )

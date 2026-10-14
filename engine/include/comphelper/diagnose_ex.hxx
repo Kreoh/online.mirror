@@ -22,7 +22,7 @@
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
 
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
 #include <sal/log.hxx>
@@ -71,7 +71,7 @@ inline cpo::uno::Any DbgGetCaughtException()
                                      throw css::lang::IllegalArgumentException( \
                                      __func__ \
                                      + OUString::Concat(u",\n" m), \
-                                     css::uno::Reference< css::uno::XInterface >(), \
+                                     cpo::uno::Reference< cpo::uno::XInterface >(), \
                                      0 ); }
 #define ENSURE_ARG_OR_THROW2(c, m, ifc, arg) if( !(c) ) { \
                                                OSL_ENSURE(c, m); \
@@ -87,14 +87,14 @@ inline cpo::uno::Any DbgGetCaughtException()
 #define ENSURE_OR_THROW(c, m) \
     if( !(c) ){ \
         OSL_ENSURE(c, m); \
-        throw css::uno::RuntimeException( \
+        throw cpo::uno::RuntimeException( \
         __func__ + OUString::Concat(u",\n" m), \
-        css::uno::Reference< css::uno::XInterface >() ); }
+        cpo::uno::Reference< cpo::uno::XInterface >() ); }
 
 #define ENSURE_OR_THROW2(c, m, ifc) \
     if( !(c) ) { \
         OSL_ENSURE(c, m); \
-        throw css::uno::RuntimeException( \
+        throw cpo::uno::RuntimeException( \
         __func__ + OUString::Concat(u",\n" m), \
         ifc ); }
 

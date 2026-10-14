@@ -15,6 +15,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPoint>
 #include <QPointer>
 #include <QString>
 
@@ -23,7 +24,10 @@
 #include <vector>
 
 class QEvent;
+class QFrame;
+class QLabel;
 class QStackedWidget;
+class QTimer;
 class QWebEngineProfile;
 class QWebEngineView;
 class QWidget;
@@ -96,6 +100,14 @@ public:
     void emitInitialState();
     void applyTheme(const QString& theme);
 
+    void showTabContextMenu(int tabId, int x, int y);
+
+    // Show the tab's name and current view in a card below it, after a short delay. x and y
+    // are the tab's bottom left corner in the strip, the colours are CSS colour strings.
+    void onTabHoverStarted(int tabId, int x, int y, const QString& background,
+                           const QString& text, const QString& border);
+    void hideHoverCard();
+
 signals:
     void requestWindowClose();
 
@@ -108,13 +120,52 @@ private:
         // closeTab), holding one override cursor that the parked callback
         // (or detachAt, if the tab leaves another way) must release.
         bool closeWaitsForSave = false;
+        // True while this tab's view waits for a save result before it is dropped.
+        bool dropWaitsForSave = false;
+        // True from the moment this tab is asked to save for a drop until it is activated
+        // again, so one drop asks for one save.
+        bool dropSaveAsked = false;
+        // The value of _activationTick when this tab was last activated. The
+        // higher the value, the more recently the user was on the tab.
+        unsigned long long lastActiveTick = 0;
+        // Stands in the stack for a tab whose view is discarded, so a stack
+        // index still matches the tab's own position. Null otherwise, and
+        // owned by the stack while it is there.
+        QWidget* placeholder = nullptr;
     };
+
+    // The widget this tab occupies in the stack: its view, or its placeholder while the
+    // view is discarded.
+    QWidget* stackWidgetFor(const Entry& e) const;
+
+    // Build the view of a discarded tab again and put it back in the stack.
+    void restoreTabView(std::vector<Entry>::iterator it);
+
+    // Build the view of the active tab, once the user has stayed on it.
+    void restoreActiveTabView();
+
+    // Discard the views of every tab beyond the live-view limit, least recently used
+    // first, so the number of web engine processes stays bounded as tabs are opened.
+    void enforceLiveViewLimit();
+
+    // Apply the live-view limit after a delay, so a run of tab switches settles first and
+    // only the tab the user stops on is acted on.
+    void scheduleLiveViewLimit(int delayMilliseconds);
+
+    // Take the view of one tab away and put a placeholder in its place in the stack.
+    void discardTabView(Entry& e);
+
+    // Ask a tab to save, and park the drop of its view on the save result.
+    void requestSaveThenDiscard(Entry& e);
 
     int registerTab(std::unique_ptr<WebView> wv, int insertAt);
     std::unique_ptr<WebView> detachAt(std::vector<Entry>::iterator it);
     std::vector<Entry>::iterator findTab(int tabId);
     std::vector<Entry>::const_iterator findTab(int tabId) const;
     QString currentTabsJson() const;
+
+    void onThumbnailChanged(WebView* wv, bool isFirstThumbnail);
+    void showHoverCard();
 
     // The strip page has no keyboard handling, so bounce focus back to the
     // active document when the strip would take it - keeps shortcuts working.
@@ -131,9 +182,26 @@ private:
     std::vector<Entry> _tabs;
     static int s_nextTabId;
     int _activeTabId = -1;
+    // Counts activations. Each tab records the value it saw when it was last activated.
+    unsigned long long _activationTick = 0;
     // Set by requestCloseAll(): after each tab finishes closing, closeTab()
     // continues with the next one until none remain.
     bool _closingAll = false;
+    // Single-shot, and holds the pending run of the live-view limit.
+    QTimer* _liveViewLimitTimer;
+    // Single-shot, and holds the pending view build for the active tab.
+    QTimer* _viewRestoreTimer;
+
+    // A tooltip window, so it may extend below the strip over the document.
+    QFrame* _hoverCard;
+    QLabel* _hoverCardTitle;
+    QLabel* _hoverCardImage;
+    // Single-shot, and holds the delay between the pointer resting on a tab and its card.
+    QTimer* _hoverCardTimer;
+    // The tab the card is for, or -1 when no tab is hovered.
+    int _hoverCardTabId = -1;
+    // The hovered tab's bottom left corner, in strip coordinates.
+    QPoint _hoverCardPosition;
 
     // One drag at a time, so process-wide; the QPointers self-null if a
     // window dies mid-drag. s_lastHover* hold the strip a DragLeave demoted

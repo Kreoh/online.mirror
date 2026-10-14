@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstddef>
@@ -33,13 +33,14 @@
 #include <string_view>
 #include <type_traits>
 
-#include "rtl/math.h"
-#include "rtl/textenc.h"
-#include "rtl/string.h"
-#include "rtl/stringutils.hxx"
+#include <o3tl/safeint.hxx>
+#include <rtl/math.h>
+#include <rtl/textenc.h>
+#include <rtl/string.h>
+#include <rtl/stringutils.hxx>
 
-#include "config_global.h"
-#include "rtl/stringconcat.hxx"
+#include <config_global.h>
+#include <rtl/stringconcat.hxx>
 
 #ifdef RTL_STRING_UNITTEST
 extern bool rtl_string_unittest_const_literal;
@@ -525,7 +526,8 @@ public:
         if (sv.empty()) {
             return *this;
         }
-        if (sv.size() > sal_uInt32(std::numeric_limits<sal_Int32>::max() - pData->length)) {
+        if (sv.size() > o3tl::make_unsigned(std::numeric_limits<sal_Int32>::max() - pData->length))
+        {
             throw std::bad_alloc();
         }
         auto const l = pData->length + sv.size();
@@ -1167,7 +1169,7 @@ public:
       end of this string
     */
     bool endsWith(std::string_view str) const {
-        return str.size() <= sal_uInt32(getLength())
+        return str.size() <= o3tl::make_unsigned(getLength())
             && match(str, getLength() - str.size());
     }
     /**
@@ -1611,7 +1613,7 @@ public:
       @param     beginIndex   the beginning index, inclusive.
       @return    the specified substring.
     */
-    SAL_WARN_UNUSED_RESULT OString copy( sal_Int32 beginIndex ) const
+    [[nodiscard]] OString copy( sal_Int32 beginIndex ) const
     {
         return copy(beginIndex, getLength() - beginIndex);
     }
@@ -1628,7 +1630,7 @@ public:
       @param     count        the number of characters.
       @return    the specified substring.
     */
-    SAL_WARN_UNUSED_RESULT OString copy( sal_Int32 beginIndex, sal_Int32 count ) const
+    [[nodiscard]] OString copy( sal_Int32 beginIndex, sal_Int32 count ) const
     {
         rtl_String *pNew = NULL;
         rtl_string_newFromSubString( &pNew, pData, beginIndex, count );
@@ -1645,7 +1647,7 @@ public:
       @param     beginIndex   the beginning index, inclusive.
       @return    the specified substring.
     */
-    SAL_WARN_UNUSED_RESULT std::string_view subView( sal_Int32 beginIndex ) const
+    [[nodiscard]] std::string_view subView( sal_Int32 beginIndex ) const
     {
         assert(beginIndex >= 0);
         assert(beginIndex <= getLength());
@@ -1664,7 +1666,7 @@ public:
       @param     count        the number of characters.
       @return    the specified substring.
     */
-    SAL_WARN_UNUSED_RESULT std::string_view subView( sal_Int32 beginIndex, sal_Int32 count ) const
+    [[nodiscard]] std::string_view subView( sal_Int32 beginIndex, sal_Int32 count ) const
     {
         assert(beginIndex >= 0);
         assert(count >= 0);
@@ -1673,7 +1675,7 @@ public:
         return std::string_view(*this).substr(beginIndex, count);
     }
 
-    SAL_WARN_UNUSED_RESULT OString replaceAt( sal_Int32 index, sal_Int32 count, std::string_view newStr ) const
+    [[nodiscard]] OString replaceAt( sal_Int32 index, sal_Int32 count, std::string_view newStr ) const
     {
         rtl_String* pNew = NULL;
         rtl_string_newReplaceStrAt_WithLength ( &pNew, pData, index, count, newStr.data(), newStr.size() );
@@ -1693,7 +1695,7 @@ public:
       @return   a string derived from this string by replacing every
                 occurrence of oldChar with newChar.
     */
-    SAL_WARN_UNUSED_RESULT OString replace( char oldChar, char newChar ) const
+    [[nodiscard]] OString replace( char oldChar, char newChar ) const
     {
         rtl_String* pNew = NULL;
         rtl_string_newReplace( &pNew, pData, oldChar, newChar );
@@ -1716,7 +1718,7 @@ public:
       replacement took place or -1 if no replacement took place; if the pointer
       is null, searching always starts at index 0
     */
-    SAL_WARN_UNUSED_RESULT OString replaceFirst(
+    [[nodiscard]] OString replaceFirst(
         OString const & from, OString const & to, sal_Int32 * index = NULL) const
     {
         rtl_String * s = NULL;
@@ -1738,7 +1740,7 @@ public:
 
       @param to  the replacing substring
     */
-    SAL_WARN_UNUSED_RESULT OString replaceAll(OString const & from, OString const & to) const {
+    [[nodiscard]] OString replaceAll(OString const & from, OString const & to) const {
         rtl_String * s = NULL;
         rtl_string_newReplaceAll(
             &s, pData, from.pData->buffer, from.pData->length,
@@ -1756,7 +1758,7 @@ public:
 
       @return   the string, converted to ASCII lowercase.
     */
-    SAL_WARN_UNUSED_RESULT OString toAsciiLowerCase() const
+    [[nodiscard]] OString toAsciiLowerCase() const
     {
         rtl_String* pNew = NULL;
         rtl_string_newToAsciiLowerCase( &pNew, pData );
@@ -1773,7 +1775,7 @@ public:
 
       @return   the string, converted to ASCII uppercase.
     */
-    SAL_WARN_UNUSED_RESULT OString toAsciiUpperCase() const
+    [[nodiscard]] OString toAsciiUpperCase() const
     {
         rtl_String* pNew = NULL;
         rtl_string_newToAsciiUpperCase( &pNew, pData );
@@ -1791,7 +1793,7 @@ public:
 
       @return   the string, with white space removed from the front and end.
     */
-    SAL_WARN_UNUSED_RESULT OString trim() const
+    [[nodiscard]] OString trim() const
     {
         rtl_String* pNew = NULL;
         rtl_string_newTrim( &pNew, pData );

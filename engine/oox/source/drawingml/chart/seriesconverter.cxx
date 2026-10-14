@@ -66,8 +66,8 @@ using namespace com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::chart2;
 using namespace ::com::sun::star::chart2::data;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace {
 
@@ -352,7 +352,7 @@ void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDat
         }
         if( bCustomLabelField )
         {
-            css::uno::Reference< XComponentContext > xContext = getComponentContext();
+            cpo::uno::Reference< XComponentContext > xContext = getComponentContext();
 
             auto& rParagraphs = mrModel.mxText->mxTextBody->getParagraphs();
 
@@ -382,7 +382,7 @@ void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDat
                 }
             }
 
-            cpo::uno::Sequence< css::uno::Reference< XDataPointCustomLabelField > > aSequence( nSequenceSize );
+            cpo::uno::Sequence< cpo::uno::Reference< XDataPointCustomLabelField > > aSequence( nSequenceSize );
             auto aSequenceRange = asNonConstRange(aSequence);
 
             int nPos = 0;
@@ -391,11 +391,14 @@ void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDat
             {
                 for( auto& pRun : pParagraph->getRuns() )
                 {
-                    css::uno::Reference< XDataPointCustomLabelField > xCustomLabel = DataPointCustomLabelField::create( xContext );
+                    cpo::uno::Reference< XDataPointCustomLabelField > xCustomLabel = DataPointCustomLabelField::create( xContext );
 
                     // Store properties
                     oox::PropertySet aPropertySet( xCustomLabel );
-                    convertTextProperty( aPropertySet, getFormatter(), mrModel.mxText->mxTextBody );
+                    // A field holds the character formatting alone. How the label is turned and
+                    // whether its text wraps belong to the label as a whole, which is set below.
+                    getFormatter().convertTextFormatting( aPropertySet, mrModel.mxText->mxTextBody,
+                                                          OBJECTTYPE_DATALABEL );
                     pRun->getTextCharacterProperties().pushToPropSet( aPropertySet, getFilter() );
 
                     if (TextField* pField = dynamic_cast<TextField*>(pRun.get()))
@@ -424,7 +427,7 @@ void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDat
 
                 if( nParagraphs > 1 && nPos < nSequenceSize )
                 {
-                    css::uno::Reference< XDataPointCustomLabelField > xCustomLabel = DataPointCustomLabelField::create( xContext );
+                    cpo::uno::Reference< XDataPointCustomLabelField > xCustomLabel = DataPointCustomLabelField::create( xContext );
                     xCustomLabel->setFieldType( DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_NEWLINE );
                     xCustomLabel->setString(u"\n"_ustr);
                     aSequenceRange[ nPos++ ] = std::move(xCustomLabel);

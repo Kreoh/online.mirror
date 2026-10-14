@@ -21,7 +21,7 @@
 
 #include <sal/types.h>
 
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/xml/dom/events/XEvent.hpp>
 #include <com/sun/star/xml/dom/events/XEventTarget.hpp>
 #include <com/sun/star/util/Time.hpp>
@@ -39,8 +39,8 @@ protected:
     std::mutex m_Mutex;
     bool m_canceled;
     OUString m_eventType;
-    css::uno::Reference< css::xml::dom::events::XEventTarget > m_target;
-    css::uno::Reference< css::xml::dom::events::XEventTarget > m_currentTarget;
+    cpo::uno::Reference< css::xml::dom::events::XEventTarget > m_target;
+    cpo::uno::Reference< css::xml::dom::events::XEventTarget > m_currentTarget;
     css::xml::dom::events::PhaseType m_phase;
     bool m_bubbles;
     bool m_cancelable;
@@ -51,16 +51,16 @@ public:
     explicit CEvent();
 
     virtual ~CEvent() override;
-    virtual OUString SAL_CALL getType() override;
-    virtual css::uno::Reference< css::xml::dom::events::XEventTarget > SAL_CALL getTarget() override;
-    virtual css::uno::Reference< css::xml::dom::events::XEventTarget > SAL_CALL getCurrentTarget() override;
-    virtual css::xml::dom::events::PhaseType SAL_CALL getEventPhase() override;
-    virtual bool SAL_CALL getBubbles() override;
-    virtual bool SAL_CALL getCancelable() override;
-    virtual css::util::Time SAL_CALL getTimeStamp() override;
-    virtual void SAL_CALL stopPropagation() override;
-    virtual void SAL_CALL preventDefault() override;
-    virtual void SAL_CALL initEvent(
+    virtual OUString getType() override;
+    virtual cpo::uno::Reference< css::xml::dom::events::XEventTarget > getTarget() override;
+    virtual cpo::uno::Reference< css::xml::dom::events::XEventTarget > getCurrentTarget() override;
+    virtual css::xml::dom::events::PhaseType getEventPhase() override;
+    virtual bool getBubbles() override;
+    virtual bool getCancelable() override;
+    virtual css::util::Time getTimeStamp() override;
+    virtual void stopPropagation() override;
+    virtual void preventDefault() override;
+    virtual void initEvent(
         const OUString& eventTypeArg,
         bool canBubbleArg,
         bool cancelableArg) override;

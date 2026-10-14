@@ -42,8 +42,8 @@
 
 using namespace ::comphelper;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using css::xml::dom::XDocumentBuilder;
 
 namespace
@@ -104,19 +104,19 @@ struct ErrorHandler
     ErrorHandler() : mnErrCount(0), /*mnFatalCount(0),*/ mnWarnCount(0)
     {}
 
-    virtual void SAL_CALL error( const cpo::uno::Any& ) override
+    virtual void error( const cpo::uno::Any& ) override
     {
         ++mnErrCount;
     }
 
     // Just implement FatalError function as it is in XErrorHandler
     // This function is never used, as lib2xml doesn't distinguish between error and fatalerror and calls error functions in both cases
-    virtual void SAL_CALL fatalError( const cpo::uno::Any& ) override
+    virtual void fatalError( const cpo::uno::Any& ) override
     {
         //++mnFatalCount;
     }
 
-    virtual void SAL_CALL warning( const cpo::uno::Any& ) override
+    virtual void warning( const cpo::uno::Any& ) override
     {
         ++mnWarnCount;
     }
@@ -126,7 +126,7 @@ struct DocumentHandler
     : public ::cppu::WeakImplHelper< xml::sax::XFastDocumentHandler >
 {
     // XFastContextHandler
-    virtual void SAL_CALL startFastElement( ::sal_Int32 Element, const uno::Reference< xml::sax::XFastAttributeList >& ) override
+    virtual void startFastElement( ::sal_Int32 Element, const uno::Reference< xml::sax::XFastAttributeList >& ) override
     {
         SAL_INFO(
             "unoxml",
@@ -134,58 +134,58 @@ struct DocumentHandler
                 << (Element & 0xFFFF0000));
     }
 
-    virtual void SAL_CALL startUnknownElement( const OUString& , const OUString& , const uno::Reference< xml::sax::XFastAttributeList >& ) override
+    virtual void startUnknownElement( const OUString& , const OUString& , const uno::Reference< xml::sax::XFastAttributeList >& ) override
     {
     }
 
-    virtual void SAL_CALL endFastElement( ::sal_Int32 ) override
+    virtual void endFastElement( ::sal_Int32 ) override
     {
     }
 
-    virtual void SAL_CALL endUnknownElement( const OUString&, const OUString& ) override
+    virtual void endUnknownElement( const OUString&, const OUString& ) override
     {
     }
 
-    virtual uno::Reference< xml::sax::XFastContextHandler > SAL_CALL createFastChildContext( ::sal_Int32 , const uno::Reference< xml::sax::XFastAttributeList >& ) override
-    {
-        return this;
-    }
-
-    virtual uno::Reference< xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext( const OUString& , const OUString& , const uno::Reference< xml::sax::XFastAttributeList >& ) override
+    virtual uno::Reference< xml::sax::XFastContextHandler > createFastChildContext( ::sal_Int32 , const uno::Reference< xml::sax::XFastAttributeList >& ) override
     {
         return this;
     }
 
-    virtual void SAL_CALL characters( const OUString& ) override
+    virtual uno::Reference< xml::sax::XFastContextHandler > createUnknownChildContext( const OUString& , const OUString& , const uno::Reference< xml::sax::XFastAttributeList >& ) override
+    {
+        return this;
+    }
+
+    virtual void characters( const OUString& ) override
     {
     }
 
     // XFastDocumentHandler
-    virtual void SAL_CALL startDocument(  ) override
+    virtual void startDocument(  ) override
     {
     }
 
-    virtual void SAL_CALL endDocument(  ) override
+    virtual void endDocument(  ) override
     {
     }
 
-    virtual void SAL_CALL processingInstruction( const OUString& /*rTarget*/, const OUString& /*rData*/ ) override
+    virtual void processingInstruction( const OUString& /*rTarget*/, const OUString& /*rData*/ ) override
     {
     }
 
-    virtual void SAL_CALL setDocumentLocator( const uno::Reference< xml::sax::XLocator >& ) override
+    virtual void setDocumentLocator( const uno::Reference< xml::sax::XLocator >& ) override
     {
     }
 };
 
 struct TokenHandler : public sax_fastparser::FastTokenHandlerBase
 {
-    virtual ::sal_Int32 SAL_CALL getTokenFromUTF8( const cpo::uno::Sequence< ::sal_Int8 >& Identifier ) override
+    virtual ::sal_Int32 getTokenFromUTF8( const cpo::uno::Sequence< ::sal_Int8 >& Identifier ) override
     {
         return Identifier.hasElements() ? Identifier[0] : 0;
     }
 
-    virtual cpo::uno::Sequence< ::sal_Int8 > SAL_CALL getUTF8Identifier( ::sal_Int32 ) override
+    virtual cpo::uno::Sequence< ::sal_Int8 > getUTF8Identifier( ::sal_Int32 ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "TokenHandler::getUTF8Identifier() unexpected call",
                                 false );
@@ -289,11 +289,11 @@ public:
             mxDomBuilder->parse(nullptr);
             CPPUNIT_FAIL("XDocumentBuilder.parse(null)");
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
-        uno::Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext(), css::uno::UNO_SET_THROW);
+        uno::Reference<cpo::uno::XComponentContext> xContext(comphelper::getProcessComponentContext(), cpo::uno::UNO_SET_THROW);
         const uno::Reference<css::ucb::XSimpleFileAccess> xFileAccess(
         xContext->getServiceManager()->createInstanceWithContext(
             u"com.sun.star.ucb.SimpleFileAccess"_ustr, xContext),
@@ -398,7 +398,7 @@ public:
             xXPathAPI->eval(nullptr, u"child::foo"_ustr);
             CPPUNIT_FAIL("XXPathAPI.eval(null)");
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -407,7 +407,7 @@ public:
             xXPathAPI->evalNS(nullptr, u"child::foo"_ustr, xRoot);
             CPPUNIT_FAIL("XXPathAPI.evalNS(null)");
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -416,7 +416,7 @@ public:
             xXPathAPI->selectNodeList(nullptr, u"child::foo"_ustr);
             CPPUNIT_FAIL("XXPathAPI.selectNodeList(null)");
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -425,7 +425,7 @@ public:
             xXPathAPI->selectNodeListNS(nullptr, u"child::foo"_ustr, xRoot);
             CPPUNIT_FAIL("XXPathAPI.selectNodeListNS(null)");
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -434,7 +434,7 @@ public:
             xXPathAPI->selectSingleNode(nullptr, u"child::foo"_ustr);
             CPPUNIT_FAIL("XXPathAPI.selectSingleNode(null)");
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -443,7 +443,7 @@ public:
             xXPathAPI->selectSingleNodeNS(nullptr, u"child::foo"_ustr, xRoot);
             CPPUNIT_FAIL("XXPathAPI.selectSingleNodeNS(null)");
         }
-        catch (uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -688,7 +688,7 @@ public:
             xText->appendChild(nullptr);
             CPPUNIT_FAIL("XText.appendChild(null)");
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -725,7 +725,7 @@ public:
             xText->removeChild(nullptr);
             CPPUNIT_FAIL("XText.removeChild(null)");
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -806,7 +806,7 @@ public:
             xPI->appendChild(nullptr);
             CPPUNIT_FAIL("XProcessingInstruction.appendChild(null)");
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 
@@ -843,7 +843,7 @@ public:
             xPI->removeChild(nullptr);
             CPPUNIT_FAIL("XProcessingInstruction.removeChild(null)");
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
         }
 

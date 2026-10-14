@@ -24,8 +24,8 @@
 
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::datatransfer::clipboard;
-using com::sun::star::uno::RuntimeException;
-using com::sun::star::uno::Reference;
+using cpo::uno::RuntimeException;
+using cpo::uno::Reference;
 
 CXNotifyingDataObject::CXNotifyingDataObject(
     const sal::systools::COMReference<IDataObject>& aIDataObject,

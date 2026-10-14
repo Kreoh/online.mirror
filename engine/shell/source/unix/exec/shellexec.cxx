@@ -49,7 +49,7 @@ extern void execute_browser(const char* sUrl);
 using com::sun::star::system::XSystemShellExecute;
 using com::sun::star::system::SystemShellExecuteException;
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::system::SystemShellExecuteFlags;
@@ -79,7 +79,7 @@ ShellExec::ShellExec( const Reference< XComponentContext >& xContext ) :
 {
 }
 
-void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags )
+void ShellExec::execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags )
 {
 #ifndef __EMSCRIPTEN__
     OStringBuffer aBuffer, aLaunchBuffer;
@@ -94,7 +94,7 @@ void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aPar
     static const char *pDesktopLaunch = getenv( "DESKTOP_LAUNCH" );
 
     // Check whether aCommand contains an absolute URI reference:
-    css::uno::Reference< css::uri::XUriReference > uri(
+    cpo::uno::Reference< css::uri::XUriReference > uri(
         css::uri::UriReferenceFactory::create(m_xContext)->parse(aCommand));
     if (uri.is() && uri->isAbsolute())
     {
@@ -230,10 +230,7 @@ void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aPar
                 aBuffer.append("--args ");
             }
 #endif
-            if( nFlags != 42 )
-                escapeForShell(aBuffer, OUStringToOString(aParameter, osl_getThreadTextEncoding()));
-            else
-                aBuffer.append(OUStringToOString(aParameter, osl_getThreadTextEncoding()));
+            escapeForShell(aBuffer, OUStringToOString(aParameter, osl_getThreadTextEncoding()));
         }
     }
 
@@ -270,13 +267,13 @@ void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aPar
 #else // __EMSCRIPTEN__
     (void)nFlags;
 
-    css::uno::Reference< css::uri::XUriReference > uri(
+    cpo::uno::Reference< css::uri::XUriReference > uri(
         css::uri::UriReferenceFactory::create(m_xContext)->parse(aCommand));
     if (!uri.is() || !uri->isAbsolute())
-        throw SystemShellExecuteException("Emscripten can just open absolute URIs.",
+        throw SystemShellExecuteException(u"Emscripten can just open absolute URIs."_ustr,
                                           static_cast<XSystemShellExecute*>(this), 42);
     if (!aParameter.isEmpty())
-        throw SystemShellExecuteException("Emscripten can't process parameters; encode in URI.",
+        throw SystemShellExecuteException(u"Emscripten can't process parameters; encode in URI."_ustr,
                                           static_cast<XSystemShellExecute*>(this), 42);
 
     OUString sEscapedURI(rtl::Uri::encode(aCommand, rtl_UriCharClassUric,
@@ -288,24 +285,24 @@ void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aPar
 
 // XServiceInfo
 
-OUString SAL_CALL ShellExec::getImplementationName(  )
+OUString ShellExec::getImplementationName(  )
 {
     return u"com.sun.star.comp.system.SystemShellExecute"_ustr;
 }
 
-bool SAL_CALL ShellExec::supportsService( const OUString& ServiceName )
+bool ShellExec::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL ShellExec::getSupportedServiceNames(   )
+Sequence< OUString > ShellExec::getSupportedServiceNames(   )
 {
     return { u"com.sun.star.system.SystemShellExecute"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 shell_ShellExec_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ShellExec(context));
 }

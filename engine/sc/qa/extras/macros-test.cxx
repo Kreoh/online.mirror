@@ -12,7 +12,16 @@
 #include <config_vclplug.h>
 
 #include <helper/qahelper.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <drwlayer.hxx>
 #include <sal/log.hxx>
+#include <sfx2/dispatch.hxx>
+#include <sfx2/frame.hxx>
+#include <sfx2/sfxsids.hrc>
+#include <sfx2/viewfrm.hxx>
+#include <svl/eitem.hxx>
+#include <svl/stritem.hxx>
 #include <svx/svdpage.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertyvalue.hxx>
@@ -21,6 +30,8 @@
 
 #include <conditio.hxx>
 #include <document.hxx>
+#include <formulacell.hxx>
+#include <tabvwsh.hxx>
 #include <scitems.hxx>
 
 #include <algorithm>
@@ -34,15 +45,19 @@
 #include <com/sun/star/table/XColumnRowRange.hpp>
 
 #include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/document/MacroExecMode.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/script/XLibraryContainer.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
 #include <editeng/brushitem.hxx>
+#include <basic/sbmod.hxx>
+#include <basic/sbstar.hxx>
+#include <formula/errorcodes.hxx>
+#include <sfx2/app.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /* Implementation of Macros test */
 
@@ -299,13 +314,12 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testPasswordProtectedUnicodeString)
     }
 
     // Unlock and load the library, to regenerate the image on save
-    css::uno::Reference<css::document::XEmbeddedScripts> xES(mxComponent, UNO_QUERY_THROW);
-    css::uno::Reference<css::script::XLibraryContainer> xLC(xES->getBasicLibraries(),
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xES(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::script::XLibraryContainer> xLC(xES->getBasicLibraries(),
                                                             UNO_QUERY_THROW);
-    css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(xLC, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xPasswd->isLibraryPasswordProtected(sLibName));
-    CPPUNIT_ASSERT(!xPasswd->isLibraryPasswordVerified(sLibName));
-    CPPUNIT_ASSERT(xPasswd->verifyLibraryPassword(sLibName, u"password"_ustr));
+    CPPUNIT_ASSERT(xLC->isLibraryPasswordProtected(sLibName));
+    CPPUNIT_ASSERT(!xLC->isLibraryPasswordVerified(sLibName));
+    CPPUNIT_ASSERT(xLC->verifyLibraryPassword(sLibName, u"password"_ustr));
     xLC->loadLibrary(sLibName);
     CPPUNIT_ASSERT(xLC->isLibraryLoaded(sLibName));
 
@@ -342,13 +356,12 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testPasswordProtectedArrayInUserType)
     }
 
     // Unlock and load the library, to regenerate the image on save
-    css::uno::Reference<css::document::XEmbeddedScripts> xES(mxComponent, UNO_QUERY_THROW);
-    css::uno::Reference<css::script::XLibraryContainer> xLC(xES->getBasicLibraries(),
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xES(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::script::XLibraryContainer> xLC(xES->getBasicLibraries(),
         UNO_QUERY_THROW);
-    css::uno::Reference<css::script::XLibraryContainerPassword> xPasswd(xLC, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xPasswd->isLibraryPasswordProtected(sLibName));
-    CPPUNIT_ASSERT(!xPasswd->isLibraryPasswordVerified(sLibName));
-    CPPUNIT_ASSERT(xPasswd->verifyLibraryPassword(sLibName, u"password"_ustr));
+    CPPUNIT_ASSERT(xLC->isLibraryPasswordProtected(sLibName));
+    CPPUNIT_ASSERT(!xLC->isLibraryPasswordVerified(sLibName));
+    CPPUNIT_ASSERT(xLC->verifyLibraryPassword(sLibName, u"password"_ustr));
     xLC->loadLibrary(sLibName);
     CPPUNIT_ASSERT(xLC->isLibraryLoaded(sLibName));
 
@@ -721,7 +734,7 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testTdf107572)
     createScDoc();
 
     // insert initial library
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(
@@ -801,7 +814,7 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testShapeLayerId)
     createScDoc();
 
     // insert initial library
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(
@@ -836,7 +849,7 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testFunctionAccessIndirect)
 
     const OUString aReference = "'" + aFileName + "'#$Sheet1.A1";
 
-    css::uno::Reference<css::sheet::XFunctionAccess> xFunc(
+    cpo::uno::Reference<css::sheet::XFunctionAccess> xFunc(
         comphelper::getProcessServiceFactory()->createInstance(u"com.sun.star.sheet.FunctionAccess"_ustr),
         UNO_QUERY_THROW);
 
@@ -851,7 +864,7 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testTdf147122)
 {
     createScDoc();
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(
@@ -883,7 +896,7 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testTdf154803)
 {
     createScDoc();
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(
@@ -915,7 +928,7 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testTdf116127)
 {
     createScDoc();
 
-    css::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
+    cpo::uno::Reference<css::document::XEmbeddedScripts> xDocScr(mxComponent, UNO_QUERY_THROW);
     auto xLibs = xDocScr->getBasicLibraries();
     auto xLibrary = xLibs->createLibrary(u"TestLibrary"_ustr);
     xLibrary->insertByName(
@@ -1177,6 +1190,69 @@ CPPUNIT_TEST_FIXTURE(ScMacrosTest, testVbaOnTime)
 
     // A1 has the expected number now:
     CPPUNIT_ASSERT_EQUAL(42.0, pDoc->GetValue(0, 0, 0));
+}
+
+CPPUNIT_TEST_FIXTURE(ScMacrosTest, testTdf173160)
+{
+    // A macro reached through a hyperlink is handed the media descriptor as positional arguments,
+    // with the URL first; the dispatch drops the argument names, so the order is all it has
+    loadWithParams(
+        createFileURL(u"tdf173160.ods"),
+        { comphelper::makePropertyValue(u"MacroExecutionMode"_ustr,
+                                        document::MacroExecMode::ALWAYS_EXECUTE_NO_WARN) });
+
+    static constexpr OUString aScriptUrl
+        = u"vnd.sun.star.script:Standard.Module1.Main1?language=Basic&location=document"_ustr;
+
+    // the items ScGlobal::OpenURL builds for a Ctrl+click on a cell hyperlink
+    SfxViewFrame& rViewFrame = getViewShell()->GetViewFrame();
+    SfxStringItem aUrl(SID_FILE_NAME, aScriptUrl);
+    SfxStringItem aTarget(SID_TARGETNAME, u""_ustr);
+    SfxFrameItem aFrame(SID_DOCFRAME, &rViewFrame);
+    SfxStringItem aReferer(SID_REFERER, u"private:user"_ustr);
+    SfxBoolItem aNewView(SID_OPEN_NEW_VIEW, false);
+    SfxBoolItem aBrowsing(SID_BROWSE, true);
+    // asynchronous like the hyperlink itself: a script URL can only be dispatched that way,
+    // because ScriptProtocolHandler has no XSynchronousDispatch
+    rViewFrame.GetDispatcher()->ExecuteList(
+        SID_OPENDOC, SfxCallMode::ASYNCHRON,
+        { &aUrl, &aTarget, &aFrame, &aReferer, &aNewView, &aBrowsing });
+    Scheduler::ProcessEventsToIdle();
+
+    // the macro wrote down what it got: A1 the first argument, B1 how many there were
+    ScDocument* pDoc = getScDoc();
+    // Without the accompanying fix in place, this test would have failed: the arguments reached
+    // the macro in the order their names happened to hash, so the first one was not the URL
+    CPPUNIT_ASSERT_EQUAL(aScriptUrl, pDoc->GetString(0, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(6.0, pDoc->GetValue(1, 0, 0));
+}
+
+CPPUNIT_TEST_FIXTURE(ScMacrosTest, testFormulaCallingApplicationBasicIsMacroUse)
+{
+    // a function the user keeps in application Basic
+    StarBASIC* pAppBasic = SfxApplication::GetBasic();
+    CPPUNIT_ASSERT(pAppBasic);
+    SbModule* pModule = pAppBasic->MakeModule(u"ScMacrosTestModule"_ustr,
+                                              u"Function SCMACROSTESTAPPFUNCTION()\n"
+                                              "    SCMACROSTESTAPPFUNCTION = 42\n"
+                                              "End Function\n"_ustr);
+    CPPUNIT_ASSERT(pModule);
+    CPPUNIT_ASSERT(pModule->Compile());
+
+    // a document with no Basic of its own calls it from a formula, opened at the default macro
+    // security level, where unsigned macros are refused
+    mxComponent = mxDesktop->loadComponentFromURL(
+        createFileURL(u"application-basic-function.fods"), u"_default"_ustr, 0,
+        { comphelper::makePropertyValue(u"MacroExecutionMode"_ustr,
+                                        document::MacroExecMode::FROM_LIST_AND_SIGNED_WARN) });
+    CPPUNIT_ASSERT(mxComponent.is());
+
+    // the formula counts as macro use, so the document got the macro decision on load and the
+    // call is refused the way a document macro would be
+    CPPUNIT_ASSERT(getScDocShell()->GetMacroCallsSeenWhileLoading());
+    ScFormulaCell* pCell = getScDoc()->GetFormulaCell(ScAddress(0, 0, 0));
+    CPPUNIT_ASSERT(pCell);
+    CPPUNIT_ASSERT_EQUAL(int(FormulaError::NoMacro), int(pCell->GetErrCode()));
 }
 
 ScMacrosTest::ScMacrosTest()

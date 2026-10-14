@@ -42,10 +42,11 @@
 
 using namespace comphelper;
 using namespace css;
+using namespace ::cpo;
 
 CertificateChooser::CertificateChooser(weld::Window* _pParent,
                                        SfxViewShell* pViewShell,
-                                       std::vector< css::uno::Reference< css::xml::crypto::XXMLSecurityContext > > && rxSecurityContexts,
+                                       std::vector< cpo::uno::Reference< css::xml::crypto::XXMLSecurityContext > > && rxSecurityContexts,
                                        CertificateChooserUserAction eAction)
     : GenericDialogController(_pParent, u"xmlsec/ui/selectcertificatedialog.ui"_ustr, u"SelectCertificateDialog"_ustr)
     , meAction(eAction)
@@ -61,17 +62,24 @@ CertificateChooser::CertificateChooser(weld::Window* _pParent,
     , m_xSearchBox(m_xBuilder->weld_entry(u"searchbox"_ustr))
     , m_xReloadBtn(m_xBuilder->weld_button(u"reloadcert"_ustr))
 {
-    auto nControlWidth = m_xCertLB->get_approximate_digit_width() * 105;
+    auto nControlWidth = m_xCertLB->get_approximate_digit_width() * 84;
     m_xCertLB->set_size_request(nControlWidth, m_xCertLB->get_height_rows(12));
 
+    // The fixed widths have to leave room for the last (certificate usage)
+    // column within the size request, otherwise the list gets a horizontal
+    // scrollbar.
     std::vector<int> aWidths
     {
-        o3tl::narrowing<int>(30*nControlWidth/100),
-        o3tl::narrowing<int>(30*nControlWidth/100),
-        o3tl::narrowing<int>(10*nControlWidth/100),
-        o3tl::narrowing<int>(20*nControlWidth/100)
+        o3tl::narrowing<int>(26*nControlWidth/100),
+        o3tl::narrowing<int>(26*nControlWidth/100),
+        o3tl::narrowing<int>(8*nControlWidth/100),
+        o3tl::narrowing<int>(16*nControlWidth/100)
     };
     m_xCertLB->set_column_fixed_widths(aWidths);
+
+    msSignBaseText = m_xFTSign->get_label();
+    msEncryptBaseText = m_xFTEncrypt->get_label();
+
     m_xCertLB->connect_selection_changed(LINK(this, CertificateChooser, CertificateHighlightHdl));
     m_xCertLB->connect_row_activated( LINK( this, CertificateChooser, CertificateSelectHdl ) );
     m_xViewBtn->connect_clicked( LINK( this, CertificateChooser, ViewButtonHdl ) );
@@ -84,13 +92,16 @@ CertificateChooser::CertificateChooser(weld::Window* _pParent,
     // disable buttons
     CertificateHighlightHdl(*m_xCertLB);
 
+#if !defined(_WIN32) && !defined(MACOSX)
     if (comphelper::COKit::isActive())
     {
         // Single certificate doesn't change during the lifetime of a COKit view: no need to search or
-        // reload it.
+        // reload it. The Windows and macOS desktop apps list the native certificate store instead,
+        // where these buttons are useful.
         m_xSearchBox->hide();
         m_xReloadBtn->hide();
     }
+#endif
 }
 
 CertificateChooser::~CertificateChooser()
@@ -218,11 +229,13 @@ void CertificateChooser::ImplInitialize(bool mbSearch)
                 if (meAction == CertificateChooserUserAction::Sign || meAction == CertificateChooserUserAction::SelectSign)
                 {
                     // The COKit (online/server) case takes the signing certificate
-                    // from the session/view. The Windows desktop app (CODA-W, the
-                    // only _WIN32 COKit build) instead signs from the native Windows
-                    // certificate store like the regular desktop.
+                    // from the session/view. The desktop apps instead sign from the
+                    // native certificate store like the regular desktop: the Windows
+                    // one (CODA-W, the only _WIN32 COKit build) from the Windows
+                    // certificate store, the macOS one (CODA-M, the only MACOSX
+                    // COKit build) from Keychain Access (and the NSS database).
                     bool bUseSessionCertificate = comphelper::COKit::isActive();
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(MACOSX)
                     bUseSessionCertificate = false;
 #endif
                     if (bUseSessionCertificate)
@@ -297,12 +310,14 @@ void CertificateChooser::ImplInitialize(bool mbSearch)
     {
 #ifdef _WIN32
         seqLoadedCertsLabels.push_back(XsResId(STR_LOADED_CERTS_X509_MSCRYPT));
-#else  // _WIN32
+#elif defined MACOSX
+        seqLoadedCertsLabels.push_back(XsResId(STR_LOADED_CERTS_X509_KEYCHAIN));
+#else
         // Should be the last one for optimal formatting, because of the appended path.
-        const uno::Reference< uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
+        const uno::Reference< cpo::uno::XComponentContext >& xContext( ::comphelper::getProcessComponentContext() );
         OUString nssPath = xml::crypto::NSSInitializer::create(xContext)->getNSSPath();
         seqLoadedCertsLabels.push_back(XsResId(STR_LOADED_CERTS_X509_NSS_NEWLINE) + nssPath);
-#endif // _WIN32
+#endif
     }
     OUStringBuffer loadedCertsLabel(XsResId(STR_LOADED_CERTS_BASE));
     for (size_t label_i=0; label_i<seqLoadedCertsLabels.size(); label_i++)
@@ -311,8 +326,16 @@ void CertificateChooser::ImplInitialize(bool mbSearch)
             loadedCertsLabel.append(", ");
         loadedCertsLabel.append(seqLoadedCertsLabels[label_i]);
     }
-    m_xFTLoadedCerts->set_label(loadedCertsLabel.toString());
-    m_xFTLoadedCerts->set_visible(true);
+    // Append the source info to the visible action label: keeping the text in
+    // a single label makes it flow with correct spacing also when the dialog
+    // is rendered as a JSDialog, where separate labels are laid out inline
+    // (and the embedded newlines collapse to spaces).
+    m_xFTLoadedCerts->hide();
+    const OUString sLoadedCerts = loadedCertsLabel.makeStringAndClear();
+    if (meAction == CertificateChooserUserAction::Encrypt)
+        m_xFTEncrypt->set_label(msEncryptBaseText + "\n" + sLoadedCerts);
+    else
+        m_xFTSign->set_label(msSignBaseText + "\n" + sLoadedCerts);
 
     m_xCertLB->thaw();
     m_xCertLB->unselect_all();

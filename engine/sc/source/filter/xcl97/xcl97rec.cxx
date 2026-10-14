@@ -35,6 +35,7 @@
 #include <rtl/uuid.h>
 #include <sal/log.hxx>
 #include <drwlayer.hxx>
+#include <userdat.hxx>
 
 #include <root.hxx>
 #include <utility>
@@ -78,8 +79,9 @@
 #include <memory>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::UNO_QUERY;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::drawing::XShape;
 using ::oox::drawingml::ShapeExport;
@@ -192,6 +194,26 @@ sal_Int32 GetVmlObjectCount( XclExpObjList& rList )
         [](const std::unique_ptr<XclObj>& rxObj) { return IsVmlObject( rxObj.get() ) || IsFormControlObject( rxObj.get() ); }));
 }
 
+/** Returns true when the object is a picture that was written as the content of a cell. Such a
+    picture stands for the value of its cell and is not written a second time as a drawing. */
+bool IsInCellImageObject( const XclObj& rObj, const XclExpXmlStream& rStrm )
+{
+    const XclObjAny* pObjAny = dynamic_cast<const XclObjAny*>(&rObj);
+    if (!pObjAny)
+        return false;
+
+    SdrObject* pSdrObj = SdrObject::getSdrObjectFromXShape(pObjAny->GetShape());
+    if (!pSdrObj || !ScDrawLayer::IsInCellImage(*pSdrObj))
+        return false;
+
+    const ScDrawObjData* pObjData = ScDrawLayer::GetOrCreateObjData(pSdrObj);
+    if (!pObjData || !pObjData->maStart.IsValid())
+        return false;
+
+    return rStrm.HasInCellImageAt(ScAddress(pObjData->maStart.Col(), pObjData->maStart.Row(),
+                                            rStrm.GetRoot().GetCurrScTab()));
+}
+
 bool IsValidObject( const XclObj& rObj )
 {
     if (rObj.GetObjType() == EXC_OBJTYPE_CHART)
@@ -241,7 +263,8 @@ void SaveDrawingMLObjects( XclExpObjList& rList, XclExpXmlStream& rStrm )
     for (const auto& rxObj : rList)
     {
         // FIXME: Can DrawingML objects be grouped with VML or not valid objects?
-        if (IsVmlObject(rxObj.get()) || !IsValidObject(*rxObj))
+        if (IsVmlObject(rxObj.get()) || !IsValidObject(*rxObj)
+            || IsInCellImageObject(*rxObj, rStrm))
             continue;
 
         const auto pObj = dynamic_cast<XclObjAny*>(rxObj.get());
@@ -257,7 +280,7 @@ void SaveDrawingMLObjects( XclExpObjList& rList, XclExpXmlStream& rStrm )
 
         if (pObj && rxObj->GetObjType() == EXC_OBJTYPE_GROUP) // (it can be a subgroup)
         {
-            css::uno::Reference<css::drawing::XShapes> xShapes(pObj->GetShape(), UNO_QUERY);
+            cpo::uno::Reference<css::drawing::XShapes> xShapes(pObj->GetShape(), UNO_QUERY);
             if (xShapes)
             {
                 // skip (also) the objects of this group
@@ -931,7 +954,8 @@ XclTxo::XclTxo( const XclExpRoot& rRoot, const SdrTextObj& rTextObj ) :
 }
 
 XclTxo::XclTxo( const XclExpRoot& rRoot, const EditTextObject& rEditObj, SdrObject* pCaption ) :
-    mpString( XclExpStringHelper::CreateString( rRoot, rEditObj ) ),
+    mpString( XclExpStringHelper::CreateString(
+        rRoot, rEditObj, pCaption ? &pCaption->GetMergedItemSet() : nullptr ) ),
     mnRotation( EXC_OBJ_ORIENT_NONE ),
     mnHorAlign( EXC_OBJ_HOR_LEFT ),
     mnVerAlign( EXC_OBJ_VER_TOP )
@@ -1370,7 +1394,9 @@ void XclObjAny::SaveXml( XclExpXmlStream& rStrm )
 
     sax_fastparser::FSHelperPtr pDrawing = rStrm.GetCurrentStream();
 
-    ShapeExport aDML(XML_xdr, pDrawing, nullptr, &rStrm, drawingml::DOCUMENT_XLSX);
+    // All shapes share one id map, so that a connector names the same id as the shape it
+    // connects to.
+    ShapeExport aDML(XML_xdr, pDrawing, &rStrm.getShapeIdMap(), &rStrm, drawingml::DOCUMENT_XLSX);
     auto pURLTransformer = std::make_shared<ScURLTransformer>(*mpDoc);
     aDML.SetURLTranslator(pURLTransformer);
 

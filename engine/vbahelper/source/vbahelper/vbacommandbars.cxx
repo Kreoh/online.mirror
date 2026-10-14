@@ -26,6 +26,7 @@
 #include "vbacommandbar.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
 namespace {
@@ -33,22 +34,22 @@ namespace {
 class CommandBarEnumeration : public ::cppu::WeakImplHelper< container::XEnumeration >
 {
     uno::Reference< XHelperInterface > m_xParent;
-    uno::Reference< uno::XComponentContext > m_xContext;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
     VbaCommandBarHelperRef m_pCBarHelper;
     cpo::uno::Sequence< OUString > m_sNames;
     sal_Int32 m_nCurrentPosition;
 public:
     /// @throws uno::RuntimeException
-    CommandBarEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< uno::XComponentContext > xContext, VbaCommandBarHelperRef  pHelper) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_pCBarHelper(std::move( pHelper )) , m_nCurrentPosition( 0 )
+    CommandBarEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< cpo::uno::XComponentContext > xContext, VbaCommandBarHelperRef  pHelper) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_pCBarHelper(std::move( pHelper )) , m_nCurrentPosition( 0 )
     {
         uno::Reference< container::XNameAccess > xNameAccess = m_pCBarHelper->getPersistentWindowState();
         m_sNames = xNameAccess->getElementNames();
     }
-    virtual bool SAL_CALL hasMoreElements() override
+    virtual bool hasMoreElements() override
     {
         return m_nCurrentPosition < m_sNames.getLength();
     }
-    virtual cpo::uno::Any SAL_CALL nextElement() override
+    virtual cpo::uno::Any nextElement() override
     {
         // FIXME: should be add menubar
         if( !hasMoreElements() )
@@ -71,7 +72,7 @@ public:
 
 }
 
-ScVbaCommandBars::ScVbaCommandBars( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess >& xIndexAccess, const uno::Reference< frame::XModel >& xModel ) : CommandBars_BASE( xParent, xContext, xIndexAccess )
+ScVbaCommandBars::ScVbaCommandBars( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess >& xIndexAccess, const uno::Reference< frame::XModel >& xModel ) : CommandBars_BASE( xParent, xContext, xIndexAccess )
 {
     m_pCBarHelper = std::make_shared<VbaCommandBarHelper>( mxContext, xModel );
     m_xNameAccess = m_pCBarHelper->getPersistentWindowState();
@@ -82,7 +83,7 @@ ScVbaCommandBars::~ScVbaCommandBars()
 }
 
 // XEnumerationAccess
-cpo::uno::Type SAL_CALL
+cpo::uno::Type
 ScVbaCommandBars::getElementType()
 {
     return cppu::UnoType<XCommandBar>::get();
@@ -146,13 +147,13 @@ ScVbaCommandBars::createCollectionObject( const cpo::uno::Any& aSource )
     }
 
     if( !aRet.hasValue() )
-        throw uno::RuntimeException( u"Toolbar do not exist"_ustr );
+        throw cpo::uno::RuntimeException( u"Toolbar do not exist"_ustr );
 
     return aRet;
 }
 
 // XCommandBars
-uno::Reference< XCommandBar > SAL_CALL
+uno::Reference< XCommandBar >
 ScVbaCommandBars::Add( const cpo::uno::Any& Name, const cpo::uno::Any& /*Position*/, const cpo::uno::Any& /*MenuBar*/, const cpo::uno::Any& /*Temporary*/ )
 {
     // FIXME: only support to add Toolbar
@@ -167,7 +168,7 @@ ScVbaCommandBars::Add( const cpo::uno::Any& Name, const cpo::uno::Any& /*Positio
     {
         sResourceUrl = m_pCBarHelper->findToolbarByName( m_xNameAccess, sName );
         if( !sResourceUrl.isEmpty() )
-            throw uno::RuntimeException( u"Toolbar exists"_ustr );
+            throw cpo::uno::RuntimeException( u"Toolbar exists"_ustr );
     }
     else
     {
@@ -180,7 +181,7 @@ ScVbaCommandBars::Add( const cpo::uno::Any& Name, const cpo::uno::Any& /*Positio
     xCBar->setName( sName );
     return xCBar;
 }
-sal_Int32 SAL_CALL
+sal_Int32
 ScVbaCommandBars::getCount()
 {
     // Filter out all toolbars from the window collection
@@ -192,7 +193,7 @@ ScVbaCommandBars::getCount()
 }
 
 // ScVbaCollectionBaseImpl
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaCommandBars::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2*/ )
 {
     if( aIndex.getValueTypeClass() == cpo::uno::TypeClass_STRING )

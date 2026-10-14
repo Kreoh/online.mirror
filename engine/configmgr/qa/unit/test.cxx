@@ -25,6 +25,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
 #include <com/sun/star/configuration/ReadOnlyAccess.hpp>
+#include <com/sun/star/configuration/Update.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -35,9 +36,9 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
 #include <cppu/unotype.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -46,6 +47,9 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 #include <comphelper/processfactory.hxx>
+#include <osl/file.hxx>
+
+#include <algorithm>
 #include <comphelper/configuration.hxx>
 #include <comphelper/configurationlistener.hxx>
 #include <cppunit/TestAssert.h>
@@ -70,6 +74,7 @@ public:
     void testListener();
     void testRecursive();
     void testCrossThreads();
+    void testSharedOrganizationLayer();
 
     cpo::uno::Any getKey(
         OUString const & path, OUString const & relative) const;
@@ -80,10 +85,10 @@ public:
 
     bool resetKey(OUString const & path, OUString const & name) const;
 
-    css::uno::Reference< css::uno::XInterface > createViewAccess(
+    cpo::uno::Reference< cpo::uno::XInterface > createViewAccess(
         OUString const & path) const;
 
-    css::uno::Reference< css::uno::XInterface > createUpdateAccess(
+    cpo::uno::Reference< cpo::uno::XInterface > createUpdateAccess(
         OUString const & path) const;
 
     CPPUNIT_TEST_SUITE(Test);
@@ -101,10 +106,11 @@ public:
     CPPUNIT_TEST(testListener);
     CPPUNIT_TEST(testRecursive);
     CPPUNIT_TEST(testCrossThreads);
+    CPPUNIT_TEST(testSharedOrganizationLayer);
     CPPUNIT_TEST_SUITE_END();
 
 private:
-    css::uno::Reference< css::lang::XMultiServiceFactory > provider_;
+    cpo::uno::Reference< css::lang::XMultiServiceFactory > provider_;
 };
 
 class RecursiveTest:
@@ -130,7 +136,7 @@ private:
 
     int count_;
     bool * destroyed_;
-    css::uno::Reference< css::beans::XPropertySet > properties_;
+    cpo::uno::Reference< css::beans::XPropertySet > properties_;
 };
 
 RecursiveTest::RecursiveTest(
@@ -144,12 +150,12 @@ void RecursiveTest::test()
         test_.createUpdateAccess(
             u"/org.openoffice.Office.UI.GenericCommands/UserInterface/Commands/"
                      ".uno:WebHtml"_ustr),
-        css::uno::UNO_QUERY_THROW);
+        cpo::uno::UNO_QUERY_THROW);
     properties_->addPropertyChangeListener(u"Label"_ustr, this);
     step();
     CPPUNIT_ASSERT_EQUAL(0, count_);
-    css::uno::Reference< css::lang::XComponent >(
-        properties_, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::lang::XComponent >(
+        properties_, cpo::uno::UNO_QUERY_THROW)->dispose();
 }
 
 RecursiveTest::~RecursiveTest()
@@ -161,8 +167,8 @@ void RecursiveTest::disposing(css::lang::EventObject const & Source)
 {
     CPPUNIT_ASSERT(properties_.is());
     CPPUNIT_ASSERT_EQUAL(
-        css::uno::Reference<css::uno::XInterface>(
-            properties_, css::uno::UNO_QUERY_THROW),
+        cpo::uno::Reference<cpo::uno::XInterface>(
+            properties_, cpo::uno::UNO_QUERY_THROW),
         Source.Source);
     properties_.clear();
 }
@@ -170,8 +176,8 @@ void RecursiveTest::disposing(css::lang::EventObject const & Source)
 void RecursiveTest::propertyChange(css::beans::PropertyChangeEvent const & evt)
 {
     CPPUNIT_ASSERT_EQUAL(
-        css::uno::Reference<css::uno::XInterface>(
-            properties_, css::uno::UNO_QUERY_THROW),
+        cpo::uno::Reference<cpo::uno::XInterface>(
+            properties_, cpo::uno::UNO_QUERY_THROW),
         evt.Source);
     CPPUNIT_ASSERT_EQUAL( u"Label"_ustr, evt.PropertyName );
     if (count_ > 0) {
@@ -266,19 +272,19 @@ void Test::testSetSetMemberName()
         s);
     CPPUNIT_ASSERT_EQUAL( u"Fontwork Shape"_ustr, s );
 
-    css::uno::Reference< css::container::XNameAccess > access(
+    cpo::uno::Reference< css::container::XNameAccess > access(
         createUpdateAccess(
             u"/org.openoffice.Office.UI.GenericCommands/UserInterface/"
                      "Commands"_ustr),
-        css::uno::UNO_QUERY_THROW);
-    css::uno::Reference< css::container::XNamed > member;
+        cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::container::XNamed > member;
     access->getByName(u".uno:FontworkGalleryFloater"_ustr) >>= member;
     CPPUNIT_ASSERT(member.is());
     member->setName(u".uno:FontworkShapeType"_ustr);
-    css::uno::Reference< css::util::XChangesBatch >(
-        access, css::uno::UNO_QUERY_THROW)->commitChanges();
-    css::uno::Reference< css::lang::XComponent >(
-        access, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::util::XChangesBatch >(
+        access, cpo::uno::UNO_QUERY_THROW)->commitChanges();
+    cpo::uno::Reference< css::lang::XComponent >(
+        access, cpo::uno::UNO_QUERY_THROW)->dispose();
 
     CPPUNIT_ASSERT(
         getKey(
@@ -290,19 +296,19 @@ void Test::testSetSetMemberName()
 }
 
 void Test::testInsertSetMember() {
-    css::uno::Reference<css::container::XNameContainer> access(
+    cpo::uno::Reference<css::container::XNameContainer> access(
         createUpdateAccess(
             u"/org.openoffice.Office.UI.GenericCommands/UserInterface/Commands"_ustr),
-        css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::uno::XInterface> member;
+        cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<cpo::uno::XInterface> member;
     member.set(
-        css::uno::Reference<css::lang::XSingleServiceFactory>(
-            access, css::uno::UNO_QUERY_THROW)->createInstance());
+        cpo::uno::Reference<css::lang::XSingleServiceFactory>(
+            access, cpo::uno::UNO_QUERY_THROW)->createInstance());
     CPPUNIT_ASSERT(member.is());
     access->insertByName(u"A"_ustr, cpo::uno::Any(member));
     member.set(
-        css::uno::Reference<css::lang::XSingleServiceFactory>(
-            access, css::uno::UNO_QUERY_THROW)->createInstance());
+        cpo::uno::Reference<css::lang::XSingleServiceFactory>(
+            access, cpo::uno::UNO_QUERY_THROW)->createInstance());
     CPPUNIT_ASSERT(member.is());
     try {
         access->insertByName(u""_ustr, cpo::uno::Any(member));
@@ -317,10 +323,10 @@ void Test::testInsertSetMember() {
     } catch (css::lang::IllegalArgumentException &) {
         CPPUNIT_FAIL("unexpected IllegalArgumentException");
     }
-    css::uno::Reference<css::util::XChangesBatch>(
-        access, css::uno::UNO_QUERY_THROW)->commitChanges();
-    css::uno::Reference<css::lang::XComponent>(
-        access, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference<css::util::XChangesBatch>(
+        access, cpo::uno::UNO_QUERY_THROW)->commitChanges();
+    cpo::uno::Reference<css::lang::XComponent>(
+        access, cpo::uno::UNO_QUERY_THROW)->dispose();
 }
 
 void Test::testLocalizedProperty() {
@@ -370,11 +376,11 @@ void Test::testLocalizedProperty() {
 
 void Test::testReadCommands()
 {
-    css::uno::Reference< css::container::XNameAccess > access(
+    cpo::uno::Reference< css::container::XNameAccess > access(
         createViewAccess(
             u"/org.openoffice.Office.UI.GenericCommands/UserInterface/"
                      "Commands"_ustr),
-        css::uno::UNO_QUERY_THROW);
+        cpo::uno::UNO_QUERY_THROW);
     const cpo::uno::Sequence< OUString > names(access->getElementNames());
 
     /*CPPUNIT_ASSERT_EQUAL(749, names.getLength());*/
@@ -382,7 +388,7 @@ void Test::testReadCommands()
     sal_uInt32 n = osl_getGlobalTimer();
     for (int i = 0; i < 8; ++i) {
         for (OUString const & childName : names) {
-            css::uno::Reference< css::container::XNameAccess > child;
+            cpo::uno::Reference< css::container::XNameAccess > child;
             if (access->getByName(childName) >>= child) {
                 CPPUNIT_ASSERT(child.is());
                 child->getByName(u"Label"_ustr);
@@ -393,8 +399,8 @@ void Test::testReadCommands()
     }
     n = osl_getGlobalTimer() - n;
     printf("Reading elements took %" SAL_PRIuUINT32 " ms\n", n);
-    css::uno::Reference< css::lang::XComponent >(
-        access, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::lang::XComponent >(
+        access, cpo::uno::UNO_QUERY_THROW)->dispose();
 }
 
 void Test::testListener()
@@ -457,11 +463,11 @@ void Test::testCrossThreads()
 cpo::uno::Any Test::getKey(
     OUString const & path, OUString const & relative) const
 {
-    css::uno::Reference< css::container::XHierarchicalNameAccess > access(
-        createViewAccess(path), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess > access(
+        createViewAccess(path), cpo::uno::UNO_QUERY_THROW);
     cpo::uno::Any value(access->getByHierarchicalName(relative));
-    css::uno::Reference< css::lang::XComponent >(
-        access, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::lang::XComponent >(
+        access, cpo::uno::UNO_QUERY_THROW)->dispose();
     return value;
 }
 
@@ -469,34 +475,34 @@ void Test::setKey(
     OUString const & path, OUString const & name,
     cpo::uno::Any const & value) const
 {
-    css::uno::Reference< css::container::XNameReplace > access(
-        createUpdateAccess(path), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::container::XNameReplace > access(
+        createUpdateAccess(path), cpo::uno::UNO_QUERY_THROW);
     access->replaceByName(name, value);
-    css::uno::Reference< css::util::XChangesBatch >(
-        access, css::uno::UNO_QUERY_THROW)->commitChanges();
-    css::uno::Reference< css::lang::XComponent >(
-        access, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::util::XChangesBatch >(
+        access, cpo::uno::UNO_QUERY_THROW)->commitChanges();
+    cpo::uno::Reference< css::lang::XComponent >(
+        access, cpo::uno::UNO_QUERY_THROW)->dispose();
 }
 
 bool Test::resetKey(OUString const & path, OUString const & name)
     const
 {
     //TODO: support setPropertyToDefault
-    css::uno::Reference< css::util::XChangesBatch > access(
-        createUpdateAccess(path), css::uno::UNO_QUERY_THROW);
-    css::uno::Reference< css::beans::XPropertyState > state(
-        access, css::uno::UNO_QUERY);
+    cpo::uno::Reference< css::util::XChangesBatch > access(
+        createUpdateAccess(path), cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::beans::XPropertyState > state(
+        access, cpo::uno::UNO_QUERY);
     if (!state.is()) {
         return false;
     }
     state->setPropertyToDefault(name);
     access->commitChanges();
-    css::uno::Reference< css::lang::XComponent >(
-        access, css::uno::UNO_QUERY_THROW)->dispose();
+    cpo::uno::Reference< css::lang::XComponent >(
+        access, cpo::uno::UNO_QUERY_THROW)->dispose();
     return true;
 }
 
-css::uno::Reference< css::uno::XInterface > Test::createViewAccess(
+cpo::uno::Reference< cpo::uno::XInterface > Test::createViewAccess(
     OUString const & path) const
 {
     cpo::uno::Any arg(
@@ -508,7 +514,7 @@ css::uno::Reference< css::uno::XInterface > Test::createViewAccess(
         cpo::uno::Sequence< cpo::uno::Any >(&arg, 1));
 }
 
-css::uno::Reference< css::uno::XInterface > Test::createUpdateAccess(
+cpo::uno::Reference< cpo::uno::XInterface > Test::createUpdateAccess(
     OUString const & path) const
 {
     cpo::uno::Any arg(
@@ -518,6 +524,49 @@ css::uno::Reference< css::uno::XInterface > Test::createUpdateAccess(
     return provider_->createInstanceWithArguments(
         u"com.sun.star.configuration.ConfigurationUpdateAccess"_ustr,
         cpo::uno::Sequence< cpo::uno::Any >(&arg, 1));
+}
+
+/// Collabora Online puts the shared AutoText, Dictionary and Template directories into the
+/// configuration at run time, by handing an .xcu to XUpdate. That needs the "sharedext" layer
+/// to be declared in CONFIGURATION_LAYERS, and nothing says so out loud if it is not: the
+/// caller only logs, so the paths quietly go missing. This test is what says so.
+void Test::testSharedOrganizationLayer()
+{
+    OUString aUrl;
+    oslFileHandle aHandle = nullptr;
+    CPPUNIT_ASSERT_EQUAL(
+        osl::FileBase::E_None, osl::FileBase::createTempFile(nullptr, &aHandle, &aUrl));
+
+    static constexpr OString aXcu
+        = R"(<?xml version="1.0" encoding="UTF-8"?>)"
+          R"(<oor:component-data xmlns:oor="http://openoffice.org/2001/registry")"
+          R"( oor:name="Paths" oor:package="org.openoffice.Office">)"
+          R"(<node oor:name="Paths"><node oor:name="AutoText" oor:op="fuse">)"
+          R"(<prop oor:name="OrganizationPaths" oor:type="oor:string-list">)"
+          R"(<value>file:///tmp/configmgr-test-autotext</value></prop></node></node>)"
+          R"(</oor:component-data>)"_ostr;
+
+    sal_uInt64 nWritten = 0;
+    CPPUNIT_ASSERT_EQUAL(osl_File_E_None,
+                         osl_writeFile(aHandle, aXcu.getStr(), aXcu.getLength(), &nWritten));
+    osl_closeFile(aHandle);
+
+    // Throws "insert extension xcs/xcu file into undefined layer" when the layer is gone.
+    css::configuration::Update::get(comphelper::getProcessComponentContext())
+        ->insertExtensionXcuFile(aUrl);
+
+    cpo::uno::Sequence<OUString> aPaths;
+    CPPUNIT_ASSERT(
+        getKey(u"/org.openoffice.Office.Paths/Paths/AutoText"_ustr, u"OrganizationPaths"_ustr)
+        >>= aPaths);
+
+    // The layer has to outrank the shipped defaults, or the entry is read and then ignored.
+    CPPUNIT_ASSERT_MESSAGE(
+        "the shared layer did not reach the AutoText path",
+        std::find(aPaths.begin(), aPaths.end(), u"file:///tmp/configmgr-test-autotext"_ustr)
+            != aPaths.end());
+
+    osl::File::remove(aUrl);
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);

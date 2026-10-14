@@ -26,7 +26,7 @@
 
 #include <memory>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace sd {
 class DrawController;
@@ -79,7 +79,7 @@ private:
             const sd::framework::ConfigurationChangeEvent& rEvent) override;
 
         // lang::XEventListener
-        virtual void SAL_CALL disposing (
+        virtual void disposing (
             const css::lang::EventObject& rEventObject) override;
 
         BasicPaneFactory& mrParent;

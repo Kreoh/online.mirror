@@ -33,9 +33,10 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 ScVbaHyperlink::ScVbaHyperlink( const cpo::uno::Sequence< cpo::uno::Any >& rArgs,
-        const uno::Reference< uno::XComponentContext >& rxContext ) :
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext ) :
     HyperlinkImpl_BASE( getXSomethingFromArgs< XHelperInterface >( rArgs, 0 ), rxContext ),
     mxCell( getXSomethingFromArgs< table::XCell >( rArgs, 1, false ) ),
     mnType( office::MsoHyperlinkType::msoHyperlinkRange )
@@ -46,7 +47,7 @@ ScVbaHyperlink::ScVbaHyperlink( const cpo::uno::Sequence< cpo::uno::Any >& rArgs
 }
 
 ScVbaHyperlink::ScVbaHyperlink( const uno::Reference< XHelperInterface >& rxAnchor,
-        const uno::Reference< uno::XComponentContext >& rxContext,
+        const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         const cpo::uno::Any& rAddress, const cpo::uno::Any& rSubAddress,
         const cpo::uno::Any& rScreenTip, const cpo::uno::Any& rTextToDisplay ) :
     HyperlinkImpl_BASE( rxAnchor, rxContext ) // parent of Hyperlink is the anchor object
@@ -55,7 +56,7 @@ ScVbaHyperlink::ScVbaHyperlink( const uno::Reference< XHelperInterface >& rxAnch
     UrlComponents aUrlComp;
     OUString aTextToDisplay;
     if( !(rAddress >>= aUrlComp.first) || aUrlComp.first.isEmpty() )
-        throw uno::RuntimeException(u"Cannot get address"_ustr );
+        throw cpo::uno::RuntimeException(u"Cannot get address"_ustr );
     rSubAddress >>= aUrlComp.second;
     rScreenTip >>= maScreenTip;
     rTextToDisplay >>= aTextToDisplay;
@@ -98,7 +99,7 @@ ScVbaHyperlink::ScVbaHyperlink( const uno::Reference< XHelperInterface >& rxAnch
         uno::Reference< msforms::XShape > xAnchorShape( rxAnchor, uno::UNO_QUERY_THROW );
         mnType = office::MsoHyperlinkType::msoHyperlinkShape;
         // FIXME: insert hyperlink into shape
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 }
 
@@ -141,12 +142,12 @@ void ScVbaHyperlink::setSubAddress( const OUString& rSubAddress )
     setUrlComponents( aUrlComp );
 }
 
-OUString SAL_CALL ScVbaHyperlink::getScreenTip()
+OUString ScVbaHyperlink::getScreenTip()
 {
     return maScreenTip;
 }
 
-void SAL_CALL ScVbaHyperlink::setScreenTip( const OUString& rScreenTip )
+void ScVbaHyperlink::setScreenTip( const OUString& rScreenTip )
 {
     maScreenTip = rScreenTip;
 }
@@ -165,12 +166,12 @@ void ScVbaHyperlink::setTextToDisplay( const OUString& rTextToDisplay )
     mxTextField->setPropertyValue(u"Representation"_ustr, cpo::uno::Any( rTextToDisplay ) );
 }
 
-sal_Int32 SAL_CALL ScVbaHyperlink::getType()
+sal_Int32 ScVbaHyperlink::getType()
 {
     return mnType;
 }
 
-uno::Reference< excel::XRange > SAL_CALL ScVbaHyperlink::getRange()
+uno::Reference< excel::XRange > ScVbaHyperlink::getRange()
 {
     if( mnType == office::MsoHyperlinkType::msoHyperlinkRange )
     {
@@ -186,10 +187,10 @@ uno::Reference< excel::XRange > SAL_CALL ScVbaHyperlink::getRange()
         return xAnchorRange;
     }
     // error if called at a shape Hyperlink object
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
-uno::Reference< msforms::XShape > SAL_CALL ScVbaHyperlink::getShape()
+uno::Reference< msforms::XShape > ScVbaHyperlink::getShape()
 {
     // error if called at a range Hyperlink object
     return uno::Reference< msforms::XShape >( getParent(), uno::UNO_QUERY_THROW );
@@ -202,7 +203,7 @@ VBAHELPER_IMPL_XHELPERINTERFACE( ScVbaHyperlink, u"ooo.vba.excel.Hyperlink"_ustr
 void ScVbaHyperlink::ensureTextField()
 {
     if( !mxTextField.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 }
 
 ScVbaHyperlink::UrlComponents ScVbaHyperlink::getUrlComponents()
@@ -225,9 +226,9 @@ void ScVbaHyperlink::setUrlComponents( const UrlComponents& rUrlComp )
     mxTextField->setPropertyValue(u"URL"_ustr, cpo::uno::Any( aUrl.makeStringAndClear() ) );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 Calc_ScVbaHyperlink_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new ScVbaHyperlink(args, context));
 }

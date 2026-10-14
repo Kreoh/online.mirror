@@ -28,7 +28,7 @@ namespace com::sun::star {
         class XProofreadingIterator;
     }
     namespace frame {
-        class XDesktop2;
+        class XDesktop;
     }
 }
 
@@ -44,9 +44,9 @@ class SwLinguServiceEventListener final :
         css::frame::XTerminateListener
     >
 {
-    css::uno::Reference<css::frame::XDesktop2 >                      m_xDesktop;
-    css::uno::Reference<css::linguistic2::XLinguServiceManager2 >    m_xLngSvcMgr;
-    css::uno::Reference<css::linguistic2::XProofreadingIterator >    m_xGCIterator;
+    cpo::uno::Reference<css::frame::XDesktop >                      m_xDesktop;
+    cpo::uno::Reference<css::linguistic2::XLinguServiceManager2 >    m_xLngSvcMgr;
+    cpo::uno::Reference<css::linguistic2::XProofreadingIterator >    m_xGCIterator;
 
     SwLinguServiceEventListener(const SwLinguServiceEventListener &) = delete;
     SwLinguServiceEventListener & operator = (const SwLinguServiceEventListener &) = delete;
@@ -56,14 +56,14 @@ public:
     virtual ~SwLinguServiceEventListener() override;
 
     /// XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& rEventObj ) override;
+    virtual void disposing( const css::lang::EventObject& rEventObj ) override;
 
     /// XLinguServiceEventListener
-    virtual void SAL_CALL processLinguServiceEvent( const css::linguistic2::LinguServiceEvent& rLngSvcEvent ) override;
+    virtual void processLinguServiceEvent( const css::linguistic2::LinguServiceEvent& rLngSvcEvent ) override;
 
     /// XTerminateListener
-    virtual void SAL_CALL queryTermination( const css::lang::EventObject& rEventObj ) override;
-    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& rEventObj ) override;
+    virtual void queryTermination( const css::lang::EventObject& rEventObj ) override;
+    virtual void notifyTermination( const css::lang::EventObject& rEventObj ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

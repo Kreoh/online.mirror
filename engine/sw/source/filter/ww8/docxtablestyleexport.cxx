@@ -11,16 +11,39 @@
 #include "docxhelper.hxx"
 #include <doc.hxx>
 #include <docsh.hxx>
+#include <tblafmt.hxx>
+#include <swtable.hxx>
+#include <swtblfmt.hxx>
+#include <frameformats.hxx>
 #include <oox/token/tokens.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <sax/fastattribs.hxx>
+#include <editeng/adjustitem.hxx>
+#include <editeng/borderline.hxx>
+#include <editeng/boxitem.hxx>
+#include "docxattributeoutput.hxx"
+#include <docmodel/theme/ColorSet.hxx>
+#include <ThemeColorChanger.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
+#include <editeng/crossedoutitem.hxx>
+#include <editeng/fhgtitem.hxx>
+#include <editeng/fontitem.hxx>
+#include <editeng/postitem.hxx>
+#include <editeng/udlnitem.hxx>
+#include <editeng/wghtitem.hxx>
+#include <filter/msfilter/util.hxx>
+#include <tools/color.hxx>
 
+#include <algorithm>
 #include <optional>
+#include <set>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <unotxdoc.hxx>
+#include <map>
 
 using namespace com::sun::star;
 using namespace oox;
@@ -32,16 +55,34 @@ private:
     SwDoc& m_rDoc;
     sax_fastparser::FSHelperPtr m_pSerializer;
     OUString m_sCurrentStyle;
+    /// The file is written in the first ECMA edition of the format.
+    bool m_bEcma;
+    /// Table style name to the id the style had in the DOCX file the document was loaded
+    /// from, built from the interop grab bag on first use.
+    std::optional<std::map<OUString, OUString>> m_oGrabBagStyleIds;
 
 public:
-    Impl(SwDoc& rDoc)
+    Impl(SwDoc& rDoc, bool bEcma)
         : m_rDoc(rDoc)
+        , m_bEcma(bEcma)
     {
     }
 
+    const std::map<OUString, OUString>& GrabBagStyleIds();
+
     std::vector<OUString> m_vStylesWithTblHeaderInFirstRow;
+    /// Style IDs already written to styles.xml, either from an InteropGrabBag table style or
+    /// synthesized from a live SwTableAutoFormat that has no such grab bag.
+    std::set<OUString> m_aWrittenStyleIds;
 
     void TableStyle(const cpo::uno::Sequence<beans::PropertyValue>& rStyle);
+    /// Writes a w:style block for a table style that has no InteropGrabBag definition,
+    /// derived from the live SwTableAutoFormat's 16-box grid instead.
+    void SynthesizeTableStyle(const SwTableAutoFormat& rFormat, const OUString& rStyleId);
+    /// Export of one w:tblStylePr, built from a single flat-grid SwBoxAutoFormat.
+    void synthesizeTblStylePr(const OUString& rType, const SwBoxAutoFormat& rBoxFormat);
+    /// Export of one border side (w:top, w:left, ...) from an editeng border line.
+    void synthesizeBorderLine(sal_Int32 nToken, const editeng::SvxBorderLine* pLine);
 
     void setSerializer(sax_fastparser::FSHelperPtr pSerializer)
     {
@@ -126,32 +167,120 @@ void DocxTableStyleExport::CnfStyle(const cpo::uno::Sequence<beans::PropertyValu
     m_pImpl->getSerializer()->singleElementNS(XML_w, XML_cnfStyle, pAttributeList);
 }
 
-void DocxTableStyleExport::TableStyles(sal_Int32 nCountStylesToWrite)
+/// The table styles the document was loaded with, as DOCX import stored them.
+static cpo::uno::Sequence<beans::PropertyValue> lcl_GetGrabBagTableStyles(SwDoc& rDoc)
 {
-    SwDocShell* pShell = m_pImpl->getDoc().GetDocShell();
+    cpo::uno::Sequence<beans::PropertyValue> aTableStyles;
+    SwDocShell* pShell = rDoc.GetDocShell();
     if (!pShell)
-        return;
-    // Do we have table styles from InteropGrabBag available?
+        return aTableStyles;
     rtl::Reference<SwXTextDocument> xPropertySet(pShell->GetBaseModel());
     cpo::uno::Sequence<beans::PropertyValue> aInteropGrabBag;
     xPropertySet->getPropertyValue(u"InteropGrabBag"_ustr) >>= aInteropGrabBag;
-    cpo::uno::Sequence<beans::PropertyValue> aTableStyles;
     auto pProp = std::find_if(
         std::cbegin(aInteropGrabBag), std::cend(aInteropGrabBag),
         [](const beans::PropertyValue& rProp) { return rProp.Name == "tableStyles"; });
     if (pProp != std::cend(aInteropGrabBag))
         pProp->Value >>= aTableStyles;
-    if (!aTableStyles.hasElements())
+    return aTableStyles;
+}
+
+const std::map<OUString, OUString>& DocxTableStyleExport::Impl::GrabBagStyleIds()
+{
+    if (m_oGrabBagStyleIds)
+        return *m_oGrabBagStyleIds;
+    m_oGrabBagStyleIds.emplace();
+    for (const beans::PropertyValue& rTableStyle : lcl_GetGrabBagTableStyles(m_rDoc))
+    {
+        cpo::uno::Sequence<beans::PropertyValue> aStyle;
+        rTableStyle.Value >>= aStyle;
+        OUString sId;
+        OUString sName;
+        for (const beans::PropertyValue& rProp : aStyle)
+        {
+            if (rProp.Name == "styleId")
+                rProp.Value >>= sId;
+            else if (rProp.Name == "name")
+                rProp.Value >>= sName;
+        }
+        if (!sId.isEmpty() && !sName.isEmpty())
+            m_oGrabBagStyleIds->emplace(sName, sId);
+    }
+    return *m_oGrabBagStyleIds;
+}
+
+OUString DocxTableStyleExport::GetDocxStyleId(std::u16string_view rStyleName) const
+{
+    // A style loaded from DOCX keeps the id it had there, which for a custom style is not
+    // derived from its name.
+    const std::map<OUString, OUString>& rIds = m_pImpl->GrabBagStyleIds();
+    auto it = rIds.find(OUString(rStyleName));
+    if (it != rIds.end())
+        return it->second;
+    return SwTableAutoFormat::MakeDocxStyleId(rStyleName);
+}
+
+void DocxTableStyleExport::TableStyles(sal_Int32 nCountStylesToWrite)
+{
+    SwDocShell* pShell = m_pImpl->getDoc().GetDocShell();
+    if (!pShell)
         return;
 
-    if (nCountStylesToWrite > aTableStyles.getLength())
-        nCountStylesToWrite = aTableStyles.getLength();
+    sal_Int32 nRemaining = nCountStylesToWrite;
 
-    for (sal_Int32 i = 0; i < nCountStylesToWrite; ++i)
+    // Do we have table styles from InteropGrabBag available?
+    cpo::uno::Sequence<beans::PropertyValue> aTableStyles
+        = lcl_GetGrabBagTableStyles(m_pImpl->getDoc());
+
+    if (aTableStyles.hasElements())
     {
-        cpo::uno::Sequence<beans::PropertyValue> aTableStyle;
-        aTableStyles[i].Value >>= aTableStyle;
-        m_pImpl->TableStyle(aTableStyle);
+        sal_Int32 nFromGrabBag = nRemaining;
+        if (nFromGrabBag > aTableStyles.getLength())
+            nFromGrabBag = aTableStyles.getLength();
+
+        for (sal_Int32 i = 0; i < nFromGrabBag; ++i)
+        {
+            cpo::uno::Sequence<beans::PropertyValue> aTableStyle;
+            aTableStyles[i].Value >>= aTableStyle;
+            m_pImpl->TableStyle(aTableStyle);
+        }
+        nRemaining -= nFromGrabBag;
+    }
+
+    // A table style that has no InteropGrabBag definition never went through a DOCX
+    // import - e.g. it originated in ODF, or was created directly in Writer. Synthesize
+    // a style for it from its live SwTableAutoFormat instead of leaving it unreferenced.
+    //
+    // GetTableStyles() also carries the built-in presets copied into every document's
+    // catalog the first time anything asks for it (SwDoc::GetTableStyles() in ndtbl.cxx),
+    // whether or not a table actually uses one, so only synthesize for a name some table
+    // in the document is actually pointing at.
+    std::set<OUString> aUsedStyleNames;
+    if (const sw::TableFrameFormats* pTableFormats = m_pImpl->getDoc().GetTableFrameFormats())
+    {
+        for (const SwTableFormat* pTableFormat : *pTableFormats)
+        {
+            if (const SwTable* pTable = SwTable::FindTable(pTableFormat))
+            {
+                const OUString& rName = pTable->GetTableStyleName().toString();
+                if (!rName.isEmpty())
+                    aUsedStyleNames.insert(rName);
+            }
+        }
+    }
+
+    const SwTableAutoFormatTable& rTableStyles = m_pImpl->getDoc().GetTableStyles();
+    for (size_t i = 0; i < rTableStyles.size() && nRemaining > 0; ++i)
+    {
+        const SwTableAutoFormat& rFormat = rTableStyles[i];
+        const OUString& rName = rFormat.GetName().toString();
+        if (!aUsedStyleNames.contains(rName))
+            continue;
+        const OUString sStyleId = GetDocxStyleId(rName);
+        if (m_pImpl->m_aWrittenStyleIds.contains(sStyleId))
+            continue;
+        m_pImpl->SynthesizeTableStyle(rFormat, sStyleId);
+        --nRemaining;
     }
 }
 
@@ -528,6 +657,7 @@ void DocxTableStyleExport::Impl::tableStyleTablePr(
     cpo::uno::Sequence<beans::PropertyValue> aTableInd;
     cpo::uno::Sequence<beans::PropertyValue> aTableBorders;
     cpo::uno::Sequence<beans::PropertyValue> aTableCellMar;
+    OUString aJc;
     std::optional<sal_Int32> oTableStyleRowBandSize;
     std::optional<sal_Int32> oTableStyleColBandSize;
     for (const auto& rProp : rTablePr)
@@ -536,6 +666,8 @@ void DocxTableStyleExport::Impl::tableStyleTablePr(
             oTableStyleRowBandSize = rProp.Value.get<sal_Int32>();
         else if (rProp.Name == "tblStyleColBandSize")
             oTableStyleColBandSize = rProp.Value.get<sal_Int32>();
+        else if (rProp.Name == "jc")
+            aJc = rProp.Value.get<OUString>();
         else if (rProp.Name == "tblInd")
             aTableInd = rProp.Value.get<cpo::uno::Sequence<beans::PropertyValue>>();
         else if (rProp.Name == "tblBorders")
@@ -549,6 +681,9 @@ void DocxTableStyleExport::Impl::tableStyleTablePr(
     if (oTableStyleColBandSize)
         m_pSerializer->singleElementNS(XML_w, XML_tblStyleColBandSize, FSNS(XML_w, XML_val),
                                        OString::number(*oTableStyleColBandSize));
+    // w:jc precedes w:tblInd in CT_TblPrBase.
+    if (!aJc.isEmpty())
+        m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), aJc);
     tableStyleTableInd(aTableInd);
     tableStyleTcBorders(aTableBorders, XML_tblBorders);
     tableStyleTableCellMar(aTableCellMar);
@@ -564,6 +699,7 @@ void DocxTableStyleExport::Impl::tableStyleTrPr(
 
     m_pSerializer->startElementNS(XML_w, XML_trPr);
 
+    OUString aJc;
     for (const auto& rProp : rTrPr)
     {
         if (rProp.Name == "tblHeader")
@@ -572,7 +708,12 @@ void DocxTableStyleExport::Impl::tableStyleTrPr(
             if (!m_sCurrentStyle.isEmpty())
                 m_vStylesWithTblHeaderInFirstRow.push_back(m_sCurrentStyle);
         }
+        else if (rProp.Name == "jc")
+            aJc = rProp.Value.get<OUString>();
     }
+    // w:jc follows w:tblHeader in CT_TrPrBase.
+    if (!aJc.isEmpty())
+        m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), aJc);
 
     m_pSerializer->endElementNS(XML_w, XML_trPr);
 }
@@ -668,6 +809,7 @@ void DocxTableStyleExport::Impl::TableStyle(const cpo::uno::Sequence<beans::Prop
     cpo::uno::Sequence<beans::PropertyValue> aPPr;
     cpo::uno::Sequence<beans::PropertyValue> aRPr;
     cpo::uno::Sequence<beans::PropertyValue> aTablePr;
+    cpo::uno::Sequence<beans::PropertyValue> aTrPr;
     cpo::uno::Sequence<beans::PropertyValue> aTcPr;
     std::vector<cpo::uno::Sequence<beans::PropertyValue>> aTableStylePrs;
     m_sCurrentStyle.clear();
@@ -699,6 +841,8 @@ void DocxTableStyleExport::Impl::TableStyle(const cpo::uno::Sequence<beans::Prop
             aRPr = rProp.Value.get<cpo::uno::Sequence<beans::PropertyValue>>();
         else if (rProp.Name == "tblPr")
             aTablePr = rProp.Value.get<cpo::uno::Sequence<beans::PropertyValue>>();
+        else if (rProp.Name == "trPr")
+            aTrPr = rProp.Value.get<cpo::uno::Sequence<beans::PropertyValue>>();
         else if (rProp.Name == "tcPr")
             aTcPr = rProp.Value.get<cpo::uno::Sequence<beans::PropertyValue>>();
         else if (rProp.Name == "tblStylePr")
@@ -733,11 +877,280 @@ void DocxTableStyleExport::Impl::TableStyle(const cpo::uno::Sequence<beans::Prop
     tableStylePPr(aPPr);
     tableStyleRPr(aRPr);
     tableStyleTablePr(aTablePr);
+    // w:trPr sits between w:tblPr and w:tcPr in CT_Style.
+    tableStyleTrPr(aTrPr);
     tableStyleTcPr(aTcPr);
     for (const cpo::uno::Sequence<beans::PropertyValue>& i : aTableStylePrs)
         tableStyleTableStylePr(i);
 
     m_pSerializer->endElementNS(XML_w, XML_style);
+
+    if (!m_sCurrentStyle.isEmpty())
+        m_aWrittenStyleIds.insert(m_sCurrentStyle);
+}
+
+namespace {
+
+/// One OOXML w:tblStylePr role, mapped to the flat-grid cell in SwTableAutoFormat's 16-box
+/// table that best represents it. None of the OOXML roles are row-only or column-only in that
+/// flat grid, so a band/first/last role is represented by pairing that axis's role with the
+/// BandA role on the other axis - the same precedence StyleSheetTable.cxx's own
+/// GetLocalPropertiesFromMask already gives wholeTable/band/row-col/corner cells on import.
+struct TableStyleRolePosition
+{
+    OUString sType;
+    sal_uInt8 nRowRole;
+    sal_uInt8 nColRole;
+};
+
+}
+
+void DocxTableStyleExport::Impl::synthesizeBorderLine(sal_Int32 nToken,
+                                                       const editeng::SvxBorderLine* pLine)
+{
+    if (!pLine || pLine->isEmpty())
+        return;
+
+    OUString sVal;
+    switch (pLine->GetBorderLineStyle())
+    {
+        case SvxBorderLineStyle::DOTTED:
+            sVal = u"dotted"_ustr;
+            break;
+        case SvxBorderLineStyle::DASHED:
+            sVal = u"dashed"_ustr;
+            break;
+        case SvxBorderLineStyle::DOUBLE:
+            sVal = u"double"_ustr;
+            break;
+        default:
+            sVal = u"single"_ustr;
+            break;
+    }
+
+    const double fConverted(
+        ::editeng::ConvertBorderWidthToWord(pLine->GetBorderLineStyle(), pLine->GetWidth()));
+    const sal_Int32 nWidth = std::clamp<sal_Int32>(sal_Int32(fConverted / 2.5), 2, 96);
+
+    rtl::Reference<sax_fastparser::FastAttributeList> pAttributeList
+        = sax_fastparser::FastSerializerHelper::createAttrList();
+    pAttributeList->add(FSNS(XML_w, XML_val), sVal);
+    pAttributeList->add(FSNS(XML_w, XML_sz), OString::number(nWidth));
+    pAttributeList->add(FSNS(XML_w, XML_color), msfilter::util::ConvertColor(pLine->GetColor()));
+    DocxAttributeOutput::AddThemeColorAttributes(pAttributeList, pLine->getComplexColor());
+    m_pSerializer->singleElementNS(XML_w, nToken, pAttributeList);
+}
+
+void DocxTableStyleExport::Impl::synthesizeTblStylePr(const OUString& rType,
+                                                       const SwBoxAutoFormat& rBoxFormat)
+{
+    const SwAutoFormatProps& rProps = rBoxFormat.GetProps();
+    // The values written are the ones the style's theme colors resolve to in this document;
+    // the theme references go next to them, so a reader with the theme follows it.
+    SfxItemSetFixed<RES_CHRATR_COLOR, RES_CHRATR_COLOR, RES_BACKGROUND, RES_BOX> aResolved(
+        m_rDoc.GetAttrPool());
+    aResolved.Put(rProps.GetBox());
+    aResolved.Put(rProps.GetBackground());
+    aResolved.Put(rProps.GetColor());
+    sw::ResolveThemeColors(aResolved, sw::GetDocumentThemeColors(m_rDoc));
+    const SvxBoxItem& rBox = aResolved.Get(RES_BOX);
+    const SvxBrushItem& rBackground = aResolved.Get(RES_BACKGROUND);
+    const SvxColorItem& rColor = aResolved.Get(RES_CHRATR_COLOR);
+
+    const bool bHasBorder
+        = rBox.GetTop() || rBox.GetBottom() || rBox.GetLeft() || rBox.GetRight();
+    const bool bHasBackground = !rBackground.GetColor().IsTransparent();
+    const bool bHasColor = rColor.GetValue() != COL_AUTO;
+
+    // Text formatting goes out only when the style really defines it; a box always carries
+    // a value for every item, defaults included.
+    auto defined = [&rProps](AutoFormatItem eItem) { return rProps.IsDefined(eItem); };
+    const bool bHasAdjust = defined(AutoFormatItem::Adjust);
+    const bool bHasRunProps = bHasColor || defined(AutoFormatItem::Font)
+                              || defined(AutoFormatItem::CJKFont)
+                              || defined(AutoFormatItem::CTLFont)
+                              || defined(AutoFormatItem::Height)
+                              || defined(AutoFormatItem::CTLHeight)
+                              || defined(AutoFormatItem::Weight)
+                              || defined(AutoFormatItem::CTLWeight)
+                              || defined(AutoFormatItem::Posture)
+                              || defined(AutoFormatItem::CTLPosture)
+                              || defined(AutoFormatItem::Underline)
+                              || defined(AutoFormatItem::CrossedOut);
+
+    if (!bHasBorder && !bHasBackground && !bHasRunProps && !bHasAdjust)
+        return;
+
+    m_pSerializer->startElementNS(XML_w, XML_tblStylePr, FSNS(XML_w, XML_type), rType);
+
+    if (bHasAdjust)
+    {
+        // A style has no writing direction of its own, so its alignment is the logical start
+        // and end, the way the paragraph export writes it too; the first ECMA edition only
+        // knows left and right.
+        const char* pJc = m_bEcma ? "left" : "start";
+        switch (rProps.GetAdjust().GetAdjust())
+        {
+            case SvxAdjust::Center:
+                pJc = "center";
+                break;
+            case SvxAdjust::Right:
+                pJc = m_bEcma ? "right" : "end";
+                break;
+            case SvxAdjust::Block:
+                pJc = "both";
+                break;
+            default:
+                break;
+        }
+        m_pSerializer->startElementNS(XML_w, XML_pPr);
+        m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), pJc);
+        m_pSerializer->endElementNS(XML_w, XML_pPr);
+    }
+
+    if (bHasRunProps)
+    {
+        m_pSerializer->startElementNS(XML_w, XML_rPr);
+        // The Western font applies to ascii and hAnsi text, the Asian one to eastAsia and the
+        // complex one to cs. Weight, posture and size have a complex variant of their own in
+        // the file; the Asian ones share the Western elements.
+        if (defined(AutoFormatItem::Font) || defined(AutoFormatItem::CJKFont)
+            || defined(AutoFormatItem::CTLFont))
+        {
+            rtl::Reference<sax_fastparser::FastAttributeList> pFonts
+                = sax_fastparser::FastSerializerHelper::createAttrList();
+            if (defined(AutoFormatItem::Font))
+            {
+                const OUString& rFontName = rProps.GetFont().GetFamilyName();
+                pFonts->add(FSNS(XML_w, XML_ascii), rFontName);
+                pFonts->add(FSNS(XML_w, XML_hAnsi), rFontName);
+            }
+            if (defined(AutoFormatItem::CJKFont))
+                pFonts->add(FSNS(XML_w, XML_eastAsia), rProps.GetCJKFont().GetFamilyName());
+            if (defined(AutoFormatItem::CTLFont))
+                pFonts->add(FSNS(XML_w, XML_cs), rProps.GetCTLFont().GetFamilyName());
+            m_pSerializer->singleElementNS(XML_w, XML_rFonts, pFonts);
+        }
+        if (defined(AutoFormatItem::Weight))
+            m_pSerializer->singleElementNS(XML_w, XML_b, FSNS(XML_w, XML_val),
+                                           rProps.GetWeight().GetWeight() >= WEIGHT_BOLD ? "1" : "0");
+        if (defined(AutoFormatItem::CTLWeight))
+            m_pSerializer->singleElementNS(XML_w, XML_bCs, FSNS(XML_w, XML_val),
+                                           rProps.GetCTLWeight().GetWeight() >= WEIGHT_BOLD ? "1" : "0");
+        if (defined(AutoFormatItem::Posture))
+            m_pSerializer->singleElementNS(XML_w, XML_i, FSNS(XML_w, XML_val),
+                                           rProps.GetPosture().GetPosture() != ITALIC_NONE ? "1" : "0");
+        if (defined(AutoFormatItem::CTLPosture))
+            m_pSerializer->singleElementNS(XML_w, XML_iCs, FSNS(XML_w, XML_val),
+                                           rProps.GetCTLPosture().GetPosture() != ITALIC_NONE ? "1" : "0");
+        if (defined(AutoFormatItem::CrossedOut))
+            m_pSerializer->singleElementNS(XML_w, XML_strike, FSNS(XML_w, XML_val),
+                                           rProps.GetCrossedOut().GetStrikeout() != STRIKEOUT_NONE ? "1" : "0");
+        if (bHasColor)
+        {
+            rtl::Reference<sax_fastparser::FastAttributeList> pColorAttributes
+                = sax_fastparser::FastSerializerHelper::createAttrList();
+            pColorAttributes->add(FSNS(XML_w, XML_val), msfilter::util::ConvertColor(rColor.GetValue()));
+            DocxAttributeOutput::AddThemeColorAttributes(pColorAttributes, rColor.getComplexColor());
+            m_pSerializer->singleElementNS(XML_w, XML_color, pColorAttributes);
+        }
+        // Half-points, from twips.
+        if (defined(AutoFormatItem::Height))
+            m_pSerializer->singleElementNS(XML_w, XML_sz, FSNS(XML_w, XML_val),
+                                           OString::number(rProps.GetHeight().GetHeight() / 10));
+        if (defined(AutoFormatItem::CTLHeight))
+            m_pSerializer->singleElementNS(XML_w, XML_szCs, FSNS(XML_w, XML_val),
+                                           OString::number(rProps.GetCTLHeight().GetHeight() / 10));
+        if (defined(AutoFormatItem::Underline))
+        {
+            const char* pUnderline = "none";
+            switch (rProps.GetUnderline().GetLineStyle())
+            {
+                case LINESTYLE_NONE:
+                    break;
+                case LINESTYLE_DOUBLE:
+                    pUnderline = "double";
+                    break;
+                default:
+                    pUnderline = "single";
+                    break;
+            }
+            m_pSerializer->singleElementNS(XML_w, XML_u, FSNS(XML_w, XML_val), pUnderline);
+        }
+        m_pSerializer->endElementNS(XML_w, XML_rPr);
+    }
+
+    if (bHasBorder || bHasBackground)
+    {
+        m_pSerializer->startElementNS(XML_w, XML_tcPr);
+        if (bHasBorder)
+        {
+            m_pSerializer->startElementNS(XML_w, XML_tcBorders);
+            synthesizeBorderLine(XML_top, rBox.GetTop());
+            synthesizeBorderLine(XML_left, rBox.GetLeft());
+            synthesizeBorderLine(XML_bottom, rBox.GetBottom());
+            synthesizeBorderLine(XML_right, rBox.GetRight());
+            m_pSerializer->endElementNS(XML_w, XML_tcBorders);
+        }
+        if (bHasBackground)
+        {
+            rtl::Reference<sax_fastparser::FastAttributeList> pShadingAttributes
+                = sax_fastparser::FastSerializerHelper::createAttrList();
+            pShadingAttributes->add(FSNS(XML_w, XML_val), "clear");
+            pShadingAttributes->add(FSNS(XML_w, XML_fill),
+                                    msfilter::util::ConvertColor(rBackground.GetColor()));
+            DocxAttributeOutput::AddThemeFillColorAttributes(pShadingAttributes,
+                                                             rBackground.getComplexColor());
+            m_pSerializer->singleElementNS(XML_w, XML_shd, pShadingAttributes);
+        }
+        m_pSerializer->endElementNS(XML_w, XML_tcPr);
+    }
+
+    m_pSerializer->endElementNS(XML_w, XML_tblStylePr);
+}
+
+void DocxTableStyleExport::Impl::SynthesizeTableStyle(const SwTableAutoFormat& rFormat,
+                                                      const OUString& rStyleId)
+{
+    const OUString& rName = rFormat.GetName().toString();
+    if (rName.isEmpty() || rStyleId.isEmpty() || m_aWrittenStyleIds.contains(rStyleId))
+        return;
+
+    using RowColRole = SwTableAutoFormat::RowColRole;
+    auto nRole = [](RowColRole eRole) { return static_cast<sal_uInt8>(eRole); };
+    const TableStyleRolePosition aRolePositions[] = {
+        { u"wholeTable"_ustr, nRole(RowColRole::BandA), nRole(RowColRole::BandA) },
+        { u"firstRow"_ustr, nRole(RowColRole::First), nRole(RowColRole::BandA) },
+        { u"lastRow"_ustr, nRole(RowColRole::Last), nRole(RowColRole::BandA) },
+        { u"firstCol"_ustr, nRole(RowColRole::BandA), nRole(RowColRole::First) },
+        { u"lastCol"_ustr, nRole(RowColRole::BandA), nRole(RowColRole::Last) },
+        { u"band1Horz"_ustr, nRole(RowColRole::BandA), nRole(RowColRole::BandA) },
+        { u"band2Horz"_ustr, nRole(RowColRole::BandB), nRole(RowColRole::BandA) },
+        { u"band1Vert"_ustr, nRole(RowColRole::BandA), nRole(RowColRole::BandA) },
+        { u"band2Vert"_ustr, nRole(RowColRole::BandA), nRole(RowColRole::BandB) },
+        { u"nwCell"_ustr, nRole(RowColRole::First), nRole(RowColRole::First) },
+        { u"neCell"_ustr, nRole(RowColRole::First), nRole(RowColRole::Last) },
+        { u"swCell"_ustr, nRole(RowColRole::Last), nRole(RowColRole::First) },
+        { u"seCell"_ustr, nRole(RowColRole::Last), nRole(RowColRole::Last) },
+    };
+
+    rtl::Reference<sax_fastparser::FastAttributeList> pAttributeList
+        = sax_fastparser::FastSerializerHelper::createAttrList();
+    pAttributeList->add(FSNS(XML_w, XML_type), "table");
+    pAttributeList->add(FSNS(XML_w, XML_styleId), rStyleId);
+    m_pSerializer->startElementNS(XML_w, XML_style, pAttributeList);
+    m_pSerializer->singleElementNS(XML_w, XML_name, FSNS(XML_w, XML_val), rName);
+
+    for (const auto& rPosition : aRolePositions)
+    {
+        const sal_uInt8 nPos = rPosition.nRowRole * SwTableAutoFormat::nRoleCount
+                              + rPosition.nColRole;
+        synthesizeTblStylePr(rPosition.sType, rFormat.GetBoxFormat(nPos));
+    }
+
+    m_pSerializer->endElementNS(XML_w, XML_style);
+
+    m_aWrittenStyleIds.insert(rStyleId);
 }
 
 bool DocxTableStyleExport::FirstRowHasTblHeader(const OUString& rStyleId) const
@@ -754,8 +1167,9 @@ void DocxTableStyleExport::SetSerializer(const sax_fastparser::FSHelperPtr& pSer
 }
 
 DocxTableStyleExport::DocxTableStyleExport(SwDoc& rDoc,
-                                           const sax_fastparser::FSHelperPtr& pSerializer)
-    : m_pImpl(std::make_unique<Impl>(rDoc))
+                                           const sax_fastparser::FSHelperPtr& pSerializer,
+                                           bool bEcma)
+    : m_pImpl(std::make_unique<Impl>(rDoc, bEcma))
 {
     m_pImpl->setSerializer(pSerializer);
 }

@@ -12,17 +12,22 @@
 #include <com/sun/star/drawing/GraphicExportFilter.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/XControlModel.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/text/ControlCharacter.hpp>
+#include <com/sun/star/text/XTextCursor.hpp>
+#include <com/sun/star/util/XComplexColor.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
+#include <docmodel/color/ComplexColor.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <test/unoapixml_test.hxx>
 #include <unotools/tempfile.hxx>
 #include <svx/unopage.hxx>
@@ -37,6 +42,7 @@
 #include <sdr/contact/objectcontactofobjlistpainter.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -65,9 +71,9 @@ CPPUNIT_TEST_FIXTURE(UnodrawTest, testWriterGraphicExport)
     // picture.
     xExportFilter->setSourceDocument(xShape);
 
-    cpo::uno::Sequence<beans::PropertyValue> aProperties(
-        comphelper::InitPropertySequence({ { "URL", cpo::uno::Any(maTempFile.GetURL()) },
-                                           { "MediaType", cpo::uno::Any(u"image/jpeg"_ustr) } }));
+    cpo::uno::Sequence<beans::PropertyValue> aProperties(comphelper::InitPropertySequence(
+        { { u"URL"_ustr, cpo::uno::Any(maTempFile.GetURL()) },
+          { u"MediaType"_ustr, cpo::uno::Any(u"image/jpeg"_ustr) } }));
     CPPUNIT_ASSERT(xExportFilter->filter(aProperties));
 }
 
@@ -217,6 +223,120 @@ CPPUNIT_TEST_FIXTURE(UnodrawTest, testPngExport)
     // i.e. it was not possible to influence the size from the cmdline.
     CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(192), aSize.getHeight());
     CPPUNIT_ASSERT_EQUAL(static_cast<tools::Long>(192), aSize.getWidth());
+}
+
+uno::Reference<drawing::XShape> insertRectangle(const uno::Reference<lang::XComponent>& xComponent)
+{
+    uno::Reference<lang::XMultiServiceFactory> xFactory(xComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XShape> xShape(
+        xFactory->createInstance(u"com.sun.star.drawing.RectangleShape"_ustr), uno::UNO_QUERY);
+    xShape->setPosition(awt::Point(1000, 1000));
+    xShape->setSize(awt::Size(10000, 10000));
+    uno::Reference<drawing::XDrawPagesSupplier> xSupplier(xComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    xDrawPage->add(xShape);
+    return xShape;
+}
+
+model::ComplexColor getComplexColor(const uno::Reference<beans::XPropertySet>& xProperties,
+                                    const OUString& rPropertyName)
+{
+    uno::Reference<util::XComplexColor> xComplexColor;
+    CPPUNIT_ASSERT(xProperties->getPropertyValue(rPropertyName) >>= xComplexColor);
+    CPPUNIT_ASSERT(xComplexColor.is());
+    return model::color::getFromXComplexColor(xComplexColor);
+}
+
+CPPUNIT_TEST_FIXTURE(UnodrawTest, testFillThemeColorSetBeforePlainColor)
+{
+    // Given a shape in an Impress document:
+    loadFromURL(u"private:factory/simpress"_ustr);
+    uno::Reference<drawing::XShape> xShape = insertRectangle(mxComponent);
+
+    // When one call sets the fill to the theme color accent1 and then to a plain color:
+    model::ComplexColor aThemeColor = model::ComplexColor::Theme(model::ThemeColorType::Accent1);
+    uno::Reference<beans::XMultiPropertySet> xMultiProperties(xShape, uno::UNO_QUERY);
+    xMultiProperties->setPropertyValues(
+        { u"FillComplexColor"_ustr, u"FillColor"_ustr },
+        { uno::Any(model::color::createXComplexColor(aThemeColor)), uno::Any(Color(0x123456)) });
+
+    // Then the fill keeps the theme color:
+    uno::Reference<beans::XPropertySet> xProperties(xShape, uno::UNO_QUERY);
+    model::ComplexColor aFillColor = getComplexColor(xProperties, u"FillComplexColor"_ustr);
+    // Without the fix in place, this test would have failed with:
+    // - Expected: 4
+    // - Actual  : -1
+    // i.e. the plain color cleared the theme color that the same call had set.
+    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent1, aFillColor.getThemeColorType());
+}
+
+CPPUNIT_TEST_FIXTURE(UnodrawTest, testTextThemeColorSetBeforePlainColor)
+{
+    // Given a shape in an Impress document with some text:
+    loadFromURL(u"private:factory/simpress"_ustr);
+    uno::Reference<drawing::XShape> xShape = insertRectangle(mxComponent);
+    uno::Reference<text::XTextRange> xShapeText(xShape, uno::UNO_QUERY);
+    xShapeText->setString(u"abc"_ustr);
+
+    // When one call sets the text to the theme color accent1 and then to a plain color:
+    uno::Reference<text::XTextCursor> xCursor = xShapeText->getText()->createTextCursor();
+    xCursor->gotoEnd(/*bExpand=*/true);
+    model::ComplexColor aThemeColor = model::ComplexColor::Theme(model::ThemeColorType::Accent1);
+    uno::Reference<beans::XMultiPropertySet> xMultiProperties(xCursor, uno::UNO_QUERY);
+    xMultiProperties->setPropertyValues(
+        { u"CharComplexColor"_ustr, u"CharColor"_ustr },
+        { uno::Any(model::color::createXComplexColor(aThemeColor)), uno::Any(Color(0x123456)) });
+
+    // Then the text keeps the theme color:
+    uno::Reference<beans::XPropertySet> xProperties(xCursor, uno::UNO_QUERY);
+    model::ComplexColor aCharColor = getComplexColor(xProperties, u"CharComplexColor"_ustr);
+    // Without the fix in place, this test would have failed with:
+    // - Expected: 4
+    // - Actual  : -1
+    // i.e. the plain color cleared the theme color that the same call had set.
+    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent1, aCharColor.getThemeColorType());
+}
+
+CPPUNIT_TEST_FIXTURE(UnodrawTest, testReflectionProperties)
+{
+    loadFromURL(u"private:factory/simpress"_ustr);
+    uno::Reference<beans::XPropertySet> xShapeProps(insertRectangle(mxComponent), uno::UNO_QUERY);
+
+    // A new shape has no reflection, and the values it would have fade from opaque at the shape
+    // to invisible at the far end.
+    CPPUNIT_ASSERT(!xShapeProps->getPropertyValue(u"ReflectionEffect"_ustr).get<bool>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(0),
+        xShapeProps->getPropertyValue(u"ReflectionEffectDistance"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(0),
+        xShapeProps->getPropertyValue(u"ReflectionEffectBlurRadius"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(0),
+        xShapeProps->getPropertyValue(u"ReflectionEffectStartTransparency"_ustr).get<sal_Int16>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(0),
+        xShapeProps->getPropertyValue(u"ReflectionEffectStartPosition"_ustr).get<sal_Int16>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(100),
+        xShapeProps->getPropertyValue(u"ReflectionEffectEndTransparency"_ustr).get<sal_Int16>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(100),
+        xShapeProps->getPropertyValue(u"ReflectionEffectEndPosition"_ustr).get<sal_Int16>());
+
+    // Values set on the shape read back unchanged.
+    xShapeProps->setPropertyValue(u"ReflectionEffect"_ustr, cpo::uno::Any(true));
+    xShapeProps->setPropertyValue(u"ReflectionEffectDistance"_ustr, cpo::uno::Any(sal_Int32(250)));
+    xShapeProps->setPropertyValue(u"ReflectionEffectEndPosition"_ustr,
+                                  cpo::uno::Any(sal_Int16(35)));
+    CPPUNIT_ASSERT(xShapeProps->getPropertyValue(u"ReflectionEffect"_ustr).get<bool>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(250),
+        xShapeProps->getPropertyValue(u"ReflectionEffectDistance"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(35),
+        xShapeProps->getPropertyValue(u"ReflectionEffectEndPosition"_ustr).get<sal_Int16>());
 }
 }
 

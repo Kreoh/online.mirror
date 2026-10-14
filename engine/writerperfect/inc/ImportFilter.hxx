@@ -15,8 +15,8 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/xml/sax/XFastDocumentHandler.hpp>
 
 #include <osl/diagnose.h>
@@ -45,22 +45,22 @@ class ImportFilterImpl
                                   css::lang::XInitialization>
 {
 public:
-    ImportFilterImpl(css::uno::Reference<css::uno::XComponentContext> xContext)
+    ImportFilterImpl(cpo::uno::Reference<cpo::uno::XComponentContext> xContext)
         : mxContext(std::move(xContext))
     {
     }
 
-    const css::uno::Reference<css::uno::XComponentContext>& getXContext() const
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& getXContext() const
     {
         return mxContext;
     }
 
     // XFilter
-    virtual bool SAL_CALL
+    virtual bool
     filter(const cpo::uno::Sequence<css::beans::PropertyValue>& rDescriptor) override
     {
         comphelper::SequenceAsHashMap aDescriptor(rDescriptor);
-        css::uno::Reference<css::io::XInputStream> xInputStream;
+        cpo::uno::Reference<css::io::XInputStream> xInputStream;
         aDescriptor[utl::MediaDescriptor::PROP_INPUTSTREAM] >>= xInputStream;
         if (!xInputStream.is())
         {
@@ -68,21 +68,21 @@ public:
             return false;
         }
 
-        css::uno::Reference<css::awt::XWindow> xDialogParent;
+        cpo::uno::Reference<css::awt::XWindow> xDialogParent;
         aDescriptor[u"ParentWindow"_ustr] >>= xDialogParent;
 
         // An XML import service: what we push sax messages to...
-        css::uno::Reference<XInterface> xInternalFilter
+        cpo::uno::Reference<XInterface> xInternalFilter
             = mxContext->getServiceManager()->createInstanceWithContext(
                 DocumentHandlerFor<Generator>::name(), mxContext);
         assert(xInternalFilter);
-        css::uno::Reference<css::xml::sax::XFastDocumentHandler> xInternalHandler(
-            xInternalFilter, css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::xml::sax::XFastDocumentHandler> xInternalHandler(
+            xInternalFilter, cpo::uno::UNO_QUERY);
         assert(xInternalHandler);
 
         // The XImporter sets up an empty target document for XDocumentHandler to write to...
-        css::uno::Reference<css::document::XImporter> xImporter(xInternalHandler,
-                                                                css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::document::XImporter> xImporter(xInternalHandler,
+                                                                cpo::uno::UNO_QUERY);
         assert(xImporter);
         xImporter->setTargetDocument(mxDoc);
 
@@ -102,25 +102,25 @@ public:
                                 aDescriptor);
     }
 
-    virtual void SAL_CALL cancel() override {}
+    virtual void cancel() override {}
 
     // XImporter
-    const css::uno::Reference<css::lang::XComponent>& getTargetDocument() const { return mxDoc; }
-    virtual void SAL_CALL
-    setTargetDocument(const css::uno::Reference<css::lang::XComponent>& xDoc) override
+    const cpo::uno::Reference<css::lang::XComponent>& getTargetDocument() const { return mxDoc; }
+    virtual void
+    setTargetDocument(const cpo::uno::Reference<css::lang::XComponent>& xDoc) override
     {
         mxDoc = xDoc;
     }
 
     //XExtendedFilterDetection
-    virtual OUString SAL_CALL
+    virtual OUString
     detect(cpo::uno::Sequence<css::beans::PropertyValue>& Descriptor) override
     {
         OUString sTypeName;
         sal_Int32 nLength = Descriptor.getLength();
         sal_Int32 location = nLength;
         const css::beans::PropertyValue* pValue = Descriptor.getConstArray();
-        css::uno::Reference<css::io::XInputStream> xInputStream;
+        cpo::uno::Reference<css::io::XInputStream> xInputStream;
         for (sal_Int32 i = 0; i < nLength; i++)
         {
             if (pValue[i].Name == "TypeName")
@@ -151,7 +151,7 @@ public:
     }
 
     // XInitialization
-    virtual void SAL_CALL
+    virtual void
     initialize(const cpo::uno::Sequence<cpo::uno::Any>& /*aArguments*/) override
     {
     }
@@ -163,8 +163,8 @@ private:
         = 0;
     virtual void doRegisterHandlers(Generator&){};
 
-    css::uno::Reference<css::uno::XComponentContext> mxContext;
-    css::uno::Reference<css::lang::XComponent> mxDoc;
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::lang::XComponent> mxDoc;
 };
 }
 
@@ -174,7 +174,7 @@ template <class Generator>
 struct ImportFilter : public cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>,
                                                          css::lang::XServiceInfo>
 {
-    ImportFilter(const css::uno::Reference<css::uno::XComponentContext>& rxContext)
+    ImportFilter(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext)
         : cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>, css::lang::XServiceInfo>(
               rxContext)
     {

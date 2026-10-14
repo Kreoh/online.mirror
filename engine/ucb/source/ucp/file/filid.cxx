@@ -45,14 +45,13 @@ FileContentIdentifier::~FileContentIdentifier()
 }
 
 OUString
-SAL_CALL
 FileContentIdentifier::getContentIdentifier()
 {
     return m_aContentId;
 }
 
 
-OUString SAL_CALL
+OUString
 FileContentIdentifier::getContentProviderScheme()
 {
     return m_aProviderScheme;

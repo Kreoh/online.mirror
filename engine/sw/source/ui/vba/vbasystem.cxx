@@ -38,6 +38,7 @@
 using namespace ::ooo::vba;
 using namespace ::ooo::vba::word;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 PrivateProfileStringListener::~PrivateProfileStringListener()
 {
@@ -113,7 +114,7 @@ cpo::uno::Any PrivateProfileStringListener::getValueEvent()
             }
         }
 #else
-        throw uno::RuntimeException(u"Only support on Windows"_ustr );
+        throw cpo::uno::RuntimeException(u"Only support on Windows"_ustr );
 #endif
     }
 
@@ -155,7 +156,7 @@ void PrivateProfileStringListener::setValueEvent( const cpo::uno::Any& value )
         }
         return;
 #else
-        throw uno::RuntimeException(u"Not implemented"_ustr );
+        throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
 #endif
     }
 
@@ -167,7 +168,7 @@ void PrivateProfileStringListener::setValueEvent( const cpo::uno::Any& value )
 
 }
 
-SwVbaSystem::SwVbaSystem( uno::Reference<uno::XComponentContext > const & xContext ): SwVbaSystem_BASE( uno::Reference< XHelperInterface >(), xContext )
+SwVbaSystem::SwVbaSystem( uno::Reference<cpo::uno::XComponentContext > const & xContext ): SwVbaSystem_BASE( uno::Reference< XHelperInterface >(), xContext )
 {
 }
 
@@ -175,7 +176,7 @@ SwVbaSystem::~SwVbaSystem()
 {
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 SwVbaSystem::getCursor()
 {
     PointerStyle nPointerStyle = getPointerStyle( static_cast<SfxBaseModel*>(getCurrentWordDoc(mxContext).get()) );
@@ -195,7 +196,7 @@ SwVbaSystem::getCursor()
     }
 }
 
-void SAL_CALL
+void
 SwVbaSystem::setCursor( sal_Int32 _cursor )
 {
     try
@@ -225,7 +226,7 @@ SwVbaSystem::setCursor( sal_Int32 _cursor )
                 break;
             }
             default:
-                throw uno::RuntimeException(u"Unknown value for Cursor pointer"_ustr );
+                throw cpo::uno::RuntimeException(u"Unknown value for Cursor pointer"_ustr );
                 // TODO: isn't this a flaw in the API? It should be allowed to throw an
                 // IllegalArgumentException, or so
         }
@@ -235,7 +236,7 @@ SwVbaSystem::setCursor( sal_Int32 _cursor )
     }
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwVbaSystem::PrivateProfileString( const OUString& rFilename, const OUString& rSection, const OUString& rKey )
 {
     // FIXME: need to detect whether it is a relative file path

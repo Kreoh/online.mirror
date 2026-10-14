@@ -21,7 +21,7 @@ import com.sun.star.bridge.XBridge;
 import com.sun.star.bridge.XBridgeFactory;
 import com.sun.star.bridge.XInstanceProvider;
 
-import com.sun.star.uno.XComponentContext;
+import cpo.uno.XComponentContext;
 import com.sun.star.lang.EventObject;
 import com.sun.star.lang.XComponent;
 import com.sun.star.lang.XEventListener;
@@ -47,7 +47,7 @@ public class TestComponentMain
         }
 
         public Object getInstance( /*IN*/String sInstanceName )
-            throws com.sun.star.container.NoSuchElementException, com.sun.star.uno.RuntimeException
+            throws com.sun.star.container.NoSuchElementException, cpo.uno.RuntimeException
         {
             Object o =null;
             try

@@ -11,7 +11,7 @@
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -48,7 +48,7 @@ bool KeynoteImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OU
 }
 
 // XExtendedFilterDetection
-OUString SAL_CALL
+OUString
 KeynoteImportFilter::detect(cpo::uno::Sequence<css::beans::PropertyValue>& Descriptor)
 {
     sal_Int32 nLength = Descriptor.getLength();
@@ -59,8 +59,8 @@ KeynoteImportFilter::detect(cpo::uno::Sequence<css::beans::PropertyValue>& Descr
     bool bIsPackage = false;
     bool bUCBContentChanged = false;
     const beans::PropertyValue* pValue = Descriptor.getConstArray();
-    css::uno::Reference<css::io::XInputStream> xInputStream;
-    css::uno::Reference<ucb::XContent> xContent;
+    cpo::uno::Reference<css::io::XInputStream> xInputStream;
+    cpo::uno::Reference<ucb::XContent> xContent;
     cpo::uno::Sequence<beans::NamedValue> lComponentDataNV;
     cpo::uno::Sequence<beans::PropertyValue> lComponentDataPV;
     bool bComponentDataNV = true;
@@ -222,25 +222,25 @@ KeynoteImportFilter::detect(cpo::uno::Sequence<css::beans::PropertyValue>& Descr
 }
 
 // XServiceInfo
-OUString SAL_CALL KeynoteImportFilter::getImplementationName()
+OUString KeynoteImportFilter::getImplementationName()
 {
     return u"org.libreoffice.comp.Impress.KeynoteImportFilter"_ustr;
 }
 
-bool SAL_CALL KeynoteImportFilter::supportsService(const OUString& rServiceName)
+bool KeynoteImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL KeynoteImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> KeynoteImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 org_libreoffice_comp_Impress_KeynoteImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new KeynoteImportFilter(context));
 }

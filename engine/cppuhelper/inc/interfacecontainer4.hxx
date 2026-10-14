@@ -27,10 +27,7 @@
 #include <mutex>
 #include <vector>
 
-namespace com::sun::star::uno
-{
-class XInterface;
-}
+namespace cpo::uno { class XInterface; }
 
 /**
 This is a straight copy of the include/comphelper/interfacecontainer4.hxx file, copied here
@@ -81,7 +78,7 @@ public:
     /** Return the next element of the iterator. Calling this method if
         hasMoreElements() has returned false, is an error.
      */
-    css::uno::Reference<ListenerT> const& next();
+    cpo::uno::Reference<ListenerT> const& next();
 
     /** Removes the current element (the last one returned by next())
         from the underlying container. Calling this method before
@@ -94,7 +91,7 @@ public:
 
 private:
     OInterfaceContainerHelper4<ListenerT>& m_rCont;
-    o3tl::cow_wrapper<std::vector<css::uno::Reference<ListenerT>>,
+    o3tl::cow_wrapper<std::vector<cpo::uno::Reference<ListenerT>>,
                       o3tl::ThreadSafeRefCountingPolicy>
         m_aData;
     sal_Int32 m_nRemain;
@@ -104,7 +101,7 @@ private:
 };
 
 template <class ListenerT>
-const css::uno::Reference<ListenerT>& OInterfaceIteratorHelper4<ListenerT>::next()
+const cpo::uno::Reference<ListenerT>& OInterfaceIteratorHelper4<ListenerT>::next()
 {
     m_nRemain--;
     return (*std::as_const(m_aData))[m_nRemain];
@@ -146,7 +143,7 @@ public:
       @param rGuard
           this parameter only here to make that this container is accessed while locked
      **/
-    std::vector<css::uno::Reference<ListenerT>>
+    std::vector<cpo::uno::Reference<ListenerT>>
     getElements(std::unique_lock<std::mutex>& rGuard) const;
 
     /** Inserts an element into the container.  The position is not specified, thus it is not
@@ -168,7 +165,7 @@ public:
                 the new count of elements in the container
     */
     sal_Int32 addInterface(std::unique_lock<std::mutex>& rGuard,
-                           const css::uno::Reference<ListenerT>& rxIFace);
+                           const cpo::uno::Reference<ListenerT>& rxIFace);
     /** Removes an element from the container.  It uses interface equality to remove the interface.
 
         @param rxIFace
@@ -179,7 +176,7 @@ public:
                 the new count of elements in the container
     */
     sal_Int32 removeInterface(std::unique_lock<std::mutex>& rGuard,
-                              const css::uno::Reference<ListenerT>& rxIFace);
+                              const cpo::uno::Reference<ListenerT>& rxIFace);
     /**
       Call disposing on all object in the container that
       support XEventListener. Then clear the container.
@@ -202,7 +199,7 @@ public:
 
         @tparam FuncT unary functor type, let your compiler deduce this for you
         @param func unary functor object expecting an argument of type
-                    css::uno::Reference<ListenerT>
+                    cpo::uno::Reference<ListenerT>
         @param rGuard
             this parameter only here to make that this container is accessed while locked
     */
@@ -242,17 +239,17 @@ public:
 
 private:
     friend class OInterfaceIteratorHelper4<ListenerT>;
-    o3tl::cow_wrapper<std::vector<css::uno::Reference<ListenerT>>,
+    o3tl::cow_wrapper<std::vector<cpo::uno::Reference<ListenerT>>,
                       o3tl::ThreadSafeRefCountingPolicy>
         maData;
     OInterfaceContainerHelper4(const OInterfaceContainerHelper4&) = delete;
     OInterfaceContainerHelper4& operator=(const OInterfaceContainerHelper4&) = delete;
 
-    static o3tl::cow_wrapper<std::vector<css::uno::Reference<ListenerT>>,
+    static o3tl::cow_wrapper<std::vector<cpo::uno::Reference<ListenerT>>,
                              o3tl::ThreadSafeRefCountingPolicy>&
     DEFAULT()
     {
-        static o3tl::cow_wrapper<std::vector<css::uno::Reference<ListenerT>>,
+        static o3tl::cow_wrapper<std::vector<cpo::uno::Reference<ListenerT>>,
                                  o3tl::ThreadSafeRefCountingPolicy>
             SINGLETON;
         return SINGLETON;
@@ -274,7 +271,7 @@ private:
             assert(m_pMethod);
         }
 
-        void operator()(const css::uno::Reference<ListenerT>& listener) const
+        void operator()(const cpo::uno::Reference<ListenerT>& listener) const
         {
             (listener.get()->*m_pMethod)(m_rEvent);
         }
@@ -341,7 +338,7 @@ OInterfaceContainerHelper4<ListenerT>::getLength(std::unique_lock<std::mutex>& r
 }
 
 template <class ListenerT>
-std::vector<css::uno::Reference<ListenerT>>
+std::vector<cpo::uno::Reference<ListenerT>>
 OInterfaceContainerHelper4<ListenerT>::getElements(std::unique_lock<std::mutex>& rGuard) const
 {
     assert(rGuard.owns_lock());
@@ -352,7 +349,7 @@ OInterfaceContainerHelper4<ListenerT>::getElements(std::unique_lock<std::mutex>&
 template <class ListenerT>
 sal_Int32
 OInterfaceContainerHelper4<ListenerT>::addInterface(std::unique_lock<std::mutex>& rGuard,
-                                                    const css::uno::Reference<ListenerT>& rListener)
+                                                    const cpo::uno::Reference<ListenerT>& rListener)
 {
     assert(rGuard.owns_lock());
     (void)rGuard;
@@ -363,7 +360,7 @@ OInterfaceContainerHelper4<ListenerT>::addInterface(std::unique_lock<std::mutex>
 
 template <class ListenerT>
 sal_Int32 OInterfaceContainerHelper4<ListenerT>::removeInterface(
-    std::unique_lock<std::mutex>& rGuard, const css::uno::Reference<ListenerT>& rListener)
+    std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference<ListenerT>& rListener)
 {
     assert(rGuard.owns_lock());
     (void)rGuard;
@@ -371,7 +368,7 @@ sal_Int32 OInterfaceContainerHelper4<ListenerT>::removeInterface(
 
     // It is not valid to compare the pointer directly, but it's faster.
     auto it = std::find_if(maData->begin(), maData->end(),
-                           [&rListener](const css::uno::Reference<css::uno::XInterface>& rItem) {
+                           [&rListener](const cpo::uno::Reference<cpo::uno::XInterface>& rItem) {
                                return rItem.get() == rListener.get();
                            });
 
@@ -401,7 +398,7 @@ void OInterfaceContainerHelper4<ListenerT>::disposeAndClear(std::unique_lock<std
             {
                 aIt.next()->disposing(rEvt);
             }
-            catch (css::uno::RuntimeException&)
+            catch (cpo::uno::RuntimeException&)
             {
                 // be robust, if e.g. a remote bridge has disposed already.
                 // there is no way to delegate the error to the caller :o(.

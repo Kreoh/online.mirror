@@ -19,6 +19,8 @@
 
 #include <com/sun/star/table/BorderLineStyle.hpp>
 #include <officecfg/Office/Calc.hxx>
+#include <drawview.hxx>
+#include <docuno.hxx>
 
 #include <comphelper/kit.hxx>
 #include <editeng/boxitem.hxx>
@@ -57,6 +59,7 @@
 #include <cellform.hxx>
 #include <cellvalue.hxx>
 #include <compiler.hxx>
+#include <dbdata.hxx>
 #include <docsh.hxx>
 #include <document.hxx>
 #include <formulacell.hxx>
@@ -211,6 +214,29 @@ void ScTabViewShell::GetState( SfxItemSet& rSet )
                     ScAddress aPos( nPosX, nPosY, nTab );
                     if ( pDocSh->IsReadOnly() || !pDocSh->GetChangeAction(aPos) || pDocSh->IsDocShared() )
                         rSet.DisableItem( nWhich );
+                }
+                break;
+
+            case FID_HANDLEDUPLICATERECORDS:
+                {
+                    // MSO parity: disable on a multi-range mark, or a rect that intersects
+                    // a table/db range without being fully inside it (like merge-cells).
+                    ScRange aSel;
+                    if (rViewData.GetSimpleArea(aSel) != SC_MARK_SIMPLE)
+                        rSet.DisableItem( nWhich );
+                    else
+                    {
+                        for (const ScDBData* pDB : rDoc.GetAllNamedDBsInArea(aSel))
+                        {
+                            ScRange aArea;
+                            pDB->GetArea(aArea);
+                            if (!aArea.Contains(aSel))
+                            {
+                                rSet.DisableItem( nWhich );
+                                break;
+                            }
+                        }
+                    }
                 }
                 break;
 
@@ -1020,10 +1046,10 @@ void ScTabViewShell::ExecStyle( SfxRequest& rReq )
             {
                 try
                 {
-                    css::uno::Reference< css::container::XNameAccess > xStyles;
-                    css::uno::Reference< css::container::XNameAccess > xCont = pDocSh->GetModel()->getStyleFamilies();
+                    cpo::uno::Reference< css::container::XNameAccess > xStyles;
+                    cpo::uno::Reference< css::container::XNameAccess > xCont = pDocSh->GetModel()->getStyleFamilies();
                     xCont->getByName(pFamilyItem->GetValue()) >>= xStyles;
-                    css::uno::Reference< css::beans::XPropertySet > xInfo;
+                    cpo::uno::Reference< css::beans::XPropertySet > xInfo;
                     xStyles->getByName( pNameItem->GetValue() ) >>= xInfo;
                     OUString aUIName;
                     xInfo->getPropertyValue(u"DisplayName"_ustr) >>= aUIName;

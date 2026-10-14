@@ -32,7 +32,6 @@
 #include "iderdll2.hxx"
 
 #include <com/sun/star/script/XLibraryContainer.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
 #include <basctl/basctldllpublic.hxx>
 #include <sal/log.hxx>
 #include <sfx2/dispatch.hxx>
@@ -58,7 +57,7 @@ namespace basctl
 // ID used for the read-only infobar
 constexpr OUString BASIC_IDE_READONLY_INFOBAR = u"readonly"_ustr;
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star;
 
 BaseWindow::BaseWindow( vcl::Window* pParent, ScriptDocument aDocument, OUString aLibName, OUString aName )
@@ -810,11 +809,10 @@ bool QueryPassword(weld::Widget* pDialogParent, const Reference< script::XLibrar
         {
             if ( xLibContainer.is() && xLibContainer->hasByName( rLibName ) )
             {
-                Reference< script::XLibraryContainerPassword > xPasswd( xLibContainer, UNO_QUERY );
-                if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( rLibName ) && !xPasswd->isLibraryPasswordVerified( rLibName ) )
+                if ( xLibContainer->isLibraryPasswordProtected( rLibName ) && !xLibContainer->isLibraryPasswordVerified( rLibName ) )
                 {
                     rPassword = aDlg.GetPassword();
-                    bOK = xPasswd->verifyLibraryPassword( rLibName, rPassword );
+                    bOK = xLibContainer->verifyLibraryPassword( rLibName, rPassword );
 
                     if ( !bOK )
                     {

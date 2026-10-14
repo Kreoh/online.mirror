@@ -20,7 +20,7 @@
 #include "UpdateRequest.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 namespace sd::framework
@@ -35,9 +35,9 @@ void UpdateRequest::execute(const rtl::Reference<Configuration>&)
     // becomes empty.
 }
 
-OUString SAL_CALL UpdateRequest::getName() { return u"UpdateRequest"_ustr; }
+OUString UpdateRequest::getName() { return u"UpdateRequest"_ustr; }
 
-void SAL_CALL UpdateRequest::setName(const OUString&)
+void UpdateRequest::setName(const OUString&)
 {
     // Ignored.
 }

@@ -29,7 +29,7 @@
 #include <unotools/charclass.hxx>
 #include <unotools/calendarwrapper.hxx>
 #include <unotools/localedatawrapper.hxx>
-#include <com/sun/star/i18n/LocaleCalendar2.hpp>
+#include <com/sun/star/i18n/LocaleCalendar.hpp>
 #include <unotools/digitgroupingiterator.hxx>
 #include <comphelper/sequence.hxx>
 
@@ -48,7 +48,7 @@
 #endif
 #if NF_TEST_CALENDAR
 #include <comphelper/processfactory.hxx>
-#include <com/sun/star/i18n/XCalendar4.hpp>
+#include <com/sun/star/i18n/XCalendar.hpp>
 #endif
 
 #if defined ERA // from POSIX <langinfo.h>
@@ -2291,9 +2291,9 @@ input for the following reasons:
             sal_Int16 nDaySet, nMonthSet, nYearSet, nHourSet, nMinuteSet, nSecondSet;
             sal_Int16 nZO, nDST1, nDST2, nDST, nZOmillis, nDST1millis, nDST2millis, nDSTmillis;
             sal_Int32 nZoneInMillis, nDST1InMillis, nDST2InMillis;
-            uno::Reference< uno::XComponentContext > xContext =
+            uno::Reference< cpo::uno::XComponentContext > xContext =
                 ::comphelper::getProcessComponentContext();
-            uno::Reference< i18n::XCalendar4 > xCal = i18n::LocaleCalendar2::create(xContext);
+            uno::Reference< i18n::XCalendar > xCal = i18n::LocaleCalendar::create(xContext);
             for ( const entry* p = cals; p->lan; ++p )
             {
                 aLocale.Language = OUString::createFromAscii( p->lan );

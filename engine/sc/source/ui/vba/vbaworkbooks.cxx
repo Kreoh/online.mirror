@@ -20,7 +20,7 @@
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/document/XTypeDetection.hpp>
 
 #include <tools/urlobj.hxx>
@@ -37,11 +37,12 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 const sal_Int16 CUSTOM_CHAR = 5;
 
 static cpo::uno::Any
-getWorkbook( const uno::Reference< uno::XComponentContext >& xContext,
+getWorkbook( const uno::Reference< cpo::uno::XComponentContext >& xContext,
              const rtl::Reference< ScModelObj > &xModel,
              const uno::Reference< XHelperInterface >& xParent )
 {
@@ -65,9 +66,9 @@ class WorkBookEnumImpl : public EnumerationHelperImpl
 {
 public:
     /// @throws uno::RuntimeException
-    WorkBookEnumImpl( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ) {}
+    WorkBookEnumImpl( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ) {}
 
-    virtual cpo::uno::Any SAL_CALL nextElement(  ) override
+    virtual cpo::uno::Any nextElement(  ) override
     {
         uno::Reference< sheet::XSpreadsheetDocument > xDoc( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
         return getWorkbook( m_xContext, static_cast<ScModelObj*>(xDoc.get()), m_xParent );
@@ -77,7 +78,7 @@ public:
 
 }
 
-ScVbaWorkbooks::ScVbaWorkbooks( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< css::uno::XComponentContext >& xContext ) : ScVbaWorkbooks_BASE( xParent, xContext, VbaDocumentsBase::EXCEL_DOCUMENT )
+ScVbaWorkbooks::ScVbaWorkbooks( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext ) : ScVbaWorkbooks_BASE( xParent, xContext, VbaDocumentsBase::EXCEL_DOCUMENT )
 {
 }
 // XEnumerationAccess
@@ -104,7 +105,7 @@ ScVbaWorkbooks::createCollectionObject( const cpo::uno::Any& aSource )
     return getWorkbook( mxContext, dynamic_cast<ScModelObj*>(xDoc.get()), mxParent );
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbooks::Add( const cpo::uno::Any& Template )
 {
     uno::Reference< sheet::XSpreadsheetDocument > xSpreadDoc;
@@ -138,7 +139,7 @@ ScVbaWorkbooks::Add( const cpo::uno::Any& Template )
     else
     {
         // illegal argument
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     // need to set up the document modules ( and vba mode ) here
@@ -153,7 +154,7 @@ ScVbaWorkbooks::Add( const cpo::uno::Any& Template )
     return aRet;
 }
 
-void SAL_CALL
+void
 ScVbaWorkbooks::Close()
 {
 }
@@ -190,7 +191,7 @@ ScVbaWorkbooks::getFileFilterType( const OUString& rFileName )
 }
 
 // #TODO# #FIXME# can any of the unused params below be used?
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaWorkbooks::Open( const OUString& rFileName, const cpo::uno::Any& /*UpdateLinks*/, const cpo::uno::Any& ReadOnly, const cpo::uno::Any& Format, const cpo::uno::Any& /*Password*/, const cpo::uno::Any& /*WriteResPassword*/, const cpo::uno::Any& /*IgnoreReadOnlyRecommended*/, const cpo::uno::Any& /*Origin*/, const cpo::uno::Any& Delimiter, const cpo::uno::Any& /*Editable*/, const cpo::uno::Any& /*Notify*/, const cpo::uno::Any& /*Converter*/, const cpo::uno::Any& /*AddToMru*/ )
 {
     // we need to detect if this is a URL, if not then assume it's a file path
@@ -227,7 +228,7 @@ ScVbaWorkbooks::Open( const OUString& rFileName, const cpo::uno::Any& /*UpdateLi
             Format >>= nFormat; // val of nFormat overwritten if extracted
             // validate param
             if ( nFormat < 1 || nFormat > 6 )
-                throw uno::RuntimeException(u"Illegal value for Format"_ustr );
+                throw cpo::uno::RuntimeException(u"Illegal value for Format"_ustr );
         }
 
         sal_Int16 nDelim = getCurrentDelim();
@@ -240,11 +241,11 @@ ScVbaWorkbooks::Open( const OUString& rFileName, const cpo::uno::Any& /*UpdateLi
         {
             // Need to check Delimiter param
             if ( !Delimiter.hasValue() )
-                throw uno::RuntimeException(u"Expected value for Delimiter"_ustr );
+                throw cpo::uno::RuntimeException(u"Expected value for Delimiter"_ustr );
             OUString sStr;
             Delimiter >>= sStr;
             if ( sStr.isEmpty() )
-                throw uno::RuntimeException(u"Incorrect value for Delimiter"_ustr );
+                throw cpo::uno::RuntimeException(u"Incorrect value for Delimiter"_ustr );
 
             nDelim = sStr[0];
 
@@ -262,7 +263,7 @@ ScVbaWorkbooks::Open( const OUString& rFileName, const cpo::uno::Any& /*UpdateLi
                        u"DocumentService"_ustr, u"com.sun.star.sheet.SpreadsheetDocument"_ustr) };
     }
     else if ( !isSpreadSheetFile( sType ) )
-        throw uno::RuntimeException(u"Bad Format"_ustr );
+        throw cpo::uno::RuntimeException(u"Bad Format"_ustr );
 
     uno::Reference <sheet::XSpreadsheetDocument> xSpreadDoc( openDocument( rFileName, ReadOnly, sProps ), uno::UNO_QUERY_THROW );
     cpo::uno::Any aRet = getWorkbook( mxContext, dynamic_cast<ScModelObj*>(xSpreadDoc.get()), mxParent );

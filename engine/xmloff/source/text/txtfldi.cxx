@@ -74,8 +74,8 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
@@ -769,6 +769,15 @@ void XMLPageNumberImportContext::ProcessAttribute(
             }
             break;
         }
+        case XML_ELEMENT(TEXT, XML_FIXED):
+        {
+            // The field always shows the page it sits on, so a number held at the value it had
+            // when it was inserted is the one case worth a word.
+            bool bFixed = false;
+            SAL_WARN_IF(::sax::Converter::convertBool(bFixed, sAttrValue) && bFixed, "xmloff",
+                        "a page number kept from insertion time is read as a live one");
+            break;
+        }
         default:
             XMLOFF_WARN_UNKNOWN_ATTR("xmloff", nAttrToken, sAttrValue);
     }
@@ -1146,9 +1155,9 @@ void XMLDatabaseFieldImportContext::ProcessAttribute(
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLDatabaseFieldImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLDatabaseFieldImportContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if (nElement == XML_ELEMENT(FORM, XML_CONNECTION_RESOURCE) )
     {
@@ -1719,7 +1728,7 @@ void XMLUserDocInfoImportContext::ProcessAttribute(
 }
 
 void XMLUserDocInfoImportContext::PrepareField(
-        const css::uno::Reference<css::beans::XPropertySet> & xPropertySet)
+        const cpo::uno::Reference<css::beans::XPropertySet> & xPropertySet)
 {
     if ( !aName.isEmpty() )
     {
@@ -2333,9 +2342,9 @@ XMLMacroFieldImportContext::XMLMacroFieldImportContext(
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLMacroFieldImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLMacroFieldImportContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >&  )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >&  )
 {
     if ( nElement == XML_ELEMENT(OFFICE, XML_EVENT_LISTENERS) )
     {
@@ -2596,9 +2605,9 @@ XMLDdeFieldDeclsImportContext::XMLDdeFieldDeclsImportContext(SvXMLImport& rImpor
 {
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLDdeFieldDeclsImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLDdeFieldDeclsImportContext::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >&  )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >&  )
 {
     if ( nElement == XML_ELEMENT(TEXT, XML_DDE_CONNECTION_DECL) )
     {
@@ -2840,7 +2849,7 @@ void XMLPageNameFieldImportContext::ProcessAttribute( sal_Int32 nAttrToken,
 
 /// prepare XTextField for insertion into document
 void XMLPageNameFieldImportContext::PrepareField(
-        const css::uno::Reference<css::beans::XPropertySet> &)
+        const cpo::uno::Reference<css::beans::XPropertySet> &)
 {
 }
 
@@ -2852,7 +2861,8 @@ XMLUrlFieldImportContext::XMLUrlFieldImportContext(
     SvXMLImport& rImport,
     XMLTextImportHelper& rHlp) :
         XMLTextFieldImportContext(rImport, rHlp, sAPI_url),
-        bFrameOK(false)
+        bFrameOK(false),
+        bNameOK(false)
 {
 }
 
@@ -2870,6 +2880,13 @@ void XMLUrlFieldImportContext::ProcessAttribute(
             sFrame = OUString::fromUtf8(sAttrValue);
             bFrameOK = true;
             break;
+        case XML_ELEMENT(OFFICE, XML_NAME):
+            sName = OUString::fromUtf8(sAttrValue);
+            bNameOK = true;
+            break;
+        case XML_ELEMENT(XLINK, XML_TYPE):
+            // The link is a simple one, which is the only kind ODF has here.
+            break;
         default:
             // ignore
             XMLOFF_WARN_UNKNOWN_ATTR("xmloff", nAttrToken, sAttrValue);
@@ -2885,6 +2902,12 @@ void XMLUrlFieldImportContext::PrepareField(
     if (bFrameOK)
     {
         xPropertySet->setPropertyValue(u"TargetFrame"_ustr, Any(sFrame));
+    }
+
+    // Calc's own URL field has no name, and this runs outside the try around InsertTextContent
+    if (bNameOK && xPropertySet->getPropertySetInfo()->hasPropertyByName(u"Name"_ustr))
+    {
+        xPropertySet->setPropertyValue(u"Name"_ustr, Any(sName));
     }
 
     xPropertySet->setPropertyValue(u"Representation"_ustr, Any(GetContent()));
@@ -3146,11 +3169,13 @@ void XMLAnnotationImportContext::ProcessAttribute(
         aResolved = OUString::fromUtf8(sAttrValue);
     else if (nAttrToken == XML_ELEMENT(LO_EXT, XML_PARENT_NAME))
         aParentName = OUString::fromUtf8(sAttrValue);
+    else if (nAttrToken == XML_ELEMENT(CO_EXT, XML_DATE_UTC))
+        aDateUTC = OUString::fromUtf8(sAttrValue);
     else
         XMLOFF_WARN_UNKNOWN_ATTR("xmloff", nAttrToken, sAttrValue);
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLAnnotationImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLAnnotationImportContext::createFastChildContext(
     sal_Int32 nElement,
     const uno::Reference< xml::sax::XFastAttributeList>& xAttrList )
 {
@@ -3246,7 +3271,7 @@ void XMLAnnotationImportContext::endFastElement(sal_Int32 /*nElement*/)
             {
                 xCursor->gotoRange(xPrevField->getAnchor(), true);
             }
-            catch (const uno::RuntimeException&)
+            catch (const cpo::uno::RuntimeException&)
             {
                 // Losing the start of the anchor is better than not opening the document at
                 // all.
@@ -3295,6 +3320,13 @@ void XMLAnnotationImportContext::PrepareField(
     bool bTmp(false);
     (void)::sax::Converter::convertBool(bTmp, aResolved);
     xPropertySet->setPropertyValue(u"Resolved"_ustr, Any(bTmp));
+
+    util::DateTime aDateTimeUTC;
+    if (!aDateUTC.isEmpty() && ::sax::Converter::parseDateTime(aDateTimeUTC, aDateUTC))
+    {
+        xPropertySet->setPropertyValue(u"DateTimeUTC"_ustr, Any(aDateTimeUTC));
+    }
+    aDateUTC.clear();
 
     util::DateTime aDateTime;
     if (::sax::Converter::parseDateTime(aDateTime, aDateBuffer))
@@ -3468,8 +3500,8 @@ static bool lcl_ProcessLabel(
     return bValid;
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLDropDownFieldImportContext::createFastChildContext(
-    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLDropDownFieldImportContext::createFastChildContext(
+    sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if( nElement == XML_ELEMENT(TEXT, XML_LABEL) )
     {
@@ -3610,7 +3642,7 @@ void XMLDateTimeFieldImportContext::ProcessAttribute( sal_Int32 nAttrToken,
 
 /// prepare XTextField for insertion into document
 void XMLDateTimeFieldImportContext::PrepareField(
-        const css::uno::Reference<
+        const cpo::uno::Reference<
         css::beans::XPropertySet> &)
 {
 }

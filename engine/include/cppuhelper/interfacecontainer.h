@@ -20,23 +20,23 @@
 #ifndef INCLUDED_CPPUHELPER_INTERFACECONTAINER_H
 #define INCLUDED_CPPUHELPER_INTERFACECONTAINER_H
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 #include <functional>
 #include <vector>
 #include <utility>
 
-#include "osl/diagnose.h"
-#include "osl/mutex.hxx"
-#include "rtl/alloc.h"
-#include "cpo/uno/Sequence.hxx"
-#include "com/sun/star/lang/EventObject.hpp"
+#include <osl/diagnose.h>
+#include <osl/mutex.hxx>
+#include <rtl/alloc.h>
+#include <cpo/uno/Sequence.hxx>
+#include <com/sun/star/lang/EventObject.hpp>
 
-#include "com/sun/star/lang/DisposedException.hpp"
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <com/sun/star/lang/DisposedException.hpp>
+#include <cppuhelper/cppuhelperdllapi.h>
 
-namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
+namespace cpo::uno { class XInterface; }
 
 namespace cppu
 {
@@ -49,8 +49,8 @@ namespace detail {
     */
     union element_alias
     {
-        std::vector< css::uno::Reference< css::uno::XInterface > > *pAsVector;
-        css::uno::XInterface * pAsInterface;
+        std::vector< cpo::uno::Reference< cpo::uno::XInterface > > *pAsVector;
+        cpo::uno::XInterface * pAsInterface;
         element_alias() : pAsInterface(NULL) {}
     };
 
@@ -95,7 +95,7 @@ public:
         hasMoreElements() has returned false, is an error. Cast the
         returned pointer to the
      */
-    css::uno::XInterface * next();
+    cpo::uno::XInterface * next();
 
     /** Removes the current element (the last one returned by next())
         from the underlying container. Calling this method before
@@ -113,9 +113,9 @@ private:
     sal_Int32                   nRemain;
 
     OInterfaceIteratorHelper( const OInterfaceIteratorHelper & )
-        SAL_DELETED_FUNCTION;
+        = delete;
     OInterfaceIteratorHelper &  operator = ( const OInterfaceIteratorHelper & )
-        SAL_DELETED_FUNCTION;
+        = delete;
 };
 
 
@@ -150,7 +150,7 @@ public:
     /**
       Return all interfaces added to this container.
      **/
-    cpo::uno::Sequence< css::uno::Reference< css::uno::XInterface > > getElements() const;
+    cpo::uno::Sequence< cpo::uno::Reference< cpo::uno::XInterface > > getElements() const;
 
     /** Inserts an element into the container.  The position is not specified, thus it is not
         specified in which order events are fired.
@@ -168,7 +168,7 @@ public:
         @return
                 the new count of elements in the container
     */
-    sal_Int32 addInterface( const css::uno::Reference< css::uno::XInterface > & rxIFace );
+    sal_Int32 addInterface( const cpo::uno::Reference< cpo::uno::XInterface > & rxIFace );
     /** Removes an element from the container.  It uses interface equality to remove the interface.
 
         @param rxIFace
@@ -176,7 +176,7 @@ public:
         @return
                 the new count of elements in the container
     */
-    sal_Int32 removeInterface( const css::uno::Reference< css::uno::XInterface > & rxIFace );
+    sal_Int32 removeInterface( const cpo::uno::Reference< cpo::uno::XInterface > & rxIFace );
     /**
       Call disposing on all object in the container that
       support XEventListener. Then clear the container.
@@ -196,7 +196,7 @@ public:
         @tparam ListenerT listener type
         @tparam FuncT unary functor type, let your compiler deduce this for you
         @param func unary functor object expecting an argument of type
-                    css::uno::Reference<ListenerT>
+                    cpo::uno::Reference<ListenerT>
     */
     template <typename ListenerT, typename FuncT>
     inline void forEach( FuncT const& func );
@@ -239,9 +239,9 @@ friend class OInterfaceIteratorHelper;
     bool                bIsList;
 
     OInterfaceContainerHelper( const OInterfaceContainerHelper & )
-        SAL_DELETED_FUNCTION;
+        = delete;
     OInterfaceContainerHelper & operator = ( const OInterfaceContainerHelper & )
-        SAL_DELETED_FUNCTION;
+        = delete;
 
     /*
       Duplicate content of the container and release the old one without destroying.
@@ -260,7 +260,7 @@ private:
     public:
         NotifySingleListener( NotificationMethod method, const EventT& event ) : m_pMethod( method ), m_rEvent( event ) { }
 
-        void operator()( const css::uno::Reference<ListenerT>& listener ) const
+        void operator()( const cpo::uno::Reference<ListenerT>& listener ) const
         {
             (listener.get()->*m_pMethod)( m_rEvent );
         }
@@ -272,7 +272,7 @@ inline void OInterfaceContainerHelper::forEach( FuncT const& func )
 {
     OInterfaceIteratorHelper iter( *this );
     while (iter.hasMoreElements()) {
-        css::uno::Reference<ListenerT> const xListener( iter.next(), css::uno::UNO_QUERY );
+        cpo::uno::Reference<ListenerT> const xListener( iter.next(), cpo::uno::UNO_QUERY );
         if (xListener.is()) {
             try {
                 func( xListener );
@@ -348,7 +348,7 @@ public:
     */
     inline sal_Int32 addInterface(
         const key & rKey,
-        const css::uno::Reference< css::uno::XInterface > & r );
+        const cpo::uno::Reference< cpo::uno::XInterface > & r );
 
     /** Removes an element from the container with the specified key.
         It uses interface equality to remove the interface.
@@ -362,7 +362,7 @@ public:
     */
     inline sal_Int32 removeInterface(
         const key & rKey,
-        const css::uno::Reference< css::uno::XInterface > & rxIFace );
+        const cpo::uno::Reference< cpo::uno::XInterface > & rxIFace );
 
     /**
       Call disposing on all references in the container, that
@@ -396,8 +396,8 @@ private:
         return iter;
     }
 
-    OMultiTypeInterfaceContainerHelperVar( const OMultiTypeInterfaceContainerHelperVar & ) SAL_DELETED_FUNCTION;
-    OMultiTypeInterfaceContainerHelperVar & operator = ( const OMultiTypeInterfaceContainerHelperVar & ) SAL_DELETED_FUNCTION;
+    OMultiTypeInterfaceContainerHelperVar( const OMultiTypeInterfaceContainerHelperVar & ) = delete;
+    OMultiTypeInterfaceContainerHelperVar & operator = ( const OMultiTypeInterfaceContainerHelperVar & ) = delete;
 };
 
 
@@ -440,7 +440,7 @@ struct SAL_WARN_UNUSED OBroadcastHelperVar
      **/
     void addListener(
         const keyType &key,
-        const css::uno::Reference < css::uno::XInterface > &r )
+        const cpo::uno::Reference < cpo::uno::XInterface > &r )
     {
         ::osl::MutexGuard guard( rMutex );
         OSL_ENSURE( !bInDispose, "do not add listeners in the dispose call" );
@@ -454,7 +454,7 @@ struct SAL_WARN_UNUSED OBroadcastHelperVar
      **/
     void removeListener(
         const keyType &key,
-        const css::uno::Reference < css::uno::XInterface > & r )
+        const cpo::uno::Reference < cpo::uno::XInterface > & r )
     {
         ::osl::MutexGuard guard( rMutex );
         if( ! bInDispose && ! bDisposed  )
@@ -537,7 +537,7 @@ public:
     */
     sal_Int32 addInterface(
         const cpo::uno::Type & rKey,
-        const css::uno::Reference< css::uno::XInterface > & r );
+        const cpo::uno::Reference< cpo::uno::XInterface > & r );
 
     /** Removes an element from the container with the specified key.
         It uses interface equality to remove the interface.
@@ -551,7 +551,7 @@ public:
     */
     sal_Int32 removeInterface(
         const cpo::uno::Type & rKey,
-        const css::uno::Reference< css::uno::XInterface > & rxIFace );
+        const cpo::uno::Reference< cpo::uno::XInterface > & rxIFace );
 
     /**
       Call disposing on all object in the container that
@@ -568,8 +568,8 @@ private:
     void *          m_pMap;
     ::osl::Mutex &  rMutex;
 
-    OMultiTypeInterfaceContainerHelper( const OMultiTypeInterfaceContainerHelper & ) SAL_DELETED_FUNCTION;
-    OMultiTypeInterfaceContainerHelper & operator = ( const OMultiTypeInterfaceContainerHelper & ) SAL_DELETED_FUNCTION;
+    OMultiTypeInterfaceContainerHelper( const OMultiTypeInterfaceContainerHelper & ) = delete;
+    OMultiTypeInterfaceContainerHelper & operator = ( const OMultiTypeInterfaceContainerHelper & ) = delete;
 };
 
 typedef OBroadcastHelperVar< OMultiTypeInterfaceContainerHelper , OMultiTypeInterfaceContainerHelper::keyType > OBroadcastHelper;

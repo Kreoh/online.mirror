@@ -20,17 +20,17 @@
 #ifndef INCLUDED_OSL_FILE_HXX
 #define INCLUDED_OSL_FILE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <string.h>
 
 #include <cstddef>
 
-#include "sal/log.hxx"
-#include "osl/time.h"
-#include "rtl/ustring.hxx"
+#include <sal/log.hxx>
+#include <osl/time.h>
+#include <rtl/ustring.hxx>
 
-#include "osl/file.h"
+#include <osl/file.h>
 
 namespace rtl { class ByteSequence; }
 
@@ -407,12 +407,12 @@ class VolumeInfo
     /** Copy constructor.
     */
 
-    VolumeInfo( VolumeInfo& ) SAL_DELETED_FUNCTION;
+    VolumeInfo( VolumeInfo& ) = delete;
 
     /** Assignment operator.
     */
 
-    VolumeInfo& operator = ( VolumeInfo& ) SAL_DELETED_FUNCTION;
+    VolumeInfo& operator = ( VolumeInfo& ) = delete;
 
 public:
 
@@ -638,12 +638,12 @@ class FileStatus
     /** Copy constructor.
     */
 
-    FileStatus( FileStatus& ) SAL_DELETED_FUNCTION;
+    FileStatus( FileStatus& ) = delete;
 
     /** Assignment operator.
     */
 
-    FileStatus& operator = ( FileStatus& ) SAL_DELETED_FUNCTION;
+    FileStatus& operator = ( FileStatus& ) = delete;
 
 public:
 
@@ -888,12 +888,12 @@ class File: public FileBase
     /** Copy constructor.
     */
 
-    File( File& ) SAL_DELETED_FUNCTION;
+    File( File& ) = delete;
 
     /** Assignment operator.
     */
 
-    File& operator = ( File& ) SAL_DELETED_FUNCTION;
+    File& operator = ( File& ) = delete;
 
 public:
 
@@ -1009,7 +1009,7 @@ public:
         @see getPos()
     */
 
-    SAL_WARN_UNUSED_RESULT RC setPos( sal_uInt32 uHow, sal_Int64 uPos )
+    [[nodiscard]] RC setPos( sal_uInt32 uHow, sal_Int64 uPos )
     {
         return static_cast< RC >( osl_setFilePos( _pData, uHow, uPos ) );
     }
@@ -1628,12 +1628,12 @@ class Directory: public FileBase
     /** Copy constructor.
     */
 
-    Directory( Directory& ) SAL_DELETED_FUNCTION;
+    Directory( Directory& ) = delete;
 
     /**  Assignment operator.
     */
 
-    Directory& operator = ( Directory& ) SAL_DELETED_FUNCTION;
+    Directory& operator = ( Directory& ) = delete;
 
 public:
 

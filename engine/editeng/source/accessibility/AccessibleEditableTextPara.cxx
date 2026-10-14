@@ -29,7 +29,7 @@
 #include <sal/log.hxx>
 #include <editeng/flditem.hxx>
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -72,6 +72,7 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::accessibility;
+using namespace ::cpo;
 
 
 // AccessibleEditableTextPara implementation
@@ -281,7 +282,7 @@ void AccessibleEditableTextPara::SetEditSource( SvxEditSourceAdapter* pEditSourc
     {
         TextChanged();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
     }
 }
@@ -366,7 +367,7 @@ sal_Int32 AccessibleEditableTextPara::GetTextLen() const
 SvxEditSourceAdapter& AccessibleEditableTextPara::GetEditSource() const
 {
     if( !mpEditSource )
-        throw uno::RuntimeException(u"No edit source, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"No edit source, object is defunct"_ustr,
                                      const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
     return *mpEditSource;
 }
@@ -377,11 +378,11 @@ SvxAccessibleTextAdapter& AccessibleEditableTextPara::GetTextForwarder() const
     SvxAccessibleTextAdapter* pTextForwarder = rEditSource.GetTextForwarderAdapter();
 
     if( !pTextForwarder )
-        throw uno::RuntimeException(u"Unable to fetch text forwarder, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"Unable to fetch text forwarder, object is defunct"_ustr,
                                     const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
 
     if( !pTextForwarder->IsValid() )
-        throw uno::RuntimeException(u"Text forwarder is invalid, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"Text forwarder is invalid, object is defunct"_ustr,
                                     const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
     return *pTextForwarder;
 }
@@ -393,12 +394,12 @@ SvxViewForwarder& AccessibleEditableTextPara::GetViewForwarder() const
 
     if( !pViewForwarder )
     {
-        throw uno::RuntimeException(u"Unable to fetch view forwarder, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"Unable to fetch view forwarder, object is defunct"_ustr,
                                     const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
     }
 
     if( !pViewForwarder->IsValid() )
-        throw uno::RuntimeException(u"View forwarder is invalid, object is defunct"_ustr,
+        throw cpo::uno::RuntimeException(u"View forwarder is invalid, object is defunct"_ustr,
                                     const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
     return *pViewForwarder;
 }
@@ -411,10 +412,10 @@ SvxAccessibleTextEditViewAdapter& AccessibleEditableTextPara::GetEditViewForward
     if( !pTextEditViewForwarder )
     {
         if( bCreate )
-            throw uno::RuntimeException(u"Unable to fetch view forwarder, object is defunct"_ustr,
+            throw cpo::uno::RuntimeException(u"Unable to fetch view forwarder, object is defunct"_ustr,
                                         const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
         else
-            throw uno::RuntimeException(u"No view forwarder, object not in edit mode"_ustr,
+            throw cpo::uno::RuntimeException(u"No view forwarder, object not in edit mode"_ustr,
                                         const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
     }
 
@@ -423,10 +424,10 @@ SvxAccessibleTextEditViewAdapter& AccessibleEditableTextPara::GetEditViewForward
     else
     {
         if( bCreate )
-            throw uno::RuntimeException(u"View forwarder is invalid, object is defunct"_ustr,
+            throw cpo::uno::RuntimeException(u"View forwarder is invalid, object is defunct"_ustr,
                                         const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
         else
-            throw uno::RuntimeException(u"View forwarder is invalid, object not in edit mode"_ustr,
+            throw cpo::uno::RuntimeException(u"View forwarder is invalid, object not in edit mode"_ustr,
                                         const_cast< AccessibleEditableTextPara* > (this)->getXWeak() );
     }
 }
@@ -1154,7 +1155,7 @@ bool AccessibleEditableTextPara::setSelection( sal_Int32 nStartIndex, sal_Int32 
         SvxEditViewForwarder& rCacheVF = GetEditViewForwarder( true );
         return rCacheVF.SetSelection( MakeSelection(nStartIndex, nEndIndex) );
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -1829,7 +1830,7 @@ bool AccessibleEditableTextPara::copyText( sal_Int32 nStartIndex, sal_Int32 nEnd
 
         return aRetVal;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -1869,7 +1870,7 @@ bool AccessibleEditableTextPara::cutText( sal_Int32 nStartIndex, sal_Int32 nEndI
 
         return rCacheVF.Cut();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -1901,7 +1902,7 @@ bool AccessibleEditableTextPara::pasteText( sal_Int32 nIndex )
 
         return rCacheVF.Paste();
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -1939,7 +1940,7 @@ bool AccessibleEditableTextPara::deleteText( sal_Int32 nStartIndex, sal_Int32 nE
 
         return bRet;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -1975,7 +1976,7 @@ bool AccessibleEditableTextPara::insertText( const OUString& sText, sal_Int32 nI
 
         return bRet;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -2015,7 +2016,7 @@ bool AccessibleEditableTextPara::replaceText( sal_Int32 nStartIndex, sal_Int32 n
 
         return bRet;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -2070,7 +2071,7 @@ bool AccessibleEditableTextPara::setAttributes( sal_Int32 nStartIndex, sal_Int32
 
         return true;
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         return false;
     }
@@ -2102,8 +2103,8 @@ cpo::uno::Sequence< beans::PropertyValue > AccessibleEditableTextPara::getDefaul
     xPropSet->SetSelection( MakeSelection( 0, GetTextLen() ) );
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
     if (!xPropSetInfo.is())
-        throw uno::RuntimeException(u"Cannot query XPropertySetInfo"_ustr,
-                    uno::Reference< uno::XInterface >
+        throw cpo::uno::RuntimeException(u"Cannot query XPropertySetInfo"_ustr,
+                    uno::Reference< cpo::uno::XInterface >
                     ( static_cast< XAccessible* > (this) ) );   // disambiguate hierarchy
 
     // build sequence of available properties to check
@@ -2188,8 +2189,8 @@ cpo::uno::Sequence< beans::PropertyValue > AccessibleEditableTextPara::getRunAtt
     xPropSet->SetSelection( MakeSelection( nIndex ) );
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
     if (!xPropSetInfo.is())
-        throw uno::RuntimeException(u"Cannot query XPropertySetInfo"_ustr,
-                                    uno::Reference< uno::XInterface >
+        throw cpo::uno::RuntimeException(u"Cannot query XPropertySetInfo"_ustr,
+                                    uno::Reference< cpo::uno::XInterface >
                                     ( static_cast< XAccessible* > (this) ) );   // disambiguate hierarchy
 
     // build sequence of available properties to check
@@ -2258,7 +2259,7 @@ cpo::uno::Sequence< beans::PropertyValue > AccessibleEditableTextPara::getRunAtt
     return nHyperLinks;
 }
 
-css::uno::Reference< css::accessibility::XAccessibleHyperlink > AccessibleEditableTextPara::getHyperLink( ::sal_Int32 nLinkIndex )
+cpo::uno::Reference< css::accessibility::XAccessibleHyperlink > AccessibleEditableTextPara::getHyperLink( ::sal_Int32 nLinkIndex )
 {
     rtl::Reference< AccessibleHyperlink > xRef;
 

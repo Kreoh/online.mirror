@@ -75,7 +75,7 @@ protected:
     sal_Int64               GetChildCount() const;
 
     rtl::Reference<comphelper::OAccessible> GetChild(sal_Int64 i);
-    css::uno::Reference< css::accessibility::XAccessible > GetChildAt( const css::awt::Point& rPoint );
+    cpo::uno::Reference< css::accessibility::XAccessible > GetChildAt( const css::awt::Point& rPoint );
 
     void                    InsertChild( sal_Int32 i );
     void                    RemoveChild( sal_Int32 i );
@@ -99,7 +99,7 @@ protected:
     virtual void            FillAccessibleStateSet( sal_Int64& rStateSet ) = 0;
 
     // XComponent
-    virtual void SAL_CALL   disposing() override;
+    virtual void   disposing() override;
 
 public:
     OAccessibleMenuBaseComponent( Menu* pMenu );
@@ -108,10 +108,10 @@ public:
     void                    SetStates();
 
     // XServiceInfo
-    virtual bool SAL_CALL supportsService( const OUString& rServiceName ) override;
+    virtual bool supportsService( const OUString& rServiceName ) override;
 
     // XAccessibleContext
-    virtual sal_Int64 SAL_CALL getAccessibleStateSet(  ) override;
+    virtual sal_Int64 getAccessibleStateSet(  ) override;
 };
 
 

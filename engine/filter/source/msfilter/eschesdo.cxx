@@ -40,8 +40,8 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::text;
 
@@ -845,7 +845,10 @@ void ImplEESdrWriter::ImplWritePage(
 
 ImplEESdrWriter::~ImplEESdrWriter()
 {
-    DBG_ASSERT( !mpSolverContainer, "ImplEESdrWriter::~ImplEESdrWriter: unwritten SolverContainer" );
+    // A container is made for every page and every single shape written, and holds only the
+    // connections between shapes, so having one left over matters when it collected any.
+    DBG_ASSERT( !mpSolverContainer || !mpSolverContainer->HasConnectors(),
+                "ImplEESdrWriter::~ImplEESdrWriter: unwritten SolverContainer" );
     if (mXDrawPage.is())
         mXDrawPage->dispose();
 }
@@ -1216,7 +1219,7 @@ sal_uInt32 ImplEESdrObject::ImplGetText()
         {
             mnTextSize = xXText->getString().getLength();
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             TOOLS_WARN_EXCEPTION("filter.ms", "ImplGetText");
         }

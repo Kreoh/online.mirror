@@ -36,8 +36,8 @@
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/uno/DeploymentException.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 #include <comphelper/sequence.hxx>
 
@@ -46,7 +46,7 @@
 
 constexpr OUString SMGR_SINGLETON = u"/singletons/com.sun.star.lang.theServiceManager"_ustr;
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star;
 
@@ -424,6 +424,7 @@ void ComponentContext::disposing(std::unique_lock<std::mutex>& rGuard)
     // dispose tdmgr; revokes callback from cppu runtime
     try_dispose( rGuard, xTDMgr );
 
+    // coverity[missing_lock : FALSE] - rGuard holds the mutex
     m_map.clear();
 
     // Hack to terminate any JNI bridge's AsynchronousFinalizer thread (as JNI
@@ -515,7 +516,7 @@ extern "C" { static void s_createComponentContext_v(va_list * pParam)
     sal_Int32                  nEntries     = va_arg(*pParam, sal_Int32);
     XComponentContext        * pDelegatee   = va_arg(*pParam, XComponentContext *);
     void                    ** ppContext    = va_arg(*pParam, void **);
-    uno::Mapping             * pTarget2curr = va_arg(*pParam, uno::Mapping *);
+    cpo::uno::Mapping        * pTarget2curr = va_arg(*pParam, cpo::uno::Mapping *);
 
     Reference<XComponentContext> xDelegate(pDelegatee, SAL_NO_ACQUIRE);
     Reference<XComponentContext> xContext;
@@ -547,11 +548,11 @@ Reference< XComponentContext > createComponentContext(
     ContextEntry_Init const * pEntries, sal_Int32 nEntries,
     Reference< XComponentContext > const & xDelegate )
 {
-    uno::Environment curr_env(Environment::getCurrent());
-    uno::Environment source_env(CPPU_CURRENT_LANGUAGE_BINDING_NAME);
+    cpo::uno::Environment curr_env(Environment::getCurrent());
+    cpo::uno::Environment source_env(u"" CPPU_CURRENT_LANGUAGE_BINDING_NAME ""_ustr);
 
-    uno::Mapping curr2source(curr_env, source_env);
-    uno::Mapping source2curr(source_env, curr_env);
+    cpo::uno::Mapping curr2source(curr_env, source_env);
+    cpo::uno::Mapping source2curr(source_env, curr_env);
 
     std::unique_ptr<ContextEntry_Init[]> mapped_entries(new ContextEntry_Init[nEntries]);
     for (sal_Int32 nPos = 0; nPos < nEntries; ++ nPos)

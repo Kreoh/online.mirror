@@ -31,6 +31,7 @@
 class ScAutoFormat;
 class ScAutoFormatData;
 class ScDocument;
+class ScTableStyle;
 struct ScImportSourceDesc;
 class ScViewData;
 class ScQueryItem;
@@ -76,6 +77,15 @@ public:
     virtual OUString GetCurrFormatName() = 0;
 };
 
+class AbstractScTableStyleDlg : public VclAbstractDialog
+{
+protected:
+    virtual ~AbstractScTableStyleDlg() override = default;
+public:
+    // The style the user created, moved out to the caller; null when cancelled.
+    virtual std::unique_ptr<ScTableStyle> TakeStyle() = 0;
+};
+
 class AbstractScColRowLabelDlg : public VclAbstractDialog
 {
 protected:
@@ -117,6 +127,7 @@ public:
     virtual bool IsNamedRange() const = 0;
     virtual OUString GetSelectedNamedRange() const = 0;
     virtual void AppendNamedRange(const OUString& rName) = 0;
+    virtual void SelectNamedRange(const OUString& rName) = 0;
 };
 
 class AbstractScDataPilotServiceDlg : public VclAbstractDialog
@@ -431,6 +442,8 @@ public:
                                                                 ScAutoFormat* pAutoFormat,
                                                                 const ScAutoFormatData* pSelFormatData,
                                                                 ScViewData& rViewData) = 0;
+    virtual     VclPtr<AbstractScTableStyleDlg> CreateScTableStyleDlg(weld::Window* pParent,
+                                                                ScDocument& rDoc) = 0;
     virtual VclPtr<AbstractScColRowLabelDlg> CreateScColRowLabelDlg (weld::Window* pParent,
                                                                 bool bCol,
                                                                 bool bRow) = 0;

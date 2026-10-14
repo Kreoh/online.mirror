@@ -20,6 +20,7 @@
 #pragma once
 
 #include <address.hxx>
+#include <global.hxx>
 #include <vector>
 
 struct ScImportParam;
@@ -30,6 +31,7 @@ struct ScSubTotalParam;
 class SfxViewFrame;
 class ScDBData;
 class ScDocShell;
+class ScMarkData;
 class ScDPObject;
 class ScDBCollection;
 
@@ -79,6 +81,19 @@ public:
                     bool bApi, const OUString& rStyleName = u""_ustr);
     SC_DLLPUBLIC bool DeleteDBTable(const ScDBData* pDBObj, bool bRecord, bool bApi );
 
+    struct TableRepair
+    {
+        OUString maUpperName;
+        bool mbTotalsGone;
+    };
+    /// The Tables the deletion would leave without any data row.
+    std::vector<TableRepair> GetTablesLosingData(const ScMarkData& rMark, const ScRange& rRange,
+                                                 DelCellCmd eCmd) const;
+
+    /// Put the tables GetTablesLosingData() named back into a shape a table may have.
+    void RepairTablesAfterDelete(const std::vector<TableRepair>& rRepairs, DelCellCmd eCmd,
+                                 bool bRecord, bool bApi);
+
     /** Enforce the "no empty, no duplicate" header invariant of a styled table:
         write generated "Column#" default names into empty header cells, and
         disambiguate any non-empty header that duplicates an earlier one in
@@ -99,10 +114,19 @@ public:
 
     SC_DLLPUBLIC bool AddDBRange( const OUString& rName, const ScRange& rRange );
     bool DeleteDBRange( const OUString& rName );
-    bool RenameDBRange( const OUString& rOld, const OUString& rNew );
+    SC_DLLPUBLIC bool RenameDBRange( const OUString& rOld, const OUString& rNew );
     SC_DLLPUBLIC void ModifyDBData( const ScDBData& rNewData );  // Name unchanged
+    // Resize an existing styled Table to rNewArea: relocates the Total Row when the row
+    // span changes, otherwise a plain ModifyDBData. Returns false when refused (overlap).
+    SC_DLLPUBLIC bool ResizeTable( const ScDBData& rOldData, const ScRange& rNewArea, bool bApi = false );
+
+    // Bake the table style into cell attributes, then drop the database range and its autofilter.
+    // One undo action.
+    SC_DLLPUBLIC bool ConvertTableToRange( const ScDBData* pDBObj, bool bApi = false );
 
     void ModifyAllDBData( const ScDBCollection& rNewColl, const std::vector<ScRange>& rDelAreaList );
+
+    void ShowFilteredRows( const ScDBData& rDBData, bool bRecord, bool bApi );
 
     bool RepeatDB( const OUString& rDBName, bool bApi, bool bIsUnnamed, SCTAB aTab = 0);
 
@@ -118,13 +142,20 @@ public:
      * Reload the referenced pivot cache, and refresh all pivot tables that
      * reference the cache.
      */
-    void RefreshPivotTables(const ScDPObject* pDPObj, bool bApi);
+    SC_DLLPUBLIC void RefreshPivotTables(const ScDPObject* pDPObj, bool bApi);
 
     /**
      * Refresh the group dimensions of all pivot tables referencing the same
      * cache.
      */
     void RefreshPivotTableGroups(ScDPObject* pDPObj);
+
+private:
+    /// Switch the Total Row off, because the row it lived in was deleted.
+    void DropTableTotals(const OUString& rUpperName);
+
+    /// Give back one empty data row, as a table cannot be left with only its header row.
+    void RestoreTableDataRow(const OUString& rUpperName, DelCellCmd eCmd, bool bRecord, bool bApi);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

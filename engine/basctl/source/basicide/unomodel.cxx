@@ -67,6 +67,7 @@ namespace basctl
 {
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SIDEModel::SIDEModel( SfxObjectShell *pObjSh )
     : cppu::ImplInheritanceHelper<SfxBaseModel, css::lang::XServiceInfo>(pObjSh)
@@ -115,7 +116,7 @@ void  SIDEModel::notImplemented()
 }
 
 // XModel
-css::uno::Reference< css::uno::XInterface > SIDEModel::getCurrentSelection()
+cpo::uno::Reference< cpo::uno::XInterface > SIDEModel::getCurrentSelection()
 {
     SolarMutexGuard aGuard;
     Shell* pShell = GetShell();
@@ -127,9 +128,9 @@ css::uno::Reference< css::uno::XInterface > SIDEModel::getCurrentSelection()
 
 } // namespace basctl
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_basic_BasicID_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     SolarMutexGuard aGuard;
     basctl::EnsureIde();

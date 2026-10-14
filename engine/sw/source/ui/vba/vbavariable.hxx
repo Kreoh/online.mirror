@@ -28,21 +28,21 @@ typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XVariable > SwVbaVaria
 class SwVbaVariable : public SwVbaVariable_BASE
 {
 private:
-    css::uno::Reference< css::beans::XPropertyAccess > mxUserDefined;
+    cpo::uno::Reference< css::beans::XPropertyAccess > mxUserDefined;
     OUString maVariableName;
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaVariable( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent, const css::uno::Reference< css::uno::XComponentContext >& rContext,
-        css::uno::Reference< css::beans::XPropertyAccess > xUserDefined, OUString aName );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaVariable( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+        cpo::uno::Reference< css::beans::XPropertyAccess > xUserDefined, OUString aName );
     virtual ~SwVbaVariable() override;
 
    // XVariable
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL setName( const OUString& ) override;
-    virtual cpo::uno::Any SAL_CALL getValue() override;
-    virtual void SAL_CALL setValue( const cpo::uno::Any& rValue ) override;
-    virtual sal_Int32 SAL_CALL getIndex() override;
+    virtual OUString getName() override;
+    virtual void setName( const OUString& ) override;
+    virtual cpo::uno::Any getValue() override;
+    virtual void setValue( const cpo::uno::Any& rValue ) override;
+    virtual sal_Int32 getIndex() override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

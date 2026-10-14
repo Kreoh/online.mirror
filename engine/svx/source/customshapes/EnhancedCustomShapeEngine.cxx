@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
@@ -43,13 +43,12 @@
 #include <svx/xfillit0.hxx>
 #include <svx/xlineit0.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <com/sun/star/document/XActionLockable.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class SdrObject;
 class SdrObjCustomShape;
@@ -65,7 +64,7 @@ EnhancedCustomShapeEngine::EnhancedCustomShapeEngine(const cpo::uno::Sequence< c
         {
             if ( aProp.Name == "CustomShape" )
             {
-                css::uno::Reference<css::drawing::XShape> xShape;
+                cpo::uno::Reference<css::drawing::XShape> xShape;
                 aProp.Value >>= xShape;
                 // the only two subclasses of SdrObject we see here are SdrObjCustomShape and SwDrawVirtObj
                 // and we only return useful data for SdrObjCustomShape
@@ -88,25 +87,25 @@ EnhancedCustomShapeEngine::EnhancedCustomShapeEngine(SdrObjCustomShape& rShape)
 }
 
 // XInterface
-void SAL_CALL EnhancedCustomShapeEngine::acquire() noexcept
+void EnhancedCustomShapeEngine::acquire() noexcept
 {
     OWeakObject::acquire();
 }
-void SAL_CALL EnhancedCustomShapeEngine::release() noexcept
+void EnhancedCustomShapeEngine::release() noexcept
 {
     OWeakObject::release();
 }
 
 // XServiceInfo
-OUString SAL_CALL EnhancedCustomShapeEngine::getImplementationName()
+OUString EnhancedCustomShapeEngine::getImplementationName()
 {
     return u"com.sun.star.drawing.EnhancedCustomShapeEngine"_ustr;
 }
-bool SAL_CALL EnhancedCustomShapeEngine::supportsService( const OUString& rServiceName )
+bool EnhancedCustomShapeEngine::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
-Sequence< OUString > SAL_CALL EnhancedCustomShapeEngine::getSupportedServiceNames()
+Sequence< OUString > EnhancedCustomShapeEngine::getSupportedServiceNames()
 {
     return { u"com.sun.star.drawing.CustomShapeEngine"_ustr };
 }
@@ -217,7 +216,7 @@ rtl::Reference<SdrObject> EnhancedCustomShapeEngine::ImplForceGroupWithText(
     return pRenderedShape;
 }
 
-Reference< drawing::XShape > SAL_CALL EnhancedCustomShapeEngine::render()
+Reference< drawing::XShape > EnhancedCustomShapeEngine::render()
 {
     rtl::Reference<SdrObject> pSdrObj = render2();
     if (!pSdrObj)
@@ -321,10 +320,6 @@ tools::Rectangle EnhancedCustomShapeEngine::getTextBounds() const
     if (!mpCustomShape)
         return tools::Rectangle();
 
-    uno::Reference< document::XActionLockable > xLockable( mpCustomShape->getUnoShape(), uno::UNO_QUERY );
-    if(!xLockable.is() || xLockable->isActionLocked())
-        return tools::Rectangle();
-
     EnhancedCustomShape2d aCustomShape2d(*mpCustomShape);
     return aCustomShape2d.GetTextRect();
 }
@@ -416,9 +411,9 @@ std::vector< Reference< drawing::XCustomShapeHandle > > EnhancedCustomShapeEngin
     return aVec;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_drawing_EnhancedCustomShapeEngine_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const & args)
 {
     return cppu::acquire(new EnhancedCustomShapeEngine(args));

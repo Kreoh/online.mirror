@@ -29,28 +29,28 @@ typedef InheritedHelperInterfaceWeakImpl< ov::msforms::XPictureFormat > ScVbaPic
 class ScVbaPictureFormat : public ScVbaPictureFormat_BASE
 {
 private:
-    css::uno::Reference< css::drawing::XShape > m_xShape;
-    css::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
 protected:
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
 private:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static void checkParameterRangeInDouble( double nRange, double nMin, double nMax );
 public:
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
-    ScVbaPictureFormat( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, css::uno::Reference< css::drawing::XShape > xShape );
+    /// @throws cpo::uno::RuntimeException
+    ScVbaPictureFormat( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, cpo::uno::Reference< css::drawing::XShape > xShape );
 
     // Attributes
-    virtual double SAL_CALL getBrightness() override;
-    virtual void SAL_CALL setBrightness( double _brightness ) override;
-    virtual double SAL_CALL getContrast() override;
-    virtual void SAL_CALL setContrast( double _contrast ) override;
+    virtual double getBrightness() override;
+    virtual void setBrightness( double _brightness ) override;
+    virtual double getContrast() override;
+    virtual void setContrast( double _contrast ) override;
 
     // Methods
-    virtual void SAL_CALL IncrementBrightness( double increment ) override;
-    virtual void SAL_CALL IncrementContrast( double increment ) override;
+    virtual void IncrementBrightness( double increment ) override;
+    virtual void IncrementContrast( double increment ) override;
 };
 
 #endif // INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAPICTUREFORMAT_HXX

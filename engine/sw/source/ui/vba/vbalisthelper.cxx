@@ -29,6 +29,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 const sal_Int32 LIST_LEVEL_COUNT = 9;
 
@@ -44,7 +45,7 @@ constexpr OUString CHAR_SQUARE = u"\u2540"_ustr;
 constexpr OUString CHAR_FOUR_DIAMONDS = u"\u2756"_ustr;
 constexpr OUString CHAR_ARROW = u"\u27A2"_ustr;
 
-SwVbaListHelper::SwVbaListHelper( css::uno::Reference< css::text::XTextDocument > xTextDoc, sal_Int32 nGalleryType, sal_Int32 nTemplateType ) : mxTextDocument(std::move( xTextDoc )), mnGalleryType( nGalleryType ), mnTemplateType( nTemplateType )
+SwVbaListHelper::SwVbaListHelper( cpo::uno::Reference< css::text::XTextDocument > xTextDoc, sal_Int32 nGalleryType, sal_Int32 nTemplateType ) : mxTextDocument(std::move( xTextDoc )), mnGalleryType( nGalleryType ), mnTemplateType( nTemplateType )
 {
     Init();
 }
@@ -71,7 +72,7 @@ void SwVbaListHelper::Init()
         }
         default:
         {
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
     }
     msStyleName += OUString::number( mnTemplateType );
@@ -121,7 +122,7 @@ void SwVbaListHelper::CreateListTemplate()
         }
         default:
         {
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
     }
 }
@@ -176,7 +177,7 @@ void SwVbaListHelper::CreateBulletListTemplate()
         default:
         {
             // we only support 7 types template now
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
     }
     setOrAppendPropertyValue( aPropertyValues, UNO_NAME_BULLET_CHAR, cpo::uno::Any( aBulletChar ) );
@@ -240,7 +241,7 @@ void SwVbaListHelper::CreateNumberListTemplate()
         default:
         {
             // we only support 7 types template now
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
     }
     setOrAppendPropertyValue( aPropertyValues, UNO_NAME_NUMBERING_TYPE, cpo::uno::Any( nNumberingType ) );
@@ -291,7 +292,7 @@ void SwVbaListHelper::CreateOutlineNumberListTemplate()
         default:
         {
             // we only support 7 types template now
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         }
     }
 }

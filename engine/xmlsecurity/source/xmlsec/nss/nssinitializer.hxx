@@ -24,7 +24,7 @@
 
 #include <cppuhelper/implbase.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 inline constexpr OUString NSS_SERVICE_NAME = u"com.sun.star.xml.crypto.NSSInitializer"_ustr;
 
@@ -35,34 +35,34 @@ class ONSSInitializer : public cppu::WeakImplHelper
 >
 {
 protected:
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
     static OUString m_sNSSPath;
     static bool m_bIsNSSinitialized;
 
     ONSSInitializer();
 
 public:
-    explicit ONSSInitializer(css::uno::Reference<css::uno::XComponentContext> xContext);
+    explicit ONSSInitializer(cpo::uno::Reference<cpo::uno::XComponentContext> xContext);
     virtual ~ONSSInitializer() override;
 
-    static bool initNSS( const css::uno::Reference< css::uno::XComponentContext > &rxContext );
-    static const OUString & getMozillaCurrentProfile(const css::uno::Reference< css::uno::XComponentContext > &rxContext, bool bSetActive = false);
+    static bool initNSS( const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext );
+    static const OUString & getMozillaCurrentProfile(const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext, bool bSetActive = false);
 
     /* XNSSInitializer */
-    virtual OUString SAL_CALL getNSSPath() override;
-    virtual bool SAL_CALL getIsNSSinitialized() override;
-    virtual cpo::uno::Sequence<css::xml::crypto::NSSProfile> SAL_CALL getNSSProfiles() override;
+    virtual OUString getNSSPath() override;
+    virtual bool getIsNSSinitialized() override;
+    virtual cpo::uno::Sequence<css::xml::crypto::NSSProfile> getNSSProfiles() override;
 
     /* XDigestContextSupplier */
-    virtual css::uno::Reference< css::xml::crypto::XDigestContext > SAL_CALL getDigestContext( ::sal_Int32 nDigestID, const cpo::uno::Sequence< css::beans::NamedValue >& aParams ) override;
+    virtual cpo::uno::Reference< css::xml::crypto::XDigestContext > getDigestContext( ::sal_Int32 nDigestID, const cpo::uno::Sequence< css::beans::NamedValue >& aParams ) override;
 
     /* XCipherContextSupplier */
-    virtual css::uno::Reference< css::xml::crypto::XCipherContext > SAL_CALL getCipherContext( ::sal_Int32 nCipherID, const cpo::uno::Sequence< ::sal_Int8 >& aKey, const cpo::uno::Sequence< ::sal_Int8 >& aInitializationVector, bool bEncryption, const cpo::uno::Sequence< css::beans::NamedValue >& aParams ) override;
+    virtual cpo::uno::Reference< css::xml::crypto::XCipherContext > getCipherContext( ::sal_Int32 nCipherID, const cpo::uno::Sequence< ::sal_Int8 >& aKey, const cpo::uno::Sequence< ::sal_Int8 >& aInitializationVector, bool bEncryption, const cpo::uno::Sequence< css::beans::NamedValue >& aParams ) override;
 
     /* XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

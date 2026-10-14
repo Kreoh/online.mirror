@@ -48,15 +48,15 @@
 
 namespace basic
 {
-    using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::frame::Desktop;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY;
     using ::com::sun::star::embed::XStorage;
     using ::com::sun::star::script::XStorageBasedLibraryContainer;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::cpo::uno::Exception;
     using ::com::sun::star::document::XStorageBasedDocument;
     using ::com::sun::star::document::XEmbeddedScripts;
@@ -79,6 +79,7 @@ namespace basic
         static ImplRepository& Instance();
 
         BasicManager*   getDocumentBasicManager( const Reference< XModel >& _rxDocumentModel );
+        BasicManager*   getExistingDocumentBasicManager( const Reference< XModel >& _rxDocumentModel ) const;
         BasicManager*   getOrCreateApplicationBasicManager();
         static BasicManager* getApplicationBasicManager();
         static void          setApplicationBasicManager( std::unique_ptr<BasicManager> _pBasicManager );
@@ -234,6 +235,15 @@ namespace basic
         if (impl_createManagerForModel(loc, _rxDocumentModel))
             return loc->second.get();
         return nullptr;
+    }
+
+    BasicManager* ImplRepository::getExistingDocumentBasicManager( const Reference< XModel >& _rxDocumentModel ) const
+    {
+        SolarMutexGuard g;
+
+        Reference< XInterface > xNormalized( _rxDocumentModel, UNO_QUERY );
+        auto const loc = m_aStore.find( xNormalized );
+        return loc != m_aStore.end() ? loc->second.get() : nullptr;
     }
 
     BasicManager* ImplRepository::getOrCreateApplicationBasicManager()
@@ -598,6 +608,11 @@ namespace basic
     BasicManager* BasicManagerRepository::getDocumentBasicManager( const Reference< XModel >& _rxDocumentModel )
     {
         return ImplRepository::Instance().getDocumentBasicManager( _rxDocumentModel );
+    }
+
+    BasicManager* BasicManagerRepository::getExistingDocumentBasicManager( const Reference< XModel >& _rxDocumentModel )
+    {
+        return ImplRepository::Instance().getExistingDocumentBasicManager( _rxDocumentModel );
     }
 
     BasicManager* BasicManagerRepository::getApplicationBasicManager()

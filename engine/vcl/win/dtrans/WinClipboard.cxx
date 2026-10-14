@@ -27,7 +27,7 @@
 #include <com/sun/star/datatransfer/clipboard/ClipboardEvent.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/svapp.hxx>
 #include <svdata.hxx>
@@ -63,7 +63,7 @@ unsigned __stdcall releaseAsyncProc(void* p)
     return 0;
 }
 
-void releaseAsync(css::uno::Reference<css::datatransfer::XTransferable>& ref)
+void releaseAsync(cpo::uno::Reference<css::datatransfer::XTransferable>& ref)
 {
     if (!ref)
         return;
@@ -76,7 +76,7 @@ void releaseAsync(css::uno::Reference<css::datatransfer::XTransferable>& ref)
 }
 
 /*XEventListener,*/
-CWinClipboard::CWinClipboard(const uno::Reference<uno::XComponentContext>& rxContext,
+CWinClipboard::CWinClipboard(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext,
                              const OUString& aClipboardName)
     : m_xContext(rxContext)
     , m_itsName(aClipboardName)
@@ -123,17 +123,17 @@ CXNotifyingDataObject* CWinClipboard::getOwnClipContent() const
 // and so on, we simply return the original XTransferable instead of our
 // DOTransferable
 
-uno::Reference<datatransfer::XTransferable> SAL_CALL CWinClipboard::getContents()
+cpo::uno::Reference<datatransfer::XTransferable> CWinClipboard::getContents()
 {
     std::unique_lock aGuard(m_aMutex);
     return getContents_noLock();
 }
 
-css::uno::Reference<css::datatransfer::XTransferable> CWinClipboard::getContents_noLock()
+cpo::uno::Reference<css::datatransfer::XTransferable> CWinClipboard::getContents_noLock()
 {
     if (m_bDisposed)
         throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
+                                      static_cast<cppu::OWeakObject*>(this));
 
     assert(!getOwnClipContent() || !m_foreignContent); // Both can be null, or only one set
 
@@ -146,7 +146,7 @@ css::uno::Reference<css::datatransfer::XTransferable> CWinClipboard::getContents
     if (m_foreignContent.is())
         return m_foreignContent;
 
-    uno::Reference<datatransfer::XTransferable> rClipContent;
+    cpo::uno::Reference<datatransfer::XTransferable> rClipContent;
 
     // get the current format list from clipboard
     if (UINT nFormats; !GetUpdatedClipboardFormats(nullptr, 0, &nFormats)
@@ -172,7 +172,7 @@ sal::systools::COMReference<IDataObject> CWinClipboard::getIDataObject()
 
         if (m_bDisposed)
             throw lang::DisposedException("object is already disposed",
-                                          static_cast<XClipboardEx*>(this));
+                                          static_cast<cppu::OWeakObject*>(this));
     }
     // get the current dataobject from clipboard
     sal::systools::COMReference<IDataObject> pIDataObject;
@@ -188,15 +188,15 @@ sal::systools::COMReference<IDataObject> CWinClipboard::getIDataObject()
     return pIDataObject;
 }
 
-void SAL_CALL CWinClipboard::setContents(
-    const uno::Reference<datatransfer::XTransferable>& xTransferable,
-    const uno::Reference<datatransfer::clipboard::XClipboardOwner>& xClipboardOwner)
+void CWinClipboard::setContents(
+    const cpo::uno::Reference<datatransfer::XTransferable>& xTransferable,
+    const cpo::uno::Reference<datatransfer::clipboard::XClipboardOwner>& xClipboardOwner)
 {
     std::unique_lock aGuard(m_aMutex);
 
     if (m_bDisposed)
         throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
+                                      static_cast<cppu::OWeakObject*>(this));
 
     sal::systools::COMReference<IDataObject> pIDataObj;
 
@@ -225,25 +225,25 @@ void SAL_CALL CWinClipboard::setContents(
     m_MtaOleClipboard.setClipboard(pIDataObj.get());
 }
 
-OUString SAL_CALL CWinClipboard::getName()
+OUString CWinClipboard::getName()
 {
     std::unique_lock aGuard(m_aMutex);
     if (m_bDisposed)
         throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
+                                      static_cast<cppu::OWeakObject*>(this));
 
     return m_itsName;
 }
 
 // XFlushableClipboard
 
-void SAL_CALL CWinClipboard::flushClipboard()
+void CWinClipboard::flushClipboard()
 {
     std::unique_lock aGuard(m_aMutex);
 
     if (m_bDisposed)
         throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
+                                      static_cast<cppu::OWeakObject*>(this));
 
     // FlushClipboard does a callback and frees DataObject, which calls onReleaseDataObject and
     // locks mutex. FlushClipboard has to be synchron in order to prevent shutdown until all
@@ -259,47 +259,35 @@ void SAL_CALL CWinClipboard::flushClipboard()
     }
 }
 
-// XClipboardEx
-
-sal_Int8 SAL_CALL CWinClipboard::getRenderingCapabilities()
-{
-    if (m_bDisposed)
-        throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
-
-    using namespace datatransfer::clipboard::RenderingCapabilities;
-    return (Delayed | Persistent);
-}
-
 // XClipboardNotifier
 
-void SAL_CALL CWinClipboard::addClipboardListener(
-    const uno::Reference<datatransfer::clipboard::XClipboardListener>& listener)
+void CWinClipboard::addClipboardListener(
+    const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
 {
     std::unique_lock aGuard(m_aMutex);
     if (m_bDisposed)
         throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
+                                      static_cast<cppu::OWeakObject*>(this));
 
     // check input parameter
     if (!listener.is())
-        throw lang::IllegalArgumentException("empty reference", static_cast<XClipboardEx*>(this),
+        throw lang::IllegalArgumentException("empty reference", static_cast<cppu::OWeakObject*>(this),
                                              1);
 
     maClipboardListeners.addInterface(aGuard, listener);
 }
 
-void SAL_CALL CWinClipboard::removeClipboardListener(
-    const uno::Reference<datatransfer::clipboard::XClipboardListener>& listener)
+void CWinClipboard::removeClipboardListener(
+    const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
 {
     std::unique_lock aGuard(m_aMutex);
     if (m_bDisposed)
         throw lang::DisposedException("object is already disposed",
-                                      static_cast<XClipboardEx*>(this));
+                                      static_cast<cppu::OWeakObject*>(this));
 
     // check input parameter
     if (!listener.is())
-        throw lang::IllegalArgumentException("empty reference", static_cast<XClipboardEx*>(this),
+        throw lang::IllegalArgumentException("empty reference", static_cast<cppu::OWeakObject*>(this),
                                              1);
 
     maClipboardListeners.removeInterface(aGuard, listener);
@@ -325,7 +313,7 @@ void CWinClipboard::handleClipboardContentChanged()
 
     try
     {
-        uno::Reference<datatransfer::XTransferable> rXTransf(getContents_noLock());
+        cpo::uno::Reference<datatransfer::XTransferable> rXTransf(getContents_noLock());
         datatransfer::clipboard::ClipboardEvent aClipbEvent(static_cast<XClipboard*>(this),
                                                             rXTransf);
         maClipboardListeners.notifyEach(
@@ -344,22 +332,22 @@ void CWinClipboard::handleClipboardContentChanged()
 
 // XServiceInfo
 
-OUString SAL_CALL CWinClipboard::getImplementationName()
+OUString CWinClipboard::getImplementationName()
 {
     return "com.sun.star.datatransfer.clipboard.ClipboardW32";
 }
 
-bool SAL_CALL CWinClipboard::supportsService(const OUString& ServiceName)
+bool CWinClipboard::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL CWinClipboard::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> CWinClipboard::getSupportedServiceNames()
 {
     return { "com.sun.star.datatransfer.clipboard.SystemClipboard" };
 }
 
-css::uno::Reference<css::datatransfer::clipboard::XClipboard>
+cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>
 WinSalInstance::CreateClipboard(const cpo::uno::Sequence<cpo::uno::Any>& arguments)
 {
     // Tests run in parallel; sharing the real Windows clipboard between them would race. Headless

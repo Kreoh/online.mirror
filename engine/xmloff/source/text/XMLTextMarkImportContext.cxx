@@ -47,8 +47,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
@@ -65,7 +65,7 @@ XMLFieldParamImportContext::XMLFieldParamImportContext(
 }
 
 
-void XMLFieldParamImportContext::startFastElement(sal_Int32 /*nElement*/, const css::uno::Reference< css::xml::sax::XFastAttributeList> & xAttrList)
+void XMLFieldParamImportContext::startFastElement(sal_Int32 /*nElement*/, const cpo::uno::Reference< css::xml::sax::XFastAttributeList> & xAttrList)
 {
     OUString sName;
     OUString sValue;
@@ -93,7 +93,7 @@ void XMLFieldParamImportContext::startFastElement(sal_Int32 /*nElement*/, const 
 XMLTextMarkImportContext::XMLTextMarkImportContext(
     SvXMLImport& rImport,
     XMLTextImportHelper& rHlp,
-    uno::Reference<uno::XInterface> & io_rxCrossRefHeadingBookmark )
+    uno::Reference<cpo::uno::XInterface> & io_rxCrossRefHeadingBookmark )
     : SvXMLImportContext(rImport)
     , m_rHelper(rHlp)
     , m_rxCrossRefHeadingBookmark(io_rxCrossRefHeadingBookmark)
@@ -151,7 +151,7 @@ static OUString lcl_getFieldmarkName(OUString const& name)
 
 
 void XMLTextMarkImportContext::startFastElement( sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     if (!FindName(xAttrList))
     {
@@ -212,7 +212,7 @@ static auto InsertFieldmark(SvXMLImport & rImport,
     assert(xFormField.is());
     try {
         xFormField->setFieldType(fieldmarkTypeName);
-    } catch (uno::RuntimeException const&) {
+    } catch (cpo::uno::RuntimeException const&) {
         // tdf#140437 somehow old documents had the field code in the type
         // attribute instead of field:param
         SAL_INFO("xmloff.text", "invalid fieldmark type, converting to param");
@@ -454,9 +454,9 @@ void XMLTextMarkImportContext::endFastElement(sal_Int32 nElement)
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > XMLTextMarkImportContext::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > XMLTextMarkImportContext::createFastChildContext(
     sal_Int32 ,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >&  )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >&  )
 {
     return new XMLFieldParamImportContext(GetImport(), m_rHelper);
 }

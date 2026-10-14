@@ -73,8 +73,8 @@ namespace {
 // tdf#157943 / tdf#126742: locate the visible top-level frame loaded from
 // sLinkURL, or null. Hidden frames are skipped (caller routes them to the
 // warn path). Comparison mirrors LoadEnv::impl_searchAlreadyLoaded.
-css::uno::Reference< css::frame::XFrame > findLinkSourceFrame(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+cpo::uno::Reference< css::frame::XFrame > findLinkSourceFrame(
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     const OUString& sLinkURL )
 {
     if ( sLinkURL.isEmpty() || INetURLObject( sLinkURL ).IsExoticProtocol() )
@@ -82,8 +82,8 @@ css::uno::Reference< css::frame::XFrame > findLinkSourceFrame(
 
     try
     {
-        css::uno::Reference< css::frame::XDesktop2 > xDesktop = css::frame::Desktop::create( xContext );
-        css::uno::Reference< css::container::XIndexAccess > xFrames = xDesktop->getFrames();
+        cpo::uno::Reference< css::frame::XDesktop > xDesktop = css::frame::Desktop::create( xContext );
+        cpo::uno::Reference< css::container::XIndexAccess > xFrames = xDesktop->getFrames();
         if ( !xFrames.is() )
             return nullptr;
 
@@ -92,16 +92,16 @@ css::uno::Reference< css::frame::XFrame > findLinkSourceFrame(
         {
             try
             {
-                css::uno::Reference< css::frame::XFrame > xFrame;
+                cpo::uno::Reference< css::frame::XFrame > xFrame;
                 xFrames->getByIndex( i ) >>= xFrame;
                 if ( !xFrame.is() )
                     continue;
 
                 OUString sFrameURL;
-                css::uno::Reference< css::frame::XController > xController = xFrame->getController();
+                cpo::uno::Reference< css::frame::XController > xController = xFrame->getController();
                 if ( xController.is() )
                 {
-                    css::uno::Reference< css::frame::XModel > xModel = xController->getModel();
+                    cpo::uno::Reference< css::frame::XModel > xModel = xController->getModel();
                     if ( xModel.is() )
                     {
                         // Skip hidden frames. Calling activate() / toFront()
@@ -125,7 +125,7 @@ css::uno::Reference< css::frame::XFrame > findLinkSourceFrame(
                 else
                 {
                     // load may be in progress - URL lives on the frame itself
-                    css::uno::Reference< css::beans::XPropertySet > xFrameProps( xFrame, css::uno::UNO_QUERY );
+                    cpo::uno::Reference< css::beans::XPropertySet > xFrameProps( xFrame, cpo::uno::UNO_QUERY );
                     if ( xFrameProps.is() )
                         xFrameProps->getPropertyValue( u"URL"_ustr ) >>= sFrameURL;
                 }
@@ -151,7 +151,7 @@ css::uno::Reference< css::frame::XFrame > findLinkSourceFrame(
 // Bring an already-loaded source document's frame to the front. Best-effort:
 // failure here is harmless because the caller refuses the OLE activation
 // regardless, which is the safe outcome.
-void switchToExistingFrame( const css::uno::Reference< css::frame::XFrame >& xFrame )
+void switchToExistingFrame( const cpo::uno::Reference< css::frame::XFrame >& xFrame )
 {
     if ( !xFrame.is() )
         return;
@@ -159,7 +159,7 @@ void switchToExistingFrame( const css::uno::Reference< css::frame::XFrame >& xFr
     try
     {
         xFrame->activate();
-        css::uno::Reference< css::awt::XTopWindow > xTopWindow( xFrame->getContainerWindow(), css::uno::UNO_QUERY );
+        cpo::uno::Reference< css::awt::XTopWindow > xTopWindow( xFrame->getContainerWindow(), cpo::uno::UNO_QUERY );
         if ( xTopWindow.is() )
             xTopWindow->toFront();
     }
@@ -223,7 +223,7 @@ OUString getSourceLockOwner( std::u16string_view sLinkURL )
     return u""_ustr;
 }
 
-void showLinkSourceLockedDialog( const css::uno::Reference< css::awt::XWindow >& xClientWindow,
+void showLinkSourceLockedDialog( const cpo::uno::Reference< css::awt::XWindow >& xClientWindow,
                                  std::u16string_view sLinkURL,
                                  std::u16string_view sOwner )
 {
@@ -246,6 +246,7 @@ void showLinkSourceLockedDialog( const css::uno::Reference< css::awt::XWindow >&
 } // anonymous namespace
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 awt::Rectangle GetRectangleInterception( const awt::Rectangle& aRect1, const awt::Rectangle& aRect2 )
 {
@@ -496,7 +497,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
         else
         {
             SAL_WARN( "embeddedobj.common", "Unacceptable state switch!" );
-            throw uno::RuntimeException(u"invalid next state, only RUNNING state allowed"_ustr); // TODO
+            throw cpo::uno::RuntimeException(u"invalid next state, only RUNNING state allowed"_ustr); // TODO
         }
     }
     else if ( m_nObjectState == embed::EmbedStates::RUNNING )
@@ -531,7 +532,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
             else
             {
                 SAL_WARN( "embeddedobj.common", "Unacceptable state switch!" );
-                throw uno::RuntimeException(u"invalid next state,only LOADED/INPLACE_ACTIVE/ACTIVE allowed"_ustr); // TODO
+                throw cpo::uno::RuntimeException(u"invalid next state,only LOADED/INPLACE_ACTIVE/ACTIVE allowed"_ustr); // TODO
             }
         }
     }
@@ -565,7 +566,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                 try
                 {
                     uno::Reference< embed::XComponentSupplier > xCompSupl( m_xClientSite, uno::UNO_QUERY_THROW );
-                    uno::Reference< uno::XInterface > xContDoc( xCompSupl->getComponent(), uno::UNO_QUERY_THROW );
+                    uno::Reference< cpo::uno::XInterface > xContDoc( xCompSupl->getComponent(), uno::UNO_QUERY_THROW );
 
                     uno::Reference< frame::XModuleManager2 > xManager( frame::ModuleManager::create( m_xContext ) );
 
@@ -599,7 +600,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
         else
         {
             SAL_WARN( "embeddedobj.common", "Unacceptable state switch!" );
-            throw uno::RuntimeException(u"invalid next state,only RUNNING/UI_ACTIVE allowed"_ustr); // TODO
+            throw cpo::uno::RuntimeException(u"invalid next state,only RUNNING/UI_ACTIVE allowed"_ustr); // TODO
         }
     }
     else if ( m_nObjectState == embed::EmbedStates::ACTIVE )
@@ -612,7 +613,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
         else
         {
             SAL_WARN( "embeddedobj.common", "Unacceptable state switch!" );
-            throw uno::RuntimeException(u"invalid next state, only RUNNING state allowed"_ustr); // TODO
+            throw cpo::uno::RuntimeException(u"invalid next state, only RUNNING state allowed"_ustr); // TODO
         }
     }
     else if ( m_nObjectState == embed::EmbedStates::UI_ACTIVE )
@@ -693,7 +694,7 @@ void OCommonEmbeddedObject::changeState( sal_Int32 nNewState )
     {
         // means that the object is currently trying to reach the target state
         throw embed::StateChangeInProgressException( OUString(),
-                                                    uno::Reference< uno::XInterface >(),
+                                                    uno::Reference< cpo::uno::XInterface >(),
                                                     m_nTargetState );
     }
     else
@@ -952,12 +953,12 @@ void OCommonEmbeddedObject::SetOleState(bool bIsOleUpdate)
     m_bOleUpdate = bIsOleUpdate;
 }
 
-css::uno::Reference< css::uno::XInterface > OCommonEmbeddedObject::getParent()
+cpo::uno::Reference< cpo::uno::XInterface > OCommonEmbeddedObject::getParent()
 {
     return m_xParent;
 }
 
-void OCommonEmbeddedObject::setParent( const css::uno::Reference< css::uno::XInterface >& xParent )
+void OCommonEmbeddedObject::setParent( const cpo::uno::Reference< cpo::uno::XInterface >& xParent )
 {
     m_xParent = xParent;
     if ( m_nObjectState != -1 && m_nObjectState != embed::EmbedStates::LOADED )

@@ -28,7 +28,7 @@
 #include <vcl/svapp.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo::uno;
 
 PDFInteractionHandler::PDFInteractionHandler()
 {
@@ -87,9 +87,9 @@ cpo::uno::Sequence< OUString > PDFInteractionHandler::getSupportedServiceNames( 
     return { u"com.sun.star.filter.pdfexport.PDFExportInteractionHandler"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_PDFExportInteractionHandler_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new PDFInteractionHandler());
 }

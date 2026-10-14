@@ -37,7 +37,7 @@
 #include <strings.hrc>
 #include <classes/fwkresid.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
@@ -83,7 +83,7 @@ static OUString getMasterCommand( const OUString& rCommand )
     return aMasterCommand;
 }
 
-GenericToolbarController::GenericToolbarController( const Reference< XComponentContext >&    rxContext,
+GenericToolbarController::GenericToolbarController( const Reference< cpo::uno::XComponentContext >&    rxContext,
                                                     const Reference< XFrame >&               rFrame,
                                                     ToolBox*                                 pToolbar,
                                                     ToolBoxItemId                            nID,
@@ -105,7 +105,7 @@ GenericToolbarController::GenericToolbarController( const Reference< XComponentC
     m_bInitialized = true;
 }
 
-GenericToolbarController::GenericToolbarController( const Reference< XComponentContext >&    rxContext,
+GenericToolbarController::GenericToolbarController( const Reference< cpo::uno::XComponentContext >&    rxContext,
                                                     const Reference< XFrame >&               rFrame,
                                                     weld::Toolbar&                           rToolbar,
                                                     const OUString&                          aCommand ) :
@@ -340,7 +340,7 @@ IMPL_STATIC_LINK( GenericToolbarController, ExecuteHdl_Impl, void*, p, void )
    delete pExecuteInfo;
 }
 
-ImageOrientationController::ImageOrientationController(const Reference<XComponentContext>& rContext,
+ImageOrientationController::ImageOrientationController(const Reference<cpo::uno::XComponentContext>& rContext,
                                                        const Reference<XFrame>& rFrame,
                                                        const Reference<css::awt::XWindow>& rParentWindow,
                                                        const OUString& rModuleName)

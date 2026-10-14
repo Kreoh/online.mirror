@@ -25,7 +25,7 @@
 
 #include <com/sun/star/container/NoSuchElementException.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ucb/AlreadyInitializedException.hpp>
 #include <com/sun/star/ui/dialogs/XWizard.hpp>
 #include <com/sun/star/ui/dialogs/XWizardController.hpp>
@@ -35,7 +35,6 @@
 #include <comphelper/proparrhlp.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <svtools/genericunodialog.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
@@ -46,14 +45,14 @@ using namespace ::svt::uno;
 
 namespace {
 
-    using css::uno::Reference;
-    using css::uno::XInterface;
-    using css::uno::UNO_QUERY;
+    using cpo::uno::Reference;
+    using cpo::uno::XInterface;
+    using cpo::uno::UNO_QUERY;
     using cpo::uno::Any;
     using cpo::uno::Sequence;
     using css::ui::dialogs::XWizard;
     using css::beans::XPropertySetInfo;
-    using css::uno::XComponentContext;
+    using cpo::uno::XComponentContext;
     using css::beans::Property;
     using css::lang::IllegalArgumentException;
     using css::ucb::AlreadyInitializedException;
@@ -89,50 +88,50 @@ namespace {
                     , public Wizard_PBase
     {
     public:
-        explicit Wizard( const css::uno::Reference< css::uno::XComponentContext >& i_rContext );
+        explicit Wizard( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_rContext );
 
         // lang::XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual OUString getImplementationName() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
         // beans::XPropertySet
-        virtual css::uno::Reference< beans::XPropertySetInfo >  SAL_CALL getPropertySetInfo() override;
-        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+        virtual cpo::uno::Reference< beans::XPropertySetInfo >  getPropertySetInfo() override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
 
         // OPropertyArrayUsageHelper
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
 
         // ui::dialogs::XWizard
-        virtual OUString SAL_CALL getHelpURL() override;
-        virtual void SAL_CALL setHelpURL( const OUString& _helpurl ) override;
-        virtual css::uno::Reference< awt::XWindow > SAL_CALL getDialogWindow() override;
-        virtual css::uno::Reference< ui::dialogs::XWizardPage > SAL_CALL getCurrentPage(  ) override;
-        virtual void SAL_CALL enableButton( ::sal_Int16 WizardButton, bool Enable ) override;
-        virtual void SAL_CALL setDefaultButton( ::sal_Int16 WizardButton ) override;
-        virtual bool SAL_CALL travelNext(  ) override;
-        virtual bool SAL_CALL travelPrevious(  ) override;
-        virtual void SAL_CALL enablePage( ::sal_Int16 PageID, bool Enable ) override;
-        virtual void SAL_CALL updateTravelUI(  ) override;
-        virtual bool SAL_CALL advanceTo( ::sal_Int16 PageId ) override;
-        virtual bool SAL_CALL goBackTo( ::sal_Int16 PageId ) override;
-        virtual void SAL_CALL activatePath( ::sal_Int16 PathIndex, bool Final ) override;
+        virtual OUString getHelpURL() override;
+        virtual void setHelpURL( const OUString& _helpurl ) override;
+        virtual cpo::uno::Reference< awt::XWindow > getDialogWindow() override;
+        virtual cpo::uno::Reference< ui::dialogs::XWizardPage > getCurrentPage(  ) override;
+        virtual void enableButton( ::sal_Int16 WizardButton, bool Enable ) override;
+        virtual void setDefaultButton( ::sal_Int16 WizardButton ) override;
+        virtual bool travelNext(  ) override;
+        virtual bool travelPrevious(  ) override;
+        virtual void enablePage( ::sal_Int16 PageID, bool Enable ) override;
+        virtual void updateTravelUI(  ) override;
+        virtual bool advanceTo( ::sal_Int16 PageId ) override;
+        virtual bool goBackTo( ::sal_Int16 PageId ) override;
+        virtual void activatePath( ::sal_Int16 PathIndex, bool Final ) override;
 
         // ui::dialogs::XExecutableDialog
-        virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
-        virtual ::sal_Int16 SAL_CALL execute(  ) override;
+        virtual void setTitle( const OUString& aTitle ) override;
+        virtual ::sal_Int16 execute(  ) override;
 
         // lang::XInitialization
-        virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
    protected:
         virtual ~Wizard() override;
 
     protected:
-        virtual std::unique_ptr<weld::DialogController> createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+        virtual std::unique_ptr<weld::DialogController> createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
 
     private:
         cpo::uno::Sequence< cpo::uno::Sequence< sal_Int16 > >         m_aWizardSteps;
-        css::uno::Reference< ui::dialogs::XWizardController >    m_xController;
+        cpo::uno::Reference< ui::dialogs::XWizardController >    m_xController;
         OUString                                            m_sHelpURL;
     };
 
@@ -202,7 +201,7 @@ namespace {
                 i_rContext, 2 );
     }
 
-    void SAL_CALL Wizard::initialize( const Sequence< Any >& i_Arguments )
+    void Wizard::initialize( const Sequence< Any >& i_Arguments )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( m_bInitialized )
@@ -242,7 +241,7 @@ namespace {
             return _rHelpURL;
     }
 
-    std::unique_ptr<weld::DialogController> Wizard::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+    std::unique_ptr<weld::DialogController> Wizard::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
     {
         auto xDialog = std::make_unique<WizardShell>(Application::GetFrameWeld(rParent), m_xController, m_aWizardSteps);
         xDialog->set_help_id(lcl_getHelpId(m_sHelpURL));
@@ -250,22 +249,22 @@ namespace {
         return xDialog;
     }
 
-    OUString SAL_CALL Wizard::getImplementationName()
+    OUString Wizard::getImplementationName()
     {
         return u"com.sun.star.comp.svtools.uno.Wizard"_ustr;
     }
 
-    Sequence< OUString > SAL_CALL Wizard::getSupportedServiceNames()
+    Sequence< OUString > Wizard::getSupportedServiceNames()
     {
         return { u"com.sun.star.ui.dialogs.Wizard"_ustr };
     }
 
-    Reference< XPropertySetInfo > SAL_CALL Wizard::getPropertySetInfo()
+    Reference< XPropertySetInfo > Wizard::getPropertySetInfo()
     {
         return createPropertySetInfo( getInfoHelper() );
     }
 
-    ::cppu::IPropertyArrayHelper& SAL_CALL Wizard::getInfoHelper()
+    ::cppu::IPropertyArrayHelper& Wizard::getInfoHelper()
     {
         return *getArrayHelper();
     }
@@ -277,7 +276,7 @@ namespace {
         return new ::cppu::OPropertyArrayHelper( aProps );
     }
 
-    OUString SAL_CALL Wizard::getHelpURL()
+    OUString Wizard::getHelpURL()
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -288,7 +287,7 @@ namespace {
         return lcl_getHelpURL(m_xDialog->get_help_id());
     }
 
-    void SAL_CALL Wizard::setHelpURL( const OUString& i_HelpURL )
+    void Wizard::setHelpURL( const OUString& i_HelpURL )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -299,7 +298,7 @@ namespace {
             m_xDialog->set_help_id(lcl_getHelpId(i_HelpURL));
     }
 
-    Reference< XWindow > SAL_CALL Wizard::getDialogWindow()
+    Reference< XWindow > Wizard::getDialogWindow()
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -308,7 +307,7 @@ namespace {
         return m_xDialog->getDialog()->GetXWindow();
     }
 
-    void SAL_CALL Wizard::enableButton( ::sal_Int16 i_WizardButton, bool i_Enable )
+    void Wizard::enableButton( ::sal_Int16 i_WizardButton, bool i_Enable )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -319,7 +318,7 @@ namespace {
         pWizardImpl->enableButtons( lcl_convertWizardButtonToWZB( i_WizardButton ), i_Enable );
     }
 
-    void SAL_CALL Wizard::setDefaultButton( ::sal_Int16 i_WizardButton )
+    void Wizard::setDefaultButton( ::sal_Int16 i_WizardButton )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -330,7 +329,7 @@ namespace {
         pWizardImpl->defaultButton( lcl_convertWizardButtonToWZB( i_WizardButton ) );
     }
 
-    bool SAL_CALL Wizard::travelNext(  )
+    bool Wizard::travelNext(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -341,7 +340,7 @@ namespace {
         return pWizardImpl->travelNext();
     }
 
-    bool SAL_CALL Wizard::travelPrevious(  )
+    bool Wizard::travelPrevious(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -352,7 +351,7 @@ namespace {
         return pWizardImpl->travelPrevious();
     }
 
-    void SAL_CALL Wizard::enablePage( ::sal_Int16 i_PageID, bool i_Enable )
+    void Wizard::enablePage( ::sal_Int16 i_PageID, bool i_Enable )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -369,7 +368,7 @@ namespace {
         pWizardImpl->enablePage( i_PageID, i_Enable );
     }
 
-    void SAL_CALL Wizard::updateTravelUI(  )
+    void Wizard::updateTravelUI(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -380,7 +379,7 @@ namespace {
         pWizardImpl->updateTravelUI();
     }
 
-    bool SAL_CALL Wizard::advanceTo( ::sal_Int16 i_PageId )
+    bool Wizard::advanceTo( ::sal_Int16 i_PageId )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -391,7 +390,7 @@ namespace {
         return pWizardImpl->advanceTo( i_PageId );
     }
 
-    bool SAL_CALL Wizard::goBackTo( ::sal_Int16 i_PageId )
+    bool Wizard::goBackTo( ::sal_Int16 i_PageId )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -402,7 +401,7 @@ namespace {
         return pWizardImpl->goBackTo( i_PageId );
     }
 
-    Reference< XWizardPage > SAL_CALL Wizard::getCurrentPage(  )
+    Reference< XWizardPage > Wizard::getCurrentPage(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -413,7 +412,7 @@ namespace {
         return pWizardImpl->getCurrentWizardPage();
     }
 
-    void SAL_CALL Wizard::activatePath( ::sal_Int16 i_PathIndex, bool i_Final )
+    void Wizard::activatePath( ::sal_Int16 i_PathIndex, bool i_Final )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -427,21 +426,21 @@ namespace {
         pWizardImpl->activatePath( i_PathIndex, i_Final );
     }
 
-    void SAL_CALL Wizard::setTitle( const OUString& i_Title )
+    void Wizard::setTitle( const OUString& i_Title )
     {
         // simply disambiguate
         Wizard_Base::OGenericUnoDialog::setTitle( i_Title );
     }
 
-    ::sal_Int16 SAL_CALL Wizard::execute(  )
+    ::sal_Int16 Wizard::execute(  )
     {
         return Wizard_Base::OGenericUnoDialog::execute();
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_svtools_uno_Wizard_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new Wizard(context));

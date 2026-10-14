@@ -127,10 +127,23 @@ interface XTest {
         [out] string value12, [out] type value13, [out] any value14,
         [out] sequence<string> value15, [out] Enum value16, [out] Struct value17,
         [out] XTest value18);
+    [overload getOverloaded] string getOverloadedNoArgs();
+    [overload getOverloaded] long getOverloadedOneArg([in] long value);
+    [overload getOverloaded] string getOverloadedString([in] string value);
+    [overload getOverloaded] long getOverloadedBytes([in] sequence<byte> value);
+    [overload getOverloaded] string getOverloadedAny([in] any value);
+    [overload getOverloadedTwoArgs] string getOverloadedAnyString(
+        [in] any value1, [in] string value2);
+    [overload getOverloadedTwoArgs] string getOverloadedStringAny(
+        [in] string value1, [in] any value2);
+    com::sun::star::beans::Optional<string> getOptionalString([in] boolean present);
+    string unwrapOptionalString([in] com::sun::star::beans::Optional<string> value);
+    string unwrapOptionalStructString(
+        [in] com::sun::star::beans::Optional<StructString> value);
     void throwRuntimeException();
     void passJob([in] com::sun::star::task::XJob object);
     void passJobExecutor([in] com::sun::star::task::XJobExecutor object, [in] boolean newThread);
-    void passInterface([in] com::sun::star::uno::XInterface object);
+    void passInterface([in] cpo::uno::XInterface object);
     boolean checkAttributes([in] com::sun::star::testuno::XAttributes object);
     [attribute] string StringAttribute;
     boolean testSolarMutex();

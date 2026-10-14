@@ -25,7 +25,6 @@ $(eval $(call gb_UIConfig_add_popupmenufiles,modules/swriter,\
 	sw/uiconfig/swriter/popupmenu/graphic \
 	sw/uiconfig/swriter/popupmenu/insertfield \
 	sw/uiconfig/swriter/popupmenu/media \
-	sw/uiconfig/swriter/popupmenu/notebookbar \
 	sw/uiconfig/swriter/popupmenu/oleobject \
 	sw/uiconfig/swriter/popupmenu/preview \
 	sw/uiconfig/swriter/popupmenu/table \
@@ -71,7 +70,6 @@ $(eval $(call gb_UIConfig_add_toolbarfiles,modules/swriter,\
 	sw/uiconfig/swriter/toolbar/mailmerge \
 	sw/uiconfig/swriter/toolbar/mediaobjectbar \
 	sw/uiconfig/swriter/toolbar/navigationobjectbar \
-	sw/uiconfig/swriter/toolbar/notebookbarshortcuts \
 	sw/uiconfig/swriter/toolbar/numobjectbar \
 	sw/uiconfig/swriter/toolbar/oleobjectbar \
 	sw/uiconfig/swriter/toolbar/optimizetablebar \
@@ -211,15 +209,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/swriter,\
 	sw/uiconfig/swriter/ui/numberingnamedialog \
 	sw/uiconfig/swriter/ui/numberinput \
 	sw/uiconfig/swriter/ui/objectdialog \
-	sw/uiconfig/swriter/ui/optcomparison \
-	sw/uiconfig/swriter/ui/optcompatpage \
 	sw/uiconfig/swriter/ui/optcaptionpage \
-	sw/uiconfig/swriter/ui/optfonttabpage \
-	sw/uiconfig/swriter/ui/optformataidspage \
-	sw/uiconfig/swriter/ui/optgeneralpage \
-	sw/uiconfig/swriter/ui/optredlinepage \
-	sw/uiconfig/swriter/ui/opttablepage \
-	sw/uiconfig/swriter/ui/opttestpage \
 	sw/uiconfig/swriter/ui/outlinebutton \
 	sw/uiconfig/swriter/ui/outlinenumbering \
 	sw/uiconfig/swriter/ui/outlinenumberingpage \
@@ -227,7 +217,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/swriter,\
 	sw/uiconfig/swriter/ui/pbmenubutton \
 	sw/uiconfig/swriter/ui/querycontinuebegindialog \
 	sw/uiconfig/swriter/ui/querycontinueenddialog \
-	sw/uiconfig/swriter/ui/querydefaultcompatdialog \
 	sw/uiconfig/swriter/ui/querysavelabeldialog \
 	sw/uiconfig/swriter/ui/mailmerge \
 	sw/uiconfig/swriter/ui/managechangessidebar \
@@ -246,12 +235,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/swriter,\
 	sw/uiconfig/swriter/ui/navigatorcontextmenu \
 	sw/uiconfig/swriter/ui/navigatordraginsertmenu \
 	sw/uiconfig/swriter/ui/navigatorpanel \
-	sw/uiconfig/swriter/ui/notebookbar \
-	sw/uiconfig/swriter/ui/notebookbar_compact \
-	sw/uiconfig/swriter/ui/notebookbar_single \
-	sw/uiconfig/swriter/ui/notebookbar_groups \
-	sw/uiconfig/swriter/ui/notebookbar_groupedbar_full \
-	sw/uiconfig/swriter/ui/notebookbar_groupedbar_compact \
 	sw/uiconfig/swriter/ui/notebookbar_online \
 	sw/uiconfig/swriter/ui/pagecolumncontrol \
 	sw/uiconfig/swriter/ui/pagemargincontrol \
@@ -281,7 +264,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/swriter,\
 	sw/uiconfig/swriter/ui/selectaddressdialog \
 	sw/uiconfig/swriter/ui/selectautotextdialog \
 	sw/uiconfig/swriter/ui/selectblockdialog \
-	sw/uiconfig/swriter/ui/seclabeldialog \
 	sw/uiconfig/swriter/ui/selectindexdialog \
 	sw/uiconfig/swriter/ui/selecttabledialog \
 	sw/uiconfig/swriter/ui/pageformatpanel \
@@ -326,7 +308,6 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/swriter,\
 	sw/uiconfig/swriter/ui/toxentrywidget \
 	sw/uiconfig/swriter/ui/toxbuttonwidget \
 	sw/uiconfig/swriter/ui/unfloatbutton \
-	sw/uiconfig/swriter/ui/viewoptionspage \
 	sw/uiconfig/swriter/ui/warndatasourcedialog \
 	sw/uiconfig/swriter/ui/warnemaildialog \
 	sw/uiconfig/swriter/ui/warnhiddensectiondialog \

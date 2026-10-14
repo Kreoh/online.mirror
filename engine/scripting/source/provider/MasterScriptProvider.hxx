@@ -25,7 +25,6 @@
 
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/document/XScriptInvocationContext.hpp>
 
 #include <com/sun/star/lang/XInitialization.hpp>
@@ -43,46 +42,31 @@ namespace func_provider
  typedef ::cppu::WeakImplHelper<
      css::script::provider::XScriptProvider,
      css::script::browse::XBrowseNode, css::lang::XServiceInfo,
-     css::lang::XInitialization,
-     css::container::XNameContainer > t_helper;
+     css::lang::XInitialization > t_helper;
 
 class MasterScriptProvider :
             public t_helper
 {
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit MasterScriptProvider(
-        const css::uno::Reference< css::uno::XComponentContext >
+        const cpo::uno::Reference< cpo::uno::XComponentContext >
         & xContext );
     virtual ~MasterScriptProvider() override;
 
     // XServiceInfo implementation
-    virtual OUString SAL_CALL getImplementationName( ) override;
+    virtual OUString getImplementationName( ) override;
 
     // XBrowseNode implementation
-    virtual OUString SAL_CALL getName() override;
-    virtual cpo::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes() override;
-    virtual bool SAL_CALL hasChildNodes() override;
-    virtual sal_Int16 SAL_CALL getType() override;
-    // XNameContainer
-    virtual void SAL_CALL insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
-    virtual void SAL_CALL removeByName( const OUString& Name ) override;
-
-    // XNameReplace
-    virtual void SAL_CALL replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
-    // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
-
-    // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType(  ) override;
-    virtual bool SAL_CALL hasElements(  ) override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames( ) override;
+    virtual OUString getName() override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::script::browse::XBrowseNode > > getChildNodes() override;
+    virtual bool hasChildNodes() override;
+    virtual sal_Int16 getType() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames( ) override;
 
     // XScriptProvider implementation
-    virtual css::uno::Reference < css::script::provider::XScript > SAL_CALL
+    virtual cpo::uno::Reference < css::script::provider::XScript >
         getScript( const OUString& scriptURI ) override;
 
     /**
@@ -91,21 +75,20 @@ public:
      * @param args expected to contain a single OUString
      * containing the URI
      */
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence < cpo::uno::Any > & args ) override;
+    virtual void initialize( const cpo::uno::Sequence < cpo::uno::Any > & args ) override;
 
     // returns context string for this provider, eg
     const OUString& getContextString() const { return m_sCtxString; }
 
 private:
     static OUString parseLocationName( const OUString& location );
-    void  createPkgProvider();
 
     ProviderCache* providerCache();
     /* to obtain other services if needed */
-    css::uno::Reference< css::uno::XComponentContext >              m_xContext;
-    css::uno::Reference< css::lang::XMultiComponentFactory >        m_xMgr;
-    css::uno::Reference< css::frame::XModel >                       m_xModel;
-    css::uno::Reference< css::document::XScriptInvocationContext >  m_xInvocationContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >              m_xContext;
+    cpo::uno::Reference< css::lang::XMultiComponentFactory >        m_xMgr;
+    cpo::uno::Reference< css::frame::XModel >                       m_xModel;
+    cpo::uno::Reference< css::document::XScriptInvocationContext >  m_xInvocationContext;
     cpo::uno::Sequence< cpo::uno::Any >                             m_sAargs;
     OUString                                                 m_sNodeName;
 
@@ -119,8 +102,6 @@ private:
     bool m_bIsValid;
     // m_bInitialised ensure initialisation only takes place once.
     bool m_bInitialised;
-    bool m_bIsPkgMSP;
-    css::uno::Reference< css::script::provider::XScriptProvider > m_xMSPPkg;
     std::unique_ptr<ProviderCache> m_pPCache;
     std::mutex m_mutex;
     OUString m_sCtxString;

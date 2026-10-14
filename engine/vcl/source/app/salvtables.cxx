@@ -25,7 +25,6 @@
 #include <com/sun/star/accessibility/AccessibleRelationType.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
-#include <colorpicker.hxx>
 #include <o3tl/safeint.hxx>
 #include <o3tl/sorted_vector.hxx>
 #include <o3tl/string_view.hxx>
@@ -660,12 +659,12 @@ void SalInstanceWidget::call_attention_to()
     m_xFlashAttention->Start();
 }
 
-css::uno::Reference<css::datatransfer::dnd::XDropTarget> SalInstanceWidget::get_drop_target()
+cpo::uno::Reference<css::datatransfer::dnd::XDropTarget> SalInstanceWidget::get_drop_target()
 {
     return m_xWidget->GetDropTarget();
 }
 
-css::uno::Reference<css::datatransfer::clipboard::XClipboard>
+cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>
 SalInstanceWidget::get_clipboard() const
 {
     return m_xWidget->GetClipboard();
@@ -841,7 +840,7 @@ Image createImage(const VirtualDevice& rDevice)
 sal_uInt16 insert_to_menu(sal_uInt16 nLastId, PopupMenu* pMenu, int pos, const OUString& rId,
                           const OUString& rStr, const OUString* pIconName,
                           const VirtualDevice* pImageSurface,
-                          const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                          const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                           TriState eCheckRadioFalse)
 {
     const sal_uInt16 nNewid = nLastId + 1;
@@ -926,7 +925,7 @@ void SalInstanceMenu::set_visible(const OUString& rIdent, bool bShow)
 void SalInstanceMenu::clear() { m_xMenu->Clear(); }
 void SalInstanceMenu::insert(int pos, const OUString& rId, const OUString& rStr,
                              const OUString* pIconName, VirtualDevice* pImageSurface,
-                             const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                             const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                              TriState eCheckRadioFalse)
 {
     m_nLastId = insert_to_menu(m_nLastId, m_xMenu, pos, rId, rStr, pIconName, pImageSurface, rImage,
@@ -1166,7 +1165,7 @@ void SalInstanceToolbar::set_item_image_mirrored(const OUString& rIdent, bool bM
 }
 
 void SalInstanceToolbar::set_item_image(const OUString& rIdent,
-                                        const css::uno::Reference<css::graphic::XGraphic>& rIcon)
+                                        const cpo::uno::Reference<css::graphic::XGraphic>& rIcon)
 {
     m_xToolBox->SetItemImage(m_xToolBox->GetItemId(rIdent), Image(rIcon));
 }
@@ -1180,7 +1179,7 @@ void SalInstanceToolbar::set_item_image(const OUString& rIdent, VirtualDevice* p
 }
 
 void SalInstanceToolbar::set_item_image(int nIndex,
-                                        const css::uno::Reference<css::graphic::XGraphic>& rIcon)
+                                        const cpo::uno::Reference<css::graphic::XGraphic>& rIcon)
 {
     m_xToolBox->SetItemImage(m_xToolBox->GetItemId(nIndex), Image(rIcon));
 }
@@ -1353,13 +1352,13 @@ void SalInstanceContainer::child_grab_focus()
         pFirstChild->ImplControlFocus();
 }
 
-css::uno::Reference<css::awt::XWindow> SalInstanceContainer::CreateChildFrame()
+cpo::uno::Reference<css::awt::XWindow> SalInstanceContainer::CreateChildFrame()
 {
     auto xPage = VclPtr<VclBin>::Create(m_xContainer.get());
     xPage->set_expand(true);
     xPage->Show();
-    return css::uno::Reference<css::awt::XWindow>(xPage->GetComponentInterface(),
-                                                  css::uno::UNO_QUERY);
+    return cpo::uno::Reference<css::awt::XWindow>(xPage->GetComponentInterface(),
+                                                  cpo::uno::UNO_QUERY);
 }
 
 std::unique_ptr<weld::Container> SalInstanceWidget::weld_parent() const
@@ -1544,6 +1543,8 @@ SalInstanceCustomWidget::SalInstanceCustomWidget(VclCustomWidget* pWidget,
 
 void SalInstanceCustomWidget::send_update() { m_xCustomWidget->Invalidate(); }
 
+void SalInstanceCustomWidget::send_update_action() {}
+
 void SalInstanceCustomWidget::set_custom_client_controller(weld::CustomClientWidgetController* p)
 {
     m_pController = p;
@@ -1617,10 +1618,10 @@ void SalInstanceWindow::set_title(const OUString& rTitle) { m_xWindow->SetText(r
 
 OUString SalInstanceWindow::get_title() const { return m_xWindow->GetText(); }
 
-css::uno::Reference<css::awt::XWindow> SalInstanceWindow::GetXWindow()
+cpo::uno::Reference<css::awt::XWindow> SalInstanceWindow::GetXWindow()
 {
-    css::uno::Reference<css::awt::XWindow> xWindow(m_xWindow->GetComponentInterface(),
-                                                   css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::awt::XWindow> xWindow(m_xWindow->GetComponentInterface(),
+                                                   cpo::uno::UNO_QUERY);
     return xWindow;
 }
 
@@ -2881,7 +2882,7 @@ void SalInstanceButton::set_image(VirtualDevice* pDevice)
         m_xButton->SetModeImage(Image());
 }
 
-void SalInstanceButton::set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage)
+void SalInstanceButton::set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
 {
     m_xButton->SetImageAlign(ImageAlign::Left);
     m_xButton->SetModeImage(Image(rImage));
@@ -3093,7 +3094,7 @@ void SalInstanceRadioButton::set_image(VirtualDevice* pDevice)
         m_xRadioButton->SetModeImage(Image());
 }
 
-void SalInstanceRadioButton::set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage)
+void SalInstanceRadioButton::set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
 {
     m_xRadioButton->SetImageAlign(ImageAlign::Center);
     m_xRadioButton->SetModeImage(Image(rImage));
@@ -3154,49 +3155,6 @@ IMPL_LINK_NOARG(SalInstanceCheckButton, ToggleHdl, CheckBox&, void)
     signal_toggled();
 }
 
-namespace
-{
-class SalInstanceScale : public SalInstanceWidget, public virtual weld::Scale
-{
-private:
-    VclPtr<Slider> m_xScale;
-
-    DECL_LINK(SlideHdl, Slider*, void);
-
-public:
-    SalInstanceScale(Slider* pScale, SalInstanceBuilder* pBuilder, bool bTakeOwnership)
-        : SalInstanceWidget(pScale, pBuilder, bTakeOwnership)
-        , m_xScale(pScale)
-    {
-        m_xScale->SetSlideHdl(LINK(this, SalInstanceScale, SlideHdl));
-    }
-
-    virtual void set_value(int value) override { m_xScale->SetThumbPos(value); }
-
-    virtual void set_range(int min, int max) override
-    {
-        m_xScale->SetRangeMin(min);
-        m_xScale->SetRangeMax(max);
-    }
-
-    virtual int get_value() const override { return m_xScale->GetThumbPos(); }
-
-    virtual void set_increments(int step, int page) override
-    {
-        m_xScale->SetLineSize(step);
-        m_xScale->SetPageSize(page);
-    }
-
-    virtual void get_increments(int& step, int& page) const override
-    {
-        step = m_xScale->GetLineSize();
-        page = m_xScale->GetPageSize();
-    }
-
-    virtual ~SalInstanceScale() override { m_xScale->SetSlideHdl(Link<Slider*, void>()); }
-};
-}
-
 IMPL_LINK_NOARG(SalInstanceScale, SlideHdl, Slider*, void) { signal_value_changed(); }
 
 namespace
@@ -3218,25 +3176,6 @@ public:
     virtual void stop() override { m_xThrobber->stop(); }
 };
 
-class SalInstanceProgressBar : public SalInstanceWidget, public virtual weld::ProgressBar
-{
-private:
-    VclPtr<::ProgressBar> m_xProgressBar;
-
-public:
-    SalInstanceProgressBar(::ProgressBar* pProgressBar, SalInstanceBuilder* pBuilder,
-                           bool bTakeOwnership)
-        : SalInstanceWidget(pProgressBar, pBuilder, bTakeOwnership)
-        , m_xProgressBar(pProgressBar)
-    {
-    }
-
-    virtual void set_percentage(int value) override { m_xProgressBar->SetValue(value); }
-
-    virtual OUString get_text() const override { return m_xProgressBar->GetText(); }
-
-    virtual void set_text(const OUString& rText) override { m_xProgressBar->SetText(rText); }
-};
 }
 
 IMPL_LINK_NOARG(SalInstanceCalendar, SelectHdl, ::Calendar*, void) { signal_selected(); }
@@ -3263,7 +3202,7 @@ void SalInstanceImage::set_image(VirtualDevice* pDevice)
         m_xImage->SetImage(::Image());
 }
 
-void SalInstanceImage::set_image(const css::uno::Reference<css::graphic::XGraphic>& rImage)
+void SalInstanceImage::set_image(const cpo::uno::Reference<css::graphic::XGraphic>& rImage)
 {
     m_xImage->SetImage(::Image(rImage));
 }
@@ -3912,6 +3851,11 @@ void SalInstanceTreeView::set_column_header_name(int nColumn, const OUString& rN
     m_xTreeView->SetColumnHeaderName(nColumn, rName);
 }
 
+void SalInstanceTreeView::clear_column_header_names()
+{
+    m_xTreeView->ClearColumnHeaderNames();
+}
+
 void SalInstanceTreeView::set_headers_sortable(bool bSortable)
 {
     m_xTreeView->SetHeadersSortable(bSortable);
@@ -4475,7 +4419,7 @@ void SalInstanceTreeView::set_image(int pos, const OUString& rImage, int col)
 }
 
 void SalInstanceTreeView::set_image(int pos,
-                                    const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                                    const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                                     int col)
 {
     set_image(m_xTreeView->GetEntry(nullptr, pos), Image(rImage), col);
@@ -4493,7 +4437,7 @@ void SalInstanceTreeView::set_image(const weld::TreeIter& rIter, const OUString&
 }
 
 void SalInstanceTreeView::set_image(const weld::TreeIter& rIter,
-                                    const css::uno::Reference<css::graphic::XGraphic>& rImage,
+                                    const cpo::uno::Reference<css::graphic::XGraphic>& rImage,
                                     int col)
 {
     const SalInstanceTreeIter& rVclIter = static_cast<const SalInstanceTreeIter&>(rIter);
@@ -5660,6 +5604,12 @@ SalInstanceIconView::~SalInstanceIconView()
     m_xIconView->SetDoubleClickHdl(Link<SvTreeListBox*, bool>());
     m_xIconView->SetSelectHdl(Link<SvTreeListBox*, void>());
     m_xIconView->SetDeselectHdl(Link<SvTreeListBox*, void>());
+    m_xIconView->SetPopupMenuHdl(Link<const CommandEvent&, bool>());
+    m_xIconView->SetTooltipHdl(Link<SvTreeListEntry*, OUString>());
+    m_xIconView->SetDumpImageHdl(Link<const ::IconView::encoded_image_query&, bool>());
+
+    for (SvTreeListEntry* pEntry = m_xIconView->First(); pEntry; pEntry = m_xIconView->Next(pEntry))
+        pEntry->SetUserData(nullptr);
 }
 
 IMPL_LINK_NOARG(SalInstanceIconView, SelectHdl, SvTreeListBox*, void)
@@ -5799,6 +5749,15 @@ SalInstanceFormattedSpinButton::SalInstanceFormattedSpinButton(FormattedField* p
     m_xButton->SetUpHdl(LINK(this, SalInstanceFormattedSpinButton, UpDownHdl));
     m_xButton->SetDownHdl(LINK(this, SalInstanceFormattedSpinButton, UpDownHdl));
     m_xButton->SetLoseFocusHdl(LINK(this, SalInstanceFormattedSpinButton, LoseFocusHdl));
+
+    if (Edit* pEdit = m_xButton->GetSubEdit())
+    {
+        pEdit->SetActivateHdl(LINK(this, SalInstanceFormattedSpinButton, ActivateHdl));
+    }
+    else
+    {
+        m_xButton->SetActivateHdl(LINK(this, SalInstanceFormattedSpinButton, ActivateHdl));
+    }
 }
 
 void SalInstanceFormattedSpinButton::do_set_text(const OUString& rText)
@@ -5839,6 +5798,15 @@ SalInstanceFormattedSpinButton::~SalInstanceFormattedSpinButton()
     m_xButton->SetLoseFocusHdl(Link<Control&, void>());
     m_xButton->SetDownHdl(Link<SpinField&, void>());
     m_xButton->SetUpHdl(Link<SpinField&, void>());
+
+    if (Edit* pEdit = m_xButton->GetSubEdit())
+    {
+        pEdit->SetActivateHdl(Link<Edit&, bool>());
+    }
+    else
+    {
+        m_xButton->SetActivateHdl(Link<Edit&, bool>());
+    }
 }
 
 IMPL_LINK_NOARG(SalInstanceFormattedSpinButton, UpDownHdl, SpinField&, void)
@@ -5851,6 +5819,17 @@ IMPL_LINK_NOARG(SalInstanceFormattedSpinButton, LoseFocusHdl, Control&, void)
     if (!m_pFormatter)
         signal_value_changed();
     m_aLoseFocusHdl.Call(*this);
+}
+
+IMPL_LINK_NOARG(SalInstanceFormattedSpinButton, ActivateHdl, Edit&, bool)
+{
+    // Return commits the typed text through the formatter the same way losing focus does, so
+    // the value read during the notification is the reformatted one.
+    if (m_pFormatter)
+        m_pFormatter->EntryLostFocus();
+
+    signal_value_changed();
+    return m_aActivateHdl.Call(*this);
 }
 
 SalInstanceLabel::SalInstanceLabel(Control* pLabel, SalInstanceBuilder* pBuilder,
@@ -6212,7 +6191,7 @@ a11yrelationset SalInstanceDrawingArea::get_accessible_relation_set()
         vcl::Window* pLabeledBy = pWindow->GetAccessibleRelationLabeledBy();
         if (pLabeledBy && pLabeledBy != pWindow)
         {
-            cpo::uno::Sequence<css::uno::Reference<css::accessibility::XAccessible>> aSequence{
+            cpo::uno::Sequence<cpo::uno::Reference<css::accessibility::XAccessible>> aSequence{
                 pLabeledBy->GetAccessible()
             };
             pRelationSetHelper->AddRelation(css::accessibility::AccessibleRelation(
@@ -6221,7 +6200,7 @@ a11yrelationset SalInstanceDrawingArea::get_accessible_relation_set()
         vcl::Window* pMemberOf = pWindow->GetAccessibleRelationMemberOf();
         if (pMemberOf && pMemberOf != pWindow)
         {
-            cpo::uno::Sequence<css::uno::Reference<css::accessibility::XAccessible>> aSequence{
+            cpo::uno::Sequence<cpo::uno::Reference<css::accessibility::XAccessible>> aSequence{
                 pMemberOf->GetAccessible()
             };
             pRelationSetHelper->AddRelation(css::accessibility::AccessibleRelation(
@@ -6581,6 +6560,16 @@ void SalInstanceComboBoxWithEdit::set_entry_hidden(int pos, bool bHidden)
     m_xComboBox->SetEntryHidden(pos, bHidden);
 }
 
+void SalInstanceComboBoxWithEdit::set_render_selected_entry(bool on)
+{
+    m_xComboBox->SetRenderSelectedEntry(on);
+}
+
+void SalInstanceComboBoxWithEdit::set_whole_width_preview(bool on)
+{
+    m_xComboBox->SetWholeWidthPreview(on);
+}
+
 void SalInstanceComboBoxWithEdit::set_entry_text(const OUString& rText)
 {
     m_xComboBox->SetText(rText);
@@ -6919,26 +6908,9 @@ void SalInstancePopover::resize_to_request()
 
 IMPL_LINK_NOARG(SalInstancePopover, PopupModeEndHdl, FloatingWindow*, void) { signal_closed(); }
 
-SalInstanceColorChooserDialog::SalInstanceColorChooserDialog(
-    std::unique_ptr<ColorPickerDialog> pColorDialog)
-    : SalInstanceDialog(dynamic_cast<SalInstanceDialog&>(*pColorDialog->getDialog()).getDialog(),
-                        nullptr, false)
-    , m_pColorPickerDialog(std::move(pColorDialog))
-{
-}
-
-SalInstanceColorChooserDialog::~SalInstanceColorChooserDialog() {}
-
-void SalInstanceColorChooserDialog::set_color(const Color& rColor)
-{
-    m_pColorPickerDialog->SetColor(rColor);
-}
-
-Color SalInstanceColorChooserDialog::get_color() const { return m_pColorPickerDialog->GetColor(); }
-
 SalInstanceBuilder::SalInstanceBuilder(vcl::Window* pParent, std::u16string_view sUIRoot,
                                        const OUString& rUIFile,
-                                       const css::uno::Reference<css::frame::XFrame>& rFrame)
+                                       const cpo::uno::Reference<css::frame::XFrame>& rFrame)
     : weld::Builder()
     , m_xBuilder(new VclBuilder(pParent, sUIRoot, rUIFile, {}, rFrame, false))
 {
@@ -7018,6 +6990,9 @@ std::unique_ptr<weld::Window> SalInstanceBuilder::create_screenshot_window()
 std::unique_ptr<weld::Widget> SalInstanceBuilder::weld_widget(const OUString& id)
 {
     vcl::Window* pWidget = m_xBuilder->get(id);
+    assert(!dynamic_cast<VclGrid*>(pWidget)
+           && "a grid needs weld_container or weld_grid, not weld_widget");
+    assert(!dynamic_cast<VclFrame*>(pWidget) && "a frame needs weld_frame, not weld_widget");
     return pWidget ? std::make_unique<SalInstanceWidget>(pWidget, this, false) : nullptr;
 }
 
@@ -7417,15 +7392,7 @@ std::unique_ptr<weld::MessageDialog> SalInstance::CreateMessageDialog(weld::Widg
     return std::make_unique<SalInstanceMessageDialog>(xMessageDialog, nullptr, true);
 }
 
-std::unique_ptr<weld::ColorChooserDialog>
-SalInstance::CreateColorChooserDialog(weld::Window* pParent, vcl::ColorPickerMode eMode)
-{
-    std::unique_ptr<ColorPickerDialog> pColorPickerDialog
-        = std::make_unique<ColorPickerDialog>(pParent, COL_BLACK, eMode);
-    return std::make_unique<SalInstanceColorChooserDialog>(std::move(pColorPickerDialog));
-}
-
-weld::Window* SalInstance::GetFrameWeld(const css::uno::Reference<css::awt::XWindow>& rWindow)
+weld::Window* SalInstance::GetFrameWeld(const cpo::uno::Reference<css::awt::XWindow>& rWindow)
 {
     UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper();
     if (!pWrapper)

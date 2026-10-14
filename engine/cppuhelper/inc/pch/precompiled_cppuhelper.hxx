@@ -52,7 +52,6 @@
 #include <rtl/malformeduriexception.hxx>
 #include <rtl/random.h>
 #include <rtl/ref.hxx>
-#include <rtl/unload.h>
 #include <rtl/uri.h>
 #include <rtl/uri.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -77,10 +76,10 @@
 #include <com/sun/star/reflection/XInterfaceTypeDescription2.hpp>
 #include <com/sun/star/reflection/XStructTypeDescription.hpp>
 #include <com/sun/star/reflection/XTypeDescription.hpp>
-#include <com/sun/star/uno/DeploymentException.hpp>
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
 #include <comphelper/sequence.hxx>
 #include <cpo/uno/Any.hxx>
 #include <cpo/uno/Sequence.hxx>

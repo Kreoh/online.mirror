@@ -26,10 +26,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <shellio.hxx>
 
-namespace com::sun::star::uno
-{
-class XComponentContext;
-}
+namespace cpo::uno { class XComponentContext; }
 
 /// Dummy Writer implementation to be able to use the string format methods of the base class
 class RtfWriter : public Writer
@@ -43,25 +40,25 @@ class RtfExportFilter final
     : public cppu::WeakImplHelper<css::document::XFilter, css::document::XExporter,
                                   css::lang::XServiceInfo>
 {
-    css::uno::Reference<css::uno::XComponentContext> m_xCtx;
-    css::uno::Reference<css::lang::XComponent> m_xSrcDoc;
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_xCtx;
+    cpo::uno::Reference<css::lang::XComponent> m_xSrcDoc;
     RtfWriter m_aWriter;
 
 public:
-    explicit RtfExportFilter(css::uno::Reference<css::uno::XComponentContext> xCtx);
+    explicit RtfExportFilter(cpo::uno::Reference<cpo::uno::XComponentContext> xCtx);
     ~RtfExportFilter() override;
 
     // XFilter
-    bool SAL_CALL filter(const cpo::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
-    void SAL_CALL cancel() override;
+    bool filter(const cpo::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
+    void cancel() override;
 
     // XExporter
-    void SAL_CALL
-    setSourceDocument(const css::uno::Reference<css::lang::XComponent>& xDoc) override;
+    void
+    setSourceDocument(const cpo::uno::Reference<css::lang::XComponent>& xDoc) override;
 
-    OUString SAL_CALL getImplementationName() override;
-    bool SAL_CALL supportsService(OUString const& ServiceName) override;
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    OUString getImplementationName() override;
+    bool supportsService(OUString const& ServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 
     Writer& GetWriter() { return m_aWriter; }
 };

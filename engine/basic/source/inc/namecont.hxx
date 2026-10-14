@@ -21,23 +21,19 @@
 
 #include <unordered_map>
 #include <vector>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
-#include <com/sun/star/script/XLibraryContainerPassword.hpp>
-#include <com/sun/star/script/XLibraryContainerExport.hpp>
-#include <com/sun/star/script/XLibraryQueryExecutable.hpp>
-#include <com/sun/star/script/XLibraryContainer3.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XContainer.hpp>
-#include <com/sun/star/ucb/XSimpleFileAccess3.hpp>
+#include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/util/XStringSubstitution.hpp>
 #include <com/sun/star/document/XStorageBasedDocument.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/deployment/XPackage.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/script/vba/XVBACompatibility.hpp>
 #include <com/sun/star/script/vba/XVBAScriptListener.hpp>
@@ -76,7 +72,7 @@ public:
 
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void insertNoCheck(const OUString& aName, const cpo::uno::Any& aElement,
                        std::unique_lock<std::mutex>& guard);
 
@@ -100,16 +96,16 @@ public:
 
     // Methods XContainer
     void addContainerListener(
-        const css::uno::Reference<css::container::XContainerListener>& xListener,
+        const cpo::uno::Reference<css::container::XContainerListener>& xListener,
         std::unique_lock<std::mutex>& guard);
     void removeContainerListener(
-        const css::uno::Reference<css::container::XContainerListener>& xListener,
+        const cpo::uno::Reference<css::container::XContainerListener>& xListener,
         std::unique_lock<std::mutex>& guard);
 
     // Methods XChangesNotifier
-    void addChangesListener(const css::uno::Reference<css::util::XChangesListener>& xListener,
+    void addChangesListener(const cpo::uno::Reference<css::util::XChangesListener>& xListener,
                             std::unique_lock<std::mutex>& guard);
-    void removeChangesListener(const css::uno::Reference<css::util::XChangesListener>& xListener,
+    void removeChangesListener(const cpo::uno::Reference<css::util::XChangesListener>& xListener,
                                std::unique_lock<std::mutex>& guard);
 };
 
@@ -131,12 +127,12 @@ public:
     bool    isModified() const  { return mbModified; }
     void    setModified( bool _bModified, std::unique_lock<std::mutex>& guard );
 
-    void    addModifyListener( const css::uno::Reference< css::util::XModifyListener >& _rxListener, std::unique_lock<std::mutex>& guard )
+    void    addModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& _rxListener, std::unique_lock<std::mutex>& guard )
     {
         m_aModifyListeners.addInterface(guard, _rxListener);
     }
 
-    void    removeModifyListener( const css::uno::Reference< css::util::XModifyListener >& _rxListener, std::unique_lock<std::mutex>& guard )
+    void    removeModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& _rxListener, std::unique_lock<std::mutex>& guard )
     {
         m_aModifyListeners.removeInterface(guard, _rxListener);
     }
@@ -151,11 +147,7 @@ class SfxLibrary;
 typedef comphelper::WeakComponentImplHelper<
     css::lang::XInitialization,
     css::script::XStorageBasedLibraryContainer,
-    css::script::XLibraryContainerPassword,
-    css::script::XLibraryContainerExport,
-    css::script::XLibraryContainer3,
     css::container::XContainer,
-    css::script::XLibraryQueryExecutable,
     css::script::vba::XVBACompatibility,
     css::lang::XServiceInfo,
     css::beans::XPropertySet> SfxLibraryContainer_BASE;
@@ -170,9 +162,9 @@ class SfxLibraryContainer
     rtl_TextEncoding meVBATextEncoding;
     OUString msProjectName;
 protected:
-    css::uno::Reference< css::uno::XComponentContext >       mxContext;
-    css::uno::Reference< css::ucb::XSimpleFileAccess3 >      mxSFI;
-    css::uno::Reference< css::util::XStringSubstitution >    mxStringSubstitution;
+    cpo::uno::Reference< cpo::uno::XComponentContext >       mxContext;
+    cpo::uno::Reference< css::ucb::XSimpleFileAccess >       mxSFI;
+    cpo::uno::Reference< css::util::XStringSubstitution >    mxStringSubstitution;
     cpo::uno::WeakReference< css::frame::XModel >            mxOwnerDocument;
 
     ModifiableHelper    maModifiable;
@@ -186,7 +178,7 @@ protected:
     OUString maLibraryPath;
     OUString maLibrariesDir;
 
-    css::uno::Reference< css::embed::XStorage > mxStorage;
+    cpo::uno::Reference< css::embed::XStorage > mxStorage;
     BasicManager*   mpBasMgr;
     bool        mbOwnBasMgr;
 
@@ -204,28 +196,28 @@ protected:
 
     void implStoreLibrary( SfxLibrary* pLib,
                             std::u16string_view rName,
-                            const css::uno::Reference< css::embed::XStorage >& rStorage );
+                            const cpo::uno::Reference< css::embed::XStorage >& rStorage );
 
     // New variant for library export
     void implStoreLibrary( SfxLibrary* pLib,
                             std::u16string_view rName,
-                            const css::uno::Reference< css::embed::XStorage >& rStorage,
+                            const cpo::uno::Reference< css::embed::XStorage >& rStorage,
                             std::u16string_view rTargetURL,
-                            const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& rToUseSFI,
-                            const css::uno::Reference< css::task::XInteractionHandler >& rHandler );
+                            const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& rToUseSFI,
+                            const cpo::uno::Reference< css::task::XInteractionHandler >& rHandler );
 
     void implStoreLibraryIndexFile( SfxLibrary* pLib, const ::xmlscript::LibDescriptor& rLib,
-                                    const css::uno::Reference< css::embed::XStorage >& xStorage );
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStorage );
 
     // New variant for library export
     void implStoreLibraryIndexFile( SfxLibrary* pLib, const ::xmlscript::LibDescriptor& rLib,
-                                    const css::uno::Reference< css::embed::XStorage >& xStorage,
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStorage,
                                     std::u16string_view aTargetURL,
-                                    const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& rToUseSFI );
+                                    const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& rToUseSFI );
 
     bool implLoadLibraryIndexFile( SfxLibrary* pLib,
                                     ::xmlscript::LibDescriptor& rLib,
-                                    const css::uno::Reference< css::embed::XStorage >& xStorage,
+                                    const cpo::uno::Reference< css::embed::XStorage >& xStorage,
                                     const OUString& aIndexFileName,
                                     std::unique_lock<std::mutex>& guard );
 
@@ -242,31 +234,31 @@ protected:
     /// @throws cpo::uno::Exception
     virtual void writeLibraryElement
     (
-        const css::uno::Reference< css::container::XNameContainer>& xLibrary,
+        const cpo::uno::Reference< css::container::XNameContainer>& xLibrary,
         const OUString& aElementName,
-        const css::uno::Reference< css::io::XOutputStream >& xOutput
+        const cpo::uno::Reference< css::io::XOutputStream >& xOutput
     ) = 0;
 
     virtual cpo::uno::Any importLibraryElement
     (
-        const css::uno::Reference< css::container::XNameContainer>& xLibrary,
+        const cpo::uno::Reference< css::container::XNameContainer>& xLibrary,
         const OUString& aElementName,
         const OUString& aFile,
-        const css::uno::Reference< css::io::XInputStream >& xElementStream ) = 0;
+        const cpo::uno::Reference< css::io::XInputStream >& xElementStream ) = 0;
     virtual void importFromOldStorage( const OUString& aFile ) = 0;
 
     // Password encryption
     virtual bool implStorePasswordLibrary( SfxLibrary* pLib, const OUString& aName,
-                        const css::uno::Reference< css::embed::XStorage >& xStorage, const css::uno::Reference< css::task::XInteractionHandler >& Handler );
+                        const cpo::uno::Reference< css::embed::XStorage >& xStorage, const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
 
     // New variant for library export
     virtual bool implStorePasswordLibrary( SfxLibrary* pLib, const OUString& aName,
-                        const css::uno::Reference< css::embed::XStorage >& rStorage,
+                        const cpo::uno::Reference< css::embed::XStorage >& rStorage,
                         const OUString& aTargetURL,
-                        const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& rToUseSFI, const css::uno::Reference< css::task::XInteractionHandler >& Handler );
+                        const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& rToUseSFI, const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
 
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual bool implLoadPasswordLibrary( SfxLibrary* pLib, const OUString& Name,
                                           bool bVerifyPasswordOnly,
                                           std::unique_lock<std::mutex>& guard );
@@ -284,7 +276,7 @@ protected:
     OUString createAppLibraryFolder( SfxLibrary* pLib, std::u16string_view aName );
 
     void init( const OUString& rInitialDocumentURL,
-               const css::uno::Reference< css::embed::XStorage >& _rxInitialStorage,
+               const cpo::uno::Reference< css::embed::XStorage >& _rxInitialStorage,
                std::unique_lock<std::mutex>& guard );
 
     virtual OUString getInfoFileName() const = 0;
@@ -300,22 +292,22 @@ protected:
         OUString& aStorageURL,
         OUString& aUnexpandedStorageURL
     );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     OUString expand_url( const OUString& url );
 
     SfxLibrary* getImplLib( const OUString& rLibraryName );
 
     void storeLibraries_Impl(
-                            const css::uno::Reference< css::embed::XStorage >& xStorage,
+                            const cpo::uno::Reference< css::embed::XStorage >& xStorage,
                             bool bComplete,
                             std::unique_lock<std::mutex>& guard );
 
-    void initializeFromDocument( const css::uno::Reference< css::document::XStorageBasedDocument >& _rxDocument,
+    void initializeFromDocument( const cpo::uno::Reference< css::document::XStorageBasedDocument >& _rxDocument,
                                  std::unique_lock<std::mutex>& guard );
 
-    css::uno::Reference<css::container::XNameContainer>
+    cpo::uno::Reference<css::container::XNameContainer>
     createLibrary_Impl(const OUString& Name, std::unique_lock<std::mutex>& guard);
-    css::uno::Reference<css::container::XNameAccess>
+    cpo::uno::Reference<css::container::XNameAccess>
     createLibraryLink_Impl(const OUString& Name, const OUString& StorageURL, bool ReadOnly,
                            std::unique_lock<std::mutex>& guard);
     void loadLibrary_Impl(const OUString& Name, std::unique_lock<std::mutex>& guard);
@@ -329,10 +321,12 @@ protected:
 
 private:
     void init_Impl( const OUString& rInitialDocumentURL,
-                    const css::uno::Reference< css::embed::XStorage >& _rxInitialStorage,
+                    const cpo::uno::Reference< css::embed::XStorage >& _rxInitialStorage,
                     std::unique_lock<std::mutex>& guard );
-    void implScanExtensions(std::unique_lock<std::mutex>& guard);
     static constexpr OUString sVBATextEncodingPropName = u"VBATextEncoding"_ustr;
+    // Sets the VBA compatibility mode without loading the Basic project.
+    static constexpr OUString sDeferredVBACompatibilityModePropName
+        = u"DeferredVBACompatibilityMode"_ustr;
 
 public:
     SfxLibraryContainer();
@@ -358,35 +352,33 @@ public:
     virtual bool hasByName( const OUString& aName ) override;
 
     // Members XStorageBasedLibraryContainer
-    virtual css::uno::Reference< css::embed::XStorage > getRootStorage() override;
-    virtual void setRootStorage( const css::uno::Reference< css::embed::XStorage >& _rootstorage ) override;
-    virtual void storeLibrariesToStorage( const css::uno::Reference< css::embed::XStorage >& RootStorage ) override;
+    virtual cpo::uno::Reference< css::embed::XStorage > getRootStorage() override;
+    virtual void setRootStorage( const cpo::uno::Reference< css::embed::XStorage >& _rootstorage ) override;
+    virtual void storeLibrariesToStorage( const cpo::uno::Reference< css::embed::XStorage >& RootStorage ) override;
 
     // Methods XModifiable (base of XPersistentLibraryContainer)
     virtual bool isModified(  ) override;
     virtual void setModified( bool bModified ) override;
-    virtual void addModifyListener( const css::uno::Reference< css::util::XModifyListener >& aListener ) override;
-    virtual void removeModifyListener( const css::uno::Reference< css::util::XModifyListener >& aListener ) override;
+    virtual void addModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+    virtual void removeModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
 
     // Methods XPersistentLibraryContainer (base of XStorageBasedLibraryContainer)
     virtual cpo::uno::Any getRootLocation() override;
     virtual OUString getContainerLocationName() override;
     virtual void storeLibraries(  ) override;
 
-    //Methods XLibraryContainer3
+    //Methods XLibraryContainer
     virtual OUString getOriginalLibraryLinkURL( const OUString& Name ) override;
 
-    // Methods XLibraryContainer2 (base of XPersistentLibraryContainer)
+    // Methods XLibraryContainer (base of XPersistentLibraryContainer)
     virtual bool isLibraryLink( const OUString& Name ) override;
     virtual OUString getLibraryLinkURL( const OUString& Name ) override;
     virtual bool isLibraryReadOnly( const OUString& Name ) override;
     virtual void setLibraryReadOnly( const OUString& Name, bool bReadOnly ) override;
     virtual void renameLibrary( const OUString& Name, const OUString& NewName ) override;
-
-    // Methods XLibraryContainer (base of XLibraryContainer2)
-    virtual css::uno::Reference< css::container::XNameContainer >
+    virtual cpo::uno::Reference< css::container::XNameContainer >
         createLibrary( const OUString& Name ) override;
-    virtual css::uno::Reference< css::container::XNameAccess > createLibraryLink
+    virtual cpo::uno::Reference< css::container::XNameAccess > createLibraryLink
         ( const OUString& Name, const OUString& StorageURL, bool ReadOnly ) override;
     virtual void removeLibrary( const OUString& Name ) override;
     virtual bool isLibraryLoaded( const OUString& Name ) override;
@@ -396,7 +388,7 @@ public:
     virtual void initialize( const cpo::uno::Sequence<
         cpo::uno::Any >& aArguments ) override;
 
-    // Methods XLibraryContainerPassword
+    // Methods XLibraryContainer
     virtual bool isLibraryPasswordProtected( const OUString& Name ) override;
     virtual bool isLibraryPasswordVerified( const OUString& Name ) override;
     virtual bool verifyLibraryPassword( const OUString& Name, const OUString& Password ) override;
@@ -404,14 +396,14 @@ public:
         const OUString& OldPassword, const OUString& NewPassword ) override;
 
     // Methods XContainer
-    virtual void addContainerListener( const css::uno::Reference<
+    virtual void addContainerListener( const cpo::uno::Reference<
         css::container::XContainerListener >& xListener ) override;
-    virtual void removeContainerListener( const css::uno::Reference<
+    virtual void removeContainerListener( const cpo::uno::Reference<
         css::container::XContainerListener >& xListener ) override;
 
-    // Methods XLibraryContainerExport
+    // Methods XLibraryContainer
     virtual void exportLibrary( const OUString& Name, const OUString& URL,
-        const css::uno::Reference< css::task::XInteractionHandler >& Handler ) override;
+        const cpo::uno::Reference< css::task::XInteractionHandler >& Handler ) override;
 
     // Methods XServiceInfo
     virtual OUString getImplementationName( ) override = 0;
@@ -424,29 +416,29 @@ public:
     virtual void setProjectName( const OUString& _projectname ) override;
     virtual sal_Int32 getRunningVBAScripts() override;
     virtual void addVBAScriptListener(
-        const css::uno::Reference< css::script::vba::XVBAScriptListener >& Listener ) override;
+        const cpo::uno::Reference< css::script::vba::XVBAScriptListener >& Listener ) override;
     virtual void removeVBAScriptListener(
-        const css::uno::Reference< css::script::vba::XVBAScriptListener >& Listener ) override;
+        const cpo::uno::Reference< css::script::vba::XVBAScriptListener >& Listener ) override;
     virtual void broadcastVBAScriptEvent( sal_Int32 nIdentifier, const OUString& rModuleName ) override;
 
     // css::beans::XPropertySet
-    virtual css::uno::Reference<css::beans::XPropertySetInfo>
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo>
         getPropertySetInfo() override;
     virtual void setPropertyValue(const OUString& aPropertyName,
                                            const cpo::uno::Any& aValue) override;
     virtual cpo::uno::Any getPropertyValue(const OUString& PropertyName) override;
     virtual void addPropertyChangeListener(
         const OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XPropertyChangeListener>& xListener) override;
+        const cpo::uno::Reference<css::beans::XPropertyChangeListener>& xListener) override;
     virtual void removePropertyChangeListener(
         const OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
+        const cpo::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
     virtual void addVetoableChangeListener(
         const OUString& PropertyName,
-        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+        const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
     virtual void removeVetoableChangeListener(
         const OUString& PropertyName,
-        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+        const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
 
 };
 
@@ -474,7 +466,7 @@ class SfxLibrary
     friend class SfxDialogLibraryContainer;
     friend class SfxScriptLibraryContainer;
 
-    css::uno::Reference< css::ucb::XSimpleFileAccess3 >   mxSFI;
+    cpo::uno::Reference< css::ucb::XSimpleFileAccess >    mxSFI;
 
     ModifiableHelper&                                     mrModifiable;
     NameContainer maNameContainer;
@@ -507,8 +499,8 @@ private:
     virtual void storeResources() = 0;
     virtual void storeResourcesAsURL( const OUString& URL, const OUString& NewName ) = 0;
     virtual void storeResourcesToURL( const OUString& URL,
-        const css::uno::Reference< css::task::XInteractionHandler >& xHandler ) = 0;
-    virtual void storeResourcesToStorage( const css::uno::Reference< css::embed::XStorage >& xStorage ) = 0;
+        const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler ) = 0;
+    virtual void storeResourcesToStorage( const cpo::uno::Reference< css::embed::XStorage >& xStorage ) = 0;
 
 protected:
     bool    implIsModified() const  { return mbIsModified; }
@@ -532,12 +524,12 @@ public:
     SfxLibrary(
         ModifiableHelper& _rModifiable,
         const cpo::uno::Type& aType,
-        const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& xSFI
+        const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& xSFI
     );
     SfxLibrary(
         ModifiableHelper& _rModifiable,
         const cpo::uno::Type& aType,
-        const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& xSFI,
+        const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& xSFI,
         OUString aLibInfoFileURL,
         OUString aStorageURL,
         bool ReadOnly
@@ -560,15 +552,15 @@ public:
     virtual void removeByName( const OUString& Name ) override;
 
     // Methods XContainer
-    virtual void addContainerListener( const css::uno::Reference<
+    virtual void addContainerListener( const cpo::uno::Reference<
         css::container::XContainerListener >& xListener ) override;
-    virtual void removeContainerListener( const css::uno::Reference<
+    virtual void removeContainerListener( const cpo::uno::Reference<
         css::container::XContainerListener >& xListener ) override;
 
     // Methods XChangesNotifier
-    virtual void addChangesListener( const css::uno::Reference<
+    virtual void addChangesListener( const cpo::uno::Reference<
         css::util::XChangesListener >& xListener ) override;
-    virtual void removeChangesListener( const css::uno::Reference<
+    virtual void removeChangesListener( const cpo::uno::Reference<
         css::util::XChangesListener >& xListener ) override;
 
 protected:
@@ -576,70 +568,6 @@ protected:
 
     virtual bool isLibraryElementValid(const cpo::uno::Any& rElement) const = 0;
 };
-
-
-class ScriptSubPackageIterator
-{
-    css::uno::Reference< css::deployment::XPackage > m_xMainPackage;
-
-    bool m_bIsValid;
-    bool m_bIsBundle;
-
-    cpo::uno::Sequence< css::uno::Reference< css::deployment::XPackage > > m_aSubPkgSeq;
-    sal_Int32 m_nSubPkgCount;
-    sal_Int32 m_iNextSubPkg;
-
-    static css::uno::Reference< css::deployment::XPackage >
-        implDetectScriptPackage( const css::uno::Reference
-            < css::deployment::XPackage >& rPackage, bool& rbPureDialogLib );
-
-public:
-    ScriptSubPackageIterator( css::uno::Reference< css::deployment::XPackage > const & xMainPackage );
-
-    css::uno::Reference< css::deployment::XPackage > getNextScriptSubPackage( bool& rbPureDialogLib );
-};
-
-
-class ScriptExtensionIterator final
-{
-public:
-    ScriptExtensionIterator();
-    OUString nextBasicOrDialogLibrary( bool& rbPureDialogLib );
-
-private:
-    css::uno::Reference< css::deployment::XPackage >
-        implGetNextUserScriptPackage( bool& rbPureDialogLib );
-    css::uno::Reference< css::deployment::XPackage >
-        implGetNextSharedScriptPackage( bool& rbPureDialogLib );
-    css::uno::Reference< css::deployment::XPackage >
-        implGetNextBundledScriptPackage( bool& rbPureDialogLib );
-
-    css::uno::Reference< css::uno::XComponentContext > m_xContext;
-
-    enum IteratorState
-    {
-        USER_EXTENSIONS,
-        SHARED_EXTENSIONS,
-        BUNDLED_EXTENSIONS,
-        END_REACHED
-    } m_eState;
-
-    cpo::uno::Sequence< css::uno::Reference< css::deployment::XPackage > > m_aUserPackagesSeq;
-    bool m_bUserPackagesLoaded;
-
-    cpo::uno::Sequence< css::uno::Reference< css::deployment::XPackage > > m_aSharedPackagesSeq;
-    bool m_bSharedPackagesLoaded;
-
-    cpo::uno::Sequence< css::uno::Reference< css::deployment::XPackage > > m_aBundledPackagesSeq;
-    bool m_bBundledPackagesLoaded;
-
-    int m_iUserPackage;
-    int m_iSharedPackage;
-    int m_iBundledPackage;
-
-    ScriptSubPackageIterator* m_pScriptSubPackageIterator;
-
-}; // end class ScriptExtensionIterator
 
 
 }   // namespace basic

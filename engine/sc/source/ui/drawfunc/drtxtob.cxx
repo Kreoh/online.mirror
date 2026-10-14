@@ -82,6 +82,7 @@
 #include <scslots.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SFX_IMPL_INTERFACE(ScDrawTextObjectBar, SfxShell)
 
@@ -608,7 +609,7 @@ static void lcl_RemoveFields( OutlinerView& rOutView )
     bool bChanged = false;
 
     //! GetPortions and GetAttribs should be const!
-    EditEngine& rEditEng = const_cast<EditEngine&>(rOutliner.GetEditEngine());
+    EditEngine& rEditEng = rOutliner.GetEditEngine();
 
     sal_Int32 nParCount = rOutliner.GetParagraphCount();
     for (sal_Int32 nPar=0; nPar<nParCount; nPar++)

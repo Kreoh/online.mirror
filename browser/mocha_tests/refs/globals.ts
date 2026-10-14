@@ -26,6 +26,13 @@
 // (and `_` resolves to the identity on untranslated strings).
 (globalThis as any)._ = (s: string) => s;
 
+// gettext plural shim. In the browser js/plural.js puts _n on the window,
+// which is the global object there. Here the window is a jsdom one instead,
+// so that name never reaches the sources and the shim stands in for it. An
+// untranslated string takes the English rule, which is the rule below.
+(globalThis as any)._n = (singular: string, plural: string, count: number) =>
+	Number(count) === 1 ? singular : plural;
+
 // Leaflet's `L` namespace is a script-loaded global in the browser. Source
 // files run mixin calls (L.Map.include, L.Handler.extend, ...) at module
 // load time, so we need enough of a stub for those to be no-ops. extend()
@@ -38,84 +45,105 @@ noopClass.mergeOptions = () => {};
 noopClass.addInitHook = () => {};
 
 (globalThis as any).L = {
-    LOUtil: {},
-    Map: noopClass,
-    Handler: noopClass,
-    Control: noopClass,
-    Class: noopClass,
-    Layer: noopClass,
-    Evented: noopClass,
-    control: {},
+	LOUtil: {},
+	Map: noopClass,
+	Handler: noopClass,
+	Control: noopClass,
+	Class: noopClass,
+	Layer: noopClass,
+	Evented: noopClass,
+	control: {},
 };
 
 // DOMPurify is loaded via <script> tag in the browser; source files call
 // DOMPurify.addHook(...) at module load time. Stub it so source
 // concatenation doesn't blow up under Node.
 (globalThis as any).DOMPurify = {
-    addHook() {},
-    sanitize(s: string) { return s; },
+	addHook() {},
+	sanitize(s: string) {
+		return s;
+	},
 };
 
 (globalThis as any).app = {
-    CSections: { Scroll: { name : 'scroll' } },
-    roundedDpiScale : 1,
-    canvasSize: null,
-    definitions: {},
-    dpiScale: 1,
-    twipsToPixels: 1 / 15,
-    pixelsToTwips: 15,
-    sectionContainer: {},
-    socket: {},
-    // Loader-time stubs: source files touch these at module-load time.
-    // In the browser, js/global.js + setLogging(true) populate app.console
-    // with real console wrappers (assert, error, warn, ...). app.events is
-    // a DocEvents instance with on/off/fire/emit. Mirror just enough of
-    // that so source concatenation doesn't blow up under Node.
-    console: console,
-    events: { on() {}, off() {}, fire() {}, emit() {} },
-    // docstatefunctions.js attaches functions to app.calc / app.impress at
-    // module-load time (e.g. `app.calc.isRTL = function () {...}`), so the
-    // sub-objects must already exist. In the browser these are created in
-    // docstate.ts; we mirror the bare structure here.
-    //
-    // docstate.ts reassigns `window.app` to a brand-new object, but that
-    // only updates the jsdom window's property — `globalThis.app` keeps
-    // pointing at this stub. The `load` event listener registered in
-    // docstatefunctions.js runs in Node scope where bare `app` resolves to
-    // `globalThis.app`, so the stub also needs `file`, `tile`, `map`, and
-    // `following` populated well enough for the load callback and the
-    // RAF helpers (app.enterRAF / app.exitRAF) not to throw.
-    calc: {},
-    impress: {},
-    file: {
-        textCursor: {
-            visible: false,
-            rectangle: null,
-        },
-    },
-    tile: {
-        size: null,
-    },
-    // `app.enterRAF`/`app.exitRAF` in docstatefunctions.js dereference
-    // `app.map._debug` without a null check on `map`, and SheetGeometry
-    // calls `app.map.fire(...)` after guarding only on `app.map`. Give
-    // `map` no-op event methods so neither site throws when RAF fires
-    // during tests. Tests that exercise map behavior (ViewLayout) still
-    // overwrite `app.map` with a richer fixture.
-    map: { fire() {}, on() {}, off() {}, emit() {}, _debug: null },
-    following: {
-        mode: 'none',
-        viewId: -1,
-    },
+	CSections: { Scroll: { name: 'scroll' } },
+	roundedDpiScale: 1,
+	canvasSize: null,
+	definitions: {},
+	dpiScale: 1,
+	twipsToPixels: 1 / 15,
+	pixelsToTwips: 15,
+	sectionContainer: {},
+	socket: {},
+	// Loader-time stubs: source files touch these at module-load time.
+	// In the browser, js/global.js + setLogging(true) populate app.console
+	// with real console wrappers (assert, error, warn, ...). app.events is
+	// a DocEvents instance with on/off/fire/emit. Mirror just enough of
+	// that so source concatenation doesn't blow up under Node.
+	console: console,
+	events: { on() {}, off() {}, fire() {}, emit() {} },
+	// docstatefunctions.js attaches functions to app.calc / app.impress at
+	// module-load time (e.g. `app.calc.isRTL = function () {...}`), so the
+	// sub-objects must already exist. In the browser these are created in
+	// docstate.ts; we mirror the bare structure here.
+	//
+	// docstate.ts reassigns `window.app` to a brand-new object, but that
+	// only updates the jsdom window's property — `globalThis.app` keeps
+	// pointing at this stub. The `load` event listener registered in
+	// docstatefunctions.js runs in Node scope where bare `app` resolves to
+	// `globalThis.app`, so the stub also needs `file`, `tile`, `map`, and
+	// `following` populated well enough for the load callback and the
+	// RAF helpers (app.enterRAF / app.exitRAF) not to throw.
+	calc: {},
+	impress: {},
+	file: {
+		textCursor: {
+			visible: false,
+			rectangle: null,
+		},
+	},
+	tile: {
+		size: null,
+	},
+	// `app.enterRAF`/`app.exitRAF` in docstatefunctions.js dereference
+	// `app.map._debug` without a null check on `map`, and SheetGeometry
+	// calls `app.map.fire(...)` after guarding only on `app.map`. Give
+	// `map` no-op event methods so neither site throws when RAF fires
+	// during tests. Tests that exercise map behavior (ViewLayout) still
+	// overwrite `app.map` with a richer fixture.
+	map: { fire() {}, on() {}, off() {}, emit() {}, _debug: null },
+	following: {
+		mode: 'none',
+		viewId: -1,
+	},
+	// The ruler slots are read on every scroll. In the browser docstate.ts
+	// creates them and HRuler / VRuler put themselves in; no ruler is built
+	// in these tests, so both stay empty.
+	UI: {
+		language: {
+			fromURL: null,
+			fromBrowser: 'en-US',
+			notebookbarAccessibility: null,
+		},
+		horizontalRuler: null,
+		verticalRuler: null,
+	},
 };
 
-globalThis.window = (function() {
+globalThis.window = (function () {
 	const jsdom = require('jsdom');
-	const dom = new jsdom.JSDOM('<html><body><div id="document-container"></div></body></html>', { pretendToBeVisual: true });
+	const dom = new jsdom.JSDOM(
+		'<html><body><div id="document-container"></div></body></html>',
+		{ pretendToBeVisual: true },
+	);
 	return dom.window;
 })();
 
 globalThis.document = globalThis.window.document;
+
+// jsdom keeps these on its own window, and the bundled sources name them bare.
+(globalThis as any).Element = (globalThis.window as any).Element;
+(globalThis as any).CSS = (globalThis.window as any).CSS;
 
 (globalThis.window as any).prefs = {
 	canPersist: false,
@@ -133,7 +161,11 @@ globalThis.document = globalThis.window.document;
 	},
 	LOUtil: {},
 	Map: {
-		include(input: any) {},
+		// The objects passed to include, in the order they were passed.
+		included: [] as any[],
+		include(input: any) {
+			(globalThis as any).L.Map.included.push(input);
+		},
 		mergeOptions(input: any) {},
 		addInitHook(i1: any, i2: any, i3: any) {},
 	},
@@ -141,13 +173,12 @@ globalThis.document = globalThis.window.document;
 		extend(input: any) {},
 	},
 
-	Control: class _Control {
-	},
+	Control: class _Control {},
 
 	control: {},
 };
 
-(globalThis.window as any).L = (globalThis as any).L;
+globalThis.window.L = (globalThis as any).L;
 
 // Old-style Leaflet factory inheritance: `window.L.Control.Foo = window.L.Control.extend({...})`
 // creates a subclass whose prototype is the given methods/properties object. The Handler stub
@@ -167,20 +198,46 @@ globalThis.document = globalThis.window.document;
 	return Sub;
 };
 
-globalThis._ = (input: string) => input;
-(globalThis.ResizeObserver as any) = class _ResizeObserver {
-	constructor(firer: () => void) {
+// jsdom implements no DOMRect.
+(globalThis as any).DOMRect = class _DOMRect {
+	x = 0;
+	y = 0;
+	width = 0;
+	height = 0;
+
+	constructor(x = 0, y = 0, width = 0, height = 0) {
+		this.x = x;
+		this.y = y;
+		this.width = width;
+		this.height = height;
 	}
-	observe(container: HTMLElement) {
+
+	get left() {
+		return this.x;
+	}
+	get top() {
+		return this.y;
+	}
+	get right() {
+		return this.x + this.width;
+	}
+	get bottom() {
+		return this.y + this.height;
 	}
 };
- globalThis.JSDialog = {};
+
+globalThis._ = (input: string) => input;
+(globalThis.ResizeObserver as any) = class _ResizeObserver {
+	constructor(firer: () => void) {}
+	observe(container: HTMLElement) {}
+};
+globalThis.JSDialog = {};
 
 (globalThis as any).DOMPurify = require('dompurify');
 (globalThis as any).glMatrix = require('gl-matrix');
 
 String.locale = 'en';
-globalThis._UNO = function(i1: string, i2: string) {
+globalThis._UNO = function (i1: string, i2: string) {
 	return i2;
 };
 globalThis.SlideShow = {};

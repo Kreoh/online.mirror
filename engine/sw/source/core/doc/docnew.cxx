@@ -39,6 +39,7 @@
 #include <comphelper/random.hxx>
 #include <comphelper/types.hxx>
 #include <sfx2/docfile.hxx>
+#include <unotools/securityoptions.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/XmlIdRegistry.hxx>
 #include <sal/log.hxx>
@@ -62,6 +63,7 @@
 #include <ftninfo.hxx>
 #include <ftnidx.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <frmfmt.hxx>
 #include <poolfmt.hxx>
 #include <dbmgr.hxx>
@@ -121,6 +123,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::document;
+using namespace ::cpo;
 
 /*
  * global functions...
@@ -129,7 +132,7 @@ using namespace ::com::sun::star::document;
 {
     if (!m_xGCIterator.is() && SvtLinguConfig().HasGrammarChecker())
     {
-        const uno::Reference< uno::XComponentContext >&  xContext( comphelper::getProcessComponentContext() );
+        const uno::Reference< cpo::uno::XComponentContext >&  xContext( comphelper::getProcessComponentContext() );
         try
         {
             m_xGCIterator = sw::proofreadingiterator::get( xContext );
@@ -680,6 +683,11 @@ OUString SwDoc::GetLinkReferer() const
     if (pShell != nullptr && pShell->HasName())
         return pShell->GetMedium()->GetName();
     return OUString();
+}
+
+bool SwDoc::AllowAccessLink() const
+{
+    return !SvtSecurityOptions::isUntrustedReferer(GetLinkReferer());
 }
 
 void SwDoc::ClearDoc()
@@ -1233,10 +1241,10 @@ SwNodeIndex SwDoc::AppendDoc(const SwDoc& rSource, sal_uInt16 const nStartPageNu
 
             // Update the rsid of each pasted text node
             SwNodes &rDestNodes = GetNodes();
-            SwNodeOffset const nEndIdx = aPaM.End()->GetNodeIndex();
+            auto [pStart, pEnd] = aPaM.StartEnd(); // SwPosition*
+            SwNodeOffset const nEndIdx = pEnd->GetNodeIndex();
 
-            for (SwNodeOffset nIdx = aPaM.Start()->GetNodeIndex();
-                    nIdx <= nEndIdx; ++nIdx)
+            for (SwNodeOffset nIdx = pStart->GetNodeIndex(); nIdx <= nEndIdx; ++nIdx)
             {
                 SwTextNode *const pTextNode = rDestNodes[nIdx]->GetTextNode();
                 if ( pTextNode )

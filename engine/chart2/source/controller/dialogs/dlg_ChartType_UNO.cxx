@@ -26,7 +26,9 @@
 namespace chart
 {
 using namespace ::com::sun::star;
-ChartTypeUnoDlg::ChartTypeUnoDlg( const uno::Reference< uno::XComponentContext >& _xContext )
+using namespace ::cpo;
+
+ChartTypeUnoDlg::ChartTypeUnoDlg( const uno::Reference< cpo::uno::XComponentContext >& _xContext )
                     : ChartTypeUnoDlg_BASE( _xContext )
 {
 }
@@ -74,7 +76,7 @@ void ChartTypeUnoDlg::implInitialize(const cpo::uno::Any& _rValue)
         ChartTypeUnoDlg_BASE::implInitialize(_rValue);
 }
 
-std::unique_ptr<weld::DialogController> ChartTypeUnoDlg::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+std::unique_ptr<weld::DialogController> ChartTypeUnoDlg::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
 {
     ChartModel* pChartModel = dynamic_cast<ChartModel*>(rParent.get());
     assert(pChartModel);
@@ -100,8 +102,8 @@ uno::Reference<beans::XPropertySetInfo>  ChartTypeUnoDlg::getPropertySetInfo()
 
 } //namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
-com_sun_star_comp_chart2_ChartTypeDialog_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_ChartTypeDialog_get_implementation(cpo::uno::XComponentContext *context,
                                                             cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new chart::ChartTypeUnoDlg(context));

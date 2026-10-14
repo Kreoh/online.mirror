@@ -232,48 +232,14 @@ sub setglobalvariables
     # makefile calling the perl program.
     $installer::globals::installertypedir = $installer::globals::packageformat;
 
-    if ( $installer::globals::os eq 'SOLARIS')
-    {
-        $installer::globals::issolarisbuild = 1;
-        if ( $installer::globals::packageformat eq "pkg" )
-        {
-            $installer::globals::issolarispkgbuild = 1;
-            $installer::globals::epmoutpath = "packages";
-        }
-        if ( $installer::globals::cpuname eq 'INTEL')
-        {
-            $installer::globals::issolarisx86build = 1;
-        }
-        else
-        {
-            $installer::globals::issolarissparcbuild = 1;
-        }
-    }
-
     if ( $installer::globals::os eq 'MACOSX' )
     {
         $installer::globals::ismacbuild = 1;
-
-        if ( $installer::globals::packageformat eq "dmg" )
-        {
-            $installer::globals::ismacdmgbuild = 1;
-        }
     }
 
     if ( $installer::globals::os eq 'OPENBSD')
     {
             $installer::globals::epmoutpath = "openbsd";
-    }
-
-    if ( $installer::globals::os eq 'FREEBSD')
-    {
-        $installer::globals::isfreebsdbuild = 1;
-
-        if ( $installer::globals::packageformat eq "bsd" )
-        {
-            $installer::globals::epmoutpath = "freebsd";
-            $installer::globals::isfreebsdpkgbuild = 1;
-        }
     }
 
     if ($installer::globals::os eq 'LINUX')
@@ -300,8 +266,6 @@ sub setglobalvariables
             $installer::globals::epmoutpath = "DEBS";
         }
     }
-
-    # Defaulting to native package format for epm
 
     # no languages defined as parameter
     if ($installer::globals::languagelist eq "") { $installer::globals::languages_defined_in_productlist = 1; }

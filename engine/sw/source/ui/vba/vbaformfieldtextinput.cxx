@@ -15,6 +15,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /**
  * TextInput formfields are inline text objects that are only found in MS Word.
@@ -25,7 +26,7 @@ using namespace ::com::sun::star;
  */
 SwVbaFormFieldTextInput::SwVbaFormFieldTextInput(
     const uno::Reference<ooo::vba::XHelperInterface>& rParent,
-    const uno::Reference<uno::XComponentContext>& rContext, sw::mark::Fieldmark& rFormField)
+    const uno::Reference<cpo::uno::XComponentContext>& rContext, sw::mark::Fieldmark& rFormField)
     : SwVbaFormFieldTextInput_BASE(rParent, rContext)
     , m_rTextInput(rFormField)
 {

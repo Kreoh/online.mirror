@@ -20,7 +20,7 @@
 #include <services/mediatypedetectionhelper.hxx>
 #include <svl/inettype.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 namespace framework
 {
@@ -82,9 +82,9 @@ bool MediaTypeDetectionHelper::mapStrings(cpo::uno::Sequence< OUString >& rSeq)
 }   // namespace framework
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 framework_MediaTypeDetectionHelper_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new framework::MediaTypeDetectionHelper());
 }

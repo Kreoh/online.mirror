@@ -35,6 +35,7 @@
 #include <map>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace xmloff {
 
@@ -78,7 +79,7 @@ public:
 /** helper to insert RDFa statements into the RDF repository */
 class RDFaInserter
 {
-    const uno::Reference<uno::XComponentContext> m_xContext;
+    const uno::Reference<cpo::uno::XComponentContext> m_xContext;
     uno::Reference< rdf::XDocumentRepository > m_xRepository;
 
     typedef ::std::map< OUString, uno::Reference< rdf::XBlankNode > >
@@ -87,7 +88,7 @@ class RDFaInserter
     BlankNodeMap_t m_BlankNodeMap;
 
 public:
-    RDFaInserter(uno::Reference<uno::XComponentContext> i_xContext,
+    RDFaInserter(uno::Reference<cpo::uno::XComponentContext> i_xContext,
             uno::Reference< rdf::XDocumentRepository > i_xRepository)
         : m_xContext(std::move(i_xContext))
         , m_xRepository(std::move(i_xRepository))

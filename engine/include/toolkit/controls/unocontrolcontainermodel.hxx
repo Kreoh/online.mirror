@@ -28,21 +28,21 @@ class TOOLKIT_DLLPUBLIC UnoControlContainerModel final : public UnoControlModel
     ::cppu::IPropertyArrayHelper&                                      getInfoHelper() override;
 
 public:
-                        UnoControlContainerModel( const css::uno::Reference< css::uno::XComponentContext >& i_factory );
+                        UnoControlContainerModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_factory );
                         UnoControlContainerModel( const UnoControlContainerModel& rModel ) : UnoControlModel( rModel ) {}
 
     rtl::Reference<UnoControlModel> Clone() const override { return new UnoControlContainerModel( *this ); }
 
     // css::beans::XMultiPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
 
     // css::io::XPersistObject
-    OUString SAL_CALL getServiceName() override;
+    OUString getServiceName() override;
 
     // css::lang::XServiceInfo
-    OUString SAL_CALL getImplementationName() override;
+    OUString getImplementationName() override;
 
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
 };
 
 

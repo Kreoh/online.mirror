@@ -169,15 +169,12 @@ void RemoteConfigPoll::handleJSON(const Poco::JSON::Object::Ptr& remoteJson)
 
     fetchRemoteFontConfig(newAppConfig, remoteJson);
 
-    // before resetting get monitors list
-    std::vector<std::pair<std::string, int>> oldMonitors = Admin::getMonitorList();
-
     _persistConfig->reset(newAppConfig);
 
 #if ENABLE_FEATURE_LOCK
     CommandControl::LockManager::parseLockedHost();
 #endif
-    Admin::instance().updateMonitors(oldMonitors);
+    Admin::instance().updateMonitors();
 
     HostUtil::parseAliases(_conf);
 
@@ -187,8 +184,8 @@ void RemoteConfigPoll::handleJSON(const Poco::JSON::Object::Ptr& remoteJson)
 
     COOLWSD::IndirectionServerEnabled =
         !ConfigUtil::getConfigValue<std::string>(_conf, "indirection_endpoint.url", "").empty();
-    COOLWSD::GeolocationSetup =
-        ConfigUtil::getConfigValue("indirection_endpoint.geolocation_setup.enable", false);
+    COOLWSD::GeolocationSetup = ConfigUtil::getConfigValue(
+        _conf, "indirection_endpoint.geolocation_setup.enable", false);
 
     handleOptions(remoteJson);
 }
@@ -508,9 +505,14 @@ void RemoteConfigPoll::fetchIndirectionEndpoint(std::map<std::string, std::strin
         newAppConfig.insert(std::make_pair(indrectionEndpointKey + ".url", url));
 
     std::string serverName;
-    if (JsonUtil::findJSONValue(indirectionEndpoint, indrectionEndpointKey + ".server_name",
-                                serverName))
+    if (JsonUtil::findJSONValue(indirectionEndpoint, "server_name", serverName))
         newAppConfig.insert(std::make_pair(indrectionEndpointKey + ".server_name", serverName));
+
+    std::string controllerMonitorUrl;
+    if (JsonUtil::findJSONValue(indirectionEndpoint, "controller_monitor_url",
+                                controllerMonitorUrl))
+        newAppConfig.insert(std::make_pair(indrectionEndpointKey + ".controller_monitor_url",
+                                           controllerMonitorUrl));
 
     const std::string geolocationKey = indrectionEndpointKey + ".geolocation_setup";
     if (!indirectionEndpoint->isObject("geolocation_setup"))
@@ -865,7 +867,9 @@ bool RemoteFontConfigPoll::finishDownload(const std::string& uri,
                    << ']');
     fonts[uri].pathName = fontFile;
 
-    COOLWSD::sendMessageToForKit("addfont " + fontFile);
+    // ForKit takes several seconds to connect back after it is launched, and a font sync that
+    // restarted it lands in that window, so hold the font until it is there to take it.
+    COOLWSD::queueMessageToPrimordialForKit("addfont " + fontFile);
 
     // The spare Kits that are already running know nothing of this font, but let
     // the whole JSON file be handled before replacing them: one round of

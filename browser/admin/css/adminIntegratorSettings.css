@@ -9,6 +9,7 @@
   --settings-text-maxcontrast: var(--color-border-lighter);
   --settings-background: var(--color-main-background);
   --settings-background-hover: var(--color-background-dark);
+  --settings-input-background: var(--color-background-dark);
   --settings-font-face:
     system-ui, -apple-system, 'Noto Sans', 'Segoe UI', Roboto, Oxygen-Sans,
     Cantarell, Ubuntu, 'Helvetica Neue', 'Liberation Sans', Arial, sans-serif;
@@ -314,7 +315,7 @@ ul {
   border: 1px solid var(--settings-border);
   border-radius: 4px;
   color: var(--settings-text);
-  background-color: var(--settings-background);
+  background-color: var(--settings-input-background);
 }
 
 .view-input-container {
@@ -339,40 +340,40 @@ ul {
   text-decoration: underline;
 }
 
-/* AI model-fetch status. A compact inline alert, deliberately distinct from the
-   neutral .view-setting-description help text it sits below: an accent bar, a
-   tinted ground and a state indicator carry the meaning at a glance. Hidden
-   until a state is set; shown via the [data-state] attribute. */
+/* A small label beside a title in the AI section. */
+.ai-badge {
+  padding: 2px 8px;
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.5;
+  border-radius: 4px;
+}
+
+/* AI model-fetch status, a badge beside the group title. Hidden until a state
+   is set; shown via the [data-state] attribute. */
 .ai-model-status {
   display: none;
-  gap: 8px;
+  gap: 6px;
   align-items: flex-start;
-  margin-top: 0.5rem;
-  margin-bottom: 1rem;
-  padding: 10px 12px;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  border-radius: var(--border-radius-element, 6px);
-  border-inline-start: 3px solid var(--ai-status-color);
-  background-color: color-mix(in srgb, var(--ai-status-color) 10%, transparent);
-  color: color-mix(in srgb, var(--ai-status-color) 62%, var(--settings-text));
-  /* Break long unbreakable tokens (masked keys, URLs) so the message stays
-     inside the panel; "anywhere" also lets the text flex item shrink. */
+  background-color: color-mix(in srgb, var(--ai-status-color) 14%, transparent);
+  color: color-mix(in srgb, var(--ai-status-color) 50%, var(--settings-text));
+  /* Break long unbreakable tokens (masked keys, URLs) so an error stays
+     inside the badge. */
   overflow-wrap: anywhere;
 }
 
 .ai-model-status[data-state] {
-  display: flex;
+  display: inline-flex;
 }
 
-/* State indicator: a filled dot, sized to align with the first text line. */
+/* State indicator: a dot, centred on the first line of text. */
 .ai-model-status::before {
   content: '';
   box-sizing: border-box;
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  margin-top: 0.18em;
+  width: 10px;
+  height: 10px;
+  margin-top: calc((1.5em - 10px) / 2);
   border-radius: 50%;
   background-color: var(--ai-status-color);
 }
@@ -388,6 +389,18 @@ ul {
 .ai-model-status[data-state='info'],
 .ai-model-status[data-state='loading'] {
   --ai-status-color: var(--color-warning);
+}
+
+/* Connected: the dot becomes the lc_ok tick, masked so it takes the text
+   colour. */
+.ai-model-status[data-state='success']::before {
+  width: 14px;
+  height: 14px;
+  margin-top: calc((1.5em - 14px) / 2);
+  border-radius: 0;
+  background-color: currentColor;
+  -webkit-mask: url('../../images/lc_ok.svg') no-repeat center / contain;
+  mask: url('../../images/lc_ok.svg') no-repeat center / contain;
 }
 
 /* Loading: the dot becomes a spinner so the "Fetching models..." moment reads
@@ -410,107 +423,6 @@ ul {
   font-weight: 500 !important;
 }
 
-/* Label row carrying a heading plus an inline info affordance. */
-.ai-label-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-/* Zero the heading's margins (including the UA default top margin) so it
-   centers against the info icon on the shared flex line. */
-.ai-label-row h3 {
-  margin: 0;
-  line-height: 1.2;
-}
-
-/* Info tooltip: a muted icon that reveals long guidance on hover/focus,
-   keeping the form uncluttered. The bubble is positioned relative to the wrap. */
-.ai-tip-wrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.ai-info-tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--settings-text);
-  opacity: 0.55;
-  cursor: help;
-  transition: opacity 0.15s ease;
-}
-
-.ai-info-tip:hover,
-.ai-info-tip:focus-visible {
-  opacity: 1;
-}
-
-.ai-info-tip .material-design-icon svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-.ai-tip-bubble {
-  position: absolute;
-  top: calc(100% + 8px);
-  inset-inline-start: 0;
-  z-index: 10;
-  width: max-content;
-  max-width: 280px;
-  padding: 10px 12px;
-  font-size: 0.8rem;
-  font-weight: 400;
-  line-height: 1.5;
-  color: var(--settings-text);
-  background-color: var(--settings-background);
-  border: 1px solid var(--settings-border);
-  border-radius: var(--border-radius-element, 6px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-2px);
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease,
-    visibility 0.15s;
-}
-
-/* Bordered caret pointing up to the icon. */
-.ai-tip-bubble::before,
-.ai-tip-bubble::after {
-  content: '';
-  position: absolute;
-  bottom: 100%;
-  border: 6px solid transparent;
-}
-
-.ai-tip-bubble::before {
-  inset-inline-start: 8px;
-  border-bottom-color: var(--settings-border);
-}
-
-.ai-tip-bubble::after {
-  inset-inline-start: 9px;
-  border-width: 5px;
-  border-bottom-color: var(--settings-background);
-}
-
-.ai-tip-wrap:hover .ai-tip-bubble,
-.ai-tip-wrap:focus-within .ai-tip-bubble {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
 .view-input-container input[type='text'],
 .view-input-container input[type='password'],
 .view-input-container input[type='number'],
@@ -523,8 +435,44 @@ ul {
 	border: 1px solid var(--settings-border);
 	border-radius: 4px;
 	color: var(--settings-text);
-	background-color: var(--settings-background);
+	background-color: var(--settings-input-background);
 	transition: border-color 0.2s ease;
+}
+
+.view-input-container input.view-input-invalid {
+	border-color: var(--color-error);
+}
+
+.view-input-container .secret-input-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+/* Grows up to the max-width every field shares, so the key field lines up
+   with the others and the button stands outside it. */
+.view-input-container .secret-input-row input[type='password'] {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
+}
+
+/* A saved key: filled in, but locked until it is deleted. It keeps the
+   colours of the other fields. */
+.view-input-container .secret-input-row input[type='password']:disabled {
+	cursor: default;
+}
+
+.secret-delete-button {
+	background-image: url('../../images/lc_trash.svg');
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: 24px;
+}
+
+[data-theme='dark'] .secret-delete-button {
+	background-image: url('../../images/dark/lc_trash.svg');
 }
 
 .view-input-container input[type='text']:focus,
@@ -648,7 +596,7 @@ ul {
   font-size: var(--default-font-size);
   border: 1px solid var(--settings-border);
   border-radius: 4px;
-  background-color: var(--settings-background);
+  background-color: var(--settings-input-background);
   color: var(--settings-text);
 }
 
@@ -717,24 +665,152 @@ ul {
   margin-bottom: 4px;
 }
 
-/* AI Settings sub-sections */
-.ai-settings-group {
-  box-sizing: border-box;
-  border: 1px solid var(--settings-border);
-  border-radius: 6px;
-  padding: 16px 20px 8px;
-  margin: 16px 0;
+/* AI Assistant section */
+/* Title and description on the left, Reset on the right, centred against
+   both of them. */
+.ai-section-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+.ai-section-intro {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
-.ai-settings-group legend {
+.ai-section-intro h3 {
+  margin: 0 0 4px;
+}
+
+.ai-section-intro p {
+  margin: 0;
+}
+
+#ai-reset-button {
+  flex: 0 0 auto;
+  color: var(--color-primary-text);
+  background-color: var(--settings-btn-primary);
+}
+
+#ai-reset-button .material-design-icon {
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  -webkit-mask: url('../../images/lc_updateall.svg') no-repeat center / contain;
+  mask: url('../../images/lc_updateall.svg') no-repeat center / contain;
+}
+
+.ai-providers-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--settings-border);
+  font-size: 1.05rem;
   font-weight: 600;
-  font-size: 0.9rem;
+}
+
+.ai-admin-tag {
+  background-color: var(--settings-background-hover);
+}
+
+.ai-empty-state-title {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+#ai-add-provider-button {
+  background-color: var(--settings-background-hover);
+  border: 1px solid var(--settings-border);
+}
+
+#ai-add-provider-button .button__text {
+  font-weight: 400;
+}
+
+/* A dropdown from createSelectField. Its chevron is the menu chevron turned
+   to point down, masked so it takes the text colour, with the same inset as
+   the text. */
+.select-field {
+  position: relative;
+  max-width: 400px;
+}
+
+.select-field select {
+  appearance: none;
+  padding-inline-end: 40px;
+}
+
+.select-field::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 16px;
+  width: 9px;
+  height: 9px;
+  transform: translateY(-50%) rotate(90deg);
+  background-color: var(--settings-text);
+  -webkit-mask: url('../../images/lc_menu_chevron.svg') no-repeat center / contain;
+  mask: url('../../images/lc_menu_chevron.svg') no-repeat center / contain;
+  pointer-events: none;
+}
+
+.select-field:has(select:disabled)::after {
+  opacity: 0.5;
+}
+
+.ai-settings-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ai-settings-group:not(:last-child) {
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--settings-border);
+}
+
+.ai-settings-group legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 1.05rem;
+  font-weight: 600;
   color: var(--settings-text);
-  padding: 0 8px;
+}
+
+/* Close under the field it explains. */
+#aiModelHint {
+  margin-top: -8px;
+}
+
+.ai-input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.view-input-container .ai-input-with-unit input[type='number'] {
+  max-width: 120px;
+  margin-bottom: 0;
 }
 
 .ai-settings-group .view-input-container {
+  margin: 10px 0;
+}
+
+.ai-settings-group > .checkbox-wrapper {
   margin: 10px 0;
 }
 
@@ -761,10 +837,59 @@ ul {
   );
 }
 
+/* Drawn here rather than by the browser: a native checkbox sized away from
+   its default does not give its checked and unchecked states the same
+   metrics, so a column of them came out visibly ragged. */
 .checkbox-radio-switch-input {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   width: 18px;
   height: 18px;
+  flex: 0 0 18px;
   margin: 4px calc((var(--default-clickable-area) - 16px) / 2);
+  border: 2px solid var(--settings-border-contrast);
+  border-radius: 4px;
+  background-color: var(--settings-background);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+}
+
+.checkbox-radio-switch-input::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  transform: scale(0);
+  background-color: var(--color-primary-text);
+  /* A tick, so the mark scales with the box instead of being a glyph. */
+  clip-path: polygon(
+    14% 44%,
+    0 65%,
+    40% 100%,
+    100% 16%,
+    84% 0,
+    39% 62%
+  );
+}
+
+.checkbox-radio-switch-input:checked {
+  background-color: var(--settings-btn-primary);
+  border-color: var(--settings-btn-primary);
+}
+
+.checkbox-radio-switch-input:checked::before {
+  transform: scale(1);
+}
+
+.checkbox-radio-switch-input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.checkbox-radio-switch-input:focus-visible {
+  outline: 2px solid var(--settings-btn-primary);
+  outline-offset: 2px;
 }
 
 .checkbox-content--has-text {
@@ -807,6 +932,24 @@ ul {
   overflow: auto;
 }
 
+#lightproof .xcu-settings-fieldset {
+  min-width: 0;
+}
+
+/* A cell holds a drawn checkbox with its margins and a label beside it, so
+   it needs more than the 140px of the other grids, or a label of ordinary
+   length, such as a single 14-letter Russian word, runs past its column and the
+   whole panel scrolls sideways. The labels are not translated and may be
+   long single words, so they get hyphenated in their own language where the
+   browser can, instead of spilling out. */
+#lightproof .xcu-settings-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+#lightproof .checkbox-content__text {
+  hyphens: auto;
+}
+
 .xcu-editor-actions,
 .browser-settings-editor-actions {
   display: flex;
@@ -831,6 +974,8 @@ ul {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	flex: 0 1 300px;
+	min-width: 0;
 	cursor: pointer;
 }
 
@@ -909,7 +1054,7 @@ ul {
 	border: 1px solid var(--settings-border);
 	padding: calc(var(--default-grid-baseline) * 2) calc(var(--default-grid-baseline) * 3);
 	border-radius: var(--border-radius-element);
-	background-color: var(--settings-background);
+	background-color: var(--settings-input-background);
 	color: var(--settings-text);
 	transition: border-color calc(var(--animation-quick) * 2) ease;
 	box-sizing: border-box;
@@ -919,4 +1064,15 @@ ul {
 	outline: none;
 	border-color: var(--settings-btn-primary);
 	box-shadow: 0 0 0 calc(var(--default-grid-baseline) / 2) rgba(0, 120, 212, 0.1);
+}
+
+/* Said when the document is running with someone else's settings, so a
+   change here is saved but will not show until the next document. */
+.settings-scope-note {
+  margin: 0 0 1rem;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--settings-btn-primary);
+  background-color: var(--settings-background-hover, var(--settings-background));
+  color: var(--settings-text);
+  font-size: 0.9rem;
 }

@@ -88,8 +88,8 @@ using namespace cppu;
 using namespace ucbhelper;
 using namespace com::sun::star;
 using namespace com::sun::star::io;
-using namespace com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace com::sun::star::ucb;
 using namespace com::sun::star::util;
 using namespace com::sun::star::lang;
@@ -108,28 +108,28 @@ class ActiveDataStreamer : public ::cppu::WeakImplHelper< XActiveDataStreamer >
     uno::Reference< XStream > mStream;
 public:
 
-    virtual uno::Reference< XStream > SAL_CALL getStream() override
+    virtual uno::Reference< XStream > getStream() override
             { return mStream; }
 
-    virtual void SAL_CALL setStream( const uno::Reference< XStream >& stream ) override
+    virtual void setStream( const uno::Reference< XStream >& stream ) override
             { mStream = stream; }
 };
 
 class DummyInputStream : public ::cppu::WeakImplHelper< XInputStream >
 {
-    virtual sal_Int32 SAL_CALL readBytes( cpo::uno::Sequence< sal_Int8 >&, sal_Int32 ) override
+    virtual sal_Int32 readBytes( cpo::uno::Sequence< sal_Int8 >&, sal_Int32 ) override
         { return 0; }
 
-    virtual sal_Int32 SAL_CALL readSomeBytes( cpo::uno::Sequence< sal_Int8 >&, sal_Int32 ) override
+    virtual sal_Int32 readSomeBytes( cpo::uno::Sequence< sal_Int8 >&, sal_Int32 ) override
         { return 0; }
 
-    virtual void SAL_CALL skipBytes( sal_Int32 ) override
+    virtual void skipBytes( sal_Int32 ) override
         {}
 
-    virtual sal_Int32 SAL_CALL available() override
+    virtual sal_Int32 available() override
         { return 0; }
 
-    virtual void SAL_CALL closeInput() override
+    virtual void closeInput() override
         {}
 };
 
@@ -594,7 +594,7 @@ void ZipPackage::getZipFileContents()
                     rtl::Reference<ZipPackageFolder> pPkgFolder = new ZipPackageFolder(m_xContext, m_nFormat, m_bAllowRemoveOnInsert);
                     try {
                         pPkgFolder->setName( OUString(sTemp) );
-                    } catch (uno::RuntimeException const& e) {
+                    } catch (cpo::uno::RuntimeException const& e) {
                         throw css::packages::zip::ZipIOException(e.Message);
                     }
                     pPkgFolder->doSetParent( pCurrent );
@@ -637,7 +637,7 @@ void ZipPackage::getZipFileContents()
     }
 }
 
-void SAL_CALL ZipPackage::initialize( const cpo::uno::Sequence< Any >& aArguments )
+void ZipPackage::initialize( const cpo::uno::Sequence< Any >& aArguments )
 {
     beans::NamedValue aNamedValue;
 
@@ -751,19 +751,19 @@ void SAL_CALL ZipPackage::initialize( const cpo::uno::Sequence< Any >& aArgument
                     else if ( aFormatName == OFOPXML_STORAGE_FORMAT_STRING )
                         m_nFormat = embed::StorageFormats::OFOPXML;
                     else
-                        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+                        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
                 }
                 else if ( aNamedValue.Value >>= nFormatID )
                 {
                     if (nFormatID != embed::StorageFormats::PACKAGE
                         && nFormatID != embed::StorageFormats::ZIP
                         && nFormatID != embed::StorageFormats::OFOPXML)
-                        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+                        throw lang::IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
 
                     m_nFormat = nFormatID;
                 }
                 else
-                    throw lang::IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 1 );
+                    throw lang::IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 1 );
 
                 m_xRootFolder->setPackageFormat_Impl( m_nFormat );
             }
@@ -849,7 +849,7 @@ void SAL_CALL ZipPackage::initialize( const cpo::uno::Sequence< Any >& aArgument
     }
 }
 
-Any SAL_CALL ZipPackage::getByHierarchicalName( const OUString& aName )
+Any ZipPackage::getByHierarchicalName( const OUString& aName )
 {
     OUString sDirName;
     sal_Int32 nOldIndex, nStreamIndex;
@@ -942,7 +942,7 @@ Any SAL_CALL ZipPackage::getByHierarchicalName( const OUString& aName )
     throw NoSuchElementException();
 }
 
-bool SAL_CALL ZipPackage::hasByHierarchicalName( const OUString& aName )
+bool ZipPackage::hasByHierarchicalName( const OUString& aName )
 {
     if (aName == "/")
         // root directory
@@ -1023,7 +1023,7 @@ bool SAL_CALL ZipPackage::hasByHierarchicalName( const OUString& aName )
             }
         }
     }
-    catch (const uno::RuntimeException &)
+    catch (const cpo::uno::RuntimeException &)
     {
         throw;
     }
@@ -1035,13 +1035,13 @@ bool SAL_CALL ZipPackage::hasByHierarchicalName( const OUString& aName )
     return false;
 }
 
-uno::Reference< XInterface > SAL_CALL ZipPackage::createInstance()
+uno::Reference< XInterface > ZipPackage::createInstance()
 {
     uno::Reference < XInterface > xRef = *( new ZipPackageStream( *this, m_xContext, m_nFormat, m_bAllowRemoveOnInsert ) );
     return xRef;
 }
 
-uno::Reference< XInterface > SAL_CALL ZipPackage::createInstanceWithArguments( const cpo::uno::Sequence< Any >& aArguments )
+uno::Reference< XInterface > ZipPackage::createInstanceWithArguments( const cpo::uno::Sequence< Any >& aArguments )
 {
     bool bArg = false;
     uno::Reference < XInterface > xRef;
@@ -1388,7 +1388,7 @@ uno::Reference< io::XInputStream > ZipPackage::writeTempFile()
             // the document is written directly, although it was empty it is important to notify that the writing has failed
             // TODO/LATER: let the package be able to recover in this situation
             OUString aErrTxt(u"This package is unusable!"_ustr);
-            embed::UseBackupException aException( aErrTxt, uno::Reference< uno::XInterface >(), OUString() );
+            embed::UseBackupException aException( aErrTxt, uno::Reference< cpo::uno::XInterface >(), OUString() );
             throw WrappedTargetException( aErrTxt,
                                             getXWeak(),
                                             Any ( aException ) );
@@ -1450,7 +1450,7 @@ uno::Reference< XActiveDataStreamer > ZipPackage::openOriginalForOutput()
     return xSink;
 }
 
-void SAL_CALL ZipPackage::commitChanges()
+void ZipPackage::commitChanges()
 {
     // lock the component for the time of committing
     ::osl::MutexGuard aGuard( m_aMutexHolder->GetMutex() );
@@ -1557,7 +1557,7 @@ void SAL_CALL ZipPackage::commitChanges()
             if( isLocalFile() )
             {
                 // write directly in case of local file
-                uno::Reference< css::ucb::XSimpleFileAccess3 > xSimpleAccess(
+                uno::Reference< css::ucb::XSimpleFileAccess > xSimpleAccess(
                     SimpleFileAccess::create( m_xContext ) );
                 OSL_ENSURE( xSimpleAccess.is(), "Can't instantiate SimpleFileAccess service!" );
                 uno::Reference< io::XTruncate > xOrigTruncate;
@@ -1660,7 +1660,7 @@ void ZipPackage::DisconnectFromTargetAndThrowException_Impl( const uno::Referenc
     }
 
     OUString aErrTxt(u"This package is read only!"_ustr);
-    embed::UseBackupException aException( aErrTxt, uno::Reference< uno::XInterface >(), aTempURL );
+    embed::UseBackupException aException( aErrTxt, uno::Reference< cpo::uno::XInterface >(), aTempURL );
     throw WrappedTargetException( aErrTxt,
                                     getXWeak(),
                                     Any ( aException ) );
@@ -1678,7 +1678,7 @@ cpo::uno::Sequence< sal_Int8 > ZipPackage::GetEncryptionKey()
         else if ( m_nStartKeyGenerationID == xml::crypto::DigestID::SHA1 )
             aNameToFind = PACKAGE_ENCRYPTIONDATA_SHA1CORRECT;
         else
-            throw uno::RuntimeException( u"No expected key is provided!"_ustr );
+            throw cpo::uno::RuntimeException( u"No expected key is provided!"_ustr );
 
         for (const auto& rKey : m_aStorageEncryptionKeys)
             if ( rKey.Name == aNameToFind )
@@ -1686,7 +1686,7 @@ cpo::uno::Sequence< sal_Int8 > ZipPackage::GetEncryptionKey()
 
         if (!aResult.hasElements() && m_aStorageEncryptionKeys.hasElements())
         {   // tdf#159519 sanity check
-            throw uno::RuntimeException(u"Expected key is missing!"_ustr);
+            throw cpo::uno::RuntimeException(u"Expected key is missing!"_ustr);
         }
     }
     else
@@ -1695,11 +1695,11 @@ cpo::uno::Sequence< sal_Int8 > ZipPackage::GetEncryptionKey()
     return aResult;
 }
 
-bool SAL_CALL ZipPackage::hasPendingChanges()
+bool ZipPackage::hasPendingChanges()
 {
     return false;
 }
-Sequence< ElementChange > SAL_CALL ZipPackage::getPendingChanges()
+Sequence< ElementChange > ZipPackage::getPendingChanges()
 {
     return cpo::uno::Sequence < ElementChange > ();
 }
@@ -1715,17 +1715,17 @@ Sequence< OUString > ZipPackage::getSupportedServiceNames()
     return { u"com.sun.star.packages.Package"_ustr };
 }
 
-bool SAL_CALL ZipPackage::supportsService( OUString const & rServiceName )
+bool ZipPackage::supportsService( OUString const & rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-uno::Reference< XPropertySetInfo > SAL_CALL ZipPackage::getPropertySetInfo()
+uno::Reference< XPropertySetInfo > ZipPackage::getPropertySetInfo()
 {
     return uno::Reference < XPropertySetInfo > ();
 }
 
-void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
+void ZipPackage::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     if ( m_nFormat != embed::StorageFormats::PACKAGE )
         throw UnknownPropertyException(aPropertyName);
@@ -1738,7 +1738,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
     else if ( aPropertyName == ENCRYPTION_KEY_PROPERTY )
     {
         if ( !( aValue >>= m_aEncryptionKey ) )
-            throw IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 2 );
+            throw IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 2 );
 
         m_aStorageEncryptionKeys.realloc( 0 );
     }
@@ -1748,7 +1748,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
         // because of this support the storage has to operate with more than one key dependent on storage generation algorithm;
         // when this support is removed, the storage will get only one key from outside
         if ( !( aValue >>= m_aStorageEncryptionKeys ) )
-            throw IllegalArgumentException(u""_ustr, uno::Reference< uno::XInterface >(), 2 );
+            throw IllegalArgumentException(u""_ustr, uno::Reference< cpo::uno::XInterface >(), 2 );
 
         m_aEncryptionKey.realloc( 0 );
     }
@@ -1758,7 +1758,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
         if ( m_pZipFile || !( aValue >>= aAlgorithms ) || !aAlgorithms.hasElements() )
         {
             // the algorithms can not be changed if the file has a persistence based on the algorithms ( m_pZipFile )
-            throw IllegalArgumentException(u"unexpected algorithms list is provided."_ustr, uno::Reference< uno::XInterface >(), 2 );
+            throw IllegalArgumentException(u"unexpected algorithms list is provided."_ustr, uno::Reference< cpo::uno::XInterface >(), 2 );
         }
 
         for (const auto& rAlgorithm : aAlgorithms)
@@ -1769,7 +1769,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
                 if ( !( rAlgorithm.Value >>= nID )
                   || ( nID != xml::crypto::DigestID::SHA256 && nID != xml::crypto::DigestID::SHA1 ) )
                 {
-                    throw IllegalArgumentException(u"Unexpected start key generation algorithm is provided!"_ustr, uno::Reference<uno::XInterface>(), 2);
+                    throw IllegalArgumentException(u"Unexpected start key generation algorithm is provided!"_ustr, uno::Reference<cpo::uno::XInterface>(), 2);
                 }
 
                 m_nStartKeyGenerationID = nID;
@@ -1782,7 +1782,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
                       && nID != xml::crypto::KDFID::PGP_RSA_OAEP_MGF1P
                       && nID != xml::crypto::KDFID::Argon2id))
                 {
-                    throw IllegalArgumentException(u"Unexpected key derivation function provided!"_ustr, uno::Reference<uno::XInterface>(), 2);
+                    throw IllegalArgumentException(u"Unexpected key derivation function provided!"_ustr, uno::Reference<cpo::uno::XInterface>(), 2);
                 }
                 m_nKeyDerivationFunctionID = nID;
             }
@@ -1794,7 +1794,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
                       && nID != xml::crypto::CipherID::AES_CBC_W3C_PADDING
                       && nID != xml::crypto::CipherID::BLOWFISH_CFB_8))
                 {
-                    throw IllegalArgumentException(u"Unexpected encryption algorithm is provided!"_ustr, uno::Reference<uno::XInterface>(), 2);
+                    throw IllegalArgumentException(u"Unexpected encryption algorithm is provided!"_ustr, uno::Reference<cpo::uno::XInterface>(), 2);
                 }
 
                 m_nCommonEncryptionID = nID;
@@ -1810,7 +1810,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
                 if ( !( rAlgorithm.Value >>= nID )
                   || ( nID != xml::crypto::DigestID::SHA1_1K && nID != xml::crypto::DigestID::SHA256_1K ) )
                 {
-                    throw IllegalArgumentException(u"Unexpected checksum algorithm is provided!"_ustr, uno::Reference<uno::XInterface>(), 2);
+                    throw IllegalArgumentException(u"Unexpected checksum algorithm is provided!"_ustr, uno::Reference<cpo::uno::XInterface>(), 2);
                 }
 
                 m_oChecksumDigestID.emplace(nID);
@@ -1818,7 +1818,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
             else
             {
                 OSL_ENSURE( false, "Unexpected encryption algorithm is provided!" );
-                throw IllegalArgumentException(u"unexpected algorithms list is provided."_ustr, uno::Reference< uno::XInterface >(), 2 );
+                throw IllegalArgumentException(u"unexpected algorithms list is provided."_ustr, uno::Reference< cpo::uno::XInterface >(), 2 );
             }
         }
     }
@@ -1826,7 +1826,7 @@ void SAL_CALL ZipPackage::setPropertyValue( const OUString& aPropertyName, const
         throw UnknownPropertyException(aPropertyName);
 }
 
-Any SAL_CALL ZipPackage::getPropertyValue( const OUString& PropertyName )
+Any ZipPackage::getPropertyValue( const OUString& PropertyName )
 {
     // TODO/LATER: Activate the check when zip-ucp is ready
     // if ( m_nFormat != embed::StorageFormats::PACKAGE )
@@ -1878,22 +1878,22 @@ Any SAL_CALL ZipPackage::getPropertyValue( const OUString& PropertyName )
     }
     throw UnknownPropertyException(PropertyName);
 }
-void SAL_CALL ZipPackage::addPropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< XPropertyChangeListener >& /*xListener*/ )
+void ZipPackage::addPropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< XPropertyChangeListener >& /*xListener*/ )
 {
 }
-void SAL_CALL ZipPackage::removePropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< XPropertyChangeListener >& /*aListener*/ )
+void ZipPackage::removePropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< XPropertyChangeListener >& /*aListener*/ )
 {
 }
-void SAL_CALL ZipPackage::addVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< XVetoableChangeListener >& /*aListener*/ )
+void ZipPackage::addVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< XVetoableChangeListener >& /*aListener*/ )
 {
 }
-void SAL_CALL ZipPackage::removeVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< XVetoableChangeListener >& /*aListener*/ )
+void ZipPackage::removeVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< XVetoableChangeListener >& /*aListener*/ )
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 package_ZipPackage_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ZipPackage(context));
 }
@@ -1902,7 +1902,7 @@ extern "C" bool TestImportZip(SvStream& rStream)
 {
     // explicitly tests the "RepairPackage" recovery mode
     rtl::Reference<ZipPackage> xPackage(new ZipPackage(comphelper::getProcessComponentContext()));
-    css::uno::Reference<css::io::XInputStream> xStream(new utl::OInputStreamWrapper(rStream));
+    cpo::uno::Reference<css::io::XInputStream> xStream(new utl::OInputStreamWrapper(rStream));
     cpo::uno::Sequence<Any> aArgs{ Any(xStream), Any(NamedValue(u"RepairPackage"_ustr, Any(true))) };
     xPackage->initialize(aArgs);
     return true;

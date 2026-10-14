@@ -38,7 +38,7 @@ test -s "$root/etc/ssl/certs/ca-certificates.crt" ||
     fail 'CA trust bundle is absent'
 test -s "$root/opt/cool/systemplate/etc/ssl/certs/ca-certificates.crt" ||
     fail 'systemplate CA trust bundle is absent'
-test -s "$root/usr/share/doc/coolwsd/online-office-sbom.spdx.json" ||
+test -s "$root/usr/share/coolwsd/online-office-sbom.spdx.json" ||
     fail 'Online Office SPDX SBOM is absent'
 find "$root/usr/share/doc/coolwsd" -type f \
     \( -iname 'copying*' -o -iname 'licen[cs]e*' -o -iname '*copyright*' \

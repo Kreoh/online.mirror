@@ -29,6 +29,7 @@
 #include <i18nutil/guessparadirection.hxx>
 #include <editeng/autodiritem.hxx>
 #include <editeng/frmdiritem.hxx>
+#include <sfx2/viewsh.hxx>
 #include <tools/json_writer.hxx>
 #include <COKit/COKit.hxx>
 #include <sax/tools/converter.hxx>
@@ -37,6 +38,7 @@
 #include <txtinet.hxx>
 #include <frmfmt.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentSettingAccess.hxx>
@@ -67,6 +69,7 @@
 #include <docsh.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void SwEditShell::UpdateSelectionAutoParaDirection()
 {
@@ -596,7 +599,7 @@ OUString SwEditShell::Calculate()
         SwTextNode* pTextNd = rCurrentPaM.GetPointNode().GetTextNode();
         if(pTextNd)
         {
-            const SwPosition *pStart = rCurrentPaM.Start(), *pEnd = rCurrentPaM.End();
+            auto [pStart, pEnd] = rCurrentPaM.StartEnd();
             const sal_Int32 nStt = pStart->GetContentIndex();
             OUString aStr = pTextNd->GetExpandText(GetLayout(),
                                 nStt, pEnd->GetContentIndex() - nStt);
@@ -836,7 +839,7 @@ void SwEditShell::SetNumberingRestart()
             MakeFindRange(SwDocPositions::Start, SwDocPositions::End, pCursor); // body content
         else
             MakeFindRange(SwDocPositions::OtherStart, SwDocPositions::OtherEnd, pCursor); // extra content
-        SwPosition* pSttPos = pCursor->Start(), *pEndPos = pCursor->End();
+        auto [pSttPos, pEndPos] = pCursor->StartEnd();
         SwNodeOffset nCurrNd = pSttPos->GetNodeIndex();
         SwNodeOffset nEndNd = pEndPos->GetNodeIndex();
         if( nCurrNd <= nEndNd )
@@ -1041,16 +1044,6 @@ void SwEditShell::SetLineNumberInfo(const SwLineNumberInfo& rInfo)
     GetDoc()->SetLineNumberInfo(rInfo);
     AddPaintRect( GetLayout()->getFrameArea() );
     EndAllAction();
-}
-
-sal_uInt16 SwEditShell::GetLinkUpdMode() const
-{
-    return getIDocumentSettingAccess().getLinkUpdateMode( false );
-}
-
-void SwEditShell::SetLinkUpdMode( sal_uInt16 nMode )
-{
-    getIDocumentSettingAccess().setLinkUpdateMode( nMode );
 }
 
 // Interface for TextInputData - (for text input of japanese/chinese characters)

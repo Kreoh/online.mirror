@@ -38,6 +38,7 @@
 #include "deffuncname.hxx"
 
 using namespace                 ::com::sun::star;
+using namespace ::cpo;
 using namespace sca::analysis;
 
 #define UNIQUE              false   // function name does not exist in Calc
@@ -279,7 +280,7 @@ sal_Int32 GetNullDate( const uno::Reference< beans::XPropertySet >& xOpt )
     }
 
     // no null date available -> no calculations possible
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 
@@ -1079,7 +1080,7 @@ double GetOddfprice( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /
     // If you change this to not unconditionally throw, the
     // SAL_WNOUNREACHABLE_CODE_PUSH/POP around the caller in
     // financial.cxx can be removed.
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 
@@ -1165,7 +1166,7 @@ double GetOddfyield( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /
     // If you change this to not unconditionally throw, the
     // SAL_WNOUNREACHABLE_CODE_PUSH/POP around the caller in
     // financial.cxx can be removed.
-    throw uno::RuntimeException();
+    throw cpo::uno::RuntimeException();
 }
 
 
@@ -2461,7 +2462,7 @@ bool ScaDate::operator<( const ScaDate& rCmp ) const
 }
 
 
-ScaAnyConverter::ScaAnyConverter( const uno::Reference< uno::XComponentContext >& xContext )
+ScaAnyConverter::ScaAnyConverter( const uno::Reference< cpo::uno::XComponentContext >& xContext )
     : nDefaultFormat(0)
     , bHasValidFormat(false)
 {

@@ -24,8 +24,14 @@
 #include <svl/itempool.hxx>
 #include <editeng/adjustitem.hxx>
 #include <editeng/editeng.hxx>
+#include <editeng/editview.hxx>
+#include <editeng/editund2.hxx>
+#include <vcl/commandevent.hxx>
 #include <editeng/eeitem.hxx>
+#include <editeng/lrspitem.hxx>
 #include <editeng/lspcitem.hxx>
+#include <editeng/numitem.hxx>
+#include <editeng/ulspitem.hxx>
 #include <editeng/unofield.hxx>
 #include <editeng/wghtitem.hxx>
 #include <editeng/postitem.hxx>
@@ -44,6 +50,8 @@
 #include <vcl/outdev.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/transfer.hxx>
+#include <vcl/wrkwin.hxx>
+#include <editeng/editview.hxx>
 #include <svtools/stringtransfer.hxx>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 #include <com/sun/star/text/textfield/Type.hpp>
@@ -51,11 +59,18 @@
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <drawinglayer/primitive2d/texthierarchyprimitive2d.hxx>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <editeng/outliner.hxx>
+#include <editeng/bulletinfo.hxx>
+#include <editeng/outlobj.hxx>
+#include <editeng/editund2.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <tools/stream.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -144,6 +159,7 @@ public:
     void testTdf154248MultilineFieldWrapping();
     void testMultilineFieldClipInvariance();
     void testMultilineFieldSublineSpacing();
+    void testMultilineFieldSelectionHighlight();
     void testTdf151748StaleKashidaArray();
     void testTdf162803StaleKashidaArray();
     void testEscapementNotPreservedOnParaBreak();
@@ -156,6 +172,26 @@ public:
 
     /// Test pasting a URL over selected text creates a hyperlink field
     void testPasteURLOverSelection();
+
+    /// Test that the whole space kept for a bullet selects the paragraph
+    void testBulletHitAreaCoversWholeLabel();
+
+    void testOutlinerRemoveTrailingParagraphs();
+    void testOutlinerAddTextNumbering();
+    void testOutlinerLastParagraphIsChild();
+    void testOutlinerUndoParaFlag();
+    void testOutlinerReadDepth();
+
+    // Fills rOutliner with two bulleted paragraphs whose label runs from 300 to 1200
+    // twips, where the second paragraph keeps 500 twips of space above itself.
+    static void prepareBulletedParagraphs(Outliner& rOutliner);
+
+    // The y coordinate halfway down the first line of the paragraph.
+    static tools::Long firstLineMiddle(Outliner& rOutliner, sal_Int32 nPara);
+
+    /// Test that a character typed over a selection through an input method is one undo step
+    void testExtTextInputOverSelectionIsOneUndoStep();
+    void testCursorReachesTheSameDepthBelowTheBaseline();
 
     // Fills rOutliner's edit engine so that paragraph 0 holds one URL field
     // long enough to wrap onto several sublines, with rTailText supplying
@@ -199,6 +235,7 @@ public:
     CPPUNIT_TEST(testTdf154248MultilineFieldWrapping);
     CPPUNIT_TEST(testMultilineFieldClipInvariance);
     CPPUNIT_TEST(testMultilineFieldSublineSpacing);
+    CPPUNIT_TEST(testMultilineFieldSelectionHighlight);
     CPPUNIT_TEST(testTdf151748StaleKashidaArray);
     CPPUNIT_TEST(testTdf162803StaleKashidaArray);
     CPPUNIT_TEST(testEscapementNotPreservedOnParaBreak);
@@ -208,6 +245,14 @@ public:
     CPPUNIT_TEST(testFillColorMaxAscentFraction);
 #endif
     CPPUNIT_TEST(testPasteURLOverSelection);
+    CPPUNIT_TEST(testBulletHitAreaCoversWholeLabel);
+    CPPUNIT_TEST(testOutlinerRemoveTrailingParagraphs);
+    CPPUNIT_TEST(testOutlinerAddTextNumbering);
+    CPPUNIT_TEST(testOutlinerLastParagraphIsChild);
+    CPPUNIT_TEST(testOutlinerUndoParaFlag);
+    CPPUNIT_TEST(testOutlinerReadDepth);
+    CPPUNIT_TEST(testExtTextInputOverSelectionIsOneUndoStep);
+    CPPUNIT_TEST(testCursorReachesTheSameDepthBelowTheBaseline);
     CPPUNIT_TEST_SUITE_END();
 
 private:
@@ -263,7 +308,7 @@ void Test::testLineSpacing()
 
         // Assert changes
         ParaPortion const& rParaPortion = aEditEngine.GetParaPortions().getRef(0);
-        ContentNode* const pNode = rParaPortion.GetNode();
+        ContentNode* const pNode = &rParaPortion.GetNode();
         const SvxLineSpacingItem& rLSItem = pNode->GetContentAttribs().GetItem(EE_PARA_SBL);
         CPPUNIT_ASSERT_EQUAL(SvxInterLineSpaceRule::Prop, rLSItem.GetInterLineSpaceRule());
         CPPUNIT_ASSERT_EQUAL(nSpace, rLSItem.GetPropLineSpace());
@@ -470,7 +515,7 @@ void Test::testHyperlinkCopyPaste()
     aOutliner.SetCalcFieldValueHdl(LINK(nullptr, Test, CalcFieldValueHdl));
 
     // Create EditEngine's instance
-    EditEngine& aEditEngine = const_cast<EditEngine&>(aOutliner.GetEditEngine());
+    EditEngine& aEditEngine = aOutliner.GetEditEngine();
 
     // Get EditDoc for current EditEngine's instance
     EditDoc& rDoc = aEditEngine.GetEditDoc();
@@ -502,7 +547,7 @@ void Test::testHyperlinkCopyPaste()
     CPPUNIT_ASSERT_EQUAL(aParaText, rDoc.GetParaAsString(sal_Int32(0)));
 
     // Insert URL 1
-    ContentNode* pNode = rDoc.GetObject(0);
+    ContentNode* pNode = &rDoc.GetObject(0);
     EditSelection aSel1(EditPaM(pNode, 13), EditPaM(pNode, 13));
     aEditEngine.InsertField(aSel1, aField1);
 
@@ -857,7 +902,7 @@ void Test::testTabsCopyPaste()
     CPPUNIT_ASSERT_EQUAL(aParaText, rDoc.GetParaAsString(sal_Int32(0)));
 
     // Insert tab 1 at desired position
-    ContentNode* pNode = rDoc.GetObject(0);
+    ContentNode* pNode = &rDoc.GetObject(0);
     EditSelection aSel1(EditPaM(pNode, 6), EditPaM(pNode, 6));
     aEditEngine.InsertFeature(aSel1, aTab);
 
@@ -913,7 +958,7 @@ void Test::testHyperlinkSearch()
 
     CPPUNIT_ASSERT_EQUAL_MESSAGE("set text", aSampleText, rDoc.GetParaAsString(sal_Int32(0)));
 
-    ContentNode* pNode = rDoc.GetObject(0);
+    ContentNode* pNode = &rDoc.GetObject(0);
     EditSelection aSel(EditPaM(pNode, 22), EditPaM(pNode, 22));
     SvxURLField aURLField(u"mailto:///jim@bob.com"_ustr, u"jim@bob.com"_ustr,
                           SvxURLFormat::Repr);
@@ -1018,9 +1063,9 @@ void Test::testBoldItalicCopyPaste()
     aEditEngine.QuickSetAttribs(*pSet, ESelection(0, 2, 0, 14));
 
     // Assert changes
-    std::unique_ptr<EditTextObject> pEditText1(aEditEngine.CreateTextObject());
+    EditTextObject aEditText1(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs1;
-    pEditText1->GetAllSections(aAttrs1);
+    aEditText1.GetAllSections(aAttrs1);
     // There should be 3 sections - woBold - wBold - woBold (w - with, wo - without)
     CPPUNIT_ASSERT_EQUAL(size_t(3), aAttrs1.size());
 
@@ -1047,9 +1092,9 @@ void Test::testBoldItalicCopyPaste()
     aEditEngine.QuickSetAttribs(*pSet, ESelection(0, 8, 0, 18));
 
     // Assert changes
-    std::unique_ptr<EditTextObject> pEditText2(aEditEngine.CreateTextObject());
+    EditTextObject aEditText2(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs2;
-    pEditText2->GetAllSections(aAttrs2);
+    aEditText2.GetAllSections(aAttrs2);
     // There should be 5 sections - woBold&woItalic - wBold&woItalic - wBold&wItalic - woBold&wItalic - woBold&woItalic (w - with, wo - without)
     CPPUNIT_ASSERT_EQUAL(size_t(5), aAttrs2.size());
 
@@ -1095,9 +1140,9 @@ void Test::testBoldItalicCopyPaste()
                          rDoc.GetParaAsString(sal_Int32(0)));
 
     // Check updated text for appropriate Bold/Italics
-    std::unique_ptr<EditTextObject> pEditText3(aEditEngine.CreateTextObject());
+    EditTextObject aEditText3(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs3;
-    pEditText3->GetAllSections(aAttrs3);
+    aEditText3.GetAllSections(aAttrs3);
     // There should be 9 sections - woBold&woItalic - wBold&woItalic - wBold&wItalic - woBold&wItalic - woBold&woItalic - wBold&woItalic
     // - wBold&wItalic - woBold&wItalic - woBold&woItalic(w - with, wo - without)
     CPPUNIT_ASSERT_EQUAL(size_t(9), aAttrs3.size());
@@ -1195,9 +1240,9 @@ void Test::testUnderlineCopyPaste()
     aEditEngine.QuickSetAttribs(*pSet, ESelection(0, 6, 0, 18));
 
     // Assert changes
-    std::unique_ptr<EditTextObject> pEditText1(aEditEngine.CreateTextObject());
+    EditTextObject aEditText1(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs1;
-    pEditText1->GetAllSections(aAttrs1);
+    aEditText1.GetAllSections(aAttrs1);
 
     // There should be 3 sections - woUnderline - wUnderline - woUnderline (w - with, wo - without)
     CPPUNIT_ASSERT_EQUAL(size_t(3), aAttrs1.size());
@@ -1231,9 +1276,9 @@ void Test::testUnderlineCopyPaste()
     CPPUNIT_ASSERT_EQUAL(OUString(aParaText + "textforunder"), rDoc.GetParaAsString(sal_Int32(0)));
 
     // Check updated text for appropriate Underline
-    std::unique_ptr<EditTextObject> pEditText2(aEditEngine.CreateTextObject());
+    EditTextObject aEditText2(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs2;
-    pEditText2->GetAllSections(aAttrs2);
+    aEditText2.GetAllSections(aAttrs2);
 
     // There should be 4 sections - woUnderline - wUnderline - woUnderline - wUnderline (w - with, wo - without)
     CPPUNIT_ASSERT_EQUAL(size_t(4), aAttrs2.size());
@@ -1352,9 +1397,9 @@ void Test::testParaBoldItalicCopyPaste()
     aEditEngine.QuickSetAttribs(*pSet, ESelection(1, 5, 1, 19));
 
     // Assert changes
-    std::unique_ptr<EditTextObject> pEditText1(aEditEngine.CreateTextObject());
+    EditTextObject aEditText1(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs1;
-    pEditText1->GetAllSections(aAttrs1);
+    aEditText1.GetAllSections(aAttrs1);
     // There should be 7 sections - woB - wB - woB -woB -wB -woB -woB (w - with, wo - without, B - Bold, I - Italic)
     CPPUNIT_ASSERT_EQUAL(size_t(7), aAttrs1.size());
 
@@ -1402,9 +1447,9 @@ void Test::testParaBoldItalicCopyPaste()
     aEditEngine.QuickSetAttribs(*pSet, ESelection(0, 14, 1, 9));
 
     // Assert changes
-    std::unique_ptr<EditTextObject> pEditText2(aEditEngine.CreateTextObject());
+    EditTextObject aEditText2(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs2;
-    pEditText2->GetAllSections(aAttrs2);
+    aEditText2.GetAllSections(aAttrs2);
     // There should be 9 sections - woB&woI - wB&woI - wB&wI -woB&wI - woB&wI - wB&wI - wB&woI - woB&woI - woB&woI (w - with, wo - without, B - Bold, I - Italic)
     CPPUNIT_ASSERT_EQUAL(size_t(9), aAttrs2.size());
 
@@ -1477,9 +1522,9 @@ void Test::testParaBoldItalicCopyPaste()
     CPPUNIT_ASSERT_EQUAL( u"This is second"_ustr, rDoc.GetParaAsString(sal_Int32(3)) );
 
     // Check updated text for appropriate Bold/Italics
-    std::unique_ptr<EditTextObject> pEditText3(aEditEngine.CreateTextObject());
+    EditTextObject aEditText3(aEditEngine.CreateTextObject());
     std::vector<editeng::Section> aAttrs3;
-    pEditText3->GetAllSections(aAttrs3);
+    aEditText3.GetAllSections(aAttrs3);
     // There should be 15 sections - woB&woI - wB&woI - wB&wI -woB&wI - woB&wI - wB&wI - wB&woI - woB&woI - woB&woI
     // - wB&woI - wB&wI - woB&wI - -woB&wI - wB&wI - wB&woI (w - with, wo - without, B - Bold, I - Italic)
     CPPUNIT_ASSERT_EQUAL(size_t(15), aAttrs3.size());
@@ -1643,10 +1688,9 @@ void Test::testSectionAttributes()
                                      static_cast<sal_uInt16>(1), pSet->Count());
 
         aEngine.QuickSetAttribs(*pSet, ESelection(0, 3, 0, 9)); // 'bbbccc'
-        std::unique_ptr<EditTextObject> pEditText(aEngine.CreateTextObject());
-        CPPUNIT_ASSERT_MESSAGE("Failed to create text object.", pEditText);
+        EditTextObject aEditText(aEngine.CreateTextObject());
         std::vector<editeng::Section> aAttrs;
-        pEditText->GetAllSections(aAttrs);
+        aEditText.GetAllSections(aAttrs);
 
         // Now, we should have a total of 3 sections.
         CPPUNIT_ASSERT_EQUAL_MESSAGE("There should be 3 sections.", static_cast<size_t>(3),
@@ -1692,10 +1736,9 @@ void Test::testSectionAttributes()
         aEngine.QuickSetAttribs(*pSet, ESelection(2, 0, 2, 3));
         aEngine.QuickSetAttribs(*pSet, ESelection(4, 0, 4, 5));
 
-        std::unique_ptr<EditTextObject> pEditText(aEngine.CreateTextObject());
-        CPPUNIT_ASSERT_MESSAGE("Failed to create text object.", pEditText);
+        EditTextObject aEditText(aEngine.CreateTextObject());
         std::vector<editeng::Section> aAttrs;
-        pEditText->GetAllSections(aAttrs);
+        aEditText.GetAllSections(aAttrs);
         CPPUNIT_ASSERT_EQUAL(size_t(5), aAttrs.size());
 
         // 1st, 3rd and 5th sections should correspond with 1st, 3rd and 5th paragraphs.
@@ -1747,10 +1790,9 @@ void Test::testSectionAttributes()
         aEngine.QuickDelete(ESelection(0, 0, 1, 3));
         CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), aEngine.GetParagraphCount());
 
-        std::unique_ptr<EditTextObject> pEditText(aEngine.CreateTextObject());
-        CPPUNIT_ASSERT_MESSAGE("Failed to create text object.", pEditText);
+        EditTextObject aEditText(aEngine.CreateTextObject());
         std::vector<editeng::Section> aAttrs;
-        pEditText->GetAllSections(aAttrs);
+        aEditText.GetAllSections(aAttrs);
 
         CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aAttrs.size());
 
@@ -1820,7 +1862,7 @@ void Test::testLargeParaCopyPaste()
         = aEditEngine.CreateTransferable(ESelection(5, 8, 7, 14));
 
     // Paste text at the end of 4th Para
-    ContentNode* pLastNode = rDoc.GetObject(3);
+    ContentNode* pLastNode = &rDoc.GetObject(3);
     aEditEngine.InsertText(xData, OUString(), EditPaM(pLastNode, pLastNode->Len()), true);
 
     // Assert changes
@@ -2239,7 +2281,7 @@ void Test::testTdf154248MultilineFieldWrapping()
     aOutliner.SetCalcFieldValueHdl(LINK(nullptr, Test, CalcFieldValueHdl));
 
     // Create EditEngine's instance
-    EditEngine& aEditEngine = const_cast<EditEngine&>(aOutliner.GetEditEngine());
+    EditEngine& aEditEngine = aOutliner.GetEditEngine();
     aEditEngine.SetPaperSize(Size(2000, 2000));
     aEditEngine.SetText(u"ABC  DEF ABC DEFGH"_ustr);
     // Positions Ref     ....*4............
@@ -2252,7 +2294,7 @@ void Test::testTdf154248MultilineFieldWrapping()
 
     // Insert URL
     EditDoc& rDoc = aEditEngine.GetEditDoc();
-    ContentNode* pNode = rDoc.GetObject(0);
+    ContentNode* pNode = &rDoc.GetObject(0);
     EditSelection aSel(EditPaM(pNode, 4), EditPaM(pNode, 4));
     aEditEngine.InsertField(aSel, aField);
 
@@ -2334,7 +2376,7 @@ EditEngine& Test::prepareWrappedFieldDocument(Outliner& rOutliner, const OUStrin
 {
     rOutliner.SetCalcFieldValueHdl(LINK(nullptr, Test, CalcFieldValueHdl));
 
-    EditEngine& rEditEngine = const_cast<EditEngine&>(rOutliner.GetEditEngine());
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
     rEditEngine.SetPaperSize(Size(2000, 5000));
     rEditEngine.SetText(rTailText);
 
@@ -2344,7 +2386,7 @@ EditEngine& Test::prepareWrappedFieldDocument(Outliner& rOutliner, const OUStrin
         SvxURLFormat::Repr);
     SvxFieldItem aField(aURLField, EE_FEATURE_FIELD);
 
-    ContentNode* pNode = rEditEngine.GetEditDoc().GetObject(0);
+    ContentNode* pNode = &rEditEngine.GetEditDoc().GetObject(0);
     EditSelection aSel(EditPaM(pNode, 0), EditPaM(pNode, 0));
     rEditEngine.InsertField(aSel, aField);
 
@@ -2445,6 +2487,54 @@ void Test::testMultilineFieldSublineSpacing()
     CPPUNIT_ASSERT_MESSAGE("second plain line not drawn", nSecondLineY >= 0);
 
     CPPUNIT_ASSERT_EQUAL(nSecondLineY - nFirstLineY, nSecondSublineY - nFirstSublineY);
+}
+
+void Test::testMultilineFieldSelectionHighlight()
+{
+    // A long hyperlink field wraps onto several rows. Selecting the whole
+    // field, as a double click on the link does, must highlight every row the
+    // link is drawn on, and no row may reach past the paper the link wrapped
+    // against.
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::TextObject);
+
+    // Paragraph 0 holds only the wrapping field.
+    const tools::Long nPaperWidth = 2000;
+    EditEngine& rEditEngine = prepareWrappedFieldDocument(aOutliner, OUString());
+
+    // The field must actually wrap, otherwise the bug cannot occur.
+    const ExtraPortionInfo* pExtraInfo = getWrappedFieldInfo(rEditEngine);
+    const sal_Int32 nRows = static_cast<sal_Int32>(pExtraInfo->lineBreaksList.size());
+
+    ScopedVclPtrInstance<WorkWindow> xWindow(nullptr, WB_APP | WB_STDWORK);
+    EditView aEditView(rEditEngine, xWindow.get());
+    aEditView.SetOutputArea(tools::Rectangle(Point(0, 0), Size(nPaperWidth, 5000)));
+
+    // The field counts as a single character, so this selects all of it.
+    aEditView.SetSelection(ESelection(0, 0, 0, 1));
+
+    std::vector<tools::Rectangle> aRects;
+    aEditView.GetSelectionRectangles(aRects);
+    CPPUNIT_ASSERT_MESSAGE("the selected link is not highlighted at all", !aRects.empty());
+
+    // Every row of the link carries highlight, and none of it spills past the
+    // width the link wrapped against.
+    const tools::Long nRowHeight
+        = rEditEngine.GetParaPortions().getRef(0).GetLines()[0].GetHeight();
+    for (sal_Int32 nRow = 0; nRow < nRows; ++nRow)
+    {
+        // A point inside the row, far enough from its edges to stay clear of
+        // where one row ends and the next begins.
+        const tools::Long nRowMiddleY = nRow * nRowHeight + nRowHeight / 2;
+        const bool bCovered = std::any_of(aRects.begin(), aRects.end(),
+                                          [nRowMiddleY](const tools::Rectangle& rRect) {
+                                              return rRect.Top() <= nRowMiddleY
+                                                     && nRowMiddleY <= rRect.Bottom();
+                                          });
+        CPPUNIT_ASSERT_MESSAGE("a row of the selected link is not highlighted", bCovered);
+    }
+
+    for (const tools::Rectangle& rRect : aRects)
+        CPPUNIT_ASSERT_LESSEQUAL(nPaperWidth, rRect.Right());
 }
 
 // Backspacing inside a justified, multi-line paragraph must not leave words on
@@ -2667,8 +2757,7 @@ void Test::testEscapementNotPreservedOnParaBreak()
     }
 
     // new para break at the end of the text (cf. pressing enter)
-    ContentNode* pNode = rDoc.GetObject(0);
-    CPPUNIT_ASSERT(pNode);
+    ContentNode* pNode = &rDoc.GetObject(0);
     EditPaM aEndPaM(pNode, pNode->Len());
     rDoc.InsertParaBreak(aEndPaM, true /* bKeepEndingAttribs */);
 
@@ -2677,8 +2766,7 @@ void Test::testEscapementNotPreservedOnParaBreak()
     CPPUNIT_ASSERT_EQUAL(OUString(), rDoc.GetParaAsString(1));
 
     // Check new para's character attributes
-    pNode = rDoc.GetObject(1);
-    CPPUNIT_ASSERT(pNode);
+    pNode = &rDoc.GetObject(1);
 
     const EditCharAttrib* pBoldAttr = pNode->GetCharAttribs().FindEmptyAttrib(EE_CHAR_WEIGHT, 0);
     CPPUNIT_ASSERT_MESSAGE("Bold attribute should be carried over.", pBoldAttr != nullptr);
@@ -2691,7 +2779,7 @@ void Test::testPasteURLOverSelection()
 {
     Outliner aOutliner(mpItemPool.get(), OutlinerMode::TextObject);
     aOutliner.SetCalcFieldValueHdl(LINK(nullptr, Test, CalcFieldValueHdl));
-    EditEngine& aEditEngine = const_cast<EditEngine&>(aOutliner.GetEditEngine());
+    EditEngine& aEditEngine = aOutliner.GetEditEngine();
     EditDoc& rDoc = aEditEngine.GetEditDoc();
 
     OUString aParaText = u"Click here for details"_ustr;
@@ -2705,7 +2793,7 @@ void Test::testPasteURLOverSelection()
     CPPUNIT_ASSERT_EQUAL(aURL, sURL);
 
     OUString aSelectedText = u"here"_ustr;
-    ContentNode* pNode = rDoc.GetObject(0);
+    ContentNode* pNode = &rDoc.GetObject(0);
     EditSelection aSel(EditPaM(pNode, 6), EditPaM(pNode, 10));
     CPPUNIT_ASSERT_EQUAL(aSelectedText, aEditEngine.GetSelected(aSel));
 
@@ -2879,6 +2967,219 @@ void Test::testFillColorMaxAscentFraction()
     CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, fFrac60NoFill, 1e-10);
 }
 #endif
+
+void Test::prepareBulletedParagraphs(Outliner& rOutliner)
+{
+    rOutliner.SetPaperSize(Size(10000, 5000));
+    rOutliner.SetText(u"First\nSecond"_ustr, 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), rOutliner.GetParagraphCount());
+
+    SvxNumRule aNumRule(SvxNumRuleFlags::BULLET_REL_SIZE, 1, false);
+    SvxNumberFormat aFormat(SVX_NUM_CHAR_SPECIAL);
+    aFormat.SetBulletChar(0x25CF);
+    // A bullet drawn at 45 percent of the size of the text covers about a tenth of the
+    // space kept for it.
+    aFormat.SetBulletRelSize(45);
+    vcl::Font aBulletFont(u"OpenSymbol"_ustr, Size(0, 100));
+    aFormat.SetBulletFont(&aBulletFont);
+    // The text starts 1200 twips from the left edge and the label takes the 900 twips
+    // before it, so the label runs from 300 to 1200.
+    aFormat.SetAbsLSpace(1200);
+    aFormat.SetFirstLineOffset(-900);
+    aNumRule.SetLevel(0, aFormat);
+
+    SfxItemSet aAttribs(rOutliner.GetEmptyItemSet());
+    aAttribs.Put(SvxNumBulletItem(std::move(aNumRule), EE_PARA_NUMBULLET));
+    // The space above a paragraph pushes its first line down, and its bullet down with it.
+    aAttribs.Put(SvxULSpaceItem(500, 0, EE_PARA_ULSPACE));
+    for (sal_Int32 nPara = 0; nPara < 2; ++nPara)
+    {
+        rOutliner.SetDepth(nPara, 0);
+        rOutliner.SetParaAttribs(nPara, aAttribs);
+    }
+}
+
+tools::Long Test::firstLineMiddle(Outliner& rOutliner, sal_Int32 nPara)
+{
+    EditEngine& rEditEngine = rOutliner.GetEditEngine();
+    const ParaPortion& rParaPortion = rEditEngine.GetParaPortions().getRef(nPara);
+    return rEditEngine.GetDocPosTopLeft(nPara).Y() + rParaPortion.GetFirstLineOffset()
+           + rEditEngine.GetParagraphInfos(nPara).nFirstLineHeight / 2;
+}
+
+void Test::testBulletHitAreaCoversWholeLabel()
+{
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::OutlineObject);
+    prepareBulletedParagraphs(aOutliner);
+
+    // The second paragraph is the one that keeps space above itself.
+    const EditEngine& rEditEngine = aOutliner.GetEditEngine();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(500),
+                         rEditEngine.GetParaPortions().getRef(1).GetFirstLineOffset());
+    const tools::Long nMiddle = firstLineMiddle(aOutliner, 1);
+
+    // The gap between the bullet and the text counts as the bullet.
+    bool bBullet = false;
+    CPPUNIT_ASSERT(aOutliner.IsTextPos(Point(1100, nMiddle), 0, &bBullet));
+    CPPUNIT_ASSERT(bBullet);
+
+    // The text itself does not.
+    bBullet = true;
+    CPPUNIT_ASSERT(aOutliner.IsTextPos(Point(1300, nMiddle), 0, &bBullet));
+    CPPUNIT_ASSERT(!bBullet);
+}
+
+void Test::testOutlinerRemoveTrailingParagraphs()
+{
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::OutlineObject);
+    aOutliner.SetText(u"a\nb\nc"_ustr, 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), aOutliner.GetParagraphCount());
+
+    // The last removal leaves no paragraph at the removed position.
+    aOutliner.Remove(1, 2);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aOutliner.GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(u"a"_ustr, aOutliner.GetText(0));
+}
+
+void Test::testOutlinerAddTextNumbering()
+{
+    Outliner aSource(mpItemPool.get(), OutlinerMode::OutlineObject);
+    aSource.SetText(u"x\ny"_ustr, 0);
+    aSource.SetNumberingStartValue(1, 5);
+    std::optional<OutlinerParaObject> oParaObj = aSource.CreateParaObject();
+    CPPUNIT_ASSERT(oParaObj);
+
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::OutlineObject);
+    aOutliner.SetText(u"a"_ustr, 0);
+    aOutliner.AddText(*oParaObj);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), aOutliner.GetParagraphCount());
+
+    // The start value belongs to the appended "y", not to the paragraph at its source index.
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(-1), aOutliner.GetNumberingStartValue(1));
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(5), aOutliner.GetNumberingStartValue(2));
+}
+
+void Test::testOutlinerLastParagraphIsChild()
+{
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::OutlineObject);
+    aOutliner.SetText(u"a\nb\nc"_ustr, 0);
+    aOutliner.SetDepth(0, 0);
+    aOutliner.SetDepth(1, 0);
+    aOutliner.SetDepth(2, 1);
+
+    // "c", the last paragraph, is a child of "b".
+    CPPUNIT_ASSERT(aOutliner.HasChildren(1));
+    CPPUNIT_ASSERT(aOutliner.IsExpanded(1));
+    CPPUNIT_ASSERT(!aOutliner.HasChildren(0));
+}
+
+void Test::testOutlinerUndoParaFlag()
+{
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::OutlineView);
+    ScopedVclPtrInstance<WorkWindow> xWindow(nullptr, WB_APP | WB_STDWORK);
+    OutlinerView aView(aOutliner, xWindow.get());
+    aOutliner.InsertView(&aView);
+    comphelper::ScopeGuard aGuard([&aOutliner, &aView] { aOutliner.RemoveView(&aView); });
+    aOutliner.SetText(u"a"_ustr, 0);
+    aOutliner.EnableUndo(true);
+
+    aOutliner.SetParaFlag(0, ParaFlag::ISPAGE);
+    CPPUNIT_ASSERT(aOutliner.GetEditEngine().HasParaFlag(0, ParaFlag::ISPAGE));
+
+    // Undo clears the flag again.
+    CPPUNIT_ASSERT(aOutliner.GetUndoManager().Undo());
+    CPPUNIT_ASSERT(!aOutliner.GetEditEngine().HasParaFlag(0, ParaFlag::ISPAGE));
+}
+
+void Test::testOutlinerReadDepth()
+{
+    Outliner aOutliner(mpItemPool.get(), OutlinerMode::OutlineView);
+    SvMemoryStream aStream;
+    aStream.WriteOString("a\n\tb");
+    aStream.Seek(0);
+    aOutliner.Read(aStream, OUString(), EETextFormat::Text);
+    // The text is read into the empty paragraph in front, which stays.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), aOutliner.GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(u"a"_ustr, aOutliner.GetText(0));
+    CPPUNIT_ASSERT_EQUAL(u"b"_ustr, aOutliner.GetText(1));
+
+    // Each paragraph takes the depth of its outline level, not the depth set before reading.
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(-1), aOutliner.GetDepth(0));
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(-1), aOutliner.GetDepth(1));
+}
+
+/*
+ * A character typed over a selection through an input method, which is how a browser client sends
+ * every keystroke, has to cost one undo step, as a key press does. The text that was selected is
+ * taken away as part of that input rather than as a step of its own.
+ */
+void Test::testExtTextInputOverSelectionIsOneUndoStep()
+{
+    EditEngine aEditEngine(mpItemPool.get());
+    aEditEngine.EnableUndo(true);
+    aEditEngine.SetText(u"Hello"_ustr);
+
+    // The view needs a window of its own: setting a selection draws it, and drawing goes through
+    // the output device of that window.
+    ScopedVclPtrInstance<WorkWindow> xWindow(nullptr, WB_APP | WB_STDWORK);
+    EditView aEditView(aEditEngine, xWindow.get());
+    aEditEngine.InsertView(&aEditView);
+    aEditView.SetOutputArea(tools::Rectangle(Point(0, 0), Size(2000, 2000)));
+    aEditView.SetSelection(ESelection(0, 0, 0, 5));
+
+    CommandEvent aStart(Point(), CommandEventId::StartExtTextInput, false);
+    aEditView.Command(aStart);
+
+    CommandExtTextInputData aInputData(u"X"_ustr, nullptr, 1, 0, false);
+    CommandEvent aInput(Point(), CommandEventId::ExtTextInput, false, &aInputData);
+    aEditView.Command(aInput);
+
+    CommandEvent aEnd(Point(), CommandEventId::EndExtTextInput, false);
+    aEditView.Command(aEnd);
+
+    CPPUNIT_ASSERT_EQUAL(u"X"_ustr, aEditEngine.GetText());
+
+    aEditEngine.GetUndoManager().Undo();
+    CPPUNIT_ASSERT_EQUAL(u"Hello"_ustr, aEditEngine.GetText());
+
+    aEditEngine.RemoveView(&aEditView);
+}
+
+/*
+ * With font independent line spacing, part of the height a line gains from its line spacing sits
+ * below the text. The cursor covers the text, so it reaches as far below the baseline at double
+ * spacing as at single spacing.
+ */
+void Test::testCursorReachesTheSameDepthBelowTheBaseline()
+{
+    EditEngine aEditEngine(mpItemPool.get());
+    aEditEngine.SetFixedCellHeight(true);
+    aEditEngine.SetText(u"Line"_ustr);
+
+    ScopedVclPtrInstance<WorkWindow> xWindow(nullptr, WB_APP | WB_STDWORK);
+    EditView aEditView(aEditEngine, xWindow.get());
+    aEditEngine.InsertView(&aEditView);
+    aEditView.SetOutputArea(tools::Rectangle(Point(0, 0), Size(10000, 10000)));
+
+    auto depthBelowBaseline = [&](sal_uInt16 nSpace) {
+        SfxItemSet aSet(aEditEngine.GetEmptyItemSet());
+        SvxLineSpacingItem aLineSpacing(LINE_SPACE_DEFAULT_HEIGHT, EE_PARA_SBL);
+        aLineSpacing.SetPropLineSpace(nSpace);
+        aSet.Put(aLineSpacing);
+        aSet.Put(SvxFontHeightItem(706, 100, EE_CHAR_FONTHEIGHT));
+        aEditEngine.QuickSetAttribs(aSet, ESelection(0, 0, 0, 4));
+
+        aEditView.SetSelection(ESelection(0, 4, 0, 4));
+        const tools::Rectangle aCursor = aEditView.GetEditCursor();
+        return aCursor.Bottom() - tools::Long(aEditEngine.GetParagraphInfos(0).nFirstLineMaxAscent);
+    };
+
+    const tools::Long nSingle = depthBelowBaseline(100);
+    CPPUNIT_ASSERT_GREATER(tools::Long(0), nSingle);
+    CPPUNIT_ASSERT_EQUAL(nSingle, depthBelowBaseline(200));
+
+    aEditEngine.RemoveView(&aEditView);
+}
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);
 }

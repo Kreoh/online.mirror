@@ -42,7 +42,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace com::sun::star::uno { template <typename > class Reference; }
+namespace cpo::uno { template <typename > class Reference; }
 
 class SfxItemSet;
 class SfxViewShell;
@@ -550,7 +550,7 @@ class ScGlobal
 
     static std::unique_ptr<SvNumberFormatter> xEnglishFormatter;          // for UNO / XML export
 
-    static css::uno::Reference< css::i18n::XOrdinalSuffix> xOrdinalSuffix;
+    static cpo::uno::Reference< css::i18n::XOrdinalSuffix> xOrdinalSuffix;
     static std::optional<CalendarWrapper>    oCalendar;
     static std::atomic<CollatorWrapper*>     pCaseCollator;
     static std::atomic<CollatorWrapper*>     pCollator;
@@ -695,6 +695,13 @@ public:
         @returns offset if found, else -1
      */
     SC_DLLPUBLIC static sal_Int32   FindUnquoted( const OUString& rString, sal_Unicode cChar, sal_Int32 nStart = 0 );
+
+    /** Offset of the first argument in an AutoSum formula, so its range can be
+        preselected for overtyping. A subtotal carries a leading function number
+        (SUBTOTAL(109;...) that is stepped over as well.
+        @returns offset, or -1 if rFormula has no '('
+     */
+    static sal_Int32                GetAutoSumArgStart( const OUString& rFormula, bool bSubTotal );
 
     /** Finds an unquoted instance of cChar in null-terminated pString. Same
         semantics as FindUnquoted( const String&, ...)

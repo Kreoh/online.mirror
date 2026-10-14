@@ -28,7 +28,8 @@
 #include <comphelper/processfactory.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 class Test : public SwModelTestBase
 {
@@ -76,7 +77,7 @@ CPPUNIT_TEST_FIXTURE(Test, testDmlPictureInTextframe)
 {
     createSwDoc("dml-picture-in-textframe.docx");
     saveAndReload(TestFilter::DOCX);
-    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
+    uno::Reference<packages::zip::XZipFileAccess> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
     CPPUNIT_ASSERT_EQUAL(true, xNameAccess->hasByName(u"word/media/image1.gif"_ustr));
     // This was also true, image was written twice.
     CPPUNIT_ASSERT_EQUAL(false, xNameAccess->hasByName(u"word/media/image2.gif"_ustr));
@@ -758,7 +759,8 @@ CPPUNIT_TEST_FIXTURE(Test, testSmartArtAnchoredInline)
 
     xmlDocUniquePtr pXmlDoc = parseExport(u"word/document.xml"_ustr);
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/w:drawing[2]/wp:anchor/wp:docPr","id",u"2");
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/w:drawing[2]/wp:anchor/wp:docPr","name",u"Diagram2");
+    // The name is the one the document gave the diagram, not one made from its number.
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/w:drawing[2]/wp:anchor/wp:docPr","name",u"Diagram 2");
 
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/wp:docPr","id",u"3");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/wp:docPr","name",u"10-Point Star 3");

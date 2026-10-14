@@ -23,8 +23,8 @@
 #include <vcl/GraphicExternalLink.hxx>
 #include <vcl/gdimtf.hxx>
 #include <vcl/graph.hxx>
-#include "graphic/Manager.hxx"
-#include "graphic/MemoryManaged.hxx"
+#include <vcl/graphic/Manager.hxx>
+#include <vcl/graphic/MemoryManaged.hxx>
 #include "graphic/GraphicID.hxx"
 #include "graphic/BitmapContainer.hxx"
 #include "graphic/AnimationContainer.hxx"
@@ -66,6 +66,8 @@ private:
     bool                         mbDummyContext = false;
     // cache checksum computation
     mutable BitmapChecksum       mnChecksum = 0;
+    // cache the per-pixel alpha scan
+    mutable std::optional<bool>  mbHasTransparentPixels;
 
     std::optional<GraphicID>     mxGraphicID;
     GraphicExternalLink          maGraphicExternalLink;
@@ -123,6 +125,7 @@ private:
 
     bool                isTransparent() const;
     bool                isAlpha() const;
+    bool                hasTransparentPixels() const;
     bool                isAnimated() const;
     bool                isEPS() const;
 
@@ -145,6 +148,8 @@ private:
     void                setPrefMapMode( const MapMode& rPrefMapMode );
 
     sal_Int64 getSizeBytes() const;
+
+    sal_Int64 getAccountedSizeBytes() const;
 
     void ensureCurrentSizeInBytes();
 
@@ -187,11 +192,20 @@ private:
 
     const std::shared_ptr<VectorGraphicData>& getVectorGraphicData() const;
 
+    /// Whether the graphic carries vector graphic data rather than pixels or drawing commands.
+    bool isVectorGraphic() const;
+
     /// Gets the bitmap replacement for a vector graphic.
     // Hide volatile state of maBitmapEx when using maVectorGraphicData into this method
     void updateBitmapFromVectorGraphic(const Size& pixelSize = {}) const;
 
     bool ensureAvailable () const;
+
+    /** Brings the encoded data of the link back into memory and tells the memory manager what
+        those bytes cost. A graphic with no link, or one whose link holds no bytes, is left as it
+        is. The graphic content itself stays where it is, so a graphic that was swapped out is
+        still swapped out afterwards. */
+    void ensureEncodedDataAvailable() const;
 
     sal_Int32 getPageNumber() const;
 
@@ -202,6 +216,7 @@ private:
 
     bool canReduceMemory() const override;
     bool reduceMemory() override;
+    void refreshCurrentSizeInBytes() override;
     std::chrono::high_resolution_clock::time_point getLastUsed() const override;
     void resetLastUsed() const;
 

@@ -48,8 +48,8 @@ public:
             would not keep a strong reference to the new object.
     */
     AccessiblePageShape (
-        css::uno::Reference<css::drawing::XDrawPage> xPage,
-        const css::uno::Reference<css::accessibility::XAccessible>& rxParent,
+        cpo::uno::Reference<css::drawing::XDrawPage> xPage,
+        const cpo::uno::Reference<css::accessibility::XAccessible>& rxParent,
         const AccessibleShapeTreeInfo& rShapeTreeInfo);
 
     virtual ~AccessiblePageShape() override;
@@ -57,7 +57,7 @@ public:
     //=====  XAccessibleContext  ==============================================
 
     /// Returns always 0 because there can be no children.
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getAccessibleChildCount() override;
 
     /** Return the specified child.
@@ -69,7 +69,7 @@ public:
         @throws IndexOutOfBoundsException
             Throws always an exception because there are no children.
     */
-    virtual css::uno::Reference<css::accessibility::XAccessible> SAL_CALL
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
         getAccessibleChild (sal_Int64 nIndex) override;
 
     // OAccessible
@@ -77,21 +77,21 @@ public:
 
     //=====  XAccessibleComponent  ============================================
 
-    virtual sal_Int32 SAL_CALL getForeground() override;
+    virtual sal_Int32 getForeground() override;
 
-    virtual sal_Int32 SAL_CALL getBackground() override;
+    virtual sal_Int32 getBackground() override;
 
     //=====  XComponent  ======================================================
 
-    virtual void SAL_CALL
+    virtual void
         dispose() override;
 
     //=====  XServiceInfo  ====================================================
 
-    virtual OUString SAL_CALL
+    virtual OUString
         getImplementationName() override;
 
-    virtual cpo::uno::Sequence< OUString> SAL_CALL
+    virtual cpo::uno::Sequence< OUString>
         getSupportedServiceNames() override;
 
     using AccessibleShape::disposing;
@@ -106,7 +106,7 @@ protected:
         CreateAccessibleName() override;
 
 private:
-    css::uno::Reference<css::drawing::XDrawPage> mxPage;
+    cpo::uno::Reference<css::drawing::XDrawPage> mxPage;
 
     AccessiblePageShape (const AccessiblePageShape&) = delete;
     AccessibleShape& operator= (const AccessiblePageShape&) = delete;

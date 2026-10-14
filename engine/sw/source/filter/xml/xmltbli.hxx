@@ -23,6 +23,7 @@
 #include <xmloff/XMLTextTableContext.hxx>
 
 #include "xmlimp.hxx"
+#include <swtable.hxx>
 
 #include <memory>
 #include <unordered_map>
@@ -51,6 +52,11 @@ class SwXMLTableContext : public XMLTextTableContext
     OUString     m_aStyleName;
     OUString     m_aDfltCellStyleName;
     OUString     m_aTemplateName;
+    /// Which of the template's row/column roles apply.
+    SwTableStyleSettings m_aTemplateSettings;
+    /// Whether the table element carried any of the table:use-*-styles attributes. Files
+    /// written before those were saved applied every role of the template.
+    bool m_bHasTemplateSettings = false;
 
     //! Holds basic information about a column's width.
     struct ColumnWidthInfo {
@@ -61,8 +67,8 @@ class SwXMLTableContext : public XMLTextTableContext
     std::vector<ColumnWidthInfo> m_aColumnWidths;
     std::optional<std::vector<OUString>> m_xColumnDefaultCellStyleNames;
 
-    css::uno::Reference< css::text::XTextCursor > m_xOldCursor;
-    css::uno::Reference< css::text::XTextContent > m_xTextContent;
+    cpo::uno::Reference< css::text::XTextCursor > m_xOldCursor;
+    cpo::uno::Reference< css::text::XTextContent > m_xTextContent;
 
     std::unique_ptr<SwXMLTableRows_Impl> m_pRows;
 
@@ -138,15 +144,15 @@ public:
 
 
     SwXMLTableContext( SwXMLImport& rImport,
-                       const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList );
+                       const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList );
     SwXMLTableContext( SwXMLImport& rImport,
                        SwXMLTableContext *pTable );
 
     virtual ~SwXMLTableContext() override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
         sal_Int32 Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) override;
 
     SwXMLImport& GetSwImport() { return static_cast<SwXMLImport&>(GetImport()); }
 
@@ -188,7 +194,7 @@ public:
     const SwStartNode *InsertTableSection(const SwStartNode *pPrevSttNd = nullptr,
                                   OUString const* pStringValueStyleName = nullptr);
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 
     void SetHasSubTables( bool bNew ) { m_bHasSubTables = bNew; }
 };

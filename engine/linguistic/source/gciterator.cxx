@@ -28,6 +28,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/linguistic2/XDictionary.hpp>
+#include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
 #include <com/sun/star/linguistic2/XSupportedLocales.hpp>
 #include <com/sun/star/linguistic2/XProofreader.hpp>
 #include <com/sun/star/linguistic2/XProofreadingIterator.hpp>
@@ -40,7 +41,7 @@
 #include <com/sun/star/text/XMultiTextMarkup.hpp>
 #include <com/sun/star/text/XFlatParagraph.hpp>
 #include <com/sun/star/text/XFlatParagraphIterator.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <sal/config.h>
 #include <sal/log.hxx>
@@ -50,6 +51,7 @@
 #include <cppuhelper/weak.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/sequence.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <tools/debug.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -63,6 +65,7 @@
 
 using namespace linguistic;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // white space list: obtained from the fonts.config.txt of a Linux system.
 const sal_Unicode aWhiteSpaces[] =
@@ -420,6 +423,7 @@ void GrammarCheckingIterator::ProcessResult(
                 text::TextMarkupDescriptor * pDescriptors = aDescriptors.getArray();
 
                 uno::Reference< linguistic2::XDictionary > xIgnoreAll = ::GetIgnoreAllList();
+                uno::Reference< linguistic2::XSearchableDictionaryList > xDicList = ::GetDictionaryList();
                 sal_Int32 ignoredCount = 0;
 
                 // at pos 0 .. nErrors-1 -> all grammar errors
@@ -427,6 +431,21 @@ void GrammarCheckingIterator::ProcessResult(
                 {
                     OUString word(rRes.aText.subView(rError.nErrorStart, rError.nErrorLength));
                     bool ignored = xIgnoreAll.is() && xIgnoreAll->getEntry(word).is();
+
+                    // A proofreader reports misspellings as well, and reports
+                    // them as proofreading errors, so the user dictionaries
+                    // have to be consulted here too - the spelling path, which
+                    // does consult them, is not taken for these. Ask only
+                    // about a single word, that being the only question a
+                    // dictionary can answer, and let a negative dictionary
+                    // outweigh a positive one, as the spelling path does.
+                    if (!ignored && xDicList.is() && !word.isEmpty()
+                        && word.indexOf(' ') < 0 && word.indexOf('\t') < 0
+                        && word.indexOf('\n') < 0
+                        && !xDicList->queryDictionaryEntry(word, rRes.aLocale, false, true).is())
+                    {
+                        ignored = xDicList->queryDictionaryEntry(word, rRes.aLocale, true, true).is();
+                    }
 
                     if (!ignored)
                     {
@@ -509,7 +528,7 @@ void GrammarCheckingIterator::ProcessResult(
 }
 
 
-std::pair<OUString, std::optional<OUString>>
+std::pair<std::vector<OUString>, std::optional<OUString>>
 GrammarCheckingIterator::getServiceForLocale(const lang::Locale& rLocale) const
 {
     if (!rLocale.Language.isEmpty())
@@ -560,44 +579,62 @@ uno::Reference< linguistic2::XProofreader > GrammarCheckingIterator::GetGrammarC
         return m_xLastGC;
     }
 
-    const auto [aSvcImplName, oFallbackBcp47] = getServiceForLocale(rLocale);
-    if (!aSvcImplName.isEmpty()) // matching configured language found?
+    const auto [aSvcImplNames, oFallbackBcp47] = getServiceForLocale(rLocale);
+    if (!aSvcImplNames.empty()) // matching configured language found?
     {
         if (oFallbackBcp47)
             rLocale = LanguageTag::convertToLocale(*oFallbackBcp47, false);
-        GCReferences_t::const_iterator aImplNameIt( m_aGCReferencesByService.find( aSvcImplName ) );
-        if (aImplNameIt != m_aGCReferencesByService.end())  // matching impl name found?
+
+        // A language is checked by one service, but which one is not settled
+        // until they are asked: a service can be configured and still decline
+        // the locale, as the remote checker does while it is switched off.
+        // Take the first that claims it rather than giving up on the first.
+        for (const OUString& rSvcImplName : aSvcImplNames)
         {
-            xRes = aImplNameIt->second;
-        }
-        else    // the service is to be instantiated here for the first time...
-        {
-            try
+            // A service instantiated for one language is kept for the next,
+            // but it still has to be asked about this locale: the one that
+            // serves English need not serve Hungarian.
+            GCReferences_t::const_iterator aImplNameIt(
+                m_aGCReferencesByService.find(rSvcImplName) );
+            const bool bKnown = aImplNameIt != m_aGCReferencesByService.end();
+
+            uno::Reference< linguistic2::XProofreader > xGC;
+            if (bKnown)
             {
-                const uno::Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
-                uno::Reference< linguistic2::XProofreader > xGC(
-                        xContext->getServiceManager()->createInstanceWithContext(aSvcImplName, xContext),
-                        uno::UNO_QUERY_THROW );
-                uno::Reference< linguistic2::XSupportedLocales > xSuppLoc( xGC, uno::UNO_QUERY_THROW );
-
-                if (xSuppLoc->hasLocale( rLocale ))
+                xGC = aImplNameIt->second;
+            }
+            else    // the service is to be instantiated here for the first time...
+            {
+                try
                 {
-                    m_aGCReferencesByService[ aSvcImplName ] = xGC;
-                    xRes = xGC;
-
-                    uno::Reference< linguistic2::XLinguServiceEventBroadcaster > xBC( xGC, uno::UNO_QUERY );
-                    if (xBC.is())
-                        xBC->addLinguServiceEventListener( this );
+                    const uno::Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+                    xGC.set(xContext->getServiceManager()->createInstanceWithContext(rSvcImplName, xContext),
+                            uno::UNO_QUERY_THROW );
                 }
-                else
+                catch (cpo::uno::Exception &)
                 {
-                    SAL_WARN( "linguistic", "grammar checker does not support required locale" );
+                    SAL_WARN( "linguistic", "instantiating " << rSvcImplName << " failed" );
+                    continue;
                 }
             }
-            catch (cpo::uno::Exception &)
+
+            // XProofreader is an XSupportedLocales, so ask it directly.
+            if (!xGC.is() || !xGC->hasLocale( rLocale ))
             {
-                SAL_WARN( "linguistic", "instantiating grammar checker failed" );
+                SAL_INFO( "linguistic", rSvcImplName << " does not support the required locale" );
+                continue;
             }
+
+            if (!bKnown)
+            {
+                m_aGCReferencesByService[ rSvcImplName ] = xGC;
+
+                uno::Reference< linguistic2::XLinguServiceEventBroadcaster > xBC( xGC, uno::UNO_QUERY );
+                if (xBC.is())
+                    xBC->addLinguServiceEventListener( this );
+            }
+            xRes = xGC;
+            break;
         }
     }
     else // not found - quite normal
@@ -786,7 +823,7 @@ void GrammarCheckingIterator::DequeueAndCheck()
 
 
 void GrammarCheckingIterator::startProofreading(
-    const uno::Reference< ::uno::XInterface > & xDoc,
+    const uno::Reference< cpo::uno::XInterface > & xDoc,
     const uno::Reference< text::XFlatParagraphIteratorProvider > & xIteratorProvider )
 {
     // get paragraph to start checking with
@@ -810,7 +847,7 @@ void GrammarCheckingIterator::startProofreading(
 
 
 linguistic2::ProofreadingResult GrammarCheckingIterator::checkSentenceAtPosition(
-    const uno::Reference< uno::XInterface >& xDoc,
+    const uno::Reference< cpo::uno::XInterface >& xDoc,
     const uno::Reference< text::XFlatParagraph >& xFlatPara,
     const OUString& rText,
     const lang::Locale&,
@@ -915,7 +952,7 @@ sal_Int32 GrammarCheckingIterator::GetSuggestedEndOfSentence(
 
     if (!m_xBreakIterator.is())
     {
-        const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+        const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
         m_xBreakIterator = i18n::BreakIterator::create(xContext);
     }
     sal_Int32 nTextLen = rText.getLength();
@@ -960,7 +997,7 @@ void GrammarCheckingIterator::resetIgnoreRules(  )
 
 
 bool GrammarCheckingIterator::isProofreading(
-    const uno::Reference< uno::XInterface >& xDoc )
+    const uno::Reference< cpo::uno::XInterface >& xDoc )
 {
     // ---- THREAD SAFE START ----
     ::osl::Guard< ::osl::Mutex > aGuard( MyMutex() );
@@ -1012,13 +1049,13 @@ void GrammarCheckingIterator::processLinguServiceEvent(
 
     try
     {
-         uno::Reference< uno::XInterface > xThis( getXWeak() );
+         uno::Reference< cpo::uno::XInterface > xThis( getXWeak() );
          linguistic2::LinguServiceEvent aEvent( xThis, linguistic2::LinguServiceEventFlags::PROOFREAD_AGAIN );
          m_aNotifyListeners.notifyEach(
                 &linguistic2::XLinguServiceEventListener::processLinguServiceEvent,
                 aEvent);
     }
-    catch (uno::RuntimeException &)
+    catch (cpo::uno::RuntimeException &)
     {
          throw;
     }
@@ -1131,7 +1168,7 @@ uno::Reference< util::XChangesBatch > const & GrammarCheckingIterator::GetUpdate
         try
         {
             // get configuration provider
-            const uno::Reference< uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
+            const uno::Reference< cpo::uno::XComponentContext >& xContext = comphelper::getProcessComponentContext();
             uno::Reference< lang::XMultiServiceFactory > xConfigurationProvider =
                     configuration::theDefaultProvider::get( xContext );
 
@@ -1173,8 +1210,10 @@ void GrammarCheckingIterator::GetConfiguredGCSvcs_Impl()
             {
                 if (aImplNames.hasElements())
                 {
-                    // only the first entry is used, there should be only one grammar checker per language
-                    aTmpGCImplNamesByLang[rElementName] = aImplNames[0];
+                    // One of them checks the language; GetGrammarChecker picks
+                    // which, since that depends on the locales they report.
+                    aTmpGCImplNamesByLang[rElementName]
+                        = std::vector<OUString>(aImplNames.begin(), aImplNames.end());
                 }
             }
             else
@@ -1226,14 +1265,11 @@ void GrammarCheckingIterator::SetServiceList(
     ::osl::Guard< ::osl::Mutex > aGuard( MyMutex() );
 
     OUString sBcp47 = LanguageTag::convertToBcp47(rLocale, false);
-    OUString aImplName;
-    if (rSvcImplNames.hasElements())
-        aImplName = rSvcImplNames[0];   // there is only one grammar checker per language
-
     if (!LinguIsUnspecified(sBcp47) && !sBcp47.isEmpty())
     {
-        if (!aImplName.isEmpty())
-            m_aGCImplNamesByLang[sBcp47] = aImplName;
+        if (rSvcImplNames.hasElements())
+            m_aGCImplNamesByLang[sBcp47]
+                = std::vector<OUString>(rSvcImplNames.begin(), rSvcImplNames.end());
         else
             m_aGCImplNamesByLang.erase(sBcp47);
     }
@@ -1245,17 +1281,13 @@ cpo::uno::Sequence< OUString > GrammarCheckingIterator::GetServiceList(
 {
     ::osl::Guard< ::osl::Mutex > aGuard( MyMutex() );
 
-    const OUString aImplName = getServiceForLocale(rLocale).first;     // there is only one grammar checker per language
-
-    if (!aImplName.isEmpty())
-        return { aImplName };
-    return {};
+    return comphelper::containerToSequence(getServiceForLocale(rLocale).first);
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 linguistic_GrammarCheckingIterator_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new GrammarCheckingIterator());
 }

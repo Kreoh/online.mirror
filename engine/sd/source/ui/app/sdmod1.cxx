@@ -60,7 +60,7 @@
 #include <officecfg/Office/Impress.hxx>
 
 using ::sd::framework::FrameworkHelper;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::com::sun::star::frame::XFrame;
 
 namespace {
@@ -107,6 +107,7 @@ void SdModule::Execute(SfxRequest& rReq)
                 {
                     SdDrawDocument* pDoc = pDocSh->GetDoc();
                     pDoc->SetOnlineSpell( bOnlineSpelling );
+                    SetAutoSpellProperty( bOnlineSpelling, pDoc->GetDocumentType() );
                 }
             }
         }

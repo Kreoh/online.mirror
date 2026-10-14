@@ -40,6 +40,7 @@ namespace svt::GraphicAccess
 
 using namespace ::utl;
 using namespace css;
+using namespace ::cpo;
 
 typedef ::cppu::WeakImplHelper<io::XStream, io::XSeekable> StreamSupplier_Base;
 
@@ -57,13 +58,13 @@ public:
 
 protected:
     // XStream
-    virtual uno::Reference<io::XInputStream> SAL_CALL getInputStream() override;
-    virtual uno::Reference<io::XOutputStream> SAL_CALL getOutputStream() override;
+    virtual uno::Reference<io::XInputStream> getInputStream() override;
+    virtual uno::Reference<io::XOutputStream> getOutputStream() override;
 
     // XSeekable
-    virtual void SAL_CALL seek(sal_Int64 location) override;
-    virtual sal_Int64 SAL_CALL getPosition() override;
-    virtual sal_Int64 SAL_CALL getLength() override;
+    virtual void seek(sal_Int64 location) override;
+    virtual sal_Int64 getPosition() override;
+    virtual sal_Int64 getLength() override;
 };
 
 }
@@ -78,31 +79,31 @@ StreamSupplier::StreamSupplier(uno::Reference<io::XInputStream> xInput, uno::Ref
     OSL_ENSURE(m_xSeekable.is(), "StreamSupplier::StreamSupplier: at least one of both must be seekable!");
 }
 
-uno::Reference<io::XInputStream> SAL_CALL StreamSupplier::getInputStream()
+uno::Reference<io::XInputStream> StreamSupplier::getInputStream()
 {
     return m_xInput;
 }
 
-uno::Reference<io::XOutputStream> SAL_CALL StreamSupplier::getOutputStream()
+uno::Reference<io::XOutputStream> StreamSupplier::getOutputStream()
 {
     return m_xOutput;
 }
 
-void SAL_CALL StreamSupplier::seek(sal_Int64 nLocation)
+void StreamSupplier::seek(sal_Int64 nLocation)
 {
     if (!m_xSeekable.is())
         throw io::NotConnectedException();
     m_xSeekable->seek(nLocation);
 }
 
-sal_Int64 SAL_CALL StreamSupplier::getPosition()
+sal_Int64 StreamSupplier::getPosition()
 {
     if (!m_xSeekable.is())
         throw io::NotConnectedException();
     return m_xSeekable->getPosition();
 }
 
-sal_Int64 SAL_CALL StreamSupplier::getLength()
+sal_Int64 StreamSupplier::getLength()
 {
     if (!m_xSeekable.is())
         throw io::NotConnectedException();
@@ -114,11 +115,10 @@ bool isSupportedURL(std::u16string_view rURL)
 {
     return o3tl::starts_with(rURL, u"private:resource/")
         || o3tl::starts_with(rURL, u"private:graphicrepository/")
-        || o3tl::starts_with(rURL, u"private:standardimage/")
-        || o3tl::starts_with(rURL, u"vnd.sun.star.extension://");
+        || o3tl::starts_with(rURL, u"private:standardimage/");
 }
 
-std::unique_ptr<SvStream> getImageStream(uno::Reference<uno::XComponentContext> const & rxContext, OUString const & rImageResourceURL)
+std::unique_ptr<SvStream> getImageStream(uno::Reference<cpo::uno::XComponentContext> const & rxContext, OUString const & rImageResourceURL)
 {
     std::unique_ptr<SvMemoryStream> pMemBuffer;
 
@@ -157,7 +157,7 @@ std::unique_ptr<SvStream> getImageStream(uno::Reference<uno::XComponentContext> 
     return pMemBuffer;
 }
 
-uno::Reference<io::XInputStream> getImageXStream(uno::Reference<uno::XComponentContext> const & rxContext, OUString const & rImageResourceURL)
+uno::Reference<io::XInputStream> getImageXStream(uno::Reference<cpo::uno::XComponentContext> const & rxContext, OUString const & rImageResourceURL)
 {
     return new OSeekableInputStreamWrapper(getImageStream(rxContext, rImageResourceURL).release(), true);   // take ownership
 }

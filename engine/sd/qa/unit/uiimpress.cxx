@@ -25,7 +25,7 @@
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/XDrawView.hpp>
@@ -33,6 +33,7 @@
 #include <com/sun/star/drawing/XMasterPageTarget.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <com/sun/star/table/XMergeableCell.hpp>
+#include <com/sun/star/text/GraphicCrop.hpp>
 #include <com/sun/star/text/WritingMode2.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 
@@ -43,6 +44,7 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/outliner.hxx>
+#include <sfx2/cokitfilepicker.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -51,9 +53,12 @@
 #include <svx/svxids.hrc>
 #include <svx/svdoashp.hxx>
 #include <svx/svdpagv.hxx>
+#include <basegfx/polygon/b2dpolygon.hxx>
+#include <svx/svdopath.hxx>
 #include <svx/svdorect.hxx>
 #include <svx/svdhdl.hxx>
 #include <svx/svddrgmt.hxx>
+#include <svx/svdomedia.hxx>
 #include <svx/svdotable.hxx>
 #include <svx/xlineit0.hxx>
 #include <svx/xfillit0.hxx>
@@ -79,8 +84,11 @@
 
 #include <drawdoc.hxx>
 #include <DrawDocShell.hxx>
+#include <SlideSectionManager.hxx>
 #include <DesignTemplates.hxx>
 #include <ViewShell.hxx>
+#include <OutlineView.hxx>
+#include <Window.hxx>
 #include <app.hrc>
 #include <sdpage.hxx>
 #include <vcl/bitmap.hxx>
@@ -94,10 +102,29 @@
 #include <unopage.hxx>
 #include <editeng/outlobj.hxx>
 #include <sdmod.hxx>
+#include <officecfg/Office/Impress.hxx>
+#include <unotools/lingucfg.hxx>
+#include <svx/sdgcpitm.hxx>
+#include <svx/svdograf.hxx>
 #include <svx/svdotext.hxx>
+#include <set>
+#include <vector>
+
+#include <tools/color.hxx>
+#include <tools/stream.hxx>
+#include <vcl/BinaryDataContainer.hxx>
+#include <vcl/alpha.hxx>
+#include <vcl/BitmapTools.hxx>
+#include <vcl/graphicfilter.hxx>
+#include <tools/LintImageCompressor.hxx>
+#include <tools/LintMeasureCache.hxx>
+#include <tools/PresentationLint.hxx>
+#include <vcl/gfxlink.hxx>
+#include <vcl/mapmod.hxx>
 #include <xmloff/autolayout.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /// Impress UI tests.
 class SdUiImpressTest : public SdModelTestBase
@@ -111,9 +138,55 @@ public:
     void checkCurrentPageNumber(sal_uInt16 nNum);
     void insertStringToObject(sal_uInt16 nObj, std::u16string_view rStr, bool bUseEscape);
     sd::slidesorter::SlideSorterViewShell*
-    getSlideSorterViewShell(const css::uno::Reference<css::lang::XComponent>& xComp = nullptr);
+    getSlideSorterViewShell(const cpo::uno::Reference<css::lang::XComponent>& xComp = nullptr);
     void lcl_search(const OUString& rKey, bool bFindAll = false, bool bBackwards = false);
+    // Opens a new presentation in Outline view, with one slide per title.
+    OutlinerView* createOutlineView(std::initializer_list<std::u16string_view> aTitles);
+    // Sends keys to the Outline view, where postKeyEvent() does not reach.
+    void typeOutlineKey(sal_uInt16 nKey);
+    void typeOutlineString(std::u16string_view aStr);
 };
+
+void SdUiImpressTest::typeOutlineKey(sal_uInt16 nKey)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    pViewShell->KeyInput(KeyEvent(0, vcl::KeyCode(nKey)), pViewShell->GetActiveWindow());
+    Scheduler::ProcessEventsToIdle();
+}
+
+void SdUiImpressTest::typeOutlineString(std::u16string_view aStr)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    for (const char16_t c : aStr)
+        pViewShell->KeyInput(KeyEvent(c, vcl::KeyCode()), pViewShell->GetActiveWindow());
+    Scheduler::ProcessEventsToIdle();
+}
+
+OutlinerView* SdUiImpressTest::createOutlineView(std::initializer_list<std::u16string_view> aTitles)
+{
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:OutlineMode"_ustr, {});
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT_EQUAL(sd::ViewShell::ST_OUTLINE, pViewShell->GetShellType());
+    auto pView = static_cast<sd::SimpleOutlinerView*>(pViewShell->GetView());
+    OutlinerView* pOutlinerView = pView->GetViewByWindow(pViewShell->GetActiveWindow());
+    CPPUNIT_ASSERT(pOutlinerView);
+
+    bool bFirst = true;
+    for (const std::u16string_view & aTitle : aTitles)
+    {
+        if (!std::exchange(bFirst, false))
+            typeOutlineKey(KEY_RETURN);
+        typeOutlineString(aTitle);
+    }
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(aTitles.size()),
+                         pImpressDocument->GetDoc()->GetSdPageCount(PageKind::Standard));
+    return pOutlinerView;
+}
 
 void SdUiImpressTest::checkCurrentPageNumber(sal_uInt16 nNum)
 {
@@ -153,7 +226,7 @@ void SdUiImpressTest::insertStringToObject(sal_uInt16 nObj, std::u16string_view 
 }
 
 sd::slidesorter::SlideSorterViewShell*
-SdUiImpressTest::getSlideSorterViewShell(const css::uno::Reference<css::lang::XComponent>& xComp)
+SdUiImpressTest::getSlideSorterViewShell(const cpo::uno::Reference<css::lang::XComponent>& xComp)
 {
     // The slide sorter is created in the slide panel, which a unit test with the Kit does not get
     if (comphelper::COKit::isActive())
@@ -1385,7 +1458,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf111522)
     aRequest.AppendItem(SfxUInt32Item(ID_VAL_WHATPAGE, 1));
     aRequest.AppendItem(
         SfxUInt32Item(ID_VAL_WHATKIND, static_cast<sal_uInt32>(PageKind::Standard)));
-    pViewShell2->ExecuteSlot(aRequest, /*bAsync=*/false);
+    pViewShell2->ExecuteSlot(aRequest);
 
     // Start text edit in window 1.
     SdPage* pPage1 = pViewShell1->GetActualPage();
@@ -1989,10 +2062,10 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf96708)
 
     rSSController.GetClipboard().DoPaste();
 
+    // tdf#151802: pasting the pages back brought a master page along that was the same as one
+    // already there, so the count grew by one
     const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
-    //FIXME: tdf#151802: Number of master pages should be 4, it's 5 instead
-    // CPPUNIT_ASSERT_EQUAL(nMasterPageCnt1, nMasterPageCnt2);
-    CPPUNIT_ASSERT_EQUAL(sal_uInt16(5), nMasterPageCnt2);
+    CPPUNIT_ASSERT_EQUAL(nMasterPageCnt1, nMasterPageCnt2);
 }
 
 CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_default_master)
@@ -2581,7 +2654,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf167029PasteKeepsOutlineLevel)
         pOlView->SetSelection(ESelection(0, 0, 0, 3));         // select "AAA"
         pOlView->Copy();
 
-        const sal_Int32 nLen = rOut.GetText(rOut.GetParagraph(1)).getLength();
+        const sal_Int32 nLen = rOut.GetText(1).getLength();
         ESelection aDest(1, 0, 1, 0);
         switch (ePos)
         {
@@ -2601,7 +2674,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf167029PasteKeepsOutlineLevel)
         // Make sure the copied text was actually pasted into the paragraph, so
         // the depth check below is meaningful (and not a no-op paste).
         CPPUNIT_ASSERT_MESSAGE("copied text was not pasted; " + aCase,
-                               rOut.GetText(rOut.GetParagraph(1)).indexOf(u"AAA") >= 0);
+                               rOut.GetText(1).indexOf(u"AAA") >= 0);
 
         // The destination paragraph keeps its own level 2 (depth 1). Without the
         // fix, pasting at the end of the line dropped it to depth 0 (the copied
@@ -2650,10 +2723,10 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf167029PasteIntoNonOutline)
     CPPUNIT_ASSERT_EQUAL(sal_Int16(-1), rBoxOut.GetDepth(0));
 
     // Paste the copied outline paragraph at the end of the text box paragraph.
-    const sal_Int32 nLen = rBoxOut.GetText(rBoxOut.GetParagraph(0)).getLength();
+    const sal_Int32 nLen = rBoxOut.GetText(0).getLength();
     pBoxView->SetSelection(ESelection(0, nLen, 0, nLen));
     pBoxView->PasteSpecial(SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT);
-    CPPUNIT_ASSERT_EQUAL(u"BBBAAA"_ustr, rBoxOut.GetText(rBoxOut.GetParagraph(0)));
+    CPPUNIT_ASSERT_EQUAL(u"BBBAAA"_ustr, rBoxOut.GetText(0));
 
     // Without an outline level of its own, the destination takes the pasted
     // (source) level 0 rather than keeping its "no level" (-1).
@@ -3143,6 +3216,42 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf134053)
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Distance", 399.0, dash.GetDistance());
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Dot length", 301.0, dash.GetDotLen());
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Dash length", 1.0, dash.GetDashLen());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testAutomaticSpellCheckingIsPerApplication)
+{
+    SvtLinguConfig aLinguConfig;
+    SvtLinguOptions aLinguOptions;
+    aLinguConfig.GetOptions(aLinguOptions);
+    const bool bSharedSpellAuto = aLinguOptions.bIsSpellAuto;
+
+    // Nothing was ever chosen for Impress, so the shared linguistic option this
+    // setting was split out of still answers for it
+    CPPUNIT_ASSERT(!officecfg::Office::Impress::Content::Display::AutomaticSpellChecking::get()
+                        .has_value());
+    CPPUNIT_ASSERT_EQUAL(bSharedSpellAuto, SdModule::GetAutoSpellProperty(DocumentType::Impress));
+
+    SdModule::SetAutoSpellProperty(false, DocumentType::Impress);
+
+    // turning Impress off leaves Draw where it was
+    CPPUNIT_ASSERT(SdModule::GetAutoSpellProperty(DocumentType::Draw));
+
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    // a new presentation takes Impress's setting
+    CPPUNIT_ASSERT(!pImpressDocument->GetDoc()->GetOnlineSpell());
+
+    // Tools - Automatic Spell Checking turns it back on, and Impress keeps that
+    // choice for the next presentation
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, {});
+    CPPUNIT_ASSERT(pImpressDocument->GetDoc()->GetOnlineSpell());
+    CPPUNIT_ASSERT(SdModule::GetAutoSpellProperty(DocumentType::Impress));
+
+    // none of which touches the shared linguistic option
+    aLinguConfig.GetOptions(aLinguOptions);
+    CPPUNIT_ASSERT_EQUAL(bSharedSpellAuto, aLinguOptions.bIsSpellAuto);
 }
 
 CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellOnlineParameter)
@@ -3806,6 +3915,50 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testMultiSelectionResize)
     CPPUNIT_ASSERT_EQUAL(aOrig2.Top() + 2 * (aOrig2.Bottom() - aOrig2.Top()), aNew2.Bottom());
 }
 
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testRotateHandleOfAPolygonIsNotOneOfItsPoints)
+{
+    // A polygon has points that the user can select, and its rotate handle is not one of them.
+    // Counting it as a point selects the first point of the polygon and shows the wrong mouse
+    // pointer.
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    SdPage* pPage = pViewShell->GetActualPage();
+
+    rtl::Reference<SdrRectObj> pRectangle
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(0, 3000, 2000, 4000));
+    basegfx::B2DPolygon aTriangle;
+    aTriangle.append(basegfx::B2DPoint(5000, 3000));
+    aTriangle.append(basegfx::B2DPoint(7000, 3000));
+    aTriangle.append(basegfx::B2DPoint(6000, 5000));
+    aTriangle.setClosed(true);
+    rtl::Reference<SdrPathObj> pPolygon
+        = new SdrPathObj(pView->getSdrModelFromSdrView(), SdrObjKind::Polygon,
+                         basegfx::B2DPolyPolygon(aTriangle));
+    pPage->NbcInsertObject(pRectangle.get());
+    pPage->NbcInsertObject(pPolygon.get());
+
+    // Two selected objects give each of them its own rotate handle.
+    pView->MarkObj(pRectangle.get(), pView->GetSdrPageView());
+    pView->MarkObj(pPolygon.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    SdrHdl* pRotateHandle = nullptr;
+    const SdrHdlList& rHdlList = pView->GetHdlList();
+    for (size_t i = 0; i < rHdlList.GetHdlCount(); ++i)
+    {
+        SdrHdl* pHdl = rHdlList.GetHdl(i);
+        if (pHdl->GetKind() == SdrHdlKind::Rotate && pHdl->GetObj() == pPolygon.get())
+            pRotateHandle = pHdl;
+    }
+    CPPUNIT_ASSERT_MESSAGE("the polygon has no rotate handle", pRotateHandle);
+
+    CPPUNIT_ASSERT(!pView->IsPointMarkable(*pRotateHandle));
+    CPPUNIT_ASSERT(!pView->MarkPoint(*pRotateHandle));
+    CPPUNIT_ASSERT(!pView->HasMarkedPoints());
+}
+
 CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testMultiSelectionRotate)
 {
     // Two separate, non-square rectangles, wireframe (non-solid) dragging.
@@ -3935,6 +4088,15 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testMultiSelectionPointEditToggle)
     pView->MarkObj(pRect1.get(), pView->GetSdrPageView());
     CPPUNIT_ASSERT(pView->IsFrameDragSingles());
     pView->MarkObj(pRect2.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    // Turning it off and then picking several objects again brings it back. Select All marks
+    // every object in one step, without passing through a selection of one.
+    dispatchCommand(mxComponent, u".uno:ToggleObjectBezierMode"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+    pView->UnmarkAllObj(pView->GetSdrPageView());
+    pView->MarkAllObj(pView->GetSdrPageView());
     CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
 }
 
@@ -4110,6 +4272,2196 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf166401_anEditElsewhereIsLeftAlone)
     CPPUNIT_ASSERT_EQUAL(pEdited, pEditedPage->GetObj(0));
     if (pView->IsTextEdit())
         pView->SdrEndTextEdit();
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintScan)
+{
+    // The lint scan lists an image stored at a far higher resolution than it is drawn at, a hidden
+    // slide and a master slide no slide uses, and keeps the speaker notes out of the list until the
+    // deck is being prepared to hand out.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto scanFor = [pDoc](const sd::lint::LintOptions& rOptions, sd::lint::LintCategory eCategory) {
+        sd::lint::PresentationLint aLint(*pDoc, rOptions);
+        aLint.scan();
+
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == eCategory)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    sd::lint::LintOptions aOptions;
+
+    // The first slide carries two images: the large JPEG the deck draws twice, and a small one
+    // that is also stored at far more pixels than it is drawn at.
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pDoc->GetSdPage(0, PageKind::Standard)->GetObjCount());
+
+    // The deck draws one JPEG twice, on the first slide at 4 cm across and on the third at 8 cm.
+    // The two drawings share a single row, which speaks for the 4 cm drawing because that is the
+    // more oversized of the two. Re-encoding the small image would free up a few kilobytes, which
+    // is under the floor the scan lists, so it gets no row.
+    auto aLargeImages = scanFor(aOptions, sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLargeImages.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aLargeImages[0]->getSlideIndex());
+    // The document still holds the encoded JPEG the slide was loaded from, so the row quotes
+    // its size.
+    CPPUNIT_ASSERT(aLargeImages[0]->getCurrentBytes() > 0);
+
+    // The row carries no image number, because it is the only image the first slide has a row
+    // for, and it says what the image is stored at so the client can write that under the line.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aLargeImages[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT(aLargeImages[0]->getFacts().mnEffectiveDPI > 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aLargeImages[0]->getFacts().mnHiddenPercent);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(aOptions, sd::lint::LintCategory::HiddenSlide).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(aOptions, sd::lint::LintCategory::UnusedMaster).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(aOptions, sd::lint::LintCategory::NotesContent).size());
+
+    // Preparing the deck to hand out brings in the speaker notes of the third slide.
+    aOptions.mbForPublication = true;
+    auto aNotes = scanFor(aOptions, sd::lint::LintCategory::NotesContent);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aNotes.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aNotes[0]->getSlideIndex());
+
+    // At a target of 300 DPI the 8 cm drawing wants about as many pixels as the JPEG already
+    // holds, so the image is left alone rather than encoded again for a fraction of its detail.
+    aOptions.mnImageResolution = 300;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(aOptions, sd::lint::LintCategory::LargeImage).size());
+
+    // A target resolution of zero leaves every image alone whatever it is stored at.
+    aOptions.mnImageResolution = 0;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(aOptions, sd::lint::LintCategory::LargeImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintScanReportsProgressAsItRuns)
+{
+    // The scan lists what it found before it has worked out a single saving, and the measurement
+    // that fills the figures in afterwards runs one finding at a time.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto imagesOf = [](const sd::lint::PresentationLint& rLint) {
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : rLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    const sd::lint::LintOptions aOptions;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+
+    // Both images of the first slide are listed straight away, told apart by their number, because
+    // nothing has yet found out that one of them has too little to offer.
+    auto aListed = imagesOf(aLint);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aListed.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aListed[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aListed[1]->getFacts().mnImageNumber);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aLint.getMeasureCount());
+    CPPUNIT_ASSERT_EQUAL(size_t(0), aLint.getMeasuredCount());
+
+    auto sumOfListedSavings = [&aLint] {
+        sal_uInt64 nSum = 0;
+        for (const auto& rpFinding : aLint.getFindings())
+            nSum += rpFinding->getSavingBytes();
+        return nSum;
+    };
+
+    // Every step leaves the running total equal to a fresh sum over the list. The figures tracked
+    // here are the saving each finding is counted at, and the sum of those figures.
+    std::vector<std::pair<const sd::lint::LintFinding*, sal_uInt64>> aCountedSavings;
+    sal_uInt64 nRunningTotal = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        aCountedSavings.emplace_back(rpFinding.get(), rpFinding->getSavingBytes());
+        nRunningTotal += rpFinding->getSavingBytes();
+    }
+
+    // Every step measures exactly one finding, and the step that meets the image with too little to
+    // offer says that the row is gone.
+    size_t nSteps = 0;
+    size_t nDropped = 0;
+    while (aLint.hasPendingMeasurement())
+    {
+        const sd::lint::LintMeasureStep aStep = aLint.measureNextFinding();
+        CPPUNIT_ASSERT(aStep.mpFinding);
+        ++nSteps;
+        if (aStep.mbDropped)
+            ++nDropped;
+
+        CPPUNIT_ASSERT_EQUAL(nSteps, aLint.getMeasuredCount());
+
+        // The figure the finding was counted at is replaced by the one it carries now, and a
+        // finding the step took off the list counts for nothing from here on.
+        for (auto& rCounted : aCountedSavings)
+        {
+            if (rCounted.first != aStep.mpFinding.get())
+                continue;
+
+            nRunningTotal -= rCounted.second;
+            rCounted.second = aStep.mbDropped ? 0 : aStep.mpFinding->getSavingBytes();
+            nRunningTotal += rCounted.second;
+        }
+
+        CPPUNIT_ASSERT_EQUAL(sumOfListedSavings(), nRunningTotal);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), nSteps);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), nDropped);
+
+    aLint.finishMeasurement();
+
+    // What stepping through the measurement leaves behind is what a scan in one go produces: the
+    // one image worth a row, with its figure, and with no number now that it stands alone for its
+    // slide.
+    sd::lint::PresentationLint aWholeLint(*pDoc, aOptions);
+    aWholeLint.scan();
+
+    auto aStepped = imagesOf(aLint);
+    auto aWhole = imagesOf(aWholeLint);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aWhole.size());
+    CPPUNIT_ASSERT_EQUAL(aWhole.size(), aStepped.size());
+    CPPUNIT_ASSERT_EQUAL(aWhole[0]->getFacts().mnImageNumber,
+                         aStepped[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aStepped[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT_EQUAL(aWhole[0]->getFacts().mnEffectiveDPI,
+                         aStepped[0]->getFacts().mnEffectiveDPI);
+    CPPUNIT_ASSERT(aStepped[0]->getSavingBytes() > 0);
+    CPPUNIT_ASSERT_EQUAL(aWhole[0]->getSavingBytes(), aStepped[0]->getSavingBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintRescanKeepsWhatItMeasured)
+{
+    // A deck scanned a second time at the same settings reports the savings the first scan
+    // reported, out of the encodings the first scan kept.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto imagesOf = [](const sd::lint::PresentationLint& rLint) {
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : rLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    const sd::lint::LintOptions aOptions;
+    auto pCache = std::make_shared<sd::lint::LintMeasureCache>();
+
+    // The cache starts out with nothing in it, so the first scan has no measurement to work from
+    // and both images of the deck are encoded.
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pCache->getCount());
+
+    sd::lint::PresentationLint aFirstLint(*pDoc, aOptions, pCache);
+    aFirstLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aFirstLint.getMeasureCount());
+
+    while (aFirstLint.hasPendingMeasurement())
+        CPPUNIT_ASSERT(aFirstLint.measureNextFinding().mpFinding);
+
+    aFirstLint.finishMeasurement();
+
+    // What the first scan encoded is in the cache, ready for a second scan to read.
+    const size_t nCachedAfterFirst = pCache->getCount();
+    CPPUNIT_ASSERT(nCachedAfterFirst > 0);
+
+    // The second scan lines the same two images up and finds every figure among the encodings the
+    // first scan left behind.
+    sd::lint::PresentationLint aSecondLint(*pDoc, aOptions, pCache);
+    aSecondLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aSecondLint.getMeasureCount());
+
+    while (aSecondLint.hasPendingMeasurement())
+        CPPUNIT_ASSERT(aSecondLint.measureNextFinding().mpFinding);
+
+    aSecondLint.finishMeasurement();
+
+    // The second scan read the figures it reports and put no encoding of its own in the cache.
+    CPPUNIT_ASSERT_EQUAL(nCachedAfterFirst, pCache->getCount());
+
+    auto aFirst = imagesOf(aFirstLint);
+    auto aSecond = imagesOf(aSecondLint);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aFirst.size());
+    CPPUNIT_ASSERT_EQUAL(aFirst.size(), aSecond.size());
+    CPPUNIT_ASSERT(aSecond[0]->getSavingBytes() > 0);
+    CPPUNIT_ASSERT_EQUAL(aFirst[0]->getSavingBytes(), aSecond[0]->getSavingBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintMeasurementsBelongToTheDocument)
+{
+    // The measurement cache belongs to the document rather than to one view of it, so a second
+    // holder is handed the encodings the first one worked out. It goes once no holder is left.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::DrawDocShell* pDocShell = pImpressDocument->GetDocShell();
+    CPPUNIT_ASSERT(pDocShell);
+
+    const sd::lint::LintOptions aOptions;
+    {
+        auto pFirstCache = pDocShell->getLintMeasureCache();
+        CPPUNIT_ASSERT_EQUAL(size_t(0), pFirstCache->getCount());
+
+        sd::lint::PresentationLint aFirstLint(*pDoc, aOptions, pFirstCache);
+        aFirstLint.scan();
+
+        const size_t nCachedAfterFirstScan = pFirstCache->getCount();
+        CPPUNIT_ASSERT(nCachedAfterFirstScan > 0);
+        const size_t nHandedInAfterFirstScan = pFirstCache->getHandedInCount();
+
+        // Whoever asks the document next is handed the very same cache.
+        auto pSecondCache = pDocShell->getLintMeasureCache();
+        CPPUNIT_ASSERT_EQUAL(pFirstCache.get(), pSecondCache.get());
+
+        // So a scan run from it reads every figure out and encodes none of the images again. Every
+        // encoding a scan makes is handed to the cache, so the cache has been handed no more.
+        sd::lint::PresentationLint aSecondLint(*pDoc, aOptions, pSecondCache);
+        aSecondLint.scan();
+
+        CPPUNIT_ASSERT_EQUAL(nCachedAfterFirstScan, pSecondCache->getCount());
+        CPPUNIT_ASSERT_EQUAL(nHandedInAfterFirstScan, pSecondCache->getHandedInCount());
+    }
+
+    // Nothing holds the encodings any more, so the document has an empty cache to hand out again.
+    auto pLaterCache = pDocShell->getLintMeasureCache();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pLaterCache->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFix)
+{
+    // Every cleanup the scan offers changes the document and can be taken back again with a single
+    // undo, under the name of the cleanup.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    auto scanFor = [pDoc](sd::lint::LintCategory eCategory, bool bForPublication = false) {
+        sd::lint::LintOptions aOptions;
+        aOptions.mbForPublication = bForPublication;
+
+        sd::lint::PresentationLint aLint(*pDoc, aOptions);
+        aLint.scan();
+
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == eCategory)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    auto applyFix = [&rBase](const std::shared_ptr<sd::lint::LintFinding>& rpFinding) {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, rpFinding->getUndoLabel());
+        rpFinding->fix(rBase);
+    };
+
+    auto getGraphicOf = [](const SdrObject* pObject) -> const Graphic& {
+        auto* pGraphicObject = dynamic_cast<const SdrGrafObj*>(pObject);
+        CPPUNIT_ASSERT(pGraphicObject);
+        const Graphic& rGraphic = pGraphicObject->GetGraphic();
+        CPPUNIT_ASSERT(rGraphic.IsGfxLink());
+        return rGraphic;
+    };
+
+    auto getGraphicBytes = [&getGraphicOf](const SdrObject* pObject) {
+        return sal_uInt64(getGraphicOf(pObject).GetGfxLink().GetDataSize());
+    };
+
+    // The first slide draws the JPEG at 4 cm across and the third draws the very same JPEG at 8 cm.
+    // The second object of the first slide is the small image, which the scan leaves alone.
+    SdPage* pFirstSlide = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pThirdSlide = pDoc->GetSdPage(2, PageKind::Standard);
+    CPPUNIT_ASSERT(pFirstSlide);
+    CPPUNIT_ASSERT(pThirdSlide);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pFirstSlide->GetObjCount());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pThirdSlide->GetObjCount());
+
+    const sal_uInt64 nImageBytes = getGraphicBytes(pFirstSlide->GetObj(0));
+    const BitmapChecksum nImageChecksum = getGraphicOf(pFirstSlide->GetObj(0)).GetChecksum();
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getGraphicBytes(pThirdSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(nImageChecksum, getGraphicOf(pThirdSlide->GetObj(0)).GetChecksum());
+
+    // One row stands for both drawings of the image, so a single cleanup deals with the two of
+    // them and the document keeps one encoding of that image throughout.
+    auto aLargeImages = scanFor(sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLargeImages.size());
+    CPPUNIT_ASSERT(aLargeImages[0]->canFix());
+    applyFix(aLargeImages[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_COMPRESS_IMAGE),
+                         pUndoManager->GetUndoActionComment(0));
+
+    const sal_uInt64 nFixedBytes = getGraphicBytes(pFirstSlide->GetObj(0));
+    CPPUNIT_ASSERT(nFixedBytes < nImageBytes);
+    CPPUNIT_ASSERT_EQUAL(nFixedBytes, getGraphicBytes(pThirdSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(getGraphicOf(pFirstSlide->GetObj(0)).GetChecksum(),
+                         getGraphicOf(pThirdSlide->GetObj(0)).GetChecksum());
+
+    // Eight centimetres at the target of 150 DPI comes to 472 pixels across.
+    CPPUNIT_ASSERT_EQUAL(tools::Long(472),
+                         getGraphicOf(pFirstSlide->GetObj(0)).GetSizePixel().Width());
+
+    // The image now holds the pixels the 8 cm drawing asks for, so a fresh scan does not offer it
+    // again. The 4 cm drawing shows those same pixels at twice the target resolution, which is not
+    // what decides whether an image is worth a row.
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(sd::lint::LintCategory::LargeImage).size());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getGraphicBytes(pFirstSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getGraphicBytes(pThirdSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(nImageChecksum, getGraphicOf(pFirstSlide->GetObj(0)).GetChecksum());
+    CPPUNIT_ASSERT_EQUAL(nImageChecksum, getGraphicOf(pThirdSlide->GetObj(0)).GetChecksum());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(sd::lint::LintCategory::LargeImage).size());
+
+    auto aHiddenSlides = scanFor(sd::lint::LintCategory::HiddenSlide);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aHiddenSlides.size());
+    applyFix(aHiddenSlides[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_DELETE_HIDDEN_SLIDE),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(pDoc->GetSdPage(1, PageKind::Standard)->IsExcluded());
+
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    auto aUnusedMasters = scanFor(sd::lint::LintCategory::UnusedMaster);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aUnusedMasters.size());
+    applyFix(aUnusedMasters[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_DELETE_UNUSED_MASTER),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    // The speaker notes of the third slide only come up when the deck is being prepared to hand
+    // out, and clearing them leaves the placeholder waiting to be typed into again.
+    auto aNotes = scanFor(sd::lint::LintCategory::NotesContent, true);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aNotes.size());
+    applyFix(aNotes[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_CLEAR_NOTES),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(sd::lint::LintCategory::NotesContent, true).size());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(sd::lint::LintCategory::NotesContent, true).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixAll)
+{
+    // Dealing with every finding in one go leaves a single undo entry, and taking that one entry
+    // back restores the whole document.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    auto countNotesFindings = [pDoc] {
+        sd::lint::LintOptions aOptions;
+        aOptions.mbForPublication = true;
+
+        sd::lint::PresentationLint aLint(*pDoc, aOptions);
+        aLint.scan();
+
+        size_t nCount = 0;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::NotesContent)
+                ++nCount;
+        }
+        return nCount;
+    };
+
+    auto getImageBytes = [pDoc] {
+        SdPage* pSlide = pDoc->GetSdPage(0, PageKind::Standard);
+        CPPUNIT_ASSERT(pSlide);
+        auto* pGraphicObject = dynamic_cast<SdrGrafObj*>(pSlide->GetObj(0));
+        CPPUNIT_ASSERT(pGraphicObject);
+        const Graphic& rGraphic = pGraphicObject->GetGraphic();
+        CPPUNIT_ASSERT(rGraphic.IsGfxLink());
+        return sal_uInt64(rGraphic.GetGfxLink().GetDataSize());
+    };
+
+    const sal_uInt16 nPageCount = pDoc->GetSdPageCount(PageKind::Standard);
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    const sal_uInt64 nImageBytes = getImageBytes();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countNotesFindings());
+
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    // The scan measures what encoding the image again would free up, which is the figure the row
+    // carries.
+    sal_uInt64 nEstimatedBytes = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+            nEstimatedBytes += rpFinding->getSavingBytes();
+    }
+    CPPUNIT_ASSERT(nEstimatedBytes > 0);
+
+    sal_uInt64 nSavedBytes = 0;
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, SdResId(STR_LINT_UNDO_FIX_ALL));
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (!rpFinding->canFix())
+                continue;
+
+            rpFinding->fix(rBase);
+            nSavedBytes += rpFinding->getRealizedSavingBytes();
+        }
+    }
+
+    // The image is stored once however many slides draw it, so the batch reports the estimate for
+    // that one image rather than a multiple of it.
+    CPPUNIT_ASSERT_EQUAL(nEstimatedBytes, nSavedBytes);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_FIX_ALL),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nPageCount - 1), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(getImageBytes() < nImageBytes);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), countNotesFindings());
+
+    pUndoManager->Undo();
+
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getImageBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countNotesFindings());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixAllPrepared)
+{
+    // Working every cleanup out before any of them changes anything is what keeps the document
+    // usable while a cleanup is prepared. Preparing first leaves the same single undo entry, frees
+    // up the same bytes and leaves the document in the same state as dealing with the findings one
+    // after another does.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    const sal_uInt16 nPageCount = pDoc->GetSdPageCount(PageKind::Standard);
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    sal_uInt64 nEstimatedBytes = 0;
+    std::vector<std::shared_ptr<sd::lint::LintFinding>> aFixable;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (!rpFinding->canFix())
+            continue;
+
+        aFixable.push_back(rpFinding);
+        if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+            nEstimatedBytes += rpFinding->getSavingBytes();
+    }
+    CPPUNIT_ASSERT(!aFixable.empty());
+    CPPUNIT_ASSERT(nEstimatedBytes > 0);
+
+    // Every cleanup is worked out first. The document is untouched by this, so the undo stack is
+    // still empty afterwards and a cleanup cancelled here leaves no trace.
+    for (const auto& rpFinding : aFixable)
+        rpFinding->prepareFix();
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    sal_uInt64 nSavedBytes = 0;
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, SdResId(STR_LINT_UNDO_FIX_ALL));
+        for (const auto& rpFinding : aFixable)
+        {
+            rpFinding->fix(rBase);
+            nSavedBytes += rpFinding->getRealizedSavingBytes();
+        }
+    }
+
+    CPPUNIT_ASSERT_EQUAL(nEstimatedBytes, nSavedBytes);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_FIX_ALL),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nPageCount - 1), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixKeepsList)
+{
+    // A cleanup that stays within the finding it is about leaves the rest of the list standing, so
+    // the one finding can be taken off the list rather than the whole deck being scanned again.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    // Preparing the deck to hand out brings in the speaker notes as well, so the scan finds
+    // something of every kind the deck holds.
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    auto findingOf = [&aLint](sd::lint::LintCategory eCategory) {
+        std::shared_ptr<sd::lint::LintFinding> pMatch;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == eCategory)
+            {
+                pMatch = rpFinding;
+                break;
+            }
+        }
+        CPPUNIT_ASSERT(pMatch);
+        return pMatch;
+    };
+
+    // Encoding an image again reaches the objects that draw that one bitmap, and clearing the
+    // speaker notes reaches one placeholder. Taking a slide or a master out of the document moves
+    // what the findings around it are about.
+    const std::shared_ptr<sd::lint::LintFinding> pImage
+        = findingOf(sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT(!pImage->invalidatesOtherFindings());
+    CPPUNIT_ASSERT(!findingOf(sd::lint::LintCategory::NotesContent)->invalidatesOtherFindings());
+    CPPUNIT_ASSERT(findingOf(sd::lint::LintCategory::HiddenSlide)->invalidatesOtherFindings());
+    CPPUNIT_ASSERT(findingOf(sd::lint::LintCategory::UnusedMaster)->invalidatesOtherFindings());
+
+    // A finding that goes before its saving has been worked out leaves the measurement owing
+    // nothing for it, so the steps that follow never meet it again.
+    sd::lint::PresentationLint aStepLint(*pDoc, aOptions);
+    aStepLint.scanStructure();
+
+    std::shared_ptr<sd::lint::LintFinding> pUnmeasured;
+    for (const auto& rpFinding : aStepLint.getFindings())
+    {
+        if (rpFinding->needsMeasuring())
+        {
+            pUnmeasured = rpFinding;
+            break;
+        }
+    }
+    CPPUNIT_ASSERT(pUnmeasured);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), aStepLint.getMeasuredCount());
+
+    aStepLint.dropFinding(pUnmeasured);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aStepLint.getMeasuredCount());
+
+    // Each finding is handed out for its figure once, and the one that went out of order is not
+    // handed out at all.
+    std::vector<const sd::lint::LintFinding*> aHandedOut;
+    while (aStepLint.hasPendingMeasurement())
+    {
+        const sd::lint::LintMeasureStep aStep = aStepLint.measureNextFinding();
+        CPPUNIT_ASSERT(aStep.mpFinding);
+        CPPUNIT_ASSERT(aStep.mpFinding != pUnmeasured);
+
+        for (const auto* pSeen : aHandedOut)
+            CPPUNIT_ASSERT(pSeen != aStep.mpFinding.get());
+
+        aHandedOut.push_back(aStep.mpFinding.get());
+    }
+
+    // Every finding the scan lined up is accounted for: the one that went out of order, and the
+    // ones the steps handed out.
+    CPPUNIT_ASSERT_EQUAL(aStepLint.getMeasureCount(), aHandedOut.size() + 1);
+
+    std::vector<std::pair<sal_Int32, sal_Int32>> aOtherRows;
+    sal_uInt64 nOtherSaving = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (rpFinding == pImage)
+            continue;
+
+        aOtherRows.emplace_back(rpFinding->getFacts().mnImageNumber,
+                                rpFinding->getSlideIndex());
+        nOtherSaving += rpFinding->getSavingBytes();
+    }
+
+    const sal_uInt64 nTotalSaving = nOtherSaving + pImage->getSavingBytes();
+    CPPUNIT_ASSERT(pImage->getSavingBytes() > 0);
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel());
+        pImage->fix(rBase);
+    }
+
+    aLint.dropFinding(pImage);
+
+    // What is left reads exactly as it did, figures and all, so no row has to be measured again.
+    CPPUNIT_ASSERT_EQUAL(aOtherRows.size(), aLint.getFindings().size());
+
+    size_t nRow = 0;
+    sal_uInt64 nSavingLeft = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        CPPUNIT_ASSERT(rpFinding != pImage);
+        CPPUNIT_ASSERT_EQUAL(aOtherRows[nRow].first, rpFinding->getFacts().mnImageNumber);
+        CPPUNIT_ASSERT_EQUAL(aOtherRows[nRow].second, rpFinding->getSlideIndex());
+        ++nRow;
+        nSavingLeft += rpFinding->getSavingBytes();
+    }
+
+    // The rows that are left stand for a hidden slide, an unused master slide and the speaker
+    // notes, and none of those carries a byte figure. So the image was the whole of what the list
+    // offered, and dealing with it leaves the list offering nothing.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), nOtherSaving);
+    CPPUNIT_ASSERT_EQUAL(nOtherSaving, nSavingLeft);
+    CPPUNIT_ASSERT(nSavingLeft < nTotalSaving);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoAsksForList)
+{
+    // Taking a cleanup back puts what it dealt with into the document again, so whoever started it
+    // is asked for the list afresh. Making the cleanup again asks once more.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    auto countImageFindings = [pDoc] {
+        sd::lint::PresentationLint aLint(*pDoc, sd::lint::LintOptions());
+        aLint.scan();
+
+        size_t nCount = 0;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+                ++nCount;
+        }
+        return nCount;
+    };
+
+    int nListRequests = 0;
+    auto pNotifier
+        = std::make_shared<sd::lint::LintUndoNotifier>([&nListRequests] { ++nListRequests; });
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    std::shared_ptr<sd::lint::LintFinding> pImage;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+            pImage = rpFinding;
+    }
+    CPPUNIT_ASSERT(pImage);
+
+    const size_t nUndoCountBefore = pUndoManager->GetUndoActionCount();
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel(), pNotifier);
+        pImage->fix(rBase);
+    }
+
+    // The list is asked for when a cleanup is taken back or made again, and the request travels
+    // inside the one entry the cleanup leaves behind rather than adding an entry of its own.
+    CPPUNIT_ASSERT_EQUAL(0, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(nUndoCountBefore + 1, pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_COMPRESS_IMAGE),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), countImageFindings());
+
+    // A cleanup that changes nothing is dropped off the undo stack, and the request for the list
+    // that goes with it is dropped along with it.
+    {
+        sd::lint::LintUndoGroup aEmptyGroup(rBase, u"nothing to take back"_ustr, pNotifier);
+    }
+    CPPUNIT_ASSERT_EQUAL(nUndoCountBefore + 1, pUndoManager->GetUndoActionCount());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(1, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countImageFindings());
+
+    pUndoManager->Redo();
+    CPPUNIT_ASSERT_EQUAL(2, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), countImageFindings());
+
+    // The undo stack outlives whoever filled it, and an entry left over from a holder that has
+    // gone asks nobody for anything.
+    pNotifier.reset();
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(2, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countImageFindings());
+}
+
+namespace
+{
+/** The encoded bytes of the given bitmap, the way an image read from a document carries them. */
+BinaryDataContainer encodeTestImage(const Bitmap& rBitmap)
+{
+    SvMemoryStream aStream;
+    GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
+    const sal_uInt16 nFormat = rFilter.GetExportFormatNumberForShortName(u"jpg");
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE,
+                         rFilter.ExportGraphic(Graphic(rBitmap), u"none", aStream, nFormat));
+
+    const sal_uInt64 nBytes = aStream.TellEnd();
+    CPPUNIT_ASSERT(nBytes > 0);
+
+    aStream.Seek(STREAM_SEEK_TO_BEGIN);
+    return BinaryDataContainer(aStream, std::size_t(nBytes));
+}
+
+/** The encoded bytes of a plain bitmap of the given size in the given colour. */
+BinaryDataContainer encodePlainImage(const Size& rPixelSize, Color aColour)
+{
+    Bitmap aBitmap(rPixelSize, vcl::PixelFormat::N24_BPP);
+    aBitmap.Erase(aColour);
+
+    return encodeTestImage(aBitmap);
+}
+
+/** A graphic read back from encoded bytes, which holds those bytes alongside its pixels. */
+Graphic importTestImage(const BinaryDataContainer& rData)
+{
+    SvMemoryStream aStream(const_cast<sal_uInt8*>(rData.getData()), rData.getSize(),
+                           StreamMode::READ);
+
+    Graphic aGraphic;
+    GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE, rFilter.ImportGraphic(aGraphic, u"", aStream));
+    return aGraphic;
+}
+
+/** A bitmap of scattered colours, which no encoding shrinks to very little, so an image made from
+    it is worth a row of its own. The number picks the pattern, so two bitmaps made under different
+    numbers hold different pixels. */
+Bitmap makeNoisyBitmap(const Size& rPixelSize, sal_Int32 nPattern)
+{
+    const sal_Int32 nWidth = rPixelSize.Width();
+    const sal_Int32 nHeight = rPixelSize.Height();
+    std::vector<sal_uInt8> aPixels(std::size_t(nWidth) * std::size_t(nHeight) * 3);
+
+    // A run of numbers that jumps about within the byte range, so neighbouring pixels have little
+    // in common and the encoded image stays large.
+    sal_uInt32 nValue = sal_uInt32(nPattern) * 7919 + 12345;
+    for (sal_uInt8& rByte : aPixels)
+    {
+        nValue = nValue * 1103515245 + 12345;
+        rByte = sal_uInt8((nValue >> 16) & 0xFF);
+    }
+
+    return vcl::bitmap::CreateFromData(aPixels.data(), nWidth, nHeight, nWidth * 3, 24);
+}
+
+/** A graphic of its own, told from every other by the pixels the number picks, holding the bytes it
+    was read from the way an image of a document does. */
+Graphic makeLinkedTestImage(sal_Int32 nPattern)
+{
+    return importTestImage(encodeTestImage(makeNoisyBitmap(Size(900, 900), nPattern)));
+}
+
+/** Draws the graphic on the given slide of the deck, 2 cm across, which is small enough for the
+    scan to find an 800 pixel image stored at more pixels than the deck needs. Answers the object
+    that draws it. */
+SdrGrafObj& addImageToSlide(SdDrawDocument& rDoc, sal_uInt16 nSlide, const Graphic& rGraphic,
+                            sal_Int32 nIndex)
+{
+    SdPage* pPage = rDoc.GetSdPage(nSlide, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    const tools::Rectangle aRectangle(Point(500 + nIndex * 200, 8000), Size(2000, 2000));
+    rtl::Reference<SdrGrafObj> pObject = new SdrGrafObj(rDoc, rGraphic, aRectangle);
+    pPage->InsertObject(pObject.get());
+
+    return *pObject;
+}
+
+/** The same, on the first slide of the deck. */
+SdrGrafObj& addImageToFirstSlide(SdDrawDocument& rDoc, const Graphic& rGraphic, sal_Int32 nIndex)
+{
+    return addImageToSlide(rDoc, 0, rGraphic, nIndex);
+}
+
+/** The findings of the given kind, in the order the list holds them. */
+std::vector<std::shared_ptr<sd::lint::LintFinding>>
+findingsOfCategory(const sd::lint::PresentationLint& rLint, sd::lint::LintCategory eCategory)
+{
+    std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+    for (const auto& rpFinding : rLint.getFindings())
+    {
+        if (rpFinding->getCategory() == eCategory)
+            aMatches.push_back(rpFinding);
+    }
+
+    return aMatches;
+}
+
+/** Which of the red, green and blue channels are strong in each quarter of a quadrant picture: red
+    at the top left, green at the top right, blue at the bottom left and yellow at the bottom
+    right. */
+constexpr bool gaQuadrantChannels[4][3] = {
+    { true, false, false }, { false, true, false }, { false, false, true }, { true, true, false }
+};
+
+/** The quarter of a quadrant picture a colour belongs to, or -1 for a colour none of them holds. */
+sal_Int32 quadrantOfColour(const Color& rColour)
+{
+    for (sal_Int32 nQuadrant = 0; nQuadrant < 4; ++nQuadrant)
+    {
+        if (gaQuadrantChannels[nQuadrant][0] == (rColour.GetRed() >= 128)
+            && gaQuadrantChannels[nQuadrant][1] == (rColour.GetGreen() >= 128)
+            && gaQuadrantChannels[nQuadrant][2] == (rColour.GetBlue() >= 128))
+            return nQuadrant;
+    }
+
+    return -1;
+}
+
+/** A bitmap whose four quarters each carry one of the quadrant colours, with every channel jumping
+    about within its own end of the range. The noise keeps the encoded picture large, so trimming
+    the picture down frees up real bytes, and every channel still reads as strong or weak wherever
+    a pixel is taken from. The number picks the run of noise, so two bitmaps made under different
+    numbers hold different pixels. */
+Bitmap makeQuadrantBitmap(const Size& rPixelSize, sal_Int32 nPattern)
+{
+    const sal_Int32 nWidth = rPixelSize.Width();
+    const sal_Int32 nHeight = rPixelSize.Height();
+    std::vector<sal_uInt8> aPixels(std::size_t(nWidth) * std::size_t(nHeight) * 3);
+
+    sal_uInt32 nValue = sal_uInt32(nPattern) * 7919 + 12345;
+    for (sal_Int32 nRow = 0; nRow < nHeight; ++nRow)
+    {
+        for (sal_Int32 nColumn = 0; nColumn < nWidth; ++nColumn)
+        {
+            const sal_Int32 nQuadrant
+                = (nRow < nHeight / 2 ? 0 : 2) + (nColumn < nWidth / 2 ? 0 : 1);
+            sal_uInt8* pPixel = aPixels.data() + (std::size_t(nRow) * nWidth + nColumn) * 3;
+
+            for (sal_Int32 nChannel = 0; nChannel < 3; ++nChannel)
+            {
+                nValue = nValue * 1103515245 + 12345;
+
+                // A quarter of the range keeps every value clear of the middle, so an encoding
+                // that shifts the colours a little still leaves each channel on its own side.
+                const sal_uInt8 nNoise = sal_uInt8((nValue >> 16) % 64);
+                pPixel[nChannel] = gaQuadrantChannels[nQuadrant][nChannel] ? 255 - nNoise : nNoise;
+            }
+        }
+    }
+
+    return vcl::bitmap::CreateFromData(aPixels.data(), nWidth, nHeight, nWidth * 3, 24);
+}
+
+/** A quadrant picture of its own, holding the bytes it was read from the way an image of a document
+    does. It carries enough pixels that hiding part of it is worth well over the few kilobytes the
+    list keeps as its floor. */
+Graphic makeQuadrantImage(sal_Int32 nPattern)
+{
+    return importTestImage(encodeTestImage(makeQuadrantBitmap(Size(1200, 1200), nPattern)));
+}
+
+/** The size of the whole picture in hundredths of a millimetre, which is the unit a crop is written
+    in. A picture read back from encoded bytes carries the resolution it was written at, so it
+    already knows itself in that unit. */
+Size pictureLogicSize(const Graphic& rGraphic)
+{
+    CPPUNIT_ASSERT_EQUAL(MapUnit::Map100thMM, rGraphic.GetPrefMapMode().GetMapUnit());
+
+    return rGraphic.GetPrefSize();
+}
+
+/** Keeps the given share of the picture off each edge of the object, the way the crop of a picture
+    on a slide does. A negative share pads the picture out instead of trimming it. */
+void setCropShares(SdrGrafObj& rObject, double fLeft, double fTop, double fRight, double fBottom)
+{
+    const Size aLogicSize = pictureLogicSize(rObject.GetGraphic());
+    const text::GraphicCrop aCrop(
+        sal_Int32(aLogicSize.Height() * fTop), sal_Int32(aLogicSize.Height() * fBottom),
+        sal_Int32(aLogicSize.Width() * fLeft), sal_Int32(aLogicSize.Width() * fRight));
+
+    uno::Reference<beans::XPropertySet> xShape(rObject.getUnoShape(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xShape.is());
+    xShape->setPropertyValue(u"GraphicCrop"_ustr, cpo::uno::Any(aCrop));
+}
+
+/** The crop the object carries, in hundredths of a millimetre. */
+const SdrGrafCropItem& cropOf(const SdrGrafObj& rObject)
+{
+    return rObject.GetMergedItem(SDRATTR_GRAFCROP);
+}
+
+/** Draws the graphic on the first slide of the deck as a square of the given side in hundredths of
+    a millimetre. Answers the object that draws it. */
+SdrGrafObj& addSquareImageToFirstSlide(SdDrawDocument& rDoc, const Graphic& rGraphic,
+                                       tools::Long nSide)
+{
+    SdPage* pPage = rDoc.GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    rtl::Reference<SdrGrafObj> pObject
+        = new SdrGrafObj(rDoc, rGraphic, tools::Rectangle(Point(500, 500), Size(nSide, nSide)));
+    pPage->InsertObject(pObject.get());
+
+    return *pObject;
+}
+
+/** The image the first slide of the deck holds at the given place in its object list. A cleanup
+    puts a new object in the place of the one it changes, so the object is looked up again after
+    every step. */
+SdrGrafObj& imageOnFirstSlide(SdDrawDocument& rDoc, sal_uInt32 nIndex)
+{
+    SdPage* pPage = rDoc.GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    auto* pObject = dynamic_cast<SdrGrafObj*>(pPage->GetObj(nIndex));
+    CPPUNIT_ASSERT(pObject);
+
+    return *pObject;
+}
+
+/** The colour of the picture the object draws, at the given share of its width and height. */
+Color colourAtShare(const SdrGrafObj& rObject, double fX, double fY)
+{
+    Bitmap aBitmap = rObject.GetGraphic().GetBitmap();
+    const Size aPixelSize = aBitmap.GetSizePixel();
+
+    return aBitmap.GetPixelColor(sal_Int32(aPixelSize.Width() * fX),
+                                 sal_Int32(aPixelSize.Height() * fY));
+}
+
+/** How many bytes the document spends on the picture the object draws. */
+sal_uInt64 storedBytesOf(const SdrGrafObj& rObject)
+{
+    const Graphic& rGraphic = rObject.GetGraphic();
+    CPPUNIT_ASSERT(rGraphic.IsGfxLink());
+
+    return sal_uInt64(rGraphic.GetGfxLink().GetDataSize());
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintEncodesATransparentImageAsPng)
+{
+    // JPEG has no way to hold transparency, so a bitmap that carries any comes back as PNG.
+    createSdImpressDoc();
+
+    Bitmap aBitmap(Size(600, 600), vcl::PixelFormat::N24_BPP);
+    aBitmap.Erase(COL_LIGHTRED);
+
+    sal_uInt8 nAlphaValue = 0x80;
+    AlphaMask aAlphaMask(Size(600, 600), &nAlphaValue);
+    const Graphic aGraphic(Bitmap(aBitmap, aAlphaMask));
+
+    const sd::lint::LintCompressedImage aCompressed = sd::lint::compressGraphic(
+        aGraphic, sal_uInt64(aGraphic.GetSizeBytes()), Size(2000, 2000), 150, 80);
+
+    CPPUNIT_ASSERT(aCompressed.getByteCount() > 8);
+
+    // The first eight bytes of a PNG are the signature the format begins with.
+    const sal_uInt8 aPngSignature[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+    for (std::size_t nByte = 0; nByte < 8; ++nByte)
+        CPPUNIT_ASSERT_EQUAL(aPngSignature[nByte], aCompressed.maData.getData()[nByte]);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testLintMeasureCacheKeepsWhatFitsAndDropsTheOldest)
+{
+    // The cache answers with the encoding it was given for a key, keeps the first encoding stored
+    // under a key it already holds, and lets the oldest go once the kept bytes are over its limit.
+    createSdImpressDoc();
+
+    sd::lint::LintMeasureCache aCache;
+
+    const sd::lint::LintMeasureKey aFirstKey{ 111, 2000, 2000, 150, 80 };
+    const sd::lint::LintMeasureKey aSecondKey{ 222, 2000, 2000, 150, 80 };
+
+    sd::lint::LintCompressedImage aSmall;
+    aSmall.maData = encodePlainImage(Size(200, 200), COL_LIGHTRED);
+    CPPUNIT_ASSERT(!aSmall.maData.isEmpty());
+
+    aCache.store(aFirstKey, aSmall);
+
+    const auto oFound = aCache.find(aFirstKey, aSmall.getByteCount() * 4);
+    CPPUNIT_ASSERT(oFound);
+    CPPUNIT_ASSERT_EQUAL(aSmall.getByteCount(), oFound->getByteCount());
+
+    // Whether the encoding is smaller is about the image that was asked after, so the same bytes
+    // answer differently for a document that spends less on the image than they take.
+    CPPUNIT_ASSERT(oFound->mbSmaller);
+    CPPUNIT_ASSERT(!aCache.find(aFirstKey, 1)->mbSmaller);
+
+    // A key that is already there keeps the bytes it has.
+    sd::lint::LintCompressedImage aOther;
+    aOther.maData = encodePlainImage(Size(300, 300), COL_LIGHTBLUE);
+    CPPUNIT_ASSERT(aOther.getByteCount() != aSmall.getByteCount());
+
+    aCache.store(aFirstKey, aOther);
+    CPPUNIT_ASSERT_EQUAL(aSmall.getByteCount(), aCache.find(aFirstKey, 1)->getByteCount());
+
+    // Two encodings of seventeen megabytes each are over the limit the cache keeps, so the one
+    // that went in first goes and the one that has just gone in stays.
+    constexpr std::size_t nHugeBytes = 17u * 1024 * 1024;
+    SvMemoryStream aHugeStream;
+    const std::vector<sal_uInt8> aHugeBlock(nHugeBytes, 0x5A);
+    aHugeStream.WriteBytes(aHugeBlock.data(), nHugeBytes);
+    aHugeStream.Seek(STREAM_SEEK_TO_BEGIN);
+
+    sd::lint::LintCompressedImage aHuge;
+    aHuge.maData = BinaryDataContainer(aHugeStream, nHugeBytes);
+
+    aCache.store(aSecondKey, aHuge);
+
+    const sd::lint::LintMeasureKey aThirdKey{ 333, 2000, 2000, 150, 80 };
+    aCache.store(aThirdKey, aHuge);
+
+    CPPUNIT_ASSERT(!aCache.find(aFirstKey, 1));
+    CPPUNIT_ASSERT(!aCache.find(aSecondKey, 1));
+    CPPUNIT_ASSERT(aCache.find(aThirdKey, 1));
+
+    // Everything goes when the cache is emptied.
+    aCache.clear();
+    CPPUNIT_ASSERT(!aCache.find(aThirdKey, 1));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintListsTheCostliestImageOfAGroupFirst)
+{
+    // The list groups the findings by the kind of problem they describe, and inside a group the
+    // one the document spends the most bytes on comes first.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // A third image, larger than the small one of the deck and smaller than its large one.
+    addImageToFirstSlide(*pDoc, makeLinkedTestImage(3), 0);
+
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+
+    std::vector<sd::lint::LintCategory> aCategoryOrder;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (aCategoryOrder.empty() || aCategoryOrder.back() != rpFinding->getCategory())
+            aCategoryOrder.push_back(rpFinding->getCategory());
+    }
+
+    // Every finding of one kind stands together, so no kind turns up twice in the list.
+    std::set<sd::lint::LintCategory> aSeenCategories(aCategoryOrder.begin(), aCategoryOrder.end());
+    CPPUNIT_ASSERT_EQUAL(aCategoryOrder.size(), aSeenCategories.size());
+    CPPUNIT_ASSERT_EQUAL(sd::lint::LintCategory::LargeImage, aCategoryOrder.front());
+
+    const auto aImages = findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(3), aImages.size());
+    CPPUNIT_ASSERT(aImages[0]->getCurrentBytes() > aImages[1]->getCurrentBytes());
+    CPPUNIT_ASSERT(aImages[1]->getCurrentBytes() > aImages[2]->getCurrentBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesAnAnimatedImageAlone)
+{
+    // An animation is a series of frames, and the size in pixels of one frame says nothing about
+    // what the whole of it takes, so an animated image gets no row.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    SvFileStream aFileStream(m_directories.getURLFromSrc(u"/sd/qa/unit/data/") + "animated.gif",
+                             StreamMode::READ);
+    Graphic aAnimation;
+    GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE, rFilter.ImportGraphic(aAnimation, u"", aFileStream));
+    CPPUNIT_ASSERT(aAnimation.IsAnimated());
+
+    // Drawn at one centimetre the animation carries far more pixels than the deck needs, so only
+    // its being an animation keeps it off the list.
+    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+    rtl::Reference<SdrGrafObj> pObject
+        = new SdrGrafObj(*pDoc, aAnimation, tools::Rectangle(Point(500, 11000), Size(1000, 1000)));
+    pPage->InsertObject(pObject.get());
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintListsAHeavilyCroppedImage)
+{
+    // An image most of which a crop keeps off the slide is listed as a cropped image, whatever
+    // resolution the part that is shown is stored at.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scan();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    // Twelve centimetres across is wide enough for the quarter that is left to carry no more
+    // pixels than the target resolution asks for, so the crop alone is what earns the row.
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aCropped[0]->getSlideIndex());
+    CPPUNIT_ASSERT(aCropped[0]->getSavingBytes() > 0);
+
+    // Half the width and half the height are kept off, which leaves three quarters of the area
+    // hidden. The row says that share and what the document spends on the whole picture.
+    CPPUNIT_ASSERT_EQUAL(storedBytesOf(rObject), aCropped[0]->getCurrentBytes());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(75), aCropped[0]->getFacts().mnHiddenPercent);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixBakesTheCrop)
+{
+    // Cleaning up a cropped image leaves the slide showing the same picture out of a bitmap that
+    // holds only the part of it that is shown.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    const tools::Rectangle aRectangleBefore = rObject.GetLogicRect();
+    const sal_uInt64 nBytesBefore = storedBytesOf(rObject);
+    const Size aPixelsBefore = rObject.GetGraphic().GetSizePixel();
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aCropped[0]->getUndoLabel());
+        aCropped[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_TRIM_IMAGE), pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT(aCropped[0]->getRealizedSavingBytes() > 0);
+
+    const SdrGrafObj& rFixed = imageOnFirstSlide(*pDoc, nIndex);
+
+    // Nothing is kept off the picture any more, and the slide gives it the room it already had.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetLeft());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetTop());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetRight());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetBottom());
+    CPPUNIT_ASSERT_EQUAL(aRectangleBefore, rFixed.GetLogicRect());
+
+    // Only the quarter the crop left showing is still there. Trimming a bitmap takes the row and
+    // the column the crop lands on as well, so the result can come out a pixel longer per side.
+    const Size aPixelsAfter = rFixed.GetGraphic().GetSizePixel();
+    CPPUNIT_ASSERT(aPixelsAfter.Width() >= aPixelsBefore.Width() / 2);
+    CPPUNIT_ASSERT(aPixelsAfter.Width() <= aPixelsBefore.Width() / 2 + 1);
+    CPPUNIT_ASSERT(aPixelsAfter.Height() >= aPixelsBefore.Height() / 2);
+    CPPUNIT_ASSERT(aPixelsAfter.Height() <= aPixelsBefore.Height() / 2 + 1);
+
+    // The crop kept the top left quarter, which is the red one.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), quadrantOfColour(colourAtShare(rFixed, 0.5, 0.5)));
+
+    CPPUNIT_ASSERT(storedBytesOf(rFixed) < nBytesBefore);
+
+    // The picture now holds what the slide shows, so a fresh scan offers it under neither kind.
+    sd::lint::PresentationLint aAfterLint(*pDoc, aOptions);
+    aAfterLint.scan();
+    CPPUNIT_ASSERT_EQUAL(
+        size_t(0), findingsOfCategory(aAfterLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoRestoresTheCrop)
+{
+    // Taking back the cleanup of a cropped image brings the whole picture and its crop back, and
+    // making the cleanup again trims the picture once more.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    const sal_Int32 nCropRightBefore = cropOf(rObject).GetRight();
+    const sal_uInt64 nBytesBefore = storedBytesOf(rObject);
+    CPPUNIT_ASSERT(nCropRightBefore > 0);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aCropped[0]->getUndoLabel());
+        aCropped[0]->fix(rBase);
+    }
+
+    const sal_uInt64 nBytesFixed = storedBytesOf(imageOnFirstSlide(*pDoc, nIndex));
+    CPPUNIT_ASSERT(nBytesFixed < nBytesBefore);
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nCropRightBefore, cropOf(imageOnFirstSlide(*pDoc, nIndex)).GetRight());
+    CPPUNIT_ASSERT_EQUAL(nBytesBefore, storedBytesOf(imageOnFirstSlide(*pDoc, nIndex)));
+
+    pUndoManager->Redo();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(imageOnFirstSlide(*pDoc, nIndex)).GetRight());
+    CPPUNIT_ASSERT_EQUAL(nBytesFixed, storedBytesOf(imageOnFirstSlide(*pDoc, nIndex)));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesAMixedCropImageAlone)
+{
+    // The document keeps one copy of a bitmap however many slides draw it, so a bitmap whose users
+    // show different parts of it gets no row: trimming it would need a copy per user.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    const Graphic aGraphic = makeQuadrantImage(5);
+    SdrGrafObj& rFirstObject = addSquareImageToFirstSlide(*pDoc, aGraphic, 2000);
+    SdrGrafObj& rSecondObject = addSquareImageToFirstSlide(*pDoc, aGraphic, 2000);
+
+    sd::lint::PresentationLint aListedLint(*pDoc, aOptions);
+    aListedLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        nImagesBefore + 1,
+        findingsOfCategory(aListedLint, sd::lint::LintCategory::LargeImage).size());
+
+    // One slide shows the left half of the picture and the other the right half.
+    setCropShares(rFirstObject, 0.0, 0.0, 0.5, 0.0);
+    setCropShares(rSecondObject, 0.5, 0.0, 0.0, 0.0);
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(0),
+                         findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesANegativeCropImageAlone)
+{
+    // A negative crop pads the picture out rather than trimming it, so there is nothing to bake in
+    // and the image gets no row.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 2000);
+
+    sd::lint::PresentationLint aListedLint(*pDoc, aOptions);
+    aListedLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        nImagesBefore + 1,
+        findingsOfCategory(aListedLint, sd::lint::LintCategory::LargeImage).size());
+
+    setCropShares(rObject, -0.2, 0.0, 0.0, 0.0);
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(0),
+                         findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintBakesTheCropOfAMirroredImage)
+{
+    // A crop names a part of the picture as the picture itself is stored, before the slide flips
+    // it, so trimming a mirrored image keeps the part the crop names and the flip along with it.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+
+    const tools::Rectangle aRectangle = rObject.GetLogicRect();
+    const tools::Long nCentreX = aRectangle.Left() + aRectangle.GetWidth() / 2;
+    rObject.Mirror(Point(nCentreX, aRectangle.Top()), Point(nCentreX, aRectangle.Bottom()));
+    CPPUNIT_ASSERT(rObject.IsMirrored());
+
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aCropped[0]->getUndoLabel());
+        aCropped[0]->fix(rBase);
+    }
+
+    const SdrGrafObj& rFixed = imageOnFirstSlide(*pDoc, nIndex);
+
+    // The crop kept the top left quarter of the stored picture, which is the red one, and the
+    // slide goes on showing that quarter the other way round.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), quadrantOfColour(colourAtShare(rFixed, 0.5, 0.5)));
+    CPPUNIT_ASSERT(rFixed.IsMirrored());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetRight());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesASmallCropAlone)
+{
+    // Trimming a sliver off a picture frees up too little to be worth reading, so a small crop
+    // earns no row of its own.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    // Fourteen centimetres across is wide enough for the picture to carry no more pixels than the
+    // target resolution asks for, so the crop is the only thing that could earn it a row.
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 14000);
+    setCropShares(rObject, 0.0, 0.0, 0.02, 0.02);
+
+    sd::lint::PresentationLint aSmallCropLint(*pDoc, aOptions);
+    aSmallCropLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        nImagesBefore,
+        findingsOfCategory(aSmallCropLint, sd::lint::LintCategory::LargeImage).size());
+    CPPUNIT_ASSERT_EQUAL(
+        size_t(0), findingsOfCategory(aSmallCropLint, sd::lint::LintCategory::CroppedImage).size());
+
+    // Hiding three quarters of the same picture is worth a row.
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    sd::lint::PresentationLint aLargeCropLint(*pDoc, aOptions);
+    aLargeCropLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        size_t(1), findingsOfCategory(aLargeCropLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintBakesTheCropOfALargeImageRow)
+{
+    // An image that keeps a sliver off and is stored at far more pixels than it is drawn at is
+    // listed for its pixels, and its cleanup trims the sliver away as it encodes the image again.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 2000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+    setCropShares(rObject, 0.02, 0.02, 0.02, 0.02);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0),
+                         findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage).size());
+
+    std::shared_ptr<sd::lint::LintFinding> pImage;
+    for (const auto& rpFinding : findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage))
+    {
+        if (rpFinding->getCurrentBytes() == storedBytesOf(rObject))
+            pImage = rpFinding;
+    }
+    CPPUNIT_ASSERT(pImage);
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_COMPRESS_IMAGE), pImage->getUndoLabel());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel());
+        pImage->fix(rBase);
+    }
+
+    const SdrGrafObj& rFixed = imageOnFirstSlide(*pDoc, nIndex);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetLeft());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetBottom());
+
+    // All four quarters of the picture survive the cleanup, each where it was.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), quadrantOfColour(colourAtShare(rFixed, 0.25, 0.25)));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), quadrantOfColour(colourAtShare(rFixed, 0.75, 0.25)));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), quadrantOfColour(colourAtShare(rFixed, 0.25, 0.75)));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), quadrantOfColour(colourAtShare(rFixed, 0.75, 0.75)));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintMeasuresTheCropOfItsOwn)
+{
+    // What an encoding comes to depends on the part of the picture that is shown, so a measurement
+    // taken of the whole picture is never read for a crop of it.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto pCache = std::make_shared<sd::lint::LintMeasureCache>();
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aWholeLint(*pDoc, aOptions, pCache);
+    aWholeLint.scan();
+
+    const std::size_t nKeysOfWholePicture = pCache->getCount();
+    CPPUNIT_ASSERT(nKeysOfWholePicture > 0);
+
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    sd::lint::PresentationLint aCroppedLint(*pDoc, aOptions, pCache);
+    aCroppedLint.scan();
+
+    CPPUNIT_ASSERT_EQUAL(nKeysOfWholePicture + 1, pCache->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixOfAnImageOnADeletedSlideChangesNothing)
+{
+    // A slide that goes between the scan and the cleanup takes its images with it, so the cleanup
+    // finds nothing left to replace, frees nothing up and leaves no undo entry behind.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    // The hidden slide of the deck carries nothing, so an image of its own goes on it and goes
+    // with it when the slide is taken out.
+    const Graphic aGraphic = makeLinkedTestImage(4);
+    SdrGrafObj& rObject = addImageToSlide(*pDoc, 1, aGraphic, 0);
+    const BitmapChecksum nChecksum = aGraphic.GetChecksum();
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    std::shared_ptr<sd::lint::LintFinding> pImage;
+    for (const auto& rpFinding : findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage))
+    {
+        if (rpFinding->getSlideIndex() == 1)
+            pImage = rpFinding;
+    }
+    CPPUNIT_ASSERT(pImage);
+    CPPUNIT_ASSERT(pImage->getSavingBytes() > 0);
+
+    const auto aHiddenSlides = findingsOfCategory(aLint, sd::lint::LintCategory::HiddenSlide);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aHiddenSlides.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aHiddenSlides[0]->getUndoLabel());
+        aHiddenSlides[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    const size_t nUndoCountBefore = pUndoManager->GetUndoActionCount();
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel());
+        pImage->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), pImage->getRealizedSavingBytes());
+    CPPUNIT_ASSERT_EQUAL(nUndoCountBefore, pUndoManager->GetUndoActionCount());
+
+    // The image the slide took with it is the one it was.
+    CPPUNIT_ASSERT_EQUAL(nChecksum, rObject.GetGraphic().GetChecksum());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoMakesAMasterPreciousAgain)
+{
+    // Every master a document is loaded with is marked precious, which is what keeps it from being
+    // dropped automatically. Taking the cleanup back puts that mark on again, and making the
+    // cleanup again takes it off.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aMasters = findingsOfCategory(aLint, sd::lint::LintCategory::UnusedMaster);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aMasters.size());
+
+    // Every slide of the deck builds on the one master, so the other master is the unused one.
+    const SdrPage& rUsedMaster = pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage();
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    rtl::Reference<SdPage> xMaster;
+    for (sal_uInt16 nMaster = 0; nMaster < nMasterCount; ++nMaster)
+    {
+        SdPage* pMaster = pDoc->GetMasterSdPage(nMaster, PageKind::Standard);
+        if (pMaster && pMaster != &rUsedMaster)
+            xMaster = pMaster;
+    }
+    CPPUNIT_ASSERT(xMaster.is());
+    CPPUNIT_ASSERT(xMaster->IsPrecious());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aMasters[0]->getUndoLabel());
+        aMasters[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!xMaster->IsPrecious());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(xMaster->IsPrecious());
+
+    pUndoManager->Redo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!xMaster->IsPrecious());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT(xMaster->IsPrecious());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoLeavesAnUnmarkedMasterUnmarked)
+{
+    // A master made during the session carries no precious mark. Taking the cleanup back brings the
+    // master back the way it was, still without the mark.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    // Every slide of the deck builds on the one master, so the other master is the unused one.
+    const SdrPage& rUsedMaster = pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage();
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    rtl::Reference<SdPage> xMaster;
+    for (sal_uInt16 nMaster = 0; nMaster < nMasterCount; ++nMaster)
+    {
+        SdPage* pMaster = pDoc->GetMasterSdPage(nMaster, PageKind::Standard);
+        if (pMaster && pMaster != &rUsedMaster)
+            xMaster = pMaster;
+    }
+    CPPUNIT_ASSERT(xMaster.is());
+
+    // A master the document was loaded with comes in marked, so the mark comes off to stand for a
+    // master that was made while the document was open.
+    xMaster->SetPrecious(false);
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aMasters = findingsOfCategory(aLint, sd::lint::LintCategory::UnusedMaster);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aMasters.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aMasters[0]->getUndoLabel());
+        aMasters[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!xMaster->IsPrecious());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testEditingAfterSlideSectionRename)
+{
+    // Typing into a shape still starts a text edit after a slide section has
+    // been added and then renamed.
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:AddSlideSection"_ustr, {});
+
+    uno::Sequence<beans::PropertyValue> aRenameArgs(
+        comphelper::InitPropertySequence({ { u"SectionIndex"_ustr, uno::Any(sal_Int32(0)) },
+                                           { u"Name"_ustr, uno::Any(u"Opening"_ustr) } }));
+    dispatchCommand(mxComponent, u".uno:RenameSlideSection"_ustr, aRenameArgs);
+
+    auto* pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    sd::SlideSectionManager& rManager = pImpressDocument->GetDoc()->GetSectionManager();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), rManager.GetSectionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Opening"_ustr, rManager.GetSection(0).maName);
+
+    // The keystrokes reach the slide and open a text edit on the shape.
+    insertStringToObject(0, u"Test", /*bUseEscape*/ true);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"Test"_ustr,
+                         xDrawPage->getByIndex(0).queryThrow<text::XTextRange>()->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDemoteTitle)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+
+    // Tab in front of "B" turns the title of the second slide into a paragraph of the first.
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 0));
+    typeOutlineKey(KEY_TAB);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1),
+                         pImpressDocument->GetDoc()->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pOutlinerView->GetOutliner().GetParagraphCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineSelectedPages)
+{
+    createOutlineView({ u"A", u"B" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    pDoc->GetSdPage(0, PageKind::Standard)->SetSelected(false);
+    pDoc->GetSdPage(1, PageKind::Standard)->SetSelected(false);
+
+    // The state of the summary slide command marks the slide of the cursor as selected.
+    SfxPoolItemHolder aState;
+    pImpressDocument->GetDocShell()->GetViewShell()->GetViewFrame()->GetDispatcher()->QueryState(
+        SID_SUMMARY_PAGE, aState);
+    CPPUNIT_ASSERT(!pDoc->GetSdPage(0, PageKind::Standard)->IsSelected());
+    CPPUNIT_ASSERT(pDoc->GetSdPage(1, PageKind::Standard)->IsSelected());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDeleteAcrossSlides)
+{
+    // Slides "A" with the body paragraph "x", "B" and "C".
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    auto xDrawPages = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()->getDrawPages();
+    xDrawPages->insertNewByIndex(0);
+    xDrawPages->insertNewByIndex(1);
+    const std::u16string_view aTitles[] = { u"A", u"B", u"C" };
+    for (sal_uInt16 i = 0; i < std::size(aTitles); ++i)
+    {
+        SdPage* pPage = pDoc->GetSdPage(i, PageKind::Standard);
+        pPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
+        auto pTitle = static_cast<SdrTextObj*>(pPage->GetPresObj(PresObjKind::Title));
+        pTitle->SetText(OUString(aTitles[i]));
+        pTitle->SetEmptyPresObj(false);
+    }
+    auto pBody = static_cast<SdrTextObj*>(
+        pDoc->GetSdPage(0, PageKind::Standard)->GetPresObj(PresObjKind::Outline));
+    pBody->SetText(u"x"_ustr);
+    pBody->SetEmptyPresObj(false);
+
+    dispatchCommand(mxComponent, u".uno:OutlineMode"_ustr, {});
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT_EQUAL(sd::ViewShell::ST_OUTLINE, pViewShell->GetShellType());
+    auto pView = static_cast<sd::SimpleOutlinerView*>(pViewShell->GetView());
+    OutlinerView* pOutlinerView = pView->GetViewByWindow(pViewShell->GetActiveWindow());
+    CPPUNIT_ASSERT(pOutlinerView);
+    Outliner& rOutliner = pOutlinerView->GetOutliner();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), rOutliner.GetParagraphCount());
+
+    // Deleting from the end of "A" to the end of "B" removes the second slide only.
+    pOutlinerView->SetSelection(ESelection(0, 1, 2, 1));
+    typeOutlineKey(KEY_DELETE);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), rOutliner.GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineBackspaceMergesTitle)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B", u"C" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageC = pDoc->GetSdPage(2, PageKind::Standard);
+
+    // Backspace in front of "B" merges it into "A" and removes the slide of "B".
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 0));
+    typeOutlineKey(KEY_BACKSPACE);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pOutlinerView->GetOutliner().GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(1, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDeleteWholeTitle)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B", u"C", u"D" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageD = pDoc->GetSdPage(3, PageKind::Standard);
+
+    // Deleting from the end of "A" to the end of "C" removes the slides of "B" and "C".
+    pOutlinerView->SetSelection(ESelection(0, 1, 2, 1));
+    typeOutlineKey(KEY_DELETE);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pOutlinerView->GetOutliner().GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageD, pDoc->GetSdPage(1, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineMoveTitleUp)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B", u"C" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageB = pDoc->GetSdPage(1, PageKind::Standard);
+    SdPage* pPageC = pDoc->GetSdPage(2, PageKind::Standard);
+
+    // Moving "C" up moves its slide in front of the slide of "B".
+    // Order will be A C B
+    pOutlinerView->SetSelection(ESelection(2, 0, 2, 1));
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"C"_ustr, pOutlinerView->GetOutliner().GetText(1));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(2, PageKind::Standard));
+
+    // Moving "C" up again moves its slide in front of the slide of "A".
+    // Order will be C A B
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 1));
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"C"_ustr, pOutlinerView->GetOutliner().GetText(0));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(2, PageKind::Standard));
+
+    // Moving "A" down, to test moving to the end.
+    // Order will be C B A
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 1));
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, pOutlinerView->GetOutliner().GetText(2));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(2, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDropSlideDownIntoBody)
+{
+    // Slides "A", "B" with the body paragraphs "y1" and "y2", and "C".
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    auto xDrawPages = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()->getDrawPages();
+    xDrawPages->insertNewByIndex(0);
+    xDrawPages->insertNewByIndex(1);
+    const std::u16string_view aTitles[] = { u"A", u"B", u"C" };
+    for (sal_uInt16 i = 0; i < std::size(aTitles); ++i)
+    {
+        SdPage* pPage = pDoc->GetSdPage(i, PageKind::Standard);
+        pPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
+        auto pTitle = static_cast<SdrTextObj*>(pPage->GetPresObj(PresObjKind::Title));
+        pTitle->SetText(OUString(aTitles[i]));
+        pTitle->SetEmptyPresObj(false);
+    }
+    auto pBody = static_cast<SdrTextObj*>(
+        pDoc->GetSdPage(1, PageKind::Standard)->GetPresObj(PresObjKind::Outline));
+    pBody->SetText(u"y1\ny2"_ustr);
+    pBody->SetEmptyPresObj(false);
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageB = pDoc->GetSdPage(1, PageKind::Standard);
+    SdPage* pPageC = pDoc->GetSdPage(2, PageKind::Standard);
+
+    dispatchCommand(mxComponent, u".uno:OutlineMode"_ustr, {});
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT_EQUAL(sd::ViewShell::ST_OUTLINE, pViewShell->GetShellType());
+    auto pView = static_cast<sd::SimpleOutlinerView*>(pViewShell->GetView());
+    OutlinerView* pOutlinerView = pView->GetViewByWindow(pViewShell->GetActiveWindow());
+    CPPUNIT_ASSERT(pOutlinerView);
+    Outliner& rOutliner = pOutlinerView->GetOutliner();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), rOutliner.GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(u"y2"_ustr, rOutliner.GetText(3));
+
+    // Dropping "A" between "y1" and "y2" moves its slide between the slides of "B" and "C".
+    pOutlinerView->SetSelection(ESelection(0, 0, 0, 1));
+    rOutliner.UndoActionStart(EDITUNDO_DRAGANDDROP);
+    pOutlinerView->GetEditView().MoveParagraphs(Range(0, 0), 3);
+    rOutliner.UndoActionEnd();
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, rOutliner.GetText(2));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(2, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testReflectionCommands)
+{
+    // The fourth shape has no reflection.
+    createSdImpressDoc("pptx/shape-reflection-effect.pptx");
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pViewShell->GetActualPage()->GetObj(3), pView->GetSdrPageView());
+    Scheduler::ProcessEventsToIdle();
+
+    dispatchCommand(
+        mxComponent, u".uno:ReflectionEffect"_ustr,
+        comphelper::InitPropertySequence({ { "ReflectionEffect", cpo::uno::Any(true) } }));
+    dispatchCommand(mxComponent, u".uno:ReflectionDistance"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "ReflectionDistance", cpo::uno::Any(sal_Int32(500)) } }));
+    dispatchCommand(mxComponent, u".uno:ReflectionEndPosition"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "ReflectionEndPosition", cpo::uno::Any(sal_Int16(70)) } }));
+
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(3, 0));
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"ReflectionEffect"_ustr).get<bool>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(500),
+        xShape->getPropertyValue(u"ReflectionEffectDistance"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(70),
+        xShape->getPropertyValue(u"ReflectionEffectEndPosition"_ustr).get<sal_Int16>());
+
+    // The state of the selected shape reads back through the same slots, the way the sidebar
+    // sees it.
+    SfxDispatcher* pDispatcher = pViewShell->GetViewFrame()->GetDispatcher();
+    SfxPoolItemHolder aResult;
+    CPPUNIT_ASSERT(pDispatcher->QueryState(SID_ATTR_REFLECTION, aResult) >= SfxItemState::DEFAULT);
+    auto pOnOff = dynamic_cast<const SfxBoolItem*>(aResult.getItem());
+    CPPUNIT_ASSERT(pOnOff);
+    CPPUNIT_ASSERT(pOnOff->GetValue());
+    CPPUNIT_ASSERT(pDispatcher->QueryState(SID_ATTR_REFLECTION_END_POSITION, aResult)
+                   >= SfxItemState::DEFAULT);
+    auto pSize = dynamic_cast<const SfxUInt16Item*>(aResult.getItem());
+    CPPUNIT_ASSERT(pSize);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(70), pSize->GetValue());
+}
+
+namespace
+{
+SdrMediaObj* findMediaObject(const uno::Reference<lang::XComponent>& xComponent)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(xComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    for (const rtl::Reference<SdrObject>& pObj : *pPage)
+        if (auto pMediaObj = dynamic_cast<SdrMediaObj*>(pObj.get()))
+            return pMediaObj;
+    return nullptr;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertMediaWithoutSize)
+{
+    // A media file dispatched without a size goes in at the default size, even when no media
+    // player can open the file to measure it.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr, createFileURL(u"silence.wav")) });
+
+    CPPUNIT_ASSERT(findMediaObject(mxComponent));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertMediaFromAppFilePicker)
+{
+    // Media picked with the file picker of a COKit app is embedded in the document, so the
+    // slideshow has an extracted copy to play.
+    createSdImpressDoc();
+    // The picked file arrives as a command for the active frame.
+    mxDesktop->setActiveFrame(uno::Reference<frame::XModel>(mxComponent, uno::UNO_QUERY_THROW)
+                                  ->getCurrentController()
+                                  ->getFrame());
+
+    static OString aPickedUrl;
+    aPickedUrl = createFileURL(u"silence.wav").toUtf8();
+    COKitFilePickerProvider aProvider{};
+    aProvider.pick = [](const char*, const COKitFilePickerFilter*, size_t,
+                        void (*pfnPicked)(void*, const char*), void* pContext)
+    { pfnPicked(pContext, aPickedUrl.getStr()); };
+
+    comphelper::COKit::setActive(true);
+    sfx2::COKitFilePicker::installProvider(&aProvider);
+    comphelper::ScopeGuard aKitGuard(
+        []
+        {
+            sfx2::COKitFilePicker::installProvider(nullptr);
+            comphelper::COKit::setActive(false);
+        });
+
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT(pMediaObj->getURL().startsWith("vnd.sun.star.Package:"));
+    CPPUNIT_ASSERT(!pMediaObj->getTempURL().isEmpty());
+}
+
+namespace
+{
+double aspectRatio(const Size& rSize) { return rSize.Width() / double(rSize.Height()); }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertVideoKeepsItsShape)
+{
+    // With no media player to measure the video, its shape comes from the file headers.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-320x240.webm")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(4.0 / 3.0, aspectRatio(pMediaObj->GetLogicRect().GetSize()), 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertLargeVideoFitsTheSlide)
+{
+    // A full HD video is wider than the slide at its pixel size.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-1920x1080.mp4")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    const Size aSize = pMediaObj->GetLogicRect().GetSize();
+    const Size aPageSize = pMediaObj->getSdrPageFromSdrObject()->GetSize();
+    CPPUNIT_ASSERT_LESSEQUAL(aPageSize.Width(), aSize.Width());
+    CPPUNIT_ASSERT_LESSEQUAL(aPageSize.Height(), aSize.Height());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(16.0 / 9.0, aspectRatio(aSize), 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertRotatedVideoIsPortrait)
+{
+    // The file stores 640x360 frames with a quarter turn, as phones record upright video.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-640x360-rotated.mp4")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(9.0 / 16.0, aspectRatio(pMediaObj->GetLogicRect().GetSize()),
+                                 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertVideoTakesItsDisplayShape)
+{
+    // The file stores 320x240 frames and asks for them to be shown at an aspect ratio of 16:9.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-320x240-wide.webm")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(16.0 / 9.0, aspectRatio(pMediaObj->GetLogicRect().GetSize()),
+                                 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertLargeVideoFitsInsideTheMargins)
+{
+    // A Draw page has margins, and a full HD video is wider than the space between them.
+    createSdDrawDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-1920x1080.mp4")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    const SdrPage* pPage = pMediaObj->getSdrPageFromSdrObject();
+    CPPUNIT_ASSERT(pPage->GetLeftBorder() + pPage->GetRightBorder() > 0);
+    const Size aSize = pMediaObj->GetLogicRect().GetSize();
+    CPPUNIT_ASSERT_LESSEQUAL(
+        pPage->GetSize().Width() - pPage->GetLeftBorder() - pPage->GetRightBorder(),
+        aSize.Width());
+    CPPUNIT_ASSERT_LESSEQUAL(
+        pPage->GetSize().Height() - pPage->GetUpperBorder() - pPage->GetLowerBorder(),
+        aSize.Height());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(16.0 / 9.0, aspectRatio(aSize), 0.01);
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

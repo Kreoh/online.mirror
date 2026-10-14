@@ -34,7 +34,7 @@ class ScAccessiblePageHeaderArea final
 {
 public:
     ScAccessiblePageHeaderArea(
-        const css::uno::Reference<css::accessibility::XAccessible>& rxParent,
+        const cpo::uno::Reference<css::accessibility::XAccessible>& rxParent,
         ScPreviewShell* pViewShell,
         const EditTextObject* pEditObj,
         SvxAdjust eAdjust);
@@ -44,7 +44,7 @@ public:
     const EditTextObject* GetEditTextObject() const { return mpEditObj.get(); }
 
     using ScAccessibleContextBase::disposing;
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 
    ///=====  SfxListener  =====================================================
 
@@ -52,24 +52,24 @@ public:
 
     ///=====  XAccessibleComponent  ============================================
 
-    virtual css::uno::Reference< css::accessibility::XAccessible >
-        SAL_CALL getAccessibleAtPoint(
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
+        getAccessibleAtPoint(
         const css::awt::Point& rPoint ) override;
 
     ///=====  XAccessibleContext  ==============================================
 
     /// Return the number of currently visible children.
     /// override to calculate this on demand
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getAccessibleChildCount() override;
 
     /// Return the specified child or NULL if index is invalid.
     /// override to calculate this on demand
-    virtual css::uno::Reference< css::accessibility::XAccessible> SAL_CALL
+    virtual cpo::uno::Reference< css::accessibility::XAccessible>
         getAccessibleChild(sal_Int64 nIndex) override;
 
     /// Return the set of current states.
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getAccessibleStateSet() override;
 
 protected:

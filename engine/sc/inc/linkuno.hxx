@@ -45,7 +45,7 @@
 class ScDocShell;
 class ScTableLink;
 
-typedef std::vector< css::uno::Reference< css::util::XRefreshListener > > XRefreshListenerArr_Impl;
+typedef std::vector< cpo::uno::Reference< css::util::XRefreshListener > > XRefreshListenerArr_Impl;
 
 class ScSheetLinkObj final : public cppu::WeakImplHelper<
                             css::container::XNamed,
@@ -71,29 +71,29 @@ public:
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XNamed
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL   setName( const OUString& aName ) override;
+    virtual OUString getName() override;
+    virtual void   setName( const OUString& aName ) override;
 
                             // XRefreshable
-    virtual void SAL_CALL   refresh() override;
-    virtual void SAL_CALL   addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
-    virtual void SAL_CALL   removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void   refresh() override;
+    virtual void   addRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void   removeRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
 
                             // XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo >
-                            SAL_CALL getPropertySetInfo(  ) override;
-    virtual void SAL_CALL   setPropertyValue( const OUString& aPropertyName,
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+                            getPropertySetInfo(  ) override;
+    virtual void   setPropertyValue( const OUString& aPropertyName,
                                     const cpo::uno::Any& aValue ) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue(
+    virtual cpo::uno::Any getPropertyValue(
                                     const OUString& PropertyName ) override;
-    virtual void SAL_CALL   addPropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
-    virtual void SAL_CALL   removePropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
-    virtual void SAL_CALL   addVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
-    virtual void SAL_CALL   removeVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void   addPropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void   removePropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void   addVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void   removeVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
 
                             // called from get/setPropertyValue:
     OUString         getFileName() const;
@@ -106,9 +106,9 @@ public:
     void                    setRefreshDelay(sal_Int32 nRefreshDelay);
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ScSheetLinksObj final : public cppu::WeakImplHelper<
@@ -131,26 +131,26 @@ public:
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ScAreaLinkObj final : public cppu::WeakImplHelper<
@@ -179,24 +179,24 @@ public:
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XRefreshable
-    virtual void SAL_CALL   refresh() override;
-    virtual void SAL_CALL   addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
-    virtual void SAL_CALL   removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void   refresh() override;
+    virtual void   addRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void   removeRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
 
                             // XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo >
-                            SAL_CALL getPropertySetInfo(  ) override;
-    virtual void SAL_CALL   setPropertyValue( const OUString& aPropertyName,
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+                            getPropertySetInfo(  ) override;
+    virtual void   setPropertyValue( const OUString& aPropertyName,
                                     const cpo::uno::Any& aValue ) override;
-    virtual cpo::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) override;
-    virtual void SAL_CALL   addPropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
-    virtual void SAL_CALL   removePropertyChangeListener( const OUString& aPropertyName,
-                                    const css::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
-    virtual void SAL_CALL   addVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
-    virtual void SAL_CALL   removeVetoableChangeListener( const OUString& PropertyName,
-                                    const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void   addPropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void   removePropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void   addVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void   removeVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
 
                             // called from get/setPropertyValue:
     OUString                getFileName() const;
@@ -209,15 +209,15 @@ public:
     void                    setRefreshDelay(sal_Int32 nRefreshDelay);
 
                             // XAreaLink
-    virtual OUString SAL_CALL getSourceArea() override;
-    virtual void SAL_CALL   setSourceArea( const OUString& aSourceArea ) override;
-    virtual css::table::CellRangeAddress SAL_CALL getDestArea() override;
-    virtual void SAL_CALL setDestArea( const css::table::CellRangeAddress& aDestArea ) override;
+    virtual OUString getSourceArea() override;
+    virtual void   setSourceArea( const OUString& aSourceArea ) override;
+    virtual css::table::CellRangeAddress getDestArea() override;
+    virtual void setDestArea( const css::table::CellRangeAddress& aDestArea ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ScAreaLinksObj final : public cppu::WeakImplHelper<
@@ -238,29 +238,29 @@ public:
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XAreaLinks
-    virtual void SAL_CALL   insertAtPosition( const css::table::CellAddress& aDestPos,
+    virtual void   insertAtPosition( const css::table::CellAddress& aDestPos,
                                                 const OUString& aFileName,
                                                 const OUString& aSourceArea,
                                                 const OUString& aFilter,
                                                 const OUString& aFilterOptions ) override;
-    virtual void SAL_CALL   removeByIndex( sal_Int32 nIndex ) override;
+    virtual void   removeByIndex( sal_Int32 nIndex ) override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 //! order of XNamed and DDELink changed to avoid "duplicate comdat" symbols
@@ -290,29 +290,29 @@ public:
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XNamed
-    virtual OUString SAL_CALL getName() override;
-    virtual void SAL_CALL   setName( const OUString& aName ) override;
+    virtual OUString getName() override;
+    virtual void   setName( const OUString& aName ) override;
 
                             // XDDELink
-    virtual OUString SAL_CALL getApplication() override;
-    virtual OUString SAL_CALL getTopic() override;
-    virtual OUString SAL_CALL getItem() override;
+    virtual OUString getApplication() override;
+    virtual OUString getTopic() override;
+    virtual OUString getItem() override;
 
                             // XRefreshable
-    virtual void SAL_CALL   refresh() override;
-    virtual void SAL_CALL   addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
-    virtual void SAL_CALL   removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void   refresh() override;
+    virtual void   addRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
+    virtual void   removeRefreshListener( const cpo::uno::Reference< css::util::XRefreshListener >& l ) override;
 
                             // XDDELinkResults
     virtual cpo::uno::Sequence< cpo::uno::Sequence< cpo::uno::Any > >
-        SAL_CALL getResults(  ) override;
-    virtual void SAL_CALL setResults(
+        getResults(  ) override;
+    virtual void setResults(
         const cpo::uno::Sequence< cpo::uno::Sequence< cpo::uno::Any > >& aResults ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ScDDELinksObj final : public cppu::WeakImplHelper<
@@ -335,31 +335,31 @@ public:
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
                             // XDDELinks
-    virtual css::uno::Reference< css::sheet::XDDELink > SAL_CALL addDDELink(
+    virtual cpo::uno::Reference< css::sheet::XDDELink > addDDELink(
         const OUString& aApplication, const OUString& aTopic,
         const OUString& aItem, css::sheet::DDELinkMode nMode ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 class ScExternalSheetCacheObj final : public cppu::WeakImplHelper< css::sheet::XExternalSheetCache >
@@ -369,17 +369,17 @@ public:
     virtual ~ScExternalSheetCacheObj() override;
 
                             // XExternalSheetCache
-    virtual void SAL_CALL setCellValue(
+    virtual void setCellValue(
         sal_Int32 nCol, sal_Int32 nRow, const cpo::uno::Any& rAny) override;
 
-    virtual cpo::uno::Any SAL_CALL getCellValue(sal_Int32 nCol, sal_Int32 nRow) override;
+    virtual cpo::uno::Any getCellValue(sal_Int32 nCol, sal_Int32 nRow) override;
 
-    virtual cpo::uno::Sequence< sal_Int32 > SAL_CALL getAllRows() override;
+    virtual cpo::uno::Sequence< sal_Int32 > getAllRows() override;
 
-    virtual cpo::uno::Sequence< sal_Int32 > SAL_CALL getAllColumns(sal_Int32 nRow) override;
+    virtual cpo::uno::Sequence< sal_Int32 > getAllColumns(sal_Int32 nRow) override;
 
     // Attributes
-    virtual sal_Int32 SAL_CALL getTokenIndex() override;
+    virtual sal_Int32 getTokenIndex() override;
 
 private:
     ScExternalSheetCacheObj(const ScExternalSheetCacheObj&) = delete;
@@ -397,28 +397,28 @@ public:
     virtual ~ScExternalDocLinkObj() override;
 
                             // XExternalDocLink
-    virtual css::uno::Reference< css::sheet::XExternalSheetCache >
-        SAL_CALL addSheetCache( const OUString& aSheetName, bool bDynamicCache ) override;
+    virtual cpo::uno::Reference< css::sheet::XExternalSheetCache >
+        addSheetCache( const OUString& aSheetName, bool bDynamicCache ) override;
 
                             // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 nIndex ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 nIndex ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
     // Attributes
-    virtual sal_Int32 SAL_CALL getTokenIndex() override;
+    virtual sal_Int32 getTokenIndex() override;
 
 private:
     ScDocShell*             mpDocShell;
@@ -434,28 +434,28 @@ public:
     virtual ~ScExternalDocLinksObj() override;
 
                             // XExternalDocLinks
-    virtual css::uno::Reference< css::sheet::XExternalDocLink >
-        SAL_CALL addDocLink( const OUString& aDocName ) override;
+    virtual cpo::uno::Reference< css::sheet::XExternalDocLink >
+        addDocLink( const OUString& aDocName ) override;
 
-    virtual css::uno::Reference<css::sheet::XExternalDocLink>
-        SAL_CALL addSpecialDocLink(const OUString& aDocName, sal_Int16 nLinkType) override;
+    virtual cpo::uno::Reference<css::sheet::XExternalDocLink>
+        addSpecialDocLink(const OUString& aDocName, sal_Int16 nLinkType) override;
 
                             // XNameAccess
-    virtual cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getElementNames() override;
-    virtual bool SAL_CALL hasByName( const OUString& aName ) override;
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() override;
-    virtual cpo::uno::Any SAL_CALL getByIndex( sal_Int32 nIndex ) override;
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 nIndex ) override;
 
                             // XEnumerationAccess
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
+    virtual cpo::uno::Reference< css::container::XEnumeration >
                             createEnumeration() override;
 
                             // XElementAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual bool SAL_CALL hasElements() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
 
 private:
     ScExternalDocLinksObj(const ScExternalDocLinksObj&) = delete;

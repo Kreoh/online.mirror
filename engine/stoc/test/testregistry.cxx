@@ -45,7 +45,7 @@
 #endif
 
 using namespace com::sun::star;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::registry;
 using namespace css::lang;
@@ -55,7 +55,7 @@ using namespace osl;
 
 namespace stoc_impreg
 {
-void SAL_CALL mergeKeys(
+void mergeKeys(
 Reference< registry::XRegistryKey > const & xDest,
 Reference< registry::XRegistryKey > const & xSource );
 }

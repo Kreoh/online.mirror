@@ -22,8 +22,8 @@
 #include <com/sun/star/script/provider/XScriptURIHelper.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/ucb/XSimpleFileAccess3.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 #include <com/sun/star/uri/XUriReferenceFactory.hpp>
 
 #include <rtl/ustring.hxx>
@@ -40,8 +40,8 @@ class ScriptingFrameworkURIHelper :
 {
 private:
 
-    css::uno::Reference< css::ucb::XSimpleFileAccess3 > m_xSimpleFileAccess;
-    css::uno::Reference<css::uri::XUriReferenceFactory> m_xUriReferenceFactory;
+    cpo::uno::Reference< css::ucb::XSimpleFileAccess > m_xSimpleFileAccess;
+    cpo::uno::Reference<css::uri::XUriReferenceFactory> m_xUriReferenceFactory;
 
     OUString m_sLanguage;
     OUString m_sLocation;
@@ -54,31 +54,31 @@ private:
     static OUString getLanguagePath(const OUString& rLanguagePart);
 
 public:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     explicit ScriptingFrameworkURIHelper(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext );
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     virtual ~ScriptingFrameworkURIHelper() override;
 
-    virtual void SAL_CALL
+    virtual void
         initialize( const cpo::uno::Sequence < cpo::uno::Any > & args ) override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
         getRootStorageURI() override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
         getScriptURI( const OUString& rStorageURI ) override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
         getStorageURI( const OUString& rScriptURI ) override;
 
-    virtual OUString SAL_CALL
+    virtual OUString
         getImplementationName() override;
 
-    virtual bool SAL_CALL
+    virtual bool
         supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
         getSupportedServiceNames() override;
 };
 

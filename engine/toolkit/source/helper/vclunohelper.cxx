@@ -50,16 +50,17 @@
 #include <com/sun/star/awt/Toolkit.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 uno::Reference< css::awt::XToolkit> VCLUnoHelper::CreateToolkit()
 {
-    const uno::Reference< uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
-    uno::Reference< awt::XToolkit> xToolkit( awt::Toolkit::create(xContext), uno::UNO_QUERY_THROW );
+    const uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    uno::Reference< awt::XToolkit> xToolkit( awt::Toolkit::create(xContext), uno::UNO_SET_THROW );
     return xToolkit;
 }
 
-Bitmap VCLUnoHelper::GetBitmap( const css::uno::Reference< css::awt::XBitmap>& rxBitmap )
+Bitmap VCLUnoHelper::GetBitmap( const cpo::uno::Reference< css::awt::XBitmap>& rxBitmap )
 {
     if (VCLXBitmap* pVCLBitmap = dynamic_cast<VCLXBitmap*>(rxBitmap.get()))
         return pVCLBitmap->GetBitmap();
@@ -67,24 +68,24 @@ Bitmap VCLUnoHelper::GetBitmap( const css::uno::Reference< css::awt::XBitmap>& r
     return vcl::GetBitmap(rxBitmap);
 }
 
-css::uno::Reference< css::awt::XBitmap> VCLUnoHelper::CreateBitmap( const Bitmap& rBitmap )
+cpo::uno::Reference< css::awt::XBitmap> VCLUnoHelper::CreateBitmap( const Bitmap& rBitmap )
 {
     return Graphic(rBitmap).GetXGraphic().query<css::awt::XBitmap>();
 }
 
-vcl::Window* VCLUnoHelper::GetWindow( const css::uno::Reference< css::awt::XWindow>& rxWindow )
+vcl::Window* VCLUnoHelper::GetWindow( const cpo::uno::Reference< css::awt::XWindow>& rxWindow )
 {
     VCLXWindow* pVCLXWindow = dynamic_cast<VCLXWindow*>( rxWindow.get() );
     return pVCLXWindow ? pVCLXWindow->GetWindow() : nullptr;
 }
 
-vcl::Window* VCLUnoHelper::GetWindow( const css::uno::Reference< css::awt::XWindowPeer>& rxWindow )
+vcl::Window* VCLUnoHelper::GetWindow( const cpo::uno::Reference< css::awt::XWindowPeer>& rxWindow )
 {
     VCLXWindow* pVCLXWindow = dynamic_cast<VCLXWindow*>( rxWindow.get() );
     return pVCLXWindow ? pVCLXWindow->GetWindow() : nullptr;
 }
 
-vcl::Region VCLUnoHelper::GetRegion( const css::uno::Reference< css::awt::XRegion >& rxRegion )
+vcl::Region VCLUnoHelper::GetRegion( const cpo::uno::Reference< css::awt::XRegion >& rxRegion )
 {
     vcl::Region aRegion;
     VCLXRegion* pVCLRegion = dynamic_cast<VCLXRegion*>( rxRegion.get() );
@@ -99,18 +100,18 @@ vcl::Region VCLUnoHelper::GetRegion( const css::uno::Reference< css::awt::XRegio
     return aRegion;
 }
 
-css::uno::Reference< css::awt::XWindow> VCLUnoHelper::GetInterface( vcl::Window* pWindow )
+cpo::uno::Reference< css::awt::XWindow> VCLUnoHelper::GetInterface( vcl::Window* pWindow )
 {
-    css::uno::Reference< css::awt::XWindow > xWin;
+    cpo::uno::Reference< css::awt::XWindow > xWin;
     if ( pWindow )
     {
-        css::uno::Reference< css::awt::XWindowPeer> xPeer = pWindow->GetComponentInterface();
-        xWin.set(xPeer, css::uno::UNO_QUERY);
+        cpo::uno::Reference< css::awt::XWindowPeer> xPeer = pWindow->GetComponentInterface();
+        xWin.set(xPeer, cpo::uno::UNO_QUERY);
     }
     return xWin;
 }
 
-OutputDevice* VCLUnoHelper::GetOutputDevice( const css::uno::Reference< css::awt::XDevice>& rxDevice )
+OutputDevice* VCLUnoHelper::GetOutputDevice( const cpo::uno::Reference< css::awt::XDevice>& rxDevice )
 {
     VclPtr<OutputDevice> pOutDev;
     VCLXDevice* pDev = dynamic_cast<VCLXDevice*>( rxDevice.get() );
@@ -119,7 +120,7 @@ OutputDevice* VCLUnoHelper::GetOutputDevice( const css::uno::Reference< css::awt
     return pOutDev;
 }
 
-OutputDevice* VCLUnoHelper::GetOutputDevice( const css::uno::Reference< css::awt::XGraphics>& rxGraphics )
+OutputDevice* VCLUnoHelper::GetOutputDevice( const cpo::uno::Reference< css::awt::XGraphics>& rxGraphics )
 {
     OutputDevice* pOutDev = nullptr;
     VCLXGraphics* pGrf = dynamic_cast<VCLXGraphics*>( rxGraphics.get() );
@@ -211,7 +212,7 @@ vcl::Font VCLUnoHelper::CreateFont( const css::awt::FontDescriptor& rDescr, cons
     return aFont;
 }
 
-vcl::Font VCLUnoHelper::CreateFont( const css::uno::Reference< css::awt::XFont >& rxFont )
+vcl::Font VCLUnoHelper::CreateFont( const cpo::uno::Reference< css::awt::XFont >& rxFont )
 {
     vcl::Font aFont;
     VCLXFont* pVCLXFont = dynamic_cast<VCLXFont*>( rxFont.get() );
@@ -441,7 +442,7 @@ MapUnit /* MapModeUnit */ VCLUnoHelper::ConvertToMapModeUnit(sal_Int16 /* com.su
     return eMode;
 }
 
-awt::MouseEvent VCLUnoHelper::createMouseEvent( const ::MouseEvent& _rVclEvent, const uno::Reference< uno::XInterface >& _rxContext )
+awt::MouseEvent VCLUnoHelper::createMouseEvent( const ::MouseEvent& _rVclEvent, const uno::Reference< cpo::uno::XInterface >& _rxContext )
 {
     awt::MouseEvent aMouseEvent;
     aMouseEvent.Source = _rxContext;
@@ -478,7 +479,7 @@ awt::MouseEvent VCLUnoHelper::createMouseEvent( const ::MouseEvent& _rVclEvent, 
     return aMouseEvent;
 }
 
-awt::KeyEvent VCLUnoHelper::createKeyEvent( const ::KeyEvent& _rVclEvent, const uno::Reference< uno::XInterface >& _rxContext )
+awt::KeyEvent VCLUnoHelper::createKeyEvent( const ::KeyEvent& _rVclEvent, const uno::Reference< cpo::uno::XInterface >& _rxContext )
 {
     awt::KeyEvent aKeyEvent;
     aKeyEvent.Source = _rxContext;
@@ -512,7 +513,7 @@ awt::KeyEvent VCLUnoHelper::createKeyEvent( const ::KeyEvent& _rVclEvent, const 
 
 }
 
-::PointerStyle VCLUnoHelper::getMousePointer(const css::uno::Reference<css::awt::XWindowPeer>& rWindowPeer)
+::PointerStyle VCLUnoHelper::getMousePointer(const cpo::uno::Reference<css::awt::XWindowPeer>& rWindowPeer)
 {
     ::PointerStyle eType = ::PointerStyle::Arrow; // default ?
     VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(rWindowPeer);
@@ -521,7 +522,7 @@ awt::KeyEvent VCLUnoHelper::createKeyEvent( const ::KeyEvent& _rVclEvent, const 
     return eType;
 }
 
-void VCLUnoHelper::setMousePointer(const css::uno::Reference<css::awt::XWindowPeer>& rWindowPeer, ::PointerStyle ePointer)
+void VCLUnoHelper::setMousePointer(const cpo::uno::Reference<css::awt::XWindowPeer>& rWindowPeer, ::PointerStyle ePointer)
 {
     VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(rWindowPeer);
     if (!pWindow)

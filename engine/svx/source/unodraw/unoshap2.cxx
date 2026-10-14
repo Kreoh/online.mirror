@@ -71,8 +71,8 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 
@@ -97,12 +97,12 @@ void SvxShapeGroup::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage )
 }
 
 
-cpo::uno::Any SAL_CALL SvxShapeGroup::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any SvxShapeGroup::queryInterface( const cpo::uno::Type & rType )
 {
     return SvxShape::queryInterface( rType );
 }
 
-cpo::uno::Any SAL_CALL SvxShapeGroup::queryAggregation( const cpo::uno::Type & rType )
+cpo::uno::Any SvxShapeGroup::queryAggregation( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aAny;
 
@@ -117,7 +117,7 @@ cpo::uno::Any SAL_CALL SvxShapeGroup::queryAggregation( const cpo::uno::Type & r
     return aAny;
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxShapeGroup::getImplementationId()
+cpo::uno::Sequence< sal_Int8 > SvxShapeGroup::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -125,37 +125,37 @@ cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxShapeGroup::getImplementationId()
 // css::drawing::XShape
 
 
-OUString SAL_CALL SvxShapeGroup::getShapeType()
+OUString SvxShapeGroup::getShapeType()
 {
     return SvxShape::getShapeType();
 }
 
-awt::Point SAL_CALL SvxShapeGroup::getPosition()
+awt::Point SvxShapeGroup::getPosition()
 {
     return SvxShape::getPosition();
 }
 
 
-void SAL_CALL SvxShapeGroup::setPosition( const awt::Point& Position )
+void SvxShapeGroup::setPosition( const awt::Point& Position )
 {
     SvxShape::setPosition(Position);
 }
 
 
-awt::Size SAL_CALL SvxShapeGroup::getSize()
+awt::Size SvxShapeGroup::getSize()
 {
     return SvxShape::getSize();
 }
 
 
-void SAL_CALL SvxShapeGroup::setSize( const awt::Size& rSize )
+void SvxShapeGroup::setSize( const awt::Size& rSize )
 {
     SvxShape::setSize( rSize );
 }
 
 // drawing::XShapeGroup
 
-void SAL_CALL SvxShapeGroup::enterGroup()
+void SvxShapeGroup::enterGroup()
 {
     SdrObject* pSdrShape = GetSdrObject();
     if (!pSdrShape)
@@ -169,7 +169,7 @@ void SAL_CALL SvxShapeGroup::enterGroup()
     });
 }
 
-void SAL_CALL SvxShapeGroup::leaveGroup()
+void SvxShapeGroup::leaveGroup()
 {
     SdrObject* pSdrShape = GetSdrObject();
     if (!pSdrShape)
@@ -237,7 +237,7 @@ void SvxShapeGroup::addShape( SvxShape& rShape, size_t nPos )
 }
 
 // XShapes
-void SAL_CALL SvxShapeGroup::add( const uno::Reference< drawing::XShape >& xShape )
+void SvxShapeGroup::add( const uno::Reference< drawing::XShape >& xShape )
 {
     ::SolarMutexGuard aGuard;
 
@@ -246,14 +246,14 @@ void SAL_CALL SvxShapeGroup::add( const uno::Reference< drawing::XShape >& xShap
 }
 
 
-void SAL_CALL SvxShapeGroup::remove( const uno::Reference< drawing::XShape >& xShape )
+void SvxShapeGroup::remove( const uno::Reference< drawing::XShape >& xShape )
 {
     ::SolarMutexGuard aGuard;
 
     SdrObject* pSdrShape = SdrObject::getSdrObjectFromXShape( xShape );
 
     if( !HasSdrObject() || pSdrShape == nullptr || pSdrShape->getParentSdrObjectFromSdrObject() != GetSdrObject() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     SdrObjList& rList = *pSdrShape->getParentSdrObjListFromSdrObject();
 
@@ -290,7 +290,7 @@ void SAL_CALL SvxShapeGroup::remove( const uno::Reference< drawing::XShape >& xS
     GetSdrObject()->getSdrModelFromSdrObject().SetChanged();
 }
 
-void SAL_CALL SvxShapeGroup::addTop( const uno::Reference< drawing::XShape >& xShape )
+void SvxShapeGroup::addTop( const uno::Reference< drawing::XShape >& xShape )
 {
     SolarMutexGuard aGuard;
 
@@ -298,7 +298,7 @@ void SAL_CALL SvxShapeGroup::addTop( const uno::Reference< drawing::XShape >& xS
     addUnoShape(xShape, SAL_MAX_SIZE);
 }
 
-void SAL_CALL SvxShapeGroup::addBottom( const uno::Reference< drawing::XShape >& xShape )
+void SvxShapeGroup::addBottom( const uno::Reference< drawing::XShape >& xShape )
 {
     SolarMutexGuard aGuard;
 
@@ -309,24 +309,24 @@ void SAL_CALL SvxShapeGroup::addBottom( const uno::Reference< drawing::XShape >&
 // XIndexAccess
 
 
-sal_Int32 SAL_CALL SvxShapeGroup::getCount()
+sal_Int32 SvxShapeGroup::getCount()
 {
     ::SolarMutexGuard aGuard;
 
     if(!HasSdrObject() || !GetSdrObject()->GetSubList())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     sal_Int32 nRetval = GetSdrObject()->GetSubList()->GetObjCount();
     return nRetval;
 }
 
 
-cpo::uno::Any SAL_CALL SvxShapeGroup::getByIndex( sal_Int32 Index )
+cpo::uno::Any SvxShapeGroup::getByIndex( sal_Int32 Index )
 {
     ::SolarMutexGuard aGuard;
 
     if( !HasSdrObject() || GetSdrObject()->GetSubList() == nullptr )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     if( Index<0 || GetSdrObject()->GetSubList()->GetObjCount() <= o3tl::make_unsigned(Index) )
         throw lang::IndexOutOfBoundsException();
@@ -343,13 +343,13 @@ cpo::uno::Any SAL_CALL SvxShapeGroup::getByIndex( sal_Int32 Index )
 // css::container::XElementAccess
 
 
-cpo::uno::Type SAL_CALL SvxShapeGroup::getElementType()
+cpo::uno::Type SvxShapeGroup::getElementType()
 {
     return cppu::UnoType<drawing::XShape>::get();
 }
 
 
-bool SAL_CALL SvxShapeGroup::hasElements()
+bool SvxShapeGroup::hasElements()
 {
     ::SolarMutexGuard aGuard;
 
@@ -454,12 +454,12 @@ SvxShapeConnector::~SvxShapeConnector() noexcept
 
 // XTypeProvider
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SvxShapeConnector::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > SvxShapeConnector::getTypes()
 {
     return SvxShape::getTypes();
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxShapeConnector::getImplementationId()
+cpo::uno::Sequence< sal_Int8 > SvxShapeConnector::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -479,12 +479,12 @@ SvxShapeControl::~SvxShapeControl() noexcept
 }
 
 
-cpo::uno::Any SAL_CALL SvxShapeControl::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any SvxShapeControl::queryInterface( const cpo::uno::Type & rType )
 {
     return SvxShapeText::queryInterface( rType );
 }
 
-cpo::uno::Any SAL_CALL SvxShapeControl::queryAggregation( const cpo::uno::Type & rType )
+cpo::uno::Any SvxShapeControl::queryAggregation( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aAny;
 
@@ -497,12 +497,12 @@ cpo::uno::Any SAL_CALL SvxShapeControl::queryAggregation( const cpo::uno::Type &
 
 // XTypeProvider
 
-cpo::uno::Sequence< cpo::uno::Type > SAL_CALL SvxShapeControl::getTypes()
+cpo::uno::Sequence< cpo::uno::Type > SvxShapeControl::getTypes()
 {
     return SvxShape::getTypes();
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxShapeControl::getImplementationId()
+cpo::uno::Sequence< sal_Int8 > SvxShapeControl::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -510,30 +510,30 @@ cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxShapeControl::getImplementationId()
 // css::drawing::XShape
 
 
-OUString SAL_CALL SvxShapeControl::getShapeType()
+OUString SvxShapeControl::getShapeType()
 {
     return SvxShapeText::getShapeType();
 }
 
-awt::Point SAL_CALL SvxShapeControl::getPosition()
+awt::Point SvxShapeControl::getPosition()
 {
     return SvxShapeText::getPosition();
 }
 
 
-void SAL_CALL SvxShapeControl::setPosition( const awt::Point& Position )
+void SvxShapeControl::setPosition( const awt::Point& Position )
 {
     SvxShapeText::setPosition(Position);
 }
 
 
-awt::Size SAL_CALL SvxShapeControl::getSize()
+awt::Size SvxShapeControl::getSize()
 {
     return SvxShapeText::getSize();
 }
 
 
-void SAL_CALL SvxShapeControl::setSize( const awt::Size& rSize )
+void SvxShapeControl::setSize( const awt::Size& rSize )
 {
     SvxShapeText::setSize( rSize );
 }
@@ -541,7 +541,7 @@ void SAL_CALL SvxShapeControl::setSize( const awt::Size& rSize )
 
 // XControlShape
 
-Reference< awt::XControlModel > SAL_CALL SvxShapeControl::getControl()
+Reference< awt::XControlModel > SvxShapeControl::getControl()
 {
     ::SolarMutexGuard aGuard;
 
@@ -555,7 +555,7 @@ Reference< awt::XControlModel > SAL_CALL SvxShapeControl::getControl()
 }
 
 
-void SAL_CALL SvxShapeControl::setControl( const Reference< awt::XControlModel >& xControl )
+void SvxShapeControl::setControl( const Reference< awt::XControlModel >& xControl )
 {
     ::SolarMutexGuard aGuard;
 
@@ -704,7 +704,7 @@ namespace
     }
 }
 
-void SAL_CALL SvxShapeControl::setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue )
+void SvxShapeControl::setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     OUString aFormsName;
     if ( lcl_convertPropertyName( aPropertyName, aFormsName ) )
@@ -742,7 +742,7 @@ void SAL_CALL SvxShapeControl::setPropertyValue( const OUString& aPropertyName, 
     }
 }
 
-cpo::uno::Any SAL_CALL SvxShapeControl::getPropertyValue( const OUString& aPropertyName )
+cpo::uno::Any SvxShapeControl::getPropertyValue( const OUString& aPropertyName )
 {
     OUString aFormsName;
     if ( lcl_convertPropertyName( aPropertyName, aFormsName ) )
@@ -791,7 +791,7 @@ cpo::uno::Any SAL_CALL SvxShapeControl::getPropertyValue( const OUString& aPrope
 }
 
 // XPropertyState
-beans::PropertyState SAL_CALL SvxShapeControl::getPropertyState( const OUString& PropertyName )
+beans::PropertyState SvxShapeControl::getPropertyState( const OUString& PropertyName )
 {
     OUString aFormsName;
     if ( lcl_convertPropertyName( PropertyName, aFormsName ) )
@@ -816,7 +816,7 @@ beans::PropertyState SAL_CALL SvxShapeControl::getPropertyState( const OUString&
     }
 }
 
-void SAL_CALL SvxShapeControl::setPropertyToDefault( const OUString& PropertyName )
+void SvxShapeControl::setPropertyToDefault( const OUString& PropertyName )
 {
     OUString aFormsName;
     if ( lcl_convertPropertyName( PropertyName, aFormsName ) )
@@ -839,7 +839,7 @@ void SAL_CALL SvxShapeControl::setPropertyToDefault( const OUString& PropertyNam
     }
 }
 
-cpo::uno::Any SAL_CALL SvxShapeControl::getPropertyDefault( const OUString& aPropertyName )
+cpo::uno::Any SvxShapeControl::getPropertyDefault( const OUString& aPropertyName )
 {
     OUString aFormsName;
     if ( lcl_convertPropertyName( aPropertyName, aFormsName ) )
@@ -1147,8 +1147,18 @@ void SvxShapePolyPolygon::SetPolygon(const basegfx::B2DPolyPolygon& rNew)
 {
     ::SolarMutexGuard aGuard;
 
-    if(HasSdrObject())
-        static_cast<SdrPathObj*>(GetSdrObject())->SetPathPoly(rNew);
+    SdrPathObj* pPath = ReferencedSdrObject<SdrPathObj>(GetSdrObject());
+    if (!pPath)
+        return;
+
+    basegfx::B2DPolyPolygon aPolyPolygon(rNew);
+    // A stand-in is drawn moved by its offset.
+    if (auto* pStandIn = dynamic_cast<SdrVirtObj*>(GetSdrObject()))
+    {
+        const Point aOffset(pStandIn->GetOffset());
+        aPolyPolygon.translate(-aOffset.X(), -aOffset.Y());
+    }
+    pPath->SetPathPoly(aPolyPolygon);
 }
 
 
@@ -1156,14 +1166,18 @@ basegfx::B2DPolyPolygon SvxShapePolyPolygon::GetPolygon() const noexcept
 {
     ::SolarMutexGuard aGuard;
 
-    if(HasSdrObject())
+    SdrPathObj* pPath = ReferencedSdrObject<SdrPathObj>(GetSdrObject());
+    if (!pPath)
+        return {};
+
+    basegfx::B2DPolyPolygon aPolyPolygon(pPath->GetPathPoly());
+    // A stand-in is drawn moved by its offset.
+    if (auto* pStandIn = dynamic_cast<SdrVirtObj*>(GetSdrObject()))
     {
-        return static_cast<SdrPathObj*>(GetSdrObject())->GetPathPoly();
+        const Point aOffset(pStandIn->GetOffset());
+        aPolyPolygon.translate(aOffset.X(), aOffset.Y());
     }
-    else
-    {
-        return basegfx::B2DPolyPolygon();
-    }
+    return aPolyPolygon;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1179,6 +1193,10 @@ SvxGraphicObject::~SvxGraphicObject() noexcept
 
 bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue )
 {
+    SdrGrafObj* pGraphic = ReferencedSdrObject<SdrGrafObj>(GetSdrObject());
+    if (!pGraphic)
+        return SvxShapeText::setPropertyValueImpl( rName, pProperty, rValue );
+
     bool bOk = false;
     switch( pProperty->nWID )
     {
@@ -1193,18 +1211,18 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
 
             if( GraphicConverter::Import( aMemStm, aGraphic ) == ERRCODE_NONE )
             {
-                static_cast<SdrGrafObj*>(GetSdrObject())->SetGraphic(aGraphic);
+                pGraphic->SetGraphic(aGraphic);
                 bOk = true;
             }
         }
         else if (uno::Reference<graphic::XGraphic> xGraphic = vcl::GetGraphic(rValue))
         {
             // Handles both graphic::XGraphic and awt::XBitmap
-            static_cast<SdrGrafObj*>(GetSdrObject())->SetGraphic(Graphic(xGraphic));
+            pGraphic->SetGraphic(Graphic(xGraphic));
             bOk = true;
         }
         if (bOk)
-            GetSdrObject()->SetEmptyPresObj(false);
+            pGraphic->SetEmptyPresObj(false);
         break;
     }
 
@@ -1219,8 +1237,8 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
 
             if( HasSdrObject() )
             {
-                static_cast<SdrGrafObj*>(GetSdrObject())->SetGrafStreamURL( aStreamURL );
-                GetSdrObject()->SetEmptyPresObj(false);
+                pGraphic->SetGrafStreamURL( aStreamURL );
+                pGraphic->SetEmptyPresObj(false);
             }
             bOk = true;
         }
@@ -1236,7 +1254,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
             Graphic aGraphic = vcl::graphic::loadFromURL(aURL);
             if (!aGraphic.IsNone())
             {
-                static_cast<SdrGrafObj*>(GetSdrObject())->SetGraphic(aGraphic);
+                pGraphic->SetGraphic(aGraphic);
                 bOk = true;
             }
         }
@@ -1248,13 +1266,13 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
                 Graphic aGraphic = xGraphic;
                 if (!aGraphic.IsNone())
                 {
-                    static_cast<SdrGrafObj*>(GetSdrObject())->SetGraphic(aGraphic);
+                    pGraphic->SetGraphic(aGraphic);
                     bOk = true;
                 }
             }
         }
         if (bOk)
-            GetSdrObject()->SetEmptyPresObj(false);
+            pGraphic->SetEmptyPresObj(false);
         break;
     }
 
@@ -1263,8 +1281,8 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         Reference< graphic::XGraphic > xGraphic( rValue, uno::UNO_QUERY );
         if( xGraphic.is() )
         {
-            static_cast< SdrGrafObj*>( GetSdrObject() )->SetGraphic( xGraphic );
-            GetSdrObject()->SetEmptyPresObj(false);
+            pGraphic->SetGraphic( xGraphic );
+            pGraphic->SetEmptyPresObj(false);
             bOk = true;
         }
         break;
@@ -1275,7 +1293,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         bool bIsSignatureLine;
         if (rValue >>= bIsSignatureLine)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setIsSignatureLine(bIsSignatureLine);
+            pGraphic->setIsSignatureLine(bIsSignatureLine);
             bOk = true;
         }
         break;
@@ -1286,7 +1304,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         OUString aSignatureLineId;
         if (rValue >>= aSignatureLineId)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineId(aSignatureLineId);
+            pGraphic->setSignatureLineId(aSignatureLineId);
             bOk = true;
         }
         break;
@@ -1297,7 +1315,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         OUString aSuggestedSignerName;
         if (rValue >>= aSuggestedSignerName)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineSuggestedSignerName(aSuggestedSignerName);
+            pGraphic->setSignatureLineSuggestedSignerName(aSuggestedSignerName);
             bOk = true;
         }
         break;
@@ -1308,7 +1326,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         OUString aSuggestedSignerTitle;
         if (rValue >>= aSuggestedSignerTitle)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineSuggestedSignerTitle(aSuggestedSignerTitle);
+            pGraphic->setSignatureLineSuggestedSignerTitle(aSuggestedSignerTitle);
             bOk = true;
         }
         break;
@@ -1319,7 +1337,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         OUString aSuggestedSignerEmail;
         if (rValue >>= aSuggestedSignerEmail)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineSuggestedSignerEmail(aSuggestedSignerEmail);
+            pGraphic->setSignatureLineSuggestedSignerEmail(aSuggestedSignerEmail);
             bOk = true;
         }
         break;
@@ -1330,7 +1348,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         OUString aSigningInstructions;
         if (rValue >>= aSigningInstructions)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineSigningInstructions(aSigningInstructions);
+            pGraphic->setSignatureLineSigningInstructions(aSigningInstructions);
             bOk = true;
         }
         break;
@@ -1341,7 +1359,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         bool bShowSignDate;
         if (rValue >>= bShowSignDate)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineShowSignDate(bShowSignDate);
+            pGraphic->setSignatureLineShowSignDate(bShowSignDate);
             bOk = true;
         }
         break;
@@ -1352,7 +1370,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         bool bCanAddComment;
         if (rValue >>= bCanAddComment)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineCanAddComment(bCanAddComment);
+            pGraphic->setSignatureLineCanAddComment(bCanAddComment);
             bOk = true;
         }
         break;
@@ -1363,7 +1381,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         Reference<graphic::XGraphic> xGraphic(rValue, uno::UNO_QUERY);
         if (xGraphic.is())
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineUnsignedGraphic(xGraphic);
+            pGraphic->setSignatureLineUnsignedGraphic(xGraphic);
             bOk = true;
         }
         break;
@@ -1374,7 +1392,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         bool bIsEmptyPresObj;
         if (rValue >>= bIsEmptyPresObj)
         {
-            GetSdrObject()->SetEmptyPresObj(bIsEmptyPresObj);
+            pGraphic->SetEmptyPresObj(bIsEmptyPresObj);
             bOk = true;
         }
         break;
@@ -1385,7 +1403,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         bool bIsSigned;
         if (rValue >>= bIsSigned)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setSignatureLineIsSigned(bIsSigned);
+            pGraphic->setSignatureLineIsSigned(bIsSigned);
             bOk = true;
         }
         break;
@@ -1396,7 +1414,7 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
         css::drawing::BarCode aBarCode;
         if (rValue >>= aBarCode)
         {
-            static_cast<SdrGrafObj*>(GetSdrObject())->setQrCode(aBarCode);
+            pGraphic->setQrCode(aBarCode);
             bOk = true;
         }
         break;
@@ -1416,11 +1434,15 @@ bool SvxGraphicObject::setPropertyValueImpl( const OUString& rName, const SfxIte
 
 bool SvxGraphicObject::getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue )
 {
+    SdrGrafObj* pGraphic = ReferencedSdrObject<SdrGrafObj>(GetSdrObject());
+    if (!pGraphic)
+        return SvxShapeText::getPropertyValueImpl( rName, pProperty, rValue );
+
     switch( pProperty->nWID )
     {
     case OWN_ATTR_VALUE_FILLBITMAP:
     {
-        const Graphic& rGraphic = static_cast<SdrGrafObj*>(GetSdrObject())->GetGraphic();
+        const Graphic& rGraphic = pGraphic->GetGraphic();
 
         if (rGraphic.GetType() != GraphicType::GdiMetafile)
         {
@@ -1442,7 +1464,7 @@ bool SvxGraphicObject::getPropertyValueImpl( const OUString& rName, const SfxIte
 
     case OWN_ATTR_REPLACEMENT_GRAPHIC:
     {
-        const GraphicObject* pGrafObj = static_cast< SdrGrafObj* >(GetSdrObject())->GetReplacementGraphicObject();
+        const GraphicObject* pGrafObj = pGraphic->GetReplacementGraphicObject();
 
         if (pGrafObj)
         {
@@ -1454,13 +1476,13 @@ bool SvxGraphicObject::getPropertyValueImpl( const OUString& rName, const SfxIte
 
     case OWN_ATTR_REPLACEMENT_MODEL:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->GetReplacementGraphicModel();
+        rValue <<= pGraphic->GetReplacementGraphicModel();
         break;
     }
 
     case OWN_ATTR_GRAFSTREAMURL:
     {
-        const OUString  aStreamURL( static_cast<SdrGrafObj*>( GetSdrObject() )->GetGrafStreamURL() );
+        const OUString  aStreamURL( pGraphic->GetGrafStreamURL() );
         if( !aStreamURL.isEmpty() )
             rValue <<= aStreamURL;
         break;
@@ -1475,7 +1497,7 @@ bool SvxGraphicObject::getPropertyValueImpl( const OUString& rName, const SfxIte
         }
 
         Reference<graphic::XGraphic> xGraphic;
-        auto pSdrGraphicObject = static_cast<SdrGrafObj*>(GetSdrObject());
+        auto pSdrGraphicObject = pGraphic;
         if (pSdrGraphicObject
             && pSdrGraphicObject->GetGraphicObject().GetType() != GraphicType::NONE)
             xGraphic = pSdrGraphicObject->GetGraphic().GetXGraphic();
@@ -1485,81 +1507,81 @@ bool SvxGraphicObject::getPropertyValueImpl( const OUString& rName, const SfxIte
 
     case OWN_ATTR_GRAPHIC_STREAM:
     {
-        rValue <<= static_cast< SdrGrafObj* >( GetSdrObject() )->getInputStream();
+        rValue <<= pGraphic->getInputStream();
         break;
     }
 
     case OWN_ATTR_IS_SIGNATURELINE:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->isSignatureLine();
+        rValue <<= pGraphic->isSignatureLine();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_ID:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->getSignatureLineId();
+        rValue <<= pGraphic->getSignatureLineId();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_SUGGESTED_SIGNER_NAME:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->getSignatureLineSuggestedSignerName();
+        rValue <<= pGraphic->getSignatureLineSuggestedSignerName();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_SUGGESTED_SIGNER_TITLE:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->getSignatureLineSuggestedSignerTitle();
+        rValue <<= pGraphic->getSignatureLineSuggestedSignerTitle();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_SUGGESTED_SIGNER_EMAIL:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->getSignatureLineSuggestedSignerEmail();
+        rValue <<= pGraphic->getSignatureLineSuggestedSignerEmail();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_SIGNING_INSTRUCTIONS:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->getSignatureLineSigningInstructions();
+        rValue <<= pGraphic->getSignatureLineSigningInstructions();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_SHOW_SIGN_DATE:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->isSignatureLineShowSignDate();
+        rValue <<= pGraphic->isSignatureLineShowSignDate();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_CAN_ADD_COMMENT:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->isSignatureLineCanAddComment();
+        rValue <<= pGraphic->isSignatureLineCanAddComment();
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_UNSIGNED_IMAGE:
     {
         Reference<graphic::XGraphic> xGraphic(
-            static_cast<SdrGrafObj*>(GetSdrObject())->getSignatureLineUnsignedGraphic());
+            pGraphic->getSignatureLineUnsignedGraphic());
         rValue <<= xGraphic;
         break;
     }
 
     case OWN_ATTR_SIGNATURELINE_IS_SIGNED:
     {
-        rValue <<= static_cast<SdrGrafObj*>(GetSdrObject())->isSignatureLineSigned();
+        rValue <<= pGraphic->isSignatureLineSigned();
         break;
     }
 
     case OWN_ATTR_OBJ_ISEMPTYPRESOBJ:
     {
-        rValue <<= GetSdrObject()->IsEmptyPresObj();
+        rValue <<= pGraphic->IsEmptyPresObj();
         break;
     }
 
     case OWN_ATTR_QRCODE:
     {
-        css::drawing::BarCode* ptr = static_cast<SdrGrafObj*>(GetSdrObject())->getQrCode();
+        css::drawing::BarCode* ptr = pGraphic->getQrCode();
         if(ptr)
         {
             rValue <<= *ptr;
@@ -1593,12 +1615,12 @@ SvxCustomShape::~SvxCustomShape() noexcept
 {
 }
 
-cpo::uno::Any SAL_CALL SvxCustomShape::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any SvxCustomShape::queryInterface( const cpo::uno::Type & rType )
 {
     return SvxShapeText::queryInterface( rType );
 }
 
-cpo::uno::Any SAL_CALL SvxCustomShape::queryAggregation( const cpo::uno::Type & rType )
+cpo::uno::Any SvxCustomShape::queryAggregation( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aReturn = SvxShapeText::queryAggregation( rType );
     if ( !aReturn.hasValue() )
@@ -1606,7 +1628,7 @@ cpo::uno::Any SAL_CALL SvxCustomShape::queryAggregation( const cpo::uno::Type & 
     return aReturn;
 }
 
-cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxCustomShape::getImplementationId()
+cpo::uno::Sequence< sal_Int8 > SvxCustomShape::getImplementationId()
 {
     return cpo::uno::Sequence<sal_Int8>();
 }
@@ -1614,24 +1636,21 @@ cpo::uno::Sequence< sal_Int8 > SAL_CALL SvxCustomShape::getImplementationId()
 // css::drawing::XShape
 
 
-awt::Point SAL_CALL SvxCustomShape::getPosition()
+awt::Point SvxCustomShape::getPosition()
 {
     ::SolarMutexGuard aGuard;
-    if ( HasSdrObject() )
+    // A stand-in sits somewhere else than what it refers to, so the base class, which asks the
+    // object itself, answers for it.
+    if (SdrObjCustomShape* pCustomShape = dynamic_cast<SdrObjCustomShape*>(GetSdrObject()))
     {
         SdrAShapeObjGeoData aCustomShapeGeoData;
-        static_cast<SdrObjCustomShape*>(GetSdrObject())->SaveGeoData( aCustomShapeGeoData );
+        pCustomShape->SaveGeoData( aCustomShapeGeoData );
 
-        bool bMirroredX = false;
-        bool bMirroredY = false;
+        bool bMirroredX = pCustomShape->IsMirroredX();
+        bool bMirroredY = pCustomShape->IsMirroredY();
 
-        if ( HasSdrObject() )
-        {
-            bMirroredX = static_cast<SdrObjCustomShape*>(GetSdrObject())->IsMirroredX();
-            bMirroredY = static_cast<SdrObjCustomShape*>(GetSdrObject())->IsMirroredY();
-        }
         // get aRect, this is the unrotated snaprect
-        tools::Rectangle aRect(static_cast<SdrObjCustomShape*>(GetSdrObject())->GetLogicRect());
+        tools::Rectangle aRect(pCustomShape->GetLogicRect());
         tools::Rectangle aRectangle( aRect );
 
         if ( bMirroredX || bMirroredY )
@@ -1696,7 +1715,7 @@ awt::Point SAL_CALL SvxCustomShape::getPosition()
 }
 
 
-void SAL_CALL SvxCustomShape::setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue )
+void SvxCustomShape::setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     ::SolarMutexGuard aGuard;
 
@@ -1721,15 +1740,17 @@ void SAL_CALL SvxCustomShape::setPropertyValue( const OUString& aPropertyName, c
         return;
     }
 
-    bool bCustomShapeGeometry = pObject && aPropertyName == "CustomShapeGeometry";
+    // The geometry lives on the referenced object.
+    SdrObjCustomShape* pCustomShape = ReferencedSdrObject<SdrObjCustomShape>(pObject);
+    bool bCustomShapeGeometry = pCustomShape && aPropertyName == "CustomShapeGeometry";
 
     bool bMirroredX = false;
     bool bMirroredY = false;
 
     if ( bCustomShapeGeometry )
     {
-        bMirroredX = static_cast<SdrObjCustomShape*>(pObject)->IsMirroredX();
-        bMirroredY = static_cast<SdrObjCustomShape*>(pObject)->IsMirroredY();
+        bMirroredX = pCustomShape->IsMirroredX();
+        bMirroredY = pCustomShape->IsMirroredY();
     }
 
     SvxShape::setPropertyValue( aPropertyName, aValue );
@@ -1737,12 +1758,12 @@ void SAL_CALL SvxCustomShape::setPropertyValue( const OUString& aPropertyName, c
     if ( !bCustomShapeGeometry )
         return;
 
-    static_cast<SdrObjCustomShape*>(pObject)->MergeDefaultAttributes();
+    pCustomShape->MergeDefaultAttributes();
     tools::Rectangle aRect( pObject->GetSnapRect() );
 
     // #i38892#
-    bool bNeedsMirrorX = static_cast<SdrObjCustomShape*>(pObject)->IsMirroredX() != bMirroredX;
-    bool bNeedsMirrorY = static_cast<SdrObjCustomShape*>(pObject)->IsMirroredY() != bMirroredY;
+    bool bNeedsMirrorX = pCustomShape->IsMirroredX() != bMirroredX;
+    bool bNeedsMirrorY = pCustomShape->IsMirroredY() != bMirroredY;
 
     std::unique_ptr< SdrGluePointList > pListCopy;
     if( bNeedsMirrorX || bNeedsMirrorY )
@@ -1759,7 +1780,7 @@ void SAL_CALL SvxCustomShape::setPropertyValue( const OUString& aPropertyName, c
         pObject->NbcMirror( aTop, aBottom );
         // NbcMirroring is flipping the current mirror state,
         // so we have to set the correct state again
-        static_cast<SdrObjCustomShape*>(pObject)->SetMirroredX( !bMirroredX );
+        pCustomShape->SetMirroredX( !bMirroredX );
     }
     if ( bNeedsMirrorY )
     {
@@ -1768,7 +1789,7 @@ void SAL_CALL SvxCustomShape::setPropertyValue( const OUString& aPropertyName, c
         pObject->NbcMirror( aLeft, aRight );
         // NbcMirroring is flipping the current mirror state,
         // so we have to set the correct state again
-        static_cast<SdrObjCustomShape*>(pObject)->SetMirroredY( !bMirroredY );
+        pCustomShape->SetMirroredY( !bMirroredY );
     }
 
     if( pListCopy )
@@ -1794,7 +1815,9 @@ bool SvxCustomShape::setPropertyValueImpl( const OUString& rName, const SfxItemP
                 // set flag that we are in 'SmartArt' import mode at target object
                 // NOTE: I tried to set SDRATTR_CUSTOMSHAPE_ENGINE SfxStringItem and use below,
                 //       but when this stays set CustomShapeEngine will not work.
-                static_cast<SdrObjCustomShape*>(GetSdrObject())->setImportingSmartArtMember(true);
+                if (SdrObjCustomShape* pCustomShape
+                    = ReferencedSdrObject<SdrObjCustomShape>(GetSdrObject()))
+                    pCustomShape->setImportingSmartArtMember(true);
 
                 // also do *not* call SvxShapeText::setPropertyValueImpl
                 return true;
@@ -1807,7 +1830,8 @@ bool SvxCustomShape::setPropertyValueImpl( const OUString& rName, const SfxItemP
     case SDRATTR_CUSTOMSHAPE_DATA:
     {
         // need to check for this if we are in 'SmartArt' mode
-        if (static_cast<SdrObjCustomShape*>(GetSdrObject())->getImportingSmartArtMember())
+        SdrObjCustomShape* pCustomShape = ReferencedSdrObject<SdrObjCustomShape>(GetSdrObject());
+        if (pCustomShape && pCustomShape->getImportingSmartArtMember())
         {
             OUString sData;
             if (rValue >>= sData)
@@ -1836,7 +1860,10 @@ bool SvxCustomShape::getPropertyValueImpl( const OUString& rName, const SfxItemP
     {
     case SDRATTR_ROTATEANGLE:
     {
-        double fAngle = static_cast<SdrObjCustomShape*>(GetSdrObject())->GetObjectRotation();
+        SdrObjCustomShape* pCustomShape = ReferencedSdrObject<SdrObjCustomShape>(GetSdrObject());
+        if (!pCustomShape)
+            break;
+        double fAngle = pCustomShape->GetObjectRotation();
         fAngle *= 100;
         rValue <<= static_cast<sal_Int32>(fAngle);
         return true;
@@ -1874,13 +1901,14 @@ bool SvxCustomShape::getPropertyValueImpl( const OUString& rName, const SfxItemP
 
 void SvxCustomShape::createCustomShapeDefaults( const OUString& rValueType )
 {
-    if (!HasSdrObject())
+    SdrObjCustomShape* pCustomShape = ReferencedSdrObject<SdrObjCustomShape>(GetSdrObject());
+    if (!pCustomShape)
     {
         OSL_FAIL("could not create Custom Shape Defaults!");
         return;
     }
 
-    static_cast<SdrObjCustomShape*>(GetSdrObject())->MergeDefaultAttributes( &rValueType );
+    pCustomShape->MergeDefaultAttributes( &rValueType );
 }
 
 SvxShapeGroupAnyD::SvxShapeGroupAnyD( SdrObject* pObject, std::span<const SfxItemPropertyMapEntry> pEntries, const SvxItemPropertySet* pPropertySet )

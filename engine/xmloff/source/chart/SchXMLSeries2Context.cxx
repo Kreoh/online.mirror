@@ -61,9 +61,10 @@
 #include <algorithm> // std::find_if
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 namespace
@@ -77,9 +78,9 @@ private:
 public:
     SchXMLDomain2Context( SvXMLImport& rImport,
                           ::std::vector< OUString > & rAddresses );
-    virtual void SAL_CALL startFastElement(
+    virtual void startFastElement(
         sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 SchXMLDomain2Context::SchXMLDomain2Context(
@@ -92,7 +93,7 @@ SchXMLDomain2Context::SchXMLDomain2Context(
 
 void SchXMLDomain2Context::startFastElement(
     sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
     for( auto& aIter : sax_fastparser::castToFastAttributeList(xAttrList) )
     {
@@ -306,7 +307,7 @@ SchXMLSeries2Context::~SchXMLSeries2Context()
 }
 
 void SchXMLSeries2Context::startFastElement (sal_Int32 /*Element*/,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList)
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList)
 {
     // parse attributes
     mnAttachedAxis = 1;
@@ -684,9 +685,9 @@ void SchXMLSeries2Context::endFastElement(sal_Int32 )
     maPostponedSequences.clear();
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLSeries2Context::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SchXMLSeries2Context::createFastChildContext(
     sal_Int32 nElement,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >&  )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >&  )
 {
     SvXMLImportContext* pContext = nullptr;
 
@@ -829,18 +830,18 @@ void SchXMLSeries2Context::setDefaultsToSeries( SeriesDefaultsAndStyles& rSeries
 // the internal property. Those are of kind "LabelFoo".
 // The array is used in methods setStylesToSeries and setStylesToDataPoints.
 const std::pair<OUString, OUString> aApiToLabelFooPairs[]
-    = { { "LineStyle", "LabelBorderStyle" },
-        { "LineWidth", "LabelBorderWidth" },
-        { "LineColor", "LabelBorderColor" },
+    = { { u"LineStyle"_ustr, u"LabelBorderStyle"_ustr },
+        { u"LineWidth"_ustr, u"LabelBorderWidth"_ustr },
+        { u"LineColor"_ustr, u"LabelBorderColor"_ustr },
         // The name "LabelBorderDash" is defined, but the associated API name "LineDash" belongs to
         // the <draw:stroke-dash> element and is not used directly as line property.
         //{"LineDash", "LabelBorderDash"},
-        { "LineDashName", "LabelBorderDashName" },
-        { "LineTransparence", "LabelBorderTransparency" },
-        { "FillStyle", "LabelFillStyle" },
-        { "FillBackground", "LabelFillBackground" },
-        { "FillHatchName", "LabelFillHatchName" },
-        { "FillColor", "LabelFillColor" } };
+        { u"LineDashName"_ustr, u"LabelBorderDashName"_ustr },
+        { u"LineTransparence"_ustr, u"LabelBorderTransparency"_ustr },
+        { u"FillStyle"_ustr, u"LabelFillStyle"_ustr },
+        { u"FillBackground"_ustr, u"LabelFillBackground"_ustr },
+        { u"FillHatchName"_ustr, u"LabelFillHatchName"_ustr },
+        { u"FillColor"_ustr, u"LabelFillColor"_ustr } };
 
 
 //static
@@ -1234,7 +1235,7 @@ void SchXMLSeries2Context::setStylesToDataPoints( SeriesDefaultsAndStyles& rSeri
 
                     Sequence< Reference<chart2::XDataPointCustomLabelField>> xLabels(nLabelCount);
                     auto pxLabels = xLabels.getArray();
-                    const Reference< uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
+                    const Reference< cpo::uno::XComponentContext >& xContext( comphelper::getProcessComponentContext() );
                     for( size_t j = 0; j < nLabelCount; ++j )
                     {
                         Reference< chart2::XDataPointCustomLabelField > xCustomLabel = chart2::DataPointCustomLabelField::create(xContext);

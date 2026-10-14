@@ -66,6 +66,7 @@
 #include <o3tl/string_view.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace {
 
@@ -148,7 +149,7 @@ public:
     SwSectionFormat & GetSectionFormatOrThrow() const {
         SwSectionFormat *const pFormat( GetSectionFormat() );
         if (!pFormat) {
-            throw uno::RuntimeException(u"SwXTextSection: disposed or invalid"_ustr, nullptr);
+            throw cpo::uno::RuntimeException(u"SwXTextSection: disposed or invalid"_ustr, nullptr);
         }
         return *pFormat;
     }
@@ -175,7 +176,7 @@ void SwXTextSection::Impl::Notify(const SfxHint& rHint)
     if(rHint.GetId() == SfxHintId::Dying)
     {
         m_pFormat = nullptr;
-        uno::Reference<uno::XInterface> const xThis(m_wThis);
+        uno::Reference<cpo::uno::XInterface> const xThis(m_wThis);
         if (!xThis.is())
         {   // fdo#72695: if UNO object is already dead, don't revive it with event
             return;
@@ -228,7 +229,7 @@ SwXTextSection::~SwXTextSection()
 {
 }
 
-uno::Reference< text::XTextSection > SAL_CALL
+uno::Reference< text::XTextSection >
 SwXTextSection::getParentSection()
 {
     SolarMutexGuard aGuard;
@@ -241,7 +242,7 @@ SwXTextSection::getParentSection()
     return CreateXTextSection(pParentFormat);
 }
 
-cpo::uno::Sequence< uno::Reference< text::XTextSection > > SAL_CALL
+cpo::uno::Sequence< uno::Reference< text::XTextSection > >
 SwXTextSection::getChildSections()
 {
     SolarMutexGuard aGuard;
@@ -260,14 +261,14 @@ SwXTextSection::getChildSections()
     return aSeq;
 }
 
-void SAL_CALL
+void
 SwXTextSection::attach(const uno::Reference< text::XTextRange > & xTextRange)
 {
     SolarMutexGuard g;
 
     if (!m_pImpl->m_bIsDescriptor)
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     SwXTextRange* pRange = dynamic_cast<SwXTextRange*>(xTextRange.get());
@@ -420,7 +421,7 @@ SwXTextSection::attach(const uno::Reference< text::XTextRange > & xTextRange)
     m_pImpl->m_bIsDescriptor = false;
 }
 
-uno::Reference< text::XTextRange > SAL_CALL
+uno::Reference< text::XTextRange >
 SwXTextSection::getAnchor()
 {
     SolarMutexGuard aGuard;
@@ -454,7 +455,7 @@ SwXTextSection::getAnchor()
             }
             if (isMoveIntoTable)
             {
-                css::uno::Reference<SwXText> const xParentText =
+                cpo::uno::Reference<SwXText> const xParentText =
                     ::sw::CreateParentXText(pSectFormat->GetDoc(), SwPosition(*pIdx));
                 xRet = new SwXTextRange(*pSectFormat);
             }
@@ -468,7 +469,7 @@ SwXTextSection::getAnchor()
     return xRet;
 }
 
-void SAL_CALL SwXTextSection::dispose()
+void SwXTextSection::dispose()
 {
     SolarMutexGuard aGuard;
 
@@ -479,7 +480,7 @@ void SAL_CALL SwXTextSection::dispose()
     }
 }
 
-void SAL_CALL SwXTextSection::addEventListener(
+void SwXTextSection::addEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
@@ -487,7 +488,7 @@ void SAL_CALL SwXTextSection::addEventListener(
     m_pImpl->m_EventListeners.addInterface(aGuard, xListener);
 }
 
-void SAL_CALL SwXTextSection::removeEventListener(
+void SwXTextSection::removeEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
@@ -495,7 +496,7 @@ void SAL_CALL SwXTextSection::removeEventListener(
     m_pImpl->m_EventListeners.removeInterface(aGuard, xListener);
 }
 
-uno::Reference< beans::XPropertySetInfo > SAL_CALL
+uno::Reference< beans::XPropertySetInfo >
 SwXTextSection::getPropertySetInfo()
 {
     SolarMutexGuard g;
@@ -564,7 +565,7 @@ void SwXTextSection::Impl::SetPropertyValues_Impl(
     SwSectionFormat *const pFormat = GetSectionFormat();
     if (!pFormat && !m_bIsDescriptor)
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     std::unique_ptr<SwSectionData> const pSectionData(
@@ -914,7 +915,7 @@ void SwXTextSection::Impl::SetPropertyValues_Impl(
         bLinkMode);
 }
 
-void SAL_CALL
+void
 SwXTextSection::setPropertyValues(
     const cpo::uno::Sequence< OUString >& rPropertyNames,
     const cpo::uno::Sequence< cpo::uno::Any >& rValues)
@@ -951,7 +952,7 @@ SwXTextSection::Impl::GetPropertyValues_Impl(
     SwSectionFormat *const pFormat = GetSectionFormat();
     if (!pFormat && !m_bIsDescriptor)
     {
-        throw uno::RuntimeException( u"non-descriptor section without format"_ustr);
+        throw cpo::uno::RuntimeException( u"non-descriptor section without format"_ustr);
     }
 
     cpo::uno::Sequence< cpo::uno::Any > aRet(rPropertyNames.getLength());
@@ -1248,7 +1249,7 @@ SwXTextSection::Impl::GetPropertyValues_Impl(
     return aRet;
 }
 
-cpo::uno::Sequence< cpo::uno::Any > SAL_CALL
+cpo::uno::Sequence< cpo::uno::Any >
 SwXTextSection::getPropertyValues(
     const cpo::uno::Sequence< OUString >& rPropertyNames)
 {
@@ -1276,7 +1277,7 @@ SwXTextSection::getPropertyValues(
     return aValues;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwXTextSection::getPropertyValue(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
@@ -1285,27 +1286,27 @@ SwXTextSection::getPropertyValue(const OUString& rPropertyName)
     return m_pImpl->GetPropertyValues_Impl(aPropertyNames).getConstArray()[0];
 }
 
-void SAL_CALL SwXTextSection::addPropertiesChangeListener(
+void SwXTextSection::addPropertiesChangeListener(
     const cpo::uno::Sequence< OUString >& /*aPropertyNames*/,
     const uno::Reference< beans::XPropertiesChangeListener >& /*xListener*/ )
 {
     OSL_FAIL("SwXTextSection::addPropertiesChangeListener(): not implemented");
 }
 
-void SAL_CALL SwXTextSection::removePropertiesChangeListener(
+void SwXTextSection::removePropertiesChangeListener(
     const uno::Reference< beans::XPropertiesChangeListener >& /*xListener*/ )
 {
     OSL_FAIL("SwXTextSection::removePropertiesChangeListener(): not implemented");
 }
 
-void SAL_CALL SwXTextSection::firePropertiesChangeEvent(
+void SwXTextSection::firePropertiesChangeEvent(
     const cpo::uno::Sequence< OUString >& /*aPropertyNames*/,
     const uno::Reference< beans::XPropertiesChangeListener >& /*xListener*/ )
 {
     OSL_FAIL("SwXTextSection::firePropertiesChangeEvent(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextSection::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
@@ -1313,7 +1314,7 @@ SwXTextSection::addPropertyChangeListener(
     OSL_FAIL("SwXTextSection::addPropertyChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextSection::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
@@ -1321,7 +1322,7 @@ SwXTextSection::removePropertyChangeListener(
     OSL_FAIL("SwXTextSection::removePropertyChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextSection::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
@@ -1329,7 +1330,7 @@ SwXTextSection::addVetoableChangeListener(
     OSL_FAIL("SwXTextSection::addVetoableChangeListener(): not implemented");
 }
 
-void SAL_CALL
+void
 SwXTextSection::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
@@ -1337,7 +1338,7 @@ SwXTextSection::removeVetoableChangeListener(
     OSL_FAIL("SwXTextSection::removeVetoableChangeListener(): not implemented");
 }
 
-beans::PropertyState SAL_CALL
+beans::PropertyState
 SwXTextSection::getPropertyState(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
@@ -1346,7 +1347,7 @@ SwXTextSection::getPropertyState(const OUString& rPropertyName)
     return getPropertyStates(aNames).getConstArray()[0];
 }
 
-cpo::uno::Sequence< beans::PropertyState > SAL_CALL
+cpo::uno::Sequence< beans::PropertyState >
 SwXTextSection::getPropertyStates(
         const cpo::uno::Sequence< OUString >& rPropertyNames)
 {
@@ -1355,7 +1356,7 @@ SwXTextSection::getPropertyStates(
     SwSectionFormat *const pFormat = m_pImpl->GetSectionFormat();
     if (!pFormat && !m_pImpl->m_bIsDescriptor)
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     cpo::uno::Sequence< beans::PropertyState > aStates(rPropertyNames.getLength());
@@ -1428,7 +1429,7 @@ SwXTextSection::getPropertyStates(
     return aStates;
 }
 
-void SAL_CALL
+void
 SwXTextSection::setPropertyToDefault(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
@@ -1436,7 +1437,7 @@ SwXTextSection::setPropertyToDefault(const OUString& rPropertyName)
     SwSectionFormat *const pFormat = m_pImpl->GetSectionFormat();
     if (!pFormat && !m_pImpl->m_bIsDescriptor)
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     SfxItemPropertyMapEntry const*const pEntry =
@@ -1449,7 +1450,7 @@ SwXTextSection::setPropertyToDefault(const OUString& rPropertyName)
     }
     if (pEntry->nFlags & beans::PropertyAttribute::READONLY)
     {
-        throw uno::RuntimeException(
+        throw cpo::uno::RuntimeException(
             "Property is read-only: " + rPropertyName,
             getXWeak());
     }
@@ -1571,7 +1572,7 @@ SwXTextSection::setPropertyToDefault(const OUString& rPropertyName)
     lcl_UpdateSection(pFormat, pSectionData, oNewAttrSet, bLinkModeChanged);
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 SwXTextSection::getPropertyDefault(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
@@ -1625,7 +1626,7 @@ SwXTextSection::getPropertyDefault(const OUString& rPropertyName)
     return aRet;
 }
 
-OUString SAL_CALL SwXTextSection::getName()
+OUString SwXTextSection::getName()
 {
     SolarMutexGuard aGuard;
 
@@ -1641,12 +1642,12 @@ OUString SAL_CALL SwXTextSection::getName()
     }
     else
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
     return sRet;
 }
 
-void SAL_CALL SwXTextSection::setName(const OUString& rName)
+void SwXTextSection::setName(const OUString& rName)
 {
     SolarMutexGuard aGuard;
 
@@ -1667,7 +1668,7 @@ void SAL_CALL SwXTextSection::setName(const OUString& rName)
             }
             else if (rName == rFormats[i]->GetSection()->GetSectionName())
             {
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             }
         }
         if (nApplyPos != SIZE_MAX)
@@ -1689,22 +1690,22 @@ void SAL_CALL SwXTextSection::setName(const OUString& rName)
     }
     else
     {
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 }
 
-OUString SAL_CALL
+OUString
 SwXTextSection::getImplementationName()
 {
     return u"SwXTextSection"_ustr;
 }
 
-bool SAL_CALL SwXTextSection::supportsService(const OUString& rServiceName)
+bool SwXTextSection::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL
+cpo::uno::Sequence< OUString >
 SwXTextSection::getSupportedServiceNames()
 {
     return {

@@ -32,14 +32,14 @@ namespace pcr
 {
 
 
-    using ::com::sun::star::uno::Reference;
+    using ::cpo::uno::Reference;
     using ::cpo::uno::TypeClass_INTERFACE;
     using ::cpo::uno::TypeClass_STRING;
-    using ::com::sun::star::uno::XComponentContext;
+    using ::cpo::uno::XComponentContext;
     using ::com::sun::star::inspection::XObjectInspectorModel;
-    using ::com::sun::star::uno::UNO_QUERY_THROW;
+    using ::cpo::uno::UNO_QUERY_THROW;
     using ::cpo::uno::Sequence;
-    using ::com::sun::star::uno::XInterface;
+    using ::cpo::uno::XInterface;
     using ::com::sun::star::beans::XPropertySetInfo;
     using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::beans::Property;
@@ -48,7 +48,7 @@ namespace pcr
     using ::cpo::uno::Type;
     using ::com::sun::star::util::VetoException;
     using ::com::sun::star::beans::PropertyVetoException;
-    using ::com::sun::star::uno::UNO_QUERY;
+    using ::cpo::uno::UNO_QUERY;
 
     namespace PropertyAttribute = css::beans::PropertyAttribute;
 
@@ -225,9 +225,9 @@ namespace pcr
 
 } // namespace pcr
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_FormController_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::FormController( context,
                 u"org.openoffice.comp.extensions.FormController"_ustr,
@@ -235,9 +235,9 @@ extensions_propctrlr_FormController_get_implementation(
                 true ) );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 extensions_propctrlr_DialogController_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new pcr::FormController( context,
             u"org.openoffice.comp.extensions.DialogController"_ustr,

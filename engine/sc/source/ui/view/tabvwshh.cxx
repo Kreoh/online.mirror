@@ -20,6 +20,7 @@
 #include <config_features.h>
 
 #include <basic/sberrors.hxx>
+#include <drawview.hxx>
 #include <svx/svdmark.hxx>
 #include <svx/svdoole2.hxx>
 #include <svx/svdview.hxx>
@@ -42,6 +43,7 @@
 #include <com/sun/star/embed/EmbedVerbs.hpp>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScTabViewShell::ExecuteObject( const SfxRequest& rReq )
 {
@@ -263,8 +265,9 @@ bool ScTabViewShell::ExecuteRetypePassDlg(ScPasswordHash eDesiredHash)
 
 void ScTabViewShell::ExecuteOnlyActiveSheetSavedDlg()
 {
-    ScOnlyActiveSheetSavedDlg aDlg(GetFrameWeld());
-    aDlg.run();
+    // The warning only reports what the save already did, so it runs after the save finishes.
+    auto xDlg = std::make_shared<ScOnlyActiveSheetSavedDlg>(GetFrameWeld());
+    weld::DialogController::runAsync(xDlg, [xDlg](sal_Int32) { xDlg->StoreWarningChoice(); });
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

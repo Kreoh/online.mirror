@@ -28,8 +28,10 @@
 #include <svl/itemiter.hxx>
 #include <svl/srchitem.hxx>
 #include <svl/whiter.hxx>
+#include <editeng/brushitem.hxx>
 #include <editeng/colritem.hxx>
 #include <editeng/fontitem.hxx>
+#include <editeng/udlnitem.hxx>
 #include <fmtpdsc.hxx>
 #include <txatbase.hxx>
 #include <charfmt.hxx>
@@ -59,8 +61,34 @@ static bool CmpAttr( const SfxPoolItem& rItem1, const SfxPoolItem& rItem2 )
     case RES_CHRATR_FONT:
         return rItem1.StaticWhichCast(RES_CHRATR_FONT).GetFamilyName() == rItem2.StaticWhichCast(RES_CHRATR_FONT).GetFamilyName();
 
+    case RES_CHRATR_BACKGROUND:
+    {
+        const SvxBrushItem& rBrush1 = rItem1.StaticWhichCast(RES_CHRATR_BACKGROUND);
+        const SvxBrushItem& rBrush2 = rItem2.StaticWhichCast(RES_CHRATR_BACKGROUND);
+        if (rBrush1.getComplexColor().isUsed() && rBrush2.getComplexColor().isUsed())
+            return rItem1 == rItem2;
+
+        return rBrush1.GetColor().IsRGBEqual(rBrush2.GetColor());
+    }
+    case RES_CHRATR_OVERLINE:
+    case RES_CHRATR_UNDERLINE:
+    {
+        auto& rUnderline1 = static_cast<const SvxTextLineItem&>(rItem1);
+        auto& rUnderline2 = static_cast<const SvxTextLineItem&>(rItem2);
+        if (rUnderline1.getComplexColor().isUsed() && rUnderline2.getComplexColor().isUsed())
+            return rItem1 == rItem2;
+
+        return rUnderline1.GetColor().IsRGBEqual(rUnderline2.GetColor())
+            && rUnderline1.GetLineStyle() == rUnderline2.GetLineStyle();
+    }
     case RES_CHRATR_COLOR:
-        return rItem1.StaticWhichCast(RES_CHRATR_COLOR).GetValue().IsRGBEqual(rItem2.StaticWhichCast(RES_CHRATR_COLOR).GetValue());
+    {
+        ::Color Color1 = rItem1.StaticWhichCast(RES_CHRATR_COLOR).GetValue();
+        ::Color Color2 = rItem2.StaticWhichCast(RES_CHRATR_COLOR).GetValue();
+        if (Color1 == COL_AUTO || Color2 == COL_AUTO)
+            return Color1 == Color2;
+        return Color1.IsRGBEqual(Color2);
+    }
     case RES_PAGEDESC:
         ::std::optional<sal_uInt16> const oNumOffset1 = rItem1.StaticWhichCast(RES_PAGEDESC).GetNumOffset();
         ::std::optional<sal_uInt16> const oNumOffset2 = rItem2.StaticWhichCast(RES_PAGEDESC).GetNumOffset();
@@ -443,11 +471,18 @@ bool SwAttrCheckArr::SetAttrFwd( const SwTextAttr& rAttr )
                     bContinue = true;
                 }
             }
-            // Will the attribute become valid?
+            // Will the attribute become/stay valid?
             else if(  CmpAttr( *pItem, *pTmpItem ) )
             {
-                m_pFindArr[ nWhch - m_nArrStart ] = aTmp;
-                ++m_nFound;
+                pCmp = &m_pFindArr[nWhch - m_nArrStart];
+                if (!pCmp->nWhich)
+                {
+                    *pCmp = aTmp;
+                    m_nFound++;
+                }
+                else if (pCmp->nEnd < aTmp.nEnd) // extend?
+                    pCmp->nEnd = aTmp.nEnd;
+
                 bContinue = true;
             }
 
@@ -601,11 +636,19 @@ bool SwAttrCheckArr::SetAttrBwd( const SwTextAttr& rAttr )
                     bContinue = true;
                 }
             }
-            // Will the attribute become valid?
+            // Will the attribute become/stay valid?
             else if( CmpAttr( *pItem, *pTmpItem ))
             {
-                m_pFindArr[ nWhch - m_nArrStart ] = aTmp;
-                ++m_nFound;
+                // search attribute and extend if needed
+                pCmp = &m_pFindArr[ nWhch - m_nArrStart ];
+                if( !pCmp->nWhich )
+                {
+                    *pCmp = aTmp; // not found, insert
+                    ++m_nFound;
+                }
+                else if (pCmp->nStt > aTmp.nStt) // extend?
+                    pCmp->nStt = aTmp.nStt;
+
                 bContinue = true;
             }
 
@@ -711,9 +754,12 @@ static bool lcl_SearchForward( const SwTextNode& rTextNd, SwAttrCheckArr& rCmpAr
                             SwPaM& rPam )
 {
     sal_Int32 nEndPos;
+    // SetNewSet: initialize the SwAttrCheckArr, find format props that cover the entire paragraph
     rCmpArr.SetNewSet( rTextNd, rPam );
+
     if( !rTextNd.HasHints() )
     {
+        // done: only entire paragraph properties exist
         if( !rCmpArr.Found() )
             return false;
         nEndPos = rCmpArr.GetNdEnd();
@@ -728,18 +774,32 @@ static bool lcl_SearchForward( const SwTextNode& rTextNd, SwAttrCheckArr& rCmpAr
     // if everything is already there then check with which it will be ended
     if( rCmpArr.Found() )
     {
+        // entire paragraph matches criteria. Do any character hints break the match?
         for( ; nPos < rHtArr.Count(); ++nPos )
         {
             pAttr = rHtArr.Get( nPos );
             if( !rCmpArr.SetAttrFwd( *pAttr ) )
             {
+                // yes - the match has been broken.
+
                 if( rCmpArr.GetNdStt() < pAttr->GetStart() )
                 {
-                    // found end
+                    // a fragment of matching text was found before the broken match
                     auto nTmpStart = pAttr->GetStart();
                     lcl_SetAttrPam( rPam, rCmpArr.GetNdStt(),
                                 &nTmpStart, true );
                     return true;
+                }
+                else
+                {
+                    // move past the non-matching hint and restart the search
+                    nEndPos = pAttr->GetAnyEnd();
+                    if (nEndPos < rCmpArr.GetNdEnd() && pAttr->GetStart() < nEndPos)
+                    {
+                        rPam.Normalize(/*PointFirst=*/true);
+                        lcl_SetAttrPam(rPam, rCmpArr.GetNdEnd(), &nEndPos, /*bSaveMark=*/true);
+                        return lcl_SearchForward(rTextNd, rCmpArr, rPam);
+                    }
                 }
                 // continue search
                 break;
@@ -830,7 +890,17 @@ static bool lcl_SearchBackward( const SwTextNode& rTextNd, SwAttrCheckArr& rCmpA
                     lcl_SetAttrPam( rPam, nSttPos, &nEndPos, false );
                     return true;
                 }
-
+                else
+                {
+                    // move before the non-matching hint and restart the search
+                    nEndPos = pAttr->GetStart();
+                    if (nEndPos > rCmpArr.GetNdStt() && pAttr->GetAnyEnd() > nEndPos)
+                    {
+                        rPam.Normalize(/*PointFirst=*/false);
+                        lcl_SetAttrPam(rPam, rCmpArr.GetNdStt(), &nEndPos, /*bSaveMark=*/false);
+                        return lcl_SearchBackward(rTextNd, rCmpArr, rPam);
+                    }
+                }
                 // continue search
                 break;
             }
@@ -1113,8 +1183,9 @@ static bool FindAttrsImpl(SwPaM & rSearchPam,
             sw::MergedPara const*const pMergedPara(pFrame ? pFrame->GetMergedPara() : nullptr);
             if (pMergedPara)
             {
-                SwPosition const& rStart(*oPam->Start());
-                SwPosition const& rEnd(*oPam->End());
+                auto [pStart, pEnd] = oPam->StartEnd(); // SwPosition*
+                SwPosition const& rStart(*pStart);
+                SwPosition const& rEnd(*pEnd);
                 // no extents? fall back to searching index 0 of propsnode
                 // to find its node items
                 if (pMergedPara->extents.empty())
@@ -1280,7 +1351,7 @@ int SwFindParaAttr::DoFind(SwPaM & rCursor, SwMoveFnCollection const & fnMove,
     bool bReplaceText = pSearchOpt && ( !pSearchOpt->replaceString.isEmpty() ||
                                     !pSet->Count() );
     bool bReplaceAttr = pReplSet && pReplSet->Count();
-    bool bMoveFirst = !bReplaceAttr;
+    bool bMoveFirst = false;
     if( bInReadOnly && (bReplaceAttr || bReplaceText ))
         bInReadOnly = false;
 
@@ -1390,15 +1461,6 @@ int SwFindParaAttr::DoFind(SwPaM & rCursor, SwMoveFnCollection const & fnMove,
         {
             SfxItemPool* pPool = pReplSet->GetPool();
             SfxItemSet aSet( *pPool, pReplSet->GetRanges() );
-
-            for (SfxItemIter aIter( *pSet ); !aIter.IsAtEnd(); aIter.Next())
-            {
-                const SfxPoolItem* pItem = aIter.GetCurItem();
-                // reset all that are not set with pool defaults
-                if( !IsInvalidItem( pItem ) && SfxItemState::SET !=
-                    pReplSet->GetItemState( pItem->Which(), false ))
-                    aSet.Put( pPool->GetUserOrPoolDefaultItem( pItem->Which() ));
-            }
             aSet.Put( *pReplSet );
             rCursor.GetDoc().getIDocumentContentOperations().InsertItemSet(
                     rCursor, aSet, SetAttrMode::DEFAULT, m_pLayout);

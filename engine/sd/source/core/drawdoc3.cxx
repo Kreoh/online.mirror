@@ -18,6 +18,7 @@
  */
 
 
+#include <algorithm>
 #include <memory>
 #include <string_view>
 
@@ -28,6 +29,7 @@
 #include <tools/debug.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <comphelper/kit.hxx>
+#include <comphelper/scopeguard.hxx>
 
 #include <sfx2/fcontnr.hxx>
 #include <svl/style.hxx>
@@ -62,6 +64,20 @@
 #include <strings.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
+
+namespace
+{
+/** The source document to record on the pages of one insertion, for an
+    insertion that links them to their source. An insertion that names no
+    source falls back to the name of the medium the pages are read from.
+*/
+const OUString& getLinkSourceUrl(const InsertBookmarkOptions& rOptions,
+                                 const PageInsertionParams& rParams)
+{
+    return rOptions.aLinkSourceUrl.isEmpty() ? rParams.aBookmarkName : rOptions.aLinkSourceUrl;
+}
+}
 
 /** Concrete incarnations get called by lcl_IterateBookmarkPages, for
     every page in the bookmark document/list
@@ -72,13 +88,77 @@ namespace {
 class InsertBookmarkAsPage_FindDuplicateLayouts
 {
 public:
-    explicit InsertBookmarkAsPage_FindDuplicateLayouts( std::vector<OUString> &rLayoutsToTransfer )
-        : mrLayoutsToTransfer(rLayoutsToTransfer) {}
+    explicit InsertBookmarkAsPage_FindDuplicateLayouts( std::vector<OUString> &rLayoutsToTransfer,
+                                                        bool bKeepSourceDesign )
+        : mrLayoutsToTransfer(rLayoutsToTransfer)
+        , mbKeepSourceDesign(bKeepSourceDesign) {}
     void operator()( SdDrawDocument&, SdPage const *, bool bRenameDuplicates, SdDrawDocument* pBookmarkDoc, bool bMergeMasterPagesOnly);
 private:
+    bool settleOwnDesignName( SdDrawDocument& rDoc, SdPage const * pBMMPage,
+                              SdDrawDocument* pBookmarkDoc, OUString& rLayout );
+
     std::vector<OUString> &mrLayoutsToTransfer;
+    // The inserted pages keep the design they came with, so a design of this document that
+    // shares its name does not stand in for it.
+    bool mbKeepSourceDesign;
 };
 
+}
+
+// Settles the name the source design travels under when the inserted pages keep it, and gives
+// back true when a master page of this document already serves them, so that no layout styles
+// have to travel.
+//
+// A master page keeps its identifier when it is merged into another document, so a master page
+// here carrying the identifier of the source master is that same design brought over by an
+// earlier insert, whatever it ended up being called. Failing that, a master page here of the
+// same name may hold the same design and serve just as well. Otherwise the name is taken by a
+// design that differs, and the arriving one takes a name that neither document uses.
+bool InsertBookmarkAsPage_FindDuplicateLayouts::settleOwnDesignName(
+    SdDrawDocument& rDoc, SdPage const * pBMMPage, SdDrawDocument* pBookmarkDoc,
+    OUString& rLayout )
+{
+    SdPage* pSameName = nullptr;
+    const sal_uInt16 nMasterPageCount = rDoc.GetMasterPageCount();
+    for (sal_uInt16 nMasterPage = 0; nMasterPage < nMasterPageCount; nMasterPage++)
+    {
+        SdPage* pTestPage = static_cast<SdPage*>( rDoc.GetMasterPage(nMasterPage) );
+        if (pTestPage->GetPageKind() != pBMMPage->GetPageKind())
+            continue;
+
+        const OUString aTest = SdDrawDocument::GetBaseLayoutName( pTestPage->GetLayoutName() );
+        if (pTestPage->GetGuid() == pBMMPage->GetGuid())
+        {
+            if (aTest == rLayout)
+                return true;
+
+            // The rename lands in the source document, so that document has to be one that
+            // does not use the name for the pages to arrive under it.
+            if (SdDrawDocument::IsLayoutNameUnused(*pBookmarkDoc, aTest))
+            {
+                pBookmarkDoc->RenameLayoutTemplate( pBMMPage->GetLayoutName(), aTest );
+                rLayout = pBMMPage->GetName();
+                return true;
+            }
+        }
+
+        if (aTest == rLayout)
+            pSameName = pTestPage;
+    }
+
+    // Nothing here uses the name, so the design travels under the one it has.
+    if (!pSameName)
+        return false;
+
+    if (pSameName->Equals(*pBMMPage))
+        return true;
+
+    const OUString aNewName = SdDrawDocument::GetUnusedLayoutName(
+        rDoc, pBookmarkDoc, mrLayoutsToTransfer,
+        SdDrawDocument::GenerateNewLayoutName(rLayout));
+    pBookmarkDoc->RenameLayoutTemplate( pBMMPage->GetLayoutName(), aNewName );
+    rLayout = pBMMPage->GetName();
+    return false;
 }
 
 void InsertBookmarkAsPage_FindDuplicateLayouts::operator()( SdDrawDocument& rDoc, SdPage const * pBMMPage, bool bRenameDuplicates, SdDrawDocument* pBookmarkDoc, bool bMergeMasterPagesOnly )
@@ -91,6 +171,13 @@ void InsertBookmarkAsPage_FindDuplicateLayouts::operator()( SdDrawDocument& rDoc
         find(mrLayoutsToTransfer.begin(), mrLayoutsToTransfer.end(), aLayout);
 
     bool bFound = pIter != mrLayoutsToTransfer.end();
+
+    if (mbKeepSourceDesign)
+    {
+        if (!bFound && !settleOwnDesignName(rDoc, pBMMPage, pBookmarkDoc, aLayout))
+            mrLayoutsToTransfer.push_back(aLayout);
+        return;
+    }
 
     const sal_uInt16 nMPageCount = rDoc.GetMasterPageCount();
     for (sal_uInt16 nMPage = 0; nMPage < nMPageCount && !bFound; nMPage++)
@@ -204,78 +291,94 @@ static void lcl_IterateBookmarkPages( SdDrawDocument &rDoc, SdDrawDocument* pBoo
     }
 }
 
-// Opens a bookmark document
-SdDrawDocument* SdDrawDocument::OpenBookmarkDoc(SfxMedium* pMedium)
+// Load an external drawing or presentation file into a fresh document shell
+::sd::DrawDocShellRef SdDrawDocument::LoadExternalDrawDoc(SfxMedium* pMedium)
 {
-    bool bOK = true;
-    SdDrawDocument* pBookmarkDoc = nullptr;
-    OUString aBookmarkName = pMedium->GetName();
-    std::shared_ptr<const SfxFilter> pFilter = pMedium->GetFilter();
-    if ( !pFilter )
+    std::unique_ptr<SfxMedium> xMedium(pMedium);
+
+    std::shared_ptr<const SfxFilter> pFilter = xMedium->GetFilter();
+    if (!pFilter)
+        SfxGetpApp()->GetFilterMatcher().GuessFilter(*xMedium, pFilter);
+
+    if (!pFilter)
+        return {};
+
+    const OUString aServiceName = pFilter->GetServiceName();
+    const bool bCreateGraphicShell = aServiceName == "com.sun.star.drawing.DrawingDocument";
+    const bool bCreateImpressShell = aServiceName == "com.sun.star.presentation.PresentationDocument";
+    if (!bCreateGraphicShell && !bCreateImpressShell)
+        return {};
+
+    // Create a DocShell, as OLE objects might be contained in the
+    // document. (Persist)
+    // If that wasn't the case, we could load the model directly.
+    ::sd::DrawDocShellRef xDocShell;
+    if (bCreateGraphicShell)
+        // Draw
+        xDocShell = new ::sd::GraphicDocShell(SfxObjectCreateMode::STANDARD);
+    else
+        // Impress
+        xDocShell = new ::sd::DrawDocShell(SfxObjectCreateMode::STANDARD, true, DocumentType::Impress);
+
+    // The shell takes over the medium from here.
+    if (!xDocShell->DoLoad(xMedium.release()))
     {
-        pMedium->UseInteractionHandler( true );
-        SfxGetpApp()->GetFilterMatcher().GuessFilter(*pMedium, pFilter);
+        xDocShell->DoClose();
+        return {};
     }
 
-    if ( !pFilter )
+    return xDocShell;
+}
+
+// Opens a bookmark document
+SdDrawDocument* SdDrawDocument::OpenBookmarkDoc(SfxMedium* pMedium, bool bNoDialogs)
+{
+    std::unique_ptr<SfxMedium> xMedium(pMedium);
+    OUString aBookmarkName = xMedium->GetName();
+    if (!xMedium->GetFilter() && !bNoDialogs)
+        xMedium->UseInteractionHandler(true);
+
+    bool bReadError = false;
+    if (!aBookmarkName.isEmpty() && maBookmarkFile != aBookmarkName)
     {
-        bOK = false;
-    }
-    else if ( !aBookmarkName.isEmpty() && maBookmarkFile != aBookmarkName )
-    {
-        bool bCreateGraphicShell = pFilter->GetServiceName() == "com.sun.star.drawing.DrawingDocument";
-        bool bCreateImpressShell = pFilter->GetServiceName() == "com.sun.star.presentation.PresentationDocument";
-        if ( bCreateGraphicShell || bCreateImpressShell )
+        ::sd::DrawDocShellRef xDocShell = LoadExternalDrawDoc(xMedium.release());
+        if (xDocShell.is())
         {
             CloseBookmarkDoc();
-
-            // Create a DocShell, as OLE objects might be contained in the
-            // document. (Persist)
-            // If that wasn't the case, we could load the model directly.
-            if ( bCreateGraphicShell )
-                // Draw
-                mxBookmarkDocShRef = new ::sd::GraphicDocShell(SfxObjectCreateMode::STANDARD);
-            else
-                // Impress
-                mxBookmarkDocShRef = new ::sd::DrawDocShell(SfxObjectCreateMode::STANDARD, true, DocumentType::Impress);
-
-            bOK = mxBookmarkDocShRef->DoLoad(pMedium);
-            if( bOK )
-            {
-                maBookmarkFile = aBookmarkName;
-                pBookmarkDoc = mxBookmarkDocShRef->GetDoc();
-            }
+            mxBookmarkDocShRef = xDocShell;
+            maBookmarkFile = aBookmarkName;
         }
+        else
+            bReadError = true;
     }
 
     DBG_ASSERT(!aBookmarkName.isEmpty(), "Empty document name!");
 
-    if (!bOK)
+    if (bReadError)
     {
-        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(nullptr,
-                                                       VclMessageType::Warning, VclButtonsType::Ok, SdResId(STR_READ_DATA_ERROR)));
-        xErrorBox->run();
+        if (!bNoDialogs)
+        {
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(nullptr,
+                                                           VclMessageType::Warning, VclButtonsType::Ok, SdResId(STR_READ_DATA_ERROR)));
+            xErrorBox->run();
+        }
 
         CloseBookmarkDoc();
-        pBookmarkDoc = nullptr;
-    }
-    else if (mxBookmarkDocShRef.is())
-    {
-        pBookmarkDoc = mxBookmarkDocShRef->GetDoc();
+        return nullptr;
     }
 
-    return pBookmarkDoc;
+    return mxBookmarkDocShRef.is() ? mxBookmarkDocShRef->GetDoc() : nullptr;
 }
 
 // Opens a bookmark document
-SdDrawDocument* SdDrawDocument::OpenBookmarkDoc(const OUString& rBookmarkFile)
+SdDrawDocument* SdDrawDocument::OpenBookmarkDoc(const OUString& rBookmarkFile, bool bNoDialogs)
 {
     SdDrawDocument* pBookmarkDoc = nullptr;
 
     if (!rBookmarkFile.isEmpty() && maBookmarkFile != rBookmarkFile)
     {
         std::unique_ptr<SfxMedium> xMedium(new SfxMedium(rBookmarkFile, StreamMode::READ));
-        pBookmarkDoc = OpenBookmarkDoc(xMedium.release());
+        pBookmarkDoc = OpenBookmarkDoc(xMedium.release(), bNoDialogs);
     }
     else if (mxBookmarkDocShRef.is())
     {
@@ -363,8 +466,8 @@ lcl_removeUnusedStyles(SfxStyleSheetBasePool* const pStyleSheetPool, StyleSheetC
 void
 lcl_removeUnusedTableStyles(SdStyleSheetPool* const pStyleSheetPool, XStyleVector const & rStyles)
 {
-    css::uno::Reference<css::container::XNameContainer> xTableFamily(
-        pStyleSheetPool->getByName(u"table"_ustr), css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::container::XNameContainer> xTableFamily(
+        pStyleSheetPool->getByName(u"table"_ustr), cpo::uno::UNO_QUERY);
     if (!xTableFamily)
         return;
 
@@ -488,6 +591,11 @@ bool SdDrawDocument::determineScaleObjects(bool bNoDialogs,
 
 SfxUndoManager* SdDrawDocument::beginUndoAction()
 {
+    return beginUndoAction(SdResId(STR_UNDO_INSERTPAGES));
+}
+
+SfxUndoManager* SdDrawDocument::beginUndoAction(const OUString& rComment)
+{
     SfxUndoManager* pUndoMgr = nullptr;
     if ( mpDocSh )
     {
@@ -495,7 +603,7 @@ SfxUndoManager* SdDrawDocument::beginUndoAction()
         ViewShellId nViewShellId(-1);
         if (sd::ViewShell* pViewShell = mpDocSh->GetViewShell())
             nViewShellId = pViewShell->GetViewShellBase().GetViewShellId();
-        pUndoMgr->EnterListAction(SdResId(STR_UNDO_INSERTPAGES), u""_ustr, 0, nViewShellId);
+        pUndoMgr->EnterListAction(rComment, u""_ustr, 0, nViewShellId);
     }
     return pUndoMgr;
 }
@@ -504,10 +612,23 @@ void SdDrawDocument::collectLayoutsToTransfer(const PageNameList& rBookmarkList,
                                               SdDrawDocument* pBookmarkDoc,
                                               SlideLayoutNameList& aLayoutsToTransfer,
                                               const DocumentPageCounts& rPageCounts,
-                                              bool bMergeMasterPagesOnly)
+                                              const InsertBookmarkOptions& rOptions)
 {
+    const bool bMergeMasterPagesOnly = rOptions.bMergeMasterPagesOnly;
     sal_uInt16 nCount = bMergeMasterPagesOnly ? rPageCounts.nMasterPageCount : rPageCounts.nSourcePageCount;// Replace by pageCounts to add the masterpagecount
-    InsertBookmarkAsPage_FindDuplicateLayouts aSearchFunctor(aLayoutsToTransfer);
+
+    // The inserted pages keep the design they came with when they bring their master pages
+    // along and do not take the design of this document. Settling the name that design lands
+    // under renames it in the document the pages are read from, so it is done only for the
+    // copy this document opened for the insert and closes again afterwards. A document the
+    // caller handed over belongs to whoever opened it, and a rename there would reach a
+    // presentation somebody is editing.
+    const bool bKeepSourceDesign = !rOptions.bAdoptTargetDesign && rOptions.bMergeMasterPages
+                                   && !bMergeMasterPagesOnly && mxBookmarkDocShRef.is()
+                                   && mxBookmarkDocShRef->GetDoc() == pBookmarkDoc;
+
+    InsertBookmarkAsPage_FindDuplicateLayouts aSearchFunctor(aLayoutsToTransfer,
+                                                             bKeepSourceDesign);
     lcl_IterateBookmarkPages( *this, pBookmarkDoc, rBookmarkList, nCount, aSearchFunctor, ( rBookmarkList.empty() && pBookmarkDoc != this ), bMergeMasterPagesOnly );
 }
 
@@ -682,7 +803,7 @@ void SdDrawDocument::insertAllPages(PageInsertionParams& rParams,
         if (rOptions.bLink)
         {
             // Assemble all link names
-            pPage->SetFileName(rParams.aBookmarkName);
+            pPage->SetFileName(getLinkSourceUrl(rOptions, rParams));
             pPage->SetBookmarkName(aNameMap[nBMSdPage]);
         }
 
@@ -800,7 +921,7 @@ void SdDrawDocument::insertSelectedPages(const PageNameList& rBookmarkList,
             if (rOptions.bLink)
             {
                 SdPage* pPage = static_cast<SdPage*>( GetPage(nActualInsertPos) );
-                pPage->SetFileName(rParams.aBookmarkName);
+                pPage->SetFileName(getLinkSourceUrl(rOptions, rParams));
                 pPage->SetBookmarkName(aPgName);
             }
 
@@ -907,9 +1028,33 @@ void SdDrawDocument::updateInsertedPages(PageInsertionParams& rParams,
 
     // Update page names (from pExchangeList), layouts, scaling, etc.
     sal_uInt16 nSdPageStart = (rParams.nInsertPos - 1) / 2;
-    sal_uInt16 nSdPageEnd = rOptions.bReplace
-        ? nSdPageStart + rParams.nReplacedStandardPages - 1 // if replacing, update only the replaced pages
-        : GetSdPageCount(PageKind::Standard) - rPageCounts.nDestPageCount + nSdPageStart - 1;
+
+    // When replacing, only the replaced pages are updated; otherwise the
+    // pages added by this insert, which is the growth of the standard-page
+    // count over the destination count captured before the insert.
+    const sal_uInt16 nUpdatedPages = rOptions.bReplace
+        ? rParams.nReplacedStandardPages
+        : GetSdPageCount(PageKind::Standard) - rPageCounts.nDestPageCount;
+
+    // Nothing landed (for example the bookmark names matched no standard page
+    // in the source): there is nothing to update, and the end index below
+    // would otherwise underflow and walk past the last page.
+    if (nUpdatedPages == 0)
+        return;
+
+    sal_uInt16 nSdPageEnd = nSdPageStart + nUpdatedPages - 1;
+
+    // When the inserted pages adopt the destination design, bind them to the
+    // layout of the destination page right before them; for an insert at the
+    // start that is the first destination page, now right after the block.
+    OUString aTargetLayoutName;
+    if (rOptions.bAdoptTargetDesign)
+    {
+        sal_uInt16 nRefSdPage = nSdPageStart > 0 ? nSdPageStart - 1 : nSdPageEnd + 1;
+        if (nRefSdPage < GetSdPageCount(PageKind::Standard))
+            aTargetLayoutName
+                = GetBaseLayoutName(GetSdPage(nRefSdPage, PageKind::Standard)->GetLayoutName());
+    }
 
     const bool bRemoveEmptyPresObj =
             (rParams.pBookmarkDoc->GetDocumentType() == DocumentType::Impress) &&
@@ -934,7 +1079,11 @@ void SdDrawDocument::updateInsertedPages(PageInsertionParams& rParams,
 
             ++pExchangeIter;
         }
-        OUString aLayout = GetBaseLayoutName(rParams.mainProps.pPage->GetLayoutName());
+        // Bind the page to the destination design's layout, or to the layout
+        // the page carried along from its source document.
+        OUString aLayout = aTargetLayoutName.isEmpty()
+            ? GetBaseLayoutName(rParams.mainProps.pPage->GetLayoutName())
+            : aTargetLayoutName;
 
         // update layout and referred master page
         rParams.mainProps.pPage->SetPresentationLayout(aLayout);
@@ -990,6 +1139,12 @@ void SdDrawDocument::updateInsertedPages(PageInsertionParams& rParams,
             rParams.mainProps.pPage->SetSize(rParams.mainProps.size);
             rParams.mainProps.pPage->SetBorder(rParams.mainProps.left, rParams.mainProps.upper, rParams.mainProps.right, rParams.mainProps.lower);
             rParams.mainProps.pPage->SetOrientation(rParams.mainProps.orientation);
+
+            // A master page cloned from another document arrives without
+            // background fill attributes; bind it to its background style,
+            // which the layout style transfer has placed in this document's
+            // style sheet pool.
+            rParams.mainProps.pPage->EnsureMasterPageDefaultBackground();
 
             rtl::Reference<SvxDrawPage> xNewPage(GetMasterPage(nPage)->getUnoPage());
 
@@ -1356,6 +1511,21 @@ void SdDrawDocument::CloseBookmarkDoc()
     maBookmarkFile.clear();
 }
 
+void SdDrawDocument::SetStagedLinkSourceFile(const OUString& rSourceReference,
+                                             const OUString& rFileUrl)
+{
+    if (rFileUrl.isEmpty())
+        maStagedLinkSourceFiles.erase(rSourceReference);
+    else
+        maStagedLinkSourceFiles[rSourceReference] = rFileUrl;
+}
+
+OUString SdDrawDocument::GetStagedLinkSourceFile(const OUString& rSourceReference) const
+{
+    const auto it = maStagedLinkSourceFiles.find(rSourceReference);
+    return it == maStagedLinkSourceFiles.end() ? OUString() : it->second;
+}
+
 // Is this document read-only?
 bool SdDrawDocument::IsReadOnly() const
 {
@@ -1570,6 +1740,44 @@ static bool isMasterPageLayoutNameUnique(const SdDrawDocument& rDoc, std::u16str
     }
 
     return true;
+}
+
+bool SdDrawDocument::IsLayoutNameUnused(const SdDrawDocument& rDoc, std::u16string_view rCandidate)
+{
+    if (!isMasterPageLayoutNameUnique(rDoc, rCandidate))
+        return false;
+
+    // A presentation style sheet is named after every layout the document has ever held, so a
+    // name is taken even when no master page carries it any more.
+    SfxStyleSheetBasePool* pPool = const_cast<SdDrawDocument&>(rDoc).GetStyleSheetPool();
+    if (!pPool)
+        return true;
+
+    const OUString aPrefix = OUString::Concat(rCandidate) + SD_LT_SEPARATOR;
+    SfxStyleSheetIterator aIter(pPool, SfxStyleFamily::Page);
+    for (SfxStyleSheetBase* pSheet = aIter.First(); pSheet; pSheet = aIter.Next())
+    {
+        if (pSheet->GetName().startsWith(aPrefix))
+            return false;
+    }
+
+    return true;
+}
+
+OUString SdDrawDocument::GetUnusedLayoutName(const SdDrawDocument& rDoc,
+                                             const SdDrawDocument* pOtherDoc,
+                                             const std::vector<OUString>& rAlsoTaken,
+                                             const OUString& rWanted)
+{
+    OUString aName = rWanted;
+    while (!IsLayoutNameUnused(rDoc, aName)
+           || std::find(rAlsoTaken.begin(), rAlsoTaken.end(), aName) != rAlsoTaken.end()
+           || (pOtherDoc && !IsLayoutNameUnused(*pOtherDoc, aName)))
+    {
+        aName = GenerateNewLayoutName(aName);
+    }
+
+    return aName;
 }
 
 // #i121863# factored out functionality
@@ -2095,7 +2303,14 @@ void SdDrawDocument::Merge(SdrModel& rSourceModel,
     for( sal_uInt16 nMaster = nMasterPageCount; nMaster < GetMasterPageCount(); nMaster++ )
     {
         SdPage* pPage = static_cast< SdPage* >( GetMasterPage( nMaster ) );
-        if( pPage && pPage->IsMasterPage() && (pPage->GetPageKind() == PageKind::Standard) )
+        if( !pPage )
+            continue;
+
+        // SdrModel::Merge inserts the cloned master pages directly into the page list, so
+        // the identifier uniqueness check runs here.
+        EnsureUniquePageGuid(*pPage);
+
+        if( pPage->IsMasterPage() && (pPage->GetPageKind() == PageKind::Standard) )
         {
             // new master page created, add its style family
             SdStyleSheetPool* pStylePool = static_cast<SdStyleSheetPool*>( GetStyleSheetPool() );
@@ -2219,6 +2434,7 @@ bool SdDrawDocument::PasteBookmarkAsPage(
 {
     // Use predefined options for paste operation
     InsertBookmarkOptions options = InsertBookmarkOptions::ForPaste(bMergeMasterPages, bMergeMasterPagesOnly);
+    KeepPageLinks aKeepLinks(*this);
 
     // Create insertion parameters
     PageInsertionParams aInsertParams(nInsertPos, /*pExchangeList*/nullptr);
@@ -2251,7 +2467,7 @@ bool SdDrawDocument::PasteBookmarkAsPage(
 
     // Collect layout names that need to be transferred
     SlideLayoutNameList aLayoutsToTransfer;
-    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options.bMergeMasterPagesOnly);
+    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options);
 
     // Copy the style that we actually need.
     SdStyleSheetPool& rBookmarkStyleSheetPool = dynamic_cast<SdStyleSheetPool&>(*aInsertParams.pBookmarkDoc->GetStyleSheetPool());
@@ -2324,11 +2540,14 @@ bool SdDrawDocument::ResolvePageLinks(
     const PageNameList &rBookmarkList,
     sal_uInt16 nInsertPos,
     bool bNoDialogs,
-    bool bCopy)
+    bool bCopy,
+    const OUString& rLinkSourceUrl)
 {
     // Use predefined options for page link resolution
     InsertBookmarkOptions options = InsertBookmarkOptions::ForPageLinks(bCopy, bNoDialogs);
     options.bMergeMasterPagesOnly = /*bMergeMasterPagesOnly*/false;
+    options.aLinkSourceUrl = rLinkSourceUrl;
+    KeepPageLinks aKeepLinks(*this);
 
     // Create insertion parameters
     PageInsertionParams aInsertParams(nInsertPos);
@@ -2359,7 +2578,7 @@ bool SdDrawDocument::ResolvePageLinks(
 
     // Collect layout names that need to be transferred
     SlideLayoutNameList aLayoutsToTransfer;
-    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options.bMergeMasterPagesOnly);
+    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options);
 
     // Copy the style that we actually need.
     SdStyleSheetPool& rBookmarkStyleSheetPool = dynamic_cast<SdStyleSheetPool&>(*aInsertParams.pBookmarkDoc->GetStyleSheetPool());
@@ -2389,6 +2608,15 @@ bool SdDrawDocument::ResolvePageLinks(
     }
     else
     {
+        // Each resolved page arrives in place of the page at its position, so the slides every
+        // section spans stay the same. The insert and the remove that carry out one replacement each
+        // shift a section boundary by themselves, so the section updates are held back over the
+        // whole run.
+        const bool bOldInternalPageMove = mbInternalPageMove;
+        mbInternalPageMove = true;
+        comphelper::ScopeGuard aSectionGuard(
+            [this, bOldInternalPageMove]() { mbInternalPageMove = bOldInternalPageMove; });
+
         // Insert selected pages
         insertSelectedPages(rBookmarkList, aInsertParams, options);
     }
@@ -2429,6 +2657,7 @@ bool SdDrawDocument::ImportDocumentPages(
 {
     // Use predefined options for document import
     InsertBookmarkOptions options = InsertBookmarkOptions::ForDocumentImport(bMergeMasterPagesOnly);
+    KeepPageLinks aKeepLinks(*this);
 
     // Create parameter object for page insertion
     PageInsertionParams aInsertParams(nInsertPos);
@@ -2459,7 +2688,7 @@ bool SdDrawDocument::ImportDocumentPages(
 
     // Collect layout names that need to be transferred
     SlideLayoutNameList aLayoutsToTransfer;
-    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options.bMergeMasterPagesOnly);
+    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options);
 
     // Copy the style that we actually need.
     SdStyleSheetPool& rBookmarkStyleSheetPool = dynamic_cast<SdStyleSheetPool&>(*aInsertParams.pBookmarkDoc->GetStyleSheetPool());
@@ -2529,8 +2758,23 @@ bool SdDrawDocument::InsertFileAsPage(
     std::optional<bool> oScaleObjects)
 {
     // Use predefined options for file insert operation
-    InsertBookmarkOptions options = InsertBookmarkOptions::ForFileInsert(bLink);
-    options.bMergeMasterPagesOnly = /*bMergeMasterPagesOnly*/false;
+    return InsertFileAsPage(rBookmarkList, pExchangeList,
+                            InsertBookmarkOptions::ForFileInsert(bLink),
+                            nInsertPos, pBookmarkDocSh, oScaleObjects);
+}
+
+// Insert pages from external files with explicit insertion options
+bool SdDrawDocument::InsertFileAsPage(
+    const PageNameList &rBookmarkList,
+    PageNameList *pExchangeList,
+    const InsertBookmarkOptions& rOptions,
+    sal_uInt16 nInsertPos,
+    ::sd::DrawDocShell* pBookmarkDocSh,
+    std::optional<bool> oScaleObjects)
+{
+    // Page position 0 holds the handout page; the first slide position is 1.
+    nInsertPos = std::max<sal_uInt16>(nInsertPos, 1);
+    KeepPageLinks aKeepLinks(*this);
 
     // Create parameter object for page insertion
     PageInsertionParams aInsertParams(nInsertPos, pExchangeList);
@@ -2559,7 +2803,7 @@ bool SdDrawDocument::InsertFileAsPage(
     }
     else
     {
-        if (!determineScaleObjects(options.bNoDialogs, rBookmarkList, aInsertParams))
+        if (!determineScaleObjects(rOptions.bNoDialogs, rBookmarkList, aInsertParams))
             return false;
     }
 
@@ -2567,9 +2811,12 @@ bool SdDrawDocument::InsertFileAsPage(
     // the pages, else, the text objects won't reference their styles anymore.
     SfxUndoManager* pUndoMgr = beginUndoAction();
 
-    // Collect layout names that need to be transferred
+    // Collect layout names that need to be transferred. When the inserted
+    // pages adopt the destination design, the source layouts stay behind and
+    // the list stays empty.
     SlideLayoutNameList aLayoutsToTransfer;
-    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options.bMergeMasterPagesOnly);
+    if (!rOptions.bAdoptTargetDesign)
+        collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, rOptions);
 
     // Copy the style that we actually need.
     SdStyleSheetPool& rBookmarkStyleSheetPool = dynamic_cast<SdStyleSheetPool&>(*aInsertParams.pBookmarkDoc->GetStyleSheetPool());
@@ -2585,7 +2832,7 @@ bool SdDrawDocument::InsertFileAsPage(
     // that are not used in any of the inserted pages. The unused styles
     // are then removed at the end of the function, where we also create
     // undo records for the inserted styles.
-    copyStyles(options.bReplace, options.bNoDialogs, aStyleContext);
+    copyStyles(rOptions.bReplace, rOptions.bNoDialogs, aStyleContext);
 
     aInsertParams.bUndo = IsUndoEnabled();
 
@@ -2594,25 +2841,22 @@ bool SdDrawDocument::InsertFileAsPage(
 
     if (rBookmarkList.empty())
     {
-        insertAllPages(aInsertParams, options, pageCounts);
+        insertAllPages(aInsertParams, rOptions, pageCounts);
     }
     else
     {
         // Insert selected pages
-        insertSelectedPages(rBookmarkList, aInsertParams, options);
+        insertSelectedPages(rBookmarkList, aInsertParams, rOptions);
     }
 
     // Remove duplicate master pages that may have been created.
-    if (!options.bMergeMasterPagesOnly)
+    if (!rOptions.bMergeMasterPagesOnly)
         removeDuplicateMasterPages(aInsertParams, pageCounts);
 
-    // nInsertPos > 2 is always true when inserting into non-empty models
-    if (nInsertPos > 0) {
-        updateInsertedPages(aInsertParams, options, pageCounts, aStyleContext);
-    }
+    updateInsertedPages(aInsertParams, rOptions, pageCounts, aStyleContext);
 
     // Make absolutely sure no double masterpages are there
-    if (!options.bMergeMasterPagesOnly)
+    if (!rOptions.bMergeMasterPagesOnly)
         RemoveUnnecessaryMasterPages(nullptr, true);
 
     // Rename object styles if necessary
@@ -2636,6 +2880,7 @@ bool SdDrawDocument::DropBookmarkAsPage(
 {
     // Use predefined options for drag and drop operation
     InsertBookmarkOptions options = InsertBookmarkOptions::ForDragDrop(bMergeMasterPages, /*bMergeMasterPagesOnly*/false);
+    KeepPageLinks aKeepLinks(*this);
 
     // Create parameter object for page insertion
     PageInsertionParams aInsertParams(nInsertPos);
@@ -2667,7 +2912,7 @@ bool SdDrawDocument::DropBookmarkAsPage(
 
     // Collect layout names that need to be transferred
     SlideLayoutNameList aLayoutsToTransfer;
-    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options.bMergeMasterPagesOnly);
+    collectLayoutsToTransfer(rBookmarkList, aInsertParams.pBookmarkDoc, aLayoutsToTransfer, pageCounts, options);
 
     // Copy the style that we actually need.
     SdStyleSheetPool& rBookmarkStyleSheetPool = dynamic_cast<SdStyleSheetPool&>(*aInsertParams.pBookmarkDoc->GetStyleSheetPool());
@@ -2734,6 +2979,7 @@ bool SdDrawDocument::CopyOrMovePagesWithinDocument(
 {
     // Use predefined options for internal document operations
     InsertBookmarkOptions options = InsertBookmarkOptions::ForInternalOps(bPreservePageNames, /*bMergeMasterPagesOnly*/false);
+    KeepPageLinks aKeepLinks(*this);
 
     // Create parameter object for page insertion
     // When copying within document, source and target are the same

@@ -20,15 +20,15 @@
 #ifndef INCLUDED_CPPUHELPER_PROPERTYSETMIXIN_HXX
 #define INCLUDED_CPPUHELPER_PROPERTYSETMIXIN_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "com/sun/star/beans/XFastPropertySet.hpp"
-#include "com/sun/star/beans/XPropertyAccess.hpp"
-#include "com/sun/star/beans/XPropertySet.hpp"
-#include "com/sun/star/uno/Reference.h"
-#include "cpo/uno/Sequence.hxx"
-#include "sal/types.h"
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <com/sun/star/beans/XFastPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyAccess.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/Sequence.hxx>
+#include <sal/types.h>
+#include <cppuhelper/cppuhelperdllapi.h>
 
 namespace com { namespace sun { namespace star {
     namespace beans {
@@ -37,11 +37,9 @@ namespace com { namespace sun { namespace star {
         class XVetoableChangeListener;
         struct PropertyValue;
     }
-    namespace uno {
-        class XComponentContext;
-    }
 } } }
 namespace cpo::uno { class Type; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace cppu {
 
@@ -126,7 +124,7 @@ protected:
            @short Notifies any
            <code>css::beans::XPropertyChangeListener</code>s.
 
-           May throw <code>css::uno::RuntimeException</code>
+           May throw <code>cpo::uno::RuntimeException</code>
            and <code>std::bad_alloc</code>.
 
            See <code>cppu::PropertySetMixinImpl::prepareSet</code>
@@ -135,8 +133,8 @@ protected:
         void notify() const;
 
     private:
-        BoundListeners( const BoundListeners&) SAL_DELETED_FUNCTION;
-        void operator=( const BoundListeners&) SAL_DELETED_FUNCTION;
+        BoundListeners( const BoundListeners&) = delete;
+        void operator=( const BoundListeners&) = delete;
 
         class Impl;
         Impl * m_impl;
@@ -168,7 +166,7 @@ protected:
 
        May throw
        <code>css::beans::PropertyVetoException</code>,
-       <code>css::uno::RuntimeException</code> (and
+       <code>cpo::uno::RuntimeException</code> (and
        <code>css::lang::DisposedException</code> in particular), and
        <code>std::bad_alloc</code>.
 
@@ -220,7 +218,7 @@ protected:
        notified of the disposing source.  Any subsequent calls to this function
        are ignored.
 
-       May throw <code>css::uno::RuntimeException</code> and
+       May throw <code>cpo::uno::RuntimeException</code> and
        <code>std::bad_alloc</code>.
      */
     void dispose();
@@ -228,30 +226,30 @@ protected:
     /**
        @short A function used by subclasses of
        <code>cppu::PropertySetMixin</code> when implementing
-       <code>css::uno::XInterface::queryInterface</code>.
+       <code>cpo::uno::XInterface::queryInterface</code>.
 
        This function checks for support of any of the UNO interface types
        specified in the call of the <code>cppu::PropertySetMixin</code>
        constructor.  It does not check for any other UNO interface types (not
-       even for <code>css::uno::XInterface</code>), and should not
+       even for <code>cpo::uno::XInterface</code>), and should not
        be used directly as the implementation of
-       <code>css::uno::XInterface::queryInterface</code> of this UNO
+       <code>cpo::uno::XInterface::queryInterface</code> of this UNO
        object.
     */
     virtual cpo::uno::Any queryInterface(
-        cpo::uno::Type const & type) SAL_OVERRIDE;
+        cpo::uno::Type const & type) override;
 
     // @see css::beans::XPropertySet::getPropertySetInfo
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() SAL_OVERRIDE;
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
 
     // @see css::beans::XPropertySet::setPropertyValue
     virtual void setPropertyValue(
         rtl::OUString const & propertyName,
-        cpo::uno::Any const & value) SAL_OVERRIDE;
+        cpo::uno::Any const & value) override;
 
     // @see css::beans::XPropertySet::getPropertyValue
     virtual cpo::uno::Any getPropertyValue(
-        rtl::OUString const & propertyName) SAL_OVERRIDE;
+        rtl::OUString const & propertyName) override;
 
     /**
        @short Adds a
@@ -264,14 +262,14 @@ protected:
     */
     virtual void addPropertyChangeListener(
         rtl::OUString const & propertyName,
-        css::uno::Reference<
-        css::beans::XPropertyChangeListener > const & listener) SAL_OVERRIDE;
+        cpo::uno::Reference<
+        css::beans::XPropertyChangeListener > const & listener) override;
 
     // @see css::beans::XPropertySet::removePropertyChangeListener
     virtual void removePropertyChangeListener(
         rtl::OUString const & propertyName,
-        css::uno::Reference<
-        css::beans::XPropertyChangeListener > const & listener) SAL_OVERRIDE;
+        cpo::uno::Reference<
+        css::beans::XPropertyChangeListener > const & listener) override;
 
     /**
        @short Adds a
@@ -284,36 +282,36 @@ protected:
     */
     virtual void addVetoableChangeListener(
         rtl::OUString const & propertyName,
-        css::uno::Reference<
-        css::beans::XVetoableChangeListener > const & listener) SAL_OVERRIDE;
+        cpo::uno::Reference<
+        css::beans::XVetoableChangeListener > const & listener) override;
 
     // @see css::beans::XPropertySet::removeVetoableChangeListener
     virtual void removeVetoableChangeListener(
         rtl::OUString const & propertyName,
-        css::uno::Reference<
-        css::beans::XVetoableChangeListener > const & listener) SAL_OVERRIDE;
+        cpo::uno::Reference<
+        css::beans::XVetoableChangeListener > const & listener) override;
 
     // @see css::beans::XFastPropertySet::setFastPropertyValue
     virtual void setFastPropertyValue(
-        sal_Int32 handle, cpo::uno::Any const & value) SAL_OVERRIDE;
+        sal_Int32 handle, cpo::uno::Any const & value) override;
 
     // @see css::beans::XFastPropertySet::getFastPropertyValue
     virtual cpo::uno::Any getFastPropertyValue(
-        sal_Int32 handle) SAL_OVERRIDE;
+        sal_Int32 handle) override;
 
     // @see css::beans::XPropertyAccess::getPropertyValues
-    virtual cpo::uno::Sequence< css::beans::PropertyValue > getPropertyValues() SAL_OVERRIDE;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getPropertyValues() override;
 
     // @see css::beans::XPropertyAccess::setPropertyValues
     virtual void setPropertyValues(
-        cpo::uno::Sequence< css::beans::PropertyValue > const & props) SAL_OVERRIDE;
+        cpo::uno::Sequence< css::beans::PropertyValue > const & props) override;
 
 private:
-    PropertySetMixinImpl( const PropertySetMixinImpl&) SAL_DELETED_FUNCTION;
-    void operator=( const PropertySetMixinImpl&) SAL_DELETED_FUNCTION;
+    PropertySetMixinImpl( const PropertySetMixinImpl&) = delete;
+    void operator=( const PropertySetMixinImpl&) = delete;
 
     PropertySetMixinImpl(
-        css::uno::Reference< css::uno::XComponentContext > const & context,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
         Implements implements,
         cpo::uno::Sequence< rtl::OUString > const & absentOptional,
         cpo::uno::Type const & type);
@@ -344,7 +342,7 @@ protected:
     /**
        @short The constructor.
 
-       May throw <code>css::uno::RuntimeException</code> and
+       May throw <code>cpo::uno::RuntimeException</code> and
        <code>std::bad_alloc</code>.
 
        @param context  the component context used by this class template; must
@@ -382,7 +380,7 @@ protected:
        empty.
     */
     PropertySetMixin(
-        css::uno::Reference< css::uno::XComponentContext > const & context,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
         Implements implements,
         cpo::uno::Sequence< rtl::OUString > const & absentOptional):
         PropertySetMixinImpl(
@@ -397,8 +395,8 @@ protected:
     ~PropertySetMixin() {}
 
 private:
-    PropertySetMixin( const PropertySetMixin&) SAL_DELETED_FUNCTION;
-    void operator=( const PropertySetMixin&) SAL_DELETED_FUNCTION;
+    PropertySetMixin( const PropertySetMixin&) = delete;
+    void operator=( const PropertySetMixin&) = delete;
 };
 
 }

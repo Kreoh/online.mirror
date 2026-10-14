@@ -51,6 +51,7 @@
 #include <cassert>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace framework
 {
@@ -122,7 +123,7 @@ StatusBarItemBits impl_convertItemStyleToItemBits( sal_Int16 nStyle )
 }
 
 StatusBarManager::StatusBarManager(
-    uno::Reference< uno::XComponentContext > xContext,
+    uno::Reference< cpo::uno::XComponentContext > xContext,
     uno::Reference< frame::XFrame >  rFrame,
     StatusBar* pStatusBar ) :
     m_bDisposed( false ),
@@ -167,7 +168,7 @@ void StatusBarManager::disposing( const lang::EventObject& Source )
 
     RemoveControllers();
 
-    if ( Source.Source == uno::Reference< uno::XInterface >( m_xFrame, uno::UNO_QUERY ))
+    if ( Source.Source == uno::Reference< cpo::uno::XInterface >( m_xFrame, uno::UNO_QUERY ))
         m_xFrame.clear();
 
     m_xContext.clear();
@@ -489,8 +490,8 @@ void StatusBarManager::DataChanged( const DataChangedEvent& rDCEvt )
          ( rDCEvt.GetType() == DataChangedEventType::DISPLAY          ))  &&
          ( rDCEvt.GetFlags() & AllSettingsFlags::STYLE               ))
     {
-        css::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
-        css::uno::Reference< css::beans::XPropertySet > xPropSet( m_xFrame, css::uno::UNO_QUERY );
+        cpo::uno::Reference< css::frame::XLayoutManager > xLayoutManager;
+        cpo::uno::Reference< css::beans::XPropertySet > xPropSet( m_xFrame, cpo::uno::UNO_QUERY );
         if ( xPropSet.is() )
             xPropSet->getPropertyValue(u"LayoutManager"_ustr) >>= xLayoutManager;
         if ( xLayoutManager.is() )

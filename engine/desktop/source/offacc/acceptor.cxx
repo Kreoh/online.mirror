@@ -33,7 +33,7 @@
 using namespace css::bridge;
 using namespace css::connection;
 using namespace css::lang;
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace desktop
@@ -81,12 +81,12 @@ Acceptor::~Acceptor()
         std::unique_lock g(m_aMutex);
     }
     for (;;) {
-        css::uno::Reference< css::bridge::XBridge > b(m_bridges.remove());
+        cpo::uno::Reference< css::bridge::XBridge > b(m_bridges.remove());
         if (!b.is()) {
             break;
         }
-        css::uno::Reference< css::lang::XComponent >(
-            b, css::uno::UNO_QUERY_THROW)->dispose();
+        cpo::uno::Reference< css::lang::XComponent >(
+            b, cpo::uno::UNO_QUERY_THROW)->dispose();
     }
 }
 
@@ -242,9 +242,9 @@ Reference<XInterface> AccInstanceProvider::getInstance (const OUString& aName )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 desktop_Acceptor_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     if (!officecfg::Office::Security::Net::AllowInsecureUNORemoteProtocol::get())
     {

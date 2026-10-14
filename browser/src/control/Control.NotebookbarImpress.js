@@ -19,7 +19,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 
 	getShortcutsBarData: function() {
 		return [
-			!this.map['wopi'].HideSaveOption ?
+			!this.map['wopi'].HideSaveOption && !this.map.isReadOnlyMode() ?
 				{
 					'id': 'shortcutstoolbox',
 					'type': 'toolbox',
@@ -129,7 +129,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'text': _('Table'),
 				'name': 'Table',
 				'context': 'Table',
-				'accessibility': { focusBack: false, combination: 'T', de: null }
+				'accessibility': { focusBack: false, combination: 'TB', de: null }
 			},
 			{
 				'id': 'Shape-tab-label',
@@ -159,6 +159,8 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'context': 'MasterPage',
 				'accessibility': { focusBack: false, combination: 'M', de: null }
 			},
+			app.LOUtil.isAIAssistantAvailable(this.map)
+				? JSDialog.AIAssistantTab.getEntry() : null,
 			{
 				'id': 'View-tab-label',
 				'text': _('View'),
@@ -205,6 +207,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 			this.getPictureTab(),
 			this.getChartTab(),
 			this.getMasterTab(),
+			this.getAIAssistantTab(),
 			this.getViewTab(),
 			this.getExtensionsTab(),
 			this.getHelpTab()
@@ -219,7 +222,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 
 	getFileTab: function() {
 		var content = [];
-		var hasSave = !this.map['wopi'].HideSaveOption;
+		var hasSave = !this.map['wopi'].HideSaveOption && !this.map.isReadOnlyMode();
 		var hasSaveAs = !this.map['wopi'].UserCanNotWriteRelative;
 		var hasShare = this.map['wopi'].EnableShare;
 		var hasRevisionHistory = window.L.Params.revHistoryEnabled;
@@ -261,7 +264,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 			);
 		}
 
-		if (hasSaveAs) {
+		if (hasSaveAs && !this.map['wopi'].HideExportOption) {
 			content.push(
 			{
 				'id': 'exportas:ExportAsMenu',
@@ -416,8 +419,40 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 			});
 		}
 
+		// Stack Properties with Security label when the format supports a label
+		// (OOXML); otherwise Properties alone as a bigtoolitem so it fills the column.
+		// The engine reports support and refreshes the notebookbar (Map.js).
 		content.push(
-			{
+			(this.map && this.map._securityLabelSupported === true) ? {
+				'type': 'container',
+				'children': [
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'properties',
+								'type': 'toolitem',
+								'text': _('Properties'),
+								'command': '.uno:SetDocumentProperties',
+								'accessibility': { focusBack: true, combination: 'FP', de: 'I' }
+							}
+						]
+					},
+					{
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'securitylabel',
+								'type': 'toolitem',
+								'text': _('Security label'),
+								'command': '.uno:SecurityLabel',
+								'accessibility': { focusBack: true, combination: 'SL', de: null }
+							}
+						]
+					}
+				],
+				'vertical': 'true'
+			} : {
 				'type': 'container',
 				'children': [
 					{
@@ -460,7 +495,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 			);
 		}
 
-		if (window.wopiSettingBaseUrl) {
+		if (app.LOUtil.canOpenSettings()) {
 			content.push({
 				'type': 'separator',
 				'id': 'file-properties-break',
@@ -705,10 +740,15 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'accessibility': { focusBack: true, combination: 'NV', de: null },
 				'children' : [
 					{
-						'id': 'notesmode',
-						'class': 'notesmode',
-						'type': 'bigcustomtoolitem',
-						'text': _('Notes View'),
+						'id': 'view-notes-menu',
+						'type': 'menubutton',
+						'command': '.uno:NotesMode',
+						'text': _('View Notes'),
+						'menu': [
+							{ 'id': 'notespanelbottom', 'type': 'action', 'text': _('Bottom Panel'), 'action': 'notespanelbottom', 'checked': false },
+							{ 'id': 'notespanelhandout', 'type': 'action', 'text': _('Handout Page'), 'action': 'notespanelhandout', 'checked': false },
+							{ 'id': 'notespanelhidden', 'type': 'action', 'text': _('Hidden'), 'action': 'notespanelhidden', 'checked': false }
+						],
 						'accessibility': { focusBack: false, combination: 'NV' }
 					},
 					{
@@ -762,6 +802,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'id':'invertbackground',
 				'class': 'unoinvertbackground',
 				'type': 'bigcustomtoolitem',
+				'visible': window.prefs.getBoolean('darkTheme'),
 				'text': _('Invert Background'),
 				'accessibility': { focusBack: true, combination: 'BG', de: null }
 			},
@@ -773,19 +814,16 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'command': '.uno:SidebarDeck.PropertyDeck',
 				'accessibility': { focusBack: true, combination: 'SD', de: null }
 			},
-			// Show the AI Assistant only to a non-anonymous user who may either
-			// configure AI or already has a configured provider. A guest can do
-			// neither, so they never see it.
-			!this.map['wopi'].IsAnonymousUser &&
-			(!this.map['wopi'].DisableAISettings || this.map['wopi'].AIConfigured) ? {
-				'id': 'view-ai-sidebar',
-				'type': 'bigcustomtoolitem',
-				'text': _('AI Assistant'),
-				'tooltip': _('AI Assistant'),
-				'icon': 'lc_ai_sidebar.svg',
-				'command': 'aichat',
-				'accessibility': { focusBack: true, combination: 'AI', de: null }
-			} : {}
+			{
+				'id': 'view-shapes-deck',
+				'type': 'bigtoolitem',
+				// To do: add a fixed row "Open Shapes Sidebar" to the existing
+				//   Home -> "Shapes" dropdown, similarly as we do for the Writer:
+				//   Home -> Styles -> Open Styles Sidebar
+				'text': _('Shapes Sidebar'),
+				'command': '.uno:SidebarDeck.ShapesDeck',
+				'accessibility': { focusBack: true, combination: 'SH', de: null }
+			},
 		];
 
 		return this.getTabPage('View', content);
@@ -1536,6 +1574,24 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 							}
 						],
 						'vertical': 'true'
+					},
+					app.impress.isSlideImportSupported() ?
+						{
+							'id': 'insert-import-slides',
+							'type': 'bigcustomtoolitem',
+							'text': _('Import Slides'),
+							'command': 'importslides',
+							'icon': 'lc_insertcanvasslide.svg',
+							'accessibility': { focusBack: true, combination: 'IF', de: null }
+						} : {},
+					{
+						'id': 'insert-update-slide-links',
+						'type': 'bigcustomtoolitem',
+						'text': _('Update Links'),
+						'command': 'updateslidelinks',
+						'icon': 'lc_updateall.svg',
+						'visible': !!this.map.slideLinks && this.map.slideLinks.hasLinks(),
+						'accessibility': { focusBack: true, combination: 'UL', de: null }
 					}
 				]
 			},
@@ -2119,6 +2175,16 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 					}
 				]
 			},
+			{ type: 'separator', id: 'review-comments-break', orientation: 'vertical' },
+			{
+				'id': 'review-cleanup',
+				'class': 'unoCleanup',
+				'type': 'bigcustomtoolitem',
+				'text': _('Clean Up'),
+				'tooltip': _('Clean Up'),
+				'command': 'cleanupdeck',
+				'accessibility': { focusBack: false, combination: 'CL', de: null }
+			},
 		];
 
 		return this.getTabPage('Review', content);
@@ -2589,39 +2655,10 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'vertical': 'true'
 			},
 			{ type: 'separator', id: 'shape-fliphorizontal-break', orientation: 'vertical' },
-			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'shape-xline-color:ColorPickerMenu',
-								'noLabel': true,
-								'type': 'toolitem',
-								'text': _UNO('.uno:XLineColor'),
-								'command': '.uno:XLineColor',
-								'accessibility': { focusBack: true, combination: 'LC', de: null }
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'shape-fill-color:ColorPickerMenu',
-								'noLabel': true,
-								'type': 'toolitem',
-								'text': _UNO('.uno:FillColor'),
-								'command': '.uno:FillColor',
-								'accessibility': { focusBack: true, combination: 'FC', de: null }
-							}
-						]
-					}
-				],
-				'vertical': 'true'
-			},
+			this.getShapeFillColorButton(),
 			{ type: 'separator', id: 'shape-fillcolor-break', orientation: 'vertical' },
+			this.getShapeLineSection(),
+			{ type: 'separator', id: 'shape-line-break', orientation: 'vertical' },
 			{
 				'id': 'shape-convert-curve',
 				'type': 'bigtoolitem',
@@ -2936,7 +2973,9 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 							{
 								'id': 'picture-effects:PictureEffectsMenu',
 								'type': 'menubutton',
+								'command': '.uno:GraphicFilterToolbox',
 								'text': _('Effects'),
+								'icon': 'lc_pictureeffectsmenu.svg',
 								'accessibility': { focusBack: true, combination: 'EF', de: null }
 							},
 							{
@@ -2952,39 +2991,10 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				]
 			},
 			{ type: 'separator', id: 'picture-transparency-break', orientation: 'vertical' },
-			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'picture-xline-color:ColorPickerMenu',
-								'type': 'menubutton',
-								'noLabel': true,
-								'text': _UNO('.uno:XLineColor'),
-								'command': '.uno:XLineColor',
-								'accessibility': { focusBack: true, combination: 'LC', de: null }
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'picture-fill-color:ColorPickerMenu',
-								'type': 'menubutton',
-								'noLabel': true,
-								'text': _UNO('.uno:FillColor'),
-								'command': '.uno:FillColor',
-								'accessibility': { focusBack: true, combination: 'FC', de: null }
-							}
-						]
-					}
-				],
-				'vertical': 'true'
-			},
+			this.getPictureFillColorButton(),
 			{ type: 'separator', id: 'picture-fillcolor-break', orientation: 'vertical' },
+			this.getPictureLineSection(),
+			{ type: 'separator', id: 'picture-line-break', orientation: 'vertical' },
 			{
 				'id': 'picture-transform-dialog',
 				'type': 'bigtoolitem',
@@ -3281,9 +3291,11 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 			},
 			{ type: 'separator', id: 'picture-leavegroup-break', orientation: 'vertical' },
 			{
+				'id': 'picture-crop',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:Crop'),
 				'command': '.uno:Crop',
+				'accessibility': { focusBack: true, combination: 'CR', de: null },
 				'context': 'Graphic'
 			},
 			{ type: 'separator', id: 'picture-crop-break', orientation: 'vertical' },

@@ -57,6 +57,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 SfxPoolItem* SwFormatINetFormat::CreateDefault() { return new SwFormatINetFormat; }
@@ -765,7 +766,7 @@ void Meta::SwClientNotify(const SwModify&, const SfxHint& rHint)
     // document, which means it has a pointer to its text node
     OSL_ENSURE(pTextNode, "ERROR: GetRegistry: no text node?");
     if (!pTextNode)
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return pTextNode->GetRegistry();
 }
 
@@ -790,7 +791,7 @@ bool Meta::IsInContent() const
     return pTextNode == nullptr || pTextNode->IsInContent();
 }
 
-css::uno::Reference< css::rdf::XMetadatable > Meta::MakeUnoObject()
+cpo::uno::Reference< css::rdf::XMetadatable > Meta::MakeUnoObject()
 {
     return SwXMeta::CreateXMeta(*this, {}, {});
 }

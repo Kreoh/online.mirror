@@ -28,6 +28,7 @@
 namespace chart
 {
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 TitleDialogData::TitleDialogData( std::optional<ReferenceSizeProvider> pRefSizeProvider )
         : aPossibilityList{ true, true, true, true, true, true, true }
@@ -71,7 +72,7 @@ void TitleDialogData::readFromModel( const rtl::Reference<::chart::ChartModel>& 
 
 bool TitleDialogData::writeDifferenceToModel(
                           const rtl::Reference<::chart::ChartModel>& xChartModel
-                        , const uno::Reference< uno::XComponentContext >& xContext
+                        , const uno::Reference< cpo::uno::XComponentContext >& xContext
                         , const TitleDialogData* pOldState )
 {
     bool bChanged = false;

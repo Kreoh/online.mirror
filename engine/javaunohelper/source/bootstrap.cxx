@@ -32,7 +32,7 @@
 #include <cppuhelper/bootstrap.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #if defined __clang__
 #pragma clang diagnostic push
@@ -49,7 +49,7 @@
 #include "vm.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace javaunohelper
 {
@@ -88,7 +88,7 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
                 if (jni_env->ExceptionCheck())
                 {
                     jni_env->ExceptionClear();
-                    throw RuntimeException( u"index out of bounds?!"_ustr );
+                    throw cpo::uno::RuntimeException( u"index out of bounds?!"_ustr );
                 }
                 if (nullptr != jstr)
                 {
@@ -98,7 +98,7 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
                     if (jni_env->ExceptionCheck())
                     {
                         jni_env->ExceptionClear();
-                        throw RuntimeException( u"index out of bounds?!"_ustr );
+                        throw cpo::uno::RuntimeException( u"index out of bounds?!"_ustr );
                     }
                     if (nullptr != jstr)
                     {
@@ -113,7 +113,7 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
         }
 
         // bootstrap uno
-        Reference< XComponentContext > xContext;
+        Reference< cpo::uno::XComponentContext > xContext;
         if (nullptr == juno_rc)
         {
             xContext = ::cppu::defaultBootstrap_InitialComponentContext();
@@ -133,18 +133,18 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
         // get uno envs
         OUString cpp_env_name = CPPU_CURRENT_LANGUAGE_BINDING_NAME;
         OUString java_env_name = u"" UNO_LB_JAVA ""_ustr;
-        Environment java_env, cpp_env;
+        cpo::uno::Environment java_env, cpp_env;
         uno_getEnvironment(reinterpret_cast<uno_Environment **>(&cpp_env), cpp_env_name.pData, nullptr);
         uno_getEnvironment(reinterpret_cast<uno_Environment **>(&java_env), java_env_name.pData, vm_access.get() );
 
         // map to java
-        Mapping mapping( cpp_env.get(), java_env.get() );
+        cpo::uno::Mapping mapping( cpp_env.get(), java_env.get() );
         if (! mapping.is())
         {
             Reference< lang::XComponent > xComp( xContext, UNO_QUERY );
             if (xComp.is())
                 xComp->dispose();
-            throw RuntimeException(u"cannot get mapping C++ <-> Java!"_ustr );
+            throw cpo::uno::RuntimeException(u"cannot get mapping C++ <-> Java!"_ustr );
         }
 
         jobject jret = static_cast<jobject>(mapping.mapInterface( xContext.get(), cppu::UnoType<decltype(xContext)>::get() ));
@@ -153,9 +153,9 @@ jobject Java_com_sun_star_comp_helper_Bootstrap_cppuhelper_1bootstrap(
 
         return jlocal;
     }
-    catch (const RuntimeException & exc)
+    catch (const cpo::uno::RuntimeException & exc)
     {
-        jclass c = jni_env->FindClass( "com/sun/star/uno/RuntimeException" );
+        jclass c = jni_env->FindClass( "cpo/uno/RuntimeException" );
         if (nullptr != c)
         {
             SAL_WARN("javaunohelper", "forwarding RuntimeException: " << exc );

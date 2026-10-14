@@ -118,6 +118,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::i18n;
+using namespace ::cpo;
 using namespace sw::util;
 using namespace sw::types;
 using namespace sw::mark;
@@ -419,11 +420,20 @@ void SwWW8AttrIter::OutAttr(sal_Int32 nSwPos, bool bWriteCombChars)
 
     SfxItemSetFixed<RES_CHRATR_BEGIN, RES_TXTATR_END - 1> aExportSet(*m_rNode.GetSwAttrSet().GetPool());
 
-    //The hard formatting properties that affect the entire paragraph
-    if (m_rNode.HasSwAttrSet())
+    //The hard formatting properties that affect the entire paragraph.
+    // What a live table style gives the paragraph counts as hard formatting for a format
+    // without table styles. DOCX has them, and its style definition carries that formatting,
+    // so a run does not repeat what the style already says.
+    const std::optional<SwAttrSet> oOwnWithRole
+        = m_rExport.GetExportFormat() != MSWordExportBase::ExportFormat::DOCX
+              ? m_rNode.GetOwnAttrsWithTableStyleRole()
+              : std::nullopt;
+    const SwAttrSet* pOwnSet
+        = oOwnWithRole ? &*oOwnWithRole : (m_rNode.HasSwAttrSet() ? m_rNode.GetpSwAttrSet() : nullptr);
+    if (pOwnSet)
     {
         // only copy hard attributes - bDeep = false
-        aExportSet.Set(m_rNode.GetSwAttrSet(), false/*bDeep*/);
+        aExportSet.Set(*pOwnSet, false/*bDeep*/);
         // get the current font item. Use rNd.GetSwAttrSet instead of aExportSet:
         const SvxFontItem &rNdFont = m_rNode.GetSwAttrSet().Get(nFontId);
         pFont = &rNdFont;
@@ -1558,8 +1568,7 @@ bool SwWW8AttrIter::IncludeEndOfParaCRInRedlineProperties( sal_Int32 nEnd ) cons
         nPos < m_rExport.m_rDoc.getIDocumentRedlineAccess().GetRedlineTable().size(); ++nPos )
     {
         const SwRangeRedline *pRange = m_rExport.m_rDoc.getIDocumentRedlineAccess().GetRedlineTable()[nPos];
-        const SwPosition* pEnd = pRange->End();
-        const SwPosition* pStart = pRange->Start();
+        auto [pStart, pEnd] = pRange->StartEnd(); // SwPosition*
         bool bBreak = true;
         // In word the paragraph end marker is a real character, in writer it is not.
         // Here we find out if the para end marker we will emit is affected by
@@ -1938,26 +1947,28 @@ void WW8AttributeOutput::FormatDrop( const SwTextNode& rNode, const SwFormatDrop
 {
     short nDropLines = rSwFormatDrop.GetLines();
     short nDistance = rSwFormatDrop.GetDistance();
+
     int rFontHeight, rDropHeight, rDropDescent;
+    const bool bHasDropSize = rNode.GetDropSize(rFontHeight, rDropHeight, rDropDescent);
 
     SVBT16 nSty;
     ShortToSVBT16( nStyle, nSty );
     m_rWW8Export.m_pO->insert( m_rWW8Export.m_pO->end(), nSty, nSty+2 );     // Style #
 
     m_rWW8Export.InsUInt16( NS_sprm::PPc::val );            // Alignment (sprmPPc)
-    m_rWW8Export.m_pO->push_back( 0x20 );
+    m_rWW8Export.m_pO->push_back(0x020); // pcVert (2) : para/text | pcHorz (0) : para/column
 
     m_rWW8Export.InsUInt16( NS_sprm::PWr::val );            // Wrapping (sprmPWr)
-    m_rWW8Export.m_pO->push_back( 0x02 );
+    m_rWW8Export.m_pO->push_back(0x02); // ST_Wrap (2) : around
 
     m_rWW8Export.InsUInt16( NS_sprm::PDcs::val );            // Dropcap (sprmPDcs)
-    int nDCS = ( nDropLines << 3 ) | 0x01;
+    int nDCS = ( nDropLines << 3 ) | 0x01; // Regular drop cap
     m_rWW8Export.InsUInt16( static_cast< sal_uInt16 >( nDCS ) );
 
     m_rWW8Export.InsUInt16( NS_sprm::PDxaFromText::val );            // Distance from text (sprmPDxaFromText)
     m_rWW8Export.InsUInt16( nDistance );
 
-    if ( rNode.GetDropSize( rFontHeight, rDropHeight, rDropDescent ) )
+    if (bHasDropSize)
     {
         m_rWW8Export.InsUInt16( NS_sprm::PDyaLine::val );            // Line spacing
         m_rWW8Export.InsUInt16( static_cast< sal_uInt16 >( -rDropHeight ) );
@@ -1977,7 +1988,7 @@ void WW8AttributeOutput::FormatDrop( const SwTextNode& rNode, const SwFormatDrop
     m_rWW8Export.m_pPapPlc->AppendFkpEntry( m_rWW8Export.Strm().Tell(), m_rWW8Export.m_pO->size(), m_rWW8Export.m_pO->data() );
     m_rWW8Export.m_pO->clear();
 
-    if ( rNode.GetDropSize( rFontHeight, rDropHeight, rDropDescent ) )
+    if (bHasDropSize)
     {
         const SwCharFormat *pSwCharFormat = rSwFormatDrop.GetCharFormat();
         if ( pSwCharFormat )

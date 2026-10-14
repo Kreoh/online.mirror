@@ -59,6 +59,7 @@
 
 #include <dapiuno.hxx>
 #include <dpobject.hxx>
+#include <dpshttab.hxx>
 #include <dpsave.hxx>
 #include <dpdimsave.hxx>
 #include <document.hxx>
@@ -71,7 +72,7 @@ namespace oox::xls {
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::sheet;
 using namespace ::com::sun::star::table;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 namespace {
 
@@ -638,7 +639,7 @@ void PivotTableField::convertPageField( const PTPageFieldModel& rPageField )
     if( !xDPField.is() )
         return;
 
-    PropertySet aPropSet(( css::uno::Reference< css::beans::XPropertySet >(xDPField) ));
+    PropertySet aPropSet(( cpo::uno::Reference< css::beans::XPropertySet >(xDPField) ));
 
     // find cache item used as 'selected page'
     sal_Int32 nCacheItem = -1;
@@ -691,7 +692,7 @@ void PivotTableField::convertDataField( const PTDataFieldModel& rDataField )
     if( !xDPField.is() )
         return;
 
-    PropertySet aPropSet(( css::uno::Reference< css::beans::XPropertySet >(xDPField) ));
+    PropertySet aPropSet(( cpo::uno::Reference< css::beans::XPropertySet >(xDPField) ));
 
     // field orientation
     aPropSet.setProperty( PROP_Orientation, DataPilotFieldOrientation_DATA );
@@ -776,7 +777,7 @@ rtl::Reference< ScDataPilotFieldObj > PivotTableField::convertRowColPageField( s
         // TODO: Use this to set properties directly, bypassing the slow uno layer.
         ScDPObject* pDPObj = mrPivotTable.getDPObject();
 
-        PropertySet aPropSet(( css::uno::Reference< css::beans::XPropertySet >(xDPField) ));
+        PropertySet aPropSet(( cpo::uno::Reference< css::beans::XPropertySet >(xDPField) ));
 
         // field orientation
         DataPilotFieldOrientation eFieldOrient = DataPilotFieldOrientation_HIDDEN;
@@ -1021,7 +1022,7 @@ void PivotTableFilter::finalizeImport()
     if( maModel.mnType != XML_count )
         return;
 
-    PropertySet aPropSet( css::uno::Reference< css::beans::XPropertySet >(mrPivotTable.getDataPilotField( maModel.mnField )) );
+    PropertySet aPropSet( cpo::uno::Reference< css::beans::XPropertySet >(mrPivotTable.getDataPilotField( maModel.mnField )) );
     if( aPropSet.is() )
     {
         DataPilotFieldAutoShowInfo aAutoShowInfo;
@@ -1372,6 +1373,16 @@ void PivotTable::finalizeImport()
         mpDPObject = mxDPDescriptor->GetDPObject();
         if (!mpDPObject)
             return;
+
+        // Keep a named/table source as a name so the pivot stays dynamic.
+        const OUString aSrcName = mpPivotCache->getSourceDefName();
+        const ScSheetSourceDesc* pDesc = mpDPObject->GetSheetDesc();
+        if (pDesc && !aSrcName.isEmpty())
+        {
+            ScSheetSourceDesc aDesc(*pDesc);
+            aDesc.SetRangeName(aSrcName);
+            mpDPObject->SetSheetDesc(aDesc);
+        }
 
         // global data pilot properties
         if (auto* pSaveData = mpDPObject->GetSaveData())

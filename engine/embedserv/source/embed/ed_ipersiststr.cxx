@@ -55,6 +55,7 @@ const sal_Int32 nConstBufferSize = 32000;
 }
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 const wchar_t aOfficeEmbedStreamName[] = L"package_stream";
 const wchar_t aExtentStreamName[] = L"properties_stream";
@@ -620,7 +621,7 @@ COM_DECLSPEC_NOTHROW STDMETHODIMP EmbedDocument_Impl::Save( IStorage *pStgSave, 
     {
         try
         {
-            xStorable->storeToURL( "private:stream",
+            xStorable->storeToURL( u"private:stream"_ustr,
                                         fillArgsForStoring_Impl( xTempOut ) );
             hr = copyXTempOutToIStream( xTempOut, pTargetStream );
             if ( SUCCEEDED( hr ) )

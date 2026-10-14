@@ -8,27 +8,46 @@
  */
 
 #include <config_pdfimport.h>
+#include <unotools/tempfile.hxx>
 #include <sdtiledrenderingtest.hxx>
 
+#include <sfx2/kit/helper.hxx>
 #include <sfx2/sidebar/Sidebar.hxx>
 #include <vcl/scheduler.hxx>
 #include <com/sun/star/document/UpdateDocMode.hpp>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/sequenceashashmap.hxx>
+#include <editeng/editobj.hxx>
+#include <editeng/outlobj.hxx>
+#include <editeng/eeitem.hxx>
+#include <editeng/fhgtitem.hxx>
+#include <editeng/section.hxx>
+#include <editeng/lspcitem.hxx>
+#include <editeng/ulspitem.hxx>
+#include <editeng/kernitem.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <svl/cryptosign.hxx>
+#include <svl/undo.hxx>
+#include <svx/svdograf.hxx>
+#include <svx/svdotext.hxx>
 #include <sfx2/linkmgr.hxx>
+#include <tools/json_writer.hxx>
 
 #include <vcl/virdev.hxx>
 
 #include <tools/UnitConversion.hxx>
 
 #include <DrawDocShell.hxx>
+#include <SlideSectionManager.hxx>
+#include <View.hxx>
 #include <ViewShell.hxx>
 #include <drawdoc.hxx>
 #include <sdpage.hxx>
+#include <SlideLink.hxx>
 #include <unomodel.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSidebarSwitchDeck)
 {
@@ -321,6 +340,978 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testInsertChartAtClientVisibleCenter)
                                  double(aObject.Center().X()), 2.0);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(double(convertTwipToMm100(aVisibleArea.Center().Y())),
                                  double(aObject.Center().Y()), 2.0);
+}
+
+// The slide-import fixtures live in the shared sd data directory, next to
+// the ones the misc-tests suite uses, rather than being copied per suite.
+constexpr OUString gSlideImportDataDir = u"/sd/qa/unit/data/"_ustr;
+
+namespace
+{
+/// The links rDocument reports, parsed.
+boost::property_tree::ptree readLinks(SdXImpressDocument& rDocument)
+{
+    tools::JsonWriter aJsonWriter;
+    const bool bWritten = rDocument.getSlideLinks(aJsonWriter);
+    const OString aLinks = aJsonWriter.finishAndGetAsOString();
+    CPPUNIT_ASSERT(bWritten);
+    std::stringstream aStream((std::string(aLinks)));
+    boost::property_tree::ptree aTree;
+    boost::property_tree::read_json(aStream, aTree);
+    return aTree;
+}
+
+/// The text the slide at nIndex of rDoc shows, taking its shapes in order.
+OUString getSlideText(SdDrawDocument& rDoc, sal_uInt16 nIndex)
+{
+    SdPage* pPage = rDoc.GetSdPage(nIndex, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+    OUStringBuffer aText;
+    for (size_t nObject = 0; nObject < pPage->GetObjCount(); ++nObject)
+    {
+        auto* pTextObject = dynamic_cast<SdrTextObj*>(pPage->GetObj(nObject));
+        if (pTextObject && !pTextObject->IsEmptyPresObj() && pTextObject->GetOutlinerParaObject())
+            aText.append(pTextObject->GetOutlinerParaObject()->GetTextObject().GetText(0));
+    }
+    return aText.makeStringAndClear();
+}
+
+/// The shape at nObject on slide nIndex of rDoc, which holds text.
+SdrTextObj& getTextShape(SdDrawDocument& rDoc, sal_uInt16 nIndex, size_t nObject)
+{
+    SdPage* pPage = rDoc.GetSdPage(nIndex, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+    auto* pTextObject = dynamic_cast<SdrTextObj*>(pPage->GetObj(nObject));
+    CPPUNIT_ASSERT(pTextObject);
+    CPPUNIT_ASSERT(pTextObject->GetOutlinerParaObject());
+    return *pTextObject;
+}
+
+/// The letter sizes the runs of the text of the shape at nObject on slide nIndex carry, in
+/// hundredths of a millimetre and in the order the runs stand in.
+std::vector<sal_uInt32> getRunLetterSizes(SdDrawDocument& rDoc, sal_uInt16 nIndex, size_t nObject)
+{
+    SdrTextObj* pTextObject = &getTextShape(rDoc, nIndex, nObject);
+
+    std::vector<editeng::Section> aSections;
+    pTextObject->GetOutlinerParaObject()->GetTextObject().GetAllSections(aSections);
+
+    std::vector<sal_uInt32> aSizes;
+    for (const editeng::Section& rSection : aSections)
+        for (const SfxPoolItem* pItem : rSection.maAttributes)
+            if (pItem->Which() == EE_CHAR_FONTHEIGHT)
+                aSizes.push_back(static_cast<const SvxFontHeightItem*>(pItem)->GetHeight());
+    return aSizes;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkList)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // A document whose slides are all its own reports no links at all.
+    CPPUNIT_ASSERT(readLinks(*pXImpressDocument).get_child("links").empty());
+
+    // Two slides of one source and one of another are inserted as links, and one slide is inserted
+    // as a plain copy.
+    const OUString aFirstUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aFirstUrl, "{\"slides\":[0,1],\"at\":0,\"link\":true,\"source\":\"Q3 #1 100%.odp\"}"_ostr));
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aFirstUrl, "{\"slides\":[0],\"at\":0,\"source\":\"Q3 #1 100%.odp\"}"_ostr));
+
+    const OUString aSecondUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-sections.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSecondUrl, "{\"slides\":[0],\"link\":true,\"source\":\"Support deck.odp\"}"_ostr));
+
+    // Each source is reported once, under the name the pages were linked to, with the pages it
+    // holds in document order. The plain copy belongs to no source and is left out.
+    const boost::property_tree::ptree aLinks = readLinks(*pXImpressDocument);
+    std::vector<boost::property_tree::ptree> aSources;
+    for (const auto& rSource : aLinks.get_child("links"))
+        aSources.push_back(rSource.second);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aSources.size());
+    CPPUNIT_ASSERT_EQUAL(std::string("Q3 #1 100%.odp"), aSources[0].get<std::string>("source"));
+    CPPUNIT_ASSERT_EQUAL(std::string("Support deck.odp"), aSources[1].get<std::string>("source"));
+
+    std::vector<boost::property_tree::ptree> aSlides;
+    for (const auto& rSlide : aSources[0].get_child("slides"))
+        aSlides.push_back(rSlide.second);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aSlides.size());
+    CPPUNIT_ASSERT_EQUAL(std::string("SourceA"), aSlides[0].get<std::string>("name"));
+    CPPUNIT_ASSERT_EQUAL(std::string("TargetOne"), aSlides[1].get<std::string>("name"));
+
+    // A page is named by the identifier it keeps for the whole session, not by its position. The
+    // plain copy landed before the linked pages, so the first of them is the second slide.
+    const OString aPartId = pDoc->GetSdPage(1, PageKind::Standard)->GetGuid().getString();
+    CPPUNIT_ASSERT_EQUAL(std::string(aPartId.getStr(), aPartId.getLength()),
+                         aSlides[0].get<std::string>("part"));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideImportLink)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // The file the slides are read from is one thing and the source document
+    // they belong to is another: here the file stands in for a document the
+    // user knows by a name that carries characters a reference has to escape.
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+
+    // A slide inserted as a link reports the source document, the slide of it that it came
+    // from, and the time that source was last modified.
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":1,\"keepDesign\":false,\"link\":true,"
+                    "\"source\":\"Q3 #1 100%.odp\",\"lastModifiedTime\":\"2020-09-13T12:26:40Z\"}"_ostr));
+    SdPage* pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20%231%20100%25.odp"_ustr,
+                         pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(u"2020-09-13T12:26:40Z"_ustr, pLinked->GetSourceModifiedTime());
+
+    // A slide inserted from the same file without asking for a link is a plain copy, and
+    // names no source and no modified time.
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl,
+        "{\"slides\":[0],\"at\":2,\"keepDesign\":false,\"source\":\"Q3 #1 100%.odp\"}"_ostr));
+    SdPage* pCopied = pDoc->GetSdPage(2, PageKind::Standard);
+    CPPUNIT_ASSERT(pCopied);
+    CPPUNIT_ASSERT_EQUAL(OUString(), pCopied->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pCopied->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pCopied->GetSourceModifiedTime());
+
+    // An insert that names no source document has nothing for a link to record, so one that
+    // asks for links inserts nothing at all.
+    const int nPartsBefore = pXImpressDocument->getParts();
+    CPPUNIT_ASSERT(
+        !pXImpressDocument->insertPagesFromFile(aSourceUrl, "{\"slides\":[0],\"link\":true}"_ostr));
+    CPPUNIT_ASSERT_EQUAL(nPartsBefore, pXImpressDocument->getParts());
+
+    // The source is a persistent link the storage resolves, so one of the shape of an address
+    // is recorded on the linked page as it is.
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl,
+        "{\"slides\":[0],\"link\":true,\"source\":\"https://storage.example/files/42\"}"_ostr));
+    CPPUNIT_ASSERT_EQUAL(nPartsBefore + 1, pXImpressDocument->getParts());
+    SdPage* pAddressed = pDoc->GetSdPage(static_cast<sal_uInt16>(nPartsBefore), PageKind::Standard);
+    CPPUNIT_ASSERT(pAddressed);
+    CPPUNIT_ASSERT_EQUAL(u"https://storage.example/files/42"_ustr,
+                         sd::SlideLink::GetSourceName(pAddressed->GetFileName()));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideImportScalesLetterSizes)
+{
+    // A slide that comes from a deck whose pages are wider than this document's is fitted to
+    // the page it lands on, and the letters it shows are fitted along with it, so the slide
+    // reads the same as it did in the deck it came from.
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // The source page is 50.8cm by 28.575cm and keeps no border, so the slide is fitted to the
+    // room this document's own page leaves, which is a little over half of that.
+    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+    const double fScale
+        = double(pPage->GetSize().Height() - pPage->GetUpperBorder() - pPage->GetLowerBorder())
+          / 28575.0;
+
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-wide-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":0,\"keepDesign\":true}"_ostr));
+
+    // The title holds one run of 80pt and the text box below it one run of 40pt, which are
+    // 2822 and 1411 hundredths of a millimetre. Without the accompanying fix in place, this
+    // test would have failed: the shapes were fitted to the smaller page and the letters kept
+    // the size they had, so the text ran past the shape that held it and past the page.
+    const std::vector<sal_uInt32> aTitleSizes = getRunLetterSizes(*pDoc, 0, 0);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aTitleSizes.size());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(2822.0 * fScale, static_cast<double>(aTitleSizes[0]), 4.0);
+
+    const std::vector<sal_uInt32> aBodySizes = getRunLetterSizes(*pDoc, 0, 1);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aBodySizes.size());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(1411.0 * fScale, static_cast<double>(aBodySizes[0]), 4.0);
+
+    // The room the title paragraph keeps for each of its lines and above itself is a length of
+    // its own rather than a share of the letter size, so it is fitted to the page as well. It
+    // was 3cm and 1cm in the deck the slide came from.
+    const SfxItemSet& rParagraph
+        = getTextShape(*pDoc, 0, 0).GetOutlinerParaObject()->GetTextObject().GetParaAttribs(0);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(
+        3000.0 * fScale,
+        static_cast<double>(rParagraph.Get(EE_PARA_SBL).GetLineHeight()), 4.0);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(
+        1000.0 * fScale, static_cast<double>(rParagraph.Get(EE_PARA_ULSPACE).GetUpper()), 4.0);
+
+    // The shapes are fitted to the page they landed on, and the text within them no longer
+    // asks for more room than they hold, so neither one grew past the page.
+    for (size_t nObject = 0; nObject < pPage->GetObjCount(); ++nObject)
+        CPPUNIT_ASSERT(pPage->GetObj(nObject)->GetLogicRect().GetHeight()
+                       <= pPage->GetSize().Height());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testTextFollowsEachDirectionsOwnScale)
+{
+    // A page that changes shape as well as size scales by a different amount across than it does
+    // down. A length that runs across the text follows the one, and a length that runs down it
+    // follows the other, so the text keeps the shape the page gives it.
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-wide-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":0,\"keepDesign\":true}"_ostr));
+
+    // The room between one letter and the next runs across the text; the room a paragraph keeps
+    // above itself runs down it. Both are held by the shape here rather than by the text.
+    SdrTextObj& rShape = getTextShape(*pDoc, 0, 1);
+    rShape.SetMergedItem(SvxKerningItem(400, EE_CHAR_KERNING));
+    rShape.SetMergedItem(SvxULSpaceItem(800, 0, EE_PARA_ULSPACE));
+
+    rShape.scaleText(0.5, 0.25, /*bUndo=*/false);
+
+    // Without the accompanying fix in place, this test would have failed: both lengths took the
+    // scale for down the text, so the room between the letters came out at a quarter.
+    const SfxItemSet& rShapeSet = rShape.GetMergedItemSet();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(200), rShapeSet.Get(EE_CHAR_KERNING).GetValue());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(200), rShapeSet.Get(EE_PARA_ULSPACE).GetUpper());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkFollowsSourceSlidePosition)
+{
+    // A slide travels to another presentation in a file written out of its own deck. An insert
+    // that names the position the slide holds in the source links the page to that position: the
+    // position in the source deck, not the one the slide took in the file it travelled in.
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-unnamed-source.fodp"));
+    SdXImpressDocument* pSourceDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pSourceDocument);
+    pSourceDocument->initializeForTiledRendering({});
+
+    // The third slide of the source travels on its own, so it stands first in the file it goes in.
+    utl::TempFileNamed aOneSlide(u"", true, u".odp");
+    aOneSlide.EnableKillingFile();
+    CPPUNIT_ASSERT(pSourceDocument->exportPages({ 2 }, aOneSlide.GetURL()));
+
+    // A refresh reads the whole source deck, so the pages stand there as they do in the source.
+    utl::TempFileNamed aWholeDeck(u"", true, u".odp");
+    aWholeDeck.EnableKillingFile();
+    CPPUNIT_ASSERT(pSourceDocument->exportPages({}, aWholeDeck.GetURL()));
+
+    // The same deck once its third slide has been moved to the front and its content revised. The
+    // slides keep the identifiers they hold in the deck above.
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-unnamed-moved.fodp"));
+    SdXImpressDocument* pMovedDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pMovedDocument);
+    pMovedDocument->initializeForTiledRendering({});
+    utl::TempFileNamed aMovedDeck(u"", true, u".odp");
+    aMovedDeck.EnableKillingFile();
+    CPPUNIT_ASSERT(pMovedDocument->exportPages({}, aMovedDeck.GetURL()));
+
+    // A deck of three slides of its own, standing where the slides of the source deck stood, and
+    // the same again with a name of its own on every slide.
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-unnamed-replaced.fodp"));
+    SdXImpressDocument* pReplacedDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReplacedDocument);
+    pReplacedDocument->initializeForTiledRendering({});
+    utl::TempFileNamed aReplacedDeck(u"", true, u".odp");
+    aReplacedDeck.EnableKillingFile();
+    CPPUNIT_ASSERT(pReplacedDocument->exportPages({}, aReplacedDeck.GetURL()));
+
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-named-replaced.fodp"));
+    SdXImpressDocument* pNamedDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pNamedDocument);
+    pNamedDocument->initializeForTiledRendering({});
+    utl::TempFileNamed aNamedDeck(u"", true, u".odp");
+    aNamedDeck.EnableKillingFile();
+    CPPUNIT_ASSERT(pNamedDocument->exportPages({}, aNamedDeck.GetURL()));
+
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // The third slide of the source travelled on its own, so it stands first in the file the
+    // insert reads. The insert names the position it holds in the source, which is the third.
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aOneSlide.GetURL(),
+        "{\"at\":1,\"link\":true,\"sourcePositions\":[3],\"source\":\"Q3 deck.odp\"}"_ostr));
+
+    SdPage* pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT_EQUAL(u"Source three"_ustr, getSlideText(*pDoc, 1));
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"Slide 3"_ustr, pLinked->GetBookmarkName());
+
+    // The page is linked to the position and to no identifier, so nothing but the position says
+    // which slide it reads.
+    CPPUNIT_ASSERT_EQUAL(OUString(), pLinked->GetSourcePageGuid());
+
+    // A refresh reading the whole source deck reads the slide standing at that position, which is
+    // the slide the page came from as long as the source holds it there.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr,
+                                                              aWholeDeck.GetURL(),
+                                                              u"2021-01-01T00:00:00Z"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Source three"_ustr, getSlideText(*pDoc, 1));
+    CPPUNIT_ASSERT_EQUAL(u"Slide 3"_ustr,
+                         pDoc->GetSdPage(1, PageKind::Standard)->GetBookmarkName());
+
+    // The slide the page came from moved to the front of the source, so another slide stands at
+    // the position the page follows, and that is the slide it reads. The page keeps the position.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr,
+                                                              aMovedDeck.GetURL(),
+                                                              u"2022-02-02T00:00:00Z"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Source two"_ustr, getSlideText(*pDoc, 1));
+    SdPage* pMoved = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pMoved);
+    CPPUNIT_ASSERT_EQUAL(u"Slide 3"_ustr, pMoved->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pMoved->GetSourcePageGuid());
+
+    // The slides of the source are other slides now, and the page reads the one standing at its
+    // position.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr,
+                                                              aReplacedDeck.GetURL(),
+                                                              u"2023-03-03T00:00:00Z"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Other three"_ustr, getSlideText(*pDoc, 1));
+
+    // The slide standing at that position carries a name of its own. The page follows the
+    // position rather than a name, so it reads that slide and keeps the position it records.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), pXImpressDocument->refreshSlideLinks(
+                                                        u"Q3 deck.odp"_ustr, aNamedDeck.GetURL(),
+                                                        u"2024-04-04T00:00:00Z"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Named three"_ustr, getSlideText(*pDoc, 1));
+    SdPage* pNamed = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pNamed);
+    CPPUNIT_ASSERT_EQUAL(u"Slide 3"_ustr, pNamed->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pNamed->GetSourcePageGuid());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkTracksSourceSlideByIdentifier)
+{
+    // An insert that asks for no position name records no name for a slide that carries none of
+    // its own, so the page follows the identifier of the slide it came from and nothing else.
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-unnamed-source.fodp"));
+    SdXImpressDocument* pSourceDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pSourceDocument);
+    pSourceDocument->initializeForTiledRendering({});
+
+    utl::TempFileNamed aOneSlide(u"", true, u".odp");
+    aOneSlide.EnableKillingFile();
+    CPPUNIT_ASSERT(pSourceDocument->exportPages({ 2 }, aOneSlide.GetURL()));
+
+    // The same deck with that slide moved to the front and its content revised, and a deck of
+    // three slides of its own standing where the slides of the source stood.
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-unnamed-moved.fodp"));
+    SdXImpressDocument* pMovedDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pMovedDocument);
+    pMovedDocument->initializeForTiledRendering({});
+    utl::TempFileNamed aMovedDeck(u"", true, u".odp");
+    aMovedDeck.EnableKillingFile();
+    CPPUNIT_ASSERT(pMovedDocument->exportPages({}, aMovedDeck.GetURL()));
+
+    loadFromURL(
+        m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-unnamed-replaced.fodp"));
+    SdXImpressDocument* pReplacedDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReplacedDocument);
+    pReplacedDocument->initializeForTiledRendering({});
+    utl::TempFileNamed aReplacedDeck(u"", true, u".odp");
+    aReplacedDeck.EnableKillingFile();
+    CPPUNIT_ASSERT(pReplacedDocument->exportPages({}, aReplacedDeck.GetURL()));
+
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aOneSlide.GetURL(), "{\"at\":1,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+    SdPage* pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pLinked->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(u"{33333333-3333-3333-3333-333333333333}"_ustr,
+                         pLinked->GetSourcePageGuid());
+
+    // The slide moved to the front of the source, and the page reads it there and stays nameless.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr,
+                                                              aMovedDeck.GetURL(),
+                                                              u"2022-02-02T00:00:00Z"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Source three, revised"_ustr, getSlideText(*pDoc, 1));
+    SdPage* pMoved = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pMoved);
+    CPPUNIT_ASSERT_EQUAL(OUString(), pMoved->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(u"{33333333-3333-3333-3333-333333333333}"_ustr,
+                         pMoved->GetSourcePageGuid());
+
+    // The slide the page came from is gone from the source, and the slides standing in its place
+    // are other slides. The page keeps the content it holds, and the slide it holds is reported.
+    std::vector<OString> aNotUpdated;
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr,
+                                                              aReplacedDeck.GetURL(),
+                                                              u"2023-03-03T00:00:00Z"_ustr,
+                                                              &aNotUpdated));
+    CPPUNIT_ASSERT_EQUAL(u"Source three, revised"_ustr, getSlideText(*pDoc, 1));
+    CPPUNIT_ASSERT_EQUAL(u"2022-02-02T00:00:00Z"_ustr,
+                         pDoc->GetSdPage(1, PageKind::Standard)->GetSourceModifiedTime());
+
+    // The slide that was left alone is reported, so the user can be told which one it was.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aNotUpdated.size());
+    CPPUNIT_ASSERT_EQUAL(pDoc->GetSdPage(1, PageKind::Standard)->GetGuid().getString(),
+                         aNotUpdated[0]);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkModifiedTimeRoundtrip)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":1,\"link\":true,\"source\":\"Q3 deck.odp\","
+                    "\"lastModifiedTime\":\"2020-09-13T12:26:40Z\"}"_ostr));
+    CPPUNIT_ASSERT_EQUAL(u"2020-09-13T12:26:40Z"_ustr,
+                         pDoc->GetSdPage(1, PageKind::Standard)->GetSourceModifiedTime());
+
+    // The time the source was last modified survives a save to ODF and the load back.
+    saveAndReload(TestFilter::ODP);
+    SdXImpressDocument* pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdDrawDocument* pReloadedDoc = pReloaded->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(u"2020-09-13T12:26:40Z"_ustr,
+                         pReloadedDoc->GetSdPage(1, PageKind::Standard)->GetSourceModifiedTime());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkNameRoundtrip)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":1,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+
+    // The page records the name of its source slide, which holds the character that separates
+    // the slide from the document in the link and the one that escapes it.
+    SdPage* pPage = pDoc->GetSdPage(1, PageKind::Standard);
+    pPage->SetBookmarkName(u"Q3 #1 100%"_ustr);
+
+    // Both the source document and the slide name come back as they were.
+    saveAndReload(TestFilter::ODP);
+    SdXImpressDocument* pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdPage* pReloadedPage = pReloaded->GetDoc()->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"Q3 deck.odp"_ustr,
+                         sd::SlideLink::GetSourceName(pReloadedPage->GetFileName()));
+    CPPUNIT_ASSERT_EQUAL(u"Q3 #1 100%"_ustr, pReloadedPage->GetBookmarkName());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkRefresh)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // One slide of the source deck is inserted as a link and the same slide as a plain copy.
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":1,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":2,\"source\":\"Q3 deck.odp\"}"_ostr));
+
+    // The linked slide is given a name of its own, so that keeping the name of the slide in this
+    // document rather than the name of the slide it came from is what the refresh has to do.
+    pDoc->GetSdPage(1, PageKind::Standard)->SetName(u"Q3 numbers"_ustr);
+    const int nParts = pXImpressDocument->getParts();
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 1));
+
+    SfxUndoManager* pUndoManager = pDoc->GetDocSh()->GetUndoManager();
+    const size_t nUndoActions = pUndoManager->GetUndoActionCount();
+
+    // The source deck changed, and the file staged for the refresh holds the changed slides.
+    const OUString aChangedUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-link-source-changed.odp");
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr, aChangedUrl,
+                                                              u"2021-01-01T00:00:00Z"_ustr));
+
+    // The linked slide shows the new content, and it kept its position, its name and its link.
+    CPPUNIT_ASSERT_EQUAL(u"Source title, revised"_ustr, getSlideText(*pDoc, 1));
+    CPPUNIT_ASSERT_EQUAL(nParts, pXImpressDocument->getParts());
+    SdPage* pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT_EQUAL(u"Q3 numbers"_ustr, pLinked->GetName());
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+    // The refreshed page records the source time the refresh was given.
+    CPPUNIT_ASSERT_EQUAL(u"2021-01-01T00:00:00Z"_ustr, pLinked->GetSourceModifiedTime());
+
+    // The plain copy of the same slide belongs to no source and keeps what it holds.
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 2));
+
+    // The whole refresh is one undo step, and undoing it brings the old content back with the link.
+    CPPUNIT_ASSERT_EQUAL(nUndoActions + 1, pUndoManager->GetUndoActionCount());
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 1));
+    CPPUNIT_ASSERT_EQUAL(nParts, pXImpressDocument->getParts());
+    pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT_EQUAL(u"Q3 numbers"_ustr, pLinked->GetName());
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+
+    // A source no page of this document is linked to refreshes nothing at all.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(-1),
+                         pXImpressDocument->refreshSlideLinks(u"Other deck.odp"_ustr, aChangedUrl,
+                                                              OUString()));
+
+    // The slides are read from a local file, so a location that would have to be fetched is
+    // refused.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(-1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr,
+                                                              u"https://example.com/deck.odp"_ustr,
+                                                              OUString()));
+
+    // A file that holds no slide the linked page records leaves that slide as it is, and a refresh
+    // that changes nothing is no undo step of its own.
+    CPPUNIT_ASSERT_EQUAL(
+        static_cast<sal_Int32>(0),
+        pXImpressDocument->refreshSlideLinks(
+            u"Q3 deck.odp"_ustr,
+            m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"),
+            OUString()));
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 1));
+    CPPUNIT_ASSERT_EQUAL(nUndoActions, pUndoManager->GetUndoActionCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkRefreshOnePage)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Two slides of one source are inserted as links, in front of the page the document had.
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0,1],\"at\":0,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+    const OUString aFirstId = pDoc->GetSdPage(0, PageKind::Standard)->GetGuid().getOUString();
+    const OUString aSecondId = pDoc->GetSdPage(1, PageKind::Standard)->GetGuid().getOUString();
+
+    // The source deck changed. Reading the second page alone leaves the first one the page it is,
+    // with the content and the time it holds, and reads the second one again: a refreshed page is
+    // the page read for it, so it holds a new identifier and the time of this read.
+    const OUString aChangedUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-link-source-changed.odp");
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr, aChangedUrl,
+                                                              u"2021-01-01T00:00:00Z"_ustr,
+                                                              nullptr, 1));
+    CPPUNIT_ASSERT_EQUAL(aFirstId,
+                         pDoc->GetSdPage(0, PageKind::Standard)->GetGuid().getOUString());
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 0));
+    CPPUNIT_ASSERT_EQUAL(OUString(),
+                         pDoc->GetSdPage(0, PageKind::Standard)->GetSourceModifiedTime());
+    CPPUNIT_ASSERT(aSecondId != pDoc->GetSdPage(1, PageKind::Standard)->GetGuid().getOUString());
+    CPPUNIT_ASSERT_EQUAL(u"2021-01-01T00:00:00Z"_ustr,
+                         pDoc->GetSdPage(1, PageKind::Standard)->GetSourceModifiedTime());
+
+    // A page that is not linked to the source, and an index that names no page, refresh nothing.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(-1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr, aChangedUrl,
+                                                              OUString(), nullptr, 2));
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(-1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr, aChangedUrl,
+                                                              OUString(), nullptr, 7));
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkRefreshKeepsSections)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Two slides of one source are inserted as links, so a refresh reads them as one run of pages.
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0,1],\"at\":0,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+
+    // A section starts on each of the two linked slides.
+    sd::SlideSectionManager& rSections = pDoc->GetSectionManager();
+    rSections.AddSection(0, u"Opening"_ustr);
+    rSections.AddSection(1, u"Details"_ustr);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), rSections.GetSectionCount());
+
+    // Both linked slides are refreshed together, and every section still starts on the slide it
+    // did.
+    CPPUNIT_ASSERT_EQUAL(
+        static_cast<sal_Int32>(2),
+        pXImpressDocument->refreshSlideLinks(
+            u"Q3 deck.odp"_ustr,
+            m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-link-source-changed.odp"),
+            OUString()));
+    CPPUNIT_ASSERT_EQUAL(u"Source title, revised"_ustr, getSlideText(*pDoc, 0));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), rSections.GetSectionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Opening"_ustr, rSections.GetSection(0).maName);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), rSections.GetSection(0).mnStartIndex);
+    CPPUNIT_ASSERT_EQUAL(u"Details"_ustr, rSections.GetSection(1).maName);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), rSections.GetSection(1).mnStartIndex);
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkSourceNotFetched)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":1,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+
+    // A page holds its link with the sfx2 link manager once the document is loaded again, so the
+    // test registers it here to reach the same state in one session.
+    pDoc->GetSdPage(1, PageKind::Standard)->ConnectLink();
+    sfx2::LinkManager* pLinkManager = pDoc->GetLinkManager();
+    CPPUNIT_ASSERT(pLinkManager);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pLinkManager->GetLinks().size());
+
+    // Updating the links reads the file staged for each source document, so a source that has no
+    // staged file leaves its page the content it holds, with its link.
+    pLinkManager->UpdateAllLinks(/*bAskUpdate=*/false, u""_ustr);
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 1));
+    SdPage* pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkBreak)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Two slides of one source are inserted as links, so that taking the source off one of them
+    // leaves the other linked.
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0,1],\"at\":0,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+
+    SfxUndoManager* pUndoManager = pDoc->GetDocSh()->GetUndoManager();
+    const size_t nUndoActions = pUndoManager->GetUndoActionCount();
+
+    // The first of the two keeps the content it holds and belongs to no source any more, and the
+    // second is still linked to the source both came from.
+    CPPUNIT_ASSERT(pXImpressDocument->breakSlideLink(0));
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 0));
+    SdPage* pBroken = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pBroken);
+    CPPUNIT_ASSERT_EQUAL(OUString(), pBroken->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pBroken->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(nUndoActions + 1, pUndoManager->GetUndoActionCount());
+
+    const boost::property_tree::ptree aLinks = readLinks(*pXImpressDocument);
+    std::vector<boost::property_tree::ptree> aSlides;
+    for (const auto& rSource : aLinks.get_child("links"))
+        for (const auto& rSlide : rSource.second.get_child("slides"))
+            aSlides.push_back(rSlide.second);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aSlides.size());
+    CPPUNIT_ASSERT_EQUAL(std::string("TargetOne"), aSlides[0].get<std::string>("name"));
+
+    // A page that belongs to no source, and an index that names no page at all, leave the document
+    // as it is.
+    CPPUNIT_ASSERT(!pXImpressDocument->breakSlideLink(0));
+    CPPUNIT_ASSERT(!pXImpressDocument->breakSlideLink(-1));
+    CPPUNIT_ASSERT(!pXImpressDocument->breakSlideLink(pXImpressDocument->getParts()));
+
+    // A refresh of the source reads the slide of the page that is still linked and leaves the other
+    // one alone.
+    const OUString aChangedUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-link-source-changed.odp");
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1),
+                         pXImpressDocument->refreshSlideLinks(u"Q3 deck.odp"_ustr, aChangedUrl,
+                                                              u"2021-01-01T00:00:00Z"_ustr));
+    CPPUNIT_ASSERT_EQUAL(u"Source title"_ustr, getSlideText(*pDoc, 0));
+
+    // Undoing the refresh and then the break gives the page the source and the slide it recorded
+    // back.
+    pUndoManager->Undo();
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nUndoActions, pUndoManager->GetUndoActionCount());
+    pBroken = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pBroken);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pBroken->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pBroken->GetBookmarkName());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideLinkBreakOnEdit)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-target.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // One slide of the source deck is inserted as a link, and the whole insertion leaves it linked.
+    const OUString aSourceUrl
+        = m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp");
+    CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+        aSourceUrl, "{\"slides\":[0],\"at\":1,\"link\":true,\"source\":\"Q3 deck.odp\"}"_ostr));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1),
+                         readLinks(*pXImpressDocument).get_child("links").size());
+
+    SfxUndoManager* pUndoManager = pDoc->GetDocSh()->GetUndoManager();
+    const size_t nUndoActions = pUndoManager->GetUndoActionCount();
+
+    sd::ViewShell* pViewShell = pDoc->GetDocSh()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::View* pView = pViewShell->GetView();
+    SdPage* pLinked = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pLinked);
+    CPPUNIT_ASSERT(pLinked->GetObjCount() > 0);
+    SdrObject* pObject = pLinked->GetObj(0);
+
+    // A change with no undo step in hand is the engine's own work on the page, the shape a link
+    // update or an embedded object gives it, so the page keeps its source.
+    pObject->Move(Size(100, 100));
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(nUndoActions, pUndoManager->GetUndoActionCount());
+
+    // A shape of the linked slide is moved by somebody editing it.
+    pXImpressDocument->setPart(1);
+    const Point aStart = pObject->GetSnapRect().TopLeft();
+    pView->MarkObj(pObject, pView->GetSdrPageView());
+    pView->MoveMarkedObj(Size(500, 500));
+
+    // The slide became this document's own, and a refresh of the source it came from has no page
+    // left to read.
+    CPPUNIT_ASSERT_EQUAL(OUString(), pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pLinked->GetBookmarkName());
+    CPPUNIT_ASSERT(readLinks(*pXImpressDocument).get_child("links").empty());
+    CPPUNIT_ASSERT_EQUAL(
+        static_cast<sal_Int32>(-1),
+        pXImpressDocument->refreshSlideLinks(
+            u"Q3 deck.odp"_ustr,
+            m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-link-source-changed.odp"),
+            OUString()));
+
+    // The edit and the source it took off are one undo step, so one undo puts the shape back where
+    // it was and the slide back with its source.
+    CPPUNIT_ASSERT_EQUAL(nUndoActions + 1, pUndoManager->GetUndoActionCount());
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nUndoActions, pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(aStart, pObject->GetSnapRect().TopLeft());
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1),
+                         readLinks(*pXImpressDocument).get_child("links").size());
+
+    // A page linked to a file by its path belongs to the older linked-page feature, which no
+    // refresh of a source document reaches, so an edit of it leaves what it records alone.
+    SdPage* pPathLinked = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPathLinked);
+    CPPUNIT_ASSERT(pPathLinked->GetObjCount() > 0);
+    pPathLinked->SetFileName(u"file:///decks/q3.odp"_ustr);
+    pPathLinked->SetBookmarkName(u"Slide 1"_ustr);
+    pXImpressDocument->setPart(0);
+    pView->MarkObj(pPathLinked->GetObj(0), pView->GetSdrPageView());
+    pView->MoveMarkedObj(Size(500, 500));
+    CPPUNIT_ASSERT_EQUAL(u"file:///decks/q3.odp"_ustr, pPathLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"Slide 1"_ustr, pPathLinked->GetBookmarkName());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testExportPages)
+{
+    loadFromURL(m_directories.getURLFromSrc(gSlideImportDataDir, u"slide-import-source.odp"));
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pXImpressDocument->initializeForTiledRendering({});
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const sal_uInt16 nPages = pDoc->GetSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT(nPages > 1);
+
+    // Two of the pages are written out as a presentation of their own.
+    utl::TempFileNamed aWritten(u"", true, u".odp");
+    aWritten.EnableKillingFile();
+    CPPUNIT_ASSERT(pXImpressDocument->exportPages({ 1, 0 }, aWritten.GetURL()));
+
+    // The document that was written holds those pages, in the order they were asked for, and
+    // the document they came from is as it was.
+    CPPUNIT_ASSERT_EQUAL(nPages, pDoc->GetSdPageCount(PageKind::Standard));
+
+    uno::Reference<lang::XComponent> xWritten(loadFromDesktop(aWritten.GetURL()));
+    SdXImpressDocument* pWrittenDocument = dynamic_cast<SdXImpressDocument*>(xWritten.get());
+    CPPUNIT_ASSERT(pWrittenDocument);
+    SdDrawDocument* pWritten = pWrittenDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(2), pWritten->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(getSlideText(*pDoc, 1), getSlideText(*pWritten, 0));
+    CPPUNIT_ASSERT_EQUAL(getSlideText(*pDoc, 0), getSlideText(*pWritten, 1));
+
+    // A slide is a standard page and the notes page that belongs to it, so the written
+    // document holds one notes page per slide and each slide finds its own.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(2), pWritten->GetSdPageCount(PageKind::Notes));
+    for (sal_uInt16 nPage = 0; nPage < 2; ++nPage)
+    {
+        const SdPage* pSlide = pWritten->GetSdPage(nPage, PageKind::Standard);
+        const SdPage* pNotes = pWritten->GetSdPage(nPage, PageKind::Notes);
+        CPPUNIT_ASSERT(pSlide);
+        CPPUNIT_ASSERT(pNotes);
+        CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(pSlide->GetPageNum() + 1),
+                             pNotes->GetPageNum());
+    }
+
+    xWritten->dispose();
+
+    // A page can be found by the identifier it keeps
+    const OUString aGuid = pDoc->GetSdPage(1, PageKind::Standard)->GetGuid().getOUString();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), pXImpressDocument->getSlideIndexOfGuid(aGuid));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1),
+                         pXImpressDocument->getSlideIndexOfGuid(
+                             u"{99999999-9999-9999-9999-999999999999}"_ustr));
+
+    // A page the document does not hold is written by nobody.
+    utl::TempFileNamed aRefused(u"", true, u".odp");
+    aRefused.EnableKillingFile();
+    CPPUNIT_ASSERT(!pXImpressDocument->exportPages({ 0, nPages }, aRefused.GetURL()));
+
+    // An empty list writes every page.
+    utl::TempFileNamed aWhole(u"", true, u".odp");
+    aWhole.EnableKillingFile();
+    CPPUNIT_ASSERT(pXImpressDocument->exportPages({}, aWhole.GetURL()));
+    uno::Reference<lang::XComponent> xWhole(loadFromDesktop(aWhole.GetURL()));
+    SdXImpressDocument* pWholeDocument = dynamic_cast<SdXImpressDocument*>(xWhole.get());
+    CPPUNIT_ASSERT(pWholeDocument);
+    CPPUNIT_ASSERT_EQUAL(nPages, pWholeDocument->GetDoc()->GetSdPageCount(PageKind::Standard));
+    xWhole->dispose();
+}
+
+// Leaving the master view puts the view back on the slide it was on, not on the first slide.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideKeptWhenLeavingMasterView)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("2slides.odp");
+    Scheduler::ProcessEventsToIdle();
+
+    pXImpressDocument->setPart(1);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(1, pXImpressDocument->getPart());
+
+    pXImpressDocument->setEditMode(1);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(1, pXImpressDocument->getEditMode());
+
+    pXImpressDocument->setEditMode(0);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(0, pXImpressDocument->getEditMode());
+
+    // Without the fix the view came back on the first slide.
+    CPPUNIT_ASSERT_EQUAL(1, pXImpressDocument->getPart());
+}
+
+// A view that goes through the master view comes back on its own slide, even when another view
+// selected a different slide in the meantime.
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testSlideKeptWhenLeavingMasterViewTwoViews)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("2slides.odp");
+    const int nView1 = KitHelper::getCurrentView();
+    pXImpressDocument->setPart(1);
+    Scheduler::ProcessEventsToIdle();
+
+    KitHelper::createView();
+    pXImpressDocument->initializeForTiledRendering({});
+    const int nView2 = KitHelper::getCurrentView();
+    pXImpressDocument->setPart(0);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(0, pXImpressDocument->getPart());
+
+    KitHelper::setView(nView1);
+    CPPUNIT_ASSERT_EQUAL(1, pXImpressDocument->getPart());
+
+    pXImpressDocument->setEditMode(1);
+    Scheduler::ProcessEventsToIdle();
+    pXImpressDocument->setEditMode(0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the fix the first view followed the second view's selection to the first slide.
+    CPPUNIT_ASSERT_EQUAL(0, pXImpressDocument->getEditMode());
+    CPPUNIT_ASSERT_EQUAL(1, pXImpressDocument->getPart());
+
+    KitHelper::setView(nView2);
+    CPPUNIT_ASSERT_EQUAL(0, pXImpressDocument->getPart());
+}
+
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testAnimatedGifSelectableOutsidePaintedTile)
+{
+    // An animated GIF is selected by a click, whichever area of the slide was painted last.
+    SdXImpressDocument* pXImpressDocument = createDoc("animated-gif.fodp");
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrObject* pGif = pViewShell->GetActualPage()->GetObj(0);
+    CPPUNIT_ASSERT(static_cast<SdrGrafObj*>(pGif)->IsAnimated());
+
+    // The tile is the top left corner of the slide, away from the GIF.
+    ScopedVclPtrInstance<VirtualDevice> pDevice(DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetOutputSizePixel(Size(256, 256));
+    pXImpressDocument->paintTile(*pDevice, 256, 256, 0, 0, 2268, 2268);
+
+    const Point aCenter = pGif->GetSnapRect().Center();
+    const int nX = o3tl::toTwips(aCenter.getX(), o3tl::Length::mm100);
+    const int nY = o3tl::toTwips(aCenter.getY(), o3tl::Length::mm100);
+    pXImpressDocument->postMouseEvent(COKitMouseEventType::BUTTONDOWN, nX, nY, 1, MOUSE_LEFT, 0);
+    pXImpressDocument->postMouseEvent(COKitMouseEventType::BUTTONUP, nX, nY, 1, MOUSE_LEFT, 0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the accompanying fix in place, the click selected nothing.
+    const SdrMarkList& rMarkList = pViewShell->GetView()->GetMarkedObjectList();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rMarkList.GetMarkCount());
+    CPPUNIT_ASSERT_EQUAL(pGif, rMarkList.GetMark(0)->GetMarkedSdrObj());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

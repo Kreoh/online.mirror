@@ -16,6 +16,12 @@
 #include <config.h>
 
 #include <common/Globals.hpp>
+#include <common/Util.hpp>
 #include <kit/KitGlobals.hpp>
+#include <wsd/WSDGlobals.hpp>
+
+const bool Util::MobileApp = Util::isMobileAppBuild();
+
+const bool Util::KitInProcess = Util::isFuzzing() || Util::isMobileAppBuild();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

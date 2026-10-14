@@ -31,32 +31,32 @@ CMimeContentType::CMimeContentType( const OUString& aCntType )
     init( aCntType );
 }
 
-OUString SAL_CALL CMimeContentType::getMediaType( )
+OUString CMimeContentType::getMediaType( )
 {
     return m_MediaType;
 }
 
-OUString SAL_CALL CMimeContentType::getMediaSubtype( )
+OUString CMimeContentType::getMediaSubtype( )
 {
     return m_MediaSubtype;
 }
 
-OUString SAL_CALL CMimeContentType::getFullMediaType( )
+OUString CMimeContentType::getFullMediaType( )
 {
     return m_MediaType + "/" + m_MediaSubtype;
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL CMimeContentType::getParameters( )
+cpo::uno::Sequence< OUString > CMimeContentType::getParameters( )
 {
     return comphelper::mapKeysToSequence(m_ParameterMap);
 }
 
-bool SAL_CALL CMimeContentType::hasParameter( const OUString& aName )
+bool CMimeContentType::hasParameter( const OUString& aName )
 {
     return m_ParameterMap.contains( aName.toAsciiLowerCase() );
 }
 
-OUString SAL_CALL CMimeContentType::getParameterValue( const OUString& aName )
+OUString CMimeContentType::getParameterValue( const OUString& aName )
 {
     auto const lower = aName.toAsciiLowerCase();
 
@@ -75,13 +75,13 @@ void CMimeContentType::init( const OUString& aCntType )
         != aCntType.getStr() + aCntType.getLength())
     {
         throw css::lang::IllegalArgumentException(
-            "illegal media type " + aCntType, css::uno::Reference<css::uno::XInterface>(), -1);
+            "illegal media type " + aCntType, cpo::uno::Reference<cpo::uno::XInterface>(), -1);
     }
     for (auto const & i: params) {
         if (!i.second.m_bConverted) {
             throw css::lang::IllegalArgumentException(
                 "illegal parameter value in media type " + aCntType,
-                css::uno::Reference<css::uno::XInterface>(), -1);
+                cpo::uno::Reference<cpo::uno::XInterface>(), -1);
         }
         m_ParameterMap[OUString::fromUtf8(i.first)] = i.second.m_sValue;
     }

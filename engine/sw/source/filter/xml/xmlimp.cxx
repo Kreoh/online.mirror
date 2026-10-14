@@ -40,6 +40,7 @@
 #include <xmloff/ProgressBarHelper.hxx>
 #include <doc.hxx>
 #include <drawdoc.hxx>
+#include <svx/compatflags.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentDeviceAccess.hxx>
 #include <IDocumentListsAccess.hxx>
@@ -86,8 +87,8 @@
 #include <unordered_set>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
@@ -106,8 +107,8 @@ public:
 
     SwXMLBodyContext_Impl( SwXMLImport& rImport );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-            sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+            sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& AttrList ) override;
 };
 
 }
@@ -141,9 +142,9 @@ SwXMLBodyContext_Impl::SwXMLBodyContext_Impl( SwXMLImport& rImport ) :
     }
 }
 
-css::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLBodyContext_Impl::createFastChildContext(
+cpo::uno::Reference< css::xml::sax::XFastContextHandler > SwXMLBodyContext_Impl::createFastChildContext(
     sal_Int32 /*nElement*/,
-    const css::uno::Reference< css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
+    const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     return GetSwImport().CreateBodyContentContext();
 }
@@ -164,8 +165,8 @@ protected: // #i69629#
 public:
     SwXMLDocContext_Impl( SwXMLImport& rImport, sal_Int32 nElement );
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 }
@@ -175,7 +176,7 @@ SwXMLDocContext_Impl::SwXMLDocContext_Impl( SwXMLImport& rImport, sal_Int32 nEle
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SwXMLDocContext_Impl::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > SwXMLDocContext_Impl::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     switch (nElement)
@@ -222,8 +223,8 @@ public:
     SwXMLOfficeDocContext_Impl( SwXMLImport& rImport, sal_Int32 nElement,
                 const Reference< document::XDocumentProperties >& xDocProps);
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler > createFastChildContext(
+        sal_Int32 nElement, const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
 };
 
 }
@@ -238,7 +239,7 @@ SwXMLOfficeDocContext_Impl::SwXMLOfficeDocContext_Impl(
 {
 }
 
-uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SwXMLOfficeDocContext_Impl::createFastChildContext(
+uno::Reference< xml::sax::XFastContextHandler > SwXMLOfficeDocContext_Impl::createFastChildContext(
     sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     // assign paragraph styles to list levels of outline style after all styles
@@ -270,7 +271,7 @@ public:
 
     SwXMLDocStylesContext_Impl( SwXMLImport& rImport, sal_Int32 nElement );
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 }
@@ -321,7 +322,7 @@ SvXMLImportContext *SwXMLImport::CreateFastContext( sal_Int32 nElement,
 }
 
 SwXMLImport::SwXMLImport(
-    const uno::Reference< uno::XComponentContext >& rContext,
+    const uno::Reference< cpo::uno::XComponentContext >& rContext,
     OUString const & implementationName, SvXMLImportFlags nImportFlags)
 :   SvXMLImport( rContext, implementationName, nImportFlags ),
     m_nStyleFamilyMask( SfxStyleFamily::All ),
@@ -668,6 +669,9 @@ void SwXMLImport::endDocument()
 
         assert(pDoc->IsInReading());
         assert(pDoc->IsInXMLImport());
+        // A flat ODF document is read by this importer alone, so the hints are set up here, the
+        // same way the package reader does after reading.
+        pDoc->GetNodes().FileLoadedInitHints();
         pDoc->SetInReading(false);
         pDoc->SetInXMLImport(false);
         pDoc->SetInXMLImport242(false);
@@ -1241,6 +1245,23 @@ void SwXMLImport::SetConfigurationSettings(const Sequence < PropertyValue > & aC
     // this method will modify the document directly -> lock SolarMutex
     SolarMutexGuard aGuard;
 
+    // Documents written after these were introduced store them, in the settings below or in the
+    // view settings, and those values replace these.
+    if (SwDoc* pDoc = getDoc())
+    {
+        if (SwDrawModel* pDrawModel = pDoc->getIDocumentDrawModelAccess().GetDrawModel())
+        {
+            pDrawModel->SetCompatibilityFlag(SdrCompatibilityFlag::AnchoredTextOverflowLegacy,
+                                             true); // legacy processing for tdf#99729
+            pDrawModel->SetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork,
+                                             true); // legacy processing for tdf#148000
+            pDrawModel->SetCompatibilityFlag(SdrCompatibilityFlag::LineSpacingBelowBaselineLegacy,
+                                             true); // legacy processing for tdf#163590
+            pDrawModel->SetCompatibilityFlag(SdrCompatibilityFlag::TextFittingLegacy,
+                                             true); // legacy processing for tdf#163590
+        }
+    }
+
     Reference< lang::XMultiServiceFactory > xFac( GetModel(), UNO_QUERY );
     if( !xFac.is() )
         return;
@@ -1736,8 +1757,8 @@ const SwDoc* SwXMLImport::getDoc() const
     return const_cast< SwXMLImport* >( this )->getDoc();
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Writer_XMLOasisImporter_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_XMLOasisImporter_get_implementation(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwXMLImport(context, u"com.sun.star.comp.Writer.XMLOasisImporter"_ustr,
@@ -1745,8 +1766,8 @@ com_sun_star_comp_Writer_XMLOasisImporter_get_implementation(css::uno::XComponen
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Writer_XMLOasisStylesImporter_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_XMLOasisStylesImporter_get_implementation(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwXMLImport(context, u"com.sun.star.comp.Writer.XMLOasisStylesImporter"_ustr,
@@ -1755,8 +1776,8 @@ com_sun_star_comp_Writer_XMLOasisStylesImporter_get_implementation(css::uno::XCo
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Writer_XMLOasisContentImporter_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_XMLOasisContentImporter_get_implementation(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwXMLImport(context, u"com.sun.star.comp.Writer.XMLOasisContentImporter"_ustr,
@@ -1764,8 +1785,8 @@ com_sun_star_comp_Writer_XMLOasisContentImporter_get_implementation(css::uno::XC
                 SvXMLImportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Writer_XMLOasisMetaImporter_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_XMLOasisMetaImporter_get_implementation(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwXMLImport(context, u"com.sun.star.comp.Writer.XMLOasisMetaImporter"_ustr,
@@ -1773,8 +1794,8 @@ com_sun_star_comp_Writer_XMLOasisMetaImporter_get_implementation(css::uno::XComp
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_Writer_XMLOasisSettingsImporter_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_XMLOasisSettingsImporter_get_implementation(cpo::uno::XComponentContext* context,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new SwXMLImport(context, u"com.sun.star.comp.Writer.XMLOasisSettingsImporter"_ustr,
@@ -1791,7 +1812,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportFODT(SvStream &rStream)
 
     uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
     uno::Reference<io::XInputStream> xStream(new utl::OSeekableInputStreamWrapper(rStream));
-    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
+    uno::Reference<cpo::uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
 
     cpo::uno::Sequence<OUString> aUserData
     {
@@ -1869,10 +1890,10 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestPDFExportFODT(SvStream &rStream)
     if (!resultString.startsWith("<?xml") || resultString.indexOf("office:mimetype=\"application/vnd.oasis.opendocument.text\"") == -1)
         return false;
 
-    uno::Reference<css::frame::XDesktop2> xDesktop = css::frame::Desktop::create(comphelper::getProcessComponentContext());
+    uno::Reference<css::frame::XDesktop> xDesktop = css::frame::Desktop::create(comphelper::getProcessComponentContext());
     uno::Reference<css::frame::XFrame> xTargetFrame = xDesktop->findFrame(u"_blank"_ustr, 0);
 
-    const uno::Reference<uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(comphelper::getProcessComponentContext());
     uno::Reference<css::frame::XModel2> xModel(xContext->getServiceManager()->createInstanceWithContext(
                 u"com.sun.star.text.TextDocument"_ustr, xContext), uno::UNO_QUERY_THROW);
 
@@ -1881,7 +1902,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestPDFExportFODT(SvStream &rStream)
 
     uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
     uno::Reference<io::XInputStream> xStream(new utl::OSeekableInputStreamWrapper(rStream));
-    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
+    uno::Reference<cpo::uno::XInterface> xInterface(xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.XmlFilterAdaptor"_ustr), uno::UNO_SET_THROW);
 
     cpo::uno::Sequence<OUString> aUserData
     {
@@ -1973,7 +1994,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestPDFExportFODT(SvStream &rStream)
 
     if (ret)
     {
-        css::uno::Reference<css::frame::XController2> xController(xModel->createDefaultViewController(xTargetFrame), uno::UNO_SET_THROW);
+        cpo::uno::Reference<css::frame::XController2> xController(xModel->createDefaultViewController(xTargetFrame), uno::UNO_SET_THROW);
         utl::ConnectFrameControllerModel(xTargetFrame, xController, xModel);
 
         utl::TempFileFast aTempFile;
@@ -1998,7 +2019,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT bool TestPDFExportFODT(SvStream &rStream)
         xPDFFilter->filter(aDescriptor);
     }
 
-    css::uno::Reference<css::util::XCloseable> xClose(xModel, css::uno::UNO_QUERY);
+    cpo::uno::Reference<css::util::XCloseable> xClose(xModel, cpo::uno::UNO_QUERY);
     xClose->close(false);
 
     return ret;

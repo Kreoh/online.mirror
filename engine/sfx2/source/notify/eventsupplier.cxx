@@ -43,18 +43,15 @@
 #include <sfx2/frame.hxx>
 #include <macroloader.hxx>
 
-#include <unicode/errorcode.h>
-#include <unicode/regex.h>
-#include <unicode/unistr.h>
 
-using namespace css;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 
     //  --- XNameReplace ---
 
-void SAL_CALL SfxEvents_Impl::replaceByName( const OUString & aName, const cpo::uno::Any & rElement )
+void SfxEvents_Impl::replaceByName( const OUString & aName, const cpo::uno::Any & rElement )
 {
     std::unique_lock aGuard( maMutex );
 
@@ -109,7 +106,7 @@ void SAL_CALL SfxEvents_Impl::replaceByName( const OUString & aName, const cpo::
 
 //  --- XNameAccess ---
 
-cpo::uno::Any SAL_CALL SfxEvents_Impl::getByName( const OUString& aName )
+cpo::uno::Any SfxEvents_Impl::getByName( const OUString& aName )
 {
     std::unique_lock aGuard( maMutex );
 
@@ -123,13 +120,13 @@ cpo::uno::Any SAL_CALL SfxEvents_Impl::getByName( const OUString& aName )
 }
 
 
-cpo::uno::Sequence< OUString > SAL_CALL SfxEvents_Impl::getElementNames()
+cpo::uno::Sequence< OUString > SfxEvents_Impl::getElementNames()
 {
     return maEventNames;
 }
 
 
-bool SAL_CALL SfxEvents_Impl::hasByName( const OUString& aName )
+bool SfxEvents_Impl::hasByName( const OUString& aName )
 {
     std::unique_lock aGuard( maMutex );
 
@@ -141,43 +138,18 @@ bool SAL_CALL SfxEvents_Impl::hasByName( const OUString& aName )
 
 //  --- XElementAccess ( parent of XNameAccess ) ---
 
-cpo::uno::Type SAL_CALL SfxEvents_Impl::getElementType()
+cpo::uno::Type SfxEvents_Impl::getElementType()
 {
     cpo::uno::Type aElementType = cppu::UnoType<cpo::uno::Sequence < beans::PropertyValue >>::get();
     return aElementType;
 }
 
 
-bool SAL_CALL SfxEvents_Impl::hasElements()
+bool SfxEvents_Impl::hasElements()
 {
     std::unique_lock aGuard( maMutex );
 
     return maEventNames.hasElements();
-}
-
-bool SfxEvents_Impl::isScriptURLAllowed(const OUString& aScriptURL)
-{
-    std::optional<cpo::uno::Sequence<OUString>> allowedEvents(
-        officecfg::Office::Common::Security::Scripting::AllowedDocumentEventURLs::get());
-    // When AllowedDocumentEventURLs is empty, all event URLs are allowed
-    if (!allowedEvents)
-        return true;
-
-    icu::ErrorCode status;
-    const uint32_t rMatcherFlags = UREGEX_CASE_INSENSITIVE;
-    icu::UnicodeString usInput(aScriptURL.getStr());
-    const cpo::uno::Sequence<OUString>& rAllowedEvents = *allowedEvents;
-    for (auto const& allowedEvent : rAllowedEvents)
-    {
-        icu::UnicodeString usRegex(allowedEvent.getStr());
-        icu::RegexMatcher rmatch1(usRegex, usInput, rMatcherFlags, status);
-        if (aScriptURL.startsWith(allowedEvent) || rmatch1.matches(status))
-        {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 void SfxEvents_Impl::Execute( cpo::uno::Sequence < css::beans::PropertyValue > const & aProperties, const document::DocumentEvent& aTrigger, SfxObjectShell* pDoc )
@@ -214,13 +186,11 @@ void SfxEvents_Impl::Execute( cpo::uno::Sequence < css::beans::PropertyValue > c
     if (aScript.isEmpty())
         return;
 
-    if (!isScriptURLAllowed(aScript))
-        return;
-
     if (!pDoc)
         pDoc = SfxObjectShell::Current();
 
-    if (pDoc && !SfxObjectShell::isScriptAccessAllowed(pDoc->GetModel()))
+    if (pDoc ? !SfxObjectShell::isDocumentScriptAllowed(aScript, pDoc->GetModel())
+             : !SfxObjectShell::isScriptURLAllowed(aScript))
         return;
 
     if (aType == STAR_BASIC)
@@ -278,7 +248,7 @@ void SfxEvents_Impl::Execute( cpo::uno::Sequence < css::beans::PropertyValue > c
 
 // --- ::document::XEventListener ---
 
-void SAL_CALL SfxEvents_Impl::documentEventOccured( const document::DocumentEvent& aEvent )
+void SfxEvents_Impl::documentEventOccured( const document::DocumentEvent& aEvent )
 {
     std::unique_lock aGuard( maMutex );
 
@@ -296,7 +266,7 @@ void SAL_CALL SfxEvents_Impl::documentEventOccured( const document::DocumentEven
 
 // --- ::lang::XEventListener ---
 
-void SAL_CALL SfxEvents_Impl::disposing( const lang::EventObject& /*Source*/ )
+void SfxEvents_Impl::disposing( const lang::EventObject& /*Source*/ )
 {
     std::unique_lock aGuard( maMutex );
 

@@ -38,7 +38,7 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
@@ -128,13 +128,13 @@ namespace T602ImportFilter {
 
 static inistruct ini;
 
-T602ImportFilter::T602ImportFilter(css::uno::Reference<css::uno::XComponentContext > x )
+T602ImportFilter::T602ImportFilter(cpo::uno::Reference<cpo::uno::XComponentContext > x )
     : mxContext(std::move(x))
     , node(tnode::START)
 {
 }
 
-T602ImportFilter::T602ImportFilter(css::uno::Reference<css::io::XInputStream> xInputStream)
+T602ImportFilter::T602ImportFilter(cpo::uno::Reference<css::io::XInputStream> xInputStream)
     : mxInputStream(std::move(xInputStream))
     , node(tnode::START)
 {
@@ -1080,23 +1080,23 @@ Sequence< OUString > T602ImportFilterDialog::getSupportedServiceNames(  )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_T602ImportFilterDialog_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new T602ImportFilter::T602ImportFilterDialog());
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 filter_T602ImportFilter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new T602ImportFilter::T602ImportFilter(context));
 }
 
 extern "C" SAL_DLLPUBLIC_EXPORT bool TestImport602(SvStream &rStream)
 {
-    css::uno::Reference<io::XInputStream> xStream(new utl::OSeekableInputStreamWrapper(rStream));
+    cpo::uno::Reference<io::XInputStream> xStream(new utl::OSeekableInputStreamWrapper(rStream));
     rtl::Reference<T602ImportFilter::T602ImportFilter> aImport(
         new T602ImportFilter::T602ImportFilter(xStream));
     aImport->test();

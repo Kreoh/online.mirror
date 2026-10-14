@@ -20,7 +20,7 @@
 #include <com/sun/star/util/XComplexColor.hpp>
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Type.h>
 
 #include <cppuhelper/implbase.hxx>
@@ -30,8 +30,8 @@
 #include <cppunit/TestAssert.h>
 
 using namespace css;
-using namespace css::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 namespace apitest
 {
@@ -52,12 +52,12 @@ public:
 
     bool m_bListenerCalled;
 
-    virtual void SAL_CALL propertyChange(const beans::PropertyChangeEvent& /* xEvent */) override
+    virtual void propertyChange(const beans::PropertyChangeEvent& /* xEvent */) override
     {
         m_bListenerCalled = true;
     }
 
-    virtual void SAL_CALL disposing(const lang::EventObject& /* xEventObj */) override {}
+    virtual void disposing(const lang::EventObject& /* xEventObj */) override {}
 };
 
 class MockedVetoableChangeListener : public ::cppu::WeakImplHelper<beans::XVetoableChangeListener>
@@ -70,12 +70,12 @@ public:
 
     bool m_bListenerCalled;
 
-    virtual void SAL_CALL vetoableChange(const beans::PropertyChangeEvent& /* xEvent */) override
+    virtual void vetoableChange(const beans::PropertyChangeEvent& /* xEvent */) override
     {
         m_bListenerCalled = true;
     }
 
-    virtual void SAL_CALL disposing(const lang::EventObject& /* xEventObj */) override {}
+    virtual void disposing(const lang::EventObject& /* xEventObj */) override {}
 };
 }
 

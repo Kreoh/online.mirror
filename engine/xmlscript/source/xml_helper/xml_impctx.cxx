@@ -26,7 +26,7 @@
 #include <com/sun/star/container/NoSuchElementException.hpp>
 #include <com/sun/star/xml/input/XAttributes.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <sal/log.hxx>
 #include <rtl/ref.hxx>
@@ -38,7 +38,7 @@
 #include <vector>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 
 namespace xmlscript
@@ -129,35 +129,35 @@ public:
         bool bSingleThreadedUse );
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(
         OUString const & servicename ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         Sequence< Any > const & arguments ) override;
 
     // XDocumentHandler
-    virtual void SAL_CALL startDocument() override;
-    virtual void SAL_CALL endDocument() override;
-    virtual void SAL_CALL startElement(
+    virtual void startDocument() override;
+    virtual void endDocument() override;
+    virtual void startElement(
         OUString const & rQElementName,
         Reference< xml::sax::XAttributeList > const & xAttribs ) override;
-    virtual void SAL_CALL endElement(
+    virtual void endElement(
         OUString const & rQElementName ) override;
-    virtual void SAL_CALL characters(
+    virtual void characters(
         OUString const & rChars ) override;
-    virtual void SAL_CALL ignorableWhitespace(
+    virtual void ignorableWhitespace(
         OUString const & rWhitespaces ) override;
-    virtual void SAL_CALL processingInstruction(
+    virtual void processingInstruction(
         OUString const & rTarget, OUString const & rData ) override;
-    virtual void SAL_CALL setDocumentLocator(
+    virtual void setDocumentLocator(
         Reference< xml::sax::XLocator > const & xLocator ) override;
 
     // XNamespaceMapping
-    virtual sal_Int32 SAL_CALL getUidByUri( OUString const & Uri ) override;
-    virtual OUString SAL_CALL getUriByUid( sal_Int32 Uid ) override;
+    virtual sal_Int32 getUidByUri( OUString const & Uri ) override;
+    virtual OUString getUriByUid( sal_Int32 Uid ) override;
 };
 
 }
@@ -312,22 +312,22 @@ public:
         Reference< xml::sax::XAttributeList > const & xAttributeList );
 
     // XAttributes
-    virtual sal_Int32 SAL_CALL getLength() override;
-    virtual sal_Int32 SAL_CALL getIndexByQName(
+    virtual sal_Int32 getLength() override;
+    virtual sal_Int32 getIndexByQName(
         OUString const & rQName ) override;
-    virtual sal_Int32 SAL_CALL getIndexByUidName(
+    virtual sal_Int32 getIndexByUidName(
         sal_Int32 nUid, OUString const & rLocalName ) override;
-    virtual OUString SAL_CALL getQNameByIndex(
+    virtual OUString getQNameByIndex(
         sal_Int32 nIndex ) override;
-    virtual sal_Int32 SAL_CALL getUidByIndex(
+    virtual sal_Int32 getUidByIndex(
         sal_Int32 nIndex ) override;
-    virtual OUString SAL_CALL getLocalNameByIndex(
+    virtual OUString getLocalNameByIndex(
         sal_Int32 nIndex ) override;
-    virtual OUString SAL_CALL getValueByIndex(
+    virtual OUString getValueByIndex(
         sal_Int32 nIndex ) override;
-    virtual OUString SAL_CALL getValueByUidName(
+    virtual OUString getValueByUidName(
         sal_Int32 nUid, OUString const & rLocalName ) override;
-    virtual OUString SAL_CALL getTypeByIndex(
+    virtual OUString getTypeByIndex(
         sal_Int32 nIndex ) override;
 };
 
@@ -709,9 +709,9 @@ Reference< xml::sax::XDocumentHandler > createDocumentHandler(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_xml_input_SaxDocumentHandler_get_implementation(
-    css::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const& )
 {
     return cppu::acquire(new xmlscript::DocumentHandlerImpl({}, false /* mt use */));
 }

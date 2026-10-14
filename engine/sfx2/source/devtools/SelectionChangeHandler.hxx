@@ -29,42 +29,42 @@ typedef comphelper::WeakComponentImplHelper<css::view::XSelectionChangeListener>
 class SelectionChangeHandler final : public SelectionChangeHandlerInterfaceBase
 {
 private:
-    css::uno::Reference<css::frame::XController> mxController;
+    cpo::uno::Reference<css::frame::XController> mxController;
     VclPtr<DevelopmentToolDockingWindow> mpDockingWindow;
 
 public:
-    SelectionChangeHandler(css::uno::Reference<css::frame::XController> xController,
+    SelectionChangeHandler(cpo::uno::Reference<css::frame::XController> xController,
                            DevelopmentToolDockingWindow* pDockingWindow)
         : mxController(std::move(xController))
         , mpDockingWindow(pDockingWindow)
     {
-        css::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
-                                                                     css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
+                                                                     cpo::uno::UNO_QUERY);
         xSupplier->addSelectionChangeListener(this);
     }
 
     ~SelectionChangeHandler() { mpDockingWindow.disposeAndClear(); }
 
-    virtual void SAL_CALL selectionChanged(const css::lang::EventObject& /*rEvent*/) override
+    virtual void selectionChanged(const css::lang::EventObject& /*rEvent*/) override
     {
-        css::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
-                                                                     css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
+                                                                     cpo::uno::UNO_QUERY);
         if (xSupplier.is())
         {
             cpo::uno::Any aAny = xSupplier->getSelection();
-            auto xInterface = aAny.get<css::uno::Reference<css::uno::XInterface>>();
+            auto xInterface = aAny.get<cpo::uno::Reference<cpo::uno::XInterface>>();
             mpDockingWindow->selectionChanged(xInterface);
         }
     }
 
     void stopListening()
     {
-        css::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
-                                                                     css::uno::UNO_QUERY);
+        cpo::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
+                                                                     cpo::uno::UNO_QUERY);
         xSupplier->removeSelectionChangeListener(this);
     }
 
-    virtual void SAL_CALL disposing(const css::lang::EventObject& /*rEvent*/) override {}
+    virtual void disposing(const css::lang::EventObject& /*rEvent*/) override {}
     using comphelper::WeakComponentImplHelperBase::disposing;
 
 private:

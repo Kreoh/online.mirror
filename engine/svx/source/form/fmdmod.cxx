@@ -26,18 +26,18 @@
 #include <svx/unoshape.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 using namespace ::svxform;
 
 
-::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >  SAL_CALL SvxFmMSFactory::createInstance(const OUString& rServiceSpecifier)
+::cpo::uno::Reference< ::cpo::uno::XInterface >  SvxFmMSFactory::createInstance(const OUString& rServiceSpecifier)
 {
-    ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >  xRet;
+    ::cpo::uno::Reference< ::cpo::uno::XInterface >  xRet;
 
     if ( rServiceSpecifier.startsWith( "com.sun.star.form.component." ) )
     {
-        const css::uno::Reference<css::uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
+        const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
         xRet = xContext->getServiceManager()->createInstanceWithContext(rServiceSpecifier, xContext);
     }
     else if ( rServiceSpecifier == "com.sun.star.drawing.ControlShape" )
@@ -56,7 +56,7 @@ using namespace ::svxform;
 }
 
 
-::cpo::uno::Sequence< OUString > SAL_CALL SvxFmMSFactory::getAvailableServiceNames()
+::cpo::uno::Sequence< OUString > SvxFmMSFactory::getAvailableServiceNames()
 {
     static constexpr OUString aSvxComponentServiceNameList[] =
     {

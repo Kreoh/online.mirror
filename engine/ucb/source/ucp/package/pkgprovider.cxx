@@ -32,7 +32,7 @@
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/ucb/IllegalIdentifierException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include "pkgprovider.hxx"
 #include "pkgcontent.hxx"
 #include "pkguri.hxx"
@@ -40,6 +40,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace package_ucp
 {
@@ -63,21 +64,21 @@ public:
     virtual ~Package() override { m_pOwner->removePackage( m_aName ); }
 
     // XInterface
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
     queryInterface( const cpo::uno::Type& aType ) override
     { return m_xNA->queryInterface( aType ); }
-    virtual void SAL_CALL
+    virtual void
     acquire() noexcept override
     { OWeakObject::acquire(); }
-    virtual void SAL_CALL
+    virtual void
     release() noexcept override
     { OWeakObject::release(); }
 
     // XHierarchicalNameAccess
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
     getByHierarchicalName( const OUString& aName ) override
     { return m_xNA->getByHierarchicalName( aName ); }
-    virtual bool SAL_CALL
+    virtual bool
     hasByHierarchicalName( const OUString& aName ) override
     { return m_xNA->hasByHierarchicalName( aName ); }
 };
@@ -89,7 +90,7 @@ using namespace package_ucp;
 
 // ContentProvider Implementation.
 ContentProvider::ContentProvider(
-            const uno::Reference< uno::XComponentContext >& rxContext )
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
 : ::ucbhelper::ContentProviderImplHelper( rxContext )
 {
 }
@@ -101,19 +102,19 @@ ContentProvider::~ContentProvider()
 }
 
 // XInterface methods.
-void SAL_CALL ContentProvider::acquire()
+void ContentProvider::acquire()
     noexcept
 {
     OWeakObject::acquire();
 }
 
-void SAL_CALL ContentProvider::release()
+void ContentProvider::release()
     noexcept
 {
     OWeakObject::release();
 }
 
-cpo::uno::Any SAL_CALL ContentProvider::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any ContentProvider::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = cppu::queryInterface( rType,
                                                static_cast< lang::XTypeProvider* >(this),
@@ -157,7 +158,7 @@ ContentProvider::getSupportedServiceNames()
 
 
 // virtual
-uno::Reference< ucb::XContent > SAL_CALL ContentProvider::queryContent(
+uno::Reference< ucb::XContent > ContentProvider::queryContent(
             const uno::Reference< ucb::XContentIdentifier >& Identifier )
 {
     if ( !Identifier.is() )
@@ -217,9 +218,9 @@ ContentProvider::createPackage( const PackageUri & rURI )
             m_xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
                 u"com.sun.star.packages.comp.ZipPackage"_ustr,
                 aArguments, m_xContext ),
-            css::uno::UNO_QUERY_THROW );
+            cpo::uno::UNO_QUERY_THROW );
     }
-    catch ( uno::RuntimeException const & )
+    catch ( cpo::uno::RuntimeException const & )
     {
         throw;
     }
@@ -243,9 +244,9 @@ void ContentProvider::removePackage( const OUString & rName )
     m_aPackages.erase( rName );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ucb_package_ContentProvider_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new ContentProvider(context));
 }

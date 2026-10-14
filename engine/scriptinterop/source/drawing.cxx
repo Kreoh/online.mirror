@@ -10,8 +10,8 @@
  */
 
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <sal/config.h>
 #include <scriptinterop/XDrawing.hpp>
@@ -23,22 +23,22 @@ namespace
 class DrawingImpl : public cppu::WeakImplHelper<scriptinterop::XDrawing>
 {
 public:
-    explicit DrawingImpl(css::uno::Reference<css::frame::XModel> const& model)
+    explicit DrawingImpl(cpo::uno::Reference<css::frame::XModel> const& model)
         : model_(model)
     {
     }
 
-    css::uno::Reference<css::uno::XInterface> SAL_CALL getuno() override { return model_; }
+    cpo::uno::Reference<cpo::uno::XInterface> getuno() override { return model_; }
 
 private:
-    css::uno::Reference<css::frame::XModel> model_;
+    cpo::uno::Reference<css::frame::XModel> model_;
 };
 }
 
 namespace scriptinterop::detail
 {
-css::uno::Reference<scriptinterop::XDrawing>
-createDrawing(css::uno::Reference<css::frame::XModel> const& model)
+cpo::uno::Reference<scriptinterop::XDrawing>
+createDrawing(cpo::uno::Reference<css::frame::XModel> const& model)
 {
     return new DrawingImpl(model);
 }

@@ -11,7 +11,7 @@
 
 #include <docmodel/theme/Theme.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/xml/sax/XFastContextHandler.hpp>
 #include <oox/mathml/importutils.hxx>
 #include <oox/drawingml/themefragmenthandler.hxx>
@@ -34,11 +34,11 @@ public:
 protected:
     void lcl_startFastElement(
         Token_t Element,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
     void lcl_endFastElement(Token_t Element) override;
-    css::uno::Reference<css::xml::sax::XFastContextHandler> lcl_createFastChildContext(
+    cpo::uno::Reference<css::xml::sax::XFastContextHandler> lcl_createFastChildContext(
         Token_t Element,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
     virtual void lcl_characters(const OUString& aChars) override;
 };
 

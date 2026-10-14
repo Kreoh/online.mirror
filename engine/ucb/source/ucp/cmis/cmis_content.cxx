@@ -70,6 +70,7 @@
 #define STD_TO_OUSTR( str ) OStringToOUString( str, RTL_TEXTENCODING_UTF8 )
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -270,7 +271,7 @@ OUString getSessionId(const cmis::URL& url)
 
 namespace cmis
 {
-    Content::Content( const uno::Reference< uno::XComponentContext >& rxContext,
+    Content::Content( const uno::Reference< cpo::uno::XComponentContext >& rxContext,
         ContentProvider *pProvider, const uno::Reference< ucb::XContentIdentifier >& Identifier,
         libcmis::ObjectPtr pObject )
         : ContentImplHelper( rxContext, pProvider, Identifier ),
@@ -288,7 +289,7 @@ namespace cmis
         m_sObjectId = m_aURL.getObjectId( );
     }
 
-    Content::Content( const uno::Reference< uno::XComponentContext >& rxContext, ContentProvider *pProvider,
+    Content::Content( const uno::Reference< cpo::uno::XComponentContext >& rxContext, ContentProvider *pProvider,
         const uno::Reference< ucb::XContentIdentifier >& Identifier,
         bool bIsFolder )
         : ContentImplHelper( rxContext, pProvider, Identifier ),
@@ -331,10 +332,10 @@ namespace cmis
         return m_pSession;
     }
 
-    libcmis::Session* createSession(const css::uno::Reference<css::ucb::XCommandEnvironment>& xEnv,
+    libcmis::Session* createSession(const cpo::uno::Reference<css::ucb::XCommandEnvironment>& xEnv,
                                     ContentProvider& rProvider, const URL& rURL,
                                     const OUString& rContentId,
-                                    const css::uno::Reference<css::ucb::XContent>& xContext)
+                                    const cpo::uno::Reference<css::ucb::XContent>& xContext)
     {
         // init libcurl callback
         libcmis::SessionFactory::setCurlInitProtocolsFunction(&::InitCurl_easy);
@@ -475,7 +476,7 @@ namespace cmis
                                     ucb::IOErrorCode_ABORT,
                                     cpo::uno::Sequence< cpo::uno::Any >( 0 ),
                                     xEnv );
-                throw uno::RuntimeException( );
+                throw cpo::uno::RuntimeException( );
             }
         }
     }
@@ -541,7 +542,7 @@ namespace cmis
             if ( !getSession( xEnv ) )
                 return m_pObject;
         }
-        catch ( uno::RuntimeException& )
+        catch ( cpo::uno::RuntimeException& )
         {
             return m_pObject;
         }
@@ -1336,7 +1337,7 @@ namespace cmis
         if ( it == m_pObjectProps.end( ) )
         {
             ucbhelper::cancelCommandExecution( cpo::uno::Any
-                ( uno::RuntimeException( u"Missing name property"_ustr,
+                ( cpo::uno::RuntimeException( u"Missing name property"_ustr,
                     getXWeak() ) ),
                 xEnv );
         }
@@ -1363,7 +1364,7 @@ namespace cmis
             if ( object->getBaseType( ) != m_pObjectType->getBaseType( )->getId() )
             {
                 ucbhelper::cancelCommandExecution( cpo::uno::Any
-                    ( uno::RuntimeException( u"Can't change a folder into a document and vice-versa."_ustr,
+                    ( cpo::uno::RuntimeException( u"Can't change a folder into a document and vice-versa."_ustr,
                         getXWeak() ) ),
                     xEnv );
             }
@@ -1382,7 +1383,7 @@ namespace cmis
                 catch ( const libcmis::Exception& )
                 {
                     ucbhelper::cancelCommandExecution( cpo::uno::Any
-                        ( uno::RuntimeException( u"Error when setting document content"_ustr,
+                        ( cpo::uno::RuntimeException( u"Error when setting document content"_ustr,
                             getXWeak() ) ),
                         xEnv );
                 }
@@ -1404,7 +1405,7 @@ namespace cmis
                 catch ( const libcmis::Exception& )
                 {
                     ucbhelper::cancelCommandExecution( cpo::uno::Any
-                        ( uno::RuntimeException( u"Error when creating folder"_ustr,
+                        ( cpo::uno::RuntimeException( u"Error when creating folder"_ustr,
                             getXWeak() ) ),
                         xEnv );
                 }
@@ -1422,7 +1423,7 @@ namespace cmis
                 catch ( const libcmis::Exception& )
                 {
                     ucbhelper::cancelCommandExecution( cpo::uno::Any
-                        ( uno::RuntimeException( u"Error when creating document"_ustr,
+                        ( cpo::uno::RuntimeException( u"Error when creating document"_ustr,
                             getXWeak() ) ),
                         xEnv );
                 }
@@ -1553,7 +1554,7 @@ namespace cmis
         return aRet;
     }
 
-    bool Content::feedSink( const uno::Reference< uno::XInterface>& xSink,
+    bool Content::feedSink( const uno::Reference< cpo::uno::XInterface>& xSink,
         const uno::Reference< ucb::XCommandEnvironment >& xEnv )
     {
         if ( !xSink.is() )
@@ -1733,34 +1734,34 @@ namespace cmis
 
     XTYPEPROVIDER_COMMON_IMPL( Content );
 
-    void SAL_CALL Content::acquire() noexcept
+    void Content::acquire() noexcept
     {
         ContentImplHelper::acquire();
     }
 
-    void SAL_CALL Content::release() noexcept
+    void Content::release() noexcept
     {
         ContentImplHelper::release();
     }
 
-    cpo::uno::Any SAL_CALL Content::queryInterface( const cpo::uno::Type & rType )
+    cpo::uno::Any Content::queryInterface( const cpo::uno::Type & rType )
     {
         cpo::uno::Any aRet = cppu::queryInterface( rType, static_cast< ucb::XContentCreator * >( this ) );
         return aRet.hasValue() ? aRet : ContentImplHelper::queryInterface(rType);
     }
 
-    OUString SAL_CALL Content::getImplementationName()
+    OUString Content::getImplementationName()
     {
        return u"com.sun.star.comp.CmisContent"_ustr;
     }
 
-    cpo::uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
+    cpo::uno::Sequence< OUString > Content::getSupportedServiceNames()
     {
            cpo::uno::Sequence<OUString> aSNS { u"com.sun.star.ucb.CmisContent"_ustr };
            return aSNS;
     }
 
-    OUString SAL_CALL Content::getContentType()
+    OUString Content::getContentType()
     {
         OUString sRet;
         try
@@ -1770,7 +1771,7 @@ namespace cmis
             else
                 sRet = CMIS_FILE_TYPE;
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             throw;
         }
@@ -1779,12 +1780,12 @@ namespace cmis
             cpo::uno::Any a(cppu::getCaughtException());
             throw lang::WrappedTargetRuntimeException(
                 "wrapped Exception " + e.Message,
-                uno::Reference<uno::XInterface>(), a);
+                uno::Reference<cpo::uno::XInterface>(), a);
         }
         return sRet;
     }
 
-    cpo::uno::Any SAL_CALL Content::execute(
+    cpo::uno::Any Content::execute(
         const ucb::Command& aCommand,
         sal_Int32 /*CommandId*/,
         const uno::Reference< ucb::XCommandEnvironment >& xEnv )
@@ -1912,18 +1913,18 @@ namespace cmis
         return aRet;
     }
 
-    void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
+    void Content::abort( sal_Int32 /*CommandId*/ )
     {
         SAL_INFO( "ucb.ucp.cmis", "TODO - Content::abort()" );
         // TODO Implement me
     }
 
-    cpo::uno::Sequence< ucb::ContentInfo > SAL_CALL Content::queryCreatableContentsInfo()
+    cpo::uno::Sequence< ucb::ContentInfo > Content::queryCreatableContentsInfo()
     {
         return queryCreatableContentsInfo( uno::Reference< ucb::XCommandEnvironment >() );
     }
 
-    uno::Reference< ucb::XContent > SAL_CALL Content::createNewContent(
+    uno::Reference< ucb::XContent > Content::createNewContent(
             const ucb::ContentInfo& Info )
     {
         bool create_document;
@@ -1953,7 +1954,7 @@ namespace cmis
         }
     }
 
-    cpo::uno::Sequence< cpo::uno::Type > SAL_CALL Content::getTypes()
+    cpo::uno::Sequence< cpo::uno::Type > Content::getTypes()
     {
         try
         {
@@ -1974,7 +1975,7 @@ namespace cmis
                 return s_aFolderCollection.getTypes();
             }
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             throw;
         }
@@ -1983,7 +1984,7 @@ namespace cmis
             cpo::uno::Any a(cppu::getCaughtException());
             throw lang::WrappedTargetRuntimeException(
                 "wrapped Exception " + e.Message,
-                uno::Reference<uno::XInterface>(), a);
+                uno::Reference<cpo::uno::XInterface>(), a);
         }
 
         static cppu::OTypeCollection s_aFileCollection
@@ -2036,7 +2037,7 @@ namespace cmis
                 };
             }
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             throw;
         }
@@ -2045,7 +2046,7 @@ namespace cmis
             cpo::uno::Any a(cppu::getCaughtException());
             throw lang::WrappedTargetRuntimeException(
                 "wrapped Exception " + e.Message,
-                uno::Reference<uno::XInterface>(), a);
+                uno::Reference<cpo::uno::XInterface>(), a);
         }
         return {};
     }

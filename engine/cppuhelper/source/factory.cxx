@@ -26,7 +26,6 @@
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <rtl/unload.h>
 
 #include <cppuhelper/propshlp.hxx>
 #include <o3tl/string_view.hxx>
@@ -48,7 +47,7 @@
 
 using namespace osl;
 using namespace com::sun::star;
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::loader;
@@ -111,9 +110,9 @@ public:
     void disposing() override;
 
 private:
-    css::uno::Reference<css::uno::XInterface> createInstanceWithArgumentsEveryTime(
+    cpo::uno::Reference<cpo::uno::XInterface> createInstanceWithArgumentsEveryTime(
         cpo::uno::Sequence<cpo::uno::Any> const & rArguments,
-        css::uno::Reference<css::uno::XComponentContext> const & xContext);
+        cpo::uno::Reference<cpo::uno::XComponentContext> const & xContext);
 
     Reference<XInterface >  m_xTheInstance;
     bool                m_bOneInstance;
@@ -127,7 +126,7 @@ protected:
      * in the createInstance and createInstanceWithArguments methods.
      * @return the newly created instance. Do not return a previous (one instance) instance.
      * @throw cpo::uno::Exception
-     * @throw css::uno::RuntimeException
+     * @throw cpo::uno::RuntimeException
      */
     virtual Reference<XInterface >  createInstanceEveryTime(
         Reference< XComponentContext > const & xContext );
@@ -248,10 +247,10 @@ Reference< XInterface > OFactoryComponentHelper::createInstanceWithArgumentsAndC
     return createInstanceWithArgumentsEveryTime( rArguments, xContext );
 }
 
-css::uno::Reference<css::uno::XInterface>
+cpo::uno::Reference<cpo::uno::XInterface>
 OFactoryComponentHelper::createInstanceWithArgumentsEveryTime(
     cpo::uno::Sequence<cpo::uno::Any> const & rArguments,
-    css::uno::Reference<css::uno::XComponentContext> const & xContext)
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & xContext)
 {
     Reference< XInterface > xRet( createInstanceEveryTime( xContext ) );
 
@@ -387,7 +386,7 @@ public:
 
 private:
     /// @throws cpo::uno::Exception
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     Reference< XInterface > createModuleFactory();
 
     /** The registry key of the implementation section */
@@ -712,8 +711,7 @@ Reference<XSingleServiceFactory > createSingleFactory(
     const Reference<XMultiServiceFactory > & rServiceManager,
     const OUString & rImplementationName,
     ComponentInstantiation pCreateFunction,
-    const Sequence< OUString > & rServiceNames,
-    rtl_ModuleCount * )
+    const Sequence< OUString > & rServiceNames)
 {
     return new OFactoryComponentHelper(
         rServiceManager, rImplementationName, pCreateFunction, nullptr, &rServiceNames, false );
@@ -724,8 +722,7 @@ Reference<XSingleServiceFactory > createOneInstanceFactory(
     const Reference<XMultiServiceFactory > & rServiceManager,
     const OUString & rImplementationName,
     ComponentInstantiation pCreateFunction,
-    const Sequence< OUString > & rServiceNames,
-    rtl_ModuleCount * )
+    const Sequence< OUString > & rServiceNames)
 {
     return new OFactoryComponentHelper(
         rServiceManager, rImplementationName, pCreateFunction, nullptr, &rServiceNames, true );
@@ -744,8 +741,7 @@ Reference<XSingleServiceFactory > createSingleRegistryFactory(
 Reference< lang::XSingleComponentFactory > createSingleComponentFactory(
     ComponentFactoryFunc fptr,
     OUString const & rImplementationName,
-    Sequence< OUString > const & rServiceNames,
-    rtl_ModuleCount *)
+    Sequence< OUString > const & rServiceNames)
 {
     return new OFactoryComponentHelper(
         Reference< XMultiServiceFactory >(), rImplementationName, nullptr, fptr, &rServiceNames, false );
@@ -754,8 +750,7 @@ Reference< lang::XSingleComponentFactory > createSingleComponentFactory(
 Reference< lang::XSingleComponentFactory > createOneInstanceComponentFactory(
     ComponentFactoryFunc fptr,
     OUString const & rImplementationName,
-    Sequence< OUString > const & rServiceNames,
-    rtl_ModuleCount *)
+    Sequence< OUString > const & rServiceNames)
 {
     return new OFactoryComponentHelper(
         Reference< XMultiServiceFactory >(), rImplementationName, nullptr, fptr, &rServiceNames, true );

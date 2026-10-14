@@ -21,6 +21,9 @@
 
 #include <DrawViewShell.hxx>
 #include <DrawController.hxx>
+#include <SdSecurityLabelTarget.hxx>
+#include <svx/seclabel/SecLabelStore.hxx>
+#include <svx/seclabel/SecurityLabelDialog.hxx>
 
 #include <sfx2/viewfrm.hxx>
 #include <editeng/eeitem.hxx>
@@ -84,7 +87,7 @@
 #include <oox/export/drawingml.hxx>
 #include <oox/shape/ShapeFilterBase.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::drawing::framework;
 using ::com::sun::star::frame::XFrame;
 using ::com::sun::star::frame::XController;
@@ -283,6 +286,24 @@ void  DrawViewShell::ExecCtrl(SfxRequest& rReq)
             break;
         }
 
+        case SID_SECURITY_LABEL:
+        {
+            // OOXML-only: the label rides in the customXml part, so gate on the actual
+            // format (the browser hides the button; this backstops a direct dispatch).
+            if (!svx::seclabel::modelSupportsLabel(GetDocSh()->GetModel()))
+            {
+                break;
+            }
+            // The dialog lives in svx; Impress supplies the marking-placement target.
+            vcl::Window* pSecWin = GetActiveWindow();
+            VclPtr<VclAbstractDialog> pSecDlg(svx::seclabel::CreateSecurityLabelDialog(
+                pSecWin ? pSecWin->GetFrameWeld() : nullptr,
+                std::make_unique<SdSecurityLabelTarget>(*this)));
+            pSecDlg->StartExecuteAsync([pSecDlg](sal_Int32 /*nResult*/) {});
+            rReq.Done();
+            break;
+        }
+
         case SID_HEADER_AND_FOOTER:
         case SID_INSERT_PAGE_NUMBER:
         case SID_INSERT_DATE_TIME:
@@ -391,12 +412,12 @@ void  DrawViewShell::ExecCtrl(SfxRequest& rReq)
                     {
                         xConfigurationController = pDrawController2->getConfigurationController();
                         if ( ! xConfigurationController.is())
-                            throw RuntimeException();
+                            throw cpo::uno::RuntimeException();
                         xConfigurationController->restoreConfiguration(xConfiguration);
                     }
                 }
             }
-            catch (RuntimeException&)
+            catch (cpo::uno::RuntimeException&)
             {
                 DBG_UNHANDLED_EXCEPTION("sd.view");
             }

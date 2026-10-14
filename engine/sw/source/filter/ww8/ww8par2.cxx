@@ -2482,7 +2482,7 @@ void WW8TabDesc::CreateSwTable()
             {
                 //With multiple table, use last table settings. Perhaps
                 //the maximum is what word does ?
-                aHori.SetPos(m_pIo->m_xSFlyPara->nXPos + GetMinLeft());
+                aHori.setPosition(gfx::Length::twip(m_pIo->m_xSFlyPara->nXPos + GetMinLeft()));
                 aHori.SetHoriOrient(text::HoriOrientation::NONE);
                 m_pIo->m_xSFlyPara->GetFlyFormat()->SetFormatAttr(aHori);
             }
@@ -2707,7 +2707,7 @@ void WW8TabDesc::ParkPaM()
         {
             m_pIo->m_pPaM->GetPoint()->Assign(nSttNd);
         }
-        while (m_pIo->m_pPaM->GetPointNode().GetNodeType() != SwNodeType::Text && ++nSttNd < nEndNd);
+        while (!m_pIo->m_pPaM->GetPointNode().IsTextNode() && ++nSttNd < nEndNd);
 
         m_pIo->m_pPaM->GetPoint()->SetContent(0);
         m_pIo->m_rDoc.SetTextFormatColl(*m_pIo->m_pPaM, const_cast<SwTextFormatColl*>(m_pIo->m_pDfltTextFormatColl));
@@ -2946,7 +2946,7 @@ void WW8TabDesc::SetPamInCell(short nWwCol, bool bPam)
         {
             m_pIo->m_pPaM->GetPoint()->Assign(nSttNd);
         }
-        while (m_pIo->m_pPaM->GetPointNode().GetNodeType() != SwNodeType::Text && ++nSttNd < nEndNd);
+        while (!m_pIo->m_pPaM->GetPointNode().IsTextNode() && ++nSttNd < nEndNd);
         m_pIo->m_pPaM->GetPoint()->SetContent(0);
         // Precautionally set now, otherwise the style is not set for cells
         // that are inserted for margin balancing.

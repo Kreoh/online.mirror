@@ -24,7 +24,7 @@
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/packages/XPackageEncryption.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <unotools/ucbstreamhelper.hxx>
 #include <unotools/streamwrap.hxx>
 #include <unotools/securityoptions.hxx>
@@ -58,6 +58,7 @@
 #include <frmatr.hxx>
 #include <rootfrm.hxx>
 #include <doc.hxx>
+#include <charformats.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <IDocumentStylePoolAccess.hxx>
@@ -123,6 +124,7 @@
 #include <fmtanchr.hxx>
 
 using namespace css;
+using namespace ::cpo;
 using namespace sw::util;
 using namespace sw::types;
 
@@ -2394,7 +2396,8 @@ void WW8AttributeOutput::TablePositioning(const SwFrameFormat* pFlyFormat)
             nTDxaAbs = -8;
             break;
         default:
-            nTDxaAbs = pFlyFormat->GetHoriOrient().GetPos();
+            nTDxaAbs = MakeSafePositioningValue(
+                pFlyFormat->GetHoriOrient().getPosition().as_twip<SwTwips>());
             break;
     }
     m_rWW8Export.InsUInt16(NS_sprm::TDxaAbs::val);
@@ -2417,7 +2420,8 @@ void WW8AttributeOutput::TablePositioning(const SwFrameFormat* pFlyFormat)
             nTDyaAbs = -12;
             break;
         default:
-            nTDyaAbs = pFlyFormat->GetVertOrient().GetPos();
+            nTDyaAbs = MakeSafePositioningValue(
+                pFlyFormat->GetVertOrient().getPosition().as_twip<SwTwips>());
             break;
     }
     m_rWW8Export.InsUInt16(NS_sprm::TDyaAbs::val);
@@ -2507,7 +2511,7 @@ void WW8AttributeOutput::TableDefinition(const ww8::WW8TableNodeInfoInner::Point
                 break;
 
             default:
-                nTableOffset = rHori.GetPos();
+                nTableOffset = rHori.getPosition().as_twip<SwTwips>();
                 const SvxLRSpaceItem& rLRSp = pFormat->GetLRSpace();
                 nTableOffset += rLRSp.ResolveLeft({});
 
@@ -3273,6 +3277,11 @@ void WW8Export::StoreDoc1()
     }
     delete[] pLastSprms;
 
+    // The CHPX bin table must cover the same text as the PAPX one, including the final
+    // paragraph mark. A paragraph mark is normally covered only by the CHPX entry of
+    // the next run, so the last one would be left out, and get dropped by Word
+    m_pChpPlc->AppendFkpEntry(Strm().Tell());
+
     m_pSepx->Finish( Fc2Cp( Strm().Tell() ));// Text + Footnote + HdFt as section end
     m_pMagicTable->Finish( Fc2Cp( Strm().Tell() ),0);
 
@@ -3811,7 +3820,7 @@ ErrCodeMsg SwWW8Writer::WriteStorage()
 
             if (sCryptoType.getLength())
             {
-                const uno::Reference<uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
+                const uno::Reference<cpo::uno::XComponentContext>& xComponentContext(comphelper::getProcessComponentContext());
                 cpo::uno::Sequence<cpo::uno::Any> aArguments{
                     cpo::uno::Any(beans::NamedValue(u"Binary"_ustr, cpo::uno::Any(true))) };
                 xPackageEncryption.set(
@@ -4065,18 +4074,18 @@ SwWW8Writer::~SwWW8Writer()
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT sal_uInt32 SaveOrDelMSVBAStorage_ww8( SfxObjectShell& rDoc, SotStorage& rStor, bool bSaveInto, const OUString& rStorageName )
+sal_uInt32 SaveOrDelMSVBAStorage_ww8( SfxObjectShell& rDoc, SotStorage& rStor, bool bSaveInto, const OUString& rStorageName )
 {
     SvxImportMSVBasic aTmp( rDoc, rStor );
     return sal_uInt32(aTmp.SaveOrDelMSVBAStorage( bSaveInto, rStorageName ));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void ExportDOC( std::u16string_view rFltName, const OUString& rBaseURL, WriterRef& xRet )
+void ExportDOC( std::u16string_view rFltName, const OUString& rBaseURL, WriterRef& xRet )
 {
     xRet = new SwWW8Writer( rFltName, rBaseURL );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT sal_uInt32 GetSaveWarningOfMSVBAStorage_ww8(  SfxObjectShell &rDocS )
+sal_uInt32 GetSaveWarningOfMSVBAStorage_ww8(  SfxObjectShell &rDocS )
 {
     return sal_uInt32(SvxImportMSVBasic::GetSaveWarningOfMSVBAStorage( rDocS ));
 }

@@ -42,7 +42,7 @@
 #include <vector>
 
 namespace com::sun::star::resource { class XStringResourceResolver; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 class StdTabController;
 
 typedef UnoControlModel     ControlModel_Base;
@@ -63,14 +63,14 @@ public:
     enum ChildOperation { Insert = 0, Remove };
     // would like to make this typedef private, too, but the Forte 7 compiler does have
     // problems with this...
-    typedef ::std::pair< css::uno::Reference< css::awt::XControlModel >, OUString >
+    typedef ::std::pair< cpo::uno::Reference< css::awt::XControlModel >, OUString >
                                                         UnoControlModelHolder;
 private:
     typedef ::std::vector< UnoControlModelHolder >        UnoControlModelHolderVector;
 
 public:
     // for grouping control models (XTabControllerModel::getGroupXXX)
-    typedef ::std::vector< css::uno::Reference< css::awt::XControlModel > >
+    typedef ::std::vector< cpo::uno::Reference< css::awt::XControlModel > >
                                                         ModelGroup;
     typedef ::std::vector< ModelGroup >                 AllGroups;
 
@@ -99,83 +99,83 @@ protected:
     /// @throws css::lang::IllegalArgumentException
     /// @throws css::container::ElementExistException
     /// @throws css::lang::WrappedTargetException
-    /// @throws css::uno::RuntimeException
-    void updateUserFormChildren(  const css::uno::Reference< css::container::XNameContainer >& xAllChildren, const OUString& aName, ChildOperation Operation,  const css::uno::Reference< css::awt::XControlModel >& xTarget );
+    /// @throws cpo::uno::RuntimeException
+    void updateUserFormChildren(  const cpo::uno::Reference< css::container::XNameContainer >& xAllChildren, const OUString& aName, ChildOperation Operation,  const cpo::uno::Reference< css::awt::XControlModel >& xTarget );
 public:
-                        ControlModelContainerBase( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+                        ControlModelContainerBase( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
                         ControlModelContainerBase( const ControlModelContainerBase& rModel );
                         virtual ~ControlModelContainerBase() override;
 
     rtl::Reference<UnoControlModel> Clone() const override;
 
     // css::container::XContainer
-    void SAL_CALL addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
-    void SAL_CALL removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
 
     // css::container::XElementAccess
-    cpo::uno::Type SAL_CALL getElementType(  ) override;
-    bool SAL_CALL hasElements(  ) override;
+    cpo::uno::Type getElementType(  ) override;
+    bool hasElements(  ) override;
 
     // css::container::XNameContainer, XNameReplace, XNameAccess
-    void SAL_CALL replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
-    cpo::uno::Any SAL_CALL getByName( const OUString& aName ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
-    bool SAL_CALL hasByName( const OUString& aName ) override;
-    void SAL_CALL insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
-    void SAL_CALL removeByName( const OUString& Name ) override;
+    void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+    cpo::uno::Any getByName( const OUString& aName ) override;
+    cpo::uno::Sequence< OUString > getElementNames(  ) override;
+    bool hasByName( const OUString& aName ) override;
+    void insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+    void removeByName( const OUString& Name ) override;
 
     // css::beans::XMultiPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
 
     // css::lang::XMultiServiceFactory
-    css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier ) override;
-    css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
-    cpo::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames(  ) override;
+    cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
+    cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
+    cpo::uno::Sequence< OUString > getAvailableServiceNames(  ) override;
 
     // XComponent
-    void SAL_CALL dispose(  ) override;
+    void dispose(  ) override;
 
     // XTabControllerModel
-    virtual bool SAL_CALL getGroupControl(  ) override;
-    virtual void SAL_CALL setGroupControl( bool GroupControl ) override;
-    virtual void SAL_CALL setControlModels( const cpo::uno::Sequence< css::uno::Reference< css::awt::XControlModel > >& Controls ) override;
-    virtual cpo::uno::Sequence< css::uno::Reference< css::awt::XControlModel > > SAL_CALL getControlModels(  ) override;
-    virtual void SAL_CALL setGroup( const cpo::uno::Sequence< css::uno::Reference< css::awt::XControlModel > >& Group, const OUString& GroupName ) override;
-    virtual sal_Int32 SAL_CALL getGroupCount(  ) override;
-    virtual void SAL_CALL getGroup( sal_Int32 nGroup, cpo::uno::Sequence< css::uno::Reference< css::awt::XControlModel > >& Group, OUString& Name ) override;
-    virtual void SAL_CALL getGroupByName( const OUString& Name, cpo::uno::Sequence< css::uno::Reference< css::awt::XControlModel > >& Group ) override;
+    virtual bool getGroupControl(  ) override;
+    virtual void setGroupControl( bool GroupControl ) override;
+    virtual void setControlModels( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Controls ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > > getControlModels(  ) override;
+    virtual void setGroup( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Group, const OUString& GroupName ) override;
+    virtual sal_Int32 getGroupCount(  ) override;
+    virtual void getGroup( sal_Int32 nGroup, cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Group, OUString& Name ) override;
+    virtual void getGroupByName( const OUString& Name, cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Group ) override;
 
     // XChangesNotifier
-    virtual void SAL_CALL addChangesListener( const css::uno::Reference< css::util::XChangesListener >& aListener ) override;
-    virtual void SAL_CALL removeChangesListener( const css::uno::Reference< css::util::XChangesListener >& aListener ) override;
+    virtual void addChangesListener( const cpo::uno::Reference< css::util::XChangesListener >& aListener ) override;
+    virtual void removeChangesListener( const cpo::uno::Reference< css::util::XChangesListener >& aListener ) override;
 
     // XPropertyChangeListener
-    virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& evt ) override;
+    virtual void propertyChange( const css::beans::PropertyChangeEvent& evt ) override;
 
     // XEventListener
     using comphelper::OPropertySetHelper::disposing;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& evt ) override;
+    virtual void disposing( const css::lang::EventObject& evt ) override;
 
     // XServiceInfo
     DECLIMPL_SERVICEINFO_DERIVED(ControlModelContainerBase, ControlModel_Base, u"toolkit.ControlModelContainerBase"_ustr )
 
     // XInitialization
-    virtual void SAL_CALL initialize (const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+    virtual void initialize (const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
 
     // css::awt::tab::XTabPageModel
-    virtual ::sal_Int16 SAL_CALL getTabPageID() override;
-    virtual bool SAL_CALL getEnabled() override;
-    virtual void SAL_CALL setEnabled( bool _enabled ) override;
-    virtual OUString SAL_CALL getTitle() override;
-    virtual void SAL_CALL setTitle( const OUString& _title ) override;
-    virtual OUString SAL_CALL getImageURL() override;
-    virtual void SAL_CALL setImageURL( const OUString& _imageurl ) override;
-    virtual OUString SAL_CALL getToolTip() override;
-    virtual void SAL_CALL setToolTip( const OUString& _tooltip ) override;
+    virtual ::sal_Int16 getTabPageID() override;
+    virtual bool getEnabled() override;
+    virtual void setEnabled( bool _enabled ) override;
+    virtual OUString getTitle() override;
+    virtual void setTitle( const OUString& _title ) override;
+    virtual OUString getImageURL() override;
+    virtual void setImageURL( const OUString& _imageurl ) override;
+    virtual OUString getToolTip() override;
+    virtual void setToolTip( const OUString& _tooltip ) override;
 
 protected:
-    void startControlListening( const css::uno::Reference< css::awt::XControlModel >& _rxChildModel );
-    void stopControlListening( const css::uno::Reference< css::awt::XControlModel >& _rxChildModel );
+    void startControlListening( const cpo::uno::Reference< css::awt::XControlModel >& _rxChildModel );
+    void stopControlListening( const cpo::uno::Reference< css::awt::XControlModel >& _rxChildModel );
 
     void implNotifyTabModelChange( const OUString& _rAccessor );
 
@@ -186,27 +186,27 @@ class ResourceListener final : public css::util::XModifyListener,
                          public ::cppu::OWeakObject
 {
     public:
-        ResourceListener( const css::uno::Reference< css::util::XModifyListener >& xListener );
+        ResourceListener( const cpo::uno::Reference< css::util::XModifyListener >& xListener );
         virtual ~ResourceListener() override;
 
-        void startListening( const css::uno::Reference< css::resource::XStringResourceResolver  >& rResource );
+        void startListening( const cpo::uno::Reference< css::resource::XStringResourceResolver  >& rResource );
         void stopListening();
 
         // XInterface
-        virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& aType ) override;
-        virtual void SAL_CALL acquire() noexcept override;
-        virtual void SAL_CALL release() noexcept override;
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
 
         // XModifyListener
-        virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) override;
+        virtual void modified( const css::lang::EventObject& aEvent ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
 
     private:
         std::mutex m_aMutex;
-        css::uno::Reference< css::resource::XStringResourceResolver > m_xResource;
-        css::uno::Reference< css::util::XModifyListener >             m_xListener;
+        cpo::uno::Reference< css::resource::XStringResourceResolver > m_xResource;
+        cpo::uno::Reference< css::util::XModifyListener >             m_xListener;
         bool                                                                                    m_bListening;
 };
 
@@ -219,15 +219,15 @@ typedef ::cppu::AggImplInheritanceHelper3   < UnoControlContainer
 class ControlContainerBase : public ControlContainer_IBase
 {
 protected:
-    css::uno::Reference< css::uno::XComponentContext >  m_xContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext >  m_xContext;
     bool                                                                        mbSizeModified;
     bool                                                                        mbPosModified;
     rtl::Reference< StdTabController >                mxTabController;
     rtl::Reference< ResourceListener > mxListener;
 
-    void        ImplInsertControl( css::uno::Reference< css::awt::XControlModel > const & rxModel, const OUString& rName );
-    void        ImplRemoveControl( css::uno::Reference< css::awt::XControlModel > const & rxModel );
-    virtual void        ImplSetPosSize( css::uno::Reference< css::awt::XControl >& rxCtrl );
+    void        ImplInsertControl( cpo::uno::Reference< css::awt::XControlModel > const & rxModel, const OUString& rName );
+    void        ImplRemoveControl( cpo::uno::Reference< css::awt::XControlModel > const & rxModel );
+    virtual void        ImplSetPosSize( cpo::uno::Reference< css::awt::XControl >& rxCtrl );
     void        ImplUpdateResourceResolver();
     void        ImplStartListingForResourceEvents();
 
@@ -237,35 +237,35 @@ protected:
 #endif
 
 public:
-    ControlContainerBase( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    ControlContainerBase( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     virtual ~ControlContainerBase() override;
 
     DECLIMPL_SERVICEINFO_DERIVED( ControlContainerBase, UnoControlBase, u"toolkit.ControlContainerBase"_ustr )
 
-    void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
-    void SAL_CALL dispose() override;
+    void disposing( const css::lang::EventObject& Source ) override;
+    void dispose() override;
 
-    void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& Toolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
+    void createPeer( const cpo::uno::Reference< css::awt::XToolkit >& Toolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
 
     // css::container::XContainerListener
-    void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
-    void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
-    void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
+    void elementInserted( const css::container::ContainerEvent& Event ) override;
+    void elementRemoved( const css::container::ContainerEvent& Event ) override;
+    void elementReplaced( const css::container::ContainerEvent& Event ) override;
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred( const css::util::ChangesEvent& Event ) override;
+    virtual void changesOccurred( const css::util::ChangesEvent& Event ) override;
 
     // css::awt::XControl
-    bool SAL_CALL setModel( const css::uno::Reference< css::awt::XControlModel >& Model ) override;
-    void SAL_CALL setDesignMode( bool bOn ) override;
+    bool setModel( const cpo::uno::Reference< css::awt::XControlModel >& Model ) override;
+    void setDesignMode( bool bOn ) override;
     // XModifyListener
     // Using a dummy/no-op implementation here, not sure if every container control needs
     // to implement this, certainly Dialog does, let's see about others
-    virtual void SAL_CALL modified( const css::lang::EventObject& ) override {}
+    virtual void modified( const css::lang::EventObject& ) override {}
 protected:
     virtual void ImplModelPropertiesChanged( const cpo::uno::Sequence< css::beans::PropertyChangeEvent >& rEvents ) override;
-    virtual void removingControl( const css::uno::Reference< css::awt::XControl >& _rxControl ) override;
-    virtual void addingControl( const css::uno::Reference< css::awt::XControl >& _rxControl ) override;
+    virtual void removingControl( const cpo::uno::Reference< css::awt::XControl >& _rxControl ) override;
+    virtual void addingControl( const cpo::uno::Reference< css::awt::XControl >& _rxControl ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -59,7 +59,7 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 
 		// initialize the model only once, remember updates from core
 		if (this.model.getSnapshot() === null)
-			this.model.fullUpdate(this.getFullJSON(this.HOME_TAB_ID));
+			this.model.fullUpdate(this.getFullJSON(this.getInitialTabId()));
 
 		this.map.on('notebookbar', this.onNotebookbar, this);
 	},
@@ -128,15 +128,6 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 				docLogo.style.backgroundImage = "url(" + window.logoURL + ")";
 			}
 		}
-
-		const isDarkMode = window.prefs.getBoolean('darkTheme');
-		if (!isDarkMode)
-			$('#invertbackground').hide();
-
-		if (!this.map.serverAuditDialog) {
-			this.hideItem('server-audit');
-			this.hideItem('help-serveraudit-break');
-		}
 	},
 
 	onRemove: function() {
@@ -148,6 +139,8 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			this.floatingNavIcon.classList.remove('hasnotebookbar');
 		$('.main-nav #document-header').remove();
 		this.clearNotebookbar();
+		$('.main-nav > #shareas').remove();
+		$('.notebookbar-options-section').remove();
 		this.setInitialized(false);
 		$(this.container).remove();
 		this.container = null;
@@ -232,6 +225,14 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 
 		this.builder.build(this.container, [this.model.getSnapshot()]);
 
+		// build() rebuilds the notebookbar DOM, so re-apply the imperative
+		// item visibility that create() sets up but cannot persist here.
+		this.onDarkModeToggleChange();
+		if (!this.map.serverAuditDialog) {
+			this.hideItem('server-audit');
+			this.hideItem('help-serveraudit-break');
+		}
+
 		if (this._showNotebookbar === false)
 			this.hideTabs();
 
@@ -261,6 +262,26 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		this._lastSelectedTabName = tabName;
 	},
 
+	getInitialTabId: function() {
+		var aiTabId = 'AIAssistant-tab-label';
+		var uiManager = this.map.uiManager;
+		var hasAITab = this.getTabs().some(function(tab) {
+			return tab && tab.id === aiTabId;
+		});
+
+		if (hasAITab && uiManager.shouldSelectAIAssistantTab() &&
+			uiManager.isTabVisible('AIAssistant'))
+			return aiTabId;
+
+		return this.HOME_TAB_ID;
+	},
+
+	selectTab: function(tabName) {
+		var tabElement = $('#' + tabName + '-tab-label');
+		if (!tabElement.hasClass('selected'))
+			tabElement.click();
+	},
+
 	isTabSelected: function(tabName) {
 		return this._lastSelectedTabName === tabName;
 	},
@@ -277,16 +298,27 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 
 	// Shared filter used by each doc-type notebookbar's getTabs/getTabsJSON
 	// to drop the Extensions entries.  The tab strip (getTabs labels) and the
+	// True when some extension has anything for the Extensions tab: a sidebar panel to toggle,
+	// or commands it asked to have offered under its own name.
+	_hasExtensionsTabContent: function() {
+		var exts = app.map._extensions || {};
+		return Object.keys(exts).some(function(id) {
+			var manifest = exts[id].options.manifest;
+			if (manifest.entry) return true;
+			var placement = manifest.contributes && manifest.contributes.extensionsMenu;
+			return !!(placement && placement.length);
+		});
+	},
+
 	// tab pages (getTabsJSON) are zipped by index in NotebookbarBuilder, so the
 	// label and its page must be dropped together or every following tab shifts
 	// by one.  Drop the Extensions label when extension support is disabled by
-	// runtime config, or when no extension has a sidebar panel; the matching
-	// page is a null from getExtensionsTab in those cases and is dropped by
-	// the !t guard.
+	// runtime config, or when no extension has anything to put there; the
+	// matching page is a null from getExtensionsTab in those cases and is
+	// dropped by the !t guard.
 	_filterExtensionsTab: function(arr) {
-		var exts = app.map._extensions || {};
-		var hideExtensionsTab = !window.enableExperimentalFeatures || !Object.keys(exts).some(
-			function(id) { return !!exts[id].options.manifest.entry; });
+		var hideExtensionsTab = !window.enableExperimentalFeatures
+			|| !this._hasExtensionsTabContent();
 		return arr.filter(function(t) {
 			if (!t) return false;
 			if (t.name === 'Extensions' && hideExtensionsTab)
@@ -297,40 +329,80 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 
 	// Shared entry used by each doc-type notebookbar's getTabsJSON to build
 	// the "Extensions" tab: one bigcustomtoolitem toggle per loaded manifest
-	// that has a sidebar panel - a commands-only extension (no `entry`) has
-	// nothing for this toggle to open, and reaches the notebookbar solely
+	// that has a sidebar panel, and, only for a GAS add-on carrying
+	// contributes.commands, a menubutton alongside it listing those commands
+	// (mirroring how Google Docs surfaces add-on entries under Extensions >
+	// <AddonName>).  A commands-only native extension reaches the notebookbar
 	// through its own contributed tab(s), see getContributedNotebookbarTabs
 	// below.  Click ids start with "extension-toggle-" so
-	// docdispatcher.dispatch routes them to ext.toggle().  Call
-	// notebookbar.refresh() after loadExtensions resolves to rebuild this
-	// tab against the real extension list.
+	// docdispatcher.dispatch routes them to ext.toggle(); the per-command
+	// actions come back as "ext:<id>:<commandId>" and reach ext.invokeCommand.
+	// Call notebookbar.refresh() after loadExtensions resolves to rebuild
+	// this tab against the real extension list.
 	getExtensionsTab: function() {
 		var exts = app.map._extensions || {};
-		var ids = Object.keys(exts)
-			.filter(function(id) { return !!exts[id].options.manifest.entry; })
-			.sort();
-		// Drop the Extensions tab entirely when no extension has a sidebar
-		// panel: returning null here lets _filterExtensionsTab strip it.
-		// refresh() (called once Control.Extension.loadExtensions resolves)
-		// rebuilds the notebookbar, so the tab appears as soon as discovery
-		// populates app.map._extensions.
-		if (ids.length === 0)
-			return null;
+		var ids = Object.keys(exts).sort();
 		var content = [];
 		for (var i = 0; i < ids.length; i++) {
 			var id = ids[i];
 			var manifest = exts[id].options.manifest;
 			var baseUrl = exts[id].options.baseUrl;
-			content.push({
-				'id': 'extension-toggle-' + id,
-				'type': 'bigcustomtoolitem',
-				'text': manifest.name,
-				'icon': manifest.icon
-					? baseUrl + manifest.icon
-					: app.LOUtil.getURL('images/extension-fallback.svg'),
-				'command': 'extension-toggle-' + id,
+			var icon = manifest.icon
+				? baseUrl + manifest.icon
+				: app.LOUtil.getURL('images/extension-fallback.svg');
+			if (manifest.entry) {
+				content.push({
+					'id': 'extension-toggle-' + id,
+					'type': 'bigcustomtoolitem',
+					'text': manifest.name,
+					'icon': icon,
+					'command': 'extension-toggle-' + id,
+				});
+			}
+			// Commands the extension asked to have offered under its own name arrive as one
+			// dropdown per extension.  Ids are built from the extension and command ids
+			// rather than a counter, so a rebuild leaves them where they were.  A menubutton
+			// id carries its menu's id behind a colon, and an id of two dash-separated parts
+			// reads the same way, so a menubutton's own id holds neither character:
+			var placement = manifest.contributes && manifest.contributes.extensionsMenu;
+			if (!placement || !placement.length)
+				continue;
+			var commands = manifest.contributes.commands || [];
+			var menu = [];
+			placement.forEach(function(item) {
+				if (item.separator)
+					return;
+				var command = commands.filter(function(c) { return c.id === item.command; })[0];
+				if (!command) {
+					console.warn(
+						'extension ' + id + ': contributes.extensionsMenu names unknown '
+						+ 'command "' + item.command + '"');
+					return;
+				}
+				menu.push({
+					'id': 'ext:' + id + ':extentry:' + item.command,
+					'text': command.title,
+					'icon': command.icon ? baseUrl + command.icon : undefined,
+					'action': 'ext:' + id + ':' + item.command,
+				});
 			});
+			if (menu.length) {
+				content.push({
+					'id': 'extmenu_' + id.replace(/[.-]/g, '_'),
+					'type': 'menubutton',
+					'text': manifest.name,
+					'icon': icon,
+					'menu': menu,
+				});
+			}
 		}
+		// Drop the Extensions tab entirely when no extension offers anything here:
+		// returning null lets _filterExtensionsTab strip it, and both sides read the same
+		// predicate because the label strip and the pages are zipped by index.  refresh()
+		// (called once Control.Extension.loadExtensions resolves) rebuilds the notebookbar,
+		// so the tab appears as soon as discovery populates app.map._extensions.
+		if (!this._hasExtensionsTabContent())
+			return null;
 		//HACK: Control.JSDialogBuilder.build's "hasManyChildren && isContainer" path only
 		// emits the <div id="Extensions-container"> wrapper when the inner overflowmanager
 		// has more than one child; so pin a trailing dummy spacer so the 1-extension case
@@ -393,7 +465,8 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 				};
 			}).filter(function(entry) { return !!entry; });
 			return {
-				'id': 'ext:' + extId + ':menu:' + (this._nextContributedId++),
+				'id': 'extmenu_' + extId.replace(/[.-]/g, '_') + '_'
+					+ (this._nextContributedId++),
 				'type': 'menubutton',
 				'text': item.title,
 				'icon': item.icon ? baseUrl + item.icon : undefined,
@@ -514,7 +587,7 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	// the page array from its getTabsJSON()) into arr, positioned by matching
 	// insertBefore/insertAfter against an existing entry's `name` (both label objects
 	// and, since getTabPage now tags its return value with `name` too, tabpage objects
-	// carry one), defaulting to the end of the ribbon when neither is given or the
+	// carry one), defaulting to the end of the notebookbar when neither is given or the
 	// named anchor isn't found.  buildEntry turns one descriptor into whichever shape
 	// this particular array needs.  The caller decides which of the two tab-list
 	// getters to call - taking the already-built list as a parameter, rather than this
@@ -525,9 +598,10 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	// `validate`, when true, warns about the manifest-authoring mistakes this function
 	// can actually detect - a contributed tab name colliding with an existing tab, both
 	// insertBefore and insertAfter set on the same tab (insertBefore silently wins), or
-	// either one naming a tab that doesn't exist (silently falls back to the end of the
-	// ribbon).  Pass true from exactly one of the two calls per doc type (getTabsJSON's)
-	// so a misconfigured tab is reported once per rebuild, not twice.
+	// either one naming a tab that doesn't exist (silently falls back to the end
+	// of the notebookbar).  Pass true from exactly one of the two calls per doc
+	// type (getTabsJSON's) so a misconfigured tab is reported once per rebuild,
+	// not twice.
 	_insertContributedNotebookbarTabs: function(arr, tabs, buildEntry, validate) {
 		var builtInNames = null;
 		if (validate) {
@@ -572,6 +646,171 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		return arr;
 	},
 
+	_getFillColorButton: function(opts) {
+		return {
+			'id': opts.prefix + '-fillcolor:ColorPickerMenu',
+			'type': 'bigtoolitem',
+			'text': _UNO('.uno:FillColor'),
+			'command': '.uno:FillColor',
+			'disabledTooltip': opts.fillColorNeedsTransparency
+				? _('Fill Color (Transparent Pictures Only)')
+				: undefined,
+			'accessibility': { focusBack: true, combination: 'FC', de: null }
+		};
+	},
+
+	_getLineSection: function(opts) {
+		var p = opts.prefix;
+		return {
+			'type': 'overflowgroup',
+			'id': opts.panelId,
+			'name': _('Line'),
+			'accessibility': { focusBack: false, combination: opts.combination, de: null },
+			'more': {
+				'command': '.uno:FormatLine',
+				'accessibility': { focusBack: true, combination: 'LM', de: null }
+			},
+			'children': [
+				{
+					'id': p + '-linecolor:ColorPickerMenu',
+					'type': 'bigtoolitem',
+					'text': _UNO('.uno:XLineColor'),
+					'command': '.uno:XLineColor',
+					'accessibility': { focusBack: true, combination: 'LC', de: null }
+				},
+				{
+					'type': 'container',
+					'children': [
+						{
+							'type': 'toolbox',
+							'id': opts.weldedToolbarId,
+							'children': [
+								{
+									'id': p + '-linestyle',
+									'type': 'toolitem',
+									'noLabel': true,
+									'dropdown': true,
+									'text': _UNO('.uno:XLineStyle', 'text'),
+									'command': '.uno:XLineStyle',
+									'accessibility': { focusBack: true, combination: 'LS', de: null }
+								}
+							]
+						},
+						{
+							'type': 'toolbox',
+							'id': p + '-linewidth-box',
+							'children': [
+								{
+									'id': p + '-linewidth:LineWidthMenu',
+									'type': 'menubutton',
+									'noLabel': true,
+									'inlineLabel': false,
+									'command': '.uno:LineWidth',
+									'icon': 'lc_selectwidth.svg',
+									'text': _('Line Width'),
+									'accessibility': { focusBack: true, combination: 'LW', de: null },
+									'menu': [
+										{ text: '0.5 pt', class: 'ui-linewidth-18', uno: 'LineWidth?LineWidth:long=18' },
+										{ text: '0.8 pt', class: 'ui-linewidth-28', uno: 'LineWidth?LineWidth:long=28' },
+										{ text: '1.0 pt', class: 'ui-linewidth-35', uno: 'LineWidth?LineWidth:long=35' },
+										{ text: '1.5 pt', class: 'ui-linewidth-53', uno: 'LineWidth?LineWidth:long=53' },
+										{ text: '2.3 pt', class: 'ui-linewidth-81', uno: 'LineWidth?LineWidth:long=81' },
+										{ text: '3.0 pt', class: 'ui-linewidth-106', uno: 'LineWidth?LineWidth:long=106' },
+										{ text: '4.5 pt', class: 'ui-linewidth-159', uno: 'LineWidth?LineWidth:long=159' },
+										{ text: '6.0 pt', class: 'ui-linewidth-212', uno: 'LineWidth?LineWidth:long=212' },
+										{
+											id: p + '-linewidth-custom',
+											type: 'json',
+											content: {
+												id: p + '-linewidth-custom',
+												type: 'linewidthcustom'
+											}
+										}
+									]
+								}
+							]
+						}
+					],
+					'vertical': 'true'
+				},
+				{
+					'id': p + '-line-fields',
+					'type': 'grid',
+					'children': [
+						{
+							'id': p + '-translabel',
+							'type': 'fixedtext',
+							'text': _('Transparency:'),
+							'top': '0',
+							'left': '0'
+						},
+						{
+							'id': p + '-linetransparency',
+							'type': 'linetransparency',
+							'text': '0%',
+							'min': 0,
+							'max': 100,
+							'step': 5,
+							'labelledBy': p + '-translabel',
+							'accessibility': { focusBack: true, combination: 'LT', de: null },
+							'top': '0',
+							'left': '1'
+						},
+						{
+							'id': p + '-thicknesslabel',
+							'type': 'fixedtext',
+							'text': _('Thickness:'),
+							'top': '1',
+							'left': '0'
+						},
+						{
+							'id': p + '-thickness',
+							'type': 'linewidth',
+							'min': 0,
+							'max': 50,
+							'step': 0.1,
+							'digits': 1,
+							'unit': 'pt',
+							'labelledBy': p + '-thicknesslabel',
+							'accessibility': { focusBack: true, combination: 'TK', de: null },
+							'top': '1',
+							'left': '1'
+						}
+					]
+				}
+			]
+		};
+	},
+
+	getPictureFillColorButton: function() {
+		return this._getFillColorButton({
+			prefix: 'picture',
+			fillColorNeedsTransparency: true
+		});
+	},
+
+	getPictureLineSection: function() {
+		return this._getLineSection({
+			prefix: 'picture',
+			panelId: 'picture-line-panel',
+			weldedToolbarId: 'PictureLineWeldedToolbar',
+			combination: 'PL'
+		});
+	},
+
+	getShapeFillColorButton: function() {
+		return this._getFillColorButton({ prefix: 'shape' });
+	},
+
+	getShapeLineSection: function() {
+		return this._getLineSection({
+			prefix: 'shape',
+			panelId: 'shape-line-panel',
+			weldedToolbarId: 'LineWeldedToolbar',
+			combination: 'PR'
+		});
+	},
+
 	// Rebuild the notebookbar from a fresh tabsJSON.  Used by
 	// ServerConnectionService once extensions have been discovered so the
 	// Extensions tab picks them up; preserves whichever tab the user has
@@ -579,13 +818,13 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	refresh: function() {
 		var selected = this._lastSelectedTabName
 			? this._lastSelectedTabName + '-tab-label'
-			: this.HOME_TAB_ID;
-		this.model.fullUpdate(this.getFullJSON(selected));
+			: this.getInitialTabId();
+		this.model.fullUpdateKeepingEntries(this.getFullJSON(selected));
 		if (this.container) this.loadTab();
 	},
 
 	getShortcutsBarData: function() {
-		var hasSave = !this._map['wopi'].HideSaveOption;
+		var hasSave = !this._map['wopi'].HideSaveOption && !this._map.isReadOnlyMode();
 		return [
 			{
 				'id': 'shortcutstoolbox',
@@ -788,8 +1027,7 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		var contextTab = null;
 		var defaultTab = null;
 		let alreadySelected = null;
-		// Currently selected tab name, part of the element's ID.
-		let currentlySelectedTabName = null;
+		let currentlySelectedTab = null;
 
 		if (requestedContext)
 			if (requestedContext.includes('MasterPage'))
@@ -801,7 +1039,7 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		for (var tab in tabs) {
 			var tabElement = $('#' + tabs[tab].name + '-tab-label');
 			if (tabElement.hasClass('selected')) {
-				currentlySelectedTabName = tabs[tab].name;
+				currentlySelectedTab = tabs[tab];
 			}
 			if (tabs[tab].context) {
 				var contexts = tabs[tab].context.split('|');
@@ -856,6 +1094,12 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			return;
 		}
 
+		if (currentlySelectedTab && currentlySelectedTab.keepSelected) {
+			this.updateButtonVisibilityForContext(
+				requestedContext, currentlySelectedTab.id);
+			return;
+		}
+
 		const docType = this._map.getDocType();
 
 		if (docType === 'spreadsheet' && this.isTabSelected('Formulas')) {
@@ -874,7 +1118,8 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			// Switch to the tab of the context, unless we currently show the review tab
 			// for text documents, where jumping to the next change would possibly
 			// switch to the Home or Table tabs, which is not wanted.
-			if ((docType !== 'text' || currentlySelectedTabName !== 'Review') &&
+			if ((docType !== 'text' ||
+				(currentlySelectedTab && currentlySelectedTab.name) !== 'Review') &&
 				!inPlaceEditTransition) {
 				contextTab.click();
 			}
@@ -897,7 +1142,7 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		const detail = event.detail;
 		if (detail.appId !== detail.oldAppId) {
 			var childrenArray = undefined; // Use buttons provided by specific Control.Notebookbar implementation by default
-			if (detail.appId === 'com.sun.star.formula.FormulaProperties') {
+			if (detail.appId === 'com.sun.star.formula.FormulaProperties' && this.map.getDocType() !== 'text') {
 				childrenArray = [
 					{
 						'type': 'toolitem',
@@ -934,12 +1179,10 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	},
 
 	onDarkModeToggleChange: function() {
-		if (window.prefs.getBoolean('darkTheme')) {
-			$('#invertbackground').show();
-		}
-		else {
-			$('#invertbackground').hide();
-		}
+		if (window.prefs.getBoolean('darkTheme'))
+			this.showItem('invertbackground');
+		else
+			this.hideItem('invertbackground');
 	},
 
 	onShowAnnotationsChange: function(e) {
@@ -958,11 +1201,13 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	},
 
 	onAccessibilityToggleChange: function() {
-		if (window.prefs.getBoolean('accessibilityState')) {
+		const on = window.prefs.getBoolean('accessibilityState');
+		if (on) {
 			$('#togglea11ystate').addClass('selected');
 		} else {
 			$('#togglea11ystate').removeClass('selected');
 		}
+		$('#togglea11ystate-button').attr('aria-pressed', on);
 		if (this._map && this._map._lockAccessibilityOn) {
 			$('#togglea11ystate').addClass('disabled');
 			$('#togglea11ystate').attr('disabled', true);

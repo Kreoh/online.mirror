@@ -25,6 +25,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /**
  * FormFields are inline text objects that are only found in MS Word.
@@ -33,7 +34,7 @@ using namespace ::com::sun::star;
  * There are three specific kinds of FormFields: CheckBox, DropDown, and TextInput.
  */
 SwVbaFormField::SwVbaFormField(const uno::Reference<ooo::vba::XHelperInterface>& rParent,
-                               const uno::Reference<uno::XComponentContext>& rContext,
+                               const uno::Reference<cpo::uno::XComponentContext>& rContext,
                                const rtl::Reference<SwXTextDocument>& xTextDocument,
                                sw::mark::Fieldmark& rFormField)
     : SwVbaFormField_BASE(rParent, rContext)

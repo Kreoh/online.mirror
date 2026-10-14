@@ -1,0 +1,715 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Office contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <swmodeltestbase.hxx>
+
+#include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include <basegfx/range/b2drectangle.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <tools/stream.hxx>
+#include <vcl/filter/PDFiumLibrary.hxx>
+#include <vcl/filter/pdfdocument.hxx>
+
+namespace
+{
+/// Covers sw/source/core/text/EnhancedPDFExportHelper.cxx fixes.
+class Test : public SwModelTestBase
+{
+public:
+    Test()
+        : SwModelTestBase(u"/sw/qa/core/text/data/"_ustr)
+    {
+    }
+};
+
+// the text an element's own marked content holds, excluding any nested element's
+OUString lcl_GetOwnText(vcl::pdf::PDFiumStructureElement& rElement,
+                        const std::unordered_map<int, OUString>& rTexts)
+{
+    OUString aText;
+    for (int i = 0; i < rElement.getNumberOfChildren(); ++i)
+    {
+        if (const int nMarkedContentID = rElement.getChildMarkedContentID(i); nMarkedContentID >= 0)
+        {
+            const auto it = rTexts.find(nMarkedContentID);
+            if (it != rTexts.end())
+                aText += it->second;
+        }
+    }
+    return aText.trim();
+}
+
+// every element holding text or a description, in document order, with the language it
+// specifies - one specifying none is listed without a language, and inherits its parent's
+OUString lcl_CollectLanguages(vcl::pdf::PDFiumStructureElement& rElement,
+                              const std::unordered_map<int, OUString>& rTexts)
+{
+    OUString aLanguages;
+    OUString aLabel(lcl_GetOwnText(rElement, rTexts));
+    if (aLabel.isEmpty())
+    {
+        // a frame holds no text of its own, so its description identifies it
+        aLabel = rElement.getAltText();
+    }
+    if (!aLabel.isEmpty())
+    {
+        const OUString aLanguage(rElement.getLang());
+        aLanguages = rElement.getType() + (aLanguage.isEmpty() ? u""_ustr : " " + aLanguage) + ": "
+                     + aLabel + "\n";
+    }
+
+    for (int i = 0; i < rElement.getNumberOfChildren(); ++i)
+    {
+        if (const auto pChild = rElement.getChild(i))
+            aLanguages += lcl_CollectLanguages(*pChild, rTexts);
+    }
+    return aLanguages;
+}
+
+// the kids of every Ruby, in the order they are emitted, each with the text it covers
+OUString lcl_CollectRubies(vcl::pdf::PDFiumStructureElement& rElement,
+                           const std::unordered_map<int, OUString>& rTexts)
+{
+    OUString aRubies;
+    if (rElement.getType() == "Ruby")
+    {
+        for (int i = 0; i < rElement.getNumberOfChildren(); ++i)
+        {
+            if (const auto pKid = rElement.getChild(i))
+                aRubies += pKid->getType() + ": " + lcl_GetOwnText(*pKid, rTexts) + "\n";
+        }
+    }
+    for (int i = 0; i < rElement.getNumberOfChildren(); ++i)
+    {
+        if (const auto pChild = rElement.getChild(i))
+            aRubies += lcl_CollectRubies(*pChild, rTexts);
+    }
+    return aRubies;
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf171022)
+{
+    createSwDoc("structure-destinations.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true),
+                                    comphelper::makePropertyValue(u"SelectPdfVersion"_ustr,
+                                                                  sal_Int32(20)) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // the outline item, the footnote's two links, the shape's link and the citation's
+    std::vector<OString> aOutlineTypes;
+    std::vector<OString> aLinkTypes;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        auto pAction = dynamic_cast<vcl::filter::PDFDictionaryElement*>(pObject->Lookup("A"_ostr));
+        if (!pAction)
+            continue;
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pAction->LookupElement("S"_ostr));
+        if (!pType || pType->GetValue() != "GoTo")
+            continue;
+        // ISO 14289-2 8.8: the destination inside the document is a structure destination, so
+        // it names the element and not only the page. veraPDF passes a structure destination
+        // that points at nothing, so check what it points at.
+        auto pPage = dynamic_cast<vcl::filter::PDFArrayElement*>(pAction->LookupElement("D"_ostr));
+        auto pStructure
+            = dynamic_cast<vcl::filter::PDFArrayElement*>(pAction->LookupElement("SD"_ostr));
+        CPPUNIT_ASSERT(pPage);
+        CPPUNIT_ASSERT(pStructure);
+        CPPUNIT_ASSERT(!pPage->GetElements().empty());
+        CPPUNIT_ASSERT(!pStructure->GetElements().empty());
+
+        auto pPageRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pPage->GetElements()[0]);
+        auto pStructureRef
+            = dynamic_cast<vcl::filter::PDFReferenceElement*>(pStructure->GetElements()[0]);
+        CPPUNIT_ASSERT(pPageRef);
+        CPPUNIT_ASSERT(pStructureRef);
+
+        CPPUNIT_ASSERT(pPageRef->LookupObject());
+        CPPUNIT_ASSERT(pStructureRef->LookupObject());
+        auto pPageType = dynamic_cast<vcl::filter::PDFNameElement*>(
+            pPageRef->LookupObject()->Lookup("Type"_ostr));
+        auto pStructureType = dynamic_cast<vcl::filter::PDFNameElement*>(
+            pStructureRef->LookupObject()->Lookup("Type"_ostr));
+        CPPUNIT_ASSERT(pPageType);
+        CPPUNIT_ASSERT(pStructureType);
+        CPPUNIT_ASSERT_EQUAL("Page"_ostr, pPageType->GetValue());
+        CPPUNIT_ASSERT_EQUAL("StructElem"_ostr, pStructureType->GetValue());
+
+        // which element it is, not merely that it is one: a jump that leaves the cursor behind
+        // names the paragraph the link sits in, and that reads as a plausible structure
+        // destination to a validator
+        auto pStructureS = dynamic_cast<vcl::filter::PDFNameElement*>(
+            pStructureRef->LookupObject()->Lookup("S"_ostr));
+        CPPUNIT_ASSERT(pStructureS);
+        // an outline item has a Title, a link annotation does not
+        if (pObject->Lookup("Title"_ostr))
+            aOutlineTypes.push_back(pStructureS->GetValue());
+        else
+            aLinkTypes.push_back(pStructureS->GetValue());
+    }
+
+    // the outline item names the heading it was made from
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aOutlineTypes.size());
+    CPPUNIT_ASSERT_EQUAL("H1"_ostr, aOutlineTypes[0]);
+
+    // the shape's bookmark sits at the document's first position on purpose: the cursor is
+    // already there, and nothing moves
+    std::sort(aLinkTypes.begin(), aLinkTypes.end());
+    CPPUNIT_ASSERT_EQUAL(size_t(4), aLinkTypes.size());
+    CPPUNIT_ASSERT_EQUAL("Bibliography 1"_ostr, aLinkTypes[0]);
+    CPPUNIT_ASSERT_EQUAL("Footnote"_ostr, aLinkTypes[1]);
+    CPPUNIT_ASSERT_EQUAL("H1"_ostr, aLinkTypes[2]);
+    CPPUNIT_ASSERT_EQUAL("Standard"_ostr, aLinkTypes[3]);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testOutlineItemAtDocumentStart)
+{
+    // a heading in the first paragraph, where the cursor stands before any jump
+    createSwDoc();
+    cpo::uno::Reference<css::text::XTextRange> xParagraph = getParagraph(1);
+    xParagraph->setString(u"Heading"_ustr);
+    cpo::uno::Reference<css::beans::XPropertySet> xProperties(xParagraph, cpo::uno::UNO_QUERY);
+    xProperties->setPropertyValue(u"ParaStyleName"_ustr, cpo::uno::Any(u"Heading 1"_ustr));
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true),
+                                    comphelper::makePropertyValue(u"SelectPdfVersion"_ustr,
+                                                                  sal_Int32(20)) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    std::vector<OString> aOutlineTypes;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+        if (!pObject->Lookup("Title"_ostr))
+            continue;
+        // Without the fix this item had a plain /Dest, which fails ISO 14289-2 8.8
+        auto pAction = dynamic_cast<vcl::filter::PDFDictionaryElement*>(pObject->Lookup("A"_ostr));
+        CPPUNIT_ASSERT(pAction);
+        auto pStructure
+            = dynamic_cast<vcl::filter::PDFArrayElement*>(pAction->LookupElement("SD"_ostr));
+        CPPUNIT_ASSERT(pStructure);
+        CPPUNIT_ASSERT(!pStructure->GetElements().empty());
+        auto pStructureRef
+            = dynamic_cast<vcl::filter::PDFReferenceElement*>(pStructure->GetElements()[0]);
+        CPPUNIT_ASSERT(pStructureRef);
+        CPPUNIT_ASSERT(pStructureRef->LookupObject());
+        auto pStructureS = dynamic_cast<vcl::filter::PDFNameElement*>(
+            pStructureRef->LookupObject()->Lookup("S"_ostr));
+        CPPUNIT_ASSERT(pStructureS);
+        aOutlineTypes.push_back(pStructureS->GetValue());
+    }
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aOutlineTypes.size());
+    CPPUNIT_ASSERT_EQUAL("H1"_ostr, aOutlineTypes[0]);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFootnoteNoteType)
+{
+    createSwDoc("footnote-tag.fodt");
+
+    // the type of the one element a footnote frame opens
+    const auto aFootnoteType = [](vcl::filter::PDFDocument& rDocument) -> OString {
+        for (auto* pObject : rDocument.GetObjects())
+        {
+            auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+            if (pType && (pType->GetValue() == "Note" || pType->GetValue() == "FENote"))
+                return pType->GetValue();
+        }
+        return OString();
+    };
+
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(
+             u"FilterData"_ustr,
+             cpo::uno::Sequence{
+                 comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true),
+                 comphelper::makePropertyValue(u"SelectPdfVersion"_ustr, sal_Int32(20)) }) });
+
+    vcl::filter::PDFDocument aPDF20;
+    CPPUNIT_ASSERT(aPDF20.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // Without the fix this was Note, which ISO 14289-2 8.2.5.14 takes only where a role map
+    // sends it to the PDF 2.0 namespace
+    CPPUNIT_ASSERT_EQUAL("FENote"_ostr, aFootnoteType(aPDF20));
+
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(
+             u"FilterData"_ustr,
+             cpo::uno::Sequence{
+                 comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) }) });
+
+    vcl::filter::PDFDocument aPDF17;
+    maTempFile.CloseStream();
+    CPPUNIT_ASSERT(aPDF17.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // the only footnote type ISO 32000-1 has, FENote being a PDF 2.0 addition
+    CPPUNIT_ASSERT_EQUAL("Note"_ostr, aFootnoteType(aPDF17));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTOCItemRef)
+{
+    createSwDoc("toc-structure-ref.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true),
+                                    comphelper::makePropertyValue(u"SelectPdfVersion"_ustr,
+                                                                  sal_Int32(20)) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // Without the fix a TOC item had no Ref at all, and ISO 14289-2 8.2.5.8 asks each of them to
+    // name the element its entry reaches
+    OStringBuffer aTargets;
+    std::unordered_set<sal_Int32> aSeen;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        if (!pType || pType->GetValue() != "TOCI")
+            continue;
+
+        auto pRefs = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject->Lookup("Ref"_ostr));
+        CPPUNIT_ASSERT(pRefs);
+        CPPUNIT_ASSERT_EQUAL(size_t(1), pRefs->GetElements().size());
+
+        auto pRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pRefs->GetElements()[0]);
+        CPPUNIT_ASSERT(pRef);
+        CPPUNIT_ASSERT(pRef->LookupObject());
+        // the heading of this entry, not the one the entry before it reached
+        CPPUNIT_ASSERT(aSeen.insert(pRef->GetObjectValue()).second);
+
+        auto pTargetType = dynamic_cast<vcl::filter::PDFNameElement*>(
+            pRef->LookupObject()->Lookup("S"_ostr));
+        CPPUNIT_ASSERT(pTargetType);
+        aTargets.append(pTargetType->GetValue() + " ");
+    }
+
+    // one item per heading, each naming its own
+    CPPUNIT_ASSERT_EQUAL("H1 H2 "_ostr, aTargets.makeStringAndClear());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFormulaAltFromSource)
+{
+    createSwDoc("formula-alt.fodt");
+    // a formula reaches the export loaded, not running, in every document but a freshly typed one
+    saveAndReload(TestFilter::ODT);
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    maTempFile.CloseStream();
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    OUStringBuffer aAlts;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        if (!pType || pType->GetValue() != "Formula")
+            continue;
+
+        // Without the fix a formula nobody had described carried no Alt, which the PDF/UA
+        // checkers count against the file
+        auto pAlt = dynamic_cast<vcl::filter::PDFHexStringElement*>(pObject->Lookup("Alt"_ostr));
+        CPPUNIT_ASSERT(pAlt);
+        aAlts.append(vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pAlt) + "|");
+    }
+
+    // the source where nobody described the formula, and the title where somebody did
+    CPPUNIT_ASSERT_EQUAL(u"E=mc^2|Half of a|"_ustr, aAlts.makeStringAndClear());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFormulaPlacement)
+{
+    createSwDoc("formula-placement.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    OString aInALine;
+    OString aInAParagraph;
+    OString aOnThePage;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        if (!pType || pType->GetValue() != "Formula")
+            continue;
+
+        auto pAttributes
+            = dynamic_cast<vcl::filter::PDFDictionaryElement*>(pObject->Lookup("A"_ostr));
+        CPPUNIT_ASSERT(pAttributes);
+        auto pPlacement = dynamic_cast<vcl::filter::PDFNameElement*>(
+            pAttributes->LookupElement("Placement"_ostr));
+        CPPUNIT_ASSERT(pPlacement);
+
+        // each formula names its own source, so the three are told apart by it
+        auto pAlt = dynamic_cast<vcl::filter::PDFHexStringElement*>(pObject->Lookup("Alt"_ostr));
+        CPPUNIT_ASSERT(pAlt);
+        const OUString aSource(vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pAlt));
+        if (aSource == u"E=mc^2")
+            aInALine = pPlacement->GetValue();
+        else if (aSource == u"a over 2")
+            aInAParagraph = pPlacement->GetValue();
+        else if (aSource == u"b+1")
+            aOnThePage = pPlacement->GetValue();
+    }
+
+    // Without the fix these were Block, which makes a block level element of a Formula that the
+    // export tags inside a paragraph, and PAC 2026 calls such a Formula inappropriate
+    CPPUNIT_ASSERT_EQUAL("Inline"_ostr, aInALine);
+    CPPUNIT_ASSERT_EQUAL("Inline"_ostr, aInAParagraph);
+    // one anchored to the page is tagged under the document, where it is a block of its own
+    CPPUNIT_ASSERT_EQUAL("Block"_ostr, aOnThePage);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLayoutAttributeUnits)
+{
+    createSwDoc("layout-attribute-units.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    maTempFile.CloseStream();
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // the indented paragraph, the one whose first line hangs, and the first data cell; a
+    // header cell carries an array of two dictionaries instead, the layout one and the table one
+    vcl::filter::PDFDictionaryElement* pIndented = nullptr;
+    vcl::filter::PDFDictionaryElement* pHanging = nullptr;
+    vcl::filter::PDFDictionaryElement* pCell = nullptr;
+    for (auto* pObject : aDocument.GetObjects())
+    {
+
+        auto pType = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("S"_ostr));
+        auto pAttributes
+            = dynamic_cast<vcl::filter::PDFDictionaryElement*>(pObject->Lookup("A"_ostr));
+        if (!pType || !pAttributes)
+            continue;
+
+        // of the paragraphs only the indented one has a right margin; the table has one too,
+        // which is why the type is asked for as well
+        if (!pIndented && pType->GetValue() == "Standard"
+            && pAttributes->LookupElement("EndIndent"_ostr))
+            pIndented = pAttributes;
+        else if (!pHanging && pType->GetValue() == "Standard"
+                 && pAttributes->LookupElement("TextIndent"_ostr))
+            pHanging = pAttributes;
+        else if (!pCell && pType->GetValue() == "TD")
+            pCell = pAttributes;
+    }
+    CPPUNIT_ASSERT(pIndented);
+    CPPUNIT_ASSERT(pHanging);
+    CPPUNIT_ASSERT(pCell);
+
+    const auto getLength = [](vcl::filter::PDFDictionaryElement* pAttributes, const OString& rKey) {
+        auto pNumber
+            = dynamic_cast<vcl::filter::PDFNumberElement*>(pAttributes->LookupElement(rKey));
+        CPPUNIT_ASSERT(pNumber);
+        return pNumber->GetValue();
+    };
+
+    // Without the fix these carried the twips the layout works in, where ISO 32000-2 14.8.5.4
+    // asks for default user space units - a fiftieth of the length they name.
+    // 0.5in, 0.4in and 0.25in of indent, and 0.2in above the paragraph
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(36.0, getLength(pIndented, "StartIndent"_ostr), 0.01);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(28.8, getLength(pIndented, "EndIndent"_ostr), 0.01);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(18.0, getLength(pIndented, "TextIndent"_ostr), 0.01);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(14.4, getLength(pIndented, "SpaceBefore"_ostr), 0.01);
+    // a hanging first line, the one length that is negative
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(-18.0, getLength(pHanging, "TextIndent"_ostr), 0.01);
+    // the 1.5in column the cell sits in
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(108.0, getLength(pCell, "Width"_ostr), 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testParagraphLanguage)
+{
+    createSwDoc("paragraph-language.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    // the value the entries below state where they state one, and what the rest inherit
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+    auto pCatalog = aDocument.GetCatalog();
+    CPPUNIT_ASSERT(pCatalog);
+    CPPUNIT_ASSERT(pCatalog->GetDictionary());
+    auto pDocumentLanguage = dynamic_cast<vcl::filter::PDFLiteralStringElement*>(
+        pCatalog->GetDictionary()->LookupElement("Lang"_ostr));
+    CPPUNIT_ASSERT(pDocumentLanguage);
+    CPPUNIT_ASSERT_EQUAL("en-US"_ostr, pDocumentLanguage->GetValue());
+
+    auto pPdfDocument = parsePDFExport();
+    auto pPdfPage = pPdfDocument->openPage(0);
+    CPPUNIT_ASSERT(pPdfPage);
+    auto pTextPage = pPdfPage->getTextPage();
+
+    // the text behind each marked content id, to identify the element covering it
+    std::unordered_map<int, OUString> aTexts;
+    for (int i = 0; i < pPdfPage->getObjectCount(); ++i)
+    {
+        auto pObject = pPdfPage->getObject(i);
+        if (const int nMarkedContentID = pObject->getMarkedContentID(); nMarkedContentID >= 0)
+            aTexts[nMarkedContentID] += pObject->getText(pTextPage);
+    }
+
+    auto pTree = pPdfPage->getStructureTree();
+    CPPUNIT_ASSERT(pTree);
+    OUString aLanguages;
+    for (int i = 0; i < pTree->getNumberOfChildren(); ++i)
+    {
+        if (const auto pChild = pTree->getChild(i))
+            aLanguages += lcl_CollectLanguages(*pChild, aTexts);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(
+        // specifies no language, being in the document's, so it inherits
+        u"P: A paragraph in the language of the document.\n"
+        "P de-DE: Ein Absatz, der ganz und gar deutsch ist.\n"
+        // the gap is where the German span took its words out of the paragraph
+        "P: English with  in it.\n"
+        "Span de-DE: ein paar deutsche Worte\n"
+        "P de-DE: Ein deutscher Absatz mit  darin.\n"
+        // the run differs from its paragraph, not from the document
+        "Span en-US: a few English words\n"
+        // a paragraph holding an anchor specified no language before, a Span carrying it
+        "P de-DE: Ein deutscher Absatz mit einem Rahmen.\n"
+        // the shape's own element, so its description does not inherit the paragraph's
+        "Div en-US: A shape described in the language of the document\n"
+        // the shape's text, tagged by drawinglayer since fr1 has no parent style
+        "P en-US: Text inside the frame.\n"
+        "P de-DE: Ein deutscher Absatz mit einem Textrahmen.\n"
+        // a Writer text frame, identified by its description
+        "Div en-US: Described in the language of the document\n"
+        // specifies none: the frame's Div specifies en-US for what it contains
+        "P: Text in a Writer frame.\n"
+        "P de-DE: Ein deutscher Absatz mit einem Bild.\n"
+        "Figure en-US: A picture described in the language of the document\n"_ustr,
+        aLanguages);
+}
+
+// the rectangle of every link annotation, down the page, each annotation carrying the
+// /StructParent that ISO 14289-1 7.18.5 needs to find its Link element
+std::vector<basegfx::B2DRectangle> lcl_CollectTaggedLinkRects(vcl::filter::PDFDocument& rDocument)
+{
+    std::vector<basegfx::B2DRectangle> aRects;
+    for (auto* pObject : rDocument.GetObjects())
+    {
+        auto pSubtype = dynamic_cast<vcl::filter::PDFNameElement*>(pObject->Lookup("Subtype"_ostr));
+        if (!pSubtype || pSubtype->GetValue() != "Link")
+            continue;
+        CPPUNIT_ASSERT_MESSAGE("a link annotation with no /StructParent",
+                               pObject->Lookup("StructParent"_ostr));
+        auto pRect = dynamic_cast<vcl::filter::PDFArrayElement*>(pObject->Lookup("Rect"_ostr));
+        CPPUNIT_ASSERT(pRect);
+        CPPUNIT_ASSERT_EQUAL(size_t(4), pRect->GetElements().size());
+        const auto aCorner = [pRect](size_t nIndex) {
+            auto pNumber = dynamic_cast<vcl::filter::PDFNumberElement*>(pRect->GetElement(nIndex));
+            CPPUNIT_ASSERT(pNumber);
+            return pNumber->GetValue();
+        };
+        aRects.emplace_back(aCorner(0), aCorner(1), aCorner(2), aCorner(3));
+    }
+    // PDF y coordinates increase upwards, so the highest bottom is the first line
+    std::ranges::sort(aRects,
+                      [](const basegfx::B2DRectangle& rLeft, const basegfx::B2DRectangle& rRight) {
+                          return rLeft.getMinY() > rRight.getMinY();
+                      });
+    return aRects;
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkEndsInRuby)
+{
+    createSwDoc("link-ends-in-ruby.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // one rectangle per line the link covers, and no third one over the empty band beside
+    // the ruby, which no structure element could cover
+    const std::vector<basegfx::B2DRectangle> aRects(lcl_CollectTaggedLinkRects(aDocument));
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aRects.size());
+    // the first line holds text alone; the second carries the ruby, and its rectangle
+    // stands over the ruby's band so that the phonetic annotation takes the click
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(13.8, aRects[0].getHeight(), 0.5);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(20.7, aRects[1].getHeight(), 0.5);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkEndsInRubyVertical)
+{
+    createSwDoc("link-ends-in-ruby-vertical.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // the region split hands this line back in pieces, one of them holding the ruby and
+    // none of the line's text, which nothing paints in and so nothing tags; the count is
+    // what this pins - the width was already right before the pieces were joined
+    const std::vector<basegfx::B2DRectangle> aRects(lcl_CollectTaggedLinkRects(aDocument));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aRects.size());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(20.7, aRects[0].getWidth(), 0.5);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkEndsInRubyVerticalWrapped)
+{
+    createSwDoc("link-ends-in-ruby-vertical-wrapped.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // an annotation for each of the three lines, all tagged, which the collector asserts
+    std::vector<basegfx::B2DRectangle> aRects(lcl_CollectTaggedLinkRects(aDocument));
+    CPPUNIT_ASSERT_EQUAL(size_t(3), aRects.size());
+    // the text runs down the page from the right, so the widest x is the first line
+    std::ranges::sort(aRects,
+                      [](const basegfx::B2DRectangle& rLeft, const basegfx::B2DRectangle& rRight) {
+                          return rLeft.getMinX() > rRight.getMinX();
+                      });
+    // only the third line carries the ruby, and only it is as wide as a ruby makes a line
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(13.8, aRects[0].getWidth(), 0.5);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(13.8, aRects[1].getWidth(), 0.5);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(20.7, aRects[2].getWidth(), 0.5);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkPartRubyOneLine)
+{
+    createSwDoc("link-part-ruby-one-line.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    // an annotation is a plain box, so a ruby over the link's second half raises the whole
+    // rectangle; leaving the first half its own height would need a quadrilateral
+    const std::vector<basegfx::B2DRectangle> aRects(lcl_CollectTaggedLinkRects(aDocument));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aRects.size());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(20.7, aRects[0].getHeight(), 0.5);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkStartsAfterRuby)
+{
+    createSwDoc("link-starts-after-ruby.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    const std::vector<basegfx::B2DRectangle> aRects(lcl_CollectTaggedLinkRects(aDocument));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aRects.size());
+    // the ruby raises the line, so the link standing beside it is as tall as the line
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(20.7, aRects[0].getHeight(), 0.5);
+    // the ruby belongs to no link, so the rectangle starts to the right of it, not at the
+    // left text margin of 56.7pt
+    CPPUNIT_ASSERT_GREATER(65.0, aRects[0].getMinX());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testLinkStartsAtAbuttingRuby)
+{
+    createSwDoc("link-starts-at-abutting-ruby.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    vcl::filter::PDFDocument aDocument;
+    CPPUNIT_ASSERT(aDocument.Read(*maTempFile.GetStream(StreamMode::READ)));
+
+    const std::vector<basegfx::B2DRectangle> aRects(lcl_CollectTaggedLinkRects(aDocument));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aRects.size());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(20.7, aRects[0].getHeight(), 0.5);
+    // a hit test at the link's first character lands in the ruby before it, which the link
+    // does not cover, so the rectangle starts at the second ruby
+    CPPUNIT_ASSERT_GREATER(65.0, aRects[0].getMinX());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testRubyStructureOrder)
+{
+    createSwDoc("ruby-positions.fodt");
+
+    cpo::uno::Sequence aFilterData{ comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, true) };
+    save(TestFilter::PDF_WRITER,
+         { comphelper::makePropertyValue(u"FilterData"_ustr, aFilterData) });
+
+    auto pPdfDocument = parsePDFExport();
+    auto pPdfPage = pPdfDocument->openPage(0);
+    CPPUNIT_ASSERT(pPdfPage);
+    auto pTextPage = pPdfPage->getTextPage();
+
+    // the text behind each marked content id, to identify the element covering it
+    std::unordered_map<int, OUString> aTexts;
+    for (int i = 0; i < pPdfPage->getObjectCount(); ++i)
+    {
+        auto pObject = pPdfPage->getObject(i);
+        if (const int nMarkedContentID = pObject->getMarkedContentID(); nMarkedContentID >= 0)
+            aTexts[nMarkedContentID] += pObject->getText(pTextPage);
+    }
+
+    auto pTree = pPdfPage->getStructureTree();
+    CPPUNIT_ASSERT(pTree);
+    OUString aRubies;
+    for (int i = 0; i < pTree->getNumberOfChildren(); ++i)
+    {
+        if (const auto pChild = pTree->getChild(i))
+            aRubies += lcl_CollectRubies(*pChild, aTexts);
+    }
+
+    // ISO 32000-2 Table 369 requires RB first. An annotation above its base paints first and
+    // is still the RT; one below paints second and is still the RT
+    CPPUNIT_ASSERT_EQUAL(u"RB: base above\n"
+                         "RT: anno above\n"
+                         "RB: base below\n"
+                         "RT: anno below\n"_ustr,
+                         aRubies);
+}
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

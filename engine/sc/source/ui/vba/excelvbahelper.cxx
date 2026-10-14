@@ -53,6 +53,7 @@
 #include <com/sun/star/script/ModuleType.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 namespace ooo::vba::excel {
@@ -89,12 +90,12 @@ GetAutoFiltRange( const ScDocShell* pShell, sal_Int16 nSheet )
     return xDataBaseRange;
 }
 
-ScDocShell* GetDocShellFromRange( const uno::Reference< uno::XInterface >& xRange )
+ScDocShell* GetDocShellFromRange( const uno::Reference< cpo::uno::XInterface >& xRange )
 {
     ScCellRangesBase* pScCellRangesBase = dynamic_cast<ScCellRangesBase*>( xRange.get() );
     if ( !pScCellRangesBase )
     {
-        throw uno::RuntimeException(u"Failed to access underlying doc shell uno range object"_ustr );
+        throw cpo::uno::RuntimeException(u"Failed to access underlying doc shell uno range object"_ustr );
     }
     return pScCellRangesBase->GetDocShell();
 }
@@ -244,9 +245,9 @@ void implnPasteSpecial( const uno::Reference< frame::XModel>& xModel, InsertDele
 }
 
 ScDocShell*
-getDocShell( const css::uno::Reference< css::frame::XModel>& xModel )
+getDocShell( const cpo::uno::Reference< css::frame::XModel>& xModel )
 {
-    uno::Reference< uno::XInterface > xIf( xModel, uno::UNO_QUERY_THROW );
+    uno::Reference< cpo::uno::XInterface > xIf( xModel, uno::UNO_QUERY_THROW );
     ScModelObj* pModel = comphelper::getFromUnoTunnel< ScModelObj >( xIf );
     ScDocShell* pDocShell = nullptr;
     if ( pModel )
@@ -256,7 +257,7 @@ getDocShell( const css::uno::Reference< css::frame::XModel>& xModel )
 }
 
 ScTabViewShell*
-getBestViewShell( const css::uno::Reference< css::frame::XModel>& xModel )
+getBestViewShell( const cpo::uno::Reference< css::frame::XModel>& xModel )
 {
     ScDocShell* pDocShell = getDocShell( xModel );
     if ( pDocShell )
@@ -265,7 +266,7 @@ getBestViewShell( const css::uno::Reference< css::frame::XModel>& xModel )
 }
 
 ScTabViewShell*
-getCurrentBestViewShell(  const uno::Reference< uno::XComponentContext >& xContext )
+getCurrentBestViewShell(  const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     uno::Reference< frame::XModel > xModel = getCurrentExcelDoc( xContext );
     return getBestViewShell( xModel );
@@ -397,7 +398,7 @@ void setUpDocumentModules( const uno::Reference< sheet::XSpreadsheetDocument >& 
 }
 
 void ExportAsFixedFormatHelper(
-    const uno::Reference< frame::XModel >& xModel, const css::uno::Reference< XApplication >& xApplication,
+    const uno::Reference< frame::XModel >& xModel, const cpo::uno::Reference< XApplication >& xApplication,
     const cpo::uno::Any& Type, const cpo::uno::Any& FileName, const cpo::uno::Any& Quality,
     const cpo::uno::Any& IncludeDocProperties, const cpo::uno::Any& From,
     const cpo::uno::Any& To, const cpo::uno::Any& OpenAfterPublish)
@@ -550,7 +551,7 @@ void SetDocInfoState(
 
     uno::Reference< util::XModifiable > xModifiable(xModel, uno::UNO_QUERY);
     if (!xModifiable.is())
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     bool bIsModified = xModifiable->isModified();
 

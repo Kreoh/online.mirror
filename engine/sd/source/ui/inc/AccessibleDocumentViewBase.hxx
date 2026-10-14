@@ -102,8 +102,8 @@ public:
     AccessibleDocumentViewBase (
         ::sd::Window* pSdWindow,
         ::sd::ViewShell* pViewShell,
-        css::uno::Reference<css::frame::XController> xController,
-        const css::uno::Reference<css::accessibility::XAccessible>& rxParent);
+        cpo::uno::Reference<css::frame::XController> xController,
+        const cpo::uno::Reference<css::accessibility::XAccessible>& rxParent);
 
     virtual ~AccessibleDocumentViewBase() override;
 
@@ -129,19 +129,19 @@ public:
 
     //=====  XAccessibleContext  ==============================================
 
-    virtual css::uno::Reference<css::accessibility::XAccessible> SAL_CALL
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
         getAccessibleParent() override;
 
     /** This implementation returns either 1 or 0 depending on whether there
         is an active accessible OLE object or not.
     */
-    virtual sal_Int64 SAL_CALL
+    virtual sal_Int64
         getAccessibleChildCount() override;
 
     /** This implementation either returns the active accessible OLE object
         if it exists and the given index is 0 or throws an exception.
     */
-    virtual css::uno::Reference<css::accessibility::XAccessible> SAL_CALL
+    virtual cpo::uno::Reference<css::accessibility::XAccessible>
         getAccessibleChild (sal_Int64 nIndex) override;
 
     // OAccessible
@@ -149,19 +149,19 @@ public:
 
     //=====  XAccessibleComponent  ============================================
 
-    virtual css::uno::Reference<css::accessibility::XAccessible > SAL_CALL
+    virtual cpo::uno::Reference<css::accessibility::XAccessible >
         getAccessibleAtPoint (const css::awt::Point& aPoint) override;
 
     //=====  XInterface  ======================================================
 
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
         queryInterface (const cpo::uno::Type & rType) override;
 
-    virtual void SAL_CALL
+    virtual void
         acquire()
         noexcept override;
 
-    virtual void SAL_CALL
+    virtual void
         release()
         noexcept override;
 
@@ -169,42 +169,42 @@ public:
 
     /** Returns an identifier for the implementation of this object.
     */
-    virtual OUString SAL_CALL
+    virtual OUString
         getImplementationName() override;
 
-    virtual cpo::uno::Sequence< OUString> SAL_CALL
+    virtual cpo::uno::Sequence< OUString>
         getSupportedServiceNames() override;
 
     //=====  lang::XEventListener  ============================================
 
-    virtual void SAL_CALL
+    virtual void
         disposing (const css::lang::EventObject& rEventObject) override;
 
     //=====  XPropertyChangeListener  =========================================
 
-    virtual void SAL_CALL
+    virtual void
         propertyChange (const css::beans::PropertyChangeEvent& rEventObject) override;
 
     //=====  XWindowListener  =================================================
 
-    virtual void SAL_CALL
+    virtual void
         windowResized (const css::awt::WindowEvent& e) override;
 
-    virtual void SAL_CALL
+    virtual void
         windowMoved (const css::awt::WindowEvent& e) override;
 
-    virtual void SAL_CALL
+    virtual void
         windowShown (const css::lang::EventObject& e) override;
 
-    virtual void SAL_CALL
+    virtual void
         windowHidden (const css::lang::EventObject& e) override;
 
     //=====  XFocusListener  =================================================
 
-    virtual void SAL_CALL focusGained (const css::awt::FocusEvent& e) override;
-    virtual void SAL_CALL focusLost (const css::awt::FocusEvent& e) override;
+    virtual void focusGained (const css::awt::FocusEvent& e) override;
+    virtual void focusLost (const css::awt::FocusEvent& e) override;
     //----------------------------xAttribute----------------------------
-    virtual OUString SAL_CALL getExtendedAttributes() override;
+    virtual OUString getExtendedAttributes() override;
      ::sd::ViewShell* mpViewShell;
 private:
 
@@ -213,7 +213,7 @@ private:
         implGetMutex() override;
 
     // return ourself as context in default case
-    virtual css::uno::Reference< css::accessibility::XAccessibleContext >
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleContext >
         implGetAccessibleContext() override;
 
     // return false in default case
@@ -226,15 +226,15 @@ private:
 
 protected:
     /// The API window that is made accessible.
-    css::uno::Reference< css::awt::XWindow>
+    cpo::uno::Reference< css::awt::XWindow>
          mxWindow;
 
     /// The controller of the window in which this view is displayed.
-    css::uno::Reference< css::frame::XController>
+    cpo::uno::Reference< css::frame::XController>
          mxController;
 
     /// Model of the document.
-    css::uno::Reference < css::frame::XModel>
+    cpo::uno::Reference < css::frame::XModel>
         mxModel;
 
     // Bundle of information that is passed down the shape tree.
@@ -246,14 +246,14 @@ protected:
     /** Accessible OLE object.  Set or removed by the
         <member>SetAccessibleOLEObject</member> method.
     */
-    css::uno::Reference< css::accessibility::XAccessible>
+    cpo::uno::Reference< css::accessibility::XAccessible>
         mxAccessibleOLEObject;
 
     Link<VclWindowEvent&,void> maWindowLink;
 
     // This method is called from the component helper base class while
     // disposing.
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 
     /** Create a name string.  The current name is not modified and,
         therefore, no events are sent.  This method is usually called once
@@ -293,13 +293,13 @@ protected:
             accessible OLE object (if there is one) is removed.
     */
     void SetAccessibleOLEObject (
-        const css::uno::Reference<css::accessibility::XAccessible>& xOLEObject);
+        const cpo::uno::Reference<css::accessibility::XAccessible>& xOLEObject);
 
 public:
     void SwitchViewActivated() { Activated(); }
-     virtual sal_Int32 SAL_CALL getForeground(  ) override;
+     virtual sal_Int32 getForeground(  ) override;
 
-    virtual sal_Int32 SAL_CALL getBackground(  ) override;
+    virtual sal_Int32 getBackground(  ) override;
     virtual void impl_dispose();
 };
 

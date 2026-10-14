@@ -50,7 +50,7 @@ public final class Type_Test {
         assertSame(
             "sequence of sequence of XComponentContext",
             XComponentContext[][].class,
-            new Type("[][]com.sun.star.uno.XComponentContext", TypeClass.SEQUENCE).getZClass());
+            new Type("[][]cpo.uno.XComponentContext", TypeClass.SEQUENCE).getZClass());
         assertSame(
             "enum TypeClass", TypeClass.class,
             new Type("cpo.uno.TypeClass", TypeClass.ENUM).getZClass());
@@ -59,17 +59,17 @@ public final class Type_Test {
             new Type("cpo.uno.Exception", TypeClass.EXCEPTION).getZClass());
         assertSame(
             "exception RuntimeException",
-            com.sun.star.uno.RuntimeException.class,
-            new Type("com.sun.star.uno.RuntimeException", TypeClass.EXCEPTION).getZClass());
+            cpo.uno.RuntimeException.class,
+            new Type("cpo.uno.RuntimeException", TypeClass.EXCEPTION).getZClass());
         assertSame(
             "exception DeploymentException", DeploymentException.class,
-            new Type("com.sun.star.uno.DeploymentException", TypeClass.EXCEPTION).getZClass());
+            new Type("cpo.uno.DeploymentException", TypeClass.EXCEPTION).getZClass());
         assertSame(
             "interface XInterface", XInterface.class,
-            new Type("com.sun.star.uno.XInterface", TypeClass.INTERFACE).getZClass());
+            new Type("cpo.uno.XInterface", TypeClass.INTERFACE).getZClass());
         assertSame(
             "interface XComponentContext", XComponentContext.class,
-            new Type("com.sun.star.uno.XComponentContext", TypeClass.INTERFACE). getZClass());
+            new Type("cpo.uno.XComponentContext", TypeClass.INTERFACE). getZClass());
 
         assertSame(boolean.class, new Type(boolean.class).getZClass());
         assertSame(boolean.class, new Type(Boolean.class).getZClass());
@@ -82,9 +82,9 @@ public final class Type_Test {
     }
 
     @Test public void testIsSupertypeOf() {
-        Type ifc = new Type(com.sun.star.uno.XInterface.class);
-        Type ctx = new Type(com.sun.star.uno.XComponentContext.class);
-        Type exc = new Type(com.sun.star.uno.RuntimeException.class);
+        Type ifc = new Type(cpo.uno.XInterface.class);
+        Type ctx = new Type(cpo.uno.XComponentContext.class);
+        Type exc = new Type(cpo.uno.RuntimeException.class);
         assertTrue("LONG :> LONG", Type.LONG.isSupertypeOf(Type.LONG));
         assertFalse("not ANY :> XInterface", Type.ANY.isSupertypeOf(ifc));
         assertTrue("ANY :> ANY", Type.ANY.isSupertypeOf(Type.ANY));

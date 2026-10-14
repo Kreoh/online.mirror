@@ -1,0 +1,42 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/xml/crypto/XXMLSignature.hpp>
+
+class XMLSignature_NssImpl
+    : public ::cppu::WeakImplHelper<css::xml::crypto::XXMLSignature, css::lang::XServiceInfo>
+{
+public:
+    explicit XMLSignature_NssImpl();
+
+    //Methods from XXMLSignature
+    virtual cpo::uno::Reference<css::xml::crypto::XXMLSignatureTemplate> generate(
+        const cpo::uno::Reference<css::xml::crypto::XXMLSignatureTemplate>& aTemplate,
+        const cpo::uno::Reference<css::xml::crypto::XSecurityEnvironment>& aEnvironment) override;
+
+    virtual cpo::uno::Reference<css::xml::crypto::XXMLSignatureTemplate>
+    validate(const cpo::uno::Reference<css::xml::crypto::XXMLSignatureTemplate>& aTemplate,
+             const cpo::uno::Reference<css::xml::crypto::XXMLSecurityContext>& aContext) override;
+
+    //Methods from XServiceInfo
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(const OUString& ServiceName) override;
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

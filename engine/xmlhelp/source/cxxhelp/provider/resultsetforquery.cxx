@@ -49,8 +49,8 @@ using namespace chelp;
 using namespace com::sun::star;
 using namespace com::sun::star::ucb;
 using namespace com::sun::star::i18n;
-using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
+using namespace ::cpo;
 using namespace ::cpo::uno;
 
 namespace {
@@ -72,7 +72,7 @@ struct HitItem
 
 }
 
-ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentContext >& rxContext,
+ResultSetForQuery::ResultSetForQuery( const uno::Reference< cpo::uno::XComponentContext >& rxContext,
                                       const uno::Reference< XContentProvider >&  xProvider,
                                       const cpo::uno::Sequence< beans::Property >& seq,
                                       const URLParameter& aURLParameter,
@@ -120,13 +120,11 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
 
     IndexFolderIterator aIndexFolderIt( *pDatabases, aURLParameter.get_module(), aURLParameter.get_language() );
     OUString idxDir;
-    bool bExtension = false;
     std::vector< std::vector<HitItem> > aIndexFolderResultVectorVector;
 
-    bool bTemporary;
     for (;;)
     {
-        idxDir = aIndexFolderIt.nextIndexFolder( bExtension, bTemporary );
+        idxDir = aIndexFolderIt.nextIndexFolder();
         if( idxDir.isEmpty() )
             break;
         std::vector<HitItem> aIndexFolderResultVector;
@@ -244,10 +242,6 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
         {
             TOOLS_WARN_EXCEPTION("xmlhelp", "");
         }
-
-        if( bTemporary )
-            aIndexFolderIt.deleteTempIndexFolder( idxDir );
-
     }   // Iterator
 
 

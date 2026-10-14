@@ -24,9 +24,10 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 NativeNumberWrapper::NativeNumberWrapper(
-            const uno::Reference< uno::XComponentContext > & rxContext
+            const uno::Reference< cpo::uno::XComponentContext > & rxContext
             )
 {
     xNNS = i18n::NativeNumberSupplier2::create(rxContext);

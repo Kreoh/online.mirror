@@ -43,7 +43,7 @@
 #include <osl/mutex.hxx>
 #include <o3tl/string_view.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::embed;
@@ -137,7 +137,7 @@ bool ODocumentContainer::supportsService(const OUString& _rServiceName)
 
         return false;
     };
-css::uno::Reference< css::beans::XPropertySetInfo >  ODocumentContainer::getPropertySetInfo()
+cpo::uno::Reference< css::beans::XPropertySetInfo >  ODocumentContainer::getPropertySetInfo()
 {
     Reference< XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
     return xInfo;
@@ -368,8 +368,8 @@ Reference< XInterface > ODocumentContainer::createInstanceWithArguments( const O
                     xCopyFrom->getByName(element) >>= xObjectToCopy;
                     Sequence<Any> aArguments(comphelper::InitAnyPropertySequence(
                     {
-                        {"Name", Any(element)}, // set as folder
-                        {"Parent", Any(xContent)},
+                        {u"Name"_ustr, Any(element)}, // set as folder
+                        {u"Parent"_ustr, Any(xContent)},
                         {PROPERTY_EMBEDDEDOBJECT, Any(xObjectToCopy)},
                     }));
 

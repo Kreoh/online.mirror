@@ -27,7 +27,7 @@
 #include <comphelper/diagnose_ex.hxx>
 #include <svx/svxbmpnumiconview.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
@@ -75,11 +75,11 @@ public:
     std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual Sequence< OUString > getSupportedServiceNames() override;
 };
 
 }
@@ -227,17 +227,17 @@ IMPL_LINK(NumberingPopup, ItemActivatedHdl, weld::IconView&, rIconView, bool)
 
     if ( mePageType == NumberingPageType::BULLET )
     {
-        auto aArgs( comphelper::InitPropertySequence( { { "BulletIndex", Any( nId + 1 ) } } ) );
+        auto aArgs( comphelper::InitPropertySequence( { { u"BulletIndex"_ustr, Any( nId + 1 ) } } ) );
         mrController.dispatchCommand( u".uno:SetBullet"_ustr, aArgs );
     }
     else if ( mePageType == NumberingPageType::SINGLENUM )
     {
-        auto aArgs( comphelper::InitPropertySequence( { { "SetNumber", Any( nId + 1 ) } } ) );
+        auto aArgs( comphelper::InitPropertySequence( { { u"SetNumber"_ustr, Any( nId + 1 ) } } ) );
         mrController.dispatchCommand( u".uno:SetNumber"_ustr, aArgs );
     }
     else
     {
-        auto aArgs( comphelper::InitPropertySequence( { { "SetOutline", Any( nId + 1 ) } } ) );
+        auto aArgs( comphelper::InitPropertySequence( { { u"SetOutline"_ustr, Any( nId + 1 ) } } ) );
         mrController.dispatchCommand( u".uno:SetOutline"_ustr, aArgs );
     }
     mrController.EndPopupMode();
@@ -257,7 +257,7 @@ IMPL_LINK(NumberingPopup, DocItemActivatedHdl, weld::IconView&, rIconView, bool)
         OUString nChar(maCustomBullets[nId].first);
         OUString sFont(maCustomBullets[nId].second);
         auto aArgs(comphelper::InitPropertySequence(
-            { { "BulletChar", Any(nChar) }, { "BulletFont", Any(sFont) } }));
+            { { u"BulletChar"_ustr, Any(nChar) }, { u"BulletFont"_ustr, Any(sFont) } }));
         mrController.dispatchCommand(u".uno:SetBullet"_ustr, aArgs);
         mrController.EndPopupMode();
     }
@@ -281,7 +281,9 @@ void NumberingPopup::GrabFocus()
 
 IMPL_LINK_NOARG(NumberingPopup, VSButtonClickSetHdl, weld::Button&, void)
 {
-    auto aArgs( comphelper::InitPropertySequence( { { "Page", Any( u"customize"_ustr ) } } ) );
+    auto aArgs( comphelper::InitPropertySequence(
+        { { u"Page"_ustr, Any( u"customize"_ustr ) },
+          { u"Bullet"_ustr, Any( mePageType == NumberingPageType::BULLET ) } } ) );
     mrController.dispatchCommand( u".uno:OutlineBullet"_ustr, aArgs );
 
     mrController.EndPopupMode();
@@ -308,7 +310,7 @@ VclPtr<vcl::Window> NumberingToolBoxControl::createVclPopupWindow( vcl::Window* 
     return mxInterimPopover;
 }
 
-void SAL_CALL NumberingToolBoxControl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments )
+void NumberingToolBoxControl::initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments )
 {
     svt::PopupWindowController::initialize( rArguments );
 
@@ -335,12 +337,12 @@ void SAL_CALL NumberingToolBoxControl::initialize( const cpo::uno::Sequence< cpo
     }
 }
 
-OUString SAL_CALL NumberingToolBoxControl::getImplementationName()
+OUString NumberingToolBoxControl::getImplementationName()
 {
     return u"com.sun.star.comp.svx.NumberingToolBoxControl"_ustr;
 }
 
-Sequence< OUString > SAL_CALL NumberingToolBoxControl::getSupportedServiceNames()
+Sequence< OUString > NumberingToolBoxControl::getSupportedServiceNames()
 {
     return { u"com.sun.star.frame.ToolbarController"_ustr };
 }

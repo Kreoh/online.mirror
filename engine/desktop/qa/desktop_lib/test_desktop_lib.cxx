@@ -15,6 +15,11 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/table/XCell.hpp>
+#include <com/sun/star/table/CellContentType.hpp>
 #include <com/sun/star/text/XTextField.hpp>
 #include <com/sun/star/awt/Key.hpp>
 #include <com/sun/star/awt/XReschedule.hpp>
@@ -26,6 +31,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 
+#include <vcl/remoteclipboard.hxx>
 #include <vcl/scheduler.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/syswin.hxx>
@@ -61,6 +67,7 @@
 #include <o3tl/string_view.hxx>
 
 #include <lib/init.hxx>
+#include <vcl/ITiledRenderable.hxx>
 #include <svx/svxids.hrc>
 
 #include <cppunit/TestAssert.h>
@@ -76,6 +83,7 @@
 #endif
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace desktop;
 
 static COKitDocumentType getDocumentTypeFromName(std::string_view name)
@@ -150,6 +158,8 @@ public:
     void closeDoc() { closeDoc(m_pDocument); }
     static void callback(COKitCallbackType eType, const char* pPayload, void* pData);
     void callbackImpl(COKitCallbackType eType, const char* pPayload);
+    boost::property_tree::ptree postSaveAndReadResult(COKitDocumentImpl* pDocument,
+                                                      const char* pArguments);
 
     void testGetStyles();
     void testGetFonts();
@@ -159,17 +169,22 @@ public:
     void testPropertySettingOnFormulaBar();
     void testSearchTermReset();
     void testWriterShapePosSizeDialog();
+    void testDialogsOfOneDocumentOnly();
     void testFormulaBarAcceptButton();
     void testSearchAllNotificationsCalc();
     void testPaintTile();
     void testSaveAs();
     void testSaveFailedReportsReason();
+    void testSaveFromReadOnlyView();
     void testExportDirectToPdfDottedName();
     void testSaveAsJsonOptions();
     void testSaveAsCalc();
     void testPasteWriter();
     void testPasteWriterJPEG();
     void testClipboardMarkdownFlavor();
+    void testPasteCalcPlainTextAsValue();
+    void testPasteFromRemoteClipboard();
+    void testPasteFromRemoteClipboardFallsBackToHtml();
     void testUndoWriter();
     void testRowColumnHeaders();
     void testHiddenRowHeaders();
@@ -184,6 +199,7 @@ public:
     void testContextMenuCalc();
     void testContextMenuWriter();
     void testNotificationCompression();
+    void testPaintedAreaOutlivesTheLastView();
     void testVectorDeltaPushCoalescing();
     void testTileInvalidationCompression();
     void testPartInInvalidation();
@@ -196,6 +212,7 @@ public:
     void testRedlineWriter();
     void testRedlineCalc();
     void testPaintPartTile();
+    void testPaintPartTileMasterPage();
     void testPaintPartTileHidesGridOnOtherPart();
     void testPaintPartTileHidesGridOnActivePartPreview();
     void testPaintPartTileDifferentSchemes();
@@ -241,6 +258,7 @@ public:
     void testNoDuplicateTableSelection();
     void testMultiViewTableSelection();
     void testColorPaletteCallback();
+    void testTableContextOnLoad();
 
     CPPUNIT_TEST_SUITE(DesktopKitTest);
     CPPUNIT_TEST(testGetStyles);
@@ -251,17 +269,22 @@ public:
     CPPUNIT_TEST(testPropertySettingOnFormulaBar);
     CPPUNIT_TEST(testSearchTermReset);
     CPPUNIT_TEST(testWriterShapePosSizeDialog);
+    CPPUNIT_TEST(testDialogsOfOneDocumentOnly);
     CPPUNIT_TEST(testFormulaBarAcceptButton);
     CPPUNIT_TEST(testSearchAllNotificationsCalc);
     CPPUNIT_TEST(testPaintTile);
     CPPUNIT_TEST(testSaveAs);
     CPPUNIT_TEST(testSaveFailedReportsReason);
+    CPPUNIT_TEST(testSaveFromReadOnlyView);
     CPPUNIT_TEST(testExportDirectToPdfDottedName);
     CPPUNIT_TEST(testSaveAsJsonOptions);
     CPPUNIT_TEST(testSaveAsCalc);
     CPPUNIT_TEST(testPasteWriter);
     CPPUNIT_TEST(testPasteWriterJPEG);
     CPPUNIT_TEST(testClipboardMarkdownFlavor);
+    CPPUNIT_TEST(testPasteCalcPlainTextAsValue);
+    CPPUNIT_TEST(testPasteFromRemoteClipboard);
+    CPPUNIT_TEST(testPasteFromRemoteClipboardFallsBackToHtml);
     CPPUNIT_TEST(testUndoWriter);
     CPPUNIT_TEST(testRowColumnHeaders);
     CPPUNIT_TEST(testHiddenRowHeaders);
@@ -276,6 +299,7 @@ public:
     CPPUNIT_TEST(testContextMenuCalc);
     CPPUNIT_TEST(testContextMenuWriter);
     CPPUNIT_TEST(testNotificationCompression);
+    CPPUNIT_TEST(testPaintedAreaOutlivesTheLastView);
     CPPUNIT_TEST(testVectorDeltaPushCoalescing);
     CPPUNIT_TEST(testTileInvalidationCompression);
     CPPUNIT_TEST(testPartInInvalidation);
@@ -288,6 +312,7 @@ public:
     CPPUNIT_TEST(testRedlineWriter);
     CPPUNIT_TEST(testRedlineCalc);
     CPPUNIT_TEST(testPaintPartTile);
+    CPPUNIT_TEST(testPaintPartTileMasterPage);
     CPPUNIT_TEST(testPaintPartTileHidesGridOnOtherPart);
     CPPUNIT_TEST(testPaintPartTileHidesGridOnActivePartPreview);
     CPPUNIT_TEST(testPaintPartTileDifferentSchemes);
@@ -333,6 +358,7 @@ public:
     CPPUNIT_TEST(testNoDuplicateTableSelection);
     CPPUNIT_TEST(testMultiViewTableSelection);
     CPPUNIT_TEST(testColorPaletteCallback);
+    CPPUNIT_TEST(testTableContextOnLoad);
     CPPUNIT_TEST_SUITE_END();
 
     OString m_aTextSelection;
@@ -449,7 +475,7 @@ void DesktopKitTest::closeDoc(std::unique_ptr<COKitDocumentImpl>& pDocument)
 
     if (mxComponent.is())
     {
-        css::uno::Reference<util::XCloseable> xCloseable(mxComponent, css::uno::UNO_QUERY_THROW);
+        cpo::uno::Reference<util::XCloseable> xCloseable(mxComponent, cpo::uno::UNO_QUERY_THROW);
         xCloseable->close(false);
         mxComponent.clear();
     }
@@ -587,8 +613,8 @@ void DesktopKitTest::testCreateView()
     CPPUNIT_ASSERT_EQUAL(2, pDocument->getViewsCount());
 
     // Test getViewIds().
-    std::vector<int> aViewIds;
-    CPPUNIT_ASSERT(pDocument->getViewIds(aViewIds));
+    const std::vector<int> aViewIds = pDocument->getViewIds();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aViewIds.size());
     // The expectation is that the most recently used shell is at the start
     CPPUNIT_ASSERT_EQUAL(nId1, aViewIds[0]);
     CPPUNIT_ASSERT_EQUAL(nId0, aViewIds[1]);
@@ -632,9 +658,9 @@ void DesktopKitTest::testSearchCalc()
 
     cpo::uno::Sequence<beans::PropertyValue> aPropertyValues(comphelper::InitPropertySequence(
     {
-        {"SearchItem.SearchString", cpo::uno::Any(u"foo"_ustr)},
-        {"SearchItem.Backward", cpo::uno::Any(false)},
-        {"SearchItem.Command", cpo::uno::Any(static_cast<sal_uInt16>(SvxSearchCmd::FIND_ALL))},
+        {u"SearchItem.SearchString"_ustr, cpo::uno::Any(u"foo"_ustr)},
+        {u"SearchItem.Backward"_ustr, cpo::uno::Any(false)},
+        {u"SearchItem.Command"_ustr, cpo::uno::Any(static_cast<sal_uInt16>(SvxSearchCmd::FIND_ALL))},
     }));
     dispatchCommand(mxComponent, u".uno:ExecuteSearch"_ustr, aPropertyValues);
 
@@ -662,9 +688,9 @@ void DesktopKitTest::testSearchAllNotificationsCalc()
 
     cpo::uno::Sequence<beans::PropertyValue> aPropertyValues(comphelper::InitPropertySequence(
     {
-        {"SearchItem.SearchString", cpo::uno::Any(u"foo"_ustr)},
-        {"SearchItem.Backward", cpo::uno::Any(false)},
-        {"SearchItem.Command", cpo::uno::Any(static_cast<sal_uInt16>(SvxSearchCmd::FIND_ALL))},
+        {u"SearchItem.SearchString"_ustr, cpo::uno::Any(u"foo"_ustr)},
+        {u"SearchItem.Backward"_ustr, cpo::uno::Any(false)},
+        {u"SearchItem.Command"_ustr, cpo::uno::Any(static_cast<sal_uInt16>(SvxSearchCmd::FIND_ALL))},
     }));
     dispatchCommand(mxComponent, u".uno:ExecuteSearch"_ustr, aPropertyValues);
 
@@ -689,7 +715,7 @@ void DesktopKitTest::testPaintTile()
     // This used to crash: paintTile() implementation did not handle
     // nCanvasWidth != nCanvasHeight correctly, as usually both are just always
     // 256.
-    pDocument->paintTile(aBuffer.data(), nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+    pDocument->paintTile(aBuffer, nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
 
     // This crashed in OutputDevice::DrawDeviceAlphaBitmap().
     nCanvasWidth = 200;
@@ -697,13 +723,28 @@ void DesktopKitTest::testPaintTile()
     nTileWidth = 4000;
     nTileHeight = 4000;
     aBuffer.resize(nCanvasWidth * nCanvasHeight * 4);
-    pDocument->paintTile(aBuffer.data(), nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+    pDocument->paintTile(aBuffer, nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
 }
 
 void DesktopKitTest::testSaveAs()
 {
     COKitDocumentImpl* pDocument = loadDoc("blank_text.odt");
     CPPUNIT_ASSERT(pDocument->saveAs(maTempFile.GetURL().toUtf8().getStr(), "png", nullptr));
+}
+
+boost::property_tree::ptree DesktopKitTest::postSaveAndReadResult(COKitDocumentImpl* pDocument,
+                                                                   const char* pArguments)
+{
+    TimeValue aTimeValue = { 5, 0 };
+    m_aCommandResultCondition.reset();
+    pDocument->postUnoCommand(".uno:Save", pArguments, true);
+    Scheduler::ProcessEventsToIdle();
+    m_aCommandResultCondition.wait(aTimeValue);
+
+    boost::property_tree::ptree aTree;
+    std::stringstream aStream((std::string(m_aCommandResult)));
+    boost::property_tree::read_json(aStream, aTree);
+    return aTree;
 }
 
 void DesktopKitTest::testSaveFailedReportsReason()
@@ -720,18 +761,10 @@ void DesktopKitTest::testSaveFailedReportsReason()
     CPPUNIT_ASSERT(pShell);
     pShell->SetReadOnly();
 
-    TimeValue aTimeValue = { 5, 0 };
-    m_aCommandResultCondition.reset();
     // A save argument makes the dispatch report the store's own true/false result rather than
     // masking a failed save as done, matching how the kit posts a save with its own arguments.
-    pDocument->postUnoCommand(".uno:Save",
-                                      "{\"NoFileSync\":{\"type\":\"boolean\",\"value\":false}}", true);
-    Scheduler::ProcessEventsToIdle();
-    m_aCommandResultCondition.wait(aTimeValue);
-
-    boost::property_tree::ptree aTree;
-    std::stringstream aStream((std::string(m_aCommandResult)));
-    boost::property_tree::read_json(aStream, aTree);
+    boost::property_tree::ptree aTree = postSaveAndReadResult(
+        pDocument, "{\"NoFileSync\":{\"type\":\"boolean\",\"value\":false}}");
 
     CPPUNIT_ASSERT_EQUAL(std::string(".uno:Save"),
                          aTree.get_child("commandName").get_value<std::string>());
@@ -741,6 +774,42 @@ void DesktopKitTest::testSaveFailedReportsReason()
     CPPUNIT_ASSERT_EQUAL(std::string("string"),
                          aTree.get_child("result.type").get_value<std::string>());
     CPPUNIT_ASSERT(!aTree.get_child("result.value").get_value<std::string>().empty());
+}
+
+void DesktopKitTest::testSaveFromReadOnlyView()
+{
+    // A read-only view cannot save. The answer to the refused save depends on whether the caller
+    // asked to skip an unchanged document.
+    m_pDocument = loadDocUrlImpl(createFileURL(u"blank_text.odt"), COKitDocumentType::TEXT);
+    COKitDocumentImpl* pDocument = m_pDocument.get();
+    pDocument->registerCallback(&DesktopKitTest::callback, this);
+    KitHelper::setViewReadOnly(pDocument->getView(), true);
+
+    const char* const pSkipUnmodified
+        = "{\"DontSaveIfUnmodified\":{\"type\":\"boolean\",\"value\":true}}";
+    const char* const pPlainSave = "{\"DontTerminateEdit\":{\"type\":\"boolean\",\"value\":true}}";
+
+    // A save that may skip an unchanged document is answered like that skip.
+    boost::property_tree::ptree aTree = postSaveAndReadResult(pDocument, pSkipUnmodified);
+    CPPUNIT_ASSERT_EQUAL(std::string(".uno:Save"),
+                         aTree.get_child("commandName").get_value<std::string>());
+    CPPUNIT_ASSERT_EQUAL(false, aTree.get_child("success").get_value<bool>());
+    CPPUNIT_ASSERT_EQUAL(std::string("unmodified"),
+                         aTree.get_child("result.value").get_value<std::string>());
+
+    // A save that did not ask for the skip is a plain failure, with no result string.
+    aTree = postSaveAndReadResult(pDocument, pPlainSave);
+    CPPUNIT_ASSERT_EQUAL(false, aTree.get_child("success").get_value<bool>());
+    CPPUNIT_ASSERT(!aTree.get_child_optional("result"));
+
+    // Once the document carries changes there is nothing to skip, so the refusal is a failure
+    // even for a save that may skip an unchanged document.
+    SfxObjectShell* pShell = SfxObjectShell::GetShellFromComponent(pDocument->mxComponent);
+    CPPUNIT_ASSERT(pShell);
+    pShell->SetModified(true);
+    aTree = postSaveAndReadResult(pDocument, pSkipUnmodified);
+    CPPUNIT_ASSERT_EQUAL(false, aTree.get_child("success").get_value<bool>());
+    CPPUNIT_ASSERT(!aTree.get_child_optional("result"));
 }
 
 void DesktopKitTest::testExportDirectToPdfDottedName()
@@ -825,7 +894,7 @@ void DesktopKitTest::testPasteWriter()
 
     pDocument->postUnoCommand(".uno:SelectAll", nullptr, false);
     Scheduler::ProcessEventsToIdle();
-    std::string aSelectedText = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    std::string aSelectedText = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL("hello"_ostr, OString(aSelectedText));
 
     // textt/plain should be rejected.
@@ -896,7 +965,7 @@ void DesktopKitTest::testPasteWriterJPEG()
     uno::Reference<lang::XComponent>(xShape, uno::UNO_QUERY_THROW)->dispose();
     cpo::uno::Sequence<beans::PropertyValue> aPropertyValues(comphelper::InitPropertySequence(
     {
-        {"AnchorType", cpo::uno::Any(static_cast<sal_uInt16>(text::TextContentAnchorType_AT_CHARACTER))},
+        {u"AnchorType"_ustr, cpo::uno::Any(static_cast<sal_uInt16>(text::TextContentAnchorType_AT_CHARACTER))},
     }));
     dispatchCommand(mxComponent, u".uno:Paste"_ustr, aPropertyValues);
     xShape.set(xDrawPage->getByIndex(0), uno::UNO_QUERY);
@@ -915,22 +984,21 @@ void DesktopKitTest::testClipboardMarkdownFlavor()
     CPPUNIT_ASSERT(pDocument->setClipboard(1, pInMimeTypes, pInSizes, pInStreams));
 
     // When getting the clipboard content:
-    std::vector<std::string> aOutMimeTypes;
-    std::vector<std::vector<char>> aOutStreams;
-    CPPUNIT_ASSERT(pDocument->getClipboard(nullptr, aOutMimeTypes, aOutStreams));
+    const std::vector<COKitClipboardItem> aItems = pDocument->getClipboard(nullptr);
+    CPPUNIT_ASSERT(!aItems.empty());
 
     // Then make sure the plain text data is also advertised as markdown:
     bool bHasPlain = false;
     bool bHasMarkdown = false;
     OString aMarkdownContent;
-    for (size_t i = 0; i < aOutMimeTypes.size(); ++i)
+    for (const COKitClipboardItem& rItem : aItems)
     {
-        if (aOutMimeTypes[i] == "text/plain;charset=utf-8")
+        if (rItem.aMimeType == "text/plain;charset=utf-8")
             bHasPlain = true;
-        else if (aOutMimeTypes[i] == "text/markdown")
+        else if (rItem.aMimeType == "text/markdown")
         {
             bHasMarkdown = true;
-            aMarkdownContent = OString(aOutStreams[i].data(), aOutStreams[i].size());
+            aMarkdownContent = OString(rItem.aData.data(), rItem.aData.size());
         }
     }
     CPPUNIT_ASSERT(bHasPlain);
@@ -938,6 +1006,123 @@ void DesktopKitTest::testClipboardMarkdownFlavor()
     // advertised when listing available formats.
     CPPUNIT_ASSERT(bHasMarkdown);
     CPPUNIT_ASSERT_EQUAL(aText, aMarkdownContent);
+}
+
+namespace
+{
+// A platform clipboard holding what a browser session of Collabora Online copied: HTML with the
+// marker of the server's clipboard endpoint, and plain text.
+constexpr std::string_view aRemoteClipboardHtml
+    = "<!DOCTYPE HTML><html><body><div id=\"meta-origin\" data-coolorigin=\""
+      "https%3A%2F%2Fcool.example.com%2Fcool%2Fclipboard%3FWOPISrc%3Dx%26ServerId%3D0123abcd"
+      "%26ViewId%3D7%26Tag%3D00112233445566778899aabbccddeeff\"><p>Hello</p></div></body></html>";
+
+bool remoteClipboardOwnsClipboard() { return false; }
+
+std::vector<std::string> remoteClipboardMimeTypes()
+{
+    return { "text/html", "text/plain;charset=utf-8" };
+}
+
+bool remoteClipboardData(const char* pMimeType, std::vector<char>* pOutData)
+{
+    std::string_view aData;
+    if (std::string_view(pMimeType) == "text/html")
+        aData = aRemoteClipboardHtml;
+    else if (std::string_view(pMimeType) == "text/plain;charset=utf-8")
+        aData = "Hello";
+    else
+        return false;
+    pOutData->assign(aData.begin(), aData.end());
+    return true;
+}
+
+const COKitClipboardProvider aRemoteClipboardProvider
+    = { nullptr, &remoteClipboardOwnsClipboard, &remoteClipboardMimeTypes, &remoteClipboardData };
+}
+
+void DesktopKitTest::testPasteFromRemoteClipboard()
+{
+    // The provider goes in before the document loads, as the apps install it at start-up: a
+    // document takes its clipboard when it is created.
+    COKitImpl aOffice;
+    aOffice.installClipboardProvider(&aRemoteClipboardProvider);
+    int nDownloads = 0;
+    vcl::remoteclipboard::setFetcherForTesting([&nDownloads](const OUString&, std::string& rBody) {
+        ++nDownloads;
+        rBody = "text/plain;charset=utf-8\n4\nrich\n";
+        return true;
+    });
+    comphelper::ScopeGuard aRestore([&aOffice] {
+        vcl::remoteclipboard::setFetcherForTesting({});
+        vcl::remoteclipboard::clearCache();
+        aOffice.installClipboardProvider(nullptr);
+    });
+
+    COKitDocumentImpl* pDocument = loadDoc("blank_text.odt");
+    pDocument->initializeForRendering(nullptr);
+
+    // The paste downloads the full clipboard from the server and pastes that, not the HTML.
+    pDocument->postUnoCommand(".uno:Paste", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(1, nDownloads);
+
+    pDocument->postUnoCommand(".uno:SelectAll", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::string("rich"),
+                         pDocument->getTextSelection("text/plain;charset=utf-8"));
+}
+
+void DesktopKitTest::testPasteFromRemoteClipboardFallsBackToHtml()
+{
+    COKitImpl aOffice;
+    aOffice.installClipboardProvider(&aRemoteClipboardProvider);
+    vcl::remoteclipboard::setFetcherForTesting(
+        [](const OUString&, std::string&) { return false; });
+    comphelper::ScopeGuard aRestore([&aOffice] {
+        vcl::remoteclipboard::setFetcherForTesting({});
+        vcl::remoteclipboard::clearCache();
+        aOffice.installClipboardProvider(nullptr);
+    });
+
+    COKitDocumentImpl* pDocument = loadDoc("blank_text.odt");
+    pDocument->initializeForRendering(nullptr);
+
+    // The server did not answer, so the paste goes ahead with the HTML on the clipboard.
+    pDocument->postUnoCommand(".uno:Paste", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+
+    pDocument->postUnoCommand(".uno:SelectAll", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+    const std::string aText = pDocument->getTextSelection("text/plain;charset=utf-8");
+    CPPUNIT_ASSERT_MESSAGE(aText, std::string::npos != aText.find("Hello"));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(aText, std::string::npos, aText.find("rich"));
+}
+
+void DesktopKitTest::testPasteCalcPlainTextAsValue()
+{
+    // Given a Calc document and a plain text clipboard:
+    COKitDocumentImpl* pDocument = loadDoc("empty.ods");
+    OString aText("2026-10-26"_ostr);
+    const char* pInMimeTypes[] = { "text/plain;charset=utf-8" };
+    const size_t pInSizes[] = { static_cast<size_t>(aText.getLength()) };
+    const char* pInStreams[] = { aText.getStr() };
+    CPPUNIT_ASSERT(pDocument->setClipboard(1, pInMimeTypes, pInSizes, pInStreams));
+
+    // When pasting into A1:
+    pDocument->postUnoCommand(".uno:Paste", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the text is recognised as a date value:
+    uno::Reference<sheet::XSpreadsheetDocument> xDocument(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xSheets(xDocument->getSheets(), uno::UNO_QUERY);
+    uno::Reference<sheet::XSpreadsheet> xSheet(xSheets->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<table::XCell> xCell = xSheet->getCellByPosition(0, 0);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 2
+    // i.e. the text was pasted as markdown into an edit text cell.
+    CPPUNIT_ASSERT_EQUAL(table::CellContentType_VALUE, xCell->getType());
 }
 
 void DesktopKitTest::testUndoWriter()
@@ -992,9 +1177,9 @@ void DesktopKitTest::testRowColumnHeaders()
 
     pDocument->initializeForRendering(nullptr);
 
-    long nWidth = 0;
-    long nHeight = 0;
-    pDocument->getDocumentSize(&nWidth, &nHeight);
+    const COKitSize aDocSize = pDocument->getDocumentSize();
+    tools::Long nWidth = aDocSize.nWidth;
+    tools::Long nHeight = aDocSize.nHeight;
     tools::Long nX = rtl::math::round(nWidth / 4.0);
     tools::Long nY = rtl::math::round(nHeight / 4.0);
     nWidth = rtl::math::round(nWidth / 2.0);
@@ -1076,12 +1261,11 @@ void DesktopKitTest::testHiddenRowHeaders()
 
     tools::Long const nX = 0;
     tools::Long const nY = 0;
-    long nWidth = 0;
-    long nHeight = 0;
-    pDocument->getDocumentSize(&nWidth, &nHeight);
+    const COKitSize aDocSize = pDocument->getDocumentSize();
 
     std::stringstream aPayload;
-    aPayload << ".uno:ViewRowColumnHeaders?x=" << nX << "&y=" << nY << "&width=" << nWidth << "&height=" << nHeight;
+    aPayload << ".uno:ViewRowColumnHeaders?x=" << nX << "&y=" << nY << "&width=" << aDocSize.nWidth
+             << "&height=" << aDocSize.nHeight;
 
     boost::property_tree::ptree aTree;
     std::string aJSON = pDocument->getCommandValues(aPayload.str().c_str());
@@ -1271,12 +1455,10 @@ void DesktopKitTest::testSheetOperations()
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT_EQUAL(6, pDocument->getParts());
 
-    std::vector<OString> aExpected = { "FirstSheet"_ostr, "Renamed"_ostr, "Sheet3"_ostr, "Sheet4"_ostr, "Sheet5"_ostr, "LastSheet"_ostr };
+    std::vector<std::string> aExpected = { "FirstSheet", "Renamed", "Sheet3", "Sheet4", "Sheet5", "LastSheet" };
     for (int i = 0; i < 6; ++i)
     {
-        char* pPartName = pDocument->getPartName(i);
-        CPPUNIT_ASSERT_EQUAL(aExpected[i], OString(pPartName));
-        free(pPartName);
+        CPPUNIT_ASSERT_EQUAL(aExpected[i], pDocument->getPartName(i));
     }
 }
 
@@ -1320,8 +1502,7 @@ void DesktopKitTest::testSheetSelections()
 
     // Copy the contents and check if matches expected data
     {
-        std::string aUsedMimeType;
-        std::string aCopiedContent = pDocument->getTextSelection("", &aUsedMimeType);
+        std::string aCopiedContent = pDocument->getTextSelection("");
         std::vector<long> aExpected = {5, 6, 7, 8, 9};
         std::istringstream iss(aCopiedContent);
         for (const long nIndex : aExpected)
@@ -1348,7 +1529,7 @@ void DesktopKitTest::testSheetSelections()
     // Selected text should get deselected and copying should give us
     // content of only one cell, now
     {
-        std::string aCopiedContent = pDocument->getTextSelection("", nullptr);
+        std::string aCopiedContent = pDocument->getTextSelection("");
         std::vector<long> aExpected = { 8 };
         std::istringstream iss(aCopiedContent);
         for (const long nIndex : aExpected)
@@ -1410,7 +1591,7 @@ void DesktopKitTest::testSheetDragDrop()
 
     // Check selection content
     {
-        std::string aSelContent = pDocument->getTextSelection("", nullptr);
+        std::string aSelContent = pDocument->getTextSelection("");
         std::vector<long> aExpected = {1, 2, 3, 4, 5};
         std::istringstream aContent(aSelContent);
         std::string token;
@@ -1453,12 +1634,13 @@ void DesktopKitTest::testSheetDragDrop()
         rViewFrame.GetBindings().QueryState(rViewFrame.GetBindings().QuerySlotId(aURL), pState);
         pState->QueryValue(aValue);
         aValue >>= sValue;
-        CPPUNIT_ASSERT_EQUAL(u"Sheet5.D1:H1"_ustr, sValue);
+        // The block is grabbed in A1 and released with the pointer in E1, so it lands at E1.
+        CPPUNIT_ASSERT_EQUAL(u"Sheet5.E1:I1"_ustr, sValue);
     }
 
     // Check selection content
     {
-        std::string aSelContent = pDocument->getTextSelection("", nullptr);
+        std::string aSelContent = pDocument->getTextSelection("");
         std::vector<long> aExpected = {1, 2, 3, 4, 5};
         std::istringstream aContent(aSelContent);
         std::string token;
@@ -1799,6 +1981,47 @@ void DesktopKitTest::testNotificationCompression()
     CPPUNIT_ASSERT_EQUAL(std::string(".uno:AssignLayout=1"), std::get<1>(notifs[i++]));
 }
 
+void DesktopKitTest::testPaintedAreaOutlivesTheLastView()
+{
+    // A view that painted no tile gets no invalidation, its own edits included.
+    // The document keeps what its views painted, for the next one to start from.
+    COKitDocumentImpl* pDocument = loadDoc("blank_text.odt");
+
+    std::vector<std::tuple<int, std::string>> aNotificationList;
+    pDocument->registerCallback(&callbackCompressionTest, &aNotificationList);
+
+    const int nFirstView = KitHelper::getCurrentView();
+    CallbackFlushHandler* pFirstHandler = pDocument->mpCallbackFlushHandlers[nFirstView].get();
+    CPPUNIT_ASSERT(pFirstHandler);
+    // The invalidation below is cropped against this, so keep it wider.
+    pFirstHandler->tilePainted("-1"_ostr, 0, tools::Rectangle(0, 0, 15000, 15000));
+
+    // The document is left loaded with no view at all.
+    pDocument->registerCallback(nullptr, nullptr);
+    CPPUNIT_ASSERT(pDocument->mpCallbackFlushHandlers.empty());
+
+    // The view coming back has no live view to take the area from.
+    aNotificationList.clear();
+    pDocument->registerCallback(&callbackCompressionTest, &aNotificationList);
+
+    const int nSecondView = KitHelper::getCurrentView();
+    CallbackFlushHandler* pSecondHandler = pDocument->mpCallbackFlushHandlers[nSecondView].get();
+    CPPUNIT_ASSERT(pSecondHandler);
+    tools::Rectangle aInvalidated(0, 0, 1000, 1000);
+    pSecondHandler->viewInvalidateTilesCallback(&aInvalidated, -1, 0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Registering a view notifies of other things too, so count only these.
+    // Without the area kept on the document this one is dropped.
+    size_t nInvalidations = 0;
+    for (const auto& rNotification : aNotificationList)
+    {
+        if (std::get<0>(rNotification) == int(COKitCallbackType::INVALIDATE_TILES))
+            ++nInvalidations;
+    }
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), nInvalidations);
+}
+
 void DesktopKitTest::testVectorDeltaPushCoalescing()
 {
     // Repeated part changes produce a single pushed vector
@@ -1809,12 +2032,19 @@ void DesktopKitTest::testVectorDeltaPushCoalescing()
     std::unique_ptr<CallbackFlushHandler> handler(
         new CallbackFlushHandler(pDocument, callbackCompressionTest, &aNotificationList));
     handler->setViewId(KitHelper::getCurrentView());
-    handler->setVectorRendering();
+    handler->setVectorRendering(0);
+
+    // A part is named by its id, the page GUID, the same value the status message names it by.
+    vcl::ITiledRenderable* pTiledRenderable
+        = dynamic_cast<vcl::ITiledRenderable*>(pDocument->mxComponent.get());
+    CPPUNIT_ASSERT(pTiledRenderable);
+    const OString aPartId = pTiledRenderable->getPartId(0, 0);
+    CPPUNIT_ASSERT(!aPartId.isEmpty());
 
     tools::Rectangle aRectangle1(Point(10, 10), Size(20, 10));
     handler->viewInvalidateTilesCallback(&aRectangle1, 0, 0);
-    handler->viewVectorPartChanged(0);
-    handler->viewVectorPartChanged(0);
+    handler->viewVectorPartChanged(aPartId, 0);
+    handler->viewVectorPartChanged(aPartId, 0);
 
     Scheduler::ProcessEventsToIdle();
 
@@ -1828,7 +2058,10 @@ void DesktopKitTest::testVectorDeltaPushCoalescing()
 
     CPPUNIT_ASSERT(!aNotificationList.empty());
     CPPUNIT_ASSERT_EQUAL(int(COKitCallbackType::VECTOR_PRIMITIVES_DELTA), std::get<0>(aNotificationList.back()));
-    CPPUNIT_ASSERT(std::get<1>(aNotificationList.back()).find("vectorprimitivesdelta") != std::string::npos);
+    // The payload names the part on its first line, and the delta follows.
+    const std::string& rPayload = std::get<1>(aNotificationList.back());
+    CPPUNIT_ASSERT(rPayload.starts_with(std::string(aPartId) + "\n{"));
+    CPPUNIT_ASSERT(rPayload.find("vectorprimitivesdelta") != std::string::npos);
 }
 
 void DesktopKitTest::testTileInvalidationCompression()
@@ -2027,6 +2260,7 @@ void DesktopKitTest::testBinaryCallback()
     const tools::Rectangle rect1(Point(10,15),Size(20,25));
     // -1 means all parts, so the invalidation carries the part it was given.
     const int nAllParts = -1;
+    const OString aAllParts("-1"_ostr);
     const std::string rect1String(std::string(rect1.toString()) + ", -1, 0");
     // Verify that using queue() and viewInvalidateTilesCallback() has the same result.
     {
@@ -2047,7 +2281,7 @@ void DesktopKitTest::testBinaryCallback()
         std::unique_ptr<CallbackFlushHandler> handler(new CallbackFlushHandler(pDocument, callbackBinaryCallbackTest, &notifs));
         handler->setViewId(KitHelper::getCurrentView());
 
-        handler->tilePainted(nAllParts, /*nMode=*/0, rect1);
+        handler->tilePainted(aAllParts, /*nMode=*/0, rect1);
         handler->viewInvalidateTilesCallback(&rect1, nAllParts, 0);
 
         Scheduler::ProcessEventsToIdle();
@@ -2062,7 +2296,7 @@ void DesktopKitTest::testBinaryCallback()
         std::unique_ptr<CallbackFlushHandler> handler(new CallbackFlushHandler(pDocument, callbackBinaryCallbackTest, &notifs));
         handler->setViewId(KitHelper::getCurrentView());
 
-        handler->tilePainted(nAllParts, /*nMode=*/0, rect1);
+        handler->tilePainted(aAllParts, /*nMode=*/0, rect1);
         handler->viewInvalidateTilesCallback(nullptr, nAllParts, 0);
 
         Scheduler::ProcessEventsToIdle();
@@ -2103,7 +2337,7 @@ void DesktopKitTest::testOmitInvalidate()
         pHandler->setViewId(0);
 
         // When emitting an invalidation outside the painted area:
-        pHandler->tilePainted(/*nPart=*/0, /*nMode=*/0, aRectangle);
+        pHandler->tilePainted(/*rPart=*/"0"_ostr, /*nMode=*/0, aRectangle);
         tools::Rectangle aElsewhere{Point(20, 20), Size(10, 10)};
         pHandler->viewInvalidateTilesCallback(&aElsewhere, /*nPart=*/0, /*nMode=*/0);
 
@@ -2119,7 +2353,7 @@ void DesktopKitTest::testOmitInvalidate()
         pHandler->setViewId(0);
 
         // When emitting an invalidation partly outside the painted area:
-        pHandler->tilePainted(/*nPart=*/0, /*nMode=*/0, aRectangle);
+        pHandler->tilePainted(/*rPart=*/"0"_ostr, /*nMode=*/0, aRectangle);
         tools::Rectangle aLarger{Point(0, 0), Size(20, 10)};
         pHandler->viewInvalidateTilesCallback(&aLarger, /*nPart=*/0, /*nMode=*/0);
 
@@ -2148,7 +2382,7 @@ void DesktopKitTest::test2ViewsOmitInvalidate()
     // When painting a tile for a larger area, and then 2 invalidates: the first view gets a smaller
     // invalidate, the second view gets a larger invalidate:
     tools::Rectangle aPaint{Point(0, 0), Size(20, 10)};
-    pDocument->updateViewsForPaintedTile(/*nOrigViewId=*/0, /*nPart=*/0, /*nMode=*/0, aPaint);
+    pDocument->updateViewsForPaintedTile(/*nOrigViewId=*/0, /*rPart=*/"0"_ostr, /*nMode=*/0, aPaint);
     tools::Rectangle aSmaller{Point(0, 0), Size(10, 10)};
     pHandler1->viewInvalidateTilesCallback(&aSmaller, /*nPart=*/0, /*nMode=*/0);
     tools::Rectangle aLarger{Point(0, 0), Size(20, 10)};
@@ -2193,7 +2427,7 @@ void DesktopKitTest::testInput()
     // get the text ...
     pDocument->postUnoCommand(".uno:SelectAll", nullptr, false);
     Scheduler::ProcessEventsToIdle();
-    std::string aText = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    std::string aText = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL("far beyond lovely "_ostr, OString(aText));
 }
 
@@ -2311,6 +2545,7 @@ public:
     int m_nComments = 0;
     int m_nDocSizeChanged = 0;
     int m_nTextViewSelection = 0;
+    OString m_aLastContext;
     boost::property_tree::ptree m_aColorPaletteCallbackResult;
     RedlineInfo m_aLastRedlineInfo;
     std::string m_searchTerm;
@@ -2383,6 +2618,11 @@ public:
         case COKitCallbackType::DOCUMENT_SIZE_CHANGED:
         {
             ++m_nDocSizeChanged;
+        }
+        break;
+        case COKitCallbackType::CONTEXT_CHANGED:
+        {
+            m_aLastContext = aPayload;
         }
         break;
         case COKitCallbackType::TEXT_VIEW_SELECTION:
@@ -2504,10 +2744,9 @@ void DesktopKitTest::testPaintPartTile()
 //    pDocument->registerCallback(&ViewCallback::callback, &aView2);
 
     // Go to the second slide in the second view. The boundary names a slide by
-    // its part number, the page's stable unique id.
-    const int nSecondSlide
-        = static_cast<int>(pDocument->getPartUniqueId(1, 0));
-    pDocument->setPart(nSecondSlide);
+    // its part identifier, the page's GUID.
+    const std::string aSecondSlide = pDocument->getPartId(1, 0);
+    pDocument->setPart(aSecondSlide.c_str());
 
     // Switch back to the first view and start typing.
     pDocument->setView(nView1);
@@ -2519,7 +2758,7 @@ void DesktopKitTest::testPaintPartTile()
 
     // Call paintPartTile() to paint the second part (in whichever view it finds suitable for this).
     unsigned char pPixels[256 * 256 * 4];
-    pDocument->paintPartTile(pPixels, nSecondSlide, 0, 256, 256, 0, 0, 256, 256);
+    pDocument->paintPartTile(pPixels, aSecondSlide.c_str(), 0, 256, 256, 0, 0, 256, 256);
 
     // Type again.
     Scheduler::ProcessEventsToIdle();
@@ -2532,6 +2771,36 @@ void DesktopKitTest::testPaintPartTile()
     //CPPUNIT_ASSERT(aView1.m_bTilesInvalidated);
 }
 
+void DesktopKitTest::testPaintPartTileMasterPage()
+{
+    // Given a view on a slide that uses the second of two master pages:
+    COKitDocumentImpl* pDocument = loadDoc("two-masters.fodp");
+    pDocument->initializeForRendering("{}");
+    const std::string aSlide = pDocument->getPartId(0, 0);
+    CPPUNIT_ASSERT_EQUAL(aSlide, pDocument->getPart());
+
+    // When painting a tile of the first master page:
+    const std::string aFirstMaster = pDocument->getPartId(0, 1);
+    CPPUNIT_ASSERT(!aFirstMaster.empty());
+    constexpr int nCanvasWidth = 256;
+    constexpr int nCanvasHeight = 256;
+    std::array<sal_uInt8, nCanvasWidth * nCanvasHeight * 4> aPixels;
+    pDocument->paintPartTile(aPixels, aFirstMaster.c_str(), 1, nCanvasWidth, nCanvasHeight, 0, 0,
+                             3840, 3840);
+
+    // Then the tile shows the red background of the first master, not the blue background of the
+    // master the slide uses:
+    constexpr size_t nOffset = (128 * nCanvasWidth + 128) * 4;
+    const bool bRGBA = pDocument->getTileMode() == COKitTileMode::RGBA;
+    const Color aPixel(aPixels[nOffset + (bRGBA ? 0 : 2)], aPixels[nOffset + 1],
+                       aPixels[nOffset + (bRGBA ? 2 : 0)]);
+    CPPUNIT_ASSERT_EQUAL(Color(0xff, 0x00, 0x00), aPixel);
+
+    // And the view is back on the slide:
+    CPPUNIT_ASSERT_EQUAL(0, pDocument->getEditMode());
+    CPPUNIT_ASSERT_EQUAL(aSlide, pDocument->getPart());
+}
+
 void DesktopKitTest::testPaintTileOmitInvalidate()
 {
     // Given a painted tile:
@@ -2540,7 +2809,7 @@ void DesktopKitTest::testPaintTileOmitInvalidate()
     const int nCanvasWidth = 256;
     const int nCanvasHeight = 256;
     std::array<sal_uInt8, nCanvasWidth * nCanvasHeight * 4> aPixels;
-    pDocument->paintTile(aPixels.data(), nCanvasWidth, nCanvasHeight, 0, 0, 3840, 3840);
+    pDocument->paintTile(aPixels, nCanvasWidth, nCanvasHeight, 0, 0, 3840, 3840);
     Scheduler::ProcessEventsToIdle();
     aView.m_bTilesInvalidated = false;
 
@@ -2564,12 +2833,12 @@ void DesktopKitTest::testCreateViewOmitInvalidate()
     const int nCanvasWidth = 256;
     const int nCanvasHeight = 256;
     std::array<sal_uInt8, nCanvasWidth * nCanvasHeight * 4> aPixels;
-    pDocument->paintTile(aPixels.data(), nCanvasWidth, nCanvasHeight, 0, 0, 3840, 3840);
+    pDocument->paintTile(aPixels, nCanvasWidth, nCanvasHeight, 0, 0, 3840, 3840);
     pDocument->createView();
     pDocument->initializeForRendering(nullptr);
     ViewCallback aView2(pDocument);
     pDocument->setView(nView1);
-    pDocument->setPart(1);
+    pDocument->setPart("1");
     Scheduler::ProcessEventsToIdle();
     aView1.m_bTilesInvalidated = false;
     aView2.m_bTilesInvalidated = false;
@@ -2594,8 +2863,8 @@ void DesktopKitTest::testPaintPartTileHidesGridOnOtherPart()
     COKitDocumentImpl* pDocument = loadDoc("2slides.odp");
     pDocument->initializeForRendering("{}");
 
-    // The boundary names a slide by its part number, the page's stable unique id.
-    const int nSecondSlide = static_cast<int>(pDocument->getPartUniqueId(1, 0));
+    // The boundary names a slide by its part identifier, the page's GUID.
+    const std::string aSecondSlide = pDocument->getPartId(1, 0);
 
     constexpr int nCanvasWidth = 256;
     constexpr int nCanvasHeight = 256;
@@ -2607,13 +2876,13 @@ void DesktopKitTest::testPaintPartTileHidesGridOnOtherPart()
     // has to temporarily borrow the only view to paint a page it is not
     // editing. This is a preview request, the way the slide panel asks for
     // a thumbnail of a slide other than the one being edited.
-    pDocument->paintPartTile(aWithoutGrid.data(), nSecondSlide, 0, nCanvasWidth, nCanvasHeight, 0,
-                              0, 3840, 3840, /*bIsPreview=*/true);
+    pDocument->paintPartTile(aWithoutGrid, aSecondSlide.c_str(), 0, nCanvasWidth,
+                              nCanvasHeight, 0, 0, 3840, 3840, /*bIsPreview=*/true);
 
     // Turn the grid on, as if the user enabled it while editing the first slide.
     dispatchCommand(mxComponent, u".uno:GridVisible"_ustr, cpo::uno::Sequence<beans::PropertyValue>());
 
-    pDocument->paintPartTile(aWithGridOnEditedPart.data(), nSecondSlide, 0, nCanvasWidth,
+    pDocument->paintPartTile(aWithGridOnEditedPart, aSecondSlide.c_str(), 0, nCanvasWidth,
                               nCanvasHeight, 0, 0, 3840, 3840, /*bIsPreview=*/true);
 
     // The grid is an editing aid for the page being edited, not part of a
@@ -2628,7 +2897,7 @@ void DesktopKitTest::testPaintPartTileHidesGridOnActivePartPreview()
     COKitDocumentImpl* pDocument = loadDoc("2slides.odp");
     pDocument->initializeForRendering("{}");
 
-    const int nFirstSlide = static_cast<int>(pDocument->getPartUniqueId(0, 0));
+    const std::string aFirstSlide = pDocument->getPartId(0, 0);
 
     constexpr int nCanvasWidth = 256;
     constexpr int nCanvasHeight = 256;
@@ -2638,21 +2907,21 @@ void DesktopKitTest::testPaintPartTileHidesGridOnActivePartPreview()
     std::array<sal_uInt8, nCanvasWidth * nCanvasHeight * 4> aPreviewWithGrid;
 
     // Baseline: grid off, a tile of the (only) active slide.
-    pDocument->paintPartTile(aWithoutGrid.data(), nFirstSlide, 0, nCanvasWidth, nCanvasHeight, 0,
-                              0, 3840, 3840);
+    pDocument->paintPartTile(aWithoutGrid, aFirstSlide.c_str(), 0, nCanvasWidth,
+                              nCanvasHeight, 0, 0, 3840, 3840);
 
     dispatchCommand(mxComponent, u".uno:GridVisible"_ustr, cpo::uno::Sequence<beans::PropertyValue>());
 
     // The editing viewport's own tile of the active slide still shows the
     // grid the user turned on: this is not a preview.
-    pDocument->paintPartTile(aViewportWithGrid.data(), nFirstSlide, 0, nCanvasWidth,
+    pDocument->paintPartTile(aViewportWithGrid, aFirstSlide.c_str(), 0, nCanvasWidth,
                               nCanvasHeight, 0, 0, 3840, 3840, /*bIsPreview=*/false);
     CPPUNIT_ASSERT(!(aWithoutGrid == aViewportWithGrid));
 
     // A preview of that same active slide must not carry the grid along,
     // even though the tile is otherwise identical to the viewport's own.
-    pDocument->paintPartTile(aPreviewWithGrid.data(), nFirstSlide, 0, nCanvasWidth, nCanvasHeight,
-                              0, 0, 3840, 3840, /*bIsPreview=*/true);
+    pDocument->paintPartTile(aPreviewWithGrid, aFirstSlide.c_str(), 0, nCanvasWidth,
+                              nCanvasHeight, 0, 0, 3840, 3840, /*bIsPreview=*/true);
     CPPUNIT_ASSERT(operator==(aWithoutGrid, aPreviewWithGrid));
 }
 
@@ -2690,18 +2959,16 @@ void DesktopKitTest::testPaintPartTileDifferentSchemes()
     pDocument->initializeForRendering("{}");
 
     // Go to the second slide in the second view. The boundary names a slide by
-    // its part number, the page's stable unique id.
-    const int nFirstSlide
-        = static_cast<int>(pDocument->getPartUniqueId(0, 0));
-    const int nSecondSlide
-        = static_cast<int>(pDocument->getPartUniqueId(1, 0));
-    pDocument->setPart(nSecondSlide);
+    // its part identifier, the page's GUID.
+    const std::string aFirstSlide = pDocument->getPartId(0, 0);
+    const std::string aSecondSlide = pDocument->getPartId(1, 0);
+    pDocument->setPart(aSecondSlide.c_str());
 
     // Set to dark scheme
     {
         cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
             {
-                { "NewTheme", cpo::uno::Any(u"Dark"_ustr) },
+                { u"NewTheme"_ustr, cpo::uno::Any(u"Dark"_ustr) },
             }
         );
         dispatchCommand(mxComponent, u".uno:ChangeTheme"_ustr, aPropertyValues);
@@ -2718,11 +2985,11 @@ void DesktopKitTest::testPaintPartTileDifferentSchemes()
     std::array<sal_uInt8, nCanvasWidth * nCanvasHeight * 4> aPixels;
 
     // Both parts should be painted with dark scheme
-    pDocument->paintPartTile(aPixels.data(), nFirstSlide, 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
+    pDocument->paintPartTile(aPixels, aFirstSlide.c_str(), 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
     Color aPixel(aPixels[nPixelX + nPixelY + 0], aPixels[nPixelX + nPixelY + 1], aPixels[nPixelX + nPixelY + 2]);
     CPPUNIT_ASSERT_EQUAL(aDarkColor, aPixel);
 
-    pDocument->paintPartTile(aPixels.data(), nFirstSlide, 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
+    pDocument->paintPartTile(aPixels, aFirstSlide.c_str(), 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
     aPixel = Color(aPixels[nPixelX + nPixelY + 0], aPixels[nPixelX + nPixelY + 1], aPixels[nPixelX + nPixelY + 2]);
     CPPUNIT_ASSERT_EQUAL(aDarkColor, aPixel);
 
@@ -2730,11 +2997,11 @@ void DesktopKitTest::testPaintPartTileDifferentSchemes()
     pDocument->setView(nView1);
 
     // Both parts should be painted with light scheme
-    pDocument->paintPartTile(aPixels.data(), nFirstSlide, 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
+    pDocument->paintPartTile(aPixels, aFirstSlide.c_str(), 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
     aPixel = Color(aPixels[nPixelX + nPixelY + 0], aPixels[nPixelX + nPixelY + 1], aPixels[nPixelX + nPixelY + 2]);
     CPPUNIT_ASSERT_EQUAL(COL_WHITE, aPixel);
 
-    pDocument->paintPartTile(aPixels.data(), nFirstSlide, 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
+    pDocument->paintPartTile(aPixels, aFirstSlide.c_str(), 0, nCanvasWidth, nCanvasHeight, 0, 0, nCanvasWidth, nCanvasHeight);
     aPixel = Color(aPixels[nPixelX + nPixelY + 0], aPixels[nPixelX + nPixelY + 1], aPixels[nPixelX + nPixelY + 2]);
     CPPUNIT_ASSERT_EQUAL(COL_WHITE, aPixel);
 }
@@ -2766,11 +3033,10 @@ void DesktopKitTest::testCommentsWriter()
 {
     COKitDocumentImpl* pDocument = loadDoc("comments.odt");
     pDocument->initializeForRendering(nullptr);
-    long nWidth, nHeight;
-    pDocument->getDocumentSize(&nWidth, &nHeight);
+    const COKitSize aDocSize = pDocument->getDocumentSize();
 
     // Document width alongwith without sidebar comes to be < 13000
-    CPPUNIT_ASSERT( nWidth < 13000 );
+    CPPUNIT_ASSERT( aDocSize.nWidth < 13000 );
 
     // Can we get all the comments using .uno:ViewAnnotations command ?
     boost::property_tree::ptree aTree;
@@ -3398,7 +3664,7 @@ void DesktopKitTest::testCalcValidityDropdown()
     Scheduler::ProcessEventsToIdle();
 
     // Check the content of the current cell. The selected value of the dropdown was 1. It should be 4 now.
-    std::string aCellContent = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    std::string aCellContent = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL("4"_ostr, OString(aCellContent));
 }
 
@@ -3557,6 +3823,49 @@ void DesktopKitTest::testWriterShapePosSizeDialog()
                            aSizeBefore.Width != aSizeAfter.Width);
 }
 
+void DesktopKitTest::testDialogsOfOneDocumentOnly()
+{
+    // Suppressing a document's dialogs, because nobody is there to answer them, reaches that
+    // document only. One process holds every open document, so the others go on opening theirs.
+    COKitImpl aOffice;
+    COKitDocumentImpl* pDocument = loadDoc("blank_text.odt");
+    Scheduler::ProcessEventsToIdle();
+
+    pDocument->initializeForRendering("{}");
+    Scheduler::ProcessEventsToIdle();
+
+    ViewCallback aView(pDocument);
+    Scheduler::ProcessEventsToIdle();
+
+    // Insert a rectangle. It is selected after insertion, so the Position and Size dialog has
+    // something to act on.
+    pDocument->postUnoCommand(".uno:BasicShapes.rectangle", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+
+    const ViewShellDocId nThisDocId(pDocument->mnDocumentId);
+    const ViewShellDocId nOtherDocId(pDocument->mnDocumentId + 1);
+
+    // This document's dialogs are suppressed, so it opens none.
+    comphelper::COKit::setDialogsSuppressed(nThisDocId);
+    pDocument->postUnoCommand(".uno:TransformDialog", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("a document with its dialogs suppressed opened one",
+                                 static_cast<unsigned long long>(0), aView.m_posSizeDialogId);
+
+    // Suppressing another document says nothing about this one, which opens its dialog as
+    // usual.
+    comphelper::COKit::clearDialogsSuppressed(nThisDocId);
+    comphelper::COKit::setDialogsSuppressed(nOtherDocId);
+    comphelper::ScopeGuard aGuard(
+        [nOtherDocId] { comphelper::COKit::clearDialogsSuppressed(nOtherDocId); });
+    CPPUNIT_ASSERT(!comphelper::COKit::areDialogsSuppressed(nThisDocId));
+
+    pDocument->postUnoCommand(".uno:TransformDialog", nullptr, false);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_MESSAGE("suppressing another document closed this document's dialog",
+                           aView.m_posSizeDialogId != 0);
+}
+
 void DesktopKitTest::testFormulaBarAcceptButton()
 {
     COKitImpl aOffice;
@@ -3669,13 +3978,13 @@ void DesktopKitTest::testGetSignatureState_Signed()
     std::vector<unsigned char> aCertificate;
     {
         readFileIntoByteVector(u"rootCA.der", aCertificate);
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"intermediateRootCA.der", aCertificate);
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3713,14 +4022,14 @@ void DesktopKitTest::testInsertCertificate_DER_ODT()
     {
         readFileIntoByteVector(u"rootCA.der", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"intermediateRootCA.der", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3728,8 +4037,7 @@ void DesktopKitTest::testInsertCertificate_DER_ODT()
         readFileIntoByteVector(u"certificate.der", aCertificate);
         readFileIntoByteVector(u"certificatePrivateKey.der", aPrivateKey);
 
-        bool bResult = pDocument->insertCertificate(aCertificate.data(), int(aCertificate.size()),
-                            aPrivateKey.data(), int(aPrivateKey.size()));
+        bool bResult = pDocument->insertCertificate(aCertificate, aPrivateKey);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3757,21 +4065,21 @@ void DesktopKitTest::testInsertCertificate_PEM_ODT()
     {
         readFileIntoByteVector(u"test-cert-chain-1.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"test-cert-chain-2.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"test-cert-chain-3.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3779,8 +4087,7 @@ void DesktopKitTest::testInsertCertificate_PEM_ODT()
         readFileIntoByteVector(u"test-cert-signing.pem", aCertificate);
         readFileIntoByteVector(u"test-PK-signing.pem", aPrivateKey);
 
-        bool bResult = pDocument->insertCertificate(aCertificate.data(), int(aCertificate.size()),
-                            aPrivateKey.data(), int(aPrivateKey.size()));
+        bool bResult = pDocument->insertCertificate(aCertificate, aPrivateKey);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3807,21 +4114,21 @@ void DesktopKitTest::testInsertCertificate_PEM_DOCX()
     {
         readFileIntoByteVector(u"test-cert-chain-1.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"test-cert-chain-2.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"test-cert-chain-3.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3829,8 +4136,7 @@ void DesktopKitTest::testInsertCertificate_PEM_DOCX()
         readFileIntoByteVector(u"test-cert-signing.pem", aCertificate);
         readFileIntoByteVector(u"test-PK-signing.pem", aPrivateKey);
 
-        bool bResult = pDocument->insertCertificate(aCertificate.data(), int(aCertificate.size()),
-                            aPrivateKey.data(), int(aPrivateKey.size()));
+        bool bResult = pDocument->insertCertificate(aCertificate, aPrivateKey);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3855,21 +4161,21 @@ void DesktopKitTest::testSignDocument_PEM_PDF()
     {
         readFileIntoByteVector(u"test-cert-chain-1.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"test-cert-chain-2.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
     {
         readFileIntoByteVector(u"test-cert-chain-3.pem", aCertificate);
 
-        bool bResult = pDocument->addCertificate(aCertificate.data(), int(aCertificate.size()));
+        bool bResult = pDocument->addCertificate(aCertificate);
         CPPUNIT_ASSERT(bResult);
     }
 
@@ -3883,9 +4189,7 @@ void DesktopKitTest::testSignDocument_PEM_PDF()
     readFileIntoByteVector(u"test-PK-signing.pem", aPrivateKey);
 
     COKitImpl aOffice;
-    bool bResult = aOffice.signDocument(maTempFile.GetURL().toUtf8().getStr(),
-                                         aCertificate.data(), int(aCertificate.size()),
-                                         aPrivateKey.data(), int(aPrivateKey.size()));
+    bool bResult = aOffice.signDocument(maTempFile.GetURL().toUtf8().getStr(), aCertificate, aPrivateKey);
 
     CPPUNIT_ASSERT(bResult);
 }
@@ -3902,7 +4206,7 @@ void DesktopKitTest::testTextSelectionHandles()
     // select the inserted text
     pDocument->postUnoCommand(".uno:SelectAll", nullptr, false);
     Scheduler::ProcessEventsToIdle();
-    std::string aSelText = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    std::string aSelText = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL(aText, OString(aSelText));
     CPPUNIT_ASSERT_EQUAL("1418, 1418, 0, 275"_ostr, m_aTextSelectionStart);
     CPPUNIT_ASSERT_EQUAL("1897, 1418, 0, 275"_ostr, m_aTextSelectionEnd);
@@ -3912,7 +4216,7 @@ void DesktopKitTest::testTextSelectionHandles()
     m_aTextSelectionEnd = ""_ostr;
     pDocument->postKeyEvent(COKitKeyEventType::DOWN, 0, css::awt::Key::ESCAPE);
     Scheduler::ProcessEventsToIdle();
-    aSelText = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    aSelText = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL(""_ostr, OString(aSelText));
     CPPUNIT_ASSERT_EQUAL(OString(), m_aTextSelectionStart);
     CPPUNIT_ASSERT_EQUAL(OString(), m_aTextSelectionEnd);
@@ -3921,7 +4225,7 @@ void DesktopKitTest::testTextSelectionHandles()
     // again
     pDocument->postUnoCommand(".uno:SelectAll", nullptr, false);
     Scheduler::ProcessEventsToIdle();
-    aSelText = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    aSelText = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL(aText, OString(aSelText));
     CPPUNIT_ASSERT_EQUAL("1418, 1418, 0, 275"_ostr, m_aTextSelectionStart);
     CPPUNIT_ASSERT_EQUAL("1897, 1418, 0, 275"_ostr, m_aTextSelectionEnd);
@@ -3962,7 +4266,7 @@ void DesktopKitTest::testComplexSelection()
     CPPUNIT_ASSERT_EQUAL(static_cast<int>(COKitSelectionType::NONE),
                          static_cast<int>(pDocument->getSelectionType()));
     CPPUNIT_ASSERT_EQUAL(static_cast<int>(COKitSelectionType::NONE),
-                         static_cast<int>(pDocument->getSelectionTypeAndText("", nullptr)));
+                         static_cast<int>(pDocument->getSelectionTypeAndText("").eType));
 
     // Paste text.
     CPPUNIT_ASSERT(pDocument->paste("text/plain;charset=utf-8", aText.getStr(), aText.getLength()));
@@ -3971,7 +4275,7 @@ void DesktopKitTest::testComplexSelection()
     CPPUNIT_ASSERT_EQUAL(static_cast<int>(COKitSelectionType::NONE),
                          static_cast<int>(pDocument->getSelectionType()));
     CPPUNIT_ASSERT_EQUAL(static_cast<int>(COKitSelectionType::NONE),
-                         static_cast<int>(pDocument->getSelectionTypeAndText("", nullptr)));
+                         static_cast<int>(pDocument->getSelectionTypeAndText("").eType));
 
     // Paste an image.
     OUString aFileURL = createFileURL(u"paste.jpg");
@@ -3985,16 +4289,16 @@ void DesktopKitTest::testComplexSelection()
     Scheduler::ProcessEventsToIdle();
 
     // Export as plain text, we should get only the text part "hello".
-    std::string aSelText = pDocument->getTextSelection("text/plain;charset=utf-8", nullptr);
+    std::string aSelText = pDocument->getTextSelection("text/plain;charset=utf-8");
     CPPUNIT_ASSERT_EQUAL(aText, OString(aSelText));
 
     // Export as rtf, we should also get the image.
-    aSelText = pDocument->getTextSelection("text/rtf", nullptr);
+    aSelText = pDocument->getTextSelection("text/rtf");
     CPPUNIT_ASSERT(aSelText.find(aText.getStr()) != std::string::npos); // Must have the text.
     CPPUNIT_ASSERT(aSelText.find("pict{") != std::string::npos); // Must have the image as well.
 
     // Export as html, we should also get the image.
-    aSelText = pDocument->getTextSelection("text/html", nullptr);
+    aSelText = pDocument->getTextSelection("text/html");
     CPPUNIT_ASSERT(aSelText.find(aText.getStr()) != std::string::npos); // Must have the text.
     CPPUNIT_ASSERT(aSelText.find("<img") != std::string::npos); // Must have the image as well.
 
@@ -4002,7 +4306,7 @@ void DesktopKitTest::testComplexSelection()
     CPPUNIT_ASSERT_EQUAL(static_cast<int>(COKitSelectionType::COMPLEX),
                          static_cast<int>(pDocument->getSelectionType()));
     CPPUNIT_ASSERT_EQUAL(static_cast<int>(COKitSelectionType::COMPLEX),
-                         static_cast<int>(pDocument->getSelectionTypeAndText("", nullptr)));
+                         static_cast<int>(pDocument->getSelectionTypeAndText("").eType));
 }
 
 void DesktopKitTest::testCalcSaveAs()
@@ -4102,8 +4406,8 @@ void DesktopKitTest::testMultiDocuments()
         CPPUNIT_ASSERT_EQUAL(2, pDocument1->getViewsCount());
 
         // Validate the views of document 1.
-        std::vector<int> aViewIdsDoc1;
-        CPPUNIT_ASSERT(pDocument1->getViewIds(aViewIdsDoc1));
+        std::vector<int> aViewIdsDoc1 = pDocument1->getViewIds();
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aViewIdsDoc1.size());
         // The expectation is that the most recently used shell is at the start
         CPPUNIT_ASSERT_EQUAL(nDoc1View1, aViewIdsDoc1[0]);
         CPPUNIT_ASSERT_EQUAL(nDoc1View0, aViewIdsDoc1[1]);
@@ -4132,8 +4436,8 @@ void DesktopKitTest::testMultiDocuments()
         CPPUNIT_ASSERT_EQUAL(2, pDocument2->getViewsCount());
 
         // Validate the views of document 2.
-        std::vector<int> aViewIdsDoc2;
-        CPPUNIT_ASSERT(pDocument2->getViewIds(aViewIdsDoc2));
+        std::vector<int> aViewIdsDoc2 = pDocument2->getViewIds();
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aViewIdsDoc2.size());
         // The expectation is that the most recently used shell is at the start
         CPPUNIT_ASSERT_EQUAL(nDoc2View1, aViewIdsDoc2[0]);
         CPPUNIT_ASSERT_EQUAL(nDoc2View0, aViewIdsDoc2[1]);
@@ -4149,7 +4453,8 @@ void DesktopKitTest::testMultiDocuments()
         CPPUNIT_ASSERT_EQUAL(2, pDocument2->getViewsCount());
 
         // The views of document1 should be unchanged.
-        CPPUNIT_ASSERT(pDocument1->getViewIds(aViewIdsDoc1));
+        aViewIdsDoc1 = pDocument1->getViewIds();
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aViewIdsDoc1.size());
         // The expectation is that the most recently used shell is at the start
         CPPUNIT_ASSERT_EQUAL(nDoc1View1, aViewIdsDoc1[0]);
         CPPUNIT_ASSERT_EQUAL(nDoc1View0, aViewIdsDoc1[1]);
@@ -4162,7 +4467,8 @@ void DesktopKitTest::testMultiDocuments()
         CPPUNIT_ASSERT_EQUAL(1, pDocument1->getViewsCount());
 
         // The views of document2 should be unchanged.
-        CPPUNIT_ASSERT(pDocument2->getViewIds(aViewIdsDoc2));
+        aViewIdsDoc2 = pDocument2->getViewIds();
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aViewIdsDoc2.size());
         // The expectation is that the most recently used shell is at the start
         CPPUNIT_ASSERT_EQUAL(nDoc2View1, aViewIdsDoc2[0]);
         CPPUNIT_ASSERT_EQUAL(nDoc2View0, aViewIdsDoc2[1]);
@@ -4251,27 +4557,24 @@ void DesktopKitTest::testRenderSearchResult_WriterNode()
 
     Scheduler::ProcessEventsToIdle();
 
-    std::vector<unsigned char> aBuffer;
     OString aPayload =
     "<indexing>"
         "<paragraph node_type=\"writer\" index=\"19\">ABC</paragraph>"
     "</indexing>"_ostr;
 
-    int nWidth = 0;
-    int nHeight = 0;
+    const COKitBitmap aResult = pDocument->renderSearchResult(aPayload.getStr());
 
-    bool bResult = pDocument->renderSearchResult(aPayload.getStr(), &aBuffer, &nWidth, &nHeight);
-
-    CPPUNIT_ASSERT(bResult);
+    CPPUNIT_ASSERT(!aResult.aPixels.empty());
 
     Scheduler::ProcessEventsToIdle();
 
-    CPPUNIT_ASSERT_EQUAL(642, nWidth);
-    CPPUNIT_ASSERT_EQUAL(561, nHeight);
-    CPPUNIT_ASSERT_EQUAL(size_t(1440648), aBuffer.size());
+    CPPUNIT_ASSERT_EQUAL(642, aResult.nWidth);
+    CPPUNIT_ASSERT_EQUAL(561, aResult.nHeight);
+    CPPUNIT_ASSERT_EQUAL(size_t(1440648), aResult.aPixels.size());
 
-    const sal_uInt8* pD = reinterpret_cast<const sal_uInt8*>(aBuffer.data());
-    Bitmap aBitmap = vcl::bitmap::CreateFromData(pD, nWidth, nHeight, nWidth * 4, /*nBitsPerPixel*/32, true, true);
+    const sal_uInt8* pD = reinterpret_cast<const sal_uInt8*>(aResult.aPixels.data());
+    Bitmap aBitmap = vcl::bitmap::CreateFromData(pD, aResult.nWidth, aResult.nHeight,
+                                                 aResult.nWidth * 4, /*nBitsPerPixel*/32, true, true);
 
     if (bDumpBitmap)
     {
@@ -4292,27 +4595,24 @@ void DesktopKitTest::testRenderSearchResult_CommonNode()
 
     Scheduler::ProcessEventsToIdle();
 
-    std::vector<unsigned char> aBuffer;
     OString aPayload =
     "<indexing>"
         "<paragraph node_type=\"common\" index=\"0\" object_name=\"Shape 1\" />"
     "</indexing>"_ostr;
 
-    int nWidth = 0;
-    int nHeight = 0;
+    const COKitBitmap aResult = pDocument->renderSearchResult(aPayload.getStr());
 
-    bool bResult = pDocument->renderSearchResult(aPayload.getStr(), &aBuffer, &nWidth, &nHeight);
-
-    CPPUNIT_ASSERT(bResult);
+    CPPUNIT_ASSERT(!aResult.aPixels.empty());
 
     Scheduler::ProcessEventsToIdle();
 
-    CPPUNIT_ASSERT_EQUAL(192, nWidth);
-    CPPUNIT_ASSERT_EQUAL(96, nHeight);
-    CPPUNIT_ASSERT_EQUAL(size_t(73728), aBuffer.size());
+    CPPUNIT_ASSERT_EQUAL(192, aResult.nWidth);
+    CPPUNIT_ASSERT_EQUAL(96, aResult.nHeight);
+    CPPUNIT_ASSERT_EQUAL(size_t(73728), aResult.aPixels.size());
 
-    const sal_uInt8* pD = reinterpret_cast<const sal_uInt8*>(aBuffer.data());
-    Bitmap aBitmap = vcl::bitmap::CreateFromData(pD, nWidth, nHeight, nWidth * 4, /*nBitsPerPixel*/32, true, true);
+    const sal_uInt8* pD = reinterpret_cast<const sal_uInt8*>(aResult.aPixels.data());
+    Bitmap aBitmap = vcl::bitmap::CreateFromData(pD, aResult.nWidth, aResult.nHeight,
+                                                 aResult.nWidth * 4, /*nBitsPerPixel*/32, true, true);
 
     if (bDumpBitmap)
     {
@@ -4457,6 +4757,26 @@ void DesktopKitTest::testColorPaletteCallback()
     }
 }
 
+void DesktopKitTest::testTableContextOnLoad()
+{
+    // A document whose first element is a table, so the cursor lands inside it on load,
+    // the same way it would land in a table the user just clicked into.
+    COKitDocumentImpl* pDocument = loadDoc("writer-starts-with-table.odt");
+
+    // initializeForRendering positions that starting cursor before the callback below is
+    // registered, the same order production code uses.
+    pDocument->initializeForRendering("{}");
+    ViewCallback aView1(pDocument);
+    Scheduler::ProcessEventsToIdle();
+
+    // The view must already know it is inside a table, without the user having to click
+    // out and back in first.
+    // Without the fix in place, this test would have failed with:
+    // - Expected: true
+    // - Actual  : false
+    // i.e. no context ever reached this view.
+    CPPUNIT_ASSERT(aView1.m_aLastContext.indexOf("Table"_ostr) != -1);
+}
 
 CPPUNIT_TEST_SUITE_REGISTRATION(DesktopKitTest);
 

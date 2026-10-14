@@ -32,37 +32,37 @@ typedef cppu::ImplInheritanceHelper< ScVbaControl, ov::msforms::XUserForm > ScVb
 class ScVbaUserForm : public ScVbaUserForm_BASE
 {
 private:
-    css::uno::Reference< css::awt::XDialog > m_xDialog;
+    cpo::uno::Reference< css::awt::XDialog > m_xDialog;
     bool mbDispose;
     OUString m_sLibName;
 protected:
 public:
     /// @throws css::lang::IllegalArgumentException
-    /// @throws css::uno::RuntimeException
-    ScVbaUserForm( cpo::uno::Sequence< cpo::uno::Any > const& aArgs, css::uno::Reference< css::uno::XComponentContext >const& xContext );
+    /// @throws cpo::uno::RuntimeException
+    ScVbaUserForm( cpo::uno::Sequence< cpo::uno::Any > const& aArgs, cpo::uno::Reference< cpo::uno::XComponentContext >const& xContext );
     virtual ~ScVbaUserForm() override;
-    static css::uno::Reference< css::awt::XControl > nestedSearch( const OUString& aPropertyName, css::uno::Reference< css::awt::XControlContainer > const & xContainer );
+    static cpo::uno::Reference< css::awt::XControl > nestedSearch( const OUString& aPropertyName, cpo::uno::Reference< css::awt::XControlContainer > const & xContainer );
     // XUserForm
-    virtual void SAL_CALL RePaint(  ) override;
-    virtual void SAL_CALL Show(  ) override;
-    virtual void SAL_CALL setValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
-    virtual cpo::uno::Any SAL_CALL getValue( const OUString& aPropertyName ) override;
-    virtual OUString SAL_CALL getCaption() override;
-    virtual void SAL_CALL setCaption( const OUString& _caption ) override;
-    virtual double SAL_CALL getInnerWidth() override;
-    virtual void SAL_CALL setInnerWidth( double fInnerWidth ) override;
-    virtual double SAL_CALL getInnerHeight() override;
-    virtual void SAL_CALL setInnerHeight( double fInnerHeight ) override;
-    virtual void SAL_CALL Hide(  ) override;
-    virtual void SAL_CALL UnloadObject(  ) override;
-    virtual cpo::uno::Any SAL_CALL Controls( const cpo::uno::Any& index ) override;
-    virtual bool SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( bool bVis ) override;
+    virtual void RePaint(  ) override;
+    virtual void Show(  ) override;
+    virtual void setValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getValue( const OUString& aPropertyName ) override;
+    virtual OUString getCaption() override;
+    virtual void setCaption( const OUString& _caption ) override;
+    virtual double getInnerWidth() override;
+    virtual void setInnerWidth( double fInnerWidth ) override;
+    virtual double getInnerHeight() override;
+    virtual void setInnerHeight( double fInnerHeight ) override;
+    virtual void Hide(  ) override;
+    virtual void UnloadObject(  ) override;
+    virtual cpo::uno::Any Controls( const cpo::uno::Any& index ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool bVis ) override;
     // XIntrospection
-    virtual css::uno::Reference< css::beans::XIntrospectionAccess > SAL_CALL getIntrospection(  ) override;
-    virtual cpo::uno::Any SAL_CALL invoke( const OUString& aFunctionName, const cpo::uno::Sequence< cpo::uno::Any >& aParams, cpo::uno::Sequence< ::sal_Int16 >& aOutParamIndex, cpo::uno::Sequence< cpo::uno::Any >& aOutParam ) override;
-    virtual bool SAL_CALL hasMethod( const OUString& aName ) override;
-    virtual bool SAL_CALL hasProperty( const OUString& aName ) override;
+    virtual cpo::uno::Reference< css::beans::XIntrospectionAccess > getIntrospection(  ) override;
+    virtual cpo::uno::Any invoke( const OUString& aFunctionName, const cpo::uno::Sequence< cpo::uno::Any >& aParams, cpo::uno::Sequence< ::sal_Int16 >& aOutParamIndex, cpo::uno::Sequence< cpo::uno::Any >& aOutParam ) override;
+    virtual bool hasMethod( const OUString& aName ) override;
+    virtual bool hasProperty( const OUString& aName ) override;
     //XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

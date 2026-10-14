@@ -3,6 +3,11 @@
 	----------------------------------*/
 	--cool-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
+	/* The room a dialog has to lay itself out in. Not always the viewport: a
+	   dialog in a window of its own has the room the document window has. */
+	--dialog-available-width: 100vw;
+	--dialog-available-height: 100vh;
+
 	/* Shared color for cell and selection border */
 	--cell-cursor-selection-border-color: var(--color-primary);
 
@@ -20,6 +25,7 @@
 
 	--border-radius-s: 2px;
 	--border-radius: 4px; /* buttons, widgets, dialog windows */
+	--border-radius-pill: 999px; /* chips and other fully round shapes */
 	--border-radius-large: 10px; /* large surfaces: backstage, welcome screen, sidebar, popups, tab groups */
 
 	/* Spacing scale for gap/padding/margin */
@@ -28,6 +34,14 @@
 	--spacing-m: 8px;
 	--spacing-l: 12px;
 	--spacing-xl: 16px;
+
+	/* One row of a list the user reads down: source lists, backstage lists,
+	   the sidebar's own lists. */
+	--list-row-height: 40px;
+
+	/* The smallest a slide thumbnail may be drawn, shared by the slide
+	   navigator and the import pane so the two agree. */
+	--slide-thumb-min-width: 160px;
 
 	/* Black overlay tints for borders, scrims and shadow components */
 	--color-black-5: rgba(0, 0, 0, 0.05);
@@ -39,11 +53,12 @@
 	--shadow-subtle: 0 0 3px var(--color-box-shadow);
 	--shadow-elevated: 0 -1px 2px 0 var(--color-black-15), 0 2px 2px 0 var(--color-black-10);
 
-	/* Motion scale for transitions and animations. The duration grows with how much of the
-	   screen moves: instant for a colour or an opacity change, fast for a single small control,
-	   normal for a dropdown or a menu, slow for a panel, deliberate for a full width surface.
-	   Pick ease-standard for movement the user asked for, ease-out for something coming in and
-	   ease-in for something going away. */
+	/* Motion scale for transitions and animations, picked by purpose: instant for feedback while
+	   the pointer is down, fast for something the user opened or toggled and for an exit that
+	   animates, normal for something the system shows on its own that the user must notice, slow
+	   for a panel, deliberate for a full width surface. Pick ease-standard for movement from one
+	   resting state to another, ease-out for something coming in and ease-in for something going
+	   away. */
 	--duration-instant: 100ms;
 	--duration-fast: 150ms;
 	--duration-normal: 200ms;
@@ -85,13 +100,18 @@
 	/* Notebookbar */
 	--notebookbar-element-height: 64px;
 
+	/* Dialogs */
+	--dialog-tab-rail-width: 150px;
+
 	/* Scrollbars */
 	--scrollbar-width: thin;
 }
 
+/* BEGIN shared motion */
 /* When the user asks the system for less motion, every transition and animation that takes its
    time from the motion scale becomes short enough to read as immediate. One millisecond keeps the
    transitionend and animationend events firing, so code that waits for them still runs. */
+/* TODO: also apply on :root[data-motion=reduce], so integrators can force it without the OS setting */
 @media (prefers-reduced-motion: reduce) {
 	:root {
 		--duration-instant: 1ms;
@@ -108,6 +128,23 @@
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
 }
+
+@keyframes fade-in {
+	from { opacity: 0; }
+}
+
+@keyframes fade-out {
+	to { opacity: 0; }
+}
+
+@keyframes fade-scale-in {
+	from { opacity: 0; transform: scale(var(--motion-scale-from, 0.96)); }
+}
+
+@keyframes slide-up-in {
+	from { opacity: 0; transform: translateY(8px); }
+}
+/* END shared motion */
 
 html {
 	height: 100%;
@@ -185,7 +222,8 @@ input, button {
 	display: block;
 }
 
-.activate-info-boxes .accessibility-info-box.filtered_out {
+.activate-info-boxes .accessibility-info-box.filtered_out,
+.activate-info-boxes .accessibility-info-box.scrolled_out {
 	display: none;
 }
 
@@ -238,6 +276,16 @@ input, button {
 	top: 36px;
 	position: fixed;
 }
+/* The document and anything docked under it, such as the Impress notes pane. */
+#document-and-notes {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	position: relative;
+}
+
 #document-container {
 	font-family: var(--cool-font);
 	background-color: var(--color-main-background);
@@ -248,6 +296,13 @@ input, button {
 	flex: 1;
 	display: block;
 	height: 100%;
+}
+
+/* With a pane below it the document takes the height flex leaves over, so the fixed height
+   above would push the pane off the bottom. */
+#document-and-notes.notes-visible > #document-container {
+	height: auto;
+	min-height: 0;
 }
 
 /* Fade used when a zoom gesture at the zoom limit switches between the Overview slide
@@ -700,6 +755,13 @@ input, button {
 	transition: left .25s;
 }
 
+/* Drawn below the card, down the side of its replies. It is out of the card's
+   flow, so the card's own box stops where the card does. */
+.cool-annotation-child-lines {
+	position: absolute;
+	top: 100%;
+}
+
 .comment-placement-overlay {
 	position: absolute;
 	pointer-events: none;
@@ -721,6 +783,23 @@ input, button {
 	width: 66ch;
 	/* Centered align comment in TS, we cannot align it here with position relative */
 	z-index: 1000;
+	/* Limit the card at the max-height above and let the text inside scroll. */
+	display: flex;
+	flex-direction: column;
+}
+
+/* The content wrapper is all of the annotation pop-up, except the margins. */
+.cool-annotation.annotation-pop-up > .cool-annotation-content-wrapper {
+	min-height: 0;
+	flex: 1;
+	overflow: hidden;
+}
+
+/* The annotation content is the actual text without the table/header and the footer. */
+.cool-annotation.annotation-pop-up .cool-annotation-content {
+	min-height: 0;
+	flex: 1;
+	max-height: none;
 }
 .cool-annotation.annotation-pop-up:not(.annotation-active) > .cool-annotation-content-wrapper {
 	margin-right: 8px;
@@ -827,8 +906,22 @@ input, button {
 	margin: 0;
 	padding: 0;
 	min-height: 0;
-	/* The maximized panes are placed against this box. */
+	/* The splitter overlay and the maximized panes are placed against this
+	 * box. */
 	position: relative;
+	/* Widths of the navigation sidebar and the slide import pane, in pixels.
+	 * The import pane starts wide enough for two slide previews side by
+	 * side. */
+	--navigation-sidebar-width: 250px;
+	--slide-import-width: 384px;
+	/* The width of the navigation grid while the panels are maximized over
+	 * the document area; the import grid fills the rest. The two grids start
+	 * at an even split. */
+	--expanded-navigation-width: 50%;
+	/* The strip at the start of the maximized import pane that holds the
+	 * button which reopens the navigation sidebar: the button's 28px margin,
+	 * its 36px box and a 16px gap. */
+	--floating-navigator-strip-width: 80px;
 }
 
 .cool-annotation-collapsed-show .cool-annotation-img {
@@ -1339,6 +1432,7 @@ input, button {
 	text-overflow: ellipsis;
 	color: #0078A8;
 	font-size: 0.88rem;
+	text-decoration: none;
 }
 
 .hyperlink-popup-btn {
@@ -1347,9 +1441,14 @@ input, button {
 	vertical-align: middle;
 	width: 26px;
 	height: 26px;
+	padding: 0;
+	border: none;
+	background: none;
+	cursor: pointer;
 }
 
-.hyperlink-popup-btn:hover {
+.hyperlink-popup-btn:hover,
+.hyperlink-popup-btn:focus-visible {
 	background-color: var(--color-background-darker);
 	border-radius: 50%;
 }
@@ -1466,20 +1565,24 @@ input, button {
 }
 
 #date_picker .ui-datepicker-next span,
-#datepicker .ui-datepicker-next span {
+#datepicker .ui-datepicker-next span,
+.ui-calendar .ui-datepicker-next span {
 	background-image: url('images/lc_nextrecord.svg');
 }
 
-#datepicker .ui-icon-circle-triangle-e {
+#datepicker .ui-icon-circle-triangle-e,
+.ui-calendar .ui-icon-circle-triangle-e {
 	background-position: 0;
 }
 
 #date_picker .ui-datepicker-prev span,
-#datepicker .ui-datepicker-prev span {
+#datepicker .ui-datepicker-prev span,
+.ui-calendar .ui-datepicker-prev span {
 	background-image: url('images/lc_prevrecord.svg');
 }
 
-#datepicker .ui-icon-circle-triangle-w {
+#datepicker .ui-icon-circle-triangle-w,
+.ui-calendar .ui-icon-circle-triangle-w {
 	background-position: 0;
 }
 
@@ -1681,6 +1784,24 @@ body.slideshow-presenting-in-window .jsdialog-window.modalpopup {
 	color: var(--color-background-lighter);
 }
 
+/* Security label banner: a full-width strip above the document area. It is a
+   flex item in the body column (before #main-document-content), so the document
+   area reflows below it -- no overlap, and space is reclaimed when hidden.
+   Colours are themeable via the --security-banner-* custom properties, which
+   default to the doc-type theme colour (as the compare banner uses). */
+#security-label-banner {
+	flex: none; /* fixed height in the column; never grow/shrink */
+	height: var(--security-banner-height, 24px);
+	line-height: var(--security-banner-height, 24px);
+	text-align: center;
+	font-weight: bold;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	background-color: var(--security-banner-background, rgb(var(--doc-type, 3, 105, 163)));
+	color: var(--security-banner-color, var(--color-background-lighter));
+}
+
 /* Debug panel */
 
 #debug-panel {
@@ -1711,7 +1832,10 @@ body.slideshow-presenting-in-window .jsdialog-window.modalpopup {
 #debug-panel .debug-panel-group legend { font-weight: 600; font-size: 12px; padding: 0 3px; }
 
 #debug-panel label { display: block; cursor: pointer; padding: 1px 0; }
+/* a tool that belongs under the one above it */
+#debug-panel label.debug-panel-subtool { padding-left: 18px; }
 #debug-panel input[type='checkbox'] { margin-right: 5px; }
+#debug-panel input[type='checkbox']:disabled + span { color: #888; }
 #debug-panel .debug-panel-number { width: 5.5em; margin-left: 5px; font: inherit; }
 
 /* the debug tile preload map, drawn above the document canvas it is a

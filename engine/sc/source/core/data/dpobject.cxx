@@ -42,6 +42,7 @@
 #include <tokenarray.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/sdb/DatabaseContext.hpp>
 #include <com/sun/star/sdb/XCompletedExecution.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/sdbc/SQLException.hpp>
@@ -78,6 +79,8 @@
 #include <vcl/svapp.hxx>
 #include <vcl/weld.hxx>
 #include <tools/XmlWriter.hxx>
+#include <tools/hostfilter.hxx>
+#include <tools/urlobj.hxx>
 
 #include <vector>
 #include <memory>
@@ -85,9 +88,10 @@
 #include <filesystem>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::UNO_QUERY;
+using ::cpo::uno::Reference;
+using ::cpo::uno::UNO_QUERY;
 using ::cpo::uno::Any;
 using ::cpo::uno::Exception;
 using ::com::sun::star::lang::XComponent;
@@ -1374,7 +1378,7 @@ OUString ScDPObject::GetDimName( tools::Long nDim, bool& rIsDataLayout, sal_Int3
         tools::Long nDimCount = xDims->getCount();
         if ( nDim < nDimCount )
         {
-            uno::Reference<uno::XInterface> xIntDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
+            uno::Reference<cpo::uno::XInterface> xIntDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
             uno::Reference<container::XNamed> xDimName( xIntDim, uno::UNO_QUERY );
             uno::Reference<beans::XPropertySet> xDimProp( xIntDim, uno::UNO_QUERY );
             if ( xDimName.is() && xDimProp.is() )
@@ -1427,7 +1431,7 @@ bool ScDPObject::IsDuplicated( tools::Long nDim )
                 try
                 {
                     cpo::uno::Any aOrigAny = xDimProp->getPropertyValue( SC_UNO_DP_ORIGINAL );
-                    uno::Reference<uno::XInterface> xIntOrig;
+                    uno::Reference<cpo::uno::XInterface> xIntOrig;
                     if ( (aOrigAny >>= xIntOrig) && xIntOrig.is() )
                         bDuplicated = true;
                 }
@@ -1909,7 +1913,7 @@ bool ScDPObject::ParseFilters(
     sal_Int32 nDimCount = xIntDims->getCount();
     for ( sal_Int32 nDim = 0; nDim<nDimCount; nDim++ )
     {
-        uno::Reference<uno::XInterface> xIntDim(xIntDims->getByIndex(nDim), uno::UNO_QUERY);
+        uno::Reference<cpo::uno::XInterface> xIntDim(xIntDims->getByIndex(nDim), uno::UNO_QUERY);
         uno::Reference<container::XNamed> xDim( xIntDim, uno::UNO_QUERY );
         uno::Reference<beans::XPropertySet> xDimProp( xDim, uno::UNO_QUERY );
         uno::Reference<sheet::XHierarchiesSupplier> xDimSupp( xDim, uno::UNO_QUERY );
@@ -1946,7 +1950,7 @@ bool ScDPObject::ParseFilters(
                     sal_Int32 nLevCount = xLevels->getCount();
                     for (sal_Int32 nLev=0; nLev<nLevCount; nLev++)
                     {
-                        uno::Reference<uno::XInterface> xLevel(xLevels->getByIndex(nLev),
+                        uno::Reference<cpo::uno::XInterface> xLevel(xLevels->getByIndex(nLev),
                                                                uno::UNO_QUERY);
                         uno::Reference<container::XNamed> xLevNam( xLevel, uno::UNO_QUERY );
                         uno::Reference<sheet::XMembersSupplier> xLevSupp( xLevel, uno::UNO_QUERY );
@@ -2196,7 +2200,7 @@ void ScDPObject::ToggleDetails(const DataPilotTableHeaderData& rElemDesc, ScDPOb
         xHiers = new ScNameToIndexAccess( xHiersName );
         nHierCount = xHiers->getCount();
     }
-    uno::Reference<uno::XInterface> xHier;
+    uno::Reference<cpo::uno::XInterface> xHier;
     if ( rElemDesc.Hierarchy < nHierCount )
         xHier.set(xHiers->getByIndex(rElemDesc.Hierarchy), uno::UNO_QUERY);
     OSL_ENSURE( xHier.is(), "hierarchy not found" );
@@ -2211,7 +2215,7 @@ void ScDPObject::ToggleDetails(const DataPilotTableHeaderData& rElemDesc, ScDPOb
         xLevels = new ScNameToIndexAccess( xLevsName );
         nLevCount = xLevels->getCount();
     }
-    uno::Reference<uno::XInterface> xLevel;
+    uno::Reference<cpo::uno::XInterface> xLevel;
     if ( rElemDesc.Level < nLevCount )
         xLevel.set(xLevels->getByIndex(rElemDesc.Level), uno::UNO_QUERY);
     OSL_ENSURE( xLevel.is(), "level not found" );
@@ -2277,7 +2281,7 @@ static PivotFunc lcl_FirstSubTotal( const uno::Reference<beans::XPropertySet>& x
         if ( xHierSupp.is() )
         {
             uno::Reference<container::XIndexAccess> xLevels = new ScNameToIndexAccess( xHierSupp->getLevels() );
-            uno::Reference<uno::XInterface> xLevel(xLevels->getByIndex(0), uno::UNO_QUERY);
+            uno::Reference<cpo::uno::XInterface> xLevel(xLevels->getByIndex(0), uno::UNO_QUERY);
             uno::Reference<beans::XPropertySet> xLevProp( xLevel, uno::UNO_QUERY );
             if ( xLevProp.is() )
             {
@@ -2549,7 +2553,7 @@ static void lcl_FillLabelData( ScDPLabelData& rData, const uno::Reference< beans
 void ScDPObject::FillLabelDataForDimension(
     const uno::Reference<container::XIndexAccess>& xDims, sal_Int32 nDim, ScDPLabelData& rLabelData)
 {
-    uno::Reference<uno::XInterface> xIntDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
+    uno::Reference<cpo::uno::XInterface> xIntDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
     uno::Reference<container::XNamed> xDimName( xIntDim, uno::UNO_QUERY );
     uno::Reference<beans::XPropertySet> xDimProp( xIntDim, uno::UNO_QUERY );
 
@@ -2664,7 +2668,7 @@ void ScDPObject::GetFieldIdsNames(sheet::DataPilotFieldOrientation nOrient, std:
     tools::Long nDimCount = xDims->getCount();
     for (tools::Long nDim = 0; nDim < nDimCount; ++nDim)
     {
-        uno::Reference<uno::XInterface> xIntDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
+        uno::Reference<cpo::uno::XInterface> xIntDim(xDims->getByIndex(nDim), uno::UNO_QUERY);
         uno::Reference<container::XNamed> xDimName(xIntDim, uno::UNO_QUERY);
         uno::Reference<beans::XPropertySet> xDimProp(xIntDim, uno::UNO_QUERY);
 
@@ -2973,7 +2977,7 @@ std::vector<OUString> ScDPObject::GetRegisteredSources()
                 cpo::uno::Any aAddInAny = xEnum->nextElement();
 //              if ( aAddInAny.getReflection()->getTypeClass() == TypeClass_INTERFACE )
                 {
-                    uno::Reference<uno::XInterface> xIntFac;
+                    uno::Reference<cpo::uno::XInterface> xIntFac;
                     aAddInAny >>= xIntFac;
                     if ( xIntFac.is() )
                     {
@@ -3010,7 +3014,7 @@ uno::Reference<sheet::XDimensionsSupplier> ScDPObject::CreateSource( const ScDPS
     while (xEnum->hasMoreElements() && !xRet.is())
     {
         cpo::uno::Any aAddInAny = xEnum->nextElement();
-        uno::Reference<uno::XInterface> xIntFac;
+        uno::Reference<cpo::uno::XInterface> xIntFac;
         aAddInAny >>= xIntFac;
         if (!xIntFac.is())
             continue;
@@ -3024,8 +3028,8 @@ uno::Reference<sheet::XDimensionsSupplier> ScDPObject::CreateSource( const ScDPS
             // #i113160# try XSingleComponentFactory in addition to (old) XSingleServiceFactory,
             // passing the context to the component (see ScUnoAddInCollection::Initialize)
 
-            uno::Reference<uno::XInterface> xInterface;
-            uno::Reference<uno::XComponentContext> xCtx(
+            uno::Reference<cpo::uno::XInterface> xInterface;
+            uno::Reference<cpo::uno::XComponentContext> xCtx(
                 comphelper::getComponentContext(xManager));
             uno::Reference<lang::XSingleComponentFactory> xCFac( xIntFac, uno::UNO_QUERY );
             if (xCFac.is())
@@ -3228,11 +3232,22 @@ const ScDPCache* ScDPCollection::SheetCaches::getCache(const ScRange& rRange, co
         pCalculatedDimData->WriteToCache(*pCache,
             collectGroupFieldNames(pDimData));
 
+    const ScDPCache* p = pCache.get();
+    addCache(rRange, std::move(pCache));
+    return p;
+}
+
+void ScDPCollection::SheetCaches::addCache(const ScRange& rRange, std::unique_ptr<ScDPCache> pCache)
+{
+    if (!pCache || hasCache(rRange))
+        return;
+
     // Get the smallest available range index.
-    it = std::find_if(maRanges.begin(), maRanges.end(), FindInvalidRange());
+    RangeIndexType::iterator aIterator
+        = std::find_if(maRanges.begin(), maRanges.end(), FindInvalidRange());
 
     size_t nIndex = maRanges.size();
-    if (it == maRanges.end())
+    if (aIterator == maRanges.end())
     {
         // All range indices are valid.  Append a new index.
         maRanges.push_back(rRange);
@@ -3240,13 +3255,11 @@ const ScDPCache* ScDPCollection::SheetCaches::getCache(const ScRange& rRange, co
     else
     {
         // Slot with invalid range.  Re-use this slot.
-        *it = rRange;
-        nIndex = std::distance(maRanges.begin(), it);
+        *aIterator = rRange;
+        nIndex = std::distance(maRanges.begin(), aIterator);
     }
 
-    const ScDPCache* p = pCache.get();
     m_Caches.insert(std::make_pair(nIndex, std::move(pCache)));
-    return p;
 }
 
 ScDPCache* ScDPCollection::SheetCaches::getExistingCache(const ScRange& rRange)
@@ -3398,8 +3411,16 @@ const ScDPCache* ScDPCollection::NameCaches::getCache(const OUString& rName, con
             collectGroupFieldNames(pDimData));
 
     const ScDPCache *const p = pCache.get();
-    m_Caches.insert(std::make_pair(rName, std::move(pCache)));
+    addCache(rName, std::move(pCache));
     return p;
+}
+
+void ScDPCollection::NameCaches::addCache(const OUString& rName, std::unique_ptr<ScDPCache> pCache)
+{
+    if (!pCache)
+        return;
+
+    m_Caches.emplace(rName, std::move(pCache));
 }
 
 ScDPCache* ScDPCollection::NameCaches::getExistingCache(const OUString& rName)
@@ -3411,6 +3432,15 @@ ScDPCache* ScDPCollection::NameCaches::getExistingCache(const OUString& rName)
 size_t ScDPCollection::NameCaches::size() const
 {
     return m_Caches.size();
+}
+
+std::vector<OUString> ScDPCollection::NameCaches::getAllNames() const
+{
+    std::vector<OUString> aNames;
+    aNames.reserve(m_Caches.size());
+    for (const auto& rEntry : m_Caches)
+        aNames.push_back(rEntry.first);
+    return aNames;
 }
 
 void ScDPCollection::NameCaches::updateCache(
@@ -3456,6 +3486,37 @@ bool ScDPCollection::DBType::less::operator() (const DBType& left, const DBType&
 }
 
 ScDPCollection::DBCaches::DBCaches(ScDocument& rDoc) : mrDoc(rDoc) {}
+
+bool ScDPCollection::IsRegisteredDatabase(const OUString& rDBName)
+{
+    if (rDBName.isEmpty())
+        return false;
+
+    try
+    {
+        uno::Reference<sdb::XDatabaseContext> xContext
+            = sdb::DatabaseContext::create(comphelper::getProcessComponentContext());
+        return xContext->hasRegisteredDatabase(rDBName);
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("sc", "ScDPCollection::IsRegisteredDatabase");
+    }
+    return false;
+}
+
+bool ScDPCollection::IsForbiddenUrlDataSource(const OUString& rDBName)
+{
+    // A registered name is a user data source and is left alone. Any other name is a URL that
+    // the document supplies, and it can point a file-backed driver at a local file or reach a
+    // remote host, so apply the allowed-path, host, and protocol checks to it.
+    if (IsRegisteredDatabase(rDBName))
+        return false;
+
+    INetURLObject aURLObject(rDBName);
+    return aURLObject.IsExoticProtocol() || HostFilter::isForbidden(aURLObject.GetHost())
+           || HostFilter::isFileUrlForbidden(rDBName);
+}
 
 bool ScDPCollection::DBCaches::hasCache(sal_Int32 nSdbType, const OUString& rDBName, const OUString& rCommand) const
 {
@@ -3515,6 +3576,23 @@ uno::Reference<sdbc::XRowSet> ScDPCollection::DBCaches::createRowSet(
     sal_Int32 nSdbType, const OUString& rDBName, const OUString& rCommand)
 {
     uno::Reference<sdbc::XRowSet> xRowSet;
+
+    // A database document named by URL is an external link, so it is opened only once the user
+    // allows link updates.
+    ScDocShell* pDocShell = mrDoc.GetDocumentShell();
+    if (pDocShell && !pDocShell->GetEmbeddedObjectContainer().getUserAllowsLinkUpdate()
+        && !IsRegisteredDatabase(rDBName))
+    {
+        SAL_WARN("sc", "data pilot source " << rDBName << " waits for link updates to be allowed");
+        return xRowSet;
+    }
+
+    if (IsForbiddenUrlDataSource(rDBName))
+    {
+        SAL_WARN("sc", "data pilot source " << rDBName << " is not an allowed source");
+        return xRowSet;
+    }
+
     try
     {
         xRowSet.set(comphelper::getProcessServiceFactory()->createInstance(

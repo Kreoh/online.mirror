@@ -22,10 +22,10 @@
 
 #include <cassert>
 #include <cstddef>
-#include "osl/interlck.h"
-#include "rtl/alloc.h"
-#include "cpo/uno/XWeak.hpp"
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <osl/interlck.h>
+#include <rtl/alloc.h>
+#include <cpo/uno/XWeak.hpp>
+#include <cppuhelper/cppuhelperdllapi.h>
 
 
 namespace cppu
@@ -104,33 +104,33 @@ public:
         { return *this; }
 
     /** Basic queryInterface() implementation supporting cpo::uno::XWeak and
-        com::sun::star::uno::XInterface.
+        cpo::uno::XInterface.
 
         @param rType demanded type
         @return demanded type or empty any
     */
     virtual cpo::uno::Any queryInterface(
-        const cpo::uno::Type & rType ) SAL_OVERRIDE;
+        const cpo::uno::Type & rType ) override;
     /** increasing m_refCount
     */
     virtual void acquire()
-        SAL_NOEXCEPT SAL_OVERRIDE;
+        noexcept override;
     /** decreasing m_refCount
     */
     virtual void release()
-        SAL_NOEXCEPT SAL_OVERRIDE;
+        noexcept override;
 
     /** XWeak::queryAdapter() implementation
 
         @return a cpo::uno::XAdapter reference
     */
-    virtual css::uno::Reference< cpo::uno::XAdapter > queryAdapter() SAL_OVERRIDE;
+    virtual cpo::uno::Reference< cpo::uno::XAdapter > queryAdapter() override;
 
     /** Cast operator to XInterface reference.
 
         @return XInterface reference
     */
-    operator css::uno::Reference< css::uno::XInterface > ()
+    operator cpo::uno::Reference< cpo::uno::XInterface > ()
         { return this; }
 
     cpo::uno::XWeak* getXWeak() { return this; }
@@ -141,14 +141,14 @@ public:
 
     To be used like:
 
-    css::uno::XInterface * FOO_constructor_function(...) {
+    cpo::uno::XInterface * FOO_constructor_function(...) {
         return cppu::acquire(new FOO(...));
     }
 
     @param instance
     Newly created instance that should be acquired.
 */
-static inline css::uno::XInterface * acquire(OWeakObject * instance)
+static inline cpo::uno::XInterface * acquire(OWeakObject * instance)
 {
     assert(instance != NULL);
     instance->acquire();

@@ -23,7 +23,7 @@
 #include <vbahelper/vbacollectionimpl.hxx>
 
 namespace com::sun::star::beans { class XPropertySet; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 namespace com::sun::star::table { class XCellRange; }
 
 typedef CollTestImplHelper< ov::excel::XBorders > ScVbaBorders_BASE;
@@ -33,32 +33,32 @@ class ScVbaBorders : public ScVbaBorders_BASE
     // XEnumerationAccess
     virtual cpo::uno::Any getItemByIntIndex( const sal_Int32 nIndex ) override;
     bool bRangeIsSingleCell;
-    css::uno::Reference< css::beans::XPropertySet > m_xProps;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xProps;
 public:
-    ScVbaBorders( const css::uno::Reference< ov::XHelperInterface >& xParent,
-                  const css::uno::Reference< css::uno::XComponentContext > & xContext,
-                  const css::uno::Reference< css::table::XCellRange >& xRange,
+    ScVbaBorders( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                  const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext,
+                  const cpo::uno::Reference< css::table::XCellRange >& xRange,
                   const ScVbaPalette& rPalette );
 
     // XEnumerationAccess
-    virtual cpo::uno::Type SAL_CALL getElementType() override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
 
     // XBorders
 
     // ScVbaCollectionBaseImpl
     virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
 
-    virtual cpo::uno::Any SAL_CALL getColor() override;
-    virtual void SAL_CALL setColor( const cpo::uno::Any& _color ) override;
-    virtual cpo::uno::Any SAL_CALL getColorIndex() override;
-    virtual void SAL_CALL setColorIndex( const cpo::uno::Any& _colorindex ) override;
-    virtual cpo::uno::Any SAL_CALL getLineStyle() override;
-    virtual void SAL_CALL setLineStyle( const cpo::uno::Any& _linestyle ) override;
-    virtual cpo::uno::Any SAL_CALL getWeight() override;
-    virtual void SAL_CALL setWeight( const  cpo::uno::Any& ) override;
-    virtual cpo::uno::Any SAL_CALL getTintAndShade() override;
-    virtual void SAL_CALL setTintAndShade( const  cpo::uno::Any& ) override;
+    virtual cpo::uno::Any getColor() override;
+    virtual void setColor( const cpo::uno::Any& _color ) override;
+    virtual cpo::uno::Any getColorIndex() override;
+    virtual void setColorIndex( const cpo::uno::Any& _colorindex ) override;
+    virtual cpo::uno::Any getLineStyle() override;
+    virtual void setLineStyle( const cpo::uno::Any& _linestyle ) override;
+    virtual cpo::uno::Any getWeight() override;
+    virtual void setWeight( const  cpo::uno::Any& ) override;
+    virtual cpo::uno::Any getTintAndShade() override;
+    virtual void setTintAndShade( const  cpo::uno::Any& ) override;
     // xxxxBASE
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;

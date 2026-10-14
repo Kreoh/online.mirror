@@ -29,10 +29,10 @@
 #include <com/sun/star/i18n/CharType.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <com/sun/star/i18n/WordType.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::lang;
@@ -501,7 +501,7 @@ bool BreakIteratorImpl::createLocaleSpecificBreakIterator(const OUString& aLocal
         return false;
 #endif
 
-    Reference < uno::XInterface > xI = m_xContext->getServiceManager()->createInstanceWithContext(
+    Reference < cpo::uno::XInterface > xI = m_xContext->getServiceManager()->createInstanceWithContext(
             "com.sun.star.i18n.BreakIterator_" + aLocaleName, m_xContext);
 
     if ( xI.is() ) {
@@ -582,9 +582,9 @@ BreakIteratorImpl::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_i18n_BreakIterator_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new i18npool::BreakIteratorImpl(context));

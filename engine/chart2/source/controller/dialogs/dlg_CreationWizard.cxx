@@ -33,6 +33,7 @@
 #include "DialogModel.hxx"
 
 using namespace css;
+using namespace ::cpo;
 
 using vcl::RoadmapWizardTypes::WizardPath;
 using vcl::RoadmapWizardTypes::PathId;
@@ -52,7 +53,7 @@ namespace {
 }
 
 CreationWizard::CreationWizard(weld::Window* pParent, const rtl::Reference<::chart::ChartModel>& xChartModel,
-                               uno::Reference<uno::XComponentContext> xContext)
+                               uno::Reference<cpo::uno::XComponentContext> xContext)
     : vcl::RoadmapWizardMachine(pParent)
     , m_xChartModel(xChartModel)
     , m_xComponentContext(std::move(xContext))

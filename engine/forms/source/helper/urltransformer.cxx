@@ -27,11 +27,11 @@ namespace frm
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::util;
     using namespace ::com::sun::star::lang;
 
-    UrlTransformer::UrlTransformer( const Reference< XComponentContext >& _rxORB )
+    UrlTransformer::UrlTransformer( const Reference< cpo::uno::XComponentContext >& _rxORB )
         :m_xORB( _rxORB )
         ,m_bTriedToCreateTransformer( false )
     {

@@ -30,7 +30,7 @@
 #include <comphelper/configuration.hxx>
 #include <officecfg/Office/Common.hxx>
 
-#include <com/sun/star/uno/SecurityException.hpp>
+#include <cpo/uno/SecurityException.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/security/CertificateValidity.hpp>
@@ -68,9 +68,9 @@
 
 using namespace comphelper;
 using namespace css::security;
-using namespace css::uno;
-using namespace css;
+using namespace ::cpo;
 using namespace ::cpo::uno;
+using namespace css;
 
 namespace
 {
@@ -192,7 +192,7 @@ bool IsThereCertificateMgr()
 
 DigitalSignaturesDialog::DigitalSignaturesDialog(
     weld::Window* pParent,
-    const uno::Reference< uno::XComponentContext >& rxCtx, DocumentSignatureMode eMode,
+    const uno::Reference< cpo::uno::XComponentContext >& rxCtx, DocumentSignatureMode eMode,
     bool bReadOnly, OUString sODFVersion, bool bHasDocumentSignature,
     SfxViewShell* pViewShell)
     : GenericDialogController(pParent, u"xmlsec/ui/digitalsignaturesdialog.ui"_ustr, u"DigitalSignaturesDialog"_ustr)
@@ -263,12 +263,14 @@ DigitalSignaturesDialog::DigitalSignaturesDialog(
     }
 
     {
-        // The Windows desktop app (CODA-W, the only _WIN32 build) signs from the
-        // native Windows certificate store like the regular desktop, so it does
-        // not require a session certificate to enable the Sign button; the
-        // online/server path still does. The certificate-manager button stays
-        // hidden everywhere - there is no local manager to launch.
-#if !defined(_WIN32)
+        // The desktop apps sign from the native certificate store like the regular
+        // desktop - the Windows one (CODA-W, the only _WIN32 build) from the
+        // Windows certificate store, the macOS one (CODA-M, the only MACOSX build)
+        // from Keychain Access - so they do not require a session certificate to
+        // enable the Sign button; the online/server path still does. The
+        // certificate-manager button stays hidden everywhere - there is no local
+        // manager to launch.
+#if !defined(_WIN32) && !defined(MACOSX)
         // If the view has a signing certificate, then allow adding a signature.
         if (!pViewShell || !pViewShell->GetSigningCertificate().m_xCertificate.is())
         {
@@ -307,7 +309,7 @@ bool DigitalSignaturesDialog::Init()
     return bInit;
 }
 
-void DigitalSignaturesDialog::SetStorage( const css::uno::Reference < css::embed::XStorage >& rxStore )
+void DigitalSignaturesDialog::SetStorage( const cpo::uno::Reference < css::embed::XStorage >& rxStore )
 {
     if (!rxStore.is())
     {
@@ -324,19 +326,19 @@ void DigitalSignaturesDialog::SetStorage( const css::uno::Reference < css::embed
     maSignatureManager.getSignatureHelper().SetStorage( maSignatureManager.getStore(), m_sODFVersion, {});
 }
 
-void DigitalSignaturesDialog::SetSignatureStream( const css::uno::Reference < css::io::XStream >& rxStream )
+void DigitalSignaturesDialog::SetSignatureStream( const cpo::uno::Reference < css::io::XStream >& rxStream )
 {
     maSignatureManager.setSignatureStream(rxStream);
 }
 
-void DigitalSignaturesDialog::SetScriptingSignatureStream( const css::uno::Reference < css::io::XStream >& rxStream )
+void DigitalSignaturesDialog::SetScriptingSignatureStream( const cpo::uno::Reference < css::io::XStream >& rxStream )
 {
     if (!rxStream.is())
     {
         return;
     }
 
-    uno::Reference<uno::XComponentContext> xContext = comphelper::getProcessComponentContext();
+    uno::Reference<cpo::uno::XComponentContext> xContext = comphelper::getProcessComponentContext();
     moScriptSignatureManager.emplace(xContext, DocumentSignatureMode::Macros);
     if (!moScriptSignatureManager->init())
     {
@@ -612,7 +614,7 @@ IMPL_LINK_NOARG(DigitalSignaturesDialog, CertMgrButtonHdl, weld::Button&, void)
 
     if (!sExecutable.isEmpty())
     {
-        const uno::Reference<uno::XComponentContext>& xContext
+        const uno::Reference<cpo::uno::XComponentContext>& xContext
             = ::comphelper::getProcessComponentContext();
         uno::Reference<css::system::XSystemShellExecute> xSystemShell(
             css::system::SystemShellExecute::create(xContext));
@@ -689,7 +691,7 @@ void DigitalSignaturesDialog::ImplFillSignaturesBox()
                     if ( bCertValid )
                         nValidCerts++;
 
-                } catch (css::uno::SecurityException& ) {
+                } catch (cpo::uno::SecurityException& ) {
                     OSL_FAIL("Verification of certificate failed");
                     bCertValid = false;
                 }

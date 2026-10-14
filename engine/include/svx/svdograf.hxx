@@ -24,6 +24,8 @@
 #include <com/sun/star/drawing/BarCode.hpp>
 #include <vcl/graph.hxx>
 #include <svx/svdorect.hxx>
+#include <basegfx/range/b2drange.hxx>
+#include <svx/svdhdl.hxx>
 #include <vcl/GraphicObject.hxx>
 #include <svx/svxdllapi.h>
 #include <o3tl/typed_flags_set.hxx>
@@ -64,6 +66,19 @@ class SdrGraphicLink;
 /**
  * This class represents an embedded or linked bitmap graphic object.
  */
+/** The change a crop by one handle makes, worked out on the picture's unit square: the
+    picture's mapping with its shear corrected, whether it had to be, the place facing the
+    handle on the square, and the change itself as a mapping of the square onto the part of it
+    that stays.
+ */
+struct SVXCORE_DLLPUBLIC SdrGrafCropChange
+{
+    basegfx::B2DHomMatrix maOriginal;
+    bool mbShearCorrected = false;
+    basegfx::B2DPoint maLocalStart;
+    basegfx::B2DHomMatrix maChange;
+};
+
 class SVXCORE_DLLPUBLIC SdrGrafObj final : public SdrRectObj
 {
     // to allow sdr::properties::GraphicProperties access to SetXPolyDirty()
@@ -96,7 +111,7 @@ class SVXCORE_DLLPUBLIC SdrGrafObj final : public SdrRectObj
     bool mbIsSignatureLineShowSignDate;
     bool mbIsSignatureLineCanAddComment;
     bool mbSignatureLineIsSigned;
-    css::uno::Reference<css::graphic::XGraphic> mpSignatureLineUnsignedGraphic;
+    cpo::uno::Reference<css::graphic::XGraphic> mpSignatureLineUnsignedGraphic;
 
     std::unique_ptr<css::drawing::BarCode> mpBarCode;
     SAL_DLLPRIVATE void                    ImpRegisterLink();
@@ -126,7 +141,7 @@ public:
     const GraphicObject&    GetGraphicObject(bool bForceSwapIn = false) const;
     SAL_DLLPRIVATE const GraphicObject*    GetReplacementGraphicObject() const;
     // An exploded view of a pdf page as a draw document.
-    SAL_DLLPRIVATE css::uno::Reference<css::lang::XComponent> GetReplacementGraphicModel() const;
+    SAL_DLLPRIVATE cpo::uno::Reference<css::lang::XComponent> GetReplacementGraphicModel() const;
 
     SAL_DLLPRIVATE void                    NbcSetGraphic(const Graphic& rGrf);
     void                    SetGraphic(const Graphic& rGrf);
@@ -192,6 +207,31 @@ public:
    SAL_DLLPRIVATE  virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
     bool IsMirrored() const { return m_bMirrored;}
+
+    /** Works out what a crop by that handle, taken to that place in the page's own unit, does
+        on the unit square. */
+    void cropChangeFor(SdrHdlKind eHandle, const basegfx::B2DPoint& rTo,
+                       SdrGrafCropChange& rChange) const;
+
+    /** Works out what a crop to a new window does on the unit square: the window given by two
+        of its opposite corners, in the page's own unit, along the picture's axes. The corners
+        may come in either order, since a picture that is turned over holds its axes the other
+        way round from how they are seen. An edge within a twip of the window's present one is
+        taken as that one, so an edge that stays where it is keeps its crop value. False where
+        the window has no width or no height. */
+    bool cropChangeForWindow(const basegfx::B2DPoint& rCorner,
+                             const basegfx::B2DPoint& rOppositeCorner,
+                             SdrGrafCropChange& rChange) const;
+
+    /** The box the picture's window takes up before and after such a change, upright and
+        unsheared, in the page's own unit. */
+    static void cropWindowRanges(const SdrGrafCropChange& rChange, basegfx::B2DRange& rBefore,
+                                 basegfx::B2DRange& rAfter);
+
+    /** Applies such a change: moves the window and sets the crop values so that the graphic
+        stays where it was and only the window changes. False where the picture shows no
+        graphic to crop. */
+    bool applyCropChange(const SdrGrafCropChange& rChange);
     SAL_DLLPRIVATE void SetMirrored( bool _bMirrored );
 
     virtual bool shouldKeepAspectRatio() const override { return true; }
@@ -199,7 +239,7 @@ public:
     // Access to GrafAnimationAllowed flag
     SAL_DLLPRIVATE void SetGrafAnimationAllowed(bool bNew);
 
-    SAL_DLLPRIVATE css::uno::Reference< css::io::XInputStream > getInputStream() const;
+    SAL_DLLPRIVATE cpo::uno::Reference< css::io::XInputStream > getInputStream() const;
 
     // #i103116# FullDrag support
     SAL_DLLPRIVATE virtual rtl::Reference<SdrObject> getFullDragClone() const override;
@@ -271,12 +311,12 @@ public:
 
     bool isSignatureLineCanAddComment() const { return mbIsSignatureLineCanAddComment; }
 
-    css::uno::Reference<css::graphic::XGraphic> const & getSignatureLineUnsignedGraphic() const
+    cpo::uno::Reference<css::graphic::XGraphic> const & getSignatureLineUnsignedGraphic() const
     {
         return mpSignatureLineUnsignedGraphic;
     }
 
-    void setSignatureLineUnsignedGraphic(const css::uno::Reference<css::graphic::XGraphic>& rGraphic)
+    void setSignatureLineUnsignedGraphic(const cpo::uno::Reference<css::graphic::XGraphic>& rGraphic)
     {
         mpSignatureLineUnsignedGraphic = rGraphic;
     }

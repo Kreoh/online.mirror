@@ -10,8 +10,8 @@
 #ifndef INCLUDED_TEST_SHEET_XSUBTOTALFIELD_HXX
 #define INCLUDED_TEST_SHEET_XSUBTOTALFIELD_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
 #include <test/testdllapi.hxx>
 
 namespace apitest
@@ -19,7 +19,7 @@ namespace apitest
 class OOO_DLLPUBLIC_TEST XSubTotalField
 {
 public:
-    virtual css::uno::Reference<css::uno::XInterface> init() = 0;
+    virtual cpo::uno::Reference<cpo::uno::XInterface> init() = 0;
 
     void testGetSetGroupColumn();
     void testGetSetTotalColumns();

@@ -34,7 +34,7 @@
 namespace com::sun::star::i18n { class XBreakIterator; }
 namespace com::sun::star::i18n { class XCharacterClassification; }
 namespace com::sun::star::i18n { class XExtendedTransliteration; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 
 class WLevDistance;
@@ -47,16 +47,16 @@ class TextSearch: public cppu::WeakImplHelper
 >
 {
     std::mutex m_aMutex;
-    css::uno::Reference < css::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference < cpo::uno::XComponentContext > m_xContext;
 
     css::util::SearchOptions2 aSrchPara;
     OUString sSrchStr;
     OUString sSrchStr2;
 
-    mutable css::uno::Reference< css::i18n::XCharacterClassification > xCharClass;
+    mutable cpo::uno::Reference< css::i18n::XCharacterClassification > xCharClass;
 
-    css::uno::Reference< css::i18n::XExtendedTransliteration > xTranslit;
-    css::uno::Reference< css::i18n::XExtendedTransliteration > xTranslit2;
+    cpo::uno::Reference< css::i18n::XExtendedTransliteration > xTranslit;
+    cpo::uno::Reference< css::i18n::XExtendedTransliteration > xTranslit2;
 
     // define a function pointer for the different search methods
     typedef css::util::SearchResult
@@ -79,22 +79,22 @@ class TextSearch: public cppu::WeakImplHelper
     void MakeBackwardTab();
     void MakeBackwardTab2();
     sal_Int32 GetDiff( const sal_Unicode ) const;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         NSrchFrwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         NSrchBkwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
 
     // Members and methods for the regular expression search
     std::unique_ptr<icu::RegexMatcher> pRegexMatcher;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         RESrchFrwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         RESrchBkwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
@@ -103,12 +103,12 @@ class TextSearch: public cppu::WeakImplHelper
     // Members and methods for the "Weight Levenshtein-Distance" search
     int nLimit;
     std::unique_ptr<WLevDistance> pWLD;
-    css::uno::Reference < css::i18n::XBreakIterator > xBreak;
-    /// @throws css::uno::RuntimeException
+    cpo::uno::Reference < css::i18n::XBreakIterator > xBreak;
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         ApproxSrchFrwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         ApproxSrchBkwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
@@ -118,11 +118,11 @@ class TextSearch: public cppu::WeakImplHelper
     OUString    maWildcardReversePattern2;
     sal_uInt32  mcWildcardEscapeChar;
     bool        mbWildcardAllowSubstring;
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         WildcardSrchFrwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::util::SearchResult
         WildcardSrchBkwrd( std::unique_lock<std::mutex>& rGuard, const OUString& searchStr,
                                 sal_Int32 startPos, sal_Int32 endPos );
@@ -131,7 +131,7 @@ class TextSearch: public cppu::WeakImplHelper
 
 public:
     explicit TextSearch(
-        const css::uno::Reference < css::uno::XComponentContext >& rxContext );
+        const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext );
 
     virtual ~TextSearch() override;
 

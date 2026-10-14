@@ -34,7 +34,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <cpo/uno/Exception.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -73,97 +73,97 @@ class SecurityEnvironment_MSCryptImpl : public ::cppu::WeakImplHelper<
         bool                                m_bEnableDefault ;
 
         //Service manager
-        css::uno::Reference< css::lang::XMultiServiceFactory > m_xServiceManager ;
+        cpo::uno::Reference< css::lang::XMultiServiceFactory > m_xServiceManager ;
 
     public:
-        explicit SecurityEnvironment_MSCryptImpl( const css::uno::Reference< css::uno::XComponentContext >& xContext ) ;
+        explicit SecurityEnvironment_MSCryptImpl( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) ;
         virtual ~SecurityEnvironment_MSCryptImpl() override;
 
         //Methods from XSecurityEnvironment
-        virtual cpo::uno::Sequence< css::uno::Reference< css::security::XCertificate > > SAL_CALL getPersonalCertificates() override;
-        virtual cpo::uno::Sequence< css::uno::Reference< css::security::XCertificate > > SAL_CALL getAllCertificates() override
-        { return cpo::uno::Sequence< css::uno::Reference< css::security::XCertificate > >(); }
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::security::XCertificate > > getPersonalCertificates() override;
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::security::XCertificate > > getAllCertificates() override
+        { return cpo::uno::Sequence< cpo::uno::Reference< css::security::XCertificate > >(); }
 
-        virtual css::uno::Reference< css::security::XCertificate > SAL_CALL getCertificate(
+        virtual cpo::uno::Reference< css::security::XCertificate > getCertificate(
             const OUString& issuerName,
             const cpo::uno::Sequence< sal_Int8 >& serialNumber ) override;
 
-        /// @throws css::uno::SecurityException
-        /// @throws css::uno::RuntimeException
-        virtual css::uno::Reference< css::security::XCertificate > getCertificate(
+        /// @throws cpo::uno::SecurityException
+        /// @throws cpo::uno::RuntimeException
+        virtual cpo::uno::Reference< css::security::XCertificate > getCertificate(
             const OUString& issuerName,
             const OUString& serialNumber ) ;
 
-        virtual cpo::uno::Sequence< css::uno::Reference< css::security::XCertificate > > SAL_CALL buildCertificatePath(
-            const css::uno::Reference< css::security::XCertificate >& beginCert ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::security::XCertificate > > buildCertificatePath(
+            const cpo::uno::Reference< css::security::XCertificate >& beginCert ) override;
 
-        virtual css::uno::Reference< css::security::XCertificate > SAL_CALL createCertificateFromRaw(
+        virtual cpo::uno::Reference< css::security::XCertificate > createCertificateFromRaw(
             const cpo::uno::Sequence< sal_Int8 >& rawCertificate ) override;
 
-        virtual css::uno::Reference< css::security::XCertificate > SAL_CALL createCertificateFromAscii(
+        virtual cpo::uno::Reference< css::security::XCertificate > createCertificateFromAscii(
             const OUString& asciiCertificate ) override;
 
-        virtual ::sal_Int32 SAL_CALL verifyCertificate(
-            const css::uno::Reference< css::security::XCertificate >& xCert,
-            const cpo::uno::Sequence< css::uno::Reference<
+        virtual ::sal_Int32 verifyCertificate(
+            const cpo::uno::Reference< css::security::XCertificate >& xCert,
+            const cpo::uno::Sequence< cpo::uno::Reference<
             css::security::XCertificate > >& intermediateCertificates) override;
 
-        virtual ::sal_Int32 SAL_CALL getCertificateCharacters(
-            const css::uno::Reference< css::security::XCertificate >& xCert ) override;
+        virtual ::sal_Int32 getCertificateCharacters(
+            const cpo::uno::Reference< css::security::XCertificate >& xCert ) override;
 
-        virtual OUString SAL_CALL getSecurityEnvironmentInformation(  ) override;
+        virtual OUString getSecurityEnvironmentInformation(  ) override;
 
 
         //Methods from XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() override;
+        virtual OUString getImplementationName() override;
 
-        virtual bool SAL_CALL supportsService(
+        virtual bool supportsService(
             const OUString& ServiceName
         ) override;
 
-        virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         HCRYPTPROV getCryptoProvider() ;
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setCryptoProvider( HCRYPTPROV aProv ) ;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         LPCTSTR getKeyContainer() ;
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setKeyContainer( LPCTSTR aKeyContainer ) ;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         HCERTSTORE getCryptoSlot() ;
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setCryptoSlot( HCERTSTORE aKeyStore ) ;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         HCERTSTORE getCertDb() ;
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void setCertDb( HCERTSTORE aCertDb ) ;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         void enableDefaultCrypt( bool enable ) ;
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         bool defaultEnabled() ;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         xmlSecKeysMngrPtr createKeysManager() ;
 
         /// @throws cpo::uno::Exception
-        /// @throws css::uno::RuntimeException
+        /// @throws cpo::uno::RuntimeException
         static void destroyKeysManager(xmlSecKeysMngrPtr pKeysMngr) ;
 } ;
 

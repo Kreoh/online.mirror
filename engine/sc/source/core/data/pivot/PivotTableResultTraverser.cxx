@@ -28,6 +28,7 @@
 #include <com/sun/star/sheet/XMembersSupplier.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc
 {
@@ -41,7 +42,7 @@ void PivotTableResultTraverser::traverse()
 
     for (sal_Int32 nDimension = 0; nDimension < xDimensions->getCount(); nDimension++)
     {
-        uno::Reference<uno::XInterface> xDimension(xDimensions->getByIndex(nDimension),
+        uno::Reference<cpo::uno::XInterface> xDimension(xDimensions->getByIndex(nDimension),
                                                    uno::UNO_QUERY);
         uno::Reference<beans::XPropertySet> xDimensionPropertySet(xDimension, uno::UNO_QUERY);
         uno::Reference<sheet::XHierarchiesSupplier> xDimensionSupplier(xDimension, uno::UNO_QUERY);
@@ -72,7 +73,7 @@ void PivotTableResultTraverser::traverse()
                     {
                         for (sal_Int32 nLevel = 0; nLevel < xLevels->getCount(); nLevel++)
                         {
-                            uno::Reference<uno::XInterface> xLevel(xLevels->getByIndex(nLevel),
+                            uno::Reference<cpo::uno::XInterface> xLevel(xLevels->getByIndex(nLevel),
                                                                    uno::UNO_QUERY);
                             uno::Reference<container::XNamed> xLevelName(xLevel, uno::UNO_QUERY);
                             uno::Reference<sheet::XDataPilotMemberResults> xLevelResult(

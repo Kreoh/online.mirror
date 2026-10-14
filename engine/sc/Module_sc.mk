@@ -18,7 +18,6 @@ $(eval $(call gb_Module_Module,sc))
 $(eval $(call gb_Module_add_targets,sc,\
 	Library_sc \
 	Library_scd \
-	Library_scfilt \
 	Library_scui \
 	Library_solver \
 	$(call gb_Helper_optional,OPENCL,Package_opencl) \
@@ -66,6 +65,7 @@ $(eval $(call gb_Module_add_check_targets,sc,\
 	CppunitTest_sc_ucalc_sparkline \
 	CppunitTest_sc_ucalc_solver \
 	CppunitTest_sc_ucalc_sort \
+	CppunitTest_sc_calculate_sheet_test \
 	CppunitTest_sc_filters_test \
 	CppunitTest_sc_oox_helpers_test \
 	CppunitTest_sc_mark_test \
@@ -100,6 +100,8 @@ $(eval $(call gb_Module_add_slowcheck_targets,sc, \
 	CppunitTest_sc_pivottable_filters_test \
 	CppunitTest_sc_pivottable_formats_import_export_test \
 	CppunitTest_sc_named_sheet_views_import_export_test \
+	CppunitTest_sc_dynamic_array_import_export_test \
+	CppunitTest_sc_image_in_cell_import_export_test \
 	CppunitTest_sc_sparkline_test \
 	CppunitTest_sc_subsequent_filters_test \
 	CppunitTest_sc_subsequent_filters_test2 \
@@ -145,6 +147,7 @@ $(eval $(call gb_Module_add_slowcheck_targets,sc, \
 	CppunitTest_sc_text_functions_test \
 	CppunitTest_sc_dynamic_array_functions_test \
 	CppunitTest_sc_arraytotext_functions_test \
+	CppunitTest_sc_ooxml_functions_let_test \
 	CppunitTest_sc_annotationobj \
 	CppunitTest_sc_annotationshapeobj \
 	CppunitTest_sc_annotationsobj \
@@ -257,12 +260,6 @@ endif
 
 $(eval $(call gb_Module_add_subsequentcheck_targets,sc,\
 	JunitTest_sc_complex \
-	JunitTest_sc_unoapi_1 \
-	JunitTest_sc_unoapi_2 \
-	JunitTest_sc_unoapi_3 \
-	JunitTest_sc_unoapi_4 \
-	JunitTest_sc_unoapi_6 \
-	JunitTest_sc_unoapi_7 \
 	$(call gb_Helper_optional,OPENCL,CppunitTest_sc_opencl-1) \
 	$(call gb_Helper_optional,OPENCL,CppunitTest_sc_opencl-2) \
 ))
@@ -297,7 +294,6 @@ $(eval $(call gb_Module_add_uicheck_targets,sc,\
 	UITest_statistics \
 	UITest_goalSeek \
 	UITest_protect \
-	UITest_sc_options \
 	UITest_validity \
 	UITest_key_f4 \
 	UITest_textCase \

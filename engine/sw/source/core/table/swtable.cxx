@@ -38,9 +38,11 @@
 #include <IDocumentRedlineAccess.hxx>
 #include <IDocumentFieldsAccess.hxx>
 #include <docary.hxx>
+#include <frameformats.hxx>
 #include <frame.hxx>
 #include <swtable.hxx>
 #include <ndtxt.hxx>
+#include <fmtcol.hxx>
 #include <tabcol.hxx>
 #include <tabfrm.hxx>
 #include <cellfrm.hxx>
@@ -202,9 +204,94 @@ SwTable::SwTable( const SwTable& rTable )
     m_nGraphicsThatResize( 0 ),
     m_nRowsToRepeat( rTable.GetRowsToRepeat() ),
     maTableStyleName(rTable.maTableStyleName),
+    maTableStyleSettings(rTable.maTableStyleSettings),
     m_bModifyLocked( false ),
     m_bNewModel( rTable.m_bNewModel )
 {
+}
+
+SwTableBoxFormat* SwTable::FindTableStyleRoleFormat(sal_uInt8 nRoleKey) const
+{
+    auto it = m_TableStyleRoleFormats.find(nRoleKey);
+    return it == m_TableStyleRoleFormats.end() ? nullptr : it->second;
+}
+
+void SwTable::AddTableStyleRoleFormat(sal_uInt8 nRoleKey, SwTableBoxFormat* pFormat)
+{
+    m_TableStyleRoleFormats.emplace(nRoleKey, pFormat);
+}
+
+std::vector<SwTableBoxFormat*> SwTable::TakeTableStyleRoleFormats()
+{
+    std::vector<SwTableBoxFormat*> aFormats;
+    aFormats.reserve(m_TableStyleRoleFormats.size());
+    for (auto& [nKey, pFormat] : m_TableStyleRoleFormats)
+        aFormats.push_back(pFormat);
+    m_TableStyleRoleFormats.clear();
+    m_bRoleCacheValid = false;
+    return aFormats;
+}
+
+bool SwTable::ReleaseTableStyleRoleFormatIfOrphaned(SwFrameFormat* pFormat)
+{
+    if (!pFormat)
+        return false;
+    for (auto it = m_TableStyleRoleFormats.begin(); it != m_TableStyleRoleFormats.end(); ++it)
+    {
+        if (it->second != pFormat)
+            continue;
+        if (pFormat->HasWriterListeners())
+            return false;
+        m_TableStyleRoleFormats.erase(it);
+        delete pFormat;
+        return true;
+    }
+    return false;
+}
+
+SwTextFormatColl* SwTable::FindTableStyleRoleColl(sal_uInt8 nRoleKey, const SwTextFormatColl& rBase) const
+{
+    auto it = m_TableStyleRoleColls.find({nRoleKey, &rBase});
+    return it == m_TableStyleRoleColls.end() ? nullptr : it->second;
+}
+
+void SwTable::AddTableStyleRoleColl(sal_uInt8 nRoleKey, const SwTextFormatColl& rBase, SwTextFormatColl* pColl)
+{
+    m_TableStyleRoleColls.emplace(std::make_pair(nRoleKey, &rBase), pColl);
+}
+
+std::vector<SwTextFormatColl*> SwTable::TakeTableStyleRoleColls()
+{
+    std::vector<SwTextFormatColl*> aColls;
+    aColls.reserve(m_TableStyleRoleColls.size());
+    for (auto& [aKey, pColl] : m_TableStyleRoleColls)
+        aColls.push_back(pColl);
+    m_TableStyleRoleColls.clear();
+    m_bRoleCacheValid = false;
+    return aColls;
+}
+
+std::vector<SwContentNode*> SwTable::DropTableStyleRoleCollsFor(const SwTextFormatColl& rBase)
+{
+    std::vector<SwContentNode*> aNodes;
+    for (auto it = m_TableStyleRoleColls.begin(); it != m_TableStyleRoleColls.end();)
+    {
+        if (it->first.second != &rBase)
+        {
+            ++it;
+            continue;
+        }
+        SwTextFormatColl* pColl = it->second;
+        SwIterator<SwContentNode, SwTextFormatColl, sw::IteratorMode::UnwrapMulti> aIter(*pColl);
+        for (SwContentNode* pNode = aIter.First(); pNode; pNode = aIter.Next())
+        {
+            pNode->SetTableStyleRoleColl(nullptr);
+            aNodes.push_back(pNode);
+        }
+        delete pColl;
+        it = m_TableStyleRoleColls.erase(it);
+    }
+    return aNodes;
 }
 
 void DelBoxNode( SwTableSortBoxes const & rSortCntBoxes )
@@ -228,6 +315,7 @@ SwTable::~SwTable()
 
     // the table can be deleted if it's the last client of the FrameFormat
     SwTableFormat* pFormat = GetFrameFormat();
+    const bool bDocInDtor = pFormat->GetDoc().IsInDtor();
     pFormat->Remove(*this);               // remove
 
     if( !pFormat->HasWriterListeners() )
@@ -239,6 +327,24 @@ SwTable::~SwTable()
     // section need deletion.
     DelBoxNode(m_TabSortContentBoxes);
     m_TabSortContentBoxes.clear();
+
+    // The paragraphs of this table outlive it, so end their use of the role collections
+    // before those go. Cell formats still deriving from a role format are moved to the
+    // format's own parent by the format's destruction, the way every dying format does.
+    for (auto& [aKey, pColl] : m_TableStyleRoleColls)
+    {
+        if (!bDocInDtor)
+        {
+            SwIterator<SwContentNode, SwTextFormatColl, sw::IteratorMode::UnwrapMulti> aIter(*pColl);
+            for (SwContentNode* pNode = aIter.First(); pNode; pNode = aIter.Next())
+                pNode->SetTableStyleRoleColl(nullptr);
+        }
+        delete pColl;
+    }
+    m_TableStyleRoleColls.clear();
+    for (auto& [nKey, pRoleFormat] : m_TableStyleRoleFormats)
+        delete pRoleFormat;
+    m_TableStyleRoleFormats.clear();
 }
 
 namespace
@@ -1941,8 +2047,11 @@ SwRedlineTable::size_type SwTableLine::GetTableRedline() const
     SwRedlineTable::size_type n = 0;
 
     const SwRangeRedline* pFnd = aRedlineTable.FindAtPosition( aLineStart, n, /*next=*/false );
-    if( pFnd && *pFnd->Start() < aLineStart && *pFnd->End() > aLineEnd )
-        return n;
+    if (pFnd)
+    {
+        if (auto [pStart, pEnd] = pFnd->StartEnd(); *pStart < aLineStart && *pEnd > aLineEnd)
+            return n;
+    }
 
     return SwRedlineTable::npos;
 }
@@ -2034,7 +2143,6 @@ SwTableBox::SwTableBox( SwTableBoxFormat* pFormat, sal_uInt16 nLines, SwTableLin
     , m_pUpper(pUp)
     , mnRowSpan(1)
     , mbDummyFlag(false)
-    , mbDirectFormatting(false)
 {
     m_aLines.reserve( nLines );
     CheckBoxFormat( pFormat )->Add(*this);
@@ -2047,7 +2155,6 @@ SwTableBox::SwTableBox( SwTableBoxFormat* pFormat, const SwNodeIndex &rIdx,
     , m_pUpper(pUp)
     , mnRowSpan(1)
     , mbDummyFlag(false)
-    , mbDirectFormatting(false)
 {
     CheckBoxFormat( pFormat )->Add(*this);
 
@@ -2069,7 +2176,6 @@ SwTableBox::SwTableBox( SwTableBoxFormat* pFormat, const SwStartNode& rSttNd, Sw
     , m_pUpper(pUp)
     , mnRowSpan(1)
     , mbDummyFlag(false)
-    , mbDirectFormatting(false)
 {
     CheckBoxFormat( pFormat )->Add(*this);
 
@@ -2099,8 +2205,17 @@ void SwTableBox::RemoveFromTable()
 
 SwTableBox::~SwTableBox()
 {
+    SwTable* pOwningTable = nullptr;
+    SwFrameFormat* pDerivedFrom = nullptr;
     if (!GetFrameFormat()->GetDoc().IsInDtor())
     {
+        // RemoveFromTable() below clears m_pStartNode, so the owning table has to be found
+        // here first.
+        if (m_pStartNode)
+        {
+            pOwningTable = &const_cast<SwTable&>(m_pStartNode->FindTableNode()->GetTable());
+            pDerivedFrom = static_cast<SwFrameFormat*>(GetFrameFormat()->DerivedFrom());
+        }
         RemoveFromTable();
     }
 
@@ -2109,6 +2224,9 @@ SwTableBox::~SwTableBox()
     pMod->Remove(*this);               // remove,
     if( !pMod->HasWriterListeners() )
         delete pMod;    // and delete
+
+    if (pOwningTable && pDerivedFrom)
+        pOwningTable->ReleaseTableStyleRoleFormatIfOrphaned(pDerivedFrom);
 }
 
 SwTableBoxFormat* SwTableBox::CheckBoxFormat( SwTableBoxFormat* pFormat )
@@ -2435,7 +2553,16 @@ void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
     }
     rBox.SetSaveNumFormatColor( pCol ? *pCol : std::optional<Color>() );
 
-    if( pTNd->GetText() != rText )
+    // What the cell shows is its text without what a tracked deletion took out of it, which is
+    // also the text HasNumContent() and IsNumberChanged() work the value out from. Ask whether
+    // that already says what the format wants: if it does there is nothing to do, and the
+    // changes recorded in the cell are left alone.
+    //
+    // If it does not, the text is rewritten as a whole below, which loses the changes recorded
+    // over it. That is coarse, but a number format is free to rewrite the text into anything -
+    // a number can come out as words, or grow a thousands separator that shifts every position
+    // after it - so there is no general way to carry a set of changes across a reformat.
+    if( pTNd->GetRedlineText() != rText )
     {
         // Exchange text. Bugfix to keep Tabs (front and back!) and annotations (inword comment anchors)
         const OUString& rOrig = pTNd->GetText();
@@ -2479,12 +2606,18 @@ void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
             while( nCommentPos > aIdx.GetIndex() && nCommentPos == nEndPos );
         }
 
+        const sal_Int32 nInsStt = aIdx.GetIndex();
         pTNd->EraseText( aIdx, n, SwInsertFlags::EMPTYEXPAND );
         pTNd->InsertText( rText, aIdx, SwInsertFlags::EMPTYEXPAND );
 
-        if( rDoc.getIDocumentRedlineAccess().IsRedlineOn() )
+        // The text of a box with a formula is worked out from the formula and is rewritten
+        // whenever the table is recalculated, by a change to some other box as much as by one
+        // here. Nobody wrote it, so do not record it as an insertion.
+        const bool bFormulaBox = SfxItemState::SET
+            == rBox.GetFrameFormat()->GetItemState( RES_BOXATR_FORMULA, false );
+        if( rDoc.getIDocumentRedlineAccess().IsRedlineOn() && !bFormulaBox )
         {
-            SwPaM aTemp(*pTNd, 0, *pTNd, rText.getLength());
+            SwPaM aTemp(*pTNd, nInsStt, *pTNd, nInsStt + rText.getLength());
             rDoc.getIDocumentRedlineAccess().AppendRedline(new SwRangeRedline(RedlineType::Insert, aTemp), true);
         }
     }

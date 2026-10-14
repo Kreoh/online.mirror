@@ -46,6 +46,7 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace ucbhelper_impl
 {
@@ -125,7 +126,7 @@ using namespace ucbhelper_impl;
 namespace ucbhelper {
 
 ContentImplHelper::ContentImplHelper(
-            uno::Reference< uno::XComponentContext > xContext,
+            uno::Reference< cpo::uno::XComponentContext > xContext,
             rtl::Reference< ContentProviderImplHelper > xProvider,
             uno::Reference<
             css::ucb::XContentIdentifier > Identifier )
@@ -142,7 +143,7 @@ ContentImplHelper::~ContentImplHelper()
 {
 }
 
-void SAL_CALL ContentImplHelper::release()
+void ContentImplHelper::release()
     noexcept
 {
     // #144882# - Call to OWeakObject::release may destroy m_xProvider.
@@ -154,7 +155,7 @@ void SAL_CALL ContentImplHelper::release()
     OWeakObject::release();
 }
 
-cpo::uno::Any SAL_CALL ContentImplHelper::queryInterface( const cpo::uno::Type & rType )
+cpo::uno::Any ContentImplHelper::queryInterface( const cpo::uno::Type & rType )
 {
     cpo::uno::Any aRet = cppu::queryInterface( rType,
             static_cast< lang::XTypeProvider * >(this),
@@ -183,14 +184,14 @@ XTYPEPROVIDER_IMPL_10( ContentImplHelper,
                        container::XChild );
 
 // virtual
-bool SAL_CALL ContentImplHelper::supportsService(
+bool ContentImplHelper::supportsService(
                                             const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::dispose()
+void ContentImplHelper::dispose()
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -237,7 +238,7 @@ void SAL_CALL ContentImplHelper::dispose()
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::addEventListener(
+void ContentImplHelper::addEventListener(
         const uno::Reference< lang::XEventListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -250,7 +251,7 @@ void SAL_CALL ContentImplHelper::addEventListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::removeEventListener(
+void ContentImplHelper::removeEventListener(
         const uno::Reference< lang::XEventListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -260,14 +261,14 @@ void SAL_CALL ContentImplHelper::removeEventListener(
 }
 
 // virtual
-uno::Reference< css::ucb::XContentIdentifier > SAL_CALL
+uno::Reference< css::ucb::XContentIdentifier >
 ContentImplHelper::getIdentifier()
 {
     return m_xIdentifier;
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::addContentEventListener(
+void ContentImplHelper::addContentEventListener(
         const uno::Reference< css::ucb::XContentEventListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -280,7 +281,7 @@ void SAL_CALL ContentImplHelper::addContentEventListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::removeContentEventListener(
+void ContentImplHelper::removeContentEventListener(
         const uno::Reference< css::ucb::XContentEventListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -290,7 +291,7 @@ void SAL_CALL ContentImplHelper::removeContentEventListener(
 }
 
 // virtual
-sal_Int32 SAL_CALL ContentImplHelper::createCommandIdentifier()
+sal_Int32 ContentImplHelper::createCommandIdentifier()
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -299,7 +300,7 @@ sal_Int32 SAL_CALL ContentImplHelper::createCommandIdentifier()
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::addPropertiesChangeListener(
+void ContentImplHelper::addPropertiesChangeListener(
         const cpo::uno::Sequence< OUString >& PropertyNames,
         const uno::Reference< beans::XPropertiesChangeListener >& Listener )
 {
@@ -327,7 +328,7 @@ void SAL_CALL ContentImplHelper::addPropertiesChangeListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::removePropertiesChangeListener(
+void ContentImplHelper::removePropertiesChangeListener(
         const cpo::uno::Sequence< OUString >& PropertyNames,
         const uno::Reference< beans::XPropertiesChangeListener >& Listener )
 {
@@ -354,7 +355,7 @@ void SAL_CALL ContentImplHelper::removePropertiesChangeListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::addCommandInfoChangeListener(
+void ContentImplHelper::addCommandInfoChangeListener(
         const uno::Reference< css::ucb::XCommandInfoChangeListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -367,7 +368,7 @@ void SAL_CALL ContentImplHelper::addCommandInfoChangeListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::removeCommandInfoChangeListener(
+void ContentImplHelper::removeCommandInfoChangeListener(
         const uno::Reference< css::ucb::XCommandInfoChangeListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -377,7 +378,7 @@ void SAL_CALL ContentImplHelper::removeCommandInfoChangeListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::addProperty(
+void ContentImplHelper::addProperty(
         const OUString& Name,
         sal_Int16 Attributes,
         const cpo::uno::Any& DefaultValue )
@@ -464,7 +465,7 @@ void SAL_CALL ContentImplHelper::addProperty(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::removeProperty( const OUString& Name )
+void ContentImplHelper::removeProperty( const OUString& Name )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -560,7 +561,7 @@ void SAL_CALL ContentImplHelper::removeProperty( const OUString& Name )
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::addPropertySetInfoChangeListener(
+void ContentImplHelper::addPropertySetInfoChangeListener(
         const uno::Reference< beans::XPropertySetInfoChangeListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -573,7 +574,7 @@ void SAL_CALL ContentImplHelper::addPropertySetInfoChangeListener(
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::removePropertySetInfoChangeListener(
+void ContentImplHelper::removePropertySetInfoChangeListener(
         const uno::Reference< beans::XPropertySetInfoChangeListener >& Listener )
 {
     osl::MutexGuard aGuard( m_aMutex );
@@ -583,9 +584,9 @@ void SAL_CALL ContentImplHelper::removePropertySetInfoChangeListener(
 }
 
 // virtual
-uno::Reference< uno::XInterface > SAL_CALL ContentImplHelper::getParent()
+uno::Reference< cpo::uno::XInterface > ContentImplHelper::getParent()
 {
-    uno::Reference< uno::XInterface > xParent;
+    uno::Reference< cpo::uno::XInterface > xParent;
     OUString aURL = getParentURL();
 
     if ( !aURL.isEmpty() )
@@ -605,8 +606,8 @@ uno::Reference< uno::XInterface > SAL_CALL ContentImplHelper::getParent()
 }
 
 // virtual
-void SAL_CALL ContentImplHelper::setParent(
-                                    const uno::Reference< uno::XInterface >& )
+void ContentImplHelper::setParent(
+                                    const uno::Reference< cpo::uno::XInterface >& )
 {
     throw lang::NoSupportException();
 }

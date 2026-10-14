@@ -13,8 +13,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <ostream>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifdef __APPLE__
@@ -28,12 +31,11 @@
  * bytes of the single format it chose; on a copy it hands over the list of
  * formats it offers so the app can advertise them to the platform clipboard.
  *
- * Every callback runs synchronously on the thread that runs the document's UNO
- * commands. In the in-process native apps that is the app's main thread, so the
- * callbacks may touch the platform clipboard directly. A callback must not
- * re-enter the engine.
+ * Every callback runs synchronously on the engine's main-loop thread, the one that runs
+ * the document's UNO commands. In the in-process desktop apps that thread is not the
+ * app's UI thread. A callback must not re-enter the engine.
  *
- * @see COKitDocument::installClipboardProvider().
+ * @see COKit::installClipboardProvider().
  */
 struct COKitClipboardProvider
 {
@@ -68,6 +70,39 @@ struct COKitClipboardProvider
     bool (*getDataForMimeType)(const char* pMimeType, std::vector<char>* pOutData);
 };
 
+/**
+ * One file-type filter for a native file picker: a name the picker can show, and the
+ * wildcards that match the type, separated by semicolons ("*.png;*.jpg").
+ */
+struct COKitFilePickerFilter
+{
+    const char* pName;
+    const char* pWildcards;
+};
+
+/**
+ * A native file picker the in-process desktop app provides to the engine.
+ *
+ * When the provider is installed, a command that needs the user to pick a file calls it
+ * instead of opening the engine's own file dialog.
+ *
+ * @see COKit::installFilePickerProvider().
+ */
+struct COKitFilePickerProvider
+{
+    /**
+     * Show a native open-file picker. Called on the engine's main-loop thread and must
+     * not block: marshal to the app's UI thread, show the picker there, and return at
+     * once. Call pfnPicked exactly once, from any thread: pass pContext and the picked
+     * file's URL ("file://..."), or nullptr for the URL when the user cancelled.
+     *
+     * pTitle names the purpose of the pick, translated. pFilters is an array of
+     * nFilters entries; an empty array means any file can be picked.
+     */
+    void (*pick)(const char* pTitle, const COKitFilePickerFilter* pFilters, size_t nFilters,
+                 void (*pfnPicked)(void* pContext, const char* pUrl), void* pContext);
+};
+
 // getDocumentType is part of the API whether or not the unstable half is asked for, so the
 // type it returns sits outside that guard.
 enum class COKitDocumentType
@@ -77,6 +112,71 @@ enum class COKitDocumentType
   PRESENTATION,
   DRAWING,
   OTHER
+};
+
+/// What running a script produced. At most one of oResult and oError holds a
+/// value. Both are empty when the script ran and its value was one that
+/// JSON.stringify drops, such as undefined, a function or a symbol.
+/// oResult is the value, JSON-encoded. oError is either a JSON object
+/// describing a JS exception or a plain message.
+struct COKitScriptResult
+{
+    std::optional<std::string> oResult;
+    std::optional<std::string> oError;
+    bool bUsedLegacyUnoApi = false;
+};
+
+/// The last column and the last row of a Calc sheet that hold data, both
+/// counted from zero. Both are 1 for a document with no data area, which is
+/// every document that is not a spreadsheet.
+struct COKitDataArea
+{
+    int64_t nLastColumn = 1;
+    int64_t nLastRow = 1;
+};
+
+/// One layer of a slide. An empty aJsonMessage means no layer was rendered.
+struct COKitSlideLayer
+{
+    /// No further layer follows this one.
+    bool bIsDone = false;
+    /// The layer is a bitmap, rather than a description of what to draw.
+    bool bIsBitmapLayer = false;
+    /// The scale the layer was rendered at.
+    double fScale = 0;
+    /// What the layer holds, as JSON.
+    std::string aJsonMessage;
+};
+
+/// One format on the clipboard: its mime type and the bytes in that format.
+/// The bytes can be empty for a type the clipboard offers but cannot produce.
+struct COKitClipboardItem
+{
+    std::string aMimeType;
+    std::vector<char> aData;
+};
+
+/// A size in pixels.
+struct COKitPixelSize
+{
+    unsigned nWidth = 0;
+    unsigned nHeight = 0;
+};
+
+/// A size in twips. Zero in both when the document cannot report one.
+struct COKitSize
+{
+    int64_t nWidth = 0;
+    int64_t nHeight = 0;
+};
+
+/// A rendered image. The pixels are four bytes each, so aPixels holds
+/// nWidth * nHeight * 4 bytes. An empty aPixels means nothing was rendered.
+struct COKitBitmap
+{
+    std::vector<unsigned char> aPixels;
+    int nWidth = 0;
+    int nHeight = 0;
 };
 
 enum class COKitPartMode
@@ -102,6 +202,24 @@ enum class COKitSelectionType
     NONE,
     TEXT,
     COMPLEX
+};
+
+/// What the document has selected, and the text of it when eType is
+/// COKitSelectionType::TEXT. The text is empty for every other type.
+struct COKitSelection
+{
+    COKitSelectionType eType = COKitSelectionType::NONE;
+    std::string aText;
+};
+
+/** Result of COKit::translateDocument(). */
+enum class COKitTranslateResult
+{
+    FAILED = -1,
+    /// the l10n stream was found and the requested language matched
+    TRANSLATED = 0,
+    /// no l10n stream (byte copy), or no locale match (markers stripped)
+    COPIED_UNTRANSLATED = 1
 };
 
 /** Optional features of COKit, in particular callbacks that block
@@ -342,9 +460,11 @@ enum class COKitCallbackType
     DOCUMENT_SIZE_CHANGED = 13,
 
     /**
-     * The current part number is changed.
+     * The current part is changed.
      *
-     * Payload is a single 0-based integer.
+     * Payload is the part identifier: the page's GUID as a braced string for
+     * a presentation or drawing document, the part's 0-based index in decimal
+     * form for other document types.
      */
     SET_PART = 14,
 
@@ -1137,15 +1257,6 @@ enum class COKitCallbackType
     VERTICAL_RULER_UPDATE = 73,
 
     /**
-     * Advertises the MIME types currently held by the kit clipboard,
-     * without any serialised content.
-     *
-     * Payload format is JSON.
-     * Example: { "mimeTypes": ["text/plain;charset=utf-8", "image/png"] }
-     */
-    CLIPBOARD_MIMETYPES = 74,
-
-    /**
      * Preview geometry while a shape handle is dragged.
      *
      * Sent in response to a MoveShapeHandle command in preview mode. The
@@ -1162,18 +1273,24 @@ enum class COKitCallbackType
      * The points are in twips, in document coordinates. An empty
      * "polygons" array means no preview is available for this handle.
      */
-    SHAPE_DRAG_PREVIEW = 75,
+    SHAPE_DRAG_PREVIEW = 74,
 
     /**
      * A vector-primitives delta for a slide that changed.
      *
-     * Pushed to a vector-rendering view so it does not have to request the
-     * delta after an invalidation. The payload is the same JSON the
+     * Pushed after an invalidation, with the delta for the part that changed.
+     * The payload is the id of the part, a newline, and then the same JSON the
      * .uno:VectorPrimitives command returns for a delta: a vectorprimitivesdelta
-     * with the part, the version, the object order, the changed objects and,
-     * when the master page changed, its content.
+     * with the part, the version space it counts in, the version it starts from,
+     * the version it brings the part to, the object order and the changed
+     * objects. The page itself is the first object. Its entry comes along when
+     * the background or the master page content changed.
+     *
+     * The delta describes the part rather than the view whose flush wrote it,
+     * and it carries no view state, so one delta stands for every reader of
+     * that part.
      */
-    VECTOR_PRIMITIVES_DELTA = 76,
+    VECTOR_PRIMITIVES_DELTA = 75,
 
     /**
      * The presentation info of an Impress or Draw document changed and
@@ -1184,7 +1301,18 @@ enum class COKitCallbackType
      * pages changes. The payload is a JSON object naming the reason and the
      * changed part, for example { "reason": "gifupdate", "part": 3 }.
      */
-    PRESENTATION_INFO = 77
+    PRESENTATION_INFO = 76,
+
+    /**
+     * The pages of an Impress or Draw document that are linked to a source
+     * document are not the same as they were.
+     *
+     * Pushed to every view of the document when a page loses the source it
+     * records, which is what an edit of a linked page does, and when an undo
+     * or a redo gives that source back. The payload is empty; the receiving
+     * view reads the link list for itself.
+     */
+    SLIDE_LINKS_CHANGED = 77
 };
 
 enum class COKitKeyEventType
@@ -1358,14 +1486,14 @@ static inline const char* kitCallbackTypeToString(COKitCallbackType eType)
         return "KIT_CALLBACK_TOOLTIP";
     case COKitCallbackType::SHAPE_INNER_TEXT:
         return "KIT_CALLBACK_SHAPE_INNER_TEXT";
-    case COKitCallbackType::CLIPBOARD_MIMETYPES:
-        return "KIT_CALLBACK_CLIPBOARD_MIMETYPES";
     case COKitCallbackType::SHAPE_DRAG_PREVIEW:
         return "KIT_CALLBACK_SHAPE_DRAG_PREVIEW";
     case COKitCallbackType::VECTOR_PRIMITIVES_DELTA:
         return "KIT_CALLBACK_VECTOR_PRIMITIVES_DELTA";
     case COKitCallbackType::PRESENTATION_INFO:
         return "KIT_CALLBACK_PRESENTATION_INFO";
+    case COKitCallbackType::SLIDE_LINKS_CHANGED:
+        return "KIT_CALLBACK_SLIDE_LINKS_CHANGED";
     }
 
     assert(!"Unknown COKitCallbackType type.");
@@ -1441,7 +1569,7 @@ typedef void (*COKitFileSaveDialogCallback)(const char* pSuggestedUri, char* pRe
                                             size_t nResultUri);
 
 /// @see COKit::registerRevealInFileManagerCallback()
-typedef void (*COKitRevealInFileManagerCallback)(const char* pUri);
+using COKitRevealInFileManagerCallback = std::function<void(const char* pUri)>;
 
 struct COKitDocument;
 
@@ -1509,7 +1637,7 @@ struct COKit
      * "ProductExtension": ".0.0.alpha0",
      * "BuildId": "<full 40 char git hash>"}
      */
-    virtual char* getVersionInfo() = 0;
+    virtual std::string getVersionInfo() = 0;
 
     /**
      * Run a macro.
@@ -1524,10 +1652,9 @@ struct COKit
     /**
      * Exports the document and signs its content.
      */
-    virtual bool signDocument(const char* pUrl, const unsigned char* pCertificateBinary,
-                               const int nCertificateBinarySize,
-                               const unsigned char* pPrivateKeyBinary,
-                               const int nPrivateKeyBinarySize) = 0;
+    virtual bool signDocument(const char* pUrl,
+                              std::span<const unsigned char> aCertificateBinary,
+                              std::span<const unsigned char> aPrivateKeyBinary) = 0;
 
     /**
      * Runs the main-loop in the current thread. To trigger this
@@ -1592,10 +1719,10 @@ struct COKit
      * in heavy use. This provides a critical tool for inspecting
      * relevant internal state.
      *
-     * @param pOptions future expansion - string options.
-     * @param pState - heap allocated, C string containing the state dump.
+     * @param aOptions future expansion - string options.
+     * @return the state dump.
      */
-    virtual void dumpState(const char* pOptions, char** pState) = 0;
+    virtual std::string dumpState(std::string_view aOptions) = 0;
 
     virtual std::string extractRequest(const char* pFilePath) = 0;
 
@@ -1673,14 +1800,13 @@ struct COKit
     /**
      * Execute a JavaScript snippet via the embedded JS UNO support.
      *
-     * On success, @c *result is set to the script's last expression result, JSON-stringified (or
-     * null if it stringifies to nothing, e.g. `undefined`), and @c *error is set to null.  On
-     * error, @c *result is null and @c *error holds the JS exception message.
+     * On success the returned oResult holds the script's last expression result,
+     * JSON-stringified, and oError is empty.  On error oResult is empty and oError holds the
+     * JS exception message.  A script whose value stringifies to nothing, such as `undefined`,
+     * leaves both empty.
      *
-     * The caller takes ownership of @c *result and @c *error and must @c free() them.
-     *
-     * The @c script, @c *result and @c *error strings are NUL-terminated C strings, thus cannot
-     * contain embedded NUL characters.
+     * The @c script string is a NUL-terminated C string, thus cannot contain embedded NUL
+     * characters.
      *
      * @c consoleCallback receives every call the script makes on the global @c console object.
      * jsuno registers the WHATWG Console API methods @c log, @c info, @c warn, @c error, @c debug,
@@ -1701,23 +1827,20 @@ struct COKit
      * @param script the script source.
      * @param source used for any exception stack frames that are reported back.
      * @param line (1-based) used for any exception stack frames that are reported back.
-     * @param result out-param for the result.
-     * @param error out-param for the error message.
      * @param consoleCallback hook for console.* method calls.
      * @param consoleCallbackData opaque pointer passed to @c consoleCallback on each call.
      * @param proxyCallback hook for proxy listener fires; may be null.
      * @param proxyCallbackData opaque pointer passed to @c proxyCallback on each call.
-     * @param usedLegacyUnoApi must be non-null; set to true if the script touched the legacy
-     *        com.sun.star UNO API, not modified otherwise.
+     * @return the script's result or error, and whether it resolved an identifier in the
+     *         legacy com.sun.star UNO API.
      */
-    virtual void executeScript(char const * script, std::string_view source, int line,
-                               char ** result, char ** error,
+    virtual COKitScriptResult executeScript(char const * script, std::string_view source, int line,
                                std::function<void(
                                    void * data, std::string_view level, std::string_view message)>
                                    consoleCallback,
                                void * consoleCallbackData,
                                void (*proxyCallback) (void * data, char const * payload),
-                               void * proxyCallbackData, bool * usedLegacyUnoApi) = 0;
+                               void * proxyCallbackData) = 0;
 
     /**
      * Deliver the iframe-side response value back to a JS-UNO proxy listener whose
@@ -1779,6 +1902,15 @@ struct COKit
     virtual void installClipboardProvider(const COKitClipboardProvider* pProvider) = 0;
 
     /**
+     * Give the engine a native file picker for the in-process desktop app. With a
+     * provider installed, a command that needs the user to pick a file - compare
+     * documents, insert an image - asks the provider instead of opening the engine's
+     * own file dialog, and continues with the picked file when the provider delivers
+     * it. Pass nullptr to remove the provider.
+     */
+    virtual void installFilePickerProvider(const COKitFilePickerProvider* pProvider) = 0;
+
+    /**
      * Read the desktop app's single process-wide clipboard. See
      * Document::getClipboard() for the parameters; this needs no document
      * because the shared clipboard is process-global. The distinct name marks
@@ -1787,6 +1919,44 @@ struct COKit
     virtual bool getGlobalClipboard(const char **pMimeTypes,
                                     std::vector<std::string>& rOutMimeTypes,
                                     std::vector<std::vector<char>>& rOutStreams) = 0;
+
+    /**
+     * Single-format convenience over getGlobalClipboard(), for the platform
+     * glue serving one advertised clipboard format on demand. Returns true
+     * and fills rOutData only when the shared clipboard holds a non-empty
+     * payload for pMimeType.
+     */
+    bool getGlobalClipboardData(const char* pMimeType, std::vector<char>& rOutData)
+    {
+        const char* pFilter[] = { pMimeType, nullptr };
+        std::vector<std::string> aOutMimeTypes;
+        std::vector<std::vector<char>> aOutStreams;
+        if (!getGlobalClipboard(pFilter, aOutMimeTypes, aOutStreams) || aOutStreams.empty()
+            || aOutStreams[0].empty())
+            return false;
+        rOutData = std::move(aOutStreams[0]);
+        return true;
+    }
+
+    /**
+     * Translate an ODF file's "_"-marked strings into the given language
+     * using the file's embedded "l10n" stream.
+     *
+     * With no "l10n" zip member the output is a byte-identical copy; with a
+     * stream that matches no locale, or that cannot be read, the rewrite
+     * only strips the "_" markers.
+     * Untouched zip members are preserved byte-for-byte.  Input and output
+     * may be the same file: the rewrite is then in place (atomic, skipped
+     * when nothing would change), and a file carrying its
+     * "l10n_template.xml" copies re-translates on every call until the
+     * first save drops them.
+     *
+     * @param pInputPath input file, system path or file URL
+     * @param pOutputPath output file, overwritten if it exists
+     * @param pBCP47Language requested language, e.g. "de-DE"
+     */
+    virtual COKitTranslateResult translateDocument(const char* pInputPath, const char* pOutputPath,
+                                                   const char* pBCP47Language) = 0;
 };
 
 struct COKitDocument
@@ -1835,17 +2005,18 @@ struct COKitDocument
      */
     virtual std::string getWriterPageRectangles() = 0;
 
-    /// Get the current part number of the document. For a presentation or
-    /// drawing document a part number is the page's stable unique identifier;
-    /// for other document types it is the part's index.
-    virtual int getPart() = 0;
+    /// Get the current part identifier of the document. For a presentation or
+    /// drawing document that is the page's GUID as a braced string like
+    /// {1BE1A269-4A03-4202-ACFE-0204C5E9BE1F}; for other document types it is
+    /// the part's index in decimal form.
+    virtual std::string getPart() = 0;
 
-    /// Set the current part of the document by its part number. The part
-    /// number of a page that is gone selects nothing.
-    virtual void setPart(int nPart) = 0;
+    /// Set the current part of the document by its part identifier. The
+    /// identifier of a page that is gone selects nothing.
+    virtual void setPart(const char* pPart) = 0;
 
     /// Get the current part's name.
-    virtual char* getPartName(int nPart) = 0;
+    virtual std::string getPartName(int nPart) = 0;
 
     virtual void setPartMode(COKitPartMode eMode) = 0;
 
@@ -1856,17 +2027,18 @@ struct COKitDocument
      * rendering at different zoom levels, as the number of rendered pixels and
      * the rendered rectangle of the document are independent.
      *
-     * @param pBuffer pointer to the buffer, its size is determined by nCanvasWidth and nCanvasHeight.
-     * @param nCanvasWidth number of pixels in a row of pBuffer.
-     * @param nCanvasHeight number of pixels in a column of pBuffer.
+     * @param aBuffer where the pixels go, four bytes each, so nCanvasWidth times
+     *        nCanvasHeight times four bytes long.
+     * @param nCanvasWidth number of pixels in a row of aBuffer.
+     * @param nCanvasHeight number of pixels in a column of aBuffer.
      * @param nTilePosX logical X position of the top left corner of the rendered rectangle, in TWIPs.
      * @param nTilePosY logical Y position of the top left corner of the rendered rectangle, in TWIPs.
      * @param nTileWidth logical width of the rendered rectangle, in TWIPs.
      * @param nTileHeight logical height of the rendered rectangle, in TWIPs.
      */
-    virtual void paintTile(unsigned char* pBuffer, const int nCanvasWidth, const int nCanvasHeight,
-                           const int nTilePosX, const int nTilePosY, const int nTileWidth,
-                           const int nTileHeight) = 0;
+    virtual void paintTile(std::span<unsigned char> aBuffer, const int nCanvasWidth,
+                           const int nCanvasHeight, const int nTilePosX, const int nTilePosY,
+                           const int nTileWidth, const int nTileHeight) = 0;
 
     /**
      * Gets the tile mode: the pixel format used for the pBuffer of paintTile().
@@ -1875,8 +2047,9 @@ struct COKitDocument
      */
     virtual COKitTileMode getTileMode() = 0;
 
-    /// Get the document sizes in TWIPs.
-    virtual void getDocumentSize(long* pWidth, long* pHeight) = 0;
+    /// Get the document size in TWIPs, or zeroes when the document does not
+    /// support tiled rendering.
+    virtual COKitSize getDocumentSize() = 0;
 
     /**
      * Initialize document for rendering.
@@ -1958,7 +2131,7 @@ struct COKitDocument
     /**
      * Sets the start or end of a text selection.
      *
-     * @param eType @see COKitSetTextSelectionType
+     * @param eType for type @see COKitSetTextSelectionType
      * @param nX horizontal position in document coordinates
      * @param nY vertical position in document coordinates
      */
@@ -1967,10 +2140,12 @@ struct COKitDocument
     /**
      * Gets the currently selected text.
      *
-     * @param pMimeType suggests the return format, for example text/plain;charset=utf-8.
-     * @param pUsedMimeType output parameter to inform about the determined format (suggested one or plain text).
+     * @param aMimeType the format to return the selection in, for example
+     *        text/plain;charset=utf-8. An empty one asks for plain text.
+     * @return the selection, empty when there is none or it cannot be had in
+     *         that format.
      */
-    virtual std::string getTextSelection(std::string_view pMimeType, std::string* pUsedMimeType) = 0;
+    virtual std::string getTextSelection(std::string_view aMimeType) = 0;
 
     /**
      * Pastes content at the current cursor position.
@@ -1984,11 +2159,26 @@ struct COKitDocument
     /**
      * Adjusts the graphic selection.
      *
-     * @param eType @see COKitSetGraphicSelectionType
+     * @param eType for type @see COKitSetGraphicSelectionType
      * @param nX horizontal position in document coordinates
      * @param nY vertical position in document coordinates
      */
     virtual void setGraphicSelection(COKitSetGraphicSelectionType eType, int nX, int nY) = 0;
+
+    /**
+     * Moves and resizes the object that is currently active for in-place editing.
+     *
+     * The area is in the same twips the "INPLACE" graphic selection reports, so a
+     * client can hand back the rectangle it was given. The container may narrow the
+     * request, for instance for an object protected against moving or resizing, or one
+     * pushed past the edge of the page. Does nothing when no object is in-place active.
+     *
+     * @param nX horizontal position in document coordinates
+     * @param nY vertical position in document coordinates
+     * @param nWidth width in document coordinates
+     * @param nHeight height in document coordinates
+     */
+    virtual void setInPlaceObjectArea(int nX, int nY, int nWidth, int nHeight) = 0;
 
     /**
      * Gets rid of any text or graphic selection.
@@ -2054,35 +2244,30 @@ struct COKitDocument
      */
     virtual int getViewsCount() = 0;
 
-    /// Get the current part's hash.
-    virtual char* getPartHash(int nPart) = 0;
-
     /**
      * Renders a subset of the document's part to a pre-allocated buffer.
      *
-     * @param nPart the part number of the document of which the tile is painted. For a
-     * presentation or drawing document that is the page's stable unique identifier, resolved to
-     * the index the page holds when it paints; the part number of a page that is gone paints
-     * nothing.
+     * @param pPart the part identifier of the document of which the tile is painted. For a
+     * presentation or drawing document that is the page's GUID, resolved to the index the page
+     * holds when it paints; the identifier of a page that is gone paints nothing. For other
+     * document types it is the part's index in decimal form.
      * @param bIsPreview true when the tile is a small preview of the part rather than a tile of
      * the editing viewport, even when it is a preview of the part currently being edited. A
      * presentation or drawing document hides its editing grid for the duration of such a render.
      * @see paintTile.
      */
-    virtual void paintPartTile(unsigned char* pBuffer, const int nPart, const int nMode,
+    virtual void paintPartTile(std::span<unsigned char> aBuffer, const char* pPart, const int nMode,
                                const int nCanvasWidth, const int nCanvasHeight,
                                const int nTilePosX, const int nTilePosY, const int nTileWidth,
                                const int nTileHeight, bool bIsPreview = false) = 0;
 
     /**
-     * Returns the viewID for each existing view. Since viewIDs are not reused,
-     * viewIDs are not the same as the index of the view in the view array over
-     * time. Use getViewsCount() to know the minimal nSize that's large enough.
-     *
-     * @param rIds the array to write the viewIDs into
-     * @returns true if result was written, false otherwise.
+     * Returns the viewID for each existing view, the most recently used one
+     * first. Since viewIDs are not reused, viewIDs are not the same as the
+     * index of the view in the view array over time. The list is empty when
+     * the document has no views.
      */
-    virtual bool getViewIds(std::vector<int>& rIds) = 0;
+    virtual std::vector<int> getViewIds() = 0;
 
     /**
      * Show/Hide a single row/column header outline for Calc documents.
@@ -2095,13 +2280,13 @@ struct COKitDocument
     virtual void setOutlineState(bool bColumn, int nLevel, int nIndex, bool bHidden) = 0;
 
     /// Paints window with given id to the buffer
-    virtual void paintWindow(unsigned nWindowId, unsigned char* pBuffer, const int x, const int y,
-                             const int width, const int height) = 0;
+    virtual void paintWindow(unsigned nWindowId, std::span<unsigned char> aBuffer, const int x,
+                             const int y, const int width, const int height) = 0;
 
     /**
      * Posts a command to the window (dialog, popup, etc.) with given id
      *
-     * @param nWindowid
+     * @param nWindowId ID of window to pass command to
      */
     virtual void postWindow(unsigned nWindowId, COKitWindowAction eAction, const char* pData) = 0;
 
@@ -2154,24 +2339,21 @@ struct COKitDocument
     /// Paints window with given id to the buffer with the give DPI scale
     /// (every pixel is dpiscale-times larger).
     /// @see COKitDocument::paintWindow().
-    virtual void paintWindowDPI(unsigned nWindowId, unsigned char* pBuffer, const int x,
+    virtual void paintWindowDPI(unsigned nWindowId, std::span<unsigned char> aBuffer, const int x,
                                 const int y, const int width, const int height,
                                 const double dpiscale) = 0;
 
     /**
      *  Insert certificate (in binary form) to the certificate store.
      */
-    virtual bool insertCertificate(const unsigned char* pCertificateBinary,
-                                   const int nCertificateBinarySize,
-                                   const unsigned char* pPrivateKeyBinary,
-                                   const int nPrivateKeyBinarySize) = 0;
+    virtual bool insertCertificate(std::span<const unsigned char> aCertificateBinary,
+                                   std::span<const unsigned char> aPrivateKeyBinary) = 0;
 
     /**
      *  Add the certificate (in binary form) to the certificate store.
      *
      */
-    virtual bool addCertificate(const unsigned char* pCertificateBinary,
-                                const int nCertificateBinarySize) = 0;
+    virtual bool addCertificate(std::span<const unsigned char> aCertificateBinary) = 0;
 
     /**
      *  Verify signature of the document.
@@ -2205,9 +2387,9 @@ struct COKitDocument
      */
     virtual int createViewWithOptions(const char* pOptions) = 0;
 
-    /// Set a part's selection mode, naming the part by its part number.
+    /// Set a part's selection mode, naming the part by its part identifier.
     /// nSelect is 0 to deselect, 1 to select, and 2 to toggle.
-    virtual void selectPart(int nPart, int nSelect) = 0;
+    virtual void selectPart(const char* pPart, int nSelect) = 0;
 
     /// Moves the selected pages/slides to a new position.
     /// nPosition is the new position where the selection
@@ -2227,19 +2409,21 @@ struct COKitDocument
     virtual void resizeWindow(unsigned nWindowId, const int width, const int height) = 0;
 
     /**
-     * Gets the content on the clipboard for the current view as a series of binary streams.
+     * Gets the content on the clipboard for the current view.
      *
-     * NB. returns a complete set of possible selection types if nullptr is passed for pMimeTypes.
-     *
-     * @param pMimeTypes passes in a nullptr terminated list of mime types to fetch
-     * @param rOutMimeTypes returns an array of mime types
-     * @param rOutStreams   the content of each mime-type
-     *
-     * @returns: true on success, false on error.
+     * @param pMimeTypes a nullptr terminated list of mime types to fetch, or
+     *        nullptr for every type the clipboard offers.
+     * @param bSkipDuplicateRenderings when true, a fetch of every type leaves
+     *        out the EMF, WMF and BMP renderings. Those hold the same picture
+     *        as the metafile and the bitmap they come from, only a native
+     *        system clipboard reads them, and they take longer to draw than
+     *        all the other formats together. Pass true when the content goes
+     *        to another document; the default keeps every rendering, which is
+     *        what a system clipboard needs.
+     * @return one item per format, empty when the clipboard has nothing to give.
      */
-    virtual bool getClipboard(const char **pMimeTypes,
-                              std::vector<std::string>& rOutMimTypes,
-                              std::vector<std::vector<char>>& rOutStreams) = 0;
+    virtual std::vector<COKitClipboardItem> getClipboard(const char **pMimeTypes,
+                                                         bool bSkipDuplicateRenderings = false) = 0;
 
     /**
      * Populates the clipboard for this view with multiple types of content.
@@ -2282,18 +2466,24 @@ struct COKitDocument
     virtual void sendDialogEvent(unsigned long long int nWindowId, const char* pArguments) = 0;
 
     /**
-     * Paints a font name or character if provided to be displayed in the font list
-     * @param pFontName the font to be painted
+     * Paints a font name or some text in that font, for display in a font list.
+     *
+     * @param pFontName the name of the font
+     * @param pChar the text to paint in the font, or empty
+     * @param nRequestedWidth the width to render at, or 0 for the font's own size
+     * @param nRequestedHeight the height to render at, or 0 for the font's own size
+     * @param nOrientation the rotation, in 10ths of a degree
+     * @return the pixels and the size they cover, empty when nothing was rendered
      */
-    virtual unsigned char* renderFontOrientation(const char* pFontName, const char* pChar,
-                                                 int* pFontWidth, int* pFontHeight,
-                                                 int pOrientation) = 0;
+    virtual COKitBitmap renderFontOrientation(const char* pFontName, const char* pChar,
+                                              int nRequestedWidth, int nRequestedHeight,
+                                              int nOrientation) = 0;
 
     /**
      * Renders a window (dialog, popup, etc.) with the given id, switching to
      * viewId first when that is >= 0.
      *
-     * @param pBuffer Buffer with enough memory allocated to render any dialog
+     * @param aBuffer Buffer with enough memory allocated to render any dialog
      * @param x x-coordinate from where the dialog should start painting
      * @param y y-coordinate from where the dialog should start painting
      * @param width The width of the dialog image to be painted
@@ -2305,8 +2495,8 @@ struct COKitDocument
      *                 200x200 width x height), so that it is easy to compute
      *                 the buffer sizes etc.
      */
-    virtual void paintWindowForView(unsigned nWindowId, unsigned char* pBuffer, const int x,
-                                    const int y, const int width, const int height,
+    virtual void paintWindowForView(unsigned nWindowId, std::span<unsigned char> aBuffer,
+                                    const int x, const int y, const int width, const int height,
                                     const double dpiscale, int viewId) = 0;
 
     /**
@@ -2336,16 +2526,12 @@ struct COKitDocument
     virtual void setBlockedCommandList(int nViewId, const char* blockedCommandList) = 0;
 
     /**
-     * Render input search result to a bitmap buffer.
+     * Render input search result to a bitmap.
      *
      * @param pSearchResult payload containing the search result data
-     * @param pBitmapBuffer contains the bitmap
-     * @param pWidth output bitmap width
-     * @param pHeight output bitmap height
-     * @return true if successful
+     * @return the bitmap, empty when there is nothing to show
      */
-    virtual bool renderSearchResult(const char* pSearchResult, std::vector<unsigned char>* pBitmapBuffer,
-                                    int* pWidth, int* pHeight) = 0;
+    virtual COKitBitmap renderSearchResult(const char* pSearchResult) = 0;
 
     /**
      * Posts an event for the content control at the cursor position.
@@ -2377,18 +2563,16 @@ struct COKitDocument
      * Gets the type of the selected content and possibly its text.
      *
      * This function is a more efficient combination of getSelectionType() and getTextSelection().
-     * It returns the same as getSelectionType(), and additionally if the return value is
-     * COKitSelectionType::TEXT then it also returns the same as getTextSelection(), otherwise
-     * pText is unchanged.
+     * The type is the same as getSelectionType() gives, and for a text selection the text is the
+     * same as getTextSelection() gives.
      *
      * @param pMimeType suggests the return format, for example text/plain;charset=utf-8.
-     * @param pText the currently selected text
-     * @return what kind of selection the document holds.
      */
-    virtual COKitSelectionType getSelectionTypeAndText(const char* pMimeType, std::string* pText) = 0;
+    virtual COKitSelection getSelectionTypeAndText(const char* pMimeType) = 0;
 
-    /// Get the data area (in Calc last row and column).
-    virtual void getDataArea(long nPart, long* pCol, long* pRow) = 0;
+    /// Get the data area of one part, that is, in Calc, its last column and
+    /// last row.
+    virtual COKitDataArea getDataArea(long nPart) = 0;
 
     virtual int getEditMode() = 0;
 
@@ -2438,17 +2622,26 @@ struct COKitDocument
     /// Get the information about the current presentation (Impress only).
     virtual std::string getPresentationInfo() = 0;
 
-    /// Create a slide renderer in engine for the input slide.
-    virtual bool createSlideRenderer(const char* pSlideHash, int nSlideNumber,
-                                     unsigned* nViewWidth, unsigned* nViewHeight,
-                                     bool bRenderBackground, bool bRenderMasterPage) = 0;
+    /// Create a slide renderer in engine for the input slide. The size asked
+    /// for is a maximum, and the size that comes back is the one the renderer
+    /// will use, which is no larger. Nothing comes back when no renderer could
+    /// be made.
+    virtual std::optional<COKitPixelSize> createSlideRenderer(const char* pSlideHash,
+                                                              int nSlideNumber,
+                                                              COKitPixelSize aMaximumSize,
+                                                              bool bRenderBackground,
+                                                              bool bRenderMasterPage) = 0;
 
     /// Clean-up the slideshow (slide renderer)
     virtual void postSlideshowCleanup() = 0;
 
-    /// Render the slide layer
-    virtual bool renderNextSlideLayer(unsigned char* pBuffer, bool* bIsBitmapLayer, double* pScale,
-                                      std::string* pJsonMessage) = 0;
+    /// Render the next layer of the slide into the given buffer, which holds
+    /// four bytes per pixel for the size createSlideRenderer() settled on.
+    ///
+    /// @param aBuffer where the pixels go
+    /// @param fScale the scale to render at
+    virtual COKitSlideLayer renderNextSlideLayer(std::span<unsigned char> aBuffer,
+                                                 double fScale) = 0;
 
     /// Set named view options
     virtual void setViewOption(const char* pOption, const char* pValue) = 0;
@@ -2487,23 +2680,213 @@ struct COKitDocument
     virtual void flushClipboard() = 0;
 
     /**
-     * Get the stable unique identifier of one part: a nonzero integer assigned
-     * to the part for the whole document session, kept over part moves,
-     * insertions and deletions of other parts. nMode selects the part list the
-     * index addresses: 0 for the standard parts, 1 for the master pages, 2 for
-     * the notes pages. Zero when there is no such part or the document has no
-     * part identifiers.
+     * Get the stable identifier of the part at the given index. For a
+     * presentation or drawing document that is the page's GUID as a braced
+     * string, kept over part moves, insertions and deletions of other parts,
+     * and persistent across sessions when the file format stores it; nMode
+     * selects the part list the index addresses: 0 for the standard parts, 1
+     * for the master pages, 2 for the notes pages, 3 for the notes master
+     * pages, 4 for the handout master page. For other document types the
+     * identifier is the index itself in decimal form. Empty when there is no
+     * such part.
      */
-    virtual unsigned long long getPartUniqueId(int nPart, int nMode) = 0;
+    virtual std::string getPartId(int nPart, int nMode) = 0;
 
     /**
-     * Get the index the part with the given part number holds now. For a
-     * presentation or drawing document a part number is the page's stable
-     * unique identifier, and the result is the position of that page in the
-     * part list nMode selects; -1 when no page carries that number any more.
-     * For other document types the part number is the index itself.
+     * Get the index the part with the given part identifier holds now. For a
+     * presentation or drawing document the identifier is the page's GUID, and
+     * the result is the position of that page in the part list nMode selects;
+     * -1 when no page carries that identifier any more. For other document
+     * types the identifier is the index itself in decimal form.
      */
-    virtual int getPartIndex(int nPart, int nMode) = 0;
+    virtual int getPartIndex(const char* pPart, int nMode) = 0;
+
+    /**
+     * Inserts pages of the presentation at pUrl into this document.
+     *
+     * @param pUrl the presentation to take the pages from, as a URL.
+     * @param pJsonOptions names the pages to take as "slides", an empty list taking every
+     *        page, the slide to insert before as "at", whether the pages keep the design of
+     *        the file they came from as "keepDesign", whether they stay linked to the
+     *        document named by "source" as "link", and the time that source was last
+     *        modified as "lastModifiedTime", recorded on each linked page. "sourcePositions"
+     *        names the position each inserted page's slide holds in the source, counted from
+     *        one, one for every page inserted or none at all: a page given a position is
+     *        linked to that position rather than to one slide, so a refresh reads whichever
+     *        slide stands there.
+     * @return whether the pages were inserted.
+     */
+    virtual bool insertPagesFromFile(const char* pUrl, const char* pJsonOptions) = 0;
+
+    /**
+     * Get the pages of the document that are linked to a source document, grouped by the source
+     * they were made from.
+     *
+     * @return JSON of the form {"links":[{"source":"<source document>","slides":[{"part":<part>,
+     *         "name":"<source page>"},...]},...]}, where a source document is named as the user
+     *         knows it, a part is the unique identifier the linked page holds now and a source page
+     *         is named as the user sees it in the source document. A document that links to nothing
+     *         reports an empty array. Empty for a document that holds no pages, which is anything
+     *         but a presentation or a drawing.
+     */
+    virtual std::string getSlideLinks() = 0;
+
+    /**
+     * Refresh the pages linked to one source document.
+     *
+     * @param pSourceName the source document as the user knows it, as getSlideLinks reports it.
+     * @param pUrl a file: URL of a file on this machine holding the source pages to read. It is a
+     *        file staged for this one refresh, so the pages keep the source document they record
+     *        and stay linked to it, and they keep their position and their name as well. A page
+     *        whose source page the file does not hold keeps the content it holds. Each refreshed
+     *        page is the page read for it, so its part changes and a caller holding the parts of
+     *        that source asks for the list again.
+     * @param pLastModifiedTime the time the source document was last modified now, recorded on
+     *        each refreshed page so a later comparison can tell whether the page is up to date.
+     * @param pNotUpdated when given, takes a JSON array of the slides the file held no slide for,
+     *        by the identifier of each one, in document order: ["{...}","{...}"]. It is an empty
+     *        array when every linked slide was read, and empty when the refresh did not run.
+     * @param pPart one page, by the identifier getSlideLinks reports for it, which is then the
+     *        only page refreshed; no part at all refreshes every page linked to the source
+     *        document.
+     * @return the number of pages refreshed, or -1 when no page is linked to that source document,
+     *         when pPart names a page that is not, when the URL is not a file on this machine, or
+     *         when the file could not be read.
+     */
+    virtual int refreshSlideLinks(const char* pSourceName, const char* pUrl,
+                                  const char* pLastModifiedTime, std::string* pNotUpdated,
+                                  const char* pPart) = 0;
+
+    /**
+     * Take the source document off one linked page.
+     *
+     * The page keeps the content it holds and becomes a page of this document alone, so a refresh
+     * of the source it came from leaves it as it is. This is one undo action, and undoing it gives
+     * the page its source back.
+     *
+     * @param pPart the page, as getSlideLinks reports it.
+     * @return true when the page was linked to a source document and is not any more.
+     */
+    virtual bool breakSlideLink(const char* pPart) = 0;
+
+    /**
+     * Writes the given pages out as a document of their own, in the order they are given.
+     *
+     * @param pParts a comma separated list of the pages to write, named the way this document
+     *        names its parts or by the identifier a page keeps in ODF
+     * @param pUrl the file the document is written to, as a URL, whose extension chooses the
+     *        filter it is written with.
+     * @return whether the document was written.
+     */
+    virtual bool exportPages(const char* pParts, const char* pUrl) = 0;
+
+    /**
+     * Marks the given objects in this view, and nothing else, as a click on them would.
+     *
+     * @param pObjectIds the objects to mark, as a comma separated list of the ids
+     *        SdrObject::GetUniqueID() answers, empty to mark nothing.
+     *
+     * The objects of one selection all sit at the same level: directly on the page, or in one and
+     * the same group. An id naming an object somewhere else, or naming nothing on the page the
+     * view shows, is left out.
+     */
+    virtual void selectObjects(const char* pObjectIds) = 0;
+
+    /**
+     * Moves points of the path an object is drawn along, for an object that is drawn along one.
+     *
+     * @param nObjectId the object, by the id SdrObject::GetUniqueID() answers.
+     * @param pChanges what moved and where to, in twips: one change is the polygon, the point of
+     *        it, which of the three parts of that point moved - 0 the point itself, 1 the weight
+     *        that bends the curve coming in, 2 the weight that bends the one going out - and the
+     *        place it moved to, as "polygon,point,part,x,y", several of them separated by ";".
+     *
+     * Only what is named moves. The rest of the path is left as it stands, so nothing that was
+     * not touched can change. Moving a point takes the weights of its curves along with it, and
+     * moving a weight of a point that a curve runs smoothly or symmetrically through moves the
+     * other weight of that point as much as it takes to keep it so. It is one step to undo. An
+     * id naming nothing on the page the view shows, or naming an object that is not drawn along
+     * a path, does nothing.
+     */
+    virtual void setObjectPoints(unsigned long long nObjectId, const char* pChanges) = 0;
+
+    /**
+     * Moves one of the points a drawing object was given for a connector to tie itself to.
+     *
+     * The place is given on the object rather than on the page: 0 and 0 is its upper left corner
+     * and 1 and 1 its lower right one, which is how the render geometry reports such a point.
+     *
+     * @param nObjectId the unique id of the object, as the render geometry names it
+     * @param nAt which of the points of that object, counted from zero as they are listed
+     * @param fX where the point goes on the object, across it
+     * @param fY where the point goes on the object, down it
+     */
+    virtual void setObjectGluePoint(unsigned long long nObjectId, int nAt, double fX, double fY)
+        = 0;
+
+    /**
+     * Gives drawing objects the mapping they are to be drawn by, which moves, scales, turns or
+     * shears them.
+     *
+     * @param pMappings one item per object, separated by semicolons. An item is the unique id of
+     * the object, as the render geometry names it, then the six numbers of its mapping -
+     * a, b, c, d, e and f - all separated by commas. The corner 0 and 0 of the object goes to
+     * e and f, in twips, and its own axes are the other four. A mapping whose two axes are
+     * turned over against each other turns the object over
+     * @param pWhat what was done, which names the step it can be undone with: "move", "scale" or
+     * "turn"
+     */
+    virtual void setObjectTransform(const char* pMappings, const char* pWhat) = 0;
+
+    /**
+     * Moves one of the points a custom shape is shaped by, which the shape reads as the value it
+     * shapes itself from.
+     *
+     * @param nObjectId the unique id of the object, as the render geometry names it
+     * @param nAt which of the points the shape offers, counted from zero as it lists them
+     * @param nX where the point goes, on the page, in twips
+     * @param nY where the point goes, on the page, in twips
+     * @param bWithTheShape true to carry the shape along where the point is one that moves it,
+     * which is what a callout's tail does when it is dragged without a modifier
+     */
+    virtual void setObjectControlPoint(unsigned long long nObjectId, int nAt, int nX, int nY,
+                                       bool bWithTheShape)
+        = 0;
+
+    /**
+     * Moves one handle of an object to a place on the page, by naming the object and the handle
+     * rather than by what a view has selected. The object reads the move its own way: a corner
+     * radius, the angle a piece of a circle begins at, the offset of a measurement.
+     *
+     * @param nObjectId the unique id of the object, as the render geometry names it
+     * @param nKind the kind of handle, as the drawing layer numbers the kinds
+     * @param nPolygon which polygon of the object the handle belongs to, zero where it belongs
+     * to none
+     * @param nPoint which point of that polygon, zero where it stands for no point
+     * @param nAt the number the object itself gives the handle, for the handles that are told
+     * apart by nothing else; -1 where the three above already name it
+     * @param nX where the handle goes, on the page, in twips
+     * @param nY where the handle goes, on the page, in twips
+     */
+    virtual void setObjectHandle(unsigned long long nObjectId, int nKind, int nPolygon,
+                                 int nPoint, int nAt, int nX, int nY)
+        = 0;
+
+    /**
+     * Crops a picture to a new window onto its graphic, given by the window's upper left and
+     * lower right corners. The corners are the window's own, along the picture's axes, so a
+     * turned or sheared picture keeps its turn and shear. The graphic stays where it is on the
+     * page and only the window onto it moves, the way the office crops. The crop values follow
+     * from the window. Nothing needs to be selected for it.
+     *
+     * @param nObjectId the unique id of the picture
+     * @param nUpperLeftX where the window's upper left corner goes, on the page, in twips
+     * @param nUpperLeftY where the window's upper left corner goes, on the page, in twips
+     * @param nLowerRightX where the window's lower right corner goes, on the page, in twips
+     * @param nLowerRightY where the window's lower right corner goes, on the page, in twips
+     */
+    virtual void cropObject(unsigned long long nObjectId, int nUpperLeftX, int nUpperLeftY,
+                            int nLowerRightX, int nLowerRightY) = 0;
 
 };
 

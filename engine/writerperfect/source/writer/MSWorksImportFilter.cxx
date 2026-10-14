@@ -133,25 +133,25 @@ void MSWorksImportFilter::doRegisterHandlers(OdtGenerator& rGenerator)
 }
 
 // XServiceInfo
-OUString SAL_CALL MSWorksImportFilter::getImplementationName()
+OUString MSWorksImportFilter::getImplementationName()
 {
     return u"com.sun.star.comp.Writer.MSWorksImportFilter"_ustr;
 }
 
-bool SAL_CALL MSWorksImportFilter::supportsService(const OUString& rServiceName)
+bool MSWorksImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-cpo::uno::Sequence<OUString> SAL_CALL MSWorksImportFilter::getSupportedServiceNames()
+cpo::uno::Sequence<OUString> MSWorksImportFilter::getSupportedServiceNames()
 {
     return { u"com.sun.star.document.ImportFilter"_ustr,
              u"com.sun.star.document.ExtendedTypeDetection"_ustr };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_MSWorksImportFilter_get_implementation(
-    css::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
 {
     return cppu::acquire(new MSWorksImportFilter(context));
 }

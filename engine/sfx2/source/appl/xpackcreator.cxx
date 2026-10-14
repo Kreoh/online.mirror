@@ -34,6 +34,7 @@
 #include <ucbhelper/content.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace {
 
@@ -44,16 +45,16 @@ public:
     OPackageStructureCreator() {}
 
     // XPackageStructureCreator
-    virtual void SAL_CALL convertToPackage( const OUString& aFolderUrl, const uno::Reference< io::XOutputStream >& xTargetStream ) override;
+    virtual void convertToPackage( const OUString& aFolderUrl, const uno::Reference< io::XOutputStream >& xTargetStream ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 };
 
 
-void SAL_CALL OPackageStructureCreator::convertToPackage( const OUString& aFolderUrl,
+void OPackageStructureCreator::convertToPackage( const OUString& aFolderUrl,
                                                           const uno::Reference< io::XOutputStream >& xTargetStream )
 {
     uno::Reference< ucb::XCommandEnvironment > xComEnv;
@@ -110,7 +111,7 @@ void SAL_CALL OPackageStructureCreator::convertToPackage( const OUString& aFolde
                 }
             }
         }
-        catch (const uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             if ( !aTempURL.isEmpty() )
                 ::utl::UCBContentHelper::Kill( aTempURL );
@@ -136,26 +137,26 @@ void SAL_CALL OPackageStructureCreator::convertToPackage( const OUString& aFolde
         throw io::IOException(); // TODO/LATER: can't proceed with creation
 }
 
-OUString SAL_CALL OPackageStructureCreator::getImplementationName()
+OUString OPackageStructureCreator::getImplementationName()
 {
     return u"com.sun.star.comp.embed.PackageStructureCreator"_ustr;
 }
 
-bool SAL_CALL OPackageStructureCreator::supportsService( const OUString& ServiceName )
+bool OPackageStructureCreator::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-cpo::uno::Sequence< OUString > SAL_CALL OPackageStructureCreator::getSupportedServiceNames()
+cpo::uno::Sequence< OUString > OPackageStructureCreator::getSupportedServiceNames()
 {
     return { u"com.sun.star.embed.PackageStructureCreator"_ustr, u"com.sun.star.comp.embed.PackageStructureCreator"_ustr };
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_embed_PackageStructureCreator_get_implementation(
-    css::uno::XComponentContext *,
+    cpo::uno::XComponentContext *,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new OPackageStructureCreator());

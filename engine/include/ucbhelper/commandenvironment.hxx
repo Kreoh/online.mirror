@@ -58,18 +58,18 @@ public:
       *        Handler or an empty reference.
       */
     CommandEnvironment(
-        const css::uno::Reference<css::task::XInteractionHandler>& rxInteractionHandler,
-        const css::uno::Reference<css::ucb::XProgressHandler>& rxProgressHandler);
+        const cpo::uno::Reference<css::task::XInteractionHandler>& rxInteractionHandler,
+        const cpo::uno::Reference<css::ucb::XProgressHandler>& rxProgressHandler);
     /**
       * Destructor.
       */
     virtual ~CommandEnvironment() override;
 
     // XCommandEnvironment
-    virtual css::uno::Reference<css::task::XInteractionHandler>
-        SAL_CALL getInteractionHandler() override;
+    virtual cpo::uno::Reference<css::task::XInteractionHandler>
+        getInteractionHandler() override;
 
-    virtual css::uno::Reference<css::ucb::XProgressHandler> SAL_CALL getProgressHandler() override;
+    virtual cpo::uno::Reference<css::ucb::XProgressHandler> getProgressHandler() override;
 };
 
 } /* namespace ucbhelper */

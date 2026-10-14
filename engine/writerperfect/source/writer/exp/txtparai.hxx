@@ -25,13 +25,13 @@ public:
 
     rtl::Reference<XMLImportContext> CreateChildContext(
         const OUString& rName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& /*xAttribs*/) override;
+        const cpo::uno::Reference<css::xml::sax::XAttributeList>& /*xAttribs*/) override;
 
-    void SAL_CALL
+    void
     startElement(const OUString& rName,
-                 const css::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
-    void SAL_CALL endElement(const OUString& rName) override;
-    void SAL_CALL characters(const OUString& rChars) override;
+                 const cpo::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
+    void endElement(const OUString& rName) override;
+    void characters(const OUString& rChars) override;
 
 private:
     OUString m_aStyleName;

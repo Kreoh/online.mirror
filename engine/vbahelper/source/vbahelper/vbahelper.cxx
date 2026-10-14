@@ -28,7 +28,7 @@
 #include <com/sun/star/script/XDefaultProperty.hpp>
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/script/Converter.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/theIntrospection.hpp>
@@ -77,6 +77,7 @@
 #include <vbahelper/vbahelper.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::ooo::vba;
 
 
@@ -106,7 +107,7 @@ getIntrospectionAccess( const cpo::uno::Any& aObject )
 }
 
 uno::Reference< script::XTypeConverter > const &
-getTypeConverter( const uno::Reference< uno::XComponentContext >& xContext )
+getTypeConverter( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     static uno::Reference< script::XTypeConverter > xTypeConv( script::Converter::create(xContext) );
     return xTypeConv;
@@ -114,7 +115,7 @@ getTypeConverter( const uno::Reference< uno::XComponentContext >& xContext )
 const cpo::uno::Any&
 aNULL()
 {
-    static  cpo::uno::Any aNULLL{ uno::Reference< uno::XInterface >() };
+    static  cpo::uno::Any aNULLL{ uno::Reference< cpo::uno::XInterface >() };
     return aNULLL;
 }
 
@@ -143,7 +144,7 @@ dispatchRequests (const uno::Reference< frame::XModel>& xModel, const OUString &
     uno::Reference<frame::XDispatchProvider> xDispatchProvider (xFrame,uno::UNO_QUERY_THROW);
     try
     {
-        const uno::Reference<uno::XComponentContext >& xContext(
+        const uno::Reference<cpo::uno::XComponentContext >& xContext(
             comphelper::getProcessComponentContext() );
         uno::Reference<util::XURLTransformer> xParser( util::URLTransformer::create(xContext) );
         xParser->parseStrict (url);
@@ -208,7 +209,7 @@ getCurrentDoc( const OUString& sKey )
         aModel = sbxToUnoValue( pCompVar );
         if ( !( aModel >>= xModel ) || !xModel.is() )
         {
-            throw uno::RuntimeException(
+            throw cpo::uno::RuntimeException(
                 u"Can't extract model from basic ( it's obviously not set yet  therefore don't know the current document context)"_ustr );
         }
         SAL_INFO("vbahelper", "Have model points to url " << xModel->getURL());
@@ -216,30 +217,30 @@ getCurrentDoc( const OUString& sKey )
     else
     {
         SAL_INFO("vbahelper", "Failed to get " << sKey);
-        throw uno::RuntimeException( u"Can't determine the currently selected document"_ustr );
+        throw cpo::uno::RuntimeException( u"Can't determine the currently selected document"_ustr );
     }
     return xModel;
 }
 
 /// @throws uno::RuntimeException
 uno::Reference< frame::XModel >
-getCurrentDocCtx( const OUString& ctxName, const uno::Reference< uno::XComponentContext >& xContext )
+getCurrentDocCtx( const OUString& ctxName, const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     uno::Reference< frame::XModel > xModel;
     // try fallback to calling doc
-    css::uno::Reference< css::container::XNameAccess > xNameAccess( xContext, css::uno::UNO_QUERY_THROW );
+    cpo::uno::Reference< css::container::XNameAccess > xNameAccess( xContext, cpo::uno::UNO_QUERY_THROW );
     xModel.set( xNameAccess->getByName( ctxName ), uno::UNO_QUERY_THROW );
     return xModel;
 }
 
 uno::Reference< frame::XModel >
-getThisExcelDoc( const uno::Reference< uno::XComponentContext >& xContext )
+getThisExcelDoc( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     return getCurrentDocCtx( u"ExcelDocumentContext"_ustr , xContext );
 }
 
  uno::Reference< frame::XModel >
-getCurrentExcelDoc( const uno::Reference< uno::XComponentContext >& xContext )
+getCurrentExcelDoc( const uno::Reference< cpo::uno::XComponentContext >& xContext )
 {
     uno::Reference< frame::XModel > xModel;
     try
@@ -433,7 +434,7 @@ bool extractBoolFromAny( const cpo::uno::Any& rAny )
             return rAny.get< sal_Int64 >() != 0;
         default:;
     }
-    throw uno::RuntimeException( u"Invalid type, cannot convert to boolean."_ustr , nullptr );
+    throw cpo::uno::RuntimeException( u"Invalid type, cannot convert to boolean."_ustr , nullptr );
 }
 
 OUString extractStringFromAny( const cpo::uno::Any& rAny, bool bUppercaseBool )
@@ -458,7 +459,7 @@ OUString extractStringFromAny( const cpo::uno::Any& rAny, bool bUppercaseBool )
             return OUString::number( rAny.get< sal_Int64 >() );
         default:;
     }
-    throw uno::RuntimeException( u"Invalid type, cannot convert to string."_ustr , nullptr );
+    throw cpo::uno::RuntimeException( u"Invalid type, cannot convert to string."_ustr , nullptr );
 }
 
 OUString extractStringFromAny( const cpo::uno::Any& rAny, const OUString& rDefault, bool bUppercaseBool )
@@ -582,23 +583,23 @@ OUString VBAToRegexp(const OUString &rIn)
     return sResult.makeStringAndClear( );
 }
 
-static double getPixelToMeterConversionFactor( const css::uno::Reference< css::awt::XDevice >& xDevice, bool bVertical)
+static double getPixelToMeterConversionFactor( const cpo::uno::Reference< css::awt::XDevice >& xDevice, bool bVertical)
 {
     return bVertical ? xDevice->getInfo().PixelPerMeterY : xDevice->getInfo().PixelPerMeterX;
 }
 
-double PointsToPixels( const css::uno::Reference< css::awt::XDevice >& xDevice, double fPoints, bool bVertical)
+double PointsToPixels( const cpo::uno::Reference< css::awt::XDevice >& xDevice, double fPoints, bool bVertical)
 {
     double fConvertFactor = getPixelToMeterConversionFactor( xDevice, bVertical );
     return o3tl::convert(fPoints, o3tl::Length::pt, o3tl::Length::m) * fConvertFactor;
 }
-double PixelsToPoints( const css::uno::Reference< css::awt::XDevice >& xDevice, double fPixels, bool bVertical)
+double PixelsToPoints( const cpo::uno::Reference< css::awt::XDevice >& xDevice, double fPixels, bool bVertical)
 {
     double fConvertFactor = getPixelToMeterConversionFactor( xDevice, bVertical );
     return o3tl::convert(fPixels / fConvertFactor, o3tl::Length::m, o3tl::Length::pt);
 }
 
-ConcreteXShapeGeometryAttributes::ConcreteXShapeGeometryAttributes( const css::uno::Reference< css::drawing::XShape >& xShape )
+ConcreteXShapeGeometryAttributes::ConcreteXShapeGeometryAttributes( const cpo::uno::Reference< css::drawing::XShape >& xShape )
   : m_aShapeHelper( xShape )
 {
 }
@@ -680,7 +681,7 @@ void setDefaultPropByIntrospection( const cpo::uno::Any& aObj, const cpo::uno::A
         xPropSet.set( xUnoAccess->queryAdapter( cppu::UnoType<beans::XPropertySet>::get()), uno::UNO_QUERY);
 
     if ( !xPropSet.is() )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
 
     xPropSet->setPropertyValue( xDflt->getDefaultPropertyName(), aValue );
 }
@@ -751,7 +752,7 @@ UserFormGeometryHelper::UserFormGeometryHelper(
     mbDialog( uno::Reference< awt::XDialog >( xControl, uno::UNO_QUERY ).is() )
 {
     if ( !xControl.is() )
-        throw uno::RuntimeException( u"No control is provided!"_ustr );
+        throw cpo::uno::RuntimeException( u"No control is provided!"_ustr );
 
     mxWindow.set( xControl->getPeer(), uno::UNO_QUERY_THROW );
     mxModelProps.set( xControl->getModel(), uno::UNO_QUERY_THROW );
@@ -942,11 +943,11 @@ void ConcreteXShapeGeometryAttributes::setWidth( double nWidth)
 }
 
 
-ShapeHelper::ShapeHelper( css::uno::Reference< css::drawing::XShape > _xShape)
+ShapeHelper::ShapeHelper( cpo::uno::Reference< css::drawing::XShape > _xShape)
     : xShape(std::move( _xShape ))
 {
     if( !xShape.is() )
-        throw css::uno::RuntimeException( u"No valid shape for helper"_ustr );
+        throw cpo::uno::RuntimeException( u"No valid shape for helper"_ustr );
 }
 
 double ShapeHelper::getHeight() const
@@ -1000,7 +1001,7 @@ void ShapeHelper::setTop(double _fTop)
 void DebugHelper::basicexception( const cpo::uno::Exception& ex, ErrCode err, std::u16string_view /*additionalArgument*/ )
 {
     // #TODO #FIXME ( do we want to support additionalArg here )
-    throw css::script::BasicErrorException( ex.Message, css::uno::Reference< css::uno::XInterface >(), sal_uInt32(err), OUString() );
+    throw css::script::BasicErrorException( ex.Message, cpo::uno::Reference< cpo::uno::XInterface >(), sal_uInt32(err), OUString() );
 }
 
 void DebugHelper::basicexception( ErrCode err,  std::u16string_view additionalArgument )
@@ -1016,8 +1017,8 @@ void DebugHelper::basicexception( const cpo::uno::Exception& ex )
 void DebugHelper::runtimeexception( ErrCode err )
 {
     // #TODO #FIXME ( do we want to support additionalArg here )
-    throw css::uno::RuntimeException( cpo::uno::Exception().Message + " " + OUString::number(sal_uInt32(err)),
-                                      css::uno::Reference< css::uno::XInterface >() );
+    throw cpo::uno::RuntimeException( cpo::uno::Exception().Message + " " + OUString::number(sal_uInt32(err)),
+                                      cpo::uno::Reference< cpo::uno::XInterface >() );
 }
 
 Millimeter::Millimeter():m_nMillimeter(0) {}
@@ -1090,7 +1091,7 @@ SfxObjectShell* getSfxObjShell( const uno::Reference< frame::XModel >& xModel )
 {
     SfxObjectShell* pFoundShell = comphelper::getFromUnoTunnel<SfxObjectShell>(xModel);
     if ( !pFoundShell )
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     return pFoundShell;
 }
 

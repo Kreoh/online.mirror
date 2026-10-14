@@ -34,7 +34,7 @@
 #include <com/sun/star/java/XJavaThreadRegister_11.hpp>
 #include <com/sun/star/java/XJavaVM.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
 #include <osl/thread.hxx>
@@ -43,8 +43,8 @@
 
 namespace com::sun::star {
     namespace container { class XContainer; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 namespace jvmaccess {
     class UnoVirtualMachine;
     class VirtualMachine;
@@ -60,49 +60,49 @@ class JavaVirtualMachine:
 {
 public:
     explicit JavaVirtualMachine(
-        css::uno::Reference<
-            css::uno::XComponentContext > xContext);
+        cpo::uno::Reference<
+            cpo::uno::XComponentContext > xContext);
 
     // XInitialization
-    virtual void SAL_CALL
+    virtual void
     initialize(cpo::uno::Sequence< cpo::uno::Any > const &
                    rArguments) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL
+    virtual bool
     supportsService(OUString const & rServiceName) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
     getSupportedServiceNames() override;
 
     // XJavaVM
-    virtual cpo::uno::Any SAL_CALL
+    virtual cpo::uno::Any
     getJavaVM(cpo::uno::Sequence< sal_Int8 > const & rProcessId) override;
 
-    virtual bool SAL_CALL isVMStarted() override;
+    virtual bool isVMStarted() override;
 
-    virtual bool SAL_CALL isVMEnabled() override;
+    virtual bool isVMEnabled() override;
 
     // XJavaThreadRegister_11
-    virtual bool SAL_CALL isThreadAttached() override;
+    virtual bool isThreadAttached() override;
 
-    virtual void SAL_CALL registerThread() override;
+    virtual void registerThread() override;
 
-    virtual void SAL_CALL revokeThread() override;
+    virtual void revokeThread() override;
 
     // XContainerListener
-    virtual void SAL_CALL
+    virtual void
     disposing(css::lang::EventObject const & rSource) override;
 
-    virtual void SAL_CALL
+    virtual void
     elementInserted(css::container::ContainerEvent const & rEvent) override;
 
-    virtual void SAL_CALL
+    virtual void
     elementRemoved(css::container::ContainerEvent const & rEvent) override;
 
-    virtual void SAL_CALL
+    virtual void
     elementReplaced(css::container::ContainerEvent const & rEvent) override;
 
 private:
@@ -111,7 +111,7 @@ private:
 
     virtual ~JavaVirtualMachine() override;
 
-    virtual void SAL_CALL disposing() override;
+    virtual void disposing() override;
 
     void registerConfigChangesListener();
 
@@ -121,7 +121,7 @@ private:
 
     void handleJniException(JNIEnv * environment);
 
-    css::uno::Reference< css::uno::XComponentContext >
+    cpo::uno::Reference< cpo::uno::XComponentContext >
         m_xContext;
 
     // the following are controlled by BaseMutex::m_aMutex:
@@ -132,7 +132,7 @@ private:
         // If the first creation of Java failed and this flag is set then the
         // next call to getJavaVM throws a RuntimException.  This is useful when
         // the second attempt to create Java might cause a crash.
-    css::uno::Reference< css::container::XContainer >
+    cpo::uno::Reference< css::container::XContainer >
         m_xInetConfiguration;
 
     osl::ThreadData m_aAttachGuards;

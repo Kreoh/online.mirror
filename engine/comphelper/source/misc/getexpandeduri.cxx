@@ -9,22 +9,22 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarExpandUrlReference.hpp>
 #include <com/sun/star/util/theMacroExpander.hpp>
 #include <comphelper/getexpandeduri.hxx>
 #include <rtl/ustring.hxx>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 OUString comphelper::getExpandedUri(
-    css::uno::Reference<css::uno::XComponentContext> const & context,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & context,
     OUString const & uri)
 {
-    css::uno::Reference<css::uri::XVndSunStarExpandUrlReference> ref(
+    cpo::uno::Reference<css::uri::XVndSunStarExpandUrlReference> ref(
         css::uri::UriReferenceFactory::create(context)->parse(uri),
-        css::uno::UNO_QUERY);
+        cpo::uno::UNO_QUERY);
     return ref.is()
         ? ref->expand(css::util::theMacroExpander::get(context)) : uri;
 }

@@ -128,7 +128,7 @@ private:
     std::unique_ptr<ScDPServiceDesc> mpServiceDescription; //  for external service
     std::shared_ptr<ScDPTableData> mpTableData; // cached data
 
-    css::uno::Reference<css::sheet::XDimensionsSupplier> mxSource;
+    cpo::uno::Reference<css::sheet::XDimensionsSupplier> mxSource;
     std::unique_ptr<ScDPOutput> mpOutput;
 
     sal_Int32 mnHeaderRows;    // page fields plus filter button
@@ -145,7 +145,7 @@ private:
     void              CreateOutput();
     void ClearSource();
     void FillLabelDataForDimension(
-        const css::uno::Reference< css::container::XIndexAccess>& xDims,
+        const cpo::uno::Reference< css::container::XIndexAccess>& xDims,
         sal_Int32 nDim, ScDPLabelData& rLabelData);
 
 public:
@@ -204,7 +204,7 @@ public:
     const ScImportSourceDesc* GetImportSourceDesc() const { return mpImportDescription.get(); }
     const ScDPServiceDesc* GetDPServiceDesc() const { return mpServiceDescription.get(); }
 
-    SC_DLLPUBLIC css::uno::Reference<css::sheet::XDimensionsSupplier> const & GetSource();
+    SC_DLLPUBLIC cpo::uno::Reference<css::sheet::XDimensionsSupplier> const & GetSource();
 
     bool                IsSheetData() const;
     bool IsImportData() const { return mpImportDescription != nullptr; }
@@ -258,13 +258,13 @@ public:
     void                GetFieldIdsNames(css::sheet::DataPilotFieldOrientation nOrient, std::vector<tools::Long>& rIndices,
                                          std::vector<OUString>& rNames);
 
-    bool                GetHierarchiesNA( sal_Int32 nDim, css::uno::Reference< css::container::XNameAccess >& xHiers );
+    bool                GetHierarchiesNA( sal_Int32 nDim, cpo::uno::Reference< css::container::XNameAccess >& xHiers );
     void                GetHierarchies( sal_Int32 nDim, cpo::uno::Sequence< OUString >& rHiers );
 
     SC_DLLPUBLIC sal_Int32 GetUsedHierarchy( sal_Int32 nDim );
 
-    bool                GetMembersNA( sal_Int32 nDim, css::uno::Reference< css::sheet::XMembersAccess >& xMembers );
-    bool                GetMembersNA( sal_Int32 nDim, sal_Int32 nHier, css::uno::Reference< css::sheet::XMembersAccess >& xMembers );
+    bool                GetMembersNA( sal_Int32 nDim, cpo::uno::Reference< css::sheet::XMembersAccess >& xMembers );
+    bool                GetMembersNA( sal_Int32 nDim, sal_Int32 nHier, cpo::uno::Reference< css::sheet::XMembersAccess >& xMembers );
 
     bool                GetMemberNames( sal_Int32 nDim, cpo::uno::Sequence< OUString >& rNames );
     SC_DLLPUBLIC bool   GetMembers( sal_Int32 nDim, sal_Int32 nHier, ::std::vector<ScDPLabelData::Member>& rMembers );
@@ -307,13 +307,13 @@ public:
 
     static bool         HasRegisteredSources();
     static std::vector<OUString> GetRegisteredSources();
-    static css::uno::Reference<css::sheet::XDimensionsSupplier>
+    static cpo::uno::Reference<css::sheet::XDimensionsSupplier>
                         CreateSource( const ScDPServiceDesc& rDesc );
 
     static void ConvertOrientation(
         ScDPSaveData& rSaveData,
         const ScPivotFieldVector& rFields, css::sheet::DataPilotFieldOrientation nOrient,
-        const css::uno::Reference< css::sheet::XDimensionsSupplier>& xSource,
+        const cpo::uno::Reference< css::sheet::XDimensionsSupplier>& xSource,
         const ScDPLabelDataVector& rLabels,
         const ScPivotFieldVector* pRefColFields = nullptr,
         const ScPivotFieldVector* pRefRowFields = nullptr,
@@ -358,6 +358,12 @@ public:
         SC_DLLPUBLIC ScDPCache* getExistingCache(const ScRange& rRange);
         SC_DLLPUBLIC const ScDPCache* getExistingCache(const ScRange& rRange) const;
 
+        /**
+         * Stores a cache that was built ahead of time for the range. A range that already has a
+         * cache keeps it, and the passed cache is dropped.
+         */
+        SC_DLLPUBLIC void addCache(const ScRange& rRange, std::unique_ptr<ScDPCache> pCache);
+
         void updateCache(const ScRange& rRange, o3tl::sorted_vector<ScDPObject*>& rRefs);
         bool remove(const ScDPCache* p);
 
@@ -378,8 +384,16 @@ public:
         bool hasCache(const OUString& rName) const;
         const ScDPCache* getCache(const OUString& rName, const ScRange& rRange,
                                   const ScDPDimensionSaveData* pDimData, const ScDPDimCalcSaveData* pCalculatedDimData);
-        ScDPCache* getExistingCache(const OUString& rName);
+        SC_DLLPUBLIC ScDPCache* getExistingCache(const OUString& rName);
+        SC_DLLPUBLIC std::vector<OUString> getAllNames() const;
         size_t size() const;
+
+        /**
+         * Stores a cache that was built ahead of time for the range name. A name that already
+         * has a cache keeps it, and the passed cache is dropped.
+         */
+        SC_DLLPUBLIC void addCache(const OUString& rName, std::unique_ptr<ScDPCache> pCache);
+
     private:
 
         void updateCache(
@@ -423,7 +437,7 @@ public:
 
     private:
 
-        static css::uno::Reference<css::sdbc::XRowSet> createRowSet(
+        cpo::uno::Reference<css::sdbc::XRowSet> createRowSet(
             sal_Int32 nSdbType, const OUString& rDBName, const OUString& rCommand);
 
         void updateCache(
@@ -435,6 +449,14 @@ public:
     ScDPCollection(ScDocument& rDocument);
     ScDPCollection(const ScDPCollection& r);
     ~ScDPCollection();
+
+    /** True when rDBName is the name of a data source registered in the user's configuration.
+        Any other name is the URL of a database document. */
+    static bool IsRegisteredDatabase(const OUString& rDBName);
+
+    /** True when rDBName is an unregistered source whose URL a document controls and the
+        allowed-path, host, or protocol checks reject it. */
+    static bool IsForbiddenUrlDataSource(const OUString& rDBName);
 
     TranslateId ReloadCache(const ScDPObject* pDPObj, o3tl::sorted_vector<ScDPObject*>& rRefs);
     bool ReloadGroupsInCache(const ScDPObject* pDPObj, o3tl::sorted_vector<ScDPObject*>& rRefs);
@@ -470,7 +492,7 @@ public:
 
     SC_DLLPUBLIC SheetCaches& GetSheetCaches();
     SC_DLLPUBLIC const SheetCaches& GetSheetCaches() const;
-    NameCaches& GetNameCaches();
+    SC_DLLPUBLIC NameCaches& GetNameCaches();
     SC_DLLPUBLIC const NameCaches& GetNameCaches() const;
     DBCaches& GetDBCaches();
     SC_DLLPUBLIC const DBCaches& GetDBCaches() const;

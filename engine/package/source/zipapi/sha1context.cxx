@@ -26,6 +26,7 @@
 #include "sha1context.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // static
 uno::Reference<xml::crypto::XDigestContext> StarOfficeSHA1DigestContext::Create()
@@ -33,7 +34,7 @@ uno::Reference<xml::crypto::XDigestContext> StarOfficeSHA1DigestContext::Create(
     ::rtl::Reference<StarOfficeSHA1DigestContext> xResult = new StarOfficeSHA1DigestContext();
     xResult->m_pDigest = rtl_digest_createSHA1_StarOfficeBug();
     if ( !xResult->m_pDigest )
-        throw uno::RuntimeException(u"Can not create cipher!"_ustr );
+        throw cpo::uno::RuntimeException(u"Can not create cipher!"_ustr );
 
     return xResult;
 }
@@ -47,7 +48,7 @@ StarOfficeSHA1DigestContext::~StarOfficeSHA1DigestContext()
     }
 }
 
-void SAL_CALL StarOfficeSHA1DigestContext::updateDigest(const cpo::uno::Sequence<::sal_Int8>& aData)
+void StarOfficeSHA1DigestContext::updateDigest(const cpo::uno::Sequence<::sal_Int8>& aData)
 {
     std::scoped_lock aGuard( m_aMutex );
     if ( !m_pDigest )
@@ -58,11 +59,11 @@ void SAL_CALL StarOfficeSHA1DigestContext::updateDigest(const cpo::uno::Sequence
         rtl_digest_destroySHA1( m_pDigest );
         m_pDigest = nullptr;
 
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 }
 
-cpo::uno::Sequence<::sal_Int8> SAL_CALL StarOfficeSHA1DigestContext::finalizeDigestAndDispose()
+cpo::uno::Sequence<::sal_Int8> StarOfficeSHA1DigestContext::finalizeDigestAndDispose()
 {
     std::scoped_lock aGuard( m_aMutex );
     if ( !m_pDigest )
@@ -74,7 +75,7 @@ cpo::uno::Sequence<::sal_Int8> SAL_CALL StarOfficeSHA1DigestContext::finalizeDig
         rtl_digest_destroySHA1( m_pDigest );
         m_pDigest = nullptr;
 
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
 
     rtl_digest_destroySHA1( m_pDigest );
@@ -96,7 +97,7 @@ CorrectSHA1DigestContext::~CorrectSHA1DigestContext()
 {
 }
 
-void SAL_CALL CorrectSHA1DigestContext::updateDigest(const cpo::uno::Sequence<::sal_Int8>& rData)
+void CorrectSHA1DigestContext::updateDigest(const cpo::uno::Sequence<::sal_Int8>& rData)
 {
     std::scoped_lock aGuard(m_Mutex);
     if (m_bDisposed)
@@ -105,7 +106,7 @@ void SAL_CALL CorrectSHA1DigestContext::updateDigest(const cpo::uno::Sequence<::
     m_Hash.update(rData.getConstArray(), rData.getLength());
 }
 
-cpo::uno::Sequence<::sal_Int8> SAL_CALL CorrectSHA1DigestContext::finalizeDigestAndDispose()
+cpo::uno::Sequence<::sal_Int8> CorrectSHA1DigestContext::finalizeDigestAndDispose()
 {
     std::scoped_lock aGuard(m_Mutex);
     if (m_bDisposed)

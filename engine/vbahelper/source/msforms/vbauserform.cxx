@@ -30,6 +30,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // some little notes
 // XDialog implementation has the following interesting bits
@@ -41,8 +42,8 @@ using namespace ::com::sun::star;
 //     the models in ControlModels can be accessed by name
 // also the XDialog is a XControl ( to access the model above
 
-ScVbaUserForm::ScVbaUserForm( cpo::uno::Sequence< cpo::uno::Any > const& aArgs, uno::Reference< uno::XComponentContext >const& xContext )
-    :  ScVbaUserForm_BASE( getXSomethingFromArgs< XHelperInterface >( aArgs, 0 ), xContext, getXSomethingFromArgs< uno::XInterface >( aArgs, 1 ), getXSomethingFromArgs< frame::XModel >( aArgs, 2 ), nullptr ),
+ScVbaUserForm::ScVbaUserForm( cpo::uno::Sequence< cpo::uno::Any > const& aArgs, uno::Reference< cpo::uno::XComponentContext >const& xContext )
+    :  ScVbaUserForm_BASE( getXSomethingFromArgs< XHelperInterface >( aArgs, 0 ), xContext, getXSomethingFromArgs< cpo::uno::XInterface >( aArgs, 1 ), getXSomethingFromArgs< frame::XModel >( aArgs, 2 ), nullptr ),
        mbDispose( true )
 {
     m_xDialog.set( m_xControl, uno::UNO_QUERY_THROW );
@@ -57,7 +58,7 @@ ScVbaUserForm::~ScVbaUserForm()
 {
 }
 
-void SAL_CALL
+void
 ScVbaUserForm::Show(  )
 {
     SAL_INFO("vbahelper", "ScVbaUserForm::Show(  )");
@@ -103,7 +104,7 @@ ScVbaUserForm::Show(  )
     }
 }
 
-OUString SAL_CALL
+OUString
 ScVbaUserForm::getCaption()
 {
     OUString sCaption;
@@ -116,7 +117,7 @@ ScVbaUserForm::setCaption( const OUString& _caption )
     m_xProps->setPropertyValue( u"Title"_ustr, cpo::uno::Any( _caption ) );
 }
 
-bool SAL_CALL
+bool
 ScVbaUserForm::getVisible()
 {
     uno::Reference< awt::XControl > xControl( m_xDialog, uno::UNO_QUERY_THROW );
@@ -124,7 +125,7 @@ ScVbaUserForm::getVisible()
     return xControlWindow->isVisible();
 }
 
-void SAL_CALL
+void
 ScVbaUserForm::setVisible( bool bVis )
 {
     if ( bVis )
@@ -133,27 +134,27 @@ ScVbaUserForm::setVisible( bool bVis )
         Hide();
 }
 
-double SAL_CALL ScVbaUserForm::getInnerWidth()
+double ScVbaUserForm::getInnerWidth()
 {
     return mpGeometryHelper->getInnerWidth();
 }
 
-void SAL_CALL ScVbaUserForm::setInnerWidth( double fInnerWidth )
+void ScVbaUserForm::setInnerWidth( double fInnerWidth )
 {
     mpGeometryHelper->setInnerWidth( fInnerWidth );
 }
 
-double SAL_CALL ScVbaUserForm::getInnerHeight()
+double ScVbaUserForm::getInnerHeight()
 {
     return mpGeometryHelper->getInnerHeight();
 }
 
-void SAL_CALL ScVbaUserForm::setInnerHeight( double fInnerHeight )
+void ScVbaUserForm::setInnerHeight( double fInnerHeight )
 {
     mpGeometryHelper->setInnerHeight( fInnerHeight );
 }
 
-void SAL_CALL
+void
 ScVbaUserForm::Hide(  )
 {
     mbDispose = false;  // hide not dispose
@@ -161,14 +162,14 @@ ScVbaUserForm::Hide(  )
         m_xDialog->endExecute();
 }
 
-void SAL_CALL
+void
 ScVbaUserForm::RePaint(  )
 {
     // #STUB
     // do nothing
 }
 
-void SAL_CALL
+void
 ScVbaUserForm::UnloadObject(  )
 {
     mbDispose = true;
@@ -188,19 +189,19 @@ ScVbaUserForm::getServiceNames()
     return { u"ooo.vba.excel.UserForm"_ustr };
 }
 
-uno::Reference< beans::XIntrospectionAccess > SAL_CALL
+uno::Reference< beans::XIntrospectionAccess >
 ScVbaUserForm::getIntrospection(  )
 {
     return uno::Reference< beans::XIntrospectionAccess >();
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaUserForm::invoke( const OUString& /*aFunctionName*/, const cpo::uno::Sequence< cpo::uno::Any >& /*aParams*/, cpo::uno::Sequence< ::sal_Int16 >& /*aOutParamIndex*/, cpo::uno::Sequence< cpo::uno::Any >& /*aOutParam*/ )
 {
-    throw uno::RuntimeException(); // unsupported operation
+    throw cpo::uno::RuntimeException(); // unsupported operation
 }
 
-void SAL_CALL
+void
 ScVbaUserForm::setValue( const OUString& aPropertyName, const cpo::uno::Any& aValue )
 {
     cpo::uno::Any aObject = getValue( aPropertyName );
@@ -242,7 +243,7 @@ ScVbaUserForm::nestedSearch( const OUString& aPropertyName, uno::Reference< awt:
     return xControl;
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaUserForm::getValue( const OUString& aPropertyName )
 {
     cpo::uno::Any aResult;
@@ -267,12 +268,12 @@ ScVbaUserForm::getValue( const OUString& aPropertyName )
     return aResult;
 }
 
-bool SAL_CALL
+bool
 ScVbaUserForm::hasMethod( const OUString& /*aName*/ )
 {
     return false;
 }
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaUserForm::Controls( const cpo::uno::Any& index )
 {
     // if the dialog already closed we should do nothing, but the VBA will call methods of the Controls objects
@@ -284,7 +285,7 @@ ScVbaUserForm::Controls( const cpo::uno::Any& index )
     return cpo::uno::Any( xControls );
 }
 
-bool SAL_CALL
+bool
 ScVbaUserForm::hasProperty( const OUString& aName )
 {
     uno::Reference< awt::XControl > xControl( m_xDialog, uno::UNO_QUERY );
@@ -304,9 +305,9 @@ ScVbaUserForm::hasProperty( const OUString& aName )
     return false;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 ScVbaUserForm_get_implementation(
-    css::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const& args)
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const& args)
 {
     return cppu::acquire(new ScVbaUserForm(args, context));
 }

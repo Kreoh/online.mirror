@@ -29,7 +29,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 
 #include <unotools/configitem.hxx>
@@ -242,132 +242,132 @@ private:
     std::optional<StorageItem> m_xStorageFile;
     std::mutex mMutex;
     OUString m_aMasterPassword; // master password is set when the string is not empty
-    css::uno::Reference< css::lang::XComponent > mComponent;
+    cpo::uno::Reference< css::lang::XComponent > mComponent;
     SysCredentialsConfig mUrlContainer;
 
     static OUString createIV();
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence< css::task::UserRecord > CopyToUserRecordSequence(
                                         const ::std::vector< NamePasswordRecord >& original,
-                                        const css::uno::Reference< css::task::XInteractionHandler >& Handler );
+                                        const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
 
     css::task::UserRecord CopyToUserRecord(
                                         const NamePasswordRecord& aRecord,
                                         bool& io_bTryToDecode,
-                                        const css::uno::Reference< css::task::XInteractionHandler >& aHandler );
+                                        const cpo::uno::Reference< css::task::XInteractionHandler >& aHandler );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     cpo::uno::Sequence< css::task::UserRecord > FindUsr(
                                         const ::std::vector< NamePasswordRecord >& userlist,
                                         std::u16string_view name,
-                                        const css::uno::Reference< css::task::XInteractionHandler >& Handler );
-    /// @throws css::uno::RuntimeException
+                                        const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
+    /// @throws cpo::uno::RuntimeException
     bool createUrlRecord(
         const PasswordMap::iterator & rIter,
         bool bName,
         std::u16string_view aName,
-        const css::uno::Reference< css::task::XInteractionHandler >& aHandler,
+        const cpo::uno::Reference< css::task::XInteractionHandler >& aHandler,
         css::task::UrlRecord & rRec  );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     css::task::UrlRecord find(
         const OUString& aURL,
         std::u16string_view aName,
         bool bName, // only needed to support empty user names
-        const css::uno::Reference< css::task::XInteractionHandler >& aHandler  );
+        const cpo::uno::Reference< css::task::XInteractionHandler >& aHandler  );
 
     static OUString GetDefaultMasterPassword();
 
     static OUString RequestPasswordFromUser(
                     css::task::PasswordRequestMode aRMode,
-                    const css::uno::Reference< css::task::XInteractionHandler >& xHandler );
+                    const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler );
 
-    /// @throws css::uno::RuntimeException
-    OUString const & GetMasterPassword( const css::uno::Reference< css::task::XInteractionHandler >& Handler );
+    /// @throws cpo::uno::RuntimeException
+    OUString const & GetMasterPassword( const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void UpdateVector( const OUString& url, ::std::vector< NamePasswordRecord >& toUpdate, NamePasswordRecord const & rec, bool writeFile );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void PrivateAdd( const OUString& aUrl,
                               const OUString& aUserName,
                               const cpo::uno::Sequence< OUString >& aPasswords,
                               char  aMode,
-                              const css::uno::Reference< css::task::XInteractionHandler >& Handler );
+                              const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static ::std::vector< OUString > DecodePasswords( std::u16string_view aLine, std::u16string_view aIV, std::u16string_view aMasterPassword, css::task::PasswordRequestMode mode );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     static OUString EncodePasswords(const std::vector< OUString >& lines, std::u16string_view aIV, std::u16string_view aMasterPassword );
 
 public:
-    PasswordContainer( const css::uno::Reference< css::uno::XComponentContext >& );
+    PasswordContainer( const cpo::uno::Reference< cpo::uno::XComponentContext >& );
     virtual ~PasswordContainer() override;
 
-    virtual void SAL_CALL add( const OUString& aUrl,
+    virtual void add( const OUString& aUrl,
                                const OUString& aUserName,
                                const cpo::uno::Sequence< OUString >& aPasswords,
-                               const css::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
+                               const cpo::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
 
-    virtual void SAL_CALL addPersistent( const OUString& aUrl,
+    virtual void addPersistent( const OUString& aUrl,
                                             const OUString& aUserName,
                                          const cpo::uno::Sequence< OUString >& aPasswords,
-                                          const css::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
+                                          const cpo::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
 
-    virtual css::task::UrlRecord SAL_CALL
+    virtual css::task::UrlRecord
                             find( const OUString& aUrl,
-                                  const css::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
+                                  const cpo::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
 
-    virtual css::task::UrlRecord SAL_CALL
+    virtual css::task::UrlRecord
                             findForName( const OUString& aUrl,
                                          const OUString& aUserName,
-                                         const css::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
+                                         const cpo::uno::Reference< css::task::XInteractionHandler >& Handler  ) override;
 
-    virtual void SAL_CALL remove( const OUString& aUrl,
+    virtual void remove( const OUString& aUrl,
                                   const OUString& aUserName ) override;
 
-    virtual void SAL_CALL removePersistent( const OUString& aUrl,
+    virtual void removePersistent( const OUString& aUrl,
                                             const OUString& aUserName ) override;
 
-    virtual void SAL_CALL removeAllPersistent() override;
+    virtual void removeAllPersistent() override;
 
-    virtual cpo::uno::Sequence< css::task::UrlRecord > SAL_CALL
-                            getAllPersistent( const css::uno::Reference< css::task::XInteractionHandler >& Handler ) override;
+    virtual cpo::uno::Sequence< css::task::UrlRecord >
+                            getAllPersistent( const cpo::uno::Reference< css::task::XInteractionHandler >& Handler ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL    getImplementationName(  ) override;
-    virtual bool SAL_CALL            supportsService( const OUString& ServiceName ) override;
+    virtual OUString    getImplementationName(  ) override;
+    virtual bool            supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
                                         getSupportedServiceNames(  ) override;
 
     // XEventListener
-    virtual void SAL_CALL        disposing( const css::lang::EventObject& Source ) override;
+    virtual void        disposing( const css::lang::EventObject& Source ) override;
 
     // XMasterPasswordHandling
-    virtual bool SAL_CALL authorizateWithMasterPassword( const css::uno::Reference< css::task::XInteractionHandler >& xHandler ) override;
-    virtual bool SAL_CALL changeMasterPassword( const css::uno::Reference< css::task::XInteractionHandler >& xHandler ) override;
-    virtual void SAL_CALL removeMasterPassword() override;
-    virtual bool SAL_CALL hasMasterPassword(  ) override;
-    virtual bool SAL_CALL allowPersistentStoring( bool bAllow ) override;
-    virtual bool SAL_CALL isPersistentStoringAllowed(  ) override;
+    virtual bool authorizateWithMasterPassword( const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler ) override;
+    virtual bool changeMasterPassword( const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler ) override;
+    virtual void removeMasterPassword() override;
+    virtual bool hasMasterPassword(  ) override;
+    virtual bool allowPersistentStoring( bool bAllow ) override;
+    virtual bool isPersistentStoringAllowed(  ) override;
 
     // XMasterPasswordHandling2
-    virtual bool SAL_CALL useDefaultMasterPassword( const css::uno::Reference< css::task::XInteractionHandler >& xHandler ) override;
-    virtual bool SAL_CALL isDefaultMasterPasswordUsed(  ) override;
+    virtual bool useDefaultMasterPassword( const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler ) override;
+    virtual bool isDefaultMasterPasswordUsed(  ) override;
 
     // XUrlContainer
-    virtual void SAL_CALL addUrl( const OUString& Url, bool MakePersistent ) override;
-    virtual OUString SAL_CALL findUrl( const OUString& Url ) override;
-    virtual void SAL_CALL removeUrl( const OUString& Url ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getUrls( bool OnlyPersistent ) override;
+    virtual void addUrl( const OUString& Url, bool MakePersistent ) override;
+    virtual OUString findUrl( const OUString& Url ) override;
+    virtual void removeUrl( const OUString& Url ) override;
+    virtual cpo::uno::Sequence< OUString > getUrls( bool OnlyPersistent ) override;
 
     void            Notify();
 private:
-    bool authorizateWithMasterPassword( std::unique_lock<std::mutex>& rGuard, const css::uno::Reference< css::task::XInteractionHandler >& xHandler );
-    cpo::uno::Sequence< css::task::UrlRecord > getAllPersistent( std::unique_lock<std::mutex>& rGuard, const css::uno::Reference< css::task::XInteractionHandler >& Handler );
+    bool authorizateWithMasterPassword( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler );
+    cpo::uno::Sequence< css::task::UrlRecord > getAllPersistent( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference< css::task::XInteractionHandler >& Handler );
     void removeAllPersistent(std::unique_lock<std::mutex>& rGuard);
     void removeMasterPassword(std::unique_lock<std::mutex>& rGuard);
 };

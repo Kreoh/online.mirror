@@ -18,11 +18,11 @@
  */
 #pragma once
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <rtl/ref.hxx>
 
 namespace chart { class ChartModel; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace chart
 {
@@ -34,13 +34,13 @@ class LegendHelper
 public:
     static rtl::Reference< ::chart::Legend >
         showLegend( ChartModel& rModel
-                  , const css::uno::Reference< css::uno::XComponentContext >& xContext );
+                  , const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
     static  void hideLegend( ChartModel& rModel );
 
     static rtl::Reference< ::chart::Legend >
         getLegend( ChartModel& rModel
-                 , const css::uno::Reference< css::uno::XComponentContext >& xContext = nullptr
+                 , const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = nullptr
                  , bool bCreate = false );
 
     /** returns <FALSE/>, if either there is no legend at the diagram, or there

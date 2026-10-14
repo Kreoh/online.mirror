@@ -43,9 +43,9 @@
 #include <com/sun/star/script/XTypeConverter.hpp>
 #include <com/sun/star/script/FailReason.hpp>
 
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XComponentContext; }
 
-using namespace css::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace css::lang;
 using namespace css::script;
@@ -226,13 +226,13 @@ public:
     TypeConverter_Impl();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService(const OUString& ServiceName) override;
-    virtual  Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual  Sequence< OUString > getSupportedServiceNames() override;
 
     // XTypeConverter
-    virtual Any SAL_CALL convertTo( const Any& aFrom, const Type& DestinationType ) override;
-    virtual Any SAL_CALL convertToSimpleType( const Any& aFrom, TypeClass aDestinationType ) override;
+    virtual Any convertTo( const Any& aFrom, const Type& DestinationType ) override;
+    virtual Any convertToSimpleType( const Any& aFrom, TypeClass aDestinationType ) override;
 };
 
 }
@@ -452,7 +452,7 @@ double TypeConverter_Impl::toDouble( const Any& rAny, double min, double max )
 }
 
 
-Any SAL_CALL TypeConverter_Impl::convertTo( const Any& rVal, const Type& aDestType )
+Any TypeConverter_Impl::convertTo( const Any& rVal, const Type& aDestType )
 {
     const Type& aSourceType = rVal.getValueType();
     if (aSourceType == aDestType)
@@ -502,7 +502,7 @@ Any SAL_CALL TypeConverter_Impl::convertTo( const Any& rVal, const Type& aDestTy
             break;
         }
 
-        auto ifc = o3tl::tryAccess<css::uno::Reference<css::uno::XInterface>>(
+        auto ifc = o3tl::tryAccess<cpo::uno::Reference<cpo::uno::XInterface>>(
             rVal);
         if (!ifc || !ifc->is())
         {
@@ -862,8 +862,8 @@ Any TypeConverter_Impl::convertToSimpleType( const Any& rVal, TypeClass aDestina
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_stoc_TypeConverter_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_stoc_TypeConverter_get_implementation(cpo::uno::XComponentContext*,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return ::cppu::acquire(new stoc_tcv::TypeConverter_Impl());

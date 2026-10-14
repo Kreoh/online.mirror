@@ -32,7 +32,7 @@
 namespace frm
 {
 using namespace comphelper;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
@@ -85,7 +85,7 @@ ORadioButtonModel::~ORadioButtonModel()
 
 // XCloneable
 
-css::uno::Reference< css::util::XCloneable > ORadioButtonModel::createClone()
+cpo::uno::Reference< css::util::XCloneable > ORadioButtonModel::createClone()
 {
     rtl::Reference<ORadioButtonModel> pClone = new ORadioButtonModel(this, getContext());
     pClone->clonedFrom(this);
@@ -384,15 +384,15 @@ bool ORadioButtonModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_ORadioButtonModel_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_ORadioButtonModel_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ORadioButtonModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_form_ORadioButtonControl_get_implementation(css::uno::XComponentContext* component,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_form_ORadioButtonControl_get_implementation(cpo::uno::XComponentContext* component,
         cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new frm::ORadioButtonControl(component));

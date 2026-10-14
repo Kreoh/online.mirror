@@ -55,6 +55,7 @@
 #include <txtfrm.hxx>
 #include <hints.hxx>
 #include <ndtxt.hxx>
+#include <swtable.hxx>
 #include <pam.hxx>
 #include <UndoCore.hxx>
 #include <UndoAttribute.hxx>
@@ -65,6 +66,7 @@
 #include <txatbase.hxx>
 #include <swtblfmt.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <docary.hxx>
 #include <paratr.hxx>
 #include <redline.hxx>
@@ -84,7 +86,7 @@
 #include <istyleaccess.hxx>
 
 using namespace ::com::sun::star::i18n;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 
 /*
  * Internal functions
@@ -841,6 +843,11 @@ SwFormat *SwDoc::MakeFrameFormat_(const UIName &rFormatName,
     return pFrameFormat;
 }
 
+SwCharFormat* SwDoc::FindCharFormatByName( const UIName& rName ) const
+{
+    return mpCharFormatTable->FindFormatByName(rName);
+}
+
 SwCharFormat *SwDoc::MakeCharFormat( const UIName &rFormatName,
                                SwCharFormat *pDerivedFrom )
 {
@@ -885,6 +892,17 @@ SwTextFormatColl* SwDoc::MakeTextFormatColl( const UIName &rFormatName,
     }
 
     return pFormatColl;
+}
+
+SwTextFormatColl* SwDoc::MakeTableStyleRoleColl(SwTextFormatColl& rBase)
+{
+    // Same name as the paragraph style it extends, so that the style name items of the
+    // paragraphs below it keep naming that style. Not in the collection list, so it never
+    // shows up as a style of its own.
+    SwTextFormatColl* pRoleColl = new SwTextFormatColl(GetAttrPool(), rBase.GetName(), &rBase);
+    pRoleColl->SetAuto(false);
+    pRoleColl->SetHidden(true);
+    return pRoleColl;
 }
 
 SwFormat *SwDoc::MakeTextFormatColl_(const UIName &rFormatName,
@@ -960,7 +978,26 @@ void SwDoc::DelTextFormatColl(size_t nFormatColl, bool bBroadcast)
     // Correct next
     for( SwTextFormatColls::const_iterator it = mpTextFormatCollTable->begin() + 1; it != mpTextFormatCollTable->end(); ++it )
         SetTextFormatCollNext( *it, pDel );
+
+    // A live table style keeps a role collection per paragraph style, found by the style's
+    // address. Free the ones built on the dying style now, so that a style created later at
+    // the same address does not find them; their paragraphs take a role collection for the
+    // style they move to once the dying one has handed them on.
+    std::vector<SwContentNode*> aRoleNodes;
+    for (SwTableFormat* pTableFormat : *GetTableFrameFormats())
+    {
+        if (SwTable* pTable = SwTable::FindTable(pTableFormat))
+        {
+            std::vector<SwContentNode*> aTableNodes = pTable->DropTableStyleRoleCollsFor(*pDel);
+            aRoleNodes.insert(aRoleNodes.end(), aTableNodes.begin(), aTableNodes.end());
+        }
+    }
+
     delete pDel;
+
+    for (SwContentNode* pNode : aRoleNodes)
+        pNode->ChkTableStyleRoleColl();
+
     getIDocumentState().SetModified();
 }
 
@@ -1083,6 +1120,26 @@ bool SwDoc::SetTextFormatColl(const SwPaM &rRg,
 {
     SwDataChanged aTmp( rRg );
     auto [pStart, pEnd] = rRg.StartEnd(); // SwPosition*
+
+    if (IsInMergedPaste() && pFormat)
+    {
+        // The style itself is dropped and its content is flattened into direct formatting.
+        SfxItemSet aFormatSet(pFormat->GetAttrSet());
+        if (aFormatSet.Count())
+        {
+            for (SwNodeOffset nIndex = pStart->GetNodeIndex(); nIndex <= pEnd->GetNodeIndex();
+                 ++nIndex)
+            {
+                if (SwTextNode* pTextNode = GetNodes()[nIndex]->GetTextNode())
+                {
+                    pTextNode->SetAttr(aFormatSet);
+                }
+            }
+            getIDocumentState().SetModified();
+        }
+        return true;
+    }
+
     SwHistory* pHst = nullptr;
     bool bRet = true;
 
@@ -1673,7 +1730,8 @@ void SwDoc::MoveLeftMargin(const SwPaM& rPam, bool bRight, bool bModulus,
 
     const SvxTabStopItem& rTabItem = GetDefault( RES_PARATR_TABSTOP );
     const sal_Int32 nDefDist = rTabItem.Count() ? rTabItem[0].GetTabPos() : 1134;
-    const SwPosition &rStt = *rPam.Start(), &rEnd = *rPam.End();
+    auto [pStt, pEnd] = rPam.StartEnd(); // SwPosition*
+    const SwPosition &rStt = *pStt, &rEnd = *pEnd;
     SwNodeIndex aIdx( rStt.GetNode() );
     while( aIdx <= rEnd.GetNode() )
     {

@@ -42,6 +42,8 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/form/XLoadable.hpp>
+#include <com/sun/star/sdb/DatabaseContext.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
@@ -54,6 +56,7 @@
 #include <com/sun/star/io/XTruncate.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/util/RevisionTag.hpp>
+#include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
 #include <com/sun/star/security/DocumentDigitalSignatures.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/xml/crypto/CipherID.hpp>
@@ -90,6 +93,8 @@
 #include <vcl/errinf.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/weld.hxx>
+#include <basic/basicmanagerrepository.hxx>
+#include <basic/basmgr.hxx>
 #include <basic/modsizeexceeded.hxx>
 #include <officecfg/Office/Common.hxx>
 #include <osl/file.hxx>
@@ -127,8 +132,8 @@
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::task;
@@ -147,13 +152,13 @@ static cpo::uno::Any getODFVersionAny(SvtSaveOptions::ODFSaneDefaultVersion v)
 }
 
 
-void impl_addToModelCollection(const css::uno::Reference< css::frame::XModel >& xModel)
+void impl_addToModelCollection(const cpo::uno::Reference< css::frame::XModel >& xModel)
 {
     if (!xModel.is())
         return;
 
-    const css::uno::Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
-    css::uno::Reference< css::frame::XGlobalEventBroadcaster > xModelCollection =
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+    cpo::uno::Reference< css::frame::XGlobalEventBroadcaster > xModelCollection =
         css::frame::theGlobalEventBroadcaster::get(xContext);
     try
     {
@@ -234,14 +239,14 @@ bool SfxObjectShell::PutURLContentsToVersionStream_Impl(
         DBG_ASSERT( xVersion.is(),
                 "The method must throw an exception if the storage can not be opened!" );
         if ( !xVersion.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< io::XStream > xVerStream = xVersion->openStreamElement(
                                                                 aStreamName,
                                                                 embed::ElementModes::READWRITE );
         DBG_ASSERT( xVerStream.is(), "The method must throw an exception if the storage can not be opened!" );
         if ( !xVerStream.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         uno::Reference< io::XOutputStream > xOutStream = xVerStream->getOutputStream();
         uno::Reference< io::XTruncate > xTrunc( xOutStream, uno::UNO_QUERY_THROW );
@@ -502,6 +507,7 @@ bool SfxObjectShell::DoInitNew()
     {
         // empty documents always get their macros from the user, so there is no reason to restrict access
         pImpl->aMacroMode.allowMacroExecution();
+        pImpl->m_bMacroCallsAllowed = true;
         if ( SfxObjectCreateMode::EMBEDDED == eCreateMode )
             SetTitle(SfxResId(STR_NONAME));
 
@@ -509,7 +515,7 @@ bool SfxObjectShell::DoInitNew()
         if ( xModel.is() )
         {
             SfxItemSet &rSet = GetMedium()->GetItemSet();
-            comphelper::SequenceAsHashMap aArgs = TransformItems(SID_OPENDOC, rSet);
+            SfxUnoArguments aArgs = TransformItems(SID_OPENDOC, rSet);
             aArgs[u"Title"_ustr] <<= GetTitle(SFX_TITLE_DETECT);
             xModel->attachResource(OUString(), aArgs.getAsConstPropertyValueList());
             if (!comphelper::IsFuzzing())
@@ -541,7 +547,7 @@ bool SfxObjectShell::ImportFromGeneratedStream_Impl(
             ::comphelper::OStorageHelper::GetStorageFromStream( xStream );
 
         if ( !xStorage.is() )
-            throw uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         if ( !pMedium )
             pMedium = new SfxMedium( xStorage, OUString() );
@@ -791,7 +797,7 @@ bool SfxObjectShell::DoLoad( SfxMedium *pMed )
         try
         {
             ::ucbhelper::Content aContent( pMedium->GetName(), utl::UCBContentHelper::getDefaultCommandEnvironment(), comphelper::getProcessComponentContext() );
-            css::uno::Reference < XPropertySetInfo > xProps = aContent.getProperties();
+            cpo::uno::Reference < XPropertySetInfo > xProps = aContent.getProperties();
             if ( xProps.is() )
             {
                 static constexpr OUString aAuthor( u"Author"_ustr );
@@ -1089,7 +1095,7 @@ void SfxObjectShell::DetectFilterOptions(SfxMedium* pMedium)
 
     if (pFilter->GetName() == "Text - txt - csv (StarCalc)")
     {
-        css::uno::Reference< css::io::XInputStream > xInputStream = pMedium->GetInputStream();
+        cpo::uno::Reference< css::io::XInputStream > xInputStream = pMedium->GetInputStream();
         if (!xInputStream.is())
             return;
         std::unique_ptr<SvStream> pInStream = utl::UcbStreamHelper::CreateStream(xInputStream);
@@ -1118,8 +1124,8 @@ ErrCode SfxObjectShell::HandleFilter( SfxMedium* pMedium, SfxObjectShell const *
 
     if ( !pData && (bTiledRendering || !pOptions) )
     {
-        css::uno::Reference< XMultiServiceFactory > xServiceManager = ::comphelper::getProcessServiceFactory();
-        css::uno::Reference< XNameAccess > xFilterCFG;
+        cpo::uno::Reference< XMultiServiceFactory > xServiceManager = ::comphelper::getProcessServiceFactory();
+        cpo::uno::Reference< XNameAccess > xFilterCFG;
         if( xServiceManager.is() )
         {
             xFilterCFG.set( xServiceManager->createInstance(u"com.sun.star.document.FilterFactory"_ustr),
@@ -1143,7 +1149,7 @@ ErrCode SfxObjectShell::HandleFilter( SfxMedium* pMedium, SfxObjectShell const *
                         pProp->Value >>= aServiceName;
                         if( !aServiceName.isEmpty() )
                         {
-                            css::uno::Reference< XInteractionHandler > rHandler = pMedium->GetInteractionHandler();
+                            cpo::uno::Reference< XInteractionHandler > rHandler = pMedium->GetInteractionHandler();
                             if( rHandler.is() )
                             {
                                 // we need some properties in the media descriptor, so we have to make sure that they are in
@@ -1222,6 +1228,22 @@ bool SfxObjectShell::IsPackageStorageFormat_Impl(const SfxMedium &rMedium)
 }
 
 
+#if HAVE_FEATURE_SCRIPTING
+namespace
+{
+// A loaded library is stored through the document BasicManager, and an unloaded one is copied
+// from the old storage.
+bool lcl_isAnyLibraryLoaded( const uno::Reference< script::XStorageBasedLibraryContainer >& xContainer )
+{
+    if ( !xContainer.is() )
+        return false;
+    const uno::Sequence< OUString > aNames = xContainer->getElementNames();
+    return std::any_of( aNames.begin(), aNames.end(),
+                        [&xContainer]( const OUString& rName ) { return xContainer->isLibraryLoaded( rName ); } );
+}
+}
+#endif
+
 bool SfxObjectShell::DoSave()
 // DoSave is only invoked for OLE. Save your own documents in the SFX through
 // DoSave_Impl order to allow for the creation of backups.
@@ -1267,7 +1289,7 @@ bool SfxObjectShell::DoSave()
                 bOk = true;
             }
 #if HAVE_FEATURE_SCRIPTING
-            if ( HasBasic() )
+            if ( !pImpl->m_bNoBasicCapabilities )
             {
                 try
                 {
@@ -1277,7 +1299,7 @@ bool SfxObjectShell::DoSave()
                     uno::Reference< embed::XStorage > xTmpStorage = ::comphelper::OStorageHelper::GetTemporaryStorage();
                     DBG_ASSERT( xTmpStorage.is(), "If a storage can not be created an exception must be thrown!\n" );
                     if ( !xTmpStorage.is() )
-                        throw uno::RuntimeException();
+                        throw cpo::uno::RuntimeException();
 
                     static constexpr OUString aBasicStorageName( u"Basic"_ustr  );
                     static constexpr OUString aDialogsStorageName( u"Dialogs"_ustr  );
@@ -1286,16 +1308,21 @@ bool SfxObjectShell::DoSave()
                     if ( GetMedium()->GetStorage()->hasByName( aDialogsStorageName ) )
                         GetMedium()->GetStorage()->copyElementTo( aDialogsStorageName, xTmpStorage, aDialogsStorageName );
 
-                    GetBasicManager();
-
-                    // disconnect from the current storage
-                    pImpl->aBasicManager.setStorage( xTmpStorage );
-
-                    // store to the current storage
-                    pImpl->aBasicManager.storeLibrariesToStorage( GetMedium()->GetStorage() );
-
-                    // connect to the current storage back
-                    pImpl->aBasicManager.setStorage( GetMedium()->GetStorage() );
+                    const uno::Reference< script::XStorageBasedLibraryContainer > aContainers[]
+                        = { GetBasicContainer(), GetDialogContainer() };
+                    if ( lcl_isAnyLibraryLoaded( aContainers[0] ) )
+                        GetBasicManager();
+                    for ( const auto& xContainer : aContainers )
+                    {
+                        if ( !xContainer.is() )
+                            continue;
+                        // disconnect from the current storage
+                        xContainer->setRootStorage( xTmpStorage );
+                        // store to the current storage
+                        xContainer->storeLibrariesToStorage( GetMedium()->GetStorage() );
+                        // connect to the current storage back
+                        xContainer->setRootStorage( GetMedium()->GetStorage() );
+                    }
                 }
                 catch( cpo::uno::Exception& )
                 {
@@ -1384,7 +1411,7 @@ bool SfxObjectShell::SaveTo_Impl
     // tdf#41063, tdf#135244: prevent jumping to cursor at any temporary modification
     auto aViewGuard(LockAllViews());
 
-    uno::Reference<uno::XComponentContext> const& xContext(
+    uno::Reference<cpo::uno::XComponentContext> const& xContext(
         ::comphelper::getProcessComponentContext());
 
     std::shared_ptr<const SfxFilter> pFilter = rMedium.GetFilter();
@@ -1785,7 +1812,7 @@ bool SfxObjectShell::SaveTo_Impl
                                                         aVersionsName,
                                                         embed::ElementModes::READ );
                         if ( !xNewVerStor.is() || !xOldVerStor.is() )
-                            throw uno::RuntimeException();
+                            throw cpo::uno::RuntimeException();
 
                         for ( const auto& rVersion : aVersions )
                         {
@@ -1926,13 +1953,13 @@ bool SfxObjectShell::SaveTo_Impl
                     }
 
                     if ( !xReadOrig.is() )
-                        throw uno::RuntimeException();
+                        throw cpo::uno::RuntimeException();
                     uno::Reference< embed::XStorage > xMetaInf = xReadOrig->openStorageElement(
                                 u"META-INF"_ustr,
                                 embed::ElementModes::READ );
 
                     if ( !xTarget.is() )
-                        throw uno::RuntimeException();
+                        throw cpo::uno::RuntimeException();
                     uno::Reference< embed::XStorage > xTargetMetaInf = xTarget->openStorageElement(
                                 u"META-INF"_ustr,
                                 embed::ElementModes::READWRITE );
@@ -2075,7 +2102,7 @@ bool SfxObjectShell::SaveTo_Impl
         try
         {
             ::ucbhelper::Content aContent( rMedium.GetName(), utl::UCBContentHelper::getDefaultCommandEnvironment(), comphelper::getProcessComponentContext() );
-            css::uno::Reference < XPropertySetInfo > xProps = aContent.getProperties();
+            cpo::uno::Reference < XPropertySetInfo > xProps = aContent.getProperties();
             if ( xProps.is() )
             {
                 static constexpr OUString aAuthor( u"Author"_ustr );
@@ -2195,7 +2222,7 @@ bool SfxObjectShell::ConnectTmpStorage_Impl(
 
             DBG_ASSERT( xTmpStorage.is(), "If a storage can not be created an exception must be thrown!\n" );
             if ( !xTmpStorage.is() )
-                throw uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
 
             // TODO/LATER: may be it should be done in SwitchPersistence also
             // TODO/LATER: find faster way to copy storage; perhaps sharing with backup?!
@@ -2395,7 +2422,7 @@ bool SfxObjectShell::DoSaveCompleted( SfxMedium* pNewMed, bool bRegisterRecent )
             if ( xModel.is() )
             {
                 const OUString& aURL {pNewMed->GetOrigURL()};
-                comphelper::SequenceAsHashMap aMediaDescr = TransformItems(SID_OPENDOC, pNewMed->GetItemSet());
+                SfxUnoArguments aMediaDescr = TransformItems(SID_OPENDOC, pNewMed->GetItemSet());
                 try
                 {
                     xModel->attachResource(aURL, aMediaDescr.getAsConstPropertyValueList());
@@ -2510,7 +2537,7 @@ bool SfxObjectShell::ConvertFrom
 }
 
 bool SfxObjectShell::ImportFrom(SfxMedium& rMedium,
-        css::uno::Reference<css::text::XTextRange> const& xInsertPosition)
+        cpo::uno::Reference<css::text::XTextRange> const& xInsertPosition)
 {
     const OUString aFilterName( rMedium.GetFilter()->GetFilterName() );
 
@@ -2554,12 +2581,12 @@ bool SfxObjectShell::ImportFrom(SfxMedium& rMedium,
             xImporter->setTargetDocument( xComp );
 
             rMedium.GetItemSet().Put( SfxStringItem( SID_FILE_NAME, rMedium.GetName() ) );
-            comphelper::SequenceAsHashMap aArgs = TransformItems(SID_OPENDOC, rMedium.GetItemSet());
+            SfxUnoArguments aArgs = TransformItems(SID_OPENDOC, rMedium.GetItemSet());
 
             static constexpr OUString sInputStream ( u"InputStream"_ustr  );
 
             if (!aArgs.contains(sInputStream))
-                aArgs[sInputStream] <<= css::uno::Reference < css::io::XInputStream > ( new utl::OSeekableInputStreamWrapper ( *rMedium.GetInStream() ) );
+                aArgs[sInputStream] <<= cpo::uno::Reference < css::io::XInputStream > ( new utl::OSeekableInputStreamWrapper ( *rMedium.GetInStream() ) );
 
             if (!aArgs.contains(u"DocumentBaseURL"_ustr))
                 aArgs[u"DocumentBaseURL"_ustr] <<= rMedium.GetBaseURL();
@@ -2567,6 +2594,12 @@ bool SfxObjectShell::ImportFrom(SfxMedium& rMedium,
             if (xInsertPosition.is()) {
                 aArgs[u"InsertMode"_ustr] <<= true;
                 aArgs[u"TextInsertModeRange"_ustr] <<= xInsertPosition;
+            }
+            else
+            {
+                // Links stay un-updated during import, as when loading our own format, until
+                // UpdateLinks settles them.
+                GetEmbeddedObjectContainer().setUserAllowsLinkUpdate(false);
             }
 
             // #i119492# During loading, some OLE objects like chart will be set
@@ -2711,7 +2744,7 @@ bool SfxObjectShell::ExportTo( SfxMedium& rMedium )
         SfxItemSet& rItems = rMedium.GetItemSet();
 
         // put in the REAL file name, and copy all PropertyValues
-        comphelper::SequenceAsHashMap aNewArgs = TransformItems(SID_SAVEASDOC, rItems);
+        SfxUnoArguments aNewArgs = TransformItems(SID_SAVEASDOC, rItems);
         const comphelper::SequenceAsHashMap& aMediumArgs(rMedium.GetArgs());
 
         if (aNewArgs.contains(u"FileName"_ustr))
@@ -2742,7 +2775,7 @@ bool SfxObjectShell::ExportTo( SfxMedium& rMedium )
 
         return xFilter->filter(aNewArgs.getAsConstPropertyValueList());
         }
-        catch (const css::uno::RuntimeException&)
+        catch (const cpo::uno::RuntimeException&)
         {
             cpo::uno::Any ex(cppu::getCaughtException());
             TOOLS_INFO_EXCEPTION("sfx.doc", "exception: " << exceptionToString(ex));
@@ -2879,7 +2912,7 @@ bool SfxObjectShell::DoSave_Impl( const SfxItemSet* pArgs )
 
     // an interaction handler here can acquire only in case of GUI Saving
     // and should be removed after the saving is done
-    css::uno::Reference< XInteractionHandler > xInteract;
+    cpo::uno::Reference< XInteractionHandler > xInteract;
     const SfxUnoAnyItem* pxInteractionItem = pArgs->GetItem(SID_INTERACTIONHANDLER, false);
     if ( pxInteractionItem && ( pxInteractionItem->GetValue() >>= xInteract ) && xInteract.is() )
         pMediumTmp->GetItemSet().Put( SfxUnoAnyItem( SID_INTERACTIONHANDLER, Any( xInteract ) ) );
@@ -3470,13 +3503,17 @@ bool SfxObjectShell::SaveAsOwnFormat( SfxMedium& rMedium )
 
         SetupStorage( xStorage, nVersion, bTemplate );
 #if HAVE_FEATURE_SCRIPTING
-        if ( HasBasic() )
+        if ( !pImpl->m_bNoBasicCapabilities )
         {
-            // Initialize Basic
-            GetBasicManager();
-
             // Save dialog/script container
-            pImpl->aBasicManager.storeLibrariesToStorage( xStorage );
+            if ( uno::Reference< script::XStorageBasedLibraryContainer > xBasicLibraries = GetBasicContainer() )
+            {
+                if ( lcl_isAnyLibraryLoaded( xBasicLibraries ) )
+                    GetBasicManager();
+                xBasicLibraries->storeLibrariesToStorage( xStorage );
+            }
+            if ( uno::Reference< script::XStorageBasedLibraryContainer > xDialogLibraries = GetDialogContainer() )
+                xDialogLibraries->storeLibrariesToStorage( xStorage );
         }
 #endif
 
@@ -4049,10 +4086,60 @@ bool SfxObjectShell::GetMacroCallsSeenWhileLoading() const
 }
 
 void SfxObjectShell::AddDeferredFormControlImage(
-    const css::uno::Reference<css::beans::XPropertySet>& rxControl,
+    const cpo::uno::Reference<css::beans::XPropertySet>& rxControl,
     const OUString& rURL)
 {
     maDeferredFormControlImages.emplace_back(rxControl, rURL);
+}
+
+bool SfxObjectShell::IsExternalDatabaseForm(const uno::Reference<beans::XPropertySet>& rxForm)
+{
+    if (!rxForm.is())
+        return false;
+    try
+    {
+        uno::Reference<beans::XPropertySetInfo> xInfo(rxForm->getPropertySetInfo());
+        if (!xInfo.is() || !xInfo->hasPropertyByName(u"DataSourceName"_ustr)
+            || !xInfo->hasPropertyByName(u"URL"_ustr))
+            return false;
+
+        OUString sURL;
+        rxForm->getPropertyValue(u"URL"_ustr) >>= sURL;
+        if (!sURL.isEmpty())
+            return true;
+
+        OUString sDataSourceName;
+        rxForm->getPropertyValue(u"DataSourceName"_ustr) >>= sDataSourceName;
+        if (sDataSourceName.isEmpty())
+            return false;
+
+        uno::Reference<sdb::XDatabaseContext> xDatabaseContext
+            = sdb::DatabaseContext::create(comphelper::getProcessComponentContext());
+        return !xDatabaseContext->hasRegisteredDatabase(sDataSourceName);
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("sfx.doc", "SfxObjectShell::IsExternalDatabaseForm");
+    }
+    // A form whose database cannot be checked counts as external.
+    return true;
+}
+
+void SfxObjectShell::AddDeferredDatabaseForm(const uno::Reference<form::XLoadable>& rxForm)
+{
+    for (const auto& rxDeferred : maDeferredDatabaseForms)
+        if (uno::Reference<form::XLoadable>(rxDeferred) == rxForm)
+            return;
+
+    const bool bFirst = maDeferredDatabaseForms.empty();
+    maDeferredDatabaseForms.emplace_back(rxForm);
+    if (!bFirst)
+        return;
+
+    if (SfxViewFrame::GetFirst(this))
+        ShowLinkUpdateInfobar();
+    else
+        SetPendingLinkUpdateInfobar();
 }
 
 bool SfxObjectShell::QuerySaveSizeExceededModules_Impl( const uno::Reference< task::XInteractionHandler >& xHandler )
@@ -4060,15 +4147,20 @@ bool SfxObjectShell::QuerySaveSizeExceededModules_Impl( const uno::Reference< ta
 #if !HAVE_FEATURE_SCRIPTING
     (void) xHandler;
 #else
-    if ( !HasBasic() )
+    if ( pImpl->m_bNoBasicCapabilities )
         return true;
 
-    if ( !pImpl->aBasicManager.isValid() )
-        GetBasicManager();
+    // Only a loaded password-protected library has modules to check, and one is loaded only
+    // through an existing BasicManager.
+    BasicManager* pBasicManager
+        = basic::BasicManagerRepository::getExistingDocumentBasicManager( GetModel() );
+    if ( !pBasicManager )
+        return true;
+
     std::vector< OUString > sModules;
     if ( xHandler.is() )
     {
-        if( pImpl->aBasicManager.ImgVersion12PsswdBinaryLimitExceeded( sModules ) )
+        if( pBasicManager->ImgVersion12PsswdBinaryLimitExceeded( sModules ) )
         {
             rtl::Reference<ModuleSizeExceeded> pReq =  new ModuleSizeExceeded( sModules );
             xHandler->handle( pReq );

@@ -23,7 +23,7 @@
 #include <rtl/ustring.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/interfacecontainer4.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/ucb/XCommandProcessor.hpp>
 #include <com/sun/star/beans/XPropertiesChangeNotifier.hpp>
@@ -79,112 +79,112 @@ namespace fileaccess {
 
         BaseContent(
             TaskManager* pMyShell,
-            const css::uno::Reference< css::ucb::XContentIdentifier >& xContentIdentifier,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& xContentIdentifier,
             OUString aUnqPath, sal_uInt16 nState = FullFeatured);
 
         virtual ~BaseContent() override;
 
         // XComponent
-        virtual void SAL_CALL
+        virtual void
         dispose() override;
 
-        virtual void SAL_CALL
+        virtual void
         addEventListener(
-            const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+            const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
 
-        virtual void SAL_CALL
-        removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
+        virtual void
+        removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
 
         // XServiceInfo
-        virtual OUString SAL_CALL
+        virtual OUString
         getImplementationName() override;
 
-        virtual bool SAL_CALL
+        virtual bool
         supportsService( const OUString& ServiceName ) override;
 
-        virtual cpo::uno::Sequence< OUString > SAL_CALL
+        virtual cpo::uno::Sequence< OUString >
         getSupportedServiceNames() override;
 
 
         // XCommandProcessor
-        virtual sal_Int32 SAL_CALL
+        virtual sal_Int32
         createCommandIdentifier() override;
 
-        virtual cpo::uno::Any SAL_CALL
+        virtual cpo::uno::Any
         execute(
             const css::ucb::Command& aCommand,
             sal_Int32 CommandId,
-            const css::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
 
-        virtual void SAL_CALL
+        virtual void
         abort( sal_Int32 CommandId ) override;
 
 
         // XContent
-        virtual css::uno::Reference< css::ucb::XContentIdentifier > SAL_CALL
+        virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
         getIdentifier() override;
 
-        virtual OUString SAL_CALL
+        virtual OUString
         getContentType() override;
 
-        virtual void SAL_CALL
+        virtual void
         addContentEventListener(
-            const css::uno::Reference< css::ucb::XContentEventListener >& Listener ) override;
+            const cpo::uno::Reference< css::ucb::XContentEventListener >& Listener ) override;
 
-        virtual void SAL_CALL
+        virtual void
         removeContentEventListener(
-            const css::uno::Reference< css::ucb::XContentEventListener >& Listener ) override;
+            const cpo::uno::Reference< css::ucb::XContentEventListener >& Listener ) override;
 
         // XPropertiesChangeNotifier
 
-        virtual void SAL_CALL
+        virtual void
         addPropertiesChangeListener(
             const cpo::uno::Sequence< OUString >& PropertyNames,
-            const css::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
+            const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
 
-        virtual void SAL_CALL
+        virtual void
         removePropertiesChangeListener( const cpo::uno::Sequence< OUString >& PropertyNames,
-                                        const css::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
+                                        const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
 
         // XPropertyContainer
 
-        virtual void SAL_CALL
+        virtual void
         addProperty(
             const OUString& Name,
             sal_Int16 Attributes,
             const cpo::uno::Any& DefaultValue ) override;
 
-        virtual void SAL_CALL
+        virtual void
         removeProperty( const OUString& Name ) override;
 
         // XPropertySetInfoChangeNotifier
 
-        virtual void SAL_CALL
+        virtual void
         addPropertySetInfoChangeListener(
-            const css::uno::Reference< css::beans::XPropertySetInfoChangeListener >& Listener ) override;
+            const cpo::uno::Reference< css::beans::XPropertySetInfoChangeListener >& Listener ) override;
 
-        virtual void SAL_CALL
+        virtual void
         removePropertySetInfoChangeListener(
-            const css::uno::Reference< css::beans::XPropertySetInfoChangeListener >& Listener ) override;
+            const cpo::uno::Reference< css::beans::XPropertySetInfoChangeListener >& Listener ) override;
 
 
         // XContentCreator
 
-        virtual cpo::uno::Sequence< css::ucb::ContentInfo > SAL_CALL
+        virtual cpo::uno::Sequence< css::ucb::ContentInfo >
         queryCreatableContentsInfo() override;
 
-        virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
+        virtual cpo::uno::Reference< css::ucb::XContent >
         createNewContent( const css::ucb::ContentInfo& Info ) override;
 
 
         // XChild
-        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
+        virtual cpo::uno::Reference< cpo::uno::XInterface >
         getParent() override;
 
         // Not supported
-        virtual void SAL_CALL
-        setParent( const css::uno::Reference< css::uno::XInterface >& Parent ) override;
+        virtual void
+        setParent( const cpo::uno::Reference< cpo::uno::XInterface >& Parent ) override;
 
 
         // Notifier
@@ -198,7 +198,7 @@ namespace fileaccess {
     private:
         // Data members
         TaskManager*                                                m_pMyShell;
-        css::uno::Reference< css::ucb::XContentIdentifier >   m_xContentIdentifier;
+        cpo::uno::Reference< css::ucb::XContentIdentifier >   m_xContentIdentifier;
         OUString                                              m_aUncPath;
         bool                                                  m_bFolder;
         sal_uInt16                                            m_nState;
@@ -211,16 +211,16 @@ namespace fileaccess {
 
 
         // Private Methods
-        /// @throws css::uno::RuntimeException
-        css::uno::Reference< css::ucb::XCommandInfo >
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::ucb::XCommandInfo >
         getCommandInfo();
 
-        /// @throws css::uno::RuntimeException
-        css::uno::Reference< css::beans::XPropertySetInfo >
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::beans::XPropertySetInfo >
         getPropertySetInfo();
 
-        /// @throws css::uno::RuntimeException
-        css::uno::Reference< css::sdbc::XRow >
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::sdbc::XRow >
         getPropertyValues(
             sal_Int32 nMyCommandIdentifier,
             const cpo::uno::Sequence< css::beans::Property >& PropertySet );
@@ -230,7 +230,7 @@ namespace fileaccess {
             sal_Int32 nMyCommandIdentifier,
             const cpo::uno::Sequence< css::beans::PropertyValue >& Values );
 
-        css::uno::Reference< css::ucb::XDynamicResultSet >
+        cpo::uno::Reference< css::ucb::XDynamicResultSet >
         open(
             sal_Int32 nMyCommandIdentifier,
             const css::ucb::OpenCommandArgument2& aCommandArgument );

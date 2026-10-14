@@ -24,17 +24,15 @@
 
 #include <unotools/unotoolsdllapi.h>
 #include <rtl/ustring.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 namespace com::sun::star {
-    namespace uno {
-        class XComponentContext;
-    }
     namespace ucb{
         class XCommandEnvironment;
     }
 }
 namespace cpo::uno { class Any; }
+namespace cpo::uno { class XComponentContext; }
 namespace ucbhelper { class Content; }
 
 namespace utl::UCBContentHelper {
@@ -61,8 +59,8 @@ UNOTOOLS_DLLPUBLIC bool MakeFolder(
 
 /// like mkdir -p
 UNOTOOLS_DLLPUBLIC bool ensureFolder(
-    const css::uno::Reference< css::uno::XComponentContext >& xCtx,
-    const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xCtx,
+    const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
     std::u16string_view rFolder, ucbhelper::Content & result) noexcept;
 
 UNOTOOLS_DLLPUBLIC bool IsYounger(
@@ -104,7 +102,7 @@ UNOTOOLS_DLLPUBLIC bool EqualURLs(
 * commit bbe51f039dffca2506ea542feb78571b6358b981.
 */
 UNOTOOLS_DLLPUBLIC
-    css::uno::Reference< css::ucb::XCommandEnvironment > getDefaultCommandEnvironment();
+    cpo::uno::Reference< css::ucb::XCommandEnvironment > getDefaultCommandEnvironment();
 
 }
 

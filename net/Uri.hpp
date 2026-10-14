@@ -19,6 +19,8 @@
 #include <string>
 #include <string_view>
 
+#include <common/NumUtil.hpp>
+
 namespace net
 {
 
@@ -49,6 +51,10 @@ inline bool parseUri(std::string uri, std::string& scheme, std::string& host, st
     {
         pathAndQuery.clear();
     }
+
+    // User information before an '@' in the authority is not supported.
+    if (uri.find('@') != uri.npos)
+        return false;
 
     // Split the authority into host and optional port. An IPv6 literal is
     // bracketed - "[::1]" or "[::1]:9980" - so its own colons are not port
@@ -101,6 +107,24 @@ inline bool parseUri(std::string uri, std::string& scheme, std::string& host, st
 {
     std::string pathAndQuery;
     return parseUri(std::move(uri), scheme, host, port, pathAndQuery);
+}
+
+/// Removes from a host and port authority a port nothing could connect to, so that the default port
+/// of the scheme applies instead. A reverse proxy that terminates TLS on the standard port reports
+/// port -1 when the Host header it forwards carries no explicit port, and no browser can fetch a URL
+/// built with such a port. Returns true if a port was removed.
+inline bool stripInvalidPort(std::string& authority)
+{
+    std::string scheme, host, port;
+    if (!parseUri(authority, scheme, host, port) || port.empty())
+        return false;
+
+    const auto [number, parsed] = NumUtil::i32FromString(port);
+    if (parsed && number > 0 && number <= 65535)
+        return false;
+
+    authority.erase(authority.size() - port.size() - 1); // Also the colon before the port.
+    return true;
 }
 
 /// Return the locator given a URI.

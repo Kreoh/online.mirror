@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/ucb/XContentProvider.hpp>
 #include <com/sun/star/beans/Property.hpp>
 
@@ -34,8 +34,8 @@ namespace chelp {
     {
     public:
 
-        ResultSetForRoot( const css::uno::Reference< css::uno::XComponentContext >&  rxContext,
-                          const css::uno::Reference< css::ucb::XContentProvider >&  xProvider,
+        ResultSetForRoot( const cpo::uno::Reference< cpo::uno::XComponentContext >&  rxContext,
+                          const cpo::uno::Reference< css::ucb::XContentProvider >&  xProvider,
                           const cpo::uno::Sequence< css::beans::Property >& seq,
                           URLParameter const & aURLParameter,
                           Databases* pDatabases );

@@ -20,27 +20,28 @@
 #include "vbaspinbutton.hxx"
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaSpinButton::ScVbaSpinButton(  const css::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<AbstractGeometryAttributes> pGeomHelper )
+ScVbaSpinButton::ScVbaSpinButton(  const cpo::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<AbstractGeometryAttributes> pGeomHelper )
     : SpinButtonImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaSpinButton::getValue()
 {
     return  m_xProps->getPropertyValue( u"SpinValue"_ustr );
 }
 
-void SAL_CALL
+void
 ScVbaSpinButton::setValue( const cpo::uno::Any& _value )
 {
     m_xProps->setPropertyValue( u"SpinValue"_ustr, _value );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaSpinButton::getMax()
 {
     sal_Int32 nMax = 0;
@@ -48,13 +49,13 @@ ScVbaSpinButton::getMax()
     return nMax;
 }
 
-void SAL_CALL
+void
 ScVbaSpinButton::setMax( sal_Int32 nVal )
 {
     m_xProps->setPropertyValue( u"SpinValueMax"_ustr, cpo::uno::Any( nVal ) );
 }
 
-::sal_Int32 SAL_CALL
+::sal_Int32
 ScVbaSpinButton::getMin()
 {
     sal_Int32 nVal = 0;
@@ -62,7 +63,7 @@ ScVbaSpinButton::getMin()
     return nVal;
 }
 
-void SAL_CALL
+void
 ScVbaSpinButton::setMin( sal_Int32 nVal )
 {
     m_xProps->setPropertyValue( u"SpinValueMin"_ustr, cpo::uno::Any( nVal ) );

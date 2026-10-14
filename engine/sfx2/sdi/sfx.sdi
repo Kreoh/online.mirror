@@ -738,25 +738,6 @@ SfxVoidItem CompileBasic SID_BASICCOMPILE
 ]
 
 
-SfxVoidItem ConfigureDialog SID_CONFIG
-(SfxStringItem ResourceURL SID_CONFIG)
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = SfxGroupId::Options;
-]
-
-
 SfxStringItem Context SID_CONTEXT
 
 [
@@ -2175,25 +2156,6 @@ SfxStringItem LibSelector SID_BASICIDE_LIBSELECTOR
 ]
 
 
-SfxVoidItem LoadAccel SID_CONFIGACCEL
-(SfxStringItem FileName SID_CFGFILE)
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Options;
-]
-
-
 SfxVoidItem LoadBasic SID_BASICLOAD
 ()
 [
@@ -2210,82 +2172,6 @@ SfxVoidItem LoadBasic SID_BASICLOAD
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
     GroupId = SfxGroupId::Insert;
-]
-
-
-SfxVoidItem LoadEvents SID_CONFIGEVENT
-(SfxStringItem FileName SID_CFGFILE)
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Options;
-]
-
-
-SfxVoidItem LoadMenu SID_CONFIGMENU
-(SfxStringItem FileName SID_CFGFILE)
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Options;
-]
-
-
-SfxVoidItem LoadStatusBar SID_CONFIGSTATUSBAR
-(SfxStringItem FileName SID_CFGFILE)
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Options;
-]
-
-
-SfxVoidItem LoadToolBox SID_TOOLBOXOPTIONS
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -2665,25 +2551,6 @@ SfxBoolItem Menubar SID_MENUBAR
     ToolBoxConfig = TRUE,
     GroupId = SfxGroupId::View;
 ]
-
-SfxVoidItem Notebookbar SID_NOTEBOOKBAR
-(SfxStringItem File SID_NOTEBOOKBAR)
-[
-    AutoUpdate = TRUE,
-    FastCall = TRUE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::View;
-]
-
 
 SfxVoidItem RestoreEditingView SID_RESTORE_EDITING_VIEW
 
@@ -3151,7 +3018,7 @@ SfxTemplateItem ParaStyle SID_STYLE_FAMILY2
 
 
 SfxVoidItem Paste SID_PASTE
-(SfxUInt16Item AnchorType FN_PARAM_1, SfxBoolItem IgnoreComments FN_PARAM_2, SfxBoolItem SkipDetection FN_PARAM_3)
+(SfxUInt16Item AnchorType FN_PARAM_1, SfxBoolItem IgnoreComments FN_PARAM_2, SfxBoolItem SkipDetection FN_PARAM_3, SfxBoolItem Merged FN_PARAM_4)
 [
     AutoUpdate = FALSE,
     FastCall = TRUE,
@@ -3475,62 +3342,6 @@ SfxBoolItem ReadOnly SID_DOC_READONLY
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
     GroupId = ;
-]
-
-
-SfxBoolItem MacroRecorder SID_RECORDMACRO
-
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    NoRecord;
-
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = SfxGroupId::Macro;
-]
-
-
-SfxVoidItem StopRecording SID_STOP_RECORDING
-(SfxBoolItem DontRecord FN_PARAM_1)
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    NoRecord;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = SfxGroupId::Macro;
-]
-
-
-SfxBoolItem MacroRecordingFloat SID_RECORDING_FLOATWINDOW
-
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    NoRecord;
-
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Macro;
 ]
 
 
@@ -4975,7 +4786,7 @@ SfxVoidItem ExportTo SID_EXPORTDOC
 
 
 SfxVoidItem ExportToPDF SID_EXPORTDOCASPDF
-(SfxStringItem URL SID_FILE_NAME, SfxStringItem FilterName SID_FILTER_NAME)
+(SfxStringItem URL SID_FILE_NAME, SfxStringItem FilterName SID_FILTER_NAME, SfxStringItem SignatureCert FN_PARAM_1, SfxStringItem SignatureKey FN_PARAM_2)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
@@ -5101,52 +4912,6 @@ SfxImageItem ImageOrientation SID_IMAGE_ORIENTATION
     GroupId = SfxGroupId::View;
 ]
 
-SfxVoidItem SendFeedback SID_SEND_FEEDBACK
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = SfxGroupId::Application;
-]
-SfxVoidItem QuestionAnswers SID_Q_AND_A
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    GroupId = SfxGroupId::Application;
-]
-SfxVoidItem Documentation SID_DOCUMENTATION
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    GroupId = SfxGroupId::Application;
-]
 SfxVoidItem ShowLicense SID_SHOW_LICENSE
 ()
 [
@@ -5180,24 +4945,6 @@ SfxVoidItem ShowCredits SID_SHOW_CREDITS
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
     GroupId = SfxGroupId::Application;
-]
-
-
-SfxVoidItem InternetDialog SID_INET_DLG
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = TRUE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -5351,23 +5098,6 @@ SfxVoidItem AutoCorrectDlg SID_AUTO_CORRECT_DLG
     GroupId = SfxGroupId::Options;
 ]
 
-SfxVoidItem OptionsTreeDialog SID_OPTIONS_TREEDIALOG
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = TRUE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = SfxGroupId::Options;
-]
-
 SfxVoidItem TerminateInplaceActivation SID_TERMINATE_INPLACEACTIVATION
 ()
 [
@@ -5415,22 +5145,6 @@ SfxVoidItem ToolbarMode SID_TOOLBAR_MODE
     AccelConfig = FALSE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Application;
-]
-
-SfxVoidItem UIPicker SID_UI_PICKER
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
     GroupId = SfxGroupId::Application;
 ]
 
@@ -5489,22 +5203,6 @@ SfxVoidItem InsertAVMedia SID_INSERT_AVMEDIA
     GroupId = SfxGroupId::Application;
 ]
 
-SfxVoidItem MoreDictionaries SID_MORE_DICTIONARIES
-()
-[
-        AutoUpdate = FALSE,
-        FastCall = TRUE,
-        ReadOnlyDoc = TRUE,
-        Toggle = FALSE,
-        Container = TRUE,
-        RecordAbsolute = FALSE,
-        RecordPerSet;
-
-        AccelConfig = FALSE,
-        MenuConfig = TRUE,
-        ToolBoxConfig = TRUE,
-        GroupId = SfxGroupId::Options;
-]
 
 SfxVoidItem OptionsSecurityDialog SID_OPTIONS_SECURITY
 ()
@@ -5839,22 +5537,6 @@ SfxVoidItem UnicodeNotationToggle SID_UNICODE_NOTATION_TOGGLE
     GroupId = SfxGroupId::Options;
 ]
 
-SfxVoidItem AdditionsDialog SID_ADDITIONS_DIALOG
-(SfxStringItem AdditionsTag FN_PARAM_ADDITIONS_TAG)
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = SfxGroupId::Application;
-]
 
 SfxBoolItem ToolbarLock SID_TOOLBAR_LOCK
 [
@@ -5911,7 +5593,7 @@ SfxVoidItem InvertBackground FN_INVERT_BACKGROUND
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
+    ReadOnlyDoc = TRUE,
     Toggle = FALSE,
     Container = FALSE,
     RecordAbsolute = FALSE,

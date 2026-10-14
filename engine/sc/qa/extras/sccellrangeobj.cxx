@@ -40,10 +40,11 @@
 #include <com/sun/star/util/XSortable.hpp>
 
 #include <cpo/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc_apitest
 {
@@ -76,9 +77,9 @@ public:
     ScCellRangeObj();
 
     virtual void setUp() override;
-    virtual uno::Reference<uno::XInterface> init() override;
-    virtual uno::Reference<uno::XInterface> getXCellRangeData() override;
-    virtual uno::Reference<uno::XInterface> getXSpreadsheet() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> getXCellRangeData() override;
+    virtual uno::Reference<cpo::uno::XInterface> getXSpreadsheet() override;
     void testSortOOB();
 
     CPPUNIT_TEST_SUITE(ScCellRangeObj);
@@ -186,7 +187,7 @@ ScCellRangeObj::ScCellRangeObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScCellRangeObj::init()
+uno::Reference<cpo::uno::XInterface> ScCellRangeObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 
@@ -199,7 +200,7 @@ uno::Reference<uno::XInterface> ScCellRangeObj::init()
     return xReturn;
 }
 
-uno::Reference<uno::XInterface> ScCellRangeObj::getXSpreadsheet()
+uno::Reference<cpo::uno::XInterface> ScCellRangeObj::getXSpreadsheet()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 
@@ -211,7 +212,7 @@ uno::Reference<uno::XInterface> ScCellRangeObj::getXSpreadsheet()
     return xSheet;
 }
 
-uno::Reference<uno::XInterface> ScCellRangeObj::getXCellRangeData()
+uno::Reference<cpo::uno::XInterface> ScCellRangeObj::getXCellRangeData()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
 

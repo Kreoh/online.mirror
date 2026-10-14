@@ -185,7 +185,6 @@ inline constexpr OUString SERVICE_SDB_PREPAREDSTATEMENT
     = u"com.sun.star.sdb.PreparedStatement"_ustr;
 inline constexpr OUString SERVICE_SDB_CALLABLESTATEMENT
     = u"com.sun.star.sdb.CallableStatement"_ustr;
-inline constexpr OUString SERVICE_SDB_SQLQUERYCOMPOSER = u"com.sun.star.sdb.SQLQueryComposer"_ustr;
 inline constexpr OUString SERVICE_SDB_DATASETTINGS = u"com.sun.star.sdb.DefinitionSettings"_ustr;
 inline constexpr OUString SERVICE_SDB_QUERYDESCRIPTOR = u"com.sun.star.sdb.QueryDescriptor"_ustr;
 inline constexpr OUString SERVICE_SDB_QUERY = u"com.sun.star.sdb.Query"_ustr;
@@ -198,8 +197,6 @@ inline constexpr OUString SERVICE_NAME_REPORT_COLLECTION = u"com.sun.star.sdb.Re
 inline constexpr OUString SERVICE_NAME_QUERY_COLLECTION = u"com.sun.star.sdb.Queries"_ustr;
 inline constexpr OUString SERVICE_NAME_SINGLESELECTQUERYCOMPOSER
     = u"com.sun.star.sdb.SingleSelectQueryComposer"_ustr;
-inline constexpr OUString SERVICE_SDB_APPLICATIONCONTROLLER
-    = u"org.openoffice.comp.dbu.OApplicationController"_ustr;
 
 // info properties
 inline constexpr OUString INFO_JDBCDRIVERCLASS = u"JavaDriverClass"_ustr;

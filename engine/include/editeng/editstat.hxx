@@ -99,45 +99,18 @@ inline void SetFlags( EVControlBits& rBits, EVControlBits nMask, bool bOn )
 class EditStatus
 {
 protected:
-    EditStatusFlags nStatusBits;
-    EEControlBits   nControlBits;
+    EditStatusFlags m_nStatusBits;
+    EEControlBits   m_nControlBits;
 
 public:
-            EditStatus()                { nStatusBits = EditStatusFlags::NONE; nControlBits = EEControlBits::NONE; }
+            EditStatus()                { m_nStatusBits = EditStatusFlags::NONE; m_nControlBits = EEControlBits::NONE; }
 
-    void    Clear()                     { nStatusBits = EditStatusFlags::NONE; }
+    void    Clear()                     { m_nStatusBits = EditStatusFlags::NONE; }
 
-    EditStatusFlags  GetStatusWord() const       { return nStatusBits; }
-    EditStatusFlags& GetStatusWord()             { return nStatusBits; }
+    EditStatusFlags  GetStatusWord() const       { return m_nStatusBits; }
+    EditStatusFlags& GetStatusWord()             { return m_nStatusBits; }
 
-    EEControlBits& GetControlWord()            { return nControlBits; }
-};
-
-enum class SpellCallbackCommand
-{
-    IGNOREWORD          = 0x0001,
-    STARTSPELLDLG       = 0x0002,
-    ADDTODICTIONARY     = 0x0003,
-    WORDLANGUAGE        = 0x0004,
-    PARALANGUAGE        = 0x0005,
-    AUTOCORRECT_OPTIONS = 0x0006,
-};
-
-struct SpellCallbackInfo
-{
-    SpellCallbackCommand nCommand;
-    OUString        aWord;
-
-    SpellCallbackInfo( SpellCallbackCommand nCMD, OUString _aWord )
-        : aWord(std::move( _aWord ))
-    {
-        nCommand = nCMD;
-    }
-
-    SpellCallbackInfo( SpellCallbackCommand nCMD )
-    {
-        nCommand = nCMD;
-    }
+    EEControlBits& GetControlWord()            { return m_nControlBits; }
 };
 
 #endif // INCLUDED_EDITENG_EDITSTAT_HXX

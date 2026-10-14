@@ -22,10 +22,10 @@
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <com/sun/star/document/XEventsSupplier.hpp>
 #include <com/sun/star/container/XNameReplace.hpp>
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <cpo/uno/Sequence.hxx>
 #include <cpo/uno/Exception.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <osl/diagnose.h>
 #include <xmloff/xmlnamespace.hxx>
 #include <xmloff/namespacemap.hxx>
@@ -41,15 +41,15 @@ using ::com::sun::star::container::XNameReplace;
 using ::com::sun::star::document::XEventsSupplier;
 using ::cpo::uno::Any;
 using ::cpo::uno::Exception;
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::XInterface;
-using ::com::sun::star::uno::UNO_QUERY;
+using ::cpo::uno::XInterface;
+using ::cpo::uno::UNO_QUERY;
 using ::com::sun::star::xml::sax::XDocumentHandler;
 
 
 XMLAutoTextEventExport::XMLAutoTextEventExport(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
     OUString const & implementationName, SvXMLExportFlags nFlags
     )
 :   SvXMLExport(xContext, implementationName, util::MeasureUnit::INCH, XML_AUTO_TEXT, nFlags)
@@ -95,7 +95,7 @@ ErrCode XMLAutoTextEventExport::exportDoc( enum XMLTokenEnum )
 {
     if( !(getExportFlags() & SvXMLExportFlags::OASIS) )
     {
-        Reference< uno::XComponentContext> xContext = getComponentContext();
+        Reference< cpo::uno::XComponentContext> xContext = getComponentContext();
         try
         {
 
@@ -193,18 +193,18 @@ void XMLAutoTextEventExport::ExportContent_() {}
 
 // methods to support the component registration
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisAutotextEventsExporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XMLAutoTextEventExport(
         context, u"com.sun.star.comp.Writer.XMLOasisAutotextEventsExporter"_ustr,
         SvXMLExportFlags::ALL | SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_XMLAutotextEventsExporter_get_implementation(
-    css::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new XMLAutoTextEventExport(
         context, u"com.sun.star.comp.Writer.XMLAutotextEventsExporter"_ustr,

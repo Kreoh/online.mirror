@@ -31,9 +31,10 @@ declare var DOMPurify: any;
 
 // cool: URLs are used by mobile/derivative apps (iOS, Android, CODA-W,
 // CODA-Q) for embedded media; DOMPurify's default allow-list rejects them.
+// A media source URL is the only content that carries the scheme.
 if (window.ThisIsAMobileApp && DOMPurify.isSupported) {
 	DOMPurify.addHook('uponSanitizeAttribute', (_node: Node, data: any) => {
-		if (data.attrValue.startsWith('cool:')) {
+		if (data.attrName === 'src' && data.attrValue.startsWith('cool:')) {
 			data.forceKeepAttr = true;
 		}
 	});
@@ -129,8 +130,55 @@ class LOUtil {
 		'text/rtf',
 	];
 
+	// Presentation formats the slide import can open, covering the same
+	// extensions the local file picker accepts (odp, otp, ppt, pptx, pptm,
+	// potx, pps, ppsx).
+	public static presentationMimeFilter = [
+		'application/vnd.oasis.opendocument.presentation',
+		'application/vnd.oasis.opendocument.presentation-template',
+		'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+		'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+		'application/vnd.openxmlformats-officedocument.presentationml.template',
+		'application/vnd.ms-powerpoint',
+		'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+	];
+
+	// The command behind each hidden file-input element.
+	private static filePickerCommands: { [inputId: string]: string } = {
+		insertgraphic: '.uno:InsertGraphic',
+		insertmultimedia: '.uno:InsertAVMedia',
+		selectbackground: '.uno:SelectBackground',
+		comparedocuments: '.uno:CompareDocuments',
+	};
+
+	// Open the file picker for one of the hidden file-input elements. In the
+	// desktop apps the bare command goes to the engine, which asks the app for
+	// a file through the requestfilepicker callback and then runs the command
+	// on the picked file directly. Everywhere else a click on the input element
+	// opens the browser's picker, and the picked file is uploaded through an
+	// insertfile message.
+	public static openFilePicker(inputId: string): void {
+		if (window.mode.isCODesktop()) {
+			app.map.sendUnoCommand(LOUtil.filePickerCommands[inputId]);
+			return;
+		}
+
+		const input = document.getElementById(inputId) as HTMLInputElement;
+		if (input) input.click();
+		else console.error('openFilePicker: no input element "' + inputId + '"');
+	}
+
 	// Time in milliseconds a touch has to stay down to count as a long press.
 	public static readonly longPressTime = 550;
+
+	// Whether the integration offers a file chooser of its own, which is the
+	// way a file other than the open document can be picked at all. wopi is
+	// the CheckFileInfo property set of the document.
+	public static hostOffersFileChooser(wopi: any): boolean {
+		return (
+			!!wopi && !!(wopi.EnableInsertRemoteFile || wopi.EnableRemoteSlideImport)
+		);
+	}
 
 	public static onRemoveHTMLElement(
 		element: Element,
@@ -346,6 +394,14 @@ class LOUtil {
 		return url;
 	}
 
+	// Forced colours cannot reach the colours inside an <img>, so an icon that is
+	// a plain shape publishes its URL for the stylesheet to use as a mask.
+	public static publishIconURL(element: HTMLImageElement, url: string): void {
+		if (!url || !url.endsWith('.svg')) return;
+		element.style.setProperty('--icon-url', 'url("' + url + '")');
+		element.classList.add('icon-maskable');
+	}
+
 	public static setImage(
 		element: HTMLImageElement | HTMLElement,
 		name: string,
@@ -356,6 +412,7 @@ class LOUtil {
 			const url = LOUtil.getImageURL(name);
 			if (element instanceof HTMLImageElement) {
 				element.src = url;
+				LOUtil.publishIconURL(element, url);
 				LOUtil.checkIfImageExists(element, imageIsLayoutCritical);
 			} else {
 				element.style.backgroundImage = 'url("' + url + '")';
@@ -408,7 +465,7 @@ class LOUtil {
 		const hasLocalized = lang && LOUtil.localizedIcons[lang]?.includes(imgName);
 		const iconLang = LOUtil.localeIconAlias[lang] || lang;
 
-		if ((window as any).prefs.getBoolean('darkTheme')) {
+		if (window.prefs.getBoolean('darkTheme')) {
 			if (hasLocalized)
 				return LOUtil.getURL('images/dark/' + iconLang + '/' + imgName);
 			return LOUtil.getURL('images/dark/' + imgName);
@@ -431,22 +488,38 @@ class LOUtil {
 		var alreadyClean = noCommad;
 		var cleanName = name;
 
-		if (!alreadyClean || alreadyClean !== true) {
-			var prefixLength = '.uno:'.length;
-			if (name.substr(0, prefixLength) == '.uno:')
-				cleanName = name.substr(prefixLength);
-			cleanName = encodeURIComponent(cleanName).replace(/%/g, '');
-			cleanName = cleanName.toLowerCase();
-		}
-
 		// An icon theme link name can arrive here in place of a command name:
 		// the engine sends the .ui icon-name of its toolbar items as e.g.
 		// 'lc_insertfooter.svg'. Reduce it to the bare name, so that the skip
 		// rules and the alias table below see the same thing they would see
 		// for a command. Only the lc_/sc_ prefix marks such a link name, our
 		// own icon files (e.g. statusbarmenu.svg) must not be touched here.
-		if (cleanName.startsWith('lc_') || cleanName.startsWith('sc_'))
-			cleanName = LOUtil.stripName(cleanName);
+		//
+		// The engine builds the link name of a parameterized command from the
+		// command itself, escaping only a few characters, so e.g.
+		// '.uno:StyleApply?Style:string=Bad&FamilyName:string=CellStyles'
+		// arrives as 'lc_styleapply%3fstyle%3astring%3dbad&familyname%3astring%3dcellstyles.svg'.
+		// Undo that escaping and send the result through the same encoding
+		// as the command, so both end at the one file we ship for it.
+		if (name.startsWith('lc_') || name.startsWith('sc_')) {
+			cleanName = LOUtil.stripName(name.substring(3));
+			if (cleanName.indexOf('%') >= 0) {
+				try {
+					cleanName = decodeURIComponent(cleanName);
+				} catch (e) {
+					// not a valid escape sequence, keep the name as sent
+				}
+				alreadyClean = false;
+			}
+		}
+
+		if (!alreadyClean || alreadyClean !== true) {
+			var prefixLength = '.uno:'.length;
+			if (cleanName.substr(0, prefixLength) == '.uno:')
+				cleanName = cleanName.substr(prefixLength);
+			cleanName = encodeURIComponent(cleanName).replace(/%/g, '');
+			cleanName = cleanName.toLowerCase();
+		}
 
 		// Skip icon lookup for numeric-only IDs (JSDialog artifacts like 1, 5, 65535),
 		// core sr*/sc* resource IDs (like sr20006, sc20177), and JSDialog submenu
@@ -471,6 +544,7 @@ class LOUtil {
 			// lc_closemobile.svg is generated when loading in NB mode then
 			// switch to compact mode: 1st hidden element in the top toolbar
 			closemobile: 'closedocmobile',
+			'sidebardeck.shapesdeck': 'basicshapes',
 			'file-saveas': 'saveas',
 			savegraphic: 'saveas',
 			saveimagetowopi: 'saveasremote',
@@ -577,9 +651,15 @@ class LOUtil {
 			tabledeletemenu: 'deletetable',
 			insertcalctable: 'inserttable',
 			removecalctable: 'deletetable',
+			tabletotalrow: 'autosum',
+			renamecalctable: 'renametable',
+			handleduplicaterecords: 'removeduplicates',
+			summarizewithpivot: 'datadatapilotrun',
 			calculatedfieldrun: 'functiondialog',
 			databasesettings: 'tabledesign',
 			tracechangemode: 'trackchanges',
+			showchanges: 'showtrackedchanges',
+			commentchange: 'editannotation',
 			deleteallannotation: 'deleteallnotes',
 			tableeditpanel: 'tabledesign',
 			tableautofitmenu: 'columnwidth',
@@ -594,6 +674,8 @@ class LOUtil {
 			decrementlevel: 'outlineright',
 			acceptformula: 'ok',
 			insertannotation: 'shownote',
+			// the engine's generic info icon, shown beside a grammar message
+			info_16: 'about',
 			insertcomment: 'shownote',
 			objecttitledescription: 'shownote',
 			namegroup: 'shownote',
@@ -714,6 +796,7 @@ class LOUtil {
 			fielddialog: 'insertfield',
 			updatefields3funlocksoftfixed3abool3d1: 'updateall',
 			navelement: 'navigator',
+			switchtoedit: 'edit',
 		};
 		if (iconURLAliases[cleanName]) {
 			cleanName = iconURLAliases[cleanName];
@@ -948,6 +1031,35 @@ class LOUtil {
 			ext === 'fodp' ||
 			ext === 'fodg'
 		);
+	}
+
+	// The Options dialog needs somewhere to read and write the settings it
+	// shows. The apps carry their own store, reached through the native
+	// bridge; in the browser it takes an integration that hands us a settings
+	// endpoint, and plenty of integrations do not implement one. The apps
+	// have to be answered before wopiSettingBaseUrl is consulted: they load
+	// cool.html off disk with its placeholders unsubstituted, so the value
+	// there is the literal "%WOPI_SETTING_BASE_URL%" and means nothing.
+	// Without a persistable preference store the settings handler is not even
+	// installed on the map, so map.settings would be undefined.
+	public static canOpenSettings(): boolean {
+		if (!window.prefs.canPersist) return false;
+		if (window.ThisIsAMobileApp) return true;
+		return !!window.wopiSettingBaseUrl;
+	}
+
+	// Offer the AI assistant only when the user can get an answer out of it:
+	// either a provider is configured already - centrally in coolwsd.xml, or
+	// in the user's own settings - or they can still reach the Options dialog
+	// to configure one. A guest can do neither.
+	public static isAIAssistantAvailable(map: any): boolean {
+		const wopi = map['wopi'];
+		if (wopi.IsAnonymousUser) return false;
+		// isAIConfigured starts out as the WOPI value and follows every
+		// settings change, so a provider the user just removed takes the
+		// entry point with it on the next rebuild.
+		if (map.isAIConfigured) return true;
+		return !wopi.DisableAISettings && LOUtil.canOpenSettings();
 	}
 
 	public static containsDOMRect(

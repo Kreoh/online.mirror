@@ -63,51 +63,51 @@ typedef cppu::ImplInheritanceHelper<
 class ContentProvider : public ContentProvider_Base
 {
 public:
-    explicit ContentProvider( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit ContentProvider( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     virtual ~ContentProvider() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XContentProvider
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    queryContent( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
 
     // XTransientDocumentsDocumentContentIdentifierFactory
-    virtual css::uno::Reference<css::ucb::XContentIdentifier> SAL_CALL
+    virtual cpo::uno::Reference<css::ucb::XContentIdentifier>
     createDocumentContentIdentifier(
-        css::uno::Reference<css::frame::XModel> const& xModel) override;
+        cpo::uno::Reference<css::frame::XModel> const& xModel) override;
 
     // XTransientDocumentsDocumentContentFactory
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    createDocumentContent( const css::uno::Reference<
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    createDocumentContent( const cpo::uno::Reference<
                                 css::frame::XModel >& Model ) override;
 
     // Non-UNO interfaces
-    css::uno::Reference< css::embed::XStorage >
+    cpo::uno::Reference< css::embed::XStorage >
     queryStorage( const OUString & rUri, StorageAccessMode eMode ) const;
 
-    css::uno::Reference< css::embed::XStorage >
+    cpo::uno::Reference< css::embed::XStorage >
     queryStorageClone( const OUString & rUri ) const;
 
     /// @throws css::packages::WrongPasswordException
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XInputStream >
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XInputStream >
     queryInputStream( const OUString & rUri,
                       const OUString & rPassword ) const;
 
     /// @throws css::packages::WrongPasswordException
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XOutputStream >
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XOutputStream >
     queryOutputStream( const OUString & rUri,
                        const OUString & rPassword,
                        bool bTruncate ) const;
 
     /// @throws css::packages::WrongPasswordException
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::io::XStream >
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::io::XStream >
     queryStream( const OUString & rUri,
                  const OUString & rPassword,
                  bool bTruncate ) const;
@@ -119,7 +119,7 @@ public:
     // storage properties
     OUString queryStorageTitle( const OUString & rUri ) const;
 
-    css::uno::Reference< css::frame::XModel >
+    cpo::uno::Reference< css::frame::XModel >
     queryDocumentModel( const OUString & rUri ) const;
 
     css::util::DateTime queryStreamDateModified(OUString const & uri) const;

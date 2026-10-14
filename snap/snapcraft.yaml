@@ -1,13 +1,14 @@
 name: collabora-office
+title: Collabora Office
 adopt-info: collabora-office
 summary: Collabora Office — create, edit and present with a modern UI
 description: |
   Collabora Office brings the familiar Collabora Online experience
   to your computer — so you can create, edit, and present with a beautiful,
-  modern UI. Based on LibreOffice, it delivers excellent interoperability
-  with ODF and Microsoft Office formats (DOCX/XLSX/PPTX), and exports to
-  PDF with ease. Your documents stay on your device unless you choose to
-  share them — privacy by design.
+  modern UI. It delivers excellent interoperability with ODF and Microsoft
+  Office formats (DOCX/XLSX/PPTX), and exports to PDF with ease. Your
+  documents stay on your device unless you choose to share them — privacy
+  by design.
 
   Why you'll love it:
   * Instantly familiar: Same interface as Collabora Online — no relearning
@@ -24,6 +25,10 @@ description: |
   * No cloud required
 
 icon: qt/hicolor/scalable/apps/com.collaboraoffice.Office.startcenter.svg
+contact: hello@collaboraoffice.com
+website: https://www.collaboraoffice.com
+source-code: https://gerrit.collaboraoffice.com/online
+issues: https://github.com/CollaboraOnline/online/issues
 license: MPL-2.0
 base: core24
 platforms:
@@ -65,6 +70,21 @@ apps:
       # derives its UserInstallation from XDG_CONFIG_HOME.
       XDG_CONFIG_HOME: $SNAP_USER_COMMON/.config
       XDG_DATA_HOME: $SNAP_USER_COMMON/.local/share
+      # Make Qt skip Chromium's sandbox-host and zygote setup entirely.
+      # Passing --no-sandbox is not enough: Chromium still probes whether
+      # unprivileged user namespaces are available, and the probe in
+      # sandbox/linux/services/credentials.cc PCHECKs that a failed
+      # CLONE_NEWUSER left errno in {EPERM, EUSERS, EINVAL, ENOSPC}.
+      # Under strict confinement on a host with
+      # kernel.apparmor_restrict_unprivileged_userns=1 the clone fails
+      # with EACCES instead, which is outside that set, so a path meant
+      # to degrade gracefully aborts the process. It hits about half of
+      # all launches. Not a security change: the command-chain wrapper
+      # has always disabled the Chromium sandbox, because the plain
+      # browser-support plug grants neither the AppArmor userns rule nor
+      # the seccomp unshare needed to run it. Making the sandbox genuinely
+      # usable needs browser-support with allow-sandbox: true.
+      QTWEBENGINE_DISABLE_SANDBOX: "1"
     plugs:
       - home
       - network
@@ -141,7 +161,6 @@ parts:
         --disable-dbus \
         --disable-dconf \
         --disable-epm \
-        --disable-evolution2 \
         --disable-gio \
         --disable-gtk3 \
         --disable-gui \
@@ -154,7 +173,6 @@ parts:
         --enable-mergelibs \
         --enable-python=auto \
         --with-branding=icon-themes/galaxy/brand_cp \
-        --with-docrepair-fonts \
         --with-fonts \
         --with-galleries=no \
         "--with-lang=ar bg ca cs cy da de el en-US en-GB eo es eu fi fr ga gl he hr hu hy id is it ja kk ko lo nb nl oc pl pt pt-BR ro ru sk sl sq sv tr uk vi zh-CN zh-TW" \
@@ -244,7 +262,7 @@ parts:
       # plugin: nil parts that use override-build.
       QT6_SDK=/snap/kde-qt6-core24-sdk/current
       export PATH="$QT6_SDK/usr/bin/qt6:$QT6_SDK/usr/lib/qt6/libexec:$QT6_SDK/usr/bin:$PATH"
-      export PKG_CONFIG_PATH="$QT6_SDK/usr/lib/x86_64-linux-gnu/pkgconfig:$QT6_SDK/usr/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+      export PKG_CONFIG_PATH="$QT6_SDK/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/pkgconfig:$QT6_SDK/usr/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
       # Shadow qtpaths6 with snap/qtpaths6-wrapper so configure's
       # QT_INSTALL_LIBEXECS / QT_INSTALL_BINS lookups get the real paths
       # instead of qtpaths6's broken multiarch defaults.
@@ -252,10 +270,15 @@ parts:
       install -m 755 "$CRAFT_PART_BUILD/snap/qtpaths6-wrapper" \
           "$CRAFT_PART_BUILD/.qt6-wrapper/qtpaths6"
       export PATH="$CRAFT_PART_BUILD/.qt6-wrapper:/snap/node/current/bin:$PATH"
+      # craft-parts presets CXXFLAGS to an -isystem path only, which
+      # suppresses autoconf's default -g -O2, and configure adds no -O of
+      # its own, so opt in to an optimized coda-qt here.
+      export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-O2"
       autoreconf -vfi
       ./configure \
         --prefix=/usr \
         --enable-qtapp \
+        --disable-server \
         --enable-ld \
         --with-lo-path=/usr/lib/collaboraoffice \
         --with-lokit-path=$(pwd)/engine/include \
@@ -360,6 +383,13 @@ parts:
       - libnss3
       - libnspr4
       - libssl3t64
+      # The openssl CLI, not just the library: Application.cpp shells out
+      # to `openssl req` and to an `openssl x509 | openssl pkey |
+      # openssl dgst` pipeline to mint the ephemeral loopback cert the
+      # embedded HTTPS server serves cool.html over. Without the binary
+      # every launch logs "openssl failed generating embed cert" and the
+      # integrator embed flow has no usable certificate.
+      - openssl
       - zlib1g
       - libzstd1
       - libhyphen0
@@ -467,13 +497,15 @@ parts:
     stage:
       # Dictionary stage-packages pull in Ubuntu's libreoffice-core as a
       # transitive dep. Excluding from stage (not just prime) is what
-      # matters: snapcraft puts $CRAFT_STAGE/usr/lib/x86_64-linux-gnu/ on
+      # matters: snapcraft puts $CRAFT_STAGE/usr/lib/<triplet>/ on
       # LD_LIBRARY_PATH during build, which outranks the engine's RPATH and
       # causes build-time tools (e.g. svidl) to load Ubuntu's older
       # libuno_sal.so.3 instead of the one we just built, breaking any
       # symbol added since that Ubuntu release.
+      # These are glob patterns, not shell, so match the triplet with a
+      # wildcard rather than a craft variable.
       - -usr/lib/libreoffice
-      - -usr/lib/x86_64-linux-gnu/libuno*
+      - -usr/lib/*-linux-gnu/libuno*
       - -usr/share/doc/libreoffice*
       - -usr/share/doc/libuno*
       - -usr/share/doc/ure*
@@ -481,10 +513,55 @@ parts:
       # branding part overrides these with branded versions (after: collabora-office)
       - -usr/share/coolwsd/browser/dist/welcome/welcome-slideshow.odp
       - -usr/share/coolwsd/browser/dist/welcome/welcome.svg
+    prime:
+      # Nothing here is needed at runtime. Filtered at prime rather than
+      # stage so the build environment is left exactly as it was.
+
+      # Chromium's binary spellcheck dictionaries, shipped by Ubuntu's
+      # hunspell-* packages: 62 files, about 90 MB. Nothing reads them.
+      # Spell checking is the engine's job and it uses the .dic/.aff pairs
+      # in /usr/share/hunspell (DICT_SYSTEM_DIR in the engine's configure).
+      # coda-qt never turns on QtWebEngine's spell checker, and Qt looks for
+      # .bdic files under qtwebengine_dictionaries, not here.
+      - -usr/share/hunspell-bdic
+
+      # POCO is linked statically into coda-qt, so the archives and headers
+      # left behind by its install are build output, not runtime files.
+      - -usr/include
+      - -usr/lib/libPoco*.a
+
+      # Maintainer scripts, perl and debconf machinery that came along as
+      # dependencies of the dictionary packages.
+      - -usr/bin/debconf*
+      - -usr/bin/ispell-wrapper
+      - -usr/bin/perl
+      - -usr/bin/perl5.*
+      - -usr/bin/select-default-iwrap
+      - -usr/lib/emacsen-common
+      - -usr/lib/ispell
+      - -usr/sbin
+      - -usr/share/bash-completion
+      - -usr/share/debconf
+      - -usr/share/dict
+      - -usr/share/dictionaries-common
+      - -usr/share/doc-base
+      - -usr/share/emacsen-common
+      - -usr/share/lintian
+      - -usr/share/man
+      - -usr/share/perl5
+      - -usr/share/pixmaps
+
+      # usr/share/doc/*/copyright stays: those are the licence texts of the
+      # dictionaries we redistribute. Only the rest of the directory goes.
+      - -usr/share/doc/*/AUTHORS*
+      - -usr/share/doc/*/NEWS*
+      - -usr/share/doc/*/README*
+      - -usr/share/doc/*/TODO*
+      - -usr/share/doc/*/changelog*
   branding:
     plugin: nil
-    source: https://www.collaboraoffice.com/downloads/collabora-office-brand/collabora-office-brand-26.04.2.3.tar.gz
-    source-checksum: sha256/2d0c9b407019d4744a57a2771ec42bf97685f082601e075237a04ee6c6b7e8e3
+    source: https://www.collaboraoffice.com/downloads/collabora-office-brand/collabora-office-brand-26.04.4.3.tar.gz
+    source-checksum: sha256/ea69060440d7d8d8694f42600ccd86fa2275dfef417324f8ad3818a6bd634288
     after: [collabora-office]
     override-build: |
       set -e

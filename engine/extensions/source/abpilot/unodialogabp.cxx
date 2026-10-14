@@ -30,7 +30,7 @@
 namespace abp
 {
     using namespace ::com::sun::star;
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
 using namespace cpo::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::ui::dialogs;
@@ -84,7 +84,7 @@ using namespace cpo::uno;
         }
     }
 
-    std::unique_ptr<weld::DialogController> OABSPilotUno::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
+    std::unique_ptr<weld::DialogController> OABSPilotUno::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
     {
         return std::make_unique<OAddressBookSourcePilot>(Application::GetFrameWeld(rParent), m_aContext);
     }
@@ -116,9 +116,9 @@ using namespace cpo::uno;
 
 }   // namespace abp
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 org_openoffice_comp_abp_OAddressBookSourcePilot(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new abp::OABSPilotUno(context));

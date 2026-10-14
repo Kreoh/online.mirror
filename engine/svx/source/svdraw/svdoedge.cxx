@@ -45,6 +45,7 @@
 #include <svx/xpoly.hxx>
 #include <vcl/ptrstyle.hxx>
 #include <comphelper/kit.hxx>
+#include <sfx2/viewsh.hxx>
 
 void SdrObjConnection::ResetVars()
 {
@@ -1656,6 +1657,28 @@ line (CL). The number of object margins per object varies between 0 and 3:
 "C":    n       0-3     0-3     = 1+U+1
 */
 
+namespace
+{
+/// True while a client of some view draws the document from the objects it holds rather than from
+/// the page the view paints.
+bool lcl_someoneDrawsFromTheObjects()
+{
+    if (!comphelper::COKit::isActive())
+        return false;
+
+    // A view of a client that is not looking at the document right now still holds its objects,
+    // so a hidden one counts as much as a visible one.
+    for (SfxViewShell* pShell = SfxViewShell::GetFirst(/*bOnlyVisible*/ false); pShell;
+         pShell = SfxViewShell::GetNext(*pShell, /*bOnlyVisible*/ false))
+    {
+        if (pShell->drawsFromObjects())
+            return true;
+    }
+
+    return false;
+}
+}
+
 void SdrEdgeObj::Notify(SfxBroadcaster& rBC, const SfxHint& rHint)
 {
     const SfxHintId nId = rHint.GetId();
@@ -1695,6 +1718,15 @@ void SdrEdgeObj::Notify(SfxBroadcaster& rBC, const SfxHint& rHint)
 
         // only redraw here, object hasn't actually changed
         ActionChanged();
+
+        /*
+            A client that draws the document from the objects it holds is told which objects
+            changed, and the way this connector runs has just changed along with the object it is
+            tied to. The redraw above reaches a view that paints the page itself; this reaches a
+            client that holds the objects and would otherwise go on drawing the old way.
+        */
+        if (lcl_someoneDrawsFromTheObjects())
+            BroadcastObjectChange();
 
         SendUserCall(SdrUserCallType::Resize,aBoundRect0);
     }
@@ -2307,8 +2339,15 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
                     }
                 }
                 // if no connector is hit, try HitTest again, for BestConnector (=bCenter)
+                //
+                // A view that draws from the objects ties an end only within reach of a point
+                // it shows for the tie: one of the object's own, the middle of a side or of the
+                // box. An end let go anywhere else over the object stays free there.
+                const SfxViewShell* pViewShell(SfxViewShell::Current());
+                const bool bOnlyAtAPoint(pViewShell && pViewShell->drawsFromObjects());
                 if(!bFnd &&
                     !bEdge &&
+                    !bOnlyAtAPoint &&
                     SdrObjectPrimitiveHit(*pObj, rPt, {fBoundHitTol, fBoundHitTol}, rPV, &rVisLayer, false))
                 {
                     // Suppress default connect at object inside bound

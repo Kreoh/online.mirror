@@ -30,7 +30,7 @@
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 class Gallery;
 class GalleryThemeEntry;
@@ -97,7 +97,6 @@ class GalleryBrowser final : public SfxListener
 private:
     std::unique_ptr<weld::Button> mxNewTheme;
     std::unique_ptr<weld::TreeView> mxThemes;
-    std::unique_ptr<weld::Button> mxMoreGalleries;
     Gallery* mpGallery;
     std::unique_ptr<ExchangeData> mpExchangeData;
     std::unique_ptr<SfxItemSet> mpThemePropsDlgItemSet;
@@ -126,8 +125,8 @@ private:
     GalleryThemeEntries maAllThemeEntries;
     GalleryThemeEntries maFoundThemeEntries;
 
-    css::uno::Reference<css::uno::XComponentContext> m_xContext;
-    css::uno::Reference<css::util::XURLTransformer> m_xTransformer;
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_xContext;
+    cpo::uno::Reference<css::util::XURLTransformer> m_xTransformer;
 
     CharClass m_aCharacterClassficator;
     SfxListener maLocalListener;
@@ -156,7 +155,6 @@ private:
     DECL_LINK(SelectThemeHdl, weld::TreeView&, void);
     DECL_LINK(PopupMenuHdl1, const CommandEvent&, bool);
     DECL_LINK(KeyInputHdl1, const KeyEvent&, bool);
-    DECL_STATIC_LINK(GalleryBrowser, OnMoreGalleriesClick, weld::Button&, void);
 
     DECL_LINK(SelectObjectHdl, weld::TreeView&, void);
     DECL_LINK(SelectObjectValueSetHdl, ValueSet*, void);
@@ -206,14 +204,14 @@ public:
     bool KeyInput(const KeyEvent& rEvt);
     bool ViewBoxHasFocus() const;
 
-    static css::uno::Reference<css::frame::XFrame> GetFrame();
-    const css::uno::Reference<css::util::XURLTransformer>& GetURLTransformer() const
+    static cpo::uno::Reference<css::frame::XFrame> GetFrame();
+    const cpo::uno::Reference<css::util::XURLTransformer>& GetURLTransformer() const
     {
         return m_xTransformer;
     }
 
     void Execute(std::u16string_view rIdent);
-    void DispatchAdd(const css::uno::Reference<css::frame::XDispatch>& rxDispatch,
+    void DispatchAdd(const cpo::uno::Reference<css::frame::XDispatch>& rxDispatch,
                      const css::util::URL& rURL);
 
     DECL_STATIC_LINK(GalleryBrowser, AsyncDispatch_Impl, void*, void);
@@ -236,7 +234,7 @@ private:
 
 public:
     GalleryDragDrop(GalleryBrowser* pParent,
-                    const css::uno::Reference<css::datatransfer::dnd::XDropTarget>& rDropTarget)
+                    const cpo::uno::Reference<css::datatransfer::dnd::XDropTarget>& rDropTarget)
         : DropTargetHelper(rDropTarget)
         , m_pParent(pParent)
     {

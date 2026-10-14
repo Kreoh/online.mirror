@@ -37,17 +37,17 @@ public:
 
 class FieldUpdaterImpl
 {
-    EditTextObjectImpl& mrObj;
+    EditTextObject& mrObj;
 public:
-    explicit FieldUpdaterImpl(EditTextObject& rObj) : mrObj(toImpl(rObj)) {}
+    explicit FieldUpdaterImpl(EditTextObject& rObj) : mrObj(rObj) {}
 
     void updateTableFields(int nTab)
     {
         SfxItemPool* pPool = mrObj.GetPool();
-        EditTextObjectImpl::ContentInfosType& rContents = mrObj.GetContents();
-        for (std::unique_ptr<ContentInfo> & i : rContents)
+        EditTextObject::EditTextObjectParagraphs& rContents = mrObj.GetParagraphs();
+        for (std::unique_ptr<EditTextObjectParagraph> & i : rContents)
         {
-            ContentInfo& rContent = *i;
+            EditTextObjectParagraph& rContent = *i;
             for (XEditAttribute & rAttr : rContent.GetCharAttribs())
             {
                 const SfxPoolItem* pItem = rAttr.GetItem();
@@ -71,10 +71,10 @@ public:
 
     void UpdatePageRelativeURLs(const std::function<void(const SvxFieldItem & rFieldItem, SvxFieldItemUpdater& rFieldItemUpdater)>& rItemCallback)
     {
-        EditTextObjectImpl::ContentInfosType& rContents = mrObj.GetContents();
-        for (std::unique_ptr<ContentInfo> & i : rContents)
+        EditTextObject::EditTextObjectParagraphs& rContents = mrObj.GetParagraphs();
+        for (std::unique_ptr<EditTextObjectParagraph> & i : rContents)
         {
-            ContentInfo& rContent = *i;
+            EditTextObjectParagraph& rContent = *i;
             for (XEditAttribute & rAttr : rContent.GetCharAttribs())
             {
                 const SfxPoolItem* pItem = rAttr.GetItem();

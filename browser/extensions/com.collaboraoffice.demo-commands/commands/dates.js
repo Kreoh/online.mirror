@@ -1,33 +1,27 @@
+// Insert text the way typing does, replacing the selection when there is one:
+function insertText(text) {
+	var doc = cool.getActiveDocument();
+	var selection = doc.getSelection();
+	if (selection) selection.replace(text);
+	else doc.getCursor().insertText(text);
+}
+
 var commands = {
 	insertDate: function () {
-		var desktop = uno.idl.com.sun.star.frame.Desktop.create(uno.componentContext);
-		var controller = desktop.getCurrentFrame().getController();
-		var viewCursor = controller.getViewCursor();
-		controller.getModel().getText().insertString(viewCursor, new Date().toLocaleDateString(), false);
+		insertText(new Date().toLocaleDateString());
 	},
 	insertTime: function () {
-		var desktop = uno.idl.com.sun.star.frame.Desktop.create(uno.componentContext);
-		var controller = desktop.getCurrentFrame().getController();
-		var viewCursor = controller.getViewCursor();
-		controller.getModel().getText().insertString(viewCursor, new Date().toLocaleTimeString(), false);
+		insertText(new Date().toLocaleTimeString());
 	},
 	insertIsoDate: function () {
-		var desktop = uno.idl.com.sun.star.frame.Desktop.create(uno.componentContext);
-		var controller = desktop.getCurrentFrame().getController();
-		var viewCursor = controller.getViewCursor();
-		var iso = new Date().toISOString().slice(0, 10);
-		controller.getModel().getText().insertString(viewCursor, iso, false);
+		insertText(new Date().toISOString().slice(0, 10));
 	},
 	insertLocaleDate: function () {
-		var desktop = uno.idl.com.sun.star.frame.Desktop.create(uno.componentContext);
-		var controller = desktop.getCurrentFrame().getController();
-		var viewCursor = controller.getViewCursor();
-		var formatted = new Date().toLocaleDateString(undefined, {
+		insertText(new Date().toLocaleDateString(undefined, {
 			weekday: 'long',
 			year: 'numeric',
 			month: 'long',
 			day: 'numeric',
-		});
-		controller.getModel().getText().insertString(viewCursor, formatted, false);
+		}));
 	},
 };

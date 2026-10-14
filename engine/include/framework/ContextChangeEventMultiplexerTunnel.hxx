@@ -10,20 +10,20 @@
 #include <framework/fwkdllapi.h>
 #include <functional>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 namespace com::sun::star::ui { class XContextChangeEventListener; }
-namespace com::sun::star::uno { class XInterface; }
-namespace com::sun::star::uno { class XComponentContext; }
+namespace cpo::uno { class XInterface; }
+namespace cpo::uno { class XComponentContext; }
 
 namespace framework {
 
 // this is pretty horrible, don't use it!
-FWK_DLLPUBLIC css::uno::Reference<css::ui::XContextChangeEventListener>
+FWK_DLLPUBLIC cpo::uno::Reference<css::ui::XContextChangeEventListener>
 GetFirstListenerWith(
-    css::uno::Reference<css::uno::XComponentContext> const & xComponentContext,
-    css::uno::Reference<css::uno::XInterface> const& xEventFocus,
-    std::function<bool (css::uno::Reference<css::ui::XContextChangeEventListener> const&)> const& rPredicate);
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & xComponentContext,
+    cpo::uno::Reference<cpo::uno::XInterface> const& xEventFocus,
+    std::function<bool (cpo::uno::Reference<css::ui::XContextChangeEventListener> const&)> const& rPredicate);
 
 }
 

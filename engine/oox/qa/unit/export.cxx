@@ -9,10 +9,15 @@
 
 #include <test/unoapixml_test.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/text/ControlCharacter.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/text/XTextField.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -324,6 +329,47 @@ CPPUNIT_TEST_FIXTURE(Test, testCustomShapeArrowExport)
                 "//w:r/mc:AlternateContent[10]/mc:Choice/w:drawing/wp:anchor/a:graphic/"
                 "a:graphicData/wps:wsp/wps:spPr/a:prstGeom/a:avLst/a:gd[4]",
                 "fmla", u"val 66660");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testHyperlinkTooltip)
+{
+    // Given a presentation whose hyperlink carries an accessible name:
+    loadFromFile(u"hyperlink-name.fodp");
+
+    // When saving it to PPTX:
+    save(TestFilter::PPTX);
+
+    // Then the name goes out as the tooltip
+    xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    assertXPath(pXmlDoc, "//a:hlinkClick", "tooltip", u"Collabora Office home page");
+
+    // and it survives reading that file back; the tooltip used to land in Representation,
+    // which TextRun overwrites with the link's visible text
+    loadFromURL(maTempFile.GetURL());
+    auto xDoc = mxComponent.queryThrow<drawing::XDrawPagesSupplier>();
+    auto xPage = xDoc->getDrawPages()->getByIndex(0).queryThrow<drawing::XDrawPage>();
+    auto xShape = xPage->getByIndex(0).queryThrow<container::XEnumerationAccess>();
+    auto xParagraphs = xShape->createEnumeration();
+    auto xParagraph = xParagraphs->nextElement().queryThrow<container::XEnumerationAccess>();
+    auto xRuns = xParagraph->createEnumeration();
+    auto xRun = xRuns->nextElement().queryThrow<beans::XPropertySet>();
+    auto xField = xRun->getPropertyValue(u"TextField"_ustr).queryThrow<text::XTextField>();
+    OUString aName;
+    xField.queryThrow<beans::XPropertySet>()->getPropertyValue(u"Name"_ustr) >>= aName;
+    CPPUNIT_ASSERT_EQUAL(u"Collabora Office home page"_ustr, aName);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testHyperlinkNoTooltip)
+{
+    // Given a presentation whose hyperlink has no name:
+    loadFromFile(u"hyperlink-no-name.fodp");
+
+    // When saving it to PPTX:
+    save(TestFilter::PPTX);
+
+    // Then no attribute is written, rather than an empty one
+    xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    assertXPathNoAttribute(pXmlDoc, "//a:hlinkClick", "tooltip");
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testCameraRevolutionGrabBag)
@@ -1385,6 +1431,56 @@ CPPUNIT_TEST_FIXTURE(Test, testPPTXExportOutlinerListStyle)
     assertXPath(pXmlDoc, "//p:sp[2]/p:txBody/a:lstStyle/a:lvl5pPr", 1);
     assertXPath(pXmlDoc, "//p:sp[2]/p:txBody/a:lstStyle/a:lvl6pPr", 1);
     assertXPath(pXmlDoc, "//p:sp[2]/p:txBody/a:lstStyle/a:lvl7pPr", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFullySeeThroughFillKeepsItsColour)
+{
+    // Given a document whose footer holds a shape with a white fill that nothing shows of:
+    loadFromFile(u"tdf81100.docx");
+
+    // When saving to DOCX:
+    save(TestFilter::DOCX);
+
+    // Then make sure the colour is still there, with nothing of it showing:
+    xmlDocUniquePtr pXmlDoc = parseExport(u"word/footer2.xml"_ustr);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // - XPath '//wps:spPr/a:solidFill/a:srgbClr' number of nodes is incorrect
+    // i.e. the fill was written as no fill at all, which threw the colour away, so a reader that
+    // made the fill solid again arrived at a colour the document never held.
+    assertXPath(pXmlDoc, "//wps:spPr/a:solidFill/a:srgbClr", "val", u"FFFFFF");
+    assertXPath(pXmlDoc, "//wps:spPr/a:solidFill/a:srgbClr/a:alpha", "val", u"0");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testUnderlineFillThemeColor)
+{
+    loadFromFile(u"underline-fill-colors.pptx");
+
+    save(TestFilter::PPTX);
+
+    // Make sure a theme color is written as a scheme color, with its transformation
+    xmlDocUniquePtr pXmlDoc = parseExport(u"ppt/slides/slide1.xml"_ustr);
+    auto getRunProperties = [](int nParagraph) -> OString {
+        return "//p:sp[1]/p:txBody/a:p[" + OString::number(nParagraph) + "]/a:r/a:rPr";
+    };
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // - XPath '//p:sp[1]/p:txBody/a:p[2]/a:r/a:rPr/a:uFill/a:solidFill/a:schemeClr'
+    //   number of nodes is incorrect
+    assertXPath(pXmlDoc, getRunProperties(2) + "/a:uFill/a:solidFill/a:schemeClr", "val",
+                u"accent2");
+    assertXPath(pXmlDoc, getRunProperties(3) + "/a:uFill/a:solidFill/a:schemeClr", "val",
+                u"accent1");
+    assertXPath(pXmlDoc, getRunProperties(3) + "/a:uFill/a:solidFill/a:schemeClr/a:lumMod", "val",
+                u"75000");
+
+    // The other color types have no theme color, so they become their RGB value
+    assertXPath(pXmlDoc, getRunProperties(1) + "/a:uFill/a:solidFill/a:srgbClr", "val", u"FF0000");
+    assertXPath(pXmlDoc, getRunProperties(4) + "/a:uFill/a:solidFill/a:srgbClr", "val", u"008000");
+    assertXPath(pXmlDoc, getRunProperties(5) + "/a:uFill/a:solidFill/a:srgbClr", "val", u"00FFFF");
+    assertXPath(pXmlDoc, getRunProperties(6) + "/a:uFill/a:solidFill/a:srgbClr", "val", u"0000FF");
 }
 }
 

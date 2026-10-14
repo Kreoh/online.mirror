@@ -45,18 +45,20 @@ namespace comphelper {
  */
 class COMPHELPER_DLLPUBLIC SolarMutex {
 public:
-    typedef void (*BeforeReleaseHandler) ();
 
     SolarMutex();
     virtual ~SolarMutex();
 
+#ifdef _WIN32
+    typedef void (*BeforeReleaseHandler) ();
     void SetBeforeReleaseHandler( const BeforeReleaseHandler& rLink )
          { m_aBeforeReleaseHandler = rLink; }
+#endif
 
     void acquire( sal_uInt32 nLockCount = 1 );
     sal_uInt32 release( bool bUnlockAll = false );
 
-    virtual bool tryToAcquire();
+    bool tryToAcquire();
 
     // returns true, if the mutex is owned by the current thread
     virtual bool IsCurrentThread() const;
@@ -77,7 +79,9 @@ private:
     SolarMutex(const SolarMutex&) = delete;
     SolarMutex& operator=(const SolarMutex&) = delete;
 
+#ifdef _WIN32
     BeforeReleaseHandler  m_aBeforeReleaseHandler;
+#endif
 };
 
 inline void SolarMutex::acquire( sal_uInt32 nLockCount )

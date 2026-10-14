@@ -39,6 +39,11 @@ getB2DRangeFromPrimitive2DReference(const Primitive2DReference& rCandidate,
 
 bool arePrimitive2DReferencesEqual(const Primitive2DReference& rxA, const Primitive2DReference& rxB)
 {
+    // Two references to the same primitive are equal. A primitive does not change once it is
+    // made, so one object stands for one and the same content.
+    if (rxA.get() == rxB.get())
+        return true;
+
     const bool bAIs(rxA.is());
 
     if (bAIs != rxB.is())
@@ -54,9 +59,12 @@ bool arePrimitive2DReferencesEqual(const Primitive2DReference& rxA, const Primit
     return rxA->operator==(*rxB);
 }
 
-bool arePrimitive2DReferencesEqual(const css::uno::Reference<css::graphic::XPrimitive2D>& rxA,
-                                   const css::uno::Reference<css::graphic::XPrimitive2D>& rxB)
+bool arePrimitive2DReferencesEqual(const cpo::uno::Reference<css::graphic::XPrimitive2D>& rxA,
+                                   const cpo::uno::Reference<css::graphic::XPrimitive2D>& rxB)
 {
+    if (rxA.get() == rxB.get())
+        return true;
+
     const bool bAIs(rxA.is());
 
     if (bAIs != rxB.is())
@@ -245,6 +253,8 @@ OUString idToString(sal_uInt32 nId)
             return u"TEXTHIERARCHYEMPHASISMARKPRIMITIVE2D"_ustr;
         case PRIMITIVE2D_ID_PDFPRIMITIVE2D:
             return u"PDFPRIMITIVE2D"_ustr;
+        case PRIMITIVE2D_ID_REFLECTIONPRIMITIVE2D:
+            return u"REFLECTIONPRIMITIVE2D"_ustr;
         default:
             return OUString::number((nId >> 16) & 0xFF) + "|" + OUString::number(nId & 0xFF);
     }

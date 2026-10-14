@@ -32,10 +32,12 @@
         <enabled desc="Master switch for AI features. When false, AI is disabled server-wide regardless of WOPI or per-user settings." type="bool" default="false">false</enabled>
         <allow_user_settings desc="If true, users may configure their own AI provider (base URL, key, model) in the settings dialog, overriding the defaults below. Set to false to force every user onto the central endpoint configured here: the per-user AI settings are hidden and any user-provided credentials are ignored, so no user can point AI at their own endpoint." type="bool" default="true">true</allow_user_settings>
         <ethical_rating_message desc="If true, the ethical AI rating badge in the assistant sidebar explains itself - as a tooltip on hover and as a description for screen readers. Set to false to show the bare rating letter without the explanation. The badge itself is always shown." type="bool" default="true">true</ethical_rating_message>
-        <api_url desc="Default AI provider base URL (e.g. http://localhost:11434 for local Ollama, or https://api.openai.com for OpenAI). Must support the /v1/chat/completions endpoint." type="string" default=""></api_url>
+        <show_ai_sidebar desc="If true, the AI Assistant sidebar opens by itself when a document loads, so a user can type a query without clicking first. Only applies where AI is configured and the user may see it. Leave false to keep the AI Assistant tab as the way in - the tab is shown either way. This answers for the whole instance; an integrator can override it for one user with the TextAISidebar, SpreadsheetAISidebar, PresentationAISidebar or DrawingAISidebar ui_default." type="bool" default="false">false</show_ai_sidebar>
+        <show_ai_notebookbar desc="If true, a document opens with the AI Assistant tab of the notebookbar selected rather than Home, so the assistant is the first thing on offer. Only applies where AI is configured and the notebookbar is the UI in use. This answers for the whole instance; an integrator can override it for one user with the TextAINotebookbar, SpreadsheetAINotebookbar, PresentationAINotebookbar or DrawingAINotebookbar ui_default." type="bool" default="false">false</show_ai_notebookbar>
+        <api_url desc="Default AI provider base URL (e.g. http://localhost:11434 for local Ollama, or https://api.openai.com for OpenAI). Must support the /v1/chat/completions endpoint. While ai.enabled is true, AI requests reach this host without a net.lok_allow entry. Documents that fetch external data from the same host still need one." type="string" default=""></api_url>
         <api_key desc="Default API key for the AI provider. May be left empty for self-hosted models that do not require authentication." type="string" default=""></api_key>
         <model desc="Default AI model name. For tool use (inspecting and editing the document) the model must support native function/tool calling - e.g. gpt-4o, llama3.1, qwen2.5. Models without it (e.g. base llama3, gemma) can still chat but cannot drive document tools." type="string" default=""></model>
-        <image_api_url desc="Default AI image-generation provider base URL (e.g. https://api.openai.com). Leave empty to reuse the text-AI endpoint if the same provider is used. Must support the /v1/images/generations endpoint." type="string" default=""></image_api_url>
+        <image_api_url desc="Default AI image-generation provider base URL (e.g. https://api.openai.com). Leave empty to reuse the text-AI endpoint if the same provider is used. Must support the /v1/images/generations endpoint. While ai.enabled is true, AI requests reach this host without a net.lok_allow entry. Documents that fetch external data from the same host still need one." type="string" default=""></image_api_url>
         <image_api_key desc="Default API key for the image-generation provider. Leave empty to reuse the text-AI key if the same provider is used, or when a self-hosted model needs no authentication." type="string" default=""></image_api_key>
         <image_model desc="Default image-generation model name (e.g. dall-e-3, stable-diffusion-3, flux-schnell)." type="string" default=""></image_model>
         <image_size desc="Default generated image size in WxH pixels (e.g. 1024x1024). Provider-specific - leave empty to let the provider pick." type="string" default=""></image_size>
@@ -70,11 +72,13 @@
         <bgsave_priority desc="A (lower) priority for use by background save processes to free time for interactive ones" type="uint" default="5">5</bgsave_priority>
         <bgsave_timeout_secs desc="The default maximum number of seconds to wait for the background save processes to finish before giving up and reverting to synchronous saving" type="uint" default="120">120</bgsave_timeout_secs>
         <redlining_as_comments desc="If true show red-lines as comments" type="bool" default="false">false</redlining_as_comments>
+        <ctl_numerals desc="How complex text layout numerals (Arabic, Hebrew, etc.) are rendered: 'arabic' for Western digits, 'hindi' for Eastern Arabic digits, 'system' to follow the locale, or 'context' to follow each run's own language. Matches a stock LibreOffice profile by defaulting to 'arabic'." type="string" default="arabic">arabic</ctl_numerals>
         <idle_timeout_secs desc="The maximum number of seconds before unloading an idle document. Defaults to 1 hour." type="uint" default="3600">3600</idle_timeout_secs>
         <idlesave_duration_secs desc="The number of idle seconds after which document, if modified, should be saved. Disabled when 0. Defaults to 30 seconds." type="uint" default="30">30</idlesave_duration_secs>
         <autosave_duration_secs desc="The number of seconds after which document, if modified, should be saved. Disabled when 0. Defaults to 5 minutes." type="uint" default="300">300</autosave_duration_secs>
         <background_autosave desc="Allow auto-saves to occur in a forked background process where possible." type="bool" default="true">true</background_autosave>
         <background_manualsave desc="Allow manual save to occur in a forked background process where possible" type="bool" default="true">true</background_manualsave>
+        <background_downloadas desc="Allow the export behind a download in another format to occur in a forked background process where possible" type="bool" default="true">true</background_downloadas>
         <always_save_on_exit desc="On exiting the last editor, always perform a save and upload if the document had been modified. This is to allow the storage to store the document, if it had skipped doing so, previously, as an optimization." type="bool" default="false">false</always_save_on_exit>
         <limit_virt_mem_mb desc="The maximum virtual memory allowed to each document process. 0 for unlimited." type="uint">0</limit_virt_mem_mb>
         <limit_stack_mem_kb desc="The maximum stack size allowed to each document process. 0 for unlimited." type="uint">8000</limit_stack_mem_kb>
@@ -185,39 +189,31 @@
            https://my.com/browser/a123... to https://my.com/my/sub/path/browser/a123... -->
       <service_root type="path" default="" desc="Prefix the base URL for all the pages, websockets, etc. with this path. This includes the discovery URL."></service_root>
       <!-- The host list below always filters the client IP address for POST
-           and REST requests such as convert-to. The allow attribute is
-           separate from that filter: when it is true these hosts also count as
-           allowed external data sources, the same role as net.lok_allow below.
-           Turning the attribute off does not disable the POST and REST filter. -->
+           and REST requests such as convert-to. Each host entry is either a
+           network in CIDR notation (100.64.0.0/10, fd00::/8) or a regular
+           expression that must match the whole client IP address. An IPv4
+           network also matches the IPv4-mapped IPv6 spelling of its addresses
+           (::ffff:100.64.1.2), so one CIDR entry replaces a pair of regular
+           expressions. The allow attribute is separate from that filter: when
+           it is true these hosts also count as allowed external data sources,
+           the same role as net.lok_allow below. Turning the attribute off does
+           not disable the POST and REST filter. -->
       <post_allow desc="Allow/deny client IP address for POST(REST)." allow="true">
-        <host desc="The IPv4 private 192.168 block as plain IPv4 dotted decimal addresses.">192\.168\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:192\.168\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 loopback (localhost) address.">127\.0\.0\.1</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 address">::ffff:127\.0\.0\.1</host>
-        <host desc="The IPv6 loopback (localhost) address.">::1</host>
-        <host desc="The IPv4 private 172.16.0.0/12 subnet part 1.">172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 private 172.16.0.0/12 subnet part 2.">172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 private 172.16.0.0/12 subnet part 3.">172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 private 10.0.0.0/8 subnet (Podman).">10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}</host>
+        <host desc="The IPv4 private 192.168.0.0/16 block.">192.168.0.0/16</host>
+        <host desc="The IPv4 loopback (localhost) address.">127.0.0.1/32</host>
+        <host desc="The IPv6 loopback (localhost) address.">::1/128</host>
+        <host desc="The IPv4 private 172.16.0.0/12 block.">172.16.0.0/12</host>
+        <host desc="The IPv4 private 10.0.0.0/8 block (Podman).">10.0.0.0/8</host>
+        <!-- example: allow a Kubernetes pod network that is outside the private ranges
+        <host desc="Carrier-grade NAT range used as the pod network">100.64.0.0/10</host>
+        -->
       </post_allow>
-      <lok_allow desc="Allowed hosts as an external data source inside edited files. All allowed post_allow.host and storage.wopi entries are also considered to be allowed as a data source. Used for example in: PostMessage Action_InsertGraphic, =WEBSERVICE() function, external reference in the cell.">
-        <host desc="The IPv4 private 192.168 block as plain IPv4 dotted decimal addresses.">192\.168\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:192\.168\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 loopback (localhost) address.">127\.0\.0\.1</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 address">::ffff:127\.0\.0\.1</host>
-        <host desc="The IPv6 loopback (localhost) address.">::1</host>
-        <host desc="The IPv4 private 172.16.0.0/12 subnet part 1.">172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:172\.1[6789]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 private 172.16.0.0/12 subnet part 2.">172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:172\.2[0-9]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 private 172.16.0.0/12 subnet part 3.">172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:172\.3[01]\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="The IPv4 private 10.0.0.0/8 subnet (Podman).">10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}</host>
-        <host desc="Ditto, but as IPv4-mapped IPv6 addresses">::ffff:10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}</host>
+      <lok_allow desc="Allowed hosts as an external data source inside edited files. Each entry is either a network in CIDR notation or a regular expression matched against the host of the URL. All allowed post_allow.host and storage.wopi entries are also considered to be allowed as a data source. Used for example in: PostMessage Action_InsertGraphic, =WEBSERVICE() function, external reference in the cell.">
+        <host desc="The IPv4 private 192.168.0.0/16 block.">192.168.0.0/16</host>
+        <host desc="The IPv4 loopback (localhost) address.">127.0.0.1/32</host>
+        <host desc="The IPv6 loopback (localhost) address.">::1/128</host>
+        <host desc="The IPv4 private 172.16.0.0/12 block.">172.16.0.0/12</host>
+        <host desc="The IPv4 private 10.0.0.0/8 block (Podman).">10.0.0.0/8</host>
         <host desc="Localhost access by name">localhost</host>
       </lok_allow>
       <content_security_policy desc="Customize the CSP header by specifying one or more policy-directive, separated by semicolons. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy">
@@ -226,10 +222,16 @@
       frame-src 'self' server-to-inject-iframe-from.xyz;
       connect-src 'self' server-to-inject-js-from.io;
       frame-ancestors server-embedding-collabora-online-iframe
+
+      A page that relays messages between the document page and the WOPI host is named in
+      frame-ancestors here too, and only a source named here is accepted as a relay. Write it
+      as the browser writes an origin, with the scheme and without a path, for example
+      https://relay.example.com, because the page posts to exactly that text.
       -->
       </content_security_policy>
       <frame_ancestors desc="OBSOLETE: Use content_security_policy. Specify who may embed the Online Office iframe (coolwsd and the WOPI host are always allowed). Separate multiple hosts by space."></frame_ancestors>
       <connection_timeout_secs desc="Specifies the connection, send, recv timeout in seconds for connections initiated by coolwsd (such as WOPI connections)." type="int" default="30">30</connection_timeout_secs>
+      <client_pong_timeout_secs desc="The number of seconds a document connection may go without answering a ping from coolwsd before it is closed. coolwsd sends a ping every 18 seconds, so keep this well above that. A browser that went away without closing its connection is dropped after this long, and its view goes with it. 0 disables the check." type="uint" default="60">60</client_pong_timeout_secs>
 
       <!-- this setting radically changes how online works, it should not be used in a production environment -->
       <proxy_prefix type="bool" default="false" desc="Enable a ProxyPrefix to be passed-in through which to redirect requests">false</proxy_prefix>
@@ -262,8 +264,11 @@
     <security desc="Altering these defaults potentially opens you to significant risk">
       <seccomp desc="Should failure to enable seccomp system call filtering be a fatal error." type="bool" default="true">true</seccomp>
 
-      <!-- deprecated: If capabilities is 'false', coolwsd will assume mount_namespaces of 'true' to achieve
-           this goal, only avoiding chroot for process isolation if linux namespaces are unavailable -->
+      <!-- With capabilities left at 'true', coolwsd picks the isolation it can get: a mount
+           namespace first, then the chroot built from the capabilities on coolforkit-caps, then
+           landlock. If it can get none of the three it refuses to start.
+           Setting capabilities to 'false' asks for landlock on its own, and a deployment where
+           landlock turns out to be unavailable then runs with no isolation at all. -->
       <capabilities desc="Should we require capabilities to isolate processes into chroot jails" type="bool" default="true">true</capabilities>
 
       <jwt_expiry_secs desc="Time in seconds before the Admin Console's JWT token expires" type="int" default="1800">1800</jwt_expiry_secs>
@@ -290,8 +295,8 @@
       <mode type="string" desc="Controls the user interface style. The 'default' means: Take the value from ui_defaults, or decide for one of compact or tabbed (default|compact|tabbed)" default="default">default</mode>
       <use_integration_theme desc="Use theme from the integrator" type="bool" default="true">true</use_integration_theme>
       <statusbar_save_indicator desc="Show saving status indicator in the statusbar" type="bool" default="true">true</statusbar_save_indicator>
-      <smart_zoom desc="Fit a text document to the width of the window when it opens. Leave this empty to let every user choose for themselves in their own Interface Settings, where fitting to the width is the default." type="bool" default=""></smart_zoom>
-      <default_zoom desc="The zoom in percent that a text document opens at when smart_zoom is off. One of 20, 25, 30, 35, 40, 50, 60, 70, 85, 100, 120, 150, 170, 200, 235, 280, 335 and 400. Leave this empty to let every user choose for themselves in their own Interface Settings, where the default is 100." type="int" default=""></default_zoom>
+      <smart_zoom desc="Fit a text document to the width of the window when it opens. A user can choose otherwise in their own Interface Settings, and that choice wins unless the integrator turns saved_ui_state off." type="bool" default="true">true</smart_zoom>
+      <default_zoom desc="The zoom in percent that a text document opens at when smart_zoom is off. One of 20, 25, 30, 35, 40, 50, 60, 70, 85, 100, 120, 150, 170, 200, 235, 280, 335 and 400. A user can choose otherwise in their own Interface Settings, and that choice wins unless the integrator turns saved_ui_state off." type="int" default="100">100</default_zoom>
 
       @CONFIG_INTERFACE_FRAGMENT@
 
@@ -310,10 +315,17 @@
                 <refresh desc="How frequently we should re-acquire a lock with the storage server, in seconds (default 15 mins) or 0 for no refresh" type="int" default="900">900</refresh>
             </locking>
 
-            <alias_groups desc="default mode is 'first' it allows only the first host connecting to coolwsd when groups are not defined. set mode to 'groups' and define group to allow multiple host and its aliases" mode="first">
-            <!-- If you need to use multiple wopi hosts, change the mode to "groups" and
-                    add the hosts below. If one host is accessible under multiple ip addresses
-                    or names, add them as aliases. -->
+            <alias_groups desc="The WOPI hosts that may connect. In mode 'first' with no group defined, the first host to connect after each start becomes the only trusted host. In mode 'groups' only the hosts you list in groups are trusted." mode="first">
+            <!-- One WOPI host, the simple case: set the mode above to "groups", uncomment this
+                 group and put in the address of your WOPI host. -->
+            <!--
+            <group>
+                    <host allow="true">https://cloud.example.com:443</host>
+            </group>
+            -->
+            <!-- Several WOPI hosts, or a host also reached under other names or addresses: set
+                 the mode above to "groups" and add one group for each host instead, with its other
+                 names as aliases, as in this example. -->
             <!--
             <group>
                     <host desc="Host to allow or deny. The scheme is optional and not used for matching; only the host and port are. A regex is allowed in the host part." allow="true">scheme://hostname:port</host>
@@ -411,7 +423,18 @@
         </allowed_websocket_origins>
       </geolocation_setup>
       <server_name desc="server name to show in cluster overview admin panel" type="string" default=""></server_name>
+      <controller_monitor_url desc="Which of the monitors.monitor entries is the controller. Documents are handed over to it before this server shuts down. When left empty, a monitor whose address contains the word controller is taken to be the controller." type="string" default=""></controller_monitor_url>
     </indirection_endpoint>
+
+    <remote_links desc="Live links from open documents to documents open on this or another server">
+      <enable desc="Enable remote links" type="bool" default="false">false</enable>
+      <server_url desc="Base URL this server dials remote documents through, usually the public proxy in front of the cluster. Empty falls back to server_name, then to this server's own address." type="string" default=""></server_url>
+      <chain_secret desc="The secret used by a server to prove it is allowed to perform remote document connection. Set the same value on every server of a cluster. Empty gets a random secret. No other server can connect then (allows only local connections)." type="string" default=""></chain_secret>
+      <max_remote_docs desc="The maximum number of remote documents this server connects to. 0 for unlimited." type="uint" default="0">0</max_remote_docs>
+      <max_links_per_document desc="The maximum number of remote documents one document may subscribe to. 0 for unlimited." type="uint" default="0">0</max_links_per_document>
+      <max_chain_depth desc="The maximum length of a chain of documents linked to each other" type="uint" default="3">3</max_chain_depth>
+      <reconnect_attempts desc="How many times a lost connection to a remote document is retried" type="uint" default="5">5</reconnect_attempts>
+    </remote_links>
 
     @HOME_MODE_CONFIGURATION@
 

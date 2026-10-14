@@ -28,7 +28,7 @@
 
 #include <dlfcn.h>
 
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 #include <cpo/uno/genfunc.hxx>
 #include <sal/alloca.h>
 #include <sal/types.h>
@@ -48,7 +48,7 @@ namespace {
 
 void call(
     bridges::cpp_uno::shared::CppInterfaceProxy * proxy,
-    css::uno::TypeDescription const & description,
+    cpo::uno::TypeDescription const & description,
     typelib_TypeDescriptionReference * returnType, sal_Int32 count,
     typelib_MethodParameter * parameters, unsigned long * gpr,
     unsigned long * fpr, unsigned long * stack, void * indirectRet)
@@ -401,7 +401,7 @@ void vtableCall(
     typelib_InterfaceTypeDescription * type = proxy->getTypeDescr();
     assert(functionIndex < type->nMapFunctionIndexToMemberIndex);
     sal_Int32 pos = type->pMapFunctionIndexToMemberIndex[functionIndex];
-    css::uno::TypeDescription desc(type->ppAllMembers[pos]);
+    cpo::uno::TypeDescription desc(type->ppAllMembers[pos]);
     switch (desc.get()->eTypeClass) {
     case typelib_TypeClass_INTERFACE_ATTRIBUTE:
         if (type->pMapMemberIndexToFunctionIndex[pos] == functionIndex) {
@@ -437,7 +437,7 @@ void vtableCall(
                     (reinterpret_cast<cpo::uno::Type *>(gpr[1])
                      ->getTypeLibType()));
                 if (td != nullptr && td->eTypeClass == typelib_TypeClass_INTERFACE) {
-                    css::uno::XInterface * ifc = nullptr;
+                    cpo::uno::XInterface * ifc = nullptr;
                     proxy->getBridge()->getCppEnv()->getRegisteredInterface(
                         proxy->getBridge()->getCppEnv(),
                         reinterpret_cast<void **>(&ifc), proxy->getOid().pData,

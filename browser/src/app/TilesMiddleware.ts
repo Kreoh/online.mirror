@@ -54,6 +54,14 @@ class RenderManager {
 		RenderManager.makeInstance(docType).initialize();
 	}
 
+	/// Pick the manager again, for when the answer to wantsVector has changed while a document is
+	/// open. A manager of the wrong kind is replaced and the new one initialized.
+	static reinitialize(docType?: string): void {
+		const previous = RenderManager._instance;
+		const instance = RenderManager.makeInstance(docType);
+		if (instance !== previous) instance.initialize();
+	}
+
 	static appendAfterVisualsReady(task: AfterVisualsReadyTask): void {
 		RenderManager.ensureInstance().appendAfterVisualsReady(task);
 	}
@@ -99,7 +107,7 @@ class RenderManager {
 	}
 
 	static overlapInvalidatedRectangleWithView(
-		part: number,
+		part: PartNumber,
 		mode: number,
 		wireId: number,
 		invalidatedRectangle: cool.SimpleRectangle,
@@ -128,6 +136,10 @@ class RenderManager {
 
 	static onTileMsg(textMsg: string, img: any): void {
 		RenderManager.ensureInstance().onTileMsg(textMsg, img);
+	}
+
+	static onTileGoneMsg(textMsg: string): void {
+		RenderManager.ensureInstance().onTileGoneMsg(textMsg);
 	}
 
 	static predictTilesToSlurp(): number {
@@ -221,30 +233,108 @@ class RenderManager {
 	static requestThumbnail(
 		id: cool.PreviewId,
 		part: number,
+		mode: number,
 		maxWidth: number,
 		maxHeight: number,
 	): void {
 		RenderManager.ensureInstance().requestThumbnail(
 			id,
 			part,
+			mode,
 			maxWidth,
 			maxHeight,
 		);
 	}
 
-	static requestPart(part: number): cool.VectorPrimitivesData | undefined {
-		return RenderManager.ensureInstance().requestPart(part);
+	static requestPart(
+		part: number,
+		mode: number,
+	): cool.VectorPrimitivesData | undefined {
+		return RenderManager.ensureInstance().requestPart(part, mode);
+	}
+
+	static partIdAt(part: number, mode: number): cool.VectorPartGuid | undefined {
+		return RenderManager.ensureInstance().partIdAt(part, mode);
 	}
 
 	static renderInto(
 		context: CanvasRenderingContext2D,
 		data: cool.VectorPrimitivesData,
+		options?: cool.VectorRenderOptions,
 	): void {
-		RenderManager.ensureInstance().renderInto(context, data);
+		RenderManager.ensureInstance().renderInto(context, data, options);
 	}
 
-	static onVectorChanged(callback: () => void): void {
+	static renderObjectsWith(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+		objectIds: number[],
+		matrix: cool.Matrix2D,
+	): void {
+		RenderManager.ensureInstance().renderObjectsWith(
+			context,
+			data,
+			objectIds,
+			matrix,
+		);
+	}
+
+	static renderPrimitives(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+		primitives: cool.Primitive[],
+	): void {
+		RenderManager.ensureInstance().renderPrimitives(context, data, primitives);
+	}
+
+	static renderPlaceholderAids(
+		context: CanvasRenderingContext2D,
+		data: cool.VectorPrimitivesData,
+	): void {
+		RenderManager.ensureInstance().renderPlaceholderAids(context, data);
+	}
+
+	static drawnElsewhere(objectIds: number[]): void {
+		RenderManager.ensureInstance().drawnElsewhere(objectIds);
+	}
+
+	static drawnElsewhereVersion(): number {
+		return RenderManager.ensureInstance().drawnElsewhereVersion();
+	}
+
+	static isPartDrawable(part: number, mode: number): boolean {
+		return RenderManager.ensureInstance().isPartDrawable(part, mode);
+	}
+
+	static requestPartById(
+		partId: cool.VectorPartGuid,
+		mode: number,
+	): cool.VectorPrimitivesData | undefined {
+		return RenderManager.ensureInstance().requestPartById(partId, mode);
+	}
+
+	static isPartDrawableById(
+		partId: cool.VectorPartGuid,
+		mode: number,
+	): boolean {
+		return RenderManager.ensureInstance().isPartDrawableById(partId, mode);
+	}
+
+	static isLayerVisible(layer: number): boolean {
+		return RenderManager.ensureInstance().isLayerVisible(layer);
+	}
+
+	static onVectorChanged(callback: (answered?: number[]) => void): void {
 		RenderManager.ensureInstance().onVectorChanged(callback);
+	}
+
+	static offVectorChanged(callback: () => void): void {
+		RenderManager.ensureInstance().offVectorChanged(callback);
+	}
+
+	/// Says that the objects the client holds changed here rather than at the engine.
+	static changedHere(): void {
+		RenderManager.ensureInstance().changedHere();
 	}
 
 	static handleVectorPrimitivesResponse(
@@ -273,8 +363,20 @@ class RenderManager {
 		RenderManager.ensureInstance().handleVectorPrimitivesDelta(values);
 	}
 
-	static clearCachedPart(part: number): void {
-		RenderManager.ensureInstance().clearCachedPart(part);
+	static partListChanged(): void {
+		RenderManager.ensureInstance().partListChanged();
+	}
+
+	static revalidateCachedParts(): void {
+		RenderManager.ensureInstance().revalidateCachedParts();
+	}
+
+	static forgetRequestsInFlight(): void {
+		RenderManager.ensureInstance().forgetRequestsInFlight();
+	}
+
+	static clearCachedPart(partId: cool.VectorPartGuid): void {
+		RenderManager.ensureInstance().clearCachedPart(partId);
 	}
 
 	static clearAllParts(): void {
@@ -282,4 +384,4 @@ class RenderManager {
 	}
 }
 
-(window as any).RenderManager = RenderManager;
+window.RenderManager = RenderManager;

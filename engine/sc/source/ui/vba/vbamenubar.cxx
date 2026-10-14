@@ -12,13 +12,14 @@
 #include <utility>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 using namespace ooo::vba;
 
-ScVbaMenuBar::ScVbaMenuBar( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, uno::Reference< XCommandBar > xCommandBar ) : MenuBar_BASE(rParent, rContext), m_xCommandBar(std::move(xCommandBar))
+ScVbaMenuBar::ScVbaMenuBar( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext, uno::Reference< XCommandBar > xCommandBar ) : MenuBar_BASE(rParent, rContext), m_xCommandBar(std::move(xCommandBar))
 {
 }
 
-cpo::uno::Any SAL_CALL
+cpo::uno::Any
 ScVbaMenuBar::Menus( const cpo::uno::Any& aIndex )
 {
     uno::Reference< XCommandBarControls > xCommandBarControls( m_xCommandBar->Controls( cpo::uno::Any() ), uno::UNO_QUERY_THROW );

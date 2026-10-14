@@ -33,7 +33,7 @@ namespace frm
 {
 
 
-    using namespace ::com::sun::star::uno;
+    using namespace ::cpo::uno;
     using namespace ::com::sun::star::frame;
     using namespace ::com::sun::star::util;
     using namespace ::com::sun::star::beans;
@@ -76,7 +76,7 @@ namespace frm
             return;
 
         SfxItemSet aEmptySet(getEditView()->GetEmptyItemSet());
-        comphelper::SequenceAsHashMap aUnoStateDescription;
+        SfxUnoArguments aUnoStateDescription;
         if ( _rState.getItem() )
         {
             aEmptySet.Put( *_rState.getItem() );

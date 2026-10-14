@@ -13,6 +13,7 @@
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 /**
  * CheckBoxes are inline text objects that are only found in MS Word.
@@ -23,7 +24,7 @@ using namespace ::com::sun::star;
  */
 SwVbaFormFieldCheckBox::SwVbaFormFieldCheckBox(
     const uno::Reference<ooo::vba::XHelperInterface>& rParent,
-    const uno::Reference<uno::XComponentContext>& rContext, sw::mark::Fieldmark& rFormField)
+    const uno::Reference<cpo::uno::XComponentContext>& rContext, sw::mark::Fieldmark& rFormField)
     : SwVbaFormFieldCheckBox_BASE(rParent, rContext)
     , m_pCheckBox(dynamic_cast<sw::mark::CheckboxFieldmark*>(&rFormField))
 {

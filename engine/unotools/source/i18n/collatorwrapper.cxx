@@ -24,8 +24,9 @@
 #include <com/sun/star/i18n/Collator.hpp>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-CollatorWrapper::CollatorWrapper ( const uno::Reference< uno::XComponentContext > &rxContext )
+CollatorWrapper::CollatorWrapper ( const uno::Reference< cpo::uno::XComponentContext > &rxContext )
 {
     mxInternationalCollator = i18n::Collator::create( rxContext );
 }
@@ -38,7 +39,7 @@ CollatorWrapper::compareString (const OUString& s1, const OUString& s2) const
         if (mxInternationalCollator.is())
             return mxInternationalCollator->compareString (s1, s2);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         SAL_WARN( "unotools.i18n","CollatorWrapper: compareString failed");
     }
@@ -54,7 +55,7 @@ CollatorWrapper::listCollatorAlgorithms (const lang::Locale& rLocale) const
         if (mxInternationalCollator.is())
             return mxInternationalCollator->listCollatorAlgorithms (rLocale);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         SAL_WARN( "unotools.i18n","CollatorWrapper: listCollatorAlgorithms failed");
     }
@@ -70,7 +71,7 @@ CollatorWrapper::loadDefaultCollator (const lang::Locale& rLocale, sal_Int32 nOp
         if (mxInternationalCollator.is())
             return mxInternationalCollator->loadDefaultCollator (rLocale, nOptions);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         SAL_WARN( "unotools.i18n","CollatorWrapper: loadDefaultCollator failed");
     }
@@ -88,7 +89,7 @@ CollatorWrapper::loadCollatorAlgorithm (const OUString& rAlgorithm,
             mxInternationalCollator->loadCollatorAlgorithm (
                                                         rAlgorithm, rLocale, nOptions);
     }
-    catch (const uno::RuntimeException&)
+    catch (const cpo::uno::RuntimeException&)
     {
         SAL_WARN( "unotools.i18n","CollatorWrapper: loadCollatorAlgorithm failed");
     }

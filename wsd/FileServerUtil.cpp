@@ -16,6 +16,7 @@
 
 #include <config.h>
 
+#include <common/FileUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <common/StringVector.hpp>
 #include <common/base64.hpp>
@@ -302,7 +303,10 @@ std::string FileServerRequestHandler::uiDefaultsToJSON(const std::string& uiDefa
         assert(currentDef);
 
         // detect the actual UI widget we want to hide or show
-        if (key == "Ruler" || key == "Sidebar" || key == "Statusbar" || key == "Toolbar")
+        // ("AISidebar" is the AI Assistant, which docks beside "Sidebar";
+        // "AINotebookbar" is its notebookbar tab.)
+        if (key == "Ruler" || key == "Sidebar" || key == "Statusbar" || key == "Toolbar" ||
+            key == "AISidebar" || key == "AINotebookbar")
         {
             std::string value("true");
             if (keyValue.equals(1, "false") || keyValue.equals(1, "False") || keyValue.equals(1, "0"))
@@ -333,6 +337,33 @@ std::string FileServerRequestHandler::uiDefaultsToJSON(const std::string& uiDefa
     Poco::JSON::Stringifier::stringify(json, oss);
 
     return oss.str();
+}
+
+std::string
+FileServerRequestHandler::relayOriginFromForm(const std::string& value,
+                                              const std::string& configuredFrameAncestors)
+{
+    if (value.empty())
+        return std::string();
+
+    // The sources are separated by spaces, and the configuration file may wrap a long list over
+    // several lines, so every kind of blank ends a source.
+    static constexpr std::string_view blanks = " \t\r\n";
+    std::size_t start = configuredFrameAncestors.find_first_not_of(blanks);
+    while (start != std::string::npos)
+    {
+        const std::size_t end = configuredFrameAncestors.find_first_of(blanks, start);
+        const std::size_t length = end == std::string::npos ? std::string::npos : end - start;
+        if (configuredFrameAncestors.compare(start, length, value) == 0)
+            return value;
+
+        if (end == std::string::npos)
+            break;
+
+        start = configuredFrameAncestors.find_first_not_of(blanks, end);
+    }
+
+    return std::string();
 }
 
 std::string FileServerRequestHandler::checkFileInfoToJSON(const std::string& checkfileInfo)
@@ -427,6 +458,37 @@ std::string FileServerRequestHandler::cssVarsToStyle(const std::string& cssVars)
     previousStyle = macaron::Base64::Encode(styleOSS.str());
 
     return previousStyle;
+}
+
+bool FileServerRequestHandler::buildSettingsUploadFileId(const std::string& filePath,
+                                                         const std::string& fileName,
+                                                         std::string& fileId)
+{
+    bool bad =
+        !filePath.starts_with('/')
+        || filePath.find("/./") != std::string::npos
+        || filePath.find("/../") != std::string::npos
+        || filePath.ends_with("/.")
+        || filePath.ends_with("/..");
+    if (!bad) {
+        std::string normalized;
+        normalized.reserve(filePath.size());
+        for (auto const c: filePath) {
+            if (c != '/' || normalized.empty() || normalized.back() != '/') {
+                normalized.push_back(c);
+            }
+        }
+        if (normalized.starts_with("/settings/userconfig/extensions/")) {
+            bad = true;
+        }
+    }
+    if (!FileUtil::isPlainFileName(fileName))
+        bad = true;
+    if (bad)
+        return false;
+
+    fileId = filePath + fileName;
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

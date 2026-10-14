@@ -11,16 +11,11 @@ $(eval $(call gb_InstallModule_InstallModule,scp2/impress))
 
 $(eval $(call gb_InstallModule_use_auto_install_libs,scp2/impress,\
 	impress \
-	impress_brand \
 ))
 
 $(eval $(call gb_InstallModule_define_if_set,scp2/impress,\
 	ENABLE_MACOSX_SANDBOX \
 	USING_X11 \
-))
-
-$(eval $(call gb_InstallModule_add_templates,scp2/impress,\
-    scp2/source/templates/module_langpack_impress \
 ))
 
 $(eval $(call gb_InstallModule_add_scpfiles,scp2/impress,\

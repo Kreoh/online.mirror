@@ -40,6 +40,7 @@ certain functionality.
 @section basic
 
 @li @c basic
+@li @c basic.legacyapi
 @li @c basic.sbx
 
 @section bridges
@@ -122,7 +123,6 @@ certain functionality.
 @section cui
 
 @li @c cui.customize
-@li @c cui.customnotebookbar
 @li @c cui.dialogs
 @li @c cui.factory
 @li @c cui.options
@@ -190,9 +190,6 @@ certain functionality.
 @li @c sd.transitions
 @li @c sd.ui
 @li @c sd.view
-@li @c sdremote
-@li @c sdremote.bluetooth
-@li @c sdremote.wifi
 
 @section editeng
 
@@ -354,6 +351,7 @@ certain functionality.
 
 @section pyuno
 
+@li @c pyuno.legacyapi
 @li @c pyuno.runtime
 
 @section rustuno
@@ -363,7 +361,6 @@ certain functionality.
 @section sdext
 
 @li @c sdext
-@li @c sdext.minimizer
 @li @c sdext.pdfimport
 @li @c sdext.pdfimport.pdfparse
 @li @c sdext.presenter
@@ -414,6 +411,7 @@ certain functionality.
 @li @c svx.fmcomp
 @li @c svx.form
 @li @c svx.sdr
+@li @c svx.seclabel - security labels (STANAG 4774/4778)
 @li @c svx.sidebar
 @li @c svx.stbcrtls - StatusBarControl
 @li @c svx.svdraw
@@ -513,6 +511,7 @@ certain functionality.
 @li @c vcl.plugadapt - the Unix/X11 backend plugin mechanism
 @li @c vcl.qt - Qt
 @li @c vcl.quartz
+@li @c vcl.remoteclipboard
 @li @c vcl.schedule - scheduler / main-loop information
 @li @c vcl.schedule.deinit
 @li @c vcl.sessioninhibitor
@@ -637,8 +636,10 @@ certain functionality.
 @li @c idl
 @li @c javaunohelper
 @li @c jsuno
+@li @c jsuno.legacyapi
 @li @c jvmaccess
 @li @c lingucomponent
+@li @c lingucomponent.lightproof
 @li @c linguistic
 @li @c net
 @li @c opencl
@@ -649,6 +650,7 @@ certain functionality.
 @li @c sax
 @li @c scripting
 @li @c scripting.provider
+@li @c scriptinterop
 @li @c shell
 @li @c shell.jumplist
 @li @c stoc

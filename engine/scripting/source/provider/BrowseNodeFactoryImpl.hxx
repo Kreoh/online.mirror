@@ -22,7 +22,7 @@
 #include <rtl/ustring.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <com/sun/star/script/browse/XBrowseNode.hpp>
@@ -37,30 +37,30 @@ class BrowseNodeFactoryImpl :
         css::lang::XServiceInfo >
 {
 private:
-    css::uno::Reference< css::uno::XComponentContext > m_xComponentContext;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xComponentContext;
 
 protected:
     virtual ~BrowseNodeFactoryImpl() override;
 
 public:
     explicit BrowseNodeFactoryImpl(
-        css::uno::Reference< css::uno::XComponentContext > const & xComponentContext );
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xComponentContext );
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
 
-    virtual bool SAL_CALL
+    virtual bool
         supportsService( OUString const & serviceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL
+    virtual cpo::uno::Sequence< OUString >
         getSupportedServiceNames() override;
 
     // XBrowseNodeFactory
-    virtual css::uno::Reference< css::script::browse::XBrowseNode > SAL_CALL
+    virtual cpo::uno::Reference< css::script::browse::XBrowseNode >
         createView( sal_Int16 viewType ) override;
 private:
-    /// @throws css::uno::RuntimeException
-    css::uno::Reference< css::script::browse::XBrowseNode >
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::script::browse::XBrowseNode >
         getOrganizerHierarchy() const;
 };
 

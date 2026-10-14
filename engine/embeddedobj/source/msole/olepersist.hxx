@@ -21,22 +21,22 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 #include <rtl/ustring.hxx>
 
 namespace com::sun::star {
     namespace io { class XInputStream; }
-    namespace uno { class XComponentContext; }
 }
+namespace cpo::uno { class XComponentContext; }
 
-OUString GetNewTempFileURL_Impl( const css::uno::Reference< css::uno::XComponentContext >& xContext );
+OUString GetNewTempFileURL_Impl( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
 /// @throws css::io::IOException
-/// @throws css::uno::RuntimeException
+/// @throws cpo::uno::RuntimeException
 OUString GetNewFilledTempFile_Impl(
-    css::uno::Reference<css::io::XInputStream > const & xInStream,
-    css::uno::Reference<css::uno::XComponentContext> const & xContext);
+    cpo::uno::Reference<css::io::XInputStream > const & xInStream,
+    cpo::uno::Reference<cpo::uno::XComponentContext> const & xContext);
 
-bool KillFile_Impl( const OUString& aURL, const css::uno::Reference< css::uno::XComponentContext >& xContext );
+bool KillFile_Impl( const OUString& aURL, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -18,6 +18,7 @@
  */
 
 #include <svx/fmshell.hxx>
+#include <docuno.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdocapt.hxx>
 #include <svx/svdoutl.hxx>
@@ -56,6 +57,7 @@
 #include <officecfg/Office/Calc.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScTabView::Init()
 {
@@ -520,12 +522,6 @@ void ScTabView::DrawMarkListHasChanged()
 {
     if ( pDrawView )
         pDrawView->MarkListHasChanged();
-}
-
-void ScTabView::UpdateAnchorHandles()
-{
-    if ( pDrawView )
-        pDrawView->AdjustMarkHdl();
 }
 
 void ScTabView::UpdateIMap( SdrObject* pObj )

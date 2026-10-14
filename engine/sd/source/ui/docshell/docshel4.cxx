@@ -87,7 +87,8 @@
 #include <ResourceId.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using ::sd::framework::FrameworkHelper;
 
 namespace sd {
@@ -246,7 +247,7 @@ void DrawDocShell::UpdateRefDevice()
 /**
  * Creates new document, opens streams
  */
-bool DrawDocShell::InitNew( const css::uno::Reference< css::embed::XStorage >& xStorage )
+bool DrawDocShell::InitNew( const cpo::uno::Reference< css::embed::XStorage >& xStorage )
 {
     bool bRet = SfxObjectShell::InitNew( xStorage );
 
@@ -268,14 +269,6 @@ bool DrawDocShell::InitNew( const css::uno::Reference< css::embed::XStorage >& x
  */
 bool DrawDocShell::Load( SfxMedium& rMedium )
 {
-    // If this is an ODF file being loaded, then by default, use legacy processing
-    // (if required, it will be overridden in *::ReadUserDataSequence())
-    if (IsOwnStorageFormat(rMedium))
-    {
-        mpDoc->SetCompatibilityFlag(SdrCompatibilityFlag::AnchoredTextOverflowLegacy, true); // for tdf#99729
-        mpDoc->SetCompatibilityFlag(SdrCompatibilityFlag::LegacyFontwork, true); // for tdf#148000
-    }
-
     bool       bRet = false;
     bool       bStartPresentation = false;
     ErrCode nError = ERRCODE_NONE;
@@ -420,7 +413,7 @@ bool DrawDocShell::ImportFrom(SfxMedium &rMedium,
         SdrOutliner& rOutl = mpDoc->GetDrawOutliner();
         EEControlBits nControlWord = rOutl.GetEditEngine().GetControlWord();
         nControlWord |=  EEControlBits::ULSPACESUMMATION;
-        const_cast<EditEngine&>(rOutl.GetEditEngine()).SetControlWord( nControlWord );
+        rOutl.GetEditEngine().SetControlWord( nControlWord );
 
         mpDoc->SetSummationOfParagraphs();
 
@@ -738,7 +731,7 @@ bool DrawDocShell::ConvertTo( SfxMedium& rMedium )
  * Reopen own streams to ensure that nobody else can prevent use from opening
  * them.
  */
-bool DrawDocShell::SaveCompleted( const css::uno::Reference< css::embed::XStorage >& xStorage )
+bool DrawDocShell::SaveCompleted( const cpo::uno::Reference< css::embed::XStorage >& xStorage )
 {
     bool bRet = false;
 

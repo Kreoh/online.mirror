@@ -20,6 +20,7 @@
 #include <com/sun/star/datatransfer/clipboard/SystemClipboard.hpp>
 #include <com/sun/star/ui/dialogs/XSLTFilterDialog.hpp>
 #include <comphelper/kit.hxx>
+#include <docuno.hxx>
 #include <comphelper/processfactory.hxx>
 #include <scitems.hxx>
 #include <sfx2/app.hxx>
@@ -48,6 +49,8 @@
 #include <vcl/svapp.hxx>
 #include <svx/svxerr.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <comphelper/configuration.hxx>
+#include <officecfg/Office/Calc.hxx>
 
 #include <editeng/unolingu.hxx>
 #include <unotools/lingucfg.hxx>
@@ -93,7 +96,6 @@
 #include <scslots.hxx>
 
 #include <scabstdlg.hxx>
-#include <formula/errorcodes.hxx>
 #include <documentlinkmgr.hxx>
 #include <COKit/COKit.hxx>
 #include <sfx2/kit/helper.hxx>
@@ -168,11 +170,11 @@ ScModule::~ScModule()
     // Need to clear this early in the shutdown process, because it might hold references
     // to large complex things like ScDocument.
     try {
-        css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
+        cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
             css::datatransfer::clipboard::SystemClipboard::create(
                 comphelper::getProcessComponentContext());
         xClipboard->setContents( nullptr, nullptr );
-    } catch (css::uno::DeploymentException const&) {
+    } catch (cpo::uno::DeploymentException const&) {
         // ignore, sometimes happens that UNO is already shutdown by now
     }
 
@@ -529,10 +531,10 @@ void ScModule::Execute( SfxRequest& rReq )
         {
             try
             {
-                css::uno::Reference < css::ui::dialogs::XExecutableDialog > xDialog = css::ui::dialogs::XSLTFilterDialog::create( ::comphelper::getProcessComponentContext());
+                cpo::uno::Reference < css::ui::dialogs::XExecutableDialog > xDialog = css::ui::dialogs::XSLTFilterDialog::create( ::comphelper::getProcessComponentContext());
                 (void)xDialog->execute();
             }
-            catch( css::uno::RuntimeException& )
+            catch( cpo::uno::RuntimeException& )
             {
                 DBG_UNHANDLED_EXCEPTION("sc.ui");
             }
@@ -697,7 +699,7 @@ ScDocument* ScModule::GetClipDoc()
     // called from document
     SfxViewFrame* pViewFrame = nullptr;
     ScTabViewShell* pViewShell = nullptr;
-    css::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
+    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
 
     if ((pViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current())))
         xTransferable.set(ScTabViewShell::GetClipData(pViewShell->GetViewData().GetActiveWin()));
@@ -705,9 +707,9 @@ ScDocument* ScModule::GetClipDoc()
         xTransferable.set(ScTabViewShell::GetClipData(pViewShell->GetViewData().GetActiveWin()));
     else if ((pViewFrame = SfxViewFrame::GetFirst()))
     {
-        css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
+        cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard =
             pViewFrame->GetWindow().GetClipboard();
-        xTransferable.set(xClipboard.is() ? xClipboard->getContents() : nullptr, css::uno::UNO_QUERY);
+        xTransferable.set(xClipboard.is() ? xClipboard->getContents() : nullptr, cpo::uno::UNO_QUERY);
     }
 
     const ScTransferObj* pObj = ScTransferObj::GetOwnClipboard(xTransferable);
@@ -724,14 +726,6 @@ ScDocument* ScModule::GetClipDoc()
 void ScModule::SetSelectionTransfer( ScSelectionTransferObj* pNew )
 {
     m_pSelTransfer = pNew;
-}
-
-void ScModule::SetViewOptions( const ScViewOptions& rOpt )
-{
-    if ( !m_pViewCfg )
-        m_pViewCfg.reset(new ScViewCfg);
-
-    m_pViewCfg->SetOptions( rOpt );
 }
 
 const ScViewOptions& ScModule::GetViewOptions()
@@ -981,10 +975,8 @@ void ScModule::ModifyOptions( const SfxItemSet& rOptSet )
     bool bRepaint = false;
     bool bUpdateMarks = false;
     bool bUpdateRefDev = false;
-    bool bCalcAll = false;
     bool bSaveAppOptions = false;
     bool bSaveInputOptions = false;
-    bool bCompileErrorCells = false;
 
     //  SfxGetpApp()->SetOptions( rOptSet );
 
@@ -1027,148 +1019,6 @@ void ScModule::ModifyOptions( const SfxItemSet& rOptSet )
     {
         aAppOptions.SetLinksInsertedLikeMSExcel(pItem->GetValue());
         bSaveAppOptions = true;
-    }
-
-    // DefaultsOptions
-    if (const ScTpDefaultsItem* pItem = rOptSet.GetItemIfSet(SID_SCDEFAULTSOPTIONS))
-    {
-        const ScDefaultsOptions& rOpt = pItem->GetDefaultsOptions();
-        SetDefaultsOptions( rOpt );
-    }
-
-    // FormulaOptions
-    if (const ScTpFormulaItem* pItem = rOptSet.GetItemIfSet(SID_SCFORMULAOPTIONS))
-    {
-        const ScFormulaOptions& rOpt = pItem->GetFormulaOptions();
-
-        if (!m_pFormulaCfg || (*m_pFormulaCfg != rOpt))
-            // Formula options have changed. Repaint the column headers.
-            bRepaint = true;
-
-        if (m_pFormulaCfg && m_pFormulaCfg->GetUseEnglishFuncName() != rOpt.GetUseEnglishFuncName())
-        {
-            // Re-compile formula cells with error as the error may have been
-            // caused by unresolved function names.
-            bCompileErrorCells = true;
-        }
-
-        // Recalc for interpreter options changes.
-        if (m_pFormulaCfg && m_pFormulaCfg->GetCalcConfig() != rOpt.GetCalcConfig())
-            bCalcAll = true;
-
-        if ( pDocSh )
-        {
-            pDocSh->SetFormulaOptions( rOpt );
-            pDocSh->SetDocumentModified();
-        }
-
-        // ScDocShell::SetFormulaOptions() may check for changed settings, so
-        // set the new options here after that has been called.
-        if (!bCalcAll || rOpt.GetWriteCalcConfig())
-        {
-            // CalcConfig is new, didn't change or is global, simply set all.
-            SetFormulaOptions( rOpt );
-        }
-        else
-        {
-            // If "only for current document" was checked, reset those affected
-            // by that setting to previous values.
-            ScFormulaOptions aNewOpt( rOpt);
-            aNewOpt.GetCalcConfig().MergeDocumentSpecific( m_pFormulaCfg->GetCalcConfig());
-            SetFormulaOptions( aNewOpt);
-        }
-    }
-
-    // ViewOptions
-    if (const ScTpViewItem* pItem = rOptSet.GetItemIfSet(SID_SCVIEWOPTIONS))
-    {
-        const ScViewOptions& rNewOpt = pItem->GetViewOptions();
-
-        if ( pViewSh )
-        {
-            ScViewData&             rViewData = pViewSh->GetViewData();
-            const ScViewOptions&    rOldOpt   = rViewData.GetOptions();
-
-            bool bAnchorList = rOldOpt.GetOption(sc::ViewOption::ANCHOR) !=
-                               rNewOpt.GetOption(sc::ViewOption::ANCHOR);
-
-            if ( rOldOpt != rNewOpt )
-            {
-                rViewData.SetOptions( rNewOpt ); // Changes rOldOpt
-                rViewData.GetDocument().SetViewOptions( rNewOpt );
-                if (pDocSh)
-                    pDocSh->SetDocumentModified();
-                bRepaint = true;
-            }
-            if ( bAnchorList )
-                pViewSh->UpdateAnchorHandles();
-        }
-        SetViewOptions( rNewOpt );
-        if (pBindings)
-        {
-            pBindings->Invalidate(SID_HELPLINES_MOVE);
-        }
-    }
-
-    // GridOptions
-    // Evaluate after ViewOptions, as GridOptions is a member of ViewOptions
-    if ( const SvxGridItem* pItem = rOptSet.GetItemIfSet(SID_ATTR_GRID_OPTIONS) )
-    {
-        ScGridOptions aNewGridOpt( *pItem );
-
-        if ( pViewSh )
-        {
-            ScViewData&          rViewData = pViewSh->GetViewData();
-            ScViewOptions        aNewViewOpt( rViewData.GetOptions() );
-            const ScGridOptions& rOldGridOpt = aNewViewOpt.GetGridOptions();
-
-            if ( rOldGridOpt != aNewGridOpt )
-            {
-                aNewViewOpt.SetGridOptions( aNewGridOpt );
-                rViewData.SetOptions( aNewViewOpt );
-                rViewData.GetDocument().SetViewOptions( aNewViewOpt );
-                if (pDocSh)
-                    pDocSh->SetDocumentModified();
-                bRepaint = true;
-            }
-        }
-        ScViewOptions aNewViewOpt ( GetViewOptions() );
-        aNewViewOpt.SetGridOptions( aNewGridOpt );
-        SetViewOptions( aNewViewOpt );
-        if (pBindings)
-        {
-            pBindings->Invalidate(SID_GRID_VISIBLE);
-            pBindings->Invalidate(SID_GRID_USE);
-        }
-    }
-
-    // DocOptions
-    if ( const ScTpCalcItem* pItem = rOptSet.GetItemIfSet(SID_SCDOCOPTIONS) )
-    {
-        const ScDocOptions& rNewOpt = pItem->GetDocOptions();
-
-        if ( pDoc )
-        {
-            const ScDocOptions& rOldOpt = pDoc->GetDocOptions();
-
-            bRepaint = ( bRepaint || ( rOldOpt != rNewOpt )   );
-            bCalcAll =   bRepaint &&
-                         (  rOldOpt.IsIter()       != rNewOpt.IsIter()
-                         || rOldOpt.GetIterCount() != rNewOpt.GetIterCount()
-                         || rOldOpt.GetIterEps()   != rNewOpt.GetIterEps()
-                         || rOldOpt.IsIgnoreCase() != rNewOpt.IsIgnoreCase()
-                         || rOldOpt.IsCalcAsShown() != rNewOpt.IsCalcAsShown()
-                         || (rNewOpt.IsCalcAsShown() &&
-                            rOldOpt.GetStdPrecision() != rNewOpt.GetStdPrecision())
-                         || rOldOpt.IsMatchWholeCell() != rNewOpt.IsMatchWholeCell()
-                         || rOldOpt.GetYear2000()   != rNewOpt.GetYear2000()
-                         || rOldOpt.IsFormulaRegexEnabled() != rNewOpt.IsFormulaRegexEnabled()
-                         || rOldOpt.IsFormulaWildcardsEnabled() != rNewOpt.IsFormulaWildcardsEnabled()
-                         );
-            pDoc->SetDocOptions( rNewOpt );
-            pDocSh->SetDocumentModified();
-        }
-        SetDocOptions( rNewOpt );
     }
 
     // Set TabDistance after the actual DocOptions
@@ -1313,28 +1163,6 @@ void ScModule::ModifyOptions( const SfxItemSet& rOptSet )
 
     if ( bSaveInputOptions )
         m_pInputCfg->SetOptions(aInputOptions);
-
-    // Kick off recalculation?
-    if (pDoc && bCompileErrorCells)
-    {
-        // Re-compile cells with name error, and recalc if at least one cell
-        // has been re-compiled.  In the future we may want to find a way to
-        // recalc only those that are affected.
-        if (pDoc->CompileErrorCells(FormulaError::NoName))
-            bCalcAll = true;
-    }
-
-    if ( pDoc && bCalcAll )
-    {
-        weld::WaitObject aWait( ScDocShell::GetActiveDialogParent() );
-        pDoc->CalcAll();
-        if ( pViewSh )
-            pViewSh->UpdateCharts( true );
-        else
-            ScDBFunc::DoUpdateCharts( ScAddress(), *pDoc, true );
-        if (pBindings)
-            pBindings->Invalidate( SID_ATTR_SIZE ); //SvxPosSize StatusControl Update
-    }
 
     if ( pViewSh && bUpdateMarks )
         pViewSh->UpdateAutoFillMark();
@@ -1992,213 +1820,6 @@ IMPL_LINK_NOARG(ScModule, IdleHandler, Timer *, void)
 /**
  * Virtual methods for the OptionsDialog
  */
-std::optional<SfxItemSet> ScModule::CreateItemSet( sal_uInt16 nId )
-{
-    std::optional<SfxItemSet> pRet;
-    if(SID_SC_EDITOPTIONS == nId)
-    {
-        pRet.emplace(
-            GetPool(),
-            svl::Items<
-                // TP_USERLISTS:
-                SCITEM_USERLIST, SCITEM_USERLIST,
-                // TP_GRID:
-                SID_ATTR_GRID_OPTIONS, SID_ATTR_GRID_OPTIONS,
-                SID_ATTR_METRIC, SID_ATTR_METRIC,
-                SID_ATTR_DEFTABSTOP, SID_ATTR_DEFTABSTOP,
-                // TP_INPUT:
-                SID_SC_INPUT_LEGACY_CELL_SELECTION, SID_SC_OPT_SORT_REF_UPDATE,
-                // TP_FORMULA, TP_DEFAULTS:
-                SID_SCFORMULAOPTIONS, SID_SCDEFAULTSOPTIONS,
-                // TP_VIEW, TP_CALC:
-                SID_SCVIEWOPTIONS, SID_SCDOCOPTIONS,
-                // TP_INPUT:
-                SID_SC_INPUT_WARNACTIVESHEET, SID_SC_INPUT_ENTER_PASTE_MODE,
-                // TP_PRINT:
-                SID_SCPRINTOPTIONS, SID_SCPRINTOPTIONS,
-                // TP_INPUT:
-                SID_SC_INPUT_SELECTION, SID_SC_INPUT_MARK_HEADER,
-                SID_SC_INPUT_TEXTWYSIWYG, SID_SC_INPUT_TEXTWYSIWYG,
-                SID_SC_INPUT_REPLCELLSWARN, SID_SC_INPUT_REPLCELLSWARN,
-                // TP_VIEW:
-                SID_SC_OPT_SYNCZOOM, SID_SC_OPT_KEY_BINDING_COMPAT,
-                SID_SC_OPT_LINKS, SID_SC_OPT_LINKS>);
-
-        const ScAppOptions& rAppOpt = GetAppOptions();
-
-        ScDocShell*     pDocSh = dynamic_cast< ScDocShell *>( SfxObjectShell::Current() );
-        ScDocOptions    aCalcOpt = pDocSh
-                            ? pDocSh->GetDocument().GetDocOptions()
-                            : GetDocOptions();
-
-        ScTabViewShell* pViewSh = dynamic_cast< ScTabViewShell *>( SfxViewShell::Current() );
-        ScViewOptions   aViewOpt = pViewSh
-                            ? pViewSh->GetViewData().GetOptions()
-                            : GetViewOptions();
-
-        ScUserListItem  aULItem( SCITEM_USERLIST );
-        const ScUserList& rUL = ScGlobal::GetUserList();
-
-        //  SfxGetpApp()->GetOptions( aSet );
-
-        pRet->Put( SfxUInt16Item( SID_ATTR_METRIC,
-                        sal::static_int_cast<sal_uInt16>(rAppOpt.GetAppMetric()) ) );
-
-        // TP_CALC
-        pRet->Put( SfxUInt16Item( SID_ATTR_DEFTABSTOP,
-                        aCalcOpt.GetTabDistance()));
-        pRet->Put( ScTpCalcItem( SID_SCDOCOPTIONS, aCalcOpt ) );
-
-        // TP_VIEW
-        pRet->Put( ScTpViewItem( aViewOpt ) );
-        pRet->Put( SfxBoolItem( SID_SC_OPT_SYNCZOOM, rAppOpt.GetSynchronizeZoom() ) );
-
-        // TP_INPUT
-        const ScInputOptions& rInpOpt = GetInputOptions();
-        pRet->Put( SfxUInt16Item( SID_SC_INPUT_SELECTIONPOS,
-                    rInpOpt.GetMoveDir() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_SELECTION,
-                    rInpOpt.GetMoveSelection() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_EDITMODE,
-                    rInpOpt.GetEnterEdit() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_FMT_EXPAND,
-                    rInpOpt.GetExtendFormat() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_RANGEFINDER,
-                    rInpOpt.GetRangeFinder() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_REF_EXPAND,
-                    rInpOpt.GetExpandRefs() ) );
-        pRet->Put( SfxBoolItem(SID_SC_OPT_SORT_REF_UPDATE, rInpOpt.GetSortRefUpdate()));
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_MARK_HEADER,
-                    rInpOpt.GetMarkHeader() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_TEXTWYSIWYG,
-                    rInpOpt.GetTextWysiwyg() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_REPLCELLSWARN,
-                    rInpOpt.GetReplaceCellsWarn() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_LEGACY_CELL_SELECTION,
-                    rInpOpt.GetLegacyCellSelection() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_ENTER_PASTE_MODE,
-                    rInpOpt.GetEnterPasteMode() ) );
-        pRet->Put( SfxBoolItem( SID_SC_INPUT_WARNACTIVESHEET,
-                    rInpOpt.GetWarnActiveSheet() ) );
-
-        // RID_SC_TP_PRINT
-        pRet->Put( ScTpPrintItem( GetPrintOptions() ) );
-
-        // TP_GRID
-        pRet->Put( aViewOpt.CreateGridItem() );
-
-        // TP_USERLISTS
-        aULItem.SetUserList(rUL);
-        pRet->Put(aULItem);
-
-        // TP_COMPATIBILITY
-        pRet->Put( SfxUInt16Item( SID_SC_OPT_KEY_BINDING_COMPAT,
-                                   rAppOpt.GetKeyBindingType() ) );
-        pRet->Put( SfxBoolItem( SID_SC_OPT_LINKS, rAppOpt.GetLinksInsertedLikeMSExcel()));
-
-        // TP_DEFAULTS
-        pRet->Put( ScTpDefaultsItem( GetDefaultsOptions() ) );
-
-        // TP_FORMULA
-        ScFormulaOptions aOptions = GetFormulaOptions();
-        if (pDocSh)
-        {
-            ScCalcConfig aConfig( aOptions.GetCalcConfig());
-            aConfig.MergeDocumentSpecific( pDocSh->GetDocument().GetCalcConfig());
-            aOptions.SetCalcConfig( aConfig);
-        }
-        pRet->Put( ScTpFormulaItem( std::move(aOptions) ) );
-    }
-    return pRet;
-}
-
-void ScModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
-{
-    if(SID_SC_EDITOPTIONS == nId)
-    {
-        ModifyOptions( rSet );
-    }
-}
-
-std::unique_ptr<SfxTabPage> ScModule::CreateTabPage( sal_uInt16 nId, weld::Container* pPage, weld::DialogController* pController, const SfxItemSet& rSet )
-{
-    std::unique_ptr<SfxTabPage> xRet;
-    ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-    switch(nId)
-    {
-        case SID_SC_TP_LAYOUT:
-        {
-            ::CreateTabPage ScTpLayoutOptionsCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_LAYOUT);
-            if (ScTpLayoutOptionsCreate)
-                xRet = (*ScTpLayoutOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case SID_SC_TP_CONTENT:
-        {
-            ::CreateTabPage ScTpContentOptionsCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_CONTENT);
-            if (ScTpContentOptionsCreate)
-                xRet = (*ScTpContentOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case SID_SC_TP_GRID:
-            xRet = SvxGridTabPage::Create(pPage, pController, rSet);
-            break;
-        case SID_SC_TP_USERLISTS:
-        {
-            ::CreateTabPage ScTpUserListsCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_USERLISTS);
-            if (ScTpUserListsCreate)
-                xRet = (*ScTpUserListsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case SID_SC_TP_CALC:
-        {
-            ::CreateTabPage ScTpCalcOptionsCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_CALC);
-            if (ScTpCalcOptionsCreate)
-                xRet = (*ScTpCalcOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case SID_SC_TP_FORMULA:
-        {
-            ::CreateTabPage ScTpFormulaOptionsCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_FORMULA);
-            if (ScTpFormulaOptionsCreate)
-                xRet = (*ScTpFormulaOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case SID_SC_TP_COMPATIBILITY:
-        {
-            ::CreateTabPage ScTpCompatOptionsCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_COMPATIBILITY);
-            if (ScTpCompatOptionsCreate)
-                xRet = (*ScTpCompatOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case SID_SC_TP_CHANGES:
-        {
-            ::CreateTabPage ScRedlineOptionsTabPageCreate = pFact->GetTabPageCreatorFunc(SID_SC_TP_CHANGES);
-            if (ScRedlineOptionsTabPageCreate)
-                xRet =(*ScRedlineOptionsTabPageCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case RID_SC_TP_PRINT:
-        {
-            ::CreateTabPage ScTpPrintOptionsCreate = pFact->GetTabPageCreatorFunc(RID_SC_TP_PRINT);
-            if (ScTpPrintOptionsCreate)
-                xRet = (*ScTpPrintOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-        case RID_SC_TP_DEFAULTS:
-        {
-            ::CreateTabPage ScTpDefaultsOptionsCreate = pFact->GetTabPageCreatorFunc(RID_SC_TP_DEFAULTS);
-            if (ScTpDefaultsOptionsCreate)
-                xRet = (*ScTpDefaultsOptionsCreate)(pPage, pController, &rSet);
-            break;
-        }
-    }
-
-    OSL_ENSURE( xRet, "ScModule::CreateTabPage(): no valid ID for TabPage!" );
-
-    return xRet;
-}
-
 IMPL_LINK( ScModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void )
 {
     //TODO: Merge with ScFieldEditEngine!
@@ -2298,6 +1919,7 @@ std::shared_ptr<SfxDialogController> ScModule::Find1RefWindow(sal_uInt16 nSlotId
 }
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 void ScModule::GetSpellSettings( LanguageType& rDefLang, LanguageType& rCjkLang, LanguageType& rCtlLang )
 {
@@ -2315,23 +1937,18 @@ void ScModule::GetSpellSettings( LanguageType& rDefLang, LanguageType& rCjkLang,
 
 void ScModule::SetAutoSpellProperty( bool bSet )
 {
-    // use SvtLinguConfig instead of service LinguProperties to avoid
-    // loading the linguistic component
-    SvtLinguConfig aConfig;
-
-    aConfig.SetProperty( u"IsSpellAuto", cpo::uno::Any(bSet) );
+    // Calc keeps its own automatic-spell-checking default, decoupled from the
+    // shared Linguistic/SpellChecking/IsSpellAuto that Writer and Impress read.
+    // Spreadsheets hold mostly data, codes and abbreviations, so checking every
+    // cell as it is typed yields mostly false positives.
+    auto pChange( comphelper::ConfigurationChanges::create() );
+    officecfg::Office::Calc::Content::Display::AutomaticSpellChecking::set( bSet, pChange );
+    pChange->commit();
 }
 
 bool ScModule::GetAutoSpellProperty()
 {
-    // use SvtLinguConfig instead of service LinguProperties to avoid
-    // loading the linguistic component
-    SvtLinguConfig aConfig;
-
-    SvtLinguOptions aOptions;
-    aConfig.GetOptions( aOptions );
-
-    return aOptions.bIsSpellAuto;
+    return officecfg::Office::Calc::Content::Display::AutomaticSpellChecking::get();
 }
 
 bool ScModule::HasThesaurusLanguage( LanguageType nLang )
@@ -2377,7 +1994,7 @@ SfxStyleFamilies ScModule::CreateStyleFamilies()
     return aStyleFamilies;
 }
 
-void ScModule::RegisterAutomationApplicationEventsCaller(css::uno::Reference< ooo::vba::XSinkCaller > const& xCaller)
+void ScModule::RegisterAutomationApplicationEventsCaller(cpo::uno::Reference< ooo::vba::XSinkCaller > const& xCaller)
 {
     mxAutomationApplicationEventsCaller = xCaller;
 }

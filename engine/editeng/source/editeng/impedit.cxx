@@ -49,6 +49,7 @@
 #include <boost/property_tree/ptree.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 #define SCRLRANGE   20  // Scroll 1/20 of the width/height, when in QueryDrop
 
@@ -514,8 +515,7 @@ void ImpEditView::DrawSelectionXOR( EditSelection aTmpSel, vcl::Region* pRegion,
             mpOutputWindow->GetCursor()->Hide();
     }
 
-    if (comphelper::COKit::isActive() || pRegion)
-        pPolyPoly = tools::PolyPolygon();
+    pPolyPoly = tools::PolyPolygon();
 
     DBG_ASSERT(!getEditEngine().IsIdleFormatterActive(), "DrawSelectionXOR: Not formatted!");
     aTmpSel.Adjust(getEditEngine().GetEditDoc());
@@ -589,7 +589,14 @@ void ImpEditView::DrawSelectionXOR( EditSelection aTmpSel, vcl::Region* pRegion,
             if (aTmpRect.Top() > GetVisDocBottom())
                 return ImpEditEngine::CallbackResult::Continue;
 
-            if (aTmpRect.Bottom() < GetVisDocTop())
+            // A selected field that wrapped onto several sublines reaches
+            // further down than this line's own row, and the rows it adds are
+            // covered further below.
+            const WrappedFieldRows aFieldRows = getImpEditEngine().GetWrappedFieldRows(
+                rInfo.rPortion, *rInfo.pLine, nStartIndex, nEndIndex);
+            const tools::Long nRowHeight = rInfo.pLine->GetHeight();
+
+            if (aTmpRect.Bottom() + aFieldRows.nRowsBelow * nRowHeight < GetVisDocTop())
                 return ImpEditEngine::CallbackResult::Continue;
 
             if ((rInfo.nPortion == nStartPara) && (rInfo.nLine == nStartLine))
@@ -603,9 +610,15 @@ void ImpEditView::DrawSelectionXOR( EditSelection aTmpSel, vcl::Region* pRegion,
                 Range aLineXPosStartEnd = getEditEngine().GetLineXPosStartEnd(rInfo.rPortion, *rInfo.pLine);
                 aTmpRect.SetLeft(aLineXPosStartEnd.Min());
                 aTmpRect.SetRight(aLineXPosStartEnd.Max());
+                // The width of a line holding a wrapped field counts the
+                // field's text as one long run, so the line reaches far past
+                // the paper. The field's first subline ends where the field
+                // had room to wrap.
+                if (aFieldRows.nRowsBelow)
+                    aTmpRect.SetRight(aFieldRows.nRight);
                 aTmpRect.Move(aLineOffset.Width(), 0);
                 ImplDrawHighlightRect(rTarget, aTmpRect.TopLeft(), aTmpRect.BottomRight(),
-                                      pPolyPoly ? &*pPolyPoly : nullptr, bLOKCalcRTL);
+                                      *pPolyPoly, bLOKCalcRTL);
             }
             else
             {
@@ -629,16 +642,41 @@ void ImpEditView::DrawSelectionXOR( EditSelection aTmpSel, vcl::Region* pRegion,
                     aTmpRect.Move(aLineOffset.Width(), 0);
 
                     ImplDrawHighlightRect(rTarget, aTmpRect.TopLeft(), aTmpRect.BottomRight(),
-                                          pPolyPoly ? &*pPolyPoly : nullptr, bLOKCalcRTL);
+                                          *pPolyPoly, bLOKCalcRTL);
                     nTmpStartIndex = nTmpEndIndex;
                 }
+            }
+
+            // The rectangles above cover the row of the line itself, which
+            // holds a wrapped field's first subline. The rows below hold the
+            // rest of the field and are covered with the same highlight, each
+            // one row height further down, the way the field is drawn.
+            for (sal_Int32 nRow = 1; nRow <= aFieldRows.nRowsBelow; ++nRow)
+            {
+                const bool bBottomRow = nRow == aFieldRows.nRowsBelow;
+                tools::Rectangle aRowRect(aTmpRect);
+                aRowRect.SetLeft(aFieldRows.nLeft + aLineOffset.Width());
+                aRowRect.SetRight((bBottomRow ? aFieldRows.nBottomRowRight : aFieldRows.nRight)
+                                  + aLineOffset.Width());
+                aRowRect.Move(0, nRow * nRowHeight);
+                ImplDrawHighlightRect(rTarget, aRowRect.TopLeft(), aRowRect.BottomRight(),
+                                      *pPolyPoly, bLOKCalcRTL);
             }
         }
         return ImpEditEngine::CallbackResult::Continue;
     };
     getImpEditEngine().IterateLineAreas(DrawHighlight, ImpEditEngine::IterFlag::none);
 
-    if (comphelper::COKit::isActive() && mpViewShell && mpOutputWindow)
+    // A render of the document into its own device - a slide preview, a
+    // thumbnail, a tile - lays the text out for that device, so the rectangles
+    // measured above are that device's and not the view's. A whole slide
+    // painted into 180 by 101 pixels puts one device pixel at about 88 twips,
+    // which is how far such a rectangle can sit from the text it covers. Only a
+    // measurement of the view is reported.
+    const bool bRendering = comphelper::COKit::isTiledPainting()
+                            || comphelper::COKit::isVectorRendering();
+
+    if (comphelper::COKit::isActive() && mpViewShell && mpOutputWindow && !bRendering)
         kitSelectionCallback(pPolyPoly, bStartHandleVisible, bEndHandleVisible);
 
     if (pRegion || comphelper::COKit::isActive())
@@ -649,6 +687,9 @@ void ImpEditView::DrawSelectionXOR( EditSelection aTmpSel, vcl::Region* pRegion,
     }
     else
     {
+        ImplInvertSelection(rTarget, vcl::Region(*pPolyPoly));
+        pPolyPoly.reset();
+
         if (mpOutputWindow && mpOutputWindow->GetCursor())
             mpOutputWindow->GetCursor()->Show();
 
@@ -666,12 +707,12 @@ void ImpEditView::GetSelectionRectangles(EditSelection aTmpSel, std::vector<tool
     aRegion.GetRegionRectangles(rLogicRects);
 }
 
-void ImpEditView::ImplDrawHighlightRect( OutputDevice& rTarget, const Point& rDocPosTopLeft, const Point& rDocPosBottomRight, tools::PolyPolygon* pPolyPoly, bool bLOKCalcRTL )
+void ImpEditView::ImplDrawHighlightRect( OutputDevice& rTarget, const Point& rDocPosTopLeft, const Point& rDocPosBottomRight, tools::PolyPolygon& rPolyPoly, bool bLOKCalcRTL )
 {
     if ( rDocPosTopLeft.X() == rDocPosBottomRight.X() )
         return;
 
-    if (mpKitSpecialPositioning && pPolyPoly)
+    if (mpKitSpecialPositioning)
     {
         MapUnit eDevUnit = rTarget.GetMapMode().GetMapUnit();
         tools::Rectangle aSelRect(rDocPosTopLeft, rDocPosBottomRight);
@@ -694,7 +735,7 @@ void ImpEditView::ImplDrawHighlightRect( OutputDevice& rTarget, const Point& rDo
         aTmpPoly[1] = aSelRect.TopRight();
         aTmpPoly[2] = aSelRect.BottomRight();
         aTmpPoly[3] = aSelRect.BottomLeft();
-        pPolyPoly->Insert(aTmpPoly);
+        rPolyPoly.Insert(aTmpPoly);
         return;
     }
 
@@ -715,32 +756,35 @@ void ImpEditView::ImplDrawHighlightRect( OutputDevice& rTarget, const Point& rDo
     }
 
     tools::Rectangle aRect( aPnt1, aPnt2 );
-    if ( pPolyPoly )
-    {
-        tools::Polygon aTmpPoly( 4 );
-        aTmpPoly[0] = aRect.TopLeft();
-        aTmpPoly[1] = aRect.TopRight();
-        aTmpPoly[2] = aRect.BottomRight();
-        aTmpPoly[3] = aRect.BottomLeft();
-        pPolyPoly->Insert( aTmpPoly );
-    }
-    else
-    {
-        vcl::Window* pWindow = rTarget.GetOwnerWindow();
+    tools::Polygon aTmpPoly( 4 );
+    aTmpPoly[0] = aRect.TopLeft();
+    aTmpPoly[1] = aRect.TopRight();
+    aTmpPoly[2] = aRect.BottomRight();
+    aTmpPoly[3] = aRect.BottomLeft();
+    rPolyPoly.Insert( aTmpPoly );
+}
 
-        if (pWindow)
-        {
-            pWindow->GetOutDev()->Invert( aRect );
-        }
-        else
-        {
-            auto popIt = rTarget.ScopedPush(vcl::PushFlags::LINECOLOR|vcl::PushFlags::FILLCOLOR|vcl::PushFlags::RASTEROP);
-            rTarget.SetLineColor();
-            rTarget.SetFillColor(COL_BLACK);
-            rTarget.SetRasterOp(RasterOp::Invert);
-            rTarget.DrawRect(aRect);
-        }
+// A region's rectangles never overlap, so each one inverts its area once.
+void ImpEditView::ImplInvertSelection(OutputDevice& rTarget, const vcl::Region& rRegion)
+{
+    RectangleVector aRects;
+    rRegion.GetRegionRectangles(aRects);
+    if (aRects.empty())
+        return;
+
+    if (vcl::Window* pWindow = rTarget.GetOwnerWindow())
+    {
+        for (const tools::Rectangle& rRect : aRects)
+            pWindow->GetOutDev()->Invert(rRect);
+        return;
     }
+
+    auto popIt = rTarget.ScopedPush(vcl::PushFlags::LINECOLOR|vcl::PushFlags::FILLCOLOR|vcl::PushFlags::RASTEROP);
+    rTarget.SetLineColor();
+    rTarget.SetFillColor(COL_BLACK);
+    rTarget.SetRasterOp(RasterOp::Invert);
+    for (const tools::Rectangle& rRect : aRects)
+        rTarget.DrawRect(rRect);
 }
 
 
@@ -1499,6 +1543,10 @@ void ImpEditView::ShowCursor( bool bGotoCursor, bool bForceVisCursor )
                             COKitCallbackType::INVALIDATE_VIEW_CURSOR, aMessageParams);
 
                 aMessageParams.put("mispelledWord", bIsWrong ? 1 : 0);
+                // The caret's logical position: its paragraph and the character
+                // offset within that paragraph.
+                aMessageParams.put("paragraph", nPara);
+                aMessageParams.put("index", aPaM.GetIndex());
                 aMessageParams.add_child("hyperlink", aHyperlinkTree);
 
                 KitHelper::notifyOtherView(*pThisShell, pThisShell,
@@ -1870,8 +1918,8 @@ OUString ImpEditView::SpellIgnoreWord()
             sal_Int32 nNodes = rDoc.Count();
             for ( sal_Int32 n = 0; n < nNodes; n++ )
             {
-                ContentNode* pNode = rDoc.GetObject( n );
-                pNode->GetWrongList()->MarkWrongsInvalid();
+                ContentNode& rNode = rDoc.GetObject( n );
+                rNode.GetWrongList()->MarkWrongsInvalid();
             }
             getImpEditEngine().DoOnlineSpelling( aPaM.GetNode() );
             getImpEditEngine().StartOnlineSpellTimer();
@@ -2172,6 +2220,11 @@ void ImpEditView::DeselectAll()
     aNewSelection.Min() = aNewSelection.Max();
     SetEditSelection(aNewSelection);
     // const_cast<EditPaM&>(GetEditSelection().Min()) = GetEditSelection().Max();
+    if (comphelper::COKit::isActive())
+    {
+        // Report the collapsed selection: the report above still had the range.
+        DrawSelectionXOR();
+    }
 
     if (comphelper::COKit::isActive() && mpViewShell && mpOutputWindow)
     {
@@ -2354,8 +2407,8 @@ void ImpEditView::dragGestureRecognized(const css::datatransfer::dnd::DragGestur
         {
             mpDragAndDropInfo.reset(new DragAndDropInfo);
             mpDragAndDropInfo->pField = pField;
-            ContentNode* pNode = getEditEngine().GetEditDoc().GetObject( nPara );
-            aCopySel = EditSelection( EditPaM( pNode, nPos ), EditPaM( pNode, nPos+1 ) );
+            ContentNode& rNode = getEditEngine().GetEditDoc().GetObject( nPara );
+            aCopySel = EditSelection( EditPaM( rNode, nPos ), EditPaM( rNode, nPos+1 ) );
             SetEditSelection(aCopySel);
             DrawSelectionXOR();
             bool bGotoCursor = DoAutoScroll();
@@ -2373,7 +2426,7 @@ void ImpEditView::dragGestureRecognized(const css::datatransfer::dnd::DragGestur
                 const SfxInt16Item& rL = getEditEngine().GetParaAttrib( n, EE_PARA_OUTLLEVEL );
                 if ( rL.GetValue() > rLevel.GetValue() )
                 {
-                    aEndPaM.SetNode( getEditEngine().GetEditDoc().GetObject( n ) );
+                    aEndPaM.SetNode( &getEditEngine().GetEditDoc().GetObject( n ) );
                 }
                 else
                 {

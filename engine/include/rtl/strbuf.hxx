@@ -19,17 +19,17 @@
 
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstring>
 #include <limits>
 
-#include "rtl/strbuf.h"
-#include "rtl/string.hxx"
-#include "rtl/stringutils.hxx"
+#include <rtl/strbuf.h>
+#include <rtl/string.hxx>
+#include <rtl/stringutils.hxx>
 
-#include "rtl/stringconcat.hxx"
+#include <rtl/stringconcat.hxx>
 #include <string_view>
 #include <type_traits>
 
@@ -317,7 +317,7 @@ public:
 
         @return the string previously contained in the buffer.
      */
-    SAL_WARN_UNUSED_RESULT OString makeStringAndClear()
+    [[nodiscard]] OString makeStringAndClear()
     {
         OString aRet( pData );
         rtl_string_new(&pData);
@@ -535,7 +535,7 @@ public:
     template< typename T >
     typename libreoffice_internal::Enable< void,
         !libreoffice_internal::CharPtrDetector< T* >::ok >::Type
-        append( T* ) SAL_DELETED_FUNCTION;
+        append( T* ) = delete;
     /// @endcond
 
     /**

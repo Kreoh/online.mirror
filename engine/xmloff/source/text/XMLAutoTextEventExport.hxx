@@ -36,18 +36,18 @@ namespace com::sun::star {
  */
 class XMLAutoTextEventExport : public SvXMLExport
 {
-    css::uno::Reference<css::container::XNameAccess> xEvents;
+    cpo::uno::Reference<css::container::XNameAccess> xEvents;
 
 public:
 
     XMLAutoTextEventExport(
-        const css::uno::Reference< css::uno::XComponentContext >& xContext, OUString const & implementationName, SvXMLExportFlags nFlags
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, OUString const & implementationName, SvXMLExportFlags nFlags
         );
 
     virtual ~XMLAutoTextEventExport() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(
+    virtual void initialize(
         const cpo::uno::Sequence<cpo::uno::Any> & rArguments ) override;
 
 private:

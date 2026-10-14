@@ -15,8 +15,13 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Spell checking menu.', func
 
 	function openContextMenu() {
 		cy.cGet('#document-canvas').click('center');
-		cy.wait(500);
+		cy.getFrameWindow().then(function(win) {
+			helper.waitForTimers(win, 'clicktimer');
+		});
 		cy.cGet('#document-canvas').dblclick('center');
+		// The double click selects the misspelled word by a core round trip.
+		// Sending the arrow key before that selection lands moves the cursor
+		// off the word, and the context menu opens with no suggestion for it.
 		cy.wait(500);
 
 		helper.typeIntoDocument('{leftArrow}');

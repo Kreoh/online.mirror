@@ -721,6 +721,31 @@ SwTwips SwAnchoredObjectPosition::ImplAdjustHoriRelPos(
     return nAdjustedRelPosX;
 }
 
+/** Move the start of a horizontal alignment area to the text start of a text frame.
+
+    The text of the frame starts after the flys that push it aside. The alignment area runs
+    from that text start to the far edge of the frame, so it loses the pushed-aside part on
+    the side where the text starts.
+*/
+static void lcl_StartAlignAreaAtTextStart( const SwTextFrame& _rTextFrame,
+                                           const bool _bIgnoreFlysAnchoredAtFrame,
+                                           SwTwips& _ioWidth,
+                                           SwTwips& _ioOffset )
+{
+    const SwTwips nTextStart = _rTextFrame.GetBaseOffsetForFly( _bIgnoreFlysAnchoredAtFrame );
+    if ( _rTextFrame.IsRightToLeft() )
+    {
+        // The text starts at the right edge, so the text start is zero or negative. The
+        // alignment area keeps its left edge and shrinks on the right.
+        _ioWidth = std::max<SwTwips>(_ioWidth + nTextStart, 0);
+    }
+    else
+    {
+        _ioOffset += nTextStart;
+        _ioWidth = std::max<SwTwips>(_ioWidth - nTextStart, 0);
+    }
+}
+
 /** determine alignment value for horizontal position of object */
 void SwAnchoredObjectPosition::GetHoriAlignmentValues( const SwFrame&  _rHoriOrientFrame,
                                                         const SwFrame&  _rPageAlignLayFrame,
@@ -741,8 +766,8 @@ void SwAnchoredObjectPosition::GetHoriAlignmentValues( const SwFrame&  _rHoriOri
             nOffset = aRectFnSet.GetLeftMargin(_rHoriOrientFrame);
             if ( _rHoriOrientFrame.IsTextFrame() )
             {
-                // consider movement of text frame left
-                nOffset += static_cast<const SwTextFrame&>(_rHoriOrientFrame).GetBaseOffsetForFly( !_bObjWrapThrough );
+                lcl_StartAlignAreaAtTextStart( static_cast<const SwTextFrame&>(_rHoriOrientFrame),
+                                               !_bObjWrapThrough, nWidth, nOffset );
             }
             else if ( _rHoriOrientFrame.IsPageFrame() && aRectFnSet.IsVert() )
             {
@@ -863,9 +888,12 @@ void SwAnchoredObjectPosition::GetHoriAlignmentValues( const SwFrame&  _rHoriOri
             SwTextBoxHelper::getShapeWrapThrough(mpFrameFormat, bWrapThrough);
 
             bool bIgnoreFlysAnchoredAtFrame = !bWrapThrough;
-            nOffset = _rHoriOrientFrame.IsTextFrame() ?
-                   static_cast<const SwTextFrame&>(_rHoriOrientFrame).GetBaseOffsetForFly( bIgnoreFlysAnchoredAtFrame ) :
-                   0;
+            nOffset = 0;
+            if ( _rHoriOrientFrame.IsTextFrame() )
+            {
+                lcl_StartAlignAreaAtTextStart( static_cast<const SwTextFrame&>(_rHoriOrientFrame),
+                                               bIgnoreFlysAnchoredAtFrame, nWidth, nOffset );
+            }
             break;
         }
     }
@@ -975,33 +1003,33 @@ SwTwips SwAnchoredObjectPosition::CalcRelPosX(
         // If compat flag is active, then disable automatic mirroring for RTL.
         bool bMirrorRtlDrawObjs = !rIDSA.get(DocumentSettingId::DO_NOT_MIRROR_RTL_DRAW_OBJS);
         const bool bR2L = rAnchorFrame.IsRightToLeft() && bMirrorRtlDrawObjs;
+        SwTwips nHoriPos = _rHoriOrient.getPosition().as_twip<SwTwips>();
         if( IsAnchoredToChar() && text::RelOrientation::CHAR == eRelOrient )
         {
             if( bR2L )
-                nRelPosX -= _rHoriOrient.GetPos();
+                nRelPosX -= nHoriPos;
             else
-                nRelPosX += _rHoriOrient.GetPos();
+                nRelPosX += nHoriPos;
         }
         else if ( bToggle || ( !_rHoriOrient.IsPosToggle() && bR2L ) )
         {
             // Correction: consider <nOffset> also for
             // toggling from left to right.
-            nRelPosX += nWidth - nObjWidth - _rHoriOrient.GetPos();
+            nRelPosX += nWidth - nObjWidth - nHoriPos;
         }
         else
         {
-            nRelPosX += _rHoriOrient.GetPos();
+            nRelPosX += nHoriPos;
         }
     }
     else if ( text::HoriOrientation::CENTER == eHoriOrient )
         nRelPosX += (nWidth / 2) - (nObjWidth / 2);
     else if (text::HoriOrientation::RIGHT == eHoriOrient)
-        nRelPosX
-            += nWidth
-               - (nObjWidth
-                  + (aRectFnSet.IsVert() ? _rULSpacing.GetLower() : _rLRSpacing.ResolveRight({})));
-    else
-        nRelPosX += aRectFnSet.IsVert() ? _rULSpacing.GetUpper() : _rLRSpacing.ResolveLeft({});
+    {
+        // The object sits flush at the edge it is aligned to. Its wrap spacing only keeps the
+        // surrounding text away from the object and plays no part in the position.
+        nRelPosX += nWidth - nObjWidth;
+    }
 
     // adjust relative position by distance between anchor frame and
     // the frame, the object is oriented at.

@@ -27,6 +27,7 @@
 #include "wrapstreamforshare.hxx"
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 WrapStreamForShare::WrapStreamForShare( uno::Reference< io::XInputStream > xInStream,
                                         rtl::Reference< comphelper::RefCountedMutex > xMutexRef )
@@ -37,7 +38,7 @@ WrapStreamForShare::WrapStreamForShare( uno::Reference< io::XInputStream > xInSt
     if ( !m_xMutex.is() || !m_xInStream.is() )
     {
         OSL_FAIL( "Wrong initialization of wrapping stream!" );
-        throw uno::RuntimeException();
+        throw cpo::uno::RuntimeException();
     }
     m_xSeekable.set( m_xInStream, uno::UNO_QUERY_THROW );
     mpByteReader = dynamic_cast<comphelper::ByteReader*>(m_xInStream.get());
@@ -49,7 +50,7 @@ WrapStreamForShare::~WrapStreamForShare()
 }
 
 // XInputStream
-sal_Int32 SAL_CALL WrapStreamForShare::readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
+sal_Int32 WrapStreamForShare::readBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
 {
     if ( !m_xInStream.is() )
         throw io::IOException();
@@ -62,7 +63,7 @@ sal_Int32 SAL_CALL WrapStreamForShare::readBytes( cpo::uno::Sequence< sal_Int8 >
     return nRead;
 }
 
-sal_Int32 SAL_CALL WrapStreamForShare::readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
+sal_Int32 WrapStreamForShare::readSomeBytes( cpo::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
 {
     if ( !m_xInStream.is() )
         throw io::IOException();
@@ -88,7 +89,7 @@ sal_Int32 WrapStreamForShare::readSomeBytes( sal_Int8* aData, sal_Int32 nMaxByte
     return nRead;
 }
 
-void SAL_CALL WrapStreamForShare::skipBytes( sal_Int32 nBytesToSkip )
+void WrapStreamForShare::skipBytes( sal_Int32 nBytesToSkip )
 {
     ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
 
@@ -101,7 +102,7 @@ void SAL_CALL WrapStreamForShare::skipBytes( sal_Int32 nBytesToSkip )
     m_nCurPos = m_xSeekable->getPosition();
 }
 
-sal_Int32 SAL_CALL WrapStreamForShare::available()
+sal_Int32 WrapStreamForShare::available()
 {
     ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
 
@@ -111,7 +112,7 @@ sal_Int32 SAL_CALL WrapStreamForShare::available()
     return m_xInStream->available();
 }
 
-void SAL_CALL WrapStreamForShare::closeInput()
+void WrapStreamForShare::closeInput()
 {
     ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
 
@@ -126,7 +127,7 @@ void SAL_CALL WrapStreamForShare::closeInput()
 }
 
 // XSeekable
-void SAL_CALL WrapStreamForShare::seek( sal_Int64 location )
+void WrapStreamForShare::seek( sal_Int64 location )
 {
     ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
 
@@ -139,7 +140,7 @@ void SAL_CALL WrapStreamForShare::seek( sal_Int64 location )
     m_nCurPos = m_xSeekable->getPosition();
 }
 
-sal_Int64 SAL_CALL WrapStreamForShare::getPosition()
+sal_Int64 WrapStreamForShare::getPosition()
 {
     ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
 
@@ -149,7 +150,7 @@ sal_Int64 SAL_CALL WrapStreamForShare::getPosition()
     return m_nCurPos;
 }
 
-sal_Int64 SAL_CALL WrapStreamForShare::getLength()
+sal_Int64 WrapStreamForShare::getLength()
 {
     ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
 

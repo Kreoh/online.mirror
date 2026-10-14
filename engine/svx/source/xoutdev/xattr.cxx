@@ -362,7 +362,7 @@ bool XColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId)
     {
         case MID_COMPLEX_COLOR:
         {
-            css::uno::Reference<css::util::XComplexColor> xComplexColor;
+            cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
             if (!(rVal >>= xComplexColor))
                 return false;
             setComplexColor(model::color::getFromXComplexColor(xComplexColor));
@@ -389,6 +389,11 @@ bool XColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId)
             if(!(rVal >>= nValue ))
                 return false;
 
+            // Assigning the color the item already holds keeps the theme reference. ODF writes
+            // a shape's fill on its graphic style and again on its paragraph style, and only
+            // the graphic one carries the reference.
+            if (nValue.GetRGBColor() != GetColorValue().GetRGBColor())
+                setComplexColor(model::ComplexColor());
             SetColorValue( nValue );
 
         }
@@ -1086,7 +1091,7 @@ bool XLineColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId)
     {
         case MID_COMPLEX_COLOR:
         {
-            css::uno::Reference<css::util::XComplexColor> xComplexColor;
+            cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
             if (!(rVal >>= xComplexColor))
                 return false;
             setComplexColor(model::color::getFromXComplexColor(xComplexColor));
@@ -1112,7 +1117,13 @@ bool XLineColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId)
             if(!(rVal >>= nValue ))
                 return false;
 
-            SetColorValue( Color(ColorTransparency, nValue) );
+            Color aColor(ColorTransparency, nValue);
+            // Assigning the color the item already holds keeps the theme reference. ODF writes
+            // a shape's fill on its graphic style and again on its paragraph style, and only
+            // the graphic one carries the reference.
+            if (aColor.GetRGBColor() != GetColorValue().GetRGBColor())
+                setComplexColor(model::ComplexColor());
+            SetColorValue( aColor );
             break;
         }
     }
@@ -1322,7 +1333,7 @@ std::unique_ptr<XLineStartItem> XLineStartItem::checkForUniqueItem( SdrModel& rM
             return nullptr;
 
         // force empty name for empty polygons
-        return std::make_unique<XLineStartItem>( "", maPolyPolygon );
+        return std::make_unique<XLineStartItem>( u""_ustr, maPolyPolygon );
     }
 
     if( maPolyPolygon.count() > 1 )
@@ -1429,7 +1440,7 @@ std::unique_ptr<XLineEndItem> XLineEndItem::checkForUniqueItem( SdrModel& rModel
             return nullptr;
 
         // force empty name for empty polygons
-        return std::make_unique<XLineEndItem>( "", maPolyPolygon );
+        return std::make_unique<XLineEndItem>( u""_ustr, maPolyPolygon );
     }
 
     if( maPolyPolygon.count() > 1 )
@@ -1937,7 +1948,7 @@ bool XFillColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
         break;
         case MID_COMPLEX_COLOR:
         {
-            css::uno::Reference<css::util::XComplexColor> xComplexColor;
+            cpo::uno::Reference<css::util::XComplexColor> xComplexColor;
             if (!(rVal >>= xComplexColor))
                 return false;
             setComplexColor(model::color::getFromXComplexColor(xComplexColor));
@@ -1964,6 +1975,11 @@ bool XFillColorItem::PutValue( const cpo::uno::Any& rVal, sal_uInt8 nMemberId )
             if(!(rVal >>= nValue ))
                 return false;
 
+            // Assigning the color the item already holds keeps the theme reference. ODF writes
+            // a shape's fill on its graphic style and again on its paragraph style, and only
+            // the graphic one carries the reference.
+            if (nValue.GetRGBColor() != GetColorValue().GetRGBColor())
+                setComplexColor(model::ComplexColor());
             SetColorValue( nValue );
 
         }

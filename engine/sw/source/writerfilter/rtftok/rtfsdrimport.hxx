@@ -53,18 +53,20 @@ public:
         PICT
     };
     void resolve(RTFShape& rShape, bool bClose, ShapeOrPict shapeOrPict);
+    /// Send the start of a shape to the dmapper. It stays open there until its end is sent.
+    void open(cpo::uno::Reference<css::drawing::XShape> const& xShape);
     void close();
     void append(std::u16string_view aKey, std::u16string_view aValue);
     /// Append property on the current parent.
     void appendGroupProperty(std::u16string_view aKey, std::u16string_view aValue);
-    void resolveDhgt(css::uno::Reference<css::beans::XPropertySet> const& xPropertySet,
+    void resolveDhgt(cpo::uno::Reference<css::beans::XPropertySet> const& xPropertySet,
                      sal_Int32 nZOrder, bool bOldStyle);
     /// Set line color and line width on the shape, using the relevant API depending on if the shape is a text frame or not.
     static void
     resolveLineColorAndWidth(bool bTextFrame,
-                             const css::uno::Reference<css::beans::XPropertySet>& xPropertySet,
+                             const cpo::uno::Reference<css::beans::XPropertySet>& xPropertySet,
                              cpo::uno::Any const& rLineColor, cpo::uno::Any const& rLineWidth);
-    static void resolveFLine(css::uno::Reference<css::beans::XPropertySet> const& xPropertySet,
+    static void resolveFLine(cpo::uno::Reference<css::beans::XPropertySet> const& xPropertySet,
                              sal_Int32 nFLine);
     /**
      * These are the default in Word, but not in Writer.
@@ -73,31 +75,34 @@ public:
      */
     static std::vector<css::beans::PropertyValue> getTextFrameDefaults(bool bNew);
     /// Push a new group shape to the parent stack.
-    void pushParent(css::uno::Reference<css::drawing::XShapes> const& xParent);
+    void pushParent(cpo::uno::Reference<css::drawing::XShapes> const& xParent);
     /// Pop the current group shape from the parent stack.
     void popParent();
-    css::uno::Reference<css::drawing::XShape> const& getCurrentShape() const { return m_xShape; }
+    cpo::uno::Reference<css::drawing::XShape> const& getCurrentShape() const { return m_xShape; }
     bool isFakePict() const { return m_bFakePict; }
+    bool isOpenInMapper() const { return m_bOpenInMapper; }
     bool isTextGraphicObject() const { return m_bTextGraphicObject; }
 
 private:
-    void createShape(const OUString& rService, css::uno::Reference<css::drawing::XShape>& xShape,
-                     css::uno::Reference<css::beans::XPropertySet>& xPropertySet);
-    void applyProperty(css::uno::Reference<css::drawing::XShape> const& xShape,
+    void createShape(const OUString& rService, cpo::uno::Reference<css::drawing::XShape>& xShape,
+                     cpo::uno::Reference<css::beans::XPropertySet>& xPropertySet);
+    void applyProperty(cpo::uno::Reference<css::drawing::XShape> const& xShape,
                        std::u16string_view aKey, std::u16string_view aValue) const;
-    int initShape(css::uno::Reference<css::drawing::XShape>& o_xShape,
-                  css::uno::Reference<css::beans::XPropertySet>& o_xPropSet, bool& o_rIsCustomShape,
+    int initShape(cpo::uno::Reference<css::drawing::XShape>& o_xShape,
+                  cpo::uno::Reference<css::beans::XPropertySet>& o_xPropSet, bool& o_rIsCustomShape,
                   RTFShape const& rShape, bool bClose, ShapeOrPict shapeOrPict);
 
     RTFDocumentImpl& m_rImport;
-    std::stack<css::uno::Reference<css::drawing::XShapes>> m_aParents;
-    css::uno::Reference<css::drawing::XShape> m_xShape;
+    std::stack<cpo::uno::Reference<css::drawing::XShapes>> m_aParents;
+    cpo::uno::Reference<css::drawing::XShape> m_xShape;
     /// If m_xShape is imported as a Writer text frame (instead of a drawinglayer rectangle).
     bool m_bTextFrame;
     /// If m_xShape is imported as a Writer text graphic object (instead of a drawinglayer shape).
     bool m_bTextGraphicObject;
     /// if inside \pict, but actually it's a shape (not a picture)
     bool m_bFakePict;
+    /// If a shape start has gone to the dmapper and its end has not.
+    bool m_bOpenInMapper;
     std::stack<writerfilter::dmapper::GraphicZOrderHelper> m_aGraphicZOrderHelpers;
 };
 } // namespace writerfilter::rtftok

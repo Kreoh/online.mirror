@@ -22,7 +22,7 @@
 #include <xmloff/xmlictxt.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <com/sun/star/uno/Reference.h>
+#include <cpo/uno/Reference.h>
 
 
 class XMLLineNumberingImportContext;
@@ -45,12 +45,12 @@ public:
 
 protected:
 
-    virtual void SAL_CALL startFastElement( sal_Int32 nElement,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& ) override;
+    virtual void startFastElement( sal_Int32 nElement,
+        const cpo::uno::Reference< css::xml::sax::XFastAttributeList >& ) override;
 
-    virtual void SAL_CALL characters( const OUString& rChars ) override;
+    virtual void characters( const OUString& rChars ) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

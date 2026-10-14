@@ -43,26 +43,45 @@ public:
     BinaryDataContainer& operator=(const BinaryDataContainer& rBinaryDataContainer) = default;
     BinaryDataContainer& operator=(BinaryDataContainer&& rBinaryDataContainer) noexcept = default;
 
+    /// Number of bytes held, whether they are in memory right now or in the temp file.
     size_t getSize() const;
+    /// True when the container holds no bytes at all.
     bool isEmpty() const;
     const sal_uInt8* getData() const;
-    SAL_DLLPRIVATE cpo::uno::Sequence<sal_Int8> getCopyAsByteSequence() const;
+
+    /// Adds one to the count of holders that each account an equal share of these bytes.
+    void addSizeHolder() const;
+    /// Takes one off the count of holders that each account an equal share of these bytes.
+    void removeSizeHolder() const;
+    /// Number of holders that each account an equal share of these bytes
+    size_t getSizeHolderCount() const;
+
+    /// The bytes as a shared reference. The referenced bytes stay valid and in
+    /// memory for the life of the reference, even if this container swaps its
+    /// copy out to disk in the meantime.
+    std::shared_ptr<const std::vector<sal_uInt8>> getSharedData() const;
+    cpo::uno::Sequence<sal_Int8> getCopyAsByteSequence() const;
 
     // Returns the data as a readonly stream open for reading
     SAL_DLLPRIVATE std::unique_ptr<SvStream> getAsStream() const;
 
     // Returns the data as a readonly stream open for reading
-    SAL_DLLPRIVATE css::uno::Reference<css::io::XInputStream> getAsXInputStream() const;
+    SAL_DLLPRIVATE cpo::uno::Reference<css::io::XInputStream> getAsXInputStream() const;
 
     /// writes the contents to the given stream
     std::size_t writeToStream(SvStream& rStream) const;
 
     /// return the in-memory size in bytes as of now.
-    SAL_DLLPRIVATE std::size_t getSizeBytes() const;
+    std::size_t getSizeBytes() const;
 
-    /// swap out to disk for now
+    /// swap out to disk for now. The bytes stay in memory while a size holder is registered.
     SAL_DLLPRIVATE void swapOut() const;
 
+    /// Whether a call to swapOut would move the bytes out of memory and into a temporary file.
+    SAL_DLLPRIVATE bool canSwapOut() const;
+
+    /// Hashes the bytes that are in memory. A container whose bytes are in the temporary file
+    /// answers zero.
     size_t calculateHash() const;
     std::vector<unsigned char> calculateSHA1() const;
 

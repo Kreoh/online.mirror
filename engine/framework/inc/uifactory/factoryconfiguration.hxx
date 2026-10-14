@@ -22,7 +22,7 @@
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ref.hxx>
@@ -46,15 +46,13 @@ class ConfigurationAccess_ControllerFactory final : // interfaces
                                                     public  ::cppu::WeakImplHelper< css::container::XContainerListener>
 {
 public:
-                    ConfigurationAccess_ControllerFactory( const css::uno::Reference< css::uno::XComponentContext >& rxContext, OUString _sRoot );
+                    ConfigurationAccess_ControllerFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext, OUString _sRoot );
     virtual       ~ConfigurationAccess_ControllerFactory() override;
 
     void          readConfigurationData();
 
     OUString getServiceFromCommandModule( std::u16string_view rCommandURL, std::u16string_view rModule ) const;
     OUString getValueFromCommandModule( std::u16string_view rCommandURL, std::u16string_view rModule ) const;
-    void          addServiceToCommandModule( std::u16string_view rCommandURL, std::u16string_view rModule, const OUString& rServiceSpecifier );
-    void          removeServiceFromCommandModule( std::u16string_view rCommandURL, std::u16string_view rModule );
 
     // container.XContainerListener
     virtual void elementInserted( const css::container::ContainerEvent& Event ) override;
@@ -84,8 +82,8 @@ private:
     OUString                     m_aPropValue;
     OUString                     m_sRoot;
     std::unordered_map< OUString, ControllerInfo >            m_aMenuControllerMap;
-    css::uno::Reference< css::lang::XMultiServiceFactory >    m_xConfigProvider;
-    css::uno::Reference< css::container::XNameAccess >        m_xConfigAccess;
+    cpo::uno::Reference< css::lang::XMultiServiceFactory >    m_xConfigProvider;
+    cpo::uno::Reference< css::container::XNameAccess >        m_xConfigAccess;
     rtl::Reference< WeakContainerListener > m_xConfigAccessListener;
     bool                          m_bConfigAccessInitialized;
 };

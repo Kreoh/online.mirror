@@ -156,8 +156,8 @@ formats and the app does only raw NSPasteboard input and output:
 |---|---|---|---|
 | Web | HTTP `/cool/clipboard` plus WebSocket | browser `navigator.clipboard` | `Clipboard.js` |
 | macOS | engine-driven COKitClipboardProvider; paste issues `.uno:Paste` directly with no `read` round-trip | NSPasteboard, UTType | `macos/coda/coda/COWrapper.mm` |
-| Windows | WebView2 `postMobileMessage`: COPY/CUT/PASTE/CLIPBOARD* | Win32 clipboard formats | `windows/coda/CODA/CODA.cpp:631` |
-| Qt | QWebChannel `Bridge.cool()`: COPY/CUT/PASTE/... | QClipboard, QMimeData | `qt/QtClipboard.cpp:162` |
+| Windows | engine-driven COKitClipboardProvider; paste issues `.uno:Paste` directly | Win32 clipboard formats, delayed rendering | `windows/coda/CODA/CODA.cpp` |
+| Qt | engine-driven COKitClipboardProvider; paste issues `.uno:Paste` directly | QClipboard, QMimeData | `qt/QtClipboard.cpp` |
 | iOS | engine-driven COKitClipboardProvider; paste issues `.uno:Paste` directly | UIPasteboard, UTType | `ios/ios.mm` |
 | Android | `@JavascriptInterface` plus JNI getClipboardContent/setClipboardContent/paste | ClipboardManager, ClipData | `android/lib/.../androidapp.cpp:355` |
 | WASM | none, uses the web browser path | browser `navigator.clipboard` | `Clipboard.js` |
@@ -270,18 +270,21 @@ This is the cross-environment case and today it is the weakest link. Both
 directions go through the operating system clipboard, which cannot carry
 what each side actually needs.
 
-- **Browser to native app.** The browser only placed HTML (with the
+- **Browser to native app.** The browser only places HTML (with the
   meta-origin div) plus plain text on the operating system clipboard. The
-  rich ODF and embed-source bytes are still on the source web server. The
-  native app reads the clipboard, sees HTML, and pastes at HTML fidelity.
-  It does not follow the meta-origin URL to fetch the server content, so
-  the embed-source fidelity is lost.
+  rich ODF and embed-source bytes stay on the source web server. Since
+  September 2026 the engine follows the meta-origin URL itself when a paste
+  asks for the clipboard (see "Engine: pastes resolve a remote Collabora
+  Online clipboard" in the Done section): it downloads the full clipboard
+  from that server, and the paste then picks the embed source. This holds
+  for CODA and for plain soffice. The server kit has no network access, so
+  the web client keeps the cross-server path of scenario 3.
 - **Native app to browser.** The native app published the full flavor set
   on the operating system clipboard, but the browser cannot see custom
   MIME types like `application/x-openoffice-embed-source-xml` from
   JavaScript. The browser paste gets HTML at best.
-- Net effect: browser and native interoperate at roughly HTML fidelity,
-  not at the native or server fidelity each side is capable of on its own.
+- Net effect: browser to native now pastes at server fidelity; native to
+  browser still pastes at HTML fidelity.
 
 ### 8. Images and Paste Special
 
@@ -372,9 +375,9 @@ fields are browser widgets, and clipboard there mostly bypasses the Kit.
 ## What is not shared (duplicated per platform)
 
 This section describes the state before the COKitClipboardProvider move and
-still holds for Qt and Android. macOS, Windows, and iOS have since moved to
+still holds for Android. macOS, Windows, Qt, and iOS have since moved to
 the provider (see the Done section): the engine now decides the formats, so
-there the mapping table is reached through the provider callbacks and the
+the mapping tables there are reached through the provider callbacks and the
 old eager write and read-everything paths named below are gone. The
 duplication described here is what the provider move is meant to remove,
 one app at a time.
@@ -519,9 +522,13 @@ one app at a time.
 - **Windows CF_HTML.** Windows reads back the CF_HTML fragment with a
   regular expression over the `StartFragment` and `EndFragment` markers
   (`CODA.cpp:709`).
-- **Qt lazy clipboard.** Qt advertises the flavor list up front and only
-  fetches bytes when a target asks, then forces a full fetch on document
-  close so an external paste survives (`QtClipboard.cpp:92,232`).
+- **Qt clipboard threading.** Unlike NSPasteboard and the Win32
+  clipboard, QClipboard may only be used on the GUI thread, while the
+  clipboard provider callbacks fire on the kit thread with the SolarMutex
+  held. Qt therefore queues the advertise to the GUI thread, answers the
+  ownership check from an atomic, and blocks on the GUI thread for the
+  paste-direction reads; the ownership flag doubles as the deadlock guard
+  for every GUI-thread path into the engine (`qt/QtClipboard.cpp`).
 - **iOS window paste.** The dialog paste branch in the Kit is compiled
   out on iOS (`#ifndef IOS`, `init.cxx:7662`).
 - **windows/clipboard.cpp is not the app bridge.** It is a standalone
@@ -561,7 +568,7 @@ This design measured against an external requirements list.
 | PC to PC copy and paste, including Calc cut and move of large sheets | Mostly met | Native desktop copy carries the full flavor set (scenario 4), and large or whole-sheet selections download on demand (scenario 9). Gap: cut as move is same-document only, so a cut pasted into another instance becomes a copy. |
 | Works for non-document content (comments, formula-bar text, core text) | Works, but by bypass | Comments and inputs are browser-native, the formula bar is a hybrid with a copy-versus-paste asymmetry and a fragile focus check (see Non-document content). No single model spans widgets and document text. |
 | Better clipboard for collaboration inside CODA | Partial | Copy and paste between documents on one server keep full fidelity through the server-held transferable (scenarios 2 and 3). More comes from the reworks below. |
-| Efficient remote download when pasting remote into local | Not built | The path exists for the browser cross-server case and would be reused by the native fetch (action plan, browser to native rich paste). |
+| Efficient remote download when pasting remote into local | Built | The engine downloads the full clipboard from the source server when a paste asks for it, on a worker thread with a cancellable progress dialog, and keeps it for the next paste (Done, "Engine: pastes resolve a remote Collabora Online clipboard"). |
 | Super-bonus: hook and push PC to online pastes in the CODA shell | Feasible, natural home | The shell has native operating system clipboard access and the in-process Kit, so it can read the system clipboard and push it into the document. It rides the shared C++ bridge (action plan). |
 | Shares lots of code cross-platform | Goal of the rework | The shared C++ bridge replaces five native glue layers with one helper plus thin adapters (action plan). |
 
@@ -603,8 +610,7 @@ per-app "which flavors matter" guesswork is gone.
   provider in process, the `clipboardmimetypes:` message and its forwarding
   (`browser/src/layer/tile/CanvasTileLayer.js`, the `ViewController`
   handler) are gone for macOS. That message path stays only for the
-  server, the web and WASM clients, and the Qt app, which are not yet on
-  the provider.
+  server, the web and WASM clients, which are not on the provider.
 - No browser round-trip for paste either. The engine reads the pasteboard
   through the provider on `.uno:Paste`, so the browser issues `.uno:Paste`
   directly instead of asking the native side through the `read` script
@@ -614,6 +620,41 @@ per-app "which flavors matter" guesswork is gone.
 - The provider is registered once, on the first message after the kit
   document loads (`COWrapper handleMessageWith`), not on copy or paste, so
   copy and paste need no setup step of their own.
+
+The provider install has since moved from per document to one
+process-global install at kit main-loop start (`kit/Kit.cpp`), paired
+with a process-shared kit clipboard that survives document close
+(`KitClipboardFactory::installGlobalProvider`,
+`engine/desktop/source/lib/kitclipboard.cxx`). Reads for external
+consumers then go through the document-less
+`COKit::getGlobalClipboard`, and closing a document only renders a
+still-lazy transferable in-engine (`COKitDocument::flushClipboard`).
+
+### Windows: same model as macOS
+
+CODA-W adopted the identical provider and then the process-shared
+clipboard. The Win32 specifics stay behind the same small provider
+surface in `windows/coda/CODA/CODA.cpp`: the advertised formats are
+served on demand through delayed rendering, and the pending promises
+are materialized at exit so the clipboard outlives the process.
+
+### Qt: same model, with GUI-thread marshaling
+
+The Qt app replaced its per-view lazy clipboard (the
+`clipboardmimetypes:` round-trip through the browser, the app-side paste
+orchestration with its paste-in format whitelist, the kit-thread
+cross-window transfer, and the QClipboard materialization on document
+close) with the same provider (`qt/QtClipboard.cpp`). Copy advertises a
+lazy `QMimeData` whose bytes come from `getGlobalClipboard` on demand;
+paste is a plain `.uno:Paste`, served from the engine's own transferable
+or, when the clipboard is foreign, read through the provider with no
+whitelist. The native COPY/CUT/COPYSLIDE/PASTE/PASTESPECIAL/
+CLIPBOARDMIMETYPES bridge verbs are gone; the JS gates Qt exactly like
+macOS and Windows. QClipboard is GUI-thread-only, so the callbacks
+marshal as described under "Qt clipboard threading" above. On Linux the
+clipboard dies with the process (no pasteboard server), so there is no
+exit-time materialization; a paste after a document closes is served by
+the flushed in-engine transferable for as long as the app runs.
 
 ### iOS: engine-driven clipboard through COKitClipboardProvider
 
@@ -635,6 +676,53 @@ Two per-platform points differ from macOS:
 - Install point. The iOS kit loop does not go through `startMainLoop()`,
   where macOS and Windows install their provider, so the install sits in
   `runKitLoopInAThread()` (`kit/Kit.cpp`).
+
+### Engine: pastes resolve a remote Collabora Online clipboard
+
+Scenario 7, the browser to native half, is done in the engine's clipboard
+layer rather than in any app or in the kit, so CODA, the server kit and plain
+soffice share it (September 2026).
+
+- A paste asks for the clipboard through
+  `TransferableDataHelper::CreateFromSystemClipboard()` with
+  `DownloadRemoteContent::Yes`
+  (`engine/include/vcl/transfer.hxx`). It reads the `text/html` once, and
+  when the meta-origin div points at an http(s) server, downloads the full
+  clipboard from that URL and rebinds the data helper to it, so the usual
+  format decision finds the embed source and the object descriptor. The
+  paste-enablement state queries keep the default, `DownloadRemoteContent::No`: both go
+  through the same vcl code and only call `getTransferDataFlavors()` before
+  the format decision, so the clipboard cannot tell a check from a paste,
+  and only the paste may read the clipboard or touch the network. That is
+  why the paste sites in sw, sc, sd and chart2 name the intent.
+- The download (`engine/vcl/source/treelist/remoteclipboard.cxx`) runs the
+  UCB "open" command on a `salhelper::Thread`, streaming into a counting
+  sink with a 256 MiB cap; the WebDAV/curl content provider brings proxy and
+  certificate handling. The main thread spins `Application::Yield()`
+  bracketed by `vcl::kit::pushExpectedReentry()`, and restores the kit view
+  afterwards, since messages for other documents handled meanwhile switch
+  it. After a 300 ms grace period a modal dialog
+  (`vcl/uiconfig/ui/remoteclipboardprogress.ui`) shows the bytes received
+  with a Cancel button; JSDialog draws it in the browser, soffice natively.
+  Cancelling stops the download, through `XCommandProcessor::abort` once the
+  last waiting paste has left, and the paste goes ahead with the HTML the
+  system clipboard holds.
+- The HTML on the system clipboard identifies a copy. The URL in its marker
+  belongs to the browser session and serves whatever was copied last there,
+  but each copy writes its own HTML, so the downloaded content is kept
+  while the clipboard holds the same HTML: the reads one paste makes and
+  repeated pastes of one copy share a download, a new copy downloads again.
+  The stub HTML for a selection too large to inline reads the same for
+  every copy, so it is downloaded every time. A failed download holds back
+  pastes of the same HTML for thirty seconds.
+- In CODA the other open documents stay editable during a download because
+  `kitPoll` runs inside the nested loop; a paste in a second document opens
+  its own dialog and joins the same download.
+- The fetch step is replaceable (`vcl::remoteclipboard::setFetcherForTesting`),
+  which the vcl and desktop unit tests use, and which is the seam for a
+  server kit fetcher that asks coolwsd to download on its behalf.
+- iOS, Android and wasm have no http(s) content provider, so the download
+  fails at once there and the paste keeps the HTML.
 
 ## Action plan
 
@@ -671,24 +759,24 @@ explains it.
 
 ### Larger reworks
 
-- Move Qt onto the COKitClipboardProvider (the model macOS, Windows, and
-  iOS now use, see the Done section). Each app registers a provider
-  and implements the same small surface: advertise a flavor list on copy,
-  list the pasteboard flavors, fetch one format's bytes, and answer the
-  own-clipboard check. The engine then drives both directions and picks the
-  paste format, so the per-platform "which flavors matter" lists (the Qt
-  whitelist) and the eager copy out go away. Qt already has a lazy
-  clipboard, so it is a small step; Android can follow later. This is the
-  chosen shape of the "shares lots of code" goal for the in-process apps:
-  the shared logic lives in the engine instead of a shared C++ helper, and
-  each app is left a thin raw input and output adapter.
-- Browser to native rich paste (scenario 7, the easy half). Teach the
-  native apps to spot a `data-coolorigin` URL in pasted HTML, fetch the
-  rich content from the source server in one asynchronous HTTP request, and
-  feed it to the local Kit through `setClipboard`. This reuses the existing
-  `/cool/clipboard` endpoint, the same path the browser already uses for
-  cross-server paste (`Clipboard.js:341`), and lifts that paste from HTML
-  up to server fidelity. Start with one platform.
+- Move Android onto the COKitClipboardProvider (the model macOS,
+  Windows, Qt, and iOS now use, see the Done section). Each app implements
+  the same small surface: advertise a flavor list on copy, list the
+  pasteboard flavors, fetch one format's bytes, and answer the
+  own-clipboard check. The engine then drives both directions and picks
+  the paste format, so the per-platform "which flavors matter" lists and
+  the eager copy out go away. This is the chosen shape of the "shares
+  lots of code" goal for the in-process apps: the shared logic lives in
+  the engine instead of a shared C++ helper, and each app is left a thin
+  raw input and output adapter.
+- Browser to native rich paste (scenario 7, the easy half) is done in the
+  engine, see the Done section. The follow-up is to let the web client use
+  the same path for its cross-server paste: the browser would post only the
+  HTML and issue `.uno:Paste`, and the server kit would resolve the marker
+  through a fetcher that asks coolwsd to download, which coolwsd already
+  knows how to do for the `{"url": ...}` set path
+  (`wsd/ClientSession.cpp`). Then `_dataTransferDownloadAndPasteAsync` in
+  `Clipboard.js` and its progress widget can go.
 - One shared C++ clipboard bridge (the native message protocol rework).
   Superseded for the in-process apps by the COKitClipboardProvider move
   above: that keeps the shared logic in the engine rather than a shared C++

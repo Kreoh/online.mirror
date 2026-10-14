@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <algorithm>
+#include <set>
 #include <vector>
 
 using namespace formula;
@@ -846,6 +847,8 @@ CPPUNIT_TEST_FIXTURE(TestFormula, testGroupConverter3D)
 
 CPPUNIT_TEST_FIXTURE(TestFormula, testFormulaTokenEquality)
 {
+    m_pDoc->InsertTab(0, u"Test"_ustr);
+
     struct FormulaTokenEqualityTest
     {
         const char* mpFormula1;
@@ -867,6 +870,11 @@ CPPUNIT_TEST_FIXTURE(TestFormula, testFormulaTokenEquality)
         { "\"Test\"", "\"Test\"", true },
         { "CONCATENATE(\"Test1\")", "CONCATENATE(\"Test1\")", true },
         { "CONCATENATE(\"Test1\")", "CONCATENATE(\"Test2\")", false },
+        // Formulas that differ only in a LET or LAMBDA binding name compute
+        // different results, so they must not be treated as equal.
+        { "LET(x,1,x*2)", "LET(x,1,x*2)", true },
+        { "LET(x,1,x*2)", "LET(y,1,y*2)", false },
+        { "LET(x,5,f,LAMBDA(x,x*3),f(7))", "LET(x,5,f,LAMBDA(z,z*3),f(7))", false },
     };
 
     formula::FormulaGrammar::Grammar eGram = formula::FormulaGrammar::GRAM_ENGLISH_XL_R1C1;
@@ -897,6 +905,8 @@ CPPUNIT_TEST_FIXTURE(TestFormula, testFormulaTokenEquality)
             }
         }
     }
+
+    m_pDoc->DeleteTab(0);
 }
 
 CPPUNIT_TEST_FIXTURE(TestFormula, testFormulaRefData)
@@ -4422,6 +4432,77 @@ CPPUNIT_TEST_FIXTURE(TestFormula, testMultipleOperations)
     m_pDoc->DeleteTab(0);
 }
 
+CPPUNIT_TEST_FIXTURE(TestFormula, testMultipleOperationsRandomPrecedent)
+{
+    // Each row of a table of multiple operations is a fresh recalculation of the model, so a RAND()
+    // anywhere in the formula chain draws a new number per row. This is what lets a table driven by
+    // a dummy input cell act as a Monte Carlo simulation.
+    m_pDoc->InsertTab(0, u"MultiOp"_ustr);
+
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+
+    // A1 is the dummy input cell. Nothing in the model reads it.
+    // B1 holds RAND() itself
+    m_pDoc->SetString(ScAddress(1,0,0), u"=RAND()"_ustr);
+    // D1 only reaches RAND() through C1.
+    m_pDoc->SetString(ScAddress(2,0,0), u"=RAND()"_ustr);
+    m_pDoc->SetString(ScAddress(3,0,0), u"=C1*10"_ustr);
+
+    constexpr SCROW nFirstRow = 2;
+    constexpr SCROW nLastRow = 6;
+    for (SCROW nRow = nFirstRow; nRow <= nLastRow; ++nRow)
+    {
+        m_pDoc->SetValue(ScAddress(0, nRow, 0), nRow - nFirstRow + 1);
+        OUString aRow = OUString::number(nRow + 1);
+        m_pDoc->SetString(ScAddress(1, nRow, 0), "=MULTIPLE.OPERATIONS($B$1;$A$1;A" + aRow + ")");
+        m_pDoc->SetString(ScAddress(3, nRow, 0), "=MULTIPLE.OPERATIONS($D$1;$A$1;A" + aRow + ")");
+    }
+
+    // Two draws of RAND() can be equal, so the rows only have to differ somewhere.
+    std::set<double> aDirectValues;
+    for (SCROW nRow = nFirstRow; nRow <= nLastRow; ++nRow)
+        aDirectValues.insert(m_pDoc->GetValue(ScAddress(1,nRow,0)));
+    CPPUNIT_ASSERT_GREATER(size_t(1), aDirectValues.size());
+
+    // RAND() one step down the chain is drawn again in each row too.
+    std::set<double> aChainedValues;
+    for (SCROW nRow = nFirstRow; nRow <= nLastRow; ++nRow)
+        aChainedValues.insert(m_pDoc->GetValue(ScAddress(3,nRow,0)));
+    CPPUNIT_ASSERT_GREATER(size_t(1), aChainedValues.size());
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula, testMultipleOperationsIndirectInput)
+{
+    // A table of multiple operations substitutes the input cell even where the model reaches it
+    // only through INDIRECT.
+    m_pDoc->InsertTab(0, u"MultiOp"_ustr);
+
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true);
+
+    // INDIRECT makes B1 volatile, so B1 does not listen to A1 for changes.
+    m_pDoc->SetValue(ScAddress(0,0,0), 1);
+    m_pDoc->SetString(ScAddress(1,0,0), u"=INDIRECT(\"A1\")"_ustr);
+    m_pDoc->SetString(ScAddress(2,0,0), u"=B1*10"_ustr);
+    CPPUNIT_ASSERT_EQUAL(10.0, m_pDoc->GetValue(ScAddress(2,0,0)));
+
+    m_pDoc->SetValue(ScAddress(0,2,0), 2);
+    m_pDoc->SetValue(ScAddress(0,3,0), 3);
+    m_pDoc->SetValue(ScAddress(0,4,0), 4);
+    m_pDoc->SetString(ScAddress(2,2,0), u"=MULTIPLE.OPERATIONS($C$1;$A$1;A3)"_ustr);
+    m_pDoc->SetString(ScAddress(2,3,0), u"=MULTIPLE.OPERATIONS($C$1;$A$1;A4)"_ustr);
+    m_pDoc->SetString(ScAddress(2,4,0), u"=MULTIPLE.OPERATIONS($C$1;$A$1;A5)"_ustr);
+    CPPUNIT_ASSERT_EQUAL(20.0, m_pDoc->GetValue(ScAddress(2,2,0)));
+    CPPUNIT_ASSERT_EQUAL(30.0, m_pDoc->GetValue(ScAddress(2,3,0)));
+    CPPUNIT_ASSERT_EQUAL(40.0, m_pDoc->GetValue(ScAddress(2,4,0)));
+
+    // The model shows its own result again once the table is calculated.
+    CPPUNIT_ASSERT_EQUAL(10.0, m_pDoc->GetValue(ScAddress(2,0,0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
 CPPUNIT_TEST_FIXTURE(TestFormula, testFuncCOLUMN)
 {
     m_pDoc->InsertTab(0, u"Formula"_ustr);
@@ -4487,6 +4568,34 @@ CPPUNIT_TEST_FIXTURE(TestFormula, testFuncCOUNT)
     m_pDoc->InsertMatrixFormula(2, 2, 2, 2, aMark, u"=COUNTA(SEARCH(\"a\";{\"a\";\"b\";\"a\"}))"_ustr);
     // Check that the #VALUE! error of "a" not found in "b" is counted.
     CPPUNIT_ASSERT_EQUAL(3.0, m_pDoc->GetValue(ScAddress(2,2,0)));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(TestFormula, testFuncTYPEofRangeAsSingleCellMatrix)
+{
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true); // turn auto calc on.
+    m_pDoc->InsertTab(0, u"Formula"_ustr);
+
+    // Fill a 3x2 block the TYPE() argument will span.
+    for (SCROW nRow = 0; nRow < 2; ++nRow)
+        for (SCCOL nCol = 1; nCol < 4; ++nCol)
+            m_pDoc->SetValue(ScAddress(nCol, nRow, 0), 1.0);
+
+    // Enter TYPE(B1:D2) as a dynamic-array matrix formula targeting a single
+    // cell, F1, the same as an XLSX array formula whose ref attribute names
+    // one cell and whose cell metadata marks it as a dynamic array.
+    ScMarkData aMark(m_pDoc->GetSheetLimits());
+    aMark.SelectOneTable(0);
+    m_pDoc->InsertMatrixFormula(5, 0, 5, 0, aMark, u"=TYPE(B1:D2)"_ustr, nullptr,
+                                formula::FormulaGrammar::GRAM_DEFAULT, /*bDynamicArrayMaster*/ true);
+
+    // TYPE() describes the whole range with one number (64 for an array),
+    // so only the declared single cell should hold a result.
+    CPPUNIT_ASSERT_EQUAL(64.0, m_pDoc->GetValue(ScAddress(5, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(CELLTYPE_NONE, m_pDoc->GetCellType(ScAddress(6, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(CELLTYPE_NONE, m_pDoc->GetCellType(ScAddress(7, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(CELLTYPE_NONE, m_pDoc->GetCellType(ScAddress(5, 1, 0)));
 
     m_pDoc->DeleteTab(0);
 }

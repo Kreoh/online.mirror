@@ -83,7 +83,7 @@
 #include <translatehelper.hxx>
 #include <txtrfmrk.hxx>
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace com::sun::star::container;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::text;
@@ -913,6 +913,8 @@ bool SwFieldMgr::InsertField(
                     aUserOpt.GetID(), // author's initials
                     SwMarkName(), // name
                     DateTime(DateTime::SYSTEM) ));
+            // The wall clock above carries no zone, so record the same moment in UTC beside it.
+            pPostItField->SetDateTimeUTC(DateTime::CreateSystemUTC());
             if (rData.m_oParentId)
             {
                 pPostItField->SetParentId(std::get<0>(*rData.m_oParentId));

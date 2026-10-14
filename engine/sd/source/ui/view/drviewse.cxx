@@ -19,7 +19,7 @@
 
 #include <config_features.h>
 
-#include <com/sun/star/presentation/XPresentation2.hpp>
+#include <com/sun/star/presentation/XPresentation.hpp>
 #include <com/sun/star/form/FormButtonType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <i18nutil/unicode.hxx>
@@ -59,7 +59,6 @@
 #include <avmedia/mediawindow.hxx>
 #include <svl/urihelper.hxx>
 #include <sfx2/docfile.hxx>
-#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 #include <osl/diagnose.h>
 #include <svl/cryptosign.hxx>
 #include <tools/debug.hxx>
@@ -109,8 +108,8 @@
 #include <svx/srchdlg.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
-using namespace cpo::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::presentation;
 using namespace ::com::sun::star::beans;
 
@@ -1454,13 +1453,15 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         {
             bool bOnlineSpell;
             const SfxPoolItem* pItem;
+            const SfxItemSet* pArgs = rReq.GetArgs();
 
-            if (rReq.GetArgs()->HasItem(FN_PARAM_1, &pItem))
+            if (pArgs && pArgs->HasItem(FN_PARAM_1, &pItem))
                 bOnlineSpell = static_cast<const SfxBoolItem*>(pItem)->GetValue();
             else // Toggle
                 bOnlineSpell = !GetDoc()->GetOnlineSpell();
 
             GetDoc()->SetOnlineSpell(bOnlineSpell);
+            SdModule::SetAutoSpellProperty(bOnlineSpell, GetDoc()->GetDocumentType());
 
             ::Outliner* pOL = mpDrawView->GetTextEditOutliner();
 

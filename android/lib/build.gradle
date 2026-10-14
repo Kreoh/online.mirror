@@ -7,20 +7,27 @@ layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("lib"))
 
 android {
     namespace 'org.libreoffice.androidlib'
-    compileSdk 36
-    buildToolsVersion "36.0.0"
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 0
+        }
+    }
+    buildToolsVersion "37.0.0"
     ndkVersion "29.0.14206865"
-    buildFeatures.buildConfig = true
+    buildFeatures {
+        resValues true
+        buildConfig true
+    }
 
     defaultConfig {
         minSdk 26
-        targetSdk 35
+        targetSdk 37
         versionCode 1
         versionName "1.0"
 
-        resValue "string", "app_name", "${liboAppName}"
-        buildConfigField "String", "GIT_COMMIT", "\"${liboOVersionHash}\""
-        buildConfigField "boolean", "GOOGLE_PLAY_ENABLED", "${liboGooglePlay}"
+        resValue "string", "app_name", "${coAppName}"
+        buildConfigField "String", "GIT_COMMIT", "\"${coVersionHash}\""
+        buildConfigField "boolean", "GOOGLE_PLAY_ENABLED", "${coGooglePlay}"
 
         externalNativeBuild {
             cmake {
@@ -31,11 +38,12 @@ android {
 
     splits {
         abi {
-            enable true
+            // https://issuetracker.google.com/issues/402800800 - we can't build split ABIs when building bundles if R8 is enabled
+            enable = !(gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") || it.toLowerCase().contains("universal") })
 
             reset ()
-            for (abi in liboAbiSplit) {
-                //noinspection ChromeOsAbiSupport - we generate liboAbiSplit at configure time, so we won't include ChromeOS support if we're not trying to build for it...
+            for (abi in coAbiSplit) {
+                //noinspection ChromeOsAbiSupport - we generate coAbiSplit at configure time, so we won't include ChromeOS support if we're not trying to build for it...
                 include(abi)
             }
         }
@@ -47,13 +55,13 @@ android {
 
     buildTypes {
         debug {
-            resValue "string", "app_name", "${liboAppName} Debug"
+            resValue "string", "app_name", "${coAppName} Debug"
             debuggable true
         }
         release {
-            minifyEnabled false // FIXME disabled before we get a good proguardRules for callFakeWebsocketOnMessage calling from C++
-            shrinkResources false // FIXME cannot be enabled when minifyEnabled is turned off
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            optimization {
+                enable true
+            }
         }
     }
 
@@ -79,6 +87,8 @@ dependencies {
     implementation 'com.google.android.material:material:1.13.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
 
+    implementation 'r8:keepanno-annotations:9.3.16' // should match the compiler version from `cat android/build/app/outputs/mapping/release/mapping.txt | grep compiler_version`
+
     // https://stackoverflow.com/questions/75263047/duplicate-class-in-kotlin-android
     constraints {
         implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.0") {
@@ -94,28 +104,24 @@ tasks.register('copyUnpackAssets', Copy) {
     description "copies assets that need to be extracted on the device"
     into 'src/main/assets/unpack'
     into('program') {
-        from("${liboInstdir}/program/types") {
+        from("${coInstdir}/program/types") {
             includes = [
                     "offapi.rdb",
                     "oovbaapi.rdb"
             ]
         }
-        from("${liboInstdir}/program") {
+        from("${coInstdir}/program") {
             includes = ["types.rdb"]
             rename 'types.rdb', 'udkapi.rdb'
         }
 
         into('resource') {
-            from "${liboInstdir}/program/resource"
+            from "${coInstdir}/program/resource"
             includes = ['**']
         }
     }
-    into('etc/coolwsd') {
-        from('/android/coolkitconfig.xcu')
-        includes = ['coolkitconfig.xcu']
-    }
     into('user/fonts') {
-        from "${liboInstdir}/share/fonts/truetype"
+        from "${coInstdir}/share/fonts/truetype"
         // Note: restrict list of fonts due to size considerations - no technical reason anymore
         // ToDo: fonts would be good candidate for using Expansion Files instead
         includes = [
@@ -128,29 +134,28 @@ tasks.register('copyUnpackAssets', Copy) {
         ]
     }
     into('etc/fonts') {
-        from "${liboSrcRoot}/android/source/"
-        includes = ['fonts.conf']
+        from 'fonts.conf'
         doFirst {
             // we have changed the filter below; so to always re-generate this
             // file, delete it first - no idea how to set a dependency on
             // build.gradle changes :-(
-            file('fonts.conf').delete()
+            file('src/main/assets/unpack/etc/fonts/fonts.conf').delete()
         }
         filter {
             String line ->
                 line.replaceAll(
-                        '@@APPLICATION_ID@@', new String("${liboApplicationId}")
+                        '@@APPLICATION_ID@@', new String("${coApplicationId}")
                 )
         }
     }
     into('share') {
-        from "${liboInstdir}/share"
+        from "${coInstdir}/share"
         // liblangtag data is needed for locales like en-CH
         include 'liblangtag/**'
     }
 
     into('share') {
-        from "${liboInstdir}/share"
+        from "${coInstdir}/share"
         // extensions - for the dictionaries for hunspell
         includes = ['extensions/dict-de/**', 'extensions/dict-en/**', 'extensions/dict-es/**', 'extensions/dict-fr/**', 'extensions/dict-pt-BR/**']
         exclude { FileTreeElement details ->
@@ -166,20 +171,20 @@ tasks.register('copyUnpackAssets', Copy) {
 tasks.register('copyAssets', Copy) {
     description "copies assets that can be accessed within the installed apk"
     into 'src/main/assets'
-    from("${liboSrcRoot}/instdir/") {
+    from("${coSrcRoot}/instdir/") {
         includes = ["LICENSE.html", "NOTICE"]
         rename "LICENSE.html", "license.html"
         rename "NOTICE", "notice.txt"
     }
-    from("${liboExampleDocument}") {
+    from("${coExampleDocument}") {
         rename ".*", "example.odt"
     }
     into('program') {
-        from "${liboInstdir}/program"
+        from "${coInstdir}/program"
         includes = ['services.rdb', 'services/services.rdb']
     }
     into('share') {
-        from "${liboInstdir}/share"
+        from "${coInstdir}/share"
         // Filter data is needed by e.g. the drawingML preset shape import.
         includes = ['registry/**', 'filter/**', 'gallery/**', 'palette/**']
     }
@@ -188,13 +193,13 @@ tasks.register('copyAssets', Copy) {
 tasks.register('createFullConfig', Copy) {
     description "copies various configuration bits into the apk"
     into('src/main/assets/share/config')
-    from("${liboInstdir}/share/config") {
+    from("${coInstdir}/share/config") {
         includes = ['soffice.cfg/**', 'images_colibre.zip']
     }
 }
 
 tasks.register('copyBrandTheme', Copy) {
-    from "${liboBrandingDir}/online-theme"
+    from "${coBrandingDir}/online-theme"
     into "src/main/assets/share/theme_definitions/online"
 }
 
@@ -206,12 +211,6 @@ tasks.register('copyDocTemplates', Copy) {
             "${rootProject.getRootDir()}/templates/untitled.xlsx",
             "${rootProject.getRootDir()}/templates/untitled.docx"
     into "src/main/assets/templates"
-}
-
-tasks.register('copyKitConfig', Copy) {
-    from "${file(rootProject.getRootDir()).getParent()}/coolkitconfig-mobile.xcu"
-    into "src/main/assets/etc/coolwsd"
-    rename { "coolkitconfig.xcu" }
 }
 
 tasks.register('createStrippedConfig') {
@@ -234,7 +233,6 @@ tasks.register('createRCfiles') {
     def fundamentalrc = file('src/main/assets/program/fundamentalrc')
     def bootstraprc = file('src/main/assets/program/bootstraprc')
     def unorc = file('src/main/assets/program/unorc')
-    def lounorc = file('src/main/assets/program/lounorc')
     def versionrc = file('src/main/assets/program/versionrc')
 
     outputs.files sofficerc, fundamentalrc, unorc, bootstraprc, versionrc
@@ -255,19 +253,12 @@ LO_LIB_DIR=file://$APP_DATA_DIR/lib/
 BRAND_BASE_DIR=file:///assets
 BRAND_SHARE_SUBDIR=share
 URE_BIN_DIR=file:///assets/ure/bin/dir/nothing-here/we-can/exec-anyway
-BAK_EXTENSIONS=${$ORIGIN/lounorc:TMP_EXTENSIONS}
-BUNDLED_EXTENSIONS=${$ORIGIN/lounorc:BUNDLED_EXTENSIONS}
-BUNDLED_EXTENSIONS_USER=${$ORIGIN/lounorc:BUNDLED_EXTENSIONS_USER}
-SHARED_EXTENSIONS_USER=${$ORIGIN/lounorc:SHARED_EXTENSIONS_USER}
-UNO_SHARED_PACKAGES_CACHE=${$ORIGIN/lounorc:UNO_SHARED_PACKAGES_CACHE}
-TMP_EXTENSIONS=${$ORIGIN/lounorc:TMP_EXTENSIONS}
-UNO_USER_PACKAGES_CACHE=${$ORIGIN/lounorc:UNO_USER_PACKAGES_CACHE}
 '''.stripIndent()
 
         bootstraprc.text = '''\
 [Bootstrap]
 InstallMode=<installmode>
-ProductKey=LibreOffice ''' + "${liboVersionMajor}.${liboVersionMinor}" + '''
+ProductKey=Collabora Office ''' + "${coVersionMajor}.${coVersionMinor}" + '''
 UserInstallation=file://$APP_DATA_DIR
 '''.stripIndent()
 
@@ -278,27 +269,11 @@ UNO_TYPES=file://$APP_DATA_DIR/program/udkapi.rdb file://$APP_DATA_DIR/program/o
 UNO_SERVICES=file:///assets/program/services.rdb file:///assets/program/services/services.rdb
 '''.stripIndent()
 
-        lounorc.text = '''\
-[Bootstrap]
-PKG_BundledUnoFile=$BUNDLED_EXTENSIONS_USER/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc
-PKG_SharedUnoFile=$SHARED_EXTENSIONS_USER/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc
-PKG_UserUnoFile=$UNO_USER_PACKAGES_CACHE/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc
-BAK_EXTENSIONS=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/user/extensions/bak
-BUNDLED_EXTENSIONS=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/share/extensions
-BUNDLED_EXTENSIONS_USER=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/user/extensions/bundled
-TMP_EXTENSIONS=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/user/extensions/tmp
-SHARED_EXTENSIONS_USER=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/user/extensions/shared
-UNO_SHARED_PACKAGES=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/share/uno_packages
-UNO_SHARED_PACKAGES_CACHE=$UNO_SHARED_PACKAGES/cache
-UNO_USER_PACKAGES=${$BRAND_BASE_DIR/program/bootstraprc:UserInstallation}/user/uno_packages
-UNO_USER_PACKAGES_CACHE=$UNO_USER_PACKAGES/cache
-'''.stripIndent()
-
         versionrc.text = '''\
 [Version]
 AllLanguages=en-US
 BuildVersion=
-buildid=''' + "${liboCoreVersionHash}" + '''
+buildid=''' + "${coVersionHash}" + '''
 ReferenceOOoMajorMinor=4.1
 '''.stripIndent()
     }
@@ -338,11 +313,11 @@ tasks.register('generateCoolReleaseAssets') {
 }
 
 afterEvaluate {
-	if (!file("${liboBrandingDir}").exists()) {
+	if (!file("${coBrandingDir}").exists()) {
 		copyBrandTheme.enabled = false
 	}
-	generateDebugAssets.dependsOn copyDocTemplates, copyKitConfig, generateCoolDebugAssets
-	generateReleaseAssets.dependsOn copyDocTemplates, copyKitConfig, generateCoolReleaseAssets
+	generateDebugAssets.dependsOn copyDocTemplates, generateCoolDebugAssets
+	generateReleaseAssets.dependsOn copyDocTemplates, generateCoolReleaseAssets
 
     // These tasks only exist under some cases (not in Android Studio)...
     // ...so use tasks.named so they don't fail if they are never registered...
@@ -356,6 +331,6 @@ afterEvaluate {
         "lintAnalyzeDebug",
         "lintVitalAnalyzeRelease",
     ] }.configureEach {
-        dependsOn copyDocTemplates, copyKitConfig
+        dependsOn copyDocTemplates
     }
 }

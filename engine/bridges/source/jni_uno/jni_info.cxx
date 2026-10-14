@@ -23,7 +23,7 @@
 
 #include "jni_helper.h"
 
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 
 #include <jvmaccess/unovirtualmachine.hxx>
 #include <rtl/string.hxx>
@@ -429,7 +429,7 @@ JNI_type_info const * JNI_info::get_type_info(
 JNI_type_info const * JNI_info::get_type_info(
     JNI_context const & jni, OUString const & uno_name ) const
 {
-    if ( uno_name == "com.sun.star.uno.XInterface" )
+    if ( uno_name == "cpo.uno.XInterface" )
     {
         return m_XInterface_type_info;
     }
@@ -440,7 +440,7 @@ JNI_type_info const * JNI_info::get_type_info(
     if (iFind == m_type_map.end())
     {
         guard.unlock();
-        css::uno::TypeDescription td( uno_name );
+        cpo::uno::TypeDescription td( uno_name );
         if (! td.is())
         {
             throw BridgeRuntimeError(
@@ -465,11 +465,11 @@ JNI_info::JNI_info(
       m_class_JNI_proxy( nullptr ),
       m_XInterface_queryInterface_td(
         (reinterpret_cast< typelib_InterfaceTypeDescription * >(
-            css::uno::TypeDescription(
-                cppu::UnoType<css::uno::XInterface>::get())
+            cpo::uno::TypeDescription(
+                cppu::UnoType<cpo::uno::XInterface>::get())
             .get())->ppMembers[ 0 ] ) ),
       m_Exception_type(cppu::UnoType<cpo::uno::Exception>::get()),
-      m_RuntimeException_type(cppu::UnoType<css::uno::RuntimeException>::get()),
+      m_RuntimeException_type(cppu::UnoType<cpo::uno::RuntimeException>::get()),
       m_void_type(cppu::UnoType<void>::get()),
       m_XInterface_type_info( nullptr )
 {
@@ -501,7 +501,7 @@ JNI_info::JNI_info(
     JLocalAutoRef jo_String(
         jni, find_class( jni, "java.lang.String" ) );
     JLocalAutoRef jo_RuntimeException(
-        jni, find_class( jni, "com.sun.star.uno.RuntimeException" ) );
+        jni, find_class( jni, "cpo.uno.RuntimeException" ) );
     JLocalAutoRef jo_UnoRuntime(
         jni, find_class( jni, "com.sun.star.uno.UnoRuntime" ) );
     JLocalAutoRef jo_Any(
@@ -842,8 +842,8 @@ JNI_info::JNI_info(
 
     try
     {
-        css::uno::TypeDescription XInterface_td(
-            cppu::UnoType<css::uno::XInterface>::get());
+        cpo::uno::TypeDescription XInterface_td(
+            cppu::UnoType<cpo::uno::XInterface>::get());
         // coverity[ctor_dtor_leak] - on purpose
         m_XInterface_type_info =
             new JNI_interface_type_info( jni, XInterface_td.get() );

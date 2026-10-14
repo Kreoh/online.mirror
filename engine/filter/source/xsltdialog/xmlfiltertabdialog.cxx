@@ -19,7 +19,7 @@
 
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/fileurl.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <vcl/svapp.hxx>
@@ -32,7 +32,7 @@
 #include "xmlfiltertabpagexslt.hxx"
 #include "xmlfiltercommon.hxx"
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace com::sun::star::container;
 using namespace com::sun::star::beans;

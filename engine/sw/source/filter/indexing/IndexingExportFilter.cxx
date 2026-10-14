@@ -21,6 +21,7 @@
 #include <svl/outstrm.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sw
 {
@@ -52,9 +53,9 @@ bool IndexingExportFilter::filter(const cpo::uno::Sequence<beans::PropertyValue>
 
 } // end namespace sw
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
 com_sun_star_comp_Writer_IndexingExportFilter_get_implementation(
-    css::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
+    cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new sw::IndexingExportFilter());
 }

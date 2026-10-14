@@ -29,35 +29,35 @@ typedef InheritedHelperInterfaceWeakImpl< ov::msforms::XFillFormat > ScVbaFillFo
 class ScVbaFillFormat : public ScVbaFillFormat_BASE
 {
 private:
-    css::uno::Reference< css::drawing::XShape > m_xShape;
-    css::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
-    css::uno::Reference< ov::msforms::XColorFormat > m_xColorFormat;
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+    cpo::uno::Reference< ov::msforms::XColorFormat > m_xColorFormat;
     css::drawing::FillStyle m_nFillStyle;
     sal_Int32 m_nForeColor;
     sal_Int16 m_nGradientAngle;
 private:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setFillStyle( css::drawing::FillStyle nFillStyle );
 protected:
     virtual OUString getServiceImplName() override;
     virtual cpo::uno::Sequence<OUString> getServiceNames() override;
 
 public:
-    ScVbaFillFormat( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< css::drawing::XShape >& xShape );
+    ScVbaFillFormat( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, const cpo::uno::Reference< css::drawing::XShape >& xShape );
 
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     void setForeColorAndInternalStyle( sal_Int32 nForeColor );
     // Attributes
-    virtual bool SAL_CALL getVisible() override;
-    virtual void SAL_CALL setVisible( bool _visible ) override;
-    virtual double SAL_CALL getTransparency() override;
-    virtual void SAL_CALL setTransparency( double _transparency ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
+    virtual double getTransparency() override;
+    virtual void setTransparency( double _transparency ) override;
 
     // Methods
-    virtual void SAL_CALL Solid() override;
-    virtual void SAL_CALL TwoColorGradient( sal_Int32 style, sal_Int32 variant ) override;
-    virtual css::uno::Reference< ov::msforms::XColorFormat > SAL_CALL BackColor() override;
-    virtual css::uno::Reference< ov::msforms::XColorFormat > SAL_CALL ForeColor() override;
+    virtual void Solid() override;
+    virtual void TwoColorGradient( sal_Int32 style, sal_Int32 variant ) override;
+    virtual cpo::uno::Reference< ov::msforms::XColorFormat > BackColor() override;
+    virtual cpo::uno::Reference< ov::msforms::XColorFormat > ForeColor() override;
 
 };
 

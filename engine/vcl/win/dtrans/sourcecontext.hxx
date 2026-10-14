@@ -35,27 +35,27 @@ class SourceContext
       public cppu::WeakComponentImplHelper<css::datatransfer::dnd::XDragSourceContext>
 {
     DragSource* m_pDragSource;
-    css::uno::Reference<css::datatransfer::dnd::XDragSource> m_dragSource;
+    cpo::uno::Reference<css::datatransfer::dnd::XDragSource> m_dragSource;
     // the action ( copy, move etc)
     sal_Int8 m_currentAction;
 
 public:
     SourceContext(DragSource* pSource,
-                  const css::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& listener);
+                  const cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& listener);
     ~SourceContext() override;
     SourceContext(const SourceContext&) = delete;
     SourceContext& operator=(const SourceContext&) = delete;
 
     /// @throws RuntimeException
     virtual void addDragSourceListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& dsl);
+        const cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& dsl);
     /// @throws RuntimeException
     virtual void removeDragSourceListener(
-        const css::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& dsl);
-    virtual sal_Int32 SAL_CALL getCurrentCursor() override;
-    virtual void SAL_CALL setCursor(sal_Int32 cursorId) override;
-    virtual void SAL_CALL setImage(sal_Int32 imageId) override;
-    virtual void SAL_CALL transferablesFlavorsChanged() override;
+        const cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& dsl);
+    virtual sal_Int32 getCurrentCursor() override;
+    virtual void setCursor(sal_Int32 cursorId) override;
+    virtual void setImage(sal_Int32 imageId) override;
+    virtual void transferablesFlavorsChanged() override;
 
     // non - interface functions
     void fire_dragDropEnd(bool success, sal_Int8 byte);

@@ -32,6 +32,7 @@
 #include <memory>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // interactive separation
 SwHyphWrapper::SwHyphWrapper( SwView& rView,
@@ -70,7 +71,7 @@ void SwHyphWrapper::SpellContinue()
         oWait.emplace( *m_rView.GetDocShell(), true );
     }
 
-    uno::Reference< uno::XInterface >  xHyphWord = m_bInSelection ?
+    uno::Reference< cpo::uno::XInterface >  xHyphWord = m_bInSelection ?
                 rSh.HyphContinue( nullptr, nullptr ) :
                 rSh.HyphContinue( &m_nPageCount, &m_nPageStart );
     SetLast( xHyphWord );

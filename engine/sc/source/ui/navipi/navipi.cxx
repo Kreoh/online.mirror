@@ -18,6 +18,8 @@
  */
 
 #include <sfx2/app.hxx>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/event.hxx>
@@ -43,9 +45,12 @@
 
 #include <vcl/jsdialog/executor.hxx>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <cpo/uno/Reference.hxx>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 //  maximum values for UI
 static SCCOL SCNAV_MAXCOL(const ScSheetLimits& rLimits) { return rLimits.GetMaxColCount(); }

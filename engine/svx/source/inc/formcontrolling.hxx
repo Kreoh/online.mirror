@@ -92,7 +92,7 @@ namespace svx
                 be <NULL/>, and must have a valid model (form).
         */
         ControllerFeatures(
-            const css::uno::Reference< css::form::runtime::XFormController >& _rxController
+            const cpo::uno::Reference< css::form::runtime::XFormController >& _rxController
         );
 
         /// dtor
@@ -104,7 +104,7 @@ namespace svx
         /** assign to a controller
         */
         void assign(
-            const css::uno::Reference< css::form::runtime::XFormController >& _rxController
+            const cpo::uno::Reference< css::form::runtime::XFormController >& _rxController
         );
 
         /// clears the instance so that it cannot be used afterwards
@@ -131,7 +131,7 @@ namespace svx
     class FormControllerHelper final : public FormControllerHelper_Base
     {
         IControllerFeatureInvalidation* m_pInvalidationCallback;
-        css::uno::Reference< css::form::runtime::XFormOperations >
+        cpo::uno::Reference< css::form::runtime::XFormOperations >
                                         m_xFormOperations;
 
         cpo::uno::Any      m_aOperationError;
@@ -146,12 +146,12 @@ namespace svx
                 the callback for invalidating feature states
         */
         FormControllerHelper(
-            const css::uno::Reference< css::form::runtime::XFormController >& _rxController,
+            const cpo::uno::Reference< css::form::runtime::XFormController >& _rxController,
             IControllerFeatureInvalidation* _pInvalidationCallback
         );
 
         // forwards to the XFormOperations implementation
-        css::uno::Reference< css::sdbc::XRowSet >
+        cpo::uno::Reference< css::sdbc::XRowSet >
                     getCursor() const;
         void        getState(
                         sal_Int32 _nSlotId,
@@ -178,14 +178,14 @@ namespace svx
         virtual ~FormControllerHelper() override;
 
         // XFeatureInvalidation
-        virtual void SAL_CALL invalidateFeatures( const cpo::uno::Sequence< ::sal_Int16 >& Features ) override;
-        virtual void SAL_CALL invalidateAllFeatures() override;
+        virtual void invalidateFeatures( const cpo::uno::Sequence< ::sal_Int16 >& Features ) override;
+        virtual void invalidateAllFeatures() override;
 
         // XSQLErrorListener
-        virtual void SAL_CALL errorOccured( const css::sdb::SQLErrorEvent& Event ) override;
+        virtual void errorOccured( const css::sdb::SQLErrorEvent& Event ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
 
         enum FormOperation { EXECUTE, EXECUTE_ARGS, COMMIT_CONTROL, COMMIT_RECORD };
 

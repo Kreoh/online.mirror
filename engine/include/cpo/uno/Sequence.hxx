@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstddef>
@@ -26,12 +26,12 @@
 # include <ostream>
 # include <utility>
 
-#include "osl/interlck.h"
-#include "cpo/uno/Sequence.h"
-#include "typelib/typedescription.h"
-#include "uno/data.h"
-#include "cpo/uno/genfunc.hxx"
-#include "cppu/unotype.hxx"
+#include <osl/interlck.h>
+#include <cpo/uno/Sequence.h>
+#include <typelib/typedescription.h>
+#include <uno/data.h>
+#include <cpo/uno/genfunc.hxx>
+#include <cppu/unotype.hxx>
 
 namespace cpo::uno
 {
@@ -167,8 +167,7 @@ template<class E> E const * Sequence<E>::end() const
 template< class E >
 inline const E & Sequence< E >::operator [] ( sal_Int32 nIndex ) const
 {
-    // silence spurious -Werror=strict-overflow warnings from GCC 4.8.2
-    assert(nIndex >= 0 && static_cast<sal_uInt32>(nIndex) < static_cast<sal_uInt32>(getLength()));
+    assert(nIndex >= 0 && nIndex < getLength());
     return reinterpret_cast< const E * >( _pSequence->elements )[ nIndex ];
 }
 

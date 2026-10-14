@@ -31,23 +31,23 @@ class SwVbaRevision : public SwVbaRevision_BASE
 {
 private:
     rtl::Reference< SwXTextDocument > mxModel;
-    css::uno::Reference< css::beans::XPropertySet > mxRedlineProps;
+    cpo::uno::Reference< css::beans::XPropertySet > mxRedlineProps;
 
 private:
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     sal_Int32 GetPosition();
 
 public:
-    /// @throws css::uno::RuntimeException
-    SwVbaRevision( const css::uno::Reference< ooo::vba::XHelperInterface >& rParent,
-                   const css::uno::Reference< css::uno::XComponentContext >& rContext,
+    /// @throws cpo::uno::RuntimeException
+    SwVbaRevision( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                   const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
                    rtl::Reference< SwXTextDocument > xModel,
-                   css::uno::Reference< css::beans::XPropertySet >  xRedlineProps );
+                   cpo::uno::Reference< css::beans::XPropertySet >  xRedlineProps );
     virtual ~SwVbaRevision() override;
 
     // Methods
-    virtual void SAL_CALL Accept(  ) override;
-    virtual void SAL_CALL Reject(  ) override;
+    virtual void Accept(  ) override;
+    virtual void Reject(  ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

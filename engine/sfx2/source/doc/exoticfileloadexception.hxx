@@ -25,19 +25,19 @@ public:
 
     // UNO interface
 public:
-    virtual cpo::uno::Sequence<css::uno::Reference<css::task::XInteractionContinuation>>
-        SAL_CALL getContinuations() override
+    virtual cpo::uno::Sequence<cpo::uno::Reference<css::task::XInteractionContinuation>>
+        getContinuations() override
     {
         return m_lContinuations;
     }
-    cpo::uno::Any SAL_CALL getRequest() override { return m_aRequest; }
+    cpo::uno::Any getRequest() override { return m_aRequest; }
 
     // member
 private:
     cpo::uno::Any m_aRequest;
     rtl::Reference<comphelper::OInteractionAbort> m_xAbort;
     rtl::Reference<comphelper::OInteractionApprove> m_xApprove;
-    cpo::uno::Sequence<css::uno::Reference<css::task::XInteractionContinuation>> m_lContinuations;
+    cpo::uno::Sequence<cpo::uno::Reference<css::task::XInteractionContinuation>> m_lContinuations;
 };
 
 #endif

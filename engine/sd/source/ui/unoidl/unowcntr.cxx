@@ -23,6 +23,7 @@
 #include <unolayer.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 SvUnoWeakContainer::SvUnoWeakContainer() noexcept
 {
@@ -87,7 +88,7 @@ void SvUnoWeakContainer::dispose()
 {
     for (auto const& elem : maVector)
     {
-        uno::Reference< uno::XInterface > xTestRef( elem );
+        uno::Reference< cpo::uno::XInterface > xTestRef( elem );
         if ( xTestRef.is() )
         {
             uno::Reference< lang::XComponent > xComp( xTestRef, uno::UNO_QUERY );

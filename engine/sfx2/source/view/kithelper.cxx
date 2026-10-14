@@ -60,6 +60,7 @@
 #include <boost/property_tree/json_parser.hpp>
 
 using namespace com::sun::star;
+using namespace ::cpo;
 
 namespace {
 bool g_bSettingView(false);
@@ -165,7 +166,7 @@ int KitHelper::createView()
     return createView(pViewShell->GetViewFrame(), pViewShell->GetDocId());
 }
 
-std::unordered_map<OUString, css::uno::Reference<css::ui::XAcceleratorConfiguration>>& KitHelper::getAcceleratorConfs()
+std::unordered_map<OUString, cpo::uno::Reference<css::ui::XAcceleratorConfiguration>>& KitHelper::getAcceleratorConfs()
 {
     return SfxApplication::GetOrCreate()->GetAcceleratorConfs_Impl();
 }
@@ -247,7 +248,7 @@ void KitHelper::setView(int nId)
 
     // Make comphelper::dispatchCommand() find the correct frame.
     uno::Reference<frame::XFrame> xFrame = rViewFrame.GetFrame().GetFrameInterface();
-    uno::Reference<frame::XDesktop2> xDesktop = frame::Desktop::create(comphelper::getProcessComponentContext());
+    uno::Reference<frame::XDesktop> xDesktop = frame::Desktop::create(comphelper::getProcessComponentContext());
     xDesktop->setActiveFrame(xFrame);
 }
 
@@ -559,7 +560,7 @@ static OString lcl_generateJSON(const SfxViewShell& rView, const boost::property
 {
     boost::property_tree::ptree aMessageProps = rTree;
     aMessageProps.put("viewId", KitHelper::getView(rView));
-    aMessageProps.put("part", rView.getPart());
+    aMessageProps.put("part", rView.getPartId().getStr());
     aMessageProps.put("mode", rView.getEditMode());
     std::stringstream aStream;
     boost::property_tree::write_json(aStream, aMessageProps, false /* pretty */);
@@ -570,7 +571,7 @@ static inline OString lcl_generateJSON(const SfxViewShell& rView, int nViewId, s
                                        const OString& rPayload)
 {
     return OString::Concat("{ \"viewId\": \"") + OString::number(nViewId)
-           + "\", \"part\": \"" + OString::number(rView.getPart()) + "\", \"mode\": \""
+           + "\", \"part\": \"" + rView.getPartId() + "\", \"mode\": \""
            + OString::number(rView.getEditMode()) + "\", \"" + rKey + "\": \""
            + lcl_sanitizeJSONAsValue(rPayload) + "\" }";
 }
@@ -862,7 +863,8 @@ void KitHelper::notifyInvalidationAllViews(vcl::ITiledRenderable* pDoc, int nPar
 }
 
 void KitHelper::notifyInvalidationViewsInMode(vcl::ITiledRenderable* pDoc, int nPart, int nMode,
-                                              tools::Rectangle const* pRect)
+                                              tools::Rectangle const* pRect,
+                                              bool bSkipViewShowingPart)
 {
     if (!pDoc || pDoc->isDisposed() || DisableCallbacks::disabled())
         return;
@@ -872,7 +874,8 @@ void KitHelper::notifyInvalidationViewsInMode(vcl::ITiledRenderable* pDoc, int n
     SfxViewShell* pViewShell = SfxViewShell::GetFirst();
     while (pViewShell)
     {
-        if (lcl_getDocForView(pViewShell) == pDoc && pViewShell->getEditMode() == nMode)
+        if (lcl_getDocForView(pViewShell) == pDoc && pViewShell->getEditMode() == nMode
+            && (!bSkipViewShowingPart || pViewShell->getPart() != nPart))
             KitHelper::notifyInvalidation(pViewShell, nPart, pRect);
         pViewShell = SfxViewShell::GetNext(*pViewShell);
     }
@@ -887,6 +890,16 @@ OString KitHelper::makeVisCursorInvalidation(int nViewId, std::string_view rRect
         "\", \"rectangle\": \"" + rRectangle +
         "\", \"mispelledWord\": \"" +  OString::number(bMispelledWord ? 1 : 0) +
         "\", \"hyperlink\": " + sHyperlink + " }";
+}
+
+OString KitHelper::makeViewCursorInvalidation(const SfxViewShell* pThisView, int nViewId,
+                                              std::string_view rRectangle, int nEditorViewId)
+{
+    return OString::Concat("{ \"viewId\": \"") + OString::number(nViewId) +
+        "\", \"part\": \"" + pThisView->getPartId() +
+        "\", \"mode\": \"" + OString::number(pThisView->getEditMode()) +
+        "\", \"editorViewId\": \"" + OString::number(nEditorViewId) +
+        "\", \"rectangle\": \"" + rRectangle + "\" }";
 }
 
 OString KitHelper::makeModifiedStatusPayload(bool bModified)
@@ -911,29 +924,12 @@ void KitHelper::notifyAllViews(COKitCallbackType eType, const OString& rPayload)
     }
 }
 
-void KitHelper::notifyView(int nViewId, COKitCallbackType eType, const OString& rPayload)
-{
-    if (DisableCallbacks::disabled() || nViewId < 0)
-        return;
-
-    SfxViewShell* pViewShell = SfxViewShell::GetFirst();
-    while (pViewShell)
-    {
-        if (pViewShell->GetViewShellId().get() == nViewId)
-        {
-            pViewShell->viewCallback(eType, rPayload);
-            return;
-        }
-        pViewShell = SfxViewShell::GetNext(*pViewShell);
-    }
-}
-
 void KitHelper::notifyContextChange(const css::ui::ContextChangeEventObject& rEvent)
 {
     if (DisableCallbacks::disabled())
         return;
 
-    SfxViewShell* pViewShell = SfxViewShell::Get({ rEvent.Source, css::uno::UNO_QUERY });
+    SfxViewShell* pViewShell = SfxViewShell::Get({ rEvent.Source, cpo::uno::UNO_QUERY });
     if (!pViewShell)
     {
         // Source may be an embedded controller (e.g. ChartController) that
@@ -1040,9 +1036,9 @@ std::string_view extractKey(std::string_view privateKey)
 }
 }
 
-css::uno::Reference<css::security::XCertificate> KitHelper::getSigningCertificate(std::string_view rCert, std::string_view rKey)
+cpo::uno::Reference<css::security::XCertificate> KitHelper::getSigningCertificate(std::string_view rCert, std::string_view rKey)
 {
-    const uno::Reference<uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
+    const uno::Reference<cpo::uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
     uno::Reference<xml::crypto::XSEInitializer> xSEInitializer = xml::crypto::SEInitializer::create(xContext);
     uno::Reference<xml::crypto::XXMLSecurityContext> xSecurityContext = xSEInitializer->createSecurityContext(OUString());
     if (!xSecurityContext.is())
@@ -1088,7 +1084,7 @@ css::uno::Reference<css::security::XCertificate> KitHelper::getSigningCertificat
 }
 
 uno::Reference<security::XCertificate> KitHelper::addCertificate(
-    const css::uno::Reference<css::xml::crypto::XCertificateCreator>& xCertificateCreator,
+    const cpo::uno::Reference<css::xml::crypto::XCertificateCreator>& xCertificateCreator,
     const cpo::uno::Sequence<sal_Int8>& rCert)
 {
     // Trust arg is handled by CERT_DecodeTrustString(), see 'man certutil'.
@@ -1097,7 +1093,7 @@ uno::Reference<security::XCertificate> KitHelper::addCertificate(
 
 void KitHelper::addCertificates(std::string_view rCerts)
 {
-    const uno::Reference<uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
+    const uno::Reference<cpo::uno::XComponentContext>& xContext = comphelper::getProcessComponentContext();
     uno::Reference<xml::crypto::XSEInitializer> xSEInitializer = xml::crypto::SEInitializer::create(xContext);
     uno::Reference<xml::crypto::XXMLSecurityContext> xSecurityContext = xSEInitializer->createSecurityContext(OUString());
     if (!xSecurityContext.is())
@@ -1321,7 +1317,10 @@ namespace
             KitHelper::setView(pKitEv->mnView);
         }
 
-        if (!pKitEv->mpWindow->HasChildPathFocus(true))
+        // The focus moves with keys and buttons only, so a pointer that passes over the window
+        // leaves the focus where it is.
+        const bool bMoveOnly = pKitEv->mnEvent == VclEventId::WindowMouseMove;
+        if (!bMoveOnly && !pKitEv->mpWindow->HasChildPathFocus(true))
         {
             SAL_INFO("sfx.view", "COKit - focus mismatch, switching focus");
             pKitEv->mpWindow->GrabFocus();
@@ -1607,6 +1606,42 @@ SfxKitLanguageGuard::~SfxKitLanguageGuard()
 
     comphelper::COKit::setLanguageTag(m_pOldShell->GetKitLanguageTag());
     comphelper::COKit::setLocale(m_pOldShell->GetKitLocale());
+}
+
+SfxKitTimezoneGuard::SfxKitTimezoneGuard()
+    : m_bSetTimezone(false)
+{
+    if (!comphelper::COKit::isActive())
+    {
+        return;
+    }
+
+    const int nView = KitHelper::getCurrentView();
+    if (nView < 0)
+    {
+        return;
+    }
+
+    // A view whose client never told us its timezone keeps the default one.
+    const auto [bIsTimezoneSet, aTimezone] = KitHelper::getViewTimezone(nView);
+    if (!bIsTimezoneSet || aTimezone.isEmpty())
+    {
+        return;
+    }
+
+    comphelper::COKit::setTimezone(true, aTimezone);
+    m_bSetTimezone = true;
+}
+
+SfxKitTimezoneGuard::~SfxKitTimezoneGuard()
+{
+    if (!m_bSetTimezone)
+    {
+        return;
+    }
+
+    const auto [bIsTimezoneSet, aTimezone] = KitHelper::getDefaultTimezone();
+    comphelper::COKit::setTimezone(bIsTimezoneSet, aTimezone);
 }
 
 KitEditViewHistory::EditViewHistoryMap KitEditViewHistory::maEditViewHistory;

@@ -32,14 +32,15 @@
 #include <com/sun/star/chart2/Symbol.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/diagnose_ex.hxx>
 
 #include <algorithm>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 using ::com::sun::star::beans::Property;
 
@@ -114,7 +115,7 @@ namespace chart
 
 ScatterChartTypeTemplate::ScatterChartTypeTemplate(
     Reference<
-        uno::XComponentContext > const & xContext,
+        cpo::uno::XComponentContext > const & xContext,
     const OUString & rServiceName,
     bool bSymbols,
     bool bHasLines /* = true */,

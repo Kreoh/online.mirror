@@ -17,11 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#ifdef __sun
-#include <ctime>
-#endif
-
 #include <framework/dispatchhelper.hxx>
 #include <com/sun/star/frame/DispatchResultState.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
@@ -46,11 +41,11 @@
 #include <comphelper/diagnose_ex.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::util;
 
-BindDispatch_Impl::BindDispatch_Impl( css::uno::Reference< css::frame::XDispatch > _xDisp, css::util::URL _aURL, SfxStateCache *pStateCache, const SfxSlot* pS )
+BindDispatch_Impl::BindDispatch_Impl( cpo::uno::Reference< css::frame::XDispatch > _xDisp, css::util::URL _aURL, SfxStateCache *pStateCache, const SfxSlot* pS )
     : xDisp(std::move( _xDisp ))
     , aURL(std::move( _aURL ))
     , pCache( pStateCache )
@@ -60,7 +55,7 @@ BindDispatch_Impl::BindDispatch_Impl( css::uno::Reference< css::frame::XDispatch
     aStatus.IsEnabled = true;
 }
 
-void SAL_CALL BindDispatch_Impl::disposing( const css::lang::EventObject& )
+void BindDispatch_Impl::disposing( const css::lang::EventObject& )
 {
     if ( xDisp.is() )
     {
@@ -69,13 +64,13 @@ void SAL_CALL BindDispatch_Impl::disposing( const css::lang::EventObject& )
     }
 }
 
-void SAL_CALL  BindDispatch_Impl::statusChanged( const css::frame::FeatureStateEvent& rEvent )
+void  BindDispatch_Impl::statusChanged( const css::frame::FeatureStateEvent& rEvent )
 {
     aStatus = rEvent;
     if ( !pCache )
         return;
 
-    css::uno::Reference< css::frame::XStatusListener >  xKeepAlive(this);
+    cpo::uno::Reference< css::frame::XStatusListener >  xKeepAlive(this);
     if ( aStatus.Requery )
         pCache->Invalidate( true );
     else
@@ -235,7 +230,7 @@ void SfxStateCache::Invalidate( bool bWithMsg )
 
 // gets the corresponding function from the dispatcher or the cache
 
-const SfxSlotServer* SfxStateCache::GetSlotServer( SfxDispatcher &rDispat , const css::uno::Reference< css::frame::XDispatchProvider > & xProv )
+const SfxSlotServer* SfxStateCache::GetSlotServer( SfxDispatcher &rDispat , const cpo::uno::Reference< css::frame::XDispatchProvider > & xProv )
 {
 
     if ( bSlotDirty )
@@ -270,7 +265,7 @@ const SfxSlotServer* SfxStateCache::GetSlotServer( SfxDispatcher &rDispat , cons
             aURL.Main = aCmd;
 
             // try to get a dispatch object for this command
-            css::uno::Reference< css::frame::XDispatch >  xDisp = xProv->queryDispatch( aURL, OUString(), 0 );
+            cpo::uno::Reference< css::frame::XDispatch >  xDisp = xProv->queryDispatch( aURL, OUString(), 0 );
             if ( xDisp.is() )
             {
                 // test the dispatch object if it is just a wrapper for a SfxDispatcher
@@ -299,8 +294,8 @@ const SfxSlotServer* SfxStateCache::GetSlotServer( SfxDispatcher &rDispat , cons
             }
             else if ( rDispat.GetFrame() )
             {
-                css::uno::Reference < css::frame::XDispatchProvider > xFrameProv(
-                        rDispat.GetFrame()->GetFrame().GetFrameInterface(), css::uno::UNO_QUERY );
+                cpo::uno::Reference < css::frame::XDispatchProvider > xFrameProv(
+                        rDispat.GetFrame()->GetFrame().GetFrameInterface(), cpo::uno::UNO_QUERY );
                 if ( xFrameProv != xProv )
                     return GetSlotServer( rDispat, xFrameProv );
             }
@@ -482,11 +477,11 @@ void SfxStateCache::SetCachedState( bool bAlways )
 }
 
 
-css::uno::Reference< css::frame::XDispatch >  SfxStateCache::GetDispatch() const
+cpo::uno::Reference< css::frame::XDispatch >  SfxStateCache::GetDispatch() const
 {
     if ( mxDispatch.is() )
         return mxDispatch->xDisp;
-    return css::uno::Reference< css::frame::XDispatch > ();
+    return cpo::uno::Reference< css::frame::XDispatch > ();
 }
 
 sal_Int16 SfxStateCache::Dispatch( const SfxItemSet* pSet, bool bForceSynchron )

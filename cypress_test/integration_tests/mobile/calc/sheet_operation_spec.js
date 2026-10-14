@@ -91,8 +91,8 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Sheet Operation', function 
 		calcHelper.selectOptionMobileWizard('Show Sheet');
 
 		cy.cGet('#mobile-wizard-content-modal-dialog-show-sheets-modal').should('exist');
-		cy.cGet('#hidden-part-checkbox-Sheet2').check();
-		cy.cGet('#show-sheets-modal-response').click();
+		cy.cGet('input#hidden-part-checkbox-0').check();
+		cy.cGet('#show-sheets-modal-response-button').click();
 
 		calcHelper.assertNumberofSheets(2);
 	});

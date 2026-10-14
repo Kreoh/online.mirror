@@ -10,10 +10,6 @@
 $(eval $(call gb_Module_Module,desktop))
 
 $(eval $(call gb_Module_add_targets,desktop,\
-    CustomTarget_desktop_unopackages_install \
-    GeneratedPackage_desktop_unopackages_install \
-    Library_deployment \
-    Library_deploymentmisc \
     Library_offacc \
     Library_sofficeapp \
     $(if $(or $(DISABLE_GUI),$(ENABLE_WASM_STRIP_SPLASH)),,Library_spl) \
@@ -27,17 +23,12 @@ $(eval $(call gb_Module_add_l10n_targets,desktop,\
 
 ifneq (,$(filter DESKTOP,$(BUILD_TYPE)))
 $(eval $(call gb_Module_add_targets,desktop,\
+    $(if $(filter-out EMSCRIPTEN MACOSX WNT,$(OS)),Executable_l10ntranslate) \
     Executable_soffice_bin \
-    $(call gb_CondExeUnopkg,Executable_unopkg_bin) \
-    $(call gb_CondExeUnopkg,Library_unopkgapp) \
     Package_scripts \
-    $(if $(ENABLE_PAGEIN), \
-        Pagein_calc \
-        Pagein_common \
-        Pagein_draw \
-        Pagein_impress \
-        Pagein_writer \
-    ) \
+	$(if $(UNITEDLIBS),Executable_unitedlibs-link-map-generator) \
+	$(if $(UNITEDLIBS),CustomTarget_unitedlibs-link-map) \
+	$(if $(UNITEDLIBS),Library_united) \
 ))
 
 ifneq (,$(filter-out EMSCRIPTEN HAIKU MACOSX WNT,$(OS)))
@@ -55,10 +46,6 @@ $(eval $(call gb_Module_add_targets,desktop,\
     Executable_soffice_exe \
     Executable_soffice_com \
     Executable_unoinfo \
-    $(call gb_CondExeUnopkg, \
-        Executable_unopkg \
-        Executable_unopkg_com \
-    ) \
     WinResTarget_soffice \
     WinResTarget_sofficebin \
 ))
@@ -79,39 +66,11 @@ $(eval $(call gb_Module_add_targets,desktop, \
 ))
 endif
 
-ifneq (,$(filter Extension_test-active,$(MAKECMDGOALS)))
-$(eval $(call gb_Module_add_targets,desktop, \
-    Extension_test-active \
-    Jar_active_java \
-    Library_active_native \
-))
-endif
-
-ifneq (,$(filter Extension_test-passive,$(MAKECMDGOALS)))
-$(eval $(call gb_Module_add_targets,desktop, \
-    Extension_test-passive \
-    Jar_passive_java \
-    Library_passive_native \
-    Pyuno_passive_python \
-    Rdb_passive_generic \
-    Rdb_passive_platform \
-))
-endif
-
-ifneq (,$(filter Extension_test-crashextension,$(MAKECMDGOALS)))
-$(eval $(call gb_Module_add_targets,desktop, \
-    Extension_test-crashextension \
-    Library_crashextension \
-    Rdb_crashextension \
-))
-endif
-
 $(eval $(call gb_Module_add_check_targets,desktop, \
     CppunitTest_desktop_app \
-    CppunitTest_desktop_version \
 ))
 
-ifneq ($(filter LINUX,$(OS))$(filter WNT-TRUE,$(OS)-$(USE_HEADLESS_CODE)),)
+ifneq ($(filter LINUX FREEBSD,$(OS))$(filter WNT-TRUE,$(OS)-$(USE_HEADLESS_CODE)),)
 $(eval $(call gb_Module_add_check_targets,desktop, \
     CppunitTest_desktop_lib \
     CppunitTest_desktop_kitinit \

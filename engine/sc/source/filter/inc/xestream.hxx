@@ -20,19 +20,23 @@
 #pragma once
 
 #include <map>
+#include <set>
 #include <stack>
 #include <string_view>
 
 #include <rtl/strbuf.hxx>
 
 #include <oox/core/xmlfilterbase.hxx>
+#include <oox/export/shapes.hxx>
 #include <sax/fshelper.hxx>
 #include <tools/stream.hxx>
 #include <formula/errorcodes.hxx>
 #include "ftools.hxx"
+#include <address.hxx>
 #include <types.hxx>
 
 #include <filter/msfilter/mscodec.hxx>
+#include <vcl/graph.hxx>
 #include <vector>
 
 namespace com::sun::star::beans { struct NamedValue; }
@@ -285,7 +289,7 @@ public:
 class XclExpXmlStream : public oox::core::XmlFilterBase
 {
 public:
-    XclExpXmlStream( const css::uno::Reference< css::uno::XComponentContext >& rCC, bool bExportVBA, bool bExportTemplate );
+    XclExpXmlStream( const cpo::uno::Reference< cpo::uno::XComponentContext >& rCC, bool bExportVBA, bool bExportTemplate );
     virtual ~XclExpXmlStream() override;
 
     /** Returns the filter root data. */
@@ -313,7 +317,7 @@ public:
     sax_fastparser::FSHelperPtr     CreateOutputStream (
                                         const OUString& sFullStream,
                                         std::u16string_view sRelativeStream,
-                                        const css::uno::Reference< css::io::XOutputStream >& xParentRelation,
+                                        const cpo::uno::Reference< css::io::XOutputStream >& xParentRelation,
                                         const char* sContentType,
                                         const OUString& sRelationshipType,
                                         OUString* pRelationshipId = nullptr);
@@ -330,14 +334,30 @@ public:
 
     static OUString GenerateUniqueTableName(const std::u16string_view& rOriginalName, const std::vector<OUString>& aNewTabNames, const std::vector<OUString>& aOriginalTabNames);
     sal_Int32 getAndIncrementDiagramId() { maDiagramId++; return maDiagramId; };
+    /// The ids of the drawing shapes of the document that are written or referenced so far.
+    oox::drawingml::ShapeExport::ShapeHashMap& getShapeIdMap() { return maShapeIdMap; }
 
     /// Set when a dynamic array master cell is emitted.
     void NoteDynamicArrayFormula() { mbHasDynamicArrayFormula = true; }
     bool HasDynamicArrayFormula() const { return mbHasDynamicArrayFormula; }
 
+    /** Notes a picture that sits in a cell and returns the value metadata index the cell writes.
+        The index counts from one. */
+    sal_Int32 NoteInCellImage( const ScAddress& rAddress, const Graphic& rGraphic )
+    {
+        maInCellImages.push_back( rGraphic );
+        maInCellImageAddresses.insert( rAddress );
+        return static_cast< sal_Int32 >( maInCellImages.size() );
+    }
+    /** Returns the pictures that sit in cells, in the order their value metadata indexes count. */
+    const std::vector< Graphic >& GetInCellImages() const { return maInCellImages; }
+    /** Returns true when the passed cell was written as a picture. */
+    bool HasInCellImageAt( const ScAddress& rAddress ) const
+        { return maInCellImageAddresses.find( rAddress ) != maInCellImageAddresses.end(); }
+
 private:
     virtual ::oox::ole::VbaProject* implCreateVbaProject() const override;
-    virtual OUString SAL_CALL getImplementationName() override;
+    virtual OUString getImplementationName() override;
     ScDocShell *getDocShell();
     void WriteAttribute(sal_Int32 nAttr, std::u16string_view sVal);
     void WriteAttribute(sal_Int32 nAttr, std::string_view sVal)
@@ -363,10 +383,13 @@ private:
     XclExpXmlPathToStateMap                     maOpenedStreamMap;
 
     sal_Int32 maDiagramId;
+    oox::drawingml::ShapeExport::ShapeHashMap maShapeIdMap;
 
     bool mbExportVBA;
     bool mbExportTemplate;
     bool mbHasDynamicArrayFormula = false;
+    std::vector< Graphic > maInCellImages;
+    std::set< ScAddress > maInCellImageAddresses;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

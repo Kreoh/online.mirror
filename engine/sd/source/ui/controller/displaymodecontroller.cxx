@@ -18,7 +18,7 @@
 #include <sdresid.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace cpo::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
@@ -35,17 +35,17 @@ namespace {
 class DisplayModeController : public svt::PopupWindowController
 {
 public:
-    explicit DisplayModeController( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit DisplayModeController( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     virtual std::unique_ptr<WeldToolbarPopup> weldPopupWindow() override;
     virtual VclPtr<vcl::Window> createVclPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     void setToolboxItemImage(const OUString& rImage);
 };
@@ -191,12 +191,12 @@ IMPL_LINK( DisplayModeToolbarMenu, SelectValueSetHdl, ValueSet*, pControl, void 
     mxControl->EndPopupMode();
 }
 
-DisplayModeController::DisplayModeController( const css::uno::Reference< css::uno::XComponentContext >& rxContext )
+DisplayModeController::DisplayModeController( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext )
 : svt::PopupWindowController( rxContext, Reference< frame::XFrame >(), OUString() )
 {
 }
 
-void SAL_CALL DisplayModeController::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+void DisplayModeController::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
 {
     svt::PopupWindowController::initialize( aArguments );
     ToolBox* pToolBox = nullptr;
@@ -242,12 +242,12 @@ void DisplayModeController::setToolboxItemImage(const OUString& rImage)
 
 // XServiceInfo
 
-OUString SAL_CALL DisplayModeController::getImplementationName()
+OUString DisplayModeController::getImplementationName()
 {
     return u"com.sun.star.comp.sd.DisplayModeController"_ustr;
 }
 
-Sequence< OUString > SAL_CALL DisplayModeController::getSupportedServiceNames(  )
+Sequence< OUString > DisplayModeController::getSupportedServiceNames(  )
 {
     cpo::uno::Sequence<OUString> aRet { u"com.sun.star.frame.ToolbarController"_ustr };
     return aRet;
@@ -255,8 +255,8 @@ Sequence< OUString > SAL_CALL DisplayModeController::getSupportedServiceNames(  
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-com_sun_star_comp_sd_DisplayModeController_get_implementation( css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_sd_DisplayModeController_get_implementation( cpo::uno::XComponentContext* context,
                                                                cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new sd::DisplayModeController(context));

@@ -24,7 +24,7 @@
 
 namespace com::sun::star::xml::wrapper { class XXMLElementWrapper; }
 
-using namespace com::sun::star::uno;
+using namespace ::cpo::uno;
 
 SignatureEngine::SignatureEngine()
     : m_nTotalReferenceNumber(-1)
@@ -91,7 +91,7 @@ void SignatureEngine::tryToPerform( )
 
     rtl::Reference<XMLSignatureTemplateImpl> xSignatureTemplate = new XMLSignatureTemplateImpl();
 
-    css::uno::Reference< css::xml::wrapper::XXMLElementWrapper >
+    cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >
         xXMLElement = m_xSAXEventKeeper->getElement( m_nIdOfTemplateEC );
 
     xSignatureTemplate->setTemplate(xXMLElement);
@@ -132,11 +132,11 @@ void SignatureEngine::clearUp( ) const
  *  3. releases the ElementCollector for the key element, if there is one.
  ******************************************************************************/
 {
-    css::uno::Reference < css::xml::crypto::sax::XReferenceResolvedBroadcaster >
-        xReferenceResolvedBroadcaster( m_xSAXEventKeeper, css::uno::UNO_QUERY );
+    cpo::uno::Reference < css::xml::crypto::sax::XReferenceResolvedBroadcaster >
+        xReferenceResolvedBroadcaster( m_xSAXEventKeeper, cpo::uno::UNO_QUERY );
     xReferenceResolvedBroadcaster->removeReferenceResolvedListener(
         m_nIdOfTemplateEC,
-        static_cast<const css::uno::Reference < css::xml::crypto::sax::XReferenceResolvedListener > >(static_cast<SecurityEngine *>(const_cast<SignatureEngine *>(this))));
+        static_cast<const cpo::uno::Reference < css::xml::crypto::sax::XReferenceResolvedListener > >(static_cast<SecurityEngine *>(const_cast<SignatureEngine *>(this))));
 
     m_xSAXEventKeeper->removeElementCollector(m_nIdOfTemplateEC);
 
@@ -144,7 +144,7 @@ void SignatureEngine::clearUp( ) const
     {
         xReferenceResolvedBroadcaster->removeReferenceResolvedListener(
             i,
-            static_cast<const css::uno::Reference < css::xml::crypto::sax::XReferenceResolvedListener > >(static_cast<SecurityEngine *>(const_cast<SignatureEngine *>(this))));
+            static_cast<const cpo::uno::Reference < css::xml::crypto::sax::XReferenceResolvedListener > >(static_cast<SecurityEngine *>(const_cast<SignatureEngine *>(this))));
         m_xSAXEventKeeper->removeElementCollector(i);
     }
 
@@ -155,29 +155,29 @@ void SignatureEngine::clearUp( ) const
 }
 
 /* XReferenceCollector */
-void SAL_CALL SignatureEngine::setReferenceCount( sal_Int32 count )
+void SignatureEngine::setReferenceCount( sal_Int32 count )
 {
     m_nTotalReferenceNumber = count;
     tryToPerform();
 }
 
-void SAL_CALL SignatureEngine::setReferenceId( sal_Int32 id )
+void SignatureEngine::setReferenceId( sal_Int32 id )
 {
     m_vReferenceIds.push_back( id );
 }
 
 /* XUriBinding */
-void SAL_CALL SignatureEngine::setUriBinding(
+void SignatureEngine::setUriBinding(
     const OUString& uri,
-    const css::uno::Reference< css::io::XInputStream >& aInputStream )
+    const cpo::uno::Reference< css::io::XInputStream >& aInputStream )
 {
     m_vUris.push_back(uri);
     m_vXInputStreams.push_back(aInputStream);
 }
 
-css::uno::Reference< css::io::XInputStream > SAL_CALL SignatureEngine::getUriBinding( const OUString& uri )
+cpo::uno::Reference< css::io::XInputStream > SignatureEngine::getUriBinding( const OUString& uri )
 {
-    css::uno::Reference< css::io::XInputStream > xInputStream;
+    cpo::uno::Reference< css::io::XInputStream > xInputStream;
 
     int size = m_vUris.size();
 

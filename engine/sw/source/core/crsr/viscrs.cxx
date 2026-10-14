@@ -50,6 +50,7 @@
 #include <COKit/COKit.hxx>
 #include <comphelper/kit.hxx>
 #include <sfx2/kit/helper.hxx>
+#include <sfx2/ipclient.hxx>
 #include <boost/property_tree/json_parser.hpp>
 #include <comphelper/string.hxx>
 #include <osl/diagnose.h>
@@ -82,6 +83,7 @@ SwVisibleCursor::SwVisibleCursor(::sw::VisibleCursorState const& rState,
     , m_pCursorShell(pCShell)
     , m_nPageLastTime(0)
     , m_nLastKitCursorEditorViewId(-1)
+    , m_nPendingKitCursorEditorViewId(-1)
 {
     if (&rState == pCShell)
     {
@@ -241,16 +243,19 @@ void SwVisibleCursor::SetPosAndShow(SfxViewShell const * pViewShell)
         // This may get called often, so instead of sending data on each update, just notify
         // that there's been an update, and the other side will pull the data using
         // getKitPayload() when it decides to.
+        // The client pulls the rectangle and the view that moved the caret there as one pair.
+        if (m_aLastKitRect != aRect)
+            m_nLastKitCursorEditorViewId = m_nPendingKitCursorEditorViewId;
         m_aLastKitRect = aRect;
-        // getCurrentView() here is the view being processed, i.e. the one whose
-        // edit is running now and moved this cursor. Capture it while that view
-        // is still current, because the payload is built later on demand.
-        m_nLastKitCursorEditorViewId = KitHelper::getCurrentView();
+        // An object edited in place shows its own cursor in this view.
+        const SfxInPlaceClient* pIPClient = pNotifyViewShell->GetIPClient();
+        const bool bOwnCursorShown = !pIPClient || !pIPClient->IsObjectInPlaceActive();
         if (pViewShell)
         {
             if (pViewShell == pNotifyViewShell)
             {
-                KitHelper::notifyUpdatePerViewId(*pViewShell, COKitCallbackType::INVALIDATE_VISIBLE_CURSOR);
+                if (bOwnCursorShown)
+                    KitHelper::notifyUpdatePerViewId(*pViewShell, COKitCallbackType::INVALIDATE_VISIBLE_CURSOR);
             }
             else
             {
@@ -260,7 +265,8 @@ void SwVisibleCursor::SetPosAndShow(SfxViewShell const * pViewShell)
         }
         else
         {
-            KitHelper::notifyUpdatePerViewId(*pNotifyViewShell, COKitCallbackType::INVALIDATE_VISIBLE_CURSOR);
+            if (bOwnCursorShown)
+                KitHelper::notifyUpdatePerViewId(*pNotifyViewShell, COKitCallbackType::INVALIDATE_VISIBLE_CURSOR);
             KitHelper::notifyOtherViewsUpdatePerViewId(pNotifyViewShell, COKitCallbackType::INVALIDATE_VIEW_CURSOR);
         }
     }
@@ -294,7 +300,8 @@ std::optional<OString> SwVisibleCursor::getKitPayload(COKitCallbackType eType, i
         OString sRect = aSVRect.toString();
 
         if(eType == COKitCallbackType::INVALIDATE_VIEW_CURSOR)
-            return KitHelper::makePayloadJSON(m_pCursorShell->GetSfxViewShell(), nViewId, "rectangle", sRect);
+            return KitHelper::makeViewCursorInvalidation(m_pCursorShell->GetSfxViewShell(), nViewId,
+                                                         sRect, m_nLastKitCursorEditorViewId);
 
         // is cursor at a misspelled word ?
         bool bIsWrong = false;
@@ -424,8 +431,9 @@ static SwRect lcl_getLayoutRect(const Point& rPoint, const SwPosition& rPosition
 void SwShellCursor::FillStartEnd(SwRect& rStart, SwRect& rEnd) const
 {
     const SwShellCursor* pCursor = GetShell()->getShellCursor(false);
-    rStart = lcl_getLayoutRect(pCursor->GetSttPos(), *pCursor->Start());
-    rEnd = lcl_getLayoutRect(pCursor->GetEndPos(), *pCursor->End());
+    auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
+    rStart = lcl_getLayoutRect(pCursor->GetSttPos(), *pStart);
+    rEnd = lcl_getLayoutRect(pCursor->GetEndPos(), *pEnd);
 }
 
 void SwSelPaintRects::Show(std::vector<OString>* pSelectionRectangles)

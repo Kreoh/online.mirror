@@ -55,7 +55,7 @@ protected:
      * the Signature bridge component, which performs signature generation
      * and verification based on xmlsec library.
      */
-    css::uno::Reference< css::xml::crypto::XXMLSignature > m_xXMLSignature;
+    cpo::uno::Reference< css::xml::crypto::XXMLSignature > m_xXMLSignature;
 
     /*
      * a collection of ElementCollector's ids. Each ElementCollector
@@ -75,7 +75,7 @@ protected:
      * to hold corresponding bound XInputStream interface.
      */
     std::vector< OUString > m_vUris;
-    std::vector< css::uno::Reference< css::io::XInputStream > > m_vXInputStreams;
+    std::vector< cpo::uno::Reference< css::io::XInputStream > > m_vXInputStreams;
 
 protected:
     explicit SignatureEngine();
@@ -91,22 +91,22 @@ protected:
      * for a SignatureVerifier, verification operation is performed.
      */
     /// @throws cpo::uno::Exception
-    /// @throws css::uno::RuntimeException
+    /// @throws cpo::uno::RuntimeException
     virtual void startEngine( const rtl::Reference<XMLSignatureTemplateImpl>&)
         {};
 
 public:
     /* XReferenceCollector */
-    virtual void SAL_CALL setReferenceCount( sal_Int32 count ) override;
+    virtual void setReferenceCount( sal_Int32 count ) override;
 
-    virtual void SAL_CALL setReferenceId( sal_Int32 id ) override;
+    virtual void setReferenceId( sal_Int32 id ) override;
 
     /* XUriBinding */
-    virtual void SAL_CALL setUriBinding(
+    virtual void setUriBinding(
         const OUString& uri,
-        const css::uno::Reference< css::io::XInputStream >& aInputStream ) override;
-    virtual css::uno::Reference< css::io::XInputStream >
-        SAL_CALL getUriBinding( const OUString& uri ) override;
+        const cpo::uno::Reference< css::io::XInputStream >& aInputStream ) override;
+    virtual cpo::uno::Reference< css::io::XInputStream >
+        getUriBinding( const OUString& uri ) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

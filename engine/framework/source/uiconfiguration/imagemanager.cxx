@@ -25,18 +25,19 @@
 #include <vcl/svapp.hxx>
 
 using ::cpo::uno::Sequence;
-using ::com::sun::star::uno::XInterface;
+using ::cpo::uno::XInterface;
 using ::cpo::uno::Any;
 using ::com::sun::star::graphic::XGraphic;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::embed;
 using namespace ::com::sun::star::lang;
+using namespace ::cpo;
 
 namespace framework
 {
 
-ImageManager::ImageManager( const uno::Reference< uno::XComponentContext >& rxContext, bool bForModule ) :
+ImageManager::ImageManager( const uno::Reference< cpo::uno::XComponentContext >& rxContext, bool bForModule ) :
     m_pImpl( new ImageManagerImpl(rxContext, this, bForModule) )
 {
 }
@@ -160,9 +161,9 @@ bool ImageManager::isReadOnly()
 
 } // namespace framework
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
 com_sun_star_comp_framework_ImageManager_get_implementation(
-    css::uno::XComponentContext *context,
+    cpo::uno::XComponentContext *context,
     cpo::uno::Sequence<cpo::uno::Any> const &)
 {
     return cppu::acquire(new framework::ImageManager(context, /*bForModule*/false));

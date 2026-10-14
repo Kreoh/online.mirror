@@ -47,8 +47,8 @@ inline constexpr OUString HIERARCHY_LINK_CONTENT_TYPE =
 
 struct ConfigProviderMapEntry
 {
-    css::uno::Reference< css::lang::XMultiServiceFactory > xConfigProvider;
-    css::uno::Reference< css::container::XHierarchicalNameAccess > xRootReadAccess;
+    cpo::uno::Reference< css::lang::XMultiServiceFactory > xConfigProvider;
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess > xRootReadAccess;
     bool bTriedToGetRootReadAccess;
 
     ConfigProviderMapEntry() : bTriedToGetRootReadAccess( false ) {}
@@ -65,34 +65,34 @@ typedef cppu::ImplInheritanceHelper< ::ucbhelper::ContentProviderImplHelper, css
 class HierarchyContentProvider : public HierarchyContentProvider_Base
 {
     ConfigProviderMap   m_aConfigProviderMap;
-    css::uno::Reference< css::util::XOfficeInstallationDirectories > m_xOfficeInstDirs;
+    cpo::uno::Reference< css::util::XOfficeInstallationDirectories > m_xOfficeInstDirs;
 
 public:
     explicit HierarchyContentProvider(
-                const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+                const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
     virtual ~HierarchyContentProvider() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() override;
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
 
     // XContentProvider
-    virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    queryContent( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
 
     // XInitialization
-    virtual void SAL_CALL
+    virtual void
     initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
 
     // Non-Interface methods
-    css::uno::Reference< css::lang::XMultiServiceFactory >
+    cpo::uno::Reference< css::lang::XMultiServiceFactory >
     getConfigProvider( const OUString & rServiceSpecifier );
-    css::uno::Reference< css::container::XHierarchicalNameAccess >
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess >
     getRootConfigReadNameAccess( const OUString & rServiceSpecifier );
 
     // Note: may return an empty reference.
-    css::uno::Reference< css::util::XOfficeInstallationDirectories >
+    cpo::uno::Reference< css::util::XOfficeInstallationDirectories >
     getOfficeInstallationDirectories();
 };
 

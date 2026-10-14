@@ -26,8 +26,9 @@
 #include <miscuno.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-using ::com::sun::star::uno::Reference;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 SC_SIMPLE_SERVICE_INFO( ScChartRangeSelectionListener, u"ScChartRangeSelectionListener"_ustr,
@@ -41,7 +42,7 @@ ScChartRangeSelectionListener::~ScChartRangeSelectionListener()
 {}
 
 // ____ XModifyListener ____
-void SAL_CALL ScChartRangeSelectionListener::selectionChanged( const lang::EventObject& aEvent )
+void ScChartRangeSelectionListener::selectionChanged( const lang::EventObject& aEvent )
 {
     Reference< chart2::data::XRangeHighlighter > xRangeHighlighter( aEvent.Source, uno::UNO_QUERY );
     if( xRangeHighlighter.is())
@@ -58,7 +59,7 @@ void SAL_CALL ScChartRangeSelectionListener::selectionChanged( const lang::Event
 }
 
 // ____ XEventListener ____
-void SAL_CALL ScChartRangeSelectionListener::disposing( const lang::EventObject& /*Source*/ )
+void ScChartRangeSelectionListener::disposing( const lang::EventObject& /*Source*/ )
 {
 }
 

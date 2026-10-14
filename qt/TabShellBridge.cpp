@@ -26,6 +26,7 @@ TabShellBridge::TabShellBridge(TabManager* manager)
 void TabShellBridge::requestSync() { _manager->emitInitialState(); }
 void TabShellBridge::tabActivated(int tabId) { _manager->activateTab(tabId); }
 void TabShellBridge::tabCloseRequested(int tabId) { _manager->closeTab(tabId); }
+void TabShellBridge::tabContextMenuRequested(int tabId, int x, int y) { _manager->showTabContextMenu(tabId, x, y); }
 void TabShellBridge::newTabRequested() { _manager->addStarterTab(); }
 
 void TabShellBridge::tabReordered(int fromIndex, int toIndex)
@@ -46,6 +47,14 @@ void TabShellBridge::tabAdoptFromOtherWindow(int srcTabId, int insertAt)
 }
 
 void TabShellBridge::targetDragOver(int insertAt) { _manager->onTargetDragOver(insertAt); }
+
+void TabShellBridge::tabHoverStarted(int tabId, int x, int y, const QString& background,
+                                     const QString& text, const QString& border)
+{
+    _manager->onTabHoverStarted(tabId, x, y, background, text, border);
+}
+
+void TabShellBridge::tabHoverEnded() { _manager->hideHoverCard(); }
 
 void TabShellBridge::debug(const QString& message)
 {

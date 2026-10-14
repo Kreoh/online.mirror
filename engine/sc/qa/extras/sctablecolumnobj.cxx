@@ -20,11 +20,12 @@
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
 #include <com/sun/star/table/XColumnRowRange.hpp>
 #include <com/sun/star/table/XTableColumns.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <cpo/uno/XInterface.hpp>
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <cpo/uno/Reference.hxx>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sc_apitest
 {
@@ -38,7 +39,7 @@ class ScTableColumnObj : public UnoApiTest,
 public:
     ScTableColumnObj();
 
-    virtual uno::Reference<uno::XInterface> init() override;
+    virtual uno::Reference<cpo::uno::XInterface> init() override;
     virtual void setUp() override;
 
     CPPUNIT_TEST_SUITE(ScTableColumnObj);
@@ -118,7 +119,7 @@ ScTableColumnObj::ScTableColumnObj()
 {
 }
 
-uno::Reference<uno::XInterface> ScTableColumnObj::init()
+uno::Reference<cpo::uno::XInterface> ScTableColumnObj::init()
 {
     uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     uno::Reference<sheet::XSpreadsheets> xSheets(xDoc->getSheets(), uno::UNO_SET_THROW);
@@ -130,7 +131,7 @@ uno::Reference<uno::XInterface> ScTableColumnObj::init()
     uno::Reference<table::XTableColumns> xTC(xCRR->getColumns(), uno::UNO_SET_THROW);
 
     uno::Reference<container::XIndexAccess> xIA_TC(xTC, uno::UNO_QUERY_THROW);
-    uno::Reference<uno::XInterface> xReturn(xIA_TC->getByIndex(10), uno::UNO_QUERY_THROW);
+    uno::Reference<cpo::uno::XInterface> xReturn(xIA_TC->getByIndex(10), uno::UNO_QUERY_THROW);
     return xReturn;
 }
 

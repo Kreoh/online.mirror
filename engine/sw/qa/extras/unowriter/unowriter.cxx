@@ -33,6 +33,7 @@
 #include <com/sun/star/style/LineSpacing.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/view/XRenderable.hpp>
 #include <com/sun/star/text/XBookmarksSupplier.hpp>
@@ -67,6 +68,7 @@
 #include <docsh.hxx>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 namespace
 {
@@ -77,7 +79,7 @@ class PasteListener : public cppu::WeakImplHelper<text::XPasteListener>
     uno::Reference<text::XTextContent> m_xTextGraphicObject;
 
 public:
-    void SAL_CALL notifyPasteEvent(const cpo::uno::Sequence<beans::PropertyValue>& rEvent) override;
+    void notifyPasteEvent(const cpo::uno::Sequence<beans::PropertyValue>& rEvent) override;
 
     OUString& GetString();
     uno::Reference<text::XTextContent>& GetTextGraphicObject();
@@ -632,7 +634,7 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTextRangeInTable)
 
 CPPUNIT_TEST_FIXTURE(SwUnoWriter, testXURI)
 {
-    uno::Reference<uno::XComponentContext> xContext(::comphelper::getProcessComponentContext());
+    uno::Reference<cpo::uno::XComponentContext> xContext(::comphelper::getProcessComponentContext());
 
     // createKnown()
     uno::Reference<rdf::XURI> xURIcreateKnown(
@@ -1255,12 +1257,12 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testMultiSelect)
 {
     // Create a new document and add a text with several repeated sequences.
     createSwDoc();
-    uno::Reference<text::XTextDocument> xTextDocument(mxComponent, css::uno::UNO_QUERY_THROW);
+    uno::Reference<text::XTextDocument> xTextDocument(mxComponent, cpo::uno::UNO_QUERY_THROW);
     auto xSimpleText = xTextDocument->getText();
     xSimpleText->insertString(xSimpleText->getStart(), u"Abc aBc abC"_ustr, false);
 
     // Create a search descriptor and find all occurrences of search string
-    css::uno::Reference<css::util::XSearchable> xSearchable(mxComponent, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::util::XSearchable> xSearchable(mxComponent, cpo::uno::UNO_QUERY_THROW);
     auto xSearchDescriptor = xSearchable->createSearchDescriptor();
     xSearchDescriptor->setPropertyValue(u"SearchStyles"_ustr, cpo::uno::Any(false));
     xSearchDescriptor->setPropertyValue(u"SearchCaseSensitive"_ustr, cpo::uno::Any(false));
@@ -1271,20 +1273,20 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testMultiSelect)
 
     // Select them all
     auto xController = xTextDocument->getCurrentController();
-    css::uno::Reference<css::view::XSelectionSupplier> xSelectionSupplier(
-        xController, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::view::XSelectionSupplier> xSelectionSupplier(
+        xController, cpo::uno::UNO_QUERY_THROW);
     xSelectionSupplier->select(cpo::uno::Any(xSearchResult));
-    css::uno::Reference<css::container::XIndexAccess> xSelection(xSelectionSupplier->getSelection(),
-                                                                 css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::container::XIndexAccess> xSelection(xSelectionSupplier->getSelection(),
+                                                                 cpo::uno::UNO_QUERY_THROW);
     // Now check that they all are selected in the reverse order ("SearchBackwards").
     CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xSelection->getCount());
-    css::uno::Reference<css::text::XTextRange> xTextRange(xSelection->getByIndex(0),
-                                                          css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextRange> xTextRange(xSelection->getByIndex(0),
+                                                          cpo::uno::UNO_QUERY_THROW);
     // For #0, result was empty (cursor was put before the last occurrence without selection)
     CPPUNIT_ASSERT_EQUAL(u"abC"_ustr, xTextRange->getString());
-    xTextRange.set(xSelection->getByIndex(1), css::uno::UNO_QUERY_THROW);
+    xTextRange.set(xSelection->getByIndex(1), cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_EQUAL(u"aBc"_ustr, xTextRange->getString());
-    xTextRange.set(xSelection->getByIndex(2), css::uno::UNO_QUERY_THROW);
+    xTextRange.set(xSelection->getByIndex(2), cpo::uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT_EQUAL(u"Abc"_ustr, xTextRange->getString());
 }
 
@@ -1308,19 +1310,19 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTdf129839)
 {
     // Create a new document and add a table
     createSwDoc();
-    css::uno::Reference<css::text::XTextDocument> xTextDocument(mxComponent,
-                                                                css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::lang::XMultiServiceFactory> xFac(xTextDocument,
-                                                              css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::text::XTextTable> xTable(
-        xFac->createInstance(u"com.sun.star.text.TextTable"_ustr), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextDocument> xTextDocument(mxComponent,
+                                                                cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xFac(xTextDocument,
+                                                              cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextTable> xTable(
+        xFac->createInstance(u"com.sun.star.text.TextTable"_ustr), cpo::uno::UNO_QUERY_THROW);
     xTable->initialize(4, 4);
     auto xSimpleText = xTextDocument->getText();
     xSimpleText->insertTextContent(xSimpleText->createTextCursor(), xTable, true);
-    css::uno::Reference<css::table::XCellRange> xTableCellRange(xTable, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::table::XCellRange> xTableCellRange(xTable, cpo::uno::UNO_QUERY_THROW);
     // Get instance of SwXCellRange
-    css::uno::Reference<css::beans::XPropertySet> xCellRange(
-        xTableCellRange->getCellRangeByPosition(0, 0, 1, 1), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::beans::XPropertySet> xCellRange(
+        xTableCellRange->getCellRangeByPosition(0, 0, 1, 1), cpo::uno::UNO_QUERY_THROW);
     // Test retrieval of VertOrient property - this crashed
     cpo::uno::Any aOrient = xCellRange->getPropertyValue(u"VertOrient"_ustr);
     CPPUNIT_ASSERT_EQUAL(cpo::uno::Any(css::text::VertOrientation::NONE), aOrient);
@@ -1330,22 +1332,22 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTdf129841)
 {
     // Create a new document and add a table
     createSwDoc();
-    css::uno::Reference<css::text::XTextDocument> xTextDocument(mxComponent,
-                                                                css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::lang::XMultiServiceFactory> xFac(xTextDocument,
-                                                              css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::text::XTextTable> xTable(
-        xFac->createInstance(u"com.sun.star.text.TextTable"_ustr), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextDocument> xTextDocument(mxComponent,
+                                                                cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> xFac(xTextDocument,
+                                                              cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::text::XTextTable> xTable(
+        xFac->createInstance(u"com.sun.star.text.TextTable"_ustr), cpo::uno::UNO_QUERY_THROW);
     xTable->initialize(4, 4);
     auto xSimpleText = xTextDocument->getText();
     xSimpleText->insertTextContent(xSimpleText->createTextCursor(), xTable, true);
     // Get SwXTextTableCursor
-    css::uno::Reference<css::beans::XPropertySet> xTableCursor(
-        xTable->createCursorByCellName(u"A1"_ustr), css::uno::UNO_QUERY_THROW);
-    css::uno::Reference<css::table::XCellRange> xTableCellRange(xTable, css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::beans::XPropertySet> xTableCursor(
+        xTable->createCursorByCellName(u"A1"_ustr), cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::table::XCellRange> xTableCellRange(xTable, cpo::uno::UNO_QUERY_THROW);
     // Get SwXCellRange for the same cell
-    css::uno::Reference<css::beans::XPropertySet> xCellRange(
-        xTableCellRange->getCellRangeByName(u"A1:A1"_ustr), css::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference<css::beans::XPropertySet> xCellRange(
+        xTableCellRange->getCellRangeByName(u"A1:A1"_ustr), cpo::uno::UNO_QUERY_THROW);
     static constexpr OUString sBackColor = u"BackColor"_ustr;
     // Apply background color to table cursor, and read background color from cell range
     cpo::uno::Any aRefColor(COL_LIGHTRED);
@@ -1466,17 +1468,17 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTdf164885)
     public:
         LocalDispatch() = default;
 
-        void SAL_CALL dispatch(const css::util::URL& URL,
+        void dispatch(const css::util::URL& URL,
                                const cpo::uno::Sequence<css::beans::PropertyValue>&) override
         {
             sLastCommand = URL.Complete;
         }
-        void SAL_CALL addStatusListener(const css::uno::Reference<css::frame::XStatusListener>&,
+        void addStatusListener(const cpo::uno::Reference<css::frame::XStatusListener>&,
                                         const css::util::URL&) override
         {
             // empty
         }
-        void SAL_CALL removeStatusListener(const css::uno::Reference<css::frame::XStatusListener>&,
+        void removeStatusListener(const cpo::uno::Reference<css::frame::XStatusListener>&,
                                            const css::util::URL&) override
         {
             // empty
@@ -1492,8 +1494,8 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTdf164885)
         LocalInterceptor() = default;
 
         // XDispatchProvider
-        css::uno::Reference<css::frame::XDispatch>
-            SAL_CALL queryDispatch(const css::util::URL& URL, const OUString& TargetFrameName,
+        cpo::uno::Reference<css::frame::XDispatch>
+            queryDispatch(const css::util::URL& URL, const OUString& TargetFrameName,
                                    sal_Int32 SearchFlags) override
         {
             if (URL.Complete == ".uno:Open")
@@ -1502,30 +1504,30 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTdf164885)
                 return m_slave->queryDispatch(URL, TargetFrameName, SearchFlags);
             return {};
         }
-        cpo::uno::Sequence<css::uno::Reference<css::frame::XDispatch>> SAL_CALL
+        cpo::uno::Sequence<cpo::uno::Reference<css::frame::XDispatch>>
         queryDispatches(const cpo::uno::Sequence<css::frame::DispatchDescriptor>&) override
         {
             return {};
         }
 
         // XDispatchProviderInterceptor
-        css::uno::Reference<css::frame::XDispatchProvider>
-            SAL_CALL getSlaveDispatchProvider() override
+        cpo::uno::Reference<css::frame::XDispatchProvider>
+            getSlaveDispatchProvider() override
         {
             return m_slave;
         }
-        void SAL_CALL setSlaveDispatchProvider(
-            const css::uno::Reference<css::frame::XDispatchProvider>& val) override
+        void setSlaveDispatchProvider(
+            const cpo::uno::Reference<css::frame::XDispatchProvider>& val) override
         {
             m_slave = val;
         }
-        css::uno::Reference<css::frame::XDispatchProvider>
-            SAL_CALL getMasterDispatchProvider() override
+        cpo::uno::Reference<css::frame::XDispatchProvider>
+            getMasterDispatchProvider() override
         {
             return m_master;
         }
-        void SAL_CALL setMasterDispatchProvider(
-            const css::uno::Reference<css::frame::XDispatchProvider>& val) override
+        void setMasterDispatchProvider(
+            const cpo::uno::Reference<css::frame::XDispatchProvider>& val) override
         {
             m_master = val;
         }
@@ -1533,8 +1535,8 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testTdf164885)
         rtl::Reference<LocalDispatch> pDispatch{ new LocalDispatch };
 
     private:
-        css::uno::Reference<css::frame::XDispatchProvider> m_master;
-        css::uno::Reference<css::frame::XDispatchProvider> m_slave;
+        cpo::uno::Reference<css::frame::XDispatchProvider> m_master;
+        cpo::uno::Reference<css::frame::XDispatchProvider> m_slave;
     };
 
     // Given a document with a hyperlink
@@ -1678,6 +1680,26 @@ CPPUNIT_TEST_FIXTURE(SwUnoWriter, testRedlineStartEnd)
     }
 
     CPPUNIT_ASSERT(!xEnumeration->hasMoreElements());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUnoWriter, testRemovedParagraph)
+{
+    // Given a document with two paragraphs, of which the first is removed through its own object...
+    createSwDoc();
+    auto const bodyText = mxComponent.queryThrow<text::XTextDocument>()->getText();
+    bodyText->insertString(bodyText->getEnd(), u"first"_ustr, false);
+    bodyText->insertControlCharacter(
+        bodyText->getEnd(), text::ControlCharacter::PARAGRAPH_BREAK, false);
+    bodyText->insertString(bodyText->getEnd(), u"second"_ustr, false);
+    auto const first = bodyText.queryThrow<container::XEnumerationAccess>()
+                           ->createEnumeration()
+                           ->nextElement()
+                           .queryThrow<text::XTextContent>();
+    bodyText->removeTextContent(first);
+    // ...then that object no longer reaches the removed paragraph, and the document keeps the rest:
+    CPPUNIT_ASSERT_THROW(first.queryThrow<text::XTextRange>()->setString(u"x"_ustr),
+                         uno::RuntimeException);
+    CPPUNIT_ASSERT_EQUAL(u"second"_ustr, bodyText->getString());
 }
 
 } // end of anonymous namespace

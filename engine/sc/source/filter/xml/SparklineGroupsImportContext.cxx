@@ -23,6 +23,7 @@
 
 using namespace xmloff::token;
 using namespace css;
+using namespace ::cpo;
 
 namespace sc
 {
@@ -267,7 +268,7 @@ void SparklineGroupsImportContext::fillSparklineAttributes(
 }
 
 uno::Reference<xml::sax::XFastContextHandler>
-    SAL_CALL SparklineGroupsImportContext::createFastChildContext(
+    SparklineGroupsImportContext::createFastChildContext(
         sal_Int32 nElement, uno::Reference<xml::sax::XFastAttributeList> const& xAttrList)
 {
     SvXMLImportContext* pContext = nullptr;
@@ -373,7 +374,7 @@ model::ComplexColor combineComplexColorAndColor(model::ComplexColor& rComplexCol
 }
 } // end anonymous namespace
 
-void SAL_CALL SparklineGroupsImportContext::endFastElement(sal_Int32 nElement)
+void SparklineGroupsImportContext::endFastElement(sal_Int32 nElement)
 {
     switch (nElement)
     {

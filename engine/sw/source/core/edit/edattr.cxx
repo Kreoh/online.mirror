@@ -105,10 +105,10 @@ bool SwEditShell::GetPaMAttr( SwPaM* pPaM, SfxItemSet& rSet,
             continue;
         }
 
-        SwNodeOffset nSttNd = rCurrentPaM.Start()->GetNodeIndex(),
-                     nEndNd = rCurrentPaM.End()->GetNodeIndex();
-        sal_Int32 nSttCnt = rCurrentPaM.Start()->GetContentIndex();
-        sal_Int32 nEndCnt = rCurrentPaM.End()->GetContentIndex();
+        auto [pStart, pEnd] = rCurrentPaM.StartEnd(); // SwPosition*
+        SwNodeOffset nSttNd = pStart->GetNodeIndex(), nEndNd = pEnd->GetNodeIndex();
+        sal_Int32 nSttCnt = pStart->GetContentIndex();
+        sal_Int32 nEndCnt = pEnd->GetContentIndex();
 
         if( sal_Int32(nEndNd - nSttNd) >= getMaxLookup() )
         {
@@ -248,8 +248,8 @@ SwTextFormatColl* SwEditShell::GetPaMTextFormatColl( SwPaM* pPaM ) const
     { // for all the point and mark (selections)
 
         // get the start and the end node of the current selection
-        SwNodeOffset nSttNd = rCurrentPaM.Start()->GetNodeIndex(),
-                     nEndNd = rCurrentPaM.End()->GetNodeIndex();
+        auto [pStart, pEnd] = rCurrentPaM.StartEnd(); // SwPosition*
+        SwNodeOffset nSttNd = pStart->GetNodeIndex(), nEndNd = pEnd->GetNodeIndex();
 
         // for all the nodes in the current Point and Mark
         for( SwNodeOffset n = nSttNd; n <= nEndNd; ++n )
@@ -288,10 +288,10 @@ std::vector<std::pair< const SfxPoolItem*, std::unique_ptr<SwPaM> >> SwEditShell
     { // for all the point and mark (selections)
 
         // get the start and the end node of the current selection
-        SwNodeOffset nSttNd = rCurrentPaM.Start()->GetNodeIndex(),
-              nEndNd = rCurrentPaM.End()->GetNodeIndex();
-        sal_Int32 nSttCnt = rCurrentPaM.Start()->GetContentIndex();
-        sal_Int32 nEndCnt = rCurrentPaM.End()->GetContentIndex();
+        auto [pStart, pEnd] = rCurrentPaM.StartEnd(); // SwPosition*
+        SwNodeOffset nSttNd = pStart->GetNodeIndex(), nEndNd = pEnd->GetNodeIndex();
+        sal_Int32 nSttCnt = pStart->GetContentIndex();
+        sal_Int32 nEndCnt = pEnd->GetContentIndex();
 
         const SfxPoolItem* pItem = nullptr;
 
@@ -316,12 +316,11 @@ std::vector<std::pair< const SfxPoolItem*, std::unique_ptr<SwPaM> >> SwEditShell
                     : css::i18n::ScriptType::WEAK;
                 nWhich = GetWhichOfScript( nWhich, nScript );
 
-                // item from attribute set
-                if( pTextNd->HasSwAttrSet() )
-                {
-                    pItem = pTextNd->GetSwAttrSet().GetItem( nWhich );
-                    vItem.emplace_back( pItem, std::make_unique<SwPaM>(*pNd, nStt, *pNd, nEnd) );
-                }
+                // The attributes that apply to the whole of the selected part of this node.
+                // A node without its own attribute set resolves them through its paragraph
+                // style, so there is a value to report either way.
+                pItem = pTextNd->GetSwAttrSet().GetItem( nWhich );
+                vItem.emplace_back( pItem, std::make_unique<SwPaM>(*pNd, nStt, *pNd, nEnd) );
 
                 if( !pTextNd->HasHints() )
                     continue;
@@ -369,12 +368,6 @@ std::vector<std::pair< const SfxPoolItem*, std::unique_ptr<SwPaM> >> SwEditShell
                                     vItem.emplace_back( pItem, std::make_unique<SwPaM>(*pNd, nStart, *pNd, nStop) );
                                     break;
                                 }
-                            }
-                            // default item
-                            if( !pItem && !pTextNd->HasSwAttrSet() )
-                            {
-                                pItem = pAutoSet->GetPool()->GetUserDefaultItem( nWhich );
-                                vItem.emplace_back( pItem,  std::make_unique<SwPaM>(*pNd, nStt, *pNd, nEnd) );
                             }
                         }
                     }
@@ -497,8 +490,8 @@ bool SwEditShell::IsMoveLeftMargin( bool bRight, bool bModulus ) const
 
     for(SwPaM& rPaM : GetCursor()->GetRingContainer())
     {
-        SwNodeOffset nSttNd = rPaM.Start()->GetNodeIndex(),
-                     nEndNd = rPaM.End()->GetNodeIndex();
+        auto [pStart, pEnd] = rPaM.StartEnd(); // SwPosition*
+        SwNodeOffset nSttNd = pStart->GetNodeIndex(), nEndNd = pEnd->GetNodeIndex();
 
         SwContentNode* pCNd;
         for( SwNodeOffset n = nSttNd; bRet && n <= nEndNd; ++n )
@@ -815,7 +808,7 @@ LanguageType SwEditShell::GetCurLang() const
 sal_uInt16 SwEditShell::GetScalingOfSelectedText() const
 {
     const SwPaM* pCursor = GetCursor();
-    const SwPosition* pStart = pCursor->Start();
+    auto [pStart, pEnd] = pCursor->StartEnd(); // SwPosition*
     const SwTextNode* pTNd = pStart->GetNode().GetTextNode();
     OSL_ENSURE( pTNd, "no textnode available" );
 
@@ -827,8 +820,8 @@ sal_uInt16 SwEditShell::GetScalingOfSelectedText() const
         assert(pFrame); // shell cursor must be positioned in node with frame
         TextFrameIndex const nStart(pFrame->MapModelToViewPos(*pStart));
         TextFrameIndex const nEnd(
-            sw::FrameContainsNode(*pFrame, pCursor->End()->GetNodeIndex())
-                ? pFrame->MapModelToViewPos(*pCursor->End())
+            sw::FrameContainsNode(*pFrame, pEnd->GetNodeIndex())
+                ? pFrame->MapModelToViewPos(*pEnd)
                 : TextFrameIndex(pFrame->GetText().getLength()));
         nScaleWidth = pFrame->GetScalingOfSelectedText(nStart, nEnd);
     }

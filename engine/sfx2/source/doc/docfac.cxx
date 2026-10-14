@@ -47,6 +47,7 @@
 #include <utility>
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 
 struct SfxObjectFactory_Impl
@@ -153,7 +154,7 @@ void SfxObjectFactory::SetSystemTemplate( const OUString& rServiceName, const OU
     try
     {
         uno::Reference< lang::XMultiServiceFactory > xFactory = ::comphelper::getProcessServiceFactory();
-        uno::Reference< uno::XInterface > xConfig = ::comphelper::ConfigurationHelper::openConfig(
+        uno::Reference< cpo::uno::XInterface > xConfig = ::comphelper::ConfigurationHelper::openConfig(
             ::comphelper::getProcessComponentContext(), u"/org.openoffice.Setup"_ustr, ::comphelper::EConfigurationModes::Standard );
 
         OUString aActualFilter;
@@ -180,7 +181,7 @@ void SfxObjectFactory::SetSystemTemplate( const OUString& rServiceName, const OU
 
         sUserTemplateURL += aExt;
 
-        uno::Reference<ucb::XSimpleFileAccess3> xSimpleFileAccess(
+        uno::Reference<ucb::XSimpleFileAccess> xSimpleFileAccess(
             ucb::SimpleFileAccess::create( ::comphelper::getComponentContext(xFactory) ) );
 
         OUString aBackupURL;
@@ -305,15 +306,15 @@ OUString SfxObjectFactory::GetModuleName() const
 {
     try
     {
-        const css::uno::Reference< css::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext = ::comphelper::getProcessComponentContext();
 
-        css::uno::Reference< css::frame::XModuleManager2 > xModuleManager(
+        cpo::uno::Reference< css::frame::XModuleManager2 > xModuleManager(
             css::frame::ModuleManager::create(xContext));
 
         ::comphelper::SequenceAsHashMap aPropSet( xModuleManager->getByName(GetDocumentServiceName()) );
         return aPropSet.getUnpackedValueOrDefault(u"ooSetupFactoryUIName"_ustr, OUString());
     }
-    catch(const css::uno::RuntimeException&)
+    catch(const cpo::uno::RuntimeException&)
     {
         throw;
     }

@@ -46,6 +46,7 @@
 #include <com/sun/star/media/XPlayer.hpp>
 
 using namespace css;
+using namespace ::cpo;
 
 namespace sd
 {
@@ -221,7 +222,7 @@ void FuExecuteInteraction::DoExecute(SfxRequest&)
 
                 mpDocSh->CallXScript(aMacro, aParams, aRet, aOutArgsIndex, aOutArgs);
             }
-            else
+            else if (SfxObjectShell::isScriptAccessAllowed(mpDocSh->GetModel()))
             {
                 // aMacro has got following format:
                 // "Macroname.Modulname.Libname.Documentname" or

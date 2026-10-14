@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CPPUHELPER_IMPLEMENTATIONENTRY_HXX
 #define INCLUDED_CPPUHELPER_IMPLEMENTATIONENTRY_HXX
 
-#include "cppuhelper/factory.hxx"
-#include "cppuhelper/cppuhelperdllapi.h"
+#include <cppuhelper/factory.hxx>
+#include <cppuhelper/cppuhelperdllapi.h>
 
 namespace cppu
 {
@@ -49,17 +49,11 @@ struct SAL_WARN_UNUSED ImplementationEntry
         The pModCount parameter is a backwards-compatibility remainder of a
         removed library unloading feature; always set to null.
     */
-     css::uno::Reference< css::lang::XSingleComponentFactory >
+     cpo::uno::Reference< css::lang::XSingleComponentFactory >
      (* createFactory)(
          ComponentFactoryFunc fptr,
          ::rtl::OUString const & rImplementationName,
-         cpo::uno::Sequence< ::rtl::OUString > const & rServiceNames,
-         rtl_ModuleCount * pModCount );
-
-    /** Backwards-compatibility remainder of a removed library unloading
-        feature; always set to null.
-    */
-     rtl_ModuleCount * moduleCounter;
+         cpo::uno::Sequence< ::rtl::OUString > const & rServiceNames);
 
     /** Must be set to 0 !
         For future extensions.

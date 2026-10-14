@@ -19,10 +19,10 @@
 #include "sal/config.h"
 
 #include "cpo/uno/Exception.hpp"
-#include "com/sun/star/uno/Reference.hxx"
+#include "cpo/uno/Reference.hxx"
 #include "cpo/uno/Sequence.hxx"
-#include "com/sun/star/uno/XComponentContext.hpp"
-#include "com/sun/star/uno/XInterface.hpp"
+#include "cpo/uno/XComponentContext.hpp"
+#include "cpo/uno/XInterface.hpp"
 #include "cppuhelper/factory.hxx"
 #include "cppuhelper/implbase1.hxx"
 #include "cppuhelper/implementationentry.hxx"
@@ -41,7 +41,7 @@ class Service: public ::cppu::WeakImplHelper1< ::test::types::XServer > {
 public:
     Service() {}
 
-    virtual ::test::types::Data SAL_CALL getData() {
+    virtual ::test::types::Data getData() {
         return ::test::types::Data(rtl::OUString("Hello"), 42);
     }
 
@@ -54,8 +54,8 @@ private:
 
 namespace CppServer {
 
-css::uno::Reference< css::uno::XInterface > create(
-    css::uno::Reference< css::uno::XComponentContext > const &)
+cpo::uno::Reference< cpo::uno::XInterface > create(
+    cpo::uno::Reference< cpo::uno::XComponentContext > const &)
 {
     return static_cast< ::cppu::OWeakObject * >(new Service);
 }
@@ -78,14 +78,14 @@ cpo::uno::Sequence< rtl::OUString > getSupportedServiceNames() {
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL component_writeInfo(
+extern "C" SAL_DLLPUBLIC_EXPORT bool component_writeInfo(
     void * serviceManager, void * registryKey)
 {
     return ::cppu::component_writeInfoHelper(
         serviceManager, registryKey, entries);
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return ::cppu::component_getFactoryHelper(

@@ -66,6 +66,7 @@
 #include <cmdid.h>
 #include <doc.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <SwStyleNameMapper.hxx>
 #include <strings.hrc>
 #include <docmodel/color/ComplexColor.hxx>
@@ -77,6 +78,7 @@
 #define MAXWIDTH  28350
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
 // General list of string pointer
 
@@ -743,33 +745,47 @@ void SfxToSwPageDescAttr( const SwWrtShell& rShell, SfxItemSet& rSet )
             assert(false); // unexpected
             break;
     }
-    if( const SvxPageModelItem* pModelItem = rSet.GetItemIfSet( SID_ATTR_PARA_MODEL, false ))
+
+    switch (rSet.GetItemState(SID_ATTR_PARA_MODEL, false, &pItem))
     {
-        const OUString& rDescName = pModelItem->GetValue();
-        if( !rDescName.isEmpty() )   // No name -> disable PageDesc!
+        case SfxItemState::SET:
         {
-            // Delete only, if PageDesc will be enabled!
-            rSet.ClearItem( RES_BREAK );
-            SwPageDesc* pDesc = const_cast<SwWrtShell&>(rShell).FindPageDescByName(
-                                                    UIName(rDescName), true );
-            if( pDesc )
-                aPgDesc.RegisterToPageDesc( *pDesc );
-        }
-        rSet.ClearItem( SID_ATTR_PARA_MODEL );
-        bChanged = true;
-    }
-    else
-    {
-        SfxItemSetFixed<RES_PAGEDESC, RES_PAGEDESC> aCoreSet(rShell.GetView().GetPool());
-        rShell.GetCurAttr( aCoreSet );
-        if(const SwFormatPageDesc* pPageDescItem = aCoreSet.GetItemIfSet( RES_PAGEDESC ) )
-        {
-            const SwPageDesc* pPageDesc = pPageDescItem->GetPageDesc();
-            if (bRemoveNumOffset && pPageDescItem->GetNumOffset())
-                bChanged = true;
-            if( pPageDesc )
+            auto pModelItem = static_cast<const SvxPageModelItem*>(pItem);
+            const OUString& rDescName = pModelItem->GetValue();
+            if (!rDescName.isEmpty())
             {
-                aPgDesc.RegisterToPageDesc( *const_cast<SwPageDesc*>(pPageDesc) );
+                // Delete 'Page Break' since 'Page Style' is specified
+                rSet.ClearItem(RES_BREAK);
+
+                SwPageDesc* pDesc =
+                    const_cast<SwWrtShell&>(rShell).FindPageDescByName(UIName(rDescName), true);
+                if (pDesc)
+                    aPgDesc.RegisterToPageDesc(*pDesc);
+            }
+            rSet.ClearItem(SID_ATTR_PARA_MODEL);
+            bChanged = true;
+            break;
+        }
+        case SfxItemState::INVALID:
+        {
+            // needed for srchdlg.cxx. See note there about using SfxPoolItemHolder instead
+            rSet.ClearItem(SID_ATTR_PARA_MODEL);
+            rSet.InvalidateItem(RES_PAGEDESC);
+            break;
+        }
+        default:
+        {
+            SfxItemSetFixed<RES_PAGEDESC, RES_PAGEDESC> aCoreSet(rShell.GetView().GetPool());
+            rShell.GetCurAttr(aCoreSet);
+            if (const SwFormatPageDesc* pPageDescItem = aCoreSet.GetItemIfSet(RES_PAGEDESC))
+            {
+                const SwPageDesc* pPageDesc = pPageDescItem->GetPageDesc();
+                if (bRemoveNumOffset && pPageDescItem->GetNumOffset())
+                    bChanged = true;
+                if (pPageDesc)
+                {
+                    aPgDesc.RegisterToPageDesc(*const_cast<SwPageDesc*>(pPageDesc));
+                }
             }
         }
     }
@@ -939,12 +955,7 @@ bool HasCharUnit( bool bWeb)
     return SwModule::get()->GetUsrPref(bWeb)->IsApplyCharUnit();
 }
 
-void SetApplyCharUnit(bool bApplyChar, bool bWeb)
-{
-    SwModule::get()->ApplyUserCharUnit(bApplyChar, bWeb);
-}
-
-bool ExecuteMenuCommand(const css::uno::Reference<css::awt::XPopupMenu>& rMenu, const SfxViewFrame& rViewFrame, sal_uInt16 nId)
+bool ExecuteMenuCommand(const cpo::uno::Reference<css::awt::XPopupMenu>& rMenu, const SfxViewFrame& rViewFrame, sal_uInt16 nId)
 {
     bool bRet = false;
     const sal_uInt16 nItemCount = rMenu->getItemCount();
@@ -952,7 +963,7 @@ bool ExecuteMenuCommand(const css::uno::Reference<css::awt::XPopupMenu>& rMenu, 
     for (sal_uInt16 nItem = 0; nItem < nItemCount; ++nItem)
     {
         sal_Int16 nItemId = rMenu->getItemId(nItem);
-        css::uno::Reference<css::awt::XPopupMenu> xPopup = rMenu->getPopupMenu(nItemId);
+        cpo::uno::Reference<css::awt::XPopupMenu> xPopup = rMenu->getPopupMenu(nItemId);
         if (xPopup.is())
         {
             sCommand = xPopup->getCommand(nId);

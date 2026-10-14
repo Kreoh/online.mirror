@@ -11,19 +11,71 @@
 
 module scriptinterop {
 
+interface XLink;
+
 interface XTextStyle : XBase
 {
+    com::sun::star::beans::Optional<XColor> getBackgroundColor();
+
+    com::sun::star::beans::Optional<TextBaselineOffset> getBaselineOffset();
+
+    com::sun::star::beans::Optional<string> getFontFamily();
+
+    com::sun::star::beans::Optional<double> getFontSize();
+
+    com::sun::star::beans::Optional<XColor> getForegroundColor();
+
+    com::sun::star::beans::Optional<XLink> getLink();
+
+    com::sun::star::beans::Optional<boolean> hasLink();
+
+    com::sun::star::beans::Optional<boolean> isBackgroundTransparent();
+
+    com::sun::star::beans::Optional<boolean> isBold();
+
+    com::sun::star::beans::Optional<boolean> isItalic();
+
+    com::sun::star::beans::Optional<boolean> isSmallCaps();
+
+    com::sun::star::beans::Optional<boolean> isStrikethrough();
+
+    com::sun::star::beans::Optional<boolean> isUnderline();
+
+    XTextStyle removeLink();
+
+    [overload setBackgroundColor] XTextStyle setBackgroundColor([in] any color);
+
+    [overload setBackgroundColor] XTextStyle setBackgroundColorRgb(
+        [in] long red, [in] long green, [in] long blue);
+
+    XTextStyle setBackgroundColorTransparent();
+
+    XTextStyle setBaselineOffset([in] TextBaselineOffset baselineOffset);
+
     XTextStyle setBold([in] boolean bold);
 
-    XTextStyle setItalic([in] boolean italic);
-
-    XTextStyle setStrikethrough([in] boolean strikethrough);
+    XTextStyle setFontFamily([in] string fontFamily);
 
     XTextStyle setFontSize([in] double points);
 
-    XTextStyle setForegroundColor([in] string hexColor);
+    [overload setForegroundColor] XTextStyle setForegroundColor([in] any color);
+
+    [overload setForegroundColor] XTextStyle setForegroundColorRgb(
+        [in] long red, [in] long green, [in] long blue);
+
+    XTextStyle setItalic([in] boolean italic);
+
+    XTextStyle setLinkSlide([in] any slide);
+
+    XTextStyle setLinkUrl([in] string url);
+
+    XTextStyle setSmallCaps([in] boolean smallCaps);
+
+    XTextStyle setStrikethrough([in] boolean strikethrough);
+
+    XTextStyle setUnderline([in] boolean underline);
 };
 
 };
 
-/* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

@@ -170,6 +170,7 @@ private:
     bool _isWebSocket : 1;
     bool _closeConnection : 1;
     bool _isCool2 : 1;
+    bool _isRemoteDocument : 1 = false;
 
     static Method stringToMethod(std::string_view method);
 
@@ -308,6 +309,15 @@ public:
     {
         return _isCool2;
     }
+    /// True when the request proved itself to be a headless connection
+    bool isRemoteDocument() const
+    {
+        return _isRemoteDocument;
+    }
+    void setRemoteDocument(bool isRemoteDocument)
+    {
+        _isRemoteDocument = isRemoteDocument;
+    }
     bool closeConnection() const
     {
         return _closeConnection;
@@ -375,6 +385,8 @@ public:
             return false;
         if (_closeConnection != rhs._closeConnection)
             return false;
+        if (_isRemoteDocument != rhs._isRemoteDocument)
+            return false;
         if (_uriString != rhs._uriString)
             return false;
         if (_proxyPrefix != rhs._proxyPrefix)
@@ -391,7 +403,7 @@ public:
     {
         std::ostringstream oss;
         oss << nameShort(_method) << ' ' << _uriString << ' ' << (_isProxy ? "Proxy" : "")
-            << (_isWebSocket ? "WebSocket" : "");
+            << (_isWebSocket ? "WebSocket" : "") << (_isRemoteDocument ? "RemoteDocument" : "");
         oss << ", host: " << _hostUntrusted;
         oss << ", " << _pathSegs.size() << " path segments: ";
         for (std::size_t i = 0; i < _pathSegs.size(); ++i)

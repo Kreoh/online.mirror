@@ -28,12 +28,12 @@
 #include <framework/desktop.hxx>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
 
-using namespace ::com::sun::star::uno;
+using namespace ::cpo::uno;
 using namespace ::com::sun::star::lang;
 using namespace cppu;
 
@@ -46,7 +46,7 @@ SAL_IMPLEMENT_MAIN()
     {
         tools::extendApplicationEnvironment();
 
-        Reference< XComponentContext > xContext = defaultBootstrap_InitialComponentContext();
+        Reference< cpo::uno::XComponentContext > xContext = defaultBootstrap_InitialComponentContext();
         Reference< XMultiServiceFactory > xServiceManager( xContext->getServiceManager(), UNO_QUERY );
 
         if( !xServiceManager.is() )

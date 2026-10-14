@@ -24,6 +24,7 @@
 #include <svtools/valueset.hxx>
 #include <sfx2/sidebar/ILayoutableWindow.hxx>
 #include <sfx2/sidebar/PanelLayout.hxx>
+#include <svl/lstner.hxx>
 #include <vcl/weld.hxx>
 
 #include <vector>
@@ -54,6 +55,7 @@ struct TransitionEntry
 
 class SlideTransitionPane final : public PanelLayout
                           , public sfx2::sidebar::ILayoutableWindow
+                          , public SfxListener
 {
 public:
     explicit SlideTransitionPane(
@@ -71,6 +73,7 @@ private:
     void updateControls();
     void updateControlState();
     void updateVariants(std::shared_ptr<TransitionPreset> const& pPreset);
+    void selectTransitionEntry(int nIndex);
 
     void updateSoundList();
     void openSoundFileDialog();
@@ -81,6 +84,8 @@ private:
 
     void addListener();
     void removeListener();
+
+    virtual void Notify(SfxBroadcaster& rBroadcaster, const SfxHint& rHint) override;
 
     ::sd::slidesorter::SharedPageSelection getSelectedPages() const;
 
@@ -124,7 +129,7 @@ private:
     std::unique_ptr<weld::Button> mxPB_PLAY;
     std::unique_ptr<weld::CheckButton> mxCB_AUTO_PREVIEW;
 
-    css::uno::Reference< css::drawing::XDrawView >             mxView;
+    cpo::uno::Reference< css::drawing::XDrawView >             mxView;
 
     std::unordered_map<OUString, std::unique_ptr<TransitionEntry>> maTranstionMap;
 

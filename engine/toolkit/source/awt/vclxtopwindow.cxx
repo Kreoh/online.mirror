@@ -87,7 +87,7 @@ cpo::uno::Any VCLXTopWindow::getWindowHandle( const cpo::uno::Sequence< sal_Int8
     return aRet;
 }
 
-void VCLXTopWindow::addTopWindowListener( const css::uno::Reference< css::awt::XTopWindowListener >& rxListener )
+void VCLXTopWindow::addTopWindowListener( const cpo::uno::Reference< css::awt::XTopWindowListener >& rxListener )
 {
     SolarMutexGuard aGuard;
 
@@ -95,7 +95,7 @@ void VCLXTopWindow::addTopWindowListener( const css::uno::Reference< css::awt::X
         GetTopWindowListeners().addInterface( rxListener );
 }
 
-void VCLXTopWindow::removeTopWindowListener( const css::uno::Reference< css::awt::XTopWindowListener >& rxListener )
+void VCLXTopWindow::removeTopWindowListener( const cpo::uno::Reference< css::awt::XTopWindowListener >& rxListener )
 {
     SolarMutexGuard aGuard;
 
@@ -116,7 +116,7 @@ void VCLXTopWindow::toBack(  )
 {
 }
 
-void VCLXTopWindow::setMenuBar( const css::uno::Reference< css::awt::XMenuBar >& rxMenu )
+void VCLXTopWindow::setMenuBar( const cpo::uno::Reference< css::awt::XMenuBar >& rxMenu )
 {
     SolarMutexGuard aGuard;
 
@@ -135,7 +135,7 @@ void VCLXTopWindow::setMenuBar( const css::uno::Reference< css::awt::XMenuBar >&
 }
 
 
-bool SAL_CALL VCLXTopWindow::getIsMaximized()
+bool VCLXTopWindow::getIsMaximized()
 {
     SolarMutexGuard aGuard;
 
@@ -147,7 +147,7 @@ bool SAL_CALL VCLXTopWindow::getIsMaximized()
 }
 
 
-void SAL_CALL VCLXTopWindow::setIsMaximized( bool _ismaximized )
+void VCLXTopWindow::setIsMaximized( bool _ismaximized )
 {
     SolarMutexGuard aGuard;
 
@@ -159,7 +159,7 @@ void SAL_CALL VCLXTopWindow::setIsMaximized( bool _ismaximized )
 }
 
 
-bool SAL_CALL VCLXTopWindow::getIsMinimized()
+bool VCLXTopWindow::getIsMinimized()
 {
     SolarMutexGuard aGuard;
 
@@ -171,7 +171,7 @@ bool SAL_CALL VCLXTopWindow::getIsMinimized()
 }
 
 
-void SAL_CALL VCLXTopWindow::setIsMinimized( bool _isMinimized )
+void VCLXTopWindow::setIsMinimized( bool _isMinimized )
 {
     SolarMutexGuard aGuard;
 
@@ -183,7 +183,7 @@ void SAL_CALL VCLXTopWindow::setIsMinimized( bool _isMinimized )
 }
 
 
-::sal_Int32 SAL_CALL VCLXTopWindow::getDisplay()
+::sal_Int32 VCLXTopWindow::getDisplay()
 {
     SolarMutexGuard aGuard;
 
@@ -195,7 +195,7 @@ void SAL_CALL VCLXTopWindow::setIsMinimized( bool _isMinimized )
 }
 
 
-void SAL_CALL VCLXTopWindow::setDisplay( ::sal_Int32 _display )
+void VCLXTopWindow::setDisplay( ::sal_Int32 _display )
 {
     SolarMutexGuard aGuard;
 

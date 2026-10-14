@@ -27,6 +27,7 @@
 #include <DataSource.hxx>
 #include <LinePropertiesHelper.hxx>
 #include <servicenames_coosystems.hxx>
+#include <servicenames_charttypes.hxx>
 #include <DataSeries.hxx>
 #include <DataSeriesHelper.hxx>
 #include <Scaling.hxx>
@@ -47,7 +48,7 @@
 #include <sal/log.hxx>
 
 #include <com/sun/star/lang/XServiceName.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include <comphelper/diagnose_ex.hxx>
 
 #include <cstddef>
@@ -57,7 +58,8 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
-using ::com::sun::star::uno::Reference;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
 using ::cpo::uno::Sequence;
 
 Reference< chart2::XScaling > AxisHelper::createLinearScaling()
@@ -316,7 +318,7 @@ rtl::Reference< Axis > AxisHelper::createAxis(
           sal_Int32 nDimensionIndex
         , sal_Int32 nAxisIndex // 0==main or 1==secondary axis
         , const rtl::Reference< BaseCoordinateSystem >& xCooSys
-        , const Reference< uno::XComponentContext > & xContext
+        , const Reference< cpo::uno::XComponentContext > & xContext
         , ReferenceSizeProvider * pRefSizeProvider )
 {
     if( !xContext.is() || !xCooSys.is() )
@@ -371,7 +373,7 @@ rtl::Reference< Axis > AxisHelper::createAxis(
 
 rtl::Reference< Axis > AxisHelper::createAxis( sal_Int32 nDimensionIndex, bool bMainAxis
                 , const rtl::Reference< Diagram >& xDiagram
-                , const Reference< uno::XComponentContext >& xContext
+                , const Reference< cpo::uno::XComponentContext >& xContext
                 , ReferenceSizeProvider * pRefSizeProvider )
 {
     OSL_ENSURE( xContext.is(), "need a context to create an axis" );
@@ -388,7 +390,7 @@ rtl::Reference< Axis > AxisHelper::createAxis( sal_Int32 nDimensionIndex, bool b
 
 void AxisHelper::showAxis( sal_Int32 nDimensionIndex, bool bMainAxis
                 , const rtl::Reference< Diagram >& xDiagram
-                , const Reference< uno::XComponentContext >& xContext
+                , const Reference< cpo::uno::XComponentContext >& xContext
                 , ReferenceSizeProvider * pRefSizeProvider )
 {
     if( !xDiagram.is() )
@@ -622,7 +624,7 @@ rtl::Reference< Axis > AxisHelper::getParallelAxis( const rtl::Reference< Axis >
             return getAxis( nDimensionIndex, nParallelAxisIndex, getCoordinateSystemByIndex( xDiagram, nCooSysIndex ) );
         }
     }
-    catch( const uno::RuntimeException& )
+    catch( const cpo::uno::RuntimeException& )
     {
     }
     return nullptr;
@@ -936,7 +938,7 @@ void AxisHelper::getAxisOrGridExistence( Sequence< bool >& rExistenceList
 bool AxisHelper::changeVisibilityOfAxes( const rtl::Reference< Diagram >& xDiagram
                         , const Sequence< bool >& rOldExistenceList
                         , const Sequence< bool >& rNewExistenceList
-                        , const Reference< uno::XComponentContext >& xContext
+                        , const Reference< cpo::uno::XComponentContext >& xContext
                         , ReferenceSizeProvider * pRefSizeProvider )
 {
     bool bChanged = false;
@@ -1007,6 +1009,33 @@ rtl::Reference< ChartType > AxisHelper::getChartTypeByIndex( const rtl::Referenc
         if( nIndex >= 0 && o3tl::make_unsigned(nIndex) < aChartTypeList.size() )
             xChartType = aChartTypeList[nIndex];
     }
+
+    return xChartType;
+}
+
+rtl::Reference<ChartType> AxisHelper::getHistogramChartTypeOfAxis(
+    const rtl::Reference< Axis >& xAxis, const rtl::Reference< ChartModel >& xChartDoc)
+{
+    if (!xAxis.is() || !xChartDoc.is())
+        return nullptr;
+
+    rtl::Reference<BaseCoordinateSystem> xCooSys(
+        AxisHelper::getCoordinateSystemOfAxis(xAxis, xChartDoc->getFirstChartDiagram()));
+    if (!xCooSys.is())
+        return nullptr;
+
+    // The bin settings sit on the chart type, and the primary X axis is the one that shows them.
+    sal_Int32 nDimensionIndex = -1;
+    sal_Int32 nAxisIndex = -1;
+    if (!AxisHelper::getIndicesForAxis(xAxis, xCooSys, nDimensionIndex, nAxisIndex)
+        || nDimensionIndex != 0 || nAxisIndex != 0)
+    {
+        return nullptr;
+    }
+
+    rtl::Reference<ChartType> xChartType(AxisHelper::getChartTypeByIndex(xCooSys, 0));
+    if (!xChartType.is() || xChartType->getChartType() != CHART2_SERVICE_NAME_CHARTTYPE_HISTOGRAM)
+        return nullptr;
 
     return xChartType;
 }

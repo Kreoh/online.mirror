@@ -23,14 +23,15 @@
 #include <array>
 #include <memory>
 #include <svtools/scrolladaptor.hxx>
+#include <svx/sdr/overlay/overlayobjectlist.hxx>
 #include <vcl/help.hxx>
 
 #include "hiranges.hxx"
 #include "viewutil.hxx"
 #include "select.hxx"
 #include "gridwin.hxx"
-#include "drawview.hxx"
 
+class ScDrawView;
 class ScEditEngineDefaulter;
 class ScOutlineWindow;
 class ScRowBar;
@@ -211,6 +212,7 @@ private:
     bool                bBlockCols:1;             // are whole columns selected?
     bool                bBlockRows:1;             // are whole rows selected?
     bool                mbInlineWithScrollbar:1;  // should inline with scrollbar?
+    bool mbFillRangeMarked:1; // the client holds a fill range marker
 
     double              mfLastZoomScale = 0;
     double              mfAccumulatedZoom = 0;
@@ -337,7 +339,6 @@ public:
 
     void            DrawDeselectAll();
     void            DrawMarkListHasChanged();
-    void            UpdateAnchorHandles();
 
     ScPageBreakData* GetPageBreakData()     { return pPageBreakData.get(); }
     const std::vector<ScHighlightEntry>& GetHighlightRanges() const { return maHighlightRanges; }
@@ -501,6 +502,7 @@ public:
     void            UpdateCopySourceOverlay();
     void            UpdateSelectionOverlay();
     void            UpdateShrinkOverlay();
+    void NotifyFillRangeMarker();
     void            UpdateAllOverlays();
 
     void            UpdateFormulas( SCCOL nStartCol = -1, SCROW nStartRow = -1, SCCOL nEndCol = -1, SCROW nEndRow = -1 );

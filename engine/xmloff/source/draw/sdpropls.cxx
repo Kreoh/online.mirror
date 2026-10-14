@@ -73,6 +73,7 @@
 using ::cpo::uno::Any;
 
 using namespace ::com::sun::star;
+using namespace ::cpo;
 using namespace ::xmloff::token;
 
 #define MAP_(name,prefix,token,type,context)  { name, prefix, token, type, context, SvtSaveOptions::ODFSVER_010, false }
@@ -175,6 +176,15 @@ const XMLPropertyMapEntry aXMLSDProperties[] =
 
     // soft edge attributes
     GMAPV( PROP_SoftEdgeRadius,                XML_NAMESPACE_LO_EXT, XML_SOFTEDGE_RADIUS,      XML_TYPE_MEASURE          , 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+
+    // reflection attributes
+    GMAPV( PROP_ReflectionEffect,                   XML_NAMESPACE_CO_EXT, XML_REFLECTION,                    XML_TYPE_BOOL     , 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+    GMAPV( PROP_ReflectionEffectDistance,           XML_NAMESPACE_CO_EXT, XML_REFLECTION_DISTANCE,           XML_TYPE_MEASURE  , 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+    GMAPV( PROP_ReflectionEffectBlurRadius,         XML_NAMESPACE_CO_EXT, XML_REFLECTION_BLUR,               XML_TYPE_MEASURE  , 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+    GMAPV( PROP_ReflectionEffectStartTransparency,  XML_NAMESPACE_CO_EXT, XML_REFLECTION_START_TRANSPARENCY, XML_TYPE_PERCENT16, 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+    GMAPV( PROP_ReflectionEffectStartPosition,      XML_NAMESPACE_CO_EXT, XML_REFLECTION_START_POSITION,     XML_TYPE_PERCENT16, 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+    GMAPV( PROP_ReflectionEffectEndTransparency,    XML_NAMESPACE_CO_EXT, XML_REFLECTION_END_TRANSPARENCY,   XML_TYPE_PERCENT16, 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
+    GMAPV( PROP_ReflectionEffectEndPosition,        XML_NAMESPACE_CO_EXT, XML_REFLECTION_END_POSITION,       XML_TYPE_PERCENT16, 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
 
     // glow text attributes
     TMAPV( PROP_GlowTextEffectRadius,           XML_NAMESPACE_LO_EXT, XML_GLOW_TEXT_RADIUS,          XML_TYPE_MEASURE  , 0, SvtSaveOptions::ODFSVER_FUTURE_EXTENDED),
@@ -1005,6 +1015,31 @@ public:
 
 namespace
 {
+/// Writes the SMIL fallback for transition subtypes that have no SMIL name. The page style has no
+/// extension attribute for them: the slide's transition filter in the animations has it, and that
+/// is what import uses.
+class XMLTransitionSubtypeHdl : public XMLEnumPropertyHdl
+{
+public:
+    XMLTransitionSubtypeHdl()
+        : XMLEnumPropertyHdl(xmloff::aAnimations_EnumMap_TransitionSubType)
+    {
+    }
+
+    bool exportXML(OUString& rStrExpValue, const uno::Any& rValue,
+                   const SvXMLUnitConverter& rUnitConverter) const override
+    {
+        sal_Int16 nSubtype = 0;
+        if (!(rValue >>= nSubtype))
+            return false;
+        return XMLEnumPropertyHdl::exportXML(
+            rStrExpValue, uno::Any(xmloff::getTransitionSubTypeFallback(nSubtype)), rUnitConverter);
+    }
+};
+}
+
+namespace
+{
 class XMLLatheEndAngleHdl : public XMLDoublePropHdl
 {
 public:
@@ -1357,7 +1392,7 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
                 pHdl = new XMLEnumPropertyHdl( xmloff::aAnimations_EnumMap_TransitionType );
                 break;
             case XML_SD_TYPE_TRANSTIION_SUBTYPE:
-                pHdl = new XMLEnumPropertyHdl( xmloff::aAnimations_EnumMap_TransitionSubType );
+                pHdl = new XMLTransitionSubtypeHdl;
                 break;
             case XML_SD_TYPE_TRANSTIION_DIRECTION:
                 pHdl = new XMLNamedBoolPropertyHdl( GetXMLToken(XML_FORWARD), GetXMLToken(XML_REVERSE) );
@@ -1986,7 +2021,7 @@ void XMLPageExportPropertyMapper::handleElementItem(
         case CTF_PAGE_SOUND_URL:
             {
                 OUString aSoundURL;
-                css::uno::Reference<css::presentation::XSoundReference> xSound;
+                cpo::uno::Reference<css::presentation::XSoundReference> xSound;
                 if( rProperty.maValue >>= xSound )
                 {
                     if( xSound.is() )

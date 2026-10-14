@@ -38,22 +38,22 @@ class WinUserInfoBe_Impl
 public:
     virtual ~WinUserInfoBe_Impl(){};
     virtual OUString GetGivenName() = 0;
-    virtual OUString GetSn() { return ""; }
-    virtual OUString GetFathersname() { return ""; }
-    virtual OUString GetInitials() { return ""; }
-    virtual OUString GetStreet() { return ""; }
-    virtual OUString GetCity() { return ""; }
-    virtual OUString GetState() { return ""; }
-    virtual OUString GetApartment() { return ""; }
-    virtual OUString GetPostalCode() { return ""; }
-    virtual OUString GetCountry() { return ""; }
-    virtual OUString GetOrganization() { return ""; }
-    virtual OUString GetPosition() { return ""; }
-    virtual OUString GetTitle() { return ""; }
-    virtual OUString GetHomePhone() { return ""; }
-    virtual OUString GetTelephoneNumber() { return ""; }
-    virtual OUString GetFaxNumber() { return ""; }
-    virtual OUString GetMail() { return ""; }
+    virtual OUString GetSn() { return u""_ustr; }
+    virtual OUString GetFathersname() { return u""_ustr; }
+    virtual OUString GetInitials() { return u""_ustr; }
+    virtual OUString GetStreet() { return u""_ustr; }
+    virtual OUString GetCity() { return u""_ustr; }
+    virtual OUString GetState() { return u""_ustr; }
+    virtual OUString GetApartment() { return u""_ustr; }
+    virtual OUString GetPostalCode() { return u""_ustr; }
+    virtual OUString GetCountry() { return u""_ustr; }
+    virtual OUString GetOrganization() { return u""_ustr; }
+    virtual OUString GetPosition() { return u""_ustr; }
+    virtual OUString GetTitle() { return u""_ustr; }
+    virtual OUString GetHomePhone() { return u""_ustr; }
+    virtual OUString GetTelephoneNumber() { return u""_ustr; }
+    virtual OUString GetFaxNumber() { return u""_ustr; }
+    virtual OUString GetMail() { return u""_ustr; }
 };
 }
 }
@@ -151,7 +151,7 @@ private:
     {
         sal::systools::BStr sBstr;
         if (FAILED((pUser->*func)(&sBstr)))
-            return "";
+            return u""_ustr;
         return OUString(sBstr);
     }
     static OUString Str(IADsUser* pUser, const wchar_t* property)
@@ -162,11 +162,11 @@ private:
             ~AutoVariant() { VariantClear(this); }
         } varArr;
         if (FAILED(pUser->GetEx(sal::systools::BStr(o3tl::toU(property)), &varArr)))
-            return "";
+            return u""_ustr;
         SAFEARRAY* sa = V_ARRAY(&varArr);
         LONG nStart, nEnd;
         if (FAILED(SafeArrayGetLBound(sa, 1, &nStart)) || FAILED(SafeArrayGetUBound(sa, 1, &nEnd)))
-            return "";
+            return u""_ustr;
         AutoVariant varItem;
         for (LONG i = nStart; i <= nEnd; i++)
         {
@@ -176,7 +176,7 @@ private:
                 return OUString(o3tl::toU(V_BSTR(&varItem)));
             VariantClear(&varItem);
         }
-        return "";
+        return u""_ustr;
     }
 
     void CacheData()
@@ -219,12 +219,12 @@ private:
     void GetCachedData()
     {
         if (m_sUserDN.isEmpty())
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         OUString sCache = officecfg::UserProfile::WinUserInfo::Cache::get();
 
         if (sCache.isEmpty())
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
 
         {
             cpo::uno::Sequence<sal_Int8> seqCachedData;
@@ -251,7 +251,7 @@ private:
         } while (nIndex >= 0);
 
         if (sUserDN != m_sUserDN)
-            throw css::uno::RuntimeException();
+            throw cpo::uno::RuntimeException();
         m_aMap = std::move(aMap);
     }
 
@@ -269,13 +269,13 @@ public:
             ULONG nSize = 0;
             GetUserNameExW(NameDisplay, nullptr, &nSize);
             if (GetLastError() != ERROR_MORE_DATA)
-                throw css::uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             auto pNameBuf(std::make_unique<wchar_t[]>(nSize));
             if (!GetUserNameExW(NameDisplay, pNameBuf.get(), &nSize))
-                throw css::uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             m_sName = o3tl::toU(pNameBuf.get());
         }
-        catch (css::uno::RuntimeException&)
+        catch (cpo::uno::RuntimeException&)
         {
             // GetUserNameEx may fail in some cases (e.g., for built-in AD domain
             // administrator account on non-DC systems), where GetUserName will
@@ -283,7 +283,7 @@ public:
             DWORD nSize = UNLEN + 1;
             auto pNameBuf(std::make_unique<wchar_t[]>(nSize));
             if (!GetUserNameW(pNameBuf.get(), &nSize))
-                throw css::uno::RuntimeException();
+                throw cpo::uno::RuntimeException();
             m_sName = o3tl::toU(pNameBuf.get());
         }
     }
@@ -309,7 +309,7 @@ WinUserInfoBe::WinUserInfoBe()
     {
         m_pImpl.reset(new ADsUserAccess());
     }
-    catch (css::uno::RuntimeException&)
+    catch (cpo::uno::RuntimeException&)
     {
         m_pImpl.reset(new SysInfoUserAccess);
     }
@@ -319,7 +319,7 @@ WinUserInfoBe::~WinUserInfoBe() {}
 
 void WinUserInfoBe::setPropertyValue(OUString const&, cpo::uno::Any const&)
 {
-    throw css::lang::IllegalArgumentException("setPropertyValue not supported",
+    throw css::lang::IllegalArgumentException(u"setPropertyValue not supported"_ustr,
                                               static_cast<cppu::OWeakObject*>(this), -1);
 }
 
@@ -405,7 +405,7 @@ cpo::uno::Any WinUserInfoBe::getPropertyValue(OUString const& PropertyName)
 
 OUString WinUserInfoBe::getImplementationName()
 {
-    return "com.sun.star.comp.configuration.backend.WinUserInfoBe";
+    return u"com.sun.star.comp.configuration.backend.WinUserInfoBe"_ustr;
 }
 
 bool WinUserInfoBe::supportsService(const OUString& aServiceName)
@@ -415,14 +415,14 @@ bool WinUserInfoBe::supportsService(const OUString& aServiceName)
 
 cpo::uno::Sequence<OUString> WinUserInfoBe::getSupportedServiceNames()
 {
-    return { "com.sun.star.configuration.backend.WinUserInfoBe" };
+    return { u"com.sun.star.configuration.backend.WinUserInfoBe"_ustr };
 }
 }
 }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
-extensions_WinUserInfoBe_get_implementation(css::uno::XComponentContext*,
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+extensions_WinUserInfoBe_get_implementation(cpo::uno::XComponentContext*,
                                             cpo::uno::Sequence<cpo::uno::Any> const&)
 {
     return cppu::acquire(new extensions::config::WinUserInfo::WinUserInfoBe());

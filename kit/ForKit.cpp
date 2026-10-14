@@ -63,6 +63,8 @@ namespace
 {
 
 bool NoCapsForKit = false;
+/// True when landlock is the only isolation this kit will get.
+bool RequireLandlock = false;
 bool NoSeccomp = false;
 #if ENABLE_DEBUG
 bool SingleKit = false;
@@ -89,6 +91,9 @@ std::vector<std::string> cleanupJailPaths;
 /// The [subforkit pid -> subforkit id] map.
 std::map<pid_t, std::string> subForKitPids;
 
+/// The jail of a crashed kit is kept for this long before it is removed.
+constexpr int CrashedJailKeepSecs = 180;
+
 /// The Main polling main-loop of this (single threaded) process
 std::unique_ptr<SocketPoll> ForKitPoll;
 
@@ -108,6 +113,7 @@ void dump_forkit_state()
            "  LogLevelStartup: " << LogLevelStartup << "\n"
            "  unit test: " << UnitTestLibrary << "\n"
            "  NoCapsForKit: " << NoCapsForKit << "\n"
+           "  RequireLandlock: " << RequireLandlock << "\n"
            "  NoSeccomp: " << NoSeccomp << "\n"
 #if ENABLE_DEBUG
            "  SingleKit: " << SingleKit << "\n"
@@ -224,8 +230,13 @@ protected:
 
     void onDisconnect() override
     {
-        if constexpr (Util::isMobileApp())
+        if (Util::isMobileApp())
             return;
+        if (SigUtil::getTerminationFlag())
+        {
+            LOG_DBG("ForKit connection closed after exit arrived from wsd");
+            return;
+        }
         LOG_ERR("ForKit connection lost without exit arriving from wsd. Setting TerminationFlag");
         SigUtil::setTerminationFlag();
     }
@@ -308,10 +319,18 @@ bool haveCorrectCapabilities()
 }
 #endif // HAVE_LIBCAP
 
+/// Remove the shared settings directory of the configuration with the given subforkit id.
+void removeSharedPresets(const std::string& childRoot, const std::string& ident)
+{
+    Poco::Path sharedPresets(childRoot, JailUtil::CHILDROOT_TMP_SHARED_PRESETS_PATH);
+    std::string presetsPath = Poco::Path(sharedPresets, Uri::encode(ident)).toString();
+    FileUtil::removeFile(presetsPath, true);
+}
+
 /// Check if some previously forked kids have died.
 void cleanupChildren(const std::string& childRoot)
 {
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
         return;
 
     pid_t exitedChildPid;
@@ -393,12 +412,18 @@ void cleanupChildren(const std::string& childRoot)
             LOG_INF("SubForKit " << exitedChildPid << " [" << subit->second
                     << "] has exited with status " << status << ".");
 
-            // remove subforkit settings dir now
-            Poco::Path sharedPresets(childRoot, JailUtil::CHILDROOT_TMP_SHARED_PRESETS_PATH);
-            std::string presetsPath = Poco::Path(sharedPresets, Uri::encode(subit->second)).toString();
-            FileUtil::removeFile(presetsPath, true);
-
+            const std::string ident = subit->second;
             subForKitPids.erase(subit);
+
+            // A subforkit that exits normally has removed its settings directory already. Every
+            // subforkit of one configuration reads the same settings directory, so it stays while
+            // another of them runs.
+            const bool exitedNormally = info.si_code == CLD_EXITED && status == EX_OK;
+            const bool identInUse =
+                std::any_of(subForKitPids.begin(), subForKitPids.end(),
+                            [&ident](const auto& pair) { return pair.second == ident; });
+            if (!exitedNormally && !identInUse)
+                removeSharedPresets(childRoot, ident);
         }
         else
         {
@@ -448,7 +473,7 @@ void cleanupChildren(const std::string& childRoot)
         if (noteStat.good())
         {
             const time_t modifiedTimeSec = noteStat.modifiedTimeMs() / 1000;
-            if (time(nullptr) < modifiedTimeSec + 180)
+            if (time(nullptr) < modifiedTimeSec + CrashedJailKeepSecs)
                 continue;
         }
 
@@ -539,7 +564,8 @@ int createCOKit(const std::string& childRoot, const std::string& sysTemplate,
 
     // Update the dynamic files as necessary.
 #if ENABLE_CHILDROOTS
-    const bool sysTemplateIncomplete = !JailUtil::SysTemplate::updateDynamicFiles(sysTemplate);
+    const bool sysTemplateIncomplete =
+        !NoCapsForKit && !JailUtil::SysTemplate::updateDynamicFiles(sysTemplate);
 #else
     const bool sysTemplateIncomplete = false;
 #endif
@@ -552,7 +578,7 @@ int createCOKit(const std::string& childRoot, const std::string& sysTemplate,
     const auto startForkingTime = std::chrono::steady_clock::now();
 
     pid_t childPid = 0;
-    if constexpr (Util::isKitInProcess())
+    if (Util::isKitInProcess())
     {
         std::thread([childRoot, jailId = std::move(jailId), configId, sysTemplate,
                      loTemplate, queryVersion
@@ -562,7 +588,7 @@ int createCOKit(const std::string& childRoot, const std::string& sysTemplate,
                     ] {
             sleepForDebugger();
             lokit_main(childRoot, jailId, configId, sysTemplate, loTemplate, true,
-                       true, false, queryVersion, DisplayVersion,
+                       false, true, false, queryVersion, DisplayVersion,
                        sysTemplateIncomplete, spareKitId);
         })
             .detach();
@@ -574,8 +600,8 @@ int createCOKit(const std::string& childRoot, const std::string& sysTemplate,
                           queryVersion, sysTemplateIncomplete]()
         {
             lokit_main(childRoot, jailId, configId, sysTemplate, loTemplate,
-                       NoCapsForKit, NoSeccomp, useMountNamespaces, queryVersion,
-                       DisplayVersion, sysTemplateIncomplete, spareKitId);
+                       NoCapsForKit, RequireLandlock, NoSeccomp, useMountNamespaces,
+                       queryVersion, DisplayVersion, sysTemplateIncomplete, spareKitId);
         };
 
         auto parentFunc = [childRoot, jailId = std::move(jailId)](int pid)
@@ -626,6 +652,11 @@ int createSubForKit(const std::string& subForKitIdent, const std::string& childR
 
         // reset this global counter for this new subForKit
         ForkCounter = 0;
+
+        // The children of the parent forkit are not children of this subForKit.
+        childJails.clear();
+        cleanupJailPaths.clear();
+        subForKitPids.clear();
 
         // Apply core configmgr xcu settings to this forkit for its coolkits to inherit
         {
@@ -690,10 +721,16 @@ void createSubForKits(const std::string& childRoot, const std::string& sysTempla
     std::vector<std::string> subForKitRequests = std::move(SubForKitRequests);
     for (const auto& subForKitIdent : subForKitRequests)
     {
-        if (createSubForKit(subForKitIdent, childRoot, sysTemplate, loTemplate,
-                            useMountNamespaces) < 0)
+        const int pid = createSubForKit(subForKitIdent, childRoot, sysTemplate, loTemplate,
+                                        useMountNamespaces);
+        if (pid < 0)
         {
             LOG_ERR("Failed to create a subForKit process for ident: " << subForKitIdent);
+        }
+        else if (pid == 0)
+        {
+            // We are the new subForKit: the rest of the requests are for our parent.
+            return;
         }
     }
 }
@@ -831,7 +868,7 @@ int forkit_main(int argc, char** argv)
 
     Util::sleepFromEnvIfSet("Forkit", "SLEEPFORDEBUGGER");
 
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
     {
         // Already set by COOLWSD.cpp in kit in process
         SigUtil::setFatalSignals("forkit startup of " + Util::getCoolVersion() + ' ' +
@@ -850,7 +887,7 @@ int forkit_main(int argc, char** argv)
     if (simd::init())
         simd_deltaInit();
 
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
         Util::setApplicationPath(Poco::Path(argv[0]).parent().toString());
 
     // Initialization
@@ -973,6 +1010,12 @@ int forkit_main(int argc, char** argv)
             NoCapsForKit = true;
         }
 
+        // landlock is the only isolation available, so failing to apply it is fatal
+        else if (std::strstr(cmd, "--require-landlock") == cmd)
+        {
+            RequireLandlock = true;
+        }
+
         // we are running without seccomp protection
         else if (std::strstr(cmd, "--noseccomp") == cmd)
         {
@@ -1024,7 +1067,8 @@ int forkit_main(int argc, char** argv)
         LOG_FTL("Capabilities are not set for the coolforkit program.");
         LOG_FTL("Please make sure that the current partition was *not* mounted with the 'nosuid' option.");
         LOG_FTL("If you are on SLES11, please set 'file_caps=1' as kernel boot option.");
-        return EX_SOFTWARE;
+        // EX_CONFIG distinguishes the missing capabilities case from any other failure to start.
+        return EX_CONFIG;
     }
 
     // Initialize LoKit
@@ -1038,14 +1082,18 @@ int forkit_main(int argc, char** argv)
         LOG_ERR("forkit has more than a single thread after pre-init" << Util::ThreadCounter().count());
 
 #if ENABLE_CHILDROOTS
-    // Link the network and system files in sysTemplate, if possible.
-    JailUtil::SysTemplate::setupDynamicFiles(sysTemplate);
+    // A kit that is not chrooted reads the real files, so there is no systemplate to prepare.
+    if (!NoCapsForKit)
+    {
+        // Link the network and system files in sysTemplate, if possible.
+        JailUtil::SysTemplate::setupDynamicFiles(sysTemplate);
 
-    // Make dev/[u]random point to the writable devices in tmp/dev/.
-    JailUtil::SysTemplate::setupRandomDeviceLinks(sysTemplate);
+        // Make dev/[u]random point to the writable devices in tmp/dev/.
+        JailUtil::SysTemplate::setupRandomDeviceLinks(sysTemplate);
+    }
 #endif
 
-    if constexpr (!Util::isKitInProcess())
+    if (!Util::isKitInProcess())
     {
         // Parse the configuration.
         char* const conf = std::getenv("COOL_CONFIG");
@@ -1055,7 +1103,14 @@ int forkit_main(int argc, char** argv)
 
     ProcUtil::setThreadName("forkit");
 
+    // Expand the library paths here, once. The expansion reads the whole of /lib and /lib64,
+    // and each child forked from here inherits the result.
+    Landlock::precomputeGlobPaths();
+
     LOG_INF("Preinit stage OK.");
+
+    if (!Util::isKitInProcess())
+        UnitBase::startKitTimeout();
 
     // We must have at least one child, more are created dynamically.
     // Ask this first child to send version information to master process and trace startup.
@@ -1125,6 +1180,32 @@ int forkit_main(int argc, char** argv)
                 // new sub forkits are launched after an 'addforkit' message
                 createSubForKits(childRoot, sysTemplate, loTemplate, useMountNamespaces);
             }
+    }
+
+    if (!ForKitIdent.empty() && getppid() == parentPid)
+    {
+        // No document uses this configuration any more, so its settings are removed now.
+        removeSharedPresets(childRoot, ForKitIdent);
+
+        // A subForKit that was told to exit is still the parent of its kits. It stays until they
+        // have exited, and removes their jails. The wait is a little longer than a crashed jail is
+        // kept, so that jail is removed too.
+        LOG_INF("SubForKit [" << ForKitIdent << "] waits for " << childJails.size()
+                              << " kits to exit.");
+        const std::chrono::seconds maxWait(CrashedJailKeepSecs + 2 * POLL_FORKIT_TIMEOUT_SECS);
+        const auto deadline = std::chrono::steady_clock::now() + maxWait;
+        cleanupChildren(childRoot);
+        while ((!childJails.empty() || !cleanupJailPaths.empty()) && getppid() == parentPid &&
+               std::chrono::steady_clock::now() < deadline)
+        {
+            ForKitPoll->poll(std::chrono::seconds(POLL_FORKIT_TIMEOUT_SECS));
+            cleanupChildren(childRoot);
+        }
+
+        if (!childJails.empty() || !cleanupJailPaths.empty())
+            LOG_WRN("SubForKit [" << ForKitIdent << "] exits with " << childJails.size()
+                                  << " kits still running and " << cleanupJailPaths.size()
+                                  << " jails not removed.");
     }
 
     const int returnValue = UnitBase::uninit();

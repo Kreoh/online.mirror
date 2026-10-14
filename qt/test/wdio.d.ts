@@ -26,6 +26,9 @@ declare const browser: {
 // Globals available inside browser.execute() callbacks (browser-side).
 interface Window {
 	postMobileMessage(msg: string): void;
+	// True when jsdialogs in the Qt shell render as their own native
+	// windows; the application leaves it unset.
+	enablePopoutDialogs?: boolean;
 	// True once a .uno:CopySlide command has reported completion through
 	// the map's 'commandresult' event; false while one is in flight.
 	__slideCopyResultSeen?: boolean;
@@ -48,6 +51,10 @@ declare const app: {
 		deselectAll(): void;
 		isEditMode(): boolean;
 		_enterEditMode(permission: string): void;
+		sendUnoCommand(command: string, json?: unknown, force?: boolean): void;
+		// Save the document. dontTerminateEdit keeps an in-progress cell edit;
+		// dontSaveIfUnmodified skips the save when there are no edits.
+		save(dontTerminateEdit: boolean, dontSaveIfUnmodified: boolean): void;
 		_clip: {
 			clearSelection(): void;
 			setTextSelectionType(selectionType: string): void;
@@ -64,6 +71,10 @@ declare const app: {
 			show(): void;
 			hide(): void;
 			toggle(): void;
+		};
+		jsdialog: {
+			dialogs: { [id: string]: unknown };
+			close(id: string, sendCloseEvent: boolean, focusHandled?: boolean): boolean;
 		};
 	};
 	impress: {
@@ -85,5 +96,10 @@ declare const app: {
 		// Runs the oldest queued task; false when the queue is empty.
 		runTheTopTask(): boolean;
 		triggerDrainCallbacks(): void;
+	};
+	file: {
+		// True while the document has edits the engine has not saved. Set from
+		// the engine's .uno:ModifiedStatus notification.
+		modified: boolean;
 	};
 };

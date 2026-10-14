@@ -37,8 +37,9 @@ OUString lcl_getTypePath(OUString& rType)
 namespace writerfilter::dmapper
 {
 using namespace ::com::sun::star;
+using namespace ::cpo;
 
-SmartTagHandler::SmartTagHandler(uno::Reference<uno::XComponentContext> xComponentContext,
+SmartTagHandler::SmartTagHandler(uno::Reference<cpo::uno::XComponentContext> xComponentContext,
                                  const rtl::Reference<SwXTextDocument>& xTextDocument)
     : LoggedProperties("SmartTagHandler")
     , m_xComponentContext(std::move(xComponentContext))

@@ -54,7 +54,8 @@
 #include <itrtxt.hxx>
 
 using namespace css;
-using namespace css::uno;
+using namespace ::cpo;
+using namespace ::cpo::uno;
 
 /// Covers sw/source/core/text/ fixes.
 class SwCoreTextTest : public SwModelTestBase
@@ -221,6 +222,76 @@ CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf159924)
     CPPUNIT_ASSERT(pCont);
     OUString sContent = ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pCont);
     CPPUNIT_ASSERT_EQUAL(u"This link opens the LibreOffice website"_ustr, sContent);
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testLinkNoName)
+{
+    createSwDoc("link_no_name.fodt");
+    save(TestFilter::PDF_WRITER);
+
+    vcl::filter::PDFDocument aDocument;
+    SvFileStream aStream(maTempFile.GetURL(), StreamMode::READ);
+    CPPUNIT_ASSERT(aDocument.Read(aStream));
+
+    // The document has one page.
+    std::vector<vcl::filter::PDFObjectElement*> aPages = aDocument.GetPages();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aPages.size());
+
+    auto pAnnots = dynamic_cast<vcl::filter::PDFArrayElement*>(aPages[0]->Lookup("Annots"_ostr));
+    CPPUNIT_ASSERT(pAnnots);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pAnnots->GetElements().size());
+
+    auto pAnnotRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pAnnots->GetElements()[0]);
+    CPPUNIT_ASSERT(pAnnotRef);
+
+    vcl::filter::PDFObjectElement* pAnnot = pAnnotRef->LookupObject();
+    CPPUNIT_ASSERT(pAnnot);
+
+    auto aType = static_cast<vcl::filter::PDFNameElement*>(pAnnot->Lookup("Type"_ostr));
+    CPPUNIT_ASSERT_EQUAL("Annot"_ostr, aType->GetValue());
+
+    auto aSubType = static_cast<vcl::filter::PDFNameElement*>(pAnnot->Lookup("Subtype"_ostr));
+    CPPUNIT_ASSERT_EQUAL("Link"_ostr, aSubType->GetValue());
+
+    auto pCont = dynamic_cast<vcl::filter::PDFHexStringElement*>(pAnnot->Lookup("Contents"_ostr));
+    CPPUNIT_ASSERT(pCont);
+    OUString sContent = ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pCont);
+    CPPUNIT_ASSERT_EQUAL(u"link"_ustr, sContent);
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testLinkedImage)
+{
+    createSwDoc("image_link.fodt");
+    save(TestFilter::PDF_WRITER);
+
+    vcl::filter::PDFDocument aDocument;
+    SvFileStream aStream(maTempFile.GetURL(), StreamMode::READ);
+    CPPUNIT_ASSERT(aDocument.Read(aStream));
+
+    // The document has one page.
+    std::vector<vcl::filter::PDFObjectElement*> aPages = aDocument.GetPages();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aPages.size());
+
+    auto pAnnots = dynamic_cast<vcl::filter::PDFArrayElement*>(aPages[0]->Lookup("Annots"_ostr));
+    CPPUNIT_ASSERT(pAnnots);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pAnnots->GetElements().size());
+
+    auto pAnnotRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pAnnots->GetElements()[0]);
+    CPPUNIT_ASSERT(pAnnotRef);
+
+    vcl::filter::PDFObjectElement* pAnnot = pAnnotRef->LookupObject();
+    CPPUNIT_ASSERT(pAnnot);
+
+    auto aType = static_cast<vcl::filter::PDFNameElement*>(pAnnot->Lookup("Type"_ostr));
+    CPPUNIT_ASSERT_EQUAL("Annot"_ostr, aType->GetValue());
+
+    auto aSubType = static_cast<vcl::filter::PDFNameElement*>(pAnnot->Lookup("Subtype"_ostr));
+    CPPUNIT_ASSERT_EQUAL("Link"_ostr, aSubType->GetValue());
+
+    auto pCont = dynamic_cast<vcl::filter::PDFHexStringElement*>(pAnnot->Lookup("Contents"_ostr));
+    CPPUNIT_ASSERT(pCont);
+    OUString sContent = ::vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pCont);
+    CPPUNIT_ASSERT_EQUAL(u"alt text - some description"_ustr, sContent);
 }
 
 CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf159336)
@@ -1785,6 +1856,41 @@ CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf136663_Korean_No_Extra_Spacing)
                 "//body/txt[4]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Text']", 3);
     assertXPath(pXmlDoc,
                 "//body/txt[4]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Kern']", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf171555NonBreakingHyphen)
+{
+    // Given paragraphs holding a non-breaking hyphen, on its own and inside a field, in a font
+    // that has no glyph for U+2011:
+    createSwDoc("tdf171555.fodt");
+
+    // When painting them:
+    std::shared_ptr<GDIMetaFile> xMetaFile = getSwDocShell()->GetPreviewMetaFile();
+    CPPUNIT_ASSERT(xMetaFile);
+
+    OUStringBuffer aPainted;
+    for (size_t nAction = 0; nAction < xMetaFile->GetActionSize(); ++nAction)
+    {
+        MetaAction* pAction = xMetaFile->GetAction(nAction);
+        if (pAction->GetType() != MetaActionType::TEXTARRAY)
+            continue;
+
+        auto pTextArray = static_cast<MetaTextArrayAction*>(pAction);
+        aPainted.append(
+            pTextArray->GetText().subView(pTextArray->GetIndex(), pTextArray->GetLen()));
+    }
+
+    // Then the plain hyphen the portion stands for reaches the font, not U+2011 itself, which
+    // Carlito has no glyph for; inside the field the hyphen was not painted at all. A no-break
+    // space stands for itself and still reaches the font as U+00A0. Joining the runs keeps this
+    // independent of where the portions and the narrow column's lines split, while still
+    // catching a character painted twice:
+    CPPUNIT_ASSERT_EQUAL(u"--a-bmm-nna\u00A0bX((1))Y"_ustr, aPainted.makeStringAndClear());
+
+    // ... and the hyphen is as wide as the one the second paragraph spells out directly
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    CPPUNIT_ASSERT_EQUAL(getXPath(pXmlDoc, "//txt[2]/SwParaPortion/SwLineLayout", "width"),
+                         getXPath(pXmlDoc, "//txt[1]/SwParaPortion/SwLineLayout", "width"));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

@@ -76,21 +76,52 @@ public:
     GenericDropTargetDropContext() {}
 
     // XDropTargetDropContext
-    virtual void SAL_CALL acceptDrop(sal_Int8 /*dragOperation*/) override {}
-    virtual void SAL_CALL rejectDrop() override {}
-    virtual void SAL_CALL dropComplete(bool /*success*/) override {}
+    virtual void acceptDrop(sal_Int8 /*dragOperation*/) override {}
+    virtual void rejectDrop() override {}
+    virtual void dropComplete(bool /*success*/) override {}
 };
 
 class GenericDropTargetDragContext
     : public ::cppu::WeakImplHelper<css::datatransfer::dnd::XDropTargetDragContext>
 {
+    // The DNDConstants action the drop target accepted, or ACTION_NONE when it rejected the drag.
+    sal_Int8 mnAcceptedAction = css::datatransfer::dnd::DNDConstants::ACTION_NONE;
+
 public:
     GenericDropTargetDragContext() {}
 
+    sal_Int8 getAcceptedAction() const { return mnAcceptedAction; }
+
     // XDropTargetDragContext
-    virtual void SAL_CALL acceptDrag(sal_Int8 /*dragOperation*/) override {}
-    virtual void SAL_CALL rejectDrag() override {}
+    virtual void acceptDrag(sal_Int8 dragOperation) override { mnAcceptedAction = dragOperation; }
+    virtual void rejectDrag() override
+    {
+        mnAcceptedAction = css::datatransfer::dnd::DNDConstants::ACTION_NONE;
+    }
 };
+
+// The pointer that shows what a drop with the accepted DNDConstants action would do.
+PointerStyle ImplKitDragPointer(sal_Int8 nAcceptedAction)
+{
+    if (nAcceptedAction & css::datatransfer::dnd::DNDConstants::ACTION_COPY)
+        return PointerStyle::CopyData;
+    if (nAcceptedAction & css::datatransfer::dnd::DNDConstants::ACTION_MOVE)
+        return PointerStyle::MoveData;
+    if (nAcceptedAction & css::datatransfer::dnd::DNDConstants::ACTION_LINK)
+        return PointerStyle::LinkData;
+    return PointerStyle::NotAllowed;
+}
+
+// Ends a kit drag and gives the mouse-down window back the pointer it had before the drag.
+void ImplEndKitDrag(ImplFrameData* pFrameData)
+{
+    pFrameData->mbStartDragCalled = pFrameData->mbDragging = false;
+    if (!pFrameData->moPointerBeforeKitDrag)
+        return;
+    if (pFrameData->mpMouseDownWin)
+        pFrameData->mpMouseDownWin->SetPointer(*pFrameData->moPointerBeforeKitDrag);
+    pFrameData->moPointerBeforeKitDrag.reset();
+}
 }
 
 bool ImplCallPreNotify( NotifyEvent& rEvt )
@@ -522,7 +553,7 @@ bool ImplHandleMouseEvent( const VclPtr<vcl::Window>& xWindow, NotifyEventType n
                                     pMouseDownWin->ImplGetFrameData()->mnFirstMouseY ) );
 
                                 // create a UNO mouse event out of the available data
-                                css::awt::MouseEvent aMouseEvent( static_cast < css::uno::XInterface * > ( nullptr ),
+                                css::awt::MouseEvent aMouseEvent( static_cast < cpo::uno::XInterface * > ( nullptr ),
 #ifdef MACOSX
                                     nCode & (KEY_SHIFT | KEY_MOD1 | KEY_MOD2 | KEY_MOD3),
 #else
@@ -537,7 +568,7 @@ bool ImplHandleMouseEvent( const VclPtr<vcl::Window>& xWindow, NotifyEventType n
                                 SolarMutexReleaser aReleaser;
 
                                 // FIXME: where do I get Action from ?
-                                css::uno::Reference< css::datatransfer::dnd::XDragSource > xDragSource = pMouseDownWin->GetDragSource();
+                                cpo::uno::Reference< css::datatransfer::dnd::XDragSource > xDragSource = pMouseDownWin->GetDragSource();
 
                                 if( xDragSource.is() )
                                 {
@@ -859,14 +890,16 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
 
     vcl::Window* pDragWin = pFrameData->mpMouseDownWin;
 
-    sal_Int8 nAction = (nCode & KEY_MOD1) ? css::datatransfer::dnd::DNDConstants::ACTION_COPY
-                                          : css::datatransfer::dnd::DNDConstants::ACTION_MOVE;
+    // A kit client sends the macOS Command key as KEY_MOD3, and it copies the same as Ctrl.
+    sal_Int8 nAction = (nCode & (KEY_MOD1 | KEY_MOD3))
+                           ? css::datatransfer::dnd::DNDConstants::ACTION_COPY
+                           : css::datatransfer::dnd::DNDConstants::ACTION_MOVE;
 
     if (pDragWin &&
         nEvent == NotifyEventType::MOUSEMOVE &&
         pFrameData->mbDragging)
     {
-        css::uno::Reference<css::datatransfer::dnd::XDropTargetDragContext> xDropTargetDragContext =
+        rtl::Reference<GenericDropTargetDragContext> xDropTargetDragContext =
             new GenericDropTargetDragContext();
         rtl::Reference<DNDListenerContainer> xDropTarget(
             pDragWin->ImplGetWindowImpl()->mxDNDListenerContainer);
@@ -876,7 +909,7 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
             (nCode & (MOUSE_LEFT | MOUSE_RIGHT | MOUSE_MIDDLE)) !=
             (MouseSettings::GetStartDragCode() & (MOUSE_LEFT | MOUSE_RIGHT | MOUSE_MIDDLE)))
         {
-            pFrameData->mbStartDragCalled = pFrameData->mbDragging = false;
+            ImplEndKitDrag(pFrameData);
             return false;
         }
 
@@ -885,6 +918,10 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
                                         | css::datatransfer::dnd::DNDConstants::ACTION_MOVE
                                         | css::datatransfer::dnd::DNDConstants::ACTION_LINK));
 
+        if (!pFrameData->moPointerBeforeKitDrag)
+            pFrameData->moPointerBeforeKitDrag = pDragWin->GetPointer();
+        pDragWin->SetPointer(ImplKitDragPointer(xDropTargetDragContext->getAcceptedAction()));
+
         return true;
     }
 
@@ -892,15 +929,15 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
         nEvent == NotifyEventType::MOUSEBUTTONUP &&
         pFrameData->mbDragging)
     {
-        css::uno::Reference<css::datatransfer::XTransferable> xTransfer;
-        css::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext> xDropTargetDropContext =
+        cpo::uno::Reference<css::datatransfer::XTransferable> xTransfer;
+        cpo::uno::Reference<css::datatransfer::dnd::XDropTargetDropContext> xDropTargetDropContext =
             new GenericDropTargetDropContext();
         rtl::Reference<DNDListenerContainer> xDropTarget(
             pDragWin->ImplGetWindowImpl()->mxDNDListenerContainer);
 
         if (!xDropTarget.is() || !xDropTargetDropContext.is())
         {
-            pFrameData->mbStartDragCalled = pFrameData->mbDragging = false;
+            ImplEndKitDrag(pFrameData);
             return false;
         }
 
@@ -912,14 +949,14 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
                                     | css::datatransfer::dnd::DNDConstants::ACTION_LINK),
                                    xTransfer);
 
-        pFrameData->mbStartDragCalled = pFrameData->mbDragging = false;
+        ImplEndKitDrag(pFrameData);
         return true;
     }
 
     if (pFrameData->mbDragging)
     {
         // wrong status, reset
-        pFrameData->mbStartDragCalled = pFrameData->mbDragging = false;
+        ImplEndKitDrag(pFrameData);
         return false;
     }
 
@@ -952,9 +989,14 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
 
                         if (xDragGestureRecognizer.is())
                         {
+                            // The drag starts at the button-down position, so the dragged
+                            // selection is the one under the pointer when the button was pressed.
+                            Point aDownPos = pDownWin->ScreenToOutputPixel(
+                                Point(pFrameData->mnFirstMouseX, pFrameData->mnFirstMouseY));
+
                             // create a UNO mouse event out of the available data
                             css::awt::MouseEvent aEvent(
-                                static_cast < css::uno::XInterface * > ( nullptr ),
+                                static_cast < cpo::uno::XInterface * > ( nullptr ),
  #ifdef MACOSX
                                 nCode & (KEY_SHIFT | KEY_MOD1 | KEY_MOD2 | KEY_MOD3),
  #else
@@ -965,7 +1007,7 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
                                 nMouseY,
                                 nClicks,
                                 false);
-                            css::uno::Reference< css::datatransfer::dnd::XDragSource > xDragSource =
+                            cpo::uno::Reference< css::datatransfer::dnd::XDragSource > xDragSource =
                                 pDownWin->GetDragSource();
 
                             if (xDragSource.is())
@@ -973,8 +1015,8 @@ bool ImplKitHandleMouseEvent(const VclPtr<vcl::Window>& xWindow, NotifyEventType
                                 xDragGestureRecognizer->
                                     fireDragGestureEvent(
                                         0,
-                                        aWinPos.X(),
-                                        aWinPos.Y(),
+                                        aDownPos.X(),
+                                        aDownPos.Y(),
                                         xDragSource,
                                         cpo::uno::Any(aEvent));
                             }

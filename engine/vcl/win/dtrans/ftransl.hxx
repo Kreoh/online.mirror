@@ -25,7 +25,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/datatransfer/XDataFormatTranslator.hpp>
 #include <com/sun/star/datatransfer/XMimeContentTypeFactory.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <cpo/uno/XComponentContext.hpp>
 #include "WinClip.hxx"
 
 #include <vector>
@@ -36,24 +36,24 @@ class CDataFormatTranslatorUNO : public
 {
 
 public:
-    explicit CDataFormatTranslatorUNO( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit CDataFormatTranslatorUNO( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
 
     // XDataFormatTranslator
 
-    virtual cpo::uno::Any SAL_CALL getSystemDataTypeFromDataFlavor( const css::datatransfer::DataFlavor& aDataFlavor ) override;
+    virtual cpo::uno::Any getSystemDataTypeFromDataFlavor( const css::datatransfer::DataFlavor& aDataFlavor ) override;
 
-    virtual css::datatransfer::DataFlavor SAL_CALL getDataFlavorFromSystemDataType( const cpo::uno::Any& aSysDataType ) override;
+    virtual css::datatransfer::DataFlavor getDataFlavorFromSystemDataType( const cpo::uno::Any& aSysDataType ) override;
 
     // XServiceInfo
 
-    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual OUString getImplementationName(  ) override;
 
-    virtual bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
 
-    virtual cpo::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
 
 private:
-    const css::uno::Reference< css::uno::XComponentContext >  m_xContext;
+    const cpo::uno::Reference< cpo::uno::XComponentContext >  m_xContext;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

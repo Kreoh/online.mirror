@@ -1,0 +1,941 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Calc-Intro-Template.ods\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-09-20 07:57+0000\n"
+"Last-Translator: QuietCedar47 "
+"<quietcedar47@users.noreply.hosted.weblate.org>\n"
+"Language-Team: Chinese (Simplified Han script) <https://hosted.weblate.org/"
+"projects/collabora-online/calc-intro-template/zh_Hans/>\n"
+"Language: zh_Hans\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Weblate 2026.10.dev0\n"
+
+#. content.xml (validation title)
+msgid "Try formatting"
+msgstr "尝试格式化功能"
+
+#. content.xml (validation help message)
+msgid "Explore the Format tab to customize your data with styles and formats."
+msgstr "前往“格式”选项卡，通过自定义样式与格式美化您的数据。"
+
+#. content.xml (validation title)
+msgid "Help"
+msgstr "帮助"
+
+#. content.xml (validation help message)
+msgid ""
+"For Medium Stock use condition \"Values between: 20-80\" and style \"Medium "
+"Stock\"."
+msgstr "对于“中等库存”，请使用条件“介于 20 至 80 之间的值”以及样式“中等库存”。"
+
+#. content.xml (validation help message)
+#, fuzzy
+msgid ""
+"For High Stock use condition \"Values greater than: 80\" and style \"High "
+"Stock\"."
+msgstr "对于“中等库存”，请使用条件“介于 20 至 80 之间的值”以及样式“中等库存”。"
+
+#. content.xml (validation title)
+msgid "Use other options"
+msgstr "使用其他选项"
+
+#. content.xml (validation help message)
+msgid "Use Standard or Advanced Filter to narrow down your data more precisely"
+msgstr "使用标准筛选或高级筛选更精准地缩小数据范围"
+
+#. content.xml (validation title)
+msgid "Share document link"
+msgstr "共享文档链接"
+
+#. content.xml (validation help message)
+msgid ""
+"Share a direct link with people who already have access to the document for "
+"quick and easy access."
+msgstr "直接与已获权限的人员共享文档链接，方便其快速访问。"
+
+#. content.xml (sheet name)
+msgid "👋 Introduction"
+msgstr "👋 简介"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "<1>Next Chapter: ✚</1><2> Formulas & Functions</2>"
+msgstr "<1>下一章：✚</1><2> 公式与函数</2>"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "👋General information"
+msgstr "👋基本信息"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Collabora Office spreadsheet can be used to calculate, analyse, and manage "
+"your data. This introduction template will help you get started and explore "
+"some of the main features of the product."
+msgstr ""
+"Collabora Office 电子表格可用于计算、分析和管理您的数据。此简介模板将帮助您快"
+"速上手并了解产品的一些主要功能。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Calc features – key features you can explore"
+msgstr "Calc 功能列表 – 您可以探索的核心功能"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Calculations (Formulas & Functions)"
+msgstr "计算（公式与函数）"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Use built-in functions to perform calculations on your data. Create formulas "
+"easily and get help with the Function Wizard."
+msgstr "使用内置函数对数据进行计算。轻松创建公式，也可借助“函数向导”获取帮助。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Tables"
+msgstr "表格"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Organise your data into structured tables. Quickly edit, sort, and filter "
+"information to keep everything clear and easy to manage."
+msgstr ""
+"将数据整理为结构化表格。快速编辑、排序与筛选信息，让所有数据清晰直观、便于管"
+"理。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Charts"
+msgstr "图表"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Visualise your data with different chart types. Quickly create and customise "
+"charts to better understand trends and comparisons."
+msgstr ""
+"使用不同的图表类型实现数据可视化。快速创建并自定义图表，以更好地理解趋势或对"
+"比。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Sorting & filtering"
+msgstr "排序与筛选"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Find what matters faster by sorting and filtering your data. Focus only on "
+"the information you need."
+msgstr ""
+"通过对数据进行排序和筛选，更快找到重点内容。通过使用排序和筛选，您可以聚焦于"
+"您需要的信息。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Data formatting"
+msgstr "数据格式化"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Format your data to improve clarity and readability. Use colours, styles, "
+"and number formats to highlight key information."
+msgstr ""
+"格式化数据以提高清晰度和可读性。使用颜色、样式和数字格式突出显示关键信息。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Collaboration tools"
+msgstr "协作工具"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Work together in real time. Share, comment, and track changes directly in "
+"the document."
+msgstr "支持实时多人协作，可直接在文档内进行共享、发表批注及追踪修改。"
+
+#. content.xml (sheet '👋 Introduction')
+msgid "Accessibility"
+msgstr "无障碍"
+
+#. content.xml (sheet '👋 Introduction')
+msgid ""
+"Calc is designed with accessibility in mind, helping ensure that everyone "
+"can easily create, edit, and work with spreadsheets."
+msgstr ""
+"Calc 在设计时充分考虑了无障碍辅助功能，确保每个人都能轻松创建、编辑和使用电子"
+"表格。"
+
+#. content.xml (sheet name)
+msgid "✚ Formulas & Functions"
+msgstr "✚ 公式与函数"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "✚Using simple functions"
+msgstr "✚使用简单函数"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"We will look at a practical case to learn how to use basic Calc features and "
+"simple functions."
+msgstr "我们将通过一个例子，学习如何使用 Calc 的基本功能和简单函数。"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Step-by-step guide – Adding values"
+msgstr "分步指南 – 求和计算"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"In this example we want to calculate the total number of items in stock. The "
+"SUM function allows you to quickly add numbers together."
+msgstr ""
+"在本例中，我们想要计算库存物品的总数量。SUM 函数允许您快速将多个数值相加。"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Writing formula into cell"
+msgstr "在单元格中写入公式"
+
+#. content.xml (sheet '✚ Formulas & Functions'); content.xml (sheet '📋
+#. Tables'); content.xml (sheet '🎨 Conditional Formatting'); content.xml
+#. (sheet '📊 Charts'); content.xml (sheet '🔍 Data & filtering')
+msgid "Item"
+msgstr "项目"
+
+#. content.xml (sheet '✚ Formulas & Functions'); content.xml (sheet '📋
+#. Tables'); content.xml (sheet '🎨 Conditional Formatting'); content.xml
+#. (sheet '📊 Charts'); content.xml (sheet '🔍 Data & filtering')
+msgid "Quantity [pcs]"
+msgstr "数量 [件]"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "1. Click on the cell below the Quantity column"
+msgstr "1. 单击“数量”列下方的单元格"
+
+#. content.xml (sheet '✚ Formulas & Functions'); content.xml (sheet '📋
+#. Tables'); content.xml (sheet '🎨 Conditional Formatting'); content.xml
+#. (sheet '📊 Charts'); content.xml (sheet '🔍 Data & filtering')
+msgid "Laptop"
+msgstr "笔记本电脑"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "<1>2. Type the formula </1><2>=SUM(E9:E11)</2>"
+msgstr "<1>2. 输入公式 </1><2>=SUM(E9:E11)</2>"
+
+#. content.xml (sheet '✚ Formulas & Functions'); content.xml (sheet '📋
+#. Tables'); content.xml (sheet '🎨 Conditional Formatting'); content.xml
+#. (sheet '📊 Charts'); content.xml (sheet '🔍 Data & filtering')
+msgid "Mouse"
+msgstr "鼠标"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"<1>3. Press </1><2>Enter</2><3> to calculate the total number of items</3>"
+msgstr "<1>3. 按 </1><2>Enter</2><3> 计算物品总数量</3>"
+
+#. content.xml (sheet '✚ Formulas & Functions'); content.xml (sheet '📋
+#. Tables'); content.xml (sheet '🎨 Conditional Formatting'); content.xml
+#. (sheet '📊 Charts'); content.xml (sheet '🔍 Data & filtering')
+msgid "Notebook"
+msgstr "笔记本"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Inserting formula via Formulas tab – Formula wizard"
+msgstr "使用“公式”选项卡中的“插入函数”（函数向导）插入公式"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "<1>2. Open </1><2>Formulas tab</2><3> in Notebook bar</3>"
+msgstr "<1>2. 打开</1><3>选项卡栏中的</3><2>公式选项卡</2>"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "<1>3. Click on </1><2>Insert Function</2>"
+msgstr "<1>3. 单击 </1><2>插入函数</2>"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"<1>4. Choose SUM from the list of functions, </1><2>=SUM ( )</2><3> should "
+"appear</3>"
+msgstr "<1>4. 从函数列表中选择 SUM，<3>应该会显示</3> </1><2>=SUM ( )</2>"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "5. Select the cells containing the values you want to add"
+msgstr "5. 选择包含待求和数值的单元格"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "<1>6. Click </1><2>OK</2><3> to insert the formula</3>"
+msgstr "<1>6. 单击 </1><2>确定</2><3> 以插入公式</3>"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Inserting formula via Formulas tab chosen from Category"
+msgstr "在“公式”选项卡中按类别选择函数并插入公式"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "<1>3. Click on </1><2>AutoSum</2>"
+msgstr "<1>3. 单击 </1><2>自动求和</2>"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Formulas Structure"
+msgstr "公式结构"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"<1>Formulas in Calc always start with the equals sign </1><2>=</2><3>. After "
+"that comes the function name (for example </3><4>sum</4><5>), which defines "
+"what type of calculation will be performed. The </5><6>brackets</6><7> "
+"contain the cells that the formula will use for its calculation.</7>"
+msgstr ""
+"<1>Calc 中的公式始终以等号 </1><2>=</2><3>开头。后面是函数名称（例如 </"
+"3><4>sum</4><5>），用于定义将要执行的计算类型。</5><6>括号</6><7> 内包含公式"
+"计算所引用的单元格。</7>"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Function Library"
+msgstr "函数库"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"Collabora Office Calc provides a large library of built-in functions that "
+"help you perform different types of calculations and data analysis."
+msgstr ""
+"Collabora Office Calc 提供了丰富且庞大的内置函数库，帮助您执行各种类型的计算"
+"和数据分析。"
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"<1>Functions are organised into categories such as Database, </1><2>Date & "
+"Time, Financial, Information, Logical, Mathematical, Array, Statistical, "
+"Spreadsheet, Text </2><3>and</3><4> Add-in</4><5>, making it easier to find "
+"the function you need.</5>"
+msgstr ""
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid ""
+"<1>You can access these functions through the Function Library or by using "
+"the </1><2>Function Wizard.</2>"
+msgstr ""
+
+#. content.xml (sheet '✚ Formulas & Functions')
+msgid "Next Chapter: 📋 Tables"
+msgstr "下一章：📋 表"
+
+#. content.xml (sheet name)
+msgid "📋 Tables"
+msgstr "📋 表"
+
+#. content.xml (sheet '📋 Tables')
+msgid "📋Create a table"
+msgstr "📋创建表"
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"Tables help you organise large amounts of information in a clear and "
+"structured way. They make it easier to manage data, perform calculations, "
+"and visualise information."
+msgstr ""
+"表可以帮助您以清晰且结构化的方式组织海量信息，从而更轻松地管理数据、执行计算"
+"以及实现信息可视化。"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🎨 Conditional
+#. Formatting'); content.xml (sheet '📊 Charts'); content.xml (sheet '🔍 Data &
+#. filtering')
+msgid "Step-by-step guide"
+msgstr "分步指南"
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"In this example we will learn how to create and use tables to organise data "
+"in a spreadsheet."
+msgstr "在本例中，我们将学习如何创建和使用表来组织电子表格中的数据。"
+
+#. content.xml (sheet '📋 Tables')
+msgid "Create a table from existing data"
+msgstr "基于现有数据创建表"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Category"
+msgstr "类别"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Supplier"
+msgstr "供应商"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '📊 Charts'); content.xml
+#. (sheet '🔍 Data & filtering')
+msgid ""
+"1. Select the range of cells that contains your data (including headers)"
+msgstr "1. 选择包含数据的单元格区域（包含标题列）"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Electronics"
+msgstr "电子产品"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Dell"
+msgstr "戴尔"
+
+#. content.xml (sheet '📋 Tables')
+msgid "<1>2. Open the </1><2>Insert tab</2><3> in the toolbar</3>"
+msgstr "<1>2. 打开工具栏中的 </1><2>插入选项卡</2><3></3>"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Logitech"
+msgstr "罗技"
+
+#. content.xml (sheet '📋 Tables')
+msgid "<1>3. Click </1><2>Table</2>"
+msgstr "<1>3. 单击 </1><2>表</2>"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Office supplies"
+msgstr "办公用品"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Staples"
+msgstr "史泰博"
+
+#. content.xml (sheet '📋 Tables')
+msgid "<1>4. Click </1><2>OK</2>"
+msgstr "<1>4. 单击 </1><2>确定</2>"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🎨 Conditional
+#. Formatting'); content.xml (sheet '📊 Charts'); content.xml (sheet '🔍 Data &
+#. filtering')
+msgid "Keyboard"
+msgstr "键盘"
+
+#. content.xml (sheet '📋 Tables')
+msgid "5. Your data is now organised as a table"
+msgstr "5. 您的数据现已整理为表格式"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🎨 Conditional
+#. Formatting'); content.xml (sheet '📊 Charts'); content.xml (sheet '🔍 Data &
+#. filtering')
+msgid "Pen"
+msgstr "笔"
+
+#. content.xml (sheet '📋 Tables'); content.xml (sheet '🔍 Data & filtering')
+msgid "Bic"
+msgstr "比克"
+
+#. content.xml (sheet '📋 Tables')
+msgid "Create a table from scratch"
+msgstr "从头开始创建表"
+
+#. content.xml (sheet '📋 Tables')
+msgid "<1>1. Open the </1><2>Insert tab</2><3> in the toolbar</3>"
+msgstr "<1>1. 打开工具栏中的 </1><2>插入选项卡</2><3></3>"
+
+#. content.xml (sheet '📋 Tables')
+msgid "<1>2. Click </1><2>Table</2>"
+msgstr "<1>2. 单击 </1><2>表</2>"
+
+#. content.xml (sheet '📋 Tables')
+msgid "3. Select the range of cells where you want to create the table"
+msgstr "3. 选择要创建表的单元格区域"
+
+#. content.xml (sheet '📋 Tables')
+msgid "5. Your table is now ready to be filled with data"
+msgstr "5. 表已创建完成，可填入数据"
+
+#. content.xml (sheet '📋 Tables')
+msgid "Editing tables"
+msgstr "编辑表"
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"When a table is created, additional tools become available in the toolbar. "
+"These tools allow you to customise and manage your table more easily. You "
+"can apply different table styles to improve the visual appearance of your "
+"data. You can also enable or disable options such as header rows, banded "
+"rows, and filter buttons, depending on how you want to display and work with "
+"your data."
+msgstr ""
+"创建数据表后，工具栏将自动调出专属工具，便于您更轻松地自定义与管理表格。您可"
+"以应用多样化的表格样式以优化数据的视觉呈现；也可根据数据展示与操作需求，灵活"
+"开启或关闭标题行、镶边行以及筛选按钮等功能选项。"
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"These features help you keep your table organised, highlight important "
+"information, and work more efficiently with your data."
+msgstr ""
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"<1>➜Try it: </1><2>Select your table, open tab Tables that appears in "
+"toolbar and explore.</2>"
+msgstr ""
+"<1>➜动手试试：</1><2>选择您的表，打开工具栏中显示的“表”选项卡进行探索。</2>"
+
+#. content.xml (sheet '📋 Tables')
+msgid "Pivot table"
+msgstr "数据透视表"
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"The pivot table (formerly known as DataPilot) allows you to combine, "
+"compare, and analyse large amounts of data. You can view different summaries "
+"of the source data, you can display the details of areas of interest, and "
+"you can create reports."
+msgstr ""
+"数据透视表（旧称 DataPilot）可用于合并、对比及分析海量数据。您可以多视角查看"
+"源数据的汇总信息，深入展开特定区域的数据明细，并生成各类分析报告。"
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"A table that has been created as a pivot table is an interactive table. Data "
+"can be arranged, rearranged or summarised according to different points of "
+"view."
+msgstr ""
+
+#. content.xml (sheet '📋 Tables')
+msgid ""
+"<1>➜Try it: </1><2>Go to the Insert tab and click Pivot Table to create one "
+"from your data.</2>"
+msgstr ""
+"<1>➜动手试试：</1><2>前往“插入”选项卡，单击“数据透视表”以基于您的数据创建透视"
+"表。</2>"
+
+#. content.xml (sheet '📋 Tables')
+msgid "Next Chapter: 🎨 Conditional Formatting"
+msgstr "下一章：🎨 条件格式"
+
+#. content.xml (sheet name)
+msgid "🎨 Conditional Formatting"
+msgstr "🎨 条件格式"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "🎨Conditional formatting"
+msgstr "🎨条件格式"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"Format your data to make it clearer and easier to understand. You can "
+"highlight important values, show patterns, and improve readability using "
+"colours, styles, and rules."
+msgstr ""
+"通过格式化数据使其更加清晰易懂。您可以借助颜色、样式与规则来突出重要数值、呈"
+"现数据规律，从而提升可读性。"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"Conditional formatting automatically changes how cells look based on their "
+"values, helping you quickly spot trends or important data."
+msgstr ""
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"In this example, we will apply conditional formatting to highlight key "
+"values in the data and make important information easier to spot at a glance."
+msgstr ""
+"在本示例中，我们将应用条件格式来高亮数据中的关键值，使重要信息一目了然。"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "Apply conditional formatting"
+msgstr "应用条件格式"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "1. Select the range of cells you want to format"
+msgstr "1. 选择要设置格式的单元格区域"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "<1>2. Open the </1><2>Format tab</2><3> in the toolbar</3>"
+msgstr "<1>2. 打开工具栏中的 </1><2>格式选项卡</2><3></3>"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "<1>3. Click </1><2>Conditional formatting</2>"
+msgstr "<1>3. 单击 </1><2>条件格式</2>"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "<1>4. Select the </1><2>rule</2><3> you want to apply</3>"
+msgstr "<1>4. 选择要应用的 </1><2>规则</2><3></3>"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "5. Set the condition and select a cell style"
+msgstr "5. 设置条件并选择单元格样式"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "<1>6. Click </1><2>OK</2><3> to apply</3>"
+msgstr "<1>6. 单击 </1><2>确定</2><3> 以应用</3>"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "➜Try it: Inventory stock overview"
+msgstr "➜动手试试：库存盘点概览"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"Highlight important inventory data to quickly identify products that are "
+"running low on stock."
+msgstr ""
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"<1>Low Stock</1><2> (less than 20 pcs) → </2><3>Red</3><4> background</4>"
+msgstr ""
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"<1>Medium Stock</1><2> (between 20 and 80 pcs)→ </2><3>Orange</3><4> "
+"background</4>"
+msgstr ""
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"<1>High Stock </1><2>(more than</2><3> </3><4>80 pcs)→ </4><5>Green</5><6> "
+"background</6>"
+msgstr ""
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid ""
+"<1>💡Useful tip: </1><2>To remove formatting, use </2><3>Clear Direct "
+"Formatting</3><4> in the </4><5>Home tab</5><6> or manage and remove rules "
+"in </6><7>Manage Conditional Formatting</7><8> from the </8><9>Format tab</"
+"9><10>.</10>"
+msgstr ""
+"<1>💡实用提示：</1><2>若要清除格式，可使用 </2><5>开始选项卡</5><6> 中的 </"
+"6><3>清除直接格式</3><4>，或在 </4><9>格式选项卡</9><10> 的 </10><7>管理条件"
+"格式</7><8> 中管理与删除规则。</8>"
+
+#. content.xml (sheet '🎨 Conditional Formatting')
+msgid "Next Chapter: 📊 Charts"
+msgstr "下一章：📊 图表"
+
+#. content.xml (sheet name)
+msgid "📊 Charts"
+msgstr "📊 图表"
+
+#. content.xml (sheet '📊 Charts')
+msgid "📊Create a chart"
+msgstr "📊创建图表"
+
+#. content.xml (sheet '📊 Charts')
+msgid ""
+"Collabora Office lets you present data graphically in a chart so that you "
+"can visually compare data series and view trends in the data. You can insert "
+"charts into spreadsheets, text documents, drawings and presentations."
+msgstr ""
+"Collabora Office 支持将数据转化为直观的图表，便于进行数据系列对比与趋势分析。"
+"您可以将图表无缝插入电子表格、文本文档、绘图及演示文稿中。"
+
+#. content.xml (sheet '📊 Charts')
+msgid ""
+"In this example we will learn how to create chart and explore the different "
+"types of charts available. On the other side, you can see an example table "
+"that can be used as a data source for creating charts."
+msgstr ""
+"本示例将引导您学习图表的创建方法，并了解各种图表类型。页面右侧提供了一张示例"
+"数据表，可直接用作生成图表的数据源。"
+
+#. content.xml (sheet '📊 Charts')
+msgid "Create a chart from existing data"
+msgstr "基于现有数据创建图表"
+
+#. content.xml (sheet '📊 Charts'); content.xml (sheet '🔍 Data & filtering')
+msgid "Price per piece [£]"
+msgstr "单价 [£]"
+
+#. content.xml (sheet '📊 Charts')
+msgid "<1>2. Open the </1><2>Insert tab </2><3>in the toolbar</3>"
+msgstr "<1>2. 打开工具栏中的 </1><2>插入选项卡</2><3></3>"
+
+#. content.xml (sheet '📊 Charts')
+msgid "<1>3. Click </1><2>Chart</2>"
+msgstr "<1>3. 单击 </1><2>图表</2>"
+
+#. content.xml (sheet '📊 Charts')
+msgid "4. Choose the chart type and style that best fits your data"
+msgstr "4. 选择最适合您数据的图表类型和样式"
+
+#. content.xml (sheet '📊 Charts')
+msgid "<1>5. Click </1><2>Finish</2><3> to insert the chart</3>"
+msgstr "<1>5. 单击 </1><2>完成</2><3> 以插入图表</3>"
+
+#. content.xml (sheet '📊 Charts')
+msgid "6. Your data is now displayed as a chart"
+msgstr "6. 图表生成完毕，数据已通过图表呈现"
+
+#. content.xml (sheet '📊 Charts')
+msgid "Create a chart via Insert tab"
+msgstr "通过“插入”选项卡创建图表"
+
+#. content.xml (sheet '📊 Charts')
+msgid "1. Open the Insert tab in the toolbar"
+msgstr "1. 打开工具栏中的“插入”选项卡"
+
+#. content.xml (sheet '📊 Charts')
+msgid "<1>2. Click </1><2>Chart</2>"
+msgstr "<1>2. 单击 </1><2>图表</2>"
+
+#. content.xml (sheet '📊 Charts')
+msgid "3. Choose the chart type and style that best fits your data"
+msgstr "3. 选择最适合您数据的图表类型和样式"
+
+#. content.xml (sheet '📊 Charts')
+msgid "<1>4. Click </1><2>Next</2>"
+msgstr "<1>4. 单击 </1><2>下一步</2>"
+
+#. content.xml (sheet '📊 Charts')
+msgid ""
+"5. Select the range of cells that contains your data (including headers)"
+msgstr "5. 选择包含数据的单元格区域（包含标题列）"
+
+#. content.xml (sheet '📊 Charts')
+msgid "<1>6. Click </1><2>Finish</2><3> to insert the chart</3>"
+msgstr "<1>6. 单击 </1><2>完成</2><3> 插入图表</3>"
+
+#. content.xml (sheet '📊 Charts')
+msgid "7. Your data is now displayed as a chart"
+msgstr "7. 图表生成完毕，数据已通过图表呈现"
+
+#. content.xml (sheet '📊 Charts')
+msgid "Editing charts"
+msgstr "编辑图表"
+
+#. content.xml (sheet '📊 Charts')
+msgid ""
+"To edit a chart, double click on it to activate editing mode. Once selected, "
+"you can use the options in the sidebar or open the context menu (right "
+"click) to modify the chart."
+msgstr ""
+"双击图表即可激活编辑模式。选中图表后，您可以通过侧边栏中的选项或打开右键快捷"
+"菜单来修改图表。"
+
+#. content.xml (sheet '📊 Charts')
+msgid ""
+"You can add or adjust chart elements such as titles, axes, and labels, as "
+"well as change the data range or chart type. These tools allow you to "
+"customise the chart and better present your data."
+msgstr ""
+
+#. content.xml (sheet '📊 Charts')
+msgid "Next Chapter:🔍 Data & filtering"
+msgstr "下一章：🔍 数据与筛选"
+
+#. content.xml (sheet name); content.xml (sheet '🔍 Data & filtering')
+msgid "🔍 Data & filtering"
+msgstr "🔍 数据与筛选"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"Data and filtering tools help you organise and explore your data more "
+"efficiently. You can quickly sort information or apply filters to focus only "
+"on the data that matters."
+msgstr ""
+"数据与筛选工具可帮助您更高效地组织并浏览数据。您可以快速对信息进行排序，或应"
+"用筛选以仅关注关键数据。"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"In this example, we will learn how to filter data to quickly find specific "
+"items in an inventory list."
+msgstr "在本例中，我们将学习如何筛选数据，以便在库存列表中快速查找特定项目。"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "Enable filtering"
+msgstr "启用筛选"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "<1>2. Open the </1><2>Data tab </2><3>in the toolbar</3>"
+msgstr "<1>2. 打开工具栏中的 </1><2>数据选项卡</2><3></3>"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "<1>3. Click </1><2>Auto Filter</2>"
+msgstr "<1>3. 单击 </1><2>自动筛选</2>"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "➜Try it: Find low stock items"
+msgstr "➜动手试试：查找低库存商品"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"Sort the Quantity [pcs] column to see which items have the lowest stock."
+msgstr ""
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "➜Try it: Show only Electronics items"
+msgstr "➜动手试试：仅显示电子产品项目"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "Use the filter in the Category column and select Electronics."
+msgstr ""
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"<1>💡Useful tip: </1><2>To disable the filter, select any cell within the "
+"filtered data, then go to the</2><3> Data tab</3><4> and click </4><5>Reset "
+"Filter</5><6>. All data will be visible again.</6>"
+msgstr ""
+"<1>💡实用提示：</1><2>若要禁用筛选，请选择筛选数据内的任意单元格，然后前往 </"
+"2><3>数据选项卡</3><4> 并单击 </4><5>重置筛选</5><6>。所有数据将再次可见。</"
+"6>"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "Other filtering options"
+msgstr "其他筛选选项"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "Additional filtering options give you more control over your data."
+msgstr "更多筛选选项可让您更精准地掌控数据。"
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"<1>Auto Filter</1><2> lets you quickly filter data directly in the table "
+"using simple selections.</2>"
+msgstr ""
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"<1>Standard Filter</1><2> allows you to define ranges that contain values in "
+"specific data fields. You can also combine conditions using logical AND or "
+"OR operators.</2>"
+msgstr ""
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid ""
+"<1>Advanced Filter</1><2> allows you to define up to eight filter "
+"conditions. You can enter these conditions directly into the sheet for more "
+"precise and flexible filtering.</2>"
+msgstr ""
+
+#. content.xml (sheet '🔍 Data & filtering')
+msgid "Last Chapter: 🤝 Productivity & collaboration"
+msgstr "最后一章：🤝 效率与协作"
+
+#. content.xml (sheet name); content.xml (sheet '🤝 Productivity &
+#. collaboration')
+msgid "🤝 Productivity & collaboration"
+msgstr "🤝 效率与协作"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"A range of features helps you stay productive and collaborate with others, "
+"making it easier to organise work and share information in real time."
+msgstr ""
+"一系列丰富的功能可助力您提升工作效率并开展团队协作，让工作组织与实时信息共享"
+"变得更加轻松。"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "Document sharing"
+msgstr "文档共享"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"Work together with others in real time. Multiple users can edit the same "
+"document simultaneously, making it easy to share ideas, review changes, and "
+"stay aligned."
+msgstr ""
+"支持与他人实时协作。多名用户可同时编辑同一文档，轻松分享创意、审查修订，并保"
+"持团队信息对齐。"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"Each user is assigned a unique colour, so you can easily see who is editing "
+"what. You can click on a user’s name or avatar to jump directly to their "
+"cursor and follow their activity in the document. Notifications also inform "
+"you when someone joins or leaves."
+msgstr ""
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "Start sharing your document"
+msgstr "开始共享您的文档"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "1. Create new document or open existing one"
+msgstr "1. 创建新文档或打开现有文档"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "<1>2. Click on </1><2>Share button</2><3> on right top side</3>"
+msgstr "<1>2. 单击右上角的 </1><2>共享按钮</2><3></3>"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "<1>3. </1><2>Share</2><3> your document with others</3>"
+msgstr "<1>3. 与其他人 </1><2>共享</2><3> 您的文档</3>"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "➜Try it: Internal shares"
+msgstr "➜动手试试：内部共享"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+#, fuzzy
+msgid ""
+"Share files within your organisation. People who already have access to the "
+"document can use the link for quick and easy access."
+msgstr "直接与已获权限的人员共享文档链接，方便其快速访问。"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "➜Try it: External shares"
+msgstr "➜动手试试：外部共享"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"Share files with others outside your organisation via public links and email "
+"addresses. You can also share to Nextcloud accounts on other instances using "
+"their federated cloud ID."
+msgstr ""
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "Shortcuts"
+msgstr "快捷键"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"Keyboard shortcuts help you work faster by reducing the need to use menus "
+"and clicks. They allow you to quickly perform common actions, such as "
+"copying, formatting, or navigating through your document, making your "
+"workflow more efficient."
+msgstr ""
+"快捷键可减少对菜单和鼠标点击的依赖，助力提升操作速度。通过快捷键，您可以快速"
+"执行复制、格式化或文档导航等常见操作，从而让工作流程更高效。"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"<1>💡Useful tip: </1><2>To find a list of all shortcuts, go to the </"
+"2><3>Help tab</3><4> and click on </4><5>Keyboard shortcuts</5><6>. You can "
+"also use the search option to quickly find specific shortcuts.</6>"
+msgstr ""
+"<1>💡实用提示：</1><2>若要查看全部快捷键，请前往 </2><3>帮助选项卡</3><4> 并"
+"单击 </4><5>快捷键</5><6>。您还可以使用搜索选项快速查找特定快捷键。</6>"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid "⏯Video tutorials"
+msgstr "⏯视频教程"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+msgid ""
+"To continue learning, explore short video introductions that cover "
+"additional features. These videos offer quick guidance and help you build on "
+"what you’ve learned, so you can become more confident and efficient in your "
+"work."
+msgstr ""
+"如需深入学习，可观看涵盖更多功能的短视频。这些视频提供快速指引，帮助您巩固与"
+"延伸所学知识，从而在工作中更加得心应手、高效顺畅。"
+
+#. content.xml (sheet '🤝 Productivity & collaboration')
+#, fuzzy
+msgid "Check out video tutorials"
+msgstr "⏯视频教程"
+
+#~ msgid "5"
+#~ msgstr "5"
+
+#~ msgid "20"
+#~ msgstr "20"
+
+#~ msgid "50"
+#~ msgstr "50"
+
+#~ msgid "10"
+#~ msgstr "10"
+
+#~ msgid "100"
+#~ msgstr "100"
+
+#~ msgid "900"
+#~ msgstr "900"
+
+#~ msgid "15"
+#~ msgstr "15"
+
+#~ msgid "3"
+#~ msgstr "3"
+
+#~ msgid "40"
+#~ msgstr "40"
+
+#~ msgid "1"
+#~ msgstr "1"

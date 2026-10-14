@@ -13,13 +13,23 @@ module scriptinterop {
 
 interface XDocument : XBase
 {
-    XSelection getSelection();
+    com::sun::star::beans::Optional<XSelection> getSelection();
 
-    string getText();
+    XBody getBody();
 
-    sequence<XParagraph> getParagraphs();
+    com::sun::star::beans::Optional<XCursor> getCursor();
+
+    sequence<XFootnote> getFootnotes();
 
     void insertImage([in] sequence<byte> data, [in] ImageOptions opts);
+
+    XCursor newPosition([in] XElement element, [in] long offset);
+
+    XRangeBuilder newRange();
+
+    XDocument setCursor([in] XCursor position);
+
+    XDocument setSelection([in] XSelection selection);
 };
 
 };

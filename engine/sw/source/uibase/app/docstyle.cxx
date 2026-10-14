@@ -39,10 +39,12 @@
 #include <docsh.hxx>
 #include <frmfmt.hxx>
 #include <charfmt.hxx>
+#include <charformats.hxx>
 #include <tblafmt.hxx>
 #include <poolfmt.hxx>
 #include <pagedesc.hxx>
 #include <docstyle.hxx>
+#include <unostyle.hxx>
 #include <docary.hxx>
 #include <ccoll.hxx>
 #include <doc.hxx>
@@ -484,13 +486,23 @@ static const SwNumRule* lcl_FindNumRule(   SwDoc&  rDoc,
     return pRule;
 }
 
+/// A table style sheet carries the style's name in the UI language, which for a built-in
+/// catalog style differs from the name in the model. Find the style by either.
+static SwTableAutoFormat* lcl_FindTableStyleByAnyName(SwDoc& rDoc, const OUString& rName)
+{
+    SwTableAutoFormat* pFormat = rDoc.GetTableStyles().FindAutoFormat(TableStyleName(rName));
+    if (!pFormat)
+        pFormat = rDoc.GetTableStyles().FindAutoFormatByUIName(UIName(rName));
+    return pFormat;
+}
+
 static SwTableAutoFormat* lcl_FindTableStyle(SwDoc& rDoc, const TableStyleName& rName, SwDocStyleSheet *pStyle = nullptr, bool bCreate = true)
 {
     SwTableAutoFormat* pFormat = nullptr;
 
     if (!rName.isEmpty())
     {
-        pFormat = rDoc.GetTableStyles().FindAutoFormat(rName);
+        pFormat = lcl_FindTableStyleByAnyName(rDoc, rName.toString());
         if (!pFormat && bCreate)
         {
             SwTableAutoFormat aNew(rName);
@@ -513,27 +525,7 @@ static SwTableAutoFormat* lcl_FindTableStyle(SwDoc& rDoc, const TableStyleName& 
 
 static const SwBoxAutoFormat* lcl_FindCellStyle(SwDoc& rDoc, const UIName& rName, SwDocStyleSheet *pStyle)
 {
-    const SwBoxAutoFormat* pFormat = rDoc.GetCellStyles().GetBoxFormat(rName);
-
-    if (!pFormat)
-    {
-        const auto& aTableTemplateMap = SwTableAutoFormat::GetTableTemplateMap();
-        SwTableAutoFormatTable& rTableStyles = rDoc.GetTableStyles();
-        for (size_t i=0; i < rTableStyles.size() && !pFormat; ++i)
-        {
-            const SwTableAutoFormat& rTableStyle = rTableStyles[i];
-            for (size_t nBoxFormat=0; nBoxFormat < aTableTemplateMap.size() && !pFormat; ++nBoxFormat)
-            {
-                    const sal_uInt32 nBoxIndex = aTableTemplateMap[nBoxFormat];
-                    const SwBoxAutoFormat& rBoxFormat = rTableStyle.GetBoxFormat(nBoxIndex);
-                    ProgName sBoxFormatName;
-                    SwStyleNameMapper::FillProgName(UIName(rTableStyle.GetName().toString()), sBoxFormatName, SwGetPoolIdFromName::TableStyle);
-                    OUString sTmp = sBoxFormatName.toString() + rTableStyle.GetTableTemplateCellSubName(rBoxFormat);
-                    if (rName == sTmp)
-                        pFormat = &rBoxFormat;
-            }
-        }
-    }
+    const SwBoxAutoFormat* pFormat = SwXTextCellStyle::GetBoxAutoFormat(rDoc, rName, nullptr);
 
     if(pStyle)
     {
@@ -851,7 +843,7 @@ void SwDocStyleSheet::SetHidden( bool bValue )
 
         case SfxStyleFamily::Table:
             {
-                SwTableAutoFormat* pTableAutoFormat = m_rDoc.GetTableStyles().FindAutoFormat( TableStyleName(aName) );
+                SwTableAutoFormat* pTableAutoFormat = lcl_FindTableStyleByAnyName( m_rDoc, aName );
                 if ( pTableAutoFormat )
                 {
                     pTableAutoFormat->SetHidden( bValue );
@@ -910,7 +902,7 @@ bool SwDocStyleSheet::IsHidden( ) const
             break;
         case SfxStyleFamily::Table:
             {
-                SwTableAutoFormat* pTableAutoFormat = m_rDoc.GetTableStyles().FindAutoFormat( TableStyleName(aName) );
+                SwTableAutoFormat* pTableAutoFormat = lcl_FindTableStyleByAnyName( m_rDoc, aName );
                 bRet = pTableAutoFormat && pTableAutoFormat->IsHidden( );
             }
             break;
@@ -2433,7 +2425,11 @@ void SwDocStyleSheet::Create()
                     m_rDoc.MakeNumRule( UIName(sTmpNm), nullptr,
                                       // #i89178#
                                       numfunc::GetDefaultPositionAndSpaceMode() ) ];
-                pRule->SetAutoRule( false );
+                if (!m_rDoc.IsInMergedPaste())
+                {
+                    // Merged paste creates "direct formatting", i.e. automatic numbering rules.
+                    pRule->SetAutoRule( false );
+                }
                 if( aName.isEmpty() )
                 {
                     // #i91400#
@@ -2829,7 +2825,8 @@ void SwDocStyleSheetPool::Remove( SfxStyleSheetBase* pStyle)
 
     case SfxStyleFamily::Table:
         {
-            m_rDoc.DelTableStyle(TableStyleName(sName.toString()));
+            if (const SwTableAutoFormat* pFormat = lcl_FindTableStyleByAnyName(m_rDoc, sName.toString()))
+                m_rDoc.DelTableStyle(pFormat->GetName());
         }
         break;
 
@@ -3347,7 +3344,7 @@ SfxStyleSheetBase*  SwStyleSheetIterator::First()
                     continue;
             }
 
-            m_aLst.Append( SfxStyleFamily::Table, UIName(rTableStyle.GetName().toString()) );
+            m_aLst.Append( SfxStyleFamily::Table, rTableStyle.GetUIName() );
         }
     }
 
